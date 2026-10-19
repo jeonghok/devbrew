@@ -14,10 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
-from check_brief import section4_items  # noqa: E402
-from check_verbatim_coverage import ITEM_RE as S6_ITEM_RE  # noqa: E402
+import brief_body  # noqa: E402
+from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, OQ_LINE_RE, FormatError, brief_universe, bundle_ids, field_text,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, FormatError, brief_section, brief_universe, bundle_ids, field_text,
     id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -215,14 +215,12 @@ class BriefIndex:
 
 
 def _body(text: str, heading: str) -> str:
-    body = section_body(text, heading)
-    if body is None:
-        raise FormatError("brief 에 %s 절이 없다" % heading)
-    return body
+    """brief 절 본문 — `## <n>.` 머리 문자열에서 번호를 받아 `roadmap_model.brief_section`(게이트와 같은 경계)으로 읽는다."""
+    return brief_section(text, heading[3:].rstrip("."))
 
 
 def _s6_ids(body: str) -> set:
-    return {m.group(1) for m in map(S6_ITEM_RE.match, body.splitlines()) if m}
+    return {sid for _n, sid, _r in brief_body.anchor_lines(body)[0]}
 
 
 def _merge_s6(b6: str, a6: str) -> str:
@@ -230,11 +228,14 @@ def _merge_s6(b6: str, a6: str) -> str:
     것만 더한다 — payload §6 이 S1~Sn 전량인 brief 에서 audit 의 같은 글 사본을 두 번 싣지 않는다. 겹치는
     앵커가 없으면(payload §6 = S1 인 brief) 두 본문을 그대로 잇는다."""
     have = _s6_ids(b6)
+    ok6, bad6 = brief_body.anchor_lines(a6)
+    if bad6:
+        raise FormatError("audit §6 에 문법 밖 앵커 줄이 있어 합칠 수 없다(%s)" % ", ".join("%d번째 줄 %s" % t for t in bad6[:5]))
+    starts = {n: sid for n, sid, _r in ok6}
     head, entries, cur = [], [], None
-    for line in a6.splitlines(keepends=True):
-        m = S6_ITEM_RE.match(line.rstrip("\r\n"))
-        if m:
-            cur = (m.group(1), [line])
+    for n, line in enumerate(brief_body.split_lines(a6, keepends=True), 1):
+        if n in starts:
+            cur = (starts[n], [line])
             entries.append(cur)
         elif cur is None:
             head.append(line)
@@ -249,40 +250,39 @@ def _merge_s6(b6: str, a6: str) -> str:
 
 def _section4_index(brief: str) -> dict:
     """§4 «key» → 그 key 가 머리 줄에 있는 항목(머리 줄 + 들여쓴 본문 줄). 항목 규칙은 게이트의
-    `check_brief.section4_items` 하나다. 본문 줄에만 있는 key 는 그 항목으로, 항목 밖 줄의 key 는 그 줄로 간다."""
+    `brief_body.section4_items` 하나다. 본문 줄에만 있는 key 는 그 항목으로 간다. 항목 밖 줄의 key 는 세지 않는다."""
     out = {}
-    items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(brief)]
+    items = [(head, "\n".join([head] + ["  " + b for b in body]), body) for head, body in section4_items(_body(brief, "## 4."))]
     for head, text, _body_lines in items:
         for key in KEY_RE.findall(head):
             out[key] = text
     for _head, text, body in items:
         for key in KEY_RE.findall("\n".join(body)):
             out.setdefault(key, text)
-    for line in _body(brief, "## 4.").splitlines():
-        for key in KEY_RE.findall(line):
-            out.setdefault(key, line)
     return out
 
 
 def index_brief(brief: str, audit: str) -> BriefIndex:
     _non_s, _s_ids, k_expected = brief_universe(brief, audit)
     lines = {}
-    for line in _body(brief, "## 2.").splitlines():
+    for line in brief_body.split_lines(_body(brief, "## 2.")):
         m = C_LINE_RE.match(line)
         if m:
             lines[m.group(1)] = line
-    for line in _body(brief, "## 0.").splitlines():
-        m = OQ_LINE_RE.match(line)
-        if m:
-            lines[m.group(1)] = line
+    for oq, line in brief_body.decision_entries(_body(brief, "## 0."))[0]:   # brief_universe 와 같은 판독
+        if oq:
+            lines[oq] = line
     lines.update(_section4_index(brief))
-    for line in _body(brief, "## 5.").splitlines():
+    for line in brief_body.split_lines(_body(brief, "## 5.")):
         m = RC_LINE_RE.search(line)
         if m:
             lines[m.group(1)] = line
         m = ST_LINE_RE.search(line)
         if m:
             lines[m.group(1)] = line
+    found = brief_body.audit_subset_problems(audit)   # 방어층 — brief_universe 가 먼저 같은 검사를 하지만 이 함수가 따로 불려도 막는다
+    if found:
+        raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
     b6, a6 = section6.body(brief), section6.body(audit)
     if b6 is None or a6 is None:
         raise FormatError("brief 또는 audit 의 §6 을 하나로 읽을 수 없다")

@@ -39,7 +39,7 @@ _SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 from seed_body import parse_seed, rejected_lines_message  # noqa: E402
-from seed_review_log import (fold_for_match, heading_structure, section_body,  # noqa: E402
+from seed_review_log import (AUDIT_HEADINGS, fold_for_match, heading_lines, heading_structure, read_audit_text, section_body,  # noqa: E402
                              separator_lines, separator_message)
 
 RAW_HEADING = "## 1. 원문"
@@ -91,6 +91,16 @@ def structure_problem(atext: str) -> list:
             "보존 · 덜어 낸 것을 판단하지 않는다" % "; ".join(problems)]
 
 
+def missing_heading_problems(atext: str) -> list:
+    """seed audit 의 템플릿 절 제목 일곱이 모두 있는가 -> 쉬운 문장 목록(`audit_heading_missing`). 진짜 제목이 없으면 그 제목과
+    같은 비신뢰 줄(원문 안 줄)이 절이 되어 읽히므로, 새로 만드는 audit 은 템플릿 제목을 전부 가져야 한다. 제목 이름은 템플릿 상수다."""
+    absent = [h for h in AUDIT_HEADINGS if not any(ok for _i, ok in heading_lines(atext, h))]
+    if not absent:
+        return []
+    return ["audit 에 템플릿 절 제목이 빠져 있다(audit_heading_missing) — %s. 템플릿의 일곱 절 제목을 모두 둔다"
+            % " · ".join("`%s`" % h for h in absent)]
+
+
 def cut_table_problems(atext: str) -> list:
     """audit `## seed 에서 덜어 낸 것` — 표(머리 행 + 데이터 행 하나 이상) 또는 `없음` 한 줄(설계 §1-1 · §1-4).
     seed 본문이 아니라 audit 쪽 존재 검사다 — seed 를 양식으로 만들지 않는다(`test_seed_one_sentence.sh`).
@@ -139,10 +149,11 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
         problems.append("audit 경로가 주어지지 않았다 — 원문 보존을 확인할 수 없다")
     else:
         try:
-            atext = audit_path.read_text(encoding="utf-8")
+            atext = read_audit_text(audit_path)
         except OSError as e:
             problems.append(f"audit 을 읽을 수 없다: {e}")
         else:
+            problems.extend(missing_heading_problems(atext))
             if not structure_problem(atext):  # 어긋나면 아래 cut_table_problems 가 한 번 보고한다
                 raw = section_body(atext, RAW_HEADING)
                 if raw is None:

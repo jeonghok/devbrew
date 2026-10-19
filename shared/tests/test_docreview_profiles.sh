@@ -200,10 +200,13 @@ done <<<"$SMK"
 sed '/^web:/d' "$DD" > "$TMPD/m1.md"
 python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/m1.md" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "변이: 필드 하나(web) 누락 → rc 2"
-sed 's/^detectors: 1$/detectors: 2/' "$DD" > "$TMPD/m2.md"
-grep -q '^detectors: 2$' "$TMPD/m2.md" || no "변이 m2 가 적용되지 않았다"
+sed 's/^detectors: 1$/detectors: 0/' "$DD" > "$TMPD/m2.md"
+grep -q '^detectors: 0$' "$TMPD/m2.md" || no "변이 m2 가 적용되지 않았다"
 python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/m2.md" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "2" "변이: detectors 2 → rc 2 (이 판본의 허용값은 1 뿐)"
+assert_eq "$rc" "2" "변이: detectors 0 → rc 2 (config_invalid — 최솟값 1)"
+sed 's/^detectors: 1$/detectors: 2/' "$DD" > "$TMPD/m2b.md"
+python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/m2b.md" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "짝: detectors 2 → rc 0 (탐지 수는 값이다)"
 awk '{print} /^detectors: 1$/{print "extra_field: 1"}' "$DD" > "$TMPD/m3.md"   # macOS sed 는 치환문 `\n` 불가 → awk
 grep -q '^extra_field:' "$TMPD/m3.md" || no "변이 m3 가 적용되지 않았다"
 python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/m3.md" >/dev/null 2>&1; rc=$?

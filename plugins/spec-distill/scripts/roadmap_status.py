@@ -101,7 +101,7 @@ class Git:
 
     def blob(self, rev: str, path: str):
         rc, out = self.run("cat-file", "blob", "%s:%s" % (rev, path))
-        return out if rc == 0 else None
+        return re.sub(r"\r\n?", "\n", out) if rc == 0 else None   # 게이트(작업 트리 읽기)와 같은 줄을 본다
 
     def exists(self, rev: str, path: str) -> bool:
         return self.run("cat-file", "-e", "%s:%s" % (rev, path))[0] == 0

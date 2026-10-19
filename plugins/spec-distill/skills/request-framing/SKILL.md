@@ -259,7 +259,35 @@ AskUserQuestion({ questions: [
 그대로 남깁니다(`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md`). 줄 모양이 계약입니다 —
 «당신이 답한 것» 줄은 리뷰의 정답 출처이고(seed 프로필 `ground_truth`), `- 내가 읽은 것: 「…」 — 고름`
 줄은 `seed_provenance.py marks` 가 «(사용자 확인)» 의 근거로 읽습니다. 꼬리의 «사용자가 적은 말» 칸은 seed
-프로필의 정답 출처에 듭니다.
+프로필의 정답 출처에 듭니다. «당신이 답한 것» 값과 «사용자가 적은 말» 값은 한 줄로 잇습니다 — 사용자 답을 Write 도구로 아래 첫 펜스가 알리는 경로 `$STATE_DIR/said-r<n>.txt` 에 먼저 쓰고, 둘째 펜스의 `seed_review_log.py one-line` 출력을 그 칸에 적습니다. 여러 줄 답이 풀이 줄 모양의 줄을 만들지 못하게 하는 계약입니다. 두 펜스는 `## 상태` 블록을 **앞에 이어 붙여** 같은 `Bash` 호출에서 돕니다(`$SD` · `$STATE_DIR` 이 거기서 나옵니다).
+
+```bash
+# audit `## 2` 답 알림 — 앞에 「## 상태」 블록을 이어 붙인다. 옛 파일을 지우고 쓸 경로를 알린다(Write 도구가 이 경로에 쓴다).
+[ -n "${SD:-}" ] || { echo "[spec-distill] 플러그인 루트가 비었다 — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라." >&2; exit 1; }
+if [ -n "${STATE_DIR:-}" ]; then
+  mkdir -p "$STATE_DIR"
+  rm -f "$STATE_DIR/said-r<n>.txt"
+  echo "답 파일 경로(Write 도구로 쓴다): $STATE_DIR/said-r<n>.txt"
+else
+  echo "[spec-distill] 리뷰 엔진 자리가 없어(거부 또는 빈 값) 답 파일을 둘 수 없다 — 사용자 답의 줄 나눔을 공백으로 이어 한 줄로 직접 적는다. 기록을 막지는 않는다." >&2
+fi
+```
+
+답을 그 경로에 쓴 뒤 읽는 펜스입니다(역시 `## 상태` 블록을 앞에 이어 붙입니다).
+
+```bash
+# audit `## 2` 답 읽기 — 한 줄로 이은 값을 내고 성공하면 파일을 지운다.
+[ -n "${SD:-}" ] || { echo "[spec-distill] 플러그인 루트가 비었다 — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라." >&2; exit 1; }
+if [ -n "${STATE_DIR:-}" ]; then
+  a_rc=0; a="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-r<n>.txt")" || a_rc=$?
+  if [ "$a_rc" -ne 0 ]; then
+    echo "[spec-distill] 답 파일이 없거나 비었다 — 답을 알린 경로에 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라. audit 에는 아직 적지 않는다." >&2
+  else
+    printf '%s\n' "$a"
+    rm -f "$STATE_DIR/said-r<n>.txt"
+  fi
+fi
+```
 
 **남는 한계** — «내가 풀어 썼는가»의 판정은 여전히 저자가 합니다. 저자가 풀어 쓴 줄 모르는 문장은 확인
 질문에 오르지 않습니다. 그 잔여는 리뷰 엔진의 탐지 리뷰어가 층 1 `inference_as_decision` 으로 봅니다 —
@@ -297,7 +325,7 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic-<i>.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -409,16 +437,18 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 매 라운드 선결 앞에(번들이 먼저면 번들 앞에) 아래 `### 표지와 원장 열기` 펜스를 돈다
 - `--state-dir` = `$STATE_DIR` · `--profile` = `$PROFILE` · `--doc` = `$SEED_ABS`
 - 탐지의 `<document>` = `$BUNDLE` 의 **내용** · codex 러너의 `<doc>` = `$BUNDLE` · 재비판의 `<document>` = `$BUNDLE_RC` 의 **내용**
-- 탐지 출력은 `$STATE_DIR/critic.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
+- 탐지는 1단계 출력의 `config.detectors.value`(N) 만큼 dispatch 하고(한 메시지에 여럿 — 병렬; N 은 게이트 둘째 줄이 알린다),
+  리뷰어 i 의 출력은 `$STATE_DIR/critic-<i>.txt`, 재비판 출력은 `$STATE_DIR/recritic.txt` 로 요약 · 전사 없이 저장한다
 - 결정 기록의 `--log-file` = `$AUDIT_ABS` — seed 프로필의 `decision_log` 이 audit 의 `## 6. 리뷰 결정` 을 가리킨다
 - 추가 라운드를 여는 1단계는 사용자 문구를 `$STATE_DIR/said-extra-r<n>.txt` 에 쓰고
   `q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-extra-r<n>.txt")"` 로 받아
-  `begin-round … --extra-approval="$q"` 로 넘긴다 — 파일이 없으면 `q` 가 비고, 엔진은 빈 승인을 승인으로 치지
-  않아 상한(rc 3)에서 멈춘다. 성공하면 그 파일을 지운다
+  `begin-round … --extra-approval="$q" --extra-approval-source "$src"` 로 넘긴다(`src` 는 사용자가 기타 칸에 썼으면
+  `typed`, 선택지를 골랐으면 `label` — 펜스 앞에서 대입한다) — 파일이 없으면 `q` 가 비고, 엔진은 값과 출처가 짝이 아니면
+  시작하지 않는다(rc 2, `extra_approval_missing`) — 빈 출처도 rc 2 다. 성공하면 그 파일을 지운다
 - 선결 `init` 앞에 `mkdir -p "$STATE_DIR"`. `$STATE_DIR` 이 비었거나 `init` 이 rc ≠ 0 이면 이 라운드를 시작하지 않고 `## degrade 채널` 의 record 를 남긴다
 
 라운드 수의 상한은 절차서의 `## 상한` 한 줄이 정본입니다 — 이 skill 은 그 숫자를 다시 적지 않습니다. 상한
-뒤의 라운드는 사용자가 승인 게이트에서 자기 문구로 열어야만 돕니다.
+뒤의 라운드는 사용자가 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돕니다.
 
 ### 표지와 원장 열기 — 라운드마다 선결 앞
 
@@ -480,7 +510,7 @@ echo "ledger-open: ${lo}"
 <!-- ledger-takeover:end -->
 
 **원장 쓰기 전 확인.** 엔진 원장에 쓰는 명령 — `docreview_state.py` 의 `init` · `begin-round` · `record-findings` ·
-`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
+`decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의 `prepare-recritic` · `finalize`,
 `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄 **다음에만** 부른다(이 skill 의
 처분 · 답 기록 · 계수 기록 펜스는 이 줄을 이미 담고 있다). rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고
 멈춘다 — 다른 세션이 표지를 넘겨받았거나 표지가 없다.
@@ -503,6 +533,14 @@ if [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   bundle_rc=2
 else
   rm -f "$STATE_DIR/critic.txt" "$STATE_DIR/recritic.txt" 2>/dev/null || true
+  # 번호 붙은 탐지 출력(critic-<번호>.txt)은 글롭 대신 ls 목록을 한 줄씩 읽어 치운다 — zsh 는 맞는 파일이 없는 글롭에서 멈춘다.
+  crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+    || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 직전 라운드의 번호 붙은 탐지 출력(critic-<번호>.txt)을 치우지 못했다: $STATE_DIR" >&2
+  while IFS= read -r crit_b; do
+    case "$crit_b" in critic-[0-9]*.txt) rm -f "$STATE_DIR/$crit_b" 2>/dev/null || true ;; esac
+  done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
   bundle_rc=0
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect > "$BUNDLE" || bundle_rc=1
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic > "$BUNDLE_RC" || bundle_rc=1
@@ -537,7 +575,18 @@ fi
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] seed 프로필을 읽지 못했다(cat rc $prof_rc): ${PROFILE:-} — 탐지 · 재비판을 dispatch 하지 않는다." >&2
-  if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then : > "$STATE_DIR/critic.txt" 2>/dev/null || true; fi
+  if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
+    [ ! -e "$STATE_DIR/critic.txt" ] || { : > "$STATE_DIR/critic.txt"; } 2>/dev/null || true
+    # 번호 붙은 출력은 글롭 대신 ls 목록을 한 줄씩 읽는다 — zsh 는 맞는 파일이 없는 글롭에서 멈춘다.
+    crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+      || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 번호 붙은 critic 출력(critic-<번호>.txt)을 비우지 못했다: $STATE_DIR" >&2
+    while IFS= read -r crit_b; do
+      case "$crit_b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+      [ ! -e "$STATE_DIR/$crit_b" ] || { : > "$STATE_DIR/$crit_b"; } 2>/dev/null || true
+    done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
+  fi
   exit 1
 fi
 # frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
@@ -609,6 +658,9 @@ fi
 
 `${PROFILE}` 에는 경로가 아니라 `### 프로필 내용` 펜스가 낸 **내용**을 싣습니다. 탐지의 `${DOCUMENT}` 는
 이번 라운드 `$BUNDLE` 의 내용입니다. seed 프로필이 웹을 허용하지 않으므로 웹 사본을 고르는 펜스가 없습니다.
+아래 탐지 블록은 N 번 dispatch 합니다 — 한 메시지에 Agent 호출 여럿(병렬), 리뷰어 i 의 출력은
+`$STATE_DIR/critic-<i>.txt` 입니다.
+`RELATED_CHANGES` 는 `python3 "$SD/scripts/docreview_state.py" related-changes --state-dir "$STATE_DIR"` 출력입니다 — 이번 라운드에 사용자가 고친다로 정한 결정 때문에 함께 바뀐 절의 제목과 앵커뿐이고, 없으면 빈 값입니다(명령이 실패하면 빈 값으로 두되 그 사실을 한 줄 알립니다).
 
 ```
 Agent({
@@ -617,12 +669,13 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
 재비판의 `${DOCUMENT}` 는 **`$BUNDLE_RC` 의 내용**입니다 — 탐지와 다른 번들입니다. 입력 슬롯은
-넷이고 그중 `diff` 는 선택입니다(그 번들 · `prep.json` 의 `items` · 프로필 · `diff`(선택)) —
+다섯이고 그중 `diff` 와 `related_changes` 는 선택입니다(그 번들 · `prep.json` 의 `items` · 프로필 · `diff`(선택) · `related_changes`(선택 — 위 탐지와 같은 출력)) —
 이 자리(문서 경로)는 `diff` 를 싣지 않습니다. 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를
 못 받으면 「이 변경이 도입했는가」 축을 쓰지 않습니다. dispatch 사유도 이전 대화도 어느 리뷰어가
 냈는지도 넣지 않습니다.
@@ -635,7 +688,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
-    <profile>${PROFILE}</profile>"
+    <profile>${PROFILE}</profile>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
@@ -645,15 +699,37 @@ Agent({
 # 엔진 산출물 셋을 판정 없이 audit `## 4. 비평과 냉독` 에 옮긴다 — 엔진 자리는 원장 정리로 사라질 수 있고,
 # 사람이 나중에 되짚을 자리는 audit 이다. 없는 산출물은 그 사실을 적는다(침묵과 0 은 다르다).
 rnd="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" | python3 -I -X utf8 -c 'import json,sys; print(json.load(sys.stdin)["round"])')" || rnd="?"
-for pair in "탐지 (doc-critic)|critic.txt" "codex|docreview-codex.yaml" "재비판 (doc-recritic)|recritic.txt"; do
-  title="${pair%%|*}"; src="$STATE_DIR/${pair#*|}"
-  if [ ! -s "$src" ]; then
-    src="$STATE_DIR/absent-note.txt"
-    printf '(이 라운드에 산출물 없음 — %s)\n' "${pair#*|}" > "$src"
+record_artifact() {   # 옮길 것: rec_title(audit 제목) · rec_name(STATE_DIR 안 파일 이름)
+  rec_src="$STATE_DIR/$rec_name"
+  if [ ! -s "$rec_src" ]; then
+    rec_src="$STATE_DIR/absent-note.txt"
+    printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name" > "$rec_src"
   fi
-  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $title" "$src" \
-    || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $title" >&2
-done
+  python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" </dev/null \
+    || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $rec_title" >&2
+}
+found=0
+# 탐지 리뷰어 i 의 출력은 critic-<i>.txt — 하나씩 따로 옮긴다. 글롭 대신 ls 목록을 한 줄씩 읽는다(zsh 는 맞는 파일이
+# 없는 글롭에서 멈추고, 목록을 단어로 쪼개면 심어 둔 이름이 갈리거나 글롭으로 풀린다).
+crit_names=""
+if [ -n "${STATE_DIR:-}" ]; then
+  crit_names="$(cd "$STATE_DIR" 2>/dev/null && ls 2>/dev/null)" \
+    || echo "[spec-distill] 상태 폴더의 파일 목록을 읽지 못했다 — 탐지 출력(critic-<번호>.txt)을 옮기지 못했다: $STATE_DIR" >&2
+fi
+while IFS= read -r b; do
+  case "$b" in critic-[0-9]*.txt) ;; *) continue ;; esac
+  [ -e "$STATE_DIR/$b" ] || continue
+  idx="${b#critic-}"; idx="${idx%.txt}"
+  case "$idx" in
+    ''|*[!0-9]*) echo "[spec-distill] 탐지 출력 이름이 critic-<숫자>.txt 가 아니다 — 옮기지 않는다: $b" >&2; continue ;;
+  esac
+  found=1; rec_title="탐지 ${idx} (doc-critic)"; rec_name="$b"; record_artifact
+done <<CRIT_NAMES
+$crit_names
+CRIT_NAMES
+[ "$found" = 1 ] || { rec_title="탐지 (doc-critic)"; rec_name="critic.txt"; record_artifact; }   # 탐지 출력이 하나도 없을 때만 옛 이름을 본다
+rec_title="codex"; rec_name="docreview-codex.yaml"; record_artifact
+rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
 ```
 
 ### 게이트 — 처분은 사용자가, 편집은 처분 뒤에
@@ -707,13 +783,14 @@ g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --sessi
 # 처분 — 엔진에 사용자 문구를 싣는 결정 하나. <id> 의 문구는 먼저 Write 도구로 "$STATE_DIR/said-<id>.txt" 에 쓴다.
 # EVENT 는 이 처분 하나: drop(fix 적용하지 않음) · adopt · reject · hold(decide). 문구 파일이 없거나 비면 누르지 않는다.
 EVENT="<drop | adopt | reject | hold>"
+finding_id="<id>"
 q_rc=0; q="$(python3 "$SD/scripts/seed_review_log.py" one-line "$STATE_DIR/said-<id>.txt")" || q_rc=$?
 if [ "$q_rc" -ne 0 ]; then
   echo "[spec-distill] <id> 의 사용자 문구 파일을 읽지 못했다 — 처분을 누르지 않는다. 문구를 Write 도구로 쓴 뒤 이 펜스를 다시 돌려라." >&2
 elif [ "$EVENT" = drop ]; then
-  python3 "$SD/scripts/docreview_state.py" fix --state-dir "$STATE_DIR" --id "<id>" --event drop --reason="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+  python3 "$SD/scripts/docreview_state.py" fix --state-dir "$STATE_DIR" --id "$finding_id" --event drop --reason="$q" --log-file "$AUDIT_ABS" || q_rc=$?
 else
-  python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR" --id "<id>" --choice "$EVENT" --quote="$q" --log-file "$AUDIT_ABS" || q_rc=$?
+  python3 "$SD/scripts/docreview_state.py" decide --state-dir "$STATE_DIR" --id "$finding_id" --choice "$EVENT" --quote="$q" --log-file "$AUDIT_ABS" || q_rc=$?
 fi
 [ "$q_rc" -ne 0 ] || rm -f "$STATE_DIR/said-<id>.txt"
 echo "q_rc=$q_rc"
@@ -723,12 +800,13 @@ echo "q_rc=$q_rc"
 g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
 # 답 기록 — ask_open 항목 하나. <n> · <id> 는 게이트의 값이다. 문구 · 요약은 먼저 Write 도구로
 # "$STATE_DIR/said-<id>.txt" · "$STATE_DIR/note-<id>.txt" 에 쓴다. 통째로 다시 돌려도 같은 기록 줄은 다시 적지 않는다.
+finding_id="<id>"
 log_rc=0; ask_rc=0
 python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 답 --round "<n>" --target "<id>" --quote-file "$STATE_DIR/said-<id>.txt" --note-file "$STATE_DIR/note-<id>.txt" || log_rc=$?
 if [ "$log_rc" -ne 0 ]; then
   echo "[spec-distill] 답 기록 실패(log_rc=$log_rc) — ask 를 닫지 않는다. 위 stderr 를 보고 파일을 고쳐 이 펜스를 다시 돌려라." >&2
 else
-  python3 "$SD/scripts/docreview_state.py" ask --state-dir "$STATE_DIR" --id "<id>" --answered || ask_rc=$?
+  python3 "$SD/scripts/docreview_state.py" ask --state-dir "$STATE_DIR" --id "$finding_id" --answered || ask_rc=$?
   if [ "$ask_rc" -eq 0 ]; then
     rm -f "$STATE_DIR/said-<id>.txt" "$STATE_DIR/note-<id>.txt"
   else
@@ -743,18 +821,17 @@ echo "ans_rc=$ans_rc"
 
 ```bash
 # 라운드 게이트에 올릴 것 — 엔진 요약에서 넷. 저자 편집 덩어리는 `### 저자 편집 공시` 가 센다.
-gate_json="$STATE_DIR/gate-summary.json"
-if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gate_json"; then
+if ! gate_json="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")"; then
   echo "[spec-distill] 엔진 게이트 요약을 읽지 못했다(STATE_DIR='${STATE_DIR:-}') — 게이트를 띄우지 않는다. 「## 상태」 블록을 앞에 이어 붙였는지 확인하라." >&2
 else
-  python3 -I -X utf8 -c '
+  printf '%s' "$gate_json" | python3 -I -X utf8 -c '
 import json, sys
-g = json.load(open(sys.argv[1], encoding="utf-8"))
+g = json.load(sys.stdin)
 for k in ("open_decide", "blocking_ask_open", "unapplied_fix", "ask_open"):
     ids = g.get(k) or []
     print("%s=%d %s" % (k, len(ids), " ".join(ids)))
 print("round_gate_needed=%s approval_gate_open=%s" % (g.get("round_gate_needed"), g.get("approval_gate_open")))
-' "$gate_json"
+'
 fi
 ```
 
@@ -768,7 +845,9 @@ fi
 ```bash
 # 문구 없는 drop 검사 — 엔진 공개 요약의 dropped 대 audit ## 6 의 기록.
 drops_rc=0
-if ! python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$STATE_DIR/gate-drops.json"; then
+if ! gate_drops="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")"; then
+  drops_rc=2
+elif ! printf '%s' "$gate_drops" > "$STATE_DIR/gate-drops.json"; then
   drops_rc=2
 else
   python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json" || drops_rc=$?
@@ -1081,8 +1160,9 @@ elif [ "$lm_rc" -ne 0 ]; then
   cnt_rc=$lm_rc
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" >/dev/null || cnt_rc=$?
+  cnt_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --log-file "$AUDIT_ABS" 2>&1)" || cnt_rc=$?
 fi
+[ "$cnt_rc" -eq 0 ] || [ -z "${cnt_out:-}" ] || printf '%s\n' "$cnt_out" >&2
 [ "$cnt_rc" -eq 0 ] || echo "[spec-distill] 리뷰 계수 줄을 audit ## 6 에 적지 못했다(cnt_rc=$cnt_rc — 엔진 원장이 없거나 표지가 남의 것이거나 advice 가 실패했다). 게이트 앞 글에 싣는다 — 막지 않는다." >&2
 echo "cnt_rc=$cnt_rc"
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$sid"
@@ -1171,7 +1251,8 @@ fi
 if [ "$final_drops_rc" -ne 0 ]; then
   :
 elif [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
-  python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR" > "$gf" || final_drops_rc=2
+  gate_final="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")" || final_drops_rc=2
+  [ "$final_drops_rc" -ne 0 ] || printf '%s' "$gate_final" > "$gf" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
   python3 -I -X utf8 -c '

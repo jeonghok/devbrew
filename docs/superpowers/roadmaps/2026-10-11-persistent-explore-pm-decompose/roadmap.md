@@ -159,7 +159,7 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등
+  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
   - 안 한다: 규칙 문서(R9)
 - 의존: R2a, R5
 - 브랜치: feature/dependency-portability
@@ -182,9 +182,9 @@ test_failure_pattern: "^FAILED (.+)$"
   - 한다: 조사 subagent 를 모델 판단으로 여럿 동시에 · 시의성 있는 사실의 신선한 근거(사용자 원칙 여덟 — 흐름 고정 점검 문서 R10 절, 설계문서 `## 번호 대조` 에 원칙마다 반영/기각 행) · 흐름 고정 점검(flexibility-audit.md)의 R10 행 · 인터뷰 끝 게이트 둘(분해된 일의 ①② 이름 · 다음 세션 줄의 에픽마다 brainstorming 고정, /compact 권장은 유지) · 분해 판단이 로드맵 `흐름` · `산출물` 칸을 채움 · 인터뷰 조사에 레포 안 재사용 검토 · 나눈 일 다음 세션 줄 문면 조율(그 한 줄 자체는 R5) · 하나짜리 brief 의 다음 세션 줄(finishing.md)이 가정하는 「SDD 의 마지막 전체 리뷰」를 「고른 실행 방식의 마지막 전체 리뷰」로 · 인터뷰 진입 이름 `spec-interview` → `pm-interview`(호출 이름 변경은 레포 규칙대로 별칭 없이 즉시 · major bump)
   - 안 한다: 에픽 넘김 줄 · 지휘(R5) · 공유 리뷰 엔진(R2a)
 - 의존: R1, R2, R3, R4, R7
-- 브랜치: feature/interview-open-research
+- 브랜치: feature/interview-open-research · feature/interview-end-gates · feature/pm-interview-rename
 - 묶음: R10.md
-- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md, plugins/spec-distill/skills/pm-interview/
+- 경로 예약: plugins/spec-distill/skills/spec-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/agents/saturation-judge.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/references/trivia-escape.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/agents/open-researcher.md, plugins/spec-distill/references/fresh-evidence.md, plugins/spec-distill/references/research-claims.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/scripts/brief_body.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/scripts/build_brief_bundle.py, plugins/spec-distill/scripts/build_brief_inline_blob.py, plugins/spec-distill/templates/interview-seed-template.md
 
 ### R11 — 원칙 문서 정리
 - 의도: 사용자의 상시 원칙을 auto-memory 에서 CLAUDE.md · 철학 문서 · 주요 문서로 옮기고 낡은 개념은 과감히 지워 문서 크기를 줄인다
@@ -195,6 +195,16 @@ test_failure_pattern: "^FAILED (.+)$"
 - 브랜치: feature/principles-docs-cleanup
 - 묶음: R11.md
 - 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md
+
+### R12 — R2a 남은 리뷰 엔진 · qg 소결함
+- 의도: R2a 와 R11 이 남긴 공유 리뷰 엔진 · qg · plugin-audit 의 작은 결함과 보안 제안을 고친다
+- 범위:
+  - 한다: 엔진 환경 변수(`DEVBREW_DOCREVIEW_*`) 최댓값 · 원문 절 마지막 앵커 밑 이어 붙인 줄 · `</related_changes>` 주입 · `declare-related` 펜스 락 · 리뷰어 둘의 같은 질문 흡수 때 기다리던 수정 목록 소실 · 확인된 결정의 보호가 자식 절에 붙지 않음 · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 · 번호 대조 · 미룸 손 편집의 허가 길 · 리뷰가 닫힌 뒤 손으로 쓴 결정 줄 · qg 판정 id 충돌(synthesize_findings.py) · plugin-audit kill switch 정규식(check-shape-completeness.py) · tools/adjudication/check_wiring.py 의 줄 번호 핀 · 철학 P3 「문서 리뷰 자리 넷」 문장
+  - 안 한다: R2a 계획 2~4 의 범위 · R8 의 권한 경계(AC17 가)
+- 의존: R2a, R11
+- 브랜치: feature/review-engine-leftovers
+- 묶음: R12.md
+- 경로 예약: shared/docreview/, plugins/quality-gates/scripts/synthesize_findings.py, plugins/plugin-audit/scripts/check-shape-completeness.py, tools/adjudication/check_wiring.py, docs/philosophy/devbrew-harness-philosophy.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
 
 ## 지휘 절차
 
@@ -380,6 +390,17 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「pm-interview (권장)」
   - 「지휘자가 spec 리뷰까지 (권장)」
+  - 「이대로 다시 나눈다」
+
+### 2026-10-18 · R2a 계획 2 의 브랜치 등록(R2a 설계 §10)
+- 바뀜: 바뀐 에픽 R2a — 브랜치 칸에 계획 2(공유 엔진 · R2 보안 잔여)의 feature/shared-review-engine-core 를 더했다 「이대로 (권장)」
+- 원문:
+  - 「이대로 (권장)」
+
+### 2026-10-19 · R2a 남은 리뷰 엔진 · qg 소결함을 새 에픽 R12 로 · R8 범위에 AC17 (가) 권한 경계
+- 바뀜: 바뀐 에픽 R8 · 새 에픽 R12 「새 에픽으로 (권장)」 · 「이대로 다시 나눈다」
+- 원문:
+  - 「새 에픽으로 (권장)」
   - 「이대로 다시 나눈다」
 
 ## 위험 번호표

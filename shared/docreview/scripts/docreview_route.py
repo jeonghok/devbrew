@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _decide_choices_for, _is_reraise_successor, category_gloss, choice_label, fail, load_profile,
+    RANK, LedgerCorrupt, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, load_profile,
     load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
@@ -31,6 +31,7 @@ from docreview_advice import (  # noqa: E402
     route_step2, scrub,
 )
 
+_DECISION_ID = re.compile(r"D[0-9]+\.[0-9]+")
 BLOCK_RE = r"```%s[ \t]*\n(.*?)\n```"
 DISPOSITIONS = tuple(sorted(RANK, key=lambda k: -RANK[k]))  # decide, ask, fix, defer, drop
 
@@ -70,6 +71,33 @@ def extract_blocks(text: str, name: str):
     return (None, "broken") if broken else (out, None)
 
 
+def _no_at(it, ev):
+    """리뷰어가 쓴 `ref` · `blocks` 의 `@` 를 `_` 로 바꾸고 센다 — `@d<i>` · `@b<k>` 꼬리표는 엔진만 붙인다."""
+    if not isinstance(it, dict):
+        return it
+    out, hit = it, False
+    if isinstance(it.get("ref"), str) and "@" in it["ref"]:
+        out, hit = dict(out), True
+        out["ref"] = it["ref"].replace("@", "_")
+    bl = it.get("blocks")
+    if isinstance(bl, str) and "@" in bl:
+        out, hit = dict(out), True
+        out["blocks"] = bl.replace("@", "_")
+    elif isinstance(bl, list):
+        fixed = []
+        for x in bl:
+            if isinstance(x, str) and "@" in x:
+                hit = True
+                x = x.replace("@", "_")
+            fixed.append(x)
+        if hit:
+            out = dict(out)
+            out["blocks"] = fixed
+    if hit:
+        ev("coerced", "ref", "(@ 포함)", None)
+    return out
+
+
 def merge_list_blocks(blocks, name, ev):
     """목록 블록 여럿을 하나로 — (항목 목록, 오류).
 
@@ -86,6 +114,7 @@ def merge_list_blocks(blocks, name, ev):
         return None, "not a list"
     merged, seen_refs, seen_items, final_ref = [], set(), {}, {}
     for k, blk in enumerate(blocks, 1):
+        blk = [_no_at(x, ev) for x in blk]
         # 1 걸음 — 항목마다 처분을 정한다: 글자까지 같은 항목은 흡수(자리는 살아남은 항목의 최종 ref),
         # 앞 블록과 ref 가 겹치는 새 항목은 `<ref>@b<k>` 로 바꾼다.
         local, plan = {}, []
@@ -146,12 +175,23 @@ def normalize(item, layer_default, prefix, idx, ledger):
         layer = int(item.get("layer") or layer_default)
     except (TypeError, ValueError):
         layer = layer_default
+    contradicts, malformed = None, False
+    if item.get("contradicts"):
+        raw = str(item["contradicts"]).strip()
+        if _DECISION_ID.fullmatch(raw):
+            contradicts = raw
+        else:
+            # 받은 글자는 어디에도 되풀이하지 않는다 — 자리표시자만 센다.
+            ledger.coerced("contradicts", "(형식 위반)", None)
+            malformed = True
     return {
         "ref": str(item.get("ref") or tag), "layer": 1 if layer == 1 else 2,
         "category": str(item.get("category") or "other"), "anchor": anchor,
         "disposition": disp, "summary": summary,
         "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
+        # 이미 내린 결정과 반대인 본문 — 가리킨 결정 id(`D<r>.<n>`). 형식은 아래에서, 실재 · 묶임은 `_classify_items` 가 본다.
+        "contradicts": contradicts, "_contradicts_malformed": malformed,
         "evidence": (str(item["evidence"]) if item.get("evidence") else None),
         # 갈래 2 의 칸 둘. 여기 없으면 리뷰어가 무엇을 적든 «조용히» 버려진다 —
         # 이 dict 는 입력을 갱신하는 것이 아니라 처음부터 새로 짓는다. 두 칸의 개행·공백
@@ -205,6 +245,67 @@ def _round_staleness(st, path, predates):
     return None
 
 
+def _read_one_critic(st, path, i, ev, rec, prof):
+    """탐지 리뷰어 i 의 출력 — (항목 [(src, it)], 사망 사유 또는 None, 층 2 부재, 합친 블록 수, 시점 미상 사유).
+
+    리뷰어 i ≥ 2 의 임시 번호와 그 `blocks` 에는 `@d<i>` 를 붙인다 — 합치기 단계의 `@b<k>`(블록 순번)와
+    다른 접미라 겹치지 않고, 질문은 자기 리뷰어의 항목을 막는다.
+    """
+    critic = Path(path)
+    merged, fresh = {}, None
+    if not critic.is_file():
+        return [], "missing", False, merged, fresh
+    stale = _round_staleness(st, critic, "critic_predates_round")
+    if stale == "critic_predates_round":
+        return [], stale, False, merged, fresh
+    if stale:
+        fresh = stale
+    try:
+        text = critic.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return [], "undecodable", False, merged, fresh
+    l1s, e1 = extract_blocks(text, "docreview-layer1")
+    l1, e1m = (merge_list_blocks(l1s, "docreview-layer1", ev) if l1s is not None else (None, None))
+    why = e1 or e1m
+    if l1s is not None and len(l1s) > 1:
+        merged["docreview-layer1"] = len(l1s)
+    if why or not isinstance(l1, list):
+        return [], why or "not a list", False, merged, fresh
+    found, l2_missing = [], None
+    for k, it in enumerate(l1, 1):
+        n1 = normalize(it, 1, "c", k, rec)
+        if n1:
+            found.append(n1)
+    l2s, e2 = extract_blocks(text, "docreview-layer2")
+    l2, e2m = (merge_list_blocks(l2s, "docreview-layer2", ev) if l2s is not None else (None, None))
+    e2 = e2 or e2m
+    if l2s is not None and len(l2s) > 1:
+        merged["docreview-layer2"] = len(l2s)
+    if e2 == "broken":
+        return [], "layer2 block broken", None, merged, fresh
+    if e2 or not isinstance(l2, list):
+        if prof["layer_rubric"].get("layer2"):
+            l2_missing = "%s" % (e2 or "not a list")
+    else:
+        for k, it in enumerate(l2, 1):
+            n2 = normalize(it, 2, "c", 100 + k, rec)
+            if n2:
+                found.append(n2)
+    tag = "" if i == 1 else "@d%d" % i
+    for it in found:
+        it["detector"] = "d%d" % i
+        if tag:
+            it["ref"] = it["ref"] + tag
+            tagged = []
+            for r in it["blocks"]:
+                tagged.append(r + tag)
+            it["blocks"] = tagged
+    out = []
+    for it in found:
+        out.append(("critic", it))
+    return out, None, l2_missing, merged, fresh
+
+
 def cmd_prepare(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -223,56 +324,39 @@ def cmd_prepare(a) -> int:
 
     degrade = {"critic_dead": False, "layer2_missing": False, "codex_absent": False, "codex_reason": None}
     items = []
-    critic = Path(a.critic)
-    critic_why = None    # critic 사망 사유 — None 이면 층 1 블록의 판정에 맡긴다
-    text = ""
-    if critic.is_file():
-        # 라운드 시작 표식보다 먼저(또는 같은 시각에) 쓰인 critic 출력은 직전 라운드 것이다 — 탐지를 dispatch
-        # 하지 못한 라운드에 같은 자리에 남은 출력을 이번 라운드의 탐지로 섭취하지 않는다(codex 와 같은 판별).
-        # 표식 부재 · 비정수(`round_start_unrecorded` · `round_start_unreadable`)는 critic 을 닫지 않는다(R69) —
-        # 다만 시점을 판별하지 못했다는 사실은 codex 경로와 독립으로 `degrade.critic_freshness_unknown` 에 이름을
-        # 남기고 `finalize` 가 advisory 로 공시한다(차단 아님). 그 키는 이 경우에만 생긴다.
-        critic_stale = _round_staleness(st, critic, "critic_predates_round")
-        if critic_stale == "critic_predates_round":
-            critic_why = "critic_predates_round"
+    expected = int((((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("config") or {})
+                   .get("detectors", {}).get("value", 1))
+    paths = list(a.critic or [])
+    n_total = max(expected, len(paths))
+    dead, dead_reasons = [], {}
+    for i in range(1, n_total + 1):
+        if i > len(paths):
+            got, why, l2m, merged = [], "missing", None, {}
         else:
-            if critic_stale:
-                degrade["critic_freshness_unknown"] = critic_stale
-            try:
-                text = critic.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                # 깨진 critic 출력 — 설계 §9 의 sentinel 깨짐과 같은 판정(critic 사망 → 재dispatch 1회 → 「미검증」)
-                critic_why = "undecodable"
-    l1s, e1 = extract_blocks(text, "docreview-layer1")
-    l1, e1m = (merge_list_blocks(l1s, "docreview-layer1", ev) if l1s is not None else (None, None))
-    critic_why = critic_why or e1 or e1m
-    if l1s is not None and len(l1s) > 1:
-        degrade.setdefault("blocks_merged", {})["docreview-layer1"] = len(l1s)
-    if critic_why or not isinstance(l1, list):
-        degrade["critic_dead"] = True
-        ev("source_failed", "doc-critic", "layer1 block %s" % (critic_why or "not a list"), True)
-    else:
-        for i, it in enumerate(l1, 1):
-            n1 = normalize(it, 1, "c", i, rec)
-            if n1:
-                items.append(("critic", n1))
-        l2s, e2 = extract_blocks(text, "docreview-layer2")
-        l2, e2m = (merge_list_blocks(l2s, "docreview-layer2", ev) if l2s is not None else (None, None))
-        e2 = e2 or e2m
-        if l2s is not None and len(l2s) > 1:
-            degrade.setdefault("blocks_merged", {})["docreview-layer2"] = len(l2s)
-        if e2 == "broken":
-            degrade["critic_dead"] = True
-            ev("source_failed", "doc-critic", "layer2 block broken", True)
-        elif e2 or not isinstance(l2, list):
-            if prof["layer_rubric"].get("layer2"):
+            got, why, l2m, merged, fresh = _read_one_critic(st, paths[i - 1], i, ev, rec, prof)
+            if fresh:
+                degrade["critic_freshness_unknown"] = fresh
+        if why:
+            dead.append(i)
+            dead_reasons[str(i)] = why
+            if n_total == 1:
+                ev("source_failed", "doc-critic", why if why.startswith("layer2") else "layer1 block %s" % why, True)
+            else:
+                ev("source_failed", "doc-critic#%d" % i, "detector %d %s" % (i, why), False)
+        else:
+            items.extend(got)
+            if l2m:
                 degrade["layer2_missing"] = True
-                ev("uncountable", "layer2", "block %s" % (e2 or "not a list"))
-        else:
-            for i, it in enumerate(l2, 1):
-                n2 = normalize(it, 2, "c", 100 + i, rec)
-                if n2:
-                    items.append(("critic", n2))
+                ev("uncountable", "layer2", "block %s" % l2m if n_total == 1 else "detector %d block %s" % (i, l2m))
+            for k, v in merged.items():
+                bm = degrade.setdefault("blocks_merged", {})
+                bm[k] = bm.get(k, 0) + v
+    if n_total > 1:
+        degrade["detectors"] = {"expected": n_total, "dead": dead, "dead_reasons": dead_reasons}
+    if len(dead) == n_total:
+        degrade["critic_dead"] = True
+        if n_total > 1:
+            ev("source_failed", "doc-critic", "all detectors dead (%s)" % ",".join(sorted(set(dead_reasons.values()))), True)
     cx, stale = None, None
     if a.codex and Path(a.codex).is_file():
         stale = _round_staleness(st, Path(a.codex), "codex_predates_round")
@@ -291,20 +375,74 @@ def cmd_prepare(a) -> int:
             nx = normalize(it, 2, "x", i, rec)
             if nx:
                 items.append(("codex", nx))
+    # 리뷰어 사이의 겹침 — (층, 분류, 앵커, 처분, 요약)이 같으면 가장 앞 리뷰어의 항목만 남기고 흡수로 센다.
+    # 비슷하기만 한 항목은 재비판으로 간다. 버려진 항목을 가리키던 blocks 는 남은 항목으로 옮긴다.
+    kept_by, alias, deduped = {}, {}, []
+    for src, it in items:
+        key = (it["layer"], it["category"], it["anchor"], it["disposition"], it["summary"])
+        first = kept_by.get(key) if src == "critic" else None
+        if first is None:
+            if src == "critic":
+                kept_by[key] = it
+            deduped.append((src, it))
+        elif first["detector"] != it["detector"]:
+            ev("absorbed", "critic#%s:%s" % (it["detector"], it["ref"]), "critic#%s:%s" % (first["detector"], first["ref"]))
+            alias[it["ref"]] = first["ref"]
+            # 버려진 사본이 막던 항목은 남은 항목이 이어서 막는다 — 안 그러면 질문이 고침 하나만 막고 나머지는 풀린다.
+            for r in it["blocks"]:
+                if r not in first["blocks"]:
+                    first["blocks"].append(r)
+            if first["edit_scope"] == first["anchor"] and it["edit_scope"] != it["anchor"]:
+                first["edit_scope"] = it["edit_scope"]
+            # 남은 항목의 빈 칸은 버려진 사본의 값으로 채운다 — 채워진 값은 덮지 않는다(`_absorb_same_as` 와 같은 규칙).
+            for fld in ("evidence", "replacement", "if_unfixed", "contradicts"):
+                if not first.get(fld) and it.get(fld):
+                    first[fld] = it[fld]
+            # 형식 위반 표시는 남은 항목에 살아 있는 `contradicts` 가 없을 때만 물려받는다 — 유효한 번호를 단 항목이
+            # 버려진 사본의 위반 때문에 「형식 위반」 공시를 받지 않게 한다.
+            if not first.get("contradicts") and not first.get("_contradicts_malformed") and it.get("_contradicts_malformed"):
+                first["_contradicts_malformed"] = it["_contradicts_malformed"]
+        else:
+            deduped.append((src, it))
+    items = deduped
     # 익명화 — 출처 순서를 복원할 수 없게 정렬한다(P9)
     items.sort(key=lambda t: (t[1]["layer"], t[1]["anchor"], t[1]["category"],
                               hashlib.sha1(t[1]["summary"].encode("utf-8")).hexdigest()))
     ref2f = {(src, it["ref"]): "f%d" % k for k, (src, it) in enumerate(items, 1)}
+    for dropped, kept in alias.items():
+        ref2f[("critic", dropped)] = ref2f[("critic", kept)]
     pending = []
     for k, (src, it) in enumerate(items, 1):
         pub = dict(it)
         pub["f"] = "f%d" % k
-        pub["blocks"] = [ref2f.get((src, r), r) for r in it["blocks"]]
+        mapped = []
+        for r in it["blocks"]:
+            if (src, r) in ref2f:
+                mapped.append(ref2f[(src, r)])
+            else:
+                # 없는 항목을 막는다는 참조 — 리뷰어(@d)·블록(@b) 꼬리표를 떼고 싣는다. 풀리지 않는 참조는
+                # finalize 의 `_remap_blocks` 가 어차피 버린다(계수 없음 — 예전과 같다).
+                mapped.append(r.split("@")[0])
+        deduped_refs = []
+        for m in mapped:
+            if m not in deduped_refs:
+                deduped_refs.append(m)
+        pub["blocks"] = deduped_refs   # 합친 두 리뷰어가 같은 항목을 가리키면 한 번만 센다
         pub.pop("ref", None)
-        pending.append({"f": pub["f"], "source": src, "finding": pub})
+        det = pub.pop("detector", None)   # 재비판에 가는 사본에는 출처 리뷰어를 싣지 않는다
+        pending.append({"f": pub["f"], "source": src, "detector": det,
+                        "finding": dict(pub, detector=det) if det else pub})
     st["pending_recritic"] = {"round": int(st["round"]), "items": pending, "degrade": degrade, "events": events}  # round — docreview_state.pending_mismatch
     save_state(a.state_dir, st, "prepare-recritic (%d items%s)" % (len(pending), ", critic dead" if degrade["critic_dead"] else ""))
-    print(json.dumps({"ok": not degrade["critic_dead"], "items": [p["finding"] for p in pending],
+    shown = []
+    for p in pending:
+        view = dict(p["finding"])
+        view.pop("detector", None)
+        for k in list(view):   # 엔진 내부 칸(`_` 시작)은 재비판자에게 보이지 않는다
+            if k.startswith("_"):
+                view.pop(k)
+        shown.append(view)
+    print(json.dumps({"ok": not degrade["critic_dead"], "items": shown,
                       "degrade": degrade}, ensure_ascii=False, indent=1))
     return 4 if degrade["critic_dead"] else 0
 
@@ -322,10 +460,10 @@ def _decision_view(it, doc, st):
     # (`_resolve_ids_and_lineage`, 이 함수 호출 직전)에서 이미 원본 레코드에
     # 찍히므로 지금 계산 가능하다 — 대상은 이 id 자신이 아니라 그 id 를 가리키는
     # «다른» 레코드라서 이 id 가 원장에 없어도 무관하다. 그래서 원장 래퍼가 아니라
-    # 순수 함수 `_decide_choices_for` 를 직접 쓴다 — 선택지 로직은 여전히
+    # 순수 함수 `_decide_choices_for` 위의 `offered_choices_for` 를 쓴다 — 선택지 로직은 여전히
     # `docreview_state.py` 한 곳뿐이고(`decide_choices`·`_rg_decide`·`_rg_expired`
-    # 와 같은 원본), 이 자리가 `decide_choices` 를 재구현하지 않는다.
-    choices = _decide_choices_for("open", _is_reraise_successor(st, it["id"]))
+    # 와 같은 원본 · 같은 채택 거름), 이 자리가 `decide_choices` 를 재구현하지 않는다.
+    choices = offered_choices_for(st, it)
     nref = None
     if doc and Path(doc).is_file():
         nref = len(refs_of(doc, it["anchor"]))
@@ -498,7 +636,7 @@ def _absorb_same_as(items, same_as, L):
         # 형제에게서 채운다 — 적힌 칸은 덮지 않는다. 오름차순이라 마지막에 쓴 값(처분이 가장
         # 높은 형제의 것)이 남는다. 공백뿐인 값은 빈 칸으로 친다(뒤의 I4 접기가 대체안 칸 둘을
         # None 으로 만드는 것과 같은 판정이다).
-        for k in ("evidence", "replacement", "if_unfixed"):
+        for k in ("evidence", "replacement", "if_unfixed", "contradicts"):
             if not (items[keep].get(k) or "").strip():
                 for m in sorted(live, key=lambda m: (RANK[items[m]["disposition"]], m)):
                     if (items[m].get(k) or "").strip():
@@ -511,13 +649,62 @@ def _absorb_same_as(items, same_as, L):
     return keep_of
 
 
+def _decision_footprint(st, entry) -> set:
+    """결정이 닿은 절 — 그 결정이 다룬 finding 들의 앵커 · 범위 ∪ 그 결정 permit 의 적용 · 신고 앵커."""
+    out = set()
+    for fid in entry.get("finding_ids") or []:
+        f = (st.get("findings") or {}).get(fid) or {}
+        for k in ("anchor", "edit_scope"):
+            if isinstance(f.get(k), str):
+                out.add(f[k])
+    p = (st.get("permits") or {}).get(entry.get("decision_id"))
+    if p:
+        for k in ("apply_anchors", "related_anchors"):
+            for x in p.get(k) or []:
+                if isinstance(x, str):
+                    out.add(x)
+    return out
+
+
+def _contradiction_binding(st, entry_by_id, cid, it, cls, fenced) -> str:
+    """지적이 가리킨 결정 id 가 이 지적을 묶는가 — "bound" · "unknown"(기록에 없다) · "unbound"(있으나 이 자리의 결정이 아니다).
+
+    묶이려면 ① 사용자의 채택(`choice == adopt`)이고 ② 뒤 결정이 그것을 잇지(`supersedes`) 않았고 ③ 지적의 앵커나 범위가
+    그 결정이 닿은 절 안이고 ④ 불변 절 · 결정 기록 · 미룸 절(울타리)이 아니어야 한다."""
+    entry = entry_by_id.get(cid)
+    if entry is None:
+        return "unknown"
+    if entry.get("choice") != "adopt":
+        return "unbound"
+    superseded = False
+    for e in entry_by_id.values():
+        if e.get("supersedes") == cid:
+            superseded = True
+    if superseded:
+        return "unbound"
+    places = {it["anchor"], it.get("edit_scope") or it["anchor"]}
+    if not (places & _decision_footprint(st, entry)):
+        return "unbound"
+    if cls["immutable"] or (places & fenced):
+        return "unbound"
+    return "bound"
+
+
 def _classify_items(items, st, prof, sections, n, L):
     """프로필 허용 처분 강제 · 앵커 분류(보호·불변) · 승격.
 
-    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items).
+    흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, contra_notes).
+    `contra_notes` 는 `contradicts` 를 비운 사유별 공시 재료다: unknown_decisions(기록에 없는 id) · unbound_decisions(있으나
+    이 자리의 결정이 아닌 id) — 순서대로 중복 없이 — 와 malformed_decisions(형식이 아니라 비운 지적 수).
     """
     allowed = prof["allowed_dispositions"]
     final, rejected_items = [], []
+    entry_by_id = {e.get("decision_id"): e for e in st.get("decision_log") or []}
+    notes = {"unknown_decisions": [], "unbound_decisions": [], "malformed_decisions": 0}
+    for x in items.values():
+        if x.get("_contradicts_malformed"):
+            notes["malformed_decisions"] += 1
+    fenced = _log_section_anchors(prof, sections)
     for f, it in items.items():
         # 흡수된 항목은 렌더되지 않는다 — 그 값의 접기를 세면 생존자가 물려받은 같은 값이 두 번 센다.
         if it.get("_absorbed_into"):
@@ -553,6 +740,19 @@ def _classify_items(items, st, prof, sections, n, L):
             it["disposition"] = new
             d = new
         cls = classify_anchor(it["anchor"], sections, prof)
+        cid = it.get("contradicts")
+        if cid:
+            verdict = _contradiction_binding(st, entry_by_id, cid, it, cls, fenced)
+            if verdict == "bound":
+                # 처분은 건드리지 않는다 — contradicts 는 참고 축에서 빼 줄 뿐 판단을 낮추지 못한다.
+                it["_decision_backed"] = True
+            else:
+                # 값이 바뀐 것이니 센다. 참고로 두고 어디서 왔는지 공시한다.
+                L.coerced("contradicts", cid, None)
+                key = "unknown_decisions" if verdict == "unknown" else "unbound_decisions"
+                if cid not in notes[key]:
+                    notes[key].append(cid)
+                it["contradicts"] = None
         it["origin"] = "reviewer"
         it["immutable"] = cls["immutable"]
         it["kind"] = "pre"
@@ -569,7 +769,7 @@ def _classify_items(items, st, prof, sections, n, L):
         final.append(it)
     # 참고(advisory) 표지 1 걸음 — 축과 처분만 보면 정해지는 것(docreview_advice.route_step1)
     route_step1(final, advisory_axes(prof))
-    return final, rejected_items
+    return final, rejected_items, notes
 
 
 def _auto_decides(a, diff, st, prof, sections, n, L):
@@ -618,7 +818,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
         # F-3 재리뷰(Ruling 20) — 형제 재상승(이 함수의 reraise 순회, `if not d0 or d0.get("state") != "expired"`)
         # 과 같은 모양. `f0` 존재만으로는 이 fix 가 «지금도» escalated 상태인지 모른다 —
         # 예약이 만들어진 뒤 사용자가 drop 하거나(cmd_fix event=drop, 상태 검사 없이
-        # 무조건 대입) intent-pass 로 재시도했을 수 있다(둘 다 `st["fixes"][fid]["state"]`
+        # 무조건 대입) 보류했을 수 있다(cmd_fix event=hold — 둘 다 `st["fixes"][fid]["state"]`
         # 를 escalated 밖으로 옮긴다). 누적(`>= n`)이 이 창을 1 라운드에서 무한대로
         # 넓혔으므로, 지금 상태가 여전히 "escalated" 인 예약만 후속을 낸다 — 아니면
         # 사용자가 이미 다른 처분을 내린 것이고 그 처분이 의무를 진다(형제와 같은 이유,
@@ -791,7 +991,7 @@ def _remap_blocks(final, keep_of, doc, st):
         out = []
         for r in it.get("blocks") or []:
             r2 = keep_of.get(r, r)
-            if r2 in f2id:
+            if r2 in f2id and f2id[r2] not in out:   # 재비판이 두 고침을 하나로 묶었으면 한 번만 센다
                 out.append(f2id[r2])
         it["blocks"] = out
         if it["disposition"] == "decide":
@@ -816,6 +1016,18 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.insert(0, "codex 없음 — 모델 다양성 0 (%s)" % degrade.get("codex_reason"))
     if degrade.get("recritic_dead"):
         adv.append("기각 경로 0 — 오탐이 걸러지지 않았다 (doc-recritic %s)" % degrade["recritic_dead"])
+    det = degrade.get("detectors")
+    if det and det.get("dead") and not degrade.get("critic_dead"):
+        # 같은 사실의 원장 문구(입력 실패(보조): doc-critic#i)는 이 한 줄이 대신 말한다 — 계수는 원장에 남는다
+        kept = []
+        for w in adv:
+            if not w.startswith("입력 실패(보조): doc-critic#"):
+                kept.append(w)
+        adv[:] = kept
+        why_parts = []
+        for k, v in sorted(det["dead_reasons"].items()):
+            why_parts.append("d%s: %s" % (k, v))
+        adv.append("탐지 %d 중 %d 사망 (%s)" % (det["expected"], len(det["dead"]), ", ".join(why_parts)))
     if degrade.get("layer2_missing"):
         adv.append("상세 미검증 — 층 2 블록 없음")
     if st["snapshots"][str(n)].get("headingless"):
@@ -829,6 +1041,12 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
         adv.append("같은 이름 블록을 합쳤다 — %s (%s)" % (" · ".join(merged_note), " · ".join(sorted(degrade["blocks_merged"]))))
     if degrade.get("recritic_blocks"):
         adv.append("재비판 블록 %d개 — 마지막만 읽었다(앞 블록은 인용 예시로 본다)" % degrade["recritic_blocks"])
+    if degrade.get("unknown_decisions"):
+        adv.append("없는 결정 id %s — 참고로 둠" % ", ".join(degrade["unknown_decisions"]))
+    if degrade.get("unbound_decisions"):
+        adv.append("이 자리의 결정이 아닌 id %s — 참고로 둠" % ", ".join(degrade["unbound_decisions"]))
+    if degrade.get("malformed_decisions"):
+        adv.append("형식이 아닌 결정 id — 참고로 둠")
     out = {
         "ok": True, "round": n, "findings": [_pub(it) for it in final],
         "by_disposition": {d: [it["id"] for it in final if it["disposition"] == d and it.get("route") != ROUTE_ADVICE]
@@ -909,7 +1127,10 @@ def cmd_finalize(a) -> int:
     verdicts, added = _read_recritic(a, degrade, L)
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
-    final, rejected_items = _classify_items(items, st, prof, sections, n, L)
+    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L)
+    for k, v in contra_notes.items():
+        if v:
+            degrade[k] = v
     extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
@@ -939,12 +1160,15 @@ def cmd_finalize(a) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_route.py")
+    p = argparse.ArgumentParser(prog="docreview_route.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("prepare-recritic"); x.add_argument("--state-dir", required=True)
-    x.add_argument("--critic", required=True); x.add_argument("--codex", default=None)
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("prepare-recritic"); x.add_argument("--state-dir", required=True)
+    x.add_argument("--critic", required=True, action="append"); x.add_argument("--codex", default=None)
     x.set_defaults(fn=cmd_prepare)
-    x = sp.add_parser("finalize"); x.add_argument("--state-dir", required=True)
+    x = P("finalize"); x.add_argument("--state-dir", required=True)
     x.add_argument("--recritic", default=None); x.add_argument("--recritic-skipped", action="store_true")
     x.add_argument("--doc", default=None)
     x.set_defaults(fn=cmd_finalize)
@@ -955,6 +1179,8 @@ def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
     except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 입구 정화(`scrub`) 밖의 글자(비 UTF-8 CLI 인자 · 원장)

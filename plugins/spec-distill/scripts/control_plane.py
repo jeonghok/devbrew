@@ -592,7 +592,7 @@ def cache_key(repo: Repo, main, main_full, mode, targets):
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
-CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "check_bundle_coverage.py", "control_plane.py",
+CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "section6.py", "brief_body.py", "check_bundle_coverage.py", "control_plane.py",
                     "repo_defaults.py", "conductor_state.py")
 
 

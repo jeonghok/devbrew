@@ -30,7 +30,8 @@ audit `## 6. 리뷰 결정` 의 줄은 두 곳에서 온다. 엔진(`docreview_s
   append-verbatim <audit> --section H --title T <file>
       <file> 내용을 인용 블록으로 H 절 끝에 붙인다. 내용 안의 다른 줄 나눔 글자(`LINE_BREAK_CHARS`)는
       `\n` 으로 바꾼 뒤 줄마다 인용 표시를 단다 — audit 에 그 글자가 남으면 읽는 쪽이 판단을 거부한다.
-      제목 T 도 한 줄로 잇는다. `## 6` 에는 붙이지 않는다(rc 2) — 그 절에는 기록 줄만 산다.
+      제목 T 도 한 줄로 잇는다. `## 6` 에는 붙이지 않는다(rc 2) — 그 절에는 기록 줄만 산다. H 는 `AUDIT_HEADINGS`
+      중 하나여야 한다(아니면 rc 2, `section_unknown` — 없는 절을 파일 끝에 새로 만들지 않는다).
 
 audit 의 절 구조는 `heading_structure` 하나가 판정한다 — 일곱 템플릿 제목은 각각 많아야 한 번,
 템플릿 순서대로 나와야 한다(없는 제목은 «절 없음»). 비신뢰 `## 1` 원문 안에 심긴 제목은 펜스 안이든
@@ -129,6 +130,13 @@ def fold_for_match(s: str) -> str:
 # `\n` 밖에서 `str.splitlines` 가 줄을 끊는 글자 전부(`\r` 은 파일을 읽을 때 `\n` 으로 바뀐다).
 LINE_BREAK_CHARS = "\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"
 _TO_NEWLINE = {ord(c): "\n" for c in LINE_BREAK_CHARS}
+
+
+def read_audit_text(path, errors: str = "strict") -> str:
+    """audit 을 읽는다 — `\r\n` 만 `\n` 으로 바꾸고 홀로 선 `\r` 은 남긴다. `read_text` 의 범용 줄바꿈은 홀로 선 `\r` 을 조용히
+    `\n` 으로 바꿔 한 줄 안의 «사용자가 적은 말» 이 새 풀이 줄로 읽히게 한다. 남은 `\r` 은 `separator_lines` 가 잡는다."""
+    data = pathlib.Path(path).read_bytes().decode("utf-8", errors)
+    return data.replace("\r\n", "\n")
 
 
 def to_newlines(s: str) -> str:
@@ -298,7 +306,7 @@ def check_drops(audit_text: str, dropped: list[str]) -> list[dict]:
 def append_under(path: pathlib.Path, heading: str, block: str) -> None:
     """`heading` 절의 끝(다음 `## ` 앞, 절 끝 빈 줄 앞)에 block 을 붙인다. 절이 없으면 파일 끝에 만든다.
     읽는 쪽과 같은 절을 고른다 — 절 경계가 모호하면(`require_unambiguous`) 쓰지 않고 `AuditAmbiguous`."""
-    text = path.read_text(encoding="utf-8")
+    text = read_audit_text(path)
     require_unambiguous(text, heading)
     lines = text.split("\n")
     block_lines = block.rstrip("\n").split("\n")
@@ -364,7 +372,7 @@ def main(argv=None) -> int:
         return 2
     try:
         if a.cmd == "user-quotes":
-            for q in user_quotes(_read(a.audit)):
+            for q in user_quotes(read_audit_text(a.audit)):
                 print('- "%s"' % q)
             return 0
         if a.cmd == "check-drops":
@@ -377,7 +385,7 @@ def main(argv=None) -> int:
             if not isinstance(dropped, list):
                 print(json.dumps({"ok": False, "error": "gate_has_no_dropped_list"}, ensure_ascii=False))
                 return 2
-            audit_text = _read(a.audit)
+            audit_text = read_audit_text(a.audit)
             try:
                 require_unambiguous(audit_text, DECISION_HEADING)
             except AuditAmbiguous as e:
@@ -392,7 +400,7 @@ def main(argv=None) -> int:
             if a.kind not in HOST_KINDS:
                 print("kind 는 %s 중 하나다: %r" % ("/".join(HOST_KINDS), a.kind), file=sys.stderr)
                 return 2
-            require_unambiguous(_read(a.audit), DECISION_HEADING)
+            require_unambiguous(read_audit_text(a.audit), DECISION_HEADING)
             quote = _read(a.quote_file)
             note = _read(a.note_file) if a.note_file else a.note
             if not one_line(quote):
@@ -409,7 +417,7 @@ def main(argv=None) -> int:
             # 읽으면 그 처분 기록이 조용히 사라진다(AC6). 되돌리기의 멱등은 `<base>.reverted` 표지가
             # 따로 맡으므로, 여기서는 다시 돌린 만큼 줄이 겹칠 뿐 기록이 빠지지는 않는다.
             if a.kind != "편집":
-                existing = (section_body(_read(a.audit), DECISION_HEADING) or "").split("\n")
+                existing = (section_body(read_audit_text(a.audit), DECISION_HEADING) or "").split("\n")
                 if line in existing:
                     print("[spec-distill] 같은 기록 줄이 이미 있다 — 다시 적지 않는다: %s" % line, file=sys.stderr)
                     return 0
@@ -425,6 +433,10 @@ def main(argv=None) -> int:
         if a.cmd == "append-verbatim":
             if a.section.strip() == DECISION_HEADING:
                 print("[seed_review_log] ## 6 에는 기록 줄만 적는다 — append-verbatim 은 다른 절에 붙인다",
+                      file=sys.stderr)
+                return 2
+            if a.section not in AUDIT_HEADINGS:
+                print("[seed_review_log] 붙일 절이 audit 템플릿의 절 제목이 아니다(section_unknown) — 적지 않는다",
                       file=sys.stderr)
                 return 2
             content = to_newlines(_read(a.file)).rstrip("\n").split("\n")

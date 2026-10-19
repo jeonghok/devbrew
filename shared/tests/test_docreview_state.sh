@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_state.py shared/tests/fixtures/docreview/**
+# guards: shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_config.py shared/tests/fixtures/docreview/**
 #
 # docreview 원장의 **행동**을 고정한다 — D13 전이표의 상태·라운드·게이트 셀.
 # 케이스 본문은 fixtures/docreview/cases.sh 에 있다(mutation 락과 공유).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "shared/docreview/scripts/docreview_state.py"; bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
+  echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/scripts/docreview_config.py"; bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
@@ -13,10 +13,54 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 case_T37_cap_and_extra
+case_config_defaults_disclosed
+case_config_env_wins
+case_config_entry_beats_profile
+case_config_invalid_refused
+case_config_changes_between_rounds
+case_config_profile_fields
+case_config_profile_string_refused
+case_config_rereview_count_never_decreases
 case_T18_adopt_issues_permit
 case_T19_reject_closes
 case_T20_hold_becomes_ask
 case_T21_permit_applied
+case_AC38_related_declared_exempt_and_shown
+case_AC38_related_undeclared_still_frozen
+case_AC38_related_refusals
+case_AC38_related_declared_but_unchanged_disclosed
+case_AC38_related_immutable_refused_and_frozen
+case_AC38_related_insert_after
+case_AC38_related_scoped_to_permit_round
+case_AC38_related_uncountable_disclosed
+case_AC38_audit_row1_forged_related_scope
+case_AC38_audit_row2_edit_scope_immutable
+case_AC38_audit_row3_insert_after_immutable
+case_AC38_audit_row4_fix_intent_pass_validated
+case_AC38_audit_row5_labels_never_apply
+case_AC38_audit_row6_decision_log_append_only
+case_AC38_audit_row9_declare_stale_permit
+case_AC38_audit_row10_11_entry_flags
+case_AC38_r3_f1_intent_pass_removed
+case_AC38_r3_f2_revert_immutable_restored
+case_AC38_r3_f3_log_section_fenced
+case_AC38_r3_f3_positive_controls
+case_AC38_r3_f4_headingless_transition
+case_AC38_r3_f5_gate_adopt_unavailable
+case_AC38_r3_f6_legacy_ledger_disclosed
+case_AC38_r3_f7_invisible_blank_quote
+case_AC38_r4_A_log_revert_keeps_engine_lines
+case_AC38_r4_B_fake_log_lines
+case_AC38_r4_C_log_recreated
+case_AC38_r4_m3_invisible_letters
+case_AC38_r4_m4_route_alternatives_filtered
+case_AC38_r4_m1_revert_target_flagged
+case_AC38_r4_snapshot_fields_cannot_switch_guards_off
+case_AC38_r5_1_revert_to_absence_keeps_engine_lines
+case_AC38_r5_2_window_upper_bound
+case_AC38_r5_3_since_corrupt_and_legacy_once
+case_AC38_r5_4_duplicate_engine_line
+case_AC38_r5_5_combining_only_blank
 case_T22_permit_expired_reraise
 case_T22b_expired_superseded_unblocks
 case_T23_post_adopt_applied
@@ -31,8 +75,12 @@ case_T32_ask_answered_unholds
 case_T33_user_drops_fix
 case_T36_freeze_exceptions_log_targets
 case_T38_stagnation
+case_AC13_stagnation_first_line
 case_T39_gate_derivation
 case_cap_zero_open_two_stage
+case_AC40_extra_source_required
+case_AC40_below_cap_approval_logged
+case_AC13_open_count_and_label
 case_precap_zero_open_not_two_stage
 case_T45_decision_log_append_only
 case_T12_immutable_permit_targets_summary
@@ -84,4 +132,32 @@ case_state_dir_for_per_doc
 case_E1_skipped_round_permit_caught_up
 case_E5_revert_caught_up_by_its_round_snapshot
 case_state_gloss_covers_gate_rows
+# AC14 — 줄인 플래그 거부 · brief 원문 절 덧붙이기만 허용.
+case_AC14_no_abbrev_flags
+case_AC14_append_only_passes
+case_AC14_append_only_plus_edit
+case_AC14_line_hashes_only_immutable
+# AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법.
+case_AC15_log_line_one_line_every_field
+case_AC15_forged_lines_gain_no_provenance
+case_AC15_drop_reason_one_line
+case_AC15_decide_quote_one_line
+case_AC15_defer_row_one_line_escaped
+# AC17 — 원장 요약값.
+case_AC17_digest_mismatch_stops
+case_AC17_digest_covers_engine_lines_and_body
+case_AC17_digest_backfill_disclosed_once
+case_AC17_digest_line_strip_stops
+case_AC17_era_marker_failure_disclosed
+case_AC17_legacy_disclosed_on_every_load
+case_AC17_misplaced_or_malformed_digest_stops
+# AC38 · AC15 — 사람이 내린 결정 줄은 엔진 명령(log-decision)으로 쓰고, 울타리는 그대로다.
+case_AC38_human_decision_via_engine
+case_AC38_human_decision_by_hand_still_frozen
+case_AC38_human_decision_creates_section
+case_AC38_human_decision_quote_one_line
+case_AC38_human_decision_refusals
+case_AC38_human_decision_no_ledger_baseline
+case_AC38_human_decision_before_first_round_baseline
+case_AC38_human_decision_count_prefix
 finish

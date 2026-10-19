@@ -241,7 +241,7 @@ PY
 case_advice_supersedes_open_lineage_only() {
   local d c p1 p2 p3 p4 surv; d="$(mc_r1)"; c="$d/critic-sup.txt"
   surv="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["summary"].startswith(("AD18:", "AD19:"))][0]')"
-  py docreview_state.py fix --state-dir "$d" --id "$surv" --event intent-pass --scope "#handoff-context" >/dev/null
+  py docreview_anchor.py check-intent "$surv" --intent "#handoff-context" --state-dir "$d" >/dev/null
   adv_sup_critic "$d/fin.json" "$FX/critic-mc-r2-supersedes.txt.tmpl" "$c"
   mc_round "$d" "$FX/design-sample-handoff.md" "$c" "$d/fin2.json"
   assert_eq "$(st_yaml "$d" "st['fixes']['$surv']['state']")" "applied" "supersedes 전제: 라운드 1 의 advisory fix(병합 생존자)가 라운드 2 에서 적용 관측됐다"
@@ -315,6 +315,21 @@ case_advice_step2_order_independent() {
     "2 걸음 순환: 서로를 막는 advisory ask 는 advice 로 증명되지 않아 차단 쪽에 남는다"
 }
 
+# ── AC16 — 읽기 전용 목록은 advice-list 로, 쓰기 플래그 없는 advice 는 거부 ───────
+case_AC16_advice_list_read_only() {
+  local d; d="$(adv_state 3)" || { no "AC16: 원장 실패"; return; }
+  local before after rc; before="$(cksum < "$d/docreview-state.md")"
+  py docreview_state.py advice-list --state-dir "$d" > "$d/list.json"; rc=$?
+  after="$(cksum < "$d/docreview-state.md")"
+  assert_eq "$rc $before" "0 $after" "AC16: advice-list 는 원장을 쓰지 않는다"
+  assert_eq "$(jget "$d/list.json" 'd["ok"], isinstance(d["items"], list), len(d["items"])')" "(True, True, 3)" "AC16: 목록 JSON"
+  py docreview_state.py advice-list --state-dir "$d" --render >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "AC16: advice-list 는 쓰기 플래그를 모른다"
+  py docreview_state.py advice --state-dir "$d" >"$d/o" 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c advice_needs_flag "$d/err") $(wc -c < "$d/o" | tr -d ' ')" "2 1 0" "AC16: 플래그 없는 advice 는 rc 2 advice_needs_flag — 목록은 advice-list 로"
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "AC16: 거부된 advice 도 원장을 쓰지 않는다"
+  rm -rf "$d"
+}
 # ── advice 서브커맨드 ───────────────────────────────────────────────────────
 adv_state() {   # adv_state <n> → 참고 항목 n 개를 가진 design-doc 라운드 1 상태 디렉토리
   local c; c="$(mktemp -t advcritic-XXXXXX)"; python3 "$FX/mk_advice_critic.py" "$1" "$c"
@@ -339,7 +354,48 @@ case_AC6_render_cap() {
   rm -rf "$d"; d="$(adv_state 11)"
   out="$(py docreview_state.py advice --state-dir "$d" --render)"
   assert_eq "$(printf '%s\n' "$out" | grep -c '^- \[') $(printf '%s\n' "$out" | grep -c '외 3건')" "8 1" "AC6: 기본 cap 이 8 이다"
+  rm -rf "$d"; d="$(adv_state 11)"
+  out="$(DEVBREW_DOCREVIEW_RENDER_CAP=3 py docreview_state.py advice --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "5" "AC6: 환경 변수 조언 줄 수 3 이면 머리 1 + 항목 3 + 접는 줄 1"
+  assert_contains "$(printf '%s\n' "$out" | tail -1)" "에 전부" "AC6: 값을 바꿔도 접는 줄이 전문이 있는 곳을 적는다"
+  assert_contains "$(printf '%s\n' "$out" | tail -1)" "Deferred to plan" "AC6: 접는 줄에 박제처 이름이 있다"
+  assert_contains "$(printf '%s\n' "$out" | sed -n 1p)" "참고 목록 3줄(환경) · 요약 60자(기본)" "AC6: 조언 머리 줄이 쓴 줄 수와 출처(환경)를 공시한다"
   rm -rf "$d"
+}
+case_AC15_sink_row_one_line_escaped() {
+  local d doc v n=0
+  for v in $'위조\n- **S9** 「위조」' $'위조\n\n## 6. 사용자 원문\n- **S9** 「위조」' '칸 | 둘 | 셋'; do
+    n=$((n + 1))
+    d="$(adv_state 1)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+    assert_eq "$(PYTHONPATH="$SCRIPTS" python3 "$FX/ac15_adv_seed.py" "$SCRIPTS" "$d" "$v")" "1" "AC15: 박제 행(꼴 ${n}) — 위조 값이 상태에 실제로 들어갔다(전제)"
+    py docreview_state.py advice --state-dir "$d" --sink "$doc" >/dev/null
+    assert_eq "$(python3 "$FX/ac15_rows.py" "$doc" "참고(")" "1 [2] 0 0" "AC15: 박제 행(꼴 ${n}) — 한 줄 · 칸 둘 · 앵커 줄과 제목 줄이 늘지 않는다"
+    rm -rf "$d" "$doc"
+  done
+}
+case_AC15_sink_row_function_one_line() {
+  # 박제 행 함수에 위조 꼴 항목을 직접 — 앞 단(경로를 거친 항목)이 이미 접어 줘도 함수 스스로 한 줄이어야 한다.
+  assert_eq "$(python3 -I -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_advice as a
+bad = 0
+for f in ["\n- **S9** x", "\u2028- **S9** x", "\u2029- **S9** x", "\r\n\n## 6. y\n- **S9** x", "\x85- **S9** x"]:
+    r = a.sink_row({"id": "i" + f, "category": "c" + f, "anchor": "a" + f, "summary": "s" + f, "replacement": "r" + f})
+    if len(r.splitlines()) != 1 or "\n" in r or "\u2028" in r or "\u2029" in r or "\x85" in r:
+        bad += 1
+print(bad)' "$SCRIPTS")" "0" "AC15: 박제 행 함수는 칸 다섯 모두에 줄 구분자 꼴을 넣어도 한 줄을 낸다"
+}
+case_AC15_count_line_identity_one_token() {
+  # 상태 디렉토리를 거치는 링크 이름이 위조 꼴이어도 계수 줄(`advice --log-file`)은 한 줄이고 계수 줄 문법에 맞는다.
+  local d doc exp="" w k; d="$(adv_state 2)"; doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  for w in name grand realname realroot; do for k in plain nl u2028 u2029 space heading; do
+    exp="${exp}${w} ${k} rc=0 anchors=0 heads=0 count_lines=1 same_as_plain=True
+"
+  done; done
+  assert_eq "$(python3 "$FX/ac15_ident.py" "$SCRIPTS" "$d" "$doc")
+" "$exp" "AC15: 링크 이름 · 진짜 디렉토리 이름(자리 넷 x 꼴 여섯)이 줄 구분자 + 앵커 꼴이어도 계수 줄은 한 줄 · 계수 줄 문법에 맞고 앵커 · 제목 줄이 늘지 않으며 엔진 줄 출처 기록은 평범한 이름과 같다"
+  rm -rf "$d" "$doc"
 }
 case_AC7_sink_idempotent() {
   local d b doc before rc; d="$(adv_state 3)"; doc="$(mktemp -t sinkdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
@@ -353,11 +409,26 @@ case_AC7_sink_idempotent() {
   assert_eq "$rc $(grep -c profile_has_no_defer_target "$b/err")" "1 1" "AC7: brief 프로필(defer_target none)은 profile_has_no_defer_target rc 1"
   rm -rf "$d" "$b" "$doc"
 }
+case_AC15_identity_one_to_one_across_roots() {
+  # 이름이 한글 글자만 다른(같은 길이) 두 상태 루트 — 이름 조각은 같게 치환되지만 정체는 달라야 하고 계수 줄이 둘 다 적힌다.
+  local d r1 r2 doc i1 i2
+  d="$(adv_state 2)"; r1="$(mktemp -d -t identroot-XXXXXX)"; r2="$(mktemp -d -t identroot-XXXXXX)"
+  doc="$(mktemp -t identdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
+  python3 "$FX/ac15_roots.py" "$d" "$r1" "$r2" "가나" "다라" > /dev/null
+  i1="$(adv_ident "$r1/가나/.docreview/$(basename "$d")")"; i2="$(adv_ident "$r2/다라/.docreview/$(basename "$d")")"
+  assert_eq "$([ "$i1" != "$i2" ] && echo differ || echo same)" "differ" "AC15: 한글 글자만 다른 두 루트의 리뷰 정체는 달라야 한다(치환이 손실이어도 일대일)"
+  ln -s "$r1/가나/.docreview/$(basename "$d")" "$r2/alias"
+  assert_eq "$(adv_ident "$r2/alias")" "$i1" "AC15: 같은 상태 디렉토리를 다른 이름의 링크로 가리켜도 리뷰 정체는 실경로 기준으로 같다"
+  py docreview_state.py advice --state-dir "$r1/가나/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
+  py docreview_state.py advice --state-dir "$r2/다라/.docreview/$(basename "$d")" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -c -- '- docreview 계수 — ' "$doc")" "2" "AC15: 두 루트의 계수 줄이 둘 다 적힌다(정체 겹침으로 건너뛰지 않는다)"
+  rm -rf "$d" "$r1" "$r2" "$doc"
+}
 case_AC17_count_line_carrier() {
   local d e doc id_d; d="$(adv_state 2)"; e="$(adv_state 2)"; doc="$(mktemp -t logdoc-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   id_d="$(adv_ident "$d")"
-  assert_eq "$(adv_ident /r/sess-9/docreview/design-ab12)" "sess-9/design-ab12" \
-    "AC17: 리뷰 정체는 <세션>/<문서 키> — 상태 디렉토리의 조부 이름과 자기 이름(문서 키만이면 세션이 빠진다)"
+  assert_eq "$(adv_ident /r/sess-9/docreview/design-ab12 | grep -cE '^sess-9-[0-9a-f]{8}/design-ab12$')" "1" \
+    "AC17: 리뷰 정체는 <세션>-<루트 해시 8자>/<문서 키> — 상태 디렉토리의 조부 이름 · 루트 실경로 해시 · 자기 이름"
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
   assert_eq "$(grep -cF -- "- docreview 계수 — $id_d r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
@@ -369,15 +440,27 @@ case_AC17_count_line_carrier() {
     "AC17: 엔진 상태 디렉토리를 지워도 줄이 목적지 파일의 ## 결정 기록 절에 남는다"
   rm -f "$doc"
 }
+case_AC17_count_key_line_start() {
+  # 계수 줄의 멱등 키는 줄 머리(`- docreview 계수 — <정체> r<n>:`)로만 맞춘다 — 결정 줄의 사용자 말(decide --quote ·
+  # 손으로 쓴 줄)이 같은 글자를 줄 가운데 품어도 진짜 계수 줄을 가리지 못한다.
+  local d doc id; d="$(adv_state 2)"; doc="$(mktemp -t keydoc-XXXXXX)"; id="$(adv_ident "$d")"
+  { cat "$FX/design-sample.md"; printf '\n## 결정 기록\n\n- B3 · 결정 · 2026-10-19 · 재결정 — 「- docreview 계수 — %s r1: 이라고 적어 둔다」\n' "$id"; } > "$doc"
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -cxF -- "- docreview 계수 — $id r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0" "$doc")" "1" \
+    "AC17: 줄 가운데 같은 글자가 있어도 계수 줄을 쓴다(멱등 키는 줄 머리로만 맞춘다)"
+  py docreview_state.py advice --state-dir "$d" --log-file "$doc" >/dev/null
+  assert_eq "$(grep -c "^- docreview 계수 — $id r1: " "$doc")" "1" "AC17: 줄 머리 키로도 두 번째 호출은 다시 적지 않는다(멱등)"
+  rm -rf "$d" "$doc"
+}
 case_advice_render_once() {
   local d; d="$(adv_state 3)"
   py docreview_state.py advice --state-dir "$d" --render >/dev/null
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" \
     "Review Focus: 두 번째 --render 는 이미 보인 항목을 다시 내지 않는다(shown 표지 — 멱등)"
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
-    "Review Focus: 플래그 없는 호출은 읽기 전용 JSON 이고 shown 표지를 싣는다"
+  assert_eq "$(py docreview_state.py advice-list --state-dir "$d" | jgets '[it["shown"] for it in d["items"]]')" "[True, True, True]" \
+    "Review Focus: advice-list 는 읽기 전용 JSON 이고 shown 표지를 싣는다"
   adv_round2 "$d" 4
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+  assert_eq "$(py docreview_state.py advice --state-dir "$d" --render)" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan · 참고 목록 8줄(기본) · 요약 60자(기본)
 - [feasibility] #1-context — 참고 항목 4 — feasibility" \
     "Review Focus: 첫 표시 뒤 라운드 2 가 새 항목 하나를 올리면 다음 --render 는 그 새 항목만 낸다(반복 셋은 안 낸다)"
   rm -rf "$d"
@@ -391,7 +474,7 @@ for r in st["rounds"].values():
         (r.get("route_report") or {}).pop(k, None)
 s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   out="$(py docreview_state.py gate --state-dir "$d" --render 2>&1)"; rc=$?
-  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^재리뷰 0/2회 썼다$')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 재리뷰 줄까지 낸다(죽지 않는다)"
+  assert_eq "$rc $(printf '%s\n' "$out" | grep -c '^재리뷰 0/2회 썼다(상한 2 — 기본)')" "0 1" "Review Focus: 업그레이드 전 원장 — 게이트 렌더가 rc 0 으로 재리뷰 줄까지 낸다(죽지 않는다)"
   assert_not_grep "$out" '^참고 ' "Review Focus: 업그레이드 전 원장 — 게이트 렌더에 참고 줄이 없다"
   assert_eq "$(py docreview_state.py advice --state-dir "$d" --render | head -1 | grep -c '^참고(advisory) 0건')" "1" "Review Focus: 업그레이드 전 원장 — --render 는 0건"
   n="$(mktemp -t pre-XXXXXX)"; cp "$FX/design-sample.md" "$n"
@@ -399,17 +482,21 @@ s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
   assert_eq "$rc $(grep -c 'docreview 계수' "$n")" "0 0" "Review Focus: 업그레이드 전 원장 — --log-file 은 계수 줄 0 · rc 0"
   rm -rf "$d" "$n"
   d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  py docreview_state.py advice --state-dir "$d" >/dev/null 2>"$d/err"; rc=$?
-  assert_eq "$rc $(grep -c profile_has_no_must_catch "$d/err")" "1 1" "Review Focus: must_catch 없는 프로필의 advice 는 profile_has_no_must_catch rc 1"
+  py docreview_state.py advice-list --state-dir "$d" >/dev/null 2>"$d/err"; rc=$?
+  assert_eq "$rc $(grep -c profile_has_no_must_catch "$d/err")" "1 1" "Review Focus: must_catch 없는 프로필의 advice-list 는 profile_has_no_must_catch rc 1"
   rm -rf "$d"
 }
 case_advice_odd_text_one_line() {
   local d doc out row id; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   doc="$(mktemp -t odd-XXXXXX)"; cp "$FX/design-sample.md" "$doc"
   out="$(py docreview_state.py advice --state-dir "$d" --sink "$doc" --render)"
-  assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan
+  assert_eq "$out" "참고(advisory) 1건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: ### Deferred to plan · 참고 목록 8줄(기본) · 요약 60자(기본)
 - [tradeoffs] #1-context — 파이프 | 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서…" \
     "Review Focus: 개행이 든 80자 요약도 렌더 항목은 한 줄이고 59자 + 「…」로 잘린다(전문 대조)"
+  rm -rf "$d"; d="$(route_r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md" "$FX/critic-mc-odd.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
+  out="$(DEVBREW_DOCREVIEW_SUMMARY_WIDTH=20 py docreview_state.py advice --state-dir "$d" --render)"
+  assert_eq "$(printf '%s\n' "$out" | sed -n 2p | sed 's/^.* — //')" "파이프 | 가 든 요약이고 둘째 줄…" "Review Focus: 환경 변수 요약 폭 20 이면 19자 + 「…」로 잘린다"
+  assert_contains "$(printf '%s\n' "$out" | sed -n 1p)" "요약 20자(환경)" "Review Focus: 조언 머리 줄이 쓴 요약 폭과 출처(환경)를 공시한다"
   id="$(st_yaml "$d" 'list(st["advice"].values())[0]["id"]')"
   row="| $id | 참고(tradeoffs) #1-context — 파이프 \\| 가 든 요약이고 둘째 줄로 이어지며 한 줄 폭 예순 자를 넘기도록 길게 늘인 문장이다 — 끝에서 잘려야 하고 그 뒤로도 계속 이어진다 — 고치면: 고치면 A \\| B 로 나눈다 |"
   assert_eq "$(adv_deferred "$doc" | sed '/^$/d')" "| # | 항목 |
@@ -434,11 +521,11 @@ case_advice_write_failure_loud() {   # 사용자 문서 쓰기 실패 — rc 1 �
   rm -rf "$d" "$doc"
 }
 case_advice_module_missing() {   # 원장 스크립트만 복사한 트리 — 다른 서브커맨드는 돌고 advice 만 사유를 내고 멈춘다
-  local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$t/"
+  local t rc; t="$(mktemp -d -t advlone-XXXXXX)"; cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$t/"
   python3 "$t/docreview_state.py" state-dir-for --root "$t/root" --doc "$FX/design-sample.md" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "형제 부재: docreview_advice 가 없어도 원장 스크립트의 다른 서브커맨드는 돈다"
-  python3 "$t/docreview_state.py" advice --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
-  assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
+  python3 "$t/docreview_state.py" advice-list --state-dir "$t" >/dev/null 2>"$t/err"; rc=$?
+  assert_eq "$rc $(grep -c advice_module_missing "$t/err")" "1 1" "형제 부재: advice-list 는 advice_module_missing rc 1 로 멈춘다(traceback 아님)"
   rm -rf "$t"
 }
 
@@ -506,8 +593,8 @@ case_advice_surrogate_sink_atomic() {   # 짝 없는 surrogate 가 사용자 문
     "surrogate: 박제 뒤에도 문서의 원래 바이트가 표 앞에 그대로 있다(0 바이트로 잘리지 않는다)"
   assert_eq "$(adv_deferred "$doc" | grep -c '| 참고(component_relations) #1-context — 외톨이 � 끝 — 고치면: 쌍 😀 · 외톨이 � |$')" "1" \
     "surrogate: 박제 행은 짝 없는 것을 U+FFFD 로, 짝이 맞는 쌍은 원래 글자로 적는다"
-  assert_eq "$(py docreview_state.py advice --state-dir "$d" | jgets '[it["summary"] for it in d["items"]]')" "['외톨이 � 끝']" \
-    "surrogate: 플래그 없는 JSON 도 rc 0 으로 U+FFFD 를 싣는다(state_unreadable 로 죽지 않는다)"
+  assert_eq "$(py docreview_state.py advice-list --state-dir "$d" | jgets '[it["summary"] for it in d["items"]]')" "['외톨이 � 끝']" \
+    "surrogate: advice-list JSON 도 rc 0 으로 U+FFFD 를 싣는다(state_unreadable 로 죽지 않는다)"
   cp "$FX/design-sample.md" "$doc"
   out="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
 from pathlib import Path
@@ -681,8 +768,155 @@ case_advice_count_line_nested_log() {   # ## 결정 기록 아래 ### Deferred t
 # ── --where 라벨 ─────────────────────────────────────────────────────────────
 case_advice_render_where_label() {   # B-A 가 쓰는 --where — 머리 줄 · 접는 줄이 그 라벨을 가리킨다
   local d out; d="$(adv_state 11)"
-  out="$(py docreview_state.py advice --state-dir "$d" --render --cap 8 --where "brief §3 · §5")"
-  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5
+  out="$(py docreview_state.py advice --state-dir "$d" --render --where "brief §3 · §5")"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '1p;$p')" "참고(advisory) 11건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: brief §3 · §5 · 참고 목록 8줄(기본) · 요약 60자(기본)
   … 외 3건 — brief §3 · §5 에 전부" "--where: 머리 줄과 접는 줄이 박제처 헤딩 대신 라벨을 가리킨다"
+  rm -rf "$d"
+}
+
+# ── AC39 — 이미 내린 결정과 반대인 본문은 저자 고침 ─────────────────────────
+case_AC39_contradicts_routes_fix() {
+  local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null   # → D1.1
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-contradicts.txt")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[ (i["contradicts"], i["disposition"], i.get("route")) for i in d["findings"] if i.get("contradicts") ]')" "[('D1.1', 'fix', None)]" "AC39: 실재하는 결정 id 를 단 지적은 참고가 아니라 저자 고침"
+  assert_eq "$(jget "$d/fin.json" '[i["summary"] for i in d["findings"] if i["anchor"]=="#handoff-context" and i.get("route")=="advice"]')" "['넘김 절이 없는 결정을 가리키며 반대라고 한다']" "AC39: 없는 id 는 참고로 남는다"
+  assert_contains "$(jget "$d/fin.json" '" | ".join(d["advisory"])')" "없는 결정 id D7.7" "AC39: 없는 id 를 공시한다"
+  rm -rf "$d"
+}
+
+# ── AC39 우회 — contradicts 는 «살아 있는 채택 + 이 자리»일 때만 묶이고, 처분을 낮추지 못한다 ──────────────
+contra_state() {   # contra_state <adopt|hold|drop|superseded> → 라운드 2 까지 온 상태 디렉토리(결정 D1.1 이 이미 있다)
+  local kind="$1" d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  if [ "$kind" = drop ]; then
+    seed_findings "$d" "[$F_FIX]"
+    py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event drop --reason '버린다' >/dev/null
+  else
+    seed_findings "$d" "[$F_DEC]"
+    if [ "$kind" = hold ]; then
+      py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice hold --quote '보류' >/dev/null
+    else
+      py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+    fi
+  fi
+  if [ "$kind" = superseded ]; then
+    PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); st["decision_log"].append({"decision_id": "D1.2", "round": 1, "finding_ids": ["aaaa0001#r1.1"], "lineage": "aaaa0001#r1.1", "choice": "adopt", "quote": "다시", "supersedes": "D1.1"}); save_state(d, st, "fixture")' "$d"
+  fi
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  echo "$d"
+}
+contra_permit() {   # contra_permit <dir> <related|apply> <앵커> — D1.1 의 permit 에 앵커를 더한다(원장을 손으로 바꾼 픽스처)
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d, kind, a = sys.argv[1:4]; st=load_state(d); p=st["permits"]["D1.1"]; key = "related_anchors" if kind == "related" else "apply_anchors"; p[key] = list(p.get(key) or []) + [a]; save_state(d, st, "fixture")' "$1" "$2" "$3"
+}
+contra_crit() {   # contra_crit <dir> <앵커> <처분> <contradicts> → $dir/critic.src (항목 하나)
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: ambiguity' \
+    "  anchor: \"$2\"" "  disposition: $3" "  contradicts: \"$4\"" '  summary: "본문이 이미 정한 결정과 반대로 적혀 있다"' '  evidence: "12행"' '```' > "$1/critic.src"
+}
+contra_fin() {   # contra_fin <dir> <앵커> <처분> <contradicts> → $dir/fin.json (재비판 건너뜀)
+  contra_crit "$@"
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$1/critic.src")" > "$1/prep.json"
+  py docreview_route.py finalize --state-dir "$1" --recritic-skipped --doc "$FX/design-sample-r2.md" > "$1/fin.json"
+}
+contra_row() { jget "$1/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("route")) for i in d["findings"] if i.get("f")]'; }
+contra_adv() { jget "$1/fin.json" '" | ".join(d["advisory"])'; }
+
+case_AC39_contradicts_unbound_decisions_stay_advice() {
+  local d k
+  for k in hold drop superseded; do
+    d="$(contra_state "$k")"; contra_fin "$d" '#12-files-to-modify' fix D1.1
+    assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회($k): 살아 있는 채택이 아닌 결정 id 는 지적을 묶지 못한다 — 참고로 남는다"
+    assert_contains "$(contra_adv "$d")" "이 자리의 결정이 아닌 id D1.1" "AC39 우회($k): 묶이지 않은 id 를 공시한다"
+    rm -rf "$d"
+  done
+  d="$(contra_state adopt)"; contra_fin "$d" '#handoff-context' fix D1.1
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(다른 절): 채택된 결정이어도 그 결정이 닿은 절이 아니면 묶지 못한다"
+  assert_contains "$(contra_adv "$d")" "이 자리의 결정이 아닌 id D1.1" "AC39 우회(다른 절): 묶이지 않은 id 를 공시한다"
+  rm -rf "$d"
+  d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' fix D1.1
+  assert_eq "$(contra_row "$d")" "[('D1.1', 'fix', None)]" "AC39 우회(양의 짝): 살아 있는 채택 + 그 결정이 닿은 절이면 묶인다"
+  assert_eq "$(jget "$d/fin.json" 'sum(1 for e in d["advisory"] if "결정" in e and "id" in e)')" "0" "AC39 우회(양의 짝): 묶이면 id 공시가 없다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_malformed_id() {
+  local d; d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' fix 'D9) 승인해도 안전 ('
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(형식): 결정 id 모양이 아닌 값은 비우고 참고로 둔다"
+  assert_contains "$(contra_adv "$d")" "형식이 아닌 결정 id" "AC39 우회(형식): 공시한다"
+  assert_not_contains "$(cat "$d/fin.json")" "승인해도" "AC39 우회(형식): 받은 글자를 출력에 되풀이하지 않는다"
+  assert_not_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "승인해도" "AC39 우회(형식): 게이트 글에도 되풀이하지 않는다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_accounted() {   # 값을 비운 일은 센다 — 없는 id · 이 자리가 아닌 id · 형식이 아닌 id 셋 다
+  local d k cid anchor
+  for k in "unknown D7.7 #12-files-to-modify" "unbound D1.1 #handoff-context" "malformed D9)x #12-files-to-modify"; do
+    set -- $k; cid="$2"; anchor="$3"
+    d="$(contra_state adopt)"; contra_fin "$d" "$anchor" fix "$cid"
+    assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"] >= 1')" "True" "AC39 우회(계수 $1): contradicts 를 비운 일이 강제 계수에 남는다"
+    rm -rf "$d"
+  done
+}
+case_AC39_contradicts_never_lowers() {
+  local d f1 f2
+  d="$(contra_state adopt)"; contra_fin "$d" '#12-files-to-modify' decide D1.1
+  assert_eq "$(contra_row "$d")" "[('D1.1', 'decide', None)]" "AC39 우회(처분): 묶인 decide 는 decide 로 남는다 — 저자 고침으로 내려가지 않는다"
+  rm -rf "$d"
+  # 병합 — 한 리뷰어의 decide 가 다른 리뷰어의 contradicts 달린 fix 에 먹히지 않는다
+  d="$(contra_state adopt)"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' \
+    '- ref: c1' '  layer: 2' '  category: ambiguity' '  anchor: "#12-files-to-modify"' '  disposition: decide' '  summary: "파일 목록을 어느 쪽으로 정할지 사용자가 정해야 한다"' '  evidence: "12행"' \
+    '- ref: c2' '  layer: 2' '  category: ambiguity' '  anchor: "#12-files-to-modify"' '  disposition: fix' '  contradicts: "D1.1"' '  summary: "파일 목록이 이미 정한 결정과 반대로 적혀 있다"' '  evidence: "12행"' '```' > "$d/critic.src"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" '[x["f"] for x in d["items"] if "사용자가 정해야" in x["summary"]][0]')"
+  f2="$(jget "$d/prep.json" '[x["f"] for x in d["items"] if "이미 정한 결정과" in x["summary"]][0]')"
+  printf '%s\n' '```docreview-recritic' 'verdicts:' "  - f: $f1" '    verdict: confirm' "    same_as: [$f2]" '```' > "$d/recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[i["disposition"] for i in d["findings"] if i.get("f")]')" "['decide']" "AC39 우회(병합): 합쳐진 생존자는 높은 처분 decide 로 남는다"
+  rm -rf "$d"
+  # 재비판의 raise 도 되돌리지 못한다
+  d="$(contra_state adopt)"; contra_crit "$d" '#12-files-to-modify' fix D1.1
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" '[x["f"] for x in d["items"]][0]')"
+  printf '%s\n' '```docreview-recritic' 'verdicts:' "  - f: $f1" '    verdict: raise' '    to: decide' '```' > "$d/recritic.txt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[i["disposition"] for i in d["findings"] if i.get("f")]')" "['decide']" "AC39 우회(raise): 재비판이 올린 decide 를 contradicts 가 fix 로 되돌리지 못한다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_fence_and_immutable() {
+  local d
+  d="$(contra_state adopt)"; contra_permit "$d" related '#deferred-to-plan'
+  contra_fin "$d" '#deferred-to-plan' fix D1.1
+  assert_eq "$(contra_row "$d")" "[(None, 'fix', 'advice')]" "AC39 우회(울타리): 결정 기록 · 미룸 절을 겨눈 지적은 묶지 못한다"
+  rm -rf "$d"
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_MC/brief.md")" || { no "AC39 불변: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  seed_findings "$d" "[$F_BRIEF_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  contra_permit "$d" related '#6-사용자-원문'
+  next_round "$d" "$FX/brief-append-r2.md" >/dev/null
+  contra_crit "$d" '#6-사용자-원문' fix D1.1
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic.src")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/brief-append-r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[(None, 'decide', 'immutable')]" "AC39 우회(불변): 불변 절은 결정 반대여도 decide 로 남고 묶이지 않는다"
+  rm -rf "$d"
+}
+case_AC39_contradicts_protected_still_asks() {
+  # 보호 절(수용 기준)의 결정 반대 지적도 보호 승격을 지난다 — 사용자의 살아 있는 permit 이 덮을 때만 fix 로 남는다
+  local d; d="$(contra_state adopt)"; contra_permit "$d" related '#11-acceptance-criteria'
+  contra_fin "$d" '#11-acceptance-criteria' fix D1.1
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[('D1.1', 'decide', 'protected')]" "AC39: 보호 절의 결정 반대 지적은 사용자에게 다시 묻는다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "(반대라고 한 결정: D1.1)" "AC39: 게이트 행이 가리킨 결정을 괄호에 보인다"
+  rm -rf "$d"
+  d="$(contra_state adopt)"; contra_permit "$d" related '#11-acceptance-criteria'; contra_permit "$d" apply '#11-acceptance-criteria'
+  contra_fin "$d" '#11-acceptance-criteria' fix D1.1
+  assert_eq "$(jget "$d/fin.json" '[(i.get("contradicts"), i["disposition"], i.get("promotion")) for i in d["findings"] if i.get("f")]')" "[('D1.1', 'fix', None)]" "AC39(양의 짝): 사용자의 살아 있는 permit 이 그 절을 덮으면 fix 로 남는다"
+  rm -rf "$d"
+}
+case_AC39_precondition_protected_fix_escalates() {   # 보호 승격을 건너뛰지 않는 근거 — 그냥 fix 는 check-intent 가 보호 절에서 올려 보낸다
+  local d fx; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  fx="$(printf '%s' "$F_FIX" | sed 's/#12-files-to-modify/#11-acceptance-criteria/g')"
+  seed_findings "$d" "[$fx]"
+  assert_contains "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent '#11-acceptance-criteria' --state-dir "$d" 2>&1)" "anchor_protected" "AC39 전제: 보호 절의 fix 는 check-intent 가 올려 보낸다"
   rm -rf "$d"
 }

@@ -11,8 +11,12 @@ advisory 축 = (`layer_rubric.layer1` ∪ `layer2`) − `must_catch`. 그 밖(ru
 """
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 from pathlib import Path
+
+from docreview_config import table_cell   # 표 행 한 줄 문법 — 표준 라이브러리만 쓰는 잎 모듈이라 형제 사본이 늘 곁에 있다
 
 ENGINE_SOURCES = frozenset(("diff", "reraise", "escalated"))
 ROUTE_ADVICE = "advice"
@@ -38,7 +42,10 @@ def advisory_axes(prof) -> frozenset:
 def is_advisory(it, axes) -> bool:
     """advisory 축 소속인가 — 엔진 자동 생성 항목은 category 와 무관하게 아니다(재상승 · 상향 후속은 원본의
     category 를 물려받으므로 category 로는 못 가른다). same_as 병합 생존자는 기각되지 않은 구성원
-    (`_member_categories`) 전부가 advisory 일 때만 advisory 다."""
+    (`_member_categories`) 전부가 advisory 일 때만 advisory 다. 이미 내린 결정에 기댄 지적(`_decision_backed`)은
+    엔진 자동 항목과 같은 자리에서 must-catch 로 친다."""
+    if it.get("_decision_backed"):
+        return False
     if it.get("_source") in ENGINE_SOURCES:
         return False
     cats = it.get("_member_categories") or [it["category"]]
@@ -161,23 +168,23 @@ def clip(s, width=SUMMARY_WIDTH) -> str:
     return s if len(s) <= width else s[:width - 1] + "…"
 
 
-def render_lines(items, cap, where) -> list:
+def render_lines(items, cap, where, width=SUMMARY_WIDTH, note="") -> list:
     """끝의 한 번 표시 — 머리 한 줄 + 항목 한 줄씩(최대 cap) + 넘치면 접는 줄 한 줄. 합계 ≤ cap + 2."""
-    out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s" % (len(items), where)]
+    out = ["참고(advisory) %d건 — 게이트 질문이 아니고 승인을 막지 않는다 · 전문: %s%s" % (len(items), where, " · " + note if note else "")]
     for it in items[:cap]:
-        out.append("- [%s] %s — %s" % (_safe(it.get("category")), _safe(it.get("anchor")), clip(it.get("summary"))))
+        out.append("- [%s] %s — %s" % (_safe(it.get("category")), _safe(it.get("anchor")), clip(it.get("summary"), width)))
     if len(items) > cap:
         out.append("  … 외 %d건 — %s 에 전부" % (len(items) - cap, where))
     return out
 
 
 def sink_row(it) -> str:
-    """박제처 절(`defer_target`)의 표 행 한 줄 — 요약(+ 대체안)을 접고 `|` 를 이스케이프한다."""
-    text = _one_line(it.get("summary"))
+    """박제처 절(`defer_target`)의 표 행 한 줄 — 칸마다 한 줄로 접고 `|` 를 이스케이프한다(AC15)."""
+    text = table_cell(_safe(it.get("summary") or ""))
     if it.get("replacement"):
-        text += " — 고치면: " + _one_line(it["replacement"])
-    return "| %s | 참고(%s) %s — %s |" % (_safe(it.get("id")), _safe(it.get("category")), _safe(it.get("anchor")),
-                                        text.replace("|", "\\|"))
+        text += " — 고치면: " + table_cell(_safe(it["replacement"]))
+    return "| %s | 참고(%s) %s — %s |" % (table_cell(_safe(it.get("id"))), table_cell(_safe(it.get("category"))),
+                                        table_cell(_safe(it.get("anchor"))), text)
 
 
 def ends_with_table(body) -> bool:
@@ -199,19 +206,43 @@ def sink_block(rows, body) -> list:
     return ([] if body is None else [""]) + list(SINK_TABLE_HEAD) + list(rows)
 
 
+_IDENT_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _ident_part(name) -> str:
+    """정체의 한 조각 — `state-dir-for` 의 이름표 글자(영문 · 숫자 · `.` `_` `-`) 밖은 전부 `-` 로 바꾼다. 상태 디렉토리가
+    이름에 줄 구분자 · 공백이 든 심볼릭 링크를 거쳐 와도 계수 줄의 정체는 한 토큰이다(AC15)."""
+    return _IDENT_UNSAFE.sub("-", name)
+
+
 def review_identity(state_dir) -> str:
-    """영속 계수 줄의 리뷰 정체 — `<상태 디렉토리의 조부모 이름>/<문서 키>`. `state-dir-for` 가 내는 자리
+    """영속 계수 줄의 리뷰 정체 — `<상태 루트 이름>-<루트 실경로 해시 8자>/<문서 키>`. `state-dir-for` 가 내는 자리
     `<root>/.docreview/<이름표>-<해시>` 에서는 조부모가 상태 루트라 정체가 세션과 무관하게 문서마다 하나이고, 계수 줄의
     키(`count_key`)는 사실상 (문서, 라운드)다 — 로그 파일에 같은 키의 줄이 이미 있으면 다시 붙이지 않으므로, 원장이
     정리된 뒤 같은 문서를 처음부터 다시 리뷰하면 번호가 겹치는 라운드의 계수 줄은 새로 붙지 않는다."""
-    p = Path(state_dir)
-    return "%s/%s" % (p.parent.parent.name, p.name)
+    p = Path(os.path.realpath(str(state_dir)))
+    root = p.parent.parent
+    digest = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:8]
+    # 이름 치환은 손실이다 — 루트 실경로 해시가 일대일을 지킨다
+    return "%s-%s/%s" % (_ident_part(root.name), digest, _ident_part(p.name))
 
 
 def count_key(identity, rnd) -> str:
     return "%s%s r%d:" % (COUNT_PREFIX, identity, rnd)
 
 
+def count_head(identity, rnd) -> str:
+    """계수 줄의 머리(줄 머리 `- ` + 키) — 멱등 판정은 이 머리로 **줄 머리에서만** 맞춘다(`has_count_line`)."""
+    return "- " + count_key(identity, rnd)
+
+
+def has_count_line(text, identity, rnd) -> bool:
+    """`text` 에 (리뷰 정체, 라운드) 계수 줄이 이미 있는가 — 줄 머리 일치만 센다. 결정 줄의 사용자 말 같은 다른 줄이
+    키 글자를 줄 가운데 품어도 진짜 계수 줄을 가리지 못한다."""
+    head = count_head(identity, rnd)
+    return any(ln.startswith(head) for ln in text.splitlines())
+
+
 def count_line(identity, rnd, rep) -> str:
-    return "- %s advice_new=%d · advice_repeat=%d · mc_preexisting_new=%d" % (
-        count_key(identity, rnd), rep["advice_new"], rep["advice_repeat"], rep["mc_preexisting_new"])
+    return "%s advice_new=%d · advice_repeat=%d · mc_preexisting_new=%d" % (
+        count_head(identity, rnd), rep["advice_new"], rep["advice_repeat"], rep["mc_preexisting_new"])
