@@ -72,12 +72,27 @@ rm -f "$D/2026-10-15-t-interview.audit.md"
 printf 'no frontmatter\n' > "$D/2026-10-15-t-interview.state.md"
 python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "AC1: 상태 자리에 type 없는 파일이 있으면 exit 2"
-# 양성 대조 — 세 자리에 제 종류가 있으면 통과
+# AC27 — 같은 날 같은 주제의 끝난 인터뷰(brief 자리에 interview-brief) → <주제>-<HHMM> 자리 + 알림, 끝난 파일은 그대로
 put_type "$D/2026-10-15-t-interview.state.md" interview-state
 put_type "$D/2026-10-15-t-interview.md" interview-brief
 put_type "$D/2026-10-15-t-interview.audit.md" interview-audit
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "0" "AC1 양성 대조: 세 자리가 제 종류면 rc 0"
+sum_before="$(cat "$D"/2026-10-15-t-interview* | cksum)"
+out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>"$WORK/err"); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-0930-interview.state.md" "AC27: 끝난 인터뷰 자리면 <주제>-<HHMM> 자리를 낸다"
+assert_contains "$(cat "$WORK/err")" "같은 날 같은 주제의 인터뷰가 이미 끝났다" "AC27: 그 사실을 한 줄 알린다"
+assert_eq "$(cat "$D"/2026-10-15-t-interview* | cksum)" "$sum_before" "AC27: 끝난 인터뷰의 파일은 바뀌지 않는다"
+# 양의 짝 — 끝나지 않은 상태 파일만 있으면 같은 자리(이어 가기 판단은 진입 단계 몫)
+rm -f "$D/2026-10-15-t-interview.md" "$D/2026-10-15-t-interview.audit.md"
+out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-interview.state.md" "AC27 양의 짝: 끝나지 않은 상태 파일이면 같은 자리"
+# 같은 분에 또 끝난 인터뷰 → 멈춘다
+put_type "$D/2026-10-15-t-interview.md" interview-brief
+put_type "$D/2026-10-15-t-0930-interview.md" interview-brief
+python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "AC27: 새 자리도 끝난 인터뷰면 exit 2"
+python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 2460 --cwd "$IV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "AC27: --time 꼴이 아니면 exit 2"
+rm -f "$D"/2026-10-15-t-*interview*
 # git 이 아니면 --cwd 기준 + stderr 한 줄
 NG="$WORK/iv-nogit"; mkdir -p "$NG"
 out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$NG" 2>&1 >/dev/null)

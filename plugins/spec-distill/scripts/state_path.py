@@ -8,7 +8,7 @@ with loud stderr log.
 CLI:
   python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
   python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
-  python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--cwd <dir>]
+  python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--time HHMM] [--cwd <dir>]
                                               → prints interview state file path (exit 2 on refusal)
   python3 state_path.py path-inside --root <R> <PATH>...
                                               → exit 0 if every PATH is inside R without links, else 2
@@ -96,6 +96,7 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 INTERVIEW_DIR = ("docs", "superpowers", "interview")
 # 한 인터뷰의 세 자리와 각 자리가 받아들이는 frontmatter `type:`.
 _SLOTS = ((".state.md", "interview-state"), (".md", "interview-brief"), (".audit.md", "interview-audit"))
+_HHMM = re.compile(r"^([01]\d|2[0-3])[0-5]\d$")
 
 
 def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
@@ -167,29 +168,8 @@ def frontmatter_scalars(path) -> dict | None:
     return out
 
 
-def interview_state_path(topic: str, date: str | None = None,
-                         cwd: str | None = None) -> tuple[Path | None, list[str]]:
-    """`<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md`.
-
-    계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
-    경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
-    """
-    msgs: list[str] = []
-    if not topic or not KEBAB.fullmatch(topic):
-        return None, ["[spec-distill] topic 이 kebab-case 가 아니다: {0!r}".format(topic)]
-    date = date or datetime.date.today().isoformat()
-    if not _DATE.fullmatch(date):
-        return None, ["[spec-distill] 날짜가 YYYY-MM-DD 가 아니다: {0!r}".format(date)]
-    root, is_git = worktree_root(cwd)
-    if not is_git:
-        msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
-    d = root.joinpath(*INTERVIEW_DIR)
-    stem = "{0}-{1}-interview".format(date, topic)
-    for q in [d] + [d / (stem + sfx) for sfx, _ in _SLOTS]:
-        why = inside_root(q, root)
-        if why:
-            msgs.append("[spec-distill] 경로가 작업 트리 밖이거나 링크를 거친다 — {0}: {1}".format(q, why))
-            return None, msgs
+def _slot_problem(d: Path, stem: str) -> str | None:
+    """세 자리 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면 짧은 사유, 아니면 None."""
     for suffix, kind in _SLOTS:
         p = d / (stem + suffix)
         if not (p.exists() or p.is_symlink()):
@@ -197,9 +177,61 @@ def interview_state_path(topic: str, date: str | None = None,
         fm = frontmatter_scalars(p)
         have = None if fm is None else fm.get("type")
         if have != kind:
-            msgs.append("[spec-distill] 계산한 자리에 다른 종류의 파일이 있다 — {0} (type: {1}). "
-                        "남의 파일 위에 인터뷰를 시작하지 않는다.".format(p, have or "없음"))
+            return ("[spec-distill] 계산한 자리에 다른 종류의 파일이 있다 — {0} (type: {1}). "
+                    "남의 파일 위에 인터뷰를 시작하지 않는다.".format(p, have or "없음"))
+    return None
+
+
+def _path_problem(d: Path, root: Path, stem: str) -> str | None:
+    for q in [d] + [d / (stem + sfx) for sfx, _ in _SLOTS]:
+        why = inside_root(q, root)
+        if why:
+            return "[spec-distill] 경로가 작업 트리 밖이거나 링크를 거친다 — {0}: {1}".format(q, why)
+    return None
+
+
+def interview_state_path(topic: str, date: str | None = None, cwd: str | None = None,
+                         hhmm: str | None = None) -> tuple[Path | None, list[str]]:
+    """`<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md`.
+
+    계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
+    경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
+    brief 자리에 `interview-brief` 가 있으면(끝난 인터뷰) `<topic>-<HHMM>` 자리를 대신 낸다.
+    """
+    msgs: list[str] = []
+    if not topic or not KEBAB.fullmatch(topic):
+        return None, ["[spec-distill] topic 이 kebab-case 가 아니다: {0!r}".format(topic)]
+    date = date or datetime.date.today().isoformat()
+    if not _DATE.fullmatch(date):
+        return None, ["[spec-distill] 날짜가 YYYY-MM-DD 가 아니다: {0!r}".format(date)]
+    if hhmm is not None and not _HHMM.fullmatch(hhmm):
+        return None, ["[spec-distill] 시각이 HHMM 이 아니다: {0!r}".format(hhmm)]
+    root, is_git = worktree_root(cwd)
+    if not is_git:
+        msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
+    d = root.joinpath(*INTERVIEW_DIR)
+    stem = "{0}-{1}-interview".format(date, topic)
+    why = _path_problem(d, root, stem) or _slot_problem(d, stem)
+    if why:
+        msgs.append(why)
+        return None, msgs
+    if (d / (stem + ".md")).exists():
+        # 위 검사를 지났으니 brief 자리의 type 은 interview-brief 다 — 끝난 인터뷰.
+        done = d / (stem + ".md")
+        hhmm = hhmm or datetime.datetime.now().strftime("%H%M")
+        stem2 = "{0}-{1}-{2}-interview".format(date, topic, hhmm)
+        new_state = d / (stem2 + ".state.md")
+        why = _path_problem(d, root, stem2) or _slot_problem(d, stem2)
+        if why:
+            msgs.append(why)
             return None, msgs
+        if (d / (stem2 + ".md")).exists():
+            msgs.append("[spec-distill] 새 자리 {0} 에도 끝난 인터뷰가 있다 — "
+                        "잠시 뒤 다시 부르거나 다른 주제 이름을 쓴다".format(new_state))
+            return None, msgs
+        msgs.append("[spec-distill] 같은 날 같은 주제의 인터뷰가 이미 끝났다({0}) — "
+                    "새 인터뷰는 {1} 에서 시작한다. 끝난 인터뷰의 파일은 건드리지 않는다.".format(done, new_state))
+        return new_state, msgs
     return d / (stem + ".state.md"), msgs
 
 
@@ -232,7 +264,11 @@ def main(argv: list[str]) -> int:
                 if i + 1 < len(argv):
                     return argv[i + 1]
             return None
-        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"))
+        hhmm = opt("--time")
+        if hhmm is not None and not _HHMM.fullmatch(hhmm):
+            print("[spec-distill] --time 은 HHMM 꼴이어야 한다: {0!r}".format(hhmm), file=sys.stderr)
+            return 2
+        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"), hhmm)
         for m in msgs:
             print(m, file=sys.stderr)
         if path is None:
