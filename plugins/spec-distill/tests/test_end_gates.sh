@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -16,6 +16,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/agents/steelman-builder.md"
   echo "plugins/spec-distill/skills/spec-interview/references/steelman.md"
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/scripts/roadmap_render.py"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -112,9 +113,16 @@ done
 assert_contains "$DJ" '위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다' "AC25: 분해 표 배정 번호 불릿"
 grep -qF '번호 없는 위험 줄' "$FIN" && no "AC25: 옛 「번호 없는 위험 줄」 불릿 잔존" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(양성 짝: 위 단언)"
 assert_contains "$BA" '`- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 이 brief 의 가장 큰 K 다음 수)' "AC25: B-A 의 §5 줄 꼴"
-for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 면' '`unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.'; do
+for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 이거나 `brief 에서 줄을 찾지 못한 번호` 면' \
+           '`unknown_ids` · `brief 에서 줄을 찾지 못한 번호` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.'; do
   assert_contains "$BR" "$lit" "AC25: B-R «${lit}»"
 done
+# B-R 이 부르는 묶음 그리기 사유는 생성기의 글과 같은 글이다(문서 · 코드가 따로 바뀌지 않게)
+NOFIND='brief 에서 줄을 찾지 못한 번호'
+assert_contains "$BR" "\`${NOFIND}\` 면" "AC25: B-R 이 묶음 그리기 사유를 이름으로 가른다"
+grep -F 'raise TableError(' "$SD/scripts/roadmap_render.py" | grep -qF "$NOFIND" \
+  && ok "AC25: roadmap_render 의 TableError 글에 «${NOFIND}» 가 있다" || no "AC25: roadmap_render 의 TableError 글이 B-R 과 다르다"
+assert_contains "$BA" '로 적습니다. brief 의 위험 줄에 번호가 없으면(옛 brief) 이 줄도 번호 없이 `- 위험 — 리뷰 참고 | …` 로 쓴다.' "AC25: B-A 옛 brief 는 번호 없이"
 TPL5="$(win "$TPL" '^## 5[.]' '^## ')"
 for lit in '- 위험 K1 — <숨은 가정 | 실패 양식>: <내용> — <근거>' '- 위험 K2 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]'; do
   assert_contains "$TPL5" "$lit" "AC25: 템플릿 §5 «${lit}»"
