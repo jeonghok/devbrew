@@ -198,7 +198,10 @@ for combo in "branch range x" "--paths a/* range x" "range x branch"; do
 done
 h="$("$SCRIPT" --help)"
 assert "--help 가 range 를 안내한다" "printf '%s' \"\$h\" | grep -qF 'range <시작>[..<끝>]'"
-assert "--help 가 critique 를 없어진 인자로 안내한다" "printf '%s' \"\$h\" | grep -q 'critique'"
+assert "--help 가 critique 를 없어진 인자로 안내한다" "printf '%s' \"\$h\" | grep -qF 'critique (→ /quality-gates:artifact-critique)'"
+out="$("$SCRIPT" --session-id "test-range-$$" range abc..def 2>&1)"; rc=$?
+assert "range a..b: rc 0" "[ $rc = 0 ]"
+assert "range a..b: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
 cd / && rm -rf "$TMPDIR"
 
 finish

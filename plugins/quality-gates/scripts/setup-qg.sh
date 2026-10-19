@@ -117,7 +117,7 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /quality-gates:quality-pipeline [branch | --paths <glob>... | range <시작>[..<끝>]]
+  /quality-gates:quality-pipeline [branch] [--paths <glob>...] | range <시작>[..<끝>]
 
 ARGUMENTS:
   (none)               Review git-derived changes (branch + worktree) or the Spec: topic
@@ -145,7 +145,7 @@ HELP_EOF
 done
 
 if [[ $RANGE_SEEN -gt 0 && $SCOPE_ARGS -gt 1 ]]; then
-  echo "❌ 범위 인자는 하나만 준다(branch · --paths · range 중 하나)." >&2
+  echo "❌ range 는 다른 범위 인자(branch · --paths)와 함께 줄 수 없다 — 범위 인자는 하나만 준다." >&2
   exit 1
 fi
 

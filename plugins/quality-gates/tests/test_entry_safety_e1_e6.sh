@@ -260,8 +260,13 @@ assert_eq "$rc" "2" "E1: setup-qg.sh critique docs/x.md 는 exit 2"
 assert_contains "$out" "/quality-gates:artifact-critique" "E1: critique 는 stdout 에 새 이름을 안내한다"
 assert_eq "$(cat "$TMP/critique.err")" "" "E1: critique 는 stderr 가 비어 있다"
 [ ! -e "$WC/.claude" ] && ok "E1: critique 는 세션 폴더를 만들지 않는다" || no "E1: critique 가 상태를 남겼다"
-(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" critique docs/x.md >/dev/null 2>&1); rc=$?
-assert_eq "$rc" "2" "E1: critique 안내는 전역 kill switch 와 무관하게 같다(exit 2)"
+# kill switch 는 모든 인자 처리보다 먼저다(계획 Task 1) — 꺼 둔 qg 는 critique 안내도 내지 않는다. 켜지 않았을 때의 안내는 위 단언이 양의 짝이다.
+for ca in "critique docs/x.md" "--ensure critique docs/x.md" "branch critique"; do
+  out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" $ca 2>&1)"; rc=$?
+  assert_eq "$rc" "1" "E1: kill switch 가 켜져 있으면 critique($ca)도 exit 1"
+  assert_contains "$out" "DEVBREW_QUALITY_GATES_DISABLE=1" "E1: kill switch 메시지가 나온다($ca)"
+  assert_eq "$(printf '%s' "$out" | grep -c 'artifact-critique')" "0" "E1: kill switch 가 켜지면 critique 안내는 없다($ca)"
+done
 out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" --ensure critique docs/x.md 2>"$TMP/critique.err")"; rc=$?
 assert_eq "$rc" "2" "E1: SKILL P2 의 실제 모양(--ensure critique docs/x.md)도 exit 2"
 assert_contains "$out" "/quality-gates:artifact-critique" "E1: --ensure critique 도 새 이름을 안내한다"

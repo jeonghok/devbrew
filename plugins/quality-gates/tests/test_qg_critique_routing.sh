@@ -35,8 +35,10 @@ for args in "branch critique" "--paths critique" "--paths a/* critique" "range c
 done
 out="$(cd "$T" && DEVBREW_QUALITY_GATES_DISABLE=1 bash "$ROOT/plugins/quality-gates/scripts/setup-qg.sh" critique 2>&1)"; rc=$?
 assert_eq "$rc" "1" "kill switch 가 critique 안내보다 먼저다(첫 인자)"
+assert_contains "$out" "DEVBREW_QUALITY_GATES_DISABLE" "kill switch 메시지가 나온다(첫 인자)"
 out="$(cd "$T" && DEVBREW_QUALITY_GATES_DISABLE=1 bash "$ROOT/plugins/quality-gates/scripts/setup-qg.sh" --ensure critique 2>&1)"; rc2=$?
 assert_eq "$rc2" "$rc" "kill switch 결과는 critique 위치와 무관하다"
+assert_contains "$out" "DEVBREW_QUALITY_GATES_DISABLE" "kill switch 메시지가 나온다(--ensure 뒤)"
 p1b=$(grep -n '^\*\*P1b — ' "$SK" | cut -d: -f1); p2=$(grep -n '^\*\*P2 — ' "$SK" | cut -d: -f1)
 assert_grep "$p1b" '^[0-9]+$' "P1b 줄을 찾았다(양성 짝)"
 [ "$p1b" -lt "$p2" ] && ok "P1b 가 P2 보다 앞이다" || no "P1b 가 P2 보다 뒤다 — 문서 비평 요청이 setup 을 먼저 돌린다"
