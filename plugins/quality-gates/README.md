@@ -30,8 +30,8 @@
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every fix-loop iteration
   boundary. It gates fix-loop consent (it does NOT gate subagent fan-out —
-  that consent gate was never implemented; fan-out is bounded by the
-  transparency line + declared max fan-out) — no new principle ID needed.
+  that consent gate was never implemented; fan-out is disclosed by the
+  two per-iteration lines, start line before dispatch and end line after; there is no reviewer cap) — no new principle ID needed.
 - **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: HEAD 쪽 커밋의 `Spec:` 트레일러가 가리키는 spec, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재·인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
@@ -146,7 +146,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 
 | 단계 | 주체 | 무엇 |
 |---|---|---|
-| ① 리뷰 | 기본 셋(`pr-review-toolkit:code-reviewer` · `security-reviewer` · codex) + 조건부 ≤4 → `code-recritic` | 범위(topic · session · `branch` · `--paths`)의 diff 를 한 기준 블록과 의도 출처로 리뷰하고, 출처를 못 보는 재비판이 지적을 다시 판정한다(탐지 0 이어도 돈다) |
+| ① 리뷰 | 시작 구성(`pr-review-toolkit:code-reviewer` · `security-reviewer` · codex + 신호에 맞는 조건부) + 근거를 적어 더한 리뷰어 → `code-recritic` | 범위(topic · session · `branch` · `--paths`)의 diff 를 한 기준 블록과 의도 출처로 리뷰하고, 출처를 못 보는 재비판이 지적을 다시 판정한다(탐지 0 이어도 돈다) |
 | ② 차등 테스트 | 오케스트레이터 + 결정론 스크립트 | 영향분 테스트를 기준선 축과 봉인된 HEAD 축에서 돌려 귀속(`references/differential-test.md`) |
 | ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect` |
 | ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
@@ -215,7 +215,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  ├ SKILL preflight ── kill switch · setup --ensure · intent: 한 줄
  ├ trivia escape? ── yes ──▶ not-certified (trivia) ──────▶ Final verdict
  ├ qg iter loop (≤5)
- │   ① review — 기본 셋 + 조건부 ≤4 → code-recritic
+ │   ① review — 시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
  │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")

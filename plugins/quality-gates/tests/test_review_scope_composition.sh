@@ -40,7 +40,7 @@ agent_ln=$(printf '%s\n' "$S3" | grep -n 'subagent_type: "quality-gates:security
 assert_contains "$S3" '일시 실패' "일시 실패 1회 재시도 규칙"
 assert_contains "$S3" '보안 리뷰어도 같다' "재시도는 보안 리뷰어에도 적용"
 assert_contains "$S3" '나눠 돌림' "큰 diff 는 파일 묶음으로 나눠 같은 리뷰어를 나란히"
-assert_not_grep "$(cat "$QG/README.md")" '최대 8|≤ 8' "README 에 리뷰어 상한 8 이 없다(AC24)"
+assert_not_grep "$(cat "$QG/README.md")" '최대 8|≤ 8|max fan-out' "README 에 리뷰어 상한 8 · 선언된 max fan-out 이 없다(AC24)"
 assert_contains "$(cat "$QG/README.md")" '위 표는 시작 구성이다' "README 구성표는 시작 구성(양성 짝)"
 assert_contains "$S3" 'unavailable (<plugin> 미설치) — degraded coverage' "미설치 degrade 는 loud"
 assert_not_grep "$S3" '^[[:space:]]*model:' "외부 dispatch 에 model: override 가 없다"

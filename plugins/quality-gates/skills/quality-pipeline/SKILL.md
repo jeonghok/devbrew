@@ -389,7 +389,7 @@ Agent({
 })
 ```
 
-**fail-closed 의 뜻** — 디스패치가 실패했거나 출력을 읽을 수 없으면 그 iteration 의 각도 파일에 `security: absent(source-failed)` 를 쓴다. 판정은 `not-certified (angle-absent)` 다. 다른 리뷰어의 finding 이 있다고 보안 각도가 채워진 것이 아니다.
+**fail-closed 의 뜻** — 한 번 다시 부른(일시 실패 재시도) 두 번째 시도도 실패했거나 출력을 읽을 수 없으면 그 iteration 의 각도 파일에 `security: absent(source-failed)` 를 쓴다. 판정은 `not-certified (angle-absent)` 다. 다른 리뷰어의 finding 이 있다고 보안 각도가 채워진 것이 아니다. 보안 리뷰를 나눠 돌렸다면 묶음마다 따로 fail-closed 다 — 한 묶음이라도 두 번 실패하면 보안은 source-failed 다.
 
 **External reviewers** (`code-reviewer` always, the conditional four per the table, and any reviewer added with a stated reason). Prompt shape:
 
