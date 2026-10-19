@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/spec-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -18,6 +18,8 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/scripts/roadmap_render.py"
   echo "plugins/spec-distill/scripts/roadmap_model.py"
+  echo "plugins/spec-distill/CHANGELOG.md"
+  echo "plugins/spec-distill/README.md"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -164,4 +166,13 @@ for lit in '칸은 기본 열하나다:' \
 done
 assert_not_contains "$DT" '칸은 열하나다:' "AC24: 옛 «칸은 열하나다:» 없음(양성 짝: 위 단언)"
 [ -f "$SD/references/roadmap-ontology.md" ] && ok "AC24: 인용한 roadmap-ontology.md 가 있다" || no "AC24: roadmap-ontology.md 부재"
+# CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
+CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
+assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)에 선택 질문 「다음 단계 갈래」가 생겼다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"
+assert_contains "$(flat "$CL")" '- 로드맵을 다시 만드는 단계가 「brief 에서 줄을 찾지 못한 번호」 로 멈추면, 그 번호가 brief 에 없을 때만 분해 표에서 뺀다.' "CHANGELOG: 다시 만드는 단계를 쉬운 말로"
+for old in '인터뷰 끝 게이트의 정본에 선택 질문' 'B-R 이 묶음 에픽의'; do
+  grep -qF "$old" "$CL" && no "CHANGELOG: 옛 «${old}» 잔존" || ok "CHANGELOG: 옛 «${old}» 없음(양성 짝: 위 단언)"
+done
+assert_contains "$(flat "$RD")" '인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고' "README: 「하나짜리 brief 에서」"
+grep -qF '하나짜리 brief 에서도' "$RD" && no "README: 옛 「에서도」 잔존" || ok "README: 옛 「에서도」 없음(양성 짝: 위 단언)"
 finish

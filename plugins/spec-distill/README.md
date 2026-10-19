@@ -101,7 +101,7 @@
 - **Law 3 (컨트롤 플레인)** — 에픽 단계 · 경고 · 받은 시각을 상태줄과 `roadmap-status` 가 늘 보여, 모르는 사이의 드리프트를 다음 세션이 아니라 지금 본다. 「없음」과 「확인 못 함」(`검사 불가` · `셀 수 없음`)을 섞지 않는다.
 - **Law 1 · Law 3 — 나누는 결정이 spec 앞에 있다** — 일을 spec 하나로 할지 나눌지를 brief 를 쓰기 전에 신호를 보이고 사용자가 승인 게이트로 정하며(숫자 컷오프 없음), 로드맵 쓰기는 «쓰고 검증하거나 원래대로 되돌린다» 로 fail-closed 다. 재분해는 승인 뒤에만 같은 로드맵 위에서 일어나 다음 사이클이 같은 지도를 이어 받는다.
 - **Law 3 (Compounding) — 로드맵 온톨로지 · 사실마다 주인 하나** — 로드맵이 가장 상류의 정본이고, 객체 · 링크 · 주인을 `references/roadmap-ontology.md` 표 하나에 둔다. 다시 불러도 같은 자리에서 이어 가도록 이어 갈 기록은 git 이 추적하는 설계문서 절에, 이 기계에서만 뜻이 있는 것만 기계 상태에 둔다(`scripts/conductor_state.py`). 링크 칸 이름의 실재는 `tests/test_roadmap_ontology.py` 가 잰다.
-- **Law 1 · P17 — 흐름을 고정하지 않는다** — 정석 흐름은 기본값이고 일의 모양이 다르면 모델이 고르되 사용자가 정한다: 에픽 넘김 줄은 블록의 `흐름:` 을 따르고, 재분해 신호는 열린 목록이며, 게이트 ③ 은 로드맵 에픽에서 「이 에픽 다시 설계」 를 고를 수 있고, 진행 게이트는 기타 칸의 「여기서 계속」 을 받는다. 승인 게이트는 설계가 받지 않기로 한 번호를 보여 사용자가 「반영」 으로 되돌릴 수 있다(N18). 문면은 `tests/test_epic_handoff.sh` · `test_decompose_surface.sh` · `test_review_handoff_order.sh` · `test_seed_at_path_handoff.sh` · `test_conducting_reference.sh` 가 잠근다. 인터뷰 끝 게이트는 하나짜리 brief 에서도 둘째 질문으로 다른 다음 단계를 고를 수 있고 이름이 고른 단계를 따르며, trivia 는 한 문장 기준이고 패턴은 예시다 — 이 문면은 `tests/test_end_gates.sh` 가 잠근다.
+- **Law 1 · P17 — 흐름을 고정하지 않는다** — 정석 흐름은 기본값이고 일의 모양이 다르면 모델이 고르되 사용자가 정한다: 에픽 넘김 줄은 블록의 `흐름:` 을 따르고, 재분해 신호는 열린 목록이며, 게이트 ③ 은 로드맵 에픽에서 「이 에픽 다시 설계」 를 고를 수 있고, 진행 게이트는 기타 칸의 「여기서 계속」 을 받는다. 승인 게이트는 설계가 받지 않기로 한 번호를 보여 사용자가 「반영」 으로 되돌릴 수 있다(N18). 문면은 `tests/test_epic_handoff.sh` · `test_decompose_surface.sh` · `test_review_handoff_order.sh` · `test_seed_at_path_handoff.sh` · `test_conducting_reference.sh` 가 잠근다. 인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고 이름이 고른 단계를 따르며, trivia 는 한 문장 기준이고 패턴은 예시다 — 이 문면은 `tests/test_end_gates.sh` 가 잠근다.
 
 ### Principles 흡수
 

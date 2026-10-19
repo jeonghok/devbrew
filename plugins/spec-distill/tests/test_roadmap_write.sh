@@ -472,16 +472,22 @@ table "$T/k3.md" "${P1_ROW/S3 · OQ2/S3 · OQ2 · K2}" "$E1_ROW" "${E2_K3/ · K2
 sed -n '/^## 생성 기록/,$p' "$T/k1.md" >> "$T/k3.md"
 assert_eq "$(create_b docs/iv2/brief.md "$T/k3.md" docs/rmk)" "1" "AC25 deleted_k: 결정 에픽에 지운 K2 를 배정한 표는 rc 1"
 assert_file_has "$T/out.txt" "unknown_ids: K2" "AC25 deleted_k: 사유에 unknown_ids: K2"
+# 새 폴더 docs/rmk2 — docs/rmk 에 남은 stamped 의 묶음이 아래 단언을 채우지 못하게 한다.
+[ -e "$W/docs/rmk2" ] && no "AC25 deleted_k: docs/rmk2 가 이미 있다" || ok "AC25 deleted_k(양성 대조): docs/rmk2 는 아직 없다"
 table "$T/k2.md" "$P1_ROW" "$E1_ROW" "${E2_K3/ · K2 · / · }"
-sed -n '/^## 생성 기록/,$p' "$T/k1.md" >> "$T/k2.md"
-assert_eq "$(create_b docs/iv2/brief.md "$T/k2.md" docs/rmk)" "0" "AC25 deleted_k: K2 를 뺀 표는 rc 0"
-assert_file_has "$W/docs/rmk/E2.md" "- K3 — 위험 — 리뷰 참고 | 셋째 — 근거" "AC25 deleted_k: K3 는 지운 뒤에도 같은 줄"
-if grep -qF -- "- K2 —" "$W/docs/rmk/E2.md"; then no "AC25 deleted_k: E2 에 K2 줄이 남았다"; else ok "AC25 deleted_k: E2 에 K2 줄이 없다"; fi
-assert_file_has "$W/docs/rmk/E1.md" "- K1 — 위험 — 숨은 가정: 가정 — 근거 약함" "AC25 deleted_k: K1 은 그대로"
+assert_eq "$(create_b docs/iv2/brief.md "$T/k2.md" docs/rmk2)" "0" "AC25 deleted_k: K2 를 뺀 표는 rc 0"
+assert_file_has "$W/docs/rmk2/E2.md" "- K3 — 위험 — 리뷰 참고 | 셋째 — 근거" "AC25 deleted_k: K3 는 지운 뒤에도 같은 줄"
+if grep -qF -- "- K2 —" "$W/docs/rmk2/E2.md"; then no "AC25 deleted_k: E2 에 K2 줄이 남았다"; else ok "AC25 deleted_k: E2 에 K2 줄이 없다"; fi
+assert_file_has "$W/docs/rmk2/E1.md" "- K1 — 위험 — 숨은 가정: 가정 — 근거 약함" "AC25 deleted_k: K1 은 그대로"
 # old_order_notice — 번호 없는 brief 는 알리고(create · update), 박힌 brief 는 알리지 않는다
 assert_file_has "$T/out.create1.txt" "줄 순서로 매겼다" "AC25 old_order_notice: 번호 없는 brief 의 create 는 알린다"
 assert_file_has "$T/out.update1.txt" "줄 순서로 매겼다" "AC25 old_order_notice: 번호 없는 brief 의 update 도 알린다"
 if grep -qF '줄 순서로 매겼다' "$T/out.stamped.txt"; then no "AC25 old_order_notice: 박힌 brief 에 알림이 나왔다"; else ok "AC25 old_order_notice: 박힌 brief 는 알리지 않는다(양의 짝)"; fi
+# 알림은 한 줄 · 내용 먼저, 식별자는 괄호 안(shared/style/plain-language.md)
+NOTICE_LINE="$(grep -F '[spec-distill] 위험 줄에 번호가 없어 줄 순서로 매겼다(brief §5 · K 번호) — ' "$T/out.create1.txt")"
+assert_eq "$(printf '%s\n' "$NOTICE_LINE" | grep -c .)" "1" "AC25 old_order_notice: 알림은 내용이 먼저인 한 줄"
+assert_contains "$NOTICE_LINE" '위험 줄마다 번호를 박고(`- 위험 K<n> — …`) 다시 만들면 번호가 그 줄에 붙어 다닌다.' "AC25 old_order_notice: 같은 줄에 고치는 법"
+if grep -qF 'brief §5 위험 줄에 K 번호가 없어' "$T/out.create1.txt"; then no "AC25 old_order_notice: 옛 식별자 먼저 꼴이 남았다"; else ok "AC25 old_order_notice: 옛 식별자 먼저 꼴 없음(양성 짝: 위 단언)"; fi
 
 # ── AC26: §4 항목 첫 줄의 RC 도 배정할 수 있다 ───────────────────────────────
 mkdir -p "$W/docs/iv3"

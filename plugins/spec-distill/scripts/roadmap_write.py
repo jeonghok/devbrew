@@ -38,9 +38,10 @@ from roadmap_model import (  # noqa: E402
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 RECORD_HEADING = "## 생성 기록"
 LISTS = ("format_errors", "unassigned", "orphans", "unknown_ids")
-RISK_ORDER_NOTICE = ("[spec-distill] brief §5 위험 줄에 K 번호가 없어 줄 순서로 매겼다 — "
+RISK_ORDER_NOTICE = ("[spec-distill] 위험 줄에 번호가 없어 줄 순서로 매겼다(brief §5 · K 번호) — "
                      "위험 줄을 지우거나 옮긴 뒤 다시 만들면 번호가 다른 위험에 붙는다. "
-                     "위험 줄을 `- 위험 K<n> — …` 꼴로 박고 다시 만들면 번호가 그 줄에 붙어 다닌다.")
+                     "위험 줄마다 번호를 박고(`- 위험 K<n> — …`) "
+                     "다시 만들면 번호가 그 줄에 붙어 다닌다.")
 
 
 class Refused(Exception):
