@@ -293,15 +293,18 @@ fi
 질문에 오르지 않습니다. 그 잔여는 리뷰 엔진의 탐지 리뷰어가 층 1 `inference_as_decision` 으로 봅니다 —
 두 장치는 다른 실패를 막고, 하나가 다른 하나를 대신하지 않습니다.
 
-### 탐색 경계 — 레포는 읽되 웹은 보지 않습니다
+### 탐색 경계 — 레포는 읽고, 웹은 이름 확인만
 
-**이 단계는 레포는 읽되 웹은 보지 않습니다** (does not — cannot 이 아닙니다. skill 계층에는
-도구를 막을 수단이 없고, `allowed-tools` 는 제한이 아닙니다. 이 경계를 지키는 것은 이 문장과
-그것을 읽는 쪽입니다). framing 의 공백은 바깥에서 찾지 않고 **사용자에게 물어서** 메웁니다.
+이 단계는 레포는 읽되 웹은 기본으로 보지 않습니다 — 레포로 설명이 안 되는 이름(제품 · 도구 · 표준 · 단체 등)만
+짧게 조회해 audit 의 `### 이름 조회` 에 남기고(`- <이름> — <한 줄 풀이> — <출처 URL> · 확인 <YYYY-MM-DD>`),
+seed 에는 싣지 않는다. framing 의 공백은 사용자에게 물어서 메웁니다.
+(does not — cannot 이 아닙니다. skill 계층에는 도구를 막을 수단이 없고, `allowed-tools` 는 제한이 아닙니다.
+이 경계를 지키는 것은 이 문장과 그것을 읽는 쪽입니다.)
 
 바깥에서 찾는 것은 다음 단계(interview)의 R&R 입니다 — landscape · steelman · blind-spot
-premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는 그 넷 중 아무것도
-없습니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
+premortem · coverage-mapper · `open-researcher` 다섯이 거기 있는 장치이고, 이 skill 에는 그 다섯 중
+아무것도 없습니다. 이름 조회는 낱말 확인이지 조사가 아닙니다 — 방향을 바꿀 만한 바깥 근거는 찾지 않고
+다음 단계로 넘깁니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
 하면 다음 단계로 넘깁니다. 같은 주제도 이 기준으로 갈립니다.
 
 이 경계는 소비자 쪽(`spec-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
@@ -309,11 +312,19 @@ premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는
 하기 때문입니다 — 한 skill 이 다른 skill 에 대해서만 적어 두면, 제약당하는 쪽을 고치는
 사람은 그것을 읽지 않습니다.
 
-**언젠가 이 단계에 웹 탐색을 더한다면**, 그 자리에서 kill switch
-`DEVBREW_SPEC_DISTILL_DISABLE_WEB` 를 **매 호출 직전에** 확인해야 합니다(세션 시작에
-캐시하지 않습니다). 지금 이 skill 의 `## kill switch` 목록에 그 스위치가 없는 이유는
-탐색이 없기 때문이지 면제받아서가 아닙니다 — 없는 스위치를 미리 적으면 죽은 스위치가
-산 것으로 읽힙니다.
+조회 직전마다 아래 펜스로 웹 스위치를 본다(세션 시작에 캐시하지 않는다). `name_lookup=skip` 이면 조회하지
+않고, 사용자에게 묻거나 audit 의 그 자리에 「웹이 꺼져 확인하지 못함」으로 적는다.
+
+<!-- framing-web:begin -->
+```bash
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  echo "[spec-distill] web 비활성 — 이름을 웹에서 조회하지 않는다. 사용자에게 묻거나 audit ### 이름 조회 에 「웹이 꺼져 확인하지 못함」으로 적는다." >&2
+  echo "name_lookup=skip"
+else
+  echo "name_lookup=go"
+fi
+```
+<!-- framing-web:end -->
 
 ## 상태
 
@@ -1086,6 +1097,8 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 | ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다. 리뷰 라운드를 다시 열면 그 전에 원장 열기(`ledger-open`)를 먼저 다시 돕니다(계수 기록 펜스가 표지를 풀었다) |
 | ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 
+**다른 다음 단계(둘째 질문).** 일이 인터뷰보다 다른 다음 단계에 맞으면 그 제안을 게이트 진입 때 읽은 정본 `proceed-gate.md` 의 「둘째 질문(선택)」 대로 보인다 — 선택지는 「인터뷰 (권장)」 · 「<모델의 제안>」, 제안 이유는 게이트 앞 글에. 제안을 고르면 다음 세션 줄은 정본 `## 다음 세션 명령` 규칙 3 대로 그 skill 의 모양으로 짓고 seed 경로를 원소로 삼으며, 운반 문장에 「seed 의 사용자 원문(첫 요청)을 원문 그대로 입력으로 삼는다」를 싣는다. 이 갈래의 줄은 위 `**다음 세션 줄 — ①/② 공통**` 블록 밖에 인용 줄로 두지 않는다.
+
 노출 모양(① 의 예 — ② 는 첫 줄이 `/new` 입니다):
 
 ```
@@ -1318,4 +1331,5 @@ payload 를 양식으로 만드는 유일한 경로이고, `tests/test_seed_one_
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — `## 진입 단계` 1 이 멈춘다(no-op), state 보존.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — 리뷰 엔진의 codex 축만 skip(탐지 · 재비판은 그대로). `### codex` 펜스가 집행하고 엔진이 게이트 첫 줄로 공시한다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 재비판만 skip(`doc-recritic` dispatch 없음 · 7단계 `--recritic-skipped`). 엔진이 `advisory[]` 로 공시한다.
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이름 조회를 하지 않는다(`### 탐색 경계` 펜스가 집행).
 - `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — 워크트리 질문·생성을 건너뛰고 현재 디렉토리에서 진행(audit §5 에 사유).

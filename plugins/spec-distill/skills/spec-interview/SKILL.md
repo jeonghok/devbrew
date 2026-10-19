@@ -501,9 +501,9 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 ### R2 — 웹 Landscape
 
-**탐색 경계** — `request-framing` 은 **레포는 읽되 웹은 보지 않는다.** framing 의 공백은
-사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(interview)의 R&R 이다 — landscape ·
-steelman · blind-spot premortem · coverage-mapper 넷이 전부 그 장치다.
+**탐색 경계** — `request-framing` 은 **레포는 읽되 웹은 기본으로 보지 않는다** — 레포로 설명이 안 되는 이름만 짧게 조회해
+그 audit 에 남기고 seed 에는 싣지 않는다. framing 의 공백은 사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(interview)의
+R&R 이다 — landscape · steelman · blind-spot premortem · coverage-mapper · `open-researcher` 다섯이 전부 그 장치다.
 
 **질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 interview.
 같은 주제도 이 기준으로 갈린다.

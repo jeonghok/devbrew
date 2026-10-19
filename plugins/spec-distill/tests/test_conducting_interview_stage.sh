@@ -1268,6 +1268,9 @@ r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
 grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
   && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
   || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
+grep -qF '레포로 설명이 안 되는 이름만 짧게 조회해' <<<"$r2_flat" \
+  && ok "R2(양의 짝): request-framing 의 이름 조회 예외가 소비자 쪽에도 있다" \
+  || no "R2(양의 짝): R2 탐색 경계에 이름 조회 예외 문장 부재"
 grep -qF 'round 1–2' "$SKILL" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
 grep -qF '토픽이 잡히면, 그리고 결정에 닿을 때마다' <<<"$r2_flat" \
   && ok "R1/D(양의 짝): landscape 는 결정에 닿을 때마다" || no "R1/D(양의 짝): landscape 새 시점 문구 부재"
