@@ -7,6 +7,6 @@
   category: placeholder
   anchor: "#handoff-context"
   disposition: fix
-  summary: "다른 고침 — 리뷰어 하나가 둘째 리뷰어의 꼬리표를 흉내 낸다"
+  summary: "다른 고침 — 첫째 리뷰어가 둘째 리뷰어의 꼬리표를 흉내 낸다"
   edit_scope: "#handoff-context"
 ```

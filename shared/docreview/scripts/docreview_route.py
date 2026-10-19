@@ -984,7 +984,7 @@ def _remap_blocks(final, keep_of, doc, st):
         out = []
         for r in it.get("blocks") or []:
             r2 = keep_of.get(r, r)
-            if r2 in f2id:
+            if r2 in f2id and f2id[r2] not in out:   # 재비판이 두 고침을 하나로 묶었으면 한 번만 센다
                 out.append(f2id[r2])
         it["blocks"] = out
         if it["disposition"] == "decide":

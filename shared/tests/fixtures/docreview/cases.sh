@@ -3956,6 +3956,19 @@ case_detectors_identical_pair_counts_blocks_once() {
   assert_eq "$(jget "$d/prep.json" '[len(i["blocks"]) for i in d["items"] if i["summary"].startswith("넘김 절의 경로")][0]')" "1" "AC10: 두 리뷰어가 같은 질문과 고침을 내도 막는 항목은 하나로 센다"
   rm -rf "$d"
 }
+case_same_as_merge_counts_blocked_fix_once() {
+  local d cr rt f1 f2; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
+  cr="$d/critic-src.txt"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 경로가 없다"' '  edit_scope: "#handoff-context"' '- ref: c2' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 이어 갈 위치가 없다"' '  edit_scope: "#handoff-context"' '- ref: c3' '  layer: 2' '  category: ambiguity' '  anchor: "#handoff-context"' '  disposition: ask' '  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다"' '  blocks: [c1, c2]' '```' > "$cr"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" > "$d/prep.json"
+  f1="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='넘김 절에 경로가 없다'][0]")"
+  f2="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary']=='넘김 절에 이어 갈 위치가 없다'][0]")"
+  rt="$d/rt.txt"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$f2" "$f1" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[len(x["blocks"]) for x in d["findings"] if x["category"]=="ambiguity"][0]')" "1" "AC10: 재비판이 두 고침을 하나로 묶어도 질문이 막는 항목은 한 번만 센다"
+  rm -rf "$d"
+}
 case_detectors_absorb_fills_contradicts() {
   local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
   cp "$FX/critic-d1-blocks.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-contra.txt" "$d/critic-2.txt"

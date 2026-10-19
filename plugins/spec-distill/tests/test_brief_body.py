@@ -744,9 +744,10 @@ class DecisionHeadIsLinear(unittest.TestCase):
                 "print(bool(C.PROVENANCE_MARK_RE.search('x' + '⟨S1⟩ ' * 30000 + 'x')))"
                 % str(Path(B.__file__).resolve().parent))
         try:
-            subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=5)
+            r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=5)
         except subprocess.TimeoutExpired:
             self.fail("출처 표시 꼬리 검사가 5초 안에 끝나지 않았다")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "False"), r.stderr)
 
     def test_positive_pair_real_decision_head_still_read(self):
         self.assertTrue(B.decision_shaped("1. OQ3: 결정"))
