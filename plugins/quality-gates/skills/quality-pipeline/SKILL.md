@@ -1156,7 +1156,7 @@ printf '판정\t%s\n반복\t<N>번\n결과\t<finished | accepted with findings i
   if [ -f "$RD/range-scope.txt" ]; then printf '\n## 범위\n\n'; cat "$RD/range-scope.txt"; fi
   DP="$RD/review-i<N>.doc-paths"; SSF="$RD/review-i<N>.self-state"
   if [ -s "$DP" ]; then
-    printf '\n## 문서 경로\n\n'; grep -E '^(doc_paths_source|doc_paths|bad_patterns|excluded|kept_model): ' "$DP"
+    printf '\n## 문서 경로\n\n'; awk '/^(exclude|kept)\t/{exit} /^(doc_paths_source|doc_paths|bad_patterns|excluded|kept_model): /' "$DP"
     if [ -f "$SSF" ]; then printf 'self_state: %s\n' "$(grep -c . "$SSF")"; else echo "self_state: -"; fi
   fi
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
@@ -1187,7 +1187,7 @@ if [ -s "$RD/review-tree.txt" ]; then
   if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then
     rm -f "$RD/review-tree.txt"; echo "review-tree: removed"
   else
-    echo "[quality-gates] 리뷰 트리를 지우지 못했다 — 다음 실행이 같은 자리에 트리를 만들 때 지우고, 아니면 오래된 세션 정리가 회수한다: $(cat "$RD/review-tree.txt")" >&2
+    echo "[quality-gates] 리뷰 트리를 지우지 못했다 — 직접 지우려면 'git worktree remove --force $(cat "$RD/review-tree.txt")' 를 실행한다(같은 자리에 다음 실행이 트리를 만들 때도 먼저 지운다)" >&2
   fi
 fi
 ```

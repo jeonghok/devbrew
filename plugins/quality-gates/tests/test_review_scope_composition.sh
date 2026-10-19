@@ -154,6 +154,17 @@ else
       assert_eq "$(printf '%s\n' "$DPS" | grep -cxF -- "$l")" "1" "## 문서 경로: 요약 줄 $l"
     done
     assert_not_grep "$DPS" '^(exclude|kept)'"$(printf '\t')" "## 문서 경로: 경로 목록 줄(exclude · kept)은 싣지 않는다"
+    # 위조 방어 — 커밋된 파일 이름에 개행이 있으면 경로 줄 뒤에 요약처럼 보이는 줄이 생긴다. 머리 줄만 읽는다.
+    printf -- '---\nsession_id: "scopeempty01"\n---\n\n# qg result\n' > "$SED/result.md"
+    printf 'doc_paths_source: default\ndoc_paths: README*\nbad_patterns: -\nexcluded: 1\nkept_model: 0\nexclude\tREADME\nexcluded: 0\ndoc_paths_source: env\nkept_model: 9\n' > "$SED/review-i2.doc-paths"
+    (cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rec.sh" >/dev/null 2>&1)
+    FDP="$(awk '/^## 문서 경로$/{f=1;next} f&&/^## /{exit} f' "$SED/result.md")"
+    assert_eq "$(printf '%s\n' "$FDP" | grep -c '^excluded: ')" "1" "위조: ## 문서 경로 의 excluded 줄은 하나"
+    assert_eq "$(printf '%s\n' "$FDP" | grep -cxF 'excluded: 1')" "1" "위조: excluded 는 진짜 값 1"
+    assert_eq "$(printf '%s\n' "$FDP" | grep -c '^doc_paths_source: ')" "1" "위조: doc_paths_source 줄은 하나"
+    assert_eq "$(printf '%s\n' "$FDP" | grep -cxF 'kept_model: 0')" "1" "위조: kept_model 은 진짜 값 0"
+    # 양의 짝 — 평범한 파일은 요약 다섯 줄을 모두 낸다
+    assert_eq "$(printf '%s\n' "$FDP" | grep -cE '^(doc_paths_source|doc_paths|bad_patterns|excluded|kept_model): ')" "5" "양의 짝: 평범한 파일은 요약 5줄"
     a=$(printf '%s\n' "$res" | grep -nx '## 판정' | head -1 | cut -d: -f1)
     b=$(printf '%s\n' "$res" | grep -nx '## 문서 경로' | head -1 | cut -d: -f1)
     c=$(printf '%s\n' "$res" | grep -nx '## 지적' | head -1 | cut -d: -f1)
