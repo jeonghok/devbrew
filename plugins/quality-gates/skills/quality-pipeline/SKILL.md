@@ -792,19 +792,25 @@ Branch on answer:
   열지 않고 이 질문을 한 번 더 띄운다.
 
 기록 펜스 — `<N>` 은 지금 반복 번호(= CAP), 출처는 `label` 또는 `typed` 다. 원문은 신뢰하지 않는 데이터다: 자리표시 줄
-자리에 받은 그대로(고치지 않고, 여러 줄이어도) 넣는다. 따옴표 붙인 here-doc(`<<'QG_EXTRA_RAW'`)이라 셸이 원문을 펼치지 않고
-(`$` · 백틱 · 따옴표 · `%` 그대로), 줄바꿈은 셸이 공백으로 접어 한 줄이 된다 — 원문의 줄이 상한 계산에 섞이지 않는다. 손으로
-고칠 것은 하나뿐이다: 원문에 `QG_EXTRA_RAW` 만 있는 줄이 있으면 그 줄 앞에 공백 하나를 붙인다(그 줄이 here-doc 을 끝내지 않게).
-`cap:` 줄이 다음 반복의 상한이다.
+자리에 받은 그대로(고치지 않고, 여러 줄이어도) 넣는다. 따옴표 붙인 here-doc 이라 셸이 원문을 펼치지 않고(`$` · 백틱 · 따옴표 ·
+`%` 그대로), 줄바꿈은 셸이 공백으로 접어 한 줄이 된다 — 원문의 줄이 상한 계산에 섞이지 않는다. here-doc 끝 줄 이름
+`QG_EXTRA_RAW_<8 hex>` 의 `<8 hex>` 는 이 펜스를 돌릴 때마다 새로 고른 16진수 8자다(두 자리에 같은 값) — 원문이 끝 줄과 같아질
+수 없게 하려는 것이고, 원문은 손대지 않는다. 쓰기 뒤 검사가 기록 줄이 정확히 하나 늘었는지 센다 — 아니면 멈춤 줄을 내고
+0 이 아닌 값으로 끝나며, 그때는 반복을 열지 않고 그 줄을 그대로 보이고 멈춘다. `cap:` 줄이 다음 반복의 상한이다.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-{ printf -- '- iter %s 뒤 · 반복 하나 더 · %s · ' '<N>' '<label 또는 typed>'; tr -d '\r' <<'QG_EXTRA_RAW' | paste -s -d ' ' -; } >> "$RD/extra-iterations.md"
+F="$RD/extra-iterations.md"; PAT='^- iter [0-9]* 뒤 · 반복 하나 더 · '
+BEFORE=0; [ -f "$F" ] && BEFORE=$(grep -c "$PAT" "$F")
+# 아래 두 QG_EXTRA_RAW_<8 hex> 의 <8 hex> 는 이 실행마다 새로 고른 16진수 8자(두 자리 같은 값)로 바꾼다.
+{ printf -- '- iter %s 뒤 · 반복 하나 더 · %s · ' '<N>' '<label 또는 typed>'; tr -d '\r' <<'QG_EXTRA_RAW_<8 hex>' | paste -s -d ' ' -; } >> "$F"
 <고른 선택지 이름 또는 기타 칸 원문 — 받은 그대로, 여러 줄이어도 된다>
-QG_EXTRA_RAW
-echo "cap: $((5 + $(grep -c '^- iter [0-9]* 뒤 · 반복 하나 더 · ' "$RD/extra-iterations.md")))"
+QG_EXTRA_RAW_<8 hex>
+AFTER=$(grep -c "$PAT" "$F")
+[ "$AFTER" = "$((BEFORE + 1))" ] || { echo "[quality-gates] 추가 반복 기록이 한 줄 늘지 않았다(전 ${BEFORE} · 후 ${AFTER}) — 반복을 열지 않는다. 멈춘다." >&2; exit 5; }
+echo "cap: $((5 + AFTER))"
 ```
 
 ### Retry: file-write safety
