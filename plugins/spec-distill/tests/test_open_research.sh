@@ -65,12 +65,13 @@ assert_contains "$FLAT" '만들 것이 없는 일(조사 · 결정만)이면 건
 RB="$(awk '/^```/{c=!c} /^## 라운드 규약/{f=1;print;next} !c && /^## /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$RB" 'AskUserQuestion 1회다. 기본은 질문 1개이고, 서로 기대지 않는 결정이 둘 이상이면 같은 호출에 질문을 여럿 묶을 수 있다' "AC13: 호출 하나 · 독립 결정 묶기"
 assert_contains "$RB" '답마다 `S<m>` 을 하나씩 기록한다' "AC13: 답마다 S"
+assert_contains "$RB" '나머지는 다음 라운드의 «다음 결정»으로 넘어간다 — 서로 기대지 않는 결정은 위 규칙대로 같은 호출에 묶을 수 있다; 되묻기는 직전 답에 기대므로 묶지 않는다' "AC13: 겹침 순서는 기대는 결정에만 — 독립 결정은 묶고 되묻기는 묶지 않는다"
 # V1 이 웹 주장으로 넓어진다(fresh-evidence 원칙 2)
 assert_contains "$RB" '결정에 닿는 웹 주장(`evidence[]`)은 `${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md` 원칙 2 대로 본체가 1차 자료로 한 번 더 확인하거나 «지금 이해»에 「확인 못 함」으로 둔다' "V1: 웹 주장 재확인 또는 「확인 못 함」"
 # AC3 — 웹 펜스를 차가운 셸에서 실행
 WF="$SCRATCH/web.sh"; cut_marked_by open-research-web "$SKILL" > "$WF"
 bash -n "$WF" && [ -s "$WF" ] && ok "AC3(양성대조): 웹 펜스를 떴다" || no "AC3: 웹 펜스 부재 또는 구문 오류"
-for v in 1 0 yes ''; do
+for v in 1 0 yes '' 2 01 10; do
   out="$(env -i PATH=/usr/bin:/bin DEVBREW_SPEC_DISTILL_DISABLE_WEB="$v" bash "$WF" 2>"$SCRATCH/w.err")"
   want=go; [ "$v" = 1 ] && want=skip
   assert_eq "$(tail -1 <<<"$out")" "open_researcher=${want}" "AC3: 스위치 '${v}' → ${want}"
