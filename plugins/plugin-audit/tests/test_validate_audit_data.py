@@ -1,4 +1,4 @@
-import copy, json, subprocess, sys, tempfile, unittest
+import copy, json, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"   # plugins/plugin-audit/scripts
@@ -498,6 +498,62 @@ class TestChosenAxes(unittest.TestCase):
             axis_of={"D1": 4, "D4": 1}, wf_axis={"D1": 1, "D4": 4})
         self.assertEqual(data["meta"]["assigned_axis"], {"D1": 1, "D4": 4})
         self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        self.assertEqual(rc, 0, err)
+
+    @unittest.skipUnless(shutil.which("node"), "node 없음 — Workflow 를 돌릴 수 없다")
+    def test_end_to_end_real_workflow_drops_cross_axis_verdict(self):
+        # 실제 Workflow 스크립트를 돌린다 — 자기 id 가 없는 축 3 이 고르지 않은 축 4 의 D4 를 판정해도
+        # Workflow 가 그 판정을 빼고 공시하므로, 고른 축 [1,3] + codex 실행에서 B7 이 GREEN 이다.
+        harness = (Path(__file__).resolve().parent / "_wf_harness.mjs").as_uri()
+        driver = (
+            "import { runWorkflow, DEFAULT_PACK } from " + json.dumps(harness) + "\n"
+            "const pack = { ...DEFAULT_PACK, candidate_clues: [\n"
+            "  { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },\n"
+            "  { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 }] }\n"
+            "const v = (id) => ({ id, verdict: 'confirmed', reason: 'r' })\n"
+            "const stub = async (p, o) => {\n"
+            "  if (o.phase !== '감사') return { verdicts: [] }\n"
+            "  const dv = o.label.startsWith('축1 ') ? [v('D1')] : o.label.startsWith('축3 ') ? [v('D4')] : []\n"
+            "  return { findings: [], d_verdicts: dv, oq_answers: [], new_open_questions: [] }\n"
+            "}\n"
+            "const { result } = await runWorkflow('plugins/plugin-audit/scripts/audit-workflow.js', {\n"
+            "  args: { target: 'sample', evidencePack: pack, codexFindings: [], axes: [1, 3] }, stubAgent: stub })\n"
+            "process.stdout.write(JSON.stringify(result))\n"
+        )
+        r = subprocess.run(["node", "--input-type=module", "-e", driver],
+                           capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        wf = json.loads(r.stdout)
+        self.assertEqual([x["id"] for x in wf["d_verdicts"]], ["D1"])
+        self.assertTrue(any("D4" in e["what"] for e in wf["degraded_events"]), wf["degraded_events"])
+        assemble = SCRIPTS_DIR / "assemble-audit-data.py"
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            codex = {"d_verdicts": [{"id": "D1", "verdict": "confirmed", "reason": "r"}],
+                     "oq_answers": [], "new_open_questions": []}
+            meta = {"date": "2026-01-01", "fanout_declared": "규모 문장",
+                    "consent": {"approved": True, "at": "t", "fanout": "규모 문장", "axes": [1, 3]},
+                    "codex": {"ran": True, "version": "1.0"}, "target": "myplugin", "seed_provided": True,
+                    "axes": [1, 3]}
+            assigned = {"assigned_d": ["D1", "D4"], "assigned_oq": []}
+            paths = {}
+            for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
+                p = t / f"{name}.json"
+                p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+                paths[name] = p
+            out = t / "data.json"
+            subprocess.run([sys.executable, str(assemble),
+                            "--workflow-return", str(paths["wf"]), "--codex-side", str(paths["codex"]),
+                            "--meta", str(paths["meta"]), "--assigned", str(paths["assigned"]),
+                            "--repo-root", str(t), "--no-grounding", "--out", str(out)],
+                           check=True, capture_output=True, text=True)
+            data = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(data["meta"]["assigned_axis_source"], "workflow")
+        d4 = [x for x in data["d_verdicts"] if x["id"] == "D4"]
+        self.assertEqual([(x["source"], x["verdict"], x.get("backfilled")) for x in d4],
+                         [("claude", "unverified", True)])
+        self.assertIn("D4", json.dumps(data["degraded"], ensure_ascii=False))
+        rc, err = run_validate(data)
         self.assertEqual(rc, 0, err)
 
     def test_end_to_end_chosen_axis_missing_codex_still_reds(self):

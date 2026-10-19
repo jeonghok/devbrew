@@ -231,7 +231,10 @@ const CONTRACT = [
   '',
   '## 후보 단서 (검증하라, 전제하지 마라)',
   ...((pack.candidate_clues || []).length
-    ? pack.candidate_clues.map((c) => '- ' + c.id + ' (축' + c.axis + '): ' + c.claim + ' — ' + c.file + ':' + c.line)
+    ? [
+        ...pack.candidate_clues.map((c) => '- ' + c.id + ' (축' + c.axis + '): ' + c.claim + ' — ' + c.file + ':' + c.line),
+        '- 다른 축의 단서는 맥락이다 — `d_verdicts`에 판정하지 마라(판정해도 버려진다). 너의 축 단서는 아래 「이 축의 후보 단서」에 있다.',
+      ]
     : ['- 후보 단서 없음 — fresh discovery (씨앗 없이 네가 직접 발견하라).']),
   '',
   '## Evidence Pack (사실만)',
@@ -753,12 +756,27 @@ for (const f of deepTargets) {
 const surviving = findings.filter((f) => f.status === 'reported').length
 log('최종: 발견 ' + findings.length + '건 중 생존 ' + surviving + '건 (심층검증 ' + deepTargets.length + '건)')
 
+// A clue / question verdict counts only from the axis that owns the id. An axis with no ids of
+// its own has no id enum, so it can still name another axis's id — drop that verdict and say so.
+// Ids with no owner (fresh, or a seed line without an axis) are kept.
+const ownVerdicts = (r, key, kind) => (r.res[key] || []).filter((v) => {
+  const owner = Object.prototype.hasOwnProperty.call(ASSIGNED_AXIS, v.id) ? ASSIGNED_AXIS[v.id] : undefined
+  if (owner === undefined || owner === r.ax.n) return true
+  degradedEvents.push({
+    what: '축' + r.ax.n + '이 낸 ' + kind + ' ' + v.id + ' 판정을 뺐다 — ' + v.id + '는 축' + owner + '의 것이다',
+    why: '항목은 그 축만 판정한다. 축' + owner + '이 이번에 돌지 않았다면 ' + v.id + '는 검증 안 됨으로 남는다',
+  })
+  return false
+})
+const claudeD = alive.flatMap((r) => ownVerdicts(r, 'd_verdicts', '후보 단서').map((d) => ({ ...d, source: 'claude' })))
+const claudeOq = alive.flatMap((r) => ownVerdicts(r, 'oq_answers', '열린 질문').map((o) => ({ ...o, source: 'claude' })))
+
 // findings only. No meta — the pipeline cannot account for itself, and the orchestrator
 // assembles audit-data.json from the harness's own journal.jsonl.
 return {
   findings,
-  d_verdicts: alive.flatMap((r) => (r.res.d_verdicts || []).map((d) => ({ ...d, source: 'claude' }))),
-  oq_answers: alive.flatMap((r) => (r.res.oq_answers || []).map((o) => ({ ...o, source: 'claude' }))),
+  d_verdicts: claudeD,
+  oq_answers: claudeOq,
   new_open_questions: alive.flatMap((r) => (r.res.new_open_questions || []).map((q) => ({ ...q, source: 'claude', axis: q.axis ?? r.ax.n }))),
   axis_failures: axisFailures,
   degraded_events: degradedEvents,

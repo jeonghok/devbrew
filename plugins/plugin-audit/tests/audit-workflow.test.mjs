@@ -558,6 +558,83 @@ test('each axis schema enums only its own clue / question ids', async () => {
   }
 })
 
+// Axis 3 has no ids of its own, so its schema has no id enum and it can name another axis's clue.
+const crossAxisPack = {
+  ...DEFAULT_PACK,
+  candidate_clues: [
+    { id: 'D1', axis: 1, claim: 'c', file: 'a', line: 1 },
+    { id: 'D4', axis: 4, claim: 'c', file: 'a', line: 4 },
+  ],
+  open_questions: [{ id: 'OQ4', axis: 4, question: 'q' }],
+}
+const crossAxisStub = async (prompt, o) => {
+  if (o.phase !== '감사') return { verdicts: [] }
+  const v = (id) => ({ id, verdict: 'confirmed', reason: 'r' })
+  if (o.label.startsWith('축1 ')) {
+    return { findings: [], d_verdicts: [v('D1')], oq_answers: [], new_open_questions: [] }
+  }
+  if (o.label.startsWith('축3 ')) {
+    return {
+      findings: [], d_verdicts: [v('D4'), v('D9')],
+      oq_answers: [{ id: 'OQ4', reason: 'r', answer: 'a' }], new_open_questions: [],
+    }
+  }
+  return { findings: [], d_verdicts: [], oq_answers: [], new_open_questions: [] }
+}
+
+test("a verdict for another axis's id is dropped and disclosed", async () => {
+  const { result } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [1, 3] },
+    stubAgent: crossAxisStub,
+  })
+  // D4 / OQ4 belong to axis 4, which did not run — axis 3's verdicts for them do not count
+  assert.deepEqual(result.d_verdicts.map((x) => x.id), ['D1', 'D9'])
+  assert.deepEqual(result.oq_answers, [])
+  for (const id of ['D4', 'OQ4']) {
+    const ev = result.degraded_events.filter((e) => e.what.includes(id))
+    assert.equal(ev.length, 1, id + ': ' + JSON.stringify(result.degraded_events))
+    assert.ok(ev[0].what.includes('축3') && ev[0].what.includes('축4'), ev[0].what)
+    assert.ok(typeof ev[0].why === 'string' && ev[0].why.length > 0)
+  }
+  // positive pair — own-id (D1) and unmapped fresh-id (D9) verdicts are kept and not disclosed
+  for (const id of ['D1', 'D9']) {
+    assert.ok(!result.degraded_events.some((e) => e.what.includes(id)), id)
+  }
+  // the owning axis's own verdict is kept when it runs
+  const { result: r2 } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [1, 4] },
+    stubAgent: async (prompt, o) => {
+      if (o.phase === '감사' && o.label.startsWith('축4 ')) {
+        return {
+          findings: [], d_verdicts: [{ id: 'D4', verdict: 'confirmed', reason: 'r' }],
+          oq_answers: [{ id: 'OQ4', reason: 'r', answer: 'a' }], new_open_questions: [],
+        }
+      }
+      return crossAxisStub(prompt, o)
+    },
+  })
+  assert.deepEqual(r2.d_verdicts.map((x) => x.id), ['D1', 'D4'])
+  assert.deepEqual(r2.oq_answers.map((x) => x.id), ['OQ4'])
+  assert.deepEqual(r2.degraded_events, [])
+})
+
+test("CONTRACT tells each axis not to judge other axes' clues", async () => {
+  const { calls } = await runWorkflow(WF, {
+    args: { target: 'sample', evidencePack: crossAxisPack, codexFindings: [], axes: [3] },
+    stubAgent: crossAxisStub,
+  })
+  const contract = auditCalls(calls)[0].prompt.split('너의 축: 3')[0]
+  const clueSection = contract.split('## 후보 단서 (검증하라, 전제하지 마라)')[1].split('## Evidence Pack')[0]
+  assert.ok(clueSection.includes('D4 (축4)'), 'all clues stay listed for context')
+  assert.ok(clueSection.includes('다른 축의 단서는 맥락'), clueSection)
+  assert.ok(clueSection.includes('`d_verdicts`'), clueSection)
+  // with no clues the fresh-discovery line stays as is, without the other-axis sentence
+  const { calls: c0 } = await runWorkflow(WF, { args: argsWithAxes([3]), stubAgent: stubOneFinding() })
+  const empty = auditCalls(c0)[0].prompt.split('## 후보 단서 (검증하라, 전제하지 마라)')[1].split('## Evidence Pack')[0]
+  assert.ok(empty.includes('후보 단서 없음 — fresh discovery'))
+  assert.ok(!empty.includes('다른 축의 단서는 맥락'))
+})
+
 test('axes without 6 — axis 2 schema drops pending', async () => {
   const stEnums = (schema) => [
     schema.properties.findings.items.properties.steelman_condition.enum,
