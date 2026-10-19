@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # 변이 락 — 모델 락(스윕 1 + 아래 pairs 의 per-agent 락)이 실제로 문다.
 #
-# 두 방향이 있다. 대부분의 agent 는 model 키 «부재»가 정답이고(통과가 정답인 부재 단언은
-# 모양만으로 이빨을 판별할 수 없다), qg 소유 리뷰 agent 둘(security-reviewer · code-recritic)은
-# 정확히 `model: opus` 한 줄이 정답이다(qg v10 재결정 R3).
-#   (1) 스윕: model 키를 다섯 표기로 PINNED 밖 agent 에 넣으면 RED — (a) `model: inherit`
+# 모든 agent 는 model 키 «부재»가 정답이다(통과가 정답인 부재 단언은 모양만으로 이빨을 판별할 수
+# 없다). qg 리뷰 agent 둘(security-reviewer · code-recritic)도 마찬가지다 — 옛 재결정 R3 의
+# `model: opus` 고정은 R2a 사용자 결정 「세션 모델을 따른다」로 풀렸다.
+#   (1) 스윕: model 키를 다섯 표기로 agent 에 넣으면 RED — (a) `model: inherit`
 #       (b) `model: opus` (c) `model:inherit` (d) `"model": inherit` (e) `model : inherit`.
-#   (2) per-agent 락: (a)·(d) 를 넣으면 RED — 부재 agent 는 키가 생겨서, PINNED 는 키가 둘이 돼서.
-#   (g) PINNED 의 opus 줄을 지우거나 `model: sonnet` 으로 바꾸면 스윕과 per-agent 락이 RED.
+#   (2) per-agent 락: (a)·(d) 를 넣으면 RED — 키가 생겨서.
+#   (g) qg 리뷰 agent 에 `model: opus` 를 되살리면 스윕과 per-agent 락이 RED.
 #   (f) 스윕 하한 — glob 을 빈 dir 로 돌리면 RED.
 # 각 per-agent 락은 변이 전 GREEN 이어야 한다(양성 대조) — 아니면 변이 RED 는 증거가 아니다.
 #
@@ -71,17 +71,14 @@ for p in "${pairs[@]}"; do
   done
 done
 
-# (g) PINNED 의 opus 줄을 지우거나 바꾸면 스윕과 per-agent 락이 RED 다(재결정 R3)
+# (g) qg 리뷰 agent 에 옛 고정 `model: opus` 를 되살리면 스윕과 per-agent 락이 RED 다(R2a 결정으로 풀린 R3)
 for p in "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh" \
          "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"; do
   agent="${p%%|*}"; lock="${p##*|}"
-  for to in "" "model: sonnet"; do
-    awk -v T="$to" '/^model: opus$/ && !d {d=1; if (T != "") print T; next} {print}' "$agent" > "$agent.tmp" && mv "$agent.tmp" "$agent"
-    touched+=("$agent")
-    bash "$SWEEP" >/dev/null && no "스윕: ${agent##*/} 의 opus 를 «${to:-삭제}» 해도 GREEN" || ok "스윕: ${agent##*/} opus → «${to:-삭제}» → RED"
-    bash "$lock" >/dev/null && no "${lock##*/}: opus 를 «${to:-삭제}» 해도 GREEN" || ok "${lock##*/}: opus → «${to:-삭제}» → RED"
-    git checkout -q -- "$agent"
-  done
+  inject "$agent" "model: opus"
+  bash "$SWEEP" >/dev/null && no "스윕: ${agent##*/} 에 opus 를 되살려도 GREEN" || ok "스윕: ${agent##*/} 에 opus 되살림 → RED"
+  bash "$lock" >/dev/null && no "${lock##*/}: opus 를 되살려도 GREEN" || ok "${lock##*/}: opus 되살림 → RED"
+  git checkout -q -- "$agent"
 done
 
 # (f) 스윕 하한 — glob 이 비면 RED

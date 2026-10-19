@@ -10,7 +10,6 @@ description: >
   <example>Context: qg iteration 의 탐지가 끝나 익명 finding 목록이 준비됐다.
   user: "이 finding 들을 출처 없이 재비판해줘"
   assistant: "I'll dispatch code-recritic with the anonymized findings, the diff, the intent source, and the profile."</example>
-model: opus
 tools: Read, Grep, Glob
 color: red
 cost_class: medium

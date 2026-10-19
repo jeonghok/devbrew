@@ -72,8 +72,8 @@ quality-gates/
 ├── .claude-plugin/         # 플러그인 메타데이터
 │   └── plugin.json
 ├── agents/                 # 리뷰어 agent (leaf agent; 파이프라인이 dispatch — 쓰기 권한 있는 agent 는 없다)
-│   ├── code-recritic.md         # ① 재비판(Step 3.5) — 출처를 가린 지적 목록을 다시 판정 (model: opus, read-only)
-│   ├── security-reviewer.md     # ① 보안 각도 always-run (model: opus) — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
+│   ├── code-recritic.md         # ① 재비판(Step 3.5) — 출처를 가린 지적 목록을 다시 판정 (read-only)
+│   ├── security-reviewer.md     # ① 보안 각도 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/quality-gates:artifact-critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/quality-gates:artifact-critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 ├── scripts/
@@ -127,10 +127,11 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as an **avail
 
 ### 재비판자(code-recritic) model
 
-`code-recritic` 은 frontmatter 에 `model: opus` 를 단다(`security-reviewer` 도 같다). 파이프라인
-안에서 **단일 model-based 판정 각도**다: 탐지 리뷰어가 findings 를 내고 그 뒤의 synthesizer 는
-결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을 거친다. 판정 관문 A–E 는
-`references/recritic-code-profile.md` 가 싣는다. Runs once per pipeline iteration (≤5×).
+qg 리뷰 agent(`code-recritic` · `security-reviewer`)는 모델을 고정하지 않는다 — 세션 모델을 따른다.
+`code-recritic` 은 파이프라인 안에서 **단일 model-based 판정 각도**다: 탐지 리뷰어가 findings 를 내고
+그 뒤의 synthesizer 는 결정론적 스크립트이므로, 사용자가 보는 모든 finding 은 재비판자의 판정을
+거친다. 판정 관문 A–E 는 `references/recritic-code-profile.md` 가 싣는다. Runs once per pipeline
+iteration (≤5×).
 
 **Choosing a cheaper tier for devbrew subagents is the user's call, not the plugin's.** Put it in your own settings — for example in `~/.claude/settings.json`:
 
