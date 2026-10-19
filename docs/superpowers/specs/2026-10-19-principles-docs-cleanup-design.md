@@ -107,12 +107,12 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 |---|---|---|
 | Law 1 필수 섹션 게이트(구현 0) 문면 · 지출 승인 조항 · P22 · P12 trivia · CLAUDE.md 「새 플러그인 — plugin-structure 먼저」 · 「버그가 새면 persona 편집」 | R9 | R9 범위(규칙 · 문서 정리 · 흐름 고정 점검 R9 행) |
 | CLAUDE.md 의존 최소 버전 줄 · spec-distill README 의 superpowers · qg · gh 부재 동작 | R8 | R8 범위(의존 선언 · 부재 시 강등) |
-| 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | R5 후속(R5 설계 `## 미룸`) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
+| 「사용자 리뷰 게이트」 용어(spec-distill README · skill · 템플릿 · 테스트) · worktree 격리 상속 · 스택 PR base 삭제 · SDD 과제 사이 이음매를 구현 틀에 | #227 (지휘자 수리 — 머지됨) | superpowers 7.0.0 이음매와 함께 skill · README 를 같은 PR 에서 맞춰야 어긋나지 않는다 |
 | qg README 원칙 절 머리(「인스턴스화한 원칙」 vs 「Principles Instantiated」) · qg 판정 id 충돌 · kill switch 정규식(plugin-audit shape 검사) · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 | R2a | 그 파일 · 테스트가 R2a 예약 · 진행 중 |
 | 철학 P3 의 「문서 리뷰 자리 넷(design doc·brief·seed·generic)을 통일하는 엔진은 `shared/docreview/`」가 지금 사실과 어긋남 — qg 의 `generic` 프로필은 엔진 테스트만 읽고(qg README 의 문서 리뷰 엔진 줄), 엔진 자리는 셋이다(spec-distill README 의 문서 리뷰 엔진 줄) | R2a | artifact-critique 를 엔진에 붙이면 그 문장이 참이 되고, 붙이지 않으면 R2a 가 그 문장을 고친다 |
 | brief §4 의 «» 키 · brief 묶음 rc 3 오탐 · spec-interview 개명에 따른 README 줄 | R10 | R10 예약(spec-interview · 템플릿) |
 | 하나짜리 brief 의 다음 세션 줄(`finishing.md`)에 원칙 2 · 3 · 4 · 6 이 없음(원칙 5 는 작은 일엔 만들지 않으니 필요 여부를 R10 이 판단) | R10 | R10 이 그 줄 문면을 맡음(`## 플러그인 동작 자리 대조`) |
-| 에픽 넘김 줄(`epic-handoff.md`)에 원칙 5(계층 · 온톨로지)를 쓰라는 문장이 없음 | R5 후속(R5 설계 `## 미룸`) | R5 가 그 파일을 예약(`## 플러그인 동작 자리 대조`) |
+| 에픽 넘김 줄(`epic-handoff.md`)에 원칙 5(계층 · 온톨로지)를 쓰라는 문장이 없음 | R5 (지휘자 수리 2 — R5 블록 브랜치로 등록) | R5 가 그 파일을 예약(`## 플러그인 동작 자리 대조`) |
 
 ### §6 메모리 정리 — 지휘 세션 몫, 레포 밖
 
@@ -236,15 +236,16 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 |---|---|---|
 | §5 의 R9 행 | R9 범위 | R9 |
 | §5 의 R8 행 | R8 범위 | R8 |
-| §5 의 R5 후속 행 | superpowers 7.0.0 이음매와 같은 PR | R5 후속(R5 설계 `## 미룸`) |
+| §5 의 R5 후속 행 | superpowers 7.0.0 이음매와 같은 PR — 지휘자 수리가 처리 | #227 |
 | §5 의 R2a 행 | R2a 예약 · 진행 중 | R2a |
 | §5 의 철학 P3 「문서 리뷰 자리 넷」 행 | artifact-critique 를 엔진에 붙일지에 따라 문장이 참이 되거나 고쳐야 함 | R2a |
 | §5 의 R10 행 | R10 예약 | R10 |
 | §5 의 `finishing.md` 행(원칙 2 · 3 · 4 · 6, 원칙 5 는 R10 이 필요 여부 판단) | R10 이 그 줄 문면을 맡음 | R10 |
-| §5 의 `epic-handoff.md` 행(원칙 5) | R5 예약 파일 | R5 후속(R5 설계 `## 미룸`) |
-| §6 머지 뒤 메모리 정리 | 레포 밖 · 머지 뒤에만 | 지휘 세션 |
+| §5 의 `epic-handoff.md` 행(원칙 5) | R5 예약 파일 — 지휘자 수리 2 가 맡는다 | R5 |
 
 ## 지휘 기록
+
+- 2026-10-19 · 지휘자 판정: `## 미룸` 의 받는 곳 셋을 상태 계산이 따라갈 수 있게 고쳤다 — §5 지휘자 수리 행은 #227(머지됨)로, 원칙 5 넘김 행은 R5(지휘자 수리 2 브랜치를 R5 블록에 등록해 R5 가 열린 채 추적), §6 머지 뒤 메모리 정리는 레포 밖 지휘 세션 일이라 미룸 표에서 빼고 이 기록으로 둔다(R11 머지 뒤 지휘 세션이 메모리 원칙 다리 정리).
 
 - 설계문서 점검(builder check) 질문 셋은 대화 · 레포에서 답이 나오거나 계획이 정해도 되는 것이라 지휘 세션이 정했다(지휘자 판정): ① 「다른 레포」는 두 갈래 모두 — §1 두 갈래 문단 · AC1a ② 크기 규칙은 정리 대상 문서에만, 넘치면 원칙 줄을 짧은 꼴로 ③ `test_readme_sync.sh` 는 이력 면제만 없앤다(새 검사 없음). 사실 고침: 철학 문서에 Structural Mechanisms 절은 있다 — case study 만 없다.
 
@@ -268,3 +269,40 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 | a52f1c68#r2.1 | 참고(ambiguity) #3-지울-낡은-개념 — 크기 목표는 정리 대상 문서마다 정리 전보다 작아야 한다고 합니다(AC5). 그런데 철학 문서는 원칙 여섯의 이유 · 배경을 새로 받아야 하고(AC2), 넘칠 때 무엇부터 줄일지는 CLAUDE.md 에만 적혀 있고 철학 문서에는 없습니다. — 고치면: §3 크기 목표에 철학 문서가 넘칠 때의 순서를 한 줄 더합니다. 예: 원칙마다 이유를 기존 P# 안 한 문장으로 줄이고, 그래도 넘치면 그 사실과 전후 크기를 PR 본문에 적어 사용자에게 보입니다. |
 | 0b618227#r2.1 | 참고(testing) #acceptance-criteria — 이번에 사용자가 고른 CHANGELOG 정리(이력이 아닌 낡은 글만 정리, 없으면 「없음」)를 확인할 수용 기준이 없고, Goals 에도 빠져 있습니다. — 고치면: Goals 둘째 줄에 CHANGELOG 의 이력이 아닌 글을 더하고, AC 하나를 둡니다: 「플러그인 CHANGELOG 넷마다 이력이 아닌 낡은 글을 정리했거나, PR 본문에 그 CHANGELOG 는 「없음」이라고 적혀 있다」. |
 | 70cfa8df#r2.1 | 참고(handoff_incomplete) #verification-plan — 지울 줄을 고정하는 테스트(핀 락)를 찾을 때 리포 밖 조사 기록(~/.claude/sdd-mirror/...)의 표를 쓰라고 합니다. 그런데 계획 · 구현 agent 는 작업 폴더 밖 파일을 못 읽을 수 있고, §3 목록이 그 표 대신 범위 전체인지도 적혀 있지 않습니다. — 고치면: §3 머리에 「아래 목록이 이 에픽 범위의 전부다 — 조사 표는 참고용이고, 핀 락은 grep 으로 찾는다」를 적고, Verification Plan 의 괄호를 grep 기준으로 고칩니다. |
+
+## 판정
+
+### docs/superpowers/plans/2026-10-19-principles-docs-cleanup.md
+
+- Ruling: 전체 스위트 실행(T1 Step 1 · T8 Step 2)은 지휘(나)가 공유 잠금 ~/.claude/sdd-mirror/suite-lock.d 아래에서 직접 돌리고 결과 파일을 계획이 정한 자리에 둔다 — 지휘 지시(잠금 · owner R11 · codex 픽스처 복원 · codex 호출 셈)를 하위 agent 에 옮기면 잠금 처리 실수 위험 — 틀리면: 구현자가 기준선 생성 단계를 직접 보지 못함(파일은 같은 자리에 있어 영향 작음).
+- Ruling: 옛 표기 「지휘자 수리 PR(R5 후속)」 1건이 `### Deferred to plan` 의 리뷰 참고 daa1d4a8#r2.1 인용에 남아 계획 Step 5 기대(0)와 다르다 — 그 줄은 지난 리뷰 원장의 인용 기록이라 고치지 않는다(기록 위조 방지 · 지휘 세션 소유 절) — 틀리면: grep 0 기대를 맞추려 인용 한 단어를 고치는 후속 편집.
+- Ruling: Task 1 커밋의 Co-Authored-By 가 실행 모델 이름(Sonnet 5.5)으로 적혔다 — HEAD 를 뒤로 옮기는 수정(amend) 금지라 그대로 두고, 이후 커밋은 지시된 트레일러를 쓰게 한다 — 틀리면: 커밋 트레일러 한 줄이 지시와 다름(내용 영향 없음).
+- Task 1: review — spec ✅ 대부분, Important 1(원칙 5 finishing 빈 곳에 §5 · 미룸 행 없음), Minor 4. Ruling: Minor 1(`roadmap-ontology.md:1` 은 제목 줄 — 인용 줄 사실 오류)과 Minor 3(미룸 행 이름)은 Task 8 끝에서 끝 (나) 가 그 줄을 열어 보므로 이번 고침에 함께 넣는다 — 값싼 사실 고침 — 틀리면: 루프에 Minor 를 넣은 작은 범위 확장.
+- Ruling: 원칙 2 · 4 의 뜻을 되살리고, 넘치는 바이트는 §3 목록 안의 줄(Polite handoff · Forbidden 머리 등)을 뜻을 지키며 더 줄여 마련한다 — 설계 §1 이 원칙 줄의 뜻을 정하고 계획 GC 는 §3 밖 · §5 조항만 줄이지 말라 함(§3 줄의 계획 문면은 논거이지 구속 아님) — 틀리면: 계획이 준 Polite handoff 문면과 몇 낱말 다름.
+- Ruling: 되살릴 바이트는 이 과제가 새로 쓴 글에서 마련한다(P8 이식성 괄호의 값 목록 — CLAUDE.md:35 가 같은 목록을 「무엇」으로 가짐; 모자라면 Law 3 「· 새 clone」) — 철학 문서는 이유 자리이고 GC 가 §3 밖 원문 삭제를 막음 — 틀리면: 철학 P8 에서 레포 전용 값의 예 목록이 빠져 CLAUDE.md 줄로만 남음.
+- Ruling: Task 6 계획 문면 「artifact-critique 의 non-code 리뷰 자리를 `generic` 프로필로 선언하고 공용 엔진 `shared/docreview/` 를 쓴다」는 Task 5 리뷰어 실측(artifact-critique SKILL 이 엔진을 배선하지 않음, generic.md 데이터만)과 어긋날 수 있다 — 구현자가 실제 배선을 재고 지금 참인 사실만 쓰게 한다(설계 §3 「지금 사실로」가 구속, 계획 문면은 논거) — 틀리면: qg README 줄이 계획 문면과 다름.
+- Ruling: Task 8 을 셋으로 나눈다 — Step 1 · 3 · 4(나)는 구현자, Step 2 전체 스위트는 지휘가 잠금 아래(Ruling 1), Step 4(가) 메모리 없는 읽기는 지휘가 두 파일 내용만 인라인으로 실은 별도 agent 로(구현자는 하위 agent 를 못 보냄 · 계획이 「subagent 에게 맡길 때는 내용을 인라인」이라 함) — 틀리면: e2e 기록 파일이 두 손에서 나와 합쳐 적어야 함.
+- Ruling: Step 4(가) 냉독자에게 두 파일 내용을 인라인하지 않고 두 경로만 주며 「그 두 파일만 · 메모리 쓰지 말 것」을 지시했다 — 하위 agent 시스템 맥락의 auto-memory 주입은 인라인이든 경로든 막을 수 없어 차이가 작고, 지휘 맥락 30KB 를 아낀다 — 틀리면: 냉독자가 다른 파일을 열어 「두 파일만으로」 측정이 흐려짐(보고서에서 확인).
+- Ruling: Important 1(받는 곳 기계 추적)은 고치지 않고 지휘에 올린다 — 고치는 길(GitHub 이슈 `#<n>` 열기 · redecompose 로 로드맵 에픽 등록)이 worktree 밖 부작용이자 지휘 결정이고, 지휘가 이미 「R5 후속(지휘자 수리 2)」로 받는 곳을 확정함 — 틀리면: 머지 뒤 roadmap-status · `check_bundle_coverage.py --impl` 이 그 행들을 「받는 곳 없음」으로 계속 경고.
+- Ruling: 최종 고침 한 번에 넣는 것 — (1) CLAUDE.md 원칙 다섯 줄 블록을 `## Plugin Shape` 머리 아래에서 Law 3 문단 바로 뒤(`## The Three Laws` 안)로 옮김(0바이트; 「모든 플러그인은 … 아래를 모두 만족」 이 「기본은 X」를 감싸 고정 규칙으로 읽히는 냉독 지적 · 원칙 2 자기모순 해소; 기존 절 안이라 설계 §1 「새 큰 절 없이」 충족) (2) 철학 P5 「주인 하나라야」→「주인이 하나라야」 (3) 철학 P8 (재사용)에 원칙 6 의 이유 한 구절(AC2 · 냉독 「이유 없음」), 바이트는 이번 브랜치가 새로 쓴 글에서 (4) 철학 P3 「문서 리뷰 자리 넷」 어긋남을 설계 §5 · `## 미룸` 에 R2a 행으로 올림. 나머지 Minor 는 미룸 — 바이트 예산 · 범위 밖 · 정본 파일이 있음 — 틀리면: 남긴 Minor 가 후속 에픽까지 그대로 남음.
+- Ruling: merge 충돌 풀기는 구현 agent 에 맡기고(지휘가 직접 고치지 않음), 판 번호는 기본 브랜치 다음 — spec-distill 7.4.1 · qg 14.0.2 · plugin-audit 1.1.5 · project-init 5.0.5 — 지휘 인계 그대로 · plugin.json 은 같은 글자면 조용히 합쳐지니 넷 모두 직접 고침 — 틀리면: 머지 직전 지휘가 번호를 다시 정해야 함.
+- Ruling: SDD 작업 폴더(.superpowers/sdd/2026-10-19-principles-docs-cleanup)를 지우지 않고 남긴다 — 지휘가 구현 대조 · PR 본문에 보고서 · 원장을 쓰고, 거울(~/.claude/sdd-mirror/r11/)도 함께 둔다 — 틀리면: git-ignored 폴더 하나가 worktree 에 남음(지휘가 PR 뒤 지움).
+- Ruling: 기본 브랜치에 그 PR 이 먼저 들어가 R11 이 기본 브랜치를 merge 할 때 spec-distill README `## External source absorption` 절에서 충돌하면 절 삭제를 택하고, 그 PR 의 CHANGELOG 7.4.0 줄(그 절 superpowers 줄 수정)은 R11 CHANGELOG 항목에 「그 절은 이번에 지웠다」로 맞춘다 — 지휘 지시 · R11 설계 §3 이 그 절 통째 삭제를 정함 — 틀리면: 그 PR 의 superpowers 줄 수정이 README 에서 사라짐(정본은 CHANGELOG · skill).
+- Ruling: 버전 번호는 머지 직전에 그 PR(spec-distill 7.4.0 · qg 14.0.1 · plugin-audit 1.1.4 · project-init 5.0.4) 다음으로 다시 정하고, plugin.json 은 같은 글자면 충돌 없이 합쳐지므로 merge 뒤 직접 확인한다 — 지휘 지시 · 계획 GC 「번호는 잠정 · 머지 직전 확정」 — 틀리면: 두 PR 이 같은 버전을 써 cache key 가 갱신 안 됨. 지금 브랜치 번호(7.3.1 · 14.0.1 · 5.0.4 · 1.1.4)는 잠정이며 그 PR 과 셋이 겹친다.
+- Ruling: R11 대조표에서 「epic-handoff.md 원칙 5 문장」의 받는 곳은 R5 후속(지휘자 수리 2)으로 확정 — 지휘 확정 · 설계문서의 표기 「R5 후속(R5 설계 `## 미룸`)」 과 같은 갈래라 설계문서는 고치지 않는다 — 틀리면: 받는 쪽 이름이 「지휘자 수리 2」로 더 구체화되어야 했음(지휘 세션이 `## 판정` 에 옮길 수 있음).
+- Ruling: (Task 1 리뷰) Minor 1(`roadmap-ontology.md:1` 은 제목 줄 — 인용 줄 사실 오류)과 Minor 3(미룸 행 이름)은 Task 8 끝에서 끝 (나) 가 그 줄을 열어 보므로 이번 고침에 함께 넣는다 — 값싼 사실 고침 — 틀리면: 루프에 Minor 를 넣은 작은 범위 확장.
+- Ruling: Task 6 계획 문면 「artifact-critique 의 non-code 리뷰 자리를 `generic` 프로필로 선언하고 공용 엔진 `shared/docreview/` 를 쓴다」는 Task 5 리뷰어 실측과 어긋날 수 있다 — 구현자가 실제 배선을 재고 지금 참인 사실만 쓰게 한다(설계 §3 「지금 사실로」가 구속) — 틀리면: qg README 줄이 계획 문면과 다름. (실측: qg 안에서 generic.md 를 읽는 실행 경로가 0이라 그 사실만 적었다.)
+- Ruling: Task 8 을 셋으로 나눈다 — Step 1 · 3 · 4(나)는 구현자, Step 2 전체 스위트는 지휘가 잠금 아래, Step 4(가) 메모리 없는 읽기는 지휘가 별도 agent 로 — 틀리면: e2e 기록 파일이 두 손에서 나와 합쳐 적어야 함.
+- Ruling: Step 4(가) 냉독자에게 두 파일 경로만 주며 「그 두 파일만 · 메모리 쓰지 말 것」을 지시했다 — auto-memory 주입은 인라인이든 경로든 막을 수 없어 차이가 작음 — 틀리면: 냉독자가 다른 파일을 열어 측정이 흐려짐. (냉독자는 두 파일만 읽었다고 보고.)
+- Ruling: 기본 브랜치 merge 때 spec-distill README `## External source absorption` 충돌은 절 삭제를 택하고 #227 의 CHANGELOG 7.4.0 줄은 R11 CHANGELOG 항목에 「그 절은 이번에 지웠다」로 맞춘다 — 지휘 지시 · 설계 §3 — 틀리면: #227 의 superpowers 줄 수정이 README 에서 사라짐(정본은 CHANGELOG · skill).
+- Ruling: 버전 번호는 머지 직전에 #227 다음으로 다시 정하고 plugin.json 은 merge 뒤 직접 확인한다 — 틀리면: 두 PR 이 같은 버전을 써 cache key 가 갱신 안 됨.
+- Ruling: R11 대조표에서 「epic-handoff.md 원칙 5 문장」의 받는 곳은 R5 후속(지휘자 수리 2)으로 확정 — 지휘 확정 — 틀리면: 받는 쪽 이름이 더 구체화되어야 했음.
+- Ruling: Important 1(받는 곳 기계 추적)은 고치지 않고 지휘에 올린다 — 이슈 · 재분해는 worktree 밖 부작용이자 지휘 결정 — 틀리면: 머지 뒤 경고 지속. (지휘 처리: 받는 곳을 #227 · R5 로 고치고 메모리 정리 행은 지휘 기록으로 옮김 — 구현 대조 경고 없음.)
+- Ruling: 최종 고침 한 번에 — (1) CLAUDE.md 원칙 다섯 줄 블록을 `## The Three Laws` 의 Law 3 문단 바로 뒤로 옮김(0바이트; 냉독 지적 · 원칙 2 자기모순 해소) (2) 철학 P5 맞춤법 (3) 철학 P8 (재사용)에 원칙 6 이유 한 구절 (4) 철학 P3 「문서 리뷰 자리 넷」 어긋남을 R2a 행으로. 나머지 Minor 는 미룸 — 틀리면: 남긴 Minor 가 후속까지 남음.
+- Ruling: merge 충돌 풀기는 구현 agent 에 맡기고 판 번호는 기본 브랜치 다음 — spec-distill 7.4.1 · qg 14.0.2 · plugin-audit 1.1.5 · project-init 5.0.5 — 틀리면: 머지 직전 다시 정함.
+- Ruling: SDD 작업 폴더를 지우지 않고 남긴다 — 지휘가 구현 대조 · PR 본문에 쓴다, 거울도 있다 — 틀리면: git-ignored 폴더 하나가 남음.
+
+## 구현 대조 — docs/superpowers/plans/2026-10-19-principles-docs-cleanup.md
+
+- 구현 대조: 구현 대조: 경고 없음 (AC 10개 · 구현됨 10개 · 미룸 0개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)
+- 보고: AC 10개 중 구현됨 10 · 미룸 0 · 빠짐 0 (AC1a 구현됨 · D1.1 「없음」)
