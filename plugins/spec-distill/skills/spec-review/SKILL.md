@@ -305,10 +305,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 
 그 파일의 여덟 단계를 **한 턴 안에서** 돈다. 절차를 여기 복사하지 않는다 — 네 자리가 같은 절차를
 쓰기 때문에 공유 정본에 두는 것이다. `--state-dir` 는 위 `$STATE_DIR` 이고, 상한은 그 문서가 정하는
-**재리뷰 상한 2** 다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
+재리뷰 상한(기본 2 — 게이트 둘째 줄이 알린다)이다(라운드 4 이상은 사용자가 승인 게이트에서 열어야만 돈다).
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.
@@ -435,8 +435,8 @@ fi
 `${PROFILE}` 에는 경로가 아니라 **프로필 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자 프로젝트 밖이라 리뷰어의
 Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜스를 돌려 그 stdout 전문을 탐지와 재비판의
 `<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않는다 — 펜스가 critic 출력 파일
-(`$STATE_DIR/critic.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을 critic 사망(rc 4)으로 읽어
-재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
+(`$STATE_DIR/critic.txt` 와 `$STATE_DIR/critic-<번호>.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을
+critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
 읽는다(`critic_predates_round`). `$spec_path` 는 이 펜스와 **같은 Bash 호출**에서 대입한다(codex 게이트 펜스와
 같다) — 새 셸에는 앞 호출의 대입이 남지 않아 `$STATE_DIR` 이 비고, 그러면 펜스는 비움을 건너뛰고 그 사실을 알린다.
 
@@ -452,11 +452,8 @@ prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
 if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
   echo "[spec-distill] 프로필 내용을 읽지 못했다(cat rc $prof_rc): $PROFILE — 탐지 · 재비판을 dispatch 하지 않는다. 5단계가 critic 사망으로 읽는다(재dispatch 1회 → 「미검증」)." >&2
   if [ -n "${STATE_DIR:-}" ] && [ -d "$STATE_DIR" ]; then
-    if { : > "$STATE_DIR/critic.txt"; } 2>/dev/null; then
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비웠다." >&2
-    else
-      echo "[spec-distill] critic 출력 파일($STATE_DIR/critic.txt)을 비우지 못했다 — 5단계가 라운드 시작보다 오래된 그 파일을 부재로 읽는다(critic_predates_round)." >&2
-    fi
+    clr_rc=0; bash "$SD/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
+    case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): $SD/scripts/clear_critic_outputs.sh" >&2 ;; esac
   else
     echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(spec_path='${spec_path:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). spec_path 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
@@ -467,8 +464,10 @@ printf '%s\n' "$PROFILE_TEXT" | sed -e '2,/^---$/{' -e '/^must_catch:/d' -e '}'
 ```
 <!-- profile-content:end -->
 
-3단계 탐지 — 한 번 dispatch 하고 출력을 요약·전사 없이 verbatim 파일(`$STATE_DIR/critic.txt`)로 저장한다.
-파싱은 `docreview_route.py` 가 그 파일에서 한다.
+3단계 탐지 — 1단계 출력의 `config.detectors.value`(N) 만큼 아래 블록을 dispatch 한다(한 메시지에 Agent 호출 여럿 —
+병렬). 리뷰어 i 의 출력을 요약·전사 없이 verbatim 파일 `$STATE_DIR/critic-<i>.txt`(i = 1…N)로 저장한다. N 명이라는
+규모는 게이트 둘째 줄이 알린다 — 선언된 fan-out 이다. 파싱은 `docreview_route.py` 가 그 파일들에서 한다.
+`RELATED_CHANGES` 는 `python3 "$SD/scripts/docreview_state.py" related-changes --state-dir "$STATE_DIR"` 출력이다 — 이번 라운드에 사용자가 고친다로 정한 결정 때문에 함께 바뀐 절의 제목과 앵커뿐이고, 없으면 빈 값이다(명령이 실패하면 빈 값으로 두되 그 사실을 한 줄 알린다).
 
 ```
 Agent({
@@ -477,12 +476,13 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-closed
   prompt: "<document>${DOCUMENT}</document>
     <profile>${PROFILE}</profile>
-    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>"
+    <prior_finding_ids>${PRIOR_FINDING_IDS}</prior_finding_ids>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
-6단계 재비판 — 입력 슬롯은 **넷**이고 그중 `diff` 는 **선택**이다: 문서 · `prep.json` 의
-`items`(출처 라벨 없음) · 프로필 · `diff`(선택). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
+6단계 재비판 — 입력 슬롯은 **다섯**이고 그중 `diff` 와 `related_changes` 는 **선택**이다: 문서 · `prep.json` 의
+`items`(출처 라벨 없음) · 프로필 · `diff`(선택) · `related_changes`(선택 — 위 탐지와 같은 출력). 이 자리(문서 경로)는 `diff` 를 싣지 않는다 —
 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를 못 받으면 「이 변경이 도입했는가」 축을 쓰지
 않는다. dispatch 사유도, 이전 대화도, 어느 리뷰어가 냈는지도 넣지 않는다 — 그것을 알면 판단이 그
 프레이밍을 흡수한다. 출력은 verbatim 파일(`recritic.txt`)로.
@@ -494,7 +494,8 @@ Agent({
   // **처분** — consumer=plugins/spec-distill/scripts/docreview_route.py · fail-open
   prompt: "<document>${DOCUMENT}</document>
     <findings>${FINDINGS}</findings>
-    <profile>${PROFILE}</profile>"
+    <profile>${PROFILE}</profile>
+    <related_changes>${RELATED_CHANGES}</related_changes>"
 })
 ```
 
@@ -518,9 +519,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 렌더 순서 맨 끝에 서고, 같은 4개씩 분할에 함께 세어지며, 선택지 「열기 / 열지 않음」 둘뿐인 그
 자신의 질문이다**(열린 항목을 마저 처리하는 것과는 독립적으로 고른다 — 다른 항목의 질문에
 얹지 않는다). 「추가 라운드 1회 열기」를 고르면
-다음 라운드 1단계가 `begin-round --extra-approval "<사용자 자신의 문구>"` 로 돈다.
+다음 라운드 1단계가 `begin-round --extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>" --extra-approval-source label|typed` 로 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다.
 
-**`AskUserQuestion` 라벨의 항목별 내용** — 각 선택지 `label` 은 **상태별 라벨 + `— <replacement 를 1–5 낱말로 압축>`** 이다. 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다. 같은 라운드의 두 항목이 **같은 라벨을 갖지 않는다.** 단 `replacement` 가 둘 다 부재면 그 부재 표기(`(대체안 미작성)`)가 같을 수 있고, 그때는 이 규약이 공허해지지 않도록 **부재 건수를 함께 공시한다**(「대체안 미작성 N건」). `label` 예산은 1–5 낱말이므로 압축은 필수다 — 렌더의 「고치면」 줄이 전문을 이미 내므로 라벨은 그 줄을 가리키는 손잡이다.
+**`AskUserQuestion` 라벨의 항목별 내용** — 각 선택지 `label` 은 **상태별 라벨 + `— <replacement 를 1–5 낱말로 압축>`** 이다. 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다. 같은 라운드의 두 항목이 **같은 라벨을 갖지 않는다.** 단 `replacement` 가 둘 다 부재면 그 부재 표기(`(대체안 미작성)`)가 같을 수 있고, 그때는 이 규약이 공허해지지 않도록 **부재 건수를 함께 공시한다**(「대체안 미작성 N건」). `label` 예산은 1–5 낱말이므로 압축은 필수다 — 렌더의 「고치면」 줄이 전문을 이미 내므로 라벨은 그 줄을 가리키는 손잡이다. 질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고 설명 괄호에만 쓴다 — 선택지 이름만 보고 무엇을 고르는지 알 수 있어야 한다. 상한 · 정체로 열린 승인 게이트의 승인 선택지 이름은 엔진 렌더의 「열린 지적 N개를 두고 진행」을 그대로 쓴다.
 
 **「미검증」 라운드** — 라벨의 정본은 엔진 출력이다. 요약(`gate --state-dir "$STATE_DIR"`, `--render` 없이)의
 `approval_label` 이 「미검증」이면 승인 게이트를 그 라벨로 연다(엔진이 `approval_gate_open` 을 참으로 내고, 사유는
@@ -568,12 +569,13 @@ elif [ ! -f "$spec_path" ]; then
 else
   g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
   adv_rc=0
-  adv_err="$STATE_DIR/advice-err.json"
-  python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render --cap 8 2>"$adv_err" || adv_rc=$?
-  if [ "$adv_rc" -ne 0 ]; then
-    cat "$adv_err" >&2
+  adv_out="$(python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --sink "$spec_path" --log-file "$spec_path" --render 2>&1)" || adv_rc=$?
+  if [ "$adv_rc" -eq 0 ]; then
+    printf '%s\n' "$adv_out"
+  else
+    printf '%s\n' "$adv_out" >&2
     echo "[spec-distill] 참고 목록 표시 · 박제 실패(rc $adv_rc) — 위 stderr 의 사유를 2단계 게이트 앞 글에 싣는다. 진행은 막지 않는다."
-    grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' "$adv_err" || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render --cap 8 || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
+    printf '%s' "$adv_out" | grep -qE '"reason": "(profile_has_no_must_catch|advice_module_missing)"' || python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" --render || echo "[spec-distill] 참고 목록 표시도 실패했다 — 목록 본문 없음을 2단계 게이트 앞 글에 싣는다."
   fi
 fi
 [ -z "${STATE_DIR:-}" ] || [ ! -d "$STATE_DIR" ] || [ -z "${harness_sid:-}" ] || python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
@@ -583,7 +585,7 @@ fi
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 2단계 게이트를 띄우기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
 「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 엔진 목록 전부를 요약 전문으로 보인다(박제된 표는 설계문서의
 `### Deferred to plan` 에 이미 있다 — 이 펜스는 원장을 읽기만 하고, 앞 펜스가 표지를 풀었으므로 원장 폴더에 아무것도
-쓰지 않는다 — 목록은 임시 파일로 받는다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여 같은 Bash 호출로 돌린다:
+쓰지 않는다 — 목록은 `advice-list` 가 읽기 전용으로 내고 `$(…)` 로 받는다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여 같은 Bash 호출로 돌린다:
 
 <!-- advice-all:begin -->
 ```bash
@@ -594,18 +596,15 @@ STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROO
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 참고(advisory) 목록 없음 — 엔진 원장을 찾지 못했다(spec_path='${spec_path:-}' · STATE_DIR='${STATE_DIR:-}'). 게이트 앞 글에 싣는다."; exit 0
 fi
-adv_all="$(mktemp "${TMPDIR:-/tmp}/spec-distill-advice-all.XXXXXX")" \
-  || { echo "[spec-distill] 참고 전부 보기 실패 — 임시 파일을 만들지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
-python3 "$SD/scripts/docreview_state.py" advice --state-dir "$STATE_DIR" > "$adv_all" \
-  || { rm -f "$adv_all"; echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
-python3 -I -X utf8 -c '
+adv_all="$(python3 "$SD/scripts/docreview_state.py" advice-list --state-dir "$STATE_DIR")" \
+  || { echo "[spec-distill] 참고 전부 보기 실패 — 엔진 원장을 읽지 못했다. 게이트 앞 글에 싣는다."; exit 0; }
+printf '%s' "$adv_all" | python3 -I -X utf8 -c '
 import json, sys
-items = json.load(open(sys.argv[1], encoding="utf-8")).get("items") or []
+items = json.load(sys.stdin).get("items") or []
 print("참고 전부 %d건" % len(items))
 for it in items:
     print("- [%s] %s — %s" % (it.get("category"), it.get("anchor"), " ".join(str(it.get("summary") or "").split())))
-' "$adv_all"
-rm -f "$adv_all"
+'
 ```
 <!-- advice-all:end -->
 
@@ -658,7 +657,41 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+
+**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스 앞에 `spec_path='<설계문서 절대 경로>'` 한 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
+
+- rc 2 — 넣은 글이 거부됐다. 줄은 이미 한 줄이어야 하고 엔진 줄 · 목록 · 제목 표지로 시작하지 못한다 — 사유가 줄이면(`line_*`) 줄을 고쳐 다시 돈다. 사유가 사용자 말이면(`quote_*`) 멈추고 사유를 사용자에게 보인다.
+- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
+- rc 0 — 엔진이 썼거나, 원장 자리는 찾았는데 이 문서의 리뷰 원장이 없다고 알렸다. 원장이 없을 때만 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
+
+<!-- decision-line:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+[ -n "${spec_path:-}" ] || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 비었다(이 펜스와 같은 Bash 호출에서 대입한다)." >&2; exit 1; }
+harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
+[ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+if [ -z "${STATE_DIR:-}" ]; then
+  echo "[spec-distill] 결정 줄을 쓰지 않았다 — 원장 자리를 찾지 못했다(spec_path='${spec_path}' · ROOT='${ROOT:-}' — 원장 자리가 비었거나 레포 밖이거나 링크를 지난다, 위 사유). 손으로 쓰지 말고 이 사유를 보고하라 — spec_path 는 절대 경로여야 하고 cwd 는 그 문서의 git 작업 트리 안이어야 한다." >&2; exit 1
+fi
+if [ ! -f "$STATE_DIR/docreview-state.md" ]; then
+  echo "[spec-distill] 이 문서의 리뷰 원장이 없다(STATE_DIR='${STATE_DIR}') — 결정 줄을 엔진으로 쓰지 않았다. 결정 기록 끝에 손으로 쓴다(다음 리뷰가 기준선으로 받는다)."; exit 0
+fi
+LF="$(mktemp "${TMPDIR:-/tmp}/decision-line.XXXXXX")" || { echo "[spec-distill] 결정 줄 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+QF="$(mktemp "${TMPDIR:-/tmp}/decision-quote.XXXXXX")" || { rm -f -- "$LF"; echo "[spec-distill] 사용자 말 임시 파일을 만들지 못했다 — 결정 줄을 쓰지 않았다." >&2; exit 1; }
+trap 'rm -f -- "$LF" "$QF"' EXIT
+cat > "$LF" <<'DEVBREW_DECISION_LINE_EOF'
+<결정 줄>
+DEVBREW_DECISION_LINE_EOF
+cat > "$QF" <<'DEVBREW_DECISION_QUOTE_EOF'
+<사용자가 적은 글 그대로>
+DEVBREW_DECISION_QUOTE_EOF
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" --log-file="$spec_path" --line="$(cat "$LF")" --quote="$(cat "$QF")"
+```
+<!-- decision-line:end -->
 
 「지적대로 고치기」 · 「직접 편집」 갈래와, `roadmap:` 줄이 없는 문서의 세 갈래는 지금 그대로다.
 
@@ -685,7 +718,8 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
   `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
   게이트-less silent 종료는 금지다.
 - **재결정 규약 (P23)** — `decide` 처분이 인터뷰가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
-  않는다. design.md 의 재결정 기록에 *원래 / 재결정 후보 / 근거* 를 적어 다음 라운드로 들고 가고,
+  않는다. 설계문서 `## 결정 기록` 에 *원래 / 재결정 후보 / 근거* 한 줄을 결정 줄 펜스로 적어(사용자 말은 그
+  결정을 고른 답) 다음 라운드로 들고 가고,
   확정이 실제로 뒤집히는 자리는 이 승인 게이트 하나다 — 사용자가 판정한다. 하류의 반증은 보고의
   근거이지 임의 변경의 근거가 아니다. 정본은 `proceed-gate.md` 의 「재결정 규약」 절.
 

@@ -355,7 +355,8 @@ class DecisionCrossCheck(unittest.TestCase):
         r = random.Random(SEED_RNG + 6)
         valid = []
         for i in range(60):
-            q = r.choice(["채택", "그대로 둔다", "QUOTE %d" % i, "", "사용자가 '아니다' 라고 했다"])
+            q = r.choice(["채택", "그대로 둔다", "QUOTE %d" % i, "", "사용자가 '아니다' 라고 했다", '그는 "아니다" 라고 했다'])
+            q = q.replace('"', "\u201d")   # 엔진 `_log_line` 이 선택지 문구의 큰따옴표를 바꾼다(줄 문법의 닫는 따옴표와 안 섞이게)
             valid.append("- D%d.%d · r%d · %s · %s · \"%s\"%s — %s" % (
                 r.randint(1, 9), r.randint(1, 9), r.randint(1, 5), r.choice(["adopt", "reject", "drop", "hold"]),
                 "%08x#r1.%d" % (r.getrandbits(32), r.randint(1, 9)), q,

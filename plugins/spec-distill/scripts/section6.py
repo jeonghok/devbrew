@@ -41,26 +41,147 @@ from __future__ import annotations
 
 import re
 
-# 펜스 인식은 `check_brief._body()` 와 같은 문법이어야 한다 — 다르면 「펜스 안」의 정의가
-# 두 개가 되어 이 모듈이 없애려는 바로 그 어긋남이 재발한다.
-FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
+# 펜스 인식은 이 모듈의 `FENCE_RE` 하나다 — 다르면 「펜스 안」의 정의가 둘이 되어 이 모듈이 없애려는 바로 그 어긋남이
+# 재발한다. 문법은 CommonMark 의 코드 펜스를 따른다: 여는 줄은 들여쓰기 0–3칸 + 같은 글자(`` ` `` 또는 `~`) 셋 이상이고
+# 백틱 펜스의 정보 문자열(여는 줄의 나머지)에는 백틱이 없다. 닫는 줄은 들여쓰기 0–3칸 + 같은 글자 + 여는 줄 이상의 길이 +
+# 공백뿐이다. 닫히지 않은 펜스는 글 끝까지다.
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$", re.DOTALL)
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 
+
+# frontmatter — 모든 판독기가 같은 좌표(frontmatter 뒤)에서 펜스를 센다. 이 정규식도 여기가 소유한다.
+FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+
+def body_start(text: str) -> int:
+    m = FRONTMATTER_RE.match(text)
+    return m.end() if m else 0
+
+
+def _scan_fences_full(text: str):
+    """-> 펜스 [(시작, 끝, 열 0 에서 열었나, 여는 줄 번호 0-based)]. 구간은 text 안의 좌표다."""
+    out, pos, opener, start, col0, at = [], 0, None, 0, True, 0
+    for idx, line in enumerate(text.split("\n")):
+        here, pos = pos, pos + len(line) + 1
+        end = min(pos - 1, len(text))
+        if opener is None:
+            m = _FENCE_OPEN_RE.match(line)
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                opener, start, col0, at = m.group(1), here, not line.startswith(" "), idx
+        else:
+            m = _FENCE_CLOSE_RE.match(line)
+            if m and m.group(1)[0] == opener[0] and len(m.group(1)) >= len(opener):
+                out.append((start, end, col0, at))
+                opener = None
+    if opener is not None:
+        out.append((start, len(text), col0, at))
+    return out
+
+
+def _scan_fences(text: str):
+    """-> (펜스 구간 [(시작, 끝)], 들여 쓴 여는 줄 [줄 글자]). 구간은 text 안의 좌표다."""
+    full = _scan_fences_full(text)
+    lines = text.split("\n")
+    return [(a, b) for a, b, _c, _i in full], [lines[i] for _a, _b, c, i in full if not c]
+
+
+def _fence_spans(text: str) -> list:
+    return _scan_fences(text)[0]
+
+
+def fence_spans_in(text: str) -> list:
+    """주어진 글 안의 펜스 구간(글 자기 좌표) — §6 조각처럼 frontmatter 가 없는 글을 읽는 판독기가 쓴다."""
+    return _fence_spans(text)
+
+
+def col0_fence_spans_in(text: str) -> list:
+    """주어진 글 안에서 **열 0 에서 연** 펜스 구간 — 줄의 «코드라서 읽지 않는다» 면제는 이것만 받는다. 들여 쓴 여는 줄이 연
+    펜스는 컨테이너마다 다르게 읽혀 면제하지 않는다."""
+    return [(a, b) for a, b, c, _i in _scan_fences_full(text) if c]
+
+
+def indented_fence_opener_numbers_in(text: str) -> list:
+    """주어진 글 안에서 들여쓰기 1–3칸으로 여는 펜스 줄의 번호(1부터)."""
+    return [i + 1 for _a, _b, c, i in _scan_fences_full(text) if not c]
+
+
+def indented_fence_openers(text: str) -> list:
+    """들여쓰기 1–3칸으로 여는 펜스 줄(frontmatter 뒤) — 부분집합은 열 0 의 펜스만 받는다(목록 항목 안의 펜스는 컨테이너마다
+    다르게 읽혀 최상위 줄을 가릴 수 있다)."""
+    return _scan_fences(text[body_start(text):])[1]
+
+
+class _Span:
+    def __init__(self, a: int, b: int):
+        self._ab = (a, b)
+
+    def span(self):
+        return self._ab
+
+    def start(self):
+        return self._ab[0]
+
+    def end(self):
+        return self._ab[1]
+
+
+class _FenceScanner:
+    """`re.Pattern` 의 `finditer` · `sub` 두 얼굴만 가진 펜스 판독기 — 부르는 쪽이 정규식처럼 쓴다."""
+
+    def finditer(self, text: str):
+        return iter([_Span(a, b) for a, b in _fence_spans(text)])
+
+    def sub(self, repl: str, text: str) -> str:
+        out, last = [], 0
+        for a, b in _fence_spans(text):
+            out += [text[last:a], repl]
+            last = b
+        return "".join(out) + text[last:]
+
+
+FENCE_RE = _FenceScanner()
+
+# HTML 요소 이름 — WHATWG 요소 색인 + 옛 요소 · 원문 텍스트 요소 + CommonMark HTML 블록 6종 이름. 속성 없는 여는 태그라도 이 이름이면
+# 진짜 요소라 브라우저가 뒤 글을 가리거나 가짜 앵커를 그리므로 자리 표시 낱말로 두지 않는다(`<file>` · `<date>` 는 요소가 아니다).
+HTML_ELEMENT_NAMES = frozenset("""
+a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data
+datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header
+hgroup hr html i iframe img input ins kbd label legend li link main map mark math menu meta meter nav noscript object ol
+optgroup option output p param picture pre progress q rp rt ruby s samp script search section select selectedcontent slot
+small source span strong style sub summary sup svg table tbody td template textarea tfoot th thead time title tr track u ul
+var video wbr
+acronym applet basefont bgsound big blink center command content dir font frame frameset image isindex keygen listing
+marquee menuitem multicol nextid nobr noembed noframes plaintext rb rtc shadow spacer strike tt xmp
+fencedframe portal geolocation model
+""".split())
+
+# 머리 정규식은 전부 한 줄만 읽는다 — `##` · 번호 · 제목 사이는 `[ \t]` 다(`\s` 는 줄 나눔을 건너 `##` 다음 줄의
+# `6. …` 을 머리로 읽는다). 빈 `##` 줄은 머리 후보(`BRIEF_HEADLIKE_RE`)라 brief 게이트가 막는다.
 # 시작 후보 — 제목을 요구하지 않는다. 제목을 요구하면 `## 6. 참고 자료` 같은 줄이 후보에서
 # 빠지는데, 그 줄은 사람에게도 소비자에게도 「6번 절」로 읽힌다. 넓은 쪽으로 틀리면 red 가
 # 하나 더 날 뿐이고, 좁은 쪽으로 틀리면 통로가 열린다.
-START_RE = re.compile(r"(?m)^##\s*6\.")
+START_RE = re.compile(r"(?m)^##[ \t]*6\.")
 # 종결 후보 — 관대(원문·펜스 무시) / 엄격(펜스 밖·번호 요구).
-END_LOOSE_RE = re.compile(r"(?m)^##\s")
-END_STRICT_RE = re.compile(r"(?m)^##\s+\d+\.")
+END_LOOSE_RE = re.compile(r"(?m)^##[ \t]")
+END_STRICT_RE = re.compile(r"(?m)^##[ \t]+\d+\.")
+# brief 절 머리 판독 — `brief_body` 가 **정규형 위에서** 쓴다(절의 끝 · 같은 번호 머리 수 · 절 밖 결정 판독). ASCII 숫자만,
+# `## <n>.` 뒤가 숫자가 아니다(`## 0.1` 은 절 머리가 아니다). 위 §6 종결 규칙과 갈리는 줄(`## 6.1` · 다른 문자 체계 숫자 ·
+# 보이지 않는 글자를 끼운 머리)은 아래 머리 후보 규칙에 걸려 게이트가 `section_head_unknown` 으로 막는다.
+BRIEF_SECTION_HEAD_RE = re.compile(r"^##[ \t]+([0-9]+)\.(?![0-9])")
+BRIEF_HEADLIKE_RE = re.compile(r"^[ \t]{0,3}##(?:[ \t]*\d|\s*$)")
 
 # 제목-모양 줄 판정 — markdown ATX 헤딩처럼 보이는 줄(들여쓰기 0–3칸 + `#`×1–6 + 공백)을
 # 분류할 뿐, 어떤 절 경계도 계산하지 않는다. 헤딩 마커를 소비하는 정규식이라 §6-단일화 락의
 # 수집 대상이 되므로(§6 경계 계산과 무관해도), 이 파일이 그 유일한 자리다.
 HEADING_SHAPED_RE = re.compile(r"^\s{0,3}#{1,6}\s")
+# ATX 제목 줄(CommonMark) — 들여쓰기 0–3칸 + `#`×1–6 + 공백 또는 줄 끝. setext 판독이 «제목 줄은 문단 줄이 아니다» 를 가를 때 쓴다.
+ATX_HEADING_RE = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
 
 
 def fence_spans(text: str) -> list:
-    return [(m.start(), m.end()) for m in FENCE_RE.finditer(text)]
+    """원문 좌표의 펜스 구간 — frontmatter 는 펜스를 세지 않는다(`brief_body.body_text` 와 같은 좌표)."""
+    off = body_start(text)
+    return [(a + off, b + off) for a, b in _fence_spans(text[off:])]
 
 
 def _outside(m, spans) -> bool:

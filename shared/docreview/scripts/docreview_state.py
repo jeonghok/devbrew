@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate · advice
+observe-diff · gate · advice · log-decision
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 try:
@@ -37,15 +38,18 @@ try:
 except ImportError:  # pragma: no cover
     _adv = None
 
+# 값 해석(leaf 형제) — 모든 라운드의 필수 경로라 `try` 로 감싸지 않는다.
+import docreview_config as _cfg
+
 STATE_FILE = "docreview-state.md"
-REREVIEW_CAP = 2
+REREVIEW_CAP = _cfg.DEFAULTS["rereview_cap"]
 RANK = {"decide": 4, "ask": 3, "fix": 2, "defer": 1, "drop": 0}
 PROFILE_FIELDS = ("detectors", "ground_truth", "allowed_dispositions", "fix_anchors",
                   "immutable", "protected_headings", "layer_rubric", "decision_log",
                   "defer_target", "web")
 # 선택 필드 — 필수 목록에 넣으면 qg `generic`(이 필드 없음)이 `fields_missing` 으로 죽는다. 부재면 advisory 축이
 # 공집합이라 라우팅이 현행과 같다(docreview_advice.advisory_axes).
-OPTIONAL_PROFILE_FIELDS = ("must_catch",)
+OPTIONAL_PROFILE_FIELDS = ("must_catch",) + _cfg.PROFILE_KEYS
 LOG_KINDS = ("doc_section", "audit_section", "state")
 DEFER_KINDS = ("doc_section", "none")
 
@@ -141,8 +145,12 @@ def load_profile(path) -> dict:
         raise ProfileError("fields_missing:%s" % ",".join(missing))
     if extra:
         raise ProfileError("fields_unknown:%s" % ",".join(extra))
-    if data["detectors"] != 1:
-        raise ProfileError("detectors_unsupported:%r" % (data["detectors"],))
+    try:
+        for k in ("detectors",) + _cfg.PROFILE_KEYS:
+            if k in data:
+                _cfg._int(k, data[k], "프로필")
+    except _cfg.ConfigInvalid as e:
+        raise ProfileError("config_invalid:%s=%r" % (e.name, e.raw))
     ad = data["allowed_dispositions"]
     if (not isinstance(ad, list) or not ad or any(x not in RANK for x in ad)
             or "decide" not in ad or "ask" not in ad):
@@ -232,11 +240,35 @@ def _empty(doc, profile):
         "fixes": {}, "asks": {}, "permits": {}, "applied_scopes": [],
         "decision_log": [], "rounds": {}, "pending_recritic": None,
         "rejected_lineages": {}, "escalated": [], "reraise": [],
+        "engine_lines": [], "engine_lines_since": 0,
     }
 
 
 def state_path(state_dir) -> Path:
     return Path(state_dir) / STATE_FILE
+
+
+DIGEST_KEY = "docreview_digest"
+# 시대 표지 — 확인값을 처음 쓴 상태 폴더에 빈 파일로 남는다. 있는데 원장에 확인값 줄이 없으면 줄이 지워진 것이다.
+ERA_FILE = "docreview-digest-era"
+_DIGEST_LINE = re.compile(r"\A" + DIGEST_KEY + r": ([0-9a-f]{64})\n")
+RECOVER = ["엔진이 쓴 내용으로 되돌린다(이 파일을 손으로 고쳤다면 그 편집을 되돌린다)",
+           "그 문서의 상태 폴더를 지우고 1라운드부터 다시 리뷰한다 — "
+           "라운드 · 재리뷰 횟수 · 지적 이력을 잃는다"]
+
+
+class LedgerCorrupt(Exception):
+    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
+
+    def __init__(self, reason, **extra):
+        super().__init__(reason)
+        self.reason = reason
+        self.extra = extra
+
+
+def _digest(tree_text: str, body: str) -> str:
+    """원장 요약값 — `docreview:` 트리 글자와 본문. 엔진 밖에서 손으로 고친 원장을 가려낸다."""
+    return hashlib.sha256((tree_text + "\x00" + body).encode("utf-8")).hexdigest()
 
 
 def load_state(state_dir) -> dict:
@@ -251,11 +283,23 @@ def load_state(state_dir) -> dict:
     end = text.find("\n---\n", 4)
     if end < 0:
         raise ValueError("frontmatter_unclosed")
-    data = yaml.safe_load(text[4:end]) or {}
+    fm = text[4:end]
+    body = text[end + 5:]
+    data = yaml.safe_load(fm) or {}
     st = data.get("docreview") if isinstance(data, dict) else None
     if not isinstance(st, dict):
         raise ValueError("docreview_key_missing")
-    st["_body"] = text[end + 5:]
+    m = _DIGEST_LINE.match(fm + "\n")
+    if m:
+        if _digest((fm + "\n")[m.end():], body) != m.group(1):
+            raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    elif DIGEST_KEY in data:   # 요약값이 있는데 첫 줄 모양이 아니다 — 없는 것으로 넘기지 않는다
+        raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    elif (p.parent / ERA_FILE).exists():   # 확인값을 쓰기 시작한 폴더인데 줄이 없다 — 줄을 지운 것이다
+        raise LedgerCorrupt("ledger_corrupt", path=str(p), recover=RECOVER)
+    else:   # 확인값이 생기기 전 버전이 쓴 원장 — 통과시키고 다음 저장이 채운다
+        st["_digest_missing"] = True
+    st["_body"] = body
     return st
 
 
@@ -263,11 +307,25 @@ def save_state(state_dir, st, log_line=None) -> None:
     if yaml is None:
         raise RuntimeError("pyyaml_missing")
     body = st.pop("_body", "# docreview 원장\n")
+    if st.pop("_digest_missing", False) and int(st.get("round") or 0) > 0:
+        rd = st["rounds"].setdefault(str(st["round"]), {"open_lineages": [], "progress": 0, "route_report": None})
+        rd["digest_backfilled"] = True
     if log_line:
         body = body.rstrip("\n") + "\n- r%s: %s\n" % (st.get("round"), log_line)
-    fm = yaml.safe_dump({"docreview": st}, allow_unicode=True, sort_keys=False,
-                        default_flow_style=False)
-    state_path(state_dir).write_text("---\n" + fm + "---\n" + body, encoding="utf-8")
+    tree = yaml.safe_dump({"docreview": st}, allow_unicode=True, sort_keys=False,
+                          default_flow_style=False)
+    fm = "%s: %s\n%s" % (DIGEST_KEY, _digest(tree, body), tree)
+    # 제자리 덮어쓰기다 — 쓰기 불가 폴더 안의 쓰기 가능한 원장도 갱신된다(진입 잔존물 락이 기대는 성질).
+    data = ("---\n" + fm + "---\n" + body).encode("utf-8")   # 인코딩을 먼저 끝낸다 — 실패해도 원본이 잘리지 않는다
+    with open(str(state_path(state_dir)), "wb") as fh:
+        fh.write(data)
+    era = Path(state_dir) / ERA_FILE
+    if not era.exists():
+        try:
+            era.write_bytes(b"")
+        except OSError as exc:   # 쓰기 불가 폴더 — 원장 갱신은 막지 않는다(표지가 없으면 줄 삭제 탐지만 약해진다)
+            print("[docreview] 원장 확인값의 시대 표지 파일을 만들지 못했다 (%s, errno %s) — 원장 갱신은 계속했고, "
+                  "확인값 줄을 지워도 알아채는 힘이 약하다." % (era, exc.errno), file=sys.stderr)
     st["_body"] = body
 
 
@@ -280,10 +338,13 @@ def _emit(obj) -> None:
 # 라운드 스냅숏(`begin-round` 가 원장에 저장한다) — 과 면제 집합의 재료(`applied_scopes` · `permits` · 프로필)가
 # 전부 원장에 있으므로 엔진이 계산한다. `docreview_anchor.py diff` CLI 도 같은 `diff_snapshots` 를 부른다.
 DOC_ANCHOR = "#__doc__"
+PREAMBLE = "#__preamble__"
 
 
 def resolve_scope(scope: str, old_secs, new_secs) -> set:
     """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
+    if scope.startswith("related:") and "=" in scope:   # 「related:<D id>=<앵커 또는 insert-after:#x>」 — 결정에 묶인 절(AC38)
+        return resolve_scope(scope.split("=", 1)[1], old_secs, new_secs)
     if not scope.startswith("insert-after:"):
         return {scope}
     after = scope.split(":", 1)[1]
@@ -296,25 +357,240 @@ def resolve_scope(scope: str, old_secs, new_secs) -> set:
     return set()
 
 
-def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
+# ── 울타리(fence) — 어떤 범위로도 면제되지 않는 절 ─────────────────────────────────────
+# 울타리 = 불변 절(사용자 원문) ∪ 결정 기록 · 미룸 절(엔진만 줄을 덧붙이는 자리)과 그 하위 절. 기록 경로(permit ·
+# fix 범위 · 신고 · 앞으로 생길 무엇이든)의 범위는 울타리 절을 면제하지 못한다 — 쓰는 때(`exempt_scopes`) 한 곳이 정한다.
+# 울타리 절이 지나가는 길은 엔진이 도출한 규칙뿐이다: 불변 절은 덧붙이기만(`line_hashes`) · 원래 글자로 정확히 되돌린
+# 원복(`expect_hash`). 결정 기록 · 미룸 절은 줄 출처 규칙 하나(`_log_verdicts`) — 엔진이 쓴 줄만 더해졌을 때만 지나간다.
+def fence_anchors(prof, sections) -> set:
+    out = set(anchors_matching(prof["immutable"], sections)) if prof["immutable"] else set()
+    return out | _log_section_anchors(prof, sections)
+
+
+def round_fence(st, prof, r) -> set:
+    """라운드 r 의 울타리 — 스냅숏 r−1 과 r 양쪽에서 구한다(어느 한쪽에만 있는 절도 든다)."""
+    snaps = st.get("snapshots") or {}
+    return (fence_anchors(prof, (snaps.get(str(r - 1)) or {}).get("sections") or [])
+            | fence_anchors(prof, (snaps.get(str(r)) or {}).get("sections") or []))
+
+
+# ── 결정 기록 · 미룸 절의 줄 출처 ────────────────────────────────────────────────────
+# 엔진은 결정 기록 · 미룸 절에 쓰는 줄마다(절을 만들면 헤딩 줄도) 해시를 원장 `engine_lines` 에 쌓는다
+# ({round, heading, hash} — 원장의 문서에 쓴 줄만). `engine_lines_since` 는 그 기록이 시작된 라운드다 — 그 전 라운드에
+# 쓴 줄은 기록에 없으므로 그 라운드의 diff 는 출처를 잴 수 없다(옛 원장 — 한 번 넘기고 게이트에 공시한다).
+_BLANK_LINE_HASH = hashlib.sha1(b"").hexdigest()[:12]
+
+
+def _line_hash(line) -> str:
+    """`docreview_anchor.parse_sections` 의 줄 해시와 같은 함수 — 오른쪽 공백을 걷은 줄의 sha1 앞 12자."""
+    return hashlib.sha1(line.rstrip().encode("utf-8")).hexdigest()[:12]
+
+
+def _engine_tracked(st, r) -> bool:
+    """라운드 r 의 diff(스냅숏 r−1 → r)를 줄 출처로 잴 수 있는가. 거짓(옛 원장 넘기기)은 기록이 아예 없는 원장이거나
+    기록이 바로 그 라운드에 시작된 경우뿐이다 — 그 앞 라운드의 diff 는 넘기지 않고 엄격하게 잰다."""
+    if "engine_lines_since" not in st:
+        return False
+    since = st["engine_lines_since"]
+    if isinstance(since, bool) or not isinstance(since, int) or since < 0 or since > int(st.get("round") or 0):
+        raise LedgerCorrupt("engine_lines_since_corrupt", value=str(since))
+    return r != since
+
+
+def _engine_lines(st, heading) -> list:
+    rec = st.get("engine_lines")
+    if rec is None:
+        return []
+    if not isinstance(rec, list):
+        raise LedgerCorrupt("engine_lines_corrupt")
+    out = []
+    for i, e in enumerate(rec):
+        if (not isinstance(e, dict) or not isinstance(e.get("hash"), str) or not isinstance(e.get("heading"), str)
+                or isinstance(e.get("round"), bool) or not isinstance(e.get("round"), int)):
+            raise LedgerCorrupt("engine_lines_corrupt", index=i)
+        if e["heading"] == heading:
+            out.append(e)
+    return out
+
+
+def _window_lines(st, heading, base_round, r) -> collections.Counter:
+    """판정하는 스냅숏 r 에 들어올 수 있는 엔진 줄 — BASE 스냅숏(base_round) 뒤 · 스냅숏 r 앞에 쓴 줄(base_round ≤ 라운드 < r),
+    해시별 쓴 횟수."""
+    return collections.Counter(e["hash"] for e in _engine_lines(st, heading) if base_round <= e["round"] < r)
+
+
+def _engine_lines_kept(window, group_new) -> bool:
+    """창 안의 엔진 줄이 새 스냅숏의 그 묶음에 하나도 빠지지 않고(쓴 횟수만큼) 있는가."""
+    have = collections.Counter(group_new)
+    return all(have[h] >= c for h, c in window.items())
+
+
+def _log_change_ok(st, heading, new_lh, base, base_round, r, group_new) -> bool:
+    """결정 기록 · 미룸 절 한 개의 변경이 «엔진 줄만 더함» 인가 — 새 줄 해시 = BASE + TAIL, TAIL 의 보이는 줄은 창 안의
+    엔진 줄이고 각 줄은 엔진이 쓴 횟수보다 많지 않으며, 창 안의 엔진 줄은 하나도 빠지지 않았다(`group_new` = 새 스냅숏의
+    그 묶음 줄 해시 전부). 면제와 원복 관측이 같은 판정을 쓴다."""
+    if not isinstance(base, list) or not isinstance(new_lh, list):
+        return False
+    if len(new_lh) < len(base) or new_lh[:len(base)] != base:
+        return False
+    window = _window_lines(st, heading, base_round, r)
+    tail = collections.Counter(h for h in new_lh[len(base):] if h != _BLANK_LINE_HASH)
+    if any(c > window[h] for h, c in tail.items()):
+        return False
+    return _engine_lines_kept(window, group_new)
+
+
+def _log_verdicts(st, prof, r) -> dict:
+    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 넷이다 —
+    append(옛 줄 + 엔진 줄) · revert(원복 permit 의 `expect_line_hashes` + 엔진 줄) · creation(이 원장의 앞 스냅숏 어디에도
+    없던 절, 줄 전부가 엔진 줄) · legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다."""
+    snaps = st.get("snapshots") or {}
+    old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
+    new_secs = (snaps.get(str(r)) or {}).get("sections") or []
+    om = {s["anchor"]: s for s in old_secs}
+    nm = {s["anchor"]: s for s in new_secs}
+    g_old, g_new = _log_groups(prof, old_secs), _log_groups(prof, new_secs)
+    earlier = set()
+    for k, snap in snaps.items():
+        try:
+            if int(k) < r and isinstance(snap, dict):
+                earlier |= {s.get("anchor") for s in snap.get("sections") or [] if isinstance(s, dict)}
+        except ValueError:
+            continue
+    tracked = _engine_tracked(st, r)
+    reverts = []
+    for did, p in (st.get("permits") or {}).items():
+        k, kind, anchors, _fid = _permit_fields(did, p)
+        if k == r and kind == "revert":
+            reverts.append((anchors, p))
+    out = {}
+    for h in sorted(set(g_old) | set(g_new)):
+        group_new = []
+        for a in g_new.get(h, ()):
+            group_new.extend(nm[a].get("line_hashes") or [])
+        for a in sorted(g_old.get(h, set()) | g_new.get(h, set())):
+            o, n = om.get(a), nm.get(a)
+            if o is not None and n is not None and o.get("hash") == n.get("hash"):
+                continue
+            if not tracked:   # 원장의 사실(엔진 줄 기록이 이 diff 뒤에 시작)로만 — 스냅숏 하나의 줄 해시 부재로는 열리지 않는다
+                if o is not None or a not in earlier:
+                    out[a] = (a, "legacy")
+                continue
+            hit = False
+            for anchors, p in reverts:
+                if a not in anchors:
+                    continue
+                er = p.get("expect_round")
+                if isinstance(er, bool) or not isinstance(er, int):
+                    continue
+                if n is None:   # 없던 절로 되돌림 — 그 사이 엔진이 이 묶음에 쓴 줄이 문서에 남아 있어야 한다
+                    hit = ("expect_hash" in p and p["expect_hash"] is None
+                           and _engine_lines_kept(_window_lines(st, h, er, r), group_new))
+                else:
+                    hit = _log_change_ok(st, h, n.get("line_hashes"), p.get("expect_line_hashes"), er, r, group_new)
+                if hit:
+                    break
+            if hit:
+                out[a] = (a, "revert")
+            elif n is None:
+                continue
+            elif o is None:
+                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
+                    out[a] = (a, "creation")
+            elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, r, group_new):
+                out[a] = ("append-only", "append")
+    return out
+
+
+# ── 범위(scope) 검증 — 기록할 때 한 함수(`scope_problem`), 쓸 때 울타리 ─────────────────────────
+# `related:<D>=…` · `append-only` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope · permit ·
+# fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
+RESERVED_SCOPES = ("append-only",)   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
+
+
+def scope_label_problem(scope):
+    """범위 글자가 면제 라벨을 흉내 내는가 — 그렇다면 이름 있는 사유, 아니면 None."""
+    if not isinstance(scope, str) or not scope.strip():
+        return "scope_invalid"
+    t = scope.strip()
+    if t.startswith("related:") or t in RESERVED_SCOPES:
+        return "scope_label_forged"
+    return None
+
+
+def scope_target(scope) -> str:
+    return scope.split(":", 1)[1] if scope.startswith("insert-after:") else scope
+
+
+def scope_problem(scope, sections, prof):
+    """범위 한 개를 기록할 때의 검증 — decide(edit_scope → permit) · declare-related · check-intent(두 계약)가 부른다.
+    라벨 위조 · 스냅숏에 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸)을 이름 있는 사유로 거부한다. 통과면 None.
+    insert-after 는 기준 앵커로 잰다 — 끼워 넣은 절은 그 기준 절 뒤에 들어간다."""
+    why = scope_label_problem(scope)
+    if why:
+        return why
+    ins = scope.startswith("insert-after:")
+    t = scope_target(scope)
+    if prof["immutable"] and t in set(anchors_matching(prof["immutable"], sections)):
+        return "insert_after_immutable" if ins else "anchor_immutable"
+    known = {s["anchor"] for s in sections}
+    if t != PREAMBLE and t not in known:
+        return "insert_after_unresolved" if ins else "anchor_unresolved"
+    if t in _log_section_anchors(prof, sections):
+        return "insert_after_log_section" if ins else "anchor_log_section"
+    return None
+
+
+def _appended_only(old_sec, new_sec) -> bool:
+    """불변 절의 「추가만 허용」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고 새 줄이 더 많을 때만 참.
+    줄 해시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 지금처럼 바뀜으로 본다."""
+    o, n = old_sec.get("line_hashes"), new_sec.get("line_hashes")
+    if not isinstance(o, list) or not isinstance(n, list):
+        return False
+    return len(n) > len(o) and n[:len(o)] == o
+
+
+def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=None, log_exempt=None) -> dict:
+    """두 스냅숏의 헤딩 단위 변경. 두 쪽 다 머리 없으면 변경 전부가 `#__doc__` 면제다. 한쪽만 머리 없는 전이에서는
+    `fence`(울타리 절) 앵커가 통째 면제에서 빠진다 — 면제 집합에 없으면 changed 다. `log_anchors`(결정 기록 · 미룸 절)가
+    오면 그 절은 면제 집합 · 덧붙이기만 규칙을 보지 않고 `log_exempt`(줄 출처 판정 `_log_verdicts` 의 라벨)만 본다."""
     os_, ns = old.get("sections", []), new.get("sections", [])
     om = {s["anchor"]: s for s in os_}
     nm = {s["anchor"]: s for s in ns}
+    both_headingless = bool(old.get("headingless") and new.get("headingless"))
     headingless = bool(old.get("headingless") or new.get("headingless"))
+    fence = set(fence or ())
+    logs = set(log_anchors) if log_anchors is not None else set()
+    log_exempt = dict(log_exempt or {})
     ex = {}
     for sc in exempt_scopes or []:
         for a in resolve_scope(sc, os_, ns):
+            if sc.startswith("related:") and a in ex:
+                continue   # 같은 앵커의 직접 permit · fix 사유가 신고보다 앞선다 — 라벨이 엉뚱한 결정을 주장하지 않게
             ex[a] = sc
     changed, exempt_applied = [], []
 
     def rec(anchor, kind, title, oh, nh):
         item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
                 "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
-        if headingless:
+        if both_headingless:
             item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
+        elif anchor in logs:
+            if anchor in log_exempt:
+                item["scope"] = log_exempt[anchor]
+                if item["scope"] == "append-only":
+                    item["kind"] = "appended"
+                    item["evidence"] = "섹션 '%s' (%s) 끝에 엔진이 쓴 줄만 더해짐" % (title, anchor)
+                exempt_applied.append(item)
+            else:
+                changed.append(item)
         elif anchor in ex:
-            item["scope"] = ex[anchor]
+            sc = ex[anchor]
+            item["scope"] = sc.split("=", 1)[0] if sc.startswith("related:") and "=" in sc else sc
+            exempt_applied.append(item)
+        elif headingless and anchor not in fence:
+            item["scope"] = DOC_ANCHOR
             exempt_applied.append(item)
         else:
             changed.append(item)
@@ -323,20 +599,16 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
         if a not in om:
             rec(a, "added", s["title"], None, s["hash"])
         elif om[a]["hash"] != s["hash"]:
-            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
+            if a not in logs and _appended_only(om[a], s):
+                exempt_applied.append({"anchor": a, "kind": "appended", "title": s["title"],
+                                       "old_hash": om[a]["hash"], "new_hash": s["hash"], "scope": "append-only",
+                                       "evidence": "섹션 '%s' (%s) 끝에 줄만 더해짐" % (s["title"], a)})
+            else:
+                rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
     for a, s in om.items():
         if a not in nm:
             rec(a, "removed", s["title"], s["hash"], None)
     return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
-
-
-class LedgerCorrupt(Exception):
-    """원장이 관측 · 얼림 검사에 필요한 것을 갖지 않는다(상태 파손) — 이름 있는 실패. 빈 diff 로 넘어가지 않는다."""
-
-    def __init__(self, reason, **extra):
-        super().__init__(reason)
-        self.reason = reason
-        self.extra = extra
 
 
 def _snapshot_ok(snap) -> bool:
@@ -371,9 +643,27 @@ def _permit_fields(did, p):
 
 def exempt_scopes(st, prof, r) -> list:
     """라운드 r 의 얼림 면제 집합(설계 §7 예외 ①②③) — 라운드 r−1 에 통과한 fix 의 범위 ∪ 라운드 r 의 **모든**
-    permit 앵커 ∪ 프로필 `decision_log` · `defer_target` 절의 헤딩 앵커. permit 은 소비 여부와 무관하다: 라운드 r 의
-    diff 가 정의되는 시점(라운드 r 시작)에는 전부 미소비였고, `finalize` 는 관측으로 소비한 **뒤** 얼림 diff 를
-    계산하므로 소비된 permit 을 빼면 허가된 편집이 `frozen_change` 로 둔갑한다."""
+    permit 앵커(와 거기 묶인 신고 절) ∪ 프로필 `decision_log` · `defer_target` 절을 «만드는» 라운드의 헤딩 앵커.
+    permit 은 소비 여부와 무관하다: 라운드 r 의 diff 가 정의되는 시점(라운드 r 시작)에는 전부 미소비였고, `finalize` 는
+    관측으로 소비한 **뒤** 얼림 diff 를 계산하므로 소비된 permit 을 빼면 허가된 편집이 `frozen_change` 로 둔갑한다.
+
+    울타리(`round_fence`)가 여기서 면제를 정한다: 면제 라벨을 흉내 내는 글자와 울타리 절로 풀리는 범위(직접 · insert-after 기준 ·
+    라운드 r−1/r 스냅숏에서 풀린 앵커)는 어디서 기록됐든 면제에 들지 못한다. 울타리 절이 드는 길은 도출 규칙뿐이다 —
+    결정 기록 · 미룸 절을 만드는 라운드의 헤딩, 원래 글자로 정확히 되돌린 원복 permit 의 앵커(새 해시 = `expect_hash`),
+    결정 기록 · 미룸 절은 줄 출처 판정(`_log_verdicts`)이 지나가게 한 것만(만드는 라운드 · 원복 · 옛 원장 — 덧붙이기는
+    `diff_snapshots` 가 그 판정의 라벨로 본다). 불변 절의 덧붙인 줄은 `diff_snapshots` 의 «덧붙이기만 허용» 이 본다."""
+    snaps = st.get("snapshots") or {}
+    old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
+    new_secs = (snaps.get(str(r)) or {}).get("sections") or []
+    fence = round_fence(st, prof, r)
+    logs = _log_section_anchors(prof, old_secs) | _log_section_anchors(prof, new_secs)
+    new_hash = {s["anchor"]: s.get("hash") for s in new_secs}
+
+    def allowed(sc):
+        if scope_label_problem(sc):
+            return False
+        return scope_target(sc) not in fence and not (resolve_scope(sc, old_secs, new_secs) & fence)
+
     out = []
     for i, s in enumerate(st.get("applied_scopes") or []):
         try:
@@ -382,16 +672,22 @@ def exempt_scopes(st, prof, r) -> list:
             raise LedgerCorrupt("applied_scope_corrupt", index=i)
         if not isinstance(scope, str):
             raise LedgerCorrupt("applied_scope_corrupt", index=i)
-        if sr == r - 1:
+        if sr == r - 1 and allowed(scope):
             out.append(scope)
     for did, p in (st.get("permits") or {}).items():
-        k, _kind, anchors, _fid = _permit_fields(did, p)
-        if k == r:
-            out.extend(anchors)
-    for key in ("decision_log", "defer_target"):
-        t = prof[key]
-        if t.get("kind") == "doc_section":
-            out.append(heading_anchor(t["heading"]))
+        k, kind, anchors, _fid = _permit_fields(did, p)
+        if k != r:
+            continue
+        for x in anchors:
+            if allowed(x):
+                out.append(x)
+            elif (kind == "revert" and x in fence and x not in logs and "expect_hash" in p
+                  and new_hash.get(x) == p["expect_hash"]):
+                out.append(x)   # 원래 글자로 정확히 되돌린 불변 절 — 진짜 복원만
+        if kind == "apply":
+            rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
+            out.extend("related:%s=%s" % (did, x) for x in rel if allowed(x))
+    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule != "append")
     return sorted(set(out))
 
 
@@ -401,7 +697,11 @@ def round_diff(st, prof, r) -> dict:
     for k in (r - 1, r):
         if not _snapshot_ok(snaps.get(str(k))):
             raise LedgerCorrupt("snapshot_missing", round=k, diff_round=r)
-    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r))
+    logs = (_log_section_anchors(prof, snaps[str(r - 1)]["sections"])
+            | _log_section_anchors(prof, snaps[str(r)]["sections"]))
+    verdicts = _log_verdicts(st, prof, r)
+    return diff_snapshots(snaps[str(r - 1)], snaps[str(r)], exempt_scopes(st, prof, r), round_fence(st, prof, r),
+                          logs, {a: v[0] for a, v in verdicts.items()})
 
 
 # ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
@@ -494,36 +794,113 @@ def cmd_profile_check(a) -> int:
     return 0
 
 
+_BLANK_CATEGORIES = ("Cc", "Cf", "Zs", "Zl", "Zp", "Mn", "Me")   # 제어 · 서식(폭 없는 공백 등) · 공백 · 줄 · 문단 구분 ·
+# 결합 부호(변형 선택자 포함) — 결합 부호뿐인 글은 보이는 글자가 없다(보이는 글자에 붙으면 그 글자가 남는다)
+# 부류로는 글자(Lo · So · Mn)지만 빈칸으로 그려지는 것 — 한글 채움 문자 · 초성/중성 채움 · 점자 빈칸 · 자소 결합자 · 반각 한글 채움 ·
+# 크메르 모음 고유 부호 둘
+_BLANK_CHARS = frozenset("\u3164\u115f\u1160\u2800\u034f\uffa0\u17b4\u17b5")
+
+
+def _blank_text(s) -> bool:
+    """보이는 글자가 하나도 없다 — 빈 글자 포함."""
+    return all(ch in _BLANK_CHARS or unicodedata.category(ch) in _BLANK_CATEGORIES for ch in s)
+
+
+def _log_groups(prof, sections) -> dict:
+    """프로필 `decision_log` · `defer_target` 이 사용자 문서 절이면 {헤딩 줄: 그 절과 하위 절의 앵커} — 엔진이 줄을
+    덧붙이는 자리다(덧붙인 줄은 마지막 하위 절 끝에 앉을 수 있다)."""
+    out = {}
+    for key in ("decision_log", "defer_target"):
+        t = prof[key]
+        if t.get("kind") == "doc_section":
+            ha = heading_anchor(t["heading"])
+            grp = out.setdefault(t["heading"].strip(), set())
+            for s in sections:
+                if s.get("anchor") == ha or ha in (s.get("parents") or []):
+                    grp.add(s["anchor"])
+    return out
+
+
+def _log_section_anchors(prof, sections) -> set:
+    out = set()
+    for grp in _log_groups(prof, sections).values():
+        out |= grp
+    return out
+
+
+def snapshot_problem(snap, prof):
+    """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸)은 줄 해시가
+    있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과 맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
+    if not isinstance(snap, dict) or not _snapshot_ok(snap):
+        return ("shape", [])
+    secs = snap["sections"]
+    is_doc = [s["anchor"] == DOC_ANCHOR for s in secs]
+    if not (all(is_doc) if snap.get("headingless") else not any(is_doc)):
+        return ("headingless_mismatch", sorted(s["anchor"] for s in secs if s["anchor"] != DOC_ANCHOR))
+    missing = sorted(s["anchor"] for s in secs if s["anchor"] in fence_anchors(prof, secs)
+                     and not (isinstance(s.get("line_hashes"), list)
+                              and all(isinstance(h, str) for h in s["line_hashes"])))
+    return ("fence_line_hashes_missing", missing) if missing else None
+
+
 def cmd_begin_round(a) -> int:
     st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    try:
+        cfg = _cfg.resolve(prof, {"detectors": a.detectors}, os.environ)
+    except _cfg.ConfigInvalid as e:
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        return 2
+    cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
+    bad = snapshot_problem(snap, prof)
+    if bad:   # 원장을 바꾸기 전에 멈춘다
+        fail("snapshot_invalid", why=bad[0], anchors=bad[1])
+        return 2
     n = int(st["round"]) + 1
-    if n <= 1 + REREVIEW_CAP:
+    if a.extra_approval is not None and _blank_text(a.extra_approval):
+        fail("extra_approval_blank")   # 빈 글자나 보이지 않는 글자뿐인 승인은 승인이 아니다
+        return 2
+    if bool(a.extra_approval) != bool(a.extra_approval_source):
+        fail("extra_approval_source_missing" if a.extra_approval else "extra_approval_missing")
+        return 2
+    unused_note = ""
+    if n <= 1 + cap:
         rr = n - 1
+        if a.extra_approval:
+            unused_note = ", 추가 승인 값이 왔지만 상한 아래라 쓰지 않았다"
     else:
         if not a.extra_approval:
             _emit({"ok": False, "reason": "cap_reached", "round": n - 1,
                    "rereview_count": st["rereview_count"]})
             return 3
-        rr = REREVIEW_CAP
-        st["extra_rounds"].append({"round": n, "quote": a.extra_approval})
+        rr = max(int(st["rereview_count"]), cap)   # 재리뷰 횟수는 줄지 않는다 — 상한을 낮춰도
+        st["extra_rounds"].append({"round": n, "quote": a.extra_approval, "source": a.extra_approval_source})
     st["round"] = n
     st["rereview_count"] = rr
-    st["snapshots"][str(n)] = {
-        "headingless": bool(snap.get("headingless")),
-        "sections": [{k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
-                     for s in snap.get("sections", [])],
-    }
+    if "engine_lines_since" not in st:   # 옛 원장 — 엔진 줄 기록이 이 라운드부터 시작한다(그 전 줄은 출처를 잴 수 없다)
+        st["engine_lines_since"] = n
+        st.setdefault("engine_lines", [])
+    imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
+    imm |= _log_section_anchors(prof, snap.get("sections", []))
+    secs = []
+    for s in snap.get("sections", []):
+        row = {k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
+        if s.get("anchor") in imm and isinstance(s.get("line_hashes"), list):
+            row["line_hashes"] = list(s["line_hashes"])   # 불변 절 · 결정 기록 · 미룸 절에만 — 원장 크기
+        secs.append(row)
+    st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
-    save_state(a.state_dir, st, "begin-round (rereview_count=%d%s)"
-               % (rr, ", extra" if n > 1 + REREVIEW_CAP else ""))
+    st["rounds"][str(n)]["config"] = cfg
+    save_state(a.state_dir, st, "begin-round (rereview_count=%d%s%s)"
+               % (rr, ", extra" if n > 1 + cap else "", unused_note))
     # 라운드 시작 표식 — codex · critic 산출물이 이보다 먼저 쓰였으면 직전 라운드 것이다
     # (`docreview_route._round_staleness`). 프로세스 시계가 아니라 방금 쓴 상태 파일의
     # mtime 을 쓴다: 같은 디렉토리의 codex 파일도 같은 파일시스템 시계로 찍히므로 해상도가
     # 같은 눈금이다.
     st["rounds"][str(n)]["started_mtime_ns"] = state_path(a.state_dir).stat().st_mtime_ns
     save_state(a.state_dir, st)
-    _emit({"ok": True, "round": n, "rereview_count": rr})
+    _emit({"ok": True, "round": n, "rereview_count": rr, "config": cfg})
     return 0
 
 
@@ -535,7 +912,8 @@ PUBLIC_FIELDS = ("id", "lineage", "bucket", "supersedes", "origin", "layer", "ca
                  # `if it["disposition"] == "decide":` 게이트) 그쪽에만
                  # 실으면 fix·defer·ask 로 난 항목의 대체안이 원장에 한 글자도 안 남는다.
                  "replacement", "if_unfixed",
-                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind")
+                 "decision_view", "state", "promotion", "promoted_from", "immutable", "kind",
+                 "detector", "contradicts")
 
 
 GateRow = collections.namedtuple("GateRow", "name ledger pred open blocks render")
@@ -619,6 +997,47 @@ def _decide_choices_for(state, is_successor) -> list:
     return ["adopt", "reject", "hold"]
 
 
+def _immutable_adopt_anchors(prof, sections) -> list:
+    """불변 절을 겨눈 decide 의 채택이 여는 permit 앵커 — 프로필 fix_anchors 의 절 중 울타리 밖."""
+    fence = fence_anchors(prof, sections)
+    return [x for x in anchors_matching(prof["fix_anchors"], sections) if x not in fence]
+
+
+def _adopt_problem_for(st, prof, kind, immutable, edit_scope, anchor):
+    if kind == "post":
+        return None
+    if prof is None:
+        try:
+            prof = load_profile(st["profile"])
+        except (ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+            return ("profile_unreadable", str(st.get("profile")))
+    secs = ((st.get("snapshots") or {}).get(str(st.get("round"))) or {}).get("sections") or []
+    if immutable:
+        return None if _immutable_adopt_anchors(prof, secs) else ("no_fix_anchor", "")
+    sc = edit_scope or anchor
+    why = scope_problem(sc, secs, prof)
+    return (why, sc) if why else None
+
+
+def adopt_problem(st, fid, prof=None):
+    """이 decide 의 「고친다(채택)」가 열 permit 범위의 문제 — (사유, 범위) 또는 None. `cmd_decide` 의 거부 ·
+    `decide_choices` · 게이트 렌더 · 라우팅의 선택지(`offered_choices_for`)가 같은 판정을 쓴다. 사후(post) 결정의
+    채택은 permit 을 열지 않으므로 문제가 없다."""
+    d = st["decides"].get(fid) or {}
+    f = st["findings"].get(fid) or {}
+    return _adopt_problem_for(st, prof, d.get("kind"), d.get("immutable"), f.get("edit_scope"), f.get("anchor"))
+
+
+def offered_choices_for(st, it) -> list:
+    """라우팅 시점(이 id 가 아직 원장에 없다)의 선택지 — 곧 «open» 으로 적힐 항목의 `_decide_choices_for` 에서
+    `decide_choices` 와 같은 채택 거름을 한다(fin.json 의 선택지 = decide 가 받는 것)."""
+    ch = _decide_choices_for("open", _is_reraise_successor(st, it["id"]))
+    if "adopt" in ch and _adopt_problem_for(st, None, it.get("kind") or "pre", bool(it.get("immutable")),
+                                            it.get("edit_scope"), it.get("anchor")):
+        ch = [c for c in ch if c != "adopt"]
+    return ch
+
+
 def decide_choices(st, fid) -> list:
     """이 항목에 «실제로 받아들여지는» 재결정 선택지 목록 — 원장에서 상태를 읽는 래퍼.
     `cmd_decide` 의 거부 술어와 `_rg_decide`(render_gate 의 「대안:」 줄)·`_rg_expired`
@@ -630,7 +1049,10 @@ def decide_choices(st, fid) -> list:
     d = st["decides"].get(fid)
     if d is None:
         return []
-    return _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
+    ch = _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid))
+    if "adopt" in ch and adopt_problem(st, fid):   # decide 가 거부할 채택은 내지 않는다(제안 = 수용)
+        ch = [c for c in ch if c != "adopt"]
+    return ch
 
 
 def open_lineages(st) -> set:
@@ -764,12 +1186,31 @@ def append_under_heading(path: Path, heading: str, line: str, own=False) -> None
     _write_atomic(path, "\n".join(lines))
 
 
+def engine_append(st, path, heading, line, own=False) -> None:
+    """`append_under_heading` 에 줄 출처 기록을 더한다 — 원장의 문서에 쓴 줄(절을 만들면 헤딩 줄도)의 해시를
+    `engine_lines` 에 쌓는다. 부르는 쪽이 원장을 저장한다."""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8") if p.is_file() else ""
+    created = _section_span(text.split("\n"), heading, own) is None
+    append_under_heading(p, heading, line, own)
+    if not isinstance(st.get("doc"), str) or doc_identity(str(p)) != doc_identity(st["doc"]):
+        return
+    rows = ([heading.strip()] if created else []) + line.split("\n")
+    rec = st.setdefault("engine_lines", [])
+    n = int(st["round"])
+    rec.extend({"round": n, "heading": heading.strip(), "hash": _line_hash(x)} for x in rows if x.strip())
+
+
 def _log_line(entry, f) -> str:
-    s = "- %s · r%d · %s · %s · \"%s\"" % (entry["decision_id"], entry["round"], entry["choice"],
-                                           ", ".join(entry["finding_ids"]), entry["quote"])
+    o = _cfg.one_line_field
+
+    def q(x):   # 요약 앞의 칸 — 큰따옴표는 선택지 문구를 여닫는 둘뿐이어야 엔진 줄 문법이 뒤 칸을 읽는다
+        return o(x).replace('"', "\u201d")
+    s = "- %s · r%d · %s · %s · \"%s\"" % (q(entry["decision_id"]), int(entry["round"]), q(entry["choice"]),
+                                                       ", ".join(q(x) for x in entry["finding_ids"]), q(entry["quote"]))
     if entry.get("supersedes"):
-        s += " · supersedes %s" % entry["supersedes"]
-    return s + " — " + (f.get("summary") or "")
+        s += " · supersedes %s" % q(entry["supersedes"])
+    return s + " — " + o(f.get("summary") or "")
 
 
 def cmd_record_findings(a) -> int:
@@ -796,6 +1237,105 @@ def cmd_exempt_anchors(a) -> int:
     return 0
 
 
+DECLARE_REFUSALS = (
+    ("scope_label_forged", ("scope_invalid", "scope_label_forged")),
+    ("anchor_not_in_snapshot", ("anchor_unresolved", "insert_after_unresolved")),
+    ("anchor_immutable", ("anchor_immutable", "insert_after_immutable")),
+    ("anchor_log_section", ("anchor_log_section", "insert_after_log_section")),
+)
+
+
+def cmd_declare_related(a) -> int:
+    """「고친다」 결정 때문에 함께 고친 절을 그 결정의 permit 에 묶는다(AC38). 묶인 절은 permit 라운드의 얼림 면제에
+    들되 게이트 · 다음 리뷰어 입력에 보인다 — 숨기는 면제가 아니다."""
+    st = load_state(a.state_dir)
+    did = a.decision
+    entry = next((e for e in st["decision_log"] if e.get("decision_id") == did), None)
+    if entry is None:
+        return fail("unknown_decision", decision_id=did)
+    p = (st.get("permits") or {}).get(did)
+    if entry.get("choice") != "adopt" or not p or p.get("kind") != "apply":
+        return fail("decision_not_adopted", decision_id=did, choice=entry.get("choice"))
+    if p.get("consumed"):
+        return fail("permit_consumed", decision_id=did, round=p.get("round"))
+    n = int(st["round"])
+    try:
+        pr = int(p["round"])
+    except (TypeError, KeyError, ValueError):
+        return fail("permit_corrupt", decision_id=did)
+    if pr not in (n, n + 1):   # check-intent 의 permit_round_mismatch 와 같은 뜻 — 낡은 permit 에는 신고를 받지 않는다
+        return fail("permit_round_mismatch", decision_id=did, permit_round=pr, round=n)
+    try:
+        secs = snapshot_at(st, n)["sections"]
+        prof = load_profile(st["profile"])
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
+    probs = [(x, scope_problem(x, secs, prof)) for x in a.anchors]
+    for reason, whys in DECLARE_REFUSALS:   # 사유 이름은 이 명령의 것 — 판정은 scope_problem 하나
+        bad = [x for x, why in probs if why in whys]
+        if bad:
+            return fail(reason, anchors=bad, why=dict(probs)[bad[0]])
+    bad = [x for x, why in probs if why]
+    if bad:   # 위 표에 없는 사유 — 받지 않는다
+        return fail("anchor_refused", anchors=bad, why=dict(probs)[bad[0]])
+    rel = list(p.get("related_anchors") or [])
+    for x in a.anchors:
+        if x not in rel and x not in p["apply_anchors"]:
+            rel.append(x)
+    p["related_anchors"] = rel
+    save_state(a.state_dir, st, "declare-related %s %s" % (did, " ".join(a.anchors)))
+    _emit({"ok": True, "decision_id": did, "related": rel})
+    return 0
+
+
+def cmd_related_changes(a) -> int:
+    """이번 라운드에 결정 때문에 함께 바뀐 절의 목록(읽기 전용) — 탐지 · 재비판의 입력 슬롯용. 결정 이유는 싣지 않는다."""
+    st = load_state(a.state_dir)
+    g = gate_summary(st)
+    bad = [rc for rc in g.get("related_changes") or [] if rc.get("uncountable")]
+    if bad:   # 빈 목록과 «셀 수 없음» 은 다른 사실이다
+        return fail("related_uncountable", decisions=[{"decision_id": rc["decision_id"], "reason": rc["uncountable"]} for rc in bad])
+    titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
+    seen, out = set(), []
+    for rc in g.get("related_changes") or []:
+        for x in rc["changed"]:
+            if x not in seen:
+                seen.add(x)
+                out.append({"anchor": x, "title": titles.get(x) or x})
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
+def _expected_lines(st, anchor, h, n):
+    """되돌릴 글의 가장 늦은 스냅숏(라운드 n 앞) — (줄 해시, 라운드). h 가 None 이면 그 앵커가 없던 가장 늦은 스냅숏
+    (줄 해시 None). 없으면 None."""
+    for k in range(n - 1, 0, -1):
+        secs = ((st.get("snapshots") or {}).get(str(k)) or {}).get("sections")
+        if not isinstance(secs, list):
+            continue
+        if h is None:
+            if not any(isinstance(s, dict) and s.get("anchor") == anchor for s in secs):
+                return None, k
+            continue
+        for s in secs:
+            if (isinstance(s, dict) and s.get("anchor") == anchor and s.get("hash") == h
+                    and isinstance(s.get("line_hashes"), list)):
+                return list(s["line_hashes"]), k
+    return None
+
+
+def revert_hit(st, prof, k, p, anchor) -> bool:
+    """원복 permit(라운드 k)이 관측됐는가 — 결정 기록 · 미룸 절은 면제와 같은 줄 출처 판정(`_log_verdicts`),
+    그 밖의 절은 그 라운드 스냅숏의 해시 = `expect_hash`."""
+    snaps = st.get("snapshots") or {}
+    logs = (_log_section_anchors(prof, (snaps.get(str(k - 1)) or {}).get("sections") or [])
+            | _log_section_anchors(prof, snapshot_at(st, k)["sections"]))
+    if anchor in logs:
+        return _log_verdicts(st, prof, k).get(anchor, (None, None))[1] == "revert"
+    cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
+    return cur.get(anchor) == p.get("expect_hash")
+
+
 def cmd_decide(a) -> int:
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -816,6 +1356,12 @@ def cmd_decide(a) -> int:
     allowed = decide_choices(st, a.id)
     if not allowed:
         return fail("decide_not_open", id=a.id, state=d["state"])
+    if a.choice == "adopt":
+        # permit 이 열 범위는 리뷰어가 쓴 edit_scope 다 — 사용자가 게이트에서 본 것은 finding 의 anchor 다. 범위가 기록 검증
+        # (`scope_problem`)을 못 넘으면 permit 을 열지 않고 거부한다(원장 불변). 게이트도 같은 판정으로 채택을 빼고 이유를 보인다.
+        prob = adopt_problem(st, a.id, prof)
+        if prob:
+            return fail("edit_scope_refused", id=a.id, scope=prob[1], why=prob[0])
     if a.choice not in allowed:
         if d["state"] == "expired":
             return fail("decide_hold_not_allowed_for_expired", id=a.id)
@@ -838,6 +1384,9 @@ def cmd_decide(a) -> int:
             d["state"] = "adopted"
             permit = {"kind": "revert", "apply_anchors": [f["anchor"]], "expect_hash": d.get("prev_hash"),
                       "round": n + 1, "finding_id": a.id, "consumed": False}
+            base = _expected_lines(st, f["anchor"], d.get("prev_hash"), n)
+            if base:   # 되돌릴 글자의 줄 해시(없던 절이면 None)와 그 스냅숏 라운드 — 결정 기록 · 미룸 절의 원복은 이것 + 엔진 줄로 잰다
+                permit["expect_line_hashes"], permit["expect_round"] = base
         else:
             d["state"] = "rejected"
     else:  # adopt
@@ -846,8 +1395,7 @@ def cmd_decide(a) -> int:
         else:
             d["state"] = "adopted"
             if d.get("immutable"):
-                secs = st["snapshots"][str(n)]["sections"]
-                anchors = anchors_matching(prof["fix_anchors"], secs)
+                anchors = _immutable_adopt_anchors(prof, st["snapshots"][str(n)]["sections"])
             else:
                 anchors = [f.get("edit_scope") or f["anchor"]]
             permit = {"kind": "apply", "apply_anchors": anchors, "round": n + 1,
@@ -868,7 +1416,7 @@ def cmd_decide(a) -> int:
         heading = prof["decision_log"].get("heading")
         if not heading:
             return fail("profile_decision_log_is_state_only")
-        append_under_heading(Path(a.log_file), heading, _log_line(entry, f))
+        engine_append(st, a.log_file, heading, _log_line(entry, f))
     _refresh_open_lineages(st, n)
     save_state(a.state_dir, st, "decide %s %s" % (a.id, a.choice))
     out = {"ok": True, "decision_id": entry["decision_id"], "state": d["state"], "permit": permit}
@@ -879,20 +1427,16 @@ def cmd_decide(a) -> int:
 
 
 def cmd_fix(a) -> int:
+    if a.event == "intent-pass":   # fix 범위를 기록하는 것은 check-intent(fix 계약) 하나다
+        return fail("intent_pass_removed", id=a.id,
+                    use="docreview_anchor.py check-intent <id> --intent <scope> --state-dir D")
     st = load_state(a.state_dir)
     fx = st["fixes"].get(a.id)
     if not fx:
         return fail("unknown_fix", id=a.id)
     n = int(st["round"])
     ev = a.event
-    if ev == "intent-pass":
-        if not a.scope:
-            return fail("scope_required")
-        fx["state"] = "intent_passed"
-        fx["scope"] = a.scope
-        fx["round"] = n
-        st["applied_scopes"].append({"finding_id": a.id, "scope": a.scope, "round": n})
-    elif ev == "drop":
+    if ev == "drop":
         fx["state"] = "dropped"
         st["decision_log"].append({"decision_id": "D%d.%d" % (n, len(st["decision_log"]) + 1), "round": n,
                                    "finding_ids": [a.id], "lineage": st["findings"][a.id]["lineage"],
@@ -900,8 +1444,8 @@ def cmd_fix(a) -> int:
         if a.log_file:
             prof = load_profile(st["profile"])
             if prof["decision_log"].get("heading"):
-                append_under_heading(Path(a.log_file), prof["decision_log"]["heading"],
-                                     _log_line(st["decision_log"][-1], st["findings"][a.id]))
+                engine_append(st, a.log_file, prof["decision_log"]["heading"],
+                              _log_line(st["decision_log"][-1], st["findings"][a.id]))
     elif ev == "hold":
         fx["state"] = "held"
     elif ev == "unhold":
@@ -949,10 +1493,59 @@ def cmd_defer(a) -> int:
     t = prof["defer_target"]
     if t.get("kind") != "doc_section":
         return fail("profile_has_no_defer_target")
-    append_under_heading(Path(a.log_file), t["heading"], "| %s | %s |" % (a.id, f.get("summary") or ""))
+    engine_append(st, a.log_file, t["heading"], "| %s | %s |" % (_cfg.table_cell(a.id), _cfg.table_cell(f.get("summary") or "")))
     f["deferred"] = True
     save_state(a.state_dir, st, "defer %s appended" % a.id)
     _emit({"ok": True})
+    return 0
+
+
+# 사람이 내린 결정 줄(기각 되돌림 · 재결정 · 재분해 등)의 머리 — 줄 머리(`- `)는 엔진이 연다. 이 꼴로 시작하는 줄은
+# 엔진 결정 줄(`_log_line`) · brief 원문 앵커 · 목록 · 제목 · 인용 · 번호 표지를 흉내 낸 것이다.
+_DECISION_LINE_FORGED = re.compile(r"(?:D\d+\.\d+ · |\*\*S\d+\*\*|[-*+#>|]|\d+[.)])")
+
+
+def decision_line_problem(line, quote):
+    """`log-decision` 입력의 거부 사유(rc 2) 또는 None. 줄은 모델이 쓰는 구조라 엔진이 고칠 글자가 하나라도 있으면
+    고치지 않고 거부한다(AC15 의 한 줄 문법을 쓰는 쪽에서 지킨다). 사용자 말은 그대로 싣되 한 줄로 접는다. 계수 줄 머리는
+    줄에도 말에도 들이지 않는다 — 그 정본(형제 모듈)이 없으면 `count_prefix_check_unavailable`(호출자가 rc 1)."""
+    if _adv is None:   # 계수 줄 머리의 정본이 없으면 그 검사를 건너뛰지 않는다(fail-closed)
+        return "count_prefix_check_unavailable"
+    count_head = _adv.COUNT_PREFIX.strip()
+    if _blank_text(line):
+        return "line_blank"
+    if _cfg.one_line_field(line) != line:
+        return "line_not_one_line"
+    if _DECISION_LINE_FORGED.match(line) or count_head in line:
+        return "line_marker_forged"
+    if _blank_text(quote):
+        return "quote_blank"
+    if count_head in _cfg.one_line_field(quote):
+        return "quote_marker_forged"
+    return None
+
+
+def cmd_log_decision(a) -> int:
+    """사람이 내린 결정 한 줄을 프로필 `decision_log` 절 끝에 엔진이 쓰고 그 출처를 원장에 남긴다 — 울타리(결정 기록
+    절은 엔진이 쓴 줄만 지나간다)는 그대로 두고, 사람의 결정을 엔진을 거쳐 쓰게 한다. 줄은 `- <줄> — 「<사용자 말>」`."""
+    why = decision_line_problem(a.line, a.quote)
+    if why == "count_prefix_check_unavailable":
+        return fail(why, detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    if why:
+        fail(why)
+        return 2
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    t = prof["decision_log"]
+    if t.get("kind") != "doc_section":
+        return fail("profile_decision_log_not_doc_section", kind=t.get("kind"))
+    if not isinstance(st.get("doc"), str) or doc_identity(a.log_file) != doc_identity(st["doc"]):
+        return fail("log_file_not_ledger_doc", log_file=a.log_file, ledger_doc=st.get("doc"))
+    path = Path(a.log_file)
+    row = "- %s — 「%s」" % (a.line, _cfg.one_line_field(a.quote))
+    engine_append(st, path, t["heading"], row)
+    save_state(a.state_dir, st, "log-decision")
+    _emit({"ok": True, "line": row})
     return 0
 
 
@@ -977,9 +1570,14 @@ def observe_ledger(st, prof, n) -> dict:
     def touched(k):   # 라운드 k 의 diff 가 닿은 앵커 — 라운드마다 한 번 계산한다
         if k not in touched_at:
             diff = round_diff(st, prof, k)
-            t = {c["anchor"] for c in diff.get("changed", [])}
-            t |= {e["anchor"] for e in diff.get("exempt_applied", [])}
-            t |= {e["scope"] for e in diff.get("exempt_applied", []) if e.get("scope")}
+            fence = round_fence(st, prof, k)
+            # 적용의 증거는 울타리 밖 절의 실제 변경뿐이다 — 덧붙이기 면제(append-only)와 울타리 절(결정 기록 · 불변)은 아니다.
+            t = {c["anchor"] for c in diff.get("changed", []) if c["anchor"] not in fence}
+            t |= {e["anchor"] for e in diff.get("exempt_applied", [])
+                  if e.get("scope") != "append-only" and e["anchor"] not in fence}
+            # 면제 라벨(related:* · #__doc__)은 적용의 증거가 아니다 — insert-after 범위만 «끼워 넣은 절이 들어옴» 이다.
+            t |= {e["scope"] for e in diff.get("exempt_applied", [])
+                  if isinstance(e.get("scope"), str) and e["scope"].startswith("insert-after:")}
             touched_at[k] = t
         return touched_at[k]
 
@@ -994,8 +1592,7 @@ def observe_ledger(st, prof, n) -> dict:
         if kind == "apply":
             hit = any(x in touched(k) for x in anchors)
         else:
-            cur = {s["anchor"]: s["hash"] for s in snapshot_at(st, k)["sections"]}
-            hit = cur.get(anchors[0]) == p.get("expect_hash")
+            hit = revert_hit(st, prof, k, p, anchors[0])
         p["consumed"] = True
         d.pop("superseded_by", None)   # 이 만료 인스턴스는 끝났다 — 낡은 포인터가 다음 만료를 풀면 안 된다
         if hit:
@@ -1129,6 +1726,19 @@ def round_unverified(st):
     return None
 
 
+def _log_check_skipped(st, n):
+    """라운드 n 에 출처를 잴 수 없어(옛 원장) 넘긴 결정 기록 · 미룸 절 중 실제로 바뀐 것. 못 읽으면 None(셀 수 없음)."""
+    if n < 2:
+        return []
+    try:
+        snapshot_at(st, n - 1)
+        snapshot_at(st, n)
+        v = _log_verdicts(st, load_profile(st["profile"]), n)
+    except (LedgerCorrupt, ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+        return None
+    return sorted(a for a, (_sc, rule) in v.items() if rule == "legacy")
+
+
 def gate_summary(st) -> dict:
     n = int(st["round"])
     rr = int(st["rereview_count"])
@@ -1139,13 +1749,55 @@ def gate_summary(st) -> dict:
     # defer · 재비판 reject — 이 하나만 와도 차단이 풀린다. 라우터의 자동 계보 연결이
     # 지목 없는 finding 에도 supersedes 를 붙이기 때문이다. superseded_by 를 쓰는 곳은
     # 재상승 루프 하나뿐이라 그 기록은 의무의 증거다. 기록이 없으면 막는다 — fail-closed.
-    g = {"round": n, "rereview_count": rr, "cap_reached": rr >= REREVIEW_CAP}
+    cfg = (st["rounds"].get(str(n)) or {}).get("config") or {}   # 옛 원장은 config 가 없다 — 기본값으로 읽는다
+    cap = (cfg.get("rereview_cap") or {}).get("value", REREVIEW_CAP)
+    g = {"round": n, "rereview_count": rr, "cap_reached": rr >= cap, "config": cfg}
     for row in GATE_ROWS:
         g[row.name] = gate_bucket(st, row)
+    if st.get("_digest_missing"):   # 읽기만 해도 알린다 — 저장 전에는 채움 공시가 없다
+        g["digest_missing"] = True
     g["asks_open"] = sorted(i for i, x in asks.items() if not x.get("answered"))
     g["defers"] = sorted(i for i, f in st["findings"].items() if f.get("disposition") == "defer")
     g["dropped"] = sorted(i for i, f in fx.items() if f["state"] == "dropped")
     g["extra_rounds"] = st["extra_rounds"]
+    rel, ctx = [], None
+    for did, p in (st.get("permits") or {}).items():
+        if not p.get("related_anchors"):
+            continue
+        try:
+            k = _permit_fields(did, p)[0]
+        except LedgerCorrupt as e:
+            rel.append({"decision_id": did, "anchors": [], "uncountable": e.reason})
+            continue
+        if k != n:
+            continue
+        anchors = list(p["related_anchors"])
+        if ctx is None:   # 프로필 · diff 는 한 번만 — 못 읽으면 그 사유를 모든 신고에 단다
+            try:
+                dd = round_diff(st, load_profile(st["profile"]), n)
+                ctx = {"touched": {e["anchor"] for e in dd["exempt_applied"]} | {c["anchor"] for c in dd["changed"]},
+                       "old": snapshot_at(st, n - 1)["sections"], "new": snapshot_at(st, n)["sections"]}
+            except LedgerCorrupt as e:
+                ctx = {"err": e.reason}
+            except ProfileError as e:
+                ctx = {"err": "profile_error"}
+            except OSError:
+                ctx = {"err": "profile_unreadable"}
+        if "err" in ctx:
+            rel.append({"decision_id": did, "anchors": anchors, "uncountable": ctx["err"]})
+            continue
+        changed, unchanged = [], []
+        for x in anchors:
+            res = sorted(resolve_scope(x, ctx["old"], ctx["new"]))
+            hit = [y for y in res if y in ctx["touched"]]
+            if hit:
+                changed.extend(y for y in hit if y not in changed)
+            else:
+                unchanged.append(x)
+        rel.append({"decision_id": did, "anchors": anchors, "changed": changed, "unchanged": unchanged})
+    g["related_changes"] = rel
+    g["log_check_skipped"] = _log_check_skipped(st, n)
+    g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
     g["stagnation"] = bool(n >= 2 and cur.get("open_lineages") and
@@ -1286,6 +1938,7 @@ COUNT_GLOSS = (
     ("reraise_unconsumed", "다시 올릴 대상이 없는 예약 %d건", "round"),
     ("escalated_unconsumed", "결정으로 올릴 대상이 없는 예약 %d건", "round"),
 )
+APPROVE_WITH_OPEN = "열린 지적 %d개를 두고 진행"
 NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
 # `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
@@ -1302,10 +1955,16 @@ WARN_GLOSS = (
     (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
     (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
     (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+    (r"탐지 (?P<n>\d+) 중 (?P<k>\d+) 사망 \((?P<why>.*)\)", "탐지",
+     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다"),
     (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
     (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
     (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
     (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
+    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다"),
+    (r"이 자리의 결정이 아닌 id (?P<why>.*) — 참고로 둠", "결정 id",
+     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다"),
+    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다"),
     (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
 )
 
@@ -1326,6 +1985,8 @@ def _plain_warns(warns) -> list:
             m = re.fullmatch(row[0], w, re.S)
             if m:
                 break
+        if m and "{n}" in row[2]:   # 숫자를 싣는 행 — 문장의 {n}·{k} 를 원문의 값으로 채운다
+            row = (row[0], row[1], row[2].format(**m.groupdict()))
         if not m:
             k = w
         elif row[1] is None:
@@ -1370,6 +2031,8 @@ def _first_line(g) -> str:
     warns = _plain_warns(warns)
     left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
     head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
+    if g.get("cap_reached") or g.get("stagnation"):
+        head += " — 열린 지적 %d개" % g["open_total"]
     s = head + (" — %s가 남았다." % " · ".join(left) if left else ("." if lead else " — 남은 것 없음."))
     if warns:
         s += " 경고 %d개: %s" % (len(warns), " · ".join(warns))
@@ -1392,7 +2055,8 @@ def _rg_decide(st, g, fid):
     dv = f.get("decision_view") or {}
     d = st["decides"].get(fid) or {}
     alternatives = [choice_label(c, d.get("kind")) for c in decide_choices(st, fid)]
-    lines = ["- %s%s (%s%s)" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else ""),
+    cited = " (반대라고 한 결정: %s)" % _one(f["contradicts"]) if f.get("contradicts") else ""
+    lines = ["- %s%s (%s%s)%s" % (_one(f.get("summary")), _post_kind_notice(d), fid, " · 자동" if dv.get("auto") else "", cited),
              "  그대로 두면: %s" % _one(dv.get("if_unfixed", "(리뷰어가 안 적음)")),
              "  고치면: %s" % _one(dv.get("replacement", "(대체안 미작성)")),
              "  근거: %s" % _one(dv.get("basis", f.get("evidence") or "—")),
@@ -1402,7 +2066,59 @@ def _rg_decide(st, g, fid):
     # 빈칸으로 두면 사상이 낡았다는 것이 아무 데도 안 남는다(D13-③ 이 안 닫힌다).
     if dv.get("category_unglossed"):
         lines.append("  ↳ 사람말 사상 없음: %s — 원래 이름 그대로 낸다" % _one(dv["category_unglossed"]))
+    lines.extend(_adopt_unavailable_line(st, fid))
+    lines.extend(_revert_target_flagged_line(st, fid))
     return lines
+
+
+def _revert_target_flagged_line(st, fid) -> list:
+    """사후 결정의 「이전 상태로 원복」이 돌아갈 글이 그 자체로 허가 없이 바뀐 글(앞 라운드에 얼림 검사가 잡았고 사용자가
+    받아들이지 않은 변경)이면 그 사실을 한 줄로 — 원복이 원래 글이 아니라 그 변경으로 돌아간다."""
+    d = st["decides"].get(fid) or {}
+    if d.get("kind") != "post" or not isinstance(d.get("prev_hash"), str):
+        return []
+    anchor = (st["findings"].get(fid) or {}).get("anchor")
+    snaps = st.get("snapshots") or {}
+    j = next((k for k in range(int(st["round"]) - 1, 0, -1)
+              if any(s.get("anchor") == anchor and s.get("hash") == d["prev_hash"]
+                     for s in (snaps.get(str(k)) or {}).get("sections") or [])), None)
+    if j is None:
+        return []
+    adopted = {i for e in st.get("decision_log") or [] if e.get("choice") == "adopt" for i in e.get("finding_ids") or []}
+    flagged = sorted(o for o, od in st["decides"].items()
+                     if o != fid and od.get("kind") == "post" and od.get("round") == j and o not in adopted
+                     and (st["findings"].get(o) or {}).get("anchor") == anchor)
+    if not flagged:
+        return []
+    return ["  ↳ 원복하면 원래 글이 아니라 라운드 %d 에 허가 없이 바뀐 글로 돌아간다 — 그 변경은 아직 받아들여지지 않았다 (%s)"
+            % (j, ", ".join(flagged))]
+
+
+# 「고친다(채택)」를 고를 수 없는 이유의 사람말 — 사유 키는 `scope_problem` · `adopt_problem` 의 것.
+ADOPT_PROBLEM_GLOSS = {
+    "scope_invalid": "고칠 범위가 비어 있다",
+    "scope_label_forged": "고칠 범위가 엔진이 쓰는 표시 글자를 흉내 낸다",
+    "anchor_immutable": "고칠 범위가 바꾸면 안 되는 사용자 원문 절이다",
+    "insert_after_immutable": "고칠 범위가 바꾸면 안 되는 사용자 원문 절 안이다",
+    "anchor_unresolved": "고칠 범위가 문서에 없는 자리다",
+    "insert_after_unresolved": "고칠 범위가 문서에 없는 자리 뒤다",
+    "anchor_log_section": "고칠 범위가 결정 기록 · 미룬 항목 절이다 — 그 절에는 엔진만 줄을 덧붙인다",
+    "insert_after_log_section": "고칠 범위가 결정 기록 · 미룬 항목 절 안이다 — 그 절에는 엔진만 줄을 덧붙인다",
+    "no_fix_anchor": "고칠 수 있는 절이 프로필에 없다",
+    "profile_unreadable": "프로필을 읽지 못했다",
+}
+
+
+def _adopt_unavailable_line(st, fid) -> list:
+    d = st["decides"].get(fid) or {}
+    if "adopt" not in _decide_choices_for(d.get("state"), _is_reraise_successor(st, fid)):
+        return []
+    prob = adopt_problem(st, fid)
+    if not prob:
+        return []
+    why, sc = prob
+    return ["  ↳ 고친다(채택)는 고를 수 없다 — %s (edit_scope_refused · %s%s)"
+            % (ADOPT_PROBLEM_GLOSS.get(why, "고칠 범위를 쓸 수 없다"), why, (" · " + _one(sc)) if sc else "")]
 
 
 def _rg_adopted(st, g, fid):
@@ -1419,12 +2135,13 @@ def _rg_expired(st, g, fid):
     # 통일한다(M3 부산물 — `_rg_decide` 와 라벨 어휘도 이제 같다).
     d = st["decides"].get(fid) or {}
     alt = " / ".join(choice_label(c, d.get("kind")) for c in decide_choices(st, fid))
-    return ["- %s — 고를 수 있는 것: %s%s (%s)" % (_one(st["findings"][fid].get("summary")), alt, _post_kind_notice(d), fid)]
+    return (["- %s — 고를 수 있는 것: %s%s (%s)" % (_one(st["findings"][fid].get("summary")), alt, _post_kind_notice(d), fid)]
+            + _adopt_unavailable_line(st, fid))
 
 
 def _rg_superseded(st, g, fid):
     d = st["decides"].get(fid) or {}
-    return ["- %s — 이어받은 결정: %s (%s)" % (_one(st["findings"][fid].get("summary")), d.get("superseded_by"), fid)]
+    return ["- %s — 다른 결정이 이어받았다 (%s · 이어받은 것 %s)" % (_one(st["findings"][fid].get("summary")), fid, d.get("superseded_by"))]
 
 
 def _rg_held_decide(st, g, fid):
@@ -1469,7 +2186,8 @@ def _rg_held_fix(st, g, fid):
 
 def _rg_blocking_ask(st, g, fid):
     f = st["findings"][fid]
-    return ["- %s — 이 답을 기다리는 수정: %s (%s)" % (_one(f.get("summary")), ", ".join(f.get("blocks") or []), fid)]
+    bl = f.get("blocks") or []
+    return ["- %s — 이 답을 기다리는 수정 %d개 (%s · 기다리는 것 %s)" % (_one(f.get("summary")), len(bl), fid, ", ".join(bl))]
 
 
 def _rg_ask_open(st, g, fid):
@@ -1500,9 +2218,16 @@ def render_gate(st, g) -> str:
     GATE_ROWS 를 옮긴다(이 함수는 순서를 따로 정하지 않는다)."""
     c = dict(g["counts"], dropped=len(g["dropped"]))
     out = [_first_line(g)]
-    sub = "재리뷰 %d/%d회 썼다" % (g["rereview_count"], REREVIEW_CAP)
+    cfg = g.get("config") or {}
+    capv = cfg.get("rereview_cap") or {"value": REREVIEW_CAP, "source": "기본"}
+    sub = "재리뷰 %d/%d회 썼다(상한 %d — %s) · %s" % (g["rereview_count"], capv["value"], capv["value"],
+                                                   capv["source"], _cfg.config_line(cfg))
     if g["cap_reached"]:
         sub += " · 상한에 닿았다"
+    if (st["rounds"].get(str(g["round"])) or {}).get("digest_backfilled"):
+        sub += " · 원장 확인값을 이번에 채웠다(확인값이 없던 원장 — 이전 버전이 썼거나 줄이 지워졌다)"
+    if g.get("digest_missing"):
+        sub += " · 원장 확인값이 없다 — 이전 버전이 썼거나 확인값 줄이 지워졌다"
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
@@ -1524,6 +2249,24 @@ def render_gate(st, g) -> str:
                 out.append("  ┆ 같은 자리(%s)" % _one(anchor))
             prev_anchor = anchor
             out.extend(fn(st, g, fid))
+    titles = {s["anchor"]: s.get("title") for s in ((st["snapshots"].get(str(g["round"])) or {}).get("sections") or [])}
+    for rc in g.get("related_changes") or []:
+        if rc.get("uncountable"):
+            what = "프로필" if rc["uncountable"] in ("profile_error", "profile_unreadable") else "원장"
+            out.append("이 결정 때문에 함께 바뀐 곳을 셀 수 없다 — %s을 읽지 못했다 (%s · %s)" % (what, rc["decision_id"], rc["uncountable"]))
+            continue
+        if rc["changed"]:
+            out.append("이 결정 때문에 함께 바뀐 곳 %d개 (%s)" % (len(rc["changed"]), rc["decision_id"]))
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), _one(x)) for x in rc["changed"])
+        if rc["unchanged"]:
+            out.append("신고했지만 바뀌지 않은 곳 %d개 (%s)" % (len(rc["unchanged"]), rc["decision_id"]))
+            out.extend("- %s (%s)" % (_one(titles.get(x) or x), _one(x)) for x in rc["unchanged"])
+    skipped = g.get("log_check_skipped", [])
+    if skipped is None:
+        out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 셀 수 없다 — 원장이나 프로필을 읽지 못했다")
+    elif skipped:
+        out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다 — 이전 버전이 만든 원장에 줄 기록이 없어"
+                   " 이번 한 번은 절 전체를 넘겼다 (%s)" % ", ".join(_one(x) for x in skipped))
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
@@ -1545,13 +2288,13 @@ def render_gate(st, g) -> str:
     mode = NEXT_MODE_GLOSS.get(g["next_round_mode"], g["next_round_mode"])
     if g["two_stage"] and g["next_round_mode"] == "extra_approval":
         if g["approval_ready"]:
-            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인) 또는 「진행 옵션으로」")
+            out.append("다음: " + ag + " 1단계 — 「추가 라운드 1회 열기」(고른 선택지나 기타 칸에 쓴 말이 승인으로 남는다) 또는 「진행 옵션으로」")
         else:
-            out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션, 또는 「추가 라운드 1회 열기」(사용자가 직접 쓴 말로 한 번 더 승인)")
+            out.append("다음: " + ag + " 1단계 — 남은 항목을 처리하거나 「%s」, 또는 「추가 라운드 1회 열기」(고른 선택지나 기타 칸에 쓴 말이 승인으로 남는다)" % (APPROVE_WITH_OPEN % g["open_total"]))
     elif g["approval_ready"]:
         out.append("다음: " + ag + " — 진행 옵션을 고를 수 있다")
     elif g["two_stage"]:
-        out.append("다음: " + ag + " 1단계 — 남은 항목을 처리한 뒤 진행 옵션 (다음 라운드: %s)" % mode)
+        out.append("다음: " + ag + " 1단계 — 남은 항목을 처리하거나 「%s」 (다음 라운드: %s)" % (APPROVE_WITH_OPEN % g["open_total"], mode))
     else:
         out.append("다음: 리뷰 %d라운드 (%s)" % (g["round"] + 1, mode))
     if g.get("unreviewed_reason"):
@@ -1569,16 +2312,31 @@ def cmd_gate(a) -> int:
     return 0
 
 
+def cmd_advice_list(a) -> int:
+    """참고(advisory) 목록 — 읽기 전용. 쓰기 플래그가 없는 하위 명령이라 펜스의 원장 쓰기 락이 이름만으로 가른다."""
+    if _adv is None:
+        return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    st = load_state(a.state_dir)
+    if not _adv.has_must_catch(load_profile(st["profile"])):
+        return fail("profile_has_no_must_catch", profile=st["profile"])
+    _emit({"ok": True, "items": _adv.scrub(list((st.get("advice") or {}).values()))})
+    return 0
+
+
 def cmd_advice(a) -> int:
     """참고(advisory) 목록 — 끝에서 한 번 표시(`--render`) · 박제(`--sink`) · 라운드별 계수 줄(`--log-file`).
 
-    플래그가 없으면 원장의 목록을 JSON 으로 낸다(읽기 전용). 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
+    쓰기 플래그(`--render` · `--sink` · `--log-file`) 하나 이상이 있어야 돈다 — 목록만 읽으려면 `advice-list`
+    (읽기 전용)다. 플래그 없이 부르면 rc 2 `advice_needs_flag`. 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
     항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
     글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
     헤딩 앞)에 선다 — 박제처가 그 하위 절이어도 박제 표에 끼지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
     박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
     저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
     (`sink_write_failed` · `log_write_failed`) · 목적지 경로로 알린다."""
+    if not (a.render or a.sink or a.log_file):
+        fail("advice_needs_flag", hint="목록은 advice-list")
+        return 2
     adv = _adv
     if adv is None:
         return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
@@ -1586,7 +2344,14 @@ def cmd_advice(a) -> int:
     prof = load_profile(st["profile"])
     if not adv.has_must_catch(prof):
         return fail("profile_has_no_must_catch", profile=st["profile"])
-    cap = adv.RENDER_CAP if a.cap is None else a.cap
+    try:
+        cfg = _cfg.resolve(prof, {}, os.environ)
+    except _cfg.ConfigInvalid as e:
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        return 2
+    cap = cfg["render_cap"]["value"] if a.cap is None else a.cap   # --cap 은 진입의 명시 값이다
+    cap_src = cfg["render_cap"]["source"] if a.cap is None else "진입"
+    width = cfg["summary_width"]["value"]
     if cap < 1:
         return fail("cap_invalid", cap=cap)
     dt = prof["defer_target"]
@@ -1601,7 +2366,7 @@ def cmd_advice(a) -> int:
         path = Path(a.sink)
         try:
             block = adv.sink_block([adv.sink_row(it) for it in sunk], section_body(path, dt["heading"]))
-            append_under_heading(path, dt["heading"], "\n".join(block))
+            engine_append(st, path, dt["heading"], "\n".join(block))
         except (OSError, UnicodeError) as e:
             return fail("sink_write_failed", path=str(path), detail=str(e))
         for it in sunk:
@@ -1614,20 +2379,25 @@ def cmd_advice(a) -> int:
             for k in sorted(st["rounds"], key=int):
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
-                if "advice_new" in rep and adv.count_key(ident, int(k)) not in have:
-                    append_under_heading(path, heading, adv.count_line(ident, int(k), rep), own=True)
+                if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
+                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True)
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
+            if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다
+                save_state(a.state_dir, st, "advice logged=%d (중단)" % len(logged))
             return fail("log_write_failed", path=str(path), detail=str(e), sunk=len(sunk), logged_rounds=logged)
-    shown = [it for it in items if not it.get("shown")] if a.render else []
+        if logged:
+            save_state(a.state_dir, st, "advice logged=%d" % len(logged))
+    shown =[it for it in items if not it.get("shown")] if a.render else []
     if a.render:
         where = a.where or (dt["heading"] if dt.get("kind") == "doc_section" else "advice 목록(JSON)")
-        print("\n".join(adv.render_lines(shown, cap, where)))
+        print("\n".join(adv.render_lines(shown, cap, where, width,
+                                        _cfg.advice_note(cap, cap_src, width, cfg["summary_width"]["source"]))))
     for it in shown:
         it["shown"] = True
     if shown:
         save_state(a.state_dir, st, "advice shown=%d" % len(shown))
-    if not a.render:
+    if not a.render:   # --sink · --log-file 만 준 호출 — 한 일을 JSON 으로 알린다
         _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
 
@@ -1639,49 +2409,68 @@ def cmd_gate_rows(a) -> int:
     return 0
 
 
+def _ascii_int(raw):
+    """진입 플래그 정수 — 환경 값과 같은 규칙(ASCII 숫자만). `1_0` · `+2` · 전각 숫자 · 공백은 거부한다."""
+    if not re.fullmatch(r"[0-9]+", raw):
+        raise argparse.ArgumentTypeError("ASCII 숫자만 쓸 수 있다: %r" % raw)
+    return int(raw, 10)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docreview_state.py")
+    p = argparse.ArgumentParser(prog="docreview_state.py", allow_abbrev=False)
     sp = p.add_subparsers(dest="cmd", required=True)
-    x = sp.add_parser("state-dir-for"); x.add_argument("--root", required=True)
+
+    def P(name):   # 하위 명령마다 줄인 플래그를 거부한다 — 줄인 플래그가 쓰기 플래그로 읽히지 않게(R2 인계)
+        return sp.add_parser(name, allow_abbrev=False)
+    x = P("state-dir-for"); x.add_argument("--root", required=True)
     x.add_argument("--doc", required=True)
     x.set_defaults(fn=cmd_state_dir_for)
-    x = sp.add_parser("init"); x.add_argument("--state-dir", required=True)
+    x = P("init"); x.add_argument("--state-dir", required=True)
     x.add_argument("--doc", required=True); x.add_argument("--profile", required=True)
     x.set_defaults(fn=cmd_init)
-    x = sp.add_parser("begin-round"); x.add_argument("--state-dir", required=True)
+    x = P("begin-round"); x.add_argument("--state-dir", required=True)
     x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
+    x.add_argument("--extra-approval-source", default=None, choices=("label", "typed"))
+    x.add_argument("--detectors", type=_ascii_int, default=None)
     x.set_defaults(fn=cmd_begin_round)
-    x = sp.add_parser("profile-check"); x.add_argument("profile")
+    x = P("profile-check"); x.add_argument("profile")
     x.set_defaults(fn=cmd_profile_check)
 
     def sd(x):
         x.add_argument("--state-dir", required=True)
         return x
-    x = sd(sp.add_parser("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
-    x = sd(sp.add_parser("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
-    x = sd(sp.add_parser("decide")); x.add_argument("--id", required=True)
+    x = sd(P("record-findings")); x.add_argument("--json", required=True); x.set_defaults(fn=cmd_record_findings)
+    x = sd(P("exempt-anchors")); x.set_defaults(fn=cmd_exempt_anchors)
+    x = sd(P("decide")); x.add_argument("--id", required=True)
     x.add_argument("--choice", required=True, choices=("adopt", "reject", "hold"))
     x.add_argument("--quote", required=True); x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_decide)
-    x = sd(sp.add_parser("fix")); x.add_argument("--id", required=True)
+    x = sd(P("fix")); x.add_argument("--id", required=True)
     x.add_argument("--event", required=True, choices=("intent-pass", "drop", "hold", "unhold", "escalate"))
     x.add_argument("--scope", default=None); x.add_argument("--reason", default=None)
     x.add_argument("--log-file", default=None); x.set_defaults(fn=cmd_fix)
-    x = sd(sp.add_parser("ask")); x.add_argument("--id", required=True)
+    x = sd(P("ask")); x.add_argument("--id", required=True)
     x.add_argument("--answered", action="store_true"); x.set_defaults(fn=cmd_ask)
-    x = sd(sp.add_parser("defer")); x.add_argument("--id", required=True)
+    x = sd(P("defer")); x.add_argument("--id", required=True)
     x.add_argument("--log-file", required=True); x.set_defaults(fn=cmd_defer)
-    x = sd(sp.add_parser("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
-    x = sd(sp.add_parser("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
-    x = sd(sp.add_parser("advice")); x.add_argument("--render", action="store_true")
-    x.add_argument("--cap", type=int, default=None); x.add_argument("--where", default=None)
+    x = sd(P("declare-related")); x.add_argument("--decision", required=True)
+    x.add_argument("--anchors", required=True, nargs="+"); x.set_defaults(fn=cmd_declare_related)
+    x = sd(P("log-decision")); x.add_argument("--log-file", required=True)
+    x.add_argument("--line", required=True); x.add_argument("--quote", required=True)
+    x.set_defaults(fn=cmd_log_decision)
+    x = sd(P("related-changes")); x.set_defaults(fn=cmd_related_changes)
+    x = sd(P("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
+    x = sd(P("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
+    x = sd(P("advice")); x.add_argument("--render", action="store_true")
+    x.add_argument("--cap", type=_ascii_int, default=None); x.add_argument("--where", default=None)
     x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
     x.set_defaults(fn=cmd_advice)
-    x = sp.add_parser("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
+    x = sd(P("advice-list")); x.set_defaults(fn=cmd_advice_list)
+    x = P("gate-rows"); x.set_defaults(fn=cmd_gate_rows)
     return p
 
 
 # 원장 · 사용자 문서에 들어가거나 출력되는 자유 텍스트 인자. 경로 인자(--doc · --log-file 등)는 파일 이름이라 뺀다.
-FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where")
+FREE_TEXT_ARGS = ("reason", "quote", "scope", "extra_approval", "where", "line")
 
 
 def unencodable_text_arg(a):
@@ -1703,6 +2492,8 @@ def main(argv=None) -> int:
         return fail("text_encoding_invalid", arg="--" + bad.replace("_", "-"))
     try:
         return a.fn(a)
+    except LedgerCorrupt as e:
+        return fail(e.reason, **e.extra)
     except FileNotFoundError as e:
         return fail("state_missing", path=str(e))
     except UnicodeEncodeError as e:   # ValueError 의 하위라 앞에 둔다 — 쓰거나 내보낼 글자의 인코딩 실패(디코딩 실패는 아래 판독 실패)

@@ -37,7 +37,11 @@ done
 
 # 원문 보존 — audit 쪽 «존재» 검사. 빈 원문 절은 막혀야 한다.
 run_gate "$FIX/seed-one-sentence.md" "$FIX/seed-empty-verbatim.audit.md"
-[ $? -ne 0 ] \
+rc_empty=$?
+empty_msg="$(PYTHONDONTWRITEBYTECODE=1 python3 "$CHECK" gate "$FIX/seed-one-sentence.md" "$FIX/seed-empty-verbatim.audit.md" 2>&1 >/dev/null)"
+# 사유 문장까지 본다 — 다른 사유(제목 빠짐 등)로 막혀도 통과하는 단언은 이 검사의 증거가 아니다.
+case "$empty_msg" in *"원문"*"절이 비어 있다"*) empty_ok=1;; *) empty_ok=0;; esac
+[ "$rc_empty" -ne 0 ] && [ "$empty_ok" = 1 ] \
   && ok "검사 살아 있음: 원문 보존 (빈 §1 원문 절)" \
   || no "검사 죽음: audit 의 §1 원문이 비어도 통과한다"
 

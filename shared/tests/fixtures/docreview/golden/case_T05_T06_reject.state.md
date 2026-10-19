@@ -1,4 +1,5 @@
 ---
+docreview_digest: <DIGEST>
 docreview:
   doc: <REPO_ROOT>/shared/tests/fixtures/docreview/design-sample.md
   profile: <REPO_ROOT>/plugins/spec-distill/references/docreview-profiles/design-doc.md
@@ -61,6 +62,11 @@ docreview:
         hash: 36a209eba25b
         parents:
         - '#handoff-context'
+        line_hashes:
+        - 36c9f135573f
+        - da39a3ee5e6b
+        - 745b53c65147
+        - 8272d43233d5
   findings:
     fee27fc9#r1.1:
       id: fee27fc9#r1.1
@@ -94,6 +100,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     011167c4#r1.2:
       id: 011167c4#r1.2
       lineage: 011167c4#r1.2
@@ -116,6 +124,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     d56c5e0c#r1.1:
       id: d56c5e0c#r1.1
       lineage: d56c5e0c#r1.1
@@ -139,6 +149,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     9dea7cf3#r1.1:
       id: 9dea7cf3#r1.1
       lineage: 9dea7cf3#r1.1
@@ -171,6 +183,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: null
+      contradicts: null
     d949ac4c#r1.1:
       id: d949ac4c#r1.1
       lineage: d949ac4c#r1.1
@@ -193,6 +207,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     11adb9c3#r1.1:
       id: 11adb9c3#r1.1
       lineage: 11adb9c3#r1.1
@@ -225,6 +241,8 @@ docreview:
       promoted_from: fix
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     e1b5b3be#r1.1:
       id: e1b5b3be#r1.1
       lineage: e1b5b3be#r1.1
@@ -247,6 +265,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: null
+      contradicts: null
     65e28991#r1.1:
       id: 65e28991#r1.1
       lineage: 65e28991#r1.1
@@ -269,6 +289,8 @@ docreview:
       promoted_from: null
       immutable: false
       kind: pre
+      detector: d1
+      contradicts: null
     1615824b#r1.1:
       id: 1615824b#r1.1
       lineage: 1615824b#r1.1
@@ -301,6 +323,8 @@ docreview:
       promoted_from: ask
       immutable: false
       kind: pre
+      detector: null
+      contradicts: null
     011167c4#r1.1:
       id: 011167c4#r1.1
       lineage: 011167c4#r1.1
@@ -323,6 +347,8 @@ docreview:
       promoted_from: null
       immutable: null
       kind: null
+      detector: d1
+      contradicts: null
   decides:
     fee27fc9#r1.1:
       state: open
@@ -396,6 +422,19 @@ docreview:
         lineage_mismatch: 1
         reraise_unconsumed: 0
         escalated_unconsumed: 0
+      config:
+        detectors:
+          value: 1
+          source: 프로필
+        rereview_cap:
+          value: 2
+          source: 기본
+        render_cap:
+          value: 8
+          source: 기본
+        summary_width:
+          value: 60
+          source: 기본
       started_mtime_ns: <MTIME_NS>
   pending_recritic: null
   rejected_lineages:
@@ -405,6 +444,8 @@ docreview:
       round: 1
   escalated: []
   reraise: []
+  engine_lines: []
+  engine_lines_since: 0
 ---
 # docreview 원장
 - r0: init

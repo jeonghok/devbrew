@@ -107,6 +107,12 @@ assert_contains "$REF_BODY" '부재 건수를 함께 공시' \
 assert_contains "$SKILL_BODY" '부재 건수를 함께 공시' \
   "spec-review ## 게이트 본문이 같은 부재 공시 규약을 적는다"
 
+# ── 6. 존재 — 게이트 질문 · 선택지 이름에 내부 기호를 쓰지 않는다 (AC41, body-unique) ──
+assert_contains "$REF_BODY" '질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고' \
+  "절차서 본문이 질문 · 선택지 이름의 내부 기호 금지를 적는다"
+assert_contains "$SKILL_BODY" '질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고' \
+  "spec-review ## 게이트 본문이 같은 내부 기호 금지를 적는다"
+
 # 쉬운 말 출력 PR 2 (계획 Q2) — 렌더 첫 줄은 첫 호출 앞 글에 한 번, 질문엔 결정 하나와 경고 개수 한 줄.
 NEWRULE='렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다'
 OLDRULE='매 호출 첫 질문의 첫 줄은 렌더'

@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "ledger_marker.py"
+sys.path.insert(0, str(SCRIPT.parent))
+import docreview_state  # noqa: E402
 A, B = "sess-aaaa1111", "sess-bbbb2222"
 
 
@@ -17,9 +19,10 @@ def run(*args):
 
 def ledger(d: Path, rnd: int):
     d.mkdir(parents=True, exist_ok=True)
-    (d / "docreview-state.md").write_text(
-        "---\ndocreview:\n  doc: /x/y.md\n  profile: design-doc\n  round: %d\n---\n# docreview 원장\n" % rnd,
-        encoding="utf-8")
+    st = docreview_state._empty("/x/y.md", "design-doc")   # 엔진이 쓴 모양 그대로 — 손으로 만든 원장이 아니다
+    st["round"] = rnd
+    st["_body"] = "# docreview 원장\n"
+    docreview_state.save_state(d, st)
 
 
 class MarkerTest(unittest.TestCase):
