@@ -477,8 +477,8 @@ nd_line="$(awk '/^### 다음 결정$/{getline; print; exit}' <<<"$round_block")"
 tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호' \
   && ok "AC13: OQ<n> 발급 — 새 결정은 새 번호 · 이어가는 결정은 기존 번호" \
   || no "AC13: OQ<n> 발급 규칙이 없거나 뒤집혔다 — 이어가는 결정에 새 번호를 주면 같은 결정이 둘로 갈린다"
-grep -qF 'AskUserQuestion 1회, **질문 1개**' <<<"$round_flat" \
-  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 질문 1개" || no "AC3: 질문 1개 규칙 부재"
+grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat" \
+  && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
 grep -qF '첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
 grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
@@ -564,7 +564,9 @@ done
 # SKILL.md 한 파일은 그 절만큼 늘어 래칫을 **그 절의 줄 수만큼** 옮긴다(여유는 옮기기 전과 같은 0).
 # 2026-10-12 R1: C44 · 자격/예산 문단을 걷고 조사 상한 절 · repo-researcher dispatch 를 더한다. 순감이라 값을 올리지 않는다.
 # 2026-10-12 R1: 실측 494 + 8 로 조였다.
-SKILL_LINE_CAP=502
+# 2026-10-19 R10 조사 열기: `## 조사 열기` 절(여럿 동시에 · 만들어 보내기 · 있는 것 먼저 · 웹 펜스 · 요약 펜스 ·
+# open-researcher dispatch)과 라운드 질문 묶기 · V1 웹 주장 문장을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 564 + 8.
+SKILL_LINE_CAP=572
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"

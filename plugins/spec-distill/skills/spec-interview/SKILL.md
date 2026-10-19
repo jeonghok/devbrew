@@ -182,7 +182,9 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
 ```
 
 - `## R<n>` 은 1부터 순증한다.
-- 라운드마다 AskUserQuestion 1회, **질문 1개**다. 첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다 —
+- 라운드마다 AskUserQuestion 1회다. 기본은 질문 1개이고, 서로 기대지 않는 결정이 둘 이상이면 같은 호출에
+  질문을 여럿 묶을 수 있다(질문 도구가 받는 수까지) — 묶으면 «다음 결정»에 그 OQ 를 모두 적고 답마다
+  `S<m>` 을 하나씩 기록한다. 질문마다 첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다 —
   steelman 절차의 질문만 예외다(아래).
 - question 본문은 무엇을 정하는지·용어·기술 사실을 풀고, 각 선택지의 `description` 은 «고르면 무엇이
   달라지는가»를 담는다. 기계 검사는 없다.
@@ -212,7 +214,8 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
   것에도 종속되지 않는다.** steelman 경로는 `references/steelman.md` Step 2 가 V1 의 특수 경우이므로
   두 번 확인하지 않고, 판정만 audit §3 `ST<N>` 과 §5 양쪽에 적는다. 판정이 `반증` 이면 그 항목이
   닿는 확정을 payload §5 에 *원래 / 재결정 / 근거* 세 칸으로 남기고(재결정 자체는 사용자 동의로만
-  한다 — P23), 그 차원을 재개방할 수 있다.
+  한다 — P23), 그 차원을 재개방할 수 있다. 결정에 닿는 웹 주장(`evidence[]`)은 `${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md`
+  원칙 2 대로 본체가 1차 자료로 한 번 더 확인하거나 «지금 이해»에 「확인 못 함」으로 둔다.
 - **결정 연결은 §4·§5 에 달고 §3·§0 이 그것을 되가리킨다.** 조사 항목 줄 끝에 레포 `[RC3 → OQ1]` ·
   `[RC3 → 없음]`, 웹 `[→ OQ1]` · `[→ 없음]` 중 하나를 쓴다 — 레포 주장은 연결 안에 항상 `RC<n>` 을
   싣는다(`없음` = 닿는 결정 없음). §4 항목은 여러 줄로 쓸 수 있되 연결과 `RC<n>` 은 첫 줄 끝에 —
@@ -239,7 +242,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
 claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
 if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
-  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher 자리면 본체가 직접 조사한다." >&2
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher 자리면 본체가 직접 조사한다. open-researcher 자리면 본체가 직접 조사한다." >&2
   exit 1
 fi
 printf '%s\n' "$CLAIMS_CONTRACT"
@@ -271,6 +274,69 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
 게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
 그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
+
+## 조사 열기 — 여럿 동시에 · 만들어 보내기
+
+**여럿 동시에.** 서로 기대지 않는 조사 질문이 둘 이상이면 한 메시지에서 조사 agent 를 여럿 띄울 수 있다.
+몇 개를 언제 띄울지는 모델 판단이다. 기본은 필요할 때 하나씩이고, 여럿을 함께 띄우면 «지금 이해»에
+무엇을 왜 함께 띄웠는지 한 줄 적는다. 필수 자리 둘(첫 질문 전 `coverage-mapper`, blind_spot 차원의 첫
+`blind-spot-prober`)과 조건 자리(`steelman-builder`)는 그대로다. 함께 띄운 조사는 같은 묶음 번호를 갖는다(`## 조사 상한 · 포화 판정`).
+
+**만들어 보내기.** 정해진 넷(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher`)의
+역할에 맞지 않는 조사는 본체가 그 자리에서 주문을 써 `open-researcher` 에 보낸다. 주문에는 찾을 것 · 닿는 열린
+결정 · 확인할 것을 쓴다(예: 「이 패키지의 지금 최신 버전과 이 레포가 쓰는 버전, 그 사이 바뀐 API 를 공식
+문서에서」). 기대 결론은 싣지 않는다. 주문을 쓸 때와 웹 근거를 받을 때 아래 파일을 Read 로 읽어 그대로 따른다.
+
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md
+```
+
+그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+
+**있는 것 먼저.** 무엇을 만들자는 결정이 열리면, 레포 안의 있는 것(같은 일을 하는 스크립트 · skill · 모듈)을
+먼저 찾고, 바깥의 성숙한 것(패키지 · 프레임워크 · 도구)을 웹으로 찾는다. 레포 안 후보는 레포 주장(RC)으로,
+바깥 후보는 §4 웹 항목으로 brief 에 싣는다. 바깥 것은 사용자 검토 뒤에만 쓴다 — 후보와 차이를 보이고 묻는다.
+기본은 이렇게 하고, 만들 것이 없는 일(조사 · 결정만)이면 건너뛰고 이유를 적는다.
+
+`open-researcher` 를 띄우는 메시지마다 그 직전에 아래 두 펜스를 차례로 돌린다. 웹 펜스의 stdout 마지막 줄이
+`open_researcher=skip` 이면 띄우지 않고 stderr 안내대로 한다. 요약 펜스의 stdout 전문을 `<fresh_evidence>` 에,
+계약 펜스(`## 조사 주장 계약`)의 stdout 전문을 `<claims_contract>` 에 싣는다. `${RESEARCH_ORDER}` 에는 본체가 쓴
+주문을, `${OPEN_DECISIONS}` 에는 `## 조사 주장 계약` 절의 렌더 형식대로 싣는다.
+
+<!-- open-research-web:begin -->
+```bash
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  echo "[spec-distill] web 비활성 — open-researcher 를 띄우지 않는다. 레포 질문은 repo-researcher 로 보내고, 웹 질문은 「웹이 꺼져 확인하지 못함」으로 «지금 이해»에 불확실로 적는다." >&2
+  echo "open_researcher=skip"
+else
+  echo "open_researcher=go"
+fi
+```
+<!-- open-research-web:end -->
+
+<!-- fresh-evidence:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+FE="${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md"
+fe_rc=0; FRESH_EVIDENCE="$(awk '/<!-- order-summary:end -->/{f=0} f; /<!-- order-summary:begin -->/{f=1}' "$FE")" || fe_rc=$?
+if [ "$fe_rc" -ne 0 ] || [ -z "$FRESH_EVIDENCE" ]; then
+  echo "[spec-distill] 신선한 근거 요약을 읽지 못했다(rc $fe_rc): $FE — open-researcher 를 띄우지 않고 본체가 직접 조사한다." >&2
+  exit 1
+fi
+printf '%s\n' "$FRESH_EVIDENCE"
+```
+<!-- fresh-evidence:end -->
+
+```
+Agent({ description: "Run an open research order", subagent_type: "spec-distill:open-researcher",
+        prompt: "조사 주문(본체가 이 자리에서 쓴 것 — 찾을 것 · 닿는 열린 결정 · 확인할 것, 기대 결론 없이): <order>${RESEARCH_ORDER}</order>. 신선한 근거 요약(내용): <fresh_evidence>${FRESH_EVIDENCE}</fresh_evidence>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 주문만 조사하고 계약 모양의 evidence · repo_claims 로." })
+// **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + 본체 직접 조사로 강등
+```
+
+출력은 다른 조사 출력과 같은 길을 탄다 — 산출 원문을 state 본문 조사 블록(`## 조사 상한 · 포화 판정`)에
+verbatim 으로 남기고 → V1(웹 주장 포함) → «지금 이해» → `research_log`. `repo_claims[]` 의 첫 산출이면
+C43 절의 internal_research admit 이 여기서도 돈다. 계약 펜스 · 요약 펜스 중 하나라도 rc 가 0 이 아니면
+dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory + 본체 직접 조사로 강등 이다.
 
 ## 사용자 발화 기록 (G1, AC1)
 
