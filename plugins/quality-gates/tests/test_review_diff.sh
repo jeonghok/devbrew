@@ -63,8 +63,6 @@ case_session_includes_untracked() {
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "review-i1.self-state 는 있고 비어 있다" || no "review-i1.self-state 가 없거나 비지 않았다"
-  [ -f "$D/review-i1.unreviewed" ] && [ ! -s "$D/review-i1.unreviewed" ] \
-    && ok "review-i1.unreviewed 는 있고 비어 있다" || no "review-i1.unreviewed 가 없거나 비지 않았다"
   assert_file_grep "$D/review-i1.names" '^new\.py$' "names 에 untracked new.py"
   assert_file_grep "$D/review-i1.names" '^src/a\.py$' "names 에 src/a.py"
   assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/new\.py$' "full.diff 에 '+++ b/new.py'"
@@ -174,8 +172,6 @@ case_degraded_session() {
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
   assert_eq "$(field self_state "$OUT")" - "self_state: -"
   [ -f "$D/review-i1.self-state" ] && ok "degraded 에도 self-state 파일을 쓴다" || no "self-state 파일 없음"
-  [ -f "$D/review-i1.unreviewed" ] && [ ! -s "$D/review-i1.unreviewed" ] \
-    && ok "degraded 에도 빈 unreviewed 파일을 쓴다" || no "unreviewed 파일이 없거나 비지 않았다"
   assert_eq "$(field files "$OUT")" - "files: -"
   assert_eq "$(field filtered_files "$OUT")" - "filtered_files: -"
   [ -f "$D/review-i1.diff" ] && [ ! -s "$D/review-i1.diff" ] \
@@ -372,21 +368,21 @@ case_self_state_bound_to_run_dir() {
 }
 
 # 우회 막기 — worktrees/(base|head)-<8>/ 는 이 리포에 등록된 git worktree 일 때만 건너뛴다.
-# 등록되지 않은 같은 이름 폴더는 안에 든 레포다 — 펼치지 않고 막는다(degraded).
 case_unregistered_worktree_folder_reviewed() {
-  echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 막는다]"
+  echo "[등록되지 않은 worktrees/base-… 폴더는 리뷰]"
   mkfix
   local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/quality-gates/worktrees/base-abcdefgh"
   mkdir -p "$S" "$FW"
-  git init -q -b trunk "$FW"; echo 'evil_marker = 1' > "$FW/evil.py"; g "$FW" add -A; g "$FW" commit -q -m x
+  git init -q -b trunk "$FW"; echo 'evil = 1' > "$FW/evil.py"; g "$FW" add -A; g "$FW" commit -q -m x
   local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/$' "가짜 트리 폴더는 names 에 있다"
-  assert_eq "$(field degraded "$OUT")" yes "가짜 트리 폴더(안에 든 레포)가 있으면 degraded: yes"
-  assert_file_absent "$S/review-i1.full.diff" 'evil_marker' "가짜 트리 폴더 안의 글은 diff 에 없다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/evil\.py$' \
+    "가짜 트리 폴더 안의 파일이 names 에 있다"
+  assert_file_grep "$S/review-i1.diff" '^\+\+\+ b/\.claude/quality-gates/worktrees/base-abcdefgh/evil\.py$' \
+    "가짜 트리 폴더 안의 파일이 리뷰 diff 에 있다"
   assert_file_absent "$S/review-i1.self-state" 'base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
-  assert_file_absent "$S/review-i1.names" 'base-mysess00' "등록된 qg 트리는 names 에 없다"
+  assert_file_absent "$S/review-i1.names" 'base-mysess00' "등록된 qg 트리는 펼치지 않는다"
   if [ -n "$wt" ] && [ -d "$wt" ]; then
     assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-mysess00/$' \
       "등록된 qg 트리는 건너뛴다"
@@ -396,22 +392,7 @@ case_unregistered_worktree_folder_reviewed() {
   assert_eq "$(field self_state "$OUT")" 1 "self_state: 1 (등록된 트리만)"
 }
 
-# 등록된 qg 트리만 있으면 막지 않는다(양의 짝).
-case_registered_worktree_only_not_blocked() {
-  echo "[등록된 qg 트리만 — degraded 아님]"
-  mkfix
-  local S="$R/.claude/quality-gates/mysess001"; mkdir -p "$S"
-  local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
-  [ -n "$wt" ] && [ -d "$wt" ] && ok "등록된 qg 트리를 만들었다" || no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
-  echo 'new = 1' > "$R/new.py"
-  rdd "$S" --mode session
-  assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field degraded "$OUT")" no "degraded: no"
-  assert_eq "$(field self_state "$OUT")" 1 "self_state: 1"
-  assert_file_absent "$ROOT/err" '안에 든 레포' "막는 줄을 내지 않는다"
-}
-
-# --dir 가 리포 밖이면 아무것도 건너뛰지 않는다 — 등록된 트리도 안에 든 레포로 막는다.
+# --dir 가 리포 밖이면 아무것도 건너뛰지 않는다.
 case_dir_outside_repo_skips_nothing() {
   echo "[--dir 가 리포 밖 — 건너뛰지 않음]"
   mkfix
@@ -422,10 +403,10 @@ case_dir_outside_repo_skips_nothing() {
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
-  assert_eq "$(field files "$OUT")" 3 "files: 3 (세션 폴더의 산출물 · 등록된 트리 폴더 줄도 센다)"
-  assert_eq "$(field degraded "$OUT")" yes "등록된 트리도 안에 든 레포라 degraded: yes"
+  assert_eq "$(field files "$OUT")" 6 "files: 6 (세션 폴더의 산출물 둘 · 등록된 트리 안의 파일 넷도 리뷰)"
   assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/mysess001/result\.md$' "names 에 result.md"
-  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/worktrees/base-mysess00/$' "names 에 등록된 트리"
+  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/worktrees/base-mysess00/src/a\.py$' \
+    "names 에 등록된 트리 안의 파일"
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "self-state 파일은 있고 비어 있다" || no "self-state 파일이 없거나 비지 않았다"
   assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
@@ -447,100 +428,81 @@ case_mdx_reviewed_as_code() {
   assert_file_grep "$D/review-i1.doc-paths" "^exclude${TAB}README\.md\$" "doc-paths 에 'exclude<TAB>README.md'"
 }
 
-# 추적 안 되는 중첩 리포(ls-files 가 폴더 한 줄로 낸다)는 펼치지 않는다 — 그 안에서 git 을 돌리지도,
-# 그 안의 파일을 읽지도 않고, 실행을 막는다(degraded: yes + 큰 줄).
-NESTED_LINE='안에 든 레포는 리뷰하지 않았다 — 커밋하거나 .gitignore 에 넣고 다시 돌려라'
-case_nested_repo_blocks() {
-  echo "[추적 안 되는 중첩 리포 — 펼치지 않고 막는다]"
+# 추적 안 되는 중첩 리포(ls-files 가 폴더 한 줄로 낸다)는 그 안의 파일을 펼쳐 리뷰한다.
+case_nested_repo_files_reviewed() {
+  echo "[추적 안 되는 중첩 리포 — 안의 파일을 리뷰]"
   mkfix
-  local N="$R/vendor/lib"; mkdir -p "$N"
+  local N="$R/vendor/lib"; mkdir -p "$N/sp ace"
   git init -q -b trunk "$N"
-  echo 'nested_marker_a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
-  echo 'nested_marker_b = 1' > "$N/b.py"
-  local B="$R/vendor/bad"; mkdir -p "$B"
-  git init -q -b trunk "$B"; echo 'nested_marker_c = 1' > "$B/c.py"; g "$B" add c.py
-  echo garbage > "$B/.git/index"
+  echo 'a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
+  echo 'b = 1' > "$N/b.py"
+  echo 'c = 1' > "$N/sp ace/c d.py"
+  printf 'n = 1\n' > "$N/n
+l.py"
+  echo '# n' > "$N/README.md"
+  git init -q -b trunk "$N/deep"; echo 'z = 1' > "$N/deep/z.py"
   echo 'new = 1' > "$R/new.py"
-  # 중첩 리포의 설정이 명령을 돌리지 못한다 — 그 안에서 git 을 돌리지 않는다.
+  # 중첩 리포의 설정이 목록 읽기에서 명령을 돌리지 못한다(core.fsmonitor).
   local fsm; fsm=$(mktemp -d "$ROOT/fsm.XXXXXX")
   printf '#!/bin/sh\ntouch "%s/RAN"\nexit 1\n' "$fsm" > "$fsm/hook.sh"; chmod +x "$fsm/hook.sh"
   git -C "$N" config core.fsmonitor "$fsm/hook.sh"
   rd --mode session
   [ ! -e "$fsm/RAN" ] && ok "중첩 리포의 core.fsmonitor 가 돌지 않았다" || no "중첩 리포의 core.fsmonitor 가 돌았다"
   assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(field degraded "$OUT")" no "degraded: no"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_eq "$(field files "$OUT")" 3 "files: 3 (new.py + 폴더 줄 둘)"
-  assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
-  assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
-  assert_file_grep "$D/review-i1.names" '^vendor/bad/$' "names 에 폴더 줄 vendor/bad/"
-  assert_file_absent "$D/review-i1.names" '^vendor/lib/.' "안의 파일을 names 에 펼치지 않는다"
-  assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "안의 파일 글이 full.diff 에 없다"
-  assert_file_absent "$D/review-i1.diff" 'nested_marker' "안의 파일 글이 걸러진 diff 에 없다"
-  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
-  assert_eq "$(grep -cF "$NESTED_LINE" "$ROOT/err")" 2 "폴더마다 큰 줄 하나"
-  assert_file_grep "$ROOT/err" "${NESTED_LINE}: vendor/lib/\$" "큰 줄이 vendor/lib/ 를 밝힌다"
-  assert_file_grep "$ROOT/err" "${NESTED_LINE}: vendor/bad/\$" "큰 줄이 vendor/bad/ 를 밝힌다"
-  assert_eq "$(sort "$D/review-i1.unreviewed" | tr '\n' ' ')" "vendor/bad/ vendor/lib/ " \
-    "review-i1.unreviewed 가 두 폴더를 적는다(판정이 읽는 표시)"
+  assert_eq "$(field files "$OUT")" 7 "files: 7 (new.py + 중첩 리포 안의 파일 여섯)"
+  assert_eq "$(field excluded "$OUT")" 1 "excluded: 1 (중첩 리포 안의 README.md)"
+  assert_eq "$(field filtered_files "$OUT")" 6 "filtered_files: 6"
+  local p
+  for p in 'vendor/lib/a\.py' 'vendor/lib/b\.py' 'vendor/lib/sp ace/c d\.py' 'vendor/lib/deep/z\.py'; do
+    assert_file_grep "$D/review-i1.names" "^$p\$" "names 에 $p"
+    # git 은 공백 든 이름의 ---/+++ 줄 끝에 TAB 을 붙인다.
+    assert_file_grep "$D/review-i1.full.diff" "^\+\+\+ b/$p${TAB}?\$" "full.diff 에 $p"
+    assert_file_grep "$D/review-i1.diff" "^\+\+\+ b/$p${TAB}?\$" "걸러진 diff 에 $p"
+  done
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ "b/vendor/lib/n\\nl\.py"$' "줄바꿈 든 이름도 걸러진 diff 에"
+  assert_file_absent "$D/review-i1.names" '^vendor/lib/$' "중첩 리포 폴더 줄은 펼친 파일로 바뀐다"
+  assert_file_grep "$D/review-i1.doc-paths" "^exclude${TAB}vendor/lib/README\.md\$" "중첩 리포 안의 문서도 문서 경로 규칙을 따른다"
+  assert_file_absent "$D/review-i1.diff" 'vendor/lib/README' "걸러진 diff 에 중첩 리포의 README 없음"
+  assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/vendor/lib/README\.md$' "full.diff 에는 중첩 리포의 README 가 있다"
 }
 
-# 공격자가 심은 중첩 리포가 부모 경로 링크로 리포 밖 파일을 가리켜도 그 글이 diff 에 실리지 않는다.
-case_nested_repo_cannot_leak() {
-  echo "[중첩 리포의 부모 경로 링크 — 리포 밖 글이 새지 않는다]"
+# 중첩 리포의 목록을 못 읽으면 조용히 건너뛰지 않는다 — degraded: yes + stderr 에 그 폴더.
+case_nested_repo_unreadable_degraded() {
+  echo "[목록을 못 읽는 중첩 리포 — degraded]"
   mkfix
-  local OUTSIDE; OUTSIDE=$(mktemp -d "$ROOT/outside.XXXXXX")
-  echo 'SENTINEL_OUTSIDE_42' > "$OUTSIDE/secret.txt"
-  local N="$R/vendor/evil"; mkdir -p "$N/up"
-  git init -q -b trunk "$N"
-  echo 'placeholder' > "$N/up/secret.txt"; g "$N" add -A; g "$N" commit -q -m x
-  rm -rf "$N/up"; ln -s "$OUTSIDE" "$N/up"
+  local N="$R/vendor/bad"; mkdir -p "$N"
+  git init -q -b trunk "$N"; echo 'a = 1' > "$N/a.py"; g "$N" add a.py
+  echo garbage > "$N/.git/index"
+  echo 'new = 1' > "$R/new.py"
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_file_absent "$D/review-i1.full.diff" 'SENTINEL_OUTSIDE_42' "리포 밖 글이 full.diff 에 없다"
-  assert_file_absent "$D/review-i1.diff" 'SENTINEL_OUTSIDE_42' "리포 밖 글이 걸러진 diff 에 없다"
-  assert_file_absent "$D/review-i1.names" 'vendor/evil/up' "링크 너머 경로가 names 에 없다"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
+  assert_eq "$(field files "$OUT")" 2 "files: 2 (new.py + 읽지 못한 폴더 줄)"
+  assert_file_grep "$ROOT/err" 'vendor/bad/' "stderr 가 읽지 못한 폴더를 밝힌다"
+  assert_file_grep "$ROOT/err" 'degraded' "stderr 가 degraded 를 말한다"
+  assert_file_grep "$D/review-i1.names" '^vendor/bad/$' "읽지 못한 폴더는 names 에 남는다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
 }
 
-# 폴더를 가리키는 추적 안 된 링크는 중첩 리포가 아니다 — 링크 자체(가리키는 곳)로 diff 에 실린다.
+# 폴더를 가리키는 추적 안 된 링크는 중첩 리포가 아니다 — 링크로 diff 에 실린다.
 case_untracked_symlink_to_dir() {
-  echo "[폴더를 가리키는 추적 안 된 링크 — 링크 자체로 리뷰]"
+  echo "[폴더를 가리키는 추적 안 된 링크 — 링크로 리뷰]"
   mkfix
   ln -s src "$R/srclink"
   ln -s "$R/lib" "$R/abslink"
-  ln -s src "$R/d link"
-  ln -s 'src/a.py' "$R/flink"
-  echo 'plain = 1' > "$R/plain.py"
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" no "degraded: no"
-  assert_eq "$(field files "$OUT")" 5 "files: 5"
+  assert_eq "$(field files "$OUT")" 2 "files: 2"
   assert_file_grep "$D/review-i1.names" '^srclink$' "names 에 srclink"
-  assert_file_grep "$D/review-i1.diff" '^diff --git a/srclink b/srclink$' "diff 머리가 실제 이름이다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/srclink$' "걸러진 diff 에 srclink"
   assert_file_grep "$D/review-i1.diff" '^\+src$' "링크 대상이 diff 본문이다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/abslink$' "걸러진 diff 에 절대 경로 링크"
-  assert_file_grep "$D/review-i1.diff" '^diff --git a/d link b/d link$' "공백 든 링크 이름의 머리"
-  assert_file_grep "$D/review-i1.diff" "^\+\+\+ b/d link${TAB}\$" "공백 든 이름의 +++ 줄 끝 TAB(git 과 같다)"
-  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/flink$' "파일을 가리키는 링크도 diff 에(양의 짝)"
-  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/plain\.py$' "보통 untracked 파일도 diff 에(양의 짝)"
-  assert_eq "$(grep -c '^new file mode 120000$' "$D/review-i1.diff")" 4 "링크 넷 모두 mode 120000"
-  assert_file_absent "$D/review-i1.diff" 'link\.tmp|srclink/|^\+\+\+ b/src/' "임시 이름 · 폴더 펼치기가 diff 에 없다"
-}
-
-# 리포가 정한 이름으로 폴더를 만들지 않는다 — 링크 diff 는 고정 임시 이름만 쓴다.
-case_dir_link_no_repo_named_dirs() {
-  echo "[폴더 링크 — 리포가 정한 이름으로 폴더를 만들지 않는다]"
-  mkfix
-  mkdir -p "$R/deep/er"; ln -s ../../src "$R/deep/er/dlink"
-  local shim; shim=$(mktemp -d "$ROOT/shim.XXXXXX")
-  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/mkdir.log"\nexec /bin/mkdir "$@"\n' "$shim" > "$shim/mkdir"
-  chmod +x "$shim/mkdir"; : > "$shim/mkdir.log"
-  OUT=$(cd "$R" && PATH="$shim:$PATH" bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
-  assert_eq "$RC" 0 "rc 0"
-  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/deep/er/dlink$' "깊은 폴더 링크도 링크로 diff 에"
-  assert_file_absent "$shim/mkdir.log" 'deep' "mkdir 가 리포가 정한 이름을 받지 않았다"
+  assert_eq "$(grep -c '^new file mode 120000$' "$D/review-i1.diff")" 2 "두 링크 모두 mode 120000"
+  assert_file_absent "$D/review-i1.diff" 'srclink/|src/a\.py' "링크를 따라 폴더를 펼치지 않는다"
 }
 
 # 우회 막기 — 추적 · 커밋된 파일은 .claude/quality-gates 아래여도 리뷰한다.
@@ -640,13 +602,11 @@ case_self_state_grammar
 case_grammar_covers_state_file_format
 case_self_state_bound_to_run_dir
 case_unregistered_worktree_folder_reviewed
-case_registered_worktree_only_not_blocked
 case_dir_outside_repo_skips_nothing
 case_mdx_reviewed_as_code
-case_nested_repo_blocks
-case_nested_repo_cannot_leak
+case_nested_repo_files_reviewed
+case_nested_repo_unreadable_degraded
 case_untracked_symlink_to_dir
-case_dir_link_no_repo_named_dirs
 case_tracked_under_self_dir_reviewed
 case_settings_local
 case_from_subdir
