@@ -86,12 +86,13 @@ sys.path.insert(0, sys.argv[1])
 import conductor_state as cs
 print("\n".join(cs.WORK_DONE))' "$ROOT/plugins/spec-distill/scripts")"
 [ -n "$DONE_WORDS" ] && ok "conductor_state.WORK_DONE 를 읽었다" || no "conductor_state.WORK_DONE 이 없다"
-DONE_SENT="$(step 1 | grep -oF -- "$DONE_RULE" >/dev/null && step 1 | PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
-t = sys.stdin.read(); s = t.find(sys.argv[1]); print(t[s:t.find(chr(10), s)])' "$DONE_RULE")"
-while IFS= read -r w; do
-  [ -n "$w" ] || continue
-  assert_contains "$DONE_SENT" "「${w}」" "걸음 1: 끝으로 세는 낱말 「${w}」 를 문장이 밝힌다(코드 상수에서 도출)"
-done <<< "$DONE_WORDS"
+DONE_LISTED="$(step 1 | PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+t = sys.stdin.read()
+s = t.find(sys.argv[1])
+e = t.find(" 인 줄만 끝으로 세고", s)
+seg = t[s + len(sys.argv[1]):e] if s >= 0 and e > s else ""
+print("\n".join(sorted(re.findall("「([^」]+)」", seg))))' "$DONE_RULE")"
+assert_eq "$DONE_LISTED" "$(printf '%s\n' "$DONE_WORDS" | LC_ALL=C sort | sed '/^$/d' | python3 -I -c 'import sys; print("\n".join(sorted(l.strip() for l in sys.stdin if l.strip())))')" "걸음 1: 끝으로 세는 낱말 목록이 conductor_state.WORK_DONE 과 같다(등호 — 더하거나 빼면 RED)"
 for n in 1 3 4; do assert_contains "$(step "$n" | grep -F -- '- 기계 상태:')" '`## 작업`' "걸음 ${n}: 기계 상태 칸에 작업 표"; done
 # 음의 락 — 동시에 돌리는 일의 개수를 수량 상한에 묶는 문장(지휘자 수리 1 리뷰 넘김 · 수리 2). 「권장(기본값) · 사용자가 늘림」 은 허용.
 cap_hits() {  # cap_hits <글> — 상한 문장을 한 줄씩(명시 부정 「상한이 아니다」 류는 뺀 뒤 잰다)
