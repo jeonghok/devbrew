@@ -50,7 +50,9 @@ exit 2 면 stderr 를 그대로 보이고 이 실행에서는 차등 테스트�
 판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다).
 
 기준선을 정한다. 기준선 커밋은 실행마다 하나로 고정된다 — 기준선 행 파일(`<memo>/baseline-<runner>.tsv`)이 한
-커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다:
+커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다. 범위 모드(세션 폴더에
+`range-scope.txt` 가 있다)면 아래 `resolve-baseline.sh` 펜스를 돌리지 않는다 — 기준선은 그다음 판별 펜스가 찍는 시작 커밋이고,
+지금 체크아웃의 merge_base 는 범위와 무관하다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -65,8 +67,7 @@ if [ -f "$RS" ] && [ "$(sed -n 's/^status: //p' "$RS")" = ok ]; then printf 'sco
 elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'scope0=topic\nboundary=%s\n' "$(sed -n 's/^boundary: //p' "$S")"; else echo "scope0=session"; fi
 ```
 
-- `scope0=range` 이면 기준선 커밋은 `boundary=` 값 — 범위의 시작 커밋이다(리뷰 diff 의 기준과 같다). 위
-  `resolve-baseline.sh` 의 값은 쓰지 않는다.
+- `scope0=range` 이면 기준선 커밋은 `boundary=` 값 — 범위의 시작 커밋이다(리뷰 diff 의 기준과 같다).
 - `scope0=topic` 이면 기준선 커밋은 `boundary=` 값이다.
 - `scope0=session` 이면 기준선 커밋은 `merge_base:` 다. `degraded: yes` 면 기준선 커밋은 `-` 이다 — 기준선 축을
   돌리지 못한다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
@@ -124,15 +125,29 @@ printf 'axis=ok\nscope=%s\nboundary=%s\ntree=%s\nhead_commit=%s\nhead_tree=%s\n'
 ## D2 후보와 배정 — 매 iteration
 
 후보의 바닥을 받는다. 토픽 · 범위 스코프면 `--topic <boundary> <tree>` 를 붙인다 — 두 값은 D1 이 이 iteration 의 스코프
-파일에서 읽어 찍은 `boundary=` · `tree=` 다. 범위면 그것이 `--topic <start> <end>`(범위 파일의 시작 · 끝 커밋)다:
+파일에서 읽어 찍은 `boundary=` · `tree=` 다. 범위면 그것이 `--topic <start> <end>`(범위 파일의 시작 · 끝 커밋)다.
+펜스가 같은 스코프 파일에서 두 값을 직접 읽는다 — 옮겨 적지 않는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/compute-test-scope-candidates.sh"
-"$QG/scripts/compute-test-scope-candidates.sh" --total
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+S="$RD/topic-scope.txt"; RS="$RD/range-scope.txt"; b=""; t=""
+if [ -f "$RS" ] && [ "$(sed -n 's/^status: //p' "$RS")" = ok ]; then
+  b=$(sed -n 's/^start: //p' "$RS"); t=$(sed -n 's/^end: //p' "$RS")
+elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
+  b=$(sed -n 's/^boundary: //p' "$S"); t=$(sed -n 's/^tree: //p' "$S")
+fi
+if [ -n "$t" ]; then
+  "$QG/scripts/compute-test-scope-candidates.sh" --topic "$b" "$t"; echo "candidates rc=$?"
+  "$QG/scripts/compute-test-scope-candidates.sh" --total --tree "$t"; echo "total rc=$?"
+else
+  "$QG/scripts/compute-test-scope-candidates.sh"; echo "candidates rc=$?"
+  "$QG/scripts/compute-test-scope-candidates.sh" --total; echo "total rc=$?"
+fi
 ```
 
-exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 이 iteration 의 판정 입력은 `--reason error-axis` 다.
+`candidates rc` · `total rc` 의 exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 이 iteration 의 판정 입력은 `--reason error-axis` 다.
 
 후보는 바닥이다. 오케스트레이터는 diff 와 의도 출처를 보고 영향 테스트를 **더할** 수만 있고 뺄 수는 없다. 낡았거나
 (이번 변경과 무관한 옛 동작을 검사) 골라 담은(변경을 피해 가는) 테스트로 판단한 것은 그대로 돌리되 커버리지로 세지
@@ -153,7 +168,8 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<스캔 트리>" "<memo>/assign-i<N>.tsv"
 ```
 
-스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 배정 파일의 행은
+스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 범위 스코프에서 이 대체는 어느 러너가 맡을지 정하는 데만 쓰인다 —
+`head_tree` 가 비면 D3 이 HEAD 축을 관측 없음으로 채우므로 지금 체크아웃(시작 커밋일 수 있다)의 테스트 결과는 판정에 들어가지 않는다. 배정 파일의 행은
 `<unit>\t<runner|unclaimed>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
 9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16).
 

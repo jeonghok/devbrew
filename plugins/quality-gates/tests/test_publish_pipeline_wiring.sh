@@ -90,6 +90,7 @@ DIRTY="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커�
 STATUS_FAIL="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
 HEAD_VLINE="게시 안 함 — 이해글에 판정 줄 모양이 있다"
 AGAIN="게시 안 함 — 이 실행은 이미 게시 단계를 돌았다"
+RANGE_LINE="게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)"
 # git status 만 실패시키는 shim — 나머지 git 호출은 진짜 git 으로 넘긴다.
 mkdir -p "$T/gshim"
 printf '#!/usr/bin/env bash\n[ "${1:-}" = "status" ] && { echo "fatal: shim" >&2; exit 128; }\nexec "%s" "$@"\n' "$(type -P git)" > "$T/gshim/git"
@@ -119,6 +120,30 @@ for sh in $SHELLS; do
   assert_eq "$(head -n 1 "$SINK_BODY_COPY")" "## 한 줄 요약" "spec §5($sh): 코멘트는 이해글로 시작한다"
   assert_eq "$(tail -n 1 "$R")" "posted: https://github.com/o/r/pull/7#issuecomment-9" "K-2($sh): sink 결과가 result.md ## 게시 에 남는다"
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "K-2($sh): ## 게시 절이 하나"
+
+  # ── 범위 모드(AC21) — 세션 폴더에 range-scope.txt 가 있으면 sink 를 부르지 않고 범위 공시 줄 ──
+  # 짝: 바로 위 정상 경우(범위 파일 없음)는 sink 를 정확히 한 번 부른다.
+  fresh_proj
+  printf 'mode: range\nstatus: ok\n' > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
+  SINK_LAST="posted: https://github.com/o/r/pull/7#issuecomment-9" run_fence "$sh" "finished"
+  assert_eq "$RC" "0" "범위($sh): rc 0"
+  assert_eq "$LAST" "$RANGE_LINE" "범위($sh): 범위 공시 줄"
+  assert_eq "$(cat "$SINK_LOG")" "" "범위($sh): 범위 파일이 있으면 sink 를 부르지 않는다"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "범위($sh): ## 게시 절이 하나"
+  assert_eq "$(tail -n 1 "$R")" "$RANGE_LINE" "범위($sh): 범위 공시 줄이 ## 게시 에 남는다"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$AGAIN" "범위($sh): 두 번째는 「이미 게시 단계를 돌았다」"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "범위($sh): 두 번 돌아도 ## 게시 는 하나"
+  fresh_proj
+  : > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
+  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 1"
+  assert_eq "$LAST" "$RANGE_LINE" "범위($sh): aborted 여도 범위 공시 줄(상태를 보지 않는다 — 파일이 있으면 거절)"
+  assert_eq "$(cat "$SINK_LOG")" "" "범위($sh): aborted + 범위도 sink 를 부르지 않는다"
+  fresh_proj
+  : > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
+  echo dirty >> "$T/proj/app.txt"
+  SINK_LAST="posted: x" run_fence "$sh" "<Final verdict 표의 결과 칸 값 그대로>"
+  assert_eq "$LAST" "$RANGE_LINE" "범위($sh): OUTCOME 형식 · 작업 트리 검사보다 범위 거절이 먼저"
 
   fresh_proj
   SINK_LAST="skipped: no-pr" run_fence "$sh" "accepted with findings iter 3"
