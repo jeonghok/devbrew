@@ -57,7 +57,7 @@ assert_eq "$(stage_of E1)" "설계 중" "설계문서 → 설계 중"
 assert_eq "$(reason_of E1)" "spec 있음" "승인 전 근거"
 
 # 4 — 승인 줄 → 근거가 승인됨
-L record --spec "$WT/plan/specs/e1-design.md" --approval --date 2026-10-18 --choice "① /compact 후 다음 세션 줄 (권장)" >/dev/null
+L record --spec "$WT/plan/specs/e1-design.md" --approval --date 2026-10-18 --choice "승인 — 계획 담당자에게" >/dev/null
 g "$WT" add -A; g "$WT" commit -qm approval
 assert_eq "$(reason_of E1)" "spec 승인됨(2026-10-18) · 계획 없음" "승인 줄 → 근거가 승인됨"
 
