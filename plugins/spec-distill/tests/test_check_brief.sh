@@ -2775,6 +2775,12 @@ out="$(irr_run irr_ok)"; rc=$?
 irr_build irr_vs16 "외부 선례 무관(@S2) — ${IRR_WHY}" "$(printf '\342\230\221\357\270\217')"
 out="$(irr_run irr_vs16)"; rc=$?
 [[ $rc -eq 0 ]] && ok "AC14: 이체 선택자를 붙인 ☑(U+2611 U+FE0F)도 사용자 선택이다 → 통과" || { no "AC14: ☑+U+FE0F 사례가 red"; printf '    %s\n' "$out"; }
+# 소스에 보이지 않는 이체 선택자를 그대로 심지 않는다 — check_brief.py 자신의 규칙(BODY_ITEM_RE 주석)대로 이스케이프로 쓴다.
+vs16_n="$(LC_ALL=C grep -c "$(printf '\357\270\217')" "$SCRIPT" || true)"
+assert_eq "$vs16_n" "0" "AC14: check_brief.py 에 이체 선택자(U+FE0F) 글자가 그대로 박힌 줄이 없다 (이스케이프로 쓴다)"
+grep -q 'words\[0\]\.replace("[\]ufe0f", "") == "☑"' "$SCRIPT" \
+  && ok "AC14(양의 짝): ☑ 판독이 이체 선택자를 이스케이프(\\ufe0f)로 뗀다" \
+  || no "AC14(양의 짝): ☑ 판독의 이체 선택자 떼기가 이스케이프 꼴이 아니다"
 
 irr_build irr_s1 "외부 선례 무관(@S1) — ${IRR_WHY}" ☑
 irr_build irr_ghost "외부 선례 무관(@S9) — ${IRR_WHY}" ☑
@@ -2796,14 +2802,22 @@ first="$(python3 -I -c 'import json,sys; f=json.load(sys.stdin)["failures"]; pri
 cp "$FXV" "$TMPD/irr_extra.md"; cp "${FXV%.md}.audit.md" "$TMPD/irr_extra.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: irr_extra.audit.md|' "$TMPD/irr_extra.md"; rm -f "$TMPD/irr_extra.md.bak"
 sed -i.bak 's|^payload:.*|payload: irr_extra.md|' "$TMPD/irr_extra.audit.md"; rm -f "$TMPD/irr_extra.audit.md.bak"
-python3 -I - "$TMPD/irr_extra.md" "$IRR_WHY" <<'PY' || no "irr_extra 변형이 적용되지 않았다"
+python3 -I - "$TMPD/irr_extra.md" "$IRR_WHY" "$TMPD/irr_extra.audit.md" <<'PY' || no "irr_extra 변형이 적용되지 않았다"
 import sys, pathlib
 p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
 old = "\n## 5. 기각 · Blind Spots"
 if old not in s:
     sys.exit("§5 머리를 찾지 못했다")
 p.write_text(s.replace(old, f"외부 선례 무관(@S1) — {sys.argv[2]}\n" + old, 1), encoding="utf-8")
+a = pathlib.Path(sys.argv[3]); t = a.read_text(encoding="utf-8")
+head = "## 7. 확산 원자료"
+if head not in t:
+    sys.exit("audit §7 머리를 찾지 못했다")
+a.write_text(t.replace(head, '- **S1** 🗣 최초 요청:\n  > "대시보드가 너무 느려요."\n\n' + head, 1), encoding="utf-8")
 PY
+grep -qF -- '- **S1** 🗣 최초 요청:' "$TMPD/irr_extra.audit.md" \
+  && ok "AC14 irr_extra 전제: audit §6 에 S1 이 🗣 로 있다 (아래 red 가 「없는 S」가 아니라 「있지만 🗣」를 잰다)" \
+  || no "AC14 irr_extra 전제: audit §6 에 S1 🗣 줄이 없다"
 out="$(irr_run irr_extra)"; rc=$?
 { [[ $rc -ne 0 ]] && grep -qF '사용자 선택(☑)이 아니다' <<<"$out"; } \
   && ok "AC14: 항목이 있는 §4 에 덧붙인 🗣 S 의 「외부 선례 무관」 → red(☑ 아님)" \

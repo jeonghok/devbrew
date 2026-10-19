@@ -815,7 +815,7 @@ def audit_chosen_anchors(audit_text: str) -> set:
     out = set()
     for _n, sid, rest in brief_body.anchor_lines(_audit_section6(audit_text))[0]:
         words = rest.split()
-        if words and words[0].replace("️", "") == "☑":
+        if words and words[0].replace("\ufe0f", "") == "☑":
             out.add(sid)
     return out
 
