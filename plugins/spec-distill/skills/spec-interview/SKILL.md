@@ -378,8 +378,8 @@ dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 한다 — 한 �
 산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim 으로 남기고, «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다.
 `<b>` 는 인터뷰 안 1부터 순증하는 묶음 번호다 — 한 메시지에서 함께 띄운 조사는 같은 `<b>` 이고, 하나만 띄운 조사와 본체 직접 조사 블록은 각자 한 묶음이다. `research_log` 항목의 `batch` 도 같은 값이다. 본체의 직접 조사(경로 (a)
 확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되(`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과
-웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때와
-floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
+웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때,
+한 메시지에서 띄우려는 묶음이 남은 호출 수(`research_limit` − 합)보다 클 때(띄우기 전에), floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md
