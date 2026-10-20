@@ -96,13 +96,16 @@ def causes_of(differential_text):
 
 
 def new_failures_of(differential_text):
-    """`new_failures:` 를 정확히 한 번 읽는다 — 값은 0 이상의 정수 글자뿐이다."""
+    """`new_failures:` 를 정확히 한 번 읽는다 — 값은 아홉 자리 이하의 0 이상 정수 글자뿐이다."""
     hits = re.findall(r"^new_failures: (.*)$", differential_text, re.M)
     if len(hits) != 1:
         fail4(f"new_failures 줄이 {len(hits)}회 (정확히 1회여야 함)")
-    if not re.fullmatch(r"[0-9]+", hits[0]):
-        fail4(f"new_failures 값이 정수가 아니다: {hits[0]!r}")
-    return int(hits[0])
+    if not re.fullmatch(r"[0-9]{1,9}", hits[0]):
+        fail4(f"new_failures 값이 아홉 자리 이하의 정수가 아니다: {hits[0][:40]!r}")
+    try:
+        return int(hits[0])
+    except ValueError:
+        fail4(f"new_failures 값을 정수로 읽지 못했다: {hits[0][:40]!r}")
 
 
 def differential_reasons(differential_text):

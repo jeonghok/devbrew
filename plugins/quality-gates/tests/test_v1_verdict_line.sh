@@ -63,11 +63,17 @@ diff_yaml "$T/neg.yaml"     true  ""                   "new_failures: -1"
 diff_yaml "$T/plus.yaml"    true  ""                   "new_failures: +1"
 diff_yaml "$T/under.yaml"   true  ""                   "new_failures: 1_0"
 diff_yaml "$T/space.yaml"   true  ""                   "new_failures:  1"
+diff_yaml "$T/dash.yaml"    true  ""                   "new_failures: 1-1"
+diff_yaml "$T/ten.yaml"     true  ""                   "new_failures: 1234567890"
+diff_yaml "$T/nine.yaml"    true  ""                   "new_failures: 000000012"
+diff_yaml "$T/huge.yaml"    true  ""                   "new_failures: $(printf '9%.0s' $(seq 1 5000))"
 diff_yaml "$T/unknown.yaml" false "no-such-cause"      "new_failures: 0"
 
 out="$(python3 "$V" --emit-args --differential "$T/regress.yaml")"; rc=$?
 assert_eq "$rc" "0" "--emit-args 회귀 픽스처 — exit 0"
 assert_eq "$out" "qg-verdict-args: --new-failures 1 --defect" "회귀가 있으면 새 실패 수와 --defect 한 줄"
+out="$(python3 "$V" --emit-args --differential "$T/nine.yaml")"
+assert_eq "$out" "qg-verdict-args: --new-failures 12 --defect" "아홉 자리 값은 받고 정수로 다시 쓴다(앞 0 제거)"
 out="$(python3 "$V" --emit-args --differential "$T/degrade.yaml")"
 assert_eq "$out" "qg-verdict-args: --new-failures 0 --reason silent-drop --reason granularity-smear" \
   "degrade 원인은 판정 어휘의 --reason 으로, REASONS 순서로"
@@ -91,10 +97,15 @@ for bad in "$L" "--prior $T/regress.yaml" "$L --e2e pass" "--review-blocked" "--
   assert_eq "$rc" "2" "--emit-args 는 $bad 와 함께 쓰지 않는다 — exit 2"
   assert_eq "$out" "" "exit 2 면 stdout 이 비어 있다 ($bad)"
 done
-for f in twice none word neg plus under space unknown; do
+for f in twice none word neg plus under space dash ten huge unknown; do
   out="$(python3 "$V" --emit-args --differential "$T/$f.yaml" 2>/dev/null)"; rc=$?
   assert_eq "$rc" "4" "--emit-args 차등 산출물 이상($f) — exit 4"
   assert_eq "$out" "" "exit 4 면 stdout 이 비어 있다 ($f)"
+done
+# 값 모양 검사가 문지기다 — 정수 변환의 예외 처리에 기대지 않는다.
+for f in word neg plus under space dash ten huge; do
+  err="$(python3 "$V" --emit-args --differential "$T/$f.yaml" 2>&1 >/dev/null)"
+  assert_contains "$err" "아홉 자리 이하의 정수가 아니다" "값 모양 검사가 막는다 ($f)"
 done
 out="$(python3 "$V" --emit-args --reason no-such-reason 2>/dev/null)"; rc=$?
 assert_eq "$rc" "4" "열거 밖 사유는 exit 4"
