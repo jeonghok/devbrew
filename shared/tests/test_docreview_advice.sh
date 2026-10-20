@@ -75,6 +75,7 @@ case_closed_log_inserted_above_count_asks
 case_closed_log_other_section_asks
 case_closed_log_old_ledger_asks
 case_closed_log_label_reserved
+case_closed_log_engine_line_deleted_asks
 # AC15 — 박제 행도 한 줄 문법.
 case_AC15_sink_row_one_line_escaped
 case_AC15_sink_row_function_one_line

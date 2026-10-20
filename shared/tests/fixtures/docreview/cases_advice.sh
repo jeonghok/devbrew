@@ -992,9 +992,32 @@ case_closed_log_other_section_asks() {
 case_closed_log_label_reserved() {   # closed-log 는 엔진의 면제 라벨이다 — 고칠 범위로 들어오면 위조로 거부한다
   local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
   seed_findings "$d" "[$F_FIX]"
-  assert_eq "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent 'closed-log' --state-dir "$d" | jgets 'd["reason"]')" "scope_label_forged" "AC11: 면제 라벨 closed-log 를 고칠 범위로 쓰면 위조로 거부한다"
   assert_eq "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" | jgets 'd.get("contract")')" "fix" "AC11(양의 짝): 보통 앵커 범위는 같은 검사를 지난다"
+  assert_eq "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent 'closed-log' --state-dir "$d" | jgets 'd["reason"]')" "scope_label_forged" "AC11: 면제 라벨 closed-log 를 고칠 범위로 쓰면 위조로 거부한다"
   rm -rf "$d"
+}
+case_closed_log_engine_line_deleted_asks() {   # 창 안의 엔진 줄(라운드 1 의 결정 줄)을 지우고 끝에 손 줄을 더하면 묻는다
+  local mode t d
+  for mode in keep delete; do
+    t="$(mktemp -t closedlog-XXXXXX)"; with_log "$FX/design-sample.md" "$t" "$LOG_L1"
+    d="$(mk_doc_state "$t" "$PROF_MC/design-doc.md")"; rm -f "$t"
+    br "$d" "$d/doc.md"
+    log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null           # 라운드 1 의 엔진 결정 줄
+    cl_finish "$d" "$d/fin.json"
+    py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md" >/dev/null
+    [ "$mode" = delete ] && doc_sub "$d/doc.md" "$HB_FULL
+" ""
+    doc_append "$d/doc.md" "$CL_H1"
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+    if [ "$mode" = keep ]; then
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1']" "AC11(양의 짝): 같은 라운드에 엔진이 쓴 결정 줄이 남아 있으면 끝의 손 줄은 기록으로 읽는다"
+      assert_eq "$(cl_frozen "$d/fin2.json")" "[]" "AC11(양의 짝): 그때 결정 기록은 묻지 않는다"
+    else
+      assert_eq "$(cl_frozen "$d/fin2.json")" "['#결정-기록']" "AC11: 닫힌 뒤 엔진이 쓴 결정 줄을 지우면 끝의 손 줄이 있어도 묻는다"
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11: 엔진 줄을 지운 라운드는 손 줄을 기록으로 읽지 않는다"
+    fi
+    rm -rf "$d"
+  done
 }
 case_closed_log_old_ledger_asks() {
   local d
