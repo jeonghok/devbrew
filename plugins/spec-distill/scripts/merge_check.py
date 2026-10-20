@@ -7,7 +7,7 @@
 같은 공유 스위트 잠금(`suite_lock.py` — 기계 상태 자원 폴더의 `suite-lock`)으로 막는다.
 
 명령줄:
-  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
+  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
 
 무엇을 돌리나: 기본 브랜치의 로드맵 frontmatter `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
 (정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. frontmatter 에 없는 키는 이 로드맵 기계 상태의 `## 레포 설정`
@@ -112,18 +112,37 @@ def drop_lock(d: Path) -> None:
 
 # ── 사본 ─────────────────────────────────────────────────────────────────────
 
+def resolve(root: Path, ref: str):
+    rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
+    return out if rc == 0 else None
+
+
+def branch_tip(root: Path, branch: str) -> str:
+    """대조할 브랜치 끝. 로컬과 origin 이 둘 다 있고 다르면 앞선 쪽을 쓰고 한 줄로 알린다 — 갈라졌으면 검사 불가."""
+    if branch.startswith("origin/") and resolve(root, "refs/remotes/" + branch):
+        return resolve(root, "refs/remotes/" + branch)
+    local = resolve(root, "refs/heads/" + branch)
+    remote = resolve(root, "refs/remotes/origin/" + branch)
+    if local is None or remote is None or local == remote:
+        if not (local or remote):
+            raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
+        return local or remote
+    if git(root, "merge-base", "--is-ancestor", local, remote)[0] == 0:
+        print("[spec-distill] 로컬 브랜치 %s 가 origin 보다 뒤라 origin/%s(%s) 를 썼다" % (branch, branch, remote[:8]))
+        return remote
+    if git(root, "merge-base", "--is-ancestor", remote, local)[0] == 0:
+        print("[spec-distill] origin/%s 가 로컬보다 뒤라(push 하지 않은 커밋) 로컬 %s(%s) 를 썼다"
+              % (branch, branch, local[:8]))
+        return local
+    raise Stop(3, "로컬 브랜치 %s(%s) 와 origin/%s(%s) 가 갈라졌다 — 한쪽으로 맞춘 뒤 다시 돈다"
+               % (branch, local[:8], branch, remote[:8]))
+
+
 def make_copies(root: Path, work: Path, branch: str):
     rc, base_sha, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
     if rc:
         raise Stop(3, NO_DEFAULT)
-    tip = None
-    for ref in ("refs/heads/" + branch, "refs/remotes/origin/" + branch):
-        rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
-        if rc == 0:
-            tip = out
-            break
-    if tip is None:
-        raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
+    tip = branch_tip(root, branch)
     base, merged = work / "base", work / "merged"
     for d in (base, merged):
         rc, _o, err = git(root, "worktree", "add", "--detach", str(d), base_sha)

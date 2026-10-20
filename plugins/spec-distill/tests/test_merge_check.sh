@@ -223,4 +223,36 @@ for r in ("shell", "pytest", "unittest", "jest"):
     print(r, sorted(m.names_in(t, shapes=m.RUNNER_SHAPES.get(r, ()))[0]))' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$SHAPED" "$(printf "%s\n" "shell ['a', 'b', 'c']" "pytest ['x.py::d']" "unittest ['b', 'diag']" "jest []")" "names_in: 러너별 모양만 쓴다"
 
+# 11 — 브랜치 끝: 로컬과 origin 이 다르면 앞선 쪽 · 갈라지면 rc 3. 낡은 로컬은 origin 이 이미 푼 충돌을 다시 낸다
+mkrepo tip; put a.txt one; push_base
+g checkout -q -b feature/tip; put a.txt two; g add -A; g commit -qm t1; g checkout -q trunk
+put a.txt three; g add -A; g commit -qm main3; g push -q origin trunk
+g checkout -q feature/tip; g merge -q trunk >/dev/null 2>&1; put a.txt merged; g add -A; g commit -qm t2
+g push -q origin feature/tip; g checkout -q trunk
+STALE="$(g rev-parse feature/tip~1)"; ORIG="$(g rev-parse feature/tip)"
+g update-ref refs/heads/feature/tip "$STALE"
+out="$(mc --branch feature/tip)"; rc=$?
+assert_not_contains "$out" "합칠 수 없다" "낡은 로컬: 낡은 커밋으로 대조하지 않는다"
+assert_contains "$out" "로컬 브랜치 feature/tip 가 origin 보다 뒤라 origin/feature/tip(${ORIG:0:8}) 를 썼다" "낡은 로컬: origin 끝을 쓰고 알린다"
+assert_contains "$out" "스위트 대조 — feature/tip(${ORIG:0:8})" "낡은 로컬: 대조한 끝이 origin 끝이다"
+g checkout -q feature/tip; g reset -q --hard "$ORIG"; put b.txt b; g add -A; g commit -qm t3; g checkout -q trunk
+AHEAD="$(g rev-parse feature/tip)"
+out="$(mc --branch feature/tip)"; rc=$?
+assert_contains "$out" "origin/feature/tip 가 로컬보다 뒤라(push 하지 않은 커밋) 로컬 feature/tip(${AHEAD:0:8}) 를 썼다" "앞선 로컬: 로컬 끝을 쓰고 알린다"
+assert_contains "$out" "스위트 대조 — feature/tip(${AHEAD:0:8})" "앞선 로컬: 대조한 끝이 로컬 끝이다"
+g checkout -q feature/tip; g reset -q --hard "$STALE"; put c.txt c; g add -A; g commit -qm t4; g checkout -q trunk
+out="$(mc --branch feature/tip)"; rc=$?
+assert_eq "$rc" "3" "갈라짐 → rc 3"
+assert_contains "$out" "로컬 브랜치 feature/tip($(g rev-parse --short=8 feature/tip)) 와 origin/feature/tip(${ORIG:0:8}) 가 갈라졌다" "갈라짐: 두 끝을 보인다"
+g branch -q -D feature/tip
+out="$(mc --branch feature/tip)"; rc=$?
+assert_contains "$out" "스위트 대조 — feature/tip(${ORIG:0:8})" "origin 만: origin 끝을 쓴다"
+assert_not_contains "$out" "를 썼다" "origin 만: 알릴 것이 없다"
+out="$(mc --branch origin/feature/tip)"; rc=$?
+assert_contains "$out" "스위트 대조 — origin/feature/tip(${ORIG:0:8})" "origin/<브랜치> 를 직접 주면 그 끝을 쓴다"
+g checkout -q -b feature/solo; put d.txt d; g add -A; g commit -qm solo; g checkout -q trunk
+out="$(mc --branch feature/solo)"; rc=$?
+assert_contains "$out" "스위트 대조 — feature/solo($(g rev-parse --short=8 feature/solo))" "로컬만: 로컬 끝을 쓴다"
+assert_not_contains "$out" "를 썼다" "로컬만: 알릴 것이 없다"
+
 finish
