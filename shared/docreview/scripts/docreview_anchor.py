@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
-    DOC_ANCHOR, LedgerCorrupt, ProfileError, anchors_matching, diff_snapshots, fail, load_profile, load_state, save_state,
-    scope_label_problem, scope_problem, slugify,
+    DOC_ANCHOR, LedgerCorrupt, ProfileError, anchors_matching, diff_snapshots, fail, lineage_anchors, load_profile, load_state,
+    save_state, scope_label_problem, scope_problem, slugify,
 )
 
 HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
@@ -108,15 +108,20 @@ def snapshot_of(doc_path) -> dict:
 
 
 # ── 보호 부류 ────────────────────────────────────────────────────────────
-def classify_anchor(anchor: str, sections, prof: dict) -> dict:
+def classify_anchor(anchor: str, sections, prof: dict, lineage=None) -> dict:
+    """앵커의 보호 · 불변 · fix 허용. `lineage` 는 `{"protected": set, "immutable": set}`
+    (`docreview_state.lineage_anchors`)이고 주어지면 지금 스냅숏 판정과 합친다 — 원장이 있는 자리는 늘 넘긴다."""
+    lin = lineage or {}
+    was_protected = anchor in (lin.get("protected") or ())
+    was_immutable = anchor in (lin.get("immutable") or ())
     found = any(s["anchor"] == anchor for s in sections)
     if not found:
-        return {"anchor": anchor, "found": False, "protected": False, "immutable": False,
+        return {"anchor": anchor, "found": False, "protected": was_protected, "immutable": was_immutable,
                 "fix_allowed": "*" in prof["fix_anchors"]}
     return {
         "anchor": anchor, "found": True,
-        "protected": anchor in anchors_matching(prof["protected_headings"], sections),
-        "immutable": anchor in anchors_matching(prof["immutable"], sections),
+        "protected": was_protected or anchor in anchors_matching(prof["protected_headings"], sections),
+        "immutable": was_immutable or anchor in anchors_matching(prof["immutable"], sections),
         "fix_allowed": anchor in anchors_matching(prof["fix_anchors"], sections),
     }
 
@@ -223,7 +228,9 @@ def cmd_check_intent(a) -> int:
         return _reject(why_label, scope=intent)
     is_insert = intent.startswith("insert-after:")
     target = intent.split(":", 1)[1] if is_insert else intent
-    cls = classify_anchor(target, sections, prof)
+    lineage = {"protected": lineage_anchors(st, prof, "protected_headings", n),
+               "immutable": lineage_anchors(st, prof, "immutable", n)}
+    cls = classify_anchor(target, sections, prof, lineage)
     if a.decision_id:
         p = st["permits"].get(a.decision_id)
         if not p:
@@ -234,7 +241,7 @@ def cmd_check_intent(a) -> int:
             return _reject("permit_consumed")
         if intent not in p["apply_anchors"]:
             return _reject("scope_outside_permit", apply_anchors=p["apply_anchors"])
-        why = scope_problem(intent, sections, prof)   # 기록 검증 하나 — 불변 · 결정 기록 · 미룸 절과 없는 앵커는 permit 으로도 못 넘는다
+        why = scope_problem(intent, sections, prof, lineage["immutable"])   # 기록 검증 하나 — 불변 · 결정 기록 · 미룸 절과 없는 앵커는 permit 으로도 못 넘는다
         if why:
             return _reject("anchor_immutable" if why == "insert_after_immutable" else why)
         print(json.dumps({"ok": True, "contract": "permit", "scope": intent, "decision_id": a.decision_id},
@@ -261,7 +268,7 @@ def cmd_check_intent(a) -> int:
     scope = f.get("edit_scope") or f["anchor"]
     if intent != scope:
         return escalate("scope_outside_edit_scope")
-    why = scope_problem(intent, sections, prof)   # 라벨 · 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸) — decide · declare-related 와 같은 판정
+    why = scope_problem(intent, sections, prof, lineage["immutable"])   # 라벨 · 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸) — decide · declare-related 와 같은 판정
     if why:
         return escalate(why)
     if is_insert:

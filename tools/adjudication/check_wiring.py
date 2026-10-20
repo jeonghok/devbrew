@@ -190,21 +190,21 @@ EXEMPT = {
     # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
     # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
     # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 850,
+    ("plugins/quality-gates/scripts/docreview_route.py", 851,
      "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 855,
+    ("plugins/quality-gates/scripts/docreview_route.py", 856,
      "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 866,
+    ("plugins/quality-gates/scripts/docreview_route.py", 867,
      "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 896,
+    ("plugins/quality-gates/scripts/docreview_route.py", 897,
      "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 907,
+    ("plugins/quality-gates/scripts/docreview_route.py", 908,
      "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
         _DR_RERAISE_ALREADY_DECIDED,
     # 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래 위에
     # 끼어들어 이 자리를 밀었다. 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 961,
+    ("plugins/quality-gates/scripts/docreview_route.py", 962,
      "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
         _DR_LINEAGE_NOT_RERAISE,
 }

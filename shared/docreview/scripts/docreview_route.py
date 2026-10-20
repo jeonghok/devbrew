@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _SLUG_STRIP, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, load_profile,
-    load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _SLUG_STRIP, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, lineage_anchors,
+    load_profile, load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
     ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
@@ -728,8 +728,8 @@ def _contradiction_binding(st, entry_by_id, cid, it, cls, fenced) -> str:
     return "bound"
 
 
-def _classify_items(items, st, prof, sections, n, L):
-    """프로필 허용 처분 강제 · 앵커 분류(보호·불변) · 승격.
+def _classify_items(items, st, prof, sections, n, L, lineage):
+    """프로필 허용 처분 강제 · 앵커 분류(보호·불변 — `lineage` 는 `cmd_finalize` 가 한 번 구한 계보) · 승격.
 
     흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, contra_notes).
     `contra_notes` 는 `contradicts` 를 비운 사유별 공시 재료다: unknown_decisions(기록에 없는 id) · unbound_decisions(있으나
@@ -777,7 +777,7 @@ def _classify_items(items, st, prof, sections, n, L):
             L.coerced("disposition", d, new)
             it["disposition"] = new
             d = new
-        cls = classify_anchor(it["anchor"], sections, prof)
+        cls = classify_anchor(it["anchor"], sections, prof, lineage)
         cid = it.get("contradicts")
         if cid:
             verdict = _contradiction_binding(st, entry_by_id, cid, it, cls, fenced)
@@ -810,8 +810,9 @@ def _classify_items(items, st, prof, sections, n, L):
     return final, rejected_items, notes
 
 
-def _auto_decides(a, diff, st, prof, sections, n, L):
-    """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre).
+def _auto_decides(a, diff, st, prof, sections, n, L, lineage):
+    """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre). 사후 항목의 층 · 불변은
+    `lineage`(보호 · 불변 계보)를 합쳐 잰다.
 
     `diff` 는 `cmd_finalize` 가 원장의 라운드별 스냅숏으로 계산한 얼림 diff(`docreview_state.round_diff`)다 — 라운드
     1 에는 직전 스냅숏이 없어 None 이고 사후 항목이 없다. `a` 는 인자 묶음 그대로다.
@@ -827,7 +828,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
     extra = []
     if diff is not None:
         for c in diff.get("changed", []):
-            cls = classify_anchor(c["anchor"], sections, prof)
+            cls = classify_anchor(c["anchor"], sections, prof, lineage)
             extra.append({"f": None, "layer": 1 if cls["protected"] else 2, "category": "frozen_change",
                           "anchor": c["anchor"], "disposition": "decide",
                           "summary": "finding 없이 바뀜: %s (%s)" % (c.get("title") or c["anchor"], c["kind"]),
@@ -1165,11 +1166,13 @@ def cmd_finalize(a) -> int:
     verdicts, added = _read_recritic(a, degrade, L)
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
-    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L)
+    lineage = {"protected": lineage_anchors(st, prof, "protected_headings", n),
+               "immutable": lineage_anchors(st, prof, "immutable", n)}
+    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L, lineage)
     for k, v in contra_notes.items():
         if v:
             degrade[k] = v
-    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
+    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L, lineage)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
     # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 열린 계보를 잇지 않는 fix · `blocks` 의 적용 경로)
