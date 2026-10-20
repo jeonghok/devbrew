@@ -57,7 +57,8 @@ secs = [s for s in re.split(r"(?m)^(?=## \[)", t) if s.startswith("## [")]
 heads = [re.match(r"## \[(\d+)\.(\d+)\.(\d+)\]", s) for s in secs]
 old = "/spec-distill:spec-" + "interview"
 row = re.compile(r"(?m)^\|\s*`" + re.escape(old) + r"`\s*\|\s*`/spec-distill:pm-interview`\s*\|")
-hit = [i for i, s in enumerate(secs) if "### Removed" in s and row.search(s.split("### Removed", 1)[1])]
+blk_re = re.compile(r"(?ms)^### Removed[^\n]*\n(.*?)(?=^### |\Z)")
+hit = [i for i, s in enumerate(secs) if (b := blk_re.search(s)) and row.search(b.group(1))]
 assert len(hit) == 1, hit
 m, prev = heads[hit[0]], heads[hit[0] + 1]
 assert (m.group(2), m.group(3)) == ("0", "0"), m.group(0)
