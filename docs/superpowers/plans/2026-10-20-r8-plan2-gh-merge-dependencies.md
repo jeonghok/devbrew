@@ -1,5 +1,7 @@
 # R8 계획 2 — gh 필수 · 머지 판정 · 의존 선언 · 판 확인 · project-init 훅 Implementation Plan
 
+**실행 방식:** Subagent-driven — 사용자 선택 「Subagent-driven (권장)」(2026-10-20)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **시작 조건 — 구현은 R10 · R12 · R13 이 모두 기본 브랜치에 머지되고(사용자 결정 U10) 이 에픽의 계획 1 이 머지된 뒤(또는 계획 1 브랜치 끝 위에 쌓아) 시작한다.** 구현 담당은 먼저 `origin/<기본 브랜치>` 를 merge 하고 이 계획이 인용한 파일 · 함수 · 절을 하나도 빠짐없이 새로 읽어 확인한다(Task 0). 이 계획은 60e21baa(설계 승인) 시점의 트리로 썼다 — R10 계획 3 이 `skills/spec-interview` 를 `skills/pm-interview` 로 옮기고, R12 가 `shared/docreview` · request-framing · spec-review · 재분해 · 지휘 절차(`references/conducting.md`) · project-init 전체를, R13 이 pm-interview · request-framing · spec-review · `check_brief` 를 고친다. 그 파일들은 줄 번호가 아니라 절 · 함수 이름으로 가리킨다.
@@ -40,6 +42,7 @@
 9. **plugin-audit · project-init 의 의존 행은 Python · Claude Code 둘**(설계 §5 표대로 git 확인은 spec-distill · qg 진입만). quality-gates 행은 Python · git · gh · Claude Code. spec-distill 행은 Python · git · gh · superpowers · quality-gates · Claude Code. codex CLI 는 이 표에 넣지 않고 README 의 지금 줄을 둔다(설계 표 밖).
 10. **merge_check 는 gh 를 부르지 않는다** — 설계 §5 의 「gh 를 쓰는 진입」 목록에 있지만 스위트 대조에는 gh 호출이 없어 gh 확인을 더하지 않는다(지휘자 진입이 이미 gh 를 확인한다).
 11. **project-init 훅의 「새 브랜치」**: `refs/heads/<b>` reflog 의 마지막 줄이 만들기(`branch: Created from` · `checkout: …` 생성) 또는 이름 바꾸기(`Branch: renamed … to refs/heads/<b>`)이고 그 시각이 지금부터 60초 안인 브랜치. reflog 파일은 공용 git 디렉토리의 `logs/refs/heads/` 를 직접 읽는다(브랜치마다 git 을 띄우지 않는다). 상태 파일을 두지 않는다. Task 10 Step 1 의 실측이 이 규칙을 확정하거나 고친다.
+12. **Python 바닥은 경로마다 실측 판이다(설계 U12 「경로마다 실측 판 (권장)」)** — skill 진입의 `python` 행은 잰 `python3` 판(지금 3.9.6), 훅 바닥은 새 `python-hook` 행(훅이 `devbrew-python.sh` 로 실제로 쓰는 해석기 판, 지금 3.12)이다. 설계 §5 표의 옛 글자 「훅 바닥 값도 개발 당시 판에 맞춘다」를 한 행으로 읽어 훅을 3.9 로 내리지 않는다. 설계와 다른 점 9 의 행 목록에 project-init 의 `python-hook` 이 더해진다(Task 8).
 
 ## Review Focus
 
@@ -245,7 +248,7 @@ def test_local_and_remote_tips_differ_both_shown(self): ...
 ### Task 8: 진입 확인 · 훅의 Python 바닥 (AC19 · AC23a 의 진입)
 
 **Files:**
-- Modify: `shared/deps/check_deps.py` (`entry`), 모든 skill 의 진입 단계(spec-distill 여섯 · qg 둘 · project-init · plugin-audit), `shared/python/devbrew-python.sh` 와 그 사본들(`FLOOR_MAJOR` · `FLOOR_MINOR` · 머리 주석의 도출 규칙 문장), `shared/tests/test_python_floor.sh`, 루트 `README.md` 의 Python 절
+- Modify: `shared/deps/check_deps.py` (`entry`), 모든 skill 의 진입 단계(spec-distill 여섯 · qg 둘 · project-init · plugin-audit), `shared/deps/check_deps.py` (`measure` 의 `python-hook` 행), `plugins/project-init/dependencies.md`(`python-hook` 행), `shared/python/devbrew-python.sh` 와 그 사본들(머리 주석의 도출 규칙 문장만 — `FLOOR_MAJOR` · `FLOOR_MINOR` 값은 그대로 3.12), `shared/tests/test_python_floor.sh`(축 하나 더), 루트 `README.md` 의 Python 절
 - Test: `shared/tests/test_check_deps.sh`, `shared/tests/test_entry_dep_needs.sh` (새)
 
 **Interfaces:**
@@ -258,13 +261,15 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 ```
 
   진입별 `--need`: epic-conductor `python,git,gh` · request-framing · reviewing-brief · roadmap-status · pm-interview · spec-review `python,git` · quality-pipeline `python,git,gh` · artifact-critique `python,git` · project-init · plugin-audit `python`. 표: rc 3 이면 그 줄을 보이고 멈춘다.
-- 훅 바닥: `FLOOR_MAJOR.FLOOR_MINOR` = 훅을 가진 플러그인 `dependencies.md` 의 python 행 앞 두 숫자. 머리 주석의 도출 규칙은 「개발 당시 판(`dependencies.md` 의 python 행) — 측정 명령이 바꾼다」로.
+- 바닥은 경로마다 따로다(U12). skill 진입의 `python` 행 = 측정 때 `python3` 의 판(2026-10-20 실측 `/usr/bin/python3` 3.9.6) — `entry --need python` 이 이것과 비교한다. 훅의 바닥은 `python` 행이 아니라 `python-hook` 행이다.
+- `python-hook` 행: 훅이 `devbrew-python.sh` 를 부르는 플러그인(60e21baa 기준 project-init 하나 — `hooks.json` 에서 센다)의 `dependencies.md` 에만 둔다. `measure` 는 그 플러그인의 `scripts/devbrew-python.sh` 를 `--event measure --plugin <p> --hook measure <임시 탐침.py>` 로 돌려 해석기가 실제로 고른 해석기의 `sys.version_info` 를 적는다(2026-10-20 실측 `~/.local/bin/python3.12` 3.12.13). 강도 `멈춤` · 없을 때 「훅 해석기가 알린다」 — 확인은 `entry` 가 아니라 해석기 자신이 한다(`--need` 목록에 넣지 않는다). 측정이 해석기를 거치므로 값이 지금 바닥 아래로 내려가지 않는다.
+- 훅 바닥: `FLOOR_MAJOR.FLOOR_MINOR` 는 그대로 3.12 — `python-hook` 행 앞 두 숫자와 같아야 한다. 머리 주석의 도출 규칙 문장만 「개발 당시 훅이 실제로 쓴 해석기 판(`dependencies.md` 의 `python-hook` 행) — 측정 명령이 잰다」로 바꾼다. 훅 바닥을 skill 의 `python3` 판(3.9)으로 내리지 않는다.
 
-- [ ] **Step 1: 실패하는 테스트.** `test_entry_dep_needs.sh`: 진입마다 `--need` 목록이 위 표와 같다(gh 는 epic-conductor · quality-pipeline 에만 — AC23a 의 진입 쪽, 양 · 음 짝) · 모든 skill 진입에 의존 확인 펜스가 있다. `test_check_deps.sh`: 가짜 `git`(판 `2.0.0`) → rc 3 · 「필요 … 이상」 · 판 못 뽑는 가짜 → rc 3 · gh 없음은 `--need` 에 gh 가 있을 때만 rc 3. `test_python_floor.sh`: 바닥 == 의존 표 python 행(축 하나 더) — 지금 3.12 픽스처(`python3.9` 음성 · `python3.99` 양성)를 새 바닥 기준으로 다시 뽑는다.
+- [ ] **Step 1: 실패하는 테스트.** `test_entry_dep_needs.sh`: 진입마다 `--need` 목록이 위 표와 같다(gh 는 epic-conductor · quality-pipeline 에만 — AC23a 의 진입 쪽, 양 · 음 짝) · 모든 skill 진입에 의존 확인 펜스가 있다. `test_check_deps.sh`: 가짜 `git`(판 `2.0.0`) → rc 3 · 「필요 … 이상」 · 판 못 뽑는 가짜 → rc 3 · gh 없음은 `--need` 에 gh 가 있을 때만 rc 3. `test_check_deps.sh`(이어서): 가짜 `devbrew-python.sh`(탐침을 3.12.13 판 해석기로 exec)를 둔 임시 플러그인 루트에서 `measure` 가 `python-hook` 행을 `3.12.13` 으로, `python` 행을 측정한 `python3` 판으로 따로 쓴다(두 행이 같은 값을 쓰면 실패 — 양 · 음 짝) · `entry --need python` 은 `python-hook` 행을 보지 않는다. `test_python_floor.sh`: 축 하나 더 — 해석기 `FLOOR_MAJOR.FLOOR_MINOR` == `python-hook` 행을 가진 모든 `dependencies.md` 의 그 행 앞 두 숫자(지금 3.12). 「3.9 를 건너뛴다」 음성(`python3.9`)과 `python3.99` 양성 픽스처는 고치지 않는다.
 - [ ] **Step 2: 실패를 본다.** Run: `bash shared/tests/test_entry_dep_needs.sh; bash shared/tests/test_check_deps.sh; bash shared/tests/test_python_floor.sh` — Expected: `✗`.
 - [ ] **Step 3: 구현 · 사본 동기화.** `devbrew-python.sh` 사본은 copy-of 계약(`shared/tests/test_copy_of_contract.sh`)대로 같이 고친다.
 - [ ] **Step 4: 통과를 본다.** 같은 명령 + `bash shared/tests/test_copy_of_contract.sh && bash shared/tests/test_invocation_surface.sh` — Expected: `✗` 0.
-- [ ] **Step 5: 커밋** — `feat(devbrew): 진입마다 쓰는 의존의 판을 확인하고 훅 바닥을 개발 당시 판에 맞춘다`
+- [ ] **Step 5: 커밋** — `feat(devbrew): 진입마다 쓰는 의존의 판을 확인하고 훅 바닥을 훅 해석기의 실측 판으로 기록한다`
 
 ---
 

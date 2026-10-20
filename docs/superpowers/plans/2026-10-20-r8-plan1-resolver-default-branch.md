@@ -1,5 +1,7 @@
 # R8 계획 1 — 값 해결자 · 폴더 · 기본 브랜치 · 상태 폴더 · 작업공간 불변 Implementation Plan
 
+**실행 방식:** Subagent-driven — 사용자 선택 「Subagent-driven (권장)」(2026-10-20)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **시작 조건 — 구현은 R10 · R12 · R13 이 모두 기본 브랜치에 머지된 뒤 시작한다(사용자 결정 U10).** 구현 담당은 먼저 `origin/<기본 브랜치>` 를 이 브랜치에 merge 하고, 이 계획이 인용한 파일 · 함수 · 절을 하나도 빠짐없이 새로 읽어 확인한다(Task 0). 이 계획은 60e21baa(설계 승인) 시점의 트리로 썼다 — 그 뒤 R10 계획 3 이 `skills/spec-interview` 를 `skills/pm-interview` 로 옮기고, R12 가 `shared/docreview` · request-framing · spec-review · 재분해 · 지휘 절차 · project-init 을, R13 이 pm-interview · request-framing · spec-review · `check_brief` 를 고친다. 그래서 그 파일들은 줄 번호가 아니라 절 · 함수 이름으로 가리킨다.
