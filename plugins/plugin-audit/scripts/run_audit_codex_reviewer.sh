@@ -128,6 +128,7 @@ EXIT_CODE=0
 codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    -c 'project_doc_max_bytes=0' \
     "${WEB_ARGS[@]}" \
     --json \
     < "$PROMPT_FILE" \
