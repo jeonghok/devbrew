@@ -19,7 +19,7 @@ SELF_FILES = frozenset({"shared/entry/check_invocation_surface.py", "shared/test
 
 ENTRY_SKILLS = (
     ("spec-distill", "request-framing"),
-    ("spec-distill", "spec-interview"),
+    ("spec-distill", "pm-interview"),
     ("spec-distill", "spec-review"),
     ("spec-distill", "roadmap-status"),
     ("spec-distill", "epic-conductor"),
@@ -67,7 +67,8 @@ _TRAIL = r"(?=$|[\s`'\"@)」])"
 FULL_CALL_RE = re.compile(_LEAD + r"/([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)" + _TRAIL)
 OLD_NAME_RE = re.compile(
     r"conducting-interview|framing-requests|reviewing-spec|auditing-plugins|critiquing-artifacts"
-    r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md")
+    r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md"
+    r"|spec-interview|spec-distill:interview(?![-A-Za-z0-9_])")
 # 옛 호출은 뒤에 이름 글자 · 경로 글자가 이어지지 않으면 잡는다(조사 · 구두점이 붙은 꼴 포함) — _TRAIL 은 G 축과 함께 쓰므로 넓히지 않는다
 _OLD_TRAIL = r"(?![-A-Za-z0-9_/])"
 OLD_CALL_RE = re.compile(_LEAD + r"/(?:interview|qg)" + _OLD_TRAIL)
