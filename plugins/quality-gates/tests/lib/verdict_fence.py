@@ -4,7 +4,7 @@
 사용: verdict_fence.py <SKILL.md> <표지> <출력 .sh> [이름=값 ...]
 
 - 표지: `<!-- <표지>:begin -->` 와 `<!-- <표지>:end -->` 사이의 첫 ```bash 펜스를 뽑는다.
-- 이름이 `QG_ARGS_` 로 시작하면 그 따옴표 heredoc(`<<'QG_ARGS_R'` …)의 몸을 값으로 바꾼다.
+- 이름이 `QG_ARGS_` 로 시작하면 그 heredoc(`<<'QG_ARGS_R'` …)의 몸을 값으로 바꾼다.
   값 안의 줄바꿈은 여러 줄이 된다. 빈 값은 빈 줄 하나다.
 - 그 밖의 이름은 글자 그대로 바꿀 자리표시다(예: `<session-id>=sid1` · `<N>=2`).
 
@@ -37,8 +37,9 @@ def extract(text, marker):
 
 
 def fill_heredoc(body, name, value):
-    opener = f"<<'{name}'"
-    starts = [i for i, l in enumerate(body) if l.rstrip().endswith(opener)]
+    # 여는 줄의 따옴표 꼴은 가리지 않는다 — 따옴표가 빠진 펜스도 채워 돌려야 위조 줄 케이스가 그 결함을 잰다.
+    openers = (f"<<'{name}'", f'<<"{name}"', f"<<{name}")
+    starts = [i for i, l in enumerate(body) if l.rstrip().endswith(openers)]
     if len(starts) != 1:
         die(f"heredoc {name} 가 {len(starts)}번 있다(정확히 한 번이어야 한다)")
     i = starts[0]
