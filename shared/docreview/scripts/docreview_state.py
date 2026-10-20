@@ -459,10 +459,44 @@ def _log_change_ok(st, heading, new_lh, base, base_round, r, group_new) -> bool:
     return _engine_lines_kept(window, group_new)
 
 
-def _log_verdicts(st, prof, r) -> dict:
-    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 넷이다 —
+def _closed_change_ok(st, heading, base, new_lh, r, group_new):
+    """리뷰가 닫힌 뒤 손으로 더한 결정 줄 — 라운드 r 의 diff 에서 기록으로 읽을 손 줄 해시 목록, 아니면 None.
+    창 [r−1, r) 에 계수 줄(`kind: count` 엔진 줄)이 있어야 하고(스냅숏 r−1 뒤에 리뷰가 닫혔다), 새 줄 = BASE + TAIL 이다.
+    TAIL 의 마지막 계수 줄까지는 엔진 줄만 오고, 그 아래에서 엔진 줄이 아닌 보이는 줄이 손 줄이다. 창 안의 엔진 줄은
+    하나도 빠지지 않아야 한다. 계수 줄 위에 끼운 줄 · 옛 줄의 변경 · 계수 줄이 없는 절 · `kind` 없는 옛 원장은 None."""
+    if not isinstance(base, list) or not isinstance(new_lh, list):
+        return None
+    if len(new_lh) < len(base) or new_lh[:len(base)] != base:
+        return None
+    lines = [e for e in _engine_lines(st, heading) if r - 1 <= e["round"] < r]
+    counts = {e["hash"] for e in lines if e.get("kind") == "count"}
+    tail = new_lh[len(base):]
+    last = max((i for i, h in enumerate(tail) if h in counts), default=None)
+    if last is None:
+        return None
+    window = collections.Counter(e["hash"] for e in lines)
+    left = collections.Counter(window)
+    hand = []
+    for i, h in enumerate(tail):
+        if h == _BLANK_LINE_HASH:
+            continue
+        if left[h] > 0:
+            left[h] -= 1
+        elif i > last:
+            hand.append(h)
+        else:
+            return None
+    if not hand or not _engine_lines_kept(window, group_new):
+        return None
+    return hand
+
+
+def _log_verdicts(st, prof, r, closed_lines=None) -> dict:
+    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 다섯이다 —
     append(옛 줄 + 엔진 줄) · revert(원복 permit 의 `expect_line_hashes` + 엔진 줄) · creation(이 원장의 앞 스냅숏 어디에도
-    없던 절, 줄 전부가 엔진 줄) · legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다."""
+    없던 절, 줄 전부가 엔진 줄) · closed(리뷰가 닫힌 뒤 마지막 계수 줄 아래에 더한 손 줄 — `_closed_change_ok`) ·
+    legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다. `closed_lines` 에 dict 를
+    주면 closed 앵커마다 (헤딩, 손 줄 해시 목록)을 채운다."""
     snaps = st.get("snapshots") or {}
     old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
     new_secs = (snaps.get(str(r)) or {}).get("sections") or []
@@ -483,6 +517,14 @@ def _log_verdicts(st, prof, r) -> dict:
         if k == r and kind == "revert":
             reverts.append((anchors, p))
     out = {}
+
+    def closed(a, h, base, n, group_new):
+        hand = _closed_change_ok(st, h, base, n.get("line_hashes"), r, group_new)
+        if hand is not None:
+            out[a] = ("closed-log", "closed")
+            if closed_lines is not None:
+                closed_lines[a] = (h, hand)
+
     for h in sorted(set(g_old) | set(g_new)):
         group_new = []
         for a in g_new.get(h, ()):
@@ -514,17 +556,23 @@ def _log_verdicts(st, prof, r) -> dict:
             elif n is None:
                 continue
             elif o is None:
-                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
+                if a in earlier:
+                    continue
+                if _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
                     out[a] = (a, "creation")
+                else:
+                    closed(a, h, [], n, group_new)
             elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, r, group_new):
                 out[a] = ("append-only", "append")
+            else:
+                closed(a, h, o.get("line_hashes"), n, group_new)
     return out
 
 
 # ── 범위(scope) 검증 — 기록할 때 한 함수(`scope_problem`), 쓸 때 울타리 ─────────────────────────
-# `related:<D>=…` · `append-only` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope · permit ·
-# fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
-RESERVED_SCOPES = ("append-only",)   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
+# `related:<D>=…` · `append-only` · `closed-log` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope ·
+# permit · fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
+RESERVED_SCOPES = ("append-only", "closed-log")   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
 
 
 def scope_label_problem(scope):
@@ -612,6 +660,8 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=No
                 if item["scope"] == "append-only":
                     item["kind"] = "appended"
                     item["evidence"] = "섹션 '%s' (%s) 끝에 엔진이 쓴 줄만 더해짐" % (title, anchor)
+                elif item["scope"] == "closed-log":
+                    item["evidence"] = "섹션 '%s' (%s) 마지막 계수 줄 아래에 리뷰가 닫힌 뒤 손으로 더한 줄 — 기록으로 읽음" % (title, anchor)
                 exempt_applied.append(item)
             else:
                 changed.append(item)
@@ -717,7 +767,7 @@ def exempt_scopes(st, prof, r) -> list:
         if kind == "apply":
             rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
             out.extend("related:%s=%s" % (did, x) for x in rel if allowed(x))
-    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule != "append")
+    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule not in ("append", "closed"))
     return sorted(set(out))
 
 
@@ -1224,19 +1274,26 @@ def append_under_heading(path: Path, heading: str, line: str, own=False) -> None
     _write_atomic(path, "\n".join(lines))
 
 
-def engine_append(st, path, heading, line, own=False) -> None:
+def engine_append(st, path, heading, line, own=False, kind=None) -> None:
     """`append_under_heading` 에 줄 출처 기록을 더한다 — 원장의 문서에 쓴 줄(절을 만들면 헤딩 줄도)의 해시를
-    `engine_lines` 에 쌓는다. 부르는 쪽이 원장을 저장한다."""
+    `engine_lines` 에 쌓는다. `kind` 를 주면 `line` 의 줄(헤딩 줄 말고)에 그 표지를 단다 — 계수 줄은 `count`.
+    부르는 쪽이 원장을 저장한다."""
     p = Path(path)
     text = p.read_text(encoding="utf-8") if p.is_file() else ""
     created = _section_span(text.split("\n"), heading, own) is None
     append_under_heading(p, heading, line, own)
     if not isinstance(st.get("doc"), str) or doc_identity(str(p)) != doc_identity(st["doc"]):
         return
-    rows = ([heading.strip()] if created else []) + line.split("\n")
     rec = st.setdefault("engine_lines", [])
     n = int(st["round"])
-    rec.extend({"round": n, "heading": heading.strip(), "hash": _line_hash(x)} for x in rows if x.strip())
+    if created:
+        rec.append({"round": n, "heading": heading.strip(), "hash": _line_hash(heading.strip())})
+    for x in line.split("\n"):
+        if x.strip():
+            e = {"round": n, "heading": heading.strip(), "hash": _line_hash(x)}
+            if kind:
+                e["kind"] = kind
+            rec.append(e)
 
 
 def _log_line(entry, f) -> str:
@@ -1784,6 +1841,34 @@ def _log_check_skipped(st, n):
     return sorted(a for a, (_sc, rule) in v.items() if rule == "legacy")
 
 
+CLOSED_LINE_MISSING = "(지금 문서에 없는 줄)"
+
+
+def _closed_log_lines(st, n):
+    """라운드 n 에 「리뷰가 닫힌 뒤 손으로 더한 결정 줄」로 읽은 줄의 글 — 문서의 그 결정 기록 절에서 해시로 찾는다.
+    못 찾은 줄은 `CLOSED_LINE_MISSING`. 원장 · 프로필을 못 읽으면 None(셀 수 없음)."""
+    if n < 2:
+        return []
+    found = {}
+    try:
+        snapshot_at(st, n - 1)
+        snapshot_at(st, n)
+        _log_verdicts(st, load_profile(st["profile"]), n, closed_lines=found)
+    except (LedgerCorrupt, ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+        return None
+    out = []
+    for heading, hashes in found.values():
+        try:
+            body = section_body(Path(st["doc"]), heading) if isinstance(st.get("doc"), str) else None
+        except (OSError, UnicodeError):
+            body = None
+        text = {}
+        for x in body or []:
+            text.setdefault(_line_hash(x), x.rstrip())
+        out.extend(text.get(h, CLOSED_LINE_MISSING) for h in hashes)
+    return out
+
+
 def gate_summary(st) -> dict:
     n = int(st["round"])
     rr = int(st["rereview_count"])
@@ -1842,6 +1927,9 @@ def gate_summary(st) -> dict:
         rel.append({"decision_id": did, "anchors": anchors, "changed": changed, "unchanged": unchanged})
     g["related_changes"] = rel
     g["log_check_skipped"] = _log_check_skipped(st, n)
+    closed = _closed_log_lines(st, n)
+    if closed != []:   # 읽은 줄이 있거나 셀 수 없을 때만 싣는다 — 없으면 키가 없다
+        g["closed_log_lines"] = closed
     g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
@@ -2312,6 +2400,10 @@ def render_gate(st, g) -> str:
     elif skipped:
         out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다 — 이전 버전이 만든 원장에 줄 기록이 없어"
                    " 이번 한 번은 절 전체를 넘겼다 (%s)" % ", ".join(_one(x) for x in skipped))
+    closed = g.get("closed_log_lines") or []   # None(셀 수 없음)은 위 「셀 수 없다」 줄이 같은 사실을 알린다
+    if closed:
+        out.append("리뷰가 닫힌 뒤 손으로 더한 결정 줄 %d개 — 기록으로 읽었다" % len(closed))
+        out.extend("  - " + _one(x[2:] if x.startswith("- ") else x) for x in closed)
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
@@ -2429,7 +2521,7 @@ def cmd_advice(a) -> int:
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
                 if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
-                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True)
+                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True, kind="count")
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
             if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다
