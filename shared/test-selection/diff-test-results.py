@@ -9,7 +9,9 @@
     <메모>/baseline-<runner>.tsv        기준선 축 행 — 같은 실행의 iteration 사이에 재사용된다
     <메모>/head-<runner>-i<N>.tsv       이번 iteration 의 HEAD 축 행
 
-출력은 verdict.py --differential 이 그대로 읽는다(R24). 종료: 0 정상 · 2 사용 오류 · 4 계약 위반.
+출력은 verdict.py --differential 이 그대로 읽는다. 판정 펜스에는 verdict.py --emit-args 가
+이 출력에서 낸 차등 결과 줄(qg-verdict-args:)이 글자 그대로 간다(R24).
+종료: 0 정상 · 2 사용 오류 · 4 계약 위반.
 표준 라이브러리만 쓴다.
 """
 from __future__ import annotations

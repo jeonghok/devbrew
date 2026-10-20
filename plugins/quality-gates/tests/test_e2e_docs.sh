@@ -62,7 +62,7 @@ case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"')" "1" \
     "I1: CLI 직접 실행 경로가 지문을 재고 그 rc 를 낸다"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=0` — E2 로 간다.')" "1" "I1: 걷기는 before rc=0 에서만 간다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
     "I1: before rc=3 이면 CLI 명령을 실행하지 않고 꺼짐(kill switch)"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.')" "1" \
     "I1: 그 밖의 rc 면 걷지 않고 미확인(지문 실패)"
@@ -129,22 +129,58 @@ case_walk_records_are_staged_not_appended_to_result() {
   assert_not_contains "$s" 'result.md"' "R-T5c: ## e2e 절의 펜스가 result.md 를 건드리지 않는다"
 }
 
+marked() {    # marked <표지> — SKILL 의 `<!-- 표지:begin -->` 과 `<!-- 표지:end -->` 사이
+  awk -v b="<!-- $1:begin -->" -v e="<!-- $1:end -->" '$0 == b {on=1; next} $0 == e {exit} on' "$SKILL"
+}
+
 case_final_verdict_goes_through_verdict_py_with_e2e() {
-  local s; s=$(section "$SKILL" "## Final verdict")
-  assert_contains "$s" 'python3 "$QG/scripts/verdict.py" --prior "$SYN" --line ' "K-3 · K-7: 최종 판정은 ② 의 \$SYN 을 --prior 로 잇는다"
-  assert_contains "$s" 'SYN="<마지막 iteration 의 RV>/synth.out"' "K-7: --prior 파일은 ② 의 \$RV/synth.out 이다"
-  assert_contains "$s" "--e2e '<e2e 칸>'" "K-3: 최종 판정 호출이 e2e 칸을 싣는다"
-  assert_contains "$s" "--e2e '안 함'" "trivia 판정 줄의 e2e 칸은 안 함"
-  # R24 — 판정 줄 숫자는 셸이 기계 출력에서 뽑는다. 차등 새 실패의 `K=` 줄은 ⑤ 가 자기 규칙으로 바꾸는 자리라
-  # 그 글자를 여기서 핀하지 않는다 — 셸 변수에서 온다는 것만 잰다.
-  assert_contains "$s" 'N_BLOCK=$(sed -n '"'"'s/^blocking: //p'"'"' "$SYN"); N_OPT=$(sed -n '"'"'s/^optional: //p'"'"' "$SYN")' "R24: 막는 지적 · 선택은 \$SYN 에서 뽑는다"
-  assert_grep "$s" '^K=' "R24: 차등 새 실패는 셸이 대입한다(K= 줄)"
-  assert_contains "$s" '--blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X"' "R24: 판정 줄 숫자 넷이 셸 변수에서 온다(결측을 0 으로 채우지 않는다)"
-  assert_not_grep "$s" '--(blocking|optional|new-failures|excluded) <' "R24: 숫자를 모델이 채우는 자리표시가 없다"
-  assert_not_contains "$s" 'ARGS+=(--defect)' "--prior 와 앞 판정 재주입(--defect · --reason)을 함께 두지 않는다"
-  # ② 의 I3 — 합성 출력이 없거나 키가 겹치면 판정 줄을 만들지 않는다. --prior 가 verdict 줄만 다시 재므로 이 가드가 남아야 한다.
-  assert_contains "$s" '[ -s "$SYN" ] || {' "I3: 합성 출력이 없거나 비면 멈추는 가드가 남았다"
-  assert_contains "$s" 'for k in verdict blocking optional; do' "I3: verdict · blocking · optional 줄이 정확히 한 번인지 재는 고리가 남았다"
+  # R24 · K-3 · K-7 — 판정 펜스 셋(최종 · trivia · 걸러진 diff 빈 실행)은 세션 폴더를 다시 읽지 않는다. 판정 인자는
+  # 숫자를 만든 직후의 펜스가 낸 `qg-verdict-args:` 줄이고, 펜스는 그 줄을 따옴표 heredoc 자리에 받아 검사한 뒤 배열로 넘긴다.
+  local s m f ax
+  s=$(section "$SKILL" "## Final verdict")
+  for m in final-verdict trivia-verdict scope-empty-verdict; do
+    f=$(marked "$m")
+    [ -n "$f" ] && ok "R24: 판정 펜스 $m 을 표지로 찾았다(아래 부재 단언이 공허하지 않다)" || no "R24: 판정 펜스 $m 이 없다"
+    assert_contains "$s" "<!-- $m:begin -->" "R24: $m 표지가 ## Final verdict 안에 있다"
+    for ax in R D X S E; do
+      assert_contains "$f" "<<'QG_ARGS_$ax'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
+    done
+    for ax in R D X S; do
+      assert_contains "$f" "\"\${${ax}_ARGS[@]}\"" "R24($m): $ax 결과 줄은 배열 \"\${${ax}_ARGS[@]}\" 로 넘긴다"
+    done
+    assert_contains "$f" '"${E_ARGS[@]}"' "R24($m): e2e 결과 줄은 배열로 넘긴다"
+    assert_contains "$f" "grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+'" "R24($m): 결과 줄의 모양을 검사한다"
+    assert_contains "$f" 'pass|fail|미확인|"안 함"|"걸을 것 없음"|"걸을 도구 없음"|"꺼짐(kill switch)") ;;' "R24($m): e2e 칸은 닫힌 열거로 검사한다"
+    assert_contains "$f" 'python3 "$QG/scripts/verdict.py" ' "R24($m): 판정은 verdict.py 가 낸다(양성 짝)"
+    for ax in synth.out synth-review.out differential.yaml excluded.md range-scope.txt --prior 'sed -n' eval; do
+      assert_not_contains "$f" "$ax" "R24($m): 판정 펜스가 '$ax' 를 쓰지 않는다(세션 폴더를 다시 읽지 않는다)"
+    done
+    assert_not_grep "$f" '--(blocking|optional|new-failures|excluded|sha) <' "R24($m): 숫자를 모델이 채우는 자리표시가 없다"
+    assert_not_grep "$f" '_ARGS=\( *[<q]' "R24($m): 결과 줄을 따옴표 없이 ( … ) 안에 붙이는 자리가 없다"
+    assert_not_contains "$f" '%q' "R24($m): printf %q 로 낸 글을 되읽지 않는다"
+    # 이름 목록 밖의 세션 파일도 못 읽게 — 펜스가 세션 폴더를 가리키는 자리는 자기가 쓰는 verdict.out 의 쓰기 · 보이기 둘뿐이고 RV 는 없다.
+    # 경로 모양이 아니라 RD 를 부르는 횟수를 센다 — "$RD"/x · "${RD}"/x · cd "$RD" 같은 꼴도 한 번으로 센다.
+    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?RD([^A-Za-z0-9_]|$)' | wc -l | tr -d ' ')" "2" \
+      "R24($m): 펜스가 \$RD 를 부르는 곳은 정확히 두 곳이다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cF '> "$RD/verdict.out"')" "1" "R24($m): 그 하나는 verdict.out 에 쓰는 자리다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cxF 'echo "verdict rc=$?"; cat "$RD/verdict.out"')" "1" "R24($m): 다른 하나는 쓴 verdict.out 을 보이는 자리다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cE '^RD=')" "1" "R24($m): RD 를 정하는 줄은 하나뿐이다"
+    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?TOP([^A-Za-z0-9_]|$)' | wc -l | tr -d ' ')" "1" \
+      "R24($m): 펜스가 \$TOP 을 부르는 곳은 RD 를 정하는 줄 하나뿐이다"
+    assert_not_grep "$f" '\$\{?RV\b|\$\{?RV\}' "R24($m): 펜스가 \$RV 를 쓰지 않는다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cE '\$\{?TOP\}?/')" "1" "R24($m): TOP 아래 경로는 RD 를 정하는 줄 하나뿐이다"
+  done
+  assert_contains "$(marked final-verdict)" '[ -n "$R_LINE" ] && [ -n "$D_LINE" ] ||' "R24: 최종 판정 펜스는 리뷰 · 차등 결과 줄이 없으면 멈춘다"
+  assert_contains "$(marked final-verdict)" '[ -n "$E_LINE" ] || {' "R24: 최종 판정 펜스는 e2e 결과 줄이 없으면 멈춘다(기본값 안 함 없음)"
+  assert_not_contains "$(marked final-verdict)" "E_ARGS=(--e2e '안 함')" "R24: 최종 판정 펜스에 e2e 기본값이 없다"
+  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
+  assert_contains "$(marked final-verdict)" '[ "$B1" -ge "$B0" ]' "R24: 되올린 뒤 줄의 막는 지적 수가 앞 줄보다 적으면 멈춘다"
+  assert_contains "$(marked trivia-verdict)" '--reason trivia --line' "trivia 펜스는 trivia 사유로 판정한다"
+  assert_contains "$(marked scope-empty-verdict)" '--reason scope-empty --line' "걸러진 diff 빈 실행 펜스는 scope-empty 사유로 판정한다"
+  assert_contains "$s" "E_ARGS=(--e2e '안 함')" "e2e 결과 줄이 없으면 e2e 칸은 안 함"
+  assert_contains "$s" '판정값 · 사유 · 우선순위는 `verdict.py` 가 정하고, 판정 인자는 결과 줄의 글자 그대로다 (V1 · R24).' \
+    "V1 · R24: 첫 문단이 새 뜻을 말한다"
+  assert_not_contains "$s" 'you do not retype the verdict, the counts' "옛 「(V1 · R24)」 문장이 없다"
 }
 
 case_K2_result_records_e2e_after_differential() {
@@ -273,6 +309,16 @@ case_readme_has_disable_e2e_line() {
   assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
+case_AC24_more_than_three_candidates_are_disclosed() {
+  local s1 q
+  s1=$(section "$REF" "## 1. 시나리오 만들기"); q=$(section "$REF" "## 2. 질문")
+  assert_eq "$(printf '%s\n' "$s1" | grep -cxF -- '- 만들 수 있는 시나리오가 셋을 넘으면 셋만 만들고 나머지 후보 수를 센다.')" "1" "AC24 §1: 셋을 넘으면 셋만 만들고 나머지 후보 수를 센다(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 후보가 셋을 넘어 셋만 만들었으면 질문 본문에 「시나리오 후보 N개 중 셋만 만들었다 — 「기타」 칸에 적으면 그 자리에서 더 만든다」 를 적는다(N 은 센 후보 수).')" "1" "AC24 §2: 질문 본문에 후보 수와 더 여는 길을 싣는다(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 시나리오를 고르지 않고 「기타」 칸에 아직 만들지 않은 후보를 적으면 그 시나리오를 만들어 같은 질문을 한 번 더 띄운다(그 선택이 실행 승인이다 — 위 시나리오 수정 갈래와 같은 한 번).')" "1" "AC24 §2: 「기타」 로 후보를 더 여는 규칙(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 그 둘째 질문은 새로 만든 시나리오(셋까지)와 `안 한다` 만 선택지로 내고 첫 질문의 시나리오는 다시 싣지 않는다. 「시나리오 후보 N개 중 …」 줄은 다시 싣지 않는다.')" "1" "AC24 §2: 둘째 질문도 선택지 넷 안이다(새 시나리오 + 안 한다만, 줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다. 선택지는 넷을 넘지 않는다.')" "1" "AC24: 선택지 넷 상한 문장은 그대로다(양성 짝)"
+}
+
 case_AC28_e2e_scenarios_are_multi_select() {
   # AC28 · 계획 결정 11 — 여러 시나리오를 고를 수 있고, 번호 순으로 하나씩 걷기마다 게이트, 칸은 가장 나쁜 결과.
   local q w g s
@@ -301,9 +347,21 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_contains "$s" '- **여러 시나리오** — ' "SKILL E4: 여러 시나리오 갈래가 있다"
   assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
   assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
-  local fv; fv=$(section "$SKILL" "## Final verdict")
-  assert_contains "$fv" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
-  assert_contains "$fv" '그 걷기가 마지막 걷기 대신 쓰인다.' "Final verdict: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
+  # e2e 칸과 「사람이 뒤집음」은 `## e2e` 의 E6(e2e 결과 줄)이 정해 낸다 — Final verdict 는 그 줄을 받는다.
+  local e6; e6=$(printf '%s\n' "$s" | awk '/^\*\*E6 — /{f=1} f')
+  [ -n "$e6" ] && ok "SKILL: E6 e2e 결과 줄 문단이 있다" || no "SKILL: E6 문단이 없다"
+  assert_contains "$e6" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "E6: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
+  assert_contains "$e6" '그 걷기가 마지막 걷기 대신 쓰인다.' "E6: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
+  assert_contains "$e6" '앞 걷기(`e2e-flip.md` 의 앞 줄)의 뒤집기는 세지 않는다' "E6: 앞 걷기의 뒤집기는 세지 않는다"
+  assert_not_contains "$(section "$SKILL" "## Final verdict")" 'e2e-flip.md` 의 앞 줄' "Final verdict 에 뒤집기 규칙의 사본이 남지 않았다"
+  # E6 앞의 갈래 · 질문의 답이 `## Final verdict` 로 가는 문장은 모두 E6 을 거친다(E6 을 건너뛰면 판정 펜스가 e2e 줄 없이 멈춘다).
+  local pre all via
+  pre=$(printf '%s\n' "$s" | awk '/^\*\*E6 — /{exit} {print}')
+  all=$(printf '%s\n' "$pre" | grep -o -F -- '`## Final verdict` 로 간다' | wc -l | tr -d ' ')
+  via=$(printf '%s\n' "$pre" | grep -o -F -- 'E6 을 돈 뒤 `## Final verdict` 로 간다' | wc -l | tr -d ' ')
+  [ "$all" -ge 9 ] && ok "SKILL: E6 앞에서 Final verdict 로 가는 문장 ${all}개를 찾았다(아래 등호가 공허하지 않다)" \
+    || no "SKILL: E6 앞에서 Final verdict 로 가는 문장이 모자라다 (${all}개)"
+  assert_eq "$via" "$all" "SKILL: E6 앞에서 Final verdict 로 가는 문장은 모두 E6 을 돈 뒤 간다"
 }
 
 case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
@@ -317,11 +375,11 @@ case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
     "SKILL E4: 여러 시나리오에서 E1 · E3 의 exit 3 갈래가 앞 걷기를 지우지 않는다"
   # final-review T11b — kill switch 갈래 줄 셋(E1 부팅 · E1 CLI · E3)이 각자 그 규칙을 가리킨다(줄 전체)
   local ptr='여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.'
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E1 부팅: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E1 CLI: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`after rc=3\` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E5 로 기록한 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`after rc=3\` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E5 로 기록하고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E3: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
   assert_eq "$(printf '%s\n' "$s" | grep -cF -- "$ptr")" "3" "SKILL: 가리키는 문장은 kill switch 갈래 줄 셋에만 있다(양성 짝)"
 }

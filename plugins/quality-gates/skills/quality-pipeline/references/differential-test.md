@@ -29,7 +29,7 @@
 - R21 unittest 는 판정하지 못하는 파일을 claim 하지 않고, go 단위는 `*_test.go` 를 요구한다.
 - R22 kill switch 는 오케스트레이터와 러너 양쪽에서 저장소 코드 실행을 막는다.
 - R23 일회용 트리는 모든 종료 경로에서 지운다.
-- R24 판정은 기계 출력을 직접 읽고, 모델이 옮겨 적지 않는다.
+- R24 판정 인자는 숫자를 만든 직후의 펜스가 낸 줄(`qg-verdict-args:`)의 글자 그대로다 — 모델은 숫자를 고르거나 옮겨 적지 않고 그 줄을 판정 펜스에 붙인다.
 
 R2~R5 · R7 · R9~R11 · R14 · R15 · R17 · R19~R21 은 `run-test-selection.sh` 와 `diff-test-results.py` 가
 코드로 지킨다. 아래 절차는 그 스크립트들을 빠짐없이 부르는 순서다.
@@ -37,7 +37,7 @@ R2~R5 · R7 · R9~R11 · R14 · R15 · R17 · R19~R21 은 `run-test-selection.sh
 ## D0 실행 시작 — 첫 iteration 에서 한 번
 
 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 이 절차 전체를 건너뛰고 판정 입력은
-`--reason kill-switch` 다(R22). 러너도 같은 스위치를 보고 저장소 코드를 돌리지 않는다.
+`--reason kill-switch` 다(R22). 차등 결과 줄은 SKILL 의 kill switch 문단 펜스가 낸다. 러너도 같은 스위치를 보고 저장소 코드를 돌리지 않는다.
 
 실행 안 메모를 만든다. 경로를 기억해 두고 실행이 끝날 때까지 모든 iteration 이 같은 메모를 쓴다(R6):
 
@@ -47,7 +47,7 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 ```
 
 exit 2 면 stderr 를 그대로 보이고 이 실행에서는 차등 테스트를 하지 않는다 — 이 iteration 과 이후 모든 iteration 의
-판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다).
+판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다). 차등 결과 줄은 iteration 마다 D7 의 펜스로 낸다.
 
 기준선을 정한다. 기준선 커밋은 실행마다 하나로 고정된다 — 기준선 행 파일(`<memo>/baseline-<runner>.tsv`)이 한
 커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다. 범위 모드(세션 폴더에
@@ -237,8 +237,8 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 리포 루트에서 부른다(펜스가 그리로 옮긴다). `<기준선 커밋>` 은 D0 의 값, `<HEAD 커밋>` 은 D1 이 찍은 `head_commit=`
 값(`-` 포함)이다. 같은 펜스가 출력 파일과 D2 의 커버리지 제외 목록을 세션 폴더에 사본으로 덮어쓰고, 그 사본
-`$RD/differential.yaml` 이 이 iteration 의 판정 입력이다 — Step 4 의 합성기와 실행 끝의 판정 줄 · `result.md` 가 메모가
-아니라 이 사본(마지막 iteration 의 것)을 읽는다:
+`$RD/differential.yaml` 이 이 iteration 의 판정 입력이다 — Step 4 의 합성기와 실행 끝의 `result.md` 가 메모가 아니라 이 사본
+(마지막 iteration 의 것)을 읽는다. 펜스 끝에서 `verdict.py --emit-args` 가 같은 사본으로 차등 결과 줄을 낸다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -255,7 +255,15 @@ else
 fi
 if [ -f "<memo>/not-counted-i<N>.md" ]; then cp "<memo>/not-counted-i<N>.md" "$RD/differential-not-counted.md"; else rm -f "$RD/differential-not-counted.md"; fi
 echo "diff_rc=$diff_rc"
+if [ "$diff_rc" -eq 0 ] && [ -f "$RD/differential.yaml" ]; then
+  python3 "$QG/scripts/verdict.py" --emit-args --differential "$RD/differential.yaml"
+else
+  python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
+fi
 ```
+
+펜스의 마지막 줄(`qg-verdict-args: --new-failures K …`)이 이 iteration 의 차등 결과 줄이다 — 글자 그대로 들고 있다가 SKILL 의
+`## Final verdict` 판정 펜스에 붙인다. 그 줄이 없으면(`verdict.py` 가 0 이 아닌 값으로 끝났다) stderr 를 그대로 보이고 멈춘다 — 판정 없음.
 
 `per_adapter` 의 `attributions` 에 `NEW_REGRESSION` 인 unit 이 있으면 그 unit 만 HEAD 축 트리에서 한 번 다시 돌리고
 (flaky 재실행) 이 펜스를 다시 부른다. 마지막 호출의 결과가 이 iteration 의 결과다(R15):
@@ -278,7 +286,7 @@ done
 
 ## D7 판정 입력
 
-판정은 `verdict.py` 가 D5 의 사본을 직접 읽어 정한다(R24). 이 절차는 값을 옮겨 적지 않는다.
+Step 4 의 합성기에 싣는 판정 입력은 아래 표가 정한다. 실행 끝의 판정 줄은 차등 결과 줄을 쓴다(R24) — 이 절차는 값을 옮겨 적지 않는다.
 
 | 이 절차의 결과 | `verdict.py` 에 |
 |---|---|
@@ -287,9 +295,15 @@ done
 | `diff_rc` 가 0 이 아니다 · 파일이 없다 · D5 전에 절차가 끝났다(D0 메모 실패 · D2 exit 4 포함) | `--reason error-axis` (R18) |
 
 D5 전에 끝난 경우에는 D1 의 `axis=mismatch` 와, D0 의 메모 만들기가 실패한 실행의 이후 모든 iteration 이 함께 든다.
+D5 에 닿지 못한 iteration 은 이 펜스로 차등 결과 줄을 낸다(D5 의 두 행은 D5 펜스가, kill switch 행은 SKILL 의 kill switch 문단 펜스가 낸다):
 
-판정 줄의 「차등 새 실패」 칸은 그 사본의 `new_failures:` 값이다 — 실행 끝의 판정 줄은 마지막 iteration 의 사본
-`$RD/differential.yaml` 에서 그 값을 읽는다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
+```
+
+판정 줄의 「차등 새 실패」 칸은 마지막 iteration 의 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
+그 사본의 `new_failures:` 에서 낸다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
 커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 양측 빨강을 공시하는
 `resolution_disclosure:` 줄이 있으면 판정 줄 옆에도 그대로 보인다(R10). bulk 러너가 양측 red 면 이 문장을 그대로 쓴다:
 
@@ -298,7 +312,7 @@ D5 전에 끝난 경우에는 D1 의 `axis=mismatch` 와, D0 의 메모 만들�
 ## D8 실행 끝 — 메모 지우기
 
 파이프라인이 어느 경로로 끝나든(최종 판정 · Stop · 중단) 마지막에 메모를 지운다(R6). 최종 판정으로 끝나면 SKILL 의
-`## Final verdict` 기록 펜스 바로 뒤, 게시 앞이다 — 판정 줄과 기록은 메모가 아니라 세션 폴더의 사본을 읽는다:
+`## Final verdict` 기록 펜스 바로 뒤, 게시 앞이다 — 기록은 메모가 아니라 세션 폴더의 사본을 읽는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }

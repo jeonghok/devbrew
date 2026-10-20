@@ -1,5 +1,10 @@
 # Changelog
 
+## [8.2.0] — 2026-10-20
+
+### Security
+- 문서 리뷰의 codex 러너(`run_docreview_codex_reviewer.sh`, 공유 문서 리뷰 엔진)가 `project_doc_max_bytes=0` 을 실어, 리뷰하는 트리의 `AGENTS.md` 를 지시로 읽지 않는다.
+
 ## [8.1.0] — 2026-10-20
 
 ### Changed
