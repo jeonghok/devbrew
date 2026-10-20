@@ -184,7 +184,7 @@ HP="$T/r'oad\"map \$(touch $T/pwned-p) \`touch $T/pwned-q\`"
 n8=0
 for W in "말 \"따옴표\" it's \$(touch $T/pwned-a) \`touch $T/pwned-b\` \$HOME" '-좋아'; do
   n8=$((n8 + 1))
-  if [ "$n8" = 1 ]; then C="\`R3\` 을 \"둘로\" 나눔 it's \$(touch $T/pwned-c) \`touch $T/pwned-d\`"; P="$HP"; else C='-순서만 바꿈'; P='-rel/docs'; fi
+  if [ "$n8" = 1 ]; then C="\`R3\` 을 \"둘로\" 나눔 it's \$(touch $T/pwned-c) \`touch $T/pwned-d\`"; P="$HP"; else C='-순서만'; P='-rel/docs'; fi
   rm -f "$T/stub2.out"
   rc=0; o="$(cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub2.out" CLAUDE_PLUGIN_ROOT="$STUB2" bash -c "$(red_fill "$W" "$C" "$P")" 2>&1)" || rc=$?
   got="$(python3 -I -c 'import json, sys
