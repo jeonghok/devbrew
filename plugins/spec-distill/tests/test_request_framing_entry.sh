@@ -50,7 +50,7 @@ assert_contains "$ENTRY" '`spec-distill:request-framing`' "trivia 안내의 <com
   || no "\`commands/request""-framing.md\` 가 남아 있다 — 명령과 skill 이 같은 이름으로 겹친다"
 
 # 5패턴을 여기 «복제하지» 않았는가 — 정본이 있는데 사본이 있으면 둘이 갈라진다.
-pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
+pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|짧은 요청)' "$CMD")"
 [ "$pc" -eq 0 ] \
   && ok "5패턴 본문이 복제되지 않았다 (정본만)" \
   || no "5패턴 본문이 이 파일에 복제돼 있다 (${pc}줄) — 정본과 갈라진다"

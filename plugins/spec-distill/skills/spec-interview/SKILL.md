@@ -68,7 +68,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:spec-interview` 로 채워 띄웁니다 — 「그대로」면 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:spec-interview` 로 채워 띄웁니다 — 「그대로」면 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
@@ -104,9 +104,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
-산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
-brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
-넘기고(optional), 없으면 brief 자체로 완료합니다.
+산출물은 `spec.md`가 아니라 **interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
+brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 기본으로 brainstorming으로
+넘기고(optional — 일의 모양이 다르면 끝 게이트의 둘째 질문으로 다른 다음 단계를 고른다), 없으면 brief 자체로 완료합니다.
 
 ## State location
 
@@ -475,7 +475,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
-«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
+«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다.
+라운드 중에는 번호 없이 적고, brief 를 쓸 때 Step A 가 줄마다 `위험` 바로 뒤에 번호를 박는다(`- 위험 K<n> — …`, `references/finishing.md` 「위험 번호」). web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
 
 **계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.

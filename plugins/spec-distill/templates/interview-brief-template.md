@@ -4,7 +4,7 @@ type: interview-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
 source: spec-distill spec-interview v0.23.0
-next_phase: superpowers:brainstorming
+next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2
 audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같은 디렉토리)
@@ -30,8 +30,8 @@ user_sourced_items:
 
 # <Topic> — Interview Brief
 
-> 이 brief는 단독 완결 산출물이다. superpowers가 있으면 §7대로 brainstorming 해답공간으로
-> 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
+> 이 brief는 단독 완결 산출물이다. superpowers가 있으면
+> §7 대로 기본 다음 단계(brainstorming 해답공간)로 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
 
 ## 0. 한눈에
 
@@ -90,6 +90,8 @@ user_sourced_items:
 - ... «example» — [취함] — 이유 (1차 · 확인 <YYYY-MM-DD>) [→ OQ1]
 - ... «other» — [중립] — 이유 [→ 없음]
 
+(«» 는 출처키 자리에만 쓴다 — 강조는 「」. §4 의 «» 는 본문 줄까지 모두 출처키로 읽혀 audit §7 선언을 요구받는다.)
+
 ## 5. 기각 · Blind Spots
 
 (`기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).
@@ -102,8 +104,8 @@ user_sourced_items:
 - 기각 — <버린 것> → <버린 이유> — verdict: kept — ST1 — 부착 M/N
 - 보류 — <대안 statement> → §3 OQ1 — verdict: deferred — ST2 — 부착 M/N
 - 검토 — steelman 0건: 검토한 방향 <N>개 · 전제 <P1..Pn> · trigger 후보 <무엇을 봤는가> → 기각 이유 <왜 trigger 가 아닌가>
-- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
-- 위험 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]
+- 위험 K1 — <숨은 가정 | 실패 양식>: <내용> — <근거>
+- 위험 K2 — 숨은 가정 | <내용> — RC3 (plugins/x/y.py#sym) [RC3 → OQ1]
 - 기각 — <원래> / <재결정> / <근거 RC4 반증> — V1 판정이 반증이었을 때의 세 칸 [RC4 → 없음]
 
 ## 6. 사용자 원문
@@ -120,7 +122,7 @@ user_sourced_items:
 
 ## 7. Next Action
 
-(superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
+(기본 다음 단계 — superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md` 작성·커밋
  → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 설계문서 점검과 그 질문을 마친 뒤 문서를 승인받는 자리) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
 

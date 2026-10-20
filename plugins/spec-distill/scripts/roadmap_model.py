@@ -137,6 +137,8 @@ REQUIRED = {
 FORBIDDEN = {"bundle": ("spec", "발화", "항목", "완료"), "branch": ("완료",),
              "decision": ("브랜치", "spec")}
 RISK_PREFIXES = ("- 위험 — 숨은 가정", "- 위험 — 실패 양식", "- 위험 — 리뷰 참고")
+# brief §5 위험 줄 머리 — `- 위험 K<n> — <종류>`(박힌 꼴) 또는 `- 위험 — <종류>`(옛 꼴). `.match` 로 줄 머리만.
+RISK_LINE_RE = re.compile(r"- 위험(?: (K\d+))? — (?=숨은 가정|실패 양식|리뷰 참고)")
 BLOCK_HEAD_RE = re.compile(r"### ([A-Z][0-9]+[a-z]?) — (\S.*)")
 BLOCK_ID_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
 BUNDLE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+\.md")
@@ -435,6 +437,30 @@ def brief_section(brief: str, num: str) -> str:
     return brief_body.section_text(brief, num)
 
 
+def brief_risk_numbers(s5: str):
+    """([(K<n>, "위험 — <종류> …")], 줄 순서로 매겼나). 글은 번호를 뗀 꼴이다. 모든 위험 줄에 번호가 박혔으면 K 수
+    순서, 하나도 안 박혔으면 숨은 가정 · 실패 양식 · 리뷰 참고 묶음마다 줄 순서로 K1 부터 — 둘째 값은 그때 위험 줄이
+    하나 이상이면 참이다. 박힌 줄과 안 박힌 줄이 섞였거나 같은 번호가 둘이면 FormatError."""
+    found = [(m.group(1), line) for line in brief_body.split_lines(s5) for m in [RISK_LINE_RE.match(line)] if m]
+    stamped = [k for k, _line in found if k]
+    if not stamped:
+        texts = []
+        for prefix in RISK_PREFIXES:
+            texts += [line[2:] for _k, line in found if line.startswith(prefix)]
+        return [("K%d" % (i + 1), text) for i, text in enumerate(texts)], bool(texts)
+    if len(stamped) != len(found):
+        bare = next(line for k, line in found if not k)
+        raise FormatError("brief §5 위험 줄 가운데 K 번호가 없는 줄이 있다 — "
+                          "그 줄에 K%d 부터 박는다: %s" % (max(int(k[1:]) for k in stamped) + 1, bare[:60]))
+    seen = set()
+    for k in stamped:
+        if k in seen:
+            raise FormatError("brief §5 위험 줄의 K 번호가 겹친다: %s" % k)
+        seen.add(k)
+    rows = [(k, "위험 — " + line[RISK_LINE_RE.match(line).end():]) for k, line in found]
+    return sorted(rows, key=lambda row: int(row[0][1:])), False
+
+
 def brief_universe(brief: str, audit: str):
     """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
     fm_lines = brief.split("\n---", 1)[0].splitlines()
@@ -447,11 +473,8 @@ def brief_universe(brief: str, audit: str):
         raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
                           % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
     non_s |= {oq for oq, _line in oq_entries if oq}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))}
-    k_expected = []
-    for prefix in RISK_PREFIXES:
-        k_expected += [line[2:] for line in brief_body.split_lines(s5) if line.startswith(prefix)]
-    k_expected = [("K%d" % (i + 1), text) for i, text in enumerate(k_expected)]
+    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
+    k_expected = brief_risk_numbers(s5)[0]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()
     found = brief_body.audit_subset_problems(audit)
