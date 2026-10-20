@@ -337,6 +337,50 @@ dep_count() {   # dep_count <basename> → 도출 수(있으면), 없으면 rc�
   printf '%s' "$DEP_COUNTS" | awk -v b="$1" '$1==b {print $2; f=1} END{ exit !f }'
 }
 
+# 산문 도출 — 플러그인 파일이 실제 호출/참조 패턴 `(scripts|agents|references)/<basename>` 으로
+# 정본을 부르면 그 플러그인을 소비자로 센다. **소비는 같은 플러그인 안의 참조다.** 빼는 것:
+#  · 배포 지점 자기 자신(파일 단위) — 빼지 않으면 배포 지점이 스스로를 참조원으로 세어
+#    도출이 순환한다.
+#  · `shared/…/<dir>/<basename>` 로 나타나는 매치(줄 단위) — 정본의 전체 경로를 설명 목적으로
+#    인용한 것이지 자기 플러그인 기준 상대 경로로 부르는 관례가 아니다. 정본의 shared/ 쪽 부모
+#    디렉토리 이름이 배포 디렉토리 이름과 같으면(`shared/docreview/references/…`) 부분
+#    문자열로 걸려, 배포 지점이 없는 플러그인이 `missing` 으로 오판된다.
+#  · 그 줄이 사는 파일의 플러그인과 **다른** 플러그인의 전체 경로
+#    `plugins/<다른>/<dir>/<basename>` 로 나타나는 매치(줄 단위) — 다른 플러그인의 배포
+#    지점을 가리키는 인용이다. 같은 플러그인의 전체 경로는 소비로 남는다.
+#  · fixtures/mocks/harness — CORPUS 와 같은 이유로 뺀다. 픽스처가 기대를 만들면 안 된다.
+# 제외를 줄 단위로 하는 이유: 파일 단위로 빼면 같은 파일의 진짜 관례 참조까지 함께 사라진다.
+# 코퍼스는 **git 이 추적하는 `plugins/` 전부**다 〔F8〕 — 디렉토리를 손으로 열거하면 빠뜨린
+# 디렉토리(공간)와 내일 생길 디렉토리(시간) 양쪽으로 fail-open 이고, 소비자가 테스트뿐인
+# 플러그인이 ∀ 집합에서 조용히 빠진다.
+# `/dev/null` 을 목록 끝에 붙이는 이유: 목록이 비면 `xargs` 가 인자 없는 `grep` 을
+# 실행해 **stdin 을 기다리며 멈춘다**. 절대 매치하지 않는 파일 하나가 그것을 막는다.
+# cwd 의 git 인덱스를 읽는다 — 축 1a 끝의 프로브가 사본 레포에서 같은 함수를 돈다.
+prose_consumers() {   # prose_consumers <basename> → 소비 플러그인 이름(한 줄에 하나)
+  local esc_base refs
+  esc_base="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  refs="$( { git ls-files -- 'plugins/*' | grep -vE '/(fixtures|mocks|harness)/'; echo /dev/null; } \
+            | tr '\n' '\0' \
+            | xargs -0 grep -nE "(scripts|agents|references)/${esc_base}" 2>/dev/null \
+            | grep -vE "shared/[^[:space:]:]*/(scripts|agents|references)/${esc_base}" \
+            | _PB="$esc_base" awk '{
+                own = $0; sub(/:[0-9]+:.*$/, "", own)
+                if (own ~ /^plugins\//) { own = substr(own, 9); sub(/\/.*$/, "", own) } else own = ""
+                body = $0; sub(/^[^:]*:[0-9]+:/, "", body)
+                re = "plugins/[^/ \t:]+/(scripts|agents|references)/" ENVIRON["_PB"]
+                while (match(body, re)) {
+                  cited = substr(body, RSTART + 8); sub(/\/.*$/, "", cited)
+                  if (cited != own) next
+                  body = substr(body, RSTART + RLENGTH)
+                }
+                print
+              }' \
+            | sed -nE 's/^([^:]+):[0-9]+:.*/\1/p' \
+            | grep -vE "^plugins/[^/]+/(scripts|agents|references)/${esc_base}\$" \
+            | sort -u || true)"
+  printf '%s\n' "$refs" | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u
+}
+
 n_expected=0
 while IFS= read -r canonical; do
   [ -n "$canonical" ] || continue
@@ -345,7 +389,6 @@ while IFS= read -r canonical; do
     continue
   fi
   base="$(basename -- "$canonical")"
-  esc_base="$(printf '%s' "$base" | sed 's/\./\\./g')"
 
   # ── 배포 지점 도출: **구조가 주(主)이고 산문은 가산(加算)이다** ─────────
   # 〔2026-08-22 §7-8〕 앞 판본은 배포 지점 집합을 **산문 리터럴만으로** 도출했다
@@ -362,9 +405,8 @@ while IFS= read -r canonical; do
   #     리팩터가 감사 대상을 줄일 수 없다(§7-8 이 요구한 ∀-지배).
   #   · 산문 → 참조는 하는데 배포 지점이 **없는** 플러그인을 `missing` 으로 잡는다.
   #     구조 단독으로는 없는 것을 셀 수 없어 이 방향이 사라진다.
-  # 〔실측 2026-08-22〕 이 union 으로 바꿔도 도출 수는 그대로다 —
-  # codex_findings_to_yaml.py 2건 · detect_codex.sh 3건 · prompt-preamble.md 3건.
-  # 값이 안 변한다는 것을 먼저 재고 바꿨다(이 락이 지키는 대상이 바뀌지 않았다).
+  # 이 union 으로 바꿀 때 도출 수가 그대로인 것을 먼저 재고 바꿨다(이 락이 지키는 대상이
+  # 바뀌지 않았다).
 
   # 구조 도출 — 인덱스와 워킹트리를 **따로** 구한다. 아래에서 둘이 갈라졌는지 본다:
   # untrack 은 인덱스에서만 지우므로 워킹트리 쪽이 남아 두 수가 갈라진다.
@@ -384,48 +426,8 @@ while IFS= read -r canonical; do
                 done 2>/dev/null | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
   structural_plugins="$(printf '%s\n%s\n' "$idx_plugins" "$wt_plugins" | grep -v '^$' | sort -u || true)"
 
-  # 산문 도출 — 실제 호출/참조 패턴((scripts|agents|references)/<basename>)을
-  # 참조하는 파일. 배포 지점 자기 자신은 도출 대상에서 제외한다 — 그러지 않으면
-  # 배포 지점 자신이 스스로를 참조원으로 세어 도출이 순환한다.
-  #
-  # 〔2026-09-08 PR2 Task1〕 패턴을 `scripts/` 하나에서 세 디렉토리로 넓혔다 —
-  # 위 구조 도출과 같은 이유(§5.1). 넓혀도 **기존 아홉 정본의 도출된 플러그인
-  # 집합은 그대로**다(실측: report 파일의 Step 5/6 대조).
-  #
-  # 넓히자마자 실측으로 걸린 것 — `reviewing-document.md` 정본의 shared/ 쪽 부모
-  # 디렉토리 이름 자체가 `references`다(`shared/docreview/references/…`). 그래서
-  # 그 **전체 경로를 그대로 인용하는 산문**(예: 다른 플러그인의 테스트 주석이
-  # "`shared/docreview/references/reviewing-document.md` 를 읽고 따른다"고 설명하는
-  # 것)도 `references/${base}` 부분 문자열에 걸려, 실제 로컬 배포가 없는 플러그인이
-  # `expected_plugins` 에 잘못 들어왔다(quality-gates 실측 RED: 배포 지점 없음).
-  # 이 패턴이 원래 잡으려던 것은 "자기 플러그인 기준 상대 경로로 부르는 관례"지
-  # "정본의 전체 경로를 설명 목적으로 인용"이 아니다 — 그래서 **`shared/.../<dir>/base`
-  # 형태로 나타나는 매치는 줄 단위로 제외**한다(파일 단위로 빼면 같은 파일의 진짜
-  # 관례 참조까지 함께 사라진다). 이 줄-단위 제외를 넣자 `run_docreview_codex_reviewer.sh`
-  # (shared/ 쪽 부모 디렉토리도 우연히 `scripts`)의 산문 도출이 2 → 1 로 줄었다 — 같은
-  # 충돌이 `scripts/` 패턴에도 이미 잠재했다는 뜻이다. 구조 도출이 그 정본의 두 배포
-  # 지점을 이미 덮고 있어(위 알림 참조) 게이트 결과는 바뀌지 않았지만, **넓히기 전에는
-  # 드러나지 않았던 결함**이라는 사실은 남겨 둔다.
-  #
-  # 〔2026-08-18 fix round 1, F8〕 코퍼스는 **git 이 추적하는 `plugins/` 전부**다.
-  # 앞 판본은 `skills`·`scripts`·`hooks`·`agents`·`commands` 다섯 디렉토리를 손으로
-  # 열거했다 — *"열거하지 않는다"* 를 원칙으로 내건 이 파일 안에서 공간(빠뜨린
-  # 디렉토리)·시간(내일 생길 디렉토리) 양쪽으로 fail-open 이었다. 오늘 그 다섯 밖에서
-  # `scripts/<basename>` 를 참조하는 파일이 8개 있고(`plugins/*/tests/` · `README.md` ·
-  # `CHANGELOG.md`), 넓혀도 **도출된 플러그인 집합은 다섯 열거와 같다**(2026-08-18 실측)
-  # — 값이 안 변한다는 것을 먼저 재고 넓혔다. 소비자가 테스트뿐인 플러그인은 앞 판본에서
-  # ∀ 집합에 조용히 빠졌고, 정본별 가드도 다른 정본이 정상 도출되면 안 터졌다.
-  # fixtures/mocks/harness 는 CORPUS 와 같은 이유로 뺀다 — 픽스처가 기대를 만들면 안 된다.
-  # `/dev/null` 을 목록 끝에 붙이는 이유: 목록이 비면 `xargs` 가 인자 없는 `grep` 을
-  # 실행해 **stdin 을 기다리며 멈춘다**. 절대 매치하지 않는 파일 하나가 그것을 막는다.
-  refs="$( { git ls-files -- 'plugins/*' | grep -vE '/(fixtures|mocks|harness)/'; echo /dev/null; } \
-            | tr '\n' '\0' \
-            | xargs -0 grep -nE "(scripts|agents|references)/${esc_base}" 2>/dev/null \
-            | grep -vE "shared/[^[:space:]:]*/(scripts|agents|references)/${esc_base}" \
-            | sed -nE 's/^([^:]+):[0-9]+:.*/\1/p' \
-            | grep -vE "^plugins/[^/]+/(scripts|agents|references)/${esc_base}\$" \
-            | sort -u || true)"
-  prose_plugins="$(printf '%s\n' "$refs" | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  # 산문 도출 — 규칙과 제외는 위 `prose_consumers` 머리 주석에 있다.
+  prose_plugins="$(prose_consumers "$base")"
   expected_plugins="$(printf '%s\n%s\n' "$structural_plugins" "$prose_plugins" \
                        | grep -v '^$' | sort -u || true)"
 
@@ -528,6 +530,36 @@ if [ "$n_expected" -ge 1 ]; then
   ok "symlink-∀: 파생된 배포 지점 총 ${n_expected}건 검사 (vacuous 아님)"
 else
   no "symlink-∀: 파생된 배포 지점이 0건 — 참조 도출이 깨졌거나 정본 도출이 비었다"
+fi
+
+# 산문 도출 프로브 — 사본 레포에서 `prose_consumers` 를 돈다. 인용 basename 은 위에서 도출한
+# 정본에서 가져온다. a 는 다른 플러그인 b 의 전체 경로만 인용하므로 소비자가 아니다(음성).
+# c 는 자기 플러그인의 전체 경로로, d 는 상대 경로로 부르므로 소비자다(양성 대조) — 둘 다
+# `.md` 파일에 둬서, 인용하는 `.md` 를 통째로 빼는 넓은 제외가 이 단언을 RED 로 만든다.
+pb_canon="$(printf '%s\n' "$SYMLINK_CANONICALS" | grep -v '^$' | head -1)"
+PB_REPO="$(mktemp -d -t copyof-prose-XXXXXX)" || exit 1
+lock_tmp_add "$PB_REPO"
+if [ -z "$pb_canon" ] || [ -z "$PB_REPO" ] || [ ! -d "$PB_REPO" ]; then
+  no "산문 도출 프로브: 인용할 정본('${pb_canon}')이나 사본 레포('${PB_REPO}')가 없다 — 프로브가 돌지 않았다"
+else
+  pb_base="$(basename -- "$pb_canon")"
+  mkdir -p "$PB_REPO/plugins/a" "$PB_REPO/plugins/b/scripts" "$PB_REPO/plugins/c" "$PB_REPO/plugins/d/skills/x"
+  printf 'see `plugins/b/scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/a/README.md"
+  printf '#!/bin/sh\n' > "$PB_REPO/plugins/b/scripts/$pb_base"
+  printf 'run `plugins/c/scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/c/README.md"
+  printf 'run `scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/d/skills/x/SKILL.md"
+  git -C "$PB_REPO" init -q >/dev/null 2>&1
+  git -C "$PB_REPO" add -A >/dev/null 2>&1
+  pb_got="$(cd "$PB_REPO" && prose_consumers "$pb_base" | tr '\n' ' ')"
+  assert_eq "$pb_got" "c d " "산문 도출 프로브: 다른 플러그인 전체 경로 인용(a)은 소비가 아니고, 같은 플러그인 전체 경로(c)와 상대 경로(d)는 소비다 (정본 ${pb_base})"
+fi
+# 양성 짝 — 사본으로 배포되는 `.md` 정본도 산문으로 도출된다. `.md` 정본을 도출에서 통째로
+# 빼는 넓은 제외는 이 단언을 RED 로 만든다.
+if [ -f shared/docreview/agents/doc-critic.md ] \
+   && prose_consumers doc-critic.md | grep -qx 'spec-distill'; then
+  ok "산문 도출 양성 짝: 정본 shared/docreview/agents/doc-critic.md 의 소비 플러그인에 spec-distill 이 든다"
+else
+  no "산문 도출 양성 짝: 정본 shared/docreview/agents/doc-critic.md 의 소비 플러그인에 spec-distill 이 없다 — 산문 도출이 \`.md\` 정본을 놓친다"
 fi
 axis_tally "$n_expected"
 
