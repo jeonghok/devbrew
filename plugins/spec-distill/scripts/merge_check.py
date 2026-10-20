@@ -32,6 +32,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import branch_tip as branch_tip_mod  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
@@ -112,30 +113,16 @@ def drop_lock(d: Path) -> None:
 
 # ── 사본 ─────────────────────────────────────────────────────────────────────
 
-def resolve(root: Path, ref: str):
-    rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
-    return out if rc == 0 else None
-
-
 def branch_tip(root: Path, branch: str) -> str:
-    """대조할 브랜치 끝. 로컬과 origin 이 둘 다 있고 다르면 앞선 쪽을 쓰고 한 줄로 알린다 — 갈라졌으면 검사 불가."""
-    if branch.startswith("origin/") and resolve(root, "refs/remotes/" + branch):
-        return resolve(root, "refs/remotes/" + branch)
-    local = resolve(root, "refs/heads/" + branch)
-    remote = resolve(root, "refs/remotes/origin/" + branch)
-    if local is None or remote is None or local == remote:
-        if not (local or remote):
-            raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
-        return local or remote
-    if git(root, "merge-base", "--is-ancestor", local, remote)[0] == 0:
-        print("[spec-distill] 로컬 브랜치 %s 가 origin 보다 뒤라 origin/%s(%s) 를 썼다" % (branch, branch, remote[:8]))
-        return remote
-    if git(root, "merge-base", "--is-ancestor", remote, local)[0] == 0:
-        print("[spec-distill] origin/%s 가 로컬보다 뒤라(push 하지 않은 커밋) 로컬 %s(%s) 를 썼다"
-              % (branch, branch, local[:8]))
-        return local
-    raise Stop(3, "로컬 브랜치 %s(%s) 와 origin/%s(%s) 가 갈라졌다 — 한쪽으로 맞춘 뒤 다시 돈다"
-               % (branch, local[:8], branch, remote[:8]))
+    try:
+        tip, note = branch_tip_mod.tip(root, branch)
+    except branch_tip_mod.TipError as exc:
+        raise Stop(3, str(exc))
+    if tip is None:
+        raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
+    if note:
+        print(note)
+    return tip
 
 
 def make_copies(root: Path, work: Path, branch: str):

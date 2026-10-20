@@ -34,6 +34,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import branch_tip  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
@@ -494,14 +495,6 @@ def _prs(root, b: dict):
 
 
 NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-
-
-def _tip(root, branch: str):
-    for ref in ("refs/heads/" + branch, "refs/remotes/origin/" + branch):
-        rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
-        if rc == 0:
-            return out
-    return None
 
 
 def _roadmap_blocks(root, roadmap: str) -> list:
@@ -968,9 +961,14 @@ def c_review_pack(root, a) -> int:
         raise Fail(2, "에픽 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.epic)
     files, conflicts, warns, skipped = [], [], [], []
     blocks = _with_copy_branches(root, a.roadmap, _roadmap_blocks(root, a.roadmap), warns)
-    tip = _tip(root, a.branch)
+    try:
+        tip, note = branch_tip.tip(root, a.branch)
+    except branch_tip.TipError as exc:
+        raise Fail(3, str(exc))
     if tip is None:
         raise Fail(3, "브랜치를 찾지 못했다: %s" % a.branch)
+    if note:
+        print(note)
     default_dir = mpath(root, a.roadmap).parent / REVIEW_PACK_DIR
     out = Path(a.out) if a.out else default_dir / ("%s-%s" % (a.epic, datetime.datetime.now().strftime("%Y%m%d%H%M%S")))
     try:
@@ -988,7 +986,13 @@ def c_review_pack(root, a) -> int:
         for br in b.get("branches") or []:
             if br == a.branch:
                 continue
-            other = _tip(root, br)
+            try:
+                other, note = branch_tip.tip(root, br)
+            except branch_tip.TipError as exc:
+                skipped.append("%s(%s): %s — 충돌 미리 보기에서 빠짐" % (b["id"], br, exc))
+                continue
+            if note:
+                warns.append(note)
             if other is None:
                 skipped.append("%s(%s): 브랜치를 찾지 못했다(아직 안 만들었거나 받지 않음) — 충돌 미리 보기에서 빠짐"
                                % (b["id"], br))

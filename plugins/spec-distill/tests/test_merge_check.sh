@@ -238,7 +238,7 @@ assert_contains "$out" "스위트 대조 — feature/tip(${ORIG:0:8})" "낡은 �
 g checkout -q feature/tip; g reset -q --hard "$ORIG"; put b.txt b; g add -A; g commit -qm t3; g checkout -q trunk
 AHEAD="$(g rev-parse feature/tip)"
 out="$(mc --branch feature/tip)"; rc=$?
-assert_contains "$out" "origin/feature/tip 가 로컬보다 뒤라(push 하지 않은 커밋) 로컬 feature/tip(${AHEAD:0:8}) 를 썼다" "앞선 로컬: 로컬 끝을 쓰고 알린다"
+assert_contains "$out" "origin/feature/tip 가 로컬보다 뒤라(push 하지 않았거나 받아 오지 않은 커밋) 로컬 feature/tip(${AHEAD:0:8}) 를 썼다" "앞선 로컬: 로컬 끝을 쓰고 알린다"
 assert_contains "$out" "스위트 대조 — feature/tip(${AHEAD:0:8})" "앞선 로컬: 대조한 끝이 로컬 끝이다"
 g checkout -q feature/tip; g reset -q --hard "$STALE"; put c.txt c; g add -A; g commit -qm t4; g checkout -q trunk
 out="$(mc --branch feature/tip)"; rc=$?
@@ -254,5 +254,11 @@ g checkout -q -b feature/solo; put d.txt d; g add -A; g commit -qm solo; g check
 out="$(mc --branch feature/solo)"; rc=$?
 assert_contains "$out" "스위트 대조 — feature/solo($(g rev-parse --short=8 feature/solo))" "로컬만: 로컬 끝을 쓴다"
 assert_not_contains "$out" "를 썼다" "로컬만: 알릴 것이 없다"
+ANC="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import branch_tip as b
+try:
+    b._is_ancestor(sys.argv[2], "0" * 40, "0" * 40); print("no error")
+except b.TipError as e:
+    print(e)' "$ROOT/plugins/spec-distill/scripts" "$W")"
+assert_contains "$ANC" "조상 관계를 잴 수 없다" "조상 관계 재기가 실패하면(rc 1 이 아닌 0 아닌 값) 「조상 아님」 으로 접지 않는다"
 
 finish
