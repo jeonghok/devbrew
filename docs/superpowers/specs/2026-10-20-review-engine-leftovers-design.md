@@ -142,7 +142,7 @@ next_phase: superpowers:writing-plans
 ### §2 엔진 값 · 원문 절 · 리뷰어 입력
 
 - **최댓값 표.** `docreview_config.py` 에 `MINIMUM` 옆 같은 꼴의 `MAXIMUM` 표를 둔다. `_int` 가 범위 밖 값을 지금처럼 `ConfigInvalid` 로 거부하고, 부르는 쪽(`begin-round` · `advice`)은 지금처럼 라운드를 시작하지 않고 이유(이름 · 값 · 허용 범위 · 출처)를 보인다. 프로필 · 진입 값도 같은 표를 지난다. 값은 기본값과 지금 테스트가 쓰는 값(탐지 3 · 재리뷰 상한 2 · 참고 목록 8 · 요약 폭 60 등)보다 넉넉하게 계획이 정하고 README 에 공시한다(지휘자 판단 — 「사용자가 연다」는 그 범위 안에서다).
-- **원문 절의 이어 쓴 줄.** 불변 절의 「추가만 허용」을 「새 항목만 추가」로 좁힌다. `_appended_only` 가 옛 줄 해시가 앞부분이라는 조건에 더해, 덧붙은 꼬리의 첫 내용 줄(앞의 빈 줄은 건너뛴다)이 0열에서 시작하는 새 목록 항목(`- `)일 때만 참이다. 스냅숏은 지금 줄 해시만 남기므로, 스냅숏을 만들 때 줄마다 「0열 `- ` 로 시작하는가」 표시를 함께 남긴다(`docreview_anchor.py snapshot` 이 만드는 스냅숏의 칸 하나 — 원장의 새 개념이 아니라 이미 있는 스냅숏 자료에 더하는 것, 지휘자 판단). 판정은 그 라운드 스냅숏의 표시로 하므로 뒤늦게 다시 계산해도(finalize · 게이트 · 따라잡기) 같은 답이다. 마지막 항목 밑에 이어 쓴 줄(들여쓴 인용 줄 · 이어지는 글)은 그 절의 바뀜으로 센다. 엔진은 `S<N>` 문법을 모른다 — 마크다운 목록 항목만 본다(지휘자 판단). 새 `S<N>` 의 정당성(원장에 있는 번호인지)은 지금처럼 진입 검사(`check_verbatim_coverage.py`)가 맡는다.
+- **원문 절의 이어 쓴 줄.** 불변 절의 「추가만 허용」을 「새 항목만 추가」로 좁힌다. `_appended_only` 가 옛 줄 해시가 앞부분이라는 조건에 더해, 덧붙은 꼬리의 첫 내용 줄(앞의 빈 줄은 건너뛴다)이 0열에서 시작하는 새 목록 항목(`- `)일 때만 참이다. 스냅숏은 지금 줄 해시만 남기므로, 스냅숏을 만들 때 줄마다 「0열 `- ` 로 시작하는가」 표시를 함께 남긴다(`docreview_anchor.py snapshot` 이 만드는 스냅숏의 칸 하나 — 원장의 새 개념이 아니라 이미 있는 스냅숏 자료에 더하는 것, 지휘자 판단. `begin-round` 가 스냅숏 칸을 원장으로 옮겨 적는 자리(`line_hashes` 를 덧붙이는 같은 자리)에서 이 표시도 옮긴다). 판정은 그 라운드 스냅숏의 표시로 하므로 뒤늦게 다시 계산해도(finalize · 게이트 · 따라잡기) 같은 답이다. 마지막 항목 밑에 이어 쓴 줄(들여쓴 인용 줄 · 이어지는 글)은 그 절의 바뀜으로 센다. 엔진은 `S<N>` 문법을 모른다 — 마크다운 목록 항목만 본다(지휘자 판단). 새 `S<N>` 의 정당성(원장에 있는 번호인지)은 지금처럼 진입 검사(`check_verbatim_coverage.py`)가 맡는다.
 - **`</related_changes>` 주입.** `cmd_related_changes` 가 JSON 을 낼 때 `<` · `>` · `&` 를 JSON 유니코드 이스케이프 `\u003c` · `\u003e` · `\u0026` 으로 바꿔 낸다. 같은 JSON 값이라 읽는 쪽은 바뀌지 않고, 슬롯의 닫는 표시가 일찍 나올 수 없다. 진입 skill 셋은 고치지 않는다.
 
 ### §3 라우터 — 흡수 · 앵커 · 임시 번호
@@ -155,7 +155,7 @@ next_phase: superpowers:writing-plans
 
 ### §4 보호 · 정리 · 닫힌 리뷰
 
-- **보호의 계보.** 보호 · 불변 판정이 그 라운드 스냅숏만이 아니라 원장의 앞선 스냅숏 전부에서 그 앵커가 보호 · 불변 절(또는 그 자식)이었는지를 본다. 원장 스냅숏을 뒤에서부터 걷는 방식은 `_expected_lines` 의 걷기를 쓴다. `check-intent`(`classify_anchor`)와 `round_fence` 가 같은 함수를 지난다. 채택한 제목 삽입으로 자식 절이 울타리 밖으로 밀려나도 보호가 이어진다. 채택한 결정의 허가(permit)는 그 변경 하나에만 걸린다 — 보호 이력은 이어지고 다음 변경은 다시 묻는다(U6). 보호는 엔진이 스스로 풀지 않는다 — 엔진은 「경계를 옮기는 결정」을 알아볼 표지가 없고, 표지를 새로 만들지 않는다(가벼운 쪽, 지휘자 판단). 그 절을 정말 울타리 밖으로 내려면 사용자가 문서의 보호 제목 자체를 바꾸는 결정을 채택한다(그 결정이 울타리를 바꾼다). README 에 「한 번 보호된 절은 이후 변경마다 다시 묻는다」를 적는다. 앞선 스냅숏에서 보호였던 앵커와 같은 slug 의 새 절이 생기면 보호 쪽으로 닫는다(질문으로 올라온다 — 과한 쪽을 감수, 지휘자 판단).
+- **보호의 계보.** 보호 · 불변 판정이 그 라운드 스냅숏만이 아니라 원장의 앞선 스냅숏 전부에서 그 앵커가 보호 · 불변 절(또는 그 자식)이었는지를 본다. 원장 스냅숏을 뒤에서부터 걷는 방식은 `_expected_lines` 의 걷기를 쓴다. 지금 스냅숏만 보고 보호 · 불변을 계산하는 자리가 모두 같은 계보 함수를 지난다 — `check-intent`(`classify_anchor`) · `round_fence` · `begin-round` 의 불변 절 줄 해시 남기기 · `scope_problem` · `_immutable_adopt_anchors`(계획이 `grep` 으로 다시 세어 빠짐없이 묶는다). 그래야 밀려난 자식 절이 자리마다 다르게 판정되지 않는다. 채택한 제목 삽입으로 자식 절이 울타리 밖으로 밀려나도 보호가 이어진다. 채택한 결정의 허가(permit)는 그 변경 하나에만 걸린다 — 보호 이력은 이어지고 다음 변경은 다시 묻는다(U6). 보호는 엔진이 스스로 풀지 않는다 — 엔진은 「경계를 옮기는 결정」을 알아볼 표지가 없고, 표지를 새로 만들지 않는다(가벼운 쪽, 지휘자 판단). 보호된 절을 울타리 밖으로 내는 길은 없다 — 계보가 앞선 스냅숏 전부를 보므로 지금 제목을 바꿔도 보호는 이어지고, 이후 변경마다 묻는다(지휘자 판단, 가장 가벼운 쪽). README 와 AC9 에 「한 번 보호된 절은 이후 변경마다 다시 묻는다」를 적는다. 앞선 스냅숏에서 보호였던 앵커와 같은 slug 의 새 절이 생기면 보호 쪽으로 닫는다(질문으로 올라온다 — 과한 쪽을 감수, 지휘자 판단).
 - **finalize 두 번.** `cmd_finalize` 가 준비가 없는데(`no_pending_recritic`) 그 라운드의 `route_report` 가 이미 있으면 거부 기록(`finalize_failed`)을 남기지 않고, 「이 라운드는 이미 정리됐다」를 알리고 같은 보고를 rc 0 으로 다시 낸다(멱등). 준비가 다른 라운드 것이거나 보고가 없으면 지금처럼 거부한다.
 - **닫힌 뒤 손으로 쓴 결정 줄.** 결정 기록 절(프로필 `decision_log` 이 문서 절인 자리)에 엔진 밖에서 더해진 줄이 리뷰가 닫힌 뒤에 생겼으면, 재리뷰 라운드의 줄 출처 판정(`_log_verdicts`)이 그 줄을 「허가 없이 바뀜」 결정이 아니라 기록으로 읽고 게이트에 「리뷰가 닫힌 뒤 손으로 더한 결정 줄 N개 — 기록으로 읽었다」와 그 줄들을 보인다. 닫힘의 표지는 이미 있다 — 끝맺음 펜스가 그 라운드의 계수 줄을 엔진으로 쓴다(`cmd_advice --log-file`, 원장 `engine_lines` 에 남는다). 기록으로 받는 줄은 닫힌 뒤 다음 재리뷰가 시작될 때 이미 있던 줄로 한정한다(U5) — 결정 기록 절에서 원장이 아는 마지막 계수 줄보다 아래에 있고, 그 재리뷰의 첫 라운드 시작 스냅숏(`begin-round` 가 원장에 남기는 스냅숏)에 이미 있는 줄이다. 그 스냅숏 뒤에 더한 줄은 열린 리뷰의 손 편집이라 지금처럼 허가를 묻는다. 계수 줄이 여럿이면 마지막 것을 쓰고, 계수 줄 위에 끼워 넣은 줄은 지금처럼 묻는다. 그 표지 뒤의 줄만 해당하고, 다른 절 · 열린 리뷰 안의 손 편집은 지금처럼 묻는다(울타리를 넓히지 않는다).
 
@@ -183,12 +183,12 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 **범위는 최종 판정만이다(U4).** 지키는 것은 최종 판정 줄의 수치 · 축이다. 반복 중간 단계(Step 4.5 표면화 · 라우팅, 낮춘 지적 게이트 · 되올려 다시 합성하기, Fix-loop 분류, result.md 기록)가 차등 테스트 뒤에 세션 폴더를 다시 읽는 것과, 레포 코드가 남긴 프로세스가 반복 2 이후의 리뷰 입력에 닿을 수 있다는 것은 바꾸지 않고 README 「한계」 절에 알린다 — 「qg 는 최종 판정 수치를 레포 코드가 돌기 전 또는 만든 직후에 읽어 지킨다. 반복 중간 단계와 레포 코드가 남긴 프로세스의 영향은 막지 않는다. 판정 뒤 게시 단계(게시 여부를 `range-scope.txt` 유무와 result.md 의 `## 게시` 줄로 정한다)도 같다」.
 
 - **순서.** iteration 마다 ① 리뷰(Step 1 · 1b · 3 · 3.5) 뒤, 차등 테스트(레포 코드) 전에 리뷰 축 합성을 끝낸다 — 합성기가 리뷰 축 판정(막는 지적 수 · 선택 수 · 리뷰 축 사유 · 각도 결손)을 내고 오케스트레이터가 그 출력을 곧바로 읽어 턴에 든다. 그다음 ② 차등 테스트를 돌고 D5 직후 `new_failures` 와 차등 축 판정을 읽어 든다. Fix-loop 의 제외 항목 수는 `excluded.md` 에 한 줄을 더할 때마다 턴에서 센다. 범위 모드의 시작 · 끝 커밋은 Preflight 에서 범위를 얼린 직후 읽어 든다.
-- **최종 판정.** `## Final verdict` 펜스는 `--prior "$SYN"` 과 `differential.yaml` · `excluded.md` · `range-scope.txt` 재독을 지우고, `verdict.py` 의 이미 있는 인자(`--blocking` · `--optional` · `--new-failures` · `--excluded` · `--sha` · `--defect` · `--review-blocked` · `--angle-absent` · `--reason` · `--e2e`)로만 넘긴다. 그 인자는 모델이 숫자를 고르거나 옮겨 적은 것이 아니다 — 숫자를 만든 직후의 펜스(리뷰 축 합성 직후 · 차등 테스트 직후 · 제외 항목을 더한 직후 · 범위를 얼린 직후)가 판정 인자 줄(`qg-verdict-args: …`)을 기계 출력으로 내고, 최종 판정 펜스는 그 줄들을 글자 그대로 붙인다(U8). 기존 규칙 R24 「판정은 기계 출력을 직접 읽고, 모델이 옮겨 적지 않는다」는 「판정 인자는 기계가 낸 줄의 글자 그대로」로 바뀌고, 그 문장과 락(`references/differential-test.md` 의 R24 줄 · `tests/test_e2e_docs.sh` 의 R24 · K-3 · K-7 단언 · `tests/test_differential_procedure.sh` 의 R24 케이스 · `tests/test_skill_run_contract.sh` 의 R24 단언)을 함께 고친다. 어느 축이 이미 있는 플래그로 표현되지 않으면 그 축에 플래그를 하나 더하는 것까지만 한다(새 상태 파일 없음). Step 1c 의 `degraded: yes` 는 지금처럼 턴에서 `--reason error-axis` 로 간다.
+- **최종 판정.** `## Final verdict` 펜스는 `--prior "$SYN"` 과 `differential.yaml` · `excluded.md` · `range-scope.txt` 재독을 지우고, `verdict.py` 의 이미 있는 인자(`--blocking` · `--optional` · `--new-failures` · `--excluded` · `--sha` · `--defect` · `--review-blocked` · `--angle-absent` · `--reason` · `--e2e`)로만 넘긴다. 그 인자는 모델이 숫자를 고르거나 옮겨 적은 것이 아니다 — 숫자를 만든 직후의 펜스(리뷰 축 합성 직후 · 차등 테스트 직후 · 제외 항목을 더한 직후 · 범위를 얼린 직후)가 판정 인자 줄(`qg-verdict-args: …`)을 기계 출력으로 내고, 최종 판정 펜스는 그 줄들을 글자 그대로 붙인다(U8). 기존 규칙 R24 「판정은 기계 출력을 직접 읽고, 모델이 옮겨 적지 않는다」는 「판정 인자는 기계가 낸 줄의 글자 그대로」로 바뀌고, R24 · V1 · K-3 · K-7 을 인용하는 자리를 계획이 `grep` 으로 전부 뽑아 함께 고친다(지금 확인된 것 — `skills/quality-pipeline/references/differential-test.md` 의 R24 문장 둘 · `skills/quality-pipeline/SKILL.md` 의 「(V1 · R24)」 · `scripts/verdict.py` 주석 · `README.md` · `tests/test_v1_verdict_line.sh` · `tests/test_diff_test_results.py` 의 ProducerToVerdict · `tests/harness/test_skill_orchestration_behavior.sh` · `tests/test_publish_pipeline_wiring.sh`(K-3), 그리고 아래 락. 판정 펜스가 지금 쓰는 `--line` · `--iter` · `--e2e-overridden` 도 기계가 낸 줄에 포함된다). 그 문장과 락(`references/differential-test.md` 의 R24 줄 · `tests/test_e2e_docs.sh` 의 R24 · K-3 · K-7 단언 · `tests/test_differential_procedure.sh` 의 R24 케이스 · `tests/test_skill_run_contract.sh` 의 R24 단언)을 함께 고친다. 어느 축이 이미 있는 플래그로 표현되지 않으면 그 축에 플래그를 하나 더하는 것까지만 한다(새 상태 파일 없음). Step 1c 의 `degraded: yes` 는 지금처럼 턴에서 `--reason error-axis` 로 간다.
 - **판정 id.** `finding_id` 를 `agent-file-line-<요약 지문>` 으로 바꾼다 — 요약 지문은 `_same_claim` 의 정규화(공백 접기 · casefold)를 한 함수로 꺼내 그 결과의 짧은 해시다(내용 기반 · 순서 무관). `anonymize` · `to_adjudication_doc` · `dedup` 의 흡수 기록이 같은 함수를 지난다. `test_synthesize_recritic.sh` 의 충돌 케이스 넷을 「같은 줄 · 다른 요약은 다른 id」 · 「같은 요약은 같은 id」로 다시 쓴다.
 - **제외 pathspec 접두 우회.** 걸러진 diff 를 만들 때 제외를 pathspec 으로 빼지 않고, 남길 경로를 `:(literal)` 로 명시해 diff 를 만든다. 그 뒤 전체 이름 목록의 모든 경로가 제외 목록 또는 걸러진 목록에 있는지 대조하고, 어느 쪽에도 없으면 `degraded: yes` 와 그 경로를 크게 알린다. 다른 바뀐 경로의 접두인 경로는 제외 목록에서 거부한다.
 - **worktree 건너뛰기의 세션 결속.** `is_qg_state` 의 worktree 갈래가 `(base|head)-<8자>` 의 8자가 `--dir` 세션 폴더 이름의 앞 8자와 같을 때만 건너뛴다(`qg-worktree.sh` 의 이름 규칙). `git worktree list` 확인은 유지한다. 맞지 않으면 리뷰 안 된 중첩 레포로 보고 `degraded: yes` 다.
 - **중첩 레포 리뷰 다시 열기.** R2a 미룸(:448)이 「상태 결정 뒤에」로 미룬 것을 연다. 판정 신호는 위 턴 운반이 맡으므로 남은 질문은 내용을 안전하게 읽는 길이다. PR #234 의 두 위험을 넘지 않는 길만 쓴다 — 중첩 레포 안에서 git 을 돌리지 않고(설정의 명령 실행), 링크를 따라가지 않는다(레포 밖 유출). 이 조건으로 중첩 레포의 무시 규칙을 지킨 파일 목록을 얻을 수 있으면 그 파일을 리뷰 diff 에 싣고 `degraded` 를 내지 않는다. 얻지 못하면 지금처럼 리뷰하지 않고 막되 그 이유를 출력에 싣는다(지휘자 판단 — 무시 규칙 없이 펼치면 의존 폴더가 리뷰를 덮는다). 길의 실측은 계획 몫이다(`### Deferred to plan`).
-- **codex 와 검토 트리의 AGENTS.md.** codex 러너 셋(코드 · 산출물 · 문서 리뷰)이 검토 대상 트리의 프로젝트 문서(AGENTS.md)를 지시로 불러오지 않게 codex 설정을 넘긴다. 설치된 codex 가 그 설정을 받지 않으면 codex 축 공시 줄과 README 한계 절에 「codex 가 검토 대상 트리의 AGENTS.md 를 지시로 읽을 수 있다」를 적는다(지휘자 판단 — 외부 도구의 동작은 바꾸지 못하고 공시가 가장 가볍다).
+- **codex 와 검토 트리의 AGENTS.md.** 검토 대상 트리를 작업 폴더로 `codex exec` 를 부르는 러너 전부(지금 넷 — qg 의 코드 · 산출물, 공유 문서 리뷰, plugin-audit 의 `run_audit_codex_reviewer.sh`; 계획이 `codex exec` 호출을 `grep` 으로 다시 세어 도출한다)가 검토 대상 트리의 프로젝트 문서(AGENTS.md)를 지시로 불러오지 않게 codex 설정을 넘긴다. 설치된 codex 가 그 설정을 받지 않으면 codex 축 공시 줄과 README 한계 절에 「codex 가 검토 대상 트리의 AGENTS.md 를 지시로 읽을 수 있다」를 적는다(지휘자 판단 — 외부 도구의 동작은 바꾸지 못하고 공시가 가장 가볍다).
 - **e2e 시나리오 수 상한 공시.** `references/e2e.md` §1 · §2 — 만들 수 있는 시나리오가 셋을 넘으면 질문 본문에 「시나리오 후보 N개 중 셋만 만들었다 — 「기타」 칸에 적으면 그 자리에서 더 만든다」를 싣는다(R2a 설계 :122 의 처분). 선택지 넷 제약은 도구 제약이라 그대로다.
 
 ### §8 락 · 판정기 빈틈
@@ -229,7 +229,7 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 2. **qg** — §7. 브랜치 `feature/qg-verdict-state`.
 3. **락 · 판정기 · 문서 · project-init · 지휘 절차** — §8 · §9(로드맵 고침과 conducting.md 걸음 4 ③ 제외 — 그것은 계획 1). 브랜치 `feature/review-lock-leftovers`.
 
-셋은 대부분 다른 파일을 고쳐 병렬로 갈 수 있다. 겹치는 곳은 `tools/adjudication/check_wiring.py`(계획 1 의 흡수 분기 락 · 계획 2 의 합성기 · 계획 3 의 키 바꾸기)와 버전 파일이다 — 공유 엔진은 링크로 spec-distill 과 quality-gates 에 함께 실려 나가므로 계획 1 · 2 는 quality-gates 를, 계획 1 · 2 · 3 은 spec-distill 을 올린다. 판 번호와 CHANGELOG 머리는 머지 직전 지휘자가 정하고, 늦게 머지되는 쪽이 기본 브랜치를 합쳐 그 둘을 다시 맞춘다 — 계획 3 이 먼저 머지되면 나머지는 줄 번호를 다시 박지 않는다. 늦게 머지되는 쪽이 기본 브랜치를 합치고 스위트를 다시 돈다. 브랜치 줄과 경로 예약(이 문서 `## Files to Modify` 가운데 R12 예약에 없는 `plugins/quality-gates/scripts/review-diff.sh` · `verdict.py` · `run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh` · `plugins/quality-gates/tests/test_review_diff.sh` · `plugins/plugin-audit/tests/test_check_shape_completeness.py` · 건드린 플러그인의 `plugin.json` · `CHANGELOG.md` · `README.md`)은 지휘자가 설계 승인 뒤 로드맵 PR 로 고친다.
+셋은 대부분 다른 파일을 고쳐 병렬로 갈 수 있다. 겹치는 곳은 `tools/adjudication/check_wiring.py`(계획 1 의 흡수 분기 락 · 계획 2 의 합성기 · 계획 3 의 키 바꾸기)와 버전 파일이다 — 공유 엔진은 링크로 spec-distill 과 quality-gates 에 함께 실려 나가므로 계획 1 · 2 는 quality-gates 를, 계획 1 · 2 · 3 은 spec-distill 을 올린다. 판 번호와 CHANGELOG 머리는 머지 직전 지휘자가 정하고, 늦게 머지되는 쪽이 기본 브랜치를 합쳐 그 둘을 다시 맞춘다 — 계획 3 이 먼저 머지되면 나머지는 줄 번호를 다시 박지 않는다. 늦게 머지되는 쪽이 기본 브랜치를 합치고 스위트를 다시 돈다. 브랜치 줄과 경로 예약(이 문서 `## Files to Modify` 가운데 R12 예약에 없는 `plugins/quality-gates/scripts/review-diff.sh` · `verdict.py` · `run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh` · `plugins/quality-gates/tests/test_review_diff.sh` · `plugins/plugin-audit/tests/test_check_shape_completeness.py` · `plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh` · `plugins/spec-distill/tests/test_conducting_loop.sh` · `test_conducting_reference.sh` · `plugins/quality-gates/skills/quality-pipeline/references/differential-test.md` · `plugins/quality-gates/tests/test_e2e_docs.sh` · `test_differential_procedure.sh` · `test_skill_run_contract.sh` · `test_v1_verdict_line.sh` · `test_diff_test_results.py` · `tests/harness/test_skill_orchestration_behavior.sh` · `test_publish_pipeline_wiring.sh` · AC23 · AC24 테스트 자리 · 건드린 플러그인의 `plugin.json` · `CHANGELOG.md` · `README.md`)은 지휘자가 설계 승인 뒤 로드맵 PR 로 고친다.
 
 ## 있는 것 검토
 
@@ -281,7 +281,7 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - AC20 제외한 경로가 다른 바뀐 경로의 접두인 경우 그 아래 파일이 리뷰 diff 에서 조용히 빠지지 않는다 — 실리거나 `degraded: yes` 와 경로가 보인다. 이름 목록 대조가 빠진 경로를 잡는다.
 - AC21 다른 세션 접미의 `worktrees/(base|head)-<8자>/` 등록 worktree 는 건너뛰지 않고 리뷰 안 된 중첩 레포로 `degraded: yes` 다. 이번 세션 접미는 지금처럼 건너뛴다.
 - AC22 중첩 레포 리뷰 — 안전한 길이 있으면 그 안 파일이 무시 규칙대로 리뷰 diff 에 실리고, 설정에 명령을 심은 중첩 레포에서 명령이 돌지 않고, 레포 밖을 가리키는 링크의 내용이 실리지 않는다. 안전한 길이 없으면 지금처럼 막고 이유를 출력에 싣는다.
-- AC23 codex 러너 셋이 AGENTS.md 불러오기를 끄는 설정을 넘기거나, 넘기지 못하면 codex 축 공시 줄 · README 한계 절에 그 사실이 있다.
+- AC23 `codex exec` 를 부르는 러너 전부(도출 — 지금 넷)가 AGENTS.md 불러오기를 끄는 설정을 넘기거나, 넘기지 못하면 codex 축 공시 줄 · README 한계 절에 그 사실이 있다.
 - AC24 e2e 시나리오 후보가 셋을 넘으면 질문 본문에 후보 수와 「기타」 칸으로 더 여는 길이 있다.
 
 **락 · 판정기(§8)**
@@ -308,7 +308,7 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - `plugins/spec-distill/references/docreview-profiles/design-doc.md`(§9 — `approaches_comparison` 설명 한 줄, U7) · `plugins/spec-distill/references/conducting.md` 걸음 4 ③ · `plugins/spec-distill/tests/test_conducting_loop.sh` · `test_conducting_reference.sh`(§9 — 고정 문장)
 - `plugins/spec-distill/tests/test_ledger_wiring.sh` · `shared/docreview/references/reviewing-document.md`(§5 · §6 — spec-distill `references/` 의 링크가 가리키는 정본)
 - `plugins/spec-distill/skills/spec-review/SKILL.md`(§5 산문 · §6 대입 꼴 · 결정 줄 펜스 · 기각 되돌리기 걸음) · `skills/request-framing/SKILL.md` · `skills/reviewing-brief/SKILL.md`(§5 의 넓힌 락이 거는 산문만) · `references/redecompose.md` · `references/conductor-dispatch.md`
-- `plugins/quality-gates/skills/quality-pipeline/SKILL.md` · `scripts/synthesize_findings.py` · `scripts/verdict.py`(축 플래그가 모자랄 때만) · `scripts/review-diff.sh` · `scripts/run_codex_reviewer.sh` · `scripts/run_artifact_codex_reviewer.sh` · `scripts/run_docreview_codex_reviewer.sh`(공유 정본 쪽) · `references/e2e.md` · `references/differential-test.md`(R24 문장) · `tests/test_synthesize_recritic.sh` · `tests/test_review_diff.sh` · `tests/test_e2e_docs.sh` · `tests/test_differential_procedure.sh` · `tests/test_skill_run_contract.sh`(R24 · K-3 · K-7) · codex 러너 설정 · 공시 테스트(AC23) · e2e 상한 공시 테스트(AC24) 자리
+- `plugins/quality-gates/skills/quality-pipeline/SKILL.md` · `scripts/synthesize_findings.py` · `scripts/verdict.py`(축 플래그가 모자랄 때만) · `scripts/review-diff.sh` · `scripts/run_codex_reviewer.sh` · `scripts/run_artifact_codex_reviewer.sh` · `scripts/run_docreview_codex_reviewer.sh`(공유 정본 쪽) · `references/e2e.md`(플러그인 루트) · `skills/quality-pipeline/references/differential-test.md`(R24 문장) · `tests/test_synthesize_recritic.sh` · `tests/test_review_diff.sh` · `tests/test_e2e_docs.sh` · `tests/test_differential_procedure.sh` · `tests/test_skill_run_contract.sh`(R24 · K-3 · K-7) · codex 러너 설정 · 공시 테스트(AC23) · e2e 상한 공시 테스트(AC24) 자리
 - `plugins/plugin-audit/scripts/check-shape-completeness.py` · `plugins/plugin-audit/tests/test_check_shape_completeness.py`
 - `shared/tests/test_copy_of_contract.sh` · `shared/entry/check_invocation_surface.py` · `shared/tests/test_invocation_surface.sh`
 - `docs/philosophy/devbrew-harness-philosophy.md`
@@ -344,6 +344,8 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 
 - U1 · 결정 · 2026-10-20 · 사용자 — 「틀리거나 빠진거 없어」 (덩어리 1 — 범위 분류 · 이미 고친 수정 목록 소실 빼기 · 범위 밖 셋 더하기)
 - U2 · 결정 · 2026-10-20 · 사용자 — 「다시 읽지 않기 (권장)」 (덩어리 2 — qg 판정 수치는 만든 직후 읽어 인자로, 리뷰 판정은 레포 코드가 돌기 전에 확정, CLAUDE.md 상태 규칙 그대로. 중첩 레포 리뷰 다시 열기 · push 보안 지적 둘은 R12 범위)
+- U9 · 결정 · 2026-10-20 · 사용자 — 「고친 대로 둠 (권장)」(2라운드 반영 절) · 「열지 않음 (권장)」(추가 라운드)
+- 지휘자 판단 · 2026-10-20 · spec 리뷰 3라운드 참고 반영 — 보호 해제 길 없음(제목 바꾸기 문장 뺌) · 계보 함수를 지나는 자리 다섯 · 줄 머리 표시는 `begin-round` 옮겨 적기 자리에서 · R24 인용 자리는 `grep` 으로 전부 · codex 러너는 `codex exec` 호출 전부로 도출(plugin-audit 포함) · 경로 예약 추가 목록에 테스트 파일들.
 - U8 · 결정 · 2026-10-20 · 사용자 — 「기계가 낸 줄을 그대로 (권장)」 (spec 리뷰 2라운드 — qg 판정 인자는 기계가 낸 줄을 글자 그대로, R24 를 그 뜻으로 고침) · 「고친 대로 둠 (권장)」(1라운드 반영 절)
 - 지휘자 판단 · 2026-10-20 · spec 리뷰 2라운드 참고 반영 — 줄 머리 표시는 스냅숏에 남김 · 보호는 엔진이 스스로 풀지 않음(README 공시) · 산문 락은 따옴표 · 경로 접두 표기도 셈 · conducting.md 걸음 4 ③ 은 계획 1 · 빠진 테스트 자리 채움.
 - U5 · 결정 · 2026-10-20 · 사용자 — 「고친다 — 재리뷰 시작 전 줄만 (권장)」 (spec 리뷰 1라운드 06800cb8#r1.1)
@@ -368,6 +370,17 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - D2.9 · r2 · adopt · a8a95e6d#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: 번호 대조 (modified)
 - D2.10 · r2 · adopt · c6c0ccc8#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Anti-goals (modified)
 - D2.11 · r2 · adopt · c934ff7b#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: 상류 · 하류 연계 (modified)
+- D3.12 · r3 · adopt · 5267fc19#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §4 보호 · 정리 · 닫힌 리뷰 (modified)
+- D3.13 · r3 · adopt · 6697c411#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: 원칙 · 입력 대조 (modified)
+- D3.14 · r3 · adopt · 6c8b9494#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Files to Modify (modified)
+- D3.15 · r3 · adopt · 7ba96ef1#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §7 qg 판정 — 다시 읽지 않기 (modified)
+- D3.16 · r3 · adopt · 8a3ed3b0#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §5 원장 쓰기 순서 — 펜스 락을 산문까지 (modified)
+- D3.17 · r3 · adopt · 93a5c0ad#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D3.18 · r3 · adopt · c1d6a48e#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §2 엔진 값 · 원문 절 · 리뷰어 입력 (modified)
+- D3.19 · r3 · adopt · e939aca4#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §11 계획 나누기 (modified)
+- docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r2: advice_new=5 · advice_repeat=2 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r3: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
 
 ## 번호 대조
 
@@ -449,3 +462,18 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - §7 판정 id 를 실행 사이에 읽는 소비자가 없는지.
 - §8 `EXEMPT` 둘러싼 `for` 의 순회 대상 글자를 `scan()` 행에서 얻을 수 있는지 — 없으면 같은 내용 기반의 다른 가르개.
 - §8 plugin-audit kill switch 를 자기 이름으로 묶었을 때 레포의 각 플러그인 판정 대조.
+
+| # | 항목 |
+|---|---|
+| d62bf01a#r1.1 | 참고(data_flow) #2-엔진-값--원문-절--리뷰어-입력 — 새 목록 항목인지 판정하는 데 필요한 줄 모양이 판정 함수까지 전달되지 않는다. 실제 스냅숏 생성과 원장 저장은 본문 대신 줄 해시를 남기므로, 해시만으로 첫 내용 줄의 목록 표지를 확인할 수 없다. — 고치면: 스냅숏 생성 시 줄별 빈 줄 여부와 0열 목록 시작 여부를 계산하고, 불변 절의 해당 정보를 원장에 보존해 추가 판정에 전달한다. 이 정보가 없는 옛 스냅숏은 추가 면제를 적용하지 않는다고 명시하고, 생산·저장·소비 경로를 설계에 연결한다. |
+| 8e36d574#r1.1 | 참고(component_relations) #4-보호--정리--닫힌-리뷰 — 제약 절에는 이 에픽이 conducting.md 를 고친다고 적혀 있다. 그런데 어느 절도 무엇을 고치는지 말하지 않고, 수정 파일 목록에도 없다. 그사이 §4 는 닫힌 리뷰에 손으로 쓴 결정 줄을 받아들이게 바뀌지만, 지휘 절차는 그런 줄을 여전히 지휘 기록으로 보낸다. — 고치면: §4 에 conducting.md 걸음 4 ③ 을 「리뷰가 닫혔으면 결정 기록 절 끝, 곧 마지막 계수 줄 아래에 손으로 쓴다. 재리뷰가 그 줄을 기록으로 읽는다」로 바꾸는 걸음을 더한다. Files to Modify 에는 `references/conducting.md` 와 위 두 테스트의 고정 문장을 더하고 AC11 에 지휘 절차 쪽 단언을 붙인다. ③ 을 그대로 두기로 하면 Constraints 에서 conducting.md 를 빼고 §4 에 그 이유를 한 줄 적는다. |
+| ed6d45de#r2.1 | 참고(component_relations) #11-계획-나누기 — 지휘 절차(conducting.md 걸음 4 ③)를 「닫힌 리뷰면 결정 기록 절 끝에 손으로 쓴다」로 바꾸는 일은 계획 3 에 있다. 그런데 그 줄을 기록으로 받아 주는 엔진 변경(§4)은 계획 1 에 있다. 둘이 병렬로 머지될 수 있다고 적혀 있어 순서가 보장되지 않는다. |
+| 294e4463#r2.1 | 참고(tradeoffs) #7-qg-판정--다시-읽지-않기 — 최종 판정 펜스가 숫자와 축을 「턴에 들고 온 값」으로 넘기게 바꾸면, 판정 숫자는 셸이 기계 출력에서 뽑고 모델이 채우지 않는다는 기존 규칙과 그 규칙을 지키는 락을 뒤집는다. 그런데 설계는 이 사실을 밝히지 않았다. — 고치면: 다시 읽지 않기(U2)는 그대로 둔다. 다만 리뷰 축 합성 직후와 차등 테스트 직후의 펜스가 판정 인자 한 줄(예: `qg-verdict-args: --blocking 2 --optional 1 --defect …`)을 기계 출력으로 내게 한다. 최종 판정 펜스는 그 줄을 글자 그대로 붙여 넣는다 — 모델은 숫자를 고르지 않고 줄을 옮기기만 한다. R24 락은 「판정 인자는 기계가 낸 줄의 글자 그대로」로 바꾸고, test_e2e_docs.sh 의 K-3 · K-7 · R24 단언을 함께 고친다. 설계 §7 · §10 에 이것이 기존 V1 · R24 규칙을 어떻게 바꾸는지 한 줄 적는다. |
+| f3af3c5a#r2.1 | 참고(ambiguity) #4-보호--정리--닫힌-리뷰 — §4 는 보호 이력이 「사용자가 보호 경계를 옮기는 결정을 명시로 채택했을 때」만 끝난다고 했다. 그런데 엔진이 어떤 결정을 「경계를 옮기는 결정」으로 알아보는지를 적지 않았다. 결정 기록에는 이와 반대인 앞선 지휘자 판단(허가가 그 앵커를 덮으면 보호가 끝남)이 대체 표시 없이 남아 있다. |
+| 4de67ca2#r2.1 | 참고(ambiguity) #5-원장-쓰기-순서--펜스-락을-산문까지 — 산문 락이 세는 꼴을 「`docreview_state.py declare-related` · `docreview_state.py log-decision`」 글자로만 정했다. 그래서 스크립트 이름과 하위 명령 사이에 따옴표 · 백틱 · 경로 변수가 낀 표기(예: `"$SD/scripts/docreview_state.py" log-decision`, `` `docreview_state.py` 의 `declare-related` ``)를 세는지가 정해지지 않았다. 허용할 표기와 그 표기별 음성 변이를 적어야 한다. |
+| 1cdda836#r2.2 | 참고(handoff_incomplete) #files-to-modify — Files to Modify 와 §11 의 경로 예약 추가 목록에 바뀌는 테스트 자리가 빠졌다. 최종 판정 펜스를 고정한 plugins/quality-gates/tests/test_e2e_docs.sh, codex 러너 셋의 설정 · 공시를 지킬 테스트(AC23), e2e 시나리오 상한 공시 테스트(AC24)가 없다. Files to Modify 에는 있는 plugins/spec-distill/tests/test_conducting_loop.sh · test_conducting_reference.sh 는 로드맵 R12 예약에도 없고 §11 의 추가 목록에도 없다. |
+| 594338de#r3.1 | 참고(handoff_incomplete) #11-계획-나누기 — §11 에 지휘자가 로드맵 PR 로 더할 경로 예약 목록이 있는데, Files to Modify 에 있으면서 R12 예약에도 없는 테스트 파일들이 이 목록에 빠져 있습니다. |
+| 20b65960#r3.1 | 참고(handoff_incomplete) #2-엔진-값--원문-절--리뷰어-입력 — 줄마다 「0열 `- ` 로 시작하는가」 표시를 남긴다고 했지만, 원장 스냅숏을 만드는 `begin-round` 가 정해진 칸만 옮겨 적기 때문에 그 표시가 원장에 남지 않습니다. 표시를 옮길 자리(줄 해시를 남기는 같은 자리)를 적어야 합니다. |
+| 73b238ba#r3.1 | 참고(handoff_incomplete) #4-보호--정리--닫힌-리뷰 — 계보 함수를 거쳐야 할 자리가 `classify_anchor` 와 `round_fence` 둘만 적혀 있습니다. 지금 스냅숏만 보는 불변 판정 자리 셋이 빠져 있어서, 밖으로 밀려난 자식 절은 울타리에서는 불변인데 다른 곳에서는 불변이 아닌 것으로 갈립니다. |
+| 229c1f42#r3.1 | 참고(ambiguity) #7-qg-판정--다시-읽지-않기 — 「검토 대상 트리의 AGENTS.md 를 지시로 읽는다」는 노출에 대해 codex 러너를 셋(코드·산출물·문서 리뷰)만 꼽았습니다. 그런데 레포에는 같은 꼴로 남의 트리를 cwd 로 codex 를 부르는 넷째 러너(plugin-audit)가 있습니다. 러너를 손으로 꼽지 말고 `codex exec` 를 부르는 곳 전부로 도출하게 적어야 합니다. |
+| 5e63ff1e#r3.1 | 참고(handoff_incomplete) #7-qg-판정--다시-읽지-않기 — R24 를 고칠 자리 목록이 일부만 있고 한 경로가 틀렸습니다. 이대로면 AC17 의 「옛 문장이 남지 않는다」를 지킬 수 없으니, R24·K-3 를 인용하는 자리를 grep 으로 전부 뽑아 고치도록 바꿔야 합니다. 판정 펜스가 넘기는 인자 목록에서도 지금 쓰는 `--line`·`--iter`·`--e2e-overridden` 이 빠져 있습니다. |
