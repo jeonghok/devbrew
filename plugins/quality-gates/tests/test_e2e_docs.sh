@@ -129,22 +129,43 @@ case_walk_records_are_staged_not_appended_to_result() {
   assert_not_contains "$s" 'result.md"' "R-T5c: ## e2e 절의 펜스가 result.md 를 건드리지 않는다"
 }
 
+marked() {    # marked <표지> — SKILL 의 `<!-- 표지:begin -->` 과 `<!-- 표지:end -->` 사이
+  awk -v b="<!-- $1:begin -->" -v e="<!-- $1:end -->" '$0 == b {on=1; next} $0 == e {exit} on' "$SKILL"
+}
+
 case_final_verdict_goes_through_verdict_py_with_e2e() {
-  local s; s=$(section "$SKILL" "## Final verdict")
-  assert_contains "$s" 'python3 "$QG/scripts/verdict.py" --prior "$SYN" --line ' "K-3 · K-7: 최종 판정은 ② 의 \$SYN 을 --prior 로 잇는다"
-  assert_contains "$s" 'SYN="<마지막 iteration 의 RV>/synth.out"' "K-7: --prior 파일은 ② 의 \$RV/synth.out 이다"
-  assert_contains "$s" "--e2e '<e2e 칸>'" "K-3: 최종 판정 호출이 e2e 칸을 싣는다"
-  assert_contains "$s" "--e2e '안 함'" "trivia 판정 줄의 e2e 칸은 안 함"
-  # R24 — 판정 줄 숫자는 셸이 기계 출력에서 뽑는다. 차등 새 실패의 `K=` 줄은 ⑤ 가 자기 규칙으로 바꾸는 자리라
-  # 그 글자를 여기서 핀하지 않는다 — 셸 변수에서 온다는 것만 잰다.
-  assert_contains "$s" 'N_BLOCK=$(sed -n '"'"'s/^blocking: //p'"'"' "$SYN"); N_OPT=$(sed -n '"'"'s/^optional: //p'"'"' "$SYN")' "R24: 막는 지적 · 선택은 \$SYN 에서 뽑는다"
-  assert_grep "$s" '^K=' "R24: 차등 새 실패는 셸이 대입한다(K= 줄)"
-  assert_contains "$s" '--blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X"' "R24: 판정 줄 숫자 넷이 셸 변수에서 온다(결측을 0 으로 채우지 않는다)"
-  assert_not_grep "$s" '--(blocking|optional|new-failures|excluded) <' "R24: 숫자를 모델이 채우는 자리표시가 없다"
-  assert_not_contains "$s" 'ARGS+=(--defect)' "--prior 와 앞 판정 재주입(--defect · --reason)을 함께 두지 않는다"
-  # ② 의 I3 — 합성 출력이 없거나 키가 겹치면 판정 줄을 만들지 않는다. --prior 가 verdict 줄만 다시 재므로 이 가드가 남아야 한다.
-  assert_contains "$s" '[ -s "$SYN" ] || {' "I3: 합성 출력이 없거나 비면 멈추는 가드가 남았다"
-  assert_contains "$s" 'for k in verdict blocking optional; do' "I3: verdict · blocking · optional 줄이 정확히 한 번인지 재는 고리가 남았다"
+  # R24 · K-3 · K-7 — 판정 펜스 셋(최종 · trivia · 걸러진 diff 빈 실행)은 세션 폴더를 다시 읽지 않는다. 판정 인자는
+  # 숫자를 만든 직후의 펜스가 낸 `qg-verdict-args:` 줄이고, 펜스는 그 줄을 따옴표 heredoc 자리에 받아 검사한 뒤 배열로 넘긴다.
+  local s m f ax
+  s=$(section "$SKILL" "## Final verdict")
+  for m in final-verdict trivia-verdict scope-empty-verdict; do
+    f=$(marked "$m")
+    [ -n "$f" ] && ok "R24: 판정 펜스 $m 을 표지로 찾았다(아래 부재 단언이 공허하지 않다)" || no "R24: 판정 펜스 $m 이 없다"
+    assert_contains "$s" "<!-- $m:begin -->" "R24: $m 표지가 ## Final verdict 안에 있다"
+    for ax in R D X S E; do
+      assert_contains "$f" "<<'QG_ARGS_$ax'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
+    done
+    for ax in R D X S; do
+      assert_contains "$f" "\"\${${ax}_ARGS[@]}\"" "R24($m): $ax 결과 줄은 배열 \"\${${ax}_ARGS[@]}\" 로 넘긴다"
+    done
+    assert_contains "$f" '"${E_ARGS[@]}"' "R24($m): e2e 결과 줄은 배열로 넘긴다"
+    assert_contains "$f" "grep -Eqx 'qg-verdict-args:( --[a-z-]+( [0-9a-z-]+)?)+'" "R24($m): 결과 줄의 모양을 검사한다"
+    assert_contains "$f" 'pass|fail|미확인|"안 함"|"걸을 것 없음"|"걸을 도구 없음"|"꺼짐(kill switch)") ;;' "R24($m): e2e 칸은 닫힌 열거로 검사한다"
+    assert_contains "$f" 'python3 "$QG/scripts/verdict.py" ' "R24($m): 판정은 verdict.py 가 낸다(양성 짝)"
+    for ax in synth.out synth-review.out differential.yaml excluded.md range-scope.txt --prior 'sed -n' eval; do
+      assert_not_contains "$f" "$ax" "R24($m): 판정 펜스가 '$ax' 를 쓰지 않는다(세션 폴더를 다시 읽지 않는다)"
+    done
+    assert_not_grep "$f" '--(blocking|optional|new-failures|excluded|sha) <' "R24($m): 숫자를 모델이 채우는 자리표시가 없다"
+    assert_not_grep "$f" '_ARGS=\( *[<q]' "R24($m): 결과 줄을 따옴표 없이 ( … ) 안에 붙이는 자리가 없다"
+    assert_not_contains "$f" '%q' "R24($m): printf %q 로 낸 글을 되읽지 않는다"
+  done
+  assert_contains "$(marked final-verdict)" '[ -n "$R_LINE" ] && [ -n "$D_LINE" ] ||' "R24: 최종 판정 펜스는 리뷰 · 차등 결과 줄이 없으면 멈춘다"
+  assert_contains "$(marked trivia-verdict)" '--reason trivia --line' "trivia 펜스는 trivia 사유로 판정한다"
+  assert_contains "$(marked scope-empty-verdict)" '--reason scope-empty --line' "걸러진 diff 빈 실행 펜스는 scope-empty 사유로 판정한다"
+  assert_contains "$s" "E_ARGS=(--e2e '안 함')" "e2e 결과 줄이 없으면 e2e 칸은 안 함"
+  assert_contains "$s" '판정값 · 사유 · 우선순위는 `verdict.py` 가 정하고, 판정 인자는 결과 줄의 글자 그대로다 (V1 · R24).' \
+    "V1 · R24: 첫 문단이 새 뜻을 말한다"
+  assert_not_contains "$s" 'you do not retype the verdict, the counts' "옛 「(V1 · R24)」 문장이 없다"
 }
 
 case_K2_result_records_e2e_after_differential() {
@@ -301,9 +322,13 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_contains "$s" '- **여러 시나리오** — ' "SKILL E4: 여러 시나리오 갈래가 있다"
   assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
   assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
-  local fv; fv=$(section "$SKILL" "## Final verdict")
-  assert_contains "$fv" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "Final verdict: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
-  assert_contains "$fv" '그 걷기가 마지막 걷기 대신 쓰인다.' "Final verdict: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
+  # e2e 칸과 「사람이 뒤집음」은 `## e2e` 의 E6(e2e 결과 줄)이 정해 낸다 — Final verdict 는 그 줄을 받는다.
+  local e6; e6=$(printf '%s\n' "$s" | awk '/^\*\*E6 — /{f=1} f')
+  [ -n "$e6" ] && ok "SKILL: E6 e2e 결과 줄 문단이 있다" || no "SKILL: E6 문단이 없다"
+  assert_contains "$e6" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "E6: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
+  assert_contains "$e6" '그 걷기가 마지막 걷기 대신 쓰인다.' "E6: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
+  assert_contains "$e6" '앞 걷기(`e2e-flip.md` 의 앞 줄)의 뒤집기는 세지 않는다' "E6: 앞 걷기의 뒤집기는 세지 않는다"
+  assert_not_contains "$(section "$SKILL" "## Final verdict")" 'e2e-flip.md` 의 앞 줄' "Final verdict 에 뒤집기 규칙의 사본이 남지 않았다"
 }
 
 case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {

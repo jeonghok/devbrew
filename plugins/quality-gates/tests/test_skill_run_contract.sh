@@ -4,7 +4,8 @@
 # P2 — 매 실행은 새 세션 폴더에서 시작한다: 끝난 앞 실행(`## 판정` 이 있는 result.md)이면 setup 을
 #      --ensure 없이 다시 불러 폴더를 다시 만들고, 실행 단위 파일을 지운다. P2 펜스를 SKILL 에서
 #      뽑아 임시 리포에서 실제로 돌린다.
-# F  — Final verdict 펜스가 판정 줄 숫자를 셸이 뽑은 값으로 넘긴다(자리표시 금지).
+# F  — Final verdict 펜스가 판정 줄 숫자를 숫자를 만든 펜스가 낸 결과 줄(qg-verdict-args:)에서 받는다(R24 —
+#      자리표시 금지 · 세션 폴더를 다시 읽지 않는다). 결과 줄이 비었거나 모양 밖이면 판정 줄을 만들지 않는다.
 # E  — 외부 리뷰어 프롬프트가 기준 블록과 의도 출처를 싣고, 그 dispatch 자리가 처분을 밝힌다.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -130,67 +131,64 @@ assert_eq "$unguarded" "" "M4: 모든 RD 대입 바로 앞 줄이 rev-parse 실�
 # ── F: Final verdict 펜스의 판정 줄 숫자
 FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 [ -n "$FV" ] && ok "Final verdict 창을 찾았다" || no "Final verdict 창이 없다"
-assert_eq "$(printf '%s\n' "$FV" | grep -cxF 'N_BLOCK=$(sed -n '"'"'s/^blocking: //p'"'"' "$SYN"); N_OPT=$(sed -n '"'"'s/^optional: //p'"'"' "$SYN")')" "1" \
-  "F: 막는 지적 · 선택 수를 합성기 출력에서 셸이 뽑는다"
-assert_eq "$(printf '%s\n' "$FV" | grep -cxF '  --blocking "$N_BLOCK" --optional "$N_OPT" --new-failures "$K" --excluded "$X" \')" "1" \
-  "F: verdict.py 에 셸이 뽑은 네 수를 넘긴다"
-assert_not_grep "$FV" '--(blocking|optional|new-failures|excluded)[ =]+"?<' "F: 판정 줄 숫자 자리에 자리표시(<N>)가 없다 (R24)"
-assert_not_grep "$FV" ':-0\}' "F: 합성 출력의 결측을 0 으로 채우는 기본값이 없다 (V8 · 최종 리뷰 I3)"
+FVF="$(awk '$0 == "<!-- final-verdict:begin -->" {on=1; next} $0 == "<!-- final-verdict:end -->" {exit} on' "$SKILL" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
+[ -n "$FVF" ] && ok "Final verdict 펜스를 표지로 뽑았다" || no "Final verdict 펜스가 없다"
+assert_contains "$FVF" 'python3 "$QG/scripts/verdict.py" --line "${R_ARGS[@]}" "${D_ARGS[@]}" "${X_ARGS[@]}" "${S_ARGS[@]}" "${E_ARGS[@]}" --iter <N> > "$RD/verdict.out"' \
+  "F: verdict.py 에 다섯 결과 줄의 배열을 넘긴다"
+assert_not_grep "$FV" '--(blocking|optional|new-failures|excluded)[ =]+"?<' "F: 판정 줄 숫자 자리에 자리표시(<N>)가 없다 — 숫자는 결과 줄에서 온다(R24)"
+assert_not_grep "$FV" ':-0\}' "F: 결측을 0 으로 채우는 셸 기본값이 없다 (V8 · 최종 리뷰 I3)"
+assert_not_contains "$FVF" 'N_BLOCK=' "F: 합성 출력에서 숫자를 다시 뽑던 옛 줄이 없다"
 
-# ── F 행동 (최종 리뷰 I3): 합성 출력이 없거나 · 비었거나 · 키가 빠졌거나 · 겹치면 판정 줄을 만들지 않는다.
+# ── F 행동: 결과 줄이 비었거나 모양 밖이면 판정 줄을 만들지 않는다. 세션 폴더의 사본은 판정에 쓰이지 않는다.
 #    Final verdict 의 첫 펜스를 임시 리포에서 실제로 돌린다.
-FVF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
-[ -n "$FVF" ] && ok "Final verdict 펜스를 뽑았다" || no "Final verdict 펜스가 없다"
-RVD="$T/rv"; mkdir -p "$RVD" "$RDIR"
 RUNF="$T/final.sh"
-FVF_SRC="$FVF" python3 - "$RUNF" "$RVD" "$SID" <<'PY'
-import sys
-out, rv, sid = sys.argv[1], sys.argv[2], sys.argv[3]
-import os
-src = os.environ["FVF_SRC"]
-src = src.replace("<마지막 iteration 의 RV>", rv).replace("<session-id>", sid).replace("<N>", "1").replace("<e2e 칸>", "pass")
-open(out, "w", encoding="utf-8").write(src + "\n")
+mkdir -p "$RDIR"
+final_case() {   # final_case <라벨> <리뷰 줄> <차등 줄> <기대 rc> <기대 조각>
+  rm -f "$RDIR/verdict.out"
+  FVF_SRC="$FVF" R_IN="$2" D_IN="$3" python3 -I - "$RUNF" "$SID" <<'PY'
+import os, sys
+out, sid = sys.argv[1], sys.argv[2]
+lines = os.environ["FVF_SRC"].split("\n")
+fill = {"QG_ARGS_R": os.environ["R_IN"], "QG_ARGS_D": os.environ["D_IN"],
+        "QG_ARGS_X": "", "QG_ARGS_S": "", "QG_ARGS_E": "qg-verdict-args: --e2e pass"}
+res, skip = [], None
+for l in lines:
+    if skip is not None:
+        if l == skip:
+            res.append(l); skip = None
+        continue
+    res.append(l)
+    for name, val in fill.items():
+        if l.rstrip().endswith("<<'%s'" % name):
+            res.append(val); skip = name
+src = "\n".join(res).replace("<session-id>", sid).replace("<N>", "1")
+with open(out, "w", encoding="utf-8") as f:
+    f.write(src + "\n")
 PY
-[ -s "$RUNF" ] && ok "Final verdict 펜스 실행 파일을 만들었다" || no "Final verdict 펜스 실행 파일이 비었다"
-
-final_case() {   # final_case <라벨> <synth.out 내용 | @missing> <기대 rc> <기대 stderr 조각 | ->
-  rm -f "$RVD/synth.out" "$RDIR/verdict.out"
-  [ "$2" = "@missing" ] || printf '%s' "$2" > "$RVD/synth.out"
   local out err rc
   out="$( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" bash "$RUNF" 2>"$T/final.err" )"; rc=$?
   err="$(cat "$T/final.err")"
-  assert_eq "$rc" "$3" "I3 $1: 펜스 rc"
-  if [ "$3" = 4 ]; then
-    assert_contains "$err" "$4" "I3 $1: 판정 줄을 만들지 않는 이유를 밝힌다"
-    [ ! -e "$RDIR/verdict.out" ] && ok "I3 $1: verdict.out 을 쓰지 않는다" || no "I3 $1: verdict.out 이 생겼다"
-    assert_not_contains "$out" 'qg: clean' "I3 $1: clean 판정 줄이 나오지 않는다"
+  assert_eq "$rc" "$4" "F $1: 펜스 rc"
+  if [ "$4" = 4 ]; then
+    assert_contains "$err" "$5" "F $1: 판정 줄을 만들지 않는 이유를 밝힌다"
+    [ ! -e "$RDIR/verdict.out" ] && ok "F $1: verdict.out 을 쓰지 않는다" || no "F $1: verdict.out 이 생겼다"
+    assert_not_contains "$out" 'qg: clean' "F $1: clean 판정 줄이 나오지 않는다"
   else
-    assert_contains "$out" "$4" "I3 $1: 판정 줄"
+    assert_contains "$out" "$5" "F $1: 판정 줄"
   fi
 }
-GOOD=$'blocking: 1\noptional: 2\nverdict: defect\n'
-final_case "정상(양성 짝)"   "$GOOD" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 1 · '
-final_case "파일 없음"       "@missing" 4 '합성 출력이 없거나 비었다'
-final_case "빈 파일"         ""         4 '합성 출력이 없거나 비었다'
-final_case "verdict 빠짐"    $'blocking: 0\noptional: 0\n'                         4 "'verdict:' 줄이 정확히 한 번이 아니다"
-final_case "blocking 빠짐"   $'optional: 0\nverdict: clean\n'                       4 "'blocking:' 줄이 정확히 한 번이 아니다"
-final_case "optional 빠짐"   $'blocking: 0\nverdict: clean\n'                       4 "'optional:' 줄이 정확히 한 번이 아니다"
-final_case "verdict 겹침"    $'blocking: 0\noptional: 0\nverdict: clean\nverdict: defect\n' 4 "'verdict:' 줄이 정확히 한 번이 아니다"
-final_case "blocking 겹침"   $'blocking: 1\nblocking: 0\noptional: 0\nverdict: defect\n'   4 "'blocking:' 줄이 정확히 한 번이 아니다"
-
-# V4 — 차등 사본($RD/differential.yaml)이 있으면 그 new_failures: 가 판정 줄의 「차등 새 실패」 다.
-#      blocking: 처럼 정확히 한 번이어야 하고, 빠지거나 겹치거나 정수가 아니면 판정 줄을 만들지 않는다.
-diff_case() {   # diff_case <라벨> <differential.yaml 내용 | @missing> <기대 rc> <기대 조각>
-  rm -f "$RDIR/differential.yaml"
-  [ "$2" = "@missing" ] || printf '%s' "$2" > "$RDIR/differential.yaml"
-  final_case "$1" "$GOOD" "$3" "$4"
-  rm -f "$RDIR/differential.yaml"
-}
-diff_case "V4 차등 사본 없음(kill switch · error-axis)" "@missing" 0 '· 차등 새 실패 0 ·'
-diff_case "V4 new_failures 값(양성 짝)" $'degrade_causes: []\nnew_failures: 3\n' 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 3 · '
-diff_case "V4 new_failures 빠짐"   $'degrade_causes: []\n'                    4 "'new_failures:' 줄이 정확히 한 번이 아니다"
-diff_case "V4 new_failures 겹침"   $'new_failures: 0\nnew_failures: 2\n'     4 "'new_failures:' 줄이 정확히 한 번이 아니다"
-diff_case "V4 new_failures 정수 아님" $'new_failures: two\n'                   4 "'new_failures:' 값이 정수가 아니다"
+GOOD_R='qg-verdict-args: --blocking 1 --optional 2 --defect'
+GOOD_D='qg-verdict-args: --new-failures 0'
+final_case "정상(양성 짝)"     "$GOOD_R" "$GOOD_D" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 1 · '
+final_case "리뷰 줄 없음"      ""        "$GOOD_D" 4 '리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다'
+final_case "차등 줄 없음"      "$GOOD_R" ""        4 '리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다'
+final_case "합성기 본문 줄"    'blocking: 1' "$GOOD_D" 4 '리뷰 결과 줄이 정해진 모양'
+final_case "숫자 아닌 값"      'qg-verdict-args: --blocking one --optional 0' "$GOOD_D" 0 'verdict rc=4'
+# V4 의 새 뜻 — 세션 폴더에 차등 사본(new_failures: 3)이 남아 있어도 판정 줄의 차등 새 실패는 차등 결과 줄의 값이다.
+printf 'degrade_causes: []\nnew_failures: 3\n' > "$RDIR/differential.yaml"
+final_case "V4 사본은 판정 입력이 아니다" "$GOOD_R" "$GOOD_D" 0 '· 차등 새 실패 0 ·'
+final_case "V4 차등 결과 줄의 값(양성 짝)" "$GOOD_R" 'qg-verdict-args: --new-failures 3' 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 3 · '
+rm -f "$RDIR/differential.yaml"
 
 # ── E: 외부 리뷰어 프롬프트와 처분
 EXT="$(awk '/^\*\*External reviewers\*\*/{f=1} f&&/^\*\*다른 전제 각도/{exit} f' "$SKILL")"

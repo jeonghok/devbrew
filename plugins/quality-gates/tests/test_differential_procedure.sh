@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test_differential_procedure.sh — 차등 테스트 절차 문서와 파이프라인 SKILL 의 판정 입력 배선.
-# 요구: R6 · R18 · R22 · R24 (docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록)
+# 요구: R6 · R18 · R22 · R24 (docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록 ·
+#       R24 의 새 뜻은 docs/superpowers/specs/2026-10-20-review-engine-leftovers-design.md §7)
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -27,10 +28,21 @@ case_R22_orchestrator_honors_kill_switch() {
   grep -qF '`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 이 절차 전체를 건너뛰고' "$REF" \
     && ok "R22: D0 이 스위치를 먼저 본다" || no "R22: D0 에 스위치 확인이 없다"
 }
-# R24 — 판정은 D5 산출 파일을 그대로 읽는다. 원장 전사 경로가 없다.
-case_R24_verdict_reads_the_machine_output() {
+# R24 — 판정 인자는 숫자를 만든 직후의 펜스가 낸 줄의 글자 그대로다. Step 4 합성기는 D5 의 사본을 읽고,
+# 차등 결과 줄은 D5 펜스 끝에서 verdict.py --emit-args 가 같은 사본으로 낸다. 원장 전사 경로가 없다.
+case_R24_differential_line_comes_from_the_machine() {
   has_line "$REF" '| `diff_rc=0` 이고 `$RD/differential.yaml` 이 있다 | `--differential "$RD/differential.yaml"` |' \
-    && ok "R24: 판정 입력은 D5 가 남긴 세션 폴더 사본이다" || no "R24: 판정 입력 행이 없다"
+    && ok "R24: Step 4 합성기의 차등 입력은 D5 가 남긴 세션 폴더 사본이다" || no "R24: 판정 입력 행이 없다"
+  has_line "$REF" '- R24 판정 인자는 숫자를 만든 직후의 펜스가 낸 줄(`qg-verdict-args:`)의 글자 그대로다 — 모델은 숫자를 고르거나 옮겨 적지 않고 그 줄을 판정 펜스에 붙인다.' \
+    && ok "R24: 지킬 것 목록이 새 뜻을 줄 전체로 싣는다" || no "R24: 새 R24 줄이 없다"
+  assert_eq "$(grep -c 'R24 판정 인자는 숫자를 만든 직후의 펜스가 낸 줄' "$REF")" "1" "R24: 새 문장은 절차에 한 번이다"
+  # 옛 두 문장은 따옴표를 끊어 둔다 — 금지 문장 grep 이 이 락 자신을 세지 않는다(런타임 값은 이어진 문장이다).
+  assert_file_absent "$REF" '판정은 기계 출력을 직접'' 읽고' "R24: 옛 R24 문장(판정이 기계 출력을 읽는다는 뜻)이 없다"
+  assert_file_absent "$REF" '사본을 직접'' 읽어 정한다' "R24: 옛 D7 문장(verdict.py 가 사본을 읽어 판정한다는 뜻)이 없다"
+  local d5; d5=$(section "$REF" '## D5 짝짓기 — 매 iteration')
+  assert_contains "$d5" $'echo "diff_rc=$diff_rc"\nif [ "$diff_rc" -eq 0 ] && [ -f "$RD/differential.yaml" ]; then\n  python3 "$QG/scripts/verdict.py" --emit-args --differential "$RD/differential.yaml"\nelse\n  python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis\nfi' \
+    "R24: D5 펜스 끝이 그 사본으로 차등 결과 줄을 내고, 사본이 없으면 error-axis 줄을 낸다"
+  assert_contains "$(section "$REF" '## D7 판정 입력')" 'python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis' "R24: D7 이 D5 에 닿지 못한 반복의 차등 결과 줄을 낸다"
   assert_eq "$(grep -c '<memo>' "$SKILL")" "0" "R24 · K-3: SKILL 어디에도 메모 경로 자리표시가 없다(합성기도 사본을 읽는다)"
   local s4; s4=$(awk '/^### Step 4 /{f=1} /^### Step 4\.5/{f=0} f' "$SKILL")
   assert_contains "$s4" '| `--differential "$RD/differential.yaml"` |' "Step 4: 합성기의 차등 입력은 세션 폴더 사본이다"
@@ -44,8 +56,9 @@ case_R24_verdict_reads_the_machine_output() {
     "R24: SKILL 은 옛 집계 파일을 읽거나 범주 카운트를 다시 세지 않는다(K 는 new_failures: 에서)"
   grep -qF 'diff-test-results.py' "$REF" && ok "R24 양성 짝: 절차가 diff-test-results.py 를 부른다" || no "R24: 절차가 짝짓기를 부르지 않는다"
 }
-# R24 · K-3 — 실행 끝의 판정 줄과 기록은 D5 가 세션 폴더에 남긴 사본을 읽는다. SKILL 펜스에 메모 경로 자리표시가 없다.
-case_R24_final_verdict_reads_the_session_copy() {
+# R24 · K-3 — 실행 끝의 판정 줄은 차등 결과 줄을 받고 세션 폴더를 다시 읽지 않는다. 기록 펜스는 D5 가 세션 폴더에
+# 남긴 사본을 그대로 붙인다(기록이지 판정 입력이 아니다). SKILL 펜스에 메모 경로 자리표시가 없다.
+case_R24_final_verdict_takes_the_differential_line() {
   local d5; d5=$(section "$REF" '## D5 짝짓기 — 매 iteration')
   assert_contains "$d5" 'cp "<memo>/diff-i<N>.yaml" "$RD/differential.yaml"' "D5 가 이 iteration 의 출력을 세션 폴더 사본으로 덮어쓴다"
   assert_contains "$d5" $'else\n  rm -f "$RD/differential.yaml"\nfi' "D5: 출력이 없거나 실패면 사본을 지운다(앞 iteration 값이 남지 않는다)"
@@ -56,8 +69,12 @@ case_R24_final_verdict_reads_the_session_copy() {
   assert_contains "$(section "$REF" '## D2 후보와 배정 — 매 iteration')" '"<memo>/not-counted-i<N>.md"' \
     "D2: 커버리지로 세지 않는 목록을 메모 파일에 쓴다"
   local fv; fv=$(section "$SKILL" '## Final verdict')
-  assert_contains "$fv" 'DY="$RD/differential.yaml"' "Final verdict: K 는 세션 폴더 사본에서 읽는다"
-  assert_contains "$fv" "sed -n 's/^new_failures: //p' \"\$DY\"" "Final verdict: K 는 new_failures: 값이다"
+  local final; final=$(awk '$0 == "<!-- final-verdict:begin -->" {on=1; next} $0 == "<!-- final-verdict:end -->" {exit} on' "$SKILL")
+  [ -n "$final" ] && ok "Final verdict: 최종 판정 펜스를 표지로 찾았다" || no "Final verdict: 최종 판정 펜스 표지가 없다"
+  assert_contains "$final" "<<'QG_ARGS_D'" "Final verdict: 차등 결과 줄을 따옴표 heredoc 자리로 받는다"
+  assert_contains "$final" '"${D_ARGS[@]}"' "Final verdict: 차등 결과 줄을 배열로 넘긴다"
+  assert_not_contains "$final" 'differential.yaml' "Final verdict: 판정 펜스가 차등 사본을 다시 읽지 않는다"
+  assert_not_contains "$final" 'new_failures:' "Final verdict: 판정 펜스가 new_failures: 를 다시 뽑지 않는다"
   assert_contains "$fv" 'cat "$RD/differential.yaml"' "기록 펜스: ## 차등 테스트 에 사본을 그대로 붙인다"
   assert_contains "$fv" 'cat "$RD/differential-not-counted.md"' "기록 펜스: 커버리지 제외 목록을 덧붙인다"
   local memo_in_fence
@@ -177,7 +194,7 @@ case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict() {
 
 for c in case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict \
          case_R18_failed_pairing_routes_to_error_axis case_R22_orchestrator_honors_kill_switch \
-         case_R24_verdict_reads_the_machine_output case_R24_final_verdict_reads_the_session_copy \
+         case_R24_differential_line_comes_from_the_machine case_R24_final_verdict_takes_the_differential_line \
          case_R6_memo_drop_after_record_before_publish case_skill_section_wires_the_reference \
          case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_every_iteration; do
   echo "== $c"; $c

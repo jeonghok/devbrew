@@ -103,37 +103,51 @@ assert_contains "$FV" '--reason scope-empty' "걸러진 diff 가 빈 실행은 s
 assert_contains "$FV" '걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)' \
   "Final verdict 의 받는 자리가 1c 와 같은 이름 · 같은 조건이다"
 assert_contains "$FV" '`--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다' "scope-empty 펜스의 차등 새 실패 0 은 차등을 돌지 않아서임을 밝힌다"
-# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 iteration 번호와
-# 앞 iteration 들이 쌓은 제외 패치 수를 싣는다(N>1 이면 excluded.md 에 항목이 있을 수 있다).
-SEF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /--reason scope-empty/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
-if [ -z "$SEF" ]; then
-  no "Final verdict 에 --reason scope-empty 를 부르는 bash 펜스가 없다"
+# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 iteration 번호와 제외 결과 줄의
+# 제외 패치 수를 싣는다(N>1 이면 앞 반복의 제외 결과 줄이 있다). 판정 펜스는 excluded.md 를 다시 세지 않는다.
+SEF="$(awk '$0 == "<!-- scope-empty-verdict:begin -->" {on=1; next} $0 == "<!-- scope-empty-verdict:end -->" {exit} on' "$SKILL")"
+RMF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /rm -f "\$RD\/differential\.yaml"/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
+if [ -z "$SEF" ] || ! printf '%s\n' "$SEF" | grep -q -- '--reason scope-empty'; then
+  no "Final verdict 에 --reason scope-empty 를 부르는 표지 펜스가 없다"
 else
   SET="$(mktemp -d)"
   git -C "$SET" init -q -b trunk \
     && git -C "$SET" -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
   mkdir -p "$SET/.claude/quality-gates/scopeempty01"
-  printf '%s\n' "$SEF" | sed 's/<session-id>/scopeempty01/g; s/<N>/2/g' > "$SET/run.sh"
+  sef_fill() {   # sef_fill <출력> <제외 결과 줄>
+    python3 -I "$QG/tests/lib/verdict_fence.py" "$SKILL" scope-empty-verdict "$1" "<session-id>=scopeempty01" "<N>=2" \
+      "QG_ARGS_R=" "QG_ARGS_D=" "QG_ARGS_X=$2" "QG_ARGS_S=" "QG_ARGS_E="
+  }
+  sef_fill "$SET/run.sh" ""; sef_fill "$SET/run2.sh" "qg-verdict-args: --excluded 2"
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다(excluded.md 없음)"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다(제외 결과 줄 없음)"
   assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
     '^qg: not-certified \(scope-empty\) · .* · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 2 · [0-9a-f]+$' \
     "scope-empty 펜스의 판정 줄 — not-certified (scope-empty) · e2e 안 함 · 제외 0 · 그 iteration 번호"
   printf -- '- #1 a.py — 사유 x\n- #2 b.py — 사유 y\n' > "$SET/.claude/quality-gates/scopeempty01/excluded.md"
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 excluded.md 가 있어도 rc 0"
   assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
-    ' · 제외 패치 2 · iter 2 · ' "scope-empty 펜스가 앞 iteration 의 제외 패치 수를 excluded.md 에서 센다"
+    ' · 제외 패치 0 · iter 2 · ' "scope-empty 펜스는 excluded.md 를 다시 세지 않는다(제외 결과 줄이 없으면 0)"
+  seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run2.sh" 2>&1)"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 제외 결과 줄이 있어도 rc 0"
+  assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
+    ' · 제외 패치 2 · iter 2 · ' "scope-empty 펜스가 앞 반복의 제외 결과 줄의 수를 싣는다"
 
   # final-review M3 — N>1 의 빈 diff 반복은 차등 테스트를 돌지 않는다. 앞 반복의 차등 사본이 남아
-  # 이번 판정의 「## 차등 테스트」로 기록되지 않게 펜스가 지운다. 기록 펜스까지 실제로 돌린다.
+  # 이번 판정의 「## 차등 테스트」로 기록되지 않게 판정 펜스 앞의 펜스가 지운다. 기록 펜스까지 실제로 돌린다.
   SED="$SET/.claude/quality-gates/scopeempty01"
   printf 'new_failures: 3\nattribution_status: stale-from-iter-1\n' > "$SED/differential.yaml"
   printf -- '- tests/test_old.sh\n' > "$SED/differential-not-counted.md"
+  if [ -z "$RMF" ]; then
+    no "Final verdict 에 앞 반복의 차등 사본을 지우는 펜스가 없다"
+  else
+    printf '%s\n' "$RMF" | sed 's/<session-id>/scopeempty01/g' > "$SET/rm.sh"
+    (cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rm.sh" >/dev/null 2>&1)
+  fi
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스 rc 0 (앞 반복의 차등 사본이 있어도)"
-  [ ! -e "$SED/differential.yaml" ] && ok "scope-empty 펜스가 앞 반복의 differential.yaml 을 지운다" || no "앞 반복의 differential.yaml 이 남았다"
-  [ ! -e "$SED/differential-not-counted.md" ] && ok "scope-empty 펜스가 앞 반복의 differential-not-counted.md 를 지운다" || no "앞 반복의 differential-not-counted.md 가 남았다"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스 rc 0 (앞 반복의 차등 사본을 지운 뒤)"
+  [ ! -e "$SED/differential.yaml" ] && ok "지우기 펜스가 앞 반복의 differential.yaml 을 지운다" || no "앞 반복의 differential.yaml 이 남았다"
+  [ ! -e "$SED/differential-not-counted.md" ] && ok "지우기 펜스가 앞 반복의 differential-not-counted.md 를 지운다" || no "앞 반복의 differential-not-counted.md 가 남았다"
   REC="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /printf .\\n## 판정/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
   if [ -z "$REC" ]; then
     no "Final verdict 에 기록 펜스(## 판정)가 없다"

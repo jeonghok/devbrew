@@ -678,11 +678,10 @@ case_degraded_blocks_certification() {
   assert_eq "$(printf '%s\n' "$row" | grep -c .)" 1 "판정 입력 표에 그 행이 하나"
   args=$(printf '%s\n' "$row" | awk -F'|' '{print $3}' | sed -n 's/^ *`\(.*\)` *$/\1/p')
   assert_eq "$args" "--reason error-axis" "그 행의 판정 입력은 --reason error-axis"
-  local V="$PLUGIN_DIR/scripts/verdict.py" SYN="$ROOT/syn.out"
-  # 합성기 꼬리와 같은 꼴: 판정 블록 + blocking · optional
+  local V="$PLUGIN_DIR/scripts/verdict.py"
+  # 그 입력은 Step 3.9 의 리뷰 결과 줄(qg-verdict-args: --blocking 0 --optional 0 --reason error-axis)로 판정 펜스에 닿는다.
   # shellcheck disable=SC2086
-  { python3 "$V" $args; printf 'blocking: 0\noptional: 0\n'; } > "$SYN"
-  local line; line=$(python3 "$V" --prior "$SYN" --line --blocking 0 --optional 0 --new-failures 0 \
+  local line; line=$(python3 "$V" --line --blocking 0 --optional 0 $args --new-failures 0 \
     --excluded 0 --iter 1 --sha abc1234 --e2e '안 함' | tail -n 1)
   assert_not_contains "$line" "qg: clean" "판정 줄이 clean 이 아니다"
   assert_contains "$line" "not-certified (error-axis)" "판정 줄이 not-certified (error-axis)"

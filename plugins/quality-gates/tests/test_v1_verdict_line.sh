@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # test_v1_verdict_line.sh — V1 · K-3: 판정 줄은 verdict.py 가 렌더한다.
 #
-# 판정 줄은 게시 코멘트와 로컬 결과가 싣는 한 줄이다. 모델이 옮겨 적으면 전사 오류가
-# 판정을 바꾼다(R24). 그래서 판정값을 정하는 파일이 그 문자열도 만들고, 잘못된 입력은
-# 문자열을 만들지 않고 exit 4 · 2 로 끝난다.
+# 판정 줄은 게시 코멘트와 로컬 결과가 싣는 한 줄이다. 판정값을 정하는 파일이 그 문자열도 만들고,
+# 잘못된 입력은 문자열을 만들지 않고 exit 4 · 2 로 끝난다. 판정 줄의 수치는 숫자를 만든 직후의
+# 펜스가 낸 결과 줄(`qg-verdict-args:`)의 글자 그대로 들어온다(R24) — 그 줄도 이 파일(`--emit-args`)과
+# 합성기(`--verdict-args`)가 낸다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 V="$SCRIPT_DIR/../scripts/verdict.py"
