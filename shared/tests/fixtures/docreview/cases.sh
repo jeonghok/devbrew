@@ -4674,8 +4674,11 @@ case_AC13_table_rows_bound_with_declare() {
   ac13_finalize_r2 "$d" "$FX/design-tables-r2.md"
   assert_eq "$(jget "$d/fin.json" '[x["anchor"] for x in d["findings"] if x["category"] == "frozen_change"]')" "[]" "AC13: 묶고 고친 표 행은 다음 라운드에 「허가 없이 바뀜」으로 돌아오지 않는다"
   local g; g="$(py docreview_state.py gate --state-dir "$d" --render)"
-  assert_contains "$g" "이 결정 때문에 함께 바뀐 곳" "AC13: 묶은 표 절은 게이트의 「이 결정 때문에 함께 바뀐 곳」에 보인다"
-  assert_contains "$g" "#미룸" "AC13: 게이트에 묶은 미룸 절이 보인다"
+  assert_contains "$g" "이 결정 때문에 함께 바뀐 곳 3개 ($did)" "AC13: 묶은 표 절 둘과 더한 절은 게이트의 「이 결정 때문에 함께 바뀐 곳」에 보인다"
+  local x
+  for x in '- 번호 대조 (#번호-대조)' '- 미룸 (#미룸)' '- 4. 되돌린 번호의 자리 (#4-되돌린-번호의-자리)'; do
+    assert_contains "$g" "$x" "AC13: 게이트의 함께 바뀐 곳 목록 — $x"
+  done
   rm -rf "$d"
 }
 case_AC13_table_rows_without_declare() {
