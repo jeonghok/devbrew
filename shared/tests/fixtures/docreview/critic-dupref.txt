@@ -1,0 +1,18 @@
+리뷰를 마쳤다.
+
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: c1
+  category: placeholder
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "c.py 가 목록에 없다"
+- ref: c1
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "목표 B 가 두 가지로 읽힌다"
+```

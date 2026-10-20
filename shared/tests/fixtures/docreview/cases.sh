@@ -4071,6 +4071,66 @@ case_same_as_merge_counts_blocked_fix_once() {
   assert_eq "$(jget "$d/fin.json" '[len(x["blocks"]) for x in d["findings"] if x["category"]=="ambiguity"][0]')" "1" "AC10: 재비판이 두 고침을 하나로 묶어도 질문이 막는 항목은 한 번만 센다"
   rm -rf "$d"
 }
+case_AC4_recritic_same_as_keeps_blocks() {
+  local d cr rt f3 f4; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC4: r1 실패"; return; }
+  cr="$d/critic-src.txt"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 경로가 없다"' '  edit_scope: "#handoff-context"' '- ref: c2' '  layer: 2' '  category: placeholder' '  anchor: "#handoff-context"' '  disposition: fix' '  summary: "넘김 절에 이어 갈 위치가 없다"' '  edit_scope: "#handoff-context"' '- ref: c3' '  layer: 2' '  category: ambiguity' '  anchor: "#handoff-context"' '  disposition: ask' '  summary: "넘김 절의 경로를 어디로 둘지 정해야 한다"' '  blocks: [c1]' '- ref: c4' '  layer: 2' '  category: ambiguity' '  anchor: "#handoff-context"' '  disposition: ask' '  summary: "경로를 어느 쪽에 둘지 못 박아야 한다"' '  blocks: [c2]' '```' > "$cr"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$cr")" > "$d/prep.json"
+  f3="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary'].startswith('넘김 절의 경로를')][0]")"
+  f4="$(jget "$d/prep.json" "[i['f'] for i in d['items'] if i['summary'].startswith('경로를 어느')][0]")"
+  rt="$d/rt.txt"
+  printf '```docreview-recritic\nverdicts:\n  - f: "%s"\n    verdict: confirm\n    same_as: ["%s"]\nadded: []\n```\n' "$f4" "$f3" > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'len([x for x in d["findings"] if x["category"]=="ambiguity"])')" "1" "AC4: 같은 질문 둘이 하나로 묶인다"
+  assert_eq "$(jget "$d/fin.json" '[len(x["blocks"]) for x in d["findings"] if x["category"]=="ambiguity"][0]')" "2" "AC4: 재비판이 묶은 질문은 두 쪽이 막던 고침을 둘 다 계속 막는다"
+  assert_eq "$(jget "$d/fin.json" 'sorted([x["id"] for x in d["findings"] if x["category"]=="placeholder"]) == sorted([b for x in d["findings"] if x["category"]=="ambiguity" for b in x["blocks"]])')" "True" "AC4: 막는 항목은 두 고침의 id 다"
+  rm -rf "$d"
+}
+case_AC5_multi_anchor_held() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC5: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-multi-anchor.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "0" "AC5: 앵커 둘을 이은 범위 항목은 받지 않는다"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_held"] >= 1, d["blocks"]')" "(True, True)" "AC5: 보류로 세고 막는다"
+  assert_contains "$(jget "$d/fin.json" '"\n".join(d["advisory"])')" "edit_scope_multi_anchor" "AC5: 이유 이름이 경고에 든다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "edit_scope_multi_anchor" "AC5: 게이트 출력에 보인다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC5: r1 실패"; return; }
+  sed 's/#2-goals, #3-non-goals/#2-goals #3-non-goals/' "$FX/critic-multi-anchor.txt" > "$d/critic-ws.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-ws.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "0" "AC5: 공백으로만 이은 꼴도 받지 않는다"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC5: r1 실패"; return; }
+  sed 's/edit_scope: "#2-goals, #3-non-goals"/edit_scope: "insert-after:#2-goals"/' "$FX/critic-multi-anchor.txt" > "$d/critic-one.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-one.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "1" "AC5 양성 짝: 앵커 하나(insert-after)는 보류되지 않는다"
+  rm -rf "$d"
+}
+case_AC6_section_sign_anchor_normalized() {
+  local d doc cr eng id sd; d="$(mktemp -d -t docreview-XXXXXX)" || { no "AC6: mktemp 실패"; return; }
+  doc="$d/doc.md"; { cat "$FX/design-sample.md"; printf '\n### §B 부분\n\n본문.\n'; } > "$doc"
+  snap "$doc" "$d/probe.json"
+  eng="$(jget "$d/probe.json" '[s["anchor"] for s in d["sections"] if "부분" in s["anchor"]][0]')"
+  sd="$(r1 "$PROF_SD/design-doc.md" "$doc")" || { no "AC6: r1 실패"; return; }
+  cr="$sd/critic-sign.txt"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  category: placeholder' '  anchor: "#§b-부분"' '  disposition: fix' '  summary: "부분 절에 내용이 없다"' '  edit_scope: "#§b-부분"' '```' > "$cr"
+  py docreview_route.py prepare-recritic --state-dir "$sd" --critic "$(critic_now "$sd" "$cr")" > "$sd/prep.json"
+  py docreview_route.py finalize --state-dir "$sd" --recritic-skipped --doc "$doc" > "$sd/fin.json"
+  assert_eq "$(jget "$sd/fin.json" '[x["anchor"] for x in d["findings"] if "부분 절" in x["summary"]][0]')" "$eng" "AC6: 지적의 앵커가 엔진 앵커와 같다"
+  assert_eq "$(jget "$sd/fin.json" 'd["adjudication_coerced"]')" "1" "AC6: 바꾼 값은 강제로 센다(앵커와 범위가 같은 글자면 한 번)"
+  id="$(jget "$sd/fin.json" '[x["id"] for x in d["findings"] if "부분 절" in x["summary"]][0]')"
+  assert_eq "$(py docreview_anchor.py check-intent "$id" --intent "$eng" --state-dir "$sd" | jgets 'd["ok"]')" "True" "AC6: 엔진 앵커로 고친 범위가 check-intent 를 통과한다"
+  assert_eq "$(py docreview_state.py gate --state-dir "$sd" | jgets 'd.get("expired", []), d["blocked_expired"]')" "([], [])" "AC6: 만료나 재상승으로 돌지 않는다"
+  rm -rf "$d" "$sd"
+}
+case_AC7_duplicate_ref_in_block_held() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC7: r1 실패"; return; }
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-dupref.txt")" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" '[i["summary"] for i in d["items"]]')" "['c.py 가 목록에 없다']" "AC7: 같은 임시 번호의 둘째 항목은 받지 않는다"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'any("duplicate_ref" in w for w in d["advisory"]), d["adjudication_held"] >= 1')" "(True, True)" "AC7: 이유 이름이 경고에 들고 보류로 센다"
+  rm -rf "$d"
+}
 case_detectors_absorb_fills_contradicts() {
   local d; d="$(r1_detectors 2 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC10: r1 실패"; return; }
   cp "$FX/critic-d1-blocks.txt" "$d/critic-1.txt"; cp "$FX/critic-d2-contra.txt" "$d/critic-2.txt"
