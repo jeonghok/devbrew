@@ -108,12 +108,11 @@ def snapshot_of(doc_path) -> dict:
 
 
 # ── 보호 부류 ────────────────────────────────────────────────────────────
-def classify_anchor(anchor: str, sections, prof: dict, lineage=None) -> dict:
+def classify_anchor(anchor: str, sections, prof: dict, *, lineage) -> dict:
     """앵커의 보호 · 불변 · fix 허용. `lineage` 는 `{"protected": set, "immutable": set}`
-    (`docreview_state.lineage_anchors`)이고 주어지면 지금 스냅숏 판정과 합친다 — 원장이 있는 자리는 늘 넘긴다."""
-    lin = lineage or {}
-    was_protected = anchor in (lin.get("protected") or ())
-    was_immutable = anchor in (lin.get("immutable") or ())
+    (`docreview_state.lineage_anchors`)이고 지금 스냅숏 판정과 합친다 — 원장이 없는 자리는 빈 계보를 넘긴다."""
+    was_protected = anchor in lineage["protected"]
+    was_immutable = anchor in lineage["immutable"]
     found = any(s["anchor"] == anchor for s in sections)
     if not found:
         return {"anchor": anchor, "found": False, "protected": was_protected, "immutable": was_immutable,
@@ -174,7 +173,7 @@ def cmd_protected(a) -> int:
     except ProfileError as e:
         return fail("profile_invalid", detail=str(e))
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
-    _emit(classify_anchor(a.anchor, snap.get("sections", []), prof))
+    _emit(classify_anchor(a.anchor, snap.get("sections", []), prof, lineage={"protected": set(), "immutable": set()}))
     return 0
 
 
@@ -230,7 +229,7 @@ def cmd_check_intent(a) -> int:
     target = intent.split(":", 1)[1] if is_insert else intent
     lineage = {"protected": lineage_anchors(st, prof, "protected_headings", n),
                "immutable": lineage_anchors(st, prof, "immutable", n)}
-    cls = classify_anchor(target, sections, prof, lineage)
+    cls = classify_anchor(target, sections, prof, lineage=lineage)
     if a.decision_id:
         p = st["permits"].get(a.decision_id)
         if not p:
@@ -241,7 +240,7 @@ def cmd_check_intent(a) -> int:
             return _reject("permit_consumed")
         if intent not in p["apply_anchors"]:
             return _reject("scope_outside_permit", apply_anchors=p["apply_anchors"])
-        why = scope_problem(intent, sections, prof, lineage["immutable"])   # 기록 검증 하나 — 불변 · 결정 기록 · 미룸 절과 없는 앵커는 permit 으로도 못 넘는다
+        why = scope_problem(intent, sections, prof, immutable_lineage=lineage["immutable"])   # 기록 검증 하나 — 불변 · 결정 기록 · 미룸 절과 없는 앵커는 permit 으로도 못 넘는다
         if why:
             return _reject("anchor_immutable" if why == "insert_after_immutable" else why)
         print(json.dumps({"ok": True, "contract": "permit", "scope": intent, "decision_id": a.decision_id},
@@ -268,7 +267,7 @@ def cmd_check_intent(a) -> int:
     scope = f.get("edit_scope") or f["anchor"]
     if intent != scope:
         return escalate("scope_outside_edit_scope")
-    why = scope_problem(intent, sections, prof, lineage["immutable"])   # 라벨 · 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸) — decide · declare-related 와 같은 판정
+    why = scope_problem(intent, sections, prof, immutable_lineage=lineage["immutable"])   # 라벨 · 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸) — decide · declare-related 와 같은 판정
     if why:
         return escalate(why)
     if is_insert:

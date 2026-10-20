@@ -541,7 +541,7 @@ def scope_target(scope) -> str:
     return scope.split(":", 1)[1] if scope.startswith("insert-after:") else scope
 
 
-def scope_problem(scope, sections, prof, immutable_lineage=frozenset()):
+def scope_problem(scope, sections, prof, *, immutable_lineage):
     """범위 한 개를 기록할 때의 검증 — decide(edit_scope → permit) · declare-related · check-intent(두 계약)가 부른다.
     라벨 위조 · 스냅숏에 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸)을 이름 있는 사유로 거부한다. 통과면 None.
     insert-after 는 기준 앵커로 잰다 — 끼워 넣은 절은 그 기준 절 뒤에 들어간다. 불변은 `immutable_lineage`
@@ -858,7 +858,7 @@ def _log_section_anchors(prof, sections) -> set:
     return out
 
 
-def snapshot_problem(snap, prof, immutable_lineage=frozenset()):
+def snapshot_problem(snap, prof, *, immutable_lineage):
     """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸 ·
     `immutable_lineage` 의 불변 계보)은 줄 해시가 있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과
     맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
@@ -886,7 +886,7 @@ def cmd_begin_round(a) -> int:
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
     imm_lineage = lineage_anchors(st, prof, "immutable", int(st["round"]))   # 직전 라운드까지의 불변 계보
-    bad = snapshot_problem(snap, prof, imm_lineage)
+    bad = snapshot_problem(snap, prof, immutable_lineage=imm_lineage)
     if bad:   # 원장을 바꾸기 전에 멈춘다
         fail("snapshot_invalid", why=bad[0], anchors=bad[1])
         return 2
@@ -1034,7 +1034,7 @@ def _decide_choices_for(state, is_successor) -> list:
     return ["adopt", "reject", "hold"]
 
 
-def _immutable_adopt_anchors(prof, sections, immutable_lineage=frozenset()) -> list:
+def _immutable_adopt_anchors(prof, sections, *, immutable_lineage) -> list:
     """불변 절을 겨눈 decide 의 채택이 여는 permit 앵커 — 프로필 fix_anchors 의 절 중 울타리 · 불변 계보 밖."""
     fence = fence_anchors(prof, sections) | set(immutable_lineage)
     return [x for x in anchors_matching(prof["fix_anchors"], sections) if x not in fence]
@@ -1051,9 +1051,9 @@ def _adopt_problem_for(st, prof, kind, immutable, edit_scope, anchor):
     secs = ((st.get("snapshots") or {}).get(str(st.get("round"))) or {}).get("sections") or []
     imm_lineage = lineage_anchors(st, prof, "immutable", int(st.get("round") or 0))
     if immutable:
-        return None if _immutable_adopt_anchors(prof, secs, imm_lineage) else ("no_fix_anchor", "")
+        return None if _immutable_adopt_anchors(prof, secs, immutable_lineage=imm_lineage) else ("no_fix_anchor", "")
     sc = edit_scope or anchor
-    why = scope_problem(sc, secs, prof, imm_lineage)
+    why = scope_problem(sc, secs, prof, immutable_lineage=imm_lineage)
     return (why, sc) if why else None
 
 
@@ -1309,7 +1309,7 @@ def cmd_declare_related(a) -> int:
     except LedgerCorrupt as e:
         return fail(e.reason, **e.extra)
     imm_lineage = lineage_anchors(st, prof, "immutable", n)
-    probs = [(x, scope_problem(x, secs, prof, imm_lineage)) for x in a.anchors]
+    probs = [(x, scope_problem(x, secs, prof, immutable_lineage=imm_lineage)) for x in a.anchors]
     for reason, whys in DECLARE_REFUSALS:   # 사유 이름은 이 명령의 것 — 판정은 scope_problem 하나
         bad = [x for x, why in probs if why in whys]
         if bad:
@@ -1440,7 +1440,7 @@ def cmd_decide(a) -> int:
             d["state"] = "adopted"
             if d.get("immutable"):
                 anchors = _immutable_adopt_anchors(prof, st["snapshots"][str(n)]["sections"],
-                                                   lineage_anchors(st, prof, "immutable", n))
+                                                   immutable_lineage=lineage_anchors(st, prof, "immutable", n))
             else:
                 anchors = [f.get("edit_scope") or f["anchor"]]
             permit = {"kind": "apply", "apply_anchors": anchors, "round": n + 1,

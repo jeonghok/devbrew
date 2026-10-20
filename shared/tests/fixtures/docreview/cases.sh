@@ -4574,3 +4574,32 @@ open(sys.argv[3], "w", encoding="utf-8").write(t[:i] + "## 5. 끼움\n\n끼운 �
     "AC9 불변: 남은 fix 절이 밀려난 불변 절뿐이면 불변 결정의 채택을 받지 않는다"
   rm -rf "$d"
 }
+
+# 계보는 앵커로 잇는다 — 보호 절의 제목을 바꾸거나 절을 지우면 지금 스냅숏에 없는 옛 앵커가 보호 절의 변경으로 묻힌다.
+lineage_r2_doc() {   # lineage_r2_doc <state-dir> — design-sample.md 에서 Goals 를 Outcomes 로 바꾸고 §1 · §3 을 지운 사본 → <state-dir>/r2.md
+  python3 -I -c 'import re, sys
+t = open(sys.argv[1], encoding="utf-8").read().replace("## 2. Goals", "## 2. Outcomes")
+t = re.sub(r"## 1\. Context\n.*?(?=## 2\.)", "", t, flags=re.S)
+t = re.sub(r"## 3\. Non-goals\n.*?(?=## 5\.)", "", t, flags=re.S)
+open(sys.argv[2], "w", encoding="utf-8").write(t)' "$FX/design-sample.md" "$1/r2.md"
+}
+case_lineage_rename_and_delete_ask() {
+  local d c; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC9 이름 바꿈: 준비 실패"; return; }
+  lineage_r2_doc "$d"
+  next_round "$d" "$d/r2.md" >/dev/null
+  assert_eq "$(st_yaml "$d" 'sorted(s["anchor"] for s in st["snapshots"]["2"]["sections"] if s["anchor"] in ("#1-context", "#2-goals", "#2-outcomes", "#3-non-goals"))')" "['#2-outcomes']" \
+    "AC9 이름 바꿈 전제: 라운드 2 스냅숏에는 옛 앵커 셋이 없고 새 제목의 앵커만 있다"
+  c="$d/critic-lineage.txt"
+  printf '%s\n' '```docreview-layer1' '[]' '```' '' '```docreview-layer2' '- ref: c1' '  category: ambiguity' \
+    '  anchor: "#3-non-goals"' '  disposition: fix' '  summary: "범위 밖 항목이 사라졌다"' '- ref: c2' '  category: ambiguity' \
+    '  anchor: "#1-context"' '  disposition: fix' '  summary: "배경이 사라졌다"' '```' > "$c"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$c" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$d/r2.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'sorted((x["anchor"], x["layer"]) for x in d["findings"] if x["category"] == "frozen_change")')" \
+    "[('#1-context', 2), ('#2-goals', 1), ('#2-outcomes', 2), ('#3-non-goals', 1)]" \
+    "AC9: 보호 절의 제목을 바꾸거나 절을 지우면 옛 앵커가 층 1 질문이다(보호 이력 없는 절은 층 2 · 새 제목은 보호 이력이 없다)"
+  assert_eq "$(jget "$d/fin.json" 'sorted((x["anchor"], x["disposition"], x.get("promotion")) for x in d["findings"] if x["category"] == "ambiguity")')" \
+    "[('#1-context', 'fix', None), ('#3-non-goals', 'decide', 'protected')]" \
+    "AC9: 지워진 보호 절을 겨눈 fix 는 결정으로 오른다(보호 이력 없는 지워진 절의 fix 는 그대로)"
+  rm -rf "$d"
+}

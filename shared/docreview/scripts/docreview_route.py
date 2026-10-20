@@ -782,7 +782,7 @@ def _classify_items(items, st, prof, sections, n, L, lineage):
             L.coerced("disposition", d, new)
             it["disposition"] = new
             d = new
-        cls = classify_anchor(it["anchor"], sections, prof, lineage)
+        cls = classify_anchor(it["anchor"], sections, prof, lineage=lineage)
         cid = it.get("contradicts")
         if cid:
             verdict = _contradiction_binding(st, entry_by_id, cid, it, cls, fenced)
@@ -833,7 +833,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L, lineage):
     extra = []
     if diff is not None:
         for c in diff.get("changed", []):
-            cls = classify_anchor(c["anchor"], sections, prof, lineage)
+            cls = classify_anchor(c["anchor"], sections, prof, lineage=lineage)
             extra.append({"f": None, "layer": 1 if cls["protected"] else 2, "category": "frozen_change",
                           "anchor": c["anchor"], "disposition": "decide",
                           "summary": "finding 없이 바뀜: %s (%s)" % (c.get("title") or c["anchor"], c["kind"]),
