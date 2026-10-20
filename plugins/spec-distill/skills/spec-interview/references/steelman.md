@@ -5,7 +5,7 @@
 직접 충돌할 때. 그 외의 근거는 원안을 강화하거나 경계를 다듬는 데 쓴다. 판정은 유지 / 보완 / 전환 /
 보류 넷이고 선택은 사용자가 한다.
 
-**trigger** = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 커버리지 공백은 R3
+**trigger** — 기본은 셋이다: landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 다른 이유로 방향이 의심되면 모델이 판단해 띄우고 그 이유를 trigger 로 적는다. 커버리지 공백은 R3
 대상이 아니다 — probe 질문으로 간다(coverage-mapper 블록).
 
 #### Step 1 — dispatch 재료 도출 (orchestrator)

@@ -60,8 +60,8 @@ direction, for writing files, or for advocating one side.
 ## Input
 
 - `<direction>` 의심 방향 한 문장.
-- `<trigger>` 게이트를 발동시킨 이유 — landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의
-  충돌 중 하나.
+- `<trigger>` 게이트를 발동시킨 이유 — 보기: landscape 모순 · 알려진 anti-pattern · 기존 사용자 제약과의
+  충돌. 이 셋에 한정하지 않는다.
 - `<goal>` 사용자 goal 의 원문. 두 케이스를 재는 **유일한 기준**이다.
 - `<premises>` 확정 방향의 핵심 전제 P1..Pn. 근거가 이 문장들과 직접 충돌할 때만 재검토 사유다.
   목록 자체가 틀렸다고 판단하면 그렇게 말한다.
@@ -85,9 +85,9 @@ direction, for writing files, or for advocating one side.
 ```yaml
 case_for_alternative:
   statement: "<대안 한 문장>"
-  strongest: "<goal 기준으로 대안이 이기는 케이스, 2-4줄>"
+  strongest: "<goal 기준으로 대안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>"
 case_for_current:
-  strongest: "<같은 기준으로 원안이 이기는 케이스, 2-4줄>"
+  strongest: "<같은 기준으로 원안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>"
 premise_refutation:
   hits: [P2]                 # 빈 배열 허용 = 반증 없음
   why: "<hit 마다: 어느 근거(url 또는 path+anchor)가 어느 전제 문장과 어떻게 충돌하는가>"  # hits 가 [] 면 생략
