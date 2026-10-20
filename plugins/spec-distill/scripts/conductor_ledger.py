@@ -984,7 +984,7 @@ def c_review_pack(root, a) -> int:
     put("pr.diff", _pack_diff(root, tip, warns, "pr.diff"))
     for b in blocks:
         for br in b.get("branches") or []:
-            if br == a.branch:
+            if a.branch in (br, "origin/" + br):
                 continue
             try:
                 other, note = branch_tip.tip(root, br)

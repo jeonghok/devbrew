@@ -1028,6 +1028,10 @@ class ReviewPack(Repo):
         self.assertEqual(rc, 0, out)
         self.assertIn("로컬 브랜치 feature/a1 가 origin 보다 뒤라 origin/feature/a1(%s) 를 썼다" % new[:8], out)
         self.assertIn("+new", (out_dir / "pr.diff").read_text(encoding="utf-8"))
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "origin/feature/a1",
+                           "--out", str(self.t / "pack-origin"))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((self.t / "pack-origin" / "open-A1-feature_a1.diff").exists(), "자기 브랜치를 다른 에픽으로 미리 보지 않는다")
         sh(self.w, "checkout", "-q", "feature/a1")
         (self.w / "y.txt").write_text("side\n", encoding="utf-8")
         sh(self.w, "add", "-A")

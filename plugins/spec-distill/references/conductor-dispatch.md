@@ -51,7 +51,7 @@
 ### 계획 agent
 
 ```text
-너는 <에픽> 의 계획 agent 다. 자리: 네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다(작업 기록 백업: <백업 경로 | 없음>) — 또는 <에픽 worktree 절대경로>(지휘 세션이 그 자리에 머문 채 보낼 때). 네 worktree 밖의 git 은 조작하지 않는다. 복합 셸 명령은 스크립트 파일로 돌린다.
+너는 <에픽> 의 계획 agent 다. 자리: 네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다(작업 기록 백업: <백업 경로 | 없음>) — 또는 <에픽 worktree 절대경로>(지휘 세션이 그 자리에 머문 채 보낼 때). origin/<브랜치> 가 앞서 있으면 git merge --ff-only origin/<브랜치> 로 맞춘 뒤 일한다(ff 가 안 되면 멈추고 보고한다). 네 worktree 밖의 git 은 조작하지 않는다. 복합 셸 명령은 스크립트 파일로 돌린다.
 흐름: <고른 흐름> — <이유>. 입력: 설계문서 <설계문서 절대경로>. 승인 게이트가 낸 계획 agent 의 입력 줄: <그 줄 그대로>.
 superpowers:writing-plans 를 단일 세션과 똑같이, 단계를 빼거나 다시 쓰지 말고 끝까지 돈다. 계획을 커밋한 뒤
 python3 "<SD>"/scripts/check_bundle_coverage.py --plan <설계문서> <계획>[ --acs "<이 계획 몫 AC>"] 를 돌려 빠진 AC 를 계획에 더하고 그 첫 줄을 보고한다.
@@ -63,7 +63,7 @@ skill 안의 테스트 실행도 그대로 둔다. 전체 스위트는 python3 "
 ### 구현 agent
 
 ```text
-너는 <에픽> 의 구현 agent 다. 자리: 네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다(작업 기록 백업: <백업 경로 | 없음>) — 또는 <에픽 worktree 절대경로>(지휘 세션이 그 자리에 머문 채 보낼 때). 네 worktree 밖의 git 은 조작하지 않는다. 복합 셸 명령은 스크립트 파일로 돌린다.
+너는 <에픽> 의 구현 agent 다. 자리: 네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다(작업 기록 백업: <백업 경로 | 없음>) — 또는 <에픽 worktree 절대경로>(지휘 세션이 그 자리에 머문 채 보낼 때). origin/<브랜치> 가 앞서 있으면 git merge --ff-only origin/<브랜치> 로 맞춘 뒤 일한다(ff 가 안 되면 멈추고 보고한다). 네 worktree 밖의 git 은 조작하지 않는다. 복합 셸 명령은 스크립트 파일로 돌린다.
 흐름: <고른 흐름> — <이유>.
 계획 <계획 레포 상대경로> 를 <writing-plans 가 권한 실행 방식 skill> 로 단일 세션과 똑같이 끝까지 실행한다.
 미리 받은 답: 머지 메뉴는 「브랜치 그대로 두기」(3번) · 기준 브랜치 <브랜치>. 그 밖에 사람에게 묻는 자리를 만나면 멈추고 (a) 쉬운 요약 (b) 원문을 돌려보낸다.
