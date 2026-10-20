@@ -26,6 +26,7 @@
 exit: 0 정상 · 2 잘못된 호출 · 4 판정축 실패(stdout 비움).
 """
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -159,8 +160,14 @@ def _normalize_identity(f, ledger=None):
     return f
 
 
+def claim_key(f):
+    """요약의 공백 · 대소문자를 접은 키 — 같은 주장인지 가르는 기준."""
+    return " ".join(str(f.get("summary", "")).split()).casefold()
+
+
 def finding_id(f):
-    return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}"
+    fp = hashlib.sha1(claim_key(f).encode("utf-8")).hexdigest()[:8]
+    return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}-{fp}"
 
 
 def _fold_sev(value):
@@ -338,8 +345,7 @@ def _has_plain(f):
 
 def _same_claim(a, b):
     """두 지적의 요약이 공백 · 대소문자만 다른가 — 그래야 한쪽의 plain 이 다른 쪽을 말한다."""
-    return (" ".join(str(a.get("summary", "")).split()).casefold()
-            == " ".join(str(b.get("summary", "")).split()).casefold())
+    return claim_key(a) == claim_key(b)
 
 
 def sort_findings(findings):
