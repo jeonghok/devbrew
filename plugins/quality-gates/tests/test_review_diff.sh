@@ -413,8 +413,10 @@ case_dir_outside_repo_skips_nothing() {
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "self-state 파일은 있고 비어 있다" || no "self-state 파일이 없거나 비지 않았다"
   assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
-  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/quality-gates/worktrees/base-mysess00/ ${NESTED_TAIL}\$" \
-    "건너뛰지 않은 등록된 트리도 크게 알린다"
+  assert_file_grep "$ROOT/err" \
+    '^review-diff: 이전 qg 실행이 남긴 worktree \.claude/quality-gates/worktrees/base-mysess00/ 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라$' \
+    "건너뛰지 않은 등록된 트리도 크게 알린다(리뷰하지 않은 qg 트리로)"
+  assert_file_absent "$ROOT/err" '중첩 레포' "등록된 qg 트리는 중첩 레포 갈래로 가지 않는다"
   assert_eq "$(field degraded "$OUT")" yes "건너뛰지 않은 등록된 트리가 있으면 degraded: yes"
 }
 
@@ -431,6 +433,131 @@ case_registered_worktree_only_not_degraded() {
   assert_eq "$(field degraded "$OUT")" no "degraded: no"
   assert_eq "$(field self_state "$OUT")" 1 "self_state: 1"
   assert_file_absent "$ROOT/err" '중첩 레포' "알리는 줄 없음"
+}
+
+# 제외한 경로가 다른 바뀐 경로의 폴더 이름이면(파일 README.md 를 지우고 README.md/a.py 를 더함) 그 아래
+# 파일이 걸러진 diff 에서 조용히 빠지지 않는다(AC20). 제외 대상의 접두 규칙은 branch · session 둘 다 잰다.
+case_excluded_prefix_not_swallowed() {
+  echo "[제외 경로가 다른 바뀐 경로의 폴더 이름 — 그 아래 파일이 빠지지 않는다]"
+  local mode
+  for mode in branch session; do
+    mkfix
+    g "$R" rm -q README.md
+    mkdir -p "$R/README.md"; echo 'swallowed_marker = 1' > "$R/README.md/a.py"
+    g "$R" add README.md/a.py
+    [ "$mode" = branch ] && g "$R" commit -q -m prefix
+    rd --mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_file_grep "$D/review-i1.names" '^README\.md/a\.py$' "$mode: names 에 README.md/a.py"
+    assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/README\.md/a\.py$' "$mode: 걸러진 diff 에 README.md/a.py"
+    assert_file_grep "$D/review-i1.diff" 'swallowed_marker' "$mode: 그 파일의 글이 걸러진 diff 에 있다"
+    assert_file_grep "$D/review-i1.diff" '^--- a/README\.md$' "$mode: 접두인 README.md 는 빼지 않고 리뷰한다"
+    assert_file_grep "$ROOT/err" '^review-diff: README\.md 는 ' "$mode: 빼지 않은 접두 경로를 stderr 에 한 줄로 알린다"
+    assert_eq "$(grep -c 'README\.md 는 ' "$ROOT/err")" 1 "$mode: 알리는 줄은 하나"
+    assert_eq "$(field excluded "$OUT")" 0 "$mode: excluded: 0 (접두 경로는 제외 목록에서 빠진다)"
+    assert_eq "$(field filtered_files "$OUT")" 2 "$mode: filtered_files: 2"
+    assert_eq "$(field degraded "$OUT")" no "$mode: 다 실렸으면 degraded: no"
+  done
+  # 음의 짝 — 접두가 아닌 제외 경로(CHANGELOG.md)는 그대로 빠지고 알리지 않는다.
+  mkfix
+  echo 'new' > "$R/CHANGELOG.md"; echo 'x = 2' > "$R/src/a.py"; g "$R" add -A; g "$R" commit -q -m c
+  rd --mode branch
+  assert_eq "$(field excluded "$OUT")" 1 "음의 짝: excluded: 1"
+  assert_file_absent "$D/review-i1.diff" 'CHANGELOG' "음의 짝: CHANGELOG.md 는 빠진다"
+  assert_file_absent "$ROOT/err" 'CHANGELOG' "음의 짝: 알리는 줄 없음"
+}
+
+# 이름 대조 — 걸러진 diff 의 이름 목록이 남길 경로 하나를 빠뜨리면 degraded: yes 와 그 경로(AC20).
+# git 대역: 남길 경로를 pathspec 매직으로 넘긴 --name-only 호출의 출력에서 src/a.py 를 지운다.
+case_name_reconcile_catches_missing() {
+  echo "[이름 대조 — 걸러진 이름 목록에서 빠진 경로를 잡는다]"
+  mkfix
+  local real shim="$ROOT/shim-git"
+  real="$(command -v git)"
+  mkdir -p "$shim"
+  {
+    printf '#!/bin/bash\n'
+    printf 'real=%q\n' "$real"
+    printf '%s\n' 'no=0 magic=0' \
+      'for a in "$@"; do case "$a" in --name-only) no=1 ;; ":("*) magic=1 ;; esac; done' \
+      'if [ "$no" = 1 ] && [ "$magic" = 1 ]; then' \
+      '  "$real" "$@" > "$0.out"; rc=$?' \
+      '  while IFS= read -r -d "" x; do [ "$x" = src/a.py ] || printf "%s\0" "$x"; done < "$0.out"' \
+      '  exit "$rc"' \
+      'fi' \
+      'exec "$real" "$@"'
+  } > "$shim/git"
+  chmod +x "$shim/git"
+  echo "# changed" > "$R/README.md"; echo 'x = 2' > "$R/src/a.py"; echo 'y = 2' > "$R/lib/b.py"
+  OUT=$(cd "$R" && PATH="$shim:$PATH" bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "빠진 경로가 있으면 degraded: yes"
+  assert_file_grep "$ROOT/err" '^review-diff: 바뀐 경로 src/a\.py ' "빠진 경로를 stderr 에 크게 알린다"
+  assert_file_absent "$ROOT/err" 'lib/b\.py' "실린 경로는 알리지 않는다"
+  assert_file_absent "$ROOT/err" 'README' "제외한 경로는 알리지 않는다"
+  # 양성 짝 — 대역 없이는 degraded 가 아니다.
+  rd --mode session
+  assert_eq "$(field degraded "$OUT")" no "양성 짝: 대역 없이 degraded: no"
+  assert_file_absent "$ROOT/err" '바뀐 경로' "양성 짝: 알리는 줄 없음"
+}
+
+# 바뀐 경로가 전부 제외되면 남길 경로가 0 — 경로 없이 git diff 를 불러 전체 diff 를 내지 않는다.
+case_all_excluded_no_pathspec() {
+  echo "[전부 제외 — 걸러진 diff 는 비고 전체 diff 가 아니다]"
+  local mode
+  for mode in branch session; do
+    mkfix
+    echo "# changed" > "$R/README.md"; echo 'new' > "$R/CHANGELOG.md"
+    g "$R" add -A
+    [ "$mode" = branch ] && g "$R" commit -q -m docs
+    rd --mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field files "$OUT")" 2 "$mode: files: 2"
+    assert_eq "$(field excluded "$OUT")" 2 "$mode: excluded: 2"
+    assert_eq "$(field filtered_files "$OUT")" 0 "$mode: filtered_files: 0"
+    assert_eq "$(field degraded "$OUT")" no "$mode: degraded: no"
+    [ -f "$D/review-i1.diff" ] && [ ! -s "$D/review-i1.diff" ] \
+      && ok "$mode: review-i1.diff 크기 0" || no "$mode: review-i1.diff 가 없거나 비지 않았다"
+    [ -s "$D/review-i1.full.diff" ] && ok "$mode: 양성 짝 — full.diff 는 비지 않았다" \
+      || no "$mode: full.diff 가 비었다"
+  done
+}
+
+# worktree 건너뛰기는 이 세션에 묶인다(AC21) — 세션 폴더 이름의 앞 8자가 (base|head)-<8자> 와 같을 때만.
+# 다른 세션 접미의 등록 worktree 는 리뷰하지 않고 이유와 함께 알린다(degraded: yes).
+case_other_session_worktree_degraded() {
+  echo "[다른 세션의 qg worktree — 건너뛰지 않고 이유와 함께 알린다]"
+  mkfix
+  local S="$R/.claude/quality-gates/sessAAAA0000" wa wb
+  mkdir -p "$S"
+  wb=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sessBBBB0000 2>/dev/null)
+  [ -n "$wb" ] && [ -d "$wb" ] && ok "다른 세션 트리를 만들었다" || no "다른 세션 트리를 만들지 못했다"
+  echo 'new = 1' > "$R/new.py"
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "다른 세션 트리가 있으면 degraded: yes"
+  assert_file_grep "$ROOT/err" \
+    '^review-diff: 이전 qg 실행이 남긴 worktree \.claude/quality-gates/worktrees/base-sessBBBB/ 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라$' \
+    "이유 줄 — 이전 qg 실행 · qg-gc"
+  assert_file_absent "$ROOT/err" '중첩 레포' "중첩 레포 줄로 알리지 않는다"
+  assert_file_absent "$S/review-i1.self-state" 'base-sessBBBB' "다른 세션 트리는 self_state 에 없다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessBBBB/$' "names 에 다른 세션 트리"
+  assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
+  # 양성 짝 — 이 세션 접미의 트리는 지금처럼 건너뛴다.
+  rm -rf -- "$S"/review-i1.*
+  g "$R" worktree remove --force --force "$wb"
+  wa=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sessAAAA0000 2>/dev/null)
+  [ -n "$wa" ] && [ -d "$wa" ] && ok "이 세션 트리를 만들었다" || no "이 세션 트리를 만들지 못했다"
+  rdd "$S" --mode session
+  assert_eq "$(field degraded "$OUT")" no "양성 짝: degraded: no"
+  assert_eq "$(field self_state "$OUT")" 1 "양성 짝: self_state: 1"
+  assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sessAAAA/$' "양성 짝: 이 세션 트리는 건너뛴다"
+  assert_file_absent "$ROOT/err" 'worktree' "양성 짝: 알리는 줄 없음"
+  # 세션 폴더 이름이 8자 미만이면 건너뛰기 없음 — 이 세션 트리도 리뷰하지 않은 항목으로 알린다.
+  local S2="$R/.claude/quality-gates/sessAAA"; mkdir -p "$S2"
+  rdd "$S2" --mode session
+  assert_eq "$(field self_state "$OUT")" 0 "8자 미만 세션 폴더: self_state: 0"
+  assert_eq "$(field degraded "$OUT")" yes "8자 미만 세션 폴더: degraded: yes"
 }
 
 # MDX 는 코드를 실행한다 — 문서 경로 패턴(README*)에 걸려도 빠지지 않고 kept 로 이름이 난다.
@@ -827,6 +954,10 @@ case_self_state_bound_to_run_dir
 case_unregistered_worktree_folder_reviewed
 case_dir_outside_repo_skips_nothing
 case_registered_worktree_only_not_degraded
+case_excluded_prefix_not_swallowed
+case_name_reconcile_catches_missing
+case_all_excluded_no_pathspec
+case_other_session_worktree_degraded
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed
 case_gitlink_no_git_inside

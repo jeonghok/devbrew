@@ -20,25 +20,27 @@
 # 쓰는 파일(<dir> 안 임시 폴더에 쓴 뒤 mv):
 #   review-i<N>.names      거르기 전 경로 전부(한 줄에 하나)
 #   review-i<N>.full.diff  거르기 전 diff
-#   review-i<N>.diff       문서 경로를 뺀 diff — 리뷰어가 받는 것
+#   review-i<N>.diff       문서 경로를 뺀 diff — 리뷰어가 받는 것(남길 경로를 하나씩 적어 만든다)
 #   review-i<N>.doc-paths  doc_paths.py select 출력(어느 경로를 왜 뺐고 남겼는지)
 #   review-i<N>.self-state 건너뛴 untracked qg 상태 경로(한 줄에 하나, 없으면 빈 파일)
 #
 # stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
 # doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
 # 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
-# gitlink)이 있으면 다섯 파일은 그대로 쓰고 degraded: yes(files 등은 수 그대로)로 rc 0 — 기준선 degraded 와는
+# gitlink · 이전 qg 실행이 남긴 worktree · 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로)이 있으면 다섯
+# 파일은 그대로 쓰고 degraded: yes(files 등은 수 그대로)로 rc 0 — 기준선 degraded 와는
 # files 가 수인지로 갈린다. git 실패 rc 4, 사용 오류 rc 2.
+# 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 문서 경로는 빼지 않고 리뷰한다(stderr 한 줄 · excluded 에 세지 않는다).
 #
 # qg 자기 산출물(이 실행의 --dir 바로 아래에서 아래 「qg 산출물 문법」 하나에 맞는 경로와 이 리포에
-# 등록된 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
+# 등록된 이 세션의 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
 # 반복의 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 다른 세션 폴더의 파일, 문법에 맞지 않는
 # untracked 파일, 추적되는 변경, 커밋된 변경은 그 폴더 아래여도 리뷰한다 — 그 자리에 둔 코드가 리뷰를
 # 피하지 못하게. --dir 가 리포 밖이면 아무것도 건너뛰지 않는다(self_state: 0 — stderr 에 그 이유).
 # diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
 # 읽기 전용 git 만 쓴다.
 set -u
-# 이 값들은 pathspec 해석을 바꾼다 — GIT_LITERAL_PATHSPECS=1 이면 제외 pathspec 이 글자 그대로 읽혀
+# 이 값들은 pathspec 해석을 바꾼다 — GIT_LITERAL_PATHSPECS=1 이면 남길 경로의 :(literal) 이 글자 그대로 읽혀
 # 걸러진 diff 가 조용히 빈다.
 unset GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 
@@ -206,9 +208,11 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
 #   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> —
-#             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. `git worktree list` 에 같은 물리
-#             경로로 등록된 것만 건너뛰고, 등록되지 않은 같은 이름 폴더(안에 든 다른 레포)는 건너뛰지 않는다
-#             (중첩 레포로 크게 알린다).
+#             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. 8자가 이 실행의 세션 폴더(--dir)
+#             이름의 앞 8자(SID8 — 영숫자 · _ · - 여덟 자가 아니면 건너뛰기 없음)와 같고 `git worktree list`
+#             에 같은 물리 경로로 등록된 것만 건너뛴다. 다른 세션 접미의 등록된 트리는 리뷰하지 않고 이전 qg
+#             실행이 남긴 트리로 알린다(say_stale_wt · degraded: yes). 등록되지 않은 같은 이름 폴더(안에 든
+#             다른 레포)는 중첩 레포로 크게 알린다.
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
 QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
 QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt|extra-iterations\.md'
@@ -217,12 +221,22 @@ QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|prefix|keep|seen|files|missing)\.z'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"
-QG_WT_RE='^\.claude/quality-gates/worktrees/(base|head)-[A-Za-z0-9_-]{8}/$'
+# qg 일회용 트리 이름 꼴 전부(qg-worktree.sh 는 sid 앞 1~8자를 쓴다)와 이 세션의 것.
+QG_WT_ANY_RE='^\.claude/quality-gates/worktrees/(base|head)-[A-Za-z0-9_-]{1,8}/$'
+QG_WT_RE=""
+SID8="${DIR##*/}"; SID8="${SID8:0:8}"
+case "$SID8" in
+  ????????)
+    case "$SID8" in
+      *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) ;;
+      *) QG_WT_RE='^\.claude/quality-gates/worktrees/(base|head)-'"$SID8"'/$' ;;
+    esac ;;
+esac
 DIR_REL=""
 case "$DIR" in "$top"/?*) DIR_REL="${DIR#"$top"/}" ;; esac
 WT_REG=() wt_loaded=0
@@ -245,8 +259,11 @@ is_qg_state() {   # <path>
   case "$1" in
     "$DIR_REL"/*) [[ "${1#"$DIR_REL"/}" =~ $QG_NAMES_RE ]] && return 0 ;;
   esac
-  [[ "$1" =~ $QG_WT_RE ]] && is_registered_wt "$1" && return 0
+  [ -n "$QG_WT_RE" ] && [[ "$1" =~ $QG_WT_RE ]] && is_registered_wt "$1" && return 0
   return 1
+}
+is_stale_wt() {   # <path> — 건너뛰지 않은(다른 세션 · --dir 가 리포 밖) 등록된 qg 일회용 트리인가
+  [[ "$1" =~ $QG_WT_ANY_RE ]] && is_registered_wt "$1"
 }
 # 이 실행의 임시 폴더는 변경도 상태도 아니다 — 세지 않는다.
 T_REL=""
@@ -263,13 +280,14 @@ if [ "$WORKTREE" -eq 1 ]; then
     "추적되지 않은 파일을 모두 리뷰한다(self_state 0): $DIR" >&2
 fi
 
-NAMES=(); UNTR=(); SELF=(); NESTED=()
+NAMES=(); UNTR=(); SELF=(); NESTED=(); STALE_WT=()
 # 추적 안 되는 중첩 레포 — 바깥 ls-files 는 그 폴더를 한 줄(끝 /)로만 낸다. 그 안은 다른 레포가 정한 글이라
 # 리뷰하지 않는다(그 안에서 git 을 돌리지도 파일을 읽지도 않는다). 폴더 줄을 names 에 남기고 폴더마다
 # stderr 에 크게 알리고 degraded: yes 를 낸다(say_unreviewed). 끝 / 는 git 이 내는 표시라 파일 시스템을
 # 따라가지 않고 가른다.
 # 링크는 폴더를 가리켜도 끝 / 가 없다 — 링크 자체를 diff 한다(add_dir_link).
-# 등록된 qg worktree 는 이 갈래 전에 is_qg_state 가 건너뛴다.
+# 이 세션의 등록된 qg worktree 는 이 갈래 전에 is_qg_state 가 건너뛰고, 건너뛰지 않은 등록된 qg worktree 는
+# 중첩 레포와 따로 STALE_WT 로 모아 리뷰하지 않고 알린다(say_stale_wt).
 while IFS= read -r -d '' f; do NAMES+=("$f"); done < "$T/tracked.z"
 while IFS= read -r -d '' f; do
   if [ -n "$T_REL" ]; then
@@ -277,19 +295,22 @@ while IFS= read -r -d '' f; do
   fi
   if is_qg_state "$f"; then
     SELF+=("$f")
+  elif is_stale_wt "$f"; then
+    STALE_WT+=("$f")
   else
     case "$f" in */) NESTED+=("$f") ;; *) UNTR+=("$f") ;; esac
   fi
 done < "$T/untracked.z"
 {
-  for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED[@]+"${NESTED[@]}"}; do
+  for f in ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED[@]+"${NESTED[@]}"} \
+           ${STALE_WT[@]+"${STALE_WT[@]}"}; do
     printf '%s\n' "$f"
   done
 } > "$T/names" || gitfail "경로 목록을 쓰지 못했다"
 {
   for f in ${SELF[@]+"${SELF[@]}"}; do printf '%s\n' "$f"; done
 } > "$T/self-state" || gitfail "상태 경로 목록을 쓰지 못했다"
-FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} + ${#NESTED[@]} ))
+FILES=$(( ${#NAMES[@]} + ${#UNTR[@]} + ${#NESTED[@]} + ${#STALE_WT[@]} ))
 
 # 레포가 정한 이름을 한 줄로 찍는다 — printf %q 로 이스케이프하고 백틱은 하나도 남기지 않는다(SKILL 이 이름을
 # 코드 스팬에 싣는데 백틱이 그 스팬을 닫지 못하게). %q 가 제어 문자 때문에 $'...' 꼴을 내면 그 안의 백틱을
@@ -400,30 +421,116 @@ is_excluded() {   # <path>
   return 1
 }
 
-# ── 걸러진 diff ────────────────────────────────────────────────────────────
-XS=()
-for x in ${EXCL[@]+"${EXCL[@]}"}; do XS+=(":(exclude,literal)$x"); done
-"${GITD[@]}" "${REV[@]}" -- "${PS[@]}" ${XS[@]+"${XS[@]}"} > "$T/diff" \
-  || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
-"${GITD[@]}" --name-only -z "${REV[@]}" -- "${PS[@]}" ${XS[@]+"${XS[@]}"} > "$T/filtered.z" \
-  || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
-FILTERED=$(tr -cd '\000' < "$T/filtered.z" | wc -c | tr -d ' ')
-for f in ${UNTR[@]+"${UNTR[@]}"}; do
-  is_excluded "$f" && continue
-  FILTERED=$((FILTERED + 1))
-  add_untracked "$T/diff" "$f"
-done
-
-# 리뷰하지 않은 중첩 레포를 크게 알린다 — 이름은 레포가 정한 글이라 %q 로 이스케이프한다(줄바꿈 · 제어 문자가
+# 리뷰하지 않은 항목을 크게 알린다 — 이름은 레포가 정한 글이라 %q 로 이스케이프한다(줄바꿈 · 제어 문자가
 # 줄을 위조하지 못하게). 하나라도 있으면 degraded: yes — 이 값은 Step 1c 의 stdout 으로 같은 턴의
 # 오케스트레이터에 가고(레포 안 표지를 나중에 다시 읽지 않는다), Step 1c 가 판정 입력 error-axis 로 싣는다.
 UNREVIEWED=0
-say_unreviewed() {   # <경로>
+say_unreviewed() {   # <경로> — 추적 안 되는 중첩 레포 · 선언되지 않은 gitlink
   UNREVIEWED=$((UNREVIEWED + 1))
   printf 'review-diff: 추적 안 되는 중첩 레포 %s 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
     "$(esc_name "$1")" >&2
 }
+say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트리
+  UNREVIEWED=$((UNREVIEWED + 1))
+  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라\n' \
+    "$(esc_name "$1")" >&2
+}
+say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로
+  UNREVIEWED=$((UNREVIEWED + 1))
+  printf 'review-diff: 바뀐 경로 %s 가 리뷰 diff 에 들지 못해 리뷰하지 않았다\n' "$(esc_name "$1")" >&2
+}
+
+# NUL 목록 다루기(경로는 바이트 그대로 비교한다).
+#   dirs <all.z> <excl.z>   excl 가운데 all 의 다른 경로의 폴더 이름(x 와 x/…)인 것
+#   minus <a.z> <b.z>…      a 의 순서대로 b 들 어느 것에도 없는 것
+NUL_PY='import sys
+def rd(p):
+    with open(p, "rb") as f:
+        return [x for x in f.read().split(b"\0") if x]
+out = sys.stdout.buffer
+op = sys.argv[1]
+if op == "dirs":
+    dirs = set()
+    for p in rd(sys.argv[2]):
+        i = p.find(b"/")
+        while i > 0:
+            dirs.add(p[:i])
+            i = p.find(b"/", i + 1)
+    for x in rd(sys.argv[3]):
+        if x in dirs:
+            out.write(x + b"\0")
+elif op == "minus":
+    skip = set()
+    for p in sys.argv[3:]:
+        skip.update(rd(p))
+    for x in rd(sys.argv[2]):
+        if x not in skip:
+            out.write(x + b"\0")
+else:
+    sys.exit(2)
+'
+nul_list() {   # <op> <파일>…
+  python3 -I -c "$NUL_PY" "$@"
+}
+put_z() {   # <out> <경로>… — NUL 목록으로 쓴다
+  local out="$1" x; shift
+  : > "$out" || return 1
+  for x in "$@"; do printf '%s\0' "$x" >> "$out" || return 1; done
+}
+
+# ── 걸러진 diff ────────────────────────────────────────────────────────────
+# 제외를 pathspec 으로 빼지 않는다 — 제외 pathspec 은 그 이름 아래 경로까지 뺀다(파일 x 를 지우고 x/a.py 를
+# 더하면 x/a.py 가 조용히 빠진다). 남길 tracked 경로 KEEP 을 :(literal) 로 하나씩 적어 git diff 한 번에 넘기고
+# (나눠 부르면 머리가 겹친다), KEEP 이 비면 git diff 를 부르지 않는다(경로 없는 git diff 는 전체 diff 다).
+# 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 제외 경로는 제외 목록에서 빼고(리뷰한다) stderr 에 한 줄로 알린다.
+put_z "$T/all.z" ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED[@]+"${NESTED[@]}"} \
+  ${STALE_WT[@]+"${STALE_WT[@]}"} || gitfail "경로 목록을 쓰지 못했다"
+put_z "$T/excl.z" ${EXCL[@]+"${EXCL[@]}"} || gitfail "제외 목록을 쓰지 못했다"
+nul_list dirs "$T/all.z" "$T/excl.z" > "$T/prefix.z" || gitfail "제외 경로의 폴더 이름 대조가 실패했다"
+DROP=()
+while IFS= read -r -d '' x; do DROP+=("$x"); done < "$T/prefix.z"
+if [ "${#DROP[@]}" -gt 0 ]; then
+  KEPT_EXCL=()
+  for x in ${EXCL[@]+"${EXCL[@]}"}; do
+    keep_it=1
+    for y in "${DROP[@]}"; do [ "$x" = "$y" ] && keep_it=0; done
+    [ "$keep_it" -eq 1 ] && KEPT_EXCL+=("$x")
+  done
+  EXCL=(${KEPT_EXCL[@]+"${KEPT_EXCL[@]}"})
+  for x in "${DROP[@]}"; do
+    printf 'review-diff: %s 는 다른 바뀐 경로의 폴더 이름이기도 해서 문서 경로로 빼지 않고 리뷰한다\n' \
+      "$(esc_name "$x")" >&2
+  done
+  case "$excluded" in ''|*[!0-9]*) ;; *) excluded=${#EXCL[@]} ;; esac
+  put_z "$T/excl.z" ${EXCL[@]+"${EXCL[@]}"} || gitfail "제외 목록을 쓰지 못했다"
+fi
+nul_list minus "$T/tracked.z" "$T/excl.z" > "$T/keep.z" || gitfail "남길 경로를 가리지 못했다"
+KS=()
+while IFS= read -r -d '' x; do KS+=(":(literal)$x"); done < "$T/keep.z"
+: > "$T/diff"; : > "$T/filtered.z"
+if [ "${#KS[@]}" -gt 0 ]; then
+  "${GITD[@]}" "${REV[@]}" -- "${KS[@]}" > "$T/diff" \
+    || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
+  "${GITD[@]}" --name-only -z "${REV[@]}" -- "${KS[@]}" > "$T/filtered.z" \
+    || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
+fi
+FILTERED=$(tr -cd '\000' < "$T/filtered.z" | wc -c | tr -d ' ')
+cp -- "$T/filtered.z" "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
+for f in ${UNTR[@]+"${UNTR[@]}"}; do
+  is_excluded "$f" && continue
+  FILTERED=$((FILTERED + 1))
+  add_untracked "$T/diff" "$f"
+  printf '%s\0' "$f" >> "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
+done
+
+# 이름 대조 — (tracked + untracked 파일) − 제외 − (걸러진 이름 + 리뷰한 untracked) 가 비어야 한다. 남는
+# 경로마다 크게 알리고 degraded: yes. 중첩 레포 · 등록된 qg 트리는 아래에서 따로 알린다.
+put_z "$T/files.z" ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} || gitfail "경로 목록을 쓰지 못했다"
+nul_list minus "$T/files.z" "$T/excl.z" "$T/seen.z" > "$T/missing.z" || gitfail "이름 대조가 실패했다"
+while IFS= read -r -d '' x; do say_missing "$x"; done < "$T/missing.z"
+
 for x in ${NESTED[@]+"${NESTED[@]}"}; do say_unreviewed "$x"; done
+for x in ${STALE_WT[@]+"${STALE_WT[@]}"}; do say_stale_wt "$x"; done
 
 # gitlink — 그 안은 diff 에 없다(커밋 줄 하나뿐). 스테이지 · 커밋한 중첩 레포, 토픽 봉인(git add -A)이 만든
 # gitlink 가 그렇다. 모든 모드에서 기준(merge_base · boundary · start)의 .gitmodules 에 선언되지 않았고 이
