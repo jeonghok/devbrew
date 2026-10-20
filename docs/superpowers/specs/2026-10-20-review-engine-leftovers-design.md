@@ -382,6 +382,7 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r1: advice_new=2 · advice_repeat=0 · mc_preexisting_new=0
 - docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r2: advice_new=5 · advice_repeat=2 · mc_preexisting_new=0
 - docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r3: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
+- 지휘자 판단 · 2026-10-20 · 계획 1 구현(Task 6 리뷰) — §4 의 「지금 제목을 바꿔도 보호는 이어지고」를 좁힌다. 밀려난 절은 보호가 이어진다. 보호 절의 제목을 바꾸면 보호 절의 변경으로 한 번 묻고, 사용자가 그 바꿈을 채택하면 새 제목에는 보호 이력이 없다(제목을 바꾼 보호 절은 보호를 잃는다). 제목 바꿈을 따라가는 장치는 만들지 않는다(U3 — 가벼운 쪽). 받는 곳은 `## 미룸`(R8 후보).
 
 ## 번호 대조
 
@@ -441,6 +442,10 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
 | 엔진 밖에서 셸이 원장을 쓰는 길 — `declare-related` · `log-decision` 이 표지 확인 없이 불려도 엔진은 거부하지 않는다(락은 절차 문면만 지킨다) | 권한 경계(R2a 설계 AC17 가)는 레포 밖 몫으로 R8 범위다 | R8 |
+| reviewing-brief `SKILL.md`(:590)가 아직 옛 `--extra-approval "<…>"` 꼴을 쓰고, 정본 `reviewing-document.md` 가 가리키는 `$extra_approval` 이 그 skill 안에서 정의되지 않는다 — 지금은 닫힌 쪽으로 멈춘다(rc 2 `extra_approval_missing`) | 그 경로는 R13 이 예약했다. 이 계획은 펜스 락이 거는 산문만 고칠 수 있다 | R13 |
+| 원장 열기 펜스는 cwd 에서 레포 뿌리를 찾고, 결정 줄 펜스는 문서의 레포에서 찾는다 — AC15 는 마지막 원장 열기가 문서의 레포에서 돌았을 때만 선다(아니면 닫힌 쪽으로 멈춘다, rc 3) | 원장 열기 펜스는 R13 이 예약한 skill 들에 있다 | R13 |
+| 엔진 명령을 거치지 않는 원장 쓰기(손 편집 · 다른 스크립트) — 순서와 펜스 락은 엔진 명령을 부르는 펜스에만 걸린다 | 권한 경계는 레포 밖 몫으로 R8 범위다 | R8 |
+| 보호 절의 제목 바꿈을 따라가는 정체 추적 — 지금은 바꿈을 한 번 묻고, 채택하면 새 제목은 보호를 잃는다(`## 결정 기록` 지휘자 판단 · 계획 1 구현) | §4 는 가장 가벼운 장치를 요구한다(U3). 정체 추적은 새 장치다 | R8 후보 |
 
 ## 지휘 기록
 
