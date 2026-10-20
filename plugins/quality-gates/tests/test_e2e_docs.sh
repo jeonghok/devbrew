@@ -303,6 +303,15 @@ case_readme_has_disable_e2e_line() {
   assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
+case_AC24_more_than_three_candidates_are_disclosed() {
+  local s1 q
+  s1=$(section "$REF" "## 1. 시나리오 만들기"); q=$(section "$REF" "## 2. 질문")
+  assert_eq "$(printf '%s\n' "$s1" | grep -cxF -- '- 만들 수 있는 시나리오가 셋을 넘으면 셋만 만들고 나머지 후보 수를 센다.')" "1" "AC24 §1: 셋을 넘으면 셋만 만들고 나머지 후보 수를 센다(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 후보가 셋을 넘어 셋만 만들었으면 질문 본문에 「시나리오 후보 N개 중 셋만 만들었다 — 「기타」 칸에 적으면 그 자리에서 더 만든다」 를 적는다(N 은 센 후보 수).')" "1" "AC24 §2: 질문 본문에 후보 수와 더 여는 길을 싣는다(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '- 시나리오를 고르지 않고 「기타」 칸에 아직 만들지 않은 후보를 적으면 그 시나리오를 만들어 같은 질문을 한 번 더 띄운다(그 선택이 실행 승인이다 — 위 시나리오 수정 갈래와 같은 한 번).')" "1" "AC24 §2: 「기타」 로 후보를 더 여는 규칙(줄 전체)"
+  assert_eq "$(printf '%s\n' "$q" | grep -cxF -- '`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다. 선택지는 넷을 넘지 않는다.')" "1" "AC24: 선택지 넷 상한 문장은 그대로다(양성 짝)"
+}
+
 case_AC28_e2e_scenarios_are_multi_select() {
   # AC28 · 계획 결정 11 — 여러 시나리오를 고를 수 있고, 번호 순으로 하나씩 걷기마다 게이트, 칸은 가장 나쁜 결과.
   local q w g s
