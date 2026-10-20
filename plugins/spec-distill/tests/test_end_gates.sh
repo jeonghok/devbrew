@@ -120,7 +120,15 @@ for lit in '`- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> �
 done
 assert_not_contains "$RISKP" '이 brief 의 가장 큰 K 다음 수' "AC25: Step A 「위험 번호」 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
 assert_contains "$DJ" '위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다' "AC25: 분해 표 배정 번호 불릿"
-grep -qF '번호 없는 위험 줄' "$FIN" && no "AC25: 옛 「번호 없는 위험 줄」 불릿 잔존" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(양성 짝: 위 단언)"
+RMT="$SD/templates/roadmap-template.md"
+for f in "$FIN" "$RMT"; do
+  grep -qF '번호 없는 위험 줄' "$f" && no "AC25: 옛 「번호 없는 위험 줄」 잔존(${f##*/})" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(${f##*/}, 양성 짝: 위 · 아래 단언)"
+done
+RMTR="$(win "$RMT" '^## 위험 번호표' '^## ')"
+for lit in '번호는 brief §5 위험 줄마다 박힌 번호(`- 위험 K<n> — …`)다.' '지운 위험의 번호는 다시 쓰지 않는다.' \
+           '번호가 박히지 않은 옛 brief 만 숨은 가정 · 실패 양식 · 리뷰 참고 순으로 줄 순서대로 번호를 달고, 그렇게 매겼다고 알린다.'; do
+  assert_contains "$RMTR" "$lit" "AC25: 로드맵 템플릿 「위험 번호표」 «${lit}»"
+done
 assert_contains "$BA" '`- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 Step A 「위험 번호」 의 다음 수 — 지운 위험의 번호는 다시 쓰지 않는다)' "AC25: B-A 의 §5 줄 꼴이 Step A 의 번호 규칙을 가리킨다"
 assert_not_contains "$BA" '이 brief 의 가장 큰 K 다음 수' "AC25: B-A 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
 # 분해 판단 5 — 로드맵 폴더 이름은 brief 파일 이름에서 도출한다(<주제>-<HHMM> 줄기도)
