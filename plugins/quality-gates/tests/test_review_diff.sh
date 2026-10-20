@@ -384,7 +384,8 @@ case_self_state_bound_to_run_dir() {
 # 우회 막기 — worktrees/(base|head)-<8>/ 는 이 리포에 등록된 git worktree 일 때만 건너뛴다.
 # 등록되지 않은 같은 이름 폴더는 안에 든 레포다 — 리뷰하지 않고 크게 알린다.
 NESTED_TAIL='는 리뷰하지 않았다 — 그 레포 설정을 믿지 않고는 안을 안전하게 읽을 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라'
-case_unregistered_worktree_folder_reviewed() {
+GITLINK_TAIL='는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. .gitmodules 에 선언하거나 git rm --cached 로 빼라'
+case_unregistered_worktree_folder_disclosed() {
   echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 알린다]"
   mkfix
   local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/quality-gates/worktrees/base-abcdefgh"
@@ -678,6 +679,8 @@ name" esc; esc="$R/esc$(printf '\033')x"
   local tick="$R/tick\`\`x" ticktab; ticktab="$R/a\`\`b$(printf '\t')c"
   git init -q -b trunk "$tick"; echo 'nested_marker_e = 1' > "$tick/e.py"
   git init -q -b trunk "$ticktab"; echo 'nested_marker_f = 1' > "$ticktab/f.py"
+  local cmdname='sub$(touch pwned-nested)'
+  git init -q -b trunk "$R/$cmdname"; echo 'nested_marker_g = 1' > "$R/$cmdname/g.py"
   echo 'new = 1' > "$R/new.py"
   local fsm; fsm=$(mktemp -d "$ROOT/fsm.XXXXXX")
   printf '#!/bin/sh\ntouch "%s/RAN"\nexit 1\n' "$fsm" > "$fsm/hook.sh"; chmod +x "$fsm/hook.sh"
@@ -687,14 +690,14 @@ name" esc; esc="$R/esc$(printf '\033')x"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (리뷰하지 못한 항목 — 인증을 막는다)"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_eq "$(field files "$OUT")" 6 "files: 6 (new.py + 폴더 줄 다섯)"
+  assert_eq "$(field files "$OUT")" 7 "files: 7 (new.py + 폴더 줄 여섯)"
   assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
   assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
   assert_file_absent "$D/review-i1.names" '^vendor/lib/.' "안의 파일을 names 에 펼치지 않는다"
   assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "안의 파일 글이 full.diff 에 없다"
   assert_file_absent "$D/review-i1.diff" 'nested_marker' "안의 파일 글이 걸러진 diff 에 없다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
-  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 5 "폴더마다 크게 알리는 줄 하나"
+  assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 6 "폴더마다 크게 알리는 줄 하나"
   grep -qF "중첩 레포 \$'tick\\x60\\x60x/' " "$ROOT/err" && ok "백틱 든 이름은 백틱을 \\x60 으로 바꿔 알린다" \
     || no "백틱 든 이름을 \\x60 으로 바꾸지 않았다"
   grep -qF "중첩 레포 \$'a\\x60\\x60b\\tc/' " "$ROOT/err" && ok "백틱과 탭이 함께 든 이름도 백틱을 \\x60 으로 바꿔 알린다" \
@@ -707,6 +710,10 @@ name" esc; esc="$R/esc$(printf '\033')x"
   assert_eq "$(grep -c "$(printf '\033')" "$ROOT/err")" 0 "날 제어 문자가 stderr 에 새지 않는다"
   grep -qF "중첩 레포 \$'esc\\Ex/' " "$ROOT/err" \
     && ok "제어 문자 든 이름은 이스케이프해 알린다" || no "제어 문자 든 이름을 이스케이프하지 않았다"
+  # 명령 치환 꼴의 이름 — 이스케이프한 이름으로 알리고, 펼쳐 실행하지 않는다.
+  assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 $(printf '%q' "$cmdname/") ${NESTED_TAIL}" "명령 치환 꼴 이름은 이스케이프해 알린다"
+  assert_file_absent "$ROOT/err" 'sub[$][(]touch pwned-nested[)]/ ' "명령 치환 꼴 이름이 날 글로 새지 않는다"
+  assert_eq "$(find "$ROOT" "$PWD" -name 'pwned-nested*' 2>/dev/null | wc -l | tr -d ' ')" 0 "명령 치환 꼴 이름의 명령이 돌지 않았다(pwned-nested 가 생기지 않았다)"
 }
 
 # 적대 중첩 레포 — 그 레포의 .git/config 에 명령(core.fsmonitor · diff.external · core.hooksPath)을 심고, 레포 밖
@@ -838,7 +845,8 @@ case_session_staged_gitlink_degraded() {
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
-  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "스테이지한 gitlink 를 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "스테이지한 gitlink 를 gitlink 줄로 알린다"
+  assert_file_absent "$ROOT/err" '중첩 레포 vendor/lib' "스테이지한 gitlink 를 중첩 레포 줄로 알리지 않는다"
   assert_file_absent "$D/review-i1.full.diff" 'staged_marker' "그 안의 글은 diff 에 없다"
 }
 
@@ -855,7 +863,7 @@ case_ignore_all_cannot_hide_gitlink() {
   rd --mode branch
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "변경이 더한 ignore = all 이어도 degraded: yes"
-  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "ignore = all 이어도 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "ignore = all 이어도 알린다"
   assert_file_grep "$D/review-i1.names" '^vendor/lib$' "names 에 gitlink 가 있다"
   # 사용자 설정 diff.ignoreSubmodules=all — .gitmodules 없이
   mkfix
@@ -865,7 +873,7 @@ case_ignore_all_cannot_hide_gitlink() {
   git -C "$R" config diff.ignoreSubmodules all
   rd --mode branch
   assert_eq "$(field degraded "$OUT")" yes "diff.ignoreSubmodules=all 이어도 degraded: yes"
-  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "diff.ignoreSubmodules=all 이어도 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "diff.ignoreSubmodules=all 이어도 알린다"
   printf 'status: ok\nstart: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
   rd --mode range --scope-file "$D/range-scope.txt"
   assert_eq "$(field degraded "$OUT")" yes "range 도 diff.ignoreSubmodules=all 이어도 degraded: yes"
@@ -880,7 +888,8 @@ case_branch_committed_gitlink_degraded() {
   rd --mode branch
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
-  assert_file_grep "$ROOT/err" "중첩 레포 vendor/lib ${NESTED_TAIL}\$" "커밋한 gitlink 를 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "커밋한 gitlink 를 gitlink 줄로 알린다"
+  assert_file_absent "$ROOT/err" '중첩 레포 vendor/lib' "커밋한 gitlink 를 중첩 레포 줄로 알리지 않는다"
 }
 
 # 토픽 모드 — boundary 에 선언되지 않은 새 gitlink 는 리뷰하지 않았다고 알린다(판정은 그대로).
@@ -904,8 +913,8 @@ case_topic_new_gitlink_disclosed() {
   rd --mode topic --scope-file "$S"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (선언되지 않은 새 gitlink)"
-  assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "선언되지 않은 새 gitlink vend 를 알린다"
-  assert_file_absent "$ROOT/err" '중첩 레포 decl ' "boundary 의 .gitmodules 에 선언된 decl 은 알리지 않는다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 새 gitlink vend 를 알린다"
+  assert_file_absent "$ROOT/err" ' decl 는 리뷰하지 않았다' "boundary 의 .gitmodules 에 선언된 decl 은 알리지 않는다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
   # 선언된 하위 모듈의 커밋만 바뀐 범위는 알리지 않고 degraded 도 아니다(양의 짝).
   echo 'z = 2' > "$R/decl/z.py"; g "$R/decl" commit -q -am z2; g "$R" add decl; g "$R" commit -q -m bump-decl
@@ -913,13 +922,13 @@ case_topic_new_gitlink_disclosed() {
   rd --mode topic --scope-file "$S"
   assert_eq "$RC" 0 "rc 0 (선언된 하위 모듈 커밋만 바뀜)"
   assert_eq "$(field degraded "$OUT")" no "선언된 하위 모듈 커밋 변경은 degraded 아님"
-  assert_file_absent "$ROOT/err" '중첩 레포' "선언된 하위 모듈 커밋 변경은 알리지 않는다"
+  assert_file_absent "$ROOT/err" '리뷰하지 않았다' "선언된 하위 모듈 커밋 변경은 알리지 않는다"
   # 선언되지 않은 gitlink 의 커밋이 바뀐 범위는 알리고 degraded 다(그 안의 변경도 리뷰하지 못한다).
   echo 'z = 3' > "$R/vend/z.py"; g "$R/vend" commit -q -am z3; g "$R" add vend; g "$R" commit -q -m bump-vend
   printf 'status: ok\nboundary: %s\ntree: %s\n' "$(git -C "$R" rev-parse HEAD~1)" "$(git -C "$R" rev-parse "HEAD^{tree}")" > "$S"
   rd --mode topic --scope-file "$S"
   assert_eq "$(field degraded "$OUT")" yes "선언되지 않은 gitlink 의 커밋 변경은 degraded: yes"
-  assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "선언되지 않은 gitlink 의 커밋 변경을 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 gitlink 의 커밋 변경을 알린다"
 }
 
 # 범위 모드 — 선언되지 않은 새 gitlink 가 있으면 degraded · 크게 알린다.
@@ -936,7 +945,7 @@ case_range_new_gitlink_degraded() {
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_file_grep "$ROOT/err" "중첩 레포 vend ${NESTED_TAIL}\$" "새 gitlink vend 를 알린다"
+  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "새 gitlink vend 를 알린다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
   # 양의 짝 — gitlink 없는 범위는 degraded 아님
   printf 'status: ok\nstart: %s\nend: %s\n' "$(git -C "$R" rev-parse HEAD)" "$(git -C "$R" rev-parse HEAD)" > "$F"
@@ -1108,7 +1117,7 @@ case_self_state_not_reviewed
 case_self_state_grammar
 case_grammar_covers_state_file_format
 case_self_state_bound_to_run_dir
-case_unregistered_worktree_folder_reviewed
+case_unregistered_worktree_folder_disclosed
 case_dir_outside_repo_skips_nothing
 case_registered_worktree_only_not_degraded
 case_excluded_prefix_not_swallowed

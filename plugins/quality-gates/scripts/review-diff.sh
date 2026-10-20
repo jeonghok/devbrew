@@ -15,7 +15,7 @@
 #   topic    --scope-file(topic-scope.txt)의 boundary..tree
 #   range    --scope-file(range-scope.txt)의 start..end — 이 파일의 start · end 만 읽는다
 #   모든 모드 기준(merge_base · boundary · start)의 .gitmodules 에 선언되지 않은 새 · 바뀐 gitlink(mode 160000)는
-#            리뷰하지 않았다고 같은 줄로 알리고 degraded: yes 를 낸다(그 안의 글은 diff 에 없다)
+#            리뷰하지 않았다고 따로 알리고 degraded: yes 를 낸다(그 안의 글은 diff 에 없다)
 #
 # 쓰는 파일(<dir> 안 임시 폴더에 쓴 뒤 mv):
 #   review-i<N>.names      거르기 전 경로 전부(한 줄에 하나)
@@ -423,9 +423,14 @@ dp_source="$(sed -n 's/^doc_paths_source: //p' "$T/doc-paths")"
 # 줄을 위조하지 못하게). 하나라도 있으면 degraded: yes — 이 값은 Step 1c 의 stdout 으로 같은 턴의
 # 오케스트레이터에 가고(레포 안 표지를 나중에 다시 읽지 않는다), Step 1c 가 판정 입력 error-axis 로 싣는다.
 UNREVIEWED=0
-say_unreviewed() {   # <경로> — 추적 안 되는 중첩 레포 · 선언되지 않은 gitlink
+say_unreviewed() {   # <경로> — 추적 안 되는 중첩 레포
   UNREVIEWED=$((UNREVIEWED + 1))
   printf 'review-diff: 추적 안 되는 중첩 레포 %s 는 리뷰하지 않았다 — 그 레포 설정을 믿지 않고는 안을 안전하게 읽을 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
+    "$(esc_name "$1")" >&2
+}
+say_unreviewed_gitlink() {   # <경로> — 기준의 .gitmodules 에 선언되지 않은 새 · 바뀐 gitlink
+  UNREVIEWED=$((UNREVIEWED + 1))
+  printf 'review-diff: 선언되지 않은 gitlink %s 는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. .gitmodules 에 선언하거나 git rm --cached 로 빼라\n' \
     "$(esc_name "$1")" >&2
 }
 say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트리. 지우는 명령에 그대로 쓰게 절대 경로로 낸다.
@@ -575,7 +580,7 @@ for x in ${STALE_WT[@]+"${STALE_WT[@]}"}; do say_stale_wt "$x"; done
 
 # gitlink — 그 안은 diff 에 없다(커밋 줄 하나뿐). 스테이지 · 커밋한 중첩 레포, 토픽 봉인(git add -A)이 만든
 # gitlink 가 그렇다. 모든 모드에서 기준(merge_base · boundary · start)의 .gitmodules 에 선언되지 않았고 이
-# 범위에서 새로 생기거나 바뀐 gitlink 를 같은 줄로 알린다(degraded: yes). 선언된 하위 모듈의 커밋 변경은
+# 범위에서 새로 생기거나 바뀐 gitlink 를 따로 알린다(say_unreviewed_gitlink · degraded: yes). 선언된 하위 모듈의 커밋 변경은
 # 알리지 않는다. 같은 REV · 경로로 세는 --raw 라 session · paths 는 작업 트리 쪽을 본다.
 "${GITD[@]}" --raw -z "${REV[@]}" -- "${PS[@]}" > "$T/raw.z" \
   || gitfail "git diff --raw 가 실패했다: ${REV[*]}"
@@ -592,7 +597,7 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' gp; do
   [ "$nm" = 160000 ] || continue
   declared=0
   for x in ${DECL[@]+"${DECL[@]}"}; do [ "$x" = "$gp" ] && declared=1; done
-  [ "$declared" -eq 1 ] || say_unreviewed "$gp"
+  [ "$declared" -eq 1 ] || say_unreviewed_gitlink "$gp"
 done < "$T/raw.z"
 
 publish

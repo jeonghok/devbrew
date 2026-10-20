@@ -66,12 +66,17 @@ assert_contains "$S1" 'rc 가 0 이어도 stderr 의 `review-diff: ` 로 시작�
 assert_contains "$S1" '줄마다 앞의 `review-diff: ` 를 `> [quality-gates] ` 로 바꾸고 나머지 글은 그대로 둔다' \
   "Step 1c: 옮길 때 머리만 바꾸고 글은 그대로 둔다"
 assert_contains "$S1" '아래에 없는 꼴의 줄도 그대로 옮긴다' "Step 1c: 목록에 없는 꼴의 줄도 옮긴다"
-assert_contains "$S1" '- `추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — <이유와 고치는 길>` — 추적 안 되는 중첩 레포 폴더 · 기준의 `.gitmodules` 에 선언되지 않은 새 · 바뀐 gitlink 마다 한 줄(모든 모드). 그 안의 파일은 리뷰 diff 에 없다.' \
-  "Step 1c: 중첩 레포 · gitlink 는 리뷰하지 않았다는 꼴로만 온다"
+assert_contains "$S1" '- `추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — <이유와 고치는 길>` — 추적 안 되는 중첩 레포 폴더마다 한 줄. 그 안의 파일은 리뷰 diff 에 없다.' \
+  "Step 1c: 중첩 레포는 리뷰하지 않았다는 꼴로만 온다"
 # README 가 스크립트가 내는 이유 줄을 글자 그대로 싣는다(스크립트에서 도출 — 한쪽만 바뀌면 깨진다).
 nested_say="$(sed -n "s/^ *printf 'review-diff: \(추적 안 되는 중첩 레포 \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
 assert_eq "$(printf '%s\n' "$nested_say" | grep -c .)" "1" "스크립트에서 중첩 레포 이유 줄 하나를 읽었다(양성 짝)"
 assert_contains "$(cat "$QG/README.md")" "\`$nested_say\`" "README 가 스크립트의 중첩 레포 이유 줄을 그대로 싣는다"
+gitlink_say="$(sed -n "s/^ *printf 'review-diff: \(선언되지 않은 gitlink \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
+assert_eq "$(printf '%s\n' "$gitlink_say" | grep -c .)" "1" "스크립트에서 gitlink 이유 줄 하나를 읽었다(양성 짝)"
+assert_contains "$(cat "$QG/README.md")" "\`$gitlink_say\`" "README 가 스크립트의 gitlink 이유 줄을 그대로 싣는다"
+assert_contains "$S1" "- \`$gitlink_say\` — 기준의 \`.gitmodules\` 에 선언되지 않은 새 · 바뀐 gitlink 마다 한 줄(모든 모드)." \
+  "Step 1c: 선언되지 않은 gitlink 는 스크립트의 이유 줄 꼴로 온다"
 # 중첩 레포 안을 펼쳐 리뷰에 싣는 길은 거뒀다 — 그 꼴 · 낱말이 SKILL · README · 스크립트에 남지 않는다.
 for f in "$SKILL" "$QG/README.md" "$QG/scripts/review-diff.sh"; do
   assert_not_grep "$(cat "$f")" '리뷰에 실었다|펼치지 못한 중첩 레포|중첩 레포 안의 중첩 레포|nested_list' \
