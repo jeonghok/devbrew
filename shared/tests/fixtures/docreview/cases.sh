@@ -2275,6 +2275,28 @@ case_finalize_twice_same_report() {   # 한 라운드에 finalize 두 번 — �
   assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "finalize 두 번: 둘째 뒤에도 게이트가 정상이다 (「미검증」 아님)"
   rm -rf "$d"
 }
+case_finalize_twice_without_saved_report_refused() {   # 보고(finalize_out)가 없는 라운드 — 둘째 finalize 는 예전처럼 거부한다
+  local d rc; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); st["rounds"]["1"].pop("finalize_out"); s.save_state(sys.argv[2], st)' "$SCRIPTS" "$d"
+  assert_eq "$(st_yaml "$d" 'bool(st["rounds"]["1"].get("route_report")), "finalize_out" in st["rounds"]["1"]')" "(True, False)" \
+    "finalize 두 번 전제: route_report 는 있고 finalize_out 은 없는 라운드"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample.md" > "$d/fin2.json" 2> "$d/fin2.err"; rc=$?
+  assert_eq "$rc $(jget "$d/fin2.err" 'd["reason"]')" "1 no_pending_recritic" "finalize 두 번: 앞 보고가 없으면 둘째는 rc 1 로 거부한다"
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "no_pending_recritic" "finalize 두 번: 그 거부를 라운드 자리에 남긴다"
+  rm -rf "$d"
+}
+case_finalize_twice_does_not_resave() {   # 둘째 finalize 는 원장을 다시 쓰지 않는다 — 내용이 바이트 단위로 같다
+  local d before rc; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  before="$(cksum < "$d/docreview-state.md")"
+  chmod a-w "$d/docreview-state.md"   # 같은 바이트로 다시 써도 잡는다 — 쓰기를 시도하면 실패한다
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample.md" > "$d/fin2.json" 2>/dev/null; rc=$?
+  chmod u+w "$d/docreview-state.md"
+  assert_eq "$rc" "0" "finalize 두 번: 쓸 수 없는 원장에서도 둘째 호출이 rc 0 이다(원장을 쓰려 하지 않는다)"
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "finalize 두 번: 둘째 호출 앞뒤의 원장 내용이 같다"
+  assert_eq "$(cmp -s "$d/fin.json" "$d/fin2.json" && echo same)" "same" "finalize 두 번(양의 짝): 둘째 호출이 앞 보고를 냈다"
+  rm -rf "$d"
+}
 case_T46_unverified_released_next_round() {   # 라운드 스코프 — 다음 라운드가 정상으로 끝나면 표지가 풀린다
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   critic_dead_twice "$d"
