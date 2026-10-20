@@ -27,7 +27,7 @@ export PYTHONDONTWRITEBYTECODE=1
 TMP="$(mktemp -d -t sd-seed-blob-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:interview\naudit_file: seed.audit.md\n---\n\nSEED_BODY_MARKER 로그인이 가끔 실패한다.\n' > "$TMP/seed.md"
+printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:pm-interview\naudit_file: seed.audit.md\n---\n\nSEED_BODY_MARKER 로그인이 가끔 실패한다.\n' > "$TMP/seed.md"
 cat > "$TMP/seed.audit.md" <<'EOF'
 ---
 type: interview-seed-audit
@@ -77,7 +77,7 @@ done
 [ "$order_ok" = 1 ] && ok "detect: 초안 → 원문 → 질문 전체 → 리뷰 결정 → CLAUDE.md 순서" || no "detect: 재료 순서가 어긋났다"
 assert_contains "$out" "ANSWER_MARKER" "detect: ## 2 의 «당신이 답한 것» 줄이 실린다"
 assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 여섯 밖)"
-assert_not_contains "$out" "next_phase: spec-distill:interview" "detect: seed frontmatter 는 벗겨진다"
+assert_not_contains "$out" "next_phase: spec-distill:pm-interview" "detect: seed frontmatter 는 벗겨진다"
 
 # ── recritic — 판정 이력 0건, 사용자 문구는 남는다(AC11) ───────────────────────
 rout="$(run --for recritic)"; rc=$?
@@ -161,7 +161,7 @@ open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "return text", 
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
 mout2="$(python3 "$TMP/mut2.py" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" 2>/dev/null)"
-grep -qF 'next_phase: spec-distill:interview' <<<"$mout2" \
+grep -qF 'next_phase: spec-distill:pm-interview' <<<"$mout2" \
   && ok "변이: frontmatter 제거를 지우면 frontmatter 가 샌다(이빨 있음)" \
   || no "변이: 제거를 지워도 안 샌다 — 이 단언은 다른 이유로 통과한다"
 

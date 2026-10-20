@@ -73,7 +73,7 @@ grep -qF '확정 표시는 «(사용자 확인)» 하나' <<<"$conv_block" && ok
 # 오지 않으므로 이 리터럴을 만족시키지 못한다.
 grep -qF '다시 검증할 것 —»로 시작' <<<"$conv_block" && ok "AC11: 마지막 문단 «다시 검증할 것 —»로 시작 규칙" || no "AC11: 재검증 문단 규약 부재"
 grep -qE '그 밖[^.]{0,30}미확인|나머지[^.]{0,30}미확인' <<<"$conv_flat" && ok "AC11: 무표시 = 미확인" || no "AC11: 무표시=미확인 문장 부재"
-# Phase 1 이 이 문단을 어디에 쓰는가 — spec-interview references/seed-input.md 와 같은 자리여야
+# Phase 1 이 이 문단을 어디에 쓰는가 — pm-interview references/seed-input.md 와 같은 자리여야
 # 한다(두 문서가 갈라지면 Phase 0 은 없는 블록을 겨냥해 문단을 쓴다).
 grep -qF 'Phase 1 은 이 문단을 R1 의 «지금 이해»·질문의 재료와 coverage-mapper 첫 dispatch 의 입력으로 씁니다' <<<"$conv_flat" \
   && ok "AC4: 재검증 문단의 소비 자리 = R1 «지금 이해»·질문 + coverage-mapper 첫 dispatch" \

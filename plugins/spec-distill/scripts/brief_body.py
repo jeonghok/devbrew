@@ -447,7 +447,7 @@ def _literal_view(line):
 
 
 _INLINE_HTML_RE = re.compile(r"<(?=[A-Za-z/!?])")
-# P21 치환 토큰(`<REDACTED:라벨>` 등) — spec-interview 가 비밀 값을 바꿔 적는 정본 형태다. 이름 뒤 `:` 때문에 HTML 태그가 아니다(마크다운
+# P21 치환 토큰(`<REDACTED:라벨>` 등) — pm-interview 가 비밀 값을 바꿔 적는 정본 형태다. 이름 뒤 `:` 때문에 HTML 태그가 아니다(마크다운
 # 파서는 이 꼴을 URI 자동 링크로 읽지만 보이는 글자는 그대로다). 그래서 `inline_html` 이 거부하지 않는다. `check_verbatim_coverage` 가 같은 정규식으로 원문 대조를 강등한다.
 P21_PLACEHOLDER_RE = re.compile(
     r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"

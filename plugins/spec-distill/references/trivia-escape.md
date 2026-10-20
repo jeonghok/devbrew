@@ -12,7 +12,7 @@
 
 해당하면 진행하기 전에 `AskUserQuestion` 한 번으로 사용자에게 묻는다 — 판정은 모델이 했고, 건너뛸지는 사용자가
 고른다. `<판정 근거>` 와 `<command>` 는 호출한 진입 skill 이 채운다 — `<command>` 는 호출한 진입 skill 의
-완전명(`spec-distill:spec-interview` · `spec-distill:request-framing`)이다:
+완전명(`spec-distill:pm-interview` · `spec-distill:request-framing`)이다:
 
 ```javascript
 AskUserQuestion({ questions: [{
@@ -32,4 +32,4 @@ AskUserQuestion({ questions: [{
   > 그래도 진행하시려면 `/<command> force <요청>` 으로 다시 부르거나 더 자세한 컨텍스트를 알려주세요.
 
   → END (사용자 후속 입력 대기).
-- **전체 과정으로** — 이 판정을 건너뛰고 진입 skill 이 정한 다음 단계(request-framing `### 4.` · spec-interview `### 3.5`)로 간다. 「풀린 입력」은 그대로다.
+- **전체 과정으로** — 이 판정을 건너뛰고 진입 skill 이 정한 다음 단계(request-framing `### 4.` · pm-interview `### 3.5`)로 간다. 「풀린 입력」은 그대로다.

@@ -103,7 +103,7 @@ class SeedFrontmatterGrammar(Tmp):
         self.assertNotIn("x.y", out)
 
     def test_positive_control_normal_frontmatter_passes(self):
-        fm = ["type: interview-seed", "date: 2026-09-01", "next_phase: spec-distill:interview",
+        fm = ["type: interview-seed", "date: 2026-09-01", "next_phase: spec-distill:pm-interview",
               "audit_file: docs/superpowers/interview/a.audit.md", "name:", "audit_file: <basename>.audit.md"]
         self.assertEqual(self.parse(fm).rejected, [])
         seed = self.write("s.md", self.FM % "\n".join(fm))

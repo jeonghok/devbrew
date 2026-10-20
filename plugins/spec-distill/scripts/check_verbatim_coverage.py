@@ -76,7 +76,7 @@ EXIT_USAGE = 64
 
 # §6 앵커 줄의 판독은 `brief_body` 하나다 — 게이트(`check_brief`) · 로드맵과 같은 객체.
 ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
-# P21 canonical placeholder 토큰 (spec-interview SKILL.md의 P21 줄과 같은 집합).
+# P21 canonical placeholder 토큰 (pm-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
 # **다른 문자 체계의 글자/숫자**가 더해진다. producer 문서(Korean-primary)가 예시로
 # 드는 `<REDACTED:라벨>`이 checker에 안 잡히던 drift를 producer가 아니라 **checker**
@@ -166,7 +166,7 @@ def parse_user_statements(fm: str) -> list[dict]:
           사라져 L1/L2 어느 쪽도 그 id를 찾지 않았다).
       (2) `text` 키 자체가 부재 — 이전엔 advisory 한 줄만 남기고 exit 0이었다.
 
-    스키마(spec-interview SKILL.md)는 각 레코드의 **첫 키가 `id`**임을 규정하므로
+    스키마(pm-interview SKILL.md)는 각 레코드의 **첫 키가 `id`**임을 규정하므로
     (1)은 새 제약이 아니라 기존 계약의 집행이다.
 
     `text`가 **존재하지만 비어 있는**(또는 정규화 후 비는) 경우는 여기서 보지 않는다 —

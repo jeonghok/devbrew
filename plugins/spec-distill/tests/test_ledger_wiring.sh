@@ -20,7 +20,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
 SR="$SD/skills/spec-review/SKILL.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
-FIN="$SD/skills/spec-interview/references/finishing.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
 
 repo="$T/repo"; mkdir -p "$repo/docs" && git -C "$repo" init -q
 doc="$repo/docs/a-design.md"; printf '# A\n' > "$doc"
