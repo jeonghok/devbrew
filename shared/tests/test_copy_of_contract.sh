@@ -536,6 +536,8 @@ fi
 # 정본에서 가져온다. a 는 다른 플러그인 b 의 전체 경로만 인용하므로 소비자가 아니다(음성).
 # c 는 자기 플러그인의 전체 경로로, d 는 상대 경로로 부르므로 소비자다(양성 대조) — 둘 다
 # `.md` 파일에 둬서, 인용하는 `.md` 를 통째로 빼는 넓은 제외가 이 단언을 RED 로 만든다.
+# e 는 한 줄에 자기 경로를 먼저, 다른 플러그인 경로를 뒤에 쓴다 — 제외가 줄 단위라 소비가
+# 아니다(줄의 첫 매치만 보는 제외는 e 를 소비로 남긴다).
 pb_canon="$(printf '%s\n' "$SYMLINK_CANONICALS" | grep -v '^$' | head -1)"
 PB_REPO="$(mktemp -d -t copyof-prose-XXXXXX)" || exit 1
 lock_tmp_add "$PB_REPO"
@@ -543,15 +545,17 @@ if [ -z "$pb_canon" ] || [ -z "$PB_REPO" ] || [ ! -d "$PB_REPO" ]; then
   no "산문 도출 프로브: 인용할 정본('${pb_canon}')이나 사본 레포('${PB_REPO}')가 없다 — 프로브가 돌지 않았다"
 else
   pb_base="$(basename -- "$pb_canon")"
-  mkdir -p "$PB_REPO/plugins/a" "$PB_REPO/plugins/b/scripts" "$PB_REPO/plugins/c" "$PB_REPO/plugins/d/skills/x"
+  mkdir -p "$PB_REPO/plugins/a" "$PB_REPO/plugins/b/scripts" "$PB_REPO/plugins/c" "$PB_REPO/plugins/d/skills/x" \
+           "$PB_REPO/plugins/e"
   printf 'see `plugins/b/scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/a/README.md"
   printf '#!/bin/sh\n' > "$PB_REPO/plugins/b/scripts/$pb_base"
   printf 'run `plugins/c/scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/c/README.md"
   printf 'run `scripts/%s`\n' "$pb_base" > "$PB_REPO/plugins/d/skills/x/SKILL.md"
+  printf 'copy `plugins/e/scripts/%s` from `plugins/b/scripts/%s`\n' "$pb_base" "$pb_base" > "$PB_REPO/plugins/e/README.md"
   git -C "$PB_REPO" init -q >/dev/null 2>&1
   git -C "$PB_REPO" add -A >/dev/null 2>&1
   pb_got="$(cd "$PB_REPO" && prose_consumers "$pb_base" | tr '\n' ' ')"
-  assert_eq "$pb_got" "c d " "산문 도출 프로브: 다른 플러그인 전체 경로 인용(a)은 소비가 아니고, 같은 플러그인 전체 경로(c)와 상대 경로(d)는 소비다 (정본 ${pb_base})"
+  assert_eq "$pb_got" "c d " "산문 도출 프로브: 다른 플러그인 전체 경로 인용(a · 같은 줄의 e)은 소비가 아니고, 같은 플러그인 전체 경로(c)와 상대 경로(d)는 소비다 (정본 ${pb_base})"
 fi
 # 양성 짝 — 사본으로 배포되는 `.md` 정본도 산문으로 도출된다. `.md` 정본을 도출에서 통째로
 # 빼는 넓은 제외는 이 단언을 RED 로 만든다.
