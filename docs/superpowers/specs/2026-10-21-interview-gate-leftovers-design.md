@@ -63,8 +63,8 @@ next_phase: superpowers:writing-plans
 
 ## Goals
 
-- G1 인터뷰를 닫는 사용자 답(외부 선례 무관 · 사용자 판단 포화)이 사용자가 실제로 고른 선택지일 때만 통과한다.
-- G2 엔진 skill 셋과 공유 러너는 상태 폴더 쓰기에서 미리 심은 링크를 따라가지 않는다. 락이 새 맨 넘기기를 막는다.
+- G1 인터뷰를 닫는 사용자 답(외부 선례 무관 · 사용자 판단 포화)은 그 S 가 state 에 고른 선택지(`source: chosen`)로 기록돼 있을 때만 통과한다 — payload · audit 과 state 가 서로 맞는지를 잰다. 사용자가 정말 골랐는지의 증명은 아니다(state 도 모델이 쓴다, §2 한계).
+- G2 엔진 skill 셋과 공유 러너는 상태 폴더 쓰기에서 미리 심은 링크를 따라가지 않는다. 세 skill 은 펜스 전체를 읽는 도출 락이, 공유 러너는 그 상태 폴더 쓰기 자리를 겨냥한 락이 새 맨 넘기기를 막는다 — 러너의 `$SCRATCH`(`mktemp -d`) 대상은 허용, `write_failclosed` 는 이유와 함께 이름으로 뺀다.
 - G3 V1 확인 줄이 인터뷰 중에 실릴 자리를 갖고, 끝날 때 audit §5 로 그대로 옮겨진다.
 - G4 리뷰 원장은 cwd 가 아니라 문서가 사는 레포에서 찾는다. 다르면 한 줄로 알린다.
 - G5 사용자 말이 로드맵 생성 명령에서 셸로 새지 않는다.
@@ -117,9 +117,17 @@ next_phase: superpowers:writing-plans
   - 판정: 대상 S 의 state 레코드가 `source: chosen` 이어야 한다. 레코드가 없거나(S1 포함) `verbatim` 이면 위반이다(rc 1). 위반한 S 는 결과의 새 목록 키에 실린다.
   - 레코드는 있는데 `source` 가 없으면 검사 불가다(rc 3, advisory) — 기존 「검사 불가 ≠ 통과」 규칙 그대로다.
 - 줄 문법은 `check_brief` 의 것을 import 해서 쓴다(`IRRELEVANT_RE` · `SAT_LINE_RE` · `SAT_USER_RE` · 절 읽기). 베껴 쓰면 두 검사가 갈라진다. 공개 함수 하나로 묶을지는 계획이 정한다.
-- 실패 처리는 기존 원문 완전성 위반과 같다 — 새 rc 는 없다. RB rc 표의 `1` 행이 새 키와 고치는 길을 적는다. 고치는 길: 인터뷰 본체가 그 질문을 선택지로 다시 묻고, 답을 새 S(`chosen`)로 기록한 뒤, 닫힘 줄의 `@S` 를 바꾼다. payload §6 · audit §6 에는 새 S 를 추가만 한다.
+- 실패 처리는 기존 원문 완전성 위반과 같다 — 새 rc 는 없다. rc 1 이라 건너뛰기 변수(`DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE`)로도 넘지 못하고 reviewing-brief 는 라운드를 시작하지 않고 멈춘다. 고치는 일은 새 자동 장치가 아니라 인터뷰가 한다. RB rc 표에 아래 행을 더한다(기존 `1` 행 아래, 키로 가른다):
+
+  | `vc_rc` | 뜻 | 동작 |
+  |---|---|---|
+  | `1`(`not_chosen`) | 인터뷰를 닫은 답(외부 선례 무관 · 사용자 판단 포화)의 S 가 state 에 고른 선택지(`source: chosen`)로 기록돼 있지 않다 | **차단 — 건너뛰지 않는다.** 리뷰를 멈추고 사용자에게 「인터뷰를 닫은 답 <S 목록> 이 고른 선택지로 기록되지 않았다. 인터뷰로 돌아가(`/spec-distill:pm-interview` — 같은 진행 기록에서 잇는다) 그 질문에 선택지로 다시 답한다」를 보인다. 그 뒤는 인터뷰의 보통 흐름이다 — 사용자가 조사를 더 원하면 라운드가 이어지고, 닫는 선택지를 고르면 인터뷰가 새 `chosen` S 를 기록하고 그 S 로 audit §2 줄과 state `## audit §2 대기 줄` 블록을 다시 쓴 뒤(외부 선례 무관이면 brief §4 줄의 `@S` 를 바꾼다) finishing Step A 를 다시 돈다(게이트, 로드맵이 있으면 B-R). payload §6 · audit §6 에는 새 S 를 추가만 한다 |
+
+  사용자가 다시 답하지 않는 경우를 따로 다루는 장치는 두지 않는다 — 리뷰는 멈춘 채로 남는다.
 - 「사용자 종료(@S…)」 는 대상이 아니다. 사용자가 자유 글로 끝낼 수 있다.
-- **한계(README · CHANGELOG 공시).** 대조는 Step A 7 의 `check_brief gate` 가 아니라 Step A.5 리뷰 진입에서 걸린다. 그 사이 brief 는 이미 쓰였다. 리뷰 진입을 지나지 않는 길에서는 대조가 돌지 않는다. R10 이 README · CHANGELOG 에 남긴 「사용자가 골랐는지 증명하지 못한다」 한계 문장을 이 사실로 바꾼다.
+- **한계 둘(README · CHANGELOG 공시 — 둘 다 남긴다).**
+  - 시점: 대조는 Step A 7 의 `check_brief gate` 가 아니라 Step A.5 리뷰 진입에서 걸린다. 그 사이 brief 는 이미 쓰였다. 리뷰 진입을 지나지 않는 길에서는 대조가 돌지 않는다.
+  - 출처: `user_statements`(그 `source: chosen` 포함)도 모델이 쓴다. 이 대조는 payload · audit 과 state 가 서로 맞는지를 잴 뿐, 사용자가 정말 골랐는지를 증명하지 않는다. R10 이 남긴 「사용자가 골랐는지 증명하지 못한다」 한계 문장은 그대로 두고 시점 한계를 더한다.
 
 ### §3 링크 따라 쓰기 — 작은 공용 writer 하나
 
@@ -138,11 +146,12 @@ next_phase: superpowers:writing-plans
   - 허용 대상: `/dev/null`, fd 복제(`>&2`), 같은 펜스에서 `mktemp` 로 만든 변수(도출). 그 밖은 RED 다.
   - 셸 펜스인데 첫 줄이 정확히 ```` ```bash ```` 가 아닌 펜스(```` ```sh ```` · 들여쓴 펜스 · 꼬리 공백 · CRLF)에 쓰기가 있으면 「검사 밖 펜스」로 거부한다 — R12 `ac8_scan` 의 펜스 모양 축과 같은 규칙이다. 프롬프트 틀 펜스의 `<tag>${VAR}` 는 쓰기가 아니다(오탐 대조로 확인).
   - 락은 새 파일에 둔다. R12 의 원장 쓰기 순서 락(`test_ledger_wiring.sh`)은 엔진 호출 줄만 보고 `| tee` 를 알려진 경계로 남겼다. 새 락은 그 경계를 세 skill 에서 덮는다. R12 락은 그대로 둔다. 그 단언(「`ac8_scan` 은 `| tee` 를 보지 않는다」)은 계속 참이다. 공유 절차서 `reviewing-document.md` 에는 셸 쓰기가 없다.
+- **공유 러너 락 — 겨냥한 락.** 공유 러너는 위의 펜스 파서로 읽지 않는다. 러너의 상태 폴더 쓰기 자리(지금 :50 · :67 · :495-498 — `$OUTPUT_PATH` 로 가는 쓰기)가 writer 를 거치는지를 따로 단언한다. `$SCRATCH`(`mktemp -d` 로 만든 폴더) 아래로 가는 쓰기(프롬프트 · codex stdout · stderr)는 허용한다. `write_failclosed`(`runner_common.sh`)는 이름으로 빼고 이유를 적는다 — qg 러너와 나누는 사본 쌍이고, 러너의 첫 쓰기가 심어 둔 링크를 이미 일반 파일로 바꿔 놓은 뒤에 불린다. 그 밖의 `$OUTPUT_PATH` 맨 넘기기를 다시 넣는 변이에 RED 다.
 - **한계(README 공시).**
   - Write 도구로 상태 폴더에 쓰는 파일(`said-*.txt` · `readback.txt`)은 셸 쓰기가 아니라 writer 로 감쌀 수 없다(`## 미룸`).
   - writer 는 마지막 경로 성분만 지킨다. 상태 폴더 자체의 링크는 이미 `path-inside` 가 막는다.
   - 실행 중에 다시 심는 링크(같은 사용자의 경쟁)는 지키지 않는다.
-  - 공유 러너의 `write_failclosed`(qg 러너와 나누는 `runner_common.sh` 사본 쌍)는 바꾸지 않는다. 러너의 첫 쓰기(:50)가 심어 둔 링크를 일반 파일로 바꿔 놓은 뒤에 쓰기 때문이다.
+  - 공유 러너의 `write_failclosed`(qg 러너와 나누는 `runner_common.sh` 사본 쌍)는 바꾸지 않는다. 러너의 첫 쓰기(:50)가 심어 둔 링크를 일반 파일로 바꿔 놓은 뒤에 쓰기 때문이다. 러너 락은 이 함수를 이 이유로 이름으로 뺀다.
 
 ### §4 V1 확인 줄 — 「대체됨」 과 같은 길
 
@@ -153,10 +162,11 @@ next_phase: superpowers:writing-plans
 
 ### §5 원장 뿌리 — 문서의 레포에서
 
-- RB · SR · finishing.md 의 `state_path.py state-root` 호출은 모두 그 펜스가 다루는 문서의 폴더(`"$(dirname "$PAYLOAD")"` · `"$(dirname "$spec_path")"`)를 인자로 넘긴다. finishing.md 의 두 펜스는 RB 의 원장을 함께 읽으므로 같은 규칙을 따른다. `state_path.py` 는 바꾸지 않는다.
-- 공시는 원장 열기 펜스(RB 의 첫 원장 펜스 · SR `ledger-open`)에서 한 번 한다. 문서 레포의 `git-common-dir` 가 cwd 의 것과 다르면 결정 줄 펜스(SR :697-702)와 같은 비교 · 같은 말투로 한 줄을 낸다.
+- RB · SR · finishing.md 의 `state_path.py state-root` 호출은 모두 한 꼴의 도출을 거친다. 그 펜스가 다루는 문서의 폴더(`$(dirname "$PAYLOAD")` · `$(dirname "$spec_path")`)가 git 작업 트리 안이면 그 폴더를 `state-root` 인자로 넘기고, 아니면 지금처럼 cwd 의 뿌리를 쓰고 그 사실을 한 줄로 알린다. 도출은 펜스마다 같은 글자의 한 꼴이다(락이 글자로 대조한다 — 계획이 있는 스크립트의 인자로 옮길 수 있다). finishing.md 의 두 펜스는 RB 의 원장을 함께 읽으므로 같은 도출을 따른다. `state_path.py` 는 바꾸지 않는다.
+- 공시는 원장 열기 펜스(RB 의 첫 원장 펜스 · SR `ledger-open`)에서 한 번 한다. 문서 레포의 `git-common-dir` 가 cwd 의 것과 다르면 결정 줄 펜스(SR :697-702)와 같은 비교 · 같은 말투로 한 줄을 낸다. 문서 폴더가 git 작업 트리 밖이면 「문서가 git 작업 트리 밖이다 — 지금 작업 폴더의 레포 원장을 쓴다」 꼴의 한 줄을 낸다.
 - RF 는 바꾸지 않는다 — seed 경로를 cwd 에서 만들기 때문이다(`$(pwd)/$SEED`, :384). 락은 RF 의 유일한 도출 지점을 그 이유와 함께 이름으로 뺀다.
 - 결과: cwd 가 다른 레포여도 원장 열기와 결정 줄 펜스가 같은 원장을 찾는다. R12 AC15 의 「마지막 원장 열기가 문서의 레포에서 돌았을 때만」 조건이 사라진다.
+- **한계(README 공시).** 원장 정리(`ledger_sweep.py`)와 지휘자는 여전히 cwd 레포의 뿌리를 쓴다. 다른 레포의 뿌리 아래 만든 원장은 그 레포에서 돌 때만 정리된다.
 
 ### §6 로드맵 생성 따옴표
 
@@ -221,20 +231,20 @@ next_phase: superpowers:writing-plans
 **사용자 답 대조(§2)**
 - AC1 brief §4 「외부 선례 무관(@S<m>)」 이 가리키는 S 의 state 레코드가 `verbatim` 이면 `check_verbatim_coverage.py` 가 rc 1 을 내고 결과의 새 키에 그 S 를 싣는다. `chosen` 이면 그 대조로는 막지 않는다(양 · 음 픽스처).
 - AC2 audit §2 마지막 포화 판정 줄이 「사용자 판단 포화(@S<m>)」 이면 같은 판정을 한다. 앞선 줄의 사용자 판단 포화 S 와 「사용자 종료(@S…)」 의 S 는 보지 않는다(각 픽스처).
-- AC3 대상 S 가 state 에 없거나 S1 이면 rc 1, 레코드에 `source` 가 없으면 rc 3 과 advisory 다. `check_brief.py` 는 state 를 읽지 않는다(불변식 docstring · 기존 테스트 그대로). RB rc 표 `1` 행에 새 키와 고치는 길이 있다. README · CHANGELOG 한계 문장이 §2 의 시점 한계로 바뀌었다.
+- AC3 대상 S 가 state 에 없거나 S1 이면 rc 1, 레코드에 `source` 가 없으면 rc 3 과 advisory 다. `check_brief.py` 는 state 를 읽지 않는다(불변식 docstring · 기존 테스트 그대로). RB rc 표에 `1`(`not_chosen`) 행이 있고, 그 멈춤 문장이 인터뷰로 돌아가 선택지로 다시 답하라고 가리킨다(문장 단언 — 사용자가 다시 답하지 않는 경우의 테스트는 두지 않는다). 건너뛰기 변수가 켜져도 이 rc 1 은 건너뛰지 않는다. README · CHANGELOG 에 §2 의 시점 한계를 더했고, 출처 한계(「사용자가 골랐는지 증명하지 못한다」)는 남아 있다.
 
 **링크 따라 쓰기(§3)**
 - AC4 writer `run` 은 P 가 레포 밖 파일을 가리키는 심볼릭 링크이거나 링크가 둘인 파일이어도 그 너머를 바꾸지 않고, P 를 명령 stdout 을 담은 일반 파일로 만든다. 명령 rc(0 · 3 · 그 밖)를 그대로 내고 rc 가 0 이 아니어도 stdout 을 놓는다. writer 자신의 실패는 따로 정한 rc 와 사유 줄이고, P 는 그대로다.
 - AC5 `empty` · `append` 는 링크를 따라 쓰지 않는다. `empty` 는 빈 일반 파일을 만들거나 0 아닌 rc 로 거부한다. `append` 는 없으면 만들고 있으면 덧붙이며, 링크 · 링크 둘이면 거부한다. 모두 bash 3.2 펜스에서 돈다.
-- AC6 세 skill 폴더의 bash 펜스에 허용 대상(`/dev/null` · fd 복제 · 같은 펜스의 `mktemp` 변수) 밖의 쓰기(`>` · `>>` · `>|` · `&>` · `N>` · `{ … } >` · `exec >` · `| tee` · `touch`)가 없다. 도출 락이 이를 지킨다. 꼴마다 하나씩 다시 넣는 변이에 RED, `mktemp` 대상 heredoc 양성 대조는 GREEN, 검사 밖 펜스의 쓰기는 거부다.
-- AC7 실제 펜스를 임시 레포에서 돌려도 심어 둔 링크(번들 · 재비판 번들 · critic YAML · `hunks.json` · `gate-drops.json` · degrade 대체 파일)의 너머가 바뀌지 않는다 — RB 번들 펜스 · RF 번들 펜스 · 공유 러너 각각 하나 이상. writer 가 두 플러그인 `scripts/` 에 링크돼 있고 공유본 링크 세트 락이 GREEN 이다.
+- AC6 세 skill 폴더의 bash 펜스에 허용 대상(`/dev/null` · fd 복제 · 같은 펜스의 `mktemp` 변수) 밖의 쓰기(`>` · `>>` · `>|` · `&>` · `N>` · `{ … } >` · `exec >` · `| tee` · `touch`)가 없다. 도출 락이 이를 지킨다. 꼴마다 하나씩 다시 넣는 변이에 RED, `mktemp` 대상 heredoc 양성 대조는 GREEN, 검사 밖 펜스의 쓰기는 거부다. 공유 러너는 이 펜스 파서의 대상이 아니다(AC7).
+- AC7 공유 러너의 상태 폴더 쓰기 자리(`$OUTPUT_PATH` 로 가는 :50 · :67 · :495-498 자리)가 writer 를 거친다는 겨냥한 락이 있다. `$SCRATCH`(`mktemp -d`) 아래 쓰기는 허용되고, `write_failclosed` 는 이유와 함께 이름으로 빠진다. `$OUTPUT_PATH` 맨 넘기기를 다시 넣는 변이에 RED 다. 실제 펜스와 러너를 임시 레포에서 돌려도 심어 둔 링크(번들 · 재비판 번들 · critic YAML · `hunks.json` · `gate-drops.json` · degrade 대체 파일)의 너머가 바뀌지 않는다 — RB 번들 펜스 · RF 번들 펜스 · 공유 러너 각각 하나 이상. writer 가 두 플러그인 `scripts/` 에 링크돼 있고 공유본 링크 세트 락이 GREEN 이다.
 
 **V1 확인 줄(§4)**
 - AC8 V1 ⑤ · steelman Step 2 가 인터뷰 중 확인 줄을 state `## R<n>` «지금 이해» 아래에 적으라 한다. finishing Step A 가 그 줄을 라운드 순서대로 audit `## 5. 프로세스 로그` 에 글자 그대로 옮긴다. 인터뷰 중 audit §5 에 적으라는 문장은 남지 않는다(부재 락 + 양의 짝). `RC<n>` 의 확인 줄이 audit §5 에 없는 brief 는 지금처럼 게이트 ⑤ 에서 red 다.
 
 **원장 뿌리(§5)**
-- AC9 RB · SR · finishing.md 의 `state-root` 호출 전부가 문서 폴더 인자를 갖는다. 도출 락이 이를 지키고, RF 의 도출 지점은 이유와 함께 이름으로 빠진다. 인자를 지우는 변이에 RED 다.
-- AC10 cwd 가 레포 B, 문서가 레포 A 일 때 원장 열기 펜스가 A 의 원장을 열고 공시 줄 하나를 낸다. 이어 결정 줄 펜스가 같은 원장에 쓴다(rc 3 이 아니다, 끝에서 끝). 같은 레포면 공시 줄이 없다.
+- AC9 RB · SR · finishing.md 의 `state-root` 호출 전부가 하나의 같은 도출(문서 폴더가 git 작업 트리 안이면 그 폴더, 아니면 cwd 뿌리 + 공시)을 거친다. 락이 그 꼴을 글자로 대조하고, RF 의 도출 지점은 이유와 함께 이름으로 빠진다. 도출을 우회하는 호출(인자 없음 · 다른 꼴)을 넣는 변이에 RED 다.
+- AC10 cwd 가 레포 B, 문서가 레포 A 일 때 원장 열기 펜스가 A 의 원장을 열고 공시 줄 하나를 낸다. 이어 결정 줄 펜스가 같은 원장에 쓴다(rc 3 이 아니다, 끝에서 끝). 같은 레포면 공시 줄이 없다. 문서가 git 작업 트리 밖이면 cwd 뿌리의 원장을 쓰고 공시 줄 하나를 낸다(git 밖 픽스처). README 에 원장 정리 · 지휘자는 cwd 레포 뿌리만 정리한다는 한계가 있다.
 
 **로드맵 생성(§6)**
 - AC11 Step A 8 펜스에 넣은 제목 · 승인 원문에 `$` · 역따옴표 · `"` · `'` · 앞 `-` 가 있어도, 임시 레포에서 돈 생성기가 글자 그대로 받는다. B-R 은 「Step A 8 의 명령을 그대로」 다. `test_decompose_surface.sh` 의 Step A 8 리터럴이 새 꼴에 맞다.
@@ -244,7 +254,7 @@ next_phase: superpowers:writing-plans
 - AC13 셸 테스트 넷이 100755 이고 직접 실행해도 통과한다. `run-all.sh` 규칙으로 고른 셸 테스트 전부가 100755 인지 보는 락이 있다. 하나를 100644 로 되돌리는 변이에 RED 이고, 락이 고른 수가 `run-all.sh` 가 고른 수와 같다(양성 대조).
 
 **공통**
-- AC14 바뀐 동작마다 테스트를 먼저 쓰고 RED 를 본 뒤 고쳤고, 변이로 이빨을 확인했다(변이 전에 커밋). 음의 락에는 양의 짝이 있다. spec-distill 과 quality-gates(공유 러너 · writer 링크)는 머지 시점 기본 브랜치 위의 다음 minor 로 올리고 CHANGELOG 에 적는다. README 에 §2 · §3 한계가 있다.
+- AC14 바뀐 동작마다 테스트를 먼저 쓰고 RED 를 본 뒤 고쳤고, 변이로 이빨을 확인했다(변이 전에 커밋). 음의 락에는 양의 짝이 있다. spec-distill 과 quality-gates(공유 러너 · writer 링크)는 머지 시점 기본 브랜치 위의 다음 minor 로 올리고 CHANGELOG 에 적는다. README 에 §2 · §3 · §5 한계가 있다.
 
 ## Files to Modify
 
@@ -253,7 +263,7 @@ next_phase: superpowers:writing-plans
 예약 밖 — 지휘자가 로드맵 PR 로 R13 경로 예약에 등록한다:
 
 - `plugins/spec-distill/scripts/check_verbatim_coverage.py` · `plugins/spec-distill/tests/test_check_verbatim_coverage.sh` · `plugins/spec-distill/tests/fixtures/`(새 대조 픽스처)(§2)
-- `shared/docreview/scripts/nofollow_write.py`(새) · 링크 `plugins/spec-distill/scripts/nofollow_write.py` · `plugins/quality-gates/scripts/nofollow_write.py` · `shared/docreview/scripts/run_docreview_codex_reviewer.sh` · `shared/tests/test_nofollow_write.sh`(새) · `plugins/spec-distill/tests/test_state_dir_writes.sh`(새, 쓰기 락 · 끝에서 끝) · `shared/tests/test_docreview_copy_set.sh`(세트가 열거라면)(§3)
+- `shared/docreview/scripts/nofollow_write.py`(새) · 링크 `plugins/spec-distill/scripts/nofollow_write.py` · `plugins/quality-gates/scripts/nofollow_write.py` · `shared/docreview/scripts/run_docreview_codex_reviewer.sh` · `shared/tests/test_nofollow_write.sh`(새 — writer 동작 · 공유 러너 겨냥 락) · `plugins/spec-distill/tests/test_state_dir_writes.sh`(새, 쓰기 락 · 끝에서 끝) · `shared/tests/test_docreview_copy_set.sh`(세트가 열거라면)(§3)
 - `plugins/spec-distill/tests/test_conducting_interview_stage.sh` · `test_fresh_evidence.sh`(§4)
 - `plugins/spec-distill/tests/test_ledger_root.sh`(새)(§5)
 - `plugins/spec-distill/tests/test_decompose_surface.sh`(§6)
@@ -306,6 +316,10 @@ next_phase: superpowers:writing-plans
   - §5 는 finishing.md 의 두 펜스도 포함한다(같은 원장을 읽는 표면). RF 는 seed 를 cwd 에서 만들어 바꾸지 않고, 락에서 이유와 함께 뺀다.
   - §2 의 「사용자 종료」 는 대상이 아니다. 레코드에 `source` 가 없으면 rc 3, 대상 S 가 state 에 없거나 S1 이면 rc 1 이다. 줄 문법은 `check_brief` 에서 import 한다.
   - §7 실행 비트 락은 `run-all.sh` 선택 규칙에서 도출해 면제 목록이 없다.
+- 지휘자 판단 · 2026-10-21 · 설계문서 점검 답 — §2 위반을 고치는 새 자동 장치는 없다. `not_chosen` 은 rc 1 행이라 건너뛸 수 없고, reviewing-brief 는 멈추고 인터뷰로 돌아가 그 질문에 선택지로 다시 답하라고 알린다. 그 뒤는 인터뷰의 보통 흐름이다(조사를 더 원하면 라운드가 이어지고, 닫는 선택지면 새 `chosen` S 로 audit §2 줄 · state `## audit §2 대기 줄` 블록을 다시 쓰고 finishing Step A 를 다시 돈다 — 게이트, 로드맵이 있으면 B-R). 「사용자가 다시 답하지 않음」 은 멈춤 문장이 인터뷰를 가리키는지만 단언한다.
+- 지휘자 판단 · 2026-10-21 · 설계문서 점검 답 — README · CHANGELOG 에 한계 둘을 다 남긴다: 시점(리뷰 진입에서 걸린다)과 출처(`source: chosen` 을 포함한 `user_statements` 도 모델이 쓴다 — 대조는 payload · audit 과 state 를 맞출 뿐 사용자가 골랐음을 증명하지 않는다). G1 은 증명을 주장하지 않고, AC3 은 「바꾼다」가 아니라 「더한다」다.
+- 지휘자 판단 · 2026-10-21 · 설계문서 점검 답 — 문서 폴더가 git 작업 트리 안일 때만 `state-root` 에 넘기고, 아니면 cwd 뿌리를 쓰고 한 줄로 알린다. AC9 락은 「모든 호출이 문서 폴더 인자를 갖는다」가 아니라 「모든 호출이 하나의 같은 도출을 거친다」다. AC10 에 git 밖 픽스처를 더한다. `ledger_sweep.py` 와 지휘자는 여전히 cwd 레포 뿌리를 정리한다는 한계를 공시한다.
+- 지휘자 판단 · 2026-10-21 · 설계문서 점검 답 — 공유 러너는 일반 펜스 파서가 아니라 겨냥한 락을 받는다. 상태 폴더 쓰기 자리(:50 · :67 · :495-498 해당 자리)가 writer 를 거치는지 단언하고, `$SCRATCH`(`mktemp -d`) 대상은 허용, `write_failclosed` 는 이유와 함께 이름으로 뺀다. G2 · AC6 · AC7 이 이것을 그대로 말한다.
 
 ## 번호 대조
 
@@ -331,7 +345,7 @@ next_phase: superpowers:writing-plans
 | CLAUDE.md 기본값과 판단 | §3(writer 이름 · rc 는 계획이 정함) · §9 |
 | CLAUDE.md 레포 전용 값 금지 | §3 락(허용 대상 도출) · §5(경로 도출) · §7 락(선택 규칙 도출) |
 | CLAUDE.md 상류 · 하류 연계 | `## 상류 · 하류 연계` |
-| CLAUDE.md 진입점에서 따라 내려가기 | §2(rc 표 `1` 행이 고치는 길) · §5(공시 줄) |
+| CLAUDE.md 진입점에서 따라 내려가기 | §2(rc 표 `not_chosen` 행이 인터뷰로 돌아가는 길을 가리킴) · §5(공시 줄) |
 | CLAUDE.md 있는 것 먼저 | `## 있는 것 검토` |
 | CLAUDE.md 공시와 차단 · 강등 공시 | §2(검사 불가 rc 3) · §3(거부 사유) · README 한계 |
 | 과설계 경계 원칙(사용자 원문) | Anti-goals · §3(writer 하나) · Rejected Alternatives |
