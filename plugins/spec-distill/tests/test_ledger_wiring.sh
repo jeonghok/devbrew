@@ -95,7 +95,39 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 # `$(…)` 로 받는다. 줄 이음(`\`)만 합치고 mktemp · 재대입 · `||` 갈래는 파싱하지 않는다.
 # 이 락의 범위 밖(AC17 · 엔진 밖 원장 쓰기): `| tee` · `exec >` · `{ … } >` · `$(…)` 로 받은 값을 `printf >` 로
 # 원장 폴더에 쓰는 줄. 같은 줄 `>` 만 본다.
-GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
+# 대상 도출 — 엔진 이름이 든 spec-distill 문서 전부(CHANGELOG 는 이력이라 뺀다). 링크(mode 120000)는 정본으로 바꾼다.
+derive_guarded() {   # derive_guarded → 대상 파일 절대경로(줄마다 하나, 중복 없음)
+  git -C "$ROOT_REPO" ls-files -s -z -- 'plugins/spec-distill/*.md' | python3 -I -c '
+import os, re, sys
+root = os.path.abspath(sys.argv[1])
+NAME = re.compile(r"docreview_(?:state|route|anchor)")
+out = set()
+bad = []
+for row in sys.stdin.buffer.read().decode("utf-8").split("\0"):
+    if not row:
+        continue
+    meta, path = row.split("\t", 1)
+    if os.path.basename(path) == "CHANGELOG.md":
+        continue
+    full = os.path.join(root, path)
+    if meta.split()[0] == "120000":
+        full = os.path.normpath(os.path.join(os.path.dirname(full), os.readlink(full)))
+        if not full.startswith(root + os.sep):
+            bad.append("레포 밖을 가리키는 링크: " + path)
+            continue
+    try:
+        text = open(full, encoding="utf-8").read()
+    except (OSError, UnicodeDecodeError) as e:
+        bad.append("읽지 못한 추적 파일: " + path + " (" + type(e).__name__ + ")")
+        continue
+    if NAME.search(text):
+        out.add(full)
+print("\n".join(sorted(out)))
+for b in bad:
+    print(b, file=sys.stderr)
+sys.exit(1 if bad else 0)' "$ROOT_REPO"
+}
+GUARDED="$(derive_guarded 2>"$T/derive-guarded.err")" && DERIVE_RC=0 || DERIVE_RC=$?
 # 읽기 전용 하위 명령 — 이 락의 유일한 목록이다(정적 검사와 아래 쓰기 명령 문단 대조가 함께 쓴다).
 AC8_READ_ONLY="advice-list gate related-changes state-dir-for profile-check gate-rows exempt-anchors"
 ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
@@ -222,6 +254,109 @@ python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" -
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | tail -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
 done
+# AC12 — 대상은 도출한다(손으로 쓴 목록이 아니다). 링크 뒤의 정본이 빠지면 엔진 문서 규칙이 락 밖에 남는다.
+RD_CANON="$ROOT_REPO/shared/docreview/references/reviewing-document.md"
+assert_eq "$DERIVE_RC" "0" "AC12: 대상 도출이 읽지 못한 파일 · 레포 밖 링크 없이 끝난다 — $(cat "$T/derive-guarded.err")"
+n_guarded="$(printf '%s\n' "$GUARDED" | grep -c .)"
+[ "$n_guarded" -gt 0 ] && ok "AC12: 대상이 도출된다 — ${n_guarded}개" || no "AC12: 도출된 대상이 0개다"
+case "$GUARDED" in *"$RD_CANON"*) ok "AC12: 도출에 reviewing-document.md 가 든다";; *) no "AC12: 도출에 reviewing-document.md 가 없다";; esac
+for need in "$SR" "$RB" "$FIN" "$SD/skills/request-framing/SKILL.md"; do
+  printf '%s\n' "$GUARDED" | grep -qxF "$need" && ok "AC12: 도출에 옛 목록 ${need#$SD/} 가 든다" || no "AC12: 도출에 옛 목록 ${need#$SD/} 가 없다"
+done
+# AC12 — 펜스 밖 산문 문단. 원장 쓰기 명령(declare-related · log-decision)을 `docreview_state.py` 꼴로 적은 문단은
+# 「표지 확인 줄 다음에만」 을 담아야 한다. 문단 = 빈 줄 사이 블록, 목록 안에서는 (들여쓴 것까지) `- ` · `* ` · `+ ` ·
+# `<숫자>. ` · `<숫자>) ` 항목 하나, `#` 제목 줄은 홀로 한 문단이다. 처분 줄(`**처분** —`)만 빼고 읽는다.
+ac12_prose_scan() {   # ac12_prose_scan <파일> → rc 0 이면 규칙 없는 쓰기 명령 문단이 없다
+  python3 -I - "$1" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8", newline="").read()
+FORM = re.compile(r'docreview_state\.py[`"\']*\s*(?:의\s*)?[`"\']*\s*(declare-related|log-decision)(?![A-Za-z0-9-])')
+RULE = "표지 확인 줄 다음에만"
+FENCE = re.compile(r'^[ \t]*(`{3,}|~{3,})')
+ITEM = re.compile(r'^[ \t]*(?:[-*+] |\d+[.)] )')
+HEADING = re.compile(r'^[ \t]{0,3}#{1,6}(?:[ \t]|$)')
+DISPOSITION = re.compile(r'^[ \t]*(?://|#)?[ \t]*\*\*처분\*\* —')
+paras, cur, fence = [], [], None
+def flush():
+    global cur
+    if cur:
+        paras.append(cur)
+    cur = []
+for ln in text.replace("\r\n", "\n").split("\n"):
+    if fence is None:
+        m = FENCE.match(ln)
+        if m:
+            flush(); fence = m.group(1); continue
+        if not ln.strip():
+            flush()
+        elif HEADING.match(ln):
+            flush(); cur.append(ln); flush()
+        elif ITEM.match(ln):
+            flush(); cur.append(ln)
+        else:
+            cur.append(ln)
+    elif ln.strip() == fence:
+        fence = None
+flush()
+bad = []
+for p in paras:
+    if p[0].startswith("**원장 쓰기 전 확인.**"):
+        continue
+    body = "\n".join(ln for ln in p if not DISPOSITION.match(ln))   # 처분 줄만 뺀다 — 바로 아래 줄은 그대로 읽는다
+    # 알려진 한계: 규칙 문구가 문단 안에 «있는지»만 본다 — 부정문에 든 문구도 통과한다.
+    if FORM.search(body) and RULE not in body:
+        bad.append("표지 확인 규칙 없는 쓰기 명령 문단: " + p[0].strip()[:100])
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+}
+for f in $GUARDED; do
+  ac12_prose_scan "$f" && ok "AC12: ${f#$ROOT_REPO/} — 쓰기 명령을 적은 문단마다 표지 확인 규칙이 있다" || no "AC12: ${f#$ROOT_REPO/} — 표지 확인 규칙 없는 쓰기 명령 문단"
+done
+RULE_TAIL='(진입 skill 의 표지 확인 줄 다음에만 부른다)'
+prosef="$T/ac12-probe.md"
+p12() { printf '%b\n' "$1" > "$prosef"; }
+for probe in 'docreview_state.py declare-related --state-dir D 로 묶는다.' \
+             '`docreview_state.py log-decision` 으로 남긴다.' \
+             '`docreview_state.py` 의 `declare-related` 로 묶는다.' \
+             '`"$SD/scripts/docreview_state.py"` log-decision 으로 남긴다.' \
+             "\`'docreview_state.py'\` declare-related 로 묶는다." \
+             'python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR"' \
+             '- 앞 항목: 표지 확인 줄 다음에만 부른다.\n- 이 항목은 docreview_state.py log-decision 으로 쓴다.' \
+             '1. 앞 항목: 표지 확인 줄 다음에만 부른다.\n2. docreview_state.py declare-related 로 묶는다.' \
+             '- 부모\n  - 표지 확인 줄 다음에만 부른다.\n  - docreview_state.py log-decision 으로 쓴다.' \
+             '1) 앞 항목: 표지 확인 줄 다음에만 부른다.\n2) docreview_state.py log-decision 으로 쓴다.' \
+             '+ 앞 항목: 표지 확인 줄 다음에만 부른다.\n+ docreview_state.py log-decision 으로 쓴다.' \
+             '표지 확인 줄 다음에만 부른다.\n## 제목\ndocreview_state.py log-decision 으로 쓴다.' \
+             '**처분** — consumer=orchestrator · fail-closed · disclosure=x\ndocreview_state.py log-decision 으로 쓴다.'; do
+  p12 "$probe"
+  ac12_prose_scan "$prosef" 2>/dev/null && no "AC12 음성 프로브: 새는 꼴이 있다: $probe" || ok "AC12 음성 프로브: 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-70)"
+done
+for probe in 'docreview_state.py declare-related --state-dir D 로 묶는다.' \
+             '`docreview_state.py log-decision` 으로 남긴다.' \
+             '`docreview_state.py` 의 `declare-related` 로 묶는다.' \
+             '`"$SD/scripts/docreview_state.py"` log-decision 으로 남긴다.' \
+             "\`'docreview_state.py'\` declare-related 로 묶는다." \
+             'python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR"' \
+             '- 앞 항목.\n- 이 항목은 docreview_state.py log-decision 으로 쓴다 (표지 확인 줄 다음에만).' \
+             '- 부모\n  - 앞 항목.\n  - 이 항목은 docreview_state.py log-decision 으로 쓴다 (표지 확인 줄 다음에만).'; do
+  p12 "$probe $RULE_TAIL"
+  ac12_prose_scan "$prosef" 2>/dev/null && ok "AC12 양성 대조: 규칙을 담으면 통과한다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-70)" || no "AC12 양성 대조: 규칙을 담은 문단이 막혔다: $probe"
+done
+for probe in '`declare-related` 로 묶는다.' '`docreview_state.py check-intent` 로 확인한다.' '`docreview_state.py` 의 `check-intent` 를 부른다.' \
+             'docreview_state.py log-decisions 와 닮은 이름.' \
+             '**처분** — consumer=plugins/x/docreview_state.py log-decision · fail-closed' \
+             '**원장 쓰기 전 확인.** `docreview_state.py` 의 `declare-related` · `log-decision` 은 쓴다.' \
+             '```bash\ndocreview_state.py log-decision\n```'; do
+  p12 "$probe"
+  ac12_prose_scan "$prosef" 2>/dev/null && ok "AC12 양성 대조: 쓰기 명령 문단이 아니다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-60)" || no "AC12 양성 대조: 쓰기 명령 문단이 아닌데 막혔다: $probe"
+done
+# 엔진은 표지를 읽지 않는다(음) — 표지 이름은 spec-distill 쪽 스크립트에만 산다(양).
+n_engine_py="$(ls "$ROOT_REPO"/shared/docreview/scripts/*.py 2>/dev/null | grep -c .)"
+[ "$n_engine_py" -gt 0 ] && ok "AC12: 엔진 스크립트가 ${n_engine_py}개 있다(빈 글롭이 아니다)" || no "AC12: 엔진 스크립트 글롭이 비었다"
+n_engine_marker="$(cat "$ROOT_REPO"/shared/docreview/scripts/*.py | grep -c 'reviewing-by')"
+assert_eq "$n_engine_marker" "0" "AC12: 엔진 스크립트는 표지 이름(reviewing-by)을 읽지 않는다"
+grep -q 'reviewing-by' "$SD/scripts/ledger_marker.py" && ok "AC12(양성 짝): 표지 이름은 ledger_marker.py 에 있다" || no "AC12(양성 짝): ledger_marker.py 에 표지 이름이 없다"
 # AC8 — 진입 skill 셋의 「원장 쓰기 전 확인」 문단이 적는 `docreview_state.py` 쓰기 명령 = 엔진 하위 명령 − 읽기 전용(도출).
 # 새 쓰기 명령(log-decision 등)을 문단에 적지 않으면 RED — 표지 확인 줄 다음에만 부른다는 규칙이 그 명령에 닿지 않는다.
 for f in "$SR" "$RB" "$SD/skills/request-framing/SKILL.md"; do
@@ -269,6 +404,7 @@ dl_no_dir() {   # dl_no_dir <라벨> <출력> <rc> <보일 값>
 }
 dlo="$(dl_run sess-eeee5555 docs/b-design.md)"; rc=$?
 dl_no_dir "spec_path 가 상대 경로" "$dlo" "$rc" "spec_path='docs/b-design.md'"
+assert_contains "$dlo" "spec_path 가 절대 경로가 아니다" "결정 줄 펜스: 상대 경로 — 폴더로 들어가기 전에 절대 경로가 아니라는 사유로 멈춘다"
 stubsd="$T/stub-sd"; mkdir -p "$stubsd/scripts"
 for s in docreview_state.py ledger_marker.py; do ln -s "$SD/scripts/$s" "$stubsd/scripts/$s"; done
 printf 'import runpy, sys\nREAL = %s\nif sys.argv[1:2] == ["state-root"]:\n    sys.exit(1)\nsys.path.insert(0, REAL.rsplit("/", 1)[0]); sys.argv[0] = REAL\nrunpy.run_path(REAL, run_name="__main__")\n' \
@@ -289,6 +425,7 @@ python3 "$SD/scripts/docreview_anchor.py" snapshot "$ddoc" > "$T/dsnap.json"
 python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapshot "$T/dsnap.json" >/dev/null
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
+assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15(양성 짝): 문서의 레포에서 돌면 레포가 다르다고 알리지 않는다"
 assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(len(ds.load_state(sys.argv[1])["engine_lines"]))' "$DSD")" "1" "결정 줄 펜스: 그 줄의 출처가 원장에 남는다"
 # 줄과 사용자 말은 둘 다 따옴표 heredoc 으로 들어간다 — 작은따옴표 · 명령 치환 · 백틱 · 「-」 머리 · 옛 구분자와 같은 줄이
 # 셸로 새거나 옵션으로 읽히거나 heredoc 을 일찍 닫지 못한다.
@@ -309,6 +446,31 @@ cp "$ddoc" "$T/ddoc.before"
 dlo="$(dl_run sess-ffff6666)"; rc=$?
 assert_eq "$rc" "3" "결정 줄 펜스: 남의 표지면 쓰기 전 확인이 rc 3 으로 멈춘다"
 cmp -s "$ddoc" "$T/ddoc.before" && ok "결정 줄 펜스: 남의 표지 — 문서가 그대로다" || no "결정 줄 펜스: 남의 표지인데 문서가 바뀌었다"
+# AC15 — cwd 가 다른 레포여도 결정 줄 펜스는 문서가 사는 레포의 원장으로 쓰고, 레포가 다르다고 알린다.
+orepo="$T/other-repo"; mkdir -p "$orepo" && git -C "$orepo" init -q
+DL_OTHER='B5 · 결정 · 2026-10-19 · 다른 레포에서 씀'
+dlo="$(DL_LINE="$DL_OTHER"; dl_run sess-eeee5555 "$ddoc" "$SD" "$orepo")"; rc=$?
+assert_eq "$rc $(grep -cxF -- "- $DL_OTHER — 「되돌려 줘」" "$ddoc")" "0 1" "AC15: 다른 레포 cwd — 문서의 레포 원장을 찾아 엔진이 결정 줄 한 줄을 쓴다"
+assert_contains "$dlo" "결정 줄은 문서가 사는 레포($repo)의 원장으로 쓴다 — 지금 작업 폴더의 레포($orepo)와 다르다." "AC15: 다른 레포 cwd — 레포가 다르다고 두 레포를 대어 알린다"
+assert_not_contains "$dlo" "손으로 쓴다" "AC15: 다른 레포 cwd — 원장 없음으로 빠져 손으로 쓰라고 하지 않는다"
+[ ! -e "$orepo/.claude" ] && ok "AC15: 다른 레포 cwd — 그 레포에 상태 폴더가 생기지 않는다" || no "AC15: 다른 레포에 상태 폴더가 생겼다: $(find "$orepo/.claude" | head -n 5)"
+# 같은 레포의 본 작업 트리 cwd + 연결된 worktree 의 문서 — 원장은 같은 공용 자리라 알리지 않는다.
+wm="$T/wt-main"; mkdir -p "$wm" && git -C "$wm" init -q && git -C "$wm" -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m init
+git -C "$wm" worktree add -q "$T/wt-linked" >/dev/null 2>&1
+mkdir -p "$T/wt-linked/docs" && cp "$ddoc" "$T/wt-linked/docs/b-design.md"
+[ -f "$T/wt-linked/.git" ] && ok "전제(AC15): 연결된 worktree 를 만들었다" || no "전제(AC15): 연결된 worktree 가 없다 — 아래 칸이 공허하다"
+dlo="$(dl_run sess-eeee5555 "$T/wt-linked/docs/b-design.md" "$SD" "$wm")"; rc=$?
+assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15: 본 작업 트리 cwd + 연결된 worktree 문서 — 원장이 같아 레포가 다르다고 알리지 않는다"
+assert_contains "$dlo" "STATE_DIR='$wm/.claude/spec-distill/" "AC15: 연결된 worktree 문서 — 원장 자리는 공용 레포의 상태 폴더다"
+# 문서 폴더로 들어가지 못하거나 문서가 git 작업 트리 밖이면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
+dlo="$(dl_run sess-eeee5555 "$T/no-such-dir/b-design.md" "$SD" "$orepo")"; rc=$?
+dl_no_dir "문서 폴더가 없다" "$dlo" "$rc" "spec_path='$T/no-such-dir/b-design.md'"
+assert_contains "$dlo" "설계문서의 폴더로 들어가지 못했다" "결정 줄 펜스: 문서 폴더가 없다 — 그 사유로 멈춘다"
+mkdir -p "$T/nogit"; cp "$ddoc" "$T/nogit/b-design.md"
+git -C "$T/nogit" rev-parse --show-toplevel >/dev/null 2>&1 && no "전제(AC15): $T/nogit 이 git 작업 트리 안이다 — 아래 칸이 공허하다" || ok "전제(AC15): $T/nogit 은 git 작업 트리 밖이다"
+dlo="$(dl_run sess-eeee5555 "$T/nogit/b-design.md" "$SD" "$orepo")"; rc=$?
+dl_no_dir "문서가 git 작업 트리 밖" "$dlo" "$rc" "spec_path='$T/nogit/b-design.md'"
+assert_contains "$dlo" "설계문서가 git 작업 트리 밖이다" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 그 사유로 멈춘다"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"
@@ -787,4 +949,128 @@ $RBBU")"
 LP_RB="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$lpr/.claude/spec-distill" --doc "$lpr/docs/b-interview.md")"
 [ -d "$LP_RB" ] && ok "T8 관문 양성 대조(c): 링크가 없으면 reviewing-brief 번들 펜스가 원장 자리를 만든다" || no "T8 관문 양성 대조(c): 원장 자리가 없다: $o"
 assert_not_contains "$o" "엔진 상태 디렉토리 없음" "T8 관문 양성 대조(c): 링크가 없으면 엔진 자리 없음이 나지 않는다"
+
+# ── AC14 — 경로 대입 줄: 따옴표 · 명령 치환 · 역따옴표가 든 경로도 셸로 새지 않고 글자 그대로 넘어간다 ──────
+pa_fill() {   # pa_fill <변수> <값> → spec-review 「경로 대입 줄」 펜스를 그 변수 · 값으로 채운 것
+  fence "$SR" path-assign | python3 -I -c 'import sys
+t = sys.stdin.read()
+lines = t.split("\n")
+lines[0] = lines[0].replace(" spec_path ", " " + sys.argv[1] + " ", 1)
+t = "\n".join(lines).replace("\n<경로 그대로>\n", "\n" + sys.argv[2] + "\n", 1)
+sys.stdout.write(t)' "$1" "$2"
+}
+PA_DEF="$(fence "$SR" path-assign)"
+assert_eq "$(printf '%s\n' "$PA_DEF" | head -n 1)" "IFS= read -r spec_path <<'DEVBREW_PATH_EOF'" "AC14: 경로 대입 줄 펜스의 첫 줄이 따옴표 heredoc 읽기다"
+assert_eq "$(printf '%s\n' "$PA_DEF" | sed -n '2,$p')" "$(printf '%s\n%s' '<경로 그대로>' 'DEVBREW_PATH_EOF')" "AC14: 경로 대입 줄 펜스가 값 줄 · 닫는 구분 줄로 끝난다"
+hrepo="$T/repo-h"; mkdir -p "$hrepo" && git -C "$hrepo" init -q
+hdir="$hrepo/docs/x'\$(touch $T/pwned-p)\`touch $T/pwned-q\`a\"b \$HOME"
+mkdir -p "$hdir" && hdoc="$hdir/h-design.md" && printf '# H\n' > "$hdoc"
+[ -f "$hdoc" ] && ok "전제(AC14): 따옴표 · 치환이 든 폴더에 설계문서를 만들었다" || no "전제(AC14): 적대 경로의 설계문서를 만들지 못했다"
+o="$(cd "$hrepo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-hhhh7777 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-hhhh7777 \
+    bash -c "$(pa_fill spec_path "$hdoc")
+$(fence "$SR" ledger-open)
+python3 \"\$SD/scripts/docreview_state.py\" init --state-dir \"\$STATE_DIR\" --doc \"\$spec_path\" --profile \"\$SD/references/docreview-profiles/design-doc.md\" >/dev/null" 2>&1)"; rc=$?
+assert_eq "$rc $(printf '%s\n' "$o" | grep -cxF 'ledger-open: HELD')" "0 1" "AC14: 적대 경로로 경로 대입 줄 + 원장 열기 + 선결 init 이 돈다"
+assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "AC14: 경로 안의 명령이 돌지 않았다"
+HSD="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$hrepo/.claude/spec-distill" --doc "$hdoc")"
+assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(ds.load_state(sys.argv[1])["doc"] == sys.argv[2])' "$HSD" "$hdoc" 2>&1)" "True" "AC14: 원장의 doc 이 그 경로 글자 그대로다"
+assert_eq "$(cat "$HSD/reviewing-by" 2>/dev/null)" "sess-hhhh7777" "AC14: 그 경로의 원장 자리에 표지가 섰다"
+# 빈 값 — 값 줄을 비우면 변수가 빈 값이고 읽기가 실패하지 않는다(set -e 아래에서도).
+o="$(bash -c "set -e
+$(pa_fill bundle_arg '')
+printf '[%s]' \"\$bundle_arg\"" 2>&1)"; rc=$?
+assert_eq "$rc $o" "0 []" "AC14: 빈 값 줄은 빈 변수가 되고 읽기가 rc 0 이다"
+# 문면 — 아홉 자리는 정의를 가리키고 따옴표 대입 꼴이 남지 않는다(음) · 정의는 한 곳이다(양).
+assert_eq "$(grep -cE "(spec_path|bundle_arg|bundle_path|repo_root)=['\"]<" "$SR")" "0" "AC14: spec-review 에 따옴표 대입 꼴(spec_path='<…>' 등)이 남지 않는다"
+assert_eq "$(grep -cF '<!-- path-assign:begin -->' "$SR")" "1" "AC14: 경로 대입 줄 정의가 한 곳이다"
+# 자리별 — 펜스 마커마다, 그 펜스 바로 앞 산문(앞 펜스의 닫는 줄이나 제목 다음부터 마커까지)이 그 자리의 변수를 대며
+# 경로 대입 줄을 가리킨다. 합계가 아니라 자리마다 잰다 — 한 자리의 가리킴이 다른 자리의 빠짐을 갚지 못한다.
+python3 -I - "$SR" > "$T/pa-sites.txt" 2>&1 <<'PY'
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+SITES = [("bundle-entry", "spec_path bundle_arg repo_root"), ("ledger-open", "spec_path"), ("ledger-release", "spec_path"),
+         ("codex-gate", "spec_path"), ("profile-content", "spec_path"), ("advice-display", "spec_path"),
+         ("advice-all", "spec_path"), ("rejected-numbers", "spec_path repo_root"), ("roadmap-position", "bundle_path repo_root"),
+         ("decision-line", "spec_path"), ("uncommitted-check", "spec_path")]
+STOP = re.compile(r"(?m)^(?:```[^\n]*|#{1,6} [^\n]*)$")
+bad = []
+for name, need in SITES:
+    mk = "<!-- %s:begin" % name
+    if t.count(mk) != 1:
+        bad.append("%s: 마커 %d개" % (name, t.count(mk)))
+        continue
+    head = t[:t.find(mk)]
+    ends = [m.end() for m in STOP.finditer(head)]
+    win = head[ends[-1] if ends else 0:]
+    lines = [ln for ln in win.split("\n") if "경로 대입 줄을 붙" in ln]
+    if not lines:
+        bad.append("%s: 경로 대입 줄을 가리키지 않는다" % name)
+        continue
+    miss = [v for v in need.split() if not any("`%s`" % v in ln for ln in lines)]
+    if miss:
+        bad.append("%s: 가리키는 줄에 변수 %s 가 없다" % (name, " ".join(miss)))
+para = [p for p in t.split("\n\n") if "이 블록보다 **먼저**" in p]
+if len(para) != 1 or "경로 대입 줄" not in para[0]:
+    bad.append("상태 디렉토리 블록: 먼저 대입하라는 문단이 경로 대입 줄을 가리키지 않는다")
+print("\n".join(bad) if bad else "자리 전부")
+PY
+assert_eq "$(cat "$T/pa-sites.txt")" "자리 전부" "AC14: 펜스 앞 대입 자리마다 그 자리의 변수로 경로 대입 줄을 가리킨다"
+# 추가 라운드 승인 — 고른 선택지 이름 · 기타 칸에 쓴 말도 따옴표 heredoc 으로 받아 = 꼴로 넘긴다(엔진까지 실제로 돈다).
+# 대상은 도출한다: 엔진 절차 정본(reviewing-document.md)을 Read 하는 진입 skill 전부 — 정본이 = 꼴을 가르치므로 그 skill 의
+# 문면이 옛 큰따옴표 자리표로 남으면 정본과 어긋난다(정본을 따르면 rc 2, skill 문면을 따르면 사용자 말이 셸로 샌다).
+EA_SKILLS=""
+for f in "$ROOT_REPO"/plugins/*/skills/*/SKILL.md; do
+  grep -qF 'references/reviewing-document.md' "$f" && EA_SKILLS="$EA_SKILLS $f"
+done
+case " $EA_SKILLS " in *" $SR "*) ok "전제(AC14): 정본을 읽는 skill 집합에 spec-review 가 든다" ;; *) no "전제(AC14): 정본을 읽는 skill 집합에 spec-review 가 없다 — 아래 칸이 공허하다" ;; esac
+case " $EA_SKILLS " in *" $RB "*) ok "전제(AC14): 정본을 읽는 skill 집합에 reviewing-brief 가 든다" ;; *) no "전제(AC14): 정본을 읽는 skill 집합에 reviewing-brief 가 없다 — 아래 칸이 공허하다" ;; esac
+EA_VAR_SKILLS=""
+for f in $EA_SKILLS; do
+  n="${f#"$ROOT_REPO"/}"
+  assert_eq "$(grep -cF -- '--extra-approval "<' "$f")" "0" "AC14: ${n} — 추가 라운드 승인 말이 큰따옴표 자리표로 남지 않는다"
+  grep -qF -- '--extra-approval=' "$f" \
+    && ok "AC14: ${n} — 추가 라운드 승인을 = 꼴로 넘긴다(문면)" || no "AC14: ${n} — 추가 라운드 승인의 = 꼴 넘김이 문면에 없다"
+  if grep -qF -- '--extra-approval="$extra_approval"' "$f"; then
+    EA_VAR_SKILLS="$EA_VAR_SKILLS $f"
+    fence "$f" extra-approval | grep -qF "IFS= read -r -d '' extra_approval <<'" \
+      && ok "AC14: ${n} — extra_approval 을 따옴표 heredoc 펜스로 정의한다" || no "AC14: ${n} — extra_approval 변수를 넘기는데 그것을 정의하는 따옴표 heredoc 펜스가 없다"
+  fi
+done
+case " $EA_VAR_SKILLS " in *" $SR "*) ok "AC14: spec-review 가 extra_approval 변수로 넘긴다" ;; *) no "AC14: spec-review 가 extra_approval 변수로 넘기지 않는다(정본 = 꼴과 어긋남)" ;; esac
+case " $EA_VAR_SKILLS " in *" $RB "*) ok "AC14: reviewing-brief 가 extra_approval 변수로 넘긴다" ;; *) no "AC14: reviewing-brief 가 extra_approval 변수로 넘기지 않는다(정본 = 꼴과 어긋남)" ;; esac
+# 위 skill 들이 Read 하는 엔진 절차 정본도 같은 꼴 — 두 자리(1단계 스냅샷 · 추가 라운드 열기) 모두.
+assert_eq "$(grep -cF -- '--extra-approval "<' "$RD_CANON")" "0" "AC14: reviewing-document.md 에 추가 라운드 승인 말의 큰따옴표 자리표가 없다(양성 짝: 아래 = 꼴 두 자리)"
+assert_eq "$(grep -cF -- '--extra-approval="$extra_approval" --extra-approval-source label|typed' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 extra_approval 변수를 = 꼴로 넘긴다"
+assert_eq "$(grep -cF -- '`extra_approval` 은 부른 skill 이 따옴표 heredoc 으로 읽은' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 변수의 출처(부른 skill 의 따옴표 heredoc)를 적는다"
+EA_WORDS="$(printf '%s\n%s' "-열어 \"줘\" it's \$(touch $T/pwned-x) \`touch $T/pwned-y\` \$HOME" "둘째 줄 DEVBREW_PATH_EOF ")"
+EA_WS="  앞뒤에 빈칸이 있는 말  "   # IFS= 없이 읽으면 앞뒤 빈칸이 잘린다
+ea_fill() {   # ea_fill <파일> <말> → 그 파일 extra-approval 펜스의 자리를 그 말로 채운 것
+  fence "$1" extra-approval | python3 -I -c 'import sys
+t = sys.stdin.read()
+sys.stdout.write(t.replace("\n<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>\n", "\n" + sys.argv[1] + "\n", 1))' "$2"
+}
+ea_count() {   # ea_count → 엔진 원장의 extra_rounds 항목 수
+  PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
+print(len(ds.load_state(sys.argv[1]).get("extra_rounds") or []))' "$HSD" 2>&1
+}
+ea_run() {   # ea_run <파일> <말> <설명> — 그 파일의 펜스로 말을 읽어 추가 라운드를 열고 원장에 글자 그대로 남았는지 잰다
+  local ea_before o rc
+  ea_before="$(ea_count)"
+  o="$(cd "$hrepo" && bash -c "set -e
+$(ea_fill "$1" "$2")
+python3 \"$SD/scripts/docreview_state.py\" begin-round --state-dir \"$HSD\" --snapshot \"$T/hsnap.json\" --extra-approval=\"\$extra_approval\" --extra-approval-source typed" 2>&1)"; rc=$?
+  assert_eq "$rc $(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
+x = ds.load_state(sys.argv[1]).get("extra_rounds") or [{}]
+print(len(x) == int(sys.argv[3]) + 1 and x[-1].get("quote") == sys.argv[2])' "$HSD" "$2" "$ea_before" 2>&1)" "0 True" "AC14: ${1#"$ROOT_REPO"/} — $3 엔진의 추가 라운드 승인에 글자 그대로 남는다"
+  [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+}
+python3 "$SD/scripts/docreview_anchor.py" snapshot "$hdoc" > "$T/hsnap.json"
+for i in 1 2 3; do python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$HSD" --snapshot "$T/hsnap.json" >/dev/null; done
+for f in $EA_VAR_SKILLS; do   # skill 마다 그 skill 의 펜스로 말 둘의 추가 라운드 승인을 연다
+  n="${f#"$ROOT_REPO"/}"
+  [ -n "$(fence "$f" extra-approval)" ] && ok "전제(AC14): ${n} — 추가 라운드 승인 펜스를 뽑았다" || no "전제(AC14): ${n} — 추가 라운드 승인 펜스가 비었다 — 아래 칸이 공허하다"
+  ea_run "$f" "$EA_WORDS" "따옴표 · 치환 · 「-」 머리 · 두 줄 · 끝 빈칸 말이"
+  ea_run "$f" "$EA_WS" "앞뒤 빈칸이 있는 말이"
+done
+assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "AC14: 추가 라운드 승인 말 안의 명령이 돌지 않았다"
 finish

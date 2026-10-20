@@ -1,7 +1,7 @@
 {
   "name": "quality-gates",
   "description": "Checks a change before you ship it: one /quality-gates:quality-pipeline run reviews the diff from several independent angles, runs the tests whose behavior changed, can walk the running app with your approval, and gives one verdict. When the branch has an open PR, it posts that verdict with a plain-language summary as one new comment.",
-  "version": "14.2.0",
+  "version": "14.3.0",
   "author": {
     "name": "jeonghokim"
   }

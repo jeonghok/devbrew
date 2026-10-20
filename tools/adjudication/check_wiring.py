@@ -242,10 +242,17 @@ TERMINAL_CONSUMERS = {
 }
 
 
+def _is_name_disposition_call(n):
+    """`ev("absorbed", …)` 꼴 — 함수 이름이 `Name` 이고 첫 인자가 처분 이름 문자열 상수인 호출."""
+    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and bool(n.args)
+            and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)
+            and n.args[0].value in DISPOSITION)
+
+
 def _disposition_calls(node):
     return [n for n in ast.walk(node)
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-            and n.func.attr in DISPOSITION]
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr in DISPOSITION) or _is_name_disposition_call(n)]
 
 
 def _parent_map(tree):

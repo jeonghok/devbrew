@@ -150,7 +150,7 @@ def load_profile(path) -> dict:
             if k in data:
                 _cfg._int(k, data[k], "프로필")
     except _cfg.ConfigInvalid as e:
-        raise ProfileError("config_invalid:%s=%r" % (e.name, e.raw))
+        raise ProfileError("config_invalid:%s=%r(허용 %s)" % (e.name, e.raw, _cfg.allowed_range(e.name)))
     ad = data["allowed_dispositions"]
     if (not isinstance(ad, list) or not ad or any(x not in RANK for x in ad)
             or "decide" not in ad or "ask" not in ad):
@@ -367,11 +367,30 @@ def fence_anchors(prof, sections) -> set:
     return out | _log_section_anchors(prof, sections)
 
 
+def lineage_anchors(st, prof, key, upto) -> set:
+    """보호 · 불변의 계보 — 원장 스냅숏 1..upto 중 하나에서라도 프로필 `key`(`protected_headings` · `immutable`) 절
+    (또는 그 자식)이었던 앵커. `_expected_lines` 처럼 뒤에서부터 걷는다. 지금 스냅숏만 보고 보호 · 불변을 재는 자리는
+    모두 이 집합을 합친다 — 채택한 제목 삽입으로 울타리 밖에 밀려난 자식 절도 자리마다 같은 판정을 받는다. 집합은
+    줄지 않는다: 엔진은 보호를 풀지 않고, 같은 slug 의 새 절은 보호 쪽으로 닫힌다."""
+    pats = prof.get(key) or []
+    out = set()
+    if not pats:
+        return out
+    snaps = st.get("snapshots") or {}
+    for k in range(int(upto), 0, -1):
+        secs = (snaps.get(str(k)) or {}).get("sections")
+        if not isinstance(secs, list):
+            continue
+        out |= set(anchors_matching(pats, [s for s in secs if isinstance(s, dict) and isinstance(s.get("anchor"), str)]))
+    return out
+
+
 def round_fence(st, prof, r) -> set:
-    """라운드 r 의 울타리 — 스냅숏 r−1 과 r 양쪽에서 구한다(어느 한쪽에만 있는 절도 든다)."""
+    """라운드 r 의 울타리 — 스냅숏 r−1 과 r 양쪽에서 구한다(어느 한쪽에만 있는 절도 든다) ∪ 스냅숏 r 까지의 불변 계보."""
     snaps = st.get("snapshots") or {}
     return (fence_anchors(prof, (snaps.get(str(r - 1)) or {}).get("sections") or [])
-            | fence_anchors(prof, (snaps.get(str(r)) or {}).get("sections") or []))
+            | fence_anchors(prof, (snaps.get(str(r)) or {}).get("sections") or [])
+            | lineage_anchors(st, prof, "immutable", r))
 
 
 # ── 결정 기록 · 미룸 절의 줄 출처 ────────────────────────────────────────────────────
@@ -440,10 +459,44 @@ def _log_change_ok(st, heading, new_lh, base, base_round, r, group_new) -> bool:
     return _engine_lines_kept(window, group_new)
 
 
-def _log_verdicts(st, prof, r) -> dict:
-    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 넷이다 —
+def _closed_change_ok(st, heading, base, new_lh, r, group_new):
+    """리뷰가 닫힌 뒤 손으로 더한 결정 줄 — 라운드 r 의 diff 에서 기록으로 읽을 손 줄 해시 목록, 아니면 None.
+    창 [r−1, r) 에 계수 줄(`kind: count` 엔진 줄)이 있어야 하고(스냅숏 r−1 뒤에 리뷰가 닫혔다), 새 줄 = BASE + TAIL 이다.
+    TAIL 의 마지막 계수 줄까지는 엔진 줄만 오고, 그 아래에서 엔진 줄이 아닌 보이는 줄이 손 줄이다. 창 안의 엔진 줄은
+    하나도 빠지지 않아야 한다. 계수 줄 위에 끼운 줄 · 옛 줄의 변경 · 계수 줄이 없는 절 · `kind` 없는 옛 원장은 None."""
+    if not isinstance(base, list) or not isinstance(new_lh, list):
+        return None
+    if len(new_lh) < len(base) or new_lh[:len(base)] != base:
+        return None
+    lines = [e for e in _engine_lines(st, heading) if r - 1 <= e["round"] < r]
+    counts = {e["hash"] for e in lines if e.get("kind") == "count"}
+    tail = new_lh[len(base):]
+    last = max((i for i, h in enumerate(tail) if h in counts), default=None)
+    if last is None:
+        return None
+    window = collections.Counter(e["hash"] for e in lines)
+    left = collections.Counter(window)
+    hand = []
+    for i, h in enumerate(tail):
+        if h == _BLANK_LINE_HASH:
+            continue
+        if left[h] > 0:
+            left[h] -= 1
+        elif i > last:
+            hand.append(h)
+        else:
+            return None
+    if not hand or not _engine_lines_kept(window, group_new):
+        return None
+    return hand
+
+
+def _log_verdicts(st, prof, r, closed_lines=None) -> dict:
+    """라운드 r 에 바뀐 결정 기록 · 미룸 절 앵커 중 지나가는 것 → (면제 라벨, 규칙). 규칙은 다섯이다 —
     append(옛 줄 + 엔진 줄) · revert(원복 permit 의 `expect_line_hashes` + 엔진 줄) · creation(이 원장의 앞 스냅숏 어디에도
-    없던 절, 줄 전부가 엔진 줄) · legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다."""
+    없던 절, 줄 전부가 엔진 줄) · closed(리뷰가 닫힌 뒤 마지막 계수 줄 아래에 더한 손 줄 — `_closed_change_ok`) ·
+    legacy(출처를 잴 수 없는 옛 원장 — 한 번, 게이트 공시). 여기 없는 바뀐 절은 changed 다. `closed_lines` 에 dict 를
+    주면 closed 앵커마다 (헤딩, 손 줄 해시 목록)을 채운다."""
     snaps = st.get("snapshots") or {}
     old_secs = (snaps.get(str(r - 1)) or {}).get("sections") or []
     new_secs = (snaps.get(str(r)) or {}).get("sections") or []
@@ -464,6 +517,14 @@ def _log_verdicts(st, prof, r) -> dict:
         if k == r and kind == "revert":
             reverts.append((anchors, p))
     out = {}
+
+    def closed(a, h, base, n, group_new):
+        hand = _closed_change_ok(st, h, base, n.get("line_hashes"), r, group_new)
+        if hand is not None:
+            out[a] = ("closed-log", "closed")
+            if closed_lines is not None:
+                closed_lines[a] = (h, hand)
+
     for h in sorted(set(g_old) | set(g_new)):
         group_new = []
         for a in g_new.get(h, ()):
@@ -495,17 +556,23 @@ def _log_verdicts(st, prof, r) -> dict:
             elif n is None:
                 continue
             elif o is None:
-                if a not in earlier and _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
+                if a in earlier:
+                    continue
+                if _log_change_ok(st, h, n.get("line_hashes"), [], r - 1, r, group_new):
                     out[a] = (a, "creation")
+                else:
+                    closed(a, h, [], n, group_new)
             elif _log_change_ok(st, h, n.get("line_hashes"), o.get("line_hashes"), r - 1, r, group_new):
                 out[a] = ("append-only", "append")
+            else:
+                closed(a, h, o.get("line_hashes"), n, group_new)
     return out
 
 
 # ── 범위(scope) 검증 — 기록할 때 한 함수(`scope_problem`), 쓸 때 울타리 ─────────────────────────
-# `related:<D>=…` · `append-only` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope · permit ·
-# fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
-RESERVED_SCOPES = ("append-only",)   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
+# `related:<D>=…` · `append-only` · `closed-log` 는 엔진이 «면제 사유 라벨» 로만 쓰는 글자다. 리뷰어가 쓴 edit_scope ·
+# permit · fix 범위로 들어오면 라벨 위조이므로 거부한다 — `related:` 를 쓰는 것은 declare-related 뿐이다.
+RESERVED_SCOPES = ("append-only", "closed-log")   # "#__doc__" 는 머리 없는 문서의 실제 앵커이기도 하다 — 예약하지 않는다
 
 
 def scope_label_problem(scope):
@@ -522,16 +589,18 @@ def scope_target(scope) -> str:
     return scope.split(":", 1)[1] if scope.startswith("insert-after:") else scope
 
 
-def scope_problem(scope, sections, prof):
+def scope_problem(scope, sections, prof, *, immutable_lineage):
     """범위 한 개를 기록할 때의 검증 — decide(edit_scope → permit) · declare-related · check-intent(두 계약)가 부른다.
     라벨 위조 · 스냅숏에 없는 앵커 · 울타리 절(불변 · 결정 기록 · 미룸)을 이름 있는 사유로 거부한다. 통과면 None.
-    insert-after 는 기준 앵커로 잰다 — 끼워 넣은 절은 그 기준 절 뒤에 들어간다."""
+    insert-after 는 기준 앵커로 잰다 — 끼워 넣은 절은 그 기준 절 뒤에 들어간다. 불변은 `immutable_lineage`
+    (`lineage_anchors(…, "immutable", …)`)를 합친다."""
     why = scope_label_problem(scope)
     if why:
         return why
     ins = scope.startswith("insert-after:")
     t = scope_target(scope)
-    if prof["immutable"] and t in set(anchors_matching(prof["immutable"], sections)):
+    imm = set(anchors_matching(prof["immutable"], sections)) if prof["immutable"] else set()
+    if t in imm or t in immutable_lineage:
         return "insert_after_immutable" if ins else "anchor_immutable"
     known = {s["anchor"] for s in sections}
     if t != PREAMBLE and t not in known:
@@ -542,12 +611,21 @@ def scope_problem(scope, sections, prof):
 
 
 def _appended_only(old_sec, new_sec) -> bool:
-    """불변 절의 「추가만 허용」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고 새 줄이 더 많을 때만 참.
-    줄 해시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 지금처럼 바뀜으로 본다."""
+    """불변 절의 「새 항목만 추가」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고, 덧붙은 꼬리의 첫 내용 줄(빈 줄은 건너뜀)이
+    0열 `- ` 항목(`item_marks` 가 `1`)일 때만 참. 줄 해시나 표시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 바뀜으로 본다."""
     o, n = old_sec.get("line_hashes"), new_sec.get("line_hashes")
+    marks = new_sec.get("item_marks")
     if not isinstance(o, list) or not isinstance(n, list):
         return False
-    return len(n) > len(o) and n[:len(o)] == o
+    old_marks = old_sec.get("item_marks")
+    if not isinstance(marks, str) or len(marks) != len(n):
+        return False
+    if not isinstance(old_marks, str) or len(old_marks) != len(o):
+        return False   # 표시 없는 옛 원장은 닫힌 쪽
+    if not (len(n) > len(o) and n[:len(o)] == o):
+        return False
+    first = next((i for i in range(len(o), len(n)) if n[i] != _BLANK_LINE_HASH), None)
+    return first is not None and marks[first] == "1"
 
 
 def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=None, log_exempt=None) -> dict:
@@ -582,6 +660,8 @@ def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=No
                 if item["scope"] == "append-only":
                     item["kind"] = "appended"
                     item["evidence"] = "섹션 '%s' (%s) 끝에 엔진이 쓴 줄만 더해짐" % (title, anchor)
+                elif item["scope"] == "closed-log":
+                    item["evidence"] = "섹션 '%s' (%s) 마지막 계수 줄 아래에 리뷰가 닫힌 뒤 손으로 더한 줄 — 기록으로 읽음" % (title, anchor)
                 exempt_applied.append(item)
             else:
                 changed.append(item)
@@ -687,7 +767,7 @@ def exempt_scopes(st, prof, r) -> list:
         if kind == "apply":
             rel = [x for x in (p.get("related_anchors") or []) if isinstance(x, str)]
             out.extend("related:%s=%s" % (did, x) for x in rel if allowed(x))
-    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule != "append")
+    out.extend(sc for sc, rule in _log_verdicts(st, prof, r).values() if rule not in ("append", "closed"))
     return sorted(set(out))
 
 
@@ -828,16 +908,18 @@ def _log_section_anchors(prof, sections) -> set:
     return out
 
 
-def snapshot_problem(snap, prof):
-    """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸)은 줄 해시가
-    있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과 맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
+def snapshot_problem(snap, prof, *, immutable_lineage):
+    """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸 ·
+    `immutable_lineage` 의 불변 계보)은 줄 해시가 있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과
+    맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
     if not isinstance(snap, dict) or not _snapshot_ok(snap):
         return ("shape", [])
     secs = snap["sections"]
     is_doc = [s["anchor"] == DOC_ANCHOR for s in secs]
     if not (all(is_doc) if snap.get("headingless") else not any(is_doc)):
         return ("headingless_mismatch", sorted(s["anchor"] for s in secs if s["anchor"] != DOC_ANCHOR))
-    missing = sorted(s["anchor"] for s in secs if s["anchor"] in fence_anchors(prof, secs)
+    fence = fence_anchors(prof, secs) | set(immutable_lineage)
+    missing = sorted(s["anchor"] for s in secs if s["anchor"] in fence
                      and not (isinstance(s.get("line_hashes"), list)
                               and all(isinstance(h, str) for h in s["line_hashes"])))
     return ("fence_line_hashes_missing", missing) if missing else None
@@ -849,11 +931,12 @@ def cmd_begin_round(a) -> int:
     try:
         cfg = _cfg.resolve(prof, {"detectors": a.detectors}, os.environ)
     except _cfg.ConfigInvalid as e:
-        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where, allowed=_cfg.allowed_range(e.name))
         return 2
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
-    bad = snapshot_problem(snap, prof)
+    imm_lineage = lineage_anchors(st, prof, "immutable", int(st["round"]))   # 직전 라운드까지의 불변 계보
+    bad = snapshot_problem(snap, prof, immutable_lineage=imm_lineage)
     if bad:   # 원장을 바꾸기 전에 멈춘다
         fail("snapshot_invalid", why=bad[0], anchors=bad[1])
         return 2
@@ -882,12 +965,16 @@ def cmd_begin_round(a) -> int:
         st["engine_lines_since"] = n
         st.setdefault("engine_lines", [])
     imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
+    imm |= imm_lineage
+    imm_items = set(imm)   # item_marks 를 옮기는 절 — 불변 절(계보 포함)만
     imm |= _log_section_anchors(prof, snap.get("sections", []))
     secs = []
     for s in snap.get("sections", []):
         row = {k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
         if s.get("anchor") in imm and isinstance(s.get("line_hashes"), list):
             row["line_hashes"] = list(s["line_hashes"])   # 불변 절 · 결정 기록 · 미룸 절에만 — 원장 크기
+            if s.get("anchor") in imm_items and isinstance(s.get("item_marks"), str):
+                row["item_marks"] = s["item_marks"]   # 「새 항목만 추가」를 재는 절만 — 결정 기록 · 미룸 절은 제외
         secs.append(row)
     st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})
@@ -997,9 +1084,9 @@ def _decide_choices_for(state, is_successor) -> list:
     return ["adopt", "reject", "hold"]
 
 
-def _immutable_adopt_anchors(prof, sections) -> list:
-    """불변 절을 겨눈 decide 의 채택이 여는 permit 앵커 — 프로필 fix_anchors 의 절 중 울타리 밖."""
-    fence = fence_anchors(prof, sections)
+def _immutable_adopt_anchors(prof, sections, *, immutable_lineage) -> list:
+    """불변 절을 겨눈 decide 의 채택이 여는 permit 앵커 — 프로필 fix_anchors 의 절 중 울타리 · 불변 계보 밖."""
+    fence = fence_anchors(prof, sections) | set(immutable_lineage)
     return [x for x in anchors_matching(prof["fix_anchors"], sections) if x not in fence]
 
 
@@ -1012,10 +1099,11 @@ def _adopt_problem_for(st, prof, kind, immutable, edit_scope, anchor):
         except (ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
             return ("profile_unreadable", str(st.get("profile")))
     secs = ((st.get("snapshots") or {}).get(str(st.get("round"))) or {}).get("sections") or []
+    imm_lineage = lineage_anchors(st, prof, "immutable", int(st.get("round") or 0))
     if immutable:
-        return None if _immutable_adopt_anchors(prof, secs) else ("no_fix_anchor", "")
+        return None if _immutable_adopt_anchors(prof, secs, immutable_lineage=imm_lineage) else ("no_fix_anchor", "")
     sc = edit_scope or anchor
-    why = scope_problem(sc, secs, prof)
+    why = scope_problem(sc, secs, prof, immutable_lineage=imm_lineage)
     return (why, sc) if why else None
 
 
@@ -1186,19 +1274,26 @@ def append_under_heading(path: Path, heading: str, line: str, own=False) -> None
     _write_atomic(path, "\n".join(lines))
 
 
-def engine_append(st, path, heading, line, own=False) -> None:
+def engine_append(st, path, heading, line, own=False, kind=None) -> None:
     """`append_under_heading` 에 줄 출처 기록을 더한다 — 원장의 문서에 쓴 줄(절을 만들면 헤딩 줄도)의 해시를
-    `engine_lines` 에 쌓는다. 부르는 쪽이 원장을 저장한다."""
+    `engine_lines` 에 쌓는다. `kind` 를 주면 `line` 의 줄(헤딩 줄 말고)에 그 표지를 단다 — 계수 줄은 `count`.
+    부르는 쪽이 원장을 저장한다."""
     p = Path(path)
     text = p.read_text(encoding="utf-8") if p.is_file() else ""
     created = _section_span(text.split("\n"), heading, own) is None
     append_under_heading(p, heading, line, own)
     if not isinstance(st.get("doc"), str) or doc_identity(str(p)) != doc_identity(st["doc"]):
         return
-    rows = ([heading.strip()] if created else []) + line.split("\n")
     rec = st.setdefault("engine_lines", [])
     n = int(st["round"])
-    rec.extend({"round": n, "heading": heading.strip(), "hash": _line_hash(x)} for x in rows if x.strip())
+    if created:
+        rec.append({"round": n, "heading": heading.strip(), "hash": _line_hash(heading.strip())})
+    for x in line.split("\n"):
+        if x.strip():
+            e = {"round": n, "heading": heading.strip(), "hash": _line_hash(x)}
+            if kind:
+                e["kind"] = kind
+            rec.append(e)
 
 
 def _log_line(entry, f) -> str:
@@ -1270,7 +1365,8 @@ def cmd_declare_related(a) -> int:
         prof = load_profile(st["profile"])
     except LedgerCorrupt as e:
         return fail(e.reason, **e.extra)
-    probs = [(x, scope_problem(x, secs, prof)) for x in a.anchors]
+    imm_lineage = lineage_anchors(st, prof, "immutable", n)
+    probs = [(x, scope_problem(x, secs, prof, immutable_lineage=imm_lineage)) for x in a.anchors]
     for reason, whys in DECLARE_REFUSALS:   # 사유 이름은 이 명령의 것 — 판정은 scope_problem 하나
         bad = [x for x, why in probs if why in whys]
         if bad:
@@ -1302,7 +1398,12 @@ def cmd_related_changes(a) -> int:
             if x not in seen:
                 seen.add(x)
                 out.append({"anchor": x, "title": titles.get(x) or x})
-    print(json.dumps(out, ensure_ascii=False))
+    # 출력은 모델 입력 슬롯에 들어간다 — 제목에 든 < > & 가 슬롯을 일찍 닫지 못하게 JSON 이스케이프로 바꾼다
+    # (JSON 문자열 안에서만 나오는 글자라 읽은 값은 그대로다).
+    text = json.dumps(out, ensure_ascii=False)
+    for ch, esc in (("&", "\\u0026"), ("<", "\\u003c"), (">", "\\u003e")):
+        text = text.replace(ch, esc)
+    print(text)
     return 0
 
 
@@ -1395,7 +1496,8 @@ def cmd_decide(a) -> int:
         else:
             d["state"] = "adopted"
             if d.get("immutable"):
-                anchors = _immutable_adopt_anchors(prof, st["snapshots"][str(n)]["sections"])
+                anchors = _immutable_adopt_anchors(prof, st["snapshots"][str(n)]["sections"],
+                                                   immutable_lineage=lineage_anchors(st, prof, "immutable", n))
             else:
                 anchors = [f.get("edit_scope") or f["anchor"]]
             permit = {"kind": "apply", "apply_anchors": anchors, "round": n + 1,
@@ -1739,6 +1841,34 @@ def _log_check_skipped(st, n):
     return sorted(a for a, (_sc, rule) in v.items() if rule == "legacy")
 
 
+CLOSED_LINE_MISSING = "(지금 문서에 없는 줄)"
+
+
+def _closed_log_lines(st, n):
+    """라운드 n 에 「리뷰가 닫힌 뒤 손으로 더한 결정 줄」로 읽은 줄의 글 — 문서의 그 결정 기록 절에서 해시로 찾는다.
+    못 찾은 줄은 `CLOSED_LINE_MISSING`. 원장 · 프로필을 못 읽으면 None(셀 수 없음)."""
+    if n < 2:
+        return []
+    found = {}
+    try:
+        snapshot_at(st, n - 1)
+        snapshot_at(st, n)
+        _log_verdicts(st, load_profile(st["profile"]), n, closed_lines=found)
+    except (LedgerCorrupt, ProfileError, OSError, ValueError, getattr(yaml, "YAMLError", ProfileError)):
+        return None
+    out = []
+    for heading, hashes in found.values():
+        try:
+            body = section_body(Path(st["doc"]), heading) if isinstance(st.get("doc"), str) else None
+        except (OSError, UnicodeError):
+            body = None
+        text = {}
+        for x in body or []:
+            text.setdefault(_line_hash(x), x.rstrip())
+        out.extend(text.get(h, CLOSED_LINE_MISSING) for h in hashes)
+    return out
+
+
 def gate_summary(st) -> dict:
     n = int(st["round"])
     rr = int(st["rereview_count"])
@@ -1797,6 +1927,9 @@ def gate_summary(st) -> dict:
         rel.append({"decision_id": did, "anchors": anchors, "changed": changed, "unchanged": unchanged})
     g["related_changes"] = rel
     g["log_check_skipped"] = _log_check_skipped(st, n)
+    closed = _closed_log_lines(st, n)
+    if closed != []:   # 읽은 줄이 있거나 셀 수 없을 때만 싣는다 — 없으면 키가 없다
+        g["closed_log_lines"] = closed
     g["open_total"] = sum(len(g[row.name]) for row in GATE_ROWS)   # 첫 줄 «남았다» 목록의 모든 행
     cur = st["rounds"].get(str(n), {})
     prev = st["rounds"].get(str(n - 1), {})
@@ -2267,6 +2400,10 @@ def render_gate(st, g) -> str:
     elif skipped:
         out.append("결정 기록 · 미룬 항목 절이 덧붙이기만 됐는지 이번 라운드는 확인하지 못했다 — 이전 버전이 만든 원장에 줄 기록이 없어"
                    " 이번 한 번은 절 전체를 넘겼다 (%s)" % ", ".join(_one(x) for x in skipped))
+    closed = g.get("closed_log_lines") or []   # None(셀 수 없음)은 위 「셀 수 없다」 줄이 같은 사실을 알린다
+    if closed:
+        out.append("리뷰가 닫힌 뒤 손으로 더한 결정 줄 %d개 — 기록으로 읽었다" % len(closed))
+        out.extend("  - " + _one(x[2:] if x.startswith("- ") else x) for x in closed)
     parts = [t % c[k] for k, t, scope in COUNT_GLOSS if c[k] and scope == "round"]
     if parts:
         out.append("이번 라운드 집계: " + " · ".join(parts))
@@ -2340,6 +2477,10 @@ def cmd_advice(a) -> int:
     adv = _adv
     if adv is None:
         return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    if a.cap is not None and a.cap > _cfg.MAXIMUM["render_cap"]:
+        fail("config_invalid", name="render_cap", value=str(a.cap), where="진입 --cap",
+             allowed=_cfg.allowed_range("render_cap"))
+        return 2
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
     if not adv.has_must_catch(prof):
@@ -2347,7 +2488,7 @@ def cmd_advice(a) -> int:
     try:
         cfg = _cfg.resolve(prof, {}, os.environ)
     except _cfg.ConfigInvalid as e:
-        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where, allowed=_cfg.allowed_range(e.name))
         return 2
     cap = cfg["render_cap"]["value"] if a.cap is None else a.cap   # --cap 은 진입의 명시 값이다
     cap_src = cfg["render_cap"]["source"] if a.cap is None else "진입"
@@ -2380,7 +2521,7 @@ def cmd_advice(a) -> int:
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
                 if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
-                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True)
+                    engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True, kind="count")
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
             if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다

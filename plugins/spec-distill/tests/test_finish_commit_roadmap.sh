@@ -155,4 +155,95 @@ assert_eq "$(ls -A "$T/rtmp")" "" "재분해: 펜스가 끝나면 임시 파일�
 rc=0; (cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub.out" STUB_RC=0 CLAUDE_PLUGIN_ROOT="$STUB" bash -c "$s" >/dev/null 2>&1) || rc=$?
 assert_eq "$rc $(ls -A "$T/rtmp")" "0 " "재분해: 성공(rc 0)에서도 임시 파일이 없다"
 
+# 8. 재분해 사용자 말 · 사유 · 경로(AC14) — 따옴표 · 명령 치환 · 역따옴표 · 「-」 머리가 든 글도 셸로 새지 않고 글자 그대로 생성기로 간다
+STUB2="$T/stub2"; mkdir -p "$STUB2/scripts"
+cat > "$STUB2/scripts/roadmap_write.py" <<'PY'
+import argparse, json, os, sys
+p = argparse.ArgumentParser()
+sub = p.add_subparsers(dest="cmd")
+u = sub.add_parser("update")
+for k in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
+    u.add_argument(k, required=True)
+u.add_argument("--approval", action="append", required=True)
+a = p.parse_args()
+with open(os.environ["STUB_OUT"], "w", encoding="utf-8") as f:
+    json.dump({"roadmap": a.roadmap, "brief": a.brief, "audit": a.audit, "change": a.change, "approval": a.approval}, f, ensure_ascii=False)
+sys.exit(0)
+PY
+red_fill() {   # red_fill <사용자 말> <사유> <경로 머리> → 표 · 사용자 말 · 사유 · 세 경로 자리를 채운 적용 펜스
+  printf '%s' "$rf" | python3 -I -c 'import sys
+t = sys.stdin.read()
+for k, v in (("<승인된 새 표 — `## 분해안` 머리와 열한 칸 표>", sys.argv[1]), ("<사용자 말 그대로>", sys.argv[2]), ("<사유 한 줄>", sys.argv[3]),
+             ("<로드맵 경로>", sys.argv[4] + "/roadmap.md"), ("<원본 brief>", sys.argv[4] + "/b.md"), ("<원본 audit>", sys.argv[4] + "/b.audit.md")):
+    if k not in t:
+        sys.exit("자리표 없음: " + k)
+    t = t.replace(k, v)
+sys.stdout.write(t)' "$TBL" "$1" "$2" "$3"
+}
+HP="$T/r'oad\"map \$(touch $T/pwned-p) \`touch $T/pwned-q\`"
+n8=0
+for W in "말 \"따옴표\" it's \$(touch $T/pwned-a) \`touch $T/pwned-b\` \$HOME" '-좋아'; do
+  n8=$((n8 + 1))
+  if [ "$n8" = 1 ]; then C="\`R3\` 을 \"둘로\" 나눔 it's \$(touch $T/pwned-c) \`touch $T/pwned-d\`"; P="$HP"; else C='-순서만'; P='-rel/docs'; fi
+  rm -f "$T/stub2.out"
+  rc=0; o="$(cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub2.out" CLAUDE_PLUGIN_ROOT="$STUB2" bash -c "$(red_fill "$W" "$C" "$P")" 2>&1)" || rc=$?
+  got="$(python3 -I -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(d == {"roadmap": sys.argv[4] + "/roadmap.md", "brief": sys.argv[4] + "/b.md", "audit": sys.argv[4] + "/b.audit.md", "change": sys.argv[3], "approval": [sys.argv[2]]})' "$T/stub2.out" "$W" "$C" "$P" 2>&1)"
+  assert_eq "$rc $got" "0 True" "재분해(AC14): 사용자 말 · 사유 · 세 경로가 글자 그대로 생성기로 간다 — 칸 $n8"
+  [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): 말 · 사유 · 경로 안의 명령이 돌지 않았다 — 칸 $n8"
+  assert_eq "$(ls -A "$T/rtmp")" "" "재분해(AC14): 펜스가 끝나면 임시 파일이 없다 — 칸 $n8"
+done
+
+# 9. 재분해 손 편집의 허가 걸음(AC13) · rc 1 가르기(AC16) · extract 펜스의 경로(따옴표 heredoc)
+RT="$(cat "$RED")"
+for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \
+         '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' \
+         '`## 미룸` 표 행도 묶는다' '`## 미룸` 절을 새로 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다' \
+         '묶을 수 없는 것은 `## 결정 기록` 과 프로필의 미룸 자리(`### Deferred to plan`)뿐이다' \
+         '`declare-related` 가 rc 0 이 아니면' \
+         'brief §5 위험 줄 가운데 K 번호가 없는 줄' 'brief §5 위험 줄의 K 번호가 겹친다' '표로 돌아가지 않고 멈추고 사유를 보인다' \
+         '재분해는 이력 brief 를 고치지 않는다' '`RISK_ORDER_NOTICE`' '정보 줄이라 멈추지 않는다'; do
+  assert_contains "$RT" "$n" "재분해(AC13·AC16): $n"
+done
+# 엔진 울타리 = 불변 ∪ 결정 기록 ∪ 프로필 미룸 자리(`### Deferred to plan`) — `## 미룸` 표는 보통 절이라 묶인다
+# (shared/tests/fixtures/docreview/cases.sh 의 case_AC13_table_rows_bound_with_declare 가 엔진에서 잰다).
+assert_not_contains "$RT" '미룸 절은 엔진 울타리' "재분해(AC13): \`## 미룸\` 을 엔진 울타리라 부르지 않는다(양성 짝: 위 「묶을 수 없는 것은 …뿐이다」)"
+assert_not_contains "$RT" '`## 미룸` · `## 결정 기록` 밖의 고친 절' "재분해(AC13): 묶을 절에서 \`## 미룸\` 을 빼지 않는다(양성 짝: 위 「표 행도 묶는다」)"
+assert_not_contains "$RT" 'rc 1 — 사유를 그대로 보이고 3 으로 돌아간다' "재분해(AC16): 옛 단일 갈래 문장(위험 줄 사유까지 표로 돌아가게 하는 꼴)이 없다(양성 짝: 위 가름 문장)"
+# RISK_ORDER_NOTICE 는 생성기가 rc 0 길에서만 낸다(roadmap_write.py) — rc 1 갈래 목록 안에 두지 않는다.
+rc1_items="$(awk '/rc 1 은 사유로 가른다/{f=1;next} f&&/^  - /{print;next} f{exit}' "$RED")"
+case "$rc1_items" in *'그 밖의 사유'*) ok "재분해(AC16): rc 1 갈래 목록을 뽑았다" ;; *) no "재분해(AC16): rc 1 갈래 목록이 비었다 — 아래 칸이 공허하다" ;; esac
+assert_not_contains "$rc1_items" 'RISK_ORDER_NOTICE' "재분해(AC16): RISK_ORDER_NOTICE 는 rc 1 갈래가 아니다"
+assert_eq "$(grep -c '^- rc 0 이면 .*`RISK_ORDER_NOTICE`' "$RED")" "1" "재분해(AC16): RISK_ORDER_NOTICE 는 rc 0 길의 항목이다"
+extract_fence() {   # extract_fence <파일> → `## 2. 지금 표` 절 안의 첫 bash 펜스(다음 `## ` 머리에서 멈춘다)
+  awk '/^## 2\. 지금 표/{f=1;next} f&&/^## /{exit} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$1"
+}
+ef="$(extract_fence "$RED")"
+[ -n "$ef" ] && ok "재분해: extract 펜스를 뽑았다" || no "재분해: extract 펜스가 비었다 — 아래 칸이 공허하다"
+printf '## 2. 지금 표\n\n펜스 없음.\n\n## 3. 영향 보이기\n\n```bash\necho leak\n```\n' > "$T/ef-probe.md"
+assert_eq "$(extract_fence "$T/ef-probe.md")" "" "재분해: extract 펜스 추출은 2 절 밖(다음 \`## \` 절)의 펜스를 집지 않는다(양성 짝: 위 실제 문서 추출)"
+assert_not_contains "$ef" '"<' "재분해(AC14): extract 펜스에 따옴표로 감싼 모델 채움 자리가 없다(양성 짝: 아래 실행 칸)"
+STUB3="$T/stub3"; mkdir -p "$STUB3/scripts"
+cat > "$STUB3/scripts/roadmap_write.py" <<'PY'
+import argparse, json, os, sys
+p = argparse.ArgumentParser()
+sub = p.add_subparsers(dest="cmd")
+e = sub.add_parser("extract")
+e.add_argument("--roadmap", required=True)
+a = p.parse_args()
+with open(os.environ["STUB_OUT"], "w", encoding="utf-8") as f:
+    json.dump({"roadmap": a.roadmap}, f, ensure_ascii=False)
+PY
+for HX in "$HP/roadmap.md" '-rel/roadmap.md'; do
+  s3="${ef//'<로드맵 경로>'/$HX}"
+  rm -f "$T/stub3.out"
+  rc=0; o="$(cd "$T" && STUB_OUT="$T/stub3.out" CLAUDE_PLUGIN_ROOT="$STUB3" bash -c "$s3" 2>&1)" || rc=$?
+  got="$(python3 -I -c 'import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")) == {"roadmap": sys.argv[2]})' "$T/stub3.out" "$HX" 2>&1)"
+  assert_eq "$rc $got" "0 True" "재분해(AC14): extract 펜스가 경로를 글자 그대로 생성기로 넘긴다 — $HX"
+  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): extract 펜스의 경로 안 명령이 돌지 않았다"
+done
+
 finish

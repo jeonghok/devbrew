@@ -17,6 +17,7 @@ case_config_defaults_disclosed
 case_config_env_wins
 case_config_entry_beats_profile
 case_config_invalid_refused
+case_config_maximum_refused
 case_config_changes_between_rounds
 case_config_profile_fields
 case_config_profile_string_refused
@@ -26,6 +27,7 @@ case_T19_reject_closes
 case_T20_hold_becomes_ask
 case_T21_permit_applied
 case_AC38_related_declared_exempt_and_shown
+case_AC3_related_changes_escaped
 case_AC38_related_undeclared_still_frozen
 case_AC38_related_refusals
 case_AC38_related_declared_but_unchanged_disclosed
@@ -137,6 +139,8 @@ case_AC14_no_abbrev_flags
 case_AC14_append_only_passes
 case_AC14_append_only_plus_edit
 case_AC14_line_hashes_only_immutable
+# AC2 — 불변 절은 0열 새 목록 항목만 추가로 본다.
+case_AC2_append_new_item_only
 # AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법.
 case_AC15_log_line_one_line_every_field
 case_AC15_forged_lines_gain_no_provenance
@@ -160,4 +164,11 @@ case_AC38_human_decision_refusals
 case_AC38_human_decision_no_ledger_baseline
 case_AC38_human_decision_before_first_round_baseline
 case_AC38_human_decision_count_prefix
+case_lineage_protected_child_pushed_out
+case_lineage_adopt_once_then_ask_again
+case_lineage_immutable_child_fenced
+case_AC13_table_row_with_adopted_decision
+case_AC13_table_row_without_decision
+case_AC13_table_rows_bound_with_declare
+case_AC13_table_rows_without_declare
 finish

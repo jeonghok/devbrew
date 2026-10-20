@@ -1,0 +1,14 @@
+리뷰를 마쳤다.
+
+```docreview-layer1
+[]
+```
+
+```docreview-layer2
+- ref: c1
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "목표와 비목표가 같은 말을 되풀이한다"
+  edit_scope: "#2-goals, #3-non-goals"
+```
