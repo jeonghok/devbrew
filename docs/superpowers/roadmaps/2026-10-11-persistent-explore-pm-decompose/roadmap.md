@@ -157,14 +157,14 @@ test_failure_pattern: "^FAILED (.+)$"
 - 순서 이유: 계획 셋을 차례로(형식 · 상태 → 이음매 → 지휘자) — 셋째는 R2a 가 qg 테스트 스크립트를 shared/ 로 옮긴 뒤(설계 D1.3 · §11)
 
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
-- 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
+- 의도: 이 장치들이 devbrew 밖 GitHub 레포에서도 통하게 한다 — gh 는 필수 의존이고 superpowers 가 없으면 인터뷰는 brief 까지 만들고 멈추며 나머지 흐름은 진입에서 멈춘다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
-  - 안 한다: 규칙 문서(R9)
-- 의존: R2a, R5
+  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
+  - 안 한다: 규칙 문서(R9) · gh 없는 대체 길 · GitHub 가 아닌 원격 지원
+- 의존: R2a, R5, R10, R12, R13
 - 브랜치: feature/dependency-portability
 - 묶음: R8.md
-- 경로 예약: 없음
+- 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_decompose_surface.sh, shared/test-selection/resolve-baseline.sh, shared/docreview/scripts/docreview_state.py, shared/python/devbrew-python.sh, plugins/quality-gates/scripts/discover-spec.sh, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/project-init/hooks/hooks.json, plugins/project-init/hooks/post-tool-use.py
 
 ### R9 — 규칙 · 문서 정리
 - 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학의 조항 문면을 고친다
@@ -420,6 +420,14 @@ test_failure_pattern: "^FAILED (.+)$"
   - 「새 에픽으로 (권장)」
   - 「R12 로 (권장)」
   - 「나눠서 다시 나눈다 (권장)」
+
+### 2026-10-20 · R8 을 R10 · R12 · R13 뒤로(경로 예약 겹침) · R8 경로 예약을 승인된 설계 Files to Modify 로 채움 · R8 의도 · 범위를 설계 결정 U1 · U6 · U9 에 맞춤
+- 바뀜: 바뀐 에픽 R8 「R10 · R12 · R13 뒤 (권장)」 · 「gh는 있어야 한다고 보자 기본적인거야 그리고 너무 낮은 호환을제공하진말자」 · 「지금처럼 + 나머지는 멈춤 (권장)」 · 「GitHub 레포만 지원 (권장)」
+- 원문:
+  - 「R10 · R12 · R13 뒤 (권장)」
+  - 「gh는 있어야 한다고 보자 기본적인거야 그리고 너무 낮은 호환을제공하진말자」
+  - 「지금처럼 + 나머지는 멈춤 (권장)」
+  - 「GitHub 레포만 지원 (권장)」
 
 ## 위험 번호표
 
