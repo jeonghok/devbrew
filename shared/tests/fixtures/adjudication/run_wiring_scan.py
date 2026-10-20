@@ -34,8 +34,9 @@ for r in rows:
     rel = str(Path(r["file"]).relative_to(root))
     if r["guarded"]:
         continue
-    # 면제 키는 자리 + 정체다 — 줄 수를 보존한 채 조건만 바꾼 분기는 여기서
-    # 면제를 «상속하지 못하고» 미배선으로 다시 나온다(stale_exempt 의 양의 짝).
+    # 면제 키는 (경로, 정체)다. 정체는 `<kind> in <func> @ <guard> ~ <loop>` 이고
+    # 줄 번호는 넣지 않는다 — 조건이 바뀐 분기는 면제를 상속하지 못하고 미배선으로
+    # 다시 나온다(stale_exempt 의 양의 짝).
     if exempt_key(rel, r) in EXEMPT:
         continue
     unwired.append((rel, r["line"], r["kind"], r["func"], r["guard"]))

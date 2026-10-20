@@ -147,6 +147,8 @@ put "$TMP/v-i_ok/plugins/spec-distill/scripts/q.py" "# scripts/qg-gc.py · plugi
 expect_green "$TMP/v-i_ok" "축 I 음성 대조: 새 이름과 상태 경로는 걸리지 않는다"
 variant i_ol; put "$TMP/v-i_ol/plugins/spec-distill/scripts/q.py" '# "/qg-gc.py" 와 `/qg-worktree` · /qg_state · `/interview/` 는 이름 · 경로 글자가 이어져 옛 호출이 아니다'
 expect_green "$TMP/v-i_ol" "축 I 음성 대조: 옛 호출 뒤에 이름 · 경로 글자가 이어지면 걸리지 않는다"
+variant i_ld; put "$TMP/v-i_ld/plugins/spec-distill/README.md" "경로 plugins/q""g 와 docs/interview 를 본다"
+expect_green "$TMP/v-i_ld" "축 I 음성 대조: 앞 글자가 허용 밖이면 뒤가 허용이어도 걸리지 않는다(_LEAD 의 이빨)"
 variant i_si; put "$TMP/v-i_si/plugins/spec-distill/README.md" "/spec-distill:spec-interview 로 부른다"
 expect_red "$TMP/v-i_si" I "축 I: 옛 진입 이름 spec-interview" "옛 이름 'spec-interview'"
 variant i_sp; put "$TMP/v-i_sp/plugins/spec-distill/skills/request-framing/SKILL.md" 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md'

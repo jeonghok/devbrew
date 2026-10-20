@@ -62,6 +62,7 @@ KEBAB_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
 BANG_RE = re.compile(r"(?:^|(?<=\s))!`([^`\n]+)`")       # 플랫폼 규칙: 줄 시작 또는 공백 뒤
 FENCE_BANG_RE = re.compile(r"^\s*```!\s*$")
 USER_ARG_RE = re.compile(r"\$(?:ARGUMENTS|\{ARGUMENTS|[0-9]|\{[0-9]|\[[0-9])")
+# _LEAD 는 G 축(bare 진입 이름)과 I 축(옛 호출)이 함께 쓴다 — 넓히면 G 도 넓어진다.
 _LEAD = r"(?:^|(?<=[\s`'\"(「*\[|>]))"
 _TRAIL = r"(?=$|[\s`'\"@)」])"
 FULL_CALL_RE = re.compile(_LEAD + r"/([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)" + _TRAIL)

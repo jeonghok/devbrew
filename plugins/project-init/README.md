@@ -51,7 +51,7 @@ plugins/project-init/
 3. 커스터마이징 질문 3–4개 답변 (commit scope, merge strategy, 브랜치 접두 추가)
 4. 플러그인이 다음을 생성:
    - `AGENTS.md` — `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식). 기존 `CLAUDE.md` 가 있으면 옮길지 묻는다 — 「CLAUDE.md 에 바로 쓰기」를 고르면 `AGENTS.md` 를 만들지 않고 관리 절을 `CLAUDE.md` 안에 쓴다.
-   - `CLAUDE.md` — 기본은 `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import). 「CLAUDE.md 에 바로 쓰기」면 관리 절을 담고, 「CLAUDE.md 는 그대로 두기」면 손대지 않는다 — 이 선택이면 AGENTS.md 에 `## Project Charter` 가 생기지 않아 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다.
+   - `CLAUDE.md` — 기본은 `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import). 「CLAUDE.md 에 바로 쓰기」면 관리 절을 담고, 「CLAUDE.md 는 그대로 두기」면 손대지 않는다 — AGENTS.md 에 헌장 절이 아직 없을 때 이 선택이면 AGENTS.md 에 `## Project Charter` 가 생기지 않아 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다.
    - `docs/git-workflow/branch-strategy.md` — 팀의 브랜치 룰
    - `docs/git-workflow/commit-conventions.md` — Conventional Commits 룰
    - `docs/git-workflow/pr-process.md` — PR 템플릿과 리뷰 체크리스트
