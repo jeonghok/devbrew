@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/** shared/** CLAUDE.md README.md docs/philosophy/** docs/plugin-authoring.md
+# guards: plugins/** shared/** CLAUDE.md README.md docs/philosophy/** docs/plugin-authoring.md docs/git-workflow/** .claude-plugin/marketplace.json
 #
 # 호출 표면 정합 락의 집행과 이빨.
 #  1부 합성 리포 — 양성 대조 GREEN · 축 A~I 변이마다 RED + 그 축의 태그 · 음성 대조 GREEN
@@ -147,6 +147,8 @@ put "$TMP/v-i_ok/plugins/spec-distill/scripts/q.py" "# scripts/qg-gc.py · plugi
 expect_green "$TMP/v-i_ok" "축 I 음성 대조: 새 이름과 상태 경로는 걸리지 않는다"
 variant i_ol; put "$TMP/v-i_ol/plugins/spec-distill/scripts/q.py" '# "/qg-gc.py" 와 `/qg-worktree` · /qg_state · `/interview/` 는 이름 · 경로 글자가 이어져 옛 호출이 아니다'
 expect_green "$TMP/v-i_ol" "축 I 음성 대조: 옛 호출 뒤에 이름 · 경로 글자가 이어지면 걸리지 않는다"
+variant i_ld; put "$TMP/v-i_ld/plugins/spec-distill/README.md" "경로 plugins/q""g 와 docs/interview 를 본다"
+expect_green "$TMP/v-i_ld" "축 I 음성 대조: 앞 글자가 허용 밖이면 뒤가 허용이어도 걸리지 않는다(_LEAD 의 이빨)"
 variant i_si; put "$TMP/v-i_si/plugins/spec-distill/README.md" "/spec-distill:spec-interview 로 부른다"
 expect_red "$TMP/v-i_si" I "축 I: 옛 진입 이름 spec-interview" "옛 이름 'spec-interview'"
 variant i_sp; put "$TMP/v-i_sp/plugins/spec-distill/skills/request-framing/SKILL.md" 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md'
@@ -157,6 +159,31 @@ variant i_pm; put "$TMP/v-i_pm/plugins/spec-distill/scripts/q.py" "# /spec-disti
 expect_green "$TMP/v-i_pm" "축 I 음성 대조: 새 이름 · 인터뷰 산출물 폴더 · 이름 글자가 이어진 꼴은 걸리지 않는다"
 variant i_fx; put "$TMP/v-i_fx/plugins/spec-distill/tests/fixtures/s.md" "next_phase: spec-distill:spec-interview"
 expect_green "$TMP/v-i_fx" "축 I 면제 대조: tests/fixtures 의 옛 seed 값은 걸리지 않는다"
+# 마크다운 강조 · 링크 · 표 칸 · <code> 뒤의 옛 호출 — 넓힌 글자마다 RED 와 음성 대조(이름 · 경로 글자가 이어진 꼴) 한 쌍
+lead_pair() {   # lead_pair <tag> <RED 줄> <GREEN 줄> <설명>
+  variant "l_${1}"; put "$TMP/v-l_${1}/plugins/spec-distill/README.md" "$2"
+  expect_red "$TMP/v-l_${1}" I "축 I 넓힘: ${4} 뒤 옛 호출" "옛 호출 토큰 '/q""g'"
+  variant "l_${1}n"; put "$TMP/v-l_${1}n/plugins/spec-distill/README.md" "$3"
+  expect_green "$TMP/v-l_${1}n" "축 I 넓힘 음성 대조: ${4} 뒤 파일 이름 · 경로 조각"
+}
+lead_pair em '**/q''g** 로 부른다' '**/q''g-gc.py** 를 고친다' '굵은 강조 **'
+lead_pair st '*/q''g* 로 부른다' '*/q''g.md* 를 읽는다' '기울임 *'
+lead_pair lk '[/q''g](x) 로 부른다' '[/q''g_state](x) 를 본다' '링크 ['
+lead_pair tb '|/q''g| 부른다 |' '|/interview/| 폴더 |' '표 칸 |'
+lead_pair cd '<code>/q''g</code> 로 부른다' '<code>/q''g.md</code> 를 읽는다' '<code>'
+variant i_fn; put "$TMP/v-i_fn/plugins/spec-distill/README.md" "옛 명령 파일 /q""g.md 와 /interview.md 는 파일 이름이다"
+expect_green "$TMP/v-i_fn" "축 I 음성 대조: /q""g.md 같은 파일 이름 꼴은 옛 호출이 아니다"
+variant i_dot; put "$TMP/v-i_dot/plugins/spec-distill/README.md" "코드라면 /q""g. 문서라면 다른 것."
+expect_red "$TMP/v-i_dot" I "축 I 대조: 문장 끝 마침표가 붙은 /q""g. 는 여전히 옛 호출" "옛 호출 토큰 '/q""g'"
+# 살아 있는 표면 — git 규칙 문서 · 마켓플레이스 목록(각각 새 이름 음성 대조)
+variant i_gw; put "$TMP/v-i_gw/docs/git-workflow/x.md" "/spec-distill:spec-interview 로 부른다"
+expect_red "$TMP/v-i_gw" I "축 I 표면: docs/git-workflow/ 의 옛 이름" "옛 이름 'spec-interview'"
+variant i_gwn; put "$TMP/v-i_gwn/docs/git-workflow/x.md" "/spec-distill:pm-interview 로 부른다"
+expect_green "$TMP/v-i_gwn" "축 I 표면 음성 대조: docs/git-workflow/ 의 새 이름"
+variant i_mk; put "$TMP/v-i_mk/.claude-plugin/marketplace.json" '{"plugins": [{"description": "Run /spec-distill:spec-interview first."}]}'
+expect_red "$TMP/v-i_mk" I "축 I 표면: .claude-plugin/marketplace.json 설명의 옛 이름" "옛 이름 'spec-interview'"
+variant i_mkn; put "$TMP/v-i_mkn/.claude-plugin/marketplace.json" '{"plugins": [{"description": "Run /spec-distill:pm-interview first."}]}'
+expect_green "$TMP/v-i_mkn" "축 I 표면 음성 대조: .claude-plugin/marketplace.json 설명의 새 이름"
 
 variant h2; put "$TMP/v-h2/plugins/spec-distill/commands/sub/x.md" "---"; expect_red "$TMP/v-h2" H "H 깊이: 중첩 commands/ 경로" "commands/ 층"
 variant g4; put "$TMP/v-g4/plugins/spec-distill/skills/spec-review/references/t.md" '`/spec-distil:spec-review` 로'; expect_red "$TMP/v-g4" G "G 오타: 없는 플러그인 완전명" "풀리지 않는다"
