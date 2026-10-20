@@ -210,7 +210,7 @@ case_duplicate_verdicts_for_one_f_are_held() {
 }
 
 case_colliding_ids_with_split_verdicts_are_not_resolved() {
-  # Review Focus 2 — 같은 agent·file·line 의 finding 둘은 같은 finding_id 로 접힌다.
+  # Review Focus 2 — 같은 agent·file·line 의 finding 둘은 요약이 공백·대소문자 정규화 뒤 같을 때만 같은 finding_id 로 접힌다.
   local T; T=$(mktemp -d)
   printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
@@ -231,7 +231,7 @@ case_colliding_ids_with_partial_verdicts_are_not_resolved() {
   # 판정되면(다른 f 는 침묵) 그 일부 판정을 전체에 적용하면 안 된다 — 판정 안 된
   # CRITICAL 이 판정된 IMPORTANT 의 기각을 뒤집어쓰고 조용히 사라진다.
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -248,7 +248,7 @@ case_colliding_ids_with_matching_verdicts_are_resolved() {
   # 종류가 같으면(둘 다 reject) 콜라이딩 finding_id 에 합쳐 적용한다. 문구까지
   # 토씨 맞추라는 요구가 아니다(컨트롤러 룰링: "same verdict, and same to for raise").
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
