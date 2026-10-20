@@ -8,10 +8,9 @@
 - 계획 중간에 돌아온 구현 담당자를 바꿀 때 옛 담당자가 띄운 하위 agent 를 먼저 멈춘다(`references/conducting.md` 걸음 4).
 - 한 브랜치는 한 worktree 만 쥔다 — 지휘자 worktree 는 detached 로 두고, origin 에 있는 에픽 브랜치에서 일하는 하위는 detached 로 서서 `git push origin HEAD:<브랜치>` 로 올린 뒤 로컬 ref 를 따라 옮긴다(`references/conductor-dispatch.md` 자리).
 - 같은 자리가 라운드마다 새 막는 지적을 내면 라운드를 더하지 않고 설계의 대안 갈래로 옮긴다(`references/conducting.md` 걸음 4).
-- 같은 에픽의 계획을 동시에 돌리면 보낼 때 판 올림 순서와 각 계획의 목표 판 번호를 정한다(`references/conductor-dispatch.md` 판 번호).
+- 같은 에픽의 계획을 동시에 돌리면 보낼 때 판 올림 순서와 각 계획의 목표 판 번호를 정한다 — 머지 순서가 바뀌면 「먼저 머지되는 쪽이 낮은 번호」 가 이긴다(`references/conductor-dispatch.md` 판 번호).
 - 끝나 worktree 가 지워진 격리 agent 는 메시지로 깨우지 않고 새 격리 agent 를 보낸다(`references/conductor-dispatch.md` 단계마다 새 agent).
-- 하위의 보고를 지휘자가 질문으로 만들면 그 질문과 「(권장)」 은 지휘자 것으로 표시한다. 옮김 대조 agent(`agents/relay-checker.md`)는 그렇게 표시된 질문의 선택지를 대조하지 않고, 표시 없는 질문은 지금처럼 대조한다.
-
+- 하위의 보고를 지휘자가 질문으로 만들면 그 질문과 「(권장)」 은 지휘자 것으로 표시한다. 옮김 대조 agent(`agents/relay-checker.md`)는 하위 원문에 질문 · 선택지가 정말 없을 때만 그 표시를 받아 선택지 대조를 빼고, 원문에 질문 · 선택지가 있는데 표시가 붙었으면 근거 없는 표시로 어긋남을 낸다.
 ### Fixed
 - 스위트 대조(`scripts/merge_check.py`)가 origin 보다 뒤처진 로컬 브랜치로 대조해 거짓 「합칠 수 없다」를 내지 않는다 — 로컬과 origin 이 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 두 끝을 보이고 검사 불가(3)로 멈춘다. `--branch origin/<브랜치>` 도 받는다.
 
