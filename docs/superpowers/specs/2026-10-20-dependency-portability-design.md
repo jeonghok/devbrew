@@ -70,7 +70,7 @@ next_phase: superpowers:writing-plans
 - G1 레포마다 다른 값(폴더 · 원격 · 브랜치 접두 · 테스트 명령 등)을 해결자 하나가 출처와 함께 낸다. 어느 작업공간에서 불러도 같은 답이다.
 - G2 커밋 범위 · 기본 브랜치 · 머지됨처럼 정확성이 걸린 값은 오류 없이 틀어질 때 멈춘다. 나머지는 출처와 나이를 보인다.
 - G3 squash · rebase 로 머지한 레포에서도 머지됨을 자동으로 판정한다.
-- G4 의존(git · gh · Claude Code · superpowers · qg)을 개발 당시 판으로 선언하고, 의존마다 정한 강도(멈춤 · 알림 · 기록 — §5 표)로 확인한다. gh 와 superpowers 가 없을 때의 동작이 정해져 있다.
+- G4 의존(Python · git · gh · Claude Code · superpowers · qg)을 개발 당시 판으로 선언하고, 의존마다 정한 강도(멈춤 · 알림 · 기록 — §5 표)로 확인한다. gh 와 superpowers 가 없을 때의 동작이 정해져 있다.
 - G5 devbrew 밖 레포(`.claude/` 를 무시하지 않는 레포 · 기본 브랜치가 `main` 이 아닌 레포 · fork 클론)에서 돈다. 지원 범위는 origin 이 GitHub(gh 가 다루는 호스트)인 레포다(U9).
 - G6 쓰는 세션을 믿는 한계를 정직하게 알리고, 정직한 실수는 값싼 대조로 잡는다.
 
@@ -107,10 +107,10 @@ next_phase: superpowers:writing-plans
 `repo_defaults.py` 가 레포마다 다른 값을 내는 유일한 해결자다. 새 모듈을 만들지 않는다.
 
 - **출처 넷, 우선순위 순.** ① 로드맵 frontmatter(그 로드맵에만) ② 레포 설정 파일 ③ 기계 상태(machine.md `## 레포 설정` — 지휘자가 찾았지만 아직 레포 설정 파일로 머지하지 못한 임시값, 출처 표시 `기계 상태(임시)`) ④ 상수. 레포 설정 파일은 레포 루트의 `.devbrew.md` 하나이고(지휘자 판단 — 이름은 계획이 바꿀 수 있다), frontmatter 만 읽는다. 없어도 된다. 기계 상태 층을 쓰면 지휘자가 그 값을 레포 설정 파일에 올리자고 알린다.
-- **층마다 받는 키가 다르다.** 로드맵을 찾기 전에 필요한 값(`roadmaps_dir` · `interview_dir` · `branch_prefix`)은 로드맵 층에서 받지 않는다(적으면 오류). 기계 상태 층은 `test_command` · `test_failure_pattern` 만 받는다.
+- **층마다 받는 키가 다르다.** 로드맵을 찾기 전에 필요한 값(`roadmaps_dir` · `interview_dir` · `branch_prefix`)은 로드맵 층에서 받지 않는다(적으면 오류). 기계 상태 층은 `test_command` · `test_failure_pattern` 만 받는다. 기계 상태는 로드맵마다 하나라, 해결자는 로드맵을 받았을 때만 이 층을 읽고(`get <키> --roadmap <로드맵>`), 받지 않았으면 이 층을 건너뛰고 출처에 「로드맵 없음 — 기계 상태 층 건너뜀」을 적는다.
 - **레포 설정 파일은 기본 브랜치 판에서 읽는다.** `git show <기본 ref>:.devbrew.md`. 작업 브랜치가 자기 검사 범위를 스스로 바꾸지 못하게 하고(Renovate 가 기본 브랜치의 설정을 읽는 것과 같다), 어느 작업공간에서 불러도 같은 값이 나오게 한다. 작업 트리에는 있고 기본 브랜치에는 없으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다(첫 도입 PR). 기본 ref 자체가 없으면(`origin/HEAD` 없음) 해결자는 멈추지 않고 상수를 쓰되 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 내고, 작업 트리에 설정 파일이 있으면 크게 알린다. 기본 브랜치가 실제로 필요한 자리는 §3 대로 멈춘다.
 - **키는 닫힌 집합이다.** 설정 키는 `specs_dir` · `plans_dir` · `roadmaps_dir` · `interview_dir` · `test_command` · `test_failure_pattern` · `review_model` · `parallel_default` · `branch_prefix` 다. 레포 설정 파일과 기계 상태 층은 이 집합에 대해 닫힌다. 로드맵 층은 로드맵 머리말 키 `type` · `source_brief` 와 그 층이 받는 설정 키(`specs_dir` · `plans_dir` · `test_command` · `test_failure_pattern` · `review_model` · `parallel_default`)의 합에 대해 닫힌다 — 이 목록 밖의 키는 오류다. 모르는 키 · 같은 키 둘은 오류로 멈춘다. 값에 `#` 이 필요하면 따옴표로 감싼다 — 따옴표 없는 값의 ` #` 은 주석과 헷갈리므로 오류다. 「frontmatter 를 못 읽음」(BOM · 닫히지 않음 · `--- ` 뒤 공백)은 「키 없음」과 다른 오류다. 폴더 키는 지금처럼 레포 상대경로만 받고 루트 · `.git` 아래를 금지한다.
-- **레포 설정 파일은 일반 파일이어야 한다.** 기본 ref 트리에서 그 파일의 mode 가 일반 파일(100644)이 아니면(심볼릭 링크 · LFS 포인터 등) 내용을 읽지 않고 멈춘다.
+- **레포 설정 파일은 일반 파일이어야 한다.** 기본 ref 트리에서 그 파일의 mode 가 일반 파일(100644)이 아니면(심볼릭 링크 등) 내용을 읽지 않고 멈춘다. LFS 포인터는 mode 가 같으므로 내용의 첫 줄(`version https://git-lfs…`)로 가려 멈춘다.
 - **값마다 출처를 낸다.** 결과는 `(값, 출처)` 이고 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기계 상태(임시)` · `기본값` 이다. 상태줄 · 지휘자 보고 · merge_check 출력이 출처를 보인다.
 - **셸 펜스에는 값이 아니라 검사를 넘긴다.** 경로를 조립해 `git add` 범위를 정하는 펜스는 `repo_defaults.py check-path <키> <경로>` 같은 판정 명령을 부르고 rc 로 받는다. 값을 꼭 받아야 하는 펜스는 `get <키>` 의 rc 를 확인하고 빈 값을 거부한다(`$(...)` 의 빈 값이 레포 루트가 되는 사고를 막는다).
 - **흡수.** machine.md `## 레포 설정`(merge_check 의 셋째 층)과 `test_failure_pattern` 을 같은 해결자로 옮긴다. 같은 키가 여러 층에 있을 때의 규칙은 위 우선순위 하나이고, 한 층 안에서 같은 키가 둘이면 오류다(지금 frontmatter 는 첫 값, machine.md 는 마지막 값이 이겨 규칙이 반대다).
@@ -128,8 +128,8 @@ next_phase: superpowers:writing-plans
 ### §3 기본 브랜치 · 원격 · 브랜치 이름
 
 - **지원하는 흐름은 내 레포 안 흐름이다(U8).** PR 과 기본 브랜치는 언제나 `origin` 이다. fork 클론에 `upstream` 원격이 있어도 devbrew 는 `origin` 만 본다. 부모 레포로 PR 을 내는 흐름 · 원격이 없는 로컬 전용 레포는 지원하지 않고 README 에 적는다. 원격 이름 설정 키는 두지 않는다.
-- **기본 브랜치는 `DEFAULT_REF`(`refs/remotes/origin/HEAD`) 하나.** main/master 로 대신 쓰는 길(request-framing · `resolve-baseline.sh`)을 지운다. qg 보호 브랜치 가드의 고정 목록은 보안 게이트라 그대로 둔다.
-- **못 찾으면 멈추고 고치는 법을 보인다.** 기본 브랜치가 실제로 필요한 자리(request-framing 의 브랜치 만들기 · 인터뷰 끝 커밋 · 지휘자 · merge_check · 상태줄)에서만 멈춘다. 안내는 `origin` 이 없으면 원격을 더하라는 것, 있으면 `git remote set-head origin --auto` 다(`git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다).
+- **기본 브랜치는 `DEFAULT_REF`(`refs/remotes/origin/HEAD`) 하나.** main/master 로 대신 쓰는 길(request-framing · 공유 `resolve-baseline.sh`)을 지운다. `resolve-baseline.sh` 의 소비자인 qg(`check-review-scope.sh` · `review-diff.sh` · `discover-spec.sh`)는 지금 이 대체 덕에 기본 브랜치 개명 뒤 남은 옛 `origin/HEAD` 에서도 돌았다 — 대체를 지우면 qg 가 기본 브랜치를 못 찾을 때 degraded 사유와 `git remote set-head origin --auto` 안내를 크게 보인다(조용한 fail-open 이 되지 않게). qg 보호 브랜치 가드의 고정 목록은 보안 게이트라 그대로 둔다.
+- **못 찾으면 멈추고 고치는 법을 보인다.** 기본 브랜치가 실제로 필요한 자리(request-framing 의 브랜치 만들기 · 인터뷰 끝 커밋 · 지휘자 · merge_check · 상태줄 · qg 의 리뷰 범위 · 차등 테스트 기준)에서만 멈춘다(qg 는 위처럼 degraded 와 안내로). 안내는 `origin` 이 없으면 원격을 더하라는 것, 있으면 `git remote set-head origin --auto` 다(`git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다).
 - **두 출처 대조.** 네트워크를 써도 되는 진입(지휘자 진입 · merge_check · 인터뷰 끝 커밋 직전)에서 `git ls-remote --symref origin HEAD` 와 로컬 값을 대조하고 다르면 멈춘다. 대조를 못 하면(오프라인 · 시간 상한 초과) 멈추지 않고 로컬 값으로 가며 「원격과 대조하지 못했다 — 로컬 기본 브랜치 <이름> 을 썼다」를 알린다(오프라인 인터뷰를 막지 않는다). 상태줄은 네트워크를 쓰지 않고 「기본 브랜치 <이름> · 마지막 받기 N시간 전(어느 원격 · 브랜치든)」만 보인다.
 - **전체 참조 이름으로 다룬다.** `refs/remotes/origin/` 접두를 벗겨 짧은 이름을 얻는다. `--short` 결과에서 `origin/` 을 글자로 벗기는 두 자리를 고친다.
 - **브랜치 접두**는 `branch_prefix` 설정(기본 `feature/`) 하나다. spec-distill 은 project-init 의 `branch-strategy.md` 를 읽지 않는다(선언 없는 플러그인 간 결합을 만들지 않는다). 브랜치 이름은 이미 분해 표 → 로드맵 `브랜치:` 로 사용자 승인을 거친다. project-init 의 브랜치 규칙과 `branch_prefix` 가 어긋나면 지휘자가 만드는 브랜치마다 훅이 알리므로, 두 README 에 「둘을 맞춘다」를 적는다(결합하지 않는다).
@@ -137,33 +137,34 @@ next_phase: superpowers:writing-plans
 
 ### §4 머지 판정 — squash · rebase
 
-gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 판독은 gh 판정의 보조로만 남는다.
+gh 가 필수라서 머지됨을 PR 상태로 판정한다. 지금 판정 길 둘(둘째 부모가 브랜치 끝인 머지 커밋 · `Merge pull request #n from <owner>/<브랜치>` 문면)은 이렇게 남는다: PR 캐시가 있으면 PR 판정이 이기고 둘은 쓰지 않는다. 캐시가 없으면 머지 커밋 길은 그대로 쓰고, 문면 길은 `<owner>` 가 origin 소유자일 때만 센다(남의 fork 문면은 세지 않는다).
 
 - **에픽 브랜치가 머지됨** = `origin` 레포의 gh PR 이 MERGED ∧ PR 의 head 레포가 `origin` 레포(`isCrossRepository` 거짓) ∧ `baseRefName` 이 기본 브랜치 ∧ `headRefName` 이 그 브랜치 ∧ `headRefOid` 가 브랜치 끝과 **같다** ∧ `mergeCommit` 이 기본 ref 에서 닿는다. 여섯이 모두 맞을 때만 「머지됨」이다. head 레포 조건은 브랜치가 지워졌어도 늘 건다(지원 흐름이 내 레포 안 흐름이라 fork 에서 온 PR 은 에픽의 PR 이 아니다).
-  - 브랜치 끝은 원격 추적 ref(`refs/remotes/origin/<브랜치>`), 없으면 로컬 브랜치다. 머지 뒤 커밋이 더 붙으면 끝이 달라 머지됨이 아니다(지금 `roadmap_status.merged_by` 와 같은 방향).
+  - 브랜치 끝은 로컬 브랜치(`refs/heads/<브랜치>`), 없으면 원격 추적 ref 다(지금 `roadmap_status` 와 같은 순서). 머지 뒤 커밋이 더 붙으면 끝이 달라 머지됨이 아니다 — 로컬에만 붙은 후속 커밋도 그렇다. 로컬과 원격 끝이 다르면 둘 다 보인다.
   - 브랜치가 지워져 끝이 없으면 machine.md 에 적어 둔 그 PR 의 `headRefOid` 와 대조하고, 그것도 없으면 나머지 다섯으로 판정하되 「브랜치 끝 없이 판정」을 알린다.
   - 같은 이름을 다시 쓴 브랜치의 옛 PR 은 `headRefOid` 가, 남의 fork 에서 온 같은 이름 PR 은 head 레포 조건이 거른다.
   - gh 는 MERGED 인데 기본 ref 에 아직 없으면 「머지됨(받기 전)」으로 알리고 `git fetch` 를 안내한다. 이 상태는 머지됨이 아니다 — 끝난 단계로 세지 않고 다음 에픽 착수 같은 게이트를 열지 않는다. 머지 뒤 revert 는 알리기만 한다.
 - **gh 호출마다 대상 레포를 명시한다.** `-R <host>/<owner>/<repo>` 를 `origin` URL 에서 호스트까지 보존해 도출한다(fork 클론의 `upstream` 을 gh 가 고르는 일 · `GH_HOST` 가 다른 서버를 가리키는 일을 막는다). 호스트를 확정하지 못하면 그 호출을 멈추고 원격 URL 을 확인하라고 안내한다. `GH_REPO` · `GH_HOST` 가 설정돼 있으면 알린다.
-- **판정을 맡는 곳 · 캐시.** PR 상태 캐시는 이미 있다 — machine.md 의 `## PR` 표와 `control_plane.py` 의 「기계 상태 캐시가 먼저, 없으면 gh」 길. 새 캐시를 만들지 않고 그 표에 칸(`받은 시각 · headRefOid · head 레포(isCrossRepository) · baseRefName · mergeCommit · 쓴 세션`)을 더한다 — 여섯 조건을 네트워크 없이 검사할 입력이 다 든다. 머지됨 판정은 `roadmap_status` 가 하고, gh 를 직접 부르지 않고 그 캐시를 입력으로 받는다. 캐시가 없으면 merge commit 문면과 손 머지 줄로 판정하고 「PR 상태 미확인 — 지휘자나 상태 확인을 돌려라」를 알린다. 캐시는 지휘자만 채운다 — machine.md 는 지휘 표지를 쥔 세션만 쓰고(`conductor_state.save`), control_plane 은 읽기만 한다. 그래서 지휘자 밖에서 squash · rebase 로 머지한 에픽은 지휘자가 다음에 들어올 때까지 「PR 상태 미확인」으로 보인다(G3 · AC14 의 범위). 상태줄은 네트워크를 쓰지 않고 캐시의 나이를 보인다. 머지 · 다음 에픽 착수 같은 게이트는 지휘자가 그 직전에 gh 로 캐시를 새로 채운 뒤 `roadmap_status` 를 부른다 — 판정 길은 하나다. 묶음이 넘기라고 한 「R0 상태 계산에」는 이 `roadmap_status` 자리다.
+- **판정을 맡는 곳 · 캐시.** PR 상태 캐시는 이미 있다 — machine.md 의 `## PR` 표와 `control_plane.py` 의 「기계 상태 캐시가 먼저, 없으면 gh」 길. 캐시를 채울 때는 그 head 이름의 PR 을 모두 받아(`--state all`, 하나로 자르지 않는다) 여섯 조건에 맞는 것을 고른다 — 가장 최근 하나만 받으면 남의 fork · 다시 쓴 이름의 PR 이 내 머지된 PR 을 가린다. 새 캐시를 만들지 않고 그 표에 칸(`받은 시각 · headRefOid · head 레포(isCrossRepository) · baseRefName · mergeCommit · 쓴 세션`)을 더한다 — 여섯 조건을 네트워크 없이 검사할 입력이 다 든다. 머지됨 판정은 `roadmap_status` 가 하고, gh 를 직접 부르지 않고 그 캐시를 입력으로 받는다. 캐시가 없으면 위 두 길과 손 머지 줄로 판정하고 「PR 상태 미확인 — 지휘자를 돌려라」를 알린다. `control_plane.py` 의 결과 캐시 열쇠에 PR 캐시 표의 지문을 넣어, 지휘자가 PR 캐시를 새로 채우면 상태줄 · 상태 보기가 바로 새 판정을 낸다. 캐시는 지휘자만 채운다 — machine.md 는 지휘 표지를 쥔 세션만 쓰고(`conductor_state.save`), control_plane 은 읽기만 한다. 그래서 상태줄과 `/spec-distill:roadmap-status`(control_plane show)는 gh 를 부르지 않는 진입이다 — control_plane 의 「캐시 없으면 gh」 길과 gh 없음 갈래는 지운다. 그래서 지휘자 밖에서 squash · rebase 로 머지한 에픽은 지휘자가 다음에 들어올 때까지 「PR 상태 미확인」으로 보인다(G3 · AC14 의 범위). 상태줄은 네트워크를 쓰지 않고 캐시의 나이를 보인다. 머지 · 다음 에픽 착수 같은 게이트는 지휘자가 그 직전에 gh 로 캐시를 새로 채운 뒤 `roadmap_status` 를 부른다 — 판정 길은 하나다. 묶음이 넘기라고 한 「R0 상태 계산에」는 이 `roadmap_status` 자리다.
 - 결정 기록의 손 머지 줄은 PR 없이 로컬에서 머지한 경우를 위해 남는다.
 
 ### §5 의존 — gh 필수 · 개발 당시 판 · 부재
 
-- **선언.** 플러그인마다 자기 의존 목록을 한 파일에 둔다(이름 · 최소 판 · 잰 날짜 · 없을 때 동작). README prerequisites 는 그 파일을 가리킨다. 최소 판은 그 플러그인 판을 개발 · 검증할 때 실제로 깔려 있던 판이다(U3). 판을 재는 작은 명령이 git · gh · Claude Code · superpowers 의 판을 재서 이 파일을 갱신한다 — 손으로 적지 않는다.
+- **선언.** 플러그인마다 자기 의존 목록을 한 파일에 둔다(이름 · 최소 판 · 잰 날짜 · 없을 때 동작). README prerequisites 는 그 파일을 가리킨다. 최소 판은 그 플러그인 판을 개발 · 검증할 때 실제로 깔려 있던 판이다(U3). 판을 재는 작은 명령이 Python · git · gh · Claude Code · superpowers 의 판을 재서 이 파일을 갱신한다 — 손으로 적지 않는다.
 - **진입 확인.** 공유 진입 사전 검사(`shared/entry/entry_preflight.py`)는 그대로 둔다(늘 rc 0 · 감시줄 하나). 의존 확인은 플러그인마다 자기 스크립트가 하고, 그 의존을 실제로 쓰는 진입만 부른다. 판 문자열에서 숫자 셋만 뽑아 정수로 비교하고(`2.54.0 (Apple Git-157)` · `2.47.1.windows.2` · gh 의 두 줄 출력), 못 뽑으면 멈춘다. 최소 판보다 낮으면 이유와 업데이트 방법을 보이고 멈춘다.
 - **지원 범위 — GitHub 레포(U9).** origin 이 GitHub(gh 가 다루는 호스트)인 레포만 지원한다. 설계 · README · 수용 기준에 적고, gh 를 쓰는 진입은 origin URL 에서 호스트 · owner · repo 를 뽑지 못하거나 gh 가 그 호스트를 다루지 않으면 이유를 보이고 멈춘다. gh 없는 길은 만들지 않는다.
 - **의존마다 확인 강도.**
 
   | 의존 | 확인하는 진입 | 낮거나 없을 때 |
   |---|---|---|
+  | Python | 모든 skill 진입(`python3`) · 훅(`devbrew-python.sh` 의 바닥) | 멈춤 — 훅 바닥 값도 개발 당시 판에 맞춘다 |
   | git | spec-distill · qg 의 진입 | 멈춤 |
   | gh | gh 를 쓰는 진입 | 멈춤(인증은 첫 호출에서) |
   | superpowers | superpowers 를 부르는 자리 | 판이 다르면 알림 · 없으면 아래 U6 |
   | qg | 지휘자 걸음 7 | 없으면 알리고 진행 |
   | Claude Code | — | 잰 판을 기록만 |
 
-- **gh 필수.** gh 를 쓰는 진입(지휘자 · merge_check · 분해 뒤 로드맵 흐름 · qg 의 PR 댓글)은 gh 가 없으면 이유와 설치 방법을 보이고 멈춘다. 인증은 첫 gh 호출이 실패할 때 「`gh auth login` 하라」를 보이고 멈춘다 — 진입마다 네트워크로 인증을 묻지 않는다(오프라인 인터뷰를 막지 않는다). gh 를 쓰지 않는 진입(인터뷰 · request-framing · plugin-audit · project-init)은 gh 를 보지 않는다. gh 없을 때의 대체 길(`conductor_ledger.py:465-490,858` · `control_plane.py:763-863` · qg `discover-spec.sh:185` · `publish-comment.sh:43`)은 지운다.
+- **gh 필수.** gh 를 쓰는 진입(지휘자 · merge_check · 분해 뒤 로드맵 흐름 · qg 의 PR 댓글)은 gh 가 없으면 이유와 설치 방법을 보이고 멈춘다. 인증은 첫 gh 호출이 실패할 때 「`gh auth login` 하라」를 보이고 멈춘다 — 진입마다 네트워크로 인증을 묻지 않는다(오프라인 인터뷰를 막지 않는다). gh 를 쓰지 않는 진입(인터뷰 · request-framing · roadmap-status · 상태줄 · plugin-audit · project-init)은 gh 를 보지 않는다. gh 없을 때의 대체 길(`conductor_ledger.py:465-490,858` · `control_plane.py:763-863` · qg `discover-spec.sh:185` · `publish-comment.sh:43`)은 지운다.
 - **실행 중인 코드의 판.** 플러그인 자기 판은 `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` 에서 읽는다(설치 기록 파일을 추론하지 않는다). 기계 상태(machine.md)를 쓰는 쪽은 자기 판을 찍고, 읽는 쪽 판이 그보다 낮으면 멈춰 「플러그인을 업데이트하라」를 보인다. 이 검사가 보장하는 것은 이 검사를 갖춘 판끼리다 — 처음 들일 때는 플러그인 갱신과 세션 재시작이 전제이고, 옛 설치본이 혼자 쓰고 혼자 읽으면 걸리지 않는다. 레포의 소스 판과 실행 중인 판의 대조는 이미 있는 `conductor_ledger.version_report` 가 따로 하고(지휘자 진입에서 알림), 둘을 다른 검사로 적는다.
 - **superpowers 판.** Claude Code 의 plugin.json `dependencies` 는 쓰지 않는다 — 의존이 없거나 판이 맞지 않으면 플러그인 전체를 끄기 때문에(code.claude.com/docs/en/plugins/dependencies, 2026-10-20) U6 의 「없어도 인터뷰는 brief 까지」가 깨진다. superpowers 를 부르는 자리(인터뷰 끝 · 지휘자)의 모델이 불러온 skill 의 기준 폴더 경로(`…/superpowers/<판>/skills/…`)에서 판을 읽어 의존 목록 파일의 판과 비교하고, 다르면 알린다(멈추지 않음). 읽지 못하면 「superpowers 판을 확인하지 못했다」를 알린다.
 - **superpowers 가 없을 때(U6).** 인터뷰는 지금처럼 brief 까지 만들고 크게 알린 뒤 멈춘다(`finishing.md` B-1 의 단독 완결 그대로). 지휘자 · 로드맵 흐름(epic-conductor · 분해 뒤 다음 단계)은 진입에서 「superpowers 가 필요하다」와 설치 방법을 보이고 멈춘다. 새 대체 길은 없다. 있는지는 지금처럼 모델이 skill 목록으로 판단한다.
@@ -245,7 +246,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 
 ## 상류 · 하류 연계
 
-- 받는 곳: 묶음 R8.md · R5 설계 `## 미룸` R8 행 · R2a 설계 `## 미룸` R8 행 다섯(:417 · :429-432) · R11 설계 §5 R8 행 · R0 설계 D2.3(squash · rebase) · R5 계획 3 Ruling R27(`resolve-baseline.sh` · control_plane 박힌 값) · PR #231 넘김(`log-decision --quote`) · PR #234 넘김(`.claude/` 무시 안 되는 레포) · R2a 계획 4 결정 6(worktree 로 만든 브랜치 이름) · R10 설계 넘기는 곳(진입 이름 → R8) · 이 세션의 사용자 결정 U1~U7.
+- 받는 곳: 묶음 R8.md · R5 설계 `## 미룸` R8 행 · R2a 설계 `## 미룸` R8 행 다섯(:417 · :429-432) · R11 설계 §5 R8 행 · R0 설계 D2.3(squash · rebase) · R5 계획 3 Ruling R27(`resolve-baseline.sh` · control_plane 박힌 값) · PR #231 넘김(`log-decision --quote`) · PR #234 넘김(`.claude/` 무시 안 되는 레포) · R2a 계획 4 결정 6(worktree 로 만든 브랜치 이름) · R10 설계 넘기는 곳(진입 이름 → R8) · 묶음 인터페이스 「받는 것: R0 의 「devbrew 밖 레포」 한계 공시」(squash · rebase 손 머지 줄 공시 — 새 규칙으로 고친다, Files to Modify) · 이 세션의 사용자 결정 U1~U10.
 - 넘기는 곳: 해결자(→ 모든 spec-distill 스크립트 · skill 펜스 · 상태줄) · 머지됨 판정(→ 상태 계산 · 지휘자 걸음 1 · 6) · 의존 확인(→ 모든 진입) · 공시 문장(→ 리뷰 결과 · README) · CLAUDE.md 규칙 문장(→ R9, `## 미룸`).
 - 되돌아오는 길: 계획 · 구현에서 이 설계를 다시 나눌 근거가 보이면 재분해 신호로 지휘 세션에 보고한다(`references/redecompose.md`).
 - 같은 상태를 읽는 다른 표면: 상태줄(`control_plane.py`) · `roadmap_status.py` · `conductor_ledger.py` · `merge_check.py` · 인터뷰 끝 펜스 · request-framing · spec-review 후보 목록 · qg(gh · 기본 브랜치) · project-init 훅. 이음매 담당은 이 에픽.
@@ -265,7 +266,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 - AC8 인터뷰 폴더 · 설계문서 폴더를 글자로 다시 적는 자리가 없다(박힌 값 락의 대상이 넓어진다).
 
 **기본 브랜치 · 원격(§3)**
-- AC9 main/master 대체가 없고(qg 보호 가드 제외), 못 찾으면 `git remote set-head <원격> --auto` 를 안내하며 멈춘다.
+- AC9 main/master 대체가 없고(qg 보호 가드 제외), 못 찾으면 `git remote set-head origin --auto` 를 안내하며 멈춘다. qg 는 같은 경우 degraded 사유와 그 안내를 크게 보인다.
 - AC10 네트워크 진입 셋에서 `ls-remote --symref` 와 로컬 기본 ref 가 다르면 멈춘다.
 - AC11 기본 브랜치 짧은 이름을 전체 참조 이름에서 얻는다 — 로컬 브랜치 `origin/main` 이 있어도 기본 브랜치 검사가 켜져 있다.
 - AC12 브랜치 접두가 설정에서 오고, 글자 `origin/main` · `feature/roadmap-` 를 잠그던 락이 「도출하는가」 락으로 바뀐다.
@@ -279,7 +280,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 
 **의존(§5)**
 - AC18 플러그인마다 의존 목록 파일(이름 · 최소 판 · 잰 날짜 · 없을 때)이 있고, 판을 재는 명령이 그것을 갱신한다.
-- AC19 spec-distill · qg 진입이 git 판을, gh 를 쓰는 진입이 gh 판을 숫자 셋으로 비교하고, 못 뽑거나 낮으면 멈춘다. 의존마다 확인 강도가 §5 표와 같다.
+- AC19 모든 skill 진입이 `python3` 판을(훅은 `devbrew-python.sh` 바닥이 같은 판), spec-distill · qg 진입이 git 판을, gh 를 쓰는 진입이 gh 판을 숫자 셋으로 비교하고, 못 뽑거나 낮으면 멈춘다. 의존마다 확인 강도가 §5 표와 같다.
 - AC20 gh 를 쓰는 진입에서 gh 가 없으면 멈추고, 인증 실패는 첫 호출에서 멈춘다. gh 없을 때의 대체 길이 코드에 없다. origin 이 GitHub(gh 가 다루는 호스트)가 아니면 gh 를 쓰는 진입이 이유를 보이고 멈춘다(U9).
 - AC21 machine.md 를 쓰는 쪽이 자기 판을 찍고, 낮은 판의 읽는 쪽은 멈춰 업데이트를 안내한다.
 - AC22 superpowers 가 없으면 인터뷰는 brief 까지 만들고 멈추고(현행), 지휘자 · 로드맵 흐름은 진입에서 멈춘다. qg 가 없으면 지휘자가 품질 게이트 없이 간다고 알리고 진행한다.
@@ -297,7 +298,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 **작업공간 · 공통(§9)**
 - AC27 작업공간 불변 락이 있고 양성 대조(설정이 다른 두 레포는 다른 답)를 가진다.
 - AC28 바뀐 동작마다 락이 있고 변이로 이빨을 확인했다. 음의 락에는 양의 짝이 있다.
-- AC29 회귀 픽스처: 기본 브랜치가 `trunk` 인 레포 · 설정 폴더가 다른 레포(`plan/…`) · upstream 원격이 있는 fork(origin 의 PR 만 본다) · origin 이 없는 레포(안내와 함께 멈춤) · 기본 브랜치 개명 뒤 · 상태 루트 아래 추적 파일 · BOM · 같은 키 둘 · 오타 키 · `-suffix` 판 문자열.
+- AC29 회귀 픽스처: 기본 브랜치가 `trunk` 인 레포 · 설정 폴더가 다른 레포(`plan/…`) · upstream 원격이 있는 fork(origin 의 PR 만 본다) · origin 이 없는 레포(안내와 함께 멈춤) · 기본 브랜치 개명 뒤(spec-distill · qg 둘 다) · 상태 루트 아래 추적 파일 · BOM · 같은 키 둘 · 오타 키 · `-suffix` 판 문자열.
 
 ## Files to Modify
 
@@ -308,7 +309,8 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 - `plugins/quality-gates/scripts/discover-spec.sh` · `publish-comment.sh`(gh 대체 길 제거 · `-R`)
 - `plugins/project-init/hooks/post-tool-use.py` · `plugins/project-init/hooks/hooks.json`(matcher)
 - 플러그인마다 의존 목록 파일 · README prerequisites · 「한계」 절 · CHANGELOG · plugin.json
-- 로드맵 R8 블록의 의도 · 범위 문장(U6 반영)
+- 로드맵 R8 블록의 의도 · 범위 문장(U1 · U6 · U9 반영)
+- 「squash · rebase 는 손 머지 줄」 공시 세 자리: `roadmap_status.py` 의 NOTICE · spec-distill `README.md` 의 상태 계산 줄 · `templates/roadmap-template.md` 의 머지 줄 안내 — 새 규칙(PR 상태로 판정 · 손 머지 줄은 PR 없는 로컬 머지만 · 캐시 없으면 「PR 상태 미확인」)으로
 
 ## Verification Plan
 
@@ -348,6 +350,8 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 - U10 · 결정 · 2026-10-20 · 사용자 — 「R10 · R12 · R13 뒤 (권장)」 (R8 구현 순서 — 로드맵 R8 의존 칸에 R10 · R12 · R13, 재분해 PR)
 - 지휘자 판단 · 2026-10-20 · spec 리뷰 1라운드 참고 항목 반영 — 기본 ref 없으면 해결자는 상수 + 출처 표시(16e1de69) · 폴더 존재는 작업 트리 · 인덱스로(857a11f3) · project-init matcher 에 EnterWorktree(a6c6dbd6) · head 레포 조건(582211a1#r1.1) · roadmap_status 가 기존 PR 캐시로 판정(582211a1#r1.2) · `-R` 에 호스트(582211a1#r1.3) · 판 검사의 보장 범위와 version_report(151b882b) · 엔진이 스냅숏을 만듦(8d270fe0) · AC 와 본문 맞춤(fccf272b) · 의존마다 확인 강도 표(f7e40deb) · branch_prefix 와 project-init 규칙은 README 로 맞춘다(a430e0e3, 결합 없음).
 - 지휘자 판단 · 2026-10-20 · spec 리뷰 2라운드 참고 항목 반영 — PR 캐시는 지휘자만 채우고 게이트는 직전에 새로 채운 뒤 판정(f1 · f7) · 캐시 칸에 baseRefName · mergeCommit · head 레포(f2) · bare 레포는 공용 git 디렉토리 안 상태 루트(f3) · 로드맵 층 키 목록(f4) · 브랜치 접두는 계획 1(f5) · 조건 수 여섯(f6) · 설정 파일 mode 확인(f8) · AC2 의 `#`(f9) · `--snapshot` 테스트는 계획으로(f10) · Metadata 순서(f11) · R2a AC17 표기 · 「머지됨(받기 전)」은 머지됨 아님.
+- U11 · 결정 · 2026-10-20 · 사용자 — 「넣는다 (권장)」 (Python 도 개발 당시 판 확인에, spec 리뷰 3라운드 19f7dd62#r3.1) · 「고친 대로 둠 (권장)」(2 · 3라운드 반영 절) · 「열지 않음 (권장)」(추가 라운드)
+- 지휘자 판단 · 2026-10-20 · spec 리뷰 3라운드 참고 항목 반영 — LFS 는 내용 첫 줄로(f1) · qg 도 기본 브랜치 대체 없이 degraded + 안내(f2) · 브랜치 끝은 로컬 먼저(f3) · control_plane 결과 캐시 열쇠에 PR 캐시 지문(f4) · 기계 상태 층은 로드맵을 받을 때만(f6) · 머지 커밋 · 문면 길의 자리(f7) · 같은 이름 PR 모두 받기(f8) · roadmap-status 는 gh 를 안 쓰는 진입(f9) · superpowers 판 출처는 계획으로(f10) · 로드맵 범위 문장 U1 · U6 · U9(f11) · R0 한계 공시 세 자리(f12).
 - U8 · 결정 · 2026-10-20 · 사용자 — 「내 레포 안 흐름만 (권장)」 (fork 클론: PR · 기본 브랜치는 언제나 origin, 부모 레포로 PR 내는 흐름은 지원하지 않음, 원격 이름 설정 키 없음)
 - 지휘자 판단 · 2026-10-20 — 레포 설정 파일 이름 `.devbrew.md`(계획이 바꿀 수 있다) · spec-distill 은 project-init `branch-strategy.md` 를 읽지 않는다 · qg 는 선택 의존 · RC78 그대로.
 - 지휘자 판단 · 2026-10-20 · 설계문서 점검 답 — 머지됨의 끝 대조는 `headRefOid` = 브랜치 끝(원격 추적 ref, 없으면 로컬; 지워졌으면 적어 둔 oid) · superpowers 는 plugin.json `dependencies` 에 올리지 않는다(U6 과 충돌) · machine.md `## 레포 설정` 은 넷째 출처 「기계 상태(임시)」로 남긴다(레포 설정 파일 머지 전 첫 지휘의 테스트 명령) · 로드맵을 찾기 전에 필요한 키는 로드맵 층에서 받지 않는다 · 원격 없는 레포는 기본 브랜치가 필요한 자리에서만 안내와 함께 멈춘다 · gh 확인은 gh 를 쓰는 진입만, 인증은 첫 호출에서 · 공유 `entry_preflight.py` 는 그대로.
@@ -361,6 +365,20 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 - D2.8 · r2 · adopt · c7f6ab3e#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §10 위험에 대한 답 (modified)
 - D2.9 · r2 · adopt · e09185f8#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Goals (modified)
 - D2.10 · r2 · adopt · e939aca4#r2.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §11 계획 나누기 (modified)
+- D3.11 · r3 · adopt · 0b7af0b4#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Metadata (modified)
+- D3.12 · r3 · adopt · 0d834c7c#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §1 값 해결자 하나 (modified)
+- D3.13 · r3 · adopt · 1dfa0ba5#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Verification Plan (modified)
+- D3.14 · r3 · adopt · 648e1b03#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §4 머지 판정 — squash · rebase (modified)
+- D3.15 · r3 · adopt · 6697c411#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: 원칙 · 입력 대조 (modified)
+- D3.16 · r3 · adopt · 93a5c0ad#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D3.17 · r3 · adopt · a4e4e637#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §8 조용한 오답 — 남긴 것 · 뺀 것 (modified)
+- D3.18 · r3 · adopt · a58ea360#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §7 쓰는 세션의 신뢰 — R2a 넘김 넷 (modified)
+- D3.19 · r3 · adopt · aff062af#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §6 상태 폴더 · devbrew 밖 레포 (modified)
+- D3.20 · r3 · adopt · e939aca4#r3.1 · "고친 대로 둠 (권장)" — finding 없이 바뀜: §11 계획 나누기 (modified)
+- D3.21 · r3 · adopt · 19f7dd62#r3.1 · "넣는다 (권장)" — 모든 devbrew 스크립트가 쓰는 Python 이 의존 선언 · 개발 당시 판 확인 목록에 없습니다. 사용자는 판 규칙을 의존 전부에 적용하라고 했습니다.
+- docreview 계수 — spec-distill/2026-10-20-dependency-portability-design-d95c38d242b0173c r1: advice_new=10 · advice_repeat=3 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-20-dependency-portability-design-d95c38d242b0173c r2: advice_new=7 · advice_repeat=5 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-20-dependency-portability-design-d95c38d242b0173c r3: advice_new=4 · advice_repeat=6 · mc_preexisting_new=1
 
 ## 번호 대조
 
@@ -384,7 +402,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 | S27 | 반영 | Goals G5 · §4 |
 | S30 | 반영 | Anti-goals · `## 있는 것 검토` |
 | S34 | 반영 | Constraints |
-| S49 | 반영 | Goals — 묶음 범위 항목을 모두 다룸(superpowers 부재 강등은 U6 으로 다시 정함) |
+| S49 | 반영 | Goals — 묶음 범위 항목을 모두 다룸(gh 부재 강등은 U1 · U9, superpowers 부재 강등은 U6 으로 다시 정함) |
 
 ## 원칙 · 입력 대조
 
@@ -403,6 +421,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 | U6 superpowers 부재 | §5 |
 | U8 내 레포 안 흐름만 | §3 · §4 |
 | U9 GitHub 레포만 | §5 · Goals G5 |
+| U11 Python 판 | §5 표 · G4 · AC19 |
 | U10 R10 · R12 · R13 뒤 | §11 · Constraints |
 | R10 계획 2 통합 리뷰 넘김(분해 판단 · Step A `--out` · `<주제>-<HHMM>`) | §2 |
 | R5 설계 미룸(박힌 값 · gh · superpowers) | §1~§5 |
@@ -418,7 +437,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 
 ## 미룸
 
-| 미룸 | 이유 | 받는 곳 |
+| 항목 | 이유 | 받는 곳 |
 |---|---|---|
 | CLAUDE.md 「최소 버전이 선언된 의존성」 · 「graceful degradation」 문장에 gh 필수 · 개발 당시 판 · superpowers 부재 동작을 반영 | 규칙 문서는 R9 범위 | R9 |
 | qg 판정 상태 위치와 그 뒤의 중첩 레포 리뷰 | R12 #18 | R12 |
@@ -435,7 +454,31 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. merge commit 문면 
 - `--snapshot` 을 넘기는 테스트 · 픽스처 전부(리뷰가 찾은 것만 10개 — test_ledger_wiring · test_reviewing_spec_residue · test_state_storage_e2e · test_seed_review_log · test_framing_review_contract · test_seed_review_profile · test_reviewing_brief_residue · shared fixtures cases.sh · cases_advice.sh · test_docreview_gate_visibility)를 계획이 다시 세어 함께 고친다.
 
 - 레포 설정 파일의 최종 이름과 위치 · 의존 목록 파일의 이름과 꼴.
-- 판을 재는 명령이 Claude Code 판을 어디서 얻는지(상태줄 입력의 `version` 또는 기록만).
+- 판을 재는 명령이 Claude Code 판 · superpowers 판을 어디서 얻는지(Claude Code 는 상태줄 입력의 `version` 또는 기록만, superpowers 는 스크립트가 skill 기준 폴더를 볼 수 없으므로 개발 세션의 모델이 본 경로를 명령에 넘기는 꼴 등 — 설치 기록 파일은 쓰지 않는다).
 - 네트워크 진입 셋의 정확한 자리와 `ls-remote` 시간 상한.
 - machine.md PR 캐시 칸의 꼴.
 - `.claude/worktrees/` 를 무시하지 않는 레포에서 qg 가 하는 일의 실측.
+
+| # | 항목 |
+|---|---|
+| 16e1de69#r1.1 | 참고(data_flow) #1-값-해결자-하나 — 레포 설정 파일을 기본 브랜치 판에서만 읽게 해서, 기본 브랜치 참조(origin/HEAD)가 없는 레포에서는 해결자가 무엇을 내는지 정해져 있지 않다. 인터뷰 폴더처럼 어디서나 필요한 값까지 여기에 걸린다. — 고치면: 기본 브랜치 참조가 없을 때 해결자가 할 일을 하나로 정한다. 하나는 모든 키에서 「기본 브랜치를 알 수 없다 — 설정을 읽지 못했다」로 멈추고 `git remote set-head origin --auto` 를 안내하는 것(이러면 인터뷰 진입도 멈춘다). 다른 하나는 기본값을 쓰되 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 표시하고, 작업 트리에 설정 파일이 있으면 크게 알리는 것. 어느 쪽인지 정한 뒤 멈추는 자리 목록과 회귀 픽스처(origin 이 없는 레포, origin/HEAD 가 없는 레포)에 반영한다. |
+| ed6d45de#r1.1 | 참고(component_relations) #11-계획-나누기 — 계획 1·2 가 고칠 파일 상당수가 R12 의 경로 예약에 들어 있는데, R12 뒤로 미룬 것은 계획 3 하나뿐이다. 새로 생긴 순서 의존(R10 계획 3 · R12)도 로드맵의 R8 의존 칸에 반영되지 않았다. — 고치면: 겹치는 파일마다 R12 와의 순서를 정한다(계획 1·2 도 R12 뒤로 두거나, 겹치는 부분만 떼어 R12 뒤의 계획으로 옮긴다). R10 계획 3 · R12 에 기대는 순서는 재분해 신호로 올려 사용자 승인을 받은 뒤 로드맵 R8 의존 칸에 싣는다. |
+| 857a11f3#r1.1 | 참고(feasibility) #2-로드맵--인터뷰-폴더 — 일반적인 Git 커밋은 빈 디렉터리를 보존하지 않으므로 기본 브랜치 트리만으로 폴더 부재와 빈 폴더를 구별할 수 없다. 새 레포에서 처음 만든 로드맵 폴더도 첫 커밋 전에는 기본 브랜치에 없다. — 고치면: 허용 폴더 경로는 기본 브랜치의 설정에서 얻고, 커밋할 폴더의 존재·대소문자·경로 안전성은 실제 작업공간에서 검사한다. 커밋할 파일 유무는 인덱스에서 확인한다. 새 로드맵 폴더가 기본 브랜치에 없다는 이유만으로 첫 커밋을 막지 않는다. |
+| a6c6dbd6#r1.1 | 참고(feasibility) #3-기본-브랜치--원격--브랜치-이름 — project-init 훅은 Bash 도구 뒤에만 불려서, 「실행 뒤 새 브랜치를 관찰한다」고 해도 네이티브 EnterWorktree 로 만든 브랜치는 여전히 보지 못한다. 그런데 이것이 묶음 위험의 핵심 사례다. — 고치면: 훅이 불리는 범위를 정한다. 예: hooks.json 의 matcher 를 Bash 와 EnterWorktree 로 넓히고 Files to Modify 에 hooks.json 을 더한다. AC13 에 EnterWorktree 를 명시하고 픽스처로 확인한다. 다른 길: 관찰을 다른 이벤트(세션 시작 · 지휘자 걸음)로 옮긴다. 아니면 EnterWorktree 는 덮지 못한다고 README 에 공시하고 묶음 위험의 답을 「부분 해소」로 고친다. |
+| 582211a1#r1.1 | 참고(data_flow) #4-머지-판정--squash--rebase — 커밋 해시가 같다고 PR의 출처 레포까지 같지는 않다. fork가 같은 커밋과 브랜치 이름을 가지면 다섯 조건을 모두 통과할 수 있고, 브랜치 끝이 없을 때는 해시 비교마저 빠진다. — 고치면: 머지 판정에 PR의 원본 레포가 origin과 같다는 조건을 추가한다. gh가 제공하는 headRepository와 isCrossRepository로 출처를 확인하고, 출처를 확인하지 못한 PR은 자동 완료 판정에 쓰지 않는다. 브랜치 삭제 여부와 무관하게 이 조건을 적용한다. |
+| 151b882b#r1.1 | 참고(feasibility) #5-의존--gh-필수--개발-당시-판--부재 — 새 버전 비교 코드를 추가해도 이미 실행 중인 구버전에는 그 검사가 생기지 않는다. 현재 기계 상태 판독기는 추가 frontmatter를 무시하며, 구버전이 처음 상태를 쓰면 비교할 더 높은 작성 버전도 없다. 따라서 이 장치만으로 저장소보다 낡은 실행 코드를 막는다는 보장은 성립하지 않는다. — 고치면: 기계 상태의 버전 검사가 보장하는 범위를 해당 검사를 갖춘 버전 사이로 명시한다. 최초 도입은 플러그인 갱신과 세션 재시작을 전제로 한다. devbrew 저장소의 소스 버전과 실행 버전 대조는 이미 있는 version_report를 재사용하고, 기계 상태 작성 버전 대조와 별개의 검사로 설명한다. |
+| 8d270fe0#r1.1 | 참고(overdesign) #7-쓰는-세션의-신뢰--r2a-넘김-넷 — shrink: begin-round 가 호출자에게 스냅숏을 받은 뒤 엔진이 같은 스냅숏을 다시 계산해 대조하는 것은 구조가 하나 더 많다. 엔진이 계산할 수 있다면 받을 필요가 없다. — 고치면: begin-round 가 상태에 적힌 문서에서 스냅숏을 직접 계산하고 `--snapshot` 인자를 없앤다(호환을 고려하지 않으므로 진입 skill 셋의 호출만 바꾼다). 대조와 거부 오류 갈래가 사라진다. └ 천장: 호출자가 넘기는 스냅숏이 엔진이 다시 만들 수 없는 정보를 담는 경우(여러 파일 번들 · 엔진이 모르는 경로)가 있으면 지금 설계(받고 대조)로 올린다. |
+| fccf272b#r1.1 | 참고(ambiguity) #acceptance-criteria — 본문은 기계 상태를 포함한 네 출처를 정의하지만 인수 기준은 세 출처만 합치도록 요구한다. 임시 테스트 설정의 우선순위를 검증할 기준이 서로 다르다. — 고치면: 인수 기준을 본문과 같은 네 출처 순서인 로드맵 → 기본 브랜치의 레포 설정 → 기계 상태의 임시 설정 → 상수로 정리한다. |
+| f7e40deb#r1.1 | 참고(ambiguity) #goals — 목표는 Claude Code · superpowers · qg 판까지 「진입에서 확인한다」고 적었다. 본문은 Claude Code 판을 기록만, superpowers 는 알리기만 하고, qg 판은 언급하지 않는다. 있는 것 검토의 「plugin.json dependencies(실측 뒤 사용)」가 무엇에 쓰이는지도 본문에 없다. |
+| a430e0e3#r1.1 | 참고(component_relations) #3-기본-브랜치--원격--브랜치-이름 — 브랜치 이름 규칙의 출처가 둘로 갈린다. spec-distill 은 레포 설정의 branch_prefix 로 브랜치를 만들고, project-init 훅은 자기 규칙 파일로 새 브랜치를 검사한다. 두 값이 다르면 지휘자가 만드는 브랜치마다 훅이 「규칙 밖」이라고 알린다. 문서는 이 어긋남을 다루지 않는다. — 고치면: 두 규칙이 어긋날 때 어떻게 할지 정한다. (가) 레포 설정 파일의 branch_prefix 를 project-init 훅도 읽는 하나의 출처로 삼는다. 둘 다 같은 레포 파일을 읽으니 플러그인끼리 서로를 부르는 결합은 생기지 않는다. (나) 결합하지 않는 쪽을 유지하고, 두 값이 다를 수 있다는 점과 맞추는 방법을 두 플러그인 README 에 적는다. 어느 쪽이든 회귀 픽스처(접두가 서로 다른 레포)를 하나 둔다. |
+| 6028abe1#r2.1 | 참고(feasibility) #9-작업공간이-여럿일-때 — 기존 상태 경로 계산은 bare 레포마다 분리되지 않는다. 실제 함수에 /repos/a.git과 /repos/b.git을 넣으면 둘 다 /repos/.claude/spec-distill을 반환한다. 작업공간 사이의 동일성만 검사하면 서로 다른 레포의 상태 충돌을 놓친다. — 고치면: 상태 루트는 같은 레포의 작업공간끼리는 공유하고 서로 다른 레포끼리는 분리한다. 일반 레포는 기존 위치를 유지하되, bare 기반 작업공간은 해당 공용 git 디렉토리 내부의 전용 위치를 사용한다. 그 위치에 맞춰 Git 추적 검사 적용 여부를 정하고, 같은 부모 폴더에 있는 서로 다른 bare 레포의 상태가 분리되는지도 검증한다. |
+| fe43b0e0#r2.1 | 참고(ambiguity) #1-값-해결자-하나 — 로드맵 층은 「`roadmap_model` 이 아는 키 — `type` · `source_brief` 등」에 대해 닫힌 집합이라고 했지만, roadmap_model 에는 그런 키 목록이 없다(source_brief 가 있는지만 검사한다). 「등」 때문에 어떤 키를 모르는 키로 보고 멈출지 정해지지 않는다. 받는 로드맵 머리말 키를 이름으로 모두 적어야 한다. |
+| 594338de#r2.1 | 참고(handoff_incomplete) #11-계획-나누기 — 계획 나누기에서 §3 의 브랜치 접두 불릿(여섯째)이 어느 계획에도 들지 않는다. 계획 1 은 「§3 앞 다섯 불릿」, 계획 2 는 「§3 끝 불릿(RC82)」만 가져가서, `branch_prefix` 설정과 AC12 를 맡는 계획이 없다. |
+| 4799696d#r2.2 | 참고(ambiguity) #4-머지-판정--squash--rebase — 머지됨 조건의 개수가 문서 안에서 서로 다르다. §4 는 여섯 조건이라 하면서 브랜치 끝이 없으면 「나머지 넷」으로 판정한다고 하는데, 실제로 남는 조건은 다섯이다. §8 표와 검증 계획은 「다섯 조건」이라고 적었다. |
+| 7398418d#r2.1 | 참고(handoff_incomplete) #8-조용한-오답--남긴-것--뺀-것 — §8 표에서 두 행이 가리키는 절에 그 내용이 없다. 심볼릭 링크 행은 「해결자가 일반 파일만 읽는 한 줄 확인」을 §1 에 둔다고 하지만 §1 · AC 에 그 줄이 없다. bare 레포 행은 「계획 단계 실측 픽스처 하나」를 §9 에 둔다고 하지만 §9 · AC29 · Deferred to plan 어디에도 없다. |
+| f2ae3bc2#r2.1 | 참고(handoff_incomplete) #metadata — Metadata의 구현 순서가 본문에서 확정한 순서와 다르다. 본문은 선행 에픽 세 개가 모두 머지된 뒤 구현하도록 하지만, Metadata에는 일부 선행 조건만 남아 있다. — 고치면: Metadata의 구현 조건을 §11과 동일하게 R10·R12·R13이 모두 머지된 뒤로 고치고, 계획 작성은 미리 가능하다는 구분을 유지한다. |
+| 00b21e44#r2.1 | 참고(ambiguity) #7-쓰는-세션의-신뢰--r2a-넘김-넷 — §7 은 「요약값 대조(AC17 나)」와 「엔진 밖 원장 쓰기(AC17 가)」라고 적는데, 이 문서의 AC17 은 상태줄이 캐시와 그 나이를 보이는 기준이다. 이 AC17 은 다른 문서(R2a 설계)의 수용 기준인데 그 문서를 밝히지 않아, 계획 작성자가 이 문서의 AC17 로 읽게 된다. — 고치면: §7 의 두 자리를 「R2a 설계 AC17 가」 · 「R2a 설계 AC17 나」처럼 어느 문서의 기준인지 밝혀 적는다. |
+| beb0d8dd#r3.1 | 참고(feasibility) #1-값-해결자-하나 — Git 파일 모드로 LFS 포인터를 판별할 수 없습니다. LFS 포인터도 일반 파일과 같은 100644 모드로 저장되므로, 명시한 검사만으로는 이를 거부하지 못합니다. — 고치면: 파일 모드 검사로 심볼릭 링크 등 허용하지 않는 항목을 거부한다. LFS 포인터는 모드가 아니라 blob 내용으로 식별하고, 설정을 해석하기 전에 지원하지 않는 설정 파일이라는 오류로 멈춘다고 구분해 적는다. |
+| e0edd473#r3.1 | 참고(ambiguity) #5-의존--gh-필수--개발-당시-판--부재 — /spec-distill:roadmap-status 가 gh 를 쓰는 진입인지 쓰지 않는 진입인지 문서에 분류가 없습니다. 이 skill 이 부르는 `control_plane.py show` 는 캐시가 없으면 gh 를 직접 부릅니다(gh_lookup_for). 그런데 문서는 이 skill 에 걸친 「gh 없음」 갈래(control_plane.py:763-863)를 지운다고만 적었습니다. 그래서 gh 가 없을 때 지도 보기가 멈추는지, gh 없이 보이는지 알 수 없습니다. |
+| 1cdda836#r3.1 | 참고(handoff_incomplete) #files-to-modify — 로드맵 R8 블록의 범위 문장 「gh · superpowers 부재 강등」은 사용자 결정 U1(gh 필수, 대체 길 없음)로도 바뀝니다. 그런데 고칠 파일 목록에는 「(U6 반영)」만 적혀 있습니다. 「U1 · U6 반영」으로 고쳐야 합니다. 번호 대조 S49 행의 「superpowers 부재 강등은 U6 으로 다시 정함」에도 gh 를 더해야 합니다. |
+| 89c6be4b#r3.1 | 참고(handoff_incomplete) #상류--하류-연계 — 묶음의 인터페이스 「받는 것: R0 의 『devbrew 밖 레포』 한계 공시」를 어떻게 처리하는지가 없습니다. 「squash · rebase 는 손 머지 줄」이라는 지금의 공시 세 자리를 새 규칙으로 고친다고 적어야 합니다. 세 자리는 roadmap_status.py:40-44 NOTICE · spec-distill README.md:147 · templates/roadmap-template.md:23 입니다. 새 규칙은 다음과 같습니다: PR 상태로 판정한다, 손 머지 줄은 PR 없는 로컬 머지에만 쓴다, 캐시가 없으면 「PR 상태 미확인」을 보인다. |
