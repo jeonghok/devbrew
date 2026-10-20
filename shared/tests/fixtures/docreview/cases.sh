@@ -4637,11 +4637,11 @@ case_lineage_rename_and_delete_ask() {
 }
 
 # ── AC13 — 표 행(번호 대조 · 미룸 표) 손 편집의 허가 걸음: 절차가 가리키는 길이 실제로 닫히는지 ──
-ac13_finalize_r2() {   # ac13_finalize_r2 <state-dir> — 라운드 2 를 열고 finalize → <state-dir>/fin.json
-  local d="$1"
-  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+ac13_finalize_r2() {   # ac13_finalize_r2 <state-dir> [라운드 2 문서] — 라운드 2 를 열고 finalize → <state-dir>/fin.json
+  local d="$1" doc="${2:-$FX/design-sample-r2.md}"
+  next_round "$d" "$doc" >/dev/null
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
-  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$doc" > "$d/fin.json"
 }
 case_AC13_table_row_with_adopted_decision() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
@@ -4656,5 +4656,32 @@ case_AC13_table_row_without_decision() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   ac13_finalize_r2 "$d"
   assert_eq "$(jget "$d/fin.json" 'sorted(x["anchor"] for x in d["findings"] if x["category"] == "frozen_change")')" "['#12-files-to-modify', '#2-goals']" "AC13 대조: 채택 결정 없이 고친 절은 다음 라운드에 frozen_change 결정으로 돌아온다(절차가 사용자에게 알리는 사실)"
+  rm -rf "$d"
+}
+# 표 행 자체 — 채택 결정(§12 를 고친다)에 `## 번호 대조` · `## 미룸` 표 행과 내용을 더할 새 절(insert-after)을 묶는다.
+# 묶을 수 없는 것은 결정 기록과 프로필의 미룸 자리(`### Deferred to plan`)뿐이다 — `## 미룸` 은 사용자 문서의 보통 절이라 묶인다.
+case_AC13_table_rows_bound_with_declare() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-tables.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  local out rc=0; out="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#번호-대조' '#미룸' 'insert-after:#2-goals')" || rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["related"]')" "0 ['#번호-대조', '#미룸', 'insert-after:#2-goals']" "AC13: 번호 대조 · 미룸 표 절과 내용을 더할 새 절(insert-after)은 채택 결정에 묶인다"
+  local a err
+  for a in '#deferred-to-plan' '#결정-기록'; do
+    rc=0; err="$(py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors "$a" 2>&1 >/dev/null)" || rc=$?
+    assert_eq "$rc" "1" "AC13: 엔진 울타리 절은 묶지 못한다 — $a"
+    assert_contains "$err" '"reason": "anchor_log_section"' "AC13: 엔진 울타리 절의 거부 사유 — $a"
+  done
+  ac13_finalize_r2 "$d" "$FX/design-tables-r2.md"
+  assert_eq "$(jget "$d/fin.json" '[x["anchor"] for x in d["findings"] if x["category"] == "frozen_change"]')" "[]" "AC13: 묶고 고친 표 행은 다음 라운드에 「허가 없이 바뀜」으로 돌아오지 않는다"
+  local g; g="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$g" "이 결정 때문에 함께 바뀐 곳" "AC13: 묶은 표 절은 게이트의 「이 결정 때문에 함께 바뀐 곳」에 보인다"
+  assert_contains "$g" "#미룸" "AC13: 게이트에 묶은 미룸 절이 보인다"
+  rm -rf "$d"
+}
+case_AC13_table_rows_without_declare() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-tables.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
+  ac13_finalize_r2 "$d" "$FX/design-tables-r2.md"
+  assert_eq "$(jget "$d/fin.json" 'sorted(x["anchor"] for x in d["findings"] if x["category"] == "frozen_change")')" "['#4-되돌린-번호의-자리', '#미룸', '#번호-대조']" "AC13 대조: 같은 채택이라도 묶지 않고 고친 표 행 · 더한 절은 다음 라운드에 frozen_change 결정으로 돌아온다(채택한 §12 는 아니다)"
   rm -rf "$d"
 }

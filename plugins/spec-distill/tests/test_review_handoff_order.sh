@@ -187,9 +187,12 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
     assert_contains "$BR" "$n" "AC34: ③ 기타 칸의 기각 번호 되돌리기 — $n"
   done
   for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \
-           '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' '고친 대로 둠'; do
+           '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' '고친 대로 둠' \
+           '`declare-related` 가 rc 0 이 아니면' "'<내용을 더한 절 앵커>'" '`insert-after:<그 앞 절 앵커>`' \
+           '채택한 결정이 없으면 고친 행과 내용을 더한 절은'; do
     assert_contains "$BR" "$n" "AC13: 기각 되돌리기가 표 행을 고치기 전 허가 걸음을 적는다 — $n"
   done
+  assert_not_contains "$BR" '채택한 결정이 없으면 고친 행은' "AC13: 알림이 고친 행만 덮지 않는다 — 내용을 더한 절도 다시 온다(양성 짝: 위 「고친 행과 내용을 더한 절은」)"
   assert_not_contains "$BR" '`- 결정 · <YYYY-MM-DD>' "AC34: 되돌림 결정 줄에 읽히지 않는 옛 꼴(B 번호 없는 줄머리)이 없다(양성 짝: 위 B<n> 꼴)"
   BR3="$(printf '%s\n' "$BR" | awk '/^\*\*다음 세션 줄 — ①\/② 공통\*\*/{exit} {print}')"
   BR_RD="$(printf '%s\n' "$BR3" | grep -n '^Read \${CLAUDE_PLUGIN_ROOT}/references/redecompose\.md$' | cut -d: -f1)"

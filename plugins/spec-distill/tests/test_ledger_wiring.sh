@@ -1019,6 +1019,10 @@ assert_eq "$(cat "$T/pa-sites.txt")" "자리 전부" "AC14: 펜스 앞 대입 �
 assert_eq "$(grep -cF -- '--extra-approval "<' "$SR")" "0" "AC14: 추가 라운드 승인 말이 큰따옴표 자리표로 남지 않는다"
 grep -qF -- '--extra-approval="$extra_approval" --extra-approval-source' "$SR" \
   && ok "AC14: 추가 라운드 승인은 extra_approval 변수를 = 꼴로 넘긴다(문면)" || no "AC14: 추가 라운드 승인의 = 꼴 넘김이 문면에 없다"
+# 엔진 절차 정본(spec-review 가 Read 한다)도 같은 꼴 — 두 자리(1단계 스냅샷 · 추가 라운드 열기) 모두.
+assert_eq "$(grep -cF -- '--extra-approval "<' "$RD_CANON")" "0" "AC14: reviewing-document.md 에 추가 라운드 승인 말의 큰따옴표 자리표가 없다(양성 짝: 아래 = 꼴 두 자리)"
+assert_eq "$(grep -cF -- '--extra-approval="$extra_approval" --extra-approval-source label|typed' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 extra_approval 변수를 = 꼴로 넘긴다"
+assert_eq "$(grep -cF -- '`extra_approval` 은 부른 skill 이 따옴표 heredoc 으로 읽은' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 변수의 출처(부른 skill 의 따옴표 heredoc)를 적는다"
 EA_WORDS="$(printf '%s\n%s' "-열어 \"줘\" it's \$(touch $T/pwned-x) \`touch $T/pwned-y\` \$HOME" "둘째 줄 DEVBREW_PATH_EOF")"
 ea_fill() {   # ea_fill <말> → extra-approval 펜스의 자리를 그 말로 채운 것
   fence "$SR" extra-approval | python3 -I -c 'import sys
