@@ -158,9 +158,15 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
     assert_not_grep "$f" '--(blocking|optional|new-failures|excluded|sha) <' "R24($m): 숫자를 모델이 채우는 자리표시가 없다"
     assert_not_grep "$f" '_ARGS=\( *[<q]' "R24($m): 결과 줄을 따옴표 없이 ( … ) 안에 붙이는 자리가 없다"
     assert_not_contains "$f" '%q' "R24($m): printf %q 로 낸 글을 되읽지 않는다"
-    # 이름 목록 밖의 세션 파일도 못 읽게 — 펜스가 쓰는 세션 폴더 경로는 자기가 쓰는 verdict.out 하나뿐이고 RV 는 없다.
-    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?RD\}?/[^" ;)]*' | sort -u | tr '\n' ' ')" '$RD/verdict.out ' \
-      "R24($m): 세션 폴더 경로는 \$RD/verdict.out 하나뿐이다"
+    # 이름 목록 밖의 세션 파일도 못 읽게 — 펜스가 세션 폴더를 가리키는 자리는 자기가 쓰는 verdict.out 의 쓰기 · 보이기 둘뿐이고 RV 는 없다.
+    # 경로 모양이 아니라 RD 를 부르는 횟수를 센다 — "$RD"/x · "${RD}"/x · cd "$RD" 같은 꼴도 한 번으로 센다.
+    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?RD([^A-Za-z0-9_]|$)' | wc -l | tr -d ' ')" "2" \
+      "R24($m): 펜스가 \$RD 를 부르는 곳은 정확히 두 곳이다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cF '> "$RD/verdict.out"')" "1" "R24($m): 그 하나는 verdict.out 에 쓰는 자리다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cxF 'echo "verdict rc=$?"; cat "$RD/verdict.out"')" "1" "R24($m): 다른 하나는 쓴 verdict.out 을 보이는 자리다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cE '^RD=')" "1" "R24($m): RD 를 정하는 줄은 하나뿐이다"
+    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?TOP([^A-Za-z0-9_]|$)' | wc -l | tr -d ' ')" "1" \
+      "R24($m): 펜스가 \$TOP 을 부르는 곳은 RD 를 정하는 줄 하나뿐이다"
     assert_not_grep "$f" '\$\{?RV\b|\$\{?RV\}' "R24($m): 펜스가 \$RV 를 쓰지 않는다"
     assert_eq "$(printf '%s\n' "$f" | grep -cE '\$\{?TOP\}?/')" "1" "R24($m): TOP 아래 경로는 RD 를 정하는 줄 하나뿐이다"
   done
