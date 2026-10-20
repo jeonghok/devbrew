@@ -8,6 +8,7 @@
 `degrade_causes` · `verdict_input`), 그리고 호출자만 아는 사유(kill switch ·
 trivia · 합치기 충돌 · 선언 무효 · 스코프 0 · 각도 부재).
 e2e 걷기의 결과는 `--e2e` 로 들어오고, 최종 판정은 `--prior` 로 마지막 iteration 의 합성기 출력(`$RV/synth.out`)을 잇는다.
+`--emit-args` 는 판정 대신 차등 축 인자 줄(`qg-verdict-args: --new-failures K …`, `render_args`) 한 줄만 낸다.
 """
 import argparse
 import re
@@ -94,6 +95,26 @@ def causes_of(differential_text):
     return [c.strip() for c in hits[0].split(",") if c.strip()]
 
 
+def new_failures_of(differential_text):
+    """`new_failures:` 를 정확히 한 번 읽는다 — 값은 0 이상의 정수 글자뿐이다."""
+    hits = re.findall(r"^new_failures: (.*)$", differential_text, re.M)
+    if len(hits) != 1:
+        fail4(f"new_failures 줄이 {len(hits)}회 (정확히 1회여야 함)")
+    if not re.fullmatch(r"[0-9]+", hits[0]):
+        fail4(f"new_failures 값이 정수가 아니다: {hits[0]!r}")
+    return int(hits[0])
+
+
+def differential_reasons(differential_text):
+    """`degrade_causes` 를 판정 어휘의 사유로 옮긴다. 모르는 원인은 exit 4."""
+    out = []
+    for c in causes_of(differential_text):
+        if c not in CAUSE_TO_REASON:
+            fail4(f"미지의 degrade_cause '{c}'")
+        out.append(CAUSE_TO_REASON[c])
+    return out
+
+
 def defect_flag_of(differential_text):
     hits = re.findall(r"^  confirmed_product_defect: (true|false)$",
                       differential_text, re.M)
@@ -146,10 +167,8 @@ def decide(*, defect=False, review_blocked=False, angle_absent=False,
         add(r)
 
     if differential_text is not None:
-        for c in causes_of(differential_text):
-            if c not in CAUSE_TO_REASON:
-                fail4(f"미지의 degrade_cause '{c}'")
-            add(CAUSE_TO_REASON[c])
+        for r in differential_reasons(differential_text):
+            add(r)
         defect = defect or defect_flag_of(differential_text)
 
     # 헌장 — 막는 것은 「항목이 소실됐거나 셀 수 없거나 주 판정자가 죽었을 때」다.
@@ -221,6 +240,35 @@ def render_line(decision, *, blocking, optional, new_failures, excluded, iterati
             f" · 제외 패치 {excluded} · iter {iteration} · {sha}\n")
 
 
+def render_args(*, blocking=None, optional=None, defect=False, review_blocked=False,
+                angle_absent=False, reasons=(), new_failures=None):
+    """판정 인자 줄 — 판정 펜스가 `qg-verdict-args: ` 뒤 글자를 bash 배열 자리에 그대로 붙인다.
+
+    주어진 것만 정해진 차례로 싣는다. 낱말은 정수와 `REASONS` 의 사유뿐이라 따옴표가 필요 없다.
+    """
+    parts = []
+    for flag, n in (("--blocking", blocking), ("--optional", optional),
+                    ("--new-failures", new_failures)):
+        if n is None:
+            continue
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            fail4(f"인자 줄의 {flag} 값이 0 이상의 정수가 아니다: {n!r}")
+        parts.append(f"{flag} {n}")
+    if defect:
+        parts.append("--defect")
+    if review_blocked:
+        parts.append("--review-blocked")
+    if angle_absent:
+        parts.append("--angle-absent")
+    for r in reasons:
+        if r not in REASONS:
+            fail4(f"열거 밖 사유 '{r}' — 어휘는 닫혀 있다")
+    for r in REASONS:
+        if r in reasons:
+            parts.append(f"--reason {r}")
+    return "qg-verdict-args: " + " ".join(parts) + "\n"
+
+
 def _count(text):
     # 비정수는 argparse 의 exit 2 가 아니라 render_line 의 exit 4 로 가게 문자열 그대로 둔다.
     try:
@@ -247,7 +295,16 @@ def main():
     ap.add_argument("--prior", default=None)
     ap.add_argument("--e2e", default=None, choices=E2E_STATES)
     ap.add_argument("--e2e-overridden", action="store_true")
+    # 판정 줄 대신 차등 축 인자 줄만 낸다 — `--differential` · `--reason` 만 받는다.
+    ap.add_argument("--emit-args", action="store_true")
     args = ap.parse_args()
+    if args.emit_args and (args.line or args.prior is not None or args.e2e is not None
+                           or args.e2e_overridden or args.defect or args.review_blocked
+                           or args.angle_absent):
+        print("verdict.py: --emit-args 는 --differential · --reason 만 받는다 "
+              "(--line · --prior · --e2e · --defect · --review-blocked · --angle-absent 와 함께 쓰지 않는다)",
+              file=sys.stderr)
+        return 2
     line_vals = (args.blocking, args.optional, args.new_failures, args.excluded,
                  args.iter, args.sha)
     if args.line and any(v is None for v in line_vals):
@@ -282,6 +339,15 @@ def main():
         print("verdict.py: --differential 은 빈 문자열을 받지 않는다 "
               "(플래그를 생략하거나 실제 경로를 줘라)", file=sys.stderr)
         return 2
+    if args.emit_args:
+        text = read_or_none(args.differential)
+        reasons, defect, new_failures = list(args.reason), False, 0
+        if text is not None:
+            new_failures = new_failures_of(text)
+            reasons += differential_reasons(text)
+            defect = defect_flag_of(text)
+        sys.stdout.write(render_args(new_failures=new_failures, defect=defect, reasons=reasons))
+        return 0
     defect, extra = args.defect, list(args.reason)
     if args.prior is not None:
         defect, extra = prior_of(read_or_none(args.prior))
