@@ -63,10 +63,22 @@ AskUserQuestion({
 
 ## 5. 적용
 
-승인된 새 표(첫 절 `## 분해안`)를 아래 펜스의 heredoc 자리에 넣어 생성기를 부른다. 사용자 말은 `<사용자 말 그대로>` heredoc 자리에 따옴표로 감싸지 않고 글자 그대로 넣는다. 표나 말에 그 자리의 구분 줄(`DEVBREW_REDECOMPOSE_TABLE_EOF` · `DEVBREW_REDECOMPOSE_APPROVAL_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 사용자 말이 여럿이면 `AF1=` 줄부터 그 닫는 구분 줄까지를 말마다 `AF2` · `AF3` … 으로 하나씩 더하고, `--approval="$(cat "$AF<k>")"` 를 말마다 하나씩 붙인다(`=` 꼴 — 「-」 로 시작하는 말도 옵션으로 읽히지 않는다). 표와 말은 이 펜스가 만든 임시 파일에만 살고 펜스가 끝나면 지워진다 — 세션 상태 폴더에 쓰지 않는다:
+승인된 새 표(첫 절 `## 분해안`)를 아래 펜스의 heredoc 자리에 넣어 생성기를 부른다. 로드맵 · 원본 brief · 원본 audit 경로, 사유 한 줄, 사용자 말도 각자의 heredoc 자리에 따옴표로 감싸지 않고 글자 그대로 넣는다. 경로나 사유에 줄바꿈이 있으면 넣지 말고 멈춰 그 사실을 사용자에게 보인다. 넣는 글에 그 자리의 구분 줄(`DEVBREW_REDECOMPOSE_PATH_EOF` · `DEVBREW_REDECOMPOSE_CHANGE_EOF` · `DEVBREW_REDECOMPOSE_TABLE_EOF` · `DEVBREW_REDECOMPOSE_APPROVAL_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 사용자 말이 여럿이면 `AF1=` 줄부터 그 닫는 구분 줄까지를 말마다 `AF2` · `AF3` … 으로 하나씩 더하고, `--approval="$(cat "$AF<k>")"` 를 말마다 하나씩 붙인다(`=` 꼴 — 「-」 로 시작하는 말도 옵션으로 읽히지 않는다). 표와 말은 이 펜스가 만든 임시 파일에만 살고 펜스가 끝나면 지워진다 — 세션 상태 폴더에 쓰지 않는다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+IFS= read -r roadmap_path <<'DEVBREW_REDECOMPOSE_PATH_EOF'
+<로드맵 경로>
+DEVBREW_REDECOMPOSE_PATH_EOF
+IFS= read -r brief_path <<'DEVBREW_REDECOMPOSE_PATH_EOF'
+<원본 brief>
+DEVBREW_REDECOMPOSE_PATH_EOF
+IFS= read -r audit_path <<'DEVBREW_REDECOMPOSE_PATH_EOF'
+<원본 audit>
+DEVBREW_REDECOMPOSE_PATH_EOF
+IFS= read -r change_line <<'DEVBREW_REDECOMPOSE_CHANGE_EOF'
+<사유 한 줄>
+DEVBREW_REDECOMPOSE_CHANGE_EOF
 TABLE="$(mktemp "${TMPDIR:-/tmp}/redecompose-table.XXXXXX")" || { echo "[spec-distill] 표 임시 파일을 만들지 못했다" >&2; exit 1; }
 AD="$(mktemp -d "${TMPDIR:-/tmp}/redecompose-approval.XXXXXX")" || { rm -f -- "$TABLE"; echo "[spec-distill] 사용자 말 임시 폴더를 만들지 못했다" >&2; exit 1; }
 trap 'rm -f -- "$TABLE"; rm -rf -- "$AD"' EXIT
@@ -78,9 +90,9 @@ cat > "$AF1" <<'DEVBREW_REDECOMPOSE_APPROVAL_EOF'
 <사용자 말 그대로>
 DEVBREW_REDECOMPOSE_APPROVAL_EOF
 u_rc=0
-python3 "$SD/scripts/roadmap_write.py" update --roadmap "<로드맵 경로>" --brief "<원본 brief>" \
-  --audit "<원본 audit>" --plan-table "$TABLE" \
-  --date "<YYYY-MM-DD>" --change "<사유 한 줄>" --approval="$(cat "$AF1")" || u_rc=$?
+python3 "$SD/scripts/roadmap_write.py" update --roadmap="$roadmap_path" --brief="$brief_path" \
+  --audit="$audit_path" --plan-table "$TABLE" \
+  --date "<YYYY-MM-DD>" --change="$change_line" --approval="$(cat "$AF1")" || u_rc=$?
 exit "$u_rc"
 ```
 

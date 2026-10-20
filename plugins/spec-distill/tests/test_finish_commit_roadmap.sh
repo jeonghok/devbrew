@@ -155,7 +155,7 @@ assert_eq "$(ls -A "$T/rtmp")" "" "재분해: 펜스가 끝나면 임시 파일�
 rc=0; (cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub.out" STUB_RC=0 CLAUDE_PLUGIN_ROOT="$STUB" bash -c "$s" >/dev/null 2>&1) || rc=$?
 assert_eq "$rc $(ls -A "$T/rtmp")" "0 " "재분해: 성공(rc 0)에서도 임시 파일이 없다"
 
-# 8. 재분해 사용자 말(AC14) — 따옴표 · 명령 치환 · 역따옴표 · 「-」 머리가 든 말도 셸로 새지 않고 글자 그대로 --approval 로 간다
+# 8. 재분해 사용자 말 · 사유 · 경로(AC14) — 따옴표 · 명령 치환 · 역따옴표 · 「-」 머리가 든 글도 셸로 새지 않고 글자 그대로 생성기로 간다
 STUB2="$T/stub2"; mkdir -p "$STUB2/scripts"
 cat > "$STUB2/scripts/roadmap_write.py" <<'PY'
 import argparse, json, os, sys
@@ -167,23 +167,33 @@ for k in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change
 u.add_argument("--approval", action="append", required=True)
 a = p.parse_args()
 with open(os.environ["STUB_OUT"], "w", encoding="utf-8") as f:
-    json.dump(a.approval, f, ensure_ascii=False)
+    json.dump({"roadmap": a.roadmap, "brief": a.brief, "audit": a.audit, "change": a.change, "approval": a.approval}, f, ensure_ascii=False)
 sys.exit(0)
 PY
-red_fill() {   # red_fill <사용자 말> → 표와 사용자 말 자리를 채운 적용 펜스
+red_fill() {   # red_fill <사용자 말> <사유> <경로 머리> → 표 · 사용자 말 · 사유 · 세 경로 자리를 채운 적용 펜스
   printf '%s' "$rf" | python3 -I -c 'import sys
 t = sys.stdin.read()
-t = t.replace("<승인된 새 표 — `## 분해안` 머리와 열한 칸 표>", sys.argv[1]).replace("<사용자 말 그대로>", sys.argv[2])
-sys.stdout.write(t)' "$TBL" "$1"
+for k, v in (("<승인된 새 표 — `## 분해안` 머리와 열한 칸 표>", sys.argv[1]), ("<사용자 말 그대로>", sys.argv[2]), ("<사유 한 줄>", sys.argv[3]),
+             ("<로드맵 경로>", sys.argv[4] + "/roadmap.md"), ("<원본 brief>", sys.argv[4] + "/b.md"), ("<원본 audit>", sys.argv[4] + "/b.audit.md")):
+    if k not in t:
+        sys.exit("자리표 없음: " + k)
+    t = t.replace(k, v)
+sys.stdout.write(t)' "$TBL" "$1" "$2" "$3"
 }
+HP="$T/r'oad\"map \$(touch $T/pwned-p) \`touch $T/pwned-q\`"
+n8=0
 for W in "말 \"따옴표\" it's \$(touch $T/pwned-a) \`touch $T/pwned-b\` \$HOME" '-좋아'; do
+  n8=$((n8 + 1))
+  if [ "$n8" = 1 ]; then C="\`R3\` 을 \"둘로\" 나눔 it's \$(touch $T/pwned-c) \`touch $T/pwned-d\`"; P="$HP"; else C='-순서만 바꿈'; P='-rel/docs'; fi
   rm -f "$T/stub2.out"
-  rc=0; o="$(cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub2.out" CLAUDE_PLUGIN_ROOT="$STUB2" bash -c "$(red_fill "$W")" 2>&1)" || rc=$?
-  got="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")) == [sys.argv[2]])' "$T/stub2.out" "$W" 2>&1)"
-  assert_eq "$rc $got" "0 True" "재분해(AC14): 사용자 말이 글자 그대로 --approval 한 개로 간다 — $(printf '%s' "$W" | cut -c 1-20)"
+  rc=0; o="$(cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub2.out" CLAUDE_PLUGIN_ROOT="$STUB2" bash -c "$(red_fill "$W" "$C" "$P")" 2>&1)" || rc=$?
+  got="$(python3 -I -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(d == {"roadmap": sys.argv[4] + "/roadmap.md", "brief": sys.argv[4] + "/b.md", "audit": sys.argv[4] + "/b.audit.md", "change": sys.argv[3], "approval": [sys.argv[2]]})' "$T/stub2.out" "$W" "$C" "$P" 2>&1)"
+  assert_eq "$rc $got" "0 True" "재분해(AC14): 사용자 말 · 사유 · 세 경로가 글자 그대로 생성기로 간다 — 칸 $n8"
   [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
-  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): 사용자 말 안의 명령이 돌지 않았다 — $(printf '%s' "$W" | cut -c 1-20)"
-  assert_eq "$(ls -A "$T/rtmp")" "" "재분해(AC14): 펜스가 끝나면 사용자 말 임시 파일도 없다 — $(printf '%s' "$W" | cut -c 1-20)"
+  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): 말 · 사유 · 경로 안의 명령이 돌지 않았다 — 칸 $n8"
+  assert_eq "$(ls -A "$T/rtmp")" "" "재분해(AC14): 펜스가 끝나면 임시 파일이 없다 — 칸 $n8"
 done
 
 finish

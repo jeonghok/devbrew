@@ -425,7 +425,7 @@ python3 "$SD/scripts/docreview_anchor.py" snapshot "$ddoc" > "$T/dsnap.json"
 python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapshot "$T/dsnap.json" >/dev/null
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
-assert_not_contains "$dlo" "다른 레포" "AC15(양성 짝): 문서의 레포에서 돌면 레포가 다르다고 알리지 않는다"
+assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15(양성 짝): 문서의 레포에서 돌면 레포가 다르다고 알리지 않는다"
 assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(len(ds.load_state(sys.argv[1])["engine_lines"]))' "$DSD")" "1" "결정 줄 펜스: 그 줄의 출처가 원장에 남는다"
 # 줄과 사용자 말은 둘 다 따옴표 heredoc 으로 들어간다 — 작은따옴표 · 명령 치환 · 백틱 · 「-」 머리 · 옛 구분자와 같은 줄이
 # 셸로 새거나 옵션으로 읽히거나 heredoc 을 일찍 닫지 못한다.
@@ -454,6 +454,14 @@ assert_eq "$rc $(grep -cxF -- "- $DL_OTHER — 「되돌려 줘」" "$ddoc")" "0
 assert_contains "$dlo" "결정 줄은 문서가 사는 레포($repo)의 원장으로 쓴다 — 지금 작업 폴더의 레포($orepo)와 다르다." "AC15: 다른 레포 cwd — 레포가 다르다고 두 레포를 대어 알린다"
 assert_not_contains "$dlo" "손으로 쓴다" "AC15: 다른 레포 cwd — 원장 없음으로 빠져 손으로 쓰라고 하지 않는다"
 [ ! -e "$orepo/.claude" ] && ok "AC15: 다른 레포 cwd — 그 레포에 상태 폴더가 생기지 않는다" || no "AC15: 다른 레포에 상태 폴더가 생겼다: $(find "$orepo/.claude" | head -n 5)"
+# 같은 레포의 본 작업 트리 cwd + 연결된 worktree 의 문서 — 원장은 같은 공용 자리라 알리지 않는다.
+wm="$T/wt-main"; mkdir -p "$wm" && git -C "$wm" init -q && git -C "$wm" -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m init
+git -C "$wm" worktree add -q "$T/wt-linked" >/dev/null 2>&1
+mkdir -p "$T/wt-linked/docs" && cp "$ddoc" "$T/wt-linked/docs/b-design.md"
+[ -f "$T/wt-linked/.git" ] && ok "전제(AC15): 연결된 worktree 를 만들었다" || no "전제(AC15): 연결된 worktree 가 없다 — 아래 칸이 공허하다"
+dlo="$(dl_run sess-eeee5555 "$T/wt-linked/docs/b-design.md" "$SD" "$wm")"; rc=$?
+assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15: 본 작업 트리 cwd + 연결된 worktree 문서 — 원장이 같아 레포가 다르다고 알리지 않는다"
+assert_contains "$dlo" "STATE_DIR='$wm/.claude/spec-distill/" "AC15: 연결된 worktree 문서 — 원장 자리는 공용 레포의 상태 폴더다"
 # 문서 폴더로 들어가지 못하거나 문서가 git 작업 트리 밖이면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
 dlo="$(dl_run sess-eeee5555 "$T/no-such-dir/b-design.md" "$SD" "$orepo")"; rc=$?
 dl_no_dir "문서 폴더가 없다" "$dlo" "$rc" "spec_path='$T/no-such-dir/b-design.md'"
@@ -975,6 +983,57 @@ assert_eq "$rc $o" "0 []" "AC14: 빈 값 줄은 빈 변수가 되고 읽기가 r
 # 문면 — 아홉 자리는 정의를 가리키고 따옴표 대입 꼴이 남지 않는다(음) · 정의는 한 곳이다(양).
 assert_eq "$(grep -cE "(spec_path|bundle_arg|bundle_path|repo_root)=['\"]<" "$SR")" "0" "AC14: spec-review 에 따옴표 대입 꼴(spec_path='<…>' 등)이 남지 않는다"
 assert_eq "$(grep -cF '<!-- path-assign:begin -->' "$SR")" "1" "AC14: 경로 대입 줄 정의가 한 곳이다"
-n_pa="$(grep -oF '경로 대입 줄을 붙' "$SR" | wc -l | tr -d ' ')"
-[ "$n_pa" -ge 9 ] && ok "AC14: 펜스 앞 대입 자리 아홉이 경로 대입 줄을 가리킨다(${n_pa}곳)" || no "AC14: 경로 대입 줄을 가리키는 자리가 아홉보다 적다(${n_pa}곳)"
+# 자리별 — 펜스 마커마다, 그 펜스 바로 앞 산문(앞 펜스의 닫는 줄이나 제목 다음부터 마커까지)이 그 자리의 변수를 대며
+# 경로 대입 줄을 가리킨다. 합계가 아니라 자리마다 잰다 — 한 자리의 가리킴이 다른 자리의 빠짐을 갚지 못한다.
+python3 -I - "$SR" > "$T/pa-sites.txt" 2>&1 <<'PY'
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+SITES = [("bundle-entry", "spec_path bundle_arg repo_root"), ("ledger-open", "spec_path"), ("ledger-release", "spec_path"),
+         ("codex-gate", "spec_path"), ("profile-content", "spec_path"), ("advice-display", "spec_path"),
+         ("advice-all", "spec_path"), ("rejected-numbers", "spec_path repo_root"), ("roadmap-position", "bundle_path repo_root"),
+         ("decision-line", "spec_path"), ("uncommitted-check", "spec_path")]
+STOP = re.compile(r"(?m)^(?:```[^\n]*|#{1,6} [^\n]*)$")
+bad = []
+for name, need in SITES:
+    mk = "<!-- %s:begin" % name
+    if t.count(mk) != 1:
+        bad.append("%s: 마커 %d개" % (name, t.count(mk)))
+        continue
+    head = t[:t.find(mk)]
+    ends = [m.end() for m in STOP.finditer(head)]
+    win = head[ends[-1] if ends else 0:]
+    lines = [ln for ln in win.split("\n") if "경로 대입 줄을 붙" in ln]
+    if not lines:
+        bad.append("%s: 경로 대입 줄을 가리키지 않는다" % name)
+        continue
+    miss = [v for v in need.split() if not any("`%s`" % v in ln for ln in lines)]
+    if miss:
+        bad.append("%s: 가리키는 줄에 변수 %s 가 없다" % (name, " ".join(miss)))
+para = [p for p in t.split("\n\n") if "이 블록보다 **먼저**" in p]
+if len(para) != 1 or "경로 대입 줄" not in para[0]:
+    bad.append("상태 디렉토리 블록: 먼저 대입하라는 문단이 경로 대입 줄을 가리키지 않는다")
+print("\n".join(bad) if bad else "자리 전부")
+PY
+assert_eq "$(cat "$T/pa-sites.txt")" "자리 전부" "AC14: 펜스 앞 대입 자리마다 그 자리의 변수로 경로 대입 줄을 가리킨다"
+# 추가 라운드 승인 — 고른 선택지 이름 · 기타 칸에 쓴 말도 따옴표 heredoc 으로 받아 = 꼴로 넘긴다(엔진까지 실제로 돈다).
+assert_eq "$(grep -cF -- '--extra-approval "<' "$SR")" "0" "AC14: 추가 라운드 승인 말이 큰따옴표 자리표로 남지 않는다"
+grep -qF -- '--extra-approval="$extra_approval" --extra-approval-source' "$SR" \
+  && ok "AC14: 추가 라운드 승인은 extra_approval 변수를 = 꼴로 넘긴다(문면)" || no "AC14: 추가 라운드 승인의 = 꼴 넘김이 문면에 없다"
+EA_WORDS="$(printf '%s\n%s' "-열어 \"줘\" it's \$(touch $T/pwned-x) \`touch $T/pwned-y\` \$HOME" "둘째 줄 DEVBREW_PATH_EOF")"
+ea_fill() {   # ea_fill <말> → extra-approval 펜스의 자리를 그 말로 채운 것
+  fence "$SR" extra-approval | python3 -I -c 'import sys
+t = sys.stdin.read()
+sys.stdout.write(t.replace("\n<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>\n", "\n" + sys.argv[1] + "\n", 1))' "$1"
+}
+[ -n "$(fence "$SR" extra-approval)" ] && ok "전제(AC14): 추가 라운드 승인 펜스를 뽑았다" || no "전제(AC14): 추가 라운드 승인 펜스가 비었다 — 아래 칸이 공허하다"
+python3 "$SD/scripts/docreview_anchor.py" snapshot "$hdoc" > "$T/hsnap.json"
+for i in 1 2 3; do python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$HSD" --snapshot "$T/hsnap.json" >/dev/null; done
+o="$(cd "$hrepo" && bash -c "set -e
+$(ea_fill "$EA_WORDS")
+python3 \"$SD/scripts/docreview_state.py\" begin-round --state-dir \"$HSD\" --snapshot \"$T/hsnap.json\" --extra-approval=\"\$extra_approval\" --extra-approval-source typed" 2>&1)"; rc=$?
+assert_eq "$rc $(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
+x = ds.load_state(sys.argv[1]).get("extra_rounds") or [{}]
+print(x[-1].get("quote") == sys.argv[2])' "$HSD" "$EA_WORDS" 2>&1)" "0 True" "AC14: 따옴표 · 치환 · 「-」 머리 · 두 줄 말이 엔진의 추가 라운드 승인에 글자 그대로 남는다"
+[ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "AC14: 추가 라운드 승인 말 안의 명령이 돌지 않았다"
 finish
