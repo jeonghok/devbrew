@@ -200,7 +200,8 @@ done
 RT="$(cat "$RED")"
 for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \
          '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' \
-         '`## 미룸` 표 행도 묶는다' '묶을 수 없는 것은 `## 결정 기록` 과 프로필의 미룸 자리(`### Deferred to plan`)뿐이다' \
+         '`## 미룸` 표 행도 묶는다' '`## 미룸` 절을 새로 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다' \
+         '묶을 수 없는 것은 `## 결정 기록` 과 프로필의 미룸 자리(`### Deferred to plan`)뿐이다' \
          '`declare-related` 가 rc 0 이 아니면' \
          'brief §5 위험 줄 가운데 K 번호가 없는 줄' 'brief §5 위험 줄의 K 번호가 겹친다' '표로 돌아가지 않고 멈추고 사유를 보인다' \
          '재분해는 이력 brief 를 고치지 않는다' '`RISK_ORDER_NOTICE`' '정보 줄이라 멈추지 않는다'; do
