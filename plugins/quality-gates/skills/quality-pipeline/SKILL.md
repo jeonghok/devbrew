@@ -1023,14 +1023,14 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `e2e-gate rc=3` — kill switch 다. `leftover-stop rc` 와 무관하게 질문을 띄우지 않고 e2e 칸을 `꺼짐(kill switch)` 로
-  두고 `## Final verdict` 로 간다. `leftover-stop rc=5` 였으면 그 `stop-failed:` 줄이나 stderr 사유도 그대로 공시한다.
+  두고 E6 을 돈 뒤 `## Final verdict` 로 간다. `leftover-stop rc=5` 였으면 그 `stop-failed:` 줄이나 stderr 사유도 그대로 공시한다.
 - `leftover-stop rc=5` (`e2e-gate rc=3` 이 아닐 때) — 앞 실행의 앱이 남았거나 그 기록을 읽지 못했다. `stop-failed:`
-  줄이나 stderr 사유를 그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
+  줄이나 stderr 사유를 그대로 공시하고, 질문을 띄우지 않고 e2e 칸을 `미확인` 으로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다.
 - `e2e-gate rc=4` — 코드 상태를 잴 수 없어 걷기의 무효 판정을 할 수 없다. 질문을 띄우지 않고 stderr 사유를
-  공시한 뒤 e2e 칸을 `미확인` 으로 두고 `## Final verdict` 로 간다.
+  공시한 뒤 e2e 칸을 `미확인` 으로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다.
 - `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문(여러 선택)을 띄운다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 번호 순으로 하나씩
   E1~E5 로 걷는다(레퍼런스 5 절 — 「안 한다」 · 「걸을 것 없음」을 함께 골랐어도 시나리오만 걷는다). 시나리오 없이 `안 한다` · `걸을 것 없음` 이거나
-  전부 `걸을 도구 없음` 이면 그 칸으로 두고 `## Final verdict` 로 간다.
+  전부 `걸을 도구 없음` 이면 그 칸으로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다.
 
 **E1 — 부팅.** 고른 시나리오의 부팅 명령을 글자 그대로 파일에 적고, 지문을 잰 **뒤에만** 부팅한다. `&&` 가 그
 순서를 집행한다 — kill switch 가 켜져 있으면 지문이 exit 3 이고 부팅 명령은 실행되지 않는다. 펜스는 앞 걷기의
@@ -1055,7 +1055,7 @@ E2E_CMD
 - `ready: …` 줄 (`boot rc=0`) — E2 로 간다.
 - `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
   끝부분이다. E3 의 `stop` 과 지문 비교는 건너뛰고 E4 로 간다.
-- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다. 띄운 앱이 남았을 수 있다. 펜스 출력과
   `stop-failed:` 줄(있으면)을 그대로 공시하고, 남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).
   판정안은 `미확인(부팅 실패)` 이고 E3 를 건너뛰고 E4 로 간다.
@@ -1077,7 +1077,7 @@ rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 ```
 
 - `before rc=0` — E2 로 간다.
-- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
@@ -1104,7 +1104,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
-- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록한 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록하고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
 - E1 의 `sha256:` 값이 없으면 `compare` 줄을 빼고 돌리고 판정안은 `미확인(걷기 뒤 지문 실패)` 이다.
 - 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
   아니거나 `compare rc` 가 0 · 1 밖이거나 `compare rc=1` 인데 마지막 줄이 `changed: <N>` 가 아니면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
@@ -1118,8 +1118,8 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
   넣지 않는다.
 - **고치고 다시 돌기** (fail 행) — `## Fix-loop` 의 「고치고 다시 돌기」와 같다: iteration 하나를 쓰고, 「적용」 목록만 고친 뒤 `## Flow` 의 ① 리뷰부터
   다시 돈다. 루프가 다시 「멈추기」 없이 끝나면 이 절로 돌아오고, 질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.
-- **지금 판정으로 끝내기** (fail 행) — `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
-- **멈추기** (fail 행) — `## Fix-loop` 의 「멈추기」와 같다: `## Final verdict` 로 간다. Outcome 은 `aborted iter <N>`, e2e 칸은
+- **지금 판정으로 끝내기** (fail 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. Outcome 은 `accepted with findings iter <N>`, e2e 칸은 `fail` 이다.
+- **멈추기** (fail 행) — `## Fix-loop` 의 「멈추기」와 같다: E6 을 돈 뒤 `## Final verdict` 로 간다. Outcome 은 `aborted iter <N>`, e2e 칸은
   `fail` 이다. 게시 펜스는 `skipped: aborted` 를 낸다.
 - **리뷰·테스트부터 다시** (무효 행) — iteration 하나를 쓰고 코드를 고치지 않은 채 ① 리뷰부터 다시 돈 뒤, 「고치고 다시 돌기」와 같은
   경로로 이 절에 돌아와 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터 걷는다.

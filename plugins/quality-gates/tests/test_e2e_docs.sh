@@ -62,7 +62,7 @@ case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"')" "1" \
     "I1: CLI 직접 실행 경로가 지문을 재고 그 rc 를 낸다"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=0` — E2 로 간다.')" "1" "I1: 걷기는 before rc=0 에서만 간다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
     "I1: before rc=3 이면 CLI 명령을 실행하지 않고 꺼짐(kill switch)"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.')" "1" \
     "I1: 그 밖의 rc 면 걷지 않고 미확인(지문 실패)"
@@ -354,6 +354,14 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_contains "$e6" '그 걷기가 마지막 걷기 대신 쓰인다.' "E6: 칸을 정한 걷기가 마지막 걷기 대신 쓰인다"
   assert_contains "$e6" '앞 걷기(`e2e-flip.md` 의 앞 줄)의 뒤집기는 세지 않는다' "E6: 앞 걷기의 뒤집기는 세지 않는다"
   assert_not_contains "$(section "$SKILL" "## Final verdict")" 'e2e-flip.md` 의 앞 줄' "Final verdict 에 뒤집기 규칙의 사본이 남지 않았다"
+  # E6 앞의 갈래 · 질문의 답이 `## Final verdict` 로 가는 문장은 모두 E6 을 거친다(E6 을 건너뛰면 판정 펜스가 e2e 줄 없이 멈춘다).
+  local pre all via
+  pre=$(printf '%s\n' "$s" | awk '/^\*\*E6 — /{exit} {print}')
+  all=$(printf '%s\n' "$pre" | grep -o -F -- '`## Final verdict` 로 간다' | wc -l | tr -d ' ')
+  via=$(printf '%s\n' "$pre" | grep -o -F -- 'E6 을 돈 뒤 `## Final verdict` 로 간다' | wc -l | tr -d ' ')
+  [ "$all" -ge 9 ] && ok "SKILL: E6 앞에서 Final verdict 로 가는 문장 ${all}개를 찾았다(아래 등호가 공허하지 않다)" \
+    || no "SKILL: E6 앞에서 Final verdict 로 가는 문장이 모자라다 (${all}개)"
+  assert_eq "$via" "$all" "SKILL: E6 앞에서 Final verdict 로 가는 문장은 모두 E6 을 돈 뒤 간다"
 }
 
 case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
@@ -367,11 +375,11 @@ case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
     "SKILL E4: 여러 시나리오에서 E1 · E3 의 exit 3 갈래가 앞 걷기를 지우지 않는다"
   # final-review T11b — kill switch 갈래 줄 셋(E1 부팅 · E1 CLI · E3)이 각자 그 규칙을 가리킨다(줄 전체)
   local ptr='여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.'
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E1 부팅: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E1 CLI: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`after rc=3\` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E5 로 기록한 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`after rc=3\` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E5 로 기록하고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E3: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
   assert_eq "$(printf '%s\n' "$s" | grep -cF -- "$ptr")" "3" "SKILL: 가리키는 문장은 kill switch 갈래 줄 셋에만 있다(양성 짝)"
 }
