@@ -384,7 +384,7 @@ case_self_state_bound_to_run_dir() {
 # 우회 막기 — worktrees/(base|head)-<8>/ 는 이 리포에 등록된 git worktree 일 때만 건너뛴다.
 # 등록되지 않은 같은 이름 폴더는 안에 든 레포다 — 리뷰하지 않고 크게 알린다.
 NESTED_TAIL='는 리뷰하지 않았다 — 그 레포 설정을 믿지 않고는 안을 안전하게 읽을 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라'
-GITLINK_TAIL='는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. .gitmodules 에 선언하거나 git rm --cached 로 빼라'
+GITLINK_TAIL='는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. 그 안의 변경은 따로 리뷰하고, 하위 모듈로 들일 것이 아니면 git rm --cached 로 빼라'
 case_unregistered_worktree_folder_disclosed() {
   echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 알린다]"
   mkfix
@@ -845,7 +845,7 @@ case_session_staged_gitlink_degraded() {
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "스테이지한 gitlink 를 gitlink 줄로 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "스테이지한 gitlink 를 gitlink 줄로 알린다"
   assert_file_absent "$ROOT/err" '중첩 레포 vendor/lib' "스테이지한 gitlink 를 중첩 레포 줄로 알리지 않는다"
   assert_file_absent "$D/review-i1.full.diff" 'staged_marker' "그 안의 글은 diff 에 없다"
 }
@@ -863,7 +863,7 @@ case_ignore_all_cannot_hide_gitlink() {
   rd --mode branch
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "변경이 더한 ignore = all 이어도 degraded: yes"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "ignore = all 이어도 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "ignore = all 이어도 알린다"
   assert_file_grep "$D/review-i1.names" '^vendor/lib$' "names 에 gitlink 가 있다"
   # 사용자 설정 diff.ignoreSubmodules=all — .gitmodules 없이
   mkfix
@@ -873,7 +873,7 @@ case_ignore_all_cannot_hide_gitlink() {
   git -C "$R" config diff.ignoreSubmodules all
   rd --mode branch
   assert_eq "$(field degraded "$OUT")" yes "diff.ignoreSubmodules=all 이어도 degraded: yes"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "diff.ignoreSubmodules=all 이어도 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "diff.ignoreSubmodules=all 이어도 알린다"
   printf 'status: ok\nstart: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
   rd --mode range --scope-file "$D/range-scope.txt"
   assert_eq "$(field degraded "$OUT")" yes "range 도 diff.ignoreSubmodules=all 이어도 degraded: yes"
@@ -888,7 +888,7 @@ case_branch_committed_gitlink_degraded() {
   rd --mode branch
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "커밋한 gitlink 를 gitlink 줄로 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vendor/lib ${GITLINK_TAIL}" "커밋한 gitlink 를 gitlink 줄로 알린다"
   assert_file_absent "$ROOT/err" '중첩 레포 vendor/lib' "커밋한 gitlink 를 중첩 레포 줄로 알리지 않는다"
 }
 
@@ -913,7 +913,7 @@ case_topic_new_gitlink_disclosed() {
   rd --mode topic --scope-file "$S"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (선언되지 않은 새 gitlink)"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 새 gitlink vend 를 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 새 gitlink vend 를 알린다"
   assert_file_absent "$ROOT/err" ' decl 는 리뷰하지 않았다' "boundary 의 .gitmodules 에 선언된 decl 은 알리지 않는다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
   # 선언된 하위 모듈의 커밋만 바뀐 범위는 알리지 않고 degraded 도 아니다(양의 짝).
@@ -928,7 +928,7 @@ case_topic_new_gitlink_disclosed() {
   printf 'status: ok\nboundary: %s\ntree: %s\n' "$(git -C "$R" rev-parse HEAD~1)" "$(git -C "$R" rev-parse "HEAD^{tree}")" > "$S"
   rd --mode topic --scope-file "$S"
   assert_eq "$(field degraded "$OUT")" yes "선언되지 않은 gitlink 의 커밋 변경은 degraded: yes"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 gitlink 의 커밋 변경을 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "선언되지 않은 gitlink 의 커밋 변경을 알린다"
 }
 
 # 범위 모드 — 선언되지 않은 새 gitlink 가 있으면 degraded · 크게 알린다.
@@ -945,7 +945,7 @@ case_range_new_gitlink_degraded() {
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_line "$ROOT/err" "review-diff: 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "새 gitlink vend 를 알린다"
+  assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "새 gitlink vend 를 알린다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
   # 양의 짝 — gitlink 없는 범위는 degraded 아님
   printf 'status: ok\nstart: %s\nend: %s\n' "$(git -C "$R" rev-parse HEAD)" "$(git -C "$R" rev-parse HEAD)" > "$F"

@@ -72,7 +72,7 @@ assert_contains "$S1" '- `추적 안 되는 중첩 레포 <이름> 는 리뷰하
 nested_say="$(sed -n "s/^ *printf 'review-diff: \(추적 안 되는 중첩 레포 \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
 assert_eq "$(printf '%s\n' "$nested_say" | grep -c .)" "1" "스크립트에서 중첩 레포 이유 줄 하나를 읽었다(양성 짝)"
 assert_contains "$(cat "$QG/README.md")" "\`$nested_say\`" "README 가 스크립트의 중첩 레포 이유 줄을 그대로 싣는다"
-gitlink_say="$(sed -n "s/^ *printf 'review-diff: \(선언되지 않은 gitlink \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
+gitlink_say="$(sed -n "s/^ *printf 'review-diff: \(기준의 \.gitmodules 에 선언되지 않은 gitlink \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
 assert_eq "$(printf '%s\n' "$gitlink_say" | grep -c .)" "1" "스크립트에서 gitlink 이유 줄 하나를 읽었다(양성 짝)"
 assert_contains "$(cat "$QG/README.md")" "\`$gitlink_say\`" "README 가 스크립트의 gitlink 이유 줄을 그대로 싣는다"
 assert_contains "$S1" "- \`$gitlink_say\` — 기준의 \`.gitmodules\` 에 선언되지 않은 새 · 바뀐 gitlink 마다 한 줄(모든 모드)." \

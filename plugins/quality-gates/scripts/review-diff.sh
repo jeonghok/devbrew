@@ -430,7 +430,7 @@ say_unreviewed() {   # <경로> — 추적 안 되는 중첩 레포
 }
 say_unreviewed_gitlink() {   # <경로> — 기준의 .gitmodules 에 선언되지 않은 새 · 바뀐 gitlink
   UNREVIEWED=$((UNREVIEWED + 1))
-  printf 'review-diff: 선언되지 않은 gitlink %s 는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. .gitmodules 에 선언하거나 git rm --cached 로 빼라\n' \
+  printf 'review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink %s 는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. 그 안의 변경은 따로 리뷰하고, 하위 모듈로 들일 것이 아니면 git rm --cached 로 빼라\n' \
     "$(esc_name "$1")" >&2
 }
 say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트리. 지우는 명령에 그대로 쓰게 절대 경로로 낸다.

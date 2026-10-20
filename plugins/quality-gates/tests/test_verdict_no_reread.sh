@@ -179,9 +179,22 @@ EOF
       assert_contains "$ERR" "$rrw" "[$sh] $rrl: 멈춘 이유를 밝힌다"
     done <<EOF
 RR 빈 줄||되올리기 여부가 비었다 — 되올리지 않았으면 되올림 없음 을 적어라
-RR 자리표시가 남음|<되올린 뒤 리뷰 결과 줄 — 되올리지 않았으면 되올림 없음>|되올린 뒤 리뷰 결과 줄이 정해진 모양
-RR 뒤에 글이 붙음|되올림 없음 (사용자가 고르지 않음)|되올린 뒤 리뷰 결과 줄이 정해진 모양
+RR 자리표시가 남음|<되올린 뒤 리뷰 결과 줄 — 되올리지 않았으면 되올림 없음>|되올린 뒤 리뷰 결과 줄이 정해진 모양(qg-verdict-args: --이름 값 …)이 아니다 — 되올리지 않았으면 되올림 없음 을 글자 그대로 적어라
+RR 뒤에 글이 붙음|되올림 없음 (사용자가 고르지 않음)|되올린 뒤 리뷰 결과 줄이 정해진 모양(qg-verdict-args: --이름 값 …)이 아니다 — 되올리지 않았으면 되올림 없음 을 글자 그대로 적어라
 EOF
+    # 두 줄 — 첫 줄만 읽고 나머지를 버리지 않는다(되올림 없음 뒤에 줄이 더 있어도 리뷰 자리의 줄로 넘어가지 않는다)
+    for rrv in "되올림 없음
+qg-verdict-args: --blocking 2 --optional 0 --defect" "되올림 없음
+
+x"; do
+      run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_RR=$rrv" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+      assert_eq "$RC" "4" "[$sh] RR 두 줄 이상: 판정 펜스가 4 로 끝난다"
+      [ ! -e "$RD/verdict.out" ] && ok "[$sh] RR 두 줄 이상: verdict.out 을 쓰지 않는다" || no "[$sh] RR 두 줄 이상: verdict.out 이 생겼다"
+      assert_contains "$ERR" "되올린 뒤 리뷰 자리에 줄이 둘 이상이다" "[$sh] RR 두 줄 이상: 멈춘 이유를 밝힌다"
+    done
+    # 리뷰 자리의 모양 오류에는 되올리기 안내가 붙지 않는다
+    run_verdict "$sh" final-verdict "QG_ARGS_R=blocking: 1" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+    assert_not_contains "$ERR" "되올림 없음 을 글자 그대로" "[$sh] 리뷰 자리의 모양 오류에는 되올리기 안내가 없다"
     # 양성 짝 — 되올림 없음 이면 리뷰 자리의 줄로 판정한다
     run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_RR=되올림 없음" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
     assert_eq "$RC" "0" "[$sh] 되올림 없음 → R 사용: rc 0 (stderr: ${ERR})"
