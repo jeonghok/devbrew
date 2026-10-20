@@ -283,7 +283,8 @@ def _count(text):
 
 
 def main():
-    ap = argparse.ArgumentParser(add_help=True)
+    # -h 로 도움말을 내고 0 으로 끝나지 않는다 — 판정 인자 자리에 들어온 낱말이 판정 없이 성공하지 못하게.
+    ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--differential", default=None)
     ap.add_argument("--defect", action="store_true")
     ap.add_argument("--review-blocked", action="store_true")

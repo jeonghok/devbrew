@@ -53,6 +53,7 @@ section() { awk -v h="$2" '$0 == h {on=1; print; next} on && /^## /{exit} on' "$
 run_verdict() {
   local sh="$1" marker="$2"; shift 2
   rm -f "$RD/verdict.out" "$T/fence.sh"
+  [ "$marker" = final-verdict ] && set -- "QG_ARGS_RR=" "$@"
   if ! python3 -I "$FENCE_PY" "$SKILL" "$marker" "$T/fence.sh" "<session-id>=$SID" "$@" 2>"$T/fill.err"; then
     OUT=""; ERR="$(cat "$T/fill.err")"; RC=99; LINE=""; return
   fi
@@ -85,6 +86,8 @@ per_adapter: []
 YAML
 D_LINE="$(python3 "$V" --emit-args --differential "$RD/differential.yaml")"
 assert_eq "$D_LINE" "qg-verdict-args: --new-failures 0" "픽스처: verdict.py --emit-args 가 차등 결과 줄을 냈다"
+# (3) e2e 결과 줄 — 걷지 않은 실행도 E6 이 낸다
+E_OK="qg-verdict-args: --e2e 안 함"
 
 tamper_session() {   # 차등 테스트 · e2e 대역 — 판정 전에 세션 폴더의 판정 재료를 지우고 고친다
   rm -f "$RV/synth.out" "$RV/synth-review.out"
@@ -101,13 +104,13 @@ case_final_verdict_ignores_tampered_session() {
     [ ! -e "$RV/synth.out" ] && ok "[$sh] 전제: 대역이 synth.out 을 지웠다" || no "[$sh] 전제: synth.out 이 남았다"
     assert_contains "$(cat "$RD/differential.yaml")" 'new_failures: 99' "[$sh] 전제: 대역이 new_failures 를 99 로 고쳤다"
     assert_eq "$(grep -c '^- ' "$RD/excluded.md")" "5" "[$sh] 전제: 대역이 excluded.md 에 다섯 줄을 더했다"
-    run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=" "<N>=1"
+    run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
     assert_eq "$RC" "0" "[$sh] 최종 판정 펜스 rc 0 (stderr: ${ERR})"
     assert_contains "$OUT" 'verdict rc=0' "[$sh] verdict.py 가 rc 0 으로 끝났다"
     assert_eq "$LINE" "qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 1 · $HEADSHA" \
-      "[$sh] 판정 줄은 받은 두 줄과 기본값(제외 0 · 지금 HEAD · e2e 안 함)이다 — 변조 값(99 · 5 · 범위 파일의 끝)이 아니다"
-    assert_not_contains "$LINE" '99' "[$sh] 판정 줄에 변조한 새 실패 수가 없다"
-    assert_not_contains "$LINE" '1111111' "[$sh] 판정 줄에 변조한 범위 끝 커밋이 없다"
+      "[$sh] 판정 줄은 받은 줄들과 기본값(제외 0 · 지금 HEAD)이다 — 변조 값(99 · 5 · 범위 파일의 끝)이 아니다"
+    assert_not_contains "$LINE" ' · 차등 새 실패 99 · ' "[$sh] 판정 줄의 차등 새 실패 칸이 변조한 99 가 아니다"
+    assert_not_contains "$LINE" ' · 제외 패치 5 · ' "[$sh] 판정 줄의 제외 패치 칸이 변조한 5 가 아니다"
     assert_grep "$(cat "$RD/verdict.out" 2>/dev/null)" '^verdict: defect$' "[$sh] 판정값은 defect"
   done
 }
@@ -144,18 +147,32 @@ case_bad_lines_fail_closed() {
       [ ! -e "$RD/verdict.out" ] && ok "[$sh] $label: verdict.out 을 쓰지 않는다" || no "[$sh] $label: verdict.out 이 생겼다"
       assert_contains "$ERR" "$want" "[$sh] $label: 멈춘 이유를 밝힌다"
     done <<EOF
-리뷰 줄 없음||$D_LINE||||리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다
-차등 줄 없음|$R_LINE|||||리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다
-리뷰 자리에 자리표시가 남음|<리뷰 줄>|$D_LINE||||리뷰 결과 줄이 정해진 모양
-리뷰 줄이 합성기 본문 줄|blocking: 1|$D_LINE||||리뷰 결과 줄이 정해진 모양
-리뷰 줄에 차등 축 인자|qg-verdict-args: --blocking 0 --optional 0 --new-failures 0|$D_LINE||||이 줄에 올 수 없는 값(--new-failures)
-차등 줄에 리뷰 축 인자|$R_LINE|qg-verdict-args: --new-failures 0 --blocking 0||||이 줄에 올 수 없는 값(--blocking)
-리뷰 줄에 같은 이름 두 번|qg-verdict-args: --blocking 1 --blocking 0 --optional 0|$D_LINE||||같은 값(--blocking)이 두 번
-제외 줄에 범위 인자|$R_LINE|$D_LINE|qg-verdict-args: --sha abc1234|||이 줄에 올 수 없는 값(--sha)
-범위 줄 값이 대문자|$R_LINE|$D_LINE||qg-verdict-args: --sha ABC1234||범위 결과 줄이 정해진 모양
+리뷰 줄 없음||$D_LINE|||$E_OK|리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다
+차등 줄 없음|$R_LINE||||$E_OK|리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다
+e2e 줄 없음|$R_LINE|$D_LINE||||e2e 결과 줄이 비었다
+리뷰 자리에 자리표시가 남음|<리뷰 줄>|$D_LINE|||$E_OK|리뷰 결과 줄이 정해진 모양
+리뷰 줄이 합성기 본문 줄|blocking: 1|$D_LINE|||$E_OK|리뷰 결과 줄이 정해진 모양
+리뷰 줄에 차등 축 인자|qg-verdict-args: --blocking 0 --optional 0 --new-failures 0|$D_LINE|||$E_OK|이 줄에 올 수 없는 값(--new-failures)
+차등 줄에 리뷰 축 인자|$R_LINE|qg-verdict-args: --new-failures 0 --blocking 0|||$E_OK|이 줄에 올 수 없는 값(--blocking)
+리뷰 줄에 같은 이름 두 번|qg-verdict-args: --blocking 1 --blocking 0 --optional 0|$D_LINE|||$E_OK|같은 값(--blocking)이 두 번
+제외 줄에 범위 인자|$R_LINE|$D_LINE|qg-verdict-args: --sha abc1234||$E_OK|이 줄에 올 수 없는 값(--sha)
+범위 줄 값이 대문자|$R_LINE|$D_LINE||qg-verdict-args: --sha ABC1234|$E_OK|범위 결과 줄이 정해진 모양
+값이 - 로 시작(-h)|qg-verdict-args: --blocking 1 --optional 0 --reason -h|$D_LINE|||$E_OK|리뷰 결과 줄이 정해진 모양
+값이 - 로 시작(-1)|qg-verdict-args: --blocking -1 --optional 0|$D_LINE|||$E_OK|리뷰 결과 줄이 정해진 모양
+도움말 이름|qg-verdict-args: --blocking 1 --optional 0 --help|$D_LINE|||$E_OK|이 줄에 올 수 없는 값(--help)
+값 없는 이름에 값|qg-verdict-args: --blocking 1 --optional 0 --defect 1|$D_LINE|||$E_OK|이름 없는 값(1)
+값이 필요한 이름에 값 없음|qg-verdict-args: --blocking --optional 0|$D_LINE|||$E_OK|--blocking 에 값이 없다
+끝 이름에 값 없음|$R_LINE|qg-verdict-args: --new-failures|||$E_OK|--new-failures 에 값이 없다
+사유에 값 없음|qg-verdict-args: --blocking 0 --optional 0 --reason|$D_LINE|||$E_OK|--reason 에 값이 없다
 e2e 칸이 열거 밖|$R_LINE|$D_LINE|||qg-verdict-args: --e2e 몰라|e2e 결과 줄의 칸이 정해진 값이 아니다
 e2e 줄 머리가 없음|$R_LINE|$D_LINE|||--e2e pass|e2e 결과 줄이 정해진 모양
 EOF
+  done
+  # verdict.py 는 -h · --help 로 도움말을 내고 0 으로 끝나지 않는다(판정 인자 자리의 낱말이 판정 없이 성공하지 못한다)
+  local rc h
+  for h in -h --help; do
+    rc=0; python3 "$V" --line --blocking 0 --optional 0 --new-failures 0 --excluded 0 --iter 1 --sha abc1234 "$h" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "2" "verdict.py $h 는 사용법 오류(rc 2)다"
   done
 }
 
@@ -166,23 +183,56 @@ case_forged_line_is_not_expanded() {
     m1="$T/pwned-$sh-1"; m2="$T/pwned-$sh-2"; m3="$T/pwned-$sh-3"; m4="$T/pwned-$sh-4"
     rm -f "$m1" "$m2" "$m3" "$m4"
     run_verdict "$sh" final-verdict "QG_ARGS_R=qg-verdict-args: --blocking 0 --optional 0 \$(touch $m1)" \
-      "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=" "<N>=1"
+      "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
     [ ! -e "$m1" ] && ok "[$sh] 위조 \$( ) 줄이 실행되지 않는다" || no "[$sh] 위조 \$( ) 줄이 실행됐다"
-    [ "$RC" -ne 0 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 \$( ) 줄은 판정 없이 멈춘다" || no "[$sh] 위조 \$( ) 줄로 판정이 나왔다 (rc $RC)"
+    [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 \$( ) 줄은 판정 없이 멈춘다" || no "[$sh] 위조 \$( ) 줄로 판정이 나왔다 (rc $RC)"
     run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_D=qg-verdict-args: --new-failures \`touch $m2\`" \
-      "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=" "<N>=1"
+      "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
     [ ! -e "$m2" ] && ok "[$sh] 위조 역따옴표 줄이 실행되지 않는다" || no "[$sh] 위조 역따옴표 줄이 실행됐다"
-    [ "$RC" -ne 0 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 역따옴표 줄은 판정 없이 멈춘다" || no "[$sh] 위조 역따옴표 줄로 판정이 나왔다 (rc $RC)"
+    [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 역따옴표 줄은 판정 없이 멈춘다" || no "[$sh] 위조 역따옴표 줄로 판정이 나왔다 (rc $RC)"
     run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" \
       "QG_ARGS_E=qg-verdict-args: --e2e pass\$(touch $m3)" "<N>=1"
     [ ! -e "$m3" ] && ok "[$sh] 위조 e2e 줄이 실행되지 않는다" || no "[$sh] 위조 e2e 줄이 실행됐다"
-    [ "$RC" -ne 0 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 e2e 줄은 판정 없이 멈춘다" || no "[$sh] 위조 e2e 줄로 판정이 나왔다 (rc $RC)"
+    [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 위조 e2e 줄은 판정 없이 멈춘다" || no "[$sh] 위조 e2e 줄로 판정이 나왔다 (rc $RC)"
     run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=qg-verdict-args: --excluded *" \
-      "QG_ARGS_S=" "QG_ARGS_E=" "<N>=1"
-    [ "$RC" -ne 0 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 글롭 글자가 든 줄은 판정 없이 멈춘다" || no "[$sh] 글롭 글자가 든 줄로 판정이 나왔다 (rc $RC)"
+      "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+    [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] 글롭 글자가 든 줄은 판정 없이 멈춘다" || no "[$sh] 글롭 글자가 든 줄로 판정이 나왔다 (rc $RC)"
     run_verdict "$sh" trivia-verdict "QG_ARGS_R=" "QG_ARGS_D=" "QG_ARGS_X=" "QG_ARGS_S=qg-verdict-args: --sha \$(touch $m4)" "QG_ARGS_E="
     [ ! -e "$m4" ] && ok "[$sh] trivia 펜스도 위조 줄을 펼치지 않는다" || no "[$sh] trivia 펜스가 위조 줄을 실행했다"
-    [ "$RC" -ne 0 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] trivia 펜스도 위조 줄로 멈춘다" || no "[$sh] trivia 펜스가 위조 줄로 판정을 냈다 (rc $RC)"
+    [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ] && [ ! -e "$RD/verdict.out" ] && ok "[$sh] trivia 펜스도 위조 줄로 멈춘다" || no "[$sh] trivia 펜스가 위조 줄로 판정을 냈다 (rc $RC)"
+  done
+}
+
+# 되올린 뒤 리뷰 결과 줄(차등 테스트 뒤 세션 폴더에서 만든 줄)은 차등 테스트 전 리뷰 결과 줄보다 느슨할 수 없다.
+case_restore_line_cannot_loosen() {
+  local sh label r0 rr want
+  R0="qg-verdict-args: --blocking 2 --optional 0 --defect --review-blocked --reason scope-empty"
+  for sh in $SHELLS; do
+    while IFS='|' read -r label rr want; do
+      [ -n "$label" ] || continue
+      run_verdict "$sh" final-verdict "QG_ARGS_R=$R0" "QG_ARGS_RR=$rr" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+      if [ "$RC" -ne 0 ] && [ "$RC" -ne 99 ]; then ok "[$sh] $label: 0 이 아닌 값으로 끝난다 (rc $RC)"; else no "[$sh] $label: rc $RC"; fi
+      [ ! -e "$RD/verdict.out" ] && ok "[$sh] $label: verdict.out 을 쓰지 않는다" || no "[$sh] $label: verdict.out 이 생겼다"
+      assert_contains "$ERR" "$want" "[$sh] $label: 멈춘 이유를 밝힌다"
+    done <<EOF
+막는 지적 수가 줄었다|qg-verdict-args: --blocking 1 --optional 1 --defect --review-blocked --reason scope-empty|막는 지적 수가 차등 테스트 전 리뷰 결과 줄보다 적거나
+사유가 빠졌다|qg-verdict-args: --blocking 2 --optional 0 --defect --review-blocked|--reason scope-empty 가 없다
+결함 표시가 빠졌다|qg-verdict-args: --blocking 2 --optional 0 --review-blocked --reason scope-empty|--defect 가 없다
+항목 소실 표시가 빠졌다|qg-verdict-args: --blocking 3 --optional 0 --defect --reason scope-empty|--review-blocked 가 없다
+막는 지적 수가 없다|qg-verdict-args: --optional 0 --defect --review-blocked --reason scope-empty|막는 지적 수가 차등 테스트 전 리뷰 결과 줄보다 적거나
+되올린 줄이 모양 밖|blocking: 3|되올린 뒤 리뷰 결과 줄이 정해진 모양
+EOF
+    # 양성 짝 — 되올리기가 막는 지적을 늘리면 그 줄이 판정에 쓰인다
+    run_verdict "$sh" final-verdict "QG_ARGS_R=qg-verdict-args: --blocking 0 --optional 1" \
+      "QG_ARGS_RR=qg-verdict-args: --blocking 1 --optional 0 --defect" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+    assert_eq "$RC" "0" "[$sh] 되올린 줄이 더 엄하면 rc 0 (stderr: ${ERR})"
+    assert_eq "$LINE" "qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 1 · $HEADSHA" \
+      "[$sh] 되올린 뒤 리뷰 결과 줄의 수가 판정 줄에 실린다"
+    run_verdict "$sh" final-verdict "QG_ARGS_R=$R0" \
+      "QG_ARGS_RR=qg-verdict-args: --blocking 2 --optional 0 --defect --review-blocked --reason merge-conflict --reason scope-empty" \
+      "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+    assert_eq "$RC" "0" "[$sh] 같은 수 · 사유가 더 많은 되올린 줄은 받는다 (stderr: ${ERR})"
+    assert_grep "$(cat "$RD/verdict.out" 2>/dev/null)" '^reasons: \[merge-conflict, scope-empty, findings-lost\]$' "[$sh] 되올린 줄의 사유가 판정에 실린다"
   done
 }
 
@@ -230,8 +280,13 @@ case_review_axis_synthesis_precedes_the_differential_test() {
   s4f=$(printf '%s\n' "$s4w" | fence_with 'synthesize_findings.py')
   assert_contains "$s4f" '> "$RV/synth.out"' "Step 4: 본 합성 펜스(양성 짝)"
   assert_not_contains "$s4f" '--verdict-args' "Step 4: 본 합성은 리뷰 결과 줄을 내지 않는다"
-  assert_contains "$s4w" '`--verdict-args` 와 `--restore-lowered <번호들>` 을 더한다' "되올려 다시 합성하기는 새 리뷰 결과 줄을 낸다"
-  assert_contains "$s4w" '새 리뷰 결과 줄이다 — Step 3.9 의 줄을 대신한다' "되올린 뒤의 줄이 앞 리뷰 줄을 대신한다"
+  assert_not_contains "$s4w" '--verdict-args' "Step 4: 되올려 다시 합성하기도 Step 4 합성으로는 리뷰 결과 줄을 내지 않는다(차등 기원 사유가 섞인다)"
+  assert_contains "$s4w" 'Step 3.9 의 펜스를 같은 판정 입력에 같은 `--restore-lowered <번호들>` 을 더해 다시 돌린다' "되올린 뒤 리뷰 결과 줄은 Step 3.9 를 다시 돌려 낸다"
+  assert_contains "$s4w" 'Step 3.9 가 처음 낸 줄도 버리지 않는다 — 판정 펜스가' "되올리기 전 리뷰 결과 줄을 판정 펜스가 함께 받는다"
+  local fvs; fvs=$(section "$SKILL" '## Final verdict')
+  assert_contains "$fvs" '| `QG_ARGS_RR` 되올린 뒤 리뷰(최종 판정 펜스만) |' "Final verdict: 되올린 뒤 리뷰 자리"
+  assert_contains "$fvs" '자리(따옴표 here-doc 의 몸)마다 정확히 한 줄 — 그 줄을 낸 펜스가 출력한 `qg-verdict-args: …` 기계 줄 하나 — 만 글자 그대로 넣는다.' \
+    "Final verdict: 자리마다 기계 줄 정확히 한 줄"
   local flow a b c
   flow=$(section "$SKILL" '## Flow')
   a=$(printf '%s\n' "$flow" | grep -n '│   ① 리뷰 ' | head -1 | cut -d: -f1)
@@ -273,16 +328,44 @@ case_differential_line_producers() {
 }
 
 case_excluded_scope_e2e_producers() {
-  local xf out
+  local xf out sh rc
   xf=$(section "$SKILL" '## Fix-loop' | fence_with "qg-verdict-args: --excluded")
   [ -n "$xf" ] && ok "Fix-loop: 제외 결과 줄 펜스가 있다" || no "Fix-loop: 제외 결과 줄 펜스가 없다"
-  printf '%s\n' "$xf" | sed "s/<session-id>/$SID/g" > "$T/x.sh"
-  rm -f "$RD/excluded.md"
-  out=$(cd "$R" && bash "$T/x.sh" 2>&1)
-  assert_eq "$out" "qg-verdict-args: --excluded 0" "제외 결과 줄: excluded.md 가 없으면 0"
-  printf -- '- iter 1 · #2 · b.py · SUGGESTION\n- iter 1 · #3 · c.py · 사용자 제외\n' > "$RD/excluded.md"
-  out=$(cd "$R" && bash "$T/x.sh" 2>&1)
-  assert_eq "$out" "qg-verdict-args: --excluded 2" "제외 결과 줄: 기록한 줄 수"
+  assert_not_contains "$xf" 'grep -c' "제외 결과 줄: excluded.md 를 다시 세지 않는다"
+  x_run() {   # x_run <셸> <앞 줄> <더할 줄들> — out · rc 를 채운다
+    python3 -I "$FENCE_PY" "$SKILL" excluded-line "$T/x.sh" "<session-id>=$SID" "QG_ARGS_XPREV=$2" "QG_EXCLUDED_ADD=$3" 2>"$T/x.fill" \
+      || { out="$(cat "$T/x.fill")"; rc=99; return; }
+    out=$(cd "$R" && "$1" "$T/x.sh" 2>&1); rc=$?
+  }
+  for sh in $SHELLS; do
+    rm -rf "$RD/excluded.md"
+    x_run "$sh" "" ""
+    assert_eq "$out" "qg-verdict-args: --excluded 0" "[$sh] 제외 결과 줄: 앞 줄도 더할 줄도 없으면 0"
+    x_run "$sh" "" $'- iter 1 · #2 · b.py · SUGGESTION\n- iter 1 · #3 · c.py · 사용자 제외'
+    assert_eq "$out" "qg-verdict-args: --excluded 2" "[$sh] 제외 결과 줄: 이번에 더한 줄 수"
+    assert_eq "$(grep -c '^- ' "$RD/excluded.md")" "2" "[$sh] 제외 결과 줄 펜스가 그 줄들을 excluded.md 에 더했다"
+    : > "$RD/excluded.md"   # 차등 테스트가 돌린 레포 코드가 기록을 비웠다
+    x_run "$sh" "qg-verdict-args: --excluded 2" '- iter 2 · #1 · d.py · SUGGESTION'
+    assert_eq "$out" "qg-verdict-args: --excluded 3" "[$sh] 제외 결과 줄: 기록을 비워도 누계는 앞 줄 2 + 이번 1"
+    printf -- '- a\n- b\n- c\n- d\n- e\n' >> "$RD/excluded.md"   # 거꾸로 부풀린 경우
+    x_run "$sh" "qg-verdict-args: --excluded 3" ""
+    assert_eq "$out" "qg-verdict-args: --excluded 3" "[$sh] 제외 결과 줄: 기록을 부풀려도 누계는 그대로"
+    for bad in "qg-verdict-args: --excluded 07" "qg-verdict-args: --excluded 3 --sha abc1234" "qg-verdict-args: --excluded" "excluded: 3" "qg-verdict-args: --excluded 1234567890"; do
+      x_run "$sh" "$bad" ""
+      if [ "$rc" -ne 0 ] && [ "$rc" -ne 99 ]; then ok "[$sh] 앞 줄 '$bad' 는 멈춘다"; else no "[$sh] 앞 줄 '$bad' 가 멈추지 않았다 (rc $rc: $out)"; fi
+      assert_not_grep "$out" '^qg-verdict-args:' "[$sh] 앞 줄 '$bad' 면 결과 줄을 내지 않는다"
+    done
+    x_run "$sh" "" 'iter 3 · #1 · e.py · SUGGESTION'
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 99 ]; then ok "[$sh] 「- 」 로 시작하지 않는 더할 줄은 멈춘다"; else no "[$sh] 「- 」 없는 줄이 멈추지 않았다 (rc $rc)"; fi
+    rm -f "$RD/excluded.md"; mkdir "$RD/excluded.md"
+    x_run "$sh" "" '- iter 1 · #1 · a.py · SUGGESTION'
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 99 ]; then ok "[$sh] excluded.md 가 폴더면 멈춘다"; else no "[$sh] excluded.md 가 폴더인데 멈추지 않았다 (rc $rc)"; fi
+    rmdir "$RD/excluded.md"; : > "$T/elsewhere.md"; ln -s "$T/elsewhere.md" "$RD/excluded.md"
+    x_run "$sh" "" '- iter 1 · #1 · a.py · SUGGESTION'
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 99 ]; then ok "[$sh] excluded.md 가 링크면 멈춘다"; else no "[$sh] excluded.md 가 링크인데 멈추지 않았다 (rc $rc)"; fi
+    [ ! -s "$T/elsewhere.md" ] && ok "[$sh] 링크 너머에 쓰지 않았다" || no "[$sh] 링크 너머에 썼다"
+    rm -f "$RD/excluded.md"
+  done
   local tree
   tree=$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SKILL" | fence_with 'review_tree:')
   assert_eq "$(printf '%s\n' "$tree" | tail -n 1)" "printf 'qg-verdict-args: --sha %s\\n' \"\$(git rev-parse --short \"\$(sed -n 's/^end: //p' \"\$RS\")\")\"" \
@@ -297,6 +380,8 @@ case_excluded_scope_e2e_producers() {
   assert_contains "$LINE" ' · e2e 꺼짐(kill switch) (사람이 뒤집음) · ' "E6 이 낸 줄을 최종 판정 펜스가 받는다"
   local e2e
   e2e=$(section "$SKILL" '## e2e')
+  assert_eq "$(printf '%s\n' "$e2e" | grep -c '건너뛰고 e2e 칸을 `안 함` 으로 둔 채 E6 만 돈다')" "2" "e2e: 멈추기 · 범위 모드도 걷기 없이 E6 을 돈다"
+  assert_contains "$e2e" '걷기를 건너뛰었든(Fix-loop · Max-iter 의 「멈추기」 · 범위 모드 — 칸은 `안 함`)' "E6: 어느 길로 판정에 가든 돈다"
   assert_contains "$e2e" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "E6: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
 }
 
@@ -309,7 +394,7 @@ case_readme_limits() {
 }
 
 for c in case_final_verdict_ignores_tampered_session case_positive_control_slots_are_used case_bad_lines_fail_closed \
-         case_forged_line_is_not_expanded case_trivia_and_scope_empty_fences \
+         case_forged_line_is_not_expanded case_restore_line_cannot_loosen case_trivia_and_scope_empty_fences \
          case_review_axis_synthesis_precedes_the_differential_test case_differential_line_producers \
          case_excluded_scope_e2e_producers case_readme_limits; do
   echo "== $c"; "$c"

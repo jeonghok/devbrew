@@ -4,7 +4,7 @@
 사용: verdict_fence.py <SKILL.md> <표지> <출력 .sh> [이름=값 ...]
 
 - 표지: `<!-- <표지>:begin -->` 와 `<!-- <표지>:end -->` 사이의 첫 ```bash 펜스를 뽑는다.
-- 이름이 `QG_ARGS_` 로 시작하면 그 heredoc(`<<'QG_ARGS_R'` …)의 몸을 값으로 바꾼다.
+- 이름이 `QG_` 로 시작하면 그 heredoc(`<<'QG_ARGS_R'` · `<<'QG_EXCLUDED_ADD'` …)의 몸을 값으로 바꾼다.
   값 안의 줄바꿈은 여러 줄이 된다. 빈 값은 빈 줄 하나다.
 - 그 밖의 이름은 글자 그대로 바꿀 자리표시다(예: `<session-id>=sid1` · `<N>=2`).
 
@@ -61,7 +61,7 @@ def main(argv):
         if "=" not in pair:
             die(f"이름=값 꼴이 아니다: {pair!r}")
         name, value = pair.split("=", 1)
-        if name.startswith("QG_ARGS_"):
+        if name.startswith("QG_"):
             body = fill_heredoc(body, name, value)
         else:
             subs.append((name, value))

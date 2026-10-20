@@ -651,9 +651,11 @@ cat "$RV/synth.out"
 
 **되올려 다시 합성하기.** Step 4.5 의 「낮춘 지적」 게이트에서 사용자가 되올릴 지적을 골랐을 때만 돈다. 먼저 앞 출력을 옮긴다 —
 `mv "$RV/synth.out" "$RV/synth-before-restore.out"`. 그다음 위 펜스를 같은 판정 입력 그대로 다시 돌리되 `> "$RV/synth.out"` 앞에
-`--verdict-args` 와 `--restore-lowered <번호들>` 을 더한다 — 번호는 「낮춘 지적」 표의 `L<k>` 를 쉼표로 잇고(예: `--restore-lowered L1,L3`), 전부면 `all` 이다.
+`--restore-lowered <번호들>` 을 더한다 — 번호는 「낮춘 지적」 표의 `L<k>` 를 쉼표로 잇고(예: `--restore-lowered L1,L3`), 전부면 `all` 이다.
 합성기는 그 번호의 lower 를 적용하지 않아 원래 심각도로 판정에 넣고, `restored:` 줄과 「낮춘 이유」 칸 머리의 `(사용자가 되올림)` 으로
-그 사실을 싣는다. 새 출력의 마지막 줄(`qg-verdict-args: …`)이 새 리뷰 결과 줄이다 — Step 3.9 의 줄을 대신한다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`). 번호는 Step 4.5 의 확인 펜스가 먼저 거르므로 여기 닿지 않아야 한다.
+그 사실을 싣는다. 그 합성이 0 으로 끝났으면 Step 3.9 의 펜스를 같은 판정 입력에 같은 `--restore-lowered <번호들>` 을 더해 다시 돌린다 —
+그 펜스가 낸 줄이 되올린 뒤 리뷰 결과 줄이다(차등 기원 사유가 없는 리뷰 축 줄이다). Step 3.9 가 처음 낸 줄도 버리지 않는다 — 판정 펜스가
+둘을 함께 받는다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`). 번호는 Step 4.5 의 확인 펜스가 먼저 거르므로 여기 닿지 않아야 한다.
 그래도 rc 2 면 멈추지 않는다: `mv "$RV/synth-before-restore.out" "$RV/synth.out"` 으로 앞 출력을 되돌리고
 `> [quality-gates] 되올리기를 적용하지 못했다(합성기 rc 2 — <stderr 첫 줄>) — 낮춘 대로 둔 앞 판정으로 간다.` 를 낸 뒤 앞 출력으로
 Step 4.5 의 라우팅을 잇는다(리뷰가 이미 끝난 실행을 잘못 친 번호 하나로 버리지 않는다). rc 2 밖의 0 아닌 rc 는 위 rc 규칙대로 멈춘다.
@@ -850,18 +852,43 @@ Branch on answer:
 - **고치고 다시 돌기** → apply only the 적용 items (after the user's changes). 차등 테스트 기원 항목은 패치가 아니라
   네가 쓴 계획이다 — 회귀 unit(예: `NEW_REGRESSION`)이 통과하도록 그 범위 안에서만 고친다. For every
   제외 item append one line to `$RD/excluded.md`: `- iter <N> · #<k> · <file> · <사유>` (a user-moved
-  item: `사용자 제외`). Then N += 1 and go back to Review Step 1 — differential test included.
+  item: `사용자 제외`) — 아래 「제외 결과 줄」 펜스가 그 줄들을 더한다(다른 길로 더하지 않는다). Then N += 1 and go back to Review Step 1 — differential test included.
 - **지금 판정으로 끝내기** → [Final verdict](#final-verdict) with Outcome `accepted with findings iter N`.
 - **멈추기** → Final verdict with Outcome `aborted iter N`.
 
-**제외 결과 줄.** `$RD/excluded.md` 에 줄을 더한 iteration(고치고 다시 돌기 · 한 번 더 돌기 · `Edit 실패` 로 건너뛴 파일)은 고침과 기록을
-마친 직후, 다음 iteration 의 Review Step 1 전에 이 펜스를 한 번 돈다. 그 줄이 제외 결과 줄이다 — 글자 그대로 들고 있다가 판정 펜스에 붙인다:
+**제외 결과 줄.** `excluded.md` 에 더할 줄이 있는 iteration(고치고 다시 돌기 · 한 번 더 돌기 · `Edit 실패` 로 건너뛴 파일)은 고침을 마친 직후,
+다음 iteration 의 Review Step 1 전에 이 펜스를 한 번 돈다. `QG_ARGS_XPREV` 자리에는 이 실행에서 이 펜스가 앞서 낸 제외 결과 줄을 글자 그대로
+한 줄 넣고(없으면 빈 줄), `QG_EXCLUDED_ADD` 자리에는 이번 iteration 에 더할 줄을 한 줄에 하나씩 넣는다. 펜스는 그 줄들을 `excluded.md` 에 더하고,
+파일을 다시 세지 않고 앞 수에 자기가 더한 줄 수를 더해 낸다. 그 줄이 제외 결과 줄이다 — 글자 그대로 들고 있다가 판정 펜스와 다음 이 펜스에 붙인다:
 
+<!-- excluded-line:begin -->
 ```bash
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-X=0; [ -f "$RD/excluded.md" ] && X=$(grep -c '^- ' "$RD/excluded.md"); printf 'qg-verdict-args: --excluded %s\n' "$X"
+F="$RD/excluded.md"
+if [ -L "$F" ] || { [ -e "$F" ] && [ ! -f "$F" ]; }; then echo "[quality-gates] 제외 기록(excluded.md)이 보통 파일이 아니다 — 제외 결과 줄을 내지 않는다. 멈춘다" >&2; exit 4; fi
+IFS= read -r PREV_LINE <<'QG_ARGS_XPREV'
+<앞 제외 결과 줄 — 없으면 빈 줄>
+QG_ARGS_XPREV
+case "$PREV_LINE" in
+  "") PREV=0 ;;
+  "qg-verdict-args: --excluded "*) PREV="${PREV_LINE#qg-verdict-args: --excluded }" ;;
+  *) PREV=x ;;
+esac
+case "$PREV" in ''|*[!0-9]*|0?*|??????????*) echo "[quality-gates] 앞 제외 결과 줄이 정해진 모양(qg-verdict-args: --excluded 수)이 아니다 — 멈춘다" >&2; exit 4 ;; esac
+ADDED=0
+while IFS= read -r XL; do
+  case "$XL" in
+    "") ;;
+    "- "*) printf '%s\n' "$XL" >> "$F" || { echo "[quality-gates] 제외 기록에 줄을 더하지 못했다 — 멈춘다" >&2; exit 4; }; ADDED=$((ADDED + 1)) ;;
+    *) echo "[quality-gates] 더할 제외 줄이 「- 」로 시작하지 않는다 — 멈춘다" >&2; exit 4 ;;
+  esac
+done <<'QG_EXCLUDED_ADD'
+<이번 iteration 에 더할 제외 줄 — 한 줄에 하나, `- iter <N> · #<k> · <file> · <사유>`>
+QG_EXCLUDED_ADD
+printf 'qg-verdict-args: --excluded %s\n' "$((PREV + ADDED))"
 ```
+<!-- excluded-line:end -->
 
 ### Max-iter decision
 
@@ -960,14 +987,14 @@ AskUserQuestion({
 })
 ```
 
-A skipped file's items are appended to `$RD/excluded.md` with 사유 `Edit 실패`.
+A skipped file's items are appended to `$RD/excluded.md` with 사유 `Edit 실패` — through the 「제외 결과 줄」 fence.
 
 ## e2e
 
-리뷰·테스트 루프가 「멈추기」 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 「멈추기」로 끝났으면(aborted) 이 절을
-건너뛰고 e2e 칸을 `안 함` 으로 둔다. trivia 로 파이프라인이 생략된 실행과 Step 1c 의 걸러진 diff 가 빈 실행도 건너뛰고 e2e 칸을 `안 함` 으로 둔다.
+리뷰·테스트 루프가 「멈추기」 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 「멈추기」로 끝났으면(aborted) 걷기를
+건너뛰고 e2e 칸을 `안 함` 으로 둔 채 E6 만 돈다. trivia 로 파이프라인이 생략된 실행과 Step 1c 의 걸러진 diff 가 빈 실행도 건너뛰고 e2e 칸을 `안 함` 으로 둔다.
 
-범위 모드도 질문 없이 건너뛰고 e2e 칸을 `안 함` 으로 둔다. 레퍼런스를 읽지 않고 이 줄만 낸다:
+범위 모드도 질문 없이 걷기를 건너뛰고 e2e 칸을 `안 함` 으로 둔 채 E6 만 돈다. 레퍼런스를 읽지 않고 이 줄만 낸다:
 `> [quality-gates] 범위 모드라 앱을 걷지 않는다 — 지금 체크아웃이 범위 끝과 다를 수 있다.`
 
 판단과 기록 규칙은 e2e 레퍼런스에 있다. 이 절에 들어오면 먼저 읽는다.
@@ -1126,8 +1153,8 @@ cat >> "$D/e2e-flip.md" <<'E2E_FLIP'
 E2E_FLIP
 ```
 
-**E6 — e2e 결과 줄.** 이 절에서 `## Final verdict` 로 가기 직전에 한 번 돈다 — 걸었든, E0 · E1 · E3 의 갈래나 질문의 답으로 e2e 칸이
-정해졌든. `<e2e 칸>` 은 레퍼런스 6 절이 정한 칸이다. `<뒤집음>` 은 「사람이 뒤집음」이 예면 ` --e2e-overridden`(앞에 공백 하나),
+**E6 — e2e 결과 줄.** `## Final verdict` 로 가기 직전에 한 번 돈다 — 어느 길로 가든: 걸었든, E0 · E1 · E3 의 갈래나 질문의 답으로 e2e 칸이
+정해졌든, 걷기를 건너뛰었든(Fix-loop · Max-iter 의 「멈추기」 · 범위 모드 — 칸은 `안 함`). trivia 실행과 걸러진 diff 가 빈 실행만 돌지 않는다. `<e2e 칸>` 은 레퍼런스 6 절이 정한 칸이다. `<뒤집음>` 은 「사람이 뒤집음」이 예면 ` --e2e-overridden`(앞에 공백 하나),
 아니면 빈 글이다 — 마지막 걷기의 판정안을 사람이 뒤집었을 때만 예다. 앞 걷기(`e2e-flip.md` 의 앞 줄)의 뒤집기는 세지 않는다.
 시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,
 그 걷기가 마지막 걷기 대신 쓰인다. 펜스가 낸 줄이 e2e 결과 줄이다 — 글자 그대로 들고 있다가 판정 펜스에 붙인다:
@@ -1140,18 +1167,23 @@ printf 'qg-verdict-args: --e2e %s%s\n' '<e2e 칸>' '<뒤집음>'
 
 ## Final verdict
 
-판정 줄은 다섯 결과 줄로 만든다 — 숫자를 만든 직후의 펜스가 낸 `qg-verdict-args: …` 줄이다. 판정 펜스는 세션 폴더를 다시 읽지 않는다.
+판정 줄은 결과 줄로 만든다 — 숫자를 만든 직후의 펜스가 낸 `qg-verdict-args: …` 줄이다. 판정 펜스는 세션 폴더를 다시 읽지 않는다.
 판정값 · 사유 · 우선순위는 `verdict.py` 가 정하고, 판정 인자는 결과 줄의 글자 그대로다 (V1 · R24).
-각 자리(따옴표 here-doc 의 몸)에 그 줄을 글자 그대로 한 줄 넣고, 줄이 없으면 그 자리를 빈 줄로 둔다. 줄은 그 줄을 낸 펜스의 출력에서만
-가져온다 — 표 · 보고서 · 요약의 글에서 다시 만들지 않는다.
+자리(따옴표 here-doc 의 몸)마다 정확히 한 줄 — 그 줄을 낸 펜스가 출력한 `qg-verdict-args: …` 기계 줄 하나 — 만 글자 그대로 넣는다.
+다른 줄 · 설명 · 여러 줄을 넣지 않고, 줄이 없으면 그 자리를 빈 줄로 둔다. 줄은 그 줄을 낸 펜스의 출력에서만 가져온다 — 표 · 보고서 ·
+요약의 글에서 다시 만들지 않는다.
 
 | 자리 | 넣을 줄 | 없으면 |
 |---|---|---|
-| `QG_ARGS_R` 리뷰 | 마지막 iteration 의 Step 3.9 펜스가 낸 줄 — 그 iteration 에서 「되올려 다시 합성하기」가 돌았으면 그 펜스가 낸 줄 | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--blocking 0 --optional 0` |
+| `QG_ARGS_R` 리뷰 | 마지막 iteration 의 Step 3.9 펜스가 처음 낸 줄(되올리기 전) | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--blocking 0 --optional 0` |
+| `QG_ARGS_RR` 되올린 뒤 리뷰(최종 판정 펜스만) | 그 iteration 에서 「되올려 다시 합성하기」가 돌았으면 그때 다시 돈 Step 3.9 펜스가 낸 줄 | 빈 줄 — 리뷰 자리의 줄을 쓴다 |
 | `QG_ARGS_D` 차등 | 마지막 iteration 의 차등 결과 줄 — D5 펜스(flaky 재실행으로 다시 불렀으면 마지막 호출) · D7 펜스 · kill switch 펜스 중 그 iteration 에 돈 것 | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--new-failures 0` |
 | `QG_ARGS_X` 제외 | 이 실행에서 Fix-loop 의 제외 결과 줄 펜스가 마지막으로 낸 줄 | `--excluded 0` |
 | `QG_ARGS_S` 범위 | 범위 모드면 Preflight 의 리뷰 트리 펜스가 낸 줄 | `--sha` = 지금 HEAD |
-| `QG_ARGS_E` e2e | 마지막 iteration 의 `## e2e` E6 펜스가 낸 줄 | `--e2e '안 함'` |
+| `QG_ARGS_E` e2e | 마지막 iteration 의 `## e2e` E6 펜스가 낸 줄 — 걷지 않은 실행(멈추기 · 범위 모드 · kill switch 등)도 E6 을 돈다 | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--e2e '안 함'` |
+
+되올린 뒤 리뷰 결과 줄이 있으면 최종 판정 펜스가 그 줄을 쓰되, 리뷰 자리의 줄보다 느슨하면(막는 지적 수가 적거나 `--defect` ·
+`--review-blocked` · `--angle-absent` · `--reason` 중 하나가 빠졌다) 판정 없이 멈춘다.
 
 `<N>` 은 마지막 iteration 번호다. 펜스는 줄마다 모양과 그 자리에 올 수 있는 이름을 검사한다 — 맞지 않으면 판정 줄 없이 0 이 아닌 값으로 끝난다.
 
@@ -1161,8 +1193,11 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 IFS= read -r R_LINE <<'QG_ARGS_R'
-<리뷰 결과 줄>
+<리뷰 결과 줄 — 마지막 iteration 의 Step 3.9 펜스가 낸 줄>
 QG_ARGS_R
+IFS= read -r RR_LINE <<'QG_ARGS_RR'
+<되올린 뒤 리뷰 결과 줄 — 없으면 빈 줄>
+QG_ARGS_RR
 IFS= read -r D_LINE <<'QG_ARGS_D'
 <차등 결과 줄>
 QG_ARGS_D
@@ -1173,33 +1208,57 @@ IFS= read -r S_LINE <<'QG_ARGS_S'
 <범위 결과 줄 — 없으면 빈 줄>
 QG_ARGS_S
 IFS= read -r E_LINE <<'QG_ARGS_E'
-<e2e 결과 줄 — 없으면 빈 줄>
+<e2e 결과 줄>
 QG_ARGS_E
 [ -n "$R_LINE" ] && [ -n "$D_LINE" ] || { echo "[quality-gates] 판정에 넘길 리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
-R_ARGS=(); D_ARGS=(); X_ARGS=(--excluded 0); S_ARGS=(--sha "$(git rev-parse --short HEAD)"); E_ARGS=(--e2e '안 함')
-for AX in R D X S; do
+R_ARGS=(); RR_ARGS=(); D_ARGS=(); X_ARGS=(--excluded 0); S_ARGS=(--sha "$(git rev-parse --short HEAD)"); E_ARGS=()
+for AX in R RR D X S; do
   case "$AX" in
     R) L="$R_LINE"; NAME="리뷰"; OK=" --blocking --optional --defect --review-blocked --angle-absent --reason " ;;
+    RR) L="$RR_LINE"; NAME="되올린 뒤 리뷰"; OK=" --blocking --optional --defect --review-blocked --angle-absent --reason " ;;
     D) L="$D_LINE"; NAME="차등 테스트"; OK=" --new-failures --defect --reason " ;;
     X) L="$X_LINE"; NAME="제외"; OK=" --excluded " ;;
     S) L="$S_LINE"; NAME="범위"; OK=" --sha " ;;
   esac
   [ -n "$L" ] || continue
-  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z-]+( [0-9a-z-]+)?)+' \
+  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+' \
     || { echo "[quality-gates] ${NAME} 결과 줄이 정해진 모양(qg-verdict-args: --이름 값 …)이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
-  A=(); SEEN=" "; REST="${L#qg-verdict-args: }"
+  A=(); SEEN=" "; NEED=""; REST="${L#qg-verdict-args: }"
   while [ -n "$REST" ]; do
     W="${REST%% *}"; case "$REST" in *" "*) REST="${REST#* }" ;; *) REST="" ;; esac
     case "$W" in
       --*)
+        [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
         case "$OK" in *" $W "*) ;; *) echo "[quality-gates] ${NAME} 결과 줄에 이 줄에 올 수 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;; esac
         case "$SEEN" in *" $W "*) [ "$W" = --reason ] || { echo "[quality-gates] ${NAME} 결과 줄에 같은 값(${W})이 두 번 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; } ;; esac
-        SEEN="$SEEN$W " ;;
+        SEEN="$SEEN$W "
+        case "$W" in --defect|--review-blocked|--angle-absent) ;; *) NEED="$W" ;; esac ;;
+      -*) echo "[quality-gates] ${NAME} 결과 줄에 - 로 시작하는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;;
+      *) [ -n "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄에 이름 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; }; NEED="" ;;
     esac
     A+=("$W")
   done
-  case "$AX" in R) R_ARGS=("${A[@]}") ;; D) D_ARGS=("${A[@]}") ;; X) X_ARGS=("${A[@]}") ;; S) S_ARGS=("${A[@]}") ;; esac
+  [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
+  case "$AX" in R) R_ARGS=("${A[@]}") ;; RR) RR_ARGS=("${A[@]}") ;; D) D_ARGS=("${A[@]}") ;; X) X_ARGS=("${A[@]}") ;; S) S_ARGS=("${A[@]}") ;; esac
 done
+if [ -n "$RR_LINE" ]; then
+  R_W=" ${R_LINE#qg-verdict-args: } "; RR_W=" ${RR_LINE#qg-verdict-args: } "
+  B0="${R_W#* --blocking }"; B0="${B0%% *}"; B1="${RR_W#* --blocking }"; B1="${B1%% *}"
+  case "$B0" in ''|*[!0-9]*|??????????*) B0=x ;; esac; case "$B1" in ''|*[!0-9]*|??????????*) B1=x ;; esac
+  { [ "$B0" != x ] && [ "$B1" != x ] && [ "$B1" -ge "$B0" ]; } \
+    || { echo "[quality-gates] 되올린 뒤 리뷰 결과 줄의 막는 지적 수가 차등 테스트 전 리뷰 결과 줄보다 적거나 읽을 수 없다 — 세션 폴더가 바뀌었을 수 있다. 판정 줄을 만들지 않는다" >&2; exit 4; }
+  REST="${R_LINE#qg-verdict-args: }"; PREVW=""
+  while [ -n "$REST" ]; do
+    W="${REST%% *}"; case "$REST" in *" "*) REST="${REST#* }" ;; *) REST="" ;; esac
+    LOST=""
+    case "$W" in --defect|--review-blocked|--angle-absent) case "$RR_W" in *" $W "*) ;; *) LOST="$W" ;; esac ;; esac
+    [ "$PREVW" != --reason ] || case "$RR_W" in *" --reason $W "*) ;; *) LOST="--reason $W" ;; esac
+    [ -z "$LOST" ] || { echo "[quality-gates] 되올린 뒤 리뷰 결과 줄에 차등 테스트 전 리뷰 결과 줄의 ${LOST} 가 없다 — 세션 폴더가 바뀌었을 수 있다. 판정 줄을 만들지 않는다" >&2; exit 4; }
+    PREVW="$W"
+  done
+  R_ARGS=("${RR_ARGS[@]}")
+fi
+[ -n "$E_LINE" ] || { echo "[quality-gates] 판정에 넘길 e2e 결과 줄이 비었다 — ## e2e 의 E6 펜스가 낸 줄을 넣는다(걷지 않은 실행도 E6 을 돈다). 판정 줄을 만들지 않는다" >&2; exit 4; }
 if [ -n "$E_LINE" ]; then
   case "$E_LINE" in "qg-verdict-args: --e2e "*) ;; *) echo "[quality-gates] e2e 결과 줄이 정해진 모양(qg-verdict-args: --e2e <칸>)이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;; esac
   E_STATE="${E_LINE#qg-verdict-args: --e2e }"; E_OV=""
@@ -1246,19 +1305,24 @@ for AX in R D X S; do
     S) L="$S_LINE"; NAME="범위"; OK=" --sha " ;;
   esac
   [ -n "$L" ] || continue
-  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z-]+( [0-9a-z-]+)?)+' \
+  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+' \
     || { echo "[quality-gates] ${NAME} 결과 줄이 정해진 모양(qg-verdict-args: --이름 값 …)이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
-  A=(); SEEN=" "; REST="${L#qg-verdict-args: }"
+  A=(); SEEN=" "; NEED=""; REST="${L#qg-verdict-args: }"
   while [ -n "$REST" ]; do
     W="${REST%% *}"; case "$REST" in *" "*) REST="${REST#* }" ;; *) REST="" ;; esac
     case "$W" in
       --*)
+        [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
         case "$OK" in *" $W "*) ;; *) echo "[quality-gates] ${NAME} 결과 줄에 이 줄에 올 수 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;; esac
         case "$SEEN" in *" $W "*) [ "$W" = --reason ] || { echo "[quality-gates] ${NAME} 결과 줄에 같은 값(${W})이 두 번 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; } ;; esac
-        SEEN="$SEEN$W " ;;
+        SEEN="$SEEN$W "
+        case "$W" in --defect|--review-blocked|--angle-absent) ;; *) NEED="$W" ;; esac ;;
+      -*) echo "[quality-gates] ${NAME} 결과 줄에 - 로 시작하는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;;
+      *) [ -n "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄에 이름 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; }; NEED="" ;;
     esac
     A+=("$W")
   done
+  [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
   case "$AX" in R) R_ARGS=("${A[@]}") ;; D) D_ARGS=("${A[@]}") ;; X) X_ARGS=("${A[@]}") ;; S) S_ARGS=("${A[@]}") ;; esac
 done
 if [ -n "$E_LINE" ]; then
@@ -1316,19 +1380,24 @@ for AX in R D X S; do
     S) L="$S_LINE"; NAME="범위"; OK=" --sha " ;;
   esac
   [ -n "$L" ] || continue
-  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z-]+( [0-9a-z-]+)?)+' \
+  printf '%s\n' "$L" | grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+' \
     || { echo "[quality-gates] ${NAME} 결과 줄이 정해진 모양(qg-verdict-args: --이름 값 …)이 아니다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
-  A=(); SEEN=" "; REST="${L#qg-verdict-args: }"
+  A=(); SEEN=" "; NEED=""; REST="${L#qg-verdict-args: }"
   while [ -n "$REST" ]; do
     W="${REST%% *}"; case "$REST" in *" "*) REST="${REST#* }" ;; *) REST="" ;; esac
     case "$W" in
       --*)
+        [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
         case "$OK" in *" $W "*) ;; *) echo "[quality-gates] ${NAME} 결과 줄에 이 줄에 올 수 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;; esac
         case "$SEEN" in *" $W "*) [ "$W" = --reason ] || { echo "[quality-gates] ${NAME} 결과 줄에 같은 값(${W})이 두 번 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; } ;; esac
-        SEEN="$SEEN$W " ;;
+        SEEN="$SEEN$W "
+        case "$W" in --defect|--review-blocked|--angle-absent) ;; *) NEED="$W" ;; esac ;;
+      -*) echo "[quality-gates] ${NAME} 결과 줄에 - 로 시작하는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4 ;;
+      *) [ -n "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄에 이름 없는 값(${W})이 있다 — 판정 줄을 만들지 않는다" >&2; exit 4; }; NEED="" ;;
     esac
     A+=("$W")
   done
+  [ -z "$NEED" ] || { echo "[quality-gates] ${NAME} 결과 줄의 ${NEED} 에 값이 없다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
   case "$AX" in R) R_ARGS=("${A[@]}") ;; D) D_ARGS=("${A[@]}") ;; X) X_ARGS=("${A[@]}") ;; S) S_ARGS=("${A[@]}") ;; esac
 done
 if [ -n "$E_LINE" ]; then

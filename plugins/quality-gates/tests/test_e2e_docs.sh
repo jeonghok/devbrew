@@ -149,7 +149,7 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
       assert_contains "$f" "\"\${${ax}_ARGS[@]}\"" "R24($m): $ax 결과 줄은 배열 \"\${${ax}_ARGS[@]}\" 로 넘긴다"
     done
     assert_contains "$f" '"${E_ARGS[@]}"' "R24($m): e2e 결과 줄은 배열로 넘긴다"
-    assert_contains "$f" "grep -Eqx 'qg-verdict-args:( --[a-z-]+( [0-9a-z-]+)?)+'" "R24($m): 결과 줄의 모양을 검사한다"
+    assert_contains "$f" "grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+'" "R24($m): 결과 줄의 모양을 검사한다"
     assert_contains "$f" 'pass|fail|미확인|"안 함"|"걸을 것 없음"|"걸을 도구 없음"|"꺼짐(kill switch)") ;;' "R24($m): e2e 칸은 닫힌 열거로 검사한다"
     assert_contains "$f" 'python3 "$QG/scripts/verdict.py" ' "R24($m): 판정은 verdict.py 가 낸다(양성 짝)"
     for ax in synth.out synth-review.out differential.yaml excluded.md range-scope.txt --prior 'sed -n' eval; do
@@ -158,8 +158,17 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
     assert_not_grep "$f" '--(blocking|optional|new-failures|excluded|sha) <' "R24($m): 숫자를 모델이 채우는 자리표시가 없다"
     assert_not_grep "$f" '_ARGS=\( *[<q]' "R24($m): 결과 줄을 따옴표 없이 ( … ) 안에 붙이는 자리가 없다"
     assert_not_contains "$f" '%q' "R24($m): printf %q 로 낸 글을 되읽지 않는다"
+    # 이름 목록 밖의 세션 파일도 못 읽게 — 펜스가 쓰는 세션 폴더 경로는 자기가 쓰는 verdict.out 하나뿐이고 RV 는 없다.
+    assert_eq "$(printf '%s\n' "$f" | grep -oE '\$\{?RD\}?/[^" ;)]*' | sort -u | tr '\n' ' ')" '$RD/verdict.out ' \
+      "R24($m): 세션 폴더 경로는 \$RD/verdict.out 하나뿐이다"
+    assert_not_grep "$f" '\$\{?RV\b|\$\{?RV\}' "R24($m): 펜스가 \$RV 를 쓰지 않는다"
+    assert_eq "$(printf '%s\n' "$f" | grep -cE '\$\{?TOP\}?/')" "1" "R24($m): TOP 아래 경로는 RD 를 정하는 줄 하나뿐이다"
   done
   assert_contains "$(marked final-verdict)" '[ -n "$R_LINE" ] && [ -n "$D_LINE" ] ||' "R24: 최종 판정 펜스는 리뷰 · 차등 결과 줄이 없으면 멈춘다"
+  assert_contains "$(marked final-verdict)" '[ -n "$E_LINE" ] || {' "R24: 최종 판정 펜스는 e2e 결과 줄이 없으면 멈춘다(기본값 안 함 없음)"
+  assert_not_contains "$(marked final-verdict)" "E_ARGS=(--e2e '안 함')" "R24: 최종 판정 펜스에 e2e 기본값이 없다"
+  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
+  assert_contains "$(marked final-verdict)" '[ "$B1" -ge "$B0" ]' "R24: 되올린 뒤 줄의 막는 지적 수가 앞 줄보다 적으면 멈춘다"
   assert_contains "$(marked trivia-verdict)" '--reason trivia --line' "trivia 펜스는 trivia 사유로 판정한다"
   assert_contains "$(marked scope-empty-verdict)" '--reason scope-empty --line' "걸러진 diff 빈 실행 펜스는 scope-empty 사유로 판정한다"
   assert_contains "$s" "E_ARGS=(--e2e '안 함')" "e2e 결과 줄이 없으면 e2e 칸은 안 함"
