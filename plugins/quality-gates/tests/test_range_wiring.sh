@@ -49,15 +49,16 @@ while i < len(lines):
 PY
 fence_with() { python3 -I -X utf8 -c "$PY_FENCE" "$1"; }
 
-# 판정 펜스 셋(일반 · trivia · scope-empty) — verdict.py 를 부르는 펜스마다 SHA_ARG 를 쓰는가
+# 판정 펜스 셋(일반 · trivia · scope-empty) — verdict.py 를 부르는 펜스마다 범위 결과 줄 자리(QG_ARGS_S)를 받아
+# 그 줄을 --sha 로 넘기는가. 범위 파일을 다시 읽지 않고, 지금 HEAD 는 범위 결과 줄이 없을 때의 기본값뿐이다.
 IFS= read -r -d '' PY_VERDICT_FENCES <<'PY' || true
 import re, sys
 text = sys.stdin.read()
 lines = text.splitlines()
 open_re = re.compile(r'^[ \t]*```bash\s*$')
 close_re = re.compile(r'^[ \t]*```\s*$')
-sha_line = ('SHA_ARG="$(git rev-parse --short HEAD)"; RS="$RD/range-scope.txt"; '
-            'if [ -f "$RS" ]; then SHA_ARG="$(git rev-parse --short "$(sed -n \'s/^end: //p\' "$RS")")"; fi')
+slot_line = "IFS= read -r S_LINE <<'QG_ARGS_S'"
+default_line = 'S_ARGS=(--sha "$(git rev-parse --short HEAD)")'
 fences = []
 i = 0
 while i < len(lines):
@@ -75,12 +76,15 @@ vf = [b for b in fences if any('scripts/verdict.py' in l for l in b)]
 print("VERDICT_FENCES:%d" % len(vf))
 good = 0
 for b in vf:
-    s = [k for k, l in enumerate(b) if l == sha_line]
+    s = [k for k, l in enumerate(b) if l == slot_line]
+    d = [k for k, l in enumerate(b) if default_line in l]
     v = [k for k, l in enumerate(b) if 'scripts/verdict.py' in l]
     calls = " ".join(b[v[0]:]) if v else ""
-    if len(s) == 1 and v and s[0] < v[0] and '--sha "$SHA_ARG"' in calls and '--short HEAD)" --e2e' not in calls:
+    body = "\n".join(b)
+    if (len(s) == 1 and len(d) == 1 and v and s[0] < d[0] < v[0] and '"${S_ARGS[@]}"' in calls
+            and 'range-scope.txt' not in body and '--short HEAD)" --e2e' not in calls):
         good += 1
-print("SHA_ARG_FENCES:%d" % good)
+print("SHA_SLOT_FENCES:%d" % good)
 PY
 
 g() {   # g <repo> <git args…> — 전역 설정에 기대지 않는 커밋
@@ -168,11 +172,13 @@ case_text_locks() {
   assert_contains "$E2" '> [quality-gates] 범위 모드라 앱을 걷지 않는다 — 지금 체크아웃이 범위 끝과 다를 수 있다.' "e2e: 걷지 않는 이유를 공시한다"
 
   local FV; FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK")"
-  assert_count_ge "printf '%s\n' \"\$FV\" | grep -c 'range-scope.txt'" 3 "판정 펜스(일반 · trivia · scope-empty)가 범위 모드면 끝 커밋을 쓴다"
   local vf; vf="$(printf '%s\n' "$FV" | python3 -I -X utf8 -c "$PY_VERDICT_FENCES")"
   assert_grep "$vf" '^VERDICT_FENCES:3$' "판정 펜스는 셋이다(양성 짝)"
-  assert_grep "$vf" '^SHA_ARG_FENCES:3$' "판정 펜스 셋 모두 verdict.py 앞에서 SHA_ARG 를 정하고 --sha 에 그것을 넘긴다"
-  assert_eq "$(printf '%s\n' "$FV" | grep -cF -- '--sha "$(git rev-parse --short HEAD)"')" "0" "판정 펜스에 HEAD 를 바로 넘기는 --sha 가 남지 않았다"
+  assert_grep "$vf" '^SHA_SLOT_FENCES:3$' "판정 펜스 셋 모두 범위 결과 줄 자리를 받아 --sha 로 넘긴다 — 범위 파일을 다시 읽지 않고, HEAD 는 줄이 없을 때의 기본값뿐이다"
+  assert_contains "$FV" '| `QG_ARGS_S` 범위 | 범위 모드면 Preflight 의 리뷰 트리 펜스가 낸 줄 |' "Final verdict: 범위 모드면 범위 결과 줄을 넣는다"
+  assert_eq "$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK" | fence_with 'review_tree:' | tail -n 1)" \
+    "printf 'qg-verdict-args: --sha %s\\n' \"\$(git rev-parse --short \"\$(sed -n 's/^end: //p' \"\$RS\")\")\"" \
+    "P2b 리뷰 트리 펜스의 마지막 줄이 범위 결과 줄(끝 커밋)을 낸다"
   assert_contains "$(printf '%s\n' "$FV" | fence_with "printf '\n## 판정")" "if [ -f \"\$RD/range-scope.txt\" ]; then printf '\n## 범위\n\n'; cat \"\$RD/range-scope.txt\"; fi" "기록 펜스: 범위 모드면 ## 범위 절을 남긴다"
 
   local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
@@ -234,6 +240,7 @@ case_review_tree() {
     printf '# dirty\n' > "$R/README.md"; printf 'x\n' > "$R/untracked-probe.txt"
     rt_run "$tree"
     assert_eq "$rc" "0" "[$where] 리뷰 트리 펜스 rc 0"
+    assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "qg-verdict-args: --sha $(git -C "$R" rev-parse --short "$E")" "[$where] 리뷰 트리 펜스가 끝 커밋의 범위 결과 줄을 낸다"
     assert_eq "$(printf '%s\n' "$out" | grep -c '^review_tree: checkout$')" "0" "[$where] 지금 체크아웃을 리뷰어에게 넘기지 않는다"
     rt="$(printf '%s\n' "$out" | sed -n 's/^review_tree: //p')"
     if [ -n "$rt" ] && [ -d "$rt" ]; then
@@ -380,11 +387,10 @@ case_fences_agree() {
   assert_grep "$out" '^1$' "D2 펜스: 분모는 끝 커밋 트리의 테스트 수(1)"
   assert_contains "$out" 'total rc=0' "D2 펜스: total rc=0"
 
-  local line; line="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | grep '^SHA_ARG=' | head -n 1)"
-  run_fence "RD=\"$D\"; $line; printf 'sha=%s\n' \"\$SHA_ARG\""
-  assert_eq "$out" "sha=$(git -C "$R" rev-parse --short "$E")" "판정 커밋: 범위 모드면 끝 커밋(체크아웃은 시작 커밋)"
-  run_fence "RD=\"$ROOT/no-range\"; $line; printf 'sha=%s\n' \"\$SHA_ARG\""
-  assert_eq "$out" "sha=$(git -C "$R" rev-parse --short HEAD)" "판정 커밋: 범위 파일이 없으면 HEAD(양성 짝)"
+  local line; line="$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK" | fence_with 'review_tree:' | tail -n 1)"
+  run_fence "RS=\"$F\"; $line"
+  assert_eq "$out" "qg-verdict-args: --sha $(git -C "$R" rev-parse --short "$E")" "판정 커밋: 범위 결과 줄은 끝 커밋이다(체크아웃은 시작 커밋)"
+  assert_not_contains "$out" "$(git -C "$R" rev-parse --short HEAD)" "판정 커밋: 범위 결과 줄은 지금 체크아웃(시작 커밋)이 아니다(양성 짝)"
 
   printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$D/result.md"
   # 게시 펜스(하나뿐) — 플러그인 루트는 sink 호출을 기록하는 대역이다

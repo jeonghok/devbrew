@@ -60,6 +60,28 @@ assert_contains "$S1" '문서 경로' "Step 1: 문서 경로 공시 줄을 정�
 assert_contains "$S1" '`self_state:`' "Step 1c: review-diff 의 self_state: 를 읽는다"
 assert_grep "$S1" '`> \[quality-gates\] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <[^>]+>개: <review-i<N>\.self-state 의 경로들>`' \
   "Step 1c: 건너뛴 qg 상태 경로를 공시한다(조용히 넘기지 않는다)"
+# AC22 — review-diff 의 stderr 줄은 매 iteration 하나도 빼지 않고 사용자에게 옮긴다(rc 0 이어도, 목록에 없는 꼴도).
+assert_contains "$S1" 'rc 가 0 이어도 stderr 의 `review-diff: ` 로 시작하는 줄은 매 iteration 하나도 빼지 않고 사용자에게 옮긴다' \
+  "Step 1c: review-diff: 줄을 매 iteration 모두 옮긴다"
+assert_contains "$S1" '줄마다 앞의 `review-diff: ` 를 `> [quality-gates] ` 로 바꾸고 나머지 글은 그대로 둔다' \
+  "Step 1c: 옮길 때 머리만 바꾸고 글은 그대로 둔다"
+assert_contains "$S1" '아래에 없는 꼴의 줄도 그대로 옮긴다' "Step 1c: 목록에 없는 꼴의 줄도 옮긴다"
+assert_contains "$S1" '- `추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — <이유와 고치는 길>` — 추적 안 되는 중첩 레포 폴더마다 한 줄. 그 안의 파일은 리뷰 diff 에 없다.' \
+  "Step 1c: 중첩 레포는 리뷰하지 않았다는 꼴로만 온다"
+# README 가 스크립트가 내는 이유 줄을 글자 그대로 싣는다(스크립트에서 도출 — 한쪽만 바뀌면 깨진다).
+nested_say="$(sed -n "s/^ *printf 'review-diff: \(추적 안 되는 중첩 레포 \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
+assert_eq "$(printf '%s\n' "$nested_say" | grep -c .)" "1" "스크립트에서 중첩 레포 이유 줄 하나를 읽었다(양성 짝)"
+assert_contains "$(cat "$QG/README.md")" "\`$nested_say\`" "README 가 스크립트의 중첩 레포 이유 줄을 그대로 싣는다"
+gitlink_say="$(sed -n "s/^ *printf 'review-diff: \(기준의 \.gitmodules 에 선언되지 않은 gitlink \)%s\( 는 리뷰하지 않았다 — .*\)\\\\n' .*\$/\1<이름>\2/p" "$QG/scripts/review-diff.sh")"
+assert_eq "$(printf '%s\n' "$gitlink_say" | grep -c .)" "1" "스크립트에서 gitlink 이유 줄 하나를 읽었다(양성 짝)"
+assert_contains "$(cat "$QG/README.md")" "\`$gitlink_say\`" "README 가 스크립트의 gitlink 이유 줄을 그대로 싣는다"
+assert_contains "$S1" "- \`$gitlink_say\` — 기준의 \`.gitmodules\` 에 선언되지 않은 새 · 바뀐 gitlink 마다 한 줄(모든 모드)." \
+  "Step 1c: 선언되지 않은 gitlink 는 스크립트의 이유 줄 꼴로 온다"
+# 중첩 레포 안을 펼쳐 리뷰에 싣는 길은 거뒀다 — 그 꼴 · 낱말이 SKILL · README · 스크립트에 남지 않는다.
+for f in "$SKILL" "$QG/README.md" "$QG/scripts/review-diff.sh"; do
+  assert_not_grep "$(cat "$f")" '리뷰에 실었다|펼치지 못한 중첩 레포|중첩 레포 안의 중첩 레포|nested_list' \
+    "중첩 레포를 펼치는 꼴이 없다: ${f#"$ROOT"/}"
+done
 assert_eq "$(grep -c 'README\*' "$SKILL")" "0" "SKILL 에 문서 경로 패턴을 다시 적지 않는다 — 규칙은 doc_paths.py 하나"
 
 # 1c 표 — 기본 scope 를 정하는 행은 펜스의 자리표시가 아니라 이 행들이다. 줄 전체로 잰다
@@ -103,37 +125,51 @@ assert_contains "$FV" '--reason scope-empty' "걸러진 diff 가 빈 실행은 s
 assert_contains "$FV" '걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)' \
   "Final verdict 의 받는 자리가 1c 와 같은 이름 · 같은 조건이다"
 assert_contains "$FV" '`--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다' "scope-empty 펜스의 차등 새 실패 0 은 차등을 돌지 않아서임을 밝힌다"
-# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 iteration 번호와
-# 앞 iteration 들이 쌓은 제외 패치 수를 싣는다(N>1 이면 excluded.md 에 항목이 있을 수 있다).
-SEF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /--reason scope-empty/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
-if [ -z "$SEF" ]; then
-  no "Final verdict 에 --reason scope-empty 를 부르는 bash 펜스가 없다"
+# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 iteration 번호와 제외 결과 줄의
+# 제외 패치 수를 싣는다(N>1 이면 앞 반복의 제외 결과 줄이 있다). 판정 펜스는 excluded.md 를 다시 세지 않는다.
+SEF="$(awk '$0 == "<!-- scope-empty-verdict:begin -->" {on=1; next} $0 == "<!-- scope-empty-verdict:end -->" {exit} on' "$SKILL")"
+RMF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /rm -f "\$RD\/differential\.yaml"/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
+if [ -z "$SEF" ] || ! printf '%s\n' "$SEF" | grep -q -- '--reason scope-empty'; then
+  no "Final verdict 에 --reason scope-empty 를 부르는 표지 펜스가 없다"
 else
   SET="$(mktemp -d)"
   git -C "$SET" init -q -b trunk \
     && git -C "$SET" -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
   mkdir -p "$SET/.claude/quality-gates/scopeempty01"
-  printf '%s\n' "$SEF" | sed 's/<session-id>/scopeempty01/g; s/<N>/2/g' > "$SET/run.sh"
+  sef_fill() {   # sef_fill <출력> <제외 결과 줄>
+    python3 -I "$QG/tests/lib/verdict_fence.py" "$SKILL" scope-empty-verdict "$1" "<session-id>=scopeempty01" "<N>=2" \
+      "QG_ARGS_R=" "QG_ARGS_D=" "QG_ARGS_X=$2" "QG_ARGS_S=" "QG_ARGS_E="
+  }
+  sef_fill "$SET/run.sh" ""; sef_fill "$SET/run2.sh" "qg-verdict-args: --excluded 2"
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다(excluded.md 없음)"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다(제외 결과 줄 없음)"
   assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
     '^qg: not-certified \(scope-empty\) · .* · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 2 · [0-9a-f]+$' \
     "scope-empty 펜스의 판정 줄 — not-certified (scope-empty) · e2e 안 함 · 제외 0 · 그 iteration 번호"
   printf -- '- #1 a.py — 사유 x\n- #2 b.py — 사유 y\n' > "$SET/.claude/quality-gates/scopeempty01/excluded.md"
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 excluded.md 가 있어도 rc 0"
   assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
-    ' · 제외 패치 2 · iter 2 · ' "scope-empty 펜스가 앞 iteration 의 제외 패치 수를 excluded.md 에서 센다"
+    ' · 제외 패치 0 · iter 2 · ' "scope-empty 펜스는 excluded.md 를 다시 세지 않는다(제외 결과 줄이 없으면 0)"
+  seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run2.sh" 2>&1)"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 제외 결과 줄이 있어도 rc 0"
+  assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
+    ' · 제외 패치 2 · iter 2 · ' "scope-empty 펜스가 앞 반복의 제외 결과 줄의 수를 싣는다"
 
   # final-review M3 — N>1 의 빈 diff 반복은 차등 테스트를 돌지 않는다. 앞 반복의 차등 사본이 남아
-  # 이번 판정의 「## 차등 테스트」로 기록되지 않게 펜스가 지운다. 기록 펜스까지 실제로 돌린다.
+  # 이번 판정의 「## 차등 테스트」로 기록되지 않게 판정 펜스 앞의 펜스가 지운다. 기록 펜스까지 실제로 돌린다.
   SED="$SET/.claude/quality-gates/scopeempty01"
   printf 'new_failures: 3\nattribution_status: stale-from-iter-1\n' > "$SED/differential.yaml"
   printf -- '- tests/test_old.sh\n' > "$SED/differential-not-counted.md"
+  if [ -z "$RMF" ]; then
+    no "Final verdict 에 앞 반복의 차등 사본을 지우는 펜스가 없다"
+  else
+    printf '%s\n' "$RMF" | sed 's/<session-id>/scopeempty01/g' > "$SET/rm.sh"
+    (cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rm.sh" >/dev/null 2>&1)
+  fi
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스 rc 0 (앞 반복의 차등 사본이 있어도)"
-  [ ! -e "$SED/differential.yaml" ] && ok "scope-empty 펜스가 앞 반복의 differential.yaml 을 지운다" || no "앞 반복의 differential.yaml 이 남았다"
-  [ ! -e "$SED/differential-not-counted.md" ] && ok "scope-empty 펜스가 앞 반복의 differential-not-counted.md 를 지운다" || no "앞 반복의 differential-not-counted.md 가 남았다"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스 rc 0 (앞 반복의 차등 사본을 지운 뒤)"
+  [ ! -e "$SED/differential.yaml" ] && ok "지우기 펜스가 앞 반복의 differential.yaml 을 지운다" || no "앞 반복의 differential.yaml 이 남았다"
+  [ ! -e "$SED/differential-not-counted.md" ] && ok "지우기 펜스가 앞 반복의 differential-not-counted.md 를 지운다" || no "앞 반복의 differential-not-counted.md 가 남았다"
   REC="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /printf .\\n## 판정/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
   if [ -z "$REC" ]; then
     no "Final verdict 에 기록 펜스(## 판정)가 없다"

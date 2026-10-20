@@ -47,10 +47,10 @@
   기대 집합을 계산하면 양쪽에서 함께 빠진 unit 을 아무도 못 잡는다. regression:
   `tests/test_differential_procedure.sh` (절차가 `diff-test-results.py` 를 직접 부른다), `tests/test_diff_test_results.py`
   (`test_R8_expected_comes_from_assign_not_results`).
-- **LD7 (구조 게이트는 silent skip 을 막는다) — 판정 입력은 기계 출력 그대로** (v3.0.0; 13.0.0
+- **LD7 (구조 게이트는 silent skip 을 막는다) — 판정 인자는 숫자를 만든 직후 기계가 낸 줄 그대로** (v3.0.0; 13.0.0
   에서 다시 지음) — 차등 테스트의 결과를 모델이 옮겨 적지 않는다. `run-test-selection.sh` 가
   행을 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을
-  직접 읽어 판정 입력 한 파일을 내며, `verdict.py` 가 그 파일을 그대로 읽는다. 꼬리 줄이
+  직접 읽어 판정 입력 한 파일을 내며, 그 직후 `verdict.py --emit-args` 가 그 파일에서 결과 줄(`qg-verdict-args: …`)을 낸다 — 리뷰 축 줄은 합성기 `--verdict-args` 가 차등 테스트 전에 낸다. 최종 판정은 그 줄들을 글자 그대로 받고 세션 폴더를 다시 읽지 않는다. 꼬리 줄이
   없거나 행 수가 어긋난 파일은 빈 결과가 아니라 exit 4 다 — 잘린 출력이 「테스트 없음」으로
   읽히지 않는다. 어댑터가 주장하지 않은 후보(`unclaimed` — 워크트리 밖 경로 포함)는
   `silent-drop` 으로 집계돼 판정을 막는다. 확증하지 못한 축은 실패가 아니라
@@ -156,7 +156,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 | ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect`. 재비판이 낮춘 지적은 「낮춘 지적」 절에 원래 심각도 · 이유와 함께 보이고, 사용자가 반복마다 골라 원래 심각도로 되올릴 수 있다 |
 | ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오(여럿 고를 수 있다 — 번호 순으로 하나씩 걷고, e2e 칸은 가장 나쁜 결과)를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
 
-**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 판정은 그 파일을 `verdict.py` 가 직접 읽는다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다. 원인을 찾으려고 그 절차 밖에서 테스트를 돌릴 수는 있지만, 그 실행은 「조사용 실행 — 판정에 안 씀」으로 표시되고 판정에 들어가지 않는다(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 그것도 돌리지 않는다).
+**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 그 직후 `verdict.py` 가 그 파일에서 차등 결과 줄(`qg-verdict-args: --new-failures K …`)을 내고, 최종 판정은 그 줄을 쓴다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다. 원인을 찾으려고 그 절차 밖에서 테스트를 돌릴 수는 있지만, 그 실행은 「조사용 실행 — 판정에 안 씀」으로 표시되고 판정에 들어가지 않는다(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 그것도 돌리지 않는다).
 
 **아키텍처 메모 — 왜 오케스트레이션이 skill 에 있는가**: Claude Code는 skill만 `Agent()`의
 `subagent_type`을 쓸 수 있다. 파이프라인은 여러 리뷰어를 디스패치해야 하므로 orchestration
@@ -226,6 +226,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │   Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty)
  │   범위 모드: 고치고 다시 돌기 없음(지금 판정으로 끝내기 / 멈추기) · e2e 없음 · 게시 없음
  │   ① review — 시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic
+ │   ①' review-axis synthesis — 리뷰 결과 줄(qg-verdict-args:)을 차등 테스트 전에 낸다
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
  │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
@@ -233,7 +234,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
  │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기
  ├ e2e ── 시나리오 질문(여러 선택) → 고른 것마다 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
- ├ Final verdict ── verdict.py 의 판정 줄 · result.md
+ ├ Final verdict ── 숫자를 만든 직후의 펜스가 낸 결과 줄로 verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:
 ```
 
@@ -321,7 +322,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 
 이 실행의 세션 폴더 안에 qg 가 쓴 추적 안 되는 상태 파일은 리뷰에서 건너뛰되, 그 수와 경로를 매 iteration 한 줄로 알린다(`review-i<N>.self-state`). 다른 세션 폴더의 파일 · qg 가 쓰지 않는 이름 · 추적되는 변경 · 커밋된 변경은 그 폴더 아래여도 리뷰한다.
 
-추적 안 되는 중첩 레포(바깥 레포 안에 든 다른 git 레포)와 기준의 `.gitmodules` 에 선언되지 않은 새 · 바뀐 gitlink(스테이지 · 커밋한 중첩 레포, 토픽 봉인이 만든 gitlink 포함 — 모든 범위)는 리뷰하지 못한다 — 그 안에서 git 프로세스나 그 레포 설정이 고른 명령을 돌리지 않고 그 안의 파일을 리뷰에 싣지 않는다(git 은 gitlink 의 커밋 줄을 보이려고 그 HEAD 만 읽는다 — 그 레포의 설정 · 링크가 명령을 돌리거나 레포 밖 파일을 리뷰에 싣지 못하게). 찍는 이름은 이스케이프하고 백틱은 `\x60` 으로 바꾼다. 리뷰하는 변경이 더한 `.gitmodules` 의 `ignore = all` 이나 사용자 설정 `diff.ignoreSubmodules` 는 gitlink 를 숨기지 못한다(`--ignore-submodules=none`). 대신 매 iteration 그 경로마다 `추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라` 를 내고(이름은 이스케이프한다), 리뷰 diff 가 `degraded: yes` 가 되어 그 실행은 인증되지 않는다(`not-certified (error-axis)`). 선언된 하위 모듈의 커밋 변경은 그대로 둔다. 하위 모듈은 늘 「Subproject commit」 줄로만 diff 한다(`--submodule=short` — 사용자 설정 `diff.submodule` 이 그 폴더 안에서 git 을 띄우지 못하게). 작업 트리 범위(session · `--paths`)의 diff 는 하위 모듈 폴더 안에서 git 을 돌리지 않는다(`--ignore-submodules=dirty` — gitlink 커밋 변경은 보이고, 하위 모듈 안의 커밋 안 된 변경은 보이지 않는다). 폴더를 가리키는 추적 안 된 링크는 링크 자체(가리키는 곳)로 리뷰한다.
+추적 안 되는 중첩 레포(바깥 레포 안에 든 다른 git 레포)와 기준의 `.gitmodules` 에 선언되지 않은 새 · 바뀐 gitlink(스테이지 · 커밋한 중첩 레포, 토픽 봉인이 만든 gitlink 포함 — 모든 범위)는 리뷰하지 않는다. 그 안의 파일을 안전하게 읽을 길이 없어서다 — 그 레포의 무시 규칙대로 파일을 고르려면 그 안에서 git 을 돌리거나 그 레포 설정을 믿어야 하는데, 그 설정이 명령을 돌리거나 링크가 레포 밖 파일을 리뷰에 싣는다. 그래서 그 안에서 git 프로세스나 그 레포 설정이 고른 명령을 돌리지 않고 그 안의 파일을 리뷰에 싣지 않는다(git 은 gitlink 의 커밋 줄을 보이려고 그 HEAD 만 읽는다). 대신 매 iteration 그 경로마다 중첩 레포면 `추적 안 되는 중첩 레포 <이름> 는 리뷰하지 않았다 — 그 레포 설정을 믿지 않고는 안을 안전하게 읽을 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라` 를, gitlink 면 `기준의 .gitmodules 에 선언되지 않은 gitlink <이름> 는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. 그 안의 변경은 따로 리뷰하고, 하위 모듈로 들일 것이 아니면 git rm --cached 로 빼라` 를 내고(찍는 이름은 이스케이프하고 백틱은 `\x60` 으로 바꾼다), 리뷰 diff 가 `degraded: yes` 가 되어 그 실행은 인증되지 않는다(`not-certified (error-axis)`). 리뷰하는 변경이 더한 `.gitmodules` 의 `ignore = all` 이나 사용자 설정 `diff.ignoreSubmodules` 는 gitlink 를 숨기지 못한다(`--ignore-submodules=none`). 선언된 하위 모듈의 커밋 변경은 그대로 둔다. 하위 모듈은 늘 「Subproject commit」 줄로만 diff 한다(`--submodule=short` — 사용자 설정 `diff.submodule` 이 그 폴더 안에서 git 을 띄우지 못하게). 작업 트리 범위(session · `--paths`)의 diff 는 하위 모듈 폴더 안에서 git 을 돌리지 않는다(`--ignore-submodules=dirty` — gitlink 커밋 변경은 보이고, 하위 모듈 안의 커밋 안 된 변경은 보이지 않는다). 폴더를 가리키는 추적 안 된 링크는 링크 자체(가리키는 곳)로 리뷰한다.
 
 **범위 모드 — `range <시작>[..<끝>]`.** 시작 커밋부터 끝 커밋까지의 변경을 한 판정으로 본다. 끝을 생략하면 `origin/HEAD` 가 가리키는 기본 브랜치 끝이다 — `origin/HEAD` 가 없으면 다른 이름으로 대신하지 않고 멈추며, 고치는 길(`git remote set-head origin --auto` 또는 끝을 적기)을 알린다.
 - 범위는 실행 시작에 두 커밋으로 얼린다(`scripts/resolve-range.sh` → 세션 폴더의 `range-scope.txt`). 리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 읽고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어가 읽지 않게 한다, 실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.
@@ -481,6 +482,14 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — 이름의 앞부분만 준 값 같은 부분 일치나
 `quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
+
+## 한계
+
+qg 는 최종 판정 수치를 레포 코드가 돌기 전 또는 만든 직후에 읽어 지킨다. 반복 중간 단계와 레포 코드가 남긴 프로세스의 영향은 막지 않는다. 판정 뒤 게시 단계(게시 여부를 `range-scope.txt` 유무와 result.md 의 `## 게시` 줄로 정한다)도 같다.
+
+- 최종 판정 줄의 수치 · 축은 숫자를 만든 직후의 펜스가 낸 결과 줄(`qg-verdict-args: …`)에서 온다 — 리뷰 축은 차등 테스트 전(Step 3.9), 차등 축은 차등 테스트 직후(D5), 범위는 얼린 직후, e2e 칸은 `## e2e` 를 떠나 판정으로 가기 직전(E6 — 걷지 않은 실행도 낸다)이다. 제외 패치 수는 iteration 마다 그 펜스가 더한 줄 수를 앞 제외 결과 줄의 수에 더해 잇는다 — `excluded.md` 를 다시 세지 않는다. 판정 펜스는 세션 폴더를 다시 읽지 않는다.
+- 반복 중간 단계 — Step 4.5 의 표면화 · 라우팅, 「낮춘 지적」 게이트와 되올려 다시 합성하기, Fix-loop 분류, `result.md` 기록 — 는 차등 테스트 뒤에 세션 폴더를 다시 읽는다. 되올려 다시 합성하기가 낸 리뷰 결과 줄은 차등 테스트 뒤의 세션 폴더에서 만들어진다 — 그래서 최종 판정 펜스는 그 줄이 차등 테스트 전의 리뷰 결과 줄보다 느슨하면(막는 지적 수가 적거나 결함 · 사유가 빠지면) 판정 없이 멈춘다.
+- 차등 테스트가 돌린 레포 코드가 남긴 프로세스는 반복 2 이후의 리뷰 입력에 닿을 수 있다.
 
 ## 파이프라인 state
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] — 2026-10-20
+
+### Security
+
+- codex 감사 러너(`run_audit_codex_reviewer.sh`)가 `project_doc_max_bytes=0` 을 실어, 감사하는 플러그인 트리의 `AGENTS.md` 를 지시로 읽지 않는다.
+
 ## [1.3.0] — 2026-10-20
 
 ### Fixed

@@ -26,6 +26,11 @@
 - 설계문서 경로와 사용자 말을 spec-review 펜스 · 재분해 적용 펜스 · 결정 줄 펜스에 넘길 때 따옴표 heredoc 으로 읽는다. 경로나 말에 `'` · `"` · `$` · 역따옴표가 있어도 셸이 실행하지 않고 글자 그대로 넘긴다.
 - 함께 바뀐 절 목록(`related-changes`)의 출력에서 `<` · `>` · `&` 를 JSON 이스케이프로 쓴다. 제목에 `</related_changes>` 를 넣어 리뷰어 입력의 경계를 깨뜨릴 수 없다.
 
+## [8.2.0] — 2026-10-20
+
+### Security
+- 문서 리뷰의 codex 러너(`run_docreview_codex_reviewer.sh`, 공유 문서 리뷰 엔진)가 `project_doc_max_bytes=0` 을 실어, 리뷰하는 트리의 `AGENTS.md` 를 지시로 읽지 않는다.
+
 ## [8.1.0] — 2026-10-20
 
 ### Changed
