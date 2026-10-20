@@ -225,8 +225,8 @@ QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|prefix|keep|roots|seen|files|missing)\.z'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|excl2|prefix|keep|roots|seen|files|missing|untr|ukeep)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|doc-paths\.new|self-state)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"
@@ -419,12 +419,6 @@ excluded="$(sed -n 's/^excluded: //p' "$T/doc-paths")"
 kept="$(sed -n 's/^kept_model: //p' "$T/doc-paths")"
 dp_source="$(sed -n 's/^doc_paths_source: //p' "$T/doc-paths")"
 
-is_excluded() {   # <path>
-  local x
-  for x in ${EXCL[@]+"${EXCL[@]}"}; do [ "$x" = "$1" ] && return 0; done
-  return 1
-}
-
 # 리뷰하지 않은 항목을 크게 알린다 — 이름은 레포가 정한 글이라 %q 로 이스케이프한다(줄바꿈 · 제어 문자가
 # 줄을 위조하지 못하게). 하나라도 있으면 degraded: yes — 이 값은 Step 1c 의 stdout 으로 같은 턴의
 # 오케스트레이터에 가고(레포 안 표지를 나중에 다시 읽지 않는다), Step 1c 가 판정 입력 error-axis 로 싣는다.
@@ -438,7 +432,7 @@ say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트
   local q
   UNREVIEWED=$((UNREVIEWED + 1))
   q="$(esc_name "$top/${1%/}")"
-  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — git worktree remove --force %s 로 지운 뒤 다시 돌려라\n' \
+  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — 다른 qg 실행이 쓰고 있지 않으면 git worktree remove --force %s 로 지운 뒤 다시 돌려라\n' \
     "$q" "$q" >&2
 }
 say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로
@@ -451,6 +445,8 @@ say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 
 #   minus <a.z> <b.z>…      a 의 순서대로 b 들 어느 것에도 없는 것
 #   roots <keep.z> <all.z>  keep 가운데 keep 안의 다른 경로가 all 의 폴더 이름으로 덮지 않는 것 — :(literal) x 는
 #                           x/… 도 잡으므로 x 아래 경로를 따로 넘기면 다른 묶음에서 두 번 나온다
+#   docpaths <doc-paths> <drop.z> <수>  doc-paths 를 줄 단위로 옮겨 쓰며 drop 의 exclude<TAB> 줄을 reviewed<TAB> 로,
+#                           <수> 가 숫자면 excluded: 줄을 그 수로 바꾼다
 NUL_PY='import sys
 def rd(p):
     with open(p, "rb") as f:
@@ -484,6 +480,17 @@ elif op == "roots":
             i = k.find(b"/", i + 1)
         if not hit:
             out.write(k + b"\0")
+elif op == "docpaths":
+    drop = set(rd(sys.argv[3]))
+    n = sys.argv[4]
+    with open(sys.argv[2], "rb") as f:
+        lines = f.read().split(b"\n")
+    for i, ln in enumerate(lines):
+        if ln.startswith(b"excluded: ") and n.isdigit():
+            lines[i] = b"excluded: " + n.encode("ascii")
+        elif ln.startswith(b"exclude\t") and ln[8:] in drop:
+            lines[i] = b"reviewed\t" + ln[8:]
+    out.write(b"\n".join(lines))
 elif op == "minus":
     skip = set()
     for p in sys.argv[3:]:
@@ -498,9 +505,8 @@ nul_list() {   # <op> <파일>…
   python3 -I -c "$NUL_PY" "$@"
 }
 put_z() {   # <out> <경로>… — NUL 목록으로 쓴다
-  local out="$1" x; shift
-  : > "$out" || return 1
-  for x in "$@"; do printf '%s\0' "$x" >> "$out" || return 1; done
+  local out="$1"; shift
+  if [ "$#" -eq 0 ]; then : > "$out"; else printf '%s\0' "$@" > "$out"; fi
 }
 
 # ── 걸러진 diff ────────────────────────────────────────────────────────────
@@ -517,29 +523,17 @@ nul_list dirs "$T/all.z" "$T/excl.z" > "$T/prefix.z" || gitfail "제외 경로�
 DROP=()
 while IFS= read -r -d '' x; do DROP+=("$x"); done < "$T/prefix.z"
 if [ "${#DROP[@]}" -gt 0 ]; then
-  KEPT_EXCL=()
-  for x in ${EXCL[@]+"${EXCL[@]}"}; do
-    keep_it=1
-    for y in "${DROP[@]}"; do [ "$x" = "$y" ] && keep_it=0; done
-    [ "$keep_it" -eq 1 ] && KEPT_EXCL+=("$x")
-  done
-  EXCL=(${KEPT_EXCL[@]+"${KEPT_EXCL[@]}"})
+  nul_list minus "$T/excl.z" "$T/prefix.z" > "$T/excl2.z" && mv -f -- "$T/excl2.z" "$T/excl.z" \
+    || gitfail "제외 목록을 고쳐 쓰지 못했다"
+  EXCL=()
+  while IFS= read -r -d '' x; do EXCL+=("$x"); done < "$T/excl.z"
   for x in "${DROP[@]}"; do
     printf 'review-diff: %s 는 다른 바뀐 경로의 폴더 이름이기도 해서 문서 경로로 빼지 않고 리뷰한다\n' \
       "$(esc_name "$x")" >&2
   done
   case "$excluded" in ''|*[!0-9]*) ;; *) excluded=${#EXCL[@]} ;; esac
-  put_z "$T/excl.z" ${EXCL[@]+"${EXCL[@]}"} || gitfail "제외 목록을 쓰지 못했다"
-  dp_new=""
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "excluded: "*) line="excluded: $excluded" ;;
-      "exclude$TAB"*)
-        for y in "${DROP[@]}"; do [ "${line:8}" = "$y" ] && line="reviewed$TAB$y"; done ;;
-    esac
-    dp_new="$dp_new$line"$'\n'
-  done < "$T/doc-paths"
-  printf '%s' "$dp_new" > "$T/doc-paths" || gitfail "문서 경로 결정을 고쳐 쓰지 못했다"
+  nul_list docpaths "$T/doc-paths" "$T/prefix.z" "$excluded" > "$T/doc-paths.new" \
+    && mv -f -- "$T/doc-paths.new" "$T/doc-paths" || gitfail "문서 경로 결정을 고쳐 쓰지 못했다"
 fi
 nul_list minus "$T/tracked.z" "$T/excl.z" > "$T/keep.z" || gitfail "남길 경로를 가리지 못했다"
 nul_list roots "$T/keep.z" "$T/all.z" > "$T/roots.z" || gitfail "남길 경로의 폴더 이름 대조가 실패했다"
@@ -562,12 +556,13 @@ done < "$T/roots.z"
 [ "${#KB[@]}" -gt 0 ] && diff_batch
 FILTERED=$(tr -cd '\000' < "$T/filtered.z" | wc -c | tr -d ' ')
 cp -- "$T/filtered.z" "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
-for f in ${UNTR[@]+"${UNTR[@]}"}; do
-  is_excluded "$f" && continue
+put_z "$T/untr.z" ${UNTR[@]+"${UNTR[@]}"} || gitfail "경로 목록을 쓰지 못했다"
+nul_list minus "$T/untr.z" "$T/excl.z" > "$T/ukeep.z" || gitfail "남길 untracked 경로를 가리지 못했다"
+while IFS= read -r -d '' f; do
   FILTERED=$((FILTERED + 1))
   add_untracked "$T/diff" "$f"
   printf '%s\0' "$f" >> "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
-done
+done < "$T/ukeep.z"
 
 # 이름 대조 — (tracked + untracked 파일) − 제외 − (걸러진 이름 + 리뷰한 untracked) 가 비어야 한다. 남는
 # 경로마다 크게 알리고 degraded: yes. 중첩 레포 · 등록된 qg 트리는 아래에서 따로 알린다.

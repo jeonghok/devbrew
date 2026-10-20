@@ -51,7 +51,7 @@ assert_line() {   # assert_line <file> <정확한 한 줄> <msg>
 
 stale_line() {   # stale_line <레포> <트리 이름> — 이전 qg 실행이 남긴 worktree 의 이유 줄(절대 경로)
   local p; p="$(cd "$1" && pwd -P)/.claude/quality-gates/worktrees/$2"
-  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — git worktree remove --force %s 로 지운 뒤 다시 돌려라' \
+  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — 다른 qg 실행이 쓰고 있지 않으면 git worktree remove --force %s 로 지운 뒤 다시 돌려라' \
     "$p" "$p"
 }
 
@@ -471,6 +471,26 @@ case_excluded_prefix_not_swallowed() {
     assert_eq "$(field filtered_files "$OUT")" 2 "$mode: filtered_files: 2"
     assert_eq "$(field degraded "$OUT")" no "$mode: 다 실렸으면 degraded: no"
   done
+  # 큰 제외 목록 + 폴더 이름 하나 — doc-paths 고쳐 쓰기가 줄 수에 비례해 끝나고 내용이 맞다.
+  mkfix
+  g "$R" rm -q README.md
+  mkdir -p "$R/README.md" "$R/notes"; echo 'swallowed_marker = 1' > "$R/README.md/a.py"
+  local i
+  for i in $(seq -w 0 3999); do echo "n $i" > "$R/notes/n-$i.md"; done
+  g "$R" add -A; g "$R" commit -q -m many-docs
+  local t0=$SECONDS
+  OUT=$(cd "$R" && DEVBREW_QUALITY_GATES_DOC_PATHS='README*,notes/**' bash "$RDIFF" --dir "$D" --iter 1 --mode branch 2>"$ROOT/err"); RC=$?
+  local took=$((SECONDS - t0))
+  assert_eq "$RC" 0 "큰 제외 목록: rc 0"
+  [ "$took" -le 120 ] && ok "큰 제외 목록: ${took}초 안에 끝난다(상한 120초)" || no "큰 제외 목록: ${took}초 — 너무 느리다"
+  assert_eq "$(field excluded "$OUT")" 4000 "큰 제외 목록: stdout excluded: 4000"
+  assert_eq "$(field excluded "$(cat "$D/review-i1.doc-paths")")" 4000 "큰 제외 목록: doc-paths excluded: 4000"
+  assert_eq "$(grep -c "^exclude${TAB}notes/n-" "$D/review-i1.doc-paths")" 4000 "큰 제외 목록: exclude 줄 4000개 그대로"
+  assert_line "$D/review-i1.doc-paths" "reviewed${TAB}README.md" "큰 제외 목록: reviewed<TAB>README.md"
+  assert_file_absent "$D/review-i1.doc-paths" "^exclude${TAB}README\\.md\$" "큰 제외 목록: exclude<TAB>README.md 없음"
+  assert_eq "$(grep -c "^reviewed${TAB}" "$D/review-i1.doc-paths")" 1 "큰 제외 목록: reviewed 줄은 하나"
+  assert_eq "$(field filtered_files "$OUT")" 2 "큰 제외 목록: filtered_files: 2"
+  assert_file_absent "$D/review-i1.diff" 'notes/n-' "큰 제외 목록: 문서는 걸러진 diff 에 없다"
   # 음의 짝 — 접두가 아닌 제외 경로(CHANGELOG.md)는 그대로 빠지고 알리지 않는다.
   mkfix
   echo 'new' > "$R/CHANGELOG.md"; echo 'x = 2' > "$R/src/a.py"; g "$R" add -A; g "$R" commit -q -m c
@@ -555,7 +575,7 @@ case_other_session_worktree_degraded() {
   assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessBBBB/$' "names 에 다른 세션 트리"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   # 알린 명령이 실제로 그 트리를 지운다(절대 경로 — 레포 안 어느 폴더에서 돌려도 같다).
-  local cmd; cmd=$(sed -n 's/^.* — \(git worktree remove --force .*\) 로 지운 뒤 다시 돌려라$/\1/p' "$ROOT/err")
+  local cmd; cmd=$(sed -n 's/^.* 쓰고 있지 않으면 \(git worktree remove --force .*\) 로 지운 뒤 다시 돌려라$/\1/p' "$ROOT/err")
   ( cd "$R/src" && eval "$cmd" ) >/dev/null 2>&1 && [ ! -d "$wb" ] \
     && ok "알린 git worktree remove 명령이 그 트리를 지운다" || no "알린 명령으로 트리를 지우지 못했다: $cmd"
   # 양성 짝 — 이 세션 접미의 트리는 지금처럼 건너뛴다.
