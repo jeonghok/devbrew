@@ -382,6 +382,7 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 - docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r2: advice_new=5 · advice_repeat=2 · mc_preexisting_new=0
 - docreview 계수 — spec-distill/2026-10-20-review-engine-leftovers-desig-974946fb0f229bd2 r3: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
 - 지휘자 판단 · 2026-10-20 · 계획 2 — 중첩 레포 내용 리뷰는 안전한 길이 라운드마다 새 보안 결함을 낳아(색인 파싱 · v4 · includeIf) 설계 §7 의 대안 갈래(리뷰하지 않고 막고 이유를 싣는다)로 돌린다 — 사용자가 다시 열 수 있다
+- U11 · 결정 · 2026-10-20 · 사용자 — 「qg에 대한 질문답은 이대로로」 (계획 2 — 중첩 레포 내용 리뷰는 대안 갈래 확정)
 - 지휘자 판단 · 2026-10-20 · 계획 2 — 남은 qg worktree 를 지우는 길은 qg-gc 가 아니라 git worktree remove --force 다(qg-gc 는 worktrees/ 를 지우지 않는다)
 
 ## 번호 대조
