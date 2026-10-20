@@ -17,6 +17,7 @@ case_config_defaults_disclosed
 case_config_env_wins
 case_config_entry_beats_profile
 case_config_invalid_refused
+case_config_maximum_refused
 case_config_changes_between_rounds
 case_config_profile_fields
 case_config_profile_string_refused

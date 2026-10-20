@@ -150,7 +150,7 @@ def load_profile(path) -> dict:
             if k in data:
                 _cfg._int(k, data[k], "프로필")
     except _cfg.ConfigInvalid as e:
-        raise ProfileError("config_invalid:%s=%r" % (e.name, e.raw))
+        raise ProfileError("config_invalid:%s=%r(허용 %s)" % (e.name, e.raw, _cfg.allowed_range(e.name)))
     ad = data["allowed_dispositions"]
     if (not isinstance(ad, list) or not ad or any(x not in RANK for x in ad)
             or "decide" not in ad or "ask" not in ad):
@@ -849,7 +849,7 @@ def cmd_begin_round(a) -> int:
     try:
         cfg = _cfg.resolve(prof, {"detectors": a.detectors}, os.environ)
     except _cfg.ConfigInvalid as e:
-        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where, allowed=_cfg.allowed_range(e.name))
         return 2
     cap = cfg["rereview_cap"]["value"]
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
@@ -2340,6 +2340,10 @@ def cmd_advice(a) -> int:
     adv = _adv
     if adv is None:
         return fail("advice_module_missing", detail="docreview_advice.py 형제 사본이 이 스크립트 옆에 없다")
+    if a.cap is not None and a.cap > _cfg.MAXIMUM["render_cap"]:
+        fail("config_invalid", name="render_cap", value=str(a.cap), where="진입 --cap",
+             allowed=_cfg.allowed_range("render_cap"))
+        return 2
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
     if not adv.has_must_catch(prof):
@@ -2347,7 +2351,7 @@ def cmd_advice(a) -> int:
     try:
         cfg = _cfg.resolve(prof, {}, os.environ)
     except _cfg.ConfigInvalid as e:
-        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where)
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where, allowed=_cfg.allowed_range(e.name))
         return 2
     cap = cfg["render_cap"]["value"] if a.cap is None else a.cap   # --cap 은 진입의 명시 값이다
     cap_src = cfg["render_cap"]["source"] if a.cap is None else "진입"

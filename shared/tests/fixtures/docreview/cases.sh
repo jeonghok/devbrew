@@ -3836,6 +3836,42 @@ case_config_invalid_refused() {
   assert_eq "$rc" "2" "config: 조언 줄 수 0 은 범위 밖"
   rm -rf "$d"
 }
+case_config_maximum_refused() {
+  local d s err rc; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "max: init 실패"; return; }
+  s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
+  err="$(DEVBREW_DOCREVIEW_DETECTORS=500 py docreview_state.py begin-round --state-dir "$d" --snapshot "$s" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "max: 최댓값을 넘는 환경 값은 라운드를 시작하지 않는다(rc 2)"
+  assert_contains "$err" '"reason": "config_invalid"' "max: 사유 이름"
+  assert_contains "$err" '"allowed": "1~6"' "max: 허용 범위를 낸다"
+  assert_contains "$err" 'DEVBREW_DOCREVIEW_DETECTORS' "max: 출처(변수 이름)를 낸다"
+  assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "max: 거부는 원장을 바꾸지 않는다"
+  for kv in DEVBREW_DOCREVIEW_REREVIEW_CAP=11 DEVBREW_DOCREVIEW_RENDER_CAP=101 DEVBREW_DOCREVIEW_SUMMARY_WIDTH=501; do
+    env "$kv" python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "2" "max: ${kv} 는 최댓값+1 이라 거부된다"
+  done
+  for kv in DEVBREW_DOCREVIEW_DETECTORS=6 DEVBREW_DOCREVIEW_REREVIEW_CAP=10 DEVBREW_DOCREVIEW_RENDER_CAP=100 DEVBREW_DOCREVIEW_SUMMARY_WIDTH=500; do
+    local d2; d2="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")"
+    env "$kv" python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d2" --snapshot "$s" >/dev/null 2>&1; rc=$?
+    assert_eq "$rc" "0" "max 양성 짝: ${kv} 는 최댓값 그대로라 받는다"; rm -rf "$d2"
+  done
+  err="$(env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --snapshot "$s" --detectors 7 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "max: --detectors 7 은 거부된다"
+  assert_contains "$err" '"where": "진입"' "max: 진입 출처를 낸다"
+  local p; p="$(mktemp -d -t prof-XXXXXX)"
+  python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 1\nrereview_cap: 11\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
+  err="$(py docreview_state.py profile-check "$p/design-doc.md" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "max: 프로필 rereview_cap 11 은 거부된다"
+  assert_contains "$err" "config_invalid" "max: 프로필 사유 이름"
+  assert_contains "$err" "0~10" "max: 프로필 메시지에 0~10 (최솟값 0)"
+  assert_not_contains "$err" "1~10" "max: 최솟값을 1 로 잘못 적지 않는다"
+  rm -rf "$p"
+  err="$(env -u DEVBREW_DOCREVIEW_RENDER_CAP python3 "$SCRIPTS/docreview_state.py" advice --state-dir "$d" --render --cap 101 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "2" "max: advice --cap 101 은 거부된다"
+  assert_contains "$err" '"reason": "config_invalid"' "max: advice 사유 이름"
+  err="$(env -u DEVBREW_DOCREVIEW_RENDER_CAP python3 "$SCRIPTS/docreview_state.py" advice --state-dir "$d" --render --cap 100 2>&1 >/dev/null)"
+  assert_not_contains "$err" 'config_invalid' "max 양성 짝: advice --cap 100 은 이 사유로 거부되지 않는다"
+  rm -rf "$d"
+}
 case_config_changes_between_rounds() {
   local d s; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "config: r1 실패"; return; }
   s="$d/s2.json"; snap "$FX/design-sample.md" "$s"
