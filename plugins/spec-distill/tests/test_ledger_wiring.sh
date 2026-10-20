@@ -404,6 +404,7 @@ dl_no_dir() {   # dl_no_dir <라벨> <출력> <rc> <보일 값>
 }
 dlo="$(dl_run sess-eeee5555 docs/b-design.md)"; rc=$?
 dl_no_dir "spec_path 가 상대 경로" "$dlo" "$rc" "spec_path='docs/b-design.md'"
+assert_contains "$dlo" "spec_path 가 절대 경로가 아니다" "결정 줄 펜스: 상대 경로 — 폴더로 들어가기 전에 절대 경로가 아니라는 사유로 멈춘다"
 stubsd="$T/stub-sd"; mkdir -p "$stubsd/scripts"
 for s in docreview_state.py ledger_marker.py; do ln -s "$SD/scripts/$s" "$stubsd/scripts/$s"; done
 printf 'import runpy, sys\nREAL = %s\nif sys.argv[1:2] == ["state-root"]:\n    sys.exit(1)\nsys.path.insert(0, REAL.rsplit("/", 1)[0]); sys.argv[0] = REAL\nrunpy.run_path(REAL, run_name="__main__")\n' \
@@ -456,10 +457,12 @@ assert_not_contains "$dlo" "손으로 쓴다" "AC15: 다른 레포 cwd — 원�
 # 문서 폴더로 들어가지 못하거나 문서가 git 작업 트리 밖이면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
 dlo="$(dl_run sess-eeee5555 "$T/no-such-dir/b-design.md" "$SD" "$orepo")"; rc=$?
 dl_no_dir "문서 폴더가 없다" "$dlo" "$rc" "spec_path='$T/no-such-dir/b-design.md'"
+assert_contains "$dlo" "설계문서의 폴더로 들어가지 못했다" "결정 줄 펜스: 문서 폴더가 없다 — 그 사유로 멈춘다"
 mkdir -p "$T/nogit"; cp "$ddoc" "$T/nogit/b-design.md"
 git -C "$T/nogit" rev-parse --show-toplevel >/dev/null 2>&1 && no "전제(AC15): $T/nogit 이 git 작업 트리 안이다 — 아래 칸이 공허하다" || ok "전제(AC15): $T/nogit 은 git 작업 트리 밖이다"
 dlo="$(dl_run sess-eeee5555 "$T/nogit/b-design.md" "$SD" "$orepo")"; rc=$?
 dl_no_dir "문서가 git 작업 트리 밖" "$dlo" "$rc" "spec_path='$T/nogit/b-design.md'"
+assert_contains "$dlo" "설계문서가 git 작업 트리 밖이다" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 그 사유로 멈춘다"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"
