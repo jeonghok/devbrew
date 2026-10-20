@@ -95,7 +95,33 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 # `$(…)` 로 받는다. 줄 이음(`\`)만 합치고 mktemp · 재대입 · `||` 갈래는 파싱하지 않는다.
 # 이 락의 범위 밖(AC17 · 엔진 밖 원장 쓰기): `| tee` · `exec >` · `{ … } >` · `$(…)` 로 받은 값을 `printf >` 로
 # 원장 폴더에 쓰는 줄. 같은 줄 `>` 만 본다.
-GUARDED="$SR $RB $FIN $SD/skills/request-framing/SKILL.md"
+# 대상 도출 — 엔진 이름이 든 spec-distill 문서 전부(CHANGELOG 는 이력이라 뺀다). 링크(mode 120000)는 정본으로 바꾼다.
+derive_guarded() {   # derive_guarded → 대상 파일 절대경로(줄마다 하나, 중복 없음)
+  git -C "$ROOT_REPO" ls-files -s -- 'plugins/spec-distill/*.md' | python3 -I -c '
+import os, re, sys
+root = os.path.realpath(sys.argv[1])
+NAME = re.compile(r"docreview_(?:state|route|anchor)")
+out = set()
+for row in sys.stdin.read().split("\n"):
+    if not row.strip():
+        continue
+    meta, path = row.split("\t", 1)
+    if os.path.basename(path) == "CHANGELOG.md":
+        continue
+    full = os.path.join(root, path)
+    if meta.split()[0] == "120000":
+        full = os.path.normpath(os.path.join(os.path.dirname(full), os.readlink(full)))
+        if not full.startswith(root + os.sep):
+            continue
+    try:
+        text = open(full, encoding="utf-8").read()
+    except OSError:
+        continue
+    if NAME.search(text):
+        out.add(full)
+print("\n".join(sorted(out)))' "$ROOT_REPO"
+}
+GUARDED="$(derive_guarded)"
 # 읽기 전용 하위 명령 — 이 락의 유일한 목록이다(정적 검사와 아래 쓰기 명령 문단 대조가 함께 쓴다).
 AC8_READ_ONLY="advice-list gate related-changes state-dir-for profile-check gate-rows exempt-anchors"
 ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
@@ -222,6 +248,94 @@ python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" -
   printf '```bash\n%s\n```\n' "$probe" > "$ac8f"
   ac8_scan "$ac8f" 2>/dev/null && ok "AC8 양성 대조: 통과한다 — $(printf '%s' "$probe" | tail -n 1 | cut -c 1-80)" || no "AC8 양성 대조: 정당한 꼴이 막혔다: $probe"
 done
+# AC12 — 대상은 도출한다(손으로 쓴 목록이 아니다). 링크 뒤의 정본이 빠지면 엔진 문서 규칙이 락 밖에 남는다.
+RD_CANON="$ROOT_REPO/shared/docreview/references/reviewing-document.md"
+n_guarded="$(printf '%s\n' "$GUARDED" | grep -c .)"
+[ "$n_guarded" -gt 0 ] && ok "AC12: 대상이 도출된다 — ${n_guarded}개" || no "AC12: 도출된 대상이 0개다"
+case "$GUARDED" in *"$RD_CANON"*) ok "AC12: 도출에 reviewing-document.md 가 든다";; *) no "AC12: 도출에 reviewing-document.md 가 없다";; esac
+for need in "$SR" "$RB" "$FIN" "$SD/skills/request-framing/SKILL.md"; do
+  printf '%s\n' "$GUARDED" | grep -qxF "$need" && ok "AC12: 도출에 옛 목록 ${need#$SD/} 가 든다" || no "AC12: 도출에 옛 목록 ${need#$SD/} 가 없다"
+done
+# AC12 — 펜스 밖 산문 문단. 원장 쓰기 명령(declare-related · log-decision)을 `docreview_state.py` 꼴로 적은 문단은
+# 「표지 확인 줄 다음에만」 을 담아야 한다. 문단 = 빈 줄 사이 블록, 목록 안에서는 0열 `- ` · `* ` · `<숫자>. ` 항목 하나.
+ac12_prose_scan() {   # ac12_prose_scan <파일> → rc 0 이면 규칙 없는 쓰기 명령 문단이 없다
+  python3 -I - "$1" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8", newline="").read()
+FORM = re.compile(r'docreview_state\.py[`"\']*\s*(?:의\s*)?[`"\']*\s*(declare-related|log-decision)(?![A-Za-z0-9-])')
+RULE = "표지 확인 줄 다음에만"
+FENCE = re.compile(r'^[ \t]*(`{3,}|~{3,})')
+ITEM = re.compile(r'^(?:[-*] |\d+\. )')
+paras, cur, fence = [], [], None
+def flush():
+    global cur
+    if cur:
+        paras.append(cur)
+    cur = []
+for ln in text.replace("\r\n", "\n").split("\n"):
+    if fence is None:
+        m = FENCE.match(ln)
+        if m:
+            flush(); fence = m.group(1); continue
+        if not ln.strip():
+            flush()
+        elif ITEM.match(ln):
+            flush(); cur.append(ln)
+        else:
+            cur.append(ln)
+    elif ln.strip() == fence:
+        fence = None
+flush()
+bad = []
+for p in paras:
+    body = "\n".join(p)
+    if any("**처분** —" in ln for ln in p) or p[0].startswith("**원장 쓰기 전 확인.**"):
+        continue
+    if FORM.search(body) and RULE not in body:
+        bad.append("표지 확인 규칙 없는 쓰기 명령 문단: " + p[0].strip()[:100])
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+}
+for f in $GUARDED; do
+  ac12_prose_scan "$f" && ok "AC12: ${f#$ROOT_REPO/} — 쓰기 명령을 적은 문단마다 표지 확인 규칙이 있다" || no "AC12: ${f#$ROOT_REPO/} — 표지 확인 규칙 없는 쓰기 명령 문단"
+done
+RULE_TAIL='(진입 skill 의 표지 확인 줄 다음에만 부른다)'
+prosef="$T/ac12-probe.md"
+p12() { printf '%b\n' "$1" > "$prosef"; }
+for probe in 'docreview_state.py declare-related --state-dir D 로 묶는다.' \
+             '`docreview_state.py log-decision` 으로 남긴다.' \
+             '`docreview_state.py` 의 `declare-related` 로 묶는다.' \
+             '`"$SD/scripts/docreview_state.py"` log-decision 으로 남긴다.' \
+             "\`'docreview_state.py'\` declare-related 로 묶는다." \
+             'python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR"' \
+             '- 앞 항목: 표지 확인 줄 다음에만 부른다.\n- 이 항목은 docreview_state.py log-decision 으로 쓴다.' \
+             '1. 앞 항목: 표지 확인 줄 다음에만 부른다.\n2. docreview_state.py declare-related 로 묶는다.'; do
+  p12 "$probe"
+  ac12_prose_scan "$prosef" 2>/dev/null && no "AC12 음성 프로브: 새는 꼴이 있다: $probe" || ok "AC12 음성 프로브: 잡힌다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-70)"
+done
+for probe in 'docreview_state.py declare-related --state-dir D 로 묶는다.' \
+             '`docreview_state.py log-decision` 으로 남긴다.' \
+             '`docreview_state.py` 의 `declare-related` 로 묶는다.' \
+             '`"$SD/scripts/docreview_state.py"` log-decision 으로 남긴다.' \
+             "\`'docreview_state.py'\` declare-related 로 묶는다." \
+             'python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR"' \
+             '- 앞 항목.\n- 이 항목은 docreview_state.py log-decision 으로 쓴다 (표지 확인 줄 다음에만).'; do
+  p12 "$probe $RULE_TAIL"
+  ac12_prose_scan "$prosef" 2>/dev/null && ok "AC12 양성 대조: 규칙을 담으면 통과한다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-70)" || no "AC12 양성 대조: 규칙을 담은 문단이 막혔다: $probe"
+done
+for probe in '`declare-related` 로 묶는다.' '`docreview_state.py check-intent` 로 확인한다.' '`docreview_state.py` 의 `check-intent` 를 부른다.' \
+             'docreview_state.py log-decisions 와 닮은 이름.' \
+             '**처분** — consumer=plugins/x/docreview_state.py log-decision · fail-closed' \
+             '**원장 쓰기 전 확인.** `docreview_state.py` 의 `declare-related` · `log-decision` 은 쓴다.' \
+             '```bash\ndocreview_state.py log-decision\n```'; do
+  p12 "$probe"
+  ac12_prose_scan "$prosef" 2>/dev/null && ok "AC12 양성 대조: 쓰기 명령 문단이 아니다 — $(printf '%s' "$probe" | head -n 1 | cut -c 1-60)" || no "AC12 양성 대조: 쓰기 명령 문단이 아닌데 막혔다: $probe"
+done
+# 엔진은 표지를 읽지 않는다(음) — 표지 이름은 spec-distill 쪽 스크립트에만 산다(양).
+n_engine_marker="$(cat "$ROOT_REPO"/shared/docreview/scripts/*.py | grep -c 'reviewing-by')"
+assert_eq "$n_engine_marker" "0" "AC12: 엔진 스크립트는 표지 이름(reviewing-by)을 읽지 않는다"
+grep -q 'reviewing-by' "$SD/scripts/ledger_marker.py" && ok "AC12(양성 짝): 표지 이름은 ledger_marker.py 에 있다" || no "AC12(양성 짝): ledger_marker.py 에 표지 이름이 없다"
 # AC8 — 진입 skill 셋의 「원장 쓰기 전 확인」 문단이 적는 `docreview_state.py` 쓰기 명령 = 엔진 하위 명령 − 읽기 전용(도출).
 # 새 쓰기 명령(log-decision 등)을 문단에 적지 않으면 RED — 표지 확인 줄 다음에만 부른다는 규칙이 그 명령에 닿지 않는다.
 for f in "$SR" "$RB" "$SD/skills/request-framing/SKILL.md"; do
