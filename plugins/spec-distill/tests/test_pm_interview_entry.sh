@@ -50,4 +50,17 @@ grep -qx 'next_phase: spec-distill:pm-interview' "$SD/templates/interview-seed-t
 grep -qF '/spec-distill:pm-interview' "$SD/README.md" \
     && ok "AC31: README 가 새 완전명을 보인다(축 I 부재의 양성 짝)" \
     || no "AC31: README 에 새 완전명이 없다"
+python3 -I - "$SD/CHANGELOG.md" <<'PY' && ok "AC31: CHANGELOG 의 major 절이 옛 → 새 진입 이름 표 행을 Removed 에 싣는다" || no "AC31: CHANGELOG 에 옛 → 새 진입 이름의 major Removed 행이 없다"
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+secs = [s for s in re.split(r"(?m)^(?=## \[)", t) if s.startswith("## [")]
+heads = [re.match(r"## \[(\d+)\.(\d+)\.(\d+)\]", s) for s in secs]
+old = "/spec-distill:spec-" + "interview"
+row = re.compile(r"(?m)^\|\s*`" + re.escape(old) + r"`\s*\|\s*`/spec-distill:pm-interview`\s*\|")
+hit = [i for i, s in enumerate(secs) if "### Removed" in s and row.search(s.split("### Removed", 1)[1])]
+assert len(hit) == 1, hit
+m, prev = heads[hit[0]], heads[hit[0] + 1]
+assert (m.group(2), m.group(3)) == ("0", "0"), m.group(0)
+assert int(m.group(1)) == int(prev.group(1)) + 1, (m.group(0), prev.group(0))
+PY
 finish
