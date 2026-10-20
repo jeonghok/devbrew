@@ -5,7 +5,7 @@
 ### Changed
 - 설계 프로필(`design-doc.md`)의 `approaches_comparison` 에 기각한 대안도 고른 안과 같은 기준으로 견주는 한 줄을 더했다. 리뷰어 프로필 편집이지만 강화다 — 규칙을 더했고 기준을 낮추지 않았다.
 - `references/conductor-dispatch.md` 의 `## 사람 자리` 에 지휘자가 하위의 질문을 사용자에게 옮기는 규칙 둘을 더했다.
-- 철학 P3 쪽 test 주석의 리뷰 자리를 셋으로 맞췄다.
+- 철학 P3 에 맞춰 `tests/test_rereview_cap_consistency.sh` 주석의 리뷰 자리를 셋으로 맞췄다.
 
 ## [8.0.0] — 2026-10-20
 

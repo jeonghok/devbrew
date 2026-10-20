@@ -39,10 +39,11 @@ for r in rows:
     # 다시 나온다(stale_exempt 의 양의 짝).
     if exempt_key(rel, r) in EXEMPT:
         continue
-    unwired.append((rel, r["line"], r["kind"], r["func"], r["guard"]))
+    unwired.append((rel, r["line"], exempt_key(rel, r)))
 print("unwired=%d" % len(unwired))
-for (rel, line, kind, func, guard) in unwired:
-    print("  UNWIRED %s:%d %s in %s @ %s" % (rel, line, kind, func, guard))
+# 줄 뒤에 면제 키 2-튜플 전체(`~ for …` 까지)를 repr 로 낸다 — 그대로 EXEMPT 에 붙여 쓸 수 있다.
+for (rel, line, key) in unwired:
+    print("  UNWIRED %s:%d %r" % (rel, line, key))
 
 print("exempt_total=%d" % len(EXEMPT))
 print("exempt_baseline=%d" % EXEMPT_BASELINE)
@@ -64,6 +65,7 @@ for (rel, ident) in stale:
     print("  STALE_EXEMPT %s %s" % (rel, ident))
 
 # 키가 자리를 가르지 못하면(정체가 같은 행 둘 이상) 면제 여부와 무관하게 RED 다.
+# 가드된(이미 배선된) 행도 센다 — 위 미배선 루프와 달리 guarded 를 건너뛰지 않는다(fail-closed).
 dups = duplicate_identities(rows, str(root))
 print("duplicate_identity=%d" % len(dups))
 for (rel, ident) in dups:
