@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
+# guards: plugins/*/scripts/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py shared/tests/fixtures/adjudication/run_wiring_absorb.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
 # 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
@@ -63,6 +63,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "tools/adjudication/cite.py"
   printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_scan.py"
   printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_probe.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_absorb.py"
   exit 0
 fi
 
@@ -182,6 +183,24 @@ assert_eq "$terminal_stale" "0" "TERMINAL_CONSUMERS 항목이 전부 여전히 �
 printf '%s\n' "$SCAN" | sed -n 's/^  STALE_TERMINAL //p' | while IFS= read -r l; do
   note "      낡은 TERMINAL_CONSUMERS: $l"
 done
+
+note "── 흡수 분기 — 라우터의 두 흡수 분기가 처분 호출을 갖고, 그 호출을 지우면 락이 RED 다"
+mkdir -p "$TMPD/absorb"
+PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_absorb.py" \
+  "$REPO_ROOT" "$TMPD/absorb" > "$TMPD/absorb.txt" 2>&1
+ABSORB="$(cat "$TMPD/absorb.txt")"
+note "$ABSORB"
+assert_contains "$ABSORB" "merge_continue_unguarded=0" "merge_list_blocks 의 continue 는 전부 같은 분기에 처분 호출을 갖는다"
+if printf '%s\n' "$ABSORB" | grep -q '^merge_continue_rows=0$'; then
+  no "merge_list_blocks 에 continue 행이 없다 — 흡수 분기가 락 모집단에 들어오지 않았다"
+else
+  ok "merge_list_blocks 의 continue 행이 락 모집단에 든다"
+fi
+assert_contains "$ABSORB" "prepare_first_guarded=1" "cmd_prepare 의 흡수 분기(가드에 first 가 든 행)는 처분 호출을 갖는다"
+assert_contains "$ABSORB" "mutant_merge_removed=1" "변이 대조(merge_list_blocks): 흡수 호출 한 줄을 실제로 지웠다"
+assert_contains "$ABSORB" "mutant_merge_unwired=1" "변이 — merge_list_blocks 의 흡수 호출을 지우면 미배선 행이 나온다(원본은 0)"
+assert_contains "$ABSORB" "mutant_prepare_removed=1" "변이 대조(cmd_prepare): 흡수 호출 한 줄을 실제로 지웠다"
+assert_contains "$ABSORB" "mutant_prepare_unwired=1" "변이 — cmd_prepare 의 흡수 호출을 지우면 미배선 행이 나온다(원본은 0)"
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"

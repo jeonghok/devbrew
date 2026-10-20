@@ -128,6 +128,7 @@ def merge_list_blocks(blocks, name, ev):
                 plan.append((None, None))
                 if ref is not None and final_ref.get(key) is not None:
                     local[ref] = final_ref[key]
+                continue
             elif ref is not None and ref in block_refs:
                 # 한 블록 안의 같은 임시 번호 — 뒤 항목을 받지 않고 센다(조용히 덮거나 다시 번호 매기지 않는다).
                 ev("hold", label, "항목 파손: duplicate_ref")
@@ -433,6 +434,7 @@ def cmd_prepare(a) -> int:
             # 버려진 사본의 위반 때문에 「형식 위반」 공시를 받지 않게 한다.
             if not first.get("contradicts") and not first.get("_contradicts_malformed") and it.get("_contradicts_malformed"):
                 first["_contradicts_malformed"] = it["_contradicts_malformed"]
+            continue
         else:
             deduped.append((src, it))
     items = deduped
