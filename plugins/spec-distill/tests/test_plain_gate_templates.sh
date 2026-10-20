@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md
 #
 # 쉬운 말 출력 설계 §4 · AC7 — 모든 게이트 질문은 결정 하나와 상태 한 줄만 담고, 경고 목록은 앞 글에 쓴다.
 # 「채널을 읽은 뒤에만 없음을 쓴다」 계약은 그대로 남는다.
@@ -7,13 +7,13 @@ set -u
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   git -C "$REPO_ROOT" ls-files -- 'plugins/spec-distill/skills/*/SKILL.md' \
-    plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
+    plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
     shared/docreview/references/reviewing-document.md
   exit 0
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
 SD="$REPO_ROOT/plugins/spec-distill"
-FIN="$SD/skills/spec-interview/references/finishing.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
 RS="$SD/skills/spec-review/SKILL.md"
 RB="$SD/skills/reviewing-brief/SKILL.md"
 FR="$SD/skills/request-framing/SKILL.md"

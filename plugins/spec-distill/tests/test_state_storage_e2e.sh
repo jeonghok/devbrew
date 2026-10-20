@@ -17,7 +17,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
 bash_with() {   # bash_with <파일> <고정 문자열> → 그 문자열을 담은 첫 bash 펜스
   awk -v pat="$2" '/^```bash$/ {b=1; buf=""; next} b && /^```$/ {b=0; if (!done && index(buf, pat)) {printf "%s", buf; done=1}; next} b {buf = buf $0 "\n"}' "$1"
 }
-SK="$SD/skills/spec-interview/SKILL.md"; FIN="$SD/skills/spec-interview/references/finishing.md"
+SK="$SD/skills/pm-interview/SKILL.md"; FIN="$SD/skills/pm-interview/references/finishing.md"
 RB="$SD/skills/reviewing-brief/SKILL.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 

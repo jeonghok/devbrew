@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/**
 #
-# seed `@경로` 핸드오프 — framing 게이트(`/new`·`/compact` → `/spec-distill:spec-interview @<seed 경로>`) ·
-# 공유 계약의 권장/차선 핸드오프 · spec-interview `## 진입 단계` 2 · 옛 호출 모양 부재 · 이름 가드 공백 거부.
+# seed `@경로` 핸드오프 — framing 게이트(`/new`·`/compact` → `/spec-distill:pm-interview @<seed 경로>`) ·
+# 공유 계약의 권장/차선 핸드오프 · pm-interview `## 진입 단계` 2 · 옛 호출 모양 부재 · 이름 가드 공백 거부.
 #
 # 정본 `references/proceed-gate.md` 에 대한 단언은 **정본 자체**를 대상으로 한다 — 채택자
 # presence 코퍼스에 정본을 넣는 것이 아니다(그 코퍼스 규칙은 test_proceed_gate_adopters.sh 에 있다).
@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
 SK="$SD/skills/request-framing/SKILL.md"
 CANON="$SD/references/proceed-gate.md"
-SK_IV="$SD/skills/spec-interview/SKILL.md"
+SK_IV="$SD/skills/pm-interview/SKILL.md"
 README="$SD/README.md"
 . "$ROOT/shared/tests/assert.sh"
 
@@ -32,7 +32,7 @@ fi
 block() { awk -v s="$1" -v e="$2" '$0 ~ s {f=1; print; next} f && $0 ~ e {f=0} f' "$3"; }
 flat()  { tr '\n' ' ' | tr -s ' '; }
 
-# ── spec-interview `## 진입 단계` 와 「풀린 입력」 ──────────────────────────
+# ── pm-interview `## 진입 단계` 와 「풀린 입력」 ──────────────────────────
 sub() { awk -v h="$2" 'index($0,h)==1{f=1;next} f&&/^##+ /{exit} f' "$1"; }   # sub <file> <소절 제목 접두>
 lent="$(grep -n '^## 진입 단계$' "$SK_IV" | head -1 | cut -d: -f1)"
 l2="$(grep -n '^### 2[.] ' "$SK_IV" | head -1 | cut -d: -f1)"
@@ -65,13 +65,13 @@ assert_contains "$s4" '「풀린 입력」' "§3: 진입 단계 4 가 풀린 입
 assert_contains "$s4" '2 의 결과' "§3: 진입 단계 4 — 풀린 입력은 2 의 결과"
 
 # 「풀린 입력」이 읽는 자리에 원 인자 토큰이 돌아오면 플랫폼이 거기에 `@경로` 문자열을 치환한다.
-# 부재 코퍼스 = spec-interview SKILL · 그 references 전부 · trivia-escape. 양성 짝 = 「풀린 입력」을
+# 부재 코퍼스 = pm-interview SKILL · 그 references 전부 · trivia-escape. 양성 짝 = 「풀린 입력」을
 # 반드시 말해야 하는 넷(steelman.md · state-migration.md 는 입력을 다루지 않아 양성 짝에서 뺀다).
 PI_ABSENT=("$SK_IV")
-for _f in "$SD"/skills/spec-interview/references/*.md; do [ -f "$_f" ] && PI_ABSENT+=("$_f"); done
+for _f in "$SD"/skills/pm-interview/references/*.md; do [ -f "$_f" ] && PI_ABSENT+=("$_f"); done
 PI_ABSENT+=("$SD/references/trivia-escape.md")
-PI_MUST=("$SK_IV" "$SD/skills/spec-interview/references/seed-input.md" \
-         "$SD/skills/spec-interview/references/finishing.md" "$SD/references/trivia-escape.md")
+PI_MUST=("$SK_IV" "$SD/skills/pm-interview/references/seed-input.md" \
+         "$SD/skills/pm-interview/references/finishing.md" "$SD/references/trivia-escape.md")
 [ "${#PI_ABSENT[@]}" -ge 5 ] \
   && ok "§3(양성): 원 인자 부재 코퍼스 ${#PI_ABSENT[@]}개" \
   || no "§3(양성): 원 인자 부재 코퍼스가 ${#PI_ABSENT[@]}개 — references 글롭이 비었다"
@@ -95,8 +95,8 @@ nrows="$(printf '%s\n' "$rows" | grep -c .)"
 assert_eq "$nrows" "4" "AC1(양성): 호출 모양 절 옵션 표에서 행 4개를 읽었다"
 r1="$(printf '%s\n' "$rows" | grep -E '^\| ① \|')"
 r2="$(printf '%s\n' "$rows" | grep -E '^\| ② \|')"
-for n in '`/compact` 후' '`/spec-distill:spec-interview @<seed 경로>`' '권장' '턴 종료'; do assert_contains "$r1" "$n" "AC1: ① 행에 $n"; done
-for n in '`/new` 후' '`/spec-distill:spec-interview @<seed 경로>`' '턴 종료'; do assert_contains "$r2" "$n" "AC1: ② 행에 $n"; done
+for n in '`/compact` 후' '`/spec-distill:pm-interview @<seed 경로>`' '권장' '턴 종료'; do assert_contains "$r1" "$n" "AC1: ① 행에 $n"; done
+for n in '`/new` 후' '`/spec-distill:pm-interview @<seed 경로>`' '턴 종료'; do assert_contains "$r2" "$n" "AC1: ② 행에 $n"; done
 assert_not_contains "$r2" '권장' "AC1: 권장은 ① 하나"
 assert_not_contains "$rows" '바로' "AC1: 옵션 표에 「바로」 진행 행이 없다"
 cf="$(printf '%s\n' "$call" | flat)"
@@ -203,17 +203,17 @@ elif [ -n "$old_hits" ]; then
 else
   ok "AC6: 옛 호출 모양(<seed 전문> · <seed 파일 전문>) 0건 — 문서 ${ncorp}개"
 fi
-assert_file_grep "$SK" '/spec-distill:spec-interview @<seed 경로>' "AC6: 새 모양(완전명)이 ${SK#"$ROOT"/} 에 있다"
+assert_file_grep "$SK" '/spec-distill:pm-interview @<seed 경로>' "AC6: 새 모양(완전명)이 ${SK#"$ROOT"/} 에 있다"
 # README 는 사람용이라 짧은 이름을 쓴다(D5) — 호출 이름이 아니라 `@<seed 경로>` 핸드오프 모양만 잰다.
-assert_file_grep "$README" '/spec-interview @<seed 경로>' "AC6: 새 모양이 ${README#"$ROOT"/} 에 있다"
+assert_file_grep "$README" '/pm-interview @<seed 경로>' "AC6: 새 모양이 ${README#"$ROOT"/} 에 있다"
 
 # ── 풀어 쓴 옛 서술의 동기화 (§4 목록) ──────────────────────────────────
 TPL="$SD/templates/interview-seed-audit-template.md"
-SEEDIN="$SD/skills/spec-interview/references/seed-input.md"
-FIN="$SD/skills/spec-interview/references/finishing.md"
-assert_file_grep   "$TPL"    '`/spec-distill:spec-interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
+SEEDIN="$SD/skills/pm-interview/references/seed-input.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
+assert_file_grep   "$TPL"    '`/spec-distill:pm-interview @<seed 경로>` 가 가리키는 것은 payload' "§4: audit 템플릿 인용 블록이 새 모양"
 assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 옛 핸드오프 서술이 없다"
-assert_file_grep   "$SEEDIN" '`/spec-distill:spec-interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
+assert_file_grep   "$SEEDIN" '`/spec-distill:pm-interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
 assert_file_absent "$SEEDIN" '붙여넣게 하고' "§4: seed-input 에 옛 도착 경로가 없다"
 assert_file_grep   "$FIN"    '`@경로` 를 풀었든 사용자가 전문을 붙여넣었든' "§4: finishing S1 문장이 두 도착 경로를 다 적는다"
 assert_file_absent "$README" '다음 세션 첫 턴에 붙여넣는 메시지' "§4: README 흐름도에 옛 서술이 없다"

@@ -5,8 +5,8 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SD="$ROOT/plugins/spec-distill"
-FIN="$SD/skills/spec-interview/references/finishing.md"
-SKILL="$SD/skills/spec-interview/SKILL.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
+SKILL="$SD/skills/pm-interview/SKILL.md"
 TPL="$SD/templates/interview-brief-template.md"
 
 win() {  # win <파일> <시작 줄 리터럴> <끝 줄 접두> — 시작 줄 다음부터 끝 줄 앞까지

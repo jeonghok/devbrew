@@ -3,9 +3,9 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/SKILL.md"
-SAT="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/saturation.md"
-FIN="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/SKILL.md"
+SAT="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references/saturation.md"
+FIN="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references/finishing.md"
 
 [[ -f "$SAT" ]] && ok "saturation.md 실재" || { no "saturation.md 부재"; finish; exit; }
 SAT_FLAT="$(tr '\n' ' ' < "$SAT" | tr -s ' ')"
@@ -41,7 +41,7 @@ grep -qF '승인은 묻지 않는다' <<<"$CAP_FLAT" && ok "G9: 승인을 묻지
 # 부르기 기준 · 계수 · 원문 보존
 grep -qF '열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다' <<<"$CAP_FLAT" && ok "§1: 부르기 기준" || no "§1: 부르기 기준 부재"
 grep -qF '상한에는 세지 않는다' <<<"$CAP_FLAT" && ok "B4: 본체 직접 조사 · 판정자는 상한에 세지 않는다" || no "B4: 계수 대상 문구 부재"
-grep -qF 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md' "$SKILL" \
+grep -qF 'Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md' "$SKILL" \
   && ok "SKILL → saturation.md 포인터" || no "SKILL → saturation.md 포인터 부재"
 # 상한 도달 — 세 선택지 · 도달 줄 · 하한도 멈춘다
 grep -qF '[spec-distill] 조사 호출 상한 도달 — <n>/<limit>. 연장 · 판정 · 종료 중 고르세요.' <<<"$SAT_FLAT" && ok "G4: 상한 도달 한 줄" || no "G4: 상한 도달 한 줄 부재"
@@ -142,7 +142,7 @@ for pair in '00|60|5' '0|60|5' '-3|60|5' 'abc|60|5' '007|7|7' '3|3|3' '|60|5'; d
   [[ "$got" == "research_limit=${er} saturation_limit=${es}" ]] && ok "M2: 값 '${v}' → ${er} · ${es}" || no "M2: 값 '${v}' → «${got}» (기대 ${er} · ${es})"
 done
 # M3 — 이월 전 조사는 번호가 없다: 판정 불가는 번호 있는 research_log 항목의 블록이 빠졌을 때만.
-MIG="$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/state-migration.md"
+MIG="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references/state-migration.md"
 MIG_FLAT="$(tr '\n' ' ' < "$MIG" | tr -s ' ')"
 grep -qF '번호가 있는 `research_log` 항목' <<<"$SAT_FLAT" && ok "M3: saturation.md 의 블록 누락 = 번호 있는 항목만" || no "M3: saturation.md 블록 누락 범위 부재"
 grep -qF '이월 전에 한 조사는 번호가 없다' <<<"$MIG_FLAT" && ok "M3: 이월 전 조사는 번호 없음" || no "M3: state-migration 에 이월 전 조사 규칙 부재"

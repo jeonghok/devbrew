@@ -103,7 +103,7 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
     # 대상이 아니라 보조 문서 링크다.
     #
     # 되접혀야 하는 것은 이 리포가 **조건부 로드 포인터**에 쓰는 관용구다: 자기 줄에 홀로
-    # 선 `Read <…references/x.md>` 지시(quality-pipeline · spec-interview ·
+    # 선 `Read <…references/x.md>` 지시(quality-pipeline · pm-interview ·
     # spec-review 전부 이 형태를 쓴다 — 실측 4곳). 그 줄이 출력에 남았다는 것은 곧
     # **아직 포인터인 채로 남은 섹션이 있다**는 뜻이다.
     local leftover

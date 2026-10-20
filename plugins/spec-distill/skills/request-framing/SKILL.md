@@ -2,7 +2,7 @@
 name: request-framing
 description: >
   Phase 0 회의 skill. 사용자가 `/spec-distill:request-framing` 으로 부른다. 확산(원문 보존 → 레포
-  읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:spec-interview @<seed 경로>` 가
+  읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:pm-interview @<seed 경로>` 가
   가리키는 `interview-seed` 파일을 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
 cost_class: variable
 argument-hint: "[raw request / 생각 / 대화 / 자료]"
@@ -27,7 +27,7 @@ allowed-tools:
 <!-- plain-language:end -->
 
 당신은 파이프라인 맨 앞의 **회의**를 진행 중입니다. 산출물은 문서가 아니라 **새 세션의 첫
-턴 `/spec-distill:spec-interview @<seed 경로>` 가 가리키는 파일**입니다. 그 첫 턴이 어떤 모양인지는 `## 확정 — proceed 게이트`
+턴 `/spec-distill:pm-interview @<seed 경로>` 가 가리키는 파일**입니다. 그 첫 턴이 어떤 모양인지는 `## 확정 — proceed 게이트`
 의 「호출 모양」 절 한 곳이 정합니다 — 다른 절은 그것을 다시 정하지 않고 가리킵니다.
 
 !`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill request-framing`
@@ -178,7 +178,7 @@ AskUserQuestion({ questions: [{
 3. audit·seed 를 그 워크트리 안의 `docs/superpowers/interview/` 에 쓴다(`## 상태` 의 경로 그대로).
 4. proceed 게이트에서 ①/② 를 고르면 **handoff 직전** 커밋 1회(`## 확정 — proceed 게이트` 의 절차).
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
-   열 때 그 디렉토리에서 열어야 `/spec-distill:spec-interview @<seed 경로>` 가 그 파일을 찾는다.
+   열 때 그 디렉토리에서 열어야 `/spec-distill:pm-interview @<seed 경로>` 가 그 파일을 찾는다.
 
 거절·도구 부재·스위치 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재|
 DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
@@ -308,7 +308,7 @@ premortem · coverage-mapper · `open-researcher` 다섯이 거기 있는 장치
 audit 의 `### 이름 조회` 줄은 긴 초안의 항목이 아니다 — 압축 · 덜어 낸 것 표 · 되살림의 대상이 아니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
 하면 다음 단계로 넘깁니다. 같은 주제도 이 기준으로 갈립니다.
 
-이 경계는 소비자 쪽(`spec-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
+이 경계는 소비자 쪽(`pm-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
 있습니다. 두 곳에 있는 이유는 중복이 아니라 **제약당하는 쪽이 그 제약을 받은 적이 있어야**
 하기 때문입니다 — 한 skill 이 다른 skill 에 대해서만 적어 두면, 제약당하는 쪽을 고치는
 사람은 그것을 읽지 않습니다.
@@ -343,7 +343,7 @@ fi
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
 디스크에서 읽고, proceed 게이트 공통 계약의 Step A 도 대상 문서가 working-tree 에 없으면
 게이트를 **띄우지 않습니다**. 승인 이후에 일어나는 것은 파일 쓰기가 아니라 **handoff**
-입니다 — 다음 세션의 첫 턴이 `/spec-distill:spec-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
+입니다 — 다음 세션의 첫 턴이 `/spec-distill:pm-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
 `## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
 **만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)만 생긴다.
@@ -1063,24 +1063,24 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 ### 호출 모양 — 이 파이프라인에서 여기가 정본이다
 
-**다음 세션의 첫 턴은 `/spec-distill:spec-interview @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
+**다음 세션의 첫 턴은 `/spec-distill:pm-interview @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
 (`docs/superpowers/interview/<날짜>-<topic>-interview.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
 치환하지 않은 자리표가 나가면 사용자가 깨진 명령을 실행하고, 그것을 잡는 자리가 없습니다.
 
 **다음 세션 줄 — ①/② 공통**
 
-> `/spec-distill:spec-interview @<seed 경로>`
+> `/spec-distill:pm-interview @<seed 경로>`
 
-`@경로` 는 서식 취향이 아닙니다 — **소비자 쪽 계약이 전부 `spec-interview` 의 「풀린 입력」에 키잉돼 있습니다.**
+`@경로` 는 서식 취향이 아닙니다 — **소비자 쪽 계약이 전부 `pm-interview` 의 「풀린 입력」에 키잉돼 있습니다.**
 명령 인자로 넘긴 `@경로` 는 헤드리스 실측(2026-09-10, 옛 interview 명령)에서 파일로 풀리지 않았고 대화형은 재지 않았습니다 —
-어느 쪽이든 `spec-interview` 의 `## 진입 단계` 2 가 그 파일을 읽어 전문으로 풉니다. 넘긴 값이 비거나 경로 문자열로 남으면
+어느 쪽이든 `pm-interview` 의 `## 진입 단계` 2 가 그 파일을 읽어 전문으로 풉니다. 넘긴 값이 비거나 경로 문자열로 남으면
 셋이 함께 조용히 실패합니다:
 
-- `spec-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
+- `pm-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
   **사용자가 방금 확정한 요청이 brief §6 에 보존되지 않습니다.**
-- `spec-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
+- `pm-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
   받습니다.
-- `spec-interview` 가 방금 Phase 0 을 거친 사용자에게 「`/spec-distill:request-framing` 을 먼저 거치면…」
+- `pm-interview` 가 방금 Phase 0 을 거친 사용자에게 「`/spec-distill:request-framing` 을 먼저 거치면…」
   조언을 내고, 인터뷰가 「어떤 것을 만들고 싶으신가요?」로 시작합니다.
 
 **frontmatter 를 떼지 않는 이유**: `type: interview-seed` 줄이 소비자가 seed 를 알아보는
@@ -1092,8 +1092,8 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 | # | 이 skill 의 옵션 |
 |---|---|
-| ① | `/compact` 후 `/spec-distill:spec-interview @<seed 경로>` (권장, 커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
-| ② | `/new` 후 `/spec-distill:spec-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
+| ① | `/compact` 후 `/spec-distill:pm-interview @<seed 경로>` (권장, 커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
+| ② | `/new` 후 `/spec-distill:pm-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** |
 | ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다. 리뷰 라운드를 다시 열면 그 전에 원장 열기(`ledger-open`)를 먼저 다시 돕니다(계수 기록 펜스가 표지를 풀었다) |
 | ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 
@@ -1103,7 +1103,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 ```
 /compact
-/spec-distill:spec-interview @docs/superpowers/interview/<날짜>-<topic>-interview.md
+/spec-distill:pm-interview @docs/superpowers/interview/<날짜>-<topic>-interview.md
 ```
 
 `/compact` 뒤 같은 줄에 붙인 텍스트는 요약 지시로, `/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.

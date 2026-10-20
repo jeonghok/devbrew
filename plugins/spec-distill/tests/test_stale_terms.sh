@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # V7 — stale-term 회귀 락. rename 완결을 **production artifacts**에서 확인한다.
 # (a) breadth-keeper → coverage-mapper 재명명이 production에 완결(잔존 0).
-# (b) interview_round는 활성 코드서 제거, 잔존은 spec-interview의 migration 참조 파일
-#     (skills/spec-interview/references/state-migration.md, Task 11b 로 SKILL.md 밖으로
+# (b) interview_round는 활성 코드서 제거, 잔존은 pm-interview의 migration 참조 파일
+#     (skills/pm-interview/references/state-migration.md, Task 11b 로 SKILL.md 밖으로
 #     분리)에만.
 # (c) v0.23.0 권위 문법 6개 리터럴이 production에서 제거됐다(AC13). README.md도 스코프 안 —
 #     제외했던 근거("Principles Instantiated가 무엇이 왜 사라졌는지 설명하려면 옛 용어를
@@ -27,7 +27,7 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-SKILL="$SD/skills/spec-interview/SKILL.md"
+SKILL="$SD/skills/pm-interview/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # grep은 세 결과를 구분한다: 0=매치(금지어 발견), 1=매치 없음(정상), >=2=grep 자체 실패
@@ -101,7 +101,7 @@ fi
 # references/state-migration.md 로 옮겨갔다 — SKILL.md 자신은 이제 포인터만 갖고 조건절 산문에도
 # 리터럴 `interview_round`를 쓰지 않으므로, 확인 대상이 「SKILL 안의 한 섹션」에서 「그 전용
 # 파일 전체」로 바뀐다. SKILL.md 쪽 잔존은 0 이어야 한다 — 포인터가 조건을 산문으로만 서술한다).
-MIG_REF="$SD/skills/spec-interview/references/state-migration.md"
+MIG_REF="$SD/skills/pm-interview/references/state-migration.md"
 skill_ir=$(grep -c interview_round "$SKILL" 2>/dev/null || true)
 mig_ir=$(grep -c interview_round "$MIG_REF" 2>/dev/null || true)
 { [[ "$skill_ir" -eq 0 ]] && [[ "$mig_ir" -ge 1 ]]; } \

@@ -317,7 +317,7 @@ else
 fi
 
 note "[정적 — 양성 증인: 고친 자리를 스캐너가 인라인 · 격리로 본다]"
-# spec-interview SKILL.md · finishing.md 는 증인에서 뺐다(R7 Task 9) — 그 자리(state 를 Bash 로만 고치던 계약의 인라인 python 줄)가
+# pm-interview SKILL.md · finishing.md 는 증인에서 뺐다(R7 Task 9) — 그 자리(state 를 Bash 로만 고치던 계약의 인라인 python 줄)가
 # 상태 파일 이월로 지워져 인라인 python 이 남지 않는다. 격리 없는 호출이 새로 생기면 위 부재 검사가 잡는다.
 for f in \
   plugins/quality-gates/scripts/setup-qg.sh \

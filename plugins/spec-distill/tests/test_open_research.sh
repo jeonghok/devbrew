@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-interview/SKILL.md plugins/spec-distill/references/fresh-evidence.md
+# guards: plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/fresh-evidence.md
 #
 # 인터뷰 skill 의 `## 조사 열기` 절 — 조사 agent 를 여럿 동시에 띄우고(AC1), 본체가 주문을 써
 # open-researcher 에 보내며(AC2 · AC8), 웹이 꺼지면 띄우지 않고(AC3), 무엇을 만들자는 결정에서
@@ -8,10 +8,10 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-SKILL="$SD/skills/spec-interview/SKILL.md"
+SKILL="$SD/skills/pm-interview/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/spec-interview/SKILL.md"
+  echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
   echo "plugins/spec-distill/references/fresh-evidence.md"
   exit 0
 fi

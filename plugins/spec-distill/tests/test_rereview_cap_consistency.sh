@@ -66,7 +66,7 @@ TARGETS=(
 # RED 를 낸다. 그때의 처방은 이 항목을 빼는 것이 아니라 줄-스코프로 좁히는 것이다.
 NEG_ONLY=(
   "$REPO_ROOT/plugins/spec-distill/references/proceed-gate.md"
-  "$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references/finishing.md"
   "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md"
   "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 )

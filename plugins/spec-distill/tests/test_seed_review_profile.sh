@@ -25,7 +25,7 @@ TPL="$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md"
 TMP="$(mktemp -d -t sd-seed-prof-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:interview\naudit_file: s.audit.md\n---\n\n로그인이 가끔 실패한다.\n\n다시 검증할 것 — 경합은 의심이다.\n' > "$TMP/s.md"
+printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:pm-interview\naudit_file: s.audit.md\n---\n\n로그인이 가끔 실패한다.\n\n다시 검증할 것 — 경합은 의심이다.\n' > "$TMP/s.md"
 cat > "$TMP/critic.txt" <<'EOF'
 ```docreview-layer1
 - ref: c1

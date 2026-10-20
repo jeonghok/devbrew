@@ -16,7 +16,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }
-FIN="$SD/skills/spec-interview/references/finishing.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
 RED="$SD/references/redecompose.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 cf="$(fence "$FIN" interview-commit)"

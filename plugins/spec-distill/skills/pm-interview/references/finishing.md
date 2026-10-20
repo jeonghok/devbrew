@@ -128,7 +128,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
-   그 아래에 `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### audit §2 줄` 형식으로 조사 호출 줄
+   그 아래에 `${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md` 의 `### audit §2 줄` 형식으로 조사 호출 줄
    한 줄을 쓰고(state `research_dispatches` · `research_limit` · `research_log` 의 `device: orchestrator` 수), 이어서 state 본문
    `## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다 — 상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 줄이
    사건 순간 거기 쌓였습니다. 다시 짓거나 요약하지 않고, 블록에 없는 줄을 기억으로 보태지 않습니다.

@@ -1,6 +1,6 @@
 # 에픽 넘김 줄
 
-승인된 로드맵의 에픽 하나를 설계하는 세션의 첫 줄이다 — 지휘자를 껐거나(지휘자를 부르지 않고 손 절차로 갈 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 spec-distill 전체를 끈다) 사용자가 에픽을 자기 세션에서 따로 진행하겠다고 할 때만 쓴다. 지휘자는 이 줄을 사용자에게 주지 않고 같은 내용을 자기 brainstorming 입력으로 쓴다. brief 흐름의 다음 세션 줄(`${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md` 의 B-3)과 같은 모양이고, 첨부와 정답 출처가 brief 가 아니라 그 에픽의 묶음이다.
+승인된 로드맵의 에픽 하나를 설계하는 세션의 첫 줄이다 — 지휘자를 껐거나(지휘자를 부르지 않고 손 절차로 갈 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 spec-distill 전체를 끈다) 사용자가 에픽을 자기 세션에서 따로 진행하겠다고 할 때만 쓴다. 지휘자는 이 줄을 사용자에게 주지 않고 같은 내용을 자기 brainstorming 입력으로 쓴다. brief 흐름의 다음 세션 줄(`${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/finishing.md` 의 B-3)과 같은 모양이고, 첨부와 정답 출처가 brief 가 아니라 그 에픽의 묶음이다.
 
 **에픽 넘김 줄**
 

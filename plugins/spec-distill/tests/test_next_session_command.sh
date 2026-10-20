@@ -122,10 +122,10 @@ for label, needle in [
 limits = {}
 for row in re.finditer(r"^\s*\|\s*`([^`]+)`\s*\|[^|\n]*\|\s*(\d+)\s*\|\s*$", sec, re.M):
     limits[row.group(1)] = int(row.group(2))
-if "spec-distill:spec-interview" in limits:
-    ok(f"정본 한도 표(양성): spec-distill:spec-interview 한도 {limits['spec-distill:spec-interview']} 를 읽었다")
+if "spec-distill:pm-interview" in limits:
+    ok(f"정본 한도 표(양성): spec-distill:pm-interview 한도 {limits['spec-distill:pm-interview']} 를 읽었다")
 else:
-    no("정본 한도 표: spec-distill:spec-interview 행이 없다 — slash 줄 한도를 잴 수 없다")
+    no("정본 한도 표: spec-distill:pm-interview 행이 없다 — slash 줄 한도를 잴 수 없다")
 if re.search(r"^\s*\|\s*외부 skill[^|\n]*\|[^|\n]*\|\s*제한 없음\s*\|\s*$", sec, re.M):
     ok("정본 한도 표: 외부 skill(평문 줄) = 제한 없음")
 else:

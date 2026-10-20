@@ -31,7 +31,7 @@ def w(rel, text):
 def head(plugin, skill):
     return subprocess.run([sys.executable, lock, "--print-head", plugin, skill],
                           capture_output=True, text=True, check=True).stdout
-ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "spec-interview", False),
+ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "pm-interview", False),
          ("spec-distill", "spec-review", False), ("spec-distill", "roadmap-status", False), ("spec-distill", "epic-conductor", False),
          ("plugin-audit", "plugin-audit", True),
          ("project-init", "project-init", True),
@@ -45,7 +45,7 @@ for p, s, user_only in ENTRY:
     w("plugins/%s/scripts/entry_preflight.py" % p, "# stub\n")
 w("plugins/spec-distill/skills/reviewing-brief/SKILL.md",
   "---\nname: reviewing-brief\ndescription: x\ncost_class: medium\nuser-invocable: false\n---\n\nbody\n")
-w("plugins/spec-distill/README.md", "# spec-distill\n\n`/spec-interview` 를 친다.\n")
+w("plugins/spec-distill/README.md", "# spec-distill\n\n`/pm-interview` 를 친다.\n")
 w("README.md", "# r\n")
 subprocess.run(["git", "init", "-q", d], check=True)
 PY
@@ -102,7 +102,7 @@ variant c1; edit "$TMP/v-c1/$SR" "$BANG_SR" ""; expect_red "$TMP/v-c1" C "C 삭�
 variant c2; edit "$TMP/v-c2/$SR" "## 진입 단계" "$BANG_SR
 
 ## 진입 단계"; expect_red "$TMP/v-c2" C "C 추가: 사전 검사 줄 둘" "정확히 하나"
-variant c3; edit "$TMP/v-c3/$SR" "spec-distill spec-review\`" "spec-distill spec-interview\`"; expect_red "$TMP/v-c3" C "C 표기: 인자 바꿔치기" "기대 모양"
+variant c3; edit "$TMP/v-c3/$SR" "spec-distill spec-review\`" "spec-distill pm-interview\`"; expect_red "$TMP/v-c3" C "C 표기: 인자 바꿔치기" "기대 모양"
 variant c4; edit "$TMP/v-c4/$SR" "allowed-tools:
 " "allowed-tools:
   - Read
@@ -147,6 +147,16 @@ put "$TMP/v-i_ok/plugins/spec-distill/scripts/q.py" "# scripts/qg-gc.py · plugi
 expect_green "$TMP/v-i_ok" "축 I 음성 대조: 새 이름과 상태 경로는 걸리지 않는다"
 variant i_ol; put "$TMP/v-i_ol/plugins/spec-distill/scripts/q.py" '# "/qg-gc.py" 와 `/qg-worktree` · /qg_state · `/interview/` 는 이름 · 경로 글자가 이어져 옛 호출이 아니다'
 expect_green "$TMP/v-i_ol" "축 I 음성 대조: 옛 호출 뒤에 이름 · 경로 글자가 이어지면 걸리지 않는다"
+variant i_si; put "$TMP/v-i_si/plugins/spec-distill/README.md" "/spec-distill:spec-interview 로 부른다"
+expect_red "$TMP/v-i_si" I "축 I: 옛 진입 이름 spec-interview" "옛 이름 'spec-interview'"
+variant i_sp; put "$TMP/v-i_sp/plugins/spec-distill/skills/request-framing/SKILL.md" 'Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md'
+expect_red "$TMP/v-i_sp" I "축 I: 옛 skill 경로" "옛 이름 'spec-interview'"
+variant i_np; put "$TMP/v-i_np/plugins/spec-distill/templates/s.md" "next_phase: spec-distill:interview"
+expect_red "$TMP/v-i_np" I "축 I: seed 템플릿 옛 next_phase 값" "옛 이름 'spec-distill:interview'"
+variant i_pm; put "$TMP/v-i_pm/plugins/spec-distill/scripts/q.py" "# /spec-distill:pm-interview · skills/pm-interview/ · docs/superpowers/interview/x.md · spec-distill:interview-x 는 옛 이름이 아니다"
+expect_green "$TMP/v-i_pm" "축 I 음성 대조: 새 이름 · 인터뷰 산출물 폴더 · 이름 글자가 이어진 꼴은 걸리지 않는다"
+variant i_fx; put "$TMP/v-i_fx/plugins/spec-distill/tests/fixtures/s.md" "next_phase: spec-distill:spec-interview"
+expect_green "$TMP/v-i_fx" "축 I 면제 대조: tests/fixtures 의 옛 seed 값은 걸리지 않는다"
 
 variant h2; put "$TMP/v-h2/plugins/spec-distill/commands/sub/x.md" "---"; expect_red "$TMP/v-h2" H "H 깊이: 중첩 commands/ 경로" "commands/ 층"
 variant g4; put "$TMP/v-g4/plugins/spec-distill/skills/spec-review/references/t.md" '`/spec-distil:spec-review` 로'; expect_red "$TMP/v-g4" G "G 오타: 없는 플러그인 완전명" "풀리지 않는다"
@@ -212,9 +222,11 @@ real c; edit "$TMP/r-c/$RSR" "$RBANG" "";                                    exp
 real d; edit "$TMP/r-d/$RSR" "spec-distill spec-review\`" "spec-distill spec-review \$ARGUMENTS\`"; expect_red "$TMP/r-d" D "실제 D 추가: 사전 검사 줄에 \$ARGUMENTS" "사용자 인자"
 real f; edit "$TMP/r-f/plugins/project-init/skills/project-init/SKILL.md" "disable-model-invocation: true
 " "";                                                                         expect_red "$TMP/r-f" F "실제 F 반전: project-init 사용자 전용 해제" "disable-model-invocation: true 가 없다"
-real g; put "$TMP/r-g/plugins/spec-distill/skills/request-framing/SKILL.md" "다음은 /spec-interview 다"; expect_red "$TMP/r-g" G "실제 G 추가: bare 진입 이름" "bare /spec-interview"
+real g; put "$TMP/r-g/plugins/spec-distill/skills/request-framing/SKILL.md" "다음은 /pm-interview 다"; expect_red "$TMP/r-g" G "실제 G 추가: bare 진입 이름" "bare /pm-interview"
 real h; put "$TMP/r-h/plugins/project-init/commands/project-init.md" "---";  expect_red "$TMP/r-h" H "실제 H 추가: 명령 층 부활" "commands/ 층"
 real i; put "$TMP/r-i/CLAUDE.md" "reviewing-spec";                           expect_red "$TMP/r-i" I "실제 I 추가: 옛 이름 재삽입" "옛 이름 'reviewing-spec'"
+real si; put "$TMP/r-si/plugins/spec-distill/README.md" "/spec-distill:spec-interview"; expect_red "$TMP/r-si" I "실제 I 추가: 옛 진입 이름 재삽입" "옛 이름 'spec-interview'"
+real pm; rm -rf "$TMP/r-pm/plugins/spec-distill/skills/pm-interview"; expect_red "$TMP/r-pm" I "실제 I 삭제: 새 이름 skill 디렉토리(양성 짝)" "'pm-interview'"
 real n; put "$TMP/r-n/plugins/spec-distill/scripts/n.py" "# docs/superpowers/interview/x.md · plugins/plugin-audit/README.md"
 expect_green "$TMP/r-n" "실제 음성 대조: 경로 조각은 GREEN"
 fi

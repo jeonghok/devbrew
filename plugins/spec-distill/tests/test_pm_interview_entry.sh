@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# spec-interview 는 사용자가 직접 부르는 진입 skill 이다(`/spec-distill:spec-interview`).
+# pm-interview 는 사용자가 직접 부르는 진입 skill 이다(`/spec-distill:pm-interview`).
 # AC1: frontmatter 에 user-invocable: 줄이 없다(메뉴에 보인다) / AC2: 기존 frontmatter 3키 보존 /
 # AC3: 옛 command 파일 부재 + spec-review re-entry 참조 보존.
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SKILL="$PLUGIN_DIR/skills/spec-interview/SKILL.md"
+SKILL="$PLUGIN_DIR/skills/pm-interview/SKILL.md"
 REVIEW="$PLUGIN_DIR/skills/spec-review/SKILL.md"
 SD="$PLUGIN_DIR"
 
@@ -16,7 +16,7 @@ SD="$PLUGIN_DIR"
 # name: 줄을 읽었는지 먼저 본다 — 추출이 비면 부재 검사는 공허하게 통과한다.
 # 파이프 대신 command-sub+herestring으로 set -uo pipefail SIGPIPE 오탐 회피.
 frontmatter="$(awk '/^---$/{c++} c==1' "$SKILL")"
-grep -q '^name: spec-interview$' <<<"$frontmatter" \
+grep -q '^name: pm-interview$' <<<"$frontmatter" \
     && ok "AC1(양성): frontmatter 블록을 읽었다" \
     || no "AC1(양성): frontmatter 블록에서 name: 을 못 읽었다 — 아래 부재 검사가 공허하다"
 grep -q '^user-invocable:' <<<"$frontmatter" \
@@ -24,7 +24,7 @@ grep -q '^user-invocable:' <<<"$frontmatter" \
     || ok "AC1: frontmatter 에 user-invocable: 줄이 없다 (사용자 호출 가능)"
 
 # AC2 — 기존 frontmatter 키 보존 (의미 변경 없음)
-grep -q '^name: spec-interview$' "$SKILL" \
+grep -q '^name: pm-interview$' "$SKILL" \
     && ok "AC2: name preserved" \
     || no "AC2: name field broken"
 grep -q '^description:' "$SKILL" \
@@ -38,7 +38,30 @@ grep -q '^cost_class: variable$' "$SKILL" \
 [ ! -e "$SD/commands/inter""view.md" ] \
     && ok "AC3: 옛 interview 명령 파일 부재 (skill 이 진입을 흡수)" \
     || no "AC3: 옛 interview 명령 파일이 남아 있다"
-grep -q 'spec-interview' "$REVIEW" \
+grep -q 'pm-interview' "$REVIEW" \
     && ok "AC3: spec-review re-entry reference preserved" \
     || no "AC3: spec-review re-entry reference MISSING"
+[ ! -e "$SD/skills/spec-""interview" ] \
+    && ok "AC31: 옛 skill 디렉토리가 없다(별칭 없음)" \
+    || no "AC31: 옛 skill 디렉토리가 남아 있다"
+grep -qx 'next_phase: spec-distill:pm-interview' "$SD/templates/interview-seed-template.md" \
+    && ok "AC31: seed 템플릿의 next_phase 가 새 이름이다" \
+    || no "AC31: seed 템플릿의 next_phase 가 새 이름이 아니다"
+grep -qF '/spec-distill:pm-interview' "$SD/README.md" \
+    && ok "AC31: README 가 새 완전명을 보인다(축 I 부재의 양성 짝)" \
+    || no "AC31: README 에 새 완전명이 없다"
+python3 -I - "$SD/CHANGELOG.md" <<'PY' && ok "AC31: CHANGELOG 의 major 절이 옛 → 새 진입 이름 표 행을 Removed 에 싣는다" || no "AC31: CHANGELOG 에 옛 → 새 진입 이름의 major Removed 행이 없다"
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+secs = [s for s in re.split(r"(?m)^(?=## \[)", t) if s.startswith("## [")]
+heads = [re.match(r"## \[(\d+)\.(\d+)\.(\d+)\]", s) for s in secs]
+old = "/spec-distill:spec-" + "interview"
+row = re.compile(r"(?m)^\|\s*`" + re.escape(old) + r"`\s*\|\s*`/spec-distill:pm-interview`\s*\|")
+blk_re = re.compile(r"(?ms)^### Removed[^\n]*\n(.*?)(?=^### |\Z)")
+hit = [i for i, s in enumerate(secs) if (b := blk_re.search(s)) and row.search(b.group(1))]
+assert len(hit) == 1, hit
+m, prev = heads[hit[0]], heads[hit[0] + 1]
+assert (m.group(2), m.group(3)) == ("0", "0"), m.group(0)
+assert int(m.group(1)) == int(prev.group(1)) + 1, (m.group(0), prev.group(0))
+PY
 finish

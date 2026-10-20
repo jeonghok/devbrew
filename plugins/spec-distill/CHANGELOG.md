@@ -1,5 +1,21 @@
 # Changelog
 
+## [8.0.0] — 2026-10-20
+
+major 인 이유 — 인터뷰를 부르는 이름이 바뀌었다. 옛 이름은 별칭 없이 사라졌다.
+
+### Removed
+| 옛 이름 | 새 이름 |
+|---|---|
+| `/spec-distill:spec-interview` | `/spec-distill:pm-interview` |
+
+설정(권한 목록 등)이나 자기 스크립트에 옛 이름을 적어 둔 사용자는 새 이름으로 바꿔야 한다.
+
+### Changed
+- seed 템플릿의 `next_phase` 가 `spec-distill:pm-interview` 이다. 옛 값(`spec-distill:spec-interview` · `spec-distill:interview`)을 가진 seed 도 그대로 받는다(seed 는 `type: interview-seed` 로 알아본다).
+- 꺼 두는 스위치 이름은 그대로다.
+- 인터뷰 산출물 폴더(`docs/superpowers/interview/`)와 상태 파일은 그대로다.
+
 ## [7.8.0] — 2026-10-20
 
 ### Added

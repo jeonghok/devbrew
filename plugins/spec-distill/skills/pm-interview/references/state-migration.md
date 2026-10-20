@@ -16,7 +16,7 @@
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
 - `orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`
   — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다. `<시작값>` 은
-  `${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md` 의 `### 상한 값` 펜스가 정한다 — 같은 검사로
+  `${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md` 의 `### 상한 값` 펜스가 정한다 — 같은 검사로
   `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 60) · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5)를 읽는다.
 
 **옛 카운터는 「부재 키만 채운다」로 안 된다.** 이미 조사를 부른 세션이 새 키의 기본값 `0` 을 받으면

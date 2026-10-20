@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
+# guards: plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
 #
 # AC8 · AC16 — 핸드오프 자리(interview 의 다음 세션 줄 · brief 템플릿 §7 · spec-review description)가
 # brainstorming → `spec-distill:spec-review` → writing-plans 순서를 싣고, `spec-review` 의 게이트 없는
@@ -13,12 +13,12 @@
 # 있어야 한다. 순서는 창 안의 문자 오프셋으로 잰다(한 줄 안의 순서까지).
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-FIN="$ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
+FIN="$ROOT/plugins/spec-distill/skills/pm-interview/references/finishing.md"
 TPL="$ROOT/plugins/spec-distill/templates/interview-brief-template.md"
 SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/spec-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   exit 0
@@ -168,7 +168,7 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   assert_not_contains "$r2" '권장' "spec-review: 권장은 ① 하나"
   assert_not_contains "$rows" '바로' "spec-review 2단계 표에 「바로」 진행 행이 없다"
   r3="$(printf '%s\n' "$rows" | grep -E '^\| ③ \|' || true)"
-  assert_contains "$r3" '`spec-interview` 재진입' "spec-review ③ 행: 인터뷰 재진입 갈래는 그대로 있다"
+  assert_contains "$r3" '`pm-interview` 재진입' "spec-review ③ 행: 인터뷰 재진입 갈래는 그대로 있다"
   assert_contains "$r3" '로드맵 에픽이면 이 에픽 다시 설계도' "AC33: spec-review ③ 행이 로드맵 에픽의 넷째 갈래를 말한다"
   BR="$(printf '%s\n' "$GATE" | awk '/^\*\*③ 의 갈래와 로드맵 에픽\.\*\*/{f=1} f&&/^- \*\*①\/② 의 정지 요건\*\*/{exit} f')"
   if [ -n "$BR" ]; then ok "spec-review: ③ 로드맵 분기 문단 창"; else no "spec-review: ③ 로드맵 분기 문단이 없다"; fi
