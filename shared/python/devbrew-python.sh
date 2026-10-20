@@ -30,9 +30,11 @@ done
 #      DEVBREW_<플러그인>_DISABLE=1  — 이름을 플러그인명에서 **도출한다**(`-`→`_`, 대문자).
 #                                     예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1
 #      DEVBREW_SKIP_HOOKS=<plugin>:<hook>  또는  <plugin>:<event>  (쉼표 목록, 전체 토큰)
-#    위 「예:」 줄은 장식이 아니다 — plugin-audit 의 `_KILLSWITCH_RE`
-#    (`DEVBREW_[A-Z0-9_]*_DISABLE`)가 도출형 이름을 못 읽어서, 이 줄이 없으면 세 플러그인
-#    모두에 거짓 「kill switch 부재」 gap 이 난다. shared/tests/test_python_floor.sh 축 B 가 잰다.
+#    plugin-audit(check-shape-completeness.py)은 훅 파일에서 그 플러그인 자기 이름의
+#    DEVBREW_<자기>_DISABLE · DEVBREW_SKIP_HOOKS · kill_switch_active("<자기>" 중 하나를 찾는다.
+#    이 해석기는 플러그인마다 같은 사본이라 자기 이름 스위치를 글자로 적을 수 없고(위처럼
+#    --plugin 에서 도출한다), 감사기는 본문의 DEVBREW_SKIP_HOOKS 를 읽고 통과시킨다.
+#    shared/tests/test_python_floor.sh 의 A11 과 축 C(AC11)가 잰다.
 _ks_trim() {   # 앞뒤 공백 제거 — 정본의 `.strip()` 자리
   _s="$1"
   _s="${_s#"${_s%%[![:space:]]*}"}"
