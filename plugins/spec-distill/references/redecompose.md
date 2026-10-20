@@ -111,7 +111,7 @@ exit "$u_rc"
 
 ## 6. 올리기
 
-로드맵 수정은 2 에서 만든 `feature/roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 머지는 사용자가 한다.
+로드맵 수정은 2 에서 만든 `feature/roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 머지 전에 로드맵을 읽는 테스트 전부(로드맵 폴더 이름을 `git grep -l` 로 찾는다)를 돌린다 — 골라 돈 몇 개가 아니다. 머지는 사용자가 한다.
 
 ## 7. 끝내기
 

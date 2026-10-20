@@ -1,5 +1,20 @@
 # Changelog
 
+## [8.4.0] — 2026-10-21
+
+### Changed
+- 로드맵을 고친 PR 은 머지 전에 로드맵을 읽는 테스트를 골라 돌리지 않고 전부 돌린다(`references/redecompose.md` · `references/conducting.md` 걸음 6).
+- 구현 담당자는 맥락을 가볍게 둔다 — 하위 보고는 파일로, 이력은 붙여 넣지 않고, 길어지면 push · 원장 갱신 뒤 다음 걸음을 적은 CHECKPOINT 로 돌아온다(`references/conductor-dispatch.md` 구현 틀).
+- 계획 중간에 돌아온 구현 담당자를 바꿀 때 옛 담당자가 띄운 하위 agent 를 먼저 멈춘다(`references/conducting.md` 걸음 4).
+- 한 브랜치는 한 worktree 만 쥔다 — 지휘자 worktree 는 detached 로 두고, origin 에 있는 에픽 브랜치에서 일하는 하위는 detached 로 서서 `git push origin HEAD:<브랜치>` 로 올린 뒤 로컬 ref 를 따라 옮긴다(`references/conductor-dispatch.md` 자리).
+- 같은 자리가 라운드마다 새 막는 지적을 내면 라운드를 더하지 않고 설계의 대안 갈래로 옮긴다(`references/conducting.md` 걸음 4).
+- 같은 에픽의 계획을 동시에 돌리면 보낼 때 판 올림 순서와 각 계획의 목표 판 번호를 정한다(`references/conductor-dispatch.md` 판 번호).
+- 끝나 worktree 가 지워진 격리 agent 는 메시지로 깨우지 않고 새 격리 agent 를 보낸다(`references/conductor-dispatch.md` 단계마다 새 agent).
+- 하위의 보고를 지휘자가 질문으로 만들면 그 질문과 「(권장)」 은 지휘자 것으로 표시한다. 옮김 대조 agent(`agents/relay-checker.md`)는 그렇게 표시된 질문의 선택지를 대조하지 않고, 표시 없는 질문은 지금처럼 대조한다.
+
+### Fixed
+- 스위트 대조(`scripts/merge_check.py`)가 origin 보다 뒤처진 로컬 브랜치로 대조해 거짓 「합칠 수 없다」를 내지 않는다 — 로컬과 origin 이 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 두 끝을 보이고 검사 불가(3)로 멈춘다. `--branch origin/<브랜치>` 도 받는다.
+
 ## [8.3.0] — 2026-10-20
 
 ### Fixed
