@@ -99,7 +99,7 @@ assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 
 derive_guarded() {   # derive_guarded → 대상 파일 절대경로(줄마다 하나, 중복 없음)
   git -C "$ROOT_REPO" ls-files -s -- 'plugins/spec-distill/*.md' | python3 -I -c '
 import os, re, sys
-root = os.path.realpath(sys.argv[1])
+root = os.path.abspath(sys.argv[1])
 NAME = re.compile(r"docreview_(?:state|route|anchor)")
 out = set()
 for row in sys.stdin.read().split("\n"):
