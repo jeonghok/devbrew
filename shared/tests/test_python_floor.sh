@@ -375,13 +375,31 @@ assert_eq "$(field want_nonempty "$bad_report")" "yes" \
 assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
 assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 «사유» 를 싣는다 (고치는 법 문장이 아니라)"
 
-# A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정기 정규식은
-#     `DEVBREW_[A-Z0-9_]*_DISABLE` 이라 **도출형 이름도 꺾쇠 플레이스홀더도 못 본다**
-#     〔실측〕. 그래서 머리에 구체 예시 한 줄이 필요하다. 진짜 소비자를 보는 것은 Task 2 의
-#     축 B(감사기를 실제로 돌린다)이고, 이 단언은 축 B 가 붙기 전까지의 대역이자
-#     「어느 파일이 원인인지」를 바로 가리키는 국소 신호다.
-assert_file_grep "$ROOT/$RESOLVER" 'DEVBREW_[A-Z0-9_]+_DISABLE' \
-  "A11: 해석기 본문에 plugin-audit 가 읽을 수 있는 구체 kill switch 이름이 있다"
+# A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정 `_has_killswitch(text, own)` 은
+#     그 플러그인 자기 이름의 DEVBREW_<자기>_DISABLE · DEVBREW_SKIP_HOOKS ·
+#     kill_switch_active("<자기>" 중 하나를 찾는다. 해석기는 플러그인마다 같은 사본이라 자기
+#     이름을 글자로 못 적고 DEVBREW_SKIP_HOOKS 로 통과한다 — 그래서 모르는 이름(fix-ture)으로
+#     판정기를 직접 부른다. 음의 짝: 본문에서 DEVBREW_SKIP_HOOKS 만 지우면 거짓이어야 한다 —
+#     이것이 없으면 판정기를 못 불러도, 다른 줄이 우연히 맞아도 양성 단언이 헛돈다.
+#     감사기 전체를 실제로 돌리는 것은 축 C(AC11)이고, 이 단언은 「어느 파일이 원인인지」를
+#     바로 가리키는 국소 신호다.
+a11_report="$(python3 - "$ROOT/plugins/plugin-audit/scripts/check-shape-completeness.py" \
+  "$ROOT/$RESOLVER" <<'PY_A11'
+import importlib.util, sys
+try:
+    spec = importlib.util.spec_from_file_location("shape_audit", sys.argv[1])
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    text = open(sys.argv[2], encoding="utf-8").read()
+    print("whole: %s" % m._has_killswitch(text, "fix-ture"))
+    print("stripped: %s" % m._has_killswitch(text.replace("DEVBREW_SKIP_HOOKS", ""), "fix-ture"))
+except Exception as e:
+    print("whole: error %s" % type(e).__name__); print("stripped: error")
+PY_A11
+)"
+assert_eq "$(field whole "$a11_report")" "True" \
+  "A11: plugin-audit 판정기가 해석기 본문을 모르는 플러그인 이름으로도 kill switch 존중으로 읽는다"
+assert_eq "$(field stripped "$a11_report")" "False" \
+  "A11: 음의 짝 — 본문에서 DEVBREW_SKIP_HOOKS 를 지우면 판정기가 거짓을 낸다"
 
 note "── 축 I: 비-절대 PATH 항목 (설계 2026-09-23 AC1~AC4 · AC8) ──────────────"
 # 해석기의 두 탐색(2단계 `python3` · 3단계 `python3.*`)이 PATH 의 절대 경로가 아닌 항목

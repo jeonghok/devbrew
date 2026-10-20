@@ -196,6 +196,14 @@ done <<<"$SMK"
 [ "$n_smk" -ge 3 ] && ok "seed 처분 안내: 비신뢰 자리 튜플 ${n_smk}개를 도출해 대조했다 (vacuous 아님)" \
   || no "seed 처분 안내: 튜플을 ${n_smk}개만 도출했다 — UNTRUSTED_VERBATIM_SECTIONS 추출이 깨졌다"
 
+# 철학 P3 문장과 design-doc 프로필의 대안 비교 줄
+PHIL="$(cat "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md")"
+assert_not_contains "$PHIL" '자리 넷' "철학 문서: 옛 「자리 넷」 0건(음)"
+assert_contains "$PHIL" '문서 리뷰 자리 셋(design doc · brief · seed)' "철학 문서: 리뷰 자리는 셋(양)"
+assert_contains "$PHIL" '`generic` 프로필은 엔진 테스트만 읽는다' "철학 문서: generic 은 엔진 테스트만 읽는다(양)"
+DD_TXT="$(cat "$DD")"
+assert_contains "$DD_TXT" 'Rejected Alternatives 의 각 대안이 채택안과 같은 기준으로 비교됐는가 — 한 단어로만 기각했으면 지적' "design-doc 프로필: approaches_comparison 줄에 같은 기준 비교(양)"
+
 # 변이 — 스키마를 깨면 rc 2 (양성 대조: 위에서 같은 파일이 통과했다)
 sed '/^web:/d' "$DD" > "$TMPD/m1.md"
 python3 "$SCRIPTS/docreview_state.py" profile-check "$TMPD/m1.md" >/dev/null 2>&1; rc=$?

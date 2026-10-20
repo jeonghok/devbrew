@@ -101,7 +101,7 @@ web: false
 - `placeholder` — TBD·TODO·「나중에」·빈 절.
 - `ambiguity` — 두 가지로 읽히는 요구. 측정 불가 표현("적절히", "빠르게").
 - `scope_creep` — 한 구현 계획으로 분해되지 않는 독립 하위 시스템 묶음.
-- `approaches_comparison` — 대안 비교 없이 단정된 선택.
+- `approaches_comparison` — 대안 비교 없이 단정된 선택. Rejected Alternatives 의 각 대안이 채택안과 같은 기준으로 비교됐는가 — 한 단어로만 기각했으면 지적.
 - `isolation` — 단위 테스트·변경 격리가 불가능할 만큼 흐린 컴포넌트 경계.
 - `testing` — **검증 전략의 부재**다. 「무엇이 관측되면 통과인가」가 없을 때만 낸다. 자동 검증 **절차**(명령·픽스처·순서)의 부재는 plan 의 일이므로 `defer` 로 낸다.
 - `handoff_incomplete` — Handoff Context 가 없거나, `/compact` 뒤 이 문서만 읽고 이어갈 수 없는 암묵 컨텍스트가 남아 있다.
