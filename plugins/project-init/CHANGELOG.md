@@ -5,6 +5,14 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.2.0] — 2026-10-20
+
+### Changed
+
+- S4 「CLAUDE.md 는 그대로 두기」를 고르면 AGENTS.md 에 헌장 절이 아직 없을 때 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다는 것을 알린다(조건을 문장 앞에 밝혔다).
+- S4 「옮기기」에서 AGENTS.md 에 같은 이름 절이 이미 있어 옮기지 않은 절은 Step 5 보고에 알린다.
+- Step 5 보고 문구를 쉬운 말로 다듬었다.
+
 ## [5.1.0] — 2026-10-19
 
 ### Changed
