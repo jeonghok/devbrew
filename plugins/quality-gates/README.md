@@ -156,7 +156,7 @@ Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FOR
 | ③ 합성 · 판정 | `synthesize_findings.py` → `verdict.py` | `clean` · `defect` · `not-certified (<사유>)` — 막는 지적(CRITICAL · IMPORTANT)이 1건 이상이면 `defect`. 재비판이 낮춘 지적은 「낮춘 지적」 절에 원래 심각도 · 이유와 함께 보이고, 사용자가 반복마다 골라 원래 심각도로 되올릴 수 있다 |
 | ④ e2e | 오케스트레이터 + `e2e-state.sh` | 사람이 고른 시나리오(여럿 고를 수 있다 — 번호 순으로 하나씩 걷고, e2e 칸은 가장 나쁜 결과)를 승인된 명령으로 띄운 앱에서 걷고, 증거표에서 코드가 판정안을 낸다 — 걷기 직후 게이트에서 사람이 확정한다(`references/e2e.md`) |
 
-**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 판정은 그 파일을 `verdict.py` 가 직접 읽는다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다. 원인을 찾으려고 그 절차 밖에서 테스트를 돌릴 수는 있지만, 그 실행은 「조사용 실행 — 판정에 안 씀」으로 표시되고 판정에 들어가지 않는다(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 그것도 돌리지 않는다).
+**차등 테스트** — 차등 테스트는 영향 테스트를 기준선 트리와 HEAD 트리(작업트리 전체를 봉인한 일회용 트리)에서 각각 돌려 짝짓는다. 행은 `run-test-selection.sh` 가 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을 짝지어 판정 입력 한 파일을 낸다 — 그 직후 `verdict.py` 가 그 파일에서 차등 결과 줄(`qg-verdict-args: --new-failures K …`)을 내고, 최종 판정은 그 줄을 쓴다. 기준선 행은 한 번의 `/quality-gates:quality-pipeline` 동안만 사는 실행 안 메모(리포 밖)에 두고 같은 실행의 다음 iteration 에서 재사용한다. 세션을 넘는 캐시는 없다. 절차와 지킬 요구 R1~R24 는 `skills/quality-pipeline/references/differential-test.md` 에 있다. 원인을 찾으려고 그 절차 밖에서 테스트를 돌릴 수는 있지만, 그 실행은 「조사용 실행 — 판정에 안 씀」으로 표시되고 판정에 들어가지 않는다(`DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 그것도 돌리지 않는다).
 
 **아키텍처 메모 — 왜 오케스트레이션이 skill 에 있는가**: Claude Code는 skill만 `Agent()`의
 `subagent_type`을 쓸 수 있다. 파이프라인은 여러 리뷰어를 디스패치해야 하므로 orchestration
@@ -226,6 +226,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │   Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty)
  │   범위 모드: 고치고 다시 돌기 없음(지금 판정으로 끝내기 / 멈추기) · e2e 없음 · 게시 없음
  │   ① review — 시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic
+ │   ①' review-axis synthesis — 리뷰 결과 줄(qg-verdict-args:)을 차등 테스트 전에 낸다
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
  │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
@@ -233,7 +234,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
  │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기
  ├ e2e ── 시나리오 질문(여러 선택) → 고른 것마다 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
- ├ Final verdict ── verdict.py 의 판정 줄 · result.md
+ ├ Final verdict ── 숫자를 만든 직후의 펜스가 낸 결과 줄로 verdict.py 의 판정 줄 · result.md
  └ Publish ── sink 한 번 · posted:/skipped:
 ```
 
@@ -481,6 +482,14 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — 이름의 앞부분만 준 값 같은 부분 일치나
 `quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
+
+## 한계
+
+qg 는 최종 판정 수치를 레포 코드가 돌기 전 또는 만든 직후에 읽어 지킨다. 반복 중간 단계와 레포 코드가 남긴 프로세스의 영향은 막지 않는다. 판정 뒤 게시 단계(게시 여부를 `range-scope.txt` 유무와 result.md 의 `## 게시` 줄로 정한다)도 같다.
+
+- 최종 판정 줄의 수치 · 축은 숫자를 만든 직후의 펜스가 낸 결과 줄(`qg-verdict-args: …`)에서 온다 — 리뷰 축은 차등 테스트 전(Step 3.9), 차등 축은 차등 테스트 직후(D5), 제외 패치 수는 기록 직후, 범위는 얼린 직후, e2e 칸은 걷기 게이트 직후다. 판정 펜스는 세션 폴더를 다시 읽지 않는다.
+- 반복 중간 단계 — Step 4.5 의 표면화 · 라우팅, 「낮춘 지적」 게이트와 되올려 다시 합성하기, Fix-loop 분류, `result.md` 기록 — 는 차등 테스트 뒤에 세션 폴더를 다시 읽는다. 되올려 다시 합성하기가 낸 리뷰 결과 줄은 차등 테스트 뒤의 세션 폴더에서 만들어진다.
+- 차등 테스트가 돌린 레포 코드가 남긴 프로세스는 반복 2 이후의 리뷰 입력에 닿을 수 있다.
 
 ## 파이프라인 state
 

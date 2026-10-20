@@ -7,7 +7,8 @@
 입력은 셋이다 — 리뷰 축(합성기의 원장), 차등 축(`diff-test-results.py` 의
 `degrade_causes` · `verdict_input`), 그리고 호출자만 아는 사유(kill switch ·
 trivia · 합치기 충돌 · 선언 무효 · 스코프 0 · 각도 부재).
-e2e 걷기의 결과는 `--e2e` 로 들어오고, 최종 판정은 `--prior` 로 마지막 iteration 의 합성기 출력(`$RV/synth.out`)을 잇는다.
+e2e 걷기의 결과는 `--e2e` 로 들어온다. 최종 판정은 숫자를 만든 직후의 펜스가 낸 결과 줄(`qg-verdict-args:`)의 인자로만
+부른다(R24). `--prior` 는 합성기 출력(`$RV/synth.out`)의 판정을 잇는 옛 호출 길이다 — SKILL 은 더 부르지 않는다.
 `--emit-args` 는 판정 대신 차등 축 인자 줄(`qg-verdict-args: --new-failures K …`, `render_args`) 한 줄만 낸다.
 """
 import argparse
@@ -215,8 +216,9 @@ def render(decision):
     return "\n".join(out) + "\n"
 
 
-# 판정 줄(K-3) — 게시 코멘트와 로컬 결과가 싣는 한 줄. 판정값과 같은 파일에서 만든다:
-# 모델이 옮겨 적으면 전사 오류가 판정을 바꾼다(R24 · V1).
+# 판정 줄(K-3) — 게시 코멘트와 로컬 결과가 싣는 한 줄. 판정값과 같은 파일에서 만든다(V1).
+# 판정 인자는 숫자를 만든 직후의 펜스가 낸 결과 줄의 글자 그대로 들어온다 — 모델이 숫자를 고르거나
+# 옮겨 적으면 전사 오류가 판정을 바꾼다(R24).
 _SHA = re.compile(r"[0-9a-f]{7,40}")
 
 
@@ -245,7 +247,7 @@ def render_line(decision, *, blocking, optional, new_failures, excluded, iterati
 
 def render_args(*, blocking=None, optional=None, defect=False, review_blocked=False,
                 angle_absent=False, reasons=(), new_failures=None):
-    """판정 인자 줄 — 판정 펜스가 `qg-verdict-args: ` 뒤 글자를 bash 배열 자리에 그대로 붙인다.
+    """판정 인자 줄 — 판정 펜스가 이 줄을 따옴표 heredoc 자리로 받아 모양을 검사한 뒤 낱말로 나눠 넘긴다.
 
     주어진 것만 정해진 차례로 싣는다. 낱말은 정수와 `REASONS` 의 사유뿐이라 따옴표가 필요 없다.
     """
