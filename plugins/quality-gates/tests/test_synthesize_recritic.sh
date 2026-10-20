@@ -239,6 +239,7 @@ case_colliding_ids_with_partial_verdicts_are_not_resolved() {
     evidence: "근거"'
   local out; out=$(synth "$T" --emit-verdict)
   assert_grep     "$out" 'findings-lost'    "f2 가 침묵이면 f1 의 기각을 전체에 적용하지 않는다"
+  assert_grep     "$out" '일부 f 만 판정됐다' "콜라이딩 id 의 부분 판정 보류가 그 사유로 선다"
   assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다 — CRITICAL 이 조용히 사라지지 않는다"
   rm -rf "$T"
 }
