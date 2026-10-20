@@ -47,10 +47,10 @@
   기대 집합을 계산하면 양쪽에서 함께 빠진 unit 을 아무도 못 잡는다. regression:
   `tests/test_differential_procedure.sh` (절차가 `diff-test-results.py` 를 직접 부른다), `tests/test_diff_test_results.py`
   (`test_R8_expected_comes_from_assign_not_results`).
-- **LD7 (구조 게이트는 silent skip 을 막는다) — 판정 입력은 기계 출력 그대로** (v3.0.0; 13.0.0
+- **LD7 (구조 게이트는 silent skip 을 막는다) — 판정 인자는 숫자를 만든 직후 기계가 낸 줄 그대로** (v3.0.0; 13.0.0
   에서 다시 지음) — 차등 테스트의 결과를 모델이 옮겨 적지 않는다. `run-test-selection.sh` 가
   행을 꼬리 줄 달린 행 파일에 쓰고, `diff-test-results.py` 가 배정 파일과 두 축의 행 파일을
-  직접 읽어 판정 입력 한 파일을 내며, `verdict.py` 가 그 파일을 그대로 읽는다. 꼬리 줄이
+  직접 읽어 판정 입력 한 파일을 내며, 그 직후 `verdict.py --emit-args` 가 그 파일에서 결과 줄(`qg-verdict-args: …`)을 낸다 — 리뷰 축 줄은 합성기 `--verdict-args` 가 차등 테스트 전에 낸다. 최종 판정은 그 줄들을 글자 그대로 받고 세션 폴더를 다시 읽지 않는다. 꼬리 줄이
   없거나 행 수가 어긋난 파일은 빈 결과가 아니라 exit 4 다 — 잘린 출력이 「테스트 없음」으로
   읽히지 않는다. 어댑터가 주장하지 않은 후보(`unclaimed` — 워크트리 밖 경로 포함)는
   `silent-drop` 으로 집계돼 판정을 막는다. 확증하지 못한 축은 실패가 아니라
