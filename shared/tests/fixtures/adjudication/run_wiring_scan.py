@@ -4,8 +4,9 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
-    EXEMPT, EXEMPT_BASELINE, TERMINAL_CONSUMERS, comprehension_count,
-    derive_consumers, exempt_key, scan, stale_exempt, stale_terminal,
+    EXEMPT, EXEMPT_BASELINE, TERMINAL_CONSUMERS, _DR_ESCALATED_TARGET_GONE,
+    _DR_RERAISE_TARGET_GONE, comprehension_count, derive_consumers,
+    duplicate_identities, exempt_key, scan, stale_exempt, stale_terminal,
     uncited_exemptions)
 # 인용 실질 판정은 `cite.py` 가 원천이다 — check_wiring 을 경유해 «재수출»
 # 받으면 그 파일에서 쓰이지 않는 별칭이 남아 죽은 import 처럼 보인다.
@@ -58,8 +59,31 @@ print("comprehensions=%d" % comprehension_count(abs_paths))
 # 줄 수를 보존한 채 조건만 바꾼 분기도 여기서 어긋난다.
 stale = stale_exempt(str(root))
 print("exempt_stale=%d" % len(stale))
-for (rel, line, ident) in stale:
-    print("  STALE_EXEMPT %s:%d %s" % (rel, line, ident))
+for (rel, ident) in stale:
+    print("  STALE_EXEMPT %s %s" % (rel, ident))
+
+# 키가 자리를 가르지 못하면(정체가 같은 행 둘 이상) 면제 여부와 무관하게 RED 다.
+dups = duplicate_identities(rows, str(root))
+print("duplicate_identity=%d" % len(dups))
+for (rel, ident) in dups:
+    print("  DUPLICATE_IDENTITY %s %s" % (rel, ident))
+
+# 면제 키의 꼴 — (경로, 정체) 2-튜플, 정체에 둘러싼 for 의 글자.
+bad_shape = 0
+for k in EXEMPT:
+    if not (isinstance(k, tuple) and len(k) == 2 and " ~ for " in str(k[1])):
+        bad_shape += 1
+print("exempt_key_bad_shape=%d" % bad_shape)
+# 형제 둘(escalated · reraise 예약의 `if not f0`) — 사유와 키가 내용으로 짝지어지는가.
+for name, reason in (("escalated", _DR_ESCALATED_TARGET_GONE),
+                     ("reraise", _DR_RERAISE_TARGET_GONE)):
+    keys = [k for k, v in EXEMPT.items() if v == reason]
+    print("exempt_sibling_%s=%s" % (name, keys[0][-1] if len(keys) == 1 else ""))
+sib = set()
+for r in rows:
+    if r["func"] == "_auto_decides" and r["guard"] == "if not f0":
+        sib.add(exempt_key(str(Path(r["file"]).relative_to(root)), r))
+print("sibling_live_keys=%d" % len(sib))
 
 # F-2 재리뷰가 지적한 비대칭의 절반(신선도) — EXEMPT 처럼 TERMINAL_CONSUMERS
 # 도 자기 등재가 여전히 유효한지(파일 존재 + 앵커 없음) 잰다.
