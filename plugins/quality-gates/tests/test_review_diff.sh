@@ -14,6 +14,9 @@ unset DEVBREW_QUALITY_GATES_DOC_PATHS
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
 TAB=$(printf '\t')
+# 이 머신 사용자의 git 설정(전역 · 시스템 · XDG)을 읽지 않는다 — 그 설정이 바꾸는 결과는 케이스마다 픽스처로 준다.
+: > "$ROOT/gitconfig-empty"; mkdir -p "$ROOT/xdg-empty"
+export GIT_CONFIG_GLOBAL="$ROOT/gitconfig-empty" XDG_CONFIG_HOME="$ROOT/xdg-empty" GIT_CONFIG_NOSYSTEM=1
 
 g() {   # g <repo> <git args…> — 전역 설정에 기대지 않는 커밋
   local r="$1"; shift
@@ -739,7 +742,6 @@ mk_hostile_nested() {   # mk_hostile_nested <중첩 레포 폴더> <마커 폴�
 
 # 추적 안 되는 중첩 레포는 그 레포의 설정 · 훅 없이 그 레포 · 사용자의 무시 규칙대로 파일 목록을 얻어
 # 리뷰한다(AC22). 링크는 링크 자체만 싣는다. 그 안의 중첩 레포(sub/inner/)는 리뷰하지 않고 알린다.
-NESTED_SAID='안 파일'
 nested_said() {   # nested_said <이름> <수> — 펼친 중첩 레포를 알리는 줄
   printf 'review-diff: 추적 안 되는 중첩 레포 %s 안 파일 %s개를 그 레포의 무시 규칙대로 리뷰에 실었다' "$1" "$2"
 }
@@ -863,6 +865,45 @@ case_nested_list_failure() {
   assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "그때 그 안의 글은 diff 에 없다"
 }
 
+# 사용자 무시 규칙은 git 이 찾는 길 그대로 찾는다 — 전역 설정이 [include] 로 불러온 파일의 core.excludesFile
+# 도 지킨다. 조건부 포함(includeIf)은 그 중첩 레포 기준으로 풀 수 없다 — 펼치지 않고 이유와 함께 막는다.
+case_nested_user_excludes_include() {
+  echo "[사용자 무시 규칙 — [include] 는 지키고 includeIf 는 막는다]"
+  mkfix
+  local GH; GH=$(mktemp -d "$ROOT/home.XXXXXX")
+  mkdir -p "$GH/xdg"
+  printf 'incex.py\n' > "$GH/gexcl"
+  printf '[core]\n\texcludesFile = %s\n' "$GH/gexcl" > "$GH/inc"
+  printf '[include]\n\tpath = %s\n' "$GH/inc" > "$GH/gitconfig"
+  printf '[includeIf "gitdir:%s/nowhere/"]\n\tpath = %s\n' "$GH" "$GH/inc" > "$GH/ifconfig"
+  git init -q -b trunk "$R/sub"
+  echo 'nested_incex_marker = 1' > "$R/sub/incex.py"; echo 'nested_keep_marker = 1' > "$R/sub/keep.py"
+  # 양성 대조 — 그 설정이 바로 그 파일을 숨긴다.
+  local plain
+  git init -q --bare "$GH/none.git"
+  plain=$(cd "$R/sub" && GIT_DIR="$GH/none.git" GIT_WORK_TREE="$R/sub" \
+    GIT_CONFIG_GLOBAL="$GH/gitconfig" HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" git ls-files --others --exclude-standard)
+  case "$plain" in *incex.py*) no "양성 대조: [include] 로 불러온 core.excludesFile 이 파일을 숨기지 않았다" ;;
+    *keep.py*) ok "양성 대조: [include] 로 불러온 core.excludesFile 이 incex.py 를 숨긴다" ;;
+    *) no "양성 대조: 목록을 얻지 못했다" ;; esac
+  OUT=$(cd "$R" && GIT_CONFIG_GLOBAL="$GH/gitconfig" HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" \
+    bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "[include]: rc 0"
+  assert_file_absent "$D/review-i1.full.diff" 'nested_incex_marker' "[include] 로 불러온 core.excludesFile 이 숨긴 파일은 없다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_keep_marker = 1$' "양의 짝: 숨기지 않은 옆 파일은 리뷰한다"
+  assert_line "$ROOT/err" "$(nested_said sub/ 1)" "sub/ 에서 실은 파일 수"
+  assert_eq "$(field degraded "$OUT")" no "[include]: degraded: no"
+  rm -f -- "$D"/review-i1.*
+  OUT=$(cd "$R" && GIT_CONFIG_GLOBAL="$GH/ifconfig" HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" \
+    bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "includeIf: rc 0"
+  assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 sub/ 는 리뷰하지 않았다 — 사용자 git 설정에 조건부 포함(includeIf)이 있어 사용자 무시 규칙을 확실히 알 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라" \
+    "includeIf 가 있으면 이유와 함께 막는다"
+  assert_file_absent "$D/review-i1.full.diff" 'nested_incex_marker|nested_keep_marker' "그때 그 안의 글은 diff 에 없다"
+  assert_file_grep "$D/review-i1.names" '^sub/$' "names 에 폴더 줄 sub/"
+  assert_eq "$(field degraded "$OUT")" yes "includeIf: degraded: yes"
+}
+
 # 중첩 레포가 커밋한 파일은 그 레포의 .gitignore 에 걸려도 리뷰한다(그 레포의 index 를 복사해 읽는다).
 # index 의 gitlink 는 리뷰하지 않은 중첩 레포로, 링크 폴더 아래 경로는 따라가지 않는다.
 case_nested_tracked_files() {
@@ -870,7 +911,8 @@ case_nested_tracked_files() {
   mkfix
   local X; X=$(mktemp -d "$ROOT/secret.XXXXXX"); mkdir -p "$X/sdir"; echo 'SECRET-R12' > "$X/sdir/b.py"
   local K="$R/tk"; mkdir -p "$K/a"; git init -q -b trunk "$K"
-  printf 'payload.py\na\n' > "$K/.gitignore"
+  # gl 도 무시한다 — tk/gl/ 줄은 무시 규칙을 지키는 untracked 목록이 아니라 index 의 gitlink 로만 나온다.
+  printf 'payload.py\na\ngl\n' > "$K/.gitignore"
   echo 'nested_payload_marker = 1' > "$K/payload.py"; echo 'gone = 1' > "$K/gone.py"
   echo 'under_link_marker = 1' > "$K/a/b.py"
   g "$K" add .gitignore gone.py; g "$K" add -f payload.py a/b.py; g "$K" commit -q -m k
@@ -896,6 +938,73 @@ case_nested_tracked_files() {
   assert_line "$ROOT/err" "$(nested_said z0/ 0)" "실을 파일이 없는 중첩 레포도 0개로 알린다"
   assert_file_absent "$ROOT/err" '들지 못해' "이름 대조에서 빠진 경로가 없다"
   assert_eq "$(field degraded "$OUT")" yes "gitlink 가 있으면 degraded: yes"
+}
+
+# 중첩 레포가 커밋한 폴더 링크가 그 레포의 .gitignore 에도 걸린다 — 링크 이름을 얻는 호출이 무시 규칙에
+# 막히지 않고 링크 자체를 싣는다.
+case_nested_committed_ignored_dir_link() {
+  echo "[중첩 레포가 커밋한 무시 대상 폴더 링크 — 링크 자체로 싣는다]"
+  mkfix
+  local L="$R/lk"; mkdir -p "$L/real"; git init -q -b trunk "$L"; echo 'lk_real_marker = 1' > "$L/real/r.py"
+  printf 'dl\n' > "$L/.gitignore"; ln -s real "$L/dl"
+  g "$L" add .gitignore real/r.py; g "$L" add -f dl; g "$L" commit -q -m l
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_line "$D/review-i1.diff" 'diff --git a/lk/dl b/lk/dl' "커밋했고 무시 대상인 폴더 링크를 링크 자체로 싣는다"
+  assert_eq "$(grep -c '^new file mode 120000$' "$D/review-i1.diff")" 1 "그 링크는 mode 120000"
+  assert_line "$ROOT/err" "$(nested_said lk/ 3)" "lk/ 에서 실은 파일 수(.gitignore · real/r.py · dl)"
+  assert_eq "$(field degraded "$OUT")" no "degraded: no"
+}
+
+index_head_line() {   # index_head_line <중첩 레포 이름> — index 머리가 읽는 꼴이 아닐 때의 이유 줄
+  local cap; cap=$(sed -n 's/^NESTED_MAX_FILES=\([0-9][0-9]*\).*$/\1/p' "$RDIFF")
+  printf 'review-diff: 추적 안 되는 중첩 레포 %s/ 는 리뷰하지 않았다 — 그 레포의 추적 파일 목록(.git/index)이 읽는 꼴(버전 2 · 3, 항목 %s개 이하)이 아니다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라' \
+    "$1" "$(( cap * 10 ))"
+}
+
+# 중첩 레포의 .git/index 는 머리(서명 DIRC · 버전 · 항목 수)를 먼저 본다 — 버전 2 · 3 이고 항목이
+# NESTED_MAX_FILES 의 열 배 이하일 때만 읽는다(버전 4 는 이름을 줄여 적어 크기 상한 안에서도 목록이 커진다).
+case_nested_index_header() {
+  echo "[중첩 레포 .git/index 머리 — 버전 4 · 항목이 너무 많으면 막는다]"
+  mkfix
+  local cap; cap=$(sed -n 's/^NESTED_MAX_FILES=\([0-9][0-9]*\).*$/\1/p' "$RDIFF")
+  case "$cap" in ''|*[!0-9]*) no "NESTED_MAX_FILES 를 읽지 못했다"; return ;; esac
+  local p v
+  for p in v2 v3 v4; do
+    git init -q -b trunk "$R/$p"; echo "${p}_marker = 1" > "$R/$p/a.py"; g "$R/$p" add a.py; g "$R/$p" commit -q -m i
+    # git 은 확장 플래그를 쓰는 항목이 없으면 버전 3 을 2 로 적는다 — v3 에는 intent-to-add 항목을 둔다.
+    if [ "$p" = v3 ]; then echo 'v3_ita_marker = 1' > "$R/$p/b.py"; g "$R/$p" add -N b.py; fi
+    git -C "$R/$p" update-index --index-version "${p#v}"
+    v=$(python3 -I -c 'import struct,sys; print(struct.unpack(">4sII", open(sys.argv[1], "rb").read(12))[1])' "$R/$p/.git/index")
+    assert_eq "$v" "${p#v}" "양성 대조: $p 픽스처의 index 버전"
+  done
+  # 머리만 맞고 몸이 깨진 index — 항목 수가 상한을 넘으면 머리에서, 상한과 같으면 git 이 읽다가 막는다.
+  for p in over at bs; do
+    git init -q -b trunk "$R/$p"; echo "${p}_marker = 1" > "$R/$p/a.py"
+  done
+  python3 -I -c 'import struct,sys; open(sys.argv[1], "wb").write(b"DIRX" + struct.pack(">II", 2, 1) + b"\0" * 64)' \
+    "$R/bs/.git/index"
+  python3 -I -c 'import struct,sys; open(sys.argv[1], "wb").write(b"DIRC" + struct.pack(">II", 2, int(sys.argv[2])) + b"\0" * 64)' \
+    "$R/over/.git/index" "$(( cap * 10 + 1 ))"
+  python3 -I -c 'import struct,sys; open(sys.argv[1], "wb").write(b"DIRC" + struct.pack(">II", 2, int(sys.argv[2])) + b"\0" * 64)' \
+    "$R/at/.git/index" "$(( cap * 10 ))"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_grep "$D/review-i1.diff" '^\+v2_marker = 1$' "index 버전 2 는 읽는다(양의 짝)"
+  assert_file_grep "$D/review-i1.diff" '^\+v3_marker = 1$' "index 버전 3 은 읽는다(양의 짝)"
+  assert_file_grep "$D/review-i1.diff" '^\+v3_ita_marker = 1$' "index 버전 3 의 intent-to-add 파일도 리뷰한다"
+  assert_line "$ROOT/err" "$(nested_said v2/ 1)" "v2/ 에서 실은 파일 수"
+  assert_line "$ROOT/err" "$(nested_said v3/ 2)" "v3/ 에서 실은 파일 수"
+  assert_line "$ROOT/err" "$(index_head_line v4)" "index 버전 4 는 이유와 함께 막는다"
+  assert_line "$ROOT/err" "$(index_head_line over)" "항목이 상한을 넘는 index 는 이유와 함께 막는다"
+  assert_line "$ROOT/err" "$(index_head_line bs)" "서명이 DIRC 가 아닌 index 는 이유와 함께 막는다"
+  assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 at/ 는 리뷰하지 않았다 — 그 레포의 추적 파일 목록(.git/index)을 안전하게 읽지 못했다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라" \
+    "항목 수가 상한과 같으면 머리는 통과하고 git 이 읽다가 막는다(경계)"
+  assert_file_absent "$D/review-i1.full.diff" 'v4_marker|over_marker|at_marker|bs_marker' "막은 중첩 레포의 글은 diff 에 없다"
+  for p in v4 over at bs; do
+    assert_file_grep "$D/review-i1.names" "^$p/\$" "names 에 폴더 줄 $p/"
+  done
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
 }
 
 # 중첩 레포의 .git 이 안전하게 읽을 수 없는 꼴이면 펼치지 않고 막는다 — 다른 곳을 가리키는 .git 파일,
@@ -925,10 +1034,11 @@ case_nested_unsafe_git_files() {
   assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 bx/ 는 리뷰하지 않았다 — 그 레포의 무시 목록(.git/info/exclude)을 안전하게 읽지 못했다. $fix" \
     "너무 큰 info/exclude 는 막는다"
   local p
-  for p in mi ox sp; do
+  for p in ox sp; do
     assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 $p/ 는 리뷰하지 않았다 — 그 레포의 추적 파일 목록(.git/index)을 안전하게 읽지 못했다. $fix" \
       "읽을 수 없는 index 는 막는다: $p"
   done
+  assert_line "$ROOT/err" "$(index_head_line mi)" "머리가 깨진 index 는 막는다: mi"
   assert_file_absent "$D/review-i1.full.diff" 'gf_marker|sx_marker|bx_marker|mi_marker|ox_marker|sp_marker|SECRET-R12' \
     "막은 중첩 레포의 글은 diff 에 없다"
   for p in gf sx bx mi ox sp; do
@@ -1314,7 +1424,10 @@ case_mdx_reviewed_as_code
 case_nested_repo_disclosed
 case_nested_repo_reviewed_safely
 case_nested_list_failure
+case_nested_user_excludes_include
 case_nested_tracked_files
+case_nested_committed_ignored_dir_link
+case_nested_index_header
 case_nested_unsafe_git_files
 case_nested_registered_worktree
 case_nested_file_cap

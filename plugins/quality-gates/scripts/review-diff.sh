@@ -475,6 +475,20 @@ NFIX='.gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라'
 fail_nested() {   # <폴더/> <이유>
   NFAIL+=("$1"); NFAIL_WHY+=("$2")
 }
+# index 복사본의 머리(12바이트) — 서명 DIRC, 버전 2 · 3(이름을 그대로 적어 목록이 파일보다 커지지 않는다),
+# 항목 수 상한 이하일 때만 읽는다. 버전 4 는 이름을 앞 항목에 기대 줄여 적는다.
+NIDX_MAX_ENTRIES=$(( NESTED_MAX_FILES * 10 ))
+index_head_ok() {   # <index 복사본>
+  python3 -I -c '
+import struct, sys
+with open(sys.argv[1], "rb") as f:
+    h = f.read(12)
+if len(h) != 12:
+    sys.exit(1)
+sig, ver, n = struct.unpack(">4sII", h)
+sys.exit(0 if sig == b"DIRC" and ver in (2, 3) and n <= int(sys.argv[2]) else 1)
+' "$1" "$NIDX_MAX_ENTRIES"
+}
 # 중첩 레포 하나를 펼친다. 목록 = 무시되지 않는 untracked(그 레포의 .gitignore · .git/info/exclude 복사본 ·
 # 사용자 무시 규칙) ∪ 그 레포가 커밋한 경로(.git/index 복사본) — nul_list nested 가 합치고, 작업 트리에 없는
 # 경로 · 링크 폴더 아래 경로는 빼고, gitlink 는 폴더 줄로 낸다. 읽을 수 없는 꼴이면 펼치지 않는다(fail_nested).
@@ -484,6 +498,9 @@ nested_list() {   # <폴더/>
     fail_nested "$n" "이 레포에 등록된 git worktree 라 그 안을 읽지 않는다. $NFIX"; return
   fi
   if [ -z "$NGIT" ]; then fail_nested "$n" "무시 규칙을 지켜 파일 목록을 얻지 못했다. $NFIX"; return; fi
+  if [ "$nexcl_ok" -eq 2 ]; then
+    fail_nested "$n" "사용자 git 설정에 조건부 포함(includeIf)이 있어 사용자 무시 규칙을 확실히 알 수 없다. $NFIX"; return
+  fi
   if [ "$nexcl_ok" -ne 1 ]; then
     fail_nested "$n" "사용자 무시 규칙(core.excludesFile)을 읽지 못했다. $NFIX"; return
   fi
@@ -505,9 +522,17 @@ nested_list() {   # <폴더/>
   : > "$T/nested-stage.z"
   if [ -e "$g/index" ] || [ -L "$g/index" ]; then
     NIDX="$T/nested-index"
-    if ! plain_file_le "$g/index" "$NESTED_INDEX_MAX" || ! cp -- "$g/index" "$NIDX" \
-       || ! nested_git "$n" -c core.untrackedCache=false -c index.sparse=false ls-files --stage -z \
-            > "$T/nested-stage.z" 2>/dev/null; then
+    if ! plain_file_le "$g/index" "$NESTED_INDEX_MAX" || ! cp -- "$g/index" "$NIDX"; then
+      NIDX=""
+      fail_nested "$n" "그 레포의 추적 파일 목록(.git/index)을 안전하게 읽지 못했다. $NFIX"; return
+    fi
+    if ! index_head_ok "$NIDX"; then
+      NIDX=""
+      fail_nested "$n" "그 레포의 추적 파일 목록(.git/index)이 읽는 꼴(버전 2 · 3, 항목 ${NIDX_MAX_ENTRIES}개 이하)이 아니다. $NFIX"
+      return
+    fi
+    if ! nested_git "$n" -c core.untrackedCache=false -c index.sparse=false ls-files --stage -z \
+         > "$T/nested-stage.z" 2>/dev/null; then
       NIDX=""
       fail_nested "$n" "그 레포의 추적 파일 목록(.git/index)을 안전하게 읽지 못했다. $NFIX"; return
     fi
@@ -521,6 +546,9 @@ nested_list() {   # <폴더/>
     fail_nested "$n" "그 레포의 추적 파일 목록(.git/index)을 안전하게 읽지 못했다. $NFIX"; return
   fi
   cnt=$(tr -cd '\000' < "$T/nested.z" | wc -c | tr -d ' ')
+  case "$cnt" in
+    ''|*[!0-9]*) fail_nested "$n" "그 레포의 파일 수를 세지 못했다. $NFIX"; return ;;
+  esac
   if [ "$cnt" -gt "$NESTED_MAX_FILES" ]; then
     fail_nested "$n" "파일이 ${NESTED_MAX_FILES}개를 넘어 리뷰에 싣지 않았다 — 필요 없는 폴더를 그 레포의 .gitignore 에 넣거나 이 레포를 바깥 .gitignore 에 넣어라"
     return
@@ -540,12 +568,13 @@ if [ "${#NESTED[@]}" -gt 0 ]; then
      && mkdir -- "$T/nested.git/info"; then
     NGIT="$T/nested.git"
   fi
-  # 사용자 무시 규칙 — git 과 같이 전역 core.excludesFile, 없으면 XDG git/ignore. 레포 밖(빈 GIT_DIR)에서
-  # 전역 설정만 읽어 절대 경로의 보통 파일일 때만 넘긴다. 상대 경로(그 레포 폴더 기준이 된다)나 읽기
-  # 실패면 지킬 수 없다 — 펼치지 않는다(nexcl_ok=0).
+  # 사용자 무시 규칙 — git 과 같이 core.excludesFile(시스템 · 전역 설정과 그 [include]), 없으면 XDG
+  # git/ignore. 그 레포 대신 빈 GIT_DIR 로 읽어 절대 경로의 보통 파일일 때만 넘긴다. 상대 경로(그 레포 폴더
+  # 기준이 된다)나 읽기 실패면 지킬 수 없다(nexcl_ok=0). includeIf 는 그 레포 기준으로 풀어야 해 빈
+  # GIT_DIR 로는 알 수 없다(nexcl_ok=2). 어느 쪽이든 펼치지 않는다.
   if [ -n "$NGIT" ]; then
-    ux="$(cd -- "$T" && unset GIT_WORK_TREE GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT \
-          && GIT_DIR="$NGIT" GIT_CONFIG_NOSYSTEM=1 git config --global --path --get core.excludesFile 2>/dev/null)"
+    ux="$(cd -- "$T" && unset GIT_WORK_TREE GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT \
+          && GIT_DIR="$NGIT" git config --includes --path --get core.excludesFile 2>/dev/null)"
     ux_rc=$?
     case "$ux_rc" in
       0) case "$ux" in
@@ -556,6 +585,13 @@ if [ "${#NESTED[@]}" -gt 0 ]; then
       1) ux="${XDG_CONFIG_HOME:-}"
          [ -n "$ux" ] || { [ -n "${HOME:-}" ] && ux="$HOME/.config"; }
          case "$ux" in /*) [ -f "$ux/git/ignore" ] && NEXCL=(-c "core.excludesFile=$ux/git/ignore") ;; esac ;;
+      *) nexcl_ok=0 ;;
+    esac
+    ui="$(cd -- "$T" && unset GIT_WORK_TREE GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT \
+          && GIT_DIR="$NGIT" git config --includes --name-only --get-regexp '^includeif\.' 2>/dev/null)"
+    case "$?" in
+      0) [ -z "$ui" ] || nexcl_ok=2 ;;
+      1) ;;
       *) nexcl_ok=0 ;;
     esac
   fi
@@ -617,7 +653,8 @@ add_dir_link() {   # <out> <path>
 
 # 링크 이름을 git 의 따옴표 규칙 그대로 한 줄로 낸다. 중첩 레포 안의 링크는 바깥 ls-files 가 내지 않는다 —
 # 레포 폴더 줄(바깥 ls-files)과 레포 안 이름(nested_git ls-files)을 따로 받아, 둘 중 하나라도 따옴표로
-# 감싸였으면 두 몸통을 이어 한 번 감싼다(git 은 이름 전체를 감싸고 글자마다 이스케이프한다).
+# 감싸였으면 두 몸통을 이어 한 번 감싼다(git 은 이름 전체를 감싸고 글자마다 이스케이프한다). 레포 안 이름은
+# 이미 고른 경로라 무시 규칙 없이 따옴표 꼴만 받는다(커밋했고 무시 대상인 링크도 이름이 나온다).
 link_qname() {   # <path>
   local r root="" rel qp qr bp br quoted=0 nl
   nl=$'\n'
@@ -630,8 +667,7 @@ link_qname() {   # <path>
   fi
   rel="${1#"$root"}"
   qp="$(git -c core.quotePath=false ls-files --others --exclude-standard -- ":(literal)${root%/}")" || return 1
-  qr="$(nested_git "$root" -c core.quotePath=false ls-files --others --exclude-standard -- ":(literal)$rel")" \
-    || return 1
+  qr="$(nested_git "$root" -c core.quotePath=false ls-files --others -- ":(literal)$rel")" || return 1
   case "$qp" in ''|*"$nl"*) return 1 ;; */|*/\") ;; *) return 1 ;; esac
   case "$qr" in ''|*"$nl"*) return 1 ;; esac
   bp="$qp"; br="$qr"
