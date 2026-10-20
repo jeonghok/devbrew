@@ -370,10 +370,32 @@ class TestMigrationRefusalChoices(unittest.TestCase):
         # S4 「CLAUDE.md 는 그대로 두기」는 AGENTS.md 의 관리 절만 갱신한다. CLAUDE.md 에 남은 옛 사본이
         # 다를 수 있다는 것을 보고가 알린다.
         block = "\n".join(_report_block(self.text))
-        kept = standalone_line(block, "> CLAUDE.md 를 그대로 뒀다면:")
+        kept = standalone_line(block, "> 「CLAUDE.md 는 그대로 두기」를 골랐다면:")
         self.assertIn("CLAUDE.md 의 관리 절은 갱신하지 않았다 — AGENTS.md 와 다를 수 있다", kept)
+        self.assertNotIn("CLAUDE.md 를 그대로 뒀다면:", self.text)
         for word in ("hook", "훅", "검증"):
             self.assertNotIn(word, kept)
+
+    def test_keep_claude_md_discloses_charter_reread(self):
+        # 「그대로 두기」는 AGENTS.md 에 헌장 절을 만들지 않는다 — 매 실행이 CLAUDE.md 의 절을 다시 읽는다는 것을 알린다.
+        sentence = "AGENTS.md 에 `## Project Charter` 가 생기지 않아 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다"
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        self.assertIn(sentence, s4)
+        block = "\n".join(_report_block(self.text))
+        self.assertIn(sentence, standalone_line(block, "> 「CLAUDE.md 는 그대로 두기」를 골랐다면:"))
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        self.assertIn(sentence, readme)
+
+    def test_move_discloses_skipped_duplicate_sections(self):
+        # S4 「옮기기」에서 AGENTS.md 에 같은 이름 절이 이미 있으면 CLAUDE.md 의 절은 옮기지 않고 사라진다 — 알린다.
+        sentence = "CLAUDE.md 의 `<절>` 은 AGENTS.md 에 이미 있어 옮기지 않았다 — CLAUDE.md 가 포인터로 바뀌며 사라졌다"
+        s4 = standalone_line(self.matrix, "| **S4 (")
+        block = "\n".join(_report_block(self.text))
+        self.assertIn(sentence, s4)
+        skipped = standalone_line(block, "> 옮기지 않은 절이 있다면:")
+        self.assertIn(sentence, skipped)
+        self.assertIn("`## Project Charter`", skipped)
+        self.assertIn("`## Git Workflow`", skipped)
 
     def test_step5_report_names_moved_sections(self):
         # 옮긴 절은 보고에서 이름으로 드러나야 한다 — git 규칙을 그대로 둔 실행의 `## Git Workflow` 이전,
