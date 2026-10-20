@@ -138,6 +138,8 @@ case_AC14_no_abbrev_flags
 case_AC14_append_only_passes
 case_AC14_append_only_plus_edit
 case_AC14_line_hashes_only_immutable
+# AC2 — 불변 절은 0열 새 목록 항목만 추가로 본다.
+case_AC2_append_new_item_only
 # AC15 — 엔진이 쓰는 줄의 모든 칸은 한 줄 문법.
 case_AC15_log_line_one_line_every_field
 case_AC15_forged_lines_gain_no_provenance

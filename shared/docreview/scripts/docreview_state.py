@@ -542,12 +542,21 @@ def scope_problem(scope, sections, prof):
 
 
 def _appended_only(old_sec, new_sec) -> bool:
-    """불변 절의 「추가만 허용」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고 새 줄이 더 많을 때만 참.
-    줄 해시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 지금처럼 바뀜으로 본다."""
+    """불변 절의 「새 항목만 추가」 — 옛 줄 해시 목록이 새 목록의 앞부분과 같고, 덧붙은 꼬리의 첫 내용 줄(빈 줄은 건너뜀)이
+    0열 `- ` 항목(`item_marks` 가 `1`)일 때만 참. 줄 해시나 표시가 없는 절(불변이 아닌 절 · 옛 원장)은 거짓 — 바뀜으로 본다."""
     o, n = old_sec.get("line_hashes"), new_sec.get("line_hashes")
+    marks = new_sec.get("item_marks")
     if not isinstance(o, list) or not isinstance(n, list):
         return False
-    return len(n) > len(o) and n[:len(o)] == o
+    old_marks = old_sec.get("item_marks")
+    if not isinstance(marks, str) or len(marks) != len(n):
+        return False
+    if not isinstance(old_marks, str) or len(old_marks) != len(o):
+        return False   # 표시 없는 옛 원장은 닫힌 쪽
+    if not (len(n) > len(o) and n[:len(o)] == o):
+        return False
+    first = next((i for i in range(len(o), len(n)) if n[i] != _BLANK_LINE_HASH), None)
+    return first is not None and marks[first] == "1"
 
 
 def diff_snapshots(old: dict, new: dict, exempt_scopes, fence=(), log_anchors=None, log_exempt=None) -> dict:
@@ -882,12 +891,15 @@ def cmd_begin_round(a) -> int:
         st["engine_lines_since"] = n
         st.setdefault("engine_lines", [])
     imm = set(anchors_matching(prof["immutable"], snap.get("sections", []))) if prof["immutable"] else set()
+    imm_items = set(imm)   # item_marks 를 옮기는 절 — 불변 절만
     imm |= _log_section_anchors(prof, snap.get("sections", []))
     secs = []
     for s in snap.get("sections", []):
         row = {k: s.get(k) for k in ("anchor", "title", "level", "hash", "parents")}
         if s.get("anchor") in imm and isinstance(s.get("line_hashes"), list):
             row["line_hashes"] = list(s["line_hashes"])   # 불변 절 · 결정 기록 · 미룸 절에만 — 원장 크기
+            if s.get("anchor") in imm_items and isinstance(s.get("item_marks"), str):
+                row["item_marks"] = s["item_marks"]   # 「새 항목만 추가」를 재는 절만 — 결정 기록 · 미룸 절은 제외
         secs.append(row)
     st["snapshots"][str(n)] = {"headingless": bool(snap.get("headingless")), "sections": secs}
     st["rounds"].setdefault(str(n), {"open_lineages": [], "progress": 0, "route_report": None})

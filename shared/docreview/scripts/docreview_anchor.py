@@ -67,6 +67,7 @@ def parse_sections(text: str, keep_body: bool = False) -> dict:
         item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
                 "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
                 "line_hashes": [hashlib.sha1(r.encode("utf-8")).hexdigest()[:12] for r in rows],
+                "item_marks": "".join("1" if r.startswith("- ") else "0" for r in rows),
                 "parents": list(parents)}
         if keep_body:
             item["body"] = body
@@ -157,6 +158,7 @@ def cmd_diff(a) -> int:
     for snap in (old, new):
         for s in snap.get("sections", []):
             s.pop("line_hashes", None)
+            s.pop("item_marks", None)
     _emit(diff_snapshots(old, new, ex))
     return 0
 

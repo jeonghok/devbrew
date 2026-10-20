@@ -3732,6 +3732,43 @@ case_AC14_append_only_passes() {
   assert_eq "$out" "([], ['append-only'])" "AC14: 「## 6」 끝에 덧붙인 줄만이면 changed 가 없고 append-only 면제로 보인다"
   rm -rf "$d"
 }
+# ── AC2 — 불변 절은 0열 새 목록 항목만 추가로 본다(이어 쓴 줄은 바뀜) ──────────────
+ac2_diff() {   # ac2_diff <round-2 doc> → 그 라운드 얼림 diff 의 (changed 앵커, 면제 scope)
+  local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { echo "init-fail"; return; }
+  s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s1" >/dev/null
+  s2="$d/s2.json"; snap "$1" "$s2"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$s2" >/dev/null
+  PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '(lambda D: ([c["anchor"] for c in D["changed"]], [e.get("scope") for e in D["exempt_applied"]]))(__import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2))'
+  rm -rf "$d"
+}
+case_AC2_append_new_item_only() {
+  assert_eq "$(ac2_diff "$FX/brief-append-r2.md")" "([], ['append-only'])" "AC2 양성: 0열 새 항목을 덧붙이면 append-only 면제다"
+  assert_eq "$(ac2_diff "$FX/brief-append-r2-blank.md")" "([], ['append-only'])" "AC2 양성: 빈 줄 뒤 새 항목도 append-only 면제다"
+  assert_eq "$(ac2_diff "$FX/brief-append-r2-cont.md")" "(['#6-사용자-원문'], [])" "AC2 음성: 들여쓴 이어 쓴 줄은 바뀜이다"
+  local d s1 res
+  s1="$(mktemp -d -t docreview-XXXXXX)/s.json"; snap "$FX/brief-append-r1.md" "$s1"
+  res="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); print(all(isinstance(s.get("item_marks"),str) and len(s["item_marks"])==len(s["line_hashes"]) for s in d["sections"]))' "$s1")"
+  assert_eq "$res" "True" "AC2: 스냅숏의 모든 절에 line_hashes 와 같은 길이의 item_marks 가 있다"
+  rm -rf "$(dirname "$s1")"
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC2: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  assert_eq "$(st_yaml "$d" '[("item_marks" in s) for s in st["snapshots"]["1"]["sections"] if s["anchor"]=="#6-사용자-원문"]')" "[True]" "AC2: 원장 스냅숏의 불변 절에는 item_marks 가 있다"
+  assert_eq "$(st_yaml "$d" '[s["anchor"] for s in st["snapshots"]["1"]["sections"] if "item_marks" in s]')" "['#6-사용자-원문']" "AC2: 불변 절 밖에는 item_marks 가 없다"
+  rm -rf "$d"
+  d="$(mk_doc_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "AC2: design init 실패"; return; }
+  with_log "$FX/design-sample.md" "$d/doc.md" "$LOG_L1"; snap "$d/doc.md" "$d/s1.json"
+  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  assert_eq "$(st_yaml "$d" '[("item_marks" in s, "line_hashes" in s) for s in st["snapshots"]["1"]["sections"] if s["anchor"]=="#결정-기록"]')" "[(False, True)]" "AC2: 결정 기록 절에는 줄 해시만 있고 item_marks 는 없다"
+  rm -rf "$d"
+  d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC2: init 실패"; return; }
+  snap "$FX/brief-append-r1.md" "$d/s1.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  # 닫힌 쪽 — item_marks 를 지운 원장은 새 항목 추가도 바뀜이다
+  PYTHONPATH="$SCRIPTS" python3 -c 'import sys; from docreview_state import load_state, save_state; d=sys.argv[1]; st=load_state(d); [s.pop("item_marks", None) for s in st["snapshots"]["1"]["sections"]]; save_state(d, st, "fixture")' "$d"
+  snap "$FX/brief-append-r2.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  assert_eq "$(PYTHONPATH="$SCRIPTS" python3 "$FX/st_get.py" "$d/docreview-state.md" '[c["anchor"] for c in __import__("docreview_state").round_diff(st, __import__("docreview_state").load_profile(st["profile"]), 2)["changed"]]')" "['#6-사용자-원문']" "AC2 닫힌 쪽: item_marks 없는 원장은 새 항목 추가도 바뀜이다"
+  rm -rf "$d"
+}
 case_AC14_append_only_plus_edit() {
   local d s1 s2; d="$(mk_state "$FX/brief-append-r1.md" "$PROF_SD/brief.md")" || { no "AC14: init 실패"; return; }
   s1="$d/s1.json"; snap "$FX/brief-append-r1.md" "$s1"
