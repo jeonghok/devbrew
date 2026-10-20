@@ -1,0 +1,114 @@
+# R8 계획 3 — 쓰는 세션의 신뢰: 엔진이 스냅숏을 만든다 · 한계 공시 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+> **시작 조건 — 구현은 R10 · R12 · R13 이 모두 기본 브랜치에 머지된 뒤 시작한다(사용자 결정 U10).** 구현 담당은 먼저 `origin/<기본 브랜치>` 를 merge 하고 이 계획이 인용한 파일 · 함수 · 절을 하나도 빠짐없이 새로 읽어 확인한다(Task 0). 이 계획은 60e21baa(설계 승인) 시점의 트리로 썼다 — R12 가 `shared/docreview` 와 진입 skill 셋(request-framing · reviewing-brief · spec-review)을, R13 이 같은 skill 셋을 고친다. 그 파일들은 줄 번호가 아니라 함수 · 절 이름으로 가리킨다. 이 계획은 계획 1 · 2 와 파일이 겹치지 않아 그 둘과 따로 갈 수 있다(같은 에픽 브랜치를 쓰면 순서만 지킨다).
+
+**Goal:** 리뷰 엔진의 `begin-round` 가 호출자에게 스냅숏을 받지 않고 원장에 적힌 문서에서 직접 계산해 위조 인자 · 정직한 실수가 들어올 길을 없애고, 쓰는 세션을 믿는 한계를 리뷰 결과 머리와 README 「한계」 절에 같은 문장으로 알린다.
+
+**Architecture:** `docreview_anchor.py` 의 문서 판독(`parse_sections` 와 보조)을 엔진 `docreview_state.py` 로 옮기고(앵커 모듈은 그것을 가져다 쓴다 — 지금도 앵커가 엔진을 import 하는 방향이다), `cmd_begin_round` 가 `st["doc"]` 을 읽어 스냅숏을 만든다. `--snapshot` 인자를 지우고 진입 skill · reference · 테스트 · 픽스처의 호출을 모두 바꾼다(호환 없음). 공시 문장 하나를 엔진 상수로 두고 `render_gate` 머리와 README 가 같은 글을 쓴다.
+
+**Tech Stack:** Python 3(표준 라이브러리 + PyYAML — 엔진의 기존 의존), bash 3.2 호환 셸, `shared/tests/assert.sh`, `python3 -m unittest`.
+
+**Spec:** `docs/superpowers/specs/2026-10-20-dependency-portability-design.md` (§7 · §8 · Metadata 의 Deferred to plan 첫 항목 · AC25 · AC26 · AC28)
+
+## Global Constraints
+
+- **시작 시점.** R10 · R12 · R13 머지 뒤. 브랜치 `feature/dependency-portability`(지휘자가 다른 브랜치를 정하면 그것). 시작 때 기본 브랜치를 merge 한다(rebase 금지). 커밋은 pathspec, `git stash` 금지, HEAD 를 뒤로 옮기지 않는다.
+- 커밋 메시지: `type(scope)` 영어 · 설명 한국어. 끝에 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` 와 세션이 주는 `Claude-Session` 줄.
+- **버전.** 판 번호는 머지 직전 지휘자가 정한다. 계획 안에서는 다음 minor 를 임시로 쓴다 — 엔진 파일이 심볼릭 링크로 들어 있는 플러그인(60e21baa 기준 spec-distill · quality-gates — `git ls-files -s plugins/*/scripts/docreview_state.py` 의 120000 으로 센다) 각각 minor bump. CHANGELOG 머리는 plugin.json 과 같게.
+- 호환을 두지 않는다(U2) — `--snapshot` 을 받는 길을 남기지 않는다. 넘기면 argparse 의 「모르는 인자」 rc 2 다.
+- 같은 세션이 원장을 쓰고 원장의 제약을 받는다는 한계를 레포 안 장치(샌드박스 · 훅 출처 기록 · 별도 프로세스)로 막지 않는다(§7 · U5). 인용마다 「출처 미확인」 라벨을 달지 않는다.
+- 공시 문장은 글자 그대로: 「사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다」.
+- 셸은 macOS bash 3.2 · zsh 호환. 스크립트 파일 읽기는 `encoding="utf-8"`, 인라인 python 은 `python3 -I`. 새 셸 테스트는 `chmod +x` 후 `100755`.
+- 사람에게 보이는 새 문면은 `shared/style/plain-language.md`(첫 줄 상태 · 끝에 할 일 하나). 모델이 읽는 reference · skill 문면에는 출처 · 배경 · 정당화를 쓰지 않는다.
+- 락은 변이로 이빨을 확인하고 음의 락에는 양의 짝. 변이 전에 커밋하고 복원은 `git checkout HEAD --` + `git diff HEAD`. `PYTHONDONTWRITEBYTECODE=1`(같은 길이 변이의 stale `.pyc`).
+
+## 설계와 다른 점 · 설계에 없던 결정
+
+1. **문서 판독을 엔진으로 옮긴다.** `docreview_anchor.py` 가 맨 위에서 `docreview_state` 를 import 하므로, 엔진이 앵커를 import 하면 순환이 생기고 엔진을 스크립트로 돌릴 때(`__main__`) 엔진 모듈이 두 벌 올라 예외 클래스의 정체가 갈린다. 그래서 `parse_sections` · `HEADING_RE` · `FENCE_RE` · `PREAMBLE` · `_after_frontmatter` 를 엔진으로 옮기고 앵커의 `snapshot_of` · `cmd_snapshot` 은 그대로 둔 채 엔진의 것을 가져다 쓴다. `docreview_anchor.py snapshot` 명령의 출력은 바이트까지 같다.
+2. **원장의 문서를 읽지 못하면** `begin-round` 는 원장을 바꾸기 전에 `doc_unreadable`(없음 · 링크 · UTF-8 아님) rc 2 로 멈춘다 — 지금 「스냅숏 파일을 못 읽음」 자리.
+3. **설계 Deferred to plan 의 `--snapshot` 호출자 목록은 60e21baa 에서 열한 파일이다**(설계가 센 열 개 + 절차 reference `shared/docreview/references/reviewing-document.md`): `plugins/spec-distill/tests/` 의 `test_framing_review_contract.sh` · `test_ledger_wiring.sh` · `test_reviewing_brief_residue.sh` · `test_reviewing_spec_residue.sh` · `test_seed_review_log.sh` · `test_seed_review_profile.sh` · `test_state_storage_e2e.sh`, `shared/tests/fixtures/docreview/cases.sh` · `cases_advice.sh`, `shared/tests/test_docreview_gate_visibility.sh`, `shared/docreview/references/reviewing-document.md`. R12 이 더 만들었을 수 있으니 Task 0 이 다시 센다.
+4. **공시 줄의 자리는 `render_gate` 출력의 둘째 줄**(첫 줄은 상태 — 쉬운 말 규칙). JSON `gate` 출력에는 키 `writer_trust_notice` 로 같은 글을 싣는다(기계 소비자가 사람 글을 파싱하지 않게).
+
+## Review Focus
+
+1. **리뷰 도중 사용자가 설계문서를 다른 경로로 옮겼다.** 사람은 엔진이 옛 경로의 빈 스냅숏으로 라운드를 시작하는 대신 원장을 건드리지 않고 「원장의 문서를 읽지 못했다 — <경로>」로 멈추길 기대한다. Task 1 의 `test_begin_round_doc_missing_keeps_ledger` 가 잠근다.
+2. **헤딩이 없는 seed 를 리뷰한다(request-framing).** 사람은 엔진이 만든 스냅숏이 지금 호출자가 만들던 것과 같아(머리 없음 표지 포함) 얼림 · 면제 판정이 바뀌지 않길 기대한다. Task 1 의 seed 사례가 잠근다.
+3. **옛 판 절차를 기억한 세션이 `--snapshot` 을 넘긴다.** 사람은 조용히 무시되는 대신 rc 2 와 「모르는 인자」를 보고 진입 skill 의 새 절차를 따르길 기대한다. Task 1 의 사례가 잠근다.
+4. **`begin-round` 와 `finalize` 사이에 문서가 고쳐졌다.** 사람은 지금과 같이 라운드 스냅숏이 `begin-round` 시점의 문서이고 그 뒤 편집은 다음 라운드의 diff 로 보이길 기대한다. Task 1 의 사례가 잠근다.
+5. **게이트 글을 기계가 읽는 소비자(진입 skill 의 게이트 행 판독)가 둘째 줄의 새 공시를 행으로 오독한다.** 사람은 게이트 행 수 · 선택지가 바뀌지 않길 기대한다. Task 2 의 `gate-rows` 사례와 골든 테스트가 잠근다.
+
+---
+
+### Task 0: 머지 뒤 다시 읽기 · 호출자 다시 세기 · 기준선
+
+**Files:**
+- Create: `$HOME/.claude/sdd-mirror/r8-plan3/baseline.sh` (레포 밖)
+- Modify: 이 계획 파일
+
+- [ ] **Step 1: 시작 조건.** R10 · R12 · R13 의 PR 이 MERGED 인지 확인한다. 아니면 멈추고 지휘 세션에 보고한다.
+- [ ] **Step 2: `git merge --no-edit origin/<기본 브랜치>`.**
+- [ ] **Step 3: 다시 읽는다.** `shared/docreview/scripts/docreview_state.py` 의 `cmd_begin_round` · `snapshot_problem` · `_snapshot_ok` · `render_gate` · `cmd_gate` · `cmd_gate_rows` · 하위 명령 등록부(`P("begin-round")`), `docreview_anchor.py` 의 `parse_sections` · `snapshot_of` · `cmd_snapshot` · `cmd_protected`, `shared/docreview/references/reviewing-document.md` 1단계, 진입 skill 셋(request-framing · reviewing-brief · spec-review)의 라운드 절차 중 스냅숏 · `begin-round` 자리, `plugins/spec-distill/README.md` 의 절 목록.
+- [ ] **Step 4: 호출자를 다시 센다.** `git grep -n -e 'begin-round' -- plugins shared ':!*CHANGELOG*' | grep -e '--snapshot'` 와 `git grep -n -e 'snap.json' -e 'docreview_anchor.py" snapshot' -e 'docreview_anchor.py snapshot' -- plugins shared ':!*CHANGELOG*'`. Expected: 결과를 Task 1 Files 목록으로 이 계획에 적는다(「설계와 다른 점 3」보다 많으면 많은 쪽). `cmd_protected` 의 `--snapshot` 은 begin-round 가 아니라 그대로 둔다.
+- [ ] **Step 5: 기준 스위트.** 계획 1 Task 0 Step 5 와 같은 `baseline.sh` 를 `$HOME/.claude/sdd-mirror/r8-plan3/` 에 두고 `before` 를 잰다.
+
+---
+
+### Task 1: `begin-round` 가 원장의 문서에서 스냅숏을 만든다 (AC25)
+
+**Files:**
+- Modify: `shared/docreview/scripts/docreview_state.py` (`parse_sections` 와 보조를 받음 · `cmd_begin_round` · 하위 명령 등록부의 `--snapshot` 지움), `shared/docreview/scripts/docreview_anchor.py` (옮긴 이름을 엔진에서 import), `shared/docreview/references/reviewing-document.md` (1단계), 진입 skill 셋의 라운드 절차(Task 0 Step 4 목록), Task 0 Step 4 의 테스트 · 픽스처 전부
+- Test: `shared/tests/test_docreview_state.sh`, `shared/tests/test_docreview_anchor.sh`, `plugins/spec-distill/tests/test_begin_round_snapshot.sh` (새)
+
+**Interfaces:**
+- Produces:
+  - `docreview_state.parse_sections(text: str, keep_body: bool = False) -> dict` — 옮긴 함수, 동작 같음.
+  - `begin-round --state-dir D [--extra-approval Q --extra-approval-source label|typed] [--detectors …]` — `--snapshot` 없음. 스냅숏 = `parse_sections(Path(st["doc"]).read_text(encoding="utf-8"))` 에 `snap["doc"] = st["doc"]`. 그 뒤의 `snapshot_problem` 검사 · 원장 저장은 지금 그대로.
+  - 실패: 문서를 못 읽으면 `fail("doc_unreadable", doc=…, why=…)` rc 2, 원장 불변.
+- 호출 꼴(절차 · skill · 테스트): `python3 "<엔진>/docreview_state.py" begin-round --state-dir "$D"` — 앞에 있던 `docreview_anchor.py snapshot <doc> > snap.json` 줄을 지운다.
+
+- [ ] **Step 1: 실패하는 테스트**(`test_begin_round_snapshot.sh` — 임시 문서 · 원장):
+  - `test_engine_snapshot_equals_anchor_snapshot`: 설계문서 픽스처로 `init` → `begin-round` 뒤 원장의 라운드 1 스냅숏 == 같은 문서의 `docreview_anchor.py snapshot` 출력에서 원장에 싣는 칸(`anchor` · `title` · `level` · `hash` · `parents` · 울타리 절의 `line_hashes`) — 바이트 비교.
+  - `test_seed_headingless`: 헤딩 없는 seed 픽스처 → 원장의 `headingless: true` 와 절 하나(`DOC_ANCHOR`).
+  - `test_snapshot_flag_is_refused`: `--snapshot x.json` → rc 2 · 원장 `round` 그대로.
+  - `test_begin_round_doc_missing_keeps_ledger`: `init` 뒤 문서를 지움 → rc 2 · `doc_unreadable` · 원장 바이트 불변.
+  - `test_edit_after_begin_round_shows_next_round`: 라운드 1 시작 → 문서 한 절 고침 → 라운드 2 시작 → 얼림 diff(`docreview_route.py finalize` 경로의 기존 함수)가 그 절을 바뀐 것으로 본다.
+  - 음의 락 + 양의 짝: Task 0 Step 4 의 파일 전부에 `begin-round` 줄과 `--snapshot` 이 같은 호출에 없다 · 진입 skill 셋과 `reviewing-document.md` 에 `begin-round --state-dir` 가 있다.
+- [ ] **Step 2: 실패를 본다.** Run: `bash plugins/spec-distill/tests/test_begin_round_snapshot.sh` — Expected: `✗`(지금은 `--snapshot` 이 필수).
+- [ ] **Step 3: 엔진을 고친다.** 판독을 옮기고 `cmd_begin_round` 의 `json.loads(Path(a.snapshot)…)` 자리를 위 계산으로. `docreview_anchor.py` 는 옮긴 이름을 `from docreview_state import …` 목록에 더한다.
+- [ ] **Step 4: 호출자를 고친다.** Task 0 Step 4 목록 전부 — 픽스처 `cases.sh` 의 75줄은 호출 꼴이 같아 한 번의 치환으로 바뀌는지 먼저 `grep -c` 로 세고, 치환 뒤 같은 수가 새 꼴인지 다시 센다(줄 경계가 다른 호출이 남지 않게).
+- [ ] **Step 5: 통과를 본다.** Run: `bash plugins/spec-distill/tests/test_begin_round_snapshot.sh && bash shared/tests/test_docreview_state.sh && bash shared/tests/test_docreview_anchor.sh && bash shared/tests/test_docreview_golden.sh && bash shared/tests/test_docreview_mutations.sh` + Task 0 Step 4 의 테스트 파일 전부 — Expected: `✗` 0.
+- [ ] **Step 6: 변이**: 엔진이 문서 대신 빈 스냅숏(`{"headingless": False, "sections": []}`)을 쓰게 → 첫 사례 RED · `doc_unreadable` 검사를 원장 저장 뒤로 → 원장 불변 사례 RED · `--snapshot` 을 받아 무시하게 되살림 → 거부 사례 RED.
+- [ ] **Step 7: 커밋** — `fix(docreview): begin-round 가 원장의 문서에서 스냅숏을 직접 만든다`
+
+---
+
+### Task 2: 한계 공시 — 리뷰 결과 머리 · README 「한계」 (AC26)
+
+**Files:**
+- Modify: `shared/docreview/scripts/docreview_state.py` (상수 `WRITER_TRUST_NOTICE` · `render_gate` 둘째 줄 · `cmd_gate` JSON 의 `writer_trust_notice`), `plugins/spec-distill/README.md` (새 `## 한계` 절), 골든 기대 파일(`shared/tests/test_docreview_golden.sh` 가 읽는 것)
+- Test: `shared/tests/test_docreview_gate_plain.sh`, `shared/tests/test_writer_trust_notice.sh` (새)
+
+**Interfaces:**
+- Produces: `WRITER_TRUST_NOTICE = "사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다"`.
+- README `## 한계` 절(`## Prerequisites` 앞): 첫 줄은 위 문장 그대로, 다음 줄 「샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다」(안내만). `--quote-file` · `log-decision --quote` · `decide --quote` 출처와 제목 하나 빠진 audit 은 이 공시로 다룬다는 한 줄.
+
+- [ ] **Step 1: 실패하는 테스트**(`test_writer_trust_notice.sh`): `render_gate` 출력의 둘째 줄 == `WRITER_TRUST_NOTICE` · README `## 한계` 절에 같은 문장이 글자 그대로 있다(엔진 상수에서 읽어 비교 — 두 글이 어긋나면 RED) · `gate` JSON 에 `writer_trust_notice` · 인용 라벨 음의 락: 엔진 출력 · 진입 skill 셋에 「출처 미확인」 낱말이 없다 — 양의 짝: 공시 문장은 있다. `gate-rows` 출력의 행 수가 공시 전과 같다(Review Focus 5).
+- [ ] **Step 2: 실패를 본다.** Run: `bash shared/tests/test_writer_trust_notice.sh` — Expected: `✗`.
+- [ ] **Step 3: 구현.** 골든 기대 파일은 둘째 줄 하나만 더해진 차이인지 `diff` 로 확인한 뒤 고친다.
+- [ ] **Step 4: 통과를 본다.** Run: `bash shared/tests/test_writer_trust_notice.sh && bash shared/tests/test_docreview_gate_plain.sh && bash shared/tests/test_docreview_golden.sh && bash shared/tests/test_docreview_gate_visibility.sh` — Expected: `✗` 0.
+- [ ] **Step 5: 변이**: README 문장에서 한 글자를 바꿈 → RED · 둘째 줄을 마지막 줄로 옮김 → RED.
+- [ ] **Step 6: 커밋** — `docs(docreview): 쓰는 세션을 믿는 한계를 리뷰 결과 머리와 README 에 같은 문장으로`
+
+---
+
+### Task 3: 문서 · 버전 · 스위트 대조 (AC28 마감)
+
+**Files:**
+- Modify: 엔진 링크를 가진 플러그인의 `CHANGELOG.md` · `.claude-plugin/plugin.json`, `plugins/spec-distill/README.md` (Principles Instantiated 한 줄)
+
+- [ ] **Step 1: 판 · CHANGELOG.** 엔진 링크를 가진 플러그인마다 minor bump(판 번호는 머지 직전 지휘자가 정한다). spec-distill CHANGELOG — Changed(「`begin-round` 는 이제 `--snapshot` 을 받지 않는다 — 원장의 문서에서 스냅숏을 만든다」) · Added(한계 공시). Principles Instantiated 에 「Law 2 — 쓰는 세션을 믿는 한계를 공시한다(장치로 막지 않는다)」. Run: `bash shared/tests/test_changelog_integrity.sh` — Expected: GREEN.
+- [ ] **Step 2: 전체 스위트 대조.** `baseline.sh` 로 `after` — Expected: 새 실패 0(있으면 고치거나 이유).
+- [ ] **Step 3: 커밋** — `docs(spec-distill): 엔진 스냅숏 · 한계 공시 판 올림`
+- [ ] **Step 4: 마지막 전체 리뷰에 AC 를 싣는다.** 고른 실행 방식의 마지막 전체 리뷰에 설계문서 `## Acceptance Criteria` 의 이 계획 몫(AC25 · AC26 · AC28) 목록을 싣고 AC 마다 `AC25: 구현됨 — <근거>` 꼴(구현됨 · 미룸 · 빠짐)로 보고하게 한다. 보고를 `$HOME/.claude/sdd-mirror/r8-plan3/ac-report.md`(git 이 추적하지 않음)에 적고, 미룸 · 빠짐과 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표에 올린 뒤 PR 전에 `python3 <spec-distill>/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-10-20-dependency-portability-design.md "$HOME/.claude/sdd-mirror/r8-plan3/ac-report.md" --acs "AC25 · AC26 · AC28"` 의 경고를 사용자에게 보인다.
