@@ -149,7 +149,7 @@ final_case() {   # final_case <라벨> <리뷰 줄> <차등 줄> <기대 rc> <�
 import os, sys
 out, sid = sys.argv[1], sys.argv[2]
 lines = os.environ["FVF_SRC"].split("\n")
-fill = {"QG_ARGS_R": os.environ["R_IN"], "QG_ARGS_RR": "", "QG_ARGS_D": os.environ["D_IN"],
+fill = {"QG_ARGS_R": os.environ["R_IN"], "QG_ARGS_RR": "되올림 없음", "QG_ARGS_D": os.environ["D_IN"],
         "QG_ARGS_X": "", "QG_ARGS_S": "", "QG_ARGS_E": "qg-verdict-args: --e2e pass"}
 res, skip = [], None
 for l in lines:

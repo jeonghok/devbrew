@@ -53,7 +53,7 @@ section() { awk -v h="$2" '$0 == h {on=1; print; next} on && /^## /{exit} on' "$
 run_verdict() {
   local sh="$1" marker="$2"; shift 2
   rm -f "$RD/verdict.out" "$T/fence.sh"
-  [ "$marker" = final-verdict ] && set -- "QG_ARGS_RR=" "$@"
+  [ "$marker" = final-verdict ] && set -- "QG_ARGS_RR=되올림 없음" "$@"
   if ! python3 -I "$FENCE_PY" "$SKILL" "$marker" "$T/fence.sh" "<session-id>=$SID" "$@" 2>"$T/fill.err"; then
     OUT=""; ERR="$(cat "$T/fill.err")"; RC=99; LINE=""; return
   fi
@@ -167,6 +167,26 @@ e2e 줄 없음|$R_LINE|$D_LINE||||e2e 결과 줄이 비었다
 e2e 칸이 열거 밖|$R_LINE|$D_LINE|||qg-verdict-args: --e2e 몰라|e2e 결과 줄의 칸이 정해진 값이 아니다
 e2e 줄 머리가 없음|$R_LINE|$D_LINE|||--e2e pass|e2e 결과 줄이 정해진 모양
 EOF
+  done
+  # 되올린 뒤 리뷰 자리는 비울 수 없다 — 빈 줄이면 리뷰 자리의 줄로 조용히 넘어가지 않고 멈춘다.
+  local rrl rrv rrw
+  for sh in $SHELLS; do
+    while IFS='|' read -r rrl rrv rrw; do
+      [ -n "$rrl" ] || continue
+      run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_RR=$rrv" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+      assert_eq "$RC" "4" "[$sh] $rrl: 판정 펜스가 4 로 끝난다"
+      [ ! -e "$RD/verdict.out" ] && ok "[$sh] $rrl: verdict.out 을 쓰지 않는다" || no "[$sh] $rrl: verdict.out 이 생겼다"
+      assert_contains "$ERR" "$rrw" "[$sh] $rrl: 멈춘 이유를 밝힌다"
+    done <<EOF
+RR 빈 줄||되올리기 여부가 비었다 — 되올리지 않았으면 되올림 없음 을 적어라
+RR 자리표시가 남음|<되올린 뒤 리뷰 결과 줄 — 되올리지 않았으면 되올림 없음>|되올린 뒤 리뷰 결과 줄이 정해진 모양
+RR 뒤에 글이 붙음|되올림 없음 (사용자가 고르지 않음)|되올린 뒤 리뷰 결과 줄이 정해진 모양
+EOF
+    # 양성 짝 — 되올림 없음 이면 리뷰 자리의 줄로 판정한다
+    run_verdict "$sh" final-verdict "QG_ARGS_R=$R_LINE" "QG_ARGS_RR=되올림 없음" "QG_ARGS_D=$D_LINE" "QG_ARGS_X=" "QG_ARGS_S=" "QG_ARGS_E=$E_OK" "<N>=1"
+    assert_eq "$RC" "0" "[$sh] 되올림 없음 → R 사용: rc 0 (stderr: ${ERR})"
+    assert_eq "$LINE" "qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 1 · $HEADSHA" \
+      "[$sh] 되올림 없음 → R 사용: 판정 줄은 리뷰 자리의 줄의 값이다"
   done
   # verdict.py 는 -h · --help 로 도움말을 내고 0 으로 끝나지 않는다(판정 인자 자리의 낱말이 판정 없이 성공하지 못한다)
   local rc h

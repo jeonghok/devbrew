@@ -1175,13 +1175,14 @@ printf 'qg-verdict-args: --e2e %s%s\n' '<e2e 칸>' '<뒤집음>'
 판정 줄은 결과 줄로 만든다 — 숫자를 만든 직후의 펜스가 낸 `qg-verdict-args: …` 줄이다. 판정 펜스는 세션 폴더를 다시 읽지 않는다.
 판정값 · 사유 · 우선순위는 `verdict.py` 가 정하고, 판정 인자는 결과 줄의 글자 그대로다 (V1 · R24).
 자리(따옴표 here-doc 의 몸)마다 정확히 한 줄 — 그 줄을 낸 펜스가 출력한 `qg-verdict-args: …` 기계 줄 하나 — 만 글자 그대로 넣는다.
-다른 줄 · 설명 · 여러 줄을 넣지 않고, 줄이 없으면 그 자리를 빈 줄로 둔다. 줄은 그 줄을 낸 펜스의 출력에서만 가져온다 — 표 · 보고서 ·
+다른 줄 · 설명 · 여러 줄을 넣지 않고, 줄이 없으면 그 자리를 빈 줄로 둔다 — `QG_ARGS_RR` 자리만은 비우지 않고 `되올림 없음` 을 넣는다.
+줄은 그 줄을 낸 펜스의 출력에서만 가져온다 — 표 · 보고서 ·
 요약의 글에서 다시 만들지 않는다.
 
 | 자리 | 넣을 줄 | 없으면 |
 |---|---|---|
 | `QG_ARGS_R` 리뷰 | 마지막 iteration 의 Step 3.9 펜스가 처음 낸 줄(되올리기 전) | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--blocking 0 --optional 0` |
-| `QG_ARGS_RR` 되올린 뒤 리뷰(최종 판정 펜스만) | 그 iteration 에서 「되올려 다시 합성하기」가 돌았으면 그때 다시 돈 Step 3.9 펜스가 낸 줄 | 빈 줄 — 리뷰 자리의 줄을 쓴다 |
+| `QG_ARGS_RR` 되올린 뒤 리뷰(최종 판정 펜스만) | 그 iteration 에서 「되올려 다시 합성하기」가 돌았으면 그때 다시 돈 Step 3.9 펜스가 낸 줄 · 그 펜스를 다시 돌지 않았으면(되올리기를 적용하지 못한 경우 포함) `되올림 없음` | `되올림 없음` 이면 리뷰 자리의 줄을 쓴다 · 빈 줄이면 판정 없이 멈춘다 |
 | `QG_ARGS_D` 차등 | 마지막 iteration 의 차등 결과 줄 — D5 펜스(flaky 재실행으로 다시 불렀으면 마지막 호출) · D7 펜스 · kill switch 펜스 중 그 iteration 에 돈 것 | 최종 판정 펜스는 판정 없이 멈춘다 · 나머지 두 펜스는 `--new-failures 0` |
 | `QG_ARGS_X` 제외 | 이 실행에서 Fix-loop 의 제외 결과 줄 펜스가 마지막으로 낸 줄 | `--excluded 0` |
 | `QG_ARGS_S` 범위 | 범위 모드면 Preflight 의 리뷰 트리 펜스가 낸 줄 | `--sha` = 지금 HEAD |
@@ -1201,7 +1202,7 @@ IFS= read -r R_LINE <<'QG_ARGS_R'
 <리뷰 결과 줄 — 마지막 iteration 의 Step 3.9 펜스가 낸 줄>
 QG_ARGS_R
 IFS= read -r RR_LINE <<'QG_ARGS_RR'
-<되올린 뒤 리뷰 결과 줄 — 없으면 빈 줄>
+<되올린 뒤 리뷰 결과 줄 — 되올리지 않았으면 되올림 없음>
 QG_ARGS_RR
 IFS= read -r D_LINE <<'QG_ARGS_D'
 <차등 결과 줄>
@@ -1216,6 +1217,8 @@ IFS= read -r E_LINE <<'QG_ARGS_E'
 <e2e 결과 줄>
 QG_ARGS_E
 [ -n "$R_LINE" ] && [ -n "$D_LINE" ] || { echo "[quality-gates] 판정에 넘길 리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
+[ -n "$RR_LINE" ] || { echo "[quality-gates] 되올리기 여부가 비었다 — 되올리지 않았으면 되올림 없음 을 적어라. 판정 줄을 만들지 않는다" >&2; exit 4; }
+[ "$RR_LINE" != "되올림 없음" ] || RR_LINE=""
 R_ARGS=(); RR_ARGS=(); D_ARGS=(); X_ARGS=(--excluded 0); S_ARGS=(--sha "$(git rev-parse --short HEAD)"); E_ARGS=()
 for AX in R RR D X S; do
   case "$AX" in
