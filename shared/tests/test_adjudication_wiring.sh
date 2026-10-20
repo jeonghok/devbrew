@@ -163,14 +163,141 @@ else
 fi
 
 note "── 면제 키의 신선도 — 키가 «자기가 면제한 그 분기»를 가리키는가"
-# 키는 (경로, 줄, 정체) 다. 정체 = kind·func·guard(분기 조건 원문). 자리가
-# 밀려도, 자리는 그대로인데 조건만 바뀌어도 여기서 어긋난다 — 후자가 최종
-# 리뷰가 실측한 구멍이다(줄 수를 보존한 채 조건만 넓히면 락 넷 전부 GREEN).
+# 키는 (경로, 정체) 다. 정체 = kind·func·guard(분기 조건 원문)·둘러싼 for 의 글자.
+# 줄 번호가 없어 위에 코드가 늘어도 키가 그대로고, 조건만 바뀌면 여기서 어긋난다.
 exempt_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_stale=//p')"
-assert_eq "$exempt_stale" "0" "모든 면제 키가 현재 트리의 «같은 정체»의 버리는 분기를 가리킨다 (자리 drift + 조건 변형 양쪽)"
+assert_eq "$exempt_stale" "0" "모든 면제 키가 현재 트리의 «같은 정체»의 버리는 분기를 가리킨다"
 printf '%s\n' "$SCAN" | sed -n 's/^  STALE_EXEMPT //p' | while IFS= read -r l; do
   note "      낡은 면제: $l"
 done
+# 정체가 겹치는 두 행은 키가 자리를 가르지 못한다 — 면제 여부와 무관하게 RED.
+dup_n="$(printf '%s\n' "$SCAN" | sed -n 's/^duplicate_identity=//p')"
+assert_eq "$dup_n" "0" "정체가 겹치는 버리는 분기 0 (모든 행이 서로 다른 키를 갖는다)"
+printf '%s\n' "$SCAN" | sed -n 's/^  DUPLICATE_IDENTITY //p' | while IFS= read -r l; do
+  note "      겹친 정체: $l"
+done
+
+note "── 면제 키 — 사본 레포에서 피검자를 고쳐 본다 (AC25)"
+# 사본은 커밋된 트리다 — 작업 트리에서 HEAD 와 다른 추적 파일을 덮어써 지금 트리를 잰다.
+# 피검자는 심볼릭 링크로 배포된다 — 쓰기는 `>`·open() 으로 링크를 따라 대상에 한다.
+_kv() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }
+CLONE="$TMPD/clone"
+SUBJECT_REL="plugins/quality-gates/scripts/docreview_route.py"
+clone_ok=0
+if git clone -q --no-local --depth 1 "$REPO_ROOT" "$CLONE" > "$TMPD/clone.err" 2>&1; then
+  git -C "$REPO_ROOT" diff --name-only HEAD > "$TMPD/dirty.txt"
+  while IFS= read -r p; do
+    [ -n "$p" ] && [ -f "$REPO_ROOT/$p" ] && [ -e "$CLONE/$p" ] \
+      && cat "$REPO_ROOT/$p" > "$CLONE/$p"
+  done < "$TMPD/dirty.txt"
+  cat "$CLONE/$SUBJECT_REL" > "$TMPD/subject.orig" && clone_ok=1
+fi
+
+_subject_reset() { cat "$TMPD/subject.orig" > "$CLONE/$SUBJECT_REL"; }
+_clone_scan() {
+  PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_scan.py" \
+    "$CLONE" > "$TMPD/cscan.txt" 2>&1
+  cat "$TMPD/cscan.txt"
+}
+# _edit_subject <insert|guard|dup> — 사본의 피검자를 한 가지 방식으로 고친다.
+_edit_subject() {
+  PYTHONDONTWRITEBYTECODE=1 python3 -I - "$CLONE/$SUBJECT_REL" "$1" <<'PY'
+import ast
+import sys
+
+path, mode = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    src = fh.read()
+lines = src.splitlines(True)
+if mode == "insert":
+    i = next(k for k, line in enumerate(lines) if line.startswith("import "))
+    lines[i + 1:i + 1] = ["# inserted %d\n" % k for k in range(10)]
+elif mode == "guard":
+    old = "        if not live:\n"
+    if src.count(old) != 1:
+        sys.exit("guard text count %d" % src.count(old))
+    lines = src.replace(old, "        if not live or False:\n").splitlines(True)
+elif mode == "dup":
+    fn = next(n for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.FunctionDef) and n.name == "_permit_covers")
+    loop = next(n for n in fn.body if isinstance(n, ast.For))
+    lines[loop.end_lineno:loop.end_lineno] = lines[loop.lineno - 1:loop.end_lineno]
+else:
+    sys.exit("unknown mode " + mode)
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write("".join(lines))
+PY
+}
+
+case_clone_baseline() {
+  local out
+  _subject_reset
+  out="$(_clone_scan)"
+  # 양성 대조 — 고치기 전 사본이 GREEN 이어야 아래 RED 가 고친 탓이다.
+  assert_eq "$(_kv "$out" exempt_stale)" "0" "사본 양성 대조 — 고치기 전 exempt_stale=0"
+  assert_eq "$(_kv "$out" unwired)" "0" "사본 양성 대조 — 고치기 전 unwired=0"
+  assert_eq "$(_kv "$out" duplicate_identity)" "0" "사본 양성 대조 — 고치기 전 duplicate_identity=0"
+}
+
+case_exempt_survives_insertion() {
+  local before after out
+  _subject_reset
+  before="$(wc -l < "$CLONE/$SUBJECT_REL")"
+  if ! _edit_subject insert; then no "사본 편집 실패 (insert)"; return; fi
+  after="$(wc -l < "$CLONE/$SUBJECT_REL")"
+  assert_eq "$((after - before))" "10" "양성 대조 — 면제한 분기들 위에 줄 열 개가 실제로 들어갔다"
+  out="$(_clone_scan)"
+  assert_eq "$(_kv "$out" exempt_stale)" "0" "면제한 분기 위에 줄을 더해도 면제 키가 낡지 않는다 (줄 번호 없는 키)"
+  assert_eq "$(_kv "$out" unwired)" "0" "면제한 분기 위에 줄을 더해도 미배선이 생기지 않는다"
+}
+
+case_exempt_guard_change_red() {
+  local out
+  _subject_reset
+  if ! _edit_subject guard; then no "사본 편집 실패 (guard)"; return; fi
+  out="$(_clone_scan)"
+  assert_eq "$(_kv "$out" exempt_stale)" "1" "가드 글자를 바꾸면 그 면제 키 하나가 낡는다"
+  assert_contains "$out" "STALE_EXEMPT ${SUBJECT_REL} continue in _absorb_same_as @ if not live ~ for " \
+    "낡은 키를 줄 번호 없이 정체로 이름 댄다"
+  assert_eq "$(_kv "$out" unwired)" "1" "가드를 바꾼 같은 행이 미배선으로 다시 나온다 (면제를 상속하지 못한다)"
+  assert_contains "$out" "_absorb_same_as @ if not live or False" "미배선 행이 바뀐 가드를 가리킨다"
+}
+
+case_duplicate_identity_red() {
+  local esc rer out
+  # 정적 — 면제 키 꼴과 형제(escalated · reraise 예약) 짝.
+  assert_eq "$(_kv "$SCAN" exempt_key_bad_shape)" "0" \
+    "EXEMPT 키가 모두 (경로, 정체) 2-튜플이고 정체에 ' ~ for ' 가 든다"
+  esc="$(_kv "$SCAN" exempt_sibling_escalated)"
+  rer="$(_kv "$SCAN" exempt_sibling_reraise)"
+  assert_contains "$esc" "st.get('escalated')" "escalated 사유의 키가 escalated 예약 순회를 가리킨다"
+  assert_contains "$rer" "st.get('reraise')" "reraise 사유의 키가 reraise 예약 순회를 가리킨다"
+  if [ -n "$esc" ] && [ "$esc" != "$rer" ]; then
+    ok "escalated · reraise 두 면제 키의 정체가 서로 다르다"
+  else
+    no "escalated · reraise 두 면제 키의 정체가 같다 (또는 비었다)"
+  fi
+  assert_eq "$(_kv "$SCAN" sibling_live_keys)" "2" \
+    "현재 트리의 두 형제 행(_auto_decides @ if not f0)이 서로 다른 키를 낸다"
+  # 동적 — 한 함수에 같은 for · 같은 가드의 버리는 분기를 하나 더 만든다.
+  _subject_reset
+  if ! _edit_subject dup; then no "사본 편집 실패 (dup)"; return; fi
+  out="$(_clone_scan)"
+  assert_eq "$(_kv "$out" duplicate_identity)" "1" "정체가 겹치는 두 행을 duplicate_identity 로 잡는다"
+  assert_contains "$out" "DUPLICATE_IDENTITY ${SUBJECT_REL} return in _permit_covers @ " \
+    "겹친 정체를 이름 댄다"
+  assert_eq "$(_kv "$out" unwired)" "0" "두 행이 다 면제 키에 맞아도(미배선 0) RED 다 — 면제 여부와 무관"
+}
+
+if [ "$clone_ok" = 1 ]; then
+  case_clone_baseline
+  case_exempt_survives_insertion
+  case_exempt_guard_change_red
+  case_duplicate_identity_red
+else
+  no "사본 레포를 만들지 못했다 — 면제 키 케이스 넷이 돌지 않았다"
+  note "$(cat "$TMPD/clone.err" 2>/dev/null)"
+fi
 
 # T6b 재리뷰(F-2 판정 항목) — TERMINAL_CONSUMERS 는 EXEMPT 와 달리 신선도
 # 검사가 없어 파일이 지워지거나(PR 3) 앵커가 새로 생겨도(호스트 wiring) 등재가

@@ -143,98 +143,63 @@ _DR_LINEAGE_NOT_RERAISE = (
 )
 
 EXEMPT = {
-    # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
-    # 줄번호 키 — 합성기를 고치는 PR 마다 실측으로 재앵커한다(exempt_stale=0 이 답한다).
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 310,
-     "continue in dedup @ if f.get('promoted')"):
+    # ("plugins/.../foo.py", "continue in f @ if x ~ for it in items"):
+    #     "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
+    ("plugins/quality-gates/scripts/synthesize_findings.py",
+     "continue in dedup @ if f.get('promoted') ~ for f in findings"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
         "이미 담겨 있고 함수 반환값(`deduped + passthrough`)에 그대로 "
         "살아남는다 — 버려지는 항목이 없다.",
 
-    # T6b — docreview_route.py 아홉 자리. spec-distill·quality-gates 두 호스트에
-    # 같은 물리 파일이 심볼릭 링크로 배포되지만(설계 §12) `scan()`/`comprehension_
-    # count()`는 F-2(재리뷰)의 `_dedup_by_realpath()`로 실제 내용을 한 번만
-    # 읽는다 — 대표로 남는 경로는 `union`의 정렬 순서상 먼저 오는
-    # `plugins/quality-gates/scripts/docreview_route.py`("q" < "s")다. 그래서
-    # 키도 아홉 개면 된다(호스트마다 다시 등록하지 않는다) — 두 배포 지점이
-    # 갈리지 않는다는 보장은 `shared/tests/test_copy_of_contract.sh`의
-    # ∀-dominance 축이 이미 진다. 사유는 위 `_DR_*` 상수 참조.
-    # [재앵커 — designer-lens-review 재리뷰 교정] 줄번호는 매 재앵커마다 실측으로
-    # 갱신한다(아래 열 자리 전부). 과거 델타를 프로즈에 «다시» 못박지 않는다 — 그
-    # 델타 자체가 다음 삽입에서 또 stale 해지는, 리뷰가 잡은 바로 그 함정이다.
-    # 재앵커가 필요한 이유(무엇이 위에서 바뀌었는가)만 남긴다: `normalize()` 의
-    # 미계수 강제 마커 주석이 고친 뒤 빠지며 위쪽이 줄었고, `cmd_prepare` 가
-    # `normalize()` 에 넘기는 기록 원장(`rec`)이 아래쪽을 늘렸다. 가드 텍스트·사유 무변경 —
-    # `bash shared/tests/test_adjudication_wiring.sh` 의 `exempt_stale=0` 이 실측으로 답한다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 258,
-     "return in _permit_covers @ if int(p['round']) == n and anchor in p['apply_anchors']"):
+    # docreview_route.py 열 자리. spec-distill·quality-gates 두 호스트에 같은 물리
+    # 파일이 심볼릭 링크로 배포되지만 `scan()` 은 `_dedup_by_realpath()` 로 한 번만
+    # 읽는다 — 대표 경로는 `union` 정렬 순서상 먼저 오는 quality-gates 쪽이다("q" <
+    # "s"). 두 배포 지점이 갈리지 않는다는 보장은 `shared/tests/test_copy_of_
+    # contract.sh` 의 ∀-dominance 축이 진다. 사유는 위 `_DR_*` 상수 참조.
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "return in _permit_covers @ if int(p['round']) == n and anchor in p['apply_anchors']"
+     " ~ for (_d, p) in st['permits'].items()"):
         _DR_PERMIT_SEARCH,
-    # T6b — docreview_route.py 아홉 자리 나머지. 사유는 위 `_DR_*` 상수 참조.
-    # PR 3 최종 리뷰 F6 — `cmd_prepare` 의 critic 디코드 실패 분기(sentinel 깨짐 = critic 사망)가 위에서 줄을 늘렸다.
-    # PR 3 qg iter 1 · 2 — 공유 시점 판별(`_round_staleness`)과 `cmd_prepare` 의 critic 시점 판별이 위에서 줄을
-    # 늘렸다(가드 텍스트 · 사유 무변경).
-    ("plugins/quality-gates/scripts/docreview_route.py", 667,
-     "continue in _absorb_same_as @ if not live"): _DR_ABSORB_GROUP_DEAD,
-    # `_absorb_same_as` 의 생존자 빈 칸 채움이 이 아래 여덟 자리를 밀었다(가드 텍스트·사유 무변경).
-    # `_absorbed_into` 는 `_classify_items` 의 개행 접기보다 «앞»으로 옮겨졌다 — 흡수된 값의 접기를
-    # 세지 않으려고(생존자가 물려받은 같은 값이 두 번 세졌다).
-    # 채움은 break·continue·필터 컴프리헨션 없이 쓴다 — 버리는 분기로 잡히지 않게.
-    ("plugins/quality-gates/scripts/docreview_route.py", 754,
-     "continue in _classify_items @ if it.get('_absorbed_into')"): _DR_ABSORBED_ALREADY,
-    ("plugins/quality-gates/scripts/docreview_route.py", 774,
-     "continue in _classify_items @ if it.get('_rejected')"): _DR_REJECTED_ALREADY,
-    # Task 2 — escalated 예약을 재상승(AC21)과 대칭으로 맞추면서 줄번호가 밀렸다.
-    # F-2/F-3 재리뷰(Ruling 20·21) 가 한 번 더 바꿨다: dedup continue 는
-    # `L.absorbed(...)` 를 같은 분기에서 직접 불러 **더 이상 면제가 필요 없다**
-    # (`scan()` 이 그 호출을 disposition 으로 자동 인식해 guarded=True) — 그래서
-    # 아래 목록에서 통째로 빠졌다(EXEMPT_BASELINE 주석 참조). 대신 F-3 이 새
-    # discard 자리(fix 가 지금도 escalated 상태인지 검사)를 하나 늘렸다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 856,
-     "continue in _auto_decides @ if int(e['round']) >= n"): _DR_ESCALATED_NOT_DUE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 861,
-     "continue in _auto_decides @ if not f0"): _DR_ESCALATED_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 872,
-     "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"):
+    # `_absorb_same_as` 의 생존자 빈 칸 채움은 break·continue·필터 컴프리헨션 없이
+    # 쓴다 — 버리는 분기로 잡히지 않게.
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _absorb_same_as @ if not live ~ for (_root, members) in groups.items()"):
+        _DR_ABSORB_GROUP_DEAD,
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _classify_items @ if it.get('_absorbed_into') ~ for (f, it) in items.items()"):
+        _DR_ABSORBED_ALREADY,
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _classify_items @ if it.get('_rejected') ~ for (f, it) in items.items()"):
+        _DR_REJECTED_ALREADY,
+    # escalated 예약의 dedup continue 는 같은 분기에서 `L.absorbed(...)` 를 불러 면제가
+    # 필요 없다(`scan()` 이 그 호출을 처분으로 인식해 guarded=True).
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _auto_decides @ if int(e['round']) >= n ~ for e in st.get('escalated') or []"):
+        _DR_ESCALATED_NOT_DUE,
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _auto_decides @ if not f0 ~ for e in st.get('escalated') or []"):
+        _DR_ESCALATED_TARGET_GONE,
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _auto_decides @ if not fx0 or fx0.get('state') != 'escalated'"
+     " ~ for e in st.get('escalated') or []"):
         _DR_ESCALATED_FIX_NOT_LIVE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 902,
-     "continue in _auto_decides @ if not f0"): _DR_RERAISE_TARGET_GONE,
-    ("plugins/quality-gates/scripts/docreview_route.py", 913,
-     "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"):
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _auto_decides @ if not f0 ~ for r in st.get('reraise') or []"):
+        _DR_RERAISE_TARGET_GONE,
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _auto_decides @ if not d0 or d0.get('state') != 'expired'"
+     " ~ for r in st.get('reraise') or []"):
         _DR_RERAISE_ALREADY_DECIDED,
-    # 재상승 후속의 kind·prev_hash 승계 주석이 `_auto_decides` 재상승 갈래 위에
-    # 끼어들어 이 자리를 밀었다. 가드 텍스트 자체는 그대로다.
-    ("plugins/quality-gates/scripts/docreview_route.py", 967,
-     "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"):
+    ("plugins/quality-gates/scripts/docreview_route.py",
+     "continue in _resolve_ids_and_lineage @ if it.get('_source') != 'reraise'"
+     " ~ for it in everything"):
         _DR_LINEAGE_NOT_RERAISE,
 }
 
-# [EXEMPT 재앵커] 위 `docreview_route.py` 자리들의 줄 번호는 그 위쪽에 코드가 늘 때마다
-# 밀린다. 지금 앵커가 맞는지는 이 프로즈가 아니라 `bash shared/tests/test_adjudication_wiring.sh`
-# 의 `exempt_stale=0` 이 매 실행마다 실측으로 답한다.
-#
-# ⚠ 재앵커할 때 기계가 못 잡는 함정 — `_DR_ESCALATED_TARGET_GONE`(escalated 예약)과
-# `_DR_RERAISE_TARGET_GONE`(reraise 예약) 두 자리의 `exempt_key` 세 번째 성분(정체
-# 문자열)이 «바이트 그대로 같다»: 둘 다 `"continue in _auto_decides @ if not f0"` 다
-# — 두 예약 종류가 같은 모양의 방어를 형제로 각자 따로 두기 때문이다(위 두 상수의
-# 본문이 서로 "형제와 문자 그대로 같은 이유·같은 모양"이라고 스스로 말한다). `EXEMPT`
-# 는 (경로, 줄, 정체) 3-튜플을 키로 쓰는 dict 이므로 이 둘은 «줄번호»로만 구별된다 —
-# 재앵커하며 실측한 두 새 줄번호를 반대로(escalated 자리에 reraise 의 줄을, 그
-# 반대로) 배정해도 키 «집합»은 스왑 전과 바이트 단위로 똑같다. `stale_exempt()` 는
-# 집합 소속만 보고 각 키의 사유(값)는 절대 안 읽으므로, 이 스왑은 `exempt_stale=0`
-# 그대로 GREEN 을 낸다 — 그런데 두 키는 이제 «서로 반대» 분기를 가리키는 채로 조용히
-# 자리 잡는다. 이 함정은 `stale_terminal()` 도 못 잡는다 — 그쪽은 `TERMINAL_
-# CONSUMERS` 의 IMPORT/ANCHOR 존재만 재고 이 dict 는 아예 안 본다.
-#
-# 우회는 기계가 아니라 사람이 진다 — «순서로 먼저 짝짓고, 내용을 읽어 확인»한다.
-# 두 정체 문자열이 같으므로 순서(EXEMPT 안에서 먼저 나오는 것이 escalated, 나중이
-# reraise — 코드 자신도 `_auto_decides` 안에서 escalated 예약 순회가 reraise 예약
-# 순회보다 먼저 온다)로 잠정 배정한 뒤, 실제 코드를 읽어 확인한다: escalated 분기는
-# `esc_unconsumed` 를 증가시키는 블록 안에, reraise 분기는 `reraise_unconsumed` 를
-# 증가시키는 블록 안에 있다 — guard 문자열은 둘을 못 가르고 변수 이름이 가른다.
-#
-# 이 지식은 한때 이 리뷰 사이클의(git-ignored, 세션이 끝나면 지워지는) 리포트
-# 파일에만 적혀 있었다 — 여기 적지 않으면 다음 재앵커에게는 이 함정 자체가 안 보인다.
+# 키에는 줄 번호가 없다 — 위에 코드가 늘어도 다시 맞출 것이 없다. 같은 함수 · 같은
+# 가드의 두 자리(escalated · reraise 예약의 `if not f0`)는 둘러싼 `for` 의 글자로
+# 갈린다. 그래도 정체가 같은 행이 둘이면 `duplicate_identities()` 가 RED 로 막는다.
 
 # Task 11 수정 라운드 1 — `derive_consumers()` 의 import·앵커 대칭 가정이
 # 깨지는 자리를 명시적으로 등재한다. 그 가정("원장을 import 하는 파일은
@@ -333,8 +298,8 @@ def _enclosing_branch(loop, target, parents):
     만든다.
 
     **`guard` 는 그 분기를 성립시키는 조건의 원문**(`ast.unparse`)이다 —
-    면제 키가 줄번호만으로는 «자리»를 가리킬 뿐 «무엇을 면제했는지»를
-    가리키지 못하기 때문이다(`stale_exempt()` 참조). 본문과 정체를 한 번의
+    면제 키가 자리가 아니라 «무엇을 면제했는지»를 가리켜야 하기
+    때문이다(`exempt_key()` 참조). 본문과 정체를 한 번의
     상승으로 «함께» 낸다 — 두 함수로 나누면 두 순회의 분기 선택이 갈리는
     순간 면제가 엉뚱한 조건에 붙는다.
 
@@ -393,7 +358,7 @@ def _dedup_by_realpath(paths):
     대표로 남기는 것은 realpath 자체가 아니라 **먼저 나온 원래 인자**다 —
     realpath를 `"file"`로 쓰면 `run_wiring_scan.py`의 `Path(r["file"]).
     relative_to(root)`가 `root` 자신이 심볼릭 링크를 거치는 환경(worktree 등)
-    에서 갈릴 수 있다. 정체(`exempt_key`의 kind·func·guard)는 어느 배포
+    에서 갈릴 수 있다. 정체(`exempt_key`의 kind·func·guard·loop)는 어느 배포
     경로를 대표로 남기든 바이트가 같으므로 동일하다 — 두 링크가 갈리지
     않는다는 보장은 `shared/tests/test_copy_of_contract.sh`의 ∀-dominance
     축이 이미 지므로, 여기서 두 번 세는 것은 그 보장을 다시 사는 게 아니라
@@ -439,59 +404,65 @@ def scan(paths):
                 "kind": type(n).__name__.lower(),
                 "func": _func_of(tree, n),
                 "guard": guard,
+                "loop": "for %s in %s" % (ast.unparse(loop.target),
+                                          ast.unparse(loop.iter)),
                 "guarded": any(_disposition_calls(s) for s in scope),
             })
     return out
 
 
 def exempt_key(rel, row):
-    """면제 키 — `(경로, 줄, 정체)`. 정체 = `<kind> in <func> @ <guard>`.
+    """면제 키 — `(경로, 정체)`. 정체 = `<kind> in <func> @ <guard> ~ <loop>`.
 
-    **줄번호만으로는 «자리»를 가리킬 뿐 «무엇을 면제했는지»를 못 가리킨다.**
-    사유는 언제나 그 분기가 «어떤 조건에서 무엇을 버리는가»에 대한 진술인데,
-    키가 자리만 쥐고 있으면 그 자리의 조건이 바뀌어도(줄 수만 보존되면)
-    면제가 새 조건에 그대로 상속된다 — 사유는 이미 거짓인데 락은 조용하다.
-
-    그래서 세 성분을 함께 묶는다: `kind`(무엇으로 버리는가) · `func`(어디서) ·
-    `guard`(어떤 조건에서). 셋 중 하나라도 바뀌면 키가 어긋나 `stale_exempt()`
-    가 이름을 대고, 같은 행이 `unwired` 로도 다시 나온다(양의 짝).
+    줄 번호를 넣지 않는다 — 위에 코드가 늘 때마다 키가 낡는다. 사유는 그 분기가
+    «어떤 조건에서 무엇을 버리는가»에 대한 진술이므로 키도 내용으로 짓는다:
+    `kind`(무엇으로 버리는가) · `func`(어디서) · `guard`(어떤 조건에서) ·
+    `loop`(둘러싼 `for` 의 글자 — 같은 함수 · 같은 가드의 두 자리를 순회 대상으로
+    가른다). 하나라도 바뀌면 키가 어긋나 `stale_exempt()` 가 이름을 대고, 같은
+    행이 `unwired` 로도 다시 나온다(양의 짝). 그래도 같은 정체가 둘이면
+    `duplicate_identities()` 가 잡는다.
 
     정체를 해시가 아니라 «원문»으로 둔다 — 면제 표를 읽는 사람이 파일을 열지
     않고도 무엇이 면제됐는지 본다. 조건이 정당하게 바뀌면 키를 갱신해야 하고,
     그 갱신이 곧 사유 재검증이다(이 락이 요구하는 churn 이지 비용이 아니다).
     """
-    return (rel, row["line"],
-            "%s in %s @ %s" % (row["kind"], row["func"], row["guard"]))
+    return (rel, "%s in %s @ %s ~ %s" % (row["kind"], row["func"], row["guard"],
+                                         row["loop"]))
+
+
+def duplicate_identities(rows, repo_root):
+    """`exempt_key()` 가 같은 행이 둘 이상인 키 — 호출자가 RED 로 만든다.
+
+    키가 자리를 가르지 못한다는 사실 자체가 결함이다 — 면제 여부와 무관하다.
+    그런 두 행은 하나의 면제를 나눠 갖고, 한쪽의 사유가 다른 쪽을 조용히 덮는다.
+    """
+    repo = Path(repo_root)
+    seen = {}
+    for r in rows:
+        k = exempt_key(str(Path(r["file"]).relative_to(repo)), r)
+        seen[k] = seen.get(k, 0) + 1
+    return sorted(k for k, c in seen.items() if c > 1)
 
 
 def stale_exempt(repo_root):
     """`EXEMPT` 의 키가 현재 트리에서 «자기가 면제한 바로 그 분기»를 가리키는지.
 
-    면제 키는 자리(경로·줄)와 정체(`kind`·`func`·`guard`)를 함께 쥔다
-    (`exempt_key()`). 이 함수는 그 키 전체를 현재 트리에서 도출한 키 집합과
-    대조해, 어긋난 것을 이름을 대어 낸다.
+    면제 키는 경로와 정체(`kind`·`func`·`guard`·`loop`)다(`exempt_key()`). 이
+    함수는 그 키 전체를 현재 트리에서 도출한 키 집합과 대조해, 어긋난 것을
+    이름을 대어 낸다. 키에 줄 번호가 없으므로 위에 코드가 늘어도 어긋나지
+    않는다.
 
-    **두 방향의 위험이 있고 둘 다 이 검사가 잡는다.**
-
-    ⑴ 자리가 어긋남 — 그 자리 «위»에 코드가 늘면 키가 밀린다. Task 11b 가
-    실증했다: 앞선 두 커밋이 설계문서 리뷰 훅(spec-distill 3.0.0 에서 삭제)의
-    선택 함수 위에 코드를 늘려 그 함수가 +13/+14 줄 밀렸고 열 개의 키가 통째로
-    낡았다. 밀린 줄이 아무것도
-    안 가리키면 배선 락이 미배선으로 다시 잡아 시끄럽게 실패하지만, 다른
-    버리는 분기의 줄번호와 겹치면 그 엉뚱한 자리가 조용히 면제된다.
-
-    ⑵ **자리는 그대로인데 분기가 다른 것이 됨** — 줄 수를 바꾸지 않고 조건만
-    넓히면(`if f.get("promoted"):` → `if f.get("promoted") or …:`) 그 자리는
-    여전히 버리는 분기라서 «자리»만 보는 검사는 통과한다. 그런데 그 면제의
+    잡는 것은 **분기가 다른 것이 됨**이다 — 조건만 넓히면(`if f.get("promoted"):`
+    → `if f.get("promoted") or …:`) 그 자리는 여전히 버리는 분기인데 면제의
     사유(「버려지는 항목이 없다」)는 이미 거짓이다 — 새 조건이 버리는 항목은
-    회계 없이 사라진다. 최종 리뷰가 이 구멍을 실측했다(락 넷 전부 GREEN).
-    키에 `guard` 를 넣는 이유가 정확히 이것이다.
+    회계 없이 사라진다. 키에 `guard` 를 넣는 이유가 정확히 이것이다. 정체가
+    같은 두 행이 하나의 면제를 나눠 갖는 것은 `duplicate_identities()` 가 잡는다.
 
     `scan()` 을 재사용한다(재도출 아님) — "실제 버리는 분기"의 정의가 배선
     락 본체와 갈리면 이 검사 자체가 새 진실을 만든다.
     """
     repo = Path(repo_root)
-    files = sorted({rel for (rel, _line, _id) in EXEMPT})
+    files = sorted({rel for (rel, _id) in EXEMPT})
     abs_paths = [str(repo / rel) for rel in files if (repo / rel).is_file()]
     rows = scan(abs_paths) if abs_paths else []
     live = {exempt_key(str(Path(r["file"]).relative_to(repo)), r) for r in rows}

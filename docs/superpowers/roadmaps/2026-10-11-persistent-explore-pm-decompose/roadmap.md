@@ -431,8 +431,7 @@ test_failure_pattern: "^FAILED (.+)$"
 
 ### 2026-10-20 · R12 계획 셋의 브랜치 · 경로 예약 등록(R12 설계 §11) · R1 · R3 · R5 경로 예약을 pm-interview 이름으로
 - 바뀜:
-  - 바뀐 에픽 R12 (경로 예약 · 브랜치) · R1 · R3 · R5 (이름 따라가기) 「승인 — 계획 담당자에게 (권장)」
-  - R1 · R3 · R5 는 머지된 에픽이라 생성기(`roadmap_write.py update`)가 거부했다 — 그 세 블록의 `경로 예약` 칸만 손으로 고쳤다(`skills/spec-interview/` → `skills/pm-interview/`, R10 계획 3 의 이름 바꾸기 #239). 번호 · 범위 · 다른 칸은 그대로다
+  - 바뀐 에픽 R12 (경로 예약 · 브랜치) · R1 · R3 · R5 (이름 따라가기 — 머지된 에픽이라 생성기 `roadmap_write.py update` 가 거부해 그 세 블록의 `경로 예약` 칸만 손으로 고침, `skills/spec-interview/` → `skills/pm-interview/`, #239 · 번호 · 범위 · 다른 칸은 그대로) 「승인 — 계획 담당자에게 (권장)」
 - 원문:
   - 「승인 — 계획 담당자에게 (권장)」
 

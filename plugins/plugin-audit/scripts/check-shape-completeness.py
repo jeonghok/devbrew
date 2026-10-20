@@ -60,9 +60,9 @@ def check(plugin_dir):
     skills = list((pd / "skills").glob("*/SKILL.md")) if (pd / "skills").exists() else []
     add("skills_cost_class", all(_has_cost_class(_read(s) or "") for s in skills) if skills else True)
 
-    add("hooks_killswitch", _hooks_killswitch_present(pd))
-
     own_name = pj.get("name", "")
+    add("hooks_killswitch", _hooks_killswitch_present(pd, own_name))
+
     cross_dispatch = _has_cross_plugin_dispatch(pd, own_name)
     add("deps_declared",
         (not cross_dispatch) or ("Prerequisites" in readme) or ("prerequisites" in readme.lower()))
@@ -133,7 +133,7 @@ def _walk_hook_commands(data):
     return cmds
 
 
-def _hooks_killswitch_present(pd):
+def _hooks_killswitch_present(pd, own_name):
     # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
     # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·비-등록 공유 헬퍼까지 훅으로 오인해
     # 정상 플러그인에 거짓 "kill switch 부재"를 낸다 (qg 2026-07-20 codex, over-glob)
@@ -171,14 +171,20 @@ def _hooks_killswitch_present(pd):
                 scripts.append(cand)
     if any(not c.is_file() for c in scripts):
         return False  # 등록된 hook 스크립트가 디스크에 부재(dangling) → 검증 불가 → gap
-    return all(_has_killswitch(_read(c) or "") for c in scripts)
+    return all(_has_killswitch(_read(c) or "", own_name) for c in scripts)
 
 
-_KILLSWITCH_RE = re.compile(r"DEVBREW_[A-Z0-9_]*_DISABLE")
-
-
-def _has_killswitch(text):
-    return bool(_KILLSWITCH_RE.search(text)) or "DEVBREW_SKIP_HOOKS" in text
+def _has_killswitch(text, own_name):
+    # 받는 꼴: 그 플러그인 자기 이름의 DEVBREW_<OWN>_DISABLE(뒤에 [A-Z0-9_] 가 이어지지 않는 것) ·
+    # DEVBREW_SKIP_HOOKS · 공유 모듈 호출 kill_switch_active("<own_name>". 남의 스위치 · 하위 스위치는 아니다.
+    if "DEVBREW_SKIP_HOOKS" in text:
+        return True
+    if not isinstance(own_name, str) or not own_name:
+        return False
+    own = own_name.upper().replace("-", "_")
+    if re.search(r"(?<![A-Z0-9_])DEVBREW_" + re.escape(own) + r"_DISABLE(?![A-Z0-9_])", text):
+        return True
+    return bool(re.search(r"kill_switch_active\(\s*[\"']" + re.escape(own_name) + r"[\"']", text))
 
 
 def main(argv):

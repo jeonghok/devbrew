@@ -242,5 +242,40 @@ class TestShapeCompleteness(unittest.TestCase):
                              "self-reference should not count as cross-plugin dispatch")
 
 
+    def _killswitch_present(self, script_body):
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_plugin(d)
+            (dd / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "demo-x", "description": "x", "version": "0.1.0"}), encoding="utf-8")
+            hooks = dd / "hooks"; hooks.mkdir()
+            (hooks / "hooks.json").write_text(json.dumps({
+                "hooks": {"PostToolUse": [{"hooks": [
+                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/h.py"}]}]}
+            }), encoding="utf-8")
+            (hooks / "h.py").write_text(script_body, encoding="utf-8")
+            r, obj = run(dd)
+            return {g["requirement"]: g for g in obj["shape_gaps"]}["hooks_killswitch"]["present"]
+
+    def test_foreign_switch_only_is_gap(self):  # AC26
+        self.assertFalse(self._killswitch_present("import os\nos.environ.get('DEVBREW_QUALITY_GATES_DISABLE')\n"))
+
+    def test_sub_switch_only_is_gap(self):  # AC26
+        self.assertFalse(self._killswitch_present("import os\nos.environ.get('DEVBREW_DEMO_X_DISABLE_WEB')\n"))
+
+    def test_own_switch_ok(self):
+        self.assertTrue(self._killswitch_present("import os\nos.environ.get('DEVBREW_DEMO_X_DISABLE')\n"))
+
+    def test_skip_hooks_ok(self):
+        self.assertTrue(self._killswitch_present("import os\nos.environ.get('DEVBREW_SKIP_HOOKS')\n"))
+
+    def test_shared_module_ok(self):
+        self.assertTrue(self._killswitch_present(
+            'from kill_switch_active import kill_switch_active\nkill_switch_active("demo-x", "h", "PostToolUse")\n'))
+
+    def test_shared_module_other_name_is_gap(self):
+        self.assertFalse(self._killswitch_present(
+            'from kill_switch_active import kill_switch_active\nkill_switch_active("other", "h", "PostToolUse")\n'))
+
+
 if __name__ == "__main__":
     unittest.main()

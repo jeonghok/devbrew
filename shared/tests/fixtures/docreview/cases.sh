@@ -3750,6 +3750,13 @@ case_same_name_block_broken_kills_critic() {
   assert_eq "$rc" "4" "같은 이름 블록 하나라도 파손 → 출력 전체가 탐지 사망(rc 4)"
   rm -rf "$d"
 }
+case_same_name_blocks_both_read() {
+  local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-two-blocks-distinct.txt" "$FX/codex-failed.yaml" "$FX/recritic-missing.txt")"
+  # 층 1 블록 둘이 서로 다른 성한 항목(c0 · c5)을 하나씩 담는다 — 첫 블록만 또는 마지막 블록만 읽으면 한쪽이 빠진다.
+  assert_eq "$(jget "$d/prep.json" 'sorted(i["summary"] for i in d["items"])')" "['Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다', '목표가 브리프와 다른 문제를 겨눈다']" "같은 이름 블록 둘: 두 블록의 항목이 모두 요약 목록에 있다"
+  assert_eq "$(jget "$d/fin.json" 'd["degrade"].get("blocks_merged")')" "{'docreview-layer1': 2}" "같은 이름 블록 둘: 합친 개수가 degrade 에 남는다"
+  rm -rf "$d"
+}
 # ── AC14 — 파서는 줄인 플래그를 거부한다 ─────────────────────────────────
 case_AC14_no_abbrev_flags() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC14: r1 실패"; return; }
