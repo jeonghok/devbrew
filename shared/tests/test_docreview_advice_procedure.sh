@@ -78,4 +78,6 @@ in_order "finishing: B-A 가 B-1 앞이고, B-A 안에서 JSON → 표시 → �
   "$(first_line "$FINP" '#### B-1' 0)"
 RD="$(cat "$REPO_ROOT/shared/docreview/references/reviewing-document.md")"
 assert_contains "$RD" "끝에서 한 번" "절차서: 참고 목록은 끝에서 한 번이다"
+assert_contains "$RD" '열린 리뷰에서 손으로 쓴 줄은 「허가 없이 바뀜」 결정으로 돌아온다. 리뷰가 닫힌 뒤(끝맺음이 계수 줄을 쓴 뒤) 결정 기록 절 끝 — 마지막 계수 줄 아래 — 에 손으로 쓴 줄은 다음 재리뷰가 기록으로 읽는다' "절차서: 손 줄이 돌아오는 것은 열린 리뷰다 — 닫힌 리뷰의 끝 손 줄은 기록이다(AC11)"
+assert_not_contains "$RD" '얼림 검사를 지난다. 손으로 쓴 줄은' "절차서: 범위 없는 「손으로 쓴 줄은 돌아온다」 문장이 없다(양성 짝: 위 줄)"
 finish
