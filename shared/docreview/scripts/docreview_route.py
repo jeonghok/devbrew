@@ -123,9 +123,14 @@ def merge_list_blocks(blocks, name, ev):
             key = json.dumps(it, sort_keys=True, ensure_ascii=False, default=str)
             ref = str(it["ref"]) if isinstance(it, dict) and it.get("ref") is not None else None
             label = "%s#b%d:%s" % (name, k, (it.get("ref") if isinstance(it, dict) else "?"))
-            if key in seen_items:
+            if key in seen_items and ref is not None and local.get(ref, final_ref.get(key)) != final_ref.get(key):
+                # 같은 블록에서 이미 다른 항목이 이 임시 번호로 옮겨졌다 — 조용히 덮어쓰지 않고 센다.
+                ev("hold", label, "항목 파손: duplicate_ref")
+                continue
+            elif key in seen_items:
                 ev("absorbed", label, seen_items[key])
                 plan.append((None, None))
+                block_refs.add(ref)
                 if ref is not None and final_ref.get(key) is not None:
                     local[ref] = final_ref[key]
                 continue

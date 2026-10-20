@@ -190,17 +190,15 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_absorb
   "$REPO_ROOT" "$TMPD/absorb" > "$TMPD/absorb.txt" 2>&1
 ABSORB="$(cat "$TMPD/absorb.txt")"
 note "$ABSORB"
-assert_contains "$ABSORB" "merge_continue_unguarded=0" "merge_list_blocks 의 continue 는 전부 같은 분기에 처분 호출을 갖는다"
-if printf '%s\n' "$ABSORB" | grep -q '^merge_continue_rows=0$'; then
-  no "merge_list_blocks 에 continue 행이 없다 — 흡수 분기가 락 모집단에 들어오지 않았다"
-else
-  ok "merge_list_blocks 의 continue 행이 락 모집단에 든다"
-fi
-assert_contains "$ABSORB" "prepare_first_guarded=1" "cmd_prepare 의 흡수 분기(가드에 first 가 든 행)는 처분 호출을 갖는다"
-assert_contains "$ABSORB" "mutant_merge_removed=1" "변이 대조(merge_list_blocks): 흡수 호출 한 줄을 실제로 지웠다"
-assert_contains "$ABSORB" "mutant_merge_unwired=1" "변이 — merge_list_blocks 의 흡수 호출을 지우면 미배선 행이 나온다(원본은 0)"
-assert_contains "$ABSORB" "mutant_prepare_removed=1" "변이 대조(cmd_prepare): 흡수 호출 한 줄을 실제로 지웠다"
-assert_contains "$ABSORB" "mutant_prepare_unwired=1" "변이 — cmd_prepare 의 흡수 호출을 지우면 미배선 행이 나온다(원본은 0)"
+_absorb_line() { printf '%s\n' "$ABSORB" | grep -cx -- "$1"; }   # 줄 전체가 같을 때만 센다 — `=1` 이 `=10` 을 받지 않는다
+assert_eq "$(_absorb_line 'merge_continue_rows=3')" "1" "merge_list_blocks 의 continue 행은 셋이다(흡수 하나 · 같은 번호 보류 둘) — 모집단에 든다"
+assert_eq "$(_absorb_line 'merge_continue_unguarded=0')" "1" "merge_list_blocks 의 continue 는 전부 같은 분기에 처분 호출을 갖는다"
+assert_eq "$(_absorb_line 'prepare_first_rows=1')" "1" "cmd_prepare 의 흡수 분기(가드에 first 가 든 행)는 하나다"
+assert_eq "$(_absorb_line 'prepare_first_guarded=1')" "1" "cmd_prepare 의 흡수 분기는 처분 호출을 갖는다"
+assert_eq "$(_absorb_line 'mutant_merge_removed=1')" "1" "변이 대조(merge_list_blocks): 흡수 호출 한 줄을 실제로 지웠다"
+assert_eq "$(_absorb_line 'mutant_merge_unwired=1')" "1" "변이 — merge_list_blocks 의 흡수 호출을 지우면 미배선 행이 하나 나온다(원본은 0)"
+assert_eq "$(_absorb_line 'mutant_prepare_removed=1')" "1" "변이 대조(cmd_prepare): 흡수 호출 한 줄을 실제로 지웠다"
+assert_eq "$(_absorb_line 'mutant_prepare_unwired=1')" "1" "변이 — cmd_prepare 의 흡수 호출을 지우면 미배선 행이 하나 나온다(원본은 0)"
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"

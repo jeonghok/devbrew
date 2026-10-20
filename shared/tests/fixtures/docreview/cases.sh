@@ -4106,13 +4106,24 @@ case_AC5_multi_anchor_held() {
   assert_eq "$(jget "$d/prep.json" 'len(d["items"])')" "1" "AC5 양성 짝: 앵커 하나(insert-after)는 보류되지 않는다"
   rm -rf "$d"
 }
+# AC6 보조 — 2 라운드 흐름: 지적을 «결정»으로 채택하고 그 절 본문을 고친 다음 라운드를 열어 관측을 낸다.
+# ac6_round2 <state-dir> <finding-id> <doc2> → "<적용으로 관측> | <만료로 관측> | <게이트의 blocked_expired 수>"
+ac6_round2() {
+  local sd="$1" id="$2" doc2="$3"
+  py docreview_state.py decide --state-dir "$sd" --id "$id" --choice adopt --quote '채택' >/dev/null
+  next_round "$sd" "$doc2" >/dev/null
+  printf '%s | %s | %s' "$(jget "$sd/obs2.json" "d['applied'] == ['$id']")" \
+    "$(jget "$sd/obs2.json" "d['expired'] == ['$id']")" \
+    "$(py docreview_state.py gate --state-dir "$sd" | jgets 'len(d["blocked_expired"])')"
+}
 case_AC6_section_sign_anchor_normalized() {
-  local d doc cr eng id sd; d="$(mktemp -d -t docreview-XXXXXX)" || { no "AC6: mktemp 실패"; return; }
+  local d doc doc2 cr eng id sd; d="$(mktemp -d -t docreview-XXXXXX)" || { no "AC6: mktemp 실패"; return; }
   doc="$d/doc.md"; { cat "$FX/design-sample.md"; printf '\n### §B 부분\n\n본문.\n'; } > "$doc"
+  doc2="$d/doc2.md"; { cat "$FX/design-sample.md"; printf '\n### §B 부분\n\n본문을 고쳤다.\n'; } > "$doc2"
   snap "$doc" "$d/probe.json"
   eng="$(jget "$d/probe.json" '[s["anchor"] for s in d["sections"] if "부분" in s["anchor"]][0]')"
   sd="$(r1 "$PROF_SD/design-doc.md" "$doc")" || { no "AC6: r1 실패"; return; }
-  cr="$sd/critic-sign.txt"
+  cr="$d/critic-sign.txt"
   printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  category: placeholder' '  anchor: "#§b-부분"' '  disposition: fix' '  summary: "부분 절에 내용이 없다"' '  edit_scope: "#§b-부분"' '```' > "$cr"
   py docreview_route.py prepare-recritic --state-dir "$sd" --critic "$(critic_now "$sd" "$cr")" > "$sd/prep.json"
   py docreview_route.py finalize --state-dir "$sd" --recritic-skipped --doc "$doc" > "$sd/fin.json"
@@ -4120,8 +4131,50 @@ case_AC6_section_sign_anchor_normalized() {
   assert_eq "$(jget "$sd/fin.json" 'd["adjudication_coerced"]')" "1" "AC6: 바꾼 값은 강제로 센다(앵커와 범위가 같은 글자면 한 번)"
   id="$(jget "$sd/fin.json" '[x["id"] for x in d["findings"] if "부분 절" in x["summary"]][0]')"
   assert_eq "$(py docreview_anchor.py check-intent "$id" --intent "$eng" --state-dir "$sd" | jgets 'd["ok"]')" "True" "AC6: 엔진 앵커로 고친 범위가 check-intent 를 통과한다"
-  assert_eq "$(py docreview_state.py gate --state-dir "$sd" | jgets 'd.get("expired", []), d["blocked_expired"]')" "([], [])" "AC6: 만료나 재상승으로 돌지 않는다"
+  assert_eq "$(py docreview_anchor.py check-intent "$id" --intent '#§b-부분' --state-dir "$sd" 2>/dev/null | jgets 'd["ok"]')" "False" "AC6 양성 짝: 날 § 앵커로 신고한 범위는 check-intent 가 거부한다"
+  rm -rf "$sd"
+  # 2 라운드 — 지적을 결정으로 채택하고 그 절 본문을 고친 다음 라운드를 열어 관측을 본다.
+  sd="$(r1 "$PROF_SD/design-doc.md" "$doc")" || { no "AC6: r1 실패"; return; }
+  sed 's/disposition: fix/disposition: decide/; s/category: placeholder/category: ambiguity/' "$cr" > "$sd/critic-dec.txt"
+  py docreview_route.py prepare-recritic --state-dir "$sd" --critic "$(critic_now "$sd" "$sd/critic-dec.txt")" > "$sd/prep.json"
+  py docreview_route.py finalize --state-dir "$sd" --recritic-skipped --doc "$doc" > "$sd/fin.json"
+  id="$(jget "$sd/fin.json" '[x["id"] for x in d["findings"] if "부분 절" in x["summary"]][0]')"
+  assert_eq "$(ac6_round2 "$sd" "$id" "$doc2")" "True | False | 0" "AC6: 엔진 앵커로 채택하고 그 절을 고치면 다음 라운드에 적용으로 관측된다(만료 · 재상승 없음)"
+  rm -rf "$sd"
+  # 양성 짝 — 정규화를 건너뛴 날 앵커로 심은 결정은 채택 단계에서 거부된다(앵커가 문서에 없다).
+  sd="$(r1 "$PROF_SD/design-doc.md" "$doc")" || { no "AC6: r1 실패"; return; }
+  seed_findings "$sd" '[{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#§b-부분","edit_scope":"#§b-부분","disposition":"decide","summary":"부분 절에 내용이 없다","evidence":null,"blocks":[],"kind":"pre"}]'
+  assert_contains "$(py docreview_state.py decide --state-dir "$sd" --id 'eeee0001#r1.1' --choice adopt --quote '채택' 2>&1 >/dev/null)" "anchor_unresolved" "AC6 양성 짝: 정규화를 건너뛴 날 앵커는 채택 단계에서 거부된다"
   rm -rf "$d" "$sd"
+}
+case_AC6_edit_scope_coerced_separately() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC6s: r1 실패"; return; }
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  category: placeholder' '  anchor: "#2-goals"' '  disposition: fix' '  summary: "목표 범위가 넓다"' '  edit_scope: "insert-after:#§2-goals"' '```' > "$d/critic-scope.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-scope.txt")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" '[x["edit_scope"] for x in d["findings"]][0]')" "insert-after:#2-goals" "AC6: 앵커와 다른 범위의 § 도 엔진 글자로 바뀐다(insert-after: 머리는 그대로)"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"]')" "1" "AC6: 앵커는 그대로이고 범위만 바뀌면 강제는 한 번"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC6s: r1 실패"; return; }
+  printf '%s\n' '```docreview-layer1' '[]' '```' '```docreview-layer2' '- ref: c1' '  category: placeholder' '  anchor: "#§2-goals"' '  disposition: fix' '  summary: "목표 범위가 넓다"' '  edit_scope: "insert-after:#§2-goals"' '```' > "$d/critic-both.txt"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-both.txt")" > "$d/prep.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"], [x["anchor"] for x in d["findings"]][0]')" "(2, '#2-goals')" "AC6: 앵커와 범위가 서로 다른 글자로 둘 다 § 를 가지면 강제는 둘"
+  rm -rf "$d"
+}
+case_AC7_absorbed_ref_in_block_orders() {
+  local d order X Y first second
+  X='- ref: c1\n  category: placeholder\n  anchor: "#12-files-to-modify"\n  disposition: fix\n  summary: "c.py 가 목록에 없다"'
+  Y='- ref: c1\n  category: ambiguity\n  anchor: "#2-goals"\n  disposition: fix\n  summary: "목표 B 가 두 가지로 읽힌다"'
+  for order in XY YX; do
+    d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC7: r1 실패"; return; }
+    if [ "$order" = XY ]; then first="$X"; second="$Y"; else first="$Y"; second="$X"; fi
+    printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n%b\n```\n```docreview-layer2\n%b\n%b\n```\n' "$X" "$first" "$second" > "$d/critic-ord.txt"
+    py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$d/critic-ord.txt")" > "$d/prep.json"
+    py docreview_route.py finalize --state-dir "$d" --recritic-skipped --doc "$FX/design-sample.md" > "$d/fin.json"
+    assert_eq "$(jget "$d/fin.json" 'any("duplicate_ref" in w for w in d["advisory"]), d["adjudication_held"] >= 1')" "(True, True)" "AC7 $order: 흡수된 항목과 같은 임시 번호를 쓰는 블록 안 항목은 순서와 무관하게 보류된다"
+    rm -rf "$d"
+  done
 }
 case_AC7_duplicate_ref_in_block_held() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "AC7: r1 실패"; return; }
