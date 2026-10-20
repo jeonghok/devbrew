@@ -379,10 +379,10 @@ case_self_state_bound_to_run_dir() {
 }
 
 # 우회 막기 — worktrees/(base|head)-<8>/ 는 이 리포에 등록된 git worktree 일 때만 건너뛴다.
-# 등록되지 않은 같은 이름 폴더는 안에 든 레포다 — 리뷰하지 않고 크게 알린다.
+# 등록되지 않은 같은 이름 폴더는 안에 든 레포다 — 건너뛰지 않고 중첩 레포로 리뷰한다.
 NESTED_TAIL='는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라'
 case_unregistered_worktree_folder_reviewed() {
-  echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 알린다]"
+  echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 리뷰한다]"
   mkfix
   local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/quality-gates/worktrees/base-abcdefgh"
   mkdir -p "$S" "$FW"
@@ -390,12 +390,12 @@ case_unregistered_worktree_folder_reviewed() {
   local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/$' "가짜 트리 폴더는 names 에 있다"
-  assert_file_absent "$S/review-i1.full.diff" 'evil_marker' "가짜 트리 폴더 안의 글은 diff 에 없다"
-  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/quality-gates/worktrees/base-abcdefgh/ ${NESTED_TAIL}\$" \
-    "가짜 트리 폴더를 크게 알린다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/evil\.py$' \
+    "가짜 트리 폴더(중첩 레포)의 파일은 names 에 있다"
+  assert_file_grep "$S/review-i1.diff" '^\+evil_marker = 1$' "가짜 트리 폴더 안의 글을 리뷰한다"
+  assert_file_absent "$ROOT/err" '리뷰하지 않았다' "가짜 트리 폴더는 리뷰했으니 알리는 줄이 없다"
   assert_file_absent "$S/review-i1.self-state" 'base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
-  assert_eq "$(field degraded "$OUT")" yes "가짜 트리 폴더(리뷰하지 못한 항목)가 있으면 degraded: yes"
+  assert_eq "$(field degraded "$OUT")" no "가짜 트리 폴더를 리뷰했으니 degraded: no"
   assert_file_absent "$S/review-i1.names" 'base-mysess00' "등록된 qg 트리는 names 에 없다"
   assert_file_absent "$ROOT/err" 'base-mysess00' "등록된 qg 트리는 알리지 않는다(건너뜀)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then
@@ -659,51 +659,182 @@ case_mdx_reviewed_as_code() {
   assert_file_grep "$D/review-i1.doc-paths" "^exclude${TAB}README\.md\$" "doc-paths 에 'exclude<TAB>README.md'"
 }
 
-# 추적 안 되는 중첩 레포(ls-files 가 폴더 한 줄로 낸다)는 리뷰하지 않는다 — 그 안에서 git 을 돌리지도,
-# 그 안의 파일을 읽지도 않고, 폴더마다 이스케이프한 이름으로 크게 알린다.
+# 추적 안 되는 중첩 레포 안의 중첩 레포(ls-files 가 폴더 한 줄로 낸다)는 리뷰하지 않는다 — 그 안에서 git 을
+# 돌리지도, 그 안의 파일을 읽지도 않고, 폴더마다 이스케이프한 이름으로 크게 알린다. 바깥 중첩 레포의 다른
+# 파일은 리뷰한다.
 case_nested_repo_disclosed() {
-  echo "[추적 안 되는 중첩 레포 — 리뷰하지 않고 크게 알린다]"
+  echo "[중첩 레포 안의 중첩 레포 — 리뷰하지 않고 크게 알린다]"
   mkfix
   local N="$R/vendor/lib"; mkdir -p "$N"
   git init -q -b trunk "$N"
   echo 'nested_marker_a = 1' > "$N/a.py"; g "$N" add a.py; g "$N" commit -q -m n
   echo 'nested_marker_b = 1' > "$N/b.py"
-  local odd="$R/odd
-name" esc; esc="$R/esc$(printf '\033')x"
-  git init -q -b trunk "$odd"; echo 'nested_marker_c = 1' > "$odd/c.py"
-  git init -q -b trunk "$esc"; echo 'nested_marker_d = 1' > "$esc/d.py"
-  local tick="$R/tick\`\`x" ticktab; ticktab="$R/a\`\`b$(printf '\t')c"
-  git init -q -b trunk "$tick"; echo 'nested_marker_e = 1' > "$tick/e.py"
-  git init -q -b trunk "$ticktab"; echo 'nested_marker_f = 1' > "$ticktab/f.py"
+  local H="$R/h"; git init -q -b trunk "$H"; echo 'holder_marker = 1' > "$H/top.py"
+  local inl="$N/inl"; git init -q -b trunk "$inl"; echo 'inner_marker_g = 1' > "$inl/g.py"
+  local odd="$H/odd
+name" esc; esc="$H/esc$(printf '\033')x"
+  git init -q -b trunk "$odd"; echo 'inner_marker_c = 1' > "$odd/c.py"
+  git init -q -b trunk "$esc"; echo 'inner_marker_d = 1' > "$esc/d.py"
+  local tick="$H/tick\`\`x" ticktab; ticktab="$H/a\`\`b$(printf '\t')c"
+  git init -q -b trunk "$tick"; echo 'inner_marker_e = 1' > "$tick/e.py"
+  git init -q -b trunk "$ticktab"; echo 'inner_marker_f = 1' > "$ticktab/f.py"
   echo 'new = 1' > "$R/new.py"
   local fsm; fsm=$(mktemp -d "$ROOT/fsm.XXXXXX")
   printf '#!/bin/sh\ntouch "%s/RAN"\nexit 1\n' "$fsm" > "$fsm/hook.sh"; chmod +x "$fsm/hook.sh"
-  git -C "$N" config core.fsmonitor "$fsm/hook.sh"
+  git -C "$N" config core.fsmonitor "$fsm/hook.sh"; git -C "$inl" config core.fsmonitor "$fsm/hook.sh"
+  git -C "$odd" config core.fsmonitor "$fsm/hook.sh"
   rd --mode session
   [ ! -e "$fsm/RAN" ] && ok "중첩 레포의 core.fsmonitor 가 돌지 않았다" || no "중첩 레포의 core.fsmonitor 가 돌았다"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (리뷰하지 못한 항목 — 인증을 막는다)"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
-  assert_eq "$(field files "$OUT")" 6 "files: 6 (new.py + 폴더 줄 다섯)"
-  assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
-  assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
-  assert_file_absent "$D/review-i1.names" '^vendor/lib/.' "안의 파일을 names 에 펼치지 않는다"
-  assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "안의 파일 글이 full.diff 에 없다"
-  assert_file_absent "$D/review-i1.diff" 'nested_marker' "안의 파일 글이 걸러진 diff 에 없다"
+  assert_eq "$(field files "$OUT")" 9 "files: 9 (new.py + 바깥 중첩 레포 파일 셋 + 안의 중첩 레포 폴더 줄 다섯)"
+  assert_eq "$(field filtered_files "$OUT")" 4 "filtered_files: 4 (new.py · vendor/lib/a.py · b.py · h/top.py)"
+  assert_file_grep "$D/review-i1.names" '^vendor/lib/inl/$' "names 에 폴더 줄 vendor/lib/inl/"
+  assert_file_absent "$D/review-i1.names" '^vendor/lib/inl/.' "안의 중첩 레포 파일을 names 에 펼치지 않는다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_marker_a = 1$' "바깥 중첩 레포가 커밋한 파일을 리뷰한다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_marker_b = 1$' "바깥 중첩 레포의 추적 안 된 파일을 리뷰한다"
+  assert_file_grep "$D/review-i1.diff" '^\+holder_marker = 1$' "이름이 이상한 안의 레포를 담은 레포의 파일도 리뷰한다"
+  assert_file_absent "$D/review-i1.full.diff" 'inner_marker' "안의 중첩 레포 글이 full.diff 에 없다"
+  assert_file_absent "$D/review-i1.diff" 'inner_marker' "안의 중첩 레포 글이 걸러진 diff 에 없다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
   assert_eq "$(grep -c "$NESTED_TAIL" "$ROOT/err")" 5 "폴더마다 크게 알리는 줄 하나"
-  grep -qF "중첩 레포 \$'tick\\x60\\x60x/' " "$ROOT/err" && ok "백틱 든 이름은 백틱을 \\x60 으로 바꿔 알린다" \
+  grep -qF "중첩 레포 \$'h/tick\\x60\\x60x/' " "$ROOT/err" && ok "백틱 든 이름은 백틱을 \\x60 으로 바꿔 알린다" \
     || no "백틱 든 이름을 \\x60 으로 바꾸지 않았다"
-  grep -qF "중첩 레포 \$'a\\x60\\x60b\\tc/' " "$ROOT/err" && ok "백틱과 탭이 함께 든 이름도 백틱을 \\x60 으로 바꿔 알린다" \
+  grep -qF "중첩 레포 \$'h/a\\x60\\x60b\\tc/' " "$ROOT/err" && ok "백틱과 탭이 함께 든 이름도 백틱을 \\x60 으로 바꿔 알린다" \
     || no "백틱과 탭이 함께 든 이름의 백틱이 남았다"
   assert_eq "$(grep "$NESTED_TAIL" "$ROOT/err" | grep -c '`')" 0 "알리는 줄에 백틱이 하나도 없다(코드 스팬을 닫지 못한다)"
-  assert_file_grep "$ROOT/err" "^review-diff: 추적 안 되는 중첩 레포 vendor/lib/ ${NESTED_TAIL}\$" "vendor/lib/ 를 알린다"
-  grep -qF "중첩 레포 \$'odd\\nname/' " "$ROOT/err" \
+  assert_file_grep "$ROOT/err" "^review-diff: 추적 안 되는 중첩 레포 vendor/lib/inl/ ${NESTED_TAIL}\$" "vendor/lib/inl/ 를 알린다"
+  grep -qF "중첩 레포 \$'h/odd\\nname/' " "$ROOT/err" \
     && ok "줄바꿈 든 이름은 이스케이프해 한 줄로 알린다" || no "줄바꿈 든 이름을 이스케이프하지 않았다"
   assert_eq "$(grep -c '^name/' "$ROOT/err")" 0 "날 줄바꿈이 stderr 에 새지 않는다"
   assert_eq "$(grep -c "$(printf '\033')" "$ROOT/err")" 0 "날 제어 문자가 stderr 에 새지 않는다"
-  grep -qF "중첩 레포 \$'esc\\Ex/' " "$ROOT/err" \
+  grep -qF "중첩 레포 \$'h/esc\\Ex/' " "$ROOT/err" \
     && ok "제어 문자 든 이름은 이스케이프해 알린다" || no "제어 문자 든 이름을 이스케이프하지 않았다"
+}
+
+# 적대 중첩 레포 — 그 레포의 .git/config 에 명령(core.fsmonitor · core.hooksPath)을 심고, 레포 밖 비밀을
+# 가리키는 링크(파일 · 폴더)를 둔다. 마커 · 비밀은 레포 밖 임시 폴더에 둔다.
+mk_hostile_nested() {   # mk_hostile_nested <중첩 레포 폴더> <마커 폴더> <비밀 폴더>
+  local N="$1" M="$2" X="$3" h
+  mkdir -p "$N/src" "$N/node_modules" "$M/hooks" "$X/sdir"
+  echo 'SECRET-R12' > "$X/secret.txt"; echo 'SECRET-R12' > "$X/sdir/s.txt"
+  git init -q -b trunk "$N"
+  printf 'node_modules/\n' > "$N/.gitignore"
+  echo 'nested_tracked_marker = 1' > "$N/t.py"
+  g "$N" add t.py .gitignore; g "$N" commit -q -m n
+  echo 'nested_src_marker = 1' > "$N/src/a.py"
+  echo 'nested_dep_marker = 1' > "$N/node_modules/x.js"
+  echo 'nested_infoex_marker = 1' > "$N/infoex.py"
+  mkdir -p "$N/.git/info"; echo 'infoex.py' >> "$N/.git/info/exclude"
+  ln -s "$X/secret.txt" "$N/link-out"
+  ln -s "$X/sdir" "$N/dlink-out"
+  printf '#!/bin/sh\ntouch "%s/FSMONITOR-FIRED"\nexit 1\n' "$M" > "$M/fsm.sh"; chmod +x "$M/fsm.sh"
+  for h in pre-commit post-checkout post-index-change reference-transaction; do
+    printf '#!/bin/sh\ntouch "%s/HOOK-FIRED"\n' "$M" > "$M/hooks/$h"; chmod +x "$M/hooks/$h"
+  done
+  git -C "$N" config core.fsmonitor "$M/fsm.sh"
+  git -C "$N" config core.hooksPath "$M/hooks"
+}
+
+# 추적 안 되는 중첩 레포는 그 레포의 설정 · 훅 없이 그 레포의 무시 규칙대로 파일 목록을 얻어 리뷰한다(AC22).
+# 링크는 링크 자체만 싣는다. 그 안의 중첩 레포(sub/inner/)는 리뷰하지 않고 알린다.
+case_nested_repo_reviewed_safely() {
+  echo "[추적 안 되는 중첩 레포 — 설정 · 링크 없이 무시 규칙대로 리뷰한다]"
+  mkfix
+  local M X C
+  M=$(mktemp -d "$ROOT/mark.XXXXXX"); X=$(mktemp -d "$ROOT/secret.XXXXXX"); C=$(mktemp -d "$ROOT/ctl.XXXXXX")
+  # 양성 대조 — 같은 픽스처에서 보호 없는 git status 는 심은 명령을 돌린다(이 픽스처가 실제로 위험하다).
+  mk_hostile_nested "$C/sub" "$C/mark" "$C/secret"
+  ( cd "$C/sub" && git status --porcelain ) >/dev/null 2>&1
+  [ -e "$C/mark/FSMONITOR-FIRED" ] && ok "양성 대조: 보호 없는 git status 는 심은 core.fsmonitor 를 돌린다" \
+    || no "양성 대조: 픽스처의 core.fsmonitor 가 돌지 않았다 — 픽스처가 위험하지 않다"
+  mk_hostile_nested "$R/sub" "$M" "$X"
+  echo 'readme' > "$R/sub/README.md"
+  local nl="$R/sub/nl
+f.py"
+  echo 'nested_nl_marker = 1' > "$nl"
+  ln -s "$X/sdir" "$R/sub/d q\"l"
+  git init -q -b trunk "$R/sub/inner"; echo 'inner_marker = 1' > "$R/sub/inner/b.py"
+  echo 'new = 1' > "$R/new.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  [ ! -e "$M/FSMONITOR-FIRED" ] && ok "중첩 레포의 core.fsmonitor 가 돌지 않았다" || no "중첩 레포의 core.fsmonitor 가 돌았다"
+  [ ! -e "$M/HOOK-FIRED" ] && ok "중첩 레포의 훅이 돌지 않았다" || no "중첩 레포의 훅이 돌았다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/sub/src/a\.py$' "sub/src/a.py 를 리뷰한다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_src_marker = 1$' "sub/src/a.py 의 글이 diff 에 있다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_tracked_marker = 1$' "중첩 레포가 커밋한 파일도 리뷰한다(그 레포의 index 를 읽지 않는다)"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_infoex_marker = 1$' "중첩 레포의 .git/info/exclude 를 읽지 않는다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/sub/\.gitignore$' "sub/.gitignore 를 리뷰한다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_nl_marker = 1$' "줄바꿈 든 이름의 파일도 리뷰한다"
+  assert_file_absent "$D/review-i1.full.diff" 'node_modules/x\.js|nested_dep_marker' "중첩 레포의 .gitignore 가 뺀 파일은 없다"
+  assert_file_absent "$D/review-i1.full.diff" 'SECRET-R12' "레포 밖 비밀이 full.diff 에 없다(링크를 따라가지 않았다)"
+  assert_file_absent "$D/review-i1.diff" 'SECRET-R12' "레포 밖 비밀이 diff 에 없다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/sub/link-out$' "파일 링크는 링크 자체로 싣는다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/sub/dlink-out$' "폴더 링크는 링크 자체로 싣는다"
+  assert_line "$D/review-i1.diff" 'diff --git "a/sub/d q\"l" "b/sub/d q\"l"' "따옴표 든 폴더 링크 이름은 git 꼴로 감싼다"
+  assert_eq "$(grep -c '^new file mode 120000$' "$D/review-i1.diff")" 3 "링크 셋 모두 mode 120000"
+  assert_file_grep "$D/review-i1.full.diff" '^\+\+\+ b/sub/README\.md$' "중첩 레포의 문서도 full.diff 에 있다"
+  assert_file_grep "$D/review-i1.doc-paths" "^exclude${TAB}sub/README\\.md\$" "중첩 레포의 문서도 문서 경로 규칙을 따른다"
+  assert_file_grep "$D/review-i1.names" '^sub/src/a\.py$' "names 에 sub/src/a.py"
+  assert_file_grep "$D/review-i1.names" '^sub/inner/$' "names 에 sub/inner/ 폴더 줄"
+  assert_file_absent "$D/review-i1.names" '^sub/$' "펼친 중첩 레포의 폴더 줄은 names 에 없다"
+  assert_file_absent "$D/review-i1.full.diff" 'inner_marker' "중첩 레포 안의 중첩 레포 글은 없다"
+  assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 sub/inner/ ${NESTED_TAIL}" "sub/inner/ 를 리뷰하지 않았다고 알린다"
+  assert_eq "$(grep -c '리뷰하지 않았다' "$ROOT/err")" 1 "리뷰하지 않았다는 줄은 sub/inner/ 하나"
+  assert_file_absent "$ROOT/err" '들지 못해' "이름 대조에서 빠진 경로가 없다"
+  assert_eq "$(field degraded "$OUT")" yes "sub/inner/ 가 있으면 degraded: yes"
+  assert_eq "$(field files "$OUT")" 11 "files: 11 (new.py + 중첩 레포 파일 아홉 + sub/inner/)"
+  # 사용자 전역 설정 · XDG 무시 규칙에 기대지 않는다 — 그 규칙이 중첩 레포 파일을 숨기지 못한다.
+  local GH; GH=$(mktemp -d "$ROOT/home.XXXXXX")
+  mkdir -p "$GH/xdg/git"
+  printf 'gex.py\n' > "$GH/gexcl"; printf '[core]\n\texcludesFile = %s\n' "$GH/gexcl" > "$GH/gitconfig"
+  printf 'xdg.py\n' > "$GH/xdg/git/ignore"
+  echo 'nested_gex_marker = 1' > "$R/sub/gex.py"; echo 'nested_xdg_marker = 1' > "$R/sub/xdg.py"
+  rm -rf -- "$R/sub/inner"
+  # 양성 대조 둘 — 막지 않으면 전역 core.excludesFile 이, 그것이 없으면 XDG git/ignore 가 파일을 숨긴다.
+  local plain
+  git init -q --bare "$GH/none.git"
+  plain=$(cd "$R/sub" && GIT_DIR="$GH/none.git" GIT_WORK_TREE="$R/sub" GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL="$GH/gitconfig" HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" git ls-files --others --exclude-standard)
+  case "$plain" in *gex.py*) no "양성 대조: 전역 core.excludesFile 이 목록에서 파일을 숨기지 않았다" ;;
+    *src/a.py*) ok "양성 대조: 전역 core.excludesFile 은 막지 않으면 중첩 레포 파일을 숨긴다" ;;
+    *) no "양성 대조: 목록을 얻지 못했다" ;; esac
+  plain=$(cd "$R/sub" && GIT_DIR="$GH/none.git" GIT_WORK_TREE="$R/sub" GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL=/dev/null HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" git ls-files --others --exclude-standard)
+  case "$plain" in *xdg.py*) no "양성 대조: XDG git/ignore 가 목록에서 파일을 숨기지 않았다" ;;
+    *src/a.py*) ok "양성 대조: XDG git/ignore 는 막지 않으면 중첩 레포 파일을 숨긴다" ;;
+    *) no "양성 대조: 목록을 얻지 못했다" ;; esac
+  rm -f -- "$D"/review-i1.*
+  OUT=$(cd "$R" && GIT_CONFIG_GLOBAL="$GH/gitconfig" HOME="$GH" XDG_CONFIG_HOME="$GH/xdg" \
+    bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "전역 설정: rc 0"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_gex_marker = 1$' "사용자 전역 core.excludesFile 이 중첩 레포 파일을 숨기지 못한다"
+  assert_file_grep "$D/review-i1.diff" '^\+nested_xdg_marker = 1$' "XDG git/ignore 가 중첩 레포 파일을 숨기지 못한다"
+  # 양의 짝 — 중첩 레포 안의 중첩 레포가 없으면 degraded: no 다.
+  assert_eq "$(field degraded "$OUT")" no "sub/inner/ 가 없으면 degraded: no"
+  assert_file_absent "$ROOT/err" '리뷰하지 않았다' "리뷰하지 않았다는 줄이 없다"
+  [ ! -e "$M/FSMONITOR-FIRED" ] && [ ! -e "$M/HOOK-FIRED" ] && ok "두 번째 실행도 심은 명령이 돌지 않았다" \
+    || no "두 번째 실행에서 심은 명령이 돌았다"
+}
+
+# 중첩 레포의 파일 목록을 얻지 못하면 그 레포는 리뷰하지 않고 이유와 함께 알린다.
+case_nested_list_failure() {
+  echo "[중첩 레포 파일 목록 실패 — 리뷰하지 않고 이유를 알린다]"
+  mkfix
+  mkdir -p "$R/sub"; git init -q -b trunk "$R/sub"; echo 'nested_marker = 1' > "$R/sub/a.py"
+  echo 'new = 1' > "$R/new.py"
+  local shim real; shim=$(mktemp -d "$ROOT/gshim.XXXXXX"); real=$(command -v git)
+  printf '#!/bin/sh\n[ -n "${GIT_WORK_TREE:-}" ] && exit 128\nexec "%s" "$@"\n' "$real" > "$shim/git"
+  chmod +x "$shim/git"
+  OUT=$(cd "$R" && PATH="$shim:$PATH" bash "$RDIFF" --dir "$D" --iter 1 --mode session 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "rc 0"
+  assert_line "$ROOT/err" "review-diff: 추적 안 되는 중첩 레포 sub/ 는 리뷰하지 않았다 — 무시 규칙을 지켜 파일 목록을 얻지 못했다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라" \
+    "목록을 얻지 못한 이유를 알린다"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_file_grep "$D/review-i1.names" '^sub/$' "names 에 폴더 줄 sub/"
+  assert_file_absent "$D/review-i1.full.diff" 'nested_marker' "그 안의 글은 diff 에 없다"
+  assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "다른 파일은 그대로 리뷰한다"
 }
 
 # 하위 모듈(gitlink) 폴더 안에서 git 을 돌리지 않는다 — 심은 core.fsmonitor 가 돌지 않는다.
@@ -879,6 +1010,7 @@ case_degraded_blocks_certification() {
   echo "[degraded: yes(수인 files:) — 판정 줄이 clean 이 아니다]"
   mkfix
   mkdir -p "$R/vendor/lib"; git init -q -b trunk "$R/vendor/lib"; echo 'a = 1' > "$R/vendor/lib/a.py"
+  git init -q -b trunk "$R/vendor/lib/inner"; echo 'b = 1' > "$R/vendor/lib/inner/b.py"
   echo 'new = 1' > "$R/new.py"
   rd --mode session
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
@@ -1044,6 +1176,8 @@ case_other_session_worktree_degraded
 case_keep_batches
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed
+case_nested_repo_reviewed_safely
+case_nested_list_failure
 case_gitlink_no_git_inside
 case_submodule_diff_format_pinned
 case_session_staged_gitlink_degraded
