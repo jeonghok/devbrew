@@ -424,6 +424,7 @@ python3 "$SD/scripts/docreview_anchor.py" snapshot "$ddoc" > "$T/dsnap.json"
 python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapshot "$T/dsnap.json" >/dev/null
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
+assert_not_contains "$dlo" "다른 레포" "AC15(양성 짝): 문서의 레포에서 돌면 레포가 다르다고 알리지 않는다"
 assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(len(ds.load_state(sys.argv[1])["engine_lines"]))' "$DSD")" "1" "결정 줄 펜스: 그 줄의 출처가 원장에 남는다"
 # 줄과 사용자 말은 둘 다 따옴표 heredoc 으로 들어간다 — 작은따옴표 · 명령 치환 · 백틱 · 「-」 머리 · 옛 구분자와 같은 줄이
 # 셸로 새거나 옵션으로 읽히거나 heredoc 을 일찍 닫지 못한다.
@@ -444,6 +445,21 @@ cp "$ddoc" "$T/ddoc.before"
 dlo="$(dl_run sess-ffff6666)"; rc=$?
 assert_eq "$rc" "3" "결정 줄 펜스: 남의 표지면 쓰기 전 확인이 rc 3 으로 멈춘다"
 cmp -s "$ddoc" "$T/ddoc.before" && ok "결정 줄 펜스: 남의 표지 — 문서가 그대로다" || no "결정 줄 펜스: 남의 표지인데 문서가 바뀌었다"
+# AC15 — cwd 가 다른 레포여도 결정 줄 펜스는 문서가 사는 레포의 원장으로 쓰고, 레포가 다르다고 알린다.
+orepo="$T/other-repo"; mkdir -p "$orepo" && git -C "$orepo" init -q
+DL_OTHER='B5 · 결정 · 2026-10-19 · 다른 레포에서 씀'
+dlo="$(DL_LINE="$DL_OTHER"; dl_run sess-eeee5555 "$ddoc" "$SD" "$orepo")"; rc=$?
+assert_eq "$rc $(grep -cxF -- "- $DL_OTHER — 「되돌려 줘」" "$ddoc")" "0 1" "AC15: 다른 레포 cwd — 문서의 레포 원장을 찾아 엔진이 결정 줄 한 줄을 쓴다"
+assert_contains "$dlo" "결정 줄은 문서가 사는 레포($repo)의 원장으로 쓴다 — 지금 작업 폴더의 레포($orepo)와 다르다." "AC15: 다른 레포 cwd — 레포가 다르다고 두 레포를 대어 알린다"
+assert_not_contains "$dlo" "손으로 쓴다" "AC15: 다른 레포 cwd — 원장 없음으로 빠져 손으로 쓰라고 하지 않는다"
+[ ! -e "$orepo/.claude" ] && ok "AC15: 다른 레포 cwd — 그 레포에 상태 폴더가 생기지 않는다" || no "AC15: 다른 레포에 상태 폴더가 생겼다: $(find "$orepo/.claude" | head -n 5)"
+# 문서 폴더로 들어가지 못하거나 문서가 git 작업 트리 밖이면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
+dlo="$(dl_run sess-eeee5555 "$T/no-such-dir/b-design.md" "$SD" "$orepo")"; rc=$?
+dl_no_dir "문서 폴더가 없다" "$dlo" "$rc" "spec_path='$T/no-such-dir/b-design.md'"
+mkdir -p "$T/nogit"; cp "$ddoc" "$T/nogit/b-design.md"
+git -C "$T/nogit" rev-parse --show-toplevel >/dev/null 2>&1 && no "전제(AC15): $T/nogit 이 git 작업 트리 안이다 — 아래 칸이 공허하다" || ok "전제(AC15): $T/nogit 은 git 작업 트리 밖이다"
+dlo="$(dl_run sess-eeee5555 "$T/nogit/b-design.md" "$SD" "$orepo")"; rc=$?
+dl_no_dir "문서가 git 작업 트리 밖" "$dlo" "$rc" "spec_path='$T/nogit/b-design.md'"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"
@@ -922,4 +938,40 @@ $RBBU")"
 LP_RB="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$lpr/.claude/spec-distill" --doc "$lpr/docs/b-interview.md")"
 [ -d "$LP_RB" ] && ok "T8 관문 양성 대조(c): 링크가 없으면 reviewing-brief 번들 펜스가 원장 자리를 만든다" || no "T8 관문 양성 대조(c): 원장 자리가 없다: $o"
 assert_not_contains "$o" "엔진 상태 디렉토리 없음" "T8 관문 양성 대조(c): 링크가 없으면 엔진 자리 없음이 나지 않는다"
+
+# ── AC14 — 경로 대입 줄: 따옴표 · 명령 치환 · 역따옴표가 든 경로도 셸로 새지 않고 글자 그대로 넘어간다 ──────
+pa_fill() {   # pa_fill <변수> <값> → spec-review 「경로 대입 줄」 펜스를 그 변수 · 값으로 채운 것
+  fence "$SR" path-assign | python3 -I -c 'import sys
+t = sys.stdin.read()
+lines = t.split("\n")
+lines[0] = lines[0].replace(" spec_path ", " " + sys.argv[1] + " ", 1)
+t = "\n".join(lines).replace("\n<경로 그대로>\n", "\n" + sys.argv[2] + "\n", 1)
+sys.stdout.write(t)' "$1" "$2"
+}
+PA_DEF="$(fence "$SR" path-assign)"
+assert_eq "$(printf '%s\n' "$PA_DEF" | head -n 1)" "IFS= read -r spec_path <<'DEVBREW_PATH_EOF'" "AC14: 경로 대입 줄 펜스의 첫 줄이 따옴표 heredoc 읽기다"
+assert_eq "$(printf '%s\n' "$PA_DEF" | sed -n '2,$p')" "$(printf '%s\n%s' '<경로 그대로>' 'DEVBREW_PATH_EOF')" "AC14: 경로 대입 줄 펜스가 값 줄 · 닫는 구분 줄로 끝난다"
+hrepo="$T/repo-h"; mkdir -p "$hrepo" && git -C "$hrepo" init -q
+hdir="$hrepo/docs/x'\$(touch $T/pwned-p)\`touch $T/pwned-q\`a\"b \$HOME"
+mkdir -p "$hdir" && hdoc="$hdir/h-design.md" && printf '# H\n' > "$hdoc"
+[ -f "$hdoc" ] && ok "전제(AC14): 따옴표 · 치환이 든 폴더에 설계문서를 만들었다" || no "전제(AC14): 적대 경로의 설계문서를 만들지 못했다"
+o="$(cd "$hrepo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-hhhh7777 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-hhhh7777 \
+    bash -c "$(pa_fill spec_path "$hdoc")
+$(fence "$SR" ledger-open)
+python3 \"\$SD/scripts/docreview_state.py\" init --state-dir \"\$STATE_DIR\" --doc \"\$spec_path\" --profile \"\$SD/references/docreview-profiles/design-doc.md\" >/dev/null" 2>&1)"; rc=$?
+assert_eq "$rc $(printf '%s\n' "$o" | grep -cxF 'ledger-open: HELD')" "0 1" "AC14: 적대 경로로 경로 대입 줄 + 원장 열기 + 선결 init 이 돈다"
+assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "AC14: 경로 안의 명령이 돌지 않았다"
+HSD="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$hrepo/.claude/spec-distill" --doc "$hdoc")"
+assert_eq "$(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds; print(ds.load_state(sys.argv[1])["doc"] == sys.argv[2])' "$HSD" "$hdoc" 2>&1)" "True" "AC14: 원장의 doc 이 그 경로 글자 그대로다"
+assert_eq "$(cat "$HSD/reviewing-by" 2>/dev/null)" "sess-hhhh7777" "AC14: 그 경로의 원장 자리에 표지가 섰다"
+# 빈 값 — 값 줄을 비우면 변수가 빈 값이고 읽기가 실패하지 않는다(set -e 아래에서도).
+o="$(bash -c "set -e
+$(pa_fill bundle_arg '')
+printf '[%s]' \"\$bundle_arg\"" 2>&1)"; rc=$?
+assert_eq "$rc $o" "0 []" "AC14: 빈 값 줄은 빈 변수가 되고 읽기가 rc 0 이다"
+# 문면 — 아홉 자리는 정의를 가리키고 따옴표 대입 꼴이 남지 않는다(음) · 정의는 한 곳이다(양).
+assert_eq "$(grep -cE "(spec_path|bundle_arg|bundle_path|repo_root)=['\"]<" "$SR")" "0" "AC14: spec-review 에 따옴표 대입 꼴(spec_path='<…>' 등)이 남지 않는다"
+assert_eq "$(grep -cF '<!-- path-assign:begin -->' "$SR")" "1" "AC14: 경로 대입 줄 정의가 한 곳이다"
+n_pa="$(grep -oF '경로 대입 줄을 붙' "$SR" | wc -l | tr -d ' ')"
+[ "$n_pa" -ge 9 ] && ok "AC14: 펜스 앞 대입 자리 아홉이 경로 대입 줄을 가리킨다(${n_pa}곳)" || no "AC14: 경로 대입 줄을 가리키는 자리가 아홉보다 적다(${n_pa}곳)"
 finish

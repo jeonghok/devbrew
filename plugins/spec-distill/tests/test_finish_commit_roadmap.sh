@@ -155,4 +155,35 @@ assert_eq "$(ls -A "$T/rtmp")" "" "재분해: 펜스가 끝나면 임시 파일�
 rc=0; (cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub.out" STUB_RC=0 CLAUDE_PLUGIN_ROOT="$STUB" bash -c "$s" >/dev/null 2>&1) || rc=$?
 assert_eq "$rc $(ls -A "$T/rtmp")" "0 " "재분해: 성공(rc 0)에서도 임시 파일이 없다"
 
+# 8. 재분해 사용자 말(AC14) — 따옴표 · 명령 치환 · 역따옴표 · 「-」 머리가 든 말도 셸로 새지 않고 글자 그대로 --approval 로 간다
+STUB2="$T/stub2"; mkdir -p "$STUB2/scripts"
+cat > "$STUB2/scripts/roadmap_write.py" <<'PY'
+import argparse, json, os, sys
+p = argparse.ArgumentParser()
+sub = p.add_subparsers(dest="cmd")
+u = sub.add_parser("update")
+for k in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
+    u.add_argument(k, required=True)
+u.add_argument("--approval", action="append", required=True)
+a = p.parse_args()
+with open(os.environ["STUB_OUT"], "w", encoding="utf-8") as f:
+    json.dump(a.approval, f, ensure_ascii=False)
+sys.exit(0)
+PY
+red_fill() {   # red_fill <사용자 말> → 표와 사용자 말 자리를 채운 적용 펜스
+  printf '%s' "$rf" | python3 -I -c 'import sys
+t = sys.stdin.read()
+t = t.replace("<승인된 새 표 — `## 분해안` 머리와 열한 칸 표>", sys.argv[1]).replace("<사용자 말 그대로>", sys.argv[2])
+sys.stdout.write(t)' "$TBL" "$1"
+}
+for W in "말 \"따옴표\" it's \$(touch $T/pwned-a) \`touch $T/pwned-b\` \$HOME" '-좋아'; do
+  rm -f "$T/stub2.out"
+  rc=0; o="$(cd "$T" && TMPDIR="$T/rtmp" STUB_OUT="$T/stub2.out" CLAUDE_PLUGIN_ROOT="$STUB2" bash -c "$(red_fill "$W")" 2>&1)" || rc=$?
+  got="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")) == [sys.argv[2]])' "$T/stub2.out" "$W" 2>&1)"
+  assert_eq "$rc $got" "0 True" "재분해(AC14): 사용자 말이 글자 그대로 --approval 한 개로 간다 — $(printf '%s' "$W" | cut -c 1-20)"
+  [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): 사용자 말 안의 명령이 돌지 않았다 — $(printf '%s' "$W" | cut -c 1-20)"
+  assert_eq "$(ls -A "$T/rtmp")" "" "재분해(AC14): 펜스가 끝나면 사용자 말 임시 파일도 없다 — $(printf '%s' "$W" | cut -c 1-20)"
+done
+
 finish
