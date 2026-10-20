@@ -1016,28 +1016,55 @@ print("\n".join(bad) if bad else "자리 전부")
 PY
 assert_eq "$(cat "$T/pa-sites.txt")" "자리 전부" "AC14: 펜스 앞 대입 자리마다 그 자리의 변수로 경로 대입 줄을 가리킨다"
 # 추가 라운드 승인 — 고른 선택지 이름 · 기타 칸에 쓴 말도 따옴표 heredoc 으로 받아 = 꼴로 넘긴다(엔진까지 실제로 돈다).
-assert_eq "$(grep -cF -- '--extra-approval "<' "$SR")" "0" "AC14: 추가 라운드 승인 말이 큰따옴표 자리표로 남지 않는다"
-grep -qF -- '--extra-approval="$extra_approval" --extra-approval-source' "$SR" \
-  && ok "AC14: 추가 라운드 승인은 extra_approval 변수를 = 꼴로 넘긴다(문면)" || no "AC14: 추가 라운드 승인의 = 꼴 넘김이 문면에 없다"
+# 대상은 도출한다: 엔진 절차 정본(reviewing-document.md)을 Read 하는 진입 skill 전부 — 정본이 = 꼴을 가르치므로 그 skill 의
+# 문면이 옛 큰따옴표 자리표로 남으면 정본과 어긋난다(정본을 따르면 rc 2, skill 문면을 따르면 사용자 말이 셸로 샌다).
+EA_SKILLS=""
+for f in "$ROOT_REPO"/plugins/*/skills/*/SKILL.md; do
+  grep -qF 'references/reviewing-document.md' "$f" && EA_SKILLS="$EA_SKILLS $f"
+done
+case " $EA_SKILLS " in *" $SR "*) ok "전제(AC14): 정본을 읽는 skill 집합에 spec-review 가 든다" ;; *) no "전제(AC14): 정본을 읽는 skill 집합에 spec-review 가 없다 — 아래 칸이 공허하다" ;; esac
+case " $EA_SKILLS " in *" $RB "*) ok "전제(AC14): 정본을 읽는 skill 집합에 reviewing-brief 가 든다" ;; *) no "전제(AC14): 정본을 읽는 skill 집합에 reviewing-brief 가 없다 — 아래 칸이 공허하다" ;; esac
+EA_VAR_SKILLS=""
+for f in $EA_SKILLS; do
+  n="${f#"$ROOT_REPO"/}"
+  assert_eq "$(grep -cF -- '--extra-approval "<' "$f")" "0" "AC14: ${n} — 추가 라운드 승인 말이 큰따옴표 자리표로 남지 않는다"
+  grep -qF -- '--extra-approval=' "$f" \
+    && ok "AC14: ${n} — 추가 라운드 승인을 = 꼴로 넘긴다(문면)" || no "AC14: ${n} — 추가 라운드 승인의 = 꼴 넘김이 문면에 없다"
+  if grep -qF -- '--extra-approval="$extra_approval"' "$f"; then
+    EA_VAR_SKILLS="$EA_VAR_SKILLS $f"
+    fence "$f" extra-approval | grep -qF "read -r -d '' extra_approval <<'" \
+      && ok "AC14: ${n} — extra_approval 을 따옴표 heredoc 펜스로 정의한다" || no "AC14: ${n} — extra_approval 변수를 넘기는데 그것을 정의하는 따옴표 heredoc 펜스가 없다"
+  fi
+done
+case " $EA_VAR_SKILLS " in *" $SR "*) ok "AC14: spec-review 가 extra_approval 변수로 넘긴다" ;; *) no "AC14: spec-review 가 extra_approval 변수로 넘기지 않는다(정본 = 꼴과 어긋남)" ;; esac
+case " $EA_VAR_SKILLS " in *" $RB "*) ok "AC14: reviewing-brief 가 extra_approval 변수로 넘긴다" ;; *) no "AC14: reviewing-brief 가 extra_approval 변수로 넘기지 않는다(정본 = 꼴과 어긋남)" ;; esac
 # 엔진 절차 정본(spec-review 가 Read 한다)도 같은 꼴 — 두 자리(1단계 스냅샷 · 추가 라운드 열기) 모두.
 assert_eq "$(grep -cF -- '--extra-approval "<' "$RD_CANON")" "0" "AC14: reviewing-document.md 에 추가 라운드 승인 말의 큰따옴표 자리표가 없다(양성 짝: 아래 = 꼴 두 자리)"
 assert_eq "$(grep -cF -- '--extra-approval="$extra_approval" --extra-approval-source label|typed' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 extra_approval 변수를 = 꼴로 넘긴다"
 assert_eq "$(grep -cF -- '`extra_approval` 은 부른 skill 이 따옴표 heredoc 으로 읽은' "$RD_CANON")" "2" "AC14: reviewing-document.md 의 두 자리가 변수의 출처(부른 skill 의 따옴표 heredoc)를 적는다"
 EA_WORDS="$(printf '%s\n%s' "-열어 \"줘\" it's \$(touch $T/pwned-x) \`touch $T/pwned-y\` \$HOME" "둘째 줄 DEVBREW_PATH_EOF")"
-ea_fill() {   # ea_fill <말> → extra-approval 펜스의 자리를 그 말로 채운 것
-  fence "$SR" extra-approval | python3 -I -c 'import sys
+ea_fill() {   # ea_fill <파일> <말> → 그 파일 extra-approval 펜스의 자리를 그 말로 채운 것
+  fence "$1" extra-approval | python3 -I -c 'import sys
 t = sys.stdin.read()
-sys.stdout.write(t.replace("\n<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>\n", "\n" + sys.argv[1] + "\n", 1))' "$1"
+sys.stdout.write(t.replace("\n<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>\n", "\n" + sys.argv[1] + "\n", 1))' "$2"
 }
-[ -n "$(fence "$SR" extra-approval)" ] && ok "전제(AC14): 추가 라운드 승인 펜스를 뽑았다" || no "전제(AC14): 추가 라운드 승인 펜스가 비었다 — 아래 칸이 공허하다"
+ea_count() {   # ea_count → 엔진 원장의 extra_rounds 항목 수
+  PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
+print(len(ds.load_state(sys.argv[1]).get("extra_rounds") or []))' "$HSD" 2>&1
+}
 python3 "$SD/scripts/docreview_anchor.py" snapshot "$hdoc" > "$T/hsnap.json"
 for i in 1 2 3; do python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$HSD" --snapshot "$T/hsnap.json" >/dev/null; done
-o="$(cd "$hrepo" && bash -c "set -e
-$(ea_fill "$EA_WORDS")
+for f in $EA_VAR_SKILLS; do   # skill 마다 그 skill 의 펜스로 추가 라운드 승인을 한 번씩 연다
+  n="${f#"$ROOT_REPO"/}"
+  [ -n "$(fence "$f" extra-approval)" ] && ok "전제(AC14): ${n} — 추가 라운드 승인 펜스를 뽑았다" || no "전제(AC14): ${n} — 추가 라운드 승인 펜스가 비었다 — 아래 칸이 공허하다"
+  ea_before="$(ea_count)"
+  o="$(cd "$hrepo" && bash -c "set -e
+$(ea_fill "$f" "$EA_WORDS")
 python3 \"$SD/scripts/docreview_state.py\" begin-round --state-dir \"$HSD\" --snapshot \"$T/hsnap.json\" --extra-approval=\"\$extra_approval\" --extra-approval-source typed" 2>&1)"; rc=$?
-assert_eq "$rc $(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
+  assert_eq "$rc $(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
 x = ds.load_state(sys.argv[1]).get("extra_rounds") or [{}]
-print(x[-1].get("quote") == sys.argv[2])' "$HSD" "$EA_WORDS" 2>&1)" "0 True" "AC14: 따옴표 · 치환 · 「-」 머리 · 두 줄 말이 엔진의 추가 라운드 승인에 글자 그대로 남는다"
-[ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+print(len(x) == int(sys.argv[3]) + 1 and x[-1].get("quote") == sys.argv[2])' "$HSD" "$EA_WORDS" "$ea_before" 2>&1)" "0 True" "AC14: ${n} — 따옴표 · 치환 · 「-」 머리 · 두 줄 말이 엔진의 추가 라운드 승인에 글자 그대로 남는다"
+  [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
+done
 assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "AC14: 추가 라운드 승인 말 안의 명령이 돌지 않았다"
 finish
