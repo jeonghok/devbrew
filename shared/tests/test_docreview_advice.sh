@@ -74,6 +74,7 @@ case_closed_log_after_close_vs_after_begin
 case_closed_log_inserted_above_count_asks
 case_closed_log_other_section_asks
 case_closed_log_old_ledger_asks
+case_closed_log_two_counts_uses_last
 case_closed_log_label_reserved
 case_closed_log_engine_line_deleted_asks
 # AC15 — 박제 행도 한 줄 문법.

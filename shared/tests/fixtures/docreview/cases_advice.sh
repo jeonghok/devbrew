@@ -1019,6 +1019,33 @@ case_closed_log_engine_line_deleted_asks() {   # 창 안의 엔진 줄(라운드
     rm -rf "$d"
   done
 }
+case_closed_log_two_counts_uses_last() {   # 계수 줄이 여럿이면 마지막 것을 쓴다(설계 §4) — 라운드 1 은 닫지 않고 라운드 2 끝맺음이 두 줄을 쓴다
+  local mode t d c1
+  for mode in between below; do
+    t="$(mktemp -t closedlog-XXXXXX)"; with_log "$FX/design-sample.md" "$t" "$LOG_L1"
+    d="$(mk_doc_state "$t" "$PROF_MC/design-doc.md")"; rm -f "$t"
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin.json"          # 라운드 1 — 끝맺음 없이 다음 라운드로
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+    py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md" >/dev/null
+    assert_eq "$(grep -c '^- docreview 계수 — ' "$d/doc.md")" "2" "AC11 전제($mode): 끝맺음 한 번이 라운드마다 계수 줄을 써 둘이다"
+    if [ "$mode" = between ]; then
+      c1="$(grep -m1 '^- docreview 계수 — ' "$d/doc.md")"
+      doc_sub "$d/doc.md" "$c1" "$c1
+$CL_H1"
+    else
+      doc_append "$d/doc.md" "$CL_H1"
+    fi
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin3.json"
+    if [ "$mode" = between ]; then
+      assert_eq "$(cl_frozen "$d/fin3.json")" "['#결정-기록']" "AC11: 두 계수 줄 사이에 끼운 손 줄은 마지막 계수 줄 위라 「허가 없이 바뀜」 으로 묻는다"
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11: 두 계수 줄 사이의 손 줄은 기록으로 읽지 않는다"
+    else
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1']" "AC11(양의 짝): 두 계수 줄 아래에 더한 손 줄은 기록으로 읽는다"
+      assert_eq "$(cl_frozen "$d/fin3.json")" "[]" "AC11(양의 짝): 그때 결정 기록은 묻지 않는다"
+    fi
+    rm -rf "$d"
+  done
+}
 case_closed_log_old_ledger_asks() {
   local d
   d="$(cl_closed existing)"
