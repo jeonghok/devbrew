@@ -1012,6 +1012,36 @@ class ReviewPack(Repo):
         self.assertIn("gh 가 없다", (out_dir / "handoffs.md").read_text(encoding="utf-8"))
         self.assertIn("/somewhere/merged", (out_dir / "README.txt").read_text(encoding="utf-8"))
 
+    def test_stale_local_uses_origin_tip(self):
+        # 스위트 대조(merge_check)와 같은 끝 고르기(branch_tip.py) — 낡은 로컬이면 origin 끝 · 갈라지면 3
+        self.branch("feature/a1", "x.txt", "old\n")
+        stale = sh(self.w, "rev-parse", "feature/a1").strip()
+        sh(self.w, "checkout", "-q", "feature/a1")
+        (self.w / "x.txt").write_text("new\n", encoding="utf-8")
+        sh(self.w, "commit", "-qam", "new")
+        sh(self.w, "push", "-q", "origin", "feature/a1")
+        sh(self.w, "checkout", "-q", "trunk")
+        new = sh(self.w, "rev-parse", "feature/a1").strip()
+        sh(self.w, "update-ref", "refs/heads/feature/a1", stale)
+        out_dir = self.t / "pack-stale"
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("로컬 브랜치 feature/a1 가 origin 보다 뒤라 origin/feature/a1(%s) 를 썼다" % new[:8], out)
+        self.assertIn("+new", (out_dir / "pr.diff").read_text(encoding="utf-8"))
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "origin/feature/a1",
+                           "--out", str(self.t / "pack-origin"))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((self.t / "pack-origin" / "open-A1-feature_a1.diff").exists(), "자기 브랜치를 다른 에픽으로 미리 보지 않는다")
+        sh(self.w, "checkout", "-q", "feature/a1")
+        (self.w / "y.txt").write_text("side\n", encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", "side")
+        sh(self.w, "checkout", "-q", "trunk")
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1",
+                           "--out", str(self.t / "pack-div"))
+        self.assertEqual(rc, 3, out)
+        self.assertIn("가 갈라졌다", out)
+
     def test_merged_branch_is_not_open(self):
         self.branch("feature/a2", "y.txt", "y\n")
         sh(self.w, "merge", "-q", "--no-ff", "feature/a2", "-m", "merge a2")

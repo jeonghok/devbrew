@@ -1,5 +1,23 @@
 # Changelog
 
+## [8.4.0] — 2026-10-21
+
+### Changed
+- 지휘자가 스스로 여는 PR(로드맵 수정 · 지휘자 수리)도 머지 전에 스위트 대조를 거친다(`references/redecompose.md` · `references/conducting.md` 걸음 6).
+- 구현 담당자는 맥락을 가볍게 둔다 — 하위 보고는 파일로, 이력은 붙여 넣지 않고, 길어지면 브랜치를 백업으로 push(PR 은 지휘자) · 원장 갱신 뒤 다음 걸음을 적은 중간 보고(CHECKPOINT)로 돌아온다(`references/conductor-dispatch.md` 구현 틀).
+- 계획 중간에 돌아온 구현 담당자를 바꿀 때 옛 담당자가 띄운 하위 agent 를 먼저 멈춘다(`references/conducting.md` 걸음 4).
+- 지휘자 worktree 는 origin 기본 브랜치에 detached 로 두고, 에픽 브랜치에 선 하위는 origin 쪽이 앞서 있으면 `git merge --ff-only origin/<브랜치>` 로 맞춘 뒤 일한다(`references/conductor-dispatch.md` 자리).
+- 같은 자리가 라운드마다 새 막는 지적을 내면 라운드를 더하지 않고 설계의 대안 갈래로 옮긴다(`references/conducting.md` 걸음 4).
+- 같은 에픽의 계획을 동시에 돌리면 보낼 때 판 올림 순서와 각 계획의 목표 판 번호를 정한다 — 머지 순서가 바뀌면 「먼저 머지되는 쪽이 낮은 번호」 가 이긴다(`references/conductor-dispatch.md` 판 번호).
+- 끝나 worktree 가 지워진 격리 agent 는 메시지로 깨우지 않고 새 격리 agent 를 보낸다(`references/conductor-dispatch.md` 단계마다 새 agent).
+- 하위의 보고를 지휘자가 질문으로 만들면 그 질문과 「(권장)」 은 지휘자 것으로 표시한다. 옮김 대조 agent(`agents/relay-checker.md`)는 하위 원문에 질문 · 선택지가 정말 없을 때만 그 표시를 받아 선택지 대조를 빼고, 원문에 질문 · 선택지가 있는데 표시가 붙었으면 근거 없는 표시로 어긋남을 낸다.
+
+### Fixed
+- 스위트 대조(`scripts/merge_check.py`)와 통합 리뷰 묶음(`conductor_ledger.py review-pack`)이 origin 보다 뒤처진 로컬 브랜치를 보지 않는다 — 둘이 같은 끝 고르기(`scripts/branch_tip.py`)를 써서, 로컬과 origin 이 다르면 앞선 쪽을 쓰고 알리며, 갈라졌거나 조상 관계를 잴 수 없으면 검사 불가(3)로 멈춘다. `--branch origin/<브랜치>` 도 받는다. 거짓 「합칠 수 없다」가 여기서 났다.
+
+### Security
+- 리뷰어 프로필 `agents/relay-checker.md` 에 조건부 면제와 공시 확인을 더했다 — 「지휘자가 만든 질문」 표시는 하위 원문에 질문 · 선택지가 없을 때만 선택지 대조를 빼고, 그때도 보인 「(권장)」 이 지휘자 것으로 밝혀졌는지 본다. 지운 규칙은 없다.
+
 ## [8.3.0] — 2026-10-20
 
 ### Fixed

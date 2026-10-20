@@ -111,7 +111,7 @@ exit "$u_rc"
 
 ## 6. 올리기
 
-로드맵 수정은 2 에서 만든 `feature/roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 머지는 사용자가 한다.
+로드맵 수정은 2 에서 만든 `feature/roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 이 PR 도 머지 전에 같은 파일 걸음 5 의 스위트 대조를 거친다. 머지는 사용자가 한다.
 
 ## 7. 끝내기
 

@@ -50,6 +50,7 @@ once '## 늘 싣는 것' '임시 파일에 쓴 뒤 `cp` 로 옮긴다'
 for t in '### 계획 agent' '### 구현 agent'; do
   blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
   assert_contains "$blk" '네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다' "${t} 틀: 자리의 기본(격리 agent 가 브랜치에 선다)"
+  assert_contains "$blk" 'origin/<브랜치> 가 앞서 있으면 git merge --ff-only origin/<브랜치> 로 맞춘 뒤 일한다(ff 가 안 되면 멈추고 보고한다)' "${t} 틀: origin 이 앞서면 ff-only 로 맞추고, 안 되면 멈춘다"
   assert_not_contains "$blk" '자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖' "${t} 틀: 다른 worktree 를 자리로만 주던 옛 문장이 없다(양성 짝: 위 단언)"
 done
 # 지휘자 수리 2(병렬 진실) — 전체 스위트는 지휘자 대조와 같은 공유 잠금 아래서만. 경로는 기계 상태에서 도출해 싣는다.
