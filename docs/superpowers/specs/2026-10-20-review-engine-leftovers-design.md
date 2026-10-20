@@ -443,6 +443,8 @@ U2 를 따른다 — 판정에 쓰는 값은 만든 직후 같은 턴에 읽어 
 
 ## 지휘 기록
 
+- spec 승인 · 2026-10-20 · 「승인 — 계획 담당자에게 (권장)」
+
 ## Metadata
 
 - 에픽: R12 · 브랜치 `feature/review-engine-leftovers`(계획 1) · `feature/qg-verdict-state`(계획 2) · `feature/review-lock-leftovers`(계획 3) — §11, 로드맵 브랜치 줄은 지휘자 로드맵 PR · 묶음 `R12.md`
