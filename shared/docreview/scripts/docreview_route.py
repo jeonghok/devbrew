@@ -1125,6 +1125,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
     }
     if advice_stats is not None:
         st["rounds"][str(n)]["route_report"].update(advice_stats)
+    # 같은 라운드의 둘째 finalize 가 이 보고를 다시 낸다 — 복사본을 둔다(같은 객체를 두 곳에 두면 YAML 앵커가 생긴다)
+    st["rounds"][str(n)]["finalize_out"] = json.loads(json.dumps(out, ensure_ascii=False))
     return out
 
 
@@ -1137,6 +1139,13 @@ def cmd_finalize(a) -> int:
     st = load_state(a.state_dir)
     n = int(st["round"])
     why = pending_mismatch(st, n)
+    if why == "no_pending_recritic":
+        done = st["rounds"].get(str(n)) or {}
+        if done.get("route_report") and done.get("finalize_out"):
+            # 이 라운드의 finalize 는 이미 성공했다 — 원장을 쓰지 않고 앞 보고를 그대로 다시 낸다.
+            sys.stderr.write("[docreview] 이 라운드(%d)는 이미 정리됐다 — 앞 finalize 의 보고를 다시 냈다\n" % n)
+            print(json.dumps(done["finalize_out"], ensure_ascii=False, indent=1))
+            return 0
     if why:
         # 이번 라운드의 준비가 없거나 · 다른 라운드 것이거나 · 어느 라운드 것인지 모른다 — 소비하지
         # 않는다. rc 만 내고 끝나면 준비가 없는 라운드의 게이트가 정상으로 열리므로, 실패를 이 라운드

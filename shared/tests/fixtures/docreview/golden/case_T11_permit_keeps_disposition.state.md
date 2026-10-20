@@ -579,6 +579,282 @@ docreview:
           value: 60
           source: 기본
       started_mtime_ns: <MTIME_NS>
+      finalize_out:
+        ok: true
+        round: 1
+        findings:
+        - layer: 1
+          category: scope
+          anchor: '#3-non-goals'
+          disposition: decide
+          summary: Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다
+          edit_scope: '#3-non-goals'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: 브리프 §2 C3 vs 문서 §3
+          replacement: null
+          if_unfixed: null
+          f: f1
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: fee27fc9
+          id: fee27fc9#r1.1
+          lineage: fee27fc9#r1.1
+          decision_view:
+            if_unfixed: (리뷰어가 안 적음)
+            replacement: (대체안 미작성)
+            basis: 브리프 §2 C3 vs 문서 §3
+            alternatives:
+            - 고친다(채택)
+            - 그대로 둔다(기각)
+            - 나중에 정한다(보류)
+            impact: '#3-non-goals (범위가 넓어지거나 좁아짐) · 인용 0 섹션'
+            category_unglossed: null
+            auto: false
+        - layer: 2
+          category: ambiguity
+          anchor: '#1-context'
+          disposition: fix
+          summary: AC 가 하나뿐이라 Goals B 를 덮지 않는다
+          edit_scope: '#1-context'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f3
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: 011167c4
+          id: 011167c4#r1.2
+          lineage: 011167c4#r1.2
+        - layer: 2
+          category: ambiguity
+          anchor: '#12-files-to-modify'
+          disposition: ask
+          summary: b.py 를 유지하나?
+          edit_scope: '#12-files-to-modify'
+          blocks:
+          - 9dea7cf3#r1.1
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f4
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: d56c5e0c
+          id: d56c5e0c#r1.1
+          lineage: d56c5e0c#r1.1
+        - layer: 2
+          category: placeholder
+          anchor: '#12-files-to-modify'
+          disposition: decide
+          summary: c.py 누락 — 파일 목록이 실제 변경과 다르다
+          edit_scope: '#12-files-to-modify'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: §5 가 c.py 를 참조한다
+          replacement: null
+          if_unfixed: null
+          f: f6
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: 9dea7cf3
+          id: 9dea7cf3#r1.1
+          lineage: 9dea7cf3#r1.1
+          decision_view:
+            if_unfixed: (리뷰어가 안 적음)
+            replacement: (대체안 미작성)
+            basis: §5 가 c.py 를 참조한다
+            alternatives:
+            - 고친다(채택)
+            - 그대로 둔다(기각)
+            - 나중에 정한다(보류)
+            impact: '#12-files-to-modify (TBD·빈 절) · 인용 1 섹션'
+            category_unglossed: null
+            auto: false
+        - layer: 2
+          category: testing
+          anchor: '#12-files-to-modify'
+          disposition: defer
+          summary: AC1 의 자동 검증 절차는 plan 이 정한다
+          edit_scope: '#12-files-to-modify'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f7
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: d949ac4c
+          id: d949ac4c#r1.1
+          lineage: d949ac4c#r1.1
+        - layer: 2
+          category: ambiguity
+          anchor: '#2-goals'
+          disposition: decide
+          summary: 목표 B 가 두 가지로 읽힌다
+          edit_scope: '#2-goals'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f8
+          detector: d1
+          origin: auto
+          immutable: false
+          kind: pre
+          promoted_from: fix
+          promotion: protected
+          bucket: 11adb9c3
+          id: 11adb9c3#r1.1
+          lineage: 11adb9c3#r1.1
+          decision_view:
+            if_unfixed: (리뷰어가 안 적음)
+            replacement: (대체안 미작성)
+            basis: (근거 없음)
+            alternatives:
+            - 고친다(채택)
+            - 그대로 둔다(기각)
+            - 나중에 정한다(보류)
+            impact: '#2-goals (두 가지로 읽힘) · 인용 0 섹션'
+            category_unglossed: null
+            auto: true
+        - layer: 2
+          category: handoff_incomplete
+          anchor: '#handoff-context'
+          disposition: fix
+          summary: Deferred to plan 표가 비어 있다
+          edit_scope: '#handoff-context'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f9
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: e1b5b3be
+          id: e1b5b3be#r1.1
+          lineage: e1b5b3be#r1.1
+        - layer: 2
+          category: isolation
+          anchor: '#handoff-context'
+          disposition: fix
+          summary: 부품 경계가 흐리다
+          edit_scope: '#handoff-context'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f10
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: 65e28991
+          id: 65e28991#r1.1
+          lineage: 65e28991#r1.1
+        - layer: 1
+          category: data_flow
+          anchor: '#5-architecture'
+          disposition: decide
+          summary: §5 의 데이터 흐름에 소비자 없는 산출물이 있다 — 의도인가?
+          edit_scope: '#5-architecture'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: a1
+          origin: auto
+          immutable: false
+          kind: pre
+          promoted_from: ask
+          promotion: protected
+          bucket: 1615824b
+          id: 1615824b#r1.1
+          lineage: 1615824b#r1.1
+          decision_view:
+            if_unfixed: (리뷰어가 안 적음)
+            replacement: (대체안 미작성)
+            basis: (근거 없음)
+            alternatives:
+            - 고친다(채택)
+            - 그대로 둔다(기각)
+            - 나중에 정한다(보류)
+            impact: '#5-architecture (데이터가 끊김) · 인용 0 섹션'
+            category_unglossed: null
+            auto: true
+        by_disposition:
+          decide:
+          - fee27fc9#r1.1
+          - 9dea7cf3#r1.1
+          - 11adb9c3#r1.1
+          - 1615824b#r1.1
+          ask:
+          - d56c5e0c#r1.1
+          fix:
+          - 011167c4#r1.2
+          - e1b5b3be#r1.1
+          - 65e28991#r1.1
+          defer:
+          - d949ac4c#r1.1
+          drop: []
+        rejected:
+        - id: 011167c4#r1.1
+          evidence: AC1 본문이 '관측 가능한 조건' 을 §13 항목으로 정의한다 — 오탐
+        defers:
+        - d949ac4c#r1.1
+        bucket_conflicts: 1
+        lineage_mismatch: 1
+        revived: []
+        degrade:
+          critic_dead: false
+          layer2_missing: false
+          codex_absent: false
+          codex_reason: null
+          recritic_dead: null
+        advisory: []
+        blocks: false
+        reraise_unconsumed: 0
+        escalated_unconsumed: 0
+        adjudication_accepted: 9
+        adjudication_rejected: 1
+        adjudication_held: 0
+        adjudication_absorbed: 1
+        adjudication_coerced: 3
+        adjudication_sources_failed: 0
+        adjudication_suppressed: 0
+        adjudication_unknown_counts: []
+        adjudication_degraded: false
+        adjudication_held_by_class:
+          판정자 부재: 0
+          항목 파손: 0
+          기타: 0
     '2':
       open_lineages:
       - 011167c4#r1.2
@@ -623,6 +899,100 @@ docreview:
           value: 60
           source: 기본
       started_mtime_ns: <MTIME_NS>
+      finalize_out:
+        ok: true
+        round: 2
+        findings:
+        - layer: 2
+          category: ambiguity
+          anchor: '#2-goals'
+          disposition: fix
+          summary: 목표 B 문구 후속 손질
+          edit_scope: '#2-goals'
+          blocks: []
+          supersedes: null
+          contradicts: null
+          evidence: null
+          replacement: null
+          if_unfixed: null
+          f: f1
+          detector: d1
+          origin: reviewer
+          immutable: false
+          kind: pre
+          bucket: 11adb9c3
+          id: 11adb9c3#r2.1
+          lineage: 11adb9c3#r2.1
+        - f: null
+          layer: 2
+          category: frozen_change
+          anchor: '#12-files-to-modify'
+          disposition: decide
+          summary: 'finding 없이 바뀜: 12. Files to Modify (modified)'
+          edit_scope: '#12-files-to-modify'
+          blocks: []
+          supersedes: null
+          evidence: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash
+            62a715899d27→5d9a206e6f82
+          origin: auto
+          kind: post
+          prev_hash: 62a715899d27
+          immutable: false
+          bucket: 42522f07
+          id: 42522f07#r2.1
+          lineage: 42522f07#r2.1
+          decision_view:
+            if_unfixed: (리뷰어가 안 적음)
+            replacement: (대체안 미작성)
+            basis: 섹션 '12. Files to Modify' (#12-files-to-modify) modified — hash
+              62a715899d27→5d9a206e6f82
+            alternatives:
+            - 현재 변경 유지(채택)
+            - 이전 상태로 원복(기각)
+            - 나중에 정한다(보류)
+            impact: '#12-files-to-modify (얼림 검사가 잡은 변경) · 인용 1 섹션'
+            category_unglossed: null
+            auto: true
+        by_disposition:
+          decide:
+          - 42522f07#r2.1
+          ask: []
+          fix:
+          - 11adb9c3#r2.1
+          defer: []
+          drop: []
+        rejected: []
+        defers: []
+        bucket_conflicts: 0
+        lineage_mismatch: 0
+        revived: []
+        degrade:
+          critic_dead: false
+          layer2_missing: false
+          codex_absent: true
+          codex_reason: exit_nonzero
+          recritic_dead: missing
+        advisory:
+        - codex 없음 — 모델 다양성 0 (exit_nonzero)
+        - '입력 실패(보조): codex — exit_nonzero'
+        - '입력 실패(보조): doc-recritic — missing'
+        - 기각 경로 0 — 오탐이 걸러지지 않았다 (doc-recritic missing)
+        blocks: false
+        reraise_unconsumed: 0
+        escalated_unconsumed: 0
+        adjudication_accepted: 2
+        adjudication_rejected: 0
+        adjudication_held: 0
+        adjudication_absorbed: 0
+        adjudication_coerced: 0
+        adjudication_sources_failed: 2
+        adjudication_suppressed: 0
+        adjudication_unknown_counts: []
+        adjudication_degraded: true
+        adjudication_held_by_class:
+          판정자 부재: 0
+          항목 파손: 0
+          기타: 0
   pending_recritic: null
   rejected_lineages:
     011167c4#r1.1:

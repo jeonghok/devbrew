@@ -2265,6 +2265,16 @@ st = s.load_state(sys.argv[2]); st["pending_recritic"].pop("round"); s.save_stat
   assert_eq "$rc $(jget "$d/fin.err" 'd["reason"]')" "1 pending_round_unrecorded" "T46: finalize 는 어느 라운드 것인지 모르는 준비를 소비하지 않는다"
   rm -rf "$d"
 }
+case_finalize_twice_same_report() {   # 한 라운드에 finalize 두 번 — 둘째는 같은 보고를 rc 0 으로, 게이트는 「미검증」이 아니다
+  local d rc; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$d/recritic.txt" --doc "$FX/design-sample.md" > "$d/fin2.json" 2> "$d/fin2.err"; rc=$?
+  assert_eq "$rc" "0" "finalize 두 번: 둘째 호출이 rc 0 이다"
+  assert_eq "$(cmp -s "$d/fin.json" "$d/fin2.json" && echo same)" "same" "finalize 두 번: 둘째 보고가 첫 보고와 바이트 단위로 같다"
+  assert_contains "$(cat "$d/fin2.err")" "이미 정리됐다" "finalize 두 번: 둘째 호출이 앞 보고를 다시 냈음을 stderr 에 밝힌다"
+  assert_eq "$(st_yaml "$d" 'st["rounds"]["1"].get("finalize_failed")')" "None" "finalize 두 번: 둘째 호출이 실패 표지를 남기지 않는다"
+  assert_eq "$(gsum "$d" "$UNV3")" "(None, None, True)" "finalize 두 번: 둘째 뒤에도 게이트가 정상이다 (「미검증」 아님)"
+  rm -rf "$d"
+}
 case_T46_unverified_released_next_round() {   # 라운드 스코프 — 다음 라운드가 정상으로 끝나면 표지가 풀린다
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   critic_dead_twice "$d"
