@@ -1314,7 +1314,12 @@ def cmd_related_changes(a) -> int:
             if x not in seen:
                 seen.add(x)
                 out.append({"anchor": x, "title": titles.get(x) or x})
-    print(json.dumps(out, ensure_ascii=False))
+    # 출력은 모델 입력 슬롯에 들어간다 — 제목에 든 < > & 가 슬롯을 일찍 닫지 못하게 JSON 이스케이프로 바꾼다
+    # (JSON 문자열 안에서만 나오는 글자라 읽은 값은 그대로다).
+    text = json.dumps(out, ensure_ascii=False)
+    for ch, esc in (("&", "\\u0026"), ("<", "\\u003c"), (">", "\\u003e")):
+        text = text.replace(ch, esc)
+    print(text)
     return 0
 
 
