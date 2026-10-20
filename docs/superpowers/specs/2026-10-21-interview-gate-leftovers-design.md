@@ -118,13 +118,13 @@ next_phase: superpowers:writing-plans
   - 판정: 레코드의 `source` 만으로 가른다. 대상 S 의 state 레코드가 `source: chosen` 이어야 한다. 레코드가 없거나 `source: verbatim` 이면 위반이다(rc 1). 위반한 S 는 결과의 새 목록 키에 실린다. S 번호로 따로 가르지 않는다 — 최초 요청이 없으면 첫 사용자 답이 `S1` 이다(finishing.md :100-101).
   - 레코드는 있는데 `source` 가 없으면 검사 불가다(rc 3, advisory) — 기존 「검사 불가 ≠ 통과」 규칙 그대로다.
 - 줄 문법은 `check_brief` 의 것을 import 해서 쓴다(`IRRELEVANT_RE` · `SAT_LINE_RE` · `SAT_USER_RE` · 절 읽기). 베껴 쓰면 두 검사가 갈라진다. 공개 함수 하나로 묶을지는 계획이 정한다.
-- 실패 처리는 기존 원문 완전성 위반과 같다 — 새 rc 는 없다. rc 1 이라 건너뛰기 변수(`DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE`)로도 넘지 못하고 reviewing-brief 는 라운드를 시작하지 않고 멈춘다. 고치는 일은 새 자동 장치가 아니라 인터뷰가 한다. RB rc 표에 아래 행을 더한다(기존 `1` 행 아래, 키로 가른다):
+- 실패 처리는 기존 원문 완전성 위반과 같다 — 새 rc 는 없다. rc 1 이라 건너뛰기 변수(`DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE`)로도 넘지 못하고 reviewing-brief 는 라운드를 시작하지 않고 멈춘다. 고치는 일은 새 자동 장치가 아니라 같은 세션의 finishing(Step A.5 를 부른 자리)이 한다 — 리뷰 진입 때는 brief 가 이미 있어서 인터뷰 진입(`interview_state.py` :80-81 · :105-106)은 그 인터뷰를 「이미 끝난 인터뷰」로 보고 이어 가기를 거부하기 때문이다. RB rc 표에 아래 행을 더한다(기존 `1` 행 아래, 키로 가른다):
 
   | `vc_rc` | 뜻 | 동작 |
   |---|---|---|
-  | `1`(`not_chosen`) | 인터뷰를 닫은 답(외부 선례 무관 · 사용자 판단 포화)의 S 가 state 에 고른 선택지(`source: chosen`)로 기록돼 있지 않다 | **차단 — 건너뛰지 않는다.** 리뷰를 멈추고 사용자에게 「인터뷰를 닫은 답 <S 목록> 이 고른 선택지로 기록되지 않았다. 인터뷰로 돌아가(`/spec-distill:pm-interview` — 같은 진행 기록에서 잇는다) 그 질문에 선택지로 다시 답한다」를 보인다. 그 뒤는 인터뷰의 보통 흐름이다 — 사용자가 조사를 더 원하면 라운드가 이어지고, 닫는 선택지를 고르면 인터뷰가 새 `chosen` S 를 기록하고, 그 S 를 가리키는 새 포화 판정 줄을 audit §2 와 state `## audit §2 대기 줄` 블록에 **덧붙인** 뒤(옛 줄은 고치지 않고 기록으로 남긴다 — 게이트는 마지막 줄을 본다. 외부 선례 무관이면 brief §4 줄의 `@S` 를 바꾼다) finishing Step A 를 다시 돈다(게이트, 로드맵이 있으면 B-R). payload §6 · audit §6 에는 새 S 를 추가만 한다 |
+  | `1`(`not_chosen`) | 인터뷰를 닫은 답(외부 선례 무관 · 사용자 판단 포화)의 S 가 state 에 고른 선택지(`source: chosen`)로 기록돼 있지 않다 | **차단 — 건너뛰지 않는다.** 리뷰를 멈추고 사용자에게 「인터뷰를 닫은 답 <S 목록> 이 고른 선택지로 기록되지 않았다 — 마무리 단계가 그 질문을 선택지로 다시 묻는다」를 보인다. finishing Step A.5 는 이 사유로 멈추면 같은 세션에서 그 닫힌 질문을 `AskUserQuestion` 선택지로 다시 묻는다(닫는 선택지 · 「조사 계속」). **닫는 선택지**면 새 `chosen` S 를 state `user_statements` 에 기록하고, 그 S 를 가리키는 새 포화 판정 줄을 state `## audit §2 대기 줄` 블록 **한 곳에만** 덧붙인다(옛 줄은 고치지 않고 기록으로 남긴다 — 게이트는 마지막 줄을 본다. 외부 선례 무관이면 brief §4 줄의 `@S` 를 바꾼다). 그다음 Step A 에서 state 로부터 다시 짓는 걸음(payload §6 · audit §6 · audit §2 옮기기)과 7 게이트 · 8 생성(로드맵이 있을 때)을 다시 돈 뒤 Step A.5 로 돌아간다 — audit §2 는 대기 줄 블록에서 다시 지어지므로 줄이 두 번 실리지 않고, §6 들은 state 에서 다시 지어져 새 S 가 더해질 뿐이다. 어느 걸음이 다시 돌아도 같은 결과를 내는지(멱등)는 계획이 실측한다. **「조사 계속」**이면 같은 세션의 라운드 루프로 돌아가고, 다시 닫을 때 finishing 을 처음부터 돈다 |
 
-  사용자가 다시 답하지 않는 경우를 따로 다루는 장치는 두지 않는다 — 리뷰는 멈춘 채로 남는다.
+  사용자가 다시 답하지 않는 경우를 따로 다루는 장치는 두지 않는다 — 리뷰는 멈춘 채로 남는다. **한계(README 공시):** 되묻기는 Step A.5 를 부른 그 세션의 finishing 에만 있다. 세션을 넘겨 reviewing-brief 를 따로 불러 이 사유로 멈추면, 끝난 인터뷰라 진행 기록에서 다시 이을 수 없다 — 멈춤 문장이 그 사실을 함께 알린다.
 - 「사용자 종료(@S…)」 는 대상이 아니다. 사용자가 자유 글로 끝낼 수 있다.
 - **한계 둘(README · CHANGELOG 공시 — 둘 다 남긴다).**
   - 시점: 대조는 Step A 7 의 `check_brief gate` 가 아니라 Step A.5 리뷰 진입에서 걸린다. 그 사이 brief 는 이미 쓰였다. 리뷰 진입을 지나지 않는 길에서는 대조가 돌지 않는다.
@@ -242,7 +242,7 @@ next_phase: superpowers:writing-plans
 **사용자 답 대조(§2)**
 - AC1 brief §4 「외부 선례 무관(@S<m>)」 이 가리키는 S 의 state 레코드가 `verbatim` 이면 `check_verbatim_coverage.py` 가 rc 1 을 내고 결과의 새 키에 그 S 를 싣는다. `chosen` 이면 그 대조로는 막지 않는다(양 · 음 픽스처).
 - AC2 audit §2 마지막 포화 판정 줄이 「사용자 판단 포화(@S<m>)」 이면 같은 판정을 한다. 앞선 줄의 사용자 판단 포화 S 와 「사용자 종료(@S…)」 의 S 는 보지 않는다(각 픽스처).
-- AC3 판정은 레코드의 `source` 로만 한다 — 대상 S 의 레코드가 state 에 없거나 `source: verbatim` 이면 rc 1, 레코드에 `source` 가 없으면 rc 3 과 advisory 다. `source: chosen` 인 `S1` 은 통과한다(최초 요청이 없는 인터뷰 픽스처). `check_brief.py` 는 state 를 읽지 않는다(불변식 docstring · 기존 테스트 그대로). RB rc 표에 `1`(`not_chosen`) 행이 있고, 그 멈춤 문장이 인터뷰로 돌아가 선택지로 다시 답하라고 가리킨다(문장 단언 — 사용자가 다시 답하지 않는 경우의 테스트는 두지 않는다). 건너뛰기 변수가 켜져도 이 rc 1 은 건너뛰지 않는다. README · CHANGELOG 에 §2 의 시점 한계를 더했고, 출처 한계(「사용자가 골랐는지 증명하지 못한다」)는 남아 있다.
+- AC3 판정은 레코드의 `source` 로만 한다 — 대상 S 의 레코드가 state 에 없거나 `source: verbatim` 이면 rc 1, 레코드에 `source` 가 없으면 rc 3 과 advisory 다. `source: chosen` 인 `S1` 은 통과한다(최초 요청이 없는 인터뷰 픽스처). `check_brief.py` 는 state 를 읽지 않는다(불변식 docstring · 기존 테스트 그대로). RB rc 표에 `1`(`not_chosen`) 행이 있고, finishing Step A.5 에 그 사유의 되묻기 갈래(닫는 선택지 → state 기록 · 대기 줄 한 곳 덧붙이기 · Step A 다시 짓기 · 7 · 8 · A.5 / 「조사 계속」 → 라운드 루프)가 있다(문장 단언). 끝에서 끝: `not_chosen` 픽스처에 새 `chosen` S 와 덧붙인 대기 줄을 넣고 Step A 의 다시 짓는 걸음을 돌리면 audit §2 에 새 줄이 한 번만 실리고, 대조와 `check_brief gate` 가 통과한다(사용자가 다시 답하지 않는 경우의 테스트는 두지 않는다). 건너뛰기 변수가 켜져도 이 rc 1 은 건너뛰지 않는다. README · CHANGELOG 에 §2 의 시점 한계를 더했고, 출처 한계(「사용자가 골랐는지 증명하지 못한다」)는 남아 있다.
 
 **링크 따라 쓰기(§3)**
 - AC4 writer `run` 은 P 가 레포 밖 파일을 가리키는 심볼릭 링크이거나 링크가 둘인 파일이어도 그 너머를 바꾸지 않고, P 를 명령 stdout 을 담은 일반 파일로 만든다. 명령 rc(0 · 3 · 그 밖)를 그대로 내고 rc 가 0 이 아니어도 stdout 을 놓는다. writer 자신의 실패는 따로 정한 rc 와 사유 줄이고, P 는 그대로다.
@@ -335,6 +335,21 @@ next_phase: superpowers:writing-plans
 - 지휘자 판단 · 2026-10-21 · spec 리뷰 2라운드 — D2.1 을 skill 이 부르는 스크립트 전부로 적용한다. grep 으로 찾은 둘째 자리 `docreview_state.py` `save_state`(원장 제자리 덮어쓰기 :320 · 시대 표지 :325)도 §3 에 넣는다 — 원장의 제자리 덮어쓰기 성질은 지킨다(`O_NOFOLLOW` 로 열고 일반 파일 · 링크 하나 확인 뒤 자르기). 이 파일은 quality-gates 에도 링크로 실려 나간다.
 - 지휘자 판단 · 2026-10-21 · spec 리뷰 2라운드 — 원장 뿌리 도출은 `state_path.py` 에 하위 명령 `state-root-for <문서 경로>` 하나를 더해 모은다(§5). 위 작성자 판단 · 점검 답의 「`state_path.py` 는 그대로」 · 「`state-root` 에 문서 폴더를 넘긴다」를 대체한다. 원장 열기의 정리는 도출된 문서 레포 뿌리를 따르고, 한계는 request-framing 의 정리 · 지휘자만 cwd 뿌리를 쓴다는 것이다.
 - 지휘자 판단 · 2026-10-21 · spec 리뷰 2라운드 — 러너 락이 이름으로 빼는 함수는 `write_failclosed` · `_degrade_if_empty` 둘이다(위 「`write_failclosed` 만」을 대체). §2 대조는 레코드의 `source` 로만 판정한다(위 「S1 이면 rc 1」을 대체 — 최초 요청이 없으면 첫 답이 S1 이다). writer 링크는 배포 링크 락(`test_copy_of_contract.sh`)이 잡는다. R8 로 넘기는 두 행은 지휘자가 같은 로드맵 PR 에서 R8 범위에 싣는다.
+- U2 · 결정 · 2026-10-21 · 사용자 — 「모두 고친 대로 둠 (권장)」 (spec 리뷰 3라운드 — 2라운드 고침 13곳 채택) · 「열기 — 고치고 한 번 더 본다 (권장)」 (추가 라운드 1회).
+- 지휘자 판단 · 2026-10-21 · spec 리뷰 3라운드 — `not_chosen` 되돌아가기는 인터뷰 재진입이 아니라 같은 세션 finishing Step A.5 의 되묻기 갈래다(끝난 인터뷰는 `interview_state.py` 가 이어 가기를 거부한다). 새 포화 줄은 state 대기 줄 블록 한 곳에만 덧붙이고 Step A 가 다시 짓는다. 위 점검 답의 「인터뷰로 돌아가 … 다시 답한다」를 대체한다. 세션을 넘긴 되돌아가기는 한계로 공시한다.
+- D3.2 · r3 · adopt · 496041cc#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Rejected Alternatives (modified)
+- D3.3 · r3 · adopt · 4ecc2710#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: R13 — R10 남은 인터뷰 게이트 · 엔진 skill 소결함 · Design (modified)
+- D3.4 · r3 · adopt · 51d7830c#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: §2 사용자 답 대조 — 원문 완전성 검사에 얹기 (modified)
+- D3.5 · r3 · adopt · 5b2b32f2#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: 있는 것 검토 (modified)
+- D3.6 · r3 · adopt · 652f36e6#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Non-goals (modified)
+- D3.7 · r3 · adopt · 6688c590#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: §5 원장 뿌리 — 문서의 레포에서 (modified)
+- D3.8 · r3 · adopt · 6c8b9494#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Files to Modify (modified)
+- D3.9 · r3 · adopt · 8e81e781#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Constraints (modified)
+- D3.10 · r3 · adopt · 93a5c0ad#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D3.11 · r3 · adopt · 96a0a3cc#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: 미룸 (modified)
+- D3.12 · r3 · adopt · a8a95e6d#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: 번호 대조 (modified)
+- D3.13 · r3 · adopt · c6c0ccc8#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Anti-goals (modified)
+- D3.14 · r3 · adopt · e09185f8#r3.1 · "모두 고친 대로 둠 (권장)" — finding 없이 바뀜: Goals (modified)
 
 ## 번호 대조
 
@@ -360,7 +375,7 @@ next_phase: superpowers:writing-plans
 | CLAUDE.md 기본값과 판단 | §3(writer 이름 · rc 는 계획이 정함) · §9 |
 | CLAUDE.md 레포 전용 값 금지 | §3 락(허용 대상 도출) · §5(경로 도출) · §7 락(선택 규칙 도출) |
 | CLAUDE.md 상류 · 하류 연계 | `## 상류 · 하류 연계` |
-| CLAUDE.md 진입점에서 따라 내려가기 | §2(rc 표 `not_chosen` 행이 인터뷰로 돌아가는 길을 가리킴) · §5(공시 줄) |
+| CLAUDE.md 진입점에서 따라 내려가기 | §2(rc 표 `not_chosen` 행 → finishing Step A.5 되묻기 갈래) · §5(공시 줄) |
 | CLAUDE.md 있는 것 먼저 | `## 있는 것 검토` |
 | CLAUDE.md 공시와 차단 · 강등 공시 | §2(검사 불가 rc 3) · §3(거부 사유) · README 한계 |
 | 과설계 경계 원칙(사용자 원문) | Anti-goals · §3(writer 하나) · Rejected Alternatives |
