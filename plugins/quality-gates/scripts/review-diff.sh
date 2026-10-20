@@ -21,7 +21,8 @@
 #   review-i<N>.names      거르기 전 경로 전부(한 줄에 하나)
 #   review-i<N>.full.diff  거르기 전 diff
 #   review-i<N>.diff       문서 경로를 뺀 diff — 리뷰어가 받는 것(남길 경로를 하나씩 적어 만든다)
-#   review-i<N>.doc-paths  doc_paths.py select 출력(어느 경로를 왜 뺐고 남겼는지)
+#   review-i<N>.doc-paths  doc_paths.py select 출력(어느 경로를 왜 뺐고 남겼는지) — 폴더 이름이라 빼지 않은 경로는
+#                          reviewed<TAB><경로> 줄, excluded: 는 뺀 뒤 수
 #   review-i<N>.self-state 건너뛴 untracked qg 상태 경로(한 줄에 하나, 없으면 빈 파일)
 #
 # stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
@@ -123,6 +124,9 @@ T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 �
 # --ignore-submodules=none — 작업 트리 .gitmodules 의 submodule.<이름>.ignore(리뷰하는 변경이 더할 수 있다)나
 # 사용자 설정 diff.ignoreSubmodules 가 gitlink 를 diff 에서 숨기지 못하게 한다. session · paths 는 뒤에
 # --ignore-submodules=dirty 를 덧붙인다(뒤 플래그가 이긴다).
+# 걸러진 diff 의 git diff 한 번에 넘기는 남길 경로 수 · 글자 수 상한(인자 길이 상한 ARG_MAX 아래로).
+KEEP_BATCH_N=500
+KEEP_BATCH_CHARS=65536
 GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames --submodule=short
       --ignore-submodules=none --src-prefix=a/ --dst-prefix=b/)
 GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
@@ -221,7 +225,7 @@ QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|prefix|keep|seen|files|missing)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|prefix|keep|roots|seen|files|missing)\.z'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
@@ -430,10 +434,12 @@ say_unreviewed() {   # <경로> — 추적 안 되는 중첩 레포 · 선언되
   printf 'review-diff: 추적 안 되는 중첩 레포 %s 는 리뷰하지 않았다 — .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라\n' \
     "$(esc_name "$1")" >&2
 }
-say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트리
+say_stale_wt() {   # <경로> — 건너뛰지 않은 등록된 qg 일회용 트리. 지우는 명령에 그대로 쓰게 절대 경로로 낸다.
+  local q
   UNREVIEWED=$((UNREVIEWED + 1))
-  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라\n' \
-    "$(esc_name "$1")" >&2
+  q="$(esc_name "$top/${1%/}")"
+  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — git worktree remove --force %s 로 지운 뒤 다시 돌려라\n' \
+    "$q" "$q" >&2
 }
 say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로
   UNREVIEWED=$((UNREVIEWED + 1))
@@ -443,6 +449,8 @@ say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 
 # NUL 목록 다루기(경로는 바이트 그대로 비교한다).
 #   dirs <all.z> <excl.z>   excl 가운데 all 의 다른 경로의 폴더 이름(x 와 x/…)인 것
 #   minus <a.z> <b.z>…      a 의 순서대로 b 들 어느 것에도 없는 것
+#   roots <keep.z> <all.z>  keep 가운데 keep 안의 다른 경로가 all 의 폴더 이름으로 덮지 않는 것 — :(literal) x 는
+#                           x/… 도 잡으므로 x 아래 경로를 따로 넘기면 다른 묶음에서 두 번 나온다
 NUL_PY='import sys
 def rd(p):
     with open(p, "rb") as f:
@@ -459,6 +467,23 @@ if op == "dirs":
     for x in rd(sys.argv[3]):
         if x in dirs:
             out.write(x + b"\0")
+elif op == "roots":
+    dirs = set()
+    for p in rd(sys.argv[3]):
+        i = p.find(b"/")
+        while i > 0:
+            dirs.add(p[:i])
+            i = p.find(b"/", i + 1)
+    keep = rd(sys.argv[2])
+    cover = set(k for k in keep if k in dirs)
+    for k in keep:
+        i = k.find(b"/")
+        hit = False
+        while i > 0 and not hit:
+            hit = k[:i] in cover
+            i = k.find(b"/", i + 1)
+        if not hit:
+            out.write(k + b"\0")
 elif op == "minus":
     skip = set()
     for p in sys.argv[3:]:
@@ -480,9 +505,11 @@ put_z() {   # <out> <경로>… — NUL 목록으로 쓴다
 
 # ── 걸러진 diff ────────────────────────────────────────────────────────────
 # 제외를 pathspec 으로 빼지 않는다 — 제외 pathspec 은 그 이름 아래 경로까지 뺀다(파일 x 를 지우고 x/a.py 를
-# 더하면 x/a.py 가 조용히 빠진다). 남길 tracked 경로 KEEP 을 :(literal) 로 하나씩 적어 git diff 한 번에 넘기고
-# (나눠 부르면 머리가 겹친다), KEEP 이 비면 git diff 를 부르지 않는다(경로 없는 git diff 는 전체 diff 다).
-# 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 제외 경로는 제외 목록에서 빼고(리뷰한다) stderr 에 한 줄로 알린다.
+# 더하면 x/a.py 가 조용히 빠진다). 남길 tracked 경로 KEEP 을 :(literal) 로 하나씩 적어 git diff 에 넘긴다 —
+# 인자 길이 상한을 넘지 않게 KEEP_BATCH_N 개 · KEEP_BATCH_CHARS 글자씩 나눠 부르고 순서대로 잇는다(파일마다
+# diff 머리가 따로라 이어도 같은 diff 다). KEEP 이 비면 git diff 를 부르지 않는다(경로 없는 git diff 는 전체 diff 다).
+# 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 제외 경로는 제외 목록에서 빼고(리뷰한다) stderr 에 한 줄로 알리고,
+# review-i<N>.doc-paths 의 그 줄을 reviewed<TAB><경로> 로, excluded: 를 뺀 뒤 수로 고쳐 쓴다.
 put_z "$T/all.z" ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} ${NESTED[@]+"${NESTED[@]}"} \
   ${STALE_WT[@]+"${STALE_WT[@]}"} || gitfail "경로 목록을 쓰지 못했다"
 put_z "$T/excl.z" ${EXCL[@]+"${EXCL[@]}"} || gitfail "제외 목록을 쓰지 못했다"
@@ -503,17 +530,36 @@ if [ "${#DROP[@]}" -gt 0 ]; then
   done
   case "$excluded" in ''|*[!0-9]*) ;; *) excluded=${#EXCL[@]} ;; esac
   put_z "$T/excl.z" ${EXCL[@]+"${EXCL[@]}"} || gitfail "제외 목록을 쓰지 못했다"
+  dp_new=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "excluded: "*) line="excluded: $excluded" ;;
+      "exclude$TAB"*)
+        for y in "${DROP[@]}"; do [ "${line:8}" = "$y" ] && line="reviewed$TAB$y"; done ;;
+    esac
+    dp_new="$dp_new$line"$'\n'
+  done < "$T/doc-paths"
+  printf '%s' "$dp_new" > "$T/doc-paths" || gitfail "문서 경로 결정을 고쳐 쓰지 못했다"
 fi
 nul_list minus "$T/tracked.z" "$T/excl.z" > "$T/keep.z" || gitfail "남길 경로를 가리지 못했다"
-KS=()
-while IFS= read -r -d '' x; do KS+=(":(literal)$x"); done < "$T/keep.z"
+nul_list roots "$T/keep.z" "$T/all.z" > "$T/roots.z" || gitfail "남길 경로의 폴더 이름 대조가 실패했다"
 : > "$T/diff"; : > "$T/filtered.z"
-if [ "${#KS[@]}" -gt 0 ]; then
-  "${GITD[@]}" "${REV[@]}" -- "${KS[@]}" > "$T/diff" \
+diff_batch() {   # KB 묶음 하나를 걸러진 diff 와 이름 목록에 덧붙인다
+  "${GITD[@]}" "${REV[@]}" -- "${KB[@]}" >> "$T/diff" \
     || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
-  "${GITD[@]}" --name-only -z "${REV[@]}" -- "${KS[@]}" > "$T/filtered.z" \
+  "${GITD[@]}" --name-only -z "${REV[@]}" -- "${KB[@]}" >> "$T/filtered.z" \
     || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
-fi
+}
+KB=(); kb_chars=0
+while IFS= read -r -d '' x; do
+  x=":(literal)$x"
+  if [ "${#KB[@]}" -gt 0 ] \
+     && { [ "${#KB[@]}" -ge "$KEEP_BATCH_N" ] || [ $((kb_chars + ${#x} + 1)) -gt "$KEEP_BATCH_CHARS" ]; }; then
+    diff_batch; KB=(); kb_chars=0
+  fi
+  KB+=("$x"); kb_chars=$((kb_chars + ${#x} + 1))
+done < "$T/roots.z"
+[ "${#KB[@]}" -gt 0 ] && diff_batch
 FILTERED=$(tr -cd '\000' < "$T/filtered.z" | wc -c | tr -d ' ')
 cp -- "$T/filtered.z" "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
 for f in ${UNTR[@]+"${UNTR[@]}"}; do

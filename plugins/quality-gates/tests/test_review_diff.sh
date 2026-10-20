@@ -44,6 +44,17 @@ rdd() {   # rdd <dir> <args…> — rd 와 같되 출력 폴더(--dir)를 정한
   OUT=$(cd "$R" && bash "$RDIFF" --dir "$dir" --iter 1 "$@" 2>"$ROOT/err"); RC=$?
 }
 
+assert_line() {   # assert_line <file> <정확한 한 줄> <msg>
+  if grep -qxF -- "$2" "$1" 2>/dev/null; then ok "$3"
+  else no "$3"; printf '      line:  %s\n      file:  %s\n' "$2" "$1"; fi
+}
+
+stale_line() {   # stale_line <레포> <트리 이름> — 이전 qg 실행이 남긴 worktree 의 이유 줄(절대 경로)
+  local p; p="$(cd "$1" && pwd -P)/.claude/quality-gates/worktrees/$2"
+  printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — git worktree remove --force %s 로 지운 뒤 다시 돌려라' \
+    "$p" "$p"
+}
+
 case_session_includes_untracked() {
   echo "[session — untracked 포함]"
   mkfix
@@ -413,8 +424,7 @@ case_dir_outside_repo_skips_nothing() {
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "self-state 파일은 있고 비어 있다" || no "self-state 파일이 없거나 비지 않았다"
   assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
-  assert_file_grep "$ROOT/err" \
-    '^review-diff: 이전 qg 실행이 남긴 worktree \.claude/quality-gates/worktrees/base-mysess00/ 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라$' \
+  assert_line "$ROOT/err" "$(stale_line "$R" base-mysess00)" \
     "건너뛰지 않은 등록된 트리도 크게 알린다(리뷰하지 않은 qg 트리로)"
   assert_file_absent "$ROOT/err" '중첩 레포' "등록된 qg 트리는 중첩 레포 갈래로 가지 않는다"
   assert_eq "$(field degraded "$OUT")" yes "건너뛰지 않은 등록된 트리가 있으면 degraded: yes"
@@ -455,6 +465,9 @@ case_excluded_prefix_not_swallowed() {
     assert_file_grep "$ROOT/err" '^review-diff: README\.md 는 ' "$mode: 빼지 않은 접두 경로를 stderr 에 한 줄로 알린다"
     assert_eq "$(grep -c 'README\.md 는 ' "$ROOT/err")" 1 "$mode: 알리는 줄은 하나"
     assert_eq "$(field excluded "$OUT")" 0 "$mode: excluded: 0 (접두 경로는 제외 목록에서 빠진다)"
+    assert_eq "$(field excluded "$(cat "$D/review-i1.doc-paths")")" 0 "$mode: doc-paths 의 excluded: 도 0 (stdout 과 같다)"
+    assert_file_grep "$D/review-i1.doc-paths" "^reviewed${TAB}README\\.md\$" "$mode: doc-paths 에 'reviewed<TAB>README.md'"
+    assert_file_absent "$D/review-i1.doc-paths" "^exclude${TAB}README\\.md\$" "$mode: doc-paths 에 'exclude<TAB>README.md' 없음"
     assert_eq "$(field filtered_files "$OUT")" 2 "$mode: filtered_files: 2"
     assert_eq "$(field degraded "$OUT")" no "$mode: 다 실렸으면 degraded: no"
   done
@@ -536,16 +549,18 @@ case_other_session_worktree_degraded() {
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "다른 세션 트리가 있으면 degraded: yes"
-  assert_file_grep "$ROOT/err" \
-    '^review-diff: 이전 qg 실행이 남긴 worktree \.claude/quality-gates/worktrees/base-sessBBBB/ 는 리뷰하지 않았다 — qg-gc 로 지운 뒤 다시 돌려라$' \
-    "이유 줄 — 이전 qg 실행 · qg-gc"
+  assert_line "$ROOT/err" "$(stale_line "$R" base-sessBBBB)" "이유 줄 — 이전 qg 실행 · 지우는 명령"
   assert_file_absent "$ROOT/err" '중첩 레포' "중첩 레포 줄로 알리지 않는다"
   assert_file_absent "$S/review-i1.self-state" 'base-sessBBBB' "다른 세션 트리는 self_state 에 없다"
   assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessBBBB/$' "names 에 다른 세션 트리"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
+  # 알린 명령이 실제로 그 트리를 지운다(절대 경로 — 레포 안 어느 폴더에서 돌려도 같다).
+  local cmd; cmd=$(sed -n 's/^.* — \(git worktree remove --force .*\) 로 지운 뒤 다시 돌려라$/\1/p' "$ROOT/err")
+  ( cd "$R/src" && eval "$cmd" ) >/dev/null 2>&1 && [ ! -d "$wb" ] \
+    && ok "알린 git worktree remove 명령이 그 트리를 지운다" || no "알린 명령으로 트리를 지우지 못했다: $cmd"
   # 양성 짝 — 이 세션 접미의 트리는 지금처럼 건너뛴다.
   rm -rf -- "$S"/review-i1.*
-  g "$R" worktree remove --force --force "$wb"
+  [ ! -d "$wb" ] || g "$R" worktree remove --force --force "$wb"
   wa=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sessAAAA0000 2>/dev/null)
   [ -n "$wa" ] && [ -d "$wa" ] && ok "이 세션 트리를 만들었다" || no "이 세션 트리를 만들지 못했다"
   rdd "$S" --mode session
@@ -558,6 +573,54 @@ case_other_session_worktree_degraded() {
   rdd "$S2" --mode session
   assert_eq "$(field self_state "$OUT")" 0 "8자 미만 세션 폴더: self_state: 0"
   assert_eq "$(field degraded "$OUT")" yes "8자 미만 세션 폴더: degraded: yes"
+  assert_line "$ROOT/err" "$(stale_line "$R" base-sessAAAA)" "8자 미만 세션 폴더: 이 세션 트리도 이유 줄로 알린다"
+}
+
+# 걸러진 diff 는 남길 경로를 묶음으로 나눠 부른다(인자 길이 상한). 묶음을 이어도 빠지거나 겹치는 경로가 없다.
+# 경로 수 묶음: m(지운 파일) · m-000…m-509 · m/x.py — 정렬 순서로 m 과 m/x.py 가 다른 묶음에 든다.
+# :(literal)m 은 m/x.py 도 잡으므로 m/x.py 를 따로 넘기면 두 번 나온다.
+case_keep_batches() {
+  echo "[남길 경로 묶음 — 수 · 글자 상한으로 나눠도 빠짐 · 겹침 없음]"
+  mkfix
+  echo 'm = 1' > "$A/m"; g "$A" add m; g "$A" commit -q -m m
+  git -C "$R" fetch -q origin; g "$R" checkout -q -B feature origin/trunk
+  g "$R" rm -q m
+  mkdir -p "$R/m"; echo 'mx_marker = 1' > "$R/m/x.py"
+  local i
+  for i in $(seq -w 0 509); do echo "v = $i" > "$R/m-$i"; done
+  g "$R" add -A; g "$R" commit -q -m many
+  rd --mode branch
+  assert_eq "$RC" 0 "수 묶음: rc 0"
+  assert_eq "$(field files "$OUT")" 512 "수 묶음: files: 512"
+  assert_eq "$(field filtered_files "$OUT")" 512 "수 묶음: filtered_files: 512 (겹침 없음)"
+  assert_eq "$(field degraded "$OUT")" no "수 묶음: degraded: no"
+  assert_eq "$(grep -c '^+++ b/m-' "$D/review-i1.diff")" 510 "수 묶음: m-NNN 510개가 모두 걸러진 diff 에"
+  assert_eq "$(grep -c '^+++ b/m/x\.py$' "$D/review-i1.diff")" 1 "수 묶음: m/x.py 는 한 번"
+  assert_eq "$(grep -c '^--- a/m$' "$D/review-i1.diff")" 1 "수 묶음: 지운 m 은 한 번"
+  assert_eq "$(grep -c '^diff --git ' "$D/review-i1.diff")" 512 "수 묶음: diff 머리 512개"
+  # 글자 수 묶음 — 인자 글자 합이 100000 을 넘는 git diff 호출을 거부하는 대역(좁은 ARG_MAX)으로 잰다.
+  mkfix
+  local long="L/$(printf 'a%.0s' $(seq 200))/$(printf 'b%.0s' $(seq 200))/$(printf 'c%.0s' $(seq 200))"
+  mkdir -p "$R/$long"
+  for i in $(seq -w 0 159); do echo "w = $i" > "$R/$long/f-$i-$(printf 'd%.0s' $(seq 80)).py"; done
+  g "$R" add -A; g "$R" commit -q -m long
+  local real shim="$ROOT/shim-argmax"
+  real="$(command -v git)"
+  mkdir -p "$shim"
+  {
+    printf '#!/bin/bash\n'
+    printf 'real=%q\n' "$real"
+    printf '%s\n' 'n=0' \
+      'for a in "$@"; do case "$a" in ":("*) n=$((n + ${#a} + 1)) ;; esac; done' \
+      'if [ "$n" -gt 100000 ]; then echo "shim: argument list too long ($n)" >&2; exit 126; fi' \
+      'exec "$real" "$@"'
+  } > "$shim/git"
+  chmod +x "$shim/git"
+  OUT=$(cd "$R" && PATH="$shim:$PATH" bash "$RDIFF" --dir "$D" --iter 1 --mode branch 2>"$ROOT/err"); RC=$?
+  assert_eq "$RC" 0 "글자 묶음: 좁은 인자 상한 대역에서도 rc 0"
+  assert_eq "$(field filtered_files "$OUT")" 160 "글자 묶음: filtered_files: 160"
+  assert_eq "$(field degraded "$OUT")" no "글자 묶음: degraded: no"
+  assert_eq "$(grep -c '^+++ b/L/' "$D/review-i1.diff")" 160 "글자 묶음: 160개가 모두 걸러진 diff 에"
 }
 
 # MDX 는 코드를 실행한다 — 문서 경로 패턴(README*)에 걸려도 빠지지 않고 kept 로 이름이 난다.
@@ -958,6 +1021,7 @@ case_excluded_prefix_not_swallowed
 case_name_reconcile_catches_missing
 case_all_excluded_no_pathspec
 case_other_session_worktree_degraded
+case_keep_batches
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed
 case_gitlink_no_git_inside
