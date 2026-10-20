@@ -4613,3 +4613,26 @@ case_lineage_rename_and_delete_ask() {
     "AC9: 지워진 보호 절을 겨눈 fix 는 결정으로 오른다(보호 이력 없는 지워진 절의 fix 는 그대로)"
   rm -rf "$d"
 }
+
+# ── AC13 — 표 행(번호 대조 · 미룸 표) 손 편집의 허가 걸음: 절차가 가리키는 길이 실제로 닫히는지 ──
+ac13_finalize_r2() {   # ac13_finalize_r2 <state-dir> — 라운드 2 를 열고 finalize → <state-dir>/fin.json
+  local d="$1"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+}
+case_AC13_table_row_with_adopted_decision() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' | jgets 'd["decision_id"]')"
+  py docreview_state.py declare-related --state-dir "$d" --decision "$did" --anchors '#2-goals' >/dev/null
+  ac13_finalize_r2 "$d"
+  assert_eq "$(jget "$d/fin.json" '[x["anchor"] for x in d["findings"] if x["category"] == "frozen_change"]')" "[]" "AC13: 채택 결정에 묶고 고친 절은 다음 라운드에 「허가 없이 바뀜」으로 돌아오지 않는다"
+  assert_contains "$(py docreview_state.py gate --state-dir "$d" --render)" "이 결정 때문에 함께 바뀐 곳" "AC13: 묶은 절은 게이트의 「이 결정 때문에 함께 바뀐 곳」에 보인다"
+  rm -rf "$d"
+}
+case_AC13_table_row_without_decision() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  ac13_finalize_r2 "$d"
+  assert_eq "$(jget "$d/fin.json" 'sorted(x["anchor"] for x in d["findings"] if x["category"] == "frozen_change")')" "['#12-files-to-modify', '#2-goals']" "AC13 대조: 채택 결정 없이 고친 절은 다음 라운드에 frozen_change 결정으로 돌아온다(절차가 사용자에게 알리는 사실)"
+  rm -rf "$d"
+}

@@ -196,4 +196,37 @@ print(d == {"roadmap": sys.argv[4] + "/roadmap.md", "brief": sys.argv[4] + "/b.m
   assert_eq "$(ls -A "$T/rtmp")" "" "재분해(AC14): 펜스가 끝나면 임시 파일이 없다 — 칸 $n8"
 done
 
+# 9. 재분해 손 편집의 허가 걸음(AC13) · rc 1 가르기(AC16) · extract 펜스의 경로(따옴표 heredoc)
+RT="$(cat "$RED")"
+for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \
+         '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' '결정 기록 · 미룸 절은 엔진 울타리' \
+         'brief §5 위험 줄 가운데 K 번호가 없는 줄' 'brief §5 위험 줄의 K 번호가 겹친다' '표로 돌아가지 않고 멈추고 사유를 보인다' \
+         '재분해는 이력 brief 를 고치지 않는다' '`RISK_ORDER_NOTICE`' '정보 줄이라 멈추지 않는다'; do
+  assert_contains "$RT" "$n" "재분해(AC13·AC16): $n"
+done
+assert_not_contains "$RT" 'rc 1 — 사유를 그대로 보이고 3 으로 돌아간다' "재분해(AC16): 옛 단일 갈래 문장(위험 줄 사유까지 표로 돌아가게 하는 꼴)이 없다(양성 짝: 위 가름 문장)"
+ef="$(awk '/^## 2\. 지금 표/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RED")"
+[ -n "$ef" ] && ok "재분해: extract 펜스를 뽑았다" || no "재분해: extract 펜스가 비었다 — 아래 칸이 공허하다"
+assert_not_contains "$ef" '"<' "재분해(AC14): extract 펜스에 따옴표로 감싼 모델 채움 자리가 없다(양성 짝: 아래 실행 칸)"
+STUB3="$T/stub3"; mkdir -p "$STUB3/scripts"
+cat > "$STUB3/scripts/roadmap_write.py" <<'PY'
+import argparse, json, os, sys
+p = argparse.ArgumentParser()
+sub = p.add_subparsers(dest="cmd")
+e = sub.add_parser("extract")
+e.add_argument("--roadmap", required=True)
+a = p.parse_args()
+with open(os.environ["STUB_OUT"], "w", encoding="utf-8") as f:
+    json.dump({"roadmap": a.roadmap}, f, ensure_ascii=False)
+PY
+for HX in "$HP/roadmap.md" '-rel/roadmap.md'; do
+  s3="${ef//'<로드맵 경로>'/$HX}"
+  rm -f "$T/stub3.out"
+  rc=0; o="$(cd "$T" && STUB_OUT="$T/stub3.out" CLAUDE_PLUGIN_ROOT="$STUB3" bash -c "$s3" 2>&1)" || rc=$?
+  got="$(python3 -I -c 'import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")) == {"roadmap": sys.argv[2]})' "$T/stub3.out" "$HX" 2>&1)"
+  assert_eq "$rc $got" "0 True" "재분해(AC14): extract 펜스가 경로를 글자 그대로 생성기로 넘긴다 — $HX"
+  assert_eq "$(ls "$T" | grep -c '^pwned-')" "0" "재분해(AC14): extract 펜스의 경로 안 명령이 돌지 않았다"
+done
+
 finish
