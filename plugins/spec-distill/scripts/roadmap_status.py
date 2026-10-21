@@ -417,8 +417,9 @@ def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, rea
     else:
         oids = sorted({r.get("headRefOid") for r in cands})
         if len(oids) > 1:
-            notes.append("%s — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(%s)"
-                         % (PR_UNCOUNTABLE, " · ".join(r.get("번호", "?") for r in cands)))
+            notes.append("%s — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(%s) — 브랜치를 맞는 PR 의 headRefOid 로 "
+                         "되살린다(`git branch %s <headRefOid>`)"
+                         % (PR_UNCOUNTABLE, " · ".join(r.get("번호", "?") for r in cands), branch))
             return PR_UNCOUNTABLE, notes, None
         if oids:
             notes.append("브랜치 끝 없이 판정 — 캐시의 headRefOid %s" % str(oids[0])[:8])
@@ -569,6 +570,22 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                                          % (rev[:8], br, hit["mergeCommit"][:8]))
         return st
 
+    cache_warning = None
+    if pr_reason:
+        cache_warning = "PR 캐시를 읽지 못했다 — %s" % pr_reason
+        if "--reset" not in pr_reason:
+            cache_warning += " — ledger pr-refresh --roadmap %s --session <세션> --reset 으로 다시 채운다" % roadmap_rel
+
+    def unchecked_note(branches, block):
+        """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 그 사유는 경고로."""
+        unchecked = [br for br in branches if br not in cached]
+        if not unchecked:
+            return
+        why = ["머지 메시지는 세지 않았다 — %s" % owner()[1]] if owner()[1] else []
+        block["notes"].append("%s(%s)" % (PR_UNCHECKED, " · ".join(unchecked + why)))
+        if cache_warning and cache_warning not in block["warnings"]:
+            block["warnings"].append(cache_warning)
+
     def extras_for(bid):
         """(더한 브랜치 이름들, 형식이 깨진 사본 수)."""
         if roadmap_rel is None or main is None:
@@ -617,12 +634,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         bundle_path = b["bundle"]
         states = [judge(br, b) for br in b["branches"]]
         b["branch_states"] = states
-        unchecked = [s["branch"] for s in states if s["branch"] not in cached]
-        if unchecked:
-            why = [pr_reason] if pr_reason else []
-            if owner()[1]:
-                why.append("머지 메시지는 세지 않았다 — %s" % owner()[1])
-            b["notes"].append("%s(%s)" % (PR_UNCHECKED, " · ".join(unchecked + why)))
+        unchecked_note([s["branch"] for s in states], b)
         bad = [s["uncountable"] for s in states if s.get("uncountable")]
         if bad:
             b["stage"], b["reason"] = "알 수 없음", " · ".join(bad)
@@ -661,6 +673,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 st = judge(br, b)
                 if st["tip"] and not st["merged"]:
                     more.append({"branch": br, "tip": st["tip"], "merged": None})
+            unchecked_note(names, b)
             if more:
                 if rec_merge:
                     for s in states:

@@ -95,6 +95,7 @@ class SixConditions(unittest.TestCase):
         v, notes = rs.merged_by_pr(rows, BR, None, None, "main", always)
         self.assertEqual(v, "셀 수 없음")
         self.assertTrue(any("같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다" in n for n in notes), notes)
+        self.assertTrue(notes[-1].endswith("되살린다(`git branch feature/x <headRefOid>`)"), notes)
 
     def test_deleted_branch_two_rows_same_oid_is_one_tip(self):
         rows = [row(num="#3"), row(num="#9")]
