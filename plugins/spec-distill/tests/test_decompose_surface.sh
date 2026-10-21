@@ -268,6 +268,11 @@ RMALL="$(cat "$E"/repo/docs/rm1/*.md 2>/dev/null)"
 case "$RMALL" in *"$HOSTILE_TITLE"*) ok "stepa8_e2e_verbatim: 제목이 글자 그대로 실렸다" ;; *) no "stepa8_e2e_verbatim: 제목이 그대로 실리지 않았다" ;; esac
 case "$RMALL" in *"「${HOSTILE_APPR}」"*) ok "stepa8_e2e_verbatim: 승인 원문이 글자 그대로 실렸다" ;; *) no "stepa8_e2e_verbatim: 승인 원문이 그대로 실리지 않았다" ;; esac
 if [ -e "$E/pwned" ]; then no "stepa8_e2e_verbatim: 승인 원문 속 명령이 실행됐다(pwned)"; else ok "stepa8_e2e_verbatim: pwned 파일 없음"; fi
+# 앞 '-' 에 빈칸이 없는 말 — argparse 는 빈칸이 든 '-…' 값을 옵션으로 읽지 않으므로 앞 '-' 는 이 칸이 잰다.
+assert_eq "$(e2e_run '-제목' '-승인' rm4)" "0" "stepa8_leading_dash: 앞 '-' 인 제목 · 승인 원문도 펜스 rc 0"
+RMALL4="$(cat "$E"/repo/docs/rm4/*.md 2>/dev/null)"
+case "$RMALL4" in *'-제목'*) ok "stepa8_leading_dash: 제목이 글자 그대로 실렸다" ;; *) no "stepa8_leading_dash: 제목이 그대로 실리지 않았다" ;; esac
+case "$RMALL4" in *'「-승인」'*) ok "stepa8_leading_dash: 승인 원문이 글자 그대로 실렸다" ;; *) no "stepa8_leading_dash: 승인 원문이 그대로 실리지 않았다" ;; esac
 # 생성기는 승인 말 하나를 한 줄로만 받는다 — 두 줄 말은 변형 · 실행 없이 생성기가 그대로 거절한다(rc 1, 아무것도 만들지 않는다).
 ML_APPR="$(printf '첫 줄 $(touch %s/pwned2)\n둘째 줄 `id`' "$E")"
 assert_eq "$(e2e_run '여러 줄 시험' "$ML_APPR" rm2)" "1" "stepa8_multiline_approval_verbatim: 두 줄 말은 생성기가 거절한다(rc 1)"
