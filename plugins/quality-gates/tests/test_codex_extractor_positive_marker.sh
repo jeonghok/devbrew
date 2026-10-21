@@ -80,9 +80,7 @@ def scan_for_override_call(lines):
                 blk.append(lines[j])
             blocktext = "\n".join(x for x in blk if not x.strip().startswith("#"))
             if OVERRIDE_FLAG in blocktext:
-                # 플래그는 그 앞 가장 가까운 python3 호출의 것이다 — 블록 머리에 출력 writer
-                # (`nofollow_write.py run --out P -- python3 X.py …`)가 올 수 있다.
-                return PYEXTRACT_RE.findall(blocktext[:blocktext.index(OVERRIDE_FLAG)])[-1]
+                return m.group(1)
             i = j + 1
             continue
         i += 1
