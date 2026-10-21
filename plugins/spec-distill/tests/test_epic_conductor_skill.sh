@@ -115,6 +115,15 @@ assert_eq "${bad_lint%% *}" "1" "양성 대조: 산문의 --session 줄을 락�
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
 assert_contains "$APP" 'conductor_ledger.py" release' "4절: release 전체 명령"
+# 기본 브랜치 대조 — 표지를 잡은 뒤 돌므로, 멈출 때 잡은 표지를 풀고 멈춘다(다른 세션이 「지휘 중」으로 막히지 않게)
+S3="$(sec '### 3. 자리 · 세션 · 표지')"
+DEF_FENCE="$(printf '%s\n' "$S3" | awk '/^```bash/{f=1;n++;next} /^```/{f=0} f&&n==1')"
+assert_contains "$DEF_FENCE" 'cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"' "3절 첫 펜스: 기본 브랜치 원격 대조 줄과 종료 코드"
+DEF_BULLET="$(printf '%s\n' "$S3" | grep -F -- '- `default_rc=`' || true)"
+assert_eq "$(printf '%s\n' "$DEF_BULLET" | grep -c .)" "1" "3절: default_rc 처리 줄이 하나다"
+for lit in '0 이 아니면' '3 기본 브랜치 없음' '5 원격과 다름' '그 밖 모두' '`claim_rc=0` 이면' '`conductor_ledger.py" release`' '돌린 뒤 멈춘다' '「대조하지 못했다」 줄은 보이고 간다'; do
+  assert_contains "$DEF_BULLET" "$lit" "3절 default_rc 줄: $lit"
+done
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
 COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"

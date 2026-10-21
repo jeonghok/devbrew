@@ -45,7 +45,7 @@ from state_path import state_root  # noqa: E402
 DONE = ("머지됨", "끝남")
 GIT = shutil.which("git") or "git"
 if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 해결자의 git 호출도 쓰게 한다
-    repo_defaults.git_dir = os.path.dirname(GIT)
+    repo_defaults.git_bin_dir = os.path.dirname(GIT)
 
 
 class Fail(Exception):

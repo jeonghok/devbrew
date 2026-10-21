@@ -125,6 +125,34 @@ assert_contains "$out" "git remote add origin" "conductor_ledger_no_origin: 지�
 got="$(python3 -I -c 'import inspect, sys; sys.path.insert(0, sys.argv[1]); import repo_defaults as r
 print(r.REMOTE_TIMEOUT, inspect.signature(r.check_remote_head).parameters["timeout"].default)' "$REAL")"
 assert_eq "$got" "10.0 10.0" "remote_timeout_is_10: 원격 대조의 시간 상한은 10초"
+REALGIT="$(command -v git)"
+mkwrap() {  # mkwrap <폴더> <걸리는 인자> <할 일> — 그 인자가 있으면 할 일을 하고, 아니면 진짜 git 으로 간다
+  mkdir -p "$1" && printf '#!/bin/sh\nfor a in "$@"; do if [ "$a" = "%s" ]; then %s; break; fi; done\nexec "%s" "$@"\n' \
+    "$2" "$3" "$REALGIT" > "$1/git" && chmod +x "$1/git"
+}
+mkwrap "$T/slow-remote" ls-remote "sleep 7"
+t0="$(python3 -I -c 'import time; print(time.time())')"
+out="$(cd "$REN" && PATH="$T/slow-remote:$PATH" python3 "$RD" default-branch --check-remote 2>&1)"; rc=$?
+took="$(python3 -I -c 'import sys, time; print(int(time.time() - float(sys.argv[1])))' "$t0")"
+assert_eq "$rc" "5" "slow_remote: 7초 걸리는 원격도 10초 상한 안이라 대조한다(다르다 → rc 5, 대조 못 함이 아니다)"
+[ "$took" -ge 7 ] && ok "양성 대조: 느린 원격 대역이 실제로 7초 이상 걸렸다(${took}초)" || no "느린 원격 대역이 걸리지 않았다(${took}초)"
+
+# ── config_failure_is_not_no_origin ──────────────────────────────────────────
+mkwrap "$T/bad-config" remote.origin.url "exit 128"
+out="$(cd "$T/nohead/work" && PATH="$T/bad-config:$PATH" python3 "$RD" default-branch 2>&1)"; rc=$?
+assert_eq "$rc" "3" "config_failure: origin 설정을 못 읽으면 rc 3"
+assert_contains "$out" "origin 원격 설정을 읽지 못했다(git config 종료 코드 128)" "config_failure: 못 읽었다고 말한다"
+assert_not_contains "$out" "origin 원격이 없다" "config_failure: 「원격이 없다」로 읽지 않는다"
+
+# ── statusline_stays_in_budget ───────────────────────────────────────────────
+mkwrap "$T/slow-config" remote.origin.url "sleep 8"
+t0="$(python3 -I -c 'import time; print(time.time())')"
+line="$(cd "$T/nohead/work" && PATH="$T/slow-config:$PATH" python3 "$REAL/control_plane.py" statusline </dev/null 2>&1)"
+took="$(python3 -I -c 'import sys, time; print(round(time.time() - float(sys.argv[1]), 1))' "$t0")"
+python3 -I -c 'import sys; sys.exit(0 if float(sys.argv[1]) < 4.5 else 1)' "$took" \
+  && ok "statusline_stays_in_budget: 기본 브랜치 판정의 느린 git 도 상태줄 시간 예산 안에서 끊는다(${took}초)" \
+  || no "statusline_stays_in_budget: 상태줄이 시간 예산을 넘겼다(${took}초)"
+assert_contains "$line" "시간 초과" "양성 대조: 느린 config 호출에 실제로 닿아 시간 초과로 끊겼다"
 
 # ── statusline_names_default ─────────────────────────────────────────────────
 S="$T/scripts"; mkdir -p "$S"

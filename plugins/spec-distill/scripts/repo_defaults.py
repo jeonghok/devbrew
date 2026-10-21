@@ -244,7 +244,7 @@ GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file", "config"})   # conf
 NET_GIT_ALLOWED = frozenset({"ls-remote"})   # 네트워크 — check_remote_head 만 쓴다
 REMOTE_TIMEOUT = 10.0
 _origin_prefix = _rm.DEFAULT_REF.rsplit("/", 1)[0] + "/"   # refs/remotes/origin/
-git_dir = None   # 부르는 쪽이 찾은 git 의 폴더 — 있으면 PATH 앞에 둔다(conductor_ledger 가 정한다)
+git_bin_dir = None   # 부르는 쪽이 찾은 git 의 폴더 — 있으면 PATH 앞에 둔다(conductor_ledger 가 정한다)
 
 
 def _git(cwd: str, *args: str, where: str = "repo", timeout: float = 5, allowed=GIT_ALLOWED) -> tuple:
@@ -254,8 +254,8 @@ def _git(cwd: str, *args: str, where: str = "repo", timeout: float = 5, allowed=
     if args[0] == "config" and args[1:2] != ("--get",):
         raise ValueError("git config 는 --get 꼴만 부른다: %r" % (args,))
     env = dict(os.environ, **_GIT_ENV)
-    if git_dir:
-        env["PATH"] = git_dir + os.pathsep + env.get("PATH", "")
+    if git_bin_dir:
+        env["PATH"] = git_bin_dir + os.pathsep + env.get("PATH", "")
     try:
         proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout)
@@ -286,12 +286,31 @@ def default_branch(cwd: str) -> tuple:
     top = _toplevel(cwd)
     sha = _default_commit(top)
     rc, out = _git(top, "rev-parse", "--symbolic-full-name", _rm.DEFAULT_REF)
-    full = out.decode("utf-8", "replace").strip()
-    short = full[len(_origin_prefix):] if rc == 0 and full.startswith(_origin_prefix) else ""
-    if sha and short and short != "HEAD":
+    short = short_default_name(rc, out.decode("utf-8", "replace"))
+    if sha and short:
         return sha, short, None
     rc, _out = _git(top, "config", "--get", "remote.origin.url")
-    return None, None, (_rm.NO_DEFAULT if rc == 0 else _rm.NO_ORIGIN)
+    return None, None, missing_default_reason(rc)
+
+
+def short_default_name(rc: int, full: str):
+    """`rev-parse --symbolic-full-name <기본 ref>` 의 (rc, 출력) → 짧은 이름, 기본 브랜치가 아니면 None. git 을 부르지 않는다."""
+    full = full.strip()
+    if rc != 0 or not full.startswith(_origin_prefix):
+        return None
+    short = full[len(_origin_prefix):]
+    return short if short and short != "HEAD" else None
+
+
+def missing_default_reason(origin_rc: int) -> str:
+    """기본 브랜치를 못 찾았을 때 `config --get remote.origin.url` 의 rc → 고치는 법. 0 원격 있음 · 1 원격 없음,
+    그 밖은 설정을 못 읽은 것이라 멈춘다. git 을 부르지 않는다."""
+    if origin_rc == 0:
+        return _rm.NO_DEFAULT
+    if origin_rc == 1:
+        return _rm.NO_ORIGIN
+    raise SettingsError("unreadable", "repo", "origin 원격 설정을 읽지 못했다(git config 종료 코드 %d) — git config --get "
+                        "remote.origin.url 을 직접 돌려 오류를 확인한다" % origin_rc)
 
 
 def unchecked_line(local_short: str) -> str:

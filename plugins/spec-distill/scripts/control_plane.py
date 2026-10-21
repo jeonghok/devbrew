@@ -383,7 +383,7 @@ def tasks_output(items, select_error=None):
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
 ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
-GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
+GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref", "config"})   # config 는 --get 꼴만
 CACHE_VERSION = 1
 STATE_SUFFIX = "-interview.state.md"
 STATUSLINE_BUDGET = 3.0
@@ -465,6 +465,8 @@ class Repo:
     def git(self, *args):
         if not args or args[0] not in GIT_OK:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
+        if args[0] == "config" and args[1:2] != ("--get",):
+            raise RuntimeError("git config 는 --get 꼴만 부른다: %r" % (args,))
         rc, out = run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
                               self.deadline, "git " + args[0])
         return rc, out.decode("utf-8", "replace")
@@ -493,15 +495,18 @@ def fetch_stamp(repo: Repo):
     return max(stamps) if stamps else None
 
 def default_ref(repo):
-    """(커밋, 전체 참조 이름, 짧은 이름, 못 찾은 사유) — origin/HEAD 가 가리키는 기본 브랜치. 네트워크를 쓰지 않는다."""
-    repo.deadline.left("기본 브랜치")
+    """(커밋, 전체 참조 이름, 짧은 이름, 못 찾은 사유) — origin/HEAD 가 가리키는 기본 브랜치. 판정은 해결자의 순수
+    함수가, git 은 시간 예산 안의 repo.git 이 맡는다. 네트워크를 쓰지 않는다."""
+    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    rc, full = repo.git("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+    short = repo_defaults.short_default_name(rc, full)
+    if sha and short:
+        return sha, full.strip(), short, None
+    rc, _out = repo.git("config", "--get", "remote.origin.url")
     try:
-        sha, short, why = repo_defaults.default_branch(repo.cwd)
+        return None, None, None, repo_defaults.missing_default_reason(rc)
     except repo_defaults.SettingsError as exc:
         return None, None, None, str(exc)
-    if not sha:
-        return None, None, None, why
-    return sha, DEFAULT_REF.rsplit("/", 1)[0] + "/" + short, short, None
 
 
 def candidates(repo: Repo, main):
