@@ -623,11 +623,14 @@ kept rb2 "rb_bundle_fence_link(하드 링크)"
 plain_one "$BND" "rb_bundle_fence_link(하드 링크)"
 
 # 쓰기 불가 상태 폴더 + 쓰기 가능한 직전 번들 — writer 가 실패하면 실패 갈래가 번들을 비우고 멈춘다
-rm -f "$BND"; printf 'OLD bundle\n' > "$BND"; chmod 555 "$SDIR"
-run_fence "$TR/rb-bundle.sh" PAYLOAD="$PAY" AUDIT="$AUD"; rc=$?
-chmod 755 "$SDIR"
+# (다른 payload 의 자리에서 — 위 하드 링크 자리는 아래 링크 수 검사가 본다)
+PAY2="$R/docs/brief-ro.md"; cp "$PAY" "$PAY2"
+SDIR2="$(state_dir_of "$PAY2")"; BND2="$SDIR2/brief-bundle.md"
+mkdir -p "$SDIR2"; printf 'OLD bundle\n' > "$BND2"; chmod 555 "$SDIR2"
+run_fence "$TR/rb-bundle.sh" PAYLOAD="$PAY2" AUDIT="$AUD"; rc=$?
+chmod 755 "$SDIR2"
 [ "$rc" != 0 ] && ok "rb_bundle_ro_dir_clears_stale: 펜스가 멈춘다(rc $rc)" || no "rb_bundle_ro_dir_clears_stale: rc 0 으로 지나갔다"
-if grep -q OLD "$BND" 2>/dev/null; then no "rb_bundle_ro_dir_clears_stale: 직전 번들의 OLD 가 남았다"; else ok "rb_bundle_ro_dir_clears_stale: 직전 번들에 OLD 가 없다"; fi
+if grep -q OLD "$BND2" 2>/dev/null; then no "rb_bundle_ro_dir_clears_stale: 직전 번들의 OLD 가 남았다"; else ok "rb_bundle_ro_dir_clears_stale: 직전 번들에 OLD 가 없다"; fi
 assert_contains "$(cat "$TR/last.err")" "번들 조립 실패" "rb_bundle_ro_dir_clears_stale: 실패 갈래의 공시"
 
 # RF 번들 펜스 — 변수를 앞에 대입해 돈다
