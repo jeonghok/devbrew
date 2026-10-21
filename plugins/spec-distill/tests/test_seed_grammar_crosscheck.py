@@ -145,7 +145,7 @@ class Gen:
         elif k < 0.50:
             s = s[:-1] + " — a < b 이고 버그 #%d 이다." % r.randint(1, 99)
         elif k < 0.56:
-            s = r.choice(["/compact ", "@docs/x.md ", "— ", "/spec-distill:spec-interview "]) + s
+            s = r.choice(["/compact ", "@docs/x.md ", "— ", "/spec-distill:pm-interview "]) + s
         elif k < 0.66:
             s = s[:-1] + " " + r.choice(HONEST_CODE) + " 를 본다."
         return s

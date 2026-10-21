@@ -50,7 +50,41 @@ case_prepare_strips_source_and_keeps_severity() {
   assert_file_absent "$T/rf.yaml" 'confidence'                "리뷰어의 결론(confidence)이 지워진다"
   local id
   id="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['f1']['finding_id'])" "$T/map.json")"
-  assert_eq "$id" "security-reviewer-app.py-10" "역매핑이 합성기의 finding_id 를 준다"
+  local want
+  want="security-reviewer-app.py-10-$(python3 -I -c "import hashlib,sys; print(hashlib.sha1(' '.join(sys.argv[1].split()).casefold().encode('utf-8')).hexdigest()[:8])" "s")"
+  assert_eq "$id" "$want" "역매핑이 합성기의 finding_id(요약 지문 포함)를 준다"
+  rm -rf "$T"
+}
+
+case_same_line_different_claim_distinct_ids() {
+  # AC19 — 같은 리뷰어 · 파일 · 줄이어도 요약이 다르면 id 가 다르다.
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "SQL 을 문자열로 만든다"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "비밀번호를 평문으로 남긴다"\n' > "$T/findings.yaml"
+  prep "$T"
+  local ids
+  ids="$(python3 -I -c "import json,sys; m=json.load(open(sys.argv[1])); print(len({v['finding_id'] for v in m.values()}))" "$T/map.json")"
+  assert_eq "$ids" "2" "다른 주장은 다른 finding_id 를 받는다"
+  reply "$T/reply.txt" 'verdicts:
+  - f: f1
+    verdict: reject
+    evidence: "근거"
+  - f: f2
+    verdict: confirm'
+  local out; out=$(synth "$T" --emit-verdict)
+  assert_not_grep "$out" 'findings-lost' "갈린 판정이 항목 파손으로 잡히지 않는다"
+  assert_grep     "$out" '미판정 0'      "hold 가 없다"
+  assert_contains "$(synth "$T")" '1 CRITICAL' "confirm 한 지적 하나만 남는다"
+  rm -rf "$T"
+}
+
+case_same_claim_whitespace_same_id() {
+  # AC19 — 공백 · 대소문자만 다른 요약은 같은 id 이고 dedup 이 하나로 합친다.
+  local T; T=$(mktemp -d)
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same Claim here"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "  same   claim HERE "\n' > "$T/findings.yaml"
+  prep "$T"
+  local ids
+  ids="$(python3 -I -c "import json,sys; m=json.load(open(sys.argv[1])); print(len({v['finding_id'] for v in m.values()}))" "$T/map.json")"
+  assert_eq "$ids" "1" "공백 · 대소문자 변형은 같은 finding_id"
   rm -rf "$T"
 }
 
@@ -176,9 +210,9 @@ case_duplicate_verdicts_for_one_f_are_held() {
 }
 
 case_colliding_ids_with_split_verdicts_are_not_resolved() {
-  # Review Focus 2 — 같은 agent·file·line 의 finding 둘은 같은 finding_id 로 접힌다.
+  # Review Focus 2 — 같은 agent·file·line 의 finding 둘은 요약이 공백·대소문자 정규화 뒤 같을 때만 같은 finding_id 로 접힌다.
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -197,7 +231,7 @@ case_colliding_ids_with_partial_verdicts_are_not_resolved() {
   # 판정되면(다른 f 는 침묵) 그 일부 판정을 전체에 적용하면 안 된다 — 판정 안 된
   # CRITICAL 이 판정된 IMPORTANT 의 기각을 뒤집어쓰고 조용히 사라진다.
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -205,6 +239,7 @@ case_colliding_ids_with_partial_verdicts_are_not_resolved() {
     evidence: "근거"'
   local out; out=$(synth "$T" --emit-verdict)
   assert_grep     "$out" 'findings-lost'    "f2 가 침묵이면 f1 의 기각을 전체에 적용하지 않는다"
+  assert_grep     "$out" '일부 f 만 판정됐다' "콜라이딩 id 의 부분 판정 보류가 그 사유로 선다"
   assert_not_grep "$out" '^verdict: clean$' "clean 이 아니다 — CRITICAL 이 조용히 사라지지 않는다"
   rm -rf "$T"
 }
@@ -214,7 +249,7 @@ case_colliding_ids_with_matching_verdicts_are_resolved() {
   # 종류가 같으면(둘 다 reject) 콜라이딩 finding_id 에 합쳐 적용한다. 문구까지
   # 토씨 맞추라는 요구가 아니다(컨트롤러 룰링: "same verdict, and same to for raise").
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -236,7 +271,7 @@ case_colliding_ids_with_raise_that_differs_per_severity_are_not_resolved() {
   # 라운드 1은 원문이 같다(둘 다 "raise IMPORTANT")고 보고 오른 쪽의 conv 를 대표로
   # 골라 CRITICAL 까지 IMPORTANT 로 «내려» 버렸다(그 뒤 dedup 이 흡수까지 했다).
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -259,7 +294,7 @@ case_colliding_ids_with_raise_ignored_for_one_severity_are_not_resolved() {
   # 「위로 오르는」게 아니다) f2 는 실제로 오른다. 첫 judged 키(무시된 confirm)를
   # 대표로 고르면 IMPORTANT 가 영원히 안 오르고 hold 도 없다.
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: CRITICAL\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: IMPORTANT\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -285,7 +320,7 @@ case_colliding_ids_with_raise_to_different_targets_are_not_resolved() {
   # 시작해 둘 다 실제로 오르게 만든다(f1 → IMPORTANT, f2 → CRITICAL) — verdict
   # 는 둘 다 "raise" 로 같지만 adjusted_severity 가 다르다.
   local T; T=$(mktemp -d)
-  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "하나"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "둘"\n' > "$T/findings.yaml"
+  printf -- '- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "Same claim"\n- agent: scout\n  file: a.py\n  line: 3\n  severity: SUGGESTION\n  confidence: 8\n  summary: "same  CLAIM"\n' > "$T/findings.yaml"
   prep "$T"
   reply "$T/reply.txt" 'verdicts:
   - f: f1
@@ -1007,6 +1042,8 @@ case_ac6_lower_on_suggestion_is_noop() {
 }
 
 case_prepare_strips_source_and_keeps_severity
+case_same_line_different_claim_distinct_ids
+case_same_claim_whitespace_same_id
 case_prepare_empty_states_the_empty_slot
 case_prepare_unreadable_findings_is_fail4_without_outputs
 case_identity_parity_with_weird_fields

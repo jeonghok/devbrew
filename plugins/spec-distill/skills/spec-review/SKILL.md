@@ -126,7 +126,22 @@ advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트
 `$spec_path` 는 **호출 인자**다 — `Skill spec-distill:spec-review <설계문서 경로>` 또는
 `/spec-distill:spec-review <경로>`. 인자가 `@` 로 시작하면 그 `@` 하나를 뗀다. 상대 경로면 진입 단계 감시줄의 `root=` 기준 절대 경로로 바꿔 쓴다.
 
-인자에 `--bundle <에픽 묶음|interview brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path='<절대 경로로 바꾼 설계문서 경로>' bundle_arg='<--bundle 값, 없으면 빈 값>' repo_root='<감시줄 root= 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
+**경로 대입 줄.** 이 skill 의 펜스 앞에 붙이는 값 대입은 전부 아래 꼴이다 — 변수 하나마다 세 줄이다. 첫 줄의 `spec_path` 를 그 변수 이름으로 바꾸고, `<경로 그대로>` 자리에 값을 글자 그대로 넣는다. 값을 따옴표로 감싸지 않는다(따옴표 heredoc 이 글자 그대로 넘긴다). 값이 없으면 값 줄을 빈 줄로 둔다. 값에 줄바꿈이 있으면 대입하지 말고 멈춰 그 사실과 값을 사용자에게 보인다. 값에 구분 줄(`DEVBREW_PATH_EOF`)과 똑같은 줄이 있으면 그 변수의 여는 줄과 닫는 줄의 구분자를 값에 없는 다른 낱말로 함께 바꾼다. 변수마다 넣는 값:
+
+- `spec_path` — 위에서 절대 경로로 바꾼 설계문서 경로
+- `bundle_arg` — `--bundle` 값(없으면 빈 값)
+- `repo_root` — 진입 단계 감시줄의 `root=` 값
+- `bundle_path` — 아래 번호 대조 진입 펜스가 낸 `bundle-entry: PROCEED` 뒤 경로
+
+<!-- path-assign:begin -->
+```bash
+IFS= read -r spec_path <<'DEVBREW_PATH_EOF'
+<경로 그대로>
+DEVBREW_PATH_EOF
+```
+<!-- path-assign:end -->
+
+인자에 `--bundle <에픽 묶음|interview brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path` · `bundle_arg` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
 
 <!-- bundle-entry:begin -->
 ```bash
@@ -171,7 +186,7 @@ git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'd
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}")"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ ! -f "$SD/scripts/state_path.py" ]; then
@@ -190,7 +205,7 @@ fi
 (`<state-root>/.docreview/<stem>-<해시>`)라서 같은 문서는 dispatch 와 세션을 넘어 같은 디렉토리로
 돌아와 라운드와 재리뷰 상한이 이어지고, 다른 문서는 다른 디렉토리로 간다. 한 디렉토리를
 여러 문서가 쓰면 둘째 문서가 첫 문서의 라운드·상한·finding 위에서 시작한다(`init` 은 그런 원장을
-`state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 대입한다. 세션 id
+`state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 경로 대입 줄로 대입한다. 세션 id
 를 못 풀면 위 블록이 `$STATE_DIR` 을 비우고, `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 빈 값이다 — 선결의
 `init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이 아니면 값과 무관하게 이 라운드를
 진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로, `state_doc_mismatch` 같은 거부를 넘어
@@ -210,7 +225,7 @@ fi
 ## 표지와 원장 열기 — 라운드마다 선결 앞
 
 절차서의 선결(`mkdir -p` · `init`) 앞에 매 라운드 이 펜스를 같은 Bash 호출 앞에 이어 붙여 돈다. 펜스 앞에
-`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다. 마지막 줄이 판결이고, `HELD` 가 아니면 펜스가 rc 3 으로 끝나 같은 호출의 뒤 명령이 돌지 않는다.
+`spec_path` 의 경로 대입 줄을 붙인다. 마지막 줄이 판결이고, `HELD` 가 아니면 펜스가 rc 3 으로 끝나 같은 호출의 뒤 명령이 돌지 않는다.
 원장 자리가 레포 밖이거나 레포 꼭대기 아래에서 링크(`.claude` · `spec-distill` · `.docreview` 포함)를
 지나면 만들지 않는다. 원장 정리는 이 세션이 이미 표지를 쥔 다음 라운드가 아니면 원장 자리를 만들기
 전에 한 번 돈다.
@@ -219,7 +234,12 @@ fi
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
+common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
+here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"; here_common="$(common_dir || true)"
+if [ -n "${spec_path:-}" ] && doc_top="$(cd "$(dirname "$spec_path")" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
+  [ "$(cd "$(dirname "$spec_path")" && common_dir || true)" = "$here_common" ] || echo "[spec-distill] 리뷰 원장은 문서가 사는 레포(${doc_top})의 것을 쓴다 — 지금 작업 폴더의 레포(${here_top:-없음})와 다르다."
+fi
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lo="ERROR"
@@ -265,7 +285,7 @@ echo "ledger-open: ${lo}"
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
@@ -275,13 +295,13 @@ STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROO
 이 펜스는 사용자가 「이어 씀」을 고른 뒤에만 돈다.
 
 해제 펜스 — 원장 열기가 `HELD` 를 낸 뒤 게이트 없이 끝나는 출구(`### 대상 부재`)에서 돈다. 펜스 앞에
-`spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙인다.
+`spec_path` 의 경로 대입 줄을 붙인다.
 
 <!-- ledger-release:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && [ -d "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
@@ -321,6 +341,7 @@ g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --sessi
 
 4단계 codex 는 이 자리의 리터럴 게이트다. 조건을 산문으로 적지 않는다 — 산문 조건은 집행되지 않고,
 kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" 만든다.
+펜스 앞에 `spec_path` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다.
 
 <!-- codex-gate:begin runner=run_docreview_codex_reviewer.sh -->
 ```bash
@@ -336,7 +357,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 # 정상 경로이고, 그때 두 번 도출하지 않는다.
 if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
-  ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
+  ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)}"
   STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)}"
   [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
   if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
@@ -376,7 +397,7 @@ residue_unclear=0; residue_left=""
 neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
   rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
   if [ -e "$NEUTRALISE_TARGET" ]; then
-    : > "$NEUTRALISE_TARGET" 2>/dev/null || true
+    python3 "$SD/scripts/nofollow_write.py" empty --out "$NEUTRALISE_TARGET" 2>/dev/null || true
     if [ -s "$NEUTRALISE_TARGET" ]; then return 1; fi
   fi
   return 0
@@ -396,7 +417,7 @@ if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
 # 위 진입 중화가 이미 지웠다. 처방은 「앞에 이어 붙여라」다 — 별개 호출로 다시 돌려도 같은
 # 빈 상태가 재생산된다.
 if [[ -z "${spec_path:-}" || -z "${CODEX_YAML:-}" ]]; then
-  echo "[spec-distill] codex 게이트 입력 부재 — spec_path='${spec_path:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌리고, spec_path 에는 이 skill 의 호출 인자(설계문서 경로)를 대입해라. 이 라운드의 codex 축은 없이 간다." >&2
+  echo "[spec-distill] codex 게이트 입력 부재 — spec_path='${spec_path:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌리고, spec_path 에는 이 skill 의 호출 인자(설계문서 경로)를 「## 입력」의 경로 대입 줄로 대입해라. 이 라운드의 codex 축은 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
 # 진입 중화가 실패했으면 그 사실이 다른 어떤 사유보다 앞선다 — 이 라운드는 codex 를
@@ -437,14 +458,14 @@ Read 가 거부된다. 탐지 dispatch 직전에(재dispatch 포함) 아래 펜�
 `<profile>` 슬롯에 싣는다. 펜스의 rc 가 0 이 아니면 dispatch 하지 않는다 — 펜스가 critic 출력 파일
 (`$STATE_DIR/critic.txt` 와 `$STATE_DIR/critic-<번호>.txt`)을 비우고(`$STATE_DIR` 이 비면 건너뛴다) 5단계가 그것을
 critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 실패면 「미검증」이다. 엔진도 라운드 시작보다 오래된 critic 파일을 부재로
-읽는다(`critic_predates_round`). `$spec_path` 는 이 펜스와 **같은 Bash 호출**에서 대입한다(codex 게이트 펜스와
+읽는다(`critic_predates_round`). 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙여 이 펜스와 **같은 Bash 호출**에서 대입한다(codex 게이트 펜스와
 같다) — 새 셸에는 앞 호출의 대입이 남지 않아 `$STATE_DIR` 이 비고, 그러면 펜스는 비움을 건너뛰고 그 사실을 알린다.
 
 <!-- profile-content:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}")"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
@@ -455,7 +476,7 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
     clr_rc=0; bash "$SD/scripts/clear_critic_outputs.sh" "$STATE_DIR" >&2 || clr_rc=$?
     case "$clr_rc" in 0|1|2) ;; *) echo "[spec-distill] critic 출력 파일을 비우지 못했다 — 비우는 스크립트가 돌지 않았다(rc ${clr_rc}): $SD/scripts/clear_critic_outputs.sh" >&2 ;; esac
   else
-    echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(spec_path='${spec_path:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). spec_path 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
+    echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(spec_path='${spec_path:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). spec_path 는 「## 입력」의 경로 대입 줄로 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
   exit 1
 fi
@@ -519,7 +540,16 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 렌더 순서 맨 끝에 서고, 같은 4개씩 분할에 함께 세어지며, 선택지 「열기 / 열지 않음」 둘뿐인 그
 자신의 질문이다**(열린 항목을 마저 처리하는 것과는 독립적으로 고른다 — 다른 항목의 질문에
 얹지 않는다). 「추가 라운드 1회 열기」를 고르면
-다음 라운드 1단계가 `begin-round --extra-approval "<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>" --extra-approval-source label|typed` 로 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다.
+다음 라운드 1단계의 `begin-round` 에 `--extra-approval="$extra_approval" --extra-approval-source label|typed` 를 붙여 돈다 — 선택지를 골랐으면 `label`, 기타 칸에 썼으면 `typed`. 둘이 `extra_rounds` 에 함께 기록된다. 그 Bash 호출 앞에 아래 펜스를 붙이고, 자리에 고른 선택지 이름 또는 기타 칸에 쓴 말을 따옴표로 감싸지 않고 글자 그대로 넣는다. 말에 구분 줄(`DEVBREW_EXTRA_APPROVAL_EOF`)과 똑같은 줄이 있으면 여는 줄과 닫는 줄의 구분자를 말에 없는 다른 낱말로 함께 바꾼다.
+
+<!-- extra-approval:begin -->
+```bash
+IFS= read -r -d '' extra_approval <<'DEVBREW_EXTRA_APPROVAL_EOF' || true
+<고른 선택지 이름 또는 기타 칸에 쓴 말 그대로>
+DEVBREW_EXTRA_APPROVAL_EOF
+extra_approval="${extra_approval%$'\n'}"
+```
+<!-- extra-approval:end -->
 
 **`AskUserQuestion` 라벨의 항목별 내용** — 각 선택지 `label` 은 **상태별 라벨 + `— <replacement 를 1–5 낱말로 압축>`** 이다. 상태별 라벨만 담으면 같은 라운드의 여러 항목이 전부 같은 글자가 되어 「라벨만 읽고 고른다」가 원리적으로 안 닫힌다. 같은 라운드의 두 항목이 **같은 라벨을 갖지 않는다.** 단 `replacement` 가 둘 다 부재면 그 부재 표기(`(대체안 미작성)`)가 같을 수 있고, 그때는 이 규약이 공허해지지 않도록 **부재 건수를 함께 공시한다**(「대체안 미작성 N건」). `label` 예산은 1–5 낱말이므로 압축은 필수다 — 렌더의 「고치면」 줄이 전문을 이미 내므로 라벨은 그 줄을 가리키는 손잡이다. 질문 · 선택지 이름에 AC 번호 · 지적 id · § 를 쓰지 않고 설명 괄호에만 쓴다 — 선택지 이름만 보고 무엇을 고르는지 알 수 있어야 한다. 상한 · 정체로 열린 승인 게이트의 승인 선택지 이름은 엔진 렌더의 「열린 지적 N개를 두고 진행」을 그대로 쓴다.
 
@@ -543,7 +573,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 박제 · 계수가 실패하면 공시한 뒤 목록만 다시 낸다(표시는 문서를 쓰지 않는다).
 
 셋 다 멱등이라 ③ 수정 뒤 다시 와도 두 번 적지 않는다. 문서가 바뀌므로 ①/② 의 미커밋 확인이 그 변경을
-알리고, 그때 커밋한다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
+알리고, 그때 커밋한다. 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙여
 같은 Bash 호출로 돌린다. 이 펜스가 이 리뷰의 마지막 원장 쓰기다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고
 끝에서 푼다. ③ 이면 수정 · `check-intent` · 다음 라운드의 어느 원장 쓰기보다 먼저 원장 열기(`ledger-open`)를 다시 돈다 — 표지를 다시 잡는다.
 
@@ -551,7 +581,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lm_rc=0
@@ -585,12 +615,12 @@ fi
 펜스 출력에 접는 줄(`… 외 K건`)이 있으면 2단계 게이트를 띄우기 전에 `AskUserQuestion` 한 번 — 「참고 전부 보기」 ·
 「접은 채로 둔다」. 「참고 전부 보기」면 아래 펜스로 엔진 목록 전부를 요약 전문으로 보인다(박제된 표는 설계문서의
 `### Deferred to plan` 에 이미 있다 — 이 펜스는 원장을 읽기만 하고, 앞 펜스가 표지를 풀었으므로 원장 폴더에 아무것도
-쓰지 않는다 — 목록은 `advice-list` 가 읽기 전용으로 내고 `$(…)` 로 받는다). 앞 펜스와 같이 `spec_path='<…>'` 한 줄을 붙여 같은 Bash 호출로 돌린다:
+쓰지 않는다 — 목록은 `advice-list` 가 읽기 전용으로 내고 `$(…)` 로 받는다). 앞 펜스와 같이 `spec_path` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다:
 
 <!-- advice-all:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
@@ -610,7 +640,7 @@ for it in items:
 
 **번호 대조 경고 — 라운드 · 승인 게이트 모두.** `## 입력` 의 진입 펜스가 낸 번호 대조 줄은 게이트 앞 글에 엔진 렌더 첫 줄 다음으로 그대로 다시 싣고, `번호 대조 경고 <N>개` 의 N 을 질문의 「경고 N개 — 위에 적었다」의 N 에 더한다. 그 N 이 0 이 아니면 「이상 없음」·「경고 없음」을 쓰지 않는다. 번호 대조 경고는 degrade 가 아니라 정답 출처 대조의 경고다 — 채널은 진입 펜스의 출력이다.
 
-**기각한 번호 — 2단계 질문 앞(N18).** 2단계 질문 앞 글에, 이 설계가 받지 않기로 한 번호(`## 번호 대조` 표의 「기각」 행)의 수와 목록을 아래 펜스 출력 그대로 싣는다 — 로드맵 속 위치 줄들 바로 앞에. 출력이 없으면(번호 대조 표가 없는 설계문서) 아무것도 싣지 않는다. 이 수는 「경고 N개」에 더하지 않는다 — 경고가 아니라 사용자가 되돌릴 수 있는 결정이다. 되돌리는 길은 아래 `**기타 칸 — 기각 번호 되돌리기.**` 문단이다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>' repo_root='<감시줄 root= 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다.
+**기각한 번호 — 2단계 질문 앞(N18).** 2단계 질문 앞 글에, 이 설계가 받지 않기로 한 번호(`## 번호 대조` 표의 「기각」 행)의 수와 목록을 아래 펜스 출력 그대로 싣는다 — 로드맵 속 위치 줄들 바로 앞에. 출력이 없으면(번호 대조 표가 없는 설계문서) 아무것도 싣지 않는다. 이 수는 「경고 N개」에 더하지 않는다 — 경고가 아니라 사용자가 되돌릴 수 있는 결정이다. 되돌리는 길은 아래 `**기타 칸 — 기각 번호 되돌리기.**` 문단이다. 펜스 앞에 `spec_path` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다.
 
 <!-- rejected-numbers:begin -->
 ```bash
@@ -620,7 +650,7 @@ python3 "$SD/scripts/spec_review_bundle.py" rejected --spec "${spec_path:-}" --r
 ```
 <!-- rejected-numbers:end -->
 
-**로드맵 속 위치와 이웃 결정 — 2단계 질문 바로 앞.** 진입 펜스의 `PROCEED` 뒤 경로가 `-` 가 아니면 아래 펜스를 돌려 출력을 게이트 앞 글의 맨 끝(질문 바로 앞)에 그대로 싣는다. 출력이 없으면(brief · 로드맵 밖) 아무것도 싣지 않는다. 펜스 앞에 `bundle_path='<PROCEED 뒤 경로>' repo_root='<감시줄 root= 값>'` 한 줄을 붙인다.
+**로드맵 속 위치와 이웃 결정 — 2단계 질문 바로 앞.** 진입 펜스의 `PROCEED` 뒤 경로가 `-` 가 아니면 아래 펜스를 돌려 출력을 게이트 앞 글의 맨 끝(질문 바로 앞)에 그대로 싣는다. 출력이 없으면(brief · 로드맵 밖) 아무것도 싣지 않는다. 펜스 앞에 `bundle_path` · `repo_root` 의 경로 대입 줄을 붙인다.
 
 <!-- roadmap-position:begin -->
 ```bash
@@ -641,10 +671,10 @@ fi
 |---|---|
 | ① | 미커밋 확인 → `/compact` 후 다음 세션 줄 (권장) — 두 줄을 노출하고 **턴 종료** |
 | ② | 미커밋 확인 → `/new` 후 같은 다음 세션 줄 — 두 줄을 노출하고 **턴 종료** |
-| ③ | 수정 필요 — 후속 질문으로 revise per findings / `spec-interview` 재진입 / 사용자 직접 편집 분기(로드맵 에픽이면 이 에픽 다시 설계도). 수정 · `check-intent` · 다음 라운드 전에 원장 열기(`ledger-open`)를 먼저 다시 돈다(끝맺음 펜스가 표지를 풀었다) |
+| ③ | 수정 필요 — 후속 질문으로 revise per findings / `pm-interview` 재진입 / 사용자 직접 편집 분기(로드맵 에픽이면 이 에픽 다시 설계도). 수정 · `check-intent` · 다음 라운드 전에 원장 열기(`ledger-open`)를 먼저 다시 돈다(끝맺음 펜스가 표지를 풀었다) |
 | ④ | 멈춤 — 상태 보존하고 종료 |
 
-**③ 의 갈래와 로드맵 에픽.** ③ 을 고르면 후속 질문 하나로 갈래를 묻는다 — 「지적대로 고치기」(revise per findings) · 「인터뷰 다시 열기」(`spec-interview` 재진입) · 「직접 편집」(사용자 직접 편집). 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 그 문서는 로드맵 에픽이고, 갈래가 넷이다:
+**③ 의 갈래와 로드맵 에픽.** ③ 을 고르면 후속 질문 하나로 갈래를 묻는다 — 「지적대로 고치기」(revise per findings) · 「인터뷰 다시 열기」(`pm-interview` 재진입) · 「직접 편집」(사용자 직접 편집). 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 그 문서는 로드맵 에픽이고, 갈래가 넷이다:
 
 - 「이 에픽 다시 설계」 를 더한다 — 지적이 이 에픽의 묶음 안에서 끝날 때(다른 에픽의 범위 · 의존 · 경로 예약을 바꾸지 않을 때)의 길이다. 이 skill 을 여기서 끝내고, 같은 세션에서 같은 묶음(`--bundle` 값) · 지금 설계문서 · 이번 라운드의 지적을 입력으로 Skill superpowers:brainstorming 을 다시 시작한다. 설계문서는 같은 경로에 고쳐 쓰고 커밋한 뒤 그 경로 뒤에 `--bundle <묶음>` 을 붙여 이 skill 을 다시 부른다 — 새 경로에 쓰면 번호 대조가 같은 묶음의 설계문서 둘(「여러 spec」)로 경고한다. 묶음 · 로드맵은 고치지 않는다.
 - 「인터뷰 다시 열기」 갈래는 인터뷰를 다시 열지 않고 같은 로드맵 위의 재분해 절차로 간다 — 지적이 다른 에픽의 경계에 닿을 때(범위가 다른 에픽으로 옮겨 가거나 새 에픽이 필요할 때)의 길이다.
@@ -657,24 +687,31 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 표 행을 고치기 전에 — 이 라운드 게이트에서 이 되돌림의 근거가 된 채택 결정이 있으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors '<번호 대조 절 앵커>' '<내용을 더한 절 앵커>'` 로 이 되돌림이 고칠 절을 모두 결정에 묶는다(원장 쓰기 — 진입 skill 의 표지 확인 줄 다음에만, 같은 Bash 호출에서). 내용을 더한 절은 아래 「자리가 없으면 그 내용을 설계에 더한다」 의 절이다 — 더할 절이 없으면 번호 대조 절만 묶고, 새 절을 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다. `declare-related` 가 rc 0 이 아니면(묶지 못했다) 엔진이 낸 사유를 그대로 보이고, 채택한 결정이 없을 때와 같이 사용자에게 먼저 알린다. 채택한 결정이 없으면 고친 행과 내용을 더한 절은 다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다 — 그 사실을 사용자에게 먼저 알리고, 그 게이트에서 「고친 대로 둠」으로 닫는다. 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
 
-**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스 앞에 `spec_path='<설계문서 절대 경로>'` 한 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
+**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스는 그 문서가 사는 레포의 원장으로 쓰고, 지금 작업 폴더가 다른 레포면 그 사실을 알린다(같은 레포의 다른 worktree 는 원장이 같아 알리지 않는다). 문서가 git 작업 트리 밖이면 지금 작업 폴더 레포의 원장에 쓴다 — 원장 열기와 같은 원장이고, 쓸 때마다 git 밖이라는 줄이 난다. 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
 
 - rc 2 — 넣은 글이 거부됐다. 줄은 이미 한 줄이어야 하고 엔진 줄 · 목록 · 제목 표지로 시작하지 못한다 — 사유가 줄이면(`line_*`) 줄을 고쳐 다시 돈다. 사유가 사용자 말이면(`quote_*`) 멈추고 사유를 사용자에게 보인다.
-- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
+- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 문서의 폴더로 들어가지 못했다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
 - rc 0 — 엔진이 썼거나, 원장 자리는 찾았는데 이 문서의 리뷰 원장이 없다고 알렸다. 원장이 없을 때만 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
 
 <!-- decision-line:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-[ -n "${spec_path:-}" ] || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 비었다(이 펜스와 같은 Bash 호출에서 대입한다)." >&2; exit 1; }
+[ -n "${spec_path:-}" ] || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 비었다(「## 입력」의 경로 대입 줄로 이 펜스와 같은 Bash 호출에서 대입한다)." >&2; exit 1; }
+case "$spec_path" in /*) ;; *) echo "[spec-distill] 결정 줄을 쓰지 않았다 — spec_path 가 절대 경로가 아니다(spec_path='${spec_path}'). 손으로 쓰지 말고 이 사유를 보고하라." >&2; exit 1 ;; esac
+common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
+here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+here_common="$(common_dir || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "$spec_path" || true)"
+cd "$(dirname "$spec_path")" || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — 설계문서의 폴더로 들어가지 못했다(spec_path='${spec_path}'). 손으로 쓰지 말고 이 사유를 보고하라." >&2; exit 1; }
+doc_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$doc_top" ] || [ "$(common_dir || true)" = "$here_common" ] || echo "[spec-distill] 결정 줄은 문서가 사는 레포(${doc_top})의 원장으로 쓴다 — 지금 작업 폴더의 레포(${here_top:-없음})와 다르다."
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ -z "${STATE_DIR:-}" ]; then
-  echo "[spec-distill] 결정 줄을 쓰지 않았다 — 원장 자리를 찾지 못했다(spec_path='${spec_path}' · ROOT='${ROOT:-}' — 원장 자리가 비었거나 레포 밖이거나 링크를 지난다, 위 사유). 손으로 쓰지 말고 이 사유를 보고하라 — spec_path 는 절대 경로여야 하고 cwd 는 그 문서의 git 작업 트리 안이어야 한다." >&2; exit 1
+  echo "[spec-distill] 결정 줄을 쓰지 않았다 — 원장 자리를 찾지 못했다(spec_path='${spec_path}' · ROOT='${ROOT:-}' — 원장 자리가 비었거나 레포 밖이거나 링크를 지난다, 위 사유). 손으로 쓰지 말고 이 사유를 보고하라." >&2; exit 1
 fi
 if [ ! -f "$STATE_DIR/docreview-state.md" ]; then
   echo "[spec-distill] 이 문서의 리뷰 원장이 없다(STATE_DIR='${STATE_DIR}') — 결정 줄을 엔진으로 쓰지 않았다. 결정 기록 끝에 손으로 쓴다(다음 리뷰가 기준선으로 받는다)."; exit 0
@@ -726,13 +763,13 @@ python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" -
 ### 미커밋 확인 — ①/② 직전
 
 사용자가 진행을 고르면 다음 단계로 가기 전에 이 펜스를 돌리고, 나온 `[spec-distill]` 줄을 그대로
-보인다. 진행은 막지 않는다. 펜스 앞에 `spec_path='<「## 입력」에서 절대 경로로 바꾼 설계문서 경로>'` 한 줄을 붙여
+보인다. 진행은 막지 않는다. 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙여
 같은 Bash 호출로 돌린다 — 호출마다 새 셸이라 앞 대입이 오지 않는다.
 
 <!-- uncommitted-check:begin -->
 ```bash
 if [ -z "${spec_path:-}" ]; then
-  echo "[spec-distill] 미커밋 확인 입력 부재 — spec_path 가 비었다(Bash 호출마다 새 셸이다 — 호출 인자를 이 펜스 안에서 다시 대입하라)."
+  echo "[spec-distill] 미커밋 확인 입력 부재 — spec_path 가 비었다(Bash 호출마다 새 셸이다 — 호출 인자를 「## 입력」의 경로 대입 줄로 이 펜스 앞에 다시 대입하라)."
 elif [ ! -e "$spec_path" ]; then
   echo "[spec-distill] 미커밋 확인 대상 부재 — '$spec_path' 가 없다(cwd=$(pwd)). 커밋 여부를 확인하지 못했다."
 else

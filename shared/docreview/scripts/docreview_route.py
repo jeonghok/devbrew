@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점
 from adjudication import Ledger  # noqa: E402
 from docreview_anchor import classify_anchor, refs_of  # noqa: E402
 from docreview_state import (  # noqa: E402
-    RANK, LedgerCorrupt, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, load_profile,
-    load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
+    RANK, LedgerCorrupt, _SLUG_STRIP, _log_section_anchors, offered_choices_for, category_gloss, choice_label, fail, lineage_anchors,
+    load_profile, load_state, observe_ledger, open_lineages, pending_mismatch, record_findings, round_diff, save_state, yaml,
 )
 from docreview_advice import (  # noqa: E402
     ROUTE_ADVICE, advice_ids, advisory_axes, has_must_catch, mc_preexisting_new, member_categories, route_step1,
@@ -103,6 +103,7 @@ def merge_list_blocks(blocks, name, ev):
 
     - 목록이 아닌 블록이 하나라도 있으면 (None, "not a list").
     - 글자까지 같은 항목(정렬한 JSON 이 같다)은 처음 것만 남기고 나머지를 흡수로 센다.
+    - 한 블록 안에서 같은 `ref` 를 두 번째로 쓴 새 항목은 받지 않고 `duplicate_ref` 보류로 센다.
     - 블록 k(2 이상)가 앞 블록에서 이미 쓴 임시 번호(ref)를 다시 쓰면 그 블록 안에서 `<ref>@b<k>` 로
       바꾸고, 같은 블록 안의 `blocks` 도 따라 바꾼다 — 질문은 자기 블록의 항목을 막는다.
     - 블록이 둘 이상이면 둘째부터 블록마다 흡수 한 건(`<name>#b<k>` → `<name>#b1`)을 센다.
@@ -117,18 +118,29 @@ def merge_list_blocks(blocks, name, ev):
         blk = [_no_at(x, ev) for x in blk]
         # 1 걸음 — 항목마다 처분을 정한다: 글자까지 같은 항목은 흡수(자리는 살아남은 항목의 최종 ref),
         # 앞 블록과 ref 가 겹치는 새 항목은 `<ref>@b<k>` 로 바꾼다.
-        local, plan = {}, []
+        local, plan, block_refs = {}, [], set()
         for it in blk:
             key = json.dumps(it, sort_keys=True, ensure_ascii=False, default=str)
             ref = str(it["ref"]) if isinstance(it, dict) and it.get("ref") is not None else None
             label = "%s#b%d:%s" % (name, k, (it.get("ref") if isinstance(it, dict) else "?"))
-            if key in seen_items:
+            if key in seen_items and ref is not None and local.get(ref, final_ref.get(key)) != final_ref.get(key):
+                # 같은 블록에서 이미 다른 항목이 이 임시 번호로 옮겨졌다 — 조용히 덮어쓰지 않고 센다.
+                ev("hold", label, "항목 파손: duplicate_ref")
+                continue
+            elif key in seen_items:
                 ev("absorbed", label, seen_items[key])
                 plan.append((None, None))
+                block_refs.add(ref)
                 if ref is not None and final_ref.get(key) is not None:
                     local[ref] = final_ref[key]
+                continue
+            elif ref is not None and ref in block_refs:
+                # 한 블록 안의 같은 임시 번호 — 뒤 항목을 받지 않고 센다(조용히 덮거나 다시 번호 매기지 않는다).
+                ev("hold", label, "항목 파손: duplicate_ref")
+                continue
             else:
                 seen_items[key] = label
+                block_refs.add(ref)
                 new_ref = ref
                 if ref is not None and k > 1 and ref in seen_refs:
                     new_ref = "%s@b%d" % (ref, k)
@@ -156,6 +168,20 @@ def merge_list_blocks(blocks, name, ev):
     return merged, None
 
 
+def _anchor_count(scope: str) -> int:
+    """`edit_scope` 안의 앵커 수 — 쉼표 · 공백으로 나눈 조각 가운데 `#` 또는 `insert-after:#` 로 시작하는 것."""
+    n = 0
+    for part in re.split(r"[,\s]+", scope.strip()):
+        n += 1 if part.startswith(("#", "insert-after:#")) else 0
+    return n
+
+
+def _engine_slug(value: str) -> str:
+    """앵커 글자의 `#` 뒤에 엔진 slug 와 같은 문자 제거를 적용한다 — `#` 앞(`insert-after:` 따위)은 그대로."""
+    head, sep, tail = value.partition("#")
+    return head + sep + _SLUG_STRIP.sub("", tail)
+
+
 def normalize(item, layer_default, prefix, idx, ledger):
     tag = "%s%d" % (prefix, idx)
     if not isinstance(item, dict):
@@ -166,6 +192,17 @@ def normalize(item, layer_default, prefix, idx, ledger):
     if not anchor.startswith("#") or not summary:
         ledger.hold(tag, "항목 파손: anchor/summary 부재")
         return None
+    raw_scope = str(item.get("edit_scope") or anchor)
+    if _anchor_count(raw_scope) > 1:
+        ledger.hold(tag, "항목 파손: edit_scope_multi_anchor")
+        return None
+    raw_anchor = anchor
+    anchor = _engine_slug(anchor)
+    if anchor != raw_anchor:
+        ledger.coerced("anchor", raw_anchor, anchor)
+    edit_scope = anchor if raw_scope == raw_anchor else _engine_slug(raw_scope)
+    if raw_scope != raw_anchor and edit_scope != raw_scope:
+        ledger.coerced("edit_scope", raw_scope, edit_scope)
     disp = item.get("disposition")
     disp = str(disp).strip() if disp else None
     if disp is not None and disp not in RANK:
@@ -188,7 +225,7 @@ def normalize(item, layer_default, prefix, idx, ledger):
         "ref": str(item.get("ref") or tag), "layer": 1 if layer == 1 else 2,
         "category": str(item.get("category") or "other"), "anchor": anchor,
         "disposition": disp, "summary": summary,
-        "edit_scope": str(item.get("edit_scope") or anchor), "blocks": _refs(item.get("blocks")),
+        "edit_scope": edit_scope, "blocks": _refs(item.get("blocks")),
         "supersedes": (str(item["supersedes"]) if item.get("supersedes") else None),
         # 이미 내린 결정과 반대인 본문 — 가리킨 결정 id(`D<r>.<n>`). 형식은 아래에서, 실재 · 묶임은 `_classify_items` 가 본다.
         "contradicts": contradicts, "_contradicts_malformed": malformed,
@@ -402,6 +439,7 @@ def cmd_prepare(a) -> int:
             # 버려진 사본의 위반 때문에 「형식 위반」 공시를 받지 않게 한다.
             if not first.get("contradicts") and not first.get("_contradicts_malformed") and it.get("_contradicts_malformed"):
                 first["_contradicts_malformed"] = it["_contradicts_malformed"]
+            continue
         else:
             deduped.append((src, it))
     items = deduped
@@ -646,6 +684,11 @@ def _absorb_same_as(items, same_as, L):
             if m != keep:
                 items[m]["_absorbed_into"] = keep
                 L.absorbed(m, into=keep)
+                # 흡수된 형제가 막던 항목도 생존자가 이어서 막는다 — 중복 없이, 순서대로.
+                merged = list(items[keep].get("blocks") or [])
+                for r in items[m].get("blocks") or []:
+                    merged += [] if r in merged else [r]
+                items[keep]["blocks"] = merged
     return keep_of
 
 
@@ -690,8 +733,8 @@ def _contradiction_binding(st, entry_by_id, cid, it, cls, fenced) -> str:
     return "bound"
 
 
-def _classify_items(items, st, prof, sections, n, L):
-    """프로필 허용 처분 강제 · 앵커 분류(보호·불변) · 승격.
+def _classify_items(items, st, prof, sections, n, L, lineage):
+    """프로필 허용 처분 강제 · 앵커 분류(보호·불변 — `lineage` 는 `cmd_finalize` 가 한 번 구한 계보) · 승격.
 
     흡수된 항목은 버리고 기각된 항목은 따로 모은다 — (final, rejected_items, contra_notes).
     `contra_notes` 는 `contradicts` 를 비운 사유별 공시 재료다: unknown_decisions(기록에 없는 id) · unbound_decisions(있으나
@@ -739,7 +782,7 @@ def _classify_items(items, st, prof, sections, n, L):
             L.coerced("disposition", d, new)
             it["disposition"] = new
             d = new
-        cls = classify_anchor(it["anchor"], sections, prof)
+        cls = classify_anchor(it["anchor"], sections, prof, lineage=lineage)
         cid = it.get("contradicts")
         if cid:
             verdict = _contradiction_binding(st, entry_by_id, cid, it, cls, fenced)
@@ -772,8 +815,9 @@ def _classify_items(items, st, prof, sections, n, L):
     return final, rejected_items, notes
 
 
-def _auto_decides(a, diff, st, prof, sections, n, L):
-    """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre).
+def _auto_decides(a, diff, st, prof, sections, n, L, lineage):
+    """사후·이월 auto decide — 얼림 diff(post) · check-intent 거부(pre) · expired 재상승(pre). 사후 항목의 층 · 불변은
+    `lineage`(보호 · 불변 계보)를 합쳐 잰다.
 
     `diff` 는 `cmd_finalize` 가 원장의 라운드별 스냅숏으로 계산한 얼림 diff(`docreview_state.round_diff`)다 — 라운드
     1 에는 직전 스냅숏이 없어 None 이고 사후 항목이 없다. `a` 는 인자 묶음 그대로다.
@@ -789,7 +833,7 @@ def _auto_decides(a, diff, st, prof, sections, n, L):
     extra = []
     if diff is not None:
         for c in diff.get("changed", []):
-            cls = classify_anchor(c["anchor"], sections, prof)
+            cls = classify_anchor(c["anchor"], sections, prof, lineage=lineage)
             extra.append({"f": None, "layer": 1 if cls["protected"] else 2, "category": "frozen_change",
                           "anchor": c["anchor"], "disposition": "decide",
                           "summary": "finding 없이 바뀜: %s (%s)" % (c.get("title") or c["anchor"], c["kind"]),
@@ -1081,6 +1125,8 @@ def _build_report(L, st, n, final, rejected_items, degrade, stats, advice_stats=
     }
     if advice_stats is not None:
         st["rounds"][str(n)]["route_report"].update(advice_stats)
+    # 같은 라운드의 둘째 finalize 가 이 보고를 다시 낸다 — 복사본을 둔다(같은 객체를 두 곳에 두면 YAML 앵커가 생긴다)
+    st["rounds"][str(n)]["finalize_out"] = json.loads(json.dumps(out, ensure_ascii=False))
     return out
 
 
@@ -1093,6 +1139,13 @@ def cmd_finalize(a) -> int:
     st = load_state(a.state_dir)
     n = int(st["round"])
     why = pending_mismatch(st, n)
+    if why == "no_pending_recritic":
+        done = st["rounds"].get(str(n)) or {}
+        if done.get("route_report") and done.get("finalize_out"):
+            # 이 라운드의 finalize 는 이미 성공했다 — 원장을 쓰지 않고 앞 보고를 그대로 다시 낸다.
+            sys.stderr.write("[docreview] 이 라운드(%d)는 이미 정리됐다 — 앞 finalize 의 보고를 다시 냈다\n" % n)
+            print(json.dumps(done["finalize_out"], ensure_ascii=False, indent=1))
+            return 0
     if why:
         # 이번 라운드의 준비가 없거나 · 다른 라운드 것이거나 · 어느 라운드 것인지 모른다 — 소비하지
         # 않는다. rc 만 내고 끝나면 준비가 없는 라운드의 게이트가 정상으로 열리므로, 실패를 이 라운드
@@ -1127,11 +1180,13 @@ def cmd_finalize(a) -> int:
     verdicts, added = _read_recritic(a, degrade, L)
     same_as = _apply_recritic(items, verdicts, added, L)
     keep_of = _absorb_same_as(items, same_as, L)
-    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L)
+    lineage = {"protected": lineage_anchors(st, prof, "protected_headings", n),
+               "immutable": lineage_anchors(st, prof, "immutable", n)}
+    final, rejected_items, contra_notes = _classify_items(items, st, prof, sections, n, L, lineage)
     for k, v in contra_notes.items():
         if v:
             degrade[k] = v
-    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L)
+    extra, reraise_unconsumed, escalated_unconsumed = _auto_decides(a, diff, st, prof, sections, n, L, lineage)
     final.extend(extra)
     bucket_conflicts, lineage_mismatch, revived = _resolve_ids_and_lineage(st, final, rejected_items, n)
     # 참고(advisory) 표지 2 걸음 — 계보를 알아야 정해지는 것(라운드 ≥2 열린 계보를 잇지 않는 fix · `blocks` 의 적용 경로)

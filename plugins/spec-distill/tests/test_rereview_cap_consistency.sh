@@ -21,7 +21,7 @@
 # 않는다 — 그러면 다음 값이 `7` 일 때 이 락이 다시 침묵한다.
 #
 # ── 이후 PR 이 코퍼스를 넓히는 자리 ─────────────────────────────────────────
-# 문서 리뷰 엔진은 자리 넷을 흡수한다. 자리가 엔진으로 전환될 때 그 SKILL.md 가 들어갈
+# 문서 리뷰 엔진은 자리 셋을 흡수한다. 자리가 엔진으로 전환될 때 그 SKILL.md 가 들어갈
 # 배열은 **그 자리가 상한 숫자를 적는가**로 갈린다 — 적으면 `TARGETS`(양의 하한 + ∀),
 # 적지 않기로 한 자리면 `NEG_ONLY` + `ABSENT`(∀ + 부재). `request-framing` 는 뒤엣것이다
 # (설계 2026-09-16-framing-intent-drift C-E — 숫자를 다시 적지 않는다). 숫자를 적지 않는
@@ -66,7 +66,7 @@ TARGETS=(
 # RED 를 낸다. 그때의 처방은 이 항목을 빼는 것이 아니라 줄-스코프로 좁히는 것이다.
 NEG_ONLY=(
   "$REPO_ROOT/plugins/spec-distill/references/proceed-gate.md"
-  "$REPO_ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
+  "$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references/finishing.md"
   "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md"
   "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 )

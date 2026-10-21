@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/fresh-evidence.md plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-audit-template.md
+# guards: plugins/spec-distill/references/fresh-evidence.md plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-audit-template.md
 #
 # 신선한 근거 원칙 여덟이 원문 그대로 · 행동 한 줄과 함께 실려 있는가, 낡은 지식 바로잡기와
 # 사용자 판단 · 외부 사실 구분 문장이 있는가, 주문 요약 표지가 한 쌍인가, 웹 근거 선택 칸이
@@ -8,12 +8,12 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-SKILL="$SD/skills/spec-interview/SKILL.md"
+SKILL="$SD/skills/pm-interview/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/fresh-evidence.md"
   echo "plugins/spec-distill/references/research-claims.md"
-  echo "plugins/spec-distill/skills/spec-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-audit-template.md"
   exit 0
 fi
@@ -54,10 +54,11 @@ assert_contains "$FE_FLAT" '다음 «지금 이해»에 바로잡은 사실을 �
 REPLACED_LINE='`- 대체됨: <앞 믿음> → <바로잡은 사실> (조사 <n>)`'
 assert_contains "$FE_FLAT" "인터뷰 중에는 audit 파일이 없으므로 그 라운드의 state 본문 \`## R<n>\` «지금 이해» 아래에 ${REPLACED_LINE} 한 줄로 적는다" "AC10: 인터뷰 중 「대체됨」 줄의 자리(state 라운드 기록)"
 assert_contains "$FE_FLAT" '그 줄들을 audit `## 5. 프로세스 로그` 로 글자 그대로 옮긴다' "AC10: 종료 때 audit 프로세스 로그로 옮긴다"
-FIN="$SD/skills/spec-interview/references/finishing.md"; AUD_T="$SD/templates/interview-audit-template.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"; AUD_T="$SD/templates/interview-audit-template.md"
 [ -f "$FIN" ] && [ -f "$AUD_T" ] && ok "AC10(양성대조): finishing.md · audit 템플릿이 있다" || no "AC10: finishing.md 또는 audit 템플릿 부재"
 STEPA="$(awk '/^### Step A — /{f=1;next} /^### /{f=0} f' "$FIN" 2>/dev/null | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$STEPA" "${REPLACED_LINE} 줄을 라운드 순서대로 audit \`## 5. 프로세스 로그\` 에 글자 그대로 옮겨 씁니다" "AC10: finishing Step A 가 「대체됨」 줄을 audit 프로세스 로그로 옮긴다"
+assert_contains "$STEPA" '같은 걸음에 state 본문 각 `## R<n>` 의 `- 확인 RC<n> — …` 줄을 라운드 순서대로 audit `## 5. 프로세스 로그` 에 글자 그대로 옮겨 씁니다' "AC8: finishing Step A 가 확인 줄도 「대체됨」 옮기기와 같은 걸음에 옮긴다"
 AUD5="$(awk '/^## 5\. 프로세스 로그/{f=1;next} /^## /{f=0} f' "$AUD_T" 2>/dev/null)"
 assert_contains "$AUD5" "$REPLACED_LINE" "AC10: audit 템플릿의 프로세스 로그 절에 「대체됨」 줄 꼴이 있다"
 assert_contains "$FE_FLAT" '사실 주장이면 출처와 함께 교정을 보이고 묻는다' "AC11: 사실 교정은 묻는다"

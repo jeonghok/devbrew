@@ -2,7 +2,8 @@
 """diff-test-results.py — 짝짓기 · 귀속 · 집계와 verdict.py 로 가는 출력 계약.
 
 요구: R1 · R2 · R5 · R7 · R8 · R9 · R10 · R12 · R13 · R15 · R16 · R17 · R19 · R24
-(docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록)
+(docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록 · R24 의 새 뜻은
+docs/superpowers/specs/2026-10-20-review-engine-leftovers-design.md §7)
 """
 from __future__ import annotations
 
@@ -358,7 +359,8 @@ class Contract(DiffBase):
 
 
 class ProducerToVerdict(unittest.TestCase):
-    """R24 — 판정은 기계 출력을 직접 읽는다: 진짜 run → diff → verdict.py 를 전사 없이 잇는다."""
+    """R24 — 판정 인자는 숫자를 만든 직후의 펜스가 낸 줄의 글자 그대로다: 진짜 run → diff →
+    verdict.py --emit-args(차등 결과 줄) → 판정 줄을 전사 없이 잇는다."""
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix="qg-e2e-"))
@@ -385,7 +387,7 @@ class ProducerToVerdict(unittest.TestCase):
     def sh(self, *args, stdin=None):
         return subprocess.run(["bash", str(RTS), *args], input=stdin, capture_output=True, text=True)
 
-    def test_R24_real_producer_output_reaches_verdict_without_transcription(self):
+    def test_R24_real_producer_output_reaches_verdict_through_the_args_line(self):
         self.sh("assign", str(self.root / "hw"), str(self.memo / "assign-i1.tsv"), stdin="tests/a.sh\ntests/b.sh\n")
         for tree, f in (("bw", "baseline-shell.tsv"), ("hw", "head-shell-i1.tsv")):
             self.sh("run", str(self.root / tree), "shell", "bulk", str(self.memo / f), "tests/a.sh", "tests/b.sh")
@@ -401,6 +403,18 @@ class ProducerToVerdict(unittest.TestCase):
         self.assertEqual(v.returncode, 0, v.stderr)
         self.assertEqual(v.stdout.splitlines()[0], "verdict: defect")
         self.assertIn("new_failures: 1", d.stdout)
+        # D5 펜스 끝의 차등 결과 줄 — 판정 펜스는 이 줄의 낱말을 그대로 넘긴다.
+        a = subprocess.run([sys.executable, str(VERDICT), "--emit-args", "--differential",
+                            str(self.memo / "diff-i1.yaml")], capture_output=True, text=True)
+        self.assertEqual(a.returncode, 0, a.stderr)
+        line = a.stdout.rstrip("\n")
+        self.assertTrue(line.startswith("qg-verdict-args: --new-failures 1 --defect"), line)
+        f = subprocess.run([sys.executable, str(VERDICT), "--line", "--blocking", "0", "--optional", "0",
+                            *line[len("qg-verdict-args: "):].split(), "--excluded", "0", "--iter", "1",
+                            "--sha", "abc1234"], capture_output=True, text=True)
+        self.assertEqual(f.returncode, 0, f.stderr)
+        self.assertEqual(f.stdout.splitlines()[0], "verdict: defect")
+        self.assertIn(" · 차등 새 실패 1 · ", f.stdout.splitlines()[-1])
 
     def test_R24_truncated_output_cannot_reach_clean(self):
         # 잘린 출력은 verdict.py 가 판정하지 않는다 — clean 으로 새는 길이 없다.

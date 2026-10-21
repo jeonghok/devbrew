@@ -1,7 +1,7 @@
 ---
-name: spec-interview
+name: pm-interview
 description: >
-  사용자가 `/spec-distill:spec-interview @<seed 경로>` 로 부른다.
+  사용자가 `/spec-distill:pm-interview @<seed 경로>` 로 부른다.
   Runs the spec-distill problem-space interview stage and produces a terminal
   interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
@@ -11,10 +11,10 @@ description: >
 cost_class: variable
 argument-hint: "[@<seed 경로> | rough request]"
 allowed-tools:
-  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-interview)
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill pm-interview)
 ---
 
-# spec-interview — 문제공간 Stage (Phase 1)
+# pm-interview — 문제공간 Stage (Phase 1)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -30,7 +30,7 @@ allowed-tools:
 예) 전: (codex 정상 · 재비판 정상 · 저자 편집 없음 · ask_open 0건) → 후: 이상 없음.
 <!-- plain-language:end -->
 
-!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-interview`
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill pm-interview`
 
 ## 진입 단계
 
@@ -42,9 +42,9 @@ allowed-tools:
 |---|---|
 | `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). state 를 만들지 않는다 |
-| `[devbrew-entry] error …` | `[spec-distill] spec-interview 사전 검사 실패 — <reason= 값>. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
-| `[shell command execution disabled by policy]` | `[spec-distill] spec-interview 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
-| 감시줄 없음 · 그 밖 | `[spec-distill] spec-interview 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] pm-interview 사전 검사 실패 — <reason= 값>. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] pm-interview 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] pm-interview 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 
@@ -68,7 +68,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 그 다섯 패턴에 「풀린 입력」을 대조한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:spec-interview` 로 채워 띄웁니다 — 「그대로」면 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:pm-interview` 로 채워 띄웁니다 — 「그대로」면 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
@@ -88,7 +88,7 @@ python3 "$SD/scripts/interview_state.py" entry --arg "${ARG_PATH:-}" --session "
 <!-- interview-state-entry:end -->
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/state-file.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
@@ -104,9 +104,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-file.md
 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
-산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
-brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
-넘기고(optional), 없으면 brief 자체로 완료합니다.
+산출물은 `spec.md`가 아니라 **interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
+brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 기본으로 brainstorming으로
+넘기고(optional — 일의 모양이 다르면 끝 게이트의 둘째 질문으로 다른 다음 단계를 고른다), 없으면 brief 자체로 완료합니다.
 
 ## State location
 
@@ -200,20 +200,20 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지> · 트레이�
   순서·라벨·추천 표기·시점)을 따르고 각각 `## R<n>` 한 라운드로 기록한다. 이 절의 질문 수·`(권장)` 표기·
   «추천: <첫 선택지>»·겹침 순서는 그 질문들에 적용하지 않으며, steelman 절차가 진행 중이면 그 질문이 겹침
   순서보다 앞선다.
-- **인자 없이 `/spec-distill:spec-interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
+- **인자 없이 `/spec-distill:pm-interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
   두고 질문으로 무엇을 다룰지 묻는다. coverage-mapper 첫 dispatch 시점은 아래 coverage-mapper 절이 정한다.
 - 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
   번호 공식은 «사용자 발화 기록» 절 그대로.
 - **V1 검문소 — 조사 주장을 «지금 이해»에 싣기 전에.** 계약(`## 조사 주장 계약`)이 산출한
   `repo_claims[]` 항목마다 orchestrator 가 자기 `Read`/`Grep` 으로 ① 경로 실재 → ② 앵커 실재 →
   ③ **주장이 그 자리와 맞는가**(구현을 읽는다 — 인덱스·목차·description 필드만 읽고 판정하지
-  않는다) 를 확인하고 ④ 결과를 {확인, 반증, 미확인} 중 하나로 정한 뒤 ⑤ `id: RC<n>` 을 붙여 audit
-  `## 5. 프로세스 로그` 에 한 줄로 적는다: `- 확인 RC3 — 확인 — <경로>#<앵커> — 주장과 일치` /
+  않는다) 를 확인하고 ④ 결과를 {확인, 반증, 미확인} 중 하나로 정한 뒤 ⑤ `id: RC<n>` 을 붙여 그 라운드의
+  state `## R<n>` «지금 이해» 아래에 한 줄로 적는다(종료 때 audit §5 로 옮겨진다): `- 확인 RC3 — 확인 — <경로>#<앵커> — 주장과 일치` /
   `- 확인 RC4 — 반증 — <경로>#<앵커> — 그 자리는 <실제>이고 주장은 <주장>이었다` /
   `- 확인 RC5 — 미확인 — <경로>#<앵커> — <왜 확정하지 못했는가>`. `미확인` 은 라벨로 **보인다** —
   조용히 흡수하지 않는다. 이 검문소는 **steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느
   것에도 종속되지 않는다.** steelman 경로는 `references/steelman.md` Step 2 가 V1 의 특수 경우이므로
-  두 번 확인하지 않고, 판정만 audit §3 `ST<N>` 과 §5 양쪽에 적는다. 판정이 `반증` 이면 그 항목이
+  두 번 확인하지 않고, 판정만 audit §3 `ST<N>` 과 확인 줄 자리 양쪽에 적는다. 판정이 `반증` 이면 그 항목이
   닿는 확정을 payload §5 에 *원래 / 재결정 / 근거* 세 칸으로 남기고(재결정 자체는 사용자 동의로만
   한다 — P23), 그 차원을 재개방할 수 있다. 결정에 닿는 웹 주장(`evidence[]`)은 `${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md`
   원칙 2 대로 본체가 1차 자료로 한 번 더 확인하거나 «지금 이해»에 「확인 못 함」으로 둔다.
@@ -382,7 +382,7 @@ dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 한다 — 한 �
 한 메시지에서 띄우려는 묶음이 남은 호출 수(`research_limit` − 합)보다 클 때(띄우기 전에), floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/saturation.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
@@ -475,7 +475,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
-«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
+«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다.
+라운드 중에는 번호 없이 적고, brief 를 쓸 때 Step A 가 줄마다 `위험` 바로 뒤에 번호를 박는다(`- 위험 K<n> — …`, `references/finishing.md` 「위험 번호」). web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
 
 **계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
@@ -532,7 +533,7 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/seed-input.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/seed-input.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
@@ -560,7 +561,7 @@ state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 골랐다.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/finishing.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/finishing.md
 Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 ```
 
@@ -572,7 +573,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 상태 파일을 읽을 때 §2.4 스키마의 **어떤 키든 부재**면 아래 파일을 읽는다.
 
 ```
-Read ${CLAUDE_PLUGIN_ROOT}/skills/spec-interview/references/state-migration.md
+Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/state-migration.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.

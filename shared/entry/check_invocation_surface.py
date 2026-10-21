@@ -19,7 +19,7 @@ SELF_FILES = frozenset({"shared/entry/check_invocation_surface.py", "shared/test
 
 ENTRY_SKILLS = (
     ("spec-distill", "request-framing"),
-    ("spec-distill", "spec-interview"),
+    ("spec-distill", "pm-interview"),
     ("spec-distill", "spec-review"),
     ("spec-distill", "roadmap-status"),
     ("spec-distill", "epic-conductor"),
@@ -62,18 +62,20 @@ KEBAB_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
 BANG_RE = re.compile(r"(?:^|(?<=\s))!`([^`\n]+)`")       # 플랫폼 규칙: 줄 시작 또는 공백 뒤
 FENCE_BANG_RE = re.compile(r"^\s*```!\s*$")
 USER_ARG_RE = re.compile(r"\$(?:ARGUMENTS|\{ARGUMENTS|[0-9]|\{[0-9]|\[[0-9])")
-_LEAD = r"(?:^|(?<=[\s`'\"(「]))"
+# _LEAD 는 G 축(bare 진입 이름)과 I 축(옛 호출)이 함께 쓴다 — 넓히면 G 도 넓어진다.
+_LEAD = r"(?:^|(?<=[\s`'\"(「*\[|>]))"
 _TRAIL = r"(?=$|[\s`'\"@)」])"
 FULL_CALL_RE = re.compile(_LEAD + r"/([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)" + _TRAIL)
 OLD_NAME_RE = re.compile(
     r"conducting-interview|framing-requests|reviewing-spec|auditing-plugins|critiquing-artifacts"
-    r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md")
-# 옛 호출은 뒤에 이름 글자 · 경로 글자가 이어지지 않으면 잡는다(조사 · 구두점이 붙은 꼴 포함) — _TRAIL 은 G 축과 함께 쓰므로 넓히지 않는다
-_OLD_TRAIL = r"(?![-A-Za-z0-9_/])"
+    r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md"
+    r"|spec-interview|spec-distill:interview(?![-A-Za-z0-9_])")
+# 옛 호출은 뒤에 이름 글자 · 경로 글자 · 확장자(`/qg.md`)가 이어지지 않으면 잡는다(조사 · 구두점 · 문장 끝 마침표가 붙은 꼴 포함) — _TRAIL 은 G 축과 함께 쓰므로 넓히지 않는다
+_OLD_TRAIL = r"(?![-A-Za-z0-9_/]|\.[A-Za-z0-9])"
 OLD_CALL_RE = re.compile(_LEAD + r"/(?:interview|qg)" + _OLD_TRAIL)
 MACHINE_DIRS = frozenset({"skills", "hooks", "scripts", "templates", "references", "agents"})
-LIVE_TOP = frozenset({"CLAUDE.md", "README.md", "docs/plugin-authoring.md"})
-LIVE_PREFIX = ("plugins/", "shared/", "docs/philosophy/")
+LIVE_TOP = frozenset({"CLAUDE.md", "README.md", "docs/plugin-authoring.md", ".claude-plugin/marketplace.json"})
+LIVE_PREFIX = ("plugins/", "shared/", "docs/philosophy/", "docs/git-workflow/")
 
 
 class Ledger:

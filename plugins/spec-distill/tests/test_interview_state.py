@@ -189,6 +189,13 @@ class EntryTest(Base):
         self.assertEqual(rc, 0)
         self.assertEqual(last(out), "interview-state: NEW-SEED t-brief seed=docs/superpowers/interview/2026-10-15-t-interview.md")
 
+    def test_seed_with_old_next_phase_values_still_enters(self):
+        for old in ("spec-distill:spec-" "interview", "spec-distill:" "interview"):
+            with self.subTest(old=old):
+                seed = self.put("2026-10-15-t-interview.md", "interview-seed", "next_phase: %s\n" % old)
+                rc, out, _ = run("entry", "--arg", str(seed), "--session", SID, cwd=self.tmp)
+                self.assertEqual((rc, last(out)), (0, "interview-state: NEW-SEED t-brief seed=docs/superpowers/interview/2026-10-15-t-interview.md"))
+
     def test_ask_when_unfinished_state_points_at_seed(self):
         seed = self.put("2026-10-15-t-interview.md", "interview-seed")
         st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state",

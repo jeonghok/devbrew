@@ -24,7 +24,9 @@ assert_eq "$(grep -cxF -- '**처분** — consumer=orchestrator · fail-closed �
 for lit in '「브랜치 그대로 두기」(3번)' 'Push 와 PR 은 지휘자가 구현 대조 뒤에 한다' '구현 agent 를 보낼 때만' \
            '계획 agent 에게는 싣지 않는다' '(a) 사람에게 보일 쉬운 요약' '(b) skill 이 낸 문면 원문' '내부 기호는 괄호에만' \
            '수 · 순서 · 라벨 · 「(권장)」' '「지휘자 의견:」 한 줄' '원문은 늘 붙인다' '사용자 답은 글자 그대로 같은 agent 에 돌려준다' \
-           '쓰기 권한 없는 agent 가 둘의 선택지 수 · 라벨 · 순서를 대조한다' '그 자리만 지휘자가 직접 돌리는 길로 되돌리고'; do
+           '쓰기 권한 없는 agent 가 둘의 선택지 수 · 라벨 · 순서를 대조한다' '그 자리만 지휘자가 직접 돌리는 길로 되돌리고' \
+           '선택지 설명을 옮길 때 원문의 문장을 하나도 빼지 않는다 — 번역해도 문장 수를 지킨다.' \
+           '미리 받은 답을 뒤 하위 agent 에 실을 때 그 dispatch 에 실제로 넣은 문장을 그 relay 파일의 「돌려보낸 글」 에 덧붙인다.'; do
   once '## 사람 자리' "$lit"
 done
 for lit in '계획 agent' '구현 agent 는 새로 보낸다' '커밋된 계획 경로 · 설계문서 경로' '리뷰 엔진의 문서별 상태 경로'; do
@@ -48,6 +50,7 @@ once '## 늘 싣는 것' '임시 파일에 쓴 뒤 `cp` 로 옮긴다'
 for t in '### 계획 agent' '### 구현 agent'; do
   blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
   assert_contains "$blk" '네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다' "${t} 틀: 자리의 기본(격리 agent 가 브랜치에 선다)"
+  assert_contains "$blk" 'origin/<브랜치> 가 앞서 있으면 git merge --ff-only origin/<브랜치> 로 맞춘 뒤 일한다(ff 가 안 되면 멈추고 보고한다)' "${t} 틀: origin 이 앞서면 ff-only 로 맞추고, 안 되면 멈춘다"
   assert_not_contains "$blk" '자리: <에픽 worktree 절대경로>(브랜치 <브랜치>). 이 worktree 밖' "${t} 틀: 다른 worktree 를 자리로만 주던 옛 문장이 없다(양성 짝: 위 단언)"
 done
 # 지휘자 수리 2(병렬 진실) — 전체 스위트는 지휘자 대조와 같은 공유 잠금 아래서만. 경로는 기계 상태에서 도출해 싣는다.

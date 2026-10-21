@@ -36,14 +36,14 @@ seed: <작업 트리 루트 기준 seed 상대경로 | 없음>
 - 판결이 `interview-state: NEW` 면 첫 라운드에서 주제를 정한 직후 만들고 그 라운드의 기록을 첫 내용으로 쓴다(그 전까지
   라운드 1 기록은 대화 안에만 있다). `seed:` 는 `없음`.
 - 경로는 늘 스크립트가 낸다. 상태 파일은 그 출력 경로에만 만든다. rc 가 0 이 아니면 그 stderr 를 보이고 멈춘다(남의 파일
-  위에 시작하지 않는다):
+  위에 시작하지 않는다). rc 0 이어도 stderr 에 `[spec-distill]` 줄이 있으면 그대로 보인다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 python3 "$SD/scripts/state_path.py" interview-state --topic "<kebab 주제>"
 ```
 
-  그 자리에 이미 `type: interview-state` 파일이 있으면 새로 쓰지 않는다 — topic 을 `<주제>-<HHMM>` 으로 바꿔 다시 낸다.
+  같은 자리에 끝난 인터뷰(brief 가 있는 자리)가 있으면 스크립트가 `<주제>-<HHMM>` 자리를 내고 한 줄 알린다 — 나온 경로를 그대로 쓴다. 끝나지 않은 `type: interview-state` 파일이 있으면 새로 쓰지 않는다 — topic 을 `<주제>-<HHMM>` 으로 바꿔 다시 낸다.
 
 ### 이어 갈 때
 

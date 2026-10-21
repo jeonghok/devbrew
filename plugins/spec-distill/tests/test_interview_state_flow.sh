@@ -14,17 +14,17 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }   # 실패 이름은 고정 — 출력은 따로 보인다
-SK="$SD/skills/spec-interview/SKILL.md"; SF="$SD/skills/spec-interview/references/state-file.md"
-FIN="$SD/skills/spec-interview/references/finishing.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
+SK="$SD/skills/pm-interview/SKILL.md"; SF="$SD/skills/pm-interview/references/state-file.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
 
 # AC2 — production 표면의 state.local.md 는 §1-7 이월 문면과 정리 코드에만
 hits="$(cd "$ROOT_REPO" && git grep --untracked -lF 'state.local.md' -- plugins/spec-distill/skills plugins/spec-distill/references plugins/spec-distill/scripts plugins/spec-distill/templates | sort)"
-want="$(printf '%s\n' plugins/spec-distill/scripts/interview_state.py plugins/spec-distill/scripts/ledger_sweep.py plugins/spec-distill/skills/spec-interview/references/state-file.md | sort)"
+want="$(printf '%s\n' plugins/spec-distill/scripts/interview_state.py plugins/spec-distill/scripts/ledger_sweep.py plugins/spec-distill/skills/pm-interview/references/state-file.md | sort)"
 assert_eq "$hits" "$want" "AC2: state.local.md 는 이월 문면(state-file.md) · interview_state.py · ledger_sweep.py 에만"
 grep -cF 'state.local.md' "$SF" | grep -qx 1 && ok "AC2: state-file.md 의 옛 이름은 §1-7 이월 문단 하나에만" || no "AC2: state-file.md 의 옛 이름 횟수"
 # 같은 개념의 다른 이름(세션 폴더 · Bash 전용 쓰기 · 세션 종료 정리)도 인터뷰 표면에서 사라졌다
 for tok in 'PN1' 'per-session' 'Bash 로만' 'SessionEnd' 'Bash write contract'; do
-  grep -qF -- "$tok" "$SK" "$SD"/skills/spec-interview/references/*.md \
+  grep -qF -- "$tok" "$SK" "$SD"/skills/pm-interview/references/*.md \
     && no "AC2(별칭): 인터뷰 표면에 「${tok}」 이 남았다" || ok "AC2(별칭): 인터뷰 표면에 「${tok}」 없음"
 done
 
@@ -212,7 +212,7 @@ for b in re.findall(r"```bash\n(.*?)\n```", t, re.S):
     lines = b.split("\n")
     if not any(l.startswith("DEGRADE_FALLBACK_FILE=") for l in lines):
         continue
-    end = next(i for i, l in enumerate(lines) if l.startswith('touch "${DEGRADE_FALLBACK_FILE'))
+    end = next(i for i, l in enumerate(lines) if l.startswith('python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE'))
     with open(os.path.join(sys.argv[2], "h{0}.sh".format(n)), "w", encoding="utf-8") as f:
         f.write("\n".join(lines[:end + 1]) + "\n")
     n += 1
@@ -249,7 +249,7 @@ done
 python3 -I - "$RB" "$T/rec.sh" >/dev/null <<'PY'
 import re, sys
 t = open(sys.argv[1], encoding="utf-8").read()
-b = next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if 'degrade-append "$STATE" --component <a>' in x)
+b = next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if 'degrade-append "$STATE" --component "<a>"' in x)
 b = b.replace("<a>", "pipeline").replace("<b>", "all").replace("<c>", "skipped").replace("<r>", "rec-probe-1")
 open(sys.argv[2], "w", encoding="utf-8").write(b + "\n")
 PY

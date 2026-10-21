@@ -124,5 +124,18 @@ class AuditTemplateGateShape(unittest.TestCase):
         self.assertTrue(fails, "데이터 줄 없이 산문만으로 포화 검사가 통과했다")
 
 
+    def test_template_source_has_no_version_tail(self):
+        """두 인터뷰 템플릿의 frontmatter `source:` 값은 판 꼬리 없이 이름뿐이다."""
+        import re
+        tdir = TPL.parent
+        for name in ("interview-audit-template.md", "interview-brief-template.md"):
+            text = (tdir / name).read_text(encoding="utf-8")
+            head = text.split("\n---\n", 2)[0] if text.startswith("---") else ""
+            vals = [ln.split(":", 1)[1].strip() for ln in head.splitlines()
+                    if ln.startswith("source:")]
+            self.assertEqual(vals, ["spec-distill pm-interview"], name)
+            self.assertIsNone(re.search(r"v\d", vals[0]), name)
+
+
 if __name__ == "__main__":
     unittest.main()

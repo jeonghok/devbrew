@@ -7,8 +7,8 @@ AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec�
 된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
 없는 검사(§4 «출처키» 요구, `type` 규약 등)는 AC 번호를 붙이지 않는다.
 
-The Law 1 termination gate for the spec-interview problem-space stage,
-made mechanical. spec-interview runs `check_brief.py gate <payload>` before
+The Law 1 termination gate for the pm-interview problem-space stage,
+made mechanical. pm-interview runs `check_brief.py gate <payload>` before
 finalizing the brief / before any optional brainstorming invoke; a non-zero exit
 BLOCKS termination (one of the 5 통과 의례 unmet).
 
@@ -22,7 +22,7 @@ Law 2 분리 리뷰는 v0.24.0부터 그 위에 얹혔다 — 지금 `skills/rev
 돌린다. 즉 "brief는 분리 리뷰를 받지 않는다"는 더 이상 사실이 아니다(NG3 교정,
 Spec B AC17).
 
-**불변식: 이 스크립트는 brief 파일만 읽는다** (payload + 그것이 가리키는 audit). spec-interview의
+**불변식: 이 스크립트는 brief 파일만 읽는다** (payload + 그것이 가리키는 audit). pm-interview의
 세션 상태 파일에 대한 의존을 여기에 절대 넣지 않는다 — 넣으면 임의의 brief 파일에 게이트를 돌릴 수
 없게 된다. state 원장 대조(§6 원문 완전성)는 별 모듈 `scripts/check_verbatim_coverage.py`의
 몫이다(Spec B AC16 · E12).
@@ -820,12 +820,17 @@ def audit_chosen_anchors(audit_text: str) -> set:
     return out
 
 
+def _irrelevant_sids(payload_text: str) -> list[str]:
+    """§4 의 불릿 없는 「외부 선례 무관(@S<m>) — <이유>」 줄이 가리키는 `S<m>` — 줄 순서 그대로, 중복 포함."""
+    return [m.group(1) for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4))
+            for m in [IRRELEVANT_RE.match(ln)] if m]
+
+
 def landscape_irrelevant(payload_text: str, audit_text: str) -> tuple:
     """§4 의 불릿 없는 줄 `외부 선례 무관(@S<m>) — <이유>` -> (closed, failures). 줄이 없으면 `(False, [])`. 있으면
     가리킨 `S<m>` 이 모두 audit §6 의 사용자 선택(☑)일 때만 `(True, [])`, 아니면 ☑ 아닌 S 마다 실패 한 줄.
     §4 경계는 `_section_text`(펜스를 벗긴 본문) 그대로 — 인용 줄(`> …`)은 열 0 이 `외` 가 아니라 닫힘이 아니다."""
-    sids = [m.group(1) for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4))
-            for m in [IRRELEVANT_RE.match(ln)] if m]
+    sids = _irrelevant_sids(payload_text)
     if not sids:
         return False, []
     chosen = audit_chosen_anchors(audit_text)
@@ -1570,6 +1575,12 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
 
 
+def _sat_hits(audit_text: str) -> list[str]:
+    """audit §2 Budget 의 포화 판정 · 사용자 종료 줄(불릿을 뗀 본문) — 사건 순서 그대로."""
+    sec = _section_text(audit_text, "2", "Budget")
+    return [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec)) if SAT_LINE_RE.match(b)]
+
+
 def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[str]]:
     """audit §2 의 마지막 포화 판정 줄 (설계 §5).
 
@@ -1577,9 +1588,7 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     실패: 줄 없음 · 마지막이 `아직`(반복 빈 곳 재조사 포함) · 마지막이 `판정 불가 — 조사 계속` ·
     형식 밖. **이 검사가 못 잡는 것**: 줄은 본체가 쓴다 — 판정자를 부르지 않은 턴이 `포화` 줄을
     지어 적으면 구별하지 못한다. 그 축은 판정자 dispatch 의 처분 줄과 Step B 의 사람 확인이 진다."""
-    sec = _section_text(audit_text, "2", "Budget")
-    hits = [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec))
-            if SAT_LINE_RE.match(b)]
+    hits = _sat_hits(audit_text)
     if not hits:
         return ["§2 Budget: 포화 판정 줄 없음 — floor 다섯이 닫힌 뒤 포화 판정자를 부르지 않았거나 "
                 "사용자 종료를 적지 않았다"], []
@@ -1600,6 +1609,18 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     if SAT_CONTINUE_RE.match(last):
         return ["§2 Budget: 판정 불가 뒤 사용자가 조사 계속을 골랐는데 그 뒤 포화 판정이나 사용자 종료 줄이 없다"], []
     return [f"§2 Budget: 포화 판정 줄이 형식 밖이다: {last[:80]}"], []
+
+
+def closing_answer_anchors(payload_text: str, audit_text: str) -> list[tuple[str, str]]:
+    """인터뷰를 사용자가 고른 답으로 닫은 자리의 `S<n>` — `(S, "irrelevant")` 는 §4 의 「외부 선례 무관(@S<n>)」 줄마다
+    (같은 S 는 한 번), `(S, "saturation")` 은 audit §2 의 **마지막** 포화 판정 줄이 「사용자 판단 포화(@S<n>)」 일 때만.
+    「사용자 종료(@S<n>)」 는 넣지 않는다 — 자유 글로 끝낼 수 있다. 줄 문법은 위 두 검사와 같은 도우미다."""
+    out = [(s, "irrelevant") for s in dict.fromkeys(_irrelevant_sids(payload_text))]
+    hits = _sat_hits(audit_text)
+    m = SAT_USER_RE.match(hits[-1]) if hits else None
+    if m:
+        out.append((m.group(1), "saturation"))
+    return out
 
 
 def frontmatter_errors(text: str) -> list[str]:
@@ -1733,7 +1754,11 @@ def gate(path: Path) -> int:
             if not any(m.startswith("7.") for m in amiss):
                 nk = landscape_keys_declared(text, audit_text)
                 if nk:
-                    failures.append(f"landscape keys not declared in audit §7: {nk}")
+                    failures.append(
+                        f"landscape keys not declared in audit §7: {nk}"
+                        " — §4 의 «» 는 모두 출처키로 읽힌다. "
+                        "강조로 쓴 것이면 「」 로 바꾸고, "
+                        "출처키면 audit §7 에 그 키와 원자료 URL 을 선언한다")
             if not any(m.startswith("2.") for m in amiss):
                 bf, ba = budget_mapper_failures(audit_text)
                 failures += [f"coverage-mapper budget: {x}" for x in bf]

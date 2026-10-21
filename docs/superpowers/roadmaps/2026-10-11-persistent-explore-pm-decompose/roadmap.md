@@ -83,7 +83,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R0
 - 브랜치: feature/interview-persistent-explore
 - 묶음: R1.md
-- 경로 예약: plugins/spec-distill/skills/spec-interview/SKILL.md, plugins/spec-distill/skills/spec-interview/references/steelman.md, plugins/spec-distill/agents/coverage-mapper.md, plugins/spec-distill/agents/blind-spot-prober.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/tests/test_conducting_interview_stage.sh
+- 경로 예약: plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/steelman.md, plugins/spec-distill/agents/coverage-mapper.md, plugins/spec-distill/agents/blind-spot-prober.md, plugins/spec-distill/agents/steelman-builder.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/tests/test_conducting_interview_stage.sh
 
 ### R2 — spec-distill 안쪽 압축 · 리뷰 장치
 - 의도: spec-distill 안에서 비용 · 압축으로 품질을 깎거나 사용자 결정을 덮는 장치를 제거하거나 공시 · 사용자가 여는 형태로 고친다
@@ -113,7 +113,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R0, P1
 - 브랜치: feature/numbered-handoff-coverage
 - 묶음: R3.md
-- 경로 예약: plugins/spec-distill/skills/spec-interview/references/finishing.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
+- 경로 예약: plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
 
 ### R4 — PM 분해 · 로드맵 · 에픽 묶음 · 재분해 경로
 - 의도: 인터뷰가 일을 에픽으로 나눠 로드맵과 묶음을 내고 하류의 재분해 · 축소 신호를 같은 지도로 되돌리게 한다
@@ -153,18 +153,18 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R1, R2, R7, R3, R4, R6, P2, P3
 - 브랜치: feature/epic-conductor · feature/epic-conductor-seams · feature/epic-conductor-loop · fix/conductor-superpowers7 · fix/conductor-parallel-truth
 - 묶음: R5.md
-- 경로 예약: plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/spec-interview/references/finishing.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/roadmap-ontology.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md
+- 경로 예약: plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/roadmap-ontology.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md
 - 순서 이유: 계획 셋을 차례로(형식 · 상태 → 이음매 → 지휘자) — 셋째는 R2a 가 qg 테스트 스크립트를 shared/ 로 옮긴 뒤(설계 D1.3 · §11)
 
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
-- 의도: 이 장치들이 devbrew 밖 레포와 superpowers 부재에서도 통하게 한다
+- 의도: 이 장치들이 devbrew 밖 GitHub 레포에서도 통하게 한다 — gh 는 필수 의존이고 superpowers 가 없으면 인터뷰는 brief 까지 만들고 멈추며 나머지 흐름은 진입에서 멈춘다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh · superpowers 부재 강등 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
-  - 안 한다: 규칙 문서(R9)
-- 의존: R2a, R5
+  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16) · R13 미룸 둘 — Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기(권한 경계 몫)
+  - 안 한다: 규칙 문서(R9) · gh 없는 대체 길 · GitHub 가 아닌 원격 지원
+- 의존: R2a, R5, R10, R12, R13
 - 브랜치: feature/dependency-portability
 - 묶음: R8.md
-- 경로 예약: 없음
+- 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_decompose_surface.sh, shared/test-selection/resolve-baseline.sh, shared/docreview/scripts/docreview_state.py, shared/python/devbrew-python.sh, plugins/quality-gates/scripts/discover-spec.sh, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/project-init/hooks/hooks.json, plugins/project-init/hooks/post-tool-use.py
 
 ### R9 — 규칙 · 문서 정리
 - 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학의 조항 문면을 고친다
@@ -202,19 +202,19 @@ test_failure_pattern: "^FAILED (.+)$"
   - 한다: 엔진 환경 변수(`DEVBREW_DOCREVIEW_*`) 최댓값 · 원문 절 마지막 앵커 밑 이어 붙인 줄 · `</related_changes>` 주입 · `declare-related` 펜스 락 · 리뷰어 둘의 같은 질문 흡수 때 기다리던 수정 목록 소실 · 확인된 결정의 보호가 자식 절에 붙지 않음 · docreview 엔진 결함 셋(finalize 두 번 · 복수 앵커 · § 앵커) · 설계문서 프로필의 대안 비교 축 · 번호 대조 · 미룸 손 편집의 허가 길 · 리뷰가 닫힌 뒤 손으로 쓴 결정 줄 · qg 판정 id 충돌(synthesize_findings.py) · plugin-audit kill switch 정규식(check-shape-completeness.py) · tools/adjudication/check_wiring.py 의 줄 번호 핀 · 철학 P3 「문서 리뷰 자리 넷」 문장 · 공유 락 빈틈(copy-of-contract 소비 도출 오탐 · 같은 이름 블록 첫 블록만 읽기 · 라우터 흡수 분기 스캔 · 같은 임시 번호 · 호출 표면 `_LEAD` · `_OLD_TRAIL` · 살아 있는 표면) · `log-decision` 표지 가드 · project-init 헌장 모서리 셋(그대로 두기 · 옮기기 중복 공시 · Step 5 문구) · qg 판정 상태 위치(판정 전에 도는 레포 코드가 세션 폴더 · 표지 · synth.out 에 닿음 — 설계 결정 · 사용자 결정 「R12 로 (권장)」) · qg e2e 시나리오 수 상한 공시
   - 안 한다: R2a 계획 2~4 의 범위 · R8 의 권한 경계(AC17 가) · R10 미룸의 인터뷰 쪽 소결함(R13)
 - 의존: R2a, R11
-- 브랜치: feature/review-engine-leftovers
+- 브랜치: feature/review-engine-leftovers · feature/qg-verdict-state · feature/review-lock-leftovers
 - 묶음: R12.md
-- 경로 예약: shared/docreview/, plugins/quality-gates/scripts/synthesize_findings.py, plugins/plugin-audit/scripts/check-shape-completeness.py, tools/adjudication/check_wiring.py, docs/philosophy/devbrew-harness-philosophy.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, shared/tests/test_copy_of_contract.sh, shared/tests/test_docreview_route.sh, shared/tests/fixtures/docreview/, shared/tests/test_adjudication_wiring.sh, shared/entry/check_invocation_surface.py, shared/tests/test_invocation_surface.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/project-init/, plugins/quality-gates/skills/quality-pipeline/, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/references/e2e.md, plugins/quality-gates/tests/test_synthesize_recritic.sh
+- 경로 예약: shared/docreview/, plugins/quality-gates/scripts/synthesize_findings.py, plugins/plugin-audit/scripts/check-shape-completeness.py, tools/adjudication/check_wiring.py, docs/philosophy/devbrew-harness-philosophy.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, shared/tests/test_copy_of_contract.sh, shared/tests/test_docreview_route.sh, shared/tests/fixtures/docreview/, shared/tests/test_adjudication_wiring.sh, shared/entry/check_invocation_surface.py, shared/tests/test_invocation_surface.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/project-init/, plugins/quality-gates/skills/quality-pipeline/, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/references/e2e.md, plugins/quality-gates/tests/test_synthesize_recritic.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/quality-gates/scripts/verdict.py, plugins/quality-gates/scripts/run_codex_reviewer.sh, plugins/quality-gates/scripts/run_artifact_codex_reviewer.sh, plugins/quality-gates/tests/test_review_diff.sh, plugins/plugin-audit/tests/test_check_shape_completeness.py, plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh, plugins/spec-distill/tests/test_conducting_loop.sh, plugins/spec-distill/tests/test_conducting_reference.sh, plugins/quality-gates/tests/test_e2e_docs.sh, plugins/quality-gates/tests/test_differential_procedure.sh, plugins/quality-gates/tests/test_skill_run_contract.sh, plugins/quality-gates/tests/test_v1_verdict_line.sh, plugins/quality-gates/tests/test_diff_test_results.py, plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh, plugins/quality-gates/tests/test_publish_pipeline_wiring.sh
 
 ### R13 — R10 남은 인터뷰 게이트 · 엔진 skill 소결함
 - 의도: R10 이 남긴 인터뷰 게이트 · 엔진 skill 의 작은 결함과 보안 제안을 pm-interview 이름 바꾸기 뒤 고친다
 - 범위:
-  - 한다: `check_brief` 의 사용자 답과 state `source: chosen` 대조 · 엔진 skill 셋(request-framing · reviewing-brief · spec-review) 번들 쓰기의 링크 따라가기(함께 쓰는 writer) · V1 확인 줄을 실을 자리
-  - 안 한다: R10 계획 1~3 의 범위 · R12 의 엔진 · qg 소결함
+  - 한다: `check_brief` 의 사용자 답과 state `source: chosen` 대조 · 엔진 skill 셋(request-framing · reviewing-brief · spec-review) 번들 쓰기의 링크 따라가기(함께 쓰는 writer) · V1 확인 줄을 실을 자리 · 상태 폴더 쓰기의 링크 따라가기를 부르는 스크립트(seed_edit_diff · docreview_state save_state)와 공유 codex 러너까지 · 원장 뿌리를 문서의 레포에서(state_path `state-root-for`) · 로드맵 생성 따옴표(finishing Step A 8) · 템플릿 `source:` 판 꼬리 · 셸 테스트 실행 비트
+  - 안 한다: R10 계획 1~3 의 범위 · R12 가 끝낸 엔진 · qg 소결함(R12 미룸은 R13 행 둘만 · qg 쪽은 공유 러너 · writer 링크에 닿는 최소 변경만) · 엔진 밖 쓰기의 권한 경계 · Write 도구 쓰기 · 실행 중 다시 심는 링크(R8) · 조사 agent 출력 계약 · superpowers 파일 · 동작
 - 의존: R10, R12
 - 브랜치: feature/interview-gate-leftovers
 - 묶음: R13.md
-- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md
+- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/fixtures/, shared/docreview/scripts/nofollow_write.py, plugins/spec-distill/scripts/nofollow_write.py, plugins/quality-gates/scripts/nofollow_write.py, shared/docreview/scripts/run_docreview_codex_reviewer.sh, plugins/spec-distill/scripts/seed_edit_diff.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_nofollow_write.sh, plugins/spec-distill/tests/test_state_dir_writes.sh, plugins/spec-distill/tests/test_fresh_evidence.sh, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/tests/test_ledger_root.sh, plugins/spec-distill/tests/test_decompose_surface.sh, plugins/spec-distill/templates/interview-audit-template.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/tests/test_brief_bundle.sh, plugins/spec-distill/tests/test_brief_no_length_cap.sh, shared/tests/test_docreview_gate_visibility.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_shell_tests_executable.sh, plugins/spec-distill/tests/test_interview_state_flow.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/tests/test_reviewing_brief_skill.sh, plugins/spec-distill/tests/test_reviewing_brief_residue.sh, plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh
 - 순서 이유: 인터뷰 skill 은 R10 계획 3 의 pm-interview 이름 바꾸기 뒤 새 이름 자리에서 · 엔진 skill 셋은 R12 의 펜스 락 뒤에
 
 ## 지휘 절차
@@ -420,6 +420,31 @@ test_failure_pattern: "^FAILED (.+)$"
   - 「새 에픽으로 (권장)」
   - 「R12 로 (권장)」
   - 「나눠서 다시 나눈다 (권장)」
+
+### 2026-10-20 · R8 을 R10 · R12 · R13 뒤로(경로 예약 겹침) · R8 경로 예약을 승인된 설계 Files to Modify 로 채움 · R8 의도 · 범위를 설계 결정 U1 · U6 · U9 에 맞춤
+- 바뀜: 바뀐 에픽 R8 「R10 · R12 · R13 뒤 (권장)」 · 「gh는 있어야 한다고 보자 기본적인거야 그리고 너무 낮은 호환을제공하진말자」 · 「지금처럼 + 나머지는 멈춤 (권장)」 · 「GitHub 레포만 지원 (권장)」
+- 원문:
+  - 「R10 · R12 · R13 뒤 (권장)」
+  - 「gh는 있어야 한다고 보자 기본적인거야 그리고 너무 낮은 호환을제공하진말자」
+  - 「지금처럼 + 나머지는 멈춤 (권장)」
+  - 「GitHub 레포만 지원 (권장)」
+
+### 2026-10-20 · R12 계획 셋의 브랜치 · 경로 예약 등록(R12 설계 §11) · R1 · R3 · R5 경로 예약을 pm-interview 이름으로
+- 바뀜:
+  - 바뀐 에픽 R12 (경로 예약 · 브랜치) · R1 · R3 · R5 (이름 따라가기 — 머지된 에픽이라 생성기 `roadmap_write.py update` 가 거부해 그 세 블록의 `경로 예약` 칸만 손으로 고침, `skills/spec-interview/` → `skills/pm-interview/`, #239 · 번호 · 범위 · 다른 칸은 그대로) 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-21 · R13 범위 · 경로 예약을 승인된 설계로 · R8 범위에 R13 미룸 두 행
+- 바뀜: 바뀐 에픽 R8 · R13 「ok」 · 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「ok」
+  - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-21 · R13 경로 예약에 계획 질문 답의 기존 테스트 다섯
+- 바뀜: 바뀐 에픽 R13 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
+- 원문:
+  - 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
 
 ## 위험 번호표
 

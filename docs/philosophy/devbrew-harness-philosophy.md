@@ -20,12 +20,12 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P2 — The Ambiguity Gate
 **Law 1 집행.** 명세는 명확도 임계를 통과했거나 아직 못 했거나 둘 중 하나이고, 게이트는 visible·declared·refusable해야 한다. Load-bearing: 게이트가 silent pass-through를 허용하는 순간 Law 1이 prose로 전락한다 — 수치 스코어링은 scorer=generator라 brittle하므로 구조적 baseline이 default이고 adversarial self-review가 enhancement다.
-코드: `plugins/spec-distill/scripts/check_brief.py` (5-ritual gate) · `plugins/spec-distill/skills/spec-interview/SKILL.md`
+코드: `plugins/spec-distill/scripts/check_brief.py` (5-ritual gate) · `plugins/spec-distill/skills/pm-interview/SKILL.md`
 
 ### P3 — Writer/Reviewer Isolation via Tool Scoping
 **Law 2 집행.** 역할 경계를 프롬프트가 아니라 frontmatter로 만든다 — 리뷰어 agent에는 `Write`/`Edit`이 없고 플래너에는 mutation-Bash가 없다. Load-bearing: "프롬프트를 믿자"에서 "도구가 존재조차 하지 않는다"로 바꾼다 — default-everything(전체 tool 접근) agent는 P3 위반이다.
 코드: `shared/docreview/agents/doc-critic.md` · `plugins/quality-gates/agents/security-reviewer.md`
-문서 리뷰 자리 넷(design doc·brief·seed·generic)을 통일하는 엔진은 `shared/docreview/`.
+문서 리뷰 자리 셋(design doc · brief · seed)을 통일하는 엔진은 `shared/docreview/` — qg 의 `generic` 프로필은 엔진 테스트만 읽는다.
 
 ### P4 — Verification Is Infrastructure
 **Law 2 집행.** 모든 작업은 *증거*를 생산하는 검증 pass로 끝난다: mechanical(compile/lint/test) → semantic(AC 준수, 독립 리뷰어) → runtime(실제로 돌림), 저렴한 실패에서 short-circuit. Load-bearing: "컴파일됨"은 증거가 아니다 — runtime tier가 앞 두 tier가 놓치는 버그 class를 잡는다. qg 는 runtime tier 를 사람이 승인하면 e2e 걷기로 확인한다 — 걷지 않은 실행은 판정 줄의 e2e 칸이 그 사실을 보인다(오케스트레이터의 판정은 판정안이고 reviewer 는 감독하는 사람이다 — Law 2 해석).
@@ -41,7 +41,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P12 — Transparency of Planning
 **Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
-코드: `plugins/spec-distill/skills/spec-interview/SKILL.md` 의 `## 진입 단계` 3 (trivia escape) · CLAUDE.md Trivia escape
+코드: `plugins/spec-distill/skills/pm-interview/SKILL.md` 의 `## 진입 단계` 3 (trivia escape) · CLAUDE.md Trivia escape
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
 **Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.

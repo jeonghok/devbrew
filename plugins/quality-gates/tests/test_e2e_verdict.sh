@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # test_e2e_verdict.sh — e2e 결과가 최종 판정과 판정 줄에 닿는 이음매(설계 v10 §1 표 · AC1 · AC2 · AC3).
 #
-# 최종 판정은 `verdict.py --prior <마지막 iteration 의 판정 출력> --e2e <상태> --line …` 한 번이다.
-# 우선순위를 오케스트레이터가 머리로 합치지 않는다(색인 K-3) — 그래서 이음매를 이 CLI 에서 잰다.
+# 최종 판정은 `verdict.py --line <리뷰 · 차등 결과 줄의 인자> --e2e <상태> …` 한 번이다(R24 — 결과 줄은 숫자를 만든
+# 직후의 펜스가 낸다). 우선순위를 오케스트레이터가 머리로 합치지 않는다(색인 K-3) — 그래서 이음매를 이 CLI 에서 잰다.
+# 앞 판정 파일(clean · defect · nc)은 그 판정을 내는 리뷰 · 차등 축 인자로 옮겨 넘긴다. `--prior` 는 SKILL 이 더 부르지
+# 않지만 verdict.py 에 남은 CLI 다 — 아래 사용법 · 판독 불가 케이스가 그 계약을 잰다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -15,9 +17,18 @@ printf 'verdict: defect\n' >"$T/defect"
 printf 'verdict: not-certified\nreason: scope-empty\nreasons: [scope-empty]\n' >"$T/nc"
 LINE=(--line --blocking 0 --optional 2 --new-failures 0 --excluded 1 --iter 3 --sha abc1234)
 
+axis_args() {   # 앞 판정 파일 → 그 판정을 내는 리뷰 · 차등 축 인자(결과 줄이 싣는 꼴)
+  case "$1" in
+    "$T/clean") ;;
+    "$T/defect") printf '%s\n' --defect ;;
+    "$T/nc") printf '%s\n' --reason scope-empty ;;
+    *) printf '%s\n' --unknown-prior ;;
+  esac
+}
 final() {   # $1 앞 판정 파일 · $2 e2e 상태 · 나머지 추가 플래그
   local prior="$1" state="$2"; shift 2
-  python3 "$V" --prior "$prior" --e2e "$state" "${LINE[@]}" "$@"
+  # shellcheck disable=SC2046
+  python3 "$V" $(axis_args "$prior") --e2e "$state" "${LINE[@]}" "$@"
 }
 
 case_AC1_approved_fail_is_defect_and_line_says_both() {

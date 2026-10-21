@@ -5,8 +5,8 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SD="$ROOT/plugins/spec-distill"
-FIN="$SD/skills/spec-interview/references/finishing.md"
-SKILL="$SD/skills/spec-interview/SKILL.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
+SKILL="$SD/skills/pm-interview/SKILL.md"
 TPL="$SD/templates/interview-brief-template.md"
 
 win() {  # win <파일> <시작 줄 리터럴> <끝 줄 접두> — 시작 줄 다음부터 끝 줄 앞까지
@@ -50,6 +50,18 @@ done
 # R7 이음매 — 분해안 표 · 생성 기록은 docs 상태 파일(<줄기>.state.md)에 산다. 세션 폴더의 옛 이름을 넘기지 않는다.
 has "$STEPA" '--plan-table "${BRIEF_REL%.md}.state.md"' "Step A 8: --plan-table 은 brief 줄기의 docs 상태 파일"
 has "$STEPA" '--audit "${BRIEF_REL%.md}.audit.md"' "Step A 8: --audit 도 같은 줄기에서"
+# AC11 — Step A 8 의 제목 · 승인 원문은 heredoc 으로 들어가 인자에서 한 낱말로 남는다.
+for lit in "IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'" '<주제 한 줄>' \
+           "cat > \"\$AF1\" <<'DEVBREW_ROADMAP_APPROVAL_EOF'" '<승인 원문>' \
+           '--title="$title"' '--approval="$(cat "$AF1")"' "trap 'rm -rf -- \"\$AD\"' EXIT" 'AF1="$AD/1"' \
+           '그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다' \
+           '`AF2` · `AF3` … 으로 하나씩 더하고' '`DEVBREW_ROADMAP_APPROVAL_EOF`' \
+           '펜스 줄과 더하는 `AF<k>` 줄은 맨 앞 칸에서 시작한다'; do
+  has "$STEPA" "$lit" "Step A 8(AC11): $lit"
+done
+for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
+  case "$STEPA" in *"$lit"*) no "Step A 8(AC11): 옛 인자 꼴이 남아 있다: $lit" ;; *) ok "Step A 8(AC11): 옛 인자 꼴 없음: $lit" ;; esac
+done
 assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
 # R7 이음매 — 로드맵 폴더는 끝내기 커밋 펜스(interview-commit)의 경로 지정에 «있을 때만» 든다. 손 커밋 안내 줄은 없다.
 CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
@@ -150,7 +162,7 @@ has "$RED_ALL" '재분해 이력에 항목 하나를 남긴다' "재분해 이�
 case "$SIG" in *'신호는 셋이다'*) no "AC32: 닫힌 「셋」 목록 문장이 남았다" ;; *) ok "AC32: 닫힌 「셋」 목록 문장이 없다(양성 짝: 열린 목록)" ;; esac
 APPLY="$(win "$RED" '## 5. 적용' '## ')"
 for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸에는 사용자 말만 둔다' \
-           '--change "<사유 한 줄>"' '--approval "<사용자 말 그대로>"' '사용자 말이 여럿이면 `--approval` 을 말마다 하나씩'; do
+           '--change="$change_line"' '<사유 한 줄>' '--approval="$(cat "$AF1")"' '<사용자 말 그대로>' '사용자 말이 여럿이면 `--approval` 을 말마다 하나씩'; do
   has "$APPLY" "$lit" "재분해 이력 새 꼴: $lit"
 done
 case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
@@ -167,5 +179,124 @@ PG="$SD/references/proceed-gate.md"
 P23="$(win "$PG" '## 재결정 규약 (P23)' '## ')"
 has "$P23" '분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecompose.md` 로' "proceed-gate: 재결정 규약 절에 분해 단위 한 줄"
 has "$P23" '보고 후 재결정 허용' "proceed-gate: 확정 항목 단위 규약은 그대로"
+
+# ── AC11 e2e — Step A 8 펜스를 잘라 셸 메타문자가 든 제목 · 승인 원문으로 돈다 ──────
+FENCE="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5' \
+  | awk 'index($0,"```bash"){b=""; f=1; next} index($0,"```")&&f{f=0; if(index(b,"roadmap_write.py\" create")){print b; exit}; next} f{b=b $0 "\n"}')"
+if [ -n "$FENCE" ]; then ok "Step A 8 펜스를 잘랐다"; else no "Step A 8 펜스를 자르지 못했다"; fi
+# heredoc 여는 줄마다 같은 구분자만 든 닫는 줄이 펜스에 있다 — 앞에 칸이 붙은 닫는 줄은 heredoc 을 닫지 못한다.
+hd="$(printf '%s\n' "$FENCE" | awk -v q="'" '
+  match($0, "<<" q "[A-Za-z_][A-Za-z0-9_]*" q) { d = substr($0, RSTART + 3, RLENGTH - 4); open[d] = 1; n++; next }
+  ($0 in open) { closed[$0] = 1 }
+  END { bad = ""; for (d in open) if (!(d in closed)) bad = bad " " d; printf "%d%s", n, bad }')"
+assert_eq "$hd" "2" "Step A 8: heredoc 둘의 닫는 구분 줄이 줄 맨 앞에 있다"
+e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdout: rc, 결과 폴더는 $E/repo/docs/<이름>. 펜스는 쓰인 그대로 돈다.
+  local title="$1" appr="$2" outn="$3" body rc=0
+  body="$FENCE"
+  body="${body//<주제 한 줄>/$title}"
+  body="${body//<승인 원문>/$appr}"
+  body="${body//docs\/superpowers\/interview\/<file>/docs/iv/brief.md}"
+  body="${body//docs\/superpowers\/roadmaps\/<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//docs/$outn/}"
+  body="${body//<YYYY-MM-DD>/2026-10-21}"
+  printf '%s\n' "$body" > "$E/fence.sh"
+  (cd "$E/repo" && CLAUDE_PLUGIN_ROOT="$SD" PYTHONDONTWRITEBYTECODE=1 /bin/bash "$E/fence.sh") > "$E/out.txt" 2>&1 || rc=$?
+  echo "$rc"
+}
+E="$(mktemp -d)" || exit 1
+[ -n "$E" ] && [ -d "$E" ] || exit 1
+trap 'rm -rf "$E"' EXIT
+mkdir -p "$E/repo/docs/iv"
+cat > "$E/repo/docs/iv/brief.md" <<'MD'
+---
+type: interview-brief
+user_sourced_items:
+  - id: C1
+    statement: "첫 확정"
+---
+
+# 픽스처 brief
+
+## 0. 한눈에
+
+**결정 목록**
+
+- OQ1 [열림] — 열린 하나
+
+## 1. Goal · Non-goal
+
+- Goal: 목표.
+
+## 2. 제약
+
+- 🗣 confirmed **C1** — 첫 확정 ⟨S1⟩
+
+## 3. Open Questions
+
+- OQ1: 열린 하나
+
+## 4. External Landscape
+
+- 바깥 하나 «ext-a» — [취함] [→ OQ1]
+
+## 5. 기각 · Blind Spots
+
+- 위험 — 숨은 가정: 가정 — 근거 약함
+
+## 6. 사용자 원문
+
+- **S1** 🗣 최초 요청:
+  > 처음 말
+
+## 7. Next Action
+
+다음.
+MD
+printf '# audit\n\n## 6. 사용자 원문\n\n- **S2** 🗣 발화 (round 1):\n  > 둘째 말\n' > "$E/repo/docs/iv/brief.audit.md"
+printf '# state\n\n## 분해안\n\n%s\n%s\n%s\n' \
+  '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
+  '|---|---|---|---|---|---|---|---|---|---|---|' \
+  '| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | a/x.py | C1 · OQ1 · K1 · «ext-a» · S1 · S2 | 없음 | 없음 |' \
+  > "$E/repo/docs/iv/brief.state.md"
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+git init -q -b main "$E/repo"
+git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid add -A
+git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm fixture
+HOSTILE_TITLE='-제목 $HOME `id` "q" '"'a'"
+HOSTILE_APPR='-승인 $(touch '"$E"'/pwned) "좋아" '"'ok'"
+assert_eq "$(e2e_run "$HOSTILE_TITLE" "$HOSTILE_APPR" rm1)" "0" "stepa8_e2e_verbatim: 펜스 rc 0"
+RMALL="$(cat "$E"/repo/docs/rm1/*.md 2>/dev/null)"
+case "$RMALL" in *"$HOSTILE_TITLE"*) ok "stepa8_e2e_verbatim: 제목이 글자 그대로 실렸다" ;; *) no "stepa8_e2e_verbatim: 제목이 그대로 실리지 않았다" ;; esac
+case "$RMALL" in *"「${HOSTILE_APPR}」"*) ok "stepa8_e2e_verbatim: 승인 원문이 글자 그대로 실렸다" ;; *) no "stepa8_e2e_verbatim: 승인 원문이 그대로 실리지 않았다" ;; esac
+if [ -e "$E/pwned" ]; then no "stepa8_e2e_verbatim: 승인 원문 속 명령이 실행됐다(pwned)"; else ok "stepa8_e2e_verbatim: pwned 파일 없음"; fi
+# 앞 '-' 에 빈칸이 없는 말 — argparse 는 빈칸이 든 '-…' 값을 옵션으로 읽지 않으므로 앞 '-' 는 이 칸이 잰다.
+assert_eq "$(e2e_run '-제목' '-승인' rm4)" "0" "stepa8_leading_dash: 앞 '-' 인 제목 · 승인 원문도 펜스 rc 0"
+RMALL4="$(cat "$E"/repo/docs/rm4/*.md 2>/dev/null)"
+case "$RMALL4" in *'-제목'*) ok "stepa8_leading_dash: 제목이 글자 그대로 실렸다" ;; *) no "stepa8_leading_dash: 제목이 그대로 실리지 않았다" ;; esac
+case "$RMALL4" in *'「-승인」'*) ok "stepa8_leading_dash: 승인 원문이 글자 그대로 실렸다" ;; *) no "stepa8_leading_dash: 승인 원문이 그대로 실리지 않았다" ;; esac
+# 생성기는 승인 말 하나를 한 줄로만 받는다 — 두 줄 말은 변형 · 실행 없이 생성기가 그대로 거절한다(rc 1, 아무것도 만들지 않는다).
+ML_APPR="$(printf '첫 줄 $(touch %s/pwned2)\n둘째 줄 `id`' "$E")"
+assert_eq "$(e2e_run '여러 줄 시험' "$ML_APPR" rm2)" "1" "stepa8_multiline_approval_verbatim: 두 줄 말은 생성기가 거절한다(rc 1)"
+case "$(cat "$E/out.txt")" in *'원문은 한 줄이고'*'첫 줄 $(touch '*) ok "stepa8_multiline_approval_verbatim: 거절 사유가 두 줄 말을 글자 그대로 보인다" ;; *) no "stepa8_multiline_approval_verbatim: 거절 사유에 두 줄 말이 그대로 없다" ;; esac
+if [ -e "$E/pwned2" ]; then no "stepa8_multiline_approval_verbatim: 명령이 실행됐다(pwned2)"; else ok "stepa8_multiline_approval_verbatim: pwned2 파일 없음"; fi
+if [ -e "$E/repo/docs/rm2" ]; then no "stepa8_multiline_approval_verbatim: 거절됐는데 폴더가 남았다"; else ok "stepa8_multiline_approval_verbatim: 거절되면 폴더를 만들지 않는다"; fi
+# 줄마다 AF<k> 로 나누면(여러 말 규칙) 두 줄이 각자 한 말로 그대로 실린다.
+FENCE_ONE="$FENCE"
+AF_BLOCK='AF2="$AD/2"
+cat > "$AF2" <<'"'"'DEVBREW_ROADMAP_APPROVAL_EOF'"'"'
+<둘째 말>
+DEVBREW_ROADMAP_APPROVAL_EOF
+'
+FENCE="${FENCE/
+c_rc=0/
+${AF_BLOCK}c_rc=0}"
+case "$FENCE" in *'AF2="$AD/2"'*) ok "stepa8_multiline_approval_verbatim: AF2 블록이 펜스에 들어갔다" ;; *) no "stepa8_multiline_approval_verbatim: AF2 블록을 넣지 못했다 — 아래 판정은 무의미하다" ;; esac
+FENCE="${FENCE/--approval=\"\$(cat \"\$AF1\")\"/--approval=\"\$(cat \"\$AF1\")\" --approval=\"\$(cat \"\$AF2\")\"}"
+SECOND='둘째 줄 $(touch '"$E"'/pwned3) `id`'
+FENCE="${FENCE//<둘째 말>/$SECOND}"
+assert_eq "$(e2e_run '두 말 시험' '첫 줄 "q"' rm3)" "0" "stepa8_multiline_approval_verbatim: 줄마다 AF<k> 로 나누면 rc 0"
+RMALL3="$(cat "$E"/repo/docs/rm3/*.md 2>/dev/null)"
+case "$RMALL3" in *'「첫 줄 "q"」'*"「${SECOND}」"*) ok "stepa8_multiline_approval_verbatim: 두 말이 각자 글자 그대로 실렸다" ;; *) no "stepa8_multiline_approval_verbatim: 두 말이 그대로 실리지 않았다" ;; esac
+if [ -e "$E/pwned3" ]; then no "stepa8_multiline_approval_verbatim: 명령이 실행됐다(pwned3)"; else ok "stepa8_multiline_approval_verbatim: pwned3 파일 없음"; fi
+FENCE="$FENCE_ONE"
 
 finish

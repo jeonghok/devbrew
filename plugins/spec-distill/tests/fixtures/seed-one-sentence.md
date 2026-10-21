@@ -1,6 +1,6 @@
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: seed-one-sentence.audit.md
 ---
 

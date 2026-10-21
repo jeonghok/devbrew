@@ -13,7 +13,8 @@
 #
 # Usage: run_docreview_codex_reviewer.sh <profile.md> <doc-or-bundle> <project_dir> <out_yaml>
 # 성공·실패 모두 <out_yaml> 에 codex_findings_to_yaml.py --emit-keys docreview 스키마의
-# 중첩 YAML 을 쓴다. <out_yaml> 자체를 못 쓰면(디렉토리 부재·권한·RO 마운트) YAML 이
+# 중첩 YAML 을 쓴다. 이 파일의 <out_yaml> 쓰기는 같은 폴더의 nofollow_write.py 로 링크를 따라가지 않는다.
+# <out_yaml> 자체를 못 쓰면(디렉토리 부재·권한·RO 마운트) YAML 이
 # 애초에 불가능하므로 rc 3 으로 죽는다 — 호출자는 rc==3 을 보면 <out_yaml> 을 지워야
 # 한다(형제 run_codex_reviewer.sh 와 같은 계약. 이 fail-
 # closed 가 핵심이다 — 조용히 죽으면 직전 라운드의 stale YAML 이 이번 라운드 판정으로
@@ -47,24 +48,31 @@ fi
 
 # stale 제거 + 쓰기 가능성 확인을 자원을 처음 만지는 지점에서 한다. 여기서 실패하면
 # YAML 자체가 불가능하므로 rc 3 — 호출자가 <out_yaml> 을 지워야 한다는 계약의 근거다.
-: > "$OUTPUT_PATH" 2>/dev/null || {
+# 러너 폴더는 `cd "$PROJECT_DIR"` 전에 절대 경로로 굳힌다 — 상대 경로로 남으면 cd 뒤의 writer 호출이
+# 리뷰 대상 레포 안의 같은 이름 파일을 실행한다.
+_RUNNER_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || {
+  echo "[docreview] 러너 폴더를 찾을 수 없다 — 산출물을 쓰지 않는다: $OUTPUT_PATH" >&2
+  exit 3
+}
+python3 -I "$_RUNNER_DIR/nofollow_write.py" empty --out "$OUTPUT_PATH" 2>/dev/null || {
   echo "[docreview] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
   exit 3
 }
 
 # `write_failclosed` · `_degrade_if_empty` 는 shared/codex/runner_common.sh 정본을
 # 그대로 쓴다(설계 §5.2 표 「reviewing-document.md」 행의 의존). source 를 가드한다 —
-# 위 guarded truncate 가 이미 OUTPUT_PATH 를 0바이트로 만들어 놨고 트랩은 아직
+# 위 writer 가 이미 OUTPUT_PATH 를 0바이트 일반 파일로 만들어 놨고 트랩은 아직
 # 안 떴다. source 실패가 `set -e` 아래서 즉사하면 0바이트 산출물이 "성공, 발견 0건"
 # 으로 읽힌다.
 # shellcheck source=/dev/null
-_RUNNER_COMMON="$(dirname -- "${BASH_SOURCE[0]}")/runner_common.sh"
+_RUNNER_COMMON="$_RUNNER_DIR/runner_common.sh"
 if [ -r "$_RUNNER_COMMON" ] && bash -n "$_RUNNER_COMMON" 2>/dev/null \
    && . "$_RUNNER_COMMON"; then
   :
 else
-  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
-    > "$OUTPUT_PATH" 2>/dev/null || {
+  python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+    printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
+    2>/dev/null || {
       echo "[docreview] runner_common.sh 로드 실패 + 산출물 기록 실패 — 호출자는 stale 을 지워야 한다" >&2
       exit 3
     }
@@ -477,6 +485,7 @@ EXIT_CODE=0
 codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    -c 'project_doc_max_bytes=0' \
     "${WEB_ARGS[@]}" \
     --json \
     < "$PROMPT_FILE" \
@@ -486,14 +495,14 @@ codex exec - \
 OVERRIDE_REASON=""
 [[ $EXIT_CODE -ne 0 ]] && OVERRIDE_REASON=exit_nonzero
 
-if ! python3 "$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py" \
+if ! python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+       python3 "$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \
        --emit-keys docreview \
-       < "$STDOUT_FILE" > "$OUTPUT_PATH"; then
-  echo 'findings: []' > "$OUTPUT_PATH"
-  echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
-  echo '  reason: yaml_conversion_failed' >> "$OUTPUT_PATH"
+       < "$STDOUT_FILE"; then
+  python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+    printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: yaml_conversion_failed\n' || exit 3
   exit 0
 fi

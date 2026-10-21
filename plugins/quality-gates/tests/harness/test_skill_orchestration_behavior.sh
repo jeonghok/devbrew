@@ -505,7 +505,7 @@ fi
 # R1b→R8 unclaimed 사슬 · 중간 파일 custody · 라벨 R8)이 이 자리에 있었다. 그 단계 · 집계 ·
 # 원장 · qg_run_tmp 가 절차와 함께 사라졌다. 각 요구는 행동 테스트가 잰다 — 배선은
 # test_differential_procedure.sh(D0~D8 · 토픽 경로 · D1 실행), 두 축의 트리는 R5 · R11 · R12,
-# 관측 실패는 R3 · R18, unclaimed 는 R16, 기계 출력의 판정 도달은 R24, 메모 위치는 R6
+# 관측 실패는 R3 · R18, unclaimed 는 R16, 판정 인자가 기계가 낸 결과 줄의 글자 그대로인 것은 R24, 메모 위치는 R6
 # (plan 「요구 → 테스트」).
 
 # ── T1 / AC1 / AC2 / M3: 앵커 이전 ──

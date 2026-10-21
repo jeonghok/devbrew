@@ -225,6 +225,27 @@ class Render(unittest.TestCase):
         self.assertEqual(rows, want)
 
 
+class Section4RcIndex(unittest.TestCase):
+    """§4 항목 첫 줄의 RC 는 그 항목(첫 줄 + 들여 쓴 본문 줄)으로 색인된다."""
+    HOOK = "- 둘을 한 줄에 «zeta» · «alpha» — [취함] [→ OQ3]\n"
+
+    def lines(self, section4):
+        self.assertIn(self.HOOK, MINI_BRIEF)
+        return R.index_brief(MINI_BRIEF.replace(self.HOOK, self.HOOK + section4), MINI_AUDIT).lines
+
+    def test_head_rc_maps_to_item_with_body(self):
+        got = self.lines("- 레포 주장 «repo-k» — [중립] — 이유 [RC7 → OQ3]\n  이어지는 본문 줄 (a/b.py)\n")
+        self.assertEqual(got["RC7"], "- 레포 주장 «repo-k» — [중립] — 이유 [RC7 → OQ3]\n  이어지는 본문 줄 (a/b.py)")
+
+    def test_section5_line_wins_over_section4_head(self):
+        got = self.lines("- 레포 주장 «repo-k» — [중립] — 이유 [RC9 → OQ3]\n")
+        self.assertEqual(got["RC9"], "- 위험 — 사실 | 고칠 자리 — RC9 (p/q.py) [RC9 → OQ3]")
+
+    def test_body_line_rc_not_indexed(self):
+        got = self.lines("- 둘째 «body-k» — [중립] — 이유 [→ 없음]\n  본문 줄 RC8 (a/b.py)\n")
+        self.assertNotIn("RC8", got)
+
+
 class FormatV2(unittest.TestCase):
     """R5 AC2 · AC3 · AC4 — 범위 하위 항목 · 선택 칸 · 새 재분해 이력."""
 

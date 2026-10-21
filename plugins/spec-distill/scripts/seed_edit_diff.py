@@ -34,8 +34,9 @@ import difflib
 import hashlib
 import json
 import pathlib
-import shutil
 import sys
+
+import nofollow_write
 
 
 def _read(p: pathlib.Path) -> list[str]:
@@ -129,7 +130,7 @@ def main(argv=None) -> int:
             print(json.dumps({"initialized": False, "reason": "base_exists"}, ensure_ascii=False))
             return 0
         base.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(seed, base)
+        nofollow_write.replace_bytes(base, seed.read_bytes())
         if shown.exists():
             shown.unlink()
         _reverted_path(base).unlink(missing_ok=True)
@@ -140,7 +141,7 @@ def main(argv=None) -> int:
             print(_version_stale_msg(), file=sys.stderr)
             return 4
         base.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(seed, base)
+        nofollow_write.replace_bytes(base, seed.read_bytes())
         shown.unlink(missing_ok=True)
         _reverted_path(base).unlink(missing_ok=True)
         print(json.dumps({"accepted": True}, ensure_ascii=False))
@@ -161,7 +162,7 @@ def main(argv=None) -> int:
     hunks = compute_hunks(b, s)
     if a.cmd == "hunks":
         seed_sha = _sha256(seed)
-        shown.write_text(seed_sha, encoding="utf-8")
+        nofollow_write.replace_bytes(shown, seed_sha.encode("utf-8"))
         _reverted_path(base).unlink(missing_ok=True)
         print(json.dumps({"base_present": True, "empty": not hunks, "hunks": hunks,
                           "seed_sha256": seed_sha}, ensure_ascii=False))
@@ -193,8 +194,9 @@ def main(argv=None) -> int:
         print("없는 덩어리 번호: %s (있는 것: %s)" % (sorted(ids - known), sorted(known)), file=sys.stderr)
         return 2
     seed.write_text("".join(revert(b, s, hunks, ids)), encoding="utf-8")
-    shown.write_text(_sha256(seed), encoding="utf-8")
-    marker.write_text(json.dumps({"ids": sorted(ids), "seed_sha256": _sha256(seed)}), encoding="utf-8")
+    nofollow_write.replace_bytes(shown, _sha256(seed).encode("utf-8"))
+    nofollow_write.replace_bytes(
+        marker, json.dumps({"ids": sorted(ids), "seed_sha256": _sha256(seed)}).encode("utf-8"))
     print(json.dumps({"reverted": sorted(ids), "remaining": len(compute_hunks(b, _read(seed)))},
                      ensure_ascii=False))
     return 0

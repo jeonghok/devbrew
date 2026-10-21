@@ -69,6 +69,14 @@ case_advice_atomic_write_keeps_link_and_mode
 case_advice_sink_after_headerless_defer_row
 case_advice_count_line_nested_log
 case_advice_render_where_label
+# AC11 — 리뷰가 닫힌 뒤 결정 기록 끝의 손 줄.
+case_closed_log_after_close_vs_after_begin
+case_closed_log_inserted_above_count_asks
+case_closed_log_other_section_asks
+case_closed_log_old_ledger_asks
+case_closed_log_two_counts_uses_last
+case_closed_log_label_reserved
+case_closed_log_engine_line_deleted_asks
 # AC15 — 박제 행도 한 줄 문법.
 case_AC15_sink_row_one_line_escaped
 case_AC15_sink_row_function_one_line

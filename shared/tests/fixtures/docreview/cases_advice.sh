@@ -920,3 +920,143 @@ case_AC39_precondition_protected_fix_escalates() {   # 보호 승격을 건너�
   assert_contains "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent '#11-acceptance-criteria' --state-dir "$d" 2>&1)" "anchor_protected" "AC39 전제: 보호 절의 fix 는 check-intent 가 올려 보낸다"
   rm -rf "$d"
 }
+
+# ── AC11 — 리뷰가 닫힌 뒤 결정 기록 끝에 손으로 쓴 줄(설계 §4 · U5) ─────────────────────────────
+CL_H1='- D9 · 결정 · 2026-10-20 · 사용자 — 「닫힌 뒤 첫 줄」'
+CL_H2='- D10 · 결정 · 2026-10-20 · 사용자 — 「닫힌 뒤 둘째 줄」'
+CL_H3='- D11 · 결정 · 2026-10-20 · 사용자 — 「재리뷰를 시작한 뒤 쓴 줄」'
+cl_finish() {   # cl_finish <dir> <out> — 열린 라운드를 빈 탐지 · codex 부재 · 빈 재비판으로 finalize(문서는 <dir>/doc.md)
+  py docreview_route.py prepare-recritic --state-dir "$1" --critic "$(critic_now "$1" "$FX/critic-mc-empty.txt")" \
+    --codex "$(codex_now "$1" "$FX/codex-failed.yaml")" > "$1/prep-cl.json"
+  py docreview_route.py finalize --state-dir "$1" --recritic "$FX/recritic-empty.txt" --doc "$1/doc.md" > "$2"
+}
+cl_closed() {   # cl_closed <existing|created> → 상태 디렉토리(문서는 그 안의 doc.md). 라운드 1 finalize 뒤 끝맺음이 계수 줄을 썼다
+  local t d; t="$(mktemp -t closedlog-XXXXXX)"
+  if [ "$1" = existing ]; then with_log "$FX/design-sample.md" "$t" "$LOG_L1"; else cp "$FX/design-sample.md" "$t"; fi
+  d="$(mk_doc_state "$t" "$PROF_MC/design-doc.md")"; rm -f "$t"
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin.json"
+  py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md" >/dev/null
+  echo "$d"
+}
+cl_frozen() { jget "$1" 'sorted(x["anchor"] for x in d["findings"] if x["category"] == "frozen_change" and x["disposition"] == "decide")'; }
+case_closed_log_after_close_vs_after_begin() {
+  local mode d
+  for mode in existing created; do
+    d="$(cl_closed "$mode")"
+    assert_eq "$(grep -c '^- docreview 계수 — ' "$d/doc.md")" "1" "AC11 전제($mode): 끝맺음이 결정 기록에 계수 줄을 썼다"
+    doc_append "$d/doc.md" "$CL_H1"; doc_append "$d/doc.md" "$CL_H2"
+    br "$d" "$d/doc.md"                                     # 재리뷰 시작 — 스냅숏 2 는 손 줄 둘을 담는다
+    doc_append "$d/doc.md" "$CL_H3"                         # 재리뷰를 시작한 뒤 쓴 줄 — 다음 라운드 diff 에 든다
+    cl_finish "$d" "$d/fin2.json"
+    assert_eq "$(cl_frozen "$d/fin2.json")" "[]" "AC11($mode): 닫힌 뒤 · 재리뷰 시작 전에 결정 기록 끝에 더한 손 줄은 「허가 없이 바뀜」 결정이 아니다"
+    assert_eq "$(rk_changed "$d" 2)" "([], [('#결정-기록', 'closed-log')])" "AC11($mode): 라운드 2 diff 는 결정 기록을 closed-log 라벨로 면제한다"
+    assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1', '$CL_H2']" "AC11($mode): gate JSON 이 기록으로 읽은 손 줄의 글을 싣는다"
+    assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -A2 '^리뷰가 닫힌 뒤 손으로 더한 결정 줄')" "리뷰가 닫힌 뒤 손으로 더한 결정 줄 2개 — 기록으로 읽었다
+  - ${CL_H1#- }
+  - ${CL_H2#- }" "AC11($mode): 게이트 글에 수와 줄이 보인다"
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin3.json"
+    assert_eq "$(cl_frozen "$d/fin3.json")" "['#결정-기록']" "AC11·U5($mode): 재리뷰를 시작한 뒤 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 으로 묻는다"
+    assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11·U5($mode): 라운드 3 게이트는 기록으로 읽은 손 줄이 없다"
+    assert_not_grep "$(py docreview_state.py gate --state-dir "$d" --render)" '^리뷰가 닫힌 뒤 손으로' "AC11·U5($mode): 라운드 3 게이트 글에 그 공시 줄이 없다"
+    rm -rf "$d"
+  done
+}
+case_closed_log_inserted_above_count_asks() {
+  local d cnt
+  d="$(cl_closed existing)"; cnt="$(grep '^- docreview 계수 — ' "$d/doc.md")"
+  doc_sub "$d/doc.md" "$cnt" "$CL_H1
+$cnt"
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+  assert_eq "$(cl_frozen "$d/fin2.json")" "['#결정-기록']" "AC11: 마지막 계수 줄 위에 끼운 손 줄은 「허가 없이 바뀜」 으로 묻는다"
+  assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11: 계수 줄 위에 끼운 줄은 기록으로 읽지 않는다"
+  rm -rf "$d"
+  d="$(cl_closed existing)"
+  doc_sub "$d/doc.md" "$LOG_L1" "$LOG_L1_FORGED"; doc_append "$d/doc.md" "$CL_H1"
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+  assert_eq "$(cl_frozen "$d/fin2.json")" "['#결정-기록']" "AC11: 닫힌 뒤 옛 결정 줄을 고치면 끝의 손 줄이 있어도 묻는다"
+  rm -rf "$d"
+}
+case_closed_log_other_section_asks() {
+  local d
+  d="$(cl_closed existing)"
+  doc_append "$d/doc.md" "$CL_H1"
+  doc_sub "$d/doc.md" '- 목표 B' '- 목표 B
+- 목표 C'
+  doc_sub "$d/doc.md" '|---|---|' '|---|---|
+| 9 | 손으로 더한 행 |'
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+  assert_eq "$(cl_frozen "$d/fin2.json")" "['#2-goals', '#deferred-to-plan']" "AC11: 닫힌 뒤 다른 절 · 미룸 절(계수 줄이 없는 묶음)의 손 편집은 지금처럼 묻는다"
+  assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1']" "AC11(양의 짝): 같은 라운드의 결정 기록 끝 손 줄은 기록으로 읽는다"
+  rm -rf "$d"
+}
+case_closed_log_label_reserved() {   # closed-log 는 엔진의 면제 라벨이다 — 고칠 범위로 들어오면 위조로 거부한다
+  local d; d="$(r1 "$PROF_MC/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[$F_FIX]"
+  assert_eq "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" | jgets 'd.get("contract")')" "fix" "AC11(양의 짝): 보통 앵커 범위는 같은 검사를 지난다"
+  assert_eq "$(py docreview_anchor.py check-intent 'bbbb0001#r1.1' --intent 'closed-log' --state-dir "$d" | jgets 'd["reason"]')" "scope_label_forged" "AC11: 면제 라벨 closed-log 를 고칠 범위로 쓰면 위조로 거부한다"
+  rm -rf "$d"
+}
+case_closed_log_engine_line_deleted_asks() {   # 창 안의 엔진 줄(라운드 1 의 결정 줄)을 지우고 끝에 손 줄을 더하면 묻는다
+  local mode t d
+  for mode in keep delete; do
+    t="$(mktemp -t closedlog-XXXXXX)"; with_log "$FX/design-sample.md" "$t" "$LOG_L1"
+    d="$(mk_doc_state "$t" "$PROF_MC/design-doc.md")"; rm -f "$t"
+    br "$d" "$d/doc.md"
+    log_dec "$d" "$HB_LINE" "$HB_QUOTE" >/dev/null           # 라운드 1 의 엔진 결정 줄
+    cl_finish "$d" "$d/fin.json"
+    py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md" >/dev/null
+    [ "$mode" = delete ] && doc_sub "$d/doc.md" "$HB_FULL
+" ""
+    doc_append "$d/doc.md" "$CL_H1"
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+    if [ "$mode" = keep ]; then
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1']" "AC11(양의 짝): 같은 라운드에 엔진이 쓴 결정 줄이 남아 있으면 끝의 손 줄은 기록으로 읽는다"
+      assert_eq "$(cl_frozen "$d/fin2.json")" "[]" "AC11(양의 짝): 그때 결정 기록은 묻지 않는다"
+    else
+      assert_eq "$(cl_frozen "$d/fin2.json")" "['#결정-기록']" "AC11: 닫힌 뒤 엔진이 쓴 결정 줄을 지우면 끝의 손 줄이 있어도 묻는다"
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11: 엔진 줄을 지운 라운드는 손 줄을 기록으로 읽지 않는다"
+    fi
+    rm -rf "$d"
+  done
+}
+case_closed_log_two_counts_uses_last() {   # 계수 줄이 여럿이면 마지막 것을 쓴다(설계 §4) — 라운드 1 은 닫지 않고 라운드 2 끝맺음이 두 줄을 쓴다
+  local mode t d c1
+  for mode in between below; do
+    t="$(mktemp -t closedlog-XXXXXX)"; with_log "$FX/design-sample.md" "$t" "$LOG_L1"
+    d="$(mk_doc_state "$t" "$PROF_MC/design-doc.md")"; rm -f "$t"
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin.json"          # 라운드 1 — 끝맺음 없이 다음 라운드로
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+    py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md" >/dev/null
+    assert_eq "$(grep -c '^- docreview 계수 — ' "$d/doc.md")" "2" "AC11 전제($mode): 끝맺음 한 번이 라운드마다 계수 줄을 써 둘이다"
+    if [ "$mode" = between ]; then
+      c1="$(grep -m1 '^- docreview 계수 — ' "$d/doc.md")"
+      doc_sub "$d/doc.md" "$c1" "$c1
+$CL_H1"
+    else
+      doc_append "$d/doc.md" "$CL_H1"
+    fi
+    br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin3.json"
+    if [ "$mode" = between ]; then
+      assert_eq "$(cl_frozen "$d/fin3.json")" "['#결정-기록']" "AC11: 두 계수 줄 사이에 끼운 손 줄은 마지막 계수 줄 위라 「허가 없이 바뀜」 으로 묻는다"
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11: 두 계수 줄 사이의 손 줄은 기록으로 읽지 않는다"
+    else
+      assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "['$CL_H1']" "AC11(양의 짝): 두 계수 줄 아래에 더한 손 줄은 기록으로 읽는다"
+      assert_eq "$(cl_frozen "$d/fin3.json")" "[]" "AC11(양의 짝): 그때 결정 기록은 묻지 않는다"
+    fi
+    rm -rf "$d"
+  done
+}
+case_closed_log_old_ledger_asks() {
+  local d
+  d="$(cl_closed existing)"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+for e in st["engine_lines"]: e.pop("kind", None)
+s.save_state(sys.argv[2], st, "fixture: kind 표지 없는 옛 원장")' "$SCRIPTS" "$d"
+  assert_eq "$(st_yaml "$d" '[e.get("kind") for e in st["engine_lines"]]')" "[None]" "AC11·U10 전제: 옛 원장 픽스처에 kind 표지가 없다"
+  doc_append "$d/doc.md" "$CL_H1"; doc_append "$d/doc.md" "$CL_H2"
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+  assert_eq "$(cl_frozen "$d/fin2.json")" "['#결정-기록']" "AC11·U10: 계수 줄 표지(kind: count)가 없는 옛 원장은 닫힌 뒤 손 줄도 묻는다(닫힌 쪽)"
+  assert_eq "$(gsum "$d" 'd.get("closed_log_lines", "키 없음")')" "키 없음" "AC11·U10: 옛 원장은 기록으로 읽은 손 줄이 없다"
+  rm -rf "$d"
+}

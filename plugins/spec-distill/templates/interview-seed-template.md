@@ -6,7 +6,7 @@
 ```markdown
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: <basename>.audit.md
 ---
 

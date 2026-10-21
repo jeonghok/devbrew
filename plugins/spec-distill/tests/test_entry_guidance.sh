@@ -6,7 +6,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SD="$ROOT/plugins/spec-distill"
-FIN="$SD/skills/spec-interview/references/finishing.md"
+FIN="$SD/skills/pm-interview/references/finishing.md"
 TPL="$SD/templates/roadmap-template.md"
 RMAP="$ROOT/docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md"
 EH="$SD/references/epic-handoff.md"

@@ -7,7 +7,7 @@
 같은 공유 스위트 잠금(`suite_lock.py` — 기계 상태 자원 폴더의 `suite-lock`)으로 막는다.
 
 명령줄:
-  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
+  merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
 
 무엇을 돌리나: 기본 브랜치의 로드맵 frontmatter `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
 (정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. frontmatter 에 없는 키는 이 로드맵 기계 상태의 `## 레포 설정`
@@ -32,6 +32,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import branch_tip as branch_tip_mod  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
@@ -112,18 +113,23 @@ def drop_lock(d: Path) -> None:
 
 # ── 사본 ─────────────────────────────────────────────────────────────────────
 
+def branch_tip(root: Path, branch: str) -> str:
+    try:
+        tip, note = branch_tip_mod.tip(root, branch)
+    except branch_tip_mod.TipError as exc:
+        raise Stop(3, str(exc))
+    if tip is None:
+        raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
+    if note:
+        print(note)
+    return tip
+
+
 def make_copies(root: Path, work: Path, branch: str):
     rc, base_sha, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
     if rc:
         raise Stop(3, NO_DEFAULT)
-    tip = None
-    for ref in ("refs/heads/" + branch, "refs/remotes/origin/" + branch):
-        rc, out, _e = git(root, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
-        if rc == 0:
-            tip = out
-            break
-    if tip is None:
-        raise Stop(3, "브랜치를 찾지 못했다: %s" % branch)
+    tip = branch_tip(root, branch)
     base, merged = work / "base", work / "merged"
     for d in (base, merged):
         rc, _o, err = git(root, "worktree", "add", "--detach", str(d), base_sha)

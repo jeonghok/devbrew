@@ -14,6 +14,7 @@
   --recritic-map PATH  `prepare` 가 쓴 역매핑 JSON
   --recritic-diff PATH 재비판자에게 준 diff (선택 — added 의 file 도출에만)
   --emit-verdict       본 보고서 뒤에 `scope:`·`angles:`(있으면) · `verdict:` 꼬리를 싣는다
+  --verdict-args       (`--emit-verdict` 와 함께) 마지막 줄로 리뷰 축 인자 줄 `qg-verdict-args: …`
   --differential PATH  diff-test-results.py 의 집계 YAML
   --reason R           호출자만 아는 사유(반복 가능, verdict.REASONS 안)
   --angles PATH        각도 상태 파일(`<각도>: <상태>` 세 줄)
@@ -26,6 +27,7 @@
 exit: 0 정상 · 2 잘못된 호출 · 4 판정축 실패(stdout 비움).
 """
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -159,8 +161,14 @@ def _normalize_identity(f, ledger=None):
     return f
 
 
+def claim_key(f):
+    """요약의 공백 · 대소문자를 접은 키 — 같은 주장인지 가르는 기준."""
+    return " ".join(str(f.get("summary", "")).split()).casefold()
+
+
 def finding_id(f):
-    return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}"
+    fp = hashlib.sha1(claim_key(f).encode("utf-8")).hexdigest()[:8]
+    return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}-{fp}"
 
 
 def _fold_sev(value):
@@ -338,8 +346,7 @@ def _has_plain(f):
 
 def _same_claim(a, b):
     """두 지적의 요약이 공백 · 대소문자만 다른가 — 그래야 한쪽의 plain 이 다른 쪽을 말한다."""
-    return (" ".join(str(a.get("summary", "")).split()).casefold()
-            == " ".join(str(b.get("summary", "")).split()).casefold())
+    return claim_key(a) == claim_key(b)
 
 
 def sort_findings(findings):
@@ -806,6 +813,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--findings", default="")
     ap.add_argument("--emit-verdict", action="store_true")
+    # 리뷰 축 인자 줄 — 차등 축의 사유 · 결함은 싣지 않는다(그것은 `verdict.py --emit-args` 가 낸다).
+    ap.add_argument("--verdict-args", action="store_true")
     # 기본값 None — 「플래그를 안 줬다」와 「빈 경로를 줬다」를 가른다. 빈 경로는 usage 오류다:
     # 값을 못 구한 호출자가 빈 변수로 부르면 그 축이 조용히 사라져 clean 이 된다.
     ap.add_argument("--differential", default=None)
@@ -840,6 +849,8 @@ def main(argv=None):
                 _usage(f"{flag} 은 --emit-verdict 없이는 의미가 없다 (함께 주거나 {flag} 을 빼라)")
         if args.reason:
             _usage("--reason 은 --emit-verdict 없이는 의미가 없다 (함께 주거나 --reason 을 빼라)")
+        if args.verdict_args:
+            _usage("--verdict-args 는 --emit-verdict 없이는 의미가 없다 (함께 주거나 --verdict-args 를 빼라)")
 
     ledger = Ledger(items="open")
     if args.recritic is not None:
@@ -874,7 +885,7 @@ def main(argv=None):
     n_block = split["CRITICAL"] + split["IMPORTANT"]   # K-4 의 blocking
 
     # 판정 «계산»은 본 보고서를 쓰기 «전»에 한다 — fail4 면 stdout 이 비어 있어야 한다.
-    decision, angle_states, scope = None, None, None
+    decision, angle_states, scope, args_line = None, None, None, None
     if args.emit_verdict:
         if args.scope is not None:
             scope = _scope_tuple.parse(_scope_tuple.read_or_fail4(args.scope))
@@ -909,13 +920,18 @@ def main(argv=None):
                 dead_angles.append("adjudication")
             angle_states = _angles.with_dead_sources(declared, dead_angles)
             angle_absent = angle_absent or _angles.blocks(angle_states)
+        review_reasons = args.reason + ([scope_reason] if scope_reason else [])
         decision = _verdict.decide(
             defect=n_block >= 1,                 # 살아남은 CRITICAL·IMPORTANT 가 1건 이상(K-4)
             review_blocked=review_blocked,
             angle_absent=angle_absent,
             differential_text=_verdict.read_or_none(args.differential),
-            extra_reasons=args.reason + ([scope_reason] if scope_reason else []),
+            extra_reasons=review_reasons,
         )
+        if args.verdict_args:
+            args_line = _verdict.render_args(
+                blocking=n_block, optional=split["SUGGESTION"], defect=n_block >= 1,
+                review_blocked=review_blocked, angle_absent=angle_absent, reasons=review_reasons)
 
     report = ledger.report()
     raw_verdict_count = doc.get("_raw_verdict_count", 0) if isinstance(doc, dict) else 0
@@ -940,6 +956,8 @@ def main(argv=None):
         if angle_states is not None:
             sys.stdout.write(_angles.render(angle_states))
         sys.stdout.write(_verdict.render(decision))
+        if args_line is not None:
+            sys.stdout.write(args_line)
 
 
 if __name__ == "__main__":

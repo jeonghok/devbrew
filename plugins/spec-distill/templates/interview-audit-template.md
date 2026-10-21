@@ -3,7 +3,7 @@ type: interview-audit
 payload: <YYYY-MM-DD>-<kebab-topic>-interview.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill spec-interview v0.57.0
+source: spec-distill pm-interview
 ---
 
 # <Topic> — Interview Audit
@@ -45,7 +45,7 @@ source: spec-distill spec-interview v0.57.0
 
 (포화 판정 줄 — 게이트는 아래 불릿 중 `포화 판정 <k>:` 또는 `사용자 종료(@S<n>)` 로 시작하는 **마지막** 줄을 본다.
 판정자 `포화` · 사용자 종료 · 사용자 판단 포화(advisory)면 통과, 줄이 없거나 마지막이 `아직` · `판정 불가 — 조사 계속` 이면
-red 다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 spec-interview 의 포화 판정 reference 다.
+red 다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 pm-interview 의 포화 판정 reference 다.
 `<k>` 는 실제 차례로 치환한다 — 채우지 않은 자리표는 게이트 red 다.)
 
 - 질문 라운드: <n> · agent dispatch: <n> · coverage-mapper <k> · codex 실호출: <n> (성공 <n>)

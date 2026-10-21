@@ -52,7 +52,7 @@ EOF
 cat > "$TMP/s.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: s.audit.md
 ---
 
@@ -163,7 +163,7 @@ EOF
 cat > "$TMP/b1.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: b.audit.md
 ---
 
@@ -179,7 +179,7 @@ assert_not_contains "$(j "$TMP/b1.json" 'd["invalid"]')" "B 는 하지 않는다
 cat > "$TMP/b2.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: b.audit.md
 ---
 
@@ -211,7 +211,7 @@ EOF
 cat > "$TMP/w.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: w.audit.md
 ---
 
@@ -226,7 +226,7 @@ clsw() { j "$TMP/w.json" "[(s['provenance'], s['basis']) for s in d['sentences']
 assert_eq "$(clsw '의심하는데 확신은 없다.')" "('author', 'none')" "classify: 감싼 원문 문장의 뒷토막만 남은 seed 문장은 저자 출처"
 assert_eq "$(clsw '나는 클라이언트 쪽 경합을 의심하는데 확신은 없다.')" "('user', 'verbatim')" "classify 양성 짝: 감싼 원문 문장 전체는 사용자 원문"
 
-# Phase 1 출처 대조(`/spec-distill:spec-interview`)가 의존하는 정확한 경계 — 문단 안에서 두 문장으로 갈린다.
+# Phase 1 출처 대조(`/spec-distill:pm-interview`)가 의존하는 정확한 경계 — 문단 안에서 두 문장으로 갈린다.
 cat > "$TMP/e.audit.md" <<'EOF'
 ---
 type: interview-seed-audit
@@ -246,7 +246,7 @@ EOF
 cat > "$TMP/e.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: e.audit.md
 ---
 
@@ -279,7 +279,7 @@ EOF
 cat > "$TMP/f.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:interview
+next_phase: spec-distill:pm-interview
 audit_file: f.audit.md
 ---
 

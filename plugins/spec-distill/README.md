@@ -4,27 +4,27 @@
 
 ## 이 플러그인이 하는 일
 
-흐릿한 요청을 한국어 인터뷰로 다듬어 brainstorming 에 넘길 문서(interview brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 인터뷰는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 인터뷰 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:spec-interview @<그 파일>` 로 이어 갈 수 있고, 인터뷰가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다).
+흐릿한 요청을 한국어 인터뷰로 다듬어 brainstorming 에 넘길 문서(interview brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 인터뷰는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 인터뷰 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:pm-interview @<그 파일>` 로 이어 갈 수 있고, 인터뷰가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다).
 
 ## 쓰는 법
 
 사용자가 부르는 진입 skill 은 다섯입니다.
 
 - `/request-framing` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
-- `/spec-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
+- `/pm-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 - `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 인터뷰 조사 수)를 보고 싶을 때. 읽기만 합니다.
 - `/spec-distill:epic-conductor [<로드맵 경로>]` — 승인된 로드맵의 에픽을 이 세션에서 끝까지 지휘합니다(cost_class high — 시작 승인, 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 공시만).
 
 ```
-/spec-interview todo 앱 만들어줘
+/pm-interview todo 앱 만들어줘
 ```
 
-`spec-interview` skill 이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 라운드를 시작합니다.
+`pm-interview` skill 이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 라운드를 시작합니다.
 
-설치 환경에 같은 이름이 있으면 `/spec-distill:spec-interview` 처럼 완전명으로 부릅니다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 씁니다.
+설치 환경에 같은 이름이 있으면 `/spec-distill:pm-interview` 처럼 완전명으로 부릅니다. 기계가 내는 안내(핸드오프 · trivia 문면)는 처음부터 완전명을 씁니다.
 
-`/spec-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춥니다(경로 한 토큰으로 다시 부르세요). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 씁니다.
+`/pm-interview` 는 `@` 로 시작하는 인자에 공백이 섞이면 풀지 않고 멈춥니다(경로 한 토큰으로 다시 부르세요). `/request-framing` 은 그런 인자를 받은 그대로 회의 재료로 씁니다.
 
 ## 흐름
 
@@ -37,10 +37,10 @@
                                        · 검증 — 문서 리뷰 엔진(seed 프로필: 탐지 doc-critic + codex → 재비판 doc-recritic)
                                                 · 처분은 사용자가 — 처분 전 편집 금지 · 저자 편집 diff 공시 · 문구 없는 drop 차단
                                                 · 냉독 축(seed-readback)
-                                       ▼ [확정 — proceed 게이트] ①/compact 후 /spec-interview @경로 · ②/new 후 /spec-interview @경로 · ③수정 필요 · ④멈춤
+                                       ▼ [확정 — proceed 게이트] ①/compact 후 /pm-interview @경로 · ②/new 후 /pm-interview @경로 · ③수정 필요 · ④멈춤
                                    interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
-                                       ▼ 다음 세션 첫 턴 = `/spec-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
-/spec-interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
+                                       ▼ 다음 세션 첫 턴 = `/pm-interview @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 인터뷰에 넘김)
+/pm-interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 사용자 말 그대로 / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
@@ -89,7 +89,7 @@
   compounding 이벤트다 — codex 도 같은 프로필 본문을 받으므로 한 곳을 고치면 두 판정자가 함께 바뀐다(persona = 보안-민감 코드).
 - **Law 2 (seed 자리) — 처분 주체는 사용자 (request-framing)** — 요청 요약(seed)의 리뷰 지적을 받아들일지는 사용자가 정하고, 저자가 먼저 고치지 않는다. Phase 0 seed 를 `shared/docreview/` 엔진의 셋째 껍데기로 리뷰한다(탐지 `doc-critic` + codex → 재비판 `doc-recritic`). seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지므로 차단은 호스트가 진다: 저자는 사용자가 처분하기 전에 seed 를 편집하지 않고, 엔진이 게이트를 열지 않는 `fix` · `ask` 도 사용자 앞에 올리며, 저자 편집은 기준 사본 diff(`scripts/seed_edit_diff.py`)로 라운드 게이트와 확정 게이트 앞에서 덩어리마다 처분받고, 문구 없는 `drop` 은 진행을 막는다(`scripts/seed_review_log.py`). 형성 라운드의 풀이는 공시가 아니라 양의 선택 질문으로 확인받고 압축이 고친 문장의 확인 표시는 떨어지며(`scripts/seed_provenance.py`), Phase 1 은 audit 원문과 대조해 출처와 확인을 두 축으로 가른다. **한계**: 차단은 엔진의 기계적 거부가 아니라 호스트의 단계 순서 + 관측이다 — 어긴 편집은 다음 공시에서 반드시 보이고 보이면 멈추지만, 엔진처럼 거부하지는 않는다.
 - **「공시와 차단은 다른 술어」 — 리뷰되지 않은 라운드** — 리뷰가 제대로 돌지 못한 라운드는 «통과» 처럼 보이지 않게 그 사실을 맨 앞에 알리되, 알린다고 해서 모두 진행을 막지는 않는다. 엔진이 critic 사망 두 번 · `finalize` 실패 · 라우팅 보고서가 없는 라운드를 결정론으로 알고 게이트 요약에 싣는다(`unverified` · `approval_label` · `round_reviewed` · `unreviewed_reason`). 「미검증」(critic 사망 · `finalize` 실패)은 승인 게이트를 그 라벨로 연다. 「미검증」이 아닌 `unrouted` 는 공시만 한다: 게이트 첫 줄이 「이상 없음」·「경고 없음」일 수 없고 「다음:」 줄에 꼬리가 붙는다. brief 자리는 같은 값을 Step B 로 싣고, 엔진 밖의 강등(진입 게이트 강등 · 냉독 실패 · brief 리뷰 skip 등)은 state 의 `brief_review_degradations` 원장으로 함께 싣는다 — 돌지 못한 검사가 통과한 검사로 집계되지 않는다.
-- **Law 3 (Compounding) — 문서 리뷰 엔진** — 문서 리뷰 자리(design doc · brief · seed)가 같은 공용 엔진 `shared/docreview/` 를 쓴다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
+- **Law 3 (Compounding) — 문서 리뷰 엔진** — 문서 리뷰 자리(design doc · brief · seed)가 같은 공용 엔진 `shared/docreview/` 를 쓴다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 한 번 보호된 절은 다른 절 밑으로 밀려나도 보호가 이어지고 이후 변경마다 다시 묻는다. 보호된 절의 제목을 바꾸거나 절을 지우면 그 바꿈을 보호 절의 변경으로 묻는다. 엔진 값이 허용 범위를 넘으면 라운드를 시작하지 않고, 불변 절의 「추가만」 면제는 새 목록 항목(`- `)을 더할 때만 받으며, 닫힌 리뷰의 결정 기록 끝에 손으로 쓴 줄은 기록으로 읽고, 원장 쓰기 순서 락은 절차 산문까지 본다. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **「판정기가 항목을 버리면 센다」 + fail-closed** — 엔진은 항목을 조용히 버리지 않고 검사를 열린 채 통과시키지 않는다. 승인 차단은 역방향 스캔이 아니라 **전방 포인터**(`superseded_by`)로 판정하고, 소비되지 못한 재상승 예약·어휘 밖 재비판 verdict·`same_as` 허상 타겟은 버리지 않고 `reraise_unconsumed`/`coerced` 로 **센다**. 영구 차단에는 사용자 탈출구를 주되 「보류」는 거부한다 — 재상승 후속에도 같은 가드가 걸리고(제안하는 선택지와 받아주는 선택지가 한 함수에서 나온다), 후속은 원본의 `kind`·`prev_hash` 를 물려받아 원복 의무가 강등되지 않는다. `escalated` 예약도 재상승 예약과 같은 누적·dedup·계수 규칙을 따르고, 상태 축의 정본 표(`is_open`·`gate_summary`·`render_gate` 를 한 표에서 도출)가 «막는 집합 ⊆ 그리는 집합»을 구조로 보장한다. 집행: 실제 `fin.json`+state 골든 동치(`shared/tests/test_docreview_golden.sh`) · 단언 수까지 대조하는 전수 스위트 · 셀마다 diff 규모를 선언해 앵커 소실을 계측기 고장으로 잡는 변이 매트릭스.
 - **Law 2 (Writer/Reviewer 분리) — design doc 자리** — 설계문서 리뷰는 공용 문서 리뷰 엔진 위에서 돌고, 리뷰어는 문서를 고칠 수 없다. `spec-review` 가 `shared/docreview/` 엔진의 껍데기다. 리뷰어는 `doc-critic`→`doc-recritic`(둘 다 `agents/*.md` 에 `# copy-of:` 마커로 바이트 동일 배포, `tools: Read, Grep, Glob` 뿐 — 심볼릭 링크 agent 는 dispatch 되지 않는다는 실측 때문에 사본이다) 이고, 승인은 verdict 없이 게이트 판정(`approval_gate_open`)의 집계로 도출된다. **능력의 빈자리를 공시한다** — design-doc 리뷰에는 외부 prior-art 대조가 Claude·codex 양쪽 모두 없다(`design-doc.md` 프로필 `web: false`). **집행 없는 kill switch 는 이름조차 남기지 않는다(P21)** — 집행 지점이 없는 옛 handoff 우회 스위치(이름은 `CHANGELOG.md` `[1.0.0]` Removed)는 이 README 에 적지 않고, `test_handoff_kill_switch.sh` 의 부재 판정 코퍼스가 이 README 를 포함해 그 이름이 design 자리 표면에 다시 나타나면 RED 가 난다 — 그래서 이 README 는 그 이름을 리터럴로 쓰지 않는다.
 - **Law 1 (Clarity) — 조사가 방향에 닿는가** — 웹 조사에서 나온 주장이 실제로 방향 결정에 쓰였는지 확인한다. 조사 주장의 계약(`references/research-claims.md`)이
@@ -98,24 +98,26 @@
   **보이면** 공시다. 「조사를
   했어야 했는가」는 기계가 알 수 없고(`check_brief.py` 는 brief 파일만 읽는다) 0건 advisory 가 Step B
   게이트로 사람에게 간다.
-- **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다. 사용자가 고른 답으로 닫는 두 길에는 한계가 있다: 「조사 불필요」로 포화를 닫으면 게이트는 그 답 번호가 brief 의 사용자 원문 절(payload · audit 어느 쪽이든)에 있는지만 보고 사람에게 확인하라는 참고 줄로 넘기며, 「외부 선례 무관」으로 landscape 를 닫으면 그 답이 고른 선택지(☑)로 적혔는지까지 본다. 둘 다 그 답을 모델이 아니라 사용자가 골랐는지는 증명하지 못한다.
+- **Law 1 · Law 2 — 멈춤의 주인은 독립 판정자** — 인터뷰가 한 번에 닫지 않고 결정에 닿는 새 사실이 없을 때까지 조사한다. 그 «없음» 을 조사하는 모델이 아니라 쓰기 권한 없는 `saturation-judge` 가 조사 원문에서 직접 판정하고, 「충분해 보인다」는 근거가 아니다. 구조 게이트(`check_brief.py` `saturation_failures`)가 판정 없는 종료를 거절한다. 사용자가 고른 답으로 닫는 두 길에는 한계가 있다: 「조사 불필요」로 포화를 닫으면 게이트는 그 답 번호가 brief 의 사용자 원문 절(payload · audit 어느 쪽이든)에 있는지만 보고 사람에게 확인하라는 참고 줄로 넘기며, 「외부 선례 무관」으로 landscape 를 닫으면 그 답이 고른 선택지(☑)로 적혔는지까지 본다. 둘 다 그 답을 모델이 아니라 사용자가 골랐는지는 증명하지 못한다. 리뷰 진입의 `check_verbatim_coverage.py` 는 두 답이 인터뷰 상태 파일에 고른 선택지(`source: chosen`)로 기록됐는지도 대조하고, 아니면 리뷰를 멈춘 뒤 같은 세션의 마무리 단계가 그 질문을 선택지로 다시 묻는다 — 상태 파일도 모델이 쓰므로 이 대조는 brief 와 상태 파일이 서로 맞는지를 잴 뿐이다. 이 대조는 brief 를 쓴 뒤 리뷰 진입(`check_verbatim_coverage.py`)에서 돈다 — 리뷰를 거치지 않는 길에서는 돌지 않는다. 다시 묻는 길은 인터뷰를 끝낸 그 세션에만 있어, 다른 세션에서 리뷰를 따로 불러 이 사유로 멈추면 끝난 인터뷰라 이어 갈 수 없다.
 - **Law 3 (컨트롤 플레인)** — 에픽 단계 · 경고 · 받은 시각을 상태줄과 `roadmap-status` 가 늘 보여, 모르는 사이의 드리프트를 다음 세션이 아니라 지금 본다. 「없음」과 「확인 못 함」(`검사 불가` · `셀 수 없음`)을 섞지 않는다.
 - **Law 1 · Law 3 — 나누는 결정이 spec 앞에 있다** — 일을 spec 하나로 할지 나눌지를 brief 를 쓰기 전에 신호를 보이고 사용자가 승인 게이트로 정하며(숫자 컷오프 없음), 로드맵 쓰기는 «쓰고 검증하거나 원래대로 되돌린다» 로 fail-closed 다. 재분해는 승인 뒤에만 같은 로드맵 위에서 일어나 다음 사이클이 같은 지도를 이어 받는다.
 - **Law 3 (Compounding) — 로드맵 온톨로지 · 사실마다 주인 하나** — 로드맵이 가장 상류의 정본이고, 객체 · 링크 · 주인을 `references/roadmap-ontology.md` 표 하나에 둔다. 다시 불러도 같은 자리에서 이어 가도록 이어 갈 기록은 git 이 추적하는 설계문서 절에, 이 기계에서만 뜻이 있는 것만 기계 상태에 둔다(`scripts/conductor_state.py`). 링크 칸 이름의 실재는 `tests/test_roadmap_ontology.py` 가 잰다.
-- **Law 1 · P17 — 흐름을 고정하지 않는다** — 정석 흐름은 기본값이고 일의 모양이 다르면 모델이 고르되 사용자가 정한다: 에픽 넘김 줄은 블록의 `흐름:` 을 따르고, 재분해 신호는 열린 목록이며, 게이트 ③ 은 로드맵 에픽에서 「이 에픽 다시 설계」 를 고를 수 있고, 진행 게이트는 기타 칸의 「여기서 계속」 을 받는다. 승인 게이트는 설계가 받지 않기로 한 번호를 보여 사용자가 「반영」 으로 되돌릴 수 있다(N18). 문면은 `tests/test_epic_handoff.sh` · `test_decompose_surface.sh` · `test_review_handoff_order.sh` · `test_seed_at_path_handoff.sh` · `test_conducting_reference.sh` 가 잠근다.
+- **Law 1 · P17 — 흐름을 고정하지 않는다** — 정석 흐름은 기본값이고 일의 모양이 다르면 모델이 고르되 사용자가 정한다: 에픽 넘김 줄은 블록의 `흐름:` 을 따르고, 재분해 신호는 열린 목록이며, 게이트 ③ 은 로드맵 에픽에서 「이 에픽 다시 설계」 를 고를 수 있고, 진행 게이트는 기타 칸의 「여기서 계속」 을 받는다. 승인 게이트는 설계가 받지 않기로 한 번호를 보여 사용자가 「반영」 으로 되돌릴 수 있다(N18). 문면은 `tests/test_epic_handoff.sh` · `test_decompose_surface.sh` · `test_review_handoff_order.sh` · `test_seed_at_path_handoff.sh` · `test_conducting_reference.sh` 가 잠근다. 인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고 이름이 고른 단계를 따르며, trivia 는 한 문장 기준이고 패턴은 예시다 — 이 문면은 `tests/test_end_gates.sh` 가 잠근다.
 
 ### Principles 흡수
 
+- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
+- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
-- **P12 (Trivia escape)** — `/spec-interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
+- **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — 인터뷰 진행 기록은 작업 트리의 `docs/superpowers/interview/<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 인터뷰에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **P17 (User sovereignty)** — 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — 인터뷰 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)의 token/key/credential placeholder 치환. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
-- **P22 (Cost class)** — 모든 skill cost_class 선언 (spec-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — medium 인 reviewing-brief 에는 진입 지출 승인 게이트가 없고(epic-conductor 의 high 는 시작 승인 게이트를 갖는다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
-- **P23 (Decisions Stay Refutable)** — `request-framing`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `spec-interview`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
+- **P22 (Cost class)** — 모든 skill cost_class 선언 (pm-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — medium 인 reviewing-brief 에는 진입 지출 승인 게이트가 없고(epic-conductor 의 high 는 시작 승인 게이트를 갖는다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
+- **P23 (Decisions Stay Refutable)** — `request-framing`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `pm-interview`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 
 ### Roadmap absorption (C-numbers)
 
@@ -126,8 +128,8 @@
 ### Anti-pattern 회피
 
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
-- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`**. 두 proceed 게이트(spec-review 의 `## 게이트` 절 · spec-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · 다음 세션 줄 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. 다음 단계 추천은 hook(텍스트 주입만 가능)이 아니라 `AskUserQuestion` proceed 게이트로 전한다 — 사용자가 redirect 가능한 approval gate(P17)다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(`spec-review` `## 게이트` 의 리터럴 펜스 — 미커밋이거나 git 이 확인에 실패하면 advisory 만 내고 아무것도 기록하지 않는다). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(①/② 의 두 줄 명령 노출 후 같은 턴에 다음 단계로 직진)도 게이트 P17 우회의 대칭 실패로 금지. interview→brainstorming Step B의 **4옵션**: ①/compact 후 다음 세션 줄 / ②/new 후 다음 세션 줄 / ③확정 목록 수정 / ④brief만 종료. ①·② 의 다음 세션 줄은 `@<brief 절대경로>` 로 시작해 새 세션이 brief 를 붙여 읽는다(정본 `## 다음 세션 명령`) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨). 질문의 기타 칸에 「여기서 계속」 을 적으면 ①/② 의 고유 단계를 마친 뒤 압축 없이 이 세션에서 다음 단계를 잇는다 — 사용자가 고른 진행이라 게이트를 건너뛴 것이 아니다.
-- **AP5 (Trivia ceremony)** — `/spec-interview` first-step trivia escape (5 패턴, 정본 `references/trivia-escape.md` — `/request-framing` 도 가리킨다).
+- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`**. 두 proceed 게이트(spec-review 의 `## 게이트` 절 · pm-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · 다음 세션 줄 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. 다음 단계 추천은 hook(텍스트 주입만 가능)이 아니라 `AskUserQuestion` proceed 게이트로 전한다 — 사용자가 redirect 가능한 approval gate(P17)다. approve tail = proceed 게이트(AskUserQuestion) → 미커밋 확인(`spec-review` `## 게이트` 의 리터럴 펜스 — 미커밋이거나 git 이 확인에 실패하면 advisory 만 내고 아무것도 기록하지 않는다). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(①/② 의 두 줄 명령 노출 후 같은 턴에 다음 단계로 직진)도 게이트 P17 우회의 대칭 실패로 금지. interview→brainstorming Step B의 **4옵션**: ①/compact 후 다음 세션 줄 / ②/new 후 다음 세션 줄 / ③확정 목록 수정 / ④brief만 종료. ①·② 의 다음 세션 줄은 `@<brief 절대경로>` 로 시작해 새 세션이 brief 를 붙여 읽는다(정본 `## 다음 세션 명령`) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨). 질문의 기타 칸에 「여기서 계속」 을 적으면 ①/② 의 고유 단계를 마친 뒤 압축 없이 이 세션에서 다음 단계를 잇는다 — 사용자가 고른 진행이라 게이트를 건너뛴 것이 아니다.
+- **AP5 (Trivia ceremony)** — `/pm-interview` first-step trivia escape (한 문장 기준 · 예시 다섯, 정본 `references/trivia-escape.md` — `/request-framing` 도 가리킨다).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 13종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·repo-researcher·open-researcher·saturation-judge·brief-readback·seed-readback·integration-reviewer·relay-checker). 지휘자(`epic-conductor`)는 fan-out 앞에 규모(남은 에픽 · agent 대략 수 · 순서)를 보이고 승인받는다. 상한이 선언된 것: 조사 subagent 는 조사 호출 상한 하나(기본 60, 사용자 연장) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · request-framing).
 - **Law 1 (Clarity) — `steelman-builder` 의심 게이트** — 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
 - **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), 조사 호출 상한(기본 60) · 포화 판정 상한(기본 5) · 본체의 반복 감지(같은 빈 곳이면 사용자에게), kill switch.
@@ -150,8 +152,8 @@
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
 - `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 로드맵 frontmatter 와 `origin/HEAD` 에서 읽습니다.
-- `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄).
-- `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음.
+- `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
+- `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음. 로컬 브랜치와 `origin/<브랜치>` 가 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 3 이다(`--branch origin/<브랜치>` 도 받는다) — 이 끝 고르기는 `scripts/branch_tip.py` 하나이고 `conductor_ledger.py review-pack` 도 같이 쓴다.
 - `scripts/suite_lock.py` — 공유 스위트 잠금. 지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 기계 상태 자원 폴더의 잠금 하나(`<기계 상태 폴더>/files/suite-lock`)를 쓴다. 하위는 `run --lock <경로> --owner <이름> [--wait <초>] -- bash -c '<명령>'` 한 번으로 잡고 · 돌리고 · 푼다(못 잡으면 75 · 잠금 폴더에 쓰지 못하면 3 — 잠금 없이 돌리지 않는다). 주인이 프로세스 번호가 아닌 잠금은 살았는지 알 수 없어 훔치지 않고 주인 · 잡은 시각을 보인다.
 - `scripts/conductor_ledger.py` — 기계 상태 · 시작 승인 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(로드맵 frontmatter `parallel_default`, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다.
 - `agents/integration-reviewer.md` — 쓰기 권한 없는 통합 리뷰어(`Read, Grep, Glob`).
@@ -211,12 +213,14 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 
 | 환경 변수 | 프로필 필드 | 뜻 | 기본 |
 |---|---|---|---|
-| `DEVBREW_DOCREVIEW_DETECTORS` | `detectors` | 탐지 리뷰어 수(1 이상) | 1 |
-| `DEVBREW_DOCREVIEW_REREVIEW_CAP` | `rereview_cap` | 한 문서의 재리뷰 상한(0 이상, 0 이면 재리뷰 없음) | 2 |
-| `DEVBREW_DOCREVIEW_RENDER_CAP` | `render_cap` | 조언 목록에 펼치는 지적 수(1 이상) | 8 |
-| `DEVBREW_DOCREVIEW_SUMMARY_WIDTH` | `summary_width` | 지적 요약 줄 너비(1 이상) | 60 |
+| `DEVBREW_DOCREVIEW_DETECTORS` | `detectors` | 탐지 리뷰어 수(1~6) | 1 |
+| `DEVBREW_DOCREVIEW_REREVIEW_CAP` | `rereview_cap` | 한 문서의 재리뷰 상한(0~10, 0 이면 재리뷰 없음) | 2 |
+| `DEVBREW_DOCREVIEW_RENDER_CAP` | `render_cap` | 조언 목록에 펼치는 지적 수(1~100) | 8 |
+| `DEVBREW_DOCREVIEW_SUMMARY_WIDTH` | `summary_width` | 지적 요약 줄 너비(1~500) | 60 |
 
 진입 skill 이 `advice --cap` 으로 펼치는 수를 넘기면 그 값이 `render_cap` 의 환경 변수보다 앞선다. 정수가 아니거나 범위 밖이면 그 값은 쓰지 않고 이름과 값을 밝히며 멈춘다.
+
+범위 밖 값은 라운드를 시작하지 않고 이름 · 값 · 허용 범위 · 출처를 보인다.
 
 ## 끄는 법
 
@@ -227,13 +231,13 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 ### 스위치 목록
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존. 리뷰 진입의 원장 정리(`scripts/ledger_sweep.py`)도 아무것도 지우지 않는다.
-  진입 skill 다섯(`request-framing` · `spec-interview` · `spec-review` · `roadmap-status` · `epic-conductor`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
+  진입 skill 다섯(`request-framing` · `pm-interview` · `spec-review` · `roadmap-status` · `epic-conductor`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`request-framing`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` — interview 조사 agent 호출 상한의 시작값(기본 60, 양의 정수가 아니면 60 과 한 줄 공시). 띄운 agent 수만 센다 — agent 안의 검색 · 출처 수는 세지 않는다. 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 띄운 agent 몫을 묶고(Phase 0 은 레포를 읽고 웹은 이름 확인에만 쓰며 조사 agent 를 띄우지 않는다), 본체 직접 웹 검색은 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다.
 - `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>` — 포화 판정자 호출 상한의 시작값(기본 5). floor 가 닫힌 뒤 판정 고리가 사용자 턴 없이 도는 것을 묶는다.
-- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다. 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다.
+- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다. 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다(대안 비교는 기각한 대안도 같은 기준으로 견준다).
 - `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 같은 효과의 이름 붙은 스위치. 수신처는 `scripts/review_entry.py` 의 진입 검사다(`spec-distill:review-entry`) — 훅이 아니지만 지목할 이름을 갖는다(`spec-distill-gc` 와 같은 관례).
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — 리뷰 진입 때의 원장 정리(`scripts/ledger_sweep.py`)를 끈다 — 문서 없는 원장 삭제 · 옛 세션 폴더 정리 · 옛 원장 옮기기가 모두 멈춘다. 설치되는 훅은 없다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 같은 원장 정리를 끈다. 이 셋은 모두 옛 시간 기준 정리를 멈추던 이름이라, 훅이 없어진 뒤에도 정리를 꺼 둔 사용자에게 삭제가 다시 켜지지 않게 그대로 읽는다.

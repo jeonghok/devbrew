@@ -314,12 +314,12 @@ fi
 #
 # 그리고 존재 검사를 **지배 관계**로 바꾼다:
 #   예전엔 "이 파일 어딘가에 CHECK가 있다"였다. 그 명제는 dispatch가 열 개여도
-#   가드가 하나면 참이다 — spec-interview가 정확히 그 상태였다(R2 블록 하나가
+#   가드가 하나면 참이다 — pm-interview가 정확히 그 상태였다(R2 블록 하나가
 #   coverage-mapper dispatch까지 '덮는' 것처럼 보였다). 이제 각 dispatch 지점마다
 #   그 **위쪽 WINDOW줄 안에** 스위치 확인이 있어야 한다.
 GUARD_WINDOW=40
 # Task 32(무게 감축): 스킬 절차 전문이 `skills/<skill>/references/*.md` 로 분리되기
-# 시작했다(spec-interview/references/finishing.md). 표면을 SKILL.md 로만 잡으면
+# 시작했다(pm-interview/references/finishing.md). 표면을 SKILL.md 로만 잡으면
 # 아래 두 **부재** 검사(느슨한 참 판정 · 상한 게이트 재도입)가 분리분을 못 본다 —
 # 부재 락은 코퍼스가 줄어도 RED 가 아니라 조용히 약해진다. 그래서 표면을 도출한다.
 # 근접 가드는 파일 안 줄번호로 재므로 파일마다 독립적으로 도는 것이 맞다.

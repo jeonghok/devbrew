@@ -31,6 +31,11 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
       exit 3은 호출자 rc 표에서 degradation record가 **의무**인 행이다. 원래 결함의
       본질은 "통과했다"가 아니라 **"강등이 조용했다"** 였다(rc 0의 advisory는 호출자
       표에서 폐기됐다). 판정을 포기하되 그 사실을 사람에게 반드시 도달시킨다.
+  L3: 인터뷰를 닫은 답 — `check_brief.closing_answer_anchors` 가 내는 S(payload §4 의 「외부 선례 무관(@S…)」
+      줄 전부 · audit §2 **마지막** 포화 판정 줄의 「사용자 판단 포화(@S…)」)의 state 레코드가 `source: chosen`
+      인가. 레코드가 없거나 `chosen` 이 아닌 값(`verbatim` · `Chosen` · `selected` …) → red(`not_chosen`).
+      레코드에 `source` 가 없거나 비면 검사 불가(exit 3). 빈 원장 조기 반환보다 **먼저** 판정한다 — 원장을
+      비우는 것으로 위반이 검사 불가로 내려가지 않는다. 줄 문법은 `check_brief` 의 것을 import 한다.
 
 정규화 N1–N5 (spec §5.5) — **순서 고정 `N1 → N2 → N3 → N4 → N5`**:
   N1 각 줄 앞 인용 마커 1회 제거 · N2 강조/링크 제거 · N3 연속 whitespace(개행 포함)
@@ -42,7 +47,7 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
 
 exit 계약:
   0  위반 없음
-  1  **위반 발견** (missing_ids · not_contained · unknown_ids 중 하나라도 비어 있지 않음) — 호출자는 차단
+  1  **위반 발견** (missing_ids · not_contained · unknown_ids · not_chosen 중 하나라도 비어 있지 않음) — 호출자는 차단
   3  검사 불가 (파일 부재·파싱 실패 — 의도적으로 매핑된 경로) — 호출자는 차단, 사용자가 「검사 없이 계속」을 고를 때만 계속
   4  내부 오류 (미처리 예외) — Python 기본 종료 코드 1을 절대 쓰지 않는다.
      `main()`이 top-level `try/except`로 감싸여 있고, "exit 1은 오직 명시적 위반
@@ -67,6 +72,7 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
 import brief_body  # noqa: E402
+import check_brief  # noqa: E402
 
 EXIT_OK = 0
 EXIT_VIOLATION = 1
@@ -76,7 +82,7 @@ EXIT_USAGE = 64
 
 # §6 앵커 줄의 판독은 `brief_body` 하나다 — 게이트(`check_brief`) · 로드맵과 같은 객체.
 ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
-# P21 canonical placeholder 토큰 (spec-interview SKILL.md의 P21 줄과 같은 집합).
+# P21 canonical placeholder 토큰 (pm-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
 # **다른 문자 체계의 글자/숫자**가 더해진다. producer 문서(Korean-primary)가 예시로
 # 드는 `<REDACTED:라벨>`이 checker에 안 잡히던 drift를 producer가 아니라 **checker**
@@ -85,6 +91,7 @@ ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 # 공백·`>`·`<`는 여전히 못 들어가고 길이 상한 64도 유지한다. 즉 산문 한 문장을 라벨로
 # 위장해 L2 비교를 통째로 강등시키는 경로는 열리지 않는다.
 P21_PLACEHOLDER_RE = brief_body.P21_PLACEHOLDER_RE   # 정규식은 brief_body 가 소유한다(§6 판독이 같은 토큰을 거부하지 않는다)
+CLOSING_KIND_TEXT = {"irrelevant": "외부 선례 무관", "saturation": "사용자 판단 포화"}
 
 
 class ParseError(Exception):
@@ -166,7 +173,7 @@ def parse_user_statements(fm: str) -> list[dict]:
           사라져 L1/L2 어느 쪽도 그 id를 찾지 않았다).
       (2) `text` 키 자체가 부재 — 이전엔 advisory 한 줄만 남기고 exit 0이었다.
 
-    스키마(spec-interview SKILL.md)는 각 레코드의 **첫 키가 `id`**임을 규정하므로
+    스키마(pm-interview SKILL.md)는 각 레코드의 **첫 키가 `id`**임을 규정하므로
     (1)은 새 제약이 아니라 기존 계약의 집행이다.
 
     `text`가 **존재하지만 비어 있는**(또는 정규화 후 비는) 경우는 여기서 보지 않는다 —
@@ -194,7 +201,7 @@ def parse_user_statements(fm: str) -> list[dict]:
             break
         m = re.match(r"^\s*-\s+id\s*:\s*(\S+)", ln)
         if m:
-            cur = {"id": m.group(1).strip().rstrip(","), "text": None}
+            cur = {"id": m.group(1).strip().rstrip(","), "text": None, "source": None}
             items.append(cur)
             i += 1
             continue
@@ -209,6 +216,11 @@ def parse_user_statements(fm: str) -> list[dict]:
                 cur["text"], i = _read_block_scalar(lines, i + 1, len(m.group(1)))
                 continue
             cur["text"] = _unquote(raw)
+            i += 1
+            continue
+        m = re.match(r"^\s*source\s*:\s*(.*)$", ln)
+        if m and cur is not None:
+            cur["source"] = _unquote(m.group(1))
             i += 1
             continue
         i += 1
@@ -279,7 +291,7 @@ def parse_section6_union(payload_text: str, audit_text: str) -> dict[str, str]:
 
 
 def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, dict]:
-    result: dict = {"missing_ids": [], "not_contained": [], "unknown_ids": [], "advisories": []}
+    result: dict = {"missing_ids": [], "not_contained": [], "unknown_ids": [], "not_chosen": [], "advisories": []}
     try:
         payload_text = payload_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -317,6 +329,29 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     # 위반 > 불확정 순으로 한다.
     saw_indeterminate = False
 
+    # L3 — 인터뷰를 닫은 답의 출처. 아래 빈 원장 조기 반환보다 먼저 돈다.
+    sources: dict[str, list] = {}
+    for st in statements:
+        sources.setdefault(st["id"], []).append(st["source"])
+    kinds: dict[str, list[str]] = {}
+    for sid, kind in check_brief.closing_answer_anchors(payload_text, audit_text):
+        kinds.setdefault(sid, []).append(kind)
+    for sid in kinds:
+        srcs = sources.get(sid, [])
+        if not srcs or any(s and s != "chosen" for s in srcs):
+            result["not_chosen"].append(sid)
+        elif not all(srcs):
+            result["advisories"].append(
+                f"검사 불가 — {sid}: 인터뷰를 닫은 답인데 상태 파일의 그 기록에 source 가 없다(또는 비었다) "
+                "— 고른 선택지인지 판정하지 않는다(통과로 집계하지 않는다)")
+            saw_indeterminate = True
+    result["not_chosen"].sort(key=lambda s: int(s[1:]))
+    if result["not_chosen"]:
+        label = " · ".join(f"{s}({' · '.join(CLOSING_KIND_TEXT[k] for k in kinds[s])})" for s in result["not_chosen"])
+        result["advisories"].append(
+            f"인터뷰를 닫은 답 {label}이 고른 선택지로 기록되지 않았다 — 마무리 단계(finishing Step A.5)가 "
+            "그 질문을 선택지로 다시 묻는다. 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 인터뷰라 이어 갈 수 없다")
+
     # 빈 전칭명제는 clean이 아니다. 원장에 statement가 0건이면 L1·L2 어느 것도 돌지 않고
     # 루프가 통째로 skip되는데, 그것을 "위반 없음"으로 집계하면 **원장을 비우는 것만으로**
     # 완전성 검사가 조용히 우회된다(같은 diff가 test_agent_frontmatter_keys.sh의 빈-glob
@@ -325,7 +360,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
         result["advisories"].append(
             "검사 불가 — state 원장에 user_statements가 0건이다 (대조 대상 없음). "
             "빈 집합 위의 '위반 없음'은 검증이 아니다")
-        return EXIT_INDETERMINATE, result
+        return (EXIT_VIOLATION if result["not_chosen"] else EXIT_INDETERMINATE), result
 
     for st in statements:
         sid = st["id"]
@@ -373,7 +408,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     known = {st["id"] for st in statements} | {"S1"}
     result["unknown_ids"] = sorted(pay_ids - known, key=lambda s: int(s[1:]))
 
-    if result["missing_ids"] or result["not_contained"] or result["unknown_ids"]:
+    if result["missing_ids"] or result["not_contained"] or result["unknown_ids"] or result["not_chosen"]:
         return EXIT_VIOLATION, result
     if saw_indeterminate:
         return EXIT_INDETERMINATE, result
@@ -396,7 +431,7 @@ def main(argv: list[str]) -> int:
     try:
         code, result = run(Path(argv[1]), Path(argv[2]), Path(argv[3]))
     except Exception as exc:  # noqa: BLE001 — 계약: 어떤 예외도 exit 4 (1로 새지 않는다)
-        print(json.dumps({"missing_ids": [], "not_contained": [], "unknown_ids": [],
+        print(json.dumps({"missing_ids": [], "not_contained": [], "unknown_ids": [], "not_chosen": [],
                           "advisories": [f"내부 오류: {type(exc).__name__}: {exc}"]},
                          ensure_ascii=False))
         return EXIT_INTERNAL

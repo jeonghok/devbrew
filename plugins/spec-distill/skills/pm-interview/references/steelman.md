@@ -5,7 +5,7 @@
 직접 충돌할 때. 그 외의 근거는 원안을 강화하거나 경계를 다듬는 데 쓴다. 판정은 유지 / 보완 / 전환 /
 보류 넷이고 선택은 사용자가 한다.
 
-**trigger** = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 커버리지 공백은 R3
+**trigger** — 기본은 셋이다: landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 다른 이유로 방향이 의심되면 모델이 판단해 띄우고 그 이유를 trigger 로 적는다. 커버리지 공백은 R3
 대상이 아니다 — probe 질문으로 간다(coverage-mapper 블록).
 
 #### Step 1 — dispatch 재료 도출 (orchestrator)
@@ -37,7 +37,7 @@ fi
 
 새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다 — 사용자가 받아들인 `premise_list_challenge` 도 바뀐 전제다. 횟수가 아니라 입력의 반복으로 멈춘다(AP16).
 
-두 슬롯은 `spec-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
+두 슬롯은 `pm-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
 에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
 dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
 「Web 부재 시 graceful degradation」 과 같은 경로로 간다(§5 항목은 사용자 판단을 근거로 기록하고
@@ -56,10 +56,11 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
 - 「근거 N 중 부착 M」의 M 은 **확인을 통과한 부착**만 센다. 반증된 부착은 `[반증됨]` 라벨로 노출되고
   M 에 들지 않는다(N 에는 든다). 리포 주장은 「리포 주장 K 중 확인 J」로 따로 센다.
 - 결과는 audit §3 `#### ST<N>` 블록의 「게이트-전 확인」 소절에 주장별 한 줄로 남는다.
-- **리포 주장(`repo_claims[]`)에는 audit §5 줄도 함께 남긴다** — `- 확인 RC<n> — {확인|반증|미확인} — <경로>#<앵커> — <사유>`.
-  확인 «행위» 는 한 번이고(이 Step 2 가 V1 의 특수 경우다) 기록이 두 자리다: §3 은 이
-  steelman 블록의 문맥을, §5 는 인터뷰 전체의 무조건 원장을 갖는다. §5 를 빼면 구조 게이트의
-  확인-줄 ∀ 술어가 그 `RC<n>` 을 이름으로 대며 막는다 — 그 술어는 주장이 steelman 에서
+- **리포 주장(`repo_claims[]`)에는 확인 줄도 함께 남긴다** — 그 라운드의 state `## R<n>` «지금 이해» 아래에도 함께 남긴다:
+  `- 확인 RC<n> — {확인|반증|미확인} — <경로>#<앵커> — <사유>`.
+  확인 «행위» 는 한 번이고(이 Step 2 가 V1 의 특수 경우다) 기록이 두 자리다: audit §3 은 이
+  steelman 블록의 문맥을, 확인 줄은 인터뷰 전체의 무조건 원장을 갖는다(종료 때 finishing 이 audit §5 로
+  옮긴다). 옮기지 않으면 구조 게이트의 확인-줄 ∀ 술어가 그 `RC<n>` 을 이름으로 대며 막는다 — 그 술어는 주장이 steelman 에서
   왔는지 보지 않는다.
 - 반증된 항목은 4-block 에서 빼지 않고 `[반증됨]` 라벨을 단다 — 4-block 의 반증 라벨은 이 하나뿐이고,
   무엇이 반증됐는지(부착 주장인지 리포 주장의 경로·앵커·내용인지)는 audit §3 「게이트-전 확인」 줄이
@@ -90,7 +91,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
 - **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 
-spec-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
+pm-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
 #### Step 4 — 기록
 

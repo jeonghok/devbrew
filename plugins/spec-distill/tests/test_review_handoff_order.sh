@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
+# guards: plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
 #
 # AC8 · AC16 — 핸드오프 자리(interview 의 다음 세션 줄 · brief 템플릿 §7 · spec-review description)가
 # brainstorming → `spec-distill:spec-review` → writing-plans 순서를 싣고, `spec-review` 의 게이트 없는
@@ -13,12 +13,12 @@
 # 있어야 한다. 순서는 창 안의 문자 오프셋으로 잰다(한 줄 안의 순서까지).
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-FIN="$ROOT/plugins/spec-distill/skills/spec-interview/references/finishing.md"
+FIN="$ROOT/plugins/spec-distill/skills/pm-interview/references/finishing.md"
 TPL="$ROOT/plugins/spec-distill/templates/interview-brief-template.md"
 SKILL="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/spec-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   exit 0
@@ -82,6 +82,13 @@ if nonempty "다음 세션 줄" "$ONE"; then
   order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
   order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
   assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
+  for n in '고른 실행 방식의 마지막 전체 리뷰' \
+           '설계의 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름(설계 → 계획 → 구현)의 의도는 지킨다.' \
+           '## 있는 것 검토 절' '사용자가 승인한 뒤에만' '## 상류 · 하류 연계 절' '레포 전용 값은 박지 말고'; do
+    assert_contains "$ONE" "$n" "AC22: brief 다음 세션 줄에 「${n}」"
+  done
+  assert_not_contains "$ONE" 'SDD 의 마지막 전체 리뷰' "AC22: 실행 방식을 SDD 로 고정하지 않는다(양성 짝: 고른 실행 방식)"
+  assert_not_contains "$ONE" '계층 · 온톨로지' "AC22: 원칙 5 는 싣지 않는다(설계 §6)"
   for n in '§3 열린 질문 · §4 조사 · §5 위험' '번호째' '## 번호 대조 표' 'source_interview' '--bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여' \
            'brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고' 'AC1 · AC2 … 처럼 번호를 단다' \
            'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' \
@@ -161,7 +168,7 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   assert_not_contains "$r2" '권장' "spec-review: 권장은 ① 하나"
   assert_not_contains "$rows" '바로' "spec-review 2단계 표에 「바로」 진행 행이 없다"
   r3="$(printf '%s\n' "$rows" | grep -E '^\| ③ \|' || true)"
-  assert_contains "$r3" '`spec-interview` 재진입' "spec-review ③ 행: 인터뷰 재진입 갈래는 그대로 있다"
+  assert_contains "$r3" '`pm-interview` 재진입' "spec-review ③ 행: 인터뷰 재진입 갈래는 그대로 있다"
   assert_contains "$r3" '로드맵 에픽이면 이 에픽 다시 설계도' "AC33: spec-review ③ 행이 로드맵 에픽의 넷째 갈래를 말한다"
   BR="$(printf '%s\n' "$GATE" | awk '/^\*\*③ 의 갈래와 로드맵 에픽\.\*\*/{f=1} f&&/^- \*\*①\/② 의 정지 요건\*\*/{exit} f')"
   if [ -n "$BR" ]; then ok "spec-review: ③ 로드맵 분기 문단 창"; else no "spec-review: ③ 로드맵 분기 문단이 없다"; fi
@@ -179,6 +186,13 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
            '먼저 원장 열기를 다시 돈다' '기각 목록에 없으면 그 사실을 보이고 다시 묻는다' '인터뷰 다시 열기」(재분해) 갈래를 권한다' '「지적대로 고치기」 와 같은 길' '로드맵 에픽이 아니어도 같다'; do
     assert_contains "$BR" "$n" "AC34: ③ 기타 칸의 기각 번호 되돌리기 — $n"
   done
+  for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \
+           '다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다' '고친 대로 둠' \
+           '`declare-related` 가 rc 0 이 아니면' "'<내용을 더한 절 앵커>'" '`insert-after:<그 앞 절 앵커>`' \
+           '채택한 결정이 없으면 고친 행과 내용을 더한 절은'; do
+    assert_contains "$BR" "$n" "AC13: 기각 되돌리기가 표 행을 고치기 전 허가 걸음을 적는다 — $n"
+  done
+  assert_not_contains "$BR" '채택한 결정이 없으면 고친 행은' "AC13: 알림이 고친 행만 덮지 않는다 — 내용을 더한 절도 다시 온다(양성 짝: 위 「고친 행과 내용을 더한 절은」)"
   assert_not_contains "$BR" '`- 결정 · <YYYY-MM-DD>' "AC34: 되돌림 결정 줄에 읽히지 않는 옛 꼴(B 번호 없는 줄머리)이 없다(양성 짝: 위 B<n> 꼴)"
   BR3="$(printf '%s\n' "$BR" | awk '/^\*\*다음 세션 줄 — ①\/② 공통\*\*/{exit} {print}')"
   BR_RD="$(printf '%s\n' "$BR3" | grep -n '^Read \${CLAUDE_PLUGIN_ROOT}/references/redecompose\.md$' | cut -d: -f1)"

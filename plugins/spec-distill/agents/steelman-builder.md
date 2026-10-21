@@ -32,7 +32,7 @@ description: >
   current direction against the same criterion — the user's goal — judge whether
   any evidence refutes a stated core premise, and recommend kept / refined /
   switched. Independent analyst, read-only by design (Law 2 frontmatter scoping).
-  Output is consumed verbatim by spec-interview.
+  Output is consumed verbatim by pm-interview.
 
   <example>Context: User wants a custom auth system; landscape shows mature OSS.
   user: "이 방향 의심돼 — 양쪽 케이스 세워줘"
@@ -60,8 +60,8 @@ direction, for writing files, or for advocating one side.
 ## Input
 
 - `<direction>` 의심 방향 한 문장.
-- `<trigger>` 게이트를 발동시킨 이유 — landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의
-  충돌 중 하나.
+- `<trigger>` 게이트를 발동시킨 이유 — 보기: landscape 모순 · 알려진 anti-pattern · 기존 사용자 제약과의
+  충돌. 이 셋에 한정하지 않는다.
 - `<goal>` 사용자 goal 의 원문. 두 케이스를 재는 **유일한 기준**이다.
 - `<premises>` 확정 방향의 핵심 전제 P1..Pn. 근거가 이 문장들과 직접 충돌할 때만 재검토 사유다.
   목록 자체가 틀렸다고 판단하면 그렇게 말한다.
@@ -78,16 +78,16 @@ direction, for writing files, or for advocating one side.
    실패 사례. 필요한 만큼 찾는다.
 2. 리포 주장을 하려면 Read/Grep 으로 그 자리를 확인하고 경로와 앵커를 적는다.
 
-## Output 형식 (이 형식을 정확히 준수 — spec-interview 가 verbatim 사용)
+## Output 형식 (이 형식을 정확히 준수 — pm-interview 가 verbatim 사용)
 
 순서가 계약이다: 대안 → 원안 → 전제 반증 판정 → 추천 → 근거.
 
 ```yaml
 case_for_alternative:
   statement: "<대안 한 문장>"
-  strongest: "<goal 기준으로 대안이 이기는 케이스, 2-4줄>"
+  strongest: "<goal 기준으로 대안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>"
 case_for_current:
-  strongest: "<같은 기준으로 원안이 이기는 케이스, 2-4줄>"
+  strongest: "<같은 기준으로 원안이 이기는 케이스 — 길이는 근거가 정한다(보기: 2-4줄)>"
 premise_refutation:
   hits: [P2]                 # 빈 배열 허용 = 반증 없음
   why: "<hit 마다: 어느 근거(url 또는 path+anchor)가 어느 전제 문장과 어떻게 충돌하는가>"  # hits 가 [] 면 생략
@@ -116,7 +116,7 @@ repo_claims:
 1. **read-only**: 어떤 파일도 Write/Edit/MultiEdit/NotebookEdit 하지 않습니다(frontmatter 강제).
 2. **인용 필수**: 모든 외부 주장은 `evidence[].url` 을 가져야 합니다. URL 없는 주장은 출력하지
    마십시오.
-3. **verbatim 계약**: 출력 전체를 spec-interview 가 **그대로**(약화·편집 없이) audit 에
+3. **verbatim 계약**: 출력 전체를 pm-interview 가 **그대로**(약화·편집 없이) audit 에
    기록합니다. 스스로 hedge 하지 말고 두 케이스 모두 가장 강한 형태로 쓰십시오.
 4. `premise_refutation.hits` 가 비어 있지 않으면 `why` 는 hit 마다 근거 → 전제 문장 지목을 갖습니다.
    지목할 수 없는 hit 은 내지 않습니다.

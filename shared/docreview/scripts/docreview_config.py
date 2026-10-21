@@ -1,7 +1,7 @@
 """docreview_config.py — 엔진 값(탐지 수 · 재리뷰 상한 · 조언 줄 수 · 요약 폭)을 한 곳에서 푼다 (leaf 모듈).
 
 순서는 기본 < 프로필 < 진입 < 환경 — 뒤가 이긴다. 진입 선언은 탐지 수에만 있다(`begin-round --detectors`).
-값이 정수가 아니거나 최솟값보다 작으면 `ConfigInvalid` — 부르는 쪽이 라운드를 시작하지 않는다.
+값이 정수가 아니거나 허용 범위 밖이면 `ConfigInvalid` — 부르는 쪽이 라운드를 시작하지 않는다.
 표준 라이브러리만 쓴다. 파일 · 환경을 직접 읽지 않고 인자로 받는다(테스트가 주입한다).
 엔진이 쓰는 줄의 글 도우미(`one_line_field` · `table_cell`)도 여기 있다.
 """
@@ -14,7 +14,12 @@ DEFAULTS = {"detectors": 1, "rereview_cap": 2, "render_cap": 8, "summary_width":
 ENV = {"detectors": "DEVBREW_DOCREVIEW_DETECTORS", "rereview_cap": "DEVBREW_DOCREVIEW_REREVIEW_CAP",
        "render_cap": "DEVBREW_DOCREVIEW_RENDER_CAP", "summary_width": "DEVBREW_DOCREVIEW_SUMMARY_WIDTH"}
 MINIMUM = {"detectors": 1, "rereview_cap": 0, "render_cap": 1, "summary_width": 1}
+MAXIMUM = {"detectors": 6, "rereview_cap": 10, "render_cap": 100, "summary_width": 500}
 PROFILE_KEYS = ("rereview_cap", "render_cap", "summary_width")   # `detectors` 는 필수 필드라 따로 있다
+
+
+def allowed_range(name) -> str:
+    return "%d~%d" % (MINIMUM[name], MAXIMUM[name])
 
 
 class ConfigInvalid(Exception):
@@ -38,7 +43,7 @@ def _int(name, raw, where):
         v = raw
     else:
         raise ConfigInvalid(name, raw, where)
-    if v < MINIMUM[name]:
+    if v < MINIMUM[name] or v > MAXIMUM[name]:
         raise ConfigInvalid(name, raw, where)
     return v
 
