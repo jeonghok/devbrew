@@ -1088,6 +1088,7 @@ class ReviewPack(Repo):
         rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
         self.assertEqual(rc, 0, out)
         self.assertIn("로컬 브랜치 feature/a1 가 origin 보다 뒤라 origin/feature/a1(%s) 를 썼다" % new[:8], out)
+        self.assertIn("(로컬 끝 %s · 원격 끝 %s)" % (stale[:8], new[:8]), out)   # 두 끝이 다르면 둘 다 보인다(§9)
         self.assertIn("+new", (out_dir / "pr.diff").read_text(encoding="utf-8"))
         rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "origin/feature/a1",
                            "--out", str(self.t / "pack-origin"))

@@ -28,6 +28,14 @@ python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" >/dev/null 2>&1 \
   && ok "T15: 정상 payload+audit 쌍이 게이트를 통과" \
   || no "T15: 정상 쌍은 통과해야 한다"
 
+# 읽은 트리(R8 §9): 게이트는 작업 트리의 brief 를 읽는다 — stderr 첫 줄에 밝히고, 표준 출력은 판정 JSON 하나로 남는다.
+rt_err="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>&1 >/dev/null | head -n 1)"
+rt_out="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null)"
+{ [[ "$rt_err" == "[spec-distill] 읽은 트리: 이 작업공간" ]] \
+    && printf '%s' "$rt_out" | python3 -I -c 'import json, sys; json.loads(sys.stdin.read())' 2>/dev/null; } \
+  && ok "read_tree: gate 의 stderr 첫 줄이 「읽은 트리: 이 작업공간」 · stdout 은 JSON 그대로" \
+  || no "read_tree: stderr 첫 줄이 「${rt_err}」 이거나 stdout 이 JSON 이 아니다"
+
 # T1: payload 8섹션을 각각 제거 → red ×8
 for hdr in "0. 한눈에" "1. Goal · Non-goal" "2. 제약" "3. Open Questions" \
            "4. External Landscape" "5. 기각 · Blind Spots" "6. 사용자 원문" "7. Next Action"; do

@@ -5,7 +5,7 @@
 명령줄:
   roadmap_status.py <로드맵 경로>           기본 브랜치(origin/HEAD)의 로드맵을 읽는다(레포 상대경로)
   roadmap_status.py --roadmap-file <파일>   작업 트리의 로드맵을 읽는다(아직 기본 브랜치에 없을 때)
-  --json 이면 JSON 하나를 낸다.
+  --json 이면 JSON 하나를 낸다. 보고 · 블록의 `read_tree` 는 읽은 트리(기본 브랜치 · 에픽 끝 · 이 작업공간)다.
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
 블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈) ·
@@ -57,6 +57,7 @@ def task_status(stage):
 
 
 DONE = ("머지됨", "끝남")
+READ_DEFAULT, READ_TIP, READ_WORKSPACE = "기본 브랜치", "에픽 끝", "이 작업공간"   # 읽은 트리(read_tree)
 PAST_PLAN = ("계획", "구현 중", "구현 끝", "PR", "머지됨")
 
 MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from [^/\s]+/(\S+)")
@@ -682,7 +683,7 @@ def _read_sections(block: dict, heading: str, label: str):
 # ── 출력 ─────────────────────────────────────────────────────────────────────
 
 def build(git: Git, args) -> dict:
-    report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+    report = {"roadmap": None, "source": None, "read_tree": None, "default_branch": None, "not_on_default": False,
               "fetched_at": git.fetched_at(), "notice": NOTICE, "blocks": [], "unassigned": None,
               "orphans": None, "unknown_ids": [], "overlaps": [], "format_errors": [], "unknown_reasons": [],
               "settings": None, "handoffs": None, "exit": 3}
@@ -695,11 +696,12 @@ def build(git: Git, args) -> dict:
             return report
         rel = os.path.relpath(os.path.realpath(args.roadmap_file), os.path.realpath(top))
         src = Source(git, root=top)
+        report["read_tree"] = READ_WORKSPACE
         if main is None:
             report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
     else:
         rel = args.roadmap.strip("/")
-        report["roadmap"] = rel
+        report["roadmap"], report["read_tree"] = rel, READ_DEFAULT
         if main is None:
             report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
             report["source"] = "기본 브랜치"
@@ -726,7 +728,8 @@ def build(git: Git, args) -> dict:
     if errors:
         report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
                              "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
-                             "task_status": None, "branch": field_text(b["fields"].get("브랜치", "")),
+                             "task_status": None, "read_tree": report["read_tree"],
+                             "branch": field_text(b["fields"].get("브랜치", "")),
                              "branches": [], "branch_states": [], "tip": None, "plans": [],
                              "deps": [], "specs": [], "ids": [], "warnings": [], "notes": [],
                              "bundle": None, "extras": {}, "parallel": None, "rulings_archived": None}
@@ -785,6 +788,7 @@ def build(git: Git, args) -> dict:
         report["blocks"].append({
             "id": b["id"], "title": b["title"], "kind": b["kind"], "stage": b["stage"],
             "reason": b["reason"], "task_status": task_status(b["stage"]),
+            "read_tree": READ_TIP if b.get("tip") else READ_DEFAULT,
             "branch": field_text(b["fields"].get("브랜치", "")), "branches": b["branches"],
             "branch_states": b.get("branch_states", []), "tip": b.get("tip"), "plans": b.get("plans", []),
             "deps": b["deps"], "specs": b["specs"],
@@ -812,10 +816,11 @@ def exit_code(report: dict) -> int:
 def render(report: dict) -> str:
     nwarn = sum(len(b["warnings"]) for b in report["blocks"])
     ninfo = sum(len(b.get("notes", [])) for b in report["blocks"]) + len(report["overlaps"])
-    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · 받은 시각: %s)"
+    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · 읽은 트리: %s · 받은 시각: %s)"
              % (len(report["blocks"]), nwarn, ninfo,
                 len(report["format_errors"]) + len(report["unknown_reasons"]),
-                report["source"] or "알 수 없음", report["fetched_at"] or "알 수 없음"),
+                report["source"] or "알 수 없음", report.get("read_tree") or "알 수 없음",
+                report["fetched_at"] or "알 수 없음"),
              report["notice"], ""]
     if report.get("not_on_default"):
         lines.append("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다: %s"
@@ -853,7 +858,7 @@ def main(argv=None) -> int:
         report = build(Git(os.getcwd()), args)
         report["exit"] = exit_code(report)
     except Exception as exc:  # 계산이 죽어도 이상 없음(0)·경고(1)로 내지 않는다
-        report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+        report = {"roadmap": None, "source": None, "read_tree": None, "default_branch": None, "not_on_default": False,
                   "fetched_at": None, "notice": NOTICE,
                   "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
                   "overlaps": [], "format_errors": [],

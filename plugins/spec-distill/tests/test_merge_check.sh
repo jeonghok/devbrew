@@ -276,11 +276,13 @@ out="$(mc --branch feature/tip)"; rc=$?
 assert_not_contains "$out" "합칠 수 없다" "낡은 로컬: 낡은 커밋으로 대조하지 않는다"
 assert_contains "$out" "로컬 브랜치 feature/tip 가 origin 보다 뒤라 origin/feature/tip(${ORIG:0:8}) 를 썼다" "낡은 로컬: origin 끝을 쓰고 알린다"
 assert_contains "$out" "스위트 대조 — feature/tip(${ORIG:0:8})" "낡은 로컬: 대조한 끝이 origin 끝이다"
+assert_contains "$out" "(로컬 끝 ${STALE:0:8} · 원격 끝 ${ORIG:0:8})" "낡은 로컬: 알림 줄에 두 끝 8자가 다 보인다"
 g checkout -q feature/tip; g reset -q --hard "$ORIG"; put b.txt b; g add -A; g commit -qm t3; g checkout -q trunk
 AHEAD="$(g rev-parse feature/tip)"
 out="$(mc --branch feature/tip)"; rc=$?
 assert_contains "$out" "origin/feature/tip 가 로컬보다 뒤라(push 하지 않았거나 받아 오지 않은 커밋) 로컬 feature/tip(${AHEAD:0:8}) 를 썼다" "앞선 로컬: 로컬 끝을 쓰고 알린다"
 assert_contains "$out" "스위트 대조 — feature/tip(${AHEAD:0:8})" "앞선 로컬: 대조한 끝이 로컬 끝이다"
+assert_contains "$out" "(로컬 끝 ${AHEAD:0:8} · 원격 끝 ${ORIG:0:8})" "앞선 로컬: 알림 줄에 두 끝 8자가 다 보인다"
 g checkout -q feature/tip; g reset -q --hard "$STALE"; put c.txt c; g add -A; g commit -qm t4; g checkout -q trunk
 out="$(mc --branch feature/tip)"; rc=$?
 assert_eq "$rc" "3" "갈라짐 → rc 3"
