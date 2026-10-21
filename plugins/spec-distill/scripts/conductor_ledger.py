@@ -16,7 +16,7 @@
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
   progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
 
-종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
+종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 4 gh 실패(gh 없음 · 인증 · 출력 모양) · 5 다른 세션의 표지.
 """
 from __future__ import annotations
 
@@ -94,6 +94,8 @@ def mdir_for_write(root, roadmap: str) -> Path:
 def load(root, roadmap: str, skip: tuple = ()) -> dict:
     try:
         return cs.load(mpath(root, roadmap), roadmap, skip)
+    except cs.OldPrRows as exc:
+        raise Fail(3, str(exc))
     except cs.MachineError as exc:
         raise Fail(3, "기계 상태를 읽지 못했다 — 덮어쓰지 않는다: %s" % exc)
 
@@ -923,6 +925,9 @@ GH_PR_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
 def _cache_row(br: str, it: dict, when: str, session: str) -> dict:
     state = GH_PR_STATES.get(it.get("state"))
     cross = it.get("isCrossRepository")
+    if it.get("headRefName") != br:
+        raise Fail(4, "gh 가 다른 브랜치의 PR 을 냈다(브랜치 %s · PR #%s 의 head %s) — 아무것도 적지 않았다. gh 판을 확인한다"
+                   % (br, it.get("number"), it.get("headRefName")))
     if state is None or not isinstance(cross, bool):
         raise Fail(4, "gh pr list 출력 모양이 다르다(브랜치 %s · PR #%s) — gh 판을 확인한다" % (br, it.get("number")))
     merge = it.get("mergeCommit")
@@ -934,16 +939,22 @@ def _cache_row(br: str, it: dict, when: str, session: str) -> dict:
 
 def c_pr_refresh(root, a) -> int:
     """대상 블록(없으면 끝나지 않은 블록 전부)의 브랜치마다 그 head 이름의 PR 을 모두 받아 그 브랜치의 PR 줄을 통째로 바꾼다."""
+    if a.reset and a.epic:
+        raise Fail(2, "`--reset` 은 PR 절 전체를 다시 채운다 — `--epic` 을 빼고 다시 돌려라")
     for line in gh_repo.env_notices():
         print("[spec-distill] " + line)
     need_holder(root, a.roadmap, a.session)
     skip = ("PR",) if a.reset else ()
     load(root, a.roadmap, skip)  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
     report = _status(root, a.roadmap)
+    warns = []
+    report["blocks"] = _with_copy_branches(root, a.roadmap, report.get("blocks") or [], warns)
+    for w in warns:
+        print("[spec-distill] " + w)
     if a.epic:
         blocks = [_block(report, a.epic)]
     else:
-        blocks = [b for b in report.get("blocks") or [] if b.get("stage") not in DONE]
+        blocks = [b for b in report["blocks"] if b.get("stage") not in DONE]
     branches = []
     for b in blocks:
         for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:

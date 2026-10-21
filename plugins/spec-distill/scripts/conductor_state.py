@@ -57,6 +57,10 @@ class MachineError(ValueError):
     """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다."""
 
 
+class OldPrRows(MachineError):
+    """옛 판이 쓴 4칸 PR 캐시 줄 — 메시지가 고치는 명령(`--reset`)이다."""
+
+
 # ── 경로 ─────────────────────────────────────────────────────────────────────
 
 def machine_dir(root, roadmap_rel: str) -> Path:
@@ -123,7 +127,7 @@ def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
         cols = COLUMNS[cur]
         cells = [c.strip() for c in line[2:].split(SEP, len(cols) - 1)]
         if cur == "PR" and len(cells) == OLD_PR_CELLS:
-            raise MachineError("%d줄: 옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> "
+            raise OldPrRows("%d줄: 옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> "
                                "--session <세션> --reset 으로 다시 채운다" % n)
         if len(cells) != len(cols) or not all(cells):
             raise MachineError("%d줄: %s 절의 칸 %d개(%s)가 아니다" % (n, cur, len(cols), " · ".join(cols)))

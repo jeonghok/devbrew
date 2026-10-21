@@ -80,7 +80,9 @@ class StderrKinds(unittest.TestCase):
 
     def test_repository_not_resolved(self):
         for err in ("GraphQL: Could not resolve to a Repository with the name 'o/r'. (repository)",
-                    "graphql: could not resolve to a repository with the name 'o/r'."):
+                    "graphql: could not resolve to a repository with the name 'o/r'.",
+                    "GraphQL: No such type PullRequest, so it can't be a fragment condition (fragment pr)",
+                    "graphql: no such type pullrequest"):
             with self.subTest(err=err):
                 self.assertEqual(gh_repo.stop_for(1, err, "github.com", "github.com/o/r"),
                                  "gh 가 origin(github.com/o/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 "
@@ -89,7 +91,6 @@ class StderrKinds(unittest.TestCase):
     def test_other_not_found_is_not_repository_resolution(self):
         for err in ("gh: Not Found (HTTP 404)",
                     "HTTP 404: Not Found (https://gitlab.com/api/graphql)",
-                    "GraphQL: No such type PullRequest, so it can't be a fragment condition (fragment pr)",
                     "error connecting to ghe.example.com",
                     "could not resolve host: ghe.example.com"):
             with self.subTest(err=err):

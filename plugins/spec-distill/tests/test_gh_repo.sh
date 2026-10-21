@@ -124,7 +124,7 @@ assert_contains "$ERR" "STOP:gh 인증이 안 됐다 — gh auth login --hostnam
 
 # ── non_github · 레포를 못 찾음(실측 stderr) ─────────────────────────────────
 # 실측(gh 2.88.1): github.com 에 없는 레포 → "Could not resolve to a Repository" ·
-# gitlab.com → "No such type PullRequest" · 모르는 호스트 → "error connecting to" · gh api 404 → "Not Found (HTTP 404)".
+# gitlab.com → "No such type PullRequest"(GitHub 인 레포만) · 모르는 호스트 → "error connecting to" · gh api 404 → "Not Found (HTTP 404)".
 mkrepo lab https://gitlab.com/o/r || { no "픽스처 lab"; finish; exit 1; }
 FAKE_GH_MODE=unresolved call "$T/fork" "$FAKEPATH"
 assert_eq "$RC" "5" "레포를 못 찾으면 멈춘다"
@@ -133,8 +133,8 @@ assert_contains "$ERR" "STOP:gh 가 origin(github.com/me/r)을 다루지 못한�
 FAKE_GH_MODE=gitlab call "$T/lab" "$FAKEPATH"
 assert_eq "$RC" "5" "비 GitHub(gitlab.com) 에서 멈춘다"
 assert_contains "$ARGS" "-R gitlab.com/o/r " "비 GitHub: -R 은 origin 그대로"
-assert_contains "$ERR" "STOP:gh 실패(rc 1): GraphQL: No such type PullRequest" \
-  "비 GitHub(gitlab.com 실측): rc 와 stderr 첫 줄로 멈춘다"
+assert_contains "$ERR" "STOP:gh 가 origin(gitlab.com/o/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다" \
+  "비 GitHub(gitlab.com 실측): 「GitHub 인 레포만」"
 FAKE_GH_MODE=ghe_unknown call "$T/ghe" "$FAKEPATH"
 assert_eq "$RC" "5" "모르는 호스트에서 멈춘다"
 assert_contains "$ERR" "STOP:gh 실패(rc 1): error connecting to ghe.example.com" \
