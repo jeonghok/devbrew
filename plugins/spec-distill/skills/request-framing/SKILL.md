@@ -122,16 +122,12 @@ seed 는 태그를 쓰지 않습니다(`check_seed.py` 가 본문 태그를 금�
 **기준은 워크트리가 실제로 쓰는 base 다** — `EnterWorktree` 의 기본(`worktree.baseRef=fresh`)은
 origin 의 **기본 브랜치**이므로, 재야 할 것은 「HEAD 에 있는데 `origin/<기본>` 에 없는 커밋」이다.
 tracking branch(`@{u}`)를 재면 **자기 remote 를 추적하는 브랜치가 0 을 보고하면서 실제로는
-`origin/main` 과 발산해 있을 수 있다** — push 를 마쳤어도 그 커밋들은 새 워크트리에 안 들어온다.
+`origin/<기본>` 과 발산해 있을 수 있다** — push 를 마쳤어도 그 커밋들은 새 워크트리에 안 들어온다.
 그러면 경고가 0 건으로 뜨고 워크트리가 조용히 커밋을 빠뜨린다. 그래서 base 를 도출해서 잰다:
 
 ```bash
-base="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
-if [ -z "$base" ]; then
-  for cand in origin/main origin/master; do
-    if git rev-parse --verify --quiet "$cand" >/dev/null 2>&1; then base="$cand"; break; fi
-  done
-fi
+base="$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)"
+case "$base" in refs/remotes/origin/?*) ;; *) base="" ;; esac
 if [ -n "$base" ]; then
   local_only_n="$(git rev-list --count "$base"..HEAD 2>/dev/null)"
 else
@@ -140,15 +136,15 @@ fi
 if [ -z "$base" ] || ! [[ "$local_only_n" =~ ^[0-9]+$ ]]; then
   LOCAL_ONLY_NOTE="확인 못함 — origin 기본 브랜치를 못 찾았거나 git rev-list 실패(사유 불명)"
 elif [ "$local_only_n" -gt 0 ]; then
-  LOCAL_ONLY_NOTE="$base 에 없는 커밋 ${local_only_n}개 — 워크트리 기본 base 엔 안 들어온다"
+  LOCAL_ONLY_NOTE="${base#refs/remotes/} 에 없는 커밋 ${local_only_n}개 — 워크트리 기본 base 엔 안 들어온다"
 else
-  LOCAL_ONLY_NOTE="$base 에 없는 커밋 0개"
+  LOCAL_ONLY_NOTE="${base#refs/remotes/} 에 없는 커밋 0개"
 fi
 echo "$LOCAL_ONLY_NOTE"
 ```
 
-origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEAD` 미설정 + main/master 둘 다 부재)
-에서도 이 블록은 죽지 않는다 — `rev-list` 를 아예 돌리지 않고 **«확인 못함»**으로 떨어진다.
+origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEAD` 미설정)
+에서도 이 블록은 죽지 않는다 — 다른 이름으로 대신 재지 않는다 — `rev-list` 를 아예 돌리지 않고 **«확인 못함»**으로 떨어진다.
 **빈 값과 0 은 다른 사실이다** — 확인에 실패하거나 base 를 못 찾아서 못 잰 것을 0건으로 읽으면
 이 풋건이 그대로 재현된다(명령 실패 시 `local_only_n` 은 빈 문자열이라 숫자 정규식에 걸리지
 않고 «확인 못함» 으로만 떨어진다).
@@ -1128,12 +1124,13 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 **handoff 직전 커밋(①/② 에서만).** 워크트리 안이면 ①/② 를 고른 직후 handoff 직전
 커밋을 한 번 합니다 — 명령 노출(①/②) 바로 앞입니다.
 ③(수정)·④(멈춤)에서는 커밋하지 않습니다 — 수정마다 커밋이 늘고 멈춤에도 커밋이 남는
-것을 막기 위해서입니다. 단순 명령 셋(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
-이미 stage 된 다른 작업을 쓸어 담지 않습니다. 첫 명령이 멈추면 그 사유를 보이고 뒤 두 git 명령을 돌리지
+것을 막기 위해서입니다. 단순 명령 넷(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
+이미 stage 된 다른 작업을 쓸어 담지 않습니다. 앞 두 판정 중 하나가 멈추면 그 사유를 보이고 뒤 두 git 명령을 돌리지
 않습니다 — 게이트 앞 글에 «미커밋 — <사유>» 를 적습니다:
 
 ```bash
 python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$AUDIT" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$SEED" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 git add -- "$AUDIT" "$SEED"
 git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$AUDIT" "$SEED"
 ```

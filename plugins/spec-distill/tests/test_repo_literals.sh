@@ -7,7 +7,9 @@
 # 면제는 줄 꼴 하나 — 처분 앵커 줄(`**처분** — consumer=<경로>`, 앞의 `//` · `#` 허용)의 consumer 값만 지우고 나머지는
 # 스캔한다. 그 값은 레포 기준 추적 경로여야 하고 그 꼴은 shared/tests/test_dispatch_disposition.sh 가 집행한다.
 # 펜스 꼴 축(R8 AC4): 해결자 값을 받는 줄은 `<V>="$(… get …)" || <V>=""` 이고 다음 비지 않은 줄이 빈 값을 확인한다.
-# `git add --` 로 경로를 정하는 펜스는 해결자의 check-path 또는 roadmap-check 를 부른다.
+# `git add --` 로 경로를 정하는 펜스는 add 앞에서 add 의 경로 변수마다 해결자 판정(check-path · roadmap-check, `|| … exit`)을
+# 거친다 — 판정 줄이 그 변수를 직접 받거나, 그 변수가 판정받은 변수에서 명령 치환 없는 대입으로만 나온다. 로드맵 판정
+# (check-path roadmaps_dir · roadmap-check)을 하나라도 부르는 펜스는 둘 다 부른다(자리와 표지는 다른 검사다).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_repo_literals.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -123,7 +125,28 @@ GET = 'repo_defaults.py" get '
 assign_rx = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)="\$\(.*repo_defaults\.py" get [^)]*\)" \|\| \1=""\s*$')
 add_rx = re.compile(r"git( -C \S+)? add --")
 judge_rx = re.compile(r'^\s*[^#\s].*repo_defaults\.py" (?:check-path|roadmap-check) ')
+judged_rx = re.compile(r'repo_defaults\.py" (check-path (\w+)|roadmap-check) "\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"')
 stop_rx = re.compile(r'\|\|.*\bexit\b')
+use_rx = re.compile(r'\$\{?([A-Za-z_][A-Za-z0-9_]*)')
+
+
+def assigns(line, name):
+    return re.search(r'(?:^|[\s;)])' + name + '=', line) is not None
+
+
+def covered_vars(body, judged):
+    """판정받은 변수 + 명령 치환 없는 대입으로만 그것들에서 나온 변수(고정점)."""
+    cov = set(judged)
+    names = {m for l in body for m in re.findall(r'(?:^|[\s;)])([A-Za-z_][A-Za-z0-9_]*)=', l)}
+    grew = True
+    while grew:
+        grew = False
+        for v in names - cov:
+            lines = [l for l in body if assigns(l, v) and set(use_rx.findall(l)) - {v}]
+            if lines and all("$(" not in l and "`" not in l and set(use_rx.findall(l)) - {v} <= cov for l in lines):
+                cov.add(v)
+                grew = True
+    return cov
 n_get = n_add = 0
 for path in sys.argv[1:]:
     with open(path, encoding="utf-8") as fh:
@@ -146,11 +169,25 @@ for path in sys.argv[1:]:
         if not any(add_rx.search(l) for l in body):
             continue
         n_add += 1
+        first_add = next(i for i, l in enumerate(body) if add_rx.search(l))
         judges = [l for l in body if judge_rx.match(l)]
         if not judges:
             print("%s:%d: git add 로 경로를 정하는 펜스가 check-path · roadmap-check 를 부르지 않는다" % (path, start))
-        elif not any(stop_rx.search(l) for l in judges):
+            continue
+        if not all(stop_rx.search(l) for l in judges):
             print("%s:%d: git add 로 경로를 정하는 펜스의 경로 판정이 거부되어도 셸을 멈추지 않는다(|| … exit 없음)" % (path, start))
+        kinds, judged = set(), set()
+        for l in body[:first_add]:
+            if judge_rx.match(l) and stop_rx.search(l):
+                for m in judged_rx.finditer(l):
+                    kinds.add(m.group(2) or "roadmap-check")
+                    judged.add(m.group(3))
+        if kinds & {"roadmaps_dir", "roadmap-check"} and not {"roadmaps_dir", "roadmap-check"} <= kinds:
+            print("%s:%d: 로드맵 폴더를 더하는 펜스가 check-path roadmaps_dir 와 roadmap-check 를 함께 부르지 않는다" % (path, start))
+        cov = covered_vars(body, judged)
+        added = {v for l in body if add_rx.search(l) for v in use_rx.findall(l.split(" add --", 1)[1])}
+        for v in sorted(added - cov):
+            print("%s:%d: git add 경로 $%s 를 add 앞에서 판정하지 않는다" % (path, start, v))
 print("세었다: get %d · add %d" % (n_get, n_add))
 PY
 }
@@ -172,8 +209,17 @@ shape_mut "$RF_T" '/^\[ -n "\$IDIR" \]/d' "빈 값을 확인하지 않는다" "�
 shape_mut "$RF_T" 's/^\[ -n "\$IDIR" \] || .*$/[ -n "$IDIR" ] || true/' "비면 셸을 멈추지 않는다" "빈 값 확인을 || true 로"
 shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 의 rc 처리 지움"
 shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 를 || true 로"
-shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$AUDIT"/d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 check-path 지움"
-shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path interview_dir "\$AUDIT"\)/# \1/' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 check-path 를 주석으로"
-# finishing 끝내기 커밋 펜스의 판정 줄은 Task 7 이 넣는다 — 그 전에는 사본이 그대로라 nocheck.
-shape_mut skills/pm-interview/references/finishing.md '/repo_defaults\.py" \(check-path\|roadmap-check\) /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움" nocheck
+shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$AUDIT"/d' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정 지움"
+shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path interview_dir "\$AUDIT"\)/# \1/' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정을 주석으로"
+shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir /d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 판정 줄 둘 다 지움"
+shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$SEED"/d' "경로 \$SEED 를 add 앞에서 판정하지 않는다" "handoff 펜스의 SEED 판정 지움"
+FIN_T=skills/pm-interview/references/finishing.md
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d;/repo_defaults\.py" roadmap-check /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir "\$RDIR"/d' "함께 부르지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" roadmap-check "\$r7"/d' "함께 부르지 않는다" "끝내기 커밋 펜스의 roadmap-check 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir /d;/repo_defaults\.py" roadmap-check /d' "경로 \$RDIR 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 로드맵 판정 둘 다 지움"
+shape_mut "$FIN_T" 's/^\( *python3 .*repo_defaults\.py" check-path roadmaps_dir "\$RDIR".*\) || {.*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정을 || true 로"
+shape_mut "$FIN_T" 's/^AUDIT_F="\${stem}\.audit\.md"$/AUDIT_F="$(printf %s "${stem}").audit.md"/' "경로 \$AUDIT_F 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 audit 경로를 명령 치환으로"
+shape_mut "$FIN_T" '/check-path interview_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
 finish

@@ -171,6 +171,22 @@ grep -qF '"$base"..HEAD' <<<"$rev_line" \
 grep -qF 'refs/remotes/origin/HEAD' <<<"$pre_q" \
   && ok "AC12: origin 의 기본 브랜치를 열거가 아니라 도출한다" \
   || no "AC12: origin 기본 브랜치 도출이 없다 — main 하드코딩은 다른 기본 브랜치 리포서 틀린다"
+# R8 AC9 · AC11 — base 펜스를 실제 저장소에서 돈다. origin/HEAD 가 없으면 main/master 로 대체하지 않고 「확인 못함」,
+# 로컬 브랜치 origin/main 이 있어도 base 는 origin/HEAD 의 전체 참조 이름에서 온다.
+base_fence="$(awk '/^```bash$/{c=1;b="";next} c&&/^```$/{c=0; if (index(b, "git rev-list --count")) {printf "%s", b; exit}; next} c{b=b $0 "\n"}' <<<"$pre_q")"
+grep -qF 'LOCAL_ONLY_NOTE=' <<<"$base_fence" && ok "R8(양성대조): base 펜스를 뽑았다" || no "R8(양성대조): base 펜스가 비었다 — 아래 칸이 공허하다"
+bsr="$(mktemp -d)"; [ -n "$bsr" ] && [ -d "$bsr" ] || { echo "mktemp 실패"; exit 1; }
+bsr="$(cd "$bsr" && pwd -P)"; [ -n "$bsr" ] && [ "$bsr" != "/" ] || { echo "mktemp 경로 해석 실패"; exit 1; }
+git init -q --bare -b main "$bsr/o.git"; git clone -q "$bsr/o.git" "$bsr/c" 2>/dev/null
+git -C "$bsr/c" config user.email t@t.t; git -C "$bsr/c" config user.name t
+git -C "$bsr/c" commit -q --allow-empty -m a; git -C "$bsr/c" push -q origin main 2>/dev/null
+git -C "$bsr/c" commit -q --allow-empty -m b
+git -C "$bsr/c" remote set-head origin -d >/dev/null 2>&1
+assert_contains "$(cd "$bsr/c" && bash -c "$base_fence" 2>&1)" "확인 못함" "R8 AC9: origin/HEAD 가 없으면 origin/main 이 있어도 「확인 못함」(main/master 대체 없음)"
+git -C "$bsr/c" remote set-head origin main >/dev/null 2>&1; git -C "$bsr/c" branch origin/main HEAD
+assert_eq "$(cd "$bsr/c" && bash -c "$base_fence" 2>/dev/null)" "origin/main 에 없는 커밋 1개 — 워크트리 기본 base 엔 안 들어온다" \
+  "R8 AC11: 로컬 브랜치 origin/main 이 있어도 base 는 origin/HEAD 의 전체 참조 이름에서 온다"
+rm -rf "$bsr"
 { grep -qF '실측한 것' <<<"$wt_block" && grep -qF '실측 밖' <<<"$wt_block"; } && ok "AC12: 단정 범위 문장이 잰 것/안 잰 것을 가른다" || no "AC12: 단정 범위 문장이 자기모순(모두 단정 안 함으로 읽힘)"
 grep -qF '워크트리 없음 —' <<<"$wt_block" && ok "AC12: 거절/부재 시 audit §5 문구" || no "AC12: 강등 문구 부재"
 grep -qE '(거절|부재|스위치)[^.]{0,60}seed[^.]{0,20}막지 않' <<<"$wt_flat" && ok "AC12: 어느 경우도 seed 작성을 막지 않는다" || no "AC12: 비차단 선언 부재"
