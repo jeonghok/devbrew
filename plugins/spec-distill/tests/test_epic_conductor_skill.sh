@@ -48,7 +48,11 @@ assert_contains "$BODY" '손으로 따르는 절차' "꺼짐: 손 절차를 가�
 assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손으로 따르는 절차.*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차를 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
 assert_contains "$(sec '### 7. 옮김 대조')" 'subagent_type: "spec-distill:relay-checker"' "옮김 대조 dispatch 자리(Ruling R37)"
-assert_contains "$(sec '### 7. 옮김 대조')" '`review_model`' "옮김 대조: 모델 칸은 review_model"
+for s in '### 6. 통합 리뷰어' '### 7. 옮김 대조'; do
+  assert_contains "$(sec "$s")" '`repo_defaults.py get review_model --roadmap <로드맵>`' "$s: 모델 칸은 해결자 get review_model 의 값"
+  assert_contains "$(sec "$s")" '3(설정을 읽지 못함)이면 그 사유 줄을 보이고' "$s: 해결자 rc 3 이면 사유 줄을 보인다"
+done
+assert_not_contains "$BODY$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '로드맵 frontmatter `review_model`' "리뷰 모델을 로드맵 머리말에서만 읽는 옛 문구가 없다"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져' "꺼짐 행: 플러그인 전체가 꺼진다고 알린다(Ruling R35)"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" '지휘자를 부르지 않은 채' "꺼짐 행: 손 절차는 지휘자를 부르지 않고 따른다"
 RC="$ROOT/plugins/spec-distill/agents/relay-checker.md"

@@ -42,7 +42,7 @@ for lit in '실행 방식은 writing-plans 가 권하는 방식이고, 계획 �
            '계획을 쓴 agent 가 스스로 가르지 않는다' '답 전에는 그 에픽의 구현을 보내지 않는다' '그 에픽만 멈추고' '다른 에픽은 계속한다' \
            'ledger rulings' '판정 줄 — 셀 수 없음' 'check_bundle_coverage.py --impl' 'ledger write-sections' 'ledger flush' '같은 worktree 에 두 writer 를 두지 않는다'; do once 4 "$lit"; done
 for lit in 'merge_check.py run --roadmap <로드맵> --branch <브랜치> --keep-merged' 'ledger review-pack' \
-           '`review_model`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다' '3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다'; do once 5 "$lit"; done
+           '`repo_defaults.py get review_model --roadmap <로드맵>`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다' '3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다'; do once 5 "$lit"; done
 for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-completion' 'superpowers:receiving-code-review'; do
   assert_contains "$(step 5)" "$lit" "걸음 5: $lit"
 done

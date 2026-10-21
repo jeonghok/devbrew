@@ -47,7 +47,7 @@ for lit in 'check_bundle_coverage.py --plan' '--acs' '그 에픽만 멈추고' '
 done
 assert_contains "$(step 6)" '`redecompose.md`' "걸음 6(머지 뒤): 재분해 절차를 가리킨다"
 assert_contains "$(step 7)" 'Spec: <에픽 설계문서 레포 상대경로>' "걸음 7: Spec 트레일러"
-for lit in '실패 «이름»' '`test_command`' '`review_model`' '같은 시각에 돌리지 않는다' '`## 통합 리뷰 인계`' '**리뷰 뒤 반영.**' '머지 직전' '스위트 대조 없음'; do
+for lit in '실패 «이름»' '`test_command`' '`repo_defaults.py get review_model --roadmap <로드맵>`' '같은 시각에 돌리지 않는다' '`## 통합 리뷰 인계`' '**리뷰 뒤 반영.**' '머지 직전' '스위트 대조 없음'; do
   assert_contains "$(step 8)" "$lit" "걸음 8(머지 전 확인): $lit"
 done
 for lit in '끝에서 끝' '브랜치는 지우지 않는다'; do

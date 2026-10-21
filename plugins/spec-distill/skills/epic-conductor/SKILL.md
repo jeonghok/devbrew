@@ -142,7 +142,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
 
 ### 6. 통합 리뷰어
 
-걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀에서는 무엇을 · 왜 · 범위 칸만 빌려 채운다. 버전 관리 도구를 돌리라는 말과 틀의 출력 형식은 넣지 않는다: 리뷰어는 diff 를 그 도구가 아니라 `PR_DIFF` · `OPEN_DIFFS` 파일과 합친 사본에서 읽고, 내는 형식은 agent 의 `## 내는 것` 이다. 로드맵 frontmatter `review_model` 이 이 dispatch 의 모델 칸이 받는 이름이면 그 값을 주고, 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
+걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀에서는 무엇을 · 왜 · 범위 칸만 빌려 채운다. 버전 관리 도구를 돌리라는 말과 틀의 출력 형식은 넣지 않는다: 리뷰어는 diff 를 그 도구가 아니라 `PR_DIFF` · `OPEN_DIFFS` 파일과 합친 사본에서 읽고, 내는 형식은 agent 의 `## 내는 것` 이다. 모델 칸은 해결자 `repo_defaults.py get review_model --roadmap <로드맵>` 의 값이 이 dispatch 의 모델 칸이 받는 이름일 때만 그 값을 준다. 종료 코드 1(값 없음)이거나 받는 이름이 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알리고, 3(설정을 읽지 못함)이면 그 사유 줄을 보이고 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
 
 ```
 Agent(
@@ -160,7 +160,7 @@ Agent(
 
 ### 7. 옮김 대조
 
-하위가 돌려보낸 사람 자리를 옮긴 에픽이 끝나면(걸음 6) 아래 자리에서 옮김 대조 agent 를 부른다. `RELAY_FILES` 는 그 에픽의 relay 폴더(`conductor_ledger.py resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이 내는 경로) 안 `relay-*.md` 파일들(계획 agent 의 입력 줄 · 받은 질문 원문 같은 다른 파일은 옮긴 기록이 아니다)의 절대경로를 한 줄에 하나씩 적은 글이다. 그런 파일이 없으면 부르지 않고 「옮긴 질문 없음」 한 줄을 그 에픽 이름과 함께 보인다. 모델 칸은 6 과 같다 — 로드맵 frontmatter `review_model` 이 받는 이름이면 그 값을 주고, 아니면 빼서 세션 모델로 가며 그 사실을 알린다. 옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다 — 어긋남이 있으면 그 자리를 그 에픽 설계문서 `## 지휘 기록` 에 적는다.
+하위가 돌려보낸 사람 자리를 옮긴 에픽이 끝나면(걸음 6) 아래 자리에서 옮김 대조 agent 를 부른다. `RELAY_FILES` 는 그 에픽의 relay 폴더(`conductor_ledger.py resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이 내는 경로) 안 `relay-*.md` 파일들(계획 agent 의 입력 줄 · 받은 질문 원문 같은 다른 파일은 옮긴 기록이 아니다)의 절대경로를 한 줄에 하나씩 적은 글이다. 그런 파일이 없으면 부르지 않고 「옮긴 질문 없음」 한 줄을 그 에픽 이름과 함께 보인다. 모델 칸은 6 과 같다 — 해결자 `repo_defaults.py get review_model --roadmap <로드맵>` 의 값이 받는 이름일 때만 그 값을 준다. 종료 코드 1(값 없음)이거나 받는 이름이 아니면 빼서 세션 모델로 가며 그 사실을 알리고, 3(설정을 읽지 못함)이면 그 사유 줄을 보이고 빼서 세션 모델로 가며 그 사실을 알린다. 옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다 — 어긋남이 있으면 그 자리를 그 에픽 설계문서 `## 지휘 기록` 에 적는다.
 
 ```
 Agent(

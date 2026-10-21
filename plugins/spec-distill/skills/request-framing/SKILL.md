@@ -134,7 +134,7 @@ else
   local_only_n=""
 fi
 if [ -z "$base" ] || ! [[ "$local_only_n" =~ ^[0-9]+$ ]]; then
-  LOCAL_ONLY_NOTE="확인 못함 — origin 기본 브랜치를 못 찾았거나 git rev-list 실패(사유 불명)"
+  LOCAL_ONLY_NOTE="확인 못함 — origin 기본 브랜치를 못 찾았거나 git rev-list 실패(사유 불명). 원격 origin 을 연결하고 git remote set-head origin --auto 로 기본 브랜치를 정한다"
 elif [ "$local_only_n" -gt 0 ]; then
   LOCAL_ONLY_NOTE="${base#refs/remotes/} 에 없는 커밋 ${local_only_n}개 — 워크트리 기본 base 엔 안 들어온다"
 else
@@ -144,7 +144,7 @@ echo "$LOCAL_ONLY_NOTE"
 ```
 
 origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEAD` 미설정)
-에서도 이 블록은 죽지 않는다 — 다른 이름으로 대신 재지 않는다 — `rev-list` 를 아예 돌리지 않고 **«확인 못함»**으로 떨어진다.
+에서도 이 블록은 죽지 않는다. 다른 이름으로 대신 재지 않고, `rev-list` 를 아예 돌리지 않은 채 **«확인 못함»**으로 떨어진다.
 **빈 값과 0 은 다른 사실이다** — 확인에 실패하거나 base 를 못 찾아서 못 잰 것을 0건으로 읽으면
 이 풋건이 그대로 재현된다(명령 실패 시 `local_only_n` 은 빈 문자열이라 숫자 정규식에 걸리지
 않고 «확인 못함» 으로만 떨어진다).

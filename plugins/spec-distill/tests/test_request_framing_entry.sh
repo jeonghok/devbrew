@@ -183,6 +183,7 @@ git -C "$bsr/c" commit -q --allow-empty -m a; git -C "$bsr/c" push -q origin mai
 git -C "$bsr/c" commit -q --allow-empty -m b
 git -C "$bsr/c" remote set-head origin -d >/dev/null 2>&1
 assert_contains "$(cd "$bsr/c" && bash -c "$base_fence" 2>&1)" "확인 못함" "R8 AC9: origin/HEAD 가 없으면 origin/main 이 있어도 「확인 못함」(main/master 대체 없음)"
+assert_contains "$(cd "$bsr/c" && bash -c "$base_fence" 2>&1)" "git remote set-head origin --auto" "R8 AC9: 「확인 못함」 줄이 기본 브랜치를 정하는 명령을 알린다"
 git -C "$bsr/c" remote set-head origin main >/dev/null 2>&1; git -C "$bsr/c" branch origin/main HEAD
 assert_eq "$(cd "$bsr/c" && bash -c "$base_fence" 2>/dev/null)" "origin/main 에 없는 커밋 1개 — 워크트리 기본 base 엔 안 들어온다" \
   "R8 AC11: 로컬 브랜치 origin/main 이 있어도 base 는 origin/HEAD 의 전체 참조 이름에서 온다"
