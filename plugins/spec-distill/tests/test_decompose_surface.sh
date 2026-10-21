@@ -55,7 +55,8 @@ for lit in "IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'" '<주제 한 줄>'
            "cat > \"\$AF1\" <<'DEVBREW_ROADMAP_APPROVAL_EOF'" '<승인 원문>' \
            '--title="$title"' '--approval="$(cat "$AF1")"' "trap 'rm -rf -- \"\$AD\"' EXIT" 'AF1="$AD/1"' \
            '그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다' \
-           '`AF2` · `AF3` … 으로 하나씩 더하고' '`DEVBREW_ROADMAP_APPROVAL_EOF`'; do
+           '`AF2` · `AF3` … 으로 하나씩 더하고' '`DEVBREW_ROADMAP_APPROVAL_EOF`' \
+           '맨 앞 3칸을 뺀 줄을 돌린다(구분 줄이 줄 맨 앞에서 시작해야 heredoc 이 닫힌다)'; do
   has "$STEPA" "$lit" "Step A 8(AC11): $lit"
 done
 for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
