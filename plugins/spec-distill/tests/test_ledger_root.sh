@@ -95,6 +95,7 @@ for name, path in zip(("RB", "SR", "FIN"), sys.argv[1:4]):
                 bad.append("%s:%d: state-root-for 첫 인자가 문서 변수가 아니다(%s)" % (name, n, m.group(1)))
     if not FOR.search(text):
         bad.append("%s: state-root-for 호출이 없다" % name)
+# RF 예외: seed 경로를 cwd 에서 만든다(`$(pwd)/$SEED`) — 원장 뿌리도 cwd 레포의 것이라 맨 state-root 하나가 맞다.
 rf = open(sys.argv[4], encoding="utf-8").read().splitlines()
 section, hits = None, []
 for n, line in enumerate(rf, 1):
@@ -111,7 +112,7 @@ print("\n".join(bad))
 PY
 }
 rl="$(root_lock "$RB" "$SR" "$FIN" "$RF")"
-assert_eq "$rl" "" "root_lock: RB · SR · finishing.md 는 문서 변수를 넘기는 state-root-for 만, RF 는 「## 상태」 의 맨 호출 하나만"
+assert_eq "$rl" "" "root_lock: RB · SR · finishing.md 는 문서 변수를 넘기는 state-root-for 만, RF 는 「## 상태」 의 맨 호출 하나만(RF 는 seed 경로를 cwd 에서 만들어(\$(pwd)/\$SEED) 원장 뿌리도 cwd 레포의 것이다)"
 for f in "$RB" "$SR" "$FIN"; do
   n="$(grep -c 'state_path.py" state-root-for' "$f" || true)"
   [ "${n:-0}" -ge 1 ] && ok "root_lock(양의 짝): ${f##*/plugins/spec-distill/} 에 state-root-for 가 ${n}번" \
@@ -169,6 +170,15 @@ open_round "$(sdir_for "$A" "$SDOC")" "$SDOC"
 run_fence "$A" sess-root0002 "spec_path='$SDOC'" "$(dl_fill 'B2 · 결정 · 2026-10-21 · 같은 레포' '네')"
 assert_eq "$E_RC" "0" "e2e_same_repo_no_notice: 전제 — 결정 줄 펜스가 썼다"
 assert_not_contains "$E_OUT" "지금 작업 폴더의 레포(" "e2e_same_repo_no_notice: 같은 레포 — 결정 줄 펜스가 레포 다름을 알리지 않는다"
+
+note "== e2e_linked_worktree_no_notice"
+[ -f "$T/A-wt/.git" ] && ok "전제: A 의 연결된 worktree 가 있다" || no "전제: A 의 연결된 worktree 가 없다 — 아래 칸이 공허하다"
+WDOC="$T/A-wt/docs/w-design.md"; mkdoc "$WDOC"
+run_fence "$A" sess-root0005 "spec_path='$WDOC'" "$(fence "$SR" ledger-open)"
+assert_eq "$(printf '%s\n' "$E_OUT" | tail -n 1)" "ledger-open: HELD" "e2e_linked_worktree_no_notice: 전제 — 원장 열기가 돌았다"
+assert_not_contains "$E_OUT" "지금 작업 폴더의 레포(" "e2e_linked_worktree_no_notice: cwd=A · 문서는 A 의 연결된 worktree — 공용 git 폴더가 같아 레포 다름을 알리지 않는다"
+assert_eq "$(cat "$(sdir_for "$A" "$WDOC")/reviewing-by" 2>/dev/null)" "sess-root0005" "e2e_linked_worktree_no_notice: 원장이 A 의 상태 루트 아래다"
+[ ! -e "$T/A-wt/.claude" ] && ok "e2e_linked_worktree_no_notice: worktree 쪽에 상태 폴더가 생기지 않는다" || no "e2e_linked_worktree_no_notice: worktree 쪽에 상태 폴더가 생겼다"
 
 note "== e2e_rb_ledger_open"
 BDOC="$A/docs/b-brief.md"; printf '# brief\n' > "$BDOC"
