@@ -217,5 +217,38 @@ class Merge(unittest.TestCase):
         self.assertEqual(m["notices"], ["알림"])
 
 
+class InternalErrors(unittest.TestCase):
+    """값 없음(rc 1)과 깨짐(rc 3)을 가른다 — 예상 밖 예외도 rc 3 이다. 임시 레포(원격 없음)에서만 돈다."""
+
+    def setUp(self):
+        import os, subprocess, tempfile
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        subprocess.run(["git", "init", "-q", self.tmp], check=True, env=env)
+
+    def test_machine_reader_non_value_error_is_settings_error(self):
+        def boom(_roadmap):
+            raise RuntimeError("깨진 기계 상태")
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.resolve(self.tmp, roadmap="r/roadmap.md", roadmap_text="---\ntype: roadmap\n---\n", machine_reader=boom)
+        self.assertEqual((c.exception.kind, c.exception.where), ("unreadable", "machine"))
+        self.assertIn("기계 상태(임시)", str(c.exception))
+
+    def test_main_turns_unexpected_exception_into_rc3(self):
+        import contextlib, io
+
+        def boom(*_a, **_k):
+            raise RuntimeError("예상 밖")
+        real = rd.resolve
+        rd.resolve = boom
+        self.addCleanup(setattr, rd, "resolve", real)
+        err, out = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            rc = rd.main(["get", "interview_dir", "--root", self.tmp])
+        self.assertEqual((rc, out.getvalue()), (3, ""))
+        self.assertIn("내부 오류", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

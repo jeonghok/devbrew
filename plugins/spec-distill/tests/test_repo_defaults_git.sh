@@ -82,6 +82,13 @@ assert_eq "$RC:$OUT" "1:" "로드맵을 안 주면 로드맵 값이 없다"
 assert_contains "$ERR" "로드맵 없음 — 기계 상태 층 건너뜀" "로드맵이 없으면 기계 상태 층을 건너뛴다고 알린다"
 run "$C" get test_command --roadmap docs/superpowers/roadmaps/none/roadmap.md
 assert_eq "$RC:$OUT" "3:" "기본 브랜치에 없는 로드맵은 rc 3"
+on_trunk "$C" docs/superpowers/roadmaps/r2/roadmap.md $'---\ntype: roadmap\nroadmaps_dir: x/\n---\n# r2\n'
+run "$C" get test_command --roadmap docs/superpowers/roadmaps/r2/roadmap.md
+assert_eq "$RC:$OUT" "3:" "로드맵 층이 받지 않는 키는 rc 3 · stdout 빔"
+assert_contains "$ERR" "로드맵(docs/superpowers/roadmaps/r2/roadmap.md)" "로드맵 층 오류는 그 로드맵을 짚는다"
+assert_not_contains "$ERR" "레포 설정 파일(.devbrew.md, 기본 브랜치 판)" "로드맵 층 오류를 레포 설정 파일 탓으로 적지 않는다"
+assert_not_contains "$ERR" "레포 설정 로드맵" "로드맵 층 오류 앞에 「레포 설정」 접두가 붙지 않는다"
+assert_not_grep "$ERR" ' roadmap |roadmap:' "사유에 층 내부 이름(roadmap)이 보이지 않는다"
 
 # ── test_get_no_value_rc1 ────────────────────────────────────────────────────
 run "$A" get test_command
@@ -102,6 +109,22 @@ printf -- '---\ninterview_dir: wt/\n---\n' > "$D/.devbrew.md"
 run "$D" get interview_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "기본 브랜치가 없으면 작업 트리 설정도 쓰지 않는다"
 assert_contains "$ERR" "[주의]" "작업 트리에 설정 파일이 있으면 크게 알린다"
+N="$T/n/work"
+mkdir -p "$N" && git init -q -b trunk "$N" && g "$N" commit -q --allow-empty -m init || no "픽스처 n(원격 없음)"
+run "$N" get interview_dir
+assert_eq "$RC:$OUT" "0:$DEF_IV" "원격 origin 이 아예 없어도 get 은 기본값(rc 0)"
+assert_contains "$ERR" "$NO_REF_LABEL" "원격이 없을 때도 출처가 기본 브랜치 없음 기본값"
+
+# ── 내부 오류는 rc 3(값 없음 rc 1 로 읽히지 않는다) ───────────────────────────
+mkdir "$T/gone-root" && rmdir "$T/gone-root"
+run "$A" get interview_dir --root "$T/gone-root"
+assert_eq "$RC:$OUT" "3:" "지워진 --root 는 rc 3 · stdout 빔"
+mkdir "$T/gone-cwd"
+OUT="$(cd "$T/gone-cwd" && rmdir "$T/gone-cwd" && python3 "$RD" get interview_dir 2>"$T/err")"; RC=$?
+ERR="$(cat "$T/err")"
+assert_eq "$RC:$OUT" "3:" "지워진 cwd 에서 부르면 rc 3 · stdout 빔"
+assert_contains "$ERR" "내부 오류" "지워진 cwd 는 내부 오류로 알린다"
+assert_not_contains "$ERR" "Traceback" "내부 오류가 Traceback 으로 새지 않는다"
 
 # ── test_symlink_and_lfs_refused ─────────────────────────────────────────────
 mkrepo e || { no "픽스처 e"; finish; exit 1; }
@@ -121,9 +144,9 @@ assert_eq "$RC:$OUT" "3:" "LFS 포인터 설정 파일은 rc 3 · stdout 빔"
 assert_contains "$ERR" "LFS" "LFS 포인터의 사유"
 
 # ── test_get_broken_rc3 ──────────────────────────────────────────────────────
-broken() {  # broken <이름> <내용> → BRC · BERR
-  mkrepo "$1" || return 1
-  on_trunk "$T/$1/work" .devbrew.md "$2"
+broken() {  # broken <이름> <내용> → BRC · BERR. 픽스처가 실패하면 크게 실패하고 앞 사례의 값을 남기지 않는다
+  BRC="픽스처 실패"; BERR="픽스처 실패"
+  mkrepo "$1" && on_trunk "$T/$1/work" .devbrew.md "$2" || { no "픽스처 $1 를 만들지 못했다"; return 1; }
   run "$T/$1/work" get interview_dir
   BRC="$RC:$OUT"; BERR="$ERR"
 }
@@ -138,6 +161,10 @@ assert_contains "$bom_err" "BOM" "BOM 의 사유"
 assert_contains "$typo_err" "interveiw_dir" "오타 키의 사유가 그 키를 짚는다"
 [ "$dup_err" != "$bom_err" ] && [ "$bom_err" != "$typo_err" ] && [ "$dup_err" != "$typo_err" ] \
   && ok "세 사유가 서로 다르다" || no "세 사유가 서로 다르다"
+for e in "$dup_err" "$bom_err" "$typo_err"; do
+  assert_not_grep "$e" ' repo |repo:' "사유에 층 내부 이름(repo)이 보이지 않는다"
+  assert_contains "$e" "레포 설정 파일(.devbrew.md, 기본 브랜치 판)" "사유가 자리를 쉬운 이름으로 짚는다"
+done
 broken badval $'---\ninterview_dir: ../up/\n---\n'
 assert_eq "$BRC" "3:" "잘못된 폴더 값(층 합치기의 오류)은 rc 3 · stdout 빔"
 

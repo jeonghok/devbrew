@@ -110,23 +110,34 @@ class SettingsError(ValueError):
     """kind: unreadable · unknown_key · duplicate_key · unquoted_hash · layer_key · bad_value · not_regular_file · lfs_pointer"""
 
     def __init__(self, kind: str, where: str, message: str = ""):
-        super().__init__(message or "%s: %s" % (where, kind))
+        super().__init__(message or "%s: %s" % (_place(where), kind))
         self.kind = kind
         self.where = where
 
 
-def strict_frontmatter(text: str, where: str) -> dict:
+_places = {"repo": "레포 설정 파일(%s, 기본 브랜치 판)" % SETTINGS_FILE, "machine": "기계 상태(임시)"}
+
+
+def _place(where: str, path: str | None = None) -> str:
+    """층 이름(repo · roadmap · machine) → 사람이 읽는 자리 이름."""
+    if where == "roadmap":
+        return "로드맵(%s)" % path if path else "로드맵"
+    return _places.get(where, where)
+
+
+def strict_frontmatter(text: str, where: str, path: str | None = None) -> dict:
     """맨 앞 `---` 블록의 최상위 `키: 값` → {키: 따옴표 벗긴 값}. 줄 규칙은 roadmap_model.frontmatter 와 같고(들여쓴 줄 · 목록 줄 ·
     `#` 줄은 건너뜀) 오류만 더한다. 머리말이 없으면 설정 파일(where == "repo")은 unreadable, 다른 층은 {}."""
+    at = _place(where, path)
     lines = text.split("\n")
     first = lines[0].rstrip("\r")
-    if text.startswith("\ufeff"):
-        raise SettingsError("unreadable", where, "%s: 머리말 앞에 BOM 이 있다" % where)
+    if text.startswith("﻿"):
+        raise SettingsError("unreadable", where, "%s 의 머리말 앞에 BOM 이 있다 — BOM 없는 UTF-8 로 저장한다" % at)
     if first != "---":
         if first.startswith("---"):
-            raise SettingsError("unreadable", where, "%s: 머리말 여는 줄이 `---` 가 아니다(뒤 공백 포함)" % where)
+            raise SettingsError("unreadable", where, "%s 의 머리말 여는 줄이 `---` 하나가 아니다(뒤 공백 포함) — `---` 만 남긴다" % at)
         if where == "repo":
-            raise SettingsError("unreadable", where, "%s: 머리말이 없다" % where)
+            raise SettingsError("unreadable", where, "%s 에 머리말이 없다 — 맨 앞에 `---` 로 감싼 머리말을 둔다" % at)
         return {}
     out: dict = {}
     for line in lines[1:]:
@@ -138,26 +149,26 @@ def strict_frontmatter(text: str, where: str) -> dict:
         key, raw = line.split(":", 1)
         key = key.strip()
         if key in out:
-            raise SettingsError("duplicate_key", where, "%s: 같은 키가 둘이다: %s" % (where, key))
+            raise SettingsError("duplicate_key", where, "%s 에 같은 키가 둘이다(%s) — 하나만 남긴다" % (at, key))
         value = raw.strip()
         if value[:1] in ("\"", "'"):
             close = value.find(value[0], 1)
             if close < 0:
-                raise SettingsError("unreadable", where, "%s: %s 의 따옴표가 닫히지 않았다" % (where, key))
+                raise SettingsError("unreadable", where, "%s 의 값 따옴표가 닫히지 않았다(%s) — 따옴표를 닫는다" % (at, key))
             rest = value[close + 1:]
             if rest and re.match(r"\s+#", rest):
-                raise SettingsError("unquoted_hash", where, "%s: %s 의 따옴표 뒤에 주석(`#`)이 있다 — 주석을 지우거나 따옴표 안에 넣는다"
-                                    % (where, key))
+                raise SettingsError("unquoted_hash", where, "%s 의 값 따옴표 뒤에 주석(`#`)이 있다(%s) — 주석을 지우거나 따옴표 안에 넣는다"
+                                    % (at, key))
             if rest:
-                raise SettingsError("unreadable", where, "%s: %s 의 따옴표 뒤에 글자가 더 있다 — 값 전체를 따옴표로 감싼다"
-                                    % (where, key))
+                raise SettingsError("unreadable", where, "%s 의 값 따옴표 뒤에 글자가 더 있다(%s) — 값 전체를 따옴표로 감싼다"
+                                    % (at, key))
         elif re.search(r"\s#", raw):
-            raise SettingsError("unquoted_hash", where, "%s: %s 의 값에 따옴표 없는 ` #` 가 있다 — 값을 따옴표로 감싼다" % (where, key))
+            raise SettingsError("unquoted_hash", where, "%s 의 값에 따옴표 없는 ` #` 가 있다(%s) — 값을 따옴표로 감싼다" % (at, key))
         out[key] = _unquote(raw)
-    raise SettingsError("unreadable", where, "%s: 머리말이 닫히지 않았다" % where)
+    raise SettingsError("unreadable", where, "%s 의 머리말이 닫히지 않았다 — 머리말 끝에 `---` 줄을 둔다" % at)
 
 
-def check_layer(meta: dict, layer: str) -> None:
+def check_layer(meta: dict, layer: str, path: str | None = None) -> None:
     """층이 받는 키 밖이면 SettingsError — 설정 키지만 그 층 몫이 아니면 layer_key, 아무 층에도 없으면 unknown_key."""
     if layer == "roadmap":
         allowed = ROADMAP_META_KEYS + ROADMAP_LAYER_KEYS
@@ -167,15 +178,18 @@ def check_layer(meta: dict, layer: str) -> None:
         allowed = MACHINE_LAYER_KEYS
     else:
         raise ValueError("알 수 없는 층: %r" % layer)
+    at = _place(layer, path)
     for key in meta:
         if key in allowed:
             continue
         if key in KEYS:
-            raise SettingsError("layer_key", layer, "%s 층은 %s 를 받지 않는다" % (layer, key))
-        raise SettingsError("unknown_key", layer, "%s 층에 모르는 키가 있다: %s" % (layer, key))
+            raise SettingsError("layer_key", layer, "%s 은 이 설정을 받지 않는다(%s) — 레포 설정 파일(%s)로 옮긴다"
+                                % (at, key, SETTINGS_FILE))
+        raise SettingsError("unknown_key", layer, "%s 에 모르는 키가 있다(%s) — 키 이름을 고친다" % (at, key))
 
 
-def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_label: str = "기본값") -> dict:
+def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_label: str = "기본값",
+                 roadmap_path: str | None = None) -> dict:
     """로드맵 > 레포 설정 > 기계 상태 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
     layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), ("기계 상태(임시)", "machine", machine))
@@ -184,16 +198,17 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
     for label, layer, meta in layers:
         if meta is None:
             continue
+        path = roadmap_path if layer == "roadmap" else None
         try:
-            check_layer(meta, layer)
+            check_layer(meta, layer, path)
         except SettingsError as exc:
-            out["errors"].append("레포 설정 " + str(exc))
+            out["errors"].append(str(exc))
             continue
-        usable.append((label, meta))
+        usable.append((label, _place(layer, path), meta))
     for key in KEYS:
         out["values"][key] = _DEFAULTS[key]
         out["sources"][key] = default_label
-        for label, meta in usable:
+        for label, at, meta in usable:
             if key not in meta:
                 continue
             raw = meta[key]
@@ -202,7 +217,7 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
                 folder, why = _folder(key, raw)
                 out["values"][key] = folder
                 if why:
-                    out["errors"].append("레포 설정 " + why)
+                    out["errors"].append("%s: %s" % (at, why))
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:
@@ -210,19 +225,20 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
                 else:
                     out["values"][key] = PARALLEL_DEFAULT
                     out["sources"][key] = "기본값(머리말 값이 깨졌다)"
-                    out["warnings"].append("레포 설정 %s 는 1 이상의 정수다: %r — 기본 %d 으로 센다" % (key, value, PARALLEL_DEFAULT))
+                    out["warnings"].append("%s: 동시 작업 권장 수는 1 이상의 정수다(%s: %r) — 기본 %d 으로 센다"
+                                           % (at, key, value, PARALLEL_DEFAULT))
             else:
                 value = _unquote(raw)
                 if value:
                     out["values"][key] = value
                 else:
                     out["values"][key] = None
-                    out["errors"].append("레포 설정 %s 값이 비었다" % key)
+                    out["errors"].append("%s 의 값이 비었다(%s) — 값을 채우거나 키를 지운다" % (at, key))
             break
     return out
 
 
-_NO_REF_LABEL = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
+_no_ref_label = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
 _GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
 GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file"})
 
@@ -283,13 +299,16 @@ def read_repo_file(cwd: str) -> tuple:
     """(레포 층, 출처 라벨, 알림). 레포 설정 파일은 기본 ref 판에서 읽는다 — 작업 트리의 판은 쓰지 않는다.
     기본 ref 가 없으면 (None, None, [알림]); 기본 ref 에 파일이 없으면 (None, 라벨, 알림)."""
     top = _toplevel(cwd)
+    return _repo_file(top, _default_commit(top))
+
+
+def _repo_file(top: str, commit) -> tuple:
     in_worktree = os.path.lexists(os.path.join(top, SETTINGS_FILE))
-    commit = _default_commit(top)
     if commit is None:
         notice = "기본 브랜치를 알 수 없어(origin/HEAD 없음) 레포 설정 파일을 읽지 못하고 기본값을 쓴다"
         if in_worktree:
             notice = "[주의] " + notice + " — 작업 트리의 %s 는 쓰지 않았다" % SETTINGS_FILE
-        return None, None, [notice + ". `git remote set-head origin --auto` 로 기본 브랜치를 정한다"]
+        return None, None, [notice + ". 원격 origin 을 연결하고 `git remote set-head origin --auto` 로 기본 브랜치를 정한다"]
     label = "레포 설정@" + commit[:8]
     text = _read_blob(top, commit, SETTINGS_FILE, "repo")
     if text is None:
@@ -302,20 +321,20 @@ def read_repo_file(cwd: str) -> tuple:
 
 def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, machine_reader=None) -> dict:
     """네 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다."""
-    repo, label, notices = read_repo_file(cwd)
+    top = _toplevel(cwd)
+    commit = _default_commit(top)   # 설정 파일과 로드맵을 같은 커밋에서 읽는다
+    repo, label, notices = _repo_file(top, commit)
     roadmap_meta = machine = None
     if roadmap is None:
         notices.append("로드맵 없음 — 기계 상태 층 건너뜀")
     else:
         if roadmap_text is None:
-            top = _toplevel(cwd)
-            commit = _default_commit(top)
             if commit is None:
                 raise SettingsError("unreadable", "roadmap", _rm.NO_DEFAULT)
             roadmap_text = _read_blob(top, commit, roadmap, "roadmap")
             if roadmap_text is None:
-                raise SettingsError("unreadable", "roadmap", "로드맵이 기본 브랜치에 없다: %s — 로드맵을 머지한 뒤 다시 부른다" % roadmap)
-        roadmap_meta = strict_frontmatter(roadmap_text, "roadmap")
+                raise SettingsError("unreadable", "roadmap", "로드맵이 기본 브랜치에 없다(%s) — 로드맵을 머지한 뒤 다시 부른다" % roadmap)
+        roadmap_meta = strict_frontmatter(roadmap_text, "roadmap", roadmap)
         if machine_reader is None:
             notices.append("기계 상태 층 건너뜀 — 읽는 함수 없음")
         else:
@@ -323,10 +342,11 @@ def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = Non
                 machine = machine_reader(roadmap)
             except SettingsError:
                 raise
-            except (OSError, ValueError) as exc:
-                raise SettingsError("unreadable", "machine", "기계 상태의 레포 설정을 읽지 못했다(%s)" % exc)
+            except Exception as exc:
+                raise SettingsError("unreadable", "machine", "기계 상태(임시)의 레포 설정을 읽지 못했다(%s: %s) — 기계 상태 파일을 확인한다"
+                                    % (type(exc).__name__, exc))
     return merge_layers(roadmap_meta, repo, label, machine, notices,
-                        default_label=_NO_REF_LABEL if label is None else "기본값")
+                        default_label=_no_ref_label if label is None else "기본값", roadmap_path=roadmap)
 
 
 def _repo_relative(top: str, base: str, path: str):
@@ -365,15 +385,15 @@ def judge_path(key: str, folder: str, path: str, base: str) -> str | None:
     top = _toplevel(base)
     rel = _repo_relative(top, base, path)
     if rel is None:
-        return "레포 밖 경로라 받지 않았다: %s — 레포(%s) 안의 경로를 준다" % (path, top)
+        return "레포 밖 경로라 받지 않았다: %s — 레포 %s 안의 경로를 준다" % (path, top)
     parent = os.path.dirname(rel) + "/"
     if parent != folder:
         if parent.casefold() == folder.casefold():
-            return "대소문자만 다른 경로라 받지 않았다: %s — %s 값(%s)의 글자 그대로 쓴다" % (rel, key, folder)
-        return "부모 폴더가 다르다: %s 의 부모는 %s 인데 %s 는 %s 다 — %s 바로 아래 경로를 준다" % (rel, parent, key, folder, folder)
+            return "대소문자만 다른 경로라 받지 않았다: %s — 정해진 폴더 %s 의 글자 그대로 쓴다(%s)" % (rel, folder, key)
+        return "부모 폴더가 다르다: %s 의 부모는 %s 인데 정해진 폴더는 %s 다(%s) — 그 폴더 바로 아래 경로를 준다" % (rel, parent, folder, key)
     bad = _case_mismatch(top, rel)
     if bad:
-        return "대소문자만 다른 경로라 받지 않았다: 인자는 %s 인데 디스크의 실제 이름은 %s 다 — 디스크의 이름에 맞춘다" % bad
+        return "대소문자만 다른 경로라 받지 않았다: 인자의 %s 가 디스크에서는 %s 다 — 디스크의 이름에 맞춘다" % bad
     return None
 
 
@@ -393,8 +413,8 @@ def main(argv=None) -> int:
     p_chk.add_argument("path")
     p_chk.add_argument("--root")
     args = ap.parse_args(argv)
-    base = args.root or os.getcwd()
     try:
+        base = args.root or os.getcwd()
         roadmap = getattr(args, "roadmap", None)
         if roadmap is not None:
             roadmap = _repo_relative(_toplevel(base), base, roadmap)
@@ -408,7 +428,7 @@ def main(argv=None) -> int:
             for line in result["errors"]:
                 _say(line)
             return 3
-        _say("%s 출처: %s" % (args.key, result["sources"][args.key]))
+        _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
         value = result["values"][args.key]
         if args.cmd == "check-path":
             why = judge_path(args.key, value, args.path, base)
@@ -418,6 +438,9 @@ def main(argv=None) -> int:
             return 0
     except SettingsError as exc:
         _say(str(exc))
+        return 3
+    except Exception as exc:   # 값 없음(rc 1)으로 읽히지 않게 — 어떤 내부 오류도 깨짐(rc 3)이다
+        _say("내부 오류로 판정하지 못했다(%s: %s) — 이 줄을 그대로 알린다" % (type(exc).__name__, exc))
         return 3
     if value is None:
         return 1
