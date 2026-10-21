@@ -159,7 +159,7 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 GitHub 레포에서도 통하게 한다 — gh 는 필수 의존이고 superpowers 가 없으면 인터뷰는 brief 까지 만들고 멈추며 나머지 흐름은 진입에서 멈춘다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16)
+  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16) · R13 미룸 둘 — Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기(권한 경계 몫)
   - 안 한다: 규칙 문서(R9) · gh 없는 대체 길 · GitHub 가 아닌 원격 지원
 - 의존: R2a, R5, R10, R12, R13
 - 브랜치: feature/dependency-portability
@@ -209,12 +209,12 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R13 — R10 남은 인터뷰 게이트 · 엔진 skill 소결함
 - 의도: R10 이 남긴 인터뷰 게이트 · 엔진 skill 의 작은 결함과 보안 제안을 pm-interview 이름 바꾸기 뒤 고친다
 - 범위:
-  - 한다: `check_brief` 의 사용자 답과 state `source: chosen` 대조 · 엔진 skill 셋(request-framing · reviewing-brief · spec-review) 번들 쓰기의 링크 따라가기(함께 쓰는 writer) · V1 확인 줄을 실을 자리
-  - 안 한다: R10 계획 1~3 의 범위 · R12 의 엔진 · qg 소결함
+  - 한다: `check_brief` 의 사용자 답과 state `source: chosen` 대조 · 엔진 skill 셋(request-framing · reviewing-brief · spec-review) 번들 쓰기의 링크 따라가기(함께 쓰는 writer) · V1 확인 줄을 실을 자리 · 상태 폴더 쓰기의 링크 따라가기를 부르는 스크립트(seed_edit_diff · docreview_state save_state)와 공유 codex 러너까지 · 원장 뿌리를 문서의 레포에서(state_path `state-root-for`) · 로드맵 생성 따옴표(finishing Step A 8) · 템플릿 `source:` 판 꼬리 · 셸 테스트 실행 비트
+  - 안 한다: R10 계획 1~3 의 범위 · R12 가 끝낸 엔진 · qg 소결함(R12 미룸은 R13 행 둘만 · qg 쪽은 공유 러너 · writer 링크에 닿는 최소 변경만) · 엔진 밖 쓰기의 권한 경계 · Write 도구 쓰기 · 실행 중 다시 심는 링크(R8) · 조사 agent 출력 계약 · superpowers 파일 · 동작
 - 의존: R10, R12
 - 브랜치: feature/interview-gate-leftovers
 - 묶음: R13.md
-- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md
+- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/fixtures/, shared/docreview/scripts/nofollow_write.py, plugins/spec-distill/scripts/nofollow_write.py, plugins/quality-gates/scripts/nofollow_write.py, shared/docreview/scripts/run_docreview_codex_reviewer.sh, plugins/spec-distill/scripts/seed_edit_diff.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_nofollow_write.sh, plugins/spec-distill/tests/test_state_dir_writes.sh, plugins/spec-distill/tests/test_fresh_evidence.sh, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/tests/test_ledger_root.sh, plugins/spec-distill/tests/test_decompose_surface.sh, plugins/spec-distill/templates/interview-audit-template.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/tests/test_brief_bundle.sh, plugins/spec-distill/tests/test_brief_no_length_cap.sh, shared/tests/test_docreview_gate_visibility.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_shell_tests_executable.sh, plugins/spec-distill/tests/test_interview_state_flow.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/tests/test_reviewing_brief_skill.sh, plugins/spec-distill/tests/test_reviewing_brief_residue.sh, plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh
 - 순서 이유: 인터뷰 skill 은 R10 계획 3 의 pm-interview 이름 바꾸기 뒤 새 이름 자리에서 · 엔진 skill 셋은 R12 의 펜스 락 뒤에
 
 ## 지휘 절차
@@ -434,6 +434,17 @@ test_failure_pattern: "^FAILED (.+)$"
   - 바뀐 에픽 R12 (경로 예약 · 브랜치) · R1 · R3 · R5 (이름 따라가기 — 머지된 에픽이라 생성기 `roadmap_write.py update` 가 거부해 그 세 블록의 `경로 예약` 칸만 손으로 고침, `skills/spec-interview/` → `skills/pm-interview/`, #239 · 번호 · 범위 · 다른 칸은 그대로) 「승인 — 계획 담당자에게 (권장)」
 - 원문:
   - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-21 · R13 범위 · 경로 예약을 승인된 설계로 · R8 범위에 R13 미룸 두 행
+- 바뀜: 바뀐 에픽 R8 · R13 「ok」 · 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「ok」
+  - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-21 · R13 경로 예약에 계획 질문 답의 기존 테스트 다섯
+- 바뀜: 바뀐 에픽 R13 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
+- 원문:
+  - 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
 
 ## 위험 번호표
 
