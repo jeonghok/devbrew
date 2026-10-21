@@ -104,6 +104,7 @@ out="$(cd "$REN" && python3 "$REAL/merge_check.py" run --roadmap docs/superpower
 assert_eq "$rc" "3" "merge_check_stops_on_rename: rc 3"
 assert_contains "$out" "set-head" "merge_check_stops_on_rename: 맞추는 법"
 assert_contains "$out" "원격 기본 브랜치(trunk)" "merge_check_stops_on_rename: 원격 이름"
+assert_not_contains "$out" "로드맵을 읽지 못했다" "merge_check_stops_on_rename: 대조에서 멈췄다(로드맵 읽기까지 가지 않는다)"
 out="$(cd "$T/off/work" && python3 "$REAL/merge_check.py" run --roadmap docs/superpowers/roadmaps/x/roadmap.md --branch feature/y 2>&1)"
 assert_contains "$out" "원격과 대조하지 못했다 — 로컬 기본 브랜치 main 을 썼다" "merge_check 오프라인: 대조 못 함을 알리고 간다"
 assert_contains "$out" "로드맵을 읽지 못했다" "merge_check 오프라인: 멈추지 않고 다음(로드맵 읽기)으로 갔다"
