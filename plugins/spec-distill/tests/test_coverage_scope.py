@@ -153,12 +153,13 @@ class SpecsDir(unittest.TestCase):
     def test_invalid_specs_dir_is_a_reason_not_the_default(self):
         tmp = Path(tempfile.mkdtemp())
         try:
+            subprocess.run(["git", "init", "-q", str(tmp)], check=True)   # 폴더는 해결자가 정한다 — git 레포 안에서만 돈다
             (tmp / "rm").mkdir()
             (tmp / "rm" / "roadmap.md").write_text(
                 ROADMAP.replace("source_brief: b.md\n", "source_brief: b.md\nspecs_dir: ../design\n"), encoding="utf-8")
             view, why = cbc._roadmap_view({"roadmap": "rm/roadmap.md"}, cbc.Repo(str(tmp)))
             self.assertIsNone(view)
-            self.assertTrue(why.startswith("로드맵 형식이 깨졌다: "), why)
+            self.assertTrue(why.startswith("레포 설정이 깨졌다: "), why)
             self.assertIn("specs_dir", why)
         finally:
             shutil.rmtree(str(tmp))
@@ -177,6 +178,7 @@ class SpecsDir(unittest.TestCase):
     def test_other_bundle_design_under_non_default_folder(self):
         tmp = Path(tempfile.mkdtemp())
         try:
+            subprocess.run(["git", "init", "-q", str(tmp)], check=True)
             (tmp / "rm").mkdir()
             (tmp / "design").mkdir()
             (tmp / "rm" / "roadmap.md").write_text(
@@ -192,6 +194,20 @@ class SpecsDir(unittest.TestCase):
             self.assertEqual(cbc._block_specs(block, dict(view, specs_dir=cbc.SPECS_DIR), repo), [])
         finally:
             shutil.rmtree(str(tmp))
+
+    def test_caller_resolved_folder_wins_over_roadmap_reread(self):   # R8 — 상태 계산이 해결자로 정한 폴더를 덮지 않는다
+        class Resolved:
+            specs_dir = "from-resolver/"
+
+            def read(self, rel):
+                return ROADMAP if rel == "rm/roadmap.md" else None
+
+            def exists(self, rel):
+                return False
+
+        view, why = cbc._roadmap_view({"roadmap": "rm/roadmap.md"}, Resolved())
+        self.assertIsNone(why)
+        self.assertEqual(view["specs_dir"], "from-resolver/")
 
     def test_tree_repo_constructor_folder_is_honoured(self):
         import roadmap_status as rs
