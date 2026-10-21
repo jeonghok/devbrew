@@ -162,7 +162,7 @@ test_failure_pattern: "^FAILED (.+)$"
   - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16) · R13 미룸 둘 — Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기(권한 경계 몫)
   - 안 한다: 규칙 문서(R9) · gh 없는 대체 길 · GitHub 가 아닌 원격 지원
 - 의존: R2a, R5, R10, R12, R13
-- 브랜치: feature/dependency-portability
+- 브랜치: feature/dependency-portability · feature/gh-merge-dependencies · feature/writer-trust
 - 묶음: R8.md
 - 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_decompose_surface.sh, shared/test-selection/resolve-baseline.sh, shared/docreview/scripts/docreview_state.py, shared/python/devbrew-python.sh, plugins/quality-gates/scripts/discover-spec.sh, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/project-init/hooks/hooks.json, plugins/project-init/hooks/post-tool-use.py
 
@@ -445,6 +445,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 바뀜: 바뀐 에픽 R13 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
 - 원문:
   - 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
+
+### 2026-10-22 · R8 계획 셋의 브랜치 등록 — 브랜치 하나면 계획 1 머지 뒤 R8 이 머지됨으로 보여 R9 가 열리고 계획 2 · 3 문서가 브랜치 끝의 계획으로 세지지 않는다(#227 R2a 넘김과 같은 꼴)
+- 바뀜: 바뀐 에픽 R8 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「승인 — 계획 담당자에게 (권장)」
 
 ## 위험 번호표
 
