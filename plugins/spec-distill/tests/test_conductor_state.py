@@ -134,6 +134,82 @@ class PrCache(unittest.TestCase):
         self.assertEqual(cs.parse_machine(cs.render_machine(RM, data), RM)["PR"], data["PR"])
 
 
+class WriterStamp(unittest.TestCase):
+    """쓴 판(R8 계획 2 Task 3 · AC21) — 머리말에 쓴 판을 찍고, 더 새 판이 쓴 파일은 읽지 않고 멈춘다."""
+    def setUp(self):
+        self.orig = cs.own_version
+
+    def tearDown(self):
+        cs.own_version = self.orig
+
+    def with_writer(self, writer, own):
+        cs.own_version = lambda: own
+        text = cs.render_machine(RM, sample())
+        cs.own_version = self.orig
+        old = "writer: spec-distill " + own + "\n"
+        self.assertEqual(text.count(old), 1)
+        return text.replace(old, "" if writer is None else "writer: " + writer + "\n")
+
+    def test_writer_stamp_roundtrip(self):
+        plugin_json = Path(cs.__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+        import json
+        want = json.loads(plugin_json.read_text(encoding="utf-8"))["version"]
+        self.assertEqual(cs.own_version(), want)
+        text = cs.render_machine(RM, sample())
+        head = text.split("\n---\n", 1)[0].split("\n")
+        self.assertIn("writer: spec-distill " + want, head)
+        self.assertEqual(cs.parse_machine(text, RM), sample())
+
+    def test_newer_writer_stops_older_reader(self):
+        text = self.with_writer("spec-distill 9.1.0", "7.0.0")
+        cs.own_version = lambda: "7.0.0"
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(text, RM)
+        msg = str(cm.exception)
+        self.assertIn("더 새 판(spec-distill 9.1.0)이 썼다", msg)
+        self.assertIn("업데이트", msg)
+        self.assertIn("지금 판 7.0.0", msg)
+        text = self.with_writer("spec-distill 7.10.0", "7.9.0")
+        cs.own_version = lambda: "7.9.0"  # 자릿수가 다른 판 — 글자가 아니라 정수로 비교한다
+        with self.assertRaises(cs.MachineError):
+            cs.parse_machine(text, RM)
+
+    def test_missing_writer_is_read(self):
+        text = self.with_writer(None, "7.0.0")
+        self.assertNotIn("writer:", text)
+        cs.own_version = lambda: "7.0.0"
+        self.assertEqual(cs.parse_machine(text, RM), sample())
+
+    def test_same_or_older_writer_is_read(self):
+        for writer, own in [("spec-distill 7.0.0", "7.0.0"), ("spec-distill 6.9.9", "7.0.0"),
+                            ("spec-distill 7.0.0-rc1", "7.0.0"), ("spec-distill 7.9.0", "7.10.0"),
+                            ("spec-distill 6.12.3", "7.0.0")]:
+            text = self.with_writer(writer, own)
+            cs.own_version = lambda: own
+            self.assertEqual(cs.parse_machine(text, RM), sample(), (writer, own))
+
+    def test_uncomparable_versions_stop(self):
+        text = self.with_writer("spec-distill dev", "7.0.0")
+        cs.own_version = lambda: "7.0.0"
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(text, RM)
+        self.assertIn("판을 비교하지 못했다", str(cm.exception))
+        text = self.with_writer("spec-distill 7.0.0", "7.0.0")
+        cs.own_version = lambda: "7.0"
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(text, RM)
+        self.assertIn("판을 비교하지 못했다", str(cm.exception))
+        with self.assertRaises(cs.MachineError):
+            cs.render_machine(RM, sample())
+
+    def test_version_triple(self):
+        self.assertEqual(cs.version_triple("8.7.0"), (8, 7, 0))
+        self.assertEqual(cs.version_triple("v7.3.1-rc1"), (7, 3, 1))
+        self.assertEqual(cs.version_triple("spec-distill 12.0.10"), (12, 0, 10))
+        for bad in ("7.3", "dev", ""):
+            self.assertIsNone(cs.version_triple(bad), bad)
+
+
 class Storage(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

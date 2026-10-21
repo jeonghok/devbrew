@@ -38,6 +38,8 @@ push_file "$RM" "$(rmtext 로드맵)"
 mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" "$S/"
+# 기계 상태 읽기는 scripts/ 의 형제 .claude-plugin/plugin.json 에서 자기 판을 읽는다 — 사본(S · m-*)의 부모에도 둔다
+mkdir -p "$T/.claude-plugin" && cp "$ROOT/plugins/spec-distill/.claude-plugin/plugin.json" "$T/.claude-plugin/"
 sp_off "$S/state_path.py"
 cat > "$S/roadmap_status.py" <<'PY'
 #!/usr/bin/env python3

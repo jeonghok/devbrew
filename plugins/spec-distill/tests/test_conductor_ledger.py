@@ -936,8 +936,14 @@ class VersionReport(unittest.TestCase):
             return json.dumps({"name": "p", "version": v})
         self.assertEqual(self.check(mk("7.3.1-rc1"), mk("7.3.1"))[0], 0)
         self.assertEqual(self.check(mk("v7.3.0"), mk("7.3.0"))[0], 0)
-        self.assertEqual(self.check(mk("7.3"), mk("7.3.0"))[0], 0)
-        rc, msg = self.check(mk("7.3"), mk("7.3.1"))
+        for inst, repo in [("7.3", "7.3.0"), ("7.3.0", "7.3")]:  # 숫자 셋을 못 뽑으면 비교하지 않는다
+            rc, msg = self.check(mk(inst), mk(repo))
+            self.assertEqual(rc, 1, (inst, repo))
+            self.assertIn("판을 비교하지 못했다", msg)
+        rc, msg = self.check(mk("7.3.0"), mk("7.3.1"))
+        self.assertEqual(rc, 1)
+        self.assertIn("옛 판", msg)
+        rc, msg = self.check(mk("7.9.0"), mk("7.10.0"))  # 정수로 비교한다
         self.assertEqual(rc, 1)
         self.assertIn("옛 판", msg)
         rc, msg = self.check(mk("8.0.0"), mk("7.3.1"))

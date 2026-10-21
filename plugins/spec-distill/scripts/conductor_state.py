@@ -31,6 +31,8 @@ from state_path import SESSION_PATTERN, state_root  # noqa: E402
 MACHINE_FILE = "machine.md"
 MARKER = "conducting-by"
 TYPE = "conductor-machine"
+WRITER = "spec-distill"
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECTIONS = (
     ("PR", ("브랜치", "번호", "상태", "확인한 때", "headRefOid", "교차 레포", "baseRefName", "mergeCommit", "쓴 세션")),
     ("실행 원장", ("에픽", "계획", "원장", "읽은 줄")),
@@ -75,6 +77,47 @@ def machine_path(root, roadmap_rel: str) -> Path:
     return machine_dir(root, roadmap_rel) / MACHINE_FILE
 
 
+# ── 판 ───────────────────────────────────────────────────────────────────────
+
+def version_triple(text: str) -> tuple[int, int, int] | None:
+    """판 문자열에서 첫 숫자 셋(`8.7.0`)을 정수로. 없으면 None."""
+    m = VERSION_RE.search(str(text))
+    return tuple(int(p) for p in m.group(0).split(".")) if m else None
+
+
+def own_version() -> str:
+    """이 플러그인의 판 — `.claude-plugin/plugin.json` 의 `version`."""
+    path = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+    try:
+        version = json.loads(path.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError) as exc:
+        raise MachineError("플러그인 판을 읽지 못했다: %s (%s)" % (path, type(exc).__name__))
+    if not isinstance(version, str) or not version.strip():
+        raise MachineError("플러그인 판이 비어 있다: %s" % path)
+    return version.strip()
+
+
+def _own_triple():
+    own = own_version()
+    triple = version_triple(own)
+    if triple is None:
+        raise MachineError("판을 비교하지 못했다 — 지금 판(%s %s)에 숫자 셋(예: 8.7.0)이 없다" % (WRITER, own))
+    return own, triple
+
+
+def _check_writer(writer):
+    """머리말의 `writer` — 없으면 지나간다(쓴 판을 찍기 전 판이 쓴 파일)."""
+    if writer is None:
+        return
+    wrote = version_triple(writer)
+    if wrote is None:
+        raise MachineError("판을 비교하지 못했다 — 이 기계 상태를 쓴 판(%s)에 숫자 셋(예: 8.7.0)이 없다" % writer)
+    own, triple = _own_triple()
+    if wrote > triple:
+        raise MachineError("이 기계 상태는 더 새 판(%s)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다(지금 판 %s)"
+                           % (writer, own))
+
+
 # ── 형식 ─────────────────────────────────────────────────────────────────────
 
 def empty() -> dict:
@@ -111,6 +154,7 @@ def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
         raise MachineError("type 이 %s 가 아니다" % TYPE)
     if head.get("roadmap") != roadmap_rel:
         raise MachineError("다른 로드맵의 기계 상태다: %s" % head.get("roadmap"))
+    _check_writer(head.get("writer"))
     data, cur = empty(), None
     for n, line in enumerate(lines[end + 1:], end + 2):
         if not line.strip():
@@ -138,7 +182,7 @@ def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
 
 
 def render_machine(roadmap_rel: str, data: dict) -> str:
-    out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
+    out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "writer: %s %s" % (WRITER, _own_triple()[0]), "---", ""]
     for name, cols in SECTIONS:
         if name in OPTIONAL_SECTIONS and not data.get(name):
             continue  # 7.6 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다

@@ -24,7 +24,6 @@ import argparse
 import datetime
 import json
 import os
-import re
 import shutil
 import stat
 import subprocess
@@ -392,12 +391,6 @@ def carried(item: str, receiver_text: str) -> bool:
     return bool(key) and key in _plain("\n".join(body))
 
 
-def _version_parts(v):
-    """앞쪽 숫자 마디(`7.3.1-rc1` → (7,3,1), `v7.3` → (7,3)). 읽을 수 없으면 None."""
-    m = re.match(r"^v?(\d+(?:\.\d+)*)", str(v).strip())
-    return tuple(int(p) for p in m.group(1).split(".")) if m else None
-
-
 def version_report(root, plugin_json: Path):
     """(rc, 한 줄). rc 1 = 설치본이 옛 판이거나 비교하지 못했다."""
     def cannot(why):
@@ -409,7 +402,7 @@ def version_report(root, plugin_json: Path):
     if not isinstance(inst, dict) or not str(inst.get("name") or "").strip():
         return cannot("설치본 plugin.json 에 이름이 없다")
     name = str(inst["name"]).strip()
-    iv = _version_parts(inst.get("version", ""))
+    iv = cs.version_triple(inst.get("version", ""))
     if iv is None:
         return cannot("설치본 판 %r 을 읽지 못했다" % inst.get("version"))
     rc, out, err = git(root, "ls-files", "--", "*plugin.json")
@@ -427,17 +420,15 @@ def version_report(root, plugin_json: Path):
             continue
         if str(src.get("name") or "").strip() != name:
             continue
-        sv = _version_parts(src.get("version", ""))
+        sv = cs.version_triple(src.get("version", ""))
         if sv is None:
             return cannot("레포 사본 판 %r 을 읽지 못했다" % src.get("version"))
-        n = max(len(iv), len(sv))
-        a_, b_ = iv + (0,) * (n - len(iv)), sv + (0,) * (n - len(sv))
-        if b_ > a_:
+        if sv > iv:
             extra = (" — 레포 사본의 기능(예: 묶음 대조 · 「여기서 계속」 · 기각 번호 보이기)이 없을 수 있다"
                      if name == "spec-distill" else "")
             return 1, ("설치된 %s %s 이 레포 사본 %s 보다 옛 판이다%s. 플러그인을 갱신하거나 레포 사본으로 지휘한다"
                        % (name, inst.get("version"), src.get("version"), extra))
-        if a_ > b_:
+        if iv > sv:
             return 0, "설치된 %s %s 이 레포 사본 %s 보다 새 판이다" % (name, inst.get("version"), src.get("version"))
         return 0, "설치본과 레포 사본의 판이 맞다(%s)" % inst.get("version")
     if broken:
