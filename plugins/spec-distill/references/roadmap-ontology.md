@@ -15,13 +15,13 @@
 
 | 객체 | 층 | 식별자 | 속성 | 링크(칸 · 키) | 주인 |
 |---|---|---|---|---|---|
-| 로드맵 | 계획 | 레포 상대 경로 | 에픽 · 결정 기록 · 재분해 이력 · 위험 번호표 | `source_brief` → brief · `specs_dir` · `plans_dir` · `test_command` · `review_model` · `parallel_default` → 레포 설정 | 로드맵 파일(git) — 인터뷰가 만든다 · 에픽 경계 · 범위 · 의존 · 흐름 · 산출물은 재분해 절차로 · 레포 설정 · 결정 기록은 로드맵 수정 PR 로 |
+| 로드맵 | 계획 | 레포 상대 경로 | 에픽 · 결정 기록 · 재분해 이력 · 위험 번호표 | `source_brief` → brief · `specs_dir` · `plans_dir` · `test_command` · `test_failure_pattern` · `review_model` · `parallel_default` → 레포 설정 | 로드맵 파일(git) — 인터뷰가 만든다 · 에픽 경계 · 범위 · 의존 · 흐름 · 산출물은 재분해 절차로 · 레포 설정 · 결정 기록은 로드맵 수정 PR 로 |
 | 에픽 | 계획 | 블록 번호(예: R5) | 칸: 의도 · 범위 · 의존 · 브랜치 · 묶음 · 경로 예약 · spec · 발화 · 항목 · 완료 · 크기 · 병렬 · 순서 이유 · 근거 · 흐름 · 산출물. 종류(묶음 · 브랜치 · 결정)마다 필수 · 금지 칸이 다르다(`REQUIRED` · `FORBIDDEN`) | `묶음:` → 에픽 묶음 · `의존:` → 에픽 · `브랜치:` → 브랜치 · `산출물:` → 산출물 · `spec:` → 설계문서 | 로드맵 — 읽기는 `roadmap_model.py` |
 | 에픽 묶음 | 계획 | 로드맵 옆 `<에픽>.md` | 배정 번호 · brief 발췌 · 인터페이스 | `epic` → 에픽 · `roadmap` → 로드맵 · `source_brief` → brief · `ids` → 번호 | 생성기(`roadmap_write.py` · `roadmap_render.py`) |
 | 설계문서 | 계획 | 레포 상대 경로 | AC · 번호 대조 · 미룸 · 결정 기록 | `source_interview` → 에픽 묶음 · `roadmap` → 로드맵 | 그 에픽의 설계 세션 |
 | 산출물 | 계획 | 레포 상대 경로 | 설계문서 대신 내는 결과 · 판정 · 구현 대조 · 지휘 기록 절 | `산출물:` ← 에픽 | 그 에픽의 세션 |
 | 계획 | 계획 | 레포 상대 경로 | task · 이 계획의 AC | `**Spec:**` → 설계문서 | 계획을 쓴 세션 |
-| 레포 설정 | 계획 | 로드맵 frontmatter 키 | 설계문서 · 계획 폴더 · 테스트 명령 · 리뷰 모델 · 병렬 권장 수(기본값이지 상한이 아니다) | `specs_dir` · `plans_dir` · `test_command` · `review_model` · `parallel_default` | 로드맵 frontmatter, 없으면 기본값 — 갱신은 로드맵 수정 PR · 기본값 · 검증은 `repo_defaults.py` |
+| 레포 설정 | 계획 | 설정 키(닫힌 집합 아홉) | 설계문서 · 계획 · 로드맵 · 인터뷰 폴더 · 테스트 명령 · 실패 이름 정규식 · 리뷰 모델 · 병렬 권장 수(기본값이지 상한이 아니다) · 브랜치 접두 | `specs_dir` · `plans_dir` · `roadmaps_dir` · `interview_dir` · `test_command` · `test_failure_pattern` · `review_model` · `parallel_default` · `branch_prefix` | 층 넷이 우선순위 순 — 로드맵 frontmatter(그 로드맵에만) > 레포 설정 파일(레포 루트, 기본 브랜치 판) > 기계 상태 `## 레포 설정`(임시) > 기본값. 층마다 받는 키가 다르다. 갱신은 로드맵 수정 PR · 레포 설정 파일을 고치는 PR · 합치기 · 출처 · 검증은 `repo_defaults.py` |
 | 브랜치 | 실행 | 브랜치 이름 | 끝 커밋 · 머지 여부 | `브랜치:` ← 에픽 · PR 의 head → PR | git — 상태 계산은 `roadmap_status.py` |
 | 커밋 | 실행 | SHA | 메시지 · 트레일러 | `Spec:` → 설계문서 | git |
 | PR | 실행 | `#<n>` | 상태(열림 · 머지됨 · 닫힘) · 통합 리뷰 인계 절 | `PR` → 캐시 · PR 의 head → 브랜치 | GitHub(있으면) — 기계 상태의 것은 캐시 |

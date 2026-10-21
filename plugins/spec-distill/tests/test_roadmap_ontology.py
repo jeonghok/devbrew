@@ -19,6 +19,7 @@ from roadmap_model import FIELDS, FORBIDDEN, REQUIRED, section_body  # noqa: E40
 from roadmap_render import BUNDLE_FORMAT  # noqa: E402
 from conductor_state import COLUMNS  # noqa: E402
 from repo_defaults import COUNT_KEYS, DIR_KEYS, TEXT_KEYS  # noqa: E402
+from repo_defaults import KEYS as SETTING_KEYS  # noqa: E402  — 레포 설정의 닫힌 키 집합
 
 DOC = PLUGIN / "references" / "roadmap-ontology.md"
 SOURCES = ("roadmap_model.py", "roadmap_status.py", "check_bundle_coverage.py", "repo_defaults.py",
@@ -55,7 +56,8 @@ def frontmatter_keys() -> set:
     return {l.split(":")[0] for l in block.splitlines() if ":" in l}
 
 
-KEYS = frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | set(COUNT_KEYS) | {"source_brief", "source_interview", "roadmap"}
+KEYS = (frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | set(COUNT_KEYS) | set(SETTING_KEYS)
+        | {"source_brief", "source_interview", "roadmap"})
 
 
 def link_ok(token: str, corpus: str) -> bool:
@@ -163,6 +165,8 @@ class Ontology(unittest.TestCase):
         self.assertFalse(link_ok("id", self.corpus))      # `ids` 의 부분 문자열은 키가 아니다
         self.assertTrue(link_ok("ids", self.corpus))
         self.assertFalse(link_ok("## 없는 절", self.corpus))
+        self.assertTrue(link_ok("branch_prefix", self.corpus))   # 레포 설정 키는 해결자의 닫힌 집합에서
+        self.assertFalse(link_ok("branch_prefixes", self.corpus))
 
 
 if __name__ == "__main__":
