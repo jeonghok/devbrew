@@ -14,6 +14,7 @@
 단계 · 경고는 `roadmap_status.py <경로> --json`(기본 브랜치 사본)을 하위 프로세스로 불러 읽기만 한다.
 레포 파일과 git 상태를 바꾸지 않는다 — 쓰는 것은 `<git 공용 디렉토리>/devbrew/control-plane.json` 캐시 하나다.
 받은 지 N분은 캐시 밖에서 매번 FETCH_HEAD 수정 시각으로 읽는다.
+gh 를 부르지 않는다 — PR 은 기계 상태의 PR 캐시(지휘자가 채운다)만 읽고, 상태줄은 그 캐시의 나이를 보인다.
 """
 from __future__ import annotations
 
@@ -26,7 +27,6 @@ import json
 import os
 import re
 import select
-import shutil
 import signal
 import stat
 import subprocess
@@ -49,11 +49,9 @@ DONE = ("머지됨", "끝남")
 # 상태줄 묶음 — 상태 계산의 단계 이름 + R5 가 더할 이름. 대기 · 끝난 단계 · 알 수 없음은 세지 않는다.
 BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR")), ("준비", ("준비",)))
 IMPL_STAGES = ("구현 중", "구현 끝", "PR")
-GH_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
 LEDGER_MAX_BYTES = 1 << 20
 MACHINE_MAX_BYTES = 1 << 20
 LEDGER_MAX_COUNT = 50
-GH_CALL_CAP = 5.0
 IMPL_DONE_MARK = " — 구현 끝 · "  # roadmap_status 가 일부 머지 이유에 붙이는 모양
 UNCOUNTED = ("대기", "머지됨", "끝남", "알 수 없음")
 TASK_STATES = ("pending", "in_progress", "completed")
@@ -218,9 +216,34 @@ def interview_lines(interview) -> list:
 
 # ── 세 출력 ──────────────────────────────────────────────────────────────────
 
-def statusline_text(items, interview, minutes, select_error=None, default_name=None) -> str:
+PR_STAMP_FORMAT = "%Y-%m-%d %H:%M"
+
+
+def pr_cache_segment(items, now=None) -> str:
+    """상태줄의 PR 캐시 조각 — 덧씌운 기계 상태의 PR 줄 가운데 가장 최근 「확인한 때」의 나이. 네트워크를 쓰지 않는다."""
+    stamps, rows, unread = [], 0, False
+    for _p, r in items:
+        machine = r.get("machine")
+        if machine is None:
+            unread = unread or bool(r.get("machine_error"))
+            continue
+        for row in machine.get("PR") or []:
+            rows += 1
+            try:
+                stamps.append(datetime.datetime.strptime(str(row.get("확인한 때")), PR_STAMP_FORMAT))
+            except ValueError:
+                continue
+    if stamps:
+        now = now or datetime.datetime.now()
+        return "PR 캐시 %d시간 전" % max(0, int((now - max(stamps)).total_seconds() // 3600))
+    if rows:
+        return "PR 캐시 나이 모름(확인한 때를 읽지 못했다)"
+    return "PR 캐시 읽기 불가" if unread else "PR 캐시 없음"
+
+
+def statusline_text(items, interview, minutes, select_error=None, default_name=None, pr_cache=None) -> str:
     """상태줄 한 줄. items 는 고른 로드맵 [(경로, 보고서)] — 수는 전부의 합이고 이름은 첫 로드맵이다. 기본 브랜치
-    이름을 알면 받은 시각 앞에 두고, 받은 시각이 그 브랜치만의 것이 아님을 밝힌다."""
+    이름을 알면 받은 시각 앞에 두고, 받은 시각이 그 브랜치만의 것이 아님을 밝힌다. pr_cache 는 받은 시각 뒤에 둔다."""
     parts = []
     if items:
         parts.append(folder_name(items[0][0]) + (" 외 %d" % (len(items) - 1) if len(items) > 1 else ""))
@@ -236,6 +259,8 @@ def statusline_text(items, interview, minutes, select_error=None, default_name=N
             if minutes is not None:
                 fetched += "(어느 원격 · 브랜치든)"
         parts.append(fetched)
+        if pr_cache:
+            parts.append(pr_cache)
     seg = interview_segment(interview)
     if seg:
         parts.append(seg)
@@ -660,9 +685,25 @@ def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     return summary
 
 
-def cache_key(repo: Repo, main, main_full, mode, targets):
-    """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본. 인터뷰 상태는
-    키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
+def pr_cache_fingerprint(machine) -> str:
+    """기계 상태의 PR 줄들을 정렬해 sha256 — 줄 순서와 무관하고, 칸 하나만 바뀌어도 달라진다. None 은 빈 캐시와 같다."""
+    rows = (machine or {}).get("PR") or []
+    lines = sorted(cs.SEP.join(str(r.get(c, "")) for c in cs.COLUMNS["PR"]) for r in rows)
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def pr_cache_prints(targets, machine_lookup) -> str:
+    """대상마다 `<경로>=<PR 캐시 지문>` — 기계 상태를 못 읽으면 그 사유. 상태 계산이 PR 캐시로 머지됨을 판정하므로 열쇠에 든다."""
+    out = []
+    for path, _blob in targets:
+        machine, why = machine_lookup(path)
+        out.append("%s=%s" % (path, pr_cache_fingerprint(machine) if machine is not None else "!" + str(why)))
+    return "\n".join(out)
+
+
+def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
+    """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본 · 대상의 PR 캐시
+    지문. 인터뷰 상태 · PR 밖 기계 상태는 키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
         return None
@@ -673,7 +714,7 @@ def cache_key(repo: Repo, main, main_full, mode, targets):
             kept.append(row)
     refs = "\n".join(kept)
     refs_hash = hashlib.sha256(refs.encode("utf-8")).hexdigest()
-    parts = [code_stamp(), mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets)]
+    parts = [code_stamp(), mode, main or "-", refs_hash, "\n".join("%s=%s" % t for t in targets), pr_prints]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -814,15 +855,33 @@ def active_branch(b: dict):
     return next((s["branch"] for s in b.get("branch_states") or [] if not s.get("merged") and s.get("tip")), None)
 
 
-def machine_for(repo, roadmap_rel: str):
+_ASK = object()
+
+
+def _machine_text(path, texts):
+    """기계 상태 파일 글. texts(dict)를 주면 같은 파일은 한 번만 읽는다 — 읽기 오류도 그대로 다시 낸다."""
+    if texts is None:
+        return read_capped(path, MACHINE_MAX_BYTES)
+    if path not in texts:
+        try:
+            texts[path] = read_capped(path, MACHINE_MAX_BYTES)
+        except (OSError, ValueError) as exc:
+            texts[path] = exc
+    if isinstance(texts[path], BaseException):
+        raise texts[path]
+    return texts[path]
+
+
+def machine_for(repo, roadmap_rel: str, common=_ASK, texts=None):
     """(기계 상태, 사유). 파일이 없으면 빈 것. 깨졌으면 (None, 사유) — 빈 것으로 읽지 않는다."""
-    common = repo.line("rev-parse", "--git-common-dir")
+    if common is _ASK:
+        common = repo.line("rev-parse", "--git-common-dir")
     if not common:
         return None, "git 공용 디렉토리를 찾지 못했다"
     try:
         path = cs.machine_path(state_root_for_common(Path(repo.cwd, common).resolve()), roadmap_rel)
         try:
-            text = read_capped(path, MACHINE_MAX_BYTES)
+            text = _machine_text(path, texts)
         except FileNotFoundError:
             return cs.empty(), None
         except (OSError, ValueError) as exc:  # 링크 · 파이프 · 큰 파일은 읽지 않고 사유로 낸다
@@ -830,6 +889,18 @@ def machine_for(repo, roadmap_rel: str):
         return cs.parse_machine(text, roadmap_rel), None
     except (cs.MachineError, FormatError) as exc:  # 한 파일이 깨져도 화면 전체를 비우지 않는다
         return None, str(exc)
+
+
+def machine_reader(repo):
+    """경로 → (기계 상태, 사유). git 공용 디렉토리는 한 번 묻고 같은 파일은 한 번 읽는다 — 결과 캐시 열쇠(PR 캐시
+    지문)와 덧씌움이 같은 읽기를 쓴다."""
+    common, texts, memo = repo.line("rev-parse", "--git-common-dir"), {}, {}
+
+    def read(rel):
+        if rel not in memo:
+            memo[rel] = machine_for(repo, rel, common, texts)
+        return memo[rel]
+    return read
 
 
 def suite_lock_for(repo, roadmap_rel: str) -> str:
@@ -844,37 +915,32 @@ def suite_lock_for(repo, roadmap_rel: str) -> str:
     return suite_lock.describe(suite_lock.lock_path(mdir))
 
 
-def gh_lookup_for(repo, deadline):
-    """브랜치 → PR 사실을 `gh pr list` 로. gh 가 없으면 None."""
-    exe = shutil.which("gh")
-    if not exe:
-        return None
-    env = dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1", GH_NO_UPDATE_NOTIFIER="1")
+PR_MISSING = "PR 캐시에 없다 — 지휘자가 채운다"
+PR_MISSING_DONE = ("PR 캐시에 없다 — 끝난 에픽의 줄은 지휘자가 다시 채우지 않는다"
+                   "(ledger pr-refresh --roadmap <로드맵> --session <세션> --epic %s 로 채운다)")
+PR_NO_DEFAULT = "기본 브랜치를 몰라 PR 캐시에서 이 레포의 PR 을 고르지 못했다"
 
-    def lookup(branch: str) -> dict:
-        try:
-            own = Deadline(min(deadline.left("gh pr list"), GH_CALL_CAP))  # 호출마다 상한 — 하나가 멈춰도 나머지가 산다
-            rc, out = run_bounded([exe, "pr", "list", "--state", "all", "--head", branch,
-                                   "--json", "number,state", "--limit", "1"], repo.cwd, env, own, "gh pr list")
-        except TimedOut:
-            return _pr_unknown("gh 시간 초과")
-        if rc != 0:
-            return _pr_unknown("gh 실패(rc %d)" % rc)
-        try:
-            data = json.loads(out.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
-            return _pr_unknown("gh 출력을 읽지 못했다")
-        if not isinstance(data, list):
-            return _pr_unknown("gh 출력 모양이 다르다")
-        if not data:
-            return {"number": None, "state": "없음", "source": "gh"}
-        if not isinstance(data[0], dict):
-            return _pr_unknown("gh 출력 모양이 다르다")
-        state, number = GH_STATES.get(data[0].get("state")), data[0].get("number")
-        if state is None or not isinstance(number, int):
-            return _pr_unknown("gh 출력 모양이 다르다")
-        return {"number": "#%d" % number, "state": state, "source": "gh"}
-    return lookup
+
+def _pr_order(row: dict):
+    """열림이 먼저, 그다음 번호가 큰(새) PR."""
+    digits = str(row.get("번호", "")).lstrip("#")
+    return row.get("상태") == "열림", int(digits) if digits.isdigit() else -1
+
+
+def pr_fact(rows: list, branch: str, default_short, missing: str) -> dict:
+    """브랜치 하나의 PR 사실 — PR 캐시 줄 가운데 이 레포에서(교차 레포 아니오) 기본 브랜치로(baseRefName) 연 PR 만
+    고르고, 열림이 먼저 · 그다음 새 PR 이다. 캐시의 줄 순서는 고르기를 바꾸지 않는다."""
+    mine = [r for r in rows if r.get("브랜치") == branch]
+    if not mine:
+        return _pr_unknown(missing)
+    if not default_short:
+        return _pr_unknown(PR_NO_DEFAULT)
+    own = [r for r in mine if r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
+    if not own:
+        return {"number": None, "state": "없음",
+                "source": "PR 캐시 — fork · 다른 base 로 연 PR %d개는 세지 않았다" % len(mine)}
+    best = max(own, key=_pr_order)
+    return {"number": best["번호"], "state": best["상태"], "source": "PR 캐시"}
 
 
 def _rulings(b: dict, paths: list, read, deadline) -> None:
@@ -908,55 +974,39 @@ def _rulings(b: dict, paths: list, read, deadline) -> None:
         b["rulings"] = rulings
 
 
-def merged_prs(b: dict, prs: dict, gh_lookup) -> list:
-    """머지된 에픽의 브랜치마다 PR — 기계 상태 캐시가 먼저, 없으면 gh. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
-    out = []
-    for s in b.get("branch_states") or []:
-        br = s["branch"]
-        if br in prs:
-            row = prs[br]
-            out.append((br, {"number": row["번호"], "state": "머지됨", "source": "기계 상태"}))
-        elif gh_lookup is None:
-            out.append((br, _pr_unknown("기계 상태에 없고 gh 가 없다")))
-        else:
-            out.append((br, gh_lookup(br)))
-    return out
+def merged_prs(b: dict, rows: list, default_short) -> list:
+    """머지된 에픽의 브랜치마다 PR — PR 캐시만 읽는다. 끝난 에픽의 줄은 `--reset` 뒤 다시 채워지지 않으므로 없으면
+    그 에픽을 채우는 명령을 밝힌다. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
+    return [(s["branch"], pr_fact(rows, s["branch"], default_short, PR_MISSING_DONE % b.get("id")))
+            for s in b.get("branch_states") or []]
 
 
-def overlay(items, machine_lookup, gh_lookup, use_gh: bool, read=read_capped, deadline=None, focus=None) -> None:
-    """기계 상태 · 실행 원장 · gh 를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다(캐시 열쇠에 넣지 않는다).
-    use_gh 가 거짓(상태줄)이면 gh 도 원장도 판정도 읽지 않는다 — 상태줄은 그것들을 보이지 않는다."""
+def overlay(items, machine_lookup, detail: bool, read=read_capped, deadline=None, focus=None,
+            default_short=None) -> None:
+    """기계 상태(PR 캐시 · 실행 원장)를 보고서에 얹는다 — 캐시 밖에서 매번 읽는다. PR 은 PR 캐시만 읽는다.
+    detail 이 거짓(상태줄)이면 원장도 판정도 읽지 않는다 — 상태줄은 그것들을 보이지 않는다."""
     for path, report in items:
         machine, why = machine_lookup(path)
         report["machine"], report["machine_error"] = machine, why
-        ledgers, prs = {}, {}
+        ledgers = {}
         for row in (machine or {}).get("실행 원장", []):
             ledgers.setdefault(row["에픽"], []).append(row["원장"])
-        for row in (machine or {}).get("PR", []):
-            prs[row["브랜치"]] = row
+        rows = (machine or {}).get("PR", [])
         for b in report.get("blocks") or []:
             stage = b.get("stage") or ""
             partial = stage.startswith("일부 머지")
             br = active_branch(b)
             if br and (stage == "구현 끝" or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
-                if br in prs:
-                    row = prs[br]
-                    b["pr"] = {"number": row["번호"], "state": row["상태"], "source": "기계 상태"}
-                elif not use_gh:
-                    b["pr"] = _pr_unknown("기계 상태에 없다(상태줄은 gh 를 부르지 않는다)")
-                elif gh_lookup is None:
-                    b["pr"] = _pr_unknown("기계 상태에 없고 gh 가 없다")
-                else:
-                    b["pr"] = gh_lookup(br)
+                b["pr"] = pr_fact(rows, br, default_short, PR_MISSING)
                 if stage == "구현 끝" and b["pr"]["state"] == "열림":
                     b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
-            if use_gh and focus is not None and b.get("id") == focus and stage == "머지됨":
-                b["merged_prs"] = merged_prs(b, prs, gh_lookup)
-            if use_gh and (stage in IMPL_STAGES or partial or stage == "머지됨"):
+            if detail and focus is not None and b.get("id") == focus and stage == "머지됨":
+                b["merged_prs"] = merged_prs(b, rows, default_short)
+            if detail and (stage in IMPL_STAGES or partial or stage == "머지됨"):
                 _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
 
 
-def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, focus=None):
+def gather(cwd: str, arg, deadline: Deadline, ctx: dict, detail: bool = True, focus=None):
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
@@ -986,7 +1036,8 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
         tree, folder, select_error = listing(repo, main)
         targets = sorted((p, e[2]) for p, e in tree.items())   # 키는 로드맵 자리의 blob — 글은 캐시를 못 쓸 때만 읽는다
     mode = arg or "*"
-    key = cache_key(repo, main, main_full, mode, targets)
+    machines = machine_reader(repo)
+    key = cache_key(repo, main, main_full, mode, targets, pr_cache_prints(targets, machines))
     path = cache_file(repo)
     entries, last, note = load_cache(path) if path else ({}, {}, "git 공용 디렉토리를 찾지 못했다")
     ctx.update(top=repo.cwd, cache=path, entries=entries, last=last)
@@ -1018,9 +1069,8 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     items = copy.deepcopy(items)  # 덧씌움이 캐시 항목(ctx["entries"])에 섞여 디스크에 남지 않게
     for _p, r in items:
         r["fetched_at"] = fetched  # 첫 줄의 받은 시각도 캐시 밖에서
-    overlay(items, lambda rel: machine_for(repo, rel), gh_lookup_for(repo, deadline) if use_gh else None, use_gh,
-            deadline=deadline, focus=focus)
-    if use_gh:
+    overlay(items, machines, detail, deadline=deadline, focus=focus, default_short=main_short)
+    if detail:
         for p, r in items:
             r["suite_lock"] = suite_lock_for(repo, p)
     view.update(items=items, interview=interview, select_error=select_error)
@@ -1093,8 +1143,9 @@ def cmd_statusline() -> int:
             print("")
             return 0
         deadline = Deadline(STATUSLINE_BUDGET)
-        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, use_gh=False)
-        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"], v.get("default_name"))
+        v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, detail=False)
+        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"], v.get("default_name"),
+                               pr_cache_segment(v["items"]))
         remember_line(ctx, line)
         print(line)
     except TimedOut:

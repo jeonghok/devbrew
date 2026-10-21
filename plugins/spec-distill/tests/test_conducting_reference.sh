@@ -252,6 +252,22 @@ done
 assert_eq "$(pr_by_hand "$T/pr.md")" "" "양성 짝: 다른 절 이름(PRX)은 잡지 않는다"
 assert_not_contains "$(cyc 4)" 'PR 을 열 명령을 사용자에게 준다' "지휘 걸음 4: PR 을 연 뒤 gh 없을 때 PR 명령을 주는 괄호가 없다(양성 짝: 위 gh pr create -R · pr-refresh)"
 
+# gh 없을 때의 대체 길은 없다(R8 계획 2 Task 5 · AC20) — 「gh 가 없…」 · 「`gh` 가 없…」 · 「gh 없음」 문장 부재 + 손 절차 5 의 -R 양의 짝.
+gh_absent() {  # gh_absent <파일> — gh 가 없을 때를 말하는 줄 번호
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines(), 1):
+    if re.search(r"(?<![\w-])`?gh`?\s*(?:가\s*|이\s*)?없", line):
+        print(i)' "$1"
+}
+assert_eq "$(gh_absent "$CD")" "" "conducting.md: gh 가 없을 때의 대체 길 문장이 없다"
+for lit in '`gh` 가 없거나 GitHub 레포가 아니면 설계문서 `## 미룸` 표에 적는다.' 'gh 가 없으면 PR 을 열 명령을 준다.' 'gh 없음이면 건너뛴다.'; do
+  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/gh.md"
+  [ -n "$(gh_absent "$T/gh.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
+done
+{ cat "$CD"; printf '%s\n' 'ghost 가 없다 · gh-repo.sh 가 없다'; } > "$T/gh.md"
+assert_eq "$(gh_absent "$T/gh.md")" "" "양성 짝: 다른 낱말(ghost · gh-repo.sh)은 잡지 않는다"
+assert_contains "$(step 5)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "손 절차 5: PR 은 gh_repo.py slug 로 origin 을 명시해 연다(음의 락의 양의 짝)"
+
 # 레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴 — 줄마다 낸다.
 banned() {
   python3 -I - "$1" <<'PY'

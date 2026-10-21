@@ -16,7 +16,8 @@
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
   progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
 
-종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 4 gh 실패(gh 없음 · 인증 · 출력 모양) · 5 다른 세션의 표지.
+종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 pr-refresh 가 받은 gh 출력이
+다르다(다른 head · 모르는 값) · 5 다른 세션의 표지.
 """
 from __future__ import annotations
 
@@ -475,33 +476,32 @@ def _doc(root, b: dict, path: str):
     return text if rc == 0 else None
 
 
+HANDOFF_STOP = "PR 인계를 읽지 못했다 — %s"
+
+
 def _gh() -> str:
-    exe = shutil.which("gh")
-    if not exe:
-        raise Fail(4, "PR 인계를 읽지 못했다 — gh 가 없다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
-    return exe
+    """gh 실행 파일. 없으면 Fail(3) — 멈춤 문장은 gh_repo 가 낸다."""
+    try:
+        return gh_repo.gh_exe()
+    except gh_repo.GhStop as exc:
+        raise Fail(3, HANDOFF_STOP % exc)
 
 
 PR_LIMIT = 20
 
 
 def _prs(root, b: dict):
-    """[(브랜치, [PR…], 한도에 닿았는가)]. 브랜치가 없으면 []."""
-    exe = _gh()
+    """[(브랜치, [PR…], 한도에 닿았는가)]. 브랜치가 없으면 []. PR 본문(인계 절)이 필요해 gh_repo.gh_json 으로 묻는다."""
+    _gh()
     out = []
     for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
-        p = subprocess.run([exe, "pr", "list", "--state", "all", "--head", br, "--json", "number,state,body",
-                            "--limit", str(PR_LIMIT)], cwd=str(root), capture_output=True, encoding="utf-8",
-                           errors="replace", env=dict(os.environ, GH_PROMPT_DISABLED="1", NO_COLOR="1"))
-        if p.returncode:
-            raise Fail(4, "PR 인계를 읽지 못했다 — gh 실패(%s). 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다"
-                       % p.stderr.strip()[-160:])
         try:
-            items = json.loads(p.stdout)
-        except ValueError:
-            raise Fail(4, "PR 인계를 읽지 못했다 — gh 출력 모양이 다르다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
+            items = gh_repo.gh_json(str(root), ["pr", "list", "--state", "all", "--head", br, "--json", "number,state,body",
+                                                "--limit", str(PR_LIMIT)])
+        except gh_repo.GhStop as exc:
+            raise Fail(3, HANDOFF_STOP % exc)
         if not isinstance(items, list):
-            raise Fail(4, "PR 인계를 읽지 못했다 — gh 출력 모양이 다르다. 설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다")
+            raise Fail(3, HANDOFF_STOP % ("gh pr list 출력 모양이 다르다(브랜치 %s) — gh 판을 확인한다" % br))
         items = [it for it in items if isinstance(it, dict)]
         out.append((br, items, len(items) >= PR_LIMIT))
     return out
@@ -889,7 +889,7 @@ def c_live_agent(root, a) -> int:
 
 
 def c_pr_handoffs(root, a) -> int:
-    _gh()  # gh 가 없으면 상태 계산보다 먼저 강등을 알린다
+    _gh()  # gh 가 없으면 상태 계산보다 먼저 멈춘다
     b = _block(_status(root, a.roadmap), a.epic)
     got = _prs(root, b)
     if not got:
@@ -957,7 +957,7 @@ def c_pr_refresh(root, a) -> int:
         try:
             items, hit = gh_repo.pr_list(str(root), br, PR_REFRESH_LIMIT)
         except gh_repo.GhStop as exc:
-            raise Fail(4, str(exc))
+            raise Fail(3, str(exc))
         if hit:
             print("[spec-distill] %s 의 PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_REFRESH_LIMIT))
         fresh[br] = [_cache_row(br, it, when, a.session) for it in items]

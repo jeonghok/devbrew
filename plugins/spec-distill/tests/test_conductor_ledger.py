@@ -70,6 +70,13 @@ class Repo(unittest.TestCase):
             rc = L.main(["--root", str(self.w), *args])
         return rc, buf.getvalue()
 
+    def gh_origin(self):
+        """가짜 gh 를 부르는 사례 — 픽스처의 origin 은 로컬 경로라 gh_repo 가 슬러그를 뽑지 못한다. 슬러그만 바꾼다."""
+        from unittest import mock
+        patch = mock.patch.object(L.gh_repo, "origin_slug", return_value=("github.com", "me", "r"))
+        patch.start()
+        self.addCleanup(patch.stop)
+
 
 class Fixture(unittest.TestCase):
     def test_roadmap_fixture_parses(self):
@@ -776,22 +783,25 @@ class Audit(unittest.TestCase):
 
 
 class PrHandoffs(Repo):
-    def test_no_gh_degrades(self):
+    def test_no_gh_stops_without_fallback(self):
         old = os.environ.get("PATH", "")
         os.environ["PATH"] = str(self.t)  # gh 없는 PATH — git 은 절대경로로 부른다
         try:
             rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
         finally:
             os.environ["PATH"] = old
-        self.assertEqual(rc, 4)
-        self.assertIn("설계문서 `## 미룸` 표와 `## 지휘 기록` 을 쓴다", out)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("PR 인계를 읽지 못했다 — " + L.gh_repo.STOP_NO_GH, out)
+        self.assertNotIn("설계문서 `## 미룸`", out)
 
     def test_gh_stub(self):
+        self.gh_origin()
         stub = self.t / "bin"
         stub.mkdir()
         (stub / "pr.json").write_text(json.dumps([{"number": 5, "state": "OPEN",
                                                    "body": "## 통합 리뷰 인계\n\n- R2 가 고침: z\n"}]), encoding="utf-8")
-        (stub / "gh").write_text("#!/bin/sh\ncat '%s'\n" % (stub / "pr.json"), encoding="utf-8")
+        (stub / "gh").write_text("#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\ncat '%s'\n" % (stub / "args", stub / "pr.json"),
+                                 encoding="utf-8")
         (stub / "gh").chmod(0o755)
         old = os.environ.get("PATH", "")
         os.environ["PATH"] = str(stub) + os.pathsep + old
@@ -802,8 +812,21 @@ class PrHandoffs(Repo):
         self.assertEqual(rc, 0, out)
         self.assertIn("#5", out)
         self.assertIn("- R2 가 고침: z", out)
+        args = (stub / "args").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(args[-2:], ["-R", "github.com/me/r"], args)
+        self.assertEqual(args[:6], ["pr", "list", "--state", "all", "--head", "feature/a1"], args)
+
+    def test_gh_stop_is_fail_3_with_its_sentence(self):
+        from unittest import mock
+        stop = "gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다"
+        with mock.patch.object(L.gh_repo, "gh_json", side_effect=L.gh_repo.GhStop(stop)), \
+                mock.patch.object(L.gh_repo, "gh_exe", return_value="/x/gh"):
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("PR 인계를 읽지 못했다 — " + stop, out)
 
     def _audit_with_gh(self, prs):
+        self.gh_origin()
         stub = self.t / "bin"
         stub.mkdir()
         (stub / "pr.json").write_text(json.dumps(prs), encoding="utf-8")
@@ -1152,7 +1175,7 @@ class PrRefresh(Repo):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         self.stop = "gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다"
         rc, out = self.refresh("--epic", "A1")
-        self.assertEqual(rc, 4, out)
+        self.assertEqual(rc, 3, out)
         self.assertIn(self.stop, out)
         self.assertEqual(self.rows(), [])
 
@@ -1182,6 +1205,7 @@ class PrRefresh(Repo):
 
 class NoPrBranch(Repo):
     def test_no_pr_line(self):
+        self.gh_origin()
         stub = self.t / "bin"
         stub.mkdir()
         (stub / "gh").write_text("#!/bin/sh\necho '[]'\n", encoding="utf-8")
@@ -1233,6 +1257,7 @@ class DocRead(Repo):
 
 class PrHandoffEdges(Repo):
     def stub(self, text):
+        self.gh_origin()
         stub = self.t / "bin"
         stub.mkdir()
         (stub / "pr.json").write_text(text, encoding="utf-8")
@@ -1374,6 +1399,7 @@ class ReviewPack(Repo):
 
     def test_pr_limit_and_skipped_branch(self):
         self.branch("feature/a1", "x.txt", "a1\n")  # feature/a2 는 만들지 않는다
+        self.gh_origin()
         fake = self.t / "bin"
         fake.mkdir()
         gh = fake / "gh"

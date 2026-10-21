@@ -18,7 +18,7 @@
 `gh_repo.origin_slug` 의 `git remote get-url` 하나다. 머지됨은 기계 상태의 PR 캐시(지휘자가 채운다)로
 판정하고, 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의 머지 줄로 판정한다. 단계는 git 으로 알 수 있는 것까지다 —
 구현 중 · 구현 끝은 계획 파일과 설계문서의 구현 대조 절로 센다. PR 단계는 여기서 세지 않고
-control_plane 이 기계 상태 또는 `gh` 로 덧씌운다.
+control_plane 이 기계 상태의 PR 캐시로 덧씌운다.
 """
 from __future__ import annotations
 
