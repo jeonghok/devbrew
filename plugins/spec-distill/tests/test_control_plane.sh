@@ -23,6 +23,7 @@ push_file() {  # push_file <경로> <내용> — 다른 사본(U)이 main 에 �
   mkdir -p "$(dirname "$U/$1")" && printf '%s\n' "$2" > "$U/$1" && u add -- "$1" && u commit -qm "$1" \
     && u push -q origin main && g fetch -q origin
 }
+rmtext() { printf -- '---\ntype: roadmap\n---\n%s' "$1"; }   # 로드맵 표지(type: roadmap)를 단 글
 calls() { if [ -f "$LOG" ]; then wc -l < "$LOG" | tr -d ' '; else echo 0; fi; }
 sl()   { (cd "$W" && python3 "$S/control_plane.py" statusline </dev/null); }
 show() { (cd "$W" && python3 "$S/control_plane.py" show "$@" </dev/null); }
@@ -33,7 +34,7 @@ git init -q --bare -b main "$T/origin.git"
 git clone -q "$T/origin.git" "$U" 2>/dev/null
 printf 'x\n' > "$U/README.txt" && u add README.txt && u commit -qm init && u push -q -u origin main
 git clone -q "$T/origin.git" "$W" 2>/dev/null
-push_file "$RM" "로드맵"
+push_file "$RM" "$(rmtext 로드맵)"
 mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" "$S/"
@@ -96,7 +97,7 @@ sl >/dev/null; assert_eq "$(calls)" "2" "키 요소 — 브랜치 머리 목록�
 sl >/dev/null; assert_eq "$(calls)" "2" "다시 맞으면 부르지 않는다"
 push_file other.txt "다른 파일"
 sl >/dev/null; assert_eq "$(calls)" "3" "키 요소 — origin/main 커밋만 바뀌어도(로드맵 그대로) 다시 계산"
-push_file "$RM" "로드맵 바뀜"
+push_file "$RM" "$(rmtext '로드맵 바뀜')"
 sl >/dev/null; assert_eq "$(calls)" "4" "키 요소 — 대상 로드맵 사본이 바뀌면 다시 계산"
 cp "$REAL/state_path.py" "$S/state_path.py"
 sl >/dev/null; assert_eq "$(calls)" "4" "인터뷰 상태 파일 지원이 켜져도 키가 아니므로 다시 계산하지 않는다"
@@ -209,9 +210,9 @@ rm -f "$CACHE"
 
 echo "=== 로드맵 여럿 · 고르기 ==="
 printf '{"roadmap":"d","source":"origin/main","fetched_at":null,"notice":"","overlaps":[],"unassigned":[],"orphans":[],"unknown_ids":[],"format_errors":[],"unknown_reasons":[],"exit":0,"blocks":[{"id":"A1","title":"끝","kind":"bundle","stage":"머지됨","reason":"r","task_status":"completed","deps":[],"warnings":[],"notes":[]}]}\n' > "$S/stub-done.json"
-push_file docs/superpowers/roadmaps/done/roadmap.md "끝난 로드맵"
+push_file docs/superpowers/roadmaps/done/roadmap.md "$(rmtext '끝난 로드맵')"
 assert_eq "$(sl)" "$LINE" "블록이 다 끝난 로드맵은 고르지 않는다"
-push_file docs/superpowers/roadmaps/rn/roadmap.md "둘째 로드맵"
+push_file docs/superpowers/roadmaps/rn/roadmap.md "$(rmtext '둘째 로드맵')"
 assert_eq "$(sl)" "rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)" "로드맵 둘 — 첫 이름 + 외 1, 수는 합"
 out="$(show --tasks 2>"$T/err")"; rc=$?
 assert_eq "$out|$rc" "|2" "로드맵이 여럿인데 경로 없음 — rc 2"
@@ -222,6 +223,42 @@ assert_eq "$rc" "0" "절대 경로 인자도 레포 상대로 바뀐다"
 assert_eq "$(tail -n 1 "$LOG")" "docs/superpowers/roadmaps/rn/roadmap.md --json" "절대 경로 → 상대 경로로 상태 계산에"
 out="$(show -- -x 2>/dev/null)"; rc=$?
 assert_eq "$rc" "2" "- 로 시작하는 경로는 사용법 오류"
+
+echo "=== 설정 폴더가 다른 레포(R8 AC6 · AC29) ==="
+P="$T/plan-work"
+pg() { git -C "$P" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
+pput() { mkdir -p "$(dirname "$P/$1")" && printf '%s\n' "$2" > "$P/$1"; }
+git init -q --bare -b main "$T/plan-origin.git"
+git clone -q "$T/plan-origin.git" "$P" 2>/dev/null
+pput .devbrew.md "$(printf -- '---\nroadmaps_dir: plan/roadmaps/\n---')"
+pput plan/roadmaps/pa/roadmap.md "$(rmtext 가)"
+pput plan/roadmaps/pb/plan.md "$(rmtext 나)"
+pput plan/roadmaps/pa/A1.md "$(printf -- '---\ntype: epic-bundle\n---')"
+pput plan/roadmaps/pa/notes.md "# 메모"
+pput plan/roadmaps/pa/deep/roadmap.md "$(rmtext 깊음)"
+pput plan/roadmaps/pc/broken.md "$(printf -- '---\ntype: roadmap\n# 머리말이 닫히지 않았다')"
+pput docs/superpowers/roadmaps/dz/roadmap.md "$(rmtext 기본폴더)"
+pput templates/roadmap-template.md "$(rmtext 템플릿)"
+pg add -A && pg commit -qm init && pg push -q -u origin main && pg remote set-head origin --auto >/dev/null \
+  || no "픽스처: 설정 폴더가 다른 레포를 만들지 못했다"
+WANT="$(printf '%s\n' plan/roadmaps/pa/roadmap.md plan/roadmaps/pb/plan.md plan/roadmaps/pc/broken.md)"
+cp_list="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import control_plane as cp
+r = cp.Repo(sys.argv[2], cp.Deadline(30)); t, why, _u = cp.candidates(r, cp.default_ref(r)[0])
+print("\n".join(sorted(p for p, _b in t))); print(why or "사유 없음")' "$S" "$P")"
+assert_eq "$cp_list" "$WANT
+사유 없음" "상태줄 후보: 설정 폴더 바로 아래 폴더의 type: roadmap 과 못 읽는 후보만(기본 폴더 · 템플릿 · 두 단계 · 다른 표지 아님)"
+ledger_list="$(python3 "$REAL/conductor_ledger.py" --root "$P" roadmaps | cut -f1 | sort)"
+assert_eq "$ledger_list" "$WANT" "로드맵 목록(conductor_ledger roadmaps)도 같은 목록"
+before="$(calls)"
+pline="$(cd "$P" && python3 "$S/control_plane.py" statusline </dev/null)"
+assert_contains "$pline" "검사 불가" "상태줄: 머리말을 못 읽는 후보는 검사 불가로 센다(조용히 빼지 않는다)"
+assert_eq "$(tail -n +"$((before + 1))" "$LOG" | sort | tr '\n' '|')" \
+  "plan/roadmaps/pa/roadmap.md --json|plan/roadmaps/pb/plan.md --json|" "상태줄: 상태 계산은 찾은 로드맵에만 부른다"
+assert_contains "$(cd "$P" && python3 "$S/control_plane.py" show </dev/null)" "plan/roadmaps/pc/broken.md" "지도: 못 읽는 후보의 경로를 보인다"
+pput .devbrew.md "$(printf -- '---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---')"
+pg commit -qam typo && pg push -q origin main || no "픽스처: 깨진 설정을 올리지 못했다"
+assert_contains "$(cd "$P" && python3 "$S/control_plane.py" statusline </dev/null)" "검사 불가" "상태줄: 레포 설정이 깨지면 기본 폴더로 조용히 찾지 않고 검사 불가"
+assert_contains "$(cd "$P" && python3 "$S/control_plane.py" show </dev/null)" "typo_key" "지도: 깨진 설정의 사유를 보인다"
 
 echo "=== 레포 밖 · 표준 입력 작업 디렉토리 ==="
 mkdir -p "$T/plain"

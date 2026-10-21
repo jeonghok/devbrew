@@ -41,7 +41,7 @@ from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError  # noqa: E402
+from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError, find_roadmaps  # noqa: E402
 from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -103,6 +103,13 @@ def failed_report(path: str, reason: str) -> dict:
     return {"roadmap": path, "source": None, "fetched_at": None, "notice": "", "blocks": [],
             "unassigned": None, "orphans": None, "unknown_ids": [], "overlaps": [],
             "format_errors": [], "unknown_reasons": [reason], "exit": 3, "bridge_error": True}
+
+
+def unreadable_report(path: str, why: str) -> dict:
+    """머리말을 못 읽은 로드맵 후보의 보고서 — exit 3. 같은 blob 이면 같은 결과라 캐시에 둔다."""
+    report = failed_report(path, "로드맵 머리말을 읽지 못했다 — %s" % why)
+    del report["bridge_error"]
+    return report
 
 
 def first_line(report: dict) -> str:
@@ -381,8 +388,7 @@ def tasks_output(items, select_error=None):
 
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
-ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
-GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref", "config"})   # config 는 --get 꼴만
+GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref", "config", "cat-file"})   # config 는 --get 꼴만
 CACHE_VERSION = 1
 STATE_SUFFIX = "-interview.state.md"
 STATUSLINE_BUDGET = 3.0
@@ -461,13 +467,17 @@ class Repo:
         self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
                         GIT_NO_LAZY_FETCH="1", LC_ALL="C")
 
-    def git(self, *args):
+    def raw(self, *args):
+        """(rc, 표준 출력 바이트) — 시간 예산 안에서 허용 목록의 git 만."""
         if not args or args[0] not in GIT_OK:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
         if args[0] == "config" and args[1:2] != ("--get",):
             raise RuntimeError("git config 는 --get 꼴만 부른다: %r" % (args,))
-        rc, out = run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
-                              self.deadline, "git " + args[0])
+        return run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
+                           self.deadline, "git " + args[0])
+
+    def git(self, *args):
+        rc, out = self.raw(*args)
         return rc, out.decode("utf-8", "replace")
 
     def line(self, *args):
@@ -508,19 +518,45 @@ def default_ref(repo):
         return None, None, None, str(exc)
 
 
+def roadmaps_dir(repo: Repo):
+    """(로드맵 폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
+    try:
+        result = repo_defaults.resolve(repo.cwd, run=repo.raw)
+    except repo_defaults.SettingsError as exc:
+        return None, str(exc)
+    if result["errors"]:
+        return None, "레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0]
+    return result["values"]["roadmaps_dir"], None
+
+
 def candidates(repo: Repo, main):
-    """([(경로, blob)], 사유). 기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
+    """([(경로, blob)], 사유, {검사 불가 경로: 사유}). 경로에는 머리말을 못 읽은 후보도 든다 — 조용히 빼지 않는다.
+    기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
     if not main:
-        return [], None
-    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", "docs/superpowers/roadmaps/")
+        return [], None, {}
+    folder, why = roadmaps_dir(repo)
+    if folder is None:
+        return [], why, {}
+    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", folder)
     if rc != 0:
-        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
-    found = []
+        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc, {}
+    blobs = {}
     for entry in (e for e in out.split("\0") if e):
         meta, _tab, path = entry.partition("\t")
-        if ROADMAP_RE.fullmatch(path):
-            found.append((path, meta.split()[-1]))
-    return sorted(found), None
+        blobs[path] = meta.split()
+
+    def read(path):
+        mode, kind, sha = blobs[path]
+        if mode != "100644" or kind != "blob":
+            return None
+        rc, data = repo.raw("cat-file", "blob", sha)
+        try:
+            return data.decode("utf-8") if rc == 0 else None
+        except UnicodeDecodeError:
+            return None
+    found, unchecked = find_roadmaps(list(blobs), read, folder)
+    unchecked = dict(unchecked)
+    return sorted((p, blobs[p][2]) for p in found + list(unchecked)), None, unchecked
 
 
 def interview_files(root: str):
@@ -909,9 +945,9 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
         arg = arg[2:] if arg.startswith("./") else arg
         blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (main, arg)) if main else None
-        targets, select_error = [(arg, blob or "-")], None
+        targets, select_error, unchecked = [(arg, blob or "-")], None, {}
     else:
-        targets, select_error = candidates(repo, main)
+        targets, select_error, unchecked = candidates(repo, main)
     mode = arg or "*"
     key = cache_key(repo, main, main_full, mode, targets)
     path = cache_file(repo)
@@ -924,7 +960,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     if hit is not None:
         items, select_error = hit
     else:
-        reports = [(p, run_status(repo, p)) for p, _blob in targets]
+        reports = [(p, unreadable_report(p, unchecked[p]) if p in unchecked else run_status(repo, p)) for p, _blob in targets]
         items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")

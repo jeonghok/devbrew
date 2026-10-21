@@ -39,7 +39,7 @@ import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, approval_date, frontmatter, parse_roadmap, section_lines, unquote)
+                           RULINGS_HEADING, FormatError, approval_date, find_roadmaps, parse_roadmap, section_lines)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -558,16 +558,48 @@ def _pack_diff(root, tip: str, warns: list, label: str) -> str:
 
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
+def _roadmaps_dir(root) -> str:
+    """해결자가 기본 브랜치의 레포 설정으로 정한 로드맵 폴더. 설정이 깨졌으면 멈춘다 — 기본 폴더로 조용히 찾지 않는다."""
+    try:
+        result = repo_defaults.resolve(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise Fail(3, str(exc))
+    if result["errors"]:
+        raise Fail(3, "레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0])
+    return result["values"]["roadmaps_dir"]
+
+
+def _default_roadmaps(root, main: str) -> tuple:
+    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 기본 브랜치의 로드맵 폴더 목록과 blob 읽기로 find_roadmaps 를 부른다."""
+    folder = _roadmaps_dir(root)
+    rc, out, err = git(root, "ls-tree", "-r", "-z", main, "--", folder)
+    if rc:
+        raise Fail(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % err)
+    blobs = {}
+    for entry in (e for e in out.split("\0") if e):
+        meta, _tab, path = entry.partition("\t")
+        blobs[path] = meta.split()
+
+    def read(path):
+        mode, kind, sha = blobs[path]
+        if mode != "100644" or kind != "blob":
+            return None
+        p = subprocess.run([GIT, "cat-file", "blob", sha], cwd=str(root), capture_output=True)
+        try:
+            return p.stdout.decode("utf-8") if p.returncode == 0 else None
+        except UnicodeDecodeError:
+            return None
+    return find_roadmaps(list(blobs), read, folder)
+
+
 def c_roadmaps(root, a) -> int:
-    _default_sha(root)
-    rc, out, err = git(root, "grep", "-l", "-I", "--full-name", "-E", "-e", "^type:[[:space:]]*[\"']?roadmap", DEFAULT_REF, "--", "*.md")
-    if rc not in (0, 1):
-        raise Fail(3, "기본 브랜치의 파일을 읽지 못했다: %s" % err)
+    found_paths, unchecked = _default_roadmaps(root, _default_sha(root))
+    unchecked = dict(unchecked)
     found = 0
-    for line in out.splitlines():
-        path = line.split(":", 1)[1] if ":" in line else line
-        _r, text, _e = git(root, "show", "%s:%s" % (DEFAULT_REF, path))
-        if unquote(frontmatter(text).get("type", "")) != "roadmap":
+    for path in sorted(found_paths + list(unchecked)):
+        if path in unchecked:   # 머리말을 못 읽은 후보 — 조용히 빼지 않고 검사 불가로 센다
+            print("%s\t검사 불가" % path)
+            found += 1
             continue
         p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", path], cwd=str(root),
                            capture_output=True, encoding="utf-8", errors="replace")

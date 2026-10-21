@@ -204,4 +204,43 @@ else
   note "  - 건너뜀: 대소문자를 가리는 파일시스템이라 디스크 대소문자 사례를 돌지 않는다"
 fi
 
+# ── test_roadmap_check (AC6) ─────────────────────────────────────────────────
+mkrepo rb || { no "픽스처 rb"; finish; exit 1; }
+RB="$T/rb/work"
+on_trunk "$RB" .devbrew.md $'---\nroadmaps_dir: plan/roadmaps/\n---\n'
+mkdir -p "$RB/plan/roadmaps/x" "$RB/docs/superpowers/roadmaps/x"
+printf -- '---\ntype: roadmap\n---\n# x\n' > "$RB/plan/roadmaps/x/roadmap.md"
+printf -- '---\ntype: roadmap\n---\n# x\n' > "$RB/docs/superpowers/roadmaps/x/roadmap.md"
+printf -- '---\ntype: epic-bundle\n---\n' > "$RB/plan/roadmaps/x/A1.md"
+printf -- '---\ntype: roadmap\n# 닫히지 않음\n' > "$RB/plan/roadmaps/x/broken.md"
+RB_P="$(cd "$RB" && pwd -P)"
+run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
+assert_eq "$RC:$OUT" "0:" "roadmap-check: 설정 폴더 바로 아래 폴더의 type: roadmap 은 rc 0 · stdout 빔"
+run "$RB/plan" roadmap-check roadmaps/x/roadmap.md
+assert_eq "$RC" "0" "roadmap-check: 상대 경로는 cwd 기준"
+run "$T" roadmap-check "$RB_P/plan/roadmaps/x/roadmap.md" --root "$RB"
+assert_eq "$RC" "0" "roadmap-check: 같은 파일의 물리 절대 경로도 rc 0"
+run "$RB" roadmap-check "$T/elsewhere/plan/roadmaps/x/roadmap.md"
+assert_eq "$RC" "3" "roadmap-check: 레포 밖 절대 경로는 rc 3"
+assert_contains "$ERR" "레포 밖 경로" "roadmap-check: 레포 밖 사유"
+run "$RB" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
+assert_eq "$RC" "3" "roadmap-check: 설정이 바꾼 폴더 밖(기본 폴더)은 rc 3"
+assert_contains "$ERR" "로드맵 폴더 밖" "roadmap-check: 폴더 밖 사유"
+run "$RB" roadmap-check plan/roadmaps/x/A1.md
+assert_eq "$RC" "3" "roadmap-check: 표지가 다른 파일은 rc 3"
+assert_contains "$ERR" "epic-bundle" "roadmap-check: 표지 사유가 실제 type 을 짚는다"
+run "$RB" roadmap-check plan/roadmaps/x/broken.md
+assert_eq "$RC" "3" "roadmap-check: 머리말을 못 읽는 파일은 rc 3"
+assert_contains "$ERR" "검사 불가" "roadmap-check: 못 읽으면 검사 불가로 알린다"
+run "$RB" roadmap-check plan/roadmaps/x/none.md
+assert_eq "$RC" "3" "roadmap-check: 없는 파일은 rc 3"
+run "$A" roadmap-check plan/roadmaps/x/roadmap.md --root "$RB"
+assert_eq "$RC" "0" "roadmap-check: 레포 A 를 cwd 로 두고 --root 레포 B 의 설정 폴더로 판정한다"
+mkdir -p "$A/plan/roadmaps/x" && cp "$RB/plan/roadmaps/x/roadmap.md" "$A/plan/roadmaps/x/roadmap.md"
+run "$A" roadmap-check plan/roadmaps/x/roadmap.md
+assert_eq "$RC" "3" "양성 대조: 같은 파일 모양도 레포 A 의 설정(기본 폴더)이면 rc 3"
+on_trunk "$RB" .devbrew.md $'---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---\n'
+run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
+assert_eq "$RC" "3" "roadmap-check: 레포 설정이 깨지면 기본 폴더로 조용히 판정하지 않고 rc 3"
+
 finish

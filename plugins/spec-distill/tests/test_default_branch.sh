@@ -163,7 +163,7 @@ printf '%s\n' 'import json, sys' \
   'print(json.dumps({"roadmap": sys.argv[1], "source": "x", "fetched_at": None, "notice": "", "overlaps": [], "unassigned": [], "orphans": [], "unknown_ids": [], "format_errors": [], "unknown_reasons": [], "exit": 0, "blocks": [{"id": "R1", "title": "하나", "kind": "bundle", "stage": "설계 중", "reason": "r", "task_status": "in_progress", "deps": [], "warnings": [], "notes": []}]}, ensure_ascii=False))' \
   > "$S/roadmap_status.py"
 TW="$T/trunk/work"
-mkdir -p "$TW/docs/superpowers/roadmaps/rm" && printf 'x\n' > "$TW/docs/superpowers/roadmaps/rm/roadmap.md"
+mkdir -p "$TW/docs/superpowers/roadmaps/rm" && printf -- '---\ntype: roadmap\n---\nx\n' > "$TW/docs/superpowers/roadmaps/rm/roadmap.md"
 g "$TW" add -A && g "$TW" commit -qm rm && g "$TW" push -q origin trunk && g "$TW" fetch -q origin
 line="$(cd "$TW" && python3 "$S/control_plane.py" statusline </dev/null)"
 assert_contains "$line" "· 기본 브랜치 trunk · 받은 지 0분(어느 원격 · 브랜치든)" "statusline_names_default: 기본 브랜치 이름과 받은 시각의 범위"

@@ -80,6 +80,55 @@ def unquote(value: str) -> str:
     return value
 
 
+def _roadmap_shape(path: str, roadmaps_dir: str):
+    """로드맵 자리(`<roadmaps_dir><폴더>/<파일>.md`)가 아니면 사유, 맞으면 None."""
+    if not path.startswith(roadmaps_dir):
+        return "로드맵 폴더 밖이다(%s 아래가 아니다)" % roadmaps_dir
+    parts = path[len(roadmaps_dir):].split("/")
+    if len(parts) != 2 or not parts[0]:
+        return "로드맵 폴더(%s) 바로 아래 폴더 한 단계 안이 아니다" % roadmaps_dir
+    if not parts[1].endswith(".md") or parts[1] == ".md":
+        return "마크다운 파일(.md)이 아니다"
+    return None
+
+
+def roadmap_verdict(path: str, text, roadmaps_dir: str) -> tuple:
+    """("roadmap" · "not_roadmap" · "unreadable", 사유). 로드맵 = roadmaps_dir 바로 아래 폴더 한 단계 안의 .md ∧ 머리말
+    `type: roadmap`. 머리말이 없거나 다른 type 이면 not_roadmap, 글이나 머리말을 못 읽으면 unreadable."""
+    why = _roadmap_shape(path, roadmaps_dir)
+    if why:
+        return "not_roadmap", why
+    if text is None:
+        return "unreadable", "파일을 읽지 못했다"
+    first = text.split("\n", 1)[0].rstrip("\r")
+    if text.startswith("\ufeff"):
+        return "unreadable", "머리말 앞에 BOM 이 있다"
+    if first != "---":
+        if first.startswith("---"):
+            return "unreadable", "머리말 여는 줄이 `---` 하나가 아니다"
+        return "not_roadmap", "머리말이 없다"
+    if not any(line.rstrip("\r") == "---" for line in text.split("\n")[1:]):
+        return "unreadable", "머리말이 닫히지 않았다"
+    kind = unquote(frontmatter(text).get("type", ""))
+    if kind != "roadmap":
+        return "not_roadmap", "표지가 type: roadmap 이 아니다(type: %s)" % (kind or "없음")
+    return "roadmap", ""
+
+
+def find_roadmaps(paths, read, roadmaps_dir: str) -> tuple:
+    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 둘 다 정렬. read(경로) → 글 | None 은 로드맵 자리의 경로만 부른다."""
+    found, unchecked = [], []
+    for path in sorted(paths):
+        if _roadmap_shape(path, roadmaps_dir):
+            continue
+        verdict, why = roadmap_verdict(path, read(path), roadmaps_dir)
+        if verdict == "roadmap":
+            found.append(path)
+        elif verdict == "unreadable":
+            unchecked.append((path, why))
+    return found, unchecked
+
+
 def _heading_indexes(lines):
     """펜스 밖의 `## ` 줄 번호들. `### ` 는 `## ` 로 시작하지 않으므로 들지 않는다."""
     in_fence = False

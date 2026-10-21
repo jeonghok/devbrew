@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -234,9 +235,10 @@ def _toplevel(cwd: str) -> str:
     return top
 
 
-def _default_commit(top: str):
+def _default_commit(top: str, run=None):
     """기본 ref 가 가리키는 커밋, 없으면 None."""
-    rc, out = _git(top, "rev-parse", "--verify", "--quiet", _rm.DEFAULT_REF + "^{commit}")
+    run = run or (lambda *args: _git(top, *args))
+    rc, out = run("rev-parse", "--verify", "--quiet", _rm.DEFAULT_REF + "^{commit}")
     sha = out.decode("ascii", "replace").strip()
     return sha if rc == 0 and sha else None
 
@@ -299,9 +301,10 @@ def check_remote_head(cwd: str, local_short: str, timeout: float = REMOTE_TIMEOU
                        % (remote, local_short))
 
 
-def _read_blob(top: str, commit: str, path: str, where: str):
+def _read_blob(top: str, commit: str, path: str, where: str, run=None):
     """기본 ref 판의 파일 내용(문자열), 파일이 없으면 None. 일반 파일이 아니면 · LFS 포인터면 · UTF-8 이 아니면 멈춘다."""
-    rc, out = _git(top, "ls-tree", "-z", commit, "--", path, where=where)
+    run = run or (lambda *args: _git(top, *args, where=where))
+    rc, out = run("ls-tree", "-z", commit, "--", path)
     if rc != 0:
         raise SettingsError("unreadable", where, "기본 브랜치에서 %s 를 찾지 못했다(git ls-tree 실패)" % path)
     entry = out.split(b"\0")[0].decode("utf-8", "replace")
@@ -311,7 +314,7 @@ def _read_blob(top: str, commit: str, path: str, where: str):
     if mode != "100644":
         raise SettingsError("not_regular_file", where, "%s 가 기본 브랜치에서 일반 파일이 아니다(mode %s) — 링크가 아닌 일반 파일로 커밋한다"
                             % (path, mode))
-    rc, blob = _git(top, "cat-file", "blob", sha, where=where)
+    rc, blob = run("cat-file", "blob", sha)
     if rc != 0:
         raise SettingsError("unreadable", where, "기본 브랜치의 %s 를 읽지 못했다(git cat-file 실패)" % path)
     if blob.split(b"\n", 1)[0].startswith(b"version https://git-lfs"):
@@ -329,7 +332,7 @@ def read_repo_file(cwd: str) -> tuple:
     return _repo_file(top, _default_commit(top))
 
 
-def _repo_file(top: str, commit) -> tuple:
+def _repo_file(top: str, commit, run=None) -> tuple:
     in_worktree = os.path.lexists(os.path.join(top, SETTINGS_FILE))
     if commit is None:
         notice = "기본 브랜치를 알 수 없어(origin/HEAD 없음) 레포 설정 파일을 읽지 못하고 기본값을 쓴다"
@@ -337,7 +340,7 @@ def _repo_file(top: str, commit) -> tuple:
             notice = "[주의] " + notice + " — 작업 트리의 %s 는 쓰지 않았다" % SETTINGS_FILE
         return None, None, [notice + ". 원격 origin 을 연결하고 `git remote set-head origin --auto` 로 기본 브랜치를 정한다"]
     label = "레포 설정@" + commit[:8]
-    text = _read_blob(top, commit, SETTINGS_FILE, "repo")
+    text = _read_blob(top, commit, SETTINGS_FILE, "repo", run)
     if text is None:
         notices = []
         if in_worktree:
@@ -346,11 +349,13 @@ def _repo_file(top: str, commit) -> tuple:
     return strict_frontmatter(text, "repo"), label, []
 
 
-def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, machine_reader=None) -> dict:
-    """네 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다."""
-    top = _toplevel(cwd)
-    commit = _default_commit(top)   # 설정 파일과 로드맵을 같은 커밋에서 읽는다
-    repo, label, notices = _repo_file(top, commit)
+def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, machine_reader=None,
+            run=None) -> dict:
+    """네 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다. run(*git 인자) → (rc, 바이트) 를 주면
+    git 을 그것으로 부르고 cwd 를 레포 최상위로 읽는다(상태줄이 시간 예산 안의 git 을 넘긴다)."""
+    top = cwd if run else _toplevel(cwd)
+    commit = _default_commit(top, run)   # 설정 파일과 로드맵을 같은 커밋에서 읽는다
+    repo, label, notices = _repo_file(top, commit, run)
     roadmap_meta = machine = None
     if roadmap is None:
         notices.append("로드맵 없음 — 기계 상태 층 건너뜀")
@@ -358,7 +363,7 @@ def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = Non
         if roadmap_text is None:
             if commit is None:
                 raise SettingsError("unreadable", "roadmap", _rm.NO_DEFAULT)
-            roadmap_text = _read_blob(top, commit, roadmap, "roadmap")
+            roadmap_text = _read_blob(top, commit, roadmap, "roadmap", run)
             if roadmap_text is None:
                 raise SettingsError("unreadable", "roadmap", "로드맵이 기본 브랜치에 없다(%s) — 로드맵을 머지한 뒤 다시 부른다" % roadmap)
         roadmap_meta = strict_frontmatter(roadmap_text, "roadmap", roadmap)
@@ -445,6 +450,42 @@ def _cmd_default_branch(base: str, check_remote: bool) -> int:
     return 0
 
 
+def _read_worktree(top: str, rel: str):
+    """작업 트리의 일반 파일 글(UTF-8), 없거나 링크 · 일반 파일 아님 · UTF-8 아님이면 None."""
+    path = os.path.join(top, rel)
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None
+        with open(path, "rb") as fh:
+            return fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _cmd_roadmap_check(base: str, path: str) -> int:
+    """0 로드맵 · 3 아님(사유 한 줄). 로드맵 폴더는 base 레포의 해결자 값, 글은 작업 트리 파일이다."""
+    top = _toplevel(base)
+    rel = _repo_relative(top, base, path)
+    if rel is None:
+        _say("레포 밖 경로라 로드맵으로 받지 않았다: %s — 레포 %s 안의 로드맵을 준다" % (path, top))
+        return 3
+    result = resolve(base)
+    for line in result["notices"] + result["warnings"] + result["errors"]:
+        _say(line)
+    if result["errors"]:
+        return 3
+    folder = result["values"]["roadmaps_dir"]
+    _say("값의 출처: %s(roadmaps_dir)" % result["sources"]["roadmaps_dir"])
+    verdict, why = _rm.roadmap_verdict(rel, _read_worktree(top, rel), folder)
+    if verdict == "roadmap":
+        return 0
+    if verdict == "unreadable":
+        _say("로드맵 검사 불가: %s — %s. 파일과 머리말을 고친다" % (rel, why))
+    else:
+        _say("로드맵이 아니다: %s — %s. 로드맵은 %s 바로 아래 폴더에 머리말 type: roadmap 으로 둔다" % (rel, why, folder))
+    return 3
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="repo_defaults.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -459,11 +500,16 @@ def main(argv=None) -> int:
     p_def = sub.add_parser("default-branch")
     p_def.add_argument("--check-remote", action="store_true")
     p_def.add_argument("--root")
+    p_rmc = sub.add_parser("roadmap-check")
+    p_rmc.add_argument("path")
+    p_rmc.add_argument("--root")
     args = ap.parse_args(argv)
     try:
         base = args.root or os.getcwd()
         if args.cmd == "default-branch":
             return _cmd_default_branch(base, args.check_remote)
+        if args.cmd == "roadmap-check":
+            return _cmd_roadmap_check(base, args.path)
         roadmap = getattr(args, "roadmap", None)
         if roadmap is not None:
             roadmap = _repo_relative(_toplevel(base), base, roadmap)
