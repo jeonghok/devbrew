@@ -240,17 +240,25 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
 
 _no_ref_label = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
 _GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
-GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file"})
+GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file", "config"})   # config 는 --get 꼴만
+NET_GIT_ALLOWED = frozenset({"ls-remote"})   # 네트워크 — check_remote_head 만 쓴다
+REMOTE_TIMEOUT = 10.0
+_origin_prefix = _rm.DEFAULT_REF.rsplit("/", 1)[0] + "/"   # refs/remotes/origin/
+git_dir = None   # 부르는 쪽이 찾은 git 의 폴더 — 있으면 PATH 앞에 둔다(conductor_ledger 가 정한다)
 
 
-def _git(cwd: str, *args: str, where: str = "repo") -> tuple:
-    """(rc, stdout 바이트). 5초 안에 답이 없거나 git 을 못 부르면 SettingsError — 「없음」으로 읽지 않는다."""
-    if not args or args[0] not in GIT_ALLOWED:
+def _git(cwd: str, *args: str, where: str = "repo", timeout: float = 5, allowed=GIT_ALLOWED) -> tuple:
+    """(rc, stdout 바이트). 시간 상한 안에 답이 없거나 git 을 못 부르면 SettingsError — 「없음」으로 읽지 않는다."""
+    if not args or args[0] not in allowed:
         raise ValueError("허용 밖 git 하위 명령: %r" % (args[:1],))
+    if args[0] == "config" and args[1:2] != ("--get",):
+        raise ValueError("git config 는 --get 꼴만 부른다: %r" % (args,))
     env = dict(os.environ, **_GIT_ENV)
+    if git_dir:
+        env["PATH"] = git_dir + os.pathsep + env.get("PATH", "")
     try:
-        proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=cwd, env=env,
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+        proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SettingsError("unreadable", where, "git 을 부르지 못했다(%s) — git 이 있는지, 레포 안에서 불렀는지 확인한다"
                             % type(exc).__name__)
@@ -270,6 +278,45 @@ def _default_commit(top: str):
     rc, out = _git(top, "rev-parse", "--verify", "--quiet", _rm.DEFAULT_REF + "^{commit}")
     sha = out.decode("ascii", "replace").strip()
     return sha if rc == 0 and sha else None
+
+
+def default_branch(cwd: str) -> tuple:
+    """(커밋, 짧은 이름, 못 찾은 사유). 짧은 이름은 기본 ref 의 전체 참조 이름에서 접두 refs/remotes/origin/ 을 벗긴 것 —
+    같은 이름의 로컬 브랜치(예: origin/main)가 있어도 흔들리지 않는다. 못 찾으면 사유가 origin 유무에 따라 고치는 법을 담는다."""
+    top = _toplevel(cwd)
+    sha = _default_commit(top)
+    rc, out = _git(top, "rev-parse", "--symbolic-full-name", _rm.DEFAULT_REF)
+    full = out.decode("utf-8", "replace").strip()
+    short = full[len(_origin_prefix):] if rc == 0 and full.startswith(_origin_prefix) else ""
+    if sha and short and short != "HEAD":
+        return sha, short, None
+    rc, _out = _git(top, "config", "--get", "remote.origin.url")
+    return None, None, (_rm.NO_DEFAULT if rc == 0 else _rm.NO_ORIGIN)
+
+
+def unchecked_line(local_short: str) -> str:
+    return "원격과 대조하지 못했다 — 로컬 기본 브랜치 %s 을 썼다" % local_short
+
+
+def check_remote_head(cwd: str, local_short: str, timeout: float = REMOTE_TIMEOUT) -> tuple:
+    """(same · differs · unchecked, 한 줄). 원격 origin 의 HEAD 를 묻는다(네트워크). 못 물으면 멈추지 않고 unchecked."""
+    unchecked = ("unchecked", unchecked_line(local_short))
+    try:
+        rc, out = _git(_toplevel(cwd), "ls-remote", "--symref", "origin", "HEAD", timeout=timeout,
+                       allowed=NET_GIT_ALLOWED)
+    except SettingsError:
+        return unchecked
+    remote = None
+    for line in out.decode("utf-8", "replace").splitlines():
+        target, _tab, name = line.partition("\t")
+        if name == "HEAD" and target.startswith("ref: refs/heads/"):
+            remote = target[len("ref: refs/heads/"):]
+    if rc != 0 or not remote:
+        return unchecked
+    if remote == local_short:
+        return "same", ""
+    return "differs", ("원격 기본 브랜치(%s)가 로컬 기본 브랜치(%s)와 다르다 — git remote set-head origin --auto 로 맞춘 뒤 다시 돈다"
+                       % (remote, local_short))
 
 
 def _read_blob(top: str, commit: str, path: str, where: str):
@@ -401,6 +448,23 @@ def _say(line: str) -> None:
     print("[spec-distill] " + line, file=sys.stderr)
 
 
+def _cmd_default_branch(base: str, check_remote: bool) -> int:
+    """0 짧은 이름(stdout) · 3 기본 브랜치 없음 · 5 원격과 다름. 대조하지 못하면 알리고 0."""
+    _sha, short, why = default_branch(base)
+    if why:
+        _say(why)
+        return 3
+    if check_remote:
+        state, line = check_remote_head(base, short)
+        if state == "differs":
+            _say(line)
+            return 5
+        if state == "unchecked":
+            _say(line)
+    print(short)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="repo_defaults.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -412,9 +476,14 @@ def main(argv=None) -> int:
     p_chk.add_argument("key", choices=_FOLDER_KEYS)
     p_chk.add_argument("path")
     p_chk.add_argument("--root")
+    p_def = sub.add_parser("default-branch")
+    p_def.add_argument("--check-remote", action="store_true")
+    p_def.add_argument("--root")
     args = ap.parse_args(argv)
     try:
         base = args.root or os.getcwd()
+        if args.cmd == "default-branch":
+            return _cmd_default_branch(base, args.check_remote)
         roadmap = getattr(args, "roadmap", None)
         if roadmap is not None:
             roadmap = _repo_relative(_toplevel(base), base, roadmap)

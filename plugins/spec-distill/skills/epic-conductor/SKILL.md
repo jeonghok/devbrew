@@ -73,12 +73,14 @@ claim_rc=
 if [ -n "$sid" ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
 echo "session=${sid:-없음}"
 echo "claim_rc=${claim_rc:-없음}"
+cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"
 ```
 
 Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(플러그인 루트 가드)과 세션 id 줄을 자기 안에 갖고, 한 번의 Bash 호출로 돌린다. 앞 펜스의 셸 변수를 이어 쓰지 않는다.
 
 - `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
 - `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
+- `default_rc=` 가 3 · 5 면 그 줄(`[spec-distill] …`)을 보이고 멈춘다 · rc 0 의 「대조하지 못했다」 줄은 보이고 간다.
 - `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다.
 
 ```bash

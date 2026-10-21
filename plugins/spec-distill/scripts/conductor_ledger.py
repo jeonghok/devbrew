@@ -38,12 +38,14 @@ import branch_tip  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
+from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
                            RULINGS_HEADING, FormatError, approval_date, frontmatter, parse_roadmap, section_lines, unquote)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 GIT = shutil.which("git") or "git"
+if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 해결자의 git 호출도 쓰게 한다
+    repo_defaults.git_dir = os.path.dirname(GIT)
 
 
 class Fail(Exception):
@@ -497,10 +499,19 @@ def _prs(root, b: dict):
 NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
 
 
+def _default_sha(root) -> str:
+    """기본 브랜치 커밋. 못 찾으면 고치는 법(origin 없음 · origin/HEAD 없음)을 담아 멈춘다."""
+    try:
+        sha, _short, why = repo_defaults.default_branch(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise Fail(3, str(exc))
+    if why:
+        raise Fail(3, why)
+    return sha
+
+
 def _roadmap_blocks(root, roadmap: str) -> list:
-    rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
+    _default_sha(root)
     rc, text, err = git(root, "show", "%s:%s" % (DEFAULT_REF, roadmap))
     if rc:
         raise Fail(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % roadmap)
@@ -515,9 +526,7 @@ def _with_copy_branches(root, roadmap: str, blocks: list, warns: list) -> list:
     (`roadmap_status.extra_branches`: 사본 블록이 기본 브랜치 블록의 브랜치를 모두 품을 때만). 계획 2 · 3 의 브랜치는 자기
     사본에서만 블록에 자신을 더해서, 기본 브랜치 블록만 읽으면 열린 에픽 브랜치를 빠뜨린다."""
     import roadmap_status as rs
-    rc, main, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
+    main = _default_sha(root)
     g = rs.Git(str(root))
     if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 상태 계산의 git 호출도 쓰게 한다
         g.env["PATH"] = os.path.dirname(GIT) + os.pathsep + g.env.get("PATH", "")
@@ -550,9 +559,7 @@ def _pack_diff(root, tip: str, warns: list, label: str) -> str:
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
 def c_roadmaps(root, a) -> int:
-    rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
+    _default_sha(root)
     rc, out, err = git(root, "grep", "-l", "-I", "--full-name", "-E", "-e", "^type:[[:space:]]*[\"']?roadmap", DEFAULT_REF, "--", "*.md")
     if rc not in (0, 1):
         raise Fail(3, "기본 브랜치의 파일을 읽지 못했다: %s" % err)

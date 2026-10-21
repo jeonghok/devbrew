@@ -210,8 +210,9 @@ def interview_lines(interview) -> list:
 
 # ── 세 출력 ──────────────────────────────────────────────────────────────────
 
-def statusline_text(items, interview, minutes, select_error=None) -> str:
-    """상태줄 한 줄. items 는 고른 로드맵 [(경로, 보고서)] — 수는 전부의 합이고 이름은 첫 로드맵이다."""
+def statusline_text(items, interview, minutes, select_error=None, default_name=None) -> str:
+    """상태줄 한 줄. items 는 고른 로드맵 [(경로, 보고서)] — 수는 전부의 합이고 이름은 첫 로드맵이다. 기본 브랜치
+    이름을 알면 받은 시각 앞에 두고, 받은 시각이 그 브랜치만의 것이 아님을 밝힌다."""
     parts = []
     if items:
         parts.append(folder_name(items[0][0]) + (" 외 %d" % (len(items) - 1) if len(items) > 1 else ""))
@@ -221,7 +222,12 @@ def statusline_text(items, interview, minutes, select_error=None) -> str:
             parts.append("기타 %d" % other)
         w = sum(count_warnings(r) for _p, r in items)
         parts.append("경고 %d" % w if w else "경고 없음")
-        parts.append("받은 지 %d분" % minutes if minutes is not None else "받은 시각 모름")
+        fetched = "받은 지 %d분" % minutes if minutes is not None else "받은 시각 모름"
+        if default_name:
+            parts.append("기본 브랜치 %s" % default_name)
+            if minutes is not None:
+                fetched += "(어느 원격 · 브랜치든)"
+        parts.append(fetched)
     seg = interview_segment(interview)
     if seg:
         parts.append(seg)
@@ -487,11 +493,15 @@ def fetch_stamp(repo: Repo):
     return max(stamps) if stamps else None
 
 def default_ref(repo):
-    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
-    sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
+    """(커밋, 전체 참조 이름, 짧은 이름, 못 찾은 사유) — origin/HEAD 가 가리키는 기본 브랜치. 네트워크를 쓰지 않는다."""
+    repo.deadline.left("기본 브랜치")
+    try:
+        sha, short, why = repo_defaults.default_branch(repo.cwd)
+    except repo_defaults.SettingsError as exc:
+        return None, None, None, str(exc)
     if not sha:
-        return None, None
-    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+        return None, None, None, why
+    return sha, DEFAULT_REF.rsplit("/", 1)[0] + "/" + short, short, None
 
 
 def candidates(repo: Repo, main):
@@ -886,9 +896,10 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     if stamp is not None:
         view["minutes"] = max(0, int((time.time() - stamp) // 60))
         fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
-    main, main_full = default_ref(repo)
-    view["no_default"] = bool(not arg and main is None
-                              and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes"))
+    main, main_full, main_short, why = default_ref(repo)
+    view["default_name"] = main_short
+    view["no_default"] = (why if not arg and main is None
+                          and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes") else None)
     if arg:
         if os.path.isabs(arg):
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
@@ -1000,7 +1011,7 @@ def cmd_statusline() -> int:
             return 0
         deadline = Deadline(STATUSLINE_BUDGET)
         v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, use_gh=False)
-        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"])
+        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"], v.get("default_name"))
         remember_line(ctx, line)
         print(line)
     except TimedOut:
@@ -1122,7 +1133,7 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
             return 3
         print(msg)
         return 0
-    shown_error = v["select_error"] or (NO_DEFAULT if v.get("no_default") and not v["items"] else None)
+    shown_error = v["select_error"] or (v.get("no_default") if not v["items"] else None)
     if epic:
         _path, report = v["items"][0] if v["items"] else (arg, None)
         if report is None or report.get("exit") in (3, 4):

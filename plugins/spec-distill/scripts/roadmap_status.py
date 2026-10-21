@@ -34,7 +34,8 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
+from repo_defaults import SPECS_DIR, SettingsError, repo_settings  # noqa: E402
+from repo_defaults import default_branch as _default_branch  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
@@ -70,6 +71,7 @@ class Git:
         self.env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0",
                         GIT_TERMINAL_PROMPT="0", LC_ALL="C")
         self.failures = []
+        self.default_reason = None
 
     def run(self, *args):
         rc, out, _err = self.run_err(*args)
@@ -110,13 +112,15 @@ class Git:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
 
     def default_branch(self):
-        """(커밋, 이름) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None)."""
-        sha = self.commit(DEFAULT_REF)
-        if not sha:
+        """(커밋, `origin/<짧은 이름>`) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None) 이고 고치는 법은
+        default_reason 에 남는다. 레포 밖이면 (None, None) — 레포 밖 사유는 부르는 쪽이 낸다."""
+        if self.toplevel() is None:
             return None, None
-        rc, out = self.run("rev-parse", "--symbolic-full-name", DEFAULT_REF)
-        full = out.strip() if rc == 0 else ""
-        return sha, (full[len("refs/remotes/"):] if full.startswith("refs/remotes/") else "origin/HEAD")
+        try:
+            sha, short, self.default_reason = _default_branch(self.cwd)
+        except SettingsError as exc:
+            raise RuntimeError(str(exc))
+        return (sha, "origin/" + short) if sha else (None, None)
 
     def first_parent_merges(self, main):
         rc, out, err = self.run_err("log", "--first-parent", "--merges",
@@ -692,12 +696,12 @@ def build(git: Git, args) -> dict:
         rel = os.path.relpath(os.path.realpath(args.roadmap_file), os.path.realpath(top))
         src = Source(git, root=top)
         if main is None:
-            report["unknown_reasons"].append(NO_DEFAULT)
+            report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
     else:
         rel = args.roadmap.strip("/")
         report["roadmap"] = rel
         if main is None:
-            report["unknown_reasons"].append(NO_DEFAULT)
+            report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
             report["source"] = "기본 브랜치"
             return report
         src = Source(git, rev=main, label=main_name)

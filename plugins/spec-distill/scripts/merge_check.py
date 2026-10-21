@@ -355,9 +355,20 @@ def run(root: Path, a) -> int:
         rc, _o, err = git(root, "fetch", "--quiet", "origin")
         if rc:
             print("[spec-distill] git fetch 가 실패했다 — 받아 둔 기본 브랜치로 대조한다(%s)" % err[-200:])
-    rc, ref_name, _e = git(root, "rev-parse", "--abbrev-ref", DEFAULT_REF)
-    if rc:
-        raise Stop(3, NO_DEFAULT)
+    try:
+        _sha, ref_name, why = repo_defaults.default_branch(str(root))
+        if why:
+            raise Stop(3, why)
+        if a.no_fetch:   # 네트워크 진입이 아니다 — 대조를 건너뛰되 알린다
+            state, line = "unchecked", repo_defaults.unchecked_line(ref_name)
+        else:
+            state, line = repo_defaults.check_remote_head(str(root), ref_name)
+    except repo_defaults.SettingsError as exc:
+        raise Stop(3, str(exc))
+    if state == "differs":
+        raise Stop(3, line)
+    if state == "unchecked":
+        print("[spec-distill] " + line)
     rc, text, _e = git(root, "show", "%s:%s" % (DEFAULT_REF, a.roadmap))
     if rc:
         raise Stop(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % a.roadmap)

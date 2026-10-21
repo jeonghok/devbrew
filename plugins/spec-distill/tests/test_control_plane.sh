@@ -78,7 +78,7 @@ cat > "$S/report.json" <<'JSON'
   {"id": "R2", "title": "둘", "kind": "bundle", "stage": "계획", "reason": "계획 있음", "task_status": "in_progress", "deps": ["R1"], "warnings": [], "notes": []},
   {"id": "R3", "title": "셋", "kind": "bundle", "stage": "준비", "reason": "의존 완료", "task_status": "pending", "deps": [], "warnings": [], "notes": []}]}
 JSON
-LINE="rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 받은 지 0분"
+LINE="rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)"
 STATE_DIR="$W/docs/superpowers/interview"
 write_state() {  # write_state <폴더> <파일 이름> <조사 수 하나> — 진행 중 인터뷰 상태 파일
   mkdir -p "$1"
@@ -196,12 +196,12 @@ rm -f "$CACHE"
 out="$(show --tasks 2>"$T/err")"; rc=$?
 assert_eq "$out|$rc" "|3" "상태 계산이 3 이면 표준 출력이 비고 rc 3"
 assert_eq "$(cat "$T/err")" "검사 불가 — 로드맵을 못 읽었다: x" "사유는 표준 오류"
-assert_eq "$(sl)" "rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 받은 지 0분 · 검사 불가" "상태줄은 검사 불가 조각"
+assert_eq "$(sl)" "rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · 검사 불가" "상태줄은 검사 불가 조각"
 rm -f "$S/stub-rm.json" "$CACHE"
 
 echo "=== 상태 계산이 깨짐 ==="
 : > "$S/garbage.flag"
-assert_eq "$(sl)" "rm · 설계 0 · 구현 0 · 준비 0 · 경고 없음 · 받은 지 0분 · 검사 불가" "JSON 이 아닌 출력은 검사 불가"
+assert_eq "$(sl)" "rm · 설계 0 · 구현 0 · 준비 0 · 경고 없음 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · 검사 불가" "JSON 이 아닌 출력은 검사 불가"
 assert_contains "$(show)" "검사 불가: 상태 계산 출력을 읽지 못했다(rc 2)" "지도에 사유"
 rm -f "$S/garbage.flag"
 assert_eq "$(sl)" "$LINE" "깨진 출력은 캐시에 남지 않는다 — 고쳐지면 바로 정상 줄"
@@ -212,7 +212,7 @@ printf '{"roadmap":"d","source":"origin/main","fetched_at":null,"notice":"","ove
 push_file docs/superpowers/roadmaps/done/roadmap.md "끝난 로드맵"
 assert_eq "$(sl)" "$LINE" "블록이 다 끝난 로드맵은 고르지 않는다"
 push_file docs/superpowers/roadmaps/rn/roadmap.md "둘째 로드맵"
-assert_eq "$(sl)" "rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 받은 지 0분" "로드맵 둘 — 첫 이름 + 외 1, 수는 합"
+assert_eq "$(sl)" "rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)" "로드맵 둘 — 첫 이름 + 외 1, 수는 합"
 out="$(show --tasks 2>"$T/err")"; rc=$?
 assert_eq "$out|$rc" "|2" "로드맵이 여럿인데 경로 없음 — rc 2"
 out="$(show --tasks "docs/superpowers/roadmaps/rn/roadmap.md" 2>/dev/null)"; rc=$?
@@ -319,7 +319,7 @@ alive() {  # alive <pid 파일> — 아직 살아 있는 pid 수
 }
 HANG="$T/hang"; mkdir -p "$HANG"
 printf '#!/bin/sh\nsleep 30 &\necho $! >> "%s/orphans"\nwait\n' "$HANG" > "$HANG/git"; chmod +x "$HANG/git"
-LINE2="rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 받은 지 0분"
+LINE2="rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)"
 
 rm -f "$CACHE"
 out="$(cd "$W" && timed 15 env PATH="$HANG:$PATH" python3 "$S/control_plane.py" statusline </dev/null)"

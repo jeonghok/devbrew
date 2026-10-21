@@ -551,6 +551,7 @@ RECORD_HEADING = "## 지휘 기록"
 DEFAULT_REF = "refs/remotes/origin/HEAD"
 NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
               "다시 계산한다")
+NO_ORIGIN = "기본 브랜치를 알 수 없다 — origin 원격이 없다. git remote add origin <URL> 로 더한 뒤 git remote set-head origin --auto 를 돈다"
 # `## 지휘 기록` 의 spec 승인 줄 — 지휘자가 `- spec 승인 · <YYYY-MM-DD> · 「<고른 선택지 원문>」` 로 쓴다.
 APPROVAL_PREFIX = "- spec 승인 · "
 APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안", "미승인", "않", "철회", "취소", "보류",

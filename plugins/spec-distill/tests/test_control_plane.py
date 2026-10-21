@@ -109,6 +109,13 @@ class Statusline(unittest.TestCase):
     def test_minutes_unknown(self):
         self.assertIn("· 받은 시각 모름", cp.statusline_text([(RM, report(BASE, 1))], NO_IV, None))
 
+    def test_default_branch_named_before_fetch_age(self):
+        line = cp.statusline_text([(RM, report(BASE, 1))], NO_IV, 5, None, "feature/x")
+        self.assertTrue(line.endswith(" · 경고 1 · 기본 브랜치 feature/x · 받은 지 5분(어느 원격 · 브랜치든)"), line)
+        line = cp.statusline_text([(RM, report(BASE, 1))], NO_IV, None, None, "trunk")
+        self.assertTrue(line.endswith(" · 기본 브랜치 trunk · 받은 시각 모름"), line)
+        self.assertEqual(cp.statusline_text([], NO_IV, 5, None, "trunk"), "")
+
     def test_many_roadmaps_are_summed(self):
         other = ("docs/superpowers/roadmaps/rn/roadmap.md", report(BASE, 3))
         line = cp.statusline_text([(RM, report(BASE, 1)), other], NO_IV, 5)
