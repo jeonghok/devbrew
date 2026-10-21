@@ -70,7 +70,7 @@ assert_eq "$(files_of_head "$c")" "$FIVE" "분해(§7 목록 · 코드 꼴): 세
 
 # 1b. 해결자는 cwd 가 아니라 brief 가 사는 레포를 기준으로 돈다 — 다른 설정을 가진 레포 안에서 돌려도 같다
 c="$(mk elsewhere)"; roadmap "$c"; brief7 "$c" "$DEC"
-x="$(mk cwdrepo 'interview_dir: notes/')"
+x="$(mk cwdrepo 'interview_dir: notes/')"; git -C "$x" remote set-head origin -d >/dev/null 2>&1   # cwd 레포는 기본 브랜치도 모른다
 o="$( cd "$x" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$c/$STEM.md}" 2>&1 )"
 assert_eq "$(files_of_head "$c")" "$FIVE" "다른 레포에서 돌림: brief 레포의 설정으로 세 파일과 로드맵 폴더가 한 커밋에"
 assert_eq "$(nhead "$x")" "1" "다른 레포에서 돌림: cwd 레포에는 커밋하지 않는다"
