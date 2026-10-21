@@ -257,11 +257,11 @@ WORK_DONE = cs.WORK_DONE
 
 
 def recommended(report: dict):
-    """(권장 수, 출처). 상태 계산 보고의 settings(해결자가 낸 값과 출처) — 없으면 기본값. 값이 깨졌으면 (None, 사유)."""
+    """(권장 수, 출처). 상태 계산 보고의 settings(해결자가 낸 값과 출처) — 없으면 기본값. 레포 설정을 못 읽었으면(값이 None) (None, 사유) — 원인 줄은 보고의 format_errors 다."""
     settings = report.get("settings") or {}
     value = settings.get("parallel_default", repo_defaults.PARALLEL_DEFAULT) if settings else repo_defaults.PARALLEL_DEFAULT
     if value is None:
-        return None, "parallel_default 값이 깨졌다"
+        return None, "레포 설정을 읽지 못해 권장 수를 모른다"
     return value, (settings.get("sources") or {}).get("parallel_default", "기본값")
 
 

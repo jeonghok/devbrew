@@ -407,7 +407,7 @@ class BrokenSettingsRecommended(unittest.TestCase):
                              capture_output=True, text=True, encoding="utf-8")
         r = json.loads(out.stdout)
         self.assertTrue(any("같은 키가 둘이다" in e for e in r["format_errors"]), r["format_errors"])
-        self.assertEqual(cp.recommended(r), (None, "parallel_default 값이 깨졌다"))
+        self.assertEqual(cp.recommended(r), (None, "레포 설정을 읽지 못해 권장 수를 모른다"))
 
 
 class Parallel(unittest.TestCase):

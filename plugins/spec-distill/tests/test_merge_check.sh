@@ -90,6 +90,11 @@ out="$(mc --branch feature/trk)"; rc=$?
 assert_eq "$rc" "3" "상태 루트: 추적 파일 레포에서 스위트 대조가 rc 3"
 assert_contains "$out" "상태 폴더 아래 파일이 이미 추적된다" "상태 루트: 고치는 법을 보인다"
 [ ! -e "$W/.claude/spec-distill/conductor" ] && ok "상태 루트: 잠금 · 사본 폴더를 만들지 않았다" || no "상태 루트: 추적 파일 레포에 기계 상태 폴더가 생겼다"
+assert_not_contains "$out" "환경 변수" "상태 루트(양의 짝): 변수 없이 멈추면 환경 변수 알림이 없다"
+out="$(cd "$W" && GIT_DIR="$W/.git" python3 "$MC" run --roadmap "$RM" --no-fetch --branch feature/trk 2>&1)"; rc=$?
+assert_eq "$rc" "3" "상태 루트: GIT_DIR 을 물려받아도 추적 파일 레포에서 rc 3"
+assert_contains "$out" "상태 폴더 아래 파일이 이미 추적된다" "상태 루트: GIT_DIR 을 물려받아도 같은 사유로 멈춘다"
+assert_contains "$out" "환경 변수 GIT_DIR 가 설정된 채로 돈다" "상태 루트: 멈출 때도 GIT_DIR 알림을 보인다"
 
 # 3b — 셸 단위의 `ERROR:` 진단 줄이 이름 집합을 가로채지 않는다(러너별 모양 — Ruling R32)
 mkrepo se
