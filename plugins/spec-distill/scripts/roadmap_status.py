@@ -5,7 +5,8 @@
 명령줄:
   roadmap_status.py <로드맵 경로>           기본 브랜치(origin/HEAD)의 로드맵을 읽는다(레포 상대경로)
   roadmap_status.py --roadmap-file <파일>   작업 트리의 로드맵을 읽는다(아직 기본 브랜치에 없을 때)
-  --json 이면 JSON 하나를 낸다. 보고 · 블록의 `read_tree` 는 읽은 트리(기본 브랜치 · 에픽 끝 · 이 작업공간)다.
+  --json 이면 JSON 하나를 낸다. 보고의 `read_tree` 는 로드맵을 읽은 트리, 블록의 `read_tree` 는 그 에픽의 단계 · spec 을
+  읽은 트리다(기본 브랜치 · 에픽 끝 · 이 작업공간).
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
 블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈) ·
@@ -719,7 +720,7 @@ def build(git: Git, args) -> dict:
     try:   # 기계 상태 층은 읽지 않는다 — 기계 상태를 읽는 모듈은 이 읽기 전용 계산의 잠긴 파일 밖이다(알림으로 밝힌다)
         resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
     except SettingsError as exc:
-        resolved = {"values": {}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}
+        resolved = {"values": {"parallel_default": None}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}
     settings = dict(resolved["values"])
     report["settings"] = dict(settings, sources=resolved["sources"], warnings=resolved["warnings"],
                               notices=resolved["notices"])

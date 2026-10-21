@@ -390,6 +390,26 @@ class CodeStamp(unittest.TestCase):
                 cp.SCRIPTS = old
 
 
+class BrokenSettingsRecommended(unittest.TestCase):
+    """해결자가 레포 설정을 읽지 못하면(SettingsError) 권장 수를 기본값으로 단정하지 않는다."""
+
+    def test_settings_error_leaves_recommended_unknown(self):
+        import json
+        tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", PYTHONDONTWRITEBYTECODE="1")
+        subprocess.run(["git", "init", "-q", tmp], check=True, env=env)
+        path = os.path.join(tmp, "roadmap.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("---\ntype: roadmap\nparallel_default: 2\nparallel_default: 4\n---\n# 로드맵\n")
+        script = Path(__file__).resolve().parent.parent / "scripts" / "roadmap_status.py"
+        out = subprocess.run([sys.executable, str(script), "--json", "--roadmap-file", path], cwd=tmp, env=env,
+                             capture_output=True, text=True, encoding="utf-8")
+        r = json.loads(out.stdout)
+        self.assertTrue(any("같은 키가 둘이다" in e for e in r["format_errors"]), r["format_errors"])
+        self.assertEqual(cp.recommended(r), (None, "parallel_default 값이 깨졌다"))
+
+
 class Parallel(unittest.TestCase):
     def test_parallel_with_skips_dependents_and_done(self):
         blocks = [{"id": "A", "stage": "설계 중", "deps": []}, {"id": "B", "stage": "준비", "deps": ["A"]},

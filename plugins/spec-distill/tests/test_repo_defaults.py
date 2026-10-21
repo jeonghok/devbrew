@@ -142,7 +142,7 @@ class Merge(unittest.TestCase):
         self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), (None, "기본값"))
 
     def test_folder_under_git_or_root_is_error(self):
-        for bad in (".git/x/", "a/.git/b/", ".", "./", "/abs/", "a/../b/"):
+        for bad in (".git/x/", "a/.git/b/", ".GIT/x/", "a/.Git/b/", ".", "./", "/abs/", "a/../b/"):
             m = rd.merge_layers(None, {"specs_dir": bad}, LABEL, None, [])
             self.assertIsNone(m["values"]["specs_dir"], bad)
             self.assertEqual(len(m["errors"]), 1, bad)
@@ -188,6 +188,18 @@ class InternalErrors(unittest.TestCase):
             rd.resolve(self.tmp, roadmap="r/roadmap.md", roadmap_text="---\ntype: roadmap\n---\n", machine_reader=boom)
         self.assertEqual((c.exception.kind, c.exception.where), ("unreadable", "machine"))
         self.assertIn("기계 상태(임시)", str(c.exception))
+
+    def test_git_calls_never_lazy_fetch(self):
+        captured = []
+        real = rd.subprocess.run
+
+        def spy(cmd, **kw):
+            captured.append(kw.get("env") or {})
+            return real(cmd, **kw)
+        rd.subprocess.run = spy
+        self.addCleanup(setattr, rd.subprocess, "run", real)
+        rd._git(self.tmp, "cat-file", "-e", "HEAD:x")
+        self.assertEqual([env.get("GIT_NO_LAZY_FETCH") for env in captured], ["1"])
 
     def test_main_turns_unexpected_exception_into_rc3(self):
         import contextlib, io

@@ -305,6 +305,8 @@ def _roadmap_view(fm: dict, repo):
             settings = resolve(repo.root, roadmap=rel, roadmap_text=text)
         except SettingsError as exc:
             return None, "레포 설정을 읽지 못했다: %s" % exc
+        for line in settings["notices"]:
+            print("[spec-distill] " + line, file=sys.stderr)
         if settings["errors"]:
             return None, "레포 설정이 깨졌다: %s" % settings["errors"][0]
         specs_dir = settings["values"]["specs_dir"]

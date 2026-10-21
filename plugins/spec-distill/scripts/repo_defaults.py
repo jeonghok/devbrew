@@ -63,7 +63,7 @@ def _folder(key: str, raw: str):
         parts = parts[:-1]
     if not parts or any(p in ("", ".", "..") for p in parts):
         return None, "%s 에 빈 조각 · . · .. 를 쓰지 않는다(레포 루트도 안 된다): %r" % (key, value)
-    if ".git" in parts:
+    if any(p.casefold() == ".git" for p in parts):
         return None, "%s 는 .git 아래를 가리킬 수 없다: %r" % (key, value)
     return "/".join(parts) + "/", None
 
@@ -201,7 +201,7 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
 
 
 _no_ref_label = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
-_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_NO_LAZY_FETCH": "1"}
 GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file", "config"})   # config 는 --get 꼴만
 NET_GIT_ALLOWED = frozenset({"ls-remote"})   # 네트워크 — check_remote_head 만 쓴다
 REMOTE_TIMEOUT = 10.0
