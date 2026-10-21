@@ -742,9 +742,9 @@ o="$(DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1 bash "$CL/rb_skip_ctl/fence.sh" 2>/dev/
 pair rebuild saturation; tool src "$S" S3=verbatim
 [[ "$(nc_of "$(vc)")" == '["S3"]' ]] && ok "rebuild_once_and_idempotent(전제): 시작 쌍은 not_chosen [S3]" || no "rebuild_once_and_idempotent(전제): 시작 쌍이 not_chosen 이 아니다"
 tool src "$S" "+S9=chosen=조사 불필요 — 판단만 남음"
-tool block "$S" "- 포화 판정 2: 사용자 판단 포화(@S9) — 조사 불필요"
+tool block "$S" "- 포화 판정 3: 사용자 판단 포화(@S9) — 조사 불필요"
 tool rebuild "$P" "$A" "$S"
-n9="$(grep -cF -- '- 포화 판정 2: 사용자 판단 포화(@S9) — 조사 불필요' "$A")"
+n9="$(grep -cF -- '- 포화 판정 3: 사용자 판단 포화(@S9) — 조사 불필요' "$A")"
 assert_eq "$n9" "1" "rebuild_once_and_idempotent: audit §2 에 @S9 줄이 정확히 한 번"
 out="$(vc)"; rc=$?
 { [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } && ok "rebuild_once_and_idempotent: 다시 지은 뒤 대조 rc 0" || no "rebuild_once_and_idempotent: 대조 rc=$rc $out"
@@ -768,13 +768,20 @@ assert_eq "$(tool sat_last "$A")" "$sat_before" "rebuild_irrelevant_keeps_last_s
 # 문장 단언 — RB rc 표 · 펜스 · finishing · README
 W_GATE_CL="$(awk '/^## 진입 게이트/{f=1;next} f && /^## /{exit} f' "$RB_SKILL")"
 row="$(grep -F '| `1`(`not_chosen`) |' <<<"$W_GATE_CL" || true)"
-{ [[ -n "$row" ]] && [[ "$row" == *'마무리 단계가 그 질문을 선택지로 다시 묻는다'* ]] && [[ "$row" == *'건너뛰지 않는다'* ]]; } \
-  && ok "RB rc 표: \`1\`(\`not_chosen\`) 행 · 「마무리 단계가 그 질문을 선택지로 다시 묻는다」 · 건너뛰지 않는다" || no "RB rc 표: not_chosen 행이 없거나 문면이 다르다"
+{ [[ -n "$row" ]] && [[ "$row" == *'`advisories` 의 「인터뷰를 닫은 답 …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다'* ]] && [[ "$row" == *'건너뛰지 않는다'* ]]; } \
+  && ok "RB rc 표: \`1\`(\`not_chosen\`) 행이 advisories 의 「인터뷰를 닫은 답 …」 줄을 그대로 보이라고 한다 · 건너뛰지 않는다" || no "RB rc 표: not_chosen 행이 없거나 문면이 다르다"
+# 행이 제 문장을 따로 지어 보이지 않는다(그 문장은 advisory 에 산다 — 위 advisory 단언이 「그 질문을 선택지로 다시 묻는다」 를 본다) · 계획 얘기를 싣지 않는다
+[[ "$row" == *'다시 묻는다」를 보인다'* ]] && no "RB rc 표: not_chosen 행이 advisory 대신 제 문장을 보이라고 한다" || ok "RB rc 표: not_chosen 행이 제 문장을 따로 짓지 않는다"
+grep -qF '계획이 실측한다' "$RB_SKILL" && no "RB SKILL: 계획 얘기(「계획이 실측한다」)가 실렸다" || ok "RB SKILL: 「계획이 실측한다」 없음"
+grep -qF '원문 완전성 검사(닫은 답의 출처 대조 포함)를 건너뛰고 계속한다' <<<"$W_GATE_CL" \
+  && ok "RB 펜스: 건너뛰기 알림이 닫은 답의 출처 대조도 건너뛴다고 말한다" || no "RB 펜스: 건너뛰기 알림에 닫은 답의 출처 대조가 없다"
+grep -qF '이 검사만 건너뛰고 리뷰를 시작한다 — 닫은 답의 출처 대조 포함' <<<"$W_GATE_CL" \
+  && ok "RB 진입 게이트: 「검사 없이 계속」 설명이 닫은 답의 출처 대조를 포함한다고 말한다" || no "RB 진입 게이트: 「검사 없이 계속」 설명에 닫은 답의 출처 대조가 없다"
 grep -qF '1) echo "[spec-distill] §6 원문 완전성 위반이나 닫은 답의 출처 위반' <<<"$W_GATE_CL" \
   && ok "RB 펜스: rc 1 문장이 원문 완전성 위반과 닫은 답의 출처 위반을 함께 말한다" || no "RB 펜스: rc 1 문장에 닫은 답의 출처 위반이 없다"
 FIN="$SD_DIR/skills/pm-interview/references/finishing.md"
 A5="$(awk '/^### Step A\.5/{f=1;next} f && /^### /{exit} f' "$FIN")"
-for ph in '닫는 선택지' '「조사 계속」' '대기 줄 블록 한 곳에만' 'brief §4 그 줄의 `@S` 만' '3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로' '세션을 넘겨'; do
+for ph in '닫는 선택지' '「조사 계속」' '대기 줄 블록 한 곳에만' 'brief §4 그 줄의 `@S` 만' '3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로' '세션을 넘겨' '마지막 포화 판정 번호 다음 수'; do
   grep -qF -- "$ph" <<<"$A5" && ok "finishing Step A.5 되묻기 갈래: 「${ph}」" || no "finishing Step A.5 되묻기 갈래에 「${ph}」 가 없다"
 done
 A4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f && /^5\. \*\*/{exit} f' "$FIN")"
