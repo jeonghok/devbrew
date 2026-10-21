@@ -130,7 +130,9 @@ DOCS="$SCRATCH/docs"; mkdir -p "$DOCS"
 cp "$FX/brief-sample.md" "$DOCS/brief-sample.md"
 printf -- '---\nx: 1\n---\n\n## 6. 사용자 원문\n\n- id: S2\n  source: verbatim\n  round: 1\n  text: "둘째 발화"\n\n## 7. 확산 원자료\n\n없음\n' > "$DOCS/brief-sample.audit.md"
 DOC_B="$DOCS/brief-sample.md"; AUD_B="$DOCS/brief-sample.audit.md"
-DOC_D="$FX/design-sample.md"
+# 설계문서도 스크래치(git 밖)에 사본으로 둔다 — 상태 루트는 문서가 사는 레포에서 오므로 레포 안 픽스처를
+# 그대로 넘기면 원장 자리가 이 레포의 상태 폴더로 간다.
+cp "$FX/design-sample.md" "$DOCS/design-sample.md"; DOC_D="$DOCS/design-sample.md"
 PROF_B="$ROOT/plugins/spec-distill/references/docreview-profiles/brief.md"
 SDS="$ROOT/plugins/spec-distill/scripts"
 

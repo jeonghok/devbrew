@@ -186,7 +186,7 @@ git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'd
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}")"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ ! -f "$SD/scripts/state_path.py" ]; then
@@ -234,7 +234,12 @@ fi
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
+common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
+here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"; here_common="$(common_dir || true)"
+if [ -n "${spec_path:-}" ] && doc_top="$(cd "$(dirname "$spec_path")" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
+  [ "$(cd "$(dirname "$spec_path")" && common_dir || true)" = "$here_common" ] || echo "[spec-distill] 리뷰 원장은 문서가 사는 레포(${doc_top})의 것을 쓴다 — 지금 작업 폴더의 레포(${here_top:-없음})와 다르다."
+fi
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lo="ERROR"
@@ -280,7 +285,7 @@ echo "ledger-open: ${lo}"
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" takeover --dir "$STATE_DIR" --session "$harness_sid"
@@ -296,7 +301,7 @@ STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROO
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && [ -d "$STATE_DIR" ] && python3 "$SD/scripts/ledger_marker.py" release --dir "$STATE_DIR" --session "$harness_sid"
@@ -352,7 +357,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
 # 정상 경로이고, 그때 두 번 도출하지 않는다.
 if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
-  ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
+  ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)}"
   STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)}"
   [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
   if [ -n "$harness_sid" ] && [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
@@ -460,7 +465,7 @@ critic 사망(rc 4)으로 읽어 재dispatch 1회(이 펜스부터 다시), 또 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}")"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/design-doc.md"
@@ -576,7 +581,7 @@ extra_approval="${extra_approval%$'\n'}"
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 lm_rc=0
@@ -615,7 +620,7 @@ fi
 <!-- advice-all:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
@@ -684,10 +689,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 **기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 표 행을 고치기 전에 — 이 라운드 게이트에서 이 되돌림의 근거가 된 채택 결정이 있으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors '<번호 대조 절 앵커>' '<내용을 더한 절 앵커>'` 로 이 되돌림이 고칠 절을 모두 결정에 묶는다(원장 쓰기 — 진입 skill 의 표지 확인 줄 다음에만, 같은 Bash 호출에서). 내용을 더한 절은 아래 「자리가 없으면 그 내용을 설계에 더한다」 의 절이다 — 더할 절이 없으면 번호 대조 절만 묶고, 새 절을 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다. `declare-related` 가 rc 0 이 아니면(묶지 못했다) 엔진이 낸 사유를 그대로 보이고, 채택한 결정이 없을 때와 같이 사용자에게 먼저 알린다. 채택한 결정이 없으면 고친 행과 내용을 더한 절은 다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다 — 그 사실을 사용자에게 먼저 알리고, 그 게이트에서 「고친 대로 둠」으로 닫는다. 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
 
-**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스는 설계문서의 폴더로 들어가 그 문서가 사는 레포의 원장으로 쓰고, 지금 작업 폴더가 다른 레포면 그 사실을 알린다(같은 레포의 다른 worktree 는 원장이 같아 알리지 않는다). 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
+**결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스는 그 문서가 사는 레포의 원장으로 쓰고, 지금 작업 폴더가 다른 레포면 그 사실을 알린다(같은 레포의 다른 worktree 는 원장이 같아 알리지 않는다). 문서가 git 작업 트리 밖이면 지금 작업 폴더 레포의 원장에 쓴다 — 원장 열기와 같은 원장이고, 쓸 때마다 git 밖이라는 줄이 난다. 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
 
 - rc 2 — 넣은 글이 거부됐다. 줄은 이미 한 줄이어야 하고 엔진 줄 · 목록 · 제목 표지로 시작하지 못한다 — 사유가 줄이면(`line_*`) 줄을 고쳐 다시 돈다. 사유가 사용자 말이면(`quote_*`) 멈추고 사유를 사용자에게 보인다.
-- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 문서의 폴더로 들어가지 못했다 · 문서가 git 작업 트리 밖이다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
+- rc 1 · rc 3 — 쓰지 않았다. 원장 자리를 찾지 못했거나(`spec_path` 가 절대 경로가 아니다 · 문서의 폴더로 들어가지 못했다 · 상태 루트를 얻지 못했다 · 원장 자리가 레포 밖이거나 링크를 지난다), 엔진이 거부했거나(`profile_decision_log_not_doc_section` · `log_file_not_ledger_doc` · `state_missing` · 손상된 원장 등), 표지 확인이 멈췄다(rc 3). 사유와 값을 보이고 멈춘다 — 결정 줄을 손으로 쓰지 않는다(손으로 쓴 줄은 열린 리뷰의 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다).
 - rc 0 — 엔진이 썼거나, 원장 자리는 찾았는데 이 문서의 리뷰 원장이 없다고 알렸다. 원장이 없을 때만 줄을 손으로 쓴다(다음 리뷰가 기준선으로 받는다).
 
 <!-- decision-line:begin -->
@@ -698,11 +703,11 @@ case "$spec_path" in /*) ;; *) echo "[spec-distill] 결정 줄을 쓰지 않았�
 common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
 here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 here_common="$(common_dir || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "$spec_path" || true)"
 cd "$(dirname "$spec_path")" || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — 설계문서의 폴더로 들어가지 못했다(spec_path='${spec_path}'). 손으로 쓰지 말고 이 사유를 보고하라." >&2; exit 1; }
-doc_top="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "[spec-distill] 결정 줄을 쓰지 않았다 — 설계문서가 git 작업 트리 밖이다(spec_path='${spec_path}'). 손으로 쓰지 말고 이 사유를 보고하라." >&2; exit 1; }
-[ "$(common_dir || true)" = "$here_common" ] || echo "[spec-distill] 결정 줄은 문서가 사는 레포(${doc_top})의 원장으로 쓴다 — 지금 작업 폴더의 레포(${here_top:-없음})와 다르다."
+doc_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$doc_top" ] || [ "$(common_dir || true)" = "$here_common" ] || echo "[spec-distill] 결정 줄은 문서가 사는 레포(${doc_top})의 원장으로 쓴다 — 지금 작업 폴더의 레포(${here_top:-없음})와 다르다."
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${spec_path:-}" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ -z "${STATE_DIR:-}" ]; then

@@ -32,9 +32,9 @@ w_out="$(bounded_window '^## 입력$' '^## 프로필$')"
 grep -qF 'state_path.py" session-id' <<<"$w_out" \
   && ok "S1: 입력 절이 state_path.py session-id 로 sid 를 해석한다" \
   || no "S1: 입력 절에 session-id 해석이 없다"
-grep -qF 'state_path.py" state-root' <<<"$w_out" \
-  && ok "S1b: 입력 절이 state_path.py state-root 로 루트를 해석한다" \
-  || no "S1b: 입력 절에 state-root 해석이 없다"
+grep -qF 'state_path.py" state-root-for "${spec_path:-}"' <<<"$w_out" \
+  && ok "S1b: 입력 절이 state_path.py state-root-for 로 문서가 사는 레포의 루트를 해석한다" \
+  || no "S1b: 입력 절에 state-root-for 해석이 없다"
 # S2 — 옛 단언은 `^STATE_DIR="$ROOT/$harness_sid"$`(세션 디렉토리)였다. 엔진 상태는 이제 상태 루트 아래
 # 문서별 디렉토리다 — 세션 성분이 없다. 같은 창에서 `$ROOT` 와 문서(`$spec_path`)의 도출 줄을 잰다.
 # 줄 끝까지 고정한다(main 의 `$` 앵커 — 리뷰 m5): `|| true)"` 뒤에는 주석만 올 수 있다. 값 뒤에 경로를 덧붙이는
