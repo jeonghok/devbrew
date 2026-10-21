@@ -134,6 +134,9 @@ class _ShellOnlyFixture:
             "printf 'build/\\n' > .gitignore\n"
             "git add -A && git commit -qm base"
         )
+        # 기준선은 origin/HEAD 가 가리키는 ref 하나다.
+        self.sh("git update-ref refs/remotes/origin/main main"
+                " && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main")
         self.sh("git checkout -q -b feature")
         if not with_changes:
             return

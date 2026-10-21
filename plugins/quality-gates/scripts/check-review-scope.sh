@@ -13,6 +13,7 @@
 #   worktree_dirty: yes|no     # tracked diff OR non-ignored untracked
 #   base: <name|->             # display name for the honest verdict message
 #   degraded: yes|no           # fail-open marker (C2): cannot determine → floor not protected
+#   degraded_reason: <사유|->  # resolve-baseline.sh 의 degraded_reason 그대로. 기준선이 풀렸으면 '-'
 #
 # Exit code: always 0 (degraded: yes carries the fail-open state). Read-only:
 # never creates/modifies/deletes files. Takes NO arguments. Invoke from project root.
@@ -20,23 +21,24 @@
 set -u   # NOT -e: graceful degradation — a failed probe falls through to
          # emit_degraded() below rather than aborting the script.
 
-emit_degraded() {
+emit_degraded() {   # [<degraded_reason>]
   echo "changes_exist: no"
   echo "branch_ahead_count: 0"
   echo "worktree_dirty: no"
   echo "base: -"
   echo "degraded: yes"
+  echo "degraded_reason: ${1:--}"
   exit 0
 }
 
 # --- baseline resolution은 resolve-baseline.sh가 단독 소유 (design §5.2 R-init).
-#     git sanity(비-git/HEAD 부재/detached/shallow) + base 후보 순서 + merge-base가
-#     전부 그 스크립트 안에 있고, 이 스크립트는 4키를 읽어 fail-open 판정만 승계한다.
+#     git sanity(비-git/HEAD 부재/detached/shallow) + 기본 브랜치(origin/HEAD) + merge-base가
+#     전부 그 스크립트 안에 있고, 이 스크립트는 키를 읽어 fail-open 판정과 사유만 승계한다.
 #     여기서 로직을 복제하면 두 소비자가 서로 다른 baseline을 보게 된다 (C2 재발). ---
 _rb_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 _rb_out=$("$_rb_dir/resolve-baseline.sh" 2>/dev/null) || emit_degraded
 _rb_field() { printf '%s\n' "$_rb_out" | awk -v k="$1:" '$1 == k { print $2 }'; }
-[[ "$(_rb_field degraded)" == "no" ]] || emit_degraded
+[[ "$(_rb_field degraded)" == "no" ]] || emit_degraded "$(_rb_field degraded_reason)"
 base=$(_rb_field base)
 merge_base=$(_rb_field merge_base)
 [[ -n "$base" && -n "$merge_base" && "$merge_base" != "-" ]] || emit_degraded
@@ -87,4 +89,5 @@ echo "branch_ahead_count: $branch_ahead_count"
 echo "worktree_dirty: $worktree_dirty"
 echo "base: $base"
 echo "degraded: no"
+echo "degraded_reason: -"
 exit 0

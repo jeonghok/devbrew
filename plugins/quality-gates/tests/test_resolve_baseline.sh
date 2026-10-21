@@ -11,27 +11,118 @@ CANDIDATES="$PLUGIN_ROOT/scripts/compute-test-scope-candidates.sh"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 REPO=""
 
-mk_repo() {   # main + feature(1 commit ahead), CWD = repo
-  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+NO_DEFAULT_LINE="[resolve-baseline] 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다"
+
+mk_bare() {   # main + feature(1 commit ahead), CWD = repo, 원격 ref 없음
+  REPO=$(mktemp -d) && [ -d "$REPO" ] || exit 1
+  REPO=$(cd "$REPO" && pwd -P) || exit 1; cd "$REPO" || exit 1
   git init -q; git config user.email t@t.test; git config user.name tester
   git checkout -q -b main
   echo base > a.txt; git add a.txt; git commit -qm base
   git checkout -q -b feature
   echo work >> a.txt; git commit -qam work
 }
+mk_repo() {   # mk_bare + origin/main · origin/HEAD → origin/main (main 의 tip)
+  mk_bare
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+}
 cleanup() { cd / && rm -rf "$REPO"; }
 
-# T2-a: 정상 — 4키 + degraded:no + merge_base가 main의 tip
+# T2-a: 정상 — 키 + degraded:no + merge_base가 origin/HEAD 가 가리키는 tip
 case_normal() {
   mk_repo
-  local out; out=$(bash "$RESOLVE")
+  local out err; out=$(bash "$RESOLVE" 2>"$REPO/.git/rb.err"); err=$(cat "$REPO/.git/rb.err")
   local expect; expect=$(git rev-parse main)
   if [[ "$(field base "$out")" == "main" \
-     && "$(field base_ref "$out")" == "main" \
+     && "$(field base_ref "$out")" == "origin/main" \
      && "$(field merge_base "$out")" == "$expect" \
-     && "$(field degraded "$out")" == "no" ]]; then
-    ok "정상 레포 → base/base_ref/merge_base/degraded 4키"
-  else no "정상 (got: $out)"; fi
+     && "$(field degraded "$out")" == "no" \
+     && "$(field degraded_reason "$out")" == "-" \
+     && "$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')" == "base,base_ref,merge_base,degraded,degraded_reason,same_as_head,ahead," \
+     && -z "$err" ]]; then
+    ok "정상 레포 → base/base_ref/merge_base/degraded/degraded_reason · stderr 없음"
+  else no "정상 (got: $out | err: $err)"; fi
+  cleanup
+}
+
+# 기준은 origin/HEAD 하나 — origin/main · origin/master · 로컬 main · master 로 대신하지 않는다.
+case_no_fallback() {
+  local kind out err
+  for kind in origin-main origin-master local-main local-master; do
+    mk_bare
+    case "$kind" in
+      origin-main)   git update-ref refs/remotes/origin/main main ;;
+      origin-master) git update-ref refs/remotes/origin/master main ;;
+      local-main)    : ;;
+      local-master)  git branch -q -m main master ;;
+    esac
+    out=$(bash "$RESOLVE" 2>"$REPO/.git/rb.err"); err=$(cat "$REPO/.git/rb.err")
+    if [[ "$(field degraded "$out")" == "yes" \
+       && "$(field degraded_reason "$out")" == "no-default-branch" \
+       && "$(field base "$out")" == "-" \
+       && "$err" == "$NO_DEFAULT_LINE" ]]; then
+      ok "origin/HEAD 없음 + $kind 만 → degraded:yes · no-default-branch · 안내 한 줄"
+    else no "$kind 로 대신했다 (got: $out | err: $err)"; fi
+    cleanup
+  done
+}
+
+# 개명 뒤 dangling origin/HEAD — 가리키는 ref 가 없으면 같은 사유(origin/main 이 있어도).
+case_dangling_origin_head() {
+  mk_bare
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  local out err; out=$(bash "$RESOLVE" 2>"$REPO/.git/rb.err"); err=$(cat "$REPO/.git/rb.err")
+  if [[ "$(field degraded "$out")" == "yes" \
+     && "$(field degraded_reason "$out")" == "no-default-branch" \
+     && "$err" == "$NO_DEFAULT_LINE" ]]; then
+    ok "dangling origin/HEAD → no-default-branch · 안내 한 줄"
+  else no "dangling origin/HEAD (got: $out | err: $err)"; fi
+  cleanup
+}
+
+# 기본 브랜치 trunk(진짜 원격 · set-head --auto) → base: trunk · base_ref: origin/trunk.
+case_trunk_default() {
+  local d; d=$(mktemp -d) && [ -d "$d" ] || exit 1
+  d=$(cd "$d" && pwd -P) || exit 1
+  git init -q --bare -b trunk "$d/remote.git"
+  git init -q -b trunk "$d/w"; cd "$d/w" || exit 1
+  git config user.email t@t.test; git config user.name tester
+  echo base > a.txt; git add a.txt; git commit -qm base
+  git remote add origin "$d/remote.git"; git push -q origin trunk
+  git remote set-head origin --auto >/dev/null
+  git checkout -q -b feature; echo w >> a.txt; git commit -qam w
+  local out; out=$(bash "$RESOLVE" 2>/dev/null)
+  if [[ "$(field base "$out")" == "trunk" \
+     && "$(field base_ref "$out")" == "origin/trunk" \
+     && "$(field degraded "$out")" == "no" \
+     && "$(field ahead "$out")" == "1" ]]; then
+    ok "trunk 기본 → base: trunk · base_ref: origin/trunk"
+  else no "trunk (got: $out)"; fi
+  cd / && rm -rf "$d"
+}
+
+# 사유 키 — degrade 갈래마다 자기 사유.
+case_reasons() {
+  local d out
+  d=$(mktemp -d) && [ -d "$d" ] || exit 1
+  d=$(cd "$d" && pwd -P) || exit 1
+  mkdir "$d/plain"
+  out=$(cd "$d/plain" && GIT_CEILING_DIRECTORIES="$d" bash "$RESOLVE" 2>/dev/null)
+  assert_eq "$(field degraded_reason "$out")" not-a-repo "레포 밖 → not-a-repo"
+  git init -q "$d/empty"
+  out=$(cd "$d/empty" && bash "$RESOLVE" 2>/dev/null)
+  assert_eq "$(field degraded_reason "$out")" no-head "커밋 없음 → no-head"
+  rm -rf "$d"
+  mk_repo; git checkout -q --detach HEAD
+  out=$(bash "$RESOLVE" 2>/dev/null)
+  assert_eq "$(field degraded_reason "$out")" detached "detached HEAD → detached"
+  cleanup
+  mk_repo
+  git update-ref refs/remotes/origin/main "$(git commit-tree "$(git write-tree)" -m orphan </dev/null)"
+  out=$(bash "$RESOLVE" 2>/dev/null)
+  assert_eq "$(field degraded_reason "$out")" merge-base "공통 조상 없음 → merge-base"
   cleanup
 }
 
@@ -53,8 +144,8 @@ case_shallow() {
   git clone -q --depth 1 "file://$src" "$dst/s" 2>/dev/null
   cd "$dst/s" || { no "shallow clone 실패"; rm -rf "$dst"; cleanup; return; }
   local out; out=$(bash "$RESOLVE")
-  if [[ "$(field degraded "$out")" == "yes" ]]; then
-    ok "shallow clone → degraded:yes"
+  if [[ "$(field degraded "$out")" == "yes" && "$(field degraded_reason "$out")" == "shallow" ]]; then
+    ok "shallow clone → degraded:yes · degraded_reason: shallow"
   else no "shallow (got: $out)"; fi
   cd / && rm -rf "$dst"; cleanup
 }
@@ -66,8 +157,9 @@ case_no_base() {
   git checkout -q -b topic
   echo x > a.txt; git add a.txt; git commit -qm x
   local out; out=$(bash "$RESOLVE")
-  if [[ "$(field degraded "$out")" == "yes" && "$(field base "$out")" == "-" ]]; then
-    ok "base 미해결 → degraded:yes"
+  if [[ "$(field degraded "$out")" == "yes" && "$(field base "$out")" == "-" \
+     && "$(field degraded_reason "$out")" == "no-default-branch" ]]; then
+    ok "base 미해결 → degraded:yes · no-default-branch"
   else no "no-base (got: $out)"; fi
   cleanup
 }
@@ -85,14 +177,23 @@ case_no_hardcoded_main() {
   else no "resolve-baseline.sh 호출 부재"; fi
 }
 
-# T4: check-review-scope.sh 출력 계약 불변 (5키 + exit 0)
+# T4: check-review-scope.sh 출력 계약 (6키 + exit 0)
 case_review_scope_contract() {
   mk_repo
   local out rc; out=$(bash "$REVIEW_SCOPE"); rc=$?
   local keys; keys=$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')
-  if [[ $rc -eq 0 && "$keys" == "changes_exist,branch_ahead_count,worktree_dirty,base,degraded," ]]; then
-    ok "check-review-scope 5키 순서 + exit 0 불변"
+  if [[ $rc -eq 0 && "$keys" == "changes_exist,branch_ahead_count,worktree_dirty,base,degraded,degraded_reason," \
+     && "$(field degraded_reason "$out")" == "-" ]]; then
+    ok "check-review-scope 6키 순서 + exit 0 · degraded_reason: -"
   else no "check-review-scope 계약 (rc=$rc keys=$keys)"; fi
+  cleanup
+  # 기준선 사유를 자기 출력에 싣는다.
+  mk_bare
+  out=$(bash "$REVIEW_SCOPE" 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 && "$(field degraded "$out")" == "yes" \
+     && "$(field degraded_reason "$out")" == "no-default-branch" ]]; then
+    ok "check-review-scope 가 기준선 사유 no-default-branch 를 싣는다"
+  else no "check-review-scope 사유 (rc=$rc out=$out)"; fi
   cleanup
 }
 
@@ -111,8 +212,8 @@ case_same_as_head() {
     ok "feature 1커밋 앞섬 → same_as_head:no, ahead:1"
   else no "feature 정상 (got: $out)"; fi
 
-  # (2) **변조** — refs/heads/main 을 HEAD 로 옮긴다. update-ref 한 번이면 된다.
-  git update-ref refs/heads/main "$(git rev-parse HEAD)"
+  # (2) **변조** — origin/HEAD 가 가리키는 ref 를 HEAD 로 옮긴다. update-ref 한 번이면 된다.
+  git update-ref refs/remotes/origin/main "$(git rev-parse HEAD)"
   out=$(bash "$RESOLVE")
   if [[ "$(field same_as_head "$out")" == "yes" && "$(field ahead "$out")" == "0" \
      && "$(field degraded "$out")" == "no" ]]; then
@@ -140,16 +241,16 @@ case_same_as_head_does_not_kill_review_floor() {
   cleanup
 }
 
-# degrade 경로도 6키를 전부 낸다 — 키를 빠뜨리면 소비자의 `field` 조회가 빈 문자열을
+# degrade 경로도 7키를 전부 낸다 — 키를 빠뜨리면 소비자의 `field` 조회가 빈 문자열을
 # 받고, 빈 문자열은 `!= yes` 라 **fail-open** 으로 읽힌다.
 case_degraded_emits_all_keys() {
   mk_repo
   git checkout -q --detach HEAD
   local out; out=$(bash "$RESOLVE")
   local keys; keys=$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')
-  if [[ "$keys" == "base,base_ref,merge_base,degraded,same_as_head,ahead," \
+  if [[ "$keys" == "base,base_ref,merge_base,degraded,degraded_reason,same_as_head,ahead," \
      && "$(field same_as_head "$out")" == "-" && "$(field ahead "$out")" == "-" ]]; then
-    ok "degraded 경로도 6키 전부 (same_as_head:- ahead:-)"
+    ok "degraded 경로도 7키 전부 (same_as_head:- ahead:-)"
   else no "degraded 키 (got keys=$keys out=$out)"; fi
   cleanup
 }
@@ -200,7 +301,8 @@ case_total() {
   cleanup
 }
 
-for c in case_normal case_detached case_shallow case_no_base \
+for c in case_normal case_no_fallback case_dangling_origin_head case_trunk_default case_reasons \
+         case_detached case_shallow case_no_base \
          case_same_as_head case_same_as_head_does_not_kill_review_floor \
          case_same_as_head_x_worktree_dirty \
          case_degraded_emits_all_keys \

@@ -22,6 +22,8 @@ new_topic_repo() {   # 형제 둘 + 미커밋 변경. CWD = 리포, 현재 = top
   git init -q .; git config user.email t@t.test; git config user.name tester
   git checkout -q -b main
   echo r0 > f.txt; mkdir -p docs; echo d > docs/x-design.md; git add -A; git commit -qm r0
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   local R; R=$(git rev-parse HEAD)
   git checkout -q -b topicA; echo a > a.txt; git add a.txt; git commit -qm "a1
 

@@ -342,6 +342,8 @@ R="$TMP/e6"; M="$TMP/e6-marks"; mkdir -p "$R" "$M"
     printf '#!/bin/sh\necho %s >> %s/ran\n' "$h" "$M" > "hooks/$h"; chmod +x "hooks/$h"
   done
   git add hooks; git commit -qm hooks
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   git config core.hooksPath hooks
   git checkout -q -b topicA
   echo a1 > a.txt; git add a.txt

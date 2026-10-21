@@ -80,7 +80,7 @@ quality-gates/
 │   ├── doc_paths.py                          # 리뷰에서 뺄 문서 경로 규칙의 유일한 자리(`DEVBREW_QUALITY_GATES_DOC_PATHS`)
 │   ├── discover-spec.sh                      # 의도 출처 (`--intent-out`; 범위 안 `Spec:` 트레일러의 설계문서 전부 → 커밋 메시지 + 열린 PR 본문)
 │   ├── compute-test-scope-candidates.sh      # 차등 — 후보의 바닥(이름 일치 · 바뀐 테스트 · # guards:) + 분모
-│   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
+│   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/degraded_reason/same_as_head/ahead)
 │   ├── scope_tuple.py                        # 스코프 튜플 파서 · status → 사유 · scope: 블록
 │   ├── topic-head.sh                         # ① 토픽 해소 — 선언 → 봉인 → 경계 · 끝점 → 합친 트리 튜플
 │   ├── seal-worktree.sh                      # `seal <session-id>` — HEAD 트리를 `.git` 안 임시 인덱스로 봉인, 봉인 커밋 SHA 출력

@@ -70,7 +70,7 @@ elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'sco
 - `scope0=range` 이면 기준선 커밋은 `boundary=` 값 — 범위의 시작 커밋이다(리뷰 diff 의 기준과 같다).
 - `scope0=topic` 이면 기준선 커밋은 `boundary=` 값이다.
 - `scope0=session` 이면 기준선 커밋은 `merge_base:` 다. `degraded: yes` 면 기준선 커밋은 `-` 이다 — 기준선 축을
-  돌리지 못한다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
+  돌리지 못한다. `degraded_reason:` 값과 stderr 의 `[resolve-baseline]` 줄(있으면)을 그대로 사용자에게 보인다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
 
 `scope0` 와 기준선 커밋을 기억해 둔다 — D1 이 매 iteration 대조한다. 뒤 iteration 에서 스코프가 session ↔ topic 으로
 바뀌거나 경계가 달라지면 그 iteration 은 기준선이 어긋나 판정하지 않는다(error-axis, D1). 한 줄로 알린다:
