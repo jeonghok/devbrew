@@ -140,7 +140,7 @@ def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
 
     추적 검사(무시 탐침 · 추적 파일)는 cwd 가 아니라 공용 git 디렉토리의 부모(본 체크아웃)에서 돈다.
     공용 git 디렉토리의 이름이 `.git` 이 아니면(bare) 상태 루트가 그 안이라 검사를 건너뛴다. git 레포가 아니어도 건너뛴다.
-    무시되지 않거나 추적 파일이 있거나 검사가 실패하면 StateRootError.
+    무시되지 않거나 추적 파일이 있거나 검사가 실패하면 StateRootError — 그 메시지는 사유 줄 뒤에 알림 줄들을 붙인다.
     """
     root = Path(root)
     cwd = cwd or os.getcwd()
@@ -149,6 +149,16 @@ def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
     if set_vars:
         notes.append("[spec-distill] 환경 변수 {0} 가 설정된 채로 돈다 — 상태 폴더({1})는 그 값이 가리키는 레포를 따른다. "
                      "다른 레포를 뜻했으면 변수를 풀고 다시 돈다".format(" · ".join(set_vars), root))
+    try:
+        _check_state_root(root, cwd)
+    except StateRootError as exc:
+        if not notes:
+            raise
+        raise StateRootError("\n".join([str(exc)] + notes)) from exc
+    return notes
+
+
+def _check_state_root(root: Path, cwd: str) -> None:
     why = inside_root(root, root.parent.parent)
     if why:
         raise StateRootError("상태 폴더 경로가 링크를 거친다({0}) — {1} 의 링크를 걷은 뒤 다시 돈다".format(why, root))
@@ -160,7 +170,7 @@ def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
     _write_ignore(root)
     common = _common_dir(cwd)
     if common is None or common.name != ".git":
-        return notes
+        return
     top = common.parent
     rel = os.path.relpath(os.path.abspath(str(root)), os.path.abspath(str(top)))
     if rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
@@ -188,7 +198,6 @@ def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
             (listed.stderr.strip().splitlines() or ["rc %d" % listed.returncode])[0]))
     if listed.stdout.strip():
         raise StateRootError("상태 폴더 아래 파일이 이미 추적된다 — git rm --cached -r {0} 로 추적을 푼 뒤 다시 돈다".format(root))
-    return notes
 
 
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")

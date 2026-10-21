@@ -177,4 +177,15 @@ assert_eq "$CL_RC" "0" "conductor_claim_stops(양의 짝): 깨끗한 레포에�
 assert_eq "$(cat "$K/.claude/spec-distill/.gitignore" 2>/dev/null)" "*" "conductor_claim_stops(양의 짝): 표지 잡기가 .gitignore 를 둔다"
 assert_eq "$(git -C "$K" status --porcelain)" "" "conductor_claim_stops(양의 짝): 표지 잡기 뒤 git status 가 비었다"
 
+note "== git_dir_notice_on_stop"
+run_cl --root "$H" claim --roadmap docs/rm/roadmap.md --session sess-root0001
+assert_not_contains "$CL_OUT" "환경 변수" "git_dir_notice_on_stop(양의 짝): 변수 없이 멈추면 알림이 없다"
+OUT="$(cd "$H" && GIT_DIR="$H/.git" python3 "$HELPER" state-root --ensure 2>"$T/err")"; RC=$?; ERR="$(cat "$T/err")"
+assert_eq "$RC|$OUT" "3|" "git_dir_notice_on_stop: GIT_DIR 설정 · 추적 파일 → rc 3"
+assert_contains "$ERR" "$(TRACKED "$H")" "git_dir_notice_on_stop: 멈춘 사유"
+assert_contains "$ERR" "[spec-distill] 환경 변수 GIT_DIR 가 설정된 채로 돈다" "git_dir_notice_on_stop: 멈출 때도 환경 변수 알림이 보인다"
+CL_OUT="$(GIT_DIR="$H/.git" python3 "$SD/scripts/conductor_ledger.py" --root "$H" claim --roadmap docs/rm/roadmap.md --session sess-root0001 2>&1)"; CL_RC=$?
+assert_eq "$CL_RC" "3" "git_dir_notice_on_stop: 표지 잡기도 rc 3"
+assert_contains "$CL_OUT" "환경 변수 GIT_DIR 가 설정된 채로 돈다" "git_dir_notice_on_stop: 표지 잡기가 멈출 때도 환경 변수 알림이 보인다"
+
 finish
