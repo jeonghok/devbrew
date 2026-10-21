@@ -669,11 +669,14 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             if broken:
                 b["notes"].append("기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 %d개는 형식이 깨져 읽은 블록만 셌다 — "
                                   "그 사본이 이 블록에 더한 브랜치는 세지 못했을 수 있다" % broken)
+            seen_tips = []
             for br in names:
                 st = judge(br, b)
+                if st["tip"]:
+                    seen_tips.append(br)   # ref 가 없는 이름은 지웠는지 아직 안 만들었는지 모른다 — 세지 않는다
                 if st["tip"] and not st["merged"]:
                     more.append({"branch": br, "tip": st["tip"], "merged": None})
-            unchecked_note(names, b)
+            unchecked_note(seen_tips, b)
             if more:
                 if rec_merge:
                     for s in states:
