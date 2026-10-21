@@ -820,12 +820,17 @@ def audit_chosen_anchors(audit_text: str) -> set:
     return out
 
 
+def _irrelevant_sids(payload_text: str) -> list[str]:
+    """§4 의 불릿 없는 「외부 선례 무관(@S<m>) — <이유>」 줄이 가리키는 `S<m>` — 줄 순서 그대로, 중복 포함."""
+    return [m.group(1) for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4))
+            for m in [IRRELEVANT_RE.match(ln)] if m]
+
+
 def landscape_irrelevant(payload_text: str, audit_text: str) -> tuple:
     """§4 의 불릿 없는 줄 `외부 선례 무관(@S<m>) — <이유>` -> (closed, failures). 줄이 없으면 `(False, [])`. 있으면
     가리킨 `S<m>` 이 모두 audit §6 의 사용자 선택(☑)일 때만 `(True, [])`, 아니면 ☑ 아닌 S 마다 실패 한 줄.
     §4 경계는 `_section_text`(펜스를 벗긴 본문) 그대로 — 인용 줄(`> …`)은 열 0 이 `외` 가 아니라 닫힘이 아니다."""
-    sids = [m.group(1) for ln in brief_body.split_lines(_section_text(payload_text, *SECTION4))
-            for m in [IRRELEVANT_RE.match(ln)] if m]
+    sids = _irrelevant_sids(payload_text)
     if not sids:
         return False, []
     chosen = audit_chosen_anchors(audit_text)
@@ -1570,6 +1575,12 @@ def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
 
 
+def _sat_hits(audit_text: str) -> list[str]:
+    """audit §2 Budget 의 포화 판정 · 사용자 종료 줄(불릿을 뗀 본문) — 사건 순서 그대로."""
+    sec = _section_text(audit_text, "2", "Budget")
+    return [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec)) if SAT_LINE_RE.match(b)]
+
+
 def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[str]]:
     """audit §2 의 마지막 포화 판정 줄 (설계 §5).
 
@@ -1577,9 +1588,7 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     실패: 줄 없음 · 마지막이 `아직`(반복 빈 곳 재조사 포함) · 마지막이 `판정 불가 — 조사 계속` ·
     형식 밖. **이 검사가 못 잡는 것**: 줄은 본체가 쓴다 — 판정자를 부르지 않은 턴이 `포화` 줄을
     지어 적으면 구별하지 못한다. 그 축은 판정자 dispatch 의 처분 줄과 Step B 의 사람 확인이 진다."""
-    sec = _section_text(audit_text, "2", "Budget")
-    hits = [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec))
-            if SAT_LINE_RE.match(b)]
+    hits = _sat_hits(audit_text)
     if not hits:
         return ["§2 Budget: 포화 판정 줄 없음 — floor 다섯이 닫힌 뒤 포화 판정자를 부르지 않았거나 "
                 "사용자 종료를 적지 않았다"], []
@@ -1600,6 +1609,18 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     if SAT_CONTINUE_RE.match(last):
         return ["§2 Budget: 판정 불가 뒤 사용자가 조사 계속을 골랐는데 그 뒤 포화 판정이나 사용자 종료 줄이 없다"], []
     return [f"§2 Budget: 포화 판정 줄이 형식 밖이다: {last[:80]}"], []
+
+
+def closing_answer_anchors(payload_text: str, audit_text: str) -> list[tuple[str, str]]:
+    """인터뷰를 사용자가 고른 답으로 닫은 자리의 `S<n>` — `(S, "irrelevant")` 는 §4 의 「외부 선례 무관(@S<n>)」 줄마다
+    (같은 S 는 한 번), `(S, "saturation")` 은 audit §2 의 **마지막** 포화 판정 줄이 「사용자 판단 포화(@S<n>)」 일 때만.
+    「사용자 종료(@S<n>)」 는 넣지 않는다 — 자유 글로 끝낼 수 있다. 줄 문법은 위 두 검사와 같은 도우미다."""
+    out = [(s, "irrelevant") for s in dict.fromkeys(_irrelevant_sids(payload_text))]
+    hits = _sat_hits(audit_text)
+    m = SAT_USER_RE.match(hits[-1]) if hits else None
+    if m:
+        out.append((m.group(1), "saturation"))
+    return out
 
 
 def frontmatter_errors(text: str) -> list[str]:

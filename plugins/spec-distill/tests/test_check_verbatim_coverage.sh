@@ -289,14 +289,14 @@ rm -f "$tmps"
 # C1 mutation: P21 분기의 강등 플래그만 제거한다. (def rename은 NameError→exit 4를 내는데
 # 그건 "세탁이 통과했다"가 아니라 "스크립트가 죽었다"이고, `!= 1` 같은 단방향 assert는 그것을
 # 통과로 오독한다 — iter-2가 이 위양성을 적발했다. mutation은 **정확한 기대값**을 요구한다.)
-# 변이본은 **디렉토리**에 세우고 sibling `section6.py` 를 함께 옮긴다. v0.47.0 부터 §6 경계는
+# 변이본은 **디렉토리**에 세우고 sibling(`section6.py` · `brief_body.py` · `check_brief.py` 와 그것이 쓰는 `skepticism.py`)을 함께 옮긴다. v0.47.0 부터 §6 경계는
 # `scripts/section6.py` 한 곳이고, 이 스크립트는 그것을 형제 모듈로 import 한다 — 파일 하나만
 # 떼어 /tmp 에 두고 돌리면 `ModuleNotFoundError` 로 죽어 rc 1 이 나고, 그 1 은 「세탁이
 # 차단됐다」가 아니라 「스크립트가 죽었다」다(아래 단언이 요구하는 정확한 기대값 0 과 다르므로
 # 이 위양성은 red 로 드러났다 — 단방향 assert 였다면 조용히 통과했을 자리).
 MUTD="$(mktemp -d)" || exit 1
 tmpm="$MUTD/check_verbatim_coverage.py"
-cp "$(dirname "$SCRIPT")/section6.py" "$(dirname "$SCRIPT")/brief_body.py" "$MUTD/"
+for sib in section6 brief_body check_brief skepticism; do cp "$(dirname "$SCRIPT")/$sib.py" "$MUTD/"; done
 MUT_PY="$(mktemp)" || exit 1
 cat > "$MUT_PY" <<'MUTEOF'
 import re, sys
@@ -484,6 +484,304 @@ PY
     && ok "AC18: audit §6 의 문법 밖 앵커(${stem}) → exit 1 «${why}»" \
     || no "AC18: audit §6 의 문법 밖 앵커(${stem})가 exit 1 + ${why} 가 아니다 (rc=$rc)"
 done
+
+# --- 닫은 답의 출처 — 인터뷰를 닫은 답이 state 에 고른 선택지(`source: chosen`)로 있는가 ----------
+# 대상 S: brief §4 의 「외부 선례 무관(@S…)」 줄 전부 + audit §2 «마지막» 포화 판정 줄이 「사용자 판단 포화(@S…)」 일 때 그 S.
+# 쌍은 fixtures/brief-closing-{irrelevant,saturation}.{md,audit.md,state.md} — 둘 다 게이트 · 대조를 통과하는 양성 대조다.
+CL="$(mktemp -d)" || exit 1
+[[ -n "$CL" && -d "$CL" ]] || exit 1
+trap 'rm -rf "$VB" "$CL"' EXIT
+SD_DIR="$REPO_ROOT/plugins/spec-distill"
+GATE_PY="$SD_DIR/scripts/check_brief.py"
+cat > "$CL/tool.py" <<'PY'
+import json, re, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import check_brief as CB
+import check_verbatim_coverage as CVC
+cmd, args = sys.argv[2], sys.argv[3:]
+def rd(p): return Path(p).read_text(encoding="utf-8")
+def wr(p, t): Path(p).write_text(t, encoding="utf-8")
+if cmd == "sub":      # sub <file> <old> <new> — 한 번 바꾼다(없으면 실패)
+    t = rd(args[0])
+    if args[1] not in t: sys.exit("sub: 찾지 못했다 — " + args[1])
+    wr(args[0], t.replace(args[1], args[2], 1))
+elif cmd == "src":    # src <state> <op>... — S3=verbatim · S3=- (키 삭제) · S3= (빈 값) · S3=@drop · +S9=chosen=<text>
+    t = rd(args[0])
+    for op in args[1:]:
+        if op.startswith("+"):
+            sid, src, text = op[1:].split("=", 2)
+            rec = f'- id: {sid}\n  source: {src}\n  round: 9\n  text: "{text}"\n'
+            i = t.index("\n---\n", 4)
+            t = t[:i + 1] + rec + t[i + 1:]
+            continue
+        sid, val = op.split("=", 1)
+        m = re.search(rf"(?m)^- id: {sid}\n(?:  .*\n)*", t)
+        if not m: sys.exit("src: 레코드가 없다 — " + sid)
+        rec = m.group(0)
+        if val != "@drop" and not re.search(r"(?m)^  source:", rec): sys.exit("src: source 줄이 없다 — " + sid)
+        if val == "@drop": new = ""
+        elif val == "-": new = re.sub(r"(?m)^  source:.*\n", "", rec)
+        elif val == "": new = re.sub(r"(?m)^  source:.*$", '  source: ""', rec)
+        else: new = re.sub(r"(?m)^  source:.*$", f"  source: {val}", rec)
+        t = t[:m.start()] + new + t[m.end():]
+    wr(args[0], t)
+elif cmd == "empty":  # empty <state> — user_statements: []
+    t = rd(args[0])
+    t = re.sub(r"(?ms)^user_statements:\n.*?(?=^---$)", "user_statements: []\n", t, count=1)
+    wr(args[0], t)
+elif cmd == "block":  # block <state> <line> — 대기 줄 블록 끝에 한 줄
+    t = rd(args[0]).rstrip("\n") + "\n" + args[1] + "\n"
+    wr(args[0], t)
+elif cmd == "anchors":  # anchors <payload> <audit> — closing_answer_anchors 를 JSON 으로
+    print(json.dumps(CB.closing_answer_anchors(rd(args[0]), rd(args[1])), ensure_ascii=False))
+elif cmd == "field":  # field <key> < json
+    print(json.dumps(json.load(sys.stdin).get(args[0]), ensure_ascii=False))
+elif cmd == "sat_last":  # sat_last <audit> — audit §2 마지막 포화 판정 줄
+    sec = CB._section_text(rd(args[0]), "2", "Budget")
+    hits = [b for b in (CB._strip_bullet(ln).strip() for ln in CB._entry_lines(sec)) if CB.SAT_LINE_RE.match(b)]
+    print(hits[-1] if hits else "")
+elif cmd == "rebuild":  # rebuild_step_a <payload> <audit> <state> — Step A 의 state 로부터 다시 짓는 걸음을 흉내 낸다
+    pp, ap, sp = args
+    state = rd(sp)
+    stmts = CVC.parse_user_statements(CVC._frontmatter(state))
+    m = re.search(r"(?ms)^## audit §2 대기 줄[ \t]*\n(.*?)(?=^## |\Z)", state)
+    block = [ln for ln in m.group(1).splitlines() if ln.strip()]
+    def is_event(ln):
+        b = CB._strip_bullet(ln.strip()).strip()
+        return bool(CB.SAT_LINE_RE.match(b)) or b.startswith(("상한 도달 ", "판정 상한 도달 "))
+    a = rd(ap)
+    m2 = re.search(r"(?ms)^## 2\. Budget\n(.*?)(?=^## )", a)
+    keep = [ln for ln in m2.group(1).splitlines() if ln.strip() and not is_event(ln)]
+    a = a[:m2.start(1)] + "\n" + "\n".join(keep + block) + "\n\n" + a[m2.end(1):]
+    p = rd(pp)
+    pay_ids, aud_ids = set(CVC.parse_section6(p, "payload")), set(CVC.parse_section6(a, "audit"))
+    for st in sorted(stmts, key=lambda s: int(s["id"][1:])):
+        mark = "☑ 선택" if st.get("source") == "chosen" else "🗣 답"
+        item = f'- **{st["id"]}** {mark}:\n  > "{st["text"]}"\n'
+        if st["id"] not in pay_ids:
+            p = p.replace("## 7. Next Action", item + "## 7. Next Action", 1)
+        if st["id"] not in aud_ids and st["id"] != "S1":
+            a = a.replace("\n## 7. 확산 원자료", item + "\n## 7. 확산 원자료", 1)
+    wr(pp, p); wr(ap, a)
+else:
+    sys.exit("tool: 모르는 명령 " + cmd)
+PY
+tool() { python3 -I "$CL/tool.py" "$SD_DIR/scripts" "$@" || { no "tool $1 이 실패했다: $*"; return 1; }; }
+pair() {  # pair <case> <irrelevant|saturation> → $CL/<case>/ 에 세 파일(이름 그대로 — audit_file 이 basename 을 가리킨다)
+  mkdir -p "$CL/$1"
+  cp "$FX/brief-closing-$2.md" "$FX/brief-closing-$2.audit.md" "$FX/brief-closing-$2.state.md" "$CL/$1/"
+  P="$CL/$1/brief-closing-$2.md"; A="$CL/$1/brief-closing-$2.audit.md"; S="$CL/$1/brief-closing-$2.state.md"
+}
+vc() { python3 "$SCRIPT" "$P" "$S" "$A" 2>/dev/null; }
+nc_of() { tool field not_chosen <<<"$1"; }
+WHY_CL='이 레포 안의 정리 일이라 바깥 선례가 결정을 바꾸지 않는다'
+
+# 양성 대조 — 두 쌍은 그대로 대조 rc 0 · 게이트 rc 0 이다(아래 red 가 다른 이유로 나지 않는다).
+for k in irrelevant saturation; do
+  pair "ctl_$k" "$k"
+  out="$(vc)"; rc=$?
+  { [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } \
+    && ok "닫은 답(양성 대조 ${k}): 대상 S 가 chosen → rc 0 · not_chosen 빔" || no "닫은 답(양성 대조 ${k}): rc=$rc $out"
+  python3 "$GATE_PY" gate "$P" >/dev/null 2>&1 && ok "닫은 답(양성 대조 ${k}): check_brief gate rc 0" || no "닫은 답(양성 대조 ${k}): 게이트가 red"
+done
+
+# vc_irrelevant_verbatim_rc1 — 「외부 선례 무관(@S2)」 · S2 verbatim → rc 1 · ["S2"] · 마무리 단계 문장
+pair irr_verb irrelevant; tool src "$S" S2=verbatim
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S2"]' ]]; } \
+  && ok "vc_irrelevant_verbatim_rc1: S2 verbatim → rc 1 · not_chosen [S2]" || no "vc_irrelevant_verbatim_rc1: rc=$rc $out"
+adv="$(tool field advisories <<<"$out")"
+{ grep -qF 'S2' <<<"$adv" && grep -qF '마무리 단계' <<<"$adv" && grep -qF '외부 선례 무관' <<<"$adv"; } \
+  && ok "vc_irrelevant_verbatim_rc1: advisory 가 S2 · 종류 · 「마무리 단계」 를 말한다" || no "vc_irrelevant_verbatim_rc1: advisory: $adv"
+assert_eq "$(tool field missing_ids <<<"$out")|$(tool field not_contained <<<"$out")|$(tool field unknown_ids <<<"$out")" "[]|[]|[]" \
+  "vc_irrelevant_verbatim_rc1: rc 1 의 이유가 원문 완전성 키가 아니다"
+
+# vc_saturation_last_line — 마지막 줄만 본다
+pair sat_verb saturation; tool src "$S" S3=verbatim
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S3"]' ]]; } \
+  && ok "vc_saturation_last_line: 마지막 줄 사용자 판단 포화(@S3) · S3 verbatim → rc 1 · [S3]" || no "vc_saturation_last_line: rc=$rc $out"
+pair sat_prev saturation; tool src "$S" S3=verbatim
+tool sub "$A" "- 포화 판정 2: 사용자 판단 포화(@S3) — 조사 불필요" "- 포화 판정 2: 사용자 판단 포화(@S3) — 조사 불필요
+- 포화 판정 3: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } \
+  && ok "vc_saturation_last_line: 앞 줄 사용자 판단 포화 · 마지막 줄 판정자 포화 → 대조 안 함(rc 0)" || no "vc_saturation_last_line(앞 줄): rc=$rc $out"
+pair sat_stop saturation; tool src "$S" S3=verbatim
+tool sub "$A" "- 포화 판정 2: 사용자 판단 포화(@S3) — 조사 불필요" "- 사용자 종료(@S3) — 포화 판정 전"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } \
+  && ok "vc_saturation_last_line: 마지막 줄 사용자 종료(@S3) · S3 verbatim → rc 0 (대상 아님)" || no "vc_saturation_last_line(사용자 종료): rc=$rc $out"
+
+# vc_record_missing_rc1 — 대상 S 가 state 에 없다(payload 에도 없어 원문 완전성 키는 비어 있다)
+pair rec_missing irrelevant
+tool sub "$P" "외부 선례 무관(@S2) — " "외부 선례 무관(@S9) — "
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S9"]' ]]; } \
+  && ok "vc_record_missing_rc1: state 에 없는 S9 → rc 1 · [S9]" || no "vc_record_missing_rc1: rc=$rc $out"
+assert_eq "$(tool field missing_ids <<<"$out")|$(tool field unknown_ids <<<"$out")" "[]|[]" \
+  "vc_record_missing_rc1: rc 1 의 이유가 원문 완전성 키가 아니다"
+
+# vc_source_absent_rc3 — 키 없음 · 빈 값 → rc 3 · 검사 불가 · not_chosen 빔
+for v in - ''; do
+  pair "src_absent_${v:-empty}" saturation; tool src "$S" "S3=${v}"
+  out="$(vc)"; rc=$?
+  { [[ $rc -eq 3 ]] && [[ "$(nc_of "$out")" == "[]" ]] && grep -qF '검사 불가' <<<"$(tool field advisories <<<"$out")"; } \
+    && ok "vc_source_absent_rc3(${v:-empty}): source 없음 → rc 3 · 「검사 불가」 · not_chosen 빔" || no "vc_source_absent_rc3(${v:-empty}): rc=$rc $out"
+done
+
+# vc_source_unknown_value_rc1 — chosen 이 아닌 값은 글자 하나 달라도 위반
+for v in selected Chosen; do
+  pair "src_$v" saturation; tool src "$S" "S3=$v"
+  out="$(vc)"; rc=$?
+  { [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S3"]' ]]; } \
+    && ok "vc_source_unknown_value_rc1: source: $v → rc 1 · [S3]" || no "vc_source_unknown_value_rc1($v): rc=$rc $out"
+done
+
+# vc_s1_chosen_passes — 최초 요청이 없는 인터뷰(S1 이 첫 답 · chosen)는 통과, 최초 요청 S1(state 에 없음)은 위반
+pair s1_chosen irrelevant
+tool sub "$P" "외부 선례 무관(@S2) — " "외부 선례 무관(@S1) — "
+tool src "$S" "+S1=chosen=대시보드가 너무 느려요."
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } \
+  && ok "vc_s1_chosen_passes: S1 이 chosen 인 첫 답 → rc 0" || no "vc_s1_chosen_passes: rc=$rc $out"
+pair s1_request irrelevant
+tool sub "$P" "외부 선례 무관(@S2) — " "외부 선례 무관(@S1) — "
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S1"]' ]]; } \
+  && ok "vc_s1_chosen_passes: 최초 요청 S1(state 에 없음)을 가리킴 → rc 1 · [S1]" || no "vc_s1_chosen_passes(최초 요청): rc=$rc $out"
+
+# vc_not_chosen_dedup_sorted — 같은 S 를 두 줄 · 두 닫힘이 가리켜도 한 번, 번호 순
+pair dedup irrelevant; tool src "$S" S2=verbatim S4=verbatim
+tool sub "$P" "외부 선례 무관(@S2) — ${WHY_CL}" "외부 선례 무관(@S4) — ${WHY_CL}
+외부 선례 무관(@S4) — 같은 답을 두 번 적었다
+외부 선례 무관(@S2) — ${WHY_CL}"
+tool block "$S" "- 포화 판정 2: 사용자 판단 포화(@S4) — 조사 불필요"
+tool sub "$A" "- 포화 판정 1: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다" "- 포화 판정 1: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다
+- 포화 판정 2: 사용자 판단 포화(@S4) — 조사 불필요"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S2", "S4"]' ]]; } \
+  && ok "vc_not_chosen_dedup_sorted: S4 두 줄 + S2 + 마지막 포화 S4 → [S2, S4]" || no "vc_not_chosen_dedup_sorted: rc=$rc $out"
+assert_eq "$(tool anchors "$P" "$A")" '[["S4", "irrelevant"], ["S2", "irrelevant"], ["S4", "saturation"]]' \
+  "vc_not_chosen_dedup_sorted: closing_answer_anchors 는 외부 선례 무관 S 를 한 번씩 · 마지막 포화를 따로 낸다"
+
+# vc_violation_beats_indeterminate — 다른 S 의 P21 자리표(검사 불가)가 섞여도 · 원장이 0건이어도 rc 1
+pair beats irrelevant; tool src "$S" S2=verbatim
+tool sub "$S" 'text: "첫 화면만 빠르면 된다"' 'text: "첫 화면만 <REDACTED:x> 된다"'
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S2"]' ]] && grep -qF 'P21' <<<"$out"; } \
+  && ok "vc_violation_beats_indeterminate: P21 검사 불가(S5) + not_chosen(S2) → rc 1" || no "vc_violation_beats_indeterminate: rc=$rc $out"
+pair beats_empty irrelevant; tool empty "$S"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S2"]' ]]; } \
+  && ok "vc_violation_beats_indeterminate: user_statements 0건 + 대상 S2 → rc 1 (검사 불가 3 이 아니다)" || no "vc_violation_beats_indeterminate(0건): rc=$rc $out"
+pair beats_empty_ctl saturation; tool empty "$S"
+tool sub "$A" "- 포화 판정 2: 사용자 판단 포화(@S3) — 조사 불필요" "- 포화 판정 3: 포화 — 최근 두 조사 모두 결정을 바꾸지도 열지도 않았다"
+out="$(vc)"; rc=$?
+[[ $rc -eq 3 ]] && ok "vc_violation_beats_indeterminate(대칭): 0건 원장 · 대상 없음 → 여전히 rc 3" || no "vc_violation_beats_indeterminate(대칭): rc=$rc $out"
+
+# 예외 JSON 도 not_chosen 키를 갖는다 — run 에 예외를 심어 main 의 출력을 본다
+cat > "$CL/inject.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("cvc", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+def boom(*a, **k):
+    raise RuntimeError("injected")
+mod.run = boom
+sys.exit(mod.main(["cvc"] + sys.argv[2:5]))
+PY
+out="$(python3 -I "$CL/inject.py" "$SCRIPT" "$P" "$S" "$A")"; rc=$?
+{ [[ $rc -eq 4 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } \
+  && ok "main 예외 JSON 에 not_chosen 키(빈 목록) · exit 4" || no "main 예외 JSON 에 not_chosen 키가 없다: rc=$rc $out"
+
+# check_brief_invariant — check_brief.py 는 brief 파일만 읽는다
+grep -qF '**불변식: 이 스크립트는 brief 파일만 읽는다**' "$GATE_PY" \
+  && ok "check_brief_invariant: 불변식 docstring 문장이 그대로다" || no "check_brief_invariant: 불변식 문장이 바뀌었다"
+for tok in 'user_statements' '.state.md' 'state_path'; do
+  grep -qF -- "$tok" "$GATE_PY" && no "check_brief_invariant: check_brief.py 에 '${tok}'" || ok "check_brief_invariant: check_brief.py 에 '${tok}' 없음"
+done
+python3 -I - "$GATE_PY" <<'PY' && ok "check_brief_invariant: closing_answer_anchors(payload_text, audit_text) — 글만 받는다" || no "check_brief_invariant: closing_answer_anchors 의 인자가 글 둘이 아니다"
+import ast, sys
+t = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+fn = [n for n in t.body if isinstance(n, ast.FunctionDef) and n.name == "closing_answer_anchors"]
+sys.exit(0 if fn and [a.arg for a in fn[0].args.args] == ["payload_text", "audit_text"] else 1)
+PY
+
+# rb_gate_skip_var_not_chosen — RB 진입 게이트 펜스를 실제 검사기로 돌린다. 건너뛰기 변수 + 오늘 날짜 rc 1 증거 줄이 있어도 멈춘다.
+RB_SKILL="$SD_DIR/skills/reviewing-brief/SKILL.md"
+rb_fence() {  # rb_fence <case 디렉토리 이름> → fence.sh
+  { printf 'PR="%s"; PAYLOAD="%s"; STATE="%s"; AUDIT="%s"; BUNDLE=""\ndrop_bundle() { return 0; }\n' "$SD_DIR" "$P" "$S" "$A"
+    awk '/^## 진입 게이트/{f=1;next} f && /^## /{exit} f' "$RB_SKILL" | awk '/^gate_rc=0;/{f=1} f && /^```/{exit} f'
+    echo 'echo REACHED_ENGINE'; } > "$CL/$1/fence.sh"
+}
+TODAY_CL="$(date +%Y-%m-%d)"
+for c in rb_skip rb_skip_ctl; do
+  pair "$c" saturation
+  [[ "$c" == rb_skip ]] && tool src "$S" S3=verbatim
+  tool sub "$A" "- check_brief.py gate — pass (2026-09-23) — web: enabled" "- check_brief.py gate — pass (2026-09-23) — web: enabled
+- check_verbatim_coverage.py — exit 1 — skipped_by_user: 검사 없이 계속 (${TODAY_CL})"
+  rb_fence "$c"
+done
+grep -qF 'check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"' "$CL/rb_skip/fence.sh" \
+  && ok "rb_gate_skip_var_not_chosen(전제): 꺼낸 펜스가 실제 검사기를 부른다" || no "rb_gate_skip_var_not_chosen(전제): 펜스를 꺼내지 못했다"
+o="$(DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1 bash "$CL/rb_skip/fence.sh" 2>"$CL/rb_skip/err")"; r=$?
+e="$(cat "$CL/rb_skip/err")"
+{ [[ $r -eq 1 ]] && [[ "$o" != *REACHED_ENGINE* ]] && [[ "$e" == *'닫은 답의 출처 위반'* ]] && [[ "$o" == *'"not_chosen": ["S3"]'* ]]; } \
+  && ok "rb_gate_skip_var_not_chosen: not_chosen 쌍 + 건너뛰기 변수 + rc 1 증거 줄 → rc 1 로 멈춘다" \
+  || no "rb_gate_skip_var_not_chosen: r=$r out=$o err=$e"
+o="$(DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1 bash "$CL/rb_skip_ctl/fence.sh" 2>/dev/null)"; r=$?
+{ [[ $r -eq 0 ]] && [[ "$o" == *REACHED_ENGINE* ]]; } \
+  && ok "rb_gate_skip_var_not_chosen(양성 대조): S3 chosen 이면 같은 펜스가 엔진까지 간다" || no "rb_gate_skip_var_not_chosen(양성 대조): r=$r $o"
+
+# rebuild_once_and_idempotent — 되묻기 결과(S9 chosen + 대기 줄 덧붙임)를 넣고 Step A 의 다시 짓는 걸음을 돌린다
+pair rebuild saturation; tool src "$S" S3=verbatim
+[[ "$(nc_of "$(vc)")" == '["S3"]' ]] && ok "rebuild_once_and_idempotent(전제): 시작 쌍은 not_chosen [S3]" || no "rebuild_once_and_idempotent(전제): 시작 쌍이 not_chosen 이 아니다"
+tool src "$S" "+S9=chosen=조사 불필요 — 판단만 남음"
+tool block "$S" "- 포화 판정 2: 사용자 판단 포화(@S9) — 조사 불필요"
+tool rebuild "$P" "$A" "$S"
+n9="$(grep -cF -- '- 포화 판정 2: 사용자 판단 포화(@S9) — 조사 불필요' "$A")"
+assert_eq "$n9" "1" "rebuild_once_and_idempotent: audit §2 에 @S9 줄이 정확히 한 번"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } && ok "rebuild_once_and_idempotent: 다시 지은 뒤 대조 rc 0" || no "rebuild_once_and_idempotent: 대조 rc=$rc $out"
+python3 "$GATE_PY" gate "$P" >/dev/null 2>&1 && ok "rebuild_once_and_idempotent: 다시 지은 뒤 check_brief gate rc 0" || no "rebuild_once_and_idempotent: 게이트가 red"
+h1="$(cat "$P" "$A" "$S" | cksum)"
+tool rebuild "$P" "$A" "$S"
+h2="$(cat "$P" "$A" "$S" | cksum)"
+assert_eq "$h2" "$h1" "rebuild_once_and_idempotent: 한 번 더 돌려도 세 파일의 바이트가 같다(멱등)"
+
+# rebuild_irrelevant_keeps_last_saturation — 외부 선례 무관 되묻기는 brief §4 의 @S 만 바꾸고 포화 줄은 그대로다
+pair rebuild_irr irrelevant; tool src "$S" S2=verbatim
+sat_before="$(tool sat_last "$A")"
+tool sub "$P" "외부 선례 무관(@S2) — " "외부 선례 무관(@S9) — "
+tool src "$S" "+S9=chosen=외부 선례 무관"
+tool rebuild "$P" "$A" "$S"
+out="$(vc)"; rc=$?
+{ [[ $rc -eq 0 ]] && [[ "$(nc_of "$out")" == "[]" ]]; } && ok "rebuild_irrelevant_keeps_last_saturation: 대조 rc 0" || no "rebuild_irrelevant_keeps_last_saturation: 대조 rc=$rc $out"
+python3 "$GATE_PY" gate "$P" >/dev/null 2>&1 && ok "rebuild_irrelevant_keeps_last_saturation: 게이트 rc 0" || no "rebuild_irrelevant_keeps_last_saturation: 게이트가 red"
+assert_eq "$(tool sat_last "$A")" "$sat_before" "rebuild_irrelevant_keeps_last_saturation: audit §2 마지막 포화 판정 줄이 같은 글자"
+
+# 문장 단언 — RB rc 표 · 펜스 · finishing · README
+W_GATE_CL="$(awk '/^## 진입 게이트/{f=1;next} f && /^## /{exit} f' "$RB_SKILL")"
+row="$(grep -F '| `1`(`not_chosen`) |' <<<"$W_GATE_CL" || true)"
+{ [[ -n "$row" ]] && [[ "$row" == *'마무리 단계가 그 질문을 선택지로 다시 묻는다'* ]] && [[ "$row" == *'건너뛰지 않는다'* ]]; } \
+  && ok "RB rc 표: \`1\`(\`not_chosen\`) 행 · 「마무리 단계가 그 질문을 선택지로 다시 묻는다」 · 건너뛰지 않는다" || no "RB rc 표: not_chosen 행이 없거나 문면이 다르다"
+grep -qF '1) echo "[spec-distill] §6 원문 완전성 위반이나 닫은 답의 출처 위반' <<<"$W_GATE_CL" \
+  && ok "RB 펜스: rc 1 문장이 원문 완전성 위반과 닫은 답의 출처 위반을 함께 말한다" || no "RB 펜스: rc 1 문장에 닫은 답의 출처 위반이 없다"
+FIN="$SD_DIR/skills/pm-interview/references/finishing.md"
+A5="$(awk '/^### Step A\.5/{f=1;next} f && /^### /{exit} f' "$FIN")"
+for ph in '닫는 선택지' '「조사 계속」' '대기 줄 블록 한 곳에만' 'brief §4 그 줄의 `@S` 만' '3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로' '세션을 넘겨'; do
+  grep -qF -- "$ph" <<<"$A5" && ok "finishing Step A.5 되묻기 갈래: 「${ph}」" || no "finishing Step A.5 되묻기 갈래에 「${ph}」 가 없다"
+done
+A4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f && /^5\. \*\*/{exit} f' "$FIN")"
+{ grep -qF 'Step A.5 의 되묻기 갈래로 다시 돌 때는' <<<"$A4" && grep -qF '통째로 다시 쓴다 — 덧붙이지 않는다' <<<"$A4"; } \
+  && ok "finishing Step A ④: 다시 돌 때는 state 에서 통째로 다시 쓴다" || no "finishing Step A ④ 에 「다시 돌 때는 … 통째로 다시 쓴다」 가 없다"
+README_SD="$SD_DIR/README.md"
+grep -qF '이 대조는 brief 를 쓴 뒤 리뷰 진입(`check_verbatim_coverage.py`)에서 돈다 — 리뷰를 거치지 않는 길에서는 돌지 않는다.' "$README_SD" \
+  && ok "README: 시점 한계 문장" || no "README: 시점 한계 문장이 없다"
+grep -qF '사용자가 골랐는지는 증명하지 못한다' "$README_SD" \
+  && ok "README: 출처 한계 「사용자가 골랐는지는 증명하지 못한다」 유지" || no "README: 출처 한계 문장이 사라졌다"
 
 # --- usage -----------------------------------------------------------------
 python3 "$SCRIPT" >/dev/null 2>&1; rc=$?
