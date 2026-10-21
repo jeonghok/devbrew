@@ -46,7 +46,7 @@ class ParseOriginUrl(unittest.TestCase):
 
     def test_unparseable_urls_stop(self):
         for url in ("file:///x", "/srv/git/r.git", "https://github.com/r", "", "../r.git",
-                    "https://github.com/a/b/c", "https:///me/r"):
+                    "https://github.com/a/b/c", "https:///me/r", "file://host/o/r", "git://github.com/me/r"):
             with self.subTest(url=url):
                 self.assertIsNone(gh_repo.parse_origin_url(url))
                 with self.assertRaises(gh_repo.GhStop) as cm:

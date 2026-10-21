@@ -29,6 +29,10 @@ case "${FAKE_GH_MODE:-ok}" in
   ok) printf '[]\n' ;;
   auth) printf 'To get started with GitHub CLI, please run:  gh auth login\n' >&2; exit 4 ;;
   unresolved) printf 'could not resolve host gitlab.com\n' >&2; exit 1 ;;
+  prs) printf '[{"number":7,"state":"MERGED","headRefName":"b","headRefOid":"abc","isCrossRepository":false,"baseRefName":"main","mergeCommit":{"oid":"def"}},{"number":8,"state":"OPEN","headRefName":"b","headRefOid":"abd","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}]\n' ;;
+  badshape) printf '{"number":7}\n' ;;
+  missingkey) printf '[{"number":7,"state":"OPEN"}]\n' ;;
+  notjson) printf 'hello\n' ;;
 esac
 FAKE
 chmod +x "$T/bin/gh" || exit 1
@@ -55,6 +59,22 @@ except gh_repo.GhStop as exc:
     print("STOP:" + str(exc), file=sys.stderr)
     sys.exit(5)
 ' "$SCRIPTS" "$1" 2>"$T/err")"; RC=$?
+  ERR="$(cat "$T/err")"
+  ARGS="$(tr '\n' ' ' < "$FAKE_GH_ARGS")"
+}
+call_prs() {  # call_prs <cwd> <limit> — pr_list(cwd, "b", limit) → OUT(개수:한도) · ERR · RC · ARGS
+  : > "$FAKE_GH_ARGS"
+  OUT="$(PATH="$FAKEPATH" "$PY" -I -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import gh_repo
+try:
+    items, hit = gh_repo.pr_list(sys.argv[2], "b", int(sys.argv[3]))
+    print("%d:%s" % (len(items), hit))
+except gh_repo.GhStop as exc:
+    print("STOP:" + str(exc), file=sys.stderr)
+    sys.exit(5)
+' "$SCRIPTS" "$1" "$2" 2>"$T/err")"; RC=$?
   ERR="$(cat "$T/err")"
   ARGS="$(tr '\n' ' ' < "$FAKE_GH_ARGS")"
 }
@@ -102,6 +122,18 @@ assert_eq "$RC" "5" "비 GitHub 에서 멈춘다"
 assert_contains "$ARGS" "-R gitlab.com/o/r " "비 GitHub: -R 은 origin 그대로"
 assert_contains "$ERR" "STOP:gh 가 origin(gitlab.com/o/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다" \
   "비 GitHub: 「GitHub 인 레포만」"
+
+# ── pr_list ──────────────────────────────────────────────────────────────────
+FAKE_GH_MODE=prs call_prs "$T/fork" 100
+assert_eq "$RC:$OUT" "0:2:False" "pr_list: 목록 둘 · 한도에 닿지 않음"
+assert_contains "$ARGS" "pr list --state all --head b --json number,state,headRefName,headRefOid,isCrossRepository,baseRefName,mergeCommit --limit 100 -R github.com/me/r " \
+  "pr_list: 상태 전부 · head 브랜치 · 일곱 칸 · 한도 · -R origin"
+FAKE_GH_MODE=prs call_prs "$T/fork" 2
+assert_eq "$RC:$OUT" "0:2:True" "pr_list: 한도만큼 오면 한도에 닿았다"
+for m in badshape missingkey notjson; do
+  FAKE_GH_MODE=$m call_prs "$T/fork" 100
+  assert_eq "$RC" "5" "pr_list: 모양이 다르면 멈춘다(${m})"
+done
 
 # ── no_origin · slug CLI ─────────────────────────────────────────────────────
 OUT="$(cd "$T/bare" && "$PY" "$GR" slug 2>"$T/err")"; RC=$?; ERR="$(cat "$T/err")"
