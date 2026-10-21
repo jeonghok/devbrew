@@ -18,7 +18,7 @@
 | shared/tests/test_docreview_round_gate_split.sh:95 | 선택지 라벨을 「replacement 를 1–5 낱말로 압축」해 조립한다는 문장 | R2 | 그 에픽이 같은 PR 에서 고친다 |
 | plugins/spec-distill/tests/test_compression_adopters.sh:89 | 압축 규약 정본 `references/compression.md` 를 채택한 표면의 대칭 | R2 | 그 에픽이 같은 PR 에서 고친다 |
 | plugins/spec-distill/tests/test_rereview_cap_consistency.sh:96 | 일치 락(값 락 아님): 정본 `rereview_cap: N` 과 엔진 상수 `REREVIEW_CAP` 이 N 이 무엇이든 같아야 한다 | R2a | 그 에픽이 같은 PR 에서 고친다 |
-| plugins/spec-distill/tests/test_reviewing_brief_skill.sh:79 | 재리뷰 상한 값: 절차가 「재리뷰 상한 2」 와 「라운드 4」 를 문구로 댄다 | R2a | 그 에픽이 같은 PR 에서 고친다 |
+| plugins/spec-distill/tests/test_reviewing_brief_skill.sh:79 | 재리뷰 상한 값: 절차가 「재리뷰 상한 2」 와 「라운드 4」 를 문구로 댄다 | R13 | R2a(#231 · #232 · #234)가 다뤘고 이 동작은 남겼다 — 이제 R13 예약 파일이라 R13 이 이 테스트를 고칠 때 이 동작을 지킨다 |
 | shared/tests/fixtures/docreview/cases_advice.sh:477 | `case_advice_pre_upgrade_ledger` — 재리뷰 상한 값: 게이트 렌더가 「재리뷰 0/2회 썼다(상한 2 — 기본)」 줄을 낸다 | R12 | R2a(#231)가 다뤘다 — 기본값은 두고 프로필 · 환경 변수(`DEVBREW_DOCREVIEW_*`) 덮어쓰기와 라운드 머리 줄의 값 · 출처 공시를 더해 이 락을 「기본값 + 덮어쓰기가 먹는다」로 고쳤다. 이제 R12 예약 파일이라 R12 가 이 파일을 고칠 때 이 동작을 지킨다 |
 | shared/tests/fixtures/docreview/golden/case_T05_T06_reject.gate.txt:2 | 재리뷰 상한 값: 골든 게이트 문구 「재리뷰 0/2회 썼다(상한 2 — 기본)」 | R12 | R2a(#231)가 다뤘다 — 기본값은 두고 프로필 · 환경 변수(`DEVBREW_DOCREVIEW_*`) 덮어쓰기와 라운드 머리 줄의 값 · 출처 공시를 더해 이 락을 「기본값 + 덮어쓰기가 먹는다」로 고쳤다. 이제 R12 예약 파일이라 R12 가 이 파일을 고칠 때 이 동작을 지킨다 |
 | shared/tests/fixtures/docreview/golden/case_T11_permit_keeps_disposition.gate.txt:2 | 재리뷰 상한 값: 골든 게이트 문구 「재리뷰 1/2회 썼다(상한 2 — 기본)」 | R12 | R2a(#231)가 다뤘다 — 기본값은 두고 프로필 · 환경 변수(`DEVBREW_DOCREVIEW_*`) 덮어쓰기와 라운드 머리 줄의 값 · 출처 공시를 더해 이 락을 「기본값 + 덮어쓰기가 먹는다」로 고쳤다. 이제 R12 예약 파일이라 R12 가 이 파일을 고칠 때 이 동작을 지킨다 |
