@@ -58,6 +58,7 @@ FIN="$SD/skills/pm-interview/references/finishing.md"; AUD_T="$SD/templates/inte
 [ -f "$FIN" ] && [ -f "$AUD_T" ] && ok "AC10(양성대조): finishing.md · audit 템플릿이 있다" || no "AC10: finishing.md 또는 audit 템플릿 부재"
 STEPA="$(awk '/^### Step A — /{f=1;next} /^### /{f=0} f' "$FIN" 2>/dev/null | tr '\n' ' ' | tr -s ' ')"
 assert_contains "$STEPA" "${REPLACED_LINE} 줄을 라운드 순서대로 audit \`## 5. 프로세스 로그\` 에 글자 그대로 옮겨 씁니다" "AC10: finishing Step A 가 「대체됨」 줄을 audit 프로세스 로그로 옮긴다"
+assert_contains "$STEPA" '같은 걸음에 state 본문 각 `## R<n>` 의 `- 확인 RC<n> — …` 줄을 라운드 순서대로 audit `## 5. 프로세스 로그` 에 글자 그대로 옮겨 씁니다' "AC8: finishing Step A 가 확인 줄도 「대체됨」 옮기기와 같은 걸음에 옮긴다"
 AUD5="$(awk '/^## 5\. 프로세스 로그/{f=1;next} /^## /{f=0} f' "$AUD_T" 2>/dev/null)"
 assert_contains "$AUD5" "$REPLACED_LINE" "AC10: audit 템플릿의 프로세스 로그 절에 「대체됨」 줄 꼴이 있다"
 assert_contains "$FE_FLAT" '사실 주장이면 출처와 함께 교정을 보이고 묻는다' "AC11: 사실 교정은 묻는다"
