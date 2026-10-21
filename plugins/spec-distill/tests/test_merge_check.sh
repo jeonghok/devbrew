@@ -82,6 +82,14 @@ branch_with feature/sh
 out="$(mc --branch feature/sh)"; rc=$?
 assert_eq "$rc" "1" "셸: 양쪽 빨간 단위 안의 새 실패 → rc 1"
 assert_contains "$out" "둘" "셸: 새 실패 이름(✗ 줄)"
+assert_eq "$(cat "$W/.claude/spec-distill/.gitignore" 2>/dev/null)" "*" "상태 루트: 스위트 대조가 상태 루트를 보장한다(.gitignore)"
+assert_eq "$(git -C "$W" status --porcelain)" "" "상태 루트: 스위트 대조 뒤 git status 가 비었다"
+mkrepo trk; put README.md r; push_base; put x.txt x; branch_with feature/trk
+mkdir -p "$W/.claude/spec-distill"; echo t > "$W/.claude/spec-distill/kept.md"; g add -f .claude/spec-distill/kept.md
+out="$(mc --branch feature/trk)"; rc=$?
+assert_eq "$rc" "3" "상태 루트: 추적 파일 레포에서 스위트 대조가 rc 3"
+assert_contains "$out" "상태 폴더 아래 파일이 이미 추적된다" "상태 루트: 고치는 법을 보인다"
+[ ! -e "$W/.claude/spec-distill/conductor" ] && ok "상태 루트: 잠금 · 사본 폴더를 만들지 않았다" || no "상태 루트: 추적 파일 레포에 기계 상태 폴더가 생겼다"
 
 # 3b — 셸 단위의 `ERROR:` 진단 줄이 이름 집합을 가로채지 않는다(러너별 모양 — Ruling R32)
 mkrepo se
