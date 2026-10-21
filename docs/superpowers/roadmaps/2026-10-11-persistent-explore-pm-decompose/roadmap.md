@@ -214,7 +214,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R10, R12
 - 브랜치: feature/interview-gate-leftovers
 - 묶음: R13.md
-- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/fixtures/, shared/docreview/scripts/nofollow_write.py, plugins/spec-distill/scripts/nofollow_write.py, plugins/quality-gates/scripts/nofollow_write.py, shared/docreview/scripts/run_docreview_codex_reviewer.sh, plugins/spec-distill/scripts/seed_edit_diff.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_nofollow_write.sh, plugins/spec-distill/tests/test_state_dir_writes.sh, plugins/spec-distill/tests/test_fresh_evidence.sh, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/tests/test_ledger_root.sh, plugins/spec-distill/tests/test_decompose_surface.sh, plugins/spec-distill/templates/interview-audit-template.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/tests/test_brief_bundle.sh, plugins/spec-distill/tests/test_brief_no_length_cap.sh, shared/tests/test_docreview_gate_visibility.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_shell_tests_executable.sh
+- 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/fixtures/, shared/docreview/scripts/nofollow_write.py, plugins/spec-distill/scripts/nofollow_write.py, plugins/quality-gates/scripts/nofollow_write.py, shared/docreview/scripts/run_docreview_codex_reviewer.sh, plugins/spec-distill/scripts/seed_edit_diff.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_nofollow_write.sh, plugins/spec-distill/tests/test_state_dir_writes.sh, plugins/spec-distill/tests/test_fresh_evidence.sh, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/tests/test_ledger_root.sh, plugins/spec-distill/tests/test_decompose_surface.sh, plugins/spec-distill/templates/interview-audit-template.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/tests/test_brief_bundle.sh, plugins/spec-distill/tests/test_brief_no_length_cap.sh, shared/tests/test_docreview_gate_visibility.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_shell_tests_executable.sh, plugins/spec-distill/tests/test_interview_state_flow.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/tests/test_reviewing_brief_skill.sh, plugins/spec-distill/tests/test_reviewing_brief_residue.sh, plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh
 - 순서 이유: 인터뷰 skill 은 R10 계획 3 의 pm-interview 이름 바꾸기 뒤 새 이름 자리에서 · 엔진 skill 셋은 R12 의 펜스 락 뒤에
 
 ## 지휘 절차
@@ -440,6 +440,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「ok」
   - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-21 · R13 경로 예약에 계획 질문 답의 기존 테스트 다섯
+- 바뀜: 바뀐 에픽 R13 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
+- 원문:
+  - 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
 
 ## 위험 번호표
 
