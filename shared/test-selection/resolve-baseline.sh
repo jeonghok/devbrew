@@ -5,7 +5,7 @@
 #
 # Output (stdout, 항상 7줄 — 소비자는 **키로** 파싱한다, 줄 번호가 아니라):
 #   base:            <display short-name | ->    사람에게 보여줄 이름(전체 이름에서 refs/remotes/origin/ 을 벗긴 것)
-#   base_ref:        <git-usable ref | ->        존재가 확인된 ref (origin/<base>)
+#   base_ref:        <git-usable ref | ->        존재가 확인된 전체 ref (refs/remotes/origin/<base>)
 #   merge_base:      <full sha | ->              git merge-base <base_ref> HEAD
 #   degraded:        yes|no                      yes면 위 3키는 전부 '-'
 #   degraded_reason: -|no-default-branch|not-a-repo|no-head|detached|shallow|merge-base
@@ -69,7 +69,8 @@ if [[ -z "$base" ]] || ! git rev-parse --verify --quiet "$full^{commit}" >/dev/n
   echo "[resolve-baseline] 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다" >&2
   emit_degraded no-default-branch
 fi
-base_ref="origin/$base"
+# 짧은 이름(origin/<base>)은 같은 이름의 로컬 브랜치가 먼저 풀리므로 전체 이름을 낸다.
+base_ref="$full"
 
 merge_base=$(git merge-base "$full" HEAD 2>/dev/null) || emit_degraded merge-base
 [[ -n "$merge_base" ]] || emit_degraded merge-base

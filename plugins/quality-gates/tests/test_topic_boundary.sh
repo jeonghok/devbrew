@@ -579,12 +579,37 @@ case_base_remote_ref_never_member() {
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "base 원격 ref 가 선언 커밋을 담아도 status: ok"
-  assert_eq "$(field base_ref "$out")" "origin/main" "base_ref 는 origin/HEAD 가 가리키는 origin/main"
+  assert_eq "$(field base_ref "$out")" "refs/remotes/origin/main" "base_ref 는 origin/HEAD 가 가리키는 refs/remotes/origin/main"
   assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
     "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
   assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
   assert_eq "$(field in_base "$out")" "1" "머지된 topicA 의 선언은 in_base 로 공시된다(양의 짝)"
   cleanup
+}
+
+# ── base_ref 는 전체 이름 — 로컬 브랜치 · 태그 `origin/main` 이 토픽 끝에 있어도 기준선이 바뀌지 않는다 ──
+case_local_branch_named_origin_main() {
+  local kind out0 out1
+  for kind in branch tag; do
+    new_repo
+    git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+    out0=$(rt resolve "$KEY" 2>/dev/null)
+    case "$kind" in
+      branch) git branch -q origin/main HEAD ;;
+      tag)    git tag origin/main HEAD ;;
+    esac
+    assert_eq "$(git rev-parse --verify --quiet origin/main 2>/dev/null)" "$(git rev-parse HEAD)" \
+      "양성 대조($kind): 짧은 이름 origin/main 은 토픽 끝으로 풀린다"
+    out1=$(rt resolve "$KEY" 2>/dev/null)
+    assert_eq "$(field status "$out0")" "ok" "양의 짝($kind): 심기 전 status: ok"
+    assert_eq "$(field in_base "$out0")" "0" "양의 짝($kind): 심기 전 in_base 0"
+    assert_eq "$(field status "$out1")" "ok" "$kind origin/main 이 있어도 status: ok"
+    assert_eq "$(field in_base "$out1")" "$(field in_base "$out0")" "$kind origin/main 이 있어도 in_base 가 같다"
+    assert_eq "$(field boundary "$out1")" "$(field boundary "$out0")" "$kind origin/main 이 있어도 boundary 가 같다"
+    assert_eq "$(git rev-parse --verify --quiet "$(field base_ref "$out1")")" "$(git rev-parse refs/remotes/origin/main)" \
+      "$kind origin/main 이 있어도 base_ref 는 원격 추적 커밋"
+    cleanup
+  done
 }
 
 # ── detect: 현재 브랜치가 base 위에 얹은 커밋의 트레일러 → 토픽 키 (R-AI) ────────────
@@ -775,6 +800,7 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_combine_three_clean case_combine_three_conflict_attribution \
          case_resolve_tips_feed_combine \
          case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
+         case_local_branch_named_origin_main \
          case_detect_statuses case_detect_ignores_base_history \
          case_detect_lowercase_trailer_ignored case_detect_usage \
          case_detect_empty_spec_value_excluded \

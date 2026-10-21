@@ -325,6 +325,11 @@ err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T
 assert_contains "$err" "$NODEF" "origin/HEAD 없음 → stderr 에 set-head 안내"
 err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T/intent.md" --base "$BASE" 2>&1 >/dev/null )"
 assert_not_contains "$err" "set-head" "--base 를 주면 기준선을 풀지 않아 안내가 없다(양의 짝)"
+git -C "$R" update-ref refs/remotes/origin/main "$BASE"
+git -C "$R" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T/intent.md" 2>&1 >/dev/null )"
+assert_not_contains "$err" "set-head" "--base 없이도 origin/HEAD 가 있으면 안내가 없다(부재 짝)"
+git -C "$R" symbolic-ref --delete refs/remotes/origin/HEAD; git -C "$R" update-ref -d refs/remotes/origin/main
 
 # 8 — 잘못된 호출
 ( cd "$R" && bash "$D" >/dev/null 2>&1 ); assert_eq "$?" "2" "--intent-out 없으면 exit 2"

@@ -13,6 +13,7 @@ qg 차등 테스트가 쓰는 스크립트 넷의 정본이다. 플러그인은 
 
 - 기준 브랜치는 `origin/HEAD` 가 가리키는 브랜치 하나다. `origin/main` · `origin/master` · 로컬 `main` · `master` 로 대신하지 않는다.
 - 출력은 키 일곱 줄이다: `base` · `base_ref` · `merge_base` · `degraded` · `degraded_reason` · `same_as_head` · `ahead`. 소비자는 줄 번호가 아니라 키로 읽는다.
+- `base` 는 짧은 이름(`main`), `base_ref` 는 전체 이름(`refs/remotes/origin/main`)이다. `origin/main` 이라는 로컬 브랜치가 있어도 기준이 바뀌지 않는다.
 - `degraded_reason` 은 `-`(풀림) · `no-default-branch` · `not-a-repo` · `no-head` · `detached` · `shallow` · `merge-base` 중 하나다.
 - `origin/HEAD` 가 없거나 가리키는 브랜치가 없으면 `degraded_reason: no-default-branch` 와 함께 stderr 에 안내 한 줄을 낸다. `git remote set-head origin --auto` 로 고친다.
 - stderr 를 버리는 소비자(`compute-test-scope-candidates.sh` 등)는 `degraded_reason` 을 읽어 같은 안내를 자기 이름으로 낸다.

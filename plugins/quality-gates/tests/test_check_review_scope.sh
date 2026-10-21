@@ -189,8 +189,9 @@ exec "$realgit" "\$@"
 EOF
   chmod +x "$shim/git"
   local out rc; out=$(PATH="$shim:$PATH" bash "$SCRIPT"); rc=$?
-  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
-    ok "git diff failure after sanity → degraded (fail-open, C2)"
+  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 \
+     && "$(field degraded_reason "$out")" == "git-query" ]]; then
+    ok "git diff failure after sanity → degraded (fail-open, C2) · degraded_reason: git-query"
   else
     no "git-query fail-open (rc=$rc got: $out)"
   fi
@@ -212,7 +213,22 @@ case_read_only() {
   cd / && rm -rf "$REPO"
 }
 
+# 형제 resolve-baseline.sh 를 못 돌리면 resolve-baseline-failed — 사유가 비지 않는다.
+case_degraded_resolver_missing() {
+  mk_repo_feature_ahead
+  local lone="$REPO/.git/lone"; mkdir -p "$lone"; cp "$SCRIPT" "$lone/check-review-scope.sh"
+  local out rc; out=$(bash "$lone/check-review-scope.sh" 2>/dev/null); rc=$?
+  if [[ "$rc" -eq 0 && "$(field degraded "$out")" == "yes" \
+     && "$(field degraded_reason "$out")" == "resolve-baseline-failed" ]]; then
+    ok "resolve-baseline.sh 를 못 돌림 → degraded · degraded_reason: resolve-baseline-failed"
+  else
+    no "resolver missing (rc=$rc got: $out)"
+  fi
+  cd / && rm -rf "$REPO"
+}
+
 case_changes_exist_branch_ahead
+case_degraded_resolver_missing
 case_changes_exist_none
 case_ng4_ignored_not_counted
 case_ng4_untracked_counted

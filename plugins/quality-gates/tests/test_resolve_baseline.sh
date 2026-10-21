@@ -35,7 +35,7 @@ case_normal() {
   local out err; out=$(bash "$RESOLVE" 2>"$REPO/.git/rb.err"); err=$(cat "$REPO/.git/rb.err")
   local expect; expect=$(git rev-parse main)
   if [[ "$(field base "$out")" == "main" \
-     && "$(field base_ref "$out")" == "origin/main" \
+     && "$(field base_ref "$out")" == "refs/remotes/origin/main" \
      && "$(field merge_base "$out")" == "$expect" \
      && "$(field degraded "$out")" == "no" \
      && "$(field degraded_reason "$out")" == "-" \
@@ -82,7 +82,48 @@ case_dangling_origin_head() {
   cleanup
 }
 
-# 기본 브랜치 trunk(진짜 원격 · set-head --auto) → base: trunk · base_ref: origin/trunk.
+# 짧은 이름 origin/main 을 가로채는 로컬 브랜치 · 태그 — 기준선은 원격 추적 커밋 그대로다.
+case_planted_short_name() {
+  local kind out remote rb_ref
+  for kind in branch tag; do
+    mk_repo
+    remote=$(git rev-parse refs/remotes/origin/main)
+    case "$kind" in
+      branch) git branch -q origin/main HEAD ;;
+      tag)    git tag origin/main HEAD ;;
+    esac
+    # 양성 대조: 옛 짧은 줄(origin/main)은 심은 ref(토픽 끝)로 풀린다 — 위험이 실재한다.
+    if [[ "$(git rev-parse --verify --quiet origin/main 2>/dev/null)" == "$(git rev-parse HEAD)" \
+       && "$(git rev-parse HEAD)" != "$remote" ]]; then
+      ok "양성 대조($kind): 짧은 이름 origin/main 은 심은 ref 로 풀린다"
+    else no "양성 대조($kind): 짧은 이름이 심은 ref 로 풀리지 않았다 — 픽스처가 위험을 만들지 못했다"; fi
+    out=$(bash "$RESOLVE" 2>/dev/null)
+    rb_ref=$(field base_ref "$out")
+    if [[ "$(field degraded "$out")" == "no" \
+       && "$(git rev-parse --verify --quiet "$rb_ref" 2>/dev/null)" == "$remote" \
+       && "$(field merge_base "$out")" == "$remote" \
+       && "$(field same_as_head "$out")" == "no" && "$(field ahead "$out")" == "1" \
+       && "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" == "7" ]]; then
+      ok "$kind origin/main 이 있어도 base_ref · merge_base 는 원격 추적 커밋(7줄)"
+    else no "$kind origin/main 에 가로채였다 (got: $out)"; fi
+    cleanup
+  done
+}
+
+# origin/HEAD 가 refs/remotes/origin/ 밖(로컬 브랜치)을 가리키면 기본 브랜치로 받지 않는다.
+case_origin_head_outside_remote() {
+  mk_bare
+  git symbolic-ref refs/remotes/origin/HEAD refs/heads/main
+  local out err; out=$(bash "$RESOLVE" 2>"$REPO/.git/rb.err"); err=$(cat "$REPO/.git/rb.err")
+  if [[ "$(field degraded "$out")" == "yes" \
+     && "$(field degraded_reason "$out")" == "no-default-branch" \
+     && "$err" == "$NO_DEFAULT_LINE" ]]; then
+    ok "origin/HEAD → refs/heads/main → no-default-branch · 안내 한 줄"
+  else no "origin/HEAD 가 로컬 브랜치를 가리킴 (got: $out | err: $err)"; fi
+  cleanup
+}
+
+# 기본 브랜치 trunk(진짜 원격 · set-head --auto) → base: trunk · base_ref: refs/remotes/origin/trunk.
 case_trunk_default() {
   local d; d=$(mktemp -d) && [ -d "$d" ] || exit 1
   d=$(cd "$d" && pwd -P) || exit 1
@@ -95,10 +136,10 @@ case_trunk_default() {
   git checkout -q -b feature; echo w >> a.txt; git commit -qam w
   local out; out=$(bash "$RESOLVE" 2>/dev/null)
   if [[ "$(field base "$out")" == "trunk" \
-     && "$(field base_ref "$out")" == "origin/trunk" \
+     && "$(field base_ref "$out")" == "refs/remotes/origin/trunk" \
      && "$(field degraded "$out")" == "no" \
      && "$(field ahead "$out")" == "1" ]]; then
-    ok "trunk 기본 → base: trunk · base_ref: origin/trunk"
+    ok "trunk 기본 → base: trunk · base_ref: refs/remotes/origin/trunk"
   else no "trunk (got: $out)"; fi
   cd / && rm -rf "$d"
 }
@@ -301,7 +342,9 @@ case_total() {
   cleanup
 }
 
-for c in case_normal case_no_fallback case_dangling_origin_head case_trunk_default case_reasons \
+for c in case_normal case_no_fallback case_dangling_origin_head case_origin_head_outside_remote \
+         case_planted_short_name \
+         case_trunk_default case_reasons \
          case_detached case_shallow case_no_base \
          case_same_as_head case_same_as_head_does_not_kill_review_floor \
          case_same_as_head_x_worktree_dirty \

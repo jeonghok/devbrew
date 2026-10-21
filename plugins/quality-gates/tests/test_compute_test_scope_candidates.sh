@@ -58,6 +58,13 @@ case_R17_unresolved_baseline_is_exit_4() {
   assert_contains "$err" "사유='no-default-branch'" "R17: exit 4 줄이 사유를 싣는다"
   rmrepo
 }
+case_default_branch_found_no_guidance() {
+  mkrepo; ( cd "$R" && echo 'x=2' > src/foo.py )
+  local err rc; err=$( (cd "$R" && bash "$SUT") 2>&1 >/dev/null ); rc=$?
+  assert_eq "$rc" "0" "origin/HEAD 가 있으면 exit 0"
+  assert_not_contains "$err" "set-head" "origin/HEAD 가 있으면 기본 브랜치 안내가 없다(부재 짝)"
+  rmrepo
+}
 case_R17_git_failure_is_exit_4() {
   mkrepo; ( cd "$R" && echo 'x=2' > src/foo.py )
   printf 'garbage' > "$R/.git/index"
@@ -113,7 +120,7 @@ case_emit_guards_only_lists_guards() {
 }
 
 for c in case_name_mapping_and_changed_tests case_no_change_is_empty case_unsupported_language_has_no_mapping \
-         case_R17_unresolved_baseline_is_exit_4 case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
+         case_R17_unresolved_baseline_is_exit_4 case_default_branch_found_no_guidance case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
          case_topic_mode_reads_the_tree case_total_contains_every_candidate case_emit_guards_only_lists_guards \
          case_subdirectory_run_matches_root_run case_deleted_test_is_a_candidate; do
   echo "== $c"; $c

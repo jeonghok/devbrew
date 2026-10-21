@@ -13,7 +13,9 @@
 #   worktree_dirty: yes|no     # tracked diff OR non-ignored untracked
 #   base: <name|->             # display name for the honest verdict message
 #   degraded: yes|no           # fail-open marker (C2): cannot determine → floor not protected
-#   degraded_reason: <사유|->  # resolve-baseline.sh 의 degraded_reason 그대로. 기준선이 풀렸으면 '-'
+#   degraded_reason: <사유|->  # degraded: no 면 '-'. 기준선을 못 풀었으면 resolve-baseline.sh 의 사유 그대로,
+#                              # 그 스크립트를 못 돌렸거나 키가 비면 resolve-baseline-failed, 뒤의 git 질의가
+#                              # 실패하면 git-query.
 #
 # Exit code: always 0 (degraded: yes carries the fail-open state). Read-only:
 # never creates/modifies/deletes files. Takes NO arguments. Invoke from project root.
@@ -21,7 +23,7 @@
 set -u   # NOT -e: graceful degradation — a failed probe falls through to
          # emit_degraded() below rather than aborting the script.
 
-emit_degraded() {   # [<degraded_reason>]
+emit_degraded() {   # <degraded_reason>
   echo "changes_exist: no"
   echo "branch_ahead_count: 0"
   echo "worktree_dirty: no"
@@ -36,12 +38,13 @@ emit_degraded() {   # [<degraded_reason>]
 #     전부 그 스크립트 안에 있고, 이 스크립트는 키를 읽어 fail-open 판정과 사유만 승계한다.
 #     여기서 로직을 복제하면 두 소비자가 서로 다른 baseline을 보게 된다 (C2 재발). ---
 _rb_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-_rb_out=$("$_rb_dir/resolve-baseline.sh" 2>/dev/null) || emit_degraded
+_rb_out=$("$_rb_dir/resolve-baseline.sh" 2>/dev/null) || emit_degraded resolve-baseline-failed
 _rb_field() { printf '%s\n' "$_rb_out" | awk -v k="$1:" '$1 == k { print $2 }'; }
-[[ "$(_rb_field degraded)" == "no" ]] || emit_degraded "$(_rb_field degraded_reason)"
+_rb_why=$(_rb_field degraded_reason)
+[[ "$(_rb_field degraded)" == "no" ]] || emit_degraded "${_rb_why:-resolve-baseline-failed}"
 base=$(_rb_field base)
 merge_base=$(_rb_field merge_base)
-[[ -n "$base" && -n "$merge_base" && "$merge_base" != "-" ]] || emit_degraded
+[[ -n "$base" && -n "$merge_base" && "$merge_base" != "-" ]] || emit_degraded resolve-baseline-failed
 
 # branch_ahead_count is a CHANGED-FILE count (NOT a commit count): the number of
 # files differing between merge_base and HEAD.
@@ -60,7 +63,7 @@ merge_base=$(_rb_field merge_base)
 # fails OPEN to degraded — consistent with the C2 contract above. A silently-swallowed
 # git error here would yield branch_ahead_count=0 + degraded=no = a FALSE-CLEAN, the
 # exact state the floor exists to prevent.
-branch_names=$(git diff --name-only "$merge_base"..HEAD 2>/dev/null) || emit_degraded
+branch_names=$(git diff --name-only "$merge_base"..HEAD 2>/dev/null) || emit_degraded git-query
 if [[ -z "$branch_names" ]]; then
   branch_ahead_count=0
 else
@@ -72,8 +75,8 @@ fi
 #     NOT count as "changes" and false-trip changes_exist. Both queries use a direct
 #     assignment + `|| emit_degraded` so a git failure fails OPEN (C2), not fail-closed
 #     to a false "no" via an empty `-n "$(…)"`. ---
-tracked_changes=$(git diff HEAD --name-only 2>/dev/null) || emit_degraded
-untracked_changes=$(git ls-files --others --exclude-standard 2>/dev/null) || emit_degraded
+tracked_changes=$(git diff HEAD --name-only 2>/dev/null) || emit_degraded git-query
+untracked_changes=$(git ls-files --others --exclude-standard 2>/dev/null) || emit_degraded git-query
 worktree_dirty="no"
 if [[ -n "$tracked_changes" || -n "$untracked_changes" ]]; then
   worktree_dirty="yes"
