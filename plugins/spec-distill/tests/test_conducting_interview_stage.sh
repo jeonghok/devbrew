@@ -539,6 +539,9 @@ grep -qF '그 라운드의 state `## R<n>` «지금 이해» 아래에 한 줄�
   && ok "V1: 확인 줄 자리가 라운드 state «지금 이해» 아래이고 줄 꼴 셋이 있다" || no "V1: 확인 줄 자리(state 라운드 기록) 또는 줄 꼴 셋 부재"
 ! grep -qF 'audit `## 5. 프로세스 로그` 에 한 줄로 적는다' <<<"$round_flat" \
   && ok "V1(음): 인터뷰 중 audit §5 에 직접 적으라는 옛 문장이 없다" || no "V1(음): 옛 문장(audit §5 에 한 줄로 적는다)이 남아 있다"
+grep -qF '판정만 audit §3 `ST<N>` 과 확인 줄 자리 양쪽에 적는다' <<<"$round_flat" \
+  && ! grep -qF '`ST<N>` 과 §5 양쪽에 적는다' <<<"$round_flat" \
+  && ok "V1: steelman 경로의 판정은 audit §3 과 확인 줄 자리 양쪽에 적는다(옛 «§5 양쪽» 없음)" || no "V1: steelman 판정 기록 자리 문장 부재 또는 옛 «§5 양쪽» 이 남아 있다"
 # 비종속 — trigger 도 웹 스위치도 이 검문소를 끄지 않는다. 문구로 못 박는다(설계 AC6).
 grep -qF 'steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느 것에도 종속되지 않는다' <<<"$round_flat" \
   && ok "V1: trigger·웹 스위치 비종속 명시" || no "V1: 비종속 문구 부재 — 조건부로 읽힐 수 있다"
