@@ -37,7 +37,7 @@ import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 from roadmap_model import DEFAULT_REF, NO_DEFAULT  # noqa: E402
-from state_path import state_root  # noqa: E402
+from state_path import StateRootError, ensure_state_root, state_root  # noqa: E402
 
 SELECT = HERE / "run-test-selection.sh"
 DIFF = HERE / "diff-test-results.py"
@@ -374,9 +374,12 @@ def run(root: Path, a) -> int:
         raise Stop(3, line)
     if state == "unchecked":
         print("[spec-distill] " + line)
+    sroot = state_root(str(root))
     try:
-        mroot = cs.machine_dir(state_root(str(root)), a.roadmap)
-    except cs.MachineError as exc:
+        mroot = cs.machine_dir(sroot, a.roadmap)
+        for line in ensure_state_root(sroot, str(root)):
+            print(line)
+    except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
     test_command, pattern, sources = suite_settings(root, a.roadmap, mroot)
     if pattern:

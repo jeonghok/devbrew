@@ -352,12 +352,13 @@ fi
 입니다 — 다음 세션의 첫 턴이 `/spec-distill:pm-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
 `## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
-**만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)만 생긴다.
+**만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)과 그 폴더를 git 이 무시하게 하는 `.gitignore`(`*` 한 줄)만 생긴다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""
+[ -n "$ROOT" ] || { echo "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유) — 고친 뒤 이 블록을 다시 돌린다" >&2; exit 1; }
 IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
 [ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를

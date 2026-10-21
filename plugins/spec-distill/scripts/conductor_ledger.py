@@ -41,7 +41,7 @@ import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
                            RULINGS_HEADING, FormatError, approval_date, blob_reader, find_roadmaps, parse_roadmap,
                            section_lines, tree_entries)
-from state_path import state_root  # noqa: E402
+from state_path import StateRootError, ensure_state_root, state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 GIT = shutil.which("git") or "git"
@@ -76,6 +76,17 @@ def mpath(root, roadmap: str) -> Path:
         return cs.machine_path(state_root(str(root)), roadmap)
     except cs.MachineError as exc:
         raise Fail(3, str(exc))
+
+
+def mdir_for_write(root, roadmap: str) -> Path:
+    """기계 상태 폴더 — 상태 루트를 먼저 보장한다(스스로 무시 · 추적 파일이면 멈춤). 폴더를 만드는 자리만 부른다."""
+    path = mpath(root, roadmap)
+    try:
+        for line in ensure_state_root(state_root(str(root)), str(root)):
+            print(line, file=sys.stderr)
+    except StateRootError as exc:
+        raise Fail(3, str(exc))
+    return path.parent
 
 
 def load(root, roadmap: str) -> dict:
@@ -621,7 +632,7 @@ def _drop_approval(root, a):
 
 
 def c_claim(root, a) -> int:
-    got = cs.acquire(mpath(root, a.roadmap).parent, a.session)
+    got = cs.acquire(mdir_for_write(root, a.roadmap), a.session)
     if got in ("acquired", "held"):
         if got == "acquired":
             _drop_approval(root, a)
@@ -632,7 +643,7 @@ def c_claim(root, a) -> int:
 
 
 def c_takeover(root, a) -> int:
-    prev = cs.takeover(mpath(root, a.roadmap).parent, a.session)
+    prev = cs.takeover(mdir_for_write(root, a.roadmap), a.session)
     _drop_approval(root, a)
     print("표지를 넘겨받았다 — 이전 주인: %s" % (prev or "없음"))
     return 0
@@ -1000,7 +1011,7 @@ def c_review_pack(root, a) -> int:
         raise Fail(3, "브랜치를 찾지 못했다: %s" % a.branch)
     if note:
         print(note)
-    default_dir = mpath(root, a.roadmap).parent / REVIEW_PACK_DIR
+    default_dir = (mpath(root, a.roadmap).parent if a.out else mdir_for_write(root, a.roadmap)) / REVIEW_PACK_DIR
     out = Path(a.out) if a.out else default_dir / ("%s-%s" % (a.epic, datetime.datetime.now().strftime("%Y%m%d%H%M%S")))
     try:
         out.mkdir(parents=True, exist_ok=False)
@@ -1105,7 +1116,7 @@ def c_resource_dir(root, a) -> int:
     """기계 상태 자원 폴더 `<기계 상태 폴더>/files/<종류>/<이름>` 을 만들고 경로를 낸다 — `cleanup` 이 확인 없이 치우는 자리."""
     if not a.name or not set(a.name) <= NAME_CHARS or a.name in (".", ".."):
         raise Fail(2, "자원 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.name)
-    mdir = mpath(root, a.roadmap).parent
+    mdir = mdir_for_write(root, a.roadmap)
     base = mdir / FILES_DIR / a.kind
     out = base / a.name
     for p in (mdir, mdir / FILES_DIR, base, out):
