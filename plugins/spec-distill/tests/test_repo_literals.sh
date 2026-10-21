@@ -123,6 +123,7 @@ GET = 'repo_defaults.py" get '
 assign_rx = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)="\$\(.*repo_defaults\.py" get [^)]*\)" \|\| \1=""\s*$')
 add_rx = re.compile(r"git( -C \S+)? add --")
 judge_rx = re.compile(r'^\s*[^#\s].*repo_defaults\.py" (?:check-path|roadmap-check) ')
+stop_rx = re.compile(r'\|\|.*\bexit\b')
 n_get = n_add = 0
 for path in sys.argv[1:]:
     with open(path, encoding="utf-8") as fh:
@@ -139,12 +140,17 @@ for path in sys.argv[1:]:
         nxt = next((l for l in lines[i + 1:] if l.strip()), "")
         if ('[ -n "$%s" ]' % v) not in nxt and ('[ -n "${%s}" ]' % v) not in nxt:
             print("%s:%d: 해결자 값 뒤 첫 줄이 빈 값을 확인하지 않는다" % (path, i + 1))
+        elif not stop_rx.search(nxt):
+            print("%s:%d: 해결자 값이 비면 셸을 멈추지 않는다(|| … exit 없음)" % (path, i + 1))
     for start, _end, body in bash_fences("\n".join(lines)):
         if not any(add_rx.search(l) for l in body):
             continue
         n_add += 1
-        if not any(judge_rx.match(l) for l in body):
+        judges = [l for l in body if judge_rx.match(l)]
+        if not judges:
             print("%s:%d: git add 로 경로를 정하는 펜스가 check-path · roadmap-check 를 부르지 않는다" % (path, start))
+        elif not any(stop_rx.search(l) for l in judges):
+            print("%s:%d: git add 로 경로를 정하는 펜스의 경로 판정이 거부되어도 셸을 멈추지 않는다(|| … exit 없음)" % (path, start))
 print("세었다: get %d · add %d" % (n_get, n_add))
 PY
 }
@@ -163,6 +169,9 @@ shape_mut() {  # shape_mut <대상> <sed 식> <기대 사유> <라벨> [nocheck]
 RF_T=skills/request-framing/SKILL.md
 shape_mut "$RF_T" 's/ || IDIR=""$//' "rc 확인 꼴이 아니다" "rc 확인 지움"
 shape_mut "$RF_T" '/^\[ -n "\$IDIR" \]/d' "빈 값을 확인하지 않는다" "빈 값 확인 지움"
+shape_mut "$RF_T" 's/^\[ -n "\$IDIR" \] || .*$/[ -n "$IDIR" ] || true/' "비면 셸을 멈추지 않는다" "빈 값 확인을 || true 로"
+shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 의 rc 처리 지움"
+shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 를 || true 로"
 shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$AUDIT"/d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 check-path 지움"
 shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path interview_dir "\$AUDIT"\)/# \1/' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 check-path 를 주석으로"
 # finishing 끝내기 커밋 펜스의 판정 줄은 Task 7 이 넣는다 — 그 전에는 사본이 그대로라 nocheck.

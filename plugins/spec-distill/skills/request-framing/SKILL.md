@@ -1129,11 +1129,11 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 커밋을 한 번 합니다 — 명령 노출(①/②) 바로 앞입니다.
 ③(수정)·④(멈춤)에서는 커밋하지 않습니다 — 수정마다 커밋이 늘고 멈춤에도 커밋이 남는
 것을 막기 위해서입니다. 단순 명령 셋(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
-이미 stage 된 다른 작업을 쓸어 담지 않습니다. 첫 명령의 rc 가 0 이 아니면 그 사유를 보이고 뒤 두 git 명령을
-돌리지 않습니다 — 게이트 앞 글에 «미커밋 — <사유>» 를 적습니다:
+이미 stage 된 다른 작업을 쓸어 담지 않습니다. 첫 명령이 멈추면 그 사유를 보이고 뒤 두 git 명령을 돌리지
+않습니다 — 게이트 앞 글에 «미커밋 — <사유>» 를 적습니다:
 
 ```bash
-python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$AUDIT"
+python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$AUDIT" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 git add -- "$AUDIT" "$SEED"
 git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$AUDIT" "$SEED"
 ```

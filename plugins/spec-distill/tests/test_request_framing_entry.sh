@@ -199,6 +199,26 @@ printf 'other\n' > "$cmr/other.txt"; git -C "$cmr" add -- other.txt
 assert_eq "$(git -C "$cmr" show --name-only --format= HEAD | sort | tr '\n' ' ')" "docs/superpowers/interview/2026-10-15-t-interview.audit.md docs/superpowers/interview/2026-10-15-t-interview.md " "AC12: 커밋에는 seed · audit 둘만 든다"
 assert_eq "$(git -C "$cmr" diff --cached --name-only)" "other.txt" "AC12: 이미 stage 된 다른 파일은 stage 된 채로 남는다"
 rm -rf "$cmr"
+# 음의 짝(R8) — 기본 브랜치의 레포 설정이 다른 인터뷰 폴더를 정하면 check-path 가 거부하고, 한 셸로 돌려도 git 두 줄은 돌지 않는다.
+cmn="$(mktemp -d)"; [ -n "$cmn" ] && [ -d "$cmn" ] || { echo "mktemp 실패"; exit 1; }
+cmn="$(cd "$cmn" && pwd -P)"; [ -n "$cmn" ] && [ "$cmn" != "/" ] || { echo "mktemp 경로 해석 실패"; exit 1; }
+git init -q --bare -b trunk "$cmn/remote.git"; git init -q -b trunk "$cmn/w"
+git -C "$cmn/w" config user.email t@t.t; git -C "$cmn/w" config user.name t
+printf -- '---\ninterview_dir: notes/\n---\n' > "$cmn/w/.devbrew.md"
+git -C "$cmn/w" add -- .devbrew.md; git -C "$cmn/w" commit -q -m init
+git -C "$cmn/w" remote add origin "$cmn/remote.git"; git -C "$cmn/w" push -q origin trunk; git -C "$cmn/w" remote set-head origin --auto >/dev/null
+mkdir -p "$cmn/w/docs/superpowers/interview"
+printf 'a\n' > "$cmn/w/docs/superpowers/interview/2026-10-15-t-interview.audit.md"
+printf 's\n' > "$cmn/w/docs/superpowers/interview/2026-10-15-t-interview.md"
+head_before="$(git -C "$cmn/w" rev-parse HEAD)"
+cm_rc=0
+( cd "$cmn/w" && SD="$ROOT/plugins/spec-distill" AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
+    bash -c "${cm_block//<topic>/t}" ) >"$cmn/out" 2>&1 || cm_rc=$?
+assert_eq "$cm_rc" "1" "R8: 다른 인터뷰 폴더면 커밋 펜스가 check-path 에서 멈춘다(rc 1)"
+assert_contains "$(cat "$cmn/out")" "미커밋 — 위 사유를 고친 뒤 다시 돌린다" "R8: 멈출 때 미커밋 사유를 낸다"
+assert_eq "$(git -C "$cmn/w" rev-parse HEAD)" "$head_before" "R8: 거부되면 커밋이 생기지 않는다"
+assert_eq "$(git -C "$cmn/w" diff --cached --name-only)" "" "R8: 거부되면 아무것도 새로 stage 하지 않는다"
+rm -rf "$cmn"
 grep -qF 'SEED_DIR' <<<"$gate_block" && no "AC12: 커밋 펜스가 사라진 세션 폴더(SEED_DIR)를 쓴다" || ok "AC12: 커밋 펜스가 세션 폴더에 기대지 않는다"
 
 finish
