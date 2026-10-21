@@ -12,12 +12,14 @@ find_cmd="$(sed -nE 's/.*< <\((find [^|]*[^| ]) *\|.*/\1/p' "$RUNALL" | head -n 
 if [ -z "$find_cmd" ]; then
   no "run-all.sh 에서 find 명령을 뽑지 못했다"
   finish
+  exit $?
 fi
 selected="$(bash -c "$find_cmd" 2>/dev/null | LC_ALL=C sort)"
 n_sel="$(printf '%s' "$selected" | grep -c .)"
 if [ "$n_sel" -eq 0 ]; then
   no "뽑은 find 명령이 셸 테스트를 0개 골랐다: $find_cmd"
   finish
+  exit $?
 fi
 ok "run-all.sh 가 셸 테스트 ${n_sel}개를 고른다"
 
