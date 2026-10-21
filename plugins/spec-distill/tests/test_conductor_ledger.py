@@ -259,6 +259,12 @@ class Roadmaps(Repo):
         self.assertEqual(sorted(unchecked), ["plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
                                              "plan/roadmaps/rm/broken.md"])
         self.assertEqual(failed, set())
+        shas = sorted(set(e[2] for e in tree.values() if e[1] == "blob")) + ["0" * 40]
+        got = cp.cat_batch(repo, shas)
+        self.assertNotIn("0" * 40, got)   # 없는 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)
+        for sha in shas[:-1]:
+            want = subprocess.run(["git", "cat-file", "blob", sha], cwd=str(self.w), env=ENV, capture_output=True).stdout
+            self.assertEqual(got.get(sha), want, sha)
         self.assertNotIn("plan/roadmaps/ex/roadmap.md", unchecked)   # 실행 비트(100755)도 일반 파일
         rows = self.rows()
         listed = sorted(rows)
