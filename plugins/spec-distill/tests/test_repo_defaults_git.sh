@@ -240,7 +240,8 @@ mkdir -p "$A/plan/roadmaps/x" && cp "$RB/plan/roadmaps/x/roadmap.md" "$A/plan/ro
 run "$A" roadmap-check plan/roadmaps/x/roadmap.md
 assert_eq "$RC" "3" "양성 대조: 같은 파일 모양도 레포 A 의 설정(기본 폴더)이면 rc 3"
 on_trunk "$RB" .devbrew.md $'---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---\n'
-run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
-assert_eq "$RC" "3" "roadmap-check: 레포 설정이 깨지면 기본 폴더로 조용히 판정하지 않고 rc 3"
+run "$RB" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
+assert_eq "$RC" "3" "roadmap-check: 레포 설정이 깨지면 기본 폴더로 조용히 판정하지 않고 rc 3(기본 폴더의 로드맵도 통과 못 함)"
+assert_contains "$ERR" "typo_key" "roadmap-check: 깨진 설정의 사유를 알린다"
 
 finish
