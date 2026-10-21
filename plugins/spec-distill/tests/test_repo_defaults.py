@@ -93,5 +93,118 @@ class NoHardcodedFolders(unittest.TestCase):
         self.assertEqual(self.hits('os.path.join(root, "docs", "other")\n'), [])
 
 
+LABEL = "레포 설정@0123abcd"
+
+
+class StrictFrontmatter(unittest.TestCase):
+    def kind(self, text, where="repo"):
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.strict_frontmatter(text, where)
+        self.assertEqual(c.exception.where, where)
+        return c.exception.kind
+
+    def test_bom_is_unreadable(self):
+        self.assertEqual(self.kind("﻿---\na: b\n---\n"), "unreadable")
+
+    def test_unclosed_and_trailing_space_fence_are_unreadable(self):
+        self.assertEqual(self.kind("---\na: b\n"), "unreadable")
+        self.assertEqual(self.kind("--- \na: b\n---\n"), "unreadable")
+
+    def test_no_frontmatter_repo_is_unreadable_other_layers_empty(self):
+        self.assertEqual(self.kind("본문만\n"), "unreadable")
+        self.assertEqual(rd.strict_frontmatter("본문만\n", "roadmap"), {})
+
+    def test_duplicate_key(self):
+        self.assertEqual(self.kind("---\nspecs_dir: a/\nspecs_dir: b/\n---\n"), "duplicate_key")
+
+    def test_unquoted_hash_is_error(self):
+        self.assertEqual(self.kind("---\ntest_command: pytest # 빠른 것\n---\n"), "unquoted_hash")
+
+    def test_quoted_hash_is_value(self):
+        self.assertEqual(rd.strict_frontmatter('---\ntest_command: "pytest -k \'a#b\' # x"\n---\n', "repo")["test_command"],
+                         "pytest -k 'a#b' # x")
+
+    def test_line_rules_skip_indented_list_and_comment_lines(self):
+        m = rd.strict_frontmatter("---\n# c\nspecs_dir: s/\n  x: y\n- item\n---\n본문 a: b\n", "repo")
+        self.assertEqual(m, {"specs_dir": "s/"})
+
+
+class Layers(unittest.TestCase):
+    def test_typo_key_is_unknown(self):
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.check_layer({"spec_dir": "x/"}, "repo")
+        self.assertEqual(c.exception.kind, "unknown_key")
+
+    def test_roadmap_layer_rejects_pre_roadmap_keys(self):   # AC23b
+        for k in ("roadmaps_dir", "interview_dir", "branch_prefix"):
+            with self.assertRaises(rd.SettingsError) as c:
+                rd.check_layer({k: "x/"}, "roadmap")
+            self.assertEqual(c.exception.kind, "layer_key", k)
+
+    def test_roadmap_layer_accepts_meta_and_its_settings(self):
+        rd.check_layer({"type": "roadmap", "source_brief": "b.md", "specs_dir": "s/", "plans_dir": "p/", "test_command": "t",
+                        "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
+
+    def test_repo_layer_accepts_all_nine_keys_and_not_meta(self):
+        self.assertEqual(len(rd.KEYS), 9)
+        rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
+        with self.assertRaises(rd.SettingsError):
+            rd.check_layer({"type": "roadmap"}, "repo")
+
+    def test_machine_layer_accepts_two_keys_only(self):
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.check_layer({"review_model": "x"}, "machine")
+        self.assertEqual(c.exception.kind, "layer_key")
+        rd.check_layer({"test_command": "x", "test_failure_pattern": "y"}, "machine")
+
+
+class Merge(unittest.TestCase):
+    def test_missing_key_is_default_not_error(self):
+        m = rd.merge_layers(None, {}, LABEL, None, [])
+        self.assertEqual((m["values"]["interview_dir"], m["sources"]["interview_dir"]), (rd.INTERVIEW_DIR, "기본값"))
+        self.assertEqual((m["values"]["branch_prefix"], m["values"]["roadmaps_dir"]), ("feature/", rd.ROADMAPS_DIR))
+        self.assertEqual(m["errors"], [])
+        self.assertEqual(list(m["values"]), list(rd.KEYS))
+
+    def test_priority_roadmap_repo_machine_constant(self):
+        m = rd.merge_layers({"test_command": "a"}, {"test_command": "b"}, LABEL, {"test_command": "c"}, [])
+        self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("a", "로드맵"))
+        m = rd.merge_layers({}, {"test_command": "b"}, LABEL, {"test_command": "c"}, [])
+        self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("b", LABEL))
+        m = rd.merge_layers({}, {}, LABEL, {"test_command": "c"}, [])
+        self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("c", "기계 상태(임시)"))
+        m = rd.merge_layers({}, {}, LABEL, {}, [])
+        self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), (None, "기본값"))
+
+    def test_folder_under_git_or_root_is_error(self):
+        for bad in (".git/x/", "a/.git/b/", ".", "./", "/abs/", "a/../b/"):
+            m = rd.merge_layers(None, {"specs_dir": bad}, LABEL, None, [])
+            self.assertIsNone(m["values"]["specs_dir"], bad)
+            self.assertEqual(len(m["errors"]), 1, bad)
+
+    def test_old_repo_settings_meaning_is_kept(self):
+        m = rd.merge_layers({"specs_dir": "design", "plans_dir": '"work/plans/"', "review_model": "opus", "test_command": "'make test'"},
+                            None, None, None, [])
+        self.assertEqual((m["values"]["specs_dir"], m["values"]["plans_dir"]), ("design/", "work/plans/"))
+        self.assertEqual((m["values"]["review_model"], m["values"]["test_command"]), ("opus", "make test"))
+        m = rd.merge_layers({"review_model": ""}, None, None, None, [])
+        self.assertIsNone(m["values"]["review_model"])
+        self.assertTrue(any("review_model" in e for e in m["errors"]))
+        for bad in ("0", "-1", "abc", "", "3.5", "３"):
+            m = rd.merge_layers({"parallel_default": bad}, None, None, None, [])
+            self.assertEqual(m["values"]["parallel_default"], 3, bad)
+            self.assertEqual(m["errors"], [], bad)
+            self.assertTrue(any("parallel_default" in w and "기본 3" in w for w in m["warnings"]), bad)
+            self.assertEqual(m["sources"]["parallel_default"], "기본값(머리말 값이 깨졌다)", bad)
+        m = rd.merge_layers({"parallel_default": "5"}, None, None, None, [])
+        self.assertEqual((m["values"]["parallel_default"], m["sources"]["parallel_default"]), (5, "로드맵"))
+
+    def test_layer_violation_is_an_error_and_notices_pass_through(self):
+        m = rd.merge_layers({"branch_prefix": "x/"}, {}, LABEL, None, ["알림"])
+        self.assertEqual(m["values"]["branch_prefix"], "feature/")
+        self.assertTrue(m["errors"])
+        self.assertEqual(m["notices"], ["알림"])
+
+
 if __name__ == "__main__":
     unittest.main()

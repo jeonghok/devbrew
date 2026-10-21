@@ -21,6 +21,7 @@ import repo_defaults as R
 consts = sorted(v for k, v in vars(R).items() if k.isupper() and isinstance(v, str) and "/" in v)
 bare = sorted(v for k, v in vars(R).items() if k.isupper() and isinstance(v, str) and v and "/" not in v)
 bare_rx = [(v, re.compile("[\"']" + re.escape(v) + "[\"']")) for v in bare]
+const_rx = [(c, re.compile(r"(?<![\w/.-])" + re.escape(c)) if c.endswith("/") else re.compile(re.escape(c))) for c in consts]
 git_rx = re.compile(r"(?<![\w/.-])(?:main|master)(?![\w/.-])")
 if not consts:
     print("상수 없음 — 허용 목록이 비었다(락이 공허하다)")
@@ -41,8 +42,8 @@ for path in sys.argv[2:]:
             for v, brx in bare_rx:
                 if brx.search(line):
                     print("%s:%d: 상수 %s" % (path, n, v))
-            for c in consts:
-                if c.rstrip("/") in line:
+            for c, crx in const_rx:
+                if crx.search(line):
                     print("%s:%d: 상수 %s" % (path, n, c))
 PY
 }
@@ -74,14 +75,14 @@ for d in "${six[@]}"; do
 done
 # 상수 반복의 양성 대조 — 정규식 규칙과 겹치지 않는 가짜 상수를 심은 모듈로 잡힌다
 mkdir "$T/shim" && cp "$SD/scripts/repo_defaults.py" "$T/shim/repo_defaults.py" && printf '\nZZ_PROBE = "zz-probe/dir/"\nZZ_BARE = "zz-bare"\n' >> "$T/shim/repo_defaults.py"
-probe="$(SCAN_DEFS="$T/shim" mut skills/epic-conductor/SKILL.md 'see zz-probe/dir here')"
+probe="$(SCAN_DEFS="$T/shim" mut skills/epic-conductor/SKILL.md 'see zz-probe/dir/x here')"
 [ -n "$probe" ] && ok "변이: 가짜 상수(슬래시 있음)를 잡는다" || no "변이: 상수 반복에 이빨이 없다"
 probe="$(SCAN_DEFS="$T/shim" mut skills/epic-conductor/SKILL.md 'x = "zz-bare"')"
 [ -n "$probe" ] && ok "변이: 가짜 상수(슬래시 없음, 따옴표 꼴)를 잡는다" || no "변이: 슬래시 없는 상수 반복에 이빨이 없다"
 probe="$(SCAN_DEFS="$T/shim" mut skills/epic-conductor/SKILL.md 'zz-bare prose')"
 [ -z "$probe" ] && ok "음성 대조: 따옴표 없는 zz-bare 는 잡지 않는다" || no "음성 대조: 따옴표 없는 zz-bare 를 잘못 잡는다"
 for line in 'git diff main...HEAD' 'git merge-base main HEAD' '"main...HEAD"' '.superpowers' 'docs/superpowers' 'x = "conductor"' "d = 'merge-check'" \
-            'git diff origin/main...HEAD' 'refs/heads/master' 'branch == "main"' "base = 'master'" 'feature/epic-x' 'fix/typo' \
+            'git diff origin/main...HEAD' 'refs/heads/master' 'branch == "main"' "base = 'master'" 'feature/epic-x' 'x = "feature/y"' 'fix/typo' \
             'docs/superpowers/specs/x.md' '.superpowers/sdd/p/progress.md' 'plugins/spec-distill/scripts' '.claude/worktrees/x' \
             'model: opus' 'Sonnet 으로' 'FABLE' 'haiku.' 'gpt-5' '# origin/main 을 쓰지 않는다' '```origin/master```'; do
   [ -n "$(mut skills/epic-conductor/SKILL.md "$line")" ] && ok "변이: 「${line}」 를 잡는다" || no "변이: 「${line}」 를 못 잡는다"
