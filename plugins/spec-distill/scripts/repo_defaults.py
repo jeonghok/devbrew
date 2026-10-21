@@ -450,16 +450,21 @@ def _cmd_default_branch(base: str, check_remote: bool) -> int:
     return 0
 
 
-def _read_worktree(top: str, rel: str):
-    """작업 트리의 일반 파일 글(UTF-8), 없거나 링크 · 일반 파일 아님 · UTF-8 아님이면 None."""
-    path = os.path.join(top, rel)
-    try:
-        if not stat.S_ISREG(os.lstat(path).st_mode):
-            return None
-        with open(path, "rb") as fh:
-            return fh.read().decode("utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
+def _worktree_reader(top: str):
+    """read(레포 상대 경로) — 작업 트리 파일을 로드맵 후보 글의 읽기 규칙(roadmap_model.regular_text)으로 읽는다."""
+    def read(rel):
+        path = os.path.join(top, rel)
+        try:
+            if not stat.S_ISREG(os.lstat(path).st_mode):
+                return _rm.regular_text(False, b"")
+            with open(path, "rb") as fh:
+                data = fh.read()
+        except FileNotFoundError:
+            raise _rm.Unreadable("파일이 없다")
+        except OSError as exc:
+            raise _rm.ReadFailed("파일을 읽지 못했다(%s)" % type(exc).__name__)
+        return _rm.regular_text(True, data)
+    return read
 
 
 def _cmd_roadmap_check(base: str, path: str) -> int:
@@ -470,13 +475,12 @@ def _cmd_roadmap_check(base: str, path: str) -> int:
         _say("레포 밖 경로라 로드맵으로 받지 않았다: %s — 레포 %s 안의 로드맵을 준다" % (path, top))
         return 3
     result = resolve(base)
-    for line in result["notices"] + result["warnings"] + result["errors"]:
+    for line in result["warnings"] + result["errors"]:
         _say(line)
     if result["errors"]:
         return 3
     folder = result["values"]["roadmaps_dir"]
-    _say("값의 출처: %s(roadmaps_dir)" % result["sources"]["roadmaps_dir"])
-    verdict, why = _rm.roadmap_verdict(rel, _read_worktree(top, rel), folder)
+    verdict, why = _rm.judge_roadmap(rel, _worktree_reader(top), folder)
     if verdict == "roadmap":
         return 0
     if verdict == "unreadable":

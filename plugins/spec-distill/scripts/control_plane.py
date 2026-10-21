@@ -41,7 +41,8 @@ from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError, find_roadmaps  # noqa: E402
+from roadmap_model import (BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError, blob_reader,  # noqa: E402
+                           find_roadmaps, tree_entries)
 from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -529,34 +530,30 @@ def roadmaps_dir(repo: Repo):
     return result["values"]["roadmaps_dir"], None
 
 
-def candidates(repo: Repo, main):
-    """([(경로, blob)], 사유, {검사 불가 경로: 사유}). 경로에는 머리말을 못 읽은 후보도 든다 — 조용히 빼지 않는다.
+def listing(repo: Repo, main):
+    """(로드맵 자리의 {경로: (mode, 종류, blob)}, 로드맵 폴더, 사유) — ls-tree 하나, 글은 읽지 않는다(캐시 키 재료).
     기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
     if not main:
-        return [], None, {}
+        return {}, None, None
     folder, why = roadmaps_dir(repo)
     if folder is None:
-        return [], why, {}
-    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", folder)
+        return {}, None, why
+    rc, out = repo.raw("ls-tree", "-r", "-z", main, "--", folder)
     if rc != 0:
-        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc, {}
-    blobs = {}
-    for entry in (e for e in out.split("\0") if e):
-        meta, _tab, path = entry.partition("\t")
-        blobs[path] = meta.split()
+        return {}, None, "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
+    return tree_entries(out, folder), folder, None
 
-    def read(path):
-        mode, kind, sha = blobs[path]
-        if mode != "100644" or kind != "blob":
-            return None
-        rc, data = repo.raw("cat-file", "blob", sha)
-        try:
-            return data.decode("utf-8") if rc == 0 else None
-        except UnicodeDecodeError:
-            return None
-    found, unchecked = find_roadmaps(list(blobs), read, folder)
+
+def candidates(repo: Repo, entries: dict, folder):
+    """([로드맵 · 검사 불가 경로], {검사 불가 경로: 사유}, {읽기가 실패한 경로}) — 캐시를 못 쓸 때만 부른다(글을 읽는다).
+    머리말을 못 읽은 후보도 경로에 든다 — 조용히 빼지 않는다."""
+    if folder is None:
+        return [], {}, set()
+    failed = set()
+    read = blob_reader(entries, lambda sha: repo.raw("cat-file", "blob", sha), failed)
+    found, unchecked = find_roadmaps(list(entries), read, folder)
     unchecked = dict(unchecked)
-    return sorted((p, blobs[p][2]) for p in found + list(unchecked)), None, unchecked
+    return sorted(found + list(unchecked)), unchecked, failed
 
 
 def interview_files(root: str):
@@ -945,9 +942,11 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
         arg = arg[2:] if arg.startswith("./") else arg
         blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (main, arg)) if main else None
-        targets, select_error, unchecked = [(arg, blob or "-")], None, {}
+        tree, folder, select_error = {}, None, None
+        targets = [(arg, blob or "-")]
     else:
-        targets, select_error, unchecked = candidates(repo, main)
+        tree, folder, select_error = listing(repo, main)
+        targets = sorted((p, e[2]) for p, e in tree.items())   # 키는 로드맵 자리의 blob — 글은 캐시를 못 쓸 때만 읽는다
     mode = arg or "*"
     key = cache_key(repo, main, main_full, mode, targets)
     path = cache_file(repo)
@@ -960,7 +959,13 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     if hit is not None:
         items, select_error = hit
     else:
-        reports = [(p, unreadable_report(p, unchecked[p]) if p in unchecked else run_status(repo, p)) for p, _blob in targets]
+        if arg:
+            reports = [(arg, run_status(repo, arg))]
+        else:
+            paths, unchecked, failed = candidates(repo, tree, folder)
+            reports = [(p, failed_report(p, unchecked[p]) if p in failed     # 읽기 실패는 캐시에 두지 않는다
+                        else unreadable_report(p, unchecked[p]) if p in unchecked else run_status(repo, p))
+                       for p in paths]
         items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")

@@ -115,13 +115,69 @@ def roadmap_verdict(path: str, text, roadmaps_dir: str) -> tuple:
     return "roadmap", ""
 
 
+class Unreadable(ValueError):
+    """로드맵 후보의 글을 읽을 수 없다 — 메시지가 사유다. read 가 던지면 그 후보는 검사 불가다."""
+
+
+class ReadFailed(Unreadable):
+    """읽기 자체가 실패했다(git 실패 등) — 글의 사실이 아니라 다시 읽으면 달라질 수 있다."""
+
+
+def regular_text(regular: bool, data: bytes) -> str:
+    """로드맵 후보 글의 읽기 규칙 하나 — 일반 파일 · LFS 포인터 아님 · UTF-8 이면 글, 아니면 Unreadable(사유)."""
+    if not regular:
+        raise Unreadable("일반 파일이 아니다(링크 · 서브모듈 등)")
+    if data.split(b"\n", 1)[0].startswith(b"version https://git-lfs"):
+        raise Unreadable("LFS 포인터다")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Unreadable("UTF-8 글이 아니다")
+
+
+def tree_entries(out: bytes, roadmaps_dir: str) -> dict:
+    """`git ls-tree -r -z` 출력 → 로드맵 자리의 {경로: (mode, 종류, blob)}. 다른 경로는 버린다."""
+    entries = {}
+    for entry in (e for e in out.split(b"\0") if e):
+        meta, _tab, path = entry.decode("utf-8", "replace").partition("\t")
+        if not _roadmap_shape(path, roadmaps_dir):
+            entries[path] = tuple(meta.split())
+    return entries
+
+
+def blob_reader(entries: dict, cat, failed: set):
+    """read(경로) — tree_entries 의 항목을 cat(blob) → (rc, 바이트) 로 읽는다. 일반 파일(100644 · 100755)만 읽고,
+    cat 이 실패하면 경로를 failed 에 넣고 ReadFailed."""
+    def read(path):
+        mode, kind, sha = entries[path]
+        regular = kind == "blob" and mode in ("100644", "100755")
+        if not regular:
+            return regular_text(False, b"")
+        rc, data = cat(sha)
+        if rc != 0:
+            failed.add(path)
+            raise ReadFailed("파일을 읽지 못했다(git cat-file rc %d)" % rc)
+        return regular_text(True, data)
+    return read
+
+
+def judge_roadmap(path: str, read, roadmaps_dir: str) -> tuple:
+    """roadmap_verdict 와 같은 답 — 글은 로드맵 자리일 때만 read(경로) 로 읽고, Unreadable 이면 ("unreadable", 사유)."""
+    why = _roadmap_shape(path, roadmaps_dir)
+    if why:
+        return "not_roadmap", why
+    try:
+        text = read(path)
+    except Unreadable as exc:
+        return "unreadable", str(exc)
+    return roadmap_verdict(path, text, roadmaps_dir)
+
+
 def find_roadmaps(paths, read, roadmaps_dir: str) -> tuple:
-    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 둘 다 정렬. read(경로) → 글 | None 은 로드맵 자리의 경로만 부른다."""
+    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 둘 다 정렬. read(경로) → 글 | None, 못 읽으면 Unreadable."""
     found, unchecked = [], []
     for path in sorted(paths):
-        if _roadmap_shape(path, roadmaps_dir):
-            continue
-        verdict, why = roadmap_verdict(path, read(path), roadmaps_dir)
+        verdict, why = judge_roadmap(path, read, roadmaps_dir)
         if verdict == "roadmap":
             found.append(path)
         elif verdict == "unreadable":

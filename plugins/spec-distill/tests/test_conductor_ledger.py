@@ -241,15 +241,32 @@ class Roadmaps(Repo):
 
     def test_two_entries_same_list(self):
         import control_plane as cp
+        (self.w / "plan/roadmaps/ln").mkdir(parents=True)
+        os.symlink("../rm/roadmap.md", str(self.w / "plan/roadmaps/ln/roadmap.md"))
+        exe = self.w / "plan/roadmaps/ex/roadmap.md"
+        exe.parent.mkdir(parents=True)
+        exe.write_text(roadmap(BLOCK), encoding="utf-8")
+        exe.chmod(0o755)
         self.put({"plan/roadmaps/rm/broken.md": "---\ntype: roadmap\n# 머리말이 닫히지 않았다\n",
-                  "plan/roadmaps/r2/plan.md": roadmap(BLOCK)})
+                  "plan/roadmaps/r2/plan.md": roadmap(BLOCK),
+                  "plan/roadmaps/lfs/roadmap.md": "version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n"})
+        self.assertIn("100755", sh(self.w, "ls-tree", "HEAD", "--", "plan/roadmaps/ex/roadmap.md"))
+        self.assertIn("120000", sh(self.w, "ls-tree", "HEAD", "--", "plan/roadmaps/ln/roadmap.md"))
         repo = cp.Repo(str(self.w), cp.Deadline(60))
-        targets, why, unchecked = cp.candidates(repo, cp.default_ref(repo)[0])
+        tree, folder, why = cp.listing(repo, cp.default_ref(repo)[0])
         self.assertIsNone(why)
-        self.assertEqual(list(unchecked), ["plan/roadmaps/rm/broken.md"])
-        listed = sorted(self.rows())
-        self.assertEqual(listed, ["plan/roadmaps/r2/plan.md", "plan/roadmaps/rm/broken.md", self.IN])
-        self.assertEqual(sorted(p for p, _b in targets), listed)
+        paths, unchecked, failed = cp.candidates(repo, tree, folder)
+        self.assertEqual(sorted(unchecked), ["plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
+                                             "plan/roadmaps/rm/broken.md"])
+        self.assertEqual(failed, set())
+        self.assertNotIn("plan/roadmaps/ex/roadmap.md", unchecked)   # 실행 비트(100755)도 일반 파일
+        rows = self.rows()
+        listed = sorted(rows)
+        self.assertEqual(listed, ["plan/roadmaps/ex/roadmap.md", "plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
+                                  "plan/roadmaps/r2/plan.md", "plan/roadmaps/rm/broken.md", self.IN])
+        self.assertEqual(paths, listed)
+        for p in ("plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md", "plan/roadmaps/rm/broken.md"):
+            self.assertEqual(rows[p], "검사 불가", p)
 
     def test_broken_settings_stop(self):
         self.put({".devbrew.md": "---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---\n"})

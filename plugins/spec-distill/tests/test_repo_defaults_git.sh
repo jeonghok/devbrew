@@ -234,6 +234,21 @@ assert_eq "$RC" "3" "roadmap-check: 머리말을 못 읽는 파일은 rc 3"
 assert_contains "$ERR" "검사 불가" "roadmap-check: 못 읽으면 검사 불가로 알린다"
 run "$RB" roadmap-check plan/roadmaps/x/none.md
 assert_eq "$RC" "3" "roadmap-check: 없는 파일은 rc 3"
+run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
+assert_not_contains "$ERR" "기계 상태 층 건너뜀" "roadmap-check: 해결자 알림(로드맵 없음 — 기계 상태 층 건너뜀)을 끝내기 펜스에 내지 않는다"
+mkdir -p "$RB/plan/roadmaps/ex" "$RB/plan/roadmaps/ln" "$RB/plan/roadmaps/lfs"
+cp "$RB/plan/roadmaps/x/roadmap.md" "$RB/plan/roadmaps/ex/roadmap.md" && chmod +x "$RB/plan/roadmaps/ex/roadmap.md"
+ln -s ../x/roadmap.md "$RB/plan/roadmaps/ln/roadmap.md"
+printf 'version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n' > "$RB/plan/roadmaps/lfs/roadmap.md"
+run "$RB" roadmap-check plan/roadmaps/ex/roadmap.md
+assert_eq "$RC" "0" "roadmap-check: 실행 비트가 있는 일반 파일도 로드맵(두 진입과 같은 읽기 규칙)"
+run "$RB" roadmap-check plan/roadmaps/ln/roadmap.md
+assert_eq "$RC" "3" "roadmap-check: 링크는 rc 3"
+assert_contains "$ERR" "일반 파일이 아니다" "roadmap-check: 링크의 사유"
+run "$RB" roadmap-check plan/roadmaps/lfs/roadmap.md
+assert_eq "$RC" "3" "roadmap-check: LFS 포인터는 rc 3"
+assert_contains "$ERR" "검사 불가" "roadmap-check: LFS 포인터는 조용한 로드맵 아님이 아니라 검사 불가"
+assert_contains "$ERR" "LFS 포인터다" "roadmap-check: LFS 포인터의 사유"
 run "$A" roadmap-check plan/roadmaps/x/roadmap.md --root "$RB"
 assert_eq "$RC" "0" "roadmap-check: 레포 A 를 cwd 로 두고 --root 레포 B 의 설정 폴더로 판정한다"
 mkdir -p "$A/plan/roadmaps/x" && cp "$RB/plan/roadmaps/x/roadmap.md" "$A/plan/roadmaps/x/roadmap.md"

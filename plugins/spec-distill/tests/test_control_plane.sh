@@ -243,8 +243,8 @@ pg add -A && pg commit -qm init && pg push -q -u origin main && pg remote set-he
   || no "픽스처: 설정 폴더가 다른 레포를 만들지 못했다"
 WANT="$(printf '%s\n' plan/roadmaps/pa/roadmap.md plan/roadmaps/pb/plan.md plan/roadmaps/pc/broken.md)"
 cp_list="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import control_plane as cp
-r = cp.Repo(sys.argv[2], cp.Deadline(30)); t, why, _u = cp.candidates(r, cp.default_ref(r)[0])
-print("\n".join(sorted(p for p, _b in t))); print(why or "사유 없음")' "$S" "$P")"
+r = cp.Repo(sys.argv[2], cp.Deadline(30)); tree, folder, why = cp.listing(r, cp.default_ref(r)[0])
+print("\n".join(cp.candidates(r, tree, folder)[0])); print(why or "사유 없음")' "$S" "$P")"
 assert_eq "$cp_list" "$WANT
 사유 없음" "상태줄 후보: 설정 폴더 바로 아래 폴더의 type: roadmap 과 못 읽는 후보만(기본 폴더 · 템플릿 · 두 단계 · 다른 표지 아님)"
 ledger_list="$(python3 "$REAL/conductor_ledger.py" --root "$P" roadmaps | cut -f1 | sort)"
@@ -255,6 +255,63 @@ assert_contains "$pline" "검사 불가" "상태줄: 머리말을 못 읽는 후
 assert_eq "$(tail -n +"$((before + 1))" "$LOG" | sort | tr '\n' '|')" \
   "plan/roadmaps/pa/roadmap.md --json|plan/roadmaps/pb/plan.md --json|" "상태줄: 상태 계산은 찾은 로드맵에만 부른다"
 assert_contains "$(cd "$P" && python3 "$S/control_plane.py" show </dev/null)" "plan/roadmaps/pc/broken.md" "지도: 못 읽는 후보의 경로를 보인다"
+cat > "$T/catcount.py" <<'PY'
+"""gather 를 두 번 돌려 로드맵 후보 글 읽기(cat-file, 레포 설정 파일 제외) 수를 센다. fail 모드는 첫 번째에 pa 읽기를 실패시킨다."""
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import control_plane as cp  # noqa: E402
+
+P, mode = sys.argv[2], sys.argv[3]
+
+
+def rev(spec):
+    return subprocess.run(["git", "-C", P, "rev-parse", spec], capture_output=True, encoding="utf-8").stdout.strip()
+
+
+settings, pa = rev("origin/HEAD:.devbrew.md"), rev("origin/HEAD:plan/roadmaps/pa/roadmap.md")
+orig, log, fail = cp.Repo.raw, [], set()
+
+
+def raw(self, *args):
+    if args[0] == "cat-file" and args[-1] != settings:
+        log.append(args[-1])
+        if args[-1] in fail:
+            return 128, b""
+    return orig(self, *args)
+
+
+cp.Repo.raw = raw
+try:
+    os.unlink(os.path.join(P, ".git", "devbrew", "control-plane.json"))
+except FileNotFoundError:
+    pass
+
+
+def gather():
+    del log[:]
+    v = cp.gather(P, None, cp.Deadline(30), {}, use_gh=False)
+    return len(log), dict((p, r.get("exit")) for p, r in v["items"])
+
+
+if mode == "fail":
+    fail.add(pa)
+n1, items1 = gather()
+fail.clear()
+n2, items2 = gather()
+pa_path = "plan/roadmaps/pa/roadmap.md"
+print("%s:%d %s:%d pa=%s>%s" % ("miss" if n1 else "none", n1, "hit" if not n2 else "read", n2,
+                                 items1.get(pa_path), items2.get(pa_path)))
+PY
+out="$(python3 "$T/catcount.py" "$S" "$P" hit)"
+case "$out" in miss:*" hit:0 "*) ok "캐시가 맞으면 로드맵 후보 글을 하나도 읽지 않는다(cat-file 0) — $out" ;;
+  *) no "캐시가 맞을 때도 후보 글을 읽는다 — $out" ;; esac
+assert_contains "$out" "miss:5 " "양성 대조: 캐시가 없으면 로드맵 자리의 .md 다섯을 읽는다(pa 셋 · pb · pc)"
+out="$(python3 "$T/catcount.py" "$S" "$P" fail)"
+assert_contains "$out" "pa=3>1" "읽기 실패는 검사 불가로 보이되 캐시에 남지 않는다 — 다시 읽으면 상태 계산이 돈다($out)"
+assert_not_contains "$out" " hit:0 " "읽기 실패 뒤 둘째 호출은 캐시를 쓰지 않고 다시 읽는다"
 pput .devbrew.md "$(printf -- '---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---')"
 pg commit -qam typo && pg push -q origin main || no "픽스처: 깨진 설정을 올리지 못했다"
 assert_contains "$(cd "$P" && python3 "$S/control_plane.py" statusline </dev/null)" "검사 불가" "상태줄: 레포 설정이 깨지면 기본 폴더로 조용히 찾지 않고 검사 불가"

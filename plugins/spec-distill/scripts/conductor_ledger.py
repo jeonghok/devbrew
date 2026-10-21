@@ -39,7 +39,8 @@ import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, approval_date, find_roadmaps, parse_roadmap, section_lines)
+                           RULINGS_HEADING, FormatError, approval_date, blob_reader, find_roadmaps, parse_roadmap,
+                           section_lines, tree_entries)
 from state_path import state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -572,24 +573,15 @@ def _roadmaps_dir(root) -> str:
 def _default_roadmaps(root, main: str) -> tuple:
     """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 기본 브랜치의 로드맵 폴더 목록과 blob 읽기로 find_roadmaps 를 부른다."""
     folder = _roadmaps_dir(root)
-    rc, out, err = git(root, "ls-tree", "-r", "-z", main, "--", folder)
-    if rc:
-        raise Fail(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % err)
-    blobs = {}
-    for entry in (e for e in out.split("\0") if e):
-        meta, _tab, path = entry.partition("\t")
-        blobs[path] = meta.split()
+    p = subprocess.run([GIT, "ls-tree", "-r", "-z", main, "--", folder], cwd=str(root), capture_output=True)
+    if p.returncode:
+        raise Fail(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % p.stderr.decode("utf-8", "replace").strip())
+    entries = tree_entries(p.stdout, folder)
 
-    def read(path):
-        mode, kind, sha = blobs[path]
-        if mode != "100644" or kind != "blob":
-            return None
-        p = subprocess.run([GIT, "cat-file", "blob", sha], cwd=str(root), capture_output=True)
-        try:
-            return p.stdout.decode("utf-8") if p.returncode == 0 else None
-        except UnicodeDecodeError:
-            return None
-    return find_roadmaps(list(blobs), read, folder)
+    def cat(sha):
+        c = subprocess.run([GIT, "cat-file", "blob", sha], cwd=str(root), capture_output=True)
+        return c.returncode, c.stdout
+    return find_roadmaps(list(entries), blob_reader(entries, cat, set()), folder)
 
 
 def c_roadmaps(root, a) -> int:
