@@ -1268,14 +1268,14 @@ elif [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
   [ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/nofollow_write.py" run --out "$gf" -- printf '%s' "$gate_final" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
-  python3 -I -X utf8 -c '
+  python3 "$SD/scripts/nofollow_write.py" run --out "$gf" -- python3 -I -X utf8 -c '
 import json, sys
 sys.path.insert(0, sys.argv[1])
 from seed_review_log import parse_lines
 text = open(sys.argv[2], encoding="utf-8").read()
 ids = [i for e in parse_lines(text) if e["source"] == "engine" and e["choice"] == "drop" for i in e["ids"]]
-json.dump({"dropped": ids}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)
-' "$SD/scripts" "$AUDIT_ABS" "$gf" || final_drops_rc=2
+json.dump({"dropped": ids}, sys.stdout, ensure_ascii=False)
+' "$SD/scripts" "$AUDIT_ABS" || final_drops_rc=2
   [ "$final_drops_rc" -ne 0 ] || echo '[spec-distill] 엔진 원장 없음 — audit `## 6` 기록으로 대조했다. 엔진이 audit 에 적지 않은 drop 은 이 대조에 보이지 않는다.' >&2
 fi
 [ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$gf" || final_drops_rc=$?

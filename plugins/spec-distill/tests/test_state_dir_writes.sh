@@ -631,7 +631,7 @@ run_fence "$TR/rb-bundle.sh" PAYLOAD="$PAY2" AUDIT="$AUD"; rc=$?
 chmod 755 "$SDIR2"
 [ "$rc" != 0 ] && ok "rb_bundle_ro_dir_clears_stale: 펜스가 멈춘다(rc $rc)" || no "rb_bundle_ro_dir_clears_stale: rc 0 으로 지나갔다"
 if grep -q OLD "$BND2" 2>/dev/null; then no "rb_bundle_ro_dir_clears_stale: 직전 번들의 OLD 가 남았다"; else ok "rb_bundle_ro_dir_clears_stale: 직전 번들에 OLD 가 없다"; fi
-assert_contains "$(cat "$TR/last.err")" "번들 조립 실패" "rb_bundle_ro_dir_clears_stale: 실패 갈래의 공시"
+assert_contains "$(cat "$TR/last.err")" "번들 조립 실패(rc 73)" "rb_bundle_ro_dir_clears_stale: writer 실패(rc 73)가 실패 갈래로 갔다"
 
 # RF 번들 펜스 — 변수를 앞에 대입해 돈다
 RFS="$R/.claude/spec-distill/.docreview/rf-seed"; mkdir -p "$RFS"
@@ -667,6 +667,19 @@ run_fence "$TR/rf-drops.sh"
 kept rf4 rf_hunks_and_drops_link
 plain_one "$RFS/gate-drops.json" "rf_hunks_and_drops_link(gate-drops.json)"
 assert_contains "$(cat "$RFS/gate-drops.json" 2>/dev/null)" '"round"' "rf_hunks_and_drops_link: gate-drops.json 에 엔진 요약(양의 짝)"
+
+# RF 확정 직전 drop 검사 — 엔진 원장이 없는 자리에서 audit 으로 만든 gate-final.json
+RFF="$R/.claude/spec-distill/.docreview/rf-final"; mkdir -p "$RFF"
+{ rf_vars; printf 'STATE_DIR="%s"\n' "$RFF"; fence_with "$RF_MD" 'gate-final.json'; } > "$TR/rf-final.sh"
+for kind in symlink hardlink; do
+  rm -f "$RFF/gate-final.json"; outside "rf-final-$kind"
+  if [ "$kind" = symlink ]; then ln -s "$OUT/rf-final-$kind" "$RFF/gate-final.json"; else ln "$OUT/rf-final-$kind" "$RFF/gate-final.json"; fi
+  run_fence "$TR/rf-final.sh"
+  [ ! -e "$RFF/docreview-state.md" ] && ok "rf_gate_final_link($kind): 엔진 원장이 없는 갈래(전제)" || no "rf_gate_final_link($kind): 엔진 원장이 생겼다 — audit 갈래를 재지 않는다"
+  kept "rf-final-$kind" "rf_gate_final_link($kind)"
+  plain_one "$RFF/gate-final.json" "rf_gate_final_link($kind)"
+  assert_contains "$(cat "$RFF/gate-final.json" 2>/dev/null)" '"dropped"' "rf_gate_final_link($kind): gate-final.json 에 audit 으로 만든 dropped(양의 짝)"
+done
 
 # RB degrade 대체 파일 — 그 자리의 링크는 거절되고 기록은 임시 폴더의 파일로 간다
 KPAY="$R/docs/ks-interview.md"; KST="$R/docs/ks-interview.state.md"
