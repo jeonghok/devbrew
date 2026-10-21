@@ -44,7 +44,7 @@
 5. **게이트 글을 기계가 읽는 소비자(진입 skill 의 게이트 행 판독)가 둘째 줄의 새 공시를 행으로 오독한다.** 사람은 게이트 행 수 · 선택지가 바뀌지 않길 기대한다. Task 2 의 `gate-rows` 사례와 골든 테스트가 잠근다.
 6. **불변 절(결정 기록)에 새 항목 하나만 더하고 다음 라운드를 연다.** 사람은 엔진이 스냅숏을 만들게 된 뒤에도 「새 항목만 추가」로 읽혀 얼림 위반으로 막히지 않길 기대한다. Task 1 의 `test_item_marks_carried` 가 잠근다.
 
-## 넘김 대조 — 이 계획이 받는 것 · 설계 밖 질문
+## 넘김 대조 — 이 계획이 받는 것
 
 전체 표는 계획 1 `## 넘김 대조`. 이 계획 몫:
 
@@ -53,14 +53,10 @@
 | R12 계획 1 통합 리뷰 — 스냅숏 동치 칸에 `item_marks` | Task 1(동치 사례 · `test_item_marks_carried` · 변이) |
 | R13 — `--snapshot` 호출자에 `test_state_dir_writes.sh` 세 사례 · 절차서 `> snap.json` 줄을 되살리지 않는다 | 「설계와 다른 점 3」 · Task 0 Step 4 · Task 1 Step 4 |
 | R13 — README 한계 불릿(P21 · P14)을 `## 한계` 절에 합치고 `test_state_dir_writes.sh` 끝 README 락을 맞춘다 | Task 2 |
-| R13 설계 `## 미룸` 두 행 · R12 설계 `## 미룸` R8 행 셋 · #243 `--optional` | 설계 범위 밖 — 아래 Q1~Q4. 답이 「받는다」면 Task 2 가 공시 · 끝냄을 한다 |
-
-설계 범위를 넓히는 질문(지휘 세션이 사용자에게 묻고, 받으면 설계 `## 상류 · 하류 연계` 받는 곳 · §7 · 결정 기록에 반영한다 — 이 계획은 설계를 고치지 않는다):
-
-- **Q1 — R13 미룸 두 행**(Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기). 로드맵 R8 「한다」에는 이미 실렸지만 R8 설계에는 없다. 권장: §7 의 「레포 밖 권한 경계 — 공시로 다룬다」에 넣어 받고, 장치는 더하지 않는다(README 에 이미 있는 P21 한계 불릿을 `## 한계` 절로 옮기는 것으로 공시가 선다).
-- **Q2 — R12 미룸 R8 행 둘**(`declare-related` · `log-decision` 이 표지 확인 없이 불려도 엔진이 거부하지 않음 · 엔진 명령을 거치지 않는 원장 쓰기). 권장: Q1 과 같이 §7 공시로 받는다.
-- **Q3 — R12 미룸 R8 행 하나**(보호 절 제목 바꿈의 정체 추적 — R12 가 「후보」로 넘김). 권장: 받지 않는다 — 새 장치라 U5(과설계 경계)에 걸리고 R12 의 「좁힌 대로 둠」을 유지한다. 그 행에 「R8 받지 않음 — 좁힌 대로 둠(U5)」.
-- **Q4 — #243 미룸**(`--optional` 을 묶지 않아 qg 판정 줄의 「선택 N」 칸이 낮아질 수 있다, 판정값은 그대로). 권장: 받는다 — qg README 한계에 한 줄 공시(장치 없음). 받으면 Task 2 Files 에 `plugins/quality-gates/README.md` 가 더해진다.
+| R13 설계 `## 미룸` 두 행(Write 도구 쓰기 링크 · 실행 중 다시 심는 링크와 `runner_common.sh` 두 함수) | 설계 U13 — §7 공시로 받음. Task 2(README `## 한계` 의 P21 불릿 · 두 행에 끝냄) |
+| R12 설계 `## 미룸` R8 행 둘(`declare-related` · `log-decision` 의 표지 없는 호출 · 엔진 명령 밖 원장 쓰기) | 설계 U14 — §7 공시로 받음. Task 2(README `## 한계` 의 공시 문장 · 두 행에 끝냄) |
+| R12 설계 `## 미룸` R8 행 — 보호 절 제목 바꿈 정체 추적(후보) | 설계 U15 — 받지 않음. Task 2(그 행에 「R8 받지 않음」) |
+| PR #243 미룸 — `--optional` 을 묶지 않아 「선택 N」 칸이 낮아질 수 있음 | 설계 U16 — qg README 한계 한 줄. Task 2(코드 없음) |
 
 ---
 
@@ -74,7 +70,6 @@
 - [ ] **Step 2: `git merge --no-edit origin/<기본 브랜치>`.**
 - [ ] **Step 3: 다시 읽는다.** `shared/docreview/scripts/docreview_state.py` 의 `cmd_begin_round`(라운드 스냅숏 행에 옮기는 칸 — 불변 절의 `item_marks` 포함) · `snapshot_problem` · `_snapshot_ok` · 「추가만」 판정 함수(`item_marks` 를 읽는 자리) · `render_gate` · `cmd_gate` · `cmd_gate_rows` · 하위 명령 등록부(`P("begin-round")`), `docreview_anchor.py` 의 `parse_sections`(절마다 `item_marks` 를 낸다) · `snapshot_of` · `cmd_snapshot` · `cmd_diff`(`item_marks` 를 뺀다) · `cmd_protected`, `shared/docreview/references/reviewing-document.md` 의 「선결」 · 1단계, 진입 skill 셋(request-framing · reviewing-brief · spec-review)의 라운드 절차 중 스냅숏 · `begin-round` 를 말하는 자리(reviewing-brief · spec-review 의 「선결의 `init` 이 rc 0 이 아니면」 문단), `plugins/spec-distill/README.md` 의 절 목록과 `### Principles 흡수` 의 한계 불릿 둘(P21 상태 폴더 쓰기의 링크 · P14 원장 정리의 뿌리), 락 `plugins/spec-distill/tests/test_state_dir_writes.sh`(원장 링크 거절 세 사례 · 끝의 README 한계 문장 단언) · `shared/tests/test_docreview_procedure_paths.sh`(산출자 축의 `*.json` 이름 도출 · `snap.json` 카나리아), 설계 밖 넘김 — R12 설계(`2026-10-20-review-engine-leftovers-design.md`) `## 미룸` 의 R8 행 셋 · R13 설계(`2026-10-21-interview-gate-leftovers-design.md`) `## 미룸` 의 R8 행 둘.
 - [ ] **Step 4: 호출자를 다시 센다.** `git grep -n -e 'begin-round' -- plugins shared ':!*CHANGELOG*' | grep -e '--snapshot'` 와 `git grep -n -e 'snap.json' -e 'docreview_anchor.py" snapshot' -e 'docreview_anchor.py snapshot' -e 'ANCHOR" snapshot' -- plugins shared ':!*CHANGELOG*'`. Expected: 「설계와 다른 점 3」의 열세 파일 + `test_docreview_procedure_paths.sh`. 더 있으면 Task 1 Files 목록에 더한다. `cmd_protected` 의 `--snapshot` 은 begin-round 가 아니라 그대로 둔다.
-- [ ] **Step 4b: 설계 밖 넘김의 답을 확인한다.** 아래 `## 넘김 대조` 의 질문 Q1~Q4 는 설계 범위를 넓히는 일이라 지휘 세션이 사용자 답을 받아 설계문서에 반영한 뒤 구현한다. 답이 아직 없으면 Task 1 은 진행하고 Task 2 Step 1 앞에서 멈춰 지휘 세션에 묻는다.
 - [ ] **Step 5: 기준 스위트.** 계획 1 Task 0 Step 5 와 같은 `baseline.sh` 를 `$HOME/.claude/sdd-mirror/r8-plan3/` 에 두고 `before` 를 잰다.
 
 ---
@@ -112,16 +107,17 @@
 ### Task 2: 한계 공시 — 리뷰 결과 머리 · README 「한계」 (AC26)
 
 **Files:**
-- Modify: `shared/docreview/scripts/docreview_state.py` (상수 `WRITER_TRUST_NOTICE` · `render_gate` 둘째 줄 · `cmd_gate` JSON 의 `writer_trust_notice`), `plugins/spec-distill/README.md` (새 `## 한계` 절 · `### Principles 흡수` 의 한계 불릿 둘을 그 절로 옮김), 골든 기대 파일(`shared/tests/test_docreview_golden.sh` 가 읽는 것), `plugins/spec-distill/tests/test_state_dir_writes.sh` (끝의 README 한계 문장 단언을 `## 한계` 절 안으로 좁힘), 넘김 표 — `## 넘김 대조` 의 Q1~Q4 답이 「받는다」인 행만: R13 설계 `## 미룸` 두 행 · R12 설계 `## 미룸` 의 해당 행 끝에 `끝냄 — <커밋 8자>(R8)`(PR #243 의 넘김은 표가 없어 PR 본문 `## 지휘자에게` 에 한 줄)
+- Modify: `shared/docreview/scripts/docreview_state.py` (상수 `WRITER_TRUST_NOTICE` · `render_gate` 둘째 줄 · `cmd_gate` JSON 의 `writer_trust_notice`), `plugins/spec-distill/README.md` (새 `## 한계` 절 · `### Principles 흡수` 의 한계 불릿 둘을 그 절로 옮김), 골든 기대 파일(`shared/tests/test_docreview_golden.sh` 가 읽는 것), `plugins/spec-distill/tests/test_state_dir_writes.sh` (끝의 README 한계 문장 단언을 `## 한계` 절 안으로 좁힘), `plugins/quality-gates/README.md` (`## 한계` 에 한 줄 — U16), 넘김 표 — R13 설계(`2026-10-21-interview-gate-leftovers-design.md`) `## 미룸` 의 R8 행 둘 · R12 설계(`2026-10-20-review-engine-leftovers-design.md`) `## 미룸` 의 엔진 밖 원장 쓰기 두 행(U13 · U14)의 이유 칸 끝에 `끝냄 — <커밋 8자>(R8)`, R12 의 보호 절 제목 바꿈 정체 추적 행(U15)의 이유 칸 끝에 `R8 받지 않음 — 좁힌 대로 둠(U5)`(꼴은 9c2e4ec3 의 「끝냄 — <sha>(R13)」와 같다). PR #243 의 넘김은 표가 없어 PR 본문 `## 지휘자에게` 에 「U16 으로 qg README 한계 한 줄」을 적는다.
 - Test: `shared/tests/test_docreview_gate_plain.sh`, `shared/tests/test_writer_trust_notice.sh` (새), `plugins/spec-distill/tests/test_state_dir_writes.sh`
 
 **Interfaces:**
 - Produces: `WRITER_TRUST_NOTICE = "사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다"`.
-- README `## 한계` 절(`## Prerequisites` 앞): 첫 줄은 위 문장 그대로, 다음 줄 「샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다」(안내만). `--quote-file` · `log-decision --quote` · `decide --quote` 출처와 제목 하나 빠진 audit 은 이 공시로 다룬다는 한 줄. 그 아래에 지금 `### Principles 흡수` 에 있는 한계 불릿 둘(「한계 — 상태 폴더 쓰기의 링크 (P21)」 · 「한계 — 원장 정리의 뿌리 (P14)」)을 글 그대로 옮긴다 — `### Principles 흡수` 에는 그 둘 대신 「한계는 `## 한계` 절」 한 줄. Q1~Q3 답이 「받는다」면 그 행이 이 공시로 다뤄진다는 한 줄을 더한다(장치 없음 — 설계 §7 · U5).
+- README `## 한계` 절(`## Prerequisites` 앞): 첫 줄은 위 문장 그대로, 다음 줄 「샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다」(안내만). `--quote-file` · `log-decision --quote` · `decide --quote` 출처와 제목 하나 빠진 audit 은 이 공시로 다룬다는 한 줄. 그 아래에 지금 `### Principles 흡수` 에 있는 한계 불릿 둘(「한계 — 상태 폴더 쓰기의 링크 (P21)」 · 「한계 — 원장 정리의 뿌리 (P14)」)을 글 그대로 옮긴다 — `### Principles 흡수` 에는 그 둘 대신 「한계는 `## 한계` 절」 한 줄. 그 절에 한 줄 더 — 「`declare-related` · `log-decision` 이 표지 확인 없이 불리거나 엔진 명령을 거치지 않고 원장을 쓰는 길도 위 공시로 다룬다 — 엔진은 그런 쓰기를 거부하지 않는다」(U14, 장치 없음). R13 두 행(U13)은 옮긴 P21 불릿이 그대로 공시한다.
+- quality-gates README `## 한계` 에 한 줄(U16): 「판정 줄의 「선택 N」 칸은 합성기가 낸 인자를 묶지 않고 옮긴다 — 같은 세션이 낮춰 적을 수 있다. 판정값(통과 · 막음)은 이 칸에 기대지 않는다」. 코드는 바꾸지 않는다.
 
-- [ ] **Step 1: 실패하는 테스트**(`test_writer_trust_notice.sh`): `render_gate` 출력의 둘째 줄 == `WRITER_TRUST_NOTICE` · README `## 한계` 절에 같은 문장이 글자 그대로 있다(엔진 상수에서 읽어 비교 — 두 글이 어긋나면 RED) · README `## 한계` 절에 P21 · P14 한계 불릿이 있고 `### Principles 흡수` 에는 없다(옮김 — 양 · 음 짝) · `gate` JSON 에 `writer_trust_notice` · 인용 라벨 음의 락: 엔진 출력 · 진입 skill 셋에 「출처 미확인」 낱말이 없다 — 양의 짝: 공시 문장은 있다. `gate-rows` 출력의 행 수가 공시 전과 같다(Review Focus 5). `test_state_dir_writes.sh` 끝의 README 단언(「Write 도구로 쓰는 상태 폴더 파일(… )은 writer 로 감싸지 못하고」)은 README 전체가 아니라 `## 한계` 절 본문에서 찾게 좁힌다.
+- [ ] **Step 1: 실패하는 테스트**(`test_writer_trust_notice.sh`): `render_gate` 출력의 둘째 줄 == `WRITER_TRUST_NOTICE` · README `## 한계` 절에 같은 문장이 글자 그대로 있다(엔진 상수에서 읽어 비교 — 두 글이 어긋나면 RED) · README `## 한계` 절에 P21 · P14 한계 불릿이 있고 `### Principles 흡수` 에는 없다(옮김 — 양 · 음 짝) · `gate` JSON 에 `writer_trust_notice` · 인용 라벨 음의 락: 엔진 출력 · 진입 skill 셋에 「출처 미확인」 낱말이 없다 — 양의 짝: 공시 문장은 있다. `gate-rows` 출력의 행 수가 공시 전과 같다(Review Focus 5). README `## 한계` 에 U14 줄이 있다 · quality-gates README `## 한계` 에 「선택 N」 줄이 있다(U16 — 양의 단언만, 글 바꿈 변이로 RED 확인). `test_state_dir_writes.sh` 끝의 README 단언(「Write 도구로 쓰는 상태 폴더 파일(… )은 writer 로 감싸지 못하고」)은 README 전체가 아니라 `## 한계` 절 본문에서 찾게 좁힌다.
 - [ ] **Step 2: 실패를 본다.** Run: `bash shared/tests/test_writer_trust_notice.sh; bash plugins/spec-distill/tests/test_state_dir_writes.sh` — Expected: `✗`.
-- [ ] **Step 3: 구현.** 골든 기대 파일은 둘째 줄 하나만 더해진 차이인지 `diff` 로 확인한 뒤 고친다. Q1~Q4 답대로 넘김 표에 끝냄을 적는다(답이 「받지 않는다」인 행은 그대로 두고 지휘 세션에 보고).
+- [ ] **Step 3: 구현.** 골든 기대 파일은 둘째 줄 하나만 더해진 차이인지 `diff` 로 확인한 뒤 고친다. README 두 곳을 쓴 커밋의 8자로 넘김 표 다섯 행에 끝냄 넷 · 받지 않음 하나를 적는다(Files 의 꼴).
 - [ ] **Step 4: 통과를 본다.** Run: `bash shared/tests/test_writer_trust_notice.sh && bash shared/tests/test_docreview_gate_plain.sh && bash shared/tests/test_docreview_golden.sh && bash shared/tests/test_docreview_gate_visibility.sh && bash plugins/spec-distill/tests/test_state_dir_writes.sh` — Expected: `✗` 0.
 - [ ] **Step 5: 변이**: README 문장에서 한 글자를 바꿈 → RED · 둘째 줄을 마지막 줄로 옮김 → RED · P21 불릿을 `### Principles 흡수` 로 되돌림 → 옮김 사례와 `test_state_dir_writes.sh` 의 좁힌 단언 RED.
 - [ ] **Step 6: 커밋** — `docs(docreview): 쓰는 세션을 믿는 한계를 리뷰 결과 머리와 README 에 같은 문장으로`

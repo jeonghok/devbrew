@@ -81,15 +81,15 @@
 | #243 — qg Step 1c 는 `review-diff: ` 로 시작하는 stderr 줄만 옮긴다(`[resolve-baseline]` 줄은 안 감) | 이 계획 Task 8(review-diff 가 `review-diff: ` 안내 줄을 낸다) |
 | #243 — `degraded_reason:` 을 더하면 review-diff stdout 줄 수 계약 · `test_review_diff.sh` 단언도 | 이 계획 Task 8(10 → 11줄) |
 | #243 — `.claude/worktrees/` 실측 결론은 새 문구(「이전 qg 실행이 남긴 worktree」 · 「추적 안 되는 중첩 레포」) | 이 계획 Task 0 Step 6 · Task 9 Step 6 |
-| #243 — `--optional` 을 묶지 않아 「선택 N」 칸이 낮아질 수 있다 | 설계 범위 밖 — 질문으로 지휘 세션에 돌려보냄(계획 3 `## 넘김 대조` 의 Q4) |
-| R12 계획 1 통합 리뷰 — R12 설계 `## 미룸` 의 R8 행 셋 | 설계 범위 밖 — 질문(계획 3 의 Q2 · Q3), 답대로 계획 3 Task 2 |
+| #243 — `--optional` 을 묶지 않아 「선택 N」 칸이 낮아질 수 있다 | 설계 U16 — qg README 한계 한 줄(계획 3 Task 2) |
+| R12 계획 1 통합 리뷰 — R12 설계 `## 미룸` 의 R8 행 셋 | 설계 U14(둘 — §7 공시로 받음) · U15(정체 추적 — 받지 않음), 계획 3 Task 2 |
 | R12 계획 1 통합 리뷰 — 스냅숏 동치 칸에 `item_marks` | 계획 3 Task 1 |
 | #245 — `branch_tip.py` 공유(merge_check · review-pack) | 이 계획 Task 0 Step 3 · 「설계에 없던 결정 11」 · Task 10 Step 4, 계획 2 Task 0 · Task 4 |
 | R13 — 펜스가 `state-root-for <doc>` 를 부르고 남는 인자를 조용히 버린다 · `--ensure` 인터페이스 · 다른 레포 문서 사례 | 이 계획 「설계에 없던 결정 8」 · Task 9 |
 | R13 — `--snapshot` 호출자에 `test_state_dir_writes.sh` 링크 거절 세 사례 · 절차서 `> snap.json` 줄을 되살리지 않는다 | 계획 3 Task 0 Step 4 · Task 1 |
 | R13 — `test_decompose_surface.sh` Step A 8 e2e 치환을 해결자 값으로 · 「폴더를 만들지 않는다」에 rc 0 양의 짝 | 이 계획 Task 6 Step 2b |
-| R13 — 미룸 두 행(Write 도구 쓰기 링크 · 실행 중 다시 심는 링크/`runner_common.sh` 두 함수) | 설계 범위 밖 — 질문(계획 3 의 Q1), 답대로 계획 3 Task 2 |
-| R13 — README 한계 불릿(P21 · P14)을 계획 3 의 `## 한계` 절에 합치고 `test_state_dir_writes.sh` 끝의 README 락을 맞춘다 · R13 설계 `## 미룸` 두 행에 끝냄 | 계획 3 Task 2(끝냄은 Q1 답이 「받는다」일 때) |
+| R13 — 미룸 두 행(Write 도구 쓰기 링크 · 실행 중 다시 심는 링크/`runner_common.sh` 두 함수) | 설계 U13 — §7 공시로 받음, 계획 3 Task 2 |
+| R13 — README 한계 불릿(P21 · P14)을 계획 3 의 `## 한계` 절에 합치고 `test_state_dir_writes.sh` 끝의 README 락을 맞춘다 · R13 설계 `## 미룸` 두 행에 끝냄 | 계획 3 Task 2 |
 | R13 — Global Constraints 두 줄(세 skill 폴더 쓰기는 `nofollow_write.py` · 펜스 사이 변수 나르기 금지는 redecompose.md 에도) · Task 6 · 7 · 계획 2 Task 8 의 Test 목록 | 세 계획의 Global Constraints · 이 계획 Task 6 · 7 · 9 · 10 · 계획 2 Task 8 · 9 |
 
 ---
