@@ -9,9 +9,9 @@
 명령줄:
   merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
 
-무엇을 돌리나: 기본 브랜치의 로드맵 frontmatter `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
-(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. frontmatter 에 없는 키는 이 로드맵 기계 상태의 `## 레포 설정`
-(지휘자가 물어 임시로 둔 값)에서 읽는다 — frontmatter 가 이기고, 기계 상태가 깨졌으면 검사 불가다. 둘 다 없으면 이
+무엇을 돌리나: 해결자(`repo_defaults.resolve`)가 낸 `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
+(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 · 이 로드맵 기계 상태의
+`## 레포 설정`(지휘자가 물어 임시로 둔 값) 순으로 찾고 출처를 함께 낸다 — 설정이 깨졌으면 검사 불가다. 값이 없으면 이
 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
@@ -36,7 +36,7 @@ import branch_tip as branch_tip_mod  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import DEFAULT_REF, NO_DEFAULT, frontmatter, unquote  # noqa: E402
+from roadmap_model import DEFAULT_REF, NO_DEFAULT  # noqa: E402
 from state_path import state_root  # noqa: E402
 
 SELECT = HERE / "run-test-selection.sh"
@@ -55,7 +55,6 @@ RUNNER_SHAPES = {
     "unittest": (KNOWN_SHAPES[1],),
     "shell": (("✗ · FAIL: 표시", re.compile(r"^\s*(?:✗|FAIL:) (.+)$", re.M)), KNOWN_SHAPES[2]),
 }
-MACHINE_NOTE = "(기계 상태 임시값)"
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
 
 
@@ -168,8 +167,8 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
     sources = sources or {}
     res = {"new": [], "fixed": [], "both": [], "unit_only": [],
            "notes": ["무엇을 돌렸나: test_command(`%s`)%s" % (cmd, sources.get("test_command", ""))]}
-    if pattern and sources.get("test_failure_pattern"):
-        res["notes"].append("실패 이름 정규식: test_failure_pattern%s" % sources["test_failure_pattern"])
+    if pattern:
+        res["notes"].append("실패 이름 정규식: test_failure_pattern(`%s`)%s" % (pattern, sources.get("test_failure_pattern", "")))
     b_rc, b_out = run_command(cmd, base, work / "tmp-base")
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if 127 in (b_rc, m_rc):
@@ -276,8 +275,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
         if count is None:
             raise Stop(3, "테스트 파일 수를 세지 못했다 — compute-test-scope-candidates 가 숫자를 내지 않았다")
         if count:
-            raise Stop(6, "테스트로 보이는 파일 %d개를 돌릴 러너를 모른다 — 테스트 명령을 정해 주면 로드맵 "
-                          "frontmatter `test_command` 로 올린다" % count)
+            raise Stop(6, "테스트로 보이는 파일 %d개를 돌릴 러너를 모른다 — 테스트 명령(`test_command`)을 정해 주면 "
+                          "레포 설정 파일(%s)에 올린다" % (count, repo_defaults.SETTINGS_FILE))
         raise Stop(7, "스위트 대조 없음 — 이 레포에서 테스트를 찾지 못했다. 통합 리뷰만 한다")
     res = {"new": [], "fixed": [], "both": [], "unit_only": [],
            "notes": ["무엇을 돌렸나: 탐지한 러너 %s" % " · ".join(sorted({r for _u, r, _g in rows}))]}
@@ -336,18 +335,24 @@ def report(res: dict) -> int:
     return 0
 
 
-def machine_settings(mroot: Path, roadmap: str) -> dict:
-    """이 로드맵 기계 상태의 `## 레포 설정` (키 → 값, 같은 키는 마지막 줄). 깨졌으면 검사 불가 — 조용히 넘기지 않는다."""
+def suite_settings(root: Path, roadmap: str, mroot: Path) -> tuple:
+    """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기계 상태(임시) · 기본값을 합친다 —
+    로드맵은 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가."""
     try:
-        data = cs.load(mroot / cs.MACHINE_FILE, roadmap)
-    except cs.MachineError as exc:
-        raise Stop(3, "기계 상태의 레포 설정을 읽지 못했다 — %s" % exc)
-    out = {}
-    for row in data.get("레포 설정", []):
-        value = unquote(row["값"].strip())
-        if value:
-            out[row["키"]] = value
-    return out
+        res = repo_defaults.resolve(str(root), roadmap=roadmap,
+                                    machine_reader=lambda rel: cs.repo_settings_rows(mroot / cs.MACHINE_FILE, rel))
+    except repo_defaults.SettingsError as exc:
+        raise Stop(3, str(exc))
+    for line in res["notices"] + res["warnings"]:
+        print("[spec-distill] " + line)
+    if res["errors"]:
+        raise Stop(3, "레포 설정이 깨졌다: %s" % res["errors"][0])
+    sources = dict((k, " — 출처 %s" % res["sources"][k]) for k in ("test_command", "test_failure_pattern"))
+    for key in ("test_command", "test_failure_pattern"):
+        if res["values"][key] is not None and res["sources"][key] == repo_defaults.MACHINE_LABEL:
+            print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
+                  % (key, repo_defaults.MACHINE_LABEL, repo_defaults.SETTINGS_FILE))
+    return res["values"]["test_command"], res["values"]["test_failure_pattern"], sources
 
 
 def run(root: Path, a) -> int:
@@ -369,28 +374,11 @@ def run(root: Path, a) -> int:
         raise Stop(3, line)
     if state == "unchecked":
         print("[spec-distill] " + line)
-    rc, text, _e = git(root, "show", "%s:%s" % (DEFAULT_REF, a.roadmap))
-    if rc:
-        raise Stop(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % a.roadmap)
-    meta = frontmatter(text)
-    settings = repo_defaults.repo_settings(meta)
-    if settings["errors"]:
-        raise Stop(3, "레포 설정이 깨졌다: %s" % settings["errors"][0])
-    pattern = unquote(meta["test_failure_pattern"]) if "test_failure_pattern" in meta else None
-    test_command = settings["test_command"]
     try:
         mroot = cs.machine_dir(state_root(str(root)), a.roadmap)
     except cs.MachineError as exc:
         raise Stop(3, str(exc))
-    sources = {}
-    if "test_command" not in meta or "test_failure_pattern" not in meta:
-        temp = machine_settings(mroot, a.roadmap)
-        if "test_command" not in meta and temp.get("test_command"):
-            test_command = temp["test_command"]
-            sources["test_command"] = MACHINE_NOTE
-        if "test_failure_pattern" not in meta and temp.get("test_failure_pattern"):
-            pattern = temp["test_failure_pattern"]
-            sources["test_failure_pattern"] = MACHINE_NOTE
+    test_command, pattern, sources = suite_settings(root, a.roadmap, mroot)
     if pattern:
         try:
             re.compile(pattern)

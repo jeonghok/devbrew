@@ -132,18 +132,50 @@ machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레�
 out="$(mc --branch feature/mt)"; rc=$?
 assert_eq "$rc" "1" "기계 상태 임시값: 그 명령을 돌려 새 실패 → rc 1"
 assert_contains "$out" "gamma" "기계 상태 임시값: 새 이름 gamma"
-assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`)(기계 상태 임시값)" "기계 상태 임시값: 무엇을 돌렸나에 출처를 적는다"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 기계 상태(임시)" "기계 상태 임시값: 무엇을 돌렸나에 출처를 적는다"
+assert_contains "$out" "test_command 를 기계 상태(임시)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "기계 상태 임시값: 레포 설정 파일에 올리자고 한 줄로 알린다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
 assert_eq "$rc" "3" "깨진 기계 상태 → rc 3(조용히 무시하지 않는다)"
-assert_contains "$out" "기계 상태의 레포 설정을 읽지 못했다" "깨진 기계 상태 사유"
+assert_contains "$out" "기계 상태(임시)의 레포 설정을 읽지 못했다" "깨진 기계 상태 사유"
 mkrepo mf 'test_command: bash run.sh\n'
 put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
 put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - delta"\nexit 1'; branch_with feature/mf
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n' "$RM")"
 out="$(mc --branch feature/mf)"; rc=$?
 assert_eq "$rc" "1" "frontmatter 가 기계 상태 임시값을 이긴다"
-assert_not_contains "$out" "(기계 상태 임시값)" "frontmatter 값이면 임시값 표시가 없다"
+assert_not_contains "$out" "출처 기계 상태(임시)" "frontmatter 값이면 임시값 표시가 없다"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "양의 짝: 로드맵 값이면 출처가 로드맵이다"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
+
+# 6c — R8 AC5 · AC23b: 기계 상태 `## 레포 설정` · 로드맵 · 레포 설정 파일이 해결자 하나를 지난다
+mkrepo dk 'test_command: bash run.sh\n'
+put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
+put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/dk
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^A: (.+)$\n- test_failure_pattern · ^B: (.+)$\n' "$RM")"
+out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "3" "기계 상태에 같은 키 둘 → rc 3(마지막 줄이 이기지 않는다)"
+assert_contains "$out" "같은 키가 둘이다(test_failure_pattern)" "같은 키 사유가 그 키를 말한다"
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- review_model · opus\n' "$RM")"
+out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "3" "기계 상태에 그 층이 받지 않는 키(review_model) → rc 3"
+assert_contains "$out" "기계 상태(임시) 은 이 설정을 받지 않는다(review_model)" "기계 상태 층이 받지 않는 키 사유"
+mkrepo pr 'test_command: bash run.sh\ntest_failure_pattern: "^BAD: (.+)$"\n'
+put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
+put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/pr
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^NOPE: (.+)$\n' "$RM")"
+out="$(mc --branch feature/pr)"; rc=$?
+assert_eq "$rc" "1" "로드맵의 test_failure_pattern 이 기계 상태 값을 이긴다 — 새 이름 → rc 1"
+assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^BAD: (.+)$\`) — 출처 로드맵" "정규식 출처가 로드맵이다(기계 상태 값은 안 쓴다)"
+mkrepo rp 'test_command: bash run.sh\n'
+put .devbrew.md $'---\ntest_failure_pattern: "^BAD: (.+)$"\n---'
+put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
+put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/rp
+out="$(mc --branch feature/rp)"; rc=$?
+at="$(g rev-parse origin/HEAD | cut -c1-8)"
+assert_eq "$rc" "1" "로드맵에 없고 레포 설정 파일에 있는 정규식으로 새 이름을 가른다 → rc 1"
+assert_contains "$out" "beta" "레포 설정 파일의 정규식: 새 이름 beta"
+assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^BAD: (.+)$\`) — 출처 레포 설정@${at}" "정규식 출처가 레포 설정@<기본 브랜치 커밋 8자>다"
 
 # 7 — 테스트 없음 → 7 · 러너 없는 테스트 파일 → 6
 mkrepo none; put README.md r; push_base; put x.txt x; branch_with feature/none
@@ -154,6 +186,7 @@ mkrepo ask; put tests/t.sh $'#!/usr/bin/env bash\nexit 0'; push_base; put x.txt 
 out="$(mc --branch feature/ask)"; rc=$?
 assert_eq "$rc" "6" "실행 비트 없는 셸 테스트만 → rc 6(묻는 자리)"
 assert_contains "$out" "test_command" "묻는 자리: 로드맵 frontmatter 키를 말한다"
+assert_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "묻는 자리: 정한 값은 레포 설정 파일에 올린다"
 
 # 7b — 테스트 파일 수를 못 세면 「스위트 대조 없음」 이 아니라 검사 불가(rc 3)
 mkrepo cn; put README.md r; push_base; put x.txt x; branch_with feature/cn

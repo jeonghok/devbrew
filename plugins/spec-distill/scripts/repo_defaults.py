@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""repo_defaults.py — 레포 설정의 기본값과 로드맵 frontmatter 의 레포 설정 읽기.
+"""repo_defaults.py — 레포 설정 해결자: 로드맵 · 레포 설정 파일(기본 브랜치 판) · 기계 상태(임시) · 기본값을 합친다.
 
 외부 도구가 정한 기본 경로(superpowers 의 설계문서 · 계획 폴더, SDD 의 작업 폴더, 하니스의 worktree 폴더)와 이 플러그인의 지휘자 상태
-폴더 이름은 이 모듈에만 글자로 둔다. 로드맵 frontmatter 에 값이 있으면 그것이 이긴다. 읽기만 한다.
+폴더 이름은 이 모듈에만 글자로 둔다. 다른 스크립트는 `resolve` 로 값과 출처를 얻는다. 읽기만 한다.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
+MACHINE_LABEL = "기계 상태(임시)"   # 기계 상태 층의 출처 표기 · 자리 이름
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
         "review_model", "parallel_default", "branch_prefix")
 ROADMAP_META_KEYS = ("type", "source_brief")
@@ -66,46 +67,6 @@ def _folder(key: str, raw: str):
     return "/".join(parts) + "/", None
 
 
-def repo_settings(meta: dict) -> dict:
-    """로드맵 frontmatter → 레포 설정. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히 바꾸지 않는다.
-    권장 수(parallel_default)만은 게이트가 아니라서 깨지면 기본값으로 세고 warnings 에 적는다(알리되 멈추지 않는다)."""
-    out = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "test_command": None, "review_model": None,
-           "parallel_default": PARALLEL_DEFAULT, "sources": {}, "errors": [], "warnings": []}
-    for key in DIR_KEYS:
-        if key not in meta:
-            out["sources"][key] = "기본값"
-            continue
-        folder, why = _folder(key, meta[key])
-        out[key] = folder
-        out["sources"][key] = "frontmatter"
-        if why:
-            out["errors"].append("레포 설정 " + why)
-    for key in TEXT_KEYS:
-        if key not in meta:
-            out["sources"][key] = "기본값"
-            continue
-        out["sources"][key] = "frontmatter"
-        value = _unquote(meta[key])
-        if value:
-            out[key] = value
-        else:
-            out["errors"].append("레포 설정 %s 값이 비었다" % key)
-    for key in COUNT_KEYS:
-        if key not in meta:
-            out["sources"][key] = "기본값"
-            continue
-        out["sources"][key] = "frontmatter"
-        value = _unquote(meta[key])
-        if value.isascii() and value.isdigit() and int(value) >= 1:
-            out[key] = int(value)
-        else:
-            # 권장 수는 게이트가 아니다 — 상태 계산 · 스위트 대조를 멈추지 않고 기본값으로 세되 크게 알린다
-            out[key] = PARALLEL_DEFAULT
-            out["sources"][key] = "기본값(머리말 값이 깨졌다)"
-            out["warnings"].append("레포 설정 %s 는 1 이상의 정수다: %r — 기본 %d 으로 센다" % (key, value, PARALLEL_DEFAULT))
-    return out
-
-
 class SettingsError(ValueError):
     """kind: unreadable · unknown_key · duplicate_key · unquoted_hash · layer_key · bad_value · not_regular_file · lfs_pointer"""
 
@@ -115,7 +76,7 @@ class SettingsError(ValueError):
         self.where = where
 
 
-_places = {"repo": "레포 설정 파일(%s, 기본 브랜치 판)" % SETTINGS_FILE, "machine": "기계 상태(임시)"}
+_places = {"repo": "레포 설정 파일(%s, 기본 브랜치 판)" % SETTINGS_FILE, "machine": MACHINE_LABEL}
 
 
 def _place(where: str, path: str | None = None) -> str:
@@ -131,7 +92,7 @@ def strict_frontmatter(text: str, where: str, path: str | None = None) -> dict:
     at = _place(where, path)
     lines = text.split("\n")
     first = lines[0].rstrip("\r")
-    if text.startswith("﻿"):
+    if text.startswith("\ufeff"):
         raise SettingsError("unreadable", where, "%s 의 머리말 앞에 BOM 이 있다 — BOM 없는 UTF-8 로 저장한다" % at)
     if first != "---":
         if first.startswith("---"):
@@ -192,7 +153,7 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
                  roadmap_path: str | None = None) -> dict:
     """로드맵 > 레포 설정 > 기계 상태 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
-    layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), ("기계 상태(임시)", "machine", machine))
+    layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), (MACHINE_LABEL, "machine", machine))
     out = {"values": {}, "sources": {}, "errors": [], "warnings": [], "notices": list(notices)}
     usable = []
     for label, layer, meta in layers:

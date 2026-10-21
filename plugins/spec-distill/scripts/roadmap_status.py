@@ -34,7 +34,7 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SPECS_DIR, SettingsError, repo_settings  # noqa: E402
+from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
 from repo_defaults import default_branch as _default_branch  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
@@ -714,10 +714,14 @@ def build(git: Git, args) -> dict:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
-    settings = repo_settings(meta)
-    report["settings"] = dict((k, settings[k]) for k in ("specs_dir", "plans_dir", "test_command",
-                                                            "review_model", "parallel_default", "sources", "warnings"))
-    errors = errors + settings["errors"]
+    try:   # 기계 상태 층은 읽지 않는다 — 기계 상태를 읽는 모듈은 이 읽기 전용 계산의 잠긴 파일 밖이다(알림으로 밝힌다)
+        resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
+    except SettingsError as exc:
+        resolved = {"values": {}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}
+    settings = dict(resolved["values"])
+    report["settings"] = dict(settings, sources=resolved["sources"], warnings=resolved["warnings"],
+                              notices=resolved["notices"])
+    errors = errors + resolved["errors"]
     report["format_errors"] = errors
     if errors:
         report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),

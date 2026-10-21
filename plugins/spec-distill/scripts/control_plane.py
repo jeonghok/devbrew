@@ -249,13 +249,12 @@ WORK_DONE = cs.WORK_DONE
 
 
 def recommended(report: dict):
-    """(권장 수, 출처). 로드맵 frontmatter `parallel_default` 가 없으면 기본값. 값이 깨졌으면 (None, 사유)."""
+    """(권장 수, 출처). 상태 계산 보고의 settings(해결자가 낸 값과 출처) — 없으면 기본값. 값이 깨졌으면 (None, 사유)."""
     settings = report.get("settings") or {}
     value = settings.get("parallel_default", repo_defaults.PARALLEL_DEFAULT) if settings else repo_defaults.PARALLEL_DEFAULT
     if value is None:
-        return None, "로드맵 머리말 parallel_default 가 깨졌다"
-    src = (settings.get("sources") or {}).get("parallel_default", "기본값")
-    return value, ("로드맵 머리말" if src == "frontmatter" else src)
+        return None, "parallel_default 값이 깨졌다"
+    return value, (settings.get("sources") or {}).get("parallel_default", "기본값")
 
 
 def running(machine: dict) -> int:

@@ -33,7 +33,7 @@ BACKTICK = re.compile(r"`([^`]+)`")
 PINS = {
     "에픽": (("roadmap_model.py", "parse_roadmap"),),
     "에픽 묶음": (("roadmap_write.py", "cmd_create"), ("roadmap_render.py", "render_bundle")),
-    "레포 설정": (("repo_defaults.py", "repo_settings"),),
+    "레포 설정": (("repo_defaults.py", "resolve"),),
     "브랜치": (("roadmap_status.py", "progress"),),
     "번호 대조 행": (("check_bundle_coverage.py", "table_rows"),),
     "미룸 · 넘김 줄": (("roadmap_model.py", "handoff_rows"),),

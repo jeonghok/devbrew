@@ -830,8 +830,16 @@ sed 's/^specs_dir: design$/specs_dir: ..\/x/' "$W/docs/rm2/roadmap.md" > "$T/rm2
 cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?
 assert_eq "$rc" "3" "레포 설정 값이 잘못되면 검사 불가"
-assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "레포 설정 specs_dir" "잘못된 레포 설정 사유"
+assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "로드맵(docs/rm2/roadmap.md): specs_dir" "잘못된 레포 설정 사유"
 assert_eq "$(js "$T/rm2-bad.json" "len(r['blocks']) > 0 and all(b['parallel'] is None for b in r['blocks'])")" "True" "형식 깨짐 보고서의 블록 parallel 은 None(빈 목록이 아니다)"
+# R8 AC23b — 로드맵 머리말은 로드맵 층이 받는 키만 받는다(roadmaps_dir 는 레포 설정 파일 몫)
+g checkout -q -- docs/rm2/roadmap.md
+awk '{ print } /^specs_dir: design$/ { print "roadmaps_dir: docs/plans-x/" }' "$W/docs/rm2/roadmap.md" > "$T/rm2-layer.md"
+assert_eq "$(grep -c '^roadmaps_dir: docs/plans-x/$' "$T/rm2-layer.md")" "1" "픽스처: 로드맵 머리말에 roadmaps_dir 줄이 들어갔다"
+cp "$T/rm2-layer.md" "$W/docs/rm2/roadmap.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-layer.json"); rc=$?
+assert_eq "$rc" "3" "로드맵 머리말에 로드맵 층이 받지 않는 키(roadmaps_dir) → 검사 불가"
+assert_contains "$(js "$T/rm2-layer.json" "' | '.join(r['format_errors'])")" "로드맵(docs/rm2/roadmap.md) 은 이 설정을 받지 않는다(roadmaps_dir)" "로드맵 층이 받지 않는 키 사유가 format_errors 에"
 g checkout -q -- docs/rm2/roadmap.md
 
 # ── R5 AC5 · AC6 · AC7 — 여러 브랜치 · 구현 중 · 구현 끝 · 산출물 ─────────────────────────────
@@ -1133,6 +1141,18 @@ assert_eq "$(stage "$T/rm21.json" G21)" "머지됨" "수리 4: 사본이 더한 
 assert_eq "$(js "$T/rm21.json" "next(b['branches'] for b in r['blocks'] if b['id']=='G21')")" "['feature/g21a']" "수리 4: 이미 머지된 이름은 branches 에 더하지 않는다"
 assert_contains "$(notes "$T/rm21.json" H21)" "로드맵 사본 1개" "수리 4: 형식이 깨진 사본은 건너뛴 수를 정보로 밝힌다(조용히 건너뛰지 않는다)"
 assert_eq "$(stage "$T/rm21.json" H21)" "머지됨" "수리 4: 깨진 사본만 있으면 판정은 머지됨 그대로"
+
+# ── R8 AC1 — 상태 계산의 레포 설정은 해결자가 낸다: 기본 브랜치의 레포 설정 파일 · 출처 · 알림 ─────────
+assert_eq "$(js "$T/rm21.json" "r['settings']['sources']['specs_dir']")" "기본값" "레포 설정 파일이 없으면 specs_dir 출처는 기본값"
+assert_contains "$(js "$T/rm21.json" "' | '.join(r['settings']['notices'])")" "기계 상태 층 건너뜀" "보고 settings 에 해결자 알림(notices)이 실린다"
+g checkout -q main
+printf -- '---\nspecs_dir: docs/superpowers/specs/\n---\n' > "$W/.devbrew.md"
+g add -- .devbrew.md && g commit -qm "레포 설정 파일" && g push -q origin main && g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm21/roadmap.md > "$T/rm21-repo.json")
+at="$(g rev-parse origin/HEAD | cut -c1-8)"
+assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['specs_dir']")" "레포 설정@${at}" "레포 설정 파일이 기본 브랜치에 있으면 specs_dir 출처가 레포 설정@<커밋 8자>"
+assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['test_command']")" "기본값" "레포 설정 파일에 없는 키는 기본값 그대로"
+assert_eq "$(stage "$T/rm21-repo.json" F21)" "일부 머지 1/2" "레포 설정 파일이 같은 값이면 단계 판정은 그대로"
 
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"
