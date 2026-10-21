@@ -3,7 +3,8 @@
 #
 #   1. 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서 전부(커밋 순서 — 오래된 것 먼저,
 #      같은 경로는 한 번, 한 커밋의 `Spec:` 줄이 여럿이면 전부)
-#   2. 없으면 범위 안 커밋 메시지 + 열린 PR 본문(읽기 전용 `gh pr view` — 범위 모드에서는 안 읽는다)
+#   2. 없으면 범위 안 커밋 메시지 + 열린 PR 본문(읽기 전용 `gh pr view <지금 브랜치> -R <origin>` — 범위 모드에서는
+#      안 읽는다). gh 와 origin 은 `gh-repo.sh` 가 정한다.
 #
 # 범위: `--range <시작> <끝>` 이면 `<시작>..<끝>` 이고 설계문서는 <끝> 커밋의 트리에서 읽는다
 # (작업 트리와 무관 — 보통 파일 blob 만, 링크 · 없음은 거부). 아니면 `--base`(없으면 merge-base)
@@ -16,12 +17,13 @@
 #
 # stdout 한 줄 JSON:
 #   {"intent_source": "spec-trailer|commits+pr|commits",
-#    "intent_note": "''|gh 없음|열린 PR 없음|gh 오류|spec 경로 거부 <k>개|범위 모드 — PR 본문 안 읽음",
+#    "intent_note": "''|열린 PR 없음|gh 오류|spec 경로 거부 <k>개|범위 모드 — PR 본문 안 읽음",
 #    "intent_file": "<abs>", "specs": ["<의도에 실은 설계문서의 리포 상대 경로>", ...]}
 # 의도 본문은 <file> 에 쓴다 — 설계문서가 하나면 그 내용 그대로, 둘 이상이면 문서마다
 # `<!-- qg-spec <k>/<N>: <경로> -->` 줄 뒤 내용, 그 뒤 빈 줄.
 #
-# exit: 0 정상 · 2 잘못된 호출(`--range` 커밋을 못 풂 포함) · 3 쓸 수 없음(<file> 또는 작업용 임시 폴더).
+# exit: 0 정상 · 2 잘못된 호출(`--range` 커밋을 못 풂 포함) · 3 쓸 수 없음(<file> 또는 작업용 임시 폴더) 또는
+#       PR 본문을 읽을 차례에 gh 가 없거나 origin 을 못 읽음 — 그때 stdout 은 JSON 대신 `stop: <사유>` 한 줄이다.
 set -u
 
 OUT=""
@@ -182,22 +184,38 @@ if [ -n "$RANGE_MODE" ]; then
   exit 0
 fi
 
-# gh 는 `pr view` 하나만 부른다. 실패는 그 출력으로만 가른다 — 「PR 없음」 문구면 열린 PR 없음,
-# 그 밖(미인증 · 원격 없음 · 네트워크)은 전부 gh 오류다. 종료 코드의 뜻은 판정에 쓰지 않는다.
+# gh 와 origin 은 gh-repo.sh 가 정한다. gh 가 없거나 origin 을 못 읽으면 JSON 대신 `stop: <사유>` 한 줄을 내고
+# exit 3 — 의도 출처를 커밋 메시지로 낮춰 진행하지 않는다. 알림 줄(GH_REPO · GH_HOST)은 stderr 로 넘긴다.
+slug="$(bash "$HERE/gh-repo.sh" 2>"$WORK/gh-repo.err")"; grc=$?
+if [ "$grc" -ne 0 ] || [ -z "$slug" ]; then
+  why=""
+  if [ "$grc" -ne 0 ]; then
+    why="$(tail -n 1 "$WORK/gh-repo.err")"
+    sed '$d' "$WORK/gh-repo.err" >&2
+  else
+    cat "$WORK/gh-repo.err" >&2
+  fi
+  printf 'stop: %s\n' "${why:-origin 의 레포를 정하지 못했다(gh-repo.sh rc ${grc})}"
+  exit 3
+fi
+cat "$WORK/gh-repo.err" >&2
+
+# gh 는 `pr view <지금 브랜치> -R <origin>` 하나만 부른다. 실패는 그 출력으로만 가른다 — 「PR 없음」 문구면
+# 열린 PR 없음, 그 밖(미인증 · 네트워크)은 전부 gh 오류다. 종료 코드의 뜻은 판정에 쓰지 않는다.
+# 이름 붙은 브랜치가 없으면(detached HEAD) PR 을 찾지 않고 열린 PR 없음이다.
 note=""
-if ! command -v gh >/dev/null 2>&1; then
-  note="gh 없음"
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)"
+if [ -z "$branch" ]; then
+  note="열린 PR 없음"
 else
-  pr_err="$(mktemp)"
-  state="$(gh pr view --json state -q .state 2>"$pr_err")"; prc=$?
+  state="$(gh pr view "$branch" -R "$slug" --json state -q .state 2>"$WORK/pr.err")"; prc=$?
   if [ "$prc" -ne 0 ]; then
-    if grep -qi 'no pull requests found' "$pr_err"; then note="열린 PR 없음"; else note="gh 오류"; fi
+    if grep -qi 'no pull requests found' "$WORK/pr.err"; then note="열린 PR 없음"; else note="gh 오류"; fi
   elif [ "$state" != "OPEN" ]; then
     note="열린 PR 없음"
-  elif ! pr="$(gh pr view --json body -q .body 2>/dev/null)"; then
+  elif ! pr="$(gh pr view "$branch" -R "$slug" --json body -q .body 2>/dev/null)"; then
     note="gh 오류"
   fi
-  rm -f "$pr_err"
 fi
 if [ -z "$note" ]; then
   { echo; echo "## PR 본문"; printf '%s\n' "$pr"; } >> "$OUT"

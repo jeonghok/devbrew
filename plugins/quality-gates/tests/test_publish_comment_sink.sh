@@ -57,6 +57,7 @@ OPEN_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain'
 # ── 픽스처 리포: main 위에 feat 브랜치 커밋 하나 ─────────────────────────────
 REPO="$T/repo"
 git init -q -b main "$REPO"
+git -C "$REPO" remote add origin https://github.com/o/r
 g() { git -C "$REPO" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
 echo base > "$REPO/a.txt"; g add a.txt; g commit -q -m base
 g checkout -q -b feat
@@ -78,7 +79,7 @@ WITH_GH="$T/bin:$PATH"
 # P6 — 결과 줄은 stdout 마지막 줄 하나뿐이다.
 p6_single_result_line() {   # <case 이름>
   local n
-  n="$(printf '%s\n' "$OUT" | grep -cE '^(posted|skipped): ')"
+  n="$(printf '%s\n' "$OUT" | grep -cE '^(posted|skipped|failed): ')"
   assert_eq "$n" "1" "P6 $1: 결과 줄이 정확히 하나"
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" "1" "P6 $1: stdout 이 통틀어 한 줄"
 }
@@ -97,6 +98,18 @@ case_AC12_posts_one_new_comment() {
   if cmp -s "$BODY" "$GH_BODY_COPY"; then ok "P4: gh 가 받은 본문이 파일 바이트 그대로"; else no "P4: gh 가 받은 본문이 다르다"; fi
   printf '%s\n' "$GHCALLS" | grep -q '^pr comment 7 --body-file ' \
     && ok "P4: 본문은 --body-file 로만 넘긴다" || no "P4: --body-file 이 아닌 경로로 넘겼다 ($GHCALLS)"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^pr comment')" "pr comment 7 --body-file $BODY -R github.com/o/r" \
+    "AC16: pr comment 는 -R origin(github.com/o/r)을 밝힌다"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^pr view')" \
+    "pr view feat -R github.com/o/r --json number,state,url,baseRefName --jq [.number,.state,.url,.baseRefName]|@tsv" \
+    "AC16: pr view 는 지금 브랜치(feat)와 -R origin 을 밝힌다"
+  # upstream 원격이 있는 fork 에서도 origin 이다.
+  g remote add upstream https://github.com/up/r
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "fork: upstream 이 있어도 게시"
+  assert_not_contains "$GHCALLS" "up/r" "fork: upstream 레포를 넘기지 않는다"
+  assert_contains "$GHCALLS" "pr comment 7 --body-file $BODY -R github.com/o/r" "fork: 코멘트는 origin 의 PR 에"
+  g remote remove upstream
 }
 
 # ── AC13 — 건너뛰는 여섯 경우 ────────────────────────────────────────────────
@@ -138,7 +151,10 @@ case_AC13_gh_unavailable() {
     no "전제: gh 없는 PATH 를 만들지 못했다 ($(PATH="$NOGH_PATH" command -v gh))"
   else
     run_sink "$NOGH_PATH" --body-file "$BODY"
-    assert_eq "$LAST" "skipped: gh-unavailable" "AC13 gh 없음: 마지막 줄"
+    assert_eq "$LAST" "failed: gh-unavailable" "gh 없음: 건너뛰지 않고 failed: gh-unavailable"
+    assert_eq "$RC" "1" "gh 없음: rc 1(실패)"
+    grep -qF 'gh 가 없다 — https://cli.github.com 에서 설치한다' "$T/err" \
+      && ok "gh 없음: stderr 에 설치 주소" || no "gh 없음: stderr 에 설치 주소가 없다 — $(head -n 3 "$T/err")"
     p6_single_result_line gh-absent
   fi
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
@@ -148,6 +164,29 @@ case_AC13_gh_unavailable() {
     && ok "R3: 미인증이면 gh 자신의 stderr 꼬리를 보인다" || no "R3: gh 의 인증 오류가 stderr 에 없다 — $(head -n 3 "$T/err")"
   grep -qF 'publish-comment: gh 미인증' "$T/err" \
     && ok "R3: 짧은 접두 줄도 남는다" || no "R3: 접두 줄이 없다"
+  grep -qF 'gh auth login --hostname github.com' "$T/err" \
+    && ok "미인증: stderr 에 origin 호스트의 로그인 안내" || no "미인증: 로그인 안내가 없다 — $(head -n 3 "$T/err")"
+  g remote set-url origin git@ghe.example.com:o/r.git
+  GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  grep -qF 'gh auth login --hostname ghe.example.com' "$T/err" \
+    && ok "미인증(GHE): 안내의 호스트는 origin 호스트" || no "미인증(GHE): 호스트가 다르다 — $(head -n 3 "$T/err")"
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_contains "$GHCALLS" "pr comment 7 --body-file $BODY -R ghe.example.com/o/r" "GHE: -R 이 origin 호스트를 보존한다"
+  g remote set-url origin https://github.com/o/r
+  # origin 이 없으면 gh 를 부르지 않고 건너뛴다(사유는 stderr).
+  g remote remove origin
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$RC:$LAST" "0:skipped: gh-unavailable" "origin 없음: skipped: gh-unavailable"
+  assert_eq "$GHCALLS" "" "origin 없음: gh 호출 0"
+  grep -qF 'origin URL 에서 호스트 · owner · repo 를 뽑지 못했다' "$T/err" \
+    && ok "origin 없음: stderr 에 사유" || no "origin 없음: stderr 에 사유가 없다 — $(head -n 3 "$T/err")"
+  g remote add origin https://github.com/o/r
+  # 이름 붙은 브랜치가 없으면(detached HEAD) PR 을 찾지 않는다.
+  g checkout -q --detach
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "skipped: no-pr" "detached HEAD: skipped: no-pr"
+  assert_eq "$GHCALLS" "auth status --active" "detached HEAD: 인증 확인 뒤 pr view 를 부르지 않는다"
+  g checkout -q feat
   # 활성 계정은 멀쩡하고 다른 계정만 깨졌으면 게시한다 — 인증 확인은 활성 계정만 본다(M3).
   GH_OTHER_ACCOUNT_BROKEN=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M3: 다른 계정만 깨졌으면 게시한다(auth status --active)"
@@ -173,6 +212,7 @@ case_P1_literal_scan_gate() {
   local fake="$T/fakeplug" variant
   mkdir -p "$fake/scripts"
   cp "$SINK" "$fake/scripts/publish-comment.sh"
+  cp "$PLUGIN_ROOT/scripts/gh-repo.sh" "$fake/scripts/gh-repo.sh"
   for variant in 'trailing-space' 'second-line' 'empty' 'yes-but-rc1'; do
     case "$variant" in
       trailing-space) printf 'print("scan_ok: yes ")\n' > "$fake/scripts/secret-scan.py" ;;
@@ -248,6 +288,7 @@ case_P4_P7_untrusted_bytes() {
 case_I1_removed_content_in_corpus() {
   local tok="Zq4rT8vB2nM6xK1pL9wC3yH7dF5sG0jA" R2="$T/repo2" leak="$T/leak2.md"
   git init -q -b main "$R2"
+  git -C "$R2" remote add origin https://github.com/o/r
   g2() { git -C "$R2" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
   printf 'line one\nkey=%s\nline three\n' "$tok" > "$R2/tok.txt"
   printf 'other=%s\n' "$tok" > "$R2/gone.txt"
@@ -322,6 +363,7 @@ case_N1_option_shaped_file_names() {
 case_N2_binary_attribute_hides_nothing() {
   local tok="Ts8nB4vC2xZ6qL0kR9mY3uH7jG1dS5pE" R3="$T/repo3" leak="$T/leak6.md"
   git init -q -b main "$R3"
+  git -C "$R3" remote add origin https://github.com/o/r
   g3() { git -C "$R3" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
   printf '*.lock -diff\n' > "$R3/.gitattributes"
   printf 'keep\nkey=%s\n' "$tok" > "$R3/x.lock"
@@ -348,6 +390,7 @@ case_N2_binary_attribute_hides_nothing() {
 case_T1_textconv_plaintext_in_corpus() {
   local tok="Qc7nB3vC9xZ5qL1kR2mY6uH4jG8dS0pW" R4="$T/repo4" leak="$T/leak8.md"
   git init -q -b main "$R4"
+  git -C "$R4" remote add origin https://github.com/o/r
   g4() { git -C "$R4" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
   git -C "$R4" config filter.rot.clean "tr A-Za-z N-ZA-Mn-za-m"
   git -C "$R4" config filter.rot.smudge "tr A-Za-z N-ZA-Mn-za-m"
@@ -447,6 +490,7 @@ case_pr_base_ignores_planted_origin_refs() {
   local tok="Wq3eR8tY2uI7oP4aS9dF1gH6jK0lZ5xC" leak="$T/leak-m3.md" R="$T/repo-m3"
   printf 'value %s\n' "$tok" > "$leak"
   git init -q -b main "$R"
+  git -C "$R" remote add origin https://github.com/o/r
   g3() { git -C "$R" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
   echo base > "$R/a.txt"; g3 add a.txt; g3 commit -q -m base
   g3 update-ref refs/remotes/origin/main HEAD

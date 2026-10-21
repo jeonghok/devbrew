@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test_publish_gh_two_files.sh — AC15: gh 를 부르는 qg 파일은 둘뿐이다 — `scripts/publish-comment.sh`(코멘트 쓰기와
 # 그 앞의 인증 · PR 확인)와 `scripts/discover-spec.sh`(읽기 전용 `gh pr view`). gh 쓰기는 publish-comment.sh 에만 있다.
+# 둘이 gh 를 찾고 `-R` 에 넣을 origin 을 받는 `scripts/gh-repo.sh` 도 목록에 있다 — 다만 gh 하위 명령은 한 줄도 없다(찾기만).
 #
 # 코퍼스는 qg 의 추적 파일 전부에서 tests/ · CHANGELOG.md · README.md 만 뺀 것이다(허용 목록이 아니라 제외 목록 —
 # 새 디렉토리가 생겨도 자동으로 코퍼스에 든다). 주석 · 산문 · 펜스 밖 줄도 본다 — 실행 지시는 펜스 밖에도 있다.
@@ -61,14 +62,18 @@ for p in files:
 
 SINK = "plugins/quality-gates/scripts/publish-comment.sh"
 DISC = "plugins/quality-gates/scripts/discover-spec.sh"
-extra = sorted(set(callers) - {SINK, DISC})
-out("NO" if extra else "OK", "gh 를 부르는 파일은 sink · discover-spec 둘뿐" + (": 밖 " + ", ".join(f"{p}:{callers[p][0]}" for p in extra) if extra else ""))
+GHREPO = "plugins/quality-gates/scripts/gh-repo.sh"
+extra = sorted(set(callers) - {SINK, DISC, GHREPO})
+out("NO" if extra else "OK", "gh 를 부르는 파일은 sink · discover-spec · gh-repo 뿐" + (": 밖 " + ", ".join(f"{p}:{callers[p][0]}" for p in extra) if extra else ""))
 w_extra = sorted(set(writers) - {SINK})
 out("NO" if w_extra else "OK", "gh 쓰기는 sink 에만" + (": 밖 " + ", ".join(f"{p}:{writers[p][0]}" for p in w_extra) if w_extra else ""))
 # 양의 짝 — 두 파일이 실제로 gh 를 부른다(부재 단언이 공허하지 않다).
 out("OK" if SINK in writers else "NO", "sink 가 gh 쓰기를 한다(양의 짝)")
 disc = subs.get(DISC, set())
 out("OK" if disc == {"pr view"} else "NO", f"discover-spec 의 gh 는 읽기 전용 pr view 하나({sorted(disc) or '없음'})")
+out("OK" if GHREPO in files else "NO", "gh-repo.sh 가 코퍼스에 있다(아래 부재 단언이 공허하지 않다)")
+out("NO" if GHREPO in callers else "OK", "gh-repo.sh 는 gh 하위 명령을 한 줄도 적지 않는다(찾기만)"
+    + (f": {GHREPO}:{callers[GHREPO][0]}" if GHREPO in callers else ""))
 PY
 rc=$?
 [ "$rc" -eq 0 ] || no "판정 코어가 죽었다(rc=$rc)"
