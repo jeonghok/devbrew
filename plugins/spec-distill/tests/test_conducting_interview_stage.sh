@@ -534,8 +534,14 @@ grep -qE '확인[^.]{0,6}반증[^.]{0,6}미확인' <<<"$round_flat" \
   && ok "V1: 결과 어휘 셋 {확인, 반증, 미확인}" || no "V1: 결과 어휘 셋 부재"
 # 기록 «절» 까지 문다(최종 리뷰 M-1) — `확인 RC` 만 재면 `## 5. 프로세스 로그` 를 `## 3. Steelman 원문` 으로
 # 바꿔도 통과한다. 게이트 ⑤ 는 audit §5 만 읽는다.
-grep -qF 'audit `## 5. 프로세스 로그` 에 한 줄로 적는다: `- 확인 RC' <<<"$round_flat" \
-  && ok "V1: audit §5 확인 줄 형식(확인 RC<n> — …) · 기록 절이 §5 프로세스 로그" || no "V1: audit §5 확인 줄 형식 부재 또는 기록 절이 §5 가 아니다"
+grep -qF '그 라운드의 state `## R<n>` «지금 이해» 아래에 한 줄로 적는다' <<<"$round_flat" \
+  && grep -qF '`- 확인 RC3 — 확인 — ' <<<"$round_flat" && grep -qF '`- 확인 RC4 — 반증 — ' <<<"$round_flat" && grep -qF '`- 확인 RC5 — 미확인 — ' <<<"$round_flat" \
+  && ok "V1: 확인 줄 자리가 라운드 state «지금 이해» 아래이고 줄 꼴 셋이 있다" || no "V1: 확인 줄 자리(state 라운드 기록) 또는 줄 꼴 셋 부재"
+! grep -qF 'audit `## 5. 프로세스 로그` 에 한 줄로 적는다' <<<"$round_flat" \
+  && ok "V1(음): 인터뷰 중 audit §5 에 직접 적으라는 옛 문장이 없다" || no "V1(음): 옛 문장(audit §5 에 한 줄로 적는다)이 남아 있다"
+grep -qF '판정만 audit §3 `ST<N>` 과 확인 줄 자리 양쪽에 적는다' <<<"$round_flat" \
+  && ! grep -qF '`ST<N>` 과 §5 양쪽에 적는다' <<<"$round_flat" \
+  && ok "V1: steelman 경로의 판정은 audit §3 과 확인 줄 자리 양쪽에 적는다(옛 «§5 양쪽» 없음)" || no "V1: steelman 판정 기록 자리 문장 부재 또는 옛 «§5 양쪽» 이 남아 있다"
 # 비종속 — trigger 도 웹 스위치도 이 검문소를 끄지 않는다. 문구로 못 박는다(설계 AC6).
 grep -qF 'steelman trigger 와 DEVBREW_SPEC_DISTILL_DISABLE_WEB 어느 것에도 종속되지 않는다' <<<"$round_flat" \
   && ok "V1: trigger·웹 스위치 비종속 명시" || no "V1: 비종속 문구 부재 — 조건부로 읽힐 수 있다"
@@ -753,9 +759,11 @@ STEELMAN="$FIN_DIR/steelman.md"
 #
 # 축을 셋으로 가른다. `확인 RC` 하나로 재면 «어느 절에 쓰는가»를 못 잰다 — 「§5」를 「§3」으로
 # 바꿔도 그 리터럴은 남아 통과한다. 절 · 형식 · 이중확인-방지를 각각 잰다.
-grep -qF 'audit §5 줄도 함께 남긴다' "$STEELMAN" \
-  && ok "AC12(산출자·절): steelman.md 가 기록 절로 audit §5 를 지목한다" \
-  || no "AC12(산출자·절): §5 지목이 없다 — 게이트가 산출자 없는 것을 막는다"
+grep -qF 'state `## R<n>` «지금 이해» 아래에도 함께 남긴다' "$STEELMAN" \
+  && ok "AC12(산출자·절): steelman.md 가 기록 자리로 state 라운드 «지금 이해» 를 지목한다" \
+  || no "AC12(산출자·절): state 라운드 기록 지목이 없다 — 게이트가 산출자 없는 것을 막는다"
+! grep -qF 'audit §5 줄도 함께 남긴다' "$STEELMAN" \
+  && ok "AC12(산출자·음): 옛 «audit §5 줄도 함께 남긴다» 가 없다" || no "AC12(산출자·음): 옛 문장이 남아 있다"
 grep -qF '확인 RC<n> — {확인|반증|미확인}' "$STEELMAN" \
   && ok "AC12(산출자·형식): 확인 줄 형식이 판정 어휘 셋과 함께 있다" \
   || no "AC12(산출자·형식): 확인 줄 형식이 없거나 판정 어휘 셋이 빠졌다"

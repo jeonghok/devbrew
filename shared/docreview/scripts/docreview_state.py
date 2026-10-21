@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import argparse
 import collections
+import errno
 import hashlib
 import json
 import os
 import re
+import stat
 import sys
 import unicodedata
 from pathlib import Path
@@ -317,12 +319,23 @@ def save_state(state_dir, st, log_line=None) -> None:
     fm = "%s: %s\n%s" % (DIGEST_KEY, _digest(tree, body), tree)
     # 제자리 덮어쓰기다 — 쓰기 불가 폴더 안의 쓰기 가능한 원장도 갱신된다(진입 잔존물 락이 기대는 성질).
     data = ("---\n" + fm + "---\n" + body).encode("utf-8")   # 인코딩을 먼저 끝낸다 — 실패해도 원본이 잘리지 않는다
-    with open(str(state_path(state_dir)), "wb") as fh:
+    ledger = str(state_path(state_dir))
+    try:   # 링크를 따라가지 않고 연다 — 링크이거나 다른 이름이 붙은 파일이면 쓰지 않는다
+        fd = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o666)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise LedgerCorrupt("ledger_not_plain_file", path=ledger)
+        raise
+    with os.fdopen(fd, "wb") as fh:
+        info = os.fstat(fh.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise LedgerCorrupt("ledger_not_plain_file", path=ledger)
+        fh.truncate(0)
         fh.write(data)
     era = Path(state_dir) / ERA_FILE
     if not era.exists():
         try:
-            era.write_bytes(b"")
+            os.close(os.open(str(era), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o666))
         except OSError as exc:   # 쓰기 불가 폴더 — 원장 갱신은 막지 않는다(표지가 없으면 줄 삭제 탐지만 약해진다)
             print("[docreview] 원장 확인값의 시대 표지 파일을 만들지 못했다 (%s, errno %s) — 원장 갱신은 계속했고, "
                   "확인값 줄을 지워도 알아채는 힘이 약하다." % (era, exc.errno), file=sys.stderr)

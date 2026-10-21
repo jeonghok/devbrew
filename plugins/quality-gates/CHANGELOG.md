@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.4.0] — 2026-10-21
+
+### Security
+- 공유 리뷰 러너의 산출물 쓰기가 링크를 따라가지 않는다 — writer `scripts/nofollow_write.py` 를 더했다. 러너는 자기 폴더를 절대 경로로 정한 뒤 `cd` 하고, writer 를 `python3 -I` 로 부른다.
+
 ## [14.3.0] — 2026-10-20
 
 공유 리뷰 엔진 고침이 함께 실린다.

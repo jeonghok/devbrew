@@ -98,13 +98,16 @@ CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$PROF" "$TMPD/nope.md" "$REPO_ROOT" "$TMPD/f2.yaml" 2>/dev/null
 assert_file_grep "$TMPD/f2.yaml" 'reason: doc_missing' "러너: 문서 부재 → fail-closed YAML"
 
-# ── rc 3 — 산출물을 실제로 못 쓰게 만든다(읽기전용 기존 파일) ─────────────
+# ── rc 3 — 산출물을 실제로 못 쓰게 만든다(쓰기 불가 폴더 안의 읽기전용 기존 파일) ──
+# 폴더가 쓰기 가능하면 writer 가 이름을 새 파일로 바꿔 놓으므로 폴더도 닫는다.
 mkdir -p "$TMPD/ro"
 : > "$TMPD/ro/x.yaml"
 chmod 000 "$TMPD/ro/x.yaml"
+chmod 555 "$TMPD/ro"
 CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$PROF" "$FX/design-sample.md" "$REPO_ROOT" "$TMPD/ro/x.yaml" 2>/dev/null
 rc=$?
+chmod 755 "$TMPD/ro" 2>/dev/null || true
 chmod 644 "$TMPD/ro/x.yaml" 2>/dev/null || true
 assert_eq "$rc" "3" "러너: 산출물 쓰기 불가 → rc 3 (호출자가 stale 을 지워야 한다)"
 

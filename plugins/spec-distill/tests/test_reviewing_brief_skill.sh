@@ -117,7 +117,7 @@ has "$W_KS" '캐시하지 않' && ok "kill switch: dispatch 직전 확인·캐�
 first_line() { grep -nE -- "$1" <<<"$ALL_RUN" | head -1 | cut -d: -f1; }
 i_gate="$(first_line 'check_brief\.py" gate "\$PAYLOAD"')"
 i_cov="$(first_line 'check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE" "\$AUDIT"')"
-i_bnd="$(first_line 'build_brief_bundle\.py" "\$PAYLOAD" "\$AUDIT" > "\$BUNDLE"')"
+i_bnd="$(first_line 'nofollow_write\.py" run --out "\$BUNDLE" -- python3 "\$PR/scripts/build_brief_bundle\.py" "\$PAYLOAD" "\$AUDIT"')"
 i_run="$(first_line 'run_docreview_codex_reviewer\.sh" "\$PROFILE" "\$BUNDLE"')"
 if [ -n "$i_gate" ] && [ -n "$i_cov" ] && [ -n "$i_bnd" ] && [ -n "$i_run" ] \
    && [ "$i_gate" -lt "$i_cov" ] && [ "$i_cov" -lt "$i_bnd" ] && [ "$i_bnd" -lt "$i_run" ]; then
@@ -343,7 +343,7 @@ done
 for fld in component affected_axis verification_status reason; do
   has "$W_KS" "\`$fld\`" && ok "degrade record: 필드 '$fld'" || no "degrade record: 필드 '$fld' 가 사라졌다"
 done
-grep -qE '^python3 "\$PR/scripts/brief_review_state\.py" degrade-append "\$STATE" .*\|\| echo .*>> "\$DEGRADE_FALLBACK_FILE"$' <<<"$ALL_RUN" \
+grep -qE '^python3 "\$PR/scripts/brief_review_state\.py" degrade-append "\$STATE" .*\|\| printf '"'"'%s\\n'"'"' .*\| python3 "\$PR/scripts/nofollow_write\.py" append --out "\$DEGRADE_FALLBACK_FILE"$' <<<"$ALL_RUN" \
   && ok "degrade record: append 가 실패하면 두 번째 채널 파일에 이어 붙는다 (실행 라인)" \
   || no "degrade record: degrade-append 의 실패가 두 번째 채널로 가지 않는다 — 원장이 죽으면 「degrade 없음」이 된다"
 grep -qE '^init_rc=0; python3 "\$PR/scripts/brief_review_state\.py" init "\$STATE" \|\| init_rc=\$\?$' <<<"$ALL_RUN" \
@@ -413,7 +413,7 @@ grep -q 'codex 게이트 입력 부재.*Skill 인자 1' <<<"$FENCE_TXT" \
 
 # ── 15. 번들 정리 — 진입 게이트 실패도, 세 층으로 ───────────────────────────────
 drop_def="$(awk '/^drop_bundle\(\) \{/{f=1} f; f && /^\}$/{exit}' <<<"$GATE_RUN")"
-{ grep -qF 'rm -f "$BUNDLE"' <<<"$drop_def" && grep -qF ': > "$BUNDLE"' <<<"$drop_def" \
+{ grep -qF 'rm -f "$BUNDLE"' <<<"$drop_def" && grep -qF 'nofollow_write.py" empty --out "$BUNDLE"' <<<"$drop_def" \
   && grep -qF '지우지도 비우지도 못했다' <<<"$drop_def" && grep -q 'return 1' <<<"$drop_def"; } \
   && ok "진입 게이트: 번들 정리가 세 층이다 (지움 → 절단 → 공시·rc 1)" \
   || no "진입 게이트: 번들 정리의 층이 빠졌다 — 지우지 못한 직전 번들이 조용히 남는다"

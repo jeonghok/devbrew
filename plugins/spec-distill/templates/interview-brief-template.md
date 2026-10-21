@@ -3,7 +3,7 @@ name: <kebab-topic>
 type: interview-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill pm-interview v0.23.0
+source: spec-distill pm-interview
 next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2

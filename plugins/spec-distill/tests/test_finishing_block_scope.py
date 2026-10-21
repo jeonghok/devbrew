@@ -28,13 +28,44 @@ FIN = (Path(__file__).resolve().parent.parent / "skills" / "pm-interview"
 
 # 펜스 밖에서 오는 값. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다 — 모델이 SKILL.md 가 보여 준 절대 경로로
 # 바꿔 넣고, 빠뜨리면 펜스의 가드가 빈 값에서 멈춘다(`shared/tests/test_plugin_root_no_cwd_fallback.sh` 축 2).
-ENV_PROVIDED = {"CLAUDE_PLUGIN_ROOT"}
+# `TMPDIR` 은 운영체제의 로그인 환경이 넣고, 없으면 펜스가 `${TMPDIR:-/tmp}` 로 /tmp 를 쓴다 — 앞 펜스가 넣는 값이 아니다.
+ENV_PROVIDED = {"CLAUDE_PLUGIN_ROOT", "TMPDIR"}
 
 FENCE_OPEN = re.compile(r"^\s*```bash\s*$")
 FENCE_CLOSE = re.compile(r"^\s*```\s*$")
 # `$VAR` · `${VAR}` — `$?`·`$1` 같은 셸 특수변수는 이름 규칙에 안 맞아 자연히 빠진다.
 USE_RE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
 ASSIGN_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=")
+# `read` 도 정의다 — 줄 머리의 `read`(앞에 `IFS=` 같은 대입 접두가 붙을 수 있다), 인자 없는 플래그(`-r`),
+# 그 뒤 이름들. 줄 머리가 아닌 `read`(`echo read x` · 주석)는 정의가 아니다.
+READ_RE = re.compile(
+    r"^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*read((?:\s+-[A-Za-z]+)*)((?:\s+[A-Za-z_][A-Za-z0-9_]*)+)\s*(?:<|$)")
+
+
+def defined_names(line):
+    """그 줄이 정의하는 변수 이름들 — 대입(`X=`)과 `read … NAME…`."""
+    out = set()
+    m = ASSIGN_RE.match(line)
+    if m:
+        out.add(m.group(1))
+    r = READ_RE.match(line)
+    if r:
+        out.update(r.group(2).split())
+    return out
+
+
+def unbound_per_fence(text):
+    """[(시작줄, 끝줄, 미정의 변수 목록)] — 펜스마다 쓰인 변수 − 정의한 변수 − 환경 제공."""
+    offenders = []
+    for start, end, body in bash_fences(text):
+        used, assigned = set(), set()
+        for ln in body:
+            assigned |= defined_names(ln)
+            used.update(USE_RE.findall(ln))
+        unbound = used - assigned - ENV_PROVIDED
+        if unbound:
+            offenders.append((start, end, sorted(unbound)))
+    return offenders
 
 
 def bash_fences(text):
@@ -72,22 +103,42 @@ class FinishingBlockScope(unittest.TestCase):
 
     def test_no_variable_carried_across_fences(self):
         """펜스마다: 쓰인 변수 ⊆ 그 펜스가 정의한 변수 ∪ 환경 제공."""
-        offenders = []
-        for start, end, body in self.fences:
-            used, assigned = set(), set()
-            for ln in body:
-                m = ASSIGN_RE.match(ln)
-                if m:
-                    assigned.add(m.group(1))
-                used.update(USE_RE.findall(ln))
-            unbound = used - assigned - ENV_PROVIDED
-            if unbound:
-                offenders.append((start, end, sorted(unbound)))
+        offenders = unbound_per_fence(self.text)
         self.assertEqual(
             offenders, [],
             "블록 간에 변수를 나르는 bash 펜스가 있다 (줄범위, 미정의 변수): %r\n"
             "각 펜스는 머리에서 경로를 다시 도출해야 한다 — Bash 도구는 호출마다 새 셸이다."
             % (offenders,))
+
+    def test_redecompose_fences_same_rule(self):
+        """같은 꼴(`IFS= read -r` + heredoc · `${TMPDIR:-/tmp}`)의 재분해 적용 펜스도 같은 규칙으로 잰다."""
+        red = FIN.parents[3] / "references" / "redecompose.md"
+        text = red.read_text(encoding="utf-8")
+        self.assertTrue(any("roadmap_write.py\" update" in "\n".join(b) for _, _, b in bash_fences(text)),
+                        "redecompose.md 에서 적용 펜스를 못 찾았다 — 아래 단언이 공허해진다")
+        self.assertEqual(unbound_per_fence(text), [])
+
+
+class RecognizerProbes(unittest.TestCase):
+    """정의 인식기의 양 · 음 짝 — 인식이 넓어져 진짜 미정의를 덮거나 좁아져 정상 펜스를 막지 않게."""
+
+    def _unbound(self, body):
+        return unbound_per_fence("```bash\n%s\n```\n" % body)
+
+    def test_read_defines(self):
+        self.assertEqual(self._unbound("IFS= read -r title <<'E'\nx\nE\necho \"$title\""), [])
+        self.assertEqual(self._unbound("read a b < f\necho \"$a$b\""), [])
+
+    def test_read_not_at_line_head_does_not_define(self):
+        self.assertEqual(self._unbound("echo read -r title\necho \"$title\""), [(1, 4, ["title"])])
+        self.assertEqual(self._unbound("# read -r title\necho \"$title\""), [(1, 4, ["title"])])
+
+    def test_undefined_still_caught(self):
+        self.assertEqual(self._unbound("echo \"$title\""), [(1, 3, ["title"])])
+
+    def test_env_provided_is_exactly_named(self):
+        self.assertEqual(self._unbound('d="${TMPDIR:-/tmp}"'), [])
+        self.assertEqual(self._unbound('d="${TMP:-/tmp}"'), [(1, 3, ["TMP"])])
 
 
 if __name__ == "__main__":

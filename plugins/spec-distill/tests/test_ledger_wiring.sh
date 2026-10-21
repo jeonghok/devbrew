@@ -407,7 +407,7 @@ dl_no_dir "spec_path 가 상대 경로" "$dlo" "$rc" "spec_path='docs/b-design.m
 assert_contains "$dlo" "spec_path 가 절대 경로가 아니다" "결정 줄 펜스: 상대 경로 — 폴더로 들어가기 전에 절대 경로가 아니라는 사유로 멈춘다"
 stubsd="$T/stub-sd"; mkdir -p "$stubsd/scripts"
 for s in docreview_state.py ledger_marker.py; do ln -s "$SD/scripts/$s" "$stubsd/scripts/$s"; done
-printf 'import runpy, sys\nREAL = %s\nif sys.argv[1:2] == ["state-root"]:\n    sys.exit(1)\nsys.path.insert(0, REAL.rsplit("/", 1)[0]); sys.argv[0] = REAL\nrunpy.run_path(REAL, run_name="__main__")\n' \
+printf 'import runpy, sys\nREAL = %s\nif sys.argv[1:2] in (["state-root"], ["state-root-for"]):\n    sys.exit(1)\nsys.path.insert(0, REAL.rsplit("/", 1)[0]); sys.argv[0] = REAL\nrunpy.run_path(REAL, run_name="__main__")\n' \
   "$(python3 -I -c 'import sys; print(repr(sys.argv[1]))' "$SD/scripts/state_path.py")" > "$stubsd/scripts/state_path.py"
 dlo="$(dl_run sess-eeee5555 "$ddoc" "$stubsd")"; rc=$?
 dl_no_dir "상태 루트를 얻지 못함" "$dlo" "$rc" "spec_path='$ddoc'"
@@ -462,15 +462,18 @@ mkdir -p "$T/wt-linked/docs" && cp "$ddoc" "$T/wt-linked/docs/b-design.md"
 dlo="$(dl_run sess-eeee5555 "$T/wt-linked/docs/b-design.md" "$SD" "$wm")"; rc=$?
 assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15: 본 작업 트리 cwd + 연결된 worktree 문서 — 원장이 같아 레포가 다르다고 알리지 않는다"
 assert_contains "$dlo" "STATE_DIR='$wm/.claude/spec-distill/" "AC15: 연결된 worktree 문서 — 원장 자리는 공용 레포의 상태 폴더다"
-# 문서 폴더로 들어가지 못하거나 문서가 git 작업 트리 밖이면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
+# 문서 폴더로 들어가지 못하면 쓰지 않고 멈춘다(원장 없음으로 빠지지 않는다).
 dlo="$(dl_run sess-eeee5555 "$T/no-such-dir/b-design.md" "$SD" "$orepo")"; rc=$?
 dl_no_dir "문서 폴더가 없다" "$dlo" "$rc" "spec_path='$T/no-such-dir/b-design.md'"
 assert_contains "$dlo" "설계문서의 폴더로 들어가지 못했다" "결정 줄 펜스: 문서 폴더가 없다 — 그 사유로 멈춘다"
+# 문서가 git 작업 트리 밖이면 거절하지 않고 지금 작업 폴더 레포의 원장 자리를 쓰고, git 밖 줄을 낸다(R13 §5).
 mkdir -p "$T/nogit"; cp "$ddoc" "$T/nogit/b-design.md"
 git -C "$T/nogit" rev-parse --show-toplevel >/dev/null 2>&1 && no "전제(AC15): $T/nogit 이 git 작업 트리 안이다 — 아래 칸이 공허하다" || ok "전제(AC15): $T/nogit 은 git 작업 트리 밖이다"
 dlo="$(dl_run sess-eeee5555 "$T/nogit/b-design.md" "$SD" "$orepo")"; rc=$?
-dl_no_dir "문서가 git 작업 트리 밖" "$dlo" "$rc" "spec_path='$T/nogit/b-design.md'"
-assert_contains "$dlo" "설계문서가 git 작업 트리 밖이다" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 그 사유로 멈춘다"
+assert_eq "$rc" "0" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 거절하지 않는다"
+assert_not_contains "$dlo" "결정 줄을 쓰지 않았다" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 쓰지 않았다는 줄이 없다"
+assert_contains "$dlo" "STATE_DIR='$orepo/.claude/spec-distill/" "결정 줄 펜스: 문서가 git 작업 트리 밖 — 지금 작업 폴더 레포의 원장 자리를 쓴다"
+assert_contains "$dlo" "[spec-distill] 문서가 git 작업 트리 밖이다 — 지금 작업 폴더의 레포 원장을 쓴다: $T/nogit/b-design.md" "결정 줄 펜스: 문서가 git 작업 트리 밖 — git 밖 줄을 낸다"
 
 # AC8 — 해제는 게이트 응답 기록 뒤(문면 순서) · 끝맺음 펜스가 release 로 끝난다
 adv="$(fence "$SR" advice-display)"
@@ -868,7 +871,7 @@ cgate() { awk '/codex-gate:begin[[:space:]]+runner=run_docreview_codex_reviewer\
 crashy() { printf '%s\n' "$1" | grep -E 'unbound variable|syntax error|Traceback|command not found' || true; }
 C1="$(bash_with "$RF" 'marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc')"; C2="$(bash_with "$RF" 'hunks-final.json')"; C3="$(bash_with "$RF" 'gate-final.json')"
 SRIN="$(bash_with "$SR" '# 엔진 상태 — 이 문서만의 디렉토리')"; SRCX="$(cgate "$SR")"
-RBBU="$(bash_with "$RB" 'build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"')"; RBCX="$(cgate "$RB")"
+RBBU="$(bash_with "$RB" 'nofollow_write.py" run --out "$BUNDLE" -- python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT"')"; RBCX="$(cgate "$RB")"
 for v in C1 C2 C3 SRIN SRCX RBBU RBCX; do
   eval "x=\"\$$v\""; [ -n "$x" ] && ok "전제(T8 관문): 펜스 $v 를 뽑았다" || no "전제(T8 관문): 펜스 $v 가 비었다 — 아래 칸이 공허하다"
 done

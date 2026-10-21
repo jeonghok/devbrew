@@ -1,5 +1,21 @@
 # Changelog
 
+## [8.5.0] — 2026-10-21
+
+### Changed
+- 리뷰 진입(`check_verbatim_coverage.py`)이 인터뷰를 닫은 답(외부 선례 무관 · 사용자 판단 포화)의 S 가 인터뷰 상태 파일에 고른 선택지(`source: chosen`)로 기록됐는지 대조한다. 아니면 `not_chosen`(rc 1)으로 리뷰를 멈추고 건너뛸 수 없다. 마무리 단계 Step A.5 는 이 사유로 멈추면 같은 세션에서 그 질문을 선택지로 다시 묻는다.
+- 한계: 이 대조는 brief 를 쓴 뒤 리뷰 진입(`check_verbatim_coverage.py`)에서 돈다 — 리뷰를 거치지 않는 길에서는 돌지 않는다. 상태 파일도 모델이 쓰므로 brief 와 상태 파일이 서로 맞는지만 잰다. 다시 묻는 길은 인터뷰를 끝낸 그 세션에만 있다.
+- 리뷰 원장의 뿌리를 문서가 속한 레포에서 도출한다(`state_path.py state-root-for`) — reviewing-brief · spec-review · 마무리 단계가 같은 원장을 찾고, 결정 줄 펜스는 git 밖의 문서를 더는 거절하지 않는다. request-framing 의 원장 정리와 지휘자는 여전히 지금 작업 폴더 레포의 뿌리를 쓴다.
+- V1 확인 줄을 인터뷰 중 라운드 상태에 두고, 인터뷰를 닫을 때 audit §5 로 옮긴다.
+
+### Fixed
+- 마무리 Step A 8 의 로드맵 생성 명령이 제목과 승인 원문을 따옴표를 친 heredoc 으로 넘겨 따옴표 · 달러 · 줄바꿈이 그대로 전해진다. 펜스는 목록 밖 맨 앞 칸에 두어 구분 줄이 heredoc 을 닫는다.
+- 인터뷰 템플릿 `source:` 줄의 판 꼬리를 뗐다. 셸 테스트 네 개에 실행 비트를 주고, 실행 비트를 잠그는 락을 더했다.
+
+### Security
+- 상태 폴더 쓰기가 링크를 따라가지 않는다 — writer `scripts/nofollow_write.py` 를 더하고, request-framing · reviewing-brief · spec-review 펜스의 상태 폴더 쓰기가 이를 거친다. `seed_edit_diff.py` 와 원장 `save_state` 도 링크를 따라 쓰지 않는다. 이 플러그인에도 실리는 공유 리뷰 러너(`scripts/run_docreview_codex_reviewer.sh`)의 산출물 쓰기도 같은 writer 를 거친다.
+- 한계: Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다.
+
 ## [8.4.0] — 2026-10-21
 
 ### Changed

@@ -20,6 +20,9 @@ CLI:
                                                 toplevel of its folder; if git sees no tree there but a lexical
                                                 ancestor has `.git`, exit 2 (the folder goes through a link);
                                                 else (not a repository) the lexical folder
+  python3 state_path.py state-root-for <DOC>  → prints the state root of the repository DOC lives in; empty DOC is
+                                                `state-root`; DOC's folder through a link → exit 2 (payload-root's
+                                                reason); DOC outside any git tree → `state-root` + one stderr notice
 """
 from __future__ import annotations
 
@@ -235,6 +238,30 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
     return d / (stem + ".state.md"), msgs
 
 
+def payload_root(payload: str) -> tuple[str | None, bool, str | None]:
+    """(뿌리, git 인가, 거부 사유). 뿌리는 payload 폴더의 git 최상위; git 이 못 보는데 어휘적 조상에
+    `.git` 이 있으면 (None, False, 사유) — 폴더가 링크를 거친다; 저장소가 아니면 (그 폴더, False, None)."""
+    d = os.path.dirname(os.path.abspath(payload))
+    try:
+        cp = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
+                            capture_output=True, text=True, timeout=5, check=False)
+        top = cp.stdout.strip() if cp.returncode == 0 else ""
+    except (subprocess.TimeoutExpired, OSError):
+        top = ""
+    if top:
+        return top, True, None
+    cur = d
+    while True:
+        if os.path.lexists(os.path.join(cur, ".git")):
+            return None, False, ("[spec-distill] payload 폴더가 저장소({0}) 안인데 git 은 그 밖으로 본다 — "
+                                 "링크를 거친다: {1}".format(cur, d))
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return d, False, None
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: state_path.py {state-root|session-id|interview-state} …", file=sys.stderr)
@@ -275,27 +302,27 @@ def main(argv: list[str]) -> int:
         if len(argv) != 3 or not argv[2]:
             print("usage: state_path.py payload-root <PAYLOAD>", file=sys.stderr)
             return 2
-        d = os.path.dirname(os.path.abspath(argv[2]))
-        try:
-            cp = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
-                                capture_output=True, text=True, timeout=5, check=False)
-            top = cp.stdout.strip() if cp.returncode == 0 else ""
-        except (subprocess.TimeoutExpired, OSError):
-            top = ""
-        if top:
-            print(top)
+        root, _is_git, why = payload_root(argv[2])
+        if why:
+            print(why, file=sys.stderr)
+            return 2
+        print(root)
+        return 0
+    if sub == "state-root-for":
+        doc = argv[2] if len(argv) >= 3 else ""
+        if not doc:
+            print(str(state_root()))
             return 0
-        cur = d
-        while True:
-            if os.path.lexists(os.path.join(cur, ".git")):
-                print("[spec-distill] payload 폴더가 저장소({0}) 안인데 git 은 그 밖으로 본다 — 링크를 거친다: {1}".format(
-                    cur, d), file=sys.stderr)
-                return 2
-            parent = os.path.dirname(cur)
-            if parent == cur:
-                break
-            cur = parent
-        print(d)
+        _root, is_git, why = payload_root(doc)
+        if why:
+            print(why, file=sys.stderr)
+            return 2
+        if is_git:
+            print(str(state_root(os.path.dirname(os.path.abspath(doc)))))
+            return 0
+        print("[spec-distill] 문서가 git 작업 트리 밖이다 — 지금 작업 폴더의 레포 원장을 쓴다: {0}".format(doc),
+              file=sys.stderr)
+        print(str(state_root()))
         return 0
     if sub == "path-inside":
         if "--root" not in argv or argv.index("--root") + 1 >= len(argv):

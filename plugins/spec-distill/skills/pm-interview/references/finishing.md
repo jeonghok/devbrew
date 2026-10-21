@@ -135,11 +135,14 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    게이트는 `포화 판정 <k>:` · `사용자 종료(@S<n>)` 줄의 **마지막**을 봅니다.
    같은 때에 state 본문 각 `## R<n>` 의 `- 대체됨: <앞 믿음> → <바로잡은 사실> (조사 <n>)` 줄을 라운드 순서대로 audit
    `## 5. 프로세스 로그` 에 글자 그대로 옮겨 씁니다(`${CLAUDE_PLUGIN_ROOT}/references/fresh-evidence.md` 「낡은 지식 바로잡기」). 없으면 쓰지 않습니다.
+   같은 걸음에 state 본문 각 `## R<n>` 의 `- 확인 RC<n> — …` 줄을 라운드 순서대로 audit `## 5. 프로세스 로그` 에 글자 그대로 옮겨 씁니다. 없으면 쓰지 않습니다.
 
    **위험 번호.** payload §5 의 위험 줄마다 `위험` 바로 뒤에 번호를 박는다 —
    `- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> …`. 숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터
    매긴다(분해 판단 표가 이 순서로 미리 배정했다). 박은 번호는 그 위험의 정체다 — 뒤에 위험 줄을 지우거나 옮겨도
    다른 줄의 번호를 고치지 않는다. 지운 위험의 번호는 다시 쓰지 않는다 — 새로 더하는 위험 줄은 지금까지 나온 가장 큰 K(이 brief 의 §5, 로드맵이 있으면 그 `## 위험 번호표` 와 분해 표의 배정 번호까지)의 다음 수를 받는다.
+
+   Step A.5 의 되묻기 갈래로 다시 돌 때는 audit §2 의 사건 줄 · §5 의 옮긴 줄 · payload §6 · audit §6 을 state 에서 통째로 다시 쓴다 — 덧붙이지 않는다. 다시 써도 audit §6 은 append-only 다 — state `user_statements` 는 append 로만 쌓이므로 다시 지은 §6 은 있던 S 그대로에 새 S 가 뒤에 더해진 글이다.
 5. **조사 주장의 인계 — 세 방향을 같은 id 로 맞물린다.** 하류는 brief 파일 경로를 받으므로
    §4·§5 를 포함한 전문을 읽을 수 있다. 하류에 **지시를 걸지 않고** 「읽을 이유」까지만 만든다.
 
@@ -198,16 +201,29 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    0건 sentinel 누락**·포화 판정 줄 없음 · 마지막 판정 «아직» · 판정 불가 뒤 조사 계속이 마지막 · 형식 밖). 통과(exit 0)할 때까지 반복합니다. 마지막 항목은 이 단계에서
    **매번** 발화할 수 있는 유일한 실패입니다 — Step A는 정의상 전부 `provisional`이므로,
    위 3의 sentinel을 빠뜨리면 첫 게이트 실행이 항상 red입니다.
-8. **로드맵 · 묶음 생성 — 분해된 일만.** 분해 판단에서 표를 승인했으면 게이트를 통과한 직후 생성기를 돌린다:
-   ```bash
-   SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   BRIEF_REL="docs/superpowers/interview/<file>"
-   python3 "$SD/scripts/roadmap_write.py" create --brief "$BRIEF_REL" \
-     --audit "${BRIEF_REL%.md}.audit.md" --plan-table "${BRIEF_REL%.md}.state.md" \
-     --out "docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/" --title "<주제 한 줄>" \
-     --date "<YYYY-MM-DD>" --approval "<승인 원문>"
-   ```
-   rc 0 이면 나온 `[spec-distill]` 줄을 그대로 보인다. rc 1 이면 사유 줄을 그대로 보이고 분해 판단 3(분해안 표)으로 돌아간다 — 생성기가 만든 파일은 이미 지워졌고 미리 있던 파일은 그대로다. 표를 고쳐 승인받은 뒤 다시 돈다. 생성기는 표 파일에 `## 생성 기록` 절을 남긴다 — Step B 의 다시 생성이 그 기록에 있는 파일만 덮어쓴다.
+8. **로드맵 · 묶음 생성 — 분해된 일만.** 분해 판단에서 표를 승인했으면 게이트를 통과한 직후 생성기를 돌린다. 제목과 승인 원문은 각자의 heredoc 자리에 따옴표로 감싸지 않고 글자 그대로 넣는다. 제목에 줄바꿈이 있으면 넣지 말고 멈춰 그 사실을 사용자에게 보인다. 넣는 글에 그 자리의 구분 줄(`DEVBREW_ROADMAP_TITLE_EOF` · `DEVBREW_ROADMAP_APPROVAL_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 생성기는 말 하나를 한 줄로만 받는다 — 승인 원문이 여러 줄이거나 말이 여럿이면 `AF1=` 줄부터 그 닫는 구분 줄까지를 줄마다 `AF2` · `AF3` … 으로 하나씩 더하고, `--approval="$(cat "$AF<k>")"` 를 하나씩 붙인다(`=` 꼴 — 「-」 로 시작하는 말도 옵션으로 읽히지 않는다). 승인 원문은 이 펜스가 만든 임시 파일에만 살고 펜스가 끝나면 지워진다 — 세션 상태 폴더에 쓰지 않는다. 펜스 줄과 더하는 `AF<k>` 줄은 맨 앞 칸에서 시작한다 — 구분 줄 앞에 칸이 있으면 heredoc 이 닫히지 않는다:
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF_REL="docs/superpowers/interview/<file>"
+IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'
+<주제 한 줄>
+DEVBREW_ROADMAP_TITLE_EOF
+AD="$(mktemp -d "${TMPDIR:-/tmp}/roadmap-approval.XXXXXX")" || { echo "[spec-distill] 승인 원문 임시 폴더를 만들지 못했다" >&2; exit 1; }
+trap 'rm -rf -- "$AD"' EXIT
+AF1="$AD/1"
+cat > "$AF1" <<'DEVBREW_ROADMAP_APPROVAL_EOF'
+<승인 원문>
+DEVBREW_ROADMAP_APPROVAL_EOF
+c_rc=0
+python3 "$SD/scripts/roadmap_write.py" create --brief "$BRIEF_REL" \
+  --audit "${BRIEF_REL%.md}.audit.md" --plan-table "${BRIEF_REL%.md}.state.md" \
+  --out "docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/" --title="$title" \
+  --date "<YYYY-MM-DD>" --approval="$(cat "$AF1")" || c_rc=$?
+exit "$c_rc"
+```
+
+rc 0 이면 나온 `[spec-distill]` 줄을 그대로 보인다. rc 1 이면 사유 줄을 그대로 보이고 분해 판단 3(분해안 표)으로 돌아간다 — 생성기가 만든 파일은 이미 지워졌고 미리 있던 파일은 그대로다. 표를 고쳐 승인받은 뒤 다시 돈다. 생성기는 표 파일에 `## 생성 기록` 절을 남긴다 — Step B 의 다시 생성이 그 기록에 있는 파일만 덮어쓴다.
 
 ### Step A.5 — brief 리뷰 파이프라인 진입 (Law 2 분리 리뷰, v0.24.0)
 
@@ -236,6 +252,10 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
   최종 문서**를 봅니다.
 - 산출물 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)이 Step B 게이트로 넘어옵니다. 엔진
   승인 게이트의 2단계(진행 옵션)는 그 skill 이 띄우지 않고 아래 Step B 가 묻습니다.
+
+**닫은 답의 출처로 멈추면 — 되묻기 갈래.** `reviewing-brief` 가 진입 게이트에서 `not_chosen`(인터뷰를 닫은 답 — 외부 선례 무관 · 사용자 판단 포화 — 이 state 에 고른 선택지 `source: chosen` 으로 기록돼 있지 않다)으로 멈추면, 이 세션에서 그 닫힌 질문을 `AskUserQuestion` 선택지로 다시 묻는다 — 닫는 선택지(처음 닫은 답과 같은 「외부 선례 무관」 · 「조사 불필요」) · 「조사 계속」.
+- **닫는 선택지**면 그 답을 새 `S<n>` 으로 state `user_statements` 에 `source: chosen` 으로 기록하고, 닫힌 답의 종류에 따라 한 곳만 바꾼다. 사용자 판단 포화였으면 그 S 를 가리키는 새 포화 판정 줄(`- 포화 판정 <k>: 사용자 판단 포화(@S<n>) — 조사 불필요` — `<k>` 는 대기 줄 블록의 마지막 포화 판정 번호 다음 수)을 state 본문의 대기 줄 블록 한 곳에만(`## audit §2 대기 줄`) 덧붙인다 — 옛 줄은 고치지 않고 기록으로 남긴다(게이트는 마지막 줄을 본다). 외부 선례 무관이었으면 포화 줄은 건드리지 않고 brief §4 그 줄의 `@S` 만 새 S 로 바꾼다(외부 선례 답을 조사 전체를 끝내는 승인으로 읽지 않게). 그다음 Step A 의 3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로 돌아간다(8 은 로드맵이 있을 때만) — audit §2 는 대기 줄 블록에서 다시 지어져 같은 줄이 두 번 실리지 않고, §6 들은 state 에서 다시 지어져 새 S 가 더해질 뿐이다.
+- **「조사 계속」**이면 같은 세션의 라운드 루프로 돌아가고, 다시 닫을 때 이 마무리 단계를 처음부터 돈다. 사용자가 다시 답하지 않으면 리뷰는 멈춘 채로 남는다. 세션을 넘겨 따로 부른 `reviewing-brief` 가 이 사유로 멈추면 끝난 인터뷰라 진행 기록에서 다시 이을 수 없다 — 멈춤 문장이 그 사실을 함께 알린다.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
@@ -327,7 +347,7 @@ PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
 AUDIT="${PAYLOAD%.md}.audit.md"
 STATE="${PAYLOAD%.md}.state.md"
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "$PAYLOAD" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 wt_top="$(python3 "$SD/scripts/state_path.py" payload-root "$PAYLOAD")" || wt_top=""
@@ -376,7 +396,7 @@ fi
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "$PAYLOAD" || true)"
 STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$PAYLOAD" || true)"
 [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 if [ -z "${STATE_DIR:-}" ] || [ ! -f "$STATE_DIR/docreview-state.md" ]; then
