@@ -206,6 +206,7 @@ for pair in "SR:spec_path" "RB:PAYLOAD"; do
   run_fence "$B" sess-root0006 "$var='$TDOC'" "$(fence "$f" ledger-open)"
   assert_eq "$E_RC|$(printf '%s\n' "$E_OUT" | tail -n 1)" "3|ledger-open: NO_DIR" "e2e_tracked_stops: $nm — 상태 루트 아래 추적 파일이면 원장 열기가 NO_DIR · rc 3"
   assert_contains "$E_OUT" "상태 폴더 아래 파일이 이미 추적된다 — git rm --cached -r $TR/.claude/spec-distill 로 추적을 푼 뒤 다시 돈다" "e2e_tracked_stops: $nm — 고치는 법이 보인다"
+  assert_contains "$E_OUT" "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유)" "e2e_tracked_stops: $nm — 원장 열기가 상태 폴더 때문에 멈췄다고 댄다"
 done
 [ ! -e "$TR/.claude/spec-distill/.docreview" ] && ok "e2e_tracked_stops: 원장 자리를 만들지 않았다" || no "e2e_tracked_stops: 원장 자리가 생겼다"
 
