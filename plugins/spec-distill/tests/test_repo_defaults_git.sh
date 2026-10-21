@@ -259,4 +259,27 @@ run "$RB" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
 assert_eq "$RC" "3" "roadmap-check: 레포 설정이 깨지면 기본 폴더로 조용히 판정하지 않고 rc 3(기본 폴더의 로드맵도 통과 못 함)"
 assert_contains "$ERR" "typo_key" "roadmap-check: 깨진 설정의 사유를 알린다"
 
+# ── 레포 밖 — get 은 기본 브랜치를 모를 때와 같은 기본값, 판정 명령 · --roadmap 은 rc 3 ─────────
+NR="$T/norepo/sub"; mkdir -p "$NR"
+[ -z "$(git -C "$NR" rev-parse --show-toplevel 2>/dev/null)" ] && ok "전제: 픽스처가 레포 밖이다" || no "전제: 픽스처가 레포 안이다 — 아래 칸이 공허하다"
+run "$NR" get interview_dir
+assert_eq "$RC:$OUT" "0:$DEF_IV" "레포 밖 get: 기본값 · rc 0"
+assert_contains "$ERR" "값의 출처: $NO_REF_LABEL(interview_dir)" "레포 밖 get: 출처는 「기본 브랜치 없음」 표기"
+assert_contains "$ERR" "git 레포 밖이라" "레포 밖 get: 레포가 아니라는 알림"
+assert_eq "$(printf '%s\n' "$ERR" | grep -c .)" "2" "레포 밖 get: stderr 는 알림 한 줄 + 출처 한 줄"
+run "$NR" get test_command
+assert_eq "$RC:$OUT" "1:" "레포 밖 get: 기본값이 없는 키는 rc 1"
+run "$NR" get test_command --roadmap x/roadmap.md
+assert_eq "$RC" "3" "레포 밖 get --roadmap: 로드맵을 읽을 수 없어 rc 3"
+run "$NR" check-path interview_dir "$DEF_IV"x-interview.md
+assert_eq "$RC" "3" "레포 밖 check-path: rc 3"
+run "$NR" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
+assert_eq "$RC" "3" "레포 밖 roadmap-check: rc 3"
+run "$NR" default-branch
+assert_eq "$RC" "3" "레포 밖 default-branch: rc 3"
+# 음의 짝 — 조상에 `.git` 이 있는데 git 이 레포를 못 읽으면 레포 밖이 아니라 깨짐(rc 3)
+BG="$T/brokengit"; mkdir -p "$BG/.git" "$BG/sub"
+run "$BG/sub" get interview_dir
+assert_eq "$RC" "3" "못 읽는 .git 아래 get: 기본값으로 조용히 넘어가지 않고 rc 3"
+
 finish

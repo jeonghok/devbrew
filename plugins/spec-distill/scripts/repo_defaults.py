@@ -235,6 +235,23 @@ def _toplevel(cwd: str) -> str:
     return top
 
 
+def _outside_repo(base: str) -> bool:
+    """git 이 레포를 찾지 못하고 base 의 조상 어디에도 `.git` 이 없으면 True. `.git` 이 있는데 못 읽으면 False(깨짐으로 간다)."""
+    if os.environ.get("GIT_DIR") or not os.path.isdir(base):
+        return False
+    rc, out = _git(base, "rev-parse", "--show-toplevel")
+    if rc == 0 and out.strip():
+        return False
+    p = os.path.realpath(base)
+    while True:
+        if os.path.lexists(os.path.join(p, ".git")):
+            return False
+        parent = os.path.dirname(p)
+        if parent == p:
+            return True
+        p = parent
+
+
 def _default_commit(top: str, run=None):
     """기본 ref 가 가리키는 커밋, 없으면 None."""
     run = run or (lambda *args: _git(top, *args))
@@ -514,6 +531,17 @@ def main(argv=None) -> int:
             return _cmd_default_branch(base, args.check_remote)
         if args.cmd == "roadmap-check":
             return _cmd_roadmap_check(base, args.path)
+        if args.cmd == "get" and args.roadmap is None and _outside_repo(base):
+            result = merge_layers(None, None, None, None, [
+                "git 레포 밖이라 레포 설정 파일을 읽지 못하고 기본값을 쓴다(%s)" % base], default_label=_no_ref_label)
+            for line in result["notices"]:
+                _say(line)
+            _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
+            value = result["values"][args.key]
+            if value is None:
+                return 1
+            print(value)
+            return 0
         roadmap = getattr(args, "roadmap", None)
         if roadmap is not None:
             roadmap = _repo_relative(_toplevel(base), base, roadmap)
