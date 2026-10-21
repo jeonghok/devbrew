@@ -12,6 +12,9 @@
 ### Fixed
 - 기준 브랜치의 짧은 이름을 전체 참조 이름에서 얻는다 — `origin/main` 이라는 로컬 브랜치가 있어도 기준이 바뀌지 않는다.
 
+### Security
+- 게시 sink(`publish-comment.sh`)가 비밀 검사 범위의 기준을 전체 참조 이름(`refs/remotes/origin/<base>`, 없으면 `refs/heads/<base>`)으로 찾는다 — 이름이 `origin/<base>` 인 태그 · 로컬 브랜치가 기준을 가로채 검사 범위를 비우던 길을 막았다.
+
 ## [14.4.0] — 2026-10-21
 
 ### Security
