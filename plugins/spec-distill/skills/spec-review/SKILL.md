@@ -2,7 +2,7 @@
 name: spec-review
 description: >
   Use right after superpowers:brainstorming writes and commits a design doc
-  (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review takes the
+  (`...-design.md` in the design-doc folder `specs_dir`), before superpowers:writing-plans — this review takes the
   place where brainstorming, after its builder check and that check's questions, hands the document
   over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or interview brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
@@ -172,13 +172,16 @@ esac
 
 <!-- review-candidates:begin -->
 ```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 top="$(git rev-parse --show-toplevel)"
-git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'BEGIN{FS="\037"} NF && !seen[$NF]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
-git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
+SPECS="$(python3 "$SD/scripts/repo_defaults.py" get specs_dir --root "$top")" || SPECS=""
+[ -n "$SPECS" ] || { echo "[spec-distill] 설계문서 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- "${SPECS}*-design.md" | awk 'BEGIN{FS="\037"} NF && !seen[$NF]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
+git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- "${SPECS}*-design.md" | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
 ```
 <!-- review-candidates:end -->
 
-후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
+후보가 없거나, 사용자가 고르지 않거나, 펜스가 멈추면(그 사유를 그대로 보인다) 아래 「대상 부재」로 끝낸다.
 
 상태 디렉토리는 `state_path.py` 리졸버(세션)와 엔진의 `state-dir-for`(문서)로 연다 — 이 문서의 엔진 상태
 (`docreview-state.md`)와 codex 산출물이 여기 산다:

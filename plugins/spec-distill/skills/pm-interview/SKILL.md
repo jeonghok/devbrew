@@ -3,7 +3,7 @@ name: pm-interview
 description: >
   사용자가 `/spec-distill:pm-interview @<seed 경로>` 로 부른다.
   Runs the spec-distill problem-space interview stage and produces a terminal
-  interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
+  interview-brief in the interview folder (`interview_dir`). 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
   closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
@@ -110,7 +110,7 @@ brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으
 
 ## State location
 
-`docs/superpowers/interview/<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
+인터뷰 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
 State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 정한다)
 
 ```yaml

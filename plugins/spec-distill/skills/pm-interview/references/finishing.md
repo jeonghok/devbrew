@@ -52,7 +52,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    |---|---|---|---|---|---|---|---|---|---|---|
 
    - 번호는 `<대문자><숫자>`(보기: `R0` · `R1`, 먼저 확인할 일은 `P1`). 가능하면 첫 에픽은 걷는 뼈대 — 가장 얇게 끝에서 끝까지 도는 에픽이다.
-   - 종류는 셋이다 — 「묶음」(에픽 묶음 파일을 만든다) · 「브랜치 <설계문서 경로>」(묶음 없이 이미 있는 설계문서를 가리킨다) · 「결정」(브랜치 없이 로드맵 결정 기록으로 끝난다). 「결정」이면 브랜치 칸은 「없음」이다.
+   - 종류는 셋이다 — 「묶음」(에픽 묶음 파일을 만든다) · 「브랜치 <설계문서 경로>」(묶음 없이 이미 있는 설계문서를 가리킨다) · 「결정」(브랜치 없이 로드맵 결정 기록으로 끝난다). 「결정」이면 브랜치 칸은 「없음」이다. 그 밖의 브랜치 칸은 `<branch_prefix><kebab>` — 접두는 `get branch_prefix`(`repo_defaults.py`)의 값이다.
    - 범위는 `한다 … / 안 한다 …`. 의존 · 경로 예약은 쉼표로 나열하고 없으면 「없음」. 빈 칸은 두지 않는다. 칸 안의 `|` 는 `\|` 로 쓴다.
    - 배정 번호 — brief 에 쓸 모든 번호(확정 C · D, 열린 질문 OQ, 레포 근거 RC, steelman ST, 웹 «key», 위험 K, 발화 S)를 하나 이상의 에픽에 배정한다. 모든 에픽이 받드는 공통 제약은 여러 에픽에 넣는다. 묶음 없는 두 종류에는 발화(S)와 그 밖의 번호가 하나 이상씩 있어야 한다. 위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다 — 숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터 매긴다.
    - 받는 것 · 넘기는 것 — 에픽 사이 인터페이스다. 묶음 §7 에 이 두 칸이 글자 그대로 실린다.
@@ -61,7 +61,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    표 아래에 `미배정 번호 <n> · 고아 발화 <m>` 한 줄을 보이고, 0 이 아니면 그 번호를 나열한다. brief 를 쓰기 전이라 이 계산은 모델이 한다 — 인터뷰 state 의 번호 목록(위 일곱 종류)에서 표의 배정 번호 합집합을 뺀다. 확정 판정은 Step A 8 의 생성기 검증(`roadmap_status.py` 규칙)이 한다.
 4. **고치기 · 승인.** `AskUserQuestion` 하나 — 옵션 셋: 「승인」(표를 확정하고 Step A 로) · 「고치기」(말로 받아 표를 고쳐 다시 보인다) · 「spec 하나로」(나누지 않고 Step A 로). 고친 횟수는 state `decompose_edits` 에 센다. 세 번 고칠 때마다 「계속 고칠까요」를 묻고(옵션: 「계속 고친다」 · 「지금 표로 승인」 · 「spec 하나로」) 자동으로 끝내지 않는다.
-5. **기록.** 승인된 표를 인터뷰 상태 파일(`<줄기>.state.md` — `state-file.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/` 다 — 폴더 이름은 brief 파일 이름(`<줄기>.md`)에서 끝의 `-interview.md` 를 뗀 것, 곧 brief 파일 이름의 날짜 · 주제 부분 그대로다. Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다 — 로드맵 경로는 그 폴더의 `roadmap.md` 를 레포 루트 기준 상대경로로 쓴다(끝내기 커밋 펜스가 이 줄에서 로드맵 폴더를 도출한다).
+5. **기록.** 승인된 표를 인터뷰 상태 파일(`<줄기>.state.md` — `state-file.md`) 본문의 `## 분해안` 절에 위 머리 그대로 적고, 표 아래에 `승인: 「<사용자가 고른 옵션 또는 말>」` 한 줄을 둔다. 로드맵 폴더는 `<roadmaps_dir><YYYY-MM-DD>-<주제 또는 주제-HHMM>/` 다(`roadmaps_dir` 은 레포 설정의 로드맵 폴더) — 폴더 이름은 brief 파일 이름(`<줄기>.md`)에서 끝의 `-interview.md` 를 뗀 것, 곧 brief 파일 이름의 날짜 · 주제 부분 그대로다. Step A 는 brief §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓴다 — 로드맵 경로는 그 폴더의 `roadmap.md` 를 레포 루트 기준 상대경로로 쓴다(끝내기 커밋 펜스가 이 줄에서 로드맵 폴더를 도출한다).
 
 ### Step A — brief 작성 (terminal 산출물, 2파일)
 
@@ -70,7 +70,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    audit **5-section** 구조를 확보합니다.
 2. 경로 (둘 다 워크트리 안 → `Write` tool 사용): payload · audit 경로는 상태 파일 이름에서 `.state.md` 를 뗀
    `<줄기>` 에 `.md` · `.audit.md` 를 붙인 것이다(`state-file.md`). 날짜 · 주제로 다시 계산하지 않는다.
-   - payload: `<줄기>.md` (`docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`)
+   - payload: `<줄기>.md` (인터뷰 폴더(`interview_dir`) 아래 `<YYYY-MM-DD>-<kebab-topic>-interview.md`)
    - audit:   `<줄기>.audit.md`
    - payload frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`(기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 B-3 이 그 skill 의 완전명으로 바꾼다),
      `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
@@ -177,7 +177,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    ```bash
    # payload 조사 항목(§4 · §5 의 불릿 줄)의 RC<n> 전량 ↔ audit §5 불릿 줄의 확인 줄 — 차집합이 비어야 한다.
    # 불릿은 `-`·`*` 둘 다, 들여쓰기 허용 — 게이트의 항목 판독과 같은 관례다. §3·§0 의 역참조는 출처가 아니다.
-   PL="docs/superpowers/interview/<file>"
+   PL="<Step A 2 의 payload 경로>"
    AD="${PL%.md}.audit.md"
    comm -23 <(awk '/^## [0-9]+\./{f=($2=="4."||$2=="5.")} f' "$PL" | grep -E '^[[:space:]]*[-*][[:space:]]' \
                 | grep -oE '(^|[^A-Za-z])RC[0-9]+' | grep -oE 'RC[0-9]+' | sort -u) \
@@ -194,7 +194,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    audit을 해석합니다:
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   python3 "$SD/scripts/check_brief.py" gate "docs/superpowers/interview/<file>"
+   python3 "$SD/scripts/check_brief.py" gate "<Step A 2 의 payload 경로>"
    ```
    exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 항목을 보완(누락 섹션·무인용
    landscape·형식 미달 verdict 항목·`기각` 0건·floor open·bijection 불일치·**`confirmed`
@@ -205,7 +205,11 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-BRIEF_REL="docs/superpowers/interview/<file>"
+IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
+[ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+RMDIR="$(python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir)" || RMDIR=""
+[ -n "$RMDIR" ] || { echo "[spec-distill] 로드맵 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+BRIEF_REL="${IDIR}<file>"
 IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'
 <주제 한 줄>
 DEVBREW_ROADMAP_TITLE_EOF
@@ -218,7 +222,7 @@ DEVBREW_ROADMAP_APPROVAL_EOF
 c_rc=0
 python3 "$SD/scripts/roadmap_write.py" create --brief "$BRIEF_REL" \
   --audit "${BRIEF_REL%.md}.audit.md" --plan-table "${BRIEF_REL%.md}.state.md" \
-  --out "docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/" --title="$title" \
+  --out "${RMDIR}<YYYY-MM-DD>-<주제 또는 주제-HHMM>/" --title="$title" \
   --date "<YYYY-MM-DD>" --approval="$(cat "$AF1")" || c_rc=$?
 exit "$c_rc"
 ```
@@ -234,7 +238,10 @@ rc 0 이면 나온 `[spec-distill]` 줄을 그대로 보인다. rc 1 이면 사�
 핸드오프 변수 2개를 **절대경로**로 세팅합니다(엔진은 상대 문서 경로를 거부하고, codex 산출물 경로는 그 skill 이 도출합니다):
 
 ```bash
-PAYLOAD="$(pwd)/docs/superpowers/interview/<file>"   # Step A가 방금 쓰고 검증한 경로
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
+[ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+PAYLOAD="$(pwd)/${IDIR}<file>"   # Step A가 방금 쓰고 검증한 경로
 AUDIT="${PAYLOAD%.md}.audit.md"                      # payload 의 audit sidecar (§6 S2+ 원문)
 ```
 
@@ -244,12 +251,9 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
 
 두 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
-- 지출 승인 게이트는 없습니다(`cost_class: medium`). 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 상한 뒤의
-  추가 라운드는 사용자가 그 skill 의 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돕니다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
-  Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
-- 리뷰가 payload 를 수정할 수 있습니다(§0 · §2~§5 — 프로필의 수정 자리. §1 은 사용자 결정이고 §6 은 추가만 허용이다). 수정이 일어나면 Step B는 **리뷰 후
-  최종 문서**를 봅니다.
+- 지출 승인 게이트는 없습니다(`cost_class: medium`). 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 상한 뒤의 추가 라운드는 사용자가 그 skill 의 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돕니다.
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가 Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
+- 리뷰가 payload 를 수정할 수 있습니다(§0 · §2~§5 — 프로필의 수정 자리. §1 은 사용자 결정이고 §6 은 추가만 허용이다). 수정이 일어나면 Step B는 **리뷰 후 최종 문서**를 봅니다.
 - 산출물 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)이 Step B 게이트로 넘어옵니다. 엔진
   승인 게이트의 2단계(진행 옵션)는 그 skill 이 띄우지 않고 아래 Step B 가 묻습니다.
 
@@ -275,7 +279,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 ```
 
 플러그인 레벨 경로입니다 — 이 파일 옆이 아니라 플러그인 루트 아래
-(`plugins/spec-distill/references/proceed-gate.md`)에 있습니다. 두 skill 이 공유하므로 어느
+(`${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md`)에 있습니다. 두 skill 이 공유하므로 어느
 skill 밑에도 두지 않았습니다.
 
 #### B-0 — 확정 후보 제시 (게이트에 흡수, AC2)
@@ -433,7 +437,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
 - **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(다음 세션에 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
-  > `[spec-distill] interview brief 를 만들었다: docs/superpowers/interview/<file>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
+  > `[spec-distill] interview brief 를 만들었다: <payload 경로>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
 
   분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
 

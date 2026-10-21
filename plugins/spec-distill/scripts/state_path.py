@@ -96,7 +96,6 @@ def state_root(cwd: str | None = None) -> Path:
 
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-INTERVIEW_DIR = ("docs", "superpowers", "interview")
 # 한 인터뷰의 세 자리와 각 자리가 받아들이는 frontmatter `type:`.
 _SLOTS = ((".state.md", "interview-state"), (".md", "interview-brief"), (".audit.md", "interview-audit"))
 _HHMM = re.compile(r"^([01]\d|2[0-3])[0-5]\d$")
@@ -115,6 +114,25 @@ def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
     except (subprocess.TimeoutExpired, OSError):
         pass
     return Path(cwd).resolve(), False
+
+
+def interview_dir(root: Path, is_git: bool) -> tuple[Path | None, str | None]:
+    """(인터뷰 폴더, 사유). git 레포면 해결자가 기본 브랜치의 레포 설정으로 정한 `interview_dir`, 아니면 기본값.
+    레포 설정이 깨졌으면 (None, 사유). 해결자는 여기서만 불러온다 — 상태 루트만 쓰는 호출은 그 모듈을 읽지 않는다."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import repo_defaults as rd
+    rel = rd.INTERVIEW_DIR
+    if is_git:
+        try:
+            result = rd.resolve(str(root))
+        except rd.SettingsError as exc:
+            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(exc)
+        if result["errors"]:
+            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(result["errors"][0])
+        rel = result["values"]["interview_dir"]
+    return root.joinpath(*rel.strip("/").split("/")), None
 
 
 def inside_root(path, root) -> str | None:
@@ -195,7 +213,7 @@ def _path_problem(d: Path, root: Path, stem: str) -> str | None:
 
 def interview_state_path(topic: str, date: str | None = None, cwd: str | None = None,
                          hhmm: str | None = None) -> tuple[Path | None, list[str]]:
-    """`<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md`.
+    """`<작업 트리 루트>/<인터뷰 폴더>/<날짜>-<topic>-interview.state.md` — 인터뷰 폴더는 `interview_dir()`.
 
     계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
     경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
@@ -212,7 +230,10 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
     root, is_git = worktree_root(cwd)
     if not is_git:
         msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
-    d = root.joinpath(*INTERVIEW_DIR)
+    d, why = interview_dir(root, is_git)
+    if d is None:
+        msgs.append(why)
+        return None, msgs
     stem = "{0}-{1}-interview".format(date, topic)
     why = _path_problem(d, root, stem) or _slot_problem(d, stem)
     if why:

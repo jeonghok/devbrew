@@ -67,7 +67,8 @@ grep -q '^TOPIC="probe-topic"$' "$W/state.sh" && ok "추출: 자리표를 픽스
 
 # ── 가짜 플러그인 루트 ────────────────────────────────────────────────────────
 PR="$W/plugin"; mkdir -p "$PR/scripts"
-for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py nofollow_write.py; do
+for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py nofollow_write.py \
+         repo_defaults.py roadmap_model.py section6.py brief_body.py; do
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
 for f in build_seed_inline_blob.py seed_review_log.py interview_state.py; do ln -s "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/$f"; done
@@ -117,6 +118,7 @@ EOF
 home() {   # home <sid> [이름] → 차가운 셸의 cwd 를 만든다(seed · session_id 를 단 audit · CLAUDE.md)
   local sid="$1" name="${2:-probe-$1-interview}" h="$W/$1"
   mkdir -p "$h/docs/superpowers/interview"
+  [ -d "$h/.git" ] || git -C "$h" init -q
   # 한 세션의 seed audit 은 하나다 — 같은 세션에 다른 이름을 주면 앞의 audit 을 치운다(둘이면 블록이 이름을 고르지 않는다)
   find "$h/docs/superpowers/interview" -name '*.audit.md' -exec rm -f {} + 2>/dev/null || true
   printf -- '---\ntype: interview-seed\n---\n\nSEED_%s 로그인이 가끔 실패한다.\n' "$sid" > "$h/docs/superpowers/interview/$name.md"

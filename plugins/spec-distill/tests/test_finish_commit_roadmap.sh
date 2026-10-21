@@ -217,12 +217,13 @@ rc1_items="$(awk '/rc 1 은 사유로 가른다/{f=1;next} f&&/^  - /{print;next
 case "$rc1_items" in *'그 밖의 사유'*) ok "재분해(AC16): rc 1 갈래 목록을 뽑았다" ;; *) no "재분해(AC16): rc 1 갈래 목록이 비었다 — 아래 칸이 공허하다" ;; esac
 assert_not_contains "$rc1_items" 'RISK_ORDER_NOTICE' "재분해(AC16): RISK_ORDER_NOTICE 는 rc 1 갈래가 아니다"
 assert_eq "$(grep -c '^- rc 0 이면 .*`RISK_ORDER_NOTICE`' "$RED")" "1" "재분해(AC16): RISK_ORDER_NOTICE 는 rc 0 길의 항목이다"
-extract_fence() {   # extract_fence <파일> → `## 2. 지금 표` 절 안의 첫 bash 펜스(다음 `## ` 머리에서 멈춘다)
-  awk '/^## 2\. 지금 표/{f=1;next} f&&/^## /{exit} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$1"
+extract_fence() {   # extract_fence <파일> → `## 2. 지금 표` 절 안에서 extract 를 부르는 bash 펜스(다음 `## ` 머리에서 멈춘다)
+  awk '/^## 2\. 지금 표/{f=1;next} f&&/^## /{exit} f&&/^```bash$/{c=1;b="";next}
+       c&&/^```$/{c=0; if (index(b, "roadmap_write.py\" extract")) {printf "%s", b; exit}; next} c{b=b $0 "\n"}' "$1"
 }
 ef="$(extract_fence "$RED")"
 [ -n "$ef" ] && ok "재분해: extract 펜스를 뽑았다" || no "재분해: extract 펜스가 비었다 — 아래 칸이 공허하다"
-printf '## 2. 지금 표\n\n펜스 없음.\n\n## 3. 영향 보이기\n\n```bash\necho leak\n```\n' > "$T/ef-probe.md"
+printf '## 2. 지금 표\n\n펜스 없음.\n\n## 3. 영향 보이기\n\n```bash\necho roadmap_write.py" extract leak\n```\n' > "$T/ef-probe.md"
 assert_eq "$(extract_fence "$T/ef-probe.md")" "" "재분해: extract 펜스 추출은 2 절 밖(다음 \`## \` 절)의 펜스를 집지 않는다(양성 짝: 위 실제 문서 추출)"
 assert_not_contains "$ef" '"<' "재분해(AC14): extract 펜스에 따옴표로 감싼 모델 채움 자리가 없다(양성 짝: 아래 실행 칸)"
 STUB3="$T/stub3"; mkdir -p "$STUB3/scripts"

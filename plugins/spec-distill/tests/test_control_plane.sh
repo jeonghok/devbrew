@@ -631,4 +631,17 @@ assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(
 [ "$(printf '%s\n' "$out" | awk 'length($0) > 400' | wc -l | tr -d ' ')" -gt 0 ] && ok "변이 잡힘: 사유를 줄이지 않으면 줄 길이 단언이 RED" || no "변이 생존: 사유 줄이기"
 rm -rf "$STATE_DIR"
 
+echo "=== 인터뷰 폴더는 기본 브랜치의 레포 설정(R8) ==="
+cp "$REAL/state_path.py" "$S/state_path.py"
+push_file .devbrew.md "$(printf -- '---\ninterview_dir: notes/iv/\n---')"
+write_state "$W/notes/iv" 2026-10-20-n-interview.state.md 2
+write_state "$STATE_DIR" 2026-10-20-d-interview.state.md 7
+out="$(show)"
+assert_contains "$out" "notes/iv/2026-10-20-n-interview.state.md" "설정한 인터뷰 폴더의 상태 파일을 읽는다"
+assert_not_contains "$out" "2026-10-20-d-interview.state.md" "기본 폴더의 상태 파일은 읽지 않는다"
+assert_contains "$(sl)" "인터뷰 조사 4/20" "상태줄도 설정한 폴더의 인터뷰를 센다"
+push_file .devbrew.md "$(printf -- '---\ninterview_dir: /abs/\n---')"
+assert_contains "$(show)" "인터뷰 폴더를 정하지 못했다" "레포 설정이 깨지면 인터뷰 칸에 그 사유를 보인다"
+rm -rf "$STATE_DIR" "$W/notes"; sp_off "$S/state_path.py"
+
 finish

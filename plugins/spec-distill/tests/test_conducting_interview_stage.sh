@@ -87,7 +87,7 @@ has 'steelman.*생략|web 비활성.*steelman' "F8: R3 web-absent loud degradati
 has 'steelman-builder' "steelman-builder dispatch"
 has 'verbatim|약화.*금지|편집.*금지' "steelman verbatim pass-through (AC5)"
 
-has 'docs/superpowers/interview/' "brief written under docs/superpowers/interview/ (C8)"
+has 'repo_defaults\.py" get interview_dir' "brief written under the interview folder from repo settings (C8)"
 has 'interview-brief-template' "uses brief template"
 
 has 'optional|선택' "brainstorming invoke is optional"
@@ -947,7 +947,7 @@ if [[ -n "$V2_SCR" && -d "$V2_SCR" ]]; then
   awk '/V2 검문소 — 무조건, 누락 대조만/{m=1} m&&/^ *```bash$/{f=1;next} f&&/^ *```$/{exit} f' "$FIN" \
     | sed 's/^   //' > "$V2_SCR/frag.sh"
   { [[ -s "$V2_SCR/frag.sh" ]] && grep -qF 'comm -23' "$V2_SCR/frag.sh" && bash -n "$V2_SCR/frag.sh" 2>/dev/null \
-      && grep -qF 'PL="docs/superpowers/interview/<file>"' "$V2_SCR/frag.sh"; } \
+      && grep -qF 'PL="<Step A 2 의 payload 경로>"' "$V2_SCR/frag.sh"; } \
     && ok "V2(실행·양성대조): 대조 펜스를 잘랐다 · bash -n 통과 · PL 자리 확인" \
     || no "V2(실행·양성대조): 대조 펜스를 못 잘랐거나 문법이 깨졌다 — 아래 실행 단언이 공허하다"
   FXV2="$REPO_ROOT/plugins/spec-distill/tests/fixtures/interview-brief-v2-valid"
@@ -960,7 +960,7 @@ if [[ -n "$V2_SCR" && -d "$V2_SCR" ]]; then
       || no "v2frag ${cell}: 변형기 실패 — 셀이 원본 쌍을 재고 있다"
     [[ "$noop" == noop || "$(cat "$V2_SCR/$cell.md" "$V2_SCR/$cell.audit.md" | cksum)" != "$before" ]] \
       || no "v2frag ${cell}: 변형이 아무것도 바꾸지 않았다 — 셀이 공허하다"
-    sed "s|docs/superpowers/interview/<file>|$V2_SCR/$cell.md|" "$V2_SCR/frag.sh" > "$V2_SCR/$cell.sh"
+    sed "s|<Step A 2 의 payload 경로>|$V2_SCR/$cell.md|" "$V2_SCR/frag.sh" > "$V2_SCR/$cell.sh"
     V2FRAG="$(bash "$V2_SCR/$cell.sh" 2>&1)"
   }
   v2frag base 'pass' noop

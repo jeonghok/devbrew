@@ -115,17 +115,23 @@ for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「인터뷰 다�
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다"' '"고치기"' '"그만둔다"' \
            'R<max+1>' '사라지는 번호는 재사용하지 않는다' '머지되거나 끝난 에픽은 건드리지 않는다' '## 미룸' \
-           'roadmap_write.py" update' '재분해 이력' 'feature/roadmap-<요지>' '원래 바이트'; do
+           'roadmap_write.py" update' '재분해 이력' '원래 바이트'; do
   has "$RTXT" "$lit" "redecompose: $lit"
 done
 
 # 리뷰 보강(I2 · I3 · I4) — 재분해 끝내기 · 전용 브랜치 · 상태 파일 표 갱신
-for lit in '새로 fetch 한 `origin/main` 에서 `feature/roadmap-<요지>` 브랜치를 전용 worktree' \
+for lit in 'roadmap-<요지>` 브랜치를 전용 worktree' \
            '에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다' \
            '## 7. 끝내기' '`check_bundle_coverage.py <묶음> <설계문서>` 를 먼저 돌려' 'spec-review 를 다시 돌린다' \
            'spec-review 게이트 ③ 의 후속 질문' '`## 분해안` 표를 `roadmap_write.py extract` 출력으로 바꿔 둔다' \
            '머지되거나 끝난 에픽'; do
   has "$RTXT" "$lit" "redecompose(리뷰): $lit"
+done
+# R8 AC12 — 재분해 작업 브랜치의 기본 브랜치 · 접두는 해결자에서 얻는다(양의 짝)와 글자로 박지 않는다(음의 짝).
+has "$RTXT" 'repo_defaults.py" default-branch' "redecompose: 기본 브랜치를 해결자에서 얻는다"
+has "$RTXT" 'repo_defaults.py" get branch_prefix' "redecompose: 브랜치 접두를 해결자에서 얻는다"
+for lit in 'origin/main' 'feature/'; do
+  case "$RTXT" in *"$lit"*) no "redecompose: 「${lit}」 글자가 남았다" ;; *) ok "redecompose: 「${lit}」 글자가 없다" ;; esac
 done
 # R7 이음매 — 재분해 표는 세션 상태 폴더(ledger_sweep 이 TTL 뒤 지우는 옛 자리)가 아니라 펜스의 임시 파일에 산다.
 assert_file_absent "$RED" 'session-id>/redecompose-table|state_path\.py" state-root' "redecompose: 세션 상태 폴더에 표를 쓰지 않는다"
@@ -190,13 +196,13 @@ hd="$(printf '%s\n' "$FENCE" | awk -v q="'" '
   ($0 in open) { closed[$0] = 1 }
   END { bad = ""; for (d in open) if (!(d in closed)) bad = bad " " d; printf "%d%s", n, bad }')"
 assert_eq "$hd" "2" "Step A 8: heredoc 둘의 닫는 구분 줄이 줄 맨 앞에 있다"
-e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdout: rc, 결과 폴더는 $E/repo/docs/<이름>. 펜스는 쓰인 그대로 돈다.
+e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdout: rc, 결과 폴더는 $E/repo/docs/<이름>. 자리표만 채우고 경로는 펜스가 레포 설정에서 얻는다.
   local title="$1" appr="$2" outn="$3" body rc=0
   body="$FENCE"
   body="${body//<주제 한 줄>/$title}"
   body="${body//<승인 원문>/$appr}"
-  body="${body//docs\/superpowers\/interview\/<file>/docs/iv/brief.md}"
-  body="${body//docs\/superpowers\/roadmaps\/<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//docs/$outn/}"
+  body="${body//<file>/brief.md}"
+  body="${body//<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//$outn/}"
   body="${body//<YYYY-MM-DD>/2026-10-21}"
   printf '%s\n' "$body" > "$E/fence.sh"
   (cd "$E/repo" && CLAUDE_PLUGIN_ROOT="$SD" PYTHONDONTWRITEBYTECODE=1 /bin/bash "$E/fence.sh") > "$E/out.txt" 2>&1 || rc=$?
@@ -257,10 +263,19 @@ printf '# state\n\n## 분해안\n\n%s\n%s\n%s\n' \
   '|---|---|---|---|---|---|---|---|---|---|---|' \
   '| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | a/x.py | C1 · OQ1 · K1 · «ext-a» · S1 · S2 | 없음 | 없음 |' \
   > "$E/repo/docs/iv/brief.state.md"
+printf -- '---\ninterview_dir: docs/iv/\nroadmaps_dir: docs/\n---\n' > "$E/repo/.devbrew.md"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+git init -q --bare -b main "$E/remote.git"
 git init -q -b main "$E/repo"
 git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid add -A
 git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm fixture
+git -C "$E/repo" remote add origin "$E/remote.git"
+git -C "$E/repo" push -q origin main
+git -C "$E/repo" remote set-head origin --auto >/dev/null
+# 양성 대조 — 펜스가 얻는 두 폴더가 기본값이 아니라 기본 브랜치의 레포 설정 값이다.
+iv_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get interview_dir 2>/dev/null)"
+rm_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir 2>/dev/null)"
+assert_eq "${iv_got}|${rm_got}" "docs/iv/|docs/" "stepa8_e2e: 픽스처 레포 설정이 인터뷰 · 로드맵 폴더를 정한다"
 HOSTILE_TITLE='-제목 $HOME `id` "q" '"'a'"
 HOSTILE_APPR='-승인 $(touch '"$E"'/pwned) "좋아" '"'ok'"
 assert_eq "$(e2e_run "$HOSTILE_TITLE" "$HOSTILE_APPR" rm1)" "0" "stepa8_e2e_verbatim: 펜스 rc 0"
@@ -279,6 +294,9 @@ assert_eq "$(e2e_run '여러 줄 시험' "$ML_APPR" rm2)" "1" "stepa8_multiline_
 case "$(cat "$E/out.txt")" in *'원문은 한 줄이고'*'첫 줄 $(touch '*) ok "stepa8_multiline_approval_verbatim: 거절 사유가 두 줄 말을 글자 그대로 보인다" ;; *) no "stepa8_multiline_approval_verbatim: 거절 사유에 두 줄 말이 그대로 없다" ;; esac
 if [ -e "$E/pwned2" ]; then no "stepa8_multiline_approval_verbatim: 명령이 실행됐다(pwned2)"; else ok "stepa8_multiline_approval_verbatim: pwned2 파일 없음"; fi
 if [ -e "$E/repo/docs/rm2" ]; then no "stepa8_multiline_approval_verbatim: 거절됐는데 폴더가 남았다"; else ok "stepa8_multiline_approval_verbatim: 거절되면 폴더를 만들지 않는다"; fi
+# 양의 짝 — 같은 픽스처에서 한 줄 승인은 rc 0 으로 로드맵 폴더(roadmaps_dir 아래)를 만든다.
+assert_eq "$(e2e_run '한 줄 시험' '한 줄 승인' rm2b)" "0" "stepa8_multiline_approval_verbatim(양의 짝): 한 줄 승인은 rc 0"
+if [ -f "$E/repo/docs/rm2b/roadmap.md" ]; then ok "stepa8_multiline_approval_verbatim(양의 짝): 로드맵 폴더 아래 roadmap.md 를 만든다"; else no "stepa8_multiline_approval_verbatim(양의 짝): 로드맵을 만들지 않았다 — 거절 단언이 공허할 수 있다"; fi
 # 줄마다 AF<k> 로 나누면(여러 말 규칙) 두 줄이 각자 한 말로 그대로 실린다.
 FENCE_ONE="$FENCE"
 AF_BLOCK='AF2="$AD/2"

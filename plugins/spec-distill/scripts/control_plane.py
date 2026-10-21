@@ -519,15 +519,26 @@ def default_ref(repo):
         return None, None, None, str(exc)
 
 
-def roadmaps_dir(repo: Repo):
-    """(로드맵 폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
+def _folder_setting(repo: Repo, key: str, what: str):
+    """(폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
     try:
         result = repo_defaults.resolve(repo.cwd, run=repo.raw)
     except repo_defaults.SettingsError as exc:
         return None, str(exc)
     if result["errors"]:
-        return None, "레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0]
-    return result["values"]["roadmaps_dir"], None
+        return None, "레포 설정을 읽지 못해 %s를 정하지 못했다 — %s" % (what, result["errors"][0])
+    return result["values"][key], None
+
+
+def roadmaps_dir(repo: Repo):
+    return _folder_setting(repo, "roadmaps_dir", "로드맵 폴더")
+
+
+def interview_dir(repo):
+    """(인터뷰 폴더, 사유). 레포 밖(repo 없음)이면 기본값."""
+    if repo is None:
+        return repo_defaults.INTERVIEW_DIR, None
+    return _folder_setting(repo, "interview_dir", "인터뷰 폴더")
 
 
 def listing(repo: Repo, main):
@@ -577,54 +588,60 @@ def candidates(repo: Repo, entries: dict, folder):
     return sorted(found + list(unchecked)), unchecked, failed
 
 
-def interview_files(root: str):
-    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, 폴더 사유 | None)."""
+def interview_files(root: str, rel: str | None, why: str | None = None):
+    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, (자리, 사유) | None). rel 은 인터뷰 폴더(레포
+    상대) — 정하지 못했으면 None 과 그 사유."""
     try:
         supported = "interview-state" in (SCRIPTS / "state_path.py").read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         supported = False
     if not supported:
         return False, [], None
-    folder = Path(root, "docs", "superpowers", "interview")
-    for part in ("docs", "docs/superpowers", "docs/superpowers/interview"):
+    if rel is None:
+        return True, [], (repo_defaults.SETTINGS_FILE, why)
+    parts = rel.strip("/").split("/")
+    shown = "/".join(parts)
+    folder = Path(root, *parts)
+    for i in range(1, len(parts) + 1):
+        part = "/".join(parts[:i])
         try:
             if stat.S_ISLNK(os.lstat(os.path.join(root, part)).st_mode):
-                return True, [], "인터뷰 폴더 경로에 링크가 있다: %s" % part
+                return True, [], (shown, "인터뷰 폴더 경로에 링크가 있다: %s" % part)
         except FileNotFoundError:
             return True, [], None
         except OSError as exc:
-            return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+            return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
     names = set()
     try:
         with os.scandir(str(folder)) as entries:
             for entry in entries:
                 if len(names) >= FOLDER_ENTRIES_MAX:
-                    return True, [], "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX
+                    return True, [], (shown, "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX)
                 try:
                     entry.name.encode("utf-8")
                 except UnicodeEncodeError:
                     continue
                 names.add(entry.name)
     except OSError as exc:
-        return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+        return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
     progress = sorted(n for n in names
                       if n.endswith(STATE_SUFFIX) and n[: -len(".state.md")] + ".md" not in names)
     if len(progress) > STATE_FILES_MAX:
-        return True, [], "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress))
+        return True, [], (shown, "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress)))
     files = []
     for name in progress:
         try:
             mtime_ns = os.lstat(str(folder / name)).st_mtime_ns
         except OSError:
             mtime_ns = -1
-        files.append(("docs/superpowers/interview/" + name, folder / name, mtime_ns))
+        files.append((shown + "/" + name, folder / name, mtime_ns))
     return True, files, None
 
 
 def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     summary = {"supported": supported, "items": [], "errors": []}
     if folder_error:
-        summary["errors"].append({"path": "docs/superpowers/interview", "reason": folder_error})
+        summary["errors"].append({"path": folder_error[0], "reason": folder_error[1]})
     for rel, path, mtime_ns in files:
         deadline.left("인터뷰 상태 파일")
         try:
@@ -943,7 +960,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
-    supported, files, folder_error = interview_files(repo.cwd if repo else cwd)
+    supported, files, folder_error = interview_files(repo.cwd if repo else cwd, *interview_dir(repo))
     if repo is None:
         view["interview"] = read_interviews(supported, files, folder_error, deadline)
         if arg:

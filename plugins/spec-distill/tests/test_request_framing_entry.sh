@@ -130,7 +130,9 @@ wt_block="$(awk '/^## 워크트리 — 진입 직후/{f=1;print;next} /^## /{f=0
 wt_flat="$(tr '\n' ' ' <<<"$wt_block" | tr -s ' ')"
 { [[ -n "$wt_block" ]] && grep -qF 'AskUserQuestion(' <<<"$wt_block"; } && ok "AC12: 워크트리 절 + 단독 AskUserQuestion" || no "AC12: 워크트리 절/질문 부재"
 grep -qE 'audit[^.]{0,20}첫 write[^.]{0,10}전|첫 write 전' <<<"$wt_flat" && ok "AC12: audit 첫 write 전에 묻는다" || no "AC12: 시점(첫 write 전) 부재"
-grep -qF 'feature/<kebab-topic>' <<<"$wt_block" && ok "AC12: feature/<kebab-topic> 이름" || no "AC12: 브랜치 이름 규약 부재"
+grep -qF '<접두><kebab-topic>' <<<"$wt_block" && ok "AC12: <접두><kebab-topic> 이름" || no "AC12: 브랜치 이름 규약 부재"
+grep -qF 'repo_defaults.py" get branch_prefix' <<<"${wt_block%%AskUserQuestion(*}" && ok "AC12: 브랜치 접두는 질문 앞에 레포 설정에서 얻는다" || no "AC12: 질문 앞에 브랜치 접두를 얻는 줄이 없다"
+grep -qF 'feature/' <<<"$wt_block" && no "AC12: 워크트리 절에 브랜치 접두 글자(feature/)가 남았다" || ok "AC12: 워크트리 절에 브랜치 접두 글자가 없다"
 [[ "$(grep -cE '^[1-5]\. ' <<<"$wt_block")" -eq 5 ]] && ok "AC12: 5단계 절차" || no "AC12: 5단계가 아니다 ($(grep -cE '^[1-5]\. ' <<<"$wt_block"))"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE' <<<"$wt_block" && ok "AC12: kill switch 를 절이 본다" || no "AC12: 절에 kill switch 부재"
 # 수정 라운드 1: base-ref 풋건이 질문 «앞»에서 확인되고 질문 본문에 실리는가(질문 뒤에만
@@ -192,7 +194,7 @@ mkdir -p "$cmr/docs/superpowers/interview"
 printf 'a\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.audit.md"
 printf 's\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.md"
 printf 'other\n' > "$cmr/other.txt"; git -C "$cmr" add -- other.txt
-( cd "$cmr" && AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
+( cd "$cmr" && SD="$ROOT/plugins/spec-distill" AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
     bash -c "${cm_block//<topic>/t}" ) >/dev/null 2>&1
 assert_eq "$(git -C "$cmr" show --name-only --format= HEAD | sort | tr '\n' ' ')" "docs/superpowers/interview/2026-10-15-t-interview.audit.md docs/superpowers/interview/2026-10-15-t-interview.md " "AC12: 커밋에는 seed · audit 둘만 든다"
 assert_eq "$(git -C "$cmr" diff --cached --name-only)" "other.txt" "AC12: 이미 stage 된 다른 파일은 stage 된 채로 남는다"

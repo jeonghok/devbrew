@@ -1,7 +1,7 @@
 ## 인터뷰 상태 파일
 
 이 인터뷰의 진행 기록(frontmatter 스키마 · `## R<n>` 라운드 기록 · 조사 원문 · `## audit §2 대기 줄`)은 작업 트리의
-`docs/superpowers/interview/<날짜>-<주제>-interview.state.md` 한 파일에 산다. brief · audit 는 같은 줄기로 옆에 놓인다
+인터뷰 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` 한 파일에 산다. brief · audit 는 같은 줄기로 옆에 놓인다
 (`<줄기>.md` · `<줄기>.audit.md`). 작업 트리 안이라 `Write` · `Edit` 로 고친다.
 
 ### 진입 판결

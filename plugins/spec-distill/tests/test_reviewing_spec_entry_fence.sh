@@ -489,7 +489,8 @@ if check_fence "후보" "$CAND_FENCE" 3; then
   CHOME="$SCRATCH/home-empty"
   mkdir -p "$CHOME"
   run_cand() {   # run_cand <repo>
-    ( cd "$1" && env -u XDG_CONFIG_HOME HOME="$CHOME" GIT_CONFIG_NOSYSTEM=1 bash "$CAND_FENCE" ) 2>/dev/null
+    ( cd "$1" && env -u XDG_CONFIG_HOME HOME="$CHOME" GIT_CONFIG_NOSYSTEM=1 CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
+        bash "$CAND_FENCE" ) 2>/dev/null
   }
   has_line() { printf '%s\n' "$1" | grep -Fxq -- "$2"; }
 
@@ -589,5 +590,26 @@ if check_fence "후보" "$CAND_FENCE" 3; then
     fi
   done
   assert_eq "$(printf '%s\n' "$out" | grep -c . || true)" "3" "후보: 공백 이름 셋이 전부 한 번씩 나온다"
+
+  # R8 — 설계문서 폴더는 기본 브랜치의 레포 설정(specs_dir)이다. 기본 폴더의 설계문서는 후보가 아니다.
+  CST="$SCRATCH/cand-settings"
+  mkdir -p "$CST/design" "$CST/docs/superpowers/specs"
+  git init -q --bare -b trunk "$SCRATCH/cand-settings-remote.git"
+  ( cd "$CST" && git init -q -b trunk && git config user.email t@t && git config user.name t \
+      && printf -- '---\nspecs_dir: design/\n---\n' > .devbrew.md && echo a > design/2026-06-01-s-design.md \
+      && echo b > docs/superpowers/specs/2026-06-02-d-design.md && git add -A && git commit -qm s \
+      && git remote add origin "$SCRATCH/cand-settings-remote.git" && git push -q origin trunk \
+      && git remote set-head origin --auto >/dev/null )
+  STTOP="$(git -C "$CST" rev-parse --show-toplevel)"
+  out="$(run_cand "$CST")"
+  has_line "$out" "$STTOP/design/2026-06-01-s-design.md" \
+    && ok "후보: 레포 설정의 설계문서 폴더에서 고른다" || no "후보: 레포 설정의 설계문서 폴더를 안 본다 — 출력: $(printf '%s' "$out" | head -c 400)"
+  assert_not_contains "$out" "2026-06-02-d-design.md" "후보: 기본 폴더의 설계문서는 레포 설정이 있으면 후보가 아니다"
+  printf -- '---\nspecs_dir: /abs/\n---\n' > "$CST/.devbrew.md"
+  ( cd "$CST" && git commit -qam broken && git push -q origin trunk )
+  rc=0; ( cd "$CST" && env -u XDG_CONFIG_HOME HOME="$CHOME" GIT_CONFIG_NOSYSTEM=1 CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
+      bash "$CAND_FENCE" ) >"$SCRATCH/cand-broken.out" 2>&1 || rc=$?
+  assert_eq "$rc" "1" "후보: 레포 설정이 깨지면 펜스가 멈춘다(rc 1)"
+  assert_contains "$(cat "$SCRATCH/cand-broken.out")" "설계문서 폴더를 정하지 못했다" "후보: 멈출 때 사유를 낸다"
 fi
 finish

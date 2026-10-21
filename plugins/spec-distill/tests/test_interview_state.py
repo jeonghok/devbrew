@@ -424,5 +424,77 @@ class SeedAuditTest(Base):
         self.assertIn("2026-10-15-a-interview.audit.md", err)
 
 
+STATE_PATH = SCRIPT.parent / "state_path.py"
+
+
+class RepoSettingsTest(unittest.TestCase):
+    """R8 — 인터뷰 폴더는 기본 브랜치의 레포 설정(`interview_dir`)이다. 두 갈래 상태 경로 · 이월 · seed audit 되찾기가 모두 그 폴더를 지난다."""
+
+    def setUp(self):
+        import shutil
+        base = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, str(base), True)
+        self.repo = base / "work"
+        remote = base / "remote.git"
+        self.git = lambda *a, cwd=None: subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", *a],
+            cwd=str(cwd or self.repo), check=True, capture_output=True)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "trunk", str(remote)], check=True)
+        subprocess.run(["git", "init", "-q", "-b", "trunk", str(self.repo)], check=True)
+        self.git("remote", "add", "origin", str(remote))
+        self.settle("---\ninterview_dir: notes/\n---\n")
+        self.iv = self.repo / "notes"
+        self.iv.mkdir()
+        self.default_iv = self.repo / "docs" / "superpowers" / "interview"
+        self.default_iv.mkdir(parents=True)
+
+    def settle(self, text):
+        (self.repo / ".devbrew.md").write_text(text, encoding="utf-8")
+        self.git("add", "--", ".devbrew.md")
+        self.git("commit", "-qm", "settings")
+        self.git("push", "-q", "origin", "trunk")
+        self.git("remote", "set-head", "origin", "--auto")
+
+    def state(self, *extra):
+        cp = subprocess.run([sys.executable, str(STATE_PATH), "interview-state", "--topic", "t", "--date", "2026-10-15",
+                             "--cwd", str(self.repo), *extra], capture_output=True, text=True, timeout=20)
+        return cp.returncode, cp.stdout.strip(), cp.stderr
+
+    def test_state_path_uses_interview_dir(self):
+        self.assertEqual(self.state()[:2], (0, str(self.iv / "2026-10-15-t-interview.state.md")))
+
+    def test_finished_branch_uses_interview_dir(self):
+        (self.iv / "2026-10-15-t-interview.md").write_text("---\ntype: interview-brief\n---\n", encoding="utf-8")
+        self.assertEqual(self.state("--time", "1230")[:2], (0, str(self.iv / "2026-10-15-t-1230-interview.state.md")))
+
+    def test_brief_in_default_folder_does_not_shift(self):
+        """음의 짝 — 기본 폴더의 끝난 인터뷰는 이 레포의 인터뷰가 아니다."""
+        (self.default_iv / "2026-10-15-t-interview.md").write_text("---\ntype: interview-brief\n---\n", encoding="utf-8")
+        self.assertEqual(self.state("--time", "1230")[:2], (0, str(self.iv / "2026-10-15-t-interview.state.md")))
+
+    def test_migrate_writes_into_interview_dir(self):
+        old = self.repo / ".claude" / "spec-distill" / SID / "state.local.md"
+        old.parent.mkdir(parents=True)
+        old.write_text("---\nsession_id: x\n---\n## R1\n", encoding="utf-8")
+        rc, _, _ = run("migrate-legacy", "--session", SID, "--topic", "t", "--date", "2026-10-15", cwd=self.repo)
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.iv / "2026-10-15-t-interview.state.md").is_file())
+
+    def test_seed_audit_found_in_interview_dir(self):
+        for d, name in ((self.iv, "2026-10-15-t-interview.audit.md"), (self.default_iv, "2026-10-15-u-interview.audit.md")):
+            (d / name).write_text("---\ntype: interview-seed-audit\nsession_id: %s\n---\n" % SID, encoding="utf-8")
+        rc, out, _ = run("seed-audit-for-session", "--session", SID, cwd=self.repo)
+        self.assertEqual((rc, out.strip()), (0, "2026-10-15-t-interview"))
+
+    def test_broken_settings_refuse(self):
+        self.settle("---\ninterview_dir: /abs/\n---\n")
+        rc, out, err = self.state()
+        self.assertEqual((rc, out), (2, ""))
+        self.assertIn("인터뷰 폴더를 정하지 못했다", err)
+        rc, out, err = run("seed-audit-for-session", "--session", SID, cwd=self.repo)
+        self.assertEqual((rc, out.strip()), (3, ""))
+        self.assertIn("인터뷰 폴더를 정하지 못했다", err)
+
+
 if __name__ == "__main__":
     unittest.main()
