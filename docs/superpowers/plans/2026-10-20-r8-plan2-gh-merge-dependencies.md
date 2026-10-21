@@ -4,7 +4,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **시작 조건 — 구현은 R10 · R12 · R13 이 모두 기본 브랜치에 머지되고(사용자 결정 U10) 이 에픽의 계획 1 이 머지된 뒤(또는 계획 1 브랜치 끝 위에 쌓아) 시작한다.** 구현 담당은 먼저 `origin/<기본 브랜치>` 를 merge 하고 이 계획이 인용한 파일 · 함수 · 절을 하나도 빠짐없이 새로 읽어 확인한다(Task 0). 이 계획은 60e21baa(설계 승인) 시점의 트리로 썼다 — R10 계획 3 이 `skills/spec-interview` 를 `skills/pm-interview` 로 옮기고, R12 가 `shared/docreview` · request-framing · spec-review · 재분해 · 지휘 절차(`references/conducting.md`) · project-init 전체를, R13 이 pm-interview · request-framing · spec-review · `check_brief` 를 고친다. 그 파일들은 줄 번호가 아니라 절 · 함수 이름으로 가리킨다.
+> **시작 조건 — 구현은 R10 · R12 · R13 이 모두 기본 브랜치에 머지되고(사용자 결정 U10) 이 에픽의 계획 1 이 머지된 뒤(또는 계획 1 브랜치 끝 위에 쌓아) 시작한다.** 구현 담당은 먼저 `origin/<기본 브랜치>` 를 merge 하고 이 계획이 인용한 파일 · 함수 · 절을 하나도 빠짐없이 새로 읽어 확인한다(Task 0). 이 계획은 설계 승인(60e21baa) 때 쓰고, R10 · R12(계획 셋) · R13 · 지휘자 수리 3(#245)이 머지된 main(6bd168d1)을 이 브랜치에 합친 트리(d0d787e8)에 맞춰 고쳤다 — 그 사이 `skills/spec-interview` 가 `skills/pm-interview` 로 옮겨졌고, 세 skill 폴더 펜스의 상태 폴더 쓰기가 `nofollow_write.py` 를 지나며(R13), 스위트 대조와 통합 리뷰 묶음이 브랜치 끝을 `branch_tip.py` 하나로 고른다(#245). 파일은 줄 번호가 아니라 절 · 함수 이름으로 가리킨다.
 
 **Goal:** gh 를 필수 의존으로 삼아 squash · rebase 로 머지한 에픽도 PR 상태로 「머지됨」을 판정하고(여섯 조건 · 지휘자만 채우는 캐시), 모든 gh 호출이 `origin` 레포를 명시하며, 의존마다 개발 당시 판을 선언하고 정한 강도로 확인하고, project-init 훅이 Bash 와 EnterWorktree 뒤의 새 브랜치 이름을 관찰해 알린다.
 
@@ -14,11 +14,32 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-20-dependency-portability-design.md` (§4 · §5 · §3 끝 불릿(RC82) · §8 의 해당 행 · §10 · AC13~AC23 · AC23a · AC28 · AC29 의 계획 2 몫)
 
+## 목차
+
+- [Global Constraints](#global-constraints)
+- [설계와 다른 점 · 설계에 없던 결정](#설계와-다른-점--설계에-없던-결정)
+- [Review Focus](#review-focus)
+- [넘김 대조 — 이 계획이 받는 것](#넘김-대조--이-계획이-받는-것)
+- [Task 0: 머지 뒤 다시 읽기 · 기준선](#task-0-머지-뒤-다시-읽기--기준선)
+- [Task 1: gh_repo.py — origin 명시 · 없음 · 인증 · 비 GitHub (AC16 · AC20 · AC23a 의 코드)](#task-1-gh_repopy--origin-명시--없음--인증--비-github-ac16--ac20--ac23a-의-코드)
+- [Task 2: PR 캐시 칸 · ledger pr-refresh (AC17 의 캐시 · §4 판정을 맡는 곳)](#task-2-pr-캐시-칸--ledger-pr-refresh-ac17-의-캐시--4-판정을-맡는-곳)
+- [Task 3: 기계 상태의 쓴 판 · 낮은 판 읽기 멈춤 (AC21)](#task-3-기계-상태의-쓴-판--낮은-판-읽기-멈춤-ac21)
+- [Task 4: 머지됨 판정 — 여섯 조건 · 받기 전 · 캐시 없음 (AC14 · AC15)](#task-4-머지됨-판정--여섯-조건--받기-전--캐시-없음-ac14--ac15)
+- [Task 5: 상태줄 · 상태 보기는 gh 를 부르지 않는다 · 지휘자의 gh 는 gh_repo 로 (AC17 · AC20 · AC23a)](#task-5-상태줄--상태-보기는-gh-를-부르지-않는다--지휘자의-gh-는-gh_repo-로-ac17--ac20--ac23a)
+- [Task 6: qg 의 gh — origin 명시 · 대체 길 지움 (AC16 · AC20 의 qg 몫)](#task-6-qg-의-gh--origin-명시--대체-길-지움-ac16--ac20-의-qg-몫)
+- [Task 7: 의존 목록 파일 · 측정 · 판 판독 (AC18 · AC19 의 판독)](#task-7-의존-목록-파일--측정--판-판독-ac18--ac19-의-판독)
+- [Task 8: 진입 확인 · 훅의 Python 바닥 (AC19 · AC23a 의 진입)](#task-8-진입-확인--훅의-python-바닥-ac19--ac23a-의-진입)
+- [Task 9: superpowers 판 알림 · 부재 시 멈춤 · qg 부재 알림 (AC22 · AC23 · K11)](#task-9-superpowers-판-알림--부재-시-멈춤--qg-부재-알림-ac22--ac23--k11)
+- [Task 10: project-init 훅 — Bash · EnterWorktree 뒤 새 브랜치 관찰 (AC13 · RC82)](#task-10-project-init-훅--bash--enterworktree-뒤-새-브랜치-관찰-ac13--rc82)
+- [Task 11: 회귀 픽스처 · 문서 · 버전 · 스위트 대조 (AC28 · AC29 의 계획 2 몫)](#task-11-회귀-픽스처--문서--버전--스위트-대조-ac28--ac29-의-계획-2-몫)
+
 ## Global Constraints
 
 - **시작 시점.** R10 · R12 · R13 · 이 에픽 계획 1 뒤. 브랜치 `feature/dependency-portability`. 시작 때 기본 브랜치를 merge 한다(rebase 금지). 커밋은 pathspec, `git stash` 금지, HEAD 를 뒤로 옮기지 않는다.
 - 커밋 메시지: `type(scope)` 영어 · 설명 한국어. 끝에 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` 와 세션이 주는 `Claude-Session` 줄.
-- **버전.** 판 번호는 머지 직전 지휘자가 정한다. 계획 안에서는 다음 minor 를 임시로 쓴다 — spec-distill · quality-gates · project-init · plugin-audit 각각 minor bump. CHANGELOG 머리는 plugin.json 과 같게.
+- **버전.** 판 번호는 이 계획에 적지 않는다 — 지휘자가 구현 dispatch 때 정해 준다(spec-distill · quality-gates · project-init · plugin-audit 를 올린다). CHANGELOG 머리는 plugin.json 과 같게.
+- **세 skill 폴더 펜스의 상태 폴더 쓰기는 `nofollow_write.py` 로.** request-framing · reviewing-brief · spec-review 의 `.md` 펜스에서 상태 폴더에 쓰는 줄은 `"$<루트>/scripts/nofollow_write.py" run|empty|append --out …` 를 지나고, writer 를 부르는 루트 변수는 그 펜스가 다른 스크립트(`check_deps.py` 포함)를 부르는 루트 변수와 같다. 집행은 `plugins/spec-distill/tests/test_state_dir_writes.sh`(`scan_writes`) — 그 폴더의 펜스를 더하거나 고치는 과제는 이 테스트를 Test 목록에 둔다.
+- **펜스 사이 변수 나르기 금지.** 한 bash 펜스는 앞 펜스에서만 정의된 변수를 쓰지 않는다. `finishing.md` 와 `references/redecompose.md` 둘 다 `plugins/spec-distill/tests/test_finishing_block_scope.py` 가 잰다 — 두 파일의 펜스를 더하거나 고치는 과제는 이 테스트를 Test 목록에 둔다.
 - gh 는 필수다 — gh 가 없을 때의 대체 길 · 강등 길을 코드에 남기지 않는다(U1). 지원 범위는 origin 이 GitHub(gh 가 다루는 호스트)인 레포다(U9). 지원 흐름은 내 레포 안 흐름 — PR · 기본 브랜치는 언제나 `origin`(U8).
 - gh 를 쓰지 않는 진입(인터뷰 · request-framing · roadmap-status · 상태줄 · plugin-audit · project-init)은 gh 를 보지 않는다. 인증은 진입마다 묻지 않고 첫 gh 호출이 실패할 때 멈춘다.
 - 판 비교는 판 문자열에서 숫자 셋(`\d+\.\d+\.\d+` 첫 일치)만 뽑아 정수로 비교한다. 못 뽑으면 멈춘다. 최소 판은 그 플러그인 판을 개발 · 검증할 때 실제로 깔려 있던 판이다(U2 · U3) — 손으로 적지 않고 측정 명령이 쓴다.
@@ -52,6 +73,15 @@
 4. **gh 는 깔렸지만 로그인하지 않았고 오프라인에서 인터뷰한다.** 사람은 인터뷰가 gh 를 보지 않고 돌며, 지휘자는 첫 gh 호출에서 「gh auth login --hostname <호스트>」를 보이고 멈추길 기대한다. Task 1 의 인증 사례와 Task 8 의 진입 목록 락이 잠근다.
 5. **플러그인을 갱신했는데 이 기계의 machine.md 는 옛 판이 썼다(4칸 PR 줄).** 사람은 빈 캐시로 조용히 읽히는 대신 고치는 명령 한 줄과 함께 멈추길 기대한다. 반대로 옛 설치본 세션이 새 판이 쓴 machine.md 를 읽으면 「플러그인을 업데이트하라」로 멈춘다. Task 2 · 3 의 사례가 잠근다.
 
+## 넘김 대조 — 이 계획이 받는 것
+
+전체 표는 계획 1 `## 넘김 대조`. 이 계획 몫:
+
+| 넘김 | 받는 과제 |
+|---|---|
+| #245 — `branch_tip.py` 공유(merge_check · review-pack) | Task 0 Step 3(다시 읽기) · Task 4 Step 3(상태 계산은 설계 §4 의 로컬 먼저 — `branch_tip.tip` 을 쓰지 않는다) |
+| R13 — Global Constraints 두 줄 · 계획 2 Task 8 의 Test 목록에 `test_state_dir_writes.sh` · `test_finishing_block_scope.py` | Global Constraints · Task 8 · Task 9(finishing.md 펜스) |
+
 ---
 
 ### Task 0: 머지 뒤 다시 읽기 · 기준선
@@ -62,8 +92,15 @@
 
 - [ ] **Step 1: 시작 조건.** R10 · R12 · R13 의 PR 과 이 에픽 계획 1 의 PR 이 MERGED 인지(아니면 계획 1 브랜치 끝 위인지) 확인한다. 아니면 멈추고 지휘 세션에 보고한다.
 - [ ] **Step 2: `git merge --no-edit origin/<기본 브랜치>`** (기본 브랜치 이름은 계획 1 의 `repo_defaults.py default-branch` 로).
-- [ ] **Step 3: 인용 자리를 다시 읽는다.** `control_plane.py` 의 `gh_lookup_for` · `merged_prs` · `overlay` · `cache_key` · `statusline_text` · `GH_STATES` · `conductor_ledger.py` 의 `_gh` · `_prs` · `c_pr_handoffs` · `c_audit` · `c_review_pack` 의 gh 자리 · `_version_parts` · `version_report` · `conductor_state.py` 의 `SECTIONS` · `parse_machine` · `render_machine` · `save` · `roadmap_status.py` 의 `merged_by` · `MERGE_MSG_RE` · `NOTICE` · `compute` 의 브랜치 끝 자리 · `references/conducting.md` 의 걸음 1 · 5 · 6 · 7 과 손 절차 1 · 5 · 6 · 8 의 gh · PR 문장 · `skills/epic-conductor/SKILL.md` 진입 단계 · `skills/pm-interview/references/finishing.md` 의 superpowers 넘김(B-1 · B-2) · 모든 skill 의 진입 단계 · qg `discover-spec.sh` 의 PR 본문 읽기 · `publish-comment.sh` 의 gh 자리 · `quality-pipeline/SKILL.md` 의 sink 결과 처리 · `plugins/project-init/hooks/post-tool-use.py` · `hooks.json` · `shared/python/devbrew-python.sh` 의 `FLOOR_*` · `shared/tests/test_python_floor.sh` · 루트 `README.md` 의 Python 절 · 네 플러그인 README 의 Prerequisites. 이름이 바뀌었으면 이 계획을 고쳐 쓴다.
-- [ ] **Step 4: gh 자리를 다시 센다.** `git grep -n -e 'shutil.which("gh")' -e 'command -v gh' -e '"gh"' -e 'gh pr ' -e 'gh api' -- plugins shared ':!*CHANGELOG*' ':!*/tests/*'` — 결과 전부를 Task 1 · 5 · 6 의 고칠 목록으로 이 계획에 적는다.
+- [ ] **Step 3: 인용 자리를 다시 읽는다.** `control_plane.py` 의 `gh_lookup_for` · `merged_prs` · `overlay` · `cache_key` · `statusline_text` · `GH_STATES` · `GH_CALL_CAP` · `gather` 의 `use_gh` · `conductor_ledger.py` 의 `_gh` · `_prs` · `c_pr_handoffs` · `c_audit` · `c_review_pack` 의 gh 자리 · `_version_parts` · `version_report` · `branch_tip.py` 전체(#245 — 스위트 대조 · 통합 리뷰 묶음의 끝 고르기, 앞선 쪽을 쓰고 갈라지면 멈춘다) · `conductor_state.py` 의 `SECTIONS` · `_check_row` · `parse_machine` · `render_machine` · `load` · `save` · `roadmap_status.py` 의 `merged_by` · `MERGE_MSG_RE` · `NOTICE` · `compute` 의 브랜치 끝 자리(`refs/heads/` 먼저, 없으면 `refs/remotes/origin/`) · `references/conducting.md` 의 걸음 1 · 5 · 6 · 7 과 손 절차 1 · 5 · 6 · 8 의 gh · PR 문장 · `skills/epic-conductor/SKILL.md` 의 `## 진입 단계`(`### 1. 감시줄 판독` ~ `### 4. 시작 승인`) · `skills/pm-interview/references/finishing.md` 의 superpowers 넘김(`#### B-1` · `#### B-2`) · 모든 skill 의 진입 단계(감시줄 판독 다음 걸음) · qg `discover-spec.sh` 의 PR 본문 읽기 · `publish-comment.sh` 의 gh 자리 · `quality-pipeline/SKILL.md` 의 sink 결과 처리 · `plugins/project-init/hooks/post-tool-use.py`(`BRANCH_CREATE_RE` · `PROTECTED_BRANCHES` · `get_branch_pattern` · `validate_branch` · `main`) · `hooks.json` · `shared/python/devbrew-python.sh` 와 사본 `plugins/project-init/scripts/devbrew-python.sh` 의 `FLOOR_*` · `shared/tests/test_python_floor.sh` · 루트 `README.md` 의 Python 절 · 네 플러그인 README 의 Prerequisites · 락 `plugins/spec-distill/tests/test_state_dir_writes.sh`(세 skill 폴더 펜스) · `tests/test_finishing_block_scope.py`. 이름이 바뀌었으면 이 계획을 고쳐 쓴다.
+- [ ] **Step 4: gh 자리를 다시 센다.** `git grep -n -e 'shutil.which("gh")' -e 'command -v gh' -e '"gh"' -e 'gh pr ' -e 'gh api' -- plugins shared ':!*CHANGELOG*' ':!*/tests/*'` — 결과를 아래 목록과 대조하고 더 있으면 Task 1 · 5 · 6 의 고칠 목록에 더한다. d0d787e8 에서 센 것:
+  - `plugins/spec-distill/scripts/conductor_ledger.py` 의 `_gh`(`shutil.which("gh")`) — Task 5
+  - `plugins/spec-distill/scripts/control_plane.py` 의 `gh_lookup_for`(`shutil.which("gh")` · `gh pr list … --limit 1`) — Task 5(지움)
+  - `plugins/spec-distill/references/conducting.md` 의 구현 agent 보고 거두기 문장 · 걸음 5 통합 리뷰 문장 — Task 2 · 5
+  - `plugins/quality-gates/scripts/discover-spec.sh` 의 `command -v gh` · `gh pr view`(두 자리) — Task 6
+  - `plugins/quality-gates/scripts/publish-comment.sh` 의 `command -v gh` · `gh pr view` · `gh pr comment` — Task 6
+  - `plugins/quality-gates/README.md` 의 게시 sink 줄 · 의도 출처 줄(`gh 없음`) — Task 6
+  - `plugins/project-init/templates/shared/pr-process.md` 의 `gh pr create` — 사용자 레포에 까는 템플릿 문서라 그대로(devbrew 가 부르는 gh 가 아니다)
 - [ ] **Step 5: 기준 스위트.** 계획 1 Task 0 Step 5 와 같은 `baseline.sh` 를 `$HOME/.claude/sdd-mirror/r8-plan2/` 에 두고 버릴 clone 에서 `before` 를 잰다.
 
 ---
@@ -175,7 +212,7 @@ def test_local_and_remote_tips_differ_both_shown(self): ...
 
 `test_roadmap_status.sh`(임시 레포): squash 머지(머지 커밋 없음) + 캐시 줄 → 단계 「머지됨」 · 손 머지 줄 없음 · 캐시 없음 → 알림 「PR 상태 미확인」 · 남의 owner 문면(`Merge pull request #3 from other/feature/x`) 은 세지 않음 · 「머지됨(받기 전)」 블록을 의존하는 다음 블록이 「대기」. 템플릿 · README · NOTICE 의 옛 문장(「squash · rebase 로 머지했거나 … 머지 줄을 적는다」)이 없다는 음의 락과 새 문장 양의 짝.
 - [ ] **Step 2: 실패를 본다.** Run: `python3 -m unittest plugins/spec-distill/tests/test_merged_by_pr.py; bash plugins/spec-distill/tests/test_roadmap_status.sh` — Expected: FAIL.
-- [ ] **Step 3: 구현.** 상태 계산은 여전히 네트워크를 쓰지 않는다(`GIT_ALLOWED` 에 `config` 를 더하지 않고 owner 는 `gh_repo.origin_slug` 로 — 그 함수의 git 호출 하나만).
+- [ ] **Step 3: 구현.** 상태 계산은 여전히 네트워크를 쓰지 않는다(`GIT_ALLOWED` 에 `config` 를 더하지 않고 owner 는 `gh_repo.origin_slug` 로 — 그 함수의 git 호출 하나만). 브랜치 끝은 설계 §4 대로 로컬 먼저 · 없으면 원격이고 다르면 둘 다 알린다 — `branch_tip.tip`(앞선 쪽을 고르고 갈라지면 멈춘다 — 스위트 대조 · 통합 리뷰 묶음의 규칙)을 이 판정에 쓰지 않는다. ref 를 커밋으로 푸는 데 `branch_tip.resolve` 를 다시 써도 되지만, 상태 계산의 git 은 `roadmap_status.Git` 를 지나야 하므로(허용 하위 명령 목록) 그 클래스의 `commit` 으로 읽는다.
 - [ ] **Step 4: 통과를 본다.** 같은 명령 + `python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_*.py'` — Expected: 새 실패 없음.
 - [ ] **Step 5: 변이**: 여섯 조건을 하나씩 지움(교차 레포 · base · head 이름 · oid · mergeCommit 닿음 · 상태) — 각각 그 사례가 RED 인지 표로 남긴다. 문면 길의 owner 비교를 지움 → 남의 owner 사례 RED.
 - [ ] **Step 6: 커밋** — `feat(spec-distill): squash · rebase 머지를 PR 캐시의 여섯 조건으로 판정한다`
@@ -249,7 +286,7 @@ def test_local_and_remote_tips_differ_both_shown(self): ...
 
 **Files:**
 - Modify: `shared/deps/check_deps.py` (`entry`), 모든 skill 의 진입 단계(spec-distill 여섯 · qg 둘 · project-init · plugin-audit), `shared/deps/check_deps.py` (`measure` 의 `python-hook` 행), `plugins/project-init/dependencies.md`(`python-hook` 행), `shared/python/devbrew-python.sh` 와 그 사본들(머리 주석의 도출 규칙 문장만 — `FLOOR_MAJOR` · `FLOOR_MINOR` 값은 그대로 3.12), `shared/tests/test_python_floor.sh`(축 하나 더), 루트 `README.md` 의 Python 절
-- Test: `shared/tests/test_check_deps.sh`, `shared/tests/test_entry_dep_needs.sh` (새)
+- Test: `shared/tests/test_check_deps.sh`, `shared/tests/test_entry_dep_needs.sh` (새), `plugins/spec-distill/tests/test_state_dir_writes.sh`(request-framing · reviewing-brief · spec-review 의 진입 펜스 — 쓰기가 없어도 펜스 수 · 루트 변수 대조가 바뀐다), `plugins/spec-distill/tests/test_finishing_block_scope.py`(pm-interview 진입 펜스가 `finishing.md` 를 건드리면), `shared/tests/test_entry_preflight.sh`(감시줄 판독 걸음이 그대로인지)
 
 **Interfaces:**
 - Produces: `check_deps.py entry --plugin-root R --need <이름,…>` — 표의 강도대로: `멈춤` 행이 없거나 낮거나 판을 못 뽑으면 stdout `[devbrew-deps] 멈춤 — <이름> <있는 판|없음> · 필요 <최소 판> 이상 · <고치는 법>` · rc 3. 모두 맞으면 `[devbrew-deps] ok — <이름 판 …>` · rc 0. gh 는 판만 본다(인증은 첫 호출).
@@ -262,13 +299,13 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 
   진입별 `--need`: epic-conductor `python,git,gh` · request-framing · reviewing-brief · roadmap-status · pm-interview · spec-review `python,git` · quality-pipeline `python,git,gh` · artifact-critique `python,git` · project-init · plugin-audit `python`. 표: rc 3 이면 그 줄을 보이고 멈춘다.
 - 바닥은 경로마다 따로다(U12). skill 진입의 `python` 행 = 측정 때 `python3` 의 판(2026-10-20 실측 `/usr/bin/python3` 3.9.6) — `entry --need python` 이 이것과 비교한다. 훅의 바닥은 `python` 행이 아니라 `python-hook` 행이다.
-- `python-hook` 행: 훅이 `devbrew-python.sh` 를 부르는 플러그인(60e21baa 기준 project-init 하나 — `hooks.json` 에서 센다)의 `dependencies.md` 에만 둔다. `measure` 는 그 플러그인의 `scripts/devbrew-python.sh` 를 `--event measure --plugin <p> --hook measure <임시 탐침.py>` 로 돌려 해석기가 실제로 고른 해석기의 `sys.version_info` 를 적는다(2026-10-20 실측 `~/.local/bin/python3.12` 3.12.13). 강도 `멈춤` · 없을 때 「훅 해석기가 알린다」 — 확인은 `entry` 가 아니라 해석기 자신이 한다(`--need` 목록에 넣지 않는다). 측정이 해석기를 거치므로 값이 지금 바닥 아래로 내려가지 않는다.
+- `python-hook` 행: 훅이 `devbrew-python.sh` 를 부르는 플러그인(d0d787e8 기준 project-init 하나 — `hooks.json` 에서 센다)의 `dependencies.md` 에만 둔다. `measure` 는 그 플러그인의 `scripts/devbrew-python.sh` 를 `--event measure --plugin <p> --hook measure <임시 탐침.py>` 로 돌려 해석기가 실제로 고른 해석기의 `sys.version_info` 를 적는다(2026-10-20 실측 `~/.local/bin/python3.12` 3.12.13). 강도 `멈춤` · 없을 때 「훅 해석기가 알린다」 — 확인은 `entry` 가 아니라 해석기 자신이 한다(`--need` 목록에 넣지 않는다). 측정이 해석기를 거치므로 값이 지금 바닥 아래로 내려가지 않는다.
 - 훅 바닥: `FLOOR_MAJOR.FLOOR_MINOR` 는 그대로 3.12 — `python-hook` 행 앞 두 숫자와 같아야 한다. 머리 주석의 도출 규칙 문장만 「개발 당시 훅이 실제로 쓴 해석기 판(`dependencies.md` 의 `python-hook` 행) — 측정 명령이 잰다」로 바꾼다. 훅 바닥을 skill 의 `python3` 판(3.9)으로 내리지 않는다.
 
 - [ ] **Step 1: 실패하는 테스트.** `test_entry_dep_needs.sh`: 진입마다 `--need` 목록이 위 표와 같다(gh 는 epic-conductor · quality-pipeline 에만 — AC23a 의 진입 쪽, 양 · 음 짝) · 모든 skill 진입에 의존 확인 펜스가 있다. `test_check_deps.sh`: 가짜 `git`(판 `2.0.0`) → rc 3 · 「필요 … 이상」 · 판 못 뽑는 가짜 → rc 3 · gh 없음은 `--need` 에 gh 가 있을 때만 rc 3. `test_check_deps.sh`(이어서): 가짜 `devbrew-python.sh`(탐침을 3.12.13 판 해석기로 exec)를 둔 임시 플러그인 루트에서 `measure` 가 `python-hook` 행을 `3.12.13` 으로, `python` 행을 측정한 `python3` 판으로 따로 쓴다(두 행이 같은 값을 쓰면 실패 — 양 · 음 짝) · `entry --need python` 은 `python-hook` 행을 보지 않는다. `test_python_floor.sh`: 축 하나 더 — 해석기 `FLOOR_MAJOR.FLOOR_MINOR` == `python-hook` 행을 가진 모든 `dependencies.md` 의 그 행 앞 두 숫자(지금 3.12). 「3.9 를 건너뛴다」 음성(`python3.9`)과 `python3.99` 양성 픽스처는 고치지 않는다.
 - [ ] **Step 2: 실패를 본다.** Run: `bash shared/tests/test_entry_dep_needs.sh; bash shared/tests/test_check_deps.sh; bash shared/tests/test_python_floor.sh` — Expected: `✗`.
 - [ ] **Step 3: 구현 · 사본 동기화.** `devbrew-python.sh` 사본은 copy-of 계약(`shared/tests/test_copy_of_contract.sh`)대로 같이 고친다.
-- [ ] **Step 4: 통과를 본다.** 같은 명령 + `bash shared/tests/test_copy_of_contract.sh && bash shared/tests/test_invocation_surface.sh` — Expected: `✗` 0.
+- [ ] **Step 4: 통과를 본다.** 같은 명령 + `bash shared/tests/test_copy_of_contract.sh && bash shared/tests/test_invocation_surface.sh && bash shared/tests/test_entry_preflight.sh && bash plugins/spec-distill/tests/test_state_dir_writes.sh && python3 -m unittest plugins/spec-distill/tests/test_finishing_block_scope.py` — Expected: `✗` 0 · OK.
 - [ ] **Step 5: 커밋** — `feat(devbrew): 진입마다 쓰는 의존의 판을 확인하고 훅 바닥을 훅 해석기의 실측 판으로 기록한다`
 
 ---
@@ -277,7 +314,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 
 **Files:**
 - Modify: `shared/deps/check_deps.py` (`superpowers`), `skills/pm-interview/references/finishing.md` (superpowers 로 넘기는 자리 직전), `skills/epic-conductor/SKILL.md` (진입 단계 — superpowers 없음은 멈춤 · 판 알림), `references/conducting.md` (걸음 7 의 qg 없음 문장 · 손 절차 머리), `plugins/spec-distill/README.md` Prerequisites
-- Test: `shared/tests/test_check_deps.sh`, `plugins/spec-distill/tests/test_superpowers_presence.sh` (새)
+- Test: `shared/tests/test_check_deps.sh`, `plugins/spec-distill/tests/test_superpowers_presence.sh` (새), `plugins/spec-distill/tests/test_finishing_block_scope.py`(finishing.md 의 판 확인 펜스 — 앞 펜스의 변수를 쓰지 않는다)
 
 **Interfaces:**
 - Produces: `check_deps.py superpowers --plugin-root R --base "<불러온 skill 의 기준 폴더 경로>"` — 늘 rc 0. 같으면 `[devbrew-deps] superpowers <판> — 검증한 판과 같다`; 다르면 `[devbrew-deps] 알림 — 설치된 superpowers <판> 이 검증한 판 <판> 과 다르다. 넘김 결과는 돌아온 뒤 대조한다`; 경로에서 판을 못 읽으면 `[devbrew-deps] superpowers 판을 확인하지 못했다`.
@@ -285,7 +322,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 
 - [ ] **Step 1: 실패하는 테스트.** `test_check_deps.sh`: 경로 `…/superpowers/7.0.0/skills/writing-plans` · 표 7.0.0 → 「같다」 · 6.4.1 → 「다르다」 · 빈 값 · 판 없는 경로 → 「확인하지 못했다」 · 셋 다 rc 0. `test_superpowers_presence.sh`: 지휘자 진입에 멈춤 문장 · 인터뷰 끝에 판 확인 펜스 · 인터뷰의 superpowers 없음 갈래(B-1 — brief 까지 만들고 크게 알린 뒤 멈춤)가 그대로 있다 · 걸음 7 에 qg 없음 문장 · spec-distill `plugin.json` 에 `dependencies` 키가 없다(음) — 양의 짝: `dependencies.md` 에 superpowers 행이 있다(AC23).
 - [ ] **Step 2: 실패를 본다.** Run: `bash shared/tests/test_check_deps.sh; bash plugins/spec-distill/tests/test_superpowers_presence.sh` — Expected: `✗`.
-- [ ] **Step 3: 구현 · 통과.** 같은 명령 — Expected: `✗` 0.
+- [ ] **Step 3: 구현 · 통과.** 같은 명령 + `python3 -m unittest plugins/spec-distill/tests/test_finishing_block_scope.py` — Expected: `✗` 0 · OK.
 - [ ] **Step 4: 실측(설계 Verification Plan).** 격리 설치(`CLAUDE_CONFIG_DIR=<빈 tmp>` — 먼저 빈 폴더로 격리를 증명)에서 superpowers 를 깔지 않고, plugin.json 에 `dependencies` 를 단 spec-distill 사본이 꺼지는지 한 번 재고 결과를 PR 본문에 적는다(쓰지 않는 근거). 하니스 제약으로 못 재면 그 사실을 적는다.
 - [ ] **Step 5: 커밋** — `feat(spec-distill): superpowers 판을 알리고 없으면 지휘자 흐름은 진입에서 멈춘다`
 
@@ -319,7 +356,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 - Test: `plugins/spec-distill/tests/test_workspace_invariance.sh` (계획 1 의 파일 — fork 사례를 더함)
 
 - [ ] **Step 1: AC29 의 계획 2 몫을 계획 1 의 픽스처 파일에 더한다.** upstream 원격이 있는 fork 클론에서 지휘자 `pr-refresh` 가 가짜 gh 에 `-R <origin>` 을 넘기고 상태 계산이 origin 의 PR 만으로 판정한다 · `-suffix` 판 문자열(`2.45.0-rc1`)의 진입 확인. Run: `bash plugins/spec-distill/tests/test_workspace_invariance.sh` — Expected: `✗` 0.
-- [ ] **Step 2: README · CHANGELOG · 판.** 네 플러그인 minor bump(판 번호는 머지 직전 지휘자가 정한다). spec-distill CHANGELOG — Added(`gh_repo.py` · `pr-refresh` · 쓴 판 도장 · 의존 목록) · Changed(gh 필수 — 「gh 가 없으면 지휘자 · 머지 판정이 이제 멈춘다」 · squash · rebase 자동 판정 · 상태줄은 gh 를 부르지 않는다) · Removed(gh 없을 때의 강등 길). qg — Changed(sink 의 `failed: gh-unavailable` · `-R`). project-init — Changed(matcher · 관찰). plugin-audit — Added(의존 목록). Run: `bash shared/tests/test_changelog_integrity.sh` — Expected: GREEN.
+- [ ] **Step 2: README · CHANGELOG · 판.** 네 플러그인 판 올림(번호는 지휘자가 구현 dispatch 때 준 것). spec-distill CHANGELOG — Added(`gh_repo.py` · `pr-refresh` · 쓴 판 도장 · 의존 목록) · Changed(gh 필수 — 「gh 가 없으면 지휘자 · 머지 판정이 이제 멈춘다」 · squash · rebase 자동 판정 · 상태줄은 gh 를 부르지 않는다) · Removed(gh 없을 때의 강등 길). qg — Changed(sink 의 `failed: gh-unavailable` · `-R`). project-init — Changed(matcher · 관찰). plugin-audit — Added(의존 목록). Run: `bash shared/tests/test_changelog_integrity.sh` — Expected: GREEN.
 - [ ] **Step 3: 로드맵 R8 블록 문장은 지휘자에게 넘긴다.** 로드맵 수정은 이 PR 이 아니라 지휘자의 로드맵 수정 PR(`references/redecompose.md`)이 한다 — 고칠 의도 · 범위 문장(U1 gh 필수 · U6 superpowers 부재 · U9 GitHub 레포만)을 PR 본문 `## 지휘자에게` 절에 적는다.
 - [ ] **Step 4: 전체 스위트 대조.** `baseline.sh` 로 `after` — Expected: 새 실패 0(있으면 고치거나 이유).
 - [ ] **Step 5: 커밋** — `docs(devbrew): gh 필수 · 의존 목록 · 판 올림`
