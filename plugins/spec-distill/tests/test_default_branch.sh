@@ -111,6 +111,20 @@ out="$(cd "$REN" && python3 "$REAL/merge_check.py" run --no-fetch --roadmap docs
 assert_contains "$out" "원격과 대조하지 못했다 — 로컬 기본 브랜치 main 을 썼다" "merge_check --no-fetch: 대조를 건너뛰되 알린다"
 assert_not_contains "$out" "set-head" "merge_check --no-fetch: 원격에 묻지 않는다"
 
+# ── 사유를 그대로 보이는 소비자 — 상태 계산 · 지휘 원장 ──────────────────────
+out="$(cd "$T/noorigin" && python3 "$REAL/roadmap_status.py" --json docs/superpowers/roadmaps/x/roadmap.md 2>&1)"
+assert_contains "$out" "git remote add origin" "roadmap_status_no_origin: 상태 계산도 원격을 더하라고 한다"
+out="$(cd "$T/nohead/work" && python3 "$REAL/roadmap_status.py" --json docs/superpowers/roadmaps/x/roadmap.md 2>&1)"
+assert_contains "$out" "git remote set-head origin --auto" "양성 대조: 원격이 있으면 상태 계산은 set-head 를 안내"
+out="$(cd "$T/noorigin" && python3 "$REAL/conductor_ledger.py" roadmaps 2>&1)"; rc=$?
+assert_eq "$rc" "3" "conductor_ledger_no_origin: rc 3"
+assert_contains "$out" "git remote add origin" "conductor_ledger_no_origin: 지휘 원장도 원격을 더하라고 한다"
+
+# ── remote_timeout_is_10 ─────────────────────────────────────────────────────
+got="$(python3 -I -c 'import inspect, sys; sys.path.insert(0, sys.argv[1]); import repo_defaults as r
+print(r.REMOTE_TIMEOUT, inspect.signature(r.check_remote_head).parameters["timeout"].default)' "$REAL")"
+assert_eq "$got" "10.0 10.0" "remote_timeout_is_10: 원격 대조의 시간 상한은 10초"
+
 # ── statusline_names_default ─────────────────────────────────────────────────
 S="$T/scripts"; mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
