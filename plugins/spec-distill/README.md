@@ -110,7 +110,7 @@
 - **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
-- **P14 (State preservation)** — 인터뷰 진행 기록은 작업 트리의 `docs/superpowers/interview/<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 인터뷰에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
+- **P14 (State preservation)** — 인터뷰 진행 기록은 작업 트리의 인터뷰 폴더(`interview_dir`, 기본 `docs/superpowers/interview/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 인터뷰에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **P17 (User sovereignty)** — 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
@@ -139,23 +139,23 @@
 - **Law 1 · Law 3 — 번호 인계** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
 - **Law 2 — 통합 리뷰어는 쓰지 못한다** — 에픽 사이 이음매 리뷰는 `tools: Read, Grep, Glob` 인 `integration-reviewer` 가 한다. superpowers 리뷰 요청 skill 의 틀만 빌리고 그 skill 이 부르는 쓰기 가능한 agent 는 쓰지 않는다. 지휘자가 하위의 질문을 옮긴 기록의 대조도 같은 도구만 가진 `relay-checker` 가 한다.
 - **Law 3 · P23 — 다시 불러도 같은 자리** — 지휘자는 무엇이 끝났는지 기억에 기대지 않고 git(설계문서의 승인 줄 · 판정 · 구현 대조 절)과 기계 상태에서 다시 계산한다. 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다(`tests/test_conductor_e2e.sh`).
-- **레포 전용 값 금지** — 지휘자 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다. 외부 도구 기본 경로는 `scripts/repo_defaults.py` 상수에만 있고 설계문서 · 계획 폴더는 로드맵 frontmatter(`specs_dir` · `plans_dir`)가 이긴다(`tests/test_repo_literals.sh`).
+- **CLAUDE.md 레포 전용 값 금지** — 레포 값은 `scripts/repo_defaults.py` 하나가 출처와 함께 낸다. 로드맵 frontmatter > 레포 설정 파일 `.devbrew.md`(기본 브랜치 판) > 기계 상태(임시) > 기본값 순이고, 외부 도구 기본 경로는 그 모듈의 상수에만 있다. 지휘자 · 인터뷰 · 끝내기 펜스 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다(`tests/test_repo_literals.sh` · `tests/test_workspace_invariance.sh`).
 - **cost_class high 의 이름 붙인 예외** — 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 이미 받은 시작 승인을 다시 쓰고 공시만 한다. 규모가 바뀌거나 다른 세션이거나 새로 잡기 · 넘겨받기 · 놓기를 거치면 다시 묻는다.
 
 ## 로드맵 · 에픽 묶음
 
 큰 일을 에픽으로 나눠 진행할 때 쓰는 로드맵 · 묶음 스크립트 넷이 있습니다. 그 넷 가운데 `roadmap_write.py` 만 로드맵과 묶음을 쓰고 나머지 셋은 읽기 전용입니다. 지휘자 스크립트 둘은 로드맵 · 묶음은 쓰지 않지만 쓰기를 합니다 — `conductor_ledger.py` 는 기계 상태 · 자원 폴더와 설계문서의 기록 절을, `merge_check.py` 는 일회용 사본과 공유 스위트 잠금(`scripts/suite_lock.py` — 하위 agent 의 전체 스위트와 같은 잠금 하나)을 씁니다. 앞의 넷(`roadmap_status.py` · `check_bundle_coverage.py` · `spec_review_bundle.py` · `roadmap_write.py`)은 네트워크에 나가지 않습니다. 지휘자 스크립트 둘은 나갑니다 — `merge_check.py` 는 `--no-fetch` 가 없으면 `git fetch origin` 을 하고, `conductor_ledger.py` 의 `pr-handoffs` · `audit` · `review-pack` 은 `gh` 를 부릅니다. 단위는 로드맵 > 에픽(spec 하나) > plan(PR 하나) > task 이고, 에픽 하나는 `브랜치:` 에 브랜치를 여럿 적어 PR 여럿을 냅니다. 객체 · 링크 · 주인은 `references/roadmap-ontology.md` 에 있습니다.
 
-- `scripts/roadmap_status.py <로드맵 경로>` — 기본 브랜치(`origin/HEAD`)의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 기본 브랜치에 없는 로드맵은(이때 종료 코드 4) `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다. 설계문서 · 계획 폴더는 로드맵 frontmatter `specs_dir` · `plans_dir`(없으면 superpowers 기본 폴더)에서 찾고, 단계는 브랜치마다 · 계획마다 구현 중 · 구현 끝까지 셉니다. 블록에 적힌 브랜치가 모두 머지된 에픽은 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 브랜치(사본의 블록이 기본 브랜치 블록의 브랜치를 모두 품고, 그 브랜치가 있고 아직 머지되지 않았을 때만)도 세어 「일부 머지」 로 내고 그 사실을 정보 줄로 밝힙니다 — 다음 계획의 브랜치가 자기 브랜치에서만 블록에 자신을 더한 경우입니다. 사본을 만든 뒤 기본 브랜치 블록의 `브랜치:` 가 바뀌면 그 사본은 세지 않습니다 — 열린 브랜치에 기본 브랜치를 merge 하면 풀립니다.
+- `scripts/roadmap_status.py <로드맵 경로>` — 기본 브랜치(`origin/HEAD`)의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 기본 브랜치에 없는 로드맵은(이때 종료 코드 4) `--roadmap-file <파일>` 로 줍니다. 머지됨 자동 판정은 merge commit 방식에서만 됩니다. 브랜치가 지워졌으면 GitHub 의 머지 메시지 `Merge pull request #<n> from <owner>/<브랜치>` 로만 알아봅니다. squash · rebase 로 머지했거나 로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적어야 합니다. 설계문서 · 계획 폴더는 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)의 `specs_dir` · `plans_dir` 에서 찾고, 단계는 브랜치마다 · 계획마다 구현 중 · 구현 끝까지 셉니다. 블록에 적힌 브랜치가 모두 머지된 에픽은 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 브랜치(사본의 블록이 기본 브랜치 블록의 브랜치를 모두 품고, 그 브랜치가 있고 아직 머지되지 않았을 때만)도 세어 「일부 머지」 로 내고 그 사실을 정보 줄로 밝힙니다 — 다음 계획의 브랜치가 자기 브랜치에서만 블록에 자신을 더한 경우입니다. 사본을 만든 뒤 기본 브랜치 블록의 `브랜치:` 가 바뀌면 그 사본은 세지 않습니다 — 열린 브랜치에 기본 브랜치를 merge 하면 풀립니다.
 - `scripts/check_bundle_coverage.py <묶음|brief> <설계문서>` — 정답 출처의 번호가 설계문서 `## 번호 대조` 표에 다 있는지(빠지면 종료 코드 1), 반영 칸이 설계문서의 실제 자리를 가리키는지 · 기각한 번호를 받드는 에픽이 있는지(경고 줄 — 종료 코드는 그대로) 봅니다. 로드맵을 못 찾으면 그 항목은 「셀 수 없음」으로 셉니다.
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
-- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 로드맵 frontmatter 와 `origin/HEAD` 에서 읽습니다.
+- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기계 상태(임시) · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
 - `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
 - `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음. 로컬 브랜치와 `origin/<브랜치>` 가 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 3 이다(`--branch origin/<브랜치>` 도 받는다) — 이 끝 고르기는 `scripts/branch_tip.py` 하나이고 `conductor_ledger.py review-pack` 도 같이 쓴다.
 - `scripts/suite_lock.py` — 공유 스위트 잠금. 지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 기계 상태 자원 폴더의 잠금 하나(`<기계 상태 폴더>/files/suite-lock`)를 쓴다. 하위는 `run --lock <경로> --owner <이름> [--wait <초>] -- bash -c '<명령>'` 한 번으로 잡고 · 돌리고 · 푼다(못 잡으면 75 · 잠금 폴더에 쓰지 못하면 3 — 잠금 없이 돌리지 않는다). 주인이 프로세스 번호가 아닌 잠금은 살았는지 알 수 없어 훔치지 않고 주인 · 잡은 시각을 보인다.
-- `scripts/conductor_ledger.py` — 기계 상태 · 시작 승인 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(로드맵 frontmatter `parallel_default`, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다.
+- `scripts/conductor_ledger.py` — 기계 상태 · 시작 승인 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(`parallel_default` — 로드맵 frontmatter · 레포 설정 파일 순, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다.
 - `agents/integration-reviewer.md` — 쓰기 권한 없는 통합 리뷰어(`Read, Grep, Glob`).
 - `agents/relay-checker.md` — 쓰기 권한 없는 옮김 대조 agent(`Read, Grep, Glob`). 에픽이 끝나면 지휘자가 하위의 질문을 사용자에게 옮긴 기록마다 선택지 수 · 순서 · 라벨 · 「(권장)」 과 사용자 답이 그대로 갔는지 대조한다.
 - spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「인터뷰 다시 열기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).
@@ -221,6 +221,55 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 진입 skill 이 `advice --cap` 으로 펼치는 수를 넘기면 그 값이 `render_cap` 의 환경 변수보다 앞선다. 정수가 아니거나 범위 밖이면 그 값은 쓰지 않고 이름과 값을 밝히며 멈춘다.
 
 범위 밖 값은 라운드를 시작하지 않고 이름 · 값 · 허용 범위 · 출처를 보인다.
+
+### 레포 설정 파일(`.devbrew.md`)
+
+레포마다 다른 값(문서 폴더 · 테스트 명령 · 리뷰 모델 · 동시 작업 권장 수 · 브랜치 접두)은 레포 루트의 `.devbrew.md` 머리말에 적는다. 파일이 없어도 된다 — 없으면 기본값을 쓴다. 값과 그 출처는 `scripts/repo_defaults.py` 하나가 낸다(`python3 <플러그인 루트>/scripts/repo_defaults.py get <키>` — 출처는 표준 오류에 한 줄).
+
+```markdown
+---
+specs_dir: docs/superpowers/specs/
+plans_dir: docs/superpowers/plans/
+roadmaps_dir: docs/superpowers/roadmaps/
+interview_dir: docs/superpowers/interview/
+parallel_default: 3
+branch_prefix: feature/
+# test_command: "<스위트를 한 번 도는 명령>"
+# test_failure_pattern: "<실패 줄에서 테스트 이름을 뽑는 정규식 — 묶음이 있으면 첫 묶음>"
+# review_model: <통합 리뷰어에게 줄 모델 이름>
+---
+```
+
+| 키 | 뜻 | 기본 | 로드맵 머리말 | 기계 상태(임시) |
+|---|---|---|---|---|
+| `specs_dir` | 설계문서 폴더 | `docs/superpowers/specs/` | 받는다 | — |
+| `plans_dir` | 계획 폴더 | `docs/superpowers/plans/` | 받는다 | — |
+| `roadmaps_dir` | 로드맵 폴더 | `docs/superpowers/roadmaps/` | 오류 | — |
+| `interview_dir` | 인터뷰 폴더 | `docs/superpowers/interview/` | 오류 | — |
+| `test_command` | 스위트 대조가 도는 명령 | 없음(러너를 찾는다) | 받는다 | 받는다 |
+| `test_failure_pattern` | 실패 이름을 뽑는 정규식 | 없음(알려진 모양) | 받는다 | 받는다 |
+| `review_model` | 통합 리뷰어 · 옮김 대조의 모델 | 없음(세션 모델) | 받는다 | — |
+| `parallel_default` | 동시에 돌리는 큰 작업의 권장 수(상한이 아니다) | 3 | 받는다 | — |
+| `branch_prefix` | request-framing 이 만드는 브랜치와 로드맵 에픽 브랜치의 접두 | `feature/` | 오류 | — |
+
+- **기본 브랜치에 머지된 판만 읽는다**(`origin/HEAD` 가 가리키는 커밋의 `.devbrew.md`). 작업 브랜치에서 고친 값은 그 PR 이 머지된 뒤에 적용된다 — 작업 브랜치가 자기 검사 범위를 바꾸지 못하고, 어느 worktree 에서 불러도 같은 값이 나온다. 작업 트리에만 있으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다. 기본 브랜치를 모르면 기본값을 쓰고 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 낸다.
+- **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기계 상태 `## 레포 설정`(지휘자가 물어 임시로 둔 값 — 출처 「기계 상태(임시)」, 레포 설정 파일에 올리자고 알린다) > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기계 상태(임시)` · `기본값` 으로 보인다.
+- **키는 위 아홉뿐이다.** 모르는 키 · 같은 키 둘 · 층이 받지 않는 키(위 표의 「오류」) · 못 읽는 머리말(BOM · 닫히지 않음 · `---` 뒤 공백)은 각각 다른 오류로 멈춘다. 폴더 키는 레포 상대경로만 받고 레포 루트 · `.git` 아래는 받지 않는다. `parallel_default` 가 1 이상의 정수가 아니면 기본 3 으로 세고 알린다.
+- **따옴표 규칙**: 값에 `#` 이 들어가면 값 전체를 따옴표(`"…"` 또는 `'…'`)로 감싼다. 따옴표 없는 값의 ` #` 은 주석과 헷갈리므로 오류다. `#` 으로 시작하는 줄은 건너뛴다.
+- `.devbrew.md` 는 일반 파일이어야 한다 — 기본 브랜치 트리에서 심볼릭 링크이거나 Git LFS 포인터면 읽지 않고 멈춘다.
+- `branch_prefix` 는 project-init 의 브랜치 규칙과 맞춘다 — 두 플러그인은 서로의 설정을 읽지 않는다.
+
+### 지원하는 흐름
+
+- devbrew 는 `origin` 의 기본 브랜치(`origin/HEAD`)와 `origin` 의 PR 만 본다. fork 의 부모 레포로 PR 을 내는 흐름과 원격 없는 로컬 레포는 지원하지 않는다. `upstream` 원격이 있어도 보지 않는다.
+- 기본 브랜치를 `main` · `master` 로 짐작하지 않는다. `origin/HEAD` 가 없으면 기본 브랜치가 필요한 자리(브랜치 만들기 · 인터뷰 끝 커밋 · 지휘자 · 스위트 대조 · 상태 계산)에서 멈추고(인터뷰 끝은 커밋만 하지 않는다) 고치는 법을 보인다 — `git remote set-head origin --auto`(`origin` 원격이 없으면 먼저 `git remote add origin <URL>`). `git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다.
+- 지휘자 진입 · `merge_check.py run` · 인터뷰 끝 커밋 직전에는 원격의 기본 브랜치(`git ls-remote --symref origin HEAD`)와 로컬 값을 대조해 다르면 멈춘다(인터뷰 끝은 커밋만 하지 않는다). 대조하지 못하면(오프라인 · 10초 넘김) 멈추지 않고 로컬 값으로 가며 그 사실을 알린다.
+
+### devbrew 밖 레포
+
+- 상태 폴더 `.claude/spec-distill/` 는 처음 쓸 때 안에 `*` 한 줄짜리 `.gitignore` 를 두어 스스로를 무시한다 — 레포의 `.gitignore` 를 고치지 않아도 된다. 그 아래 파일이 이미 git 에 추적되고 있으면 멈춘다: `git rm --cached -r .claude/spec-distill` 로 추적을 푼 뒤 다시 돈다.
+- bare 레포에 worktree 를 두고 쓰는 배치면 상태 폴더는 bare 레포 안(`<bare 레포>/.claude/spec-distill`)에 생겨 레포마다 갈린다. `GIT_DIR` · `GIT_WORK_TREE` 가 설정돼 있으면 한 줄로 알린다.
+- Claude Code 가 worktree 를 두는 `.claude/worktrees/` 는 레포 `.gitignore` 에 더한다. 더하지 않으면 quality-gates 가 그 아래 worktree 를 「추적 안 되는 중첩 레포」로 보고 리뷰하지 않아 판정이 degraded 가 된다 — 그 한 줄을 더하면 풀린다(2026-10-21 실측).
 
 ## 끄는 법
 
