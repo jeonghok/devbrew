@@ -962,14 +962,14 @@ class VersionReport(unittest.TestCase):
 OID1, OID2, OID3, MOID = "1" * 40, "2" * 40, "3" * 40, "abcdef0123456789abcdef0123456789abcdef01"
 
 
-def gh_pr(number, state, oid, cross, merge=None, head="feature/a1"):
+def gh_pr(number, state, oid, cross, merge=None, head="feature/a1", base="trunk"):
     return {"number": number, "state": state, "headRefName": head, "headRefOid": oid, "isCrossRepository": cross,
-            "baseRefName": "trunk", "mergeCommit": {"oid": merge} if merge else None}
+            "baseRefName": base, "mergeCommit": {"oid": merge} if merge else None}
 
 
 class PrRefresh(Repo):
     """ledger pr-refresh — head 이름의 PR 을 모두 받아 그 브랜치의 PR 캐시 줄을 통째로 바꾼다(R8 계획 2 Task 2 · AC17 · §4)."""
-    THREE = [gh_pr(7, "MERGED", OID1, False, MOID), gh_pr(8, "MERGED", OID2, True, MOID.replace("a", "b")),
+    THREE = [gh_pr(7, "MERGED", OID1, False, MOID), gh_pr(8, "MERGED", OID2, True, MOID.replace("a", "b"), base="dev"),
              gh_pr(9, "OPEN", OID3, False)]
 
     def setUp(self):
@@ -1001,11 +1001,13 @@ class PrRefresh(Repo):
         self.assertEqual(self.calls, [(str(self.w), "feature/a1", L.PR_REFRESH_LIMIT)])
         self.assertEqual(L.PR_REFRESH_LIMIT, 100)
         rows = self.rows()
-        self.assertEqual([(r["번호"], r["상태"], r["headRefOid"], r["교차 레포"], r["mergeCommit"]) for r in rows], [
-            ("#7", "머지됨", OID1, "아니오", MOID), ("#8", "머지됨", OID2, "예", MOID.replace("a", "b")),
-            ("#9", "열림", OID3, "아니오", "-")])
+        # 같은 head 이름의 내 레포 PR · 남의 fork PR(다른 base) 이 둘 다 줄이 되고, 판정이 거를 칸을 그대로 적는다
+        self.assertEqual([(r["번호"], r["상태"], r["headRefOid"], r["교차 레포"], r["baseRefName"], r["mergeCommit"])
+                          for r in rows], [
+            ("#7", "머지됨", OID1, "아니오", "trunk", MOID), ("#8", "머지됨", OID2, "예", "dev", MOID.replace("a", "b")),
+            ("#9", "열림", OID3, "아니오", "trunk", "-")])
         for r in rows:
-            self.assertEqual((r["브랜치"], r["baseRefName"], r["쓴 세션"]), ("feature/a1", "trunk", SID))
+            self.assertEqual((r["브랜치"], r["쓴 세션"]), ("feature/a1", SID))
             self.assertRegex(r["확인한 때"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
         last = out.strip().splitlines()[-1]
         self.assertRegex(last, r"^PR 캐시: 브랜치 1개 · PR 3개를 \d{4}-\d\d-\d\d \d\d:\d\d 에 채웠다$")
