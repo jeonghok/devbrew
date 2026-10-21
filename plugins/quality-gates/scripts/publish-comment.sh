@@ -67,7 +67,8 @@ mb=""
 if [ -n "$base" ]; then
   mb="$(git rev-parse --verify -q "${base}^{commit}" 2>/dev/null || true)"
 elif [[ "${pr_base:-}" =~ ^[A-Za-z0-9._/][A-Za-z0-9._/-]*$ ]]; then
-  mb="$(git merge-base "origin/${pr_base}" HEAD 2>/dev/null || git merge-base "${pr_base}" HEAD 2>/dev/null || true)"
+  # 전체 참조 이름만 쓴다 — 짧은 이름 origin/<base> 는 같은 이름의 태그 · 로컬 브랜치가 가로챈다.
+  mb="$(git merge-base "refs/remotes/origin/${pr_base}" HEAD 2>/dev/null || git merge-base "refs/heads/${pr_base}" HEAD 2>/dev/null || true)"
 fi
 CORPUS="$WORK/corpus"
 diff_vs_base() { git diff "$@" "$mb" --; }
