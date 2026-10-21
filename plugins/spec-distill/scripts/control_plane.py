@@ -419,16 +419,16 @@ class Deadline:
         return left
 
 
-def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
-    """(rc, 표준 출력 바이트). 남은 시간을 넘기면 프로세스 묶음째 죽이고 TimedOut."""
+def run_bounded(argv, cwd, env, deadline: Deadline, what: str, data=None):
+    """(rc, 표준 출력 바이트). data 가 있으면 표준 입력으로 준다. 남은 시간을 넘기면 프로세스 묶음째 죽이고 TimedOut."""
     wait = deadline.left(what)
     try:
-        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, start_new_session=True)
+        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL if data is None else subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
     except (OSError, subprocess.SubprocessError):
         return 127, b""
     try:
-        out, _err = proc.communicate(timeout=wait)
+        out, _err = proc.communicate(input=data, timeout=wait)
     except BaseException as exc:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -468,14 +468,14 @@ class Repo:
         self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
                         GIT_NO_LAZY_FETCH="1", LC_ALL="C")
 
-    def raw(self, *args):
-        """(rc, 표준 출력 바이트) — 시간 예산 안에서 허용 목록의 git 만."""
+    def raw(self, *args, data=None):
+        """(rc, 표준 출력 바이트) — 시간 예산 안에서 허용 목록의 git 만. data 는 표준 입력."""
         if not args or args[0] not in GIT_OK:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
         if args[0] == "config" and args[1:2] != ("--get",):
             raise RuntimeError("git config 는 --get 꼴만 부른다: %r" % (args,))
         return run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
-                           self.deadline, "git " + args[0])
+                           self.deadline, "git " + args[0], data)
 
     def git(self, *args):
         rc, out = self.raw(*args)
@@ -544,13 +544,34 @@ def listing(repo: Repo, main):
     return tree_entries(out, folder), folder, None
 
 
+def cat_batch(repo: Repo, shas) -> dict:
+    """{blob: 바이트} — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)."""
+    if not shas:
+        return {}
+    rc, out = repo.raw("cat-file", "--batch", data="".join(sha + "\n" for sha in shas).encode("ascii"))
+    got, pos = {}, 0
+    while rc == 0 and pos < len(out):
+        end = out.find(b"\n", pos)
+        if end < 0:
+            break
+        head, pos = out[pos:end].decode("ascii", "replace").split(" "), end + 1
+        if len(head) != 3 or not head[2].isdigit():
+            continue   # `<blob> missing` 등 — 내용 없는 줄
+        size = int(head[2])
+        if pos + size > len(out):
+            break
+        got[head[0]], pos = out[pos:pos + size], pos + size + 1
+    return got
+
+
 def candidates(repo: Repo, entries: dict, folder):
     """([로드맵 · 검사 불가 경로], {검사 불가 경로: 사유}, {읽기가 실패한 경로}) — 캐시를 못 쓸 때만 부른다(글을 읽는다).
     머리말을 못 읽은 후보도 경로에 든다 — 조용히 빼지 않는다."""
     if folder is None:
         return [], {}, set()
     failed = set()
-    read = blob_reader(entries, lambda sha: repo.raw("cat-file", "blob", sha), failed)
+    blobs = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
+    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (128, b""), failed)
     found, unchecked = find_roadmaps(list(entries), read, folder)
     unchecked = dict(unchecked)
     return sorted(found + list(unchecked)), unchecked, failed

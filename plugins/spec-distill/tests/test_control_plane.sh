@@ -272,15 +272,19 @@ def rev(spec):
 
 
 settings, pa = rev("origin/HEAD:.devbrew.md"), rev("origin/HEAD:plan/roadmaps/pa/roadmap.md")
-orig, log, fail = cp.Repo.raw, [], set()
+orig, log, fail, procs = cp.Repo.raw, [], set(), []
 
 
-def raw(self, *args):
-    if args[0] == "cat-file" and args[-1] != settings:
+def raw(self, *args, data=None):
+    if args[0] == "cat-file" and args[1:] == ("--batch",):
+        shas = data.decode("ascii").split()
+        log.extend(shas)
+        procs.append(len(shas))
+        data = "".join(s + "\n" for s in shas if s not in fail).encode("ascii")   # 실패시킬 blob 은 빼고 묻는다
+    elif args[0] == "cat-file" and args[-1] != settings:
         log.append(args[-1])
-        if args[-1] in fail:
-            return 128, b""
-    return orig(self, *args)
+        procs.append(1)
+    return orig(self, *args, data=data)
 
 
 cp.Repo.raw = raw
@@ -291,7 +295,7 @@ except FileNotFoundError:
 
 
 def gather():
-    del log[:]
+    del log[:], procs[:]
     v = cp.gather(P, None, cp.Deadline(30), {}, use_gh=False)
     return len(log), dict((p, r.get("exit")) for p, r in v["items"])
 
@@ -299,16 +303,18 @@ def gather():
 if mode == "fail":
     fail.add(pa)
 n1, items1 = gather()
+procs1 = len(procs)
 fail.clear()
 n2, items2 = gather()
 pa_path = "plan/roadmaps/pa/roadmap.md"
-print("%s:%d %s:%d pa=%s>%s" % ("miss" if n1 else "none", n1, "hit" if not n2 else "read", n2,
-                                 items1.get(pa_path), items2.get(pa_path)))
+print("%s:%d %s:%d pa=%s>%s procs=%d" % ("miss" if n1 else "none", n1, "hit" if not n2 else "read", n2,
+                                         items1.get(pa_path), items2.get(pa_path), procs1))
 PY
 out="$(python3 "$T/catcount.py" "$S" "$P" hit)"
 case "$out" in miss:*" hit:0 "*) ok "캐시가 맞으면 로드맵 후보 글을 하나도 읽지 않는다(cat-file 0) — $out" ;;
   *) no "캐시가 맞을 때도 후보 글을 읽는다 — $out" ;; esac
 assert_contains "$out" "miss:5 " "양성 대조: 캐시가 없으면 로드맵 자리의 .md 다섯을 읽는다(pa 셋 · pb · pc)"
+assert_contains "$out" " procs=1" "캐시가 없을 때 후보 글은 git 한 번(cat-file --batch)으로 읽는다 — 파일 수만큼 부르지 않는다"
 out="$(python3 "$T/catcount.py" "$S" "$P" fail)"
 assert_contains "$out" "pa=3>1" "읽기 실패는 검사 불가로 보이되 캐시에 남지 않는다 — 다시 읽으면 상태 계산이 돈다($out)"
 assert_not_contains "$out" " hit:0 " "읽기 실패 뒤 둘째 호출은 캐시를 쓰지 않고 다시 읽는다"
