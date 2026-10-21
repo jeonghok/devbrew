@@ -151,6 +151,7 @@ fresh; mkdir "$P"
 nw run --out "$P" -- printf 'x' 2>/dev/null; rc=$?
 assert_eq "$rc" "73" "P 가 폴더: rc 73"
 assert_eq "$(tmp_left)" "0" "P 가 폴더: run 실패 뒤 임시 파일 없음"
+fresh; mkdir "$P"
 nw empty --out "$P" 2>/dev/null; rc=$?
 assert_eq "$rc" "73" "P 가 폴더: empty rc 73"
 assert_eq "$(tmp_left)" "0" "P 가 폴더: empty 실패 뒤 임시 파일 없음"
