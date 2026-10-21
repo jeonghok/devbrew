@@ -790,6 +790,9 @@ A4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f && /^5\. \*\*/{exit} f' "
 README_SD="$SD_DIR/README.md"
 grep -qF '이 대조는 brief 를 쓴 뒤 리뷰 진입(`check_verbatim_coverage.py`)에서 돈다 — 리뷰를 거치지 않는 길에서는 돌지 않는다.' "$README_SD" \
   && ok "README: 시점 한계 문장" || no "README: 시점 한계 문장이 없다"
+CL_SD="$SD_DIR/CHANGELOG.md"
+grep -qF '이 대조는 brief 를 쓴 뒤 리뷰 진입(`check_verbatim_coverage.py`)에서 돈다 — 리뷰를 거치지 않는 길에서는 돌지 않는다.' "$CL_SD" \
+  && ok "CHANGELOG: 시점 한계 문장" || no "CHANGELOG: 시점 한계 문장이 없다"
 grep -qF '사용자가 골랐는지는 증명하지 못한다' "$README_SD" \
   && ok "README: 출처 한계 「사용자가 골랐는지는 증명하지 못한다」 유지" || no "README: 출처 한계 문장이 사라졌다"
 

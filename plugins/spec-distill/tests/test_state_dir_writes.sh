@@ -700,4 +700,7 @@ multi="$(find "$R/.claude" -type f -links +1)"
 [ "$nreg" -ge 6 ] && ok "nlink_one_after_rounds: 상태 폴더의 일반 파일 ${nreg}개를 봤다" || no "nlink_one_after_rounds: 일반 파일이 ${nreg}개뿐이다 — 실행이 상태 폴더에 닿지 않았다"
 assert_eq "$multi" "" "nlink_one_after_rounds: 링크 수 2 이상인 파일이 없다"
 
+# README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다
+assert_contains "$(cat "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README: §3 한계 문장"
+
 finish

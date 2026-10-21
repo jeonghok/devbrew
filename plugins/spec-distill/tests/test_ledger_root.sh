@@ -242,4 +242,7 @@ cmp_old "$B" payload-root "$A/linkdir/x.md"
 cmp_old "$B" payload-root ""
 cmp_old "$B" payload-root
 
+# README 한계 문장 — 다른 레포의 문서를 리뷰하는 동안 cwd 레포 원장은 정리되지 않는다
+assert_contains "$(cat "$REPO_ROOT/plugins/spec-distill/README.md")" '다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다' "README: §5 한계 문장"
+
 finish
