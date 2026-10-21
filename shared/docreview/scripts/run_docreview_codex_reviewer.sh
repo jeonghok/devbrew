@@ -48,8 +48,13 @@ fi
 
 # stale 제거 + 쓰기 가능성 확인을 자원을 처음 만지는 지점에서 한다. 여기서 실패하면
 # YAML 자체가 불가능하므로 rc 3 — 호출자가 <out_yaml> 을 지워야 한다는 계약의 근거다.
-_RUNNER_DIR="$(dirname -- "${BASH_SOURCE[0]}")"
-python3 "$_RUNNER_DIR/nofollow_write.py" empty --out "$OUTPUT_PATH" 2>/dev/null || {
+# 러너 폴더는 `cd "$PROJECT_DIR"` 전에 절대 경로로 굳힌다 — 상대 경로로 남으면 cd 뒤의 writer 호출이
+# 리뷰 대상 레포 안의 같은 이름 파일을 실행한다.
+_RUNNER_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || {
+  echo "[docreview] 러너 폴더를 찾을 수 없다 — 산출물을 쓰지 않는다: $OUTPUT_PATH" >&2
+  exit 3
+}
+python3 -I "$_RUNNER_DIR/nofollow_write.py" empty --out "$OUTPUT_PATH" 2>/dev/null || {
   echo "[docreview] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
   exit 3
 }
@@ -65,7 +70,7 @@ if [ -r "$_RUNNER_COMMON" ] && bash -n "$_RUNNER_COMMON" 2>/dev/null \
    && . "$_RUNNER_COMMON"; then
   :
 else
-  python3 "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+  python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
     printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
     2>/dev/null || {
       echo "[docreview] runner_common.sh 로드 실패 + 산출물 기록 실패 — 호출자는 stale 을 지워야 한다" >&2
@@ -490,14 +495,14 @@ codex exec - \
 OVERRIDE_REASON=""
 [[ $EXIT_CODE -ne 0 ]] && OVERRIDE_REASON=exit_nonzero
 
-if ! python3 "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+if ! python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
        python3 "$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \
        --emit-keys docreview \
        < "$STDOUT_FILE"; then
-  python3 "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
+  python3 -I "$_RUNNER_DIR/nofollow_write.py" run --out "$OUTPUT_PATH" -- \
     printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: yaml_conversion_failed\n' || exit 3
   exit 0
 fi

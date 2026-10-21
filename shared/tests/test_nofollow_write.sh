@@ -221,6 +221,7 @@ SEP_OPS = {";", ";;", "&&", "||", "|", "|&", "&", "(", ")"}
 KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time"}
 DECL = {"export", "local", "readonly", "declare", "typeset"}
 EMPTY_NEEDLE = 'nofollow_write.py" empty --out "$OUTPUT_PATH"'
+WRITER_CALL = 'python3 -I "$_RUNNER_DIR/nofollow_write.py"'
 EXEMPT_FUNCS = re.compile(r"\b(write_failclosed|_degrade_if_empty)\b")
 
 
@@ -489,6 +490,12 @@ def check(path):
         for ln, c in acc["code"]:
             if EXEMPT_FUNCS.search(c) and ln <= e:
                 bad.append("L%d: write_failclosed · _degrade_if_empty 가 writer empty 줄(L%d) 앞에서 불린다" % (ln, e))
+    for ln, c in acc["code"]:
+        if "nofollow_write.py" in c and WRITER_CALL not in c:
+            bad.append("L%d: writer 를 python3 -I \"$_RUNNER_DIR/…\" 꼴로 부르지 않는다" % ln)
+    rd = acc["assign"].get("_RUNNER_DIR", [])
+    if not rd or any(v is None or "pwd -P" not in v for v in rd):
+        bad.append("_RUNNER_DIR 가 절대 경로(pwd -P)로만 대입되지 않는다")
     for b in bad:
         print(b)
     print("scratch=" + ",".join(sorted(scratch_vars)))
@@ -504,7 +511,7 @@ def mutate(src, dst, kind, line=""):
     idx = [i for i, ln in enumerate(lines) if EMPTY_NEEDLE in ln]
     if kind == "revive_truncate" and len(idx) == 1:
         new[idx[0]] = new[idx[0]].replace(
-            'python3 "$_RUNNER_DIR/nofollow_write.py" empty --out "$OUTPUT_PATH"', ': > "$OUTPUT_PATH"')
+            WRITER_CALL + ' empty --out "$OUTPUT_PATH"', ': > "$OUTPUT_PATH"')
     elif kind == "move_empty_after_trap" and len(idx) == 1:
         end = next((j for j in range(idx[0], len(lines)) if lines[j] == "}"), None)
         trap = next((j for j, ln in enumerate(lines) if ln.startswith("trap ")), None)
@@ -520,6 +527,9 @@ def mutate(src, dst, kind, line=""):
     elif kind == "before_empty" and len(idx) == 1:
         new.insert(idx[0], line)
     out = "\n".join(new)
+    if kind == "sub_first" and "@@" in line:
+        old, rep = line.split("@@", 1)
+        out = text.replace(old, rep, 1)
     if out == text:
         sys.stderr.write("변이가 적용되지 않았다: %s\n" % kind)
         return 2
@@ -577,6 +587,8 @@ scratch-reassigned~after_anchor~SCRATCH="$PWD"~1~허용 밖 대상
 unquoted-heredoc~after_anchor~cat <<EOF2~1~따옴표 없는 heredoc
 empty-after-trap~move_empty_after_trap~~1~종료 trap
 failclosed-first~before_empty~write_failclosed "$OUTPUT_PATH" early~1~앞에서 불린다
+writer-not-isolated~sub_first~python3 -I "$_RUNNER_DIR/nofollow_write.py" run@@python3 "$_RUNNER_DIR/nofollow_write.py" run~1~python3 -I
+runner-dir-relative~sub_first~_RUNNER_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"@@_RUNNER_DIR="$(dirname -- "${BASH_SOURCE[0]}")"~1~pwd -P
 prompt-write~after_anchor~echo x > "$PROMPT_FILE"~0~
 devnull-and-dup~after_anchor~echo x >/dev/null 2>&1; echo y >&2~0~
 EOF_MUT
@@ -627,5 +639,44 @@ PATH="$STUB:$PATH" CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
 assert_eq "$rc" "3" "산출물 폴더 쓰기 불가 · P 없음: rc 3"
 assert_contains "$(cat "$T/err")" "산출물 경로에 쓸 수 없다" "산출물 폴더 쓰기 불가: 사유 한 줄"
 chmod 755 "$T/out"
+
+note "== runner_relative_path_planted"
+# 러너를 상대 경로로 부르고, 러너가 cd 하는 리뷰 대상 폴더의 같은 상대 자리에 nofollow_write.py 를 심는다.
+PROJ="$T/proj"; MARK="$T/planted-ran"
+plant_writer() {   # plant_writer <PROJ 안 상대 폴더>
+  mkdir -p "$PROJ/$1"
+  printf 'import os\nopen(os.environ["PLANT_MARK"], "a").write("ran\\n")\n' > "$PROJ/$1/nofollow_write.py"
+}
+rel_run() {        # rel_run <cwd> <상대 러너 경로>
+  ( cd "$1" && PLANT_MARK="$MARK" PATH="$STUB:$PATH" CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
+      bash "$2" "$PROF" "$DOCF" "$PROJ" "$P" 2>/dev/null )
+}
+rm -rf "$PROJ"; rm -f "$MARK"; fresh
+plant_writer plugins/spec-distill/scripts
+rel_run "$ROOT" plugins/spec-distill/scripts/run_docreview_codex_reviewer.sh; rc=$?
+assert_eq "$rc" "0" "상대 경로 러너: rc 0"
+[ ! -e "$MARK" ] && ok "상대 경로 러너: 리뷰 대상 폴더에 심은 nofollow_write.py 를 실행하지 않는다" \
+  || no "상대 경로 러너: 리뷰 대상 폴더에 심은 nofollow_write.py 를 실행했다"
+assert_grep "$(content "$P")" '^  codex_failed: false$' "상대 경로 러너: P 는 YAML"
+# 양성 대조 — 러너 폴더를 굳히지 않은 사본은 심은 파일을 실행한다(이 단언이 공허하지 않다는 증거).
+HOST="$T/host/scripts"; mkdir -p "$HOST"
+ln -s "$ROOT/plugins/spec-distill/scripts/runner_common.sh" "$HOST/runner_common.sh"
+ln -s "$W" "$HOST/nofollow_write.py"
+python3 -I -c '
+import sys
+src, dst = sys.argv[1:3]
+t = open(src, encoding="utf-8").read()
+old = "_RUNNER_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd -P)\""
+new = "_RUNNER_DIR=\"$(dirname -- \"${BASH_SOURCE[0]}\")\""
+if t.count(old) != 1:
+    sys.exit(2)
+open(dst, "w", encoding="utf-8").write(t.replace(old, new))
+' "$RUNNER" "$HOST/run.sh"; mrc=$?
+assert_eq "$mrc" "0" "양성 대조: 옛 _RUNNER_DIR 줄로 사본을 만들었다"
+rm -rf "$PROJ"; rm -f "$MARK"; fresh
+plant_writer host/scripts
+rel_run "$T" host/scripts/run.sh
+[ -e "$MARK" ] && ok "양성 대조: 옛 _RUNNER_DIR 사본은 심은 파일을 실행한다" \
+  || no "양성 대조: 옛 _RUNNER_DIR 사본도 심은 파일을 실행하지 않았다 — 위 단언이 공허하다"
 
 finish
