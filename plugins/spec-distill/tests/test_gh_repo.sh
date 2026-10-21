@@ -20,6 +20,9 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GH_REPO GH_HOST
 
 mkdir -p "$T/bin" "$T/nogh" || exit 1
+mkdir -p "$T/badbin" || exit 1
+printf '#!/nonexistent-devbrew-interp/sh\n' > "$T/badbin/gh" || exit 1
+chmod +x "$T/badbin/gh" || exit 1
 cat > "$T/bin/gh" <<'FAKE'
 #!/bin/sh
 : > "$FAKE_GH_ARGS"
@@ -28,7 +31,11 @@ printf 'env:%s:%s:%s\n' "${GH_PROMPT_DISABLED:-}" "${NO_COLOR:-}" "${GH_NO_UPDAT
 case "${FAKE_GH_MODE:-ok}" in
   ok) printf '[]\n' ;;
   auth) printf 'To get started with GitHub CLI, please run:  gh auth login\n' >&2; exit 4 ;;
-  unresolved) printf 'could not resolve host gitlab.com\n' >&2; exit 1 ;;
+  unresolved) printf "GraphQL: Could not resolve to a Repository with the name 'o/r'. (repository)\n" >&2; exit 1 ;;
+  gitlab) printf "GraphQL: No such type PullRequest, so it can't be a fragment condition (fragment pr), PullRequestState isn't a defined input type (on \$state) (query PullRequestList)\n" >&2; exit 1 ;;
+  ghe_unknown) printf 'error connecting to ghe.example.com\ncheck your internet connection or https://githubstatus.com\n' >&2; exit 1 ;;
+  api404) printf '{"message":"Not Found","status":"404"}'; printf 'gh: Not Found (HTTP 404)\n' >&2; exit 1 ;;
+  sleep) exec sleep 5 ;;
   prs) printf '[{"number":7,"state":"MERGED","headRefName":"b","headRefOid":"abc","isCrossRepository":false,"baseRefName":"main","mergeCommit":{"oid":"def"}},{"number":8,"state":"OPEN","headRefName":"b","headRefOid":"abd","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}]\n' ;;
   badshape) printf '{"number":7}\n' ;;
   missingkey) printf '[{"number":7,"state":"OPEN"}]\n' ;;
@@ -54,11 +61,11 @@ import gh_repo
 for n in gh_repo.env_notices():
     print("NOTICE:" + n, file=sys.stderr)
 try:
-    print(gh_repo.gh_json(sys.argv[2], ["pr", "list"]))
+    print(gh_repo.gh_json(sys.argv[2], ["pr", "list"], float(sys.argv[3])))
 except gh_repo.GhStop as exc:
     print("STOP:" + str(exc), file=sys.stderr)
     sys.exit(5)
-' "$SCRIPTS" "$1" 2>"$T/err")"; RC=$?
+' "$SCRIPTS" "$1" "${CALL_TIMEOUT:-15}" 2>"$T/err")"; RC=$?
   ERR="$(cat "$T/err")"
   ARGS="$(tr '\n' ' ' < "$FAKE_GH_ARGS")"
 }
@@ -115,13 +122,40 @@ assert_eq "$RC" "5" "인증 실패에서 멈춘다"
 assert_contains "$ERR" "STOP:gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다" \
   "인증 실패 문장에 gh auth login --hostname github.com"
 
-# ── non_github ───────────────────────────────────────────────────────────────
+# ── non_github · 레포를 못 찾음(실측 stderr) ─────────────────────────────────
+# 실측(gh 2.88.1): github.com 에 없는 레포 → "Could not resolve to a Repository" ·
+# gitlab.com → "No such type PullRequest" · 모르는 호스트 → "error connecting to" · gh api 404 → "Not Found (HTTP 404)".
 mkrepo lab https://gitlab.com/o/r || { no "픽스처 lab"; finish; exit 1; }
-FAKE_GH_MODE=unresolved call "$T/lab" "$FAKEPATH"
-assert_eq "$RC" "5" "비 GitHub 에서 멈춘다"
+FAKE_GH_MODE=unresolved call "$T/fork" "$FAKEPATH"
+assert_eq "$RC" "5" "레포를 못 찾으면 멈춘다"
+assert_contains "$ERR" "STOP:gh 가 origin(github.com/me/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다(비공개 레포면 접근 권한도 확인한다)" \
+  "레포를 못 찾음: 「GitHub 인 레포만」 · 비공개면 접근 권한"
+FAKE_GH_MODE=gitlab call "$T/lab" "$FAKEPATH"
+assert_eq "$RC" "5" "비 GitHub(gitlab.com) 에서 멈춘다"
 assert_contains "$ARGS" "-R gitlab.com/o/r " "비 GitHub: -R 은 origin 그대로"
-assert_contains "$ERR" "STOP:gh 가 origin(gitlab.com/o/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다" \
-  "비 GitHub: 「GitHub 인 레포만」"
+assert_contains "$ERR" "STOP:gh 실패(rc 1): GraphQL: No such type PullRequest" \
+  "비 GitHub(gitlab.com 실측): rc 와 stderr 첫 줄로 멈춘다"
+FAKE_GH_MODE=ghe_unknown call "$T/ghe" "$FAKEPATH"
+assert_eq "$RC" "5" "모르는 호스트에서 멈춘다"
+assert_contains "$ERR" "STOP:gh 실패(rc 1): error connecting to ghe.example.com" \
+  "모르는 호스트(실측): rc 와 stderr 첫 줄로 멈춘다"
+FAKE_GH_MODE=api404 call "$T/fork" "$FAKEPATH"
+assert_contains "$ERR" "STOP:gh 실패(rc 1): gh: Not Found (HTTP 404)" "gh api 404 는 「GitHub 인 레포만」으로 가르지 않는다"
+assert_not_contains "$ERR" "GitHub 인 레포만" "gh api 404 에 「GitHub 인 레포만」이 없다"
+
+# ── 시간 초과 · 실행 실패 ────────────────────────────────────────────────────
+FAKE_GH_MODE=sleep CALL_TIMEOUT=0.5 call "$T/fork" "$FAKEPATH"
+assert_eq "$RC" "5" "gh 가 시간 안에 끝나지 않으면 멈춘다"
+assert_contains "$ERR" "STOP:gh 가 0.5초 안에 끝나지 않았다(github.com/me/r)" "시간 초과 문장"
+call "$T/fork" "$T/badbin:$PATH"
+assert_eq "$RC" "5" "gh 를 실행하지 못하면 멈춘다"
+assert_contains "$ERR" "STOP:gh 를 실행하지 못했다(" "실행 실패 문장"
+
+# ── insteadOf ────────────────────────────────────────────────────────────────
+mkrepo alias gh:me/r || { no "픽스처 alias"; finish; exit 1; }
+git -C "$T/alias" config url.git@github.com:.insteadOf gh: || { no "픽스처 alias insteadOf"; finish; exit 1; }
+OUT="$(cd "$T/alias" && "$PY" "$GR" slug 2>"$T/err")"; RC=$?
+assert_eq "$RC:$OUT" "0:github.com/me/r" "insteadOf 로 바뀐 origin URL(git remote get-url origin)을 읽는다"
 
 # ── pr_list ──────────────────────────────────────────────────────────────────
 FAKE_GH_MODE=prs call_prs "$T/fork" 100

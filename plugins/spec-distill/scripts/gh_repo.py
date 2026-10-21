@@ -7,7 +7,7 @@
   - gh 없음 → 설치 주소
   - origin 이 없거나 URL 을 못 읽음 → `git remote get-url origin` 확인
   - 인증 실패 → `gh auth login --hostname <host>`
-  - 레포를 못 찾음 · 호스트를 모름 → origin 이 GitHub 인 레포만 지원
+  - 레포를 못 찾음(could not resolve to a repository) → origin 이 GitHub 인 레포만 지원 · 비공개면 접근 권한
   - 그 밖 → rc 와 stderr 첫 줄
 
 CLI: `gh_repo.py slug` — stdout `<host>/<owner>/<repo>` · rc 0. 못 뽑으면 rc 3 + 사유(stderr).
@@ -25,8 +25,7 @@ STOP_SLUG = "origin URL 에서 호스트 · owner · repo 를 뽑지 못했다 �
 STOP_NO_GH = "gh 가 없다 — devbrew 는 gh 를 필수로 쓴다. https://cli.github.com 에서 설치한다"
 ENV_NAMES = ("GH_REPO", "GH_HOST")
 AUTH_MARKS = ("auth login", "not logged", "authentication", "bad credentials", "http 401")
-UNKNOWN_MARKS = ("could not resolve", "not found", "http 404", "no such host", "known github host",
-                 "unknown host")
+UNKNOWN_MARKS = ("could not resolve to a repository",)
 PR_FIELDS = ("number", "state", "headRefName", "headRefOid", "isCrossRepository", "baseRefName", "mergeCommit")
 
 
@@ -77,7 +76,7 @@ def slug_from_url(url: str) -> str:
 def origin_slug(cwd: str):
     """(host, owner, repo). origin 이 없거나 URL 을 못 읽으면 GhStop."""
     try:
-        p = subprocess.run(["git", "-C", str(cwd), "config", "--get", "remote.origin.url"],
+        p = subprocess.run(["git", "-C", str(cwd), "remote", "get-url", "origin"],
                            capture_output=True, encoding="utf-8", errors="replace", timeout=5)
     except (OSError, subprocess.TimeoutExpired):
         raise GhStop(STOP_SLUG)
@@ -106,7 +105,8 @@ def stop_for(rc: int, stderr: str, host: str, slug: str) -> str:
     if any(m in low for m in AUTH_MARKS):
         return "gh 인증이 안 됐다 — gh auth login --hostname %s 를 돈다" % host
     if any(m in low for m in UNKNOWN_MARKS):
-        return "gh 가 origin(%s)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다" % slug
+        return ("gh 가 origin(%s)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다"
+                "(비공개 레포면 접근 권한도 확인한다)" % slug)
     first = next((ln.strip() for ln in (stderr or "").splitlines() if ln.strip()), "")
     return "gh 실패(rc %d): %s" % (rc, first)
 
