@@ -35,7 +35,7 @@
 
 ## Global Constraints
 
-- **시작 시점.** R10 · R12 · R13 · 이 에픽 계획 1 뒤. 브랜치 `feature/dependency-portability`. 시작 때 기본 브랜치를 merge 한다(rebase 금지). 커밋은 pathspec, `git stash` 금지, HEAD 를 뒤로 옮기지 않는다.
+- **시작 시점.** R10 · R12 · R13 · 이 에픽 계획 1 머지 뒤. 브랜치 `feature/gh-merge-dependencies`(로드맵 R8 의 둘째 브랜치 — 기본 브랜치에서 새로 만든다). 시작 때 기본 브랜치를 merge 한다(rebase 금지). 커밋은 pathspec, `git stash` 금지, HEAD 를 뒤로 옮기지 않는다.
 - 커밋 메시지: `type(scope)` 영어 · 설명 한국어. 끝에 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` 와 세션이 주는 `Claude-Session` 줄.
 - **버전.** 판 번호는 이 계획에 적지 않는다 — 지휘자가 구현 dispatch 때 정해 준다(spec-distill · quality-gates · project-init · plugin-audit 를 올린다). CHANGELOG 머리는 plugin.json 과 같게.
 - **세 skill 폴더 펜스의 상태 폴더 쓰기는 `nofollow_write.py` 로.** request-framing · reviewing-brief · spec-review 의 `.md` 펜스에서 상태 폴더에 쓰는 줄은 `"$<루트>/scripts/nofollow_write.py" run|empty|append --out …` 를 지나고, writer 를 부르는 루트 변수는 그 펜스가 다른 스크립트(`check_deps.py` 포함)를 부르는 루트 변수와 같다. 집행은 `plugins/spec-distill/tests/test_state_dir_writes.sh`(`scan_writes`) — 그 폴더의 펜스를 더하거나 고치는 과제는 이 테스트를 Test 목록에 둔다.
