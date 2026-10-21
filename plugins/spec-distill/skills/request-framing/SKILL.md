@@ -714,7 +714,8 @@ record_artifact() {   # 옮길 것: rec_title(audit 제목) · rec_name(STATE_DI
   rec_src="$STATE_DIR/$rec_name"
   if [ ! -s "$rec_src" ]; then
     rec_src="$STATE_DIR/absent-note.txt"
-    python3 "$SD/scripts/nofollow_write.py" run --out "$rec_src" -- printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name"
+    python3 "$SD/scripts/nofollow_write.py" run --out "$rec_src" -- printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name" \
+      || { echo "[spec-distill] 「산출물 없음」 메모를 쓰지 못해 audit ## 4 에 옮기지 않았다: $rec_title" >&2; return 1; }
   fi
   python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" </dev/null \
     || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $rec_title" >&2

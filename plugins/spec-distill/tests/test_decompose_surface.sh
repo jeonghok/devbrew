@@ -56,7 +56,7 @@ for lit in "IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'" '<주제 한 줄>'
            '--title="$title"' '--approval="$(cat "$AF1")"' "trap 'rm -rf -- \"\$AD\"' EXIT" 'AF1="$AD/1"' \
            '그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다' \
            '`AF2` · `AF3` … 으로 하나씩 더하고' '`DEVBREW_ROADMAP_APPROVAL_EOF`' \
-           '맨 앞 3칸을 뺀 줄을 돌린다(구분 줄이 줄 맨 앞에서 시작해야 heredoc 이 닫힌다)'; do
+           '펜스 줄과 더하는 `AF<k>` 줄은 맨 앞 칸에서 시작한다'; do
   has "$STEPA" "$lit" "Step A 8(AC11): $lit"
 done
 for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
@@ -184,9 +184,15 @@ has "$P23" '보고 후 재결정 허용' "proceed-gate: 확정 항목 단위 규
 FENCE="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5' \
   | awk 'index($0,"```bash"){b=""; f=1; next} index($0,"```")&&f{f=0; if(index(b,"roadmap_write.py\" create")){print b; exit}; next} f{b=b $0 "\n"}')"
 if [ -n "$FENCE" ]; then ok "Step A 8 펜스를 잘랐다"; else no "Step A 8 펜스를 자르지 못했다"; fi
-e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdout: rc, 결과 폴더는 $E/repo/docs/<이름>
+# heredoc 여는 줄마다 같은 구분자만 든 닫는 줄이 펜스에 있다 — 앞에 칸이 붙은 닫는 줄은 heredoc 을 닫지 못한다.
+hd="$(printf '%s\n' "$FENCE" | awk -v q="'" '
+  match($0, "<<" q "[A-Za-z_][A-Za-z0-9_]*" q) { d = substr($0, RSTART + 3, RLENGTH - 4); open[d] = 1; n++; next }
+  ($0 in open) { closed[$0] = 1 }
+  END { bad = ""; for (d in open) if (!(d in closed)) bad = bad " " d; printf "%d%s", n, bad }')"
+assert_eq "$hd" "2" "Step A 8: heredoc 둘의 닫는 구분 줄이 줄 맨 앞에 있다"
+e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdout: rc, 결과 폴더는 $E/repo/docs/<이름>. 펜스는 쓰인 그대로 돈다.
   local title="$1" appr="$2" outn="$3" body rc=0
-  body="$(printf '%s' "$FENCE" | sed 's/^   //')"
+  body="$FENCE"
   body="${body//<주제 한 줄>/$title}"
   body="${body//<승인 원문>/$appr}"
   body="${body//docs\/superpowers\/interview\/<file>/docs/iv/brief.md}"
@@ -255,7 +261,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q -b main "$E/repo"
 git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid add -A
 git -C "$E/repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm fixture
-HOSTILE_TITLE='제목 $HOME `id` "q" '"'a'"
+HOSTILE_TITLE='-제목 $HOME `id` "q" '"'a'"
 HOSTILE_APPR='-승인 $(touch '"$E"'/pwned) "좋아" '"'ok'"
 assert_eq "$(e2e_run "$HOSTILE_TITLE" "$HOSTILE_APPR" rm1)" "0" "stepa8_e2e_verbatim: 펜스 rc 0"
 RMALL="$(cat "$E"/repo/docs/rm1/*.md 2>/dev/null)"
@@ -270,14 +276,15 @@ if [ -e "$E/pwned2" ]; then no "stepa8_multiline_approval_verbatim: 명령이 �
 if [ -e "$E/repo/docs/rm2" ]; then no "stepa8_multiline_approval_verbatim: 거절됐는데 폴더가 남았다"; else ok "stepa8_multiline_approval_verbatim: 거절되면 폴더를 만들지 않는다"; fi
 # 줄마다 AF<k> 로 나누면(여러 말 규칙) 두 줄이 각자 한 말로 그대로 실린다.
 FENCE_ONE="$FENCE"
-AF_BLOCK='   AF2="$AD/2"
-   cat > "$AF2" <<'"'"'DEVBREW_ROADMAP_APPROVAL_EOF'"'"'
+AF_BLOCK='AF2="$AD/2"
+cat > "$AF2" <<'"'"'DEVBREW_ROADMAP_APPROVAL_EOF'"'"'
 <둘째 말>
-   DEVBREW_ROADMAP_APPROVAL_EOF
+DEVBREW_ROADMAP_APPROVAL_EOF
 '
 FENCE="${FENCE/
-   c_rc=0/
-${AF_BLOCK}   c_rc=0}"
+c_rc=0/
+${AF_BLOCK}c_rc=0}"
+case "$FENCE" in *'AF2="$AD/2"'*) ok "stepa8_multiline_approval_verbatim: AF2 블록이 펜스에 들어갔다" ;; *) no "stepa8_multiline_approval_verbatim: AF2 블록을 넣지 못했다 — 아래 판정은 무의미하다" ;; esac
 FENCE="${FENCE/--approval=\"\$(cat \"\$AF1\")\"/--approval=\"\$(cat \"\$AF1\")\" --approval=\"\$(cat \"\$AF2\")\"}"
 SECOND='둘째 줄 $(touch '"$E"'/pwned3) `id`'
 FENCE="${FENCE//<둘째 말>/$SECOND}"

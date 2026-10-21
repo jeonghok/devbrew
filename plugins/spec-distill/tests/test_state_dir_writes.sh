@@ -700,6 +700,27 @@ multi="$(find "$R/.claude" -type f -links +1)"
 [ "$nreg" -ge 6 ] && ok "nlink_one_after_rounds: 상태 폴더의 일반 파일 ${nreg}개를 봤다" || no "nlink_one_after_rounds: 일반 파일이 ${nreg}개뿐이다 — 실행이 상태 폴더에 닿지 않았다"
 assert_eq "$multi" "" "nlink_one_after_rounds: 링크 수 2 이상인 파일이 없다"
 
+# RF 산출물 기록 — 「산출물 없음」 메모를 쓰지 못하면 지난 라운드의 메모를 audit 에 옮기지 않는다
+RFA="$R/.claude/spec-distill/.docreview/rf-absent"; mkdir -p "$RFA"
+AUDA="$R/docs/rf-absent.audit.md"
+{ rf_vars; printf 'STATE_DIR="%s"\nAUDIT_ABS="%s"\n' "$RFA" "$AUDA"; fence_with "$RF_MD" 'record_artifact()'; } > "$TR/rf-absent.sh"
+if grep -q 'absent-note.txt' "$TR/rf-absent.sh" && bash -n "$TR/rf-absent.sh" 2>/dev/null; then ok "추출: RF 산출물 기록 펜스(bash -n 통과)"
+else no "추출: RF 산출물 기록 펜스가 비었거나 문법이 깨졌다 — 아래 판정은 무의미하다"; fi
+for kind in writable readonly; do
+  cp "$ROOT/plugins/spec-distill/tests/fixtures/seed-one-sentence.audit.md" "$AUDA"
+  printf '(STALE_ABSENT_NOTE)\n' > "$RFA/absent-note.txt"
+  [ "$kind" = readonly ] && chmod 555 "$RFA"
+  run_fence "$TR/rf-absent.sh"
+  chmod 755 "$RFA"
+  aud="$(cat "$AUDA")"
+  case "$aud" in *STALE_ABSENT_NOTE*) no "rf_absent_note($kind): 지난 메모가 audit 에 옮겨졌다" ;; *) ok "rf_absent_note($kind): 지난 메모가 audit 에 없다" ;; esac
+  if [ "$kind" = writable ]; then
+    assert_contains "$aud" '(이 라운드에 산출물 없음 — recritic.txt)' "rf_absent_note(writable): 새 메모가 audit 에 옮겨졌다(양의 짝)"
+  else
+    assert_contains "$(cat "$TR/last.err")" '「산출물 없음」 메모를 쓰지 못해 audit ## 4 에 옮기지 않았다: 재비판 (doc-recritic)' "rf_absent_note(readonly): 쓰지 못한 사실을 알린다"
+  fi
+done
+
 # README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다
 assert_contains "$(cat "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README: §3 한계 문장"
 
