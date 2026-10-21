@@ -554,11 +554,11 @@ else
 $crit_names
 CRIT_NAMES
   bundle_rc=0
-  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect > "$BUNDLE" || bundle_rc=1
-  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic > "$BUNDLE_RC" || bundle_rc=1
+  python3 "$SD/scripts/nofollow_write.py" run --out "$BUNDLE" -- python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for detect || bundle_rc=1
+  python3 "$SD/scripts/nofollow_write.py" run --out "$BUNDLE_RC" -- python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md --for recritic || bundle_rc=1
   if [ "$bundle_rc" -ne 0 ]; then
     rm -f "$BUNDLE" "$BUNDLE_RC" 2>/dev/null || true
-    for f in "$BUNDLE" "$BUNDLE_RC"; do [ ! -e "$f" ] || : > "$f" 2>/dev/null || true; done
+    for f in "$BUNDLE" "$BUNDLE_RC"; do [ ! -e "$f" ] || python3 "$SD/scripts/nofollow_write.py" empty --out "$f" 2>/dev/null || true; done
     echo "[spec-distill] 번들 조립 실패 — 두 번들을 치웠다(못 지우면 비웠다). 이 라운드를 시작하지 않는다." >&2
   fi
 fi
@@ -627,7 +627,7 @@ wipe_target=""   # 스킬 본문의 위치 인자는 호출 인자로 치환된�
 wipe_or_truncate() {   # wipe_target 을 지운다 — 못 지우면 절단 — 둘 다 못 하면 rc 1
   rm -f "$wipe_target" 2>/dev/null || true
   [ -e "$wipe_target" ] || return 0
-  : > "$wipe_target" 2>/dev/null || true
+  python3 "$SD/scripts/nofollow_write.py" empty --out "$wipe_target" 2>/dev/null || true
   if [ -s "$wipe_target" ]; then return 1; fi
   return 0
 }
@@ -714,7 +714,7 @@ record_artifact() {   # 옮길 것: rec_title(audit 제목) · rec_name(STATE_DI
   rec_src="$STATE_DIR/$rec_name"
   if [ ! -s "$rec_src" ]; then
     rec_src="$STATE_DIR/absent-note.txt"
-    printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name" > "$rec_src"
+    python3 "$SD/scripts/nofollow_write.py" run --out "$rec_src" -- printf '(이 라운드에 산출물 없음 — %s)\n' "$rec_name"
   fi
   python3 "$SD/scripts/seed_review_log.py" append-verbatim "$AUDIT_ABS" --section "## 4. 비평과 냉독" --title "라운드 $rnd — $rec_title" "$rec_src" </dev/null \
     || echo "[spec-distill] audit ## 4 에 옮기지 못했다: $rec_title" >&2
@@ -858,7 +858,7 @@ fi
 drops_rc=0
 if ! gate_drops="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")"; then
   drops_rc=2
-elif ! printf '%s' "$gate_drops" > "$STATE_DIR/gate-drops.json"; then
+elif ! python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/gate-drops.json" -- printf '%s' "$gate_drops"; then
   drops_rc=2
 else
   python3 "$SD/scripts/seed_review_log.py" check-drops "$AUDIT_ABS" "$STATE_DIR/gate-drops.json" || drops_rc=$?
@@ -880,7 +880,7 @@ seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제합�
 # 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일을 먼저 지운다.
 find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
 hunks_rc=0
-python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks.json" || hunks_rc=$?
+python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || hunks_rc=$?
 case "$hunks_rc" in
   0) python3 -I -X utf8 -c '
 import json, sys
@@ -1226,7 +1226,7 @@ elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DI
   final_hunks_rc=2
 else
   find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
-  python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" > "$STATE_DIR/hunks-final.json" || final_hunks_rc=$?
+  python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks-final.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || final_hunks_rc=$?
 fi
 case "$final_hunks_rc" in
   0) python3 -I -X utf8 -c '
@@ -1265,7 +1265,7 @@ if [ "$final_drops_rc" -ne 0 ]; then
   :
 elif [ -n "${STATE_DIR:-}" ] && [ -f "$STATE_DIR/docreview-state.md" ]; then
   gate_final="$(python3 "$SD/scripts/docreview_state.py" gate --state-dir "$STATE_DIR")" || final_drops_rc=2
-  [ "$final_drops_rc" -ne 0 ] || printf '%s' "$gate_final" > "$gf" || final_drops_rc=2
+  [ "$final_drops_rc" -ne 0 ] || python3 "$SD/scripts/nofollow_write.py" run --out "$gf" -- printf '%s' "$gate_final" || final_drops_rc=2
 else
   # 엔진 원장이 없다 — dropped 를 audit ## 6 의 엔진 drop 줄에서 만든다. 기록된 drop 마다 문구가 있는지는 그대로 잰다.
   python3 -I -X utf8 -c '

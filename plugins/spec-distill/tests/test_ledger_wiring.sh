@@ -868,7 +868,7 @@ cgate() { awk '/codex-gate:begin[[:space:]]+runner=run_docreview_codex_reviewer\
 crashy() { printf '%s\n' "$1" | grep -E 'unbound variable|syntax error|Traceback|command not found' || true; }
 C1="$(bash_with "$RF" 'marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc')"; C2="$(bash_with "$RF" 'hunks-final.json')"; C3="$(bash_with "$RF" 'gate-final.json')"
 SRIN="$(bash_with "$SR" '# 엔진 상태 — 이 문서만의 디렉토리')"; SRCX="$(cgate "$SR")"
-RBBU="$(bash_with "$RB" 'build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"')"; RBCX="$(cgate "$RB")"
+RBBU="$(bash_with "$RB" 'nofollow_write.py" run --out "$BUNDLE" -- python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT"')"; RBCX="$(cgate "$RB")"
 for v in C1 C2 C3 SRIN SRCX RBBU RBCX; do
   eval "x=\"\$$v\""; [ -n "$x" ] && ok "전제(T8 관문): 펜스 $v 를 뽑았다" || no "전제(T8 관문): 펜스 $v 가 비었다 — 아래 칸이 공허하다"
 done

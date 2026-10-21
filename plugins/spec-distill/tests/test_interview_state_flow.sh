@@ -212,7 +212,7 @@ for b in re.findall(r"```bash\n(.*?)\n```", t, re.S):
     lines = b.split("\n")
     if not any(l.startswith("DEGRADE_FALLBACK_FILE=") for l in lines):
         continue
-    end = next(i for i, l in enumerate(lines) if l.startswith('touch "${DEGRADE_FALLBACK_FILE'))
+    end = next(i for i, l in enumerate(lines) if l.startswith('python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE'))
     with open(os.path.join(sys.argv[2], "h{0}.sh".format(n)), "w", encoding="utf-8") as f:
         f.write("\n".join(lines[:end + 1]) + "\n")
     n += 1
@@ -249,7 +249,7 @@ done
 python3 -I - "$RB" "$T/rec.sh" >/dev/null <<'PY'
 import re, sys
 t = open(sys.argv[1], encoding="utf-8").read()
-b = next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if 'degrade-append "$STATE" --component <a>' in x)
+b = next(x for x in re.findall(r"```bash\n(.*?)\n```", t, re.S) if 'degrade-append "$STATE" --component "<a>"' in x)
 b = b.replace("<a>", "pipeline").replace("<b>", "all").replace("<c>", "skipped").replace("<r>", "rec-probe-1")
 open(sys.argv[2], "w", encoding="utf-8").write(b + "\n")
 PY

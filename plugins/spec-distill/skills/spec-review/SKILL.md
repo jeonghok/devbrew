@@ -392,7 +392,7 @@ residue_unclear=0; residue_left=""
 neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
   rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
   if [ -e "$NEUTRALISE_TARGET" ]; then
-    : > "$NEUTRALISE_TARGET" 2>/dev/null || true
+    python3 "$SD/scripts/nofollow_write.py" empty --out "$NEUTRALISE_TARGET" 2>/dev/null || true
     if [ -s "$NEUTRALISE_TARGET" ]; then return 1; fi
   fi
   return 0

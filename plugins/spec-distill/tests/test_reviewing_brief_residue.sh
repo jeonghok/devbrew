@@ -99,7 +99,7 @@ FENCE_E="$SCRATCH/fence-errexit.sh"; { echo 'set -euo pipefail'; cat "$FENCE"; }
 
 # ── 가짜 플러그인 루트 + 문서 ────────────────────────────────────────────────
 PR="$SCRATCH/plugin"; mkdir -p "$PR/scripts"
-for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py; do
+for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py nofollow_write.py; do
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
 ln -s "$ROOT/plugins/spec-distill/scripts/build_brief_bundle.py" "$PR/scripts/build_brief_bundle.py"
@@ -510,16 +510,16 @@ bundle_fail() {   # bundle_fail <라벨> <sid> <script>
 }
 bundle_fail "평상시" rb41bndf "$SCRATCH/b-bundle.sh"
 bundle_fail "errexit" rb42bnde "$SCRATCH/b-bundle-e.sh"
-# 잠긴 번들 — 직전 번들 파일이 쓰기 불가면 `> "$BUNDLE"` 리다이렉트 자체가 실패해(rc 1) 절단도
-# 일어나지 않는다. 이때 직전 번들을 치우는 것은 실패 분기의 명시적 정리 하나뿐이다(디렉토리 권한으로 지운다).
+# 잠긴 번들 — 직전 번들 파일이 쓰기 불가여도 writer 는 그 파일에 쓰지 않고 옆 임시 파일을 이름 바꿔
+# 새 번들로 놓는다(폴더 쓰기 권한으로). 라운드는 그대로 나아가고 직전 번들의 글은 남지 않는다.
 at="$(where rb43bndk "$DOC_B")"; mkdir -p "$at"; b="$at/brief-bundle.md"
 printf 'bundle from the previous round — %s\n' "$OLD" > "$b"; chmod 444 "$b"
 rc=0; run_bundle rb43bndk "$SCRATCH/b-bundle.sh" "$AUD_B" || rc=$?
 [ -e "$b" ] && chmod 644 "$b"
-if [ "$rc" != "0" ] && ! grep -q "$OLD" "$b" 2>/dev/null; then
-  ok "B(잠긴 번들): 리다이렉트가 실패한 라운드도 멈추고(rc $rc) 직전 번들을 치운다 ($(state_of "$b"))"
+if [ "$rc" = "0" ] && ! grep -q "$OLD" "$b" 2>/dev/null && grep -qF '둘째 발화' "$b" 2>/dev/null; then
+  ok "B(잠긴 번들): writer 가 이름을 바꿔 새 번들을 놓는다 — rc 0 · 직전 번들의 글 없음 ($(state_of "$b"))"
 else
-  no "B(잠긴 번들): rc=$rc 로 끝났거나 직전 번들이 남았다($(state_of "$b")) — 다음 셸의 fence 가 그것을 이번 번들로 codex 에 넘긴다"
+  no "B(잠긴 번들): rc=$rc 이거나 직전 번들이 남았거나 새 번들이 없다($(state_of "$b")) — 다음 셸의 fence 가 그것을 이번 번들로 codex 에 넘긴다"
 fi
 # 그 뒤 같은 자리에서 fence 가 돈다면 codex 를 건너뛰어야 한다 — 없는 번들로 러너를 부르지 않는다.
 fire_at="$(where rb41bndf "$DOC_B")"

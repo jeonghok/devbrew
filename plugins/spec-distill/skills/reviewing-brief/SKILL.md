@@ -59,7 +59,7 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=$?
 ```
@@ -109,10 +109,10 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
-python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component <a> --axis <b> --status <c> --reason "<r>" \
-  || echo "- (state 기록 실패) component=<a> axis=<b> status=<c> reason=<r>" >> "$DEGRADE_FALLBACK_FILE"
+python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component "<a>" --axis "<b>" --status "<c>" --reason "<r>" \
+  || printf '%s\n' "- (state 기록 실패) component=<a> axis=<b> status=<c> reason=<r>" | python3 "$PR/scripts/nofollow_write.py" append --out "$DEGRADE_FALLBACK_FILE"
 ```
 
 ### 표지와 원장 열기 — 라운드마다 선결 앞
@@ -203,12 +203,12 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
   rm -f "$BUNDLE" 2>/dev/null || true
-  if [ -e "$BUNDLE" ]; then : > "$BUNDLE" 2>/dev/null || true; fi
+  if [ -e "$BUNDLE" ]; then python3 "$PR/scripts/nofollow_write.py" empty --out "$BUNDLE" 2>/dev/null || true; fi
   [ -s "$BUNDLE" ] || return 0
   echo "[spec-distill] 직전 라운드 번들을 지우지도 비우지도 못했다: $BUNDLE — 남아 있는 한 codex 게이트가 그것을 이번 번들로 넘긴다. 이 라운드는 멈춘다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   return 1
@@ -275,12 +275,12 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 drop_bundle() {   # 직전 라운드 번들 — 지운다, 못 지우면 0바이트로 절단, 둘 다 못 하면 공시하고 rc 1
   [ -n "${BUNDLE:-}" ] && [ -e "$BUNDLE" ] || return 0
   rm -f "$BUNDLE" 2>/dev/null || true
-  if [ -e "$BUNDLE" ]; then : > "$BUNDLE" 2>/dev/null || true; fi
+  if [ -e "$BUNDLE" ]; then python3 "$PR/scripts/nofollow_write.py" empty --out "$BUNDLE" 2>/dev/null || true; fi
   [ -s "$BUNDLE" ] || return 0
   echo "[spec-distill] 직전 라운드 번들을 지우지도 비우지도 못했다: $BUNDLE — 남아 있는 한 codex 게이트가 그것을 이번 번들로 넘긴다. 이 라운드는 멈춘다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   return 1
@@ -292,7 +292,7 @@ if [ -z "${STATE_DIR:-}" ] || [ -z "${harness_sid:-}" ] || ! mkdir -p "$STATE_DI
   echo "[spec-distill] 엔진 상태 디렉토리 없음 — ${why}. 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
   exit 1
 fi
-blob_rc=0; python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE" || blob_rc=$?
+blob_rc=0; python3 "$PR/scripts/nofollow_write.py" run --out "$BUNDLE" -- python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" || blob_rc=$?
 if [ "$blob_rc" -ne 0 ] && [ "$blob_rc" -ne 3 ]; then
   drop_bundle || true
   echo "[spec-distill] 번들 조립 실패(rc $blob_rc) — 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
@@ -366,7 +366,7 @@ residue_unclear=0; residue_left=""
 neutralise() {   # `$NEUTRALISE_TARGET` 을 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
   rm -f "$NEUTRALISE_TARGET" 2>/dev/null || true
   if [ -e "$NEUTRALISE_TARGET" ]; then
-    : > "$NEUTRALISE_TARGET" 2>/dev/null || true
+    python3 "$SD/scripts/nofollow_write.py" empty --out "$NEUTRALISE_TARGET" 2>/dev/null || true
     if [ -s "$NEUTRALISE_TARGET" ]; then return 1; fi
   fi
   return 0
@@ -436,7 +436,7 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 prof_rc=0; PROFILE_TEXT="$(cat "$PROFILE")" || prof_rc=$?
@@ -449,7 +449,7 @@ if [ "$prof_rc" -ne 0 ] || [ -z "$PROFILE_TEXT" ]; then
     echo "[spec-distill] critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패(PAYLOAD='${PAYLOAD:-}' · harness_sid='${harness_sid:-}' · STATE_DIR='${STATE_DIR:-}'). PAYLOAD 는 이 펜스와 같은 Bash 호출에서 대입한다. 5단계는 라운드 시작보다 오래된 critic 파일을 부재로 읽는다(critic_predates_round)." >&2
   fi
   python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis all --status unavailable --reason "프로필 내용 판독 불가(cat rc $prof_rc) — 탐지 dispatch 안 함" >&2 \
-    || echo "- (state 기록 실패) component=critic axis=all status=unavailable reason=프로필 내용 판독 불가(cat rc $prof_rc)" >> "$DEGRADE_FALLBACK_FILE"
+    || printf '%s\n' "- (state 기록 실패) component=critic axis=all status=unavailable reason=프로필 내용 판독 불가(cat rc $prof_rc)" | python3 "$PR/scripts/nofollow_write.py" append --out "$DEGRADE_FALLBACK_FILE"
   exit 1
 fi
 # frontmatter 의 `must_catch:` 줄(엔진 라우팅 키)은 리뷰어에게 싣지 않는다 — 막는 축을 아는 리뷰어는 category 로 차단 여부를 조종할 수 있다.
@@ -477,7 +477,7 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 pc_rc=0; PJ="$(python3 "$PR/scripts/docreview_state.py" profile-check "$PROFILE")" || pc_rc=$?
@@ -487,7 +487,7 @@ if [ "$pc_rc" -eq 0 ]; then
 fi
 record_web() {   # 웹 없는 사본으로 내려간 라운드(사유 `$WEB_REASON`) — degrade 원장, 못 쓰면 두 번째 채널
   python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis direction --status degraded --reason "$WEB_REASON" \
-    || echo "- (state 기록 실패) component=critic axis=direction status=degraded reason=$WEB_REASON" >> "$DEGRADE_FALLBACK_FILE"
+    || printf '%s\n' "- (state 기록 실패) component=critic axis=direction status=degraded reason=$WEB_REASON" | python3 "$PR/scripts/nofollow_write.py" append --out "$DEGRADE_FALLBACK_FILE"
 }
 CRITIC_AGENT="spec-distill:doc-critic"
 if [ -z "$PROFILE_WEB" ]; then
@@ -635,7 +635,7 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
 DEGRADE_FALLBACK_FILE="${STATE_DIR:+$STATE_DIR/brief-degrade-fallback.txt}"   # 원장 자리를 만들지 않는다 — 원장 열기 전이면 아래 줄이 임시 폴더로 보낸다
-touch "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
+python3 "$PR/scripts/nofollow_write.py" append --out "${DEGRADE_FALLBACK_FILE:-/nonexistent/brief-degrade}" </dev/null 2>/dev/null || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 BUNDLE="${STATE_DIR:+$STATE_DIR/brief-bundle.md}"
 blob_rc=0; BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")" || blob_rc=$?
 ```

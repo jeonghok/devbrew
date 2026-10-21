@@ -101,7 +101,8 @@ mkdir -p "$PR/scripts"
 cp "$ROOT/plugins/spec-distill/scripts/state_path.py"        "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/detect_codex.sh"      "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/codex-killswitch.conf" "$PR/scripts/"
-cp -L "$ROOT/plugins/spec-distill/scripts/docreview_state.py" "$ROOT/plugins/spec-distill/scripts/docreview_config.py" "$PR/scripts/"
+cp -L "$ROOT/plugins/spec-distill/scripts/docreview_state.py" "$ROOT/plugins/spec-distill/scripts/docreview_config.py" \
+  "$ROOT/plugins/spec-distill/scripts/nofollow_write.py" "$PR/scripts/"
 ln -s "$ROOT/plugins/spec-distill/references" "$PR/references"
 DETECTOR="$PR/scripts/detect_codex.sh"
 # dir_of <sid> <doc> → 그 셀(홈)·문서의 엔진 상태 디렉토리. 펜스가 쓰는 도출과 같은 한 줄이다.
