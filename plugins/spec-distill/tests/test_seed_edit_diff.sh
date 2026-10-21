@@ -188,7 +188,8 @@ python3 "$X" accept "$RB" "$RS" > /dev/null
 
 # ── 변이 — init 의 AC6b 보호(base.exists 검사)를 지우면 재-init 뒤 편집이
 #    실제로 사라진다 ─────────────────────────────────────────────────────────
-MUT_STATUS="$(python3 - "$X" "$TMP/mut.py" <<'PY'
+mkdir -p "$TMP/mutdir" && cp "$(dirname "$X")/nofollow_write.py" "$TMP/mutdir/nofollow_write.py"   # 변이 사본이 형제 모듈을 import 한다
+MUT_STATUS="$(python3 - "$X" "$TMP/mutdir/seed_edit_diff.py" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 needle = "if base.exists():"
@@ -200,9 +201,9 @@ assert_eq "$MUT_STATUS" "MUTATED" "변이: 니들이 소스에 있다 — 없으
 
 MB="$TMP/mb.md"; MS="$TMP/ms.md"
 printf 'p 첫 줄\nq 둘째 줄\n' > "$MS"
-python3 "$TMP/mut.py" init "$MB" "$MS" > /dev/null
+python3 "$TMP/mutdir/seed_edit_diff.py" init "$MB" "$MS" > /dev/null
 printf 'p 첫 줄\nq 둘째 줄을 고쳤다\n' > "$MS"
-python3 "$TMP/mut.py" init "$MB" "$MS" > /dev/null
+python3 "$TMP/mutdir/seed_edit_diff.py" init "$MB" "$MS" > /dev/null
 python3 "$X" hunks "$MB" "$MS" > "$TMP/hmut.json"
 assert_eq "$(j "$TMP/hmut.json" 'd["empty"]')" "True" "변이: init 보호를 지우면 재-init 뒤 편집이 사라진다(hunks 0) — AC6b 단언에 이빨이 있다"
 
