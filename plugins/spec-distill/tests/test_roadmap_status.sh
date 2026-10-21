@@ -399,7 +399,7 @@ import ast, os, sys
 WRITE_ATTRS = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "rename", "replace",
                "touch", "chmod", "remove", "makedirs", "rmtree", "symlink_to", "system", "popen"}
 NET_MODS = {"socket", "urllib", "http", "requests", "ftplib", "smtplib", "shutil"}
-READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"}
+READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep", "ls-tree"}
 LOCAL = set()
 if os.environ.get("LOCAL_DIR"):
     LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}

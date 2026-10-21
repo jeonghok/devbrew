@@ -7,6 +7,16 @@
 """
 from __future__ import annotations
 
+import argparse
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import roadmap_model as _rm  # noqa: E402
+
 SPECS_DIR = "docs/superpowers/specs/"
 PLANS_DIR = "docs/superpowers/plans/"
 SDD_WORKSPACE = ".superpowers/sdd/"
@@ -129,7 +139,19 @@ def strict_frontmatter(text: str, where: str) -> dict:
         key = key.strip()
         if key in out:
             raise SettingsError("duplicate_key", where, "%s: 같은 키가 둘이다: %s" % (where, key))
-        if not raw.strip().startswith(("\"", "'")) and " #" in raw:
+        value = raw.strip()
+        if value[:1] in ("\"", "'"):
+            close = value.find(value[0], 1)
+            if close < 0:
+                raise SettingsError("unreadable", where, "%s: %s 의 따옴표가 닫히지 않았다" % (where, key))
+            rest = value[close + 1:]
+            if rest and re.match(r"\s+#", rest):
+                raise SettingsError("unquoted_hash", where, "%s: %s 의 따옴표 뒤에 주석(`#`)이 있다 — 주석을 지우거나 따옴표 안에 넣는다"
+                                    % (where, key))
+            if rest:
+                raise SettingsError("unreadable", where, "%s: %s 의 따옴표 뒤에 글자가 더 있다 — 값 전체를 따옴표로 감싼다"
+                                    % (where, key))
+        elif re.search(r"\s#", raw):
             raise SettingsError("unquoted_hash", where, "%s: %s 의 값에 따옴표 없는 ` #` 가 있다 — 값을 따옴표로 감싼다" % (where, key))
         out[key] = _unquote(raw)
     raise SettingsError("unreadable", where, "%s: 머리말이 닫히지 않았다" % where)
@@ -153,7 +175,7 @@ def check_layer(meta: dict, layer: str) -> None:
         raise SettingsError("unknown_key", layer, "%s 층에 모르는 키가 있다: %s" % (layer, key))
 
 
-def merge_layers(roadmap, repo, repo_label, machine, notices: list) -> dict:
+def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_label: str = "기본값") -> dict:
     """로드맵 > 레포 설정 > 기계 상태 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
     layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), ("기계 상태(임시)", "machine", machine))
@@ -170,7 +192,7 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list) -> dict:
         usable.append((label, meta))
     for key in KEYS:
         out["values"][key] = _DEFAULTS[key]
-        out["sources"][key] = "기본값"
+        out["sources"][key] = default_label
         for label, meta in usable:
             if key not in meta:
                 continue
@@ -198,3 +220,210 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list) -> dict:
                     out["errors"].append("레포 설정 %s 값이 비었다" % key)
             break
     return out
+
+
+_NO_REF_LABEL = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
+_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "cat-file"})
+
+
+def _git(cwd: str, *args: str, where: str = "repo") -> tuple:
+    """(rc, stdout 바이트). 5초 안에 답이 없거나 git 을 못 부르면 SettingsError — 「없음」으로 읽지 않는다."""
+    if not args or args[0] not in GIT_ALLOWED:
+        raise ValueError("허용 밖 git 하위 명령: %r" % (args[:1],))
+    env = dict(os.environ, **_GIT_ENV)
+    try:
+        proc = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=cwd, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SettingsError("unreadable", where, "git 을 부르지 못했다(%s) — git 이 있는지, 레포 안에서 불렀는지 확인한다"
+                            % type(exc).__name__)
+    return proc.returncode, proc.stdout
+
+
+def _toplevel(cwd: str) -> str:
+    rc, out = _git(cwd, "rev-parse", "--show-toplevel")
+    top = out.decode("utf-8", "replace").strip()
+    if rc != 0 or not top:
+        raise SettingsError("unreadable", "repo", "git 레포가 아니다: %s — 레포 안에서 부르거나 --root 로 레포를 준다" % cwd)
+    return top
+
+
+def _default_commit(top: str):
+    """기본 ref 가 가리키는 커밋, 없으면 None."""
+    rc, out = _git(top, "rev-parse", "--verify", "--quiet", _rm.DEFAULT_REF + "^{commit}")
+    sha = out.decode("ascii", "replace").strip()
+    return sha if rc == 0 and sha else None
+
+
+def _read_blob(top: str, commit: str, path: str, where: str):
+    """기본 ref 판의 파일 내용(문자열), 파일이 없으면 None. 일반 파일이 아니면 · LFS 포인터면 · UTF-8 이 아니면 멈춘다."""
+    rc, out = _git(top, "ls-tree", "-z", commit, "--", path, where=where)
+    if rc != 0:
+        raise SettingsError("unreadable", where, "기본 브랜치에서 %s 를 찾지 못했다(git ls-tree 실패)" % path)
+    entry = out.split(b"\0")[0].decode("utf-8", "replace")
+    if not entry:
+        return None
+    mode, _type, sha = entry.split("\t", 1)[0].split(" ")
+    if mode != "100644":
+        raise SettingsError("not_regular_file", where, "%s 가 기본 브랜치에서 일반 파일이 아니다(mode %s) — 링크가 아닌 일반 파일로 커밋한다"
+                            % (path, mode))
+    rc, blob = _git(top, "cat-file", "blob", sha, where=where)
+    if rc != 0:
+        raise SettingsError("unreadable", where, "기본 브랜치의 %s 를 읽지 못했다(git cat-file 실패)" % path)
+    if blob.split(b"\n", 1)[0].startswith(b"version https://git-lfs"):
+        raise SettingsError("lfs_pointer", where, "%s 가 기본 브랜치에서 LFS 포인터다 — LFS 밖의 일반 파일로 커밋한다" % path)
+    try:
+        return blob.decode("utf-8")
+    except UnicodeDecodeError:
+        raise SettingsError("unreadable", where, "%s 가 UTF-8 글이 아니다 — UTF-8 로 저장해 커밋한다" % path)
+
+
+def read_repo_file(cwd: str) -> tuple:
+    """(레포 층, 출처 라벨, 알림). 레포 설정 파일은 기본 ref 판에서 읽는다 — 작업 트리의 판은 쓰지 않는다.
+    기본 ref 가 없으면 (None, None, [알림]); 기본 ref 에 파일이 없으면 (None, 라벨, 알림)."""
+    top = _toplevel(cwd)
+    in_worktree = os.path.lexists(os.path.join(top, SETTINGS_FILE))
+    commit = _default_commit(top)
+    if commit is None:
+        notice = "기본 브랜치를 알 수 없어(origin/HEAD 없음) 레포 설정 파일을 읽지 못하고 기본값을 쓴다"
+        if in_worktree:
+            notice = "[주의] " + notice + " — 작업 트리의 %s 는 쓰지 않았다" % SETTINGS_FILE
+        return None, None, [notice + ". `git remote set-head origin --auto` 로 기본 브랜치를 정한다"]
+    label = "레포 설정@" + commit[:8]
+    text = _read_blob(top, commit, SETTINGS_FILE, "repo")
+    if text is None:
+        notices = []
+        if in_worktree:
+            notices.append("레포 설정 파일(%s)이 아직 기본 브랜치에 없다 — 기본값을 쓴다" % SETTINGS_FILE)
+        return None, label, notices
+    return strict_frontmatter(text, "repo"), label, []
+
+
+def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, machine_reader=None) -> dict:
+    """네 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다."""
+    repo, label, notices = read_repo_file(cwd)
+    roadmap_meta = machine = None
+    if roadmap is None:
+        notices.append("로드맵 없음 — 기계 상태 층 건너뜀")
+    else:
+        if roadmap_text is None:
+            top = _toplevel(cwd)
+            commit = _default_commit(top)
+            if commit is None:
+                raise SettingsError("unreadable", "roadmap", _rm.NO_DEFAULT)
+            roadmap_text = _read_blob(top, commit, roadmap, "roadmap")
+            if roadmap_text is None:
+                raise SettingsError("unreadable", "roadmap", "로드맵이 기본 브랜치에 없다: %s — 로드맵을 머지한 뒤 다시 부른다" % roadmap)
+        roadmap_meta = strict_frontmatter(roadmap_text, "roadmap")
+        if machine_reader is None:
+            notices.append("기계 상태 층 건너뜀 — 읽는 함수 없음")
+        else:
+            try:
+                machine = machine_reader(roadmap)
+            except SettingsError:
+                raise
+            except (OSError, ValueError) as exc:
+                raise SettingsError("unreadable", "machine", "기계 상태의 레포 설정을 읽지 못했다(%s)" % exc)
+    return merge_layers(roadmap_meta, repo, label, machine, notices,
+                        default_label=_NO_REF_LABEL if label is None else "기본값")
+
+
+def _repo_relative(top: str, base: str, path: str):
+    """경로 인자 → 레포 상대 경로, 레포 밖이면 None. 상대 경로는 base 기준, 절대 경로는 레포 루트(pwd -P) 기준."""
+    top_real = os.path.realpath(top)
+    if os.path.isabs(path):
+        full = os.path.normpath(path)
+        given = os.path.normpath(os.path.abspath(base))
+        if full.startswith(given + os.sep):
+            full = os.path.realpath(base) + full[len(given):]
+    else:
+        full = os.path.normpath(os.path.join(os.path.realpath(base), path))
+    if not full.startswith(top_real + os.sep):
+        return None
+    return full[len(top_real) + 1:]
+
+
+def _case_mismatch(top: str, rel: str):
+    """디스크에 있는 경로 성분의 실제 이름이 대소문자만 다르면 (인자 성분, 실제 이름), 아니면 None."""
+    cur = os.path.realpath(top)
+    for part in rel.split("/"):
+        try:
+            names = os.listdir(cur)
+        except OSError:
+            return None
+        if part in names:
+            cur = os.path.join(cur, part)
+            continue
+        same = [n for n in names if n.casefold() == part.casefold()]
+        return (part, same[0]) if same else None
+    return None
+
+
+def judge_path(key: str, folder: str, path: str, base: str) -> str | None:
+    """경로의 부모 폴더가 그 키의 폴더와 글자까지 같으면 None, 아니면 거부 사유 한 줄."""
+    top = _toplevel(base)
+    rel = _repo_relative(top, base, path)
+    if rel is None:
+        return "레포 밖 경로라 받지 않았다: %s — 레포(%s) 안의 경로를 준다" % (path, top)
+    parent = os.path.dirname(rel) + "/"
+    if parent != folder:
+        if parent.casefold() == folder.casefold():
+            return "대소문자만 다른 경로라 받지 않았다: %s — %s 값(%s)의 글자 그대로 쓴다" % (rel, key, folder)
+        return "부모 폴더가 다르다: %s 의 부모는 %s 인데 %s 는 %s 다 — %s 바로 아래 경로를 준다" % (rel, parent, key, folder, folder)
+    bad = _case_mismatch(top, rel)
+    if bad:
+        return "대소문자만 다른 경로라 받지 않았다: 인자는 %s 인데 디스크의 실제 이름은 %s 다 — 디스크의 이름에 맞춘다" % bad
+    return None
+
+
+def _say(line: str) -> None:
+    print("[spec-distill] " + line, file=sys.stderr)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="repo_defaults.py")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p_get = sub.add_parser("get")
+    p_get.add_argument("key", choices=KEYS)
+    p_get.add_argument("--roadmap")
+    p_get.add_argument("--root")
+    p_chk = sub.add_parser("check-path")
+    p_chk.add_argument("key", choices=_FOLDER_KEYS)
+    p_chk.add_argument("path")
+    p_chk.add_argument("--root")
+    args = ap.parse_args(argv)
+    base = args.root or os.getcwd()
+    try:
+        roadmap = getattr(args, "roadmap", None)
+        if roadmap is not None:
+            roadmap = _repo_relative(_toplevel(base), base, roadmap)
+            if roadmap is None:
+                _say("레포 밖 경로라 로드맵으로 받지 않았다: %s — 레포 안의 로드맵을 준다" % args.roadmap)
+                return 3
+        result = resolve(base, roadmap=roadmap)
+        for line in result["notices"] + result["warnings"]:
+            _say(line)
+        if result["errors"]:
+            for line in result["errors"]:
+                _say(line)
+            return 3
+        _say("%s 출처: %s" % (args.key, result["sources"][args.key]))
+        value = result["values"][args.key]
+        if args.cmd == "check-path":
+            why = judge_path(args.key, value, args.path, base)
+            if why:
+                _say(why)
+                return 3
+            return 0
+    except SettingsError as exc:
+        _say(str(exc))
+        return 3
+    if value is None:
+        return 1
+    print(value)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

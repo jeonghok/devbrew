@@ -124,6 +124,17 @@ class StrictFrontmatter(unittest.TestCase):
         self.assertEqual(rd.strict_frontmatter('---\ntest_command: "pytest -k \'a#b\' # x"\n---\n', "repo")["test_command"],
                          "pytest -k 'a#b' # x")
 
+    def test_quoted_value_with_trailing_text_is_error(self):
+        self.assertEqual(self.kind('---\ntest_command: "pytest" # x\n---\n'), "unquoted_hash")
+        self.assertEqual(self.kind("---\ntest_command: 'pytest'\t# x\n---\n"), "unquoted_hash")
+        self.assertEqual(self.kind('---\ntest_command: "pytest" -k a\n---\n'), "unreadable")
+        self.assertEqual(self.kind('---\ntest_command: "pytest"#x\n---\n'), "unreadable")
+        self.assertEqual(self.kind('---\ntest_command: "pytest\n---\n'), "unreadable")
+
+    def test_hash_after_any_whitespace_is_error(self):
+        self.assertEqual(self.kind("---\ntest_command: pytest\t# 빠른 것\n---\n"), "unquoted_hash")
+        self.assertEqual(rd.strict_frontmatter("---\ntest_command: a#b\n---\n", "repo")["test_command"], "a#b")
+
     def test_line_rules_skip_indented_list_and_comment_lines(self):
         m = rd.strict_frontmatter("---\n# c\nspecs_dir: s/\n  x: y\n- item\n---\n본문 a: b\n", "repo")
         self.assertEqual(m, {"specs_dir": "s/"})

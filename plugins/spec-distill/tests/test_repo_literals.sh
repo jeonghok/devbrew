@@ -14,8 +14,9 @@ T="$(mktemp -d)" || exit 1
 trap 'rm -rf "$T"' EXIT
 TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md"
 scan() {  # scan <파일...> — 걸린 줄을 `<파일>:<줄>: <종류>` 로
-  PYTHONIOENCODING=utf-8 python3 -I - "${SCAN_DEFS:-$SD/scripts}" "$@" <<'PY'
-import re, sys
+  SCAN_DEPS="$SD/scripts" PYTHONIOENCODING=utf-8 python3 -I - "${SCAN_DEFS:-$SD/scripts}" "$@" <<'PY'
+import os, re, sys
+sys.path.insert(0, os.environ["SCAN_DEPS"])  # 사본 모듈이 import 하는 이웃 모듈(roadmap_model 등)
 sys.path.insert(0, sys.argv[1])
 import repo_defaults as R
 consts = sorted(v for k, v in vars(R).items() if k.isupper() and isinstance(v, str) and "/" in v)
