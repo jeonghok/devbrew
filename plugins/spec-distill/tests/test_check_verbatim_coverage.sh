@@ -592,8 +592,11 @@ out="$(vc)"; rc=$?
 { [[ $rc -eq 1 ]] && [[ "$(nc_of "$out")" == '["S2"]' ]]; } \
   && ok "vc_irrelevant_verbatim_rc1: S2 verbatim → rc 1 · not_chosen [S2]" || no "vc_irrelevant_verbatim_rc1: rc=$rc $out"
 adv="$(tool field advisories <<<"$out")"
-{ grep -qF 'S2' <<<"$adv" && grep -qF '마무리 단계' <<<"$adv" && grep -qF '외부 선례 무관' <<<"$adv"; } \
-  && ok "vc_irrelevant_verbatim_rc1: advisory 가 S2 · 종류 · 「마무리 단계」 를 말한다" || no "vc_irrelevant_verbatim_rc1: advisory: $adv"
+adv_ok=1
+for ph in 'S2(외부 선례 무관)' '고른 선택지로 기록되지 않았다' '마무리 단계' '그 질문을 선택지로 다시 묻는다' '다른 세션' '이어 갈 수 없다'; do
+  grep -qF -- "$ph" <<<"$adv" || { adv_ok=0; no "vc_irrelevant_verbatim_rc1: advisory 에 「${ph}」 가 없다: $adv"; }
+done
+[[ $adv_ok -eq 1 ]] && ok "vc_irrelevant_verbatim_rc1: advisory 가 S2 · 종류 · 고른 선택지 아님 · 마무리 단계가 다시 묻는다 · 다른 세션이면 이어 갈 수 없다를 말한다"
 assert_eq "$(tool field missing_ids <<<"$out")|$(tool field not_contained <<<"$out")|$(tool field unknown_ids <<<"$out")" "[]|[]|[]" \
   "vc_irrelevant_verbatim_rc1: rc 1 의 이유가 원문 완전성 키가 아니다"
 
