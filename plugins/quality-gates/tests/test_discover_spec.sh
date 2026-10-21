@@ -319,6 +319,18 @@ for suffix in "" "#k"; do
   assert_file_grep "$T/intent.md" '^- new$' "리포 안 심볼릭 링크$suffix — 대상 본문을 읽는다"
 done
 
+# 9 — --base 없이 기본 브랜치를 못 찾으면 고치는 법을 자기 이름으로 stderr 에 낸다(R 에는 origin/HEAD 가 없다).
+NODEF="discover-spec.sh: 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다"
+err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T/intent.md" 2>&1 >/dev/null )"
+assert_contains "$err" "$NODEF" "origin/HEAD 없음 → stderr 에 set-head 안내"
+err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T/intent.md" --base "$BASE" 2>&1 >/dev/null )"
+assert_not_contains "$err" "set-head" "--base 를 주면 기준선을 풀지 않아 안내가 없다(양의 짝)"
+git -C "$R" update-ref refs/remotes/origin/main "$BASE"
+git -C "$R" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+err="$( cd "$R" && PATH="$B:$PATH" GH_LOG="$T/gh.log" bash "$D" --intent-out "$T/intent.md" 2>&1 >/dev/null )"
+assert_not_contains "$err" "set-head" "--base 없이도 origin/HEAD 가 있으면 안내가 없다(부재 짝)"
+git -C "$R" symbolic-ref --delete refs/remotes/origin/HEAD; git -C "$R" update-ref -d refs/remotes/origin/main
+
 # 8 — 잘못된 호출
 ( cd "$R" && bash "$D" >/dev/null 2>&1 ); assert_eq "$?" "2" "--intent-out 없으면 exit 2"
 ( cd "$R" && bash "$D" --intent-out "$T/없는/디렉토리/x.md" >/dev/null 2>&1 ); assert_eq "$?" "3" "의도 파일에 쓸 수 없으면 exit 3"

@@ -130,7 +130,9 @@ wt_block="$(awk '/^## 워크트리 — 진입 직후/{f=1;print;next} /^## /{f=0
 wt_flat="$(tr '\n' ' ' <<<"$wt_block" | tr -s ' ')"
 { [[ -n "$wt_block" ]] && grep -qF 'AskUserQuestion(' <<<"$wt_block"; } && ok "AC12: 워크트리 절 + 단독 AskUserQuestion" || no "AC12: 워크트리 절/질문 부재"
 grep -qE 'audit[^.]{0,20}첫 write[^.]{0,10}전|첫 write 전' <<<"$wt_flat" && ok "AC12: audit 첫 write 전에 묻는다" || no "AC12: 시점(첫 write 전) 부재"
-grep -qF 'feature/<kebab-topic>' <<<"$wt_block" && ok "AC12: feature/<kebab-topic> 이름" || no "AC12: 브랜치 이름 규약 부재"
+grep -qF '<접두><kebab-topic>' <<<"$wt_block" && ok "AC12: <접두><kebab-topic> 이름" || no "AC12: 브랜치 이름 규약 부재"
+grep -qF 'repo_defaults.py" get branch_prefix' <<<"${wt_block%%AskUserQuestion(*}" && ok "AC12: 브랜치 접두는 질문 앞에 레포 설정에서 얻는다" || no "AC12: 질문 앞에 브랜치 접두를 얻는 줄이 없다"
+grep -qF 'feature/' <<<"$wt_block" && no "AC12: 워크트리 절에 브랜치 접두 글자(feature/)가 남았다" || ok "AC12: 워크트리 절에 브랜치 접두 글자가 없다"
 [[ "$(grep -cE '^[1-5]\. ' <<<"$wt_block")" -eq 5 ]] && ok "AC12: 5단계 절차" || no "AC12: 5단계가 아니다 ($(grep -cE '^[1-5]\. ' <<<"$wt_block"))"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE' <<<"$wt_block" && ok "AC12: kill switch 를 절이 본다" || no "AC12: 절에 kill switch 부재"
 # 수정 라운드 1: base-ref 풋건이 질문 «앞»에서 확인되고 질문 본문에 실리는가(질문 뒤에만
@@ -169,6 +171,23 @@ grep -qF '"$base"..HEAD' <<<"$rev_line" \
 grep -qF 'refs/remotes/origin/HEAD' <<<"$pre_q" \
   && ok "AC12: origin 의 기본 브랜치를 열거가 아니라 도출한다" \
   || no "AC12: origin 기본 브랜치 도출이 없다 — main 하드코딩은 다른 기본 브랜치 리포서 틀린다"
+# R8 AC9 · AC11 — base 펜스를 실제 저장소에서 돈다. origin/HEAD 가 없으면 main/master 로 대체하지 않고 「확인 못함」,
+# 로컬 브랜치 origin/main 이 있어도 base 는 origin/HEAD 의 전체 참조 이름에서 온다.
+base_fence="$(awk '/^```bash$/{c=1;b="";next} c&&/^```$/{c=0; if (index(b, "git rev-list --count")) {printf "%s", b; exit}; next} c{b=b $0 "\n"}' <<<"$pre_q")"
+grep -qF 'LOCAL_ONLY_NOTE=' <<<"$base_fence" && ok "R8(양성대조): base 펜스를 뽑았다" || no "R8(양성대조): base 펜스가 비었다 — 아래 칸이 공허하다"
+bsr="$(mktemp -d)"; [ -n "$bsr" ] && [ -d "$bsr" ] || { echo "mktemp 실패"; exit 1; }
+bsr="$(cd "$bsr" && pwd -P)"; [ -n "$bsr" ] && [ "$bsr" != "/" ] || { echo "mktemp 경로 해석 실패"; exit 1; }
+git init -q --bare -b main "$bsr/o.git"; git clone -q "$bsr/o.git" "$bsr/c" 2>/dev/null
+git -C "$bsr/c" config user.email t@t.t; git -C "$bsr/c" config user.name t
+git -C "$bsr/c" commit -q --allow-empty -m a; git -C "$bsr/c" push -q origin main 2>/dev/null
+git -C "$bsr/c" commit -q --allow-empty -m b
+git -C "$bsr/c" remote set-head origin -d >/dev/null 2>&1
+assert_contains "$(cd "$bsr/c" && bash -c "$base_fence" 2>&1)" "확인 못함" "R8 AC9: origin/HEAD 가 없으면 origin/main 이 있어도 「확인 못함」(main/master 대체 없음)"
+assert_contains "$(cd "$bsr/c" && bash -c "$base_fence" 2>&1)" "git remote set-head origin --auto" "R8 AC9: 「확인 못함」 줄이 기본 브랜치를 정하는 명령을 알린다"
+git -C "$bsr/c" remote set-head origin main >/dev/null 2>&1; git -C "$bsr/c" branch origin/main HEAD
+assert_eq "$(cd "$bsr/c" && bash -c "$base_fence" 2>/dev/null)" "origin/main 에 없는 커밋 1개 — 워크트리 기본 base 엔 안 들어온다" \
+  "R8 AC11: 로컬 브랜치 origin/main 이 있어도 base 는 origin/HEAD 의 전체 참조 이름에서 온다"
+rm -rf "$bsr"
 { grep -qF '실측한 것' <<<"$wt_block" && grep -qF '실측 밖' <<<"$wt_block"; } && ok "AC12: 단정 범위 문장이 잰 것/안 잰 것을 가른다" || no "AC12: 단정 범위 문장이 자기모순(모두 단정 안 함으로 읽힘)"
 grep -qF '워크트리 없음 —' <<<"$wt_block" && ok "AC12: 거절/부재 시 audit §5 문구" || no "AC12: 강등 문구 부재"
 grep -qE '(거절|부재|스위치)[^.]{0,60}seed[^.]{0,20}막지 않' <<<"$wt_flat" && ok "AC12: 어느 경우도 seed 작성을 막지 않는다" || no "AC12: 비차단 선언 부재"
@@ -192,11 +211,31 @@ mkdir -p "$cmr/docs/superpowers/interview"
 printf 'a\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.audit.md"
 printf 's\n' > "$cmr/docs/superpowers/interview/2026-10-15-t-interview.md"
 printf 'other\n' > "$cmr/other.txt"; git -C "$cmr" add -- other.txt
-( cd "$cmr" && AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
+( cd "$cmr" && SD="$ROOT/plugins/spec-distill" AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
     bash -c "${cm_block//<topic>/t}" ) >/dev/null 2>&1
 assert_eq "$(git -C "$cmr" show --name-only --format= HEAD | sort | tr '\n' ' ')" "docs/superpowers/interview/2026-10-15-t-interview.audit.md docs/superpowers/interview/2026-10-15-t-interview.md " "AC12: 커밋에는 seed · audit 둘만 든다"
 assert_eq "$(git -C "$cmr" diff --cached --name-only)" "other.txt" "AC12: 이미 stage 된 다른 파일은 stage 된 채로 남는다"
 rm -rf "$cmr"
+# 음의 짝(R8) — 기본 브랜치의 레포 설정이 다른 인터뷰 폴더를 정하면 check-path 가 거부하고, 한 셸로 돌려도 git 두 줄은 돌지 않는다.
+cmn="$(mktemp -d)"; [ -n "$cmn" ] && [ -d "$cmn" ] || { echo "mktemp 실패"; exit 1; }
+cmn="$(cd "$cmn" && pwd -P)"; [ -n "$cmn" ] && [ "$cmn" != "/" ] || { echo "mktemp 경로 해석 실패"; exit 1; }
+git init -q --bare -b trunk "$cmn/remote.git"; git init -q -b trunk "$cmn/w"
+git -C "$cmn/w" config user.email t@t.t; git -C "$cmn/w" config user.name t
+printf -- '---\ninterview_dir: notes/\n---\n' > "$cmn/w/.devbrew.md"
+git -C "$cmn/w" add -- .devbrew.md; git -C "$cmn/w" commit -q -m init
+git -C "$cmn/w" remote add origin "$cmn/remote.git"; git -C "$cmn/w" push -q origin trunk; git -C "$cmn/w" remote set-head origin --auto >/dev/null
+mkdir -p "$cmn/w/docs/superpowers/interview"
+printf 'a\n' > "$cmn/w/docs/superpowers/interview/2026-10-15-t-interview.audit.md"
+printf 's\n' > "$cmn/w/docs/superpowers/interview/2026-10-15-t-interview.md"
+head_before="$(git -C "$cmn/w" rev-parse HEAD)"
+cm_rc=0
+( cd "$cmn/w" && SD="$ROOT/plugins/spec-distill" AUDIT="docs/superpowers/interview/2026-10-15-t-interview.audit.md" SEED="docs/superpowers/interview/2026-10-15-t-interview.md" \
+    bash -c "${cm_block//<topic>/t}" ) >"$cmn/out" 2>&1 || cm_rc=$?
+assert_eq "$cm_rc" "1" "R8: 다른 인터뷰 폴더면 커밋 펜스가 check-path 에서 멈춘다(rc 1)"
+assert_contains "$(cat "$cmn/out")" "미커밋 — 위 사유를 고친 뒤 다시 돌린다" "R8: 멈출 때 미커밋 사유를 낸다"
+assert_eq "$(git -C "$cmn/w" rev-parse HEAD)" "$head_before" "R8: 거부되면 커밋이 생기지 않는다"
+assert_eq "$(git -C "$cmn/w" diff --cached --name-only)" "" "R8: 거부되면 아무것도 새로 stage 하지 않는다"
+rm -rf "$cmn"
 grep -qF 'SEED_DIR' <<<"$gate_block" && no "AC12: 커밋 펜스가 사라진 세션 폴더(SEED_DIR)를 쓴다" || ok "AC12: 커밋 펜스가 세션 폴더에 기대지 않는다"
 
 finish

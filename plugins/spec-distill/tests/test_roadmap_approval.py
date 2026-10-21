@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import control_plane as cp  # noqa: E402
+import repo_defaults as rd  # noqa: E402
 import roadmap_model as M  # noqa: E402
 import roadmap_status as rs  # noqa: E402
 
@@ -134,10 +135,13 @@ class OneDefaultRef(unittest.TestCase):
         self.assertIs(cp.DEFAULT_REF, M.DEFAULT_REF)
         self.assertIs(rs.NO_DEFAULT, M.NO_DEFAULT)
         self.assertIs(cp.NO_DEFAULT, M.NO_DEFAULT)
-        for name in ("roadmap_status.py", "control_plane.py"):
+        self.assertIs(rd._rm.DEFAULT_REF, M.DEFAULT_REF)
+        self.assertIs(rd._rm.NO_ORIGIN, M.NO_ORIGIN)
+        for name in ("roadmap_status.py", "control_plane.py", "repo_defaults.py"):
             text = (Path(rs.__file__).parent / name).read_text(encoding="utf-8")
             self.assertNotIn('DEFAULT_REF = "', text, name)
             self.assertNotIn("NO_DEFAULT = (", text, name)
+            self.assertNotIn("NO_ORIGIN = ", text, name)
 
 
 class MergedPrs(unittest.TestCase):

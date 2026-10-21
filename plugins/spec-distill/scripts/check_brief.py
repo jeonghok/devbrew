@@ -47,6 +47,7 @@ CLI subcommands (all print JSON):
   check_brief.py gate <payload>                → {"pass": bool, "failures": [...],
                                                     "advisories": [...]}
                                                  exit 0 if pass else 1 (advisories never flip this)
+                                                 stderr 첫 줄: `[spec-distill] 읽은 트리: 이 작업공간`
 """
 from __future__ import annotations
 
@@ -1660,7 +1661,11 @@ def _line_no(text: str, line: str) -> int:
     return _line_map(text).get(line, 0)
 
 
+READ_TREE_LINE = "[spec-distill] 읽은 트리: 이 작업공간"
+
+
 def gate(path: Path) -> int:
+    print(READ_TREE_LINE, file=sys.stderr)   # 표준 출력은 판정 JSON 하나로 둔다
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:

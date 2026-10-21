@@ -118,7 +118,7 @@ for f in "$RB" "$SR" "$FIN"; do
   [ "${n:-0}" -ge 1 ] && ok "root_lock(양의 짝): ${f##*/plugins/spec-distill/} 에 state-root-for 가 ${n}번" \
     || no "root_lock(양의 짝): ${f##*/plugins/spec-distill/} 에 state-root-for 가 없다"
 done
-n="$(grep -c 'state_path.py" state-root)' "$RF" || true)"
+n="$(grep -c 'state_path.py" state-root --ensure)" || ROOT=""' "$RF" || true)"
 assert_eq "$n" "1" "root_lock(양의 짝): RF 에 맨 state-root 호출이 하나 있다"
 
 # ── 끝에서 끝 — 원장 열기 · 결정 줄 펜스 (AC10) ──
@@ -147,6 +147,14 @@ count_line() { printf '%s\n' "$1" | grep -cxF -- "$2" || true; }
 mkdoc() { printf '# D\n\n## 결정 기록\n\n- B1 · 결정 · 2026-10-21 · 처음 — 「네」\n' > "$1"; }
 LO_NOTICE() { printf '[spec-distill] 리뷰 원장은 문서가 사는 레포(%s)의 것을 쓴다 — 지금 작업 폴더의 레포(%s)와 다르다.' "$1" "$2"; }
 
+note "== ensure_lock"
+for f in "$RB" "$SR"; do
+  n="$(fence "$f" ledger-open | grep -c 'state_path.py" state-root-for "[^"]*" --ensure)" || ROOT=""' || true)"
+  assert_eq "$n" "1" "ensure_lock: ${f##*/plugins/spec-distill/} 원장 열기 펜스가 --ensure 로 상태 루트를 보장한다"
+done
+bad="$(grep -n -e '--ensure.*|| true' "$RB" "$SR" "$RF" "$FIN" || true)"
+assert_eq "$bad" "" "ensure_lock: --ensure 의 rc 를 || true 로 삼키는 줄이 없다"
+
 note "== e2e_other_repo"
 DDOC="$A/docs/d-design.md"; mkdoc "$DDOC"
 run_fence "$B" sess-root0001 "spec_path='$DDOC'" "$(fence "$SR" ledger-open)"
@@ -160,6 +168,7 @@ run_fence "$B" sess-root0001 "spec_path='$DDOC'" "$(dl_fill "$DL1" '네')"
 assert_eq "$E_RC $(grep -cxF -- "- $DL1 — 「네」" "$DDOC")" "0 1" "e2e_other_repo: 결정 줄 펜스가 같은 원장으로 결정 줄 한 줄을 쓴다(rc 3 아님)"
 assert_contains "$E_OUT" "[spec-distill] 결정 줄은 문서가 사는 레포(${A})의 원장으로 쓴다 — 지금 작업 폴더의 레포(${B})와 다르다." "e2e_other_repo: 결정 줄 펜스의 레포 다름 줄은 그대로다"
 [ ! -e "$B/.claude" ] && ok "e2e_other_repo: B 에 상태 폴더가 생기지 않는다" || no "e2e_other_repo: B 에 상태 폴더가 생겼다"
+assert_eq "$(cat "$A/.claude/spec-distill/.gitignore" 2>/dev/null)" "*" "e2e_other_repo: 원장 열기가 문서 레포(A)의 상태 루트를 보장한다(.gitignore)"
 
 note "== e2e_same_repo_no_notice"
 SDOC="$A/docs/s-design.md"; mkdoc "$SDOC"
@@ -187,6 +196,19 @@ assert_eq "$(printf '%s\n' "$E_OUT" | tail -n 1)" "ledger-open: HELD" "e2e_rb_le
 assert_eq "$(cat "$(sdir_for "$A" "$BDOC")/reviewing-by" 2>/dev/null)" "sess-root0003" "e2e_rb_ledger_open: 표지가 A 의 원장 자리에 선다"
 assert_eq "$(count_line "$E_OUT" "$(LO_NOTICE "$A" "$B")")" "1" "e2e_rb_ledger_open: 공시 한 줄을 정확히 한 번 낸다"
 [ ! -e "$B/.claude" ] && ok "e2e_rb_ledger_open: B 에 상태 폴더가 생기지 않는다" || no "e2e_rb_ledger_open: B 에 상태 폴더가 생겼다"
+
+note "== e2e_tracked_stops"
+TR="$T/TR"; mkrepo "$TR"; mkdir -p "$TR/.claude/spec-distill"; echo t > "$TR/.claude/spec-distill/kept.md"; git -C "$TR" add -f .claude/spec-distill/kept.md
+TDOC="$TR/docs/t-design.md"; mkdoc "$TDOC"
+for pair in "SR:spec_path" "RB:PAYLOAD"; do
+  nm="${pair%%:*}"; var="${pair#*:}"
+  if [ "$nm" = SR ]; then f="$SR"; else f="$RB"; fi
+  run_fence "$B" sess-root0006 "$var='$TDOC'" "$(fence "$f" ledger-open)"
+  assert_eq "$E_RC|$(printf '%s\n' "$E_OUT" | tail -n 1)" "3|ledger-open: NO_DIR" "e2e_tracked_stops: $nm — 상태 루트 아래 추적 파일이면 원장 열기가 NO_DIR · rc 3"
+  assert_contains "$E_OUT" "상태 폴더 아래 파일이 이미 추적된다 — git rm --cached -r $TR/.claude/spec-distill 로 추적을 푼 뒤 다시 돈다" "e2e_tracked_stops: $nm — 고치는 법이 보인다"
+  assert_contains "$E_OUT" "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유)" "e2e_tracked_stops: $nm — 원장 열기가 상태 폴더 때문에 멈췄다고 댄다"
+done
+[ ! -e "$TR/.claude/spec-distill/.docreview" ] && ok "e2e_tracked_stops: 원장 자리를 만들지 않았다" || no "e2e_tracked_stops: 원장 자리가 생겼다"
 
 note "== e2e_outside_git"
 NDOC="$T/nogit/d-design.md"; mkdoc "$NDOC"

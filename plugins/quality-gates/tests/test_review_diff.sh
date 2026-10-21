@@ -71,9 +71,10 @@ case_session_includes_untracked() {
   assert_eq "$(field degraded "$OUT")" no "degraded: no"
   assert_eq "$(field files "$OUT")" 2 "files: 2"
   assert_eq "$(field filtered_files "$OUT")" 2 "filtered_files: 2"
-  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 11 "stdout 11줄"
   assert_eq "$(sed 's/:.*//' <<< "$OUT" | tr '\n' ' ')" \
-    "mode base head degraded files filtered_files excluded kept_model doc_paths_source self_state " "키 순서"
+    "mode base head degraded degraded_reason files filtered_files excluded kept_model doc_paths_source self_state " "키 순서"
+  assert_eq "$(field degraded_reason "$OUT")" - "degraded_reason: -"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "review-i1.self-state 는 있고 비어 있다" || no "review-i1.self-state 가 없거나 비지 않았다"
@@ -184,12 +185,35 @@ case_degraded_session() {
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(field degraded_reason "$OUT")" detached "degraded_reason: detached"
+  assert_file_absent "$ROOT/err" 'set-head' "detached 에는 기본 브랜치 안내가 없다"
   assert_eq "$(field self_state "$OUT")" - "self_state: -"
   [ -f "$D/review-i1.self-state" ] && ok "degraded 에도 self-state 파일을 쓴다" || no "self-state 파일 없음"
   assert_eq "$(field files "$OUT")" - "files: -"
   assert_eq "$(field filtered_files "$OUT")" - "filtered_files: -"
   [ -f "$D/review-i1.diff" ] && [ ! -s "$D/review-i1.diff" ] \
     && ok "review-i1.diff 는 비어 있다" || no "review-i1.diff 가 없거나 비지 않았다"
+}
+
+# origin/HEAD 가 없는 레포 — 기준선 사유와 review-diff: 로 시작하는 고치는 법 한 줄.
+case_no_default_branch_session() {
+  echo "[origin/HEAD 없음 — no-default-branch]"
+  mkfix
+  git -C "$R" remote set-head origin -d
+  echo 'x = 2' > "$R/src/a.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_eq "$(field degraded_reason "$OUT")" no-default-branch "degraded_reason: no-default-branch"
+  assert_eq "$(field files "$OUT")" - "files: -"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 11 "stdout 11줄"
+  assert_line "$ROOT/err" "review-diff: 기본 브랜치를 찾지 못해 리뷰 범위를 정하지 못했다 — git remote set-head origin --auto 로 고친다" \
+    "stderr 에 review-diff: 로 시작하는 set-head 안내 한 줄"
+  # 양의 짝 — set-head 로 고치면 degraded 가 아니고 안내도 없다.
+  git -C "$R" remote set-head origin --auto >/dev/null
+  rd --mode session
+  assert_eq "$(field degraded "$OUT")" no "set-head 뒤 degraded: no"
+  assert_file_absent "$ROOT/err" 'set-head' "set-head 뒤 안내 없음"
 }
 
 case_paths_mode() {
@@ -689,7 +713,7 @@ name" esc; esc="$R/esc$(printf '\033')x"
   [ ! -e "$fsm/RAN" ] && ok "중첩 레포의 core.fsmonitor 가 돌지 않았다" || no "중첩 레포의 core.fsmonitor 가 돌았다"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes (리뷰하지 못한 항목 — 인증을 막는다)"
-  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 11 "stdout 11줄"
   assert_eq "$(field files "$OUT")" 7 "files: 7 (new.py + 폴더 줄 여섯)"
   assert_eq "$(field filtered_files "$OUT")" 1 "filtered_files: 1 (new.py)"
   assert_file_grep "$D/review-i1.names" '^vendor/lib/$' "names 에 폴더 줄 vendor/lib/"
@@ -944,7 +968,7 @@ case_range_new_gitlink_degraded() {
   rd --mode range --scope-file "$F"
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
-  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 10 "stdout 10줄"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 11 "stdout 11줄"
   assert_line "$ROOT/err" "review-diff: 기준의 .gitmodules 에 선언되지 않은 gitlink vend ${GITLINK_TAIL}" "새 gitlink vend 를 알린다"
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/lib/b\.py$' "다른 변경은 그대로 리뷰한다"
   # 양의 짝 — gitlink 없는 범위는 degraded 아님
@@ -1108,6 +1132,7 @@ case_topic_uses_boundary_tree
 case_settings_change_falls_back
 case_filtered_empty
 case_degraded_session
+case_no_default_branch_session
 case_paths_mode
 case_no_ext_diff
 case_no_textconv

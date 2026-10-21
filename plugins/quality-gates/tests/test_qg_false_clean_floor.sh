@@ -54,6 +54,8 @@ mk_repo_feature_ahead() {
   git config user.email t@t.test; git config user.name tester
   git checkout -q -b main
   echo base > a.txt; git add a.txt; git commit -qm base
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   git checkout -q -b feature
   echo work >> a.txt; git commit -qam work
 }

@@ -1,28 +1,30 @@
 #!/usr/bin/env bash
 # resolve-baseline.sh — 공유 baseline resolution (design 2026-08-01 §5.2 R-init, AC4).
-# check-review-scope.sh v2.6.0→v2.7.0 3라운드 하드닝의 산물을 단일 모듈로 추출:
-# origin/HEAD → origin/main → origin/master → local main → local master 순 resolution
+# 기준 브랜치는 `refs/remotes/origin/HEAD` 가 가리키는 ref 하나다 — 다른 후보로 대신하지 않는다.
 # + merge-base + shallow/detached 감지.
 #
-# Output (stdout, 항상 6줄 — 소비자는 **키로** 파싱한다, 줄 번호가 아니라):
-#   base:         <display short-name | ->    사람에게 보여줄 이름
-#   base_ref:     <git-usable ref | ->        존재가 확인된 ref (remote-tracking일 수 있음)
-#   merge_base:   <full sha | ->              git merge-base <base_ref> HEAD
-#   degraded:     yes|no                      yes면 위 3키는 전부 '-'
-#   same_as_head: yes|no|-                    merge_base 가 HEAD 와 동일한가
-#   ahead:        <N | ->                     merge_base..HEAD 커밋 수
+# Output (stdout, 항상 7줄 — 소비자는 **키로** 파싱한다, 줄 번호가 아니라):
+#   base:            <display short-name | ->    사람에게 보여줄 이름(전체 이름에서 refs/remotes/origin/ 을 벗긴 것)
+#   base_ref:        <git-usable ref | ->        존재가 확인된 전체 ref (refs/remotes/origin/<base>)
+#   merge_base:      <full sha | ->              git merge-base <base_ref> HEAD
+#   degraded:        yes|no                      yes면 위 3키는 전부 '-'
+#   degraded_reason: -|no-default-branch|not-a-repo|no-head|detached|shallow|merge-base
+#                                                degraded: no 면 '-'
+#   same_as_head:    yes|no|-                    merge_base 가 HEAD 와 동일한가
+#   ahead:           <N | ->                     merge_base..HEAD 커밋 수
+#
+# no-default-branch 면 stderr 에 고치는 법 한 줄(`[resolve-baseline] …`)을 낸다.
 #
 # `same_as_head` / `ahead` 는 **차등 실행 가능성**을 실어 나른다 — `degraded` 와 별개
 # 키인 이유가 load-bearing 이다. merge_base == HEAD 는 두 가지로 생긴다:
 #
-#   (1) 정상 — `main` 위에서 커밋 없이 워킹트리만 고친 상태. Review 게이트의
+#   (1) 정상 — 기본 브랜치 위에서 커밋 없이 워킹트리만 고친 상태. Review 게이트의
 #       changes-exist floor 는 이 상태를 **정상으로 봐야 한다** (worktree_dirty 로
 #       변경을 잡는다). 여기서 degrade 하면 floor 가 통째로 꺼진다.
-#   (2) 변조 — base 후보 ref(`refs/remotes/origin/{HEAD,main,master}`,
-#       `refs/heads/{main,master}`)는 전부 **공유 common gitdir** 에 있고,
-#       `run` 이 실행하는 저장소 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다.
-#       base 를 HEAD 로 옮기면 기준선 트리가 리뷰 대상 코드 자체가 되어 모든 진짜
-#       회귀가 (fail,fail)=PRE_EXISTING 으로 접힌다.
+#   (2) 변조 — base ref(`refs/remotes/origin/HEAD` 와 그것이 가리키는 ref)는 **공유
+#       common gitdir** 에 있고, `run` 이 실행하는 저장소 코드가 호스트 권한으로
+#       `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면 기준선 트리가 리뷰 대상
+#       코드 자체가 되어 모든 진짜 회귀가 (fail,fail)=PRE_EXISTING 으로 접힌다.
 #
 # 두 경우를 여기서 구분할 방법은 없다 — 그래서 **판정하지 않고 사실만 emit** 한다.
 # 소비자가 자기 축에서 결정한다: Runtime 게이트는 `same_as_head: yes` 를 "차등 증거
@@ -37,50 +39,43 @@
 # Exit: 항상 0 (degraded: yes가 fail-open 상태를 실어 나른다). 인자 없음. read-only.
 set -u
 
-emit_degraded() {
+emit_degraded() {   # <degraded_reason>
   echo "base: -"
   echo "base_ref: -"
   echo "merge_base: -"
   echo "degraded: yes"
+  echo "degraded_reason: $1"
   echo "same_as_head: -"
   echo "ahead: -"
   exit 0
 }
 
-git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit_degraded
-git rev-parse --verify --quiet HEAD  >/dev/null 2>&1 || emit_degraded
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit_degraded not-a-repo
+git rev-parse --verify --quiet HEAD  >/dev/null 2>&1 || emit_degraded no-head
 # detached HEAD → 비교할 브랜치 컨텍스트 없음 → degraded.
-git symbolic-ref --quiet HEAD        >/dev/null 2>&1 || emit_degraded
+git symbolic-ref --quiet HEAD        >/dev/null 2>&1 || emit_degraded detached
 # shallow clone → 잘린 히스토리 → merge-base가 grafted boundary로 조용히 resolve될 수 있음.
-[[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded
+[[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded shallow
 
-base=""; base_ref=""
-# qg iter-7 (M6): `symbolic-ref` 는 **대상의 존재를 검증하지 않는다.** master→main
-# rename 뒤 흔히 남는 dangling `origin/HEAD` 가 여기서 성공해 `base_ref=origin/master`
-# 를 세우고, 아래 `merge-base` 가 실패해 `degraded: yes` 가 난다 — `origin/main` 이
-# 멀쩡한데도 fallback 체인 전체가 도달 불가가 된다. 방향은 fail-closed 지만, 이것이
-# 하류 소비자가 삼키던 `degraded: yes` 의 최대 공급원이었다. 가리키는 ref 가 실제로
-# 있을 때만 받아들인다.
-if ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) \
-   && [ -n "$ref" ] \
-   && git rev-parse --verify --quiet "refs/remotes/$ref" >/dev/null 2>&1; then
-  base="${ref#origin/}"; base_ref="$ref"
-elif git rev-parse --verify --quiet refs/remotes/origin/main   >/dev/null 2>&1; then
-  base="main";   base_ref="origin/main"
-elif git rev-parse --verify --quiet refs/remotes/origin/master >/dev/null 2>&1; then
-  base="master"; base_ref="origin/master"
-elif git rev-parse --verify --quiet refs/heads/main            >/dev/null 2>&1; then
-  base="main";   base_ref="main"
-elif git rev-parse --verify --quiet refs/heads/master          >/dev/null 2>&1; then
-  base="master"; base_ref="master"
-else
-  emit_degraded
+# `symbolic-ref` 는 **대상의 존재를 검증하지 않는다** — 기본 브랜치 개명 뒤 남는 dangling
+# `origin/HEAD` 도 여기서 성공한다. 가리키는 ref 가 실제로 있을 때만 받아들인다.
+# 짧은 이름은 `--short` 가 아니라 전체 이름에서 접두를 벗겨 얻는다.
+full=$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null) || full=""
+base=""
+case "$full" in
+  refs/remotes/origin/?*) base="${full#refs/remotes/origin/}" ;;
+esac
+if [[ -z "$base" ]] || ! git rev-parse --verify --quiet "$full^{commit}" >/dev/null 2>&1; then
+  echo "[resolve-baseline] 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다" >&2
+  emit_degraded no-default-branch
 fi
+# 짧은 이름(origin/<base>)은 같은 이름의 로컬 브랜치가 먼저 풀리므로 전체 이름을 낸다.
+base_ref="$full"
 
-merge_base=$(git merge-base "$base_ref" HEAD 2>/dev/null) || emit_degraded
-[[ -n "$merge_base" ]] || emit_degraded
+merge_base=$(git merge-base "$full" HEAD 2>/dev/null) || emit_degraded merge-base
+[[ -n "$merge_base" ]] || emit_degraded merge-base
 
-head_sha=$(git rev-parse HEAD 2>/dev/null) || emit_degraded
+head_sha=$(git rev-parse HEAD 2>/dev/null) || emit_degraded no-head
 if [[ "$merge_base" == "$head_sha" ]]; then same_as_head=yes; else same_as_head=no; fi
 
 # 실패를 0 으로 접지 않는다 — `ahead: 0` 은 "커밋 없음"이라는 **주장**이고, 질의
@@ -92,6 +87,7 @@ echo "base: $base"
 echo "base_ref: $base_ref"
 echo "merge_base: $merge_base"
 echo "degraded: no"
+echo "degraded_reason: -"
 echo "same_as_head: $same_as_head"
 echo "ahead: $ahead"
 exit 0

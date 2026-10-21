@@ -18,7 +18,16 @@
 
 ## 2. 지금 표
 
-먼저 작업 브랜치를 만든다 — 새로 fetch 한 `origin/main` 에서 `feature/roadmap-<요지>` 브랜치를 전용 worktree 로 만들고, 아래 extract 와 5 의 update 를 모두 그 worktree 에서 돈다. 에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다.
+먼저 작업 브랜치를 만든다 — 아래 펜스로 기본 브랜치와 브랜치 접두를 얻고, 새로 fetch 한 `origin/<기본 브랜치>` 에서 `<접두>roadmap-<요지>` 브랜치를 전용 worktree 로 만들고, 아래 extract 와 5 의 update 를 모두 그 worktree 에서 돈다. 펜스가 멈추면 그 사유를 보이고 멈춘다. 에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+DEF="$(python3 "$SD/scripts/repo_defaults.py" default-branch)" || DEF=""
+[ -n "$DEF" ] || { echo "[spec-distill] 기본 브랜치를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+BP="$(python3 "$SD/scripts/repo_defaults.py" get branch_prefix)" || BP=""
+[ -n "$BP" ] || { echo "[spec-distill] 브랜치 접두를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+echo "기본 브랜치: ${DEF} · 브랜치 접두: ${BP}"
+```
 
 - 인터뷰 상태 파일이 docs 에 커밋돼 있으면 그 파일의 `## 분해안` 표가 지금 표다.
 - 아니면 로드맵 블록과 묶음(frontmatter 번호 · §7)에서 거꾸로 뽑는다. 아래 펜스의 자리에 로드맵 경로를 따옴표로 감싸지 않고 글자 그대로 넣는다 — 5 의 경로 자리와 같은 규칙이다(경로에 줄바꿈이 있으면 넣지 말고 멈춰 사용자에게 보이고, 구분 줄 `DEVBREW_REDECOMPOSE_PATH_EOF` 와 똑같은 줄이 경로에 있으면 여는 줄과 닫는 줄의 구분자를 함께 바꾼다).
@@ -111,7 +120,7 @@ exit "$u_rc"
 
 ## 6. 올리기
 
-로드맵 수정은 2 에서 만든 `feature/roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 이 PR 도 머지 전에 같은 파일 걸음 5 의 스위트 대조를 거친다. 머지는 사용자가 한다.
+로드맵 수정은 2 에서 만든 `<접두>roadmap-<요지>` 브랜치에서 PR 로 올린다(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6). 이 PR 도 머지 전에 같은 파일 걸음 5 의 스위트 대조를 거친다. 머지는 사용자가 한다.
 
 ## 7. 끝내기
 

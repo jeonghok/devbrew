@@ -42,14 +42,14 @@ for lit in '실행 방식은 writing-plans 가 권하는 방식이고, 계획 �
            '계획을 쓴 agent 가 스스로 가르지 않는다' '답 전에는 그 에픽의 구현을 보내지 않는다' '그 에픽만 멈추고' '다른 에픽은 계속한다' \
            'ledger rulings' '판정 줄 — 셀 수 없음' 'check_bundle_coverage.py --impl' 'ledger write-sections' 'ledger flush' '같은 worktree 에 두 writer 를 두지 않는다'; do once 4 "$lit"; done
 for lit in 'merge_check.py run --roadmap <로드맵> --branch <브랜치> --keep-merged' 'ledger review-pack' \
-           '`review_model`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다' '3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다'; do once 5 "$lit"; done
+           '`repo_defaults.py get review_model --roadmap <로드맵>`' '「이 PR 이 고침」 · 「뒤 에픽이 고침」' '`## 통합 리뷰 인계`' 'PR 하나에 두 번까지' '머지는 사용자가 한다' '3(검사 불가)이면 사유를 그대로 보이고 그 PR 의 머지 준비를 멈춘다'; do once 5 "$lit"; done
 for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-completion' 'superpowers:receiving-code-review'; do
   assert_contains "$(step 5)" "$lit" "걸음 5: $lit"
 done
 for lit in '직접 merge 하지 않는다' '다음 task 경계에서 merge 하라고' '그 에픽만 멈추고 알린다' '`redecompose.md`' '브랜치는 지우지 않는다' 'ledger pending' '맡을 에픽을 제안하고' '이슈를 새로 만드는 것은 그때마다 묻는다'; do once 6 "$lit"; done
 for lit in '끝에서 끝 확인' '로드맵 시작 커밋부터' '그 사실을 알린다' 'ledger release'; do once 7 "$lit"; done
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
-PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(로드맵 머리말 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
+PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"
 once 4 "$PAR"
 # 지휘자 수리 2 — 원천에서 다시 세기 · 맞추기 순서 · 완료 표시는 끝이 아님 · 잠금 대기는 줄 · 권장 수 · 채우기 · 로드맵 밖 일

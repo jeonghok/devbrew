@@ -6,7 +6,7 @@
 `tip(root, branch)` → (커밋 | None, 알릴 줄 | None):
   - `origin/<b>` 를 주면 그 원격 끝
   - 로컬과 origin 중 하나만 있거나 같으면 그것(알릴 줄 없음)
-  - 둘이 다르면 앞선 쪽을 쓰고 알릴 줄을 낸다 — 갈라졌거나 조상 관계를 잴 수 없으면 TipError(부르는 쪽은 검사 불가 3)
+  - 둘이 다르면 앞선 쪽을 쓰고 알릴 줄(두 끝 8자를 함께)을 낸다 — 갈라졌거나 조상 관계를 잴 수 없으면 TipError(부르는 쪽은 검사 불가 3)
 """
 from __future__ import annotations
 
@@ -37,6 +37,10 @@ def _is_ancestor(root, a: str, b: str) -> bool:
     raise TipError("조상 관계를 잴 수 없다(%s · %s): %s" % (a[:8], b[:8], err[-200:]))
 
 
+def _both(local: str, remote: str) -> str:
+    return " (로컬 끝 %s · 원격 끝 %s)" % (local[:8], remote[:8])
+
+
 def tip(root, branch: str):
     if branch.startswith("origin/"):
         remote = resolve(root, "refs/remotes/" + branch)
@@ -47,9 +51,10 @@ def tip(root, branch: str):
     if local is None or remote is None or local == remote:
         return local or remote, None
     if _is_ancestor(root, local, remote):
-        return remote, "[spec-distill] 로컬 브랜치 %s 가 origin 보다 뒤라 origin/%s(%s) 를 썼다" % (branch, branch, remote[:8])
+        return remote, ("[spec-distill] 로컬 브랜치 %s 가 origin 보다 뒤라 origin/%s(%s) 를 썼다%s"
+                        % (branch, branch, remote[:8], _both(local, remote)))
     if _is_ancestor(root, remote, local):
-        return local, ("[spec-distill] origin/%s 가 로컬보다 뒤라(push 하지 않았거나 받아 오지 않은 커밋) 로컬 %s(%s) 를 썼다"
-                       % (branch, branch, local[:8]))
+        return local, ("[spec-distill] origin/%s 가 로컬보다 뒤라(push 하지 않았거나 받아 오지 않은 커밋) 로컬 %s(%s) 를 썼다%s"
+                       % (branch, branch, local[:8], _both(local, remote)))
     raise TipError("로컬 브랜치 %s(%s) 와 origin/%s(%s) 가 갈라졌다 — 한쪽으로 맞춘 뒤 다시 돈다"
                    % (branch, local[:8], branch, remote[:8]))

@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.5.0] — 2026-10-22
+
+### Changed
+- 기준선(`resolve-baseline.sh`)이 `origin/HEAD` 가 가리키는 브랜치 하나만 쓴다 — `origin/main` · `origin/master` · 로컬 `main` · `master` 로 대신하지 않는다. 못 찾으면 판정이 degraded 가 되고, 사유(`degraded_reason: no-default-branch`)와 「`git remote set-head origin --auto` 로 고친다」 안내를 보인다. `review-diff.sh` · `check-review-scope.sh` · `discover-spec.sh` · `compute-test-scope-candidates.sh` · `resolve-topic.sh` 가 그 사유를 그대로 싣는다.
+- 기준선 출력에 `degraded_reason` 키가 더해졌다(`resolve-baseline.sh` 일곱 줄 · `check-review-scope.sh` 여섯 줄 · `review-diff.sh` 열한 줄). 소비자는 줄 번호가 아니라 키로 읽는다.
+
+### Fixed
+- 기준 브랜치의 짧은 이름을 전체 참조 이름에서 얻는다 — `origin/main` 이라는 로컬 브랜치가 있어도 기준이 바뀌지 않는다.
+
+### Security
+- 게시 sink(`publish-comment.sh`)가 비밀 검사 범위의 기준을 전체 참조 이름(`refs/remotes/origin/<base>`, 없으면 `refs/heads/<base>`)으로 찾는다 — 이름이 `origin/<base>` 인 태그 · 로컬 브랜치가 기준을 가로채 검사 범위를 비우던 길을 막았다.
+
 ## [14.4.0] — 2026-10-21
 
 ### Security

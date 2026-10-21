@@ -8,7 +8,7 @@ SUT="$SCRIPTS/compute-test-scope-candidates.sh"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
 
 R=""
-mkrepo() {   # main 에 기준 커밋, feature 브랜치로 체크아웃
+mkrepo() {   # main 에 기준 커밋(origin/HEAD → origin/main 도 거기), feature 브랜치로 체크아웃
   R=$(mktemp -d) && [ -d "$R" ] || { echo "mktemp 실패" >&2; exit 1; }
   git init -q -b main "$R" || exit 1
   git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" config commit.gpgsign false
@@ -16,7 +16,10 @@ mkrepo() {   # main 에 기준 커밋, feature 브랜치로 체크아웃
   echo 'x=1' > "$R/src/foo.py"; echo x > "$R/tests/test_foo.py"; echo x > "$R/web/bar.ts"; echo x > "$R/web/bar.test.ts"
   echo x > "$R/cmd/plain.go"
   { printf '#!/bin/bash\n'; printf '# %s: src/**\n' guards; printf 'exit 0\n'; } > "$R/lib/tests/test_lock.sh"
-  ( cd "$R" && git add -A && git commit -qm base && git checkout -q -b feature ) || exit 1
+  ( cd "$R" && git add -A && git commit -qm base \
+    && git update-ref refs/remotes/origin/main main \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main \
+    && git checkout -q -b feature ) || exit 1
 }
 rmrepo() { cd / && rm -rf "$R"; }
 cands() { ( cd "$R" && bash "$SUT" "$@" ) 2>/dev/null; }
@@ -46,9 +49,20 @@ case_unsupported_language_has_no_mapping() {
 case_R17_unresolved_baseline_is_exit_4() {
   R=$(mktemp -d); git init -q -b weird "$R"; git -C "$R" config user.email t@t; git -C "$R" config user.name t
   ( cd "$R" && echo a > a && git add a && git commit -qm a && git checkout -q -b other && git branch -qD weird )
-  local out rc; out=$(cands); rc=$?
+  local out rc err; out=$(cands); rc=$?
   assert_eq "$rc" "4" "R17: 기준선을 못 풀면 exit 4"
   assert_eq "$out" "" "R17: stdout 은 비어 있다"
+  err=$( (cd "$R" && bash "$SUT") 2>&1 >/dev/null )
+  assert_contains "$err" "compute-test-scope-candidates: 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다" \
+    "R17: 기본 브랜치가 없으면 고치는 법을 자기 이름으로 stderr 에 낸다"
+  assert_contains "$err" "사유='no-default-branch'" "R17: exit 4 줄이 사유를 싣는다"
+  rmrepo
+}
+case_default_branch_found_no_guidance() {
+  mkrepo; ( cd "$R" && echo 'x=2' > src/foo.py )
+  local err rc; err=$( (cd "$R" && bash "$SUT") 2>&1 >/dev/null ); rc=$?
+  assert_eq "$rc" "0" "origin/HEAD 가 있으면 exit 0"
+  assert_not_contains "$err" "set-head" "origin/HEAD 가 있으면 기본 브랜치 안내가 없다(부재 짝)"
   rmrepo
 }
 case_R17_git_failure_is_exit_4() {
@@ -106,7 +120,7 @@ case_emit_guards_only_lists_guards() {
 }
 
 for c in case_name_mapping_and_changed_tests case_no_change_is_empty case_unsupported_language_has_no_mapping \
-         case_R17_unresolved_baseline_is_exit_4 case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
+         case_R17_unresolved_baseline_is_exit_4 case_default_branch_found_no_guidance case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
          case_topic_mode_reads_the_tree case_total_contains_every_candidate case_emit_guards_only_lists_guards \
          case_subdirectory_run_matches_root_run case_deleted_test_is_a_candidate; do
   echo "== $c"; $c

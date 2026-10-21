@@ -2,11 +2,14 @@
 """spec-distill state path helper.
 
 Resolves state root to <main_repo>/.claude/spec-distill regardless of cwd
-(worktree-aware via `git rev-parse --git-common-dir`). Fallback: cwd-relative
-with loud stderr log.
+(worktree-aware via `git rev-parse --git-common-dir`; a bare common dir keeps it inside:
+<common dir>/.claude/spec-distill). Fallback: cwd-relative with loud stderr log.
 
 CLI:
-  python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
+  python3 state_path.py state-root [<cwd>] [--ensure]
+                                              → prints absolute path to stdout. --ensure: ensure_state_root first —
+                                                creates the root with a `*` .gitignore; tracked files under it → exit 3,
+                                                stdout empty, the fix on stderr. Unknown or extra arguments → exit 2
   python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
   python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--time HHMM] [--cwd <dir>]
                                               → prints interview state file path (exit 2 on refusal)
@@ -20,9 +23,11 @@ CLI:
                                                 toplevel of its folder; if git sees no tree there but a lexical
                                                 ancestor has `.git`, exit 2 (the folder goes through a link);
                                                 else (not a repository) the lexical folder
-  python3 state_path.py state-root-for <DOC>  → prints the state root of the repository DOC lives in; empty DOC is
+  python3 state_path.py state-root-for <DOC> [--ensure]
+                                              → prints the state root of the repository DOC lives in; empty DOC is
                                                 `state-root`; DOC's folder through a link → exit 2 (payload-root's
-                                                reason); DOC outside any git tree → `state-root` + one stderr notice
+                                                reason); DOC outside any git tree → `state-root` + one stderr notice.
+                                                --ensure ensures that same root (DOC's repository) as `state-root --ensure`
 """
 from __future__ import annotations
 
@@ -66,26 +71,37 @@ def resolve_session_id(payload: dict | None = None) -> str | None:
 
 
 def state_root_for_common(git_common_dir: Path) -> Path:
-    """공용 git 디렉토리 → <main_repo>/.claude/spec-distill. 화면이 git 을 다시 부르지 않고 쓴다."""
-    return Path(git_common_dir).parent / ".claude" / "spec-distill"
+    """공용 git 디렉토리 → 상태 루트. 이름이 `.git` 이면 그 부모(<main_repo>/.claude/spec-distill),
+    아니면(bare) 그 안(<공용 git 디렉토리>/.claude/spec-distill). git 을 부르지 않는다."""
+    common = Path(git_common_dir)
+    base = common.parent if common.name == ".git" else common
+    return base / ".claude" / "spec-distill"
+
+
+def _common_dir(cwd: str) -> Path | None:
+    """cwd 의 공용 git 디렉토리(상대면 cwd 기준으로 푼다). git 이 아니면 None."""
+    try:
+        cp = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=cwd, capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        return None
+    if cp.returncode != 0 or not cp.stdout.strip():
+        return None
+    git_dir = Path(cp.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = (Path(cwd) / git_dir).resolve()
+    return git_dir
 
 
 def state_root(cwd: str | None = None) -> Path:
     """Return <main_repo>/.claude/spec-distill. cwd fallback on git failure."""
     if cwd is None:
         cwd = os.getcwd()
-    try:
-        cp = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            cwd=cwd, capture_output=True, text=True, timeout=5, check=False,
-        )
-        if cp.returncode == 0:
-            git_dir = Path(cp.stdout.strip())
-            if not git_dir.is_absolute():
-                git_dir = (Path(cwd) / git_dir).resolve()
-            return state_root_for_common(git_dir)
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
-        pass
+    common = _common_dir(cwd)
+    if common is not None:
+        return state_root_for_common(common)
     fallback = Path(cwd) / ".claude" / "spec-distill"
     print(
         f"[spec-distill] state root fallback: cwd ({cwd}) — main repo 미해석",
@@ -94,9 +110,98 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
+class StateRootError(RuntimeError):
+    """상태 루트를 쓸 수 없다 — 메시지는 고치는 법까지 담은 한 줄이다."""
+
+
+_GIT_ENV = ("GIT_DIR", "GIT_WORK_TREE")
+
+
+def _write_ignore(root: Path) -> None:
+    """`<root>/.gitignore` 가 없으면 `*` 한 줄로 만든다. 마지막 성분이 링크면 거부한다."""
+    path = root / ".gitignore"
+    try:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    except FileExistsError:
+        if os.path.islink(str(path)):
+            raise StateRootError("상태 폴더의 .gitignore 가 링크다 — {0} 를 지운 뒤 다시 돈다".format(path))
+        return
+    except OSError as exc:
+        raise StateRootError("상태 폴더에 .gitignore 를 쓰지 못했다({0}) — {1} 의 권한을 확인한 뒤 다시 돈다".format(
+            exc.strerror or type(exc).__name__, root))
+    try:
+        os.write(fd, b"*\n")
+    finally:
+        os.close(fd)
+
+
+def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
+    """상태 루트를 만들고 스스로를 무시하게 한다. 돌려주는 것은 알림 줄들이다.
+
+    추적 검사(무시 탐침 · 추적 파일)는 cwd 가 아니라 공용 git 디렉토리의 부모(본 체크아웃)에서 돈다.
+    공용 git 디렉토리의 이름이 `.git` 이 아니면(bare) 상태 루트가 그 안이라 검사를 건너뛴다. git 레포가 아니어도 건너뛴다.
+    무시되지 않거나 추적 파일이 있거나 검사가 실패하면 StateRootError — 그 메시지는 사유 줄 뒤에 알림 줄들을 붙인다.
+    """
+    root = Path(root)
+    cwd = cwd or os.getcwd()
+    notes = []
+    set_vars = [v for v in _GIT_ENV if os.environ.get(v)]
+    if set_vars:
+        notes.append("[spec-distill] 환경 변수 {0} 가 설정된 채로 돈다 — 상태 폴더({1})는 그 값이 가리키는 레포를 따른다. "
+                     "다른 레포를 뜻했으면 변수를 풀고 다시 돈다".format(" · ".join(set_vars), root))
+    try:
+        _check_state_root(root, cwd)
+    except StateRootError as exc:
+        if not notes:
+            raise
+        raise StateRootError("\n".join([str(exc)] + notes)) from exc
+    return notes
+
+
+def _check_state_root(root: Path, cwd: str) -> None:
+    why = inside_root(root, root.parent.parent)
+    if why:
+        raise StateRootError("상태 폴더 경로가 링크를 거친다({0}) — {1} 의 링크를 걷은 뒤 다시 돈다".format(why, root))
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise StateRootError("상태 폴더를 만들지 못했다({0}) — {1} 의 권한을 확인한 뒤 다시 돈다".format(
+            exc.strerror or type(exc).__name__, root))
+    _write_ignore(root)
+    common = _common_dir(cwd)
+    if common is None or common.name != ".git":
+        return
+    top = common.parent
+    rel = os.path.relpath(os.path.abspath(str(root)), os.path.abspath(str(top)))
+    if rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
+        raise StateRootError("상태 폴더({0})가 본 체크아웃({1}) 밖이다 — cwd 를 그 레포 안으로 옮긴 뒤 다시 돈다".format(root, top))
+    env = dict((k, v) for k, v in os.environ.items() if k not in _GIT_ENV)
+
+    def git(*args):
+        try:
+            return subprocess.run(["git", "-C", str(top), *args], capture_output=True, text=True,
+                                  timeout=10, check=False, env=env)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise StateRootError("상태 폴더가 무시되는지 확인하지 못했다(git: {0}) — git 이 도는지 확인한 뒤 다시 돈다".format(
+                type(exc).__name__))
+
+    probe = git("check-ignore", "-q", "--", os.path.join(rel, "probe"))
+    if probe.returncode == 1:
+        raise StateRootError("상태 폴더가 git 무시 목록에 들지 않는다 — {0} 를 * 한 줄로 고친 뒤 다시 돈다".format(
+            root / ".gitignore"))
+    if probe.returncode != 0:
+        raise StateRootError("상태 폴더가 무시되는지 확인하지 못했다(git: {0}) — 위 사유를 고친 뒤 다시 돈다".format(
+            (probe.stderr.strip().splitlines() or ["rc %d" % probe.returncode])[0]))
+    listed = git("ls-files", "--", rel)
+    if listed.returncode != 0:
+        raise StateRootError("상태 폴더의 추적 파일을 확인하지 못했다(git: {0}) — 위 사유를 고친 뒤 다시 돈다".format(
+            (listed.stderr.strip().splitlines() or ["rc %d" % listed.returncode])[0]))
+    if listed.stdout.strip():
+        raise StateRootError("상태 폴더 아래 파일이 이미 추적된다 — git rm --cached -r {0} 로 추적을 푼 뒤 다시 돈다".format(root))
+
+
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-INTERVIEW_DIR = ("docs", "superpowers", "interview")
 # 한 인터뷰의 세 자리와 각 자리가 받아들이는 frontmatter `type:`.
 _SLOTS = ((".state.md", "interview-state"), (".md", "interview-brief"), (".audit.md", "interview-audit"))
 _HHMM = re.compile(r"^([01]\d|2[0-3])[0-5]\d$")
@@ -115,6 +220,25 @@ def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
     except (subprocess.TimeoutExpired, OSError):
         pass
     return Path(cwd).resolve(), False
+
+
+def interview_dir(root: Path, is_git: bool) -> tuple[Path | None, str | None]:
+    """(인터뷰 폴더, 사유). git 레포면 해결자가 기본 브랜치의 레포 설정으로 정한 `interview_dir`, 아니면 기본값.
+    레포 설정이 깨졌으면 (None, 사유). 해결자는 여기서만 불러온다 — 상태 루트만 쓰는 호출은 그 모듈을 읽지 않는다."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import repo_defaults as rd
+    rel = rd.INTERVIEW_DIR
+    if is_git:
+        try:
+            result = rd.resolve(str(root))
+        except rd.SettingsError as exc:
+            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(exc)
+        if result["errors"]:
+            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(result["errors"][0])
+        rel = result["values"]["interview_dir"]
+    return root.joinpath(*rel.strip("/").split("/")), None
 
 
 def inside_root(path, root) -> str | None:
@@ -195,7 +319,7 @@ def _path_problem(d: Path, root: Path, stem: str) -> str | None:
 
 def interview_state_path(topic: str, date: str | None = None, cwd: str | None = None,
                          hhmm: str | None = None) -> tuple[Path | None, list[str]]:
-    """`<작업 트리 루트>/docs/superpowers/interview/<날짜>-<topic>-interview.state.md`.
+    """`<작업 트리 루트>/<인터뷰 폴더>/<날짜>-<topic>-interview.state.md` — 인터뷰 폴더는 `interview_dir()`.
 
     계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
     경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
@@ -212,7 +336,10 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
     root, is_git = worktree_root(cwd)
     if not is_git:
         msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
-    d = root.joinpath(*INTERVIEW_DIR)
+    d, why = interview_dir(root, is_git)
+    if d is None:
+        msgs.append(why)
+        return None, msgs
     stem = "{0}-{1}-interview".format(date, topic)
     why = _path_problem(d, root, stem) or _slot_problem(d, stem)
     if why:
@@ -262,14 +389,57 @@ def payload_root(payload: str) -> tuple[str | None, bool, str | None]:
     return d, False, None
 
 
+def _root_for_doc(doc: str) -> tuple[str | None, Path | None]:
+    """(상태 루트를 고른 cwd, 상태 루트) — DOC 가 사는 레포. 링크를 거치면 사유를 내고 (None, None)."""
+    if not doc:
+        return None, state_root()
+    _root, is_git, why = payload_root(doc)
+    if why:
+        print(why, file=sys.stderr)
+        return None, None
+    if is_git:
+        d = os.path.dirname(os.path.abspath(doc))
+        return d, state_root(d)
+    print("[spec-distill] 문서가 git 작업 트리 밖이다 — 지금 작업 폴더의 레포 원장을 쓴다: {0}".format(doc),
+          file=sys.stderr)
+    return None, state_root()
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: state_path.py {state-root|session-id|interview-state} …", file=sys.stderr)
         return 2
     sub = argv[1]
-    if sub == "state-root":
-        cwd = argv[2] if len(argv) >= 3 else None
-        print(str(state_root(cwd)))
+    if sub in ("state-root", "state-root-for"):
+        pos, flags, unknown = [], 0, False
+        for arg in argv[2:]:
+            if arg == "--ensure":
+                flags += 1
+            elif arg.startswith("--"):
+                unknown = True
+            else:
+                pos.append(arg)
+        ensure = flags == 1
+        if unknown or flags > 1 or len(pos) > 1:
+            print("usage: state_path.py {0} [<{1}>] [--ensure]".format(sub, "cwd" if sub == "state-root" else "DOC"),
+                  file=sys.stderr)
+            return 2
+        if sub == "state-root":
+            cwd = pos[0] if pos else None
+            root = state_root(cwd)
+        else:
+            cwd, root = _root_for_doc(pos[0] if pos else "")
+            if root is None:
+                return 2
+        if ensure:
+            try:
+                notes = ensure_state_root(root, cwd)
+            except StateRootError as exc:
+                print("[spec-distill] {0}".format(exc), file=sys.stderr)
+                return 3
+            for line in notes:
+                print(line, file=sys.stderr)
+        print(str(root))
         return 0
     if sub == "session-id":
         # env-only resolve (no hook payload on the CLI path). Skills use this sid as the
@@ -307,22 +477,6 @@ def main(argv: list[str]) -> int:
             print(why, file=sys.stderr)
             return 2
         print(root)
-        return 0
-    if sub == "state-root-for":
-        doc = argv[2] if len(argv) >= 3 else ""
-        if not doc:
-            print(str(state_root()))
-            return 0
-        _root, is_git, why = payload_root(doc)
-        if why:
-            print(why, file=sys.stderr)
-            return 2
-        if is_git:
-            print(str(state_root(os.path.dirname(os.path.abspath(doc)))))
-            return 0
-        print("[spec-distill] 문서가 git 작업 트리 밖이다 — 지금 작업 폴더의 레포 원장을 쓴다: {0}".format(doc),
-              file=sys.stderr)
-        print(str(state_root()))
         return 0
     if sub == "path-inside":
         if "--root" not in argv or argv.index("--root") + 1 >= len(argv):

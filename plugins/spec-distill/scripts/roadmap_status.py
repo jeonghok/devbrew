@@ -5,7 +5,8 @@
 명령줄:
   roadmap_status.py <로드맵 경로>           기본 브랜치(origin/HEAD)의 로드맵을 읽는다(레포 상대경로)
   roadmap_status.py --roadmap-file <파일>   작업 트리의 로드맵을 읽는다(아직 기본 브랜치에 없을 때)
-  --json 이면 JSON 하나를 낸다.
+  --json 이면 JSON 하나를 낸다. 보고의 `read_tree` 는 로드맵을 읽은 트리, 블록의 `read_tree` 는 그 에픽의 단계 · spec 을
+  읽은 트리다(기본 브랜치 · 에픽 끝 · 이 작업공간).
 
 종료 코드: 0 이상 없음 · 1 경고 있음 · 2 사용법 오류 · 3 검사 불가(로드맵 없음 · 형식 깨짐 ·
 블록 하나라도 알 수 없음 · 번호 대조 검사 불가 · 미룸 표 깨짐 · 번호 전체 집합을 못 셈) ·
@@ -34,7 +35,8 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
+from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
+from repo_defaults import default_branch as _default_branch  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
@@ -56,6 +58,7 @@ def task_status(stage):
 
 
 DONE = ("머지됨", "끝남")
+READ_DEFAULT, READ_TIP, READ_WORKSPACE = "기본 브랜치", "에픽 끝", "이 작업공간"   # 읽은 트리(read_tree)
 PAST_PLAN = ("계획", "구현 중", "구현 끝", "PR", "머지됨")
 
 MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from [^/\s]+/(\S+)")
@@ -70,6 +73,7 @@ class Git:
         self.env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0",
                         GIT_TERMINAL_PROMPT="0", LC_ALL="C")
         self.failures = []
+        self.default_reason = None
 
     def run(self, *args):
         rc, out, _err = self.run_err(*args)
@@ -110,13 +114,15 @@ class Git:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
 
     def default_branch(self):
-        """(커밋, 이름) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None)."""
-        sha = self.commit(DEFAULT_REF)
-        if not sha:
+        """(커밋, `origin/<짧은 이름>`) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None) 이고 고치는 법은
+        default_reason 에 남는다. 레포 밖이면 (None, None) — 레포 밖 사유는 부르는 쪽이 낸다."""
+        if self.toplevel() is None:
             return None, None
-        rc, out = self.run("rev-parse", "--symbolic-full-name", DEFAULT_REF)
-        full = out.strip() if rc == 0 else ""
-        return sha, (full[len("refs/remotes/"):] if full.startswith("refs/remotes/") else "origin/HEAD")
+        try:
+            sha, short, self.default_reason = _default_branch(self.cwd)
+        except SettingsError as exc:
+            raise RuntimeError(str(exc))
+        return (sha, "origin/" + short) if sha else (None, None)
 
     def first_parent_merges(self, main):
         rc, out, err = self.run_err("log", "--first-parent", "--merges",
@@ -678,7 +684,7 @@ def _read_sections(block: dict, heading: str, label: str):
 # ── 출력 ─────────────────────────────────────────────────────────────────────
 
 def build(git: Git, args) -> dict:
-    report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+    report = {"roadmap": None, "source": None, "read_tree": None, "default_branch": None, "not_on_default": False,
               "fetched_at": git.fetched_at(), "notice": NOTICE, "blocks": [], "unassigned": None,
               "orphans": None, "unknown_ids": [], "overlaps": [], "format_errors": [], "unknown_reasons": [],
               "settings": None, "handoffs": None, "exit": 3}
@@ -691,13 +697,14 @@ def build(git: Git, args) -> dict:
             return report
         rel = os.path.relpath(os.path.realpath(args.roadmap_file), os.path.realpath(top))
         src = Source(git, root=top)
+        report["read_tree"] = READ_WORKSPACE
         if main is None:
-            report["unknown_reasons"].append(NO_DEFAULT)
+            report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
     else:
         rel = args.roadmap.strip("/")
-        report["roadmap"] = rel
+        report["roadmap"], report["read_tree"] = rel, READ_DEFAULT
         if main is None:
-            report["unknown_reasons"].append(NO_DEFAULT)
+            report["unknown_reasons"].append(git.default_reason or NO_DEFAULT)
             report["source"] = "기본 브랜치"
             return report
         src = Source(git, rev=main, label=main_name)
@@ -710,15 +717,20 @@ def build(git: Git, args) -> dict:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
-    settings = repo_settings(meta)
-    report["settings"] = dict((k, settings[k]) for k in ("specs_dir", "plans_dir", "test_command",
-                                                            "review_model", "parallel_default", "sources", "warnings"))
-    errors = errors + settings["errors"]
+    try:   # 기계 상태 층은 읽지 않는다 — 기계 상태를 읽는 모듈은 이 읽기 전용 계산의 잠긴 파일 밖이다(알림으로 밝힌다)
+        resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
+    except SettingsError as exc:
+        resolved = {"values": {"parallel_default": None}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}
+    settings = dict(resolved["values"])
+    report["settings"] = dict(settings, sources=resolved["sources"], warnings=resolved["warnings"],
+                              notices=resolved["notices"])
+    errors = errors + resolved["errors"]
     report["format_errors"] = errors
     if errors:
         report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
                              "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
-                             "task_status": None, "branch": field_text(b["fields"].get("브랜치", "")),
+                             "task_status": None, "read_tree": report["read_tree"],
+                             "branch": field_text(b["fields"].get("브랜치", "")),
                              "branches": [], "branch_states": [], "tip": None, "plans": [],
                              "deps": [], "specs": [], "ids": [], "warnings": [], "notes": [],
                              "bundle": None, "extras": {}, "parallel": None, "rulings_archived": None}
@@ -777,6 +789,7 @@ def build(git: Git, args) -> dict:
         report["blocks"].append({
             "id": b["id"], "title": b["title"], "kind": b["kind"], "stage": b["stage"],
             "reason": b["reason"], "task_status": task_status(b["stage"]),
+            "read_tree": READ_TIP if b.get("tip") else READ_DEFAULT,
             "branch": field_text(b["fields"].get("브랜치", "")), "branches": b["branches"],
             "branch_states": b.get("branch_states", []), "tip": b.get("tip"), "plans": b.get("plans", []),
             "deps": b["deps"], "specs": b["specs"],
@@ -804,10 +817,11 @@ def exit_code(report: dict) -> int:
 def render(report: dict) -> str:
     nwarn = sum(len(b["warnings"]) for b in report["blocks"])
     ninfo = sum(len(b.get("notes", [])) for b in report["blocks"]) + len(report["overlaps"])
-    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · 받은 시각: %s)"
+    lines = ["로드맵 상태 — 블록 %d개 · 경고 %d개 · 정보 %d개 · 검사 불가 %d개 (사본: %s · 읽은 트리: %s · 받은 시각: %s)"
              % (len(report["blocks"]), nwarn, ninfo,
                 len(report["format_errors"]) + len(report["unknown_reasons"]),
-                report["source"] or "알 수 없음", report["fetched_at"] or "알 수 없음"),
+                report["source"] or "알 수 없음", report.get("read_tree") or "알 수 없음",
+                report["fetched_at"] or "알 수 없음"),
              report["notice"], ""]
     if report.get("not_on_default"):
         lines.append("로드맵이 아직 기본 브랜치(%s)에 없다 — 머지 전이면 `--roadmap-file` 로 계산한다: %s"
@@ -845,7 +859,7 @@ def main(argv=None) -> int:
         report = build(Git(os.getcwd()), args)
         report["exit"] = exit_code(report)
     except Exception as exc:  # 계산이 죽어도 이상 없음(0)·경고(1)로 내지 않는다
-        report = {"roadmap": None, "source": None, "default_branch": None, "not_on_default": False,
+        report = {"roadmap": None, "source": None, "read_tree": None, "default_branch": None, "not_on_default": False,
                   "fetched_at": None, "notice": NOTICE,
                   "blocks": [], "unassigned": None, "orphans": None, "unknown_ids": [],
                   "overlaps": [], "format_errors": [],

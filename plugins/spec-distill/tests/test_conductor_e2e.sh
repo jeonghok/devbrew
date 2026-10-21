@@ -117,6 +117,6 @@ L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null; assert_
 assert_eq "$(g "$W" branch -a --list '*main*' | wc -l | tr -d ' ')" "0" "버릴 레포에 main 브랜치가 없다"
 [ -d "$W/docs" ] && no "버릴 레포에 docs 폴더가 생겼다(기본 폴더를 박은 곳이 있다)" || ok "기본 폴더를 쓰지 않았다(frontmatter 폴더만)"
 rs="$(status_json)"
-assert_eq "$(printf '%s' "$rs" | python3 -I -c 'import json,sys; s=json.load(sys.stdin)["settings"]["sources"]; print(s["specs_dir"], s["plans_dir"])')" "frontmatter frontmatter" "설계문서 · 계획 폴더는 frontmatter 에서 읽었다"
+assert_eq "$(printf '%s' "$rs" | python3 -I -c 'import json,sys; s=json.load(sys.stdin)["settings"]["sources"]; print(s["specs_dir"], s["plans_dir"])')" "로드맵 로드맵" "설계문서 · 계획 폴더는 로드맵 머리말에서 읽었다(출처 로드맵)"
 assert_eq "$(printf '%s' "$rs" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["default_branch"])')" "origin/trunk" "기본 브랜치는 origin/trunk 로 읽혔다"
 finish

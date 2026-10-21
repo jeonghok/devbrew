@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from repo_defaults import SPECS_DIR, repo_settings  # noqa: E402
+from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
     collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
@@ -299,10 +299,18 @@ def _roadmap_view(fm: dict, repo):
     if errors:
         return None, "로드맵 형식이 깨졌다: %s" % errors[0]
     _bundles, _union, errs = collect_assigned(blocks, meta, rel, repo.read, repo.exists)
-    settings = repo_settings(meta)
-    if settings["errors"]:
-        return None, "로드맵 형식이 깨졌다: %s" % settings["errors"][0]
-    return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": settings["specs_dir"]}, None
+    specs_dir = getattr(repo, "specs_dir", None)   # 부르는 쪽(상태 계산)이 해결자로 이미 정한 폴더
+    if specs_dir is None:
+        try:
+            settings = resolve(repo.root, roadmap=rel, roadmap_text=text)
+        except SettingsError as exc:
+            return None, "레포 설정을 읽지 못했다: %s" % exc
+        for line in settings["notices"]:
+            print("[spec-distill] " + line, file=sys.stderr)
+        if settings["errors"]:
+            return None, "레포 설정이 깨졌다: %s" % settings["errors"][0]
+        specs_dir = settings["values"]["specs_dir"]
+    return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": specs_dir}, None
 
 
 def _block_specs(block: dict, view: dict, repo) -> list:

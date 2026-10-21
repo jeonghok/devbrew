@@ -41,7 +41,9 @@ mk_repo() {
     printf 'exit 0\n'
   } > "$R/shared/tests/test_lock.sh"
   chmod +x "$R/shared/tests/test_lock.sh"
-  ( cd "$R" && git add -A && git commit -qm init )
+  ( cd "$R" && git add -A && git commit -qm init \
+    && git update-ref refs/remotes/origin/main main \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main )
 }
 
 # F1 회귀 픽스처 — 선언이 **탭**으로 구분된 경우. 리뷰어 지적: `IFS=' ' read -a`는
@@ -61,7 +63,9 @@ mk_repo_tab() {
     printf 'exit 0\n'
   } > "$R/shared/tests/test_lock.sh"
   chmod +x "$R/shared/tests/test_lock.sh"
-  ( cd "$R" && git add -A && git commit -qm init )
+  ( cd "$R" && git add -A && git commit -qm init \
+    && git update-ref refs/remotes/origin/main main \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main )
 }
 
 candidates() {   # $1 = 건드릴 파일 (repo-상대)
@@ -86,7 +90,7 @@ done
 # 구별되지 않는다.
 mk_repo
 mkdir -p "$TMP/repo/docs"; printf 'x\n' > "$TMP/repo/docs/note.md"
-( cd "$TMP/repo" && git add -A && git commit -qm docs )
+( cd "$TMP/repo" && git add -A && git commit -qm docs && git update-ref refs/remotes/origin/main main )
 out="$(candidates docs/note.md)"
 case "$out" in
   *shared/tests/test_lock.sh*) no "guards: 글롭 밖 변경인데 락이 후보에 든다 — 무차별 선택" ;;
@@ -98,7 +102,7 @@ mk_repo
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/repo/plugins/qg/tests/test_plain.sh" 2>/dev/null \
   || { mkdir -p "$TMP/repo/plugins/qg/tests"; printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/repo/plugins/qg/tests/test_plain.sh"; }
 chmod +x "$TMP/repo/plugins/qg/tests/test_plain.sh"
-( cd "$TMP/repo" && git add -A && git commit -qm plain )
+( cd "$TMP/repo" && git add -A && git commit -qm plain && git update-ref refs/remotes/origin/main main )
 out="$(candidates plugins/qg/scripts/mod.py)"
 case "$out" in
   *test_plain.sh*) no "선언 없는 테스트가 남의 변경에 딸려 들어온다 — 회귀" ;;

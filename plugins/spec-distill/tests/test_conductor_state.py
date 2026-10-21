@@ -129,6 +129,18 @@ class Storage(unittest.TestCase):
     def test_state_root_for_common(self):
         self.assertEqual(state_path.state_root_for_common(Path("/r/.git")), Path("/r/.claude/spec-distill"))
 
+    def test_repo_settings_rows(self):   # R8 AC5 — 해결자의 기계 상태 층
+        self.assertEqual(cs.repo_settings_rows(self.path, RM), {})
+        self.path.parent.mkdir(parents=True)
+        head = "---\ntype: %s\nroadmap: %s\n---\n\n## 레포 설정\n\n" % (cs.TYPE, RM)
+        self.path.write_text(head + "- test_command · make test\n- test_failure_pattern · \"^F: (.+)$\"\n", encoding="utf-8")
+        self.assertEqual(cs.repo_settings_rows(self.path, RM),
+                         {"test_command": "make test", "test_failure_pattern": "\"^F: (.+)$\""})
+        self.path.write_text(head + "- test_command · make a\n- test_command · make b\n", encoding="utf-8")
+        with self.assertRaises(cs.MachineError) as c:
+            cs.repo_settings_rows(self.path, RM)
+        self.assertIn("같은 키가 둘이다(test_command)", str(c.exception))
+
 
 class Handoffs(unittest.TestCase):
     def test_five_states(self):

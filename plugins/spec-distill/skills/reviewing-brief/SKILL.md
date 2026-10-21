@@ -127,7 +127,7 @@ python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component 
 PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
-harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" --ensure)" || ROOT=""
 common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
 here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"; here_common="$(common_dir || true)"
 if [ -n "${PAYLOAD:-}" ] && doc_top="$(cd "$(dirname "$PAYLOAD")" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
@@ -139,6 +139,9 @@ lo="ERROR"
 if [ -z "$harness_sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 이 라운드를 시작하지 않는다(record 후 Step B)."
   lo="NO_SESSION"
+elif [ -z "$ROOT" ]; then
+  echo "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유) — 이 라운드를 시작하지 않는다(record 후 Step B)."
+  lo="NO_DIR"
 elif [ -z "$STATE_DIR" ] || ! python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
   echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 이 라운드를 시작하지 않는다(record 후 Step B)."
   lo="NO_DIR"

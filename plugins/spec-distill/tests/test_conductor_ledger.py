@@ -201,23 +201,84 @@ class ApprovalMarker(Repo):
 
 
 class Roadmaps(Repo):
-    def test_unreadable_roadmap_is_listed_unchecked(self):
-        (self.w / "plan/rm/bad.md").write_text("---\ntype: roadmap\n---\n\n# x\n", encoding="utf-8")
-        (self.w / "plan/rm/quoted.md").write_bytes(b'---\r\ntype: "roadmap"\r\n---\r\n\r\n# x\r\n')
+    """설정 폴더가 plan/roadmaps/ 인 레포(R8 AC6 · AC29) — 로드맵 = 그 폴더 바로 아래 폴더의 .md ∧ type: roadmap."""
+    IN = "plan/roadmaps/rm/roadmap.md"
+
+    def setUp(self):
+        super().setUp()
+        self.put({".devbrew.md": "---\nroadmaps_dir: plan/roadmaps/\n---\n",
+                  self.IN: roadmap(BLOCK),
+                  "plan/roadmaps/rm/A1.md": "---\ntype: epic-bundle\n---\n",
+                  "plan/roadmaps/rm/notes.md": "# 메모\n",
+                  "plan/roadmaps/rm/deep/roadmap.md": roadmap(BLOCK),
+                  "docs/superpowers/roadmaps/z/roadmap.md": roadmap(BLOCK),
+                  "templates/roadmap-template.md": roadmap(BLOCK)})
+
+    def put(self, files):
+        for rel, text in files.items():
+            (self.w / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.w / rel).write_bytes(text if isinstance(text, bytes) else text.encode("utf-8"))
         sh(self.w, "add", "-A")
-        sh(self.w, "commit", "-qm", "bad")
+        sh(self.w, "commit", "-qm", "files")
         sh(self.w, "push", "-q", "origin", "trunk")
+
+    def rows(self):
         rc, out = self.cli("roadmaps")
         self.assertEqual(rc, 0, out)
-        rows = dict(l.split("\t") for l in out.strip().splitlines())
-        self.assertEqual(rows.get("plan/rm/bad.md"), "검사 불가")
-        self.assertEqual(rows.get("plan/rm/quoted.md"), "검사 불가")
+        return dict(l.split("\t") for l in out.strip().splitlines())
 
+    def test_unreadable_roadmap_is_listed_unchecked(self):
+        self.put({"plan/roadmaps/rm/bad.md": "---\ntype: roadmap\n---\n\n# x\n",
+                  "plan/roadmaps/q/quoted.md": b'---\r\ntype: "roadmap"\r\n---\r\n\r\n# x\r\n',
+                  "plan/roadmaps/rm/broken.md": "---\ntype: roadmap\n# 머리말이 닫히지 않았다\n"})
+        rows = self.rows()
+        self.assertEqual(rows.get("plan/roadmaps/rm/bad.md"), "검사 불가")
+        self.assertEqual(rows.get("plan/roadmaps/q/quoted.md"), "검사 불가")
+        self.assertEqual(rows.get("plan/roadmaps/rm/broken.md"), "검사 불가")
 
-    def test_finds_by_frontmatter_not_folder(self):
+    def test_finds_in_configured_folder_only(self):
+        self.assertEqual(list(self.rows()), [self.IN])
+
+    def test_two_entries_same_list(self):
+        import control_plane as cp
+        (self.w / "plan/roadmaps/ln").mkdir(parents=True)
+        os.symlink("../rm/roadmap.md", str(self.w / "plan/roadmaps/ln/roadmap.md"))
+        exe = self.w / "plan/roadmaps/ex/roadmap.md"
+        exe.parent.mkdir(parents=True)
+        exe.write_text(roadmap(BLOCK), encoding="utf-8")
+        exe.chmod(0o755)
+        self.put({"plan/roadmaps/rm/broken.md": "---\ntype: roadmap\n# 머리말이 닫히지 않았다\n",
+                  "plan/roadmaps/r2/plan.md": roadmap(BLOCK),
+                  "plan/roadmaps/lfs/roadmap.md": "version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n"})
+        self.assertIn("100755", sh(self.w, "ls-tree", "HEAD", "--", "plan/roadmaps/ex/roadmap.md"))
+        self.assertIn("120000", sh(self.w, "ls-tree", "HEAD", "--", "plan/roadmaps/ln/roadmap.md"))
+        repo = cp.Repo(str(self.w), cp.Deadline(60))
+        tree, folder, why = cp.listing(repo, cp.default_ref(repo)[0])
+        self.assertIsNone(why)
+        paths, unchecked, failed = cp.candidates(repo, tree, folder)
+        self.assertEqual(sorted(unchecked), ["plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
+                                             "plan/roadmaps/rm/broken.md"])
+        self.assertEqual(failed, set())
+        shas = sorted(set(e[2] for e in tree.values() if e[1] == "blob")) + ["0" * 40]
+        got = cp.cat_batch(repo, shas)
+        self.assertNotIn("0" * 40, got)   # 없는 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)
+        for sha in shas[:-1]:
+            want = subprocess.run(["git", "cat-file", "blob", sha], cwd=str(self.w), env=ENV, capture_output=True).stdout
+            self.assertEqual(got.get(sha), want, sha)
+        self.assertNotIn("plan/roadmaps/ex/roadmap.md", unchecked)   # 실행 비트(100755)도 일반 파일
+        rows = self.rows()
+        listed = sorted(rows)
+        self.assertEqual(listed, ["plan/roadmaps/ex/roadmap.md", "plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
+                                  "plan/roadmaps/r2/plan.md", "plan/roadmaps/rm/broken.md", self.IN])
+        self.assertEqual(paths, listed)
+        for p in ("plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md", "plan/roadmaps/rm/broken.md"):
+            self.assertEqual(rows[p], "검사 불가", p)
+
+    def test_broken_settings_stop(self):
+        self.put({".devbrew.md": "---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---\n"})
         rc, out = self.cli("roadmaps")
-        self.assertEqual(rc, 0, out)
-        self.assertEqual(out.strip().split("\t")[0], RM)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("typo_key", out)
 
     def test_no_default_branch(self):
         sh(self.w, "remote", "set-head", "origin", "-d")
@@ -1027,6 +1088,7 @@ class ReviewPack(Repo):
         rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
         self.assertEqual(rc, 0, out)
         self.assertIn("로컬 브랜치 feature/a1 가 origin 보다 뒤라 origin/feature/a1(%s) 를 썼다" % new[:8], out)
+        self.assertIn("(로컬 끝 %s · 원격 끝 %s)" % (stale[:8], new[:8]), out)   # 두 끝이 다르면 둘 다 보인다(§9)
         self.assertIn("+new", (out_dir / "pr.diff").read_text(encoding="utf-8"))
         rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "origin/feature/a1",
                            "--out", str(self.t / "pack-origin"))

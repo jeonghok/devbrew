@@ -157,6 +157,16 @@ def load(path: Path, roadmap_rel: str) -> dict:
     return parse_machine(text, roadmap_rel)
 
 
+def repo_settings_rows(path, roadmap_rel: str) -> dict:
+    """`## 레포 설정` 의 키 → 값(해결자 `repo_defaults.resolve` 의 기계 상태 층). 같은 키가 둘이면 MachineError."""
+    out = {}
+    for row in load(path, roadmap_rel)["레포 설정"]:
+        if row["키"] in out:
+            raise MachineError("레포 설정 절에 같은 키가 둘이다(%s) — 한 줄만 남긴다" % row["키"])
+        out[row["키"]] = row["값"]
+    return out
+
+
 # ── 표지 · 쓰기 ──────────────────────────────────────────────────────────────
 
 def _need_session(session) -> str:

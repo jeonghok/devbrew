@@ -741,8 +741,7 @@ printf -- '---\ntype: interview-audit\nsession_id: sess-rf000002\n---\n' > "$rfr
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000002 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000002 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션의 인터뷰 audit 으로 이름을 되찾지 않는다" || no "AC11: 인터뷰 audit 이 이름 되찾기에 걸렸다: $out"
-[ -e "$rfr/.claude/spec-distill" ] && no "§2-5: 상태 블록이 .claude/spec-distill 아래에 무언가를 만들었다: $(ls -A "$rfr/.claude/spec-distill")" \
-  || ok "§2-5: 상태 블록은 세션 폴더를 만들지 않는다"
+assert_eq "$(ls -A "$rfr/.claude/spec-distill" 2>&1)" ".gitignore" "§2-5: 상태 블록은 세션 폴더를 만들지 않는다 — 상태 루트에는 스스로를 무시하는 .gitignore 하나뿐이다"
 
 # 펜스 실행 도구 — 상태 블록(TOPIC 을 픽스처 주제로)을 앞에 이어 붙인다. 두 세션 다 같은 날 · 같은 주제로 같은 seed 를 가리킨다.
 blkT="$(printf '%s\n' "$blk" | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="rfx"/')"

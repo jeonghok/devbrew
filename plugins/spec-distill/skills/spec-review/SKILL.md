@@ -2,7 +2,7 @@
 name: spec-review
 description: >
   Use right after superpowers:brainstorming writes and commits a design doc
-  (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review takes the
+  (`...-design.md` in the design-doc folder `specs_dir`), before superpowers:writing-plans — this review takes the
   place where brainstorming, after its builder check and that check's questions, hands the document
   over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or interview brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
@@ -147,6 +147,7 @@ DEVBREW_PATH_EOF
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 RETURN_MSG="[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)."
+echo "[spec-distill] 읽은 트리: 이 작업공간"
 be_rc=0
 be_out="$(python3 "$SD/scripts/spec_review_bundle.py" entry --spec "${spec_path:-}" --bundle "${bundle_arg:-}" --root "${repo_root:-}" 2>&1)" || be_rc=$?
 be_last="$(printf '%s\n' "$be_out" | tail -n 1)"
@@ -165,20 +166,23 @@ esac
 ```
 <!-- bundle-entry:end -->
 
-마지막 줄이 `bundle-entry: REFUSE` 면 펜스가 낸 `[spec-distill]` 두 줄(쓸 수 없는 사유 · 복귀 문장)을 그대로 보이고 게이트 없이 끝낸다 — `### 대상 부재` 와 같은 예외 경로다. `bundle-entry: PROCEED` 면 그 앞 줄들(번호 대조 출력)을 사용자에게 그대로 보이고 리뷰를 시작한다. `번호 대조 경고 <N>개` 의 N 과 `PROCEED` 뒤의 경로(`-` 면 없음)는 `## 게이트` 가 쓴다. 번호 대조가 「검사 불가」여도 리뷰는 계속한다 — 사람이 보는 경고이지 리뷰의 정답이 아니다.
+마지막 줄이 `bundle-entry: REFUSE` 면 펜스가 낸 `[spec-distill]` 줄들(읽은 트리 줄 · 쓸 수 없는 사유 · 복귀 문장)을 그대로 보이고 게이트 없이 끝낸다 — `### 대상 부재` 와 같은 예외 경로다. `bundle-entry: PROCEED` 면 그 앞 줄들(읽은 트리 줄 · 번호 대조 출력)을 사용자에게 그대로 보이고 리뷰를 시작한다 — 리뷰는 경로로 받은 설계문서를 이 작업공간의 파일로 읽는다. `번호 대조 경고 <N>개` 의 N 과 `PROCEED` 뒤의 경로(`-` 면 없음)는 `## 게이트` 가 쓴다. 번호 대조가 「검사 불가」여도 리뷰는 계속한다 — 사람이 보는 경고이지 리뷰의 정답이 아니다.
 
 인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 설계문서(`-design.md`)를 추가한 최근
 커밋 50개에서 나온 것 중 최신 5개와 untracked 전부:
 
 <!-- review-candidates:begin -->
 ```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 top="$(git rev-parse --show-toplevel)"
-git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'BEGIN{FS="\037"} NF && !seen[$NF]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
-git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
+SPECS="$(python3 "$SD/scripts/repo_defaults.py" get specs_dir --root "$top")" || SPECS=""
+[ -n "$SPECS" ] || { echo "[spec-distill] 설계문서 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+git -C "$top" -c core.quotePath=false log -n 50 --diff-filter=A --name-only --pretty=format: -- "${SPECS}*-design.md" | awk 'BEGIN{FS="\037"} NF && !seen[$NF]++' | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done | head -n 5
+git -C "$top" -c core.quotePath=false ls-files --others --exclude-standard -- "${SPECS}*-design.md" | while IFS= read -r p; do [ -e "$top/$p" ] && printf '%s/%s\n' "$top" "$p"; done
 ```
 <!-- review-candidates:end -->
 
-후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
+후보가 없거나, 사용자가 고르지 않거나, 펜스가 멈추면(그 사유를 그대로 보인다) 아래 「대상 부재」로 끝낸다.
 
 상태 디렉토리는 `state_path.py` 리졸버(세션)와 엔진의 `state-dir-for`(문서)로 연다 — 이 문서의 엔진 상태
 (`docreview-state.md`)와 codex 산출물이 여기 산다:
@@ -234,7 +238,7 @@ fi
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
 harness_sid="$(python3 "$SD/scripts/state_path.py" session-id || true)"
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" || true)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root-for "${spec_path:-}" --ensure)" || ROOT=""
 common_dir() { d="$(git rev-parse --git-common-dir 2>/dev/null)" && [ -n "$d" ] && (cd "$d" && pwd -P); }
 here_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"; here_common="$(common_dir || true)"
 if [ -n "${spec_path:-}" ] && doc_top="$(cd "$(dirname "$spec_path")" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
@@ -246,6 +250,9 @@ lo="ERROR"
 if [ -z "$harness_sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못해 동시 리뷰 표지를 잡을 수 없다 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)."
   lo="NO_SESSION"
+elif [ -z "$ROOT" ]; then
+  echo "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)."
+  lo="NO_DIR"
 elif [ -z "$STATE_DIR" ] || ! python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR"; then
   echo "[spec-distill] 원장 자리를 열지 못했다(STATE_DIR='${STATE_DIR:-}' — 비었거나 레포 밖이거나 링크를 지난다, 위 사유) — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)."
   lo="NO_DIR"

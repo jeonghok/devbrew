@@ -6,6 +6,7 @@ CLI (판결은 stdout 마지막 줄):
   interview_state.py migrate-legacy --session <sid> --topic <kebab> [--seed <경로>] [--date D] [--cwd <dir>]
     rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부(링크 포함)/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
   interview_state.py seed-audit-for-session --session <sid> [--cwd <dir>]
+    rc: 0 이름 하나 · 1 없음 · 2 둘 이상 · 3 인터뷰 폴더를 정하지 못함(레포 설정이 깨짐)
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import (  # noqa: E402
-    INTERVIEW_DIR, SESSION_PATTERN, frontmatter_scalars, inside_root, interview_state_path, physical_cwd_prefix,
+    SESSION_PATTERN, frontmatter_scalars, inside_root, interview_dir, interview_state_path, physical_cwd_prefix,
     state_root, worktree_root,
 )
 from gc_common import root_escapes  # noqa: E402
@@ -177,8 +178,11 @@ def cmd_migrate(a) -> int:
 
 
 def cmd_seed_audit(a) -> int:
-    root, _ = worktree_root(a.cwd)
-    d = root.joinpath(*INTERVIEW_DIR)
+    root, is_git = worktree_root(a.cwd)
+    d, why = interview_dir(root, is_git)
+    if d is None:
+        print(why, file=sys.stderr)
+        return 3
     hits = []
     for p in sorted(d.glob("*-interview.audit.md")):
         fm = frontmatter_scalars(p) or {}

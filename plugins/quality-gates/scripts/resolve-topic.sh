@@ -90,8 +90,9 @@ if [ "$SUB" = "detect" ]; then
     exit 0
   }
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || d_emit - base-unresolved "not a git work tree"
-  BASE_REF=$(bash "$SCRIPT_DIR/resolve-baseline.sh" | awk -F': ' '/^base_ref:/{print $2}')
-  [ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; d_emit - base-unresolved "resolve-baseline.sh degraded"; }
+  RB=$(bash "$SCRIPT_DIR/resolve-baseline.sh")
+  BASE_REF=$(printf '%s\n' "$RB" | awk -F': ' '/^base_ref:/{print $2}')
+  [ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; d_emit - base-unresolved "resolve-baseline.sh degraded ($(printf '%s\n' "$RB" | awk -F': ' '/^degraded_reason:/{print $2}'))"; }
   # `grep .` 로 빈 값(예: `--cleanup=verbatim` 이 보존한 `Spec: `)을 세는 집합에서
   # 먼저 뺀다 — 안 그러면 sort -u 가 빈 문자열을 진짜 키보다 앞에 두어, 아래 `$keys`
   # 를 그대로 내는 ok 경로에서 topic_key 값에 개행이 섞여 4줄 계약이 깨진다.
@@ -105,8 +106,9 @@ fi
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit base-unresolved "not a git work tree"
 
 # base_ref 는 기존 모듈이 푼다 — 후보 체인을 두 벌 두지 않는다.
-BASE_REF=$(bash "$SCRIPT_DIR/resolve-baseline.sh" | awk -F': ' '/^base_ref:/{print $2}')
-[ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; emit base-unresolved "resolve-baseline.sh degraded"; }
+RB=$(bash "$SCRIPT_DIR/resolve-baseline.sh")
+BASE_REF=$(printf '%s\n' "$RB" | awk -F': ' '/^base_ref:/{print $2}')
+[ -n "$BASE_REF" ] && [ "$BASE_REF" != "-" ] || { BASE_REF="-"; emit base-unresolved "resolve-baseline.sh degraded ($(printf '%s\n' "$RB" | awk -F': ' '/^degraded_reason:/{print $2}'))"; }
 
 # ── C = 선언 커밋 ──────────────────────────────────────────────────────────
 # git 의 `--grep` 은 기본이 BRE 다. 토픽 키에 `.` 가 흔하므로 메타문자를 이스케이프한다.

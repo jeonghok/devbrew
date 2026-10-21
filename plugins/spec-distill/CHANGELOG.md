@@ -1,5 +1,30 @@
 # Changelog
 
+## [8.6.0] — 2026-10-22
+
+### Added
+- 레포 설정 파일 `.devbrew.md` — 레포 루트 머리말에 레포마다 다른 값 아홉(`specs_dir` · `plans_dir` · `roadmaps_dir` · `interview_dir` · `test_command` · `test_failure_pattern` · `review_model` · `parallel_default` · `branch_prefix`)을 적는다. 기본 브랜치에 머지된 판만 읽고, 로드맵 머리말 > 레포 설정 파일 > 기계 상태(임시) > 기본값 순으로 합치며, 값마다 출처를 보인다. 모르는 키 · 같은 키 둘 · 층이 받지 않는 키 · 따옴표 없는 값의 ` #` · 못 읽는 머리말은 각각 다른 오류로 멈춘다. README `## 설정` 에 예시와 규칙이 있다.
+- 해결자 명령(`scripts/repo_defaults.py`): `get <키>` · `check-path <키> <경로>` · `roadmap-check <경로>` · `default-branch [--check-remote]`, 모두 `--root <레포>` 를 받는다. 인터뷰 · request-framing · spec-review · 재분해 · 끝내기 커밋 펜스가 폴더 · 브랜치 접두 · 기본 브랜치를 이 명령에서 얻는다.
+- 상태 폴더가 스스로를 무시한다 — `.claude/spec-distill/` 를 처음 쓸 때 안에 `*` 한 줄짜리 `.gitignore` 를 둔다. 그 아래 파일이 이미 추적되고 있으면 멈추고 `git rm --cached -r` 로 추적을 풀라고 안내한다. bare 레포에 worktree 를 두는 배치는 상태 폴더를 bare 레포 안에 두어 레포마다 갈린다. `GIT_DIR` · `GIT_WORK_TREE` 가 설정돼 있으면 알린다. `state_path.py state-root` · `state-root-for` 가 `--ensure` 를 받고, 모르는 인자 · 남는 인자는 사용법 오류(종료 코드 2)다.
+- 상태 계산 · brief 게이트 · 끝내기 커밋 펜스 · spec-review 묶음 진입이 어느 트리를 읽었는지(기본 브랜치 · 에픽 끝 · 이 작업공간) 밝힌다. 로컬과 원격의 브랜치 끝이 다르면 알림 줄에 두 끝을 함께 싣는다.
+
+### Changed
+- 기본 브랜치를 `main` · `master` 로 짐작하지 않는다 — `origin/HEAD` 가 없으면 이제 멈춘다: `git remote set-head origin --auto` 로 고친다(`origin` 원격이 없으면 먼저 `git remote add origin <URL>`). 지휘자 진입 · `merge_check.py run` · 인터뷰 끝 커밋 직전에는 원격의 기본 브랜치와 대조해 다르면 멈추고, 대조하지 못하면(오프라인 · 10초 넘김) 로컬 값으로 가며 알린다.
+- 기계 상태 `## 레포 설정` 과 `test_failure_pattern` 이 같은 해결자를 지난다. 기계 상태 층은 `test_command` · `test_failure_pattern` 만 받고, 그 값을 쓰면 레포 설정 파일에 올리자고 알린다. 한 층 안에 같은 키가 둘이면 오류다(전에는 로드맵은 첫 값, 기계 상태는 마지막 값이 이겼다).
+- 로드맵은 `roadmaps_dir` 바로 아래 폴더의 머리말 `type: roadmap` 파일이다 — 상태줄 · 로드맵 목록 · 끝내기 커밋 펜스가 같은 함수로 찾는다. 파일 이름 `roadmap.md` 는 더 요구하지 않는다. 머리말을 못 읽은 후보는 「검사 불가」로 센다.
+- 지원하는 흐름을 README 에 적었다 — `origin` 의 기본 브랜치와 PR 만 본다. fork 의 부모 레포로 PR 을 내는 흐름과 원격 없는 로컬 레포는 지원하지 않는다.
+
+### Fixed
+- 로드맵 후보에 템플릿 · 픽스처가 잡히지 않는다(정해진 폴더 안 + 표지).
+- 기본 브랜치 짧은 이름을 전체 참조 이름(`refs/remotes/origin/…`)에서 얻는다 — `--short` 결과에서 `origin/` 을 글자로 벗기던 두 자리 때문에 로컬 브랜치 `origin/main` 이 있으면 기본 브랜치 검사가 꺼지던 결함을 고쳤다.
+- 인터뷰 폴더 · 설계문서 폴더 · 브랜치 접두를 글자로 다시 적던 자리가 해결자를 부른다 — 설정한 레포에서 인터뷰 이름 되찾기 · spec-review 후보 · 끝내기 커밋 범위가 기본 폴더를 보지 않는다.
+- 지휘자의 통합 리뷰 · 옮김 대조가 리뷰 모델을 로드맵 머리말이 아니라 해결자(`repo_defaults.py get review_model`)에서 얻는다 — 레포 설정 파일의 `review_model` 도 쓰이고, 설정을 못 읽으면 사유를 보이고 세션 모델로 간다.
+- 상태 폴더 보장이 멈출 때도 `GIT_DIR` · `GIT_WORK_TREE` 알림을 사유 뒤에 싣는다(`state_path.py --ensure` · 지휘 원장 · `merge_check.py run`).
+- 상태 계산이 레포 설정을 못 읽으면 동시 작업 권장 수를 「권장 3(기본값)」으로 단정하지 않고 모른다고 보인다.
+- 폴더 설정 값의 `.git` 금지가 대소문자를 가리지 않는다(`.GIT/x` 도 거부). 해결자의 git 호출이 부분 클론에서 빠진 객체를 받으러 가지 않는다(`GIT_NO_LAZY_FETCH=1`).
+- 묶음 대조(`check_bundle_coverage.py`)가 해결자의 알림(기본값으로 대신함 · 건너뛴 층)을 stderr 로 알린다.
+- request-framing 의 로컬 전용 커밋 확인이 「확인 못함」일 때 `git remote set-head origin --auto` 로 고치라고 안내한다.
+
 ## [8.5.0] — 2026-10-21
 
 ### Changed

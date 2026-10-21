@@ -62,8 +62,11 @@ if [ -n "$RANGE_MODE" ]; then
   RANGE="$R_START..$R_END"
 else
   if [ -z "$BASE" ]; then
-    BASE="$(bash "$HERE/resolve-baseline.sh" 2>/dev/null | sed -n 's/^merge_base: //p')"
+    rb="$(bash "$HERE/resolve-baseline.sh" 2>/dev/null)"
+    BASE="$(printf '%s\n' "$rb" | sed -n 's/^merge_base: //p')"
     [ "$BASE" = "-" ] && BASE=""
+    [ "$(printf '%s\n' "$rb" | sed -n 's/^degraded_reason: //p')" = no-default-branch ] \
+      && echo "discover-spec.sh: 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다" >&2
   fi
   if [ -n "$BASE" ]; then RANGE="$BASE..HEAD"; else RANGE="-1"; fi
 fi

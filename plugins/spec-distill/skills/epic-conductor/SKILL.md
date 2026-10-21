@@ -73,12 +73,14 @@ claim_rc=
 if [ -n "$sid" ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
 echo "session=${sid:-없음}"
 echo "claim_rc=${claim_rc:-없음}"
+cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"
 ```
 
 Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(플러그인 루트 가드)과 세션 id 줄을 자기 안에 갖고, 한 번의 Bash 호출로 돌린다. 앞 펜스의 셸 변수를 이어 쓰지 않는다.
 
 - `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
 - `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
+- `default_rc=` 가 0 이 아니면(3 기본 브랜치 없음 · 5 원격과 다름 · 그 밖 모두) 그 줄(`[spec-distill] …`, 없으면 종료 코드)을 보이고, `claim_rc=0` 이면 4 끝의 표지 풀기 펜스(`conductor_ledger.py" release`)를 돌린 뒤 멈춘다. rc 0 의 「대조하지 못했다」 줄은 보이고 간다.
 - `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다.
 
 ```bash
@@ -140,7 +142,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
 
 ### 6. 통합 리뷰어
 
-걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀에서는 무엇을 · 왜 · 범위 칸만 빌려 채운다. 버전 관리 도구를 돌리라는 말과 틀의 출력 형식은 넣지 않는다: 리뷰어는 diff 를 그 도구가 아니라 `PR_DIFF` · `OPEN_DIFFS` 파일과 합친 사본에서 읽고, 내는 형식은 agent 의 `## 내는 것` 이다. 로드맵 frontmatter `review_model` 이 이 dispatch 의 모델 칸이 받는 이름이면 그 값을 주고, 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
+걸음 5 의 통합 리뷰는 아래 자리에서 부른다. `REVIEW_REQUEST` 는 `superpowers:requesting-code-review` 의 리뷰 요청 틀(`code-reviewer.md`)을 이 PR 로 채운 글, `MERGED_COPY` 는 `merge_check.py --keep-merged` 가 남긴 합친 사본, 나머지 셋은 `conductor_ledger.py review-pack` 이 만든 폴더의 파일 경로다. 그 skill 이 스스로 부르는 agent 는 쓰기 도구를 가져 쓰지 않는다 — 틀에서는 무엇을 · 왜 · 범위 칸만 빌려 채운다. 버전 관리 도구를 돌리라는 말과 틀의 출력 형식은 넣지 않는다: 리뷰어는 diff 를 그 도구가 아니라 `PR_DIFF` · `OPEN_DIFFS` 파일과 합친 사본에서 읽고, 내는 형식은 agent 의 `## 내는 것` 이다. 모델 칸은 해결자 `repo_defaults.py get review_model --roadmap <로드맵>` 의 값이 이 dispatch 의 모델 칸이 받는 이름일 때만 그 값을 준다. 종료 코드 1(값 없음)이거나 받는 이름이 아니면 모델 칸을 빼 세션 모델로 가며 그 사실을 알리고, 3(설정을 읽지 못함)이면 그 사유 줄을 보이고 모델 칸을 빼 세션 모델로 가며 그 사실을 알린다. 이음매가 여럿이면 여럿을 동시에 부른다. 통합 리뷰 지적 전부를 「이 PR 이 고침」 · 「뒤 에픽이 고침」으로 나눠 PR 본문 인계 절과 사용자에게 보인다.
 
 ```
 Agent(
@@ -158,7 +160,7 @@ Agent(
 
 ### 7. 옮김 대조
 
-하위가 돌려보낸 사람 자리를 옮긴 에픽이 끝나면(걸음 6) 아래 자리에서 옮김 대조 agent 를 부른다. `RELAY_FILES` 는 그 에픽의 relay 폴더(`conductor_ledger.py resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이 내는 경로) 안 `relay-*.md` 파일들(계획 agent 의 입력 줄 · 받은 질문 원문 같은 다른 파일은 옮긴 기록이 아니다)의 절대경로를 한 줄에 하나씩 적은 글이다. 그런 파일이 없으면 부르지 않고 「옮긴 질문 없음」 한 줄을 그 에픽 이름과 함께 보인다. 모델 칸은 6 과 같다 — 로드맵 frontmatter `review_model` 이 받는 이름이면 그 값을 주고, 아니면 빼서 세션 모델로 가며 그 사실을 알린다. 옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다 — 어긋남이 있으면 그 자리를 그 에픽 설계문서 `## 지휘 기록` 에 적는다.
+하위가 돌려보낸 사람 자리를 옮긴 에픽이 끝나면(걸음 6) 아래 자리에서 옮김 대조 agent 를 부른다. `RELAY_FILES` 는 그 에픽의 relay 폴더(`conductor_ledger.py resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이 내는 경로) 안 `relay-*.md` 파일들(계획 agent 의 입력 줄 · 받은 질문 원문 같은 다른 파일은 옮긴 기록이 아니다)의 절대경로를 한 줄에 하나씩 적은 글이다. 그런 파일이 없으면 부르지 않고 「옮긴 질문 없음」 한 줄을 그 에픽 이름과 함께 보인다. 모델 칸은 6 과 같다 — 해결자 `repo_defaults.py get review_model --roadmap <로드맵>` 의 값이 받는 이름일 때만 그 값을 준다. 종료 코드 1(값 없음)이거나 받는 이름이 아니면 빼서 세션 모델로 가며 그 사실을 알리고, 3(설정을 읽지 못함)이면 그 사유 줄을 보이고 빼서 세션 모델로 가며 그 사실을 알린다. 옮김 대조 결과 전부(일치 · 어긋남 · 확인 못 함)를 그 에픽 이름과 함께 사용자에게 보인다 — 어긋남이 있으면 그 자리를 그 에픽 설계문서 `## 지휘 기록` 에 적는다.
 
 ```
 Agent(

@@ -274,5 +274,91 @@ class BriefRiskNumbers(unittest.TestCase):
         self.assertEqual(M.brief_risk_numbers("- 위험 — 사실 | 사실 하나 — RC1 (a/b.py) [RC1 → OQ1]\n"), ([], False))
 
 
+class RoadmapVerdict(unittest.TestCase):
+    """로드맵 = 정해진 폴더 바로 아래 폴더 한 단계 안의 .md ∧ 머리말 type: roadmap (R8 AC6)."""
+    DIR = "docs/superpowers/roadmaps/"
+    TEXT = "---\ntype: roadmap\n---\n# r\n"
+
+    def test_template_and_fixture_are_not_roadmaps(self):
+        for path in ("plugins/spec-distill/templates/roadmap-template.md",
+                     "plugins/spec-distill/tests/fixtures/conductor-e2e/roadmap.md"):
+            verdict, why = M.roadmap_verdict(path, self.TEXT, self.DIR)
+            self.assertEqual(verdict, "not_roadmap", path)
+            self.assertIn("로드맵 폴더 밖", why)
+
+    def test_two_levels_deep_is_not_roadmap(self):
+        verdict, why = M.roadmap_verdict(self.DIR + "x/y/roadmap.md", self.TEXT, self.DIR)
+        self.assertEqual(verdict, "not_roadmap")
+        self.assertIn("한 단계", why)
+        self.assertEqual(M.roadmap_verdict(self.DIR + "roadmap.md", self.TEXT, self.DIR)[0], "not_roadmap")
+        self.assertEqual(M.roadmap_verdict(self.DIR + "x/roadmap.txt", self.TEXT, self.DIR)[0], "not_roadmap")
+
+    def test_unreadable_frontmatter_is_counted(self):
+        path = self.DIR + "x/roadmap.md"
+        for text in (None, "---\ntype: roadmap\n# 닫히지 않음\n", "\ufeff---\ntype: roadmap\n---\n", "--- \ntype: roadmap\n---\n"):
+            verdict, why = M.roadmap_verdict(path, text, self.DIR)
+            self.assertEqual(verdict, "unreadable", repr(text))
+            self.assertTrue(why)
+        found, unchecked = M.find_roadmaps([path, self.DIR + "y/roadmap.md"],
+                                           {path: None, self.DIR + "y/roadmap.md": self.TEXT}.get, self.DIR)
+        self.assertEqual(found, [self.DIR + "y/roadmap.md"])
+        self.assertEqual([p for p, _w in unchecked], [path])
+
+    def test_other_type_in_folder(self):
+        verdict, why = M.roadmap_verdict(self.DIR + "x/A1.md", "---\ntype: epic-bundle\n---\n", self.DIR)
+        self.assertEqual(verdict, "not_roadmap")
+        self.assertIn("epic-bundle", why)
+        self.assertEqual(M.roadmap_verdict(self.DIR + "x/notes.md", "# 메모\n", self.DIR)[0], "not_roadmap")
+
+    def test_any_md_name_in_folder_is_roadmap(self):
+        self.assertEqual(M.roadmap_verdict(self.DIR + "x/plan.md", self.TEXT, self.DIR), ("roadmap", ""))
+        quoted = "---\r\ntype: \"roadmap\"\r\n---\r\n"
+        self.assertEqual(M.roadmap_verdict("plan/roadmaps/x/plan.md", quoted, "plan/roadmaps/")[0], "roadmap")
+
+    def test_one_read_rule(self):
+        """일반 파일(100644 · 100755)은 읽고, 링크 · 서브모듈 · LFS · UTF-8 아님은 사유가 있는 검사 불가, cat 실패는 따로 센다."""
+        d = self.DIR
+        out = b"".join(b"%s %s %s\t%s\0" % (m, k, s, p.encode("utf-8")) for m, k, s, p in (
+            (b"100644", b"blob", b"a1", d + "a/roadmap.md"), (b"100755", b"blob", b"x1", d + "x/roadmap.md"),
+            (b"120000", b"blob", b"l1", d + "l/roadmap.md"), (b"160000", b"commit", b"s1", d + "s/roadmap.md"),
+            (b"100644", b"blob", b"f1", d + "f/roadmap.md"), (b"100644", b"blob", b"z1", d + "z/roadmap.md"),
+            (b"100644", b"blob", b"u1", d + "u/roadmap.md"), (b"100644", b"blob", b"d1", d + "a/deep/r.md"),
+            (b"100644", b"blob", b"o1", "docs/x.md")))
+        entries = M.tree_entries(out, d)
+        self.assertNotIn(d + "a/deep/r.md", entries)
+        self.assertNotIn("docs/x.md", entries)
+        blobs = {b"a1": self.TEXT.encode(), b"x1": self.TEXT.encode(), b"f1": None,
+                 b"z1": b"version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n", b"u1": b"\xff\xfe---\n"}
+        cats = []
+
+        def cat(sha):
+            cats.append(sha)
+            data = blobs[sha.encode()]
+            return (128, b"") if data is None else (0, data)
+        failed = set()
+        found, unchecked = M.find_roadmaps(list(entries), M.blob_reader(entries, cat, failed), d)
+        self.assertEqual(found, [d + "a/roadmap.md", d + "x/roadmap.md"])
+        why = dict(unchecked)
+        self.assertIn("파일을 읽지 못했다", why[d + "f/roadmap.md"])
+        self.assertIn("일반 파일이 아니다", why[d + "l/roadmap.md"])
+        self.assertIn("일반 파일이 아니다", why[d + "s/roadmap.md"])
+        self.assertIn("LFS", why[d + "z/roadmap.md"])
+        self.assertIn("UTF-8", why[d + "u/roadmap.md"])
+        self.assertEqual(failed, {d + "f/roadmap.md"})
+        self.assertNotIn("l1", cats)
+        self.assertNotIn("s1", cats)
+
+    def test_find_roadmaps_reads_only_shaped_paths(self):
+        read_paths = []
+
+        def read(path):
+            read_paths.append(path)
+            return self.TEXT
+        paths = [self.DIR + "b/roadmap.md", "docs/x.md", self.DIR + "a/roadmap.md", self.DIR + "a/deep/r.md"]
+        found, unchecked = M.find_roadmaps(paths, read, self.DIR)
+        self.assertEqual((found, unchecked), ([self.DIR + "a/roadmap.md", self.DIR + "b/roadmap.md"], []))
+        self.assertEqual(sorted(read_paths), [self.DIR + "a/roadmap.md", self.DIR + "b/roadmap.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

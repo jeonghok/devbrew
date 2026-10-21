@@ -25,9 +25,10 @@
 #                          reviewed<TAB><경로> 줄, excluded: 는 뺀 뒤 수
 #   review-i<N>.self-state 건너뛴 untracked qg 상태 경로(한 줄에 하나, 없으면 빈 파일)
 #
-# stdout 10줄: mode · base · head · degraded · files · filtered_files · excluded · kept_model ·
-# doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
-# 비워 두고 degraded: yes · files: - · self_state: - 로 rc 0. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
+# stdout 11줄: mode · base · head · degraded · degraded_reason · files · filtered_files · excluded ·
+# kept_model · doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
+# 비워 두고 degraded: yes · degraded_reason: <resolve-baseline.sh 의 사유> · files: - · self_state: - 로 rc 0
+# (사유가 no-default-branch 면 stderr 에 고치는 법 한 줄). 그 밖에는 degraded_reason: - 다. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
 # gitlink · 이전 qg 실행이 남긴 worktree · 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로)이 있으면 다섯
 # 파일은 그대로 쓰고 degraded: yes(files 등은 수 그대로)로 rc 0 — 기준선 degraded 와는
 # files 가 수인지로 갈린다. git 실패 rc 4, 사용 오류 rc 2.
@@ -141,9 +142,9 @@ publish() {   # 임시 파일 다섯을 제자리로
     || gitfail "결과 파일을 옮기지 못했다: $DIR"
 }
 
-emit() {   # <base> <head> <degraded> <files> <filtered> <excluded> <kept> <source> <self_state>
-  printf 'mode: %s\nbase: %s\nhead: %s\ndegraded: %s\nfiles: %s\nfiltered_files: %s\nexcluded: %s\nkept_model: %s\ndoc_paths_source: %s\nself_state: %s\n' \
-    "$MODE" "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9"
+emit() {   # <base> <head> <degraded> <degraded_reason> <files> <filtered> <excluded> <kept> <source> <self_state>
+  printf 'mode: %s\nbase: %s\nhead: %s\ndegraded: %s\ndegraded_reason: %s\nfiles: %s\nfiltered_files: %s\nexcluded: %s\nkept_model: %s\ndoc_paths_source: %s\nself_state: %s\n' \
+    "$MODE" "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}"
 }
 
 scope_val() {   # <key> — 범위 파일에서 그 키의 첫 값
@@ -165,6 +166,10 @@ case "$MODE" in
     deg="$(printf '%s\n' "$rb" | sed -n 's/^degraded: //p')"
     mb="$(printf '%s\n' "$rb" | sed -n 's/^merge_base: //p')"
     if [ "$deg" != no ] || [ -z "$mb" ] || [ "$mb" = - ]; then
+      why="$(printf '%s\n' "$rb" | sed -n 's/^degraded_reason: //p')"
+      [ -n "$why" ] || why=-
+      [ "$why" = no-default-branch ] \
+        && echo "review-diff: 기본 브랜치를 찾지 못해 리뷰 범위를 정하지 못했다 — git remote set-head origin --auto 로 고친다" >&2
       : > "$T/names"; : > "$T/full.diff"; : > "$T/doc-paths"; : > "$T/self-state"; : > "$T/diff"
       publish
       if [ "$MODE" = branch ]; then
@@ -173,7 +178,7 @@ case "$MODE" in
       else
         h=worktree
       fi
-      emit - "$h" yes - - - - - -
+      emit - "$h" yes "$why" - - - - - -
       exit 0
     fi
     BASE="$mb"
@@ -602,5 +607,5 @@ done < "$T/raw.z"
 
 publish
 deg_out=no; [ "$UNREVIEWED" -gt 0 ] && deg_out=yes
-emit "$BASE" "$HEAD_LABEL" "$deg_out" "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
+emit "$BASE" "$HEAD_LABEL" "$deg_out" - "$FILES" "$FILTERED" "${excluded:--}" "${kept:--}" "${dp_source:--}" "${#SELF[@]}"
 exit 0

@@ -48,7 +48,11 @@ assert_contains "$BODY" '손으로 따르는 절차' "꺼짐: 손 절차를 가�
 assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손으로 따르는 절차.*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차를 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
 assert_contains "$(sec '### 7. 옮김 대조')" 'subagent_type: "spec-distill:relay-checker"' "옮김 대조 dispatch 자리(Ruling R37)"
-assert_contains "$(sec '### 7. 옮김 대조')" '`review_model`' "옮김 대조: 모델 칸은 review_model"
+for s in '### 6. 통합 리뷰어' '### 7. 옮김 대조'; do
+  assert_contains "$(sec "$s")" '`repo_defaults.py get review_model --roadmap <로드맵>`' "$s: 모델 칸은 해결자 get review_model 의 값"
+  assert_contains "$(sec "$s")" '3(설정을 읽지 못함)이면 그 사유 줄을 보이고' "$s: 해결자 rc 3 이면 사유 줄을 보인다"
+done
+assert_not_contains "$BODY$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '로드맵 frontmatter `review_model`' "리뷰 모델을 로드맵 머리말에서만 읽는 옛 문구가 없다"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져' "꺼짐 행: 플러그인 전체가 꺼진다고 알린다(Ruling R35)"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" '지휘자를 부르지 않은 채' "꺼짐 행: 손 절차는 지휘자를 부르지 않고 따른다"
 RC="$ROOT/plugins/spec-distill/agents/relay-checker.md"
@@ -115,6 +119,15 @@ assert_eq "${bad_lint%% *}" "1" "양성 대조: 산문의 --session 줄을 락�
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
 assert_contains "$APP" 'conductor_ledger.py" release' "4절: release 전체 명령"
+# 기본 브랜치 대조 — 표지를 잡은 뒤 돌므로, 멈출 때 잡은 표지를 풀고 멈춘다(다른 세션이 「지휘 중」으로 막히지 않게)
+S3="$(sec '### 3. 자리 · 세션 · 표지')"
+DEF_FENCE="$(printf '%s\n' "$S3" | awk '/^```bash/{f=1;n++;next} /^```/{f=0} f&&n==1')"
+assert_contains "$DEF_FENCE" 'cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"' "3절 첫 펜스: 기본 브랜치 원격 대조 줄과 종료 코드"
+DEF_BULLET="$(printf '%s\n' "$S3" | grep -F -- '- `default_rc=`' || true)"
+assert_eq "$(printf '%s\n' "$DEF_BULLET" | grep -c .)" "1" "3절: default_rc 처리 줄이 하나다"
+for lit in '0 이 아니면' '3 기본 브랜치 없음' '5 원격과 다름' '그 밖 모두' '`claim_rc=0` 이면' '`conductor_ledger.py" release`' '돌린 뒤 멈춘다' '「대조하지 못했다」 줄은 보이고 간다'; do
+  assert_contains "$DEF_BULLET" "$lit" "3절 default_rc 줄: $lit"
+done
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
 COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"

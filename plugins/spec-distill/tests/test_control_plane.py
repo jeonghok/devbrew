@@ -109,6 +109,13 @@ class Statusline(unittest.TestCase):
     def test_minutes_unknown(self):
         self.assertIn("· 받은 시각 모름", cp.statusline_text([(RM, report(BASE, 1))], NO_IV, None))
 
+    def test_default_branch_named_before_fetch_age(self):
+        line = cp.statusline_text([(RM, report(BASE, 1))], NO_IV, 5, None, "feature/x")
+        self.assertTrue(line.endswith(" · 경고 1 · 기본 브랜치 feature/x · 받은 지 5분(어느 원격 · 브랜치든)"), line)
+        line = cp.statusline_text([(RM, report(BASE, 1))], NO_IV, None, None, "trunk")
+        self.assertTrue(line.endswith(" · 기본 브랜치 trunk · 받은 시각 모름"), line)
+        self.assertEqual(cp.statusline_text([], NO_IV, 5, None, "trunk"), "")
+
     def test_many_roadmaps_are_summed(self):
         other = ("docs/superpowers/roadmaps/rn/roadmap.md", report(BASE, 3))
         line = cp.statusline_text([(RM, report(BASE, 1)), other], NO_IV, 5)
@@ -239,10 +246,13 @@ class Works(unittest.TestCase):
         self.assertIn("스위트 잠금: 주인 프로세스가 돌고 있다 — 주인 1 impl · 잡은 시각 2026-10-19 08:07:00", text)
 
     def test_recommended_from_frontmatter_and_broken(self):
-        r = report([], settings={"parallel_default": 5, "sources": {"parallel_default": "frontmatter"}},
+        r = report([], settings={"parallel_default": 5, "sources": {"parallel_default": "로드맵"}},
                    machine=self.machine(1))
-        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 5(로드맵 머리말 — 상한이 아니다, 사용자가 늘린다)", self.lines(r))
-        r = report([], settings={"parallel_default": None, "sources": {"parallel_default": "frontmatter"}},
+        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 5(로드맵 — 상한이 아니다, 사용자가 늘린다)", self.lines(r))
+        r = report([], settings={"parallel_default": 4, "sources": {"parallel_default": "레포 설정@0123abcd"}},
+                   machine=self.machine(1))
+        self.assertIn("돌고 있는 큰 작업 1(기계 상태 사본) · 권장 4(레포 설정@0123abcd — 상한이 아니다, 사용자가 늘린다)", self.lines(r))
+        r = report([], settings={"parallel_default": None, "sources": {"parallel_default": "로드맵"}},
                    machine=self.machine(1))
         self.assertTrue(any("권장 수 모름" in l for l in self.lines(r)))
 
@@ -378,6 +388,26 @@ class CodeStamp(unittest.TestCase):
                     self.assertNotEqual(before, cp.code_stamp(), edited)
             finally:
                 cp.SCRIPTS = old
+
+
+class BrokenSettingsRecommended(unittest.TestCase):
+    """해결자가 레포 설정을 읽지 못하면(SettingsError) 권장 수를 기본값으로 단정하지 않는다."""
+
+    def test_settings_error_leaves_recommended_unknown(self):
+        import json
+        tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", PYTHONDONTWRITEBYTECODE="1")
+        subprocess.run(["git", "init", "-q", tmp], check=True, env=env)
+        path = os.path.join(tmp, "roadmap.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("---\ntype: roadmap\nparallel_default: 2\nparallel_default: 4\n---\n# 로드맵\n")
+        script = Path(__file__).resolve().parent.parent / "scripts" / "roadmap_status.py"
+        out = subprocess.run([sys.executable, str(script), "--json", "--roadmap-file", path], cwd=tmp, env=env,
+                             capture_output=True, text=True, encoding="utf-8")
+        r = json.loads(out.stdout)
+        self.assertTrue(any("같은 키가 둘이다" in e for e in r["format_errors"]), r["format_errors"])
+        self.assertEqual(cp.recommended(r), (None, "레포 설정을 읽지 못해 권장 수를 모른다"))
 
 
 class Parallel(unittest.TestCase):

@@ -399,7 +399,7 @@ import ast, os, sys
 WRITE_ATTRS = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "rename", "replace",
                "touch", "chmod", "remove", "makedirs", "rmtree", "symlink_to", "system", "popen"}
 NET_MODS = {"socket", "urllib", "http", "requests", "ftplib", "smtplib", "shutil"}
-READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"}
+READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep", "ls-tree", "config"}  # config 는 --get 꼴만(아래)
 LOCAL = set()
 if os.environ.get("LOCAL_DIR"):
     LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}
@@ -436,6 +436,12 @@ for path in sys.argv[1:]:
         if isinstance(node, ast.Call):
             f = node.func
             name = getattr(f, "attr", getattr(f, "id", ""))
+            pos = node.args[0].elts if node.args and isinstance(node.args[0], ast.List) else list(node.args)
+            for i, arg in enumerate(pos):
+                if isinstance(arg, ast.Constant) and arg.value == "config":
+                    nxt = pos[i + 1] if i + 1 < len(pos) else None
+                    if not (isinstance(nxt, ast.Constant) and nxt.value == "--get"):
+                        print("%s:%d: git config 를 --get 꼴 밖으로 부른다" % (path, node.lineno))
             if name in WRITE_ATTRS:
                 print("%s:%d: 쓰기 호출 %s" % (path, node.lineno, name))
             if name == "open":
@@ -479,6 +485,66 @@ printf 'import conductor_state\n' > "$T/ctl_local.py"
 assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 잠긴 파일 밖 로컬 모듈 import 를 잡는다"
 printf 'from subprocess import run\n' > "$T/ctl_from.py"
 assert_contains "$(static_check "$T/ctl_from.py")" "subprocess 를 이름으로 import" "양성 대조: from subprocess import 를 잡는다"
+# 네트워크 축 — 원격 대조(ls-remote)는 repo_defaults.py 의 NET_GIT_ALLOWED 하나 · check_remote_head 안에서만 쓰고,
+# 상태 계산 · 상태줄(roadmap_status · control_plane)은 check_remote_head 를 부르지 않는다.
+net_check() {  # net_check <파일...> — 네트워크 축 위반을 찾으면 줄을 낸다. 끝에 CHECKED n.
+  python3 - "$@" <<'PY'
+import ast, os, sys
+count = 0
+for path in sys.argv[1:]:
+    count += 1
+    base = os.path.basename(path)
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    inside = set()
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name == "check_remote_head":
+            inside |= {id(n) for n in ast.walk(fn)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "NET_GIT_ALLOWED" for t in node.targets):
+            v = node.value
+            lit = v.args[0] if isinstance(v, ast.Call) and getattr(v.func, "id", "") == "frozenset" and v.args else None
+            vals = ({e.value for e in lit.elts} if isinstance(lit, (ast.Set, ast.List))
+                    and all(isinstance(e, ast.Constant) for e in lit.elts) else None)
+            if base != "repo_defaults.py":
+                print("%s:%d: NET_GIT_ALLOWED 는 repo_defaults.py 에만 둔다" % (path, node.lineno))
+            if vals != {"ls-remote"}:
+                print("%s:%d: NET_GIT_ALLOWED 가 frozenset({'ls-remote'}) 가 아니다: %r" % (path, node.lineno, vals))
+        elif isinstance(node, ast.Name) and node.id == "NET_GIT_ALLOWED" and isinstance(node.ctx, ast.Load) \
+                and id(node) not in inside:
+            print("%s:%d: NET_GIT_ALLOWED 를 check_remote_head 밖에서 쓴다" % (path, node.lineno))
+        elif isinstance(node, ast.keyword) and node.arg == "allowed" and id(node) not in inside:
+            print("%s:%d: git 허용 목록(allowed=)을 check_remote_head 밖에서 바꾼다" % (path, node.value.lineno))
+        if base in ("roadmap_status.py", "control_plane.py"):
+            name = (node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name)
+                    else node.name if isinstance(node, ast.alias) else "")
+            if name == "check_remote_head":
+                print("%s:%d: 네트워크 대조 check_remote_head 를 부른다" % (path, getattr(node, "lineno", 0)))
+print("CHECKED %d" % count)
+PY
+}
+out="$(net_check "$RS" "$S/control_plane.py" "$S/repo_defaults.py")"; rc=$?
+assert_eq "$rc:$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "0:" "네트워크 축: ls-remote 는 check_remote_head 안에만 · 상태 계산 · 상태줄은 부르지 않는다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 3" "네트워크 축이 세 스크립트를 셌다"
+assert_contains "$(cat "$S/repo_defaults.py")" 'NET_GIT_ALLOWED = frozenset({"ls-remote"})' "양의 짝: 네트워크 허용 목록이 실제로 있다"
+sed 's/^    main, main_full, main_short, why = default_ref(repo)$/    main, main_full, main_short, why = default_ref(repo); repo_defaults.check_remote_head(repo.cwd, main_short)/' \
+  "$S/control_plane.py" > "$T/control_plane.py"
+cmp -s "$S/control_plane.py" "$T/control_plane.py" && no "변이 적용 안 됨(상태줄이 원격 대조)" || ok "변이 적용됨(상태줄이 원격 대조)"
+assert_contains "$(net_check "$T/control_plane.py")" "네트워크 대조 check_remote_head 를 부른다" "양성 대조: 상태줄이 check_remote_head 를 부르면 잡는다"
+printf 'from repo_defaults import check_remote_head\n' > "$T/roadmap_status.py"
+assert_contains "$(net_check "$T/roadmap_status.py")" "네트워크 대조 check_remote_head 를 부른다" "양성 대조: 상태 계산이 이름으로 import 해도 잡는다"
+sed 's/^def _toplevel(cwd: str) -> str:$/def _toplevel(cwd: str, allowed=NET_GIT_ALLOWED) -> str:/' "$S/repo_defaults.py" > "$T/repo_defaults.py"
+cmp -s "$S/repo_defaults.py" "$T/repo_defaults.py" && no "변이 적용 안 됨(밖에서 네트워크 목록)" || ok "변이 적용됨(밖에서 네트워크 목록)"
+assert_contains "$(net_check "$T/repo_defaults.py")" "NET_GIT_ALLOWED 를 check_remote_head 밖에서 쓴다" "양성 대조: check_remote_head 밖에서 네트워크 목록을 쓰면 잡는다"
+sed 's/^NET_GIT_ALLOWED = frozenset({"ls-remote"})/NET_GIT_ALLOWED = frozenset({"ls-remote", "fetch"})/' "$S/repo_defaults.py" > "$T/repo_defaults.py"
+assert_contains "$(net_check "$T/repo_defaults.py")" "NET_GIT_ALLOWED 가 frozenset" "양성 대조: 네트워크 목록에 fetch 를 더하면 잡는다"
+printf 'import subprocess\nNET_GIT_ALLOWED = frozenset({"ls-remote"})\n' > "$T/roadmap_status.py"
+assert_contains "$(net_check "$T/roadmap_status.py")" "NET_GIT_ALLOWED 는 repo_defaults.py 에만 둔다" "양성 대조: 다른 파일의 네트워크 목록을 잡는다"
+printf 'def f(top):\n    return _git(top, "ls-remote", "origin", allowed=frozenset({"ls-remote"}))\n' > "$T/ctl_allowed.py"
+assert_contains "$(net_check "$T/ctl_allowed.py")" "git 허용 목록(allowed=)을 check_remote_head 밖에서 바꾼다" "양성 대조: 허용 목록을 글자로 넘겨 우회하면 잡는다"
+printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "user.name", "x"])\n' > "$T/ctl_config.py"
+assert_contains "$(static_check "$T/ctl_config.py")" "git config 를 --get 꼴 밖으로 부른다" "양성 대조: config 를 --get 없이 부르면 잡는다"
+printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "--get", "remote.origin.url"])\n' > "$T/ctl_config_ok.py"
+assert_not_contains "$(static_check "$T/ctl_config_ok.py")" "config 를 --get 꼴 밖" "양의 짝: config --get 꼴은 통과"
 for sub in fetch push update-ref; do
   out="$(cd "$S" && python3 -c 'import sys; import roadmap_status as r
 try:
@@ -764,8 +830,16 @@ sed 's/^specs_dir: design$/specs_dir: ..\/x/' "$W/docs/rm2/roadmap.md" > "$T/rm2
 cp "$T/rm2-bad.md" "$W/docs/rm2/roadmap.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-bad.json"); rc=$?
 assert_eq "$rc" "3" "레포 설정 값이 잘못되면 검사 불가"
-assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "레포 설정 specs_dir" "잘못된 레포 설정 사유"
+assert_contains "$(js "$T/rm2-bad.json" "' | '.join(r['format_errors'])")" "로드맵(docs/rm2/roadmap.md): specs_dir" "잘못된 레포 설정 사유"
 assert_eq "$(js "$T/rm2-bad.json" "len(r['blocks']) > 0 and all(b['parallel'] is None for b in r['blocks'])")" "True" "형식 깨짐 보고서의 블록 parallel 은 None(빈 목록이 아니다)"
+# R8 AC23b — 로드맵 머리말은 로드맵 층이 받는 키만 받는다(roadmaps_dir 는 레포 설정 파일 몫)
+g checkout -q -- docs/rm2/roadmap.md
+awk '{ print } /^specs_dir: design$/ { print "roadmaps_dir: docs/plans-x/" }' "$W/docs/rm2/roadmap.md" > "$T/rm2-layer.md"
+assert_eq "$(grep -c '^roadmaps_dir: docs/plans-x/$' "$T/rm2-layer.md")" "1" "픽스처: 로드맵 머리말에 roadmaps_dir 줄이 들어갔다"
+cp "$T/rm2-layer.md" "$W/docs/rm2/roadmap.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm2/roadmap.md > "$T/rm2-layer.json"); rc=$?
+assert_eq "$rc" "3" "로드맵 머리말에 로드맵 층이 받지 않는 키(roadmaps_dir) → 검사 불가"
+assert_contains "$(js "$T/rm2-layer.json" "' | '.join(r['format_errors'])")" "로드맵(docs/rm2/roadmap.md) 은 이 설정을 받지 않는다(roadmaps_dir)" "로드맵 층이 받지 않는 키 사유가 format_errors 에"
 g checkout -q -- docs/rm2/roadmap.md
 
 # ── R5 AC5 · AC6 · AC7 — 여러 브랜치 · 구현 중 · 구현 끝 · 산출물 ─────────────────────────────
@@ -1067,6 +1141,18 @@ assert_eq "$(stage "$T/rm21.json" G21)" "머지됨" "수리 4: 사본이 더한 
 assert_eq "$(js "$T/rm21.json" "next(b['branches'] for b in r['blocks'] if b['id']=='G21')")" "['feature/g21a']" "수리 4: 이미 머지된 이름은 branches 에 더하지 않는다"
 assert_contains "$(notes "$T/rm21.json" H21)" "로드맵 사본 1개" "수리 4: 형식이 깨진 사본은 건너뛴 수를 정보로 밝힌다(조용히 건너뛰지 않는다)"
 assert_eq "$(stage "$T/rm21.json" H21)" "머지됨" "수리 4: 깨진 사본만 있으면 판정은 머지됨 그대로"
+
+# ── R8 AC1 — 상태 계산의 레포 설정은 해결자가 낸다: 기본 브랜치의 레포 설정 파일 · 출처 · 알림 ─────────
+assert_eq "$(js "$T/rm21.json" "r['settings']['sources']['specs_dir']")" "기본값" "레포 설정 파일이 없으면 specs_dir 출처는 기본값"
+assert_contains "$(js "$T/rm21.json" "' | '.join(r['settings']['notices'])")" "기계 상태 층 건너뜀" "보고 settings 에 해결자 알림(notices)이 실린다"
+g checkout -q main
+printf -- '---\nspecs_dir: docs/superpowers/specs/\n---\n' > "$W/.devbrew.md"
+g add -- .devbrew.md && g commit -qm "레포 설정 파일" && g push -q origin main && g fetch -q origin
+(cd "$W" && python3 "$RS" --json docs/rm21/roadmap.md > "$T/rm21-repo.json")
+at="$(g rev-parse origin/HEAD | cut -c1-8)"
+assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['specs_dir']")" "레포 설정@${at}" "레포 설정 파일이 기본 브랜치에 있으면 specs_dir 출처가 레포 설정@<커밋 8자>"
+assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['test_command']")" "기본값" "레포 설정 파일에 없는 키는 기본값 그대로"
+assert_eq "$(stage "$T/rm21-repo.json" F21)" "일부 머지 1/2" "레포 설정 파일이 같은 값이면 단계 판정은 그대로"
 
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"

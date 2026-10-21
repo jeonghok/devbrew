@@ -80,6 +80,111 @@ def unquote(value: str) -> str:
     return value
 
 
+def _roadmap_shape(path: str, roadmaps_dir: str):
+    """로드맵 자리(`<roadmaps_dir><폴더>/<파일>.md`)가 아니면 사유, 맞으면 None."""
+    if not path.startswith(roadmaps_dir):
+        return "로드맵 폴더 밖이다(%s 아래가 아니다)" % roadmaps_dir
+    parts = path[len(roadmaps_dir):].split("/")
+    if len(parts) != 2 or not parts[0]:
+        return "로드맵 폴더(%s) 바로 아래 폴더 한 단계 안이 아니다" % roadmaps_dir
+    if not parts[1].endswith(".md") or parts[1] == ".md":
+        return "마크다운 파일(.md)이 아니다"
+    return None
+
+
+def roadmap_verdict(path: str, text, roadmaps_dir: str) -> tuple:
+    """("roadmap" · "not_roadmap" · "unreadable", 사유). 로드맵 = roadmaps_dir 바로 아래 폴더 한 단계 안의 .md ∧ 머리말
+    `type: roadmap`. 머리말이 없거나 다른 type 이면 not_roadmap, 글이나 머리말을 못 읽으면 unreadable."""
+    why = _roadmap_shape(path, roadmaps_dir)
+    if why:
+        return "not_roadmap", why
+    if text is None:
+        return "unreadable", "파일을 읽지 못했다"
+    first = text.split("\n", 1)[0].rstrip("\r")
+    if text.startswith("\ufeff"):
+        return "unreadable", "머리말 앞에 BOM 이 있다"
+    if first != "---":
+        if first.startswith("---"):
+            return "unreadable", "머리말 여는 줄이 `---` 하나가 아니다"
+        return "not_roadmap", "머리말이 없다"
+    if not any(line.rstrip("\r") == "---" for line in text.split("\n")[1:]):
+        return "unreadable", "머리말이 닫히지 않았다"
+    kind = unquote(frontmatter(text).get("type", ""))
+    if kind != "roadmap":
+        return "not_roadmap", "표지가 type: roadmap 이 아니다(type: %s)" % (kind or "없음")
+    return "roadmap", ""
+
+
+class Unreadable(ValueError):
+    """로드맵 후보의 글을 읽을 수 없다 — 메시지가 사유다. read 가 던지면 그 후보는 검사 불가다."""
+
+
+class ReadFailed(Unreadable):
+    """읽기 자체가 실패했다(git 실패 등) — 글의 사실이 아니라 다시 읽으면 달라질 수 있다."""
+
+
+def regular_text(regular: bool, data: bytes) -> str:
+    """로드맵 후보 글의 읽기 규칙 하나 — 일반 파일 · LFS 포인터 아님 · UTF-8 이면 글, 아니면 Unreadable(사유)."""
+    if not regular:
+        raise Unreadable("일반 파일이 아니다(링크 · 서브모듈 등)")
+    if data.split(b"\n", 1)[0].startswith(b"version https://git-lfs"):
+        raise Unreadable("LFS 포인터다")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Unreadable("UTF-8 글이 아니다")
+
+
+def tree_entries(out: bytes, roadmaps_dir: str) -> dict:
+    """`git ls-tree -r -z` 출력 → 로드맵 자리의 {경로: (mode, 종류, blob)}. 다른 경로는 버린다."""
+    entries = {}
+    for entry in (e for e in out.split(b"\0") if e):
+        meta, _tab, path = entry.decode("utf-8", "replace").partition("\t")
+        if not _roadmap_shape(path, roadmaps_dir):
+            entries[path] = tuple(meta.split())
+    return entries
+
+
+def blob_reader(entries: dict, cat, failed: set):
+    """read(경로) — tree_entries 의 항목을 cat(blob) → (rc, 바이트) 로 읽는다. 일반 파일(100644 · 100755)만 읽고,
+    cat 이 실패하면 경로를 failed 에 넣고 ReadFailed."""
+    def read(path):
+        mode, kind, sha = entries[path]
+        regular = kind == "blob" and mode in ("100644", "100755")
+        if not regular:
+            return regular_text(False, b"")
+        rc, data = cat(sha)
+        if rc != 0:
+            failed.add(path)
+            raise ReadFailed("파일을 읽지 못했다(git cat-file rc %d)" % rc)
+        return regular_text(True, data)
+    return read
+
+
+def judge_roadmap(path: str, read, roadmaps_dir: str) -> tuple:
+    """roadmap_verdict 와 같은 답 — 글은 로드맵 자리일 때만 read(경로) 로 읽고, Unreadable 이면 ("unreadable", 사유)."""
+    why = _roadmap_shape(path, roadmaps_dir)
+    if why:
+        return "not_roadmap", why
+    try:
+        text = read(path)
+    except Unreadable as exc:
+        return "unreadable", str(exc)
+    return roadmap_verdict(path, text, roadmaps_dir)
+
+
+def find_roadmaps(paths, read, roadmaps_dir: str) -> tuple:
+    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 둘 다 정렬. read(경로) → 글 | None, 못 읽으면 Unreadable."""
+    found, unchecked = [], []
+    for path in sorted(paths):
+        verdict, why = judge_roadmap(path, read, roadmaps_dir)
+        if verdict == "roadmap":
+            found.append(path)
+        elif verdict == "unreadable":
+            unchecked.append((path, why))
+    return found, unchecked
+
+
 def _heading_indexes(lines):
     """펜스 밖의 `## ` 줄 번호들. `### ` 는 `## ` 로 시작하지 않으므로 들지 않는다."""
     in_fence = False
@@ -551,6 +656,7 @@ RECORD_HEADING = "## 지휘 기록"
 DEFAULT_REF = "refs/remotes/origin/HEAD"
 NO_DEFAULT = ("기본 브랜치를 알 수 없다 — origin/HEAD 가 없다. `git remote set-head origin --auto` 로 만든 뒤 "
               "다시 계산한다")
+NO_ORIGIN = "기본 브랜치를 알 수 없다 — origin 원격이 없다. git remote add origin <URL> 로 더한 뒤 git remote set-head origin --auto 를 돈다"
 # `## 지휘 기록` 의 spec 승인 줄 — 지휘자가 `- spec 승인 · <YYYY-MM-DD> · 「<고른 선택지 원문>」` 로 쓴다.
 APPROVAL_PREFIX = "- spec 승인 · "
 APPROVAL_DENY = ("승인 대기", "승인 전", "승인 거절", "승인하지 않", "승인 안", "미승인", "않", "철회", "취소", "보류",

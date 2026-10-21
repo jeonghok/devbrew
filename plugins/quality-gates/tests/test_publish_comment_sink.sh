@@ -442,6 +442,27 @@ case_M4_session_dir_not_in_corpus() {
   rm -rf "$REPO/.claude"
 }
 
+# ── PR base 는 원격 추적 참조로 잰다: 이름이 origin/<base> 인 태그 · 로컬 브랜치가 가로채지 못한다 ──
+case_pr_base_ignores_planted_origin_refs() {
+  local tok="Wq3eR8tY2uI7oP4aS9dF1gH6jK0lZ5xC" leak="$T/leak-m3.md" R="$T/repo-m3"
+  printf 'value %s\n' "$tok" > "$leak"
+  git init -q -b main "$R"
+  g3() { git -C "$R" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+  echo base > "$R/a.txt"; g3 add a.txt; g3 commit -q -m base
+  g3 update-ref refs/remotes/origin/main HEAD
+  g3 checkout -q -b feat
+  g3 commit -q --allow-empty -m "ci: rotate $tok"
+  g3 branch -f main HEAD
+  g3 branch origin/main HEAD 2>/dev/null
+  g3 tag origin/main HEAD 2>/dev/null
+  assert_eq "$(git -C "$R" merge-base origin/main HEAD 2>/dev/null)" "$(git -C "$R" rev-parse HEAD)" \
+    "pr_base 양성 대조: 짧은 이름 origin/main 은 심은 태그 · 브랜치를 고른다(옛 줄이면 corpus 가 빈다)"
+  SINK_CWD="$R" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "pr_base 전제: base 를 찾아 corpus 가 degraded 가 아니다"
+  SINK_CWD="$R" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$leak"
+  assert_eq "$LAST" "skipped: scan-failed" "pr_base: 심은 origin/main 태그 · 브랜치가 있어도 refs/remotes/origin/main 기준이라 커밋 메시지가 corpus 에 든다"
+}
+
 # ── 잘못된 호출은 exit 2, 결과 줄 없음, gh 호출 0 ─────────────────────────────
 case_usage_errors() {
   run_sink "$WITH_GH"
@@ -466,7 +487,8 @@ for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
          case_I2_producer_failure_fails_closed case_subdir_runs_from_repo_root \
          case_N1_option_shaped_file_names case_N2_binary_attribute_hides_nothing \
          case_T1_textconv_plaintext_in_corpus case_unreadable_changed_file_fails_closed \
-         case_I2_images_and_html_refused case_M4_session_dir_not_in_corpus case_usage_errors; do
+         case_I2_images_and_html_refused case_M4_session_dir_not_in_corpus case_pr_base_ignores_planted_origin_refs \
+         case_usage_errors; do
   note "-- $c"
   "$c"
 done

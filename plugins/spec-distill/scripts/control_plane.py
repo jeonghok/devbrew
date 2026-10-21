@@ -41,7 +41,8 @@ from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError  # noqa: E402
+from roadmap_model import (BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError, blob_reader,  # noqa: E402
+                           find_roadmaps, tree_entries)
 from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -103,6 +104,13 @@ def failed_report(path: str, reason: str) -> dict:
     return {"roadmap": path, "source": None, "fetched_at": None, "notice": "", "blocks": [],
             "unassigned": None, "orphans": None, "unknown_ids": [], "overlaps": [],
             "format_errors": [], "unknown_reasons": [reason], "exit": 3, "bridge_error": True}
+
+
+def unreadable_report(path: str, why: str) -> dict:
+    """머리말을 못 읽은 로드맵 후보의 보고서 — exit 3. 같은 blob 이면 같은 결과라 캐시에 둔다."""
+    report = failed_report(path, "로드맵 머리말을 읽지 못했다 — %s" % why)
+    del report["bridge_error"]
+    return report
 
 
 def first_line(report: dict) -> str:
@@ -210,8 +218,9 @@ def interview_lines(interview) -> list:
 
 # ── 세 출력 ──────────────────────────────────────────────────────────────────
 
-def statusline_text(items, interview, minutes, select_error=None) -> str:
-    """상태줄 한 줄. items 는 고른 로드맵 [(경로, 보고서)] — 수는 전부의 합이고 이름은 첫 로드맵이다."""
+def statusline_text(items, interview, minutes, select_error=None, default_name=None) -> str:
+    """상태줄 한 줄. items 는 고른 로드맵 [(경로, 보고서)] — 수는 전부의 합이고 이름은 첫 로드맵이다. 기본 브랜치
+    이름을 알면 받은 시각 앞에 두고, 받은 시각이 그 브랜치만의 것이 아님을 밝힌다."""
     parts = []
     if items:
         parts.append(folder_name(items[0][0]) + (" 외 %d" % (len(items) - 1) if len(items) > 1 else ""))
@@ -221,7 +230,12 @@ def statusline_text(items, interview, minutes, select_error=None) -> str:
             parts.append("기타 %d" % other)
         w = sum(count_warnings(r) for _p, r in items)
         parts.append("경고 %d" % w if w else "경고 없음")
-        parts.append("받은 지 %d분" % minutes if minutes is not None else "받은 시각 모름")
+        fetched = "받은 지 %d분" % minutes if minutes is not None else "받은 시각 모름"
+        if default_name:
+            parts.append("기본 브랜치 %s" % default_name)
+            if minutes is not None:
+                fetched += "(어느 원격 · 브랜치든)"
+        parts.append(fetched)
     seg = interview_segment(interview)
     if seg:
         parts.append(seg)
@@ -243,13 +257,12 @@ WORK_DONE = cs.WORK_DONE
 
 
 def recommended(report: dict):
-    """(권장 수, 출처). 로드맵 frontmatter `parallel_default` 가 없으면 기본값. 값이 깨졌으면 (None, 사유)."""
+    """(권장 수, 출처). 상태 계산 보고의 settings(해결자가 낸 값과 출처) — 없으면 기본값. 레포 설정을 못 읽었으면(값이 None) (None, 사유) — 원인 줄은 보고의 format_errors 다."""
     settings = report.get("settings") or {}
     value = settings.get("parallel_default", repo_defaults.PARALLEL_DEFAULT) if settings else repo_defaults.PARALLEL_DEFAULT
     if value is None:
-        return None, "로드맵 머리말 parallel_default 가 깨졌다"
-    src = (settings.get("sources") or {}).get("parallel_default", "기본값")
-    return value, ("로드맵 머리말" if src == "frontmatter" else src)
+        return None, "레포 설정을 읽지 못해 권장 수를 모른다"
+    return value, (settings.get("sources") or {}).get("parallel_default", "기본값")
 
 
 def running(machine: dict) -> int:
@@ -376,8 +389,7 @@ def tasks_output(items, select_error=None):
 
 # ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
-ROADMAP_RE = re.compile(r"docs/superpowers/roadmaps/[^/]+/roadmap\.md")
-GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref"})
+GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref", "config", "cat-file"})   # config 는 --get 꼴만
 CACHE_VERSION = 1
 STATE_SUFFIX = "-interview.state.md"
 STATUSLINE_BUDGET = 3.0
@@ -407,16 +419,16 @@ class Deadline:
         return left
 
 
-def run_bounded(argv, cwd, env, deadline: Deadline, what: str):
-    """(rc, 표준 출력 바이트). 남은 시간을 넘기면 프로세스 묶음째 죽이고 TimedOut."""
+def run_bounded(argv, cwd, env, deadline: Deadline, what: str, data=None):
+    """(rc, 표준 출력 바이트). data 가 있으면 표준 입력으로 준다. 남은 시간을 넘기면 프로세스 묶음째 죽이고 TimedOut."""
     wait = deadline.left(what)
     try:
-        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, start_new_session=True)
+        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL if data is None else subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
     except (OSError, subprocess.SubprocessError):
         return 127, b""
     try:
-        out, _err = proc.communicate(timeout=wait)
+        out, _err = proc.communicate(input=data, timeout=wait)
     except BaseException as exc:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -456,11 +468,17 @@ class Repo:
         self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
                         GIT_NO_LAZY_FETCH="1", LC_ALL="C")
 
-    def git(self, *args):
+    def raw(self, *args, data=None):
+        """(rc, 표준 출력 바이트) — 시간 예산 안에서 허용 목록의 git 만. data 는 표준 입력."""
         if not args or args[0] not in GIT_OK:
             raise RuntimeError("허용하지 않은 git 하위 명령: %r" % (args[:1],))
-        rc, out = run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
-                              self.deadline, "git " + args[0])
+        if args[0] == "config" and args[1:2] != ("--get",):
+            raise RuntimeError("git config 는 --get 꼴만 부른다: %r" % (args,))
+        return run_bounded(["git", "-c", "core.quotePath=false"] + list(args), self.cwd, self.env,
+                           self.deadline, "git " + args[0], data)
+
+    def git(self, *args):
+        rc, out = self.raw(*args)
         return rc, out.decode("utf-8", "replace")
 
     def line(self, *args):
@@ -487,76 +505,143 @@ def fetch_stamp(repo: Repo):
     return max(stamps) if stamps else None
 
 def default_ref(repo):
-    """(커밋, 전체 참조 이름) — origin/HEAD 가 가리키는 기본 브랜치. 없으면 (None, None)."""
+    """(커밋, 전체 참조 이름, 짧은 이름, 못 찾은 사유) — origin/HEAD 가 가리키는 기본 브랜치. 판정은 해결자의 순수
+    함수가, git 은 시간 예산 안의 repo.git 이 맡는다. 네트워크를 쓰지 않는다."""
     sha = repo.line("rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if not sha:
-        return None, None
-    return sha, repo.line("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+    rc, full = repo.git("rev-parse", "--symbolic-full-name", DEFAULT_REF)
+    short = repo_defaults.short_default_name(rc, full)
+    if sha and short:
+        return sha, full.strip(), short, None
+    rc, _out = repo.git("config", "--get", "remote.origin.url")
+    try:
+        return None, None, None, repo_defaults.missing_default_reason(rc)
+    except repo_defaults.SettingsError as exc:
+        return None, None, None, str(exc)
 
 
-def candidates(repo: Repo, main):
-    """([(경로, blob)], 사유). 기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
+def _folder_setting(repo: Repo, key: str, what: str):
+    """(폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
+    try:
+        result = repo_defaults.resolve(repo.cwd, run=repo.raw)
+    except repo_defaults.SettingsError as exc:
+        return None, str(exc)
+    if result["errors"]:
+        return None, "레포 설정을 읽지 못해 %s를 정하지 못했다 — %s" % (what, result["errors"][0])
+    return result["values"][key], None
+
+
+def roadmaps_dir(repo: Repo):
+    return _folder_setting(repo, "roadmaps_dir", "로드맵 폴더")
+
+
+def interview_dir(repo):
+    """(인터뷰 폴더, 사유). 레포 밖(repo 없음)이면 기본값."""
+    if repo is None:
+        return repo_defaults.INTERVIEW_DIR, None
+    return _folder_setting(repo, "interview_dir", "인터뷰 폴더")
+
+
+def listing(repo: Repo, main):
+    """(로드맵 자리의 {경로: (mode, 종류, blob)}, 로드맵 폴더, 사유) — ls-tree 하나, 글은 읽지 않는다(캐시 키 재료).
+    기본 브랜치가 없으면 고를 것이 없다(로드맵 없음과 같다)."""
     if not main:
-        return [], None
-    rc, out = repo.git("ls-tree", "-r", "-z", main, "--", "docs/superpowers/roadmaps/")
+        return {}, None, None
+    folder, why = roadmaps_dir(repo)
+    if folder is None:
+        return {}, None, why
+    rc, out = repo.raw("ls-tree", "-r", "-z", main, "--", folder)
     if rc != 0:
-        return [], "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
-    found = []
-    for entry in (e for e in out.split("\0") if e):
-        meta, _tab, path = entry.partition("\t")
-        if ROADMAP_RE.fullmatch(path):
-            found.append((path, meta.split()[-1]))
-    return sorted(found), None
+        return {}, None, "기본 브랜치의 로드맵 목록을 읽지 못했다(git ls-tree rc %d)" % rc
+    return tree_entries(out, folder), folder, None
 
 
-def interview_files(root: str):
-    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, 폴더 사유 | None)."""
+def cat_batch(repo: Repo, shas) -> dict:
+    """{blob: 바이트} — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)."""
+    if not shas:
+        return {}
+    rc, out = repo.raw("cat-file", "--batch", data="".join(sha + "\n" for sha in shas).encode("ascii"))
+    got, pos = {}, 0
+    while rc == 0 and pos < len(out):
+        end = out.find(b"\n", pos)
+        if end < 0:
+            break
+        head, pos = out[pos:end].decode("ascii", "replace").split(" "), end + 1
+        if len(head) != 3 or not head[2].isdigit():
+            continue   # `<blob> missing` 등 — 내용 없는 줄
+        size = int(head[2])
+        if pos + size > len(out):
+            break
+        got[head[0]], pos = out[pos:pos + size], pos + size + 1
+    return got
+
+
+def candidates(repo: Repo, entries: dict, folder):
+    """([로드맵 · 검사 불가 경로], {검사 불가 경로: 사유}, {읽기가 실패한 경로}) — 캐시를 못 쓸 때만 부른다(글을 읽는다).
+    머리말을 못 읽은 후보도 경로에 든다 — 조용히 빼지 않는다."""
+    if folder is None:
+        return [], {}, set()
+    failed = set()
+    blobs = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
+    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (128, b""), failed)
+    found, unchecked = find_roadmaps(list(entries), read, folder)
+    unchecked = dict(unchecked)
+    return sorted(found + list(unchecked)), unchecked, failed
+
+
+def interview_files(root: str, rel: str | None, why: str | None = None):
+    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, (자리, 사유) | None). rel 은 인터뷰 폴더(레포
+    상대) — 정하지 못했으면 None 과 그 사유."""
     try:
         supported = "interview-state" in (SCRIPTS / "state_path.py").read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         supported = False
     if not supported:
         return False, [], None
-    folder = Path(root, "docs", "superpowers", "interview")
-    for part in ("docs", "docs/superpowers", "docs/superpowers/interview"):
+    if rel is None:
+        return True, [], (repo_defaults.SETTINGS_FILE, why)
+    parts = rel.strip("/").split("/")
+    shown = "/".join(parts)
+    folder = Path(root, *parts)
+    for i in range(1, len(parts) + 1):
+        part = "/".join(parts[:i])
         try:
             if stat.S_ISLNK(os.lstat(os.path.join(root, part)).st_mode):
-                return True, [], "인터뷰 폴더 경로에 링크가 있다: %s" % part
+                return True, [], (shown, "인터뷰 폴더 경로에 링크가 있다: %s" % part)
         except FileNotFoundError:
             return True, [], None
         except OSError as exc:
-            return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+            return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
     names = set()
     try:
         with os.scandir(str(folder)) as entries:
             for entry in entries:
                 if len(names) >= FOLDER_ENTRIES_MAX:
-                    return True, [], "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX
+                    return True, [], (shown, "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX)
                 try:
                     entry.name.encode("utf-8")
                 except UnicodeEncodeError:
                     continue
                 names.add(entry.name)
     except OSError as exc:
-        return True, [], "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__
+        return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
     progress = sorted(n for n in names
                       if n.endswith(STATE_SUFFIX) and n[: -len(".state.md")] + ".md" not in names)
     if len(progress) > STATE_FILES_MAX:
-        return True, [], "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress))
+        return True, [], (shown, "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress)))
     files = []
     for name in progress:
         try:
             mtime_ns = os.lstat(str(folder / name)).st_mtime_ns
         except OSError:
             mtime_ns = -1
-        files.append(("docs/superpowers/interview/" + name, folder / name, mtime_ns))
+        files.append((shown + "/" + name, folder / name, mtime_ns))
     return True, files, None
 
 
 def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     summary = {"supported": supported, "items": [], "errors": []}
     if folder_error:
-        summary["errors"].append({"path": "docs/superpowers/interview", "reason": folder_error})
+        summary["errors"].append({"path": folder_error[0], "reason": folder_error[1]})
     for rel, path, mtime_ns in files:
         deadline.left("인터뷰 상태 파일")
         try:
@@ -875,7 +960,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
-    supported, files, folder_error = interview_files(repo.cwd if repo else cwd)
+    supported, files, folder_error = interview_files(repo.cwd if repo else cwd, *interview_dir(repo))
     if repo is None:
         view["interview"] = read_interviews(supported, files, folder_error, deadline)
         if arg:
@@ -886,17 +971,20 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     if stamp is not None:
         view["minutes"] = max(0, int((time.time() - stamp) // 60))
         fetched = datetime.datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
-    main, main_full = default_ref(repo)
-    view["no_default"] = bool(not arg and main is None
-                              and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes"))
+    main, main_full, main_short, why = default_ref(repo)
+    view["default_name"] = main_short
+    view["no_default"] = (why if not arg and main is None
+                          and repo.line("for-each-ref", "--count=1", "--format=%(refname)", "refs/remotes") else None)
     if arg:
         if os.path.isabs(arg):
             arg = os.path.relpath(os.path.realpath(arg), os.path.realpath(repo.cwd))
         arg = arg[2:] if arg.startswith("./") else arg
         blob = repo.line("rev-parse", "--verify", "--quiet", "%s:%s" % (main, arg)) if main else None
-        targets, select_error = [(arg, blob or "-")], None
+        tree, folder, select_error = {}, None, None
+        targets = [(arg, blob or "-")]
     else:
-        targets, select_error = candidates(repo, main)
+        tree, folder, select_error = listing(repo, main)
+        targets = sorted((p, e[2]) for p, e in tree.items())   # 키는 로드맵 자리의 blob — 글은 캐시를 못 쓸 때만 읽는다
     mode = arg or "*"
     key = cache_key(repo, main, main_full, mode, targets)
     path = cache_file(repo)
@@ -909,7 +997,13 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, use_gh: bool = True, fo
     if hit is not None:
         items, select_error = hit
     else:
-        reports = [(p, run_status(repo, p)) for p, _blob in targets]
+        if arg:
+            reports = [(arg, run_status(repo, arg))]
+        else:
+            paths, unchecked, failed = candidates(repo, tree, folder)
+            reports = [(p, failed_report(p, unchecked[p]) if p in failed     # 읽기 실패는 캐시에 두지 않는다
+                        else unreadable_report(p, unchecked[p]) if p in unchecked else run_status(repo, p))
+                       for p in paths]
         items = reports if arg else [(p, r) for p, r in reports if unfinished(r)]
         if key is None:
             view["notes"].append("캐시 키를 만들지 못했다(git 읽기 실패)")
@@ -1000,7 +1094,7 @@ def cmd_statusline() -> int:
             return 0
         deadline = Deadline(STATUSLINE_BUDGET)
         v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, use_gh=False)
-        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"])
+        line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"], v.get("default_name"))
         remember_line(ctx, line)
         print(line)
     except TimedOut:
@@ -1122,7 +1216,7 @@ def cmd_show(tasks: bool, arg, epic=None) -> int:
             return 3
         print(msg)
         return 0
-    shown_error = v["select_error"] or (NO_DEFAULT if v.get("no_default") and not v["items"] else None)
+    shown_error = v["select_error"] or (v.get("no_default") if not v["items"] else None)
     if epic:
         _path, report = v["items"][0] if v["items"] else (arg, None)
         if report is None or report.get("exit") in (3, 4):

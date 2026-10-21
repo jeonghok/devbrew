@@ -134,7 +134,7 @@ assert_not_contains "$BA" '이 brief 의 가장 큰 K 다음 수' "AC25: B-A 에
 # 분해 판단 5 — 로드맵 폴더 이름은 brief 파일 이름에서 도출한다(<주제>-<HHMM> 줄기도)
 DJ5="$(parab "$FIN" '5. **기록.**')"
 assert_contains "$DJ" '5. **기록.**' "분해 판단 5 가 분해 판단 절 안에 있다"
-assert_contains "$DJ5" '로드맵 폴더는 `docs/superpowers/roadmaps/<YYYY-MM-DD>-<주제 또는 주제-HHMM>/` 다 — 폴더 이름은 brief 파일 이름(`<줄기>.md`)에서 끝의 `-interview.md` 를 뗀 것, 곧 brief 파일 이름의 날짜 · 주제 부분 그대로다.' "분해 판단 5: 로드맵 폴더 이름을 brief 파일 이름에서 도출"
+assert_contains "$DJ5" '로드맵 폴더는 `<roadmaps_dir><YYYY-MM-DD>-<주제 또는 주제-HHMM>/` 다(`roadmaps_dir` 은 레포 설정의 로드맵 폴더) — 폴더 이름은 brief 파일 이름(`<줄기>.md`)에서 끝의 `-interview.md` 를 뗀 것, 곧 brief 파일 이름의 날짜 · 주제 부분 그대로다.' "분해 판단 5: 로드맵 폴더 이름을 brief 파일 이름에서 도출"
 assert_not_contains "$DJ5" '(brief 와 같은 날짜 · 주제)' "분해 판단 5: 옛 「brief 와 같은 날짜 · 주제」 없음(양성 짝: 위 단언)"
 for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 이거나 `brief 에서 줄을 찾지 못한 번호` 면' \
            '`unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.' \

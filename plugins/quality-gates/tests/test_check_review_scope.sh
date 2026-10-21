@@ -14,6 +14,7 @@ REPO=""
 # field <key> <output-text> → prints the value after "<key>: "
 
 # Build a repo with a 'main' base branch + a 'feature' branch 1 commit ahead.
+# origin/HEAD → origin/main (= main 의 tip) — 기준선은 origin/HEAD 하나다.
 # Sets global REPO and leaves CWD inside it (on feature, clean tree).
 mk_repo_feature_ahead() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1   # fail-closed: never run git in caller's repo
@@ -21,6 +22,8 @@ mk_repo_feature_ahead() {
   git config user.email t@t.test; git config user.name tester
   git checkout -q -b main
   echo base > a.txt; git add a.txt; git commit -qm base
+  git update-ref refs/remotes/origin/main main
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   git checkout -q -b feature
   echo work >> a.txt; git commit -qam work
 }
@@ -61,6 +64,7 @@ case_ng4_ignored_not_counted() {
   mk_repo_feature_ahead
   git checkout -q main
   echo 'build/' > .gitignore; git add .gitignore; git commit -qm gitignore
+  git update-ref refs/remotes/origin/main main   # 기본 브랜치에 들어간 커밋
   mkdir -p build; echo obj > build/x.o   # ignored, untracked
   local out; out=$(bash "$SCRIPT")
   if [[ "$(field changes_exist "$out")" == "no" \
@@ -135,8 +139,9 @@ case_degraded_no_base() {
   git checkout -q -b weirdname
   echo x > a.txt; git add a.txt; git commit -qm x
   local out rc; out=$(bash "$SCRIPT"); rc=$?
-  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
-    ok "no main/master base → degraded + exit 0"
+  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 \
+     && "$(field degraded_reason "$out")" == "no-default-branch" ]]; then
+    ok "no main/master base → degraded + exit 0 · degraded_reason: no-default-branch"
   else
     no "degraded no-base (rc=$rc got: $out)"
   fi
@@ -184,8 +189,9 @@ exec "$realgit" "\$@"
 EOF
   chmod +x "$shim/git"
   local out rc; out=$(PATH="$shim:$PATH" bash "$SCRIPT"); rc=$?
-  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
-    ok "git diff failure after sanity → degraded (fail-open, C2)"
+  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 \
+     && "$(field degraded_reason "$out")" == "git-query" ]]; then
+    ok "git diff failure after sanity → degraded (fail-open, C2) · degraded_reason: git-query"
   else
     no "git-query fail-open (rc=$rc got: $out)"
   fi
@@ -207,7 +213,22 @@ case_read_only() {
   cd / && rm -rf "$REPO"
 }
 
+# 형제 resolve-baseline.sh 를 못 돌리면 resolve-baseline-failed — 사유가 비지 않는다.
+case_degraded_resolver_missing() {
+  mk_repo_feature_ahead
+  local lone="$REPO/.git/lone"; mkdir -p "$lone"; cp "$SCRIPT" "$lone/check-review-scope.sh"
+  local out rc; out=$(bash "$lone/check-review-scope.sh" 2>/dev/null); rc=$?
+  if [[ "$rc" -eq 0 && "$(field degraded "$out")" == "yes" \
+     && "$(field degraded_reason "$out")" == "resolve-baseline-failed" ]]; then
+    ok "resolve-baseline.sh 를 못 돌림 → degraded · degraded_reason: resolve-baseline-failed"
+  else
+    no "resolver missing (rc=$rc got: $out)"
+  fi
+  cd / && rm -rf "$REPO"
+}
+
 case_changes_exist_branch_ahead
+case_degraded_resolver_missing
 case_changes_exist_none
 case_ng4_ignored_not_counted
 case_ng4_untracked_counted

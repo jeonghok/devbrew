@@ -108,7 +108,7 @@ seed 는 태그를 쓰지 않습니다(`check_seed.py` 가 본문 태그를 금�
 뒤의 되찾기는 워크트리의 docs 를 본다.
 
 **요청이 비어 있으면 이 질문보다 먼저** 「무엇을 맡기려 하시나요」로 주제부터 묻는다 — 워크트리
-이름(`feature/<kebab-topic>`)도 audit 이름(`## 상태` 의 `TOPIC`)도 요청의 주제에서 나오는데 빈
+이름(`<접두><kebab-topic>`)도 audit 이름(`## 상태` 의 `TOPIC`)도 요청의 주제에서 나오는데 빈
 요청에는 주제가 없다. 답으로도 주제를 못 대면 좁혀 다시 묻는다. 주제가 정해지면 아래로 간다.
 워크트리 질문을 건너뛰는 경우도 같다 — audit 이름에 주제가 필요하다. 그 답들은 audit 보다 먼저 온
 원문이므로 `## 확산` 1번에서 `## 1. 원문` 의 **첫 항목**부터 요약 없이 옮긴다.
@@ -122,33 +122,29 @@ seed 는 태그를 쓰지 않습니다(`check_seed.py` 가 본문 태그를 금�
 **기준은 워크트리가 실제로 쓰는 base 다** — `EnterWorktree` 의 기본(`worktree.baseRef=fresh`)은
 origin 의 **기본 브랜치**이므로, 재야 할 것은 「HEAD 에 있는데 `origin/<기본>` 에 없는 커밋」이다.
 tracking branch(`@{u}`)를 재면 **자기 remote 를 추적하는 브랜치가 0 을 보고하면서 실제로는
-`origin/main` 과 발산해 있을 수 있다** — push 를 마쳤어도 그 커밋들은 새 워크트리에 안 들어온다.
+`origin/<기본>` 과 발산해 있을 수 있다** — push 를 마쳤어도 그 커밋들은 새 워크트리에 안 들어온다.
 그러면 경고가 0 건으로 뜨고 워크트리가 조용히 커밋을 빠뜨린다. 그래서 base 를 도출해서 잰다:
 
 ```bash
-base="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
-if [ -z "$base" ]; then
-  for cand in origin/main origin/master; do
-    if git rev-parse --verify --quiet "$cand" >/dev/null 2>&1; then base="$cand"; break; fi
-  done
-fi
+base="$(git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)"
+case "$base" in refs/remotes/origin/?*) ;; *) base="" ;; esac
 if [ -n "$base" ]; then
   local_only_n="$(git rev-list --count "$base"..HEAD 2>/dev/null)"
 else
   local_only_n=""
 fi
 if [ -z "$base" ] || ! [[ "$local_only_n" =~ ^[0-9]+$ ]]; then
-  LOCAL_ONLY_NOTE="확인 못함 — origin 기본 브랜치를 못 찾았거나 git rev-list 실패(사유 불명)"
+  LOCAL_ONLY_NOTE="확인 못함 — origin 기본 브랜치를 못 찾았거나 git rev-list 실패(사유 불명). 원격 origin 을 연결하고 git remote set-head origin --auto 로 기본 브랜치를 정한다"
 elif [ "$local_only_n" -gt 0 ]; then
-  LOCAL_ONLY_NOTE="$base 에 없는 커밋 ${local_only_n}개 — 워크트리 기본 base 엔 안 들어온다"
+  LOCAL_ONLY_NOTE="${base#refs/remotes/} 에 없는 커밋 ${local_only_n}개 — 워크트리 기본 base 엔 안 들어온다"
 else
-  LOCAL_ONLY_NOTE="$base 에 없는 커밋 0개"
+  LOCAL_ONLY_NOTE="${base#refs/remotes/} 에 없는 커밋 0개"
 fi
 echo "$LOCAL_ONLY_NOTE"
 ```
 
-origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEAD` 미설정 + main/master 둘 다 부재)
-에서도 이 블록은 죽지 않는다 — `rev-list` 를 아예 돌리지 않고 **«확인 못함»**으로 떨어진다.
+origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEAD` 미설정)
+에서도 이 블록은 죽지 않는다. 다른 이름으로 대신 재지 않고, `rev-list` 를 아예 돌리지 않은 채 **«확인 못함»**으로 떨어진다.
 **빈 값과 0 은 다른 사실이다** — 확인에 실패하거나 base 를 못 찾아서 못 잰 것을 0건으로 읽으면
 이 풋건이 그대로 재현된다(명령 실패 시 `local_only_n` 은 빈 문자열이라 숫자 정규식에 걸리지
 않고 «확인 못함» 으로만 떨어진다).
@@ -158,13 +154,23 @@ origin 의 기본 브랜치를 못 찾는 환경(원격 미설정 · `origin/HEA
 `worktree.baseRef=head` 로 바꾼 사용자에게는 이 경고가 무해한 과다 경고다 — 그 설정에서는
 base 가 로컬 HEAD 라 아무것도 안 빠진다.
 
+브랜치 이름의 `<접두>` 는 레포 설정의 브랜치 접두다 — 질문 전에 이 펜스로 얻는다. 펜스가 멈추면 그 사유를
+보이고 멈춘다(레포 설정을 고친 뒤 다시 돈다):
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BP="$(python3 "$SD/scripts/repo_defaults.py" get branch_prefix)" || BP=""
+[ -n "$BP" ] || { echo "[spec-distill] 브랜치 접두를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+echo "$BP"
+```
+
 `${LOCAL_ONLY_NOTE}` 를 질문 본문과 «만들고 시작» 옵션 설명에 그대로 실어 단독
-`AskUserQuestion` 하나를 띄운다:
+`AskUserQuestion` 하나를 띄운다(`<접두>` 는 위 펜스가 낸 값):
 
 ```javascript
 AskUserQuestion({ questions: [{
   header: "워크트리",
-  question: "`feature/<kebab-topic>` 워크트리를 만들고 거기서 시작할까요? 이 브랜치 하나에서 인터뷰·설계·계획·구현까지 갑니다. (${LOCAL_ONLY_NOTE}) 거절하면 현재 디렉토리에서 진행합니다.",
+  question: "`<접두><kebab-topic>` 워크트리를 만들고 거기서 시작할까요? 이 브랜치 하나에서 인터뷰·설계·계획·구현까지 갑니다. (${LOCAL_ONLY_NOTE}) 거절하면 현재 디렉토리에서 진행합니다.",
   options: [
     {label: "만들고 시작 (권장)", description: "고르면 이 세션의 cwd 가 그 워크트리로 옮겨지고 audit·seed 가 그 안에 쓰인다. ${LOCAL_ONLY_NOTE}"},
     {label: "현재 디렉토리에서", description: "고르면 워크트리 없이 지금 위치에 쓴다 — 자료는 현재 브랜치에 남는다"}],
@@ -174,8 +180,8 @@ AskUserQuestion({ questions: [{
 승낙 시 절차 — 순서 고정, **각 단계는 단순 명령 하나**(격리 세션의 git 가드가 복합 명령을 막는다):
 
 1. `EnterWorktree(name=<kebab-topic>)` — native 도구 우선(superpowers `using-git-worktrees` 와 같은 원칙). 실측(v6): 요청한 이름 그대로가 아니라 `worktree-` 접두가 붙은 브랜치가 된다 — 그래서 2단계의 rename 이 항상 필요하다.
-2. `git branch -m feature/<kebab-topic>` — project-init 검증기가 제안하는 바로 그 형태. 실측(v6): rename 은 거부되지 않았다.
-3. audit·seed 를 그 워크트리 안의 `docs/superpowers/interview/` 에 쓴다(`## 상태` 의 경로 그대로).
+2. `git branch -m <접두><kebab-topic>` — `<접두>` 는 질문 앞 펜스가 낸 값. 실측(v6): rename 은 거부되지 않았다.
+3. audit·seed 를 그 워크트리 안의 인터뷰 폴더(`interview_dir`)에 쓴다(`## 상태` 의 경로 그대로).
 4. proceed 게이트에서 ①/② 를 고르면 **handoff 직전** 커밋 1회(`## 확정 — proceed 게이트` 의 절차).
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
    열 때 그 디렉토리에서 열어야 `/spec-distill:pm-interview @<seed 경로>` 가 그 파일을 찾는다.
@@ -333,7 +339,7 @@ fi
 
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
-| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정). 첫 write 때 frontmatter `session_id: <sid>` 를 적는다 — 이후 라운드의 이름 되찾기가 그 값을 본다 |
+| audit (`$AUDIT`) | 인터뷰 폴더(`interview_dir` — `## 상태` 블록의 `$IDIR`) | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정). 첫 write 때 frontmatter `session_id: <sid>` 를 적는다 — 이후 라운드의 이름 되찾기가 그 값을 본다 |
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
@@ -346,12 +352,15 @@ fi
 입니다 — 다음 세션의 첫 턴이 `/spec-distill:pm-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
 `## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
-**만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)만 생긴다.
+**만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)과 그 폴더를 git 이 무시하게 하는 `.gitignore`(`*` 한 줄)만 생긴다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
-ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""
+[ -n "$ROOT" ] || { echo "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유) — 고친 뒤 이 블록을 다시 돌린다" >&2; exit 1; }
+IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
+[ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
 # 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다.
 TOPIC="<kebab-topic>"
@@ -365,9 +374,12 @@ else
       ""|*"<"*|*">"*|*/*|*[[:space:]]*) IV_NAME="" ;;
       *) IV_NAME="$(date +%F)-${TOPIC}-interview" ;;
     esac
-  elif [ "$f_rc" -ne 0 ]; then
+  elif [ "$f_rc" -eq 2 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2
+  elif [ "$f_rc" -ne 0 ]; then
+    IV_NAME=""
+    echo "[spec-distill] 이 세션의 seed audit 을 찾지 못했다(위 사유) — 이름을 고르지 않고 멈춘다." >&2
   fi
 fi
 AUDIT=""
@@ -376,8 +388,8 @@ case "$IV_NAME" in
   ""|*/*|*"<"*|*">"*|*[[:space:]]*)
     echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다." >&2 ;;
   *)
-    AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
-    SEED="docs/superpowers/interview/$IV_NAME.md" ;;
+    AUDIT="${IDIR}${IV_NAME}.audit.md"
+    SEED="${IDIR}${IV_NAME}.md" ;;
 esac
 SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""; LEDGER_REFUSED=""
 if [ -n "$SEED" ]; then
@@ -393,7 +405,7 @@ SEED_BASE="${STATE_DIR:+$STATE_DIR/seed-baseline.md}"            # 저자 편집
 ledger_rc=1   # Phase 0 에는 상태 파일이 없다 — degrade 는 no-state-in-phase-0 경로로 간다
 ```
 
-**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$AUDIT`·`$SEED`·
+**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$IDIR`·`$AUDIT`·`$SEED`·
 `$SEED_ABS`·`$AUDIT_ABS`·`$STATE_DIR`·`$PROFILE`·`$BUNDLE`·`$BUNDLE_RC`·`$CODEX_YAML`·`$SEED_BASE` 는 전부
 환경과 audit 의 `session_id` 의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느
 블록도 이 값들을 새로 만들지 않습니다 — `mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못합니다.
@@ -1065,7 +1077,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 ### 호출 모양 — 이 파이프라인에서 여기가 정본이다
 
 **다음 세션의 첫 턴은 `/spec-distill:pm-interview @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
-(`docs/superpowers/interview/<날짜>-<topic>-interview.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
+(인터뷰 폴더(`interview_dir`) 아래 `<날짜>-<topic>-interview.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
 치환하지 않은 자리표가 나가면 사용자가 깨진 명령을 실행하고, 그것을 잡는 자리가 없습니다.
 
 **다음 세션 줄 — ①/② 공통**
@@ -1104,7 +1116,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 ```
 /compact
-/spec-distill:pm-interview @docs/superpowers/interview/<날짜>-<topic>-interview.md
+/spec-distill:pm-interview @<인터뷰 폴더><날짜>-<topic>-interview.md
 ```
 
 `/compact` 뒤 같은 줄에 붙인 텍스트는 요약 지시로, `/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.
@@ -1113,10 +1125,13 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 **handoff 직전 커밋(①/② 에서만).** 워크트리 안이면 ①/② 를 고른 직후 handoff 직전
 커밋을 한 번 합니다 — 명령 노출(①/②) 바로 앞입니다.
 ③(수정)·④(멈춤)에서는 커밋하지 않습니다 — 수정마다 커밋이 늘고 멈춤에도 커밋이 남는
-것을 막기 위해서입니다. 단순 명령 둘(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
-이미 stage 된 다른 작업을 쓸어 담지 않습니다:
+것을 막기 위해서입니다. 단순 명령 넷(`<topic>` 은 공백 없는 kebab-case 주제) — 경로 지정 커밋이라
+이미 stage 된 다른 작업을 쓸어 담지 않습니다. 앞 두 판정 중 하나가 멈추면 그 사유를 보이고 뒤 두 git 명령을 돌리지
+않습니다 — 게이트 앞 글에 «미커밋 — <사유>» 를 적습니다:
 
 ```bash
+python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$AUDIT" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$SEED" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 git add -- "$AUDIT" "$SEED"
 git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$AUDIT" "$SEED"
 ```

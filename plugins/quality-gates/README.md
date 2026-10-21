@@ -80,7 +80,7 @@ quality-gates/
 │   ├── doc_paths.py                          # 리뷰에서 뺄 문서 경로 규칙의 유일한 자리(`DEVBREW_QUALITY_GATES_DOC_PATHS`)
 │   ├── discover-spec.sh                      # 의도 출처 (`--intent-out`; 범위 안 `Spec:` 트레일러의 설계문서 전부 → 커밋 메시지 + 열린 PR 본문)
 │   ├── compute-test-scope-candidates.sh      # 차등 — 후보의 바닥(이름 일치 · 바뀐 테스트 · # guards:) + 분모
-│   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
+│   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/degraded_reason/same_as_head/ahead)
 │   ├── scope_tuple.py                        # 스코프 튜플 파서 · status → 사유 · scope: 블록
 │   ├── topic-head.sh                         # ① 토픽 해소 — 선언 → 봉인 → 경계 · 끝점 → 합친 트리 튜플
 │   ├── seal-worktree.sh                      # `seal <session-id>` — HEAD 트리를 `.git` 안 임시 인덱스로 봉인, 봉인 커밋 SHA 출력
@@ -279,7 +279,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
   커밋이 다른 `Spec:` 키를 달았으면 흡수 대신 `not-certified (declaration-invalid)`(키 둘)로 막힌다.
   머지한 브랜치는 로컬과 원격 모두 지운다(`git branch -D` · `git push origin --delete` ·
   `git fetch --prune`). 조각마다 다른 키(`…#pr1` · `…#pr2`)를 쓰면 생기지 않는다.
-- base 는 `base_ref`(보통 `origin/main`)다. 같은 키의 앞 조각을 로컬 `main` 에만 머지했으면(push
+- base 는 `base_ref`(`origin/HEAD` 가 가리키는 `refs/remotes/origin/<기본 브랜치>`)다. 같은 키의 앞 조각을 로컬 `main` 에만 머지했으면(push
   전) 로컬 `main` 과 그 뒤 딴 브랜치가 구성원으로 잡힌다. 원격에서 머지했지만 아직 fetch 하지
   않았으면 남은 앞 조각 ref(로컬 · `origin/<b>`) 때문에 그 조각을 다시 본다. 머지는 원격에서 하고
   fetch 한 뒤 돌린다.

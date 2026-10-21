@@ -47,7 +47,7 @@ for lit in 'check_bundle_coverage.py --plan' '--acs' '그 에픽만 멈추고' '
 done
 assert_contains "$(step 6)" '`redecompose.md`' "걸음 6(머지 뒤): 재분해 절차를 가리킨다"
 assert_contains "$(step 7)" 'Spec: <에픽 설계문서 레포 상대경로>' "걸음 7: Spec 트레일러"
-for lit in '실패 «이름»' '`test_command`' '`review_model`' '같은 시각에 돌리지 않는다' '`## 통합 리뷰 인계`' '**리뷰 뒤 반영.**' '머지 직전' '스위트 대조 없음'; do
+for lit in '실패 «이름»' '`test_command`' '`repo_defaults.py get review_model --roadmap <로드맵>`' '같은 시각에 돌리지 않는다' '`## 통합 리뷰 인계`' '**리뷰 뒤 반영.**' '머지 직전' '스위트 대조 없음'; do
   assert_contains "$(step 8)" "$lit" "걸음 8(머지 전 확인): $lit"
 done
 for lit in '끝에서 끝' '브랜치는 지우지 않는다'; do
@@ -72,7 +72,7 @@ assert_not_contains "$MAN" '절별 승인' "손 절차: superpowers 7.0.0 에 �
 assert_contains "$(step 2)" '설계문서 점검의 질문' "걸음 2: 사람에게 묻는 단계에 설계문서 점검의 질문"
 once 5 '`### <앞 계획 경로>` 아래로 옮긴다'
 once 8 '바탕 브랜치를 지우기 전에 위 PR 의 바탕을 기본 브랜치로 바꾼다'
-once 1 'agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(로드맵 머리말 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
+once 1 'agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 2 '그 브랜치를 체크아웃한 worktree 가 둘 이상이면 쓰지 않고 멈춰 보인다'
 once 3 '레포 전용 값 · 계층 · 온톨로지 · 크기 선호'
 # 지휘자가 가른 결과 · 판정은 리뷰 엔진의 얼림 울타리 밖(`## 지휘 기록`)에 — 열린 리뷰의 `## 결정 기록` 에 손으로 쓰면 「허가 없이 바뀜」 으로 돌아온다(R2a 계획 2 통합 재리뷰 · R12 §4)

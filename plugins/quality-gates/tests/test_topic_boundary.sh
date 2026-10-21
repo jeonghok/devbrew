@@ -14,6 +14,17 @@ KEY='docs/x-design.md#pr1'
 REPO=""
 cleanup() { cd / && rm -rf "$REPO"; }
 
+# 기준선은 origin/HEAD 가 가리키는 ref 하나다. 이 픽스처의 기본 브랜치는 로컬 main 이라
+# 부를 때마다 origin/main 을 main 에 맞추고 origin/HEAD 를 그리로 둔다.
+sync_base() {   # 이미 맞으면 ref 를 건드리지 않는다(ref 이동 · 훅 실행 없음)
+  local m; m=$(git rev-parse --verify --quiet refs/heads/main) || return 0
+  [ "$(git rev-parse --verify --quiet refs/remotes/origin/main)" = "$m" ] \
+    || git update-ref refs/remotes/origin/main "$m"
+  [ "$(git symbolic-ref --quiet refs/remotes/origin/HEAD)" = refs/remotes/origin/main ] \
+    || git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+}
+rt() { sync_base; bash "$RT" "$@"; }
+
 new_repo() {   # 빈 리포 + main 두 커밋(둘째가 $KEY 의 선언 대상 경로). CWD = 리포
   # AC16 은 선언이 가리키는 경로가 실재해야 "ok" 로 간다 — $KEY 의 경로
   # (docs/x-design.md) 를 여기서 만들어 두지 않으면 F1·F2·F3 의 "status: ok"
@@ -26,6 +37,7 @@ new_repo() {   # 빈 리포 + main 두 커밋(둘째가 $KEY 의 선언 대상 �
   echo r0 > f.txt; git add f.txt; git commit -qm r0
   mkdir -p docs; echo '# design' > docs/x-design.md
   git add docs/x-design.md; git commit -qm "add design doc"
+  sync_base
 }
 
 decl_commit() {   # <파일> <내용> <메시지> — 토픽 선언 트레일러를 단 커밋
@@ -54,7 +66,7 @@ case_f1_two_siblings() {
   git checkout -q topicA
   git checkout -q -b noise "$R"; echo n > n.txt; git add n.txt; git commit -qm "noise (선언 없음)"
   git checkout -q topicA
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F1 status: ok"
   assert_eq "$(field declared "$out")" "2" "F1 선언 커밋 2"
   assert_grep "$(field branches "$out")" 'topicA' "F1 branches 에 topicA"
@@ -74,7 +86,7 @@ case_f2_merged_ref_alive() {
   git checkout -q main
   git merge -q --no-ff -m "merge topicA" topicA     # ref 는 그대로 둔다
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F2 status: ok"
   assert_eq "$(field declared "$out")" "2" "F2 선언 커밋 2(C 전체)"
   assert_eq "$(field in_base "$out")" "1" "F2 base 에 든 선언 1 이 in_base 로 공시된다"
@@ -93,7 +105,7 @@ case_f3_merged_ref_deleted() {
   git merge -q --no-ff -m "merge topicA" topicA
   git branch -q -D topicA
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "F3 status: ok"
   assert_eq "$(field in_base "$out")" "1" "F3 in_base 1"
   assert_eq "$(field branches "$out")" "topicB" "F3 구성원은 topicB 뿐 — merged: 구성원이 없다"
@@ -109,9 +121,9 @@ case_f5_fragment_discriminates() {
   git commit -qm "b1
 
 Spec: docs/x-design.md#pr2"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field declared "$out")" "1" "F5 #pr1 질의가 #pr2 를 매치하지 않는다"
-  local out2; out2=$(bash "$RT" resolve 'docs/x-design.md')
+  local out2; out2=$(rt resolve 'docs/x-design.md')
   assert_eq "$(field status "$out2")" "no-declaration" "F5 맨 경로 질의는 조각을 매치하지 않는다"
   cleanup
 }
@@ -131,9 +143,9 @@ Spec: docs/x-design.md#pr1"
   git commit -qm "b1
 
 Spec: docs/x-design.md#pr10"
-  local out; out=$(bash "$RT" resolve 'docs/x-design.md#pr1')
+  local out; out=$(rt resolve 'docs/x-design.md#pr1')
   assert_eq "$(field declared "$out")" "1" "F5b #pr1 질의가 #pr10 을 매치하지 않는다"
-  local out2; out2=$(bash "$RT" resolve 'docs/x-design.md#pr10')
+  local out2; out2=$(rt resolve 'docs/x-design.md#pr10')
   assert_eq "$(field declared "$out2")" "1" "F5b #pr10 질의는 자기 자신만 매치한다"
   cleanup
 }
@@ -146,7 +158,7 @@ case_f6_path_absent() {
   git commit -qm "a1
 
 Spec: docs/nonexistent-design.md#pr1"
-  local out; out=$(bash "$RT" resolve 'docs/nonexistent-design.md#pr1')
+  local out; out=$(rt resolve 'docs/nonexistent-design.md#pr1')
   assert_eq "$(field status "$out")" "declaration-invalid" "F6 경로 부재 → declaration-invalid"
   assert_grep "$(field reason "$out")" '.' "F6 사유가 비어 있지 않다"
   cleanup
@@ -160,7 +172,7 @@ case_path_check_is_repo_root_relative() {
   new_repo
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   mkdir -p sub/dir; cd sub/dir
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "하위 디렉터리에서 호출해도 declared path 는 repo-root 기준으로 resolve 된다"
   cleanup
 }
@@ -172,7 +184,7 @@ case_f1_boundary() {
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   git checkout -q topicA
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field boundary "$out")" "$R" "F1 경계 = 두 fork 의 merge-base = 분기점"
   assert_eq "$(field commits "$out")" "2" "F1 |T| = 2"
   cleanup
@@ -185,12 +197,12 @@ case_all_declared_in_base() {
   git checkout -q main
   echo r2 >> f.txt; git commit -qam r2
   git merge -q --no-ff -m "merge topicA" topicA
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "no-declaration" "선언 전부 base: status: no-declaration"
   assert_grep "$(field reason "$out")" 'already in base_ref' "reason 이 base 에 들었음을 적는다"
   assert_eq "$(field declared "$out")" "1" "declared 는 C 전체(1)"
   assert_eq "$(field in_base "$out")" "1" "in_base 1"
-  local rc; bash "$RT" commits "$KEY" >/dev/null 2>&1; rc=$?
+  local rc; rt commits "$KEY" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "3" "commits 는 status≠ok 이면 exit 3(그대로)"
   cleanup
 }
@@ -201,7 +213,7 @@ case_orphan_tag_only() {
   git checkout -q --detach HEAD; decl_commit t.txt t1 "t1 (태그에만)"
   git tag only-tag
   git checkout -q main
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "declaration-invalid" "태그에만 있는 선언: declaration-invalid"
   assert_grep "$(field reason "$out")" '^orphan declaration commit' "reason 이 고아를 이름 붙인다"
   assert_eq "$(field in_base "$out")" "0" "고아는 base 에 없다(in_base 0)"
@@ -217,10 +229,10 @@ case_f4_undeclared_ancestor_included() {
   git checkout -q -b topicA
   echo a1 > a.txt; git add a.txt; git commit -qm "a1 (선언 없음)"
   decl_commit b.txt b1 "b1"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field boundary "$out")" "$R" "F4 경계 = 브랜치 분기점(선언 커밋이 아니다)"
   assert_eq "$(field commits "$out")" "2" "F4 선언 없는 조상 a1 도 T 에 든다"
-  local cs; cs=$(bash "$RT" commits "$KEY")
+  local cs; cs=$(rt commits "$KEY")
   assert_eq "$(printf '%s\n' "$cs" | grep -c .)" "2" "F4 commits 서브커맨드도 2줄"
   cleanup
 }
@@ -233,10 +245,10 @@ case_f7_mixed_keys_in_T() {
   git commit -qm "b1
 
 Spec: docs/x-design.md#pr2"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "declaration-invalid" "F7 한 집합에 두 토픽 키 → declaration-invalid"
   local cout crc
-  cout=$(bash "$RT" commits "$KEY" 2>/dev/null); crc=$?
+  cout=$(rt commits "$KEY" 2>/dev/null); crc=$?
   assert_eq "$crc" "3" "F7 status != ok 이면 commits 는 exit 3 (fail-closed)"
   assert_eq "$cout" "" "F7 commits 가 stdout 에 아무것도 내지 않는다"
   cleanup
@@ -253,7 +265,7 @@ case_nkeys_grep_family_catches_genuine_trailer() {
   git commit -qm "b1
 
 Spec: docs/x-design.md#pr2"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "declaration-invalid" "nkeys: 진짜 트레일러의 다른 키는 여전히 declaration-invalid"
   cleanup
 }
@@ -269,7 +281,7 @@ case_nkeys_lowercase_trailer_no_false_positive() {
   git commit -qm "b1
 
 spec: docs/other.md#zz"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "nkeys: 소문자 spec: 트레일러는 declaration-invalid 를 유발하지 않는다"
   cleanup
 }
@@ -289,18 +301,18 @@ case_f8_seal_first_then_maximal() {
   # 기대지 않는다).
   local SEAL; SEAL=$(git commit-tree "$TIPA^{tree}" -p "$TIPA" -m seal)
 
-  local out0; out0=$(bash "$RT" resolve "$KEY")
+  local out0; out0=$(rt resolve "$KEY")
   assert_not_contains "$(field tips "$out0")" "$TIPA" "F8 --seal 없으면 tip(A) 는 극대원소가 아니라 빠진다"
   assert_contains "$(field tips "$out0")" "$TIPB" "F8 tip(B) 는 끝점이다"
 
-  local out1; out1=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  local out1; out1=$(rt resolve "$KEY" --seal "$SEAL")
   assert_contains "$(field tips "$out1")" "$SEAL" "F8 봉인을 먼저 넣으면 끝점에 든다"
   assert_not_contains "$(field tips "$out1")" "$TIPA" "F8 tip(A) 는 여전히 빠진다(조상이므로)"
 
   # ── F1(리뷰): 합성 봉인 커밋은 tips 의 끝점이지만 commits 의 원소가 아니다 ──
   #    ref 없는 합성 커밋이 「토픽 커밋」으로 세이면 GC 뒤 사라질 SHA 가 clean 튜플에
   #    낀다. tips 는 그대로 봉인을 담아야 한다(§6.2.4) — commits 만 뺀다.
-  local cout1; cout1=$(bash "$RT" commits "$KEY" --seal "$SEAL")
+  local cout1; cout1=$(rt commits "$KEY" --seal "$SEAL")
   assert_not_contains "$cout1" "$SEAL" "F8 commits 는 봉인 SHA 를 포함하지 않는다(합성 커밋 제외)"
   assert_contains "$cout1" "$TIPB" "F8 commits 는 여전히 실제 토픽 커밋(tip B)을 포함한다"
   cleanup
@@ -313,7 +325,7 @@ case_seal_on_topic_yes() {
   git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
   local TIPA; TIPA=$(git rev-parse HEAD)
   local SEAL; SEAL=$(git commit-tree "$TIPA^{tree}" -p "$TIPA" -m seal)
-  local out; out=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  local out; out=$(rt resolve "$KEY" --seal "$SEAL")
   assert_eq "$(field status "$out")" "ok" "봉인-토픽안: status: ok"
   assert_eq "$(field seal_on_topic "$out")" "yes" "봉인-토픽안: seal_on_topic: yes(봉인의 부모가 B_t 구성원)"
   assert_contains "$(field tips "$out")" "$SEAL" "봉인-토픽안: tips 에 봉인 SHA 가 있다"
@@ -336,12 +348,12 @@ case_seal_off_topic_excludes_commits() {
   git checkout -q topicA
   local SEAL; SEAL=$(git commit-tree "$OUTSIDE_TIP^{tree}" -p "$OUTSIDE_TIP" -m seal)
 
-  local out; out=$(bash "$RT" resolve "$KEY" --seal "$SEAL")
+  local out; out=$(rt resolve "$KEY" --seal "$SEAL")
   assert_eq "$(field status "$out")" "ok" "봉인-토픽밖: status: ok(진행하되 공시일 뿐 막지 않는다)"
   assert_eq "$(field seal_on_topic "$out")" "no" "봉인-토픽밖: seal_on_topic: no"
   assert_contains "$(field tips "$out")" "$SEAL" "봉인-토픽밖: tips 는 여전히 봉인 SHA 를 담는다(끝점 자격은 유지)"
 
-  local cs; cs=$(bash "$RT" commits "$KEY" --seal "$SEAL")
+  local cs; cs=$(rt commits "$KEY" --seal "$SEAL")
   assert_eq "$(printf '%s\n' "$cs" | grep -c .)" "1" "봉인-토픽밖: commits 는 정확히 1개 — 토픽 자신의 커밋만"
   assert_contains "$cs" "$TIPA" "봉인-토픽밖: commits 에 topicA 자신의 커밋(TIPA)이 있다"
   assert_not_contains "$cs" "$OUTSIDE_TIP" "봉인-토픽밖: commits 에 outside 브랜치의 커밋이 없다(오염 없음)"
@@ -359,9 +371,9 @@ case_tips_order_deterministic() {
   git checkout -q -b aaa "$R"; decl_commit a.txt a "a"
   git checkout -q -b mmm "$R"; decl_commit m.txt m "m"
   git checkout -q main
-  local o1; o1=$(field tips "$(bash "$RT" resolve "$KEY")")
+  local o1; o1=$(field tips "$(rt resolve "$KEY")")
   git branch -m zzz b_zzz; git branch -m aaa y_aaa; git branch -m mmm a_mmm
-  local o2; o2=$(field tips "$(bash "$RT" resolve "$KEY")")
+  local o2; o2=$(field tips "$(rt resolve "$KEY")")
   assert_eq "$o2" "$o1" "브랜치 개명으로 발견 순서가 바뀌어도 tips 순서가 같다"
   assert_eq "$(printf '%s' "$o1" | tr ',' '\n' | grep -c .)" "3" "끝점 3개"
   cleanup
@@ -372,11 +384,11 @@ case_no_declaration() {
   new_repo
   git checkout -q -b topicA
   echo a1 > a.txt; git add a.txt; git commit -qm "a1 (선언 없음)"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "no-declaration" "선언 0 → no-declaration"
   assert_eq "$(field declared "$out")" "0" "declared: 0"
   local cout crc
-  cout=$(bash "$RT" commits "$KEY" 2>/dev/null); crc=$?
+  cout=$(rt commits "$KEY" 2>/dev/null); crc=$?
   assert_eq "$crc" "3" "no-declaration 이면 commits 는 exit 3 (fail-closed)"
   assert_eq "$cout" "" "no-declaration 이면 commits 가 stdout 에 아무것도 내지 않는다"
   cleanup
@@ -394,7 +406,7 @@ case_remote_only_unmerged_member() {
   git update-ref refs/remotes/origin/topicA "$TIPA"
   git checkout -q main
   git branch -q -D topicA
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "원격-전용 미머지 구성원: status: ok(orphan 이 아니다)"
   assert_grep "$(field branches "$out")" 'origin/topicA' "원격-전용 미머지 구성원: branches 에 원격-추적 이름이 있다"
   cleanup
@@ -407,7 +419,7 @@ case_local_and_remote_same_commit_dedup() {
   git checkout -q -b topicA "$R"; decl_commit a.txt a1 "a1"
   local TIPA; TIPA=$(git rev-parse HEAD)
   git update-ref refs/remotes/origin/topicA "$TIPA"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "로컬+원격 같은 커밋: status: ok"
   assert_eq "$(field branches "$out" | tr ',' '\n' | grep -c .)" "1" "로컬+원격 같은 커밋: branches 에 구성원이 한 번만"
   assert_eq "$(field branches "$out")" "topicA" "로컬+원격 같은 커밋: 로컬 이름이 이긴다(사전순으로 먼저 스캔됨)"
@@ -417,12 +429,12 @@ case_local_and_remote_same_commit_dedup() {
 # ── 출력 계약: 11키가 «항상» 나온다 (in_base 가 다섯째 키) ─────────────────────
 case_eleven_keys_always() {
   new_repo
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   local n; n=$(printf '%s\n' "$out" | grep -cE '^[a-z_]+:')
   assert_eq "$n" "11" "선언 0 인 리포에서도 11키 전부 emit"
   assert_eq "$(printf '%s\n' "$out" | sed -n '5p')" "in_base: 0" "다섯째 줄이 in_base — 선언 0 이면 0"
   assert_eq "$(field seal_on_topic "$out")" "-" "--seal 없으면 seal_on_topic: -"
-  local rc; bash "$RT" resolve "$KEY" >/dev/null 2>&1; rc=$?
+  local rc; rt resolve "$KEY" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "정상 경로 exit 0"
   cleanup
 }
@@ -532,7 +544,7 @@ case_resolve_tips_feed_combine() {
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   git checkout -q -b topicC "$R"; decl_commit c.txt c1 "c1"
   git checkout -q topicA
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "조립: resolve 가 status ok 를 낸다(전제 확인)"
   local cout; cout=$(bash "$CT" $(field tips "$out" | tr ',' ' '))
   assert_eq "$(field status "$cout")" "ok" "조립: resolve 의 tips(콤마) 를 combine(공백 인자) 이 받는다"
@@ -565,9 +577,9 @@ case_base_remote_ref_never_member() {
   git update-ref refs/remotes/origin/main HEAD
   git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "base 원격 ref 가 선언 커밋을 담아도 status: ok"
-  assert_eq "$(field base_ref "$out")" "origin/main" "base_ref 는 origin/HEAD 가 가리키는 origin/main"
+  assert_eq "$(field base_ref "$out")" "refs/remotes/origin/main" "base_ref 는 origin/HEAD 가 가리키는 refs/remotes/origin/main"
   assert_not_grep "$(field branches "$out")" '(^|,)(origin|origin/HEAD|origin/main|main)(,|$)' \
     "origin/HEAD(=origin) · origin/main · main 은 구성원이 아니다"
   assert_grep "$(field branches "$out")" '(^|,)topicB(,|$)' "살아 있는 구성원 topicB 는 있다(양의 짝)"
@@ -575,18 +587,43 @@ case_base_remote_ref_never_member() {
   cleanup
 }
 
+# ── base_ref 는 전체 이름 — 로컬 브랜치 · 태그 `origin/main` 이 토픽 끝에 있어도 기준선이 바뀌지 않는다 ──
+case_local_branch_named_origin_main() {
+  local kind out0 out1
+  for kind in branch tag; do
+    new_repo
+    git checkout -q -b topicA; decl_commit a.txt a1 "a1"
+    out0=$(rt resolve "$KEY" 2>/dev/null)
+    case "$kind" in
+      branch) git branch -q origin/main HEAD ;;
+      tag)    git tag origin/main HEAD ;;
+    esac
+    assert_eq "$(git rev-parse --verify --quiet origin/main 2>/dev/null)" "$(git rev-parse HEAD)" \
+      "양성 대조($kind): 짧은 이름 origin/main 은 토픽 끝으로 풀린다"
+    out1=$(rt resolve "$KEY" 2>/dev/null)
+    assert_eq "$(field status "$out0")" "ok" "양의 짝($kind): 심기 전 status: ok"
+    assert_eq "$(field in_base "$out0")" "0" "양의 짝($kind): 심기 전 in_base 0"
+    assert_eq "$(field status "$out1")" "ok" "$kind origin/main 이 있어도 status: ok"
+    assert_eq "$(field in_base "$out1")" "$(field in_base "$out0")" "$kind origin/main 이 있어도 in_base 가 같다"
+    assert_eq "$(field boundary "$out1")" "$(field boundary "$out0")" "$kind origin/main 이 있어도 boundary 가 같다"
+    assert_eq "$(git rev-parse --verify --quiet "$(field base_ref "$out1")")" "$(git rev-parse refs/remotes/origin/main)" \
+      "$kind origin/main 이 있어도 base_ref 는 원격 추적 커밋"
+    cleanup
+  done
+}
+
 # ── detect: 현재 브랜치가 base 위에 얹은 커밋의 트레일러 → 토픽 키 (R-AI) ────────────
 case_detect_statuses() {
   new_repo
   local R out; R=$(git rev-parse HEAD)
   git checkout -q -b plain; echo p > p.txt; git add p.txt; git commit -qm plain
-  out=$(bash "$RT" detect)
+  out=$(rt detect)
   assert_eq "$(field status "$out")" "no-declaration" "detect: 선언 없음"
   assert_eq "$(field topic_key "$out")" "-" "detect: 선언 없으면 topic_key: -"
   assert_detect_shape "$out" "detect(no-declaration)"
   git checkout -q -b late "$R"; echo u > u.txt; git add u.txt; git commit -qm "undeclared first"
   decl_commit l.txt l1 "declared later"
-  out=$(bash "$RT" detect)
+  out=$(rt detect)
   assert_eq "$(field status "$out")" "ok" "detect: 뒤 커밋에만 트레일러 → ok"
   assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 트레일러 값 전체(조각 포함)"
   assert_detect_shape "$out" "detect(ok)"
@@ -594,15 +631,19 @@ case_detect_statuses() {
   git commit -q --allow-empty -m "s2
 
 Spec: docs/x-design.md#pr2"
-  out=$(bash "$RT" detect)
+  out=$(rt detect)
   assert_eq "$(field status "$out")" "declaration-invalid" "detect: 한 브랜치에 키 둘 → declaration-invalid"
   assert_grep "$(field reason "$out")" '2 distinct' "detect: reason 이 키 수를 적는다"
   assert_eq "$(field topic_key "$out")" "-" "detect: 키가 둘이면 topic_key: -"
   assert_detect_shape "$out" "detect(declaration-invalid)"
   git checkout -q --detach HEAD
-  out=$(bash "$RT" detect)
+  out=$(rt detect)
   assert_eq "$(field status "$out")" "base-unresolved" "detect: detached HEAD → base-unresolved"
+  assert_eq "$(field reason "$out")" "resolve-baseline.sh degraded (detached)" "detect: reason 이 기준선 사유를 싣는다"
   assert_detect_shape "$out" "detect(base-unresolved)"
+  git checkout -q main; git symbolic-ref --delete refs/remotes/origin/HEAD
+  out=$(bash "$RT" resolve "$KEY" 2>/dev/null)
+  assert_eq "$(field reason "$out")" "resolve-baseline.sh degraded (no-default-branch)" "resolve: origin/HEAD 없음 → reason 이 no-default-branch"
   cleanup
 }
 
@@ -618,7 +659,7 @@ case_detect_empty_spec_value_excluded() {
 
 Spec: "
   decl_commit real.txt r1 "real key"
-  local out; out=$(bash "$RT" detect)
+  local out; out=$(rt detect)
   assert_eq "$(field status "$out")" "ok" "detect: 빈 Spec: 값과 진짜 키 하나 → ok(빈 값은 무시)"
   assert_eq "$(field topic_key "$out")" "$KEY" "detect: topic_key 는 진짜 키(빈 값이 앞자리를 차지하지 않는다)"
   assert_detect_shape "$out" "detect(빈 Spec 값 배제)"
@@ -630,7 +671,7 @@ case_detect_ignores_base_history() {
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q main; git merge -q --no-ff topicA -m "merge topicA"
   git checkout -q -b next; echo n > n.txt; git add n.txt; git commit -qm "next (선언 없음)"
-  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+  assert_eq "$(field status "$(rt detect)")" "no-declaration" \
     "detect: base 에 이미 든 앞 토픽의 트레일러는 세지 않는다"
   cleanup
 }
@@ -641,14 +682,14 @@ case_detect_lowercase_trailer_ignored() {
   git commit -qm "low
 
 spec: $KEY"
-  assert_eq "$(field status "$(bash "$RT" detect)")" "no-declaration" \
+  assert_eq "$(field status "$(rt detect)")" "no-declaration" \
     "detect: 소문자 spec: 는 선언이 아니다(nkeys 와 같은 계열)"
   cleanup
 }
 
 case_detect_usage() {
   new_repo
-  local rc; bash "$RT" detect extra >/dev/null 2>&1; rc=$?
+  local rc; rt detect extra >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "2" "detect 는 인자를 받지 않는다(exit 2)"
   cleanup
 }
@@ -662,7 +703,7 @@ case_unrelated_after_merge_not_member() {
   git checkout -q -b unrelated; echo u > u.txt; git add u.txt; git commit -qm "u (선언 없음)"
   git update-ref refs/remotes/origin/other "$(git rev-parse HEAD)"
   git checkout -q main; git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "같은 키 후속: status: ok"
   assert_eq "$(field branches "$out")" "topicB2" "구성원은 topicB2 뿐 — unrelated · origin/other 는 아니다"
   assert_eq "$(field in_base "$out")" "1" "머지된 앞 조각은 in_base 1"
@@ -678,7 +719,7 @@ case_n1_main_history_not_absorbed() {
   git checkout -q main; git merge -q --no-ff -m "merge topicA" topicA
   local i; for i in 1 2 3 4 5; do echo "m$i" > "m$i.txt"; git add "m$i.txt"; git commit -qm "main m$i"; done
   git checkout -q topicB; git merge -q --no-edit main      # 스택 뒤 조각이 main 을 merge 로 최신화
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "N1: status: ok"
   assert_eq "$(field branches "$out")" "topicB" "N1: 구성원 topicB 뿐"
   assert_eq "$(field boundary "$out")" "$(git rev-parse main)" "N1: 경계 = 방금 최신화한 main"
@@ -698,7 +739,7 @@ case_n2_nested_merge_not_expanded() {
   git branch -q -D topicA
   git checkout -q develop; echo y > y.txt; git add y.txt; git commit -qm "develop y (무관, 머지 뒤)"
   git checkout -q main; git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "N2: status: ok"
   assert_eq "$(field branches "$out")" "topicB2" "N2: 구성원 topicB2 뿐 — develop 은 아니다"
   assert_eq "$(field commits "$out")" "1" "N2: T = topicB2 의 커밋 하나(develop 의 x · y 없음)"
@@ -711,7 +752,7 @@ case_squash_front_still_member() {
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
   git checkout -q main; git merge -q --squash topicA; git commit -qm "squash topicA"
   git checkout -q -b topicB2; decl_commit b2.txt b2 "b2 — 같은 키 후속"
-  local out; out=$(bash "$RT" resolve "$KEY")
+  local out; out=$(rt resolve "$KEY")
   assert_eq "$(field status "$out")" "ok" "squash: status: ok"
   assert_grep "$(field branches "$out")" '(^|,)topicA(,|$)' \
     "squash: 원래 커밋이 base 의 조상이 아니라 topicA 가 여전히 구성원이다(§15-12)"
@@ -736,7 +777,7 @@ case_no_merged_member_machinery() {
 #    «셀 수 없음»과 «0»은 다른 사실이다(status 단언과 묶은 양의 짝).
 case_base_unresolved_in_base_is_dash() {
   local nogit; nogit=$(mktemp -d) || exit 1
-  local out; out=$(cd "$nogit" && bash "$RT" resolve "$KEY")
+  local out; out=$(cd "$nogit" && rt resolve "$KEY")
   assert_eq "$(field status "$out")" "base-unresolved" "git 리포가 아님: status: base-unresolved"
   assert_eq "$(field in_base "$out")" "-" "git 리포가 아님: in_base 는 -(C 를 세기 전에 끝난다 — 0 이 아니다)"
   rm -rf "$nogit"
@@ -759,6 +800,7 @@ for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_combine_three_clean case_combine_three_conflict_attribution \
          case_resolve_tips_feed_combine \
          case_for_each_ref_sort_pinned case_base_remote_ref_never_member \
+         case_local_branch_named_origin_main \
          case_detect_statuses case_detect_ignores_base_history \
          case_detect_lowercase_trailer_ignored case_detect_usage \
          case_detect_empty_spec_value_excluded \

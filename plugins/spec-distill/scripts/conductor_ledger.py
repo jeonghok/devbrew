@@ -38,12 +38,15 @@ import branch_tip  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
-from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, NO_DEFAULT, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, approval_date, frontmatter, parse_roadmap, section_lines, unquote)
-from state_path import state_root  # noqa: E402
+from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
+                           RULINGS_HEADING, FormatError, approval_date, blob_reader, find_roadmaps, parse_roadmap,
+                           section_lines, tree_entries)
+from state_path import StateRootError, ensure_state_root, state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 GIT = shutil.which("git") or "git"
+if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 해결자의 git 호출도 쓰게 한다
+    repo_defaults.git_bin_dir = os.path.dirname(GIT)
 
 
 class Fail(Exception):
@@ -73,6 +76,17 @@ def mpath(root, roadmap: str) -> Path:
         return cs.machine_path(state_root(str(root)), roadmap)
     except cs.MachineError as exc:
         raise Fail(3, str(exc))
+
+
+def mdir_for_write(root, roadmap: str) -> Path:
+    """기계 상태 폴더 — 상태 루트를 먼저 보장한다(스스로 무시 · 추적 파일이면 멈춤). 폴더를 만드는 자리만 부른다."""
+    path = mpath(root, roadmap)
+    try:
+        for line in ensure_state_root(state_root(str(root)), str(root)):
+            print(line, file=sys.stderr)
+    except StateRootError as exc:
+        raise Fail(3, str(exc))
+    return path.parent
 
 
 def load(root, roadmap: str) -> dict:
@@ -497,10 +511,19 @@ def _prs(root, b: dict):
 NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
 
 
+def _default_sha(root) -> str:
+    """기본 브랜치 커밋. 못 찾으면 고치는 법(origin 없음 · origin/HEAD 없음)을 담아 멈춘다."""
+    try:
+        sha, _short, why = repo_defaults.default_branch(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise Fail(3, str(exc))
+    if why:
+        raise Fail(3, why)
+    return sha
+
+
 def _roadmap_blocks(root, roadmap: str) -> list:
-    rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
+    _default_sha(root)
     rc, text, err = git(root, "show", "%s:%s" % (DEFAULT_REF, roadmap))
     if rc:
         raise Fail(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % roadmap)
@@ -515,9 +538,7 @@ def _with_copy_branches(root, roadmap: str, blocks: list, warns: list) -> list:
     (`roadmap_status.extra_branches`: 사본 블록이 기본 브랜치 블록의 브랜치를 모두 품을 때만). 계획 2 · 3 의 브랜치는 자기
     사본에서만 블록에 자신을 더해서, 기본 브랜치 블록만 읽으면 열린 에픽 브랜치를 빠뜨린다."""
     import roadmap_status as rs
-    rc, main, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
+    main = _default_sha(root)
     g = rs.Git(str(root))
     if os.path.isabs(GIT):  # 이 스크립트가 찾은 git 을 상태 계산의 git 호출도 쓰게 한다
         g.env["PATH"] = os.path.dirname(GIT) + os.pathsep + g.env.get("PATH", "")
@@ -549,18 +570,39 @@ def _pack_diff(root, tip: str, warns: list, label: str) -> str:
 
 # ── 하위 명령 ────────────────────────────────────────────────────────────────
 
+def _roadmaps_dir(root) -> str:
+    """해결자가 기본 브랜치의 레포 설정으로 정한 로드맵 폴더. 설정이 깨졌으면 멈춘다 — 기본 폴더로 조용히 찾지 않는다."""
+    try:
+        result = repo_defaults.resolve(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise Fail(3, str(exc))
+    if result["errors"]:
+        raise Fail(3, "레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0])
+    return result["values"]["roadmaps_dir"]
+
+
+def _default_roadmaps(root, main: str) -> tuple:
+    """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 기본 브랜치의 로드맵 폴더 목록과 blob 읽기로 find_roadmaps 를 부른다."""
+    folder = _roadmaps_dir(root)
+    p = subprocess.run([GIT, "ls-tree", "-r", "-z", main, "--", folder], cwd=str(root), capture_output=True)
+    if p.returncode:
+        raise Fail(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % p.stderr.decode("utf-8", "replace").strip())
+    entries = tree_entries(p.stdout, folder)
+
+    def cat(sha):
+        c = subprocess.run([GIT, "cat-file", "blob", sha], cwd=str(root), capture_output=True)
+        return c.returncode, c.stdout
+    return find_roadmaps(list(entries), blob_reader(entries, cat, set()), folder)
+
+
 def c_roadmaps(root, a) -> int:
-    rc, _o, _e = git(root, "rev-parse", "--verify", "--quiet", DEFAULT_REF + "^{commit}")
-    if rc:
-        raise Fail(3, NO_DEFAULT)
-    rc, out, err = git(root, "grep", "-l", "-I", "--full-name", "-E", "-e", "^type:[[:space:]]*[\"']?roadmap", DEFAULT_REF, "--", "*.md")
-    if rc not in (0, 1):
-        raise Fail(3, "기본 브랜치의 파일을 읽지 못했다: %s" % err)
+    found_paths, unchecked = _default_roadmaps(root, _default_sha(root))
+    unchecked = dict(unchecked)
     found = 0
-    for line in out.splitlines():
-        path = line.split(":", 1)[1] if ":" in line else line
-        _r, text, _e = git(root, "show", "%s:%s" % (DEFAULT_REF, path))
-        if unquote(frontmatter(text).get("type", "")) != "roadmap":
+    for path in sorted(found_paths + list(unchecked)):
+        if path in unchecked:   # 머리말을 못 읽은 후보 — 조용히 빼지 않고 검사 불가로 센다
+            print("%s\t검사 불가" % path)
+            found += 1
             continue
         p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", path], cwd=str(root),
                            capture_output=True, encoding="utf-8", errors="replace")
@@ -590,7 +632,7 @@ def _drop_approval(root, a):
 
 
 def c_claim(root, a) -> int:
-    got = cs.acquire(mpath(root, a.roadmap).parent, a.session)
+    got = cs.acquire(mdir_for_write(root, a.roadmap), a.session)
     if got in ("acquired", "held"):
         if got == "acquired":
             _drop_approval(root, a)
@@ -601,7 +643,7 @@ def c_claim(root, a) -> int:
 
 
 def c_takeover(root, a) -> int:
-    prev = cs.takeover(mpath(root, a.roadmap).parent, a.session)
+    prev = cs.takeover(mdir_for_write(root, a.roadmap), a.session)
     _drop_approval(root, a)
     print("표지를 넘겨받았다 — 이전 주인: %s" % (prev or "없음"))
     return 0
@@ -969,7 +1011,7 @@ def c_review_pack(root, a) -> int:
         raise Fail(3, "브랜치를 찾지 못했다: %s" % a.branch)
     if note:
         print(note)
-    default_dir = mpath(root, a.roadmap).parent / REVIEW_PACK_DIR
+    default_dir = (mpath(root, a.roadmap).parent if a.out else mdir_for_write(root, a.roadmap)) / REVIEW_PACK_DIR
     out = Path(a.out) if a.out else default_dir / ("%s-%s" % (a.epic, datetime.datetime.now().strftime("%Y%m%d%H%M%S")))
     try:
         out.mkdir(parents=True, exist_ok=False)
@@ -1074,7 +1116,7 @@ def c_resource_dir(root, a) -> int:
     """기계 상태 자원 폴더 `<기계 상태 폴더>/files/<종류>/<이름>` 을 만들고 경로를 낸다 — `cleanup` 이 확인 없이 치우는 자리."""
     if not a.name or not set(a.name) <= NAME_CHARS or a.name in (".", ".."):
         raise Fail(2, "자원 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.name)
-    mdir = mpath(root, a.roadmap).parent
+    mdir = mdir_for_write(root, a.roadmap)
     base = mdir / FILES_DIR / a.kind
     out = base / a.name
     for p in (mdir, mdir / FILES_DIR, base, out):

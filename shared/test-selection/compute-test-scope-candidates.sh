@@ -54,8 +54,11 @@ if [ "$mode" = worktree ]; then
   rb=$("$SCRIPT_DIR/resolve-baseline.sh" 2>/dev/null) || die4 "resolve-baseline.sh 를 실행하지 못했다"
   degraded=$(printf '%s\n' "$rb" | awk '$1 == "degraded:" { print $2 }')
   mb=$(printf '%s\n' "$rb" | awk '$1 == "merge_base:" { print $2 }')
+  why=$(printf '%s\n' "$rb" | awk '$1 == "degraded_reason:" { print $2 }')
+  [ "$why" = no-default-branch ] \
+    && echo "compute-test-scope-candidates: 기본 브랜치를 찾지 못했다 — origin/HEAD 가 없거나 가리키는 브랜치가 없다. git remote set-head origin --auto 로 고친다" >&2
   [ "$degraded" = no ] && [ -n "$mb" ] && [ "$mb" != "-" ] \
-    || die4 "기준선 미확정(degraded='${degraded:-?}' merge_base='${mb:-?}') — 범위를 확정하지 못했다"
+    || die4 "기준선 미확정(degraded='${degraded:-?}' 사유='${why:-?}' merge_base='${mb:-?}') — 범위를 확정하지 못했다"
   changed=$("${GIT[@]}" diff --name-only "$mb") || die4 "git diff 실패 ($mb..작업트리)"
   untracked=$("${GIT[@]}" ls-files --others --exclude-standard) || die4 "ls-files --others 실패"
   tracked=$("${GIT[@]}" ls-files) || die4 "ls-files 실패"

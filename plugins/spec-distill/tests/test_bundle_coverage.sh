@@ -119,6 +119,7 @@ assert_file_absent "$C" '^(import|from) roadmap_status' "check_bundle_coverage �
 assert_file_absent "$S/roadmap_model.py" '^(import|from) (check_bundle_coverage|roadmap_status)' "roadmap_model 은 두 스크립트 어느 쪽도 import 하지 않는다(순환 없음)"
 # ── 11~16: R3 §2 — 자리 · 기각 에픽 · 받듦 · 셀 수 없음 · brief 입력 · 출력 ─────────
 R="$T/repo"; mkdir -p "$R/docs/x" "$R/docs/superpowers/specs"
+git init -q "$R"   # 설계문서 폴더는 해결자가 정한다 — 해결자는 git 레포 안에서만 돈다
 cat > "$R/docs/x/roadmap.md" <<'MD'
 ---
 type: roadmap
@@ -208,6 +209,14 @@ txt="$(python3 "$C" "$T/lone/R9.md" "$R/rej.md")"; rc=$?
 assert_eq "$rc" "0" "AC7: 셀 수 없음만 있으면 rc 0"
 assert_eq "$(printf '%s\n' "$txt" | head -n 1)" "번호 대조: 빠진 번호 0개 · 얕은 답 0개 · 받드는 에픽 없는 발화 0개 · 셀 수 없음 4개" "AC7: 첫 줄이 셀 수 없음 개수를 말한다(조용한 0 이 아니다)"
 assert_contains "$txt" "셀 수 없음 — S7 — 로드맵을 찾지 못했다: docs/x/roadmap.md" "셀 수 없음 사유 줄"
+# 13b. R8 — 레포 설정을 해결자가 못 내면(git 레포 밖) 그 항목만 셀 수 없음이고 사유를 말한다
+mkdir -p "$T/nogit"; cp -R "$R/docs" "$T/nogit/"
+txt="$(python3 "$C" "$T/nogit/docs/x/R9.md" "$R/rej.md")"; rc=$?
+assert_eq "$rc" "0" "레포 설정을 못 읽음: 셀 수 없음만 있으면 rc 0"
+assert_contains "$txt" "셀 수 없음 — S7 — 레포 설정을 읽지 못했다: git 레포가 아니다" "레포 설정을 못 읽은 사유 줄"
+# 13c. 해결자의 알림(기본값으로 대신한 것 · 건너뛴 층)은 stderr 로 알린다 — 조용히 대신하지 않는다
+err="$(python3 "$C" "$R/docs/x/R9.md" "$R/rej.md" 2>&1 >/dev/null)"
+assert_contains "$err" "[spec-distill] 기계 상태 층 건너뜀" "해결자 알림을 stderr 로 알린다"
 
 # 14. 출력 · 종료 코드(AC7) — 빠진 번호가 하나면 rc 1(양성 짝), JSON 키
 r9_design '| C1 | 반영 | §1 |\n| D2 | 반영 | §1 |\n| S7 | 반영 | §1 |\n| S8 | 반영 | §1 |\n' > "$R/miss1.md"
