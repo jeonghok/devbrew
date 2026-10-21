@@ -11,6 +11,7 @@
   add  --roadmap R --session S --section 절 --cells "칸 · 칸 …"
   drop --roadmap R --session S --section 절 --where 칸=값
   approval | approve --roadmap R --session S --scale "규모"   시작 승인 공시 판단 · 기록
+  pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
   progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
@@ -36,6 +37,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import branch_tip  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import gh_repo  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
@@ -89,20 +91,24 @@ def mdir_for_write(root, roadmap: str) -> Path:
     return path.parent
 
 
-def load(root, roadmap: str) -> dict:
+def load(root, roadmap: str, skip: tuple = ()) -> dict:
     try:
-        return cs.load(mpath(root, roadmap), roadmap)
+        return cs.load(mpath(root, roadmap), roadmap, skip)
     except cs.MachineError as exc:
         raise Fail(3, "기계 상태를 읽지 못했다 — 덮어쓰지 않는다: %s" % exc)
 
 
-def update(root, roadmap: str, session: str, change) -> dict:
-    """표지를 쥔 세션만 쓴다. 깨진 기계 상태는 읽기에서 멈춘다(빈 상태로 덮어쓰지 않는다)."""
-    path = mpath(root, roadmap)
-    owner = cs.holder(path.parent)
+def need_holder(root, roadmap: str, session: str) -> None:
+    owner = cs.holder(mpath(root, roadmap).parent)
     if owner != session:
         raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
-    data = load(root, roadmap)
+
+
+def update(root, roadmap: str, session: str, change, skip: tuple = ()) -> dict:
+    """표지를 쥔 세션만 쓴다. 깨진 기계 상태는 읽기에서 멈춘다(빈 상태로 덮어쓰지 않는다)."""
+    path = mpath(root, roadmap)
+    need_holder(root, roadmap, session)
+    data = load(root, roadmap, skip)
     change(data)
     try:
         cs.save(path, roadmap, data, session)
@@ -910,6 +916,58 @@ def c_pr_handoffs(root, a) -> int:
     return 0
 
 
+PR_REFRESH_LIMIT = 100
+GH_PR_STATES = {"OPEN": "열림", "MERGED": "머지됨", "CLOSED": "닫힘"}
+
+
+def _cache_row(br: str, it: dict, when: str, session: str) -> dict:
+    state = GH_PR_STATES.get(it.get("state"))
+    cross = it.get("isCrossRepository")
+    if state is None or not isinstance(cross, bool):
+        raise Fail(4, "gh pr list 출력 모양이 다르다(브랜치 %s · PR #%s) — gh 판을 확인한다" % (br, it.get("number")))
+    merge = it.get("mergeCommit")
+    oid = merge.get("oid") if isinstance(merge, dict) else None
+    return {"브랜치": br, "번호": "#%s" % it.get("number"), "상태": state, "확인한 때": when,
+            "headRefOid": str(it.get("headRefOid") or ""), "교차 레포": "예" if cross else "아니오",
+            "baseRefName": str(it.get("baseRefName") or ""), "mergeCommit": str(oid or "-"), "쓴 세션": session}
+
+
+def c_pr_refresh(root, a) -> int:
+    """대상 블록(없으면 끝나지 않은 블록 전부)의 브랜치마다 그 head 이름의 PR 을 모두 받아 그 브랜치의 PR 줄을 통째로 바꾼다."""
+    for line in gh_repo.env_notices():
+        print("[spec-distill] " + line)
+    need_holder(root, a.roadmap, a.session)
+    skip = ("PR",) if a.reset else ()
+    load(root, a.roadmap, skip)  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
+    report = _status(root, a.roadmap)
+    if a.epic:
+        blocks = [_block(report, a.epic)]
+    else:
+        blocks = [b for b in report.get("blocks") or [] if b.get("stage") not in DONE]
+    branches = []
+    for b in blocks:
+        for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
+            if br not in branches:
+                branches.append(br)
+    when = now()
+    fresh = {}
+    for br in branches:
+        try:
+            items, hit = gh_repo.pr_list(str(root), br, PR_REFRESH_LIMIT)
+        except gh_repo.GhStop as exc:
+            raise Fail(4, str(exc))
+        if hit:
+            print("[spec-distill] %s 의 PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_REFRESH_LIMIT))
+        fresh[br] = [_cache_row(br, it, when, a.session) for it in items]
+
+    def change(d):
+        kept = [r for r in d["PR"] if r["브랜치"] not in fresh]
+        d["PR"] = kept + [r for br in branches for r in fresh[br]]
+    update(root, a.roadmap, a.session, change, skip)
+    print("PR 캐시: 브랜치 %d개 · PR %d개를 %s 에 채웠다" % (len(branches), sum(len(v) for v in fresh.values()), when))
+    return 0
+
+
 def _unread(spec: str, b: dict) -> str:
     return "셀 수 없음 — %s 을 %s 에서 읽지 못했다" % (spec, _ref(b))
 
@@ -1209,6 +1267,7 @@ COMMANDS = {
     "pending": (c_pending, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic"))),
     "live-agent": (c_live_agent, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
                                             p.add_argument("--work", required=True))),
+    "pr-refresh": (c_pr_refresh, lambda p: (_rs(p), p.add_argument("--epic"), p.add_argument("--reset", action="store_true"))),
     "pr-handoffs": (c_pr_handoffs, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "audit": (c_audit, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "review-pack": (c_review_pack, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),

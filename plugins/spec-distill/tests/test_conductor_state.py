@@ -18,11 +18,20 @@ import state_path  # noqa: E402
 
 RM = "docs/superpowers/roadmaps/rm/roadmap.md"
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
+OID_A, OID_B = "a" * 40, "0123456789abcdef0123456789abcdef01234567"
+
+
+def pr_row(**over):
+    row = {"브랜치": "feature/a", "번호": "#12", "상태": "열림", "확인한 때": "2026-10-17 10:00", "headRefOid": OID_A,
+           "교차 레포": "아니오", "baseRefName": "trunk", "mergeCommit": "-", "쓴 세션": SID}
+    row.update(over)
+    return row
 
 
 def sample():
     data = cs.empty()
-    data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": "열림", "확인한 때": "2026-10-17 10:00"})
+    data["PR"].append(pr_row())
+    data["PR"].append(pr_row(번호="#13", 상태="머지됨", mergeCommit=OID_B, **{"교차 레포": "예"}))
     data["실행 원장"].append({"에픽": "R5", "계획": "docs/p.md", "원장": "/w/.superpowers/sdd/p/progress.md",
                            "읽은 줄": "3"})
     data["자원"].append({"종류": "worktree", "경로": "/w", "에픽": "R5", "용도": "구현", "만든 때": "2026-10-17"})
@@ -47,7 +56,7 @@ class Format(unittest.TestCase):
             "frontmatter 없음": good.split("---\n", 2)[2],
             "다른 로드맵": good.replace("roadmap: " + RM, "roadmap: other/roadmap.md"),
             "모르는 절": good + "\n## 모르는 절\n",
-            "칸 수": good.replace("- feature/a · #12 · 열림 · 2026-10-17 10:00", "- feature/a · #12"),
+            "칸 수": good.replace("- feature/a · #12 · 열림 · 2026-10-17 10:00 · " + OID_A, "- feature/a · #12"),
             "PR 상태": good.replace("· 열림 ·", "· 열렸음 ·"),
             "PR 번호": good.replace("#12", "12"),
             "읽은 줄": good.replace("progress.md · 3", "progress.md · 셋"),
@@ -61,6 +70,68 @@ class Format(unittest.TestCase):
         for bad in ("roadmap.md", "a/../roadmap.md"):
             with self.assertRaises(cs.MachineError):
                 cs.machine_dir("/s", bad)
+
+
+class PrCache(unittest.TestCase):
+    """PR 캐시 아홉 칸(R8 계획 2 Task 2) — 옛 판 4칸 줄은 고치는 명령과 함께 멈추고, --reset 만 PR 절을 건너뛴다."""
+    OLD = "- feature/a · #12 · 열림 · 2026-10-17 10:00"
+
+    def test_nine_columns_round_trip(self):
+        self.assertEqual(cs.COLUMNS["PR"], ("브랜치", "번호", "상태", "확인한 때", "headRefOid", "교차 레포",
+                                           "baseRefName", "mergeCommit", "쓴 세션"))
+        text = cs.render_machine(RM, sample())
+        self.assertIn("- feature/a · #13 · 머지됨 · 2026-10-17 10:00 · %s · 예 · trunk · %s · %s" % (OID_A, OID_B, SID),
+                      text)
+        self.assertEqual(cs.parse_machine(text, RM)["PR"], sample()["PR"])
+
+    def old_text(self):
+        good = cs.render_machine(RM, sample())
+        head, _sep, rest = good.partition("## PR\n\n")
+        return head + "## PR\n\n" + self.OLD + "\n" + rest.split("\n\n", 1)[1]
+
+    def test_four_column_row_names_the_reset_command(self):
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(self.old_text(), RM)
+        msg = str(cm.exception)
+        self.assertIn("옛 판이 쓴 PR 캐시 줄이다(칸 4개)", msg)
+        self.assertIn("ledger pr-refresh --roadmap <로드맵> --session <세션> --reset 으로 다시 채운다", msg)
+        self.assertRegex(msg, r"^\d+줄: ")
+
+    def test_skip_reads_past_four_column_rows(self):
+        data = cs.parse_machine(self.old_text(), RM, skip=("PR",))
+        self.assertEqual(data["PR"], [])
+        self.assertEqual(data["자원"], sample()["자원"])
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            path = cs.machine_path(tmp, RM)
+            path.parent.mkdir(parents=True)
+            path.write_text(self.old_text(), encoding="utf-8")
+            self.assertEqual(cs.load(path, RM, skip=("PR",))["PR"], [])
+            with self.assertRaises(cs.MachineError):
+                cs.load(path, RM)
+        finally:
+            shutil.rmtree(str(tmp))
+
+    def test_cell_checks(self):
+        bad = {
+            "교차 레포 몰라": {"교차 레포": "몰라"},
+            "headRefOid 짧음": {"headRefOid": "abc"},
+            "headRefOid 대문자": {"headRefOid": "A" * 40},
+            "mergeCommit 짧음": {"mergeCommit": "def"},
+            "상태": {"상태": "OPEN"},
+        }
+        for name, over in bad.items():
+            data = cs.empty()
+            data["PR"].append(pr_row(**over))
+            with self.assertRaises(cs.MachineError, msg=name):
+                cs.render_machine(RM, data)
+            text = cs.render_machine(RM, cs.empty()).replace("## PR\n\n", "## PR\n\n- " + " · ".join(
+                pr_row(**over)[c] for c in cs.COLUMNS["PR"]) + "\n")
+            with self.assertRaises(cs.MachineError, msg=name + " (읽기)"):
+                cs.parse_machine(text, RM)
+        data = cs.empty()
+        data["PR"].append(pr_row(mergeCommit=OID_B, 상태="머지됨", **{"교차 레포": "예"}))
+        self.assertEqual(cs.parse_machine(cs.render_machine(RM, data), RM)["PR"], data["PR"])
 
 
 class Storage(unittest.TestCase):

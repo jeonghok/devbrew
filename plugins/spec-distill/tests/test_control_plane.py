@@ -437,7 +437,9 @@ class Overlay(unittest.TestCase):
     def machine(self, pr=None, ledger_for=None):
         data = cs.empty()
         if pr:
-            data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": pr, "확인한 때": "2026-10-17 10:00"})
+            data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": pr, "확인한 때": "2026-10-17 10:00",
+                               "headRefOid": "a" * 40, "교차 레포": "아니오", "baseRefName": "main",
+                               "mergeCommit": "-", "쓴 세션": "session-aaaa1111"})
         if ledger_for:
             data["실행 원장"].append({"에픽": ledger_for, "계획": "p.md", "원장": str(self.ledger), "읽은 줄": "0"})
         return lambda rel: (data, None)

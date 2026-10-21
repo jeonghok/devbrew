@@ -521,7 +521,9 @@ write_machine() {  # write_machine <PR 상태> <원장 경로> — 진짜 기계
   mkdir -p "$(dirname "$MPATH")"
   python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c
 d = c.empty()
-d["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": sys.argv[4], "확인한 때": "2026-10-17 10:00"})
+d["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": sys.argv[4], "확인한 때": "2026-10-17 10:00",
+                "headRefOid": "a" * 40, "교차 레포": "아니오", "baseRefName": "main", "mergeCommit": "-",
+                "쓴 세션": "session-aaaa1111"})
 d["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": sys.argv[5], "읽은 줄": "0"})
 open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM" "$1" "$2"
 }

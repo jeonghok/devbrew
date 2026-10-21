@@ -216,6 +216,41 @@ SYN_OK='x check_bundle_coverage.py --plan <설계문서> <계획> 을 돌려 더
 assert_eq "$(acs_in_plan "$SYN_NO")" "no" "양성 대조: --plan 문장에 --acs 가 없고 --impl 문장에만 있으면 no"
 assert_eq "$(acs_in_plan "$SYN_OK")" "yes" "양성 짝: --plan 문장에 --acs 가 있으면 yes"
 
+# PR 캐시는 `ledger pr-refresh` 로만 채운다(R8 계획 2 Task 2) — 걸음 1 맞추기 · PR 을 연 뒤 · 머지 전 확인 · 다음 에픽 착수 직전.
+cyc() {  # cyc <n> [파일] — 지휘 순환 걸음 n(`### n.` 절)의 글
+  awk -v h="### $1. " 'index($0, h)==1{f=1; next} f && /^#{2,3} /{exit} f' "${2:-$CD}"
+}
+for n in 1 3 4 5; do
+  [ -n "$(cyc "$n")" ] && ok "지휘 순환 걸음 $n 을 읽었다" || no "지휘 순환 걸음 $n 이 비었다 — 아래 단언이 공허하다"
+done
+REFRESH='`ledger pr-refresh --roadmap <로드맵> --session <세션>'
+assert_contains "$(cyc 1)" "→ ${REFRESH}\` 으로 기계 상태의 PR 캐시를 주인(GitHub)과 맞춘다" "지휘 걸음 1(맞추기): pr-refresh 로 PR 캐시를 맞춘다"
+assert_contains "$(cyc 4)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 채운다" "지휘 걸음 4: PR 을 연 뒤 pr-refresh"
+assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "지휘 걸음 4: gh pr create 에 -R origin"
+assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 스위트 대조" "지휘 걸음 5(머지 전 확인): 스위트 대조 직전에 pr-refresh"
+before() {  # before <글> <앞> <뒤> — 앞이 뒤보다 먼저 나오면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t, a, b = sys.argv[1:4]
+i, j = t.find(a), t.find(b)
+print("yes" if 0 <= i < j else "no")' "$1" "$2" "$3"
+}
+assert_eq "$(before "$(cyc 3)" "$REFRESH" '으로 준비된 에픽을 센다')" "yes" "지휘 걸음 3: 다음 에픽을 고르기 직전에 pr-refresh"
+assert_eq "$(before "준비된 에픽을 센다. ${REFRESH}" "$REFRESH" '준비된 에픽을 센다')" "no" "양성 대조: pr-refresh 가 고른 뒤에 오면 no"
+pr_by_hand() {  # pr_by_hand <파일> — PR 캐시를 손으로 적는 `ledger add … --section PR`
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines(), 1):
+    if re.search(r"--section\s+(\"PR\"|'"'"'PR'"'"'|PR)(?![\w가-힣])", line):
+        print(i)' "$1"
+}
+assert_eq "$(pr_by_hand "$CD")" "" "conducting.md: PR 캐시를 손으로 적는 ledger add --section PR 이 없다"
+for lit in '번호를 `ledger add --section PR` 로 적는다' '`ledger add --roadmap <로드맵> --session <세션> --section "PR" --cells "x"`'; do
+  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/pr.md"
+  [ -n "$(pr_by_hand "$T/pr.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
+done
+{ cat "$CD"; printf '%s\n' '`ledger add --section PRX`'; } > "$T/pr.md"
+assert_eq "$(pr_by_hand "$T/pr.md")" "" "양성 짝: 다른 절 이름(PRX)은 잡지 않는다"
+assert_not_contains "$(cyc 4)" 'PR 을 열 명령을 사용자에게 준다' "지휘 걸음 4: PR 을 연 뒤 gh 없을 때 PR 명령을 주는 괄호가 없다(양성 짝: 위 gh pr create -R · pr-refresh)"
+
 # 레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴 — 줄마다 낸다.
 banned() {
   python3 -I - "$1" <<'PY'

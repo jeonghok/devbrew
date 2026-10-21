@@ -112,7 +112,7 @@ class Marker(Repo):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "PR", "--cells", "feature/a1 · #3")
         self.assertEqual(rc, 2)
-        self.assertIn("칸 4개", out)
+        self.assertIn("칸 9개", out)
 
     def test_broken_machine_state_is_not_overwritten(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -957,6 +957,147 @@ class VersionReport(unittest.TestCase):
         rc, msg = self.check(json.dumps({"name": "p", "version": "1.0.0"}), None)
         self.assertEqual(rc, 0)
         self.assertIn("플러그인 소스가 없다", msg)
+
+
+OID1, OID2, OID3, MOID = "1" * 40, "2" * 40, "3" * 40, "abcdef0123456789abcdef0123456789abcdef01"
+
+
+def gh_pr(number, state, oid, cross, merge=None, head="feature/a1"):
+    return {"number": number, "state": state, "headRefName": head, "headRefOid": oid, "isCrossRepository": cross,
+            "baseRefName": "trunk", "mergeCommit": {"oid": merge} if merge else None}
+
+
+class PrRefresh(Repo):
+    """ledger pr-refresh — head 이름의 PR 을 모두 받아 그 브랜치의 PR 캐시 줄을 통째로 바꾼다(R8 계획 2 Task 2 · AC17 · §4)."""
+    THREE = [gh_pr(7, "MERGED", OID1, False, MOID), gh_pr(8, "MERGED", OID2, True, MOID.replace("a", "b")),
+             gh_pr(9, "OPEN", OID3, False)]
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.answers = {}
+        self.stop = None
+
+    def fake_pr_list(self, cwd, branch, limit=100):
+        self.calls.append((cwd, branch, limit))
+        if self.stop:
+            raise L.gh_repo.GhStop(self.stop)
+        items = list(self.answers.get(branch, []))[:limit]
+        return items, len(items) >= limit
+
+    def refresh(self, *extra, session=SID):
+        from unittest import mock
+        with mock.patch.object(L.gh_repo, "pr_list", self.fake_pr_list):
+            return self.cli("pr-refresh", "--roadmap", RM, "--session", session, *extra)
+
+    def rows(self):
+        return cs.load(L.mpath(self.w, RM), RM)["PR"]
+
+    def test_all_prs_with_same_head_name_become_rows(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.answers["feature/a1"] = self.THREE
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.calls, [(str(self.w), "feature/a1", L.PR_REFRESH_LIMIT)])
+        self.assertEqual(L.PR_REFRESH_LIMIT, 100)
+        rows = self.rows()
+        self.assertEqual([(r["번호"], r["상태"], r["headRefOid"], r["교차 레포"], r["mergeCommit"]) for r in rows], [
+            ("#7", "머지됨", OID1, "아니오", MOID), ("#8", "머지됨", OID2, "예", MOID.replace("a", "b")),
+            ("#9", "열림", OID3, "아니오", "-")])
+        for r in rows:
+            self.assertEqual((r["브랜치"], r["baseRefName"], r["쓴 세션"]), ("feature/a1", "trunk", SID))
+            self.assertRegex(r["확인한 때"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
+        last = out.strip().splitlines()[-1]
+        self.assertRegex(last, r"^PR 캐시: 브랜치 1개 · PR 3개를 \d{4}-\d\d-\d\d \d\d:\d\d 에 채웠다$")
+
+    def test_without_epic_takes_every_unfinished_block(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.answers["feature/a2"] = [gh_pr(4, "CLOSED", OID1, False, head="feature/a2")]
+        rc, out = self.refresh()
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(sorted(c[1] for c in self.calls), ["feature/a1", "feature/a2"])
+        self.assertEqual([(r["브랜치"], r["번호"], r["상태"]) for r in self.rows()], [("feature/a2", "#4", "닫힘")])
+        self.assertIn("PR 캐시: 브랜치 2개 · PR 1개를", out)
+
+    def test_branch_rows_are_replaced_whole_and_other_branches_kept(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.answers["feature/a1"] = self.THREE
+        self.refresh("--epic", "A1")
+        L.update(self.w, RM, SID, lambda d: d["PR"].append(dict(d["PR"][0], 브랜치="feature/other", 번호="#1")))
+        self.answers["feature/a1"] = [gh_pr(9, "MERGED", OID3, False, MOID)]
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([(r["브랜치"], r["번호"], r["상태"]) for r in self.rows()],
+                         [("feature/other", "#1", "머지됨"), ("feature/a1", "#9", "머지됨")])
+
+    def test_session_without_marker_cannot_write(self):
+        self.cli("claim", "--roadmap", RM, "--session", OTHER)
+        self.answers["feature/a1"] = self.THREE
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 5, out)
+        self.assertIn("읽기 전용", out)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.rows(), [])
+
+    def test_reset_clears_old_four_column_rows_and_refills(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        path = L.mpath(self.w, RM)
+        text = path.read_text(encoding="utf-8")
+        old = "- feature/a1 · #3 · 열림 · 2026-10-17 10:00"
+        path.write_text(text.replace("## PR\n\n", "## PR\n\n" + old + "\n", 1), encoding="utf-8")
+        self.answers["feature/a1"] = self.THREE
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("옛 판이 쓴 PR 캐시 줄이다(칸 4개)", out)
+        self.assertIn("--reset", out)
+        self.assertEqual(self.calls, [])
+        self.assertIn(old, path.read_text(encoding="utf-8"))
+        rc, out = self.refresh("--epic", "A1", "--reset")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn(old, path.read_text(encoding="utf-8"))
+        self.assertEqual([r["번호"] for r in self.rows()], ["#7", "#8", "#9"])
+
+    def test_limit_reached_is_stated(self):
+        from unittest import mock
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.answers["feature/a1"] = self.THREE
+        with mock.patch.object(L, "PR_REFRESH_LIMIT", 3):
+            rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("feature/a1 의 PR 목록이 3개 한도에 닿았다 — 더 있을 수 있다", out)
+        rc, out = self.refresh("--epic", "A1")
+        self.assertNotIn("한도에 닿았다", out)
+
+    def test_gh_stop_stops_without_writing(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.stop = "gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다"
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 4, out)
+        self.assertIn(self.stop, out)
+        self.assertEqual(self.rows(), [])
+
+    def test_unknown_state_or_cross_value_stops(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        for bad in (dict(gh_pr(7, "DRAFT", OID1, False)), dict(gh_pr(7, "OPEN", OID1, None))):
+            self.answers["feature/a1"] = [bad]
+            rc, out = self.refresh("--epic", "A1")
+            self.assertEqual(rc, 4, out)
+            self.assertIn("gh pr list 출력 모양이 다르다", out)
+        self.assertEqual(self.rows(), [])
+
+    def test_env_notices_are_shown(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        old = os.environ.get("GH_REPO")
+        os.environ["GH_REPO"] = "up/r"
+        try:
+            rc, out = self.refresh("--epic", "A1")
+        finally:
+            if old is None:
+                os.environ.pop("GH_REPO", None)
+            else:
+                os.environ["GH_REPO"] = old
+        self.assertEqual(rc, 0, out)
+        self.assertIn("GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다", out)
 
 
 class NoPrBranch(Repo):
