@@ -5,6 +5,17 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.3.0] — 2026-10-22
+
+### Added
+- 의존 목록 `dependencies.md`(python · python-hook · claude-code)와 `scripts/check_deps.py`. `python-hook` 행은 훅 해석기(`scripts/devbrew-python.sh`)가 실제로 고른 해석기의 판을 잰다. `/project-init:project-init` 진입이 처음에 `check_deps.py entry --need python` 으로 Python 판을 확인하고, 없거나 낮으면 멈춘다. README Prerequisites 가 그 파일을 가리킨다.
+
+### Changed
+- 브랜치 이름 검사가 명령 문자열이 아니라 실행 뒤 관찰이다 — 훅 matcher 가 `Bash|EnterWorktree` 이고, 도구 호출 뒤 브랜치 reflog 에서 60초 안에 만들어지거나 이름이 바뀌거나 복사된 브랜치를 새 브랜치로 잡는다(`worktree add -b` · `branch -m` · `checkout -B` · `switch --create` · `git -C <dir> branch` 포함). 규칙 밖 옛 브랜치는 60초가 지나면 다시 알리지 않는다. 커밋 메시지 검사는 `Bash` 에서만 한다.
+- 브랜치 규칙을 작업 트리가 아니라 기본 브랜치 판(`origin/HEAD` 의 `docs/git-workflow/branch-strategy.md`)에서 읽는다. `origin` 이 없거나 기본 브랜치를 못 찾으면 그 사실을 알리고 브랜치 검사를 건너뛴다(fail-open).
+- 다른 작업 트리에서 쓰고 있는 브랜치에는 이름 바꾸기 명령을 내지 않고 그 작업 트리 경로를 알린다. 작업 트리 목록을 못 읽으면 명령을 내지 않는다고 알린다. 이름 바꾸기 명령은 `git branch -m <옛 이름> <접두>/<이름>` 꼴이다.
+- 한 번 실행의 git 호출은 모두 합쳐 8초 안에 끝낸다 — 넘으면 브랜치 검사를 건너뛴다고 알리고 커밋 메시지 검사는 그대로 낸다.
+
 ## [5.2.0] — 2026-10-20
 
 ### Changed

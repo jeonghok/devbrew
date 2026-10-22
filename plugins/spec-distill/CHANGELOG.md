@@ -1,5 +1,26 @@
 # Changelog
 
+## [8.7.0] — 2026-10-22
+
+### Added
+- `scripts/gh_repo.py` — spec-distill 의 gh 호출을 한 곳에 모았다. 호출마다 `origin` URL 에서 호스트까지 뽑은 `-R <호스트>/<owner>/<repo>` 를 붙여, `upstream` 원격이 있는 fork 클론에서도 `origin` 의 PR 만 본다. gh 없음 · `origin` URL 을 못 읽음 · 미인증(`gh auth login --hostname <호스트>`) · gh 가 그 레포를 다루지 못함은 이유를 보이고 멈춘다. `GH_REPO` · `GH_HOST` 가 설정돼 있으면 알린다.
+- `ledger pr-refresh --roadmap <로드맵> --session <세션> [--epic <에픽>] [--reset]` — 지휘자가 PR 캐시를 head 이름의 PR 전부(`--state all`)로 채운다. 캐시 줄에 받은 시각 · `headRefOid` · 교차 레포 · `baseRefName` · `mergeCommit` · 쓴 세션 칸이 더해졌다. 지휘 절차의 걸음 1 과 게이트 직전에 돈다.
+- 기계 상태에 쓴 판을 찍는다(`writer: spec-distill <판>`). 더 새 판이 쓴 기계 상태는 읽지 않고 멈춰 플러그인을 업데이트하라고 안내한다.
+- 의존 목록 `dependencies.md` — 의존마다 최소 판 · 잰 날짜 · 강도(멈춤 · 알림 · 기록) · 없을 때 동작. 최소 판은 개발 당시 깔린 판을 `scripts/check_deps.py measure` 가 잰다(손으로 적지 않는다).
+- 진입 의존 확인 — 진입 skill 여섯(epic-conductor · pm-interview · request-framing · reviewing-brief · roadmap-status · spec-review)이 처음에 `check_deps.py entry --need <이름,…>` 를 돈다. 강도 멈춤인 의존이 없거나 낮거나 판을 못 읽으면 멈춘다. gh 는 epic-conductor 만 확인한다.
+- superpowers 판 알림 — 지휘자는 이 세션에서 superpowers skill 을 처음 불러온 직후 판을 확인해, 의존 목록의 판과 다르거나 확인하지 못하면 알린다(멈추지 않는다). 인터뷰 끝은 그 세션이 superpowers skill 을 불러왔을 때만 판을 확인하고, 아니면 「알 수 없음」 한 줄을 따로 보인다(경고로 세지 않는다).
+
+### Changed
+- gh 가 필수다 — gh 가 없으면 지휘자 · 머지 판정이 이제 멈춘다. 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다.
+- squash · rebase 머지도 자동으로 판정한다 — PR 캐시의 여섯 조건(브랜치 · 머지됨 · 같은 레포 · 기본 브랜치 base · `headRefOid` 가 브랜치 끝 · `mergeCommit` 이 기본 브랜치에서 닿음)이 모두 맞을 때만 「머지됨」이다. 캐시에 그 브랜치 줄이 없으면 머지 커밋 · `origin` 소유자의 머지 메시지 · 결정 기록의 머지 줄로 판정한다(남의 fork 의 머지 메시지는 세지 않는다).
+- 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 지휘자가 캐시를 새로 채우면 바로 새 판정을 낸다.
+- 옛 판이 쓴 4칸 PR 캐시 줄은 읽지 않고 멈춘다 — 갱신 뒤 지휘자가 `ledger pr-refresh --roadmap <로드맵> --session <세션> --reset` 을 한 번 돈다.
+- superpowers 가 없으면 지휘자와 손으로 따르는 지휘 절차가 진입에서 멈춘다(인터뷰는 그대로 brief 까지 만들고 알린 뒤 멈춘다). quality-gates 가 없으면 지휘 순환 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
+- README Prerequisites 가 `dependencies.md` 를 가리키고, gh 를 필수로, 지원 범위를 「`origin` 이 GitHub 인 레포」로 적는다.
+
+### Removed
+- gh 가 없을 때의 강등 길 — 상태줄 · 상태 보기의 「캐시가 없으면 gh」 대체 길과 gh 없음 갈래를 지웠다.
+
 ## [8.6.0] — 2026-10-22
 
 ### Added

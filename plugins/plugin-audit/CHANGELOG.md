@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.0] — 2026-10-22
+
+### Added
+- 의존 목록 `dependencies.md`(python · claude-code)와 `scripts/check_deps.py`. `/plugin-audit:plugin-audit` 진입이 처음에 `check_deps.py entry --need python` 으로 Python 판을 확인하고, 없거나 낮으면 멈춘다. README Prerequisites 가 그 파일을 가리킨다.
+
 ## [1.4.0] — 2026-10-20
 
 ### Security

@@ -76,6 +76,8 @@ plugins/project-init/
 
 ## Prerequisites
 
+의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다. 이 플러그인은 gh 를 쓰지 않는다 — 훅의 Python 바닥은 아래 줄과 표의 `python-hook` 행이다.
+
 - **Python 3.12+** — 이 플러그인의 훅이 요구하는 바닥입니다. 숫자는 도출된 값입니다 —
   「개발 당시 훅이 실제로 쓴 해석기 판(`dependencies.md` 의 `python-hook` 행) — 측정 명령이 잰다」,
   다음 재검토는 3.12 EOL(2028-10).
@@ -105,6 +107,7 @@ plugins/project-init/
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
+- **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **Law 3 (Compounding)** — PostToolUse hook이 브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제; 컨벤션 drift를 action 레이어에서 잡음.
 - **Plugin shape — minimal pointer pattern** — 기본은 `CLAUDE.md` 가 `@AGENTS.md` 한 줄 thin pointer 이고 규칙 본문은 `AGENTS.md` 와 `docs/git-workflow/` 에 산다. 「CLAUDE.md 에 바로 쓰기」를 고르면 관리 절이 `CLAUDE.md` 안에 있고, 「CLAUDE.md 는 그대로 두기」를 고르면 `CLAUDE.md` 는 손대지 않는다.
 - **Law 1 (Clarity Before Code)** — Project Charter가 project-init에 *처음으로* 생기는 clarity 구조 게이트. 최초 실행에서 vision·non-goals·tech-stack·conventions가 채워질 때까지 진행을 막되, 각 항목 최대 3회 재질문 뒤 사용자가 건너뛰기 · 계속 묻기 · 중단을 고른다(기계가 멈추지 않는다 — 반복은 사용자 선택이 연다).

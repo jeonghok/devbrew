@@ -3,6 +3,19 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.6.0] — 2026-10-22
+
+### Added
+- `scripts/gh-repo.sh` — gh 를 찾고 `-R` 에 넣을 `origin`(`<호스트>/<owner>/<repo>`)을 낸다. gh 없음은 rc 4, `origin` 을 읽지 못하면 rc 3. `GH_REPO` · `GH_HOST` 가 설정돼 있으면 알린다.
+- 의존 목록 `dependencies.md` 와 진입 의존 확인 — `/quality-gates:quality-pipeline` 은 python · git · gh 를, `/quality-gates:artifact-critique` 는 python · git 을 처음에 `check_deps.py entry --need …` 로 확인하고, 없거나 낮으면 멈춘다.
+
+### Changed
+- gh 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다 — `upstream` 원격이 있는 fork 클론에서도 `origin` 의 PR 을 본다.
+- 게시 sink 는 gh 가 없으면 `failed: gh-unavailable`(rc 1)을 낸다(전에는 건너뛰었다). `origin` 이 없거나 못 읽으면 `failed: no-origin`. 미인증이면 `gh auth login --hostname <호스트>` 를 보인다.
+- 게시 sink 는 PR 이 `origin` 안의 PR 이고 그 head 가 지금 HEAD 와 같을 때만 코멘트를 단다 — 아니면 `skipped: pr-mismatch`.
+- 의도 출처(`discover-spec.sh`)는 gh 없음 · `origin` 못 읽음 · 미인증 · gh 가 `origin` 레포를 다루지 못함이면 JSON 대신 `stop: <사유>` 한 줄과 rc 3 을 내고, 파이프라인은 그 사유를 보이고 멈춘다. PR 본문은 head 브랜치가 지금 브랜치와 같고 같은 레포의 PR 일 때만 쓴다.
+- README 사전 요건이 `dependencies.md` 를 가리키고 gh 를 필수로 적는다.
+
 ## [14.5.0] — 2026-10-22
 
 ### Changed

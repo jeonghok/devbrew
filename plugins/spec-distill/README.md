@@ -108,6 +108,7 @@
 
 - **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
 - **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
+- **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — 인터뷰 진행 기록은 작업 트리의 인터뷰 폴더(`interview_dir`, 기본 `docs/superpowers/interview/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 인터뷰 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 인터뷰에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · request-framing 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
@@ -261,6 +262,7 @@ branch_prefix: feature/
 
 ### 지원하는 흐름
 
+- 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다. gh 를 쓰는 진입은 `origin` URL 에서 호스트 · owner · repo 를 뽑지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다.
 - devbrew 는 `origin` 의 기본 브랜치(`origin/HEAD`)와 `origin` 의 PR 만 본다. fork 의 부모 레포로 PR 을 내는 흐름과 원격 없는 로컬 레포는 지원하지 않는다. `upstream` 원격이 있어도 보지 않는다.
 - 기본 브랜치를 `main` · `master` 로 짐작하지 않는다. `origin/HEAD` 가 없으면 기본 브랜치가 필요한 자리(브랜치 만들기 · 인터뷰 끝 커밋 · 지휘자 · 스위트 대조 · 상태 계산)에서 멈추고(인터뷰 끝은 커밋만 하지 않는다) 고치는 법을 보인다 — `git remote set-head origin --auto`(`origin` 원격이 없으면 먼저 `git remote add origin <URL>`). `git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다.
 - 지휘자 진입 · `merge_check.py run` · 인터뷰 끝 커밋 직전에는 원격의 기본 브랜치(`git ls-remote --symref origin HEAD`)와 로컬 값을 대조해 다르면 멈춘다(인터뷰 끝은 커밋만 하지 않는다). 대조하지 못하면(오프라인 · 10초 넘김) 멈추지 않고 로컬 값으로 가며 그 사실을 알린다.
@@ -321,12 +323,14 @@ branch_prefix: feature/
 
 ## Prerequisites
 
+의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다.
+
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다. 문서 리뷰 엔진은
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
 - **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. 설치된 판이 `dependencies.md` 의 판과 다르면 알린다(멈추지 않는다). Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 인터뷰도 돌지 않는다.
 - **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받으면 `/quality-gates:quality-pipeline` 을 부른다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 설치돼 있지 않으면 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
-- **gh CLI** (외부, optional) — 머지된 PR 번호 · PR 인계를 모은다. 없으면 공시하고 강등한다(crash 없음).
+- **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다.
 - **codex CLI** (외부, optional) — 있으면 문서 리뷰 엔진 라운드(design doc · interview brief · interview seed)에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 
 ## License

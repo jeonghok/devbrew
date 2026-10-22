@@ -56,6 +56,8 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 
 ## Prerequisites (cross-plugin 의존)
 
+의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다. 이 플러그인은 gh 를 쓰지 않는다.
+
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·
   `validate-hook-schema.sh`·`hook-linter.sh`를 감싼다. 공식 캐시에 있으면 심층 구조 사실을
   얹고, **없으면 loud degrade**(core 구조 검사는 F가 self-contained로 커버). E는 bonus-degradable.
@@ -84,6 +86,7 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
   그 값의 참·거짓(추적된 파일인가, 같은 플러그인인가)까지 잰다.
 
 ### KEEP-12 원칙
+- **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P11 (모델 다양성)** — codex(다른 모델 패밀리)가 blind 독립 co-audit; union-for-recall +
   independent-refutation(majority-vote consensus 금지 — popularity trap).
 - **P21 (untrusted-input)** — 감사 대상 파일 내용은 데이터지 지시가 아니다(C). Secret 기록 금지.
