@@ -1622,16 +1622,32 @@ Q33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/q33; sq feature/q33; Q33
 # E33 — PR 은 squash 로 머지 · 로컬은 PR head 보다 앞이고 그 로컬 끝이 기본 브랜치 머지 커밋의 부모다
 g checkout -q -b feature/e33 main; commit_file src/e33.txt e "e33"; E33_PR="$(g rev-parse HEAD)"; g push -q origin feature/e33; sq feature/e33; E33_SQ="$(g rev-parse HEAD)"
 g checkout -q feature/e33; commit_file src/e33b.txt e2 "e33 더"; g checkout -q main; g merge -q --no-ff feature/e33 -m "Merge branch 'feature/e33'"; E33_MC="$(g rev-parse HEAD)"
-# V33 — 머지 뒤 로컬 브랜치를 기본 브랜치로 앞당김(로컬이 원격보다 앞이지만 기본 브랜치 안) · 원격 끝이 머지 커밋의 부모
-g checkout -q -b feature/v33 main; commit_file src/v33.txt v "v33"; V33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/v33; pr_merge 54 feature/v33; V33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/v33 main
+# V33 — 머지 뒤 로컬 브랜치를 기본 브랜치로 앞당김(로컬이 원격보다 앞이지만 기본 브랜치 안) · 원격 끝이 머지 커밋의 둘째
+# 부모 · 이 에픽의 승인된 설계문서가 그 머지로 기본 브랜치에 들어왔다(시작한 에픽 · 설계문서 뒤의 머지)
+g checkout -q -b feature/v33 main; approved_spec docs/superpowers/specs/v33-design.md docs/rm33/V33.md; commit_file src/v33.txt v "v33"; V33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/v33; pr_merge 54 feature/v33; V33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/v33 main
 # X33 — 짝: 원격 끝이 머지 커밋의 부모지만 로컬에 기본 브랜치 밖 커밋이 더 붙음 → 머지됨 아님
 g checkout -q -b feature/x33 main; commit_file src/x33.txt x "x33"; X33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/x33; pr_merge 55 feature/x33; X33_MC="$(g rev-parse HEAD)"
 g checkout -q feature/x33; commit_file src/x33b.txt x2 "x33 더"; X33_LOCAL="$(g rev-parse HEAD)"; g checkout -q main; g push -q origin main; g fetch -q origin
+# 같은 이름 재사용 · 만들기 전 브랜치에 남은 옛 원격 ref(AC15) — 옛 브랜치는 PR 머지 커밋으로 머지됐고 GitHub 에서 지워졌지만
+# origin/<브랜치> 는 prune 되지 않았다. PR 캐시에는 그 이름의 옛 MERGED PR 이 있다.
+# U33 — 옛 머지 뒤 더 새 main 에서 같은 이름을 새로 땄다 · 이 에픽의 설계문서는 기본 브랜치에 없다
+g checkout -q -b feature/u33 main; commit_file src/u33.txt u "u33 옛"; U33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/u33; pr_merge 56 feature/u33; U33_MC="$(g rev-parse HEAD)"
+commit_file src/after-u33.txt a "u33 뒤 main"; g branch -q -f feature/u33 main
+# T33 — U33 과 같되 새 에픽의 승인된 설계문서가 옛 머지 뒤 기본 브랜치에 들어왔다(시작한 에픽 — 옛 머지는 그보다 먼저)
+g checkout -q -b feature/t33 main; commit_file src/t33.txt t "t33 옛"; T33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/t33; pr_merge 57 feature/t33; T33_MC="$(g rev-parse HEAD)"
+approved_spec docs/superpowers/specs/t33-design.md docs/rm33/T33.md; g branch -q -f feature/t33 main
+# N33 — 만들기 전 브랜치(로컬 없음)에 옛 원격 ref · 시작 흔적 없음(승인 줄 없는 설계문서가 옛 머지에 실려 들어왔다)
+g checkout -q -b feature/n33 main; commit_file docs/superpowers/specs/n33-design.md "$(spec_doc docs/rm33/N33.md C1)" "n33 설계(승인 전)"
+N33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/n33; pr_merge 58 feature/n33; N33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/n33
+# P33 — 짝: 로컬을 지운 시작한 에픽(승인된 설계문서가 그 머지로 들어옴) · 원격 끝이 머지 커밋의 둘째 부모 → 머지됨
+g checkout -q -b feature/p33 main; approved_spec docs/superpowers/specs/p33-design.md docs/rm33/P33.md; commit_file src/p33.txt p "p33"
+P33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/p33; pr_merge 59 feature/p33; P33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/p33
+g push -q origin main; g fetch -q origin
 mkdir -p "$W/docs/rm33"
-for b in L33 Q33 E33 V33 X33; do bundle docs/rm33 "$b" "C1, S1"; done
+for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33; do bundle docs/rm33 "$b" "C1, S1"; done
 bundle docs/rm33 L33 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
 { roadmap_head
-  for b in L33 Q33 E33 V33 X33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
   block W33 feature/w33 "L33, Q33, E33, V33" 없음
   roadmap_tail ""
 } > "$W/docs/rm33/roadmap.md"
@@ -1641,6 +1657,10 @@ MD33="$W/.claude/spec-distill/conductor/rm33"; mkdir -p "$MD33"
   printf 'feature/q33|#52|머지됨|%s|아니오|main|%s\n' "$Q33_TIP" "$Q33_MC"
   printf 'feature/e33|#53|머지됨|%s|아니오|main|%s\n' "$E33_PR" "$E33_SQ"
   printf 'feature/v33|#54|머지됨|%s|아니오|main|%s\n' "$V33_TIP" "$V33_MC"
+  printf 'feature/u33|#56|머지됨|%s|아니오|main|%s\n' "$U33_OLD" "$U33_MC"
+  printf 'feature/t33|#57|머지됨|%s|아니오|main|%s\n' "$T33_OLD" "$T33_MC"
+  printf 'feature/n33|#58|머지됨|%s|아니오|main|%s\n' "$N33_OLD" "$N33_MC"
+  printf 'feature/p33|#59|머지됨|%s|아니오|main|%s\n' "$P33_TIP" "$P33_MC"
   printf 'feature/x33|#55|머지됨|%s|아니오|main|%s\n' "$X33_TIP" "$X33_MC"
 } > "$T/rows33"
 write_machine "$MD33/machine.md" docs/rm33/roadmap.md "$T/rows33"
@@ -1653,6 +1673,12 @@ assert_eq "$(stage "$T/rm33.json" V33):$(reason "$T/rm33.json" V33)" "머지됨:
 assert_eq "$(stage "$T/rm33.json" X33)" "설계 중" "AC15 짝: 원격 끝이 머지 커밋의 부모여도 로컬에 기본 브랜치 밖 커밋이 있으면 머지됨이 아니다"
 assert_contains "$(notes "$T/rm33.json" X33)" "로컬 끝 ${X33_LOCAL:0:8} · 원격 끝 ${X33_TIP:0:8}" "AC15 짝: 두 끝을 보인다"
 assert_eq "$(stage "$T/rm33.json" W33)" "준비" "머지된 에픽에 기대는 블록은 열린다(거짓 「의존 미완료」 없음)"
+assert_contains "$(notes "$T/rm33.json" L33)" "feature/l33: 로컬 끝 ${L33_OLD:0:8} · 원격 끝 ${L33_TIP:0:8}" "뒤처진 로컬의 머지 커밋 판정도 두 끝을 보인다"
+assert_eq "$(stage "$T/rm33.json" U33)" "설계 중" "AC15: 같은 이름을 새 main 에서 다시 땄고 옛 원격 ref 가 남음 — 옛 머지 커밋으로 머지됨이 아니다"
+assert_eq "$(stage "$T/rm33.json" T33)" "설계 중" "AC15: 새 에픽이 시작했어도 옛 머지가 그 설계문서보다 먼저면 머지됨이 아니다"
+assert_eq "$(stage "$T/rm33.json" N33)" "설계 중" "AC15: 만들기 전 브랜치(로컬 없음)에 남은 옛 원격 ref · 시작 흔적 없음 → 머지됨이 아니다"
+assert_contains "$(notes "$T/rm33.json" N33)" "feature/n33: 브랜치가 없다 — 같은 이름의 옛 PR #58 은 이 에픽의 PR 로 세지 않았다" "만들기 전 브랜치: 옛 원격 ref 의 PR 을 세지 않았다고 알린다"
+assert_eq "$(stage "$T/rm33.json" P33):$(reason "$T/rm33.json" P33)" "머지됨:기본 브랜치의 머지 커밋 ${P33_MC:0:8}(원격 끝)" "양의 짝: 시작한 에픽의 지운 로컬 · 원격 끝의 머지 커밋으로 머지됨"
 # origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
 (cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
 assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"
