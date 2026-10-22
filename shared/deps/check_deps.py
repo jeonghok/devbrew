@@ -5,6 +5,9 @@
   entry --plugin-root R --need <이름,…>
       진입에서 쓰는 의존의 지금 판을 표의 최소 판과 비교한다. python 행의 지금 판은 이 스크립트를 돌린 해석기의
       판이다. 강도 `멈춤` 행이 없거나 낮거나 판을 못 뽑으면 `멈춤` 줄을 내고 rc 3.
+  superpowers --plugin-root R [--base <불러온 superpowers skill 의 기준 폴더 경로>]
+      경로의 `superpowers/<판>/skills` 에서 읽은 판을 표의 superpowers 행 판과 비교해 같다 · 다르다 ·
+      확인하지 못했다 중 한 줄을 낸다. 알리기만 한다 — 늘 rc 0.
   measure --plugin-root R [--superpowers-base <경로>] [--today YYYY-MM-DD]
       표의 `최소 판` · `잰 날짜` 칸을 지금 깔린 판으로 바꿔 쓴다. 강도 · 없을 때 칸은 그대로 둔다.
       재지 못한 행은 그대로 두고 알린다. `python-hook` 행은 플러그인의 훅 해석기
@@ -13,7 +16,7 @@
 형제 모듈을 import 하지 않는다. 플러그인마다 `scripts/check_deps.py` 심볼릭 링크로 돌면
 sys.path[0] 이 정본 폴더(`shared/deps/`)라서 형제가 풀리지 않는다. 플러그인 루트는 인자로 받는다.
 
-rc: 0 = 끝남(measure 는 못 잰 행이 있어도 알리고 0) · 2 = 사용법 오류 · 3 = 멈춤(의존 목록을 읽지
+rc: 0 = 끝남(measure 는 못 잰 행이 있어도 알리고 0, superpowers 는 늘 0) · 2 = 사용법 오류 · 3 = 멈춤(의존 목록을 읽지
 못했거나, entry 에서 의존이 없거나 낮거나 판을 못 뽑았다).
 """
 import argparse
@@ -323,6 +326,40 @@ def entry(plugin_root, needs):
     return stops, notes, passed
 
 
+def superpowers_check(plugin_root, base):
+    """(첫 줄, 이유 또는 None). 첫 줄은 같다 · 다르다 · 확인하지 못했다 중 하나. 멈추지 않는다."""
+    unknown = "{0} superpowers 판을 확인하지 못했다".format(PREFIX)
+    if not base:
+        return unknown, "불러온 superpowers skill 의 기준 폴더 경로를 받지 못했다(--base)"
+    have = superpowers_version(base)
+    if have is None:
+        return unknown, "받은 경로에 superpowers/<판>/skills 꼴이 없다: {0}".format(base)
+    path = os.path.join(plugin_root, FILE_NAME)
+    try:
+        rows = read_table(path)
+    except DepsError as exc:
+        return unknown, "의존 목록을 읽지 못했다: {0}".format(exc)
+    want = None
+    for row in rows:
+        if row["name"] == "superpowers":
+            want = version_triple(row["min_version"])
+            break
+    if want is None:
+        return unknown, "의존 목록에 superpowers 행이 없거나 그 판 칸이 판이 아니다 ({0})".format(path)
+    if have == want:
+        return "{0} superpowers {1} — 검증한 판과 같다".format(PREFIX, triple_text(have)), None
+    return ("{0} 알림 — 설치된 superpowers {1} 이 검증한 판 {2} 과 다르다. 넘김 결과는 돌아온 뒤 대조한다".format(
+        PREFIX, triple_text(have), triple_text(want)), None)
+
+
+def _run_superpowers(args):
+    first, reason = superpowers_check(args.plugin_root, args.base)
+    print(first)
+    if reason:
+        print("  이유: {0}".format(reason))
+    return 0
+
+
 def _needs(value):
     names = [part.strip() for part in value.split(",")]
     if any(not part for part in names):
@@ -362,6 +399,9 @@ def main(argv=None):
     entry_cmd = commands.add_parser("entry")
     entry_cmd.add_argument("--plugin-root", required=True)
     entry_cmd.add_argument("--need", required=True, type=_needs)
+    superpowers_cmd = commands.add_parser("superpowers")
+    superpowers_cmd.add_argument("--plugin-root", required=True)
+    superpowers_cmd.add_argument("--base")
     measure_cmd = commands.add_parser("measure")
     measure_cmd.add_argument("--plugin-root", required=True)
     measure_cmd.add_argument("--superpowers-base")
@@ -369,6 +409,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "entry":
         return _run_entry(args)
+    if args.command == "superpowers":
+        return _run_superpowers(args)
     if args.command != "measure":
         parser.print_usage(sys.stderr)
         return 2

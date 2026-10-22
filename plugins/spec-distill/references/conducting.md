@@ -71,7 +71,7 @@
 
 ### 7. 끝
 - 기본값: 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로(인터뷰 → 분해 → 에픽 설계 → spec-review → 계획 · 구현 대조 → 작업 목록 · 상태줄)와 설계 흐름이 아닌 에픽의 경로를 실제 명령으로 걷는다. 그때 품질 게이트(`/quality-gates:quality-pipeline`)를 한 번, 로드맵 시작 커밋부터 지금 기본 브랜치까지 돌린다.
-- 판단: 품질 게이트가 범위 입력을 받는지는 그 skill 의 인자 안내로 정한다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 `python3 "<SD>"/scripts/control_plane.py show <로드맵> <에픽>` 의 열린 넘김으로 확인하고, 쌓인 기록이 남았으면 기록만 담은 로드맵 수정 PR 로 싣고 실은 줄은 걸음 6 처럼 뺀다. 쓴 자원을 `ledger resources` · `ledger orphans` 로 보고 정리한 뒤 표지를 푼다(`ledger release`).
+- 판단: skill 목록에 `quality-gates:quality-pipeline` 이 없으면 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다. 품질 게이트가 범위 입력을 받는지는 그 skill 의 인자 안내로 정한다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 `python3 "<SD>"/scripts/control_plane.py show <로드맵> <에픽>` 의 열린 넘김으로 확인하고, 쌓인 기록이 남았으면 기록만 담은 로드맵 수정 PR 로 싣고 실은 줄은 걸음 6 처럼 뺀다. 쓴 자원을 `ledger resources` · `ledger orphans` 로 보고 정리한 뒤 표지를 푼다(`ledger release`).
 - 부를 skill: `/quality-gates:quality-pipeline`(범위 입력이 있을 때).
 - 기록: 끝에서 끝으로 걸어 본 결과 · 품질 게이트를 건너뛴 사실 → 마지막 로드맵 수정 PR 본문 `## 지휘 기록`.
 - 기계 상태: 비운다(남은 자원 · agent · 쌓인 기록이 없을 때).
@@ -87,6 +87,7 @@
 로드맵 하나를 따라 에픽들을 지휘하는 세션의 절차다. 걸음마다 기본값이다 — 일의 모양이 다르면 다르게 하고, 무엇을 왜 다르게 했는지 그 에픽 설계문서 `## 지휘 기록` 에(에픽에 매이지 않은 판단은 다음 로드맵 수정 PR 본문에) 적는다. 정석 흐름(brainstorming → 계획 → 구현)의 뜻은 지킨다.
 
 - `<SD>` 는 spec-distill 플러그인 폴더의 절대경로, `<로드맵>` 은 로드맵 파일의 레포 루트 기준 경로다. `<SD>` 를 모르면 추측하지 말고(cwd 포함) 멈춰 사용자에게 묻는다.
+- skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 이 절차를 시작하지 않는다 — 「superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다」를 보이고 멈춘다. superpowers skill 을 처음 불러온 직후 `python3 "<SD>"/scripts/check_deps.py superpowers --plugin-root "<SD>" --base "<그 skill 의 기준 폴더>"` 를 한 번 돌려 「다르다」 · 「확인하지 못했다」 줄을 보인다 — 판 확인 결과로는 멈추지 않는다.
 - 레포마다 다른 값은 박지 않고 읽는다 — 기본 브랜치는 `origin/HEAD`, 브랜치 이름은 로드맵 블록의 `브랜치:`, 설계문서 · 계획 폴더 · 테스트 명령 · 리뷰 모델(`specs_dir` · `plans_dir` · `test_command` · `review_model`)은 해결자(`repo_defaults.py get`)가 로드맵 · 레포 설정 파일 · 기본값에서 낸다. 없으면 각각 superpowers 기본 폴더 · 레포 파일에서 찾은 러너 · 세션 모델을 쓰고, 한 번 물어 정한 값은 레포 설정 파일에 올리자고 알린다.
 - 각 칸의 주인과 갱신 길은 같은 폴더의 `roadmap-ontology.md` 에 있다.
 

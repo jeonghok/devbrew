@@ -254,6 +254,61 @@ assert_eq "$rc" "2" "entry: --need 없음은 rc 2"
 err="$("$PY" "$S" entry --plugin-root "$EDEMO" --need "python,,git" 2>&1 >/dev/null)"; rc=$?
 assert_eq "$rc" "2" "entry: 빈 이름이 낀 --need 는 rc 2"
 
+# ── 6. superpowers — 불러온 skill 의 기준 폴더 경로의 판을 표의 판과 비교해 알리기만 한다 ──
+SPDEMO="$TMP/plugins/spdemo"
+mkdir -p "$SPDEMO"
+write_spdemo() {   # write_spdemo <superpowers 최소 판>
+  printf '%s\n' '---' 'type: devbrew-dependencies' 'plugin: spdemo' '---' '' \
+    '| 이름 | 최소 판 | 잰 날짜 | 강도 | 없을 때 |' \
+    '|---|---|---|---|---|' \
+    '| python | 1.0.0 | 2026-10-20 | 멈춤 | x |' \
+    "| superpowers | $1 | 2026-10-20 | 알림 | x |" > "$SPDEMO/dependencies.md"
+}
+run_sp() {   # run_sp [--base 값] → 출력 $out · rc $src (링크로 돌린다)
+  out="$("$PY" "$ROOT/plugins/spec-distill/scripts/check_deps.py" superpowers --plugin-root "$SPDEMO" "$@")"; src=$?
+}
+SPBASE="$TMP/cache/superpowers/7.0.0/skills/writing-plans"
+UNKNOWN="[devbrew-deps] superpowers 판을 확인하지 못했다"
+write_spdemo 7.0.0
+run_sp --base "$SPBASE"
+assert_eq "$src" "0" "superpowers 같음: rc 0"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "[devbrew-deps] superpowers 7.0.0 — 검증한 판과 같다" "superpowers: 경로 판 = 표 판이면 「같다」"
+assert_not_contains "$out" "다르다" "superpowers 같음: 「다르다」를 말하지 않는다"
+write_spdemo 6.4.1
+run_sp --base "$SPBASE"
+assert_eq "$src" "0" "superpowers 다름(표가 낮다): rc 0 — 멈추지 않는다"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" \
+  "[devbrew-deps] 알림 — 설치된 superpowers 7.0.0 이 검증한 판 6.4.1 과 다르다. 넘김 결과는 돌아온 뒤 대조한다" \
+  "superpowers: 경로 판 ≠ 표 판이면 「다르다」와 두 판"
+write_spdemo 8.0.0
+run_sp --base "$SPBASE"
+assert_eq "$src" "0" "superpowers 다름(표가 높다): rc 0"
+assert_contains "$out" "설치된 superpowers 7.0.0 이 검증한 판 8.0.0 과 다르다" "superpowers: 높고 낮음이 아니라 같음을 잰다(표가 높아도 「다르다」)"
+write_spdemo 7.0.0
+run_sp --base ""
+assert_eq "$src" "0" "superpowers 빈 경로: rc 0"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: 빈 경로면 「확인하지 못했다」"
+run_sp
+assert_eq "$src" "0" "superpowers --base 없음: rc 0"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: --base 가 없으면 「확인하지 못했다」"
+run_sp --base "$TMP/cache/superpowers/skills/writing-plans"
+assert_eq "$src" "0" "superpowers 판 없는 경로: rc 0"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: 경로에 판이 없으면 「확인하지 못했다」"
+assert_contains "$out" "superpowers/<판>/skills 꼴이 없다" "superpowers: 판 없는 경로의 이유를 둘째 줄에 보인다"
+run_sp --base "$TMP/cache/superpowers/latest/skills/writing-plans"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: 판 자리가 판이 아니면 「확인하지 못했다」"
+printf 'garbage\n' > "$SPDEMO/dependencies.md"
+run_sp --base "$SPBASE"
+assert_eq "$src" "0" "superpowers 깨진 의존 목록: rc 0 — 멈추지 않는다"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: 의존 목록이 깨졌으면 「확인하지 못했다」"
+write_edemo 1.0.0 2.47.1 2.88.1
+out="$("$PY" "$S" superpowers --plugin-root "$EDEMO" --base "$SPBASE")"; src=$?
+assert_eq "$src" "0" "superpowers 행 없음: rc 0"
+assert_eq "$(printf '%s\n' "$out" | sed -n 1p)" "$UNKNOWN" "superpowers: 표에 superpowers 행이 없으면 「확인하지 못했다」"
+err="$("$PY" "$S" superpowers 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "2" "superpowers: --plugin-root 없음은 rc 2"
+assert_contains "$err" "--plugin-root" "superpowers: rc 2 의 사유가 빠진 --plugin-root 다(모르는 하위 명령이 아니다)"
+
 # 사용법
 err="$("$PY" "$S" 2>&1 >/dev/null)"; rc=$?
 assert_eq "$rc" "2" "하위 명령 없음: rc 2"

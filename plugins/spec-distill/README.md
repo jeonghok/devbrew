@@ -324,8 +324,8 @@ branch_prefix: feature/
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다. 문서 리뷰 엔진은
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
-- **superpowers** (외부, optional) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13).
-- **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받으면 `/quality-gates:quality-pipeline` 을 부른다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 설치돼 있지 않을 때의 동작은 걸음 7 이 따로 말하지 않는다.
+- **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. 설치된 판이 `dependencies.md` 의 판과 다르면 알린다(멈추지 않는다). Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 인터뷰도 돌지 않는다.
+- **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받으면 `/quality-gates:quality-pipeline` 을 부른다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 설치돼 있지 않으면 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
 - **gh CLI** (외부, optional) — 머지된 PR 번호 · PR 인계를 모은다. 없으면 공시하고 강등한다(crash 없음).
 - **codex CLI** (외부, optional) — 있으면 문서 리뷰 엔진 라운드(design doc · interview brief · interview seed)에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 
