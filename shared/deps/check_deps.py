@@ -201,11 +201,13 @@ def _hook_python_version(plugin_root, plugin):
         except (OSError, subprocess.SubprocessError, ValueError) as exc:
             return None, "훅 해석기를 실행하지 못했다: {0}".format(" ".join(str(exc).split()))
     out = proc.stdout or ""
+    if proc.returncode != 0:
+        err = [line.strip() for line in (proc.stderr or "").splitlines() if line.strip()]
+        return None, "훅 해석기가 rc {0} 로 끝났다: {1}".format(
+            proc.returncode, err[-1] if err else "stderr 없음")
     if not out.strip():
         return None, ("훅 해석기가 판을 내지 않았다 — 이 플러그인의 훅이 꺼져 있거나(kill switch) 바닥을 "
                       "만족하는 해석기가 없다")
-    if proc.returncode != 0:
-        return None, "훅 해석기가 rc {0} 로 끝났다".format(proc.returncode)
     triple = version_triple(out)
     if triple is None:
         return None, "훅 해석기 출력의 첫 줄에서 판을 뽑지 못했다: {0!r}".format(out.splitlines()[0])

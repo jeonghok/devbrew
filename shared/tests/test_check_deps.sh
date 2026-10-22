@@ -137,10 +137,13 @@ assert_eq "$rc" "3" "머리말 없음: rc 3"
 # ── 4. measure — python-hook 은 훅 해석기가 고른 해석기의 판, python 은 돌린 python3 의 판 ──
 HOOKY="$TMP/plugins/hooky"
 mkdir -p "$HOOKY/scripts" "$TMP/hookpy"
-# 가짜 해석기 — 넘겨받은 인자를 적고, 탐침을 3.12.13 판 해석기로 exec 한다
+# 훅 해석기가 고를 가짜 판 — 돌린 python3 의 판($PYV)과 늘 다르게 도출한다(패치 숫자 + 1)
+HOOKV="$(printf '%s' "$PYV" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')"
+case "$HOOKV" in "$PYV"|""|*[!0-9.]*) no "전제: 가짜 훅 판($HOOKV)을 $PYV 와 다르게 도출하지 못했다" ;; *) ok "전제: 가짜 훅 판 $HOOKV ≠ 돌린 python3 $PYV" ;; esac
+# 가짜 해석기 — 넘겨받은 인자를 적고, 탐침을 가짜 판 해석기로 exec 한다
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "%s/resolver-args"\nshift 6\nexec "%s/hookpy/python3.12" "$@"\n' "$TMP" "$TMP" > "$HOOKY/scripts/devbrew-python.sh"
-# 가짜 3.12.13 — 탐침 파일이 sys.version_info 를 묻는 .py 일 때만 판을 낸다
-printf '#!/bin/sh\ncase "$1" in *.py) grep -q version_info "$1" && echo "3.12.13" ;; esac\n' > "$TMP/hookpy/python3.12"
+# 가짜 해석기 — 탐침 파일이 sys.version_info 를 묻는 .py 일 때만 판을 낸다
+printf '#!/bin/sh\ncase "$1" in *.py) grep -q version_info "$1" && echo "%s" ;; esac\n' "$HOOKV" > "$TMP/hookpy/python3.12"
 chmod +x "$TMP/hookpy/python3.12"
 HDEMO="$HOOKY/dependencies.md"
 write_hooky() {
@@ -148,36 +151,40 @@ write_hooky() {
     '| 이름 | 최소 판 | 잰 날짜 | 강도 | 없을 때 |' \
     '|---|---|---|---|---|' \
     '| python | 1.0.0 | 2000-01-01 | 멈춤 | 파이썬 멈춘다 |' \
-    '| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |' > "$HDEMO"
+    '| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅이 알림 없이 건너뛴다 |' > "$HDEMO"
 }
 hrow() { grep -E "^\| $1 \|" "$HDEMO"; }
 write_hooky
 out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$ROOT/plugins/project-init/scripts/check_deps.py" measure \
   --plugin-root "$HOOKY" --today 2026-10-20)"; rc=$?
 assert_eq "$rc" "0" "measure(python-hook): rc 0"
-assert_eq "$(hrow python-hook)" "| python-hook | 3.12.13 | 2026-10-20 | 멈춤 | 훅 해석기가 알린다 |" \
+assert_eq "$(hrow python-hook)" "| python-hook | $HOOKV | 2026-10-20 | 멈춤 | 훅이 알림 없이 건너뛴다 |" \
   "measure: python-hook 은 훅 해석기가 고른 해석기의 판"
 assert_eq "$(hrow python)" "| python | $PYV | 2026-10-20 | 멈춤 | 파이썬 멈춘다 |" "measure: python 은 돌린 python3 의 판(따로)"
-if [ "$PYV" != "3.12.13" ]; then
-  [ "$(hrow python | cut -d'|' -f3)" != "$(hrow python-hook | cut -d'|' -f3)" ] \
-    && ok "measure: python 과 python-hook 이 다른 값을 쓴다" || no "measure: python 과 python-hook 이 같은 값을 쓴다"
-else
-  no "전제: 이 python3 가 3.12.13 이라 두 행을 가를 수 없다 — 가짜 판을 바꾼다"
-fi
+[ "$(hrow python | cut -d'|' -f3)" != "$(hrow python-hook | cut -d'|' -f3)" ] \
+  && ok "measure: python 과 python-hook 이 다른 값을 쓴다" || no "measure: python 과 python-hook 이 같은 값을 쓴다"
 assert_eq "$(cat "$TMP/resolver-args" 2>/dev/null | cut -d' ' -f1-6)" "--event measure --plugin hooky --hook measure" \
   "measure: 해석기를 --event measure --plugin <머리말 plugin> --hook measure 로 부른다"
+# 해석기가 죽는다 — rc 와 stderr 마지막 줄을 알리고, 꺼짐 · 해석기 없음으로 말하지 않는다
+printf '#!/bin/sh\necho "앞 줄" >&2\necho "resolver boom" >&2\nexit 7\n' > "$HOOKY/scripts/devbrew-python.sh"
+write_hooky
+out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$HOOKY" --today 2026-10-21)"; rc=$?
+assert_eq "$rc" "0" "measure(해석기 실패): rc 0"
+assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅이 알림 없이 건너뛴다 |" "measure: 해석기가 실패하면 python-hook 행은 그대로"
+assert_contains "$out" "python-hook 못 쟀다 — 훅 해석기가 rc 7 로 끝났다: resolver boom" "measure: 해석기 실패의 rc 와 stderr 마지막 줄을 알린다"
+assert_not_contains "$out" "kill switch" "measure: 해석기 실패를 꺼짐으로 말하지 않는다"
 # 해석기가 판을 내지 않는다(꺼짐 · 바닥 만족 해석기 없음) — 행은 그대로
 printf '#!/bin/sh\nexit 0\n' > "$HOOKY/scripts/devbrew-python.sh"
 write_hooky
 out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$HOOKY" --today 2026-10-21)"; rc=$?
 assert_eq "$rc" "0" "measure(해석기 침묵): rc 0"
-assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |" "measure: 해석기가 판을 내지 않으면 python-hook 행은 그대로"
+assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅이 알림 없이 건너뛴다 |" "measure: 해석기가 판을 내지 않으면 python-hook 행은 그대로"
 assert_contains "$out" "python-hook 못 쟀다 — 훅 해석기가 판을 내지 않았다" "measure: 해석기 침묵을 알린다"
 # 해석기가 없다 — 행은 그대로
 rm -f "$HOOKY/scripts/devbrew-python.sh"
 write_hooky
 out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$HOOKY" --today 2026-10-21)"
-assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |" "measure: 해석기가 없으면 python-hook 행은 그대로"
+assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅이 알림 없이 건너뛴다 |" "measure: 해석기가 없으면 python-hook 행은 그대로"
 assert_contains "$out" "python-hook 못 쟀다 — 훅 해석기가 없다" "measure: 해석기 없음을 알린다"
 
 # ── 5. entry — 진입의 의존 확인 ─────────────────────────────────────────────
@@ -190,7 +197,7 @@ write_edemo() {   # write_edemo <python 최소 판> <git 최소 판> <gh 최소 
     "| python | $1 | 2026-10-20 | 멈춤 | x |" \
     "| git | $2 | 2026-10-20 | 멈춤 | x |" \
     "| gh | $3 | 2026-10-20 | 멈춤 | x |" \
-    "| python-hook | ${4:-3.12.13} | 2026-10-20 | 멈춤 | 훅 해석기가 알린다 |" \
+    "| python-hook | ${4:-3.12.13} | 2026-10-20 | 멈춤 | 훅이 알림 없이 건너뛴다 |" \
     '| claude-code | 2.1.303 | 2026-10-20 | 기록 | x |' > "$EDEMO/dependencies.md"
 }
 run_entry() {   # run_entry <--need 값> → 출력, rc 는 $erc

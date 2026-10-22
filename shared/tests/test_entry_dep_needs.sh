@@ -121,8 +121,9 @@ for f in $SKILLS; do
   esac
   # 펜스 뒤 글이 rc 3 이면 멈춘다고 적는다
   after="$(awk -v s="$fline" 'NR>s && f && /^```bash$/ {exit} NR>s && /^```$/ && !f {f=1; next} f' "$sk")"
-  assert_contains "$after" "rc 3" "$key: 펜스 뒤 글이 rc 3 의 동작을 적는다"
-  assert_contains "$after" "멈춘다" "$key: 펜스 뒤 글이 멈춘다고 적는다"
+  # 결과 표의 rc 3 행 하나가 그 자리에서 멈춘다고 적는다(뒤 걸음의 「멈춘다」로 채워지지 않게 행 단위로 잰다)
+  if printf '%s\n' "$after" | grep -qE '^\| rc 3 [^|]*\|[^|]*멈춘다'; then ok "$key: 결과 표의 rc 3 행이 멈춘다고 적는다"
+  else no "$key: 결과 표에 「rc 3 … | … 멈춘다」 행이 없다"; fi
 
   # 펜스를 잘라 돌린다 — 가짜 check_deps.py 가 인자를 적고 STUB_RC 로 끝난다
   plug="${key%%/*}"
