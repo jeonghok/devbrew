@@ -86,11 +86,13 @@ P21='- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 
 P14='- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.'
 absorb="$(subsection "$SD_README" '### Principles 흡수')"
 [ -n "$absorb" ] && ok "README: ### Principles 흡수 절이 있다" || no "README: ### Principles 흡수 절이 없다 — 아래 부재 단언이 공허하다"
-for pair in "P21|$P21" "P14|$P14"; do
-  tag="${pair%%|*}"; line="${pair#*|}"
+H21='**한계 — 상태 폴더 쓰기의 링크 (P21)**'
+H14='**한계 — 원장 정리의 뿌리 (P14)**'
+for pair in "P21|$H21|$P21" "P14|$H14|$P14"; do
+  tag="${pair%%|*}"; rest="${pair#*|}"; head="${rest%%|*}"; line="${rest#*|}"
   if printf '%s\n' "$lim" | grep -qxF -- "$line"; then ok "README ## 한계: $tag 한계 불릿이 글 그대로 있다"
   else no "README ## 한계: $tag 한계 불릿이 없거나 글이 바뀌었다"; fi
-  assert_not_contains "$absorb" "**한계 — " "README ### Principles 흡수: $tag 한계 불릿이 남지 않았다"
+  assert_not_contains "$absorb" "$head" "README ### Principles 흡수: $tag 한계 불릿이 남지 않았다"
 done
 assert_contains "$absorb" '한계는 `## 한계` 절' "README ### Principles 흡수: 한계 절을 가리키는 한 줄"
 
