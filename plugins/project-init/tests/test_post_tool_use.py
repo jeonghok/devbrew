@@ -153,6 +153,14 @@ class F1FailOpenTest(_RepoTestCase):
         self.assertIn("기본 브랜치(origin/HEAD)를 찾지 못해", msg)
         self.assertIn("git remote set-head origin --auto", msg)
 
+    def test_no_origin_remote_fails_open(self):
+        # origin 원격 자체가 없으면 set-head 를 권하지 않고 그 사실을 알린다.
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        git("remote", "remove", "origin", cwd=work)
+        msg = self.assert_one_fail_open(self.observe_after_branch(work, "Bad"))
+        self.assertIn("`origin` 원격이 없어", msg)
+        self.assertNotIn("set-head", msg)
+
     def test_working_tree_rule_is_not_read(self):
         work = self.repo(None)
         d = Path(work, "docs", "git-workflow")

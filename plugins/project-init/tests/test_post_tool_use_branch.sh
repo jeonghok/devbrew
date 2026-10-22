@@ -46,7 +46,7 @@ fresh() { # 새 작업 레포(origin/HEAD = main)를 만들고 경로를 W 에 �
 
 hook() { # $1 tool_name, $2 cwd, [$3 command] — 출력은 OUT
   OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": sys.argv[1], "cwd": sys.argv[2], "tool_input": {"command": sys.argv[3]}}))' "$1" "$2" "${3:-}" \
-    | CLAUDE_PROJECT_DIR="$2" python3 "$HOOK")
+    | PATH="${HOOK_PATH:-$PATH}" CLAUDE_PROJECT_DIR="$2" python3 "$HOOK")
 }
 
 field() { # $1 key in OUT → stdout
@@ -64,6 +64,12 @@ alerted() { # $1 이름, $2 label
   sm=$(field systemMessage); ac=$(field ac)
   case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*) ;; *) no "$2: 사람 채널에 규칙 밖 알림이 없다 — $OUT"; return ;; esac
   case "$ac" in *"git branch -m $1 "*) ok "$2" ;; *) no "$2: 모델 채널에 이름 바꾸기 명령이 없다 — $OUT" ;; esac
+}
+
+elsewhere() { # $1 이름, $2 작업 트리 경로, $3 label
+  sm=$(field systemMessage); ac=$(field ac)
+  case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*"다른 작업 트리($2)"*) ;; *) no "$3: 사람 채널에 알림 · 작업 트리 경로가 없다 — $OUT"; return ;; esac
+  case "$ac" in *"git branch -m $1 "*) no "$3: 다른 작업 트리 브랜치에 이름 바꾸기 명령을 냈다 — $OUT" ;; *) ok "$3" ;; esac
 }
 
 quiet() { # $1 label
@@ -91,7 +97,7 @@ m=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="
 
 echo "다섯 명령 뒤 규칙 밖 이름 → 알림"
 fresh; git -C "$W" worktree add -q -b Bad1 "$T/wt1"
-hook Bash "$W" "git worktree add -b Bad1 ../wt1"; alerted Bad1 "git worktree add -b"
+hook Bash "$W" "git worktree add -b Bad1 ../wt1"; elsewhere Bad1 "$T/wt1" "git worktree add -b(다른 작업 트리에서 쓰는 브랜치)"
 fresh; git -C "$W" branch tmpa; age_reflog "$W" tmpa 3600; git -C "$W" branch -m tmpa Bad2
 hook Bash "$W" "git branch -m tmpa Bad2"; alerted Bad2 "git branch -m"
 fresh; git -C "$W" checkout -q -B Bad3
@@ -99,8 +105,21 @@ hook Bash "$W" "git checkout -B Bad3"; alerted Bad3 "git checkout -B"
 fresh; git -C "$W" switch -q --create Bad4
 hook Bash "$W" "git switch --create Bad4"; alerted Bad4 "git switch --create"
 fresh; git -C "$W" branch Bad5
-hook Bash "$T" "git -C w$N branch Bad5"; quiet "레포 밖 cwd 는 관찰하지 않는다(레포 아님)"
 hook Bash "$W" "git -C $W branch Bad5"; alerted Bad5 "git -C <dir> branch"
+
+echo "다른 작업 트리가 쓰는 브랜치 — 이름 바꾸기 명령을 내지 않는다"
+fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" branch BadPlain
+hook Bash "$W" "git branch BadPlain"
+elsewhere BadB "$T/wtB$N" "작업 트리 B 에서 쓰는 규칙 밖 브랜치 → 사람 채널에 B 경로 · 모델 채널에 명령 없음"
+alerted BadPlain "어디에서도 쓰지 않는 규칙 밖 브랜치 → 이름 바꾸기 명령(양성 짝)"
+mkdir -p "$T/wtfail"
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail/git"
+chmod +x "$T/wtfail/git"
+HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git branch BadPlain"
+sm=$(field systemMessage); ac=$(field ac)
+case "$ac" in *"git branch -m"*) no "작업 트리 목록을 못 읽었는데 이름 바꾸기 명령을 냈다 — $OUT" ;; *)
+  case "$sm" in *"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*"이름 규칙에 맞지 않는다"*|*"이름 규칙에 맞지 않는다"*"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*)
+    ok "작업 트리 목록 실패 → 명령 없이 알리고 그 사실을 적는다" ;; *) no "작업 트리 목록 실패 안내가 없다 — $OUT" ;; esac ;; esac
 
 echo "EnterWorktree"
 fresh; git -C "$W" worktree add -q -b worktree-x "$W/.claude/worktrees/x"
@@ -129,12 +148,29 @@ hook Bash "$W" "git branch Bad10"; alerted Bad10 "작업 브랜치에서 느슨�
 echo "fail-open"
 fresh; git -C "$W" remote set-head origin -d; git -C "$W" branch Bad11
 hook Bash "$W" "git branch Bad11"
-case "$(field systemMessage)" in *"기본 브랜치(origin/HEAD)를 찾지 못해"*"브랜치 이름 검사를 건너뛴다(fail-open)"*) ok "기본 ref 없음 → 알리고 건너뜀" ;; *) no "기본 ref 없음 안내가 없다 — $OUT" ;; esac
+case "$(field systemMessage)" in *"기본 브랜치(origin/HEAD)를 찾지 못해"*"브랜치 이름 검사를 건너뛴다(fail-open)"*"git remote set-head origin --auto"*) ok "기본 ref 없음 → 알리고 건너뜀 · set-head 안내" ;; *) no "기본 ref 없음 안내가 없다 — $OUT" ;; esac
+W="$T/noorigin"; git clone -q "$SRC" "$W"; git -C "$W" remote remove origin; git -C "$W" branch Bad14
+hook Bash "$W" "git branch Bad14"
+sm=$(field systemMessage)
+case "$sm" in *'`origin` 원격이 없어'*"브랜치 이름 검사를 건너뛴다(fail-open)"*)
+  case "$sm" in *"set-head"*) no "origin 원격이 없는데 set-head 를 안내한다 — $OUT" ;; *) ok "origin 원격 없음 → 그 사실을 알리고 건너뜀" ;; esac ;;
+  *) no "origin 원격 없음 안내가 없다 — $OUT" ;; esac
 W="$T/norule"; git clone -q "$NORULE" "$W"
 mkdir -p "$W/docs/git-workflow"; printf '```regex\n%s\n```\n' "$RULE" > "$W/docs/git-workflow/branch-strategy.md"
 git -C "$W" branch Bad12
 hook Bash "$W" "git branch Bad12"
 case "$(field systemMessage)" in *"규칙을 찾지 못했다 — 브랜치 이름 검사를 건너뛴다(fail-open)"*) ok "기본 브랜치 판에 규칙 파일 없음 → 작업 트리 파일이 있어도 알리고 건너뜀" ;; *) no "규칙 파일 없음 안내가 없다 — $OUT" ;; esac
+
+echo "git 이 멈추면 — 공유 시간 상한 안에 끝내고 커밋 검사는 낸다"
+mkdir -p "$T/slowbin"
+printf '#!/bin/sh\nsleep 30\n' > "$T/slowbin/git"
+chmod +x "$T/slowbin/git"
+t0=$(date +%s)
+HOOK_PATH="$T/slowbin:$PATH" hook Bash "$W" 'git commit -m "add thing"'
+el=$(( $(date +%s) - t0 ))
+sm=$(field systemMessage)
+case "$sm" in *"git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open)"*"Conventional Commits"*) ok "시간 초과 → fail-open 안내 + 커밋 검사" ;; *) no "시간 초과 안내 · 커밋 검사가 없다 — $OUT" ;; esac
+[ "$el" -lt 10 ] && ok "훅이 ${el}초에 끝났다(hooks.json timeout 10초 안)" || no "훅이 ${el}초 걸렸다 — 10초 timeout 을 넘는다"
 
 echo "kill switch — git 을 부르기 전에 끝난다"
 mkdir -p "$T/fakebin"
