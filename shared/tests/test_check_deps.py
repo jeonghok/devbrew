@@ -40,7 +40,7 @@ class VersionTriple(unittest.TestCase):
                 self.assertEqual(check_deps.version_triple(text), expected)
 
     def test_unreadable(self):
-        for text in ("git version unknown", "", None, "\n3.9.6"):
+        for text in ("git version unknown", "", None, "\n3.9.6", "Python 3.12", "gh version 2.88 (dev)"):
             with self.subTest(text=text):
                 self.assertIsNone(check_deps.version_triple(text))
 
