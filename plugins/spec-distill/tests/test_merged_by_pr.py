@@ -55,7 +55,7 @@ class SixConditions(unittest.TestCase):
         self.assertIsNone(v)
 
     def test_cross_repo_even_when_branch_deleted(self):          # 끝 없음 + 교차 레포 예
-        v, notes = rs.merged_by_pr([row(cross="예")], BR, None, None, "main", always)
+        v, notes = rs.merged_by_pr([row(cross="예")], BR, None, None, "main", always, started=True)
         self.assertIsNone(v)
         self.assertFalse(any("브랜치 끝 없이 판정" in n for n in notes), notes)
 
@@ -68,7 +68,7 @@ class SixConditions(unittest.TestCase):
         self.assertIsNone(v)
 
     def test_non_default_base_when_branch_deleted(self):
-        v, _ = rs.merged_by_pr([row(base="release")], BR, None, None, "main", always)
+        v, _ = rs.merged_by_pr([row(base="release")], BR, None, None, "main", always, started=True)
         self.assertIsNone(v)
 
     def test_open_or_closed_is_not_merged(self):
@@ -85,21 +85,37 @@ class SixConditions(unittest.TestCase):
         self.assertIsNone(v)
         self.assertIn("로컬 끝 %s · 원격 끝 %s" % (NEW[:8], TIP[:8]), notes)
 
-    def test_deleted_branch_single_row_notices(self):
-        v, notes = rs.merged_by_pr([row(oid=OLD, merge=M_OLD)], BR, None, None, "main", always)
+    def test_deleted_branch_single_row_notices(self):             # 시작한 에픽의 지운 브랜치(양의 짝)
+        v, notes = rs.merged_by_pr([row(oid=OLD, merge=M_OLD)], BR, None, None, "main", always, started=True)
         self.assertEqual(v, "머지됨")
         self.assertIn("브랜치 끝 없이 판정 — 캐시의 headRefOid %s" % OLD[:8], notes)
 
-    def test_deleted_branch_two_rows_is_uncountable(self):
+    def test_never_created_branch_old_merged_pr_is_not_merged(self):  # AC15 — 만들기 전 브랜치 이름의 옛 MERGED PR
+        v, notes = rs.merged_by_pr([row(oid=OLD, merge=M_OLD, num="#1")], BR, None, None, "main", always)
+        self.assertIsNone(v)
+        self.assertEqual(notes, ["브랜치가 없다 — 같은 이름의 옛 PR #1 은 이 에픽의 PR 로 세지 않았다(이 에픽의 승인된 "
+                                 "설계문서나 계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다)"])
+
+    def test_never_created_branch_two_old_prs_is_not_uncountable(self):
         rows = [row(oid=OLD, merge=M_OLD, num="#3"), row(oid=TIP, merge=M, num="#9")]
         v, notes = rs.merged_by_pr(rows, BR, None, None, "main", always)
+        self.assertIsNone(v)
+        self.assertTrue(notes and notes[0].startswith("브랜치가 없다 — 같은 이름의 옛 PR #3 · #9 은"), notes)
+
+    def test_never_started_but_tip_present_still_judged(self):    # 끝이 있으면 시작 흔적을 묻지 않는다
+        v, _ = rs.merged_by_pr([row()], BR, TIP, None, "main", always, started=False)
+        self.assertEqual(v, "머지됨")
+
+    def test_deleted_branch_two_rows_is_uncountable(self):
+        rows = [row(oid=OLD, merge=M_OLD, num="#3"), row(oid=TIP, merge=M, num="#9")]
+        v, notes = rs.merged_by_pr(rows, BR, None, None, "main", always, started=True)
         self.assertEqual(v, "셀 수 없음")
         self.assertEqual(notes, ["셀 수 없음 — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(#3 · #9) — 브랜치를 맞는 PR 의 "
                                  "headRefOid 로 되살린다(`git branch feature/x <headRefOid>`)"])
 
     def test_deleted_branch_two_rows_same_oid_is_one_tip(self):
         rows = [row(num="#3"), row(num="#9")]
-        v, _ = rs.merged_by_pr(rows, BR, None, None, "main", always)
+        v, _ = rs.merged_by_pr(rows, BR, None, None, "main", always, started=True)
         self.assertEqual(v, "머지됨")
 
     def test_not_fetched_is_not_merged(self):
@@ -150,13 +166,13 @@ class ForkRowWrittenLast(unittest.TestCase):
         self.assertIsNone(v)
 
     def test_deleted_branch_fork_row_last_is_not_a_second_candidate(self):
-        v, notes = rs.merged_by_pr([row(), self.fork()], BR, None, None, "main", always)
+        v, notes = rs.merged_by_pr([row(), self.fork()], BR, None, None, "main", always, started=True)
         self.assertEqual(v, "머지됨")
         self.assertIn("브랜치 끝 없이 판정 — 캐시의 headRefOid %s" % TIP[:8], notes)
 
     def test_deleted_branch_other_base_row_last_is_not_a_second_candidate(self):
         rows = [row(), row(base="release", oid=OLD, merge=M_OLD, num="#5")]
-        v, _ = rs.merged_by_pr(rows, BR, None, None, "main", always)
+        v, _ = rs.merged_by_pr(rows, BR, None, None, "main", always, started=True)
         self.assertEqual(v, "머지됨")
 
 

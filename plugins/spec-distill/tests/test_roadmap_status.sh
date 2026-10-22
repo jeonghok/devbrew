@@ -1454,8 +1454,11 @@ sq() {  # sq <브랜치> — 브랜치를 기본 브랜치에 squash 로 머지�
 }
 # S30 — squash 머지, 브랜치는 남음 · 손 머지 줄 없음
 g checkout -q -b feature/s30 main; commit_file src/s30.txt s "s30"; S30_TIP="$(g rev-parse HEAD)"; sq feature/s30; S30_MC="$(g rev-parse HEAD)"
-# B30 — squash 머지 뒤 브랜치를 지움(캐시의 headRefOid 로 판정)
-g checkout -q -b feature/b30 main; commit_file src/b30.txt b "b30"; B30_TIP="$(g rev-parse HEAD)"; sq feature/b30; B30_MC="$(g rev-parse HEAD)"; g branch -q -D feature/b30
+approved_spec() {  # approved_spec <경로> <source_interview> — `## 지휘 기록` 에 spec 승인 줄이 있는 설계문서를 커밋한다
+  commit_file "$1" "$(spec_doc "$2" C1)$(printf '\n| S1 | 반영 | §1 |\n\n## 지휘 기록\n\n- spec 승인 · 2026-10-20 · 「승인」')" "spec $1"
+}
+# B30 — 승인된 설계문서를 담아 squash 머지 뒤 브랜치를 지움(시작한 에픽 — 캐시의 headRefOid 로 판정)
+g checkout -q -b feature/b30 main; approved_spec docs/superpowers/specs/b30-design.md docs/rm30/B30.md; commit_file src/b30.txt b "b30"; B30_TIP="$(g rev-parse HEAD)"; sq feature/b30; B30_MC="$(g rev-parse HEAD)"; g branch -q -D feature/b30
 # D30 — 내 PR 은 열림 · 같은 head 이름의 fork PR 이 머지됐고 기본 브랜치에 닿는다(캐시의 마지막 줄)
 g checkout -q -b feature/d30 main; commit_file src/d30.txt d "d30"; D30_TIP="$(g rev-parse HEAD)"; sq feature/d30; D30_MC="$(g rev-parse HEAD)"
 # K30 — 내 레포 PR 이 release 로 머지됨(기본 브랜치가 아닌 base)
@@ -1515,7 +1518,7 @@ reason() { js "$1" "next(b['reason'] for b in r['blocks'] if b['id']=='$2')"; }
 assert_eq "$(stage "$T/rm30.json" S30)" "머지됨" "AC14: squash 머지(머지 커밋 없음) + PR 캐시 → 손 머지 줄 없이 머지됨"
 assert_contains "$(reason "$T/rm30.json" S30)" "PR #31 머지됨(mergeCommit ${S30_MC:0:8})" "AC14: 근거는 내 레포 PR — 뒤에 적힌 같은 이름의 fork 줄(#90)이 아니다"
 assert_not_contains "$(notes "$T/rm30.json" S30)" "PR 상태 미확인" "AC14: 캐시에 줄이 있으면 「PR 상태 미확인」 이 없다"
-assert_eq "$(stage "$T/rm30.json" B30)" "머지됨" "AC15: 지운 브랜치는 캐시의 headRefOid 로 판정"
+assert_eq "$(stage "$T/rm30.json" B30)" "머지됨" "AC15: 시작한 에픽(승인된 설계문서가 기본 브랜치에)의 지운 브랜치는 캐시의 headRefOid 로 판정"
 assert_contains "$(notes "$T/rm30.json" B30)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${B30_TIP:0:8}" "AC15: 지운 브랜치는 「브랜치 끝 없이 판정」 을 알린다"
 assert_eq "$(stage "$T/rm30.json" D30)" "설계 중" "AC15: 같은 head 이름의 fork PR(마지막 줄 · 끝 같음 · 기본 브랜치에 닿음)은 머지됨을 정하지 않는다"
 assert_eq "$(stage "$T/rm30.json" K30)" "설계 중" "AC15: 기본 브랜치가 아닌 base(release)로 머지된 PR 은 머지됨이 아니다"
@@ -1545,8 +1548,9 @@ sed 's/m and m.group(1).casefold() == origin_owner.casefold() and m.group(2) == 
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(owner 비교)" || ok "변이 적용됨(owner 비교)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json --roadmap-file docs/rm30/roadmap.md > "$T/m30.json")
 assert_eq "$(stage "$T/m30.json" G30)" "머지됨" "변이: owner 비교를 지우면 G30 이 머지됨 — G30 단언에 이빨이 있다"
-# 지운 브랜치 · 같은 이름의 머지된 PR 둘(headRefOid 다름) → 셀 수 없음(검사 불가 rc 3)
+# 지운 브랜치 · 같은 이름의 머지된 PR 둘(headRefOid 다름) → 셀 수 없음(검사 불가 rc 3) — 시작한 에픽(승인된 설계문서)
 mkdir -p "$W/docs/rm31"
+g checkout -q main; approved_spec docs/superpowers/specs/b31-design.md docs/rm31/B31.md; g push -q origin main; g fetch -q origin
 bundle docs/rm31 B31 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
 { roadmap_head; block B31 feature/b30 없음 없음; roadmap_tail ""; } > "$W/docs/rm31/roadmap.md"
 MD31="$W/.claude/spec-distill/conductor/rm31"; mkdir -p "$MD31"
@@ -1572,6 +1576,25 @@ assert_eq "$rc" "1" "옛 판 4칸 줄: 경고(rc 1)"
 rm -f "$MD31/machine.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31d.json"); rc=$?
 assert_eq "$rc:$(warns "$T/rm31d.json" B31)" "0:" "양의 짝: 기계 상태 파일이 없으면 경고 없음(rc 0) — 정보 줄만"
+# 아직 만들지 않은 브랜치(feature/f32) — 캐시에 같은 이름의 옛 MERGED PR(#1 · 기본 브랜치에 닿음)이 있어도 머지됨이
+# 아니고 알림 한 줄. G32 는 F32 에 기댄다. 양의 짝: 같은 캐시에서 F32 의 승인된 설계문서가 기본 브랜치에 오면 끝 없이 판정한다.
+mkdir -p "$W/docs/rm32"
+bundle docs/rm32 F32 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"; bundle docs/rm32 G32 "C1, S1"
+{ roadmap_head; block F32 feature/f32 없음 없음; block G32 feature/g32 F32 없음; roadmap_tail ""; } > "$W/docs/rm32/roadmap.md"
+MD32="$W/.claude/spec-distill/conductor/rm32"; mkdir -p "$MD32"
+printf 'feature/f32|#1|머지됨|%s|아니오|main|%s\n' "$S30_TIP" "$S30_MC" > "$T/rows32"
+write_machine "$MD32/machine.md" docs/rm32/roadmap.md "$T/rows32"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32.json"); rc=$?
+assert_eq "$(stage "$T/rm32.json" F32)" "준비" "AC15: 만들기 전 브랜치 이름의 옛 MERGED PR 은 머지됨이 아니다"
+assert_contains "$(notes "$T/rm32.json" F32)" "feature/f32: 브랜치가 없다 — 같은 이름의 옛 PR #1 은 이 에픽의 PR 로 세지 않았다" "만들기 전 브랜치: 옛 PR 을 세지 않았다는 알림 한 줄"
+assert_not_contains "$(notes "$T/rm32.json" F32)" "브랜치 끝 없이 판정" "만들기 전 브랜치: 끝 없이 판정하지 않는다"
+assert_eq "$(stage "$T/rm32.json" G32)" "대기" "만들기 전 브랜치의 블록에 기대는 블록은 열리지 않는다"
+assert_eq "$rc" "0" "만들기 전 브랜치의 알림은 정보(rc 0)"
+g checkout -q main; approved_spec docs/superpowers/specs/f32-design.md docs/rm32/F32.md; g push -q origin main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32b.json")
+assert_eq "$(stage "$T/rm32b.json" F32)" "머지됨" "양의 짝: 같은 캐시 · 승인된 설계문서가 기본 브랜치에 있으면 지운 브랜치로 보고 끝 없이 판정"
+assert_contains "$(notes "$T/rm32b.json" F32)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${S30_TIP:0:8}" "양의 짝: 「브랜치 끝 없이 판정」 을 알린다"
+assert_not_contains "$(notes "$T/rm32b.json" F32)" "브랜치가 없다" "양의 짝: 옛 PR 알림이 없다"
 # origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
 (cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
 assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"

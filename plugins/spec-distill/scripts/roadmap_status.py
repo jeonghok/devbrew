@@ -403,9 +403,10 @@ def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_ow
     return None
 
 
-def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable):
+def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable, started=False):
     """(판정 | None, 알림 줄, 고른 줄 | None). 후보는 브랜치 · 머지됨 · 교차 레포 아님 · 기본 브랜치 base 에 맞는 줄만이고
-    끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다."""
+    끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다. 끝이 없으면 started(이 에픽이
+    시작된 흔적 — 지워진 브랜치)일 때만 끝 없이 판정하고, 아니면 아직 만들지 않은 브랜치로 보고 같은 이름의 옛 PR 을 세지 않는다."""
     notes = []
     cands = [r for r in rows if r.get("브랜치") == branch and r.get("상태") == "머지됨"
              and r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
@@ -415,6 +416,11 @@ def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, rea
     if tip:
         cands = [r for r in cands if r.get("headRefOid") == tip]
     else:
+        if cands and not started:
+            notes.append("브랜치가 없다 — 같은 이름의 옛 PR %s 은 이 에픽의 PR 로 세지 않았다(이 에픽의 승인된 설계문서나 "
+                         "계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다)"
+                         % " · ".join(r.get("번호", "?") for r in cands))
+            return None, notes, None
         oids = sorted({r.get("headRefOid") for r in cands})
         if len(oids) > 1:
             notes.append("%s — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(%s) — 브랜치를 맞는 PR 의 headRefOid 로 "
@@ -437,11 +443,12 @@ def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, rea
     return PR_NOT_FETCHED, notes, known[0]
 
 
-def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: str, reachable):
+def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: str, reachable, started=False):
     """(판정, 알림 줄) — 판정 ∈ 「머지됨」 · 「머지됨(받기 전)」 · 「셀 수 없음」 · None. 여섯 조건: 브랜치 == branch ∧
     상태 == 머지됨 ∧ 교차 레포 == 아니오 ∧ baseRefName == 기본 브랜치 ∧ headRefOid == 끝(로컬, 없으면 원격) ∧
-    mergeCommit 이 기본 ref 에서 닿는다. 끝이 없으면 다섯으로 판정하되 맞는 headRefOid 가 둘 이상이면 셀 수 없음."""
-    verdict, notes, _row = _judge_pr(rows, branch, tip_local, tip_remote, default_short, reachable)
+    mergeCommit 이 기본 ref 에서 닿는다. 끝이 없으면 started(지워진 브랜치)일 때만 다섯으로 판정하되 맞는 headRefOid 가
+    둘 이상이면 셀 수 없음 — started 가 아니면 판정 없음과 알림 한 줄."""
+    verdict, notes, _row = _judge_pr(rows, branch, tip_local, tip_remote, default_short, reachable, started)
     return verdict, notes
 
 
@@ -549,8 +556,23 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 owner_memo.append((None, str(exc)))
         return owner_memo[0]
 
-    def judge(br, block):
-        """브랜치 하나의 상태 — tip · merged(근거 | None) · 셀 수 없으면 uncountable."""
+    started_memo = {}
+
+    def started(block):
+        """이 에픽이 시작된 흔적 — 블록의 설계문서가 기본 브랜치에 있고 승인됐거나 그것을 가리키는 계획이 기본 브랜치에
+        있다. 끝 없는 브랜치를 PR 로 판정해도 되는지(지워진 브랜치인지 아직 만들지 않은 브랜치인지)를 가른다."""
+        if block["id"] not in started_memo:
+            specs = find_specs(git, main, block, block["bundle"], settings["specs_dir"])
+            when, _why = approval_of(git, main, specs) if specs else (None, None)
+            planned = bool(specs) and not when and any(
+                plan_specs(git.blob(main, p) or "") & set(specs)
+                for s in specs for p in git.grep_files(main, s, settings["plans_dir"]))
+            started_memo[block["id"]] = bool(when) or planned
+        return started_memo[block["id"]]
+
+    def judge(br, block, extra=False):
+        """브랜치 하나의 상태 — tip · merged(근거 | None) · 셀 수 없으면 uncountable. extra(더한 브랜치)는 끝이 없으면
+        판정을 쓰지 않으므로 시작 흔적을 묻지 않는다."""
         local = git.commit("refs/heads/" + br)
         remote = git.commit("refs/remotes/origin/" + br)
         st = {"branch": br, "tip": local or remote, "merged": None}
@@ -558,7 +580,8 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             st["merged"] = merged_by_git(git, merges, main, br, st["tip"], owner()[0])
             return st
         rows = [r for r in pr_rows if r.get("브랜치") == br]
-        verdict, notes, hit = _judge_pr(rows, br, local, remote, default_short, lambda c: git.is_ancestor(c, main))
+        verdict, notes, hit = _judge_pr(rows, br, local, remote, default_short, lambda c: git.is_ancestor(c, main),
+                                        started=extra or bool(local or remote) or started(block))
         if verdict in (PR_NOT_FETCHED, PR_UNCOUNTABLE):
             line = "%s: %s" % (br, notes.pop())
             if verdict == PR_NOT_FETCHED:
@@ -674,7 +697,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                                   "그 사본이 이 블록에 더한 브랜치는 세지 못했을 수 있다" % broken)
             seen_tips = []
             for br in names:
-                st = judge(br, b)
+                st = judge(br, b, extra=True)
                 if st["tip"]:
                     seen_tips.append(br)   # ref 가 없는 이름은 지웠는지 아직 안 만들었는지 모른다 — 세지 않는다
                 if st["tip"] and not st["merged"]:
