@@ -199,7 +199,8 @@ case_AC13_gh_unavailable() {
   # origin 이 없으면 gh 를 부르지 않고 건너뛴다(사유는 stderr).
   g remote remove origin
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
-  assert_eq "$RC:$LAST" "0:skipped: gh-unavailable" "origin 없음: skipped: gh-unavailable"
+  assert_eq "$RC:$LAST" "1:failed: no-origin" "origin 없음: 건너뛰지 않고 failed: no-origin(rc 1)"
+  p6_single_result_line no-origin
   assert_eq "$GHCALLS" "" "origin 없음: gh 호출 0"
   grep -qF 'origin URL 에서 호스트 · owner · repo 를 뽑지 못했다' "$T/err" \
     && ok "origin 없음: stderr 에 사유" || no "origin 없음: stderr 에 사유가 없다 — $(head -n 3 "$T/err")"

@@ -188,7 +188,14 @@ if [[ "$DS_RC" -ne 0 ]]; then
   case "$DS_RC" in
     127) DS_HINT="script missing? check CLAUDE_PLUGIN_ROOT" ;;
     2)   DS_HINT="잘못된 호출" ;;
-    3)   DS_HINT="의도 · 임시 파일에 쓸 수 없음" ;;
+    3)   # rc 3 은 둘이다 — stdout 의 `stop: <사유>` 줄(gh 없음 · origin 못 읽음 · gh 미인증 · origin 레포를
+         # gh 가 다루지 못함)이 있으면 그 사유, 없으면 의도 · 임시 파일에 쓸 수 없음.
+         DS_STOP="$(printf '%s\n' "$INTENT_JSON" | sed -n 's/^stop: //p' | tail -n 1)"
+         if [[ -n "$DS_STOP" ]]; then
+           DS_HINT="PR 본문을 읽을 차례에 멈춤"; DS_ERR="$DS_STOP"
+         else
+           DS_HINT="의도 · 임시 파일에 쓸 수 없음"
+         fi ;;
     *)   DS_HINT="crashed" ;;
   esac
   echo "[quality-gates] codex intent: discover-spec.sh rc=${DS_RC} (${DS_HINT})${DS_ERR:+: ${DS_ERR}} — empty <intent>." >&2

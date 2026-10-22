@@ -170,7 +170,7 @@ tail is the first `# ` heading of `$RD/intent.md`, or `(제목 없는 spec)` whe
 paths in `specs`, the tail is `설계문서 N개 (<경로> · <경로> …)` — N and the paths from `specs`, in its order (commit
 order). Do not take the intent file's first heading then: it belongs to the first document only (the file separates
 the documents with `<!-- qg-spec k/N: <경로> -->` lines). **Consume the rc.** If the output has a
-`stop: <사유>` line (`intent rc=3` — PR 본문을 읽을 차례에 gh 가 없거나 origin 을 읽지 못했다), show that line
+`stop: <사유>` line (`intent rc=3` — PR 본문을 읽을 차례에 gh 가 없음 · origin 을 못 읽음 · gh 미인증 · gh 가 origin 레포를 다루지 못함), show that line
 verbatim and stop the run — 판정도 게시도 없다. Any other non-zero
 `intent rc` (2 bad call · 3 cannot write the intent file) leaves no JSON: print
 `intent: 없음 (discover-spec rc=<N>)` as that one line instead, and
@@ -1583,8 +1583,9 @@ printf '%s\n' "$line"
 이 펜스는 `/quality-gates:quality-pipeline` 한 번에 한 번만 돈다 — 결과가 무엇이든 다시 돌리지 않는다(다시 돌리면 펜스가 거절한다).
 
 `skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `pr-mismatch` · `kill-switch` ·
-`scan-failed` · `gh-unavailable` · `too-long` · `aborted` 중 하나다. `failed: gh-unavailable` 은 실패다 — gh 가 없어
-코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink stderr 의 설치 안내 줄을 그대로 보인다. 판정은 이미 났으므로
+`scan-failed` · `gh-unavailable` · `too-long` · `aborted` 중 하나다. `failed: <사유>` 는 실패다 — `gh-unavailable`(gh 가 없다) ·
+`no-origin`(origin 이 없거나 그 URL 에서 레포를 못 읽는다)이라 코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink
+stderr 의 설치 · 확인 안내 줄을 그대로 보인다. 판정은 이미 났으므로
 바뀌지 않는다. `scan-failed` 면 sink 가 stderr 로 낸 finding
 (값은 가려져 있다)을 그대로 보이고 이해글을 고쳐 다시 게시하지 않는다 — 다음 `/quality-gates:quality-pipeline` 실행이 다시 쓴다.
 

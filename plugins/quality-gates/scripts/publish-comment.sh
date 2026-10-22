@@ -6,7 +6,8 @@
 # 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
 # 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long.
 # pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
-# `failed:` 는 gh 가 없을 때 하나다(`failed: gh-unavailable`).
+# `failed:` 는 둘이다 — gh 가 없다(`failed: gh-unavailable`) · origin 이 없거나 URL 을 못 읽는다(`failed: no-origin`).
+# 사유는 stderr 에 있다(gh-repo.sh 가 낸 설치 · 확인 안내).
 # exit: posted·skipped 는 0, failed 는 1, 잘못된 호출은 2.
 #
 # Usage: publish-comment.sh --body-file <file> [--base <merge-base sha>]
@@ -43,7 +44,7 @@ case "$body" in /*) ;; *) body="$PWD/$body" ;; esac
 top="$(git rev-parse --show-toplevel 2>/dev/null)" && cd "$top" \
   || { echo "publish-comment: git 리포 루트를 찾지 못했다" >&2; skip scan-failed; }
 
-# 2. gh 존재 · origin — gh-repo.sh 가 정한다. gh 가 없으면(rc 4) 실패, origin 을 못 읽으면 건너뛴다.
+# 2. gh 존재 · origin — gh-repo.sh 가 정한다. gh 가 없거나(rc 4) origin 을 못 읽으면(rc 3) 실패다.
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/qg-sink.XXXXXX")" || { echo "publish-comment: 임시 디렉토리를 만들 수 없다" >&2; skip scan-failed; }
 trap 'rm -rf "$WORK"' EXIT
 slug_rc=0
@@ -54,7 +55,7 @@ if [ "$slug_rc" -eq 4 ]; then
   fail gh-unavailable
 fi
 [ "$slug_rc" -eq 0 ] && [ -n "$slug" ] \
-  || { echo "publish-comment: origin 의 레포를 정하지 못했다(gh-repo.sh rc ${slug_rc})" >&2; skip gh-unavailable; }
+  || { echo "publish-comment: origin 의 레포를 정하지 못해 PR 코멘트를 달지 못했다(gh-repo.sh rc ${slug_rc})" >&2; fail no-origin; }
 host="${slug%%/*}"
 # 인증 — 부작용 전(P5). 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
 auth_err="$(gh auth status --active 2>&1 >/dev/null)" \

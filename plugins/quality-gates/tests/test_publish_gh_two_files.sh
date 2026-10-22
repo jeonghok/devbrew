@@ -70,7 +70,9 @@ out("NO" if w_extra else "OK", "gh 쓰기는 sink 에만" + (": 밖 " + ", ".joi
 # 양의 짝 — 두 파일이 실제로 gh 를 부른다(부재 단언이 공허하지 않다).
 out("OK" if SINK in writers else "NO", "sink 가 gh 쓰기를 한다(양의 짝)")
 disc = subs.get(DISC, set())
-out("OK" if disc == {"pr view"} else "NO", f"discover-spec 의 gh 는 읽기 전용 pr view 하나({sorted(disc) or '없음'})")
+# `auth login` 은 미인증일 때 멈추며 보이는 안내 글(`gh auth login --hostname <호스트>`)이다 — 그 밖의 하위 명령은 없다.
+out("OK" if "pr view" in disc and disc <= {"pr view", "auth login"} else "NO",
+    f"discover-spec 의 gh 는 읽기 전용 pr view 하나 + 로그인 안내 글({sorted(disc) or '없음'})")
 out("OK" if GHREPO in files else "NO", "gh-repo.sh 가 코퍼스에 있다(아래 부재 단언이 공허하지 않다)")
 out("NO" if GHREPO in callers else "OK", "gh-repo.sh 는 gh 하위 명령을 한 줄도 적지 않는다(찾기만)"
     + (f": {GHREPO}:{callers[GHREPO][0]}" if GHREPO in callers else ""))
