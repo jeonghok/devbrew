@@ -61,7 +61,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git,
 | rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 지휘하지 않는다 |
 | 그 밖 | `[spec-distill] epic-conductor 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 지휘하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
-superpowers 확인 — skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 `[devbrew-deps] 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 내고 멈춘다. 지휘하지 않는다.
+superpowers 확인 — skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 `[spec-distill] epic-conductor 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 내고 멈춘다. 지휘하지 않는다.
 
 superpowers 판 알림 — 이 세션에서 superpowers skill 을 처음 불러온 직후 아래 펜스를 한 번 돌린다. `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다.
 
@@ -73,7 +73,7 @@ python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "<기
 | 결과 | 동작 |
 |---|---|
 | rc 0 · `[devbrew-deps] superpowers <판> — 검증한 판과 같다` | 보이지 않고 간다 |
-| rc 0 · 「다르다」 · 「확인하지 못했다」 줄 | 그 줄(이유 줄 포함)을 그대로 보이고 간다 |
+| rc 0 · 「다르다」 · 「확인하지 못했다」 줄 | 그 줄(「확인하지 못했다」면 뒤의 이유 줄까지)을 그대로 보이고 간다 |
 | 그 밖 | `[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.` 를 내고 간다 |
 
 판 확인 결과로는 멈추지 않는다.

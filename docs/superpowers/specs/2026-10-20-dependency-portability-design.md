@@ -454,6 +454,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. 지금 판정 길 �
 | `strict_frontmatter` 가 콜론 없는 머리말 줄을 오류 없이 건너뛴다 | 해결자 줄 규칙을 오류로 조이는 일 — 계획 2 · 3 의 파일 목록에 해결자가 없다. R8 계획 2 범위에 더할 것 | R8 |
 | 설정 값의 pathspec 매직 · 글롭 글자가 `ls-tree` · spec-review 의 pathspec 에 그대로 닿는다 | 계획 1 은 경로 모양(루트 · `.git` · `..`)만 막는다 — 글자 규칙이나 글자 그대로 읽는 pathspec 이 필요하다. R8 계획 2 범위에 더할 것 | R8 |
 | `ledger add --section "레포 설정"` 이 같은 키 둘을 받는데 merge_check 는 그 기계 상태를 거부한다 | 쓰는 쪽에서 막거나 거부 문장에 고치는 명령을 적는 일 — R8 계획 2(`conductor_ledger.py` · 지휘 절차의 `ledger add` 문장을 고친다) | R8 |
+| 인터뷰 뒤 brainstorming 을 실제로 부르는 세션(인터뷰가 주는 다음 세션 줄)의 superpowers 판 확인 | 인터뷰 끝(B-1)은 보통 superpowers skill 을 불러오지 않아 판을 읽을 기준 폴더 경로가 없다 — 그때는 판 확인을 하지 않고 「알 수 없음」 한 줄만 쓴다. 넘김 줄에 판 확인을 싣는 일은 그 줄을 잡은 락들과 함께 다뤄야 한다 | R9 |
 | 계획 1 리뷰의 작은 동작 빈틈: 묶음 대조의 `specs_dir` 필수화 · 머리말 앞 빈 줄이면 로드맵 아님 · 한 번에 읽기의 크기 상한 · 원장 git 호출의 lazy fetch 끄기 · `.git` 이름 bare 레포의 멈춤 문장 · check-path 가 로드맵 층을 안 봄 | 지금 값은 맞거나 멈춤 쪽으로 틀린다 — R8 계획 2 범위에 더할 것 | R8 |
 | 계획 1 리뷰의 작은 문구 · 테스트 빈틈: 해결자 대체 이름표 · 안 쓰는 kind `bad_value` · 리터럴 락의 끝 슬래시 없는 상수 탐침 · 기계 층 unknown_key · check-path `--root` 글자 접두 테스트 · 지휘자 3단계 부분 문자열 락 · 상태줄 「N분」 문구 · test_merge_check 낡은 이름표 · ReadFailed 사유의 고정 rc · 원장 검사 불가 행의 사유 · 멈춤 정규식 느슨함 · 상태 블록 stderr 두 줄 · 해결자 두 번 부름 · 확인과 add 사이 재대입 · 테스트 1b 이름표 · review-diff `degraded_reason: -` · check-review-scope 대체 락 · resolve-baseline 주석 · ensure 락이 `:` 꼴을 통과 | 동작은 맞고 문구 · 락 세기만 다르다 | R9 |
 

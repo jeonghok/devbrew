@@ -25,6 +25,13 @@ trap 'rm -rf "$TMP"' EXIT
 
 STOP='superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다'
 QG_ABSENT='품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다'
+EC_STOP_LINE="[spec-distill] epic-conductor 멈춤 — $STOP"
+MAN_STOP_LINE="[spec-distill] 지휘 절차 멈춤 — $STOP"
+NOT_LOADED='알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)'
+# stop_literal <글> — 멈춤 문장을 담은 백틱 안 줄 하나(백틱 뺌)
+stop_literal() {
+  printf '%s\n' "$1" | grep -oE '`[^`]*superpowers 가 필요하다[^`]*`' | head -1 | tr -d '`'
+}
 
 # section <파일> <제목 줄 ERE> <끝 줄 ERE> — 제목 줄부터 끝 줄 앞까지(제목 포함, 끝 제외)
 section() {
@@ -33,7 +40,7 @@ section() {
 # sp_fences <글 파일> — `check_deps.py" superpowers` 를 부르는 bash 펜스마다 「<여는 줄>」 한 줄
 sp_fences() {
   awk '/^```bash$/ {inb=1; start=NR; hit=0; next} inb && /^```$/ {if (hit) print start; inb=0; next}
-       inb && /^python3 "\$[A-Za-z_]+\/scripts\/check_deps\.py" superpowers --plugin-root "\$[A-Za-z_]+" --base "<[^>]+>"$/ {hit=1}' "$1"
+       inb && /^python3 "\$[A-Za-z_]+\/scripts\/check_deps\.py" superpowers --plugin-root "\$[A-Za-z_]+" --base "(<[^>]+>|\$[A-Za-z_]+)"$/ {hit=1}' "$1"
 }
 # run_sp_fence <키> <글 파일> <여는 줄> — 펜스를 잘라 가짜 check_deps.py 로 돌린다
 run_sp_fence() {
@@ -74,6 +81,11 @@ stopline="$(printf '%s\n' "$E15" | grep -F -- "$STOP" | head -1)"
 assert_contains "$stopline" "$STOP" "epic-conductor 1.5: superpowers 가 없으면 보일 문장"
 assert_contains "$stopline" "멈춘다" "epic-conductor 1.5: 그 문장의 줄이 멈춘다고 적는다"
 assert_contains "$stopline" "skill 목록" "epic-conductor 1.5: 있는지는 skill 목록으로 가린다"
+ecstop="$(stop_literal "$stopline")"
+assert_eq "$ecstop" "$EC_STOP_LINE" "epic-conductor 1.5: 멈춤 줄 전체가 그 skill 의 모델 줄 꼴이다"
+case "$ecstop" in "[devbrew-deps]"*) no "epic-conductor 1.5: 모델이 쓰는 멈춤 줄이 스크립트 머리 [devbrew-deps] 를 단다" ;;
+  *) ok "epic-conductor 1.5: 모델이 쓰는 멈춤 줄은 [devbrew-deps] 로 시작하지 않는다" ;; esac
+assert_not_contains "$(cat "$EC")" "[devbrew-deps] 멈춤 — superpowers" "epic-conductor: superpowers 멈춤을 스크립트 머리로 쓰는 줄이 없다"
 okrow="$(printf '%s\n' "$E15" | grep -E '^\| rc 0 ' | head -1)"
 assert_contains "$okrow" "superpowers" "epic-conductor 1.5: 의존 확인 rc 0 다음이 superpowers 확인이다(바로 2 로 가지 않는다)"
 printf '%s\n' "$E15" > "$TMP/e15.md"
@@ -111,7 +123,32 @@ if [ -n "$bf" ] && [ -n "$lb1" ]; then
   after="$(after_fence "$FIN" "$bfl")"
   assert_contains "$after" "멈추지 않는다" "finishing.md B-1: 판 확인 결과로는 멈추지 않는다고 적는다"
   assert_contains "$after" "B-2" "finishing.md B-1: 판 확인 뒤 B-2 게이트로 간다"
+  assert_contains "$after" '`[devbrew-deps] superpowers 판을 확인하지 못했다 — <이유>` 로 한 줄에 접는다' \
+    "finishing.md B-1: 「확인하지 못했다」의 이유 줄을 한 줄로 접는 꼴을 적는다"
+
+  # 실제 check_deps.py 로 돌린다 — 불러온 skill 이 없으면(빈 기준 폴더) 스크립트를 부르지 않고 경고 줄을 내지 않는다
+  awk -v s="$bfl" 'NR>s && /^```$/ {exit} NR>s' "$FIN" > "$TMP/b1-real.sh"
+  n_ph="$(grep -c '"<기준 폴더>"' "$TMP/b1-real.sh")"
+  assert_eq "$n_ph" "1" "finishing.md B-1: 펜스에 기준 폴더 자리가 한 번 있다"
+  sed 's|"<기준 폴더>"|""|' "$TMP/b1-real.sh" > "$TMP/b1-none.sh"
+  sed "s|\"<기준 폴더>\"|\"$TMP/cache/superpowers/7.0.0/skills/brainstorming\"|" "$TMP/b1-real.sh" > "$TMP/b1-loaded.sh"
+  none_out="$(cd "$TMP" && env -i PATH=/usr/bin:/bin HOME="$TMP" CLAUDE_PLUGIN_ROOT="$SD" PYTHONDONTWRITEBYTECODE=1 /bin/bash "$TMP/b1-none.sh" 2>&1)"; none_rc=$?
+  assert_eq "$none_rc" "0" "finishing.md B-1(skill 안 불러옴): 펜스가 rc 0 으로 끝난다"
+  assert_eq "$none_out" "$NOT_LOADED" "finishing.md B-1(skill 안 불러옴): 「알 수 없음」 한 줄만 낸다"
+  assert_not_contains "$none_out" "[devbrew-deps]" "finishing.md B-1(skill 안 불러옴): 판 확인 스크립트를 부르지 않는다 — 경고 줄이 없다"
+  loaded_out="$(cd "$TMP" && env -i PATH=/usr/bin:/bin HOME="$TMP" CLAUDE_PLUGIN_ROOT="$SD" PYTHONDONTWRITEBYTECODE=1 /bin/bash "$TMP/b1-loaded.sh" 2>&1)"; loaded_rc=$?
+  assert_eq "$loaded_rc" "0" "finishing.md B-1(skill 불러옴): 펜스가 rc 0 으로 끝난다"
+  case "$(printf '%s\n' "$loaded_out" | sed -n 1p)" in
+    "[devbrew-deps] superpowers "*" — 검증한 판과 같다"|"[devbrew-deps] 알림 — 설치된 superpowers 7.0.0 이 검증한 판 "*) ok "finishing.md B-1(skill 불러옴): 스크립트가 경로의 판을 표와 비교했다" ;;
+    *) no "finishing.md B-1(skill 불러옴): 스크립트가 판을 비교하지 않았다: $loaded_out" ;;
+  esac
+  assert_not_contains "$loaded_out" "알 수 없음" "finishing.md B-1(skill 불러옴): 「알 수 없음」 줄을 내지 않는다"
 fi
+avail_line="$(printf '%s\n' "$B1" | grep -F -- '- **superpowers 가용 시**' | head -1)"
+assert_contains "$avail_line" "불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다)" "finishing.md B-1: skill 을 불러오지 않았으면 판 확인을 하지 않는다"
+assert_contains "$avail_line" "「${NOT_LOADED}」 한 줄을 쓴다" "finishing.md B-1: 그때는 「알 수 없음」 한 줄을 쓴다"
+assert_contains "$avail_line" "「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 경고 수에 들지 않는다"
+assert_not_contains "$B1" '빈 값(`""`)으로 둔다' "finishing.md B-1: 불러오지 않았을 때 빈 경로로 스크립트를 부르지 않는다(옛 지시가 없다)"
 
 # ── 3. 손 절차 머리 · 걸음 7 ─────────────────────────────────────────────────
 MAN_HEAD="$(section "$CD" '^## 손으로 따르는 절차$' '^1\. \*\*')"
@@ -119,6 +156,7 @@ MAN_HEAD="$(section "$CD" '^## 손으로 따르는 절차$' '^1\. \*\*')"
 mline="$(printf '%s\n' "$MAN_HEAD" | grep -F -- "$STOP" | head -1)"
 assert_contains "$mline" "$STOP" "conducting.md 손 절차 머리: superpowers 가 없으면 보일 문장"
 assert_contains "$mline" "멈춘다" "conducting.md 손 절차 머리: 그 문장의 줄이 멈춘다고 적는다"
+assert_eq "$(stop_literal "$mline")" "$MAN_STOP_LINE" "conducting.md 손 절차 머리: 멈춤 줄 전체가 모델 줄 꼴이다(스크립트 머리 아님)"
 assert_contains "$MAN_HEAD" 'scripts/check_deps.py superpowers --plugin-root' "conducting.md 손 절차 머리: superpowers 판 확인 명령"
 S7="$(section "$CD" '^### 7\. 끝$' '^##+ ')"
 [ -n "$S7" ] && ok "conducting.md: 걸음 7 을 읽었다" || no "conducting.md: 걸음 7 이 없다"

@@ -87,7 +87,7 @@
 로드맵 하나를 따라 에픽들을 지휘하는 세션의 절차다. 걸음마다 기본값이다 — 일의 모양이 다르면 다르게 하고, 무엇을 왜 다르게 했는지 그 에픽 설계문서 `## 지휘 기록` 에(에픽에 매이지 않은 판단은 다음 로드맵 수정 PR 본문에) 적는다. 정석 흐름(brainstorming → 계획 → 구현)의 뜻은 지킨다.
 
 - `<SD>` 는 spec-distill 플러그인 폴더의 절대경로, `<로드맵>` 은 로드맵 파일의 레포 루트 기준 경로다. `<SD>` 를 모르면 추측하지 말고(cwd 포함) 멈춰 사용자에게 묻는다.
-- skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 이 절차를 시작하지 않는다 — 「superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다」를 보이고 멈춘다. superpowers skill 을 처음 불러온 직후 `python3 "<SD>"/scripts/check_deps.py superpowers --plugin-root "<SD>" --base "<그 skill 의 기준 폴더>"` 를 한 번 돌려 「다르다」 · 「확인하지 못했다」 줄을 보인다 — 판 확인 결과로는 멈추지 않는다.
+- skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 이 절차를 시작하지 않는다 — `[spec-distill] 지휘 절차 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 보이고 멈춘다. superpowers skill 을 처음 불러온 직후 `python3 "<SD>"/scripts/check_deps.py superpowers --plugin-root "<SD>" --base "<그 skill 의 기준 폴더>"` 를 한 번 돌려 「다르다」 · 「확인하지 못했다」 줄(뒤의 이유 줄까지)을 그대로 보인다 — 판 확인 결과로는 멈추지 않는다.
 - 레포마다 다른 값은 박지 않고 읽는다 — 기본 브랜치는 `origin/HEAD`, 브랜치 이름은 로드맵 블록의 `브랜치:`, 설계문서 · 계획 폴더 · 테스트 명령 · 리뷰 모델(`specs_dir` · `plans_dir` · `test_command` · `review_model`)은 해결자(`repo_defaults.py get`)가 로드맵 · 레포 설정 파일 · 기본값에서 낸다. 없으면 각각 superpowers 기본 폴더 · 레포 파일에서 찾은 러너 · 세션 모델을 쓰고, 한 번 물어 정한 값은 레포 설정 파일에 올리자고 알린다.
 - 각 칸의 주인과 갱신 길은 같은 폴더의 `roadmap-ontology.md` 에 있다.
 

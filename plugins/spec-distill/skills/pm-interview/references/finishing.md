@@ -441,14 +441,16 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
   분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
 
-- **superpowers 가용 시**: 아래 판 확인 펜스를 한 번 돌린 뒤 B-2 proceed 게이트 제시. `<기준 폴더>` 는 이 세션에서 불러온 superpowers skill 의 기준 폴더(base directory) 경로다 — 불러온 적이 없으면 빈 값(`""`)으로 둔다.
+- **superpowers 가용 시**: 판을 확인한 뒤 B-2 proceed 게이트 제시. 이 세션에서 superpowers skill 을 불러왔으면 아래 판 확인 펜스를 한 번 돌린다 — `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다. 불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다) B-2 게이트 앞 글(목록 4)에 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 한 줄을 쓴다. 이 줄은 경고가 아니다 — 「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "<기준 폴더>"
+SP_BASE="<기준 폴더>"
+[ -n "$SP_BASE" ] || { echo "알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)"; exit 0; }
+python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "$SP_BASE"
 ```
 
-첫 줄이 「검증한 판과 같다」면 쓰지 않는다. 「다르다」 · 「확인하지 못했다」 줄(이유 줄 포함)이나 rc 0 이 아닌 끝(`[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.`)은 B-2 게이트 앞 글의 경고(목록 4)에 한 줄로 쓴다. 판 확인 결과로는 멈추지 않는다 — B-2 로 간다.
+첫 줄이 「검증한 판과 같다」면 쓰지 않는다. 「다르다」 줄, 「확인하지 못했다」 줄, rc 0 이 아닌 끝(`[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.`)은 B-2 게이트 앞 글의 경고(목록 4)에 한 줄로 쓴다 — 「확인하지 못했다」 뒤의 `  이유: <이유>` 줄은 따로 쓰지 않고 `[devbrew-deps] superpowers 판을 확인하지 못했다 — <이유>` 로 한 줄에 접는다. 판 확인 결과로는 멈추지 않는다 — B-2 로 간다.
 
 #### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC2)
 
@@ -479,7 +481,7 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 **이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
 `reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
 state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄 ·
-B-1 의 superpowers 판 확인 한 줄(「같다」가 아닐 때).
+B-1 의 superpowers 판 확인 한 줄(펜스를 돌렸고 「같다」가 아닐 때 — 펜스를 돌리지 않은 「알 수 없음」 줄은 경고가 아니다).
 `advisory[]` 원문은 하나하나가 `gate --render` 첫 줄의 경고 줄 중 하나에 대응하므로, 경고(목록 4)에는 그 첫 줄의
 경고 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않습니다. 질문의 「경고 N개」에서 엔진 몫은 렌더 첫 줄의 N 이고,
 다른 채널의 경고 줄은 그 위에 더합니다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).

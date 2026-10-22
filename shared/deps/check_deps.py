@@ -27,6 +27,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from typing import Any, Dict
 
 PREFIX = "[devbrew-deps]"
 FILE_NAME = "dependencies.md"
@@ -129,7 +130,7 @@ def _parse(text, path):
         if len(cells) != len(COLUMNS):
             raise DepsError("표의 행이 {0}칸이 아니라 {1}칸이다 ({2}:{3})".format(
                 len(COLUMNS), len(cells), path, index + 1))
-        row = dict(zip(KEYS, cells))
+        row: Dict[str, Any] = dict(zip(KEYS, cells))
         if not row["name"]:
             raise DepsError("이름 칸이 비었다 ({0}:{1})".format(path, index + 1))
         if row["name"] in names:
@@ -391,7 +392,7 @@ def _date(value):
 
 def main(argv=None):
     try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+        getattr(sys.stdout, "reconfigure")(encoding="utf-8", errors="backslashreplace")
     except (AttributeError, ValueError):
         pass
     parser = argparse.ArgumentParser(prog="check_deps.py")
