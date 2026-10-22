@@ -2185,6 +2185,8 @@ COUNT_GLOSS = (
 )
 APPROVE_WITH_OPEN = "열린 지적 %d개를 두고 진행"
 NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "사용자가 연 추가 라운드"}
+# 쓰는 세션을 믿는 한계의 공시 — 게이트 렌더 셋째 줄 · `gate` JSON `writer_trust_notice` · spec-distill README `## 한계` 가 같은 글이다.
+WRITER_TRUST_NOTICE = "사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다"
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
 # `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
 # 괄호 이름과 문장이 같은 행은 같은 사실을 두 출처가 말한 것이라 한 줄로 합치고, 사유(`why`)는 그 줄 괄호에 모은다.
@@ -2476,6 +2478,7 @@ def render_gate(st, g) -> str:
     if g["stagnation"]:
         sub += " · 진전 없음(stagnation)"
     out.append(sub)
+    out.append(WRITER_TRUST_NOTICE)
     # 이 바깥 초기화는 쓰이지 않지만 남긴다 — 변이 셀 `marker_crosses_group` 이 묶음마다의 안쪽 초기화만 지워 그 재설정을 잰다.
     prev_anchor = None
     for row in GATE_ROWS:
@@ -2557,7 +2560,7 @@ def cmd_gate(a) -> int:
     if a.render:
         print(render_gate(st, g))
     else:
-        print(json.dumps(g, ensure_ascii=False))
+        print(json.dumps(dict(g, writer_trust_notice=WRITER_TRUST_NOTICE), ensure_ascii=False))
     return 0
 
 

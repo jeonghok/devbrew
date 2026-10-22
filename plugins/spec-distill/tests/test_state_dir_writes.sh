@@ -717,7 +717,7 @@ for kind in writable readonly; do
   fi
 done
 
-# README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다
-assert_contains "$(cat "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README: §3 한계 문장"
+# README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다. README 전체가 아니라 `## 한계` 절 본문에서 찾는다
+assert_contains "$(awk '$0 == "## 한계" {on=1; next} on && /^## /{exit} on' "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README ## 한계: §3 한계 문장"
 
 finish

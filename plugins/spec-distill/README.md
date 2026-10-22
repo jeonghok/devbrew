@@ -106,8 +106,7 @@
 
 ### Principles 흡수
 
-- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
-- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
+- 한계는 `## 한계` 절에 있다.
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
@@ -320,6 +319,16 @@ branch_prefix: feature/
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` (v0.36.0) — 재-nag 층 자체가 없다.
 - `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (6.0.0) — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 TTL-GC 스크립트가 지워져 읽는 곳이 없다. 진입 검사는 이 이름을 알리지 않는다. 원장 정리는 한 일을 늘 한 줄로 낸다.
+
+## 한계
+
+사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다
+
+- 샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다.
+- `--quote-file` · `log-decision --quote` · `decide --quote` 로 받은 문구의 출처와 제목 하나 빠진 audit 도 위 공시로 다룬다 — 엔진은 그 문구가 사용자 말인지 확인하지 않는다.
+- `declare-related` · `log-decision` 이 표지 확인 없이 불리거나 엔진 명령을 거치지 않고 원장을 쓰는 길도 위 공시로 다룬다 — 엔진은 그런 쓰기를 거부하지 않는다.
+- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
+- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
 
 ## Prerequisites
 
