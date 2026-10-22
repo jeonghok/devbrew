@@ -401,12 +401,21 @@ NR="$(grep -c -- ' -R github.com/me/r$' "$T/gh.log")"
 assert_not_contains "$(cat "$T/gh.log")" "up/r" "fork pr-refresh: upstream 을 묻지 않는다"
 assert_contains "$(cat "$T/gh.log")" "--head feature/r1 " "전제: 가짜 gh 가 에픽 브랜치를 물음받았다"
 FJ="$T/fk-status.json"
-(cd "$FW" && python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+# 상태 계산은 gh 를 부르지 않는다 — 늘 실패하고 받은 인자를 gh.log 에 적는 gh 를 PATH 앞에 두고, 돈 뒤 gh.log 가 그대로인지 본다.
+mkdir -p "$T/failgh"
+printf '#!/bin/sh\nprintf "%%s\\n" "status: $*" >> "%s"\nexit 1\n' "$T/gh.log" > "$T/failgh/gh"; chmod +x "$T/failgh/gh"
+(cd "$T" && PATH="$T/failgh:$PATH" gh probe >/dev/null 2>&1)
+assert_contains "$(cat "$T/gh.log")" "status: probe" "전제: 늘 실패하는 gh 가 부르면 gh.log 에 적는다"
+GHLOG_BEFORE="$(cat "$T/gh.log")"
+(cd "$FW" && PATH="$T/failgh:$PATH" python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+assert_eq "$(cat "$T/gh.log")" "$GHLOG_BEFORE" "fork 상태 계산: gh 를 부르지 않는다(gh.log 그대로)"
 assert_eq "$(js "$FJ" "[(s['branch'], s['merged']) for b in r['blocks'] if b['id'] == 'R1' for s in b['branch_states']]")" \
   "[('feature/r1', None)]" "fork 상태 계산: origin 의 PR 이 열림이면 머지됨이 아니다(upstream 의 머지된 PR #99 를 쓰지 않는다)"
 out="$(cd "$FW" && PATH="$T/fkbin:$PATH" FK_ORIGIN_STATE=MERGED python3 "$CL" pr-refresh --roadmap "$RM" --session "$FSES" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "양의 짝: origin 의 PR 이 머지됐으면 pr-refresh rc 0"
-(cd "$FW" && python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+GHLOG_BEFORE="$(cat "$T/gh.log")"
+(cd "$FW" && PATH="$T/failgh:$PATH" python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+assert_eq "$(cat "$T/gh.log")" "$GHLOG_BEFORE" "양의 짝 상태 계산: gh 를 부르지 않는다(gh.log 그대로)"
 assert_eq "$(js "$FJ" "[(s['branch'], s['merged']) for b in r['blocks'] if b['id'] == 'R1' for s in b['branch_states']]")" \
   "[('feature/r1', 'PR #7 머지됨(mergeCommit ${FSQ:0:8})')]" "양의 짝: 상태 계산은 origin 의 PR #7 로 squash 머지를 판정한다"
 

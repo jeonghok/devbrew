@@ -2,7 +2,8 @@
 # gh 를 찾고 실행하는 자리는 한 곳이다(R8 계획 2 · AC20) — spec-distill 은 scripts/gh_repo.py, qg 는 scripts/gh-repo.sh.
 # 판독: spec-distill 의 .py 는 ast 로(문자열 grep 은 주석 · 안내 글로 만족된다), qg 의 셸은 주석을 뗀 줄로.
 # 예외 하나: 의존 판 측정(shared/deps/check_deps.py — spec-distill 에는 심볼릭 링크)의 argv `["gh", "--version"]` 는
-# 레포를 묻지 않는 판 확인이라 문이 아니다. 그 파일 · 그 argv 꼴만 PROBE 로 따로 내고, 정확히 하나인지 잰다.
+# 레포를 묻지 않는 판 확인이라 문이 아니다. 그 파일에서 그 argv 꼴이 `_run_version(...)` 의 유일한 인자일 때만 PROBE 로
+# 따로 내고, 정확히 하나인지 잰다(목록을 더하거나 변수에 담아 고치는 꼴은 문으로 잡는다).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_gh_single_door.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -15,7 +16,8 @@ T="$(cd "$T" && pwd -P)"
 trap 'rm -rf "$T"' EXIT
 
 py_doors() {  # py_doors <파일…> — gh 를 찾거나 argv 첫 칸으로 실행하는 자리마다 `<파일>:<줄>` 한 줄. 끝에 CHECKED n.
-  # PROBE_OK(환경 변수)의 실제 경로인 파일에서 argv 가 정확히 ("gh", "--version") 이면 `PROBE <파일>:<줄>` 로 낸다.
+  # PROBE_OK(환경 변수)의 실제 경로인 파일에서 argv 가 정확히 ("gh", "--version") 이고 `_run_version` 호출의 유일한 인자면
+  # `PROBE <파일>:<줄>` 로 낸다.
   PYTHONIOENCODING=utf-8 python3 -I - "$@" <<'PY'
 import ast, os, sys
 PROBE_OK = os.path.realpath(os.environ["PROBE_OK"]) if os.environ.get("PROBE_OK") else None
@@ -44,6 +46,7 @@ for path in sys.argv[1:]:
                            for a in n.names if a.name == "which" and a.asname}
     lines, probes = set(), set()
     probe_file = PROBE_OK is not None and os.path.realpath(path) == PROBE_OK
+    parents = {c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
     for n in ast.walk(tree):
         hit = False
         if isinstance(n, ast.Call):
@@ -53,8 +56,11 @@ for path in sys.argv[1:]:
             elif name in RUNNERS and n.args and shell_gh(n.args[0]):
                 hit = True                                   # run("gh pr list", shell=True) · system("gh …")
         elif isinstance(n, (ast.List, ast.Tuple)) and n.elts and is_gh(n.elts[0]):
+            up = parents.get(n)
             if (probe_file and len(n.elts) == 2 and isinstance(n.elts[1], ast.Constant)
-                    and n.elts[1].value == "--version"):
+                    and n.elts[1].value == "--version"
+                    and isinstance(up, ast.Call) and name_of(up.func) == "_run_version"
+                    and len(up.args) == 1 and up.args[0] is n and not up.keywords):
                 probes.add(n.lineno)                         # 판 측정 — 레포를 묻지 않는다
                 continue
             hit = True                                       # ["gh", "pr", …] — argv 첫 칸
@@ -119,14 +125,23 @@ assert_eq "$got" "bad.py:4 bad.py:5 bad.py:6 bad.py:7 bad.py:8 " "which · 별�
 assert_eq "$(py_doors "$T/fine.py" | grep -v '^CHECKED ' || true)" "" "양성 짝: 안내 글 · 둘째 칸 · 변수 첫 칸 · 다른 이름 · 주석은 잡지 않는다"
 cat > "$T/probe.py" <<'PY'
 import subprocess
-subprocess.run(["gh", "--version"])
+_run_version(["gh", "--version"])
 subprocess.run(["gh", "pr", "list"])
 subprocess.run(["gh", "--version", "-R", "x/y"])
+_run_version(["gh", "--version"] + ["pr", "comment", "1"])
+argv = ["gh", "--version"]
+argv[1:] = ["pr", "comment", "1"]
+subprocess.run(["gh", "--version"])
+_run_version(["gh", "--version"], timeout=1)
 PY
 got="$(PROBE_OK="$T/probe.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
-assert_eq "$got" "probe.py:3 probe.py:4 PROBE probe.py:2 " "판 측정 예외: 그 파일에서도 (\"gh\", \"--version\") 꼴만 빠지고 다른 gh argv 는 잡는다"
+assert_eq "$got" "probe.py:3 probe.py:4 probe.py:5 probe.py:6 probe.py:8 probe.py:9 PROBE probe.py:2 " "판 측정 예외: 그 파일에서도 _run_version 의 유일한 인자인 (\"gh\", \"--version\") 만 빠지고 다른 gh argv 는 잡는다"
+case " $got " in *" probe.py:5 "*) ok "판 측정 예외: (\"gh\", \"--version\") 에 다른 목록을 더한 꼴은 잡는다" ;;
+  *) no "판 측정 예외: (\"gh\", \"--version\") + [\"pr\", \"comment\", …] 를 놓쳤다" ;; esac
+case " $got " in *" probe.py:6 "*) ok "판 측정 예외: 변수에 담아 뒤에서 조각 대입으로 고치는 꼴은 잡는다" ;;
+  *) no "판 측정 예외: argv = [\"gh\", \"--version\"] 뒤 조각 대입을 놓쳤다" ;; esac
 got="$(PROBE_OK="$T/fine.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
-assert_eq "$got" "probe.py:2 probe.py:3 probe.py:4 " "판 측정 예외: 예외 파일이 아닌 곳의 gh --version 은 잡는다"
+assert_eq "$got" "probe.py:2 probe.py:3 probe.py:4 probe.py:5 probe.py:6 probe.py:8 probe.py:9 " "판 측정 예외: 예외 파일이 아닌 곳의 gh --version 은 잡는다"
 
 echo "=== qg: gh 를 찾는 자리는 gh-repo.sh 하나 ==="
 SHS=()
