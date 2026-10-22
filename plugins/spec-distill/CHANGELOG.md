@@ -6,7 +6,10 @@
 - 쓰는 세션을 믿는 한계를 공시한다 — 문서 리뷰 결과의 셋째 줄(둘째 줄의 재리뷰 줄 바로 뒤, 행 묶음 앞)이 「사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다」이고, `gate` JSON 에 같은 글이 `writer_trust_notice` 로 실린다. 둘째 줄과 게이트 행은 그대로다. README 에 `## 한계` 절을 두어 같은 문장을 첫 줄에 싣고, 샌드박스 안내 · 인용 출처 · 엔진 밖 원장 쓰기 줄과 `### Principles 흡수` 에 있던 한계 불릿 둘(P21 · P14)을 모았다.
 
 ### Changed
-- `begin-round` 는 이제 `--snapshot` 을 받지 않는다 — 원장의 문서에서 스냅숏을 만든다. 넘기면 「모르는 인자」로 rc 2 다. 원장의 문서가 링크이거나 없거나 UTF-8 이 아니면 원장을 바꾸기 전에 `doc_unreadable`(rc 2)로 멈춘다. 줄 끝(CRLF · CR)은 앵커 도구(`docreview_anchor.py snapshot`)와 같이 맞춰 읽으므로 스냅숏이 앵커 도구의 것과 같다. 절차서와 진입 skill 의 선결 문단은 「`begin-round` 는 원장에 적힌 문서만 읽으므로」로 맞췄다.
+- `begin-round` 는 원장의 문서에서 스냅숏을 만든다. 원장의 문서가 링크이거나 없거나 UTF-8 이 아니면 원장을 바꾸기 전에 `doc_unreadable`(rc 2)로 멈춘다. 줄 끝(CRLF · CR)은 앵커 도구(`docreview_anchor.py snapshot`)와 같이 맞춰 읽으므로 스냅숏이 앵커 도구의 것과 같다. 절차서와 진입 skill 의 선결 문단은 「`begin-round` 는 원장에 적힌 문서만 읽으므로」로 맞췄다.
+
+### Removed
+- `begin-round --snapshot` — 사용자 결정(U2, 호환 없음)이라 deprecation 창 없이 지웠다. 넘기면 rc 2(모르는 인자)
 
 ## [8.7.0] — 2026-10-22
 
