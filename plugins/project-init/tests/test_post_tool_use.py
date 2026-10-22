@@ -7,9 +7,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "post-tool-use.py"
 
@@ -22,21 +23,48 @@ assert _spec is not None and _spec.loader is not None, f"could not load hook mod
 _hook = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_hook)
 
+GIT_ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
 
-def write_strategy(project_dir: str, regex_block: Optional[str]) -> None:
-    """Write docs/git-workflow/branch-strategy.md under project_dir.
+
+def git(*args: str, cwd: Optional[str] = None) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
+         "-c", "init.defaultBranch=main", *args],
+        cwd=cwd, env=GIT_ENV, check=True, capture_output=True,
+    )
+
+
+def strategy(regex_block: Optional[str]) -> str:
+    """branch-strategy.md text.
 
     regex_block is None  -> file with NO ```regex fence (regex-less).
     regex_block == ""    -> file with an EMPTY ```regex fence (degenerate).
     otherwise            -> file with a ```regex fence containing regex_block.
     """
-    dst = Path(project_dir) / "docs" / "git-workflow"
-    dst.mkdir(parents=True, exist_ok=True)
-    f = dst / "branch-strategy.md"
     if regex_block is None:
-        f.write_text("# Branch Strategy\n\nNo regex fence here.\n")
-    else:
-        f.write_text(f"# Branch Strategy\n\n```regex\n{regex_block}\n```\n")
+        return "# Branch Strategy\n\nNo regex fence here.\n"
+    return f"# Branch Strategy\n\n```regex\n{regex_block}\n```\n"
+
+
+def make_repo(root: str, content: Union[str, bytes, None], origin_head: bool = True) -> str:
+    """Commit the strategy file on the origin's default branch, clone it, return the clone.
+
+    content None -> no strategy file on the default branch.
+    """
+    src, work = os.path.join(root, "src"), os.path.join(root, "work")
+    git("init", "-q", src)
+    if content is not None:
+        d = Path(src, "docs", "git-workflow")
+        d.mkdir(parents=True)
+        data = content if isinstance(content, bytes) else content.encode("utf-8")
+        (d / "branch-strategy.md").write_bytes(data)
+    Path(src, "README").write_text("x\n", encoding="utf-8")
+    git("add", "-A", cwd=src)
+    git("commit", "-q", "-m", "init", cwd=src)
+    git("clone", "-q", src, work)
+    if not origin_head:
+        git("remote", "set-head", "origin", "-d", cwd=work)
+    return work
 
 
 def run_hook(payload: dict, env_override: Optional[dict] = None,
@@ -62,111 +90,120 @@ def run_hook(payload: dict, env_override: Optional[dict] = None,
     return cp.stdout, cp.returncode
 
 
-class _ProjectDirTestCase(unittest.TestCase):
-    """Base: isolates CLAUDE_PROJECT_DIR to a fresh tempdir per test."""
+class _RepoTestCase(unittest.TestCase):
+    """Base: a fresh temp root per test for repo fixtures."""
 
     def setUp(self) -> None:
-        self._prev = os.environ.get("CLAUDE_PROJECT_DIR")
         self.tmp = tempfile.mkdtemp()
-        os.environ["CLAUDE_PROJECT_DIR"] = self.tmp
 
     def tearDown(self) -> None:
-        if self._prev is None:
-            os.environ.pop("CLAUDE_PROJECT_DIR", None)
-        else:
-            os.environ["CLAUDE_PROJECT_DIR"] = self._prev
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def repo(self, content: Union[str, bytes, None], origin_head: bool = True) -> str:
+        return make_repo(self.tmp, content, origin_head)
 
-class F1FailOpenTest(_ProjectDirTestCase):
-    """F1 / LD2 — no valid declared pattern => fail OPEN, loudly (AC1)."""
+    def observe_after_branch(self, work: str, name: str) -> list:
+        git("branch", name, cwd=work)
+        return _hook.observe_branches(work, time.time())
 
-    def test_file_absent_fails_open(self):
-        # No strategy file written under self.tmp.
-        self.assertIsNone(_hook.get_branch_pattern())
-        msg, _model = _hook.validate_branch("git checkout -b release/x")
-        self.assertIsNotNone(msg)
+    def assert_one_fail_open(self, results: list) -> str:
+        self.assertEqual(len(results), 1, results)
+        msg, model = results[0]
         self.assertIn("fail-open", msg)
         self.assertIn("브랜치 이름 검사를 건너뛴다", msg)
+        self.assertIsNone(model)
+        return msg
+
+
+class F1FailOpenTest(_RepoTestCase):
+    """F1 / LD2 — no valid declared pattern on the default branch => fail OPEN, loudly (AC1)."""
+
+    def test_file_absent_fails_open(self):
+        work = self.repo(None)
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        self.assert_one_fail_open(self.observe_after_branch(work, "release/x"))
 
     def test_regexless_file_fails_open(self):
-        write_strategy(self.tmp, None)
-        self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x")[0])
+        work = self.repo(strategy(None))
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        self.assert_one_fail_open(self.observe_after_branch(work, "release/x"))
 
     def test_malformed_regex_fails_open(self):
-        write_strategy(self.tmp, "^(feature|fix")  # unbalanced paren -> re.error
-        self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b whatever")[0])
+        work = self.repo(strategy("^(feature|fix"))  # unbalanced paren -> re.error
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        self.assert_one_fail_open(self.observe_after_branch(work, "whatever"))
 
     def test_empty_regex_fence_fails_open(self):
-        write_strategy(self.tmp, "")  # ```regex\n\n``` -> search regex can't capture
-        self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x")[0])
+        work = self.repo(strategy(""))  # ```regex\n\n``` -> search regex can't capture
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        self.assert_one_fail_open(self.observe_after_branch(work, "release/x"))
 
     def test_whitespace_only_regex_fence_fails_open(self):
         # ```regex\n   \n``` -> captures "   " -> .strip() empty -> guard -> None.
         # Must NOT become re.compile("") which would silently pass EVERY branch.
-        write_strategy(self.tmp, "   ")
-        self.assertIsNone(_hook.get_branch_pattern())
-        msg, _model = _hook.validate_branch("git checkout -b anything-goes")
-        self.assertIsNotNone(msg)  # not silent pass-all
-        self.assertIn("fail-open", msg)
+        work = self.repo(strategy("   "))
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        self.assert_one_fail_open(self.observe_after_branch(work, "anything-goes"))
+
+    def test_no_default_ref_fails_open(self):
+        # 기본 ref(origin/HEAD) 없음 — 규칙 파일이 있어도 어느 판인지 몰라 건너뛰고, 따로 알린다.
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"), origin_head=False)
+        self.assertIsNone(_hook.get_branch_pattern(work))
+        msg = self.assert_one_fail_open(self.observe_after_branch(work, "Bad"))
+        self.assertIn("기본 브랜치(origin/HEAD)를 찾지 못해", msg)
+        self.assertIn("git remote set-head origin --auto", msg)
+
+    def test_working_tree_rule_is_not_read(self):
+        work = self.repo(None)
+        d = Path(work, "docs", "git-workflow")
+        d.mkdir(parents=True)
+        (d / "branch-strategy.md").write_text(
+            strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"), encoding="utf-8")
+        self.assertIsNone(_hook.get_branch_pattern(work))
 
     def test_declared_gitflow_pattern_respected(self):
         # AC3: a declared pattern is honored; release/* passes, no fail-open.
-        write_strategy(self.tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
-        pat = _hook.get_branch_pattern()
+        work = self.repo(strategy(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$"))
+        pat = _hook.get_branch_pattern(work)
         self.assertIsNotNone(pat)
-        self.assertIsNone(_hook.validate_branch("git checkout -b release/v1.2"))
+        self.assertIsNone(_hook.check_branch_name("release/v1.2", pat))
+        self.assertEqual(self.observe_after_branch(work, "release/v1.2"), [])
 
     def test_non_utf8_strategy_file_fails_open(self):
         # 5th malformed case (qg-security + adversarial): a non-UTF-8/binary
         # branch-strategy.md must fail OPEN (loud advisory), never crash — this
         # preserves the always-exit-0 advisory contract AND must not let a
-        # get_branch_pattern crash silently defeat commit validation in main()'s
-        # left-to-right validator tuple.
-        dst = Path(self.tmp) / "docs" / "git-workflow"
-        dst.mkdir(parents=True, exist_ok=True)
-        (dst / "branch-strategy.md").write_bytes(b"\xff\xfe\x00\x81\x82 not-utf8 \x9c")
-        self.assertIsNone(_hook.get_branch_pattern())  # no UnicodeDecodeError crash
-        msg, _model = _hook.validate_branch("git checkout -b release/x")
-        self.assertIsNotNone(msg)
-        self.assertIn("fail-open", msg)
-        # main() must still exit 0 AND still run commit validation (not aborted mid-tuple)
+        # rule-read crash silently defeat commit validation in main().
+        work = self.repo(b"\xff\xfe\x00\x81\x82 not-utf8 \x9c")
+        self.assertIsNone(_hook.get_branch_pattern(work))  # no UnicodeDecodeError crash
+        self.assert_one_fail_open(self.observe_after_branch(work, "release/x"))
+        # main() must still exit 0 AND still run commit validation
         out, rc = run_hook(
             {"tool_name": "Bash",
              "tool_input": {"command": 'git checkout -b release/x && git commit -m "add x"'}},
-            cwd=self.tmp,
+            cwd=work,
         )
         self.assertEqual(rc, 0)
         self.assertIn("fail-open", out)
         self.assertIn("Conventional Commits", out)  # commit validator still ran
 
     def test_utf8_strategy_read_under_non_utf8_locale(self):
-        # codex (qg iter2): open() used the platform default encoding, so a VALID
-        # UTF-8 strategy file with non-ASCII (Korean — devbrew is Korean-primary)
-        # text fails to decode on a non-UTF-8 locale (e.g. LANG=C in CI/Docker),
-        # quietly fail-opening a correctly-declared strategy. encoding="utf-8"
-        # must read it regardless of locale.
-        dst = Path(self.tmp) / "docs" / "git-workflow"
-        dst.mkdir(parents=True, exist_ok=True)
-        (dst / "branch-strategy.md").write_text(
+        # codex (qg iter2): a VALID UTF-8 strategy file with non-ASCII (Korean —
+        # devbrew is Korean-primary) text must decode on a non-UTF-8 locale
+        # (e.g. LANG=C in CI/Docker) instead of quietly fail-opening.
+        work = self.repo(
             "# 브랜치 전략\n\n소문자만 허용합니다.\n\n"
-            "```regex\n^(feature|fix)/[a-z0-9][a-z0-9.-]*$\n```\n",
-            encoding="utf-8",
-        )
+            "```regex\n^(feature|fix)/[a-z0-9][a-z0-9.-]*$\n```\n")
+        git("branch", "Bad_Name", cwd=work)
         # Force an ASCII default encoding in the subprocess (defeat PEP 538/540
         # coercion so the locale default is genuinely non-UTF-8).
         out, rc = run_hook(
-            {"tool_name": "Bash", "tool_input": {"command": "git checkout -b Bad_Name"}},
+            {"tool_name": "Bash", "tool_input": {"command": "git branch Bad_Name"}},
             env_override={"LC_ALL": "C", "LANG": "C",
                           "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"},
-            cwd=self.tmp,
+            cwd=work,
         )
         self.assertEqual(rc, 0)
-        # The Korean file decoded → its pattern applied → Bad_Name violates it.
-        # Under the bug the file fails to decode → fail-open, so neither holds.
         self.assertIn("이름 규칙에 맞지 않는다", json.loads(out).get("systemMessage", ""))
         self.assertNotIn("fail-open", out)
 
@@ -180,12 +217,17 @@ class F1RegressionLockTest(unittest.TestCase):
             "DEFAULT_BRANCH_PATTERN reintroduced — GitHub-Flow default fallback is back",
         )
 
+    def test_command_regex_removed(self):
+        # RC82 — 브랜치는 명령 문자열이 아니라 실행 뒤 reflog 로 본다.
+        self.assertFalse(hasattr(_hook, "BRANCH_CREATE_RE"))
+        self.assertFalse(hasattr(_hook, "validate_branch"))
 
-class PreservedBehaviorTest(_ProjectDirTestCase):
+
+class PreservedBehaviorTest(_RepoTestCase):
     """AC7 — commit / kill-switch / non-Bash / malformed-JSON paths unchanged."""
 
     def test_protected_branch_skipped(self):
-        self.assertIsNone(_hook.validate_branch("git checkout -b main"))
+        self.assertIsNone(_hook.check_branch_name("main", re.compile(r"^feature/.+$")))
 
     def test_conventional_commit_passes(self):
         self.assertIsNone(_hook.validate_commit('git commit -m "feat: add thing"'))
@@ -200,9 +242,11 @@ class PreservedBehaviorTest(_ProjectDirTestCase):
         self.assertIn("Conventional Commits", msg)
 
     def test_kill_switch_disable(self):
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        git("branch", "Bad_Name", cwd=work)
         out, rc = run_hook(
-            {"tool_name": "Bash", "tool_input": {"command": "git checkout -b Bad_Name"}},
-            env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"},
+            {"tool_name": "Bash", "tool_input": {"command": "git branch Bad_Name"}},
+            env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"}, cwd=work,
         )
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)
@@ -254,166 +298,127 @@ class DerivePrefixesTest(unittest.TestCase):
         self.assertEqual(_hook.derive_prefixes(pat), [])
 
 
-class F2SuggestionTest(_ProjectDirTestCase):
+class F2SuggestionTest(unittest.TestCase):
     """F2 / AC4 / AC5 — correction suggestion derived from active pattern."""
 
     def test_gitflow_violation_lists_derived_prefixes_no_feature_hardcode(self):
-        write_strategy(self.tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
-        msg, model = _hook.validate_branch("git checkout -b hotfix-login")
+        pat = re.compile(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
+        msg, model = _hook.check_branch_name("hotfix-login", pat)
         self.assertIsNotNone(msg)
         self.assertIn("release", msg)
         self.assertIn("hotfix", msg)
         self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
         self.assertIn("허용 접두어: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
-        # model half must be self-contained: a runnable command (derived prefix, not a
-        # placeholder) plus the full prefix list — never a dangling <prefix>/"above" pointer
-        self.assertIn("git branch -m feature/hotfix-login", model)
+        # model half must be self-contained: a runnable command naming the observed
+        # branch (it may not be the current one) and the derived prefix, plus the full
+        # prefix list — never a dangling <prefix>/"above" pointer
+        self.assertIn("git branch -m hotfix-login feature/hotfix-login", model)
         self.assertIn("Allowed prefixes: feature, fix, release, hotfix", model)
         self.assertNotIn("<prefix>", model)
         self.assertNotIn("above", model.lower())
 
+    def test_shell_metacharacters_in_name_are_quoted(self):
+        pat = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+        _msg, model = _hook.check_branch_name("a;touch_x", pat)
+        self.assertIn("git branch -m 'a;touch_x' 'feature/a;touch_x'", model)
+
     def test_exotic_pattern_degrades_to_doc(self):
-        write_strategy(self.tmp, r"^feature-.*$")  # literal prefix -> exotic -> []
-        msg, _model = _hook.validate_branch("git checkout -b bad")
+        msg, model = _hook.check_branch_name("bad", re.compile(r"^feature-.*$"))  # literal prefix -> exotic -> []
         self.assertIsNotNone(msg)
         self.assertNotIn("git branch -m", msg)  # cmd is None for exotic
+        self.assertIsNone(model)
         self.assertIn("허용 접두어는 docs/git-workflow/branch-strategy.md 에 있다.", msg)
 
 
-class MainDoubleValidationTest(unittest.TestCase):
-    """AC10 / §5.5 — main() runs BOTH validators (no `or` short-circuit)."""
+class MainDoubleValidationTest(_RepoTestCase):
+    """AC10 / §5.5 — main() runs BOTH checks (no `or` short-circuit)."""
 
     def test_compound_failopen_runs_both_validators(self):
-        tmp = tempfile.mkdtemp()  # no strategy file -> branch fails open
-        try:
-            payload = {
-                "tool_name": "Bash",
-                "tool_input": {
-                    "command": 'git checkout -b feat && git commit -m "add thing"'
-                },
-            }
-            out, rc = run_hook(payload, cwd=tmp)
-            self.assertEqual(rc, 0)
-            data = json.loads(out)
-            msg = data.get("systemMessage", "")
-            self.assertIn("fail-open", msg)             # branch validator ran
-            self.assertIn("Conventional Commits", msg)  # commit validator ALSO ran (not short-circuited)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        work = self.repo(None)  # no strategy file -> branch fails open
+        git("branch", "feat", cwd=work)
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": 'git checkout -b feat && git commit -m "add thing"'}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(rc, 0)
+        msg = json.loads(out).get("systemMessage", "")
+        self.assertIn("fail-open", msg)             # branch check ran
+        self.assertIn("Conventional Commits", msg)  # commit validator ALSO ran (not short-circuited)
 
     def test_valid_branch_bad_commit_still_flags_commit(self):
-        tmp = tempfile.mkdtemp()
-        write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
-        try:
-            payload = {
-                "tool_name": "Bash",
-                "tool_input": {
-                    "command": 'git checkout -b feature/ok && git commit -m "add thing"'
-                },
-            }
-            out, rc = run_hook(payload, cwd=tmp)
-            data = json.loads(out)
-            msg = data.get("systemMessage", "")
-            self.assertNotIn("이름 규칙에 맞지 않는다", msg)  # branch OK -> no branch warning (양성 짝: test_branch_fact_and_hint_stay_human)
-            self.assertIn("Conventional Commits", msg)   # commit flagged independently
-            self.assertEqual(rc, 0)  # non-blocking: hook always exits 0 for compound shape too
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        git("branch", "feature/ok", cwd=work)
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "add thing"'}}
+        out, rc = run_hook(payload, cwd=work)
+        msg = json.loads(out).get("systemMessage", "")
+        self.assertNotIn("이름 규칙에 맞지 않는다", msg)  # branch OK -> no branch warning (양성 짝: test_branch_fact_and_hint_stay_human)
+        self.assertIn("Conventional Commits", msg)   # commit flagged independently
+        self.assertEqual(rc, 0)  # non-blocking: hook always exits 0 for compound shape too
 
     def test_both_clean_emits_empty(self):
-        tmp = tempfile.mkdtemp()
-        write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
-        try:
-            payload = {
-                "tool_name": "Bash",
-                "tool_input": {
-                    "command": 'git checkout -b feature/ok && git commit -m "feat: ok"'
-                },
-            }
-            out, rc = run_hook(payload, cwd=tmp)
-            self.assertEqual(out.strip(), "{}")
-            self.assertEqual(rc, 0)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        git("branch", "feature/ok", cwd=work)
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "feat: ok"'}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(out.strip(), "{}")
+        self.assertEqual(rc, 0)
 
 
-class ChannelSplit(unittest.TestCase):
+class ChannelSplit(_RepoTestCase):
     """MU3·MU4 — 브랜치 수정 명령은 모델 채널로, 커밋 경고는 사람 채널에 남는다."""
 
-    def _branch_violation(self, tmp):
-        write_strategy(tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
-        payload = {"tool_name": "Bash",
-                   "tool_input": {"command": "git checkout -b BadName"}}
-        out, rc = run_hook(payload, cwd=tmp)
+    def _branch_violation(self):
+        work = self.repo(strategy(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$"))
+        git("branch", "BadName", cwd=work)
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git branch BadName"}}
+        out, rc = run_hook(payload, cwd=work)
         self.assertEqual(rc, 0)
         return json.loads(out)
 
     def test_branch_fix_command_goes_to_model_channel(self):
-        tmp = tempfile.mkdtemp()
-        try:
-            data = self._branch_violation(tmp)
-            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
-            self.assertEqual(data.get("hookSpecificOutput", {}).get("hookEventName"),
-                             "PostToolUse")
-            self.assertIn("git branch -m", ac, "수정 명령이 모델 채널에 없다")
-            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", ac,
-                          "허용 prefix 목록이 모델 채널 자체에 없다 — 모델이 못 보는 사람 채널을 가리킨다")
-            self.assertNotIn("<prefix>", ac,
-                             "모델 채널에 미치환 <prefix> placeholder가 남아 있다")
-            self.assertNotIn("above", ac.lower(),
-                             "모델 채널이 자신은 못 보는 '위' 콘텐츠를 가리킨다")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        data = self._branch_violation()
+        ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertEqual(data.get("hookSpecificOutput", {}).get("hookEventName"), "PostToolUse")
+        self.assertIn("git branch -m BadName ", ac, "수정 명령이 모델 채널에 없다")
+        self.assertIn("Allowed prefixes: feature, fix, release, hotfix", ac,
+                      "허용 prefix 목록이 모델 채널 자체에 없다 — 모델이 못 보는 사람 채널을 가리킨다")
+        self.assertNotIn("<prefix>", ac, "모델 채널에 미치환 <prefix> placeholder가 남아 있다")
+        self.assertNotIn("above", ac.lower(), "모델 채널이 자신은 못 보는 '위' 콘텐츠를 가리킨다")
 
     def test_branch_fact_and_hint_stay_human(self):
         """양성 증인 — 사람 채널이 여전히 사실과 기대 패턴을 싣는다."""
-        tmp = tempfile.mkdtemp()
-        try:
-            data = self._branch_violation(tmp)
-            sm = data.get("systemMessage", "")
-            self.assertIn("이름 규칙에 맞지 않는다", sm)
-            self.assertIn("기대하는 형식:", sm)
-            self.assertIn("허용 접두어: feature, fix, release, hotfix", sm)
-            self.assertNotIn("does not follow", sm, "옛 영어 경고가 사람 채널에 남았다")
-            self.assertNotIn("git branch -m", sm,
-                             "수정 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        sm = self._branch_violation().get("systemMessage", "")
+        self.assertIn("이름 규칙에 맞지 않는다", sm)
+        self.assertIn("기대하는 형식:", sm)
+        self.assertIn("허용 접두어: feature, fix, release, hotfix", sm)
+        self.assertNotIn("does not follow", sm, "옛 영어 경고가 사람 채널에 남았다")
+        self.assertNotIn("git branch -m", sm, "수정 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
 
     def test_commit_warning_stays_in_system_message(self):
         """MU4 — 커밋 경고는 자기 정규식에 재발동하므로 모델 채널로 보내지 않는다."""
-        tmp = tempfile.mkdtemp()
-        try:
-            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
-            payload = {"tool_name": "Bash",
-                       "tool_input": {"command": 'git commit -m "add thing"'}}
-            out, rc = run_hook(payload, cwd=tmp)
-            self.assertEqual(rc, 0)
-            data = json.loads(out)
-            sm = data.get("systemMessage", "")
-            self.assertIn("Conventional Commits", sm)
-            self.assertIn("project-init: 커밋 메시지가 Conventional Commits 형식이 아니다.", sm)
-            self.assertIn("형식: <type>(<scope>): <설명>", sm)
-            self.assertIn("type: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert", sm)
-            self.assertIn("제안: feat: add thing", sm)
-            self.assertNotIn("Suggested:", sm, "옛 영어 제안 줄이 남았다")
-            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
-            self.assertNotIn("Conventional Commits", ac,
-                             "커밋 경고가 모델 채널로 갔다 — 재진입 비대칭이 깨졌다")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        payload = {"tool_name": "Bash", "tool_input": {"command": 'git commit -m "add thing"'}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(rc, 0)
+        data = json.loads(out)
+        sm = data.get("systemMessage", "")
+        self.assertIn("Conventional Commits", sm)
+        self.assertIn("project-init: 커밋 메시지가 Conventional Commits 형식이 아니다.", sm)
+        self.assertIn("형식: <type>(<scope>): <설명>", sm)
+        self.assertIn("type: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert", sm)
+        self.assertIn("제안: feat: add thing", sm)
+        self.assertNotIn("Suggested:", sm, "옛 영어 제안 줄이 남았다")
+        ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Conventional Commits", ac, "커밋 경고가 모델 채널로 갔다 — 재진입 비대칭이 깨졌다")
 
     def test_clean_command_emits_neither_channel(self):
-        tmp = tempfile.mkdtemp()
-        try:
-            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
-            payload = {"tool_name": "Bash",
-                       "tool_input": {"command": "git checkout -b feature/ok"}}
-            out, rc = run_hook(payload, cwd=tmp)
-            self.assertEqual(rc, 0)
-            self.assertEqual(json.loads(out), {})
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        git("branch", "feature/ok", cwd=work)
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git branch feature/ok"}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out), {})
 
 
 if __name__ == "__main__":

@@ -226,7 +226,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. 지금 판정 길 �
 ### §10 위험에 대한 답
 
 - RC78 — §6: 그대로 둔다(타입은 devbrew 산출물 이름).
-- RC82 — §3: matcher 를 넓히고 사후 관찰로 알린다(EnterWorktree 에서 훅이 안 불리면 「부분」).
+- RC82 — 부분 — EnterWorktree 뒤 훅 호출은 실측 못 함. §3: matcher 를 넓히고 사후 관찰로 알린다(EnterWorktree 뒤에 훅이 안 불리면 그 브랜치는 검사 밖일 수 있다 — project-init README 공시).
 - RC83 — §5: 의존 목록 파일 · 개발 당시 판 · 진입 확인.
 - K11 — §5: 판 기록 + 진입 공시 + R3 돌아온 결과 대조.
 
@@ -461,6 +461,7 @@ gh 가 필수라서 머지됨을 PR 상태로 판정한다. 지금 판정 길 �
 ## 지휘 기록
 
 - spec 승인 · 2026-10-20 · 「승인 — 계획 담당자에게 (권장)」
+- R8 계획 2 Task 10 · 2026-10-22 · EnterWorktree 뒤 PostToolUse 훅 호출을 실측하지 못했다(격리 설치는 로그인되지 않고 로그인은 대화형이다) — §10 RC82 답을 「부분」으로 고치고 project-init README 에 공시했다. matcher 는 `Bash|EnterWorktree` 로 둔다(안 불려도 비용이 없다). Claude Code 훅 문서는 PostToolUse 가 모든 도구 호출 뒤에 불린다고 적는다 — 문서 근거, 실측 아님.
 
 ## Metadata
 

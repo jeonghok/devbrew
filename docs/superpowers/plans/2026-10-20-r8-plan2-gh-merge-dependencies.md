@@ -62,7 +62,7 @@
 8. **superpowers 판의 출처**: 측정은 개발 세션의 모델이 본 skill 기준 폴더 경로(`…/superpowers/<판>/skills/…`)를 `--superpowers-base` 로 넘긴다. 확인도 같은 꼴 — 부르는 자리의 모델이 불러온 skill 의 기준 폴더 경로를 넘긴다. Claude Code 판은 `claude --version` 의 숫자 셋을 기록만 한다.
 9. **plugin-audit · project-init 의 의존 행은 Python · Claude Code 둘**(설계 §5 표대로 git 확인은 spec-distill · qg 진입만). quality-gates 행은 Python · git · gh · Claude Code. spec-distill 행은 Python · git · gh · superpowers · quality-gates · Claude Code. codex CLI 는 이 표에 넣지 않고 README 의 지금 줄을 둔다(설계 표 밖).
 10. **merge_check 는 gh 를 부르지 않는다** — 설계 §5 의 「gh 를 쓰는 진입」 목록에 있지만 스위트 대조에는 gh 호출이 없어 gh 확인을 더하지 않는다(지휘자 진입이 이미 gh 를 확인한다).
-11. **project-init 훅의 「새 브랜치」**: `refs/heads/<b>` reflog 의 마지막 줄이 만들기(`branch: Created from` · `checkout: …` 생성) 또는 이름 바꾸기(`Branch: renamed … to refs/heads/<b>`)이고 그 시각이 지금부터 60초 안인 브랜치. reflog 파일은 공용 git 디렉토리의 `logs/refs/heads/` 를 직접 읽는다(브랜치마다 git 을 띄우지 않는다). 상태 파일을 두지 않는다. Task 10 Step 1 의 실측이 이 규칙을 확정하거나 고친다.
+11. **project-init 훅의 「새 브랜치」**: `refs/heads/<b>` reflog 의 마지막 줄이 만들기(`branch: Created from …`) 또는 이름 바꾸기 · 복사(`Branch: renamed|copied refs/heads/… to refs/heads/<b>`)이고 그 시각이 지금부터 60초 안인 브랜치. reflog 파일은 공용 git 디렉토리의 `logs/refs/heads/` 를 직접 읽는다(브랜치마다 git 을 띄우지 않는다). 상태 파일을 두지 않는다. Task 10 Step 1 실측으로 고쳤다: `checkout -b` · `checkout -B` · `switch --create` 도 브랜치 reflog 에는 `branch: Created from HEAD` 를 남기고(`checkout: …` 줄은 HEAD reflog 에만 있다), `branch -c` 가 `Branch: copied …` 를 남겨 복사를 더했다.
 12. **Python 바닥은 경로마다 실측 판이다(설계 U12 「경로마다 실측 판 (권장)」)** — skill 진입의 `python` 행은 잰 `python3` 판(지금 3.9.6), 훅 바닥은 새 `python-hook` 행(훅이 `devbrew-python.sh` 로 실제로 쓰는 해석기 판, 지금 3.12)이다. 설계 §5 표의 옛 글자 「훅 바닥 값도 개발 당시 판에 맞춘다」를 한 행으로 읽어 훅을 3.9 로 내리지 않는다. 설계와 다른 점 9 의 행 목록에 project-init 의 `python-hook` 이 더해진다(Task 8).
 
 ## Review Focus
@@ -353,6 +353,27 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
   - `main()` 은 kill switch → `tool_name` 이 `Bash` 이면 커밋 검사(지금 그대로) + 관찰, `EnterWorktree` 면 관찰만. 규칙 밖 이름마다 지금 메시지 꼴(사람 채널 + 모델 채널의 `git branch -m <접두>/<이름>`).
 
 - [ ] **Step 1: 실측 둘.** (a) EnterWorktree 뒤에 PostToolUse 훅이 실제로 불리는가 — 격리 설치(`CLAUDE_CONFIG_DIR=<빈 tmp>`, 쓰기 전 빈 폴더로 격리 증명)에 이 플러그인 사본을 깔고 훅이 받은 입력을 파일로 적게 한 뒤 EnterWorktree 를 한 번 부른다. (b) `git worktree add -b x` · `git branch -m a b` · `git checkout -B c` · `git switch --create d` · `git -C <dir> branch e` · EnterWorktree(`worktree-<이름>`) 뒤 reflog 마지막 줄의 문면과 시각을 표로 적는다. Expected: 표를 이 계획에 붙이고 「설계와 다른 점 11」의 규칙을 확정하거나 고친다. (a) 가 「불리지 않음」이면 README Hooks Installed 에 「EnterWorktree 로 만든 브랜치는 검사 밖」을 적고, 설계문서 §10 의 RC82 답을 「부분」으로 고친 뒤 그 사실을 설계문서 `## 지휘 기록` 에 한 줄로 남긴다.
+
+  **실측 결과 (2026-10-22, git 2.54.0 Apple Git-157, Claude Code 2.1.303).**
+  (a) 실측 못 함 — 빈 `CLAUDE_CONFIG_DIR` 의 `claude auth status` 가 `"loggedIn": false` 이고 로그인은 대화형이다(진짜 설정은 건드리지 않았다). Claude Code 훅 문서는 「`PreToolUse` · `PostToolUse` 는 에이전트 루프 안의 모든 도구 호출에서 불린다(`EndConversation` 만 예외)」고 적는다 — 문서 근거, 실측 아님. 그래서 matcher 는 `Bash|EnterWorktree` 로 두고 README 에 공시하고 설계 §10 RC82 답을 「부분 — EnterWorktree 뒤 훅 호출은 실측 못 함」으로 고쳤다.
+  (b) 임시 레포(job tmp)에서 각 명령 직후 `logs/refs/heads/<b>` 의 마지막 줄 — 시각은 모두 명령을 돌린 그 초(`1792636950 +0900`, 실행 시각과 같음):
+
+  | 명령 | 브랜치 | 마지막 줄 문면 |
+  |---|---|---|
+  | `git worktree add -b x <dir>` | `x` | `branch: Created from HEAD` |
+  | `git branch -m a b` | `b` | `Branch: renamed refs/heads/a to refs/heads/b` (옛 `a` reflog 파일은 사라짐) |
+  | `git checkout -B c` | `c` | `branch: Created from HEAD` (기존 `c` 를 다시 `-B` 해도 같은 줄) |
+  | `git switch --create d` | `d` | `branch: Created from HEAD` |
+  | `git -C <dir> branch e` | `e` | `branch: Created from d` (`Created from <그때 HEAD 브랜치>`) |
+  | `git checkout -b f` · `git switch -c g` | `f` · `g` | `branch: Created from HEAD` |
+  | `git branch -c b bcopy` | `bcopy` | `Branch: copied refs/heads/b to refs/heads/bcopy` |
+  | `git branch -M bcopy bmoved` | `bmoved` | `Branch: renamed refs/heads/bcopy to refs/heads/bmoved` |
+  | 연결 작업 트리 안 `git branch from-wt` | `from-wt` | `branch: Created from x` — 공용 git 디렉토리(`<repo>/.git`)에 쓰인다 |
+  | 만든 뒤 커밋 | `d` | `commit: z` — 새 브랜치로 보지 않는다 |
+  | `git update-ref refs/heads/raw HEAD` | `raw` | 메시지 없음(탭 없음) — 새 브랜치로 보지 않는다 |
+  | EnterWorktree(`worktree-<이름>`) | — | 실측 못 함. 추론: EnterWorktree 는 `git worktree add -b worktree-<이름> <dir> <base>` 꼴이라 첫 행과 같은 `branch: Created from …` 줄을 남긴다(`git worktree add -b worktree-name <dir> HEAD` 로 잰 결과가 `branch: Created from HEAD`) |
+
+  `git pack-refs --all` 뒤에도 `logs/refs/heads/<b>` 파일은 남는다. 이 결과로 「설계와 다른 점 11」을 고쳤다(`checkout: …` 줄은 브랜치 reflog 에 없음 · 복사 추가).
 - [ ] **Step 2: 실패하는 테스트.** `test_post_tool_use_branch.sh`: 위 다섯 명령 각각 뒤 규칙 밖 이름 → 알림(AC13 의 `worktree add -b` · `branch -m`) · EnterWorktree 입력(`tool_name: EnterWorktree`) 뒤 `worktree-x` → 알림 · 규칙 안 이름 → 조용 · 61초 전에 만든 규칙 밖 옛 브랜치 → 다시 알리지 않음(시각은 reflog 줄을 고쳐 만든다) · 작업 브랜치에서 규칙 파일을 느슨하게 고쳐도 기본 브랜치 규칙으로 판정 · `DEVBREW_PROJECT_INIT_DISABLE=1` · `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `project-init:PostToolUse` 셋 다 출력 `{}` · `hooks.json` matcher 가 `Bash|EnterWorktree`.
 - [ ] **Step 3: 실패를 본다.** Run: `bash plugins/project-init/tests/test_post_tool_use_branch.sh` — Expected: `✗`.
 - [ ] **Step 4: 구현 · 통과.** 같은 명령 + `python3 -m unittest plugins/project-init/tests/test_post_tool_use.py plugins/project-init/tests/test_branch_prefix_templates.py` + `bash plugins/project-init/tests/test_no_write_matcher_hooks.sh`(쓰기 · 고치기 matcher 금지 락 — 새 matcher 가 걸리지 않고 양성 대조가 `Bash` 조각을 찾는지) — Expected: `✗` 0 · OK.

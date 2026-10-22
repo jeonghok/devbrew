@@ -2,6 +2,7 @@
 import importlib.util
 import os
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,28 +61,38 @@ def render(strategy, extras):
 
 
 class HookEnv(object):
-    """Point CLAUDE_PROJECT_DIR at a temp project holding the rendered doc."""
+    """A temp clone whose default branch (origin/HEAD) holds the rendered doc."""
 
     def __init__(self, strategy, extras):
         self.strategy = strategy
         self.extras = extras
 
+    def _git(self, *args, cwd=None):
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=cwd, env=env, check=True, capture_output=True,
+        )
+
     def __enter__(self):
         self.tmp = tempfile.TemporaryDirectory()
-        d = Path(self.tmp.name) / "docs" / "git-workflow"
+        src = Path(self.tmp.name) / "src"
+        d = src / "docs" / "git-workflow"
         d.mkdir(parents=True)
         (d / "branch-strategy.md").write_text(
             render(self.strategy, self.extras), encoding="utf-8"
         )
-        self.old = os.environ.get("CLAUDE_PROJECT_DIR")
-        os.environ["CLAUDE_PROJECT_DIR"] = self.tmp.name
+        self._git("init", "-q", str(src))
+        self._git("add", "-A", cwd=str(src))
+        self._git("commit", "-q", "-m", "init", cwd=str(src))
+        self.work = str(Path(self.tmp.name) / "work")
+        self._git("clone", "-q", str(src), self.work)
         return self
 
+    def pattern(self):
+        return _hook.get_branch_pattern(self.work)
+
     def __exit__(self, *exc):
-        if self.old is None:
-            os.environ.pop("CLAUDE_PROJECT_DIR", None)
-        else:
-            os.environ["CLAUDE_PROJECT_DIR"] = self.old
         self.tmp.cleanup()
 
 
@@ -97,24 +108,24 @@ class BranchPrefixTemplateTests(unittest.TestCase):
 
     def test_hook_derives_defaults(self):
         for s in STRATEGIES:
-            with HookEnv(s, []):
+            with HookEnv(s, []) as env:
                 self.assertEqual(
-                    _hook.derive_prefixes(_hook.get_branch_pattern()),
+                    _hook.derive_prefixes(env.pattern()),
                     defaults_from_skill()[s],
                     s,
                 )
 
     def test_hook_derives_added_prefixes(self):
         for s in STRATEGIES:
-            with HookEnv(s, ["docs", "chore"]):
+            with HookEnv(s, ["docs", "chore"]) as env:
                 self.assertEqual(
-                    _hook.derive_prefixes(_hook.get_branch_pattern()),
+                    _hook.derive_prefixes(env.pattern()),
                     defaults_from_skill()[s] + ["docs", "chore"],
                     s,
                 )
-                self.assertIsNone(_hook.validate_branch("git checkout -b docs/readme-fix"), s)
-            with HookEnv(s, []):
-                self.assertIsNotNone(_hook.validate_branch("git checkout -b docs/readme-fix"), s)
+                self.assertIsNone(_hook.check_branch_name("docs/readme-fix", env.pattern()), s)
+            with HookEnv(s, []) as env:
+                self.assertIsNotNone(_hook.check_branch_name("docs/readme-fix", env.pattern()), s)
 
     def test_skill_prefix_rule_matches_hook(self):
         text = read(SKILL)

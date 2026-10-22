@@ -2,7 +2,7 @@
 
 프로젝트의 git 작업 규칙(브랜치 이름 · 커밋 메시지 · PR 절차)과 프로젝트 헌장을 짧은 대화로 만들어 준다.
 결과는 에이전트가 읽는 `AGENTS.md`(그리고 그것을 가리키는 `CLAUDE.md`)와 `docs/` 문서다. 그 뒤로는 훅 하나가
-`Bash` 호출에서 브랜치 이름과 커밋 메시지를 확인해 알려 준다(막지는 않는다).
+`Bash` · `EnterWorktree` 호출 뒤 새로 생긴 브랜치 이름과 커밋 메시지를 확인해 알려 준다(막지는 않는다).
 
 ## 아키텍처
 
@@ -15,10 +15,11 @@ plugins/project-init/
 │   └── project-init/SKILL.md        # /project-init — 인터랙티브 셋업(사용자 전용)
 ├── hooks/
 │   ├── hooks.json                   # PostToolUse hook 설정 (1개 entry)
-│   └── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
+│   └── post-tool-use.py             # 새 브랜치 관찰(fail-open advisory) + 커밋 검증기 (Bash|EnterWorktree matcher)
 ├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
 │   ├── __init__.py
 │   ├── test_post_tool_use.py        # post-tool-use fail-open/F2/main 검증
+│   ├── test_post_tool_use_branch.sh # 명령 · EnterWorktree 뒤 새 브랜치 관찰 · 기본 브랜치 규칙 · kill switch (임시 레포)
 │   ├── test_command_contract.py     # skills/project-init 산문 계약 회귀 락 (4c S2a H1 · 이전 거절 선택지 · 헌장 게이트 선택)
 │   ├── test_branch_prefix_templates.py  # 템플릿 브랜치 접두 placeholder · worktree 절 락
 │   ├── test_branch_strategy_rebase_clause.sh  # AC8e, rebase 무조건 금지 조항 부재 락
@@ -62,7 +63,7 @@ plugins/project-init/
 | 컴포넌트 | 역할 |
 |---------|------|
 | **`/project-init` skill** | 인터랙티브 셋업 — strategy 선택, 룰 생성 |
-| **PostToolUse hook** | 브랜치 이름·커밋 메시지 포맷 자동 검증 |
+| **PostToolUse hook** | 새 브랜치 이름·커밋 메시지 포맷 자동 검증 |
 | **Templates** | 3개 branching strategy의 사전 작성된 룰 |
 
 ## 브랜치 전략
@@ -91,7 +92,9 @@ plugins/project-init/
 
 ## 설치된 Hook
 
-- **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증 (advisory, non-blocking). 브랜치 검증은 `docs/git-workflow/branch-strategy.md`의 선언된 전략 패턴을 런타임에 읽어 수행하며, 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록·비-UTF-8 파일)이면 GitHub Flow를 단정하지 않고 **loud advisory로 검증을 건너뛴다**(fail-open). 교정 제안은 활성 패턴에서 파생된 prefix를 제시한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
+- **`PostToolUse` (`Bash|EnterWorktree` matcher) — `post-tool-use.py`**: 새 브랜치 이름·커밋 메시지 검증 (advisory, non-blocking). 브랜치는 명령 문자열이 아니라 **실행 뒤 상태**로 본다 — 도구 호출이 끝난 뒤 공용 git 디렉토리의 브랜치 reflog 를 읽어, 마지막 줄이 만들기(`branch: Created from …`) · 이름 바꾸기 · 복사이고 60초 안인 브랜치를 새 브랜치로 잡는다(`worktree add -b` · `branch -m` · `checkout -B` · `switch --create` · `git -C <dir> branch` 가 모두 이 줄을 남긴다). 상태 파일을 두지 않아서 60초 안의 다음 호출에서는 같은 알림이 다시 날 수 있고, 60초가 지난 규칙 밖 옛 브랜치는 다시 알리지 않는다. 규칙은 작업 트리가 아니라 **기본 브랜치 판**(`refs/remotes/origin/HEAD` 의 `docs/git-workflow/branch-strategy.md`)의 선언된 전략 패턴을 런타임에 읽는다. 기본 브랜치(`origin/HEAD`)가 없거나 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록·비-UTF-8 파일)이면 GitHub Flow를 단정하지 않고 그 사실을 **loud advisory로 알리고 검증을 건너뛴다**(fail-open). 교정 제안은 활성 패턴에서 파생된 prefix로 `git branch -m <옛 이름> <접두>/<이름>` 을 제시한다. 커밋 메시지 검증은 `Bash` 에서만 한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash · EnterWorktree invocation 뒤에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
+  - EnterWorktree 뒤에 이 훅이 실제로 불리는지는 실측하지 못했다(Claude Code 훅 문서는 PostToolUse 가 모든 도구 호출 뒤에 불린다고 적는다 — 문서 근거, 실측 아님). 불리지 않으면 EnterWorktree 로 만든 브랜치는 검사 밖일 수 있다(60초 안에 다음 Bash 호출이 오면 그때 잡힌다).
+  - spec-distill 의 레포 설정 `branch_prefix` 는 이 플러그인의 브랜치 규칙과 맞춘다 — 두 플러그인은 서로의 설정을 읽지 않으므로, 어긋나면 지휘자가 만드는 브랜치마다 이 훅이 알린다.
   - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse`. 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
   - `DEVBREW_PROJECT_INIT_DISABLE=1` 은 훅만이 아니라 `/project-init` 진입도 `disabled` no-op 으로 만든다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
   - 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
