@@ -69,7 +69,9 @@ alerted() { # $1 이름, $2 label
 elsewhere() { # $1 이름, $2 작업 트리 경로, $3 label
   sm=$(field systemMessage); ac=$(field ac)
   case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*"다른 작업 트리($2)"*) ;; *) no "$3: 사람 채널에 알림 · 작업 트리 경로가 없다 — $OUT"; return ;; esac
-  case "$ac" in *"git branch -m $1 "*) no "$3: 다른 작업 트리 브랜치에 이름 바꾸기 명령을 냈다 — $OUT" ;; *) ok "$3" ;; esac
+  case "$ac" in *"git branch -m $1 "*) no "$3: 다른 작업 트리 브랜치에 이름 바꾸기 명령을 냈다 — $OUT"; return ;; esac
+  case "$ac" in *"브랜치 $1(작업 트리 $2)이 규칙 밖이다 — 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다"*) ok "$3" ;;
+    *) no "$3: 모델 채널에 명령 없는 알림 줄이 없다 — $OUT" ;; esac
 }
 
 quiet() { # $1 label
@@ -112,11 +114,15 @@ fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" branch BadPla
 hook Bash "$W" "git branch BadPlain"
 elsewhere BadB "$T/wtB$N" "작업 트리 B 에서 쓰는 규칙 밖 브랜치 → 사람 채널에 B 경로 · 모델 채널에 명령 없음"
 alerted BadPlain "어디에서도 쓰지 않는 규칙 밖 브랜치 → 이름 바꾸기 명령(양성 짝)"
+fresh; git -C "$W" checkout -q -b BadMain; git -C "$W" worktree add -q --detach "$W/.claude/worktrees/x"
+hook Bash "$W/.claude/worktrees/x" "git worktree add --detach .claude/worktrees/x"
+elsewhere BadMain "$W" "안에 중첩된 detached 작업 트리가 cwd · 바깥 main 작업 트리가 쓰는 규칙 밖 브랜치 → 명령 없음"
 mkdir -p "$T/wtfail"
 printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail/git"
 chmod +x "$T/wtfail/git"
 HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git branch BadPlain"
 sm=$(field systemMessage); ac=$(field ac)
+case "$ac" in *"작업 트리 목록을 읽지 못해 규칙 밖 브랜치에 이름 바꾸기 명령을 내지 않았다"*) ok "작업 트리 목록 실패 → 모델 채널에 명령 없는 알림 줄" ;; *) no "작업 트리 목록 실패를 모델 채널에 알리지 않았다 — $OUT" ;; esac
 case "$ac" in *"git branch -m"*) no "작업 트리 목록을 못 읽었는데 이름 바꾸기 명령을 냈다 — $OUT" ;; *)
   case "$sm" in *"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*"이름 규칙에 맞지 않는다"*|*"이름 규칙에 맞지 않는다"*"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*)
     ok "작업 트리 목록 실패 → 명령 없이 알리고 그 사실을 적는다" ;; *) no "작업 트리 목록 실패 안내가 없다 — $OUT" ;; esac ;; esac

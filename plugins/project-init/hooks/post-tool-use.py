@@ -133,15 +133,17 @@ def checked_out_elsewhere(cwd, deadline=None):
     out = _git(cwd, "worktree", "list", "--porcelain", deadline=deadline)
     if out is None:
         return None
-    trees, path = [], None
+    paths, trees, path = [], [], None
     for line in out.decode("utf-8", "replace").splitlines():
         if line.startswith("worktree "):
             path = os.path.realpath(line[len("worktree "):])
+            paths.append(path)
         elif line.startswith("branch refs/heads/") and path is not None:
             trees.append((path, line[len("branch refs/heads/"):]))
     here = os.path.realpath(cwd)
+    # 브랜치 줄 없는(detached) 작업 트리도 cwd 의 작업 트리일 수 있다 — 모든 경로에서 고른다.
     own = max(
-        (p for p, _b in trees if here == p or here.startswith(p.rstrip(os.sep) + os.sep)),
+        (p for p in paths if here == p or here.startswith(p.rstrip(os.sep) + os.sep)),
         key=len, default=None,
     )
     return {b: p for p, b in trees if p != own}
@@ -298,10 +300,14 @@ def _observe(cwd, now, deadline):
         elif name in elsewhere:
             human += (f"\n이 브랜치는 다른 작업 트리({elsewhere[name]})에서 쓰고 있어 "
                       "이 세션에서는 이름을 바꾸라고 하지 않는다.")
-            cmd = None
+            cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {elsewhere[name]})이 규칙 밖이다 "
+                   "— 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다.")
         out.append((human, cmd))
     if elsewhere is None:
-        out.append(("project-init: 작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다.", None))
+        out.append((
+            "project-init: 작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다.",
+            "작업 트리 목록을 읽지 못해 규칙 밖 브랜치에 이름 바꾸기 명령을 내지 않았다.",
+        ))
     return out
 
 
