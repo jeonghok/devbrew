@@ -1565,7 +1565,8 @@ printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n#
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31b.json"); rc=$?
 assert_contains "$(notes "$T/rm31b.json" B31)" "PR 상태 미확인 — 지휘자를 돌려라(feature/b30)" "깨진 기계 상태: 캐시 없음으로 간다"
 assert_contains "$(warns "$T/rm31b.json" B31)" "PR 캐시를 읽지 못했다 — 기계 상태를 읽지 못했다 — " "깨진 기계 상태: 사유는 경고"
-assert_contains "$(warns "$T/rm31b.json" B31)" "ledger pr-refresh --roadmap docs/rm31/roadmap.md --session <세션> --reset 으로 다시 채운다" "깨진 기계 상태: 경고 끝에 고치는 명령"
+assert_contains "$(warns "$T/rm31b.json" B31)" "— 기계 상태 파일에서 그 자리를 고친다" "깨진 기계 상태: 경고 끝에 그 사유의 할 일"
+assert_not_contains "$(warns "$T/rm31b.json" B31)" "--reset" "깨진 기계 상태: --reset 은 옛 판 줄의 할 일이라 달지 않는다"
 assert_eq "$rc" "1" "깨진 기계 상태: 경고(rc 1)"
 assert_eq "$(stage "$T/rm31b.json" B31)" "준비" "깨진 기계 상태: 캐시 없음 길(squash 는 머지됨이 아니다)"
 printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n## PR\n\n- feature/b30 · #12 · 머지됨 · 2026-10-20\n' > "$MD31/machine.md"
@@ -1573,6 +1574,20 @@ printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n#
 assert_contains "$(warns "$T/rm31c.json" B31)" "옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> --session <세션> --reset 으로 다시 채운다" "옛 판 4칸 줄: 경고와 고치는 명령"
 assert_eq "$(warns "$T/rm31c.json" B31 | grep -o -- '--reset' | wc -l | tr -d ' ')" "1" "옛 판 4칸 줄: 고치는 명령은 한 번만"
 assert_eq "$rc" "1" "옛 판 4칸 줄: 경고(rc 1)"
+# 사유마다 그 사유의 할 일 — 더 새 판 · 링크 · 읽기 오류에는 --reset 을 달지 않는다
+printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\nwriter: spec-distill 99.0.0\n---\n\n## PR\n\n' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31v.json")
+assert_contains "$(warns "$T/rm31v.json" B31)" "더 새 판(spec-distill 99.0.0)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다" "더 새 판: 할 일은 플러그인 업데이트"
+assert_not_contains "$(warns "$T/rm31v.json" B31)" "--reset" "더 새 판: --reset 을 달지 않는다"
+cp "$MD31/machine.md" "$T/machine-target.md"; rm -f "$MD31/machine.md"; ln -s "$T/machine-target.md" "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31l.json")
+assert_contains "$(warns "$T/rm31l.json" B31)" "기계 상태 파일이 링크다: " "링크: 사유"
+assert_contains "$(warns "$T/rm31l.json" B31)" "— 링크를 그 내용의 보통 파일로 바꾼다" "링크: 할 일은 보통 파일로 바꾸기"
+assert_not_contains "$(warns "$T/rm31l.json" B31)" "--reset" "링크: --reset 을 달지 않는다"
+rm -f "$MD31/machine.md"; printf '\377\376' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31u.json")
+assert_contains "$(warns "$T/rm31u.json" B31)" "(UnicodeDecodeError) — 파일 권한과 UTF-8 인코딩을 확인한다" "읽기 오류: 할 일은 권한 · 인코딩 확인"
+assert_not_contains "$(warns "$T/rm31u.json" B31)" "--reset" "읽기 오류: --reset 을 달지 않는다"
 rm -f "$MD31/machine.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31d.json"); rc=$?
 assert_eq "$rc:$(warns "$T/rm31d.json" B31)" "0:" "양의 짝: 기계 상태 파일이 없으면 경고 없음(rc 0) — 정보 줄만"

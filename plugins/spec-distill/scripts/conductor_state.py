@@ -59,11 +59,18 @@ SEP = " · "
 
 
 class MachineError(ValueError):
-    """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다."""
+    """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다. action_in_message 면 메시지 끝이 할 일이다."""
+    action_in_message = False
 
 
 class OldPrRows(MachineError):
     """옛 판이 쓴 4칸 PR 캐시 줄 — 메시지가 고치는 명령(`--reset`)이다."""
+    action_in_message = True
+
+
+class WriterStop(MachineError):
+    """판 · writer 문장 — 메시지 끝이 할 일(업데이트 · 다시 설치 · writer 줄 확인)이다."""
+    action_in_message = True
 
 
 # ── 경로 ─────────────────────────────────────────────────────────────────────
@@ -94,9 +101,9 @@ def own_version() -> str:
     try:
         version = json.loads(path.read_text(encoding="utf-8")).get("version")
     except (OSError, ValueError, AttributeError) as exc:
-        raise MachineError("플러그인 판을 읽지 못했다: %s (%s) — 플러그인을 다시 설치한다" % (path, type(exc).__name__))
+        raise WriterStop("플러그인 판을 읽지 못했다: %s (%s) — 플러그인을 다시 설치한다" % (path, type(exc).__name__))
     if not isinstance(version, str) or not version.strip():
-        raise MachineError("플러그인 판이 비어 있다: %s — 플러그인을 다시 설치한다" % path)
+        raise WriterStop("플러그인 판이 비어 있다: %s — 플러그인을 다시 설치한다" % path)
     return version.strip()
 
 
@@ -104,7 +111,7 @@ def _own_triple():
     own = own_version()
     triple = version_triple(own)
     if triple is None:
-        raise MachineError("판을 비교하지 못했다 — 지금 판(%s %s)에 숫자 셋(예: 8.7.0)이 없다 — 플러그인을 다시 설치한다"
+        raise WriterStop("판을 비교하지 못했다 — 지금 판(%s %s)에 숫자 셋(예: 8.7.0)이 없다 — 플러그인을 다시 설치한다"
                            % (WRITER, own))
     return own, triple
 
@@ -114,15 +121,15 @@ def _check_writer(writer):
     if writer is None:
         return
     if writer.split(" ", 1)[0] != WRITER:
-        raise MachineError("이 기계 상태를 쓴 것이 %s 가 아니다(%s) — 기계 상태 파일 머리말의 writer 줄을 확인한다"
+        raise WriterStop("이 기계 상태를 쓴 것이 %s 가 아니다(%s) — 기계 상태 파일 머리말의 writer 줄을 확인한다"
                            % (WRITER, writer))
     wrote = version_triple(writer)
     if wrote is None:
-        raise MachineError("판을 비교하지 못했다 — 이 기계 상태를 쓴 판(%s)에 숫자 셋(예: 8.7.0)이 없다 — "
+        raise WriterStop("판을 비교하지 못했다 — 이 기계 상태를 쓴 판(%s)에 숫자 셋(예: 8.7.0)이 없다 — "
                            "기계 상태 파일 머리말의 writer 줄을 확인한다" % writer)
     own, triple = _own_triple()
     if wrote > triple:
-        raise MachineError("이 기계 상태는 더 새 판(%s)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다(지금 판 %s)"
+        raise WriterStop("이 기계 상태는 더 새 판(%s)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다(지금 판 %s)"
                            % (writer, own))
 
 

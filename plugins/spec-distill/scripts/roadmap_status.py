@@ -453,26 +453,28 @@ def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: 
 
 
 def read_pr_cache(git: Git, roadmap_rel: str):
-    """(PR 캐시 줄들, 못 읽은 사유 | None). 기계 상태 파일이 없으면 ([], None) — 깨졌으면 빈 캐시로 가고 사유를 낸다."""
+    """(PR 캐시 줄들, 못 읽은 사유 | None). 기계 상태 파일이 없으면 ([], None) — 깨졌으면 빈 캐시로 가고 사유를 낸다.
+    사유는 끝에 그 사유의 할 일 하나를 단다 — `--reset` 은 옛 판 줄(OldPrRows)의 할 일일 뿐이다."""
     common = git.common_dir()
     if common is None:
-        return [], "git 공용 디렉토리를 찾지 못했다"
+        return [], "git 공용 디렉토리를 찾지 못했다 — git 레포 안에서 다시 돌린다"
     try:
         path = machine_path(state_root_for_common(Path(git.cwd, common).resolve()), roadmap_rel)
     except MachineError as exc:
-        return [], "기계 상태를 읽지 못했다 — %s" % exc
+        return [], "기계 상태를 읽지 못했다 — %s — 로드맵 경로를 확인한다" % exc
     if path.is_symlink():
-        return [], "기계 상태 파일이 링크다: %s" % path
+        return [], "기계 상태 파일이 링크다: %s — 링크를 그 내용의 보통 파일로 바꾼다" % path
     if not path.exists():
         return [], None
     if not path.is_file():
-        return [], "기계 상태 파일이 보통 파일이 아니다: %s" % path
+        return [], "기계 상태 파일이 보통 파일이 아니다: %s — 그 자리에 보통 파일만 둔다" % path
     try:
         return parse_machine(path.read_text(encoding="utf-8"), roadmap_rel)["PR"], None
     except (OSError, UnicodeDecodeError) as exc:
-        return [], "기계 상태 파일을 읽지 못했다: %s (%s)" % (path, type(exc).__name__)
-    except MachineError as exc:
-        return [], "기계 상태를 읽지 못했다 — %s" % exc
+        return [], "기계 상태 파일을 읽지 못했다: %s (%s) — 파일 권한과 UTF-8 인코딩을 확인한다" % (path, type(exc).__name__)
+    except MachineError as exc:  # 옛 판 줄(--reset) · 판 문장(업데이트 등)은 메시지 끝이 할 일이다
+        return [], "기계 상태를 읽지 못했다 — %s%s" % (
+            exc, "" if exc.action_in_message else " — 기계 상태 파일에서 그 자리를 고친다")
 
 
 def extra_branches(git: Git, main: str, rel: str, blocks: list):
@@ -598,9 +600,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     cache_warning = None
     if pr_reason:
-        cache_warning = "PR 캐시를 읽지 못했다 — %s" % pr_reason
-        if "--reset" not in pr_reason:
-            cache_warning += " — ledger pr-refresh --roadmap %s --session <세션> --reset 으로 다시 채운다" % roadmap_rel
+        cache_warning = "PR 캐시를 읽지 못했다 — %s" % pr_reason  # 할 일은 사유마다 read_pr_cache 가 단다
 
     def unchecked_note(branches, block):
         """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 그 사유는 경고로."""
