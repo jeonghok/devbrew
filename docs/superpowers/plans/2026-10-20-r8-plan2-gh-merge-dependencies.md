@@ -197,7 +197,7 @@
 - Produces:
   - `merged_by_pr(rows: list[dict], branch: str, tip_local: str | None, tip_remote: str | None, default_short: str, reachable: Callable[[str], bool]) -> tuple[str | None, list[str]]` — (판정 ∈ `"머지됨"` · `"머지됨(받기 전)"` · `"셀 수 없음"` · `None`, 알림 줄). 후보 = `브랜치 == branch ∧ 상태 == 머지됨 ∧ 교차 레포 == 아니오 ∧ baseRefName == default_short`. 끝 = `tip_local or tip_remote`; 둘 다 있고 다르면 알림 「로컬 끝 <8자> · 원격 끝 <8자>」. 끝이 있으면 `headRefOid == 끝` 인 후보만. 끝이 없으면 「설계와 다른 점 3」. 맞는 줄의 `mergeCommit` 이 기본 ref 에서 닿으면 `"머지됨"`, 아니면 `"머지됨(받기 전)"` + 「git fetch 뒤 다시 계산한다」.
   - `merged_by_git(git, merges, main, branch, tip, origin_owner) -> str | None` — 지금의 두 길. 문면 길은 `Merge pull request #n from <owner>/<브랜치>` 의 owner 가 `origin_owner` 일 때만.
-  - `compute` 는 그 브랜치의 PR 줄이 캐시에 하나라도 있으면 `merged_by_pr` 만, 없으면 `merged_by_git` + 손 머지 줄 + 블록 알림 「PR 상태 미확인 — 지휘자를 돌려라」. 기계 상태를 못 읽으면(깨짐) 캐시 없음으로 가고 그 사유를 알림에 싣는다. 머지 뒤 revert(기본 ref 의 그 뒤 커밋 메시지에 `This reverts commit <mergeCommit>`)는 알림만.
+  - `compute` 는 그 브랜치의 PR 줄이 캐시에 하나라도 있으면 `merged_by_tips`(머지 커밋 근거) 먼저, 머지됨이 아니면 `merged_by_pr`(로컬 끝이 원격 끝과 다르고 그 조상이면 끝은 원격 끝 — 설계 U17, fcf7d300), 없으면 `merged_by_git` + 손 머지 줄 + 블록 알림 「PR 상태 미확인 — 지휘자를 돌려라」. 기계 상태를 못 읽으면(깨짐) 캐시 없음으로 가고 그 사유를 알림에 싣는다. 머지 뒤 revert(기본 ref 의 그 뒤 커밋 메시지에 `This reverts commit <mergeCommit>`)는 알림만.
   - `NOTICE` 새 문장: 「머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지로 알아보고 「PR 상태 미확인」을 보인다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 쓴다. …(경로 예약 문장은 그대로)」. README 상태 계산 줄과 템플릿 머지 줄 안내도 같은 규칙으로.
 
 - [ ] **Step 1: 실패하는 테스트**(`test_merged_by_pr.py`, 순수 함수):
