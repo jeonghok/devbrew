@@ -167,7 +167,7 @@ for lit in ("- `reset_rc=` 가 0 이 아니면 그 사유", "멈춘다", "- `cla
 print(" | ".join(bad) or "ok")'
 assert_contains "$OLD_MSG" "--reset" "OldPrRows 메시지를 실제로 얻었다(--reset 명령을 담는다)"
 assert_eq "$(python3 -I -c "$reset_branch_check" "$OLD_MSG" < "$SK")" "ok" "3절: claim rc 3 + 옛 PR 캐시 줄 → reset → release → claim 갈래"
-for mut in '단 `claim_rc=3` 이고|단 claim 이 3 이고' '`옛 판이 쓴 PR 캐시 줄`|`옛 판 PR 줄`' \
+for mut in '단 `claim_rc=3` 이고|단 claim 이 3 이고' '`옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고|`옛 판 PR 줄` 이 있으면 멈추지 않고' \
            'release --roadmap "<로드맵>" --session "$sid" && |' '- `reset_rc=` 가 0 이 아니면|- reset 이 실패하면'; do
   from="${mut%%|*}"; to="${mut#*|}"
   applied="$(grep -cF -- "$from" "$SK")"
@@ -175,6 +175,40 @@ for mut in '단 `claim_rc=3` 이고|단 claim 이 3 이고' '`옛 판이 쓴 PR 
 t = sys.stdin.read()
 print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$reset_branch_check" "$OLD_MSG")"
   [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 갈래 락이 통과한다"
+done
+# 4절도 같은 갈래로 — 다시 채우기가 실패해 표지가 남은 채 같은 세션이 다시 오면 claim 은 held(0)이고 approval · approve 가 3
+approval_branch_check='import re, sys
+t, msg = sys.stdin.read(), sys.argv[1]
+a = t.index("### 4. "); b = t.index("### 5. ")
+s4 = t[a:b]
+bad = []
+lines = s4.splitlines()
+i = next((n for n, l in enumerate(lines) if l.startswith("- 이 펜스나 아래 approve 펜스의 종료 코드가 3 이고")), None)
+j = next((n for n, l in enumerate(lines) if l.startswith("- 종료 코드 0 이 아니면")), None)
+if i is None:
+    bad.append("4절에 옛 줄 갈래가 없다")
+else:
+    m = re.search(r"출력에 `([^`]+)` 이 있으면 묻지도 멈추지도 않고 3 의 「옛 PR 캐시 다시 채우기」 로 간다", lines[i])
+    if not m:
+        bad.append("4절 갈래가 3 의 다시 채우기로 가지 않는다")
+    elif not msg or m.group(1) not in msg:
+        bad.append("4절 갈래의 문구가 OldPrRows 메시지에 없다: %r" % m.group(1))
+    if "`claim_rc=0` 이면 4 를 처음부터 다시 돈다" not in lines[i]:
+        bad.append("4절 갈래가 다시 채운 뒤 4 를 다시 돌지 않는다")
+    if j is None or j < i or "위 옛 줄 갈래는 빼고" not in lines[j]:
+        bad.append("일반 갈래가 옛 줄 갈래 뒤에 있지 않거나 그것을 빼지 않는다")
+if "옛 PR 캐시 다시 채우기 — " not in t[t.index("### 3. "):a]:
+    bad.append("3절에 다시 채우기 펜스가 없다")
+print(" | ".join(bad) or "ok")'
+assert_eq "$(python3 -I -c "$approval_branch_check" "$OLD_MSG" < "$SK")" "ok" "4절: approval · approve 가 3 + 옛 PR 캐시 줄이면 3 의 다시 채우기로"
+for mut in '- 이 펜스나 아래 approve 펜스의 종료 코드가 3 이고|- 종료 코드가 3 이면' 'approve 펜스의 종료 코드가 3 이고 출력에 `옛 판이 쓴 PR 캐시 줄`|approve 펜스의 종료 코드가 3 이고 출력에 `옛 PR 줄`' \
+           ' — 위 옛 줄 갈래는 빼고|'; do
+  from="${mut%%|*}"; to="${mut#*|}"
+  applied="$(grep -cF -- "$from" "$SK")"
+  got="$(python3 -I -c 'import sys
+t = sys.stdin.read()
+print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$approval_branch_check" "$OLD_MSG")"
+  [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 4절 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 4절 갈래 락이 통과한다"
 done
 assert_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
