@@ -24,8 +24,8 @@ if bad:
     for m, e in bad:
         print(f"BAD matcher={m!r} entry={e}", file=sys.stderr)
     sys.exit(1)
-# 양성 대조: Bash matcher 는 위반이 아니다 — 하나는 남아 있어야 한다 (A2).
-if not any(e.get("matcher") == "Bash" for e in entries):
+# 양성 대조: Bash matcher 는 위반이 아니다 — `|` 조각 중 Bash 인 항목이 하나는 남아 있어야 한다 (A2).
+if not any("Bash" in [x.strip() for x in (e.get("matcher") or "").split("|")] for e in entries):
     print("Bash matcher 항목이 사라졌다 — 양성 대조 실패", file=sys.stderr)
     sys.exit(1)
 PY

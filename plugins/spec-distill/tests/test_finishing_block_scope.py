@@ -110,6 +110,21 @@ class FinishingBlockScope(unittest.TestCase):
             "각 펜스는 머리에서 경로를 다시 도출해야 한다 — Bash 도구는 호출마다 새 셸이다."
             % (offenders,))
 
+    def test_superpowers_version_fence_is_scanned(self):
+        """B-1 의 superpowers 판 확인 펜스가 이 락이 재는 펜스 안에 있고, 자기 루트를 스스로 도출한다."""
+        hits = [(s, e, b) for s, e, b in self.fences
+                if any('/scripts/check_deps.py" superpowers --plugin-root' in ln for ln in b)]
+        self.assertEqual(len(hits), 1, "판 확인 펜스를 정확히 하나 찾지 못했다 — 이 락이 그 펜스를 재지 못한다")
+        start, end, body = hits[0]
+        self.assertEqual(unbound_per_fence("```bash\n%s\n```\n" % "\n".join(body)), [],
+                         "판 확인 펜스(%d–%d행)가 앞 펜스의 변수를 쓴다" % (start, end))
+        root = re.match(r'^python3 "\$(\w+)/scripts/check_deps\.py" superpowers --plugin-root "\$(\w+)"', body[-1])
+        if root is None:
+            self.fail("판 확인 펜스의 끝 줄이 check_deps.py superpowers 호출이 아니다")
+        self.assertEqual(root.group(1), root.group(2), "--plugin-root 가 그 펜스의 루트 변수가 아니다")
+        self.assertTrue(any(ln.startswith('%s="${CLAUDE_PLUGIN_ROOT}"' % root.group(1)) for ln in body),
+                        "판 확인 펜스가 루트 변수를 자기 안에서 정의하지 않는다")
+
     def test_redecompose_fences_same_rule(self):
         """같은 꼴(`IFS= read -r` + heredoc · `${TMPDIR:-/tmp}`)의 재분해 적용 펜스도 같은 규칙으로 잰다."""
         red = FIN.parents[3] / "references" / "redecompose.md"

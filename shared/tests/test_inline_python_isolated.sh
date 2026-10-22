@@ -195,6 +195,12 @@ EXEMPT_PATHS=(
   "plugins/spec-distill/scripts/run-test-selection.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
+  "plugins/spec-distill/dependencies.md"
+  "plugins/quality-gates/dependencies.md"
+  "plugins/project-init/dependencies.md"
+  "plugins/plugin-audit/dependencies.md"
+  "plugins/plugin-audit/skills/plugin-audit/SKILL.md"
+  "plugins/project-init/skills/project-init/SKILL.md"
 )
 EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
@@ -202,6 +208,12 @@ EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
   "python3 -m unittest discover"
   'add_why "$cand(python): 러너 비정상 종료'
+  $'\t| python | '
+  $'\t| python | '
+  $'\t| python | '
+  $'\t| python | '
+  'entry --plugin-root "$PA" --need python'
+  'entry --plugin-root "$PI" --need python'
 )
 EXEMPT_REASONS=(
   "차등 테스트의 venv setup 명령 — 리뷰 대상 리포의 setup 을 일부러 돌린다(R22 kill switch 가 막는다)"
@@ -209,6 +221,12 @@ EXEMPT_REASONS=(
   "같은 공유본을 spec-distill 링크 경로로 읽은 줄이다(위 항목과 같은 사유)"
   "감사 대상 플러그인의 자체 테스트를 샌드박스에서 일부러 돌린다(README 의 알려진 한계)"
   "호출이 아니라 실패 사유 문자열 안의 글자다"
+  "호출이 아니라 의존 표의 행 이름이다(check_deps.py 가 읽는 「python」 행). 바늘은 행 머리(탭 뒤 줄 시작)까지만 — 사이의 판 · 날짜 칸이 measure 마다 바뀌어 고정 문자열 바늘에 강도 칸을 넣지 못한다"
+  "같은 사유(의존 표의 「python」 행)"
+  "같은 사유(의존 표의 「python」 행)"
+  "같은 사유(의존 표의 「python」 행)"
+  "호출이 아니라 진입 의존 확인 펜스의 --need 값(의존 이름 python)이다 — 열 진입 펜스가 모두 --plugin-root 뒤에 --need 를 둔다"
+  "같은 사유(진입 의존 확인 펜스의 --need python)"
 )
 
 note "[분류기 — 꼴마다 하나]"
@@ -403,7 +421,11 @@ if [ -n "$NONUTF8" ]; then
   git -C "$REJ" commit -q --allow-empty -m "chore: base"; git -C "$REJ" branch -M main
   git -C "$REJ" checkout -q -b feature/reject
   git -C "$REJ" commit -q --allow-empty -m "feat: reject" -m "Spec: ../outside.md"
-  out="$(cd "$REJ" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
+  # 트레일러가 거부되면 PR 본문을 읽을 차례다 — origin 과 「PR 없음」을 내는 가짜 gh(gh 가 없으면 멈춘다).
+  git -C "$REJ" remote add origin https://github.com/o/r
+  mkdir -p "$TMP/fakegh"
+  printf '#!/bin/sh\necho "no pull requests found" >&2\nexit 1\n' > "$TMP/fakegh/gh"; chmod +x "$TMP/fakegh/gh"
+  out="$(cd "$REJ" && PATH="$TMP/fakegh:$PATH" LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
   assert_contains "$out" '"intent_note": "spec 경로 거부 1개"' "$NONUTF8 — discover-spec.sh 가 한국어 거부 사유를 담은 JSON 을 낸다"
 else
   no "UTF-8 아닌 로케일이 하나도 없어 이 겹을 재지 못했다(셀 수 없음)"

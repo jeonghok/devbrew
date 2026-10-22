@@ -25,22 +25,21 @@ git -C "$R" add -A
 git -C "$R" -c user.email=t@t -c user.name=t commit -q -m "feat: first" -m "Spec: docs/superpowers/specs/old-design.md"
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: second" -m "Spec: docs/superpowers/specs/new-design.md"
 
-# gh 스텁 — 환경 변수로 응답을 고른다
+# gh 스텁 — 환경 변수로 응답을 고른다. `pr view` 는 discover-spec 의 -q 식이 내는 꼴
+# (첫 줄 「상태 탭 head 브랜치 탭 다른 레포 여부」, 그 뒤 본문)을 그대로 흉내 낸다.
 B="$T/bin"; mkdir -p "$B"
 cat > "$B/gh" <<'SH'
 #!/bin/sh
-echo "$*" >> "$GH_LOG"
+printf '%s\n' "$*" >> "$GH_LOG"
 case "$1 $2" in
   "pr view")
-    case "$*" in
-      *"--json state"*) [ -n "${GH_PR_ERR:-}" ] && { echo "$GH_PR_ERR" >&2; exit 1; }; echo "${GH_PR_STATE:-OPEN}" ;;
-      *"--json body"*) echo "${GH_PR_BODY:-}" ;;
-    esac ;;
+    [ -n "${GH_PR_ERR:-}" ] && { printf '%s\n' "$GH_PR_ERR" >&2; exit 1; }
+    printf '%s\t%s\t%s\n%s\n' "${GH_PR_STATE:-OPEN}" "${GH_PR_HEAD:-main}" "${GH_PR_CROSS:-false}" "${GH_PR_BODY:-}" ;;
 esac
 SH
 chmod +x "$B/gh"
 NOGH="$T/nogh"; mkdir -p "$NOGH"
-for c in git python3 sed grep cat mktemp rm dirname bash tail; do ln -s "$(command -v "$c")" "$NOGH/$c"; done
+for c in git python3 sed grep cat mktemp rm dirname bash tail tr; do ln -s "$(command -v "$c")" "$NOGH/$c"; done
 export GH_LOG="$T/gh.log"; : > "$GH_LOG"
 
 run() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$BASE" ); }
@@ -227,23 +226,53 @@ assert_file_grep "$SCRIPT_DIR/../references/review-criteria.md" '^의도 출처�
 assert_file_grep "$SCRIPT_DIR/../references/review-criteria.md" '^의도 출처에 설계문서가 여럿이면\(구분 줄 `<!-- qg-spec k/N: 경로 -->`\), 의도 출처의 요구를 어긴 막는 지적마다 summary 끝 괄호에 근거 문서의 경로와 AC 번호를 단다\(예: `\(docs/a-design\.md AC3\)`\)\.$' \
   "근거 표기 줄은 의도 출처의 요구를 어긴 막는 지적으로 좁혀져 있다"
 
-# 2 — 트레일러 없음 · gh 없음 → 커밋 메시지만, 그 사실을 공시
+# 2 — 트레일러 없음 · gh 없음 → 커밋 메시지로 낮추지 않고 멈춘다(rc 3 · `stop:` 한 줄 · JSON 없음)
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "fix: third (no trailer)"
+git -C "$R" remote add origin https://github.com/me/r
 BASE2="$(git -C "$R" rev-parse HEAD~1)"
 run2() { ( cd "$R" && PATH="$1" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" ); }
-out="$(run2 "$NOGH")"
-assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "트레일러가 없으면 커밋 메시지"
-assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 없음" "gh 가 없으면 그 사실을 싣는다"
-assert_file_grep "$T/intent.md" 'fix: third' "의도 본문에 커밋 메시지가 있다"
+out="$(run2 "$NOGH" 2>/dev/null)"; rc=$?
+assert_eq "$rc" "3" "gh 가 없으면 rc 3 으로 멈춘다"
+assert_eq "$out" "stop: gh 가 없다 — https://cli.github.com 에서 설치한다" "gh 가 없으면 stdout 은 stop: 사유 한 줄(설치 주소)"
+assert_file_grep "$T/intent.md" 'fix: third' "멈춰도 의도 파일의 커밋 메시지는 쓰였다(앞 단계)"
+# origin 이 없으면 gh 가 있어도 멈춘다 — gh 를 부르지 않는다.
+git -C "$R" remote remove origin
+L0="$T/gh-noorigin.log"; : > "$L0"
+out="$(GH_LOG="$L0" run2 "$B:$PATH" 2>/dev/null)"; rc=$?
+assert_eq "$rc:$out" "3:stop: origin URL 에서 호스트 · owner · repo 를 뽑지 못했다 — git remote get-url origin 을 확인한다" \
+  "origin 이 없으면 rc 3 · stop: 사유"
+assert_eq "$(cat "$L0")" "" "origin 이 없으면 gh 를 부르지 않는다"
+git -C "$R" remote add origin https://github.com/me/r
 
-# 3 — 미인증은 gh 오류로 접는다(실측 gh 2.88.1: 미인증 `gh pr view` 는 「gh auth login」 안내를 내고 rc 4)
-out="$(GH_PR_ERR="To get started with GitHub CLI, please run:  gh auth login" run2 "$B:$PATH")"
-assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 오류" "미인증은 gh 오류다 — 따로 가르지 않는다"
+# 3 — 미인증은 첫 gh 호출에서 멈춘다(실측 gh 2.88.1: 미인증 `gh pr view` 는 「gh auth login」 안내를 내고 rc 4)
+out="$(GH_PR_ERR="To get started with GitHub CLI, please run:  gh auth login" run2 "$B:$PATH" 2>/dev/null)"; rc=$?
+assert_eq "$rc:$out" "3:stop: gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다" \
+  "미인증은 rc 3 · stop: 로그인 안내(origin 호스트) — gh 오류로 낮추지 않는다"
+out="$(GH_PR_ERR="HTTP 401: Bad credentials (https://api.github.com/graphql)" run2 "$B:$PATH" 2>/dev/null)"; rc=$?
+assert_eq "$rc" "3" "만료된 토큰(HTTP 401)도 미인증으로 멈춘다"
+# gh 가 origin 레포를 다루지 못하면(GitHub 이 아님 · 레포 없음) 이유를 보이고 멈춘다(AC20).
+out="$(GH_PR_ERR="GraphQL: Could not resolve to a Repository with the name 'me/r'. (repository)" run2 "$B:$PATH" 2>/dev/null)"; rc=$?
+assert_eq "$rc:$out" "3:stop: gh 가 origin(github.com/me/r)을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다(비공개 레포면 접근 권한도 확인한다)" \
+  "origin 레포를 gh 가 못 찾으면 rc 3 · stop: GitHub 인 레포만"
 
-# 4 — 열린 PR 본문
-out="$(GH_PR_BODY="PR 본문의 요구" run2 "$B:$PATH")"
+# 4 — 열린 PR 본문 · origin 명시(upstream 이 있는 fork 에서도 origin)
+git -C "$R" remote add upstream https://github.com/up/r
+L4="$T/gh-fork.log"; : > "$L4"
+out="$(GH_LOG="$L4" GH_PR_BODY="PR 본문의 요구" run2 "$B:$PATH")"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "commits+pr" "열린 PR 이 있으면 commits+pr"
 assert_file_grep "$T/intent.md" 'PR 본문의 요구' "의도 본문에 PR 본문이 있다"
+assert_eq "$(wc -l < "$L4" | tr -d ' ')" "1" "pr view 는 한 번만 부른다(상태 · head · 레포 · 본문을 함께)"
+assert_contains "$(cat "$L4")" "pr view main -R github.com/me/r --json state,body,headRefName,isCrossRepository -q " \
+  "pr view 는 지금 브랜치와 -R origin(github.com/me/r)을 밝히고 head 브랜치 · 다른 레포 여부를 받는다"
+assert_not_contains "$(cat "$L4")" "up/r" "upstream 레포를 넘기지 않는다"
+git -C "$R" remote remove upstream
+# 이름 붙은 브랜치가 없으면(detached HEAD) PR 을 찾지 않는다.
+git -C "$R" checkout -q --detach
+L4d="$T/gh-detached.log"; : > "$L4d"
+out="$(GH_LOG="$L4d" GH_PR_BODY="PR 본문의 요구" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "detached HEAD — PR 안 찾음" "detached HEAD 면 PR 을 찾지 않는다고 알린다"
+assert_eq "$(cat "$L4d")" "" "detached HEAD 면 gh 를 부르지 않는다"
+git -C "$R" checkout -q main
 
 # 5 — PR 없음 · 닫힌 PR
 out="$(GH_PR_ERR="no pull requests found for branch" run2 "$B:$PATH")"
@@ -253,6 +282,27 @@ assert_eq "$(printf '%s' "$out" | key intent_note)" "열린 PR 없음" "머지�
 out="$(GH_PR_ERR="HTTP 502" run2 "$B:$PATH")"
 assert_eq "$(printf '%s' "$out" | key intent_note)" "gh 오류" "그 밖의 gh 실패는 gh 오류"
 
+# 5b — 고른 PR 이 이 브랜치의 것이 아니면 본문을 읽지 않는다(숫자뿐인 브랜치 이름이 PR 번호로 읽힘 · 같은 이름의 fork PR)
+MISM="다른 브랜치 · 레포의 PR — 본문 안 읽음"
+out="$(GH_PR_HEAD=other-branch GH_PR_BODY="남의 PR 본문" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_source):$(printf '%s' "$out" | key intent_note)" "commits:$MISM" \
+  "head 브랜치가 지금 브랜치와 다르면 PR 본문을 쓰지 않는다"
+assert_file_absent "$T/intent.md" '남의 PR 본문' "head 가 다른 PR 의 본문이 의도에 없다"
+out="$(GH_PR_CROSS=true GH_PR_BODY="fork 의 본문" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_source):$(printf '%s' "$out" | key intent_note)" "commits:$MISM" \
+  "다른 레포(fork) PR 이면 PR 본문을 쓰지 않는다"
+assert_file_absent "$T/intent.md" 'fork 의 본문' "fork PR 의 본문이 의도에 없다"
+git -C "$R" branch -q 123 main
+git -C "$R" checkout -q 123
+L5="$T/gh-digits.log"; : > "$L5"
+out="$(GH_LOG="$L5" GH_PR_HEAD=feature/x GH_PR_BODY="PR 7 의 본문" run2 "$B:$PATH")"
+assert_contains "$(cat "$L5")" "pr view 123 -R github.com/me/r " "숫자뿐인 브랜치 이름(123)도 그대로 넘긴다"
+assert_eq "$(printf '%s' "$out" | key intent_note)" "$MISM" "숫자뿐인 브랜치 이름이 PR 번호로 읽혀 다른 PR 이 오면 쓰지 않는다"
+out="$(GH_LOG="$L5" GH_PR_HEAD=123 GH_PR_BODY="브랜치 123 의 PR 본문" run2 "$B:$PATH")"
+assert_eq "$(printf '%s' "$out" | key intent_source)" "commits+pr" "양성 짝: head 가 지금 브랜치(123)이고 같은 레포면 쓴다"
+git -C "$R" checkout -q main
+git -C "$R" branch -q -D 123
+
 # 6 — AC15: gh 는 읽기만 한다
 assert_eq "$(grep -cv '^pr view ' "$GH_LOG")" "0" "gh 호출은 pr view 뿐이다 (AC15 · K-5 — auth status 도 부르지 않는다)"
 assert_grep "$(cat "$GH_LOG")" '^pr view' "양의 짝 — pr view 는 실제로 불렸다"
@@ -260,7 +310,8 @@ assert_grep "$(cat "$GH_LOG")" '^pr view' "양의 짝 — pr view 는 실제로 
 # 7 — AC9: mtime 을 읽지 않는다. 트레일러가 가리키는 파일이 없으면 더 새 spec 이 있어도 고르지 않는다
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: gone" -m "Spec: docs/superpowers/specs/missing-design.md"
 touch "$R/docs/superpowers/specs/new-design.md"
-out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
+# 트레일러가 모두 거부되면 PR 본문을 읽을 차례다 — gh 스텁은 「PR 없음」을 낸다(gh 가 없으면 멈추므로).
+out="$( cd "$R" && GH_PR_ERR="no pull requests found" PATH="$B:$PATH" bash "$D" --intent-out "$T/intent.md" --base "$BASE2" )"
 assert_file_absent "$T/intent.md" '^- new$' "가리킨 파일이 없으면 다른 spec 을 mtime 으로 고르지 않는다"
 assert_eq "$(printf '%s' "$out" | key intent_source)" "commits" "커밋 메시지로 내려간다"
 assert_eq "$(printf '%s' "$out" | key intent_note)" "spec 경로 거부 1개" "가리킨 파일이 없으면 거부로 공시한다(조용히 버리지 않는다)"
@@ -280,7 +331,7 @@ ln -s new-design.md "$R/docs/superpowers/specs/inrepo-link.md"
 # 범위는 방금 만든 커밋 하나다 — 범위 안 트레일러를 전부 읽으므로(AC22) 앞 케이스의 트레일러가 섞이지 않게 한다.
 trailer_case() {  # trailer_case <Spec: 값> → out
   git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "feat: case" -m "Spec: $1"
-  out="$( cd "$R" && PATH="$NOGH" bash "$D" --intent-out "$T/intent.md" --base "$(git -C "$R" rev-parse HEAD~1)" )"
+  out="$( cd "$R" && GH_PR_ERR="no pull requests found" PATH="$B:$PATH" bash "$D" --intent-out "$T/intent.md" --base "$(git -C "$R" rev-parse HEAD~1)" )"
 }
 refused() {  # refused <Spec: 값> <라벨>
   for suffix in "" "#k"; do
@@ -302,7 +353,7 @@ printf 'SECRET=hunter2\n' > "$R/.env"
 printf 'SECRET=hunter2-untracked\n' > "$R/untracked-notes.md"
 printf 'SECRET=hunter2-link\n' > "$R/untracked-target.md"
 ln -s ../../../untracked-target.md "$R/docs/superpowers/specs/link-to-untracked.md"
-git -C "$R" config remote.origin.url "https://user:hunter2-token@example.com/x.git"
+git -C "$R" config remote.origin.url "https://user:hunter2-token@github.com/me/r.git"
 refused ".env" "git-ignored .env"
 refused "untracked-notes.md" "미추적 파일"
 refused ".git/config" ".git/config"

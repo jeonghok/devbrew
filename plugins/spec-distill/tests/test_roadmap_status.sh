@@ -9,8 +9,20 @@ S="$ROOT/plugins/spec-distill/scripts"
 RS="$S/roadmap_status.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
-trap 'rm -rf "$T"' EXIT
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT   # 읽기 전용 행동 검사가 픽스처를 a-w 로 둔다
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+# origin 은 로컬 bare 레포다 — 머지 메시지 길은 origin 소유자가 필요하므로 `git -C <d> remote get-url origin` 만
+# FAKE_ORIGIN_URL 로 답하는 git 을 PATH 앞에 둔다(그 밖의 git 은 그대로). FAKE_ORIGIN_URL 을 비우면 실제 URL 이 나온다.
+mkdir -p "$T/fakebin-origin"
+cat > "$T/fakebin-origin/git" <<SH
+#!/bin/bash
+if [ -n "\${FAKE_ORIGIN_URL:-}" ] && [ "\$1" = "-C" ] && [ "\$3" = "remote" ] && [ "\$4" = "get-url" ] && [ "\$5" = "origin" ]; then
+  printf '%s\n' "\$FAKE_ORIGIN_URL"; exit 0
+fi
+exec "$(command -v git)" "\$@"
+SH
+chmod +x "$T/fakebin-origin/git"
+export PATH="$T/fakebin-origin:$PATH" FAKE_ORIGIN_URL="https://github.com/o/r.git"
 W="$T/work"
 g() { git -C "$W" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false \
         -c init.defaultBranch=main "$@"; }
@@ -269,7 +281,17 @@ assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]"
 assert_eq "$(js "$OUT" "next(b['task_status'] for b in r['blocks'] if b['id']=='H1')")" "in_progress" "작업 목록 대응: 계획 → in_progress"
 txt="$(cd "$W" && python3 "$RS" docs/rm/roadmap.md)"
 assert_grep "$txt" "^로드맵 상태 — 블록 22개 · " "사람용 글 첫 줄이 상태"
-assert_contains "$txt" "머지됨 자동 판정은 merge commit 방식에서만 된다" "한계 공시 줄"
+assert_contains "$txt" "머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지로 알아보고 「PR 상태 미확인」을 보인다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 쓴다" "판정 공시 줄(양의 짝)"
+assert_not_contains "$txt" "merge commit 방식에서만" "옛 공시 「merge commit 방식에서만」 이 없다"
+assert_not_contains "$txt" "squash · rebase 로 머지했거나" "옛 공시 「squash · rebase 로 머지했거나 … 머지 줄을 적는다」 가 없다"
+SDR="$ROOT/plugins/spec-distill"
+assert_contains "$(cat "$SDR/README.md")" "캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지(\`Merge pull request #<n> from <owner>/<브랜치>\`)로 알아보고 「PR 상태 미확인」을 보입니다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 씁니다." "README 상태 계산 줄: 새 규칙(양의 짝)"
+assert_not_contains "$(cat "$SDR/README.md")" "squash · rebase 로 머지했거나" "README: 옛 「squash · rebase 로 머지했거나 … 머지 줄을 적어야」 가 없다"
+assert_not_contains "$(cat "$SDR/README.md")" "merge commit 방식에서만" "README: 옛 「merge commit 방식에서만」 이 없다"
+assert_contains "$(cat "$SDR/templates/roadmap-template.md")" "「머지」 줄은 PR 없이 로컬에서 머지한 에픽에만 적는다" "템플릿 머지 줄 안내: 새 규칙(양의 짝)"
+assert_not_contains "$(cat "$SDR/templates/roadmap-template.md")" "머지 커밋이 없는 에픽은 「머지」 줄로 적는다" "템플릿: 옛 「squash · rebase 로 머지해 … 「머지」 줄로 적는다」 가 없다"
+assert_contains "$(notes "$OUT" A1)" "PR 상태 미확인 — 지휘자를 돌려라(feature/a1)" "캐시 없음: 블록마다 「PR 상태 미확인」 정보 줄"
+assert_not_contains "$(warns "$OUT" A1)" "PR 상태 미확인" "캐시 없음: 「PR 상태 미확인」 은 경고가 아니다"
 assert_contains "$txt" "경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보다" "공시: 겹침 · 위반은 정보"
 assert_contains "$txt" "경로 예약 겹침(정보): 1개" "사람용 글: 겹침은 정보 머리 아래"
 assert_contains "$txt" "    정보: 경로 예약 위반: src/j.txt 은 J1 만 예약했다" "사람용 글: 위반은 「정보:」 줄"
@@ -300,7 +322,7 @@ assert_eq "$(js "$T/info.json" "sum(len(b['warnings']) for b in r['blocks'])")" 
 assert_eq "$rc" "1" "양성 짝: 같은 로드맵에 묶음 없음 경고 하나를 더하면 rc 1"
 assert_contains "$(warns "$T/info-warn.json" L5)" "묶음 없음: docs/rm6/L5.md" "양성 짝: 더한 경고는 L5 의 묶음 없음"
 info_txt="$(cd "$W" && python3 "$RS" --roadmap-file docs/rm5/roadmap.md)"
-assert_grep "$info_txt" "^로드맵 상태 — 블록 3개 · 경고 0개 · 정보 3개 · 검사 불가 0개 " "정보 로드맵 머리 줄: 정보 3개 = I1 위반 2 + 겹침 1(둘 다 센다)"
+assert_grep "$info_txt" "^로드맵 상태 — 블록 3개 · 경고 0개 · 정보 6개 · 검사 불가 0개 " "정보 로드맵 머리 줄: 정보 6개 = I1 위반 2 + 겹침 1 + PR 상태 미확인 3(모두 센다)"
 
 # ── 2. --roadmap-file(작업 트리) 사본 · 번호 대조 검사 불가 · 미배정 · 고아 ─────────
 mkdir -p "$W/docs/rm2"
@@ -404,6 +426,199 @@ LOCAL = set()
 if os.environ.get("LOCAL_DIR"):
     LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}
 ARGS = {os.path.basename(a)[:-3] for a in sys.argv[1:]}
+# 상태 계산이 잠긴 파일 밖에서 이름으로만 가져오는 읽기 함수 — PR 캐시 읽기 · origin 소유자 읽기
+READERS = {"conductor_state": {"MachineError", "machine_path", "parse_machine"},
+           "gh_repo": {"GhStop", "origin_slug"},
+           "state_path": {"state_root_for_common"}}
+
+
+import builtins
+# 읽기 함수 추적은 닫힌 쪽으로 — 아래 목록에 없는 호출은 「따라가지 못한 호출」로 낸다
+BAD_BUILTINS = {"getattr", "setattr", "delattr", "eval", "exec", "compile", "__import__", "globals", "locals", "vars",
+                "breakpoint", "input", "open"}
+SAFE_BUILTINS = set(dir(builtins)) - BAD_BUILTINS
+OS_OK = {"getcwd", "listdir", "fspath", "stat", "lstat", "getpid", "environ.get"}   # os.path.* 은 따로 허용
+MODULE_OK = {("json", "loads"), ("re", "compile"), ("re", "sub"), ("re", "match"), ("re", "fullmatch"), ("re", "search"),
+             ("re", "escape"), ("sys", "path.insert"), ("datetime", "date.fromisoformat"), ("functools", "lru_cache")}
+METHOD_OK = {"strip", "lstrip", "rstrip", "split", "rsplit", "partition", "rpartition", "startswith", "endswith", "lower",
+             "upper", "casefold", "join", "format", "encode", "decode", "splitlines", "count", "find", "index", "get",
+             "items", "keys", "values", "append", "extend", "add", "update", "pop", "setdefault", "copy", "group", "groups",
+             "match", "fullmatch", "search", "finditer", "findall", "sub", "resolve", "exists", "is_file", "is_dir",
+             "is_symlink", "read_text", "relative_to", "with_suffix", "insert", "isascii", "isalnum", "isdigit"}
+_MODS, _IMPORT_SCANNED = {}, set()
+
+
+def module(mod):
+    """(트리, 함수, 모듈 별칭 → 모듈, 가져온 이름 → (모듈, 원래 이름), 클래스, async 함수)."""
+    if mod not in _MODS:
+        tree = ast.parse(open(os.path.join(os.environ["LOCAL_DIR"], mod + ".py"), encoding="utf-8").read())
+        mods, names = {}, {}
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    mods[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+            elif isinstance(n, ast.ImportFrom) and n.module:
+                for a in n.names:
+                    names[a.asname or a.name] = (n.module.split(".")[0], a.name)
+        top = tree.body
+        _MODS[mod] = (tree, {n.name: n for n in top if isinstance(n, ast.FunctionDef)}, mods, names,
+                      {n.name: n for n in top if isinstance(n, ast.ClassDef)},
+                      {n.name for n in top if isinstance(n, ast.AsyncFunctionDef)})
+    return _MODS[mod]
+
+
+def open_mode(node, is_method):
+    pos = (node.args[0] if node.args else None) if is_method else (node.args[1] if len(node.args) > 1 else None)
+    for kw in node.keywords:
+        if kw.arg == "mode":
+            pos = kw.value
+    if pos is None:
+        return None
+    if not isinstance(pos, ast.Constant):
+        return "금지 호출 open(모드 알 수 없음)"
+    return "금지 호출 open(%s)" % pos.value if set(str(pos.value)) & set("wax+") else None
+
+
+def argv_bad(node):
+    """subprocess 인자는 [git, -C, <경로>, remote, get-url, origin] 꼴 하나만."""
+    first = node.args[0] if node.args else None
+    elts = first.elts if isinstance(first, (ast.List, ast.Tuple)) else []
+    ok = (len(elts) == 6 and not isinstance(elts[2], ast.Starred)
+          and [getattr(e, "value", None) for i, e in enumerate(elts) if i != 2]
+          == ["git", "-C", "remote", "get-url", "origin"])
+    return None if ok else "금지 호출 git … remote get-url origin 이 아닌 subprocess"
+
+
+def dotted(f):
+    parts = []
+    while isinstance(f, ast.Attribute):
+        parts.append(f.attr)
+        f = f.value
+    return ".".join([f.id] + parts[::-1]) if isinstance(f, ast.Name) else None
+
+
+def inspect_call(node, mod):
+    """(금지 · 따라가지 못한 호출 | None, 따라갈 (모듈, 이름) | None)."""
+    _tree, funcs, mods, names, classes, asyncs = module(mod)
+    f = node.func
+    if isinstance(f, ast.Name):
+        if f.id in names:
+            src, orig = names[f.id]
+            if src == "subprocess":
+                return argv_bad(node), None
+            if src in LOCAL:
+                return None, (src, orig)
+            return (None if (src, orig) == ("pathlib", "Path") else "금지 호출 가져온 이름 %s(%s)" % (f.id, src)), None
+        if f.id in funcs or f.id in classes:
+            return None, (mod, f.id)
+        if f.id in asyncs:
+            return "따라가지 못한 호출 %s(async)" % f.id, None
+        if f.id == "open":
+            return open_mode(node, False), None
+        if f.id in BAD_BUILTINS:
+            return "금지 호출 %s" % f.id, None
+        return (None if f.id in SAFE_BUILTINS else "따라가지 못한 호출 %s" % f.id), None
+    if isinstance(f, ast.Attribute):
+        d = dotted(f)
+        root = d.split(".", 1)[0] if d else None
+        if root in mods:
+            src, rest = mods[root], d.split(".", 1)[1]
+            if src == "subprocess":
+                return argv_bad(node), None
+            if src == "os":
+                return (None if rest in OS_OK or rest.startswith("path.") else "금지 호출 os.%s" % rest), None
+            if src in LOCAL:
+                if "." not in rest:
+                    return None, (src, rest)
+                return (None if f.attr in METHOD_OK else "따라가지 못한 호출 %s" % d), None
+            return (None if (src, rest) in MODULE_OK else "따라가지 못한 호출 %s.%s" % (src, rest)), None
+        if f.attr in WRITE_ATTRS:
+            return "금지 호출 %s" % f.attr, None
+        if f.attr == "open":
+            return open_mode(node, True), None
+        return (None if f.attr in METHOD_OK else "따라가지 못한 호출 .%s" % f.attr), None
+    return "따라가지 못한 호출 %s" % type(f).__name__, None
+
+
+def is_main_guard(stmt):
+    t = stmt.test if isinstance(stmt, ast.If) else None
+    return (isinstance(t, ast.Compare) and isinstance(t.left, ast.Name) and t.left.id == "__name__"
+            and len(t.ops) == 1 and isinstance(t.ops[0], ast.Eq) and len(t.comparators) == 1
+            and isinstance(t.comparators[0], ast.Constant) and t.comparators[0].value == "__main__")
+
+
+def def_header(fn):
+    """def 의 가져올 때 도는 부분 — 장식자 · 기본 인자 값."""
+    return fn.decorator_list + fn.args.defaults + [d for d in fn.args.kw_defaults if d is not None]
+
+
+def import_time_nodes(tree):
+    """가져올 때 도는 노드 — 함수 몸 · 정확히 `if __name__ == "__main__":` 인 블록은 빼고 장식자 · 기본 인자 · 클래스 몸은 넣는다."""
+    for stmt in tree.body:
+        if is_main_guard(stmt):
+            continue
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            parts = def_header(stmt)
+        elif isinstance(stmt, ast.ClassDef):
+            parts = stmt.decorator_list + stmt.bases + [k.value for k in stmt.keywords]
+            for s in stmt.body:
+                parts += def_header(s) if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)) else [s]
+        else:
+            parts = [stmt]
+        for p in parts:
+            yield from ast.walk(p)
+
+
+def reader_writes(mod, names):
+    """mod 의 names 와 그것이 부르는 함수 · 클래스(같은 모듈 · 가져온 로컬 모듈, 재귀), 그리고 mod 와 그 모듈이 가져오는
+    로컬 모듈의 가져올 때 도는 노드에서 금지 호출과 따라가지 못한 호출을 찾는다."""
+    out, seen, todo = [], set(), [(mod, n) for n in names]
+    closure, stack = [], [mod]
+    while stack:
+        m = stack.pop()
+        if m in closure or m in _IMPORT_SCANNED:
+            continue
+        closure.append(m)
+        # 가져올 때 도는 import 만 따라간다. 함수 안 import 는 따라가지 않는다 — 그렇게 가져온 이름을 부르면
+        # 「따라가지 못한 호출」로 잡히지만, 그 모듈의 가져올 때 도는 코드는 여기서 재지 않는다(행동 검사가 덮는다).
+        for n in import_time_nodes(module(m)[0]):
+            if isinstance(n, ast.Import):
+                stack += [a.name.split(".")[0] for a in n.names if a.name.split(".")[0] in LOCAL]
+            elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] in LOCAL:
+                stack.append(n.module.split(".")[0])
+    for m in closure:
+        _IMPORT_SCANNED.add(m)
+        for node in import_time_nodes(module(m)[0]):
+            if isinstance(node, ast.Call):
+                what, follow = inspect_call(node, m)
+                if what:
+                    out.append("가져올 때 도는 %s 의 %d줄에 %s" % (m, node.lineno, what))
+                if follow:
+                    todo.append(follow)
+    while todo:
+        m, name = todo.pop()
+        if (m, name) in seen:
+            continue
+        seen.add((m, name))
+        _t, funcs, _mods, imported, classes, _a = module(m)
+        if name in funcs or name in classes:
+            target = funcs.get(name) or classes[name]   # 클래스는 몸 전체(메서드 포함)를 잰다
+        elif name in imported and imported[name][0] in LOCAL:
+            todo.append(imported[name])
+            continue
+        else:
+            out.append("따라가지 못한 호출 %s.%s" % (m, name))
+            continue
+        for node in ast.walk(target):
+            if isinstance(node, ast.Call):
+                what, follow = inspect_call(node, m)
+                if what:
+                    out.append("읽기 함수 %s.%s 에 %s(%d줄)" % (m, name, what, node.lineno))
+                if follow:
+                    todo.append(follow)
+    return out
+
+
 count = 0
 for path in sys.argv[1:]:
     count += 1
@@ -432,7 +647,13 @@ for path in sys.argv[1:]:
                 if mod.split(".")[0] in NET_MODS:
                     print("%s:%d: 네트워크 · 파일 조작 모듈 %s" % (path, node.lineno, mod))
                 if mod.split(".")[0] in LOCAL and mod.split(".")[0] not in ARGS:
-                    print("%s:%d: 잠긴 파일 밖 로컬 모듈 import %s" % (path, node.lineno, mod))
+                    names = {a.name for a in node.names} if isinstance(node, ast.ImportFrom) else None
+                    if (os.path.basename(path) == "roadmap_status.py" and mod in READERS and names is not None
+                            and names <= READERS[mod]):
+                        for line in reader_writes(mod, names):   # 이름으로 허용한 읽기 함수 — 그 몸과 부르는 같은 모듈 함수에 쓰기가 없다
+                            print("%s:%d: %s" % (path, node.lineno, line))
+                    else:
+                        print("%s:%d: 잠긴 파일 밖 로컬 모듈 import %s" % (path, node.lineno, mod))
         if isinstance(node, ast.Call):
             f = node.func
             name = getattr(f, "attr", getattr(f, "id", ""))
@@ -483,6 +704,74 @@ printf 'import subprocess\nsubprocess.run(["ls"])\n' > "$T/ctl_run.py"
 assert_contains "$(static_check "$T/ctl_run.py")" "git 이 아닌 subprocess" "양성 대조: git 밖 subprocess.run 을 잡는다"
 printf 'import conductor_state\n' > "$T/ctl_local.py"
 assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 잠긴 파일 밖 로컬 모듈 import 를 잡는다"
+# 상태 계산은 잠긴 파일 밖에서 읽기 함수만 이름으로 가져온다(PR 캐시 · origin 소유자) — 허용 밖 이름 · 모듈째 import · 다른 파일은 잡는다
+mkdir -p "$T/ctlrs" "$T/ctlmods"
+assert_contains "$(cat "$RS")" "from conductor_state import MachineError, machine_path, parse_machine" "양의 짝: 상태 계산이 PR 캐시 읽기 함수를 이름으로 가져온다"
+assert_contains "$(cat "$RS")" "from gh_repo import GhStop, origin_slug" "양의 짝: 상태 계산이 origin 소유자 읽기 함수를 이름으로 가져온다"
+printf 'from conductor_state import parse_machine, save\n' > "$T/ctlrs/roadmap_status.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 허용 밖 이름(save)을 함께 가져오면 잡는다"
+printf 'import gh_repo\n' > "$T/ctlrs/roadmap_status.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 모듈째 import 는 잡는다"
+printf 'from gh_repo import gh_json\n' > "$T/ctlrs/roadmap_status.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: gh 를 부르는 gh_json 은 잡는다"
+printf 'from gh_repo import origin_slug\n' > "$T/ctl_other.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_other.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 허용은 상태 계산 파일에만"
+ctl_reader() {  # ctl_reader <이름> <모듈 파일> <옛 글> <새 글> [<옛 글> <새 글>] — 사본의 읽기 모듈을 바꾸고 정적 검사 출력을 낸다(글의 \n 은 줄바꿈)
+  local d="$T/ctlmods/$1" f="$2"; shift 2
+  mkdir -p "$d" && cp "$S"/*.py "$d/"
+  python3 -I -c 'import sys
+p, pairs = sys.argv[1], sys.argv[2:]
+s = open(p, encoding="utf-8").read()
+for old, new in zip(pairs[::2], pairs[1::2]):
+    old, new = old.replace("\\n", "\n"), new.replace("\\n", "\n")
+    if s.count(old) != 1:
+        sys.exit("변이 자리 %d개: %r" % (s.count(old), old))
+    s = s.replace(old, new)
+open(p, "w", encoding="utf-8").write(s)' "$d/$f" "$@" || { no "변이 적용 안 됨($f)"; return; }
+  LOCAL_DIR="$d" static_check "$RS"
+}
+ctl_out="$(ctl_reader own conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    Path("x").write_text("y", encoding="utf-8")\n')"
+assert_contains "$ctl_out" "읽기 함수 conductor_state.own_version 에 금지 호출 write_text" "양성 대조: parse_machine 이 부르는 함수의 쓰기까지 따라가 잡는다"
+ctl_out="$(ctl_reader imported conductor_state.py 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n' 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n    _atomic_write(Path("."), "x", "y")\n')"
+assert_contains "$ctl_out" "읽기 함수 ledger_marker._atomic_write 에 금지 호출 os.open" "양성 대조: 읽기 함수가 가져온 이름(_atomic_write)을 부르면 그 모듈까지 따라가 잡는다"
+ctl_out="$(ctl_reader argv gh_repo.py '["git", "-C", str(cwd), "remote", "get-url", "origin"]' '["git", "-C", str(cwd), "fetch"]')"
+assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: origin_slug 의 git 이 remote get-url origin 이 아니면 잡는다"
+ctl_out="$(ctl_reader oswrite conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    os.write(os.open("x", os.O_WRONLY), b"y")\n')"
+assert_contains "$ctl_out" "금지 호출 os.open" "양성 대조: os.open 을 잡는다"
+assert_contains "$ctl_out" "금지 호출 os.write" "양성 대조: os.write 를 잡는다"
+ctl_out="$(ctl_reader fromalias gh_repo.py 'import sys\n' 'import sys\nfrom subprocess import run as _r\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    _r(["ls"])\n')"
+assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: from subprocess import run as 별칭을 풀어 잡는다"
+ctl_out="$(ctl_reader modalias gh_repo.py 'import sys\n' 'import sys\nimport subprocess as sp\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    sp.call(["ls"])\n')"
+assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: import subprocess as 별칭을 풀어 잡는다"
+ctl_out="$(ctl_reader toplevel gh_repo.py 'ENV_NAMES = ("GH_REPO", "GH_HOST")\n' 'ENV_NAMES = ("GH_REPO", "GH_HOST")\nopen("x", "w", encoding="utf-8").close()\n')"
+assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 읽기 모듈의 가져올 때 도는 문장을 잰다"
+ctl_out="$(ctl_reader toplevel2 ledger_marker.py 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\n' 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\nos.makedirs("x")\n')"
+assert_contains "$ctl_out" "가져올 때 도는 ledger_marker 의" "양성 대조: 읽기 모듈이 가져오는 로컬 모듈의 가져올 때 도는 문장도 잰다"
+# 닫힌 쪽 추적 — 목록에 없는 호출은 「따라가지 못한 호출」, 클래스는 몸 전체
+OV='def own_version() -> str:\n'
+PM='def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n'
+ctl_own() {  # ctl_own <이름> <own_version 첫 줄에 넣을 문장> <기대 문구> <설명>
+  assert_contains "$(ctl_reader "$1" conductor_state.py "$OV" "${OV}    $2\n")" "$3" "양성 대조: $4"
+}
+ctl_out="$(ctl_reader cls conductor_state.py "$PM" 'class _W:\n    def __init__(self):\n        Path("x").write_text("y", encoding="utf-8")\n\n\n'"${PM}"'    _W()\n')"
+assert_contains "$ctl_out" "읽기 함수 conductor_state._W 에 금지 호출 write_text" "양성 대조: 로컬 클래스를 부르면 클래스 몸(__init__)까지 잰다"
+ctl_out="$(ctl_reader async conductor_state.py "$PM" 'async def _a():\n    pass\n\n\n'"${PM}"'    _a()\n')"
+assert_contains "$ctl_out" "따라가지 못한 호출 _a(async)" "양성 대조: async 함수는 따라가지 못한 호출"
+ctl_own symlink 'os.symlink("a", "b")' "금지 호출 os.symlink" "os 는 허용 목록 밖이면 잡는다(symlink)"
+ctl_own lambda '(lambda: 0)()' "따라가지 못한 호출 Lambda" "모양을 모르는 호출은 따라가지 못한 호출"
+ctl_own method '"".zfill(3)' "따라가지 못한 호출 .zfill" "목록 밖 메서드는 따라가지 못한 호출"
+ctl_own constcall 'SEP()' "따라가지 못한 호출 SEP" "함수 · 클래스가 아닌 이름을 부르면 따라가지 못한 호출"
+ctl_own mode 'open("x", MARKER)' "금지 호출 open(모드 알 수 없음)" "open 모드가 글자가 아니면 잡는다"
+ctl_own getattr 'getattr(os, "remove")' "금지 호출 getattr" "getattr 을 잡는다"
+ctl_own exec 'exec("x = 1")' "금지 호출 exec" "exec 를 잡는다"
+ctl_out="$(ctl_reader pathalias gh_repo.py 'import sys\n' 'import sys\nfrom shutil import rmtree as Path\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    Path("x")\n')"
+assert_contains "$ctl_out" "금지 호출 가져온 이름 Path(shutil)" "양성 대조: Path 허용은 pathlib 의 Path 만"
+ctl_out="$(ctl_reader importlib gh_repo.py 'import sys\n' 'import sys\nimport importlib\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    importlib.import_module("os")\n')"
+assert_contains "$ctl_out" "따라가지 못한 호출 importlib.import_module" "양성 대조: importlib 를 잡는다"
+ctl_out="$(ctl_reader default gh_repo.py 'def gh_exe() -> str:\n' 'def gh_exe(_x=open("x", "w")) -> str:\n')"
+assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 기본 인자 값은 가져올 때 돈다"
+ctl_out="$(ctl_reader guard gh_repo.py 'if __name__ == "__main__":\n' 'if __name__ == "__main__" or True:\n')"
+assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 정확히 __name__ == \"__main__\" 인 블록만 뺀다"
 printf 'from subprocess import run\n' > "$T/ctl_from.py"
 assert_contains "$(static_check "$T/ctl_from.py")" "subprocess 를 이름으로 import" "양성 대조: from subprocess import 를 잡는다"
 # 네트워크 축 — 원격 대조(ls-remote)는 repo_defaults.py 의 NET_GIT_ALLOWED 하나 · check_remote_head 안에서만 쓰고,
@@ -563,12 +852,13 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" \
+  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$M/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
 assert_eq "$(stage "$T/mfp.json" U1)" "머지됨" "변이: --first-parent 를 빼면 U1 이 머지됨 — 위 U1 단언에 이빨이 있다"
-sed 's/if m and m.group(1) == branch:/if m and m.group(1).startswith(branch):/' "$RS" > "$M/roadmap_status.py"
+sed 's/and m.group(2) == branch:/and m.group(2).startswith(branch):/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(정확히 같음)" || ok "변이 적용됨(정확히 같음)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mpx.json")
 assert_eq "$(stage "$T/mpx.json" E1)" "머지됨" "변이: 정확히 같음을 앞부분 같음으로 바꾸면 E1 이 머지됨 — E1 단언에 이빨이 있다"
@@ -615,7 +905,8 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" \
+  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")
@@ -1090,6 +1381,7 @@ assert_eq "$(grep -c '^- 브랜치: feature/e6a$' "$W/docs/rm6/roadmap.md")" "1"
 assert_eq "$(stage "$T/rm6.json" E6)" "일부 머지 1/2" "수리 4: 다른 브랜치의 로드맵 사본이 더한 계획 브랜치가 남았으면 머지됨이 아니다"
 assert_contains "$(js "$T/rm6.json" "next(b['reason'] for b in r['blocks'] if b['id']=='E6')")" "feature/e6b — 계획" "수리 4: 남은 계획 브랜치의 단계를 보인다"
 assert_contains "$(notes "$T/rm6.json" E6)" "feature/e6b" "수리 4: 블록 밖에서 센 브랜치를 정보로 밝힌다"
+assert_contains "$(notes "$T/rm6.json" E6)" "PR 상태 미확인 — 지휘자를 돌려라(feature/e6b)" "사본이 더한 브랜치도 캐시 줄이 없으면 「PR 상태 미확인」"
 assert_eq "$(js "$T/rm6.json" "next(b['branches'] for b in r['blocks'] if b['id']=='E6')")" "['feature/e6a', 'feature/e6b']" "수리 4: 보고서 branches 에 더한 브랜치가 실린다(PR 인계 · 통합 리뷰 묶음이 읽는다)"
 assert_eq "$(js "$T/rm6.json" "next(b['task_status'] for b in r['blocks'] if b['id']=='E6')")" "in_progress" "수리 4: 작업 목록은 진행 중"
 # 양성 짝 — 그 브랜치가 없으면(지웠거나 아직 안 만든 이름) 머지됨 그대로
@@ -1101,6 +1393,7 @@ g checkout -q main
 (cd "$W" && python3 "$RS" --json docs/rm6/roadmap.md > "$T/rm6b.json")
 assert_eq "$(stage "$T/rm6b.json" E6)" "머지됨" "수리 4 양성 짝: 사본에만 있는 이름의 브랜치가 없으면 머지됨"
 assert_eq "$(js "$T/rm6b.json" "next(b['branches'] for b in r['blocks'] if b['id']=='E6')")" "['feature/e6a']" "수리 4 양성 짝: 없는 브랜치는 branches 에 더하지 않는다"
+assert_not_contains "$(notes "$T/rm6b.json" E6)" "feature/e6z" "사본에만 있고 ref 가 없는 이름에는 「PR 상태 미확인」 을 달지 않는다"
 # 양성 짝 — 더한 브랜치가 기본 브랜치에 머지됐으면(그 로드맵 사본도 함께 머지됨) 2/2 머지됨
 g branch -q -m feature/e6b-kept feature/e6b
 g branch -q -D feature/e6c
@@ -1153,6 +1446,348 @@ at="$(g rev-parse origin/HEAD | cut -c1-8)"
 assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['specs_dir']")" "레포 설정@${at}" "레포 설정 파일이 기본 브랜치에 있으면 specs_dir 출처가 레포 설정@<커밋 8자>"
 assert_eq "$(js "$T/rm21-repo.json" "r['settings']['sources']['test_command']")" "기본값" "레포 설정 파일에 없는 키는 기본값 그대로"
 assert_eq "$(stage "$T/rm21-repo.json" F21)" "일부 머지 1/2" "레포 설정 파일이 같은 값이면 단계 판정은 그대로"
+
+# ── R8 AC14 · AC15 — 머지됨은 PR 캐시(기계 상태 `## PR`)로 판정한다 ─────────────────────────────
+g checkout -q main
+sq() {  # sq <브랜치> — 브랜치를 기본 브랜치에 squash 로 머지한다(머지 커밋 없음)
+  g checkout -q main && g merge -q --squash "$1" >/dev/null && g commit -qm "$1 (squash)"
+}
+# S30 — squash 머지, 브랜치는 남음 · 손 머지 줄 없음
+g checkout -q -b feature/s30 main; commit_file src/s30.txt s "s30"; S30_TIP="$(g rev-parse HEAD)"; sq feature/s30; S30_MC="$(g rev-parse HEAD)"
+approved_spec() {  # approved_spec <경로> <source_interview> — `## 지휘 기록` 에 spec 승인 줄이 있는 설계문서를 커밋한다
+  commit_file "$1" "$(spec_doc "$2" C1)$(printf '\n| S1 | 반영 | §1 |\n\n## 지휘 기록\n\n- spec 승인 · 2026-10-20 · 「승인」')" "spec $1"
+}
+# B30 — 승인된 설계문서를 담아 squash 머지 뒤 브랜치를 지움(시작한 에픽 — 캐시의 headRefOid 로 판정)
+g checkout -q -b feature/b30 main; approved_spec docs/superpowers/specs/b30-design.md docs/rm30/B30.md; commit_file src/b30.txt b "b30"; B30_TIP="$(g rev-parse HEAD)"; sq feature/b30; B30_MC="$(g rev-parse HEAD)"; g branch -q -D feature/b30
+# D30 — 내 PR 은 열림 · 같은 head 이름의 fork PR 이 머지됐고 기본 브랜치에 닿는다(캐시의 마지막 줄)
+g checkout -q -b feature/d30 main; commit_file src/d30.txt d "d30"; D30_TIP="$(g rev-parse HEAD)"; sq feature/d30; D30_MC="$(g rev-parse HEAD)"
+# K30 — 내 레포 PR 이 release 로 머지됨(기본 브랜치가 아닌 base)
+g checkout -q -b feature/k30 main; commit_file src/k30.txt k "k30"; K30_TIP="$(g rev-parse HEAD)"; sq feature/k30; K30_MC="$(g rev-parse HEAD)"
+# Y30 — squash 머지 뒤 로컬에만 커밋이 더 붙음(원격 끝은 머지한 끝)
+g checkout -q -b feature/y30 main; commit_file src/y30.txt y "y30"; Y30_TIP="$(g rev-parse HEAD)"; g push -q origin feature/y30; sq feature/y30; Y30_MC="$(g rev-parse HEAD)"
+g checkout -q feature/y30; commit_file src/y30.txt y2 "y30 더"
+# N30 — gh 는 머지됐다는데 mergeCommit 을 아직 받지 않았다 → 받기 전 · 의존하는 O30 은 대기
+g checkout -q -b feature/n30 main; commit_file src/n30.txt n "n30"; N30_TIP="$(g rev-parse HEAD)"; N30_MC="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+# R30 — squash 머지 뒤 되돌림
+g checkout -q -b feature/r30 main; commit_file src/r30.txt r "r30"; R30_TIP="$(g rev-parse HEAD)"; sq feature/r30; R30_MC="$(g rev-parse HEAD)"; g revert --no-edit "$R30_MC" >/dev/null; R30_REV="$(g rev-parse HEAD)"
+# M30 — PR 캐시에 줄이 있는데 결정 기록에도 머지 줄이 있다(PR 은 열림 · 브랜치 지움)
+g checkout -q -b feature/m30 main; commit_file src/m30.txt m "m30"; M30_TIP="$(g rev-parse HEAD)"; g checkout -q main; g branch -q -D feature/m30
+# G30 — 캐시 줄 없음 · 남의 owner 머지 메시지 · 브랜치 지움 / H30 — 같은 꼴, 이 레포 owner(양의 짝)
+g checkout -q -b feature/g30 main; commit_file src/g30.txt g "g30"; g checkout -q main
+g merge -q --no-ff feature/g30 -m "Merge pull request #3 from other/feature/g30"; g branch -q -D feature/g30
+g checkout -q -b feature/h30 main; commit_file src/h30.txt h "h30"; g checkout -q main
+g merge -q --no-ff feature/h30 -m "Merge pull request #4 from o/feature/h30"; g branch -q -D feature/h30
+g push -q origin main; g fetch -q origin
+mkdir -p "$W/docs/rm30"
+for b in S30 B30 D30 K30 Y30 N30 O30 R30 M30 G30 H30; do bundle docs/rm30 "$b" "C1, S1"; done
+bundle docs/rm30 S30 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head
+  for b in S30 B30 D30 K30 Y30 N30 R30 M30 G30 H30; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  block O30 feature/o30 N30 없음
+  roadmap_tail "$(printf -- '- M30 · 머지 · 2026-10-20 · 「로컬에서 머지했다」')"
+} > "$W/docs/rm30/roadmap.md"
+MD30="$W/.claude/spec-distill/conductor/rm30"; mkdir -p "$MD30"
+# 줄: 브랜치|번호|상태|headRefOid|교차 레포|baseRefName|mergeCommit — fork 줄은 그 브랜치의 마지막 줄이다
+{ printf 'feature/s30|#31|머지됨|%s|아니오|main|%s\n' "$S30_TIP" "$S30_MC"
+  printf 'feature/s30|#90|머지됨|%s|예|main|%s\n' "$S30_TIP" "$K30_MC"
+  printf 'feature/b30|#32|머지됨|%s|아니오|main|%s\n' "$B30_TIP" "$B30_MC"
+  printf 'feature/d30|#33|열림|%s|아니오|main|-\n' "$D30_TIP"
+  printf 'feature/d30|#91|머지됨|%s|예|main|%s\n' "$D30_TIP" "$D30_MC"
+  printf 'feature/k30|#34|머지됨|%s|아니오|release|%s\n' "$K30_TIP" "$K30_MC"
+  printf 'feature/y30|#35|머지됨|%s|아니오|main|%s\n' "$Y30_TIP" "$Y30_MC"
+  printf 'feature/n30|#36|머지됨|%s|아니오|main|%s\n' "$N30_TIP" "$N30_MC"
+  printf 'feature/r30|#37|머지됨|%s|아니오|main|%s\n' "$R30_TIP" "$R30_MC"
+  printf 'feature/m30|#38|열림|%s|아니오|main|-\n' "$M30_TIP"
+} > "$T/rows30"
+write_machine() {  # write_machine <machine.md> <로드맵 레포 상대경로> <줄 파일>
+  python3 -I - "$S" "$1" "$2" "$3" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_state as cs
+data = cs.empty()
+for line in open(sys.argv[4], encoding="utf-8").read().splitlines():
+    br, num, state, oid, cross, base, merge = line.split("|")
+    data["PR"].append({"브랜치": br, "번호": num, "상태": state, "확인한 때": "2026-10-20 10:00", "headRefOid": oid,
+                       "교차 레포": cross, "baseRefName": base, "mergeCommit": merge, "쓴 세션": "session-aaaa1111"})
+open(sys.argv[2], "w", encoding="utf-8").write(cs.render_machine(sys.argv[3], data))
+PY
+}
+write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30.json"); rc=$?
+reason() { js "$1" "next(b['reason'] for b in r['blocks'] if b['id']=='$2')"; }
+assert_eq "$(stage "$T/rm30.json" S30)" "머지됨" "AC14: squash 머지(머지 커밋 없음) + PR 캐시 → 손 머지 줄 없이 머지됨"
+assert_contains "$(reason "$T/rm30.json" S30)" "PR #31 머지됨(mergeCommit ${S30_MC:0:8})" "AC14: 근거는 내 레포 PR — 뒤에 적힌 같은 이름의 fork 줄(#90)이 아니다"
+assert_not_contains "$(notes "$T/rm30.json" S30)" "PR 상태 미확인" "AC14: 캐시에 줄이 있으면 「PR 상태 미확인」 이 없다"
+assert_eq "$(stage "$T/rm30.json" B30)" "머지됨" "AC15: 시작한 에픽(승인된 설계문서가 기본 브랜치에)의 지운 브랜치는 캐시의 headRefOid 로 판정"
+assert_contains "$(notes "$T/rm30.json" B30)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${B30_TIP:0:8}" "AC15: 지운 브랜치는 「브랜치 끝 없이 판정」 을 알린다"
+assert_eq "$(stage "$T/rm30.json" D30)" "설계 중" "AC15: 같은 head 이름의 fork PR(마지막 줄 · 끝 같음 · 기본 브랜치에 닿음)은 머지됨을 정하지 않는다"
+assert_eq "$(stage "$T/rm30.json" K30)" "설계 중" "AC15: 기본 브랜치가 아닌 base(release)로 머지된 PR 은 머지됨이 아니다"
+assert_eq "$(stage "$T/rm30.json" Y30)" "설계 중" "AC15: 머지 뒤 로컬에만 커밋이 더 붙은 브랜치는 머지됨이 아니다"
+assert_contains "$(notes "$T/rm30.json" Y30)" "로컬 끝 $(g rev-parse feature/y30 | cut -c1-8) · 원격 끝 ${Y30_TIP:0:8}" "로컬 · 원격 끝이 다르면 둘 다 보인다"
+assert_eq "$(stage "$T/rm30.json" N30)" "설계 중" "AC14: 「머지됨(받기 전)」 은 단계가 아니다 — 단계는 그 전 계산대로"
+assert_contains "$(warns "$T/rm30.json" N30)" "머지됨(받기 전) — git fetch 뒤 다시 계산한다(PR #36)" "AC14: 받기 전은 경고와 git fetch 안내"
+assert_eq "$(stage "$T/rm30.json" O30)" "대기" "AC14: 「머지됨(받기 전)」 블록에 의존하는 블록은 대기(끝난 단계로 세지 않는다)"
+assert_eq "$(stage "$T/rm30.json" R30)" "머지됨" "되돌림은 단계를 바꾸지 않는다"
+assert_contains "$(warns "$T/rm30.json" R30)" "머지 뒤 되돌림 — ${R30_REV:0:8} 이 feature/r30 의 머지 커밋 ${R30_MC:0:8} 을 되돌렸다" "되돌림은 알린다"
+assert_eq "$(stage "$T/rm30.json" M30)" "준비" "PR 캐시에 줄이 있으면 결정 기록의 머지 줄을 쓰지 않는다"
+assert_contains "$(warns "$T/rm30.json" M30)" "결정 기록의 머지 줄을 feature/m30 에 적용하지 않았다 — PR 캐시에 그 브랜치의 PR 이 있어" "적용하지 않은 머지 줄은 경고로 밝힌다"
+assert_eq "$(stage "$T/rm30.json" G30)" "준비" "캐시 없음: 남의 owner 머지 메시지(other/feature/g30)는 세지 않는다"
+assert_contains "$(notes "$T/rm30.json" G30)" "PR 상태 미확인 — 지휘자를 돌려라(feature/g30)" "캐시 없음: 「PR 상태 미확인」"
+assert_eq "$(stage "$T/rm30.json" H30)" "머지됨" "캐시 없음 양의 짝: 이 레포 owner 머지 메시지(o/feature/h30)는 센다"
+assert_eq "$rc" "1" "PR 캐시 로드맵: 경고(받기 전 · 되돌림 · 머지 줄)만 있으면 rc 1"
+# 「PR 0개」 줄(지휘자가 PR 이 없다고 확인함) — 미확인을 달지 않고, 로컬 머지 판정은 그대로
+{ cat "$T/rows30"; printf 'feature/g30|-|PR 0개|-|-|-|-\nfeature/h30|-|PR 0개|-|-|-|-\n'; } > "$T/rows30m"
+write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30m"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30m.json")
+assert_not_contains "$(notes "$T/rm30m.json" G30)" "PR 상태 미확인" "「PR 0개」 줄이 있는 브랜치에는 「PR 상태 미확인」 을 달지 않는다"
+assert_eq "$(stage "$T/rm30m.json" H30)" "머지됨" "「PR 0개」 줄이 있어도 이 레포 owner 머지 메시지(로컬 머지)는 센다"
+assert_eq "$(stage "$T/rm30m.json" G30)" "준비" "「PR 0개」 줄은 머지됨을 만들지 않는다"
+write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30"
+# 변이 — 문면 길의 owner 비교를 지우면 G30 이 머지됨
+sed 's/m and m.group(1).casefold() == origin_owner.casefold() and m.group(2) == branch:/m and m.group(2) == branch:/' "$RS" > "$M/roadmap_status.py"
+cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(owner 비교)" || ok "변이 적용됨(owner 비교)"
+(cd "$W" && python3 "$M/roadmap_status.py" --json --roadmap-file docs/rm30/roadmap.md > "$T/m30.json")
+assert_eq "$(stage "$T/m30.json" G30)" "머지됨" "변이: owner 비교를 지우면 G30 이 머지됨 — G30 단언에 이빨이 있다"
+# 지운 브랜치 · 같은 이름의 머지된 PR 둘(headRefOid 다름) → 셀 수 없음(검사 불가 rc 3) — 시작한 에픽(승인된 설계문서)
+mkdir -p "$W/docs/rm31"
+g checkout -q main; approved_spec docs/superpowers/specs/b31-design.md docs/rm31/B31.md; g push -q origin main; g fetch -q origin
+bundle docs/rm31 B31 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head; block B31 feature/b30 없음 없음; roadmap_tail ""; } > "$W/docs/rm31/roadmap.md"
+MD31="$W/.claude/spec-distill/conductor/rm31"; mkdir -p "$MD31"
+{ printf 'feature/b30|#12|머지됨|%s|아니오|main|%s\n' "$S30_TIP" "$S30_MC"; printf 'feature/b30|#32|머지됨|%s|아니오|main|%s\n' "$B30_TIP" "$B30_MC"; } > "$T/rows31"
+write_machine "$MD31/machine.md" docs/rm31/roadmap.md "$T/rows31"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31.json"); rc=$?
+assert_eq "$(stage "$T/rm31.json" B31)" "알 수 없음" "AC15: 지운 브랜치에 같은 이름의 머지된 PR 이 둘이면 머지됨이 아니라 셀 수 없음"
+assert_contains "$(reason "$T/rm31.json" B31)" "셀 수 없음 — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(#12 · #32) — 브랜치를 맞는 PR 의 headRefOid 로 되살린다(\`git branch feature/b30 <headRefOid>\`)" "셀 수 없음의 사유 · 끝에 할 일 하나"
+assert_eq "$rc" "3" "셀 수 없음은 검사 불가(rc 3)"
+# 기계 상태가 깨졌으면 캐시 없음으로 가고 사유를 싣는다
+printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n## PR\n\n- 깨진 줄\n' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31b.json"); rc=$?
+assert_contains "$(notes "$T/rm31b.json" B31)" "PR 상태 미확인 — 지휘자를 돌려라(feature/b30)" "깨진 기계 상태: 캐시 없음으로 간다"
+assert_contains "$(warns "$T/rm31b.json" B31)" "PR 캐시를 읽지 못했다 — 기계 상태를 읽지 못했다: " "깨진 기계 상태: 사유는 경고"
+assert_contains "$(warns "$T/rm31b.json" B31)" "rm31/machine.md — " "깨진 기계 상태: 사유에 기계 상태 파일 경로"
+assert_contains "$(warns "$T/rm31b.json" B31)" "— 기계 상태 파일에서 그 자리를 고친다" "깨진 기계 상태: 경고 끝에 그 사유의 할 일"
+assert_not_contains "$(warns "$T/rm31b.json" B31)" "--reset" "깨진 기계 상태: --reset 은 옛 판 줄의 할 일이라 달지 않는다"
+assert_eq "$rc" "1" "깨진 기계 상태: 경고(rc 1)"
+assert_eq "$(stage "$T/rm31b.json" B31)" "준비" "깨진 기계 상태: 캐시 없음 길(squash 는 머지됨이 아니다)"
+printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n## PR\n\n- feature/b30 · #12 · 머지됨 · 2026-10-20\n' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31c.json"); rc=$?
+assert_contains "$(warns "$T/rm31c.json" B31)" "옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> --session <세션> --reset 으로 다시 채운다" "옛 판 4칸 줄: 경고와 고치는 명령"
+assert_eq "$(warns "$T/rm31c.json" B31 | grep -o -- '--reset' | wc -l | tr -d ' ')" "1" "옛 판 4칸 줄: 고치는 명령은 한 번만"
+assert_eq "$rc" "1" "옛 판 4칸 줄: 경고(rc 1)"
+# 사유마다 그 사유의 할 일 — 더 새 판 · 링크 · 읽기 오류에는 --reset 을 달지 않는다
+printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\nwriter: spec-distill 99.0.0\n---\n\n## PR\n\n' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31v.json")
+assert_contains "$(warns "$T/rm31v.json" B31)" "더 새 판(spec-distill 99.0.0)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다" "더 새 판: 할 일은 플러그인 업데이트"
+assert_not_contains "$(warns "$T/rm31v.json" B31)" "--reset" "더 새 판: --reset 을 달지 않는다"
+cp "$MD31/machine.md" "$T/machine-target.md"; rm -f "$MD31/machine.md"; ln -s "$T/machine-target.md" "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31l.json")
+assert_contains "$(warns "$T/rm31l.json" B31)" "기계 상태 파일이 링크다: " "링크: 사유"
+assert_contains "$(warns "$T/rm31l.json" B31)" "— 링크를 그 내용의 보통 파일로 바꾼다" "링크: 할 일은 보통 파일로 바꾸기"
+assert_not_contains "$(warns "$T/rm31l.json" B31)" "--reset" "링크: --reset 을 달지 않는다"
+rm -f "$MD31/machine.md"; printf '\377\376' > "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31u.json")
+assert_contains "$(warns "$T/rm31u.json" B31)" "(UnicodeDecodeError) — 파일 권한과 UTF-8 인코딩을 확인한다" "읽기 오류: 할 일은 권한 · 인코딩 확인"
+assert_not_contains "$(warns "$T/rm31u.json" B31)" "--reset" "읽기 오류: --reset 을 달지 않는다"
+rm -f "$MD31/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31d.json"); rc=$?
+assert_eq "$rc:$(warns "$T/rm31d.json" B31)" "0:" "양의 짝: 기계 상태 파일이 없으면 경고 없음(rc 0) — 정보 줄만"
+# 아직 만들지 않은 브랜치(feature/f32) — 캐시에 같은 이름의 옛 MERGED PR(#1 · 기본 브랜치에 닿음)이 있어도 머지됨이
+# 아니고 알림 한 줄. G32 는 F32 에 기댄다. 양의 짝: 같은 캐시에서 F32 의 승인된 설계문서가 기본 브랜치에 오면 끝 없이 판정한다.
+mkdir -p "$W/docs/rm32"
+bundle docs/rm32 F32 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"; bundle docs/rm32 G32 "C1, S1"
+{ roadmap_head; block F32 feature/f32 없음 없음; block G32 feature/g32 F32 없음; roadmap_tail ""; } > "$W/docs/rm32/roadmap.md"
+MD32="$W/.claude/spec-distill/conductor/rm32"; mkdir -p "$MD32"
+printf 'feature/f32|#1|머지됨|%s|아니오|main|%s\n' "$S30_TIP" "$S30_MC" > "$T/rows32"
+write_machine "$MD32/machine.md" docs/rm32/roadmap.md "$T/rows32"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32.json"); rc=$?
+assert_eq "$(stage "$T/rm32.json" F32)" "준비" "AC15: 만들기 전 브랜치 이름의 옛 MERGED PR 은 머지됨이 아니다"
+assert_contains "$(notes "$T/rm32.json" F32)" "feature/f32: 브랜치가 없다 — 같은 이름의 옛 PR #1 은 이 에픽의 PR 로 세지 않았다" "만들기 전 브랜치: 옛 PR 을 세지 않았다는 알림 한 줄"
+assert_contains "$(notes "$T/rm32.json" F32)" "지운 브랜치면 \`git branch feature/f32 ${S30_TIP}\` 로 되살리거나" "만들기 전 브랜치: 알림 끝의 할 일은 실제 이름 · headRefOid"
+assert_not_contains "$(notes "$T/rm32.json" F32)" "브랜치 끝 없이 판정" "만들기 전 브랜치: 끝 없이 판정하지 않는다"
+assert_eq "$(stage "$T/rm32.json" G32)" "대기" "만들기 전 브랜치의 블록에 기대는 블록은 열리지 않는다"
+assert_eq "$rc" "0" "만들기 전 브랜치의 알림은 정보(rc 0)"
+g checkout -q main; approved_spec docs/superpowers/specs/f32-design.md docs/rm32/F32.md; F32_HEAD="$(g rev-parse HEAD)"; g push -q origin main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32a.json")
+assert_eq "$(stage "$T/rm32a.json" F32)" "준비" "AC15: 시작한 에픽이어도 같은 이름의 옛 PR(#1)이 그 설계문서보다 먼저 머지됐으면 머지됨이 아니다"
+assert_contains "$(notes "$T/rm32a.json" F32)" "같은 이름의 옛 PR #1 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼" "옛 PR 을 나이 검사로 걸렀다고 알린다"
+# 양의 짝 — 이 에픽의 PR(#2)이 설계문서 뒤에 squash 로 머지됐고 브랜치는 지워짐
+commit_file src/f32.txt f "f32 (squash)"; F32_MC="$(g rev-parse HEAD)"; g push -q origin main; g fetch -q origin
+printf 'feature/f32|#2|머지됨|%s|아니오|main|%s\n' "$F32_HEAD" "$F32_MC" > "$T/rows32b"
+write_machine "$MD32/machine.md" docs/rm32/roadmap.md "$T/rows32b"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32b.json")
+assert_eq "$(stage "$T/rm32b.json" F32)" "머지됨" "양의 짝: 승인된 설계문서가 기본 브랜치에 있으면 지운 브랜치로 보고 끝 없이 판정"
+assert_contains "$(notes "$T/rm32b.json" F32)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${F32_HEAD:0:8}" "양의 짝: 「브랜치 끝 없이 판정」 을 알린다"
+assert_not_contains "$(notes "$T/rm32b.json" F32)" "브랜치가 없다" "양의 짝: 옛 PR 알림이 없다"
+# 기본 브랜치 머지 커밋이 PR 캐시보다 먼저다 — `pr-refresh --reset` 이 끝난 에픽의 줄을 채워도 머지된 에픽은 머지됨 그대로.
+# L33 — 로컬 끝이 원격 끝보다 뒤(받기만 함) · 원격 끝이 PR 머지 커밋의 부모 · PR headRefOid 는 원격 끝
+g checkout -q -b feature/l33 main; commit_file src/l33.txt l "l33"; L33_OLD="$(g rev-parse HEAD)"; commit_file src/l33.txt l2 "l33 더"
+L33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/l33; pr_merge 51 feature/l33; L33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/l33 "$L33_OLD"
+# Q33 — squash 머지(머지 커밋 없음) · 로컬 끝이 원격 끝보다 뒤 · PR headRefOid 는 원격 끝
+g checkout -q -b feature/q33 main; commit_file src/q33.txt q "q33"; Q33_OLD="$(g rev-parse HEAD)"; commit_file src/q33.txt q2 "q33 더"
+Q33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/q33; sq feature/q33; Q33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/q33 "$Q33_OLD"
+# E33 — PR 은 squash 로 머지 · 로컬은 PR head 보다 앞이고 그 로컬 끝이 기본 브랜치 머지 커밋의 부모다
+g checkout -q -b feature/e33 main; commit_file src/e33.txt e "e33"; E33_PR="$(g rev-parse HEAD)"; g push -q origin feature/e33; sq feature/e33; E33_SQ="$(g rev-parse HEAD)"
+g checkout -q feature/e33; commit_file src/e33b.txt e2 "e33 더"; g checkout -q main; g merge -q --no-ff feature/e33 -m "Merge branch 'feature/e33'"; E33_MC="$(g rev-parse HEAD)"
+# V33 — 머지 뒤 로컬 브랜치를 기본 브랜치로 앞당김(로컬이 원격보다 앞이지만 기본 브랜치 안) · 원격 끝이 머지 커밋의 둘째
+# 부모 · 이 에픽의 승인된 설계문서가 그 머지로 기본 브랜치에 들어왔다(시작한 에픽 · 설계문서 뒤의 머지)
+g checkout -q -b feature/v33 main; approved_spec docs/superpowers/specs/v33-design.md docs/rm33/V33.md; commit_file src/v33.txt v "v33"; V33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/v33; pr_merge 54 feature/v33; V33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/v33 main
+# X33 — 짝: 원격 끝이 머지 커밋의 부모지만 로컬에 기본 브랜치 밖 커밋이 더 붙음 → 머지됨 아님
+g checkout -q -b feature/x33 main; commit_file src/x33.txt x "x33"; X33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/x33; pr_merge 55 feature/x33; X33_MC="$(g rev-parse HEAD)"
+g checkout -q feature/x33; commit_file src/x33b.txt x2 "x33 더"; X33_LOCAL="$(g rev-parse HEAD)"; g checkout -q main; g push -q origin main; g fetch -q origin
+# 같은 이름 재사용 · 만들기 전 브랜치에 남은 옛 원격 ref(AC15) — 옛 브랜치는 PR 머지 커밋으로 머지됐고 GitHub 에서 지워졌지만
+# origin/<브랜치> 는 prune 되지 않았다. PR 캐시에는 그 이름의 옛 MERGED PR 이 있다.
+# U33 — 옛 머지 뒤 더 새 main 에서 같은 이름을 새로 땄다 · 이 에픽의 설계문서는 기본 브랜치에 없다(견줄 문서 없음 —
+# 8.6.0 처럼 머지됨: R14 미룸의 틈)
+g checkout -q -b feature/u33 main; commit_file src/u33.txt u "u33 옛"; U33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/u33; pr_merge 56 feature/u33; U33_MC="$(g rev-parse HEAD)"
+commit_file src/after-u33.txt a "u33 뒤 main"; g branch -q -f feature/u33 main
+# T33 — U33 과 같되 새 에픽의 승인된 설계문서가 옛 머지 뒤 기본 브랜치에 들어왔다(시작한 에픽 — 옛 머지는 그보다 먼저)
+g checkout -q -b feature/t33 main; commit_file src/t33.txt t "t33 옛"; T33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/t33; pr_merge 57 feature/t33; T33_MC="$(g rev-parse HEAD)"
+approved_spec docs/superpowers/specs/t33-design.md docs/rm33/T33.md; g branch -q -f feature/t33 main
+# N33 — 로컬 없음 · 원격 ref · 시작 흔적 없음(승인 줄 없는 설계문서가 그 머지로 들어왔다) — 새 클론 · 둘째 기계에서
+# 머지된 에픽의 모양과 갈라지지 않으므로 머지됨(8.6.0 과 같다). 만들기 전 브랜치라면 R14 미룸의 틈이다.
+g checkout -q -b feature/n33 main; commit_file docs/superpowers/specs/n33-design.md "$(spec_doc docs/rm33/N33.md C1)" "n33 설계(승인 전)"
+N33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/n33; pr_merge 58 feature/n33; N33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/n33
+# P33 — 짝: 로컬을 지운 시작한 에픽(승인된 설계문서가 그 머지로 들어옴) · 원격 끝이 머지 커밋의 둘째 부모 → 머지됨
+g checkout -q -b feature/p33 main; approved_spec docs/superpowers/specs/p33-design.md docs/rm33/P33.md; commit_file src/p33.txt p "p33"
+P33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/p33; pr_merge 59 feature/p33; P33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/p33
+# K33 — 옛 머지 전에 갈라진 브랜치에 이 에픽의 설계문서가 있고 그 브랜치가 옛 머지 뒤에 머지됐다 · 같은 이름의 옛 브랜치는
+# 로컬 없이 원격 ref 만 남음 — 문서를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋(#61 머지)이 옛 머지보다 뒤라 머지됨 아님
+g checkout -q -b feature/k33-doc main; approved_spec docs/superpowers/specs/k33-design.md docs/rm33/K33.md
+g checkout -q -b feature/k33 main; commit_file src/k33.txt k "k33 옛"; K33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/k33; pr_merge 60 feature/k33; K33_MC="$(g rev-parse HEAD)"
+pr_merge 61 feature/k33-doc; g branch -q -D feature/k33
+# H33 — squash 머지 · 시작 흔적 없음(승인 줄 없는 설계문서) · 로컬 없음 · 원격 ref 있음(새 클론) → PR 캐시로 머지됨
+g checkout -q -b feature/h33 main; commit_file docs/superpowers/specs/h33-design.md "$(spec_doc docs/rm33/H33.md C1)" "h33 설계(승인 전)"
+H33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/h33; sq feature/h33; H33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/h33
+# J33 — H33 과 같되 원격 ref 도 없다(지운 브랜치) · 설계문서가 기본 브랜치에 있어 끝 없이 판정 → 머지됨
+g checkout -q -b feature/j33 main; commit_file docs/superpowers/specs/j33-design.md "$(spec_doc docs/rm33/J33.md C1)" "j33 설계(승인 전)"
+J33_TIP="$(g rev-parse HEAD)"; sq feature/j33; J33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/j33
+# A34 · B34 — 머지 커밋으로 머지한 뒤 기본 브랜치에서 설계문서를 옮겼다(git mv) · 로컬 지움. A34 는 원격 ref 가 남고(새 클론),
+# B34 는 원격 ref 도 없다(지운 브랜치). 문서를 더한 커밋은 옮긴 커밋이 아니라 그 머지다(`--follow`) → 둘 다 머지됨
+g checkout -q -b feature/a34 main; commit_file docs/superpowers/specs/a34-design.md "$(spec_doc docs/rm33/A34.md C1)" "a34 설계(승인 전)"; commit_file src/a34.txt a "a34"
+A34_TIP="$(g rev-parse HEAD)"; g push -q origin feature/a34; pr_merge 64 feature/a34; A34_MC="$(g rev-parse HEAD)"; g branch -q -D feature/a34
+g checkout -q -b feature/b34 main; commit_file docs/superpowers/specs/b34-design.md "$(spec_doc docs/rm33/B34.md C1)" "b34 설계(승인 전)"; commit_file src/b34.txt b "b34"
+B34_TIP="$(g rev-parse HEAD)"; pr_merge 65 feature/b34; B34_MC="$(g rev-parse HEAD)"; g branch -q -D feature/b34
+mkdir -p "$W/docs/superpowers/specs/moved"; g mv docs/superpowers/specs/a34-design.md docs/superpowers/specs/moved/a34-design.md; g commit -qm "a34 설계문서 옮김"
+g mv docs/superpowers/specs/b34-design.md docs/superpowers/specs/moved/b34-design.md; g commit -qm "b34 설계문서 옮김"
+g push -q origin main; g fetch -q origin
+mkdir -p "$W/docs/rm33"
+for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33 A34 B34; do bundle docs/rm33 "$b" "C1, S1"; done
+bundle docs/rm33 L33 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head
+  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33 A34 B34; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  block W33 feature/w33 "L33, Q33, E33, V33" 없음
+  roadmap_tail ""
+} > "$W/docs/rm33/roadmap.md"
+bundle docs/rm33 W33 "C1, S1"
+MD33="$W/.claude/spec-distill/conductor/rm33"; mkdir -p "$MD33"
+{ printf 'feature/l33|#51|머지됨|%s|아니오|main|%s\n' "$L33_TIP" "$L33_MC"
+  printf 'feature/q33|#52|머지됨|%s|아니오|main|%s\n' "$Q33_TIP" "$Q33_MC"
+  printf 'feature/e33|#53|머지됨|%s|아니오|main|%s\n' "$E33_PR" "$E33_SQ"
+  printf 'feature/v33|#54|머지됨|%s|아니오|main|%s\n' "$V33_TIP" "$V33_MC"
+  printf 'feature/u33|#56|머지됨|%s|아니오|main|%s\n' "$U33_OLD" "$U33_MC"
+  printf 'feature/t33|#57|머지됨|%s|아니오|main|%s\n' "$T33_OLD" "$T33_MC"
+  printf 'feature/n33|#58|머지됨|%s|아니오|main|%s\n' "$N33_OLD" "$N33_MC"
+  printf 'feature/p33|#59|머지됨|%s|아니오|main|%s\n' "$P33_TIP" "$P33_MC"
+  printf 'feature/k33|#60|머지됨|%s|아니오|main|%s\n' "$K33_OLD" "$K33_MC"
+  printf 'feature/h33|#62|머지됨|%s|아니오|main|%s\n' "$H33_TIP" "$H33_MC"
+  printf 'feature/j33|#63|머지됨|%s|아니오|main|%s\n' "$J33_TIP" "$J33_MC"
+  printf 'feature/a34|#64|머지됨|%s|아니오|main|%s\n' "$A34_TIP" "$A34_MC"
+  printf 'feature/b34|#65|머지됨|%s|아니오|main|%s\n' "$B34_TIP" "$B34_MC"
+  printf 'feature/x33|#55|머지됨|%s|아니오|main|%s\n' "$X33_TIP" "$X33_MC"
+} > "$T/rows33"
+write_machine "$MD33/machine.md" docs/rm33/roadmap.md "$T/rows33"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm33/roadmap.md > "$T/rm33.json")
+assert_eq "$(stage "$T/rm33.json" L33):$(reason "$T/rm33.json" L33)" "머지됨:기본 브랜치의 머지 커밋 ${L33_MC:0:8}(원격 끝)" "뒤처진 로컬: 원격 끝이 머지 커밋의 부모면 PR 캐시보다 먼저 머지됨"
+assert_eq "$(stage "$T/rm33.json" Q33)" "머지됨" "뒤처진 로컬 · squash: PR 의 headRefOid 를 원격 끝과 견준다"
+assert_contains "$(notes "$T/rm33.json" Q33)" "로컬 끝 ${Q33_OLD:0:8} 이 원격 끝 ${Q33_TIP:0:8} 보다 뒤라 원격 끝으로 판정" "뒤처진 로컬 · squash: 원격 끝으로 판정했다고 알린다"
+assert_eq "$(stage "$T/rm33.json" E33):$(reason "$T/rm33.json" E33)" "머지됨:기본 브랜치의 머지 커밋 ${E33_MC:0:8}" "로컬 끝이 PR head 보다 앞이어도 그 끝이 머지 커밋의 부모면 머지됨"
+assert_eq "$(stage "$T/rm33.json" V33):$(reason "$T/rm33.json" V33)" "머지됨:기본 브랜치의 머지 커밋 ${V33_MC:0:8}(원격 끝)" "로컬을 기본 브랜치로 앞당김: 원격 끝의 머지 커밋으로 머지됨"
+assert_eq "$(stage "$T/rm33.json" X33)" "설계 중" "AC15 짝: 원격 끝이 머지 커밋의 부모여도 로컬에 기본 브랜치 밖 커밋이 있으면 머지됨이 아니다"
+assert_contains "$(notes "$T/rm33.json" X33)" "로컬 끝 ${X33_LOCAL:0:8} · 원격 끝 ${X33_TIP:0:8}" "AC15 짝: 두 끝을 보인다"
+assert_eq "$(stage "$T/rm33.json" W33)" "준비" "머지된 에픽에 기대는 블록은 열린다(거짓 「의존 미완료」 없음)"
+assert_contains "$(notes "$T/rm33.json" L33)" "feature/l33: 로컬 끝 ${L33_OLD:0:8} · 원격 끝 ${L33_TIP:0:8}" "뒤처진 로컬의 머지 커밋 판정도 두 끝을 보인다"
+assert_eq "$(stage "$T/rm33.json" U33):$(reason "$T/rm33.json" U33)" "머지됨:기본 브랜치의 머지 커밋 ${U33_MC:0:8}(원격 끝)" "견줄 문서 없음(같은 이름 재사용 · 새 에픽 문서가 기본 브랜치에 없음): 8.6.0 처럼 머지됨 — R14 미룸의 틈"
+assert_eq "$(stage "$T/rm33.json" T33)" "설계 중" "AC15: 같은 이름 재사용 — 옛 머지가 새 에픽의 설계문서를 기본 브랜치에 더한 커밋보다 먼저면 머지됨이 아니다"
+assert_eq "$(stage "$T/rm33.json" N33):$(reason "$T/rm33.json" N33)" "머지됨:기본 브랜치의 머지 커밋 ${N33_MC:0:8}(원격 끝)" "로컬 없음 · 시작 흔적 없음 · 문서가 그 머지로 들어옴(새 클론의 머지된 에픽): 머지됨"
+assert_eq "$(stage "$T/rm33.json" P33):$(reason "$T/rm33.json" P33)" "머지됨:기본 브랜치의 머지 커밋 ${P33_MC:0:8}(원격 끝)" "양의 짝: 시작한 에픽의 지운 로컬 · 원격 끝의 머지 커밋으로 머지됨"
+assert_eq "$(stage "$T/rm33.json" K33)" "설계 중" "AC15: 옛 머지 전에 갈라진 브랜치로 문서가 나중에 들어옴 — 첫째 부모 줄의 문서 추가가 옛 머지보다 뒤라 머지됨 아님"
+assert_contains "$(notes "$T/rm33.json" K33)" "feature/k33: 같은 이름의 옛 PR #60 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼 이 에픽의 PR 로 세지 않았다" "AC15: 로컬 없을 때의 PR 판정도 같은 나이 검사로 옛 PR 을 거른다"
+assert_eq "$(stage "$T/rm33.json" H33):$(reason "$T/rm33.json" H33)" "머지됨:PR #62 머지됨(mergeCommit ${H33_MC:0:8})" "새 클론 · squash · 시작 흔적 없음: 원격 ref 와 PR 캐시로 머지됨(8.6.0 회귀 아님)"
+assert_eq "$(stage "$T/rm33.json" J33):$(reason "$T/rm33.json" J33)" "머지됨:PR #63 머지됨(mergeCommit ${J33_MC:0:8})" "지운 브랜치 · squash · 시작 흔적 없음 · 문서가 기본 브랜치에 있음: 끝 없이 판정해 머지됨"
+assert_eq "$(stage "$T/rm33.json" A34):$(reason "$T/rm33.json" A34)" "머지됨:기본 브랜치의 머지 커밋 ${A34_MC:0:8}(원격 끝)" "머지 뒤 설계문서를 옮김 · 새 클론(로컬 없음): 문서를 더한 커밋은 그 머지라 머지됨(8.6.0 회귀 아님)"
+assert_eq "$(stage "$T/rm33.json" B34):$(reason "$T/rm33.json" B34)" "머지됨:PR #65 머지됨(mergeCommit ${B34_MC:0:8})" "머지 뒤 설계문서를 옮김 · 지운 브랜치(ref 없음): 끝 없이 판정해 머지됨"
+# origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
+(cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
+assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"
+assert_contains "$(notes "$T/rm30-noowner.json" H30)" "머지 메시지는 세지 않았다 — origin URL 에서 호스트 · owner · repo 를 뽑지 못했다" "origin 소유자를 못 읽은 사유를 싣는다"
+assert_eq "$(stage "$T/rm30-noowner.json" S30)" "머지됨" "origin 소유자를 못 읽어도 PR 캐시 판정은 그대로"
+
+# ── 읽기 전용 행동 — 지휘자 · 상태줄이 쓰는 CLI 를 읽기 전용 픽스처(작업 트리 · .git · 상태 폴더)에서 돌린다 ─────
+# git · gh 를 PATH 앞의 기록기로 받고: gh 는 한 번도 부르지 않는다 · git 은 모듈의 허용 목록(roadmap_status · repo_defaults 의
+# GIT_ALLOWED, config 는 --get 꼴) 과 `remote get-url origin` 만 · 픽스처 파일은 앞뒤 해시가 같다 · rc 는 1(경고 있음).
+g checkout -q main; g add -- docs/rm30 && g commit -qm "rm30" && g push -q origin main && g fetch -q origin
+RB="$T/ro-bin"; mkdir -p "$RB"
+cat > "$RB/git" <<SH
+#!/bin/bash
+for a in "\$@"; do printf '%s\037' "\$a"; done >> "$T/ro-git.log"; printf '\n' >> "$T/ro-git.log"
+exec "$(command -v git)" "\$@"
+SH
+cat > "$RB/gh" <<SH
+#!/bin/bash
+printf '%s\n' "\$*" >> "$T/ro-gh.log"; exit 1
+SH
+chmod +x "$RB/git" "$RB/gh"
+ro_hash() { (cd "$W" && find . -type f -print0 | sort -z | xargs -0 shasum); }
+ro_probe() {  # ro_probe <roadmap_status.py> — 어긋남을 한 줄씩 낸다(없으면 빈 출력)
+  : > "$T/ro-git.log"; : > "$T/ro-gh.log"
+  local before after rc
+  before="$(ro_hash)"
+  chmod -R a-w "$W"
+  (cd "$W" && PATH="$RB:$PATH" python3 "$1" --json docs/rm30/roadmap.md > "$T/ro.json" 2> "$T/ro.err"); rc=$?
+  chmod -R u+w "$W"
+  after="$(ro_hash)"
+  [ "$rc" = "1" ] || echo "rc $rc: $(head -c 300 "$T/ro.json")"
+  [ "$before" = "$after" ] || echo "픽스처 파일이 바뀌었다"
+  [ -s "$T/ro-gh.log" ] && echo "gh 를 불렀다: $(head -1 "$T/ro-gh.log")"
+  python3 -I - "$S" "$T/ro-git.log" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import repo_defaults, roadmap_status
+allowed = roadmap_status.GIT_ALLOWED | repo_defaults.GIT_ALLOWED
+calls = [l.split("\x1f")[:-1] for l in open(sys.argv[2], encoding="utf-8").read().splitlines()]
+for args in calls:
+    rest = list(args)
+    while rest[:1] in (["-c"], ["-C"]):
+        rest = rest[2:]
+    sub = rest[0] if rest else ""
+    if sub == "remote" and rest == ["remote", "get-url", "origin"]:
+        continue
+    if sub not in allowed or (sub == "config" and "--get" not in rest):
+        print("허용 밖 git: %s" % " ".join(args))
+if not calls or not any(c[-3:] == ["remote", "get-url", "origin"] for c in calls):
+    print("git 기록기가 호출을 못 받았다(git %d번)" % len(calls))
+PY
+}
+assert_eq "$(ro_probe "$RS")" "" "읽기 전용 행동: gh 없음 · git 은 허용 목록 · 픽스처 그대로 · rc 1"
+assert_eq "$(stage "$T/ro.json" S30)" "머지됨" "읽기 전용 행동: 읽기 전용이어도 PR 캐시 판정은 그대로(기계 상태를 읽었다)"
+ROP="$T/ro-plug"
+ro_variant() {  # ro_variant <넣을 문장> — 플러그인 사본의 build() 첫머리에 문장을 넣고 그 roadmap_status.py 경로를 낸다
+  rm -rf "$ROP"; mkdir -p "$ROP/scripts" "$ROP/.claude-plugin"
+  cp "$S"/*.py "$ROP/scripts/"; cp "$S/../.claude-plugin/plugin.json" "$ROP/.claude-plugin/"
+  python3 -I -c 'import sys
+p, add = sys.argv[1], sys.argv[2]
+anchor = "    main, main_name = git.default_branch()\n"
+s = open(p, encoding="utf-8").read()
+assert s.count(anchor) == 1
+open(p, "w", encoding="utf-8").write(s.replace(anchor, "    " + add + "\n" + anchor))' "$ROP/scripts/roadmap_status.py" "$1"
+  printf '%s' "$ROP/scripts/roadmap_status.py"
+}
+ro_out="$(ro_probe "$(ro_variant 'Path(git.cwd, ".claude", "spec-distill", "probe.md").write_text("x", encoding="utf-8")')")"
+assert_contains "$ro_out" "rc 3: " "양성 대조: 상태 폴더에 쓰기를 넣으면 읽기 전용 행동 검사가 RED(쓰기가 막혀 rc 3)"
+assert_contains "$(js "$T/ro.json" "r['unknown_reasons']")" "PermissionError" "양성 대조: RED 의 까닭이 막힌 쓰기다"
+assert_contains "$(ro_probe "$(ro_variant 'subprocess.run(["gh", "pr", "list"])')")" "gh 를 불렀다: pr list" "양성 대조: gh 를 부르면 RED"
+assert_contains "$(ro_probe "$(ro_variant 'subprocess.run(["git", "-C", git.cwd, "fetch", "-q", "origin"], capture_output=True)')")" "허용 밖 git: -C" "양성 대조: 허용 밖 git(fetch)을 부르면 RED"
 
 nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs
 b = "feature/h5a"

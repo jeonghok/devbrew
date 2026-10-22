@@ -38,13 +38,45 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 아래에서 쓴다 |
+| `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 아래에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고, spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져 있어 지휘하지 않는다고 알린다 — 지휘자 없이 진행하려면 스위치를 풀고 지휘자를 부르지 않은 채 이 플러그인 references 폴더의 지휘 절차 파일(conducting.md) 끝 절인 손으로 따르는 절차를 따르라고 한 줄로 알린 뒤 멈춘다 |
 | `[devbrew-entry] error …` | `[spec-distill] epic-conductor 사전 검사 실패 — <reason= 값>. 지휘하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] epic-conductor 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지휘하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] epic-conductor 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 지휘하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다.
+
+### 1.5 의존 확인
+
+아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git,gh
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 아래 superpowers 확인을 한 뒤 2 로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 지휘하지 않는다 |
+| 그 밖 | `[spec-distill] epic-conductor 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 지휘하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
+
+superpowers 확인 — skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 `[spec-distill] epic-conductor 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 내고 멈춘다. 지휘하지 않는다.
+
+superpowers 판 알림 — 이 세션에서 superpowers skill 을 처음 불러온 직후 아래 펜스를 한 번 돌린다. `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "<기준 폴더>"
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 · `[devbrew-deps] superpowers <판> — 검증한 판과 같다` | 보이지 않고 간다 |
+| rc 0 · 「다르다」 · 「확인하지 못했다」 줄 | 그 줄(「확인하지 못했다」면 뒤의 이유 줄까지)을 그대로 보이고 간다 |
+| 그 밖 | `[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.` 를 내고 간다 |
+
+판 확인 결과로는 멈추지 않는다.
 
 ### 2. 로드맵 정하기
 
@@ -81,13 +113,28 @@ Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(�
 - `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
 - `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
 - `default_rc=` 가 0 이 아니면(3 기본 브랜치 없음 · 5 원격과 다름 · 그 밖 모두) 그 줄(`[spec-distill] …`, 없으면 종료 코드)을 보이고, `claim_rc=0` 이면 4 끝의 표지 풀기 펜스(`conductor_ledger.py" release`)를 돌린 뒤 멈춘다. rc 0 의 「대조하지 못했다」 줄은 보이고 간다.
-- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다.
+- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다 — 단 `claim_rc=3` 이고 출력에 `옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다(takeover 펜스의 출력에 그 문구가 있어도 같다).
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
 cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" takeover --roadmap "<로드맵>" --session "$sid"
 ```
+
+옛 PR 캐시 다시 채우기 — 그 출력이 이름 붙인 `pr-refresh … --reset` 을 이 로드맵 · 세션으로 돌리고, 0 이면 표지를 풀었다 다시 잡는다(새로 잡아야 이 세션의 옛 시작 승인이 지워진다).
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" pr-refresh --roadmap "<로드맵>" --session "$sid" --reset; reset_rc=$?
+echo "reset_rc=$reset_rc"
+claim_rc=
+if [ "$reset_rc" = 0 ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
+echo "claim_rc=${claim_rc:-없음}"
+```
+
+- `reset_rc=` 가 0 이 아니면 그 사유(`[spec-distill] …`, 없으면 종료 코드)를 보이고 멈춘다.
+- `claim_rc=` 가 0 이면 4 로 간다. 5 면 그 사이 다른 세션이 표지를 잡았다 — 위 5 와 같이 한다. 그 밖이면 사유를 보이고 멈춘다.
 
 ### 4. 시작 승인
 
@@ -109,7 +156,8 @@ cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" approval --roadmap "<�
 ```
 
 - 종료 코드 0(「공시만 — …」): 그 줄을 보이고 5 로 간다.
-- 종료 코드 0 이 아니면(1 「승인 필요」 · 3 기계 상태 읽기 불가 포함, 그 밖 모두) 공시만으로 넘어가지 않고 `AskUserQuestion` 으로 묻는다 — 「이 규모로 지휘 시작 (권장)」 · 「멈춤」. 3 이면 기계 상태를 읽지 못했다는 사유를 질문에 함께 보인다. 시작이면 아래 펜스를 돌리고, 종료 코드가 0 이 아니면 그 사유를 보이고 멈춘다(5 로 가지 않는다). 0 이면 5 로 간다.
+- 이 펜스나 아래 approve 펜스의 종료 코드가 3 이고 출력에 `옛 판이 쓴 PR 캐시 줄` 이 있으면 묻지도 멈추지도 않고 3 의 「옛 PR 캐시 다시 채우기」 로 간다 — 거기서 `claim_rc=0` 이면 4 를 처음부터 다시 돈다.
+- 종료 코드 0 이 아니면(1 「승인 필요」 · 3 기계 상태 읽기 불가 포함, 그 밖 모두 — 위 옛 줄 갈래는 빼고) 공시만으로 넘어가지 않고 `AskUserQuestion` 으로 묻는다 — 「이 규모로 지휘 시작 (권장)」 · 「멈춤」. 3 이면 기계 상태를 읽지 못했다는 사유를 질문에 함께 보인다. 시작이면 아래 펜스를 돌리고, 종료 코드가 0 이 아니면 그 사유를 보이고 멈춘다(5 로 가지 않는다). 0 이면 5 로 간다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }

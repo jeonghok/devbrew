@@ -586,7 +586,8 @@ done
 # 2026-10-12 R1: 실측 494 + 8 로 조였다.
 # 2026-10-19 R10 조사 열기: `## 조사 열기` 절(여럿 동시에 · 만들어 보내기 · 있는 것 먼저 · 웹 펜스 · 요약 펜스 ·
 # open-researcher dispatch)과 라운드 질문 묶기 · V1 웹 주장 문장을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 564 + 8.
-SKILL_LINE_CAP=572
+# 2026-10-22 R8 계획 2: 진입 단계 `### 1.5 의존 확인`(펜스 · 결과 표)을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 586 + 8.
+SKILL_LINE_CAP=594
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"

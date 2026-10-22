@@ -193,6 +193,15 @@ class Render(unittest.TestCase):
         self.assertEqual(section_body(text, "## 에픽"),
                          "\n" + "\n".join(R.render_block(r) for r in self.rows) + "\n")
 
+    def test_roadmap_merge_line_rule(self):
+        text = R.render_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), self.rows, self.idx, "t", "iv/b.md",
+                                "rm/roadmap.md", "- h")
+        record = section_body(text, "## 결정 기록")
+        self.assertIn("「머지」 줄은 PR 없이 로컬에서 머지한 에픽에만 적는다 — PR 로 머지한 에픽은 지휘자가 채운 PR 상태로 "
+                      "머지됨이 된다(squash · rebase 포함)", record)
+        self.assertNotIn("머지 커밋이 없는 에픽은 「머지」 줄로 적는다", record)
+        self.assertNotIn("squash · rebase 로 머지해", record)
+
     def test_roadmap_without_risks(self):
         brief = "\n".join(l for l in MINI_BRIEF.splitlines() if not l.startswith("- 위험 — 숨은")
                           and not l.startswith("- 위험 — 실패")) + "\n"

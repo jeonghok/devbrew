@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 작업공간 불변 락(R8 AC27 · §9)과 devbrew 밖 레포 회귀 픽스처(R8 AC29 의 계획 1 몫).
+# 작업공간 불변 락(R8 AC27 · §9)과 devbrew 밖 레포 회귀 픽스처(R8 AC29 — upstream 원격이 있는 fork · `-suffix` 판 문자열 포함).
 #
 # 불변 락: 한 레포의 서로 다른 브랜치 worktree 둘(한쪽은 로드맵 · 레포 설정 파일을 고쳐 자기 브랜치에만 커밋)에서
 # 해결자 `get`(아홉 키 · 로드맵 층 포함) · 로드맵 찾기 · 상태 계산 JSON 의 stdout · stderr · rc 가 바이트까지 같다.
@@ -359,6 +359,85 @@ for c in bom dup typo good; do
   esac
   if [ "$c" = good ]; then assert_eq "$RRC:$ROUT" "2:끝나지 않은 로드맵이 없다" "양성 대조: 바른 설정이면 로드맵 찾기가 설정을 지나 폴더를 본다(로드맵 없음 rc 2)"
   else assert_eq "$RRC" "3" "${c}: 로드맵 찾기도 설정이 깨지면 멈춘다(기본 폴더로 조용히 찾지 않는다)"; fi
+done
+
+echo "=== fork 클론 — upstream 원격이 있어도 origin 의 PR 만(AC16 · AC29) ==="
+mkrepo fk main || { no "픽스처 fk"; finish; exit 1; }
+FW="$T/fk/work"
+docs "$FW" "$RMD" ""
+g "$FW" add -A && g "$FW" commit -qm docs && g "$FW" push -q origin main
+g "$FW" switch -q -c feature/r1 && printf 'a\n' > "$FW/src-a.txt" && g "$FW" add -A && g "$FW" commit -qm r1 && g "$FW" push -q origin feature/r1
+FTIP="$(g "$FW" rev-parse feature/r1)"
+g "$FW" switch -q main && g "$FW" merge -q --squash feature/r1 >/dev/null && g "$FW" commit -qm "R1 (#7)" && g "$FW" push -q origin main && g "$FW" fetch -q origin
+FSQ="$(g "$FW" rev-parse main)"
+g "$FW" switch -q feature/r1
+g "$FW" remote set-url origin https://github.com/me/r.git && g "$FW" remote add upstream https://github.com/up/r.git
+# 가짜 gh: 받은 인자를 gh.log 에 적는다. -R 이 origin(github.com/me/r)이면 PR #7(FK_ORIGIN_STATE — 열림 · 머지됨),
+# 그 밖(-R 없음 · upstream)이면 여섯 조건을 다 맞춘 머지된 PR #99 — origin 밖을 물으면 거짓 「머지됨」이 난다.
+mkdir -p "$T/fkbin"
+cat > "$T/fkbin/gh" <<SH
+#!/bin/sh
+printf '%s\n' "\$*" >> "$T/gh.log"
+r=""; h=""; prev=""
+for a in "\$@"; do [ "\$prev" = "-R" ] && r="\$a"; [ "\$prev" = "--head" ] && h="\$a"; prev="\$a"; done
+[ "\$h" = feature/r1 ] || { echo '[]'; exit 0; }
+row() { printf '[{"number":%s,"state":"%s","headRefName":"feature/r1","headRefOid":"$FTIP","isCrossRepository":false,"baseRefName":"main","mergeCommit":%s}]\n' "\$1" "\$2" "\$3"; }
+if [ "\$r" = github.com/me/r ]; then
+  if [ "\${FK_ORIGIN_STATE:-OPEN}" = MERGED ]; then row 7 MERGED '{"oid":"$FSQ"}'; else row 7 OPEN null; fi
+else row 99 MERGED '{"oid":"$FSQ"}'; fi
+SH
+chmod +x "$T/fkbin/gh"
+FSES=sess-fork001
+out="$(cd "$FW" && python3 "$CL" claim --roadmap "$RM" --session "$FSES" 2>&1)"; rc=$?
+assert_eq "$rc:$out" "0:acquired" "fork: 지휘 표지를 잡는다"
+: > "$T/gh.log"
+out="$(cd "$FW" && PATH="$T/fkbin:$PATH" GH_REPO=up/r python3 "$CL" pr-refresh --roadmap "$RM" --session "$FSES" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "fork pr-refresh: rc 0"
+assert_contains "$out" "GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다" "fork pr-refresh: GH_REPO 를 알린다"
+NGH="$(grep -c . "$T/gh.log")"
+NR="$(grep -c -- ' -R github.com/me/r$' "$T/gh.log")"
+[ "$NGH" -ge 1 ] && [ "$NR" = "$NGH" ] && ok "fork pr-refresh: gh 호출 $NGH 번이 모두 -R github.com/me/r(origin)" \
+  || no "fork pr-refresh: origin 을 명시하지 않은 gh 호출이 있다(호출 $NGH · origin -R $NR): $(cat "$T/gh.log")"
+assert_not_contains "$(cat "$T/gh.log")" "up/r" "fork pr-refresh: upstream 을 묻지 않는다"
+assert_contains "$(cat "$T/gh.log")" "--head feature/r1 " "전제: 가짜 gh 가 에픽 브랜치를 물음받았다"
+FJ="$T/fk-status.json"
+# 상태 계산은 gh 를 부르지 않는다 — 늘 실패하고 받은 인자를 gh.log 에 적는 gh 를 PATH 앞에 두고, 돈 뒤 gh.log 가 그대로인지 본다.
+mkdir -p "$T/failgh"
+printf '#!/bin/sh\nprintf "%%s\\n" "status: $*" >> "%s"\nexit 1\n' "$T/gh.log" > "$T/failgh/gh"; chmod +x "$T/failgh/gh"
+(cd "$T" && PATH="$T/failgh:$PATH" gh probe >/dev/null 2>&1)
+assert_contains "$(cat "$T/gh.log")" "status: probe" "전제: 늘 실패하는 gh 가 부르면 gh.log 에 적는다"
+GHLOG_BEFORE="$(cat "$T/gh.log")"
+(cd "$FW" && PATH="$T/failgh:$PATH" python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+assert_eq "$(cat "$T/gh.log")" "$GHLOG_BEFORE" "fork 상태 계산: gh 를 부르지 않는다(gh.log 그대로)"
+assert_eq "$(js "$FJ" "[(s['branch'], s['merged']) for b in r['blocks'] if b['id'] == 'R1' for s in b['branch_states']]")" \
+  "[('feature/r1', None)]" "fork 상태 계산: origin 의 PR 이 열림이면 머지됨이 아니다(upstream 의 머지된 PR #99 를 쓰지 않는다)"
+out="$(cd "$FW" && PATH="$T/fkbin:$PATH" FK_ORIGIN_STATE=MERGED python3 "$CL" pr-refresh --roadmap "$RM" --session "$FSES" 2>&1)"; rc=$?
+assert_eq "$rc" "0" "양의 짝: origin 의 PR 이 머지됐으면 pr-refresh rc 0"
+GHLOG_BEFORE="$(cat "$T/gh.log")"
+(cd "$FW" && PATH="$T/failgh:$PATH" python3 "$RS" --json "$RM") > "$FJ" 2>/dev/null
+assert_eq "$(cat "$T/gh.log")" "$GHLOG_BEFORE" "양의 짝 상태 계산: gh 를 부르지 않는다(gh.log 그대로)"
+assert_eq "$(js "$FJ" "[(s['branch'], s['merged']) for b in r['blocks'] if b['id'] == 'R1' for s in b['branch_states']]")" \
+  "[('feature/r1', 'PR #7 머지됨(mergeCommit ${FSQ:0:8})')]" "양의 짝: 상태 계산은 origin 의 PR #7 로 squash 머지를 판정한다"
+
+echo "=== -suffix 판 문자열의 진입 확인(AC29) ==="
+GHMIN="$(awk -F'|' '$2 ~ /^ gh $/ {gsub(/ /, "", $3); print $3}' "$SD/dependencies.md")"
+case "$GHMIN" in [0-9]*.[0-9]*.[0-9]*) ok "전제: spec-distill 의존 목록의 gh 최소 판 $GHMIN" ;; *) no "전제: gh 최소 판을 읽지 못했다: $GHMIN" ;; esac
+LOW=2.45.0-rc1
+HIGH="$(( ${GHMIN%%.*} + 1 )).0.0-rc1"
+python3 -I -c 'import sys; t=lambda v: tuple(int(x) for x in v.split("-")[0].split(".")); sys.exit(0 if t(sys.argv[1]) < t(sys.argv[2]) < t(sys.argv[3]) else 1)' "$LOW" "$GHMIN" "$HIGH" \
+  && ok "전제: $LOW < $GHMIN < $HIGH" || no "전제: 판 순서가 $LOW < $GHMIN < $HIGH 이 아니다"
+mkdir -p "$T/sfxbin"
+for v in "$LOW" "$HIGH"; do
+  printf '#!/bin/sh\necho "gh version %s (2026-01-01)"\necho "https://github.com/cli/cli/releases/tag/v%s"\n' "$v" "$v" > "$T/sfxbin/gh"
+  chmod +x "$T/sfxbin/gh"
+  out="$(PATH="$T/sfxbin:$PATH" python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need gh 2>&1)"; rc=$?
+  if [ "$v" = "$LOW" ]; then
+    assert_eq "$rc" "3" "-suffix: 낮은 판 $LOW 는 진입에서 멈춘다(rc 3)"
+    assert_contains "$out" "[devbrew-deps] 멈춤 — gh 2.45.0 · 필요 $GHMIN 이상" "-suffix: 접미사를 떼고 판을 읽어 비교한다(「판 못 읽음」이 아니다)"
+  else
+    assert_eq "$rc" "0" "양의 짝: 최소 판보다 높은 $HIGH 는 지난다(rc 0)"
+    assert_contains "$out" "gh ${HIGH%-rc1}" "양의 짝: ok 줄에 접미사를 뗀 판"
+  fi
 done
 
 finish

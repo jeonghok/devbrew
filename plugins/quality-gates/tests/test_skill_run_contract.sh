@@ -105,7 +105,11 @@ assert_contains "$(printf '%s\n' "$P3W" | tr '\n' ' ')" 'print `intent: 없음 (
   "M1: rc 가 0 이 아니면 intent: 줄이 그 rc 를 밝힌다"
 RUN3="$T/p3.sh"
 { printf '%s\n' "$P3F" | sed "s/<session-id>/$SID/g"; } > "$RUN3"
-out3="$( cd "$T/sub/deeper" && PATH=/usr/bin:/bin CLAUDE_PLUGIN_ROOT="$QGP" bash "$RUN3" 2>&1 )"
+# 트레일러가 없어 PR 본문을 읽을 차례다 — origin 과 「PR 없음」을 내는 가짜 gh 를 둔다(gh 가 없으면 P3 가 멈춘다).
+git -C "$T" remote add origin https://github.com/o/r
+mkdir -p "$T/fakegh"
+printf '#!/bin/sh\necho "no pull requests found" >&2\nexit 1\n' > "$T/fakegh/gh"; chmod +x "$T/fakegh/gh"
+out3="$( cd "$T/sub/deeper" && PATH="$T/fakegh:/usr/bin:/bin" CLAUDE_PLUGIN_ROOT="$QGP" bash "$RUN3" 2>&1 )"
 assert_contains "$out3" 'intent rc=0' "(d) 하위 디렉토리의 P3 가 rc 0 으로 끝난다 (최상위 RD 가 이미 있다)"
 [ -f "$RDIR/intent.md" ] && ok "(d) 의도 파일이 최상위 RD 에 있다" || no "(d) 의도 파일이 최상위 RD 에 없다"
 

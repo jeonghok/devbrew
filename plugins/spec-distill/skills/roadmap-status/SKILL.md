@@ -38,13 +38,28 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
+| `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op) |
 | `[devbrew-entry] error …` | `[spec-distill] roadmap-status 사전 검사 실패 — <reason= 값>. 지도를 내지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] roadmap-status 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지도를 내지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] roadmap-status 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 지도를 내지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 지도 스크립트는 `DEVBREW_SKIP_HOOKS=spec-distill:statusline` 도 본다.
+
+### 1.5 의존 확인
+
+아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 2 로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 지도를 내지 않는다 |
+| 그 밖 | `[spec-distill] roadmap-status 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 지도를 내지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
 ### 2. 지도 내기
 

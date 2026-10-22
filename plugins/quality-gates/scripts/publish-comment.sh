@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # publish-comment.sh — qg 게시의 유일한 sink. gh 쓰기는 이 파일에만 있다(AC15).
 #
-# 순서(spec §5): kill switch → gh 존재·인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그 → 길이 → 코멘트.
-# 마지막 stdout 줄은 `posted: <url>` 또는 `skipped: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
-# 사유 리터럴: no-pr · pr-closed · kill-switch · scan-failed · gh-unavailable · too-long.
-# exit: posted·skipped 는 0, 잘못된 호출은 2.
+# 순서(spec §5): kill switch → gh 존재 · origin(gh-repo.sh) → 인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그
+# → 길이 → 코멘트. gh 호출은 전부 `-R <origin>` 을 밝힌다.
+# 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
+# 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long.
+# pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
+# `failed:` 는 둘이다 — gh 가 없다(`failed: gh-unavailable`) · origin 이 없거나 URL 을 못 읽거나 gh 가 그 레포를
+# 다루지 못한다(`failed: no-origin`).
+# 사유는 stderr 에 있다(gh-repo.sh 가 낸 설치 · 확인 안내).
+# exit: posted·skipped 는 0, failed 는 1, 잘못된 호출은 2.
 #
 # Usage: publish-comment.sh --body-file <file> [--base <merge-base sha>]
 set -uo pipefail
@@ -23,6 +28,7 @@ done
 [ -n "$body" ] || { echo "publish-comment: --body-file 이 필요하다" >&2; exit 2; }
 
 skip() { echo "skipped: $1"; exit 0; }
+fail() { echo "failed: $1"; exit 1; }
 
 # 1. kill switch — 어떤 gh 호출보다 먼저(P3 · AC14). 전체 토큰 일치(E5).
 if [ "${DEVBREW_QUALITY_GATES_DISABLE_PUBLISH:-}" = "1" ] || [ "${DEVBREW_QUALITY_GATES_DISABLE:-}" = "1" ]; then
@@ -39,27 +45,53 @@ case "$body" in /*) ;; *) body="$PWD/$body" ;; esac
 top="$(git rev-parse --show-toplevel 2>/dev/null)" && cd "$top" \
   || { echo "publish-comment: git 리포 루트를 찾지 못했다" >&2; skip scan-failed; }
 
-# 2. gh 존재·인증 — 부작용 전(P5).
-command -v gh >/dev/null 2>&1 || { echo "publish-comment: gh 가 PATH 에 없다" >&2; skip gh-unavailable; }
-# 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
-auth_err="$(gh auth status --active 2>&1 >/dev/null)" \
-  || { echo "publish-comment: gh 미인증 —" >&2; printf '%s\n' "$auth_err" | tail -n 3 >&2; skip gh-unavailable; }
-
-# 3. 현재 브랜치의 PR.
+# 2. gh 존재 · origin — gh-repo.sh 가 정한다. gh 가 없거나(rc 4) origin 을 못 읽으면(rc 3) 실패다.
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/qg-sink.XXXXXX")" || { echo "publish-comment: 임시 디렉토리를 만들 수 없다" >&2; skip scan-failed; }
 trap 'rm -rf "$WORK"' EXIT
+slug_rc=0
+slug="$(bash "$SCRIPT_DIR/gh-repo.sh" 2>"$WORK/gh-repo.err")" || slug_rc=$?
+cat "$WORK/gh-repo.err" >&2
+if [ "$slug_rc" -eq 4 ]; then
+  echo "publish-comment: gh 가 없어 PR 코멘트를 달지 못했다" >&2
+  fail gh-unavailable
+fi
+[ "$slug_rc" -eq 0 ] && [ -n "$slug" ] \
+  || { echo "publish-comment: origin 의 레포를 정하지 못해 PR 코멘트를 달지 못했다(gh-repo.sh rc ${slug_rc})" >&2; fail no-origin; }
+host="${slug%%/*}"
+# 인증 — 부작용 전(P5). 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
+auth_err="$(gh auth status --active 2>&1 >/dev/null)" \
+  || { echo "publish-comment: gh 미인증 — gh auth login --hostname ${host} 를 돈다" >&2
+       printf '%s\n' "$auth_err" | tail -n 3 >&2; skip gh-unavailable; }
+
+# 3. 현재 브랜치의 PR — 브랜치 이름과 origin 을 밝혀 묻는다. 이름 붙은 브랜치가 없으면(detached HEAD) PR 이 없다.
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" \
+  || { echo "publish-comment: 지금 브랜치가 없다(detached HEAD) — 그 PR 을 찾지 않는다" >&2; skip no-pr; }
 pr_rc=0
-gh pr view --json number,state,url,baseRefName --jq '[.number,.state,.url,.baseRefName]|@tsv' \
+gh pr view "$branch" -R "$slug" --json number,state,url,baseRefName,headRefOid,isCrossRepository \
+  --jq '[.number,.state,.url,.baseRefName,.headRefOid,.isCrossRepository]|@tsv' \
   >"$WORK/pr.tsv" 2>"$WORK/pr.err" || pr_rc=$?
 if [ "$pr_rc" -ne 0 ]; then
   tail -n 3 "$WORK/pr.err" >&2
   if grep -qi 'no pull requests found' "$WORK/pr.err"; then skip no-pr; fi
+  if grep -qiE 'could not resolve to a repository|no such type pullrequest' "$WORK/pr.err"; then
+    echo "publish-comment: gh 가 origin(${slug})을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다(비공개 레포면 접근 권한도 확인한다)" >&2
+    fail no-origin
+  fi
   skip gh-unavailable
 fi
-IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base <"$WORK/pr.tsv" || true
+IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base pr_head pr_cross <"$WORK/pr.tsv" || true
 # 비신뢰 값은 전체 일치로 검사한다(V11).
 [[ "${pr_num:-}" =~ ^[0-9]+$ ]] || { echo "publish-comment: PR 번호를 읽지 못했다" >&2; skip gh-unavailable; }
 [ "${pr_state:-}" = "OPEN" ] || { echo "publish-comment: PR #${pr_num} 상태 ${pr_state:-?}" >&2; skip pr-closed; }
+# 브랜치 이름만으로 고른 PR 이 이 checkout 의 PR 인지 확인한다 — 같은 이름의 fork PR · 옛 PR 에 달지 않는다.
+# origin 안의 PR 이고(isCrossRepository false) 그 head 가 지금 HEAD 와 같을 때만 단다. 아니면 달지 않는다.
+[ "${pr_cross:-}" = "false" ] \
+  || { echo "publish-comment: PR #${pr_num} 은 다른 레포(fork)에서 온 PR 이다(isCrossRepository ${pr_cross:-?}) — 달지 않는다" >&2; skip pr-mismatch; }
+head_sha="$(git rev-parse --verify -q HEAD 2>/dev/null || true)"
+if [ -z "$head_sha" ] || [ "${pr_head:-}" != "$head_sha" ]; then
+  echo "publish-comment: PR #${pr_num} 의 head(${pr_head:0:12}) 가 지금 HEAD(${head_sha:0:12}) 와 다르다 — 푸시한 뒤 다시 /quality-gates:quality-pipeline" >&2
+  skip pr-mismatch
+fi
 
 # 4. corpus — 이 변경 자신의 글: 커밋 메시지·패치, 작업트리 diff, 변경 파일 내용. merge-base 가 없거나 생산자
 #    하나라도 실패하면 degraded 헤더 한 줄만 둔다(secret-scan 이 fail-closed) — 부분 corpus 로 통과시키지 않는다.
@@ -130,7 +162,7 @@ chars="$(python3 -I -X utf8 -c 'import sys; print(len(open(sys.argv[1], encoding
 
 # 6. 새 코멘트 하나. 본문은 불투명 바이트로만 넘긴다(P4).
 post_rc=0
-gh pr comment "$pr_num" --body-file "$body" >"$WORK/post.out" 2>"$WORK/post.err" || post_rc=$?
+gh pr comment "$pr_num" --body-file "$body" -R "$slug" >"$WORK/post.out" 2>"$WORK/post.err" || post_rc=$?
 if [ "$post_rc" -ne 0 ]; then
   tail -n 3 "$WORK/post.err" >&2
   echo "publish-comment: gh pr comment 실패(rc ${post_rc})" >&2

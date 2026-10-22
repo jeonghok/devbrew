@@ -1,9 +1,9 @@
 {
-  "description": "project-init - validates branch naming and commit messages on Bash tool calls",
+  "description": "project-init - observes new branch names after Bash and EnterWorktree tool calls and validates commit messages on Bash tool calls",
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|EnterWorktree",
         "hooks": [
           {
             "type": "command",

@@ -150,6 +150,11 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "skipped: no-pr" "정상($sh): skipped 줄도 그대로 낸다"
 
   fresh_proj
+  SINK_LAST="failed: gh-unavailable" run_fence "$sh" "finished"
+  assert_eq "$LAST" "failed: gh-unavailable" "gh 없음($sh): sink 의 failed: 줄을 그대로 낸다"
+  assert_eq "$(tail -n 1 "$R")" "failed: gh-unavailable" "gh 없음($sh): failed: 줄이 result.md ## 게시 에 남는다"
+
+  fresh_proj
   SINK_LAST="something else" run_fence "$sh" "finished"
   assert_eq "$LAST" "게시 결과 불명 — sink 출력 계약 위반(rc 0)" "P6($sh): sink 마지막 줄이 리터럴이 아니면 성공으로 읽지 않는다"
 

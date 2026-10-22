@@ -38,6 +38,8 @@ push_file "$RM" "$(rmtext 로드맵)"
 mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" "$S/"
+# 기계 상태 읽기는 scripts/ 의 형제 .claude-plugin/plugin.json 에서 자기 판을 읽는다 — 사본(S · m-*)의 부모에도 둔다
+mkdir -p "$T/.claude-plugin" && cp "$ROOT/plugins/spec-distill/.claude-plugin/plugin.json" "$T/.claude-plugin/"
 sp_off "$S/state_path.py"
 cat > "$S/roadmap_status.py" <<'PY'
 #!/usr/bin/env python3
@@ -79,7 +81,7 @@ cat > "$S/report.json" <<'JSON'
   {"id": "R2", "title": "둘", "kind": "bundle", "stage": "계획", "reason": "계획 있음", "task_status": "in_progress", "deps": ["R1"], "warnings": [], "notes": []},
   {"id": "R3", "title": "셋", "kind": "bundle", "stage": "준비", "reason": "의존 완료", "task_status": "pending", "deps": [], "warnings": [], "notes": []}]}
 JSON
-LINE="rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)"
+LINE="rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음"
 STATE_DIR="$W/docs/superpowers/interview"
 write_state() {  # write_state <폴더> <파일 이름> <조사 수 하나> — 진행 중 인터뷰 상태 파일
   mkdir -p "$1"
@@ -197,12 +199,12 @@ rm -f "$CACHE"
 out="$(show --tasks 2>"$T/err")"; rc=$?
 assert_eq "$out|$rc" "|3" "상태 계산이 3 이면 표준 출력이 비고 rc 3"
 assert_eq "$(cat "$T/err")" "검사 불가 — 로드맵을 못 읽었다: x" "사유는 표준 오류"
-assert_eq "$(sl)" "rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · 검사 불가" "상태줄은 검사 불가 조각"
+assert_eq "$(sl)" "rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음 · 검사 불가" "상태줄은 검사 불가 조각"
 rm -f "$S/stub-rm.json" "$CACHE"
 
 echo "=== 상태 계산이 깨짐 ==="
 : > "$S/garbage.flag"
-assert_eq "$(sl)" "rm · 설계 0 · 구현 0 · 준비 0 · 경고 없음 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · 검사 불가" "JSON 이 아닌 출력은 검사 불가"
+assert_eq "$(sl)" "rm · 설계 0 · 구현 0 · 준비 0 · 경고 없음 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음 · 검사 불가" "JSON 이 아닌 출력은 검사 불가"
 assert_contains "$(show)" "검사 불가: 상태 계산 출력을 읽지 못했다(rc 2)" "지도에 사유"
 rm -f "$S/garbage.flag"
 assert_eq "$(sl)" "$LINE" "깨진 출력은 캐시에 남지 않는다 — 고쳐지면 바로 정상 줄"
@@ -213,7 +215,7 @@ printf '{"roadmap":"d","source":"origin/main","fetched_at":null,"notice":"","ove
 push_file docs/superpowers/roadmaps/done/roadmap.md "$(rmtext '끝난 로드맵')"
 assert_eq "$(sl)" "$LINE" "블록이 다 끝난 로드맵은 고르지 않는다"
 push_file docs/superpowers/roadmaps/rn/roadmap.md "$(rmtext '둘째 로드맵')"
-assert_eq "$(sl)" "rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)" "로드맵 둘 — 첫 이름 + 외 1, 수는 합"
+assert_eq "$(sl)" "rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음" "로드맵 둘 — 첫 이름 + 외 1, 수는 합"
 out="$(show --tasks 2>"$T/err")"; rc=$?
 assert_eq "$out|$rc" "|2" "로드맵이 여럿인데 경로 없음 — rc 2"
 out="$(show --tasks "docs/superpowers/roadmaps/rn/roadmap.md" 2>/dev/null)"; rc=$?
@@ -296,7 +298,7 @@ except FileNotFoundError:
 
 def gather():
     del log[:], procs[:]
-    v = cp.gather(P, None, cp.Deadline(30), {}, use_gh=False)
+    v = cp.gather(P, None, cp.Deadline(30), {}, detail=False)
     return len(log), dict((p, r.get("exit")) for p, r in v["items"])
 
 
@@ -419,7 +421,7 @@ alive() {  # alive <pid 파일> — 아직 살아 있는 pid 수
 }
 HANG="$T/hang"; mkdir -p "$HANG"
 printf '#!/bin/sh\nsleep 30 &\necho $! >> "%s/orphans"\nwait\n' "$HANG" > "$HANG/git"; chmod +x "$HANG/git"
-LINE2="rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든)"
+LINE2="rm 외 1 · 설계 2 · 구현 2 · 준비 2 · 경고 4 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음"
 
 rm -f "$CACHE"
 out="$(cd "$W" && timed 15 env PATH="$HANG:$PATH" python3 "$S/control_plane.py" statusline </dev/null)"
@@ -517,13 +519,20 @@ echo "=== 기계 상태 덧씌우기 — 배선 · 캐시 · 상한 ==="
 MPATH="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c; print(c.machine_path(sys.argv[2], sys.argv[3]))' "$REAL" "$W/.claude/spec-distill" "$RM")"
 LEDGER="$T/exec-ledger.md"
 printf '# SDD ledger — plan: p\nTask 1: Ruling: 가 — 왜 — 비용\n' > "$LEDGER"
-write_machine() {  # write_machine <PR 상태> <원장 경로> — 진짜 기계 상태 파일을 쓴다
+write_machine() {  # write_machine <PR 상태> <원장 경로> [<번호>:<상태>:<교차 레포>:<base> …] — 진짜 기계 상태 파일을 쓴다.
+  # 첫 줄은 이 레포에서 main 으로 연 #12, 뒤 인자는 그 뒤에 적는 feature/a 의 줄들(적힌 차례 그대로)
   mkdir -p "$(dirname "$MPATH")"
   python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c
 d = c.empty()
-d["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": sys.argv[4], "확인한 때": "2026-10-17 10:00"})
+def row(num, state, cross, base):
+    return {"브랜치": "feature/a", "번호": num, "상태": state, "확인한 때": "2026-10-17 10:00",
+            "headRefOid": "a" * 40, "교차 레포": cross, "baseRefName": base, "mergeCommit": "-",
+            "쓴 세션": "session-aaaa1111"}
+d["PR"].append(row("#12", sys.argv[4], "아니오", "main"))
+for extra in sys.argv[6:]:
+    d["PR"].append(row(*extra.split(":")))
 d["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": sys.argv[5], "읽은 줄": "0"})
-open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM" "$1" "$2"
+open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM" "$@"
 }
 python3 -I -c 'import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -532,21 +541,80 @@ d["blocks"] = [{"id": "R5", "title": "다섯", "kind": "bundle", "stage": "구�
                 "branch_states": [{"branch": "feature/a", "tip": "abcdef12", "merged": None}]}]
 d["orphans"] = []; d["exit"] = 0
 json.dump(d, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False)' "$S/report.json" "$S/stub-rm.json"
-rm -f "$CACHE"
-write_machine 열림 "$LEDGER"
-sl >/dev/null
+rm -f "$CACHE" "$MPATH"
 out="$(show)"
-assert_contains "$out" "R5 다섯 — PR · #12 열림(기계 상태)" "기계 상태의 열린 PR 이 단계를 PR 로 바꾼다(gather 배선)"
-assert_contains "$out" "    PR: #12 열림(기계 상태)" "PR 줄"
+assert_contains "$out" "    PR: 알 수 없음 — PR 캐시에 없다 — 지휘자가 채운다" "PR 캐시에 그 브랜치 줄이 없으면 지휘자가 채운다고 밝힌다(gh 를 부르지 않는다)"
+assert_contains "$(sl)" "· PR 캐시 없음" "상태줄: 기계 상태가 없으면 PR 캐시 없음"
+write_machine 열림 "$LEDGER"
+CALLS_BEFORE="$(calls)"
+sl >/dev/null
+[ "$(calls)" -gt "$CALLS_BEFORE" ] && ok "PR 캐시 줄이 생기면 다시 계산한다(결과 캐시 열쇠에 PR 캐시 지문)" || no "PR 캐시 줄이 생기면 다시 계산한다(결과 캐시 열쇠에 PR 캐시 지문) — 호출 수 $CALLS_BEFORE → $(calls)"
+out="$(show)"
+assert_contains "$out" "R5 다섯 — PR · #12 열림(PR 캐시)" "PR 캐시의 열린 PR 이 단계를 PR 로 바꾼다(gather 배선)"
+assert_contains "$out" "    PR: #12 열림(PR 캐시)" "PR 줄"
 assert_contains "$out" "    R5: Task 1: Ruling: 가 — 왜 — 비용" "실행 원장의 판정 줄"
+assert_grep "$(sl)" ' · PR 캐시 [0-9]+시간 전$' "상태줄: PR 캐시의 나이(가장 최근 확인한 때, 네트워크 없음)"
 CALLS_BEFORE="$(calls)"
 write_machine 닫힘 "$LEDGER"
 sl >/dev/null
 out="$(show)"
-assert_eq "$(calls)" "$CALLS_BEFORE" "양성 짝: 캐시가 맞아 상태 계산은 다시 부르지 않았다"
-assert_contains "$out" "    PR: #12 닫힘(기계 상태)" "기계 상태를 바꾸면 캐시 뒤의 화면이 따라간다 — 덧씌움이 캐시에 남지 않는다"
-assert_not_contains "$out" "열림(기계 상태)" "옛 PR 상태가 캐시를 타고 남지 않는다"
-assert_not_contains "$(cat "$CACHE")" "기계 상태" "캐시 파일에 덧씌움이 없다"
+[ "$(calls)" -gt "$CALLS_BEFORE" ] && ok "PR 캐시 줄만 바꿔도 다시 계산한다(결과 캐시 열쇠)" || no "PR 캐시 줄만 바꿔도 다시 계산한다(결과 캐시 열쇠) — 호출 수 $CALLS_BEFORE → $(calls)"
+assert_contains "$out" "    PR: #12 닫힘(PR 캐시)" "PR 캐시를 바꾸면 화면이 따라간다"
+assert_not_contains "$out" "열림(PR 캐시)" "옛 PR 상태가 캐시를 타고 남지 않는다"
+assert_not_contains "$(cat "$CACHE")" "PR 캐시)" "캐시 파일에 덧씌움이 없다"
+printf '# SDD ledger — plan: p\nTask 1: Ruling: 나 — 왜 — 비용\n' > "$T/exec-ledger-2.md"
+CALLS_BEFORE="$(calls)"
+write_machine 닫힘 "$T/exec-ledger-2.md"
+sl >/dev/null
+assert_eq "$(calls)" "$CALLS_BEFORE" "양성 짝: PR 줄 밖(실행 원장)만 바뀌면 다시 계산하지 않는다"
+assert_contains "$(show)" "    R5: Task 1: Ruling: 나 — 왜 — 비용" "실행 원장은 캐시 밖에서 매번 읽는다"
+
+echo "=== PR 캐시: fork · 다른 base 의 같은 이름 PR 은 고르지 않는다(줄 순서와 무관) ==="
+write_machine 열림 "$LEDGER" "#99:열림:예:main" "#50:열림:아니오:dev"
+out="$(show)"
+assert_contains "$out" "R5 다섯 — PR · #12 열림(PR 캐시)" "뒤에 적힌 fork 줄이 단계와 번호를 정하지 않는다"
+assert_not_contains "$out" "#99" "fork PR 번호를 보이지 않는다"
+assert_not_contains "$out" "#50" "다른 base 의 PR 번호를 보이지 않는다"
+write_machine 닫힘 "$LEDGER" "#99:열림:예:main"
+out="$(show)"
+assert_contains "$out" "R5 다섯 — 구현 끝" "이 레포 PR 이 닫혔으면 뒤의 열린 fork PR 이 단계를 PR 로 바꾸지 않는다"
+assert_contains "$out" "    PR: #12 닫힘(PR 캐시)" "PR 줄은 이 레포의 PR"
+write_machine 닫힘 "$LEDGER" "#13:열림:아니오:main"
+assert_contains "$(show)" "R5 다섯 — PR · #13 열림(PR 캐시)" "양성 짝: 이 레포의 열린 PR 은 줄 순서와 무관하게 고른다"
+write_machine_fork_only() {  # 이 레포 줄 없이 fork 줄 하나
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as c
+d = c.empty()
+d["PR"].append({"브랜치": "feature/a", "번호": "#99", "상태": "열림", "확인한 때": "2026-10-17 10:00", "headRefOid": "a" * 40,
+                "교차 레포": "예", "baseRefName": "main", "mergeCommit": "-", "쓴 세션": "session-aaaa1111"})
+open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))' "$REAL" "$MPATH" "$RM"
+}
+write_machine_fork_only
+out="$(show)"
+assert_contains "$out" "    PR: 없음(PR 캐시 — fork PR 1개는 세지 않았다)" "fork 줄만 있으면 이 레포의 PR 은 없다고 밝힌다"
+assert_contains "$out" "R5 다섯 — 구현 끝" "fork 줄만 있으면 단계를 바꾸지 않는다"
+write_machine 닫힘 "$LEDGER"
+
+echo "=== gh 없는 PATH(AC23a) — 상태줄 · 상태 보기는 gh 를 보지 않는다 ==="
+NOGH="$T/nogh"; mkdir -p "$NOGH"
+ln -s "$(command -v git)" "$NOGH/git"; PYBIN="$(command -v python3)"
+(PATH="$NOGH" command -v gh >/dev/null 2>&1) && no "그 PATH 에 gh 가 있다 — 아래 단언이 공허하다" || ok "양성 짝: 그 PATH 에 gh 가 없다"
+rm -f "$MPATH" "$CACHE"
+out="$(cd "$W" && PATH="$NOGH" "$PYBIN" "$S/control_plane.py" statusline </dev/null)"; rc=$?
+assert_eq "$rc" "0" "gh 없음: 상태줄 rc 0"
+assert_contains "$out" "rm 외 1 · 설계" "gh 없음: 상태줄이 정상 줄을 낸다"
+assert_not_grep "$out" '(^|[^A-Za-z0-9_])gh([^A-Za-z0-9_]|$)' "gh 없음: 상태줄에 「gh」 낱말이 없다"
+out="$(cd "$W" && PATH="$NOGH" "$PYBIN" "$S/control_plane.py" show </dev/null)"; rc=$?
+assert_eq "$rc" "0" "gh 없음: 상태 보기 rc 0"
+assert_contains "$out" "    PR: 알 수 없음 — PR 캐시에 없다 — 지휘자가 채운다" "gh 없음: PR 칸은 PR 캐시만 읽는다"
+assert_not_grep "$out" '(^|[^A-Za-z0-9_])gh([^A-Za-z0-9_]|$)' "gh 없음: 상태 보기에 「gh」 낱말이 없다"
+out="$(cd "$W" && PATH="$NOGH" "$PYBIN" "$S/control_plane.py" show "$RM" R5 </dev/null)"; rc=$?
+assert_eq "$rc" "0" "gh 없음: 에픽 보기 rc 0"
+assert_not_grep "$out" '(^|[^A-Za-z0-9_])gh([^A-Za-z0-9_]|$)' "gh 없음: 에픽 보기에 「gh」 낱말이 없다"
+(grep -qE '(^|[^A-Za-z0-9_])gh([^A-Za-z0-9_]|$)' <<< "기계 상태에 없고 gh 가 없다") && ok "양성 대조: 판독 패턴이 옛 문장 「… gh 가 없다」를 잡는다" || no "판독 패턴이 옛 문장을 못 잡는다 — 위 단언이 공허하다"
+mutant fp 'refs_hash, "\n".join("%s=%s" % t for t in targets), pr_prints]' 'refs_hash, "\n".join("%s=%s" % t for t in targets), "-"]'
+rm -f "$CACHE" "$MPATH"; msl fp >/dev/null; c1="$(mcalls fp)"; write_machine 열림 "$LEDGER"; msl fp >/dev/null; c2="$(mcalls fp)"
+[ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: 열쇠에서 PR 캐시 지문을 빼면 다시 계산 단언이 RED" || no "변이 생존: PR 캐시 지문($c1 → $c2)"
+write_machine 닫힘 "$LEDGER"
 printf '깨진 파일\n' > "$MPATH"
 out="$(show)"
 assert_contains "$out" "기계 상태를 읽지 못했다 — frontmatter 가 없다" "깨진 기계 상태는 사유로 보인다"

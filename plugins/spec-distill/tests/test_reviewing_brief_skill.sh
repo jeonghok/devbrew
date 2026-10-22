@@ -125,6 +125,10 @@ if [ -n "$i_gate" ] && [ -n "$i_cov" ] && [ -n "$i_bnd" ] && [ -n "$i_run" ] \
 else
   no "순서 위반 또는 부재 (gate=${i_gate:-없음} coverage=${i_cov:-없음} bundle=${i_bnd:-없음} runner=${i_run:-없음}) — 엔진은 게이트를 통과한 문서만 받아야 한다"
 fi
+i_dep="$(first_line 'check_deps\.py" entry --plugin-root "\$PR" --need ')"
+{ [ -n "$i_dep" ] && [ -n "$i_gate" ] && [ "$i_dep" -lt "$i_gate" ]; } \
+  && ok "순서: 의존 확인 → 구조 게이트 (실행 라인 순서)" \
+  || no "순서: 의존 확인이 없거나 구조 게이트보다 뒤다 (deps=${i_dep:-없음} gate=${i_gate:-없음})"
 l_gate_h="$(grep -n '^## 진입 게이트' "$SKILL" | head -1 | cut -d: -f1)"
 l_proc_h="$(grep -n '^## 절차' "$SKILL" | head -1 | cut -d: -f1)"
 { [ -n "$l_gate_h" ] && [ -n "$l_proc_h" ] && [ "$l_gate_h" -lt "$l_proc_h" ]; } \
@@ -365,8 +369,10 @@ TPL_HEAD='### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)'
 # 따로 도는 블록이 `$PR`·`$STATE`·`$DEGRADE_FALLBACK_FILE` 을 물려받지 못하면 record 가 `>> ""` 로
 # 사라지고 그것이 「degrade 없음」으로 렌더된다. 실행 증거는 residue 락의 M3·I1 셀이고, 여기서는
 # 네 블록이 `## 입력` 머리와 **같은 줄들**로 시작하는지를 잰다 — 한 블록만 고치면 갈린다.
-first_block() {   # first_block <절 이름 정규식> → 그 절의 첫 ```bash 블록
-  section "$1" | awk '/^```bash$/ { if (!d) { b = 1; next } } b && /^```$/ { b = 0; d = 1; next } b'
+first_block() {   # first_block <절 이름 정규식> → 그 절의 첫 ```bash 블록(의존 확인 펜스는 건너뛴다 — 상태를 쓰지 않는다)
+  section "$1" | awk '/^```bash$/ { if (!d) { b = 1; buf = ""; dep = 0; next } }
+    b && /^```$/ { b = 0; if (!dep) { printf "%s", buf; d = 1 }; next }
+    b { buf = buf $0 "\n"; if (index($0, "/scripts/check_deps.py\" entry ")) dep = 1 }'
 }
 HEAD_TXT="$(first_block '입력' | sed '/^BUNDLE=/q')"
 n_head="$(printf '%s\n' "$HEAD_TXT" | grep -c . || true)"

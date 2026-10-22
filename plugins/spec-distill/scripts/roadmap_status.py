@@ -14,9 +14,14 @@
 정보(경로 예약 겹침 · 다른 에픽이 예약한 파일의 편집)는 종료 코드를 바꾸지 않는다 — 충돌은 머지 때 푼다.
 
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
-부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다). 단계는 git 으로 알 수 있는 것까지다 —
+부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다) — 밖의 git 은 origin 소유자를 읽는
+`gh_repo.origin_slug` 의 `git remote get-url` 하나다. 머지됨은 기계 상태의 PR 캐시(지휘자가 채운다)로
+판정하되 브랜치 끝이 기본 브랜치 머지 커밋의 둘째 부모면 캐시보다 먼저 머지됨이다(로컬 끝, 로컬이 원격의 조상이면
+원격 끝 — 로컬이 없거나 기본 브랜치 안에서 원격보다 앞이면 그 머지가 이 에픽의 문서를 처음 더한 커밋보다 먼저가
+아닐 때만 원격 끝. 로컬이 없을 때의 PR 판정도 같다). 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의
+머지 줄로 판정한다. 단계는 git 으로 알 수 있는 것까지다 —
 구현 중 · 구현 끝은 계획 파일과 설계문서의 구현 대조 절로 센다. PR 단계는 여기서 세지 않고
-control_plane 이 기계 상태 또는 `gh` 로 덧씌운다.
+control_plane 이 기계 상태의 PR 캐시로 덧씌운다.
 """
 from __future__ import annotations
 
@@ -37,11 +42,14 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     section_body, section_lines, split_list, unquote)
 from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
 from repo_defaults import default_branch as _default_branch  # noqa: E402
+from conductor_state import MachineError, machine_path, parse_machine  # noqa: E402 — PR 캐시 읽기만
+from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
+from state_path import state_root_for_common  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
-NOTICE = ("머지됨 자동 판정은 merge commit 방식에서만 된다 — 브랜치가 지워졌으면 GitHub 의 머지 메시지 "
-          "`Merge pull request #<n> from <owner>/<브랜치>` 로만 알아본다. squash · rebase 로 머지했거나 "
-          "로컬에서 머지한 뒤 브랜치를 지웠으면 로드맵 결정 기록에 머지 줄을 적는다(여러 브랜치 블록이면 머지한 브랜치 이름만 적는다 — 줄은 쌓이고 머지한 브랜치마다 한 줄이면 된다). 경로 예약 겹침과 다른 에픽이 "
+NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 "
+          "메시지로 알아보고 「PR 상태 미확인」을 보인다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 쓴다"
+          "(여러 브랜치 블록이면 머지한 브랜치 이름만 적는다 — 줄은 쌓이고 머지한 브랜치마다 한 줄이면 된다). 경로 예약 겹침과 다른 에픽이 "
           "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 기본 브랜치를 "
           "merge 하고 스위트를 다시 돌린다).")
 # 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
@@ -61,7 +69,10 @@ DONE = ("머지됨", "끝남")
 READ_DEFAULT, READ_TIP, READ_WORKSPACE = "기본 브랜치", "에픽 끝", "이 작업공간"   # 읽은 트리(read_tree)
 PAST_PLAN = ("계획", "구현 중", "구현 끝", "PR", "머지됨")
 
-MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from [^/\s]+/(\S+)")
+MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from ([^/\s]+)/(\S+)")
+PR_MERGED, PR_NOT_FETCHED, PR_UNCOUNTABLE = "머지됨", "머지됨(받기 전)", "셀 수 없음"
+FETCH_HINT = "git fetch 뒤 다시 계산한다"
+PR_UNCHECKED = "PR 상태 미확인 — 지휘자를 돌려라"
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 
 
@@ -112,6 +123,19 @@ class Git:
 
     def is_ancestor(self, a: str, b: str) -> bool:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
+
+    def common_dir(self):
+        rc, out = self.run("rev-parse", "--git-common-dir")
+        return out.strip() if rc == 0 and out.strip() else None
+
+    def reverts_of(self, commit: str, main: str) -> list:
+        """commit 뒤 기본 ref 의 커밋 가운데 메시지에 `This reverts commit <commit>` 이 든 것."""
+        rc, out, err = self.run_err("log", "--format=%H", "--fixed-strings",
+                                    "--grep=This reverts commit " + commit, "%s..%s" % (commit, main))
+        if rc != 0:
+            self.fail("log", rc, err)
+            return []
+        return [l.strip() for l in out.splitlines() if l.strip()]
 
     def default_branch(self):
         """(커밋, `origin/<짧은 이름>`) — origin/HEAD 가 가리키는 기본 브랜치. 못 풀면 (None, None) 이고 고치는 법은
@@ -361,22 +385,169 @@ def names_branch(text: str, branch: str) -> bool:
     return False
 
 
-def merged_by(git: Git, merges: list, main: str, branch: str, tip):
-    """머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1)."""
+def _merge_commit_of(git: Git, merges: list, tip):
+    """기본 브랜치의 머지 커밋 가운데 둘째 부모가 tip 이고 tip 이 첫째 부모에 아직 없던 것, 아니면 None."""
     if tip:
         for sha, parents, _subj in merges:
             if len(parents) >= 2 and parents[1] == tip and not git.is_ancestor(tip, parents[0]):
-                return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+                return sha
+    return None
+
+
+def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote, age_ok=None):
+    """PR 캐시에 줄이 있어도 먼저 보는 머지 커밋 근거 한 줄, 아니면 None. 로컬 끝이 원격 끝의 조상(받기만 한 로컬)이면
+    원격 끝만, 아니면 로컬 끝을 본다 — 그 끝이 기본 브랜치 머지 커밋의 둘째 부모면 머지됨. 원격 끝의 머지 커밋은 로컬 끝이
+    없거나, 로컬 끝이 원격 끝보다 앞이고 기본 브랜치에 다 들어 있을 때도 세되 age_ok(머지 커밋)가 거짓이면 세지 않는다
+    (그 머지가 이 에픽의 설계문서 · 산출물이 기본 브랜치에 처음 들어온 커밋보다 먼저다 — 같은 이름을 다시 쓴 옛 브랜치).
+    age_ok 가 None 을 내면(견줄 문서가 없다) 센다. 로컬에 기본 브랜치 밖 커밋이 있으면 원격 끝은 세지 않는다."""
+    stale = bool(tip_local and tip_remote and tip_local != tip_remote and git.is_ancestor(tip_local, tip_remote))
+    if tip_local and not stale:
+        sha = _merge_commit_of(git, merges, tip_local)
+        if sha:
+            return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+        if not (tip_remote and tip_remote != tip_local and git.is_ancestor(tip_remote, tip_local)
+                and git.is_ancestor(tip_local, main)):
+            return None
+    sha = _merge_commit_of(git, merges, tip_remote)
+    if not sha or (not stale and age_ok is not None and age_ok(sha) is False):
+        return None
+    return "기본 브랜치의 머지 커밋 %s(원격 끝)" % sha[:8]
+
+
+def parse_fp_events(text: str) -> list:
+    """`git log --first-parent -M --diff-filter=AR --name-status --format=%x00%H` 출력 → [(커밋, [(상태, [경로 …]) …]) …]
+    (새 커밋부터)."""
+    out = []
+    for chunk in text.split("\x00")[1:]:
+        lines = chunk.split("\n")
+        changes = [(parts[0], parts[1:]) for parts in (l.split("\t") for l in lines[1:] if l.strip()) if len(parts) >= 2]
+        out.append((lines[0].strip(), changes))
+    return out
+
+
+def first_added(events: list, path: str):
+    """path 를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋, 없으면 None. 이름 바꿈(R)은 옛 이름으로 따라가 그 이름의 추가를
+    찾는다 — 복사(C)는 따라가지 않는다(틀이 같은 문서끼리 서로의 복사로 잡히지 않게)."""
+    found = None
+    for sha, changes in events:
+        for status, paths in changes:
+            if status == "A" and paths[0] == path:
+                found = sha
+            elif status.startswith("R") and len(paths) == 2 and paths[1] == path:
+                path = paths[0]
+    return found
+
+
+def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_owner):
+    """PR 캐시에 그 브랜치의 줄이 없을 때의 머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1).
+    머지 메시지 길은 `<owner>` 가 origin 소유자일 때만 센다 — origin_owner 가 None 이면 세지 않는다."""
+    sha = _merge_commit_of(git, merges, tip)
+    if sha:
+        return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+    if origin_owner is None:
+        return None
     # 머지 메시지가 이 브랜치를 정확히 부른다 — 브랜치가 지워졌거나, 남은 브랜치 끝이 기본 브랜치에 다 들어가
     # 있을 때만(머지 뒤 로컬 브랜치를 기본 브랜치로 앞당긴 경우). 머지 뒤 커밋이 더 붙었으면 머지됨이 아니다.
     if tip and not git.is_ancestor(tip, main):
         return None
     for sha, _parents, subj in merges:
         m = MERGE_MSG_RE.fullmatch(subj.strip())
-        if m and m.group(1) == branch:
+        if m and m.group(1).casefold() == origin_owner.casefold() and m.group(2) == branch:
             return "머지 메시지 %s (%s)" % (sha[:8], "브랜치 끝이 기본 브랜치에 들어 있음" if tip
                                           else "브랜치는 지워짐")
     return None
+
+
+def _sh_word(text: str) -> str:
+    """셸에 그대로 붙여 넣을 낱말 — 안전한 글자뿐이면 그대로, 아니면 작은따옴표로 감싼다."""
+    if re.fullmatch(r"[A-Za-z0-9._/@+=:,-]+", text):
+        return text
+    return "'" + "'\\''".join(text.split("'")) + "'"
+
+
+def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable, started=False,
+              stale_local=False):
+    """(판정 | None, 알림 줄, 고른 줄 | None). 후보는 브랜치 · 머지됨 · 교차 레포 아님 · 기본 브랜치 base 에 맞는 줄만이고
+    끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다. 끝은 로컬 끝이고, 로컬 끝이 원격 끝의
+    조상(stale_local — 받기만 하고 앞당기지 않은 로컬)이면 원격 끝이다. 끝이 없으면 started(이 에픽이
+    시작된 흔적 — 지워진 브랜치)일 때만 끝 없이 판정하고, 아니면 아직 만들지 않은 브랜치로 보고 같은 이름의 옛 PR 을 세지 않는다."""
+    notes = []
+    cands = [r for r in rows if r.get("브랜치") == branch and r.get("상태") == "머지됨"
+             and r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
+    tip = tip_local or tip_remote
+    if tip_local and tip_remote and tip_local != tip_remote:
+        if stale_local:
+            tip = tip_remote
+            notes.append("로컬 끝 %s 이 원격 끝 %s 보다 뒤라 원격 끝으로 판정" % (tip_local[:8], tip_remote[:8]))
+        else:
+            notes.append("로컬 끝 %s · 원격 끝 %s" % (tip_local[:8], tip_remote[:8]))
+    if tip:
+        cands = [r for r in cands if r.get("headRefOid") == tip]
+    else:
+        if cands and not started:
+            old_oids = sorted({str(r.get("headRefOid")) for r in cands})
+            notes.append("브랜치가 없다 — 같은 이름의 옛 PR %s 은 이 에픽의 PR 로 세지 않았다(이 에픽의 승인된 설계문서나 "
+                         "계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다) — 지운 브랜치면 `git branch %s %s` 로 "
+                         "되살리거나, 설계문서의 승인 줄 · 계획의 `**Spec:**` 를 확인한다"
+                         % (" · ".join(r.get("번호", "?") for r in cands), _sh_word(branch),
+                            old_oids[0] if len(old_oids) == 1 else "<headRefOid>"))
+            return None, notes, None
+        oids = sorted({r.get("headRefOid") for r in cands})
+        if len(oids) > 1:
+            notes.append("%s — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(%s) — 브랜치를 맞는 PR 의 headRefOid 로 "
+                         "되살린다(`git branch %s <headRefOid>`)"
+                         % (PR_UNCOUNTABLE, " · ".join(r.get("번호", "?") for r in cands), branch))
+            return PR_UNCOUNTABLE, notes, None
+        if oids:
+            notes.append("브랜치 끝 없이 판정 — 캐시의 headRefOid %s" % str(oids[0])[:8])
+    if not cands:
+        return None, notes, None
+    known = [r for r in cands if r.get("mergeCommit") not in (None, "", "-")]
+    if not known:
+        notes.append("PR %s 은 머지됐지만 캐시에 mergeCommit 이 없어 머지됨으로 세지 않았다 — 지휘자를 돌려 PR 캐시를 "
+                     "다시 채운다" % " · ".join(r.get("번호", "?") for r in cands))
+        return None, notes, None
+    hit = next((r for r in known if reachable(r["mergeCommit"])), None)
+    if hit is not None:
+        return PR_MERGED, notes, hit
+    notes.append("%s — %s(PR %s)" % (PR_NOT_FETCHED, FETCH_HINT, known[0].get("번호", "?")))
+    return PR_NOT_FETCHED, notes, known[0]
+
+
+def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: str, reachable, started=False,
+                 stale_local=False):
+    """(판정, 알림 줄) — 판정 ∈ 「머지됨」 · 「머지됨(받기 전)」 · 「셀 수 없음」 · None. 여섯 조건: 브랜치 == branch ∧
+    상태 == 머지됨 ∧ 교차 레포 == 아니오 ∧ baseRefName == 기본 브랜치 ∧ headRefOid == 끝(로컬, 없으면 원격 — 로컬이
+    원격의 조상이면 원격) ∧ mergeCommit 이 기본 ref 에서 닿는다. 끝이 없으면 started(지워진 브랜치)일 때만 다섯으로
+    판정하되 맞는 headRefOid 가 둘 이상이면 셀 수 없음 — started 가 아니면 판정 없음과 알림 한 줄."""
+    verdict, notes, _row = _judge_pr(rows, branch, tip_local, tip_remote, default_short, reachable, started,
+                                     stale_local)
+    return verdict, notes
+
+
+def read_pr_cache(git: Git, roadmap_rel: str):
+    """(PR 캐시 줄들, 못 읽은 사유 | None). 기계 상태 파일이 없으면 ([], None) — 깨졌으면 빈 캐시로 가고 사유를 낸다.
+    사유는 끝에 그 사유의 할 일 하나를 단다 — `--reset` 은 옛 판 줄(OldPrRows)의 할 일일 뿐이다."""
+    common = git.common_dir()
+    if common is None:
+        return [], "git 공용 디렉토리를 찾지 못했다 — git 레포 안에서 다시 돌린다"
+    try:
+        path = machine_path(state_root_for_common(Path(git.cwd, common).resolve()), roadmap_rel)
+    except MachineError as exc:
+        return [], "기계 상태를 읽지 못했다 — %s — 로드맵 경로를 확인한다" % exc
+    if path.is_symlink():
+        return [], "기계 상태 파일이 링크다: %s — 링크를 그 내용의 보통 파일로 바꾼다" % path
+    if not path.exists():
+        return [], None
+    if not path.is_file():
+        return [], "기계 상태 파일이 보통 파일이 아니다: %s — 그 자리에 보통 파일만 둔다" % path
+    try:
+        return parse_machine(path.read_text(encoding="utf-8"), roadmap_rel)["PR"], None
+    except (OSError, UnicodeDecodeError) as exc:
+        return [], "기계 상태 파일을 읽지 못했다: %s (%s) — 파일 권한과 UTF-8 인코딩을 확인한다" % (path, type(exc).__name__)
+    except MachineError as exc:  # 옛 판 줄(--reset) · 판 문장(업데이트 등)은 메시지 끝이 할 일이다
+        return [], "기계 상태를 읽지 못했다: %s — %s%s" % (
+            path, exc, "" if exc.action_in_message else " — 기계 상태 파일에서 그 자리를 고친다")
 
 
 def extra_branches(git: Git, main: str, rel: str, blocks: list):
@@ -438,11 +609,119 @@ class _GitTreeRepo:
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str, settings: dict,
-            roadmap_rel=None):
+            roadmap_rel=None, pr_rows=None, pr_reason=None, default_short=None):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록.
-    roadmap_rel 을 주면 블록에 적힌 브랜치가 모두 머지된 에픽에서 다른 브랜치의 로드맵 사본이 더한 브랜치도 센다."""
+    roadmap_rel 을 주면 블록에 적힌 브랜치가 모두 머지된 에픽에서 다른 브랜치의 로드맵 사본이 더한 브랜치도 센다.
+    머지됨은 브랜치마다 — PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_tips(머지 커밋) 다음 merged_by_pr, 없으면 merged_by_git ·
+    결정 기록의 머지 줄로 판정하고, 「PR 0개」 줄(번호 `-` — 지휘자가 PR 이 없다고 확인함)도 없으면 블록에 「PR 상태
+    미확인」을 단다(pr_reason 은 캐시를 못 읽은 사유)."""
     merges = git.first_parent_merges(main) if main else []
     extra_cache = []
+    no_pr = {r.get("브랜치") for r in pr_rows or [] if r.get("번호") == "-"}  # conductor_state.NO_PR
+    pr_rows = [r for r in pr_rows or [] if r.get("번호") != "-"]
+    cached = {r.get("브랜치") for r in pr_rows}
+    owner_memo = []
+
+    def owner():
+        """(origin 소유자 | None, 못 읽은 사유 | None) — 처음 필요할 때 한 번 읽는다."""
+        if not owner_memo:
+            try:
+                owner_memo.append((origin_slug(git.cwd)[1], None))
+            except GhStop as exc:
+                owner_memo.append((None, str(exc)))
+        return owner_memo[0]
+
+    started_memo = {}
+
+    def started(block):
+        """이 에픽이 시작된 흔적 — 블록의 설계문서가 기본 브랜치에 있고 승인됐거나 그것을 가리키는 계획이 기본 브랜치에
+        있다. 끝 없는 브랜치를 PR 로 판정해도 되는지(지워진 브랜치인지 아직 만들지 않은 브랜치인지)를 가른다."""
+        if block["id"] not in started_memo:
+            specs = find_specs(git, main, block, block["bundle"], settings["specs_dir"])
+            when, _why = approval_of(git, main, specs) if specs else (None, None)
+            planned = bool(specs) and not when and any(
+                plan_specs(git.blob(main, p) or "") & set(specs)
+                for s in specs for p in git.grep_files(main, s, settings["plans_dir"]))
+            started_memo[block["id"]] = bool(when) or planned
+        return started_memo[block["id"]]
+
+    added_memo, events_memo = {}, []
+
+    def doc_added(block):
+        """블록의 설계문서(산출물 블록은 산출물)마다 그것을 기본 브랜치 첫째 부모 줄에 처음 더한 커밋 — 문서가 그 에픽
+        브랜치와 함께 머지됐으면 그 머지 커밋이다. 이름을 바꾼 문서는 옛 이름의 추가까지 따라간다(first_added).
+        기본 브랜치에 없거나 더한 커밋을 못 찾은 문서는 빠진다."""
+        if block["id"] not in added_memo:
+            if not events_memo:
+                rc, log, err = git.run_err("log", "--first-parent", "-M", "--diff-filter=AR", "--name-status",
+                                           "--format=%x00%H", main)
+                if rc != 0:
+                    git.fail("log", rc, err)
+                events_memo.append(parse_fp_events(log) if rc == 0 else [])
+            added = (first_added(events_memo[0], s)
+                     for s in find_specs(git, main, block, block["bundle"], settings["specs_dir"]))
+            added_memo[block["id"]] = [a for a in added if a]
+        return added_memo[block["id"]]
+
+    def age_ok(block, sha):
+        """머지 커밋 sha 를 이 에픽의 머지로 셀 수 있는가 — 거짓: sha 가 그 블록 문서들을 처음 더한 커밋 모두의 엄격한
+        조상(그 에픽보다 먼저 머지된 같은 이름의 옛 브랜치). 견줄 커밋이 없으면 None(8.6.0 처럼 센다)."""
+        added = doc_added(block)
+        if not added:
+            return None
+        return not all(sha != a and git.is_ancestor(sha, a) for a in added)
+
+    def judge(br, block, extra=False):
+        """브랜치 하나의 상태 — tip · merged(근거 | None) · 셀 수 없으면 uncountable. extra(더한 브랜치)는 끝이 없으면
+        판정을 쓰지 않으므로 시작 흔적을 묻지 않는다."""
+        local = git.commit("refs/heads/" + br)
+        remote = git.commit("refs/remotes/origin/" + br)
+        st = {"branch": br, "tip": local or remote, "merged": None}
+        if br not in cached:
+            st["merged"] = merged_by_git(git, merges, main, br, st["tip"], owner()[0])
+            return st
+        st["merged"] = merged_by_tips(git, merges, main, local, remote, lambda sha: age_ok(block, sha))
+        if st["merged"]:
+            if local and remote and local != remote:
+                block["notes"].append("%s: 로컬 끝 %s · 원격 끝 %s" % (br, local[:8], remote[:8]))
+            return st
+        rows = [r for r in pr_rows if r.get("브랜치") == br]
+        stale = bool(local and remote and local != remote and git.is_ancestor(local, remote))
+        verdict, notes, hit = _judge_pr(rows, br, local, remote, default_short, lambda c: git.is_ancestor(c, main),
+                                        started=extra or bool(local or remote) or started(block) or bool(doc_added(block)),
+                                        stale_local=stale)
+        if verdict == PR_MERGED and not local and age_ok(block, hit["mergeCommit"]) is False:
+            # 로컬이 없으면 끝(원격 ref · 캐시의 headRefOid)이 같은 이름의 옛 브랜치 것일 수 있다 — 문서보다 먼저 머지된 PR 은 세지 않는다
+            notes.append("같은 이름의 옛 PR %s 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼 이 에픽의 PR 로 세지 "
+                         "않았다" % hit.get("번호", "?"))
+            verdict, hit = None, None
+        if verdict in (PR_NOT_FETCHED, PR_UNCOUNTABLE):
+            line = "%s: %s" % (br, notes.pop())
+            if verdict == PR_NOT_FETCHED:
+                block["warnings"].append(line)
+            else:
+                st["uncountable"] = line
+        block["notes"].extend("%s: %s" % (br, n) for n in notes)
+        if verdict == PR_MERGED:
+            st["merged"] = "PR %s 머지됨(mergeCommit %s)" % (hit["번호"], hit["mergeCommit"][:8])
+            for rev in git.reverts_of(hit["mergeCommit"], main):
+                block["warnings"].append("머지 뒤 되돌림 — %s 이 %s 의 머지 커밋 %s 을 되돌렸다(단계는 머지됨 그대로)"
+                                         % (rev[:8], br, hit["mergeCommit"][:8]))
+        return st
+
+    cache_warning = None
+    if pr_reason:
+        cache_warning = "PR 캐시를 읽지 못했다 — %s" % pr_reason  # 할 일은 사유마다 read_pr_cache 가 단다
+
+    def unchecked_note(branches, block):
+        """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 그 사유는 경고로."""
+        unchecked = [br for br in branches if br not in cached and br not in no_pr]
+        if not unchecked:
+            return
+        why = ["머지 메시지는 세지 않았다 — %s" % owner()[1]] if owner()[1] else []
+        block["notes"].append("%s(%s)" % (PR_UNCHECKED, " · ".join(unchecked + why)))
+        if cache_warning and cache_warning not in block["warnings"]:
+            block["warnings"].append(cache_warning)
 
     def extras_for(bid):
         """(더한 브랜치 이름들, 형식이 깨진 사본 수)."""
@@ -490,19 +769,29 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 b["stage"], b["reason"] = "준비", "의존 완료"
             continue
         bundle_path = b["bundle"]
-        states = []
-        for br in b["branches"]:
-            tip = git.commit("refs/heads/" + br) or git.commit("refs/remotes/origin/" + br)
-            states.append({"branch": br, "tip": tip, "merged": merged_by(git, merges, main, br, tip)})
+        states = [judge(br, b) for br in b["branches"]]
         b["branch_states"] = states
+        unchecked_note([s["branch"] for s in states], b)
+        bad = [s["uncountable"] for s in states if s.get("uncountable")]
+        if bad:
+            b["stage"], b["reason"] = "알 수 없음", " · ".join(bad)
+            continue
         rec_merge = rec.get((bid, "머지"))
+        if rec_merge and len(states) == 1 and states[0]["branch"] in cached:
+            if not states[0]["merged"]:
+                b["warnings"].append("결정 기록의 머지 줄을 %s 에 적용하지 않았다 — PR 캐시에 그 브랜치의 PR 이 있어 PR 상태로 "
+                                     "판정한다" % states[0]["branch"])
+            rec_merge = None
         if rec_merge and len(states) > 1 and not all(s["merged"] for s in states):
             # 브랜치가 여럿이면 머지 줄은 쌓인다 — 글에 이름이 적힌 브랜치에만 닿고, 그 ref 가 사라졌을 때만 머지로 센다.
             for s in states:
                 if s["merged"]:
                     continue
                 line = next((r for r in merge_lines[bid] if names_branch(r["quote"], s["branch"])), None)
-                if line is None:
+                if s["branch"] in cached:
+                    b["warnings"].append("결정 기록의 머지 줄을 %s 에 적용하지 않았다 — PR 캐시에 그 브랜치의 PR 이 있어 PR "
+                                         "상태로 판정한다" % s["branch"])
+                elif line is None:
                     b["warnings"].append("결정 기록의 머지 줄이 %s 를 가리키지 않아 적용하지 않았다" % s["branch"])
                 elif s["tip"] is None:
                     s["merged"] = "결정 기록의 머지 기록 %s %s" % (line["date"], line["quote"])
@@ -517,10 +806,14 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             if broken:
                 b["notes"].append("기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 %d개는 형식이 깨져 읽은 블록만 셌다 — "
                                   "그 사본이 이 블록에 더한 브랜치는 세지 못했을 수 있다" % broken)
+            seen_tips = []
             for br in names:
-                tip = git.commit("refs/heads/" + br) or git.commit("refs/remotes/origin/" + br)
-                if tip and not merged_by(git, merges, main, br, tip):
-                    more.append({"branch": br, "tip": tip, "merged": None})
+                st = judge(br, b, extra=True)
+                if st["tip"]:
+                    seen_tips.append(br)   # ref 가 없는 이름은 지웠는지 아직 안 만들었는지 모른다 — 세지 않는다
+                if st["tip"] and not st["merged"]:
+                    more.append({"branch": br, "tip": st["tip"], "merged": None})
+            unchecked_note(seen_tips, b)
             if more:
                 if rec_merge:
                     for s in states:
@@ -717,7 +1010,7 @@ def build(git: Git, args) -> dict:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
-    try:   # 기계 상태 층은 읽지 않는다 — 기계 상태를 읽는 모듈은 이 읽기 전용 계산의 잠긴 파일 밖이다(알림으로 밝힌다)
+    try:   # 레포 설정의 기계 상태 층은 읽지 않는다 — 상태 계산이 기계 상태에서 읽는 것은 PR 캐시뿐이다(알림으로 밝힌다)
         resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
     except SettingsError as exc:
         resolved = {"values": {"parallel_default": None}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}
@@ -761,7 +1054,10 @@ def build(git: Git, args) -> dict:
         report["orphans"] = sorted(s_ids - union, key=id_sort_key)
         report["unknown_ids"] = sorted(union - non_s - s_ids, key=id_sort_key)
 
-    cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings, roadmap_rel=rel)
+    pr_rows, pr_reason = read_pr_cache(git, rel)
+    cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings, roadmap_rel=rel,
+                          pr_rows=pr_rows, pr_reason=pr_reason,
+                          default_short=main_name.split("/", 1)[1] if main_name else None)
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
     report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
     report["overlaps"] = overlaps(blocks)

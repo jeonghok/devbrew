@@ -149,36 +149,45 @@ class MergedPrs(unittest.TestCase):
         return {"id": "R1", "stage": "머지됨", "branch_states": [
             {"branch": "feature/a", "tip": None, "merged": "x"}, {"branch": "feature/b", "tip": None, "merged": "y"}]}
 
-    def test_cache_then_gh(self):
-        prs = {"feature/a": {"브랜치": "feature/a", "번호": "#7", "상태": "열림", "확인한 때": "t"}}
-        calls = []
+    @staticmethod
+    def row(br, num, state, cross="아니오", base="main"):
+        return {"브랜치": br, "번호": num, "상태": state, "확인한 때": "t", "headRefOid": "a" * 40, "교차 레포": cross,
+                "baseRefName": base, "mergeCommit": "-", "쓴 세션": "session-aaaa1111"}
 
-        def gh(br):
-            calls.append(br)
-            return {"number": "#9", "state": "머지됨", "source": "gh"}
-        got = cp.merged_prs(self.b(), prs, gh)
-        self.assertEqual(got, [("feature/a", {"number": "#7", "state": "머지됨", "source": "기계 상태"}),
-                               ("feature/b", {"number": "#9", "state": "머지됨", "source": "gh"})])
-        self.assertEqual(calls, ["feature/b"])
+    def test_cache_only_and_own_pr_wins_over_a_later_fork_row(self):
+        rows = [self.row("feature/a", "#7", "머지됨"), self.row("feature/a", "#8", "열림", cross="예"),
+                self.row("feature/a", "#9", "열림", base="dev")]
+        got = cp.merged_prs(self.b(), rows, "main")
+        self.assertEqual(got[0], ("feature/a", {"number": "#7", "state": "머지됨", "source": "PR 캐시"}))
+        self.assertEqual(got[1][0], "feature/b")
+        self.assertEqual(got[1][1]["state"], "알 수 없음")
 
-    def test_no_gh(self):
-        got = cp.merged_prs(self.b(), {}, None)
+    def test_merged_row_wins_over_a_newer_open_row(self):
+        rows = [self.row("feature/a", "#9", "열림"), self.row("feature/a", "#7", "머지됨"), self.row("feature/a", "#5", "닫힘")]
+        got = cp.merged_prs(self.b(), rows, "main")
+        self.assertEqual(got[0], ("feature/a", {"number": "#7", "state": "머지됨", "source": "PR 캐시"}))
+
+    def test_finished_epic_without_rows_names_the_refill_command(self):
+        got = cp.merged_prs(self.b(), [], "main")
         self.assertEqual([p["state"] for _b, p in got], ["알 수 없음", "알 수 없음"])
+        why = got[0][1]["source"]
+        self.assertIn("PR 캐시에 없다 — 끝난 에픽의 줄은 지휘자가 다시 채우지 않는다", why)
+        self.assertIn("ledger pr-refresh --roadmap <로드맵> --session <세션> --epic R1 로 채운다", why)
+        self.assertNotIn("gh", why.replace("pr-refresh", ""))
 
     def test_overlay_only_for_focus(self):
         report = {"blocks": [self.b(), dict(self.b(), id="R2")]}
-        cp.overlay([("rm/roadmap.md", report)], lambda rel: ({"PR": [], "실행 원장": []}, None),
-                   lambda br: {"number": "#1", "state": "머지됨", "source": "gh"}, True,
-                   read=lambda p, n: "", focus="R1")
+        cp.overlay([("rm/roadmap.md", report)], lambda rel: ({"PR": [], "실행 원장": []}, None), True,
+                   read=lambda p, n: "", focus="R1", default_short="main")
         self.assertIn("merged_prs", report["blocks"][0])
         self.assertNotIn("merged_prs", report["blocks"][1])
 
     def test_epic_view_shows_merged_prs(self):
         b = dict(self.b(), title="가", reason="머지", deps=[], parallel=[], specs=[], plans=[],
-                 merged_prs=[("feature/a", {"number": "#7", "state": "머지됨", "source": "기계 상태"})])
+                 merged_prs=[("feature/a", {"number": "#7", "state": "머지됨", "source": "PR 캐시"})])
         lines, rc = cp.epic_view("rm/roadmap.md", {"blocks": [b], "handoffs": [], "machine": None}, "R1")
         self.assertEqual(rc, 0)
-        self.assertIn("  PR: feature/a #7 머지됨(기계 상태)", lines)
+        self.assertIn("  PR: feature/a #7 머지됨(PR 캐시)", lines)
 
 
 if __name__ == "__main__":

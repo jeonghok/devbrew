@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """PostToolUse hook for project-init plugin.
 
-Validates two things on Bash tool use:
-1. Branch naming — detects git checkout -b / git switch -c and validates
-   the branch name against the pattern in docs/git-workflow/branch-strategy.md.
-2. Commit message — detects git commit -m and validates Conventional Commits format.
+Runs after Bash and EnterWorktree tool calls:
+1. Branch naming (Bash and EnterWorktree) — observes, after the call, which
+   local branches were just made (their reflog's last line is a create /
+   rename / copy within NEW_BRANCH_WINDOW seconds) and validates each name
+   against the pattern in docs/git-workflow/branch-strategy.md as committed on
+   the default branch (refs/remotes/origin/HEAD), not the working tree.
+2. Commit message (Bash only) — detects git commit -m and validates
+   Conventional Commits format.
 
 Both validators are non-blocking. Each emits a human-facing warning on
 systemMessage; the branch validator additionally emits a self-contained,
@@ -24,7 +28,11 @@ import json
 import os
 import pathlib
 import re
+import shlex
+import signal
+import subprocess
 import sys
+import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from kill_switch_active import kill_switch_active  # noqa: E402
@@ -35,7 +43,12 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
     r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?:\s.+"
 )
 
-BRANCH_CREATE_RE = re.compile(r"git\s+(?:checkout\s+-b|switch\s+-c)\s+(\S+)")
+DEFAULT_REF = "refs/remotes/origin/HEAD"
+STRATEGY_PATH = "docs/git-workflow/branch-strategy.md"
+NEW_BRANCH_WINDOW = 60.0
+GIT_BUDGET = 8.0  # 한 실행의 git 호출 전체 — hooks.json 의 timeout(10초) 안
+CREATED_PREFIX = "branch: Created from "
+RENAMED_RE = re.compile(r"Branch: (?:renamed|copied) refs/heads/.+ to refs/heads/(.+)$")
 COMMIT_MSG_RE = re.compile(r"""git\s+commit\s+[^;|&]*-m\s+(['"])(.*?)\1""")
 HEREDOC_COMMIT_RE = re.compile(
     r"""git\s+commit\s+[^;|&]*-m\s+['"]\$\(cat\s+<<['"]?(\w+)['"]?\n(.*?)\n\1""",
@@ -70,27 +83,170 @@ PROTECTED_BRANCHES = {"main", "master", "develop", "dev"}
 # --- Helpers ---
 
 
-def get_branch_pattern():
-    """Return the declared branch pattern, or None when none is validly declared.
+class GitTimeout(Exception):
+    """The shared git deadline ran out."""
+
+
+def _deadline():
+    return time.monotonic() + GIT_BUDGET
+
+
+def _git(cwd, *args, deadline=None):
+    """Run git in cwd; stdout bytes on rc 0, else None (git 없음 · 레포 아님).
+
+    한 실행의 모든 git 호출은 deadline 하나를 나눠 쓴다. 다 쓰면 GitTimeout —
+    프로세스 그룹째 끊어 손자 프로세스가 파이프를 붙잡아도 매달리지 않는다.
+    """
+    remaining = (deadline if deadline is not None else _deadline()) - time.monotonic()
+    if remaining <= 0:
+        raise GitTimeout()
+    env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0")
+    try:
+        p = subprocess.Popen(
+            ["git", "-C", cwd, *args], stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+            start_new_session=True,
+        )
+    except OSError:
+        return None
+    try:
+        out, _err = p.communicate(timeout=remaining)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            p.kill()
+        try:
+            p.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        raise GitTimeout()
+    return out if p.returncode == 0 else None
+
+
+def checked_out_elsewhere(cwd, deadline=None):
+    """{branch: worktree path} for branches checked out in a worktree other than cwd's.
+
+    None when the worktree list can't be read. cwd 의 작업 트리는 cwd 를 품는 가장 긴
+    작업 트리 경로다(안에 중첩된 .claude/worktrees/* 를 바깥 작업 트리와 가른다).
+    """
+    out = _git(cwd, "worktree", "list", "--porcelain", deadline=deadline)
+    if out is None:
+        return None
+    paths, trees, path = [], [], None
+    for line in out.decode("utf-8", "replace").splitlines():
+        if line.startswith("worktree "):
+            path = os.path.realpath(line[len("worktree "):])
+            paths.append(path)
+        elif line.startswith("branch refs/heads/") and path is not None:
+            trees.append((path, line[len("branch refs/heads/"):]))
+    here = os.path.realpath(cwd)
+    # 브랜치 줄 없는(detached) 작업 트리도 cwd 의 작업 트리일 수 있다 — 모든 경로에서 고른다.
+    own = max(
+        (p for p in paths if here == p or here.startswith(p.rstrip(os.sep) + os.sep)),
+        key=len, default=None,
+    )
+    return {b: p for p, b in trees if p != own}
+
+
+def _inert(text):
+    """사람 · 모델 줄에 넣는 경로 — 줄바꿈 · 제어 문자를 repr 꼴(`\\n`)로 바꿔 줄을 쪼개거나 지시를 끼우지 못하게 한다."""
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
+
+
+def _last_reflog_line(path):
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        f.seek(max(0, f.tell() - 8192))
+        lines = [ln for ln in f.read().split(b"\n") if ln.strip()]
+    return lines[-1].decode("utf-8", "replace") if lines else ""
+
+
+def _is_new_branch_line(line, branch, now, window):
+    """reflog 한 줄이 window 초 안의 만들기 · 이름 바꾸기 · 복사인가."""
+    head, sep, msg = line.partition("\t")
+    parts = head.split()
+    if not sep or len(parts) < 2:
+        return False
+    try:
+        ts = int(parts[-2])
+    except ValueError:
+        return False
+    if now - ts > window:
+        return False
+    if msg.startswith(CREATED_PREFIX):
+        return True
+    m = RENAMED_RE.match(msg)
+    return bool(m and m.group(1) == branch)
+
+
+def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None):
+    """Branches whose reflog's last line made them within `window` seconds.
+
+    공용 git 디렉토리의 logs/refs/heads/** 를 직접 읽는다(브랜치마다 git 을 띄우지
+    않는다 · 상태 파일 없음). 레포가 아니거나 reflog 가 없으면 빈 목록.
+    """
+    out = _git(cwd, "rev-parse", "--git-common-dir", deadline=deadline)
+    if out is None:
+        return []
+    common = os.path.join(cwd, out.decode("utf-8", "replace").strip())
+    root = os.path.join(common, "logs", "refs", "heads")
+    found = []
+    for dirpath, _dirs, files in os.walk(root):
+        for fn in files:
+            path = os.path.join(dirpath, fn)
+            try:
+                if os.path.getmtime(path) < now - window:
+                    continue
+                line = _last_reflog_line(path)
+            except OSError:
+                continue
+            name = os.path.relpath(path, root).replace(os.sep, "/")
+            if _is_new_branch_line(line, name, now, window):
+                found.append(name)
+    return sorted(found)
+
+
+def read_branch_rule(cwd, deadline=None):
+    """(pattern, None) or (None, fail-open notice) — 규칙은 기본 브랜치 판에서 읽는다.
 
     None => fail-open: 전략 미선언 → 브랜치명 검증을 건너뛴다(loud advisory).
-    아래 다섯을 하나의 fail-open 경로로 통일한다: (1) 파일 부재, (2) ```regex 블록
-    부재, (3) malformed regex(re.error), (4) 빈/공백-only 블록(.strip() 후 empty),
-    (5) non-UTF-8/binary 파일(UnicodeDecodeError) — crash 대신 loud fail-open (qg-security).
+    「origin 원격 없음」 · 「기본 ref 없음」은 따로 알린다. 나머지 다섯은 하나의 fail-open
+    안내로 통일한다: (1) 파일 부재, (2) ```regex 블록 부재, (3) malformed regex(re.error),
+    (4) 빈/공백-only 블록(.strip() 후 empty), (5) non-UTF-8/binary 파일(UnicodeDecodeError).
     """
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR", ".")
-    strategy_path = os.path.join(
-        project_dir, "docs", "git-workflow", "branch-strategy.md"
+    if _git(cwd, "rev-parse", "--verify", "-q", DEFAULT_REF, deadline=deadline) is None:
+        remotes = _git(cwd, "remote", deadline=deadline) or b""
+        if b"origin" not in remotes.split():
+            return None, (
+                "project-init: `origin` 원격이 없어 기본 브랜치의 브랜치 이름 규칙을 읽지 못했다 "
+                "— 브랜치 이름 검사를 건너뛴다(fail-open)."
+            )
+        return None, (
+            "project-init: 기본 브랜치(origin/HEAD)를 찾지 못해 브랜치 이름 규칙을 읽지 못했다 "
+            "— 브랜치 이름 검사를 건너뛴다(fail-open).\n"
+            "기본 브랜치를 알려 주려면: git remote set-head origin --auto"
+        )
+    missing = (
+        f"project-init: 기본 브랜치(origin/HEAD) 판의 {STRATEGY_PATH} 에서 쓸 수 있는 "
+        "브랜치 이름 규칙을 찾지 못했다 — 브랜치 이름 검사를 건너뛴다(fail-open)."
     )
+    raw = _git(cwd, "show", f"{DEFAULT_REF}:{STRATEGY_PATH}", deadline=deadline)
+    if raw is None:
+        return None, missing
     try:
-        with open(strategy_path, "r", encoding="utf-8") as f:  # explicit UTF-8: 생성 파일이 Korean-primary라 locale 기본 인코딩 의존 시 valid 파일이 non-UTF-8 locale에서 오판됨 (qg-codex)
-            content = f.read()
+        content = raw.decode("utf-8")  # explicit UTF-8: locale 과 무관하게 Korean-primary 파일을 읽는다 (qg-codex)
         match = re.search(r"```regex\n(.+?)\n```", content)
         if match and match.group(1).strip():  # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
-            return re.compile(match.group(1).strip())
-    except (OSError, re.error, ValueError):  # OSError⊇FileNotFound/IOError/PermissionError; ValueError⊇UnicodeDecodeError → non-UTF-8 파일도 fail-open (qg-security)
+            return re.compile(match.group(1).strip()), None
+    except (re.error, ValueError):  # ValueError⊇UnicodeDecodeError → non-UTF-8 파일도 fail-open (qg-security)
         pass
-    return None
+    return None, missing
+
+
+def get_branch_pattern(cwd):
+    """The default branch's declared branch pattern, or None (fail-open)."""
+    return read_branch_rule(cwd)[0]
 
 
 def derive_prefixes(pattern):
@@ -114,25 +270,56 @@ def guess_commit_type(message):
     return COMMIT_TYPES.get(first_word, "feat")
 
 
-def validate_branch(command):
-    """Check branch creation commands for naming convention compliance."""
-    match = BRANCH_CREATE_RE.search(command)
-    if not match:
-        return None
+def observe_branches(cwd, now):
+    """Warnings for branches made just now whose names break the default branch's rule."""
+    deadline = _deadline()
+    try:
+        return _observe(cwd, now, deadline)
+    except GitTimeout:
+        return [(
+            "project-init: git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open).",
+            None,
+        )]
 
-    branch_name = match.group(1)
 
-    if branch_name in PROTECTED_BRANCHES:
-        return None
+def _observe(cwd, now, deadline):
+    names = [n for n in new_branches(cwd, now, deadline=deadline) if n not in PROTECTED_BRANCHES]
+    if not names:
+        return []
+    pattern, notice = read_branch_rule(cwd, deadline=deadline)
+    if pattern is None:  # 유효 패턴 없음 → fail OPEN, loudly
+        return [(notice, None)]  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
+    found = [(n, r) for n, r in ((n, check_branch_name(n, pattern)) for n in names) if r]
+    if not any(cmd for _n, (_h, cmd) in found):
+        return [r for _n, r in found]
+    # 이름 바꾸기는 다른 작업 트리가 쓰는 브랜치에 내지 않는다 — git branch -m 은 그
+    # 작업 트리의 HEAD 까지 바꿔 다른 세션의 push · PR · 정리를 깨뜨린다.
+    try:
+        elsewhere = checked_out_elsewhere(cwd, deadline=deadline)
+    except GitTimeout:
+        elsewhere = None  # 이름 판정은 이미 났다 — 알림은 내고 명령만 뺀다
+    out = []
+    for name, (human, cmd) in found:
+        if elsewhere is None:
+            cmd = None
+        elif name in elsewhere:
+            where = _inert(elsewhere[name])
+            human += (f"\n이 브랜치는 다른 작업 트리({where})에서 쓰고 있어 "
+                      "이 세션에서는 이름을 바꾸라고 하지 않는다.")
+            cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {where})이 규칙 밖이다 "
+                   "— 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다.")
+        out.append((human, cmd))
+    if elsewhere is None:
+        out.append((
+            "project-init: 작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다.",
+            "작업 트리 목록을 읽지 못해 규칙 밖 브랜치에 이름 바꾸기 명령을 내지 않았다.",
+        ))
+    return out
 
-    pattern = get_branch_pattern()
-    if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록/비-UTF-8) → fail OPEN, loudly
-        return (
-            "project-init: docs/git-workflow/branch-strategy.md 에서 쓸 수 있는 브랜치 이름 규칙을 "
-            "찾지 못했다 — 브랜치 이름 검사를 건너뛴다(fail-open).",
-            None,  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
-        )
-    if pattern.match(branch_name):
+
+def check_branch_name(branch_name, pattern):
+    """(human, model) warning when branch_name breaks pattern, else None."""
+    if branch_name in PROTECTED_BRANCHES or pattern.match(branch_name):
         return None
 
     # Suggest correction — prefixes derived from the active pattern (no feature/ hardcode)
@@ -140,8 +327,10 @@ def validate_branch(command):
     prefixes = derive_prefixes(pattern)
     if prefixes:
         hint = f"허용 접두어: {', '.join(prefixes)}"
+        # 옛 이름을 함께 적는다 — 관찰한 브랜치는 지금 브랜치가 아닐 수 있다(worktree add -b).
         cmd = (
-            f"Rename the branch: git branch -m {prefixes[0]}/{name_part}\n"
+            f"Rename the branch: git branch -m {shlex.quote(branch_name)} "
+            f"{shlex.quote(prefixes[0] + '/' + name_part)}\n"
             f"Allowed prefixes: {', '.join(prefixes)} — use whichever fits this change."
         )
     else:  # exotic regex → NO feature/ hardcode
@@ -210,18 +399,26 @@ def main():
         print(json.dumps({}))
         sys.exit(0)
 
+    if not isinstance(input_data, dict):
+        print(json.dumps({}))
+        sys.exit(0)
     tool_name = input_data.get("tool_name", "")
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
 
-    if tool_name != "Bash":
+    if tool_name not in ("Bash", "EnterWorktree"):
         print(json.dumps({}))
         sys.exit(0)
 
-    command = tool_input.get("command", "")
+    cwd = input_data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or "."
 
-    # Run BOTH validators (no short-circuit): a branch warning must not
+    # Run BOTH checks (no short-circuit): a branch warning must not
     # suppress commit validation on compound commands (§5.5).
-    results = [r for r in (validate_branch(command), validate_commit(command)) if r]
+    # EnterWorktree 는 관찰만 한다 — 커밋 명령이 없다.
+    results = observe_branches(cwd, time.time())
+    if tool_name == "Bash" and isinstance(tool_input, dict):
+        commit = validate_commit(str(tool_input.get("command", "")))
+        if commit:
+            results.append(commit)
     human = [h for h, _m in results if h]
     model = [m for _h, m in results if m]
 

@@ -537,7 +537,7 @@ fire_at="$(where rb41bndf "$DOC_B")"
 # 루트를 쓴다(상태 루트는 cwd 가 git 밖인 스크래치라 그 안에 생긴다). 러너가 없는 블록이라 스텁이 필요 없다.
 RPR="$ROOT/plugins/spec-distill"
 APPEND_BLK="$SCRATCH/append.sh"; cut_block "$SKILL" '^## kill switch' > "$APPEND_BLK"
-GATE_BLK="$SCRATCH/gate.sh";     cut_block "$SKILL" '^## 진입 게이트' > "$GATE_BLK"
+GATE_BLK="$SCRATCH/gate.sh";     cut_block_with "$SKILL" '^## 진입 게이트' 'check_brief\.py" gate' > "$GATE_BLK"   # 절의 첫 펜스는 의존 확인이다
 GATE_BLK_E="$SCRATCH/gate-e.sh"; { echo 'set -euo pipefail'; cat "$GATE_BLK"; } > "$GATE_BLK_E"
 { grep -q 'degrade-append' "$APPEND_BLK" && grep -q 'check_brief.py" gate' "$GATE_BLK" && bash -n "$GATE_BLK" 2>/dev/null; } \
   && ok "H 추출: degrade-append 블록과 진입 게이트 블록을 잘랐다 (bash -n 통과)" \

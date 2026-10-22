@@ -1,5 +1,34 @@
 # Changelog
 
+## [8.7.0] — 2026-10-22
+
+### Added
+- `scripts/gh_repo.py` — spec-distill 의 gh 호출을 한 곳에 모았다. 호출마다 `origin` URL 에서 호스트까지 뽑은 `-R <호스트>/<owner>/<repo>` 를 붙여, `upstream` 원격이 있는 fork 클론에서도 `origin` 의 PR 만 본다. gh 없음 · `origin` URL 을 못 읽음 · 미인증(`gh auth login --hostname <호스트>`) · gh 가 그 레포를 다루지 못함은 이유를 보이고 멈춘다. `GH_REPO` · `GH_HOST` 가 설정돼 있으면 알린다.
+- `ledger pr-refresh --roadmap <로드맵> --session <세션> [--epic <에픽>] [--reset]` — 지휘자가 PR 캐시를 head 이름의 PR 전부(`--state all`)로 채운다. 캐시 줄에 받은 시각 · `headRefOid` · 교차 레포 · `baseRefName` · `mergeCommit` · 쓴 세션 칸이 더해졌다. 지휘 절차의 걸음 1 과 게이트 직전에 돈다.
+- 기계 상태에 쓴 판을 찍는다(`writer: spec-distill <판>`). 더 새 판이 쓴 기계 상태는 읽지 않고 멈춰 플러그인을 업데이트하라고 안내한다.
+- 의존 목록 `dependencies.md` — 의존마다 최소 판 · 잰 날짜 · 강도(멈춤 · 알림 · 기록) · 없을 때 동작. 최소 판은 개발 당시 깔린 판을 `scripts/check_deps.py measure` 가 잰다(손으로 적지 않는다).
+- 진입 의존 확인 — 진입 skill 여섯(epic-conductor · pm-interview · request-framing · reviewing-brief · roadmap-status · spec-review)이 처음에 `check_deps.py entry --need <이름,…>` 를 돈다. 강도 멈춤인 의존이 없거나 낮거나 판을 못 읽으면 멈춘다. gh 는 epic-conductor 만 확인한다.
+- superpowers 판 알림 — 지휘자는 이 세션에서 superpowers skill 을 처음 불러온 직후 판을 확인해, 의존 목록의 판과 다르거나 확인하지 못하면 알린다(멈추지 않는다). 인터뷰 끝은 그 세션이 superpowers skill 을 불러왔을 때만 판을 확인하고, 아니면 「알 수 없음」 한 줄을 따로 보인다(경고로 세지 않는다).
+
+### Changed
+- gh 가 필수다 — gh 가 없으면 지휘자와 지휘자의 PR 캐시 채우기(`ledger pr-refresh`)가 이제 멈춘다(상태줄 · 상태 계산 · `scripts/merge_check.py` 는 gh 를 부르지 않고 PR 캐시만 읽는다). 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다.
+- squash · rebase 머지도 자동으로 판정한다 — PR 캐시의 여섯 조건(브랜치 · 머지됨 · 같은 레포 · 기본 브랜치 base · `headRefOid` 가 브랜치 끝 · `mergeCommit` 이 기본 브랜치에서 닿음)이 모두 맞을 때만 「머지됨」이다. 캐시에 그 브랜치 줄이 없으면 머지 커밋 · `origin` 소유자의 머지 메시지 · 결정 기록의 머지 줄로 판정한다(남의 fork 의 머지 메시지는 세지 않는다).
+- 브랜치가 없으면(끝 없음) 이 에픽의 승인된 설계문서나 그것을 가리키는 계획이 기본 브랜치에 있거나 그 설계문서 · 산출물이 기본 브랜치 첫째 부모 줄에 더해져 있을 때만 지워진 브랜치로 보고 PR 캐시로 판정한다. 아니면 아직 만들지 않은 브랜치라 같은 이름의 옛 MERGED PR 은 머지됨이 아니고, 「브랜치가 없다 — 같은 이름의 옛 PR … 은 이 에픽의 PR 로 세지 않았다」 한 줄을 보인다.
+- 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 지휘자가 캐시를 새로 채우면 바로 새 판정을 낸다.
+- 옛 판이 쓴 4칸 PR 캐시 줄은 읽지 않고 멈춘다 — 갱신 뒤 지휘자가 `ledger pr-refresh --roadmap <로드맵> --session <세션> --reset` 을 한 번 돈다. 지휘자는 진입(표지 잡기)에서 그 줄을 만나면 멈추지 않고 이 명령을 돌린 뒤 표지를 풀었다 다시 잡고 이어 간다.
+- `ledger pr-refresh` 는 PR 이 하나도 없는 브랜치에 「PR 0개」 줄(확인한 때)을 남긴다 — 그 브랜치는 「PR 상태 미확인」을 보이지 않는다. `--reset` 은 끝난 에픽의 줄도 다시 채운다(squash 머지된 에픽이 머지됨에서 빠지지 않는다).
+- PR 이 「없음」이면 세지 않은 PR 을 fork PR 수와 base 이름마다의 PR 수로 나눠 보인다(다른 브랜치 위에 쌓은 PR 이 보인다). 머지된 에픽의 PR 줄은 머지된 PR 을 먼저 고른다. 상태줄의 PR 캐시 조각은 고른 로드맵 가운데 기계 상태를 못 읽은 것이 있으면 「(일부 읽기 불가)」를 붙인다.
+- 기계 상태의 판 문장은 끝에 할 일 하나를 적는다(플러그인을 다시 설치 · 업데이트 · 머리말의 writer 줄 확인). writer 가 spec-distill 이 아닌 기계 상태는 읽지 않고 멈춘다.
+- superpowers 가 없으면 지휘자와 손으로 따르는 지휘 절차가 진입에서 멈춘다(인터뷰는 그대로 brief 까지 만들고 알린 뒤 멈춘다). quality-gates 가 없으면 지휘 순환 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
+- README Prerequisites 가 `dependencies.md` 를 가리키고, gh 를 필수로, 지원 범위를 「`origin` 이 GitHub 인 레포」로 적는다.
+- 진행 게이트 정본(`references/proceed-gate.md`)이 skill 하나가 «그 세션이 해당 skill 을 불러오지 않았으면 읽지 않는 채널» 하나를 이름 붙이게 허용한다. 그 채널을 읽지 않았으면 「알 수 없음 — …」 줄을 그대로 따로 보이고, 그 줄은 경고로 세지 않지만 확인했다는 뜻이 아니다.
+
+### Removed
+- gh 가 없을 때의 강등 길 — 상태줄 · 상태 보기의 「캐시가 없으면 gh」 대체 길과 gh 없음 갈래를 지웠다.
+
+### Fixed
+- `ledger pr-refresh --reset` 뒤 이미 머지된 에픽이 「일부 머지」 · 설계 중으로 돌아가지 않는다 — 브랜치 끝이 기본 브랜치 머지 커밋의 둘째 부모면 PR 캐시보다 먼저 머지됨이다. 끝은 로컬 끝이고, 로컬 끝이 원격 끝보다 뒤처져 있으면 원격 끝이다(PR 의 `headRefOid` 도 원격 끝과 견준다). 로컬 끝이 없거나 기본 브랜치 안에서 원격 끝보다 앞이면 원격 끝의 머지 커밋(로컬 끝이 없으면 PR 캐시로 고른 PR 도)은 그 에픽의 설계문서 · 산출물을 기본 브랜치 첫째 부모 줄에 처음 더한 커밋보다 엄격히 먼저면 세지 않는다 — 같은 이름의 옛 브랜치가 남긴 원격 ref 를 거른다. 견줄 커밋이 없으면 8.6.0 처럼 센다.
+
 ## [8.6.0] — 2026-10-22
 
 ### Added

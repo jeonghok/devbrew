@@ -437,51 +437,46 @@ class Overlay(unittest.TestCase):
     def machine(self, pr=None, ledger_for=None):
         data = cs.empty()
         if pr:
-            data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": pr, "확인한 때": "2026-10-17 10:00"})
+            data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": pr, "확인한 때": "2026-10-17 10:00",
+                               "headRefOid": "a" * 40, "교차 레포": "아니오", "baseRefName": "main",
+                               "mergeCommit": "-", "쓴 세션": "session-aaaa1111"})
         if ledger_for:
             data["실행 원장"].append({"에픽": ledger_for, "계획": "p.md", "원장": str(self.ledger), "읽은 줄": "0"})
         return lambda rel: (data, None)
 
     def test_open_pr_in_machine_turns_impl_done_into_pr(self):
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], self.machine(pr="열림"), None, True)
+        cp.overlay([(RM, r)], self.machine(pr="열림"), True, default_short="main")
         self.assertEqual(r["blocks"][0]["stage"], "PR")
         self.assertEqual(r["blocks"][0]["task_status"], "in_progress")
 
     def test_unknown_pr_keeps_stage_and_says_so(self):
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], self.machine(), None, True)
+        cp.overlay([(RM, r)], self.machine(), True, default_short="main")
         self.assertEqual(r["blocks"][0]["stage"], "구현 끝")
-        self.assertIn("    PR: 알 수 없음 — 기계 상태에 없고 gh 가 없다", self.show_lines(r))
+        self.assertIn("    PR: 알 수 없음 — PR 캐시에 없다 — 지휘자가 채운다", self.show_lines(r))
 
-    def test_statusline_mode_never_calls_gh(self):
+    def test_statusline_mode_reads_the_pr_cache(self):
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], self.machine(), lambda br: self.fail("gh 를 불렀다"), False)
-        self.assertEqual(r["blocks"][0]["pr"]["state"], "알 수 없음")
+        cp.overlay([(RM, r)], self.machine(pr="열림"), False, default_short="main")
+        self.assertEqual((r["blocks"][0]["stage"], r["blocks"][0]["pr"]["number"]), ("PR", "#12"))
 
     def test_statusline_mode_reads_no_ledger_and_no_rulings(self):
         r = report([impl_done_block(rulings_archived=["- 보관"])])
-        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), None, False,
+        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), False,
                    read=lambda path, limit: self.fail("원장을 읽었다"))
         self.assertNotIn("rulings", r["blocks"][0])
 
-    def test_gather_in_statusline_mode_never_asks_for_gh(self):
-        repo = self.tmp / "repo"
-        repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        orig = cp.gh_lookup_for
-        cp.gh_lookup_for = lambda *a, **k: self.fail("상태줄 모드가 gh 조회기를 만들었다")
-        try:
-            cp.gather(str(repo), None, cp.Deadline(5), {}, use_gh=False)
-        finally:
-            cp.gh_lookup_for = orig
+    def test_gh_fallback_is_gone(self):
+        for name in ("gh_lookup_for", "GH_STATES", "GH_CALL_CAP", "shutil"):
+            self.assertFalse(hasattr(cp, name), name)
 
-    def test_cmd_statusline_gathers_without_gh(self):
+    def test_cmd_statusline_gathers_without_detail(self):
         seen = {}
         orig = (cp.gather, cp.stdin_dir)
 
-        def fake(cwd, arg, deadline, ctx, use_gh=True):
-            seen["use_gh"] = use_gh
+        def fake(cwd, arg, deadline, ctx, detail=True):
+            seen["detail"] = detail
             return {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
         cp.gather, cp.stdin_dir = fake, lambda: str(self.tmp)
         try:
@@ -489,7 +484,7 @@ class Overlay(unittest.TestCase):
                 cp.cmd_statusline()
         finally:
             cp.gather, cp.stdin_dir = orig
-        self.assertIs(seen.get("use_gh"), False)
+        self.assertIs(seen.get("detail"), False)
 
     def test_relative_ledger_path_is_unreadable_not_resolved(self):
         (self.tmp / "rel.md").write_text("Task 1: Ruling: 가\n", encoding="utf-8")
@@ -499,7 +494,7 @@ class Overlay(unittest.TestCase):
         cwd = os.getcwd()
         os.chdir(str(self.tmp))
         try:
-            cp.overlay([(RM, r)], lambda rel: (data, None), None, True)
+            cp.overlay([(RM, r)], lambda rel: (data, None), True)
         finally:
             os.chdir(cwd)
         b = r["blocks"][0]
@@ -515,7 +510,7 @@ class Overlay(unittest.TestCase):
             data["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": str(self.ledger), "읽은 줄": "0"})
         reads = []
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], lambda rel: (data, None), None, True,
+        cp.overlay([(RM, r)], lambda rel: (data, None), True,
                    read=lambda path, limit: reads.append(path) or "Task 1: Ruling: 가\n")
         self.assertEqual(len(reads), cp.LEDGER_MAX_COUNT)
         self.assertEqual(r["blocks"][0]["ledger_cut"], "원장 %d개 중 %d개만 읽음" % (cp.LEDGER_MAX_COUNT + 7,
@@ -526,7 +521,7 @@ class Overlay(unittest.TestCase):
         r = report([impl_done_block()])
         dl = cp.Deadline(0)
         time.sleep(0.01)
-        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), None, True,
+        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), True,
                    read=lambda path, limit: self.fail("기한이 지났는데 읽었다"), deadline=dl)
         self.assertEqual(r["blocks"][0]["ledger_failures"][0]["reason"], "시간 초과")
 
@@ -537,7 +532,7 @@ class Overlay(unittest.TestCase):
         for name in (str(self.tmp / "plan1-missing.md"), str(good)):
             data["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": name, "읽은 줄": "0"})
         r = report([impl_done_block(rulings_archived=["- Task 1: Ruling: 첫째 계획 보관"])])
-        cp.overlay([(RM, r)], lambda rel: (data, None), None, True)
+        cp.overlay([(RM, r)], lambda rel: (data, None), True)
         lines = self.show_lines(r)
         self.assertIn("    R5: Task 1: Ruling: 둘째 계획", lines)
         self.assertIn("    R5: - Task 1: Ruling: 첫째 계획 보관", lines)
@@ -548,7 +543,7 @@ class Overlay(unittest.TestCase):
         data = cs.empty()
         data["실행 원장"].append({"에픽": "R5", "계획": "p.md", "원장": str(self.tmp / "gone.md"), "읽은 줄": "0"})
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], lambda rel: (data, None), None, True)
+        cp.overlay([(RM, r)], lambda rel: (data, None), True)
         lines = self.show_lines(r)
         self.assertIn("    R5: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다", lines)
 
@@ -558,14 +553,14 @@ class Overlay(unittest.TestCase):
         exact = blk("R6", "일부 머지 1/2", "in_progress", reason="feature/b — 구현 끝 · x",
                     branch_states=[{"branch": "feature/b", "tip": "abcdef12", "merged": None}])
         r = report([near, exact])
-        cp.overlay([(RM, r)], self.machine(), None, True)
+        cp.overlay([(RM, r)], self.machine(), True, default_short="main")
         self.assertNotIn("pr", r["blocks"][0])
         self.assertIn("pr", r["blocks"][1])
 
     def test_rulings_ledger_then_archive_then_uncountable(self):
         r = report([impl_done_block("R5"), impl_done_block("R6", rulings_archived=["- 보관 판정"]),
                     impl_done_block("R7"), blk("R0", "머지됨", "completed")])
-        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), None, True)
+        cp.overlay([(RM, r)], self.machine(ledger_for="R5"), True)
         got = dict((b["id"], b.get("rulings", "없음 키")) for b in r["blocks"])
         self.assertEqual(got, {"R5": ["Task 1: Ruling: 가 — 왜 — 비용"], "R6": ["- 보관 판정"], "R7": None,
                                "R0": "없음 키"})
@@ -573,7 +568,7 @@ class Overlay(unittest.TestCase):
 
     def test_broken_machine_is_shown_not_emptied(self):
         r = report([impl_done_block()])
-        cp.overlay([(RM, r)], lambda rel: (None, "3줄: 모르는 절 'x'"), None, False)
+        cp.overlay([(RM, r)], lambda rel: (None, "3줄: 모르는 절 'x'"), False)
         self.assertIsNone(r["machine"])
         self.assertIn("기계 상태를 읽지 못했다 — 3줄: 모르는 절 'x'", self.show_lines(r))
 
@@ -635,29 +630,124 @@ class Overlay(unittest.TestCase):
         os.remove(str(path))
         self.assertEqual(cp.machine_for(repo, RM), (cs.empty(), None))
 
-    def test_gh_lookup_with_fake_gh(self):
-        bindir = self.tmp / "bin"
-        bindir.mkdir()
-        gh = bindir / "gh"
-        old_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = str(bindir) + os.pathsep + old_path
-        try:
-            for body, want in (("echo '[{\"number\": 7, \"state\": \"OPEN\"}]'", {"number": "#7", "state": "열림"}),
-                               ("echo '[]'", {"number": None, "state": "없음"}),
-                               ("exit 1", {"number": None, "state": "알 수 없음"}),
-                               ("echo 'not json'", {"number": None, "state": "알 수 없음"}),
-                               ("echo '[1]'", {"number": None, "state": "알 수 없음"}),
-                               ("sleep 30", {"number": None, "state": "알 수 없음"})):
-                gh.write_text("#!/bin/sh\n" + body + "\n", encoding="utf-8")
-                gh.chmod(0o755)
-                lookup = cp.gh_lookup_for(cp.Repo(str(self.tmp), cp.Deadline(5)), cp.Deadline(1 if "sleep" in body else 5))
-                got = lookup("feature/a")
-                self.assertEqual({"number": got["number"], "state": got["state"]}, want, body)
-        finally:
-            os.environ["PATH"] = old_path
-
     def show_lines(self, r):
         return cp.show_text([(RM, r)], NO_IV, [], lambda rep: "첫 줄", None).split("\n")
+
+
+def pr_row(num, state, cross="아니오", base="main", when="2026-10-17 10:00", branch="feature/a"):
+    return {"브랜치": branch, "번호": num, "상태": state, "확인한 때": when, "headRefOid": "a" * 40, "교차 레포": cross,
+            "baseRefName": base, "mergeCommit": "-", "쓴 세션": "session-aaaa1111"}
+
+
+class PrCache(unittest.TestCase):
+    """PR 은 PR 캐시만 읽는다 — 같은 head 이름의 fork · 다른 base PR 은 고르지 않고, 줄 순서가 고르기를 바꾸지 않는다."""
+
+    def overlaid(self, rows, default_short="main"):
+        data = cs.empty()
+        data["PR"].extend(rows)
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], lambda rel: (data, None), True, default_short=default_short)
+        return r["blocks"][0]
+
+    def test_fork_row_written_last_does_not_decide(self):
+        b = self.overlaid([pr_row("#12", "열림"), pr_row("#99", "열림", cross="예")])
+        self.assertEqual((b["stage"], b["pr"]["number"]), ("PR", "#12"))
+        b = self.overlaid([pr_row("#12", "닫힘"), pr_row("#99", "열림", cross="예")])
+        self.assertEqual((b["stage"], b["pr"]["number"], b["pr"]["state"]), ("구현 끝", "#12", "닫힘"))
+
+    def test_other_base_is_ignored(self):
+        b = self.overlaid([pr_row("#12", "닫힘"), pr_row("#50", "열림", base="release")])
+        self.assertEqual((b["stage"], b["pr"]["number"]), ("구현 끝", "#12"))
+
+    def test_open_first_then_newest_regardless_of_order(self):
+        for rows in ([pr_row("#7", "닫힘"), pr_row("#9", "열림"), pr_row("#11", "머지됨")],
+                     [pr_row("#11", "머지됨"), pr_row("#9", "열림"), pr_row("#7", "닫힘")]):
+            self.assertEqual(self.overlaid(rows)["pr"]["number"], "#9")
+        for rows in ([pr_row("#7", "닫힘"), pr_row("#11", "닫힘")], [pr_row("#11", "닫힘"), pr_row("#7", "닫힘")]):
+            self.assertEqual(self.overlaid(rows)["pr"]["number"], "#11")
+
+    def test_only_foreign_rows_mean_no_own_pr(self):
+        b = self.overlaid([pr_row("#99", "열림", cross="예"), pr_row("#50", "열림", base="dev")])
+        self.assertEqual(b["stage"], "구현 끝")
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — fork PR 1개 · base dev 로 연 PR 1개는 세지 않았다)")
+
+    def test_stacked_prs_are_counted_by_base_name(self):
+        b = self.overlaid([pr_row("#20", "열림", base="feature/a"), pr_row("#21", "닫힘", base="feature/a"),
+                           pr_row("#22", "열림", base="feature/b"), pr_row("#99", "열림", cross="예"),
+                           pr_row("#98", "닫힘", cross="예", base="dev")])
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — fork PR 2개 · base feature/a 로 연 PR 2개 · "
+                                              "base feature/b 로 연 PR 1개는 세지 않았다)")
+
+    def test_no_pr_marker_states_when_it_was_checked(self):
+        b = self.overlaid([cs.no_pr_row("feature/a", "2026-10-22 09:00", "session-aaaa1111")])
+        self.assertEqual(b["stage"], "구현 끝")
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — 확인함 · PR 0개 · 2026-10-22 09:00)")
+        b = self.overlaid([cs.no_pr_row("feature/a", "2026-10-22 09:00", "session-aaaa1111")], default_short=None)
+        self.assertEqual(b["pr"]["state"], "없음")
+
+    def test_unknown_default_branch_does_not_guess(self):
+        b = self.overlaid([pr_row("#12", "열림")], default_short=None)
+        self.assertEqual((b["stage"], b["pr"]["state"]), ("구현 끝", "알 수 없음"))
+        self.assertEqual(b["pr"]["source"], cp.PR_NO_DEFAULT)
+
+    def test_other_branch_rows_are_not_this_branch(self):
+        b = self.overlaid([pr_row("#3", "열림", branch="feature/b")])
+        self.assertEqual(cp.pr_text(b["pr"]), "알 수 없음 — PR 캐시에 없다 — 지휘자가 채운다")
+
+    def test_fingerprint_ignores_order_and_sees_one_cell(self):
+        a, b = pr_row("#1", "열림"), pr_row("#2", "닫힘")
+        fp = cp.pr_cache_fingerprint({"PR": [a, b]})
+        self.assertEqual(fp, cp.pr_cache_fingerprint({"PR": [b, a]}))
+        self.assertNotEqual(fp, cp.pr_cache_fingerprint({"PR": [a, dict(b, 상태="머지됨")]}))
+        self.assertNotEqual(fp, cp.pr_cache_fingerprint({"PR": [a, dict(b, mergeCommit="b" * 40)]}))
+        self.assertEqual(cp.pr_cache_fingerprint(None), cp.pr_cache_fingerprint(cs.empty()))
+        self.assertNotEqual(fp, cp.pr_cache_fingerprint(cs.empty()))
+
+    def test_statusline_segment_age(self):
+        now = cp.datetime.datetime(2026, 10, 17, 15, 30)
+        with_rows = {"machine": {"PR": [pr_row("#1", "열림", when="2026-10-17 10:00"),
+                                        pr_row("#2", "닫힘", when="2026-10-17 13:00")]}}
+        self.assertEqual(cp.pr_cache_segment([(RM, with_rows)], now), "PR 캐시 2시간 전")
+        self.assertEqual(cp.pr_cache_segment([(RM, {"machine": cs.empty()})], now), "PR 캐시 없음")
+        self.assertEqual(cp.pr_cache_segment([(RM, {"machine": None, "machine_error": "깨짐"})], now), "PR 캐시 읽기 불가")
+        bad = {"machine": {"PR": [pr_row("#1", "열림", when="어제")]}}
+        self.assertEqual(cp.pr_cache_segment([(RM, bad)], now), "PR 캐시 나이 모름(확인한 때를 읽지 못했다)")
+        future = {"machine": {"PR": [pr_row("#1", "열림", when="2026-10-18 10:00")]}}
+        self.assertEqual(cp.pr_cache_segment([(RM, future)], now), "PR 캐시 0시간 전")
+        broken = {"machine": None, "machine_error": "깨짐"}
+        self.assertEqual(cp.pr_cache_segment([(RM, with_rows), ("other/roadmap.md", broken)], now),
+                         "PR 캐시 2시간 전(일부 읽기 불가)")
+        self.assertEqual(cp.pr_cache_segment([(RM, broken), ("other/roadmap.md", bad)], now),
+                         "PR 캐시 나이 모름(확인한 때를 읽지 못했다)(일부 읽기 불가)")
+        self.assertEqual(cp.pr_cache_segment([(RM, with_rows), ("other/roadmap.md", {"machine": None})], now),
+                         "PR 캐시 2시간 전")
+
+    def test_statusline_puts_the_segment_after_fetch_time(self):
+        line = cp.statusline_text([(RM, report(BASE, 1))], IV, 5, None, "main", "PR 캐시 3시간 전")
+        self.assertTrue(line.endswith(" · 받은 지 5분(어느 원격 · 브랜치든) · PR 캐시 3시간 전 · 인터뷰 조사 3/20 외 1"), line)
+        self.assertEqual(cp.statusline_text([], NO_IV, 5, None, "main", "PR 캐시 없음"), "")
+
+    def test_machine_reader_reads_each_file_once(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(tmp), True)
+        subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+        repo = cp.Repo(str(tmp), cp.Deadline(5))
+        path = cs.machine_path(tmp / ".claude" / "spec-distill", RM)
+        path.parent.mkdir(parents=True)
+        data = cs.empty()
+        data["PR"].append(pr_row("#1", "열림"))
+        path.write_text(cs.render_machine(RM, data), encoding="utf-8")
+        reads, orig = [], cp.read_capped
+        cp.read_capped = lambda p, limit: reads.append(p) or orig(p, limit)
+        try:
+            read = cp.machine_reader(repo)
+            got = [read(RM), read(RM), read(RM.replace("roadmap.md", "A1.md"))]
+        finally:
+            cp.read_capped = orig
+        self.assertEqual(len(reads), 1)
+        self.assertEqual(got[0][0]["PR"][0]["번호"], "#1")
+        self.assertIsNone(got[2][0])
+        self.assertIn("다른 로드맵", got[2][1])
 
 
 class EpicView(unittest.TestCase):

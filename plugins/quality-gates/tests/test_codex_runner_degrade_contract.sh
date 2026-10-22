@@ -59,7 +59,7 @@ abort_trigger_sleeping_codex "$tmp/binabort"
 # `codex_prompt_common.py` 는 빌더의 **형제 import** 다(stdout 가드 + P21 로더 정본의
 # 사본) — 빠지면 빌더가 ImportError 로 죽고, 그 죽음도 degrade 로 읽혀 이 테스트가
 # 재려던 경로(추출기 실패)와 **다른 이유**로 GREEN 이 된다.
-for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh resolve-baseline.sh prompt-preamble.md; do
+for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh gh-repo.sh resolve-baseline.sh prompt-preamble.md; do
   [ -f "$QG/scripts/$f" ] && cp "$QG/scripts/$f" "$tmp/root/scripts/"
 done
 mkdir -p "$tmp/root/references" && cp "$QG/references/review-criteria.md" "$tmp/root/references/"
@@ -192,6 +192,22 @@ CODEX_CAPTURE_DIR="$tmp/rangecap" PATH="$QG/tests/mocks/capture-codex:$PATH" CLA
 assert_grep "$(cat "$tmp/range-unres.err")" 'discover-spec\.sh rc=2 .*커밋을 풀 수 없다: AAA' "8 — 못 푸는 --range 커밋은 rc 와 원인을 이름으로 낸다"
 assert_not_grep "$(cat "$tmp/range-unres.err")" 'script missing' "8 — 못 푸는 --range 커밋을 「script missing」 으로 오도하지 않는다"
 [ -d "$tmp/rangecap/call-0" ] && ok "8 — 의도가 비어도 codex 는 돈다(degrade 유지)" || no "8 — 의도가 비어도 codex 는 돈다(degrade 유지)"
+# discover-spec rc 3 은 둘이다 — stdout 의 `stop: <사유>` 가 있으면 그 사유를, 없으면 「의도 · 임시 파일에 쓸 수 없음」을 낸다.
+mkdir -p "$tmp/stoproot"
+cp -RL "$QG/scripts" "$tmp/stoproot/"
+cp -RL "$QG/references" "$tmp/stoproot/"
+stop_run() {  # stop_run <가짜 discover-spec 본문> → $tmp/stop.err
+  printf '#!/usr/bin/env bash\n%s\n' "$1" > "$tmp/stoproot/scripts/discover-spec.sh"
+  CODEX_CAPTURE_DIR="$tmp/stopcap" PATH="$QG/tests/mocks/capture-codex:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/stoproot" \
+    bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$tmp/stop.yaml" >/dev/null 2>"$tmp/stop.err"
+}
+stop_run 'echo "stop: gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다"; exit 3'
+assert_grep "$(cat "$tmp/stop.err")" 'discover-spec\.sh rc=3 \(PR 본문을 읽을 차례에 멈춤\): gh 인증이 안 됐다' \
+  "9 — rc 3 + stop: 줄이면 그 사유를 stdout 에서 읽어 낸다"
+assert_not_grep "$(cat "$tmp/stop.err")" '쓸 수 없음' "9 — stop: 사유를 「쓸 수 없음」으로 오도하지 않는다"
+stop_run 'echo "discover-spec.sh: 의도 파일에 쓸 수 없다: /x" >&2; exit 3'
+assert_grep "$(cat "$tmp/stop.err")" 'discover-spec\.sh rc=3 \(의도 · 임시 파일에 쓸 수 없음\): discover-spec\.sh: 의도 파일에 쓸 수 없다' \
+  "9 — 양성 짝: stop: 줄이 없는 rc 3 은 「쓸 수 없음」과 stderr 사유"
 for bad in "--bogus" "--range AAA" "--range AAA BBB CCC"; do
   : > "$tmp/ds.log"
   # shellcheck disable=SC2086

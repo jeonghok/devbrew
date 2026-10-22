@@ -31,8 +31,10 @@ from state_path import SESSION_PATTERN, state_root  # noqa: E402
 MACHINE_FILE = "machine.md"
 MARKER = "conducting-by"
 TYPE = "conductor-machine"
+WRITER = "spec-distill"
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECTIONS = (
-    ("PR", ("브랜치", "번호", "상태", "확인한 때")),
+    ("PR", ("브랜치", "번호", "상태", "확인한 때", "headRefOid", "교차 레포", "baseRefName", "mergeCommit", "쓴 세션")),
     ("실행 원장", ("에픽", "계획", "원장", "읽은 줄")),
     ("자원", ("종류", "경로", "에픽", "용도", "만든 때")),
     ("살아 있는 agent", ("이름", "에픽", "일", "worktree", "보낸 때")),
@@ -47,11 +49,28 @@ OPTIONAL_SECTIONS = ("작업",)
 WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
 PR_NUMBER_RE = re.compile(r"#\d+")
+PR_CROSS = ("예", "아니오")
+OID_RE = re.compile(r"[0-9a-f]{40}")
+OLD_PR_CELLS = 4
+NO_PR = "-"  # PR 절의 「확인함 · PR 0개」 줄 — 번호 칸이 `-` 이고 상태 칸이 NO_PR_STATE, 확인한 때 · 쓴 세션 밖의 칸은 모두 `-`
+NO_PR_STATE = "PR 0개"
+NO_PR_BLANK = ("headRefOid", "교차 레포", "baseRefName", "mergeCommit")
 SEP = " · "
 
 
 class MachineError(ValueError):
-    """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다."""
+    """기계 상태를 읽거나 쓸 수 없다 — 빈 상태로 읽지 않는다. action_in_message 면 메시지 끝이 할 일이다."""
+    action_in_message = False
+
+
+class OldPrRows(MachineError):
+    """옛 판이 쓴 4칸 PR 캐시 줄 — 메시지가 고치는 명령(`--reset`)이다."""
+    action_in_message = True
+
+
+class WriterStop(MachineError):
+    """판 · writer 문장 — 메시지 끝이 할 일(업데이트 · 다시 설치 · writer 줄 확인)이다."""
+    action_in_message = True
 
 
 # ── 경로 ─────────────────────────────────────────────────────────────────────
@@ -68,23 +87,87 @@ def machine_path(root, roadmap_rel: str) -> Path:
     return machine_dir(root, roadmap_rel) / MACHINE_FILE
 
 
+# ── 판 ───────────────────────────────────────────────────────────────────────
+
+def version_triple(text: str) -> tuple[int, int, int] | None:
+    """판 문자열에서 첫 숫자 셋(`8.7.0`)을 정수로. 없으면 None."""
+    m = VERSION_RE.search(str(text))
+    return tuple(int(p) for p in m.group(0).split(".")) if m else None
+
+
+def own_version() -> str:
+    """이 플러그인의 판 — `.claude-plugin/plugin.json` 의 `version`."""
+    path = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+    try:
+        version = json.loads(path.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError) as exc:
+        raise WriterStop("플러그인 판을 읽지 못했다: %s (%s) — 플러그인을 다시 설치한다" % (path, type(exc).__name__))
+    if not isinstance(version, str) or not version.strip():
+        raise WriterStop("플러그인 판이 비어 있다: %s — 플러그인을 다시 설치한다" % path)
+    return version.strip()
+
+
+def _own_triple():
+    own = own_version()
+    triple = version_triple(own)
+    if triple is None:
+        raise WriterStop("판을 비교하지 못했다 — 지금 판(%s %s)에 숫자 셋(예: 8.7.0)이 없다 — 플러그인을 다시 설치한다"
+                           % (WRITER, own))
+    return own, triple
+
+
+def _check_writer(writer):
+    """머리말의 `writer` — 없으면 지나간다(쓴 판을 찍기 전 판이 쓴 파일)."""
+    if writer is None:
+        return
+    if writer.split(" ", 1)[0] != WRITER:
+        raise WriterStop("이 기계 상태를 쓴 것이 %s 가 아니다(%s) — 기계 상태 파일 머리말의 writer 줄을 확인한다"
+                           % (WRITER, writer))
+    wrote = version_triple(writer)
+    if wrote is None:
+        raise WriterStop("판을 비교하지 못했다 — 이 기계 상태를 쓴 판(%s)에 숫자 셋(예: 8.7.0)이 없다 — "
+                           "기계 상태 파일 머리말의 writer 줄을 확인한다" % writer)
+    own, triple = _own_triple()
+    if wrote > triple:
+        raise WriterStop("이 기계 상태는 더 새 판(%s)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다(지금 판 %s)"
+                           % (writer, own))
+
+
 # ── 형식 ─────────────────────────────────────────────────────────────────────
 
 def empty() -> dict:
     return dict((name, []) for name, _cols in SECTIONS)
 
 
+def no_pr_row(branch: str, when: str, session: str) -> dict:
+    """PR 이 하나도 없다고 확인한 브랜치의 PR 절 줄."""
+    row = {"브랜치": branch, "번호": NO_PR, "상태": NO_PR_STATE, "확인한 때": when, "쓴 세션": session}
+    row.update((c, "-") for c in NO_PR_BLANK)
+    return row
+
+
 def _check_row(section: str, row: dict, where: str):
-    if section == "PR":
+    if section == "PR" and row["번호"] == NO_PR:
+        if row["상태"] != NO_PR_STATE or any(row[c] != "-" for c in NO_PR_BLANK):
+            raise MachineError("%s: 번호가 `-` 인 PR 줄은 상태가 %s 이고 %s 칸이 `-` 다: %r"
+                               % (where, NO_PR_STATE, " · ".join(NO_PR_BLANK), row))
+    elif section == "PR":
         if not PR_NUMBER_RE.fullmatch(row["번호"]):
             raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
         if row["상태"] not in PR_STATES:
             raise MachineError("%s: PR 상태는 %s 중 하나다: %r" % (where, " · ".join(PR_STATES), row["상태"]))
+        if not OID_RE.fullmatch(row["headRefOid"]):
+            raise MachineError("%s: headRefOid 는 40자 16진이다: %r" % (where, row["headRefOid"]))
+        if row["교차 레포"] not in PR_CROSS:
+            raise MachineError("%s: 교차 레포는 %s 중 하나다: %r" % (where, " · ".join(PR_CROSS), row["교차 레포"]))
+        if row["mergeCommit"] != "-" and not OID_RE.fullmatch(row["mergeCommit"]):
+            raise MachineError("%s: mergeCommit 은 40자 16진이거나 `-` 다: %r" % (where, row["mergeCommit"]))
     if section == "실행 원장" and not re.fullmatch(r"[0-9]+", row["읽은 줄"]):
         raise MachineError("%s: 읽은 줄은 숫자다: %r" % (where, row["읽은 줄"]))
 
 
-def parse_machine(text: str, roadmap_rel: str) -> dict:
+def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
+    """skip 에 든 절은 줄 검사 없이 비운다."""
     lines = text.split("\n")
     if not lines or lines[0] != "---":
         raise MachineError("frontmatter 가 없다")
@@ -97,6 +180,7 @@ def parse_machine(text: str, roadmap_rel: str) -> dict:
         raise MachineError("type 이 %s 가 아니다" % TYPE)
     if head.get("roadmap") != roadmap_rel:
         raise MachineError("다른 로드맵의 기계 상태다: %s" % head.get("roadmap"))
+    _check_writer(head.get("writer"))
     data, cur = empty(), None
     for n, line in enumerate(lines[end + 1:], end + 2):
         if not line.strip():
@@ -106,10 +190,15 @@ def parse_machine(text: str, roadmap_rel: str) -> dict:
             if cur not in COLUMNS:
                 raise MachineError("%d줄: 모르는 절 %r" % (n, cur))
             continue
+        if cur in skip:
+            continue
         if cur is None or not line.startswith("- "):
             raise MachineError("%d줄: 읽지 못한 줄 %r" % (n, line))
         cols = COLUMNS[cur]
         cells = [c.strip() for c in line[2:].split(SEP, len(cols) - 1)]
+        if cur == "PR" and len(cells) == OLD_PR_CELLS:
+            raise OldPrRows("%d줄: 옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> "
+                               "--session <세션> --reset 으로 다시 채운다" % n)
         if len(cells) != len(cols) or not all(cells):
             raise MachineError("%d줄: %s 절의 칸 %d개(%s)가 아니다" % (n, cur, len(cols), " · ".join(cols)))
         row = dict(zip(cols, cells))
@@ -119,7 +208,7 @@ def parse_machine(text: str, roadmap_rel: str) -> dict:
 
 
 def render_machine(roadmap_rel: str, data: dict) -> str:
-    out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "---", ""]
+    out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "writer: %s %s" % (WRITER, _own_triple()[0]), "---", ""]
     for name, cols in SECTIONS:
         if name in OPTIONAL_SECTIONS and not data.get(name):
             continue  # 7.6 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
@@ -144,7 +233,7 @@ def _normalized(data: dict) -> dict:
     return out
 
 
-def load(path: Path, roadmap_rel: str) -> dict:
+def load(path: Path, roadmap_rel: str, skip: tuple = ()) -> dict:
     path = Path(path)
     if path.is_symlink():
         raise MachineError("기계 상태 파일이 링크다: %s" % path)
@@ -154,7 +243,7 @@ def load(path: Path, roadmap_rel: str) -> dict:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise MachineError("기계 상태 파일을 읽지 못했다: %s (%s)" % (path, type(exc).__name__))
-    return parse_machine(text, roadmap_rel)
+    return parse_machine(text, roadmap_rel, skip)
 
 
 def repo_settings_rows(path, roadmap_rel: str) -> dict:

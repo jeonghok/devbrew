@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # test_publish_gh_two_files.sh — AC15: gh 를 부르는 qg 파일은 둘뿐이다 — `scripts/publish-comment.sh`(코멘트 쓰기와
 # 그 앞의 인증 · PR 확인)와 `scripts/discover-spec.sh`(읽기 전용 `gh pr view`). gh 쓰기는 publish-comment.sh 에만 있다.
+# 둘이 gh 를 찾고 `-R` 에 넣을 origin 을 받는 `scripts/gh-repo.sh` 도 목록에 있다 — 다만 gh 하위 명령은 한 줄도 없다(찾기만).
 #
-# 코퍼스는 qg 의 추적 파일 전부에서 tests/ · CHANGELOG.md · README.md 만 뺀 것이다(허용 목록이 아니라 제외 목록 —
-# 새 디렉토리가 생겨도 자동으로 코퍼스에 든다). 주석 · 산문 · 펜스 밖 줄도 본다 — 실행 지시는 펜스 밖에도 있다.
-# 뺀 셋은 실행되지도 모델에 로드되지도 않는다.
+# 코퍼스는 qg 의 추적 파일 전부에서 tests/ · CHANGELOG.md · README.md · dependencies.md 만 뺀 것이다(허용 목록이 아니라
+# 제외 목록 — 새 디렉토리가 생겨도 자동으로 코퍼스에 든다). 주석 · 산문 · 펜스 밖 줄도 본다 — 실행 지시는 펜스 밖에도 있다.
+# 뺀 넷은 실행되지도 모델에 로드되지도 않는다 — dependencies.md 는 `scripts/check_deps.py` 가 표로만 읽는다(「없을 때」 칸의
+# `gh auth login` 은 사람에게 보이는 안내 글이다).
 # (qg v10 ③ plan 이 쓴 테스트 코드다 — 리뷰는 이 파일도 검사 대상으로 본다.)
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -42,7 +44,7 @@ out("NO" if bad else "OK", f"매처 대조 {len(probe)}건 " + ("실패: " + " |
 r = subprocess.run(["git", "-C", root, "ls-files", "--", "plugins/quality-gates"], capture_output=True, text=True)
 if r.returncode != 0 or not r.stdout.strip():
     out("NO", f"git ls-files 실패(rc={r.returncode}) — 코퍼스 없이 판정하지 않는다"); sys.exit(0)
-SKIP = re.compile(r"plugins/quality-gates/(tests/|CHANGELOG\.md$|README\.md$)")
+SKIP = re.compile(r"plugins/quality-gates/(tests/|CHANGELOG\.md$|README\.md$|dependencies\.md$)")
 files = [p for p in r.stdout.splitlines() if not SKIP.match(p)]
 out("OK" if len(files) >= 30 else "NO", f"코퍼스 {len(files)}개(하한 30)")
 
@@ -61,14 +63,20 @@ for p in files:
 
 SINK = "plugins/quality-gates/scripts/publish-comment.sh"
 DISC = "plugins/quality-gates/scripts/discover-spec.sh"
-extra = sorted(set(callers) - {SINK, DISC})
-out("NO" if extra else "OK", "gh 를 부르는 파일은 sink · discover-spec 둘뿐" + (": 밖 " + ", ".join(f"{p}:{callers[p][0]}" for p in extra) if extra else ""))
+GHREPO = "plugins/quality-gates/scripts/gh-repo.sh"
+extra = sorted(set(callers) - {SINK, DISC, GHREPO})
+out("NO" if extra else "OK", "gh 를 부르는 파일은 sink · discover-spec · gh-repo 뿐" + (": 밖 " + ", ".join(f"{p}:{callers[p][0]}" for p in extra) if extra else ""))
 w_extra = sorted(set(writers) - {SINK})
 out("NO" if w_extra else "OK", "gh 쓰기는 sink 에만" + (": 밖 " + ", ".join(f"{p}:{writers[p][0]}" for p in w_extra) if w_extra else ""))
 # 양의 짝 — 두 파일이 실제로 gh 를 부른다(부재 단언이 공허하지 않다).
 out("OK" if SINK in writers else "NO", "sink 가 gh 쓰기를 한다(양의 짝)")
 disc = subs.get(DISC, set())
-out("OK" if disc == {"pr view"} else "NO", f"discover-spec 의 gh 는 읽기 전용 pr view 하나({sorted(disc) or '없음'})")
+# `auth login` 은 미인증일 때 멈추며 보이는 안내 글(`gh auth login --hostname <호스트>`)이다 — 그 밖의 하위 명령은 없다.
+out("OK" if "pr view" in disc and disc <= {"pr view", "auth login"} else "NO",
+    f"discover-spec 의 gh 는 읽기 전용 pr view 하나 + 로그인 안내 글({sorted(disc) or '없음'})")
+out("OK" if GHREPO in files else "NO", "gh-repo.sh 가 코퍼스에 있다(아래 부재 단언이 공허하지 않다)")
+out("NO" if GHREPO in callers else "OK", "gh-repo.sh 는 gh 하위 명령을 한 줄도 적지 않는다(찾기만)"
+    + (f": {GHREPO}:{callers[GHREPO][0]}" if GHREPO in callers else ""))
 PY
 rc=$?
 [ "$rc" -eq 0 ] || no "판정 코어가 죽었다(rc=$rc)"

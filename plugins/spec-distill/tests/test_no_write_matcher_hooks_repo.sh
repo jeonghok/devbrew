@@ -47,7 +47,8 @@ import glob, json, re, sys
 #          통과시키지만 allowlist 는 막고 사람에게 묻는다.
 #
 # SAFE_TOOLS 를 늘리는 것은 **의도된 편집**이어야 하고 리뷰에서 보여야 한다.
-SAFE_TOOLS = {"Bash"}
+# EnterWorktree — project-init 훅이 새 worktree 브랜치 이름을 관찰한다(R8 RC82). 파일을 쓰는 도구가 아니다.
+SAFE_TOOLS = {"Bash", "EnterWorktree"}
 
 # 진단 라벨 전용 — **판정에 쓰지 않는다.** 위 allowlist 가 판정을 전부 진다.
 # 여기 이름이 빠져도 그 토큰은 SAFE_TOOLS 밖이라 어차피 막힌다(이 집합은 메시지를
@@ -120,7 +121,8 @@ fi
 # 변이에서 출력이 ✓ 한 줄에서 끊겼다). 개수 0 은 아래 임계값이 판정한다.
 # 임계는 1 이다 — qg v7.0.0 이 자기 Bash matcher 훅을 의도적으로 지웠다(이 락은 그보다 먼저 생겼다).
 # 이 대조의 목적은 grep 이 작동한다는 양성 증인이라 1 로 충분하다.
-N_BASH=$(grep -l '"matcher": "Bash"' plugins/*/hooks/hooks.json 2>/dev/null | wc -l | tr -d ' ') || N_BASH=0
+# Bash 는 `|` 조각 중 하나면 된다(project-init 은 `Bash|EnterWorktree`).
+N_BASH=$(grep -lE '"matcher": "([^"|]*\|)*Bash(\|[^"|]*)*"' plugins/*/hooks/hooks.json 2>/dev/null | wc -l | tr -d ' ') || N_BASH=0
 [[ "$N_BASH" -ge 1 ]] && ok "양성 대조: Bash matcher 훅 ${N_BASH}개 생존" \
                       || no "양성 대조 실패: Bash matcher 훅이 ${N_BASH}개뿐"
 
