@@ -195,6 +195,10 @@ EXEMPT_PATHS=(
   "plugins/spec-distill/scripts/run-test-selection.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
   "plugins/plugin-audit/scripts/run-own-tests.sh"
+  "plugins/spec-distill/dependencies.md"
+  "plugins/quality-gates/dependencies.md"
+  "plugins/project-init/dependencies.md"
+  "plugins/plugin-audit/dependencies.md"
 )
 EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
@@ -202,6 +206,10 @@ EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
   "python3 -m unittest discover"
   'add_why "$cand(python): 러너 비정상 종료'
+  '| python | '
+  '| python | '
+  '| python | '
+  '| python | '
 )
 EXEMPT_REASONS=(
   "차등 테스트의 venv setup 명령 — 리뷰 대상 리포의 setup 을 일부러 돌린다(R22 kill switch 가 막는다)"
@@ -209,6 +217,10 @@ EXEMPT_REASONS=(
   "같은 공유본을 spec-distill 링크 경로로 읽은 줄이다(위 항목과 같은 사유)"
   "감사 대상 플러그인의 자체 테스트를 샌드박스에서 일부러 돌린다(README 의 알려진 한계)"
   "호출이 아니라 실패 사유 문자열 안의 글자다"
+  "호출이 아니라 의존 표의 행 이름이다(check_deps.py 가 읽는 「python」 행)"
+  "같은 사유(의존 표의 「python」 행)"
+  "같은 사유(의존 표의 「python」 행)"
+  "같은 사유(의존 표의 「python」 행)"
 )
 
 note "[분류기 — 꼴마다 하나]"
