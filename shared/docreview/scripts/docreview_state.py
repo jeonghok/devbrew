@@ -428,22 +428,24 @@ def parse_sections(text: str, keep_body: bool = False) -> dict:
     return {"headingless": False, "sections": sections}
 
 
-def read_ledger_doc(doc) -> tuple:
-    """원장에 적힌 문서의 글 — 링크를 따라가지 않고 일반 파일만 UTF-8 로 읽는다. 못 읽으면 (None, 사유)."""
+def read_ledger_doc(doc) -> "tuple[str | None, str | None]":
+    """원장에 적힌 문서의 글 — 링크를 따라가지 않고 일반 파일만 UTF-8 로 읽는다. 못 읽으면 (None, 사유).
+    줄 끝은 `Path.read_text` 와 같이 `\r\n` · `\r` 를 `\n` 으로 맞춘다(`docreview_anchor.py snapshot` 과 같은 글)."""
     if not isinstance(doc, str) or not doc:
         return None, "not_a_path"
     try:
         fd = os.open(doc, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
     except OSError as exc:
-        return None, "symlink" if exc.errno == errno.ELOOP else (errno.errorcode.get(exc.errno) or "oserror")
+        return None, "symlink" if exc.errno == errno.ELOOP else (errno.errorcode.get(exc.errno or 0) or "oserror")
     with os.fdopen(fd, "rb") as fh:
         if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
             return None, "not_a_regular_file"
         data = fh.read()
     try:
-        return data.decode("utf-8"), None
+        text = data.decode("utf-8")
     except UnicodeDecodeError:
         return None, "not_utf8"
+    return text.replace("\r\n", "\n").replace("\r", "\n"), None
 
 
 def resolve_scope(scope: str, old_secs, new_secs) -> set:

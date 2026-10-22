@@ -98,6 +98,21 @@ assert_contains "$got" '"item_marks"' "원장 스냅숏에 item_marks 칸이 있
 assert_contains "$got" '"line_hashes"' "원장 스냅숏에 line_hashes 칸이 있다"
 n_lh="$(printf '%s' "$got" | python3 -I -c 'import json,sys;print(sum("line_hashes" in s for s in json.load(sys.stdin)["sections"]))')"
 assert_eq "$n_lh" "3" "line_hashes 는 울타리 절 셋에만"
+# 줄 끝 — CRLF(닫는 # 이 붙은 헤딩 · # 으로 끝나는 제목)와 CR 만 쓴 문서도 앵커 스냅숏과 같은 글로 읽는다
+for eol in crlf cr; do
+  De="$T/eol-$eol"; DOCe="$T/eol-$eol.md"
+  case "$eol" in
+    crlf) printf '# 표본\r\n\r\n## Goals ##\r\n\r\n- 하나\r\n\r\n## C#\r\n\r\n본문.\r\n' > "$DOCe" ;;
+    cr) printf '# 표본\r\r## Goals ##\r\r- 하나\r\r## C#\r\r본문.\r' > "$DOCe" ;;
+  esac
+  new_ledger "$De" "$DOCe" "$PROF"
+  begin "$De"
+  assert_eq "$BR_RC" "0" "$eol: begin-round rc 0"
+  got="$(ledger_snap "$De" 1)"
+  assert_eq "$got" "$(expected_snap "$DOCe" "" "")" "$eol: 원장 스냅숏 == 앵커 스냅숏(제목 · 앵커 · 해시)"
+  anchors="$(printf '%s' "$got" | python3 -I -c 'import json,sys;print(" ".join(s["anchor"] for s in json.load(sys.stdin)["sections"]))')"
+  assert_eq "$anchors" "#표본 #goals #c" "$eol: 헤딩 셋을 닫는 # 없이 읽는다(비교가 공허하지 않다)"
+done
 
 note "== test_seed_headingless"
 D2="$T/seed"; DOC2="$T/seed.md"
@@ -171,12 +186,20 @@ assert_eq "$(ledger_snap "$D6" 2)" "$(expected_snap "$DOC6" "$FENCE" "$IMM")" "�
 rd="$(round_diff "$D6" 2)"
 assert_contains "$rd" '"#원칙": "append-only"' "「새 항목만 추가」로 읽힌다"
 assert_not_contains "$rd" '"changed": ["#원칙"' "얼림 위반으로 막히지 않는다"
-# 양의 짝 — 항목이 아닌 줄을 더하면 같은 판정이 바뀜으로 본다
+# 양의 짝 ① — 덧붙인 줄이 항목이 아니면 같은 판정이 바뀜으로 본다(바꾼 것은 그 줄 하나)
 write_doc "$DOC6" "- P3 셋
 설명 줄" "본문."
-sed -i.bak 's/^- P1 하나$/- P1 고침/' "$DOC6"
 begin "$D6"
 rd="$(round_diff "$D6" 3)"
+assert_contains "$rd" '"changed": ["#원칙"]' "양의 짝: 항목이 아닌 줄을 덧붙이면 불변 절 바뀜"
+# 양의 짝 ② — 앞 항목을 고치면 바뀜(새 원장 · 바꾼 것은 그 항목 하나)
+D7="$T/items-edit"; DOC7="$T/items-edit.md"
+write_doc "$DOC7" "" "본문."
+new_ledger "$D7" "$DOC7" "$PROF"
+begin "$D7"
+sed -i.bak 's/^- P1 하나$/- P1 고침/' "$DOC7"
+begin "$D7"
+rd="$(round_diff "$D7" 2)"
 assert_contains "$rd" '"changed": ["#원칙"]' "양의 짝: 앞 항목을 고치면 불변 절 바뀜"
 
 note "== 호출자 문면 — begin-round 호출에 스냅숏 인자가 없다"
