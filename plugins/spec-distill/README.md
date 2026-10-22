@@ -330,7 +330,7 @@ branch_prefix: feature/
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
 - **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. 설치된 판이 `dependencies.md` 의 판과 다르면 알린다(멈추지 않는다). Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 인터뷰도 돌지 않는다.
 - **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받으면 `/quality-gates:quality-pipeline` 을 부른다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 설치돼 있지 않으면 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
-- **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다.
+- **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다.
 - **codex CLI** (외부, optional) — 있으면 문서 리뷰 엔진 라운드(design doc · interview brief · interview seed)에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 
 ## License
