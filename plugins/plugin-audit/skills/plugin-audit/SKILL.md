@@ -49,13 +49,26 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 아래 인자 해석으로 간다. 그 줄의 `root=` 값을 `--seed` 상대경로에 쓴다 |
+| `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다. 그 줄의 `root=` 값을 `--seed` 상대경로에 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 실행 디렉토리를 만들지 않는다 |
 | `[devbrew-entry] error …` | `[plugin-audit] 사전 검사 실패 — <reason= 값>. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[plugin-audit] 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[plugin-audit] 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_PLUGIN_AUDIT_DISABLE=1` 하나다.
+
+의존 확인 — 아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+PA="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PA" ] || { echo "[plugin-audit] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$PA/scripts/check_deps.py" entry --need python --plugin-root "$PA"
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 아래 인자 해석으로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 감사를 시작하지 않는다 |
+| 그 밖 | `[plugin-audit] plugin-audit 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 감사를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
 **인자 해석** — 받은 인자의 첫 토큰이 `<target>`(플러그인 이름)이다. 그 뒤에 `--seed <path>` 가 올 수 있고, 상대경로면 `root=` 기준으로 푼다. `<target>` 이 비었으면 `감사할 플러그인 이름이 필요합니다 — /plugin-audit:plugin-audit <target> [--seed <path>]` 를 내고 멈춘다. 그 밖이면 `target` · `seedPath` 를 들고 `## phase 0` 으로 간다.
 

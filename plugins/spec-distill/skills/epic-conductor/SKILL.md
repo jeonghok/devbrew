@@ -38,13 +38,28 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 2 로 간다. 그 줄의 `root=` 값을 아래에서 쓴다 |
+| `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 아래에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고, spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져 있어 지휘하지 않는다고 알린다 — 지휘자 없이 진행하려면 스위치를 풀고 지휘자를 부르지 않은 채 이 플러그인 references 폴더의 지휘 절차 파일(conducting.md) 끝 절인 손으로 따르는 절차를 따르라고 한 줄로 알린 뒤 멈춘다 |
 | `[devbrew-entry] error …` | `[spec-distill] epic-conductor 사전 검사 실패 — <reason= 값>. 지휘하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] epic-conductor 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 지휘하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] epic-conductor 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 지휘하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다.
+
+### 1.5 의존 확인
+
+아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git,gh
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 2 로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 지휘하지 않는다 |
+| 그 밖 | `[spec-distill] epic-conductor 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 지휘하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
 ### 2. 로드맵 정하기
 

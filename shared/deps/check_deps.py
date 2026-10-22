@@ -2,14 +2,19 @@
 """devbrew 의존 목록(`<플러그인>/dependencies.md`)을 읽고 판을 잰다.
 
 하위 명령:
+  entry --plugin-root R --need <이름,…>
+      진입에서 쓰는 의존의 지금 판을 표의 최소 판과 비교한다. python 행의 지금 판은 이 스크립트를 돌린 해석기의
+      판이다. 강도 `멈춤` 행이 없거나 낮거나 판을 못 뽑으면 `멈춤` 줄을 내고 rc 3.
   measure --plugin-root R [--superpowers-base <경로>] [--today YYYY-MM-DD]
       표의 `최소 판` · `잰 날짜` 칸을 지금 깔린 판으로 바꿔 쓴다. 강도 · 없을 때 칸은 그대로 둔다.
-      재지 못한 행은 그대로 두고 알린다.
+      재지 못한 행은 그대로 두고 알린다. `python-hook` 행은 플러그인의 훅 해석기
+      (`scripts/devbrew-python.sh`)가 고른 해석기의 판이다.
 
 형제 모듈을 import 하지 않는다. 플러그인마다 `scripts/check_deps.py` 심볼릭 링크로 돌면
 sys.path[0] 이 정본 폴더(`shared/deps/`)라서 형제가 풀리지 않는다. 플러그인 루트는 인자로 받는다.
 
-rc: 0 = 끝남(못 잰 행이 있어도 알리고 0) · 2 = 사용법 오류 · 3 = 의존 목록을 읽지 못해 멈춤.
+rc: 0 = 끝남(measure 는 못 잰 행이 있어도 알리고 0) · 2 = 사용법 오류 · 3 = 멈춤(의존 목록을 읽지
+못했거나, entry 에서 의존이 없거나 낮거나 판을 못 뽑았다).
 """
 import argparse
 import datetime
@@ -18,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 PREFIX = "[devbrew-deps]"
 FILE_NAME = "dependencies.md"
@@ -27,6 +33,13 @@ KEYS = ("name", "min_version", "measured_on", "strength", "when_missing")
 STRENGTHS = ("멈춤", "알림", "기록")
 
 _TRIPLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+HOOK_RESOLVER = os.path.join("scripts", "devbrew-python.sh")
+_HOOK_PROBE = 'import sys\nprint("%d.%d.%d" % tuple(sys.version_info[:3]))\n'
+FIXES = {
+    "python": "Python 3 을 설치하거나 업데이트한다(python3 가 이 판 이상이어야 한다)",
+    "git": "git 을 설치하거나 업데이트한다(https://git-scm.com/downloads)",
+    "gh": "gh 를 설치하거나 업데이트한다(https://cli.github.com)",
+}
 
 
 class DepsError(ValueError):
@@ -128,7 +141,7 @@ def _parse(text, path):
         raise DepsError("의존 표가 없다 ({0})".format(path))
     if not rows:
         raise DepsError("의존 표에 행이 없다 ({0})".format(path))
-    return lines, rows
+    return lines, rows, meta
 
 
 def _read_text(path):
@@ -150,12 +163,16 @@ def _row_line(row):
     return "| " + " | ".join(row[key] for key in KEYS) + " |\n"
 
 
+class _Missing(str):
+    """프로그램이 아예 없다는 이유 — entry 가 「없음」으로 보인다."""
+
+
 def _run_version(argv):
-    """(판 셋, None) 또는 (None, 이유)."""
+    """(판 셋, None) 또는 (None, 이유). 프로그램이 없으면 이유가 _Missing 이다."""
     try:
         proc = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace", timeout=60)
     except FileNotFoundError:
-        return None, "{0} 가 없다".format(argv[0])
+        return None, _Missing("{0} 가 없다".format(argv[0]))
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         return None, "{0} 을 실행하지 못했다: {1}".format(" ".join(argv), " ".join(str(exc).split()))
     out = proc.stdout or ""
@@ -165,6 +182,33 @@ def _run_version(argv):
     if triple is None:
         first = out.splitlines()[0] if out.splitlines() else ""
         return None, "{0} 출력의 첫 줄에서 판을 뽑지 못했다: {1!r}".format(" ".join(argv), first)
+    return triple, None
+
+
+def _hook_python_version(plugin_root, plugin):
+    """훅 해석기가 고른 해석기로 탐침을 돌려 그 판을 잰다. (판 셋, None) 또는 (None, 이유)."""
+    resolver = os.path.join(plugin_root, HOOK_RESOLVER)
+    if not os.path.isfile(resolver):
+        return None, "훅 해석기가 없다: {0}".format(resolver)
+    with tempfile.TemporaryDirectory(prefix="devbrew-deps-") as tmp:
+        probe = os.path.join(tmp, "probe.py")
+        with open(probe, "w", encoding="utf-8") as handle:
+            handle.write(_HOOK_PROBE)
+        argv = ["/bin/sh", resolver, "--event", "measure", "--plugin", plugin, "--hook", "measure", probe]
+        try:
+            proc = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace", timeout=60,
+                                  stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            return None, "훅 해석기를 실행하지 못했다: {0}".format(" ".join(str(exc).split()))
+    out = proc.stdout or ""
+    if not out.strip():
+        return None, ("훅 해석기가 판을 내지 않았다 — 이 플러그인의 훅이 꺼져 있거나(kill switch) 바닥을 "
+                      "만족하는 해석기가 없다")
+    if proc.returncode != 0:
+        return None, "훅 해석기가 rc {0} 로 끝났다".format(proc.returncode)
+    triple = version_triple(out)
+    if triple is None:
+        return None, "훅 해석기 출력의 첫 줄에서 판을 뽑지 못했다: {0!r}".format(out.splitlines()[0])
     return triple, None
 
 
@@ -179,9 +223,11 @@ def superpowers_version(base):
     return None
 
 
-def _measure_row(name, plugin_root, superpowers_base):
+def _measure_row(name, plugin_root, superpowers_base, plugin=""):
     if name == "python":
         return tuple(sys.version_info[:3]), None
+    if name == "python-hook":
+        return _hook_python_version(plugin_root, plugin)
     if name == "git":
         return _run_version(["git", "--version"])
     if name == "gh":
@@ -223,12 +269,12 @@ def measure(plugin_root, superpowers_base=None, today=None):
         text = _read_text(path)
     except (OSError, UnicodeDecodeError) as exc:
         raise DepsError("의존 목록을 열지 못했다: {0} ({1})".format(exc, path))
-    lines, rows = _parse(text, path)
+    lines, rows, meta = _parse(text, path)
     day = today or datetime.date.today().isoformat()
     measured = []
     missed = []
     for row in rows:
-        triple, reason = _measure_row(row["name"], plugin_root, superpowers_base)
+        triple, reason = _measure_row(row["name"], plugin_root, superpowers_base, meta["plugin"])
         if triple is None:
             missed.append((row["name"], reason))
             continue
@@ -239,6 +285,62 @@ def measure(plugin_root, superpowers_base=None, today=None):
     if measured:
         _write_atomic(path, "".join(lines))
     return measured, missed, path
+
+
+def entry(plugin_root, needs):
+    """(멈춤 줄 목록, 알림 줄 목록, 맞은 [(이름, 판)]). 의존 목록이 깨졌거나 행이 없으면 DepsError."""
+    path = os.path.join(plugin_root, FILE_NAME)
+    by_name = {row["name"]: row for row in read_table(path)}
+    stops, notes, passed = [], [], []
+    for name in needs:
+        row = by_name.get(name)
+        if row is None:
+            raise DepsError("의존 목록에 {0} 행이 없다 ({1})".format(name, path))
+        floor = version_triple(row["min_version"])
+        if floor is None:
+            raise DepsError("{0} 행의 최소 판이 비었거나 판이 아니다: {1!r} ({2})".format(
+                name, row["min_version"], path))
+        triple, reason = _measure_row(name, plugin_root, None)
+        if triple is not None and triple >= floor:
+            passed.append((name, triple_text(triple)))
+            continue
+        if triple is not None:
+            have = triple_text(triple)
+        elif isinstance(reason, _Missing):
+            have = "없음"
+        else:
+            have = "판 못 읽음"
+        fix = FIXES.get(name, "{0} 을 설치하거나 업데이트한다".format(name))
+        line = "{0} {1} · 필요 {2} 이상 · {3}".format(name, have, triple_text(floor), fix)
+        if row["strength"] == "멈춤":
+            stops.append("{0} 멈춤 — {1}".format(PREFIX, line))
+        elif row["strength"] == "알림":
+            notes.append("{0} 알림 — {1}".format(PREFIX, line))
+        else:
+            passed.append((name, have))
+    return stops, notes, passed
+
+
+def _needs(value):
+    names = [part.strip() for part in value.split(",")]
+    if any(not part for part in names):
+        raise argparse.ArgumentTypeError("쉼표로 나눈 이름 목록이 아니다: {0!r}".format(value))
+    return names
+
+
+def _run_entry(args):
+    try:
+        stops, notes, passed = entry(args.plugin_root, args.need)
+    except DepsError as exc:
+        print("{0} 멈춤 — 의존 목록을 읽지 못했다: {1}".format(PREFIX, exc))
+        print("할 일: 플러그인을 다시 설치하거나 업데이트한다.")
+        return 3
+    for line in stops + notes:
+        print(line)
+    if stops:
+        return 3
+    print("{0} ok — {1}".format(PREFIX, " · ".join("{0} {1}".format(n, v) for n, v in passed)))
+    return 0
 
 
 def _date(value):
@@ -255,11 +357,16 @@ def main(argv=None):
         pass
     parser = argparse.ArgumentParser(prog="check_deps.py")
     commands = parser.add_subparsers(dest="command")
+    entry_cmd = commands.add_parser("entry")
+    entry_cmd.add_argument("--plugin-root", required=True)
+    entry_cmd.add_argument("--need", required=True, type=_needs)
     measure_cmd = commands.add_parser("measure")
     measure_cmd.add_argument("--plugin-root", required=True)
     measure_cmd.add_argument("--superpowers-base")
     measure_cmd.add_argument("--today", type=_date)
     args = parser.parse_args(argv)
+    if args.command == "entry":
+        return _run_entry(args)
     if args.command != "measure":
         parser.print_usage(sys.stderr)
         return 2

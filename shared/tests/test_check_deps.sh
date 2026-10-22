@@ -29,6 +29,7 @@ expected_names() {
   case "$1" in
     spec-distill)  echo "python git gh superpowers quality-gates claude-code" ;;
     quality-gates) echo "python git gh claude-code" ;;
+    project-init)  echo "python python-hook claude-code" ;;
     *)             echo "python claude-code" ;;
   esac
 }
@@ -132,6 +133,119 @@ assert_eq "$(cat "$DEMO")" "$before" "표 밖 표 줄: 파일은 그대로"
 printf '%s\n' '| 이름 | 최소 판 | 잰 날짜 | 강도 | 없을 때 |' '|---|---|---|---|---|' '| python |  |  | 멈춤 | x |' > "$DEMO"
 out="$("$PY" "$S" measure --plugin-root "$TMP/plugins/demo")"; rc=$?
 assert_eq "$rc" "3" "머리말 없음: rc 3"
+
+# ── 4. measure — python-hook 은 훅 해석기가 고른 해석기의 판, python 은 돌린 python3 의 판 ──
+HOOKY="$TMP/plugins/hooky"
+mkdir -p "$HOOKY/scripts" "$TMP/hookpy"
+# 가짜 해석기 — 넘겨받은 인자를 적고, 탐침을 3.12.13 판 해석기로 exec 한다
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "%s/resolver-args"\nshift 6\nexec "%s/hookpy/python3.12" "$@"\n' "$TMP" "$TMP" > "$HOOKY/scripts/devbrew-python.sh"
+# 가짜 3.12.13 — 탐침 파일이 sys.version_info 를 묻는 .py 일 때만 판을 낸다
+printf '#!/bin/sh\ncase "$1" in *.py) grep -q version_info "$1" && echo "3.12.13" ;; esac\n' > "$TMP/hookpy/python3.12"
+chmod +x "$TMP/hookpy/python3.12"
+HDEMO="$HOOKY/dependencies.md"
+write_hooky() {
+  printf '%s\n' '---' 'type: devbrew-dependencies' 'plugin: hooky' '---' '' \
+    '| 이름 | 최소 판 | 잰 날짜 | 강도 | 없을 때 |' \
+    '|---|---|---|---|---|' \
+    '| python | 1.0.0 | 2000-01-01 | 멈춤 | 파이썬 멈춘다 |' \
+    '| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |' > "$HDEMO"
+}
+hrow() { grep -E "^\| $1 \|" "$HDEMO"; }
+write_hooky
+out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$ROOT/plugins/project-init/scripts/check_deps.py" measure \
+  --plugin-root "$HOOKY" --today 2026-10-20)"; rc=$?
+assert_eq "$rc" "0" "measure(python-hook): rc 0"
+assert_eq "$(hrow python-hook)" "| python-hook | 3.12.13 | 2026-10-20 | 멈춤 | 훅 해석기가 알린다 |" \
+  "measure: python-hook 은 훅 해석기가 고른 해석기의 판"
+assert_eq "$(hrow python)" "| python | $PYV | 2026-10-20 | 멈춤 | 파이썬 멈춘다 |" "measure: python 은 돌린 python3 의 판(따로)"
+if [ "$PYV" != "3.12.13" ]; then
+  [ "$(hrow python | cut -d'|' -f3)" != "$(hrow python-hook | cut -d'|' -f3)" ] \
+    && ok "measure: python 과 python-hook 이 다른 값을 쓴다" || no "measure: python 과 python-hook 이 같은 값을 쓴다"
+else
+  no "전제: 이 python3 가 3.12.13 이라 두 행을 가를 수 없다 — 가짜 판을 바꾼다"
+fi
+assert_eq "$(cat "$TMP/resolver-args" 2>/dev/null | cut -d' ' -f1-6)" "--event measure --plugin hooky --hook measure" \
+  "measure: 해석기를 --event measure --plugin <머리말 plugin> --hook measure 로 부른다"
+# 해석기가 판을 내지 않는다(꺼짐 · 바닥 만족 해석기 없음) — 행은 그대로
+printf '#!/bin/sh\nexit 0\n' > "$HOOKY/scripts/devbrew-python.sh"
+write_hooky
+out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$HOOKY" --today 2026-10-21)"; rc=$?
+assert_eq "$rc" "0" "measure(해석기 침묵): rc 0"
+assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |" "measure: 해석기가 판을 내지 않으면 python-hook 행은 그대로"
+assert_contains "$out" "python-hook 못 쟀다 — 훅 해석기가 판을 내지 않았다" "measure: 해석기 침묵을 알린다"
+# 해석기가 없다 — 행은 그대로
+rm -f "$HOOKY/scripts/devbrew-python.sh"
+write_hooky
+out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$HOOKY" --today 2026-10-21)"
+assert_eq "$(hrow python-hook)" "| python-hook | 1.0.0 | 2000-01-01 | 멈춤 | 훅 해석기가 알린다 |" "measure: 해석기가 없으면 python-hook 행은 그대로"
+assert_contains "$out" "python-hook 못 쟀다 — 훅 해석기가 없다" "measure: 해석기 없음을 알린다"
+
+# ── 5. entry — 진입의 의존 확인 ─────────────────────────────────────────────
+EDEMO="$TMP/plugins/edemo"
+mkdir -p "$EDEMO" "$TMP/ebin"
+write_edemo() {   # write_edemo <python 최소 판> <git 최소 판> <gh 최소 판> [<python-hook 최소 판>]
+  printf '%s\n' '---' 'type: devbrew-dependencies' 'plugin: edemo' '---' '' \
+    '| 이름 | 최소 판 | 잰 날짜 | 강도 | 없을 때 |' \
+    '|---|---|---|---|---|' \
+    "| python | $1 | 2026-10-20 | 멈춤 | x |" \
+    "| git | $2 | 2026-10-20 | 멈춤 | x |" \
+    "| gh | $3 | 2026-10-20 | 멈춤 | x |" \
+    "| python-hook | ${4:-3.12.13} | 2026-10-20 | 멈춤 | 훅 해석기가 알린다 |" \
+    '| claude-code | 2.1.303 | 2026-10-20 | 기록 | x |' > "$EDEMO/dependencies.md"
+}
+run_entry() {   # run_entry <--need 값> → 출력, rc 는 $erc
+  out="$(PATH="$TMP/ebin:/bin" "$PY" "$ROOT/plugins/spec-distill/scripts/check_deps.py" entry --plugin-root "$EDEMO" --need "$1")"; erc=$?
+}
+printf '#!/bin/sh\necho "git version 2.47.1 (Apple Git-157)"\n' > "$TMP/ebin/git"
+printf '#!/bin/sh\necho "gh version 2.88.1 (2026-03-12)"\necho "https://github.com/cli/cli/releases/tag/v9.9.9"\n' > "$TMP/ebin/gh"
+chmod +x "$TMP/ebin/git" "$TMP/ebin/gh"
+write_edemo 1.0.0 2.47.1 2.88.1
+run_entry python,git,gh
+assert_eq "$erc" "0" "entry: 모두 맞으면 rc 0 (등호 경계 포함)"
+assert_eq "$out" "[devbrew-deps] ok — python $PYV · git 2.47.1 · gh 2.88.1" "entry: ok 줄에 이름과 판"
+# 낮은 git
+printf '#!/bin/sh\necho "git version 2.0.0"\n' > "$TMP/ebin/git"
+run_entry python,git
+assert_eq "$erc" "3" "entry: git 이 낮으면 rc 3"
+assert_contains "$out" "[devbrew-deps] 멈춤 — git 2.0.0 · 필요 2.47.1 이상 · git 을 설치하거나 업데이트한다" "entry: 낮은 판 · 필요 판 · 고치는 법"
+# 판을 못 뽑는 git
+printf '#!/bin/sh\necho "git version unknown"\n' > "$TMP/ebin/git"
+run_entry python,git
+assert_eq "$erc" "3" "entry: git 판을 못 뽑으면 rc 3"
+assert_contains "$out" "[devbrew-deps] 멈춤 — git 판 못 읽음 · 필요 2.47.1 이상" "entry: 판 못 읽음을 보인다"
+printf '#!/bin/sh\necho "git version 2.47.1"\n' > "$TMP/ebin/git"
+# gh 없음 — --need 에 gh 가 있을 때만 멈춘다
+rm -f "$TMP/ebin/gh"
+run_entry python,git
+assert_eq "$erc" "0" "entry: gh 를 쓰지 않는 진입은 gh 가 없어도 rc 0"
+assert_not_contains "$out" "gh" "entry: gh 를 쓰지 않는 진입은 gh 를 말하지 않는다"
+run_entry python,git,gh
+assert_eq "$erc" "3" "entry: gh 를 쓰는 진입은 gh 가 없으면 rc 3"
+assert_contains "$out" "[devbrew-deps] 멈춤 — gh 없음 · 필요 2.88.1 이상 · gh 를 설치하거나 업데이트한다(https://cli.github.com)" "entry: gh 없음 · 설치 방법"
+# python — 돌린 python3 의 판과 python 행을 비교한다 · python-hook 행은 보지 않는다
+write_edemo 99.0.0 2.47.1 2.88.1 1.0.0
+run_entry python
+assert_eq "$erc" "3" "entry: python3 가 python 행보다 낮으면 rc 3"
+assert_contains "$out" "[devbrew-deps] 멈춤 — python $PYV · 필요 99.0.0 이상" "entry: python 의 있는 판 · 필요 판"
+write_edemo 1.0.0 2.47.1 2.88.1 99.0.0
+run_entry python
+assert_eq "$erc" "0" "entry --need python: python-hook 행(99.0.0)을 보지 않는다"
+assert_not_contains "$out" "python-hook" "entry --need python: python-hook 을 말하지 않는다"
+# 표에 없는 이름 · 비운 최소 판 · 깨진 표 — 멈춘다
+run_entry python,svn
+assert_eq "$erc" "3" "entry: 표에 없는 이름이면 rc 3"
+assert_contains "$out" "svn 행이 없다" "entry: 없는 행을 말한다"
+write_edemo 1.0.0 "" 2.88.1
+run_entry git
+assert_eq "$erc" "3" "entry: 최소 판이 빈 행이면 rc 3"
+printf 'garbage\n' > "$EDEMO/dependencies.md"
+run_entry python
+assert_eq "$erc" "3" "entry: 의존 목록이 깨졌으면 rc 3"
+assert_contains "$out" "멈춤 — 의존 목록을 읽지 못했다" "entry: 깨진 목록의 멈춤 줄"
+err="$("$PY" "$S" entry --plugin-root "$EDEMO" 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "2" "entry: --need 없음은 rc 2"
+err="$("$PY" "$S" entry --plugin-root "$EDEMO" --need "python,,git" 2>&1 >/dev/null)"; rc=$?
+assert_eq "$rc" "2" "entry: 빈 이름이 낀 --need 는 rc 2"
 
 # 사용법
 err="$("$PY" "$S" 2>&1 >/dev/null)"; rc=$?

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py pyproject.toml .python-version uv.lock README.md plugins/*/README.md
+# guards: shared/python/** plugins/*/scripts/devbrew-python.sh plugins/*/hooks/hooks.json plugins/**/*.py pyproject.toml .python-version uv.lock README.md plugins/*/README.md plugins/*/dependencies.md
 #
 # 출하 Python 바닥의 «집행» 이 살아 있는가. 선언은 여기서 재지 않는다 — 선언만 한 바닥은
 # 훅이 읽지 않는다는 것이 이 설계의 출발점이다(설계 Context/Why 3).
 #
 # 축 A 해석기 행동 · B 배포(물리 사본) · C 배선(hooks.json) · D 두 바닥 · E 훅 자식 ·
-# F 도출 규칙의 산출물 기록 · G prerequisite · H uv.lock 핀 · I 비-절대 PATH 항목.
+# F 도출 규칙의 산출물 기록 · G prerequisite · H uv.lock 핀 · I 비-절대 PATH 항목 ·
+# J 훅 바닥 = 의존 목록의 python-hook 행.
 #
 # **이 락이 스스로 못 지키는 것** — fixture 로 쓰는 가짜 인터프리터가 「바닥을 만족한다」고
 # 거짓말하는 것 자체는 못 잰다. 그것이 이 락의 «측정 수단»이기 때문이다. 대신 축 A 는 같은
@@ -36,7 +37,11 @@ README.md
 plugins/project-init/README.md
 plugins/quality-gates/README.md
 plugins/spec-distill/README.md
-plugins/plugin-audit/README.md"
+plugins/plugin-audit/README.md
+plugins/project-init/dependencies.md
+plugins/quality-gates/dependencies.md
+plugins/spec-distill/dependencies.md
+plugins/plugin-audit/dependencies.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCANNED"
   exit 0
@@ -873,7 +878,7 @@ assert_file_grep pyproject.toml '^package = false$' \
   "H: [tool.uv] package = false — devbrew 는 빌드되는 패키지가 아니다"
 
 note "── 축 F: 도출 규칙이 산출물에 적혀 있다 (AC13) ───────────────────────"
-RULE='2026-10 이후에도 패치를 받는 버전 중 최빈'
+RULE='개발 당시 훅이 실제로 쓴 해석기 판'
 # spec-distill 은 6.0.0 에서 훅과 해석기를 지워 이 목록에서 빠졌다(아래 축 G 의 음의 짝).
 for f in "$RESOLVER" README.md \
          plugins/project-init/README.md; do
@@ -883,6 +888,28 @@ for f in "$RESOLVER" README.md \
     "F/AC13: $f 가 현재 바닥 ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 를 말한다"
   assert_file_grep "$f" "EOL" "F/AC13: $f 가 다음 재검토 시점(EOL)을 말한다"
 done
+
+note "── 축 J: 훅 바닥 = 의존 목록의 python-hook 행 (AC19) ─────────────────"
+# python-hook 행은 훅이 해석기를 부르는 플러그인(hooks.json 에서 센다)의 의존 목록에만 있다 — 양 · 음 짝.
+# 그 행의 앞 두 숫자가 해석기의 FLOOR_MAJOR.FLOOR_MINOR 와 같다. 바닥 숫자는 위에서 해석기에서 도출했다.
+hook_plugins=""; row_plugins=""
+for d in plugins/*/; do
+  p="${d%/}"; p="${p#plugins/}"
+  if [ -f "plugins/$p/hooks/hooks.json" ] && grep -q 'devbrew-python\.sh' "plugins/$p/hooks/hooks.json"; then
+    hook_plugins="$hook_plugins $p"
+  fi
+  dep="plugins/$p/dependencies.md"
+  [ -f "$dep" ] || continue
+  hrow="$(grep -E '^\| python-hook \|' "$dep" | head -1)"
+  [ -n "$hrow" ] || continue
+  row_plugins="$row_plugins $p"
+  hv="$(printf '%s' "$hrow" | sed -n 's/^| python-hook | \([0-9][0-9]*\)\.\([0-9][0-9]*\)\.[0-9][0-9]* |.*/\1.\2/p')"
+  assert_eq "${hv:-못 읽음}" "${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL}" \
+    "J: $p 의 python-hook 행 앞 두 숫자가 해석기 바닥 ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 와 같다"
+done
+[ -n "$hook_plugins" ] && ok "J: 해석기를 부르는 훅이 있는 플러그인을 도출했다 ($hook_plugins )" \
+  || no "J: 해석기를 부르는 훅이 있는 플러그인을 하나도 못 찾았다 — 대조가 공허하다"
+assert_eq "$row_plugins" "$hook_plugins" "J: python-hook 행은 해석기를 부르는 훅이 있는 플러그인에만 있다"
 
 note "── 축 G: prerequisite (AC14) ─────────────────────────────────────────"
 # `assert_file_grep`/`assert_file_absent` 는 grep -qE 를 쓴다 — ERE 에서 `+` 는 quantifier,

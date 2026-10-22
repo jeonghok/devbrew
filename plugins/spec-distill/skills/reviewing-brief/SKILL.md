@@ -201,6 +201,19 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 게이트가 그것을 이번 번들로 넘긴다. 치우는 순서는 codex 산출물과 같다: 지운다 → 못 지우면 0바이트로
 절단한다 → 둘 다 못 하면 공시하고 멈춘다.
 
+먼저 의존 확인 펜스를 Bash 로 한 번 돌린다(라운드마다).
+
+```bash
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$PR/scripts/check_deps.py" entry --plugin-root "$PR" --need python,git
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 아래 게이트 펜스로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 이 라운드를 시작하지 않는다 |
+| 그 밖 | `[spec-distill] reviewing-brief 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 이 라운드를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
+
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac

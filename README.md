@@ -36,9 +36,10 @@ Brewing better dev tools for Claude Code.
 ## Python
 
 devbrew의 **훅**은 Python 3.12 이상을 요구합니다. 이 숫자는 리터럴이 아니라 도출된 값입니다 —
-「2026-10 이후에도 패치를 받는 버전 중 최빈」. 다음 재검토 시점은 3.12 EOL(2028-10)이고,
-올릴 때는 숫자를 손으로 바꾸는 게 아니라 이 규칙을 다시 적용합니다. 정본은
-`shared/python/devbrew-python.sh`의 `FLOOR_MAJOR`/`FLOOR_MINOR`.
+「개발 당시 훅이 실제로 쓴 해석기 판(`dependencies.md` 의 `python-hook` 행) — 측정 명령이 잰다」.
+다음 재검토 시점은 3.12 EOL(2028-10)이고, 올릴 때는 숫자를 손으로 바꾸는 게 아니라 이 규칙을 다시
+적용합니다. 정본은 `shared/python/devbrew-python.sh`의 `FLOOR_MAJOR`/`FLOOR_MINOR`.
+스킬 진입이 확인하는 `python3` 의 바닥은 따로입니다 — 각 플러그인 `dependencies.md` 의 `python` 행.
 
 바닥 미만 머신에서 훅은 **막지 않고 건너뜁니다**. 그 사실을 알리는 세션 시작 안내는 `SessionStart`
 훅 자리에서만 나가는데, quality-gates 10.0.0 이 그 마지막 자리를 지워 **지금 devbrew 에는 그 자리가

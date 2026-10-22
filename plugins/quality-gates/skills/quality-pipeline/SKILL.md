@@ -23,11 +23,24 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 아래 `## Preflight` 로 간다 |
+| `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
 | `[devbrew-entry] error …` | `[quality-gates] quality-pipeline 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[quality-gates] quality-pipeline 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[quality-gates] quality-pipeline 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
+
+의존 확인 — 아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git,gh
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 아래 `## Preflight` 로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다 |
+| 그 밖 | `[quality-gates] quality-pipeline 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>).` 와 펜스 출력을 내고 멈춘다 |
 
 # Quality Gates — In-Turn Orchestrator (v14.0.0)
 

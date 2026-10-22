@@ -41,13 +41,26 @@ allowed-tools:
 
 | 그 자리의 내용 | 동작 |
 |---|---|
-| `[devbrew-entry] ok …` | 아래 `## 진입 검사`(1.5)로 간다. 그 줄의 `root=` 값을 `## 입력` 에서 쓴다 |
+| `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다. 그 줄의 `root=` 값을 `## 입력` 에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 `[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).` 를 덧붙여 멈춘다 |
 | `[devbrew-entry] error …` | `[spec-distill] spec-review 사전 검사 실패 — <reason= 값>.` 과 위 복귀 문장을 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] spec-review 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 와 위 복귀 문장을 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] spec-review 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다.` 와 위 복귀 문장을 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. 이 skill 의 나머지 스위치(아래 `## 진입 검사` 의 셋 — 플러그인 전체 스위치는 위 표가 먼저 본다)는 1.5 `## 진입 검사` 가 본다. `DEVBREW_SKIP_HOOKS` 의 플러그인 토큰은 이 표에 걸리지 않는다.
+
+의존 확인 — 아래 펜스를 Bash 로 한 번 돌린다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라 — 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리)." >&2; exit 1; }
+python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
+```
+
+| 결과 | 동작 |
+|---|---|
+| rc 0 (`[devbrew-deps] ok …`) | 아래 `## 진입 검사`(1.5)로 간다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다 — 위 복귀 문장을 덧붙인다 |
+| 그 밖 | `[spec-distill] spec-review 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>).` 과 위 복귀 문장, 펜스 출력을 내고 멈춘다 |
 
 ## 진입 검사
 
