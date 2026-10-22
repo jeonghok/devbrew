@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # gh 를 찾고 실행하는 자리는 한 곳이다(R8 계획 2 · AC20) — spec-distill 은 scripts/gh_repo.py, qg 는 scripts/gh-repo.sh.
 # 판독: spec-distill 의 .py 는 ast 로(문자열 grep 은 주석 · 안내 글로 만족된다), qg 의 셸은 주석을 뗀 줄로.
+# 예외 하나: 의존 판 측정(shared/deps/check_deps.py — spec-distill 에는 심볼릭 링크)의 argv `["gh", "--version"]` 는
+# 레포를 묻지 않는 판 확인이라 문이 아니다. 그 파일 · 그 argv 꼴만 PROBE 로 따로 내고, 정확히 하나인지 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_gh_single_door.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -13,8 +15,10 @@ T="$(cd "$T" && pwd -P)"
 trap 'rm -rf "$T"' EXIT
 
 py_doors() {  # py_doors <파일…> — gh 를 찾거나 argv 첫 칸으로 실행하는 자리마다 `<파일>:<줄>` 한 줄. 끝에 CHECKED n.
+  # PROBE_OK(환경 변수)의 실제 경로인 파일에서 argv 가 정확히 ("gh", "--version") 이면 `PROBE <파일>:<줄>` 로 낸다.
   PYTHONIOENCODING=utf-8 python3 -I - "$@" <<'PY'
-import ast, sys
+import ast, os, sys
+PROBE_OK = os.path.realpath(os.environ["PROBE_OK"]) if os.environ.get("PROBE_OK") else None
 RUNNERS = {"run", "Popen", "call", "check_call", "check_output", "system", "popen", "getoutput", "getstatusoutput",
            "execvp", "execv", "execlp", "spawnlp"}
 
@@ -38,7 +42,8 @@ for path in sys.argv[1:]:
     checked += 1
     whiches = {"which"} | {a.asname for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "shutil"
                            for a in n.names if a.name == "which" and a.asname}
-    lines = set()
+    lines, probes = set(), set()
+    probe_file = PROBE_OK is not None and os.path.realpath(path) == PROBE_OK
     for n in ast.walk(tree):
         hit = False
         if isinstance(n, ast.Call):
@@ -48,11 +53,17 @@ for path in sys.argv[1:]:
             elif name in RUNNERS and n.args and shell_gh(n.args[0]):
                 hit = True                                   # run("gh pr list", shell=True) · system("gh …")
         elif isinstance(n, (ast.List, ast.Tuple)) and n.elts and is_gh(n.elts[0]):
+            if (probe_file and len(n.elts) == 2 and isinstance(n.elts[1], ast.Constant)
+                    and n.elts[1].value == "--version"):
+                probes.add(n.lineno)                         # 판 측정 — 레포를 묻지 않는다
+                continue
             hit = True                                       # ["gh", "pr", …] — argv 첫 칸
         if hit:
             lines.add(n.lineno)
     for line in sorted(lines):
         print("%s:%d" % (path, line))
+    for line in sorted(probes):
+        print("PROBE %s:%d" % (path, line))
 print("CHECKED %d" % checked)
 PY
 }
@@ -76,10 +87,12 @@ echo "=== spec-distill: gh 를 찾고 부르는 자리는 gh_repo.py 하나 ==="
 PYS=()
 while IFS= read -r f; do PYS+=("$ROOT/$f"); done < <(git -C "$ROOT" ls-files -- "$SD_SCRIPTS/*.py")
 [ "${#PYS[@]}" -ge 10 ] && ok "spec-distill 스크립트 ${#PYS[@]}개를 읽는다" || no "spec-distill 스크립트를 못 찾았다(${#PYS[@]}개) — 아래 검사가 공허하다"
-OUT="$(py_doors ${PYS[@]+"${PYS[@]}"})"
+OUT="$(PROBE_OK="$ROOT/shared/deps/check_deps.py" py_doors ${PYS[@]+"${PYS[@]}"})"
 assert_eq "$(printf '%s\n' "$OUT" | grep '^CHECKED ' || true)" "CHECKED ${#PYS[@]}" "파일마다 ast 로 읽었다"
-HITS="$(printf '%s\n' "$OUT" | grep -v '^CHECKED ' | sed "s#^$ROOT/##" || true)"
+HITS="$(printf '%s\n' "$OUT" | grep -v '^CHECKED ' | grep -v '^PROBE ' | sed "s#^$ROOT/##" || true)"
 assert_eq "$(printf '%s\n' "$HITS" | grep -v "^$SD_SCRIPTS/gh_repo\.py:" || true)" "" "gh 를 찾거나 argv 첫 칸으로 부르는 자리가 gh_repo.py 밖에 없다"
+assert_eq "$(printf '%s\n' "$OUT" | grep '^PROBE ' | sed "s#^PROBE $ROOT/##; s#:[0-9]*\$##" || true)" "$SD_SCRIPTS/check_deps.py" \
+  "판 측정 예외: argv (\"gh\", \"--version\") 는 의존 판 측정 파일(check_deps.py)에 정확히 하나"
 assert_contains "$HITS" "$SD_SCRIPTS/gh_repo.py:" "양의 짝: gh_repo.py 에는 gh 찾기가 있다"
 
 echo "=== 판독기 양성 대조 ==="
@@ -104,6 +117,16 @@ PY
 got="$(py_doors "$T/bad.py" | grep -v '^CHECKED ' | sed "s#^$T/##" | tr '\n' ' ')"
 assert_eq "$got" "bad.py:4 bad.py:5 bad.py:6 bad.py:7 bad.py:8 " "which · 별칭 which · argv 목록 · argv 튜플 · 셸 문자열을 모두 잡는다"
 assert_eq "$(py_doors "$T/fine.py" | grep -v '^CHECKED ' || true)" "" "양성 짝: 안내 글 · 둘째 칸 · 변수 첫 칸 · 다른 이름 · 주석은 잡지 않는다"
+cat > "$T/probe.py" <<'PY'
+import subprocess
+subprocess.run(["gh", "--version"])
+subprocess.run(["gh", "pr", "list"])
+subprocess.run(["gh", "--version", "-R", "x/y"])
+PY
+got="$(PROBE_OK="$T/probe.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
+assert_eq "$got" "probe.py:3 probe.py:4 PROBE probe.py:2 " "판 측정 예외: 그 파일에서도 (\"gh\", \"--version\") 꼴만 빠지고 다른 gh argv 는 잡는다"
+got="$(PROBE_OK="$T/fine.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
+assert_eq "$got" "probe.py:2 probe.py:3 probe.py:4 " "판 측정 예외: 예외 파일이 아닌 곳의 gh --version 은 잡는다"
 
 echo "=== qg: gh 를 찾는 자리는 gh-repo.sh 하나 ==="
 SHS=()
