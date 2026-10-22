@@ -262,10 +262,18 @@ def _measure_row(name, plugin_root, superpowers_base, plugin=""):
 
 
 def _write_atomic(path, text):
+    """임시 파일에 쓴 뒤 바꿔 넣는다. 쓰기 · 바꿔 넣기가 실패하면 임시 파일을 지우고 오류를 그대로 낸다."""
     tmp = "{0}.tmp-{1}".format(path, os.getpid())
-    with open(tmp, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def measure(plugin_root, superpowers_base=None, today=None):

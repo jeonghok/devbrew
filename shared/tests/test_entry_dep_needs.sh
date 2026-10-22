@@ -47,9 +47,7 @@ fence_info() {
   python3 -I - "$1" <<'PY'
 import re, sys
 lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
-# 인자 순서는 둘 중 하나다 — `--need python` 이 줄 끝이면 인라인 python 락이 인터프리터 호출로 읽는다.
-CALL = re.compile(r'^python3 "\$(\w+)/scripts/check_deps\.py" entry '
-                  r'(?:--plugin-root "\$(?P<r1>\w+)" --need (?P<n1>\S+)|--need (?P<n2>\S+) --plugin-root "\$(?P<r2>\w+)")$')
+CALL = re.compile(r'^python3 "\$(\w+)/scripts/check_deps\.py" entry --plugin-root "\$(\w+)" --need (\S+)$')
 i = 0
 while i < len(lines):
     if lines[i] != "```bash":
@@ -64,7 +62,7 @@ while i < len(lines):
         if m:
             var = m.group(1)
             guards = sum(1 for b in body if b.startswith('%s="${CLAUDE_PLUGIN_ROOT}"; [ -n "$%s" ] ||' % (var, var)))
-            print(i + 1, var, guards, m.group("r1") or m.group("r2"), m.group("n1") or m.group("n2"))
+            print(i + 1, var, guards, m.group(2), m.group(3))
     i = j + 1
 PY
 }

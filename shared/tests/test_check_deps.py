@@ -137,5 +137,36 @@ class ReadTable(unittest.TestCase):
             check_deps.read_table(os.path.join(self.tmp, "none.md"))
 
 
+class WriteAtomic(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_failed_replace_leaves_no_tmp_file(self):
+        from unittest import mock
+        path = os.path.join(self.tmp, check_deps.FILE_NAME)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(GOOD)
+        with mock.patch.object(check_deps.os, "replace", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                check_deps._write_atomic(path, "new")
+        self.assertEqual(sorted(os.listdir(self.tmp)), [check_deps.FILE_NAME])
+        with open(path, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), GOOD)
+
+    def test_failed_write_leaves_no_tmp_file(self):
+        path = os.path.join(self.tmp, check_deps.FILE_NAME)
+        with self.assertRaises(UnicodeEncodeError):
+            check_deps._write_atomic(path, "\ud800")
+        self.assertEqual(os.listdir(self.tmp), [])
+
+    def test_success_replaces(self):
+        path = os.path.join(self.tmp, check_deps.FILE_NAME)
+        check_deps._write_atomic(path, GOOD)
+        self.assertEqual(os.listdir(self.tmp), [check_deps.FILE_NAME])
+
+
 if __name__ == "__main__":
     unittest.main()

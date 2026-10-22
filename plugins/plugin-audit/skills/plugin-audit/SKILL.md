@@ -61,7 +61,7 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
 
 ```bash
 PA="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PA" ] || { echo "[plugin-audit] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-python3 "$PA/scripts/check_deps.py" entry --need python --plugin-root "$PA"
+python3 "$PA/scripts/check_deps.py" entry --plugin-root "$PA" --need python
 ```
 
 | 결과 | 동작 |
