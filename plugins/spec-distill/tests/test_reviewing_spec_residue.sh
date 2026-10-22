@@ -278,8 +278,7 @@ PY
 }
 mk_state() {   # mk_state <dir>
   python3 "$SD_SCRIPTS/docreview_state.py" init --state-dir "$1" --doc "$DOC_D" --profile "$PROFILE_D" >/dev/null
-  python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$DOC_D" > "$1/s1.json"
-  python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$1" --snapshot "$1/s1.json" >/dev/null
+  python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$1" >/dev/null
 }
 sid=rs09down; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
 mk_state "$D"
@@ -349,8 +348,7 @@ st = s.load_state(sys.argv[2]); r = st["rounds"]["1"]
 r["started_mtime_ns"] = int(r["started_mtime_ns"]) - 120 * 10**9; s.save_state(sys.argv[2], st)
 t = r["started_mtime_ns"] + 60 * 10**9; os.utime(sys.argv[3], ns=(t, t))' "$SD_SCRIPTS" "$D" "$yml"
 chmod 444 "$yml"; chmod 555 "$D"
-python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$DOC_D" > "$SCRATCH/$sid.s2.json"
-python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$D" --snapshot "$SCRATCH/$sid.s2.json" >/dev/null 2>&1; brc=$?
+python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$D" >/dev/null 2>&1; brc=$?
 rnd="$(python3 "$FXD/st_get.py" "$D/docreview-state.md" 'st["round"]' 2>/dev/null)"
 win="$(python3 -c 'import os, sys, yaml; t = open(sys.argv[1], encoding="utf-8").read(); r = yaml.safe_load(t[4:t.find("\n---\n", 4)])["docreview"]["rounds"]; m = os.stat(sys.argv[2]).st_mtime_ns; a = (r.get("1") or {}).get("started_mtime_ns"); b = (r.get("2") or {}).get("started_mtime_ns"); print(a is not None and b is not None and int(a) < m < int(b))' "$D/docreview-state.md" "$yml" 2>/dev/null)"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \

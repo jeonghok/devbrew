@@ -51,12 +51,13 @@ export PYTHONDONTWRITEBYTECODE=1
 # 얇은 변형(`gv_r1`)을 이 락 안에 따로 둔다 — cases.sh 를 오염시키지 않는다(브리프
 # 원문의 이유와 같다). `seed_findings`·`next_round`·저수준 CLI(`decide`·`fix`·`ask`)는
 # 이미 명시 `--state-dir` 를 받으므로 그대로 재사용한다.
-gv_r1() {   # gv_r1 <state-dir> <profile> <doc>
-  py docreview_state.py init --state-dir "$1" --doc "$3" --profile "$2" >/dev/null || return 1
+gv_r1() {   # gv_r1 <state-dir> <profile> <doc> — 원장의 문서는 <doc> 의 사본이다(cases.sh `own_doc`)
+  local o; o="$(own_doc "$1" "$3")" || return 1
+  py docreview_state.py init --state-dir "$1" --doc "$o" --profile "$2" >/dev/null || return 1
   # 파일명은 반드시 s1.json — `next_round()`(cases.sh) 가 다음 라운드에서
   # `$d/s$((n-1)).json` 로 이 파일을 도로 찾는다(r1() 과 같은 이름 계약).
   local s="$1/s1.json"; snap "$3" "$s"
-  py docreview_state.py begin-round --state-dir "$1" --snapshot "$s" >/dev/null || return 1
+  py docreview_state.py begin-round --state-dir "$1" >/dev/null || return 1
 }
 
 gv_reach_open_decide() {

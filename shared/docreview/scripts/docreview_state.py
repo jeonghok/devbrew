@@ -354,6 +354,98 @@ DOC_ANCHOR = "#__doc__"
 PREAMBLE = "#__preamble__"
 
 
+# ── 문서 판독 — 헤딩 단위 절 · 앵커 · 해시 ──────────────────────────────────
+# ATX 헤딩만(setext 없음) · 코드 펜스 안 무시 · frontmatter 건너뜀 · 앵커는 GitHub slug · 절은 그 헤딩부터 다음 헤딩
+# (레벨 무관) 직전까지(평면) · 해시는 우측 공백 제거 본문의 sha1 앞 12자. `begin-round` 가 원장의 문서로 라운드
+# 스냅숏을 만들 때와 `docreview_anchor.py snapshot` 이 같은 함수를 부른다.
+HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+
+
+def _after_frontmatter(lines) -> int:
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                return i + 1
+    return 0
+
+
+def parse_sections(text: str, keep_body: bool = False) -> dict:
+    lines = text.split("\n")
+    start = _after_frontmatter(lines)
+    heads = []
+    fence = None
+    for i in range(start, len(lines)):
+        line = lines[i]
+        fm = FENCE_RE.match(line)
+        if fm:
+            tok = fm.group(1)[0]
+            if fence is None:
+                fence = tok
+            elif tok == fence:
+                fence = None
+            continue
+        if fence:
+            continue
+        hm = HEADING_RE.match(line)
+        if hm:
+            heads.append((i, len(hm.group(1)), hm.group(2).strip()))
+    sections = []
+
+    def add(anchor, title, level, a, b, parents):
+        rows = [x.rstrip() for x in lines[a:b]]
+        while rows and rows[-1] == "":
+            rows.pop()
+        body = "\n".join(rows).strip("\n")
+        item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
+                "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
+                "line_hashes": [hashlib.sha1(r.encode("utf-8")).hexdigest()[:12] for r in rows],
+                "item_marks": "".join("1" if r.startswith("- ") else "0" for r in rows),
+                "parents": list(parents)}
+        if keep_body:
+            item["body"] = body
+        sections.append(item)
+
+    if not heads:
+        if "".join(lines[start:]).strip():
+            add(DOC_ANCHOR, "(문서 전체)", 0, start, len(lines), [])
+        return {"headingless": True, "sections": sections}
+    if "".join(lines[start:heads[0][0]]).strip():
+        add(PREAMBLE, "(머리말)", 0, start, heads[0][0], [])
+    seen = {}
+    stack = []  # [(level, anchor)]
+    for k, (ln, lvl, title) in enumerate(heads):
+        base = slugify(title)
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        anchor = "#" + (base if n == 0 else "%s-%d" % (base, n))
+        while stack and stack[-1][0] >= lvl:
+            stack.pop()
+        parents = [a for (_l, a) in stack]
+        end = heads[k + 1][0] if k + 1 < len(heads) else len(lines)
+        add(anchor, title, lvl, ln, end, parents)
+        stack.append((lvl, anchor))
+    return {"headingless": False, "sections": sections}
+
+
+def read_ledger_doc(doc) -> tuple:
+    """원장에 적힌 문서의 글 — 링크를 따라가지 않고 일반 파일만 UTF-8 로 읽는다. 못 읽으면 (None, 사유)."""
+    if not isinstance(doc, str) or not doc:
+        return None, "not_a_path"
+    try:
+        fd = os.open(doc, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+    except OSError as exc:
+        return None, "symlink" if exc.errno == errno.ELOOP else (errno.errorcode.get(exc.errno) or "oserror")
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            return None, "not_a_regular_file"
+        data = fh.read()
+    try:
+        return data.decode("utf-8"), None
+    except UnicodeDecodeError:
+        return None, "not_utf8"
+
+
 def resolve_scope(scope: str, old_secs, new_secs) -> set:
     """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
     if scope.startswith("related:") and "=" in scope:   # 「related:<D id>=<앵커 또는 insert-after:#x>」 — 결정에 묶인 절(AC38)
@@ -414,7 +506,7 @@ _BLANK_LINE_HASH = hashlib.sha1(b"").hexdigest()[:12]
 
 
 def _line_hash(line) -> str:
-    """`docreview_anchor.parse_sections` 의 줄 해시와 같은 함수 — 오른쪽 공백을 걷은 줄의 sha1 앞 12자."""
+    """`parse_sections` 의 줄 해시와 같은 함수 — 오른쪽 공백을 걷은 줄의 sha1 앞 12자."""
     return hashlib.sha1(line.rstrip().encode("utf-8")).hexdigest()[:12]
 
 
@@ -922,7 +1014,7 @@ def _log_section_anchors(prof, sections) -> set:
 
 
 def snapshot_problem(snap, prof, *, immutable_lineage):
-    """호출자가 낸 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸 ·
+    """라운드 스냅숏이 가드를 끌 모양인가 — (사유, 앵커) 또는 None. 울타리 절(불변 · 결정 기록 · 미룸 ·
     `immutable_lineage` 의 불변 계보)은 줄 해시가 있어야 하고(덧붙이기 · 줄 출처 판정의 재료), 머리 없음 표지는 절 목록과
     맞아야 한다(둘 다 머리 없으면 통째 면제다)."""
     if not isinstance(snap, dict) or not _snapshot_ok(snap):
@@ -947,7 +1039,12 @@ def cmd_begin_round(a) -> int:
         fail("config_invalid", name=e.name, value=str(e.raw), where=e.where, allowed=_cfg.allowed_range(e.name))
         return 2
     cap = cfg["rereview_cap"]["value"]
-    snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
+    text, why = read_ledger_doc(st.get("doc"))
+    if text is None:   # 원장을 바꾸기 전에 멈춘다 — 옮기거나 지운 문서로 빈 라운드를 열지 않는다
+        fail("doc_unreadable", doc=st.get("doc"), why=why)
+        return 2
+    snap = parse_sections(text)
+    snap["doc"] = st["doc"]
     imm_lineage = lineage_anchors(st, prof, "immutable", int(st["round"]))   # 직전 라운드까지의 불변 계보
     bad = snapshot_problem(snap, prof, immutable_lineage=imm_lineage)
     if bad:   # 원장을 바꾸기 전에 멈춘다
@@ -2583,7 +2680,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--doc", required=True); x.add_argument("--profile", required=True)
     x.set_defaults(fn=cmd_init)
     x = P("begin-round"); x.add_argument("--state-dir", required=True)
-    x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
+    x.add_argument("--extra-approval", default=None)
     x.add_argument("--extra-approval-source", default=None, choices=("label", "typed"))
     x.add_argument("--detectors", type=_ascii_int, default=None)
     x.set_defaults(fn=cmd_begin_round)

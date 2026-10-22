@@ -11,88 +11,20 @@ protected(앵커의 보호·불변·fix 허용 여부) · refs(그 앵커를 인
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
 from docreview_state import (  # noqa: E402
-    DOC_ANCHOR, LedgerCorrupt, ProfileError, anchors_matching, diff_snapshots, fail, lineage_anchors, load_profile, load_state,
-    save_state, scope_label_problem, scope_problem, slugify,
+    DOC_ANCHOR, FENCE_RE, HEADING_RE, PREAMBLE, LedgerCorrupt, ProfileError, _after_frontmatter, anchors_matching,
+    diff_snapshots, fail, lineage_anchors, load_profile, load_state, parse_sections, save_state, scope_label_problem,
+    scope_problem, slugify,
 )
 
-HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
-FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
-PREAMBLE = "#__preamble__"
-
-
 # ── 파싱 ────────────────────────────────────────────────────────────────
-def _after_frontmatter(lines) -> int:
-    if lines and lines[0].strip() == "---":
-        for i in range(1, len(lines)):
-            if lines[i].strip() == "---":
-                return i + 1
-    return 0
-
-
-def parse_sections(text: str, keep_body: bool = False) -> dict:
-    lines = text.split("\n")
-    start = _after_frontmatter(lines)
-    heads = []
-    fence = None
-    for i in range(start, len(lines)):
-        line = lines[i]
-        fm = FENCE_RE.match(line)
-        if fm:
-            tok = fm.group(1)[0]
-            if fence is None:
-                fence = tok
-            elif tok == fence:
-                fence = None
-            continue
-        if fence:
-            continue
-        hm = HEADING_RE.match(line)
-        if hm:
-            heads.append((i, len(hm.group(1)), hm.group(2).strip()))
-    sections = []
-
-    def add(anchor, title, level, a, b, parents):
-        rows = [x.rstrip() for x in lines[a:b]]
-        while rows and rows[-1] == "":
-            rows.pop()
-        body = "\n".join(rows).strip("\n")
-        item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
-                "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
-                "line_hashes": [hashlib.sha1(r.encode("utf-8")).hexdigest()[:12] for r in rows],
-                "item_marks": "".join("1" if r.startswith("- ") else "0" for r in rows),
-                "parents": list(parents)}
-        if keep_body:
-            item["body"] = body
-        sections.append(item)
-
-    if not heads:
-        if "".join(lines[start:]).strip():
-            add(DOC_ANCHOR, "(문서 전체)", 0, start, len(lines), [])
-        return {"headingless": True, "sections": sections}
-    if "".join(lines[start:heads[0][0]]).strip():
-        add(PREAMBLE, "(머리말)", 0, start, heads[0][0], [])
-    seen = {}
-    stack = []  # [(level, anchor)]
-    for k, (ln, lvl, title) in enumerate(heads):
-        base = slugify(title)
-        n = seen.get(base, 0)
-        seen[base] = n + 1
-        anchor = "#" + (base if n == 0 else "%s-%d" % (base, n))
-        while stack and stack[-1][0] >= lvl:
-            stack.pop()
-        parents = [a for (_l, a) in stack]
-        end = heads[k + 1][0] if k + 1 < len(heads) else len(lines)
-        add(anchor, title, lvl, ln, end, parents)
-        stack.append((lvl, anchor))
-    return {"headingless": False, "sections": sections}
+# 헤딩 판독(`parse_sections` · `HEADING_RE` · `FENCE_RE` · `PREAMBLE` · `_after_frontmatter`)은 `docreview_state` 에 산다 —
+# `begin-round` 가 원장의 문서로 라운드 스냅숏을 만들 때 같은 함수를 부른다.
 
 
 def snapshot_of(doc_path) -> dict:

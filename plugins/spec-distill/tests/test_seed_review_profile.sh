@@ -52,8 +52,7 @@ EOF
 route() {   # route <profile> <tag> → PROBE_DROP · PROBE_ASK · PROBE_FIX 의 최종 처분을 한 줄로
   local prof="$1" d="$TMP/$2"; mkdir -p "$d"
   python3 "$S/docreview_state.py" init --state-dir "$d" --doc "$TMP/s.md" --profile "$prof" >/dev/null || { echo INIT_FAIL; return; }
-  python3 "$S/docreview_anchor.py" snapshot "$TMP/s.md" > "$d/snap.json"
-  python3 "$S/docreview_state.py" begin-round --state-dir "$d" --snapshot "$d/snap.json" >/dev/null || { echo BEGIN_FAIL; return; }
+  python3 "$S/docreview_state.py" begin-round --state-dir "$d" >/dev/null || { echo BEGIN_FAIL; return; }
   cp "$TMP/critic.txt" "$d/critic.txt"   # 라운드 시작 «뒤»에 쓴다 — 앞이면 critic_predates_round
   python3 "$S/docreview_route.py" prepare-recritic --state-dir "$d" --critic "$d/critic.txt" > "$d/prep.json" || { echo PREP_FAIL; return; }
   python3 "$S/docreview_route.py" finalize --state-dir "$d" --recritic-skipped --doc "$TMP/s.md" > "$d/fin.json" || { echo FIN_FAIL; return; }

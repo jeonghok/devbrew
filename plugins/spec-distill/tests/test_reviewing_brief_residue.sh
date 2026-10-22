@@ -260,8 +260,7 @@ fi
 # ── D) 하류가 실제로 무엇을 섭취하는가 (brief 프로필로 end-to-end) ───────────────
 open_round() {   # open_round <dir> — brief payload 의 엔진 원장 + 라운드 1 시작
   python3 "$SDS/docreview_state.py" init --state-dir "$1" --doc "$DOC_B" --profile "$PROF_B" >/dev/null
-  python3 "$SDS/docreview_anchor.py" snapshot "$DOC_B" > "$1/s1.json"
-  python3 "$SDS/docreview_state.py" begin-round --state-dir "$1" --snapshot "$1/s1.json" >/dev/null
+  python3 "$SDS/docreview_state.py" begin-round --state-dir "$1" >/dev/null
 }
 ingest() {   # ingest <dir> <codex 경로> → "codex_absent|items|직전 마커 수|codex_reason"
   # prep.json 은 상태 디렉토리 «옆»에 쓴다 — A3 은 그 디렉토리를 쓰기 불가로 잠근 채 하류를 부른다.
@@ -327,8 +326,7 @@ print(a is not None and b is not None and int(a) < m < int(b))
 PY
 python3 "$SCRATCH/rewind.py" "$SDS" "$at" "$yml"
 chmod 444 "$yml"; chmod 555 "$at"
-python3 "$SDS/docreview_anchor.py" snapshot "$DOC_B" > "$SCRATCH/rb13pred.s2.json"
-brc=0; python3 "$SDS/docreview_state.py" begin-round --state-dir "$at" --snapshot "$SCRATCH/rb13pred.s2.json" >/dev/null 2>&1 || brc=$?
+brc=0; python3 "$SDS/docreview_state.py" begin-round --state-dir "$at" >/dev/null 2>&1 || brc=$?
 rnd="$(python3 "$FX/st_get.py" "$at/docreview-state.md" 'st["round"]' 2>/dev/null)"
 win="$(python3 "$SCRATCH/between.py" "$at/docreview-state.md" "$yml" 2>/dev/null)"
 ( cd "$SCRATCH/rb13pred" && env -i PATH="$BIN_OK:$BASE" HOME="$SCRATCH/rb13pred" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \

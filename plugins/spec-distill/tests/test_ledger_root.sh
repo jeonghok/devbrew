@@ -140,8 +140,7 @@ $4" 2>&1)"; E_RC=$?
 sdir_for() { python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$1/.claude/spec-distill" --doc "$2"; }
 open_round() {   # open_round <state dir> <문서> — 엔진 원장을 만들고 라운드를 연다
   python3 "$SD/scripts/docreview_state.py" init --state-dir "$1" --doc "$2" --profile "$SD/references/docreview-profiles/design-doc.md" >/dev/null
-  python3 "$SD/scripts/docreview_anchor.py" snapshot "$2" > "$T/snap.json"
-  python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$1" --snapshot "$T/snap.json" >/dev/null
+  python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$1" >/dev/null
 }
 count_line() { printf '%s\n' "$1" | grep -cxF -- "$2" || true; }
 mkdoc() { printf '# D\n\n## 결정 기록\n\n- B1 · 결정 · 2026-10-21 · 처음 — 「네」\n' > "$1"; }
