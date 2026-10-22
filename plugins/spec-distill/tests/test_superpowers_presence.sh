@@ -128,6 +128,8 @@ if [ -n "$bf" ] && [ -n "$lb1" ]; then
 
   # 실제 check_deps.py 로 돌린다 — 불러온 skill 이 없으면(빈 기준 폴더) 스크립트를 부르지 않고 경고 줄을 내지 않는다
   awk -v s="$bfl" 'NR>s && /^```$/ {exit} NR>s' "$FIN" > "$TMP/b1-real.sh"
+  FENCE_ECHO="$(sed -n 's/^\[ -n "\$SP_BASE" \] || { echo "\([^"]*\)"; exit 0; }$/\1/p' "$TMP/b1-real.sh")"
+  assert_eq "$FENCE_ECHO" "$NOT_LOADED" "finishing.md B-1: 펜스가 내는 「알 수 없음」 줄(전체)"
   n_ph="$(grep -c '"<기준 폴더>"' "$TMP/b1-real.sh")"
   assert_eq "$n_ph" "1" "finishing.md B-1: 펜스에 기준 폴더 자리가 한 번 있다"
   sed 's|"<기준 폴더>"|""|' "$TMP/b1-real.sh" > "$TMP/b1-none.sh"
@@ -146,7 +148,29 @@ if [ -n "$bf" ] && [ -n "$lb1" ]; then
 fi
 avail_line="$(printf '%s\n' "$B1" | grep -F -- '- **superpowers 가용 시**' | head -1)"
 assert_contains "$avail_line" "불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다)" "finishing.md B-1: skill 을 불러오지 않았으면 판 확인을 하지 않는다"
-assert_contains "$avail_line" "「${NOT_LOADED}」 한 줄을 쓴다" "finishing.md B-1: 그때는 「알 수 없음」 한 줄을 쓴다"
+assert_contains "$avail_line" "」 한 줄을 쓴다" "finishing.md B-1: 그때는 「알 수 없음」 한 줄을 쓴다"
+# unknown_quote <줄> — 줄 안의 「알 수 없음 — …」 인용 하나(전체, 낫표 뺌)
+unknown_quote() {
+  printf '%s\n' "$1" | python3 -I -c 'import re, sys
+m = re.findall(r"「(알 수 없음 — [^」]*?\))」", sys.stdin.read())
+print(m[0] if len(m) == 1 else "인용이 %d개" % len(m))'
+}
+assert_eq "$(unknown_quote "$avail_line")" "${FENCE_ECHO:-펜스 echo 없음}" "finishing.md B-1: 글의 「알 수 없음」 줄이 펜스가 내는 줄과 글자까지 같다"
+# 「이상 없음」 은 읽었다는 주장 — superpowers 판 채널만 예외(정본 proceed-gate.md · finishing.md 가 따른다)
+FIN_EXC="superpowers 판 채널만 예외다(정본 \`proceed-gate.md\` 의 «불러오지 않았으면 읽지 않는 채널») — 이 세션이 superpowers skill 을 불러오지 않았으면 읽지 않고 「${NOT_LOADED}」 줄을 그대로 따로 보이며, 그 줄은 경고 수에 들지 않지만 확인했다는 뜻이 아니다 — 없는 것과 확인 못 한 것은 다르다."
+PG_EXC='예외는 skill 이 어휘 절에서 «그 세션이 해당 skill 을 불러오지 않았으면 읽지 않는 채널»로 이름 붙인 채널 하나뿐이다 — 그 채널을 읽지 않았으면 「알 수 없음 — …」 줄을 그대로 따로 보이고, 그 줄은 경고 수에 들지 않아 「이상 없음」·「경고 없음」을 막지 않지만 확인했다는 뜻이 아니다(없는 것과 확인 못 한 것은 다르다).'
+PG="$SD/references/proceed-gate.md"
+claim_ln="$(grep -n -F '「이상 없음」·「경고 없음」은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.' "$FIN" | head -1 | cut -d: -f1)"
+exc_ln="$(grep -n -x -F -- "$FIN_EXC" "$FIN" | head -1 | cut -d: -f1)"
+if [ -n "$claim_ln" ] && [ -n "$exc_ln" ] && [ "$exc_ln" = "$((claim_ln + 1))" ]; then
+  ok "finishing.md: 「읽었다는 주장」 바로 다음 줄이 superpowers 판 채널 예외 문장(전체 줄)이다"
+else no "finishing.md: 「읽었다는 주장」 다음 줄에 superpowers 판 채널 예외 문장(전체 줄)이 없다 (주장=${claim_ln:-없음} 예외=${exc_ln:-없음})"; fi
+assert_eq "$(unknown_quote "$FIN_EXC")" "${FENCE_ECHO:-펜스 echo 없음}" "finishing.md 예외 문장의 「알 수 없음」 줄이 펜스가 내는 줄과 같다"
+pg_unknown_ln="$(grep -n -F '읽지 못한 채널은 「알 수 없음 — <사유>」로 따로 쓴다.' "$PG" | head -1 | cut -d: -f1)"
+pg_exc_ln="$(grep -n -x -F -- "$PG_EXC" "$PG" | head -1 | cut -d: -f1)"
+if [ -n "$pg_unknown_ln" ] && [ -n "$pg_exc_ln" ] && [ "$pg_exc_ln" = "$((pg_unknown_ln + 1))" ]; then
+  ok "proceed-gate.md: 「알 수 없음」 규칙 바로 다음 줄이 그 예외 문장(전체 줄)이다 — 정본"
+else no "proceed-gate.md: 「알 수 없음」 규칙 다음 줄에 예외 문장(전체 줄)이 없다 (규칙=${pg_unknown_ln:-없음} 예외=${pg_exc_ln:-없음})"; fi
 assert_contains "$avail_line" "「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 경고 수에 들지 않는다"
 assert_not_contains "$B1" '빈 값(`""`)으로 둔다' "finishing.md B-1: 불러오지 않았을 때 빈 경로로 스크립트를 부르지 않는다(옛 지시가 없다)"
 
