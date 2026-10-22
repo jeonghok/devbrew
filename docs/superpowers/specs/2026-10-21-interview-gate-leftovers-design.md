@@ -402,8 +402,8 @@ next_phase: superpowers:writing-plans
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| Write 도구로 상태 폴더에 쓰는 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt`(request-framing 의 항목 요약 걸음) · 리뷰어 출력 `critic*.txt` · `recritic.txt`(세 skill 의 탐지 리뷰어 출력 · 재비판 출력 저장 걸음))의 링크 따라가기 | 셸 쓰기가 아니라 writer 로 감쌀 수 없다. 하니스 도구 층의 엔진 밖 쓰기라 권한 경계 몫이다 | R8 |
-| 실행 중 다시 심는 링크(같은 사용자의 경쟁) · `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기 | writer 는 미리 심은 링크만 막는다. 그 밖은 같은 사용자 권한의 경계라 권한 경계 몫이다 | R8 |
+| Write 도구로 상태 폴더에 쓰는 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt`(request-framing 의 항목 요약 걸음) · 리뷰어 출력 `critic*.txt` · `recritic.txt`(세 skill 의 탐지 리뷰어 출력 · 재비판 출력 저장 걸음))의 링크 따라가기 | 셸 쓰기가 아니라 writer 로 감쌀 수 없다. 하니스 도구 층의 엔진 밖 쓰기라 권한 경계 몫이다 끝냄 — 45ebad11(R8) | R8 |
+| 실행 중 다시 심는 링크(같은 사용자의 경쟁) · `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기 | writer 는 미리 심은 링크만 막는다. 그 밖은 같은 사용자 권한의 경계라 권한 경계 몫이다 끝냄 — 45ebad11(R8) | R8 |
 
 R8 행 둘은 지휘자가 R13 의 범위 · 경로 예약을 고치는 같은 로드맵 PR 에서 로드맵 R8 범위에 등록한다(사용자가 승인한 재분해).
 
