@@ -4,7 +4,8 @@
 # 순서(spec §5): kill switch → gh 존재 · origin(gh-repo.sh) → 인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그
 # → 길이 → 코멘트. gh 호출은 전부 `-R <origin>` 을 밝힌다.
 # 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
-# 사유 리터럴: no-pr · pr-closed · kill-switch · scan-failed · gh-unavailable · too-long.
+# 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long.
+# pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
 # `failed:` 는 gh 가 없을 때 하나다(`failed: gh-unavailable`).
 # exit: posted·skipped 는 0, failed 는 1, 잘못된 호출은 2.
 #
@@ -64,17 +65,27 @@ auth_err="$(gh auth status --active 2>&1 >/dev/null)" \
 branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" \
   || { echo "publish-comment: 지금 브랜치가 없다(detached HEAD) — 그 PR 을 찾지 않는다" >&2; skip no-pr; }
 pr_rc=0
-gh pr view "$branch" -R "$slug" --json number,state,url,baseRefName --jq '[.number,.state,.url,.baseRefName]|@tsv' \
+gh pr view "$branch" -R "$slug" --json number,state,url,baseRefName,headRefOid,isCrossRepository \
+  --jq '[.number,.state,.url,.baseRefName,.headRefOid,.isCrossRepository]|@tsv' \
   >"$WORK/pr.tsv" 2>"$WORK/pr.err" || pr_rc=$?
 if [ "$pr_rc" -ne 0 ]; then
   tail -n 3 "$WORK/pr.err" >&2
   if grep -qi 'no pull requests found' "$WORK/pr.err"; then skip no-pr; fi
   skip gh-unavailable
 fi
-IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base <"$WORK/pr.tsv" || true
+IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base pr_head pr_cross <"$WORK/pr.tsv" || true
 # 비신뢰 값은 전체 일치로 검사한다(V11).
 [[ "${pr_num:-}" =~ ^[0-9]+$ ]] || { echo "publish-comment: PR 번호를 읽지 못했다" >&2; skip gh-unavailable; }
 [ "${pr_state:-}" = "OPEN" ] || { echo "publish-comment: PR #${pr_num} 상태 ${pr_state:-?}" >&2; skip pr-closed; }
+# 브랜치 이름만으로 고른 PR 이 이 checkout 의 PR 인지 확인한다 — 같은 이름의 fork PR · 옛 PR 에 달지 않는다.
+# origin 안의 PR 이고(isCrossRepository false) 그 head 가 지금 HEAD 와 같을 때만 단다. 아니면 달지 않는다.
+[ "${pr_cross:-}" = "false" ] \
+  || { echo "publish-comment: PR #${pr_num} 은 다른 레포(fork)에서 온 PR 이다(isCrossRepository ${pr_cross:-?}) — 달지 않는다" >&2; skip pr-mismatch; }
+head_sha="$(git rev-parse --verify -q HEAD 2>/dev/null || true)"
+if [ -z "$head_sha" ] || [ "${pr_head:-}" != "$head_sha" ]; then
+  echo "publish-comment: PR #${pr_num} 의 head(${pr_head:0:12}) 가 지금 HEAD(${head_sha:0:12}) 와 다르다 — 푸시한 뒤 다시 /quality-gates:quality-pipeline" >&2
+  skip pr-mismatch
+fi
 
 # 4. corpus — 이 변경 자신의 글: 커밋 메시지·패치, 작업트리 diff, 변경 파일 내용. merge-base 가 없거나 생산자
 #    하나라도 실패하면 degraded 헤더 한 줄만 둔다(secret-scan 이 fail-closed) — 부분 corpus 로 통과시키지 않는다.

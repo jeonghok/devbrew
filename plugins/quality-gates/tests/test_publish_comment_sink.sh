@@ -31,7 +31,9 @@ case "$1 ${2:-}" in
     case "${GH_PR:-none}" in
       none) echo 'no pull requests found for branch "feat"' >&2; exit 1 ;;
       error) echo 'HTTP 502: Bad Gateway' >&2; exit 1 ;;
-      *) printf '%b\n' "$GH_PR"; exit 0 ;;
+      # `@HEAD@` 은 sink 가 도는 리포의 지금 HEAD 로 바꾼다 — PR head 가 checkout 과 같은 정상 경우.
+      *) pr_line="$(printf '%b' "$GH_PR")"; h="$(git rev-parse HEAD 2>/dev/null)"
+         printf '%s\n' "${pr_line//@HEAD@/$h}"; exit 0 ;;
     esac ;;
   "pr comment")
     while [ $# -gt 0 ]; do
@@ -52,7 +54,7 @@ ln -s "$(command -v git)" "$T/nogh/git"
 ln -s "$(command -v python3)" "$T/nogh/python3"
 NOGH_PATH="$T/nogh:/usr/bin:/bin"
 
-OPEN_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain'
+OPEN_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t@HEAD@\tfalse'
 
 # ── 픽스처 리포: main 위에 feat 브랜치 커밋 하나 ─────────────────────────────
 REPO="$T/repo"
@@ -101,7 +103,7 @@ case_AC12_posts_one_new_comment() {
   assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^pr comment')" "pr comment 7 --body-file $BODY -R github.com/o/r" \
     "AC16: pr comment 는 -R origin(github.com/o/r)을 밝힌다"
   assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^pr view')" \
-    "pr view feat -R github.com/o/r --json number,state,url,baseRefName --jq [.number,.state,.url,.baseRefName]|@tsv" \
+    "pr view feat -R github.com/o/r --json number,state,url,baseRefName,headRefOid,isCrossRepository --jq [.number,.state,.url,.baseRefName,.headRefOid,.isCrossRepository]|@tsv" \
     "AC16: pr view 는 지금 브랜치(feat)와 -R origin 을 밝힌다"
   # upstream 원격이 있는 fork 에서도 origin 이다.
   g remote add upstream https://github.com/up/r
@@ -110,6 +112,27 @@ case_AC12_posts_one_new_comment() {
   assert_not_contains "$GHCALLS" "up/r" "fork: upstream 레포를 넘기지 않는다"
   assert_contains "$GHCALLS" "pr comment 7 --body-file $BODY -R github.com/o/r" "fork: 코멘트는 origin 의 PR 에"
   g remote remove upstream
+}
+
+# ── 브랜치 이름으로 찾은 PR 이 이 checkout 의 PR 이 아니면 달지 않는다(같은 이름의 fork PR · 옛 PR) ──
+case_pr_mismatch_not_posted() {
+  local head; head="$(git -C "$REPO" rev-parse HEAD)"
+  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t@HEAD@\ttrue' run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$RC:$LAST" "0:skipped: pr-mismatch" "fork PR(isCrossRepository true): skipped: pr-mismatch"
+  no_comment_call "fork PR"; p6_single_result_line fork-pr
+  grep -qF '다른 레포(fork)에서 온 PR' "$T/err" && ok "fork PR: stderr 가 이유를 밝힌다" || no "fork PR: stderr 에 이유가 없다 — $(head -n 3 "$T/err")"
+  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t0123456789abcdef0123456789abcdef01234567\tfalse' run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$RC:$LAST" "0:skipped: pr-mismatch" "head 가 다른 PR(옛 PR · 푸시 안 함): skipped: pr-mismatch"
+  no_comment_call "head 다름"
+  grep -qF "지금 HEAD(${head:0:12})" "$T/err" && ok "head 다름: stderr 가 두 sha 를 밝힌다" || no "head 다름: stderr 에 HEAD 가 없다 — $(head -n 3 "$T/err")"
+  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t\tfalse' run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "skipped: pr-mismatch" "head 칸이 비면 달지 않는다(fail-closed)"
+  no_comment_call "head 칸 빔"
+  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t@HEAD@' run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "skipped: pr-mismatch" "isCrossRepository 칸이 없으면 달지 않는다(fail-closed)"
+  # 양성 짝: 같은 레포 · head 가 지금 HEAD 면 단다.
+  GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "같은 레포 · head = HEAD 면 게시(양성 짝)"
 }
 
 # ── AC13 — 건너뛰는 여섯 경우 ────────────────────────────────────────────────
@@ -121,7 +144,7 @@ case_AC13_no_pr() {
 case_AC13_pr_closed() {
   local st
   for st in MERGED CLOSED; do
-    GH_PR="7\t${st}\thttps://github.com/o/r/pull/7\tmain" run_sink "$WITH_GH" --body-file "$BODY"
+    GH_PR="7\t${st}\thttps://github.com/o/r/pull/7\tmain\t@HEAD@\tfalse" run_sink "$WITH_GH" --body-file "$BODY"
     assert_eq "$LAST" "skipped: pr-closed" "AC13 pr-closed(${st}): 마지막 줄"
     p6_single_result_line "pr-closed(${st})"; no_comment_call "AC13 pr-closed(${st})"
   done
@@ -233,7 +256,7 @@ case_P1_literal_scan_gate() {
 
 # ── P2 — degraded corpus · corpus 가 실제로 변경 내용·커밋 메시지·untracked 를 담는다 ──
 case_P2_degraded_and_corpus_content() {
-  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tnosuchbranch' run_sink "$WITH_GH" --body-file "$BODY"
+  GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tnosuchbranch\t@HEAD@\tfalse' run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: scan-failed" "P2: merge-base 없음 → degraded corpus → fail-closed"
   local tok="Kj8xQvN2mZ4pR7wL9tB3cF6yD1sA5gH0uE" leak="$T/leak.md"
   printf 'value %s\n' "$tok" > "$leak"
@@ -524,7 +547,7 @@ case_usage_errors() {
   assert_eq "$GHCALLS" "" "usage: 빈 본문 파일은 gh 호출 0"
 }
 
-for c in case_AC12_posts_one_new_comment case_AC13_no_pr case_AC13_pr_closed \
+for c in case_AC12_posts_one_new_comment case_pr_mismatch_not_posted case_AC13_no_pr case_AC13_pr_closed \
          case_AC13_kill_switch_AC14_zero_network case_AC13_scan_failed case_AC13_gh_unavailable \
          case_AC13_too_long case_P1_literal_scan_gate case_P2_degraded_and_corpus_content \
          case_P5_auth_before_side_effects case_P4_P7_untrusted_bytes case_I1_removed_content_in_corpus \

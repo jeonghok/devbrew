@@ -1582,7 +1582,7 @@ printf '%s\n' "$line"
 
 이 펜스는 `/quality-gates:quality-pipeline` 한 번에 한 번만 돈다 — 결과가 무엇이든 다시 돌리지 않는다(다시 돌리면 펜스가 거절한다).
 
-`skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `kill-switch` ·
+`skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `pr-mismatch` · `kill-switch` ·
 `scan-failed` · `gh-unavailable` · `too-long` · `aborted` 중 하나다. `failed: gh-unavailable` 은 실패다 — gh 가 없어
 코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink stderr 의 설치 안내 줄을 그대로 보인다. 판정은 이미 났으므로
 바뀌지 않는다. `scan-failed` 면 sink 가 stderr 로 낸 finding

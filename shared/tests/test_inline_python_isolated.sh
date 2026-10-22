@@ -403,7 +403,11 @@ if [ -n "$NONUTF8" ]; then
   git -C "$REJ" commit -q --allow-empty -m "chore: base"; git -C "$REJ" branch -M main
   git -C "$REJ" checkout -q -b feature/reject
   git -C "$REJ" commit -q --allow-empty -m "feat: reject" -m "Spec: ../outside.md"
-  out="$(cd "$REJ" && LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
+  # 트레일러가 거부되면 PR 본문을 읽을 차례다 — origin 과 「PR 없음」을 내는 가짜 gh(gh 가 없으면 멈춘다).
+  git -C "$REJ" remote add origin https://github.com/o/r
+  mkdir -p "$TMP/fakegh"
+  printf '#!/bin/sh\necho "no pull requests found" >&2\nexit 1\n' > "$TMP/fakegh/gh"; chmod +x "$TMP/fakegh/gh"
+  out="$(cd "$REJ" && PATH="$TMP/fakegh:$PATH" LC_ALL="$NONUTF8" LANG="$NONUTF8" PYTHONIOENCODING=utf-8 bash "$QG/discover-spec.sh" --intent-out "$TMP/intent2.md" 2>/dev/null)"
   assert_contains "$out" '"intent_note": "spec 경로 거부 1개"' "$NONUTF8 — discover-spec.sh 가 한국어 거부 사유를 담은 JSON 을 낸다"
 else
   no "UTF-8 아닌 로케일이 하나도 없어 이 겹을 재지 못했다(셀 수 없음)"
