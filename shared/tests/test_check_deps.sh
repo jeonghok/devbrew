@@ -93,10 +93,13 @@ assert_file_grep "$DEMO" "^# demo 의존\$" "measure: 머리 글은 그대로"
   "$ROOT/shared/deps" "$DEMO" >/dev/null 2>&1 \
   && ok "measure: 고친 파일이 다시 읽힌다" || no "measure: 고친 파일이 다시 읽히지 않는다"
 
-# 재지 못하는 의존 — gh 가 PATH 에 없고 superpowers 경로를 받지 않았다
+# 재지 못하는 의존 — gh 가 PATH 에 없고 superpowers 경로를 받지 않았다. PATH 는 가짜 바이너리 폴더 하나뿐이다
+# (/usr/bin 에 gh 가 깔린 기계에서도 gh 없음이다).
 write_demo
 rm -f "$TMP/bin/gh"
-out="$(PATH="$TMP/bin:/usr/bin:/bin" "$PY" "$S" measure --plugin-root "$TMP/plugins/demo" --today 2026-10-21)"; rc=$?
+[ ! -e "$TMP/bin/gh" ] && ! PATH="$TMP/bin" command -v gh >/dev/null 2>&1 \
+  && ok "전제: 가짜 바이너리 PATH 에 gh 가 없다" || no "전제: 가짜 바이너리 PATH 에 gh 가 있다"
+out="$(PATH="$TMP/bin" "$PY" "$S" measure --plugin-root "$TMP/plugins/demo" --today 2026-10-21)"; rc=$?
 assert_eq "$rc" "0" "measure(못 잰 행): rc 0"
 assert_eq "$(row gh)" "| gh | 1.0.0 | 2000-01-01 | 멈춤 | 지에이치 멈춘다 |" "measure: gh 가 없으면 gh 행은 그대로"
 assert_eq "$(row superpowers)" "| superpowers |  |  | 알림 | 슈퍼 알린다 |" "measure: 기준 폴더 경로가 없으면 superpowers 행은 그대로"
