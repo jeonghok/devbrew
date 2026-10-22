@@ -136,9 +136,9 @@ _run_version(["gh", "--version"], timeout=1)
 PY
 got="$(PROBE_OK="$T/probe.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
 assert_eq "$got" "probe.py:3 probe.py:4 probe.py:5 probe.py:6 probe.py:8 probe.py:9 PROBE probe.py:2 " "판 측정 예외: 그 파일에서도 _run_version 의 유일한 인자인 (\"gh\", \"--version\") 만 빠지고 다른 gh argv 는 잡는다"
-case " $got " in *" probe.py:5 "*) ok "판 측정 예외: (\"gh\", \"--version\") 에 다른 목록을 더한 꼴은 잡는다" ;;
+case " ${got%%PROBE*}" in *" probe.py:5 "*) ok "판 측정 예외: (\"gh\", \"--version\") 에 다른 목록을 더한 꼴은 잡는다" ;;
   *) no "판 측정 예외: (\"gh\", \"--version\") + [\"pr\", \"comment\", …] 를 놓쳤다" ;; esac
-case " $got " in *" probe.py:6 "*) ok "판 측정 예외: 변수에 담아 뒤에서 조각 대입으로 고치는 꼴은 잡는다" ;;
+case " ${got%%PROBE*}" in *" probe.py:6 "*) ok "판 측정 예외: 변수에 담아 뒤에서 조각 대입으로 고치는 꼴은 잡는다" ;;
   *) no "판 측정 예외: argv = [\"gh\", \"--version\"] 뒤 조각 대입을 놓쳤다" ;; esac
 got="$(PROBE_OK="$T/fine.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
 assert_eq "$got" "probe.py:2 probe.py:3 probe.py:4 probe.py:5 probe.py:6 probe.py:8 probe.py:9 " "판 측정 예외: 예외 파일이 아닌 곳의 gh --version 은 잡는다"
