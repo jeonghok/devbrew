@@ -1662,12 +1662,20 @@ H33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/h33; sq feature/h33; H33
 # J33 — H33 과 같되 원격 ref 도 없다(지운 브랜치) · 설계문서가 기본 브랜치에 있어 끝 없이 판정 → 머지됨
 g checkout -q -b feature/j33 main; commit_file docs/superpowers/specs/j33-design.md "$(spec_doc docs/rm33/J33.md C1)" "j33 설계(승인 전)"
 J33_TIP="$(g rev-parse HEAD)"; sq feature/j33; J33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/j33
+# A34 · B34 — 머지 커밋으로 머지한 뒤 기본 브랜치에서 설계문서를 옮겼다(git mv) · 로컬 지움. A34 는 원격 ref 가 남고(새 클론),
+# B34 는 원격 ref 도 없다(지운 브랜치). 문서를 더한 커밋은 옮긴 커밋이 아니라 그 머지다(`--follow`) → 둘 다 머지됨
+g checkout -q -b feature/a34 main; commit_file docs/superpowers/specs/a34-design.md "$(spec_doc docs/rm33/A34.md C1)" "a34 설계(승인 전)"; commit_file src/a34.txt a "a34"
+A34_TIP="$(g rev-parse HEAD)"; g push -q origin feature/a34; pr_merge 64 feature/a34; A34_MC="$(g rev-parse HEAD)"; g branch -q -D feature/a34
+g checkout -q -b feature/b34 main; commit_file docs/superpowers/specs/b34-design.md "$(spec_doc docs/rm33/B34.md C1)" "b34 설계(승인 전)"; commit_file src/b34.txt b "b34"
+B34_TIP="$(g rev-parse HEAD)"; pr_merge 65 feature/b34; B34_MC="$(g rev-parse HEAD)"; g branch -q -D feature/b34
+mkdir -p "$W/docs/superpowers/specs/moved"; g mv docs/superpowers/specs/a34-design.md docs/superpowers/specs/moved/a34-design.md; g commit -qm "a34 설계문서 옮김"
+g mv docs/superpowers/specs/b34-design.md docs/superpowers/specs/moved/b34-design.md; g commit -qm "b34 설계문서 옮김"
 g push -q origin main; g fetch -q origin
 mkdir -p "$W/docs/rm33"
-for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33; do bundle docs/rm33 "$b" "C1, S1"; done
+for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33 A34 B34; do bundle docs/rm33 "$b" "C1, S1"; done
 bundle docs/rm33 L33 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
 { roadmap_head
-  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33 A34 B34; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
   block W33 feature/w33 "L33, Q33, E33, V33" 없음
   roadmap_tail ""
 } > "$W/docs/rm33/roadmap.md"
@@ -1684,6 +1692,8 @@ MD33="$W/.claude/spec-distill/conductor/rm33"; mkdir -p "$MD33"
   printf 'feature/k33|#60|머지됨|%s|아니오|main|%s\n' "$K33_OLD" "$K33_MC"
   printf 'feature/h33|#62|머지됨|%s|아니오|main|%s\n' "$H33_TIP" "$H33_MC"
   printf 'feature/j33|#63|머지됨|%s|아니오|main|%s\n' "$J33_TIP" "$J33_MC"
+  printf 'feature/a34|#64|머지됨|%s|아니오|main|%s\n' "$A34_TIP" "$A34_MC"
+  printf 'feature/b34|#65|머지됨|%s|아니오|main|%s\n' "$B34_TIP" "$B34_MC"
   printf 'feature/x33|#55|머지됨|%s|아니오|main|%s\n' "$X33_TIP" "$X33_MC"
 } > "$T/rows33"
 write_machine "$MD33/machine.md" docs/rm33/roadmap.md "$T/rows33"
@@ -1705,6 +1715,8 @@ assert_eq "$(stage "$T/rm33.json" K33)" "설계 중" "AC15: 옛 머지 전에 �
 assert_contains "$(notes "$T/rm33.json" K33)" "feature/k33: 같은 이름의 옛 PR #60 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼 이 에픽의 PR 로 세지 않았다" "AC15: 로컬 없을 때의 PR 판정도 같은 나이 검사로 옛 PR 을 거른다"
 assert_eq "$(stage "$T/rm33.json" H33):$(reason "$T/rm33.json" H33)" "머지됨:PR #62 머지됨(mergeCommit ${H33_MC:0:8})" "새 클론 · squash · 시작 흔적 없음: 원격 ref 와 PR 캐시로 머지됨(8.6.0 회귀 아님)"
 assert_eq "$(stage "$T/rm33.json" J33):$(reason "$T/rm33.json" J33)" "머지됨:PR #63 머지됨(mergeCommit ${J33_MC:0:8})" "지운 브랜치 · squash · 시작 흔적 없음 · 문서가 기본 브랜치에 있음: 끝 없이 판정해 머지됨"
+assert_eq "$(stage "$T/rm33.json" A34):$(reason "$T/rm33.json" A34)" "머지됨:기본 브랜치의 머지 커밋 ${A34_MC:0:8}(원격 끝)" "머지 뒤 설계문서를 옮김 · 새 클론(로컬 없음): 문서를 더한 커밋은 그 머지라 머지됨(8.6.0 회귀 아님)"
+assert_eq "$(stage "$T/rm33.json" B34):$(reason "$T/rm33.json" B34)" "머지됨:PR #65 머지됨(mergeCommit ${B34_MC:0:8})" "머지 뒤 설계문서를 옮김 · 지운 브랜치(ref 없음): 끝 없이 판정해 머지됨"
 # origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
 (cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
 assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"

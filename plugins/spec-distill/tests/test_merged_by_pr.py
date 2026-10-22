@@ -292,5 +292,32 @@ class StaleLocalTip(unittest.TestCase):
         self.assertIsNone(v)
 
 
+class FirstAdded(unittest.TestCase):
+    """문서를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋 — 이름 바꿈은 따라가고 복사는 따라가지 않는다."""
+    LOG = ("\x00" + "r" * 40 + "\n\nR100\tdocs/specs/x.md\tdocs/new/x.md\n"
+           "\x00" + "c" * 40 + "\n\nA\tdocs/specs/y.md\n"
+           "\x00" + M + "\n\nA\tdocs/specs/x.md\nA\tsrc/x.txt\n"
+           "\x00" + "o" * 40 + "\n\nA\tdocs/specs/t.md\n")
+
+    def test_parse(self):
+        ev = rs.parse_fp_events(self.LOG)
+        self.assertEqual([s for s, _c in ev], ["r" * 40, "c" * 40, M, "o" * 40])
+        self.assertEqual(ev[0][1], [("R100", ["docs/specs/x.md", "docs/new/x.md"])])
+
+    def test_rename_follows_to_the_merge(self):                    # 머지 뒤 기본 브랜치에서 옮김 → 더한 커밋은 그 머지
+        self.assertEqual(rs.first_added(rs.parse_fp_events(self.LOG), "docs/new/x.md"), M)
+
+    def test_copy_is_not_followed(self):
+        log = "\x00" + "c" * 40 + "\n\nC084\tdocs/specs/t.md\tdocs/specs/z.md\n\x00" + "o" * 40 + "\n\nA\tdocs/specs/t.md\n"
+        self.assertIsNone(rs.first_added(rs.parse_fp_events(log), "docs/specs/z.md"))
+
+    def test_oldest_add_wins(self):                                # 지웠다가 다시 더함 — 처음 더한 커밋
+        log = "\x00" + "n" * 40 + "\n\nA\tdocs/a.md\n\x00" + "o" * 40 + "\n\nA\tdocs/a.md\n"
+        self.assertEqual(rs.first_added(rs.parse_fp_events(log), "docs/a.md"), "o" * 40)
+
+    def test_missing_is_none(self):
+        self.assertIsNone(rs.first_added(rs.parse_fp_events(self.LOG), "docs/none.md"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -414,6 +414,30 @@ def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote, age
     return "기본 브랜치의 머지 커밋 %s(원격 끝)" % sha[:8]
 
 
+def parse_fp_events(text: str) -> list:
+    """`git log --first-parent -M --diff-filter=AR --name-status --format=%x00%H` 출력 → [(커밋, [(상태, [경로 …]) …]) …]
+    (새 커밋부터)."""
+    out = []
+    for chunk in text.split("\x00")[1:]:
+        lines = chunk.split("\n")
+        changes = [(parts[0], parts[1:]) for parts in (l.split("\t") for l in lines[1:] if l.strip()) if len(parts) >= 2]
+        out.append((lines[0].strip(), changes))
+    return out
+
+
+def first_added(events: list, path: str):
+    """path 를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋, 없으면 None. 이름 바꿈(R)은 옛 이름으로 따라가 그 이름의 추가를
+    찾는다 — 복사(C)는 따라가지 않는다(틀이 같은 문서끼리 서로의 복사로 잡히지 않게)."""
+    found = None
+    for sha, changes in events:
+        for status, paths in changes:
+            if status == "A" and paths[0] == path:
+                found = sha
+            elif status.startswith("R") and len(paths) == 2 and paths[1] == path:
+                path = paths[0]
+    return found
+
+
 def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_owner):
     """PR 캐시에 그 브랜치의 줄이 없을 때의 머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1).
     머지 메시지 길은 `<owner>` 가 origin 소유자일 때만 센다 — origin_owner 가 None 이면 세지 않는다."""
@@ -621,20 +645,22 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             started_memo[block["id"]] = bool(when) or planned
         return started_memo[block["id"]]
 
-    added_memo = {}
+    added_memo, events_memo = {}, []
 
     def doc_added(block):
         """블록의 설계문서(산출물 블록은 산출물)마다 그것을 기본 브랜치 첫째 부모 줄에 처음 더한 커밋 — 문서가 그 에픽
-        브랜치와 함께 머지됐으면 그 머지 커밋이다. 기본 브랜치에 없거나 더한 커밋이 없는(이름을 바꾼) 문서는 빠진다."""
+        브랜치와 함께 머지됐으면 그 머지 커밋이다. 이름을 바꾼 문서는 옛 이름의 추가까지 따라간다(first_added).
+        기본 브랜치에 없거나 더한 커밋을 못 찾은 문서는 빠진다."""
         if block["id"] not in added_memo:
-            out = []
-            for s in find_specs(git, main, block, block["bundle"], settings["specs_dir"]):
-                rc, log, err = git.run_err("log", "--first-parent", "--format=%H", "--diff-filter=A", main, "--", s)
+            if not events_memo:
+                rc, log, err = git.run_err("log", "--first-parent", "-M", "--diff-filter=AR", "--name-status",
+                                           "--format=%x00%H", main)
                 if rc != 0:
                     git.fail("log", rc, err)
-                elif log.split():
-                    out.append(log.split()[-1])
-            added_memo[block["id"]] = out
+                events_memo.append(parse_fp_events(log) if rc == 0 else [])
+            added = (first_added(events_memo[0], s)
+                     for s in find_specs(git, main, block, block["bundle"], settings["specs_dir"]))
+            added_memo[block["id"]] = [a for a in added if a]
         return added_memo[block["id"]]
 
     def age_ok(block, sha):
