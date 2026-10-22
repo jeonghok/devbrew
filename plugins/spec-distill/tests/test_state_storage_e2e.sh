@@ -110,17 +110,16 @@ rb "$B" "$RB_TAKE" >/dev/null
 assert_eq "$(cat "$SDIR/reviewing-by" 2>/dev/null)" "$B" "5: 「이어 씀」 — B 의 넘겨받기 뒤 표지가 B"
 o="$(rb "$B" "$RB_OPEN")"
 assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "5: 넘겨받은 B 가 원장 열기를 다시 돌면 HELD"
-snap="$T/snap.json"; python3 "$SD/scripts/docreview_anchor.py" snapshot "$BRIEF" > "$snap"
 before="$(cksum < "$SDIR/docreview-state.md")"
 o="$(rb "$A" "$RB_HEAD
 $RB_GUARD
-python3 \"\$PR/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\" --snapshot '$snap'")"; rc=$?
+python3 \"\$PR/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\"")"; rc=$?
 assert_eq "$rc" "3" "5: 넘겨준 세션 A — 쓰기 전 확인이 rc 3 으로 멈춘다"
 assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "5: 넘겨준 세션 A — 원장 바이트가 그대로다"
 assert_contains "$o" "「이어 씀」" "5: A 에게 남의 표지라는 안내(「이어 씀」)를 보인다"
 o="$(rb "$B" "$RB_HEAD
 $RB_GUARD
-python3 \"\$PR/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\" --snapshot '$snap'")"; rc=$?
+python3 \"\$PR/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\"")"; rc=$?
 assert_eq "$rc" "0" "5: 표지 주인 B — 확인을 지나 begin-round 가 돈다"; [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
 [ "$(cksum < "$SDIR/docreview-state.md")" != "$before" ] && ok "5 양성 대조: 같은 쓰기가 표지 주인에게서는 원장을 바꾼다(바이트 단언의 이빨)" \
   || no "5 양성 대조: B 의 begin-round 가 원장을 바꾸지 않았다 — 위 「그대로다」 단언이 공허하다"

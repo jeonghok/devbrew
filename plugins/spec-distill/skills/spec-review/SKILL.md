@@ -225,7 +225,7 @@ fi
 `state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 경로 대입 줄로 대입한다. 세션 id
 를 못 풀면 위 블록이 `$STATE_DIR` 을 비우고, `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 빈 값이다 — 선결의
 `init` 이 `state_dir_missing` 으로 멈춘다. **선결의 `init` 이 rc 0 이 아니면 값과 무관하게 이 라운드를
-진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로, `state_doc_mismatch` 같은 거부를 넘어
+진행하지 않는다** — `begin-round` 는 원장에 적힌 문서만 읽으므로, `state_doc_mismatch` 같은 거부를 넘어
 진행하면 다른 문서의 원장 위에서 라운드가 돈다.
 
 ### 대상 부재 — 게이트 없이 끝나는 경로 (정본 Step A)

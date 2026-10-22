@@ -183,8 +183,7 @@ D="$T/state"; mkdir -p "$D"
 # 처분 · 답 기록 펜스의 첫 줄은 쓰기 전 확인이다 — 이 세션이 표지를 쥔 원장에서 돌린다
 python3 "$S/ledger_marker.py" acquire --dir "$D" --session sess-ct000001 >/dev/null || no "전제: 원장 표지를 잡지 못했다"
 python3 "$S/docreview_state.py" init --state-dir "$D" --doc "$T/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
-python3 "$S/docreview_anchor.py" snapshot "$T/s.md" > "$D/snap.json"
-python3 "$S/docreview_state.py" begin-round --state-dir "$D" --snapshot "$D/snap.json" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$D" >/dev/null
 cat > "$D/critic.txt" <<'EOF'
 ```docreview-layer1
 - ref: c1
@@ -245,8 +244,7 @@ assert_eq "$(n_ans)" "$((a0 + 1))" "답 펜스: 재사용 시도가 줄을 남�
 # ── 처분 펜스(drop · decide) — 문구 파일에서 먼저 받고, 없으면 누르지 않는다 ─────
 D2="$T/state2"; mkdir -p "$D2"; python3 "$S/ledger_marker.py" acquire --dir "$D2" --session sess-ct000001 >/dev/null || no "전제: 원장 표지를 잡지 못했다"; cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/s2.audit.md"
 python3 "$S/docreview_state.py" init --state-dir "$D2" --doc "$T/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
-python3 "$S/docreview_anchor.py" snapshot "$T/s.md" > "$D2/snap.json"
-python3 "$S/docreview_state.py" begin-round --state-dir "$D2" --snapshot "$D2/snap.json" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$D2" >/dev/null
 cat > "$D2/critic.txt" <<'EOF'
 ```docreview-layer1
 - ref: c1

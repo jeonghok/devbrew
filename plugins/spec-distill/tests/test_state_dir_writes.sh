@@ -10,7 +10,6 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 export PYTHONDONTWRITEBYTECODE=1
 SED="$ROOT/plugins/spec-distill/scripts/seed_edit_diff.py"
 DS="$ROOT/shared/docreview/scripts/docreview_state.py"
-ANCHOR="$ROOT/plugins/spec-distill/scripts/docreview_anchor.py"
 PROFILE="$ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md"
 DOC="$ROOT/shared/tests/fixtures/docreview/design-sample.md"
 T="$(mktemp -d -t sd-state-writes-XXXXXX)" || exit 1
@@ -75,9 +74,8 @@ mkdir -p "$c/state2" "$c/state0"
 ds_init "$c/state0" >/dev/null 2>&1
 cp "$c/state0/docreview-state.md" "$c/out/o.txt"
 ln -s "$c/out/o.txt" "$c/state2/docreview-state.md"
-python3 "$ANCHOR" snapshot "$DOC" > "$c/s1.json"
 before="$(cat "$c/out/o.txt")"
-err="$(python3 "$DS" begin-round --state-dir "$c/state2" --snapshot "$c/s1.json" 2>&1 >/dev/null)"; rc=$?
+err="$(python3 "$DS" begin-round --state-dir "$c/state2" 2>&1 >/dev/null)"; rc=$?
 assert_eq "$rc" "1" "ds_save_symlink_refused: 살아 있는 링크 원장도 rc 1"
 assert_contains "$err" "ledger_not_plain_file" "ds_save_symlink_refused: 살아 있는 링크 사유"
 assert_eq "$(cat "$c/out/o.txt")" "$before" "ds_save_symlink_refused: 바깥 파일 그대로"
@@ -87,9 +85,8 @@ mkdir -p "$c/state0"
 ds_init "$c/state0" >/dev/null 2>&1
 cp "$c/state0/docreview-state.md" "$c/out/o.txt"
 ln "$c/out/o.txt" "$c/state/docreview-state.md"
-python3 "$ANCHOR" snapshot "$DOC" > "$c/s1.json"
 before="$(cat "$c/out/o.txt")"
-err="$(python3 "$DS" begin-round --state-dir "$c/state" --snapshot "$c/s1.json" 2>&1 >/dev/null)"; rc=$?
+err="$(python3 "$DS" begin-round --state-dir "$c/state" 2>&1 >/dev/null)"; rc=$?
 assert_eq "$rc" "1" "ds_save_hardlink_refused: 하드 링크 원장은 rc 1"
 assert_contains "$err" "ledger_not_plain_file" "ds_save_hardlink_refused: 사유"
 assert_eq "$(cat "$c/out/o.txt")" "$before" "ds_save_hardlink_refused: 다른 이름의 파일 그대로"
@@ -102,9 +99,8 @@ if [ -e "$c/out/new-target" ] || [ -L "$c/out/new-target" ]; then no "ds_era_lin
 
 mk_case ds_inplace_ro_dir_kept; c="$T/ds_inplace_ro_dir_kept"
 ds_init "$c/state" >/dev/null 2>&1
-python3 "$ANCHOR" snapshot "$DOC" > "$c/s1.json"
 chmod 555 "$c/state"
-python3 "$DS" begin-round --state-dir "$c/state" --snapshot "$c/s1.json" >/dev/null 2>&1; rc=$?
+python3 "$DS" begin-round --state-dir "$c/state" >/dev/null 2>&1; rc=$?
 chmod 755 "$c/state"
 assert_eq "$rc" "0" "ds_inplace_ro_dir_kept: 쓰기 불가 폴더 안 원장도 갱신된다"
 assert_contains "$(cat "$c/state/docreview-state.md")" "round: 1" "ds_inplace_ro_dir_kept: 라운드가 올랐다"
@@ -721,7 +717,7 @@ for kind in writable readonly; do
   fi
 done
 
-# README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다
-assert_contains "$(cat "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README: §3 한계 문장"
+# README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다. README 전체가 아니라 `## 한계` 절 본문에서 찾는다
+assert_contains "$(awk '$0 == "## 한계" {on=1; next} on && /^## /{exit} on' "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README ## 한계: §3 한계 문장"
 
 finish

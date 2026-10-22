@@ -1,7 +1,7 @@
 ---
 docreview_digest: <DIGEST>
 docreview:
-  doc: <REPO_ROOT>/shared/tests/fixtures/docreview/design-sample.md
+  doc: <STATE_DIR>/src/design-sample.md
   profile: <REPO_ROOT>/plugins/spec-distill/references/docreview-profiles/design-doc.md
   round: 1
   rereview_count: 0

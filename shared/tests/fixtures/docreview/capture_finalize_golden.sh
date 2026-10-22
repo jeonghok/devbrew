@@ -47,14 +47,17 @@ mkdir -p "$OUT"
 GOLDEN_PLACEHOLDER='<REPO_ROOT>'
 # 라운드 시작 표식(`started_mtime_ns`)은 실행마다 다른 파일시스템 시각이다 — 같은 이유로
 # 자리표로 바꾼다. 줄 자체는 남기므로 표식이 사라지면 골든이 여전히 RED 다. 원장 요약값(`docreview_digest`)도 같다.
-norm_copy() {   # norm_copy <src> <dst> — 사본 프로필 경로 · REPO_ROOT 절대경로 · 라운드 시작 표식을 안정 자리표로
+# 원장의 문서(`doc:`)는 케이스 도우미가 상태 폴더 안에 둔 사본이라 실행마다 다른 임시 경로다 — 그 상태 폴더를
+# `<STATE_DIR>` 로 바꾼다(`<STATE_DIR>/src/<픽스처 이름>`).
+STATE_PLACEHOLDER='<STATE_DIR>'
+norm_copy() {   # norm_copy <src> <dst> <state-dir> — 사본 프로필 경로 · 상태 폴더 · REPO_ROOT 절대경로 · 라운드 시작 표식을 안정 자리표로
   python3 -c 'import io, re, sys
-src, dst, root, ph, prof, canon = sys.argv[1:7]
-t = io.open(src, encoding="utf-8").read().replace(prof + "/", canon + "/").replace(root + "/", ph + "/")
+src, dst, root, ph, prof, canon, sd, sph = sys.argv[1:9]
+t = io.open(src, encoding="utf-8").read().replace(prof + "/", canon + "/").replace(sd + "/", sph + "/").replace(root + "/", ph + "/")
 t = re.sub(r"(?m)^(\s*started_mtime_ns: )[0-9]+$", r"\g<1><MTIME_NS>", t)
 t = re.sub(r"(?m)^(docreview_digest: )[0-9a-f]{64}$", r"\g<1><DIGEST>", t)   # 원장 요약값은 REPO_ROOT 를 담은 글자의 해시라 체크아웃마다 다르다
 io.open(dst, "w", encoding="utf-8").write(t)' \
-    "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER" "$PROF_SD" "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles"
+    "$1" "$2" "$REPO_ROOT" "$GOLDEN_PLACEHOLDER" "$PROF_SD" "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles" "$3" "$STATE_PLACEHOLDER"
 }
 
 # capture_and_run <case-fn> — `rm` 을 이 함수 호출 동안만 재정의해 케이스가 스스로
@@ -68,12 +71,12 @@ capture_and_run() {
     for arg in "$@"; do
       case "$arg" in -*) continue ;; esac
       if [ -d "$arg" ] && [ -f "$arg/docreview-state.md" ]; then
-        [ -f "$arg/fin.json" ] && norm_copy "$arg/fin.json" "$OUT/$casefn.fin.json"
-        norm_copy "$arg/docreview-state.md" "$OUT/$casefn.state.md"
+        [ -f "$arg/fin.json" ] && norm_copy "$arg/fin.json" "$OUT/$casefn.fin.json" "$arg"
+        norm_copy "$arg/docreview-state.md" "$OUT/$casefn.state.md" "$arg"
         py docreview_state.py gate --state-dir "$arg" > "$arg/golden-gate.json" 2>/dev/null \
-          && norm_copy "$arg/golden-gate.json" "$OUT/$casefn.gate.json"
+          && norm_copy "$arg/golden-gate.json" "$OUT/$casefn.gate.json" "$arg"
         py docreview_state.py gate --state-dir "$arg" --render > "$arg/golden-gate.txt" 2>/dev/null \
-          && norm_copy "$arg/golden-gate.txt" "$OUT/$casefn.gate.txt"
+          && norm_copy "$arg/golden-gate.txt" "$OUT/$casefn.gate.txt" "$arg"
       fi
     done
     command rm "$@"

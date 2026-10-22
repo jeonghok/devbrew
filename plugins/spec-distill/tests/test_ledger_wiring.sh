@@ -62,7 +62,7 @@ guard="$(fence "$SR" ledger-guard)"
 ( cd "$repo" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-cccc3333 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-cccc3333 \
     bash -c "SD='$SD'; STATE_DIR='$SDIR'; harness_sid=sess-cccc3333
 $guard
-python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\" --snapshot /dev/null" >/dev/null 2>&1 ); rc=$?
+python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\"" >/dev/null 2>&1 ); rc=$?
 assert_eq "$rc" "3" "AC8: 남의 표지 — 쓰기 전 확인이 rc 3 으로 멈춘다"
 assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 남의 표지 — 원장 파일이 바뀌지 않았다"
 # 양의 짝 — 표지 주인은 확인을 지나 다음 명령에 닿는다(확인이 늘 멈추는 것이 아니다)
@@ -81,7 +81,7 @@ assert_eq "$(cat "$SDIR/reviewing-by")" "sess-dddd4444" "AC8: 남의 표지 — 
 rm -f "$SDIR/reviewing-by"
 ( cd "$repo" && bash -c "SD='$SD'; STATE_DIR='$SDIR'; harness_sid=sess-cccc3333
 $guard
-python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\" --snapshot /dev/null" >/dev/null 2>&1 ); rc=$?
+python3 \"\$SD/scripts/docreview_state.py\" begin-round --state-dir \"\$STATE_DIR\"" >/dev/null 2>&1 ); rc=$?
 assert_eq "$rc" "3" "AC8: 표지 없음 — 쓰기 전 확인이 rc 3 으로 멈춘다"
 assert_eq "$(cksum < "$SDIR/docreview-state.md")" "$before" "AC8: 표지 없음 — 원장 파일이 바뀌지 않았다"
 
@@ -421,8 +421,7 @@ assert_eq "$(grep -c 'B2 · 결정' "$ddoc" "$repo3/docs/b-design.md" | tr '\n' 
 $(fence "$SR" ledger-open)" >/dev/null 2>&1 )
 DSD="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo/.claude/spec-distill" --doc "$ddoc")"
 python3 "$SD/scripts/docreview_state.py" init --state-dir "$DSD" --doc "$ddoc" --profile "$SD/references/docreview-profiles/design-doc.md" >/dev/null
-python3 "$SD/scripts/docreview_anchor.py" snapshot "$ddoc" > "$T/dsnap.json"
-python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" --snapshot "$T/dsnap.json" >/dev/null
+python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$DSD" >/dev/null
 dlo="$(dl_run sess-eeee5555)"; rc=$?
 assert_eq "$rc $(grep -cxF -- "$DL_FULL" "$ddoc")" "0 1" "결정 줄 펜스: 표지 주인이면 엔진이 결정 줄 한 줄을 쓴다"
 assert_not_contains "$dlo" "지금 작업 폴더의 레포(" "AC15(양성 짝): 문서의 레포에서 돌면 레포가 다르다고 알리지 않는다"
@@ -1060,14 +1059,13 @@ ea_run() {   # ea_run <파일> <말> <설명> — 그 파일의 펜스로 말을
   ea_before="$(ea_count)"
   o="$(cd "$hrepo" && bash -c "set -e
 $(ea_fill "$1" "$2")
-python3 \"$SD/scripts/docreview_state.py\" begin-round --state-dir \"$HSD\" --snapshot \"$T/hsnap.json\" --extra-approval=\"\$extra_approval\" --extra-approval-source typed" 2>&1)"; rc=$?
+python3 \"$SD/scripts/docreview_state.py\" begin-round --state-dir \"$HSD\" --extra-approval=\"\$extra_approval\" --extra-approval-source typed" 2>&1)"; rc=$?
   assert_eq "$rc $(PYTHONPATH="$SD/scripts" python3 -c 'import sys, docreview_state as ds
 x = ds.load_state(sys.argv[1]).get("extra_rounds") or [{}]
 print(len(x) == int(sys.argv[3]) + 1 and x[-1].get("quote") == sys.argv[2])' "$HSD" "$2" "$ea_before" 2>&1)" "0 True" "AC14: ${1#"$ROOT_REPO"/} — $3 엔진의 추가 라운드 승인에 글자 그대로 남는다"
   [ "$rc" -eq 0 ] || printf '      출력: %s\n' "$o"
 }
-python3 "$SD/scripts/docreview_anchor.py" snapshot "$hdoc" > "$T/hsnap.json"
-for i in 1 2 3; do python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$HSD" --snapshot "$T/hsnap.json" >/dev/null; done
+for i in 1 2 3; do python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$HSD" >/dev/null; done
 for f in $EA_VAR_SKILLS; do   # skill 마다 그 skill 의 펜스로 말 둘의 추가 라운드 승인을 연다
   n="${f#"$ROOT_REPO"/}"
   [ -n "$(fence "$f" extra-approval)" ] && ok "전제(AC14): ${n} — 추가 라운드 승인 펜스를 뽑았다" || no "전제(AC14): ${n} — 추가 라운드 승인 펜스가 비었다 — 아래 칸이 공허하다"

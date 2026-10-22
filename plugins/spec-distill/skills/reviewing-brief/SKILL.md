@@ -69,7 +69,7 @@ init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=
 돌아와 라운드·재리뷰 상한이 이어지고, 다른 문서(design doc 자리의 것 포함)는 다른 자리로 간다. `$PAYLOAD` 가
 비면 `$STATE_DIR` 이 비고 선결 `init` 이 `state_dir_missing` 으로 멈춘다. 세션 id 를 못 풀면 `## 번들` 이
 라운드를 시작하지 않는다. **선결의 `init` 이 rc 0 이
-아니면 값과 무관하게 이 라운드를 진행하지 않는다** — `begin-round` 는 문서를 보지 않으므로,
+아니면 값과 무관하게 이 라운드를 진행하지 않는다** — `begin-round` 는 원장에 적힌 문서만 읽으므로,
 `state_doc_mismatch` 같은 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. 그때는
 record(`pipeline` / `all` / `unavailable`, reason = `init` 이 낸 사유)를 남기고 Step B 로 돌아간다.
 

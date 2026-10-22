@@ -75,6 +75,7 @@
 - **Law 1 — 허용 문법 판독기(`brief_body`)** — brief · audit 는 `scripts/brief_body.py`, seed 는 `scripts/seed_body.py` 가 각자 허용 문법 하나로 읽고 문법 밖은 해석하지 않고 거부한다. 기계가 쓰는 글이라 꼴을 막는 정규식을 늘어놓지 않고 읽는 쪽을 하나로 둔다.
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) + repo-researcher(`Read, Grep, Glob`) + open-researcher(`Read, Grep, Glob, WebSearch, WebFetch`) + saturation-judge(`Read, Grep, Glob`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **허용할 도구만 적는 방식이라 적지 않은 쓰기·실행·위임 도구는 자동으로 막힌다**(막을 도구만 적는 방식(denylist)은 내일 생길 도구를 오늘 적을 수 없어 기본값이 열림이 되므로 쓰지 않는다).
 - **Law 2 — 리뷰 진입은 집행이 아니다** — 설계문서 리뷰 진입에 훅 강제가 없다. brainstorming 뒤·writing-plans 앞에 `spec-review` 를 부르는 것은 오케스트레이터이고, 근거는 인터뷰 핸드오프 문구(`finishing.md` 의 다음 세션 줄, brief 템플릿 §7)와 이 skill 의 description 이다 — 철학 P13(hook = 집행 / skill = capability 표면) 기준으로 이 자리에는 집행이 없다. `/brainstorming` 직접 경로는 description 하나에 기대므로 건너뛰는 일이 흔할 것이다 — 그때는 `/spec-distill:spec-review <경로>` 로 부른다. 리뷰어의 물리 분리(`tools:` allowlist)는 그대로다.
+- **Law 2 — 쓰는 세션을 믿는 한계를 공시한다(장치로 막지 않는다)** — 원장과 사용자 문구를 쓰는 세션이 그 원장의 제약을 받는 한계는 리뷰 결과 셋째 줄과 `## 한계` 절의 같은 문장으로 알린다.
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** — 리뷰가 찾은 결함을 버릴 때마다 장부에 남겨 조용히 사라지지 않게 한다. 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분을 부른다. 소비자는 문서 리뷰 엔진의 `scripts/docreview_route.py`(`shared/docreview/` 심볼릭 링크 — design doc · brief · seed 세 자리의 finding 이 여기서 라우팅된다) 등이고, 전수 목록은 `tools/adjudication/check_wiring.py` 가 import 로 도출한다 — 여기서 열거하지 않는다. 집행은 `shared/tests/test_adjudication_{wiring,consumed}.sh`. **범위**: `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계) — 이 플러그인의 앵커 다수가 그쪽이다.
 - **Law 2 (입력 오염 차단) — `input_slots`** — 리뷰어가 받는 입력에 앞선 판정이나 점수가 섞이지 않게, 이 플러그인의 agent 열이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언한다. 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 `tools/adjudication/check_slots.py` 의 `EXEMPT_SLOTS` 등재(면제 목록)를 요구한다 — `blind-spot-prober.framing` 이 그 하나다(맡은 일이 오케스트레이터가 모은 framing — 사용자 원문과 확인한 사실 — 을 따지는 것이라서). 집행은 `shared/tests/test_agent_input_slots.sh`.
 - **Law 3 (Compounding)** — 설계문서가 이름이 있고 git 이력이 남고 달라진 곳을 볼 수 있는 파일이라서, 다음 세션이 그것을 찾아 이어받을 수 있다. 설계문서 `docs/superpowers/specs/…-design.md` 자체가 named, git-versioned, diff-able artifact (P5).
@@ -106,8 +107,7 @@
 
 ### Principles 흡수
 
-- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
-- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
+- 한계는 `## 한계` 절에 있다.
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
@@ -320,6 +320,16 @@ branch_prefix: feature/
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` (v0.36.0) — 재-nag 층 자체가 없다.
 - `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (6.0.0) — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 TTL-GC 스크립트가 지워져 읽는 곳이 없다. 진입 검사는 이 이름을 알리지 않는다. 원장 정리는 한 일을 늘 한 줄로 낸다.
+
+## 한계
+
+사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다
+
+- 샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다.
+- `--quote-file` · `log-decision --quote` · `decide --quote` 로 받은 문구의 출처와 제목 하나 빠진 audit 도 위 공시로 다룬다 — 엔진은 그 문구가 사용자 말인지 확인하지 않는다.
+- `declare-related` · `log-decision` 이 표지 확인 없이 불리거나 엔진 명령을 거치지 않고 원장을 쓰는 길도 위 공시로 다룬다 — 엔진은 그런 쓰기를 거부하지 않는다.
+- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
+- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
 
 ## Prerequisites
 

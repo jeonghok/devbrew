@@ -890,7 +890,7 @@ case_AC39_contradicts_fence_and_immutable() {
   rm -rf "$d"
   d="$(mk_state "$FX/brief-append-r1.md" "$PROF_MC/brief.md")" || { no "AC39 불변: init 실패"; return; }
   snap "$FX/brief-append-r1.md" "$d/s1.json"
-  py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s1.json" >/dev/null
+  put_snap "$d" "$d/s1.json" && py docreview_state.py begin-round --state-dir "$d" >/dev/null
   seed_findings "$d" "[$F_BRIEF_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '고친다' >/dev/null
   contra_permit "$d" related '#6-사용자-원문'

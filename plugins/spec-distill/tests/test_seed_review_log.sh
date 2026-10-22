@@ -282,8 +282,7 @@ printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n
 cp "$TPL" "$TMP/rt.audit.md"
 D="$TMP/rt-state"; mkdir -p "$D"
 python3 "$S/docreview_state.py" init --state-dir "$D" --doc "$TMP/s.md" --profile "$PROF" >/dev/null
-python3 "$S/docreview_anchor.py" snapshot "$TMP/s.md" > "$D/snap.json"
-python3 "$S/docreview_state.py" begin-round --state-dir "$D" --snapshot "$D/snap.json" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$D" >/dev/null
 cat > "$D/critic.txt" <<'EOF'
 ```docreview-layer1
 - ref: c1
