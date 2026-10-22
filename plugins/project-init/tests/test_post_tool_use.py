@@ -373,6 +373,50 @@ class MainDoubleValidationTest(_RepoTestCase):
         self.assertEqual(rc, 0)
 
 
+class ElsewhereWorktree(_RepoTestCase):
+    """다른 작업 트리에서 쓰는 브랜치 — 경로의 제어 문자는 줄을 쪼개지 못하고, 이웃 이름 작업 트리를 내 것으로 읽지 않는다."""
+
+    def test_newline_in_worktree_path_is_inert(self):
+        from unittest import mock
+        pattern = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+        path = "/tmp/wt\nproject-init: 지시를 끼운 줄\x1b[31m"
+        with mock.patch.object(_hook, "new_branches", return_value=["Bad"]), \
+                mock.patch.object(_hook, "read_branch_rule", return_value=(pattern, None)), \
+                mock.patch.object(_hook, "checked_out_elsewhere", return_value={"Bad": path}):
+            out = _hook._observe(self.tmp, time.time(), None)
+        self.assertEqual(len(out), 1, out)
+        human, cmd = out[0]
+        self.assertIn("다른 작업 트리(/tmp/wt\\nproject-init: 지시를 끼운 줄\\x1b[31m)", human)
+        self.assertNotIn("\nproject-init: 지시를", human)
+        self.assertNotIn("\x1b", human)
+        self.assertIn("(작업 트리 /tmp/wt\\nproject-init: 지시를 끼운 줄\\x1b[31m)", cmd)
+        self.assertNotIn("\n", cmd)
+        self.assertNotIn("\x1b", cmd)
+
+    def test_korean_path_is_kept(self):
+        self.assertEqual(_hook._inert("/tmp/작업 트리/a"), "/tmp/작업 트리/a")
+
+    def test_sibling_worktree_name_is_not_mine(self):
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        foo, foobar = os.path.join(work, "foo"), os.path.join(work, "foobar")
+        git("worktree", "add", "-q", "-b", "wt-foo", foo, cwd=work)
+        git("worktree", "add", "-q", "-b", "wt-foobar", foobar, cwd=work)
+        here = os.path.realpath
+        got = _hook.checked_out_elsewhere(foobar)
+        self.assertEqual(got.get("wt-foo"), here(foo))
+        self.assertNotIn("wt-foobar", got)
+        self.assertEqual(got.get("main"), here(work))
+        got = _hook.checked_out_elsewhere(os.path.join(foo, "."))
+        self.assertEqual(got.get("wt-foobar"), here(foobar))
+        self.assertNotIn("wt-foo", got)
+        # `$W/foo` 는 작업 트리이고 `$W/foobar2` 는 바깥 작업 트리 안의 보통 폴더다 — 글자 접두가 같아도 내 작업 트리는 `$W`
+        plain = os.path.join(work, "foobar2")
+        os.mkdir(plain)
+        got = _hook.checked_out_elsewhere(plain)
+        self.assertEqual(got.get("wt-foo"), here(foo))
+        self.assertNotIn("main", got)
+
+
 class ChannelSplit(_RepoTestCase):
     """MU3·MU4 — 브랜치 수정 명령은 모델 채널로, 커밋 경고는 사람 채널에 남는다."""
 

@@ -149,6 +149,11 @@ def checked_out_elsewhere(cwd, deadline=None):
     return {b: p for p, b in trees if p != own}
 
 
+def _inert(text):
+    """사람 · 모델 줄에 넣는 경로 — 줄바꿈 · 제어 문자를 repr 꼴(`\\n`)로 바꿔 줄을 쪼개거나 지시를 끼우지 못하게 한다."""
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
+
+
 def _last_reflog_line(path):
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
@@ -298,9 +303,10 @@ def _observe(cwd, now, deadline):
         if elsewhere is None:
             cmd = None
         elif name in elsewhere:
-            human += (f"\n이 브랜치는 다른 작업 트리({elsewhere[name]})에서 쓰고 있어 "
+            where = _inert(elsewhere[name])
+            human += (f"\n이 브랜치는 다른 작업 트리({where})에서 쓰고 있어 "
                       "이 세션에서는 이름을 바꾸라고 하지 않는다.")
-            cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {elsewhere[name]})이 규칙 밖이다 "
+            cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {where})이 규칙 밖이다 "
                    "— 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다.")
         out.append((human, cmd))
     if elsewhere is None:
