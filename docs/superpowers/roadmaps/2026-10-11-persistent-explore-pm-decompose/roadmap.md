@@ -156,10 +156,10 @@ test_failure_pattern: "^FAILED (.+)$"
 - 경로 예약: plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/roadmap-ontology.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md
 - 순서 이유: 계획 셋을 차례로(형식 · 상태 → 이음매 → 지휘자) — 셋째는 R2a 가 qg 테스트 스크립트를 shared/ 로 옮긴 뒤(설계 D1.3 · §11)
 
-### R8 — 의존 선언 · 부재 시 강등 · devbrew 밖 경로
+### R8 — 의존 선언 · 부재 시 멈춤 · devbrew 밖 경로
 - 의도: 이 장치들이 devbrew 밖 GitHub 레포에서도 통하게 한다 — gh 는 필수 의존이고 superpowers 가 없으면 인터뷰는 brief 까지 만들고 멈추며 나머지 흐름은 진입에서 멈춘다
 - 범위:
-  - 한다: 의존 최소 버전 선언 · 부재 시 강등 · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16) · R13 미룸 둘 — Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기(권한 경계 몫)
+  - 한다: 의존 최소 버전 선언 · 부재 시 동작(gh · superpowers 는 멈춤, quality-gates 는 알리고 진행) · 경로 규약 범용화 · squash · rebase 머지 자동 판정 · 다른 파일에 박힌 레포 전용 값(예: 인터뷰 끝의 로드맵 폴더 위치 검사) · gh 필수(없으면 이유와 설치 방법을 보이고 멈춤 — 대체 길 없음) · superpowers 부재 시 인터뷰는 지금처럼 brief 까지 만들고 멈추고 지휘자 · 로드맵 흐름은 진입에서 멈춤 · 지원 범위는 origin 이 GitHub 인 레포 · AC17 (가) 엔진 밖 원장 쓰기의 권한 경계 · 스냅숏 칸 신뢰 · `--quote-file` · `log-decision --quote` 출처 · 제목 하나 빠진 audit(R2a 설계 미룸 · 사용자 결정 B16) · R13 미룸 둘 — Write 도구로 상태 폴더에 쓰는 파일의 링크 따라가기 · 실행 중 다시 심는 링크와 `runner_common.sh` `write_failclosed` · `_degrade_if_empty` 의 맨 넘기기(권한 경계 몫)
   - 안 한다: 규칙 문서(R9) · gh 없는 대체 길 · GitHub 가 아닌 원격 지원
 - 의존: R2a, R5, R10, R12, R13
 - 브랜치: feature/dependency-portability · feature/gh-merge-dependencies · feature/writer-trust
@@ -216,6 +216,17 @@ test_failure_pattern: "^FAILED (.+)$"
 - 묶음: R13.md
 - 경로 예약: plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/, plugins/spec-distill/skills/reviewing-brief/, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/tests/test_check_verbatim_coverage.sh, plugins/spec-distill/tests/fixtures/, shared/docreview/scripts/nofollow_write.py, plugins/spec-distill/scripts/nofollow_write.py, plugins/quality-gates/scripts/nofollow_write.py, shared/docreview/scripts/run_docreview_codex_reviewer.sh, plugins/spec-distill/scripts/seed_edit_diff.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_nofollow_write.sh, plugins/spec-distill/tests/test_state_dir_writes.sh, plugins/spec-distill/tests/test_fresh_evidence.sh, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/tests/test_ledger_root.sh, plugins/spec-distill/tests/test_decompose_surface.sh, plugins/spec-distill/templates/interview-audit-template.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/tests/test_brief_bundle.sh, plugins/spec-distill/tests/test_brief_no_length_cap.sh, shared/tests/test_docreview_gate_visibility.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_shell_tests_executable.sh, plugins/spec-distill/tests/test_interview_state_flow.sh, plugins/spec-distill/tests/test_ledger_wiring.sh, plugins/spec-distill/tests/test_reviewing_brief_skill.sh, plugins/spec-distill/tests/test_reviewing_brief_residue.sh, plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh
 - 순서 이유: 인터뷰 skill 은 R10 계획 3 의 pm-interview 이름 바꾸기 뒤 새 이름 자리에서 · 엔진 skill 셋은 R12 의 펜스 락 뒤에
+
+### R14 — R8 남은 장치 결함
+- 의도: R8 의 리뷰가 남긴 장치 쪽 결함을 고친다
+- 범위:
+  - 한다: R8 설계문서 `## 미룸` 의 장치 쪽 행 — `strict_frontmatter` 가 콜론 없는 머리말 줄을 오류 없이 건너뛴다 · 설정 값의 pathspec 매직 · 글롭 글자가 `ls-tree` · spec-review 의 pathspec 에 그대로 닿는다 · `ledger add --section "레포 설정"` 이 같은 키 둘을 받는데 merge_check 는 그 기계 상태를 거부한다 · 계획 1 리뷰의 작은 동작 빈틈 여섯(묶음 대조의 `specs_dir` 필수화 · 머리말 앞 빈 줄이면 로드맵 아님 · 한 번에 읽기의 크기 상한 · 원장 git 호출의 lazy fetch 끄기 · `.git` 이름 bare 레포의 멈춤 문장 · check-path 가 로드맵 층을 안 봄) · 계획 1 리뷰의 작은 문구 · 테스트 빈틈 열아홉(해결자 대체 이름표에서 ensure 락이 `:` 꼴을 통과까지 — 동작은 맞고 문구 · 락 세기만 다르다) · 인터뷰 뒤 brainstorming 을 실제로 부르는 세션(인터뷰가 주는 다음 세션 줄)의 superpowers 판 확인 · 상태 계산 읽기 전용 정적 락(`test_roadmap_status.sh`)의 남은 후보 여덟 · 끝 없는 브랜치 판정의 여러 브랜치 블록 틈(옛 PR 의 `mergeCommit` 이 설계문서를 처음 더한 커밋의 조상이면 세지 않는다)
+  - 안 한다: 규칙 · 철학 문서(R9) · 새 기능
+- 의존: R8
+- 브랜치: feature/r8-device-leftovers
+- 묶음: R14.md
+- 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/tests/test_roadmap_status.sh, plugins/spec-distill/tests/test_repo_defaults.py, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_epic_conductor_skill.sh, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/tests/test_finish_commit_roadmap.sh, plugins/spec-distill/tests/test_ledger_root.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/tests/test_check_review_scope.sh, shared/test-selection/resolve-baseline.sh
+- 순서 이유: R8 계획 2 · 3 이 고친 해결자 · 상태 계산 · 원장 위에서 — 같은 파일을 R8 이 예약했다
 
 ## 지휘 절차
 
@@ -447,6 +458,17 @@ test_failure_pattern: "^FAILED (.+)$"
   - 「더한다 — 다섯 개를 고치고, 구현 중 같은 종류가 더 나오면 보고 후 같이 고친다 (권장)」
 
 ### 2026-10-22 · R8 계획 셋의 브랜치 등록 — 브랜치 하나면 계획 1 머지 뒤 R8 이 머지됨으로 보여 R9 가 열리고 계획 2 · 3 문서가 브랜치 끝의 계획으로 세지지 않는다(#227 R2a 넘김과 같은 꼴)
+- 바뀜: 바뀐 에픽 R8 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-22 · R8 설계 미룸의 장치 쪽 행 여덟을 새 에픽 R14 로(R9 는 장치 동작을 바꾸지 않는다) · R8 제목 · 범위의 「부재 시 강등」 을 gh 필수(U1)에 맞춰 「부재 시 멈춤」 · 「부재 시 동작」 으로 — 원문은 R14 결정(2026-10-22)과 U1 을 실은 R8 설계 승인(2026-10-20)
+- 바뀜: 바뀐 에픽 R8 · 새 에픽 R14 「새 에픽 R14 로 (권장)」 · 「승인 — 계획 담당자에게 (권장)」
+- 원문:
+  - 「새 에픽 R14 로 (권장)」
+  - 「승인 — 계획 담당자에게 (권장)」
+
+### 2026-10-22 · R8 넘기는 것의 「부재 시 강등」 도 gh 필수(U1)에 맞춰 「부재 시 동작」 으로 — 바로 위 항목의 R8 제목 · 범위 고침과 같은 승인(U1 을 실은 R8 설계 승인, 2026-10-20)
 - 바뀜: 바뀐 에픽 R8 「승인 — 계획 담당자에게 (권장)」
 - 원문:
   - 「승인 — 계획 담당자에게 (권장)」
