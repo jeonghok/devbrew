@@ -6,7 +6,8 @@
 # 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
 # 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long.
 # pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
-# `failed:` 는 둘이다 — gh 가 없다(`failed: gh-unavailable`) · origin 이 없거나 URL 을 못 읽는다(`failed: no-origin`).
+# `failed:` 는 둘이다 — gh 가 없다(`failed: gh-unavailable`) · origin 이 없거나 URL 을 못 읽거나 gh 가 그 레포를
+# 다루지 못한다(`failed: no-origin`).
 # 사유는 stderr 에 있다(gh-repo.sh 가 낸 설치 · 확인 안내).
 # exit: posted·skipped 는 0, failed 는 1, 잘못된 호출은 2.
 #
@@ -72,6 +73,10 @@ gh pr view "$branch" -R "$slug" --json number,state,url,baseRefName,headRefOid,i
 if [ "$pr_rc" -ne 0 ]; then
   tail -n 3 "$WORK/pr.err" >&2
   if grep -qi 'no pull requests found' "$WORK/pr.err"; then skip no-pr; fi
+  if grep -qiE 'could not resolve to a repository|no such type pullrequest' "$WORK/pr.err"; then
+    echo "publish-comment: gh 가 origin(${slug})을 다루지 못한다 — devbrew 는 origin 이 GitHub 인 레포만 지원한다(비공개 레포면 접근 권한도 확인한다)" >&2
+    fail no-origin
+  fi
   skip gh-unavailable
 fi
 IFS="$(printf '\t')" read -r pr_num pr_state pr_url pr_base pr_head pr_cross <"$WORK/pr.tsv" || true

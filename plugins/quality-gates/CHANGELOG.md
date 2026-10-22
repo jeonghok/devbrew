@@ -11,7 +11,7 @@
 
 ### Changed
 - gh 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다 — `upstream` 원격이 있는 fork 클론에서도 `origin` 의 PR 을 본다.
-- 게시 sink 는 gh 가 없으면 `failed: gh-unavailable`(rc 1)을 낸다(전에는 건너뛰었다). `origin` 이 없거나 못 읽으면 `failed: no-origin`. 미인증이면 `gh auth login --hostname <호스트>` 를 보인다.
+- 게시 sink 는 gh 가 없으면 `failed: gh-unavailable`(rc 1)을 낸다(전에는 건너뛰었다). `origin` 이 없거나 못 읽거나 gh 가 그 레포를 다루지 못하면(GitHub 이 아니거나 접근 권한이 없다) `failed: no-origin`. 미인증이면 `gh auth login --hostname <호스트>` 를 보인다.
 - 게시 sink 는 PR 이 `origin` 안의 PR 이고 그 head 가 지금 HEAD 와 같을 때만 코멘트를 단다 — 아니면 `skipped: pr-mismatch`.
 - 의도 출처(`discover-spec.sh`)는 gh 없음 · `origin` 못 읽음 · 미인증 · gh 가 `origin` 레포를 다루지 못함이면 JSON 대신 `stop: <사유>` 한 줄과 rc 3 을 내고, 파이프라인은 그 사유를 보이고 멈춘다. PR 본문은 head 브랜치가 지금 브랜치와 같고 같은 레포의 PR 일 때만 쓴다.
 - README 사전 요건이 `dependencies.md` 를 가리키고 gh 를 필수로 적는다.

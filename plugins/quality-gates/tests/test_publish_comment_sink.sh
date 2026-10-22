@@ -31,6 +31,7 @@ case "$1 ${2:-}" in
     case "${GH_PR:-none}" in
       none) echo 'no pull requests found for branch "feat"' >&2; exit 1 ;;
       error) echo 'HTTP 502: Bad Gateway' >&2; exit 1 ;;
+      norepo) echo "GraphQL: Could not resolve to a Repository with the name 'o/r'. (repository)" >&2; exit 1 ;;
       # `@HEAD@` 은 sink 가 도는 리포의 지금 HEAD 로 바꾼다 — PR head 가 checkout 과 같은 정상 경우.
       *) pr_line="$(printf '%b' "$GH_PR")"; h="$(git rev-parse HEAD 2>/dev/null)"
          printf '%s\n' "${pr_line//@HEAD@/$h}"; exit 0 ;;
@@ -216,6 +217,13 @@ case_AC13_gh_unavailable() {
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M3: 다른 계정만 깨졌으면 게시한다(auth status --active)"
   GH_PR=error run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 gh pr view 오류(no-pr 아님): 마지막 줄"
+  # gh 가 origin 레포를 다루지 못하면(GitHub 아님 · 접근 권한 없음) 실패다(AC20).
+  GH_PR=norepo run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$RC:$LAST" "1:failed: no-origin" "AC20 gh 가 origin 레포를 다루지 못함: 건너뛰지 않고 failed: no-origin(rc 1)"
+  p6_single_result_line gh-cannot-handle-origin
+  no_comment_call "AC20 gh 가 origin 레포를 다루지 못함"
+  grep -qF 'devbrew 는 origin 이 GitHub 인 레포만 지원한다' "$T/err" \
+    && ok "AC20 gh 가 origin 레포를 다루지 못함: stderr 에 지원 범위" || no "AC20: stderr 에 지원 범위가 없다 — $(head -n 3 "$T/err")"
   GH_PR="$OPEN_PR" GH_COMMENT_RC=1 run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 코멘트 쓰기 실패: posted 로 위장하지 않는다"
   p6_single_result_line comment-failed
