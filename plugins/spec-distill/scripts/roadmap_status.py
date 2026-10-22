@@ -17,7 +17,8 @@
 부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다) — 밖의 git 은 origin 소유자를 읽는
 `gh_repo.origin_slug` 의 `git remote get-url` 하나다. 머지됨은 기계 상태의 PR 캐시(지휘자가 채운다)로
 판정하되 브랜치 끝이 기본 브랜치 머지 커밋의 둘째 부모면 캐시보다 먼저 머지됨이다(로컬 끝, 로컬이 원격의 조상이면
-원격 끝 — 로컬이 없거나 기본 브랜치 안에서 원격보다 앞이면 그 에픽이 시작된 뒤의 머지일 때만 원격 끝). 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의
+원격 끝 — 로컬이 없거나 기본 브랜치 안에서 원격보다 앞이면 그 머지가 이 에픽의 문서를 처음 더한 커밋보다 먼저가
+아닐 때만 원격 끝. 로컬이 없을 때의 PR 판정도 같다). 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의
 머지 줄로 판정한다. 단계는 git 으로 알 수 있는 것까지다 —
 구현 중 · 구현 끝은 계획 파일과 설계문서의 구현 대조 절로 센다. PR 단계는 여기서 세지 않고
 control_plane 이 기계 상태의 PR 캐시로 덧씌운다.
@@ -393,12 +394,12 @@ def _merge_commit_of(git: Git, merges: list, tip):
     return None
 
 
-def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote, epic_after=None):
+def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote, age_ok=None):
     """PR 캐시에 줄이 있어도 먼저 보는 머지 커밋 근거 한 줄, 아니면 None. 로컬 끝이 원격 끝의 조상(받기만 한 로컬)이면
     원격 끝만, 아니면 로컬 끝을 본다 — 그 끝이 기본 브랜치 머지 커밋의 둘째 부모면 머지됨. 원격 끝의 머지 커밋은 로컬 끝이
-    없거나, 로컬 끝이 원격 끝보다 앞이고 기본 브랜치에 다 들어 있을 때도 세되 epic_after(머지 커밋)가 참일 때만이다
-    (이 에픽이 시작됐고 그 머지가 이 에픽의 설계문서가 기본 브랜치에 처음 들어온 뒤다) — 같은 이름을 다시 쓴 새 브랜치 ·
-    만들기 전 브랜치에 남은 옛 원격 ref 는 세지 않는다. 로컬에 기본 브랜치 밖 커밋이 있으면 원격 끝은 세지 않는다."""
+    없거나, 로컬 끝이 원격 끝보다 앞이고 기본 브랜치에 다 들어 있을 때도 세되 age_ok(머지 커밋)가 거짓이면 세지 않는다
+    (그 머지가 이 에픽의 설계문서 · 산출물이 기본 브랜치에 처음 들어온 커밋보다 먼저다 — 같은 이름을 다시 쓴 옛 브랜치).
+    age_ok 가 None 을 내면(견줄 문서가 없다) 센다. 로컬에 기본 브랜치 밖 커밋이 있으면 원격 끝은 세지 않는다."""
     stale = bool(tip_local and tip_remote and tip_local != tip_remote and git.is_ancestor(tip_local, tip_remote))
     if tip_local and not stale:
         sha = _merge_commit_of(git, merges, tip_local)
@@ -408,7 +409,7 @@ def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote, epi
                 and git.is_ancestor(tip_local, main)):
             return None
     sha = _merge_commit_of(git, merges, tip_remote)
-    if not sha or not (stale or (epic_after is not None and epic_after(sha))):
+    if not sha or (not stale and age_ok is not None and age_ok(sha) is False):
         return None
     return "기본 브랜치의 머지 커밋 %s(원격 끝)" % sha[:8]
 
@@ -622,12 +623,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     added_memo = {}
 
-    def spec_added(block):
-        """블록의 설계문서마다 그것을 기본 브랜치에 처음 더한 커밋 — 못 찾은 설계문서는 빠진다."""
+    def doc_added(block):
+        """블록의 설계문서(산출물 블록은 산출물)마다 그것을 기본 브랜치 첫째 부모 줄에 처음 더한 커밋 — 문서가 그 에픽
+        브랜치와 함께 머지됐으면 그 머지 커밋이다. 기본 브랜치에 없거나 더한 커밋이 없는(이름을 바꾼) 문서는 빠진다."""
         if block["id"] not in added_memo:
             out = []
             for s in find_specs(git, main, block, block["bundle"], settings["specs_dir"]):
-                rc, log, err = git.run_err("log", "--format=%H", "--diff-filter=A", main, "--", s)
+                rc, log, err = git.run_err("log", "--first-parent", "--format=%H", "--diff-filter=A", main, "--", s)
                 if rc != 0:
                     git.fail("log", rc, err)
                 elif log.split():
@@ -635,15 +637,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             added_memo[block["id"]] = out
         return added_memo[block["id"]]
 
-    def epic_after(block, extra):
-        """원격 끝의 머지 커밋을 이 에픽의 머지로 셀지 — 시작 흔적이 있고(더한 브랜치는 묻지 않는다) 그 머지가 이 에픽의
-        설계문서가 기본 브랜치에 처음 들어온 커밋보다 먼저가 아니다."""
-        def after(sha):
-            if not (extra or started(block)):
-                return False
-            added = spec_added(block)
-            return bool(added) and not all(git.is_ancestor(sha, a) for a in added)
-        return after
+    def age_ok(block, sha):
+        """머지 커밋 sha 를 이 에픽의 머지로 셀 수 있는가 — 거짓: sha 가 그 블록 문서들을 처음 더한 커밋 모두의 엄격한
+        조상(그 에픽보다 먼저 머지된 같은 이름의 옛 브랜치). 견줄 커밋이 없으면 None(8.6.0 처럼 센다)."""
+        added = doc_added(block)
+        if not added:
+            return None
+        return not all(sha != a and git.is_ancestor(sha, a) for a in added)
 
     def judge(br, block, extra=False):
         """브랜치 하나의 상태 — tip · merged(근거 | None) · 셀 수 없으면 uncountable. extra(더한 브랜치)는 끝이 없으면
@@ -654,18 +654,21 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         if br not in cached:
             st["merged"] = merged_by_git(git, merges, main, br, st["tip"], owner()[0])
             return st
-        st["merged"] = merged_by_tips(git, merges, main, local, remote, epic_after(block, extra))
+        st["merged"] = merged_by_tips(git, merges, main, local, remote, lambda sha: age_ok(block, sha))
         if st["merged"]:
             if local and remote and local != remote:
                 block["notes"].append("%s: 로컬 끝 %s · 원격 끝 %s" % (br, local[:8], remote[:8]))
             return st
         rows = [r for r in pr_rows if r.get("브랜치") == br]
         stale = bool(local and remote and local != remote and git.is_ancestor(local, remote))
-        pr_remote = remote
-        if not local and remote and not (extra or started(block)):
-            pr_remote = None   # 로컬이 없고 시작 흔적도 없다 — 원격 ref 는 같은 이름의 옛 브랜치가 남긴 것일 수 있다
-        verdict, notes, hit = _judge_pr(rows, br, local, pr_remote, default_short, lambda c: git.is_ancestor(c, main),
-                                        started=extra or bool(local or pr_remote) or started(block), stale_local=stale)
+        verdict, notes, hit = _judge_pr(rows, br, local, remote, default_short, lambda c: git.is_ancestor(c, main),
+                                        started=extra or bool(local or remote) or started(block) or bool(doc_added(block)),
+                                        stale_local=stale)
+        if verdict == PR_MERGED and not local and age_ok(block, hit["mergeCommit"]) is False:
+            # 로컬이 없으면 끝(원격 ref · 캐시의 headRefOid)이 같은 이름의 옛 브랜치 것일 수 있다 — 문서보다 먼저 머지된 PR 은 세지 않는다
+            notes.append("같은 이름의 옛 PR %s 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼 이 에픽의 PR 로 세지 "
+                         "않았다" % hit.get("번호", "?"))
+            verdict, hit = None, None
         if verdict in (PR_NOT_FETCHED, PR_UNCOUNTABLE):
             line = "%s: %s" % (br, notes.pop())
             if verdict == PR_NOT_FETCHED:

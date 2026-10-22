@@ -1607,10 +1607,17 @@ assert_contains "$(notes "$T/rm32.json" F32)" "지운 브랜치면 \`git branch 
 assert_not_contains "$(notes "$T/rm32.json" F32)" "브랜치 끝 없이 판정" "만들기 전 브랜치: 끝 없이 판정하지 않는다"
 assert_eq "$(stage "$T/rm32.json" G32)" "대기" "만들기 전 브랜치의 블록에 기대는 블록은 열리지 않는다"
 assert_eq "$rc" "0" "만들기 전 브랜치의 알림은 정보(rc 0)"
-g checkout -q main; approved_spec docs/superpowers/specs/f32-design.md docs/rm32/F32.md; g push -q origin main; g fetch -q origin
+g checkout -q main; approved_spec docs/superpowers/specs/f32-design.md docs/rm32/F32.md; F32_HEAD="$(g rev-parse HEAD)"; g push -q origin main; g fetch -q origin
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32a.json")
+assert_eq "$(stage "$T/rm32a.json" F32)" "준비" "AC15: 시작한 에픽이어도 같은 이름의 옛 PR(#1)이 그 설계문서보다 먼저 머지됐으면 머지됨이 아니다"
+assert_contains "$(notes "$T/rm32a.json" F32)" "같은 이름의 옛 PR #1 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼" "옛 PR 을 나이 검사로 걸렀다고 알린다"
+# 양의 짝 — 이 에픽의 PR(#2)이 설계문서 뒤에 squash 로 머지됐고 브랜치는 지워짐
+commit_file src/f32.txt f "f32 (squash)"; F32_MC="$(g rev-parse HEAD)"; g push -q origin main; g fetch -q origin
+printf 'feature/f32|#2|머지됨|%s|아니오|main|%s\n' "$F32_HEAD" "$F32_MC" > "$T/rows32b"
+write_machine "$MD32/machine.md" docs/rm32/roadmap.md "$T/rows32b"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm32/roadmap.md > "$T/rm32b.json")
-assert_eq "$(stage "$T/rm32b.json" F32)" "머지됨" "양의 짝: 같은 캐시 · 승인된 설계문서가 기본 브랜치에 있으면 지운 브랜치로 보고 끝 없이 판정"
-assert_contains "$(notes "$T/rm32b.json" F32)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${S30_TIP:0:8}" "양의 짝: 「브랜치 끝 없이 판정」 을 알린다"
+assert_eq "$(stage "$T/rm32b.json" F32)" "머지됨" "양의 짝: 승인된 설계문서가 기본 브랜치에 있으면 지운 브랜치로 보고 끝 없이 판정"
+assert_contains "$(notes "$T/rm32b.json" F32)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${F32_HEAD:0:8}" "양의 짝: 「브랜치 끝 없이 판정」 을 알린다"
 assert_not_contains "$(notes "$T/rm32b.json" F32)" "브랜치가 없다" "양의 짝: 옛 PR 알림이 없다"
 # 기본 브랜치 머지 커밋이 PR 캐시보다 먼저다 — `pr-refresh --reset` 이 끝난 에픽의 줄을 채워도 머지된 에픽은 머지됨 그대로.
 # L33 — 로컬 끝이 원격 끝보다 뒤(받기만 함) · 원격 끝이 PR 머지 커밋의 부모 · PR headRefOid 는 원격 끝
@@ -1630,24 +1637,37 @@ g checkout -q -b feature/x33 main; commit_file src/x33.txt x "x33"; X33_TIP="$(g
 g checkout -q feature/x33; commit_file src/x33b.txt x2 "x33 더"; X33_LOCAL="$(g rev-parse HEAD)"; g checkout -q main; g push -q origin main; g fetch -q origin
 # 같은 이름 재사용 · 만들기 전 브랜치에 남은 옛 원격 ref(AC15) — 옛 브랜치는 PR 머지 커밋으로 머지됐고 GitHub 에서 지워졌지만
 # origin/<브랜치> 는 prune 되지 않았다. PR 캐시에는 그 이름의 옛 MERGED PR 이 있다.
-# U33 — 옛 머지 뒤 더 새 main 에서 같은 이름을 새로 땄다 · 이 에픽의 설계문서는 기본 브랜치에 없다
+# U33 — 옛 머지 뒤 더 새 main 에서 같은 이름을 새로 땄다 · 이 에픽의 설계문서는 기본 브랜치에 없다(견줄 문서 없음 —
+# 8.6.0 처럼 머지됨: R14 미룸의 틈)
 g checkout -q -b feature/u33 main; commit_file src/u33.txt u "u33 옛"; U33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/u33; pr_merge 56 feature/u33; U33_MC="$(g rev-parse HEAD)"
 commit_file src/after-u33.txt a "u33 뒤 main"; g branch -q -f feature/u33 main
 # T33 — U33 과 같되 새 에픽의 승인된 설계문서가 옛 머지 뒤 기본 브랜치에 들어왔다(시작한 에픽 — 옛 머지는 그보다 먼저)
 g checkout -q -b feature/t33 main; commit_file src/t33.txt t "t33 옛"; T33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/t33; pr_merge 57 feature/t33; T33_MC="$(g rev-parse HEAD)"
 approved_spec docs/superpowers/specs/t33-design.md docs/rm33/T33.md; g branch -q -f feature/t33 main
-# N33 — 만들기 전 브랜치(로컬 없음)에 옛 원격 ref · 시작 흔적 없음(승인 줄 없는 설계문서가 옛 머지에 실려 들어왔다)
+# N33 — 로컬 없음 · 원격 ref · 시작 흔적 없음(승인 줄 없는 설계문서가 그 머지로 들어왔다) — 새 클론 · 둘째 기계에서
+# 머지된 에픽의 모양과 갈라지지 않으므로 머지됨(8.6.0 과 같다). 만들기 전 브랜치라면 R14 미룸의 틈이다.
 g checkout -q -b feature/n33 main; commit_file docs/superpowers/specs/n33-design.md "$(spec_doc docs/rm33/N33.md C1)" "n33 설계(승인 전)"
 N33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/n33; pr_merge 58 feature/n33; N33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/n33
 # P33 — 짝: 로컬을 지운 시작한 에픽(승인된 설계문서가 그 머지로 들어옴) · 원격 끝이 머지 커밋의 둘째 부모 → 머지됨
 g checkout -q -b feature/p33 main; approved_spec docs/superpowers/specs/p33-design.md docs/rm33/P33.md; commit_file src/p33.txt p "p33"
 P33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/p33; pr_merge 59 feature/p33; P33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/p33
+# K33 — 옛 머지 전에 갈라진 브랜치에 이 에픽의 설계문서가 있고 그 브랜치가 옛 머지 뒤에 머지됐다 · 같은 이름의 옛 브랜치는
+# 로컬 없이 원격 ref 만 남음 — 문서를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋(#61 머지)이 옛 머지보다 뒤라 머지됨 아님
+g checkout -q -b feature/k33-doc main; approved_spec docs/superpowers/specs/k33-design.md docs/rm33/K33.md
+g checkout -q -b feature/k33 main; commit_file src/k33.txt k "k33 옛"; K33_OLD="$(g rev-parse HEAD)"; g push -q origin feature/k33; pr_merge 60 feature/k33; K33_MC="$(g rev-parse HEAD)"
+pr_merge 61 feature/k33-doc; g branch -q -D feature/k33
+# H33 — squash 머지 · 시작 흔적 없음(승인 줄 없는 설계문서) · 로컬 없음 · 원격 ref 있음(새 클론) → PR 캐시로 머지됨
+g checkout -q -b feature/h33 main; commit_file docs/superpowers/specs/h33-design.md "$(spec_doc docs/rm33/H33.md C1)" "h33 설계(승인 전)"
+H33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/h33; sq feature/h33; H33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/h33
+# J33 — H33 과 같되 원격 ref 도 없다(지운 브랜치) · 설계문서가 기본 브랜치에 있어 끝 없이 판정 → 머지됨
+g checkout -q -b feature/j33 main; commit_file docs/superpowers/specs/j33-design.md "$(spec_doc docs/rm33/J33.md C1)" "j33 설계(승인 전)"
+J33_TIP="$(g rev-parse HEAD)"; sq feature/j33; J33_MC="$(g rev-parse HEAD)"; g branch -q -D feature/j33
 g push -q origin main; g fetch -q origin
 mkdir -p "$W/docs/rm33"
-for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33; do bundle docs/rm33 "$b" "C1, S1"; done
+for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33; do bundle docs/rm33 "$b" "C1, S1"; done
 bundle docs/rm33 L33 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
 { roadmap_head
-  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  for b in L33 Q33 E33 V33 X33 U33 T33 N33 P33 K33 H33 J33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
   block W33 feature/w33 "L33, Q33, E33, V33" 없음
   roadmap_tail ""
 } > "$W/docs/rm33/roadmap.md"
@@ -1661,6 +1681,9 @@ MD33="$W/.claude/spec-distill/conductor/rm33"; mkdir -p "$MD33"
   printf 'feature/t33|#57|머지됨|%s|아니오|main|%s\n' "$T33_OLD" "$T33_MC"
   printf 'feature/n33|#58|머지됨|%s|아니오|main|%s\n' "$N33_OLD" "$N33_MC"
   printf 'feature/p33|#59|머지됨|%s|아니오|main|%s\n' "$P33_TIP" "$P33_MC"
+  printf 'feature/k33|#60|머지됨|%s|아니오|main|%s\n' "$K33_OLD" "$K33_MC"
+  printf 'feature/h33|#62|머지됨|%s|아니오|main|%s\n' "$H33_TIP" "$H33_MC"
+  printf 'feature/j33|#63|머지됨|%s|아니오|main|%s\n' "$J33_TIP" "$J33_MC"
   printf 'feature/x33|#55|머지됨|%s|아니오|main|%s\n' "$X33_TIP" "$X33_MC"
 } > "$T/rows33"
 write_machine "$MD33/machine.md" docs/rm33/roadmap.md "$T/rows33"
@@ -1674,11 +1697,14 @@ assert_eq "$(stage "$T/rm33.json" X33)" "설계 중" "AC15 짝: 원격 끝이 �
 assert_contains "$(notes "$T/rm33.json" X33)" "로컬 끝 ${X33_LOCAL:0:8} · 원격 끝 ${X33_TIP:0:8}" "AC15 짝: 두 끝을 보인다"
 assert_eq "$(stage "$T/rm33.json" W33)" "준비" "머지된 에픽에 기대는 블록은 열린다(거짓 「의존 미완료」 없음)"
 assert_contains "$(notes "$T/rm33.json" L33)" "feature/l33: 로컬 끝 ${L33_OLD:0:8} · 원격 끝 ${L33_TIP:0:8}" "뒤처진 로컬의 머지 커밋 판정도 두 끝을 보인다"
-assert_eq "$(stage "$T/rm33.json" U33)" "설계 중" "AC15: 같은 이름을 새 main 에서 다시 땄고 옛 원격 ref 가 남음 — 옛 머지 커밋으로 머지됨이 아니다"
-assert_eq "$(stage "$T/rm33.json" T33)" "설계 중" "AC15: 새 에픽이 시작했어도 옛 머지가 그 설계문서보다 먼저면 머지됨이 아니다"
-assert_eq "$(stage "$T/rm33.json" N33)" "설계 중" "AC15: 만들기 전 브랜치(로컬 없음)에 남은 옛 원격 ref · 시작 흔적 없음 → 머지됨이 아니다"
-assert_contains "$(notes "$T/rm33.json" N33)" "feature/n33: 브랜치가 없다 — 같은 이름의 옛 PR #58 은 이 에픽의 PR 로 세지 않았다" "만들기 전 브랜치: 옛 원격 ref 의 PR 을 세지 않았다고 알린다"
+assert_eq "$(stage "$T/rm33.json" U33):$(reason "$T/rm33.json" U33)" "머지됨:기본 브랜치의 머지 커밋 ${U33_MC:0:8}(원격 끝)" "견줄 문서 없음(같은 이름 재사용 · 새 에픽 문서가 기본 브랜치에 없음): 8.6.0 처럼 머지됨 — R14 미룸의 틈"
+assert_eq "$(stage "$T/rm33.json" T33)" "설계 중" "AC15: 같은 이름 재사용 — 옛 머지가 새 에픽의 설계문서를 기본 브랜치에 더한 커밋보다 먼저면 머지됨이 아니다"
+assert_eq "$(stage "$T/rm33.json" N33):$(reason "$T/rm33.json" N33)" "머지됨:기본 브랜치의 머지 커밋 ${N33_MC:0:8}(원격 끝)" "로컬 없음 · 시작 흔적 없음 · 문서가 그 머지로 들어옴(새 클론의 머지된 에픽): 머지됨"
 assert_eq "$(stage "$T/rm33.json" P33):$(reason "$T/rm33.json" P33)" "머지됨:기본 브랜치의 머지 커밋 ${P33_MC:0:8}(원격 끝)" "양의 짝: 시작한 에픽의 지운 로컬 · 원격 끝의 머지 커밋으로 머지됨"
+assert_eq "$(stage "$T/rm33.json" K33)" "설계 중" "AC15: 옛 머지 전에 갈라진 브랜치로 문서가 나중에 들어옴 — 첫째 부모 줄의 문서 추가가 옛 머지보다 뒤라 머지됨 아님"
+assert_contains "$(notes "$T/rm33.json" K33)" "feature/k33: 같은 이름의 옛 PR #60 은 이 에픽의 문서가 기본 브랜치에 들어오기 전에 머지돼 이 에픽의 PR 로 세지 않았다" "AC15: 로컬 없을 때의 PR 판정도 같은 나이 검사로 옛 PR 을 거른다"
+assert_eq "$(stage "$T/rm33.json" H33):$(reason "$T/rm33.json" H33)" "머지됨:PR #62 머지됨(mergeCommit ${H33_MC:0:8})" "새 클론 · squash · 시작 흔적 없음: 원격 ref 와 PR 캐시로 머지됨(8.6.0 회귀 아님)"
+assert_eq "$(stage "$T/rm33.json" J33):$(reason "$T/rm33.json" J33)" "머지됨:PR #63 머지됨(mergeCommit ${J33_MC:0:8})" "지운 브랜치 · squash · 시작 흔적 없음 · 문서가 기본 브랜치에 있음: 끝 없이 판정해 머지됨"
 # origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
 (cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
 assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"

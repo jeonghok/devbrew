@@ -217,7 +217,7 @@ class MergedByGit(unittest.TestCase):
 
 class MergeCommitBeforePrCache(unittest.TestCase):
     """PR 캐시에 줄이 있어도 끝이 기본 브랜치 머지 커밋의 둘째 부모면 머지됨 — 로컬 끝, 로컬이 원격의 조상이면 원격 끝,
-    로컬이 없거나 기본 브랜치 안에서 원격보다 앞이면 epic_after 가 참일 때만 원격 끝."""
+    로컬이 없거나 기본 브랜치 안에서 원격보다 앞이면 age_ok 가 거짓이 아닐 때 원격 끝(None — 견줄 문서 없음 — 은 센다)."""
     MERGES = [(M, ["e" * 40, TIP], "Merge pull request #7 from o/feature/x")]
     AHEAD_IN_MAIN = {(TIP, NEW), (NEW, "main")}   # 원격 끝 ⊂ 로컬 끝 ⊂ 기본 브랜치
 
@@ -226,7 +226,7 @@ class MergeCommitBeforePrCache(unittest.TestCase):
         self.assertEqual(why, "기본 브랜치의 머지 커밋 %s" % M[:8])
 
     def test_remote_tip_is_merge_parent_stale_local(self):         # 로컬이 원격의 조상(받기만 함) — 시작 흔적을 묻지 않는다
-        why = rs.merged_by_tips(FakeGit({(OLD, "main"), (OLD, TIP)}), self.MERGES, "main", OLD, TIP)
+        why = rs.merged_by_tips(FakeGit({(OLD, "main"), (OLD, TIP)}), self.MERGES, "main", OLD, TIP, lambda _s: False)
         self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
 
     def test_stale_local_checks_only_remote_tip(self):             # 로컬이 원격의 조상이면 로컬 끝은 보지 않는다
@@ -237,22 +237,29 @@ class MergeCommitBeforePrCache(unittest.TestCase):
         why = rs.merged_by_tips(FakeGit(self.AHEAD_IN_MAIN), self.MERGES, "main", NEW, TIP, lambda _s: True)
         self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
 
-    def test_reused_name_old_remote_ref_is_not_merged(self):        # AC15 — 옛 원격 ref · 새 main 에서 딴 같은 이름
+    def test_reused_name_old_remote_ref_is_not_merged(self):        # AC15 — 옛 원격 ref · 새 main 에서 딴 같은 이름 · 문서보다 먼저
         self.assertIsNone(rs.merged_by_tips(FakeGit(self.AHEAD_IN_MAIN), self.MERGES, "main", NEW, TIP, lambda _s: False))
-        self.assertIsNone(rs.merged_by_tips(FakeGit(self.AHEAD_IN_MAIN), self.MERGES, "main", NEW, TIP))
+
+    def test_ahead_local_nothing_to_age_test_counts(self):         # 견줄 문서 없음 — 8.6.0 처럼 센다(R14 미룸의 틈)
+        why = rs.merged_by_tips(FakeGit(self.AHEAD_IN_MAIN), self.MERGES, "main", NEW, TIP, lambda _s: None)
+        self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
+        self.assertIsNotNone(rs.merged_by_tips(FakeGit(self.AHEAD_IN_MAIN), self.MERGES, "main", NEW, TIP))
 
     def test_local_not_descendant_of_remote_is_not_merged(self):   # 로컬이 원격과 갈라짐 — 원격 끝을 세지 않는다
         self.assertIsNone(rs.merged_by_tips(FakeGit({(NEW, "main")}), self.MERGES, "main", NEW, TIP, lambda _s: True))
 
-    def test_remote_tip_no_local_with_start_evidence(self):         # 지워진 로컬 · 시작한 에픽(양의 짝)
+    def test_remote_tip_no_local_merge_after_doc(self):             # 새 클론 · 둘째 기계(로컬 없음) — 문서 뒤의 머지(양의 짝)
         why = rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP, lambda _s: True)
         self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
 
-    def test_remote_tip_no_local_without_start_evidence(self):      # AC15 — 만들기 전 브랜치에 남은 옛 원격 ref
-        self.assertIsNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP, lambda _s: False))
-        self.assertIsNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP))
+    def test_remote_tip_no_local_nothing_to_age_test_counts(self):  # 로컬 없음 · 견줄 문서 없음 — 8.6.0 처럼 센다
+        self.assertIsNotNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP, lambda _s: None))
+        self.assertIsNotNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP))
 
-    def test_epic_after_gets_the_merge_commit(self):
+    def test_remote_tip_no_local_merge_before_doc(self):            # AC15 — 만들기 전 브랜치에 남은 옛 원격 ref · 문서보다 먼저
+        self.assertIsNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP, lambda _s: False))
+
+    def test_age_ok_gets_the_merge_commit(self):
         seen = []
         rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP, lambda s: seen.append(s) or True)
         self.assertEqual(seen, [M])
