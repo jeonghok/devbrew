@@ -4,7 +4,7 @@
 #  · 게이트 렌더의 셋째 줄이 엔진 상수 WRITER_TRUST_NOTICE 이고, 둘째 줄은 그대로 재리뷰 줄이다(양의 짝).
 #    행 묶음은 공시 뒤에 온다 — 공시가 행으로 읽히지 않는다.
 #  · `gate` JSON 에 같은 글이 `writer_trust_notice` 로 있다.
-#  · spec-distill README `## 한계` 절에 같은 문장이 한 줄로 있다(엔진 상수에서 읽어 비교). 상태 폴더 링크(P21) ·
+#  · spec-distill README `## 한계` 절의 첫 줄이 같은 문장이다(엔진 상수에서 읽어 비교). 상태 폴더 링크(P21) ·
 #    원장 정리 뿌리(P14) 한계 불릿은 그 절에 있고 `### Principles 흡수` 에는 없다.
 #  · 인용마다 다는 「출처 미확인」 라벨은 엔진 출력 · 진입 skill 셋 어디에도 없다.
 #  · quality-gates README `## 한계` 에 「선택 N」 칸 한 줄이 있다.
@@ -70,10 +70,11 @@ done
 # ── spec-distill README `## 한계` ─────────────────────────────────────────────
 lim="$(section "$SD_README" '## 한계')"
 [ -n "$lim" ] && ok "spec-distill README 에 ## 한계 절이 있다" || no "spec-distill README 에 ## 한계 절이 없다"
-if [ -n "$NOTICE" ] && printf '%s\n' "$lim" | grep -qxF -- "$NOTICE"; then
-  ok "README ## 한계: 엔진 상수와 같은 문장이 한 줄로 있다"
+first="$(printf '%s\n' "$lim" | sed 1d | grep -m1 -v '^[[:space:]]*$')"
+if [ -n "$NOTICE" ] && [ "$first" = "$NOTICE" ]; then
+  ok "README ## 한계: 절의 첫 줄이 엔진 상수와 같은 문장이다"
 else
-  no "README ## 한계: 엔진 상수와 같은 문장 줄이 없다 — 두 글이 어긋났다"
+  no "README ## 한계: 절의 첫 줄이 엔진 상수와 다르다 — 두 글이 어긋났거나 공시가 첫 줄이 아니다 — 첫 줄: $first"
 fi
 order="$(grep -nE '^## (끄는 법|한계|Prerequisites)$' "$SD_README" | sed 's/^[0-9]*:## //' | tr '\n' '|')"
 assert_eq "$order" "끄는 법|한계|Prerequisites|" "README: ## 한계 는 ## 끄는 법 다음 · ## Prerequisites 앞이다"
