@@ -94,13 +94,21 @@ class SixConditions(unittest.TestCase):
         v, notes = rs.merged_by_pr([row(oid=OLD, merge=M_OLD, num="#1")], BR, None, None, "main", always)
         self.assertIsNone(v)
         self.assertEqual(notes, ["브랜치가 없다 — 같은 이름의 옛 PR #1 은 이 에픽의 PR 로 세지 않았다(이 에픽의 승인된 "
-                                 "설계문서나 계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다)"])
+                                 "설계문서나 계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다) — 지운 브랜치면 "
+                                 "`git branch feature/x %s` 로 되살리거나, 설계문서의 승인 줄 · 계획의 `**Spec:**` 를 "
+                                 "확인한다" % OLD])
+
+    def test_never_created_notice_quotes_unsafe_branch_name(self):
+        br = "fix/it's ; rm"
+        _v, notes = rs.merged_by_pr([row(branch=br, oid=OLD, merge=M_OLD)], br, None, None, "main", always)
+        self.assertIn("`git branch 'fix/it'\\''s ; rm' %s`" % OLD, notes[0])
 
     def test_never_created_branch_two_old_prs_is_not_uncountable(self):
         rows = [row(oid=OLD, merge=M_OLD, num="#3"), row(oid=TIP, merge=M, num="#9")]
         v, notes = rs.merged_by_pr(rows, BR, None, None, "main", always)
         self.assertIsNone(v)
         self.assertTrue(notes and notes[0].startswith("브랜치가 없다 — 같은 이름의 옛 PR #3 · #9 은"), notes)
+        self.assertIn("`git branch feature/x <headRefOid>`", notes[0])
 
     def test_never_started_but_tip_present_still_judged(self):    # 끝이 있으면 시작 흔적을 묻지 않는다
         v, _ = rs.merged_by_pr([row()], BR, TIP, None, "main", always, started=False)

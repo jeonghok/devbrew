@@ -403,6 +403,13 @@ def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_ow
     return None
 
 
+def _sh_word(text: str) -> str:
+    """셸에 그대로 붙여 넣을 낱말 — 안전한 글자뿐이면 그대로, 아니면 작은따옴표로 감싼다."""
+    if re.fullmatch(r"[A-Za-z0-9._/@+=:,-]+", text):
+        return text
+    return "'" + "'\\''".join(text.split("'")) + "'"
+
+
 def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable, started=False):
     """(판정 | None, 알림 줄, 고른 줄 | None). 후보는 브랜치 · 머지됨 · 교차 레포 아님 · 기본 브랜치 base 에 맞는 줄만이고
     끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다. 끝이 없으면 started(이 에픽이
@@ -417,9 +424,12 @@ def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, rea
         cands = [r for r in cands if r.get("headRefOid") == tip]
     else:
         if cands and not started:
+            old_oids = sorted({str(r.get("headRefOid")) for r in cands})
             notes.append("브랜치가 없다 — 같은 이름의 옛 PR %s 은 이 에픽의 PR 로 세지 않았다(이 에픽의 승인된 설계문서나 "
-                         "계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다)"
-                         % " · ".join(r.get("번호", "?") for r in cands))
+                         "계획이 기본 브랜치에 없어 아직 만들지 않은 브랜치로 본다) — 지운 브랜치면 `git branch %s %s` 로 "
+                         "되살리거나, 설계문서의 승인 줄 · 계획의 `**Spec:**` 를 확인한다"
+                         % (" · ".join(r.get("번호", "?") for r in cands), _sh_word(branch),
+                            old_oids[0] if len(old_oids) == 1 else "<headRefOid>"))
             return None, notes, None
         oids = sorted({r.get("headRefOid") for r in cands})
         if len(oids) > 1:
@@ -473,8 +483,8 @@ def read_pr_cache(git: Git, roadmap_rel: str):
     except (OSError, UnicodeDecodeError) as exc:
         return [], "기계 상태 파일을 읽지 못했다: %s (%s) — 파일 권한과 UTF-8 인코딩을 확인한다" % (path, type(exc).__name__)
     except MachineError as exc:  # 옛 판 줄(--reset) · 판 문장(업데이트 등)은 메시지 끝이 할 일이다
-        return [], "기계 상태를 읽지 못했다 — %s%s" % (
-            exc, "" if exc.action_in_message else " — 기계 상태 파일에서 그 자리를 고친다")
+        return [], "기계 상태를 읽지 못했다: %s — %s%s" % (
+            path, exc, "" if exc.action_in_message else " — 기계 상태 파일에서 그 자리를 고친다")
 
 
 def extra_branches(git: Git, main: str, rel: str, blocks: list):
