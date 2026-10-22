@@ -113,13 +113,28 @@ Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(�
 - `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
 - `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
 - `default_rc=` 가 0 이 아니면(3 기본 브랜치 없음 · 5 원격과 다름 · 그 밖 모두) 그 줄(`[spec-distill] …`, 없으면 종료 코드)을 보이고, `claim_rc=0` 이면 4 끝의 표지 풀기 펜스(`conductor_ledger.py" release`)를 돌린 뒤 멈춘다. rc 0 의 「대조하지 못했다」 줄은 보이고 간다.
-- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다.
+- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다 — 단 `claim_rc=3` 이고 출력에 `옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다(takeover 펜스의 출력에 그 문구가 있어도 같다).
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
 cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" takeover --roadmap "<로드맵>" --session "$sid"
 ```
+
+옛 PR 캐시 다시 채우기 — 그 출력이 이름 붙인 `pr-refresh … --reset` 을 이 로드맵 · 세션으로 돌리고, 0 이면 표지를 풀었다 다시 잡는다(새로 잡아야 이 세션의 옛 시작 승인이 지워진다).
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" pr-refresh --roadmap "<로드맵>" --session "$sid" --reset; reset_rc=$?
+echo "reset_rc=$reset_rc"
+claim_rc=
+if [ "$reset_rc" = 0 ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
+echo "claim_rc=${claim_rc:-없음}"
+```
+
+- `reset_rc=` 가 0 이 아니면 그 사유(`[spec-distill] …`, 없으면 종료 코드)를 보이고 멈춘다.
+- `claim_rc=` 가 0 이면 4 로 간다. 5 면 그 사이 다른 세션이 표지를 잡았다 — 위 5 와 같이 한다. 그 밖이면 사유를 보이고 멈춘다.
 
 ### 4. 시작 승인
 

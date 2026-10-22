@@ -1139,6 +1139,47 @@ class PrRefresh(Repo):
         self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()],
                          [("feature/a1", "#7"), ("feature/a1", "#8"), ("feature/a1", "#9"), ("feature/a2", "-")])
 
+    def test_skill_reset_branch_drops_stale_approval_and_unblocks_approval(self):
+        """지휘자 3 의 「옛 PR 캐시 다시 채우기」: claim rc 3(표지는 잡음) → pr-refresh --reset → release → claim rc 0.
+        표지를 넘겨받혀 남은 이 세션의 옛 시작 승인은 지워지고, approval · approve 는 옛 줄에 막히지 않는다."""
+        scale = "남은 에픽 2 · agent 약 6"
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
+        self.cli("takeover", "--roadmap", RM, "--session", OTHER)   # 이 세션의 승인 줄은 남는다
+        self.cli("release", "--roadmap", RM, "--session", OTHER)
+        self.write_old_row()
+        rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("옛 판이 쓴 PR 캐시 줄", out)
+        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
+        self.assertEqual(rc, 3, out)                                   # 다시 채우기 전에는 같은 벽
+        self.answers["feature/a1"] = self.THREE
+        self.assertEqual(self.refresh("--reset")[0], 0)
+        self.assertEqual(self.cli("release", "--roadmap", RM, "--session", SID)[0], 0)
+        rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual((rc, out.strip()), (0, "acquired"))
+        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("승인 필요 — 이 세션의 승인이 없다", out)
+        self.assertEqual(self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
+        self.assertEqual(self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
+
+    def test_reset_then_claim_without_release_keeps_stale_approval(self):
+        """양의 짝: release 없이 claim 만 다시 돌면(held) 넘겨받히기 전의 옛 시작 승인이 살아 「공시만」 이 된다."""
+        scale = "남은 에픽 2 · agent 약 6"
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)
+        self.cli("takeover", "--roadmap", RM, "--session", OTHER)
+        self.cli("release", "--roadmap", RM, "--session", OTHER)
+        self.write_old_row()
+        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID)[0], 3)
+        self.answers["feature/a1"] = self.THREE
+        self.assertEqual(self.refresh("--reset")[0], 0)
+        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID), (0, "held\n"))
+        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("공시만", out)
+
     def test_pr_of_another_head_name_fails_closed(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         self.answers["feature/a1"] = [gh_pr(7, "MERGED", OID1, False, MOID), gh_pr(5, "MERGED", OID2, False, MOID,
