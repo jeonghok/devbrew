@@ -119,7 +119,8 @@ class FinishingBlockScope(unittest.TestCase):
         self.assertEqual(unbound_per_fence("```bash\n%s\n```\n" % "\n".join(body)), [],
                          "판 확인 펜스(%d–%d행)가 앞 펜스의 변수를 쓴다" % (start, end))
         root = re.match(r'^python3 "\$(\w+)/scripts/check_deps\.py" superpowers --plugin-root "\$(\w+)"', body[-1])
-        self.assertIsNotNone(root, "판 확인 펜스의 끝 줄이 check_deps.py superpowers 호출이 아니다")
+        if root is None:
+            self.fail("판 확인 펜스의 끝 줄이 check_deps.py superpowers 호출이 아니다")
         self.assertEqual(root.group(1), root.group(2), "--plugin-root 가 그 펜스의 루트 변수가 아니다")
         self.assertTrue(any(ln.startswith('%s="${CLAUDE_PLUGIN_ROOT}"' % root.group(1)) for ln in body),
                         "판 확인 펜스가 루트 변수를 자기 안에서 정의하지 않는다")
