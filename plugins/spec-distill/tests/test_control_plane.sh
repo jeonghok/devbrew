@@ -590,7 +590,7 @@ open(sys.argv[2], "w", encoding="utf-8").write(c.render_machine(sys.argv[3], d))
 }
 write_machine_fork_only
 out="$(show)"
-assert_contains "$out" "    PR: 없음(PR 캐시 — fork · 다른 base 로 연 PR 1개는 세지 않았다)" "fork 줄만 있으면 이 레포의 PR 은 없다고 밝힌다"
+assert_contains "$out" "    PR: 없음(PR 캐시 — fork PR 1개는 세지 않았다)" "fork 줄만 있으면 이 레포의 PR 은 없다고 밝힌다"
 assert_contains "$out" "R5 다섯 — 구현 끝" "fork 줄만 있으면 단계를 바꾸지 않는다"
 write_machine 닫힘 "$LEDGER"
 

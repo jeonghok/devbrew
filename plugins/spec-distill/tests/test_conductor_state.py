@@ -133,6 +133,23 @@ class PrCache(unittest.TestCase):
         data["PR"].append(pr_row(mergeCommit=OID_B, 상태="머지됨", **{"교차 레포": "예"}))
         self.assertEqual(cs.parse_machine(cs.render_machine(RM, data), RM)["PR"], data["PR"])
 
+    def test_no_pr_row_round_trip_and_shape(self):
+        data = cs.empty()
+        data["PR"].append(cs.no_pr_row("feature/z", "2026-10-22 09:00", SID))
+        text = cs.render_machine(RM, data)
+        self.assertIn("- feature/z · - · PR 0개 · 2026-10-22 09:00 · - · - · - · - · %s" % SID, text)
+        self.assertEqual(cs.parse_machine(text, RM)["PR"], data["PR"])
+        for over in ({"상태": "열림"}, {"headRefOid": OID_A}, {"교차 레포": "아니오"}, {"baseRefName": "trunk"},
+                     {"mergeCommit": OID_B}):
+            bad = cs.empty()
+            bad["PR"].append(dict(cs.no_pr_row("feature/z", "2026-10-22 09:00", SID), **over))
+            with self.assertRaises(cs.MachineError, msg=over):
+                cs.render_machine(RM, bad)
+        bad = cs.empty()
+        bad["PR"].append(pr_row(상태="PR 0개"))
+        with self.assertRaises(cs.MachineError):
+            cs.render_machine(RM, bad)
+
 
 class WriterStamp(unittest.TestCase):
     """쓴 판(R8 계획 2 Task 3 · AC21) — 머리말에 쓴 판을 찍고, 더 새 판이 쓴 파일은 읽지 않고 멈춘다."""

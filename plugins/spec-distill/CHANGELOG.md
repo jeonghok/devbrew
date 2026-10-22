@@ -15,6 +15,9 @@
 - squash · rebase 머지도 자동으로 판정한다 — PR 캐시의 여섯 조건(브랜치 · 머지됨 · 같은 레포 · 기본 브랜치 base · `headRefOid` 가 브랜치 끝 · `mergeCommit` 이 기본 브랜치에서 닿음)이 모두 맞을 때만 「머지됨」이다. 캐시에 그 브랜치 줄이 없으면 머지 커밋 · `origin` 소유자의 머지 메시지 · 결정 기록의 머지 줄로 판정한다(남의 fork 의 머지 메시지는 세지 않는다).
 - 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 지휘자가 캐시를 새로 채우면 바로 새 판정을 낸다.
 - 옛 판이 쓴 4칸 PR 캐시 줄은 읽지 않고 멈춘다 — 갱신 뒤 지휘자가 `ledger pr-refresh --roadmap <로드맵> --session <세션> --reset` 을 한 번 돈다.
+- `ledger pr-refresh` 는 PR 이 하나도 없는 브랜치에 「PR 0개」 줄(확인한 때)을 남긴다 — 그 브랜치는 「PR 상태 미확인」을 보이지 않는다. `--reset` 은 끝난 에픽의 줄도 다시 채운다(squash 머지된 에픽이 머지됨에서 빠지지 않는다).
+- PR 이 「없음」이면 세지 않은 PR 을 fork PR 수와 base 이름마다의 PR 수로 나눠 보인다(다른 브랜치 위에 쌓은 PR 이 보인다). 머지된 에픽의 PR 줄은 머지된 PR 을 먼저 고른다. 상태줄의 PR 캐시 조각은 고른 로드맵 가운데 기계 상태를 못 읽은 것이 있으면 「(일부 읽기 불가)」를 붙인다.
+- 기계 상태의 판 문장은 끝에 할 일 하나를 적는다(플러그인을 다시 설치 · 업데이트 · 머리말의 writer 줄 확인). writer 가 spec-distill 이 아닌 기계 상태는 읽지 않고 멈춘다.
 - superpowers 가 없으면 지휘자와 손으로 따르는 지휘 절차가 진입에서 멈춘다(인터뷰는 그대로 brief 까지 만들고 알린 뒤 멈춘다). quality-gates 가 없으면 지휘 순환 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
 - README Prerequisites 가 `dependencies.md` 를 가리키고, gh 를 필수로, 지원 범위를 「`origin` 이 GitHub 인 레포」로 적는다.
 

@@ -669,7 +669,21 @@ class PrCache(unittest.TestCase):
     def test_only_foreign_rows_mean_no_own_pr(self):
         b = self.overlaid([pr_row("#99", "열림", cross="예"), pr_row("#50", "열림", base="dev")])
         self.assertEqual(b["stage"], "구현 끝")
-        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — fork · 다른 base 로 연 PR 2개는 세지 않았다)")
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — fork PR 1개 · base dev 로 연 PR 1개는 세지 않았다)")
+
+    def test_stacked_prs_are_counted_by_base_name(self):
+        b = self.overlaid([pr_row("#20", "열림", base="feature/a"), pr_row("#21", "닫힘", base="feature/a"),
+                           pr_row("#22", "열림", base="feature/b"), pr_row("#99", "열림", cross="예"),
+                           pr_row("#98", "닫힘", cross="예", base="dev")])
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — fork PR 2개 · base feature/a 로 연 PR 2개 · "
+                                              "base feature/b 로 연 PR 1개는 세지 않았다)")
+
+    def test_no_pr_marker_states_when_it_was_checked(self):
+        b = self.overlaid([cs.no_pr_row("feature/a", "2026-10-22 09:00", "session-aaaa1111")])
+        self.assertEqual(b["stage"], "구현 끝")
+        self.assertEqual(cp.pr_text(b["pr"]), "없음(PR 캐시 — 확인함 · PR 0개 · 2026-10-22 09:00)")
+        b = self.overlaid([cs.no_pr_row("feature/a", "2026-10-22 09:00", "session-aaaa1111")], default_short=None)
+        self.assertEqual(b["pr"]["state"], "없음")
 
     def test_unknown_default_branch_does_not_guess(self):
         b = self.overlaid([pr_row("#12", "열림")], default_short=None)
@@ -700,6 +714,13 @@ class PrCache(unittest.TestCase):
         self.assertEqual(cp.pr_cache_segment([(RM, bad)], now), "PR 캐시 나이 모름(확인한 때를 읽지 못했다)")
         future = {"machine": {"PR": [pr_row("#1", "열림", when="2026-10-18 10:00")]}}
         self.assertEqual(cp.pr_cache_segment([(RM, future)], now), "PR 캐시 0시간 전")
+        broken = {"machine": None, "machine_error": "깨짐"}
+        self.assertEqual(cp.pr_cache_segment([(RM, with_rows), ("other/roadmap.md", broken)], now),
+                         "PR 캐시 2시간 전(일부 읽기 불가)")
+        self.assertEqual(cp.pr_cache_segment([(RM, broken), ("other/roadmap.md", bad)], now),
+                         "PR 캐시 나이 모름(확인한 때를 읽지 못했다)(일부 읽기 불가)")
+        self.assertEqual(cp.pr_cache_segment([(RM, with_rows), ("other/roadmap.md", {"machine": None})], now),
+                         "PR 캐시 2시간 전")
 
     def test_statusline_puts_the_segment_after_fetch_time(self):
         line = cp.statusline_text([(RM, report(BASE, 1))], IV, 5, None, "main", "PR 캐시 3시간 전")

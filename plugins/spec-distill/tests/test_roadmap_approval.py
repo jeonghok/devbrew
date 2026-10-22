@@ -162,6 +162,11 @@ class MergedPrs(unittest.TestCase):
         self.assertEqual(got[1][0], "feature/b")
         self.assertEqual(got[1][1]["state"], "알 수 없음")
 
+    def test_merged_row_wins_over_a_newer_open_row(self):
+        rows = [self.row("feature/a", "#9", "열림"), self.row("feature/a", "#7", "머지됨"), self.row("feature/a", "#5", "닫힘")]
+        got = cp.merged_prs(self.b(), rows, "main")
+        self.assertEqual(got[0], ("feature/a", {"number": "#7", "state": "머지됨", "source": "PR 캐시"}))
+
     def test_finished_epic_without_rows_names_the_refill_command(self):
         got = cp.merged_prs(self.b(), [], "main")
         self.assertEqual([p["state"] for _b, p in got], ["알 수 없음", "알 수 없음"])

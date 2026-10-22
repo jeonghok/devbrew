@@ -221,7 +221,7 @@ PR_STAMP_FORMAT = "%Y-%m-%d %H:%M"
 
 def pr_cache_segment(items, now=None) -> str:
     """상태줄의 PR 캐시 조각 — 덧씌운 기계 상태의 PR 줄 가운데 가장 최근 「확인한 때」의 나이. 네트워크를 쓰지 않는다."""
-    stamps, rows, unread = [], 0, False
+    stamps, rows, unread = [], 0, False  # unread: 고른 로드맵 가운데 기계 상태를 못 읽은 것이 있다
     for _p, r in items:
         machine = r.get("machine")
         if machine is None:
@@ -233,11 +233,12 @@ def pr_cache_segment(items, now=None) -> str:
                 stamps.append(datetime.datetime.strptime(str(row.get("확인한 때")), PR_STAMP_FORMAT))
             except ValueError:
                 continue
+    part = "(일부 읽기 불가)" if unread else ""
     if stamps:
         now = now or datetime.datetime.now()
-        return "PR 캐시 %d시간 전" % max(0, int((now - max(stamps)).total_seconds() // 3600))
+        return "PR 캐시 %d시간 전%s" % (max(0, int((now - max(stamps)).total_seconds() // 3600)), part)
     if rows:
-        return "PR 캐시 나이 모름(확인한 때를 읽지 못했다)"
+        return "PR 캐시 나이 모름(확인한 때를 읽지 못했다)%s" % part
     return "PR 캐시 읽기 불가" if unread else "PR 캐시 없음"
 
 
@@ -921,25 +922,40 @@ PR_MISSING_DONE = ("PR 캐시에 없다 — 끝난 에픽의 줄은 지휘자가
 PR_NO_DEFAULT = "기본 브랜치를 몰라 PR 캐시에서 이 레포의 PR 을 고르지 못했다"
 
 
-def _pr_order(row: dict):
-    """열림이 먼저, 그다음 번호가 큰(새) PR."""
+def _pr_order(row: dict, first: str = "열림"):
+    """first 상태가 먼저, 그다음 번호가 큰(새) PR."""
     digits = str(row.get("번호", "")).lstrip("#")
-    return row.get("상태") == "열림", int(digits) if digits.isdigit() else -1
+    return row.get("상태") == first, int(digits) if digits.isdigit() else -1
 
 
-def pr_fact(rows: list, branch: str, default_short, missing: str) -> dict:
+def _not_counted(prs: list) -> str:
+    """고르지 않은 PR 의 사유 — fork PR 수와 다른 base PR 수(base 이름마다)."""
+    fork = sum(1 for r in prs if r.get("교차 레포") != "아니오")
+    bases = {}
+    for r in prs:
+        if r.get("교차 레포") == "아니오":
+            bases[r.get("baseRefName")] = bases.get(r.get("baseRefName"), 0) + 1
+    parts = (["fork PR %d개" % fork] if fork else []) + [
+        "base %s 로 연 PR %d개" % (base, n) for base, n in sorted(bases.items(), key=lambda kv: str(kv[0]))]
+    return "PR 캐시 — %s는 세지 않았다" % " · ".join(parts)
+
+
+def pr_fact(rows: list, branch: str, default_short, missing: str, first: str = "열림") -> dict:
     """브랜치 하나의 PR 사실 — PR 캐시 줄 가운데 이 레포에서(교차 레포 아니오) 기본 브랜치로(baseRefName) 연 PR 만
-    고르고, 열림이 먼저 · 그다음 새 PR 이다. 캐시의 줄 순서는 고르기를 바꾸지 않는다."""
+    고르고, first 상태(기본 열림)가 먼저 · 그다음 새 PR 이다. 캐시의 줄 순서는 고르기를 바꾸지 않는다.
+    「PR 0개」 줄만 있으면 PR 이 없다고 확인한 때를 밝힌다."""
     mine = [r for r in rows if r.get("브랜치") == branch]
     if not mine:
         return _pr_unknown(missing)
+    prs = [r for r in mine if r.get("번호") != cs.NO_PR]
+    if not prs:
+        return {"number": None, "state": "없음", "source": "PR 캐시 — 확인함 · PR 0개 · %s" % mine[0].get("확인한 때")}
     if not default_short:
         return _pr_unknown(PR_NO_DEFAULT)
-    own = [r for r in mine if r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
+    own = [r for r in prs if r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
     if not own:
-        return {"number": None, "state": "없음",
-                "source": "PR 캐시 — fork · 다른 base 로 연 PR %d개는 세지 않았다" % len(mine)}
-    best = max(own, key=_pr_order)
+        return {"number": None, "state": "없음", "source": _not_counted(prs)}
+    best = max(own, key=lambda r: _pr_order(r, first))
     return {"number": best["번호"], "state": best["상태"], "source": "PR 캐시"}
 
 
@@ -975,9 +991,9 @@ def _rulings(b: dict, paths: list, read, deadline) -> None:
 
 
 def merged_prs(b: dict, rows: list, default_short) -> list:
-    """머지된 에픽의 브랜치마다 PR — PR 캐시만 읽는다. 끝난 에픽의 줄은 `--reset` 뒤 다시 채워지지 않으므로 없으면
-    그 에픽을 채우는 명령을 밝힌다. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
-    return [(s["branch"], pr_fact(rows, s["branch"], default_short, PR_MISSING_DONE % b.get("id")))
+    """머지된 에픽의 브랜치마다 PR — PR 캐시만 읽고 머지된 PR 이 먼저다. 평소 pr-refresh 는 끝난 에픽의 줄을 다시
+    채우지 않으므로 없으면 그 에픽을 채우는 명령을 밝힌다. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
+    return [(s["branch"], pr_fact(rows, s["branch"], default_short, PR_MISSING_DONE % b.get("id"), first="머지됨"))
             for s in b.get("branch_states") or []]
 
 

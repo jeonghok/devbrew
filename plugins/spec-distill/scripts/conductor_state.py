@@ -52,6 +52,9 @@ PR_NUMBER_RE = re.compile(r"#\d+")
 PR_CROSS = ("예", "아니오")
 OID_RE = re.compile(r"[0-9a-f]{40}")
 OLD_PR_CELLS = 4
+NO_PR = "-"  # PR 절의 「확인함 · PR 0개」 줄 — 번호 칸이 `-` 이고 상태 칸이 NO_PR_STATE, 확인한 때 · 쓴 세션 밖의 칸은 모두 `-`
+NO_PR_STATE = "PR 0개"
+NO_PR_BLANK = ("headRefOid", "교차 레포", "baseRefName", "mergeCommit")
 SEP = " · "
 
 
@@ -129,8 +132,19 @@ def empty() -> dict:
     return dict((name, []) for name, _cols in SECTIONS)
 
 
+def no_pr_row(branch: str, when: str, session: str) -> dict:
+    """PR 이 하나도 없다고 확인한 브랜치의 PR 절 줄."""
+    row = {"브랜치": branch, "번호": NO_PR, "상태": NO_PR_STATE, "확인한 때": when, "쓴 세션": session}
+    row.update((c, "-") for c in NO_PR_BLANK)
+    return row
+
+
 def _check_row(section: str, row: dict, where: str):
-    if section == "PR":
+    if section == "PR" and row["번호"] == NO_PR:
+        if row["상태"] != NO_PR_STATE or any(row[c] != "-" for c in NO_PR_BLANK):
+            raise MachineError("%s: 번호가 `-` 인 PR 줄은 상태가 %s 이고 %s 칸이 `-` 다: %r"
+                               % (where, NO_PR_STATE, " · ".join(NO_PR_BLANK), row))
+    elif section == "PR":
         if not PR_NUMBER_RE.fullmatch(row["번호"]):
             raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
         if row["상태"] not in PR_STATES:

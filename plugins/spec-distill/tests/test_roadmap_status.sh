@@ -1532,6 +1532,14 @@ assert_eq "$(stage "$T/rm30.json" G30)" "준비" "캐시 없음: 남의 owner �
 assert_contains "$(notes "$T/rm30.json" G30)" "PR 상태 미확인 — 지휘자를 돌려라(feature/g30)" "캐시 없음: 「PR 상태 미확인」"
 assert_eq "$(stage "$T/rm30.json" H30)" "머지됨" "캐시 없음 양의 짝: 이 레포 owner 머지 메시지(o/feature/h30)는 센다"
 assert_eq "$rc" "1" "PR 캐시 로드맵: 경고(받기 전 · 되돌림 · 머지 줄)만 있으면 rc 1"
+# 「PR 0개」 줄(지휘자가 PR 이 없다고 확인함) — 미확인을 달지 않고, 로컬 머지 판정은 그대로
+{ cat "$T/rows30"; printf 'feature/g30|-|PR 0개|-|-|-|-\nfeature/h30|-|PR 0개|-|-|-|-\n'; } > "$T/rows30m"
+write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30m"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30m.json")
+assert_not_contains "$(notes "$T/rm30m.json" G30)" "PR 상태 미확인" "「PR 0개」 줄이 있는 브랜치에는 「PR 상태 미확인」 을 달지 않는다"
+assert_eq "$(stage "$T/rm30m.json" H30)" "머지됨" "「PR 0개」 줄이 있어도 이 레포 owner 머지 메시지(로컬 머지)는 센다"
+assert_eq "$(stage "$T/rm30m.json" G30)" "준비" "「PR 0개」 줄은 머지됨을 만들지 않는다"
+write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30"
 # 변이 — 문면 길의 owner 비교를 지우면 G30 이 머지됨
 sed 's/m and m.group(1).casefold() == origin_owner.casefold() and m.group(2) == branch:/m and m.group(2) == branch:/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(owner 비교)" || ok "변이 적용됨(owner 비교)"

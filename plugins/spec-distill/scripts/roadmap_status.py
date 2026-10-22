@@ -530,11 +530,14 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             roadmap_rel=None, pr_rows=None, pr_reason=None, default_short=None):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록.
     roadmap_rel 을 주면 블록에 적힌 브랜치가 모두 머지된 에픽에서 다른 브랜치의 로드맵 사본이 더한 브랜치도 센다.
-    머지됨은 브랜치마다 — PR 캐시(pr_rows)에 그 브랜치의 줄이 하나라도 있으면 merged_by_pr 만, 없으면 merged_by_git ·
-    결정 기록의 머지 줄로 판정하고 블록에 「PR 상태 미확인」을 단다(pr_reason 은 캐시를 못 읽은 사유)."""
+    머지됨은 브랜치마다 — PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_pr 만, 없으면 merged_by_git ·
+    결정 기록의 머지 줄로 판정하고, 「PR 0개」 줄(번호 `-` — 지휘자가 PR 이 없다고 확인함)도 없으면 블록에 「PR 상태
+    미확인」을 단다(pr_reason 은 캐시를 못 읽은 사유)."""
     merges = git.first_parent_merges(main) if main else []
     extra_cache = []
-    cached = {r.get("브랜치") for r in pr_rows or []}
+    no_pr = {r.get("브랜치") for r in pr_rows or [] if r.get("번호") == "-"}  # conductor_state.NO_PR
+    pr_rows = [r for r in pr_rows or [] if r.get("번호") != "-"]
+    cached = {r.get("브랜치") for r in pr_rows}
     owner_memo = []
 
     def owner():
@@ -578,7 +581,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
 
     def unchecked_note(branches, block):
         """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 그 사유는 경고로."""
-        unchecked = [br for br in branches if br not in cached]
+        unchecked = [br for br in branches if br not in cached and br not in no_pr]
         if not unchecked:
             return
         why = ["머지 메시지는 세지 않았다 — %s" % owner()[1]] if owner()[1] else []

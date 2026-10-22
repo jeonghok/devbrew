@@ -929,7 +929,8 @@ def _cache_row(br: str, it: dict, when: str, session: str) -> dict:
 
 
 def c_pr_refresh(root, a) -> int:
-    """대상 블록(없으면 끝나지 않은 블록 전부)의 브랜치마다 그 head 이름의 PR 을 모두 받아 그 브랜치의 PR 줄을 통째로 바꾼다."""
+    """대상 블록(없으면 끝나지 않은 블록 전부, `--reset` 이면 끝난 블록까지)의 브랜치마다 그 head 이름의 PR 을 모두 받아
+    그 브랜치의 PR 줄을 통째로 바꾼다. PR 이 없는 브랜치는 「PR 0개」 줄 하나로 확인한 때를 남긴다."""
     if a.reset and a.epic:
         raise Fail(2, "`--reset` 은 PR 절 전체를 다시 채운다 — `--epic` 을 빼고 다시 돌려라")
     for line in gh_repo.env_notices():
@@ -944,6 +945,8 @@ def c_pr_refresh(root, a) -> int:
         print("[spec-distill] " + w)
     if a.epic:
         blocks = [_block(report, a.epic)]
+    elif a.reset:
+        blocks = list(report["blocks"])  # PR 절을 비웠으니 끝난 에픽의 줄도 다시 채운다 — 아니면 squash 머지가 머지됨에서 빠진다
     else:
         blocks = [b for b in report["blocks"] if b.get("stage") not in DONE]
     branches = []
@@ -960,13 +963,14 @@ def c_pr_refresh(root, a) -> int:
             raise Fail(3, str(exc))
         if hit:
             print("[spec-distill] %s 의 PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_REFRESH_LIMIT))
-        fresh[br] = [_cache_row(br, it, when, a.session) for it in items]
+        fresh[br] = [_cache_row(br, it, when, a.session) for it in items] or [cs.no_pr_row(br, when, a.session)]
 
     def change(d):
         kept = [r for r in d["PR"] if r["브랜치"] not in fresh]
         d["PR"] = kept + [r for br in branches for r in fresh[br]]
     update(root, a.roadmap, a.session, change, skip)
-    print("PR 캐시: 브랜치 %d개 · PR %d개를 %s 에 채웠다" % (len(branches), sum(len(v) for v in fresh.values()), when))
+    print("PR 캐시: 브랜치 %d개 · PR %d개를 %s 에 채웠다"
+          % (len(branches), sum(1 for v in fresh.values() for r in v if r["번호"] != cs.NO_PR), when))
     return 0
 
 

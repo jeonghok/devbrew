@@ -1047,8 +1047,22 @@ class PrRefresh(Repo):
         rc, out = self.refresh()
         self.assertEqual(rc, 0, out)
         self.assertEqual(sorted(c[1] for c in self.calls), ["feature/a1", "feature/a2"])
-        self.assertEqual([(r["브랜치"], r["번호"], r["상태"]) for r in self.rows()], [("feature/a2", "#4", "닫힘")])
+        self.assertEqual(sorted((r["브랜치"], r["번호"], r["상태"]) for r in self.rows()),
+                         [("feature/a1", "-", "PR 0개"), ("feature/a2", "#4", "닫힘")])
         self.assertIn("PR 캐시: 브랜치 2개 · PR 1개를", out)
+
+    def test_branch_without_pr_gets_a_checked_marker(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        rows = self.rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0], cs.no_pr_row("feature/a1", rows[0]["확인한 때"], SID))
+        self.assertRegex(rows[0]["확인한 때"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
+        self.assertIn("PR 캐시: 브랜치 1개 · PR 0개를", out)
+        self.answers["feature/a1"] = [gh_pr(9, "OPEN", OID3, False)]
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual([r["번호"] for r in self.rows()], ["#9"])
 
     def test_branch_rows_are_replaced_whole_and_other_branches_kept(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -1086,7 +1100,8 @@ class PrRefresh(Repo):
         rc, out = self.refresh("--reset")
         self.assertEqual(rc, 0, out)
         self.assertNotIn(old, path.read_text(encoding="utf-8"))
-        self.assertEqual([r["번호"] for r in self.rows()], ["#7", "#8", "#9"])
+        self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()],
+                         [("feature/a1", "#7"), ("feature/a1", "#8"), ("feature/a1", "#9"), ("feature/a2", "-")])
 
     def test_reset_with_epic_is_refused(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -1121,7 +1136,8 @@ class PrRefresh(Repo):
         self.assertEqual(rc, 0, out)
         rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
         self.assertEqual((rc, out.strip()), (0, "held"))
-        self.assertEqual([r["번호"] for r in self.rows()], ["#7", "#8", "#9"])
+        self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()],
+                         [("feature/a1", "#7"), ("feature/a1", "#8"), ("feature/a1", "#9"), ("feature/a2", "-")])
 
     def test_pr_of_another_head_name_fails_closed(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -1145,6 +1161,23 @@ class PrRefresh(Repo):
         self.assertEqual(rc, 0, out)
         self.assertEqual([c[1] for c in self.calls], ["feature/a3", "feature/a4", "feature/a4b"])
 
+    def test_reset_refills_finished_blocks_too(self):
+        from unittest import mock
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rep = {"blocks": [{"id": "A1", "kind": "bundle", "stage": "머지됨", "branches": ["feature/a1"]},
+                          {"id": "A2", "kind": "bundle", "stage": "끝남", "branches": ["feature/a2"]},
+                          {"id": "A3", "kind": "bundle", "stage": "구현 끝", "branches": ["feature/a3"]}]}
+        self.answers["feature/a1"] = [gh_pr(7, "MERGED", OID1, False, MOID)]
+        with mock.patch.object(L, "_status", return_value=rep):
+            rc, out = self.refresh()
+            self.assertEqual([c[1] for c in self.calls], ["feature/a3"])
+            self.calls.clear()
+            rc, out = self.refresh("--reset")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c[1] for c in self.calls], ["feature/a1", "feature/a2", "feature/a3"])
+        self.assertEqual([(r["브랜치"], r["번호"], r["상태"]) for r in self.rows()],
+                         [("feature/a1", "#7", "머지됨"), ("feature/a2", "-", "PR 0개"), ("feature/a3", "-", "PR 0개")])
+
     def test_branch_added_only_by_unmerged_roadmap_copy(self):
         sh(self.w, "checkout", "-q", "-b", "feature/a1-2")
         (self.w / RM).write_text(roadmap(BLOCK.replace("- 브랜치: feature/a1\n", "- 브랜치: feature/a1 · feature/a1-2\n")),
@@ -1158,7 +1191,7 @@ class PrRefresh(Repo):
         rc, out = self.refresh("--epic", "A1")
         self.assertEqual(rc, 0, out)
         self.assertEqual([c[1] for c in self.calls], ["feature/a1", "feature/a1-2"])
-        self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()], [("feature/a1-2", "#11")])
+        self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()], [("feature/a1", "-"), ("feature/a1-2", "#11")])
 
     def test_limit_reached_is_stated(self):
         from unittest import mock
