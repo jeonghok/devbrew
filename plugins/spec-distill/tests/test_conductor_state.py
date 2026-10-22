@@ -202,6 +202,36 @@ class WriterStamp(unittest.TestCase):
         with self.assertRaises(cs.MachineError):
             cs.render_machine(RM, sample())
 
+    def test_own_version_read_failure_stops_with_reinstall(self):
+        orig_file = cs.__file__
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "scripts").mkdir()
+            cs.__file__ = str(tmp / "scripts" / "conductor_state.py")
+            for content in (None, "{not json", '{"version": ""}', '{"version": "dev"}'):
+                meta = tmp / ".claude-plugin"
+                if content is not None:
+                    meta.mkdir(exist_ok=True)
+                    (meta / "plugin.json").write_text(content, encoding="utf-8")
+                with self.assertRaises(cs.MachineError) as cm:
+                    cs.render_machine(RM, sample())
+                self.assertTrue(str(cm.exception).endswith("— 플러그인을 다시 설치한다"), (content, str(cm.exception)))
+        finally:
+            cs.__file__ = orig_file
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_writer_name_must_be_spec_distill(self):
+        for writer in ("other-plugin 7.0.0", "spec-distillx 7.0.0", "7.0.0"):
+            text = self.with_writer(writer, "7.0.0")
+            cs.own_version = lambda: "7.0.0"
+            with self.assertRaises(cs.MachineError) as cm:
+                cs.parse_machine(text, RM)
+            self.assertTrue(str(cm.exception).endswith("머리말의 writer 줄을 확인한다"), (writer, str(cm.exception)))
+        text = self.with_writer("spec-distill dev", "7.0.0")
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(text, RM)
+        self.assertTrue(str(cm.exception).endswith("머리말의 writer 줄을 확인한다"), str(cm.exception))
+
     def test_version_triple(self):
         self.assertEqual(cs.version_triple("8.7.0"), (8, 7, 0))
         self.assertEqual(cs.version_triple("v7.3.1-rc1"), (7, 3, 1))

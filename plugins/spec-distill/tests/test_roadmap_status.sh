@@ -579,7 +579,9 @@ def reader_writes(mod, names):
         if m in closure or m in _IMPORT_SCANNED:
             continue
         closure.append(m)
-        for n in import_time_nodes(module(m)[0]):   # 가져올 때 도는 import 만 — 함수 안 import 는 그 함수를 따라갈 때 본다
+        # 가져올 때 도는 import 만 따라간다. 함수 안 import 는 따라가지 않는다 — 그렇게 가져온 이름을 부르면
+        # 「따라가지 못한 호출」로 잡히지만, 그 모듈의 가져올 때 도는 코드는 여기서 재지 않는다(행동 검사가 덮는다).
+        for n in import_time_nodes(module(m)[0]):
             if isinstance(n, ast.Import):
                 stack += [a.name.split(".")[0] for a in n.names if a.name.split(".")[0] in LOCAL]
             elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] in LOCAL:
