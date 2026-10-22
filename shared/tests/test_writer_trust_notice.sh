@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_state.py plugins/spec-distill/README.md plugins/quality-gates/README.md
+# guards: shared/docreview/scripts/docreview_state.py shared/tests/fixtures/docreview/cases.sh shared/tests/fixtures/docreview/design-sample.md plugins/spec-distill/README.md plugins/quality-gates/README.md plugins/spec-distill/skills/request-framing/* plugins/spec-distill/skills/reviewing-brief/* plugins/spec-distill/skills/spec-review/*
 # 쓰는 세션을 믿는 한계의 공시 — 리뷰 결과 머리 한 줄과 README 「한계」 절이 같은 문장이다.
 #  · 게이트 렌더의 셋째 줄이 엔진 상수 WRITER_TRUST_NOTICE 이고, 둘째 줄은 그대로 재리뷰 줄이다(양의 짝).
 #    행 묶음은 공시 뒤에 온다 — 공시가 행으로 읽히지 않는다.
@@ -9,6 +9,13 @@
 #  · 인용마다 다는 「출처 미확인」 라벨은 엔진 출력 · 진입 skill 셋 어디에도 없다.
 #  · quality-gates README `## 한계` 에 「선택 N」 칸 한 줄이 있다.
 set -u
+if [ "${1:-}" = "--emit-scanned" ]; then
+  cd "$(dirname "$0")/../.." || exit 1
+  printf '%s\n' shared/docreview/scripts/docreview_state.py shared/tests/fixtures/docreview/cases.sh \
+    shared/tests/fixtures/docreview/design-sample.md plugins/spec-distill/README.md plugins/quality-gates/README.md
+  git ls-files -- plugins/spec-distill/skills/request-framing plugins/spec-distill/skills/reviewing-brief plugins/spec-distill/skills/spec-review
+  exit 0
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
