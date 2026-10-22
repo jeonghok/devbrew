@@ -215,5 +215,52 @@ class MergedByGit(unittest.TestCase):
         self.assertIn("머지 커밋", why or "")
 
 
+class MergeCommitBeforePrCache(unittest.TestCase):
+    """PR 캐시에 줄이 있어도 끝이 기본 브랜치 머지 커밋의 부모면 머지됨 — 로컬 끝, 또는 로컬이 기본 브랜치에 다 든 원격 끝."""
+    MERGES = [(M, ["e" * 40, TIP], "Merge pull request #7 from o/feature/x")]
+
+    def test_local_tip_is_merge_parent(self):                      # 로컬 끝이 PR head 보다 앞이어도
+        why = rs.merged_by_tips(FakeGit(), [(M, ["e" * 40, NEW], "Merge branch 'feature/x'")], "main", NEW, TIP)
+        self.assertEqual(why, "기본 브랜치의 머지 커밋 %s" % M[:8])
+
+    def test_remote_tip_is_merge_parent_stale_local(self):         # 로컬이 원격의 조상(받기만 함) — 로컬은 기본 브랜치 안
+        why = rs.merged_by_tips(FakeGit({(OLD, "main"), (OLD, TIP)}), self.MERGES, "main", OLD, TIP)
+        self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
+
+    def test_remote_tip_is_merge_parent_local_fast_forwarded(self):  # 로컬을 기본 브랜치로 앞당김
+        why = rs.merged_by_tips(FakeGit({(NEW, "main")}), self.MERGES, "main", NEW, TIP)
+        self.assertEqual(why, "기본 브랜치의 머지 커밋 %s(원격 끝)" % M[:8])
+
+    def test_remote_tip_is_merge_parent_no_local(self):
+        self.assertIsNotNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", None, TIP))
+
+    def test_local_commits_outside_main_is_not_merged(self):       # AC15 — 머지 뒤 기본 브랜치 밖 커밋
+        self.assertIsNone(rs.merged_by_tips(FakeGit({(TIP, NEW)}), self.MERGES, "main", NEW, TIP))
+
+    def test_reused_name_tip_not_a_merge_parent(self):             # AC15 — 새 브랜치 끝은 옛 머지 커밋의 부모가 아니다
+        self.assertIsNone(rs.merged_by_tips(FakeGit(), self.MERGES, "main", NEW, None))
+
+    def test_tip_already_in_first_parent_is_not_merged(self):      # 끝이 머지 전에 이미 기본 브랜치에 있었다
+        self.assertIsNone(rs.merged_by_tips(FakeGit({(TIP, "e" * 40)}), self.MERGES, "main", TIP, None))
+
+
+class StaleLocalTip(unittest.TestCase):
+    """로컬 끝이 원격 끝의 조상이면 PR 의 headRefOid 를 원격 끝과 견준다(squash · rebase)."""
+
+    def test_stale_local_uses_remote_tip(self):
+        v, notes = rs.merged_by_pr([row(oid=TIP)], BR, OLD, TIP, "main", always, stale_local=True)
+        self.assertEqual(v, "머지됨")
+        self.assertIn("로컬 끝 %s 이 원격 끝 %s 보다 뒤라 원격 끝으로 판정" % (OLD[:8], TIP[:8]), notes)
+
+    def test_not_stale_local_ahead_is_not_merged(self):            # 짝: 로컬이 앞(기본 브랜치 밖 커밋)이면 로컬 끝
+        v, notes = rs.merged_by_pr([row(oid=TIP)], BR, NEW, TIP, "main", always, stale_local=False)
+        self.assertIsNone(v)
+        self.assertIn("로컬 끝 %s · 원격 끝 %s" % (NEW[:8], TIP[:8]), notes)
+
+    def test_stale_local_remote_ahead_of_pr_head_is_not_merged(self):  # 머지 뒤 원격에 커밋이 더 붙음
+        v, _ = rs.merged_by_pr([row(oid=OLD, merge=M_OLD)], BR, OLD, TIP, "main", always, stale_local=True)
+        self.assertIsNone(v)
+
+
 if __name__ == "__main__":
     unittest.main()

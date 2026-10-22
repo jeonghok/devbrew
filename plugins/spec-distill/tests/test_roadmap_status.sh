@@ -1612,6 +1612,47 @@ g checkout -q main; approved_spec docs/superpowers/specs/f32-design.md docs/rm32
 assert_eq "$(stage "$T/rm32b.json" F32)" "머지됨" "양의 짝: 같은 캐시 · 승인된 설계문서가 기본 브랜치에 있으면 지운 브랜치로 보고 끝 없이 판정"
 assert_contains "$(notes "$T/rm32b.json" F32)" "브랜치 끝 없이 판정 — 캐시의 headRefOid ${S30_TIP:0:8}" "양의 짝: 「브랜치 끝 없이 판정」 을 알린다"
 assert_not_contains "$(notes "$T/rm32b.json" F32)" "브랜치가 없다" "양의 짝: 옛 PR 알림이 없다"
+# 기본 브랜치 머지 커밋이 PR 캐시보다 먼저다 — `pr-refresh --reset` 이 끝난 에픽의 줄을 채워도 머지된 에픽은 머지됨 그대로.
+# L33 — 로컬 끝이 원격 끝보다 뒤(받기만 함) · 원격 끝이 PR 머지 커밋의 부모 · PR headRefOid 는 원격 끝
+g checkout -q -b feature/l33 main; commit_file src/l33.txt l "l33"; L33_OLD="$(g rev-parse HEAD)"; commit_file src/l33.txt l2 "l33 더"
+L33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/l33; pr_merge 51 feature/l33; L33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/l33 "$L33_OLD"
+# Q33 — squash 머지(머지 커밋 없음) · 로컬 끝이 원격 끝보다 뒤 · PR headRefOid 는 원격 끝
+g checkout -q -b feature/q33 main; commit_file src/q33.txt q "q33"; Q33_OLD="$(g rev-parse HEAD)"; commit_file src/q33.txt q2 "q33 더"
+Q33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/q33; sq feature/q33; Q33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/q33 "$Q33_OLD"
+# E33 — PR 은 squash 로 머지 · 로컬은 PR head 보다 앞이고 그 로컬 끝이 기본 브랜치 머지 커밋의 부모다
+g checkout -q -b feature/e33 main; commit_file src/e33.txt e "e33"; E33_PR="$(g rev-parse HEAD)"; g push -q origin feature/e33; sq feature/e33; E33_SQ="$(g rev-parse HEAD)"
+g checkout -q feature/e33; commit_file src/e33b.txt e2 "e33 더"; g checkout -q main; g merge -q --no-ff feature/e33 -m "Merge branch 'feature/e33'"; E33_MC="$(g rev-parse HEAD)"
+# V33 — 머지 뒤 로컬 브랜치를 기본 브랜치로 앞당김(로컬이 원격보다 앞이지만 기본 브랜치 안) · 원격 끝이 머지 커밋의 부모
+g checkout -q -b feature/v33 main; commit_file src/v33.txt v "v33"; V33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/v33; pr_merge 54 feature/v33; V33_MC="$(g rev-parse HEAD)"; g branch -q -f feature/v33 main
+# X33 — 짝: 원격 끝이 머지 커밋의 부모지만 로컬에 기본 브랜치 밖 커밋이 더 붙음 → 머지됨 아님
+g checkout -q -b feature/x33 main; commit_file src/x33.txt x "x33"; X33_TIP="$(g rev-parse HEAD)"; g push -q origin feature/x33; pr_merge 55 feature/x33; X33_MC="$(g rev-parse HEAD)"
+g checkout -q feature/x33; commit_file src/x33b.txt x2 "x33 더"; X33_LOCAL="$(g rev-parse HEAD)"; g checkout -q main; g push -q origin main; g fetch -q origin
+mkdir -p "$W/docs/rm33"
+for b in L33 Q33 E33 V33 X33; do bundle docs/rm33 "$b" "C1, S1"; done
+bundle docs/rm33 L33 "C1, D2, OQ1, RC1, ST1, «k1», K1, K2, S1, S2"
+{ roadmap_head
+  for b in L33 Q33 E33 V33 X33; do block "$b" "feature/$(printf '%s' "$b" | tr 'A-Z' 'a-z')" 없음 없음; done
+  block W33 feature/w33 "L33, Q33, E33, V33" 없음
+  roadmap_tail ""
+} > "$W/docs/rm33/roadmap.md"
+bundle docs/rm33 W33 "C1, S1"
+MD33="$W/.claude/spec-distill/conductor/rm33"; mkdir -p "$MD33"
+{ printf 'feature/l33|#51|머지됨|%s|아니오|main|%s\n' "$L33_TIP" "$L33_MC"
+  printf 'feature/q33|#52|머지됨|%s|아니오|main|%s\n' "$Q33_TIP" "$Q33_MC"
+  printf 'feature/e33|#53|머지됨|%s|아니오|main|%s\n' "$E33_PR" "$E33_SQ"
+  printf 'feature/v33|#54|머지됨|%s|아니오|main|%s\n' "$V33_TIP" "$V33_MC"
+  printf 'feature/x33|#55|머지됨|%s|아니오|main|%s\n' "$X33_TIP" "$X33_MC"
+} > "$T/rows33"
+write_machine "$MD33/machine.md" docs/rm33/roadmap.md "$T/rows33"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm33/roadmap.md > "$T/rm33.json")
+assert_eq "$(stage "$T/rm33.json" L33):$(reason "$T/rm33.json" L33)" "머지됨:기본 브랜치의 머지 커밋 ${L33_MC:0:8}(원격 끝)" "뒤처진 로컬: 원격 끝이 머지 커밋의 부모면 PR 캐시보다 먼저 머지됨"
+assert_eq "$(stage "$T/rm33.json" Q33)" "머지됨" "뒤처진 로컬 · squash: PR 의 headRefOid 를 원격 끝과 견준다"
+assert_contains "$(notes "$T/rm33.json" Q33)" "로컬 끝 ${Q33_OLD:0:8} 이 원격 끝 ${Q33_TIP:0:8} 보다 뒤라 원격 끝으로 판정" "뒤처진 로컬 · squash: 원격 끝으로 판정했다고 알린다"
+assert_eq "$(stage "$T/rm33.json" E33):$(reason "$T/rm33.json" E33)" "머지됨:기본 브랜치의 머지 커밋 ${E33_MC:0:8}" "로컬 끝이 PR head 보다 앞이어도 그 끝이 머지 커밋의 부모면 머지됨"
+assert_eq "$(stage "$T/rm33.json" V33):$(reason "$T/rm33.json" V33)" "머지됨:기본 브랜치의 머지 커밋 ${V33_MC:0:8}(원격 끝)" "로컬을 기본 브랜치로 앞당김: 원격 끝의 머지 커밋으로 머지됨"
+assert_eq "$(stage "$T/rm33.json" X33)" "설계 중" "AC15 짝: 원격 끝이 머지 커밋의 부모여도 로컬에 기본 브랜치 밖 커밋이 있으면 머지됨이 아니다"
+assert_contains "$(notes "$T/rm33.json" X33)" "로컬 끝 ${X33_LOCAL:0:8} · 원격 끝 ${X33_TIP:0:8}" "AC15 짝: 두 끝을 보인다"
+assert_eq "$(stage "$T/rm33.json" W33)" "준비" "머지된 에픽에 기대는 블록은 열린다(거짓 「의존 미완료」 없음)"
 # origin 소유자를 못 읽으면 문면 길을 세지 않고 사유를 싣는다
 (cd "$W" && FAKE_ORIGIN_URL= python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30-noowner.json")
 assert_eq "$(stage "$T/rm30-noowner.json" H30)" "준비" "origin 소유자를 못 읽으면 머지 메시지 길을 세지 않는다"

@@ -16,7 +16,9 @@
 읽기만 한다 — 파일을 쓰지 않고 네트워크에 나가지 않는다. git 은 `GIT_ALLOWED` 의 하위 명령만
 부르고 fetch 하지 않는다(지휘 절차가 계산 전에 fetch 한다) — 밖의 git 은 origin 소유자를 읽는
 `gh_repo.origin_slug` 의 `git remote get-url` 하나다. 머지됨은 기계 상태의 PR 캐시(지휘자가 채운다)로
-판정하고, 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의 머지 줄로 판정한다. 단계는 git 으로 알 수 있는 것까지다 —
+판정하되 브랜치 끝(로컬, 또는 로컬이 기본 브랜치에 다 들어 있을 때의 원격)이 기본 브랜치 머지 커밋의 부모면
+캐시보다 먼저 머지됨이다. 그 브랜치의 줄이 캐시에 없으면 머지 커밋 · 이 레포 소유자의 머지 메시지 · 결정 기록의
+머지 줄로 판정한다. 단계는 git 으로 알 수 있는 것까지다 —
 구현 중 · 구현 끝은 계획 파일과 설계문서의 구현 대조 절로 센다. PR 단계는 여기서 세지 않고
 control_plane 이 기계 상태의 PR 캐시로 덧씌운다.
 """
@@ -382,13 +384,35 @@ def names_branch(text: str, branch: str) -> bool:
     return False
 
 
-def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_owner):
-    """PR 캐시에 그 브랜치의 줄이 없을 때의 머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1).
-    머지 메시지 길은 `<owner>` 가 origin 소유자일 때만 센다 — origin_owner 가 None 이면 세지 않는다."""
+def _merge_commit_of(git: Git, merges: list, tip):
+    """기본 브랜치의 머지 커밋 가운데 둘째 부모가 tip 이고 tip 이 첫째 부모에 아직 없던 것, 아니면 None."""
     if tip:
         for sha, parents, _subj in merges:
             if len(parents) >= 2 and parents[1] == tip and not git.is_ancestor(tip, parents[0]):
-                return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+                return sha
+    return None
+
+
+def merged_by_tips(git: Git, merges: list, main: str, tip_local, tip_remote):
+    """PR 캐시에 줄이 있어도 먼저 보는 머지 커밋 근거 한 줄, 아니면 None. 로컬 끝이 기본 브랜치 머지 커밋의 둘째
+    부모거나, 원격 끝이 그렇고 로컬 끝이 없거나 기본 브랜치에 다 들어 있을 때다 — 로컬에만 붙은 후속 커밋이 기본
+    브랜치 밖에 있으면 원격 끝의 머지는 세지 않는다."""
+    sha = _merge_commit_of(git, merges, tip_local)
+    if sha:
+        return "기본 브랜치의 머지 커밋 %s" % sha[:8]
+    if tip_remote and tip_remote != tip_local and (not tip_local or git.is_ancestor(tip_local, main)):
+        sha = _merge_commit_of(git, merges, tip_remote)
+        if sha:
+            return "기본 브랜치의 머지 커밋 %s(원격 끝)" % sha[:8]
+    return None
+
+
+def merged_by_git(git: Git, merges: list, main: str, branch: str, tip, origin_owner):
+    """PR 캐시에 그 브랜치의 줄이 없을 때의 머지됨 근거 한 줄, 아니면 None. 조상 관계만으로는 머지됨이 아니다(D1.1).
+    머지 메시지 길은 `<owner>` 가 origin 소유자일 때만 센다 — origin_owner 가 None 이면 세지 않는다."""
+    sha = _merge_commit_of(git, merges, tip)
+    if sha:
+        return "기본 브랜치의 머지 커밋 %s" % sha[:8]
     if origin_owner is None:
         return None
     # 머지 메시지가 이 브랜치를 정확히 부른다 — 브랜치가 지워졌거나, 남은 브랜치 끝이 기본 브랜치에 다 들어가
@@ -410,16 +434,22 @@ def _sh_word(text: str) -> str:
     return "'" + "'\\''".join(text.split("'")) + "'"
 
 
-def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable, started=False):
+def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, reachable, started=False,
+              stale_local=False):
     """(판정 | None, 알림 줄, 고른 줄 | None). 후보는 브랜치 · 머지됨 · 교차 레포 아님 · 기본 브랜치 base 에 맞는 줄만이고
-    끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다. 끝이 없으면 started(이 에픽이
+    끝이 있으면 headRefOid 가 끝인 줄만이다 — 캐시의 줄 순서는 판정을 바꾸지 않는다. 끝은 로컬 끝이고, 로컬 끝이 원격 끝의
+    조상(stale_local — 받기만 하고 앞당기지 않은 로컬)이면 원격 끝이다. 끝이 없으면 started(이 에픽이
     시작된 흔적 — 지워진 브랜치)일 때만 끝 없이 판정하고, 아니면 아직 만들지 않은 브랜치로 보고 같은 이름의 옛 PR 을 세지 않는다."""
     notes = []
     cands = [r for r in rows if r.get("브랜치") == branch and r.get("상태") == "머지됨"
              and r.get("교차 레포") == "아니오" and r.get("baseRefName") == default_short]
     tip = tip_local or tip_remote
     if tip_local and tip_remote and tip_local != tip_remote:
-        notes.append("로컬 끝 %s · 원격 끝 %s" % (tip_local[:8], tip_remote[:8]))
+        if stale_local:
+            tip = tip_remote
+            notes.append("로컬 끝 %s 이 원격 끝 %s 보다 뒤라 원격 끝으로 판정" % (tip_local[:8], tip_remote[:8]))
+        else:
+            notes.append("로컬 끝 %s · 원격 끝 %s" % (tip_local[:8], tip_remote[:8]))
     if tip:
         cands = [r for r in cands if r.get("headRefOid") == tip]
     else:
@@ -453,12 +483,14 @@ def _judge_pr(rows: list, branch: str, tip_local, tip_remote, default_short, rea
     return PR_NOT_FETCHED, notes, known[0]
 
 
-def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: str, reachable, started=False):
+def merged_by_pr(rows: list, branch: str, tip_local, tip_remote, default_short: str, reachable, started=False,
+                 stale_local=False):
     """(판정, 알림 줄) — 판정 ∈ 「머지됨」 · 「머지됨(받기 전)」 · 「셀 수 없음」 · None. 여섯 조건: 브랜치 == branch ∧
-    상태 == 머지됨 ∧ 교차 레포 == 아니오 ∧ baseRefName == 기본 브랜치 ∧ headRefOid == 끝(로컬, 없으면 원격) ∧
-    mergeCommit 이 기본 ref 에서 닿는다. 끝이 없으면 started(지워진 브랜치)일 때만 다섯으로 판정하되 맞는 headRefOid 가
-    둘 이상이면 셀 수 없음 — started 가 아니면 판정 없음과 알림 한 줄."""
-    verdict, notes, _row = _judge_pr(rows, branch, tip_local, tip_remote, default_short, reachable, started)
+    상태 == 머지됨 ∧ 교차 레포 == 아니오 ∧ baseRefName == 기본 브랜치 ∧ headRefOid == 끝(로컬, 없으면 원격 — 로컬이
+    원격의 조상이면 원격) ∧ mergeCommit 이 기본 ref 에서 닿는다. 끝이 없으면 started(지워진 브랜치)일 때만 다섯으로
+    판정하되 맞는 headRefOid 가 둘 이상이면 셀 수 없음 — started 가 아니면 판정 없음과 알림 한 줄."""
+    verdict, notes, _row = _judge_pr(rows, branch, tip_local, tip_remote, default_short, reachable, started,
+                                     stale_local)
     return verdict, notes
 
 
@@ -549,7 +581,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             roadmap_rel=None, pr_rows=None, pr_reason=None, default_short=None):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록.
     roadmap_rel 을 주면 블록에 적힌 브랜치가 모두 머지된 에픽에서 다른 브랜치의 로드맵 사본이 더한 브랜치도 센다.
-    머지됨은 브랜치마다 — PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_pr 만, 없으면 merged_by_git ·
+    머지됨은 브랜치마다 — PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_tips(머지 커밋) 다음 merged_by_pr, 없으면 merged_by_git ·
     결정 기록의 머지 줄로 판정하고, 「PR 0개」 줄(번호 `-` — 지휘자가 PR 이 없다고 확인함)도 없으면 블록에 「PR 상태
     미확인」을 단다(pr_reason 은 캐시를 못 읽은 사유)."""
     merges = git.first_parent_merges(main) if main else []
@@ -591,9 +623,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         if br not in cached:
             st["merged"] = merged_by_git(git, merges, main, br, st["tip"], owner()[0])
             return st
+        st["merged"] = merged_by_tips(git, merges, main, local, remote)
+        if st["merged"]:
+            return st
         rows = [r for r in pr_rows if r.get("브랜치") == br]
+        stale = bool(local and remote and local != remote and git.is_ancestor(local, remote))
         verdict, notes, hit = _judge_pr(rows, br, local, remote, default_short, lambda c: git.is_ancestor(c, main),
-                                        started=extra or bool(local or remote) or started(block))
+                                        started=extra or bool(local or remote) or started(block), stale_local=stale)
         if verdict in (PR_NOT_FETCHED, PR_UNCOUNTABLE):
             line = "%s: %s" % (br, notes.pop())
             if verdict == PR_NOT_FETCHED:
