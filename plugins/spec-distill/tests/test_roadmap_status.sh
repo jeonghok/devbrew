@@ -571,6 +571,30 @@ def import_time_nodes(tree):
             yield from ast.walk(p)
 
 
+def bindings(tree, name):
+    """모듈 어디서든 name 을 묶는 자리 — 대입 · 증강 · 주석 대입 · for · with · := · 컴프리헨션의 대상, import 별칭,
+    def · class, except … as, match 의 이름. 함수 안의 바인딩도 센다(global 로 모듈 이름을 바꿀 수 있다 — 닫힌 쪽)."""
+    out = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store) and n.id == name:
+            out.append(n)
+        elif isinstance(n, ast.alias) and (n.asname or n.name.split(".")[0]) == name:
+            out.append(n)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler)) and n.name == name:
+            out.append(n)
+        elif type(n).__name__ in ("MatchAs", "MatchStar") and getattr(n, "name", None) == name:
+            out.append(n)
+    return out
+
+
+def str_constant_only(tree, name):
+    """name 의 바인딩이 모듈 최상위의 대상 하나짜리 `name = "<문자열>"` 하나뿐이다 — 다른 바인딩이 하나라도 있으면 거짓."""
+    found = bindings(tree, name)
+    return len(found) == 1 and any(
+        isinstance(s, ast.Assign) and len(s.targets) == 1 and s.targets[0] is found[0]
+        and isinstance(s.value, ast.Constant) and isinstance(s.value.value, str) for s in tree.body)
+
+
 def reader_writes(mod, names):
     """mod 의 names 와 그것이 부르는 함수 · 클래스(같은 모듈 · 가져온 로컬 모듈, 재귀), 그리고 mod 와 그 모듈이 가져오는
     로컬 모듈의 가져올 때 도는 노드에서 금지 호출과 따라가지 못한 호출을 찾는다."""
@@ -608,9 +632,8 @@ def reader_writes(mod, names):
         elif name in imported and imported[name][0] in LOCAL:
             todo.append(imported[name])
             continue
-        elif any(isinstance(s, ast.Assign) and isinstance(s.value, ast.Constant) and isinstance(s.value.value, str)
-                 and any(isinstance(t, ast.Name) and t.id == name for t in s.targets) for s in _t.body):
-            continue   # 모듈 최상위의 문자열 상수 — 부르는 것이 없다
+        elif str_constant_only(_t, name):
+            continue   # 모듈 최상위의 문자열 상수가 유일한 바인딩 — 부르는 것이 없다
         else:
             out.append("따라가지 못한 호출 %s.%s" % (m, name))
             continue
@@ -764,6 +787,13 @@ ctl_out="$(ctl_reader async conductor_state.py "$PM" 'async def _a():\n    pass\
 assert_contains "$ctl_out" "따라가지 못한 호출 _a(async)" "양성 대조: async 함수는 따라가지 못한 호출"
 ctl_out="$(ctl_reader const conductor_state.py 'RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"\n' 'RECORDED_MISSING = MARKER\n')"
 assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 가져온 이름이 문자열 상수가 아니면(다른 이름을 묶음) 따라가지 못한 호출"
+RMS='RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"\n'
+ctl_out="$(ctl_reader const2 conductor_state.py "$RMS" "${RMS}"'RECORDED_MISSING = os.remove\n')"
+assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름을 다시 묶으면(os.remove) 따라가지 못한 호출"
+ctl_out="$(ctl_reader const3 conductor_state.py "$RMS" "${RMS}"'from shutil import rmtree as RECORDED_MISSING\n')"
+assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름으로 import 하면 따라가지 못한 호출"
+ctl_out="$(ctl_reader const4 conductor_state.py "$RMS" "${RMS}"'for RECORDED_MISSING in (os.remove,):\n    pass\n')"
+assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 for 대상으로 다시 묶으면 따라가지 못한 호출"
 ctl_own symlink 'os.symlink("a", "b")' "금지 호출 os.symlink" "os 는 허용 목록 밖이면 잡는다(symlink)"
 ctl_own lambda '(lambda: 0)()' "따라가지 못한 호출 Lambda" "모양을 모르는 호출은 따라가지 못한 호출"
 ctl_own method '"".zfill(3)' "따라가지 못한 호출 .zfill" "목록 밖 메서드는 따라가지 못한 호출"
