@@ -282,4 +282,9 @@ BG="$T/brokengit"; mkdir -p "$BG/.git" "$BG/sub"
 run "$BG/sub" get interview_dir
 assert_eq "$RC" "3" "못 읽는 .git 아래 get: 기본값으로 조용히 넘어가지 않고 rc 3"
 
+run "$H" check-path specs_dir docs/superpowers/specs/x
+assert_eq "$RC" "2" "check-path: specs_dir 는 키가 아니다(사용법 오류 rc 2)"
+run "$H" check-path interview_dir docs/superpowers/interview/x
+assert_eq "$RC" "0" "check-path(양의 짝): interview_dir 는 그대로 통과"
+
 finish

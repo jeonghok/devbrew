@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
+from repo_defaults import SettingsError, resolve  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
     collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
@@ -101,9 +101,9 @@ class Repo:
     def exists(self, rel: str) -> bool:
         return os.path.exists(os.path.join(self.root, rel))
 
-    def specs_for(self, source: str, specs_dir=None) -> list:
-        """설계문서 폴더(로드맵 레포 설정, 없으면 기본값)의 `*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
-        d = (specs_dir or SPECS_DIR).rstrip("/")
+    def specs_for(self, source: str, specs_dir: str) -> list:
+        """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
+        d = specs_dir.rstrip("/")
         if d not in self._specs:
             found = []
             try:

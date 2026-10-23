@@ -139,7 +139,7 @@ def ensure_state_root(root: Path, cwd: str | None = None) -> list[str]:
     """상태 루트를 만들고 스스로를 무시하게 한다. 돌려주는 것은 알림 줄들이다.
 
     추적 검사(무시 탐침 · 추적 파일)는 cwd 가 아니라 공용 git 디렉토리의 부모(본 체크아웃)에서 돈다.
-    공용 git 디렉토리의 이름이 `.git` 이 아니면(bare) 상태 루트가 그 안이라 검사를 건너뛴다. git 레포가 아니어도 건너뛴다.
+    공용 git 디렉토리의 이름이 `.git` 이 아니거나 `.git` 이름의 bare 레포면 검사를 건너뛴다. git 레포가 아니어도 건너뛴다.
     무시되지 않거나 추적 파일이 있거나 검사가 실패하면 StateRootError — 그 메시지는 사유 줄 뒤에 알림 줄들을 붙인다.
     """
     root = Path(root)
@@ -171,11 +171,18 @@ def _check_state_root(root: Path, cwd: str) -> None:
     common = _common_dir(cwd)
     if common is None or common.name != ".git":
         return
+    env = dict((k, v) for k, v in os.environ.items() if k not in _GIT_ENV)
+    try:
+        bare = subprocess.run(["git", "--git-dir", str(common), "config", "--bool", "core.bare"],
+                              capture_output=True, text=True, timeout=10, check=False, env=env)
+    except (subprocess.TimeoutExpired, OSError):
+        bare = None
+    if bare is not None and bare.returncode == 0 and bare.stdout.strip() == "true":
+        return
     top = common.parent
     rel = os.path.relpath(os.path.abspath(str(root)), os.path.abspath(str(top)))
     if rel == ".." or rel.startswith(".." + os.sep) or os.path.isabs(rel):
         raise StateRootError("상태 폴더({0})가 본 체크아웃({1}) 밖이다 — cwd 를 그 레포 안으로 옮긴 뒤 다시 돈다".format(root, top))
-    env = dict((k, v) for k, v in os.environ.items() if k not in _GIT_ENV)
 
     def git(*args):
         try:

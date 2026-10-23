@@ -525,7 +525,7 @@ def main(argv=None) -> int:
     p_get.add_argument("--roadmap")
     p_get.add_argument("--root")
     p_chk = sub.add_parser("check-path")
-    p_chk.add_argument("key", choices=_FOLDER_KEYS)
+    p_chk.add_argument("key", choices=("roadmaps_dir", "interview_dir"))
     p_chk.add_argument("path")
     p_chk.add_argument("--root")
     p_def = sub.add_parser("default-branch")

@@ -40,7 +40,7 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SPECS_DIR, SettingsError, resolve  # noqa: E402
+from repo_defaults import SettingsError, resolve  # noqa: E402
 from repo_defaults import default_branch as _default_branch  # noqa: E402
 from conductor_state import MachineError, machine_path, parse_machine  # noqa: E402 — PR 캐시 읽기만
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
@@ -584,7 +584,7 @@ def extra_branches(git: Git, main: str, rel: str, blocks: list):
 class _GitTreeRepo:
     """check() 가 로드맵 · 다른 묶음의 설계문서를 읽는 자리 — 작업 트리가 아니라 한 커밋(기본 브랜치)의 트리에서."""
 
-    def __init__(self, git: Git, tree: str, specs_dir=None):
+    def __init__(self, git: Git, tree: str, specs_dir: str):
         self.git, self.tree, self.specs_dir = git, tree, specs_dir
         self._memo = {}
 
@@ -595,7 +595,7 @@ class _GitTreeRepo:
         return self.git.exists(self.tree, rel)
 
     def specs_for(self, source: str, specs_dir=None) -> list:
-        folder = specs_dir or self.specs_dir or SPECS_DIR
+        folder = specs_dir or self.specs_dir
         key = (source, folder)
         if key in self._memo:
             return self._memo[key]
