@@ -32,10 +32,10 @@ mk_state() {   # mk_state <doc> <profile>  → prints state dir (init 까지). �
 snap() { py docreview_anchor.py snapshot "$1" > "$2"; }         # snap <doc> <out.json>
 ledger_doc() { python3 "$FX/st_get.py" "$1/docreview-state.md" 'st["doc"]'; }   # ledger_doc <state-dir> → 원장의 문서
 put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원장의 문서 자리에 옮긴다(같은 파일이면 그대로). 공유 픽스처는 덮지 않는다
-  local L; L="$(ledger_doc "$1")" || return 1
+  local L; L="$(ledger_doc "$1")" || { no "[cases.sh] 원장의 문서를 읽지 못했다: $1" >&2; return 1; }
   [ "$2" -ef "$L" ] && return 0
   case "$L" in "$FX"/*) no "[cases.sh] 원장의 문서가 공유 픽스처다 — 덮지 않는다: $L" >&2; return 1 ;; esac
-  cp "$2" "$L"
+  cp "$2" "$L" || { no "[cases.sh] 문서 복사 실패: $2 → $L" >&2; return 1; }
 }
 put_snap() { put_doc "$1" "$(jget "$2" 'd["doc"]')"; }   # put_snap <state-dir> <snapshot.json> — 그 스냅숏을 뜬 문서를 원장의 문서 자리에. 부르는 줄은 `&&` 로 잇는다(거절이면 begin-round 를 돌리지 않는다)
 # put_snap 의 거절은 `no` 로 실패를 센다 — `$(...)` 안에서 부르면 그 수가 서브셸에서 사라진다. 그래서 `$(...)` 안에서 부르지 않는다.
@@ -52,6 +52,19 @@ case_put_snap_failure_counted() {   # 공유 픽스처가 원장의 문서인 �
   assert_eq "$a1" "1" "put_snap 계수: 부름 줄을 서브셸 밖에서 돌리면 거절이 실패로 정확히 1 센다"
   assert_eq "$a2" "0" "put_snap 계수 대조: 옛 꼴(\$(…) 안)에서는 그 실패가 세어지지 않는다"
   assert_eq "$r" "" "put_snap 계수: 거절이면 begin-round 를 돌리지 않는다"
+  rm -rf "$d"
+  # 원장을 못 읽는 실패 · 복사 실패도 같은 줄에서 정확히 1 센다 — 세지 않으면 `put_snap … && assert_eq …` 의 단언이 조용히 빠진다
+  d="$(mktemp -d -t docreview-XXXXXX)" || { no "put_snap 계수: 임시 폴더 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  b=$_ASSERT_FAIL; { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } >/dev/null 2>&1
+  a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a1 [$r]" "1 []" "put_snap 계수: 원장이 없어 원장의 문서를 못 읽으면 실패로 정확히 1 센다"
+  rm -rf "$d"
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "put_snap 계수: init 실패"; rm -rf "$d"; return; }
+  cp "$FX/design-sample.md" "$d/gone.md"; s="$d/s.json"; snap "$d/gone.md" "$s"; rm -f "$d/gone.md"
+  b=$_ASSERT_FAIL; { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } >/dev/null 2>&1
+  a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a1 [$r]" "1 []" "put_snap 계수: 문서 복사가 실패하면 실패로 정확히 1 센다"
   rm -rf "$d"
 }
 
