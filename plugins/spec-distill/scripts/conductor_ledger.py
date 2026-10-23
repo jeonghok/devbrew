@@ -11,7 +11,7 @@
   add  --roadmap R --session S --section 절 --cells "칸 · 칸 …"
   drop --roadmap R --session S --section 절 --where 칸=값
   approval | approve --roadmap R --session S --scale "규모"   시작 승인 공시 판단 · 기록
-  pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다
+  pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다(적은 번호는 따로 받는다)
   pr-record  --roadmap R --session S --epic E --pr <PR> [--drop]   대조한 에픽 PR 번호 줄과 PR 캐시 줄을 쓴다(--drop 은 지운다)
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
@@ -492,12 +492,25 @@ def _gh() -> str:
 PR_LIMIT = 20
 
 
-def _prs(root, b: dict):
-    """[(브랜치, [PR…], 한도에 닿았는가)]. 브랜치가 없으면 []. PR 본문(인계 절)이 필요해 gh_repo.gh_json 으로 묻는다."""
+def _epic_rows(root, roadmap: str) -> list:
+    """기계 상태의 `## 에픽 PR` 줄 — 옛 판의 PR 캐시 줄에 걸리지 않게 `## PR` 은 읽지 않는다."""
+    return load(root, roadmap, skip=("PR",))[cs.EPIC_PR]
+
+
+def _prs(root, b: dict, epic_rows: list):
+    """[(브랜치, [PR…], 한도에 닿았는가)]. 브랜치가 없으면 []. PR 본문(인계 절)이 필요해 gh_repo.gh_json 으로 묻는다.
+    번호를 적은 브랜치는 그 번호의 PR 하나만 번호로 묻는다 — 이름으로 먼저 잡히는 다른 PR 을 읽지 않는다."""
     _gh()
     out = []
-    for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
+    for br in _branches_of(b):
+        number = cs.recorded_number(epic_rows, b.get("id"), br)
         try:
+            if number is not None:
+                it = gh_repo.gh_json(str(root), ["pr", "view", number.lstrip("#"), "--json", "number,state,body"])
+                if not isinstance(it, dict):
+                    raise Fail(3, HANDOFF_STOP % ("gh pr view 출력 모양이 다르다(PR %s) — gh 판을 확인한다" % number))
+                out.append((br, [it], False))
+                continue
             items = gh_repo.gh_json(str(root), ["pr", "list", "--state", "all", "--head", br, "--json", "number,state,body",
                                                 "--limit", str(PR_LIMIT)])
         except gh_repo.GhStop as exc:
@@ -908,7 +921,7 @@ def c_live_agent(root, a) -> int:
 def c_pr_handoffs(root, a) -> int:
     _gh()  # gh 가 없으면 상태 계산보다 먼저 멈춘다
     b = _block(_status(root, a.roadmap), a.epic)
-    got = _prs(root, b)
+    got = _prs(root, b, _epic_rows(root, a.roadmap))
     if not got:
         print("%s 브랜치 없음" % a.epic)
     for br, items, hit in got:
@@ -945,16 +958,34 @@ def _cache_row(br: str, it: dict, when: str, session: str) -> dict:
             "baseRefName": str(it.get("baseRefName") or ""), "mergeCommit": str(oid or "-"), "쓴 세션": session}
 
 
+RECORD_MISMATCH = ("적은 PR #%d 이 %s 와 맞지 않는다(%s) — 이 에픽의 PR 이면 `ledger pr-record --roadmap %s --session %s "
+                   "--epic %s --pr <번호>` 로 다시 적고, 아니면 `ledger pr-record --roadmap %s --session %s --epic %s "
+                   "--pr %d --drop`")
+
+
+def _recorded_mismatch(br: str, n: int, it: dict) -> list:
+    """적은 번호로 받은 PR 이 그 브랜치와 어긋난 칸들(`<칸>: <기대 값> ≠ <gh 값>`). 맞으면 []."""
+    bad = []
+    if it.get("number") != n:
+        bad.append("number: %d ≠ %s" % (n, it.get("number")))
+    if it.get("headRefName") != br:
+        bad.append("headRefName: %s ≠ %s" % (br, it.get("headRefName")))
+    if it.get("isCrossRepository") is True:
+        bad.append("isCrossRepository: false ≠ true")
+    return bad
+
+
 def c_pr_refresh(root, a) -> int:
     """대상 블록(없으면 끝나지 않은 블록 전부, `--reset` 이면 끝난 블록까지)의 브랜치마다 그 head 이름의 PR 을 모두 받아
-    그 브랜치의 PR 줄을 통째로 바꾼다. PR 이 없는 브랜치는 「PR 0개」 줄 하나로 확인한 때를 남긴다."""
+    그 브랜치의 PR 줄을 통째로 바꾼다. PR 이 없는 브랜치는 「PR 0개」 줄 하나로 확인한 때를 남긴다. 번호를 적은 브랜치는
+    그 번호를 목록에 없으면 따로 받아 줄을 두고, 그 PR 이 브랜치와 어긋나면 그 줄만 빼고 경고한다(rc 0)."""
     if a.reset and a.epic:
         raise Fail(2, "`--reset` 은 PR 절 전체를 다시 채운다 — `--epic` 을 빼고 다시 돌려라")
     for line in gh_repo.env_notices():
         print("[spec-distill] " + line)
     need_holder(root, a.roadmap, a.session)
     skip = ("PR",) if a.reset else ()
-    load(root, a.roadmap, skip)  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
+    epic_rows = load(root, a.roadmap, skip)[cs.EPIC_PR]  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
     report = _status_with_copies(root, a.roadmap)
     if a.epic:
         blocks = [_block(report, a.epic)]
@@ -962,13 +993,14 @@ def c_pr_refresh(root, a) -> int:
         blocks = list(report["blocks"])  # PR 절을 비웠으니 끝난 에픽의 줄도 다시 채운다 — 아니면 squash 머지가 머지됨에서 빠진다
     else:
         blocks = [b for b in report["blocks"] if b.get("stage") not in DONE]
-    branches = []
+    branches, epic_of = [], {}
     for b in blocks:
         for br in _branches_of(b):
             if br not in branches:
                 branches.append(br)
+                epic_of[br] = b.get("id")
     when = now()
-    fresh = {}
+    fresh, warns = {}, []
     for br in branches:
         try:
             items, hit = gh_repo.pr_list(str(root), br, PR_REFRESH_LIMIT)
@@ -976,12 +1008,31 @@ def c_pr_refresh(root, a) -> int:
             raise Fail(3, str(exc))
         if hit:
             print("[spec-distill] %s 의 PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_REFRESH_LIMIT))
+        number = cs.recorded_number(epic_rows, epic_of[br], br)
+        if number is not None:
+            n = int(number.lstrip("#"))
+            it = next((x for x in items if x.get("number") == n), None)
+            listed = it is not None
+            if not listed:
+                try:
+                    it = gh_repo.pr_view(str(root), n)
+                except gh_repo.GhStop as exc:
+                    raise Fail(3, str(exc))
+            bad = _recorded_mismatch(br, n, it)
+            if bad:
+                items = [x for x in items if x.get("number") != n]
+                warns.append(RECORD_MISMATCH % (n, br, " · ".join(bad), a.roadmap, a.session, epic_of[br],
+                                                a.roadmap, a.session, epic_of[br], n))
+            elif not listed:
+                items = list(items) + [it]
         fresh[br] = [_cache_row(br, it, when, a.session) for it in items] or [cs.no_pr_row(br, when, a.session)]
 
     def change(d):
         kept = [r for r in d["PR"] if r["브랜치"] not in fresh]
         d["PR"] = kept + [r for br in branches for r in fresh[br]]
     update(root, a.roadmap, a.session, change, skip)
+    for w in warns:
+        print("[spec-distill] " + w)
     print("PR 캐시: 브랜치 %d개 · PR %d개를 %s 에 채웠다"
           % (len(branches), sum(1 for v in fresh.values() for r in v if r["번호"] != cs.NO_PR), when))
     return 0
@@ -1107,7 +1158,7 @@ def c_audit(root, a) -> int:
             add("판정(%s)" % spec, ["셀 수 없음 — %s" % exc], 0, True)
     try:
         lines, notes = [], []
-        for br, items, hit in _prs(root, b):
+        for br, items, hit in _prs(root, b, _epic_rows(root, a.roadmap)):
             lines += [l for it in items for l in after_review_lines(str(it.get("body") or ""))]
             if hit:
                 notes.append("%s PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_LIMIT))
@@ -1217,8 +1268,9 @@ def c_review_pack(root, a) -> int:
     put("conflicts.txt", "\n".join(body) + "\n")
     try:
         lines = []
+        epic_rows = _epic_rows(root, a.roadmap)
         for b in blocks:
-            for br, items, hit in _prs(root, b):
+            for br, items, hit in _prs(root, b, epic_rows):
                 if hit:
                     note = "%s PR 목록이 %d개 한도에 닿았다 — 더 있을 수 있다" % (br, PR_LIMIT)
                     lines += ["(" + note + ")", ""]

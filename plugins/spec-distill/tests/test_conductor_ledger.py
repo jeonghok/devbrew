@@ -864,6 +864,7 @@ class AuditReadFailures(unittest.TestCase):
         with mock.patch.object(L, "_status", return_value=rep), \
                 mock.patch.object(L, "_doc", side_effect=lambda r, b, p: docs.get(p)), \
                 mock.patch.object(L, "_prs", return_value=prs if prs is not None else []), \
+                mock.patch.object(L, "_epic_rows", return_value=[]), \
                 redirect_stdout(buf):
             rc = L.main(["--root", ".", "audit", "--roadmap", "r.md", "--epic", "A1"])
         return rc, buf.getvalue()
@@ -1006,6 +1007,8 @@ class PrRefresh(Repo):
         self.calls = []
         self.answers = {}
         self.stop = None
+        self.views = {}
+        self.viewed = []
 
     def fake_pr_list(self, cwd, branch, limit=100):
         self.calls.append((cwd, branch, limit))
@@ -1014,9 +1017,14 @@ class PrRefresh(Repo):
         items = list(self.answers.get(branch, []))[:limit]
         return items, len(items) >= limit
 
+    def fake_pr_view(self, cwd, number):
+        self.viewed.append(number)
+        return dict(self.views[number])
+
     def refresh(self, *extra, session=SID):
         from unittest import mock
-        with mock.patch.object(L.gh_repo, "pr_list", self.fake_pr_list):
+        with mock.patch.object(L.gh_repo, "pr_list", self.fake_pr_list), \
+                mock.patch.object(L.gh_repo, "pr_view", self.fake_pr_view):
             return self.cli("pr-refresh", "--roadmap", RM, "--session", session, *extra)
 
     def rows(self):
@@ -1276,6 +1284,127 @@ class PrRefresh(Repo):
         self.assertEqual(rc, 0, out)
         self.assertIn("GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다", out)
 
+    # ── 적은 번호(R14 AC3) ──
+    def record_row(self, epic="A1", branch="feature/a1", number="#7"):
+        L.update(self.w, RM, SID, lambda d: d[cs.EPIC_PR].append(
+            {"에픽": epic, "브랜치": branch, "번호": number, "적은 때": "2026-10-01 10:00", "쓴 세션": SID}))
+
+    def epic_rows(self):
+        return cs.load(L.mpath(self.w, RM), RM)[cs.EPIC_PR]
+
+    def numbers_of(self, branch):
+        return [r["번호"] for r in self.rows() if r["브랜치"] == branch]
+
+    def mismatch_line(self, out):
+        return [l for l in out.splitlines() if "맞지 않는다" in l]
+
+    def test_recorded_number_kept_when_missing_from_list(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.record_row()
+        self.answers["feature/a1"] = [gh_pr(9, "OPEN", OID3, False)]
+        self.views[7] = gh_pr(7, "MERGED", OID1, False, MOID)
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.viewed, [7])
+        self.assertEqual(sorted((r["번호"], r["상태"], r["mergeCommit"]) for r in self.rows()),
+                         [("#7", "머지됨", MOID), ("#9", "열림", "-")])
+        self.assertIn("PR 캐시: 브랜치 1개 · PR 2개를", out)
+        self.assertEqual(self.mismatch_line(out), [])
+        # 양의 짝: 목록에 그 번호가 있으면 따로 묻지 않고 줄은 하나다
+        self.viewed.clear()
+        self.answers["feature/a1"] = [gh_pr(7, "MERGED", OID1, False, MOID), gh_pr(9, "OPEN", OID3, False)]
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(sorted(self.numbers_of("feature/a1")), ["#7", "#9"])
+
+    def test_reset_keeps_epic_pr(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.record_row()
+        before = self.epic_rows()
+        self.assertEqual(len(before), 1)
+        self.views[7] = gh_pr(7, "MERGED", OID1, False, MOID)
+        rc, out = self.refresh("--reset")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.epic_rows(), before)
+        self.assertEqual(self.numbers_of("feature/a1"), ["#7"])
+
+    def test_mismatch_head_drops_only_that_row(self):
+        from unittest import mock
+        import control_plane
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.record_row()
+        self.answers["feature/a1"] = [gh_pr(9, "OPEN", OID3, False)]
+        self.answers["feature/a2"] = [gh_pr(4, "OPEN", OID2, False, head="feature/a2")]
+        self.views[7] = gh_pr(7, "MERGED", OID1, False, MOID)
+        with mock.patch.object(L, "now", return_value="2026-10-23 10:00"):
+            rc, out = self.refresh()
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(sorted(self.numbers_of("feature/a1")), ["#7", "#9"])  # 앞서 맞던 #7 줄
+            epic_before = self.epic_rows()
+            print_before = control_plane.pr_cache_fingerprint(cs.load(L.mpath(self.w, RM), RM))
+            self.views[7] = gh_pr(7, "MERGED", OID1, False, MOID, head="feature/zz")
+            self.calls.clear()
+            rc, out = self.refresh()
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.numbers_of("feature/a1"), ["#9"])
+        self.assertEqual(self.epic_rows(), epic_before)
+        self.assertEqual(sorted(c[1] for c in self.calls), ["feature/a1", "feature/a2"])  # 다른 블록 브랜치도 채운다
+        self.assertEqual(self.numbers_of("feature/a2"), ["#4"])
+        expected = ("[spec-distill] 적은 PR #7 이 feature/a1 와 맞지 않는다(headRefName: feature/a1 ≠ feature/zz) — "
+                    "이 에픽의 PR 이면 `ledger pr-record --roadmap %s --session %s --epic A1 --pr <번호>` 로 다시 적고, "
+                    "아니면 `ledger pr-record --roadmap %s --session %s --epic A1 --pr 7 --drop`" % (RM, SID, RM, SID))
+        self.assertEqual(self.mismatch_line(out), [expected])
+        self.assertIn("적은 PR #7 이 feature/a1 와 맞지 않는다(headRefName: feature/a1 ≠ feature/zz)", out)
+        self.assertIn("--pr 7 --drop", out)
+        self.assertIn("--pr <번호>", out)
+        state = cs.load(L.mpath(self.w, RM), RM)
+        self.assertEqual(cs.recorded_cache_row(state[cs.EPIC_PR], state["PR"], "A1", "feature/a1"), ("#7", None))
+        self.assertNotEqual(control_plane.pr_cache_fingerprint(state), print_before)
+
+    def test_mismatch_cross_repo(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.record_row()
+        # head 목록에 그 번호가 교차 레포로 든 경우 — 따로 묻지 않고 목록에서 뺀다
+        self.answers["feature/a1"] = [gh_pr(7, "OPEN", OID1, True), gh_pr(9, "OPEN", OID3, False)]
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(self.numbers_of("feature/a1"), ["#9"])
+        self.assertEqual(len(self.epic_rows()), 1)
+        [line] = self.mismatch_line(out)
+        self.assertIn("적은 PR #7 이 feature/a1 와 맞지 않는다(isCrossRepository: false ≠ true)", line)
+        self.assertIn("--pr 7 --drop", line)
+        # 번호로 따로 받은 PR 이 교차 레포여도 같은 갈래
+        self.answers["feature/a1"] = [gh_pr(9, "OPEN", OID3, False)]
+        self.views[7] = gh_pr(7, "OPEN", OID1, True)
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.viewed, [7])
+        self.assertEqual(self.numbers_of("feature/a1"), ["#9"])
+        self.assertIn("(isCrossRepository: false ≠ true)", out)
+
+    def test_no_record_suggestion_without_records(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.answers["feature/a1"] = [gh_pr(7, "OPEN", OID1, True), gh_pr(9, "OPEN", OID3, False)]
+        rc, out = self.refresh()
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("pr-record", out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(sorted(self.numbers_of("feature/a1")), ["#7", "#9"])  # 번호 없는 브랜치는 지금 그대로
+
+    def test_warning_has_no_bare_hash(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.record_row()
+        self.views[7] = gh_pr(7, "OPEN", OID1, False, head="feature/zz")
+        rc, out = self.refresh("--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        lines = self.mismatch_line(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertIn("--pr 7 --drop", lines[0])           # 양의 짝: 숫자 꼴은 있다
+        self.assertNotIn("--pr #", lines[0])
+        self.assertNotIn("--pr '#", lines[0])
+
 
 class PrRecord(Repo):
     """ledger pr-record — 번호로 물은 PR 을 에픽의 브랜치 · 교차 · base 와 대조한 뒤에만 번호 줄과 PR 캐시 줄을 쓴다
@@ -1461,6 +1590,86 @@ class NoPrBranch(Repo):
             os.environ["PATH"] = old
         self.assertEqual(rc, 0, out)
         self.assertIn("feature/a1 PR 없음", out)
+
+
+class RecordedPrs(Repo):
+    """적은 번호가 있는 브랜치는 pr-handoffs · audit · review-pack 이 그 번호의 PR 하나만 번호로 묻는다(R14 AC18).
+    A1(feature/a1)에 #7 을 적었다. head 목록은 그 브랜치에 이름으로 먼저 잡히는 다른 PR #9(열림)를 낸다."""
+    SEVEN = {"number": 7, "state": "MERGED",
+             "body": "## 통합 리뷰 인계\n- seven\n- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): seven-fix"}
+    NINE = [{"number": 9, "state": "OPEN",
+             "body": "## 통합 리뷰 인계\n- nine\n- 리뷰 뒤 반영(리뷰 라운드를 거치지 않았다): nine-fix"}]
+    FOUR = [{"number": 4, "state": "OPEN", "body": "## 통합 리뷰 인계\n- four"}]
+
+    def setUp(self):
+        super().setUp()
+        self.gh_origin()
+        stub = self.t / "bin"
+        stub.mkdir()
+        self.args_file = stub / "args"
+        for name, value in (("seven.json", self.SEVEN), ("nine.json", self.NINE), ("four.json", self.FOUR)):
+            (stub / name).write_text(json.dumps(value), encoding="utf-8")
+        script = ("#!/bin/sh\n"
+                  "printf '%%s\\n' \"$*\" >> '{args}'\n"
+                  "case \"$*\" in\n"
+                  "  'pr view 7 '*) cat '{d}/seven.json' ;;\n"
+                  "  *'--head feature/a1 '*) cat '{d}/nine.json' ;;\n"
+                  "  *'--head feature/a2 '*) cat '{d}/four.json' ;;\n"
+                  "  *) echo '[]' ;;\n"
+                  "esac\n").replace("%%", "%").format(args=self.args_file, d=stub)
+        (stub / "gh").write_text(script, encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        self.addCleanup(os.environ.__setitem__, "PATH", old)
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        L.update(self.w, RM, SID, lambda d: d[cs.EPIC_PR].append(
+            {"에픽": "A1", "브랜치": "feature/a1", "번호": "#7", "적은 때": "2026-10-01 10:00", "쓴 세션": SID}))
+
+    def args(self):
+        return self.args_file.read_text(encoding="utf-8").splitlines() if self.args_file.exists() else []
+
+    def test_handoffs_use_recorded_number(self):
+        rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("feature/a1 #7(MERGED)", out)
+        self.assertIn("- seven", out)
+        self.assertNotIn("#9", out)
+        self.assertNotIn("nine", out)
+        args = self.args()
+        self.assertIn("pr view 7 --json number,state,body -R github.com/me/r", args)
+        self.assertFalse([a for a in args if "list" in a and "--head feature/a1" in a], args)
+
+    def test_audit_and_review_pack_use_recorded_number(self):
+        rc, out = self.cli("audit", "--roadmap", RM, "--epic", "A1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("리뷰 뒤 반영 1개", out)
+        self.assertIn("seven-fix", out)
+        self.assertNotIn("#9", out)
+        self.assertNotIn("nine", out)
+        sh(self.w, "checkout", "-q", "-b", "feature/a1", "trunk")
+        (self.w / "x.txt").write_text("a1\n", encoding="utf-8")
+        sh(self.w, "add", "-A")
+        sh(self.w, "commit", "-qm", "a1")
+        sh(self.w, "checkout", "-q", "trunk")
+        out_dir = self.t / "pack"
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
+        self.assertEqual(rc, 0, out)
+        handoffs = (out_dir / "handoffs.md").read_text(encoding="utf-8")
+        self.assertIn("### A1 feature/a1 #7(MERGED)", handoffs)
+        self.assertIn("- seven", handoffs)
+        self.assertIn("### A2 feature/a2 #4(OPEN)", handoffs)   # 양의 짝: 번호 없는 브랜치는 head 목록 그대로
+        self.assertNotIn("#9", handoffs)
+        self.assertNotIn("nine", handoffs)
+
+    def test_unrecorded_branch_keeps_list(self):
+        rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A2")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("feature/a2 #4(OPEN)", out)
+        self.assertIn("- four", out)
+        args = self.args()
+        self.assertTrue([a for a in args if a.startswith("pr list --state all --head feature/a2 ")], args)
+        self.assertFalse([a for a in args if a.startswith("pr view")], args)
 
 
 class AuditEndToEnd(Repo):
