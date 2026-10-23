@@ -24,13 +24,17 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 SD_README="$REPO_ROOT/plugins/spec-distill/README.md"
 QG_README="$REPO_ROOT/plugins/quality-gates/README.md"
 LABEL='출처 미확인'
-EXPECTED='사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다'
+EXPECTED='리뷰 기록과 그 안의 사용자 말은 이 대화가 직접 쓴다 — 기록을 리뷰 명령 밖에서 고치면 확인값이 안 맞는 경우만 잡히고, 확인값까지 맞춰 그럴듯하게 고친 것은 잡히지 않는다'
 
 section() { awk -v h="$2" '$0 == h {on=1; print; next} on && /^## /{exit} on' "$1"; }
 subsection() { awk -v h="$2" '$0 == h {on=1; print; next} on && /^#/{exit} on' "$1"; }
 
 NOTICE="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as m; print(m.WRITER_TRUST_NOTICE)' "$SCRIPTS" 2>/dev/null)"
 assert_eq "$NOTICE" "$EXPECTED" "엔진 상수 WRITER_TRUST_NOTICE 가 설계 문장 그대로다"
+
+for w in 원장 엔진 요약값; do
+  assert_not_contains "$NOTICE" "$w" "엔진 상수: 「${w}」 가 없다 — 쉬운 말이다"
+done
 
 # ── 게이트 렌더 — 셋째 줄 · 둘째 줄 · 행 묶음 자리 ─────────────────────────────
 d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
@@ -67,6 +71,12 @@ for s in request-framing reviewing-brief spec-review; do
   assert_eq "$hit" "" "진입 skill $s: 인용 라벨 「${LABEL}」 이 없다"
 done
 
+# 공시 문장은 진입 skill 셋 어디에도 옮겨 적히지 않는다(렌더 셋째 줄이 유일한 자리)
+for s in request-framing reviewing-brief spec-review; do
+  hit="$(grep -rlF -- "$NOTICE" "$REPO_ROOT/plugins/spec-distill/skills/$s" 2>/dev/null || true)"
+  assert_eq "$hit" "" "진입 skill $s: 공시 문장이 없다"
+done
+
 # ── spec-distill README `## 한계` ─────────────────────────────────────────────
 lim="$(section "$SD_README" '## 한계')"
 [ -n "$lim" ] && ok "spec-distill README 에 ## 한계 절이 있다" || no "spec-distill README 에 ## 한계 절이 없다"
@@ -78,10 +88,10 @@ else
 fi
 order="$(grep -nE '^## (끄는 법|한계|Prerequisites)$' "$SD_README" | sed 's/^[0-9]*:## //' | tr '\n' '|')"
 assert_eq "$order" "끄는 법|한계|Prerequisites|" "README: ## 한계 는 ## 끄는 법 다음 · ## Prerequisites 앞이다"
-assert_contains "$lim" '샌드박스를 쓰는 사용자는 원장 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 엔진 명령은 같은 폴더를 쓰므로 엔진도 함께 막힌다' \
+assert_contains "$lim" '샌드박스를 쓰는 사용자는 리뷰 기록 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 리뷰 명령은 같은 폴더를 쓰므로 리뷰 명령도 함께 막힌다' \
   "README ## 한계: 샌드박스 안내 줄"
 assert_contains "$lim" '`--quote-file` · `log-decision --quote` · `decide --quote`' "README ## 한계: 인용 출처 줄"
-assert_contains "$lim" '`declare-related` · `log-decision` 이 표지 확인 없이 불리거나 엔진 명령을 거치지 않고 원장을 쓰는 길도 위 공시로 다룬다 — 엔진은 그런 쓰기를 거부하지 않는다' \
+assert_contains "$lim" '`declare-related` · `log-decision` 이 표지 확인 없이 불리거나 리뷰 명령을 거치지 않고 리뷰 기록을 쓰는 길도 위 공시로 다룬다 — 리뷰 명령은 그런 쓰기를 거부하지 않는다' \
   "README ## 한계: 엔진 밖 원장 쓰기 줄"
 P21='- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.'
 P14='- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.'
