@@ -48,7 +48,7 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git,
 ## 사람에게 쓰는 글
 이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다. 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 - 처음 보는 사람이 한 번에 이해하게 쓴다. 번호·해시·필드 이름·내부 용어는 가리키는 내용을 문장으로 먼저 쓰고 괄호 안에만 둔다. 지어낸 말은 쓰지 않거나 처음 쓸 때 풀어 쓴다.
-- 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일 하나. 할 일이 없으면 없다고 쓴다.
+- 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일. 할 일은 기본 하나다 — 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다. 할 일이 없으면 없다고 쓴다. 커밋·PR 본문에는 이 순서를 적용하지 않는다.
 - 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천은 「(권장)」으로 표시한다.
 - 제목과 목록으로 나누되 표의 칸은 짧게 쓴다. 굵은 글씨는 꼭 필요한 곳에만 쓴다.
 - 사용자가 알 필요 없는 글은 쓰지 않는다: 도구 호출 사이의 진행 설명, 전부 정상인 항목의 나열. 확인해서 남은 것도 경고도 없으면 「이상 없음」 한 줄로 쓴다. 확인하지 못한 것·빠진 검사·셀 수 없는 것은 따로 한 줄씩 쓴다 — 없는 것과 확인 못 한 것은 다르다.
@@ -1495,7 +1495,7 @@ fi
 ```
 Then run [Publish](#publish) — the publish result line is the run's last script output. The session folder stays for the TTL GC.
 
-The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is (e.g. 「qg 를 반복 2번 만에 끝냈다 — 판정 defect, 남은 지적을 둔 채 끝냈다.」). The counts stay in the verdict line — do not restate them. After the publish result line, end with exactly one next action for the user (e.g. 「남은 지적 2개를 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다」 or 「할 일 없음」).
+The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is (e.g. 「qg 를 반복 2번 만에 끝냈다 — 판정 defect, 남은 지적을 둔 채 끝냈다.」). The counts stay in the verdict line — do not restate them. After the publish result line, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together (e.g. 「남은 지적 2개를 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다」 or 「할 일 없음」).
 
 ## Publish
 

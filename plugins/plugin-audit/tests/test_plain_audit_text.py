@@ -59,7 +59,8 @@ class SkillTextTest(unittest.TestCase):
         self.assertLess(step.index(warn), step.index("절대경로를 보인다"), "경고 줄은 리포트 경로 앞이다")
         self.assertIn("리포트 (`$RUN_DIR/audit.md`)의 절대경로를 보인다 — 사용자가 열어 볼 것은 이것이다.", step)
         self.assertIn("원장(`$RUN_DIR/audit-journal.jsonl`) 경로는 사용자가 물을 때만 보인다.", step)
-        self.assertIn("맨 끝에 사용자가 할 일 하나를 쓴다", step)
+        self.assertIn("맨 끝에 사용자가 할 일을 쓴다 — 기본 하나, 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다", step)
+        self.assertNotIn("할 일 하나를 쓴다", step)
         self.assertNotIn("의 절대경로를 사용자에게 보인다", step, "세 경로를 모두 보이던 옛 틀이 남았다")
 
 

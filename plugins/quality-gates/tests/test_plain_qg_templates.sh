@@ -86,7 +86,8 @@ assert_file_absent "$S" "^printf 'Verdict" "AC6: 옛 영어 칸 이름이 없다
 assert_file_grep "$S" 'finished\|"accepted with findings iter "\[0-9\]\*\|"aborted iter "\[0-9\]\*\)' "R15: 게시 펜스가 같은 세 결과 토큰을 받는다(양성 짝)"
 assert_contains "$SF" 'The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is' "§4: 완료 보고 첫 줄은 끝난 방식과 판정값"
 assert_contains "$SF" 'The counts stay in the verdict line — do not restate them.' "규칙 블록: 개수를 다시 풀어 쓰지 않는다"
-assert_contains "$SF" 'After the publish result line, end with exactly one next action for the user' "§4: 완료 보고 끝은 할 일 하나"
+assert_contains "$SF" "After the publish result line, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together" "AC2: 완료 보고 끝 할 일 — 기본 하나 · 여럿이면 밝힘"
+assert_not_contains "$SF" 'exactly one next action' "AC2: exactly one 없음"
 assert_contains "$SF" "the publish result line is the run's last script output." "게시 결과 줄은 스크립트 출력의 마지막이다(할 일 줄과 충돌하지 않는다)"
 assert_not_contains "$SF" "the publish result line is the run's last output." "게시 줄이 «실행의» 마지막 출력이라는 옛 문장이 없다"
 
@@ -153,7 +154,8 @@ assert_file_absent "$E2R" 'Accept|Stop|Retry /|Retry 를 넣지' "AC6: e2e 레�
 CAF="$(flat "$CA")"
 assert_contains "$CAF" '보고의 첫 줄은 끝났는지와 결과 한 문장이다' "§4: 비평 최종 보고 첫 줄"
 assert_contains "$CAF" '잔여 `kept` 항목에 `plain:` 이 있으면 그것을 먼저 쓰고 원래 `summary` 는 뒤 괄호에 둔다' "R7: 비평 보고가 plain 을 먼저 쓴다"
-assert_contains "$CAF" '맨 끝에 사용자가 할 일 하나를 쓴다' "§4: 비평 최종 보고 끝 할 일 하나"
+assert_contains "$CAF" '맨 끝에 사용자가 할 일을 쓴다 — 기본 하나, 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다.' "AC2: 비평 최종 보고 끝 할 일 — 기본 하나 · 여럿이면 밝힘"
+assert_not_contains "$CAF" '할 일 하나를 쓴다' "AC2: 비평 보고에 옛 「할 일 하나를 쓴다」 없음"
 
 # ⑩ Max-iter 결정 — AskUserQuestion 의 라벨이 같은 절의 굵은 분기 글자와 같다(라벨만 바꾸면 분기가 없는 선택지를 부른다)
 MX="$(awk '/^### Max-iter decision$/{f=1;next} f&&/^### /{exit} f' "$S")"
