@@ -253,6 +253,79 @@ done
 assert_eq "$(pr_by_hand "$T/pr.md")" "" "양성 짝: 다른 절 이름(PRX)은 잡지 않는다"
 assert_not_contains "$(cyc 4)" 'PR 을 열 명령을 사용자에게 준다' "지휘 걸음 4: PR 을 연 뒤 gh 없을 때 PR 명령을 주는 괄호가 없다(양성 짝: 위 gh pr create -R · pr-refresh)"
 
+# 에픽 PR 번호를 적는 자리는 둘뿐이다(R14 §2 · AC2 · AC17 · AC19) — PR 을 열 때(걸음 4 · 손 절차 5)와
+# 쌓인 PR 의 바탕을 기본 브랜치로 바꾼 직후(걸음 5 · 손 절차 8). 맞추기(걸음 1)에는 찾아 적는 걸음이 없다.
+chain() {  # chain <글> <첫째> <둘째> … — 각 조각이 앞 조각의 첫 출현 뒤에 차례로 나오면 yes
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t, ks = sys.argv[1], sys.argv[2:]
+i = 0
+for k in ks:
+    j = t.find(k, i)
+    if j < 0:
+        print("no")
+        sys.exit(0)
+    i = j + len(k)
+print("yes")' "$@"
+}
+for where in "cyc 4" "step 5"; do
+  assert_eq "$(chain "$($where)" 'gh pr create' 'pr-record --roadmap' 'pr-refresh --roadmap')" "yes" "${where}: gh pr create → pr-record → pr-refresh 순서(AC2)"
+  for lit in '종료 코드 4' '예상된 결과'; do
+    assert_contains "$($where)" "$lit" "${where}: 쌓인 PR 의 pr-record 거부를 적는다 — $lit"
+  done
+done
+assert_eq "$(chain 'gh pr create 로 연다. pr-refresh --roadmap 을 부른다. pr-record --roadmap 을 부른다.' 'gh pr create' 'pr-record --roadmap' 'pr-refresh --roadmap')" "no" "양성 대조(AC2): pr-refresh 가 pr-record 앞이면 no"
+assert_eq "$(chain 'pr-record --roadmap 을 부른다. gh pr create 로 연다. pr-refresh --roadmap 을 부른다.' 'gh pr create' 'pr-record --roadmap' 'pr-refresh --roadmap')" "no" "양성 대조(AC2): PR 을 열기 전에 적으면 no"
+STACK=('바탕을 기본 브랜치로 바꾼 직후' 'pr-record --roadmap' 'pr-refresh --roadmap' '머지 명령 줄만 준비하고')
+for where in "cyc 5" "step 8"; do
+  assert_eq "$(chain "$($where)" "${STACK[@]}")" "yes" "${where}: 바탕을 바꾼 직후 → pr-record → pr-refresh → 머지 명령 순서(AC17)"
+done
+assert_eq "$(chain '바탕을 기본 브랜치로 바꾼 직후 pr-refresh --roadmap 을 부르고 pr-record --roadmap 을 부른다. 머지 명령 줄만 준비하고' "${STACK[@]}")" "no" "양성 대조(AC17): pr-refresh 가 pr-record 앞이면 no"
+assert_eq "$(chain '머지 명령 줄만 준비하고 바탕을 기본 브랜치로 바꾼 직후 pr-record --roadmap → pr-refresh --roadmap' "${STACK[@]}")" "no" "양성 대조(AC17): 머지 명령이 번호 적기 앞이면 no"
+assert_eq "$(chain 'pr-record --roadmap → pr-refresh --roadmap. 바탕을 기본 브랜치로 바꾼 직후. 머지 명령 줄만 준비하고' "${STACK[@]}")" "no" "양성 대조(AC17): 바탕을 바꾸기 전에 적으면 no"
+records() {  # records <글> — 번호를 적는 명령(pr-record)의 출현
+  printf '%s\n' "$1" | grep -oF -- 'pr-record' || true
+}
+for where in "cyc 1" "step 1"; do
+  [ -n "$($where)" ] || no "${where} 이 비었다 — 아래 부재 단언이 공허하다"
+  assert_eq "$(records "$($where)")" "" "${where}(맞추기): 번호 없는 PR 을 찾아 적는 pr-record 가 없다(AC17 · 8ce8e648 — 양의 짝: 위 순서 락)"
+  [ -n "$(records "$($where) 그다음 번호 없는 PR 을 \`ledger pr-record\` 로 적는다.")" ] && ok "양성 대조(${where}): ledger pr-record 를 넣으면 잡는다" || no "양성 대조(${where}): ledger pr-record 를 넣어도 못 잡는다"
+done
+cyc_head() {  # cyc_head [파일] — `## 지휘 순환` 머리(걸음 1 앞까지)
+  awk '$0=="## 지휘 순환"{f=1; next} f && /^#{2,3} /{exit} f' "${1:-$CD}"
+}
+HEAD_BULLET="$(cyc_head | grep -F -- 'pr-record' || true)"
+[ -n "$HEAD_BULLET" ] && ok "지휘 순환 머리에 번호 적기 불릿이 있다" || no "지휘 순환 머리에 번호 적기 불릿이 없다"
+for lit in '--drop' '맞지 않는다' '걸음 4' '걸음 5' '--pr <번호>'; do
+  assert_contains "$HEAD_BULLET" "$lit" "지휘 순환 머리 불릿: $lit"
+done
+assert_contains "$(cyc 7)" '`## 에픽 PR` 은 남기고' "지휘 걸음 7(기계 상태): 정리에서 \`## 에픽 PR\` 을 남긴다(AC19)"
+KEEP_EPIC='`## 에픽 PR` 은 남기고 나머지를 비운다'
+wipes_epic() {  # wipes_epic <글> — `## 에픽 PR` 을 지우거나 비우는 문장(남긴다는 허용 절은 뺀다)
+  local t="${1//"$KEEP_EPIC"/}"
+  printf '%s\n' "$t" | hit '에픽 PR[^.]*(지운|비운|지워|비워)'
+}
+assert_eq "$(wipes_epic "$(cyc 7)")" "" "지휘 걸음 7: \`## 에픽 PR\` 을 지우거나 비우는 문장이 없다(AC19 — 양의 짝: 남기고)"
+for lit in '- 기계 상태: `## 에픽 PR` 도 비운다.' '- 기계 상태: 모두 비운다 — `## 에픽 PR` 까지 지운다.'; do
+  [ -n "$(wipes_epic "$(cyc 7) $lit")" ] && ok "양성 대조(AC19): 「${lit}」 를 잡는다" || no "양성 대조(AC19): 「${lit}」 를 못 잡는다"
+done
+assert_eq "$(wipes_epic "- 기계 상태: ${KEEP_EPIC}(남은 자원이 없을 때).")" "" "양성 짝(AC19): 남긴다는 허용 절은 잡지 않는다"
+epic_pr_by_hand() {  # epic_pr_by_hand <파일> — `## 에픽 PR` 을 손으로 적는 `--section "에픽 PR"`
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines(), 1):
+    if re.search(r"--section\s+(\"에픽 PR\"|'"'"'에픽 PR'"'"')", line):
+        print(i)' "$1"
+}
+assert_eq "$(epic_pr_by_hand "$CD")" "" "conducting.md: 에픽 PR 번호를 손으로 적는 --section \"에픽 PR\" 이 없다(AC2 — 양의 짝: pr-record)"
+for lit in '`ledger add --roadmap <로드맵> --session <세션> --section "에픽 PR" --cells "x"`' "\`ledger add --section '에픽 PR' --cells \"x\"\`"; do
+  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/epr.md"
+  [ -n "$(epic_pr_by_hand "$T/epr.md")" ] && ok "양성 대조(AC2): 「${lit}」 를 넣으면 잡는다" || no "양성 대조(AC2): 「${lit}」 를 못 잡는다"
+done
+pr_hash() {  # pr_hash <글> — 명령 예시의 `--pr #…`(번호는 숫자만 쓴다)
+  printf '%s\n' "$1" | hit '--pr\s+#'
+}
+assert_eq "$(pr_hash "$(cat "$CD")")" "" "conducting.md: 명령 예시에 --pr # 가 없다(번호는 숫자만)"
+[ -n "$(pr_hash 'ledger pr-record --epic <에픽> --pr #123')" ] && ok "양성 대조: --pr #123 을 잡는다" || no "양성 대조: --pr #123 을 못 잡는다"
+
 # gh 없을 때의 대체 길은 없다(R8 계획 2 Task 5 · AC20) — 「gh 가 없…」 · 「`gh` 가 없…」 · 「gh 없음」 문장 부재 + 손 절차 5 의 -R 양의 짝.
 gh_absent() {  # gh_absent <파일> — gh 가 없을 때를 말하는 줄 번호
   PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
