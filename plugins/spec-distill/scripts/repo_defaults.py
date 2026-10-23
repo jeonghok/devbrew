@@ -65,6 +65,13 @@ def _folder(key: str, raw: str):
         return None, "%s 에 빈 조각 · . · .. 를 쓰지 않는다(레포 루트도 안 된다): %r" % (key, value)
     if any(p.casefold() == ".git" for p in parts):
         return None, "%s 는 .git 아래를 가리킬 수 없다: %r" % (key, value)
+    found = [":"] if value.startswith(":") else []
+    for ch in value:
+        if ch in "*?[]\\" and ch not in found:
+            found.append(ch)
+    if found:
+        return None, ("%s 에 글롭 · pathspec 특수 글자(%s)를 쓰지 않는다 — git 이 경로를 글자 그대로 읽지 않는다: %r"
+                      % (key, " · ".join(found), value))
     return "/".join(parts) + "/", None
 
 
@@ -106,8 +113,11 @@ def strict_frontmatter(text: str, where: str, path: str | None = None) -> dict:
         line = line.rstrip("\r")
         if line == "---":
             return out
-        if not line or line[0] in " \t-#" or ":" not in line:
+        if not line or line[0] in " \t-#":
             continue
+        if ":" not in line:
+            raise SettingsError("unreadable", where, "%s 의 머리말에 `키: 값` 꼴이 아닌 줄이 있다(%s) — `키: 값` 으로 고치거나 지운다"
+                                % (at, line))
         key, raw = line.split(":", 1)
         key = key.strip()
         if key in out:
@@ -515,7 +525,7 @@ def main(argv=None) -> int:
     p_get.add_argument("--roadmap")
     p_get.add_argument("--root")
     p_chk = sub.add_parser("check-path")
-    p_chk.add_argument("key", choices=_FOLDER_KEYS)
+    p_chk.add_argument("key", choices=("roadmaps_dir", "interview_dir"))
     p_chk.add_argument("path")
     p_chk.add_argument("--root")
     p_def = sub.add_parser("default-branch")

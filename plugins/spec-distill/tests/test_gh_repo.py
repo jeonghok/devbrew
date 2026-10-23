@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
@@ -100,6 +101,33 @@ class StderrKinds(unittest.TestCase):
     def test_other(self):
         self.assertEqual(gh_repo.stop_for(2, "\nboom here\nsecond", "github.com", "github.com/me/r"),
                          "gh 실패(rc 2): boom here")
+
+
+class PrView(unittest.TestCase):
+    def test_pr_view_args(self):
+        with mock.patch.object(gh_repo, "gh_json", return_value={k: None for k in gh_repo.PR_FIELDS}) as m:
+            gh_repo.pr_view("/x", 12)
+        self.assertEqual(m.call_args[0][1], ["pr", "view", "12", "--json",
+                                             "number,state,headRefName,headRefOid,isCrossRepository,"
+                                             "baseRefName,mergeCommit"])
+
+    def test_pr_view_shape_error(self):
+        for bad in ([], {"number": 12}):
+            with self.subTest(bad=bad), mock.patch.object(gh_repo, "gh_json", return_value=bad):
+                with self.assertRaises(gh_repo.GhStop) as cm:
+                    gh_repo.pr_view("/x", 12)
+                self.assertIn("PR #12", str(cm.exception))
+
+
+class ParsePrRef(unittest.TestCase):
+    def test_parse_pr_ref_forms(self):
+        for t in ("12", "#12", " 12\n"):
+            self.assertEqual(gh_repo.parse_pr_ref(t), (12, None), t)
+        self.assertEqual(gh_repo.parse_pr_ref("https://github.com/Me/r/pull/12/\n"),
+                         (12, ("github.com", "Me", "r")))
+        self.assertEqual(gh_repo.parse_pr_ref("http://GHE.example/o/r/pull/3"), (3, ("ghe.example", "o", "r")))
+        for t in ("#", "0", "12abc", "", "https://github.com/o/r/issues/3", "https://github.com/o/r/pull/3/files"):
+            self.assertIsNone(gh_repo.parse_pr_ref(t), t)
 
 
 if __name__ == "__main__":

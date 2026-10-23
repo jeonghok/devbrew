@@ -173,6 +173,15 @@ machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레�
 out="$(mc --branch feature/dk)"; rc=$?
 assert_eq "$rc" "3" "기계 상태에 그 층이 받지 않는 키(review_model) → rc 3"
 assert_contains "$out" "기계 상태(임시) 은 이 설정을 받지 않는다(review_model)" "기계 상태 층이 받지 않는 키 사유"
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_comand · bash run.sh\n' "$RM")"
+out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "3" "기계 상태에 오타 키(test_comand) → rc 3(R14 §7 기계 층 unknown_key)"
+assert_contains "$out" "모르는 키" "기계 상태 오타 키 사유가 모르는 키라고 말한다"
+assert_contains "$out" "(test_comand)" "기계 상태 오타 키 사유가 그 키를 말한다"
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · [\n' "$RM")"
+out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "3" "컴파일되지 않는 test_failure_pattern → rc 3"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 기계 상태(임시): " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
 mkrepo pr 'test_command: bash run.sh\ntest_failure_pattern: "^BAD: (.+)$"\n'
 put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
 put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/pr

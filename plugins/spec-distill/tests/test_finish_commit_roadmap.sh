@@ -68,7 +68,7 @@ c="$(mk dec-code)"; roadmap "$c"; brief7 "$c" "- \`$DEC\`"
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$FIVE" "분해(§7 목록 · 코드 꼴): 세 파일과 로드맵 폴더가 한 커밋에"
 
-# 1b. 해결자는 cwd 가 아니라 brief 가 사는 레포를 기준으로 돈다 — 다른 설정을 가진 레포 안에서 돌려도 같다
+# 1b. cwd 가 다른 레포(다른 interview_dir · 기본 브랜치 모름)여도 brief 레포에 세 파일과 로드맵 폴더를 커밋하고 cwd 레포에는 커밋하지 않는다
 c="$(mk elsewhere)"; roadmap "$c"; brief7 "$c" "$DEC"
 x="$(mk cwdrepo 'interview_dir: notes/')"; git -C "$x" remote set-head origin -d >/dev/null 2>&1   # cwd 레포는 기본 브랜치도 모른다
 o="$( cd "$x" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$c/$STEM.md}" 2>&1 )"

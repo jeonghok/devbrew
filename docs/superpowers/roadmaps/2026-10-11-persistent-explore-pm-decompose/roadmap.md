@@ -221,12 +221,12 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R14 — R8 남은 장치 결함
 - 의도: R8 의 리뷰가 남긴 장치 쪽 결함을 고친다
 - 범위:
-  - 한다: R8 설계문서 `## 미룸` 의 장치 쪽 행 — `strict_frontmatter` 가 콜론 없는 머리말 줄을 오류 없이 건너뛴다 · 설정 값의 pathspec 매직 · 글롭 글자가 `ls-tree` · spec-review 의 pathspec 에 그대로 닿는다 · `ledger add --section "레포 설정"` 이 같은 키 둘을 받는데 merge_check 는 그 기계 상태를 거부한다 · 계획 1 리뷰의 작은 동작 빈틈 여섯(묶음 대조의 `specs_dir` 필수화 · 머리말 앞 빈 줄이면 로드맵 아님 · 한 번에 읽기의 크기 상한 · 원장 git 호출의 lazy fetch 끄기 · `.git` 이름 bare 레포의 멈춤 문장 · check-path 가 로드맵 층을 안 봄) · 계획 1 리뷰의 작은 문구 · 테스트 빈틈 열아홉(해결자 대체 이름표에서 ensure 락이 `:` 꼴을 통과까지 — 동작은 맞고 문구 · 락 세기만 다르다) · 인터뷰 뒤 brainstorming 을 실제로 부르는 세션(인터뷰가 주는 다음 세션 줄)의 superpowers 판 확인 · 상태 계산 읽기 전용 정적 락(`test_roadmap_status.sh`)의 남은 후보 여덟 · 같은 이름의 옛 브랜치를 나이로 거르지 못하는 틈(견줄 커밋 없음 · 옛 머지가 문서보다 뒤 · 거꾸로 방향 · `diff.renameLimit` · 에픽이 자기 PR 번호를 적는 길) · 쓰는 세션을 믿는 한계 공시(`WRITER_TRUST_NOTICE`)가 사용자에게 도구 출력 그대로로만 닿는다(문면 · 사용자 화면으로 올리는 길) · `put_snap` 실패가 `$(...)` 안에서 일어나면 `shared/tests/fixtures/docreview/cases.sh` 가 실패 수를 잃는다(서브셸)
-  - 안 한다: 규칙 · 철학 문서(R9) · 새 기능
+  - 한다: R8 설계문서 `## 미룸` 의 장치 쪽 행 — `strict_frontmatter` 가 콜론 없는 머리말 줄을 오류 없이 건너뛴다 · 설정 값의 pathspec 매직 · 글롭 글자가 `ls-tree` · spec-review 의 pathspec 에 그대로 닿는다 · `ledger add --section "레포 설정"` 이 같은 키 둘을 받는데 merge_check 는 그 기계 상태를 거부한다 · 계획 1 리뷰의 작은 동작 빈틈 여섯(묶음 대조의 `specs_dir` 필수화 · 머리말 앞 빈 줄이면 로드맵 아님 · 한 번에 읽기의 크기 상한 · 원장 git 호출의 lazy fetch 끄기 · `.git` 이름 bare 레포의 멈춤 문장 · check-path 가 로드맵 층을 안 봄) · 계획 1 리뷰의 작은 문구 · 테스트 빈틈 열아홉(해결자 대체 이름표에서 ensure 락이 `:` 꼴을 통과까지 — 동작은 맞고 문구 · 락 세기만 다르다) · 인터뷰 뒤 brainstorming 을 실제로 부르는 세션(인터뷰가 주는 다음 세션 줄)의 superpowers 판 확인 · 상태 계산 읽기 전용 정적 락(`test_roadmap_status.sh`)의 남은 후보 여덟 · 같은 이름의 옛 브랜치를 나이로 거르지 못하는 틈(견줄 커밋 없음 · 옛 머지가 문서보다 뒤 · 거꾸로 방향 · `diff.renameLimit` · 에픽이 자기 PR 번호를 적는 길) · 쓰는 세션을 믿는 한계 공시(`WRITER_TRUST_NOTICE`)가 사용자에게 도구 출력 그대로로만 닿는다(문면 · 사용자 화면으로 올리는 길) · `put_snap` 실패가 `$(...)` 안에서 일어나면 `shared/tests/fixtures/docreview/cases.sh` 가 실패 수를 잃는다(서브셸) · 에픽 PR 번호 기록 · 번호로 머지 판정
+  - 안 한다: 규칙 · 철학 문서(R9) · 에픽 PR 번호 기록 밖의 새 기능 · cost_class high skill 의 승인 게이트(R9)
 - 의존: R8
 - 브랜치: feature/r8-device-leftovers
 - 묶음: R14.md
-- 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/tests/test_roadmap_status.sh, plugins/spec-distill/tests/test_repo_defaults.py, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_epic_conductor_skill.sh, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/tests/test_finish_commit_roadmap.sh, plugins/spec-distill/tests/test_ledger_root.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/tests/test_check_review_scope.sh, shared/test-selection/resolve-baseline.sh, plugins/spec-distill/tests/test_superpowers_presence.sh, plugins/spec-distill/tests/test_finishing_block_scope.py, shared/deps/check_deps.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_writer_trust_notice.sh, plugins/spec-distill/README.md, shared/tests/fixtures/docreview/cases.sh
+- 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/tests/test_roadmap_status.sh, plugins/spec-distill/tests/test_repo_defaults.py, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_epic_conductor_skill.sh, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/tests/test_finish_commit_roadmap.sh, plugins/spec-distill/tests/test_ledger_root.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/tests/test_check_review_scope.sh, shared/test-selection/resolve-baseline.sh, plugins/spec-distill/tests/test_superpowers_presence.sh, plugins/spec-distill/tests/test_finishing_block_scope.py, shared/deps/check_deps.py, shared/docreview/scripts/docreview_state.py, shared/tests/test_writer_trust_notice.sh, plugins/spec-distill/README.md, shared/tests/fixtures/docreview/cases.sh, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/gh_repo.py, plugins/spec-distill/tests/test_conducting_reference.sh, plugins/spec-distill/tests/test_conductor_ledger.py, plugins/spec-distill/tests/test_conductor_state.py, plugins/spec-distill/tests/test_merged_by_pr.py, plugins/spec-distill/tests/test_control_plane.py, plugins/spec-distill/tests/test_gh_repo.py, plugins/spec-distill/tests/test_bundle_coverage.sh, plugins/spec-distill/tests/test_state_root.sh, plugins/spec-distill/tests/test_repo_defaults_git.sh, plugins/spec-distill/tests/test_control_plane.sh, shared/tests/fixtures/docreview/golden/, plugins/spec-distill/tests/test_review_handoff_order.sh, plugins/spec-distill/tests/test_coverage_scope.py
 - 순서 이유: R8 계획 2 · 3 이 고친 해결자 · 상태 계산 · 원장 위에서 — 같은 파일을 R8 이 예약했다
 
 ## 지휘 절차
@@ -484,6 +484,21 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「모든 high skill 을 규모 공시만으로 (권장)」
   - 「R9 가 규칙과 skill 을 함께 (권장)」
+
+### 2026-10-23 · R14 범위에 에픽 PR 번호 기록 · 번호로 머지 판정을 더하고 「안 한다: 새 기능」 을 그 길 밖으로 좁힌다 · R14 경로 예약에 번호 길과 설계 Files to Modify 의 자리(골든 폴더 · test_review_handoff_order.sh 는 락 지도 단언을 고친 뒤 구현 PR 에서) — 원문은 R14 설계의 사용자 결정 U3(2026-10-23). 넘기는 것의 R9 규칙 문장 · 승인 게이트 제외는 지휘자 판단(사용자 결정 아님)
+- 바뀜: 바뀐 에픽 R14 「좋아 유니크한거라 이게 더좋지 실수도 적고」
+- 원문:
+  - 「좋아 유니크한거라 이게 더좋지 실수도 적고」
+
+### 2026-10-23 · R14 경로 예약에 골든 폴더와 test_review_handoff_order.sh — 락 지도 단언을 고친 뒤
+- 바뀜: 바뀐 에픽 R14 「승인하고 계획으로 (권장)」
+- 원문:
+  - 「승인하고 계획으로 (권장)」
+
+### 2026-10-23 · R14 경로 예약에 test_coverage_scope.py — specs_dir 필수화(§7)로 고친 테스트
+- 바뀜: 바뀐 에픽 R14 「돌려도 된다 (권장)」
+- 원문:
+  - 「돌려도 된다 (권장)」
 
 ## 위험 번호표
 

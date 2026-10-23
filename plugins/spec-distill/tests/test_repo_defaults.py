@@ -93,6 +93,62 @@ class StrictFrontmatter(unittest.TestCase):
         m = rd.strict_frontmatter("---\n# c\nspecs_dir: s/\n  x: y\n- item\n---\n본문 a: b\n", "repo")
         self.assertEqual(m, {"specs_dir": "s/"})
 
+    def test_colonless_line_unreadable_repo(self):
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.strict_frontmatter("---\nspecs_dir: s/\nplans_dir s/\n---\n", "repo")
+        self.assertEqual((c.exception.kind, c.exception.where), ("unreadable", "repo"))
+        self.assertIn("plans_dir s/", str(c.exception))
+
+    def test_colonless_line_unreadable_roadmap(self):
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.strict_frontmatter("---\ntype: roadmap\nspecs_dir s/\n---\n", "roadmap", "r/roadmap.md")
+        self.assertEqual((c.exception.kind, c.exception.where), ("unreadable", "roadmap"))
+        self.assertIn("specs_dir s/", str(c.exception))
+
+    def test_skipped_lines_still_skipped(self):
+        m = rd.strict_frontmatter("---\n\n  indented no colon\n\ttab no colon\n- x\n# x\nspecs_dir: s/\n---\n", "repo")
+        self.assertEqual(m, {"specs_dir": "s/"})
+
+    def test_real_roadmaps_pass(self):
+        root = Path(__file__).resolve().parents[3]
+        files = sorted(root.glob("docs/superpowers/roadmaps/*/roadmap.md"))
+        self.assertTrue(files)
+        for f in files:
+            rd.strict_frontmatter(f.read_text(encoding="utf-8"), "roadmap", str(f))
+        settings = root / rd.SETTINGS_FILE
+        if settings.is_file():
+            rd.strict_frontmatter(settings.read_text(encoding="utf-8"), "repo")
+
+
+class FolderSpecialChars(unittest.TestCase):
+    def merged(self, key, value):
+        return rd.merge_layers(None, {key: value}, LABEL, None, [])
+
+    def test_folder_special_chars(self):
+        for key in ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir"):
+            for ch in ("*", "?", "[", "]", "\\"):
+                m = self.merged(key, "docs/a%sb/" % ch)
+                self.assertIsNone(m["values"][key], (key, ch))
+                self.assertEqual(len(m["errors"]), 1, (key, ch))
+                self.assertIn(key, m["errors"][0])
+                self.assertIn(ch, m["errors"][0])
+            m = self.merged(key, ":(glob)docs/")
+            self.assertIsNone(m["values"][key], key)
+            self.assertIn(":", m["errors"][0])
+
+    def test_colon_inside_folder_ok(self):
+        m = self.merged("specs_dir", "docs/a:b/")
+        self.assertEqual((m["values"]["specs_dir"], m["errors"]), ("docs/a:b/", []))
+
+    def test_pattern_keeps_bracket(self):
+        m = self.merged("test_failure_pattern", "^\\[x\\]")
+        self.assertEqual((m["values"]["test_failure_pattern"], m["errors"]), ("^\\[x\\]", []))
+
+    def test_ordinary_folder_and_defaults_pass(self):
+        m = self.merged("plans_dir", "docs/my-plans/")
+        self.assertEqual((m["values"]["plans_dir"], m["errors"]), ("docs/my-plans/", []))
+        self.assertEqual(rd.merge_layers(None, {}, LABEL, None, [])["errors"], [])
+
 
 class Layers(unittest.TestCase):
     def test_typo_key_is_unknown(self):

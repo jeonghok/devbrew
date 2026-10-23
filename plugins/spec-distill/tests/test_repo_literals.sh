@@ -134,14 +134,23 @@ def assigns(line, name):
     return re.search(r'(?:^|[\s;)])' + name + '=', line) is not None
 
 
-def covered_vars(body, judged):
-    """판정받은 변수 + 명령 치환 없는 대입으로만 그것들에서 나온 변수(고정점)."""
+def refills(line, name):
+    """빈 값이 아닌 대입 — 셸 단어 전체가 빈 따옴표뿐인 `X=""` 만 add 범위를 좁힐 뿐이라 다시 대입으로 치지 않는다.
+    `X+=` · `${X:=…}` · `${X=…}` 는 늘 다시 대입이다."""
+    if re.search(r'\b' + name + r'\+=', line) or re.search(r'\$\{' + name + r':?=', line):
+        return True
+    vals = re.findall(r'(?:^|[\s;)])' + name + r'=((?:"[^"]*"|\'[^\']*\'|[^\s;"\'])*)', line)
+    return any(not re.fullmatch(r'(?:""|\'\')*', v) for v in vals)
+
+
+def covered_vars(body, judged, barred=frozenset()):
+    """판정받은 변수 + 명령 치환 없는 대입으로만 그것들에서 나온 변수(고정점). barred 는 덮지 않는다."""
     cov = set(judged)
     names = {m for l in body for m in re.findall(r'(?:^|[\s;)])([A-Za-z_][A-Za-z0-9_]*)=', l)}
     grew = True
     while grew:
         grew = False
-        for v in names - cov:
+        for v in names - cov - set(barred):
             lines = [l for l in body if assigns(l, v) and set(use_rx.findall(l)) - {v}]
             if lines and all("$(" not in l and "`" not in l and set(use_rx.findall(l)) - {v} <= cov for l in lines):
                 cov.add(v)
@@ -176,18 +185,22 @@ for path in sys.argv[1:]:
             continue
         if not all(stop_rx.search(l) for l in judges):
             print("%s:%d: git add 로 경로를 정하는 펜스의 경로 판정이 거부되어도 셸을 멈추지 않는다(|| … exit 없음)" % (path, start))
-        kinds, judged = set(), set()
-        for l in body[:first_add]:
+        kinds, judged = set(), {}
+        for i, l in enumerate(body[:first_add]):
             if judge_rx.match(l) and stop_rx.search(l):
                 for m in judged_rx.finditer(l):
                     kinds.add(m.group(2) or "roadmap-check")
-                    judged.add(m.group(3))
+                    judged.setdefault(m.group(3), i)
+        reassigned = {v for v, i in judged.items() if any(refills(l, v) for l in body[i + 1:first_add])}
         if kinds & {"roadmaps_dir", "roadmap-check"} and not {"roadmaps_dir", "roadmap-check"} <= kinds:
             print("%s:%d: 로드맵 폴더를 더하는 펜스가 check-path roadmaps_dir 와 roadmap-check 를 함께 부르지 않는다" % (path, start))
-        cov = covered_vars(body, judged)
+        cov = covered_vars(body, set(judged) - reassigned, reassigned)
         added = {v for l in body if add_rx.search(l) for v in use_rx.findall(l.split(" add --", 1)[1])}
         for v in sorted(added - cov):
-            print("%s:%d: git add 경로 $%s 를 add 앞에서 판정하지 않는다" % (path, start, v))
+            if v in reassigned:
+                print("%s:%d: git add 경로 $%s 를 판정 뒤 다시 대입한다" % (path, start, v))
+            else:
+                print("%s:%d: git add 경로 $%s 를 add 앞에서 판정하지 않는다" % (path, start, v))
 print("세었다: get %d · add %d" % (n_get, n_add))
 PY
 }
@@ -213,6 +226,15 @@ shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$AUDIT"/d' "�
 shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path interview_dir "\$AUDIT"\)/# \1/' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정을 주석으로"
 shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir /d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 판정 줄 둘 다 지움"
 shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$SEED"/d' "경로 \$SEED 를 add 앞에서 판정하지 않는다" "handoff 펜스의 SEED 판정 지움"
+shape_mut "$RF_T" '/^git add -- "\$AUDIT"/{h;s/.*/AUDIT="$SEED"/;G;}' "git add 경로 \$AUDIT 를 판정 뒤 다시 대입한다" "handoff 펜스의 판정과 add 사이 AUDIT 재대입"
+shape_mut "$RF_T" '/^git add -- "\$AUDIT"/{h;s/.*/AUDIT="$(printf %s x)"/;G;}' "git add 경로 \$AUDIT 를 판정 뒤 다시 대입한다" "handoff 펜스의 판정과 add 사이 AUDIT 명령 치환 재대입"
+rf_pre="$T/shape-pre-$(basename "$RF_T")"
+sed '/check-path interview_dir "\$AUDIT"/{h;s/.*/AUDIT="$SEED"/;G;}' "$SD/$RF_T" > "$rf_pre"
+if cmp -s "$SD/$RF_T" "$rf_pre"; then no "음성 대조(판정 앞 대입): 사본이 그대로다 — 판정이 공허하다"
+else
+  case "$(shape "$rf_pre")" in *"다시 대입한다"*|*"판정하지 않는다"*) no "음성 대조(판정 앞 대입): 판정 앞의 대입을 잘못 잡는다" ;;
+    *) ok "음성 대조(판정 앞 대입): 판정 앞의 대입은 잡지 않는다" ;; esac
+fi
 FIN_T=skills/pm-interview/references/finishing.md
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d;/repo_defaults\.py" roadmap-check /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
@@ -222,4 +244,10 @@ shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir /d;/repo_default
 shape_mut "$FIN_T" 's/^\( *python3 .*repo_defaults\.py" check-path roadmaps_dir "\$RDIR".*\) || {.*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정을 || true 로"
 shape_mut "$FIN_T" 's/^AUDIT_F="\${stem}\.audit\.md"$/AUDIT_F="$(printf %s "${stem}").audit.md"/' "경로 \$AUDIT_F 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 audit 경로를 명령 치환으로"
 shape_mut "$FIN_T" '/check-path interview_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
+# 판정 뒤 `RDIR=""`(범위를 좁힘)는 지금 문서에 있고 위 펜스 꼴 단언이 통과시킨다 — 같은 자리에 빈 값이 아닌 값을 넣으면 잡는다
+shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 값 대입을 다른 경로로"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR=""$r7/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 따옴표에 값을 덧붙임"
+shape_mut "$FIN_T" "s/^    RDIR=\"\"\$/    RDIR=''\"\$r7\"/" "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 홑따옴표에 값을 덧붙임"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    : "${RDIR:=$r7}"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 기본값 대입(:=)"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR+="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 덧붙임 대입(+=)"
 finish

@@ -146,8 +146,8 @@ def tree_entries(out: bytes, roadmaps_dir: str) -> dict:
 
 
 def blob_reader(entries: dict, cat, failed: set):
-    """read(경로) — tree_entries 의 항목을 cat(blob) → (rc, 바이트) 로 읽는다. 일반 파일(100644 · 100755)만 읽고,
-    cat 이 실패하면 경로를 failed 에 넣고 ReadFailed."""
+    """read(경로) — tree_entries 의 항목을 cat(blob) → (rc, 바이트 | None) 으로 읽는다. 일반 파일(100644 · 100755)만
+    읽고, rc 가 0 이 아니거나 바이트가 None(rc 0 인데 한 번에 읽기 출력에 없음)이면 경로를 failed 에 넣고 ReadFailed."""
     def read(path):
         mode, kind, sha = entries[path]
         regular = kind == "blob" and mode in ("100644", "100755")
@@ -157,6 +157,9 @@ def blob_reader(entries: dict, cat, failed: set):
         if rc != 0:
             failed.add(path)
             raise ReadFailed("파일을 읽지 못했다(git cat-file rc %d)" % rc)
+        if data is None:
+            failed.add(path)
+            raise ReadFailed("파일을 읽지 못했다(git cat-file --batch 출력에 이 blob 이 없다 — 짧게 읽음)")
         return regular_text(True, data)
     return read
 
