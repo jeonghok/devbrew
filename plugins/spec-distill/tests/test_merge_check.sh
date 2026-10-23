@@ -180,8 +180,8 @@ assert_contains "$out" "모르는 키" "기계 상태 오타 키 사유가 모�
 assert_contains "$out" "(test_comand)" "기계 상태 오타 키 사유가 그 키를 말한다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · [\n' "$RM")"
 out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "컴파일되지 않는 test_failure_pattern → rc 3(run 이 pattern_error 를 부른다)"
-assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 기계 상태(임시): " "깨진 정규식 사유 문구와 출처"
+assert_eq "$rc" "3" "컴파일되지 않는 test_failure_pattern → rc 3"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 기계 상태(임시): " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
 mkrepo pr 'test_command: bash run.sh\ntest_failure_pattern: "^BAD: (.+)$"\n'
 put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
 put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/pr
