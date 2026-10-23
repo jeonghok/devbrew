@@ -2,7 +2,7 @@
 # guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/README.md plugins/quality-gates/references/e2e.md
 #
 # 쉬운 말 출력 설계 §4 · AC6 — /quality-gates:quality-pipeline 의 질문 셋 · 완료 표 · 모델이 그대로 내는 문구가 한국어이고,
-# 완료 보고와 비평 최종 보고가 첫 줄 상태 · 끝 할 일 하나를 지시받는다. e2e 걷기 직후 게이트(④)가
+# 완료 보고와 비평 최종 보고가 첫 줄 상태 · 끝 할 일(기본 하나 — 여럿이거나 병렬이면 밝힘)을 지시받는다. e2e 걷기 직후 게이트(④)가
 # 부르는 Fix-loop 선택지도 같은 라벨이다.
 # 부재 단언마다 같은 자리의 양성 짝이 있다(부재 락은 통째로 지워도 통과한다).
 set -u
