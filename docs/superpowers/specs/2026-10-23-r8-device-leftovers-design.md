@@ -123,13 +123,15 @@ next_phase: superpowers:writing-plans
   - 번호로 PR 을 묻는다 — `gh_repo` 에 `pr_view(cwd, number)`(`gh pr view <N> -R <origin> --json <PR_FIELDS>`)를 더한다.
   - 그 PR 의 `headRefName` 이 그 에픽 블록의 브랜치(로드맵 사본이 더한 브랜치 포함 — `pr-refresh --epic` 과 같은 블록 해석) 가운데 하나이고, `isCrossRepository` 가 거짓이고, `baseRefName` 이 기본 브랜치여야 적는다. 하나라도 어긋나면 아무것도 쓰지 않고 rc 4 와 어긋난 칸을 보인다 — 번호를 잘못 옮겨 적는 실수가 쓰는 자리에서 잡힌다. 번호를 못 읽으면 rc 2.
   - 같은 (에픽, 브랜치) 줄이 있으면 새 번호로 바꾼다(닫고 새로 연 PR).
+  - 번호를 적을 때 이미 받은 그 PR 로 `## PR` 캐시 줄도 함께 쓴다(`_cache_row` 꼴 — 같은 번호의 옛 줄은 바꾼다). 그래서 이미 머지된 PR 을 적어도 다음 `pr-refresh` 전까지 「캐시에 그 번호가 없다」(판정 없음)로 떨어지지 않고 바로 번호로 판정된다.
   - `--drop` 이면 gh 를 묻지 않고 그 에픽의 `--pr` 번호 줄을 지운다(그 브랜치는 번호 없는 브랜치로 돌아간다). 없는 줄이면 rc 1.
-- 지휘 절차 걸음 4 와 손 절차 5 는 `gh pr create -R …` 의 출력(PR URL)을 받아 `ledger pr-record … --epic <에픽> --pr <그 URL>` 을 부른 **뒤** `ledger pr-refresh … --epic <에픽>` 을 부른다. PR 이 이미 있어 `gh pr create` 가 실패하면 그 PR 의 번호를 `--pr <번호>` 로 적는다 — 판단은 지휘자가 하고 이유를 보인다. PR 캐시를 손으로 적는 `ledger add --section PR` 금지(`pr_by_hand` 락)는 그대로다 — `pr-record` 는 검증하고 쓰는 명령이지 손 적기가 아니다.
+- 지휘 절차 걸음 4 와 손 절차 5 는 `gh pr create -R …` 의 출력(PR URL)을 받아 `ledger pr-record … --epic <에픽> --pr <그 URL>` 을 부른 **뒤** `ledger pr-refresh … --epic <에픽>` 을 부른다. PR 이 이미 있어 `gh pr create` 가 실패하면 그 PR 의 번호를 `--pr <번호>` 로 적는다 — 판단은 지휘자가 하고 이유를 보인다. 앞 계획의 브랜치를 base 로 연 쌓인 PR(stacked PR)은 base 가 기본 브랜치가 아니라 `pr-record` 가 rc 4 로 거부한다 — 이때의 rc 4 는 예상된 결과이지 멈출 오류가 아니다. 지휘자는 적지 않고 넘어가고, base 를 기본 브랜치로 바꾼 뒤(걸음 5) 걸음 1 의 채우기가 그 PR 을 적는다. conducting.md 걸음 4 · 손 절차 5 의 문장이 이것을 그대로 말한다(지휘자 판단(사용자 결정 아님)). PR 캐시를 손으로 적는 `ledger add --section PR` 금지(`pr_by_hand` 락)는 그대로다 — `pr-record` 는 검증하고 쓰는 명령이지 손 적기가 아니다.
 
 **운반하는 곳 — PR 캐시.**
 
 - `pr-refresh` 는 블록의 브랜치마다 지금처럼 head 이름의 PR 을 모두 받고, 그 브랜치에 적은 번호가 있으면 그 번호를 `pr_view` 로 따로 받아 `## PR` 에 그 줄을 둔다(head 목록이 한도에 닿아 빠져도 번호 줄은 있다).
 - **적은 번호가 그 브랜치와 더는 맞지 않으면**(head 이름이 바뀜 · 다른 head · 교차 레포가 됨) `pr-refresh` 는 전체를 멈추지 않는다(지휘자 판단(사용자 결정 아님)). 그 브랜치에서는 `## PR` 의 #N 줄 하나만 지운다 — 앞서 맞던 #N 줄이 남아 있으면 그것도 지운다. `## 에픽 PR` 의 번호 기록과 그 브랜치의 다른 PR 줄은 그대로 둔다. 그리고 경고 한 줄을 보인다 — 「적은 PR #N 이 <브랜치> 와 맞지 않는다(<어긋난 칸>: <기대 값> ≠ <gh 값>) — 이 에픽의 PR 이면 `ledger pr-record --epic <에픽> --pr <번호>` 로 다시 적고, 아니면 `ledger pr-record --epic <에픽> --pr <N 의 숫자> --drop`」. 상태 계산은 아래 「캐시에 그 번호가 없다」 갈래로 가서 그 브랜치를 「판정 없음」으로 둔다. 캐시가 바뀌었으므로 상태줄 지문도 바뀐다. 다른 브랜치는 그대로 채운다(지휘자 판단(사용자 결정 아님)). 종료 코드는 그 경고가 있어도 0 이다(경고 줄이 할 일을 싣는다).
+- **열린 PR 은 단계와 무관하게 묻는다(지휘자 판단(사용자 결정 아님)).** 지금 `pr-refresh` 는 `--epic` 없이 돌 때 끝난 단계(머지됨 · 끝남)의 블록을 건너뛴다. 그러면 같은 이름의 옛 브랜치 때문에 거짓으로 머지됨인 에픽은 새로 연 PR 이 캐시에 오지 않아 채우기가 닿지 않는다. 그래서 적은 번호가 없는 브랜치는 블록의 단계와 무관하게 열린 PR(`--state open`)을 묻고 그 줄을 캐시에 둔다 — 끝난 블록의 나머지 줄(머지 · 닫힌 PR)은 지금처럼 다시 채우지 않는다. 아래 알림과 채우기 규칙은 열린 후보에만 걸린다. 머지된 옛 PR 은 자동으로 적지 않는다.
 - **번호 없는 열린 에픽 PR 알림.** `pr-refresh` 는 채운 뒤, 블록 브랜치 가운데 적은 번호가 없고 캐시에 열린 PR(교차 아님 · 기본 base)이 있는 브랜치마다 한 줄을 보인다 — 「번호를 적지 않은 열린 PR: <에픽> <브랜치> #N — `ledger pr-record --epic <에픽> --pr <N 의 숫자>`」. 한 브랜치에 열린 PR 후보가 둘 이상이면 후보를 모두 보이고 명령은 싣지 않는다.
 - `--reset` 은 `## PR` 만 비운다. `## 에픽 PR` 은 다시 만들 수 없는 기록이라 남긴다.
 - `control_plane.pr_cache_fingerprint` 는 `## 에픽 PR` 줄도 지문에 넣는다 — 번호를 적으면 상태줄 · 상태 보기가 바로 새 판정을 낸다.
@@ -165,7 +167,7 @@ next_phase: superpowers:writing-plans
 **README `## 한계` 두 줄(U8).** 번호 기록은 이 기계에만 둔다. 사용자가 고른 선택지의 약속대로 SD README `## 한계` 에 두 줄을 더한다(첫 줄 공시 뒤 불릿):
 
 - 「에픽 PR 번호 기록은 이 기계의 지휘 기계 상태에만 있다 — 다른 기계나 새 클론에서는 머지 판정이 브랜치 이름과 이력 추정으로 돌아가고, 같은 이름의 옛 브랜치 틈이 다시 열린다.」
-- 「지휘자 밖에서 연 PR 도 번호로 판정된다 — 열려 있는 PR 은 지휘자가 다음 맞추기(걸음 1)에서 스스로 적고, 이미 머지된 PR 은 지휘 세션에서 `ledger pr-record --roadmap <로드맵> --session <세션> --epic <에픽> --pr <번호>` 를 한 번 부른다(번호는 숫자만). 쓰기는 지휘 표지를 쥔 세션만 한다.」
+- 「지휘자 밖에서 연 PR 도 번호로 판정된다 — 열려 있는 PR 은 지휘자가 다음 맞추기(걸음 1)에서 스스로 적고, 이미 머지된 PR 은 지휘 세션에서 `ledger pr-record --roadmap <로드맵> --session <세션> --epic <에픽> --pr <번호>` 를 한 번 부른다(번호는 숫자만) — 그 명령이 PR 캐시 줄까지 써서 바로 그 번호로 판정된다. 쓰기는 지휘 표지를 쥔 세션만 한다.」
 
 ### §3 쓰는 세션을 믿는 한계 공시 — 쉬운 말로
 
@@ -175,7 +177,12 @@ next_phase: superpowers:writing-plans
 
   사용자가 동의한 예시 꼴(U5 근거 대화의 「리뷰 기록은 이 대화가 직접 쓴다 — 기록을 엔진 밖에서 고치면 숫자가 안 맞는 경우만 잡히고, 그럴듯하게 고친 것은 잡히지 않는다」)에서 셋을 다듬었다(작성자 판단). 「엔진」 → 「리뷰 명령」. 「숫자」 → 「확인값」 — 렌더 둘째 줄이 같은 대상을 이미 「확인값」 이라 부르고, 실제 값은 숫자가 아니라 해시다. 「그 안의 사용자 말」 — 옛 문장의 「사용자 문구」 몫이고, README 둘째 불릿(`--quote` 출처)이 「위 공시로 다룬다」 고 기대는 자리다. 원장 · 엔진 · 요약값은 문장에 없다.
 - 자리는 그대로 둘이다 — 렌더 셋째 줄(+ `gate` JSON `writer_trust_notice`)과 SD README `## 한계` 첫 줄. 게이트 질문 글(`AskUserQuestion`)에는 싣지 않는다(U5 — 되풀이되는 경고는 무시된다).
-- README `## 한계` 의 나머지 불릿은 바꾸지 않는다(§2 의 U8 두 줄을 더할 뿐이다).
+- README `## 한계` 에서 공시 바로 뒤의 세 불릿(「위 공시로 다룬다」 가 가리키는 자리)을 같은 쉬운 말(리뷰 기록 · 리뷰 명령)로 고친다 — 뜻은 그대로다:
+  - 「샌드박스를 쓰는 사용자는 리뷰 기록 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 리뷰 명령은 같은 폴더를 쓰므로 리뷰 명령도 함께 막힌다.」
+  - 「`--quote-file` · `log-decision --quote` · `decide --quote` 로 받은 문구의 출처와 제목 하나 빠진 audit 도 위 공시로 다룬다 — 리뷰 명령은 그 문구가 사용자 말인지 확인하지 않는다.」
+  - 「`declare-related` · `log-decision` 이 표지 확인 없이 불리거나 리뷰 명령을 거치지 않고 리뷰 기록을 쓰는 길도 위 공시로 다룬다 — 리뷰 명령은 그런 쓰기를 거부하지 않는다.」
+
+  `test_writer_trust_notice.sh` 가 글 그대로 잡는 두 줄(샌드박스 줄 · `declare-related` 줄)의 기대값도 함께 바꾼다(인용 출처 줄은 앞부분만 잡아 그대로 통과한다). 나머지 불릿(P21 · P14)과 §2 의 U8 두 줄은 이 바꿈과 무관하다.
 - 같이 바뀌는 것: 골든 다섯의 셋째 줄과 `.gate.json`, `test_writer_trust_notice.sh` 의 `EXPECTED`. CHANGELOG 의 옛 문장 · R8 설계 §7 의 인용은 이력이라 그대로 둔다.
 
 ### §4 골든 예약과 락 지도 단언
@@ -193,7 +200,7 @@ next_phase: superpowers:writing-plans
 
 - **(1) 콜론 없는 머리말 줄은 엄격 오류.** `strict_frontmatter` 에서 비지 않은 최상위 줄(들여쓰기 · `-` · `#` 로 시작하지 않는 줄)에 `:` 가 없으면 `SettingsError("unreadable", …)` — 「<자리> 의 머리말에 `키: 값` 꼴이 아닌 줄이 있다(<줄>) — `키: 값` 으로 고치거나 지운다」. 레포 설정 파일과 로드맵 층 둘 다다. 지금 레포의 로드맵 · 템플릿 머리말에는 그런 줄이 없다(확인함). 「키 없음」(기본값)과 다른 오류다.
 - **(2) 폴더 값의 특수 글자 거부.** `_folder` 가 값에 `*` · `?` · `[` · `]` · `\` 가 있거나 값이 `:` 로 시작하면(pathspec 매직) 그 키를 쓰지 않고 오류를 낸다 — 「<키> 에 글롭 · pathspec 특수 글자(<찾은 글자>)를 쓰지 않는다 — git 이 경로를 글자 그대로 읽지 않는다: <값>」. 해결자 한 자리에서 막으므로 `ls-tree` · `git grep` · spec-review 의 `"${SPECS}*-design.md"`(뒤 `*` 는 일부러 쓴 글롭) 모두가 글자 그대로의 폴더만 받는다. 폴더 키(`specs_dir` · `plans_dir` · `roadmaps_dir` · `interview_dir`)만이다 — `test_failure_pattern` 처럼 일부러 정규식인 값은 그대로다.
-- **(3) 레포 설정의 같은 키는 쓰는 자리에서 거부.** `c_add` 가 `--section "레포 설정"` 일 때 그 키가 이미 있으면 아무것도 쓰지 않고 rc 2 — 「레포 설정 절에 <키> 가 이미 있다 — 바꾸려면 `ledger drop --roadmap <로드맵> --session <세션> --section "레포 설정" --where 키=<키>` 로 지운 뒤 다시 적는다」. 같은 자리에서 기계 상태 층이 받지 않는 키(`repo_defaults.check_layer(meta, "machine")`)도 rc 2 로 거부한다 — 읽는 쪽이 거부하는 상태를 쓰지 않는다는 같은 축이고, 있는 검사를 부를 뿐이다(작성자 판단). conducting.md 의 `## 레포 설정` 기록 문장에 「같은 키를 바꿀 때는 drop 뒤 add」 를 적는다.
+- **(3) 레포 설정의 같은 키는 쓰는 자리에서 거부.** `c_add` 가 `--section "레포 설정"` 일 때 그 키가 이미 있으면 아무것도 쓰지 않고 rc 2 — 「레포 설정 절에 <키> 가 이미 있다 — 바꾸려면 `ledger drop --roadmap <로드맵> --session <세션> --section "레포 설정" --where 키=<키>` 로 지운 뒤 다시 적는다」. 같은 자리에서 기계 상태 층이 받지 않는 키(`repo_defaults.check_layer(meta, "machine")`)도 rc 2 로 거부한다 — 읽는 쪽이 거부하는 상태를 쓰지 않는다는 같은 축이고, 있는 검사를 부를 뿐이다(작성자 판단). 값도 읽는 쪽과 같은 검사를 쓰기 전에 돈다(지휘자 판단(사용자 결정 아님)): 따옴표를 벗긴 뒤 빈 값(`repo_defaults.merge_layers` 가 기계 상태 층 하나로 돌 때 내는 오류를 그대로 본다)과 `test_failure_pattern` 의 정규식 컴파일(merge_check 가 `run` 안에서 하는 `re.compile` 검사 — 그 몇 줄을 `merge_check` 의 작은 함수로 옮겨 `run` 과 `ledger add` 가 함께 부른다, 새로 짓지 않는다). 하나라도 걸리면 rc 2 이고 기계 상태는 바뀌지 않는다. conducting.md 의 `## 레포 설정` 기록 문장에 「같은 키를 바꿀 때는 drop 뒤 add」 를 적는다.
 
 ### §6 인터뷰 다음 세션의 superpowers 판 확인
 
@@ -312,7 +319,7 @@ next_phase: superpowers:writing-plans
 | 7 | `test_roadmap_status.sh` 5절 정적 검사 · 행동 검사 | 그대로 — 안 고침 |
 | 8 | `roadmap_status.compute.judge` | 그대로 남음 |
 | 9 | `WRITER_TRUST_NOTICE` · 골든 다섯 · 테스트 | 그대로 남음 |
-| 10 | `cases.sh` 의 `$(put_snap … && …)` 다섯 자리 | 그대로 남음 |
+| 10 | `cases.sh` 의 `$(put_snap … && …)` 모든 자리(18 — 지금 cases.sh 기준) | 그대로 남음 |
 
 ## 있는 것 검토
 
@@ -356,7 +363,7 @@ next_phase: superpowers:writing-plans
   | `SD/skills/spec-review/SKILL.md` · `SD/skills/request-framing/SKILL.md` | 고치지 않는다(§5 (2) 는 해결자에서 막고, §7 의 상태 블록 stderr 는 안 고침) — R14 예약에는 남아 있다 | 쉬운 말 블록 사본 |
   | `SD/references/conducting.md` · `SD/tests/test_conducting_reference.sh` | 걸음 1 · 손 절차 1 의 번호 채우기 · 걸음 4 · 손 절차 5 의 PR 번호 · 「레포 설정」 문장과 그 순서 락 | 시작 승인 문장과 그 락 |
 
-  - epic-conductor SKILL 에 PR 번호 문장이 필요해지면 R14 가 쓰되 `### 4`(승인 게이트) 밖에 둔다. 문단이 달라 기계적 충돌은 작을 것이다.
+  - R14 는 epic-conductor `SKILL.md` 를 고치지 않는다 — PR 번호 걸음은 모두 conducting.md 에 있다. R5 설계 :642 의 SKILL 문장(`approval` rc 가 0 이 아니면 묻는다)도 R14 가 할 일이 없다 — R9 계획 2 가 그 승인 갈래를 지운다. 문단이 달라 기계적 충돌은 작을 것이다.
 - R12 예약(골든 폴더 · `test_conducting_reference.sh` 등)은 R12 가 머지돼 의존 순서 안이다.
 
 ## Acceptance Criteria
@@ -374,6 +381,8 @@ next_phase: superpowers:writing-plans
 
   상태 계산은 gh 를 부르지 않는다(기존 stub 락 GREEN).
 - AC5 번호가 없는 브랜치의 판정은 바뀌지 않는다(기존 PR · 머지 테스트 전부 GREEN). SD README `## 한계` 에 §2 의 U8 두 줄이 글 그대로 있다(첫 줄 공시는 그대로 첫 줄). `roadmap_status.NOTICE` 와 SD README 상태 계산 줄에 §2 의 공시 문장이 있다(번호 판정 · 번호 없는 에픽의 추정과 남은 틈 · 번호 기록은 이 기계에만).
+- AC19 같은 이름의 옛 브랜치 머지로 거짓 머지됨인 에픽의 같은 브랜치에 새 PR 이 열린 픽스처에서, `--epic` 없는 `pr-refresh` 가 그 열린 PR 을 캐시에 두고 「번호를 적지 않은 열린 PR」 알림을 낸다. 걸음 1 의 채우기 뒤 그 브랜치는 번호 판정으로 바뀌어 머지됨이 아니다. 같은 블록의 머지된 옛 PR 은 적지 않는다.
+- AC20 이미 머지된 PR 을 `pr-record` 로 적은 직후(`pr-refresh` 없이) 상태 계산이 그 브랜치를 그 번호로 머지됨이라 판정한다 — `## PR` 에 그 번호의 줄이 `_cache_row` 꼴로 있다. 같은 번호의 옛 줄이 있으면 바뀐다.
 - AC18 적은 번호가 있는 브랜치에서 `control_plane.pr_fact`(단계 「PR」 과 보이는 번호) · `merged_prs` · `roadmap_status.judge` · `ledger pr-handoffs` 가 모두 적은 번호를 쓴다 — 같은 브랜치에 이름으로 먼저 잡히는 다른 PR 줄(더 최근 · 열림)을 둔 픽스처에서 넷이 같은 번호를 낸다. 번호 없는 브랜치의 출력은 기존 테스트대로다. 줄을 고르는 세 자리(`pr_fact` · `merged_prs` · `judge`)는 `conductor_state` 의 한 함수를 부르고, `pr-handoffs` 는 같은 모듈의 번호 찾기를 쓴다. 세 자리 가운데 하나가 그 함수를 우회해 이름으로 고르게 하는 변이마다 RED 다. 지문은 AC6 이 잰다.
 - AC6 `## 에픽 PR` 은 선택 절이다 — 줄이 없으면 머리를 쓰지 않는다. 번호 꼴 · 같은 (에픽, 브랜치) 두 줄은 기계 상태를 읽을 때 오류다. `control_plane.pr_cache_fingerprint` 가 이 절을 지문에 넣는다(번호 하나를 더하면 지문이 바뀌는 테스트).
 
@@ -392,14 +401,14 @@ next_phase: superpowers:writing-plans
 **해결자 · 원장(§5)**
 - AC9 `strict_frontmatter` 가 콜론 없는 최상위 줄을 그 줄을 이름 붙인 `unreadable` 오류로 멈춘다(레포 설정 · 로드맵 층 각각). 들여쓴 줄 · 목록 줄 · `#` 줄 · 빈 줄은 그대로 건너뛴다. 레포의 실제 로드맵이 모두 통과한다.
 - AC10 폴더 키 값에 `*` · `?` · `[` · `]` · `\` 가 있거나 `:` 로 시작하면 해결자가 그 키를 이름 붙인 오류를 내고 값을 주지 않는다(글자마다 한 경우). 기본값 · 보통 폴더는 통과하고, `test_failure_pattern` 의 `[` 는 받는다(양의 짝).
-- AC11 `ledger add --section "레포 설정"` 은 이미 있는 키면 rc 2 와 `ledger drop … --where 키=<키>` 를 담은 문장을 내고 아무것도 쓰지 않는다. 기계 상태 층이 받지 않는 키도 rc 2 다. merge_check 가 거부하는 기계 상태를 이 명령으로 만들 수 없다(끝에서 끝). conducting.md 에 「바꿀 때는 drop 뒤 add」 가 있다.
+- AC11 `ledger add --section "레포 설정"` 은 이미 있는 키면 rc 2 와 `ledger drop … --where 키=<키>` 를 담은 문장을 내고 아무것도 쓰지 않는다. 기계 상태 층이 받지 않는 키도 rc 2 다. 따옴표를 벗기면 빈 값 · 컴파일되지 않는 `test_failure_pattern` 도 rc 2 이고, 넷 모두 기계 상태 파일이 바이트까지 그대로다(전후 비교). 값 검사는 읽는 쪽 함수(`merge_layers` · merge_check 의 정규식 검사 함수)를 부른다 — 그 함수를 바꾸면 쓰는 쪽 판정도 함께 바뀌는 테스트. merge_check 가 거부하는 기계 상태를 이 명령으로 만들 수 없다(끝에서 끝). conducting.md 에 「바꿀 때는 drop 뒤 add」 가 있다.
 
 **superpowers 판(§6)**
 - AC12 다음 세션 줄(brief 줄, 그리고 고른 skill 이 `superpowers:` 인 다른 다음 단계 줄)이 첫 문장 바로 뒤에 §6 의 판 확인 문장을 싣는다. `test_review_handoff_order.sh` 의 기존 단언(머리 · 순서 · `lead_only`)이 GREEN 이다. 그 문장을 지우는 변이에 RED 다.
 
 **작은 빈틈(§7)**
 - AC13 §7 표에서 「고침」 인 하위 항목 열마다 테스트가 있다 — 동작 셋(`specs_dir` 필수 · `.git` 이름 bare 레포에서 상태 루트 확인이 통과하는 픽스처 · check-path 가 `specs_dir` 를 사용법 오류로) · 문구 · 락 일곱(기계 층 오타 키 · `--root` 글자 접두 · 1b 이름표 · ReadFailed 사유 · 검사 불가 행 사유 · 재대입 변이 · `|| :`). 「안 고침」 하위 항목은 코드가 바뀌지 않는다.
-- AC14 `cases.sh` 에서 `put_snap` 이 `$(...)` 안에서 불리지 않는다. `put_snap` 실패를 일부러 낸 경우가 바깥 실패 수에 남는다(테스트).
+- AC14 `cases.sh` 에서 `put_snap` 이 `$(...)` 안에서 불리지 않는다(지금 18 자리 모두 — 부재 단언은 개수를 박지 않고 파일 전체를 본다). `put_snap` 실패를 일부러 낸 경우가 바깥 실패 수에 남는다(테스트).
 
 **조사 · 공통**
 - AC15 계획의 첫 Task 가 §9 의 가벼운 재확인이다 — ad7efbb6 뒤 기본 브랜치 변경이 §10 표의 자리를 바꿨는지, 새 받는 곳 R14 행이 있는지. 결과(바뀐 자리 · 새 행, 없으면 「없음」)가 계획에 적혀 있다.
@@ -407,21 +416,33 @@ next_phase: superpowers:writing-plans
 
 ## Files to Modify
 
-예약 안(R14):
+**예약 안(R14)** — 처음부터 R14 경로 예약에 있던 파일:
 
-- `plugins/spec-distill/scripts/repo_defaults.py` · `roadmap_status.py` · `conductor_ledger.py` · `control_plane.py` · `roadmap_model.py`(필요할 때) · `check_bundle_coverage.py` · `state_path.py`
+- `plugins/spec-distill/scripts/repo_defaults.py` · `roadmap_status.py` · `conductor_ledger.py` · `control_plane.py` · `merge_check.py`(§5 (3) 정규식 검사 함수) · `roadmap_model.py`(필요할 때) · `check_bundle_coverage.py` · `state_path.py`
 - `plugins/spec-distill/references/conducting.md` · `skills/pm-interview/references/finishing.md`
 - `plugins/spec-distill/tests/test_roadmap_status.sh` · `test_repo_defaults.py` · `test_repo_literals.sh` · `test_merge_check.sh` · `test_finish_commit_roadmap.sh` · `test_ledger_root.sh`
 - `shared/docreview/scripts/docreview_state.py` · `shared/tests/test_writer_trust_notice.sh` · `shared/tests/fixtures/docreview/cases.sh` · `plugins/spec-distill/README.md`
 
-예약 밖 — 이 브랜치의 로드맵 커밋으로 등록했다(골든 폴더 · `test_review_handoff_order.sh` 는 §4 순서대로 구현 PR 에서):
+**예약 안이지만 이번 설계로 고칠 자리가 늘어난 곳** — 파일은 위 목록에 있다:
 
-- `plugins/spec-distill/scripts/conductor_state.py`(선택 절 · 적은 번호 줄을 내는 함수) · `plugins/spec-distill/scripts/gh_repo.py`(`pr_view`)(§2)
-- 예약 안이지만 이번에 더한 자리: `control_plane.py` 의 `pr_fact` · `merged_prs` · 지문, `conductor_ledger.py` 의 `c_pr_handoffs` · `_prs` · `pr-refresh` 어긋남 갈래 · 알림, conducting.md 걸음 1 · 손 절차 1 의 채우기(§2 「보이는 곳」 · 「채우기」)와 그 테스트(`test_control_plane.py` · `test_conductor_ledger.py` · `test_conducting_reference.sh`)
+- `control_plane.py` 의 `pr_fact` · `merged_prs` · 지문(§2 「보이는 곳」)
+- `conductor_ledger.py` 의 `pr-record`(캐시 줄 쓰기 포함) · `c_pr_handoffs` · `_prs` · `pr-refresh` 의 어긋남 갈래 · 단계와 무관한 열린 PR 묻기 · 알림 · `c_add` 의 값 검사(§2 · §5 (3))
+- `merge_check.py` 의 `re.compile` 검사를 작은 함수로 옮김(§5 (3))
+- conducting.md 걸음 1 · 손 절차 1 의 채우기, 걸음 4 · 손 절차 5 의 쌓인 PR 문장(§2)
+- SD README `## 한계` 의 공시 뒤 세 불릿과 U8 두 줄(§2 · §3)
+
+**예약 밖** — 이 브랜치의 로드맵 커밋(0e803d5a)으로 등록했다:
+
+- `plugins/spec-distill/scripts/conductor_state.py`(선택 절 · 적은 번호 찾기와 줄을 내는 함수) · `plugins/spec-distill/scripts/gh_repo.py`(`pr_view`)(§2)
 - `plugins/spec-distill/tests/test_conducting_reference.sh` · `test_conductor_ledger.py` · `test_conductor_state.py` · `test_merged_by_pr.py` · `test_control_plane.py` · `test_gh_repo.py`(§2)
-- `shared/tests/fixtures/docreview/golden/`(§3 · §4) · `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6) — 둘은 §4 의 단언 변경 뒤 구현 PR 에서 등록한다
 - `plugins/spec-distill/tests/test_bundle_coverage.sh` · `test_state_root.sh` · `test_repo_defaults_git.sh` · `test_control_plane.sh`(§7)
-- `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `plugins/quality-gates/.claude-plugin/plugin.json` · `CHANGELOG.md`(공유 파일 — 겹침에서 빠진다)
+
+**예약 밖 — 구현 PR 에서 등록한다**(§4 의 단언 변경 뒤):
+
+- `shared/tests/fixtures/docreview/golden/`(§3 · §4) · `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6)
+- 그 등록은 구현 PR 이 `roadmap_write.py update` 로 로드맵 파일 `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md` 와 묶음 `R14.md` 를 고쳐 한다
+
+**공유 파일**(겹침에서 빠진다): `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `plugins/quality-gates/.claude-plugin/plugin.json` · `CHANGELOG.md`
 
 ## Verification Plan
 
@@ -471,6 +492,11 @@ next_phase: superpowers:writing-plans
     - 접미가 붙은 두 AC(옛 2a · 6a)를 AC17 · AC18 로 — 레포의 AC 정규식(`AC(\d+)`)이 접미를 버린다.
     - 사람에게 보이는 명령의 PR 번호는 숫자만(`--pr 123`) — 맨 `#` 은 셸 주석이다. `#123` 을 받더라도 따옴표가 든다.
     - §10 에 check-path `--root` 행을 더하고, R8 계획 PR 수를 셋으로 고쳤다(병합된 R8 PR 은 계획 PR #249 · #251 · #252 와 로드맵 PR 들이다).
+  - spec 리뷰 2라운드 반영(2026-10-23):
+    - `pr-refresh` 는 적은 번호가 없는 브랜치의 열린 PR 을 블록 단계와 무관하게 묻는다 — 거짓 머지됨이 채우기를 막지 않게. 열린 후보에만 채우기 규칙이 걸리고 머지된 옛 PR 은 자동으로 적지 않는다(AC19).
+    - 쌓인 PR 은 base 가 기본 브랜치가 아니라 `pr-record` 가 rc 4 로 거부한다 — 그때의 rc 4 는 예상된 결과이고, base 를 바꾼 뒤(걸음 5) 걸음 1 의 채우기가 적는다.
+    - `ledger add --section "레포 설정"` 은 쓰기 전에 읽는 쪽과 같은 값 검사(빈 값 · `test_failure_pattern` 정규식)를 읽는 쪽 함수로 돈다. 거부면 기계 상태는 그대로다(AC11).
+    - Files to Modify 를 예약 안 · 예약 안에서 늘어난 자리 · 예약 밖(등록함) · 예약 밖(구현 PR 에서) · 공유 파일로 나누고, 구현 PR 의 로드맵 갱신 파일을 적었다.
   - R9 와의 통합: R14 가 먼저 머지 · R9 가 merge 뒤 대조와 통합 리뷰. 겹치는 파일의 주인은 `## 상류 · 하류 연계` 표 — R14 는 PR 번호 기록(필요한 `conductor_ledger.py` · epic-conductor SKILL 문장 포함), R9 는 high skill 승인 게이트 제거 · 쉬운 말 블록 사본 · 규칙 문장. R14 는 쉬운 말 블록을 고치지 않고 README 는 `## 한계` 와 상태 계산 줄만 고친다.
   - 골든 예약 충돌은 실데이터 락 지도 단언이 머지된 에픽의 예약 · 줄을 다른 에픽 소유로 세지 않게 고치고, 그 뒤 골든 폴더를 R14 에 예약한다(§4).
   - 5 · 6 · 7 · 10 은 사람을 헷갈리게 하거나 실제 결함을 통과시키는 것만 고치고 나머지는 안 고친다. 7 은 행동 층이 덮으면 안 고침이 기본이다(§7).
@@ -487,6 +513,9 @@ next_phase: superpowers:writing-plans
   - 이 브랜치의 로드맵 갱신에 골든 폴더와 `test_review_handoff_order.sh` 를 넣지 않는다 — 단언 변경 전에 넣으면 실데이터 단언이 위반 셋으로 RED 다(이 브랜치에서 실측, §4).
   - §5 (3) 에 기계 상태 층 키 검사(`check_layer`)를 함께 건다.
   - §7 하위 항목 스물다섯의 처분.
+- D2.1 · r2 · adopt · 7836d322#r2.1 · "유지한다 (권장)" — finding 없이 바뀜: §2 에픽 PR 번호 — 적고, 번호로 머지를 판정한다 (modified)
+- D2.2 · r2 · adopt · 93a5c0ad#r2.1 · "유지한다 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- D2.3 · r2 · adopt · fa9159b4#r2.1 · "유지한다 (권장)" — finding 없이 바뀜: §10 조사 — 빠진 항목 · 지금 코드 재확인 (modified)
 
 ## 번호 대조
 
