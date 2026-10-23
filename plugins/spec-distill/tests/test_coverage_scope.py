@@ -171,7 +171,7 @@ class SpecsDir(unittest.TestCase):
             (tmp / "design" / "a.md").write_text("---\nsource_interview: rm/R5.md\n---\n", encoding="utf-8")
             repo = cbc.Repo(str(tmp))
             self.assertEqual([p for p, _t in repo.specs_for("rm/R5.md", "design/")], ["design/a.md"])
-            self.assertEqual(repo.specs_for("rm/R5.md"), [])
+            self.assertEqual(repo.specs_for("rm/R5.md", "other/"), [])
         finally:
             shutil.rmtree(str(tmp))
 
@@ -191,7 +191,7 @@ class SpecsDir(unittest.TestCase):
             self.assertEqual(view["specs_dir"], "design/")
             block = {"kind": "bundle", "fields": {"묶음": "R5.md"}}
             self.assertEqual(cbc._block_specs(block, view, repo), [other])
-            self.assertEqual(cbc._block_specs(block, dict(view, specs_dir=cbc.SPECS_DIR), repo), [])
+            self.assertEqual(cbc._block_specs(block, dict(view, specs_dir="docs/superpowers/specs/"), repo), [])
         finally:
             shutil.rmtree(str(tmp))
 
@@ -222,7 +222,7 @@ class SpecsDir(unittest.TestCase):
 
         fake = FakeTree()
         repo = rs._GitTreeRepo(fake, "tree", "design/")
-        repo.specs_for("rm/R5.md")
+        repo.specs_for("rm/R5.md", None)   # 생성자 폴더
         repo.specs_for("rm/R5.md", "other/")
         repo.specs_for("rm/R5.md", "other/")   # 같은 폴더는 메모
         self.assertEqual(fake.folders, ["design/", "other/"])

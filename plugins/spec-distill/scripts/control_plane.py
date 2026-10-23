@@ -581,10 +581,11 @@ def listing(repo: Repo, main):
     return tree_entries(out, folder), folder, None
 
 
-def cat_batch(repo: Repo, shas) -> dict:
-    """{blob: 바이트} — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)."""
+def cat_batch(repo: Repo, shas) -> tuple:
+    """({blob: 바이트}, rc) — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 rc 로 짧은
+    읽기와 git 실패를 가려 읽기 실패로 센다)."""
     if not shas:
-        return {}
+        return {}, 0
     rc, out = repo.raw("cat-file", "--batch", data="".join(sha + "\n" for sha in shas).encode("ascii"))
     got, pos = {}, 0
     while rc == 0 and pos < len(out):
@@ -598,7 +599,7 @@ def cat_batch(repo: Repo, shas) -> dict:
         if pos + size > len(out):
             break
         got[head[0]], pos = out[pos:pos + size], pos + size + 1
-    return got
+    return got, rc
 
 
 def candidates(repo: Repo, entries: dict, folder):
@@ -607,8 +608,8 @@ def candidates(repo: Repo, entries: dict, folder):
     if folder is None:
         return [], {}, set()
     failed = set()
-    blobs = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
-    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (128, b""), failed)
+    blobs, rc = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
+    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (rc, None), failed)
     found, unchecked = find_roadmaps(list(entries), read, folder)
     unchecked = dict(unchecked)
     return sorted(found + list(unchecked)), unchecked, failed
@@ -687,9 +688,13 @@ def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
 
 
 def pr_cache_fingerprint(machine) -> str:
-    """기계 상태의 PR 줄들을 정렬해 sha256 — 줄 순서와 무관하고, 칸 하나만 바뀌어도 달라진다. None 은 빈 캐시와 같다."""
+    """기계 상태의 PR 줄들과 에픽 PR 줄들을 정렬해 sha256 — 줄 순서와 무관하고, 칸 하나만 바뀌어도 달라진다.
+    None 은 빈 캐시와 같다. 에픽 PR 줄이 없으면 PR 줄만의 값과 같다."""
     rows = (machine or {}).get("PR") or []
-    lines = sorted(cs.SEP.join(str(r.get(c, "")) for c in cs.COLUMNS["PR"]) for r in rows)
+    lines = [cs.SEP.join(str(r.get(c, "")) for c in cs.COLUMNS["PR"]) for r in rows]
+    lines += [cs.EPIC_PR + cs.SEP + cs.SEP.join(str(r.get(c, "")) for c in cs.COLUMNS[cs.EPIC_PR])
+              for r in (machine or {}).get(cs.EPIC_PR) or []]
+    lines = sorted(lines)
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
 
@@ -920,6 +925,7 @@ PR_MISSING = "PR 캐시에 없다 — 지휘자가 채운다"
 PR_MISSING_DONE = ("PR 캐시에 없다 — 끝난 에픽의 줄은 지휘자가 다시 채우지 않는다"
                    "(ledger pr-refresh --roadmap <로드맵> --session <세션> --epic %s 로 채운다)")
 PR_NO_DEFAULT = "기본 브랜치를 몰라 PR 캐시에서 이 레포의 PR 을 고르지 못했다"
+PR_RECORDED_MISSING = "PR %s 캐시에 없음 — 지휘자를 돌려 캐시를 채운다"
 
 
 def _pr_order(row: dict, first: str = "열림"):
@@ -940,10 +946,17 @@ def _not_counted(prs: list) -> str:
     return "PR 캐시 — %s는 세지 않았다" % " · ".join(parts)
 
 
-def pr_fact(rows: list, branch: str, default_short, missing: str, first: str = "열림") -> dict:
-    """브랜치 하나의 PR 사실 — PR 캐시 줄 가운데 이 레포에서(교차 레포 아니오) 기본 브랜치로(baseRefName) 연 PR 만
-    고르고, first 상태(기본 열림)가 먼저 · 그다음 새 PR 이다. 캐시의 줄 순서는 고르기를 바꾸지 않는다.
+def pr_fact(rows: list, branch: str, default_short, missing: str, first: str = "열림", epic=None,
+            epic_rows=()) -> dict:
+    """브랜치 하나의 PR 사실 — 에픽 PR 절에 (epic, branch) 의 번호가 적혀 있으면 그 번호의 캐시 줄 하나만 쓴다(없으면
+    「캐시에 없음」). 적은 번호가 없으면 PR 캐시 줄 가운데 이 레포에서(교차 레포 아니오) 기본 브랜치로(baseRefName)
+    연 PR 만 고르고, first 상태(기본 열림)가 먼저 · 그다음 새 PR 이다. 캐시의 줄 순서는 고르기를 바꾸지 않는다.
     「PR 0개」 줄만 있으면 PR 이 없다고 확인한 때를 밝힌다."""
+    number, recorded = cs.recorded_cache_row(epic_rows, rows, epic, branch)
+    if number is not None:
+        if recorded is None:
+            return {"number": number, "state": "알 수 없음", "source": PR_RECORDED_MISSING % number}
+        return {"number": recorded["번호"], "state": recorded["상태"], "source": "PR 캐시 — 적은 번호"}
     mine = [r for r in rows if r.get("브랜치") == branch]
     if not mine:
         return _pr_unknown(missing)
@@ -990,10 +1003,12 @@ def _rulings(b: dict, paths: list, read, deadline) -> None:
         b["rulings"] = rulings
 
 
-def merged_prs(b: dict, rows: list, default_short) -> list:
-    """머지된 에픽의 브랜치마다 PR — PR 캐시만 읽고 머지된 PR 이 먼저다. 평소 pr-refresh 는 끝난 에픽의 줄을 다시
-    채우지 않으므로 없으면 그 에픽을 채우는 명령을 밝힌다. 머지 커밋 메시지는 해석하지 않는다(호스트마다 다르다)."""
-    return [(s["branch"], pr_fact(rows, s["branch"], default_short, PR_MISSING_DONE % b.get("id"), first="머지됨"))
+def merged_prs(b: dict, rows: list, default_short, epic_rows=()) -> list:
+    """머지된 에픽의 브랜치마다 PR — PR 캐시만 읽고 적은 번호가 있으면 그 줄, 없으면 머지된 PR 이 먼저다. 평소
+    pr-refresh 는 끝난 에픽의 줄을 다시 채우지 않으므로 없으면 그 에픽을 채우는 명령을 밝힌다. 머지 커밋 메시지는
+    해석하지 않는다(호스트마다 다르다)."""
+    return [(s["branch"], pr_fact(rows, s["branch"], default_short,
+                                  PR_MISSING_DONE % b.get("id"), first="머지됨", epic=b.get("id"), epic_rows=epic_rows))
             for s in b.get("branch_states") or []]
 
 
@@ -1008,16 +1023,17 @@ def overlay(items, machine_lookup, detail: bool, read=read_capped, deadline=None
         for row in (machine or {}).get("실행 원장", []):
             ledgers.setdefault(row["에픽"], []).append(row["원장"])
         rows = (machine or {}).get("PR", [])
+        epics = (machine or {}).get(cs.EPIC_PR, [])
         for b in report.get("blocks") or []:
             stage = b.get("stage") or ""
             partial = stage.startswith("일부 머지")
             br = active_branch(b)
             if br and (stage == "구현 끝" or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
-                b["pr"] = pr_fact(rows, br, default_short, PR_MISSING)
+                b["pr"] = pr_fact(rows, br, default_short, PR_MISSING, epic=b.get("id"), epic_rows=epics)
                 if stage == "구현 끝" and b["pr"]["state"] == "열림":
                     b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
             if detail and focus is not None and b.get("id") == focus and stage == "머지됨":
-                b["merged_prs"] = merged_prs(b, rows, default_short)
+                b["merged_prs"] = merged_prs(b, rows, default_short, epics)
             if detail and (stage in IMPL_STAGES or partial or stage == "머지됨"):
                 _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
 

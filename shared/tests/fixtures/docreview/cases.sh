@@ -32,25 +32,54 @@ mk_state() {   # mk_state <doc> <profile>  → prints state dir (init 까지). �
 snap() { py docreview_anchor.py snapshot "$1" > "$2"; }         # snap <doc> <out.json>
 ledger_doc() { python3 "$FX/st_get.py" "$1/docreview-state.md" 'st["doc"]'; }   # ledger_doc <state-dir> → 원장의 문서
 put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원장의 문서 자리에 옮긴다(같은 파일이면 그대로). 공유 픽스처는 덮지 않는다
-  local L; L="$(ledger_doc "$1")" || return 1
+  local L; L="$(ledger_doc "$1")" || { no "[cases.sh] 원장의 문서를 읽지 못했다: $1" >&2; return 1; }
   [ "$2" -ef "$L" ] && return 0
   case "$L" in "$FX"/*) no "[cases.sh] 원장의 문서가 공유 픽스처다 — 덮지 않는다: $L" >&2; return 1 ;; esac
-  cp "$2" "$L"
+  cp "$2" "$L" || { no "[cases.sh] 문서 복사 실패: $2 → $L" >&2; return 1; }
 }
 put_snap() { put_doc "$1" "$(jget "$2" 'd["doc"]')"; }   # put_snap <state-dir> <snapshot.json> — 그 스냅숏을 뜬 문서를 원장의 문서 자리에. 부르는 줄은 `&&` 로 잇는다(거절이면 begin-round 를 돌리지 않는다)
+# put_snap 의 거절은 `no` 로 실패를 센다 — `$(...)` 안에서 부르면 그 수가 서브셸에서 사라진다. 그래서 `$(...)` 안에서 부르지 않는다.
+case_put_snap_failure_counted() {   # 공유 픽스처가 원장의 문서인 상태에 다른 문서의 스냅숏을 넣는 줄이 실패를 정확히 1 센다
+  local d s b a1 a2 r pf
+  d="$(mktemp -d -t docreview-XXXXXX)" || { no "put_snap 계수: 임시 폴더 실패"; return; }
+  py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" >/dev/null || { no "put_snap 계수: init 실패"; rm -rf "$d"; return; }
+  { cat "$FX/design-sample.md"; echo "다른 문서"; } > "$d/other.md"; s="$d/s.json"; snap "$d/other.md" "$s"
+  b=$_ASSERT_FAIL
+  { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } 2>/dev/null
+  a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  { pf=put_snap; r=""; r="$($pf "$d" "$s" && py docreview_state.py begin-round --state-dir "$d")"; } 2>/dev/null
+  a2=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a1" "1" "put_snap 계수: 부름 줄을 서브셸 밖에서 돌리면 거절이 실패로 정확히 1 센다"
+  assert_eq "$a2" "0" "put_snap 계수 대조: 옛 꼴(\$(…) 안)에서는 그 실패가 세어지지 않는다"
+  assert_eq "$r" "" "put_snap 계수: 거절이면 begin-round 를 돌리지 않는다"
+  rm -rf "$d"
+  # 원장을 못 읽는 실패 · 복사 실패도 같은 줄에서 정확히 1 센다 — 세지 않으면 `put_snap … && assert_eq …` 의 단언이 조용히 빠진다
+  d="$(mktemp -d -t docreview-XXXXXX)" || { no "put_snap 계수: 임시 폴더 실패"; return; }
+  s="$d/s.json"; snap "$FX/design-sample.md" "$s"
+  b=$_ASSERT_FAIL; { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } >/dev/null 2>&1
+  a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a1 [$r]" "1 []" "put_snap 계수: 원장이 없어 원장의 문서를 못 읽으면 실패로 정확히 1 센다"
+  rm -rf "$d"
+  d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "put_snap 계수: init 실패"; rm -rf "$d"; return; }
+  cp "$FX/design-sample.md" "$d/gone.md"; s="$d/s.json"; snap "$d/gone.md" "$s"; rm -f "$d/gone.md"
+  b=$_ASSERT_FAIL; { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } >/dev/null 2>&1
+  a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a1 [$r]" "1 []" "put_snap 계수: 문서 복사가 실패하면 실패로 정확히 1 센다"
+  rm -rf "$d"
+}
 
 # ── T37 — 상한 2 와 추가 라운드 ───────────────────────────────────────────
 case_T37_cap_and_extra() {
   local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "T37: init 실패"; return; }
   s="$d/snap.json"; snap "$FX/design-sample.md" "$s"
   local r1 r2 r3 r4 r4b
-  r1="$(put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
-  r2="$(put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
-  r3="$(put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
+  r1=""; put_snap "$d" "$s" && r1="$(py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
+  r2=""; put_snap "$d" "$s" && r2="$(py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
+  r3=""; put_snap "$d" "$s" && r3="$(py docreview_state.py begin-round --state-dir "$d" | jgets 'd["rereview_count"]')"
   assert_eq "$r1 $r2 $r3" "0 1 2" "T37: rereview_count 는 라운드 1·2·3 에서 0·1·2"
   put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; r4=$?
   assert_eq "$r4" "3" "T37: 라운드 4 는 승인 없이 rc 3 (cap_reached)"
-  r4b="$(put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" --extra-approval '추가 라운드 1회 열기' --extra-approval-source label | jgets 'd["round"]')"
+  r4b=""; put_snap "$d" "$s" && r4b="$(py docreview_state.py begin-round --state-dir "$d" --extra-approval '추가 라운드 1회 열기' --extra-approval-source label | jgets 'd["round"]')"
   assert_eq "$r4b" "4" "T37: --extra-approval 이 있으면 라운드 4 가 열린다"
   local nx; nx="$(python3 "$FX/st_get.py" "$d/docreview-state.md" 'len(st["extra_rounds"]), st["extra_rounds"][0]["round"], st["rereview_count"], st["extra_rounds"][0]["source"]')"
   assert_eq "$nx" "(1, 4, 2, 'label')" "T37: extra_rounds 에 개별 기록 1건(round 4), 카운터는 2 에 머문다"
@@ -449,10 +478,10 @@ case_AC38_audit_row10_11_entry_flags() {
   local dmc; dmc="$(r1 "$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md" "$FX/design-sample.md")"   # must_catch 를 지목한 프로필 — advice 가 도는 원장
   py docreview_state.py advice --state-dir "$dmc" --render --cap 3 >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "0" "AC38 감사10 양성 짝: --render 와 ASCII 정수 cap 은 받는다(rc 0)"
-  assert_eq "$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --detectors 1 | jgets 'd["ok"]')" "True" "AC38 감사10 양성 짝: ASCII 숫자는 받는다"
+  put_snap "$d" "$d/s2.json" && assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --detectors 1 | jgets 'd["ok"]')" "True" "AC38 감사10 양성 짝: ASCII 숫자는 받는다"
   snap "$FX/design-sample.md" "$d/s3.json"; snap "$FX/design-sample.md" "$d/s4.json"
   put_snap "$d" "$d/s3.json" && py docreview_state.py begin-round --state-dir "$d" >/dev/null
-  local err; err="$(put_snap "$d" "$d/s4.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval '   ' --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+  local err; err=""; put_snap "$d" "$d/s4.json" && err="$(py docreview_state.py begin-round --state-dir "$d" --extra-approval '   ' --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
   assert_contains "$err" '"reason": "extra_approval_blank"' "AC38 감사11: 공백뿐인 추가 승인은 거부"
   rm -rf "$d"
 }
@@ -655,11 +684,11 @@ case_AC38_r3_f7_invisible_blank_quote() {
   # 3차 지적 7 — 보이지 않는 글자(폭 없는 공백 등)뿐인 추가 승인은 승인이 아니다
   local d s err v rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
   for v in "$(python3 -I -c 'print("​", end="")')" "$(python3 -I -c 'print("﻿⁠", end="")')" "$(python3 -I -c 'print("​ 　‌", end="")')"; do
-    err="$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval "$v" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+    err=""; put_snap "$d" "$d/s2.json" && err="$(py docreview_state.py begin-round --state-dir "$d" --extra-approval "$v" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
     assert_eq "$rc" "2" "AC38 3차7: 보이지 않는 글자뿐인 추가 승인은 rc 2"
     assert_contains "$err" '"reason": "extra_approval_blank"' "AC38 3차7: 사유는 extra_approval_blank"
   done
-  assert_eq "$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval '열기' --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 3차7 양성 짝: 보이는 글자가 있는 승인은 받는다"
+  put_snap "$d" "$d/s2.json" && assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --extra-approval '열기' --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 3차7 양성 짝: 보이는 글자가 있는 승인은 받는다"
   rm -rf "$d"
 }
 # ── AC38 4차 — 결정 기록 · 미룸 절의 줄 출처: 엔진이 쓴 줄만 지나간다 ─────────────────────────
@@ -763,10 +792,10 @@ case_AC38_r4_m3_invisible_letters() {
   # 4차 m3 — 글자 부류로는 문자지만 보이지 않는 것(한글 채움 문자 · 점자 빈칸 · 결합 자소 결합자)뿐인 추가 승인도 승인이 아니다
   local d err rc v; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; snap "$FX/design-sample.md" "$d/s2.json"
   for v in 3164 115F 1160 2800 034F FFA0; do
-    err="$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
+    err=""; put_snap "$d" "$d/s2.json" && err="$(py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed 2>&1 >/dev/null)"; rc=$?
     assert_eq "$rc" "2" "AC38 4차m3: U+${v} 뿐인 추가 승인은 rc 2"
   done
-  assert_eq "$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'print(chr(0x3164) + "열기", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 4차m3 양성 짝: 보이는 글자가 섞이면 받는다"
+  put_snap "$d" "$d/s2.json" && assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'print(chr(0x3164) + "열기", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 4차m3 양성 짝: 보이는 글자가 섞이면 받는다"
   rm -rf "$d"
 }
 revert_target_flagged_state() {   # → state dir: 라운드 2 와 3 에 #12 가 연달아 허가 없이 바뀌고 사후 결정 둘이 열려 있다
@@ -911,7 +940,7 @@ case_AC38_r5_5_combining_only_blank() {
     put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'import sys; print(chr(int(sys.argv[1], 16)), end="")' "$v")" --extra-approval-source typed >/dev/null 2>&1; rc=$?
     assert_eq "$rc" "2" "AC38 5차5: U+${v} 뿐인 추가 승인은 rc 2"
   done
-  assert_eq "$(put_snap "$d" "$d/s2.json" && py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'print("é", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 5차5 양성 짝: 보이는 글자에 붙은 결합 부호는 받는다"
+  put_snap "$d" "$d/s2.json" && assert_eq "$(py docreview_state.py begin-round --state-dir "$d" --extra-approval "$(python3 -I -c 'print("é", end="")')" --extra-approval-source typed | jgets 'd["ok"]')" "True" "AC38 5차5 양성 짝: 보이는 글자에 붙은 결합 부호는 받는다"
   rm -rf "$d"
 }
 case_AC38_r4_m4_route_alternatives_filtered() {
@@ -3906,7 +3935,7 @@ case_config_defaults_disclosed() {
 case_config_env_wins() {
   local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
   s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
-  local out; out="$(put_snap "$d" "$s" && DEVBREW_DOCREVIEW_DETECTORS=3 DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --detectors 2)"
+  local out; out=""; put_snap "$d" "$s" && out="$(DEVBREW_DOCREVIEW_DETECTORS=3 DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" --detectors 2)"
   assert_eq "$(printf '%s' "$out" | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"], d["config"]["rereview_cap"]["value"]')" "(3, '환경', 0)" "config: 환경이 진입(--detectors 2)과 프로필을 이긴다"
   put_snap "$d" "$s" && DEVBREW_DOCREVIEW_REREVIEW_CAP=0 py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; local rc=$?
   assert_eq "$rc" "3" "config: 상한 0 이면 라운드 2 는 승인 없이 rc 3"
@@ -3915,13 +3944,13 @@ case_config_env_wins() {
 case_config_entry_beats_profile() {
   local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
   s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
-  assert_eq "$(put_snap "$d" "$s" && env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --detectors 2 | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"]')" "(2, '진입')" "config: 진입 선언이 프로필(1)을 이긴다"
+  put_snap "$d" "$s" && assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --detectors 2 | jgets 'd["config"]["detectors"]["value"], d["config"]["detectors"]["source"]')" "(2, '진입')" "config: 진입 선언이 프로필(1)을 이긴다"
   rm -rf "$d"
 }
 case_config_invalid_refused() {
   local d s; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "config: init 실패"; return; }
   s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
-  local err rc; err="$(put_snap "$d" "$s" && DEVBREW_DOCREVIEW_DETECTORS=two py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  local err rc; err=""; put_snap "$d" "$s" && err="$(DEVBREW_DOCREVIEW_DETECTORS=two py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
   assert_eq "$rc" "2" "config: 정수가 아닌 환경 값은 라운드를 시작하지 않는다(rc 2)"
   assert_contains "$err" '"reason": "config_invalid"' "config: 사유 이름"
   assert_contains "$err" "DEVBREW_DOCREVIEW_DETECTORS" "config: 변수 이름을 낸다"
@@ -3938,7 +3967,7 @@ case_config_invalid_refused() {
 case_config_maximum_refused() {
   local d s err rc; d="$(mk_state "$FX/design-sample.md" "$PROF_SD/design-doc.md")" || { no "max: init 실패"; return; }
   s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
-  err="$(put_snap "$d" "$s" && DEVBREW_DOCREVIEW_DETECTORS=500 py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  err=""; put_snap "$d" "$s" && err="$(DEVBREW_DOCREVIEW_DETECTORS=500 py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
   assert_eq "$rc" "2" "max: 최댓값을 넘는 환경 값은 라운드를 시작하지 않는다(rc 2)"
   assert_contains "$err" '"reason": "config_invalid"' "max: 사유 이름"
   assert_contains "$err" '"allowed": "1~6"' "max: 허용 범위를 낸다"
@@ -3953,7 +3982,7 @@ case_config_maximum_refused() {
     put_snap "$d2" "$s" && env "$kv" python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d2" >/dev/null 2>&1; rc=$?
     assert_eq "$rc" "0" "max 양성 짝: ${kv} 는 최댓값 그대로라 받는다"; rm -rf "$d2"
   done
-  err="$(put_snap "$d" "$s" && env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --detectors 7 2>&1 >/dev/null)"; rc=$?
+  err=""; put_snap "$d" "$s" && err="$(env -u DEVBREW_DOCREVIEW_DETECTORS python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" --detectors 7 2>&1 >/dev/null)"; rc=$?
   assert_eq "$rc" "2" "max: --detectors 7 은 거부된다"
   assert_contains "$err" '"where": "진입"' "max: 진입 출처를 낸다"
   local p; p="$(mktemp -d -t prof-XXXXXX)"
@@ -3983,7 +4012,7 @@ case_config_profile_fields() {
   python3 -I -c 'import sys; t=open(sys.argv[1],encoding="utf-8").read(); t=t.replace("detectors: 1\n","detectors: 2\nrereview_cap: 4\nrender_cap: 12\nsummary_width: 80\n",1); open(sys.argv[2],"w",encoding="utf-8").write(t)' "$PROF_SD/design-doc.md" "$p/design-doc.md"
   local d s; d="$(mk_state "$FX/design-sample.md" "$p/design-doc.md")" || { no "config: init 실패"; rm -rf "$p"; return; }
   s="$d/s1.json"; snap "$FX/design-sample.md" "$s"
-  assert_eq "$(put_snap "$d" "$s" && env -u DEVBREW_DOCREVIEW_DETECTORS -u DEVBREW_DOCREVIEW_REREVIEW_CAP -u DEVBREW_DOCREVIEW_RENDER_CAP -u DEVBREW_DOCREVIEW_SUMMARY_WIDTH python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" | jgets 'tuple((k, v["value"], v["source"]) for k, v in sorted(d["config"].items()))')" \
+  put_snap "$d" "$s" && assert_eq "$(env -u DEVBREW_DOCREVIEW_DETECTORS -u DEVBREW_DOCREVIEW_REREVIEW_CAP -u DEVBREW_DOCREVIEW_RENDER_CAP -u DEVBREW_DOCREVIEW_SUMMARY_WIDTH python3 "$SCRIPTS/docreview_state.py" begin-round --state-dir "$d" | jgets 'tuple((k, v["value"], v["source"]) for k, v in sorted(d["config"].items()))')" \
     "(('detectors', 2, '프로필'), ('render_cap', 12, '프로필'), ('rereview_cap', 4, '프로필'), ('summary_width', 80, '프로필'))" "config: 프로필 필드 넷이 먹는다"
   rm -rf "$d" "$p"
 }
@@ -4334,7 +4363,7 @@ case_AC17_era_marker_failure_disclosed() {
   rm -f "$d/docreview-digest-era"
   s="$d.snap.json"; snap "$FX/design-sample.md" "$s"
   chmod 555 "$d"
-  err="$(put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
+  err=""; put_snap "$d" "$s" && err="$(py docreview_state.py begin-round --state-dir "$d" 2>&1 >/dev/null)"; rc=$?
   chmod 755 "$d"
   assert_eq "$rc" "0" "AC17: 표지 파일을 못 만들어도 원장 갱신은 계속된다"
   assert_contains "$err" "시대 표지 파일을 만들지 못했다" "AC17: 표지 파일을 만들지 못한 것을 한 줄로 알린다"

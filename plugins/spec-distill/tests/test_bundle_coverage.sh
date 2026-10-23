@@ -378,4 +378,20 @@ mkdefer '| 항목 | 받는 곳 | 이유 |
 | AC2 | R5 | 나중 |'
 assert_contains "$(defer_out)" "항목 · 이유 · 받는 곳 순서가 아니다" "deferred_rows: 머리 행 순서가 다르면 FormatError"
 
+# ── specs_dir 는 필수 인자다 — 기본값 갈래가 없다(R14) ─────────────────────────
+req="$(cd "$S" && python3 -c '
+import check_bundle_coverage as c, roadmap_status as r
+for f in (lambda: c.Repo(".").specs_for("x"), lambda: r._GitTreeRepo(None, "t")):
+    try:
+        f()
+        print("no-error")
+    except TypeError:
+        print("TypeError")
+' 2>&1)"
+assert_eq "$req" "$(printf 'TypeError\nTypeError')" "specs_dir 필수: specs_for · _GitTreeRepo 가 폴더 없이 부르면 TypeError"
+req2="$(cd "$S" && python3 -c '
+import check_bundle_coverage as c
+print(c.Repo(".").specs_for("x", "docs/none"))' 2>&1)"
+assert_eq "$req2" "[]" "specs_dir 필수(양의 짝): 폴더를 주면 부른다"
+
 finish

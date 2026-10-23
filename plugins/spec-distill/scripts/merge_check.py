@@ -73,6 +73,15 @@ def stamp() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def pattern_error(pattern: str):
+    """`test_failure_pattern` 이 컴파일되지 않으면 그 `re.error` 글, 되면 None. `run` 과 `ledger add`(레포 설정)가 함께 부른다."""
+    try:
+        re.compile(pattern, re.M)
+    except re.error as exc:
+        return str(exc)
+    return None
+
+
 def names_in(text: str, pattern=None, shapes=None):
     """(실패 이름 집합, 쓴 모양). 모양이 하나도 안 맞으면 (빈 집합, None) — 「이름 대조 불가」 의 근거다.
 
@@ -382,11 +391,9 @@ def run(root: Path, a) -> int:
     except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
     test_command, pattern, sources = suite_settings(root, a.roadmap, mroot)
-    if pattern:
-        try:
-            re.compile(pattern)
-        except re.error as exc:
-            raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), exc))
+    why = pattern_error(pattern) if pattern else None
+    if why:
+        raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), why))
     mdir = mroot / repo_defaults.MERGE_CHECK_DIR
     lock = suite_lock.lock_path(mroot)
     take_lock(lock, a.branch, a.wait)

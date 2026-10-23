@@ -292,6 +292,62 @@ class StaleLocalTip(unittest.TestCase):
         self.assertIsNone(v)
 
 
+class MergedByNumber(unittest.TestCase):
+    """적은 번호가 있는 브랜치는 그 번호의 캐시 줄로만 판정한다(R14 AC4) — 끝 · 나이 · 이름은 판정에 쓰지 않는다."""
+    RM = "docs/rm/roadmap.md"
+
+    def judge(self, mine, others=(), tip=TIP, reachable=always, rm=RM):
+        rows = ([mine] if mine else []) + list(others)
+        return rs.merged_by_number("#12", mine, rows, tip, "main", reachable, "R1", rm)
+
+    def test_missing_from_cache(self):
+        self.assertEqual(self.judge(None, [row(num="#13")]),
+                         (None, ["PR #12 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"], []))
+
+    def test_missing_merge_commit(self):
+        self.assertEqual(self.judge(row(num="#12", merge="-")),
+                         (None, ["PR #12 은 머지됐지만 캐시에 mergeCommit 이 없어 머지됨으로 세지 않았다 — 지휘자를 돌려 "
+                                 "PR 캐시를 다시 채운다"], []))
+
+    def test_reachable_same_tip_no_info(self):
+        self.assertEqual(self.judge(row(num="#12")),
+                         ("PR #12 머지됨(적은 번호로 판정 · mergeCommit %s)" % M[:8], [], []))
+
+    def test_no_tip_no_info(self):
+        self.assertEqual(self.judge(row(num="#12"), tip=None)[1:], ([], []))
+
+    def test_reachable_tip_moved_on(self):                          # 머지 뒤 브랜치에 커밋이 더 붙음 — 판정은 그대로
+        got, infos, warns = self.judge(row(num="#12"), tip=NEW)
+        self.assertEqual(got, "PR #12 머지됨(적은 번호로 판정 · mergeCommit %s)" % M[:8])
+        self.assertEqual(infos, ["머지 뒤 브랜치에 커밋이 더 붙었다(%s ≠ PR 의 head %s — 번호 판정은 그대로)"
+                                 % (NEW[:8], TIP[:8])])
+        self.assertEqual(warns, [])
+
+    def test_not_reachable_warns(self):
+        self.assertEqual(self.judge(row(num="#12"), reachable=never),
+                         (None, [], ["머지됨(받기 전) — git fetch 뒤 다시 계산한다(PR #12)"]))
+
+    def test_open_closed_other_base_cross_are_not_merged(self):
+        for mine in (row(num="#12", state="열림", merge="-"), row(num="#12", state="닫힘", merge="-"),
+                     row(num="#12", base="release"), row(num="#12", cross="예")):
+            self.assertEqual(self.judge(mine), (None, [], []), mine)
+
+    def test_other_merged_row_suggests_record(self):
+        got, infos, warns = self.judge(row(num="#12", state="닫힘", merge="-"), [row(num="#13", oid=NEW)])
+        self.assertIsNone(got)
+        self.assertEqual(infos, [])
+        self.assertEqual(warns, ["적은 PR #12 은 닫힘이고 같은 브랜치의 PR #13 이 머지됐다 — 그 PR 이 이 에픽의 PR 이면 "
+                                 "`ledger pr-record --roadmap docs/rm/roadmap.md --session <세션> --epic R1 --pr 13`"])
+        self.assertNotIn("--pr #", warns[0])
+        self.assertIn("--roadmap <로드맵>", self.judge(row(num="#12", state="닫힘", merge="-"), [row(num="#13")],
+                                                     rm=None)[2][0])
+
+    def test_other_row_must_be_own_repo_default_base_merged(self):
+        for other in (row(num="#13", cross="예"), row(num="#13", base="release"), row(num="#13", state="열림"),
+                      row(num="-", state="PR 0개", oid="-", cross="-", base="-", merge="-")):
+            self.assertEqual(self.judge(row(num="#12", state="열림", merge="-"), [other]), (None, [], []), other)
+
+
 class FirstAdded(unittest.TestCase):
     """문서를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋 — 이름 바꿈은 따라가고 복사는 따라가지 않는다."""
     LOG = ("\x00" + "r" * 40 + "\n\nR100\tdocs/specs/x.md\tdocs/new/x.md\n"

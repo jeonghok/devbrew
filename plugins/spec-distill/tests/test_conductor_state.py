@@ -389,5 +389,55 @@ class OptionalWorks(unittest.TestCase):
         self.assertEqual(C.parse_machine(text, "a/rm/roadmap.md")["작업"], data["작업"])
 
 
+class EpicPr(unittest.TestCase):
+    """에픽 PR 절 — 에픽이 연 PR 번호 기록. 빈 절은 머리를 쓰지 않는다."""
+    ROW = {"에픽": "R14", "브랜치": "feature/x", "번호": "#12", "적은 때": "2026-10-23 10:00", "쓴 세션": SID}
+
+    def _with(self, *rows):
+        data = cs.empty()
+        data["에픽 PR"].extend(rows)
+        return data
+
+    def test_empty_section_has_no_header(self):
+        self.assertNotIn("## 에픽 PR", cs.render_machine(RM, cs.empty()))
+
+    def test_roundtrip(self):
+        text = cs.render_machine(RM, self._with(self.ROW))
+        self.assertIn("- R14 · feature/x · #12 · 2026-10-23 10:00 · " + SID, text)
+        self.assertEqual(cs.parse_machine(text, RM)["에픽 PR"], [self.ROW])
+
+    def test_bad_number_rejected(self):
+        for bad in ("12", "#x"):
+            with self.assertRaises(cs.MachineError) as cm:
+                cs.render_machine(RM, self._with(dict(self.ROW, 번호=bad)))
+            self.assertIn("#<숫자>", str(cm.exception))
+
+    def test_bad_epic_rejected(self):
+        with self.assertRaises(cs.MachineError):
+            cs.render_machine(RM, self._with(dict(self.ROW, 에픽="r14")))
+
+    def test_duplicate_pair_rejected(self):
+        one = cs.render_machine(RM, self._with(self.ROW))
+        first = "- R14 · feature/x · #12 · 2026-10-23 10:00 · " + SID
+        two = one.replace(first, first + "\n- R14 · feature/x · #13 · 2026-10-23 11:00 · " + SID)
+        with self.assertRaises(cs.MachineError) as cm:
+            cs.parse_machine(two, RM)
+        self.assertIn("같은 (에픽, 브랜치)", str(cm.exception))
+        other = one.replace(first, first + "\n- R15 · feature/x · #13 · 2026-10-23 11:00 · " + SID)
+        self.assertEqual(len(cs.parse_machine(other, RM)["에픽 PR"]), 2)
+
+    def test_recorded_cache_row_three_cases(self):
+        rows = [self.ROW]
+        self.assertEqual(cs.recorded_cache_row([], [pr_row()], "R14", "feature/x"), (None, None))
+        self.assertIsNone(cs.recorded_number([], "R14", "feature/x"))
+        self.assertEqual(cs.recorded_number(rows, "R14", "feature/x"), "#12")
+        hit = pr_row(브랜치="feature/x", 번호="#12")
+        self.assertEqual(cs.recorded_cache_row(rows, [hit], "R14", "feature/x"), ("#12", hit))
+        miss = pr_row(브랜치="feature/x", 번호="#13")
+        self.assertEqual(cs.recorded_cache_row(rows, [miss], "R14", "feature/x"), ("#12", None))
+        nopr = cs.no_pr_row("feature/x", "2026-10-23 10:00", SID)
+        self.assertEqual(cs.recorded_cache_row(rows, [nopr], "R14", "feature/x"), ("#12", None))
+
+
 if __name__ == "__main__":
     unittest.main()

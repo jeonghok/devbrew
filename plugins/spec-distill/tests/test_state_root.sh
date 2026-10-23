@@ -188,4 +188,12 @@ CL_OUT="$(GIT_DIR="$H/.git" python3 "$SD/scripts/conductor_ledger.py" --root "$H
 assert_eq "$CL_RC" "3" "git_dir_notice_on_stop: 표지 잡기도 rc 3"
 assert_contains "$CL_OUT" "환경 변수 GIT_DIR 가 설정된 채로 돈다" "git_dir_notice_on_stop: 표지 잡기가 멈출 때도 환경 변수 알림이 보인다"
 
+note "== bare_dotgit"
+BD="$T/bd"; mkdir -p "$BD"
+g clone -q --bare "$S" "$BD/.git"
+g --git-dir "$BD/.git" worktree add -q --detach "$BD/wt" HEAD
+run "$BD/wt" state-root --ensure
+assert_eq "$RC" "0" "bare_dotgit: .git 이름의 bare 레포 worktree 에서 ensure 가 rc 0"
+if [ -d "$BD/.claude/spec-distill" ]; then ok "bare_dotgit: 상태 폴더가 생겼다"; else no "bare_dotgit: 상태 폴더가 없다(rc ${RC} · ${ERR})"; fi
+
 finish

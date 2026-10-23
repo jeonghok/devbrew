@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지.
 
-기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 작업(로드맵 밖 일 포함) · 기다리는 질문 ·
+기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 작업(로드맵 밖 일 포함) · 에픽 PR 번호 기록 · 기다리는 질문 ·
 아직 커밋하지 못한 기록 · 임시 레포 설정 · 시작 승인(같은 세션 이어 부르기 공시))만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
 넘김 상태 계산은 읽기 전용 `roadmap_model.py` 가 하고 여기서 다시 내보낸다. 상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
 
@@ -35,6 +35,7 @@ WRITER = "spec-distill"
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECTIONS = (
     ("PR", ("브랜치", "번호", "상태", "확인한 때", "headRefOid", "교차 레포", "baseRefName", "mergeCommit", "쓴 세션")),
+    ("에픽 PR", ("에픽", "브랜치", "번호", "적은 때", "쓴 세션")),
     ("실행 원장", ("에픽", "계획", "원장", "읽은 줄")),
     ("자원", ("종류", "경로", "에픽", "용도", "만든 때")),
     ("살아 있는 agent", ("이름", "에픽", "일", "worktree", "보낸 때")),
@@ -45,7 +46,9 @@ SECTIONS = (
     ("시작 승인", ("세션", "때", "규모")),
 )
 COLUMNS = dict(SECTIONS)
-OPTIONAL_SECTIONS = ("작업",)
+EPIC_PR = "에픽 PR"
+OPTIONAL_SECTIONS = ("작업", EPIC_PR)
+RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"
 WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
 PR_NUMBER_RE = re.compile(r"#\d+")
@@ -162,6 +165,11 @@ def _check_row(section: str, row: dict, where: str):
             raise MachineError("%s: 교차 레포는 %s 중 하나다: %r" % (where, " · ".join(PR_CROSS), row["교차 레포"]))
         if row["mergeCommit"] != "-" and not OID_RE.fullmatch(row["mergeCommit"]):
             raise MachineError("%s: mergeCommit 은 40자 16진이거나 `-` 다: %r" % (where, row["mergeCommit"]))
+    if section == EPIC_PR:
+        if not EPIC_RE.fullmatch(row["에픽"]):
+            raise MachineError("%s: 에픽 이름 꼴이 아니다: %r" % (where, row["에픽"]))
+        if not PR_NUMBER_RE.fullmatch(row["번호"]):
+            raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
     if section == "실행 원장" and not re.fullmatch(r"[0-9]+", row["읽은 줄"]):
         raise MachineError("%s: 읽은 줄은 숫자다: %r" % (where, row["읽은 줄"]))
 
@@ -204,7 +212,32 @@ def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
         row = dict(zip(cols, cells))
         _check_row(cur, row, "%d줄" % n)
         data[cur].append(row)
+    seen = set()
+    for row in data[EPIC_PR]:
+        key = (row["에픽"], row["브랜치"])
+        if key in seen:
+            raise MachineError("에픽 PR 절에 같은 (에픽, 브랜치) 줄이 둘 이상이다: %s, %s" % key)
+        seen.add(key)
     return data
+
+
+def recorded_number(epic_rows: list, epic: str, branch: str):
+    """에픽 PR 절에 적힌 (에픽, 브랜치) 의 번호(`#12` 꼴) — 없으면 None."""
+    for row in epic_rows:
+        if row["에픽"] == epic and row["브랜치"] == branch:
+            return row["번호"]
+    return None
+
+
+def recorded_cache_row(epic_rows: list, pr_rows: list, epic: str, branch: str) -> tuple:
+    """(None, None) 적은 번호 없음 · (번호, 줄) · (번호, None) 캐시에 그 (브랜치, 번호) 줄 없음. 번호가 `-` 인 줄은 보지 않는다."""
+    number = recorded_number(epic_rows, epic, branch)
+    if number is None:
+        return (None, None)
+    for row in pr_rows:
+        if row["브랜치"] == branch and row["번호"] == number and row["번호"] != NO_PR:
+            return (number, row)
+    return (number, None)
 
 
 def render_machine(roadmap_rel: str, data: dict) -> str:

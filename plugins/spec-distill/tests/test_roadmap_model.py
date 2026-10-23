@@ -323,28 +323,34 @@ class RoadmapVerdict(unittest.TestCase):
             (b"120000", b"blob", b"l1", d + "l/roadmap.md"), (b"160000", b"commit", b"s1", d + "s/roadmap.md"),
             (b"100644", b"blob", b"f1", d + "f/roadmap.md"), (b"100644", b"blob", b"z1", d + "z/roadmap.md"),
             (b"100644", b"blob", b"u1", d + "u/roadmap.md"), (b"100644", b"blob", b"d1", d + "a/deep/r.md"),
-            (b"100644", b"blob", b"o1", "docs/x.md")))
+            (b"100644", b"blob", b"g1", d + "g/roadmap.md"), (b"100644", b"blob", b"o1", "docs/x.md")))
         entries = M.tree_entries(out, d)
         self.assertNotIn(d + "a/deep/r.md", entries)
         self.assertNotIn("docs/x.md", entries)
-        blobs = {b"a1": self.TEXT.encode(), b"x1": self.TEXT.encode(), b"f1": None,
+        blobs = {b"a1": self.TEXT.encode(), b"x1": self.TEXT.encode(), b"f1": None, b"g1": b"",
                  b"z1": b"version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n", b"u1": b"\xff\xfe---\n"}
         cats = []
 
         def cat(sha):
             cats.append(sha)
             data = blobs[sha.encode()]
-            return (128, b"") if data is None else (0, data)
+            if data == b"":
+                return 0, None   # rc 0 인데 한 번에 읽기 출력에 이 blob 이 없다(짧게 읽음)
+            return (128, None) if data is None else (0, data)
         failed = set()
         found, unchecked = M.find_roadmaps(list(entries), M.blob_reader(entries, cat, failed), d)
         self.assertEqual(found, [d + "a/roadmap.md", d + "x/roadmap.md"])
         why = dict(unchecked)
         self.assertIn("파일을 읽지 못했다", why[d + "f/roadmap.md"])
+        self.assertIn("rc 128", why[d + "f/roadmap.md"])
+        self.assertNotIn("짧게 읽음", why[d + "f/roadmap.md"])
+        self.assertIn("짧게 읽음", why[d + "g/roadmap.md"])
+        self.assertNotIn("rc 0", why[d + "g/roadmap.md"])
         self.assertIn("일반 파일이 아니다", why[d + "l/roadmap.md"])
         self.assertIn("일반 파일이 아니다", why[d + "s/roadmap.md"])
         self.assertIn("LFS", why[d + "z/roadmap.md"])
         self.assertIn("UTF-8", why[d + "u/roadmap.md"])
-        self.assertEqual(failed, {d + "f/roadmap.md"})
+        self.assertEqual(failed, {d + "f/roadmap.md", d + "g/roadmap.md"})
         self.assertNotIn("l1", cats)
         self.assertNotIn("s1", cats)
 
