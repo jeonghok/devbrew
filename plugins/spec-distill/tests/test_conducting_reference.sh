@@ -273,6 +273,15 @@ for where in "cyc 4" "step 5"; do
     assert_contains "$($where)" "$lit" "${where}: 쌓인 PR 의 pr-record 거부를 적는다 — $lit"
   done
 done
+# pr-record 의 종료 코드 4 는 head · 교차 레포 · origin 아닌 URL 에도 난다 — 「예상된 결과」 는 어긋난 칸이 baseRefName
+# 하나뿐일 때로 묶이고, 그 밖의 0 아닌 종료 코드는 사유를 보이고 그 에픽의 번호 적기만 멈춘다(pr-refresh 는 그대로).
+RC4=('종료 코드 4' '`baseRefName` 하나뿐일 때만' '예상된 결과' '그 밖의 0 아닌 종료 코드' '사유를 그대로 보이고' '번호 적기를 멈춘다' '`pr-refresh` 는 그대로 부른다')
+for where in "cyc 4" "step 5"; do
+  assert_eq "$(chain "$($where)" "${RC4[@]}")" "yes" "${where}: pr-record 종료 코드 4 는 baseRefName 하나만 어긋날 때만 예상된 결과 · 그 밖은 사유를 보이고 번호 적기만 멈춘다"
+done
+assert_eq "$(chain '쌓인 PR 이면 `pr-record` 가 종료 코드 4 로 거부한다 — 예상된 결과이고 멈출 오류가 아니다.' "${RC4[@]}")" "no" "양성 대조: 조건 없는 옛 문장(종료 코드 4 는 늘 예상된 결과)이면 no"
+assert_eq "$(chain '종료 코드 4 — 예상된 결과. `baseRefName` 하나뿐일 때만. 그 밖의 0 아닌 종료 코드는 사유를 그대로 보이고 번호 적기를 멈춘다 — `pr-refresh` 는 그대로 부른다.' "${RC4[@]}")" "no" "양성 대조: 조건이 「예상된 결과」 뒤로 떨어지면 no"
+assert_eq "$(chain '종료 코드 4 는 `baseRefName` 하나뿐일 때만 예상된 결과다. 그 밖의 0 아닌 종료 코드는 사유를 그대로 보이고 번호 적기를 멈춘다 — `pr-refresh` 는 그대로 부른다.' "${RC4[@]}")" "yes" "양성 짝: 조건 · 그 밖 · pr-refresh 가 차례로 있으면 yes"
 assert_eq "$(chain 'gh pr create 로 연다. pr-refresh --roadmap 을 부른다. pr-record --roadmap 을 부른다.' 'gh pr create' 'pr-record --roadmap' 'pr-refresh --roadmap')" "no" "양성 대조(AC2): pr-refresh 가 pr-record 앞이면 no"
 assert_eq "$(chain 'pr-record --roadmap 을 부른다. gh pr create 로 연다. pr-refresh --roadmap 을 부른다.' 'gh pr create' 'pr-record --roadmap' 'pr-refresh --roadmap')" "no" "양성 대조(AC2): PR 을 열기 전에 적으면 no"
 STACK=('바탕을 기본 브랜치로 바꾼 직후' 'pr-record --roadmap' 'pr-refresh --roadmap' '머지 명령 줄만 준비하고')

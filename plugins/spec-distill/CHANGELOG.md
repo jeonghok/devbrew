@@ -15,7 +15,7 @@
 - `check-path` 는 `roadmaps_dir` · `interview_dir` 만 받는다.
 - `ledger add --section "레포 설정"` 은 중복 키 · 기계 층이 거부하는 키 · 빈 값 · 컴파일 안 되는 `test_failure_pattern` 을 거부한다(rc 2, 아무것도 쓰지 않는다).
 - 인터뷰의 다음 세션 줄이 superpowers 판을 확인하라고 안내한다.
-- 지휘 절차는 PR 을 열 때, 그리고 쌓인 PR 을 re-base 한 직후에 PR 번호를 기록한다. 걸음 7 은 `## 에픽 PR` 을 지우지 않는다.
+- 지휘 절차는 PR 을 열 때, 그리고 쌓인 PR 을 re-base 한 직후에 PR 번호를 기록한다. `pr-record` 의 종료 코드 4 는 어긋난 칸이 `baseRefName` 하나뿐일 때(쌓인 PR)만 예상된 결과로 넘기고, 그 밖의 0 아닌 종료 코드는 사유를 보이고 그 에픽의 번호 적기를 멈춘다. 걸음 7 은 `## 에픽 PR` 을 지우지 않는다.
 - 호환: `## 에픽 PR` 줄이 있는 기계 상태를 더 옛 판 spec-distill 이 읽으면 「모르는 절」로 멈춘다 — 플러그인을 업데이트해야 한다.
 
 ### Fixed
