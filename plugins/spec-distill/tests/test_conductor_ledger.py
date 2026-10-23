@@ -234,14 +234,22 @@ class Roadmaps(Repo):
         self.assertEqual(rc, 0, out)
         return dict(l.split("\t") for l in out.strip().splitlines())
 
+    def assertUnchecked(self, row, why=None):
+        """검사 불가 줄의 둘째 칸 = 「검사 불가 — <사유>」, 사유는 비지 않는다(why 를 주면 그 사유 그대로)."""
+        self.assertIsNotNone(row)
+        self.assertTrue(row.startswith("검사 불가 — "), row)
+        self.assertTrue(row[len("검사 불가 — "):].strip(), row)
+        if why is not None:
+            self.assertEqual(row, "검사 불가 — " + why)
+
     def test_unreadable_roadmap_is_listed_unchecked(self):
         self.put({"plan/roadmaps/rm/bad.md": "---\ntype: roadmap\n---\n\n# x\n",
                   "plan/roadmaps/q/quoted.md": b'---\r\ntype: "roadmap"\r\n---\r\n\r\n# x\r\n',
                   "plan/roadmaps/rm/broken.md": "---\ntype: roadmap\n# 머리말이 닫히지 않았다\n"})
         rows = self.rows()
-        self.assertEqual(rows.get("plan/roadmaps/rm/bad.md"), "검사 불가")
-        self.assertEqual(rows.get("plan/roadmaps/q/quoted.md"), "검사 불가")
-        self.assertEqual(rows.get("plan/roadmaps/rm/broken.md"), "검사 불가")
+        self.assertUnchecked(rows.get("plan/roadmaps/rm/bad.md"))
+        self.assertUnchecked(rows.get("plan/roadmaps/q/quoted.md"))
+        self.assertUnchecked(rows.get("plan/roadmaps/rm/broken.md"), "머리말이 닫히지 않았다")
 
     def test_finds_in_configured_folder_only(self):
         self.assertEqual(list(self.rows()), [self.IN])
@@ -267,7 +275,8 @@ class Roadmaps(Repo):
                                              "plan/roadmaps/rm/broken.md"])
         self.assertEqual(failed, set())
         shas = sorted(set(e[2] for e in tree.values() if e[1] == "blob")) + ["0" * 40]
-        got = cp.cat_batch(repo, shas)
+        got, rc = cp.cat_batch(repo, shas)
+        self.assertEqual(rc, 0)   # 없는 blob 은 `<blob> missing` 줄일 뿐 git 은 0 으로 끝난다
         self.assertNotIn("0" * 40, got)   # 없는 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)
         for sha in shas[:-1]:
             want = subprocess.run(["git", "cat-file", "blob", sha], cwd=str(self.w), env=ENV, capture_output=True).stdout
@@ -278,8 +287,10 @@ class Roadmaps(Repo):
         self.assertEqual(listed, ["plan/roadmaps/ex/roadmap.md", "plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md",
                                   "plan/roadmaps/r2/plan.md", "plan/roadmaps/rm/broken.md", self.IN])
         self.assertEqual(paths, listed)
-        for p in ("plan/roadmaps/lfs/roadmap.md", "plan/roadmaps/ln/roadmap.md", "plan/roadmaps/rm/broken.md"):
-            self.assertEqual(rows[p], "검사 불가", p)
+        for p, why in (("plan/roadmaps/lfs/roadmap.md", "LFS 포인터다"),
+                       ("plan/roadmaps/ln/roadmap.md", "일반 파일이 아니다(링크 · 서브모듈 등)"),
+                       ("plan/roadmaps/rm/broken.md", "머리말이 닫히지 않았다")):
+            self.assertUnchecked(rows[p], why)
 
     def test_broken_settings_stop(self):
         self.put({".devbrew.md": "---\nroadmaps_dir: plan/roadmaps/\ntypo_key: x\n---\n"})
