@@ -586,7 +586,18 @@ next_phase: superpowers:writing-plans
 
 ## 미룸
 
-없음 — §7 에서 안 고친 하위 항목은 이유와 함께 닫았고, 번호 없는 에픽에 남는 틈은 §2 의 공시로 닫는다. 계획의 첫 Task 재확인이 새 항목을 찾아 이 에픽이 받지 않기로 하면 여기에 행으로 올린다.
+§7 에서 안 고친 하위 항목은 이유와 함께 닫았고, 번호 없는 에픽에 남는 틈은 §2 의 공시로 닫는다. 계획의 첫 Task 재확인은 새 항목을 찾지 않았다. 아래는 구현 · 리뷰가 남긴 것이다(AC1–AC21 은 모두 구현됨).
+
+| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| SD README `### Principles` 의 Law 3 · P23 줄 「기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다」 | `## 에픽 PR` 은 다시 만들 수 없는 기록이라 이제 정확하지 않다. README 의 그 자리는 R9 몫이라 R14 가 고치지 않았다 | R9 |
+| SD README 상태 계산 앞 문단의 gh 를 부르는 명령 목록(`pr-handoffs` · `audit` · `review-pack` · `pr-refresh`)에 `pr-record` 가 없다 | 같은 이유 — README 의 그 자리는 R9 몫 | R9 |
+| epic-conductor `SKILL.md` 의 `ledger roadmaps` 줄 꼴 「`<경로><탭><끝나지 않은 에픽 수>`」 | 둘째 칸이 「검사 불가 — <사유>」 일 수 있다(전에도 맨 「검사 불가」 였다). SKILL.md 는 R9 몫 | R9 |
+| R9 의 PR 처럼 8.9.0 전에 연 PR 의 번호 기록 | 자동으로 찾아 적는 길이 없다(U9). 지휘 세션이 `ledger pr-record --roadmap <로드맵> --session <세션> --epic R9 --pr <번호>` 를 한 번 부른다 | R9 |
+| `plugins/spec-distill/tests/test_coverage_scope.py` 를 R14 경로 예약에 등록 | `specs_dir` 필수화(§7)로 이 테스트를 고쳐야 했는데 예약 · Files to Modify 밖이다(어느 에픽도 예약하지 않음). 구현 agent 의 `roadmap_write.py update` 는 권한 판정이 막아 돌리지 않았다 — 지휘 세션이 머지 전에 `python3 plugins/spec-distill/scripts/roadmap_write.py update --roadmap docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md --brief docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md --audit docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.audit.md --plan-table <R14 행에 그 경로를 더한 표 파일> --date <날짜> --change "R14 경로 예약에 test_coverage_scope.py — specs_dir 필수화(§7)로 고친 테스트" --approval "승인하고 계획으로 (권장)"` 를 돌린다 | R14 |
+| Files to Modify 의 「`roadmap_write.py update` 로 로드맵 파일과 묶음 `R14.md` 를 고쳐 한다」 | 경로 예약은 로드맵 블록에만 그려져 `R14.md` 는 바이트 그대로였다(도구 동작이 맞다) — 문장만 어긋난다 | R14 |
+| 이 레포 지휘 기계 상태의 옛 4칸 PR 줄 | 8.9.0 은 기계 상태를 못 읽으면 머지 판정을 보류한다(AC21) — 머지 뒤 표지를 쥔 지휘 세션이 `ledger pr-refresh --roadmap <로드맵> --session <세션> --reset` 을 한 번 돌려야 블록이 「알 수 없음」 에서 풀린다 | R14 |
+| 과제 리뷰 · 마지막 리뷰의 작은 보강(테스트 빈 칸 · 문구) — 같은 번호 다른 브랜치 · 다른 에픽 같은 브랜치 찾기 테스트, `pr-record` 의 `env_notices` 안내 · 번호 어긋남 갈래 테스트, 두 블록에 든 브랜치의 `pr-refresh` 갈래, 머리 목록 한도 + 번호 테스트, 번호 길의 `has_pr` · `reverts_of` 단언, 픽스처 `g()` 의 `gc.auto=0`(한 번 본 흔들림), 읽기 전용 락의 남은 우회 꼴(`sys.modules[...].__dict__` · 별표 import), 재대입 락의 창(같은 줄 · 뒤 `git add`), `wipes_epic` 의 어순, 「짧게 읽음」 이 `<sha> missing` 도 덮음, 캐시에 없는 번호 문구 둘 | 마지막 리뷰가 머지 전에 고칠 것 아님으로 분류했다(안전한 쪽으로 실패하거나 행동 층이 덮는다). 받을 에픽이 로드맵에 없다 | 없음 |
 
 ## 지휘 기록
 
