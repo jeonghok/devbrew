@@ -228,4 +228,20 @@ for f in plugins/quality-gates/README.md plugins/plugin-audit/README.md plugins/
   assert_contains "$(tr '\n' ' ' < "$f" | tr -s ' ')" '락 · 스크립트 · skill 이면 그것을 고친다' "AC5: $f 가 같은 뜻"
 done
 
+# --- AC6 · AC8: skill 로드는 기본 경로, 가이드의 qg 폴더와 감사 완전명 ---
+assert_contains "$(grep -F 'plugin-dev:plugin-structure' "$CLAUDE_MD")" '다른 길이 맞으면 이유를 적는다' "AC6: CLAUDE.md 가 기본 경로 꼴"
+assert_not_contains "$(cat "$CLAUDE_MD")" 'skill을 먼저 로드' "AC6: CLAUDE.md 강제 구 없음"
+if [ ! -f "$AUTHORING" ]; then
+  no "AC6: docs/plugin-authoring.md 부재 — 가이드 문장 검사를 판정할 수 없다 (fail-closed)"
+else
+AUTH="$(cat "$AUTHORING")"
+assert_contains "$AUTH" '기본은 해당 단계에 들어갈 때 그 단계의 skill 을 로드하는 것이다 — 다른 순서가 맞으면 이유를 적는다' "AC6: 가이드 기본 경로"
+for gone in '해당 단계에 진입할 때만 로드' '선행 일괄 로드는 progressive disclosure 위반' '이 단계에서 필요한 유일한 것' '`/plugin-audit` ('; do
+  assert_not_contains "$AUTH" "$gone" "AC6: 가이드에 「${gone}」 없음"
+done
+assert_contains "$AUTH" '`/plugin-audit:plugin-audit`' "AC6: 완전명(양)"
+assert_contains "$AUTH" '`agents/`, `references/`, `scripts/`, `skills/`를 shipping' "AC8: qg 폴더가 지금 폴더"
+assert_not_contains "$AUTH" 'writer + reviewer + hook 파이프라인' "AC8: qg 에 없는 hook 을 말하던 구가 없다"
+fi
+
 finish
