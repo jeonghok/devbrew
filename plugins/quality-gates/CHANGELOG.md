@@ -3,6 +3,13 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.7.2] — 2026-10-24
+
+### Changed
+- 사람에게 쓰는 글 — 끝에 할 일은 기본 하나, 여럿이거나 병렬이면 밝힌다(커밋 · PR 본문은 순서 밖).
+- README 의 Law 3 persona 문장을 다듬었다. `/quality-gates:quality-pipeline` 완료 보고와 `/quality-gates:artifact-critique` 최종 보고가 다음 할 일 문장으로 끝난다.
+- 사람에게 내는 글을 쉬운 말로 다듬었다.
+
 ## [14.7.1] — 2026-10-23
 
 ### Changed
