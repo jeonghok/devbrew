@@ -11,6 +11,8 @@
     → origin 이 GitHub 인 레포만 지원 · 비공개면 접근 권한
   - 그 밖 → rc 와 stderr 첫 줄
 
+PR 번호 하나 묻기(`pr_view`)와 사람이 준 PR 참조(URL · `#N` · `N`) 읽기(`parse_pr_ref`)도 여기 있다.
+
 CLI: `gh_repo.py slug` — stdout `<host>/<owner>/<repo>` · rc 0. 못 뽑으면 rc 3 + 사유(stderr).
 """
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +30,8 @@ STOP_NO_GH = "gh 가 없다 — devbrew 는 gh 를 필수로 쓴다. https://cli
 ENV_NAMES = ("GH_REPO", "GH_HOST")
 AUTH_MARKS = ("auth login", "not logged", "authentication", "bad credentials", "http 401")
 UNKNOWN_MARKS = ("could not resolve to a repository", "no such type pullrequest")
+_PR_NUM_RE = re.compile(r"#?([0-9]+)")
+_PR_URL_RE = re.compile(r"https?://([^/\s]+)/([^/\s]+)/([^/\s]+)/pull/([0-9]+)/?")
 PR_FIELDS = ("number", "state", "headRefName", "headRefOid", "isCrossRepository", "baseRefName", "mergeCommit")
 
 
@@ -142,6 +147,28 @@ def pr_list(cwd: str, branch: str, limit: int = 100):
                                               for it in items):
         raise GhStop("gh pr list 출력 모양이 다르다(브랜치 %s) — gh 판을 확인한다" % branch)
     return items, len(items) >= limit
+
+
+def pr_view(cwd: str, number: int) -> dict:
+    """번호 하나의 PR. 모양이 다르면 GhStop."""
+    got = gh_json(cwd, ["pr", "view", str(number), "--json", ",".join(PR_FIELDS)])
+    if not isinstance(got, dict) or not all(k in got for k in PR_FIELDS):
+        raise GhStop("gh pr view 출력 모양이 다르다(PR #%d) — gh 판을 확인한다" % number)
+    return got
+
+
+def parse_pr_ref(text: str):
+    """`(번호, (host 소문자, owner, repo) | None)` 또는 None. `N` · `#N` · PR URL 만 읽는다."""
+    t = (text or "").strip()
+    m = _PR_NUM_RE.fullmatch(t)
+    if m:
+        ref, number = None, int(m.group(1))
+    else:
+        m = _PR_URL_RE.fullmatch(t)
+        if not m:
+            return None
+        ref, number = (m.group(1).lower(), m.group(2), m.group(3)), int(m.group(4))
+    return (number, ref) if number >= 1 else None
 
 
 def main(argv=None) -> int:
