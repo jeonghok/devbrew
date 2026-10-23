@@ -167,14 +167,15 @@ test_failure_pattern: "^FAILED (.+)$"
 - 경로 예약: plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/scripts/state_path.py, plugins/spec-distill/templates/roadmap-template.md, plugins/spec-distill/skills/pm-interview/, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/tests/test_repo_literals.sh, plugins/spec-distill/tests/test_decompose_surface.sh, shared/test-selection/resolve-baseline.sh, shared/docreview/scripts/docreview_state.py, shared/python/devbrew-python.sh, plugins/quality-gates/scripts/discover-spec.sh, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/check-review-scope.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/project-init/hooks/hooks.json, plugins/project-init/hooks/post-tool-use.py
 
 ### R9 — 규칙 · 문서 정리
-- 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학의 조항 문면을 고친다
+- 의도: 바뀐 장치에 맞춰 레포 규칙 · 철학의 조항 문면을 고치고, 지출 승인을 규모 공시로 바꾸는 skill · 스크립트 · 락도 함께 고친다
 - 범위:
-  - 한다: 지출 승인 조항(지휘자 시작 승인을 「규모 공시만」으로) · P22 개정 문안(사용자 승인) · 흐름 고정 점검(flexibility-audit.md)의 R9 행(「끝에 할 일 하나」 · Law 1 중간 단계 — 사용자 결정)
-  - 안 한다: 장치 동작 변경 · 원칙 문서 정리 · 낡은 개념 삭제(R11)
+  - 한다: 지출 승인 조항 — 모든 cost_class high skill 의 지출 승인을 「규모 공시만」으로(epic-conductor 시작 승인 · plugin-audit 지출 동의 · artifact-critique 동의 게이트의 지출 부분과 그 skill · 스크립트 · 락, 대상 · 모드 · 취소 같은 범위 고르기는 남김) · P22 개정 문안(사용자 승인) · 흐름 고정 점검(flexibility-audit.md)의 R9 행 다섯(「끝에 할 일 하나」 · Law 1 중간 단계 — 사용자 결정, persona 편집 · skill 강제 · 브랜치 규칙 문면과 접두) · 지금 장치와 어긋난 규칙 · 문서 문장 · 지휘자가 만든 권장을 옮기는 규칙
+  - 안 한다: 원칙 문서 정리 · 낡은 개념 삭제(R11) · 위에 적지 않은 장치 동작 변경 · 새 기능
 - 의존: R8, R11
-- 브랜치: feature/rules-docs-cleanup
+- 브랜치: feature/rules-docs-cleanup · feature/cost-scale-disclosure
 - 묶음: R9.md
-- 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md
+- 경로 예약: CLAUDE.md, docs/philosophy/devbrew-harness-philosophy.md, docs/plugin-authoring.md, docs/git-workflow/branch-strategy.md, shared/README.md, shared/style/plain-language.md, shared/tests/test_plain_language_block.sh, shared/tests/test_cost_disclosure.sh, plugins/plugin-audit/skills/plugin-audit/SKILL.md, plugins/plugin-audit/scripts/validate-audit-data.py, plugins/plugin-audit/scripts/prepare-run-dir.py, plugins/plugin-audit/scripts/audit-workflow.js, plugins/plugin-audit/README.md, plugins/plugin-audit/tests/README.md, plugins/plugin-audit/tests/test_skill_orchestration.py, plugins/plugin-audit/tests/test_validate_audit_data.py, plugins/plugin-audit/tests/test_plain_audit_text.py, plugins/project-init/skills/project-init/SKILL.md, plugins/project-init/README.md, plugins/project-init/tests/test_branch_strategy_rebase_clause.sh, plugins/quality-gates/skills/artifact-critique/SKILL.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/README.md, plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh, plugins/quality-gates/tests/test_governance_no_capability_caps.sh, plugins/quality-gates/tests/test_plain_qg_templates.sh, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/agents/relay-checker.md, plugins/spec-distill/README.md, plugins/spec-distill/tests/test_conductor_ledger.py, plugins/spec-distill/tests/test_conductor_state.py, plugins/spec-distill/tests/test_conductor_e2e.sh, plugins/spec-distill/tests/test_epic_conductor_skill.sh, plugins/spec-distill/tests/test_conductor_dispatch_reference.sh
+- 순서 이유: R14 와 병렬 — 겹치는 파일(conductor_ledger.py · test_epic_conductor_skill.sh · spec-distill README · spec-review · request-framing SKILL.md)은 R14 가 먼저 머지하고 R9 가 기본 브랜치를 합친 뒤 스위트 대조 · 통합 리뷰를 다시 돈다
 
 ### R10 — 인터뷰 조사 열기 · 신선한 근거 · 끝 게이트
 - 의도: 인터뷰가 모델 판단으로 조사를 넓게 열어 결정에 닿는 신선하고 믿을 만한 근거를 빠짐없이 채우게 한다 — 기존 방식에 더한다
@@ -477,6 +478,12 @@ test_failure_pattern: "^FAILED (.+)$"
 - 바뀜: 바뀐 에픽 R14 「새 에픽 R14 로 (권장)」
 - 원문:
   - 「새 에픽 R14 로 (권장)」
+
+### 2026-10-23 · R9 범위를 지출 승인 결정에 맞춰 넓힌다 — 모든 cost_class high skill 의 지출 승인을 규모 공시로 바꾸는 skill · 스크립트 · 락까지 R9 가 함께 고친다 · R9 경로 예약 · 브랜치 둘(계획 둘) · R14 와 병렬(겹치는 파일은 R14 가 먼저 머지 — 지휘자 판단) · R14 받는 것에서 R9 는 장치 동작을 바꾸지 않는다는 괄호를 뺀다
+- 바뀜: 바뀐 에픽 R9 · R14 「모든 high skill 을 규모 공시만으로 (권장)」 · 「R9 가 규칙과 skill 을 함께 (권장)」
+- 원문:
+  - 「모든 high skill 을 규모 공시만으로 (권장)」
+  - 「R9 가 규칙과 skill 을 함께 (권장)」
 
 ## 위험 번호표
 
