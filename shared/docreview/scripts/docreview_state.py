@@ -2107,6 +2107,7 @@ CATEGORY_GLOSS = {
     "scope_creep": "분해 안 되는 묶음", "approaches_comparison": "대안 비교 없는 단정",
     "isolation": "컴포넌트 경계가 흐림", "testing": "검증 전략 부재",
     "handoff_incomplete": "이어갈 컨텍스트 부족",
+    "required_sections": "필수 섹션 누락",
     # seed 층 1
     "unfounded_addition": "원문에 없는 요구가 더해짐", "example_as_requirement": "예시가 요구로 승격됨",
     "premature_closure": "열어 둔 선택이 닫힘", "inference_as_decision": "추론이 결정처럼 쓰임",

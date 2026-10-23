@@ -13,8 +13,8 @@ protected_headings:
   - "Acceptance Criteria|수용 기준|\\bAC\\b"
 layer_rubric:
   layer1: [goal_fit, problem_definition, scope, architecture, component_relations, data_flow, tradeoffs, feasibility, overdesign]
-  layer2: [placeholder, ambiguity, scope_creep, approaches_comparison, isolation, testing, handoff_incomplete]
-must_catch: [goal_fit, problem_definition, scope, architecture]
+  layer2: [placeholder, ambiguity, scope_creep, approaches_comparison, isolation, testing, handoff_incomplete, required_sections]
+must_catch: [goal_fit, problem_definition, scope, architecture, required_sections]
 decision_log: {kind: doc_section, heading: "## 결정 기록"}
 defer_target: {kind: doc_section, heading: "### Deferred to plan"}
 web: false
@@ -105,6 +105,7 @@ web: false
 - `isolation` — 단위 테스트·변경 격리가 불가능할 만큼 흐린 컴포넌트 경계.
 - `testing` — **검증 전략의 부재**다. 「무엇이 관측되면 통과인가」가 없을 때만 낸다. 자동 검증 **절차**(명령·픽스처·순서)의 부재는 plan 의 일이므로 `defer` 로 낸다.
 - `handoff_incomplete` — Handoff Context 가 없거나, `/compact` 뒤 이 문서만 읽고 이어갈 수 없는 암묵 컨텍스트가 남아 있다.
+- `required_sections` — 필수 섹션 누락. Context/Why · Goals · Non-goals · Constraints · Acceptance Criteria · Files to Modify · Verification Plan · Rejected Alternatives · Metadata 가운데 없는 절이 있거나, 있는데 비어 있고 「해당 없음 — 이유」도 없을 때만 낸다. 제목이 달라도 같은 것을 다루면 있는 것으로 본다(예: 한국어 제목). 처분은 빠진 절을 채우는 `fix` 다 — 그 절을 쓸 사실이 저자에게 없으면 `ask`.
 
 ## 처분 안내
 

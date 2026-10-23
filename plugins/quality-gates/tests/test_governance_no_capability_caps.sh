@@ -209,6 +209,8 @@ assert_contains "$LAW1_C" '한 문장으로 설명 가능한 trivia diff (typo, 
 assert_contains "$p12"    '한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고' "AC3: P12 trivia escape 그대로(양)"
 assert_contains "$LAW1_C" "$FACT" "AC4: CLAUDE.md Law 1 이 설계문서 쪽 사실을 쓴다"
 assert_contains "$LAW1_P" "$FACT" "AC4: 철학 Law 1 이 설계문서 쪽 사실을 쓴다"
+assert_contains "$(grep -F '**Law 1 (Clarity Before Code)**' plugins/spec-distill/README.md)" "$FACT" "AC4a: spec-distill README Law 1 이 같은 사실"
+assert_not_contains "$(cat plugins/spec-distill/README.md)" '필수 섹션 게이트 구현은 0' "AC4a: README 옛 구 없음"
 assert_contains "$LAW1_C" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: CLAUDE.md Law 1 — brief 는 구조로 막는다"
 assert_contains "$LAW1_P" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: 철학 Law 1 — brief 는 구조로 막는다"
 assert_not_contains "$LAW1_C" '최소한 **구조적 게이트** (필수 섹션:' "AC4: CLAUDE.md 에 없는 구조 게이트를 있다고 쓰던 옛 구가 없다"
