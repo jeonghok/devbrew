@@ -60,7 +60,7 @@ next_phase: superpowers:writing-plans
 
 ## Goals
 
-- G1 `cost_class: high` skill(그리고 지출 승인 게이트를 가진 `variable` skill)은 크게 쓰기 전에 규모를 한 줄로 알리고 진행한다. 지출을 이유로 묻지 않는다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 남는다.
+- G1 `cost_class: high` skill 은 크게 쓰기 전에 규모를 한 줄로 알리고 진행한다. 어느 skill 도 지출을 이유로 묻지 않는다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문과 사용자가 상한을 여는 질문은 남는다.
 - G2 CLAUDE.md · 철학 문서의 규칙 문장이 지금 장치가 하는 일과 같다. 기계로 막지 않는 것을 막는다고 쓰지 않는다.
 - G3 흐름 고정 점검 R9 행 다섯이 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」 꼴이 된다(사용자 결정 둘 포함).
 - G4 지휘자의 권장은 라벨 안으로 들어가지 않고, skill 의 문장 권장은 문장으로 옮겨진다. 옮김 대조 agent 가 그 둘을 어긋남으로 잡는다.
@@ -115,8 +115,9 @@ next_phase: superpowers:writing-plans
 
 **CLAUDE.md:51** 을 아래 뜻으로 바꾼다(글자는 계획이 다듬는다).
 
-> **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`(그리고 worst-case 가 high 인 `variable`)는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — 지출을 이유로 묻지 않는다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.
+> **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — 지출을 이유로 묻지 않는다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다. 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.
 
+- 규칙의 공시 의무는 `cost_class: high` 에 걸린다. `variable` 은 공시 의무 대신 「지출 승인을 묻지 않는다」만 받는다. 상한 · 압축 문장은 D18 을 그대로 옮긴 것이다. pm-interview 의 조사 상한 연장 질문과 리뷰 엔진의 추가 라운드 질문은 사용자가 상한을 여는 질문이라 이 규칙과 맞는다(지휘자 판단(사용자 결정 아님)).
 - epic-conductor 의 「이름 붙인 예외」 문장은 지운다. 물을 게이트가 없어 예외가 할 일이 없다.
 - 굵은 머리 「모든 skill에 `cost_class` 선언」은 그대로 둔다 — `plugins/plugin-audit/tests/test_check_shape_completeness.py:15` 의 앵커다.
 - CLAUDE.md:91(Subagent spray · Workflow 명시 요청)은 그대로다. 규모 공시 줄이 곧 fan-out 선언이다.
@@ -138,11 +139,9 @@ next_phase: superpowers:writing-plans
   
   이 락의 원래 이유(「P17 사용자 주권 컨트롤 소실」)는 범위 질문 문장의 양성 단언으로 옮긴다 — 사용자 결정권이 남는 자리는 범위 고르기다.
 - spec-distill `test_epic_conductor_skill.sh:215-223` 의 예외 락은 반대로 선다. CLAUDE.md 와 모든 SKILL.md 에 「이름 붙인 예외」가 0 이고(음), CLAUDE.md cost 줄에 새 문장이 있다(양).
-- 새 공유 락 `shared/tests/test_cost_disclosure.sh` 를 둔다.
-  - 대상은 `plugins/*/skills/*/SKILL.md` 가운데 frontmatter 가 `cost_class: high` 인 것이다. 도출한 수가 `find` 로 센 수와 같은지 본다(양성 대조).
-  - 대상마다 본문에 공통 공시 문장 하나(계획이 정하는 본문 고유 문장 — 머리로 만족되지 않게)가 있다.
-  - 대상마다 「지출 동의」 · 「지출 전 명시」 · 「승인 전에는 agent 를 보내지 않는다」 · 「이름 붙인 예외」가 없다.
-  - artifact-critique 는 variable 이라 도출 대상이 아니므로 이름으로 더해 같은 음성 단언을 받는다. 이유는 worst-case high 이고 E3 가 지출 승인이었기 때문이다.
+- 새 공유 락 `shared/tests/test_cost_disclosure.sh` 를 둔다. 두 갈래로 잠근다(지휘자 판단(사용자 결정 아님)).
+  - (가) 코퍼스 전체 음성 락. 대상은 `plugins/*/skills/*/SKILL.md` 글롭 전부이고 손으로 적은 목록이 없다. 도출한 수가 `find` 로 센 수와 같은지 본다(양성 대조). 어느 파일에도 지출 승인 문구 — 「지출 동의」 · 「지출 전 명시」 · 「지출-전 명시 승인」 · 「승인 전에는 agent 를 보내지 않는다」 · 「이름 붙인 예외」 — 가 없다. 낱말 목록의 마지막 모양은 계획이 정하되, 상한을 여는 질문(「더 연다」 · 「연장」)은 걸리지 않게 한다(양성 대조 — pm-interview · 리뷰 엔진 skill 이 GREEN).
+  - (나) 게이트가 있던 세 skill(epic-conductor · plugin-audit · artifact-critique)마다 공시 줄 문장(계획이 정하는 본문 고유 문장 — 머리로 만족되지 않게)이 있다는 양성 단언.
 
 ### §3 지휘자 시작 승인 걷기
 
@@ -151,7 +150,7 @@ next_phase: superpowers:writing-plans
 - 남는 것: `control_plane.py show` 펜스, 규모 줄 만들기(꼴 그대로 — 같은 상태면 같은 줄).
 - 바뀌는 것: 「규모 줄을 보이고 5 로 간다 — 지출을 이유로 묻지 않는다. 그 뒤의 dispatch 도 띄우기 전에 규모만 알리고 간다」.
 - 지우는 것: `approval` 펜스 · 갈래 셋(rc 0 · 옛 PR 캐시 줄 · 그 밖), `approve` 펜스, 「멈춤이면 표지를 풀고 멈춘다」 펜스, 「승인 전에는 agent 를 보내지 않는다」, 이름 붙인 예외 문단.
-- :29 의 「시작 승인」 낱말과 :124 의 괄호(「새로 잡아야 이 세션의 옛 시작 승인이 지워진다」)도 고친다. :124 의 release → claim 걸음 자체는 남긴다 — `conducting.md`(R14 예약)가 같은 걸음을 적고 락이 잡는다. 이유 괄호만 뺀다.
+- :29 의 「시작 승인」 낱말과 :124 의 괄호(「새로 잡아야 이 세션의 옛 시작 승인이 지워진다」)도 고친다. :124 의 release → claim 걸음 자체는 남긴다 — `conducting.md`(R14 예약)가 같은 걸음을 적고 락이 잡는다. 이유 괄호만 뺀다. `references/conducting.md:13` 의 같은 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」도 계획 2 가 예약 밖 편집으로 뺀다. R14 가 먼저 머지하고 그 문장은 건드리지 않는다(지휘자 판단(사용자 결정 아님)).
 
 **`conductor_ledger.py`.**
 
@@ -190,8 +189,10 @@ next_phase: superpowers:writing-plans
 
 **plugin-audit step 3.**
 
-- 이름을 「범위 고르기 · 규모 공시」로 바꾼다. (a) 축 고르기 질문은 그대로다 — 범위 고르기다.
-- (b) 는 질문이 아니라 공시 한 줄이다. 지금 질문 본문의 내용을 그대로 싣는다 — 감사자 k · 반박 최대 k · codex 감사 k회와 반박 1 · 심층검증은 상한 없음, 축을 뺐으면 「검증 안 됨」 줄, 보안 축을 뺐으면 맨 앞 경고 줄. 「승인」 · 「중단」 선택지는 지운다. 멈추고 싶은 사용자는 (a) 의 「중단」 갈래나 끼어들기로 멈춘다.
+- 이름을 「범위 고르기 · 규모 공시」로 바꾼다. (a) 축 고르기 질문은 범위 고르기라 남는다.
+- (a) 의 첫 질문에 「중단」 선택지를 더한다 — 「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」. 지휘자 판단(사용자 결정 아님): (b) 의 「승인」 · 「중단」 질문을 지우면 「여섯 축 전부」를 고르는 사용자에게 멈출 선택지가 없어진다. 범위 질문은 남긴다는 사용자 결정(U1 의 범위)을 지키면서 멈춤 길을 그 질문에 둔다.
+- 규모는 고르기 전에 보인다. 첫 질문의 선택지 설명에 규모를 싣는다 — 「여섯 축 전부」는 감사자 6 · 반박 최대 6 · codex 감사 6회(설치돼 있으면)와 그 반박 1 · 심층검증은 반박을 통과한 심각 · 중요 지적마다 2회(상한 없음), 「축 골라서」는 축마다 감사자 1 · 반박 최대 1 · codex 감사 1회 꼴, 「중단」은 아무것도 띄우지 않고 실행 폴더도 만들지 않는다.
+- (b) 는 질문이 아니라 공시 한 줄이다. 고른 축 수 k 로 지금 질문 본문의 내용을 그대로 싣는다 — 감사자 k · 반박 최대 k · codex 감사 k회와 반박 1 · 심층검증 상한 없음, 축을 뺐으면 「검증 안 됨」 줄, 보안 축을 뺐으면 맨 앞 경고 줄. 「승인」 · 「중단」 질문은 지운다. 고른 뒤 멈추고 싶은 사용자는 끼어들기나 kill switch 로 멈춘다.
 - step 4 의 「승인 직후」는 「공시 직후」로 바꾼다. frontmatter description :7 의 「지출 동의 게이트」도 바꾼다.
 
 **동의 기록 — 고른 길: `approved` 를 요구하지 않는다.**
@@ -207,7 +208,7 @@ next_phase: superpowers:writing-plans
 
 **plugin-audit 락.**
 
-- `test_skill_orchestration.py` — :15 의 `AskUserQuestion` 은 축 고르기 질문으로 남는다. :85 · :92 · :122 의 앵커를 「범위 고르기 · 규모 공시」로 바꾼다. 순서는 축 질문 → 공시 줄 → `prepare-run-dir.py`. step 3 에 「승인」 · 「중단」 선택지가 없다는 음성 단언과 공시 문장의 양성 짝을 둔다.
+- `test_skill_orchestration.py` — :15 의 `AskUserQuestion` 은 축 고르기 질문으로 남는다. :85 · :92 · :122 의 앵커를 「범위 고르기 · 규모 공시」로 바꾼다. 순서는 축 질문 → 공시 줄 → `prepare-run-dir.py`. 첫 축 질문에 「중단」 선택지와 선택지 설명의 규모 문장이 있다는 양성 단언, 「중단」이면 `prepare-run-dir.py` 앞에서 끝난다는 단언, step 3 (b) 에 「승인」 선택지가 없다는 음성 단언과 공시 문장의 양성 짝을 둔다. 첫 질문의 「중단」을 지우는 변이에 RED 다.
 - `test_validate_audit_data.py` — `approved` 없는 동의는 통과, `approved: false` 는 오류, 옛 픽스처는 통과. 셋 다 변이로 확인한다.
 
 **artifact-critique E3.**
@@ -236,6 +237,7 @@ next_phase: superpowers:writing-plans
 
 > 기본은 설계 → 계획 → 구현이다. 중간 크기 일은 이유를 밝히고 가벼운 꼴(PR 본문의 계획 · 짧은 brief)을 고를 수 있다. 가벼운 꼴도 필수 섹션이 다루는 것을 짧게 덮고, 다루지 않는 섹션은 「해당 없음 — 이유」로 적는다.
 
+- 가벼운 꼴도 필수 섹션을 짧게 덮는 것은 사용자 결정이다(U5 「짧게 덮는다 (권장)」).
 - trivia escape 문장(「한 문장으로 설명 가능한 trivia diff … 파일 수와 무관하게」)은 그대로다. qg AC8c(P12 절 single-file 부재)도 그대로 GREEN 이다.
 - 「중간 크기」 판정은 trivia 판정처럼 부르는 skill 의 몫이다.
 - 기존 skill(request-framing 의 다음 단계 대안 · 지휘자의 흐름 고르기)은 이미 모델이 고른 대안을 이유와 함께 허용한다. 계획 첫 과제가 중간 단계를 막는 장치 문장이 없는지 다시 본다.
@@ -256,7 +258,7 @@ next_phase: superpowers:writing-plans
 
 **행 5 — 브랜치 규칙(`docs/git-workflow/branch-strategy.md`).**
 
-- 접두 — 작성자 판단(지휘자가 맡김): `docs/` · `chore/` 를 더한다. :12 의 정규식이 `^(feature|fix|docs|chore)/[a-z0-9][a-z0-9.-]*$` 가 된다.
+- 접두 — 사용자 결정 U6 「docs/ · chore/ 를 더한다」. :12 의 정규식이 `^(feature|fix|docs|chore)/[a-z0-9][a-z0-9.-]*$` 가 된다. 문면과 project-init 템플릿은 서로 맞게 둔다 — 템플릿은 이미 `{{BRANCH_PREFIXES}}` · 추가 접두 선택지를 주므로 고치지 않고, 이 레포 문서의 문면을 템플릿 꼴에 맞춘다. `test_branch_prefix_templates.py` 는 그대로 GREEN 이어야 한다.
 - **훅 동작이 바뀐다.** project-init 훅은 기본 브랜치에 커밋된 이 파일의 정규식을 읽는다(`post-tool-use.py:47` · :239). 그래서 이 레포에서 `docs/<이름>` · `chore/<이름>` 브랜치가 경고 없이 통과하고, 고침 안내의 허용 접두가 넷이 된다(`derive_prefixes` 가 정규식에서 도출 — 하드코딩 없음). 다른 레포에는 영향이 없다. 그 레포는 자기 파일을 읽고, project-init 템플릿은 이미 접두 선택지를 준다(`{{BRANCH_PREFIXES}}`).
 - 문면(:6 · :21-22 · :32-38 · :57-61)은 project-init 템플릿 `templates/github-flow/branch-strategy.md` 의 지금 문면을 따른다.
   - 「모든 작업은 단명 브랜치(접두는 아래)에서」.
@@ -283,7 +285,7 @@ next_phase: superpowers:writing-plans
 | CLAUDE.md:73 | optional 만 | 「optional 은 downgrade 하고 알린다. 필수 의존(`dependencies.md` 강도 멈춤)은 이유와 설치 방법을 보이고 멈춘다. 훅은 사람에게 말할 자리가 없어 바닥 미만이면 건너뛰고 그 사실을 README Prerequisites 가 공시한다」 | — |
 | CLAUDE.md:103 | 300줄 넘으면 목차 필수 — 집행 없음 | 「기본은 목차를 둔다 — 앵커로 인용되는 오래 사는 문서(가이드 · 철학 · 설계문서)는 둔다. 한 번 쓰고 닫는 계획 · 기록은 모델이 판단한다」. R5 설계 :630 의 「계획 목차 없음 수용」과 맞다 | — |
 | CLAUDE.md:18 | 「자동 검증」 | 「project-init 훅이 브랜치 이름 · 커밋 꼴을 확인해 알린다(막지 않는다)」 | — |
-| CLAUDE.md:48 | 역할 프롬프트를 영어 공식으로 시작 | 「역할 프롬프트는 맡는 것과 맡지 않는 것을 첫머리에 밝힌다(예: *"You are X. You are responsible for Y. You are NOT responsible for Z."* 또는 같은 뜻의 한국어)」. persona 파일은 고치지 않는다 — 열린 질문 1 | — |
+| CLAUDE.md:48 | 역할 프롬프트를 영어 공식으로 시작 | 지금 agent 들이 실제로 하는 대로 쓴다 — 「역할 프롬프트는 첫머리에 맡는 일을 밝힌다. 맡지 않는 일(쓰기 · 고치기 등)은 `tools:` allowlist 가 막고, 프롬프트가 밝힐 때는 같은 첫머리에 둔다. 특정 영어 공식은 강제하지 않는다」. 계획 첫 과제가 agent 마다 첫머리의 역할 문장을 다시 확인해 문장이 그 사실과 맞는지 본다. agent 파일은 하나도 고치지 않는다(U7) | AC8 |
 | 철학 P12 :44 | `## 진입 단계` 3 (trivia escape) | `plugins/spec-distill/references/trivia-escape.md` · CLAUDE.md Law 1 | citations GREEN |
 | 철학 P13 :47-48 | hook=집행 레이어 · `plugins/*/hooks/hooks.json` | 훅은 사건에 붙는 관찰 · 알림, 진입 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행, 코드 `plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py` | citations GREEN |
 | docs/plugin-authoring.md:29 | qg 가 `commands/` · `hooks/` 를 shipping | 지금 폴더(`agents/` · `references/` · `scripts/` · `skills/`)와 「writer + reviewer 파이프라인」 | — |
@@ -322,7 +324,7 @@ next_phase: superpowers:writing-plans
   AC17 이 이 셋의 상한 문장이 남았음을 단언한다.
 - RC62(qg PR 코멘트 상시 동의) — 지출 승인이 아니라 그대로다(P17).
 - RC64(artifact-critique upfront 게이트) — §4. 묶음은 옛 경로 `skills/critiquing-artifacts/` 를 적지만 지금은 `skills/artifact-critique/` 다.
-- K1(멈춤 판정의 주인이 모델로) — 지출 질문이 없어져도 멈출 길은 셋이다. 범위 질문의 「중단」 · 「취소」, 끼어들기, kill switch.
+- K1(멈춤 판정의 주인이 모델로) — 지출 질문이 없어져도 멈출 길은 셋이다. 범위 질문의 「중단」 · 「취소」(plugin-audit 은 첫 축 질문에 「중단」을 새로 두고 규모를 선택지 설명에 보여, 고르기 전에 규모를 보고 멈출 수 있다 — 지휘자 판단(사용자 결정 아님)), 끼어들기, kill switch. epic-conductor 는 범위 질문이 없어 로드맵 고르기 뒤 끼어들기와 kill switch 로 멈춘다.
 - K6 · K13(승인 피로 · 도장 찍기) — 지출 질문이 빠져 남은 사용자 결정(spec 승인 · 범위 고르기)이 덜 묻힌다.
 - K7(사용자 자신의 통제 자리가 섞임) — 지출 승인은 사용자가 직접 걷자고 했다(U1). 범위 고르기는 사용자 통제 자리라 남긴다.
 - K8(공유 파일 겹침) — R14 와 겹치는 파일의 주인 · 머지 순서(`## 상류 · 하류 연계`), 판 번호는 머지 직전.
@@ -391,8 +393,8 @@ next_phase: superpowers:writing-plans
 | `plugins/spec-distill/skills/request-framing/SKILL.md` | R14 범위 | 쉬운 말 블록(:19) 한 줄만(계획 1) |
 | `plugins/spec-distill/tests/test_roadmap_status.sh` | 정적 락 후보 여덟 | 겹침 정보 단언 한 줄(이 설계의 로드맵 커밋 — 이미 함) |
 
-- R14 는 위 R9 몫의 자리(4절 · 승인 코드 · 쉬운 말 블록)를 고치지 않는다.
-- R5 설계 :642 의 SKILL 문장(「approval rc≠0 → AskUserQuestion」)은 되비춤 답으로 R14 에 갔다. 그런데 R9 계획 2 가 그 갈래 전체를 걷어 그 문장은 할 일이 없다 — 지휘자가 R14 에 알린다. R2a 설계 :496 문장(artifact-critique 진입 'ok' 행)은 R14 몫으로 남는다. R9 는 같은 파일의 E3 만 고친다.
+- R14 는 위 R9 몫의 자리(4절 · 승인 코드 · 쉬운 말 블록)를 고치지 않는다. `references/conducting.md:13` 의 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」도 R14 는 건드리지 않고, R9 계획 2 가 예약 밖 편집으로 고친다(지휘자 판단(사용자 결정 아님)).
+- R5 설계 :642 의 SKILL 문장(「approval rc≠0 → AskUserQuestion」)에 대해 R14 가 할 일은 없다. R9 계획 2 가 그 approval 갈래를 통째로 지운다. 지휘자가 R14 에 그렇게 알린다(지휘자 판단(사용자 결정 아님)). R2a 설계 :496 문장(artifact-critique 진입 'ok' 행)은 R14 몫으로 남는다. R9 는 같은 파일의 E3 만 고친다.
 - 겹침 확인: R9 PR 마다 `merge_check.py --keep-merged` 사본에서 R14 가 넣은 줄이 남았는지 diff 로 본다(AC21).
 
 ## Acceptance Criteria
@@ -412,13 +414,13 @@ next_phase: superpowers:writing-plans
 
 **계획 2 — 지출 승인을 규모 공시로**
 
-- AC11 CLAUDE.md cost 줄에 §2 의 공시 문장이 있고, 옛 게이트 문장과 「이름 붙인 예외」가 없다. 굵은 머리 「모든 skill에 `cost_class` 선언」 유지(shape GREEN). CLAUDE.md:91 은 바뀌지 않는다(diff).
+- AC11 CLAUDE.md cost 줄에 §2 의 공시 문장(`cost_class: high` 에 건다) · 「어느 클래스의 skill 도 지출 승인을 묻지 않는다」 · 「상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다」가 있고, 옛 게이트 문장 · 「이름 붙인 예외」 · 「worst-case 가 high 인 `variable`」이 없다. 굵은 머리 「모든 skill에 `cost_class` 선언」 유지(shape GREEN). CLAUDE.md:91 은 바뀌지 않는다(diff).
 - AC12 P22 가 `cost_class: high` · 공시 · 범위 질문을 담고 `<Use_When>` 이 없다. 코드 가리킴이 실재한다(citations GREEN).
 - AC13 epic-conductor `### 4. 규모 공시` 가 규모 줄을 보이고 5 로 간다. 그 절에 `approval` · `approve` · `AskUserQuestion` · `release` 펜스와 「승인 전에는 agent 를 보내지 않는다」가 없다. 변이(옛 approval 펜스 재삽입 · 공시 문장 삭제)에 RED 다.
 - AC14 `conductor_ledger.py approval|approve` 는 rc 2 와 모르는 하위 명령 사유를 낸다(rc · 사유 함께 단언). claim · takeover · release 는 그대로 돈다. `conductor_state` 는 `## 시작 승인` 행이 있는 옛 파일을 오류 없이 읽고, 다시 저장하면 그 절 머리가 없다. 새로 만든 파일에는 처음부터 없다. 그 절이 없는 파일도 읽는다. e2e 가 규모 공시로 돈다.
-- AC15 plugin-audit step 3 에 축 고르기 질문이 있고, (b) 에 「승인」 · 「중단」 질문이 없으며 공시 줄 문장이 있다. 순서는 축 질문 → 공시 → `prepare-run-dir.py`. `consent.json` 은 `{at, fanout, axes}`. 검증기는 `approved` 없음 통과 · `approved: false` 오류 · 옛 픽스처 통과다(각 변이). :238 근거 문장이 사용자 호출 · `disable-model-invocation` 을 말한다.
+- AC15 plugin-audit step 3 의 첫 축 질문에 「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」이 있고, 선택지 설명에 규모가 있으며, 「중단」이면 실행 폴더를 만들지 않고 끝난다. (b) 에 「승인」 질문이 없고 공시 줄 문장이 있다. 순서는 축 질문 → 공시 → `prepare-run-dir.py`. `test_skill_orchestration.py` 가 이를 단언하고, 첫 질문의 「중단」을 지우는 변이에 RED 다. `consent.json` 은 `{at, fanout, axes}`. 검증기는 `approved` 없음 통과 · `approved: false` 오류 · 옛 픽스처 통과다(각 변이). :238 근거 문장이 사용자 호출 · `disable-model-invocation` 을 말한다.
 - AC16 artifact-critique E3 의 두 질문 · 선택지가 그대로이고, 지출 승인 문장 · `consent-integrity` 가 없으며 새 낱말이 있다(양 · 음).
-- AC17 `shared/tests/test_cost_disclosure.sh` 가 high skill 을 frontmatter 에서 도출하고(수 = `find` 수) 각자 공통 공시 문장 · 음성 낱말 부재를 단언한다. artifact-critique 도 음성 단언을 받는다. 지휘자 · plugin-audit · artifact-critique 의 루프 상한 · kill switch 문장이 남았는지 단언한다(RC14). 변이 — 한 skill 에 「지출 동의 게이트」 재삽입, 공시 문장 삭제, 임시 사본에 공시 없는 high skill 하나 추가 — 셋 다 RED.
+- AC17 `shared/tests/test_cost_disclosure.sh` 가 두 갈래로 잠근다. (가) 글롭으로 도출한 모든 SKILL.md(수 = `find` 수)에 지출 승인 문구가 없다. pm-interview 의 연장 질문 · 리뷰 엔진 skill 의 추가 라운드 질문은 걸리지 않는다(양성 대조). (나) epic-conductor · plugin-audit · artifact-critique 에 공시 줄 문장이 있다. 지휘자 · plugin-audit · artifact-critique 의 루프 상한 · kill switch 문장이 남았는지도 단언한다(RC14). 변이 — 아무 SKILL.md 하나(게이트가 없던 variable skill 포함)에 「지출 동의 게이트」 재삽입, 세 skill 중 하나의 공시 문장 삭제, 임시 사본에 지출 승인 문구를 가진 새 SKILL.md 하나 추가 — 셋 다 RED.
 - AC18 qg AC8a · `test_epic_conductor_skill.sh` 예외 락이 §2 대로 바뀌고 양의 짝을 가진다.
 
 **공통**
@@ -458,6 +460,7 @@ next_phase: superpowers:writing-plans
 **예약 밖**
 
 - `plugins/spec-distill/tests/test_reviewing_brief_skill.sh:73` — 실패 메시지 「high 는 지출 승인 게이트를 요구한다(CLAUDE.md)」 를 새 규칙에 맞춘다(계획 2). 락 지도(`locks.md`)가 이 파일을 R13 행으로 적어, 예약하면 `test_roadmap_status.sh` 의 락 지도 단언이 깨진다. 그래서 예약하지 않고 경로 예약 정보 줄 하나를 받아들인다.
+- `plugins/spec-distill/references/conducting.md:13` — 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」를 뺀다(계획 2, 예약 밖 편집). R14 가 예약한 파일이지만 R14 가 먼저 머지하고 그 문장은 건드리지 않는다(지휘자 판단(사용자 결정 아님)). 경로 예약 정보 줄 하나를 받아들인다.
 - 네 플러그인의 `.claude-plugin/plugin.json` · `CHANGELOG.md` — 판 번호는 머지 직전.
 - 이 설계의 로드맵 커밋(이미 함): `roadmap.md` · `R9.md` · `R14.md` · `plugins/spec-distill/tests/test_roadmap_status.sh`(겹침 정보 단언에 R9 ↔ R14 한 줄).
 
@@ -481,9 +484,12 @@ next_phase: superpowers:writing-plans
 - 동의 기록에서 `approved` 를 `disclosed` 로 바꿈 — 옛 데이터를 위해 두 키를 다 받아야 하고, 이름만 바뀐 같은 불리언이다. `at` · `fanout` 일치가 이미 공시를 잰다.
 - `approved` 를 그대로 `true` 로 계속 씀 — 승인이 없는데 승인했다고 적는 기록은 막지 않는 것을 막는다고 믿게 하는 선언이다.
 - artifact-critique E3 질문까지 지움 — 대상 · 모드 · 취소 · 비평자 수는 범위 고르기다. 사용자가 남기라고 했다.
-- 브랜치 접두를 `feature/` · `fix/` 그대로 두고 문면만 — 점검 문서 행 5 가 접두 선택지(`docs/` · `chore/`)를 적었고, 템플릿은 이미 선택지를 준다. 이 레포만 고정으로 남는다(열린 질문 2).
+- 브랜치 접두를 `feature/` · `fix/` 그대로 두고 문면만 — 점검 문서 행 5 가 접두 선택지(`docs/` · `chore/`)를 적었고, 템플릿은 이미 선택지를 준다. 이 레포만 고정으로 남는다. 사용자가 더하기를 골랐다(U6).
 - 설계문서 필수 섹션 기계 게이트를 지금 만듦 — 새 기능이고 R9 범위 밖이다. 문장을 사실대로 고치는 것이 이 에픽의 몫이다.
-- 역할 프롬프트 공식을 지키려고 agent 열여섯에 한 줄씩 더함 — persona 편집 다수(보안-민감)이고 사용자 결정이 없다(열린 질문 1).
+- 역할 프롬프트 공식을 지키려고 agent 열여섯에 한 줄씩 더함 — persona 편집 다수(보안-민감)다. 사용자가 규칙 문장을 맞추기로 골랐다(U7).
+- Law 1 가벼운 꼴은 이유만 밝히고 섹션은 덮지 않음 — Law 1 의 「silent 하게 skip 불가」와 어긋난다. 사용자가 짧게 덮기를 골랐다(U5).
+- variable skill 에도 공시 의무를 지움(「worst-case 가 high 인 variable」) — 공시 의무는 high 에 걸리고, variable 은 지출 승인을 묻지 않는다는 음성 규칙과 코퍼스 락으로 충분하다(지휘자 판단(사용자 결정 아님)).
+- plugin-audit 을 공시만 하고 멈춤 선택지 없이 둠 — 「여섯 축 전부」를 고르면 멈출 길이 끼어들기뿐이다. 첫 축 질문에 「중단」을 둔다(지휘자 판단(사용자 결정 아님)).
 - `shared/README.md` 에 「10곳」 — 다시 낡는다. 도출이라고 쓴다.
 
 ## 결정 기록
@@ -510,14 +516,22 @@ next_phase: superpowers:writing-plans
 - 작성자 판단(지휘자가 맡긴 자리 · 사용자 결정 아님) · 2026-10-23:
   - `conductor_state` 는 「읽되 버리는 절」(`RETIRED_SECTIONS` + `skip` 길 + 쓰지 않음)이다. `approval` · `approve` 는 은퇴(공시 전용으로 남기지 않음)한다. 옛 행까지 걷는 쪽이 같은 크기에 더 깨끗하다(§3).
   - 동의 기록은 키 이름 그대로 두고 `approved` 를 요구하지 않으며, 있으면 `true` 여야 한다(§4).
-  - `docs/` · `chore/` 를 더한다 — 점검 행이 그 접두를 적었고, 훅 변경은 이 레포 한정이다(§5 행 5).
-  - Law 1 의 가벼운 꼴도 필수 섹션을 짧게 덮는다(「해당 없음 — 이유」) — Law 1 의 「silent 하게 skip 불가」와 맞추려는 것이다(열린 질문 3).
-  - 역할 프롬프트 규칙은 문장만 뜻으로 고치고 persona 파일은 두지 않는다(열린 질문 1).
+  - `docs/` · `chore/` 를 더하자고 제안했다 — 사용자가 U6 으로 정했다.
+  - Law 1 의 가벼운 꼴도 필수 섹션을 짧게 덮자고 제안했다 — 사용자가 U5 로 정했다.
+  - 역할 프롬프트 규칙은 문장만 맞추자고 제안했다 — 사용자가 U7 로 정했다.
   - 쉬운 말 skill 자리는 「하나만」을 강제하는 셋만 고친다.
   - `test_reviewing_brief_skill.sh` 는 예약하지 않는다(락 지도).
   - qg `dependencies.md` 의 `pr-review-toolkit` 행은 `check_deps.py measure` 가 외부 플러그인 판을 못 재서 새 측정 길이 필요하다 → `## 미룸`.
   - 계획 2 브랜치 이름은 `feature/cost-scale-disclosure`.
   - 로드맵 재분해의 원문은 U1 · U2 둘을 실었다.
+- U5 · 결정 · 2026-10-23 · 사용자 — 「짧게 덮는다 (권장)」 (Law 1 중간 단계의 가벼운 꼴도 필수 섹션을 짧게 덮고, 다루지 않는 섹션은 「해당 없음 — 이유」로 적는다 — §5 행 2)
+- U6 · 결정 · 2026-10-23 · 사용자 — 「docs/ · chore/ 를 더한다」 (branch-strategy.md:12 정규식에 두 접두를 더하고 훅 테스트를 단다. 문면과 템플릿은 서로 맞게 — §5 행 5)
+- U7 · 결정 · 2026-10-23 · 사용자 — 「규칙 문장을 맞춘다 (권장)」 (CLAUDE.md:48 문장을 agent 들의 실제 모양에 맞추고 agent 파일은 하나도 고치지 않는다 — §6)
+- 지휘자 판단(사용자 결정 아님) · 2026-10-23 · 설계 점검 뒤:
+  - plugin-audit 멈춤 길 — (b) 질문을 지우면 「여섯 축 전부」를 고른 사용자에게 멈출 선택지가 없다. 첫 축 질문에 「중단」을 더하고 규모를 선택지 설명에 실어 고르기 전에 보이게 한다. 범위 질문은 남긴다는 사용자 결정을 지킨다(§4 · §8 K1 · AC15 · `test_skill_orchestration.py`).
+  - `references/conducting.md:13` 의 낡은 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」는 R9 계획 2 가 예약 밖 편집으로 고친다(`test_reviewing_brief_skill.sh` 와 같은 꼴). R14 가 먼저 머지하고 그 문장은 건드리지 않는다.
+  - 비용 규칙은 `cost_class: high` 에 건다. D18 의 문장 「상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다」를 규칙 문장에 넣어 pm-interview 의 연장 질문 · 리뷰 엔진의 추가 라운드 질문과 맞춘다. `variable` 은 지출 승인을 묻지 않는다는 규칙만 받는다. 락은 둘 — (가) 글롭으로 도출한 모든 SKILL.md 의 지출 승인 문구 부재, (나) 게이트가 있던 세 skill 의 공시 줄 양성. 「worst-case 가 high 인 variable」 문구는 지운다(§2 · AC11 · AC17).
+  - R5 설계 :642 문장에 대해 R14 는 할 일이 없다 — R9 계획 2 가 approval 갈래를 지운다(`## 상류 · 하류 연계`).
 
 ## 번호 대조
 
