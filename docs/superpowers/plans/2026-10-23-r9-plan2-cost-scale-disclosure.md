@@ -23,7 +23,7 @@
 - **변이(AC19):** 테스트 먼저 · RED 확인 · 커밋 뒤 변이(삭제 · 추가 · 반전 · 형태 변경) · 양성 대조 · 복원은 `git checkout HEAD -- <파일>` 뒤 `git diff HEAD --quiet`. 음의 락에는 양의 짝.
 - **전체 스위트:** 계획 1 과 같은 공유 잠금 줄 — `LOCK="$(python3 plugins/spec-distill/scripts/conductor_ledger.py suite-lock --roadmap docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md | head -1)"`, `python3 plugins/spec-distill/scripts/suite_lock.py run --lock "$LOCK" --owner <이름> --wait 1800 -- bash -c 'bash tools/suite/run-all.sh > <출력> 2>&1'`. 하위 agent 에게도 이 줄을 싣는다. 기록 폴더 `$HOME/.claude/sdd-mirror/r9/`.
 - **공통 공시 문장:** 세 skill 의 공시 자리는 모두 `지출 승인을 묻지 않는다` 를 쓴다 — CLAUDE.md · P22 의 「어느 클래스의 skill(스킬)도 지출 승인을 묻지 않는다」 와 같은 낱말이다. 새 락의 (나) 갈래가 이 문장을 절 안에서 잰다(머리로 만족되지 않게).
-- 예약 밖 편집 둘(설계 Files to Modify): `plugins/spec-distill/tests/test_reviewing_brief_skill.sh`(:73 메시지) · `plugins/spec-distill/references/conducting.md`(:13 괄호). 경로 예약 정보 줄을 받아들인다.
+- 예약 밖 편집 둘(설계 Files to Modify): `plugins/spec-distill/tests/test_reviewing_brief_skill.sh`(:73 메시지) · `plugins/spec-distill/references/conducting.md`(:14 괄호). 경로 예약 정보 줄을 받아들인다.
 - persona · 리뷰어 프로필은 고치지 않는다.
 
 ## 설계와 다른 점 · 설계에 없던 결정
@@ -60,6 +60,7 @@
 **Files:**
 - Modify: `plugins/spec-distill/scripts/conductor_state.py`(docstring :6 · `SECTIONS` 뒤 · `parse_machine` · `render_machine` · `_normalized`)
 - Test: `plugins/spec-distill/tests/test_conductor_state.py`
+- R14(#254)가 이 파일에 `EPIC_PR` 절을 더했다 — `SECTIONS` · `OPTIONAL_SECTIONS` · `parse_machine` · `recorded_number` · `recorded_cache_row` 의 R14 줄은 남긴다. `RETIRED_SECTIONS` 는 그 옆에 더한다. `test_conductor_state.py` 의 R14 단언도 남긴다.
 
 **Interfaces:**
 - Produces: `RETIRED_SECTIONS: tuple = ("시작 승인",)` — `SECTIONS` 에 남은 채 읽기에서 줄 검사 없이 버리고, 쓰기에서 머리를 쓰지 않는 절.
@@ -83,6 +84,7 @@
 **Files:**
 - Modify: `plugins/spec-distill/scripts/conductor_ledger.py`(docstring :13 · `scale_check` · `_drop_approval` · `c_claim` · `c_takeover` · `c_release` · `c_approval` · `c_approve` · 하위 명령 표)
 - Test: `plugins/spec-distill/tests/test_conductor_ledger.py`
+- R14(#254)가 이 파일에 넣은 줄(에픽 PR 번호 판정·기록 쪽)은 남긴다. `test_conductor_ledger.py` 의 R14 단언도 남긴다.
 
 **Interfaces:**
 - Consumes: Task 1 의 `RETIRED_SECTIONS` 동작(다시 쓸 때 그 절이 사라진다).
@@ -106,14 +108,14 @@
 
 **Files:**
 - Modify: `plugins/spec-distill/skills/epic-conductor/SKILL.md`(:29 · 3절 · 4절)
-- Modify: `plugins/spec-distill/references/conducting.md`(:13 괄호 하나 — 예약 밖)
+- Modify: `plugins/spec-distill/references/conducting.md`(:14 괄호 하나 — 예약 밖)
 - Test: `plugins/spec-distill/tests/test_epic_conductor_skill.sh`(:32-44 · :97 · :128 · 4절 옛 PR 캐시 갈래 락) · `plugins/spec-distill/tests/test_conductor_e2e.sh`(:42-47 · :114)
 
 - [ ] **Step 1: 실패하는 단언.** `APP="$(sec '### 4. 규모 공시')"`. 리터럴(양): `'남은 에픽'` · `'agent 약'` · `'라운드마다 부르는 리뷰어 agent'` · `'spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다)'` · `'구현 안 agent 수는 task 수에 따라 — 상한 없음'` · `'규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다.'`. 부재(음): `'conductor_ledger.py" approval'` · `'conductor_ledger.py" approve'` · `` '`AskUserQuestion`' `` · `'conductor_ledger.py" release'` · `'승인 전에는 agent 를 보내지 않는다'` · `'이름 붙인 예외'`. 순서: `규모 줄 하나를 만든다` 가 `규모 줄을 보이고 5 로 간다` 앞. 세션 펜스 수 단언(:97)을 `-ge 4` 「(claim · takeover · 다시 채우기 · release)」로. :128 의 `assert_contains "$APP" 'conductor_ledger.py" release'` 를 3절 단언으로 옮긴다 — 3절 펜스 가운데 `pr-refresh` 가 없고 `python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid"` 를 담는 펜스가 정확히 하나이고 `[ -n "$sid" ] ||` 멈춤을 가진다. `default_rc` 줄 리터럴(`'`claim_rc=0` 이면'` · `'`conductor_ledger.py" release`'` · `'돌린 뒤 멈춘다'`)은 그대로 두고 `'4 끝의'` 부재를 더한다. 4절의 `approval_branch_check` 블록과 그 변이 고리는 지운다(3절 `reset_branch_check` 는 그대로). `assert_not_contains "$(sec '### 3. 자리 · 세션 · 표지')" '옛 시작 승인'` 와 conducting.md 에 대한 `assert_not_contains "…conducting.md 내용…" '옛 시작 승인이 지워진다'` 를 더한다(conducting 의 「다시 채운 뒤 `ledger release` → `ledger claim`」 양성 단언은 그대로).
   e2e 의 2 단계는 `# 2 — 표지 · 규모 공시(원장에 승인 하위 명령이 없다)` 로: claim rc 0 · 기계 상태 파일이 생겼다 · `L approval …` 의 rc 가 2. :114 는 `L claim …` rc 0 으로 바꾸고 「시작 승인을 다시 묻는다」 단언을 지운다.
 - [ ] **Step 2:** 두 테스트 RED.
 - [ ] **Step 3: 4절 문면.** 머리를 `### 4. 규모 공시` 로. `control_plane.py show` 펜스는 그대로. 규모 줄 문장의 꼴을 `` `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …> · spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · 구현 안 agent 수는 task 수에 따라 — 상한 없음` `` 으로(설계 §3), 이어지는 agent 수 설명 · 「같은 상태에서는 같은 줄이 나오게 이 꼴 그대로 쓴다.」는 그대로. 그 뒤 `규모 줄을 보이고 아래 펜스로 승인 상태를 본다.` 부터 4절 끝(이름 붙인 예외 문단)까지를 `규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다. 그 뒤의 dispatch 도 띄우기 전에 규모만 알리고 간다.` 한 문단으로 바꾼다.
-- [ ] **Step 4: 3절 · :29 · conducting.md.** `default_rc` 줄의 `4 끝의 표지 풀기 펜스` 를 `아래 표지 풀기 펜스` 로. 3절 끝(다시 채우기 처리 줄 뒤, `### 4.` 앞)에 `표지 풀기 — 위에서 표지를 잡은 채 멈출 때 이 펜스로 푼다.` 한 줄과 옛 4절의 release 펜스(루트 가드 · 세션 id 멈춤 · `cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid"`)를 옮긴다. 다시 채우기 줄 끝의 `(새로 잡아야 이 세션의 옛 시작 승인이 지워진다)` 를 지운다. :29 의 `진입 · 시작 승인 · 차례` 를 `진입 · 규모 공시 · 차례` 로. `conducting.md` :13 의 `(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)` 괄호만 지운다(그 걸음은 남긴다).
+- [ ] **Step 4: 3절 · :29 · conducting.md.** `default_rc` 줄의 `4 끝의 표지 풀기 펜스` 를 `아래 표지 풀기 펜스` 로. 3절 끝(다시 채우기 처리 줄 뒤, `### 4.` 앞)에 `표지 풀기 — 위에서 표지를 잡은 채 멈출 때 이 펜스로 푼다.` 한 줄과 옛 4절의 release 펜스(루트 가드 · 세션 id 멈춤 · `cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid"`)를 옮긴다. 다시 채우기 줄 끝의 `(새로 잡아야 이 세션의 옛 시작 승인이 지워진다)` 를 지운다. :29 의 `진입 · 시작 승인 · 차례` 를 `진입 · 규모 공시 · 차례` 로. `conducting.md` :14 의 `(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)` 괄호만 지운다(그 걸음은 남긴다).
 - [ ] **Step 5:** 두 테스트 GREEN · `bash plugins/spec-distill/tests/test_conducting_reference.sh` · `bash plugins/spec-distill/tests/test_conducting_loop.sh` · 3~4절 펜스 공유 락(`test_epic_conductor_skill.sh` 가 부르는 `shared/tests/test_skill_*` 넷) GREEN.
 - [ ] **Step 6: 커밋** — `feat(spec-distill)!: 지휘자 시작 승인을 규모 공시로 — 규모 줄에 리뷰 라운드 상한과 상한 없는 부분`.
 - [ ] **Step 7: 변이.** 4절에 옛 approval 펜스를 되살림 → RED. 공시 문장 삭제 → RED. 3절 release 펜스 삭제(가리키는 펜스가 사라짐) → RED. 규모 줄 꼴에서 `상한 없음` 칸 삭제(형태 변경) → RED.
