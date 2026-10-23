@@ -265,7 +265,7 @@ next_phase: superpowers:writing-plans
 
 - 숨은 가정 「인터뷰 시점에 나눈 경계가 맞고 하류가 따른다 — 승인된 분해가 봉인되기 쉽다」(K4) — 설계 대화에서 「새 기능」 경계가 반증되자 사용자 결정으로 범위를 넓히고 재분해로 로드맵에 싣는다(봉인하지 않음).
 - 외부 문구 변화(K11) — §6. 다음 세션이 불러온 superpowers 의 판을 개발 당시 판과 대조해 알린다.
-- 실패 양식 「버전 · CHANGELOG 같은 공유 파일 겹침」 — 판 번호는 머지 직전에 정한다(Metadata). R9 와 병렬이어도 R9 는 CLAUDE.md · 철학 문서만 고쳐 공유 파일이 겹치지 않는다.
+- 실패 양식 「버전 · CHANGELOG 같은 공유 파일 겹침」 — 판 번호는 머지 직전에 정한다(Metadata). R9 는 CLAUDE.md · 철학 문서만이 아니라 high skill 승인 게이트 제거로 spec-distill · quality-gates 파일도 고쳐 R14 와 겹치는 파일이 있다(§9 · `## 상류 · 하류 연계` 겹침 표) — R14 가 먼저 머지하고 R9 가 그 뒤 기본 브랜치를 merge 해 스위트 대조와 통합 리뷰를 다시 돈다.
 
 이 설계가 새로 여는 위험:
 
@@ -355,15 +355,18 @@ next_phase: superpowers:writing-plans
 - 경로 겹침(R9 · 지휘자 판정 2026-10-23):
   - R9 는 사용자 결정 「모든 high skill 을 규모 공시만으로 (권장)」 · 「R9 가 규칙과 skill 을 함께 (권장)」(2026-10-23)에 따라 cost_class high skill 의 승인 게이트를 지우고 그 락을 고친다. R14 는 승인 게이트를 건드리지 않는다.
   - 머지 순서: R14 가 먼저 머지한다. R9 가 그 뒤 기본 브랜치를 merge 하고 스위트 대조와 통합 리뷰를 다시 돈다.
-  - 주인(지휘자 판정): R14 는 PR 번호 기록과 그것에 드는 `conductor_ledger.py` · epic-conductor SKILL 문장을 맡는다. R9 는 high skill 승인 게이트 제거(epic-conductor `### 4` · `conductor_ledger` 의 `approval` · `approve` · plugin-audit · artifact-critique), 쉬운 말 블록의 사본들, 규칙 문장을 맡는다. R14 는 쉬운 말 블록과 그 사본을 고치지 않는다.
+  - 주인(지휘자 판정): R14 는 PR 번호 기록과 그것에 드는 `conductor_ledger.py` · `conductor_state.py` · conducting.md 문장을 맡는다 — epic-conductor `SKILL.md` 는 고치지 않는다(SKILL.md 의 `ledger roadmaps` 줄 꼴 메모는 `## 미룸` 의 R9 행이다). R9 는 high skill 승인 게이트 제거(epic-conductor `### 4` · `conductor_ledger` 의 `approval` · `approve` · plugin-audit · artifact-critique), 쉬운 말 블록의 사본들, 규칙 문장을 맡는다. R14 는 쉬운 말 블록과 그 사본을 고치지 않는다.
 
   | 파일 | R14 가 고치는 것 | R9 가 고치는 것 |
   |---|---|---|
   | `SD/scripts/conductor_ledger.py` | `pr-record` 명령 · `pr-refresh` 의 번호 줄 · `c_add` 의 레포 설정 거부 · `c_roadmaps` 검사 불가 사유 | `approval` · `approve`(승인 게이트 제거) |
   | `SD/tests/test_epic_conductor_skill.sh` | 고치지 않는다(§7 지휘자 3단계 락은 안 고침, PR 번호 문장은 conducting.md 에 둔다) | 승인 게이트 락 |
-  | `SD/README.md` | `## 한계` 첫 줄(§3) · `## 한계` 의 U8 두 줄(§2) · 상태 계산 줄의 번호 판정 공시(§2)만 | 쉬운 말 블록 사본 · 규칙에 닿는 문장 |
+  | `SD/README.md` | `## 한계` 첫 줄(§3) · `## 한계` 의 U8 두 줄(§2) · 상태 계산 줄의 번호 판정 공시(§2) · `### Principles` Law 3 · P23 줄의 `## 에픽 PR` 예외 · 로드맵 절 gh 명령 목록의 `pr-record`(통합 리뷰 반영)만 | 쉬운 말 블록 사본 · 규칙에 닿는 문장 |
   | `SD/skills/spec-review/SKILL.md` · `SD/skills/request-framing/SKILL.md` | 고치지 않는다(§5 (2) 는 해결자에서 막고, §7 의 상태 블록 stderr 는 안 고침) — R14 예약에는 남아 있다 | 쉬운 말 블록 사본 |
   | `SD/references/conducting.md` · `SD/tests/test_conducting_reference.sh` | 걸음 4 · 손 절차 5 의 PR 번호 · 걸음 5 의 쌓인 PR 바탕 바꾼 뒤 번호 · 걸음 7 정리에서 `## 에픽 PR` 남김 · 「레포 설정」 문장과 그 순서 락 | 시작 승인 문장과 그 락 |
+  | `SD/scripts/conductor_state.py` | `EPIC_PR` 절 — `SECTIONS` · `OPTIONAL_SECTIONS` · `parse_machine` 의 줄 검사 · `recorded_number` · `recorded_cache_row` | R9 예약 파일 — R14 뒤에 머지하며 R14 가 더한 이 줄들을 남긴다 |
+  | `SD/tests/test_conductor_ledger.py` | PR 번호 테스트(`PrRecord` · `RecordThenStatus` · `RecordedPrs` · `pr-refresh` 번호 갈래) · `RepoSettingsAdd` | R9 예약 파일 — R14 뒤에 머지하며 R14 가 더한 이 테스트들을 남긴다 |
+  | `SD/tests/test_conductor_state.py` | `OptionalWorks` 뒤의 `EpicPr` 테스트 | R9 예약 파일 — R14 뒤에 머지하며 R14 가 더한 이 테스트들을 남긴다 |
 
   - R14 는 epic-conductor `SKILL.md` 를 고치지 않는다 — PR 번호 걸음은 모두 conducting.md 에 있다. R5 설계 :642 의 SKILL 문장(`approval` rc 가 0 이 아니면 묻는다)도 R14 가 할 일이 없다 — R9 계획 2 가 그 승인 갈래를 지운다. 문단이 달라 기계적 충돌은 작을 것이다.
 - 걸음 7 정리: 로드맵 끝의 기계 상태 정리는 `## 에픽 PR` 을 남긴다(§2) — 정리 뒤에도 상태 계산 · 상태줄이 같은 번호로 판정한다.
@@ -434,6 +437,7 @@ next_phase: superpowers:writing-plans
 - `merge_check.py` 의 `re.compile` 검사를 작은 함수로 옮김(§5 (3))
 - conducting.md 걸음 4 · 손 절차 5 의 번호 적기와 쌓인 PR 문장, 걸음 5 · 손 절차 8 의 바탕 바꾼 뒤 번호 적기, 걸음 7 정리의 `## 에픽 PR` 남김(§2)
 - SD README `## 한계` 의 공시 뒤 세 불릿과 U8 두 줄(§2 · §3)
+- SD README `### Principles` Law 3 · P23 줄의 `## 에픽 PR` 예외 · 로드맵 절 gh 명령 목록의 `pr-record`(통합 리뷰 반영)
 
 **예약 밖** — 이 브랜치의 로드맵 커밋(0e803d5a)으로 등록했다:
 
@@ -507,7 +511,7 @@ next_phase: superpowers:writing-plans
   - spec 리뷰 3라운드 반영(2026-10-23):
     - 걸음 7 의 기계 상태 정리는 `## 에픽 PR` 을 남긴다 — 다시 만들 수 없는 기록이다(AC19).
     - `ledger audit` · `ledger review-pack` 도 `_prs` 를 지나므로 번호가 적힌 브랜치는 그 번호의 PR 만 쓴다(AC18).
-  - R9 와의 통합: R14 가 먼저 머지 · R9 가 merge 뒤 대조와 통합 리뷰. 겹치는 파일의 주인은 `## 상류 · 하류 연계` 표 — R14 는 PR 번호 기록(필요한 `conductor_ledger.py` · epic-conductor SKILL 문장 포함), R9 는 high skill 승인 게이트 제거 · 쉬운 말 블록 사본 · 규칙 문장. R14 는 쉬운 말 블록을 고치지 않고 README 는 `## 한계` 와 상태 계산 줄만 고친다.
+  - R9 와의 통합: R14 가 먼저 머지 · R9 가 merge 뒤 대조와 통합 리뷰. 겹치는 파일의 주인은 `## 상류 · 하류 연계` 표 — R14 는 PR 번호 기록(필요한 `conductor_ledger.py` · `conductor_state.py` · conducting.md 문장 포함 — epic-conductor `SKILL.md` 는 고치지 않는다), R9 는 high skill 승인 게이트 제거 · 쉬운 말 블록 사본 · 규칙 문장. R14 는 쉬운 말 블록을 고치지 않고 README 는 `## 한계` 와 상태 계산 줄, 그리고 통합 리뷰가 찾은 두 자리(`### Principles` Law 3 · P23 줄의 `## 에픽 PR` 예외 · 로드맵 절 gh 명령 목록의 `pr-record`)만 고친다.
   - 골든 예약 충돌은 실데이터 락 지도 단언이 머지된 에픽의 예약 · 줄을 다른 에픽 소유로 세지 않게 고치고, 그 뒤 골든 폴더를 R14 에 예약한다(§4).
   - 5 · 6 · 7 · 10 은 사람을 헷갈리게 하거나 실제 결함을 통과시키는 것만 고치고 나머지는 안 고친다. 7 은 행동 층이 덮으면 안 고침이 기본이다(§7).
   - (1) 콜론 없는 머리말 줄은 엄격 오류 · (2) 폴더 값의 글롭 · pathspec 특수 글자는 거부 · (3) `ledger add --section "레포 설정"` 의 같은 키는 쓰는 자리에서 거부(§5).
@@ -590,11 +594,12 @@ next_phase: superpowers:writing-plans
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| SD README `### Principles` 의 Law 3 · P23 줄 「기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다」 | `## 에픽 PR` 은 다시 만들 수 없는 기록이라 이제 정확하지 않다. README 의 그 자리는 R9 몫이라 R14 가 고치지 않았다 | R9 |
-| SD README 상태 계산 앞 문단의 gh 를 부르는 명령 목록(`pr-handoffs` · `audit` · `review-pack` · `pr-refresh`)에 `pr-record` 가 없다 | 같은 이유 — README 의 그 자리는 R9 몫 | R9 |
+| SD README `### Principles` 의 Law 3 · P23 줄 「기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다」 | `## 에픽 PR` 은 다시 만들 수 없는 기록이라 이제 정확하지 않다. README 의 그 자리는 R9 몫이라 R14 가 고치지 않았다 끝냄 — R14(feature/r8-device-leftovers, 통합 리뷰 반영) | R9 |
+| SD README 상태 계산 앞 문단의 gh 를 부르는 명령 목록(`pr-handoffs` · `audit` · `review-pack` · `pr-refresh`)에 `pr-record` 가 없다 | 같은 이유 — README 의 그 자리는 R9 몫 끝냄 — R14(feature/r8-device-leftovers, 통합 리뷰 반영) | R9 |
 | epic-conductor `SKILL.md` 의 `ledger roadmaps` 줄 꼴 「`<경로><탭><끝나지 않은 에픽 수>`」 | 둘째 칸이 「검사 불가 — <사유>」 일 수 있다(전에도 맨 「검사 불가」 였다). SKILL.md 는 R9 몫 | R9 |
+| `## 상류 · 하류 연계` 의 R9 로 넘기는 규칙 문장(U6) 「에픽의 머지됨은 지휘자가 PR 을 열 때 기계 상태에 적은 PR 번호로 판정한다 — 그 PR 이 기본 브랜치로 머지됐을 때만 머지됨이다. 번호가 없는 에픽만 브랜치 이름과 이력으로 알아보고, 그 추정의 틈(같은 이름의 옛 브랜치 · 늦게 들어온 문서)은 공시한다.」 을 머지 판정을 말하는 규칙 문서(CLAUDE.md 또는 철학 문서) 자리에 싣는다 | 규칙 문서는 R14 몫이 아니다 — R9 범위 | R9 |
 | R9 의 PR 처럼 8.9.0 전에 연 PR 의 번호 기록 | 자동으로 찾아 적는 길이 없다(U9). 지휘 세션이 `ledger pr-record --roadmap <로드맵> --session <세션> --epic R9 --pr <번호>` 를 한 번 부른다 | R9 |
-| `plugins/spec-distill/tests/test_coverage_scope.py` 를 R14 경로 예약에 등록 | `specs_dir` 필수화(§7)로 이 테스트를 고쳐야 했는데 예약 · Files to Modify 밖이다(어느 에픽도 예약하지 않음). 구현 agent 의 `roadmap_write.py update` 는 권한 판정이 막아 돌리지 않았다 — 지휘 세션이 머지 전에 `python3 plugins/spec-distill/scripts/roadmap_write.py update --roadmap docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md --brief docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md --audit docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.audit.md --plan-table <R14 행에 그 경로를 더한 표 파일> --date <날짜> --change "R14 경로 예약에 test_coverage_scope.py — specs_dir 필수화(§7)로 고친 테스트" --approval "승인하고 계획으로 (권장)"` 를 돌린다 | R14 |
+| `plugins/spec-distill/tests/test_coverage_scope.py` 를 R14 경로 예약에 등록 | `specs_dir` 필수화(§7)로 이 테스트를 고쳐야 했는데 예약 · Files to Modify 밖이다(어느 에픽도 예약하지 않음). 구현 agent 의 `roadmap_write.py update` 는 권한 판정이 막아 돌리지 않았다 — 지휘 세션이 머지 전에 `python3 plugins/spec-distill/scripts/roadmap_write.py update --roadmap docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md --brief docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.md --audit docs/superpowers/interview/2026-10-11-persistent-explore-pm-decompose-interview.audit.md --plan-table <R14 행에 그 경로를 더한 표 파일> --date <날짜> --change "R14 경로 예약에 test_coverage_scope.py — specs_dir 필수화(§7)로 고친 테스트" --approval "승인하고 계획으로 (권장)"` 를 돌린다 끝냄 — 5e0f1490(R14, 로드맵 경로 예약) | R14 |
 | Files to Modify 의 「`roadmap_write.py update` 로 로드맵 파일과 묶음 `R14.md` 를 고쳐 한다」 | 경로 예약은 로드맵 블록에만 그려져 `R14.md` 는 바이트 그대로였다(도구 동작이 맞다) — 문장만 어긋난다 | R14 |
 | 이 레포 지휘 기계 상태의 옛 4칸 PR 줄 | 8.9.0 은 기계 상태를 못 읽으면 머지 판정을 보류한다(AC21) — 머지 뒤 표지를 쥔 지휘 세션이 `ledger pr-refresh --roadmap <로드맵> --session <세션> --reset` 을 한 번 돌려야 블록이 「알 수 없음」 에서 풀린다 | R14 |
 | 과제 리뷰 · 마지막 리뷰의 작은 보강(테스트 빈 칸 · 문구) — 같은 번호 다른 브랜치 · 다른 에픽 같은 브랜치 찾기 테스트, `pr-record` 의 `env_notices` 안내 · 번호 어긋남 갈래 테스트, 두 블록에 든 브랜치의 `pr-refresh` 갈래, 머리 목록 한도 + 번호 테스트, 번호 길의 `has_pr` · `reverts_of` 단언, 픽스처 `g()` 의 `gc.auto=0`(한 번 본 흔들림), 읽기 전용 락의 남은 우회 꼴(`sys.modules[...].__dict__` · 별표 import), 재대입 락의 창(같은 줄 · 뒤 `git add`), `wipes_epic` 의 어순, 「짧게 읽음」 이 `<sha> missing` 도 덮음, 캐시에 없는 번호 문구 둘 | 마지막 리뷰가 머지 전에 고칠 것 아님으로 분류했다(안전한 쪽으로 실패하거나 행동 층이 덮는다). 받을 에픽이 로드맵에 없다 | 없음 |
