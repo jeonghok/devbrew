@@ -1575,6 +1575,56 @@ class PrRecord(Repo):
         self.assertEqual(self.viewed, [])
 
 
+class RecordThenStatus(Repo):
+    """이미 머지된 PR 을 `pr-record` 로 적은 직후(`pr-refresh` 없이) 상태 계산이 그 번호로 머지됨이라 판정한다(R14 AC20).
+    `pr-refresh --reset` 뒤에도 같다(AC19). `--drop` 뒤에는 이름 · 이력 길로 돌아간다(Review Focus 4)."""
+    def setUp(self):
+        super().setUp()
+        self.gh_origin()
+        sh(self.w, "checkout", "-q", "-b", "feature/a1")
+        (self.w / "a1.txt").write_text("a1\n", encoding="utf-8")
+        sh(self.w, "add", "a1.txt")
+        sh(self.w, "commit", "-qm", "a1")
+        tip = sh(self.w, "rev-parse", "HEAD").strip()
+        sh(self.w, "checkout", "-q", "trunk")
+        sh(self.w, "merge", "-q", "--no-ff", "feature/a1", "-m", "Merge branch 'feature/a1'")
+        merge = sh(self.w, "rev-parse", "HEAD").strip()
+        sh(self.w, "push", "-q", "origin", "trunk")
+        self.pr = gh_pr(7, "MERGED", tip, False, merge)
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+
+    def gh(self, *args):
+        from unittest import mock
+        with mock.patch.object(L.gh_repo, "pr_view", lambda cwd, number: dict(self.pr)), \
+                mock.patch.object(L.gh_repo, "pr_list", lambda cwd, branch, limit=100:
+                                  ([dict(self.pr)] if branch == "feature/a1" else [], False)):
+            return self.cli(*args)
+
+    def reason(self):
+        return L._block(L._status(self.w, RM), "A1")
+
+    def test_record_then_status_without_refresh(self):
+        rc, out = self.gh("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7")
+        self.assertEqual(rc, 0, out)
+        b = self.reason()
+        self.assertEqual(b["stage"], "머지됨", b)
+        self.assertIn("PR #7 머지됨(적은 번호로 판정 · mergeCommit %s)" % self.pr["mergeCommit"]["oid"][:8], b["reason"])
+        rc, out = self.gh("pr-refresh", "--roadmap", RM, "--session", SID, "--reset")
+        self.assertEqual(rc, 0, out)
+        b = self.reason()
+        self.assertEqual(b["stage"], "머지됨", b)
+        self.assertIn("적은 번호로 판정", b["reason"])
+
+    def test_drop_returns_to_name_path(self):
+        self.assertEqual(self.gh("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7")[0], 0)
+        self.assertIn("적은 번호로 판정", self.reason()["reason"])
+        rc, out = self.gh("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7", "--drop")
+        self.assertEqual(rc, 0, out)
+        b = self.reason()
+        self.assertEqual(b["stage"], "머지됨", b)
+        self.assertNotIn("적은 번호", b["reason"])
+
+
 class NoPrBranch(Repo):
     def test_no_pr_line(self):
         self.gh_origin()
