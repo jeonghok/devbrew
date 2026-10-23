@@ -163,7 +163,8 @@ next_phase: superpowers:writing-plans
 - 실현(작성자 판단): 이 단언은 git 없이 잰다는 계약이 있어 「머지됨」 을 git · PR 캐시에서 읽으면 클론마다 판정이 갈린다. 그래서 「끝남」 을 로드맵 자신의 의존으로 읽는다 — 로드맵의 의존은 「앞 에픽이 머지된 뒤 시작」 이므로, 예약한 에픽이 줄의 에픽에 (건너서라도) 의존하면 줄의 에픽은 그 에픽이 손대기 전에 끝난다. `lock_rows` 의 위반 조건에 한 줄을 더한다: 다른 에픽 Y 가 줄의 에픽 X 에 의존(`roadmap_status._reachable` — `overlaps` 가 쓰는 같은 도달 표)하면 위반이 아니다.
 - 약해지지 않는 것: 의존이 없는 두 에픽(병렬)은 지금처럼 위반이다. 방향이 반대인 경우(줄의 에픽이 나중이고 먼저 가는 에픽이 그 파일을 예약)도 위반이다 — 먼저 가는 에픽이 나중 에픽이 맡은 락을 건드릴 수 있다. 이 규칙은 `overlaps` 가 겹침을 정보에서 빼는 규칙과 같은 방향의 좁은 판이다.
 - 최소인 이유: 단언 하나의 조건 한 줄이고, 락 지도 줄을 고치지 않는다(줄은 「R12 가 이 동작을 지킨다」 는 기록으로 남는다).
-- 순서: 같은 PR 에서 단언을 먼저 고치고, 그다음 `roadmap_write.py update` 로 R14 경로 예약에 `shared/tests/fixtures/docreview/golden/` 를 더한다. 폴더 전체(`fixtures/docreview/`)가 아니라 골든 폴더만 — `cases_advice.sh` 의 R12 줄 둘을 건드리지 않는다.
+- 순서: 같은 PR 에서 단언을 먼저 고치고, 그다음 `roadmap_write.py update` 로 R14 경로 예약에 `shared/tests/fixtures/docreview/golden/` 와 `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6 — 락 지도에 바꿀 에픽 R3 인 줄이 있다)를 더한다. 폴더 전체(`fixtures/docreview/`)가 아니라 골든 폴더만 — `cases_advice.sh` 의 R12 줄 둘을 건드리지 않는다.
+- 실측(이 브랜치, 지금 단언): 둘을 예약에 넣으면 실데이터 단언이 위반 셋을 낸다 — R12 골든 줄 둘 · R3 의 `test_review_handoff_order.sh` 줄. 세 줄 모두 줄의 에픽(R12 · R3)이 R14 의 의존 경로 안이라 고친 단언에서는 위반이 아니다.
 
 ### §5 해결자 · 원장의 거부 셋
 
@@ -352,7 +353,7 @@ next_phase: superpowers:writing-plans
   - 줄의 에픽이 나중이고 먼저 가는 에픽이 예약 → 위반.
   - 의존 없는 두 에픽 → 위반.
 
-  그다음 같은 PR 에서 `roadmap_write.py update` 로 R14 경로 예약에 `shared/tests/fixtures/docreview/golden/` 가 더해지고, 실데이터 `LOCKBAD` 는 `[]`, `OVERLAPS` 는 그대로다.
+  그다음 같은 PR 에서 `roadmap_write.py update` 로 R14 경로 예약에 `shared/tests/fixtures/docreview/golden/` 와 `plugins/spec-distill/tests/test_review_handoff_order.sh` 가 더해지고, 실데이터 `LOCKBAD` 는 `[]`, `OVERLAPS` 는 그대로다.
 
 **해결자 · 원장(§5)**
 - AC9 `strict_frontmatter` 가 콜론 없는 최상위 줄을 그 줄을 이름 붙인 `unreadable` 오류로 멈춘다(레포 설정 · 로드맵 층 각각). 들여쓴 줄 · 목록 줄 · `#` 줄 · 빈 줄은 그대로 건너뛴다. 레포의 실제 로드맵이 모두 통과한다.
@@ -379,12 +380,11 @@ next_phase: superpowers:writing-plans
 - `plugins/spec-distill/tests/test_roadmap_status.sh` · `test_repo_defaults.py` · `test_repo_literals.sh` · `test_merge_check.sh` · `test_finish_commit_roadmap.sh` · `test_ledger_root.sh`
 - `shared/docreview/scripts/docreview_state.py` · `shared/tests/test_writer_trust_notice.sh` · `shared/tests/fixtures/docreview/cases.sh` · `plugins/spec-distill/README.md`
 
-예약 밖 — 이 브랜치의 로드맵 커밋으로 등록한다(골든 폴더는 §4 순서대로 구현 PR 에서):
+예약 밖 — 이 브랜치의 로드맵 커밋으로 등록했다(골든 폴더 · `test_review_handoff_order.sh` 는 §4 순서대로 구현 PR 에서):
 
 - `plugins/spec-distill/scripts/conductor_state.py`(선택 절) · `plugins/spec-distill/scripts/gh_repo.py`(`pr_view`)(§2)
 - `plugins/spec-distill/tests/test_conducting_reference.sh` · `test_conductor_ledger.py` · `test_conductor_state.py` · `test_merged_by_pr.py` · `test_control_plane.py` · `test_gh_repo.py`(§2)
-- `shared/tests/fixtures/docreview/golden/`(§3 · §4 — 단언 변경 뒤)
-- `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6)
+- `shared/tests/fixtures/docreview/golden/`(§3 · §4) · `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6) — 둘은 §4 의 단언 변경 뒤 구현 PR 에서 등록한다
 - `plugins/spec-distill/tests/test_bundle_coverage.sh` · `test_state_root.sh` · `test_repo_defaults_git.sh` · `test_control_plane.sh`(§7)
 - `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `plugins/quality-gates/.claude-plugin/plugin.json` · `CHANGELOG.md`(공유 파일 — 겹침에서 빠진다)
 
@@ -433,7 +433,7 @@ next_phase: superpowers:writing-plans
   - 닫힌 번호 · 머지 뒤 커밋은 판정을 바꾸지 않고 줄로 알린다.
   - 공시 문장의 「엔진 → 리뷰 명령」 · 「숫자 → 확인값」 · 「그 안의 사용자 말」(§3).
   - §4 의 「머지됨」 을 단언의 git 없는 계약에 맞춰 로드맵 의존 순서로 읽는다. 방향은 「예약한 에픽이 줄의 에픽에 의존」 한쪽만이다.
-  - 이 커밋 시점의 로드맵 갱신에 골든 폴더를 넣지 않는다 — 단언 변경 전에 넣으면 실데이터 단언이 RED 다(이 브랜치에서 확인).
+  - 이 브랜치의 로드맵 갱신에 골든 폴더와 `test_review_handoff_order.sh` 를 넣지 않는다 — 단언 변경 전에 넣으면 실데이터 단언이 위반 셋으로 RED 다(이 브랜치에서 실측, §4).
   - §5 (3) 에 기계 상태 층 키 검사(`check_layer`)를 함께 건다.
   - §7 하위 항목 스물다섯의 처분.
 
