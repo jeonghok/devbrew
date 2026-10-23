@@ -299,7 +299,7 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    (`$RUN_DIR/audit.md`)의 절대경로를 보인다 — 사용자가 열어 볼 것은 이것이다. 데이터(`$RUN_DIR/audit-data.json`) ·
    원장(`$RUN_DIR/audit-journal.jsonl`) 경로는 사용자가 물을 때만 보인다. 맨 끝에 사용자가 할 일 하나를 쓴다
    (예: 「리포트의 심각 발견부터 고칠지 정해 주세요」). 리포트는 한 번 읽는 작업 산출물이다 — 실행 디렉토리는
-   git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과 reviewer persona 편집이 맡는다.
+   git-ignore 되고 커밋하지 않는다. 이 감사의 compounding 은 감사가 낳은 수정 커밋과, 기본으로는 reviewer persona 편집이 맡는다 — 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고친다.
 
 ## kill switch
 

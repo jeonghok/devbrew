@@ -214,4 +214,18 @@ assert_contains "$LAW1_P" '인터뷰 brief 는 `check_brief.py` 가 구조로 �
 assert_not_contains "$LAW1_C" '최소한 **구조적 게이트** (필수 섹션:' "AC4: CLAUDE.md 에 없는 구조 게이트를 있다고 쓰던 옛 구가 없다"
 assert_not_contains "$LAW1_P" 'silent하게 skip할 수 없는 구조적 게이트' "AC4: 철학 Law 1 의 옛 구가 없다"
 
+# --- AC5: persona 편집은 기본값, 더 맞는 자리면 그것 ---
+PERS_C="$(grep -F '**버그가 리뷰를 탈출하면**' "$CLAUDE_MD")"
+p10="$(awk '/^### P10/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+NEWP='그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고치고 이유를 적는다'
+assert_contains "$PERS_C" '기본 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것이다 — 코드만 패치하지 않는다.' "AC5: CLAUDE.md persona 기본"
+assert_contains "$PERS_C" "$NEWP" "AC5: CLAUDE.md — 더 맞는 자리면 그것"
+assert_not_contains "$PERS_C" '메모리' "AC5: CLAUDE.md persona 문장에 메모리가 없다"
+assert_contains "$p10" "$NEWP" "AC5: P10 — 더 맞는 자리면 그것"
+assert_not_contains "$p10" '메모리' "AC5: P10 에 메모리가 없다"
+assert_not_contains "$p10" 'fix는 코드 패치가 아니라 그 버그를 잡았어야 할 persona 파일 편집이고' "AC5: P10 옛 문장이 없다"
+for f in plugins/quality-gates/README.md plugins/plugin-audit/README.md plugins/plugin-audit/skills/plugin-audit/SKILL.md; do
+  assert_contains "$(tr '\n' ' ' < "$f" | tr -s ' ')" '락 · 스크립트 · skill 이면 그것을 고친다' "AC5: $f 가 같은 뜻"
+done
+
 finish

@@ -94,7 +94,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 - **Polite handoff** — 리뷰 승인 뒤 proceed 게이트 없이 다음 단계를 narrate만 하는 것, 게이트가 정한 멈춤을 건너뛰고 직진하는 것. 둘 다 게이트(P17)를 건너뛴 polite stop(AP2 variant). 게이트 계약 · 예외의 정본은 `plugins/spec-distill/references/proceed-gate.md`.
 - **Sealed decision** — 앞 단계의 확정이 하류에서 반증됐는데 피벗 경로가 없는 것 (철학 P23 의 anti-corollary). 재발견 금지는 반증 금지가 아니다 — 근거 있는 재결정은 사용자 동의를 받아 허용하고, 임의 변경만 금지한다.
 
-**버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
+**버그가 리뷰를 탈출하면** 기본 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것이다 — 코드만 패치하지 않는다. 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고치고 이유를 적는다. 그 commit 이 compounding 이벤트다(Law 3).
 
 ## Doc Conventions
 

@@ -32,7 +32,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드(mechanical · semantic · runtime): `plugins/quality-gates/scripts/run-test-selection.sh` · `plugins/quality-gates/skills/quality-pipeline/references/differential-test.md` · `plugins/quality-gates/skills/quality-pipeline/SKILL.md` · `plugins/quality-gates/references/e2e.md`
 
 ### P10 — Taste Pluralism
-**Law 2 × Law 3 집행.** 단일 리뷰어가 아니라 persona *라이브러리* — 각각 작고 버저닝 가능하며 *구체적 의견*을 이름으로 쓴 마크다운. Load-bearing: 버그가 리뷰를 탈출하면 fix는 코드 패치가 아니라 그 버그를 잡았어야 할 persona 파일 편집이고, 그 커밋이 compounding 이벤트(Law 3)다.
+**Law 2 × Law 3 집행.** 단일 리뷰어가 아니라 persona *라이브러리* — 각각 작고 버저닝 가능하며 *구체적 의견*을 이름으로 쓴 마크다운. Load-bearing: 버그가 리뷰를 탈출하면 기본 해결책은 그 버그를 잡았어야 할 persona 파일 편집이다 — 코드만 패치하지 않는다. 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고치고 이유를 적는다. 그 커밋이 compounding 이벤트(Law 3)다.
 코드: `plugins/quality-gates/agents/` (persona 파일군)
 
 ### P11 — Cross-Model Adversarial at High-Stakes Moments

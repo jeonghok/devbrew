@@ -74,7 +74,8 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
   프롬프트가 아니라 frontmatter scoping. `check-law2.py` 정적 게이트 + smoke가 런타임 실증.
 - **Law 3 (Every Cycle Leaves the System Smarter)** — 리포트는 한 번 읽는 작업 산출물이다
   (`.claude/plugin-audit/<실행 키>/`, 스스로 git-ignore). 이 사이클의 compounding 은 감사가 낳은 수정
-  커밋과 reviewer persona 편집이 맡는다.
+  커밋과, 기본으로는 reviewer persona 편집이 맡는다 — 그 버그를 더 잘 잡는 자리가 락 · 스크립트 ·
+  skill 이면 그것을 고친다.
 - **Law 2 (입력 오염 차단) — `input_slots`** — agent 셋이 frontmatter 에 받는 입력의 `tag`/`var`/`kind`
   를 선언한다. `audit-refuter.findings` 는 금지 종류 `prior_verdict` 이며 `tools/adjudication/check_slots.py`
   의 `EXEMPT_SLOTS` 에 C6 인용과 함께 등재돼 있다(반박이 과업이라 대응물이 없다). 집행은
