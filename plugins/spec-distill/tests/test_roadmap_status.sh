@@ -281,7 +281,8 @@ assert_eq "$(js "$OUT" "[o['blocks'] for o in r['overlaps']]")" "[['E1', 'W1']]"
 assert_eq "$(js "$OUT" "next(b['task_status'] for b in r['blocks'] if b['id']=='H1')")" "in_progress" "작업 목록 대응: 계획 → in_progress"
 txt="$(cd "$W" && python3 "$RS" docs/rm/roadmap.md)"
 assert_grep "$txt" "^로드맵 상태 — 블록 22개 · " "사람용 글 첫 줄이 상태"
-assert_contains "$txt" "머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지로 알아보고 「PR 상태 미확인」을 보인다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 쓴다" "판정 공시 줄(양의 짝)"
+assert_contains "$txt" "머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지로 알아보고 「PR 상태 미확인」을 보인다." "판정 공시 줄(양의 짝)"
+assert_contains "$txt" "이 기계에만 있다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 쓴다" "판정 공시 줄(양의 짝): 번호 판정 문장 뒤에도 결정 기록 문장이 이어진다"
 assert_not_contains "$txt" "merge commit 방식에서만" "옛 공시 「merge commit 방식에서만」 이 없다"
 assert_not_contains "$txt" "squash · rebase 로 머지했거나" "옛 공시 「squash · rebase 로 머지했거나 … 머지 줄을 적는다」 가 없다"
 SDR="$ROOT/plugins/spec-distill"
@@ -1804,5 +1805,26 @@ nb="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap
 b = "feature/h5a"
 for t in ("feature/h5a를 머지", "feature/h5a. 끝", "feature/h5a.", "feature/h5a2", "https://x/feature/h5a", "origin/feature/h5a", "feature/h5a/sub", "-feature/h5a", "_feature/h5a", "Feature/H5A", "(feature/h5a)"): print(int(rs.names_branch(t, b)))' "$S")"
 assert_eq "$(printf '%s' "$nb" | tr '\n' ' ')" "1 1 1 0 0 0 0 0 0 0 1" "이름 경계: 한글 조사 · 문장 부호 마침표는 경계, 숫자 · 경로 · 접두 · 대소문자 다름은 아니다"
+
+# 번호 판정 공시(R14 AC5) — NOTICE · README 상태 계산 줄 · `## 한계` 의 U8 두 줄
+RDM="$ROOT/plugins/spec-distill/README.md"
+N9="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as m; print(m.NOTICE)' "$S")"
+assert_contains "$N9" "번호를 적은 에픽은 그 PR 로만 머지를 판정한다" "공시: NOTICE 에 번호 판정 문장"
+assert_contains "$N9" "이 기계에만" "공시: NOTICE 에 번호 기록은 이 기계에만"
+SL9="$(grep -F 'scripts/roadmap_status.py <로드맵 경로>' "$RDM")"
+assert_contains "$SL9" "번호를 적은 에픽은 그 PR 로만 머지를 판정합니다" "공시: README 상태 계산 줄에 번호 판정 문장"
+assert_contains "$SL9" "이 기계에만" "공시: README 상태 계산 줄에 이 기계에만"
+assert_contains "$SL9" "번호를 적지 않은 에픽에 남는 틈입니다" "공시: README 괄호가 번호 없는 에픽의 틈으로 바뀌었다"
+assert_eq "$(printf '%s' "$SL9" | grep -c 'R14 로 미룬')" "0" "공시: 옛 괄호(R14 로 미룬)는 없다"
+LIM9="$(awk '/^## 한계$/{f=1;next} /^## /{f=0} f' "$RDM")"
+WTN9="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as m; print(m.WRITER_TRUST_NOTICE)' "$ROOT/shared/docreview/scripts")"
+assert_eq "$(printf '%s\n' "$LIM9" | grep -m1 -v '^[[:space:]]*$')" "$WTN9" "한계: 첫 비지 않은 줄은 WRITER_TRUST_NOTICE 그대로"
+U8A='- 에픽 PR 번호 기록은 이 기계의 지휘 기계 상태에만 있다 — 다른 기계나 새 클론에서는 머지 판정이 브랜치 이름과 이력 추정으로 돌아가고, 같은 이름의 옛 브랜치 틈이 다시 열린다.'
+U8B='- 지휘자가 연 PR 은 열 때(쌓아 연 PR 은 바탕을 기본 브랜치로 바꾼 직후) 번호가 적힌다. 그 밖의 PR(손으로 연 PR · 이 판 전에 연 PR)은 지휘 세션에서 `ledger pr-record --roadmap <로드맵> --session <세션> --epic <에픽> --pr <번호>` 를 한 번 부르면 된다(번호는 숫자만) — 그 명령이 PR 캐시 줄까지 써서 바로 그 번호로 판정된다. 적기 전까지 그 PR 의 에픽은 브랜치 이름과 이력으로 판정된다. 쓰기는 지휘 표지를 쥔 세션만 한다.'
+assert_eq "$(printf '%s\n' "$LIM9" | grep -cxF -- "$U8A")" "1" "한계: U8 첫 줄이 글 그대로 한 번"
+assert_eq "$(printf '%s\n' "$LIM9" | grep -cxF -- "$U8B")" "1" "한계: U8 둘째 줄이 글 그대로 한 번"
+LN8="$(printf '%s\n' "$LIM9" | grep -nxF -- "$U8B" | cut -d: -f1)"
+LNP="$(printf '%s\n' "$LIM9" | grep -n 'P21' | head -1 | cut -d: -f1)"
+assert_eq "$([ "${LN8:-99}" -lt "${LNP:-0}" ] && echo before || echo after)" "before" "한계: U8 줄들은 P21 불릿 앞에 있다"
 
 finish
