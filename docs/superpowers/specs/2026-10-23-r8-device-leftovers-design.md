@@ -49,7 +49,7 @@ next_phase: superpowers:writing-plans
 지금 레포에서 확인한 것(origin/main ad7efbb6, `plugins/spec-distill` = SD):
 
 1. **머지 판정과 PR 캐시.** 머지됨 판정은 `SD/scripts/roadmap_status.py` `compute` 의 `judge` 가 브랜치마다 한다. 순서는 R8 U17 대로 머지 커밋 근거(`merged_by_tips`, 나이 검사 `age_ok`) → PR 캐시(`_judge_pr` 여섯 조건) → 캐시에 그 브랜치 줄이 없으면 `merged_by_git`(머지 커밋 · 이 레포 소유자의 머지 문면)이다. PR 캐시는 기계 상태(`machine.md`) `## PR` 절이고, 줄은 **브랜치 이름으로** 묶인다(칸: 브랜치 · 번호 · 상태 · 확인한 때 · headRefOid · 교차 레포 · baseRefName · mergeCommit · 쓴 세션 — `SD/scripts/conductor_state.py` `SECTIONS`). 캐시를 채우는 것은 `ledger pr-refresh`(`SD/scripts/conductor_ledger.py` `c_pr_refresh`) 하나이고, `gh pr list --head <브랜치> --state all` 로 그 head 이름의 PR 을 모두 받는다. 번호는 캐시에 있지만 이름으로 찾은 것이다 — 에픽과 PR 사이를 잇는 유일한 열쇠가 브랜치 이름이다.
-2. **PR 을 여는 자리.** 지휘 절차 `SD/references/conducting.md` 의 걸음 4(구현 agent 가 돌아온 뒤)와 손 절차 5 가 `gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"` 로 PR 을 열고 `ledger pr-refresh --epic <에픽>` 으로 캐시를 채운다. PR 캐시를 손으로 적는 `ledger add … --section PR` 은 지금 절차에 없고, `SD/tests/test_conducting_reference.sh` 의 `pr_by_hand` 락이 그것을 막는다.
+2. **PR 을 여는 자리.** 지휘 절차 `SD/references/conducting.md` 의 걸음 4(구현 agent 가 돌아온 뒤)는 `gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"` 로 PR 을 열고 `ledger pr-refresh --epic <에픽>` 으로 캐시를 채운다. 손 절차 5 는 같은 명령으로 PR 을 열기만 하고 캐시를 채우지 않는다. PR 캐시를 손으로 적는 `ledger add … --section PR` 은 지금 절차에 없고, `SD/tests/test_conducting_reference.sh` 의 `pr_by_hand` 락이 그것을 막는다.
 3. **옛 꼴.** 이 레포의 지휘 기계 상태(`.claude/spec-distill/conductor/<로드맵>/machine.md`)의 PR 절은 지금 옛 판의 4칸 줄이다 — 「R8 · #252 · 머지됨 · 2026-10-23」(에픽 · 번호 · 상태 · 날짜). 옛 지휘 절차가 PR 을 연 뒤 손으로 적던 꼴로, 에픽과 번호를 직접 이었다. 지금 판은 이 줄을 거부하고(`OldPrRows`) `pr-refresh --reset` 을 안내한다. 사용자가 고른 길은 그 「에픽 · 번호」 고리를 기계가 쓰는 꼴로 되살리는 것이다.
 4. **남은 틈.** R8 미룸 행 「같은 이름의 옛 브랜치를 나이로 거르지 못하는 틈」 — 견줄 커밋이 없거나 옛 머지가 이 에픽의 문서보다 뒤면 옛 원격 ref(또는 끝 없는 판정의 옛 MERGED PR)가 거짓 머지됨을 만든다(틈 ①). 거꾸로, 문서가 첫 머지보다 뒤에 들어온 에픽은 로컬 브랜치가 없으면 머지됨이 아니고, `diff.renameLimit` 을 넘는 커밋이면 머지된 에픽이 빠질 수 있다(틈 ②). 둘 다 이름 · 이력 추정의 한계다.
 5. **공시 문장.** `shared/docreview/scripts/docreview_state.py` 의 `WRITER_TRUST_NOTICE` 는 「사용자 문구와 원장은 이 세션이 쓴 것이다 — 엔진은 엔진 밖에서 고친 원장 중 요약값이 안 맞는 것만 잡는다」 다. `render_gate` 셋째 줄 · `gate` JSON 의 `writer_trust_notice` · SD `README.md` `## 한계` 첫 줄 · 골든 다섯(`shared/tests/fixtures/docreview/golden/*.gate.txt` 셋째 줄 · `*.gate.json`) · `shared/tests/test_writer_trust_notice.sh` 의 `EXPECTED` 가 같은 글자다. 렌더 둘째 줄은 같은 대상을 이미 「원장 확인값」 이라 부른다.
@@ -373,7 +373,7 @@ next_phase: superpowers:writing-plans
 
 **PR 번호(§2)**
 - AC1 `ledger pr-record --roadmap R --session S --epic E --pr <PR>` 이 있다. URL · `#N` · `N` 을 받고, 번호로 `gh pr view` 한 PR 의 head 가 그 에픽의 브랜치이고 교차 레포가 아니고 base 가 기본 브랜치일 때만 `## 에픽 PR` 에 (에픽 · 브랜치 · 번호 · 적은 때 · 쓴 세션) 한 줄을 쓴다(같은 (에픽, 브랜치) 줄은 바꾼다). head 다름 · 교차 · base 다름 · URL 레포가 origin 아님은 각각 rc 4 이고 아무것도 쓰지 않는다. 번호를 못 읽으면 rc 2, 표지가 없으면 지금 쓰기 명령과 같은 멈춤이다(gh stub 픽스처).
-- AC17 conducting.md 걸음 5 가 쌓인 PR 의 바탕을 기본 브랜치로 바꾼 뒤 → `ledger pr-record --epic <에픽> --pr <번호>` → 머지 명령 준비 순서다(`test_conducting_reference.sh` 의 `before` 꼴 순서 락 + 뒤집은 글로 양성 대조). 걸음 4 · 손 절차 5 는 쌓인 PR 의 rc 4 를 예상된 결과로 적는다. 걸음 1 에 번호를 자동으로 찾아 적는 걸음이 없다(부재 락 + 위 순서 락이 양의 짝). conducting.md 가 `pr-refresh` 의 어긋남 경고 뒤 할 일(다시 적기 · `--drop`)을 적는다.
+- AC17 conducting.md 걸음 5 와 손 절차 8 이 쌓인 PR 의 바탕을 기본 브랜치로 바꾼 뒤 → `ledger pr-record --epic <에픽> --pr <번호>` → `ledger pr-refresh --epic <에픽>` → 머지 명령 준비 순서다(`test_conducting_reference.sh` 의 `before` 꼴 순서 락 + 뒤집은 글로 양성 대조). 걸음 4 · 손 절차 5 는 쌓인 PR 의 rc 4 를 예상된 결과로 적는다. 걸음 1 에 번호를 자동으로 찾아 적는 걸음이 없다(부재 락 + 위 순서 락이 양의 짝). conducting.md 가 `pr-refresh` 의 어긋남 경고 뒤 할 일(다시 적기 · `--drop`)을 적는다.
 - AC2 conducting.md 걸음 4 와 손 절차 5 가 `gh pr create -R …` → `ledger pr-record … --pr <그 출력의 URL>` → `ledger pr-refresh … --epic <에픽>` 순서다(순서 락). `pr_by_hand` 락은 그대로 GREEN 이고, `--section "에픽 PR"` 손 적기도 없다(부재 락 + 양의 짝).
 - AC3 `pr-refresh` 는 적은 번호가 있는 브랜치의 그 PR 줄을 head 목록에 없어도 `## PR` 에 둔다(목록 stub 이 그 PR 을 빼는 픽스처). `--reset` 뒤 `## 에픽 PR` 은 그대로다. 적은 번호의 head 가 그 브랜치와 다르거나 교차 레포가 된 픽스처에서 `pr-refresh` 는 rc 0 으로 끝나고, 번호 · 어긋난 칸 · `pr-record` 다시 적기와 `--drop` 을 이름 붙인 경고 한 줄을 낸다. 그 브랜치의 `## PR` 에서 #N 줄만 사라지고 — 앞서 맞던 #N 줄이 있던 픽스처에서도 — `## 에픽 PR` 의 번호 기록과 그 브랜치의 다른 PR 줄은 남는다. 상태 계산은 그 브랜치를 판정 없음으로 두고, 상태줄 지문이 바뀐다. 다른 브랜치의 줄은 채워진다. 번호를 적지 않은 브랜치에 대해 `pr-refresh` 가 `pr-record` 를 부르거나 권하지 않는다(그 밖의 동작은 지금 그대로 — 기존 `pr-refresh` 테스트 GREEN). 경고 · README 의 명령은 모두 `--pr <숫자>` 꼴이고 맨 `#` 이 없다(부재 단언). `pr-record --drop` 은 gh 를 부르지 않고 그 줄을 지운다(없으면 rc 1).
 - AC4 상태 계산은 적은 번호가 있는 브랜치를 그 번호의 캐시 줄로만 판정한다 — 머지됨 ∧ 교차 아님 ∧ 기본 base ∧ mergeCommit 닿음이면 머지됨(근거에 「적은 번호로 판정」), mergeCommit 이 닿지 않으면 「머지됨(받기 전)」 경고이고 머지됨이 아니다, 열림 · 닫힘 · 다른 base · 교차 · mergeCommit `-` 는 머지됨이 아니다, 캐시에 그 번호가 없으면 그 번호를 이름 붙인 정보 줄. 픽스처 넷:
@@ -388,6 +388,7 @@ next_phase: superpowers:writing-plans
 - AC20 이미 머지된 PR 을 `pr-record` 로 적은 직후(`pr-refresh` 없이) 상태 계산이 그 브랜치를 그 번호로 머지됨이라 판정한다 — `## PR` 에 그 번호의 줄이 `_cache_row` 꼴로 있다. 같은 번호의 옛 줄이 있으면 바뀐다.
 - AC18 적은 번호가 있는 브랜치에서 `control_plane.pr_fact`(단계 「PR」 과 보이는 번호) · `merged_prs` · `roadmap_status.judge` · `ledger pr-handoffs` · `ledger audit` · `ledger review-pack` 이 모두 적은 번호를 쓴다 — 같은 브랜치에 이름으로 먼저 잡히는 다른 PR 줄(더 최근 · 열림)을 둔 픽스처에서 여섯이 같은 번호를 내고, `audit` · `review-pack` 출력에 그 다른 PR 이 나오지 않는다. 번호 없는 브랜치의 출력은 기존 테스트대로다. 줄을 고르는 세 자리(`pr_fact` · `merged_prs` · `judge`)는 `conductor_state` 의 한 함수를 부르고, `pr-handoffs` · `audit` · `review-pack` 은 같은 모듈의 번호 찾기를 쓴다(`_prs` 한 자리). 세 자리 가운데 하나가 그 함수를 우회해 이름으로 고르게 하는 변이마다 RED 다. 지문은 AC6 이 잰다.
 - AC6 `## 에픽 PR` 은 선택 절이다 — 줄이 없으면 머리를 쓰지 않는다. 번호 꼴 · 같은 (에픽, 브랜치) 두 줄은 기계 상태를 읽을 때 오류다. `control_plane.pr_cache_fingerprint` 가 이 절을 지문에 넣는다(번호 하나를 더하면 지문이 바뀌는 테스트).
+- AC21 기계 상태 파일이 있는데 읽기 · 꼴 검사에 실패하면(`read_pr_cache` 가 사유를 낸다) 번호 기록이 있는지 알 수 없으므로, 상태 계산은 그 로드맵의 브랜치 머지 판정을 보류한다 — 이름 · 이력 추정으로 내려가지 않고 그 블록을 「알 수 없음」 으로 두며 복구 사유(그 사유의 할 일 포함)를 보인다. 번호 기록이 깨졌고 같은 이름의 옛 머지 이력(머지 커밋 · 이 레포 소유자의 머지 문면)이 있어도 머지됨으로 판정하지 않는다(픽스처). 상태 파일이 없을 때와 정상으로 읽었는데 그 브랜치의 번호 줄이 없을 때만 옛 추정을 쓴다(양의 짝). 깨진 기계 상태의 기존 테스트 기대(캐시 없음 길 · rc 1)는 이 AC 로 바뀐다 — AC5 의 예외다(지휘자 덧붙임 2026-10-23, 계획 단계).
 
 **공시(§3)**
 - AC7 `WRITER_TRUST_NOTICE` 가 §3 의 문장 그대로이고, 렌더 셋째 줄 · `gate` JSON · SD README `## 한계` 첫 줄 · 골든 다섯이 같은 글자다(`test_writer_trust_notice.sh` 의 기대값 갱신 · 기존 단언 GREEN). 문장에 「원장」 · 「엔진」 · 「요약값」 이 없다(단언). 진입 skill 셋의 게이트 질문 글에 공시 문장이 없다(부재 락 + 렌더에는 있다는 양의 짝).
@@ -431,7 +432,7 @@ next_phase: superpowers:writing-plans
 - `control_plane.py` 의 `pr_fact` · `merged_prs` · 지문(§2 「보이는 곳」)
 - `conductor_ledger.py` 의 `pr-record`(캐시 줄 쓰기 포함) · `_prs`(`c_pr_handoffs` · `c_audit` · `c_review_pack` 이 지난다) · `pr-refresh` 의 번호 따로 받기 · 어긋남 갈래 · `c_add` 의 값 검사(§2 · §5 (3))
 - `merge_check.py` 의 `re.compile` 검사를 작은 함수로 옮김(§5 (3))
-- conducting.md 걸음 4 · 손 절차 5 의 번호 적기와 쌓인 PR 문장, 걸음 5 의 바탕 바꾼 뒤 번호 적기, 걸음 7 정리의 `## 에픽 PR` 남김(§2)
+- conducting.md 걸음 4 · 손 절차 5 의 번호 적기와 쌓인 PR 문장, 걸음 5 · 손 절차 8 의 바탕 바꾼 뒤 번호 적기, 걸음 7 정리의 `## 에픽 PR` 남김(§2)
 - SD README `## 한계` 의 공시 뒤 세 불릿과 U8 두 줄(§2 · §3)
 
 **예약 밖** — 이 브랜치의 로드맵 커밋(0e803d5a)으로 등록했다:
