@@ -1987,5 +1987,72 @@ class ParallelTruth(Repo):
         self.assertEqual(rc, 2)
 
 
+class RepoSettingsAdd(Repo):
+    """R14 AC11 — `ledger add --section "레포 설정"` 은 읽는 쪽(merge_layers · merge_check)이 거부할 값을 쓰지 않는다."""
+    def setUp(self):
+        super().setUp()
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.add("test_command · make test")
+        self.assertEqual(rc, 0, out)
+        self.before = L.mpath(self.w, RM).read_bytes()
+
+    def add(self, cells):
+        return self.cli("add", "--roadmap", RM, "--session", SID, "--section", "레포 설정", "--cells", cells)
+
+    def refused(self, cells):
+        rc, out = self.add(cells)
+        self.assertEqual(rc, 2, out)
+        self.assertEqual(L.mpath(self.w, RM).read_bytes(), self.before, "거부면 기계 상태가 바이트까지 그대로다")
+        return out
+
+    def test_duplicate_key_rc2(self):
+        out = self.refused("test_command · make check")
+        self.assertIn("레포 설정 절에 test_command 가 이미 있다", out)
+        self.assertIn("ledger drop --roadmap %s --session %s --section \"레포 설정\" --where 키=test_command" % (RM, SID), out)
+
+    def test_layer_key_rc2(self):
+        out = self.refused("specs_dir · docs/specs")
+        self.assertIn("이 설정을 받지 않는다(specs_dir)", out)
+
+    def test_unknown_key_rc2(self):
+        out = self.refused("test_comand · make test")
+        self.assertIn("모르는 키가 있다(test_comand)", out)
+
+    def test_empty_value_rc2(self):
+        out = self.refused('test_failure_pattern · ""')
+        self.assertIn("값이 비었다(test_failure_pattern)", out)
+
+    def test_bad_pattern_rc2(self):
+        out = self.refused("test_failure_pattern · [")
+        self.assertIn("test_failure_pattern", out)
+        import merge_check
+        self.assertIn(merge_check.pattern_error("["), out, "merge_check 가 내는 정규식 오류 글을 그대로 보인다")
+
+    def test_good_pattern_is_written(self):
+        rc, out = self.add("test_failure_pattern · ^FAIL: (.+)$")
+        self.assertEqual(rc, 0, out)
+        self.assertNotEqual(L.mpath(self.w, RM).read_bytes(), self.before, "양의 짝: 맞는 값은 쓴다")
+
+    def test_reader_function_drives_writer(self):
+        from unittest import mock
+        import merge_check
+        with mock.patch.object(merge_check, "pattern_error", return_value="강제 오류"):
+            out = self.refused("test_failure_pattern · ^FAIL: (.+)$")
+        self.assertIn("강제 오류", out)
+
+    def test_end_to_end_merge_check_accepts(self):
+        import merge_check
+        import repo_defaults
+        rc, out = self.add("test_failure_pattern · \"^FAIL: (.+)$\"")
+        self.assertEqual(rc, 0, out)
+        rows = cs.repo_settings_rows(L.mpath(self.w, RM), RM)
+        self.assertEqual(sorted(rows), ["test_command", "test_failure_pattern"])
+        res = repo_defaults.merge_layers(None, None, None, rows, [])
+        self.assertEqual(res["errors"], [])
+        self.assertEqual(res["values"]["test_command"], "make test")
+        self.assertEqual(res["values"]["test_failure_pattern"], "^FAIL: (.+)$")
+        self.assertIsNone(merge_check.pattern_error(res["values"]["test_failure_pattern"]))
+
+
 if __name__ == "__main__":
     unittest.main()

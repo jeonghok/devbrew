@@ -687,7 +687,28 @@ def c_release(root, a) -> int:
 
 def c_add(root, a) -> int:
     row = split_cells(a.section, a.cells)
-    update(root, a.roadmap, a.session, lambda d: d[a.section].append(row))
+    if a.section == "레포 설정":   # 읽는 쪽(merge_layers · merge_check)이 거부할 줄은 쓰지 않는다 — 같은 함수를 부른다
+        layer = {row["키"]: row["값"]}
+        try:
+            repo_defaults.check_layer(layer, "machine")
+        except repo_defaults.SettingsError as exc:
+            raise Fail(2, str(exc))
+        res = repo_defaults.merge_layers(None, None, None, layer, [])
+        if res["errors"]:
+            raise Fail(2, res["errors"][0])
+        if row["키"] == "test_failure_pattern":
+            import merge_check  # 함수 안 — merge_check 는 이 모듈을 부르지 않는다
+            why = merge_check.pattern_error(res["values"]["test_failure_pattern"])
+            if why:
+                raise Fail(2, "test_failure_pattern 정규식이 깨졌다: %s" % why)
+
+    def change(d):
+        if a.section == "레포 설정" and any(r["키"] == row["키"] for r in d[a.section]):
+            raise Fail(2, "레포 설정 절에 %s 가 이미 있다 — 바꾸려면 `ledger drop --roadmap %s --session %s "
+                          "--section \"레포 설정\" --where 키=%s` 로 지운 뒤 다시 적는다"
+                          % (row["키"], a.roadmap, a.session, row["키"]))
+        d[a.section].append(row)
+    update(root, a.roadmap, a.session, change)
     print("적었다 — %s: %s" % (a.section, a.cells))
     return 0
 

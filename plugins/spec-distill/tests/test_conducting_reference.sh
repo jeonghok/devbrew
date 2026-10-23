@@ -229,6 +229,7 @@ assert_contains "$(cyc 1)" '`ledger claim` · `ledger takeover` · `ledger pr-re
 assert_contains "$(cyc 4)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 채운다" "지휘 걸음 4: PR 을 연 뒤 pr-refresh"
 assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "지휘 걸음 4: gh pr create 에 -R origin"
 assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 스위트 대조" "지휘 걸음 5(머지 전 확인): 스위트 대조 직전에 pr-refresh"
+assert_contains "$(cyc 5)" "같은 키를 바꿀 때는 drop 뒤 add 한다" "지휘 걸음 5(rc 6): 레포 설정의 같은 키는 drop 뒤 add 로 바꾼다(R14 AC11)"
 before() {  # before <글> <앞> <뒤> — 앞이 뒤보다 먼저 나오면 yes
   PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t, a, b = sys.argv[1:4]
