@@ -1892,6 +1892,16 @@ assert_not_contains "$(notes "$T/rm40.json" Z40)" "PR 상태 미확인" "AC4: �
 assert_eq "$(stage "$T/rm40.json" E40)" "머지됨" "AC18 judge: 같은 브랜치에 이름으로 먼저 잡히는 열린 PR 이 있어도 적은 번호로 머지됨"
 assert_contains "$(reason "$T/rm40.json" E40)" "PR #407 머지됨(적은 번호로 판정 · mergeCommit ${E40_MC:0:8})" "AC18 judge: 근거는 적은 번호 #407"
 assert_not_contains "$(js "$T/rm40.json" "next(b for b in r['blocks'] if b['id']=='E40')")" "#410" "AC18 judge: 이름으로 잡히는 다른 PR(#410)은 블록 어디에도 나오지 않는다"
+# 변이 — judge 가 recorded_cache_row 를 우회하면(결과를 (None, None) 으로) 이름 · 이력 길로 간다 — AC18 단언에 이빨이 있다
+python3 -I -c 'import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+old = "recorded_cache_row(epic_pr_rows, pr_rows, block[\"id\"], br)"
+assert s.count(old) == 1, s.count(old)
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(old, "(None, None)"))' "$RS" "$M/roadmap_status.py"
+cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(recorded_cache_row)" || ok "변이 적용됨(recorded_cache_row)"
+(cd "$W" && python3 "$M/roadmap_status.py" --json --roadmap-file docs/rm40/roadmap.md > "$T/m40.json")
+assert_not_contains "$(stage "$T/m40.json" E40)" "머지됨" "변이: recorded_cache_row 를 우회하면 E40 이 머지됨이 아니다 — AC18 단언이 RED 가 된다"
+assert_eq "$(stage "$T/m40.json" G40)" "머지됨" "변이 양의 짝: 같은 사본에서 G40 은 옛 머지 커밋으로 머지됨(변이 사본이 돌았고 이름 길로 갔다)"
 # 대조 — 같은 픽스처에서 G40 · N40 의 번호 줄만 지우면 이름 · 이력 길: G40 은 옛 머지 커밋으로 머지됨(틈 ①), N40 은 머지됨 아님(틈 ②)
 grep -v -e '^G40|' -e '^N40|' "$T/epic40" > "$T/epic40b"
 write_machine_epic "$MD40/machine.md" docs/rm40/roadmap.md "$T/rows40" "$T/epic40b"
