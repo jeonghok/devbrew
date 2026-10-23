@@ -62,6 +62,10 @@ for lit in 'You are the relay checker' 'You are responsible for' 'You are NOT re
   assert_file_grep "$RC" "$lit" "relay-checker: $lit"
 done
 assert_eq "$(fm "$RC" | grep -c 'tag: relay_files$')" "1" "relay-checker 입력 칸 relay_files"
+assert_contains "$(cat "$RC")" '「문장 권장이 라벨 꼬리로 옮겨짐」' "AC9: 문장 권장이 라벨 꼬리로 옮겨지면 어긋남"
+assert_contains "$(cat "$RC")" '「지휘자가 만든 질문의 라벨에 (권장)」' "AC9: 지휘자가 만든 질문의 라벨 (권장) 은 어긋남"
+assert_contains "$(cat "$RC")" 'skill 이 붙인 자리에만, 그 자리에 그대로 있는가' "AC9(양): skill 원문의 (권장) 은 그대로 대조한다"
+assert_not_contains "$(cat "$RC")" '지휘자 것이라고 밝혀 두었는지' "AC9: 옛 문장 없음"
 assert_not_contains "$BODY" '다른 세션을 열어' "다른 세션을 열라는 말이 없다"
 # agent — 쓰기 도구 없음(Law 2) · 역할 문장 · 입력 칸
 assert_eq "$(fm "$AG" | grep -E '^tools:' )" "tools: Read, Grep, Glob" "agent tools 는 Read, Grep, Glob 뿐"
