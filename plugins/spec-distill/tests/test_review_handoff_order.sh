@@ -81,6 +81,16 @@ if nonempty "다음 세션 줄" "$ONE"; then
   esac
   order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
   order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
+  # R14 AC12 — 다음 세션이 superpowers 판을 한 번 확인한다(결과로는 멈추지 않는다)
+  assert_contains "$ONE" 'check_deps.py superpowers --plugin-root' "AC12: 다음 세션 줄이 superpowers 판 확인을 부른다"
+  assert_contains "$ONE" '판 확인 결과로는 멈추지 않는다' "AC12: 판 확인은 멈춤 조건이 아니다"
+  order "다음 세션 줄" "$ONE" "을 시작하라." "check_deps.py"
+  order "다음 세션 줄" "$ONE" "check_deps.py" "spec-distill:spec-review"
+  OTHER="$(grep -F '**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' "$FIN" || true)"
+  if nonempty "다른 다음 단계의 줄" "$OTHER"; then
+    assert_contains "$OTHER" '`superpowers:` 로 시작하면' "AC12: 다른 다음 단계의 줄이 superpowers: 로 시작하는 skill 을 말한다"
+    assert_contains "$OTHER" '판 확인 문장' "AC12: 다른 다음 단계의 줄이 판 확인 문장을 싣는다"
+  fi
   assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
   for n in '고른 실행 방식의 마지막 전체 리뷰' \
            '설계의 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름(설계 → 계획 → 구현)의 의도는 지킨다.' \
