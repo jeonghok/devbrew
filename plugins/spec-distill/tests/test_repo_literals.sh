@@ -135,9 +135,12 @@ def assigns(line, name):
 
 
 def refills(line, name):
-    """빈 값이 아닌 대입 — `X=""` 는 add 범위를 좁힐 뿐이라 다시 대입으로 치지 않는다."""
-    vals = re.findall(r'(?:^|[\s;)])' + name + r'=("[^"]*"|\'[^\']*\'|[^\s;]*)', line)
-    return any(v not in ("", '""', "''") for v in vals)
+    """빈 값이 아닌 대입 — 셸 단어 전체가 빈 따옴표뿐인 `X=""` 만 add 범위를 좁힐 뿐이라 다시 대입으로 치지 않는다.
+    `X+=` · `${X:=…}` · `${X=…}` 는 늘 다시 대입이다."""
+    if re.search(r'\b' + name + r'\+=', line) or re.search(r'\$\{' + name + r':?=', line):
+        return True
+    vals = re.findall(r'(?:^|[\s;)])' + name + r'=((?:"[^"]*"|\'[^\']*\'|[^\s;"\'])*)', line)
+    return any(not re.fullmatch(r'(?:""|\'\')*', v) for v in vals)
 
 
 def covered_vars(body, judged, barred=frozenset()):
@@ -243,4 +246,8 @@ shape_mut "$FIN_T" 's/^AUDIT_F="\${stem}\.audit\.md"$/AUDIT_F="$(printf %s "${st
 shape_mut "$FIN_T" '/check-path interview_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
 # 판정 뒤 `RDIR=""`(범위를 좁힘)는 지금 문서에 있고 위 펜스 꼴 단언이 통과시킨다 — 같은 자리에 빈 값이 아닌 값을 넣으면 잡는다
 shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 값 대입을 다른 경로로"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR=""$r7/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 따옴표에 값을 덧붙임"
+shape_mut "$FIN_T" "s/^    RDIR=\"\"\$/    RDIR=''\"\$r7\"/" "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 홑따옴표에 값을 덧붙임"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    : "${RDIR:=$r7}"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 기본값 대입(:=)"
+shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR+="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 덧붙임 대입(+=)"
 finish
