@@ -77,6 +77,7 @@ MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from ([^/\s]+)/(\S+)")
 PR_MERGED, PR_NOT_FETCHED, PR_UNCOUNTABLE = "머지됨", "머지됨(받기 전)", "셀 수 없음"
 FETCH_HINT = "git fetch 뒤 다시 계산한다"
 PR_UNCHECKED = "PR 상태 미확인 — 지휘자를 돌려라"
+HOLD = "머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다"
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 
 
@@ -653,7 +654,8 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
     머지됨은 브랜치마다 — (블록, 브랜치)에 적은 번호(epic_pr_rows)가 있으면 그 번호의 캐시 줄로만(merged_by_number)
     판정한다. 없으면 PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_tips(머지 커밋) 다음 merged_by_pr, 없으면 merged_by_git ·
     결정 기록의 머지 줄로 판정하고, 「PR 0개」 줄(번호 `-` — 지휘자가 PR 이 없다고 확인함)도 없으면 블록에 「PR 상태
-    미확인」을 단다(pr_reason 은 캐시를 못 읽은 사유)."""
+    미확인」을 단다. pr_reason(기계 상태 파일이 있는데 못 읽은 사유)이 있으면 번호 기록이 있는지 모르므로 모든 브랜치의
+    머지 판정을 보류한다 — 블록은 「알 수 없음」이고 사유에 pr_reason(그 할 일 포함)을 싣는다."""
     merges = git.first_parent_merges(main) if main else []
     extra_cache = []
     no_pr = {r.get("브랜치") for r in pr_rows or [] if r.get("번호") == "-"}  # conductor_state.NO_PR
@@ -721,6 +723,10 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         local = git.commit("refs/heads/" + br)
         remote = git.commit("refs/remotes/origin/" + br)
         st = {"branch": br, "tip": local or remote, "merged": None}
+        if pr_reason:
+            # 파일은 있는데 못 읽었다 — 번호 기록이 있는지 모르므로 이름 · 이력 추정으로 내려가지 않는다(AC21)
+            st["uncountable"] = "%s: %s(%s)" % (br, HOLD, pr_reason)
+            return st
         number, row = recorded_cache_row(epic_pr_rows, pr_rows, block["id"], br)
         if number is not None:
             # 적은 번호가 있으면 그 길만 — 머지 커밋 · 나이 · 이름으로 고른 PR 줄 · 머지 메시지를 보지 않는다
@@ -773,14 +779,17 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
         cache_warning = "PR 캐시를 읽지 못했다 — %s" % pr_reason  # 할 일은 사유마다 read_pr_cache 가 단다
 
     def unchecked_note(branches, block):
-        """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 그 사유는 경고로."""
+        """캐시 줄이 없는 브랜치에 「PR 상태 미확인」 정보 줄 하나 — 캐시를 못 읽었으면 판정을 보류했으므로 그 줄은
+        달지 않고 사유만 경고로."""
+        if cache_warning:
+            if branches and cache_warning not in block["warnings"]:
+                block["warnings"].append(cache_warning)
+            return
         unchecked = [br for br in branches if not has_pr(block["id"], br) and br not in no_pr]
         if not unchecked:
             return
         why = ["머지 메시지는 세지 않았다 — %s" % owner()[1]] if owner()[1] else []
         block["notes"].append("%s(%s)" % (PR_UNCHECKED, " · ".join(unchecked + why)))
-        if cache_warning and cache_warning not in block["warnings"]:
-            block["warnings"].append(cache_warning)
 
     def extras_for(bid):
         """(더한 브랜치 이름들, 형식이 깨진 사본 수)."""

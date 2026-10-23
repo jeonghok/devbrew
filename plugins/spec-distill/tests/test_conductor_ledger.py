@@ -1626,6 +1626,24 @@ class RecordThenStatus(Repo):
         self.assertEqual(b["stage"], "머지됨", b)
         self.assertIn("적은 번호로 판정", b["reason"])
 
+    def test_reset_lifts_hold_on_old_rows(self):
+        """옛 판 4칸 줄이 남은 기계 상태 — 상태 계산은 머지 판정을 보류하고(R14 AC21) 사유에 `--reset` 을 싣는다.
+        `pr-refresh --reset` 이 그 상태에서 돌고 보류를 푼다(Review Focus 1)."""
+        path = L.mpath(self.w, RM)
+        old = "- feature/a1 · #3 · 열림 · 2026-10-17 10:00"
+        path.write_text(path.read_text(encoding="utf-8").replace("## PR\n\n", "## PR\n\n" + old + "\n", 1),
+                        encoding="utf-8")
+        b = self.reason()
+        self.assertEqual(b["stage"], "알 수 없음", b)
+        self.assertIn("feature/a1: 머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다(", b["reason"])
+        self.assertIn("--reset 으로 다시 채운다", b["reason"])
+        rc, out = self.gh("pr-refresh", "--roadmap", RM, "--session", SID, "--reset")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn(old, path.read_text(encoding="utf-8"))
+        b = self.reason()
+        self.assertEqual(b["stage"], "머지됨", b)
+        self.assertNotIn("머지 판정 보류", b["reason"])
+
     def test_drop_returns_to_name_path(self):
         self.assertEqual(self.gh("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7")[0], 0)
         self.assertIn("적은 번호로 판정", self.reason()["reason"])

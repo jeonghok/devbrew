@@ -891,6 +891,8 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
 M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" \
   "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$M/"
+# 변이 사본의 conductor_state 가 자기 판을 읽는 자리(../.claude-plugin) — 없으면 기계 상태를 못 읽어 변이가 머지 판정 보류로 간다
+mkdir -p "$T/.claude-plugin"; cp "$S/../.claude-plugin/plugin.json" "$T/.claude-plugin/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
 cmp -s "$RS" "$M/roadmap_status.py" && no "변이 적용 안 됨(--first-parent)" || ok "변이 적용됨(--first-parent)"
 (cd "$W" && python3 "$M/roadmap_status.py" --json docs/rm/roadmap.md > "$T/mfp.json")
@@ -1608,21 +1610,26 @@ write_machine "$MD31/machine.md" docs/rm31/roadmap.md "$T/rows31"
 assert_eq "$(stage "$T/rm31.json" B31)" "알 수 없음" "AC15: 지운 브랜치에 같은 이름의 머지된 PR 이 둘이면 머지됨이 아니라 셀 수 없음"
 assert_contains "$(reason "$T/rm31.json" B31)" "셀 수 없음 — 같은 이름의 머지된 PR 이 여럿이고 브랜치 끝이 없다(#12 · #32) — 브랜치를 맞는 PR 의 headRefOid 로 되살린다(\`git branch feature/b30 <headRefOid>\`)" "셀 수 없음의 사유 · 끝에 할 일 하나"
 assert_eq "$rc" "3" "셀 수 없음은 검사 불가(rc 3)"
-# 기계 상태가 깨졌으면 캐시 없음으로 가고 사유를 싣는다
+# 기계 상태가 깨졌으면 번호 기록이 있는지 모르므로 머지 판정을 보류한다(R14 AC21 — AC5 의 예외) · 사유는 경고와 블록 사유에
 printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n## PR\n\n- 깨진 줄\n' > "$MD31/machine.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31b.json"); rc=$?
-assert_contains "$(notes "$T/rm31b.json" B31)" "PR 상태 미확인 — 지휘자를 돌려라(feature/b30)" "깨진 기계 상태: 캐시 없음으로 간다"
+assert_not_contains "$(notes "$T/rm31b.json" B31)" "PR 상태 미확인" "깨진 기계 상태: 캐시 없음 길로 가지 않는다 — 「PR 상태 미확인」 없음"
 assert_contains "$(warns "$T/rm31b.json" B31)" "PR 캐시를 읽지 못했다 — 기계 상태를 읽지 못했다: " "깨진 기계 상태: 사유는 경고"
 assert_contains "$(warns "$T/rm31b.json" B31)" "rm31/machine.md — " "깨진 기계 상태: 사유에 기계 상태 파일 경로"
 assert_contains "$(warns "$T/rm31b.json" B31)" "— 기계 상태 파일에서 그 자리를 고친다" "깨진 기계 상태: 경고 끝에 그 사유의 할 일"
 assert_not_contains "$(warns "$T/rm31b.json" B31)" "--reset" "깨진 기계 상태: --reset 은 옛 판 줄의 할 일이라 달지 않는다"
-assert_eq "$rc" "1" "깨진 기계 상태: 경고(rc 1)"
-assert_eq "$(stage "$T/rm31b.json" B31)" "준비" "깨진 기계 상태: 캐시 없음 길(squash 는 머지됨이 아니다)"
+assert_eq "$rc" "3" "깨진 기계 상태: 머지 판정 보류는 검사 불가(rc 3)"
+assert_eq "$(stage "$T/rm31b.json" B31)" "알 수 없음" "깨진 기계 상태: 단계는 알 수 없음(이름 · 이력 추정으로 내려가지 않는다)"
+assert_contains "$(reason "$T/rm31b.json" B31)" "feature/b30: 머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다(기계 상태를 읽지 못했다: " "깨진 기계 상태: 사유에 머지 판정 보류"
+assert_contains "$(reason "$T/rm31b.json" B31)" "— 기계 상태 파일에서 그 자리를 고친다)" "깨진 기계 상태: 보류 사유에 그 사유의 할 일"
 printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\n---\n\n## PR\n\n- feature/b30 · #12 · 머지됨 · 2026-10-20\n' > "$MD31/machine.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31c.json"); rc=$?
 assert_contains "$(warns "$T/rm31c.json" B31)" "옛 판이 쓴 PR 캐시 줄이다(칸 4개) — ledger pr-refresh --roadmap <로드맵> --session <세션> --reset 으로 다시 채운다" "옛 판 4칸 줄: 경고와 고치는 명령"
 assert_eq "$(warns "$T/rm31c.json" B31 | grep -o -- '--reset' | wc -l | tr -d ' ')" "1" "옛 판 4칸 줄: 고치는 명령은 한 번만"
-assert_eq "$rc" "1" "옛 판 4칸 줄: 경고(rc 1)"
+assert_eq "$rc" "3" "옛 판 4칸 줄: 머지 판정 보류(rc 3)"
+assert_eq "$(stage "$T/rm31c.json" B31)" "알 수 없음" "옛 판 4칸 줄: 단계는 알 수 없음"
+assert_contains "$(reason "$T/rm31c.json" B31)" "머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다(" "옛 판 4칸 줄: 사유에 머지 판정 보류"
+assert_contains "$(reason "$T/rm31c.json" B31)" "ledger pr-refresh --roadmap <로드맵> --session <세션> --reset 으로 다시 채운다)" "옛 판 4칸 줄: 보류 사유에 고치는 명령(--reset)"
 # 사유마다 그 사유의 할 일 — 더 새 판 · 링크 · 읽기 오류에는 --reset 을 달지 않는다
 printf -- '---\ntype: conductor-machine\nroadmap: docs/rm31/roadmap.md\nwriter: spec-distill 99.0.0\n---\n\n## PR\n\n' > "$MD31/machine.md"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm31/roadmap.md > "$T/rm31v.json")
@@ -1938,6 +1945,17 @@ write_machine_epic "$MD40/machine.md" docs/rm40/roadmap.md "$T/rows40" "$T/epic4
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm40/roadmap.md > "$T/rm40b.json")
 assert_eq "$(stage "$T/rm40b.json" G40):$(reason "$T/rm40b.json" G40)" "머지됨:기본 브랜치의 머지 커밋 ${G40_MC:0:8}(원격 끝)" "AC4 (가) 대조: 번호 줄이 없으면 옛 머지 커밋이 거짓 머지됨을 만든다 — 번호가 틈 ① 을 닫았다"
 assert_not_contains "$(stage "$T/rm40b.json" N40)" "머지됨" "AC4 (나) 대조: 번호 줄이 없으면 문서가 늦게 들어온 squash 머지 에픽이 빠진다 — 번호가 틈 ② 를 닫았다"
+# AC21 — 기계 상태가 깨졌으면 G40(이 레포 소유자의 머지 문면 · 머지 커밋이 있는 같은 이름 브랜치)도 머지됨이 아니라 보류
+printf -- '---\ntype: conductor-machine\nroadmap: docs/rm40/roadmap.md\n---\n\n## PR\n\n- 깨진 줄\n' > "$MD40/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm40/roadmap.md > "$T/rm40x.json"); rc=$?
+assert_eq "$(stage "$T/rm40x.json" G40)" "알 수 없음" "AC21: 깨진 기계 상태 — 옛 머지 커밋 · 이 레포 소유자의 머지 문면이 있어도 머지됨이 아니라 알 수 없음"
+assert_contains "$(reason "$T/rm40x.json" G40)" "feature/g40: 머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다(" "AC21: 보류 사유"
+assert_eq "$(stage "$T/rm40x.json" N40)" "알 수 없음" "AC21: 모든 브랜치가 보류된다(N40)"
+assert_eq "$rc" "3" "AC21: 보류는 검사 불가(rc 3)"
+rm -f "$MD40/machine.md"
+(cd "$W" && python3 "$RS" --json --roadmap-file docs/rm40/roadmap.md > "$T/rm40n.json")
+assert_eq "$(stage "$T/rm40n.json" G40):$(reason "$T/rm40n.json" G40)" "머지됨:기본 브랜치의 머지 커밋 ${G40_MC:0:8}" "AC21 양의 짝: 기계 상태 파일이 없으면 옛 추정(이름 · 이력 — 머지 커밋)으로 머지됨"
+assert_not_contains "$(reason "$T/rm40n.json" G40)" "머지 판정 보류" "AC21 양의 짝: 파일이 없으면 보류하지 않는다"
 write_machine_epic "$MD40/machine.md" docs/rm40/roadmap.md "$T/rows40" "$T/epic40"
 # 번호 판정도 gh 를 부르지 않는다(R8 AC17) — 위 읽기 전용 행동 검사의 gh 기록기로
 : > "$T/ro-gh.log"
