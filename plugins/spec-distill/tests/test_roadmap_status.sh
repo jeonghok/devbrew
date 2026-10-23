@@ -988,15 +988,16 @@ print("R0TABLE\t%s" % (set(r0["assigned"]) == cbc.table_ids(spec)))
 
 
 def lock_rows(text, blocks):
-    """락 지도 표의 (파일, 에픽) 중 파일을 다른 에픽이 예약한 줄 — (검사한 줄 수, 위반 목록)."""
+    """락 지도 표의 (파일, 에픽) 중 파일을 다른 에픽이 예약한 줄(예약한 에픽이 줄의 에픽에 의존하면 순서로 끝났으니 제외) — (검사한 줄 수, 위반 목록)."""
     checked, bad_rows = 0, []
+    reach = rs._reachable(blocks)
     for line in text.splitlines():
         cells = [c.strip() for c in re.split(r"(?<!\\)\|", line)[1:-1]]
         m = re.fullmatch(r"(\S+):(\d+)", cells[0]) if len(cells) >= 4 else None
         if not m:
             continue
         checked += 1
-        others = [b["id"] for b in blocks if b["id"] != cells[2]
+        others = [b["id"] for b in blocks if b["id"] != cells[2] and cells[2] not in reach[b["id"]]
                   and any(rs._reserves(e, m.group(1)) for e in b["reserved"])]
         if others:
             bad_rows.append("%s %s 는 %s 가 예약했다" % (cells[2], m.group(1), "·".join(others)))
@@ -1008,6 +1009,13 @@ print("LOCKROWS\t%d" % n)
 print("LOCKBAD\t%s" % bad_rows)
 synthetic = "| plugins/spec-distill/tests/test_conducting_interview_stage.sh:149 | x | R2 | y |"
 print("LOCKCTL\t%s" % lock_rows(synthetic, blocks)[1])
+import copy
+blocks2 = copy.deepcopy(blocks)
+GOLD = "shared/tests/fixtures/docreview/golden/"
+next(b for b in blocks2 if b["id"] == "R14")["reserved"].append(GOLD)
+print("LOCKDEP\t%s" % lock_rows("| " + GOLD + "case_T05_T06_reject.gate.txt:2 | x | R12 | y |", blocks2)[1])
+print("LOCKREV\t%s" % lock_rows("| " + GOLD + "x.txt:1 | x | R14 | y |", blocks)[1])
+print("LOCKNODEP\t%s" % lock_rows("| plugins/spec-distill/scripts/gh_repo.py:1 | x | R9 | y |", blocks)[1])
 PY
   )
 }
@@ -1027,6 +1035,9 @@ assert_eq "$(field_of R0TABLE)" "True" "실데이터: R0 블록의 항목 · 발
 assert_eq "$(field_of LOCKBAD)" "[]" "실데이터: 락 지도의 모든 줄이 다른 에픽이 예약한 파일을 자기 것으로 적지 않았다"
 [ "$(field_of LOCKROWS)" -ge 10 ] && ok "실데이터: 락 지도 줄 $(field_of LOCKROWS)개를 읽었다(양성 대조 — 표를 못 읽으면 0)" || no "실데이터: 락 지도 줄을 10개 미만으로 읽었다($(field_of LOCKROWS))"
 assert_contains "$(field_of LOCKCTL)" "R2 plugins/spec-distill/tests/test_conducting_interview_stage.sh 는 R1 가 예약했다" "양성 대조: 다른 에픽이 예약한 파일의 줄을 잡는다"
+assert_eq "$(field_of LOCKDEP)" "[]" "락 지도: 예약한 에픽 R14 가 줄의 에픽 R12 에 의존하면 위반이 아니다"
+assert_contains "$(field_of LOCKREV)" "R14 shared/tests/fixtures/docreview/golden/x.txt 는 R12 가 예약했다" "양성 대조: 반대 방향(줄의 에픽이 예약한 에픽에 의존)은 위반"
+assert_contains "$(field_of LOCKNODEP)" "R9 plugins/spec-distill/scripts/gh_repo.py 는 R14 가 예약했다" "양성 대조: 의존 없는 두 에픽은 위반"
 # 양성 대조 — 사본에서 묶음 하나의 번호를 빼고 다른 묶음의 §6 을 한 글자 바꾸면 위 검사가 잡는다
 RMD=docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose
 mkdir -p "$T/ctl/docs/superpowers/roadmaps" "$T/ctl/docs/superpowers/interview" "$T/ctl/docs/superpowers/specs"
