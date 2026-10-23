@@ -249,8 +249,20 @@ r = cp.Repo(sys.argv[2], cp.Deadline(30)); tree, folder, why = cp.listing(r, cp.
 print("\n".join(cp.candidates(r, tree, folder)[0])); print(why or "사유 없음")' "$S" "$P")"
 assert_eq "$cp_list" "$WANT
 사유 없음" "상태줄 후보: 설정 폴더 바로 아래 폴더의 type: roadmap 과 못 읽는 후보만(기본 폴더 · 템플릿 · 두 단계 · 다른 표지 아님)"
-ledger_list="$(python3 "$REAL/conductor_ledger.py" --root "$P" roadmaps | cut -f1 | sort)"
+ledger_out="$(python3 "$REAL/conductor_ledger.py" --root "$P" roadmaps)"
+ledger_list="$(printf '%s\n' "$ledger_out" | cut -f1 | sort)"
 assert_eq "$ledger_list" "$WANT" "로드맵 목록(conductor_ledger roadmaps)도 같은 목록"
+assert_eq "$(printf '%s\n' "$ledger_out" | grep '^plan/roadmaps/pc/broken\.md	')" \
+  "$(printf 'plan/roadmaps/pc/broken.md\t검사 불가 — 머리말이 닫히지 않았다')" "로드맵 목록: 머리말을 못 읽은 후보의 검사 불가 줄에 사유가 붙는다"
+for p in plan/roadmaps/pa/roadmap.md plan/roadmaps/pb/plan.md; do
+  row="$(printf '%s\n' "$ledger_out" | grep -F "$p	" | cut -f2-)"
+  assert_eq "$row" "검사 불가 — frontmatter source_brief 가 없다" \
+    "로드맵 목록: 상태 계산이 검사 불가인 ${p} 에 상태 계산의 첫 사유가 붙는다"
+done
+LS="$T/ledger-scripts"; cp -R "$REAL" "$LS"
+printf 'import sys\nprint("JSON 아님")\nsys.exit(2)\n' > "$LS/roadmap_status.py"
+row="$(python3 "$LS/conductor_ledger.py" --root "$P" roadmaps | grep -F "plan/roadmaps/pa/roadmap.md	" | cut -f2-)"
+assert_eq "$row" "검사 불가 — 상태 계산 출력을 읽지 못했다(rc 2)" "로드맵 목록: 상태 계산 출력이 JSON 이 아니면 그 rc 를 사유로"
 before="$(calls)"
 pline="$(cd "$P" && python3 "$S/control_plane.py" statusline </dev/null)"
 assert_contains "$pline" "검사 불가" "상태줄: 머리말을 못 읽는 후보는 검사 불가로 센다(조용히 빼지 않는다)"

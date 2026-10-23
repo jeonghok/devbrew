@@ -339,6 +339,44 @@ class Tasks(unittest.TestCase):
         self.assertEqual(cp.tasks_output([], "목록을 못 읽었다"), ([], "검사 불가 — 목록을 못 읽었다", 3))
 
 
+class ShortRead(unittest.TestCase):
+    """한 번에 읽기(`cat-file --batch`)의 실패 사유 — rc 0 인데 blob 이 출력에 없으면 짧은 읽기, rc 가 0 이 아니면 그 rc."""
+    DIR = "docs/superpowers/roadmaps/"
+    PATH = DIR + "a/roadmap.md"
+    SHA = "a" * 40
+
+    def why(self, rc, out):
+        class Batch:
+            def raw(self_, *args, data=None):
+                return rc, out
+        paths, unchecked, failed = cp.candidates(Batch(), {self.PATH: ("100644", "blob", self.SHA)}, self.DIR)
+        self.assertEqual((paths, failed), ([self.PATH], {self.PATH}))
+        return unchecked[self.PATH]
+
+    def test_empty_output_with_rc0_is_a_short_read(self):
+        why = self.why(0, b"")
+        self.assertIn("짧게 읽음", why)
+        self.assertNotIn("rc 128", why)
+        self.assertNotIn("rc 0", why)
+
+    def test_truncated_body_with_rc0_is_a_short_read(self):
+        why = self.why(0, ("%s blob 100\n" % self.SHA).encode("ascii") + b"---\ntype: ")
+        self.assertIn("짧게 읽음", why)
+        self.assertNotIn("rc 128", why)
+
+    def test_nonzero_rc_names_the_rc(self):
+        why = self.why(128, b"")
+        self.assertIn("rc 128", why)
+        self.assertNotIn("짧게 읽음", why)
+
+    def test_cat_batch_returns_the_rc(self):
+        class Batch:
+            def raw(self_, *args, data=None):
+                return 7, b""
+        self.assertEqual(cp.cat_batch(Batch(), [self.SHA]), ({}, 7))
+        self.assertEqual(cp.cat_batch(Batch(), []), ({}, 0))
+
+
 class InterviewState(unittest.TestCase):
     def test_valid(self):
         self.assertEqual(cp.parse_interview_state(STATE), {"n": 3, "limit": 20, "last": "포화 판정 1: 아직 — 빈 곳 2개"})

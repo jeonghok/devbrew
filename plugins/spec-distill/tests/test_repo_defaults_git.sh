@@ -190,6 +190,13 @@ assert_eq "$RC" "3" "check-path: 레포 밖 절대 경로는 rc 3"
 assert_contains "$ERR" "레포 밖 경로" "check-path: 레포 밖 사유"
 run "$T" check-path roadmaps_dir docs/superpowers/roadmaps/x --root "$H"
 assert_eq "$RC" "0" "check-path: --root 기준 상대 경로"
+L="$T/h-link"
+ln -s "$H" "$L" || no "픽스처: 레포를 가리키는 링크를 만들지 못했다"
+run "$T" check-path interview_dir "$L/${DEF_IV}x.md" --root "$L"
+assert_eq "$RC" "0" "check-path: 절대 경로가 --root 의 글자 그대로(링크)로 시작하면 그 접두를 실제 경로로 바꿔 판정"
+run "$T" check-path interview_dir "$L/${DEF_IV}x.md" --root "$H"
+assert_eq "$RC" "3" "check-path(대조): --root 가 실제 경로면 링크로 시작하는 같은 경로는 레포 밖(rc 3)"
+assert_contains "$ERR" "레포 밖 경로" "check-path(대조): 레포 밖 사유"
 run "$H" check-path interview_dir docs/superpowers/interview/x-interview.md
 assert_eq "$RC" "0" "check-path: interview_dir 도 같은 명령"
 run "$H" check-path test_command x

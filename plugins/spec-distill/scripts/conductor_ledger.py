@@ -628,23 +628,28 @@ def c_roadmaps(root, a) -> int:
     found_paths, unchecked = _default_roadmaps(root, _default_sha(root))
     unchecked = dict(unchecked)
     found = 0
+
+    def _one_line(why) -> str:   # 한 줄 한 로드맵 — 사유의 첫 줄만, 칸 구분자(탭)는 공백으로
+        return (str(why).splitlines() or [""])[0].replace("\t", " ") or "사유 없음"
     for path in sorted(found_paths + list(unchecked)):
-        if path in unchecked:   # 머리말을 못 읽은 후보 — 조용히 빼지 않고 검사 불가로 센다
-            print("%s\t검사 불가" % path)
+        if path in unchecked:   # 머리말을 못 읽은 후보 — 조용히 빼지 않고 사유와 함께 검사 불가로 센다
+            print("%s\t검사 불가 — %s" % (path, _one_line(unchecked[path])))
             found += 1
             continue
         p = subprocess.run([sys.executable, str(HERE / "roadmap_status.py"), "--json", path], cwd=str(root),
                            capture_output=True, encoding="utf-8", errors="replace")
+        unread = "상태 계산 출력을 읽지 못했다(rc %d)" % p.returncode
         try:
             rep_ = json.loads(p.stdout)
             blocks = rep_.get("blocks") or []
             staged = any(b.get("stage") for b in blocks)
-            if rep_.get("exit") == 3 or (not staged and (rep_.get("unknown_reasons") or rep_.get("format_errors"))):
-                left = "검사 불가"
+            reasons = list(rep_.get("unknown_reasons") or []) + list(rep_.get("format_errors") or [])
+            if rep_.get("exit") == 3 or (not staged and reasons):
+                left = "검사 불가 — %s" % (_one_line(reasons[0]) if reasons else unread)
             else:
                 left = str(sum(1 for b in blocks if b.get("stage") not in DONE))
         except ValueError:
-            left = "검사 불가"
+            left = "검사 불가 — %s" % unread
         if left != "0":
             print("%s\t%s" % (path, left))
             found += 1

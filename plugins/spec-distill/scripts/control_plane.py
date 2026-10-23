@@ -581,10 +581,11 @@ def listing(repo: Repo, main):
     return tree_entries(out, folder), folder, None
 
 
-def cat_batch(repo: Repo, shas) -> dict:
-    """{blob: 바이트} — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 읽기 실패로 센다)."""
+def cat_batch(repo: Repo, shas) -> tuple:
+    """({blob: 바이트}, rc) — `git cat-file --batch` 한 번으로 읽는다. 못 읽은 blob 은 빠진다(읽는 쪽이 rc 로 짧은
+    읽기와 git 실패를 가려 읽기 실패로 센다)."""
     if not shas:
-        return {}
+        return {}, 0
     rc, out = repo.raw("cat-file", "--batch", data="".join(sha + "\n" for sha in shas).encode("ascii"))
     got, pos = {}, 0
     while rc == 0 and pos < len(out):
@@ -598,7 +599,7 @@ def cat_batch(repo: Repo, shas) -> dict:
         if pos + size > len(out):
             break
         got[head[0]], pos = out[pos:pos + size], pos + size + 1
-    return got
+    return got, rc
 
 
 def candidates(repo: Repo, entries: dict, folder):
@@ -607,8 +608,8 @@ def candidates(repo: Repo, entries: dict, folder):
     if folder is None:
         return [], {}, set()
     failed = set()
-    blobs = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
-    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (128, b""), failed)
+    blobs, rc = cat_batch(repo, sorted(set(sha for _mode, kind, sha in entries.values() if kind == "blob")))
+    read = blob_reader(entries, lambda sha: (0, blobs[sha]) if sha in blobs else (rc, None), failed)
     found, unchecked = find_roadmaps(list(entries), read, folder)
     unchecked = dict(unchecked)
     return sorted(found + list(unchecked)), unchecked, failed

@@ -151,8 +151,19 @@ for f in "$RB" "$SR"; do
   n="$(fence "$f" ledger-open | grep -c 'state_path.py" state-root-for "[^"]*" --ensure)" || ROOT=""' || true)"
   assert_eq "$n" "1" "ensure_lock: ${f##*/plugins/spec-distill/} 원장 열기 펜스가 --ensure 로 상태 루트를 보장한다"
 done
-bad="$(grep -n -e '--ensure.*|| true' "$RB" "$SR" "$RF" "$FIN" || true)"
-assert_eq "$bad" "" "ensure_lock: --ensure 의 rc 를 || true 로 삼키는 줄이 없다"
+ENSURE_SWALLOW='--ensure.*\|\|[[:space:]]*(true|:)([[:space:]]|$|;)'
+bad="$(grep -nE -e "$ENSURE_SWALLOW" "$RB" "$SR" "$RF" "$FIN" || true)"
+assert_eq "$bad" "" "ensure_lock: --ensure 의 rc 를 || true · || : 로 삼키는 줄이 없다"
+for line in 'ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || :' \
+            'ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || :; echo x' \
+            'ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" ||true'; do
+  [ -n "$(printf '%s\n' "$line" | grep -E -e "$ENSURE_SWALLOW")" ] && ok "ensure_lock(양성 대조): 「${line}」 를 잡는다" \
+    || no "ensure_lock(양성 대조): 「${line}」 를 못 잡는다"
+done
+for line in "$(grep -m1 -e '--ensure)" || ROOT=""' "$RF")" 'ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""'; do
+  [ -n "$line" ] && [ -z "$(printf '%s\n' "$line" | grep -E -e "$ENSURE_SWALLOW")" ] && ok "ensure_lock(음성 대조): 「${line}」 는 잡지 않는다" \
+    || no "ensure_lock(음성 대조): 「${line}」 를 잘못 잡는다(또는 지금 문서에 그 줄이 없다)"
+done
 
 note "== e2e_other_repo"
 DDOC="$A/docs/d-design.md"; mkdoc "$DDOC"
