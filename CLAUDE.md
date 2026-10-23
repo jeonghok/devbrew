@@ -11,11 +11,11 @@ devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plug
 
 GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow/`.
 
-- Branch: `main`에서 `feature/*` 또는 `fix/*`. kebab-case, 2–4 단어.
+- Branch: `main`에서 `feature/*` · `fix/*`(문서만이면 `docs/*`, 설정 · 잡일이면 `chore/*`). kebab-case, 2–4 단어.
 - Commit: Conventional Commits (`<type>(<scope>): <description>`)
 - 언어: 커밋 메시지의 설명과 PR 본문은 한국어로 쓴다. `type`·`scope` 는 영어다(예: `fix(qg): 범위 경고를 쉬운 말로`). 다른 레포는 그 레포의 규칙을 따른다.
 - PR: merge commit, `docs/git-workflow/pr-process.md` 참고
-- project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증
+- project-init 훅이 브랜치 이름 · 커밋 꼴을 확인해 알린다(막지 않는다)
 
 ## The Three Laws
 

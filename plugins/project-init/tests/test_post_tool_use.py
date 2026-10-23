@@ -473,5 +473,35 @@ class ChannelSplit(_RepoTestCase):
         self.assertEqual(json.loads(out), {})
 
 
+class ThisRepoBranchStrategyTest(_RepoTestCase):
+    """이 레포의 docs/git-workflow/branch-strategy.md 를 훅이 기본 브랜치 판으로 읽는 것을 잰다."""
+
+    DOC = Path(__file__).resolve().parents[3] / "docs" / "git-workflow" / "branch-strategy.md"
+
+    def _rule(self, text: str):
+        work = self.repo(text)
+        pattern, notice = _hook.read_branch_rule(work)
+        self.assertIsNone(notice, notice)
+        self.assertIsNotNone(pattern)
+        return pattern
+
+    def test_this_repo_rule_accepts_four_prefixes(self):
+        p = self._rule(self.DOC.read_text(encoding="utf-8"))
+        for ok in ("docs/x", "chore/x", "feature/x", "fix/x"):
+            self.assertTrue(p.match(ok), ok)
+        for bad in ("misc/x", "docs/", "docs/X"):
+            self.assertFalse(p.match(bad), bad)
+        self.assertEqual(_hook.derive_prefixes(p), ["feature", "fix", "docs", "chore"])
+        msg = _hook.check_branch_name("misc/x", p)[0]
+        self.assertIn("허용 접두어: feature, fix, docs, chore", msg)
+
+    def test_rule_without_docs_rejects_docs_branch(self):
+        text = self.DOC.read_text(encoding="utf-8")
+        changed = text.replace("feature|fix|docs|chore", "feature|fix|chore")
+        self.assertNotEqual(changed, text)
+        p = self._rule(changed)
+        self.assertFalse(p.match("docs/x"))
+
+
 if __name__ == "__main__":
     unittest.main()
