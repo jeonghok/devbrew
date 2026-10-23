@@ -270,4 +270,10 @@ STYLE="$(grep -F '`style/`' shared/README.md)"
 assert_not_grep "$STYLE" '[0-9]+곳' "AC8: shared/README 에 사본 수 숫자가 없다"
 assert_contains "$STYLE" '글롭에서 도출' "AC8: shared/README 가 도출을 말한다(양)"
 
+# R14 넘김 — 번호 판정
+p5="$(awk '/^### P5/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+U6='에픽의 머지됨은 지휘자가 PR 을 열 때 기계 상태에 적은 PR 번호로 판정한다 — 그 PR 이 기본 브랜치로 머지됐을 때만 머지됨이다. 번호가 없는 에픽만 브랜치 이름과 이력으로 알아보고, 그 추정의 틈(같은 이름의 옛 브랜치 · 늦게 들어온 문서)은 공시한다.'
+assert_contains "$p5" "$U6" "R14 U6: P5 가 에픽 머지 판정 규칙을 쓴다"
+assert_contains "$p5" '`plugins/spec-distill/scripts/roadmap_status.py`' "R14 U6: P5 코드 줄이 번호 판정 스크립트를 가리킨다"
+
 finish

@@ -91,8 +91,8 @@ CLAUDE.md에 부재하거나 미묘해서 이 essence에서만 완전히 생존�
 컨텍스트 윈도우는 compact될 것이다 — 하니스는 그럴 것이라 가정하고 설계한다. 규칙: **턴 종료 전 load-bearing 사실은 파일로 기록한다 — 대화에만 있는 사실은 compaction 후 사망한다.** Plan 파일·state 파일·스펙 파일·커밋 메시지·`CLAUDE.md`·review findings 마크다운 등 지속적인 것에 기록한다. 이 규칙은 CLAUDE.md에 부재하므로 이 essence가 정본이다.
 
 ### P5 — Filesystem as Memory
-상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되(주인이 하나라야 끝이 정본), 작은 일에는 이 구조를 만들지 않는다. state 자리는 CLAUDE.md §런타임 상태 & 훅.
-코드: `plugins/spec-distill/references/roadmap-ontology.md`
+상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 상태가 얽히면 객체 · 링크 · 속성 · 주인을 명시해 진입점 하나에서 따라가게 하되(주인이 하나라야 끝이 정본), 작은 일에는 이 구조를 만들지 않는다. state 자리는 CLAUDE.md §런타임 상태 & 훅. 에픽의 머지됨은 지휘자가 PR 을 열 때 기계 상태에 적은 PR 번호로 판정한다 — 그 PR 이 기본 브랜치로 머지됐을 때만 머지됨이다. 번호가 없는 에픽만 브랜치 이름과 이력으로 알아보고, 그 추정의 틈(같은 이름의 옛 브랜치 · 늦게 들어온 문서)은 공시한다.
+코드: `plugins/spec-distill/references/roadmap-ontology.md` · `plugins/spec-distill/scripts/roadmap_status.py`
 
 ## Anti-Pattern Anchors
 
