@@ -71,7 +71,7 @@ next_phase: superpowers:writing-plans
 
 - 규칙 · 철학 문서(R9). R14 는 R9 가 실을 규칙 문장만 넘긴다(`## 상류 · 하류 연계`).
 - R8 이 정한 판정 순서(U17) · 여섯 조건 · 나이 검사 바꾸기 — 번호 없는 브랜치에서는 그대로다.
-- 번호를 git 이 추적하는 파일에 남기기(다른 기계 · 새 클론으로 옮기기) — Rejected Alternatives.
+- 번호를 git 이 추적하는 파일에 남기기(다른 기계 · 새 클론으로 옮기기) — 사용자 결정 U8 「이 기계에만 둔다 (권장)」, Rejected Alternatives.
 - 옛 4칸 PR 줄 옮기기 · 머지된 에픽에 번호 채우기 — 머지된 에픽은 지금 판정으로 이미 머지됨이다.
 - 게이트 질문 글에 공시 싣기(U5).
 - cost_class high skill 의 승인 게이트(`AskUserQuestion`)를 고치거나 지우기 — R9 몫이다(R9 결정, `## 상류 · 하류 연계`).
@@ -123,13 +123,17 @@ next_phase: superpowers:writing-plans
   - 번호로 PR 을 묻는다 — `gh_repo` 에 `pr_view(cwd, number)`(`gh pr view <N> -R <origin> --json <PR_FIELDS>`)를 더한다.
   - 그 PR 의 `headRefName` 이 그 에픽 블록의 브랜치(로드맵 사본이 더한 브랜치 포함 — `pr-refresh --epic` 과 같은 블록 해석) 가운데 하나이고, `isCrossRepository` 가 거짓이고, `baseRefName` 이 기본 브랜치여야 적는다. 하나라도 어긋나면 아무것도 쓰지 않고 rc 4 와 어긋난 칸을 보인다 — 번호를 잘못 옮겨 적는 실수가 쓰는 자리에서 잡힌다. 번호를 못 읽으면 rc 2.
   - 같은 (에픽, 브랜치) 줄이 있으면 새 번호로 바꾼다(닫고 새로 연 PR).
+  - `--drop` 이면 gh 를 묻지 않고 그 에픽의 `--pr` 번호 줄을 지운다(그 브랜치는 번호 없는 브랜치로 돌아간다). 없는 줄이면 rc 1.
 - 지휘 절차 걸음 4 와 손 절차 5 는 `gh pr create -R …` 의 출력(PR URL)을 받아 `ledger pr-record … --epic <에픽> --pr <그 URL>` 을 부른 **뒤** `ledger pr-refresh … --epic <에픽>` 을 부른다. PR 이 이미 있어 `gh pr create` 가 실패하면 그 PR 의 번호를 `--pr <번호>` 로 적는다 — 판단은 지휘자가 하고 이유를 보인다. PR 캐시를 손으로 적는 `ledger add --section PR` 금지(`pr_by_hand` 락)는 그대로다 — `pr-record` 는 검증하고 쓰는 명령이지 손 적기가 아니다.
 
 **운반하는 곳 — PR 캐시.**
 
 - `pr-refresh` 는 블록의 브랜치마다 지금처럼 head 이름의 PR 을 모두 받고, 그 브랜치에 적은 번호가 있으면 그 번호를 `pr_view` 로 따로 받아 `## PR` 에 그 줄을 둔다(head 목록이 한도에 닿아 빠져도 번호 줄은 있다).
+- **적은 번호가 그 브랜치와 더는 맞지 않으면**(head 이름이 바뀜 · 다른 head · 교차 레포가 됨) `pr-refresh` 는 전체를 멈추지 않는다(지휘자 판단(사용자 결정 아님)). 그 브랜치만 건너뛰고(그 브랜치의 `## PR` 줄은 고치지 않는다) 경고 한 줄을 보인다 — 「적은 PR #N 이 <브랜치> 와 맞지 않는다(<어긋난 칸>: <기대 값> ≠ <gh 값>) — 이 에픽의 PR 이면 `ledger pr-record --epic <에픽> --pr <번호>` 로 다시 적고, 아니면 `ledger pr-record --epic <에픽> --pr #N --drop`」. 상태 계산은 그 브랜치를 「판정 없음」(아래 「캐시에 그 번호가 없다」 와 같은 무게)으로 둔다. 다른 브랜치는 그대로 채운다. 종료 코드는 그 경고가 있어도 0 이다(경고 줄이 할 일을 싣는다).
+- **번호 없는 열린 에픽 PR 알림.** `pr-refresh` 는 채운 뒤, 블록 브랜치 가운데 적은 번호가 없고 캐시에 열린 PR(교차 아님 · 기본 base)이 있는 브랜치마다 한 줄을 보인다 — 「번호를 적지 않은 열린 PR: <에픽> <브랜치> #N — `ledger pr-record --epic <에픽> --pr #N`」. 열린 PR 이 둘 이상이면 모두 보이고 적지 않는다(고르는 것은 지휘자의 판단이다).
 - `--reset` 은 `## PR` 만 비운다. `## 에픽 PR` 은 다시 만들 수 없는 기록이라 남긴다.
 - `control_plane.pr_cache_fingerprint` 는 `## 에픽 PR` 줄도 지문에 넣는다 — 번호를 적으면 상태줄 · 상태 보기가 바로 새 판정을 낸다.
+- **채우기(지휘자 판단(사용자 결정 아님)).** 지휘 절차 걸음 1(맞추기)과 손 절차 1 은 `ledger pr-refresh` 다음, 상태를 세기(`control_plane.py show --tasks` · 맞추기 순서 ②) 전에, 위 「번호를 적지 않은 열린 PR」 줄마다 `ledger pr-record --epic <에픽> --pr <번호>` 를 한 번 부른다. 이 판 전에 열린 에픽 PR(R14 가 머지될 때 열려 있을 R9 의 PR 등)이 이 길로 번호를 얻는다. 머지된 옛 에픽은 채우지 않는다.
 
 **읽는 곳 — 상태 계산.**
 
@@ -140,11 +144,28 @@ next_phase: superpowers:writing-plans
   - mergeCommit 이 `-` 면 지금처럼 머지됨으로 세지 않고 알린다. 닿지 않으면 「머지됨(받기 전)」 경고 — 머지됨이 아니다(R8 §4 그대로).
   - 그 밖(열림 · 닫힘 · 다른 base · 교차 레포)은 머지됨이 아니다.
   - 적은 PR 이 머지되지 않았는데 같은 브랜치의 다른 줄이 머지됨(교차 아님 · 기본 base)이면 경고 한 줄 — 「적은 PR #N 은 <상태>이고 같은 브랜치의 PR #M 이 머지됐다 — 그 PR 이 이 에픽의 PR 이면 `ledger pr-record --epic <에픽> --pr #M`」. 판정은 바꾸지 않는다(닫고 새로 연 PR 을 적지 않은 경우가 사람에게 보인다).
-  - 머지됨인데 브랜치 끝(로컬, 없으면 원격)이 기본 브랜치의 조상이 아니면 정보 줄 「머지 뒤 브랜치에 커밋이 더 있다(번호 판정은 그대로)」.
+  - 머지됨인데 브랜치 끝(로컬 · 원격 가운데 있는 것)이 그 PR 캐시 줄의 `headRefOid` 와 다르면 정보 줄 「머지 뒤 브랜치에 커밋이 더 붙었다(<끝 8자> ≠ PR 의 head <8자> — 번호 판정은 그대로)」(지휘자 판단(사용자 결정 아님)). squash · rebase 머지는 끝이 기본 브랜치의 조상이 아니어도 끝 == `headRefOid` 라 이 줄이 나지 않는다. 끝이 없으면 줄도 없다.
   - 머지 뒤 되돌림 경고(`reverts_of`) · 결정 기록 손 머지 줄을 적용하지 않는다는 경고는 지금 PR 판정 길과 같다.
 - 번호가 없는 브랜치는 지금 길 그대로다(U17 순서 · 나이 검사 · 여섯 조건 · `merged_by_git`).
 
+**보이는 곳 — 한 출처(지휘자 판단(사용자 결정 아님)).** 적은 번호가 있는 브랜치는 그 에픽의 PR 을 보이거나 쓰는 모든 표면이 이름으로 고른 줄이 아니라 적은 번호의 줄을 쓴다. 번호 없는 브랜치는 지금 그대로다.
+
+| 표면 | 지금 | 바뀜 |
+|---|---|---|
+| `control_plane.pr_fact`(「PR #N 열림」 단계 · 보이는 번호) | 브랜치 이름의 캐시 줄에서 고른다 | 적은 번호의 줄 — 없으면 「PR #N 캐시에 없음」 |
+| `control_plane.merged_prs` | 브랜치 이름으로 머지된 줄을 모은다 | 적은 번호의 줄이 머지됐을 때만 |
+| `ledger pr-handoffs`(`c_pr_handoffs` · `_prs`) | head 이름의 PR 목록 본문에서 인계 절을 읽는다 | 적은 번호의 PR 하나를 번호로 물어(`gh pr view <N> --json number,state,body`) 읽는다 |
+| `control_plane.pr_cache_fingerprint` | `## PR` 줄 | `## PR` + `## 에픽 PR` 줄 |
+| `roadmap_status.judge` | 위 「읽는 곳」 | 위 「읽는 곳」 |
+
+같은 갈래(적은 번호 있음 / 없음)를 표면마다 다시 짓지 않게, 「(에픽, 브랜치) → 적은 번호의 캐시 줄 | 없음 사유」 를 내는 함수 하나를 `conductor_state` 에 두고 다섯 자리가 그것을 부른다(이름은 계획이 정한다).
+
 **공시.** `roadmap_status.NOTICE` 와 SD README 상태 계산 줄에 한 문장을 더한다 — 「지휘자가 PR 을 열 때 번호를 적은 에픽은 그 PR 로만 머지를 판정한다. 번호가 없는 에픽(이 판 전에 연 PR · 지휘자 밖에서 연 PR · 번호 기록이 없는 다른 기계)은 브랜치 이름과 이력으로 알아보며, 같은 이름의 옛 브랜치가 머지됨으로 보이거나 머지된 에픽이 빠지는 틈이 남는다.」 번호 기록은 기계 상태라 이 기계에만 있다는 사실도 같은 문장에 든다.
+
+**README `## 한계` 두 줄(U8).** 번호 기록은 이 기계에만 둔다. 사용자가 고른 선택지의 약속대로 SD README `## 한계` 에 두 줄을 더한다(첫 줄 공시 뒤 불릿):
+
+- 「에픽 PR 번호 기록은 이 기계의 지휘 기계 상태에만 있다 — 다른 기계나 새 클론에서는 머지 판정이 브랜치 이름과 이력 추정으로 돌아가고, 같은 이름의 옛 브랜치 틈이 다시 열린다.」
+- 「지휘자 밖에서 손으로 연 PR 도 `ledger pr-record --roadmap <로드맵> --session <세션> --epic <에픽> --pr <번호>` 를 한 번 부르면 그 번호로 판정된다.」
 
 ### §3 쓰는 세션을 믿는 한계 공시 — 쉬운 말로
 
@@ -154,7 +175,7 @@ next_phase: superpowers:writing-plans
 
   사용자가 동의한 예시 꼴(U5 근거 대화의 「리뷰 기록은 이 대화가 직접 쓴다 — 기록을 엔진 밖에서 고치면 숫자가 안 맞는 경우만 잡히고, 그럴듯하게 고친 것은 잡히지 않는다」)에서 셋을 다듬었다(작성자 판단). 「엔진」 → 「리뷰 명령」. 「숫자」 → 「확인값」 — 렌더 둘째 줄이 같은 대상을 이미 「확인값」 이라 부르고, 실제 값은 숫자가 아니라 해시다. 「그 안의 사용자 말」 — 옛 문장의 「사용자 문구」 몫이고, README 둘째 불릿(`--quote` 출처)이 「위 공시로 다룬다」 고 기대는 자리다. 원장 · 엔진 · 요약값은 문장에 없다.
 - 자리는 그대로 둘이다 — 렌더 셋째 줄(+ `gate` JSON `writer_trust_notice`)과 SD README `## 한계` 첫 줄. 게이트 질문 글(`AskUserQuestion`)에는 싣지 않는다(U5 — 되풀이되는 경고는 무시된다).
-- README `## 한계` 의 나머지 불릿은 바꾸지 않는다.
+- README `## 한계` 의 나머지 불릿은 바꾸지 않는다(§2 의 U8 두 줄을 더할 뿐이다).
 - 같이 바뀌는 것: 골든 다섯의 셋째 줄과 `.gate.json`, `test_writer_trust_notice.sh` 의 `EXPECTED`. CHANGELOG 의 옛 문장 · R8 설계 §7 의 인용은 이력이라 그대로 둔다.
 
 ### §4 골든 예약과 락 지도 단언
@@ -330,9 +351,9 @@ next_phase: superpowers:writing-plans
   |---|---|---|
   | `SD/scripts/conductor_ledger.py` | `pr-record` 명령 · `pr-refresh` 의 번호 줄 · `c_add` 의 레포 설정 거부 · `c_roadmaps` 검사 불가 사유 | `approval` · `approve`(승인 게이트 제거) |
   | `SD/tests/test_epic_conductor_skill.sh` | 고치지 않는다(§7 지휘자 3단계 락은 안 고침, PR 번호 문장은 conducting.md 에 둔다) | 승인 게이트 락 |
-  | `SD/README.md` | `## 한계` 첫 줄(§3)과 상태 계산 줄의 번호 판정 공시(§2)만 | 쉬운 말 블록 사본 · 규칙에 닿는 문장 |
+  | `SD/README.md` | `## 한계` 첫 줄(§3) · `## 한계` 의 U8 두 줄(§2) · 상태 계산 줄의 번호 판정 공시(§2)만 | 쉬운 말 블록 사본 · 규칙에 닿는 문장 |
   | `SD/skills/spec-review/SKILL.md` · `SD/skills/request-framing/SKILL.md` | 고치지 않는다(§5 (2) 는 해결자에서 막고, §7 의 상태 블록 stderr 는 안 고침) — R14 예약에는 남아 있다 | 쉬운 말 블록 사본 |
-  | `SD/references/conducting.md` · `SD/tests/test_conducting_reference.sh` | 걸음 4 · 손 절차 5 의 PR 번호 · 「레포 설정」 문장과 그 순서 락 | 시작 승인 문장과 그 락 |
+  | `SD/references/conducting.md` · `SD/tests/test_conducting_reference.sh` | 걸음 1 · 손 절차 1 의 번호 채우기 · 걸음 4 · 손 절차 5 의 PR 번호 · 「레포 설정」 문장과 그 순서 락 | 시작 승인 문장과 그 락 |
 
   - epic-conductor SKILL 에 PR 번호 문장이 필요해지면 R14 가 쓰되 `### 4`(승인 게이트) 밖에 둔다. 문단이 달라 기계적 충돌은 작을 것이다.
 - R12 예약(골든 폴더 · `test_conducting_reference.sh` 등)은 R12 가 머지돼 의존 순서 안이다.
@@ -341,16 +362,18 @@ next_phase: superpowers:writing-plans
 
 **PR 번호(§2)**
 - AC1 `ledger pr-record --roadmap R --session S --epic E --pr <PR>` 이 있다. URL · `#N` · `N` 을 받고, 번호로 `gh pr view` 한 PR 의 head 가 그 에픽의 브랜치이고 교차 레포가 아니고 base 가 기본 브랜치일 때만 `## 에픽 PR` 에 (에픽 · 브랜치 · 번호 · 적은 때 · 쓴 세션) 한 줄을 쓴다(같은 (에픽, 브랜치) 줄은 바꾼다). head 다름 · 교차 · base 다름 · URL 레포가 origin 아님은 각각 rc 4 이고 아무것도 쓰지 않는다. 번호를 못 읽으면 rc 2, 표지가 없으면 지금 쓰기 명령과 같은 멈춤이다(gh stub 픽스처).
+- AC2a conducting.md 걸음 1 이 `ledger pr-refresh` → 「번호를 적지 않은 열린 PR」 마다 `ledger pr-record --epic <에픽> --pr <번호>` → 상태 세기 순서다(`test_conducting_reference.sh` 의 `before` 꼴 순서 락 + 뒤집은 글로 양성 대조). 손 절차 1 도 같은 걸음을 싣는다. conducting.md 가 `pr-refresh` 의 어긋남 경고 뒤 할 일(다시 적기 · `--drop`)을 적는다.
 - AC2 conducting.md 걸음 4 와 손 절차 5 가 `gh pr create -R …` → `ledger pr-record … --pr <그 출력의 URL>` → `ledger pr-refresh … --epic <에픽>` 순서다(순서 락). `pr_by_hand` 락은 그대로 GREEN 이고, `--section "에픽 PR"` 손 적기도 없다(부재 락 + 양의 짝).
-- AC3 `pr-refresh` 는 적은 번호가 있는 브랜치의 그 PR 줄을 head 목록에 없어도 `## PR` 에 둔다(목록 stub 이 그 PR 을 빼는 픽스처). `--reset` 뒤 `## 에픽 PR` 은 그대로다.
+- AC3 `pr-refresh` 는 적은 번호가 있는 브랜치의 그 PR 줄을 head 목록에 없어도 `## PR` 에 둔다(목록 stub 이 그 PR 을 빼는 픽스처). `--reset` 뒤 `## 에픽 PR` 은 그대로다. 적은 번호의 head 가 그 브랜치와 다르거나 교차 레포가 된 픽스처에서 `pr-refresh` 는 rc 0 으로 끝나고, 그 브랜치만 건너뛰며 번호 · 어긋난 칸 · `pr-record` 다시 적기와 `--drop` 을 이름 붙인 경고 한 줄을 낸다. 다른 브랜치의 줄은 채워지고, 상태 계산은 그 브랜치를 판정 없음으로 둔다. 번호 없는 브랜치에 열린 PR 이 하나 있으면 「번호를 적지 않은 열린 PR」 줄이 `pr-record` 명령과 함께 나고, 둘이면 둘 다 보이고 적지 않는다. `pr-record --drop` 은 gh 를 부르지 않고 그 줄을 지운다(없으면 rc 1).
 - AC4 상태 계산은 적은 번호가 있는 브랜치를 그 번호의 캐시 줄로만 판정한다 — 머지됨 ∧ 교차 아님 ∧ 기본 base ∧ mergeCommit 닿음이면 머지됨(근거에 「적은 번호로 판정」), mergeCommit 이 닿지 않으면 「머지됨(받기 전)」 경고이고 머지됨이 아니다, 열림 · 닫힘 · 다른 base · 교차 · mergeCommit `-` 는 머지됨이 아니다, 캐시에 그 번호가 없으면 그 번호를 이름 붙인 정보 줄. 픽스처 넷:
   - (가) 같은 이름의 옛 브랜치 머지 커밋이 첫째 부모 줄에 있고 적은 PR 이 열림 → 머지됨 아님(틈 ①이 닫힘).
-  - (나) 로컬 브랜치 없이 문서가 첫 머지보다 뒤에 들어왔고 적은 PR 이 squash 머지됨 → 머지됨(틈 ②가 닫힘).
+  - (나) 로컬 브랜치 없이 문서가 첫 머지보다 뒤에 들어왔고 적은 PR 이 squash 머지됨(원격 끝 == 캐시의 `headRefOid`, 끝은 기본 브랜치의 조상이 아님) → 머지됨, 「커밋이 더 붙었다」 줄 없음(틈 ②가 닫힘).
   - (다) 적은 PR 은 닫힘, 같은 브랜치의 다른 PR 이 머지됨 → 머지됨 아님 + `ledger pr-record … --pr #M` 경고.
-  - (라) 머지 뒤 브랜치에 커밋이 더 있음 → 머지됨 + 정보 줄.
+  - (라) 머지 뒤 브랜치에 커밋이 더 붙음(끝 ≠ 캐시의 `headRefOid`) → 머지됨 + 「커밋이 더 붙었다」 정보 줄. 대조: rebase 머지 뒤 끝 == `headRefOid` 이면 줄이 없다.
 
   상태 계산은 gh 를 부르지 않는다(기존 stub 락 GREEN).
-- AC5 번호가 없는 브랜치의 판정은 바뀌지 않는다(기존 PR · 머지 테스트 전부 GREEN). `roadmap_status.NOTICE` 와 SD README 상태 계산 줄에 §2 의 공시 문장이 있다(번호 판정 · 번호 없는 에픽의 추정과 남은 틈 · 번호 기록은 이 기계에만).
+- AC5 번호가 없는 브랜치의 판정은 바뀌지 않는다(기존 PR · 머지 테스트 전부 GREEN). SD README `## 한계` 에 §2 의 U8 두 줄이 글 그대로 있다(첫 줄 공시는 그대로 첫 줄). `roadmap_status.NOTICE` 와 SD README 상태 계산 줄에 §2 의 공시 문장이 있다(번호 판정 · 번호 없는 에픽의 추정과 남은 틈 · 번호 기록은 이 기계에만).
+- AC6a 적은 번호가 있는 브랜치에서 `control_plane.pr_fact`(단계 「PR」 과 보이는 번호) · `merged_prs` · `ledger pr-handoffs` · 지문 · `roadmap_status` 가 모두 적은 번호의 줄을 쓴다 — 같은 브랜치에 이름으로 먼저 잡히는 다른 PR 줄(더 최근 · 열림)을 둔 픽스처에서 다섯 표면이 같은 번호를 낸다. 번호 없는 브랜치의 출력은 기존 테스트대로다. 다섯 자리는 `conductor_state` 의 한 함수를 부른다(그 함수를 우회하는 변이에 RED).
 - AC6 `## 에픽 PR` 은 선택 절이다 — 줄이 없으면 머리를 쓰지 않는다. 번호 꼴 · 같은 (에픽, 브랜치) 두 줄은 기계 상태를 읽을 때 오류다. `control_plane.pr_cache_fingerprint` 가 이 절을 지문에 넣는다(번호 하나를 더하면 지문이 바뀌는 테스트).
 
 **공시(§3)**
@@ -392,7 +415,8 @@ next_phase: superpowers:writing-plans
 
 예약 밖 — 이 브랜치의 로드맵 커밋으로 등록했다(골든 폴더 · `test_review_handoff_order.sh` 는 §4 순서대로 구현 PR 에서):
 
-- `plugins/spec-distill/scripts/conductor_state.py`(선택 절) · `plugins/spec-distill/scripts/gh_repo.py`(`pr_view`)(§2)
+- `plugins/spec-distill/scripts/conductor_state.py`(선택 절 · 적은 번호 줄을 내는 함수) · `plugins/spec-distill/scripts/gh_repo.py`(`pr_view`)(§2)
+- 예약 안이지만 이번에 더한 자리: `control_plane.py` 의 `pr_fact` · `merged_prs` · 지문, `conductor_ledger.py` 의 `c_pr_handoffs` · `_prs` · `pr-refresh` 어긋남 갈래 · 알림, conducting.md 걸음 1 · 손 절차 1 의 채우기(§2 「보이는 곳」 · 「채우기」)와 그 테스트(`test_control_plane.py` · `test_conductor_ledger.py` · `test_conducting_reference.sh`)
 - `plugins/spec-distill/tests/test_conducting_reference.sh` · `test_conductor_ledger.py` · `test_conductor_state.py` · `test_merged_by_pr.py` · `test_control_plane.py` · `test_gh_repo.py`(§2)
 - `shared/tests/fixtures/docreview/golden/`(§3 · §4) · `plugins/spec-distill/tests/test_review_handoff_order.sh`(§6) — 둘은 §4 의 단언 변경 뒤 구현 PR 에서 등록한다
 - `plugins/spec-distill/tests/test_bundle_coverage.sh` · `test_state_root.sh` · `test_repo_defaults_git.sh` · `test_control_plane.sh`(§7)
@@ -411,7 +435,7 @@ next_phase: superpowers:writing-plans
 같은 기준으로 견준다 — 틈을 닫는 힘 · 장치 무게(새 상태 · 명령 · 파일) · 다른 표면과의 이음매.
 
 - 옛 브랜치 틈을 공시로만 닫기 — 장치는 없다. 하지만 틈이 그대로 남는다. 사용자가 「유니크한 값」 쪽을 골랐다(U2 · U3).
-- 번호를 설계문서 `## 지휘 기록` 등 git 이 추적하는 곳에 적기 — 다른 기계에서도 번호 판정이 된다. 하지만 PR 은 그 커밋 뒤에 열려 번호를 적으려면 커밋이 하나 더 들고, 상태 계산이 기본 브랜치에 없는 브랜치 끝의 문서를 읽어야 한다. 기계 상태로 시작하고 다른 기계는 공시한다.
+- 번호를 설계문서 `## 지휘 기록` 등 git 이 추적하는 곳에 적기(U8 이 기각) — 다른 기계에서도 번호 판정이 된다. 하지만 PR 은 그 커밋 뒤에 열려 번호를 적으려면 커밋이 하나 더 들고, 상태 계산이 기본 브랜치에 없는 브랜치 끝의 문서를 읽어야 한다. 기계 상태로 시작하고 다른 기계는 공시한다.
 - `ledger add --section "에픽 PR"` 로 손으로 적기 — 새 명령이 없다. 하지만 검증이 없어 번호를 잘못 옮겨 적는 실수가 그대로 들어온다. `pr_by_hand` 락의 뜻과도 어긋난다.
 - PR 캐시 `## PR` 줄에 「에픽의 PR」 표지 칸 더하기 — 절은 하나다. 하지만 `--reset` · `pr-refresh` 가 줄을 통째로 갈아끼워 표지가 사라지고, 옛 9칸 줄과 칸 수가 갈린다.
 - 번호가 있어도 여섯 조건(끝 대조 포함)으로 판정 — 머지 뒤 커밋을 더 붙인 브랜치를 머지됨이 아니라고 본다. 하지만 사용자 결정(「번호 있으면 그것으로」)과 다르고, 끝 대조가 이름 · 이력 추정으로 돌아가는 문이다. 정보 줄로 보인다.
@@ -429,9 +453,15 @@ next_phase: superpowers:writing-plans
 - U5 · 결정 · 2026-10-23 · 사용자 — 「그래」 (U4 에 답한 권장: README 에 쉬운 말로 · 질문 화면엔 올리지 않음 · 도구 출력 셋째 줄도 같은 쉬운 문장. 근거 대화에서 사용자가 동의한 예시 꼴 「리뷰 기록은 이 대화가 직접 쓴다 — 기록을 엔진 밖에서 고치면 숫자가 안 맞는 경우만 잡히고, 그럴듯하게 고친 것은 잡히지 않는다」)
 - U6 · 결정 · 2026-10-23 · 사용자 — 「좋아 그리고 작업하는겇가장 먼저에 꼼꼼히 조사도 넣어주고 놓친거 있을 수 있으니, 파일이 안 겹치면 병렬 권장 이긴한데 회귀나 병렬 진행으로 인한 통한은 여전히 잘해야해」 (§9 · §10 — 빠진 항목 · 이미 고쳐진 항목 조사(U7 로 설계 때로 옮김), R9 와 병렬이되 통합 대조는 그대로, R9 로 넘기는 규칙 문장)
 - U7 · 결정 · 2026-10-23 · 사용자 — 「아님 스펙 만들때 조사가 더 좋으려나」 (U6 의 「작업하는겇가장 먼저에 꼼꼼히 조사」 를 설계 때로 옮김 — 조사는 §10, 계획 첫 Task 는 가벼운 재확인. 지휘자가 이 읽기를 확인했다)
+- U8 · 결정 · 2026-10-23 · 사용자 — 「이 기계에만 둔다 (권장)」 (PR 번호 기록을 어디에 둘지. 사용자가 본 선택지 설명 원문: 「장치가 가볍다. 다른 기계 · 새 클론에서는 추정으로 돌아간다는 사실과, 손으로 연 PR 은 명령 한 번을 부르면 된다는 것을 README 한계에 적는다.」 — §2 README 한계 두 줄)
 - R9 결정(이 에픽에 닿는 범위) · 2026-10-23 · 사용자 — 「모든 high skill 을 규모 공시만으로 (권장)」 · 「R9 가 규칙과 skill 을 함께 (권장)」 (R9 가 cost_class high skill 의 승인 게이트를 지운다 — R14 는 게이트를 건드리지 않고 겹침을 `## 상류 · 하류 연계` 에 적는다)
 - 원칙 · 2026-10-20 · 사용자 — 「너무 과한 장치와 제약(과설계)만 경계해 devbrew원칙이야」 (R8 U5 — 이 에픽의 지배 원칙, §7 기준)
 - 지휘자 판단(사용자 결정 아님) · 2026-10-23:
+  - 설계문서 점검 답(2026-10-23) 넷:
+    - 「머지 뒤 커밋이 더 붙었다」 줄은 끝 ≠ 적은 PR 의 캐시 `headRefOid` 일 때만 낸다 — 「끝이 기본 브랜치의 조상이 아님」 으로 재면 squash · rebase 머지마다 난다.
+    - 적은 번호가 있는 브랜치는 PR 을 보이거나 쓰는 모든 표면(`pr_fact` · `merged_prs` · `pr-handoffs` · 지문 · 상태 계산)이 적은 번호의 줄 하나를 쓴다. 번호 없는 브랜치는 그대로다.
+    - 적은 번호가 브랜치와 더는 맞지 않으면 `pr-refresh` 는 전체를 멈추지 않고 그 브랜치만 건너뛰며 다시 적기 · `--drop` 을 안내한다. 그 브랜치는 판정 없음이다.
+    - 걸음 1 에서 번호 없는 열린 에픽 PR 을 상태를 세기 전에 한 번 채운다(R9 의 PR 이 이 길을 탄다). 순서 락을 둔다.
   - R9 와의 통합: R14 가 먼저 머지 · R9 가 merge 뒤 대조와 통합 리뷰. 겹치는 파일의 주인은 `## 상류 · 하류 연계` 표 — R14 는 PR 번호 기록(필요한 `conductor_ledger.py` · epic-conductor SKILL 문장 포함), R9 는 high skill 승인 게이트 제거 · 쉬운 말 블록 사본 · 규칙 문장. R14 는 쉬운 말 블록을 고치지 않고 README 는 `## 한계` 와 상태 계산 줄만 고친다.
   - 골든 예약 충돌은 실데이터 락 지도 단언이 머지된 에픽의 예약 · 줄을 다른 에픽 소유로 세지 않게 고치고, 그 뒤 골든 폴더를 R14 에 예약한다(§4).
   - 5 · 6 · 7 · 10 은 사람을 헷갈리게 하거나 실제 결함을 통과시키는 것만 고치고 나머지는 안 고친다. 7 은 행동 층이 덮으면 안 고침이 기본이다(§7).
@@ -441,7 +471,8 @@ next_phase: superpowers:writing-plans
 - 작성자 판단(사용자 결정 아님) · 2026-10-23 · 설계문서 작성(위 결정 안에서 다듬음):
   - 번호는 새 선택 절 `## 에픽 PR` 에 둔다. `## PR` 칸에 넣지 않는 이유는 `--reset` 이 그 절을 비우기 때문이다.
   - 쓰는 명령은 `pr-record` 하나다. 번호로 PR 을 물어 head · 교차 · base 를 대조한 뒤에만 쓴다. 판정에는 mergeCommit 닿음(「받기 전」)을 남긴다 — 이름 · 이력 추정이 아니라 받기 상태다.
-  - 닫힌 번호 · 머지 뒤 커밋은 판정을 바꾸지 않고 줄로 알린다.
+  - 닫힌 번호 · 머지 뒤 커밋은 판정을 바꾸지 않고 줄로 알린다(머지 뒤 커밋의 기준은 위 지휘자 판단의 `headRefOid` 대조).
+  - `pr-record --drop` 의 꼴(`--pr #N --drop`, gh 없음)과 「번호를 적지 않은 열린 PR」 알림을 `pr-refresh` 가 내는 것.
   - 공시 문장의 「엔진 → 리뷰 명령」 · 「숫자 → 확인값」 · 「그 안의 사용자 말」(§3).
   - §4 의 「머지됨」 을 단언의 git 없는 계약에 맞춰 로드맵 의존 순서로 읽는다. 방향은 「예약한 에픽이 줄의 에픽에 의존」 한쪽만이다.
   - 이 브랜치의 로드맵 갱신에 골든 폴더와 `test_review_handoff_order.sh` 를 넣지 않는다 — 단언 변경 전에 넣으면 실데이터 단언이 위반 셋으로 RED 다(이 브랜치에서 실측, §4).
