@@ -574,6 +574,10 @@ next_phase: superpowers:writing-plans
   - §5 행 5 — 훅이 `refs/remotes/origin/HEAD` 판을 읽으므로 테스트는 그 ref 가 새 정규식 커밋을 가리키는 임시 레포로 한다. 살아 있는 원격으로는 재지 않는다.
   - §8 K1 · §4 — kill switch 는 다음 진입에서만 듣는다. 도는 실행을 멈추는 길은 끼어들기 하나다.
   - 번호 대조 D34 · OQ16 · S32 의 이유 칸을 사실 문장으로 바꿨다(Anti-goals 는 고치지 않음).
+- D2.3 · r2 · adopt · 6c8b9494#r2.1 · "전부 유지 (권장)" — finding 없이 바뀜: Files to Modify (modified)
+- D2.4 · r2 · adopt · 93a5c0ad#r2.1 · "전부 유지 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
+- docreview 계수 — spec-distill/2026-10-23-rules-docs-cleanup-design-dea18b73164db1cc r1: advice_new=1 · advice_repeat=0 · mc_preexisting_new=0
+- docreview 계수 — spec-distill/2026-10-23-rules-docs-cleanup-design-dea18b73164db1cc r2: advice_new=3 · advice_repeat=2 · mc_preexisting_new=0
 
 ## 번호 대조
 
@@ -645,6 +649,7 @@ next_phase: superpowers:writing-plans
 - 2026-10-23 · 로드맵 R9 재범위는 같은 브랜치의 따로 된 커밋이다(생성기 `roadmap_write.py update`, 원문 U1 · U2).
   - R14 블록 받는 것의 괄호 「R9 는 장치 동작을 바꾸지 않는다」는 생성기가 R14 묶음 §7 과 함께 지웠다.
   - 재분해 이력 2026-10-22 머리(roadmap.md:465)의 같은 괄호는 그때의 기록이라 두었다 — 지휘자가 정한다.
+- spec 승인 · 2026-10-23 · 「승인하고 계획으로 (권장)」
 
 ## Metadata
 
@@ -661,3 +666,10 @@ next_phase: superpowers:writing-plans
 - `test_conductor_ledger.py` 승인 클래스 가운데 claim · takeover 의 다른 성질을 함께 재던 단언이 있는지 — 있으면 그 단언은 남긴다.
 - relay-checker 의 두 어긋남 문장 글자.
 - §6 표 각 행의 정확한 문면(뜻은 표대로).
+
+| # | 항목 |
+|---|---|
+| 3d9ac787#r1.1 | 참고(data_flow) #3-지휘자-시작-승인-걷기 — 승인 행을 지우는 함수를 없애면 claim 과 takeover 가 지휘 상태 파일을 더는 읽지 않습니다. 그래서 옛 판이 쓴 PR 줄이나 깨진 상태 파일을 시작할 때 알아채지 못하고, 3절의 「옛 PR 캐시 다시 채우기」 길은 한 번도 불리지 않습니다. — 고치면: claim 과 takeover 에서 승인 행 지우기만 빼고, 상태 파일을 읽어 검사하는 단계는 남깁니다(쓰지 않음). 그러면 옛 PR 줄과 깨진 상태는 지금처럼 3절에서 rc 3 으로 드러나고 다시 채우기 길이 살아 있습니다. AC14 에 「옛 4칸 PR 줄이 있으면 claim · takeover 가 rc 3 과 다시 채우기 안내를 낸다」를 더하고, 위 업그레이드 경로 테스트를 남긴다고 적습니다. |
+| 808c54ce#r2.1 | 참고(feasibility) #4-plugin-audit-지출-동의--artifact-critique-동의-게이트 — plugin-audit README 에 지출 게이트를 적은 줄(100번 줄)이 하나 더 있는데, 함께 고칠 목록에 없습니다. 새 공유 테스트는 SKILL.md 만 보므로 이 줄은 남아도 잡히지 않습니다. — 고치면: §4 「함께 고치는 곳」의 README 목록을 「:19 · :23-24 · :93 · :100」으로 바꾸고, :100 은 「범위 고르기 · 규모 공시 → pre-0 → Workflow → post-1」로 고친다고 적습니다. |
+| 9f483f03#r2.1 | 참고(feasibility) #6-지금-장치와-어긋난-규칙-문장 — project-init README 에는 훅 절이 이미 「설치된 Hook」이라는 한국어 제목으로 있습니다. 「Hooks Installed」 절을 새로 더하는 계획은 같은 절을 두 번 만듭니다. — 고치면: README 는 그대로 둡니다. CLAUDE.md:72 문장만 「README 의 Hooks Installed(한국어 README 는 「설치된 Hook」) 절에 훅마다 왜 skill 이 아닌가 한 줄」로 고칩니다. AC8 의 조건은 「project-init README 의 기존 훅 절이 PostToolUse 와 이유 한 줄을 담는다」로 바꾸고, Context 5번의 「절이 없음」을 지웁니다. |
+| 20b8dc7d#r2.1 | 참고(ambiguity) #3-지휘자-시작-승인-걷기 — 새 공시 규칙은 라운드와 상한 없는 부분까지 알리도록 하지만, 지휘자 설계는 기존 출력 형식을 그대로 유지한다. 실제 기존 형식은 남은 에픽·대략적인 agent 수·순서만 보여 주므로 두 지시를 함께 만족하지 못한다. — 고치면: 기존 규모 줄에 적용되는 리뷰 라운드 상한과 상한 없는 실행 부분을 함께 표시하도록 명시한다. 같은 상태에서는 같은 줄을 만든다는 원칙은 유지하되, 기존 형식을 그대로 유지한다는 문장은 수정한다. |
