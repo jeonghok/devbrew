@@ -561,6 +561,21 @@ def _with_copy_branches(root, roadmap: str, blocks: list, warns: list) -> list:
     return blocks
 
 
+def _status_with_copies(root, roadmap: str) -> dict:
+    """상태 계산 + 로드맵 사본이 더한 브랜치. 사본 경고는 여기서 보인다 — pr-refresh · pr-record 가 같은 해석을 쓴다."""
+    report = _status(root, roadmap)
+    warns = []
+    report["blocks"] = _with_copy_branches(root, roadmap, report.get("blocks") or [], warns)
+    for w in warns:
+        print("[spec-distill] " + w)
+    return report
+
+
+def _branches_of(b: dict) -> list:
+    """블록의 브랜치 — `branches` 가 없으면 상태 계산의 `branch_states` 이름."""
+    return list(b.get("branches") or [s["branch"] for s in b.get("branch_states") or []])
+
+
 def _pack_diff(root, tip: str, warns: list, label: str) -> str:
     rc, d, err = git(root, "-c", "core.quotePath=false", "diff", "%s...%s" % (DEFAULT_REF, tip))
     if rc:
@@ -940,11 +955,7 @@ def c_pr_refresh(root, a) -> int:
     need_holder(root, a.roadmap, a.session)
     skip = ("PR",) if a.reset else ()
     load(root, a.roadmap, skip)  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
-    report = _status(root, a.roadmap)
-    warns = []
-    report["blocks"] = _with_copy_branches(root, a.roadmap, report.get("blocks") or [], warns)
-    for w in warns:
-        print("[spec-distill] " + w)
+    report = _status_with_copies(root, a.roadmap)
     if a.epic:
         blocks = [_block(report, a.epic)]
     elif a.reset:
@@ -953,7 +964,7 @@ def c_pr_refresh(root, a) -> int:
         blocks = [b for b in report["blocks"] if b.get("stage") not in DONE]
     branches = []
     for b in blocks:
-        for br in b.get("branches") or [s["branch"] for s in b.get("branch_states") or []]:
+        for br in _branches_of(b):
             if br not in branches:
                 branches.append(br)
     when = now()
@@ -1007,13 +1018,7 @@ def c_pr_record(root, a) -> int:
                 (origin[0].lower(), origin[1].casefold(), origin[2].casefold()):
             raise Fail(4, "PR URL 의 레포(%s)가 origin(%s)이 아니다 — 아무것도 적지 않았다"
                        % ("/".join(url), "/".join(origin)))
-    report = _status(root, a.roadmap)
-    warns = []
-    report["blocks"] = _with_copy_branches(root, a.roadmap, report.get("blocks") or [], warns)
-    for w in warns:
-        print("[spec-distill] " + w)
-    b = _block(report, a.epic)
-    branches = list(b.get("branches") or [s["branch"] for s in b.get("branch_states") or []])
+    branches = _branches_of(_block(_status_with_copies(root, a.roadmap), a.epic))
     try:
         it = gh_repo.pr_view(str(root), n)
     except gh_repo.GhStop as exc:
