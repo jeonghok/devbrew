@@ -639,6 +639,15 @@ def pr_row(num, state, cross="아니오", base="main", when="2026-10-17 10:00", 
             "baseRefName": base, "mergeCommit": "-", "쓴 세션": "session-aaaa1111"}
 
 
+def epic_pr_row(num, epic="R5", branch="feature/a"):
+    return {"에픽": epic, "브랜치": branch, "번호": num, "적은 때": "2026-10-23 09:00", "쓴 세션": "session-aaaa1111"}
+
+
+def recorded_fixture():
+    """적은 #7(머지됨) 곁에 이름으로 먼저 잡히는 줄 — 상태 보기는 열린 #9, 머지된 PR 목록은 더 새 머지 #11 을 고른다."""
+    return [pr_row("#7", "머지됨"), pr_row("#9", "열림"), pr_row("#11", "머지됨")]
+
+
 class PrCache(unittest.TestCase):
     """PR 은 PR 캐시만 읽는다 — 같은 head 이름의 fork · 다른 base PR 은 고르지 않고, 줄 순서가 고르기를 바꾸지 않는다."""
 
@@ -702,6 +711,44 @@ class PrCache(unittest.TestCase):
         self.assertNotEqual(fp, cp.pr_cache_fingerprint({"PR": [a, dict(b, mergeCommit="b" * 40)]}))
         self.assertEqual(cp.pr_cache_fingerprint(None), cp.pr_cache_fingerprint(cs.empty()))
         self.assertNotEqual(fp, cp.pr_cache_fingerprint(cs.empty()))
+
+    def test_fingerprint_includes_epic_pr(self):
+        a = pr_row("#1", "열림")
+        fp = cp.pr_cache_fingerprint({"PR": [a]})
+        self.assertEqual(fp, cp.pr_cache_fingerprint({"PR": [a], "에픽 PR": []}))
+        self.assertNotEqual(fp, cp.pr_cache_fingerprint({"PR": [a], "에픽 PR": [epic_pr_row("#1")]}))
+        self.assertNotEqual(cp.pr_cache_fingerprint({"PR": [a], "에픽 PR": [epic_pr_row("#1")]}),
+                            cp.pr_cache_fingerprint({"PR": [a], "에픽 PR": [epic_pr_row("#2")]}))
+
+    def test_pr_fact_uses_recorded(self):
+        rows, rec = recorded_fixture(), [epic_pr_row("#7")]
+        got = cp.pr_fact(rows, "feature/a", "main", cp.PR_MISSING, epic="R5", epic_rows=rec)
+        self.assertEqual((got["number"], got["state"], got["source"]), ("#7", "머지됨", "PR 캐시 — 적은 번호"))
+        self.assertEqual(cp.pr_fact(rows, "feature/a", "main", cp.PR_MISSING)["number"], "#9")  # 양의 짝
+        self.assertEqual(cp.pr_fact(rows, "feature/a", "main", cp.PR_MISSING, epic="R9", epic_rows=rec)["number"], "#9")
+        gone = cp.pr_fact([r for r in rows if r["번호"] != "#7"], "feature/a", "main", cp.PR_MISSING,
+                          epic="R5", epic_rows=rec)
+        self.assertEqual((gone["number"], gone["state"]), ("#7", "알 수 없음"))
+        self.assertIn("PR #7 캐시에 없음", cp.pr_text(gone))
+        data = cs.empty()
+        data["PR"].extend(rows)
+        data["에픽 PR"].extend(rec)
+        r = report([impl_done_block()])
+        cp.overlay([(RM, r)], lambda rel: (data, None), True, default_short="main")
+        self.assertEqual((r["blocks"][0]["stage"], r["blocks"][0]["pr"]["number"]), ("구현 끝", "#7"))
+        self.assertEqual(self.overlaid(rows)["pr"]["number"], "#9")  # 양의 짝: 적은 번호 없으면 지금 그대로
+
+    def test_merged_prs_uses_recorded(self):
+        rows, rec = recorded_fixture(), [epic_pr_row("#7")]
+        b = blk("R5", "머지됨", "completed", branch_states=[{"branch": "feature/a", "tip": None, "merged": "x"}])
+        self.assertEqual([p["number"] for _br, p in cp.merged_prs(b, rows, "main", epic_rows=rec)], ["#7"])
+        self.assertEqual([p["number"] for _br, p in cp.merged_prs(b, rows, "main")], ["#11"])  # 양의 짝
+        data = cs.empty()
+        data["PR"].extend(rows)
+        data["에픽 PR"].extend(rec)
+        r = report([b])
+        cp.overlay([(RM, r)], lambda rel: (data, None), True, focus="R5", default_short="main")
+        self.assertEqual([p["number"] for _br, p in r["blocks"][0]["merged_prs"]], ["#7"])
 
     def test_statusline_segment_age(self):
         now = cp.datetime.datetime(2026, 10, 17, 15, 30)

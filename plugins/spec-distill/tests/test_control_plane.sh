@@ -712,4 +712,26 @@ push_file .devbrew.md "$(printf -- '---\ninterview_dir: /abs/\n---')"
 assert_contains "$(show)" "인터뷰 폴더를 정하지 못했다" "레포 설정이 깨지면 인터뷰 칸에 그 사유를 보인다"
 rm -rf "$STATE_DIR" "$W/notes"; sp_off "$S/state_path.py"
 
+echo "=== AC18 한 출처 — 적은 번호가 있는 브랜치는 이름으로 고르지 않는다 ==="
+recorded() {  # recorded <scripts 폴더> — 적은 #7(머지됨) 곁에 열린 #9 · 더 새 머지 #11. 「pr_fact merged_prs」 번호를 낸다
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import control_plane as cp
+def row(n, s):
+    return {"브랜치": "feature/a", "번호": n, "상태": s, "확인한 때": "2026-10-17 10:00", "headRefOid": "a" * 40,
+            "교차 레포": "아니오", "baseRefName": "main", "mergeCommit": "-", "쓴 세션": "session-aaaa1111"}
+rows = [row("#7", "머지됨"), row("#9", "열림"), row("#11", "머지됨")]
+rec = [{"에픽": "R5", "브랜치": "feature/a", "번호": "#7", "적은 때": "2026-10-23 09:00", "쓴 세션": "session-aaaa1111"}]
+b = {"id": "R5", "branch_states": [{"branch": "feature/a", "tip": None, "merged": "x"}]}
+fact = cp.pr_fact(rows, "feature/a", "main", cp.PR_MISSING, epic="R5", epic_rows=rec)["number"]
+merged = [p["number"] for _br, p in cp.merged_prs(b, rows, "main", epic_rows=rec)]
+print(fact, " ".join(merged))' "$1"
+}
+assert_eq "$(recorded "$S")" "#7 #7" "pr_fact · merged_prs 가 적은 번호 #7 을 낸다(이름으로는 #9 · #11)"
+mutant rec_fact "number, recorded = cs.recorded_cache_row(epic_rows, rows, epic, branch)" "number, recorded = (None, None)"
+cmp -s "$S/control_plane.py" "$T/m-rec_fact/control_plane.py" && no "변이가 심기지 않았다: rec_fact" || ok "변이 심김: rec_fact(cmp 다름)"
+assert_eq "$(recorded "$T/m-rec_fact")" "#9 #11" "변이 잡힘: pr_fact 가 한 출처를 우회하면 #7 단언이 RED"
+mutant rec_merged 'PR_MISSING_DONE % b.get("id"), first="머지됨", epic=b.get("id"), epic_rows=epic_rows)' \
+  'PR_MISSING_DONE % b.get("id"), first="머지됨", epic=b.get("id"))'
+cmp -s "$S/control_plane.py" "$T/m-rec_merged/control_plane.py" && no "변이가 심기지 않았다: rec_merged" || ok "변이 심김: rec_merged(cmp 다름)"
+assert_eq "$(recorded "$T/m-rec_merged")" "#7 #11" "변이 잡힘: merged_prs 가 적은 번호를 넘기지 않으면 #7 단언이 RED"
+
 finish
