@@ -44,8 +44,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/spec-distill/references/trivia-escape.md` · CLAUDE.md Law 1
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
-**Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
-코드: `plugins/*/hooks/hooks.json`
+**Cross-cutting (L1·L2·L3) 집행.** hook=사건에 붙는 관찰 · 알림, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). 진입 skill 의 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다. Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
+코드: `plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py`
 
 ### P17 — User Sovereignty
 **Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다. qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다 — 게시마다 묻지 않고, 게시만 끄는 길은 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다).

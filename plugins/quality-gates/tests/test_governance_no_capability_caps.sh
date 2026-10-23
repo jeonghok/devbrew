@@ -244,4 +244,28 @@ assert_contains "$AUTH" '`agents/`, `references/`, `scripts/`, `skills/`를 ship
 assert_not_contains "$AUTH" 'writer + reviewer + hook 파이프라인' "AC8: qg 에 없는 hook 을 말하던 구가 없다"
 fi
 
+# --- AC8 — 장치와 맞춘 규칙 문장 ---
+cline() { grep -F -- "$1" "$CLAUDE_MD"; }
+assert_not_contains "$(cline '**레포 전용 값 금지.**')" '`gh`' "AC8 :31: gh 는 레포마다 정할 값이 아니다"
+assert_contains "$(cline '**레포 전용 값 금지.**')" '경로 · 테스트 명령 · 브랜치 · 모델 같은 값' "AC8 :31(양)"
+assert_contains "$(cline '**Scoped agents')" '역할 프롬프트는 첫머리에 맡는 일을 밝힌다' "AC8 :48"
+assert_not_contains "$(cline '**Scoped agents')" 'You are NOT responsible for Z' "AC8 :48: 영어 공식 강제 없음"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때)' "AC8 :50"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`check_deps.py measure`' "AC8 :50 판 측정"
+assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '로드맵 단위 지휘 기계 상태(`machine.md`)' "AC8 :70 수명 넷"
+assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '링크 검사 없이 만든다' "AC8 :70 예외"
+assert_not_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '실패 시 디버깅을 위해' "AC8 :70 없는 동작을 쓰지 않는다"
+assert_contains "$(cline '**모든 훅에 kill switch.**')" '그 플러그인의 훅과 진입 skill 을 끈다' "AC8 :71"
+assert_contains "$(cline '**모든 훅에 kill switch.**')" '진입 사전 검사는 이 변수를 읽지 않는다' "AC8 :71 SKIP_HOOKS 는 사전 검사 밖"
+assert_not_contains "$(cline '**모든 훅에 kill switch.**')" '진입 skill 자체는 끄지 않는다' "AC8 :71 review-entry 와 어긋나는 구 없음"
+assert_contains "$(cline '**훅 공존.**')" 'Hooks Installed(한국어 README 는 「설치된 Hook」)' "AC8 :72"
+assert_contains "$(cline '**Loud logging')" '필수 의존(`dependencies.md` 강도 멈춤)은 이유와 설치 방법을 보이고 멈춘다' "AC8 :73"
+assert_contains "$(grep -F '## 목차' "$CLAUDE_MD")" '한 번 쓰고 닫는 계획 · 기록은 모델이 판단한다' "AC8 :103"
+p13="$(awk '/^### P13/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+assert_contains "$p13" '`plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py`' "AC8 P13 코드"
+assert_not_contains "$p13" 'hook=집행 레이어' "AC8 P13 옛 구 없음"
+STYLE="$(grep -F '`style/`' shared/README.md)"
+assert_not_grep "$STYLE" '[0-9]+곳' "AC8: shared/README 에 사본 수 숫자가 없다"
+assert_contains "$STYLE" '글롭에서 도출' "AC8: shared/README 가 도출을 말한다(양)"
+
 finish
