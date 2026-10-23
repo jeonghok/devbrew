@@ -1277,6 +1277,175 @@ class PrRefresh(Repo):
         self.assertIn("GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다", out)
 
 
+class PrRecord(Repo):
+    """ledger pr-record — 번호로 물은 PR 을 에픽의 브랜치 · 교차 · base 와 대조한 뒤에만 번호 줄과 PR 캐시 줄을 쓴다
+    (R14 AC1 · AC20 · AC3 `--drop`)."""
+    def setUp(self):
+        super().setUp()
+        self.gh_origin()
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.viewed = []
+        self.answer = gh_pr(7, "OPEN", OID1, False)
+
+    def fake_view(self, cwd, number):
+        self.viewed.append(number)
+        return dict(self.answer)
+
+    def record(self, *extra, session=SID):
+        from unittest import mock
+        with mock.patch.object(L.gh_repo, "pr_view", self.fake_view):
+            return self.cli("pr-record", "--roadmap", RM, "--session", session, "--epic", "A1", *extra)
+
+    def state(self):
+        return cs.load(L.mpath(self.w, RM), RM)
+
+    def numbers(self):
+        return [(r["에픽"], r["브랜치"], r["번호"]) for r in self.state()[cs.EPIC_PR]]
+
+    def raw(self):
+        return L.mpath(self.w, RM).read_bytes()
+
+    def test_three_forms_record_one_row(self):
+        for form in ("7", "#7", "https://github.com/me/r/pull/7"):
+            rc, out = self.record("--pr", form)
+            self.assertEqual(rc, 0, out)
+            self.assertEqual(out.strip().splitlines()[-1], "번호를 적었다 — A1 · feature/a1 · #7(PR 캐시 줄도 썼다)")
+            self.assertEqual(self.numbers(), [("A1", "feature/a1", "#7")])
+            row = self.state()[cs.EPIC_PR][0]
+            self.assertEqual(row["쓴 세션"], SID)
+            self.assertRegex(row["적은 때"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
+        self.assertEqual(self.viewed, [7, 7, 7])
+
+    def mismatch(self, answer, column):
+        self.answer = answer
+        before = self.raw()
+        rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 4, out)
+        self.assertIn(column, out)
+        self.assertIn("아무것도 적지 않았다", out)
+        self.assertEqual(self.raw(), before)
+        return out
+
+    def test_head_mismatch_rc4_no_write(self):
+        out = self.mismatch(gh_pr(7, "OPEN", OID1, False, head="feature/zz"), "headRefName")
+        self.assertIn("feature/a1", out)
+        self.assertIn("feature/zz", out)
+
+    def test_cross_repo_rc4_no_write(self):
+        self.mismatch(gh_pr(7, "OPEN", OID1, True), "isCrossRepository")
+
+    def test_base_mismatch_rc4_no_write(self):
+        out = self.mismatch(gh_pr(7, "OPEN", OID1, False, base="feature/a0"), "baseRefName")
+        self.assertIn("trunk", out)
+        self.assertIn("feature/a0", out)
+        self.assertIn("쌓인 PR 이면 바탕을 기본 브랜치로 바꾼 직후 다시 적는다", out)
+
+    def test_url_other_repo_rc4_without_gh(self):
+        before = self.raw()
+        rc, out = self.record("--pr", "https://github.com/other/r/pull/7")
+        self.assertEqual(rc, 4, out)
+        self.assertIn("PR URL 의 레포(github.com/other/r)가 origin(github.com/me/r)이 아니다 — 아무것도 적지 않았다", out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(self.raw(), before)
+
+    def test_url_same_repo_other_case_accepted(self):
+        rc, out = self.record("--pr", "https://GitHub.com/ME/R/pull/7")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.numbers(), [("A1", "feature/a1", "#7")])
+
+    def test_unreadable_pr_rc2(self):
+        before = self.raw()
+        rc, out = self.record("--pr", "abc")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("PR 번호를 읽지 못했다: 'abc'", out)
+        self.assertIn("--pr 123", out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(self.raw(), before)
+
+    def test_without_marker_rc5_without_gh(self):
+        self.cli("takeover", "--roadmap", RM, "--session", OTHER)
+        before = self.raw()
+        rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 5, out)
+        self.assertIn("읽기 전용", out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(self.raw(), before)
+
+    def test_gh_stop_rc3_no_write(self):
+        from unittest import mock
+
+        def stop(cwd, number):
+            raise L.gh_repo.GhStop("gh 인증이 안 됐다")
+        before = self.raw()
+        with mock.patch.object(L.gh_repo, "pr_view", stop):
+            rc, out = self.cli("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("gh 인증이 안 됐다", out)
+        self.assertEqual(self.raw(), before)
+
+    def test_cache_row_written_and_replaced(self):
+        old = L._cache_row("feature/a1", gh_pr(7, "OPEN", OID1, False), "2026-10-01 10:00", SID)
+        keep = L._cache_row("feature/a1", gh_pr(5, "CLOSED", OID2, False), "2026-10-01 10:00", SID)
+        other = L._cache_row("feature/a2", gh_pr(7, "OPEN", OID3, False, head="feature/a2"), "2026-10-01 10:00", SID)
+        L.update(self.w, RM, SID, lambda d: d["PR"].extend(
+            [old, cs.no_pr_row("feature/a1", "2026-10-01 10:00", SID), keep, other]))
+        self.answer = gh_pr(7, "MERGED", OID1, False, MOID)
+        rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 0, out)
+        rows = self.state()["PR"]
+        self.assertEqual([(r["브랜치"], r["번호"], r["상태"]) for r in rows if r["브랜치"] == "feature/a1"],
+                         [("feature/a1", "#5", "닫힘"), ("feature/a1", "#7", "머지됨")])
+        self.assertIn(other, rows)
+        mine = next(r for r in rows if r["브랜치"] == "feature/a1" and r["번호"] == "#7")
+        self.assertEqual((mine["mergeCommit"], mine["쓴 세션"]), (MOID, SID))
+        self.assertNotEqual(mine["확인한 때"], "2026-10-01 10:00")
+        number, row = cs.recorded_cache_row(self.state()[cs.EPIC_PR], rows, "A1", "feature/a1")
+        self.assertEqual((number, row), ("#7", mine))
+
+    def test_copy_branch_head_accepted(self):
+        from unittest import mock
+        real = L._with_copy_branches
+
+        def widen(root, roadmap, blocks, warns):
+            blocks = real(root, roadmap, blocks, warns)
+            for b in blocks:
+                if b["id"] == "A1":
+                    b["branches"] = list(b.get("branches") or []) + ["feature/a1-2"]
+            return blocks
+        self.answer = gh_pr(7, "OPEN", OID1, False, head="feature/a1-2")
+        with mock.patch.object(L, "_with_copy_branches", widen):
+            rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.numbers(), [("A1", "feature/a1-2", "#7")])
+        rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 4, out)                       # 양의 짝: 사본이 더하지 않으면 같은 head 는 거부된다
+        self.assertIn("headRefName", out)
+
+    def test_other_epic_rows_kept(self):
+        L.update(self.w, RM, SID, lambda d: d[cs.EPIC_PR].append(
+            {"에픽": "A2", "브랜치": "feature/a2", "번호": "#3", "적은 때": "2026-10-01 10:00", "쓴 세션": SID}))
+        rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.numbers(), [("A2", "feature/a2", "#3"), ("A1", "feature/a1", "#7")])
+
+    def test_drop_removes_without_gh(self):
+        self.assertEqual(self.record("--pr", "7")[0], 0)
+        self.viewed.clear()
+        rc, out = self.record("--pr", "7", "--drop")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.numbers(), [])
+        self.assertEqual(self.viewed, [])
+
+    def test_drop_missing_rc1(self):
+        self.assertEqual(self.record("--pr", "7")[0], 0)
+        self.viewed.clear()
+        rc, out = self.record("--pr", "8", "--drop")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("지울 번호 줄이 없다 — A1 · #8", out)
+        self.assertEqual(self.numbers(), [("A1", "feature/a1", "#7")])
+        self.assertEqual(self.viewed, [])
+
+
 class NoPrBranch(Repo):
     def test_no_pr_line(self):
         self.gh_origin()

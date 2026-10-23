@@ -12,12 +12,14 @@
   drop --roadmap R --session S --section 절 --where 칸=값
   approval | approve --roadmap R --session S --scale "규모"   시작 승인 공시 판단 · 기록
   pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다
+  pr-record  --roadmap R --session S --epic E --pr <PR> [--drop]   대조한 에픽 PR 번호 줄과 PR 캐시 줄을 쓴다(--drop 은 지운다)
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
   progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
 
-종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 pr-refresh 가 받은 gh 출력이
-다르다(다른 head · 모르는 값) · 5 다른 세션의 표지.
+종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 받은 gh 출력이 기대와
+다르다(pr-refresh: 다른 head · 모르는 값 / pr-record: head · 교차 레포 · base 대조 실패 · PR URL 의 레포가 origin 아님 —
+아무것도 쓰지 않는다) · 5 다른 세션의 표지.
 """
 from __future__ import annotations
 
@@ -974,6 +976,84 @@ def c_pr_refresh(root, a) -> int:
     return 0
 
 
+def c_pr_record(root, a) -> int:
+    """번호로 물은 PR 의 head · 교차 · base 를 그 에픽의 브랜치와 대조한 뒤에만 `## 에픽 PR` 번호 줄과 `## PR` 캐시 줄을
+    한 번에 쓴다. `--drop` 은 gh 없이 (에픽, 번호) 줄을 지운다."""
+    ref = gh_repo.parse_pr_ref(a.pr)
+    if ref is None:
+        raise Fail(2, "PR 번호를 읽지 못했다: %r — PR URL 이나 숫자(예: --pr 123)를 준다" % a.pr)
+    n, url = ref
+    number = "#%d" % n
+    if a.drop:
+        gone = []
+
+        def drop(d):
+            gone.extend(r for r in d[cs.EPIC_PR] if r["에픽"] == a.epic and r["번호"] == number)
+            d[cs.EPIC_PR] = [r for r in d[cs.EPIC_PR] if not (r["에픽"] == a.epic and r["번호"] == number)]
+        update(root, a.roadmap, a.session, drop)
+        if not gone:
+            print("[spec-distill] 지울 번호 줄이 없다 — %s · %s" % (a.epic, number))
+            return 1
+        print("번호 줄을 지웠다 — %s · %s" % (a.epic, number))
+        return 0
+    need_holder(root, a.roadmap, a.session)
+    load(root, a.roadmap)  # 깨진 기계 상태는 gh 를 부르기 전에 멈춘다
+    if url is not None:
+        try:
+            origin = gh_repo.origin_slug(str(root))
+        except gh_repo.GhStop as exc:
+            raise Fail(3, str(exc))
+        if (url[0].lower(), url[1].casefold(), url[2].casefold()) != \
+                (origin[0].lower(), origin[1].casefold(), origin[2].casefold()):
+            raise Fail(4, "PR URL 의 레포(%s)가 origin(%s)이 아니다 — 아무것도 적지 않았다"
+                       % ("/".join(url), "/".join(origin)))
+    report = _status(root, a.roadmap)
+    warns = []
+    report["blocks"] = _with_copy_branches(root, a.roadmap, report.get("blocks") or [], warns)
+    for w in warns:
+        print("[spec-distill] " + w)
+    b = _block(report, a.epic)
+    branches = list(b.get("branches") or [s["branch"] for s in b.get("branch_states") or []])
+    try:
+        it = gh_repo.pr_view(str(root), n)
+    except gh_repo.GhStop as exc:
+        raise Fail(3, str(exc))
+    try:
+        _sha, base, why = repo_defaults.default_branch(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise Fail(3, str(exc))
+    if why:
+        raise Fail(3, why)
+    head = it.get("headRefName")
+    bad = []
+    if it.get("number") != n:
+        bad.append("number: %d ≠ %s" % (n, it.get("number")))
+    if head not in branches:
+        bad.append("headRefName: %s 중 하나 ≠ %s" % (" · ".join(branches) or "브랜치 없음", head))
+    if it.get("isCrossRepository") is not False:
+        bad.append("isCrossRepository: false ≠ %s" % json.dumps(it.get("isCrossRepository")))
+    if it.get("baseRefName") != base:
+        bad.append("baseRefName: %s ≠ %s — 쌓인 PR 이면 바탕을 기본 브랜치로 바꾼 직후 다시 적는다"
+                   % (base, it.get("baseRefName")))
+    if bad:
+        raise Fail(4, "PR %s 이 에픽 %s 와 맞지 않는다(%s) — 아무것도 적지 않았다" % (number, a.epic, " · ".join(bad)))
+    when = now()
+    cache = _cache_row(head, it, when, a.session)
+    mine = {"에픽": a.epic, "브랜치": head, "번호": number, "적은 때": when, "쓴 세션": a.session}
+
+    def change(d):
+        rows = d[cs.EPIC_PR]
+        at = next((i for i, r in enumerate(rows) if r["에픽"] == a.epic and r["브랜치"] == head), None)
+        if at is None:
+            rows.append(mine)
+        else:
+            rows[at] = mine
+        d["PR"] = [r for r in d["PR"] if not (r["브랜치"] == head and r["번호"] in (number, cs.NO_PR))] + [cache]
+    update(root, a.roadmap, a.session, change)
+    print("번호를 적었다 — %s · %s · %s(PR 캐시 줄도 썼다)" % (a.epic, head, number))
+    return 0
+
+
 def _unread(spec: str, b: dict) -> str:
     return "셀 수 없음 — %s 을 %s 에서 읽지 못했다" % (spec, _ref(b))
 
@@ -1274,6 +1354,8 @@ COMMANDS = {
     "live-agent": (c_live_agent, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
                                             p.add_argument("--work", required=True))),
     "pr-refresh": (c_pr_refresh, lambda p: (_rs(p), p.add_argument("--epic"), p.add_argument("--reset", action="store_true"))),
+    "pr-record": (c_pr_record, lambda p: (_rs(p), p.add_argument("--epic", required=True), p.add_argument("--pr", required=True),
+                                          p.add_argument("--drop", action="store_true"))),
     "pr-handoffs": (c_pr_handoffs, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "audit": (c_audit, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True))),
     "review-pack": (c_review_pack, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--epic", required=True),
