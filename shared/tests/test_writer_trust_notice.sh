@@ -112,4 +112,15 @@ qlim="$(section "$QG_README" '## 한계')"
 assert_contains "$qlim" '판정 줄의 「선택 N」 칸은 합성기가 낸 인자를 묶지 않고 옮긴다 — 같은 세션이 낮춰 적을 수 있다. 판정값(통과 · 막음)은 이 칸에 기대지 않는다' \
   "qg README ## 한계: 「선택 N」 칸 줄"
 
+# ── put_snap 은 서브셸 밖에서 부른다 — 실패 수가 서브셸에서 사라지지 않는다 ──────────────
+case_put_snap_failure_counted
+CASES="$HERE/fixtures/docreview/cases.sh"
+OLDFORM='$(put_snap'
+old_hits() { grep -cF -- "$OLDFORM" "$1" || true; }   # 파일 안의 옛 꼴 개수 — 개수를 박지 않고 0 인지만 본다
+assert_eq "$(old_hits "$CASES")" "0" "cases.sh: 서브셸 안 put_snap 호출이 없다"
+synth="$(mktemp -t putsnap-XXXXXX)"
+printf '%s\n' 'x="$(put_snap "$d" "$s" && py docreview_state.py begin-round)"' > "$synth"
+assert_eq "$(old_hits "$synth")" "1" "cases.sh 부재 단언 양성 대조: 옛 꼴을 담은 합성 줄은 잡힌다"
+rm -f "$synth"
+
 finish
