@@ -290,6 +290,23 @@ for where in "cyc 1" "step 1"; do
   assert_eq "$(records "$($where)")" "" "${where}(맞추기): 번호 없는 PR 을 찾아 적는 pr-record 가 없다(AC17 · 8ce8e648 — 양의 짝: 위 순서 락)"
   [ -n "$(records "$($where) 그다음 번호 없는 PR 을 \`ledger pr-record\` 로 적는다.")" ] && ok "양성 대조(${where}): ledger pr-record 를 넣으면 잡는다" || no "양성 대조(${where}): ledger pr-record 를 넣어도 못 잡는다"
 done
+rebuild_list() {  # rebuild_list <글> — 걸음 1 판단의 「다시 만들 수 있는 것(…)은 주인에서 다시 모은다」 괄호 안
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+a = t.find("다시 만들 수 있는 것(")
+b = t.find(")은 주인에서 다시 모은다", a)
+print(t[a + len("다시 만들 수 있는 것("):b] if 0 <= a < b else "")' "$1"
+}
+rebuild_names_epic() {  # rebuild_names_epic <글> — 다시 모으는 목록이 에픽 PR 번호 기록을 가리키는 말
+  rebuild_list "$1" | hit '에픽 PR|PR 번호|번호 기록'
+}
+[ -n "$(rebuild_list "$(cyc 1)")" ] && ok "지휘 걸음 1: 다시 모으는 목록을 읽었다" || no "지휘 걸음 1: 다시 모으는 목록이 비었다 — 아래 부재 단언이 공허하다"
+assert_eq "$(rebuild_names_epic "$(cyc 1)")" "" "지휘 걸음 1(판단): 다시 모으는 목록이 에픽 PR 번호 기록을 가리키지 않는다(AC17 · AC19 — 양의 짝: 그대로 둔다)"
+assert_contains "$(cyc 1)" '`## 에픽 PR` 은 다시 모으지 않고 그대로 둔다' "지휘 걸음 1(판단): 깨진 기계 상태에서도 \`## 에픽 PR\` 은 다시 모으지 않는다"
+for lit in '다시 만들 수 있는 것(PR 번호 · 자원 · 기다리는 질문)은 주인에서 다시 모은다.' '다시 만들 수 있는 것(PR 캐시(`## PR`) · `## 에픽 PR` · 자원)은 주인에서 다시 모은다.'; do
+  [ -n "$(rebuild_names_epic "$lit")" ] && ok "양성 대조(걸음 1 목록): 「${lit}」 를 잡는다" || no "양성 대조(걸음 1 목록): 「${lit}」 를 못 잡는다"
+done
+assert_eq "$(rebuild_names_epic '다시 만들 수 있는 것(PR 캐시(`## PR`) · 자원 · 기다리는 질문)은 주인에서 다시 모은다.')" "" "양성 짝(걸음 1 목록): PR 캐시 · 자원 · 기다리는 질문은 잡지 않는다"
 cyc_head() {  # cyc_head [파일] — `## 지휘 순환` 머리(걸음 1 앞까지)
   awk '$0=="## 지휘 순환"{f=1; next} f && /^#{2,3} /{exit} f' "${1:-$CD}"
 }
