@@ -198,4 +198,20 @@ else
     ok "AC8d: model: inherit 코드 예시 없음"
   fi
 fi
+# --- AC3 · AC4: Law 1 — 지금 막는 자리(사실) · 중간 단계 · trivia escape 보존 ---
+LAW1_C="$(grep -F '**Law 1 — Clarity Before Code.**' "$CLAUDE_MD")"
+LAW1_P="$(grep -F '**Law 1 — Clarity Before Code.**' "$PHIL")"
+MID='기본은 설계 → 계획 → 구현이다. 중간 크기 일은 이유를 밝히고 가벼운 꼴(PR 본문의 계획 · 짧은 brief)을 고를 수 있다. 가벼운 꼴도 필수 섹션이 다루는 것을 짧게 덮고, 다루지 않는 섹션은 「해당 없음 — 이유」로 적는다.'
+FACT='설계문서 리뷰어가 필수 섹션 누락을 승인을 막는 지적으로 낸다 — 기계 게이트는 아니다'
+assert_contains "$LAW1_C" "$MID"   "AC3: CLAUDE.md Law 1 에 중간 단계 문장"
+assert_contains "$p12"    "$MID"   "AC3: P12 에 중간 단계 문장"
+assert_contains "$LAW1_C" '한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, formatting — **파일 수와 무관하게**)는 게이트 우회' "AC3: CLAUDE.md trivia escape 그대로(양)"
+assert_contains "$p12"    '한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고' "AC3: P12 trivia escape 그대로(양)"
+assert_contains "$LAW1_C" "$FACT" "AC4: CLAUDE.md Law 1 이 설계문서 쪽 사실을 쓴다"
+assert_contains "$LAW1_P" "$FACT" "AC4: 철학 Law 1 이 설계문서 쪽 사실을 쓴다"
+assert_contains "$LAW1_C" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: CLAUDE.md Law 1 — brief 는 구조로 막는다"
+assert_contains "$LAW1_P" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: 철학 Law 1 — brief 는 구조로 막는다"
+assert_not_contains "$LAW1_C" '최소한 **구조적 게이트** (필수 섹션:' "AC4: CLAUDE.md 에 없는 구조 게이트를 있다고 쓰던 옛 구가 없다"
+assert_not_contains "$LAW1_P" 'silent하게 skip할 수 없는 구조적 게이트' "AC4: 철학 Law 1 의 옛 구가 없다"
+
 finish

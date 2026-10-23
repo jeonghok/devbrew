@@ -8,7 +8,7 @@
 
 세 법칙이 모든 플러그인을 지배한다. 계층적이다 — 충돌 시 **Law N이 Law N+1을 override** (명확성 먼저, 독립성 둘째, compounding 셋째).
 
-**Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계다. 코드를 shipping하는 모든 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 **실제 거절 메커니즘** — 최소한 필수 섹션(Context/Why·Goals·Non-goals·Constraints·Acceptance Criteria·Files to Modify·Verification Plan·Rejected Alternatives·Metadata)을 silent하게 skip할 수 없는 구조적 게이트 — 을 가져야 한다. 모델 신뢰만으로는 부족하다.
+**Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않는다. 명세 작성은 자신의 스킬·게이트·거절 동작을 가진 일급(first-class) 단계다. 코드를 shipping하는 모든 플러그인은 "아직 이건 코딩 못 한다"고 말할 수 있는 **실제 거절 메커니즘** — 최소한 필수 섹션(Context/Why·Goals·Non-goals·Constraints·Acceptance Criteria·Files to Modify·Verification Plan·Rejected Alternatives·Metadata)을 silent하게 skip할 수 없게 하는 것 — 을 가져야 한다. 지금 막는 자리: 인터뷰 brief 는 `check_brief.py` 가 구조로 막는다. 설계문서 리뷰어가 필수 섹션 누락을 승인을 막는 지적으로 낸다 — 기계 게이트는 아니다. 모델 신뢰만으로는 부족하다.
 
 **Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없다. 이것은 heuristic이 아니라 하드 규칙이고, 분리는 프롬프트가 아니라 도구 표면으로 한다(P3).
 
@@ -40,8 +40,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/agents/code-recritic.md` · `plugins/quality-gates/references/recritic-code-profile.md`
 
 ### P12 — Transparency of Planning
-**Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
-코드: `plugins/spec-distill/skills/pm-interview/SKILL.md` 의 `## 진입 단계` 3 (trivia escape) · CLAUDE.md Trivia escape
+**Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. 기본은 설계 → 계획 → 구현이다. 중간 크기 일은 이유를 밝히고 가벼운 꼴(PR 본문의 계획 · 짧은 brief)을 고를 수 있다. 가벼운 꼴도 필수 섹션이 다루는 것을 짧게 덮고, 다루지 않는 섹션은 「해당 없음 — 이유」로 적는다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정과 「중간 크기」 판정은 invoking skill의 책임이다.
+코드: `plugins/spec-distill/references/trivia-escape.md` · CLAUDE.md Law 1
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
 **Cross-cutting (L1·L2·L3) 집행.** hook=집행 레이어, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
