@@ -113,20 +113,31 @@ next_phase: superpowers:writing-plans
 
 ### §2 지출 승인을 규모 공시로 — 규칙 · P22
 
-**CLAUDE.md:51** 을 아래 뜻으로 바꾼다(글자는 계획이 다듬는다).
+아래 두 블록이 확정 문안이다(U8 「설계에 확정 문안을 싣는다 (권장)」). 계획은 글자 그대로 옮긴다. 계획이 낱말 하나라도 바꿔야 하면 바꾼 문안을 사용자에게 다시 보여 승인받는 과제를 계획에 둔다 — 승인 전에는 바꾼 문안을 커밋하지 않는다.
 
-> **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — 지출을 이유로 묻지 않는다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다. 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.
+**CLAUDE.md:51 확정 문안**(그 줄 전체를 이 한 줄로 바꾼다):
+
+```markdown
+- **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.
+```
+
+**철학 P22 확정 문안**(머리 `### P22 — Cost Awareness` 는 그대로, 그 아래 본문 두 줄 :63-64 를 이 두 줄로 바꾼다):
+
+```markdown
+**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.
+코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 3 · `shared/tests/test_cost_disclosure.sh`
+```
 
 - 규칙의 공시 의무는 `cost_class: high` 에 걸린다. `variable` 은 공시 의무 대신 「지출 승인을 묻지 않는다」만 받는다. 상한 · 압축 문장은 D18 을 그대로 옮긴 것이다. pm-interview 의 조사 상한 연장 질문과 리뷰 엔진의 추가 라운드 질문은 사용자가 상한을 여는 질문이라 이 규칙과 맞는다(지휘자 판단(사용자 결정 아님)).
 - epic-conductor 의 「이름 붙인 예외」 문장은 지운다. 물을 게이트가 없어 예외가 할 일이 없다.
 - 굵은 머리 「모든 skill에 `cost_class` 선언」은 그대로 둔다 — `plugins/plugin-audit/tests/test_check_shape_completeness.py:15` 의 앵커다.
 - CLAUDE.md:91(Subagent spray · Workflow 명시 요청)은 그대로다. 규모 공시 줄이 곧 fan-out 선언이다.
 
-**철학 P22** 를 바꾼다.
+**철학 P22** 확정 문안에 대해:
 
-- 규칙 문장은 위와 같은 뜻이다. `cost_class: high` 리터럴은 남긴다.
-- `<Use_When>` 에 fan-out N 을 적으라는 말을 지운다 — 쓰는 skill 이 0 이다. 대신 「fan-out 규모는 띄우기 전 공시 줄로 알린다」를 적는다.
-- 코드 가리킴을 `quality-pipeline`(variable) 에서 규모 공시를 하는 high skill 의 자리로 바꾼다 — epic-conductor `### 4. 규모 공시` · plugin-audit phase 0 step 3. 가리키는 이름은 `shared/tests/test_charter_citations.sh` 가 실재를 잰다.
+- `cost_class: high` 리터럴이 남는다.
+- `<Use_When>` 에 fan-out N 을 적으라는 말은 빠졌다 — 쓰는 skill 이 0 이다. 대신 「fan-out 규모는 띄우기 전 이 공시 줄로 알린다」가 들어갔다.
+- 코드 가리킴은 `quality-pipeline`(variable) 에서 규모 공시를 하는 high skill 의 자리와 새 락으로 옮겼다. 가리키는 이름은 `shared/tests/test_charter_citations.sh` 가 실재를 잰다 — `test_cost_disclosure.sh` 는 계획 2 가 같은 PR 에서 만든다.
 - AP9(Subagent spray, :108)는 그대로다.
 
 **락.**
@@ -150,12 +161,14 @@ next_phase: superpowers:writing-plans
 - 남는 것: `control_plane.py show` 펜스, 규모 줄 만들기(꼴 그대로 — 같은 상태면 같은 줄).
 - 바뀌는 것: 「규모 줄을 보이고 5 로 간다 — 지출을 이유로 묻지 않는다. 그 뒤의 dispatch 도 띄우기 전에 규모만 알리고 간다」.
 - 지우는 것: `approval` 펜스 · 갈래 셋(rc 0 · 옛 PR 캐시 줄 · 그 밖), `approve` 펜스, 「멈춤이면 표지를 풀고 멈춘다」 펜스, 「승인 전에는 agent 를 보내지 않는다」, 이름 붙인 예외 문단.
+- 3절 :115 의 `default_rc` 줄은 「4 끝의 표지 풀기 펜스(`conductor_ledger.py" release`)」를 가리킨다. 4 끝의 그 펜스가 사라지므로, 그 줄이 가리키는 표지 풀기 펜스를 3절 안에 바로 둔다(세션 · 루트 가드를 가진 `release` 펜스 하나). 줄은 「`claim_rc=0` 이면 아래 표지 풀기 펜스(`conductor_ledger.py" release`)를 돌린 뒤 멈춘다」가 된다. `test_epic_conductor_skill.sh:128` 의 리터럴(`'`claim_rc=0` 이면'` · `'`conductor_ledger.py" release`'` · `'돌린 뒤 멈춘다'`)은 그대로 만족한다. 더해 그 펜스가 3절 안에 있다는 단언을 두어, 가리키는 펜스가 없어지면 RED 가 되게 한다(지휘자 판단(사용자 결정 아님)).
 - :29 의 「시작 승인」 낱말과 :124 의 괄호(「새로 잡아야 이 세션의 옛 시작 승인이 지워진다」)도 고친다. :124 의 release → claim 걸음 자체는 남긴다 — `conducting.md`(R14 예약)가 같은 걸음을 적고 락이 잡는다. 이유 괄호만 뺀다. `references/conducting.md:13` 의 같은 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」도 계획 2 가 예약 밖 편집으로 뺀다. R14 가 먼저 머지하고 그 문장은 건드리지 않는다(지휘자 판단(사용자 결정 아님)).
 
 **`conductor_ledger.py`.**
 
 - 지운다: `approval` · `approve` 하위 명령, `scale_check`, `c_approval`, `c_approve`, 사용법 줄 :13.
 - `_drop_approval` 과 그 호출 셋도 지운다 — 아래 상태 쪽 변경으로 할 일이 없다.
+- 그런데 지금 claim(새로 잡을 때) · takeover 는 `_drop_approval` 이 부르는 `update` 의 읽기로 기계 상태를 검사한다. 그래서 옛 4칸 PR 줄이나 깨진 상태가 rc 3 과 다시 채우기 안내(`ledger pr-refresh … --reset`)로 드러난다. 지휘자 판단(사용자 결정 아님): 그 검사는 남긴다. claim 이 새로 잡았을 때와 takeover 는 표지를 쥔 뒤 기계 상태를 읽기만 하고(검사하는 `load` — 쓰기 없음), 실패를 지금과 같은 rc · 문장으로 낸다. 표지는 지금처럼 쥔 채 남는다. `test_upgrade_path_claim_then_reset_then_claim`(`test_conductor_ledger.py:1121-1140`)은 그대로 두고 통과해야 한다.
 - 지운 하위 명령을 부르면 argparse 의 모르는 하위 명령 rc 2 다. 락은 rc 와 사유 글을 함께 본다.
 
 **`conductor_state.py` — 고른 길: 읽되 버리는 절.**
@@ -163,7 +176,7 @@ next_phase: superpowers:writing-plans
 - `시작 승인` 을 `SECTIONS` 에 남겨 옛 파일의 머리가 「모르는 절」 이 되지 않게 한다.
 - 새 튜플 `RETIRED_SECTIONS = ("시작 승인",)` 을 두고, `parse_machine` 은 그 절의 줄을 이미 있는 `skip` 길처럼 검사 없이 버린다.
 - `render_machine` 은 그 절을 쓰지 않는다. 그래서 옛 파일은 다음 저장 때 그 절이 사라지고, 새 파일에는 처음부터 없다.
-- 이 판보다 옛 플러그인이 새 파일을 읽어도 된다. 빠진 절은 `empty()` 가 빈 목록으로 채운다(지금도 그렇다).
+- 이 판보다 옛 플러그인은 새 파일을 읽지 못한다 — `_check_writer` 가 머리말 `writer` 의 판이 자기보다 새면 절을 보기 전에 「이 기계 상태는 더 새 판(…)이 썼다 — 플러그인을 업데이트하고 세션을 다시 연다」로 멈춘다(`conductor_state.py:131-133`). 이것은 지금도 같은 성질이고 이 에픽이 바꾸지 않는다. 새 판이 옛 파일을 읽는 쪽만 이 변경이 지킨다. 같은 판끼리는 빠진 절을 `empty()` 가 빈 목록으로 채운다.
 - 모듈 docstring :6 에서 「시작 승인」을 뺀다.
 
   더 작은 길로 「절을 남기고 쓰기만 멈춤」(`OPTIONAL_SECTIONS` 에 더하기)도 봤다. 그 길은 옛 행이 있으면 저장할 때마다 다시 써서 읽는 쪽 없는 행이 파일에 남는다. 고른 길은 같은 두 줄 크기에 옛 행까지 걷는다(Rejected Alternatives).
@@ -179,10 +192,11 @@ next_phase: superpowers:writing-plans
   - 4절 단언(:32-44)을 「규모 줄 → 5 로」 순서로 바꾼다. 4절에 `approval` · `approve` · `AskUserQuestion` · `release` 펜스가 없다는 음성 단언을 두고, 양성 짝은 규모 줄 문장과 「지출을 이유로 묻지 않는다」다.
   - 세션 펜스 수 단언(:97 「5개 이상(claim · takeover · approval · approve · release)」)은 남는 펜스 수로 다시 센다.
   - 4절의 옛 PR 캐시 갈래 락은 4절에 그 갈래가 없어지므로 4절 쪽만 걷는다. 3절의 reset 갈래 락(:133-176)은 그대로다.
-- `test_conductor_ledger.py` 의 승인 클래스(:135-205 · :1142-1181)는 걷는다. 대신 둘을 둔다 — 지운 하위 명령이 rc 2 와 모르는 하위 명령 사유를 낸다, claim · takeover · release 가 그대로 돈다.
+- `test_conductor_ledger.py` 의 승인 클래스(:135-205 · :1142-1181)는 걷는다. 대신 셋을 둔다 — 지운 하위 명령이 rc 2 와 모르는 하위 명령 사유를 낸다, claim · takeover · release 가 그대로 돈다, 옛 4칸 PR 줄이면 claim · takeover 가 rc 3 과 다시 채우기 안내를 내고 기계 상태 파일 바이트는 그대로다(읽기만). `test_upgrade_path_claim_then_reset_then_claim`(:1121-1140)은 고치지 않는다.
 - `test_conductor_state.py` 에 둘을 더한다.
   - 옛 꼴(`## 시작 승인` 과 행 하나)을 읽어 오류가 없고 그 절이 빈다. 다시 저장하면 그 머리가 없다.
   - 그 절이 없는 새 꼴을 읽는다.
+  - 머리말 `writer` 가 더 새 판이면 지금처럼 「더 새 판이 썼다」로 멈춘다(기존 단언이 있으면 그것으로 갈음).
 - `test_conductor_e2e.sh` 의 2 단계(:42-47)와 :114 는 「표지 · 규모 공시」로 바꾼다. 「기계 상태를 잃으면 시작 승인을 다시 묻는다」 단언은 걷는다.
 
 ### §4 plugin-audit 지출 동의 · artifact-critique 동의 게이트
@@ -192,23 +206,23 @@ next_phase: superpowers:writing-plans
 - 이름을 「범위 고르기 · 규모 공시」로 바꾼다. (a) 축 고르기 질문은 범위 고르기라 남는다.
 - (a) 의 첫 질문에 「중단」 선택지를 더한다 — 「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」. 지휘자 판단(사용자 결정 아님): (b) 의 「승인」 · 「중단」 질문을 지우면 「여섯 축 전부」를 고르는 사용자에게 멈출 선택지가 없어진다. 범위 질문은 남긴다는 사용자 결정(U1 의 범위)을 지키면서 멈춤 길을 그 질문에 둔다.
 - 규모는 고르기 전에 보인다. 첫 질문의 선택지 설명에 규모를 싣는다 — 「여섯 축 전부」는 감사자 6 · 반박 최대 6 · codex 감사 6회(설치돼 있으면)와 그 반박 1 · 심층검증은 반박을 통과한 심각 · 중요 지적마다 2회(상한 없음), 「축 골라서」는 축마다 감사자 1 · 반박 최대 1 · codex 감사 1회 꼴, 「중단」은 아무것도 띄우지 않고 실행 폴더도 만들지 않는다.
-- (b) 는 질문이 아니라 공시 한 줄이다. 고른 축 수 k 로 지금 질문 본문의 내용을 그대로 싣는다 — 감사자 k · 반박 최대 k · codex 감사 k회와 반박 1 · 심층검증 상한 없음, 축을 뺐으면 「검증 안 됨」 줄, 보안 축을 뺐으면 맨 앞 경고 줄. 「승인」 · 「중단」 질문은 지운다. 고른 뒤 멈추고 싶은 사용자는 끼어들기나 kill switch 로 멈춘다.
+- (b) 는 질문이 아니라 공시 한 줄이다. 고른 축 수 k 로 지금 질문 본문의 내용을 그대로 싣는다 — 감사자 k · 반박 최대 k · codex 감사 k회와 반박 1 · 심층검증 상한 없음, 축을 뺐으면 「검증 안 됨」 줄, 보안 축을 뺐으면 맨 앞 경고 줄. 「승인」 · 「중단」 질문은 지운다. 고른 뒤 멈추고 싶은 사용자는 끼어들어 멈춘다 — 도는 중인 감사를 멈추는 길은 끼어들기 하나다. kill switch(`DEVBREW_PLUGIN_AUDIT_DISABLE=1`)는 다음 진입에서만 듣는다(진입 사전 검사).
 - step 4 의 「승인 직후」는 「공시 직후」로 바꾼다. frontmatter description :7 의 「지출 동의 게이트」도 바꾼다.
 
 **동의 기록 — 고른 길: `approved` 를 요구하지 않는다.**
 
 - skill 은 `consent.json` 에 `{at, fanout, axes}` 를 쓴다 — `at` 은 공시한 때다. 파일 · 키 이름 `consent` 는 그대로 둔다. 이 기록은 사용자가 고른 축(a)과 공시한 규모를 담고, 이름이 바뀌면 옛 실행 폴더의 데이터가 갈라진다.
 - `validate-audit-data.py` 는 `approved` 가 없어도 통과시킨다. 있는데 `True` 가 아니면 오류다 — 거절을 적은 기록이 지나가지 않게.
-- `at` 필수와 `fanout_declared == consent.fanout` 일치는 그대로다. 이것이 「공시한 규모 = 실행한 규모」 를 잰다.
+- `at` 필수와 `fanout_declared == consent.fanout` 일치는 그대로다. 이 검사는 적어 둔 두 값(데이터의 `fanout_declared` 와 동의 기록의 `fanout` — 둘 다 공시 문장)이 같은지만 본다. 실제로 띄운 agent 수를 세지는 않는다 — 「공시한 규모 = 실행한 규모」를 잰다고 말하지 않는다. 고른 축(`axes`)과 Workflow 가 실제로 돈 축(`axes_run`)의 일치는 지금처럼 따로 검사한다.
 - 옛 데이터 · 픽스처(`approved: true`)는 고치지 않아도 계속 통과한다.
 
 **Workflow 근거(:238)** 를 바꾼다 — 「사용자가 `/plugin-audit:plugin-audit` 를 부른 것이 이 Workflow 의 명시 요청이다. 모델은 이 skill 을 부르지 않는다(`disable-model-invocation: true`)」. CLAUDE.md:91 의 규칙은 그대로이고, 근거만 지운 게이트에서 사용자의 호출로 옮긴다.
 
-**함께 고치는 곳.** `prepare-run-dir.py` docstring :2, `audit-workflow.js` 의 주석 :31 · :691(「consent gate」 → 범위 고르기), README :19 · :23-24 · :93, `tests/README.md:14`, CHANGELOG(:153 은 옛 판 기록이라 두고 새 판 항목을 쓴다).
+**함께 고치는 곳.** `tests/test_skill_orchestration.py:132`(`{approved, at, fanout, axes}` 단언 — 아래 락), `prepare-run-dir.py` docstring :2, `audit-workflow.js` 의 주석 :31 · :691(「consent gate」 → 범위 고르기), README :19 · :23-24 · :93, `tests/README.md:14`, CHANGELOG(:153 은 옛 판 기록이라 두고 새 판 항목을 쓴다).
 
 **plugin-audit 락.**
 
-- `test_skill_orchestration.py` — :15 의 `AskUserQuestion` 은 축 고르기 질문으로 남는다. :85 · :92 · :122 의 앵커를 「범위 고르기 · 규모 공시」로 바꾼다. 순서는 축 질문 → 공시 줄 → `prepare-run-dir.py`. 첫 축 질문에 「중단」 선택지와 선택지 설명의 규모 문장이 있다는 양성 단언, 「중단」이면 `prepare-run-dir.py` 앞에서 끝난다는 단언, step 3 (b) 에 「승인」 선택지가 없다는 음성 단언과 공시 문장의 양성 짝을 둔다. 첫 질문의 「중단」을 지우는 변이에 RED 다.
+- `test_skill_orchestration.py` — :15 의 `AskUserQuestion` 은 축 고르기 질문으로 남는다. :130-131 의 「AskUserQuestion`으로 명시 승인」 단언은 걷고, :132 의 `{approved, at, fanout, axes}` 단언은 `{at, fanout, axes}` 로 바꾼다. :85 · :92 · :122 의 앵커를 「범위 고르기 · 규모 공시」로 바꾼다. 순서는 축 질문 → 공시 줄 → `prepare-run-dir.py`. 첫 축 질문에 「중단」 선택지와 선택지 설명의 규모 문장이 있다는 양성 단언, 「중단」이면 `prepare-run-dir.py` 앞에서 끝난다는 단언, step 3 (b) 에 「승인」 선택지가 없다는 음성 단언과 공시 문장의 양성 짝을 둔다. 첫 질문의 「중단」을 지우는 변이에 RED 다.
 - `test_validate_audit_data.py` — `approved` 없는 동의는 통과, `approved: false` 는 오류, 옛 픽스처는 통과. 셋 다 변이로 확인한다.
 
 **artifact-critique E3.**
@@ -217,7 +231,7 @@ next_phase: superpowers:writing-plans
 - 지우는 것: 「cost_class=variable(worst-case high)이라 이 upfront 게이트가 지출-전 명시 승인이다」. 대신 「이 질문은 범위를 고르는 질문이다 — 라운드마다 띄울 수와 상한은 본문에 공시한다」를 쓴다.
 - 「동의 범위 = 실행 범위; consent-integrity」는 「고지 범위 = 실행 범위; disclosure-integrity」로 바꾼다.
 - `test_critiquing_artifacts_skill.sh:43-67` 의 본문 고유 앵커를 새 낱말로 옮긴다. 옛 낱말 · 지출 승인 문장이 없다는 음성 단언을 둔다.
-- qg README :28-32 · :210-211 은 「fan-out 동의 게이트는 없다 — 공시 두 줄」을 이미 말한다. P22 이름만 새 문면에 맞춘다.
+- qg README :28-32 · :210-211 은 「fan-out 동의 게이트는 없다 — 공시 두 줄」을 이미 말한다. P22 이름만 새 문면에 맞춘다. :38 의 「Law 1=E3 upfront 동의 게이트」는 「Law 1=E3 범위 고르기 · 규모 공시」로 바꾼다.
 
 ### §5 흐름 고정 점검 R9 행 다섯
 
@@ -268,7 +282,7 @@ next_phase: superpowers:writing-plans
   - 「브랜치 이름은 위 접두 중 하나로 시작」.
 - rebase 금지 원문은 그대로다(`plugins/project-init/tests/test_branch_strategy_rebase_clause.sh:39-45` 가 사용자 선호로 지킨다).
 - CLAUDE.md:14 를 「`main`에서 `feature/*` · `fix/*`(문서만이면 `docs/*`, 설정 · 잡일이면 `chore/*`)」로 바꾼다.
-- 락: `test_branch_strategy_rebase_clause.sh` 에 단언을 더한다 — 이 레포 문서의 정규식을 훅의 읽기 함수로 읽어 `docs/x` · `chore/x` · `feature/x` 통과, `misc/x` 거부, `derive_prefixes` 가 넷. 변이: `docs` 를 지우면 RED.
+- 락: 훅은 작업 트리가 아니라 `refs/remotes/origin/HEAD:docs/git-workflow/branch-strategy.md` 를 읽는다(`post-tool-use.py:46` · :234). 그래서 테스트는 임시 레포를 만든다 — 이 레포의 새 `branch-strategy.md` 를 담은 커밋을 그 임시 레포의 `refs/remotes/origin/HEAD` 가 가리키게 하고, 그 레포에서 훅의 읽기 함수를 돌린다. `docs/x` · `chore/x` · `feature/x` 통과, `misc/x` 거부, `derive_prefixes` 가 넷. 살아 있는 원격으로는 재지 않는다(네트워크 · 다른 사람의 기본 브랜치에 기대지 않게). 변이: 임시 레포에 넣는 문서에서 `docs` 를 지우면 RED. 테스트 자리는 `test_branch_strategy_rebase_clause.sh` 에 더하거나, 임시 레포 헬퍼가 있는 project-init 훅 테스트(`test_post_tool_use.py`)에 두고 이 레포 문서를 픽스처로 읽는다 — 계획이 고른다(지휘자 판단(사용자 결정 아님)).
 
 ### §6 지금 장치와 어긋난 규칙 문장
 
@@ -276,10 +290,10 @@ next_phase: superpowers:writing-plans
 
 | 자리 | 지금 | 고친 뜻 | 락 |
 |---|---|---|---|
-| CLAUDE.md:24 · 철학 :11 Law 1 | 필수 섹션 구조 게이트가 있다고 읽힌다 | 요구는 그대로 둔다(거절 메커니즘 필수). 지금 무엇이 막는지를 쓴다 — 인터뷰 brief 는 `check_brief.py` 가 구조로 막는다. 설계문서의 필수 섹션은 기계 게이트가 없고 설계문서 리뷰(doc-critic)와 사용자 승인 게이트가 본다(빈틈을 밝힘). spec-distill README:72 와 같은 사실 | governance 테스트에 문장 양성 |
+| CLAUDE.md:24 · 철학 :11 Law 1 | 필수 섹션 구조 게이트가 있다고 읽힌다 | 요구는 그대로 둔다(거절 메커니즘 필수). 지금 무엇이 막는지를 쓴다 — 인터뷰 brief 는 `check_brief.py` 가 구조로 막는다. 설계문서의 필수 섹션은 설계문서 리뷰어의 층 2 항목 「필수 섹션 누락」(이 에픽이 더한다 — 아래)과 사용자 승인 게이트가 본다. 섹션 유무를 기계로 막는 게이트는 여전히 없다(그렇다고 쓴다). spec-distill README:72 도 같은 사실로 고친다 | governance 테스트에 문장 양성 · 프로필 항목 락 |
 | CLAUDE.md:31 | `gh` 를 레포마다 정할 값으로 적음 | `gh` 를 목록에서 뺀다 — 필수 의존이다(R8 U1, `dependencies.md` 강도 멈춤) | — |
 | CLAUDE.md:50 | README prerequisites 만 | 「플러그인이 기대는 도구 · 다른 플러그인은 `dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때)에 적고 판은 `check_deps.py measure` 가 잰다(개발 · 검증할 때 깔려 있던 판). dispatch 하는 다른 플러그인은 README prerequisites 에도」. 굵은 머리 「최소 버전이 선언된 의존성」 유지(shape 앵커 :16) | shape 테스트 GREEN |
-| CLAUDE.md:70 | 세션 · 문서 원장 둘 | 수명 넷 — 세션 단위(성공 시 지움, 실패 시 남김, qg 는 다음 시작 때 지우고 TTL GC) · 문서 단위 리뷰 원장(문서가 사라질 때) · 로드맵 단위 지휘 기계 상태(`machine.md`) · 실행 단위 산출(plugin-audit 실행 폴더, 지우지 않음). 상태 루트는 메인 레포 쪽이고 처음 만들 때 자기 `.gitignore` 를 둔다. 상태 폴더 쓰기는 링크를 따라가지 않는다(`nofollow_write`). 「JSON 이 아니라 마크다운」 · 「Secret 기록 금지」 유지 | — |
+| CLAUDE.md:70 | 세션 · 문서 원장 둘 | 수명 넷 — 세션 단위(성공 시 지움, 실패 시 남김, qg 는 다음 시작 때 지우고 TTL GC) · 문서 단위 리뷰 원장(문서가 사라질 때) · 로드맵 단위 지휘 기계 상태(`machine.md`) · 실행 단위 산출(plugin-audit 실행 폴더, 지우지 않음). 상태 루트는 메인 레포 쪽이고 처음 만들 때 자기 `.gitignore` 를 둔다. 엔진 skill 의 상태 폴더 쓰기는 링크를 따라가지 않는다(`nofollow_write`). 예외 하나를 밝힌다 — plugin-audit 실행 폴더는 넘겨받은 `--repo-root`(기본 cwd) 아래에 링크 검사 없이 만든다(`prepare-run-dir.py` :57 · :69, `os.mkdir`). 이 에픽은 `prepare-run-dir.py` 를 바꾸지 않는다(지휘자 판단(사용자 결정 아님)). 「JSON 이 아니라 마크다운」 · 「Secret 기록 금지」 유지 | — |
 | CLAUDE.md:71 | 훅만 | 굵은 머리 「모든 훅에 kill switch」 유지(shape 앵커 :15) — 「진입 skill 도 같다」를 더한다. `DEVBREW_<PLUGIN>_DISABLE=1` 은 그 플러그인의 훅과 진입 skill 을 끈다(진입 사전 검사). `DEVBREW_SKIP_HOOKS=<plugin>:<이름>` 은 이름 붙은 한 곳만 끈다 — 훅이나 훅이 아닌 이름 붙은 자리(예: `spec-distill:review-entry` · `quality-gates:qg-gc`)이고 진입 skill 자체는 끄지 않는다 | shape 테스트 GREEN |
 | CLAUDE.md:72 | Hooks Installed 규칙 — 유일한 훅의 README 에 절 없음 | 규칙은 그대로, `plugins/project-init/README.md` 에 「Hooks Installed」 절(PostToolUse 하나 · 왜 skill 이 아닌가 한 줄)을 더한다 | — |
 | CLAUDE.md:73 | optional 만 | 「optional 은 downgrade 하고 알린다. 필수 의존(`dependencies.md` 강도 멈춤)은 이유와 설치 방법을 보이고 멈춘다. 훅은 사람에게 말할 자리가 없어 바닥 미만이면 건너뛰고 그 사실을 README Prerequisites 가 공시한다」 | — |
@@ -290,6 +304,16 @@ next_phase: superpowers:writing-plans
 | 철학 P13 :47-48 | hook=집행 레이어 · `plugins/*/hooks/hooks.json` | 훅은 사건에 붙는 관찰 · 알림, 진입 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행, 코드 `plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py` | citations GREEN |
 | docs/plugin-authoring.md:29 | qg 가 `commands/` · `hooks/` 를 shipping | 지금 폴더(`agents/` · `references/` · `scripts/` · `skills/`)와 「writer + reviewer 파이프라인」 | — |
 | shared/README.md:36 | 「15곳」 | 「모든 진입 skill 의 SKILL.md 에 바이트 그대로(대상은 락이 글롭에서 도출)」 — 수를 박지 않는다 | — |
+
+**설계문서 리뷰어 층 2 에 「필수 섹션 누락」 (U9 「리뷰어가 보게 한다 (권장)」, 계획 1).**
+
+- 정본 프로필은 `plugins/spec-distill/references/docreview-profiles/design-doc.md` 다(일반 파일 — shared 사본 없음). `## 층 2 — 상세 완결` 목록에 항목 하나를 더한다.
+  - 키 `required_sections` — 「필수 섹션 누락」. Context/Why · Goals · Non-goals · Constraints · Acceptance Criteria · Files to Modify · Verification Plan · Rejected Alternatives · Metadata 가운데 없는 절이 있거나, 있는데 비어 있고 「해당 없음 — 이유」도 없을 때만 낸다.
+  - 문구는 계획이 다듬되 아홉 섹션 이름과 「해당 없음 — 이유」 출구는 그대로 싣는다(U5 와 맞게).
+- 엔진은 프로필에서 도출한 범주 이름마다 사람말 사상을 요구한다. `shared/docreview/scripts/docreview_state.py` 의 `CATEGORY_GLOSS` 에 `"required_sections": "필수 섹션 누락"` 한 줄을 더한다 — 없으면 `test_docreview_profile_schema.sh` 가 RED 다. 이 파일은 R14 도 예약했다. R14 가 먼저 머지하고 R9 는 사전에 한 줄만 더한다.
+- `shared/tests/test_docreview_profiles.sh:104` 의 「design-doc 층 2 불변」 기대 목록에 `required_sections` 를 더한다.
+- **보안-민감.** 리뷰어 규칙을 조이는 편집이다(CLAUDE.md 「Persona 파일은 보안-민감 코드」 — 프로필은 리뷰어가 읽는 규칙이다). PR 본문에 밝히고 보안 리뷰 대상으로 올린다.
+- 락: 프로필 층 2 목록에 `required_sections` 와 아홉 섹션 이름이 있다는 양성 단언, 그 항목을 지우는 변이에 RED. 사상 락(`test_docreview_profile_schema.sh`)은 사상 줄을 지우는 변이에 RED.
 
 - 고친 앵커를 읽는 락은 도출로 찾는다. 테스트 가운데 `CLAUDE.md` · `devbrew-harness-philosophy` · `plugin-authoring` · `branch-strategy` 를 읽는 파일을 `git grep -l` 로 모으고 모두 돌린다. 문면이 바뀐 앵커마다 같은 PR 에서 락을 고치고 양의 짝을 둔다.
 - R8 :453(의존 · degradation 문장에 gh 필수 · 개발 당시 판 · superpowers 부재 동작)은 :50 · :73 행이 받는다. superpowers 부재 동작은 `dependencies.md` 의 「없을 때」 칸을 가리켜 덮는다.
@@ -324,11 +348,12 @@ next_phase: superpowers:writing-plans
   AC17 이 이 셋의 상한 문장이 남았음을 단언한다.
 - RC62(qg PR 코멘트 상시 동의) — 지출 승인이 아니라 그대로다(P17).
 - RC64(artifact-critique upfront 게이트) — §4. 묶음은 옛 경로 `skills/critiquing-artifacts/` 를 적지만 지금은 `skills/artifact-critique/` 다.
-- K1(멈춤 판정의 주인이 모델로) — 지출 질문이 없어져도 멈출 길은 셋이다. 범위 질문의 「중단」 · 「취소」(plugin-audit 은 첫 축 질문에 「중단」을 새로 두고 규모를 선택지 설명에 보여, 고르기 전에 규모를 보고 멈출 수 있다 — 지휘자 판단(사용자 결정 아님)), 끼어들기, kill switch. epic-conductor 는 범위 질문이 없어 로드맵 고르기 뒤 끼어들기와 kill switch 로 멈춘다.
+- K1(멈춤 판정의 주인이 모델로) — 지출 질문이 없어져도 멈출 길은 셋이다. 범위 질문의 「중단」 · 「취소」(plugin-audit 은 첫 축 질문에 「중단」을 새로 두고 규모를 선택지 설명에 보여, 고르기 전에 규모를 보고 멈출 수 있다 — 지휘자 판단(사용자 결정 아님)), 끼어들기, kill switch. 다만 kill switch 는 다음 진입에서만 듣는다(진입 사전 검사) — 이미 도는 실행을 멈추는 길은 끼어들기 하나다. epic-conductor 는 범위 질문이 없어 로드맵 고르기 뒤에는 끼어들어 멈추고, kill switch 는 다음 부름부터 막는다.
 - K6 · K13(승인 피로 · 도장 찍기) — 지출 질문이 빠져 남은 사용자 결정(spec 승인 · 범위 고르기)이 덜 묻힌다.
 - K7(사용자 자신의 통제 자리가 섞임) — 지출 승인은 사용자가 직접 걷자고 했다(U1). 범위 고르기는 사용자 통제 자리라 남긴다.
 - K8(공유 파일 겹침) — R14 와 겹치는 파일의 주인 · 머지 순서(`## 상류 · 하류 연계`), 판 번호는 머지 직전.
 - K14(봉인된 결정) — CLAUDE.md Sealed decision · P23 은 그대로다.
+- D34 · OQ16 · S32(개선 측정) — 이 설계는 개선을 재는 장치를 만들지 않는다 — 사용자가 쓰면서 판단(S32).
 
 이 설계가 새로 여는 위험:
 
@@ -405,6 +430,7 @@ next_phase: superpowers:writing-plans
 - AC2 quality-pipeline 완료 보고 · artifact-critique 최종 보고 · plugin-audit 종료 보고가 「기본 하나, 여럿이거나 병렬이면 밝힌다」고 지시한다. 테스트 셋이 새 문장을 단언하고 「exactly one」 · 「할 일 하나를 쓴다」 부재를 단언한다. roadmap-status · project-init · epic-conductor 자리는 바뀌지 않는다.
 - AC3 CLAUDE.md Law 1 과 철학 P12 에 중간 단계 문장(기본 설계 → 계획 → 구현 · 이유 · 가벼운 꼴 · 필수 섹션을 짧게 덮음)이 있고, trivia escape 문장은 그대로다. qg AC8c 는 GREEN 이고, 새 단언은 중간 단계 문장 삭제 변이에 RED 다.
 - AC4 CLAUDE.md Law 1 과 철학 Law 1 이 brief 는 `check_brief.py` 가 막고 설계문서 필수 섹션은 기계 게이트 없이 리뷰어 · 승인 게이트가 본다고 쓴다. 단언(양)이 있다.
+- AC4a 설계문서 프로필 `design-doc.md` 의 층 2 에 `required_sections`(「필수 섹션 누락」 — 아홉 섹션 이름 · 「해당 없음 — 이유」 출구)가 있고, `CATEGORY_GLOSS` 에 사상이 있으며, `test_docreview_profiles.sh` 의 층 2 기대 목록이 그것을 담는다. 락이 그 항목을 단언하고, 항목을 지우는 변이 · 사상 줄을 지우는 변이에 각각 RED 다. CLAUDE.md · 철학 Law 1 과 spec-distill README:72 가 「리뷰어 층 2 와 승인 게이트가 보고, 기계 게이트는 없다」를 쓴다. PR 본문이 이 편집을 보안-민감(리뷰어 규칙 조임)으로 밝힌다.
 - AC5 CLAUDE.md:97 · 철학 P10 이 persona 기본 · 락 · 스크립트 · skill 이 더 맞으면 그것 · 이유를 적는다고 쓰고, 그 문장에 「메모리」가 없다(양 · 음). qg README · plugin-audit README · SKILL.md:302 가 같은 뜻이다. persona 파일은 바뀌지 않는다(diff 에 `agents/` 는 relay-checker 하나뿐).
 - AC6 CLAUDE.md:82 · `docs/plugin-authoring.md` 의 skill 강제 문장이 기본 경로 꼴이고, 「진입할 때만 로드」 · 「유일한 것」 이 없다. `/plugin-audit` 짧은 이름이 없다. 호출 표면 락 GREEN.
 - AC7 `branch-strategy.md` 정규식이 넷을 받고, 문면이 §5 행 5 대로다. 훅의 읽기 함수로 읽은 이 레포 정규식이 `docs/x` · `chore/x` · `feature/x` 를 받고 `misc/x` 를 거부하며 `derive_prefixes` 가 넷을 낸다. `docs` 를 지우는 변이에 RED 다. rebase 원문 락 GREEN. CLAUDE.md:14 · :18 이 §5 · §6 대로다.
@@ -415,9 +441,9 @@ next_phase: superpowers:writing-plans
 **계획 2 — 지출 승인을 규모 공시로**
 
 - AC11 CLAUDE.md cost 줄에 §2 의 공시 문장(`cost_class: high` 에 건다) · 「어느 클래스의 skill 도 지출 승인을 묻지 않는다」 · 「상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다」가 있고, 옛 게이트 문장 · 「이름 붙인 예외」 · 「worst-case 가 high 인 `variable`」이 없다. 굵은 머리 「모든 skill에 `cost_class` 선언」 유지(shape GREEN). CLAUDE.md:91 은 바뀌지 않는다(diff).
-- AC12 P22 가 `cost_class: high` · 공시 · 범위 질문을 담고 `<Use_When>` 이 없다. 코드 가리킴이 실재한다(citations GREEN).
+- AC12 CLAUDE.md:51 과 P22 본문이 §2 의 확정 문안과 바이트 같다(락은 문안을 설계에서 읽지 않고 리터럴로 단언). 문안을 바꿨다면 사용자 재승인 원문이 계획 · PR 에 있다. P22 가 `cost_class: high` · 공시 · 범위 질문을 담고 `<Use_When>` 이 없다. 코드 가리킴이 실재한다(citations GREEN).
 - AC13 epic-conductor `### 4. 규모 공시` 가 규모 줄을 보이고 5 로 간다. 그 절에 `approval` · `approve` · `AskUserQuestion` · `release` 펜스와 「승인 전에는 agent 를 보내지 않는다」가 없다. 변이(옛 approval 펜스 재삽입 · 공시 문장 삭제)에 RED 다.
-- AC14 `conductor_ledger.py approval|approve` 는 rc 2 와 모르는 하위 명령 사유를 낸다(rc · 사유 함께 단언). claim · takeover · release 는 그대로 돈다. `conductor_state` 는 `## 시작 승인` 행이 있는 옛 파일을 오류 없이 읽고, 다시 저장하면 그 절 머리가 없다. 새로 만든 파일에는 처음부터 없다. 그 절이 없는 파일도 읽는다. e2e 가 규모 공시로 돈다.
+- AC14 `conductor_ledger.py approval|approve` 는 rc 2 와 모르는 하위 명령 사유를 낸다(rc · 사유 함께 단언). claim · takeover · release 는 그대로 돈다. 옛 4칸 PR 줄이면 claim · takeover 가 rc 3 과 다시 채우기 안내를 내고(기계 상태 바이트는 그대로), `test_upgrade_path_claim_then_reset_then_claim` 이 고치지 않은 채 통과한다. 3절의 표지 풀기 펜스가 3절 안에 있다. `conductor_state` 는 `## 시작 승인` 행이 있는 옛 파일을 오류 없이 읽고, 다시 저장하면 그 절 머리가 없다. 새로 만든 파일에는 처음부터 없다. 그 절이 없는 파일도 읽는다. e2e 가 규모 공시로 돈다.
 - AC15 plugin-audit step 3 의 첫 축 질문에 「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」이 있고, 선택지 설명에 규모가 있으며, 「중단」이면 실행 폴더를 만들지 않고 끝난다. (b) 에 「승인」 질문이 없고 공시 줄 문장이 있다. 순서는 축 질문 → 공시 → `prepare-run-dir.py`. `test_skill_orchestration.py` 가 이를 단언하고, 첫 질문의 「중단」을 지우는 변이에 RED 다. `consent.json` 은 `{at, fanout, axes}`. 검증기는 `approved` 없음 통과 · `approved: false` 오류 · 옛 픽스처 통과다(각 변이). :238 근거 문장이 사용자 호출 · `disable-model-invocation` 을 말한다.
 - AC16 artifact-critique E3 의 두 질문 · 선택지가 그대로이고, 지출 승인 문장 · `consent-integrity` 가 없으며 새 낱말이 있다(양 · 음).
 - AC17 `shared/tests/test_cost_disclosure.sh` 가 두 갈래로 잠근다. (가) 글롭으로 도출한 모든 SKILL.md(수 = `find` 수)에 지출 승인 문구가 없다. pm-interview 의 연장 질문 · 리뷰 엔진 skill 의 추가 라운드 질문은 걸리지 않는다(양성 대조). (나) epic-conductor · plugin-audit · artifact-critique 에 공시 줄 문장이 있다. 지휘자 · plugin-audit · artifact-critique 의 루프 상한 · kill switch 문장이 남았는지도 단언한다(RC14). 변이 — 아무 SKILL.md 하나(게이트가 없던 variable skill 포함)에 「지출 동의 게이트」 재삽입, 세 skill 중 하나의 공시 문장 삭제, 임시 사본에 지출 승인 문구를 가진 새 SKILL.md 하나 추가 — 셋 다 RED.
@@ -443,6 +469,7 @@ next_phase: superpowers:writing-plans
   - `plugins/plugin-audit/skills/plugin-audit/SKILL.md` · `plugins/project-init/skills/project-init/SKILL.md`
   - `plugins/quality-gates/skills/{artifact-critique,quality-pipeline}/SKILL.md`
   - `plugins/spec-distill/skills/{epic-conductor,pm-interview,request-framing,reviewing-brief,roadmap-status,spec-review}/SKILL.md`
+- 리뷰어 프로필(보안-민감): `plugins/spec-distill/references/docreview-profiles/design-doc.md` — 예약 밖(아래)
 - 테스트 · 문서: `plugins/plugin-audit/tests/test_plain_audit_text.py` · `plugins/quality-gates/tests/test_plain_qg_templates.sh` · `plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `plugins/project-init/README.md` · `plugins/project-init/tests/test_branch_strategy_rebase_clause.sh` · `plugins/quality-gates/README.md` · `plugins/plugin-audit/README.md`
 - 옮김 규칙: `plugins/spec-distill/references/conductor-dispatch.md` · `plugins/spec-distill/agents/relay-checker.md` · `plugins/spec-distill/tests/test_conductor_dispatch_reference.sh` · `plugins/spec-distill/tests/test_epic_conductor_skill.sh`
 
@@ -459,6 +486,7 @@ next_phase: superpowers:writing-plans
 
 **예약 밖**
 
+- 계획 1 — 리뷰어 층 2 「필수 섹션 누락」(U9): `plugins/spec-distill/references/docreview-profiles/design-doc.md`(R2 · R3 · R12 가 예약했던 파일 — 모두 머지됨) · `shared/docreview/scripts/docreview_state.py`(`CATEGORY_GLOSS` 한 줄 — R14 예약, R14 가 먼저 머지) · `shared/tests/test_docreview_profiles.sh` · `shared/tests/test_docreview_profile_schema.sh`(필요할 때) · `plugins/spec-distill/README.md:72`(R14 예약 — 한 줄). 지휘자가 R9 경로 예약에 더할지 정한다.
 - `plugins/spec-distill/tests/test_reviewing_brief_skill.sh:73` — 실패 메시지 「high 는 지출 승인 게이트를 요구한다(CLAUDE.md)」 를 새 규칙에 맞춘다(계획 2). 락 지도(`locks.md`)가 이 파일을 R13 행으로 적어, 예약하면 `test_roadmap_status.sh` 의 락 지도 단언이 깨진다. 그래서 예약하지 않고 경로 예약 정보 줄 하나를 받아들인다.
 - `plugins/spec-distill/references/conducting.md:13` — 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」를 뺀다(계획 2, 예약 밖 편집). R14 가 예약한 파일이지만 R14 가 먼저 머지하고 그 문장은 건드리지 않는다(지휘자 판단(사용자 결정 아님)). 경로 예약 정보 줄 하나를 받아들인다.
 - 네 플러그인의 `.claude-plugin/plugin.json` · `CHANGELOG.md` — 판 번호는 머지 직전.
@@ -532,6 +560,20 @@ next_phase: superpowers:writing-plans
   - `references/conducting.md:13` 의 낡은 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」는 R9 계획 2 가 예약 밖 편집으로 고친다(`test_reviewing_brief_skill.sh` 와 같은 꼴). R14 가 먼저 머지하고 그 문장은 건드리지 않는다.
   - 비용 규칙은 `cost_class: high` 에 건다. D18 의 문장 「상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다」를 규칙 문장에 넣어 pm-interview 의 연장 질문 · 리뷰 엔진의 추가 라운드 질문과 맞춘다. `variable` 은 지출 승인을 묻지 않는다는 규칙만 받는다. 락은 둘 — (가) 글롭으로 도출한 모든 SKILL.md 의 지출 승인 문구 부재, (나) 게이트가 있던 세 skill 의 공시 줄 양성. 「worst-case 가 high 인 variable」 문구는 지운다(§2 · AC11 · AC17).
   - R5 설계 :642 문장에 대해 R14 는 할 일이 없다 — R9 계획 2 가 approval 갈래를 지운다(`## 상류 · 하류 연계`).
+- D1.1 · r1 · adopt · 44504bc0#r1.1 · "리뷰어가 보게 한다 (권장)" — Law 1 행은 「필수 섹션을 막는 구조 게이트가 있어야 한다」는 요구를 그대로 두면서, 설계문서의 필수 섹션은 doc-critic 리뷰가 본다고 새로 씁니다. 그런데 doc-critic 의 검토 항목에는 필수 섹션이 빠졌는지 보는 항목이 없습니다. 기계로 막지 않는 것을 막는다고 쓰지 않겠다는 목표와 어긋납니다.
+- D1.2 · r1 · adopt · 50623beb#r1.1 · "설계에 확정 문안을 싣는다 (권장)" — 묶음은 P22 개정 문안을 사용자 승인 대상으로 적었습니다. 그런데 설계는 CLAUDE.md 비용 줄의 글자를 계획에 넘기고 P22 는 뜻만 항목으로 적어서, 사용자가 실제 문안을 승인하는 자리가 없습니다.
+- U8 · 결정 · 2026-10-23 · 사용자 — 「설계에 확정 문안을 싣는다 (권장)」 (spec 리뷰 1라운드 D1.2 — CLAUDE.md:51 과 P22 본문 전체의 확정 문안을 §2 에 펜스로 싣고 계획은 글자 그대로 옮긴다. 낱말을 바꿔야 하면 계획이 바꾼 문안을 사용자에게 다시 보여 승인받는다)
+- U9 · 결정 · 2026-10-23 · 사용자 — 「리뷰어가 보게 한다 (권장)」 (spec 리뷰 1라운드 D1.1 — 설계문서 리뷰 프로필 층 2 에 「필수 섹션 누락」을 더하고, §6 Law 1 행은 리뷰어 층 2 와 승인 게이트가 보고 기계 게이트는 없다고 쓴다. 리뷰어 규칙 조임이라 보안-민감)
+- 지휘자 판단(사용자 결정 아님) · 2026-10-23 · spec 리뷰 1라운드 뒤:
+  - §3 — `_drop_approval` 은 지우되 claim(새로 잡을 때) · takeover 는 기계 상태를 읽기만 해 검사한다. 옛 4칸 PR 줄 · 깨진 상태는 지금처럼 rc 3 과 다시 채우기 안내로 드러난다. `test_upgrade_path_claim_then_reset_then_claim` 은 그대로 둔다(AC14).
+  - §3 — 옛 플러그인은 새 기계 상태를 읽지 못한다(`_check_writer` 의 「더 새 판이 썼다」). 반대로 적은 문장을 고쳤다.
+  - §3 — 3절 :115 가 가리키던 「4 끝의 표지 풀기 펜스」를 3절 안의 `release` 펜스로 옮긴다.
+  - §4 — `validate-audit-data` 는 적어 둔 두 공시 문자열이 같은지만 본다. 「공시 규모 = 실행 규모」라고 말하지 않는다.
+  - §4 — `test_skill_orchestration.py:132` 와 qg README:38 을 바꿀 목록에 더했다.
+  - §6 — plugin-audit 실행 폴더는 넘겨받은 repo-root 아래에 링크 검사 없이 만든다. state 문장에 예외로 밝히고 `prepare-run-dir.py` 는 이 에픽에서 바꾸지 않는다.
+  - §5 행 5 — 훅이 `refs/remotes/origin/HEAD` 판을 읽으므로 테스트는 그 ref 가 새 정규식 커밋을 가리키는 임시 레포로 한다. 살아 있는 원격으로는 재지 않는다.
+  - §8 K1 · §4 — kill switch 는 다음 진입에서만 듣는다. 도는 실행을 멈추는 길은 끼어들기 하나다.
+  - 번호 대조 D34 · OQ16 · S32 의 이유 칸을 사실 문장으로 바꿨다(Anti-goals 는 고치지 않음).
 
 ## 번호 대조
 
@@ -545,8 +587,8 @@ next_phase: superpowers:writing-plans
 | D18 | 반영 | §2 · §3 · §4 — 지출로만 작동하는 게이트는 제거, 상한 · 심층검증 수는 공시 |
 | D21 | 반영 | §8 — RC12 · RC13 · RC14 · RC62 · RC64 · RC84 와 K1 · K6 · K7 · K8 · K13 · K14 에 답함, 새 위험 넷 |
 | D26 | 반영 | Constraints — devbrew 쪽만 바꿈 |
-| D34 | 반영 | Anti-goals · Non-goals — 개선을 재는 새 장치 없음, 사용자가 쓰면서 판단 |
-| OQ16 | 반영 | 해결(S32) 그대로 — 측정 장치를 두지 않음(Anti-goals) |
+| D34 | 반영 | §8 — 이 설계는 개선을 재는 장치를 만들지 않는다 — 사용자가 쓰면서 판단(S32) |
+| OQ16 | 반영 | §8 — 이 설계는 개선을 재는 장치를 만들지 않는다 — 사용자가 쓰면서 판단(S32) |
 | OQ26 | 반영 | 해결(S44) 그대로 — §5 행 3 이 교훈을 장치 편집으로만 남김 |
 | OQ35 | 반영 | §2 — U1 로 해결, 문안은 §2 |
 | RC12 | 반영 | §2 · §8 — CLAUDE.md:51 개정 |
@@ -561,7 +603,7 @@ next_phase: superpowers:writing-plans
 | S17 | 반영 | Constraints · Non-goals |
 | S18 | 반영 | Constraints |
 | S30 | 반영 | `## 있는 것 검토` · Anti-goals |
-| S32 | 반영 | Anti-goals — 측정 장치 없음 |
+| S32 | 반영 | §8 — 이 설계는 개선을 재는 장치를 만들지 않는다 — 사용자가 쓰면서 판단(S32) |
 | S34 | 반영 | Constraints · Non-goals |
 | S44 | 반영 | §5 행 3 — 교훈을 따로 다루지 않음 |
 | S49 | 반영 | §1 — 묶음 범위와 넓힌 범위를 줄이지 않고 받은 넘김을 모두 실음 |
