@@ -248,7 +248,7 @@ next_phase: superpowers:writing-plans
 
 - 계획 하나, 브랜치 `feature/r8-device-leftovers`. 항목 대부분이 다른 파일을 고친다. 순서는 계획이 정하되 §4(단언 → 골든 예약)는 붙어 간다.
 - **꼼꼼한 조사는 설계 때 했다(U6 · U7 — §10).** 계획의 첫 Task 는 가벼운 재확인이다 — 이 설계를 쓴 커밋(origin/main ad7efbb6) 뒤 기본 브랜치에 들어온 변경이 §10 표의 자리를 바꿨는지, 받는 곳이 R14 인 행이 새로 생겼는지만 본다. 바뀐 것은 계획에 적고, 설계에 없던 결정이면 지휘 세션에 보고한다.
-- **병렬(U6).** R14 는 R9(`feature/rules-docs-cleanup`)와 병렬로 간다. R9 는 규칙 문서와 함께 cost_class high skill 의 승인 게이트를 고치므로 지휘 절차 파일 일부가 겹칠 수 있다(`## 상류 · 하류 연계`의 겹침 줄) — 같은 문단은 아니다. 통합은 그대로 한다 — 나중에 머지되는 에픽이 기본 브랜치를 merge 하고 스위트 대조와 통합 리뷰를 다시 돈다. 회귀가 병렬 진행 탓으로 생기지 않는지 그 두 번째 대조가 본다.
+- **병렬(U6).** R14 는 R9(`feature/rules-docs-cleanup`)와 병렬로 간다. R9 는 규칙 문서와 함께 cost_class high skill 의 승인 게이트를 고치므로 지휘 절차 파일 일부가 겹칠 수 있다(`## 상류 · 하류 연계`의 겹침 줄) — 같은 문단은 아니다. 통합은 그대로 한다 — R14 가 먼저 머지하고, R9 가 기본 브랜치를 merge 한 뒤 스위트 대조와 통합 리뷰를 다시 돈다(지휘자 판정). 회귀가 병렬 진행 탓으로 생기지 않는지 그 두 번째 대조가 본다.
 
 ### §10 조사 — 빠진 항목 · 지금 코드 재확인
 
@@ -321,10 +321,20 @@ next_phase: superpowers:writing-plans
   - 해결자 값 — 모든 spec-distill 스크립트 · skill 펜스 · 상태줄
   - 리뷰 렌더 셋째 줄 — spec-distill 진입 skill 셋 · quality-gates 문서 비평
   - 이음매 담당은 이 에픽이다.
-- 경로 겹침:
+- 경로 겹침(R9 · 지휘자 판정 2026-10-23):
   - R9 는 사용자 결정 「모든 high skill 을 규모 공시만으로 (권장)」 · 「R9 가 규칙과 skill 을 함께 (권장)」(2026-10-23)에 따라 cost_class high skill 의 승인 게이트를 지우고 그 락을 고친다. R14 는 승인 게이트를 건드리지 않는다.
-  - R14 가 고치는 파일 가운데 그 일과 같은 파일일 수 있는 것은 `SD/references/conducting.md`(R14: 걸음 4 · 손 절차 5 의 PR 번호 · 「레포 설정」 문장 / R9: 시작 승인 문장 — `ledger approval` · `approve` 자리) · `SD/tests/test_conducting_reference.sh`(R14: PR 순서 락 / R9: 승인 문장 락) · `SD/scripts/conductor_ledger.py`(R14: `pr-record` · `c_add` / R9 가 `approval` · `approve` 명령을 고칠 때만)다. `epic-conductor/SKILL.md` 와 `test_epic_conductor_skill.sh` 는 R14 가 고치지 않는다(§7 의 지휘자 3단계 락은 안 고침).
-  - 문단이 달라 기계적 충돌은 작을 것이다. 나중에 머지되는 쪽이 기본 브랜치를 merge 하고 스위트 대조와 통합 리뷰를 다시 돈다(§9).
+  - 머지 순서: R14 가 먼저 머지한다. R9 가 그 뒤 기본 브랜치를 merge 하고 스위트 대조와 통합 리뷰를 다시 돈다.
+  - 주인(지휘자 판정): R14 는 PR 번호 기록과 그것에 드는 `conductor_ledger.py` · epic-conductor SKILL 문장을 맡는다. R9 는 high skill 승인 게이트 제거(epic-conductor `### 4` · `conductor_ledger` 의 `approval` · `approve` · plugin-audit · artifact-critique), 쉬운 말 블록의 사본들, 규칙 문장을 맡는다. R14 는 쉬운 말 블록과 그 사본을 고치지 않는다.
+
+  | 파일 | R14 가 고치는 것 | R9 가 고치는 것 |
+  |---|---|---|
+  | `SD/scripts/conductor_ledger.py` | `pr-record` 명령 · `pr-refresh` 의 번호 줄 · `c_add` 의 레포 설정 거부 · `c_roadmaps` 검사 불가 사유 | `approval` · `approve`(승인 게이트 제거) |
+  | `SD/tests/test_epic_conductor_skill.sh` | 고치지 않는다(§7 지휘자 3단계 락은 안 고침, PR 번호 문장은 conducting.md 에 둔다) | 승인 게이트 락 |
+  | `SD/README.md` | `## 한계` 첫 줄(§3)과 상태 계산 줄의 번호 판정 공시(§2)만 | 쉬운 말 블록 사본 · 규칙에 닿는 문장 |
+  | `SD/skills/spec-review/SKILL.md` · `SD/skills/request-framing/SKILL.md` | 고치지 않는다(§5 (2) 는 해결자에서 막고, §7 의 상태 블록 stderr 는 안 고침) — R14 예약에는 남아 있다 | 쉬운 말 블록 사본 |
+  | `SD/references/conducting.md` · `SD/tests/test_conducting_reference.sh` | 걸음 4 · 손 절차 5 의 PR 번호 · 「레포 설정」 문장과 그 순서 락 | 시작 승인 문장과 그 락 |
+
+  - epic-conductor SKILL 에 PR 번호 문장이 필요해지면 R14 가 쓰되 `### 4`(승인 게이트) 밖에 둔다. 문단이 달라 기계적 충돌은 작을 것이다.
 - R12 예약(골든 폴더 · `test_conducting_reference.sh` 등)은 R12 가 머지돼 의존 순서 안이다.
 
 ## Acceptance Criteria
@@ -422,6 +432,7 @@ next_phase: superpowers:writing-plans
 - R9 결정(이 에픽에 닿는 범위) · 2026-10-23 · 사용자 — 「모든 high skill 을 규모 공시만으로 (권장)」 · 「R9 가 규칙과 skill 을 함께 (권장)」 (R9 가 cost_class high skill 의 승인 게이트를 지운다 — R14 는 게이트를 건드리지 않고 겹침을 `## 상류 · 하류 연계` 에 적는다)
 - 원칙 · 2026-10-20 · 사용자 — 「너무 과한 장치와 제약(과설계)만 경계해 devbrew원칙이야」 (R8 U5 — 이 에픽의 지배 원칙, §7 기준)
 - 지휘자 판단(사용자 결정 아님) · 2026-10-23:
+  - R9 와의 통합: R14 가 먼저 머지 · R9 가 merge 뒤 대조와 통합 리뷰. 겹치는 파일의 주인은 `## 상류 · 하류 연계` 표 — R14 는 PR 번호 기록(필요한 `conductor_ledger.py` · epic-conductor SKILL 문장 포함), R9 는 high skill 승인 게이트 제거 · 쉬운 말 블록 사본 · 규칙 문장. R14 는 쉬운 말 블록을 고치지 않고 README 는 `## 한계` 와 상태 계산 줄만 고친다.
   - 골든 예약 충돌은 실데이터 락 지도 단언이 머지된 에픽의 예약 · 줄을 다른 에픽 소유로 세지 않게 고치고, 그 뒤 골든 폴더를 R14 에 예약한다(§4).
   - 5 · 6 · 7 · 10 은 사람을 헷갈리게 하거나 실제 결함을 통과시키는 것만 고치고 나머지는 안 고친다. 7 은 행동 층이 덮으면 안 고침이 기본이다(§7).
   - (1) 콜론 없는 머리말 줄은 엄격 오류 · (2) 폴더 값의 글롭 · pathspec 특수 글자는 거부 · (3) `ledger add --section "레포 설정"` 의 같은 키는 쓰는 자리에서 거부(§5).
