@@ -233,6 +233,57 @@ assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 
 ---
 
+### Task 7b: 계획 1 에서 넘어온 작은 고침 셋 (설계 `## 미룸` 의 R9 받는 곳 행 셋을 닫는다)
+
+**Files — 아래 중 `test_plain_language_block.sh` 만 로드맵 R9 경로 예약 안이다. 나머지는 예약 밖(`roadmap.md` R9 블록에 없음)이라 경로 예약 정보 줄을 받아들인다:**
+- Modify: `plugins/quality-gates/dependencies.md` · `shared/tests/test_check_deps.sh`(둘 다 예약 밖 — R14 가 예약한 `shared/deps/check_deps.py` 는 건드리지 않는다)
+- Modify: `plugins/project-init/templates/github-flow/branch-strategy.md`(:70) · `plugins/project-init/templates/git-flow/branch-strategy.md`(:103) · `plugins/project-init/templates/trunk-based/branch-strategy.md`(:74) · `plugins/project-init/tests/test_branch_prefix_templates.py` · `plugins/project-init/.claude-plugin/plugin.json` · `plugins/project-init/CHANGELOG.md`
+- Modify: `plugins/spec-distill/references/redecompose.md`(:129) · `shared/tests/test_plain_language_block.sh`(R9 예약)
+- 판: project-init patch(`plugin.json` · CHANGELOG `Fixed`). quality-gates 는 Task 7 의 patch 에 `Changed` 한 줄을 더한다(`dependencies.md` 에 외부 플러그인 행). spec-distill 은 Task 7 의 minor 에 `Changed` 한 줄(redecompose 끝 문장).
+- 장치 변경 없음: `check_deps.py` 를 고치지 않는다 — 아래 (i) 는 그 스크립트가 이미 받는 꼴만 쓴다.
+
+**(i) qg `dependencies.md` 에 `pr-review-toolkit` 행** — 설계 `## 미룸` 「qg `dependencies.md` 에 `pr-review-toolkit` 행」을 닫는다.
+
+`check_deps.py` 가 이미 하는 일(읽고 확인했다): `read_table`/`_parse` 는 머리 다섯 칸·행마다 다섯 칸·이름 중복 없음·강도가 `멈춤` · `알림` · `기록` 중 하나일 때만 받고, 최소 판 · 잰 날짜 칸의 값은 보지 않는다. `measure` 는 `_measure_row` 가 모르는 이름이면 「이 이름을 재는 방법이 없다」로 그 행을 못 잰 행에 넣어 그대로 두고 알리며 rc 0 이다. `entry` 는 `--need` 로 부른 이름의 행만 읽는다 — `--need` 에 `pr-review-toolkit` 을 적으면 최소 판 칸이 판이 아니라 `DepsError` 로 멈추므로 어느 SKILL 도 그 이름을 `--need` 에 적지 않는다.
+
+- [ ] **Step 1: 실패하는 단언.** `shared/tests/test_check_deps.sh` 의 `expected_names` 에서 `quality-gates)` 를 `echo "python git gh claude-code pr-review-toolkit"` 로. 같은 파일 §2 의 「모든 행의 최소 판 · 잰 날짜가 채워져 있다」 검사(파이썬 한 줄 — `all(version_triple(min_version) and len(measured_on) == 10 …)`)는 외부 플러그인 행에서 깨지므로, 판을 재지 못하는 행을 이름이 아니라 **강도 `기록` 이면서 `_measure_row` 가 재지 못하는 이름**(`check_deps._measure_row(name, ".", None)[0] is None`)으로 도출해 그 행만 건너뛴다 — 건너뛴 이름 목록을 한 줄 더 내고 `quality-gates` 에서 정확히 `pr-review-toolkit` 하나임을 `assert_eq` 한다(양성 대조: 목록이 비면 건너뛰기가 공허하다). 새 단언 둘: `qg: pr-review-toolkit 행은 강도 기록이고 없을 때 칸이 외부 플러그인이라 재지 못한다고 말한다`(`read_table` 로 그 행의 `strength == "기록"` · `when_missing` 에 `외부 플러그인` · `재지 못한다`), `qg: entry --need python,git,gh,claude-code 는 새 행과 상관없이 통과한다`(이 레포의 `scripts/check_deps.py entry --plugin-root plugins/quality-gates --need python,git,gh` rc 0 — 지금 환경 판이 최소 판 이상일 때).
+- [ ] **Step 2:** `bash shared/tests/test_check_deps.sh` RED(행 이름 불일치).
+- [ ] **Step 3: 행.** `plugins/quality-gates/dependencies.md` 표 끝(`claude-code` 행 뒤)에 정확히 이 줄을 더한다:
+
+```
+| pr-review-toolkit | — | — | 기록 | 외부 플러그인이라 판을 재지 못한다 — 없으면 이 리뷰어를 건너뛰고 나머지로 진행한다(README Prerequisites 의 optional 의존) |
+```
+
+  머리 안내문(「판 칸은 … measure 가 쓴다」 문단)은 그대로 둔다 — `measure` 가 이 행을 「못 쟀다」로 알리고 그대로 두는 것이 정상 동작이다.
+- [ ] **Step 4:** `bash shared/tests/test_check_deps.sh` GREEN · `python3 plugins/quality-gates/scripts/check_deps.py entry --plugin-root plugins/quality-gates --need python,git,gh` rc 0 · `python3 plugins/quality-gates/scripts/check_deps.py measure --plugin-root plugins/quality-gates --today 2026-01-01` 은 **실제 파일을 고치므로** 복사본으로 돌린다(`cp -R plugins/quality-gates "$TMPDIR/qg-copy"` 뒤 `--plugin-root "$TMPDIR/qg-copy"`): 출력에 `pr-review-toolkit 못 쟀다` 가 있고 rc 0, 복사본에서 그 행이 바이트 그대로다.
+- [ ] **Step 5: 커밋** — `fix(qg): 의존 표에 외부 플러그인 pr-review-toolkit 행을 기록으로 더한다`.
+- [ ] **Step 6: 변이.** 행의 강도 `기록` → `멈춤`(형태 변경) → 새 강도 단언 RED. 행 삭제 → 이름 단언 RED. `외부 플러그인` 삭제 → 없을 때 단언 RED. 건너뛰기 도출을 이름 하드코딩 없이 `기록` 만 보게 바꿈(`claude-code` 도 건너뜀) → 건너뛴 목록 `assert_eq` RED(양성 대조).
+
+**(ii) project-init 템플릿 셋의 낡은 훅 문장** — 설계 `## 미룸` 「project-init 템플릿 셋의 훅 문장」을 닫는다. 사실: 훅은 `Bash|EnterWorktree` 뒤 브랜치 reflog 의 만들기 · 이름 바꾸기 · 복사를 60초 안에 잡으므로 `git worktree add -b` 도 확인한다(`plugins/project-init/README.md` 「설치된 Hook」 `PostToolUse` 항목 · `plugins/project-init/hooks/post-tool-use.py` `_last_reflog_line`). 계획 시작 전에 이 사실을 `git grep -n 'reflog' plugins/project-init/hooks/post-tool-use.py plugins/project-init/README.md` 로 다시 확인하고 다르면 멈춘다.
+
+- [ ] **Step 7: 실패하는 단언.** `plugins/project-init/tests/test_branch_prefix_templates.py::test_worktree_path_same_rule` 의 needle 목록에서 `"확인하지 않는다"` 를 빼고, 루프 뒤에 추가한다: `self.assertIn("reflog", sec, s)` · `self.assertIn("`git worktree add -b` 로 만든 이름을 모두 확인한다", sec, s)`(양) · `self.assertNotIn("확인하지 않는다", sec, s)` · `self.assertNotIn("만 확인한다", sec, s)`(음). 양성 짝: 위 두 양의 단언이 세 전략 모두에서 GREEN 인 것이 음의 단언이 공허하지 않다는 증거다.
+- [ ] **Step 8:** `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest plugins/project-init/tests/test_branch_prefix_templates.py` RED.
+- [ ] **Step 9: 문면.** 세 파일의 마지막 문장만 바꾼다(앞 문장은 그대로):
+  - `github-flow` :70 — `project-init 훅은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.` → `project-init 훅은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 모두 확인한다.`
+  - `git-flow` :103 — 같은 문장(앞머리 `project-init 훅은` 그대로).
+  - `trunk-based` :74 — `훅(project-init)은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.` → `훅(project-init)은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 모두 확인한다.`
+  `git grep -n '만 확인한다' -- plugins/project-init/templates` 가 빈다. 템플릿 문장은 사용자 레포로 복사되는 문서라 출처 · 날짜를 넣지 않는다.
+- [ ] **Step 10:** 위 단위 테스트 GREEN · `git grep -l 'branch-strategy.md' -- plugins/project-init/tests` 의 테스트(`test_branch_strategy_rebase_clause.sh` 포함) GREEN. `plugin.json` patch · CHANGELOG `Fixed` — 템플릿 훅 문장을 지금 훅(reflog 로 `worktree add -b` 도 확인)에 맞췄다.
+- [ ] **Step 11: 커밋** — `fix(project-init): 브랜치 전략 템플릿의 훅 문장을 worktree add -b 도 확인하는 지금 훅에 맞춘다`.
+- [ ] **Step 12: 변이.** 한 템플릿(trunk-based)에 옛 문장 되살림 → `assertNotIn` RED. `reflog` 삭제 → 양 단언 RED. `모두` 삭제 → 양 단언 RED. 세 전략 중 하나의 절을 비움 → 그 전략 이름이 든 메시지로 RED(`s` 가 메시지에 있다).
+
+**(iii) redecompose 끝 문장** — 설계 `## 미룸` 「`redecompose.md` 의 『다음 할 일 하나만 말하고』」를 닫는다.
+
+- [ ] **Step 13: 실패하는 단언.** `shared/tests/test_plain_language_block.sh` 의 :45 아래에 추가: `assert_file_grep "$ROOT/plugins/spec-distill/references/redecompose.md" '다음 할 일을 말하고\(기본 하나 — 여럿이거나 병렬이면 밝힌다\) 턴을 끝낸다' "R9: redecompose 성공 줄이 새 꼬리를 쓴다(양)"`, 그리고 옛 문장 없음 — `RD_OLD="$(grep -cF -- '다음 할 일 하나만 말하고' "$ROOT/plugins/spec-distill/references/redecompose.md" || true)"; assert_eq "$RD_OLD" "0" "R9: redecompose 에 옛 꼬리가 없다(음)"`. 현재 문장 위치(`redecompose.md:129` — `git grep -n '다음 할 일 하나만 말하고' -- plugins shared tools` 로 이 줄뿐임을 확인했다).
+- [ ] **Step 14:** `bash shared/tests/test_plain_language_block.sh` RED.
+- [ ] **Step 15: 문면.** `plugins/spec-distill/references/redecompose.md:129` 끝의 `다음 할 일 하나만 말하고 턴을 끝낸다.` → `다음 할 일을 말하고(기본 하나 — 여럿이거나 병렬이면 밝힌다) 턴을 끝낸다.` 줄의 앞부분은 그대로. spec-distill README/CHANGELOG 는 Task 7 의 `Changed` 한 줄에 합친다.
+- [ ] **Step 16:** `bash shared/tests/test_plain_language_block.sh` GREEN · `git grep -n -F '다음 할 일 하나만' -- plugins shared tools` 가 빈다.
+- [ ] **Step 17: 커밋** — `docs(spec-distill): redecompose 성공 줄의 끝 할 일을 기본 하나로 맞춘다`.
+- [ ] **Step 18: 변이.** 옛 문장 되살림 → 음 단언 RED. `(기본 하나 — …)` 괄호 삭제 → 양 단언 RED. `여럿이거나` → `여럿이면`(형태 변경) → 양 단언 RED.
+- [ ] **Step 19:** 설계 `## 미룸` 표의 R9 받는 곳 행 셋(`pr-review-toolkit` 행 · 템플릿 훅 문장 행 · redecompose 행)에 `끝냄 — <커밋 해시>` 를 더한다(Task 8 Step 4 와 같은 표). 그 행들의 받는 곳은 `R9` 로 이미 올라 있다.
+
+---
+
 ### Task 8: 합치기 · 전체 대조 · 마지막 리뷰 · 미룸 (AC19 · AC21 · AC11~AC18 확인)
 
 - [ ] **Step 1:** `git fetch origin && git merge --no-edit origin/main`(앞서 있으면). 합친 사본에서 Task 1~6 의 테스트를 다시 돌린다. 겹친 파일(`conductor_ledger.py` · `test_epic_conductor_skill.sh` · spec-distill README)에서 R14 가 넣은 줄이 남았는지 `git diff origin/main -- <파일>` 로 확인해 PR 본문에 적는다(AC21).

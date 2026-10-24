@@ -658,13 +658,13 @@ next_phase: superpowers:writing-plans
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| qg `dependencies.md` 에 `pr-review-toolkit` 행 — qg 가 그 agent 를 dispatch 하는데 의존 표에 없다 | 판 칸은 `check_deps.py measure` 만 쓰는데 외부 플러그인 판을 재는 길이 없다 — 새 측정 길은 장치 변경이고 `shared/deps/check_deps.py` 는 R14 가 예약했다. 지휘자가 R14 범위에 싣거나 다른 받는 곳을 사용자에게 묻는다 | R14 |
-| 로드맵 R9 경로 예약에 예약 밖 여섯 파일 · R9 순서 이유 칸 · `test_roadmap_status.sh` 겹침 단언(계획 1 Task 10) | `roadmap_write.py update` 가 지휘자 기계 상태의 옛 4칸 PR 캐시 줄 때문에 멈추고(머지 여부를 알 수 없다), 지휘자가 정한 우회(ad7efbb6 스크립트를 `git archive` 로 풀어 쓰기)는 권한 분류기가 막았다. 그 단언이 RED 라 AC21 「새 실패 0」 이 아직 아니다 | 지휘자 · 사용자(허가) |
-| project-init 템플릿 `templates/github-flow/branch-strategy.md` 의 훅 문장 「`git checkout -b` · `git switch -c` 로 만든 이름만 확인한다」 | 지금 훅은 reflog 로 `worktree add -b` 도 잡는다 — 이 레포 문서에는 옮기지 않았다(계획 1 설계와 다른 점) | 지휘자 |
-| `shared/tests/test_invocation_surface.sh` manifest 세 단언과 `test_epic_conductor_skill.sh` 의 공유 락 단언 RED | claude CLI 2.1.309 의 `plugin validate --strict --json` 이 모르는 최상위 키 `directory` 를 낸다 — 이 브랜치와 무관한 환경 변화 | 지휘자(공유 락 주인) |
-| `plugins/spec-distill/references/redecompose.md` 의 「다음 할 일 하나만 말하고」 | 예약 밖 — 규칙으로 하나를 고르는 자리인지(roadmap-status 와 같은 꼴) 정하지 않았다 | 지휘자 |
-| 락 강화 후보(계획 1 리뷰 후속): P13 새 문장 양성 단언 · CLAUDE.md :70 의 spec-distill 상태 루트 · `nofollow_write` 사실 단언 · :103 목차 줄을 굵은 머리로 자르기 · 설계문서 프로필 `required_sections` 의 「때만 낸다」 잠금 · relay-checker 「어긋남이다」 뒤 부정 덧붙임 · AC5 「같은 뜻」 셋을 Law 3 줄로 좁히기 · AC4 부재 리터럴 · branch 양성 대조에 chore/x | 부분 문자열 락의 빈틈 — 막을 수준은 아니라고 마지막 리뷰가 분류했다 | 지휘자 |
-| 문면 후속(계획 1 리뷰 후속): `required_sections` 처분 `fix` 와 처분 안내의 `decide` 사이 · branch-strategy 「STOP, 브랜치 먼저 생성」 줄의 worktree 가리킴 · 계획 2 Task 1 · 2 메모 위치 · 혼자인 「검사 불가」 로드맵을 고를지 · U6 문장에 `ledger pr-record` 길(손으로 연 PR) | 계획 1 범위 밖이거나 설계 질문 | 지휘자 |
+| qg `dependencies.md` 에 `pr-review-toolkit` 행 — qg 가 그 agent 를 dispatch 하는데 의존 표에 없다 | 판 칸은 `check_deps.py measure` 만 쓰는데 외부 플러그인 판을 재는 길이 없다 — 새 측정 길은 장치 변경이고 `shared/deps/check_deps.py` 는 R14 가 예약했다. 지휘자가 R14 범위에 싣거나 다른 받는 곳을 사용자에게 묻는다 | R9 |
+| 로드맵 R9 경로 예약에 예약 밖 여섯 파일 · R9 순서 이유 칸 · `test_roadmap_status.sh` 겹침 단언(계획 1 Task 10) | `roadmap_write.py update` 가 지휘자 기계 상태의 옛 4칸 PR 캐시 줄 때문에 멈추고(머지 여부를 알 수 없다), 지휘자가 정한 우회(ad7efbb6 스크립트를 `git archive` 로 풀어 쓰기)는 권한 분류기가 막았다. 그 단언이 RED 라 AC21 「새 실패 0」 이 아직 아니다 끝냄 — 901e69c2(지휘자의 로드맵 쓰기 — 경로 예약 · 순서 이유) · 20fdc053(겹침 단언) | R9 |
+| project-init 템플릿 셋의 훅 문장 「`git checkout -b` · `git switch -c` 로 만든 이름만 확인한다」 — `plugins/project-init/templates/github-flow/branch-strategy.md`:70 · `plugins/project-init/templates/git-flow/branch-strategy.md`:103 · `plugins/project-init/templates/trunk-based/branch-strategy.md`:74 | 지금 훅은 reflog 로 `worktree add -b` 도 잡는다 — 이 레포 문서에는 옮기지 않았다(계획 1 설계와 다른 점) | R9 |
+| `shared/tests/test_invocation_surface.sh` manifest 세 단언과 `test_epic_conductor_skill.sh` 의 공유 락 단언 RED | claude CLI 2.1.309 의 `plugin validate --strict --json` 이 모르는 최상위 키 `directory` 를 낸다 — 이 브랜치와 무관한 환경 변화 — 공유 락 주인 몫의 환경(claude CLI 스키마) 변화라 이 로드맵의 에픽이 받지 않는다 — 공시한다 | 없음 |
+| `plugins/spec-distill/references/redecompose.md` 의 「다음 할 일 하나만 말하고」 | 예약 밖 — 규칙으로 하나를 고르는 자리인지(roadmap-status 와 같은 꼴) 정하지 않았다 | R9 |
+| 락 강화 후보(계획 1 리뷰 후속): P13 새 문장 양성 단언 · CLAUDE.md :70 의 spec-distill 상태 루트 · `nofollow_write` 사실 단언 · :103 목차 줄을 굵은 머리로 자르기 · 설계문서 프로필 `required_sections` 의 「때만 낸다」 잠금 · relay-checker 「어긋남이다」 뒤 부정 덧붙임 · AC5 「같은 뜻」 셋을 Law 3 줄로 좁히기 · AC4 부재 리터럴 · branch 양성 대조에 chore/x | 부분 문자열 락의 빈틈 — 막을 수준은 아니라고 마지막 리뷰가 분류했다 — 마지막 리뷰가 막을 수준이 아니라고 분류했다. 그 락을 다음에 고치는 에픽이 함께 본다 — 공시한다 | 없음 |
+| 문면 후속(계획 1 리뷰 후속): `required_sections` 처분 `fix` 와 처분 안내의 `decide` 사이 · branch-strategy 「STOP, 브랜치 먼저 생성」 줄의 worktree 가리킴 · 계획 2 Task 1 · 2 메모 위치 · 혼자인 「검사 불가」 로드맵을 고를지 · U6 문장에 `ledger pr-record` 길(손으로 연 PR) | 계획 1 범위 밖이거나 설계 질문 — 설계 질문 묶음이라 받는 에픽을 지어내지 않고 공시한다 | 없음 |
 
 ## 지휘 기록
 
