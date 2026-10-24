@@ -64,7 +64,24 @@ assert_contains "$(cat "$S")" '아직 커밋되지 않은(untracked) 파일입�
 # leaving that unrelated heading intact stayed GREEN (verified by mutation).
 # `consent-integrity` is the design-term unique to E3's body sentence and absent
 # from any heading/frontmatter.
-assert_contains "$(cat "$S")" 'consent-integrity' "E3 uses effective_max_rounds (consent-integrity, body-unique)"
+# E3 는 범위 고르기 · 규모 공시다 — 지출 승인을 묻지 않는다. 판정은 E3 절 본문에서만 한다.
+E3="$(awk '/^### E3 — /{f=1} f&&/^## /{exit} f' "$S")"
+assert_contains "$E3" '### E3 — 범위 고르기 · 규모 공시' "E3 머리가 범위 고르기 · 규모 공시다"
+assert_contains "$E3" 'disclosure-integrity' "E3 uses effective_max_rounds (disclosure-integrity, E3 본문 고유)"
+assert_contains "$E3" '이 질문은 범위를 고르는 질문이다 — 라운드마다 띄울 수와 상한은 본문에 공시한다.' "E3 끝 문단: 범위 질문 + 본문 공시"
+assert_contains "$E3" '지출 승인을 묻지 않는다' "E3 지출 승인을 묻지 않는다"
+assert_contains "$E3" '**실행**' "E3 선택지 실행"
+assert_contains "$E3" '**대상 변경**' "E3 선택지 대상 변경"
+assert_contains "$E3" '**취소**' "E3 선택지 취소"
+assert_contains "$E3" '「1명 (권장)」' "E3 비평자 수 선택지"
+assert_contains "$E3" 'effective_max_rounds' "E3 effective_max_rounds"
+assert_not_contains "$E3" 'consent-integrity' "E3 에 consent-integrity 없다"
+assert_not_contains "$E3" '지출-전 명시 승인' "E3 에 지출-전 명시 승인 없다"
+assert_not_contains "$E3" '동의 범위 = 실행 범위' "E3 에 동의 범위 = 실행 범위 없다"
+assert_not_contains "$(cat "$S")" 'Upfront 동의 게이트' "SKILL 에 Upfront 동의 게이트 없다"
+README="plugins/quality-gates/README.md"
+assert_file_grep "$README" 'Law 1=E3 범위 고르기 · 규모 공시' "qg README: Law 1=E3 범위 고르기 · 규모 공시"
+assert_file_absent "$README" 'Law 1=E3 upfront 동의 게이트' "qg README 에 옛 E3 이름 없다"
 
 # read-only reviewer dispatch (Law 2)
 assert_contains "$(cat "$S")" 'artifact-critic' "dispatches artifact-critic"
