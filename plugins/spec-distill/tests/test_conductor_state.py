@@ -20,6 +20,14 @@ RM = "docs/superpowers/roadmaps/rm/roadmap.md"
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
 OID_A, OID_B = "a" * 40, "0123456789abcdef0123456789abcdef01234567"
 
+# 시작 승인 절을 쓰던 판이 실제로 쓴 기계 상태 글(그 판의 render_machine 출력 그대로).
+OLD_MACHINE = (
+    "---\ntype: conductor-machine\nroadmap: docs/superpowers/roadmaps/rm/roadmap.md\nwriter: spec-distill 8.9.1\n---\n\n"
+    "## PR\n\n\n## 실행 원장\n\n\n## 자원\n\n\n## 살아 있는 agent\n\n\n## 기다리는 질문\n\n\n"
+    "## 쌓인 기록\n\n\n## 레포 설정\n\n\n## 시작 승인\n\n"
+    "- session-aaaa1111 · 2026-10-18 10:00 · 남은 에픽 2 · agent 약 6\n"
+)
+
 
 def pr_row(**over):
     row = {"브랜치": "feature/a", "번호": "#12", "상태": "열림", "확인한 때": "2026-10-17 10:00", "headRefOid": OID_A,
@@ -437,6 +445,36 @@ class EpicPr(unittest.TestCase):
         self.assertEqual(cs.recorded_cache_row(rows, [miss], "R14", "feature/x"), ("#12", None))
         nopr = cs.no_pr_row("feature/x", "2026-10-23 10:00", SID)
         self.assertEqual(cs.recorded_cache_row(rows, [nopr], "R14", "feature/x"), ("#12", None))
+
+
+class RetiredStartApproval(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.path = cs.machine_path(self.tmp, RM)
+
+    def tearDown(self):
+        shutil.rmtree(str(self.tmp))
+
+    def test_old_machine_with_start_approval_is_read_and_dropped(self):
+        self.assertEqual(cs.parse_machine(OLD_MACHINE, RM)["시작 승인"], [])
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(OLD_MACHINE, encoding="utf-8")
+        self.assertEqual(cs.acquire(self.path.parent, SID), "acquired")
+        cs.save(self.path, RM, cs.load(self.path, RM), SID)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("## 시작 승인", text)
+        for head in ("## PR", "## 실행 원장", "## 자원", "## 살아 있는 agent", "## 기다리는 질문", "## 쌓인 기록", "## 레포 설정"):
+            self.assertIn(head + "\n", text)
+
+    def test_new_file_has_no_start_approval_heading(self):
+        text = cs.render_machine(RM, cs.empty())
+        self.assertNotIn("## 시작 승인", text)
+        self.assertIn("## PR\n", text)
+        self.assertEqual(cs.parse_machine(text, RM)["시작 승인"], [])
+
+    def test_retired_rows_are_not_checked(self):
+        text = OLD_MACHINE.split("## 시작 승인")[0] + "## 시작 승인\n\n- 하나뿐\n"
+        self.assertEqual(cs.parse_machine(text, RM)["시작 승인"], [])
 
 
 if __name__ == "__main__":

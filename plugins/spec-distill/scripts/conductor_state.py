@@ -3,7 +3,7 @@
 """conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지.
 
 기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 작업(로드맵 밖 일 포함) · 에픽 PR 번호 기록 · 기다리는 질문 ·
-아직 커밋하지 못한 기록 · 임시 레포 설정 · 시작 승인(같은 세션 이어 부르기 공시))만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
+아직 커밋하지 못한 기록 · 임시 레포 설정)만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
 넘김 상태 계산은 읽기 전용 `roadmap_model.py` 가 하고 여기서 다시 내보낸다. 상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
 
 명령줄(읽기만):
@@ -48,6 +48,7 @@ SECTIONS = (
 COLUMNS = dict(SECTIONS)
 EPIC_PR = "에픽 PR"
 OPTIONAL_SECTIONS = ("작업", EPIC_PR)
+RETIRED_SECTIONS = ("시작 승인",)  # 읽기에서 줄 검사 없이 버리고 쓰기에서 머리를 쓰지 않는 옛 절
 RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"
 WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
@@ -200,6 +201,8 @@ def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:
             continue
         if cur in skip:
             continue
+        if cur in RETIRED_SECTIONS:
+            continue
         if cur is None or not line.startswith("- "):
             raise MachineError("%d줄: 읽지 못한 줄 %r" % (n, line))
         cols = COLUMNS[cur]
@@ -243,6 +246,8 @@ def recorded_cache_row(epic_rows: list, pr_rows: list, epic: str, branch: str) -
 def render_machine(roadmap_rel: str, data: dict) -> str:
     out = ["---", "type: " + TYPE, "roadmap: " + roadmap_rel, "writer: %s %s" % (WRITER, _own_triple()[0]), "---", ""]
     for name, cols in SECTIONS:
+        if name in RETIRED_SECTIONS:
+            continue
         if name in OPTIONAL_SECTIONS and not data.get(name):
             continue  # 7.6 에 더한 절 — 비어 있으면 머리를 쓰지 않아 옛 판도 이 파일을 읽는다
         out += ["## " + name, ""]
@@ -261,6 +266,8 @@ def render_machine(roadmap_rel: str, data: dict) -> str:
 def _normalized(data: dict) -> dict:
     out = empty()
     for name, cols in SECTIONS:
+        if name in RETIRED_SECTIONS:
+            continue
         for row in data.get(name, []):
             out[name].append(dict((c, str(row[c]).replace("\n", " ").strip()) for c in cols))
     return out
