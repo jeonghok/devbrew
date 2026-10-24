@@ -43,6 +43,9 @@ SK_FIND="$(cd "$ROOT" && find plugins -path '*/skills/*/SKILL.md' | grep -c .)"
 assert_eq "$SK_N" "$SK_FIND" "R9: SKILL.md 글롭 도출 수가 find 수와 같다(양의 짝)"
 assert_eq "$SK_HIT" "0" "R9: 어떤 SKILL.md 에도 옛 꼬리 「끝에 할 일 하나)」 가 없다(음)"
 assert_file_grep "$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md" '끝에 할 일\(기본 하나 — 여럿이거나 병렬이면 밝힌다\)' "R9: spec-review 계획 세션 넘김 줄이 새 꼬리를 쓴다(양)"
+assert_file_grep "$ROOT/plugins/spec-distill/references/redecompose.md" '다음 할 일을 말하고\(기본 하나 — 여럿이거나 병렬이면 밝힌다\) 턴을 끝낸다' "R9: redecompose 성공 줄이 새 꼬리를 쓴다(양)"
+RD_OLD="$(grep -cF -- '다음 할 일 하나만 말하고' "$ROOT/plugins/spec-distill/references/redecompose.md" || true)"
+assert_eq "$RD_OLD" "0" "R9: redecompose 에 옛 꼬리가 없다(음)"
 python3 "$ROOT/shared/tests/plain_language_block.py" "$ROOT" "$LIST" > "$RES" 2>&1
 rc=$?
 assert_eq "$rc" "0" "판정 모듈이 rc 0 으로 끝났다"
