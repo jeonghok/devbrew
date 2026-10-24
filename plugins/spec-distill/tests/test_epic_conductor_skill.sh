@@ -31,19 +31,24 @@ assert_contains "$CLAIM_LINE" 'then cd "<root>" && python3 "$SD/scripts/conducto
 for lit in 'worktree 안에서 시작했다' '여기서도 지휘한다' 'state_path.py" session-id' 'conductor_ledger.py" claim' '읽기 전용'; do
   assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" "$lit" "자리 · 세션 · 표지: $lit"
 done
-APP="$(sec '### 4. 시작 승인')"
-for lit in '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' 'conductor_ledger.py" approval' '`AskUserQuestion`' 'conductor_ledger.py" approve' \
-           '승인 전에는 agent 를 보내지 않는다' '이름 붙인 예외' '규모 줄이 글자 그대로 같을 때만' \
-           '종료 코드 0 이 아니면' '3 기계 상태 읽기 불가'; do
-  assert_contains "$APP" "$lit" "시작 승인: $lit"
+APP="$(sec '### 4. 규모 공시')"
+for lit in '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' \
+           'spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다)' \
+           '구현 안 agent 수는 task 수에 따라 — 상한 없음' \
+           '규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다.'; do
+  assert_contains "$APP" "$lit" "규모 공시: $lit"
 done
-# 시작 승인 순서: 규모 공시 → approval → (rc 1 이면) AskUserQuestion → approve
+for lit in 'conductor_ledger.py" approval' 'conductor_ledger.py" approve' '`AskUserQuestion`' 'conductor_ledger.py" release' \
+           '승인 전에는 agent 를 보내지 않는다' '이름 붙인 예외'; do
+  assert_not_contains "$APP" "$lit" "규모 공시: 지출 승인 흔적이 없다 — $lit"
+done
+# 규모 공시 순서: 규모 줄을 만들고 → 보이고 5 로 간다
 order="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t = sys.argv[1]
-ks = ["규모 줄", "conductor_ledger.py\" approval", "`AskUserQuestion`", "conductor_ledger.py\" approve "]
+ks = ["규모 줄 하나를 만든다", "규모 줄을 보이고 5 로 간다"]
 ix = [t.find(k) for k in ks]
 print("yes" if min(ix) >= 0 and ix == sorted(ix) else "no")' "$APP")"
-assert_eq "$order" "yes" "시작 승인: 규모 → approval → 질문 → approve 순서"
+assert_eq "$order" "yes" "규모 공시: 규모 줄을 만든 뒤 보이고 5 로 간다 순서"
 assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md' "conducting.md 를 읽는다"
 assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md' "conductor-dispatch.md 를 읽는다"
 assert_contains "$BODY" '손으로 따르는 절차' "꺼짐: 손 절차를 가리킨다"
@@ -102,7 +107,7 @@ for i in range(1, len(parts), 2):
             bad += 1
 print("%d %d" % (n, bad))' "$SK")"
 assert_eq "${fence_check#* }" "0" "3~4절: --session 을 쓰는 펜스가 같은 펜스에서 sid 와 루트 가드를 정한다"
-[ "${fence_check%% *}" -ge 5 ] && ok "3~4절: 세션을 쓰는 펜스 5개 이상(claim · takeover · approval · approve · release)" || no "세션 펜스 수 부족: ${fence_check}"
+[ "${fence_check%% *}" -ge 4 ] && ok "3~4절: 세션을 쓰는 펜스 4개 이상(claim · takeover · 다시 채우기 · release)" || no "세션 펜스 수 부족: ${fence_check}"
 # 3~4절 산문(펜스 밖)에는 셸 변수 sid · SD 가 없고, sid 를 쓰는 펜스는 빈 값이면 멈춘다
 fence_lint='import sys
 t = sys.stdin.read()
@@ -126,7 +131,23 @@ bad_lint="$(printf '%s\n' "$mutated" | python3 -I -c "$fence_lint")"
 assert_eq "${bad_lint%% *}" "1" "양성 대조: 산문의 --session 줄을 락이 잡는다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
 assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
-assert_contains "$APP" 'conductor_ledger.py" release' "4절: release 전체 명령"
+REL_CNT="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+a = t.index("### 3. ")
+b = t.index("### 4. ")
+parts = t[a:b].split("`" * 3)
+n = 0
+stop = 0
+for i in range(1, len(parts), 2):
+    f = parts[i]
+    if "pr-refresh" in f:
+        continue
+    if "python3 \"$SD/scripts/conductor_ledger.py\" release --roadmap \"<로드맵>\" --session \"$sid\"" in f:
+        n += 1
+        if "[ -n \"$sid\" ] ||" in f:
+            stop += 1
+print("%d %d" % (n, stop))' "$SK")"
+assert_eq "$REL_CNT" "1 1" "3절: 표지 풀기 펜스(release)가 pr-refresh 없는 펜스로 정확히 하나이고 세션 id 멈춤을 가진다"
 # 기본 브랜치 대조 — 표지를 잡은 뒤 돌므로, 멈출 때 잡은 표지를 풀고 멈춘다(다른 세션이 「지휘 중」으로 막히지 않게)
 S3="$(sec '### 3. 자리 · 세션 · 표지')"
 DEF_FENCE="$(printf '%s\n' "$S3" | awk '/^```bash/{f=1;n++;next} /^```/{f=0} f&&n==1')"
@@ -136,6 +157,8 @@ assert_eq "$(printf '%s\n' "$DEF_BULLET" | grep -c .)" "1" "3절: default_rc 처
 for lit in '0 이 아니면' '3 기본 브랜치 없음' '5 원격과 다름' '그 밖 모두' '`claim_rc=0` 이면' '`conductor_ledger.py" release`' '돌린 뒤 멈춘다' '「대조하지 못했다」 줄은 보이고 간다'; do
   assert_contains "$DEF_BULLET" "$lit" "3절 default_rc 줄: $lit"
 done
+assert_not_contains "$DEF_BULLET" '4 끝의' "3절 default_rc 줄: 4절 끝을 가리키는 옛 문구가 없다"
+assert_not_contains "$S3" '옛 시작 승인' "3절: 옛 시작 승인 언급이 없다"
 # 옛 PR 캐시 다시 채우기 — claim rc 3 + 옛 줄 문구면 멈추지 않고 reset → release → claim(R8 계획 2 최종 리뷰 I-2).
 # 문구는 conductor_state 가 실제로 내는 OldPrRows 메시지의 부분 문자열이어야 한다.
 OLD_MSG="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
@@ -184,40 +207,7 @@ t = sys.stdin.read()
 print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$reset_branch_check" "$OLD_MSG")"
   [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 갈래 락이 통과한다"
 done
-# 4절도 같은 갈래로 — 다시 채우기가 실패해 표지가 남은 채 같은 세션이 다시 오면 claim 은 held(0)이고 approval · approve 가 3
-approval_branch_check='import re, sys
-t, msg = sys.stdin.read(), sys.argv[1]
-a = t.index("### 4. "); b = t.index("### 5. ")
-s4 = t[a:b]
-bad = []
-lines = s4.splitlines()
-i = next((n for n, l in enumerate(lines) if l.startswith("- 이 펜스나 아래 approve 펜스의 종료 코드가 3 이고")), None)
-j = next((n for n, l in enumerate(lines) if l.startswith("- 종료 코드 0 이 아니면")), None)
-if i is None:
-    bad.append("4절에 옛 줄 갈래가 없다")
-else:
-    m = re.search(r"출력에 `([^`]+)` 이 있으면 묻지도 멈추지도 않고 3 의 「옛 PR 캐시 다시 채우기」 로 간다", lines[i])
-    if not m:
-        bad.append("4절 갈래가 3 의 다시 채우기로 가지 않는다")
-    elif not msg or m.group(1) not in msg:
-        bad.append("4절 갈래의 문구가 OldPrRows 메시지에 없다: %r" % m.group(1))
-    if "`claim_rc=0` 이면 4 를 처음부터 다시 돈다" not in lines[i]:
-        bad.append("4절 갈래가 다시 채운 뒤 4 를 다시 돌지 않는다")
-    if j is None or j < i or "위 옛 줄 갈래는 빼고" not in lines[j]:
-        bad.append("일반 갈래가 옛 줄 갈래 뒤에 있지 않거나 그것을 빼지 않는다")
-if "옛 PR 캐시 다시 채우기 — " not in t[t.index("### 3. "):a]:
-    bad.append("3절에 다시 채우기 펜스가 없다")
-print(" | ".join(bad) or "ok")'
-assert_eq "$(python3 -I -c "$approval_branch_check" "$OLD_MSG" < "$SK")" "ok" "4절: approval · approve 가 3 + 옛 PR 캐시 줄이면 3 의 다시 채우기로"
-for mut in '- 이 펜스나 아래 approve 펜스의 종료 코드가 3 이고|- 종료 코드가 3 이면' 'approve 펜스의 종료 코드가 3 이고 출력에 `옛 판이 쓴 PR 캐시 줄`|approve 펜스의 종료 코드가 3 이고 출력에 `옛 PR 줄`' \
-           ' — 위 옛 줄 갈래는 빼고|'; do
-  from="${mut%%|*}"; to="${mut#*|}"
-  applied="$(grep -cF -- "$from" "$SK")"
-  got="$(python3 -I -c 'import sys
-t = sys.stdin.read()
-print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$approval_branch_check" "$OLD_MSG")"
-  [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 4절 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 4절 갈래 락이 통과한다"
-done
+assert_not_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '옛 시작 승인이 지워진다' "conducting: 옛 시작 승인 괄호가 없다"
 assert_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
