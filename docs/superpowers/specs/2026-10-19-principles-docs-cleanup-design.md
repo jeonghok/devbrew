@@ -234,7 +234,7 @@ devbrew 를 만들 때만 쓰는 교훈 몇 줄. 어느 열린 에픽도 이 파
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| §5 의 R9 행 | R9 범위 | R9 |
+| §5 의 R9 행 | R9 범위 끝냄 — 8ed124bc · 03863846 · 3c29cd5d(R9 계획 1 #255, Law 1 문면 · P12 중간 단계 · persona 편집 · plugin-structure 먼저) · 2cffd79d(R9 계획 2, feature/cost-scale-disclosure, 지출 조항 · P22) | R9 |
 | §5 의 R8 행 | R8 범위 끝냄 — #251(R8 계획 2) | R8 |
 | §5 의 R5 후속 행 | superpowers 7.0.0 이음매와 같은 PR — 지휘자 수리가 처리 | #227 |
 | §5 의 R2a 행 | R2a 예약 · 진행 중 | R2a |
