@@ -263,6 +263,7 @@ assert_contains "$(cline '**Scoped agents')" '역할 프롬프트는 첫머리�
 assert_not_contains "$(cline '**Scoped agents')" 'You are NOT responsible for Z' "AC8 :48: 영어 공식 강제 없음"
 assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때)' "AC8 :50"
 assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`check_deps.py measure`' "AC8 :50 판 측정"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 `—` 를 적는다' "AC8 :50 외부 플러그인 예외"
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '로드맵 단위 지휘 기계 상태(`machine.md`)' "AC8 :70 수명 넷"
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '링크 검사 없이 만든다' "AC8 :70 예외"
 assert_not_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '실패 시 디버깅을 위해' "AC8 :70 없는 동작을 쓰지 않는다"
