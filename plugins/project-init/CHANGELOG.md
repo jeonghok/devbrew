@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.3.1] — 2026-10-24
+
+### Changed
+- 사람에게 쓰는 글 — 끝에 할 일은 기본 하나, 여럿이거나 병렬이면 밝힌다(커밋 · PR 본문은 순서 밖).
+
 ## [5.3.0] — 2026-10-22
 
 ### Added

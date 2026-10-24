@@ -24,6 +24,8 @@ for lit in 'conductor_ledger.py" roadmaps' '여럿이면 `AskUserQuestion`' '앞
   assert_contains "$(sec '### 2. 로드맵 정하기')" "$lit" "로드맵 정하기: $lit"
 done
 assert_not_contains "$(sec '### 2. 로드맵 정하기')" '절대경로면 `root=` 기준 상대경로로' "로드맵 정하기: root= 하나만 기준으로 삼던 옛 문장이 없다(다른 worktree 의 절대경로를 놓친다)"
+assert_contains "$(sec '### 2. 로드맵 정하기')" '둘째 칸이 `검사 불가 — <사유>` 인 줄은 셀 수 없었던 로드맵이니 그 사유를 함께 보인다' "로드맵 정하기: ledger roadmaps 줄의 검사 불가 칸을 읽는 법"
+assert_not_contains "$(sec '### 2. 로드맵 정하기')" '줄마다 `<경로><탭><끝나지 않은 에픽 수>` 다. 하나면' "로드맵 정하기: 검사 불가 칸 없이 하나면으로 잇던 옛 문장이 없다"
 CLAIM_LINE="$(sec '### 3. 자리 · 세션 · 표지' | grep -F 'claim --roadmap' || true)"
 assert_contains "$CLAIM_LINE" 'then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim' "자리 · 세션 · 표지: claim 줄도 cd 에 묶였다"
 for lit in 'worktree 안에서 시작했다' '여기서도 지휘한다' 'state_path.py" session-id' 'conductor_ledger.py" claim' '읽기 전용'; do
@@ -62,6 +64,12 @@ for lit in 'You are the relay checker' 'You are responsible for' 'You are NOT re
   assert_file_grep "$RC" "$lit" "relay-checker: $lit"
 done
 assert_eq "$(fm "$RC" | grep -c 'tag: relay_files$')" "1" "relay-checker 입력 칸 relay_files"
+assert_contains "$(cat "$RC")" '「문장 권장이 라벨 꼬리로 옮겨짐」' "AC9: 문장 권장이 라벨 꼬리로 옮겨지면 어긋남"
+assert_contains "$(cat "$RC")" '「지휘자가 만든 질문의 라벨에 (권장)」' "AC9: 지휘자가 만든 질문의 라벨 (권장) 은 어긋남"
+assert_contains "$(cat "$RC")" '라벨이 아니라 문장으로 냈는데 띄운 질문의 라벨에 「(권장)」 꼬리가 붙었으면 어긋남이다' "AC9: 문장 권장 꼬리 조건 문면"
+assert_contains "$(cat "$RC")" '선택지(라벨이든 설명이든)에 「(권장)」 이 있으면 어긋남이다' "AC9: 지휘자가 만든 질문은 라벨이든 설명이든 (권장) 이 어긋남"
+assert_contains "$(cat "$RC")" 'skill 이 붙인 자리에만, 그 자리에 그대로 있는가' "AC9(양): skill 원문의 (권장) 은 그대로 대조한다"
+assert_not_contains "$(cat "$RC")" '지휘자 것이라고 밝혀 두었는지' "AC9: 옛 문장 없음"
 assert_not_contains "$BODY" '다른 세션을 열어' "다른 세션을 열라는 말이 없다"
 # agent — 쓰기 도구 없음(Law 2) · 역할 문장 · 입력 칸
 assert_eq "$(fm "$AG" | grep -E '^tools:' )" "tools: Read, Grep, Glob" "agent tools 는 Read, Grep, Glob 뿐"

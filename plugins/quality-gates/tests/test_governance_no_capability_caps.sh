@@ -198,4 +198,82 @@ else
     ok "AC8d: model: inherit 코드 예시 없음"
   fi
 fi
+# --- AC3 · AC4: Law 1 — 지금 막는 자리(사실) · 중간 단계 · trivia escape 보존 ---
+LAW1_C="$(grep -F '**Law 1 — Clarity Before Code.**' "$CLAUDE_MD")"
+LAW1_P="$(grep -F '**Law 1 — Clarity Before Code.**' "$PHIL")"
+MID='기본은 설계 → 계획 → 구현이다. 중간 크기 일은 이유를 밝히고 가벼운 꼴(PR 본문의 계획 · 짧은 brief)을 고를 수 있다. 가벼운 꼴도 필수 섹션이 다루는 것을 짧게 덮고, 다루지 않는 섹션은 「해당 없음 — 이유」로 적는다.'
+FACT='설계문서 리뷰어가 필수 섹션 누락을 승인을 막는 지적으로 낸다 — 기계 게이트는 아니다'
+assert_contains "$LAW1_C" "$MID"   "AC3: CLAUDE.md Law 1 에 중간 단계 문장"
+assert_contains "$p12"    "$MID"   "AC3: P12 에 중간 단계 문장"
+assert_contains "$LAW1_C" '한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, formatting — **파일 수와 무관하게**)는 게이트 우회' "AC3: CLAUDE.md trivia escape 그대로(양)"
+assert_contains "$p12"    '한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고' "AC3: P12 trivia escape 그대로(양)"
+assert_contains "$LAW1_C" "$FACT" "AC4: CLAUDE.md Law 1 이 설계문서 쪽 사실을 쓴다"
+assert_contains "$LAW1_P" "$FACT" "AC4: 철학 Law 1 이 설계문서 쪽 사실을 쓴다"
+assert_contains "$(grep -F '**Law 1 (Clarity Before Code)**' plugins/spec-distill/README.md)" "$FACT" "AC4a: spec-distill README Law 1 이 같은 사실"
+assert_not_contains "$(cat plugins/spec-distill/README.md)" '필수 섹션 게이트 구현은 0' "AC4a: README 옛 구 없음"
+assert_contains "$LAW1_C" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: CLAUDE.md Law 1 — brief 는 구조로 막는다"
+assert_contains "$LAW1_P" '인터뷰 brief 는 `check_brief.py` 가 구조로 막는다' "AC4: 철학 Law 1 — brief 는 구조로 막는다"
+assert_not_contains "$LAW1_C" '최소한 **구조적 게이트** (필수 섹션:' "AC4: CLAUDE.md 에 없는 구조 게이트를 있다고 쓰던 옛 구가 없다"
+assert_not_contains "$LAW1_P" 'silent하게 skip할 수 없는 구조적 게이트' "AC4: 철학 Law 1 의 옛 구가 없다"
+
+# --- AC5: persona 편집은 기본값, 더 맞는 자리면 그것 ---
+PERS_C="$(grep -F '**버그가 리뷰를 탈출하면**' "$CLAUDE_MD")"
+p10="$(awk '/^### P10/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+NEWP='그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고치고 이유를 적는다'
+assert_contains "$PERS_C" '기본 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것이다 — 코드만 패치하지 않는다.' "AC5: CLAUDE.md persona 기본"
+assert_contains "$PERS_C" "$NEWP" "AC5: CLAUDE.md — 더 맞는 자리면 그것"
+assert_not_contains "$PERS_C" '메모리' "AC5: CLAUDE.md persona 문장에 메모리가 없다"
+assert_contains "$p10" "$NEWP" "AC5: P10 — 더 맞는 자리면 그것"
+assert_not_contains "$p10" '메모리' "AC5: P10 에 메모리가 없다"
+assert_not_contains "$p10" 'fix는 코드 패치가 아니라 그 버그를 잡았어야 할 persona 파일 편집이고' "AC5: P10 옛 문장이 없다"
+for f in plugins/quality-gates/README.md plugins/plugin-audit/README.md plugins/plugin-audit/skills/plugin-audit/SKILL.md; do
+  assert_contains "$(tr '\n' ' ' < "$f" | tr -s ' ')" '락 · 스크립트 · skill 이면 그것을 고친다' "AC5: $f 가 같은 뜻"
+done
+
+# --- AC6 · AC8: skill 로드는 기본 경로, 가이드의 qg 폴더와 감사 완전명 ---
+assert_contains "$(grep -F 'plugin-dev:plugin-structure' "$CLAUDE_MD")" '다른 길이 맞으면 이유를 적는다' "AC6: CLAUDE.md 가 기본 경로 꼴"
+assert_not_contains "$(cat "$CLAUDE_MD")" 'skill을 먼저 로드' "AC6: CLAUDE.md 강제 구 없음"
+if [ ! -f "$AUTHORING" ]; then
+  no "AC6: docs/plugin-authoring.md 부재 — 가이드 문장 검사를 판정할 수 없다 (fail-closed)"
+else
+AUTH="$(cat "$AUTHORING")"
+assert_contains "$AUTH" '기본은 해당 단계에 들어갈 때 그 단계의 skill 을 로드하는 것이다 — 다른 순서가 맞으면 이유를 적는다' "AC6: 가이드 기본 경로"
+for gone in '해당 단계에 진입할 때만 로드' '선행 일괄 로드는 progressive disclosure 위반' '이 단계에서 필요한 유일한 것' '`/plugin-audit` ('; do
+  assert_not_contains "$AUTH" "$gone" "AC6: 가이드에 「${gone}」 없음"
+done
+assert_contains "$AUTH" '`/plugin-audit:plugin-audit`' "AC6: 완전명(양)"
+assert_contains "$AUTH" '`agents/`, `references/`, `scripts/`, `skills/`를 shipping' "AC8: qg 폴더가 지금 폴더"
+assert_not_contains "$AUTH" 'writer + reviewer + hook 파이프라인' "AC8: qg 에 없는 hook 을 말하던 구가 없다"
+fi
+
+# --- AC8 — 장치와 맞춘 규칙 문장 ---
+cline() { grep -F -- "$1" "$CLAUDE_MD"; }
+assert_not_contains "$(cline '**레포 전용 값 금지.**')" '`gh`' "AC8 :31: gh 는 레포마다 정할 값이 아니다"
+assert_contains "$(cline '**레포 전용 값 금지.**')" '경로 · 테스트 명령 · 브랜치 · 모델 같은 값' "AC8 :31(양)"
+assert_contains "$(cline '**Scoped agents')" '역할 프롬프트는 첫머리에 맡는 일을 밝힌다' "AC8 :48"
+assert_not_contains "$(cline '**Scoped agents')" 'You are NOT responsible for Z' "AC8 :48: 영어 공식 강제 없음"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때)' "AC8 :50"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`check_deps.py measure`' "AC8 :50 판 측정"
+assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '로드맵 단위 지휘 기계 상태(`machine.md`)' "AC8 :70 수명 넷"
+assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '링크 검사 없이 만든다' "AC8 :70 예외"
+assert_not_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '실패 시 디버깅을 위해' "AC8 :70 없는 동작을 쓰지 않는다"
+assert_contains "$(cline '**모든 훅에 kill switch.**')" '그 플러그인의 훅과 진입 skill 을 끈다' "AC8 :71"
+assert_contains "$(cline '**모든 훅에 kill switch.**')" '진입 사전 검사는 이 변수를 읽지 않는다' "AC8 :71 SKIP_HOOKS 는 사전 검사 밖"
+assert_not_contains "$(cline '**모든 훅에 kill switch.**')" '진입 skill 자체는 끄지 않는다' "AC8 :71 review-entry 와 어긋나는 구 없음"
+assert_contains "$(cline '**훅 공존.**')" 'Hooks Installed(한국어 README 는 「설치된 Hook」)' "AC8 :72"
+assert_contains "$(cline '**Loud logging')" '필수 의존(`dependencies.md` 강도 멈춤)은 이유와 설치 방법을 보이고 멈춘다' "AC8 :73"
+assert_contains "$(grep -F '## 목차' "$CLAUDE_MD")" '한 번 쓰고 닫는 계획 · 기록은 모델이 판단한다' "AC8 :103"
+p13="$(awk '/^### P13/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+assert_contains "$p13" '`plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py`' "AC8 P13 코드"
+assert_not_contains "$p13" 'hook=집행 레이어' "AC8 P13 옛 구 없음"
+STYLE="$(grep -F '`style/`' shared/README.md)"
+assert_not_grep "$STYLE" '[0-9]+곳' "AC8: shared/README 에 사본 수 숫자가 없다"
+assert_contains "$STYLE" '글롭에서 도출' "AC8: shared/README 가 도출을 말한다(양)"
+
+# R14 넘김 — 번호 판정
+p5="$(awk '/^### P5/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+U6='에픽의 머지됨은 지휘자가 PR 을 열 때 기계 상태에 적은 PR 번호로 판정한다 — 그 PR 이 기본 브랜치로 머지됐을 때만 머지됨이다. 번호가 없는 에픽만 브랜치 이름과 이력으로 알아보고, 그 추정의 틈(같은 이름의 옛 브랜치 · 늦게 들어온 문서)은 공시한다.'
+assert_contains "$p5" "$U6" "R14 U6: P5 가 에픽 머지 판정 규칙을 쓴다"
+assert_contains "$p5" '`plugins/spec-distill/scripts/roadmap_status.py`' "R14 U6: P5 코드 줄이 번호 판정 스크립트를 가리킨다"
+
 finish

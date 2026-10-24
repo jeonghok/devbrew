@@ -26,7 +26,7 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
-- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 보안·판정 두 각도는 `tools:` allowlist 격리(qg 자체 agent 는 모두 쓰기 권한 없음), 다른 전제 각도(codex)는 OS-level read-only 샌드박스 + 별도 프로세스로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
+- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer 파이프라인**. 보안·판정 두 각도는 `tools:` allowlist 격리(qg 자체 agent 는 모두 쓰기 권한 없음), 다른 전제 각도(codex)는 OS-level read-only 샌드박스 + 별도 프로세스로 Laws 1–2를 embody. `agents/`, `references/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](../plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. 사용자 전용 진입 skill 하나(`skills/project-init/`)와 `hooks/`, `templates/`를 shipping. `agents/` 없음 — skill 하나 + hooks-and-templates 도 유효한 형태.
 
 > **새 agent 를 dispatch 하는 자리를 만들면 처분 앵커 한 줄이 함께 온다** —
@@ -39,11 +39,11 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 > `# guards: plugins/**` 를 선언하므로 `plugins/` 를 건드리는 변경의 차등 테스트
 > 스코프에 들어온다. 회계 모듈은 `shared/adjudication/`.
 
-**단계별 문법 레퍼런스** — `plugin-dev`(claude-plugins-official)가 Claude Code 컴포넌트 문법을 skill로 shipping한다. 해당 단계에 진입할 때만 로드 — 선행 일괄 로드는 progressive disclosure 위반:
+**단계별 문법 레퍼런스** — `plugin-dev`(claude-plugins-official)가 Claude Code 컴포넌트 문법을 skill로 shipping한다. 기본은 해당 단계에 들어갈 때 그 단계의 skill 을 로드하는 것이다 — 다른 순서가 맞으면 이유를 적는다:
 
-- **설계 (brainstorming)** — `plugin-dev:plugin-structure`. 컴포넌트 타입, `plugin.json` 스키마, 디렉토리 레이아웃. 이 단계에서 필요한 유일한 것.
+- **설계 (brainstorming)** — `plugin-dev:plugin-structure`. 컴포넌트 타입, `plugin.json` 스키마, 디렉토리 레이아웃. 이 단계의 기본 skill 이다.
 - **구현** — shipping하는 surface별로 `plugin-dev:skill-development` / `command-development` / `agent-development` / `hook-development` / `mcp-integration`.
-- **검증** — `/plugin-audit` (읽기전용 고른 축(기본 여섯) 감사 → 적대적 반박 → codex 병렬 co-audit).
+- **검증** — `/plugin-audit:plugin-audit` (읽기전용 고른 축(기본 여섯) 감사 → 적대적 반박 → codex 병렬 co-audit).
 
 `plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev`의 `/create-plugin`은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
 

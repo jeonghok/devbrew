@@ -69,7 +69,7 @@
 
 ### Three Laws
 
-- **Law 1 (Clarity Before Code)** — 이 플러그인이 있는 이유다: 명세가 모호하면 구현으로 가지 않는다. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서에는 필수 섹션 구조 게이트가 없다** — 설계문서의 명확성은 `doc-critic` 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정한다 — 이 리포의 Law 1 필수 섹션 게이트 구현은 0 이다.
+- **Law 1 (Clarity Before Code)** — 이 플러그인이 있는 이유다: 명세가 모호하면 구현으로 가지 않는다. 인터뷰 → brief → design doc → reviewer → human gate. **설계문서 리뷰어가 필수 섹션 누락을 승인을 막는 지적으로 낸다 — 기계 게이트는 아니다** — `doc-critic` 층 2 의 `required_sections` 를 프로필이 `must_catch` 로 지목해 승인 게이트의 질문이 된다. 그 밖의 명확성은 같은 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정하고, 섹션 유무를 기계로 막는 게이트는 없다.
 - **Law 1 (Clarity) — 문제공간 게이트** — 인터뷰가 끝나려면 다섯 가지 확인(R1–R5: 사용자 말 그대로 · 사례 조사 · 반대 입장 시험 · 해보고 버린 것 · 열린 질문)을 거쳐야 하고, 그것을 `check_brief.py`로 기계가 검사하는 구조 게이트다. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단. 종료는 고정 라운드 수가 아니라 커버리지 원장(고정 floor 5 + 주제에서 도출한 차원, status ∈ {open, in-progress, closed})이 정한다.
 - **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.** 끄기로 해 둔 기능은 모델이 마음을 바꿔도 돌지 않는다는 뜻이다 — skill 본문을 읽기 전에 정해진 검사가 먼저 돌아 스위치를 확인한다.
 - **Law 1 — 허용 문법 판독기(`brief_body`)** — brief · audit 는 `scripts/brief_body.py`, seed 는 `scripts/seed_body.py` 가 각자 허용 문법 하나로 읽고 문법 밖은 해석하지 않고 거부한다. 기계가 쓰는 글이라 꼴을 막는 정규식을 늘어놓지 않고 읽는 쪽을 하나로 둔다.

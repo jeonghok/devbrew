@@ -101,8 +101,16 @@ done <<<"$MARKERS"
   || no "brief 층 2: 표지 튜플을 ${n_mk}개만 도출했다 — UNTRUSTED_VERBATIM_MARKERS 추출이 깨졌다"
 # 양의 짝 — 다른 프로필의 층 2 는 이 편집과 무관하게 그대로다.
 assert_eq "$(chk "$DD" 'd["layer_rubric"]["layer2"]')" \
-  "['placeholder', 'ambiguity', 'scope_creep', 'approaches_comparison', 'isolation', 'testing', 'handoff_incomplete']" \
-  "design-doc 층 2 불변"
+  "['placeholder', 'ambiguity', 'scope_creep', 'approaches_comparison', 'isolation', 'testing', 'handoff_incomplete', 'required_sections']" \
+  "design-doc 층 2 — 일곱 + 필수 섹션 누락"
+assert_eq "$(chk "$DD" '"required_sections" in d["must_catch"]')" "True" "AC4a: design-doc must_catch 가 필수 섹션 누락을 지목한다"
+DDL2="$(awk '/^## 층 2/{f=1;next} /^## /{f=0} f' "$DD")"
+RS_LINE="$(printf '%s\n' "$DDL2" | grep -F -- '- `required_sections` —')"
+for s in 'Context/Why' 'Goals' 'Non-goals' 'Constraints' 'Acceptance Criteria' 'Files to Modify' 'Verification Plan' 'Rejected Alternatives' 'Metadata'; do
+  assert_contains "$RS_LINE" "$s" "AC4a: required_sections 줄이 섹션 「${s}」 를 이름으로 댄다"
+done
+assert_contains "$RS_LINE" '「해당 없음 — 이유」' "profile_required_sections_exits: 해당 없음 출구"
+assert_contains "$RS_LINE" '제목이 달라도 같은 것을 다루면 있는 것으로 본다' "profile_required_sections_exits: 다른 제목 출구"
 assert_eq "$(chk "$GE" 'd["layer_rubric"]["layer2"]')" \
   "['completeness', 'evidence', 'ambiguity', 'actionability', 'structure']" "generic 층 2 불변"
 assert_eq "$(chk "$SE" 'd["layer_rubric"]["layer2"]')" "[]" "seed 는 층 2 를 비운다"
