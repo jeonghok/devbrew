@@ -1135,6 +1135,7 @@ class PrRefresh(Repo):
         self.assertEqual(cs.holder(L.mpath(self.w, RM).parent), SID)
         rc, out = self.cli("takeover", "--roadmap", RM, "--session", OTHER)
         self.assertEqual(rc, 3, out)
+        self.assertIn("--reset 으로 다시 채운다", out)
         self.assertEqual(L.mpath(self.w, RM).read_bytes(), before)
 
     def test_claim_rewrites_old_machine_without_start_approval(self):

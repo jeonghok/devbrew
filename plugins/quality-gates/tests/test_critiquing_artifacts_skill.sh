@@ -60,9 +60,9 @@ assert_contains "$(cat "$S")" '커밋/stash 후 재실행' "E2b clean preconditi
 assert_contains "$(cat "$S")" '아직 커밋되지 않은(untracked) 파일입니다' "E2b rejects an untracked target (tracked: false reject line, body-unique)"
 # NOTE: the old pattern `agf 'effective_max_rounds'` was header-satisfiable — the
 # term also appears in the LOOP section heading (`## 루프 (라운드 N =
-# 1..effective_max_rounds)`), so deleting E3's own consent-integrity body while
+# 1..effective_max_rounds)`), so deleting E3's own disclosure-integrity body while
 # leaving that unrelated heading intact stayed GREEN (verified by mutation).
-# `consent-integrity` is the design-term unique to E3's body sentence and absent
+# `disclosure-integrity` is the design-term unique to E3's body sentence and absent
 # from any heading/frontmatter.
 # E3 는 범위 고르기 · 규모 공시다 — 지출 승인을 묻지 않는다. 판정은 E3 절 본문에서만 한다.
 E3="$(awk '/^### E3 — /{f=1} f&&/^## /{exit} f' "$S")"

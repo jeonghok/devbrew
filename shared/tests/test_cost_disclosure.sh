@@ -107,6 +107,7 @@ assert_eq "$rc_ac" "0" "(나) artifact-critique: 「### E3 — 범위 고르기 
 assert_contains "$W_EC" '지출 승인을 묻지 않는다' "(나) epic-conductor 규모 공시 절: 지출 승인을 묻지 않는다"
 assert_contains "$W_PA" '지출 승인을 묻지 않는다' "(나) plugin-audit step 3: 지출 승인을 묻지 않는다"
 assert_contains "$W_AC" '지출 승인을 묻지 않는다' "(나) artifact-critique E3: 지출 승인을 묻지 않는다"
+assert_contains "$W_PA" '「감사자 k · 반박 최대 k · codex 감사 k회' "(나) plugin-audit step 3 (b): 규모 공시 줄 본문(감사자 k · 반박 최대 k · codex 감사 k회)"
 
 # 규칙 문서도 같은 문장을 갖는다(음성 scan 의 양의 짝).
 COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$ROOT/CLAUDE.md")"

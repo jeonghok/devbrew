@@ -10,7 +10,7 @@ README = PLUGIN / "README.md"
 _BUGGY_ARTIFACTS_DIR_FORM = re.compile(r'--artifacts\s+"?\$RUN_DIR/?"?(\s|$)')
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
-    "cost_class: high",                                    # 지출 게이트 owner
+    "cost_class: high",                                    # 범위 고르기 · 규모 공시 owner
     "DEVBREW_PLUGIN_AUDIT_DISABLE",                         # kill switch
     "AskUserQuestion",                                     # 축 고르기 질문(범위)
     "check-law2.py",                                        # pre-0 정적 게이트
@@ -121,6 +121,7 @@ class TestSkillOrchestration(unittest.TestCase):
                      "감사자 6 · 반박 최대 6",
                      "아무것도 띄우지 않고 실행 디렉토리도 만들지 않는다",
                      "상한 없음", "심층검증",
+                     "「감사자 k · 반박 최대 k · codex 감사 k회",
                      "보안 축을 뺐다 — 사용자 파일 파괴 경로를 아무도 보지 않는다",
                      "「검증 안 됨」", "지출 승인을 묻지 않는다"):
             self.assertIn(need, sec)
