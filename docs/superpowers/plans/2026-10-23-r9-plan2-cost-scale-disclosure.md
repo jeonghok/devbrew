@@ -184,7 +184,7 @@
 **Files:**
 - Create: `shared/tests/test_cost_disclosure.sh`(100755)
 - Modify: `CLAUDE.md`(:51) · `docs/philosophy/devbrew-harness-philosophy.md`(P22 :63-64)
-- Test: `plugins/quality-gates/tests/test_governance_no_capability_caps.sh`(AC8a cost 블록) · `plugins/spec-distill/tests/test_epic_conductor_skill.sh`(:213-223 예외 락) · `plugins/spec-distill/tests/test_reviewing_brief_skill.sh`(:73 메시지 — 예약 밖)
+- Test: `plugins/quality-gates/tests/test_governance_no_capability_caps.sh`(AC8a cost 블록) · `plugins/spec-distill/tests/test_epic_conductor_skill.sh`(예외 락 — `CM="$ROOT/CLAUDE.md"` 줄부터 단언 「예외를 주장하는 다른 skill 이 없다」 까지) · `plugins/spec-distill/tests/test_reviewing_brief_skill.sh`(:73 메시지 — 예약 밖)
 
 - [ ] **Step 1: 새 락 `shared/tests/test_cost_disclosure.sh`.** 머리 `# guards: plugins/*/skills/*/SKILL.md CLAUDE.md docs/philosophy/*.md`. 내용:
   - 도출: `derive_git` = `git -C "$ROOT" ls-files -- 'plugins/*/skills/*/SKILL.md'`(정렬), `derive_find <root>` = `find plugins -path '*/skills/*/SKILL.md'`(그 root 에서). 양성 대조 — 두 수가 같고 0 보다 크다.
@@ -211,7 +211,7 @@ assert_not_contains "$p22" '승인 게이트가 필수' "AC12: P22 옛 게이트
 assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 ```
 
-  AC12 바이트 같음 — 설계 §2 의 세 줄(CLAUDE.md 한 줄 · P22 두 줄)을 테스트 안 리터럴로 두고 `grep -cxF -- "<줄>" <파일>` 이 각각 1(설계 파일에서 읽지 않는다). `test_epic_conductor_skill.sh` :213-223 은 `assert_contains "$COST" '어느 클래스의 skill 도 지출 승인을 묻지 않는다'`(양) · `assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "0"` · `others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md || true)"` 가 빈다(음)로. `test_reviewing_brief_skill.sh` :73 의 실패 메시지 `high 는 지출 승인 게이트를 요구한다(CLAUDE.md)` 를 `high 는 크게 쓰기 전에 규모 공시를 요구한다(CLAUDE.md)` 로(단언은 그대로).
+  AC12 바이트 같음 — 설계 §2 의 세 줄(CLAUDE.md 한 줄 · P22 두 줄)을 테스트 안 리터럴로 두고 `grep -cxF -- "<줄>" <파일>` 이 각각 1(설계 파일에서 읽지 않는다). `test_epic_conductor_skill.sh` 의 예외 락(`CM="$ROOT/CLAUDE.md"` 줄부터 — 단언 「CLAUDE.md: 원래 승인 규칙 문장이 그대로」 · 「CLAUDE.md 예외: …」 고리 · 「CLAUDE.md: 이름 붙인 예외는 하나」 · 「예외를 주장하는 다른 skill 이 없다」)은 `assert_contains "$COST" '어느 클래스의 skill 도 지출 승인을 묻지 않는다'`(양) · `assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "0"` · `others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md || true)"` 가 빈다(음)로. `test_reviewing_brief_skill.sh` :73 의 실패 메시지 `high 는 지출 승인 게이트를 요구한다(CLAUDE.md)` 를 `high 는 크게 쓰기 전에 규모 공시를 요구한다(CLAUDE.md)` 로(단언은 그대로).
 - [ ] **Step 3:** governance · epic-conductor 테스트 RED.
 - [ ] **Step 4: 규칙 문면.** CLAUDE.md :51 줄 전체를 설계 §2 「CLAUDE.md:51 확정 문안」 펜스의 한 줄로. 철학 P22 머리 `### P22 — Cost Awareness` 는 그대로, 본문 두 줄(:63-64)을 설계 §2 「철학 P22 확정 문안」 펜스의 두 줄로. 글자 그대로 — 바꿔야 하면 Global Constraints 의 확정 문안 규칙대로 멈춘다.
 - [ ] **Step 5:** 아래가 모두 GREEN — governance(AC8a fan-out 임계 단언 포함 — 새 P22 줄은 `fan-out` 과 숫자를 함께 갖지만 비교 낱말이 없다) · `bash shared/tests/test_charter_citations.sh`(P22 코드 줄의 `test_cost_disclosure.sh` 가 추적 파일이다 — 같은 커밋에 넣는다) · `bash shared/tests/test_cost_disclosure.sh` · `bash plugins/spec-distill/tests/test_epic_conductor_skill.sh` · `bash plugins/spec-distill/tests/test_reviewing_brief_skill.sh` · `python3 -m unittest discover -s plugins/plugin-audit/tests -p 'test_check_shape_completeness.py'` · `git diff origin/main -- CLAUDE.md` 에 :91(Subagent spray) 줄이 없다.
@@ -233,12 +233,13 @@ assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 
 ---
 
-### Task 7b: 계획 1 에서 넘어온 작은 고침 셋 (설계 `## 미룸` 의 R9 받는 곳 행 셋을 닫는다)
+### Task 7b: 계획 1 에서 넘어온 작은 고침 넷 (설계 `## 미룸` 의 R9 받는 곳 행 넷을 닫는다)
 
-**Files — 아래 중 `test_plain_language_block.sh` 만 로드맵 R9 경로 예약 안이다. 나머지는 예약 밖(`roadmap.md` R9 블록에 없음)이라 경로 예약 정보 줄을 받아들인다:**
-- Modify: `plugins/quality-gates/dependencies.md` · `shared/tests/test_check_deps.sh`(둘 다 예약 밖 — R14 가 예약한 `shared/deps/check_deps.py` 는 건드리지 않는다)
+**Files — 아래 중 `test_plain_language_block.sh` · `CLAUDE.md` · `test_governance_no_capability_caps.sh` 만 로드맵 R9 경로 예약 안이다. (iv) 의 세 파일은 Step 20 이 예약에 더한다(못 더하면 이유를 적는다). 나머지는 예약 밖(`roadmap.md` R9 블록에 없음)이라 경로 예약 정보 줄을 받아들인다:**
+- Modify: `plugins/quality-gates/dependencies.md` · `shared/tests/test_check_deps.sh`(둘 다 예약 밖 — R14 가 예약한 `shared/deps/check_deps.py` 는 건드리지 않는다) · `CLAUDE.md`(:50 — 예외 한 문장) · `plugins/quality-gates/tests/test_governance_no_capability_caps.sh`(AC8 :50 옆 양성 단언 하나)
 - Modify: `plugins/project-init/templates/github-flow/branch-strategy.md`(:70) · `plugins/project-init/templates/git-flow/branch-strategy.md`(:103) · `plugins/project-init/templates/trunk-based/branch-strategy.md`(:74) · `plugins/project-init/tests/test_branch_prefix_templates.py` · `plugins/project-init/.claude-plugin/plugin.json` · `plugins/project-init/CHANGELOG.md`
 - Modify: `plugins/spec-distill/references/redecompose.md`(:129) · `shared/tests/test_plain_language_block.sh`(R9 예약)
+- Modify: `shared/tests/fixtures/docreview/cases_advice.sh` · `shared/tests/test_docreview_advice.sh` · `shared/tests/test_docreview_mutations.sh`((iv) — 이름 바꾸기만) · `docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose/roadmap.md`(생성기가 쓴다) · `plugins/spec-distill/tests/test_roadmap_status.sh`(겹침 단언 — 바뀔 때만)
 - 판: project-init patch(`plugin.json` · CHANGELOG `Fixed`). quality-gates 는 Task 7 의 patch 에 `Changed` 한 줄을 더한다(`dependencies.md` 에 외부 플러그인 행). spec-distill 은 Task 7 의 minor 에 `Changed` 한 줄(redecompose 끝 문장).
 - 장치 변경 없음: `check_deps.py` 를 고치지 않는다 — 아래 (i) 는 그 스크립트가 이미 받는 꼴만 쓴다.
 
@@ -254,33 +255,46 @@ assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 | pr-review-toolkit | — | — | 기록 | 외부 플러그인이라 판을 재지 못한다 — 없으면 이 리뷰어를 건너뛰고 나머지로 진행한다(README Prerequisites 의 optional 의존) |
 ```
 
-  머리 안내문(「판 칸은 … measure 가 쓴다」 문단)은 그대로 둔다 — `measure` 가 이 행을 「못 쟀다」로 알리고 그대로 두는 것이 정상 동작이다.
-- [ ] **Step 4:** `bash shared/tests/test_check_deps.sh` GREEN · `python3 plugins/quality-gates/scripts/check_deps.py entry --plugin-root plugins/quality-gates --need python,git,gh` rc 0 · `python3 plugins/quality-gates/scripts/check_deps.py measure --plugin-root plugins/quality-gates --today 2026-01-01` 은 **실제 파일을 고치므로** 복사본으로 돌린다(`cp -R plugins/quality-gates "$TMPDIR/qg-copy"` 뒤 `--plugin-root "$TMPDIR/qg-copy"`): 출력에 `pr-review-toolkit 못 쟀다` 가 있고 rc 0, 복사본에서 그 행이 바이트 그대로다.
-- [ ] **Step 5: 커밋** — `fix(qg): 의존 표에 외부 플러그인 pr-review-toolkit 행을 기록으로 더한다`.
-- [ ] **Step 6: 변이.** 행의 강도 `기록` → `멈춤`(형태 변경) → 새 강도 단언 RED. 행 삭제 → 이름 단언 RED. `외부 플러그인` 삭제 → 없을 때 단언 RED. 건너뛰기 도출을 강도 `기록` 만 보게 바꿈(`claude-code` 도 건너뜀) → 건너뛴 목록 `assert_eq` RED(양성 대조).
+  머리 안내문(「판 칸은 … measure 가 쓴다」 문단)의 기존 문장은 그대로 두고, 예외 한 문장은 Step 4 가 더한다 — `measure` 가 이 행을 「못 쟀다」로 알리고 그대로 두는 것이 정상 동작이다.
+- [ ] **Step 4: 예외를 규칙 두 곳에 적는다.** `CLAUDE.md:50` 과 qg `dependencies.md:8` 은 둘 다 판 칸을 `check_deps.py measure` 가 재고 손으로 고치지 않는다고 말한다 — Step 3 의 `—` 는 손으로 적는 값이라 그 문장과 어긋난다. 같은 커밋에서 두 곳에 같은 예외 문장을 적는다: `판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 \`—\` 를 적는다.`
+  - 먼저 양성 단언(RED 확인): governance 의 `AC8 :50` 두 단언 옆에 `assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 \`—\` 를 적는다' "AC8 :50 외부 플러그인 예외"`, `test_check_deps.sh` 에 qg `dependencies.md` 의 같은 문장 `grep -cF` 가 1 인 단언과 「건너뛴 행이 있는 플러그인은 그 문장을 갖는다」(Step 1 의 건너뛴 이름 목록이 빈 플러그인은 묻지 않는다).
+  - 문면: `CLAUDE.md:50` 의 괄호 `(개발 · 검증할 때 깔려 있던 판 — 손으로 고치지 않는다)` 를 `(개발 · 검증할 때 깔려 있던 판 — 손으로 고치지 않는다. 판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 \`—\` 를 적는다)` 로. qg `dependencies.md:8` 문단 끝(`— 손으로 고치지 않는다.` 뒤)에 ` 판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 \`—\` 를 적는다 — \`measure\` 는 그 행을 「못 쟀다」로 알리고 그대로 둔다.` 를 잇는다. 외부 플러그인 행이 없는 다른 세 플러그인의 `dependencies.md` 는 고치지 않는다.
+  - governance 의 기존 `AC8 :50`(`` `dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때) ``)과 `AC8 :50 판 측정`(`` `check_deps.py measure` ``) 단언은 그대로 GREEN 이다 — 괄호 안에 문장을 더할 뿐 두 리터럴을 건드리지 않는다. AC8a 의 fan-out 임계 단언도 이 줄에 닿지 않는다(fan-out 낱말이 없다).
+  - `measure` 의 「할 일: 못 잰 이유를 해결한 뒤 measure 를 다시 돌린다 — 판 칸은 손으로 적지 않는다.」 줄은 이 행 때문에 늘 나온다. 그 문구는 `check_deps.py` 의 것이라 이 과제는 고치지 않는다(장치 변경 없음) — 위 예외 문장이 그 줄을 읽는 사람에게 이유를 준다. 마지막 리뷰에 이 어긋남을 알리고, 고칠지는 `## 미룸` 에 적는다.
+- [ ] **Step 5:** `bash shared/tests/test_check_deps.sh` GREEN · `python3 plugins/quality-gates/scripts/check_deps.py entry --plugin-root plugins/quality-gates --need python,git,gh` rc 0 · `python3 plugins/quality-gates/scripts/check_deps.py measure --plugin-root plugins/quality-gates --today 2026-01-01` 은 **실제 파일을 고치므로** 복사본으로 돌린다(`cp -R plugins/quality-gates "$TMPDIR/qg-copy"` 뒤 `--plugin-root "$TMPDIR/qg-copy"`): 출력에 `pr-review-toolkit 못 쟀다` 가 있고 rc 0, 복사본에서 그 행이 바이트 그대로다. `bash plugins/quality-gates/tests/test_governance_no_capability_caps.sh` GREEN(AC8 :50 셋).
+- [ ] **Step 6: 커밋** — `git add plugins/quality-gates/dependencies.md shared/tests/test_check_deps.sh CLAUDE.md plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `fix(qg): 의존 표에 외부 플러그인 pr-review-toolkit 행을 기록으로 더하고 판 칸 — 예외를 규칙에 적는다`.
+- [ ] **Step 7: 변이.** 행의 강도 `기록` → `멈춤`(형태 변경) → 새 강도 단언 RED. 행 삭제 → 이름 단언 RED. `외부 플러그인` 삭제 → 없을 때 단언 RED. 건너뛰기 도출을 강도 `기록` 만 보게 바꿈(`claude-code` 도 건너뜀) → 건너뛴 목록 `assert_eq` RED(양성 대조). `CLAUDE.md:50` 의 예외 문장 삭제 → governance `AC8 :50 외부 플러그인 예외` RED. qg `dependencies.md` 머리의 예외 문장 삭제 → `test_check_deps.sh` 예외 단언 RED.
 
 **(ii) project-init 템플릿 셋의 낡은 훅 문장** — 설계 `## 미룸` 「project-init 템플릿 셋의 훅 문장」을 닫는다. 사실: 훅은 `Bash|EnterWorktree` 뒤 브랜치 reflog 의 만들기 · 이름 바꾸기 · 복사를 60초 안에 잡으므로 `git worktree add -b` 도 확인한다(`plugins/project-init/README.md` 「설치된 Hook」 `PostToolUse` 항목 · `plugins/project-init/hooks/post-tool-use.py` `_last_reflog_line`). 계획 시작 전에 이 사실을 `git grep -n 'reflog' plugins/project-init/hooks/post-tool-use.py plugins/project-init/README.md` 로 다시 확인하고 다르면 멈춘다.
 
-- [ ] **Step 7: 실패하는 단언.** `plugins/project-init/tests/test_branch_prefix_templates.py::test_worktree_path_same_rule` 의 needle 목록에서 `"확인하지 않는다"` 를 빼고, 루프 뒤에 추가한다: `self.assertIn("reflog", sec, s)` · `self.assertIn("`git worktree add -b` 로 만든 이름을 모두 확인한다", sec, s)`(양) · `self.assertNotIn("확인하지 않는다", sec, s)` · `self.assertNotIn("만 확인한다", sec, s)`(음). 양성 짝: 위 두 양의 단언이 세 전략 모두에서 GREEN 인 것이 음의 단언이 공허하지 않다는 증거다.
-- [ ] **Step 8:** `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest plugins/project-init/tests/test_branch_prefix_templates.py` RED.
-- [ ] **Step 9: 문면.** 세 파일의 마지막 문장만 바꾼다(앞 문장은 그대로):
+- [ ] **Step 8: 실패하는 단언.** `plugins/project-init/tests/test_branch_prefix_templates.py::test_worktree_path_same_rule` 의 needle 목록에서 `"확인하지 않는다"` 를 빼고, 루프 뒤에 추가한다: `self.assertIn("reflog", sec, s)` · `self.assertIn("`git worktree add -b` 로 만든 이름을 모두 확인한다", sec, s)`(양) · `self.assertNotIn("확인하지 않는다", sec, s)` · `self.assertNotIn("만 확인한다", sec, s)`(음). 양성 짝: 위 두 양의 단언이 세 전략 모두에서 GREEN 인 것이 음의 단언이 공허하지 않다는 증거다.
+- [ ] **Step 9:** `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest plugins/project-init/tests/test_branch_prefix_templates.py` RED.
+- [ ] **Step 10: 문면.** 세 파일의 마지막 문장만 바꾼다(앞 문장은 그대로):
   - `github-flow` :70 — `project-init 훅은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.` → `project-init 훅은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 모두 확인한다.`
   - `git-flow` :103 — 같은 문장(앞머리 `project-init 훅은` 그대로).
   - `trunk-based` :74 — `훅(project-init)은 `git checkout -b` · `git switch -c` 로 만든 이름만 확인한다 — `git worktree add -b` 로 만든 이름은 확인하지 않는다.` → `훅(project-init)은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 모두 확인한다.`
   `git grep -n '만 확인한다' -- plugins/project-init/templates` 가 빈다. 템플릿 문장은 사용자 레포로 복사되는 문서라 출처 · 날짜를 넣지 않는다.
-- [ ] **Step 10:** 위 단위 테스트 GREEN · `git grep -l 'branch-strategy.md' -- plugins/project-init/tests` 의 테스트(`test_branch_strategy_rebase_clause.sh` 포함) GREEN. `plugin.json` patch · CHANGELOG `Fixed` — 템플릿 훅 문장을 지금 훅(reflog 로 `worktree add -b` 도 확인)에 맞췄다.
-- [ ] **Step 11: 커밋** — `fix(project-init): 브랜치 전략 템플릿의 훅 문장을 worktree add -b 도 확인하는 지금 훅에 맞춘다`.
-- [ ] **Step 12: 변이.** 한 템플릿(trunk-based)에 옛 문장 되살림 → `assertNotIn` RED. `reflog` 삭제 → 양 단언 RED. `모두` 삭제 → 양 단언 RED. 세 전략 중 하나의 절을 비움 → 그 전략 이름이 든 메시지로 RED(`s` 가 메시지에 있다).
+- [ ] **Step 11:** 위 단위 테스트 GREEN · `git grep -l 'branch-strategy.md' -- plugins/project-init/tests` 의 테스트(`test_branch_strategy_rebase_clause.sh` 포함) GREEN. `plugin.json` patch · CHANGELOG `Fixed` — 템플릿 훅 문장을 지금 훅(reflog 로 `worktree add -b` 도 확인)에 맞췄다.
+- [ ] **Step 12: 커밋** — `fix(project-init): 브랜치 전략 템플릿의 훅 문장을 worktree add -b 도 확인하는 지금 훅에 맞춘다`.
+- [ ] **Step 13: 변이.** 한 템플릿(trunk-based)에 옛 문장 되살림 → `assertNotIn` RED. `reflog` 삭제 → 양 단언 RED. `모두` 삭제 → 양 단언 RED. 세 전략 중 하나의 절을 비움 → 그 전략 이름이 든 메시지로 RED(`s` 가 메시지에 있다).
 
 **(iii) redecompose 끝 문장** — 설계 `## 미룸` 「`redecompose.md` 의 『다음 할 일 하나만 말하고』」를 닫는다.
 
-- [ ] **Step 13: 실패하는 단언.** `shared/tests/test_plain_language_block.sh` 의 :45 아래에 추가: `assert_file_grep "$ROOT/plugins/spec-distill/references/redecompose.md" '다음 할 일을 말하고\(기본 하나 — 여럿이거나 병렬이면 밝힌다\) 턴을 끝낸다' "R9: redecompose 성공 줄이 새 꼬리를 쓴다(양)"`, 그리고 옛 문장 없음 — `RD_OLD="$(grep -cF -- '다음 할 일 하나만 말하고' "$ROOT/plugins/spec-distill/references/redecompose.md" || true)"; assert_eq "$RD_OLD" "0" "R9: redecompose 에 옛 꼬리가 없다(음)"`. 현재 문장 위치(`redecompose.md:129` — `git grep -n '다음 할 일 하나만 말하고' -- plugins shared tools` 로 이 줄뿐임을 확인했다).
-- [ ] **Step 14:** `bash shared/tests/test_plain_language_block.sh` RED.
-- [ ] **Step 15: 문면.** `plugins/spec-distill/references/redecompose.md:129` 끝의 `다음 할 일 하나만 말하고 턴을 끝낸다.` → `다음 할 일을 말하고(기본 하나 — 여럿이거나 병렬이면 밝힌다) 턴을 끝낸다.` 줄의 앞부분은 그대로. spec-distill README/CHANGELOG 는 Task 7 의 `Changed` 한 줄에 합친다.
-- [ ] **Step 16:** `bash shared/tests/test_plain_language_block.sh` GREEN · `git grep -n -F '다음 할 일 하나만' -- plugins shared tools` 가 빈다.
-- [ ] **Step 17: 커밋** — `docs(spec-distill): redecompose 성공 줄의 끝 할 일을 기본 하나로 맞춘다`.
-- [ ] **Step 18: 변이.** 옛 문장 되살림 → 음 단언 RED. `(기본 하나 — …)` 괄호 삭제 → 양 단언 RED. `여럿이거나` → `여럿이면`(형태 변경) → 양 단언 RED.
-- [ ] **Step 19:** 설계 `## 미룸` 표의 R9 받는 곳 행 셋(`pr-review-toolkit` 행 · 템플릿 훅 문장 행 · redecompose 행)에 `끝냄 — <커밋 해시>` 를 더한다(Task 8 Step 4 와 같은 표). 그 행들의 받는 곳은 `R9` 로 이미 올라 있다.
+- [ ] **Step 14: 실패하는 단언.** `shared/tests/test_plain_language_block.sh` 의 :45 아래에 추가: `assert_file_grep "$ROOT/plugins/spec-distill/references/redecompose.md" '다음 할 일을 말하고\(기본 하나 — 여럿이거나 병렬이면 밝힌다\) 턴을 끝낸다' "R9: redecompose 성공 줄이 새 꼬리를 쓴다(양)"`, 그리고 옛 문장 없음 — `RD_OLD="$(grep -cF -- '다음 할 일 하나만 말하고' "$ROOT/plugins/spec-distill/references/redecompose.md" || true)"; assert_eq "$RD_OLD" "0" "R9: redecompose 에 옛 꼬리가 없다(음)"`. 현재 문장 위치(`redecompose.md:129` — `git grep -n '다음 할 일 하나만 말하고' -- plugins shared tools` 로 이 줄뿐임을 확인했다).
+- [ ] **Step 15:** `bash shared/tests/test_plain_language_block.sh` RED.
+- [ ] **Step 16: 문면.** `plugins/spec-distill/references/redecompose.md:129` 끝의 `다음 할 일 하나만 말하고 턴을 끝낸다.` → `다음 할 일을 말하고(기본 하나 — 여럿이거나 병렬이면 밝힌다) 턴을 끝낸다.` 줄의 앞부분은 그대로. spec-distill README/CHANGELOG 는 Task 7 의 `Changed` 한 줄에 합친다.
+- [ ] **Step 17:** `bash shared/tests/test_plain_language_block.sh` GREEN · `git grep -n -F '다음 할 일 하나만' -- plugins shared tools` 가 빈다.
+- [ ] **Step 18: 커밋** — `docs(spec-distill): redecompose 성공 줄의 끝 할 일을 기본 하나로 맞춘다`.
+- [ ] **Step 19: 변이.** 옛 문장 되살림 → 음 단언 RED. `(기본 하나 — …)` 괄호 삭제 → 양 단언 RED. `여럿이거나` → `여럿이면`(형태 변경) → 양 단언 RED.
+
+**(iv) docreview 픽스처 AC1 함수 이름** — 설계 `## 미룸` 「`case_AC1_brief_direction_*` 이름」 행을 닫는다. 사실: R2(#217)가 `direction` 을 brief 프로필 `must_catch` 로 옮겨, `shared/tests/fixtures/docreview/cases_advice.sh` 의 `case_AC1_brief_direction_only` · `case_AC1_brief_direction_distortion` 은 이제 `overdesign`(참고 축)을 잰다 — 본문 · 단언 메시지는 이미 `overdesign` 이고 이름만 낡았다. 계획 시작 전에 `git grep -n 'case_AC1_brief_direction' -- shared plugins tools` 로 쓰는 곳이 정의 둘(`cases_advice.sh`) · 등록 둘(`test_docreview_advice.sh`) · 변이 대상 둘(`test_docreview_mutations.sh` 의 `advisory_axes_flipped` · `route_step1_removed` `mut` 줄)뿐인지 다시 확인하고 다르면 멈춘다.
+
+- [ ] **Step 20: 경로 예약.** 세 파일은 R9 경로 예약 밖이고, `cases_advice.sh` 는 R12 예약 폴더(`shared/tests/fixtures/docreview/`) 안이며 락 지도(`locks.md`)의 R12 행 둘(`case_advice_pre_upgrade_ledger` · `case_AC6_render_cap`)과 같은 파일이다 — 이름 바꾸기는 그 두 케이스의 줄을 건드리지 않는다. 계획 1 Task 10 과 같은 길로 R9 경로 예약에 셋을 더한다: `roadmap_write.py extract` → R9 행 경로 예약 칸 끝에 ` · ` 로 세 경로를 이은 표 파일 → `roadmap_write.py update --change "R9 경로 예약에 docreview 픽스처 AC1 이름 바꾸기 파일 셋"`(나머지 인자 · heredoc 파일은 계획 1 Task 10 Step 2 와 같은 꼴) → rc 0 과 R9 블록 · 재분해 이력 한 항목만 바뀌었는지 `git diff` 로 본다 → `bash plugins/spec-distill/tests/test_roadmap_status.sh` 의 `OVERLAPS` 단언이 바뀌면 생성기 출력을 그대로 옮긴다(R14 가 넣은 단언은 건드리지 않는다). 생성기가 멈추거나(옛 4칸 PR 캐시 줄 — 계획 1 Task 10 이 겪은 것) 권한 판정이 막아 이 세션이 돌리지 못하면 지휘 세션에 돌려보내고, 그래도 더하지 못하면 더하지 않은 이유를 설계 `## 미룸` 에 한 행으로 적고 경로 예약 정보 줄을 받아들인다 — 어느 쪽이든 기록 없이 넘어가지 않는다. 커밋 — `docs(roadmap): R9 경로 예약에 docreview 픽스처 AC1 이름 바꾸기 파일 셋`(로드맵 · 묶음 · 바뀌었으면 `test_roadmap_status.sh`).
+- [ ] **Step 21: 기준선.** 바꾸기 전에 `bash shared/tests/test_docreview_advice.sh` 와 `bash shared/tests/test_docreview_mutations.sh` 를 돌려 `AC1(i)` · `AC1(ii)` 줄과 두 변이 셀(`advisory_axes_flipped` · `route_step1_removed`)의 판정을 `$HOME/.claude/sdd-mirror/r9/plan2-ac1-rename-before.txt` 에 적는다.
+- [ ] **Step 22: 이름 바꾸기.** 세 파일에서 한꺼번에 `case_AC1_brief_direction_only` → `case_AC1_brief_overdesign_only`, `case_AC1_brief_direction_distortion` → `case_AC1_brief_overdesign_distortion`. 함수 본문 · 단언 메시지 · `mut` 줄의 sed 프로그램 · churn 값은 그대로. `docs/superpowers/plans/2026-09-27-review-stopping-criterion.md` 의 옛 이름은 그때의 기록이라 둔다.
+- [ ] **Step 23: 확인.** `git grep -n 'case_AC1_brief_direction' -- shared plugins tools` 가 빈다 · `git grep -n 'case_AC1_brief_overdesign_' -- shared/tests` 가 정확히 여섯 줄(정의 둘 · 등록 둘 · 변이 둘). 두 테스트를 다시 돌려 Step 21 기록과 같은 판정인지 본다 — 특히 두 변이 셀이 여전히 「잡힘」이고 바꾸지 않은 사본에서 두 케이스가 GREEN 이다(이름이 한 곳만 어긋나면 없는 함수를 부른 실패가 「잡힘」처럼 보일 수 있다 — 양성 대조는 바꾸지 않은 사본의 GREEN 이다). 락 지도 R12 행 둘의 케이스도 GREEN.
+- [ ] **Step 24: 커밋** — `git add shared/tests/fixtures/docreview/cases_advice.sh shared/tests/test_docreview_advice.sh shared/tests/test_docreview_mutations.sh` · `test(docreview): brief AC1 케이스 이름을 재는 축(overdesign)에 맞춘다`. 변이 없음 — 이름만 바뀌고 단언이 그대로라 Step 23 의 판정 대조가 증거다.
+- [ ] **Step 25:** 설계 `## 미룸` 표의 R9 받는 곳 행 넷(`pr-review-toolkit` 행 · 템플릿 훅 문장 행 · redecompose 행 · `case_AC1_brief_direction_*` 이름 행)에 `끝냄 — <커밋 해시>` 를 더한다(Task 8 Step 4 와 같은 표). 그 행들의 받는 곳은 `R9` 로 이미 올라 있다.
 
 ---
 

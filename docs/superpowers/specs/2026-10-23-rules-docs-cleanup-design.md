@@ -425,6 +425,9 @@ next_phase: superpowers:writing-plans
 | `plugins/spec-distill/skills/spec-review/SKILL.md` | R14 범위 | 쉬운 말 블록(:23) 한 줄만(계획 1) |
 | `plugins/spec-distill/skills/request-framing/SKILL.md` | R14 범위 | 쉬운 말 블록(:19) 한 줄만(계획 1) |
 | `plugins/spec-distill/tests/test_roadmap_status.sh` | 정적 락 후보 여덟 | 겹침 정보 단언 한 줄(이 설계의 로드맵 커밋 — 이미 함) |
+| `shared/docreview/scripts/docreview_state.py` | `WRITER_TRUST_NOTICE` 공시 문장(R14 예약 — 머지됨) | `CATEGORY_GLOSS` 에 `required_sections` 한 줄(계획 1 · AC4a) |
+
+- spec-distill `README.md` 는 생성기의 겹침 계산(`roadmap_status.py` 의 `SHARED_BASENAMES` — `plugin.json` · `CHANGELOG.md` · `README.md`)에서 빠진다. 위 표의 README 행은 사람이 본 겹침이라 `test_roadmap_status.sh` 의 겹침 단언에는 없다.
 
 - R14 는 위 R9 몫의 자리(4절 · 승인 코드 · 쉬운 말 블록)를 고치지 않는다. `references/conducting.md:14` 의 괄호 「(새로 잡아야 그 세션의 옛 시작 승인이 지워진다)」도 R14 는 건드리지 않고, R9 계획 2 가 예약 밖 편집으로 고친다(지휘자 판단(사용자 결정 아님)).
 - R5 설계 :642 의 SKILL 문장(「approval rc≠0 → AskUserQuestion」)에 대해 R14 가 할 일은 없다. R9 계획 2 가 그 approval 갈래를 통째로 지운다. 지휘자가 R14 에 그렇게 알린다(지휘자 판단(사용자 결정 아님)). R2a 설계 :496 문장(artifact-critique 진입 'ok' 행)은 할 일 없음 — 이미 맞다(`plugins/quality-gates/skills/artifact-critique/SKILL.md:40` 「아래 절차로 간다 — `project_dir` 는 E2 가 정한다」 — ok 행은 진행만 말하고 `project_dir` 는 E2 하나가 정한다). R9 는 같은 파일의 E3 만 고친다.
@@ -658,11 +661,12 @@ next_phase: superpowers:writing-plans
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| qg `dependencies.md` 에 `pr-review-toolkit` 행 — qg 가 그 agent 를 dispatch 하는데 의존 표에 없다 | 판 칸은 `check_deps.py measure` 만 쓰는데 외부 플러그인 판을 재는 길이 없다 — 새 측정 길은 장치 변경이고 `shared/deps/check_deps.py` 는 R14 가 예약했다. 지휘자가 R14 범위에 싣거나 다른 받는 곳을 사용자에게 묻는다 | R9 |
+| qg `dependencies.md` 에 `pr-review-toolkit` 행 — qg 가 그 agent 를 dispatch 하는데 의존 표에 없다 | 판 칸은 `check_deps.py measure` 만 쓰는데 외부 플러그인 판을 재는 길이 없다 — 계획 2 Task 7b (i) 가 `check_deps.py` 를 바꾸지 않고 받는다: 판 칸 둘을 `—` 로 둔 행을 `measure` 가 「못 쟀다」로 알리고 그대로 두는 지금 동작을 쓰고, 「판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 `—`」 예외를 CLAUDE.md:50 과 qg `dependencies.md` 머리 문단에 함께 적는다 | R9 |
 | 로드맵 R9 경로 예약에 예약 밖 여섯 파일 · R9 순서 이유 칸 · `test_roadmap_status.sh` 겹침 단언(계획 1 Task 10) | `roadmap_write.py update` 가 지휘자 기계 상태의 옛 4칸 PR 캐시 줄 때문에 멈추고(머지 여부를 알 수 없다), 지휘자가 정한 우회(ad7efbb6 스크립트를 `git archive` 로 풀어 쓰기)는 권한 분류기가 막았다. 그 단언이 RED 라 AC21 「새 실패 0」 이 아직 아니다 끝냄 — 901e69c2(지휘자의 로드맵 쓰기 — 경로 예약 · 순서 이유) · 20fdc053(겹침 단언) | R9 |
 | project-init 템플릿 셋의 훅 문장 「`git checkout -b` · `git switch -c` 로 만든 이름만 확인한다」 — `plugins/project-init/templates/github-flow/branch-strategy.md`:70 · `plugins/project-init/templates/git-flow/branch-strategy.md`:103 · `plugins/project-init/templates/trunk-based/branch-strategy.md`:74 | 지금 훅은 reflog 로 `worktree add -b` 도 잡는다 — 이 레포 문서에는 옮기지 않았다(계획 1 설계와 다른 점) | R9 |
 | `shared/tests/test_invocation_surface.sh` manifest 세 단언과 `test_epic_conductor_skill.sh` 의 공유 락 단언 RED | claude CLI 2.1.309 의 `plugin validate --strict --json` 이 모르는 최상위 키 `directory` 를 낸다 — 이 브랜치와 무관한 환경 변화 — 공유 락 주인 몫의 환경(claude CLI 스키마) 변화라 이 로드맵의 에픽이 받지 않는다 — 공시한다 | 없음 |
 | `plugins/spec-distill/references/redecompose.md` 의 「다음 할 일 하나만 말하고」 | 예약 밖 — 규칙으로 하나를 고르는 자리인지(roadmap-status 와 같은 꼴) 정하지 않았다 | R9 |
+| `shared/tests/fixtures/docreview/cases_advice.sh` 의 `case_AC1_brief_direction_only` · `case_AC1_brief_direction_distortion` 이름 — 쓰는 곳 `shared/tests/test_docreview_advice.sh`(등록 둘) · `shared/tests/test_docreview_mutations.sh`(`advisory_axes_flipped` · `route_step1_removed` 의 변이 대상) | R2(#217)가 `direction` 을 brief `must_catch` 로 옮겨 두 함수는 이제 `overdesign` 을 잰다. R2 가 이름 바꾸기를 R9 에 넘겼는데 기록이 없었다(통합 리뷰가 찾음). 세 파일은 R9 경로 예약 밖이고 `cases_advice.sh` 는 R12 예약 폴더 안 · 락 지도 R12 행과 같은 파일이다 — 계획 2 Task 7b (iv) 가 예약에 더하고(못 더하면 이유를 적고) 세 파일을 함께 바꾼다 | R9 |
 | 락 강화 후보(계획 1 리뷰 후속): P13 새 문장 양성 단언 · CLAUDE.md :70 의 spec-distill 상태 루트 · `nofollow_write` 사실 단언 · :103 목차 줄을 굵은 머리로 자르기 · 설계문서 프로필 `required_sections` 의 「때만 낸다」 잠금 · relay-checker 「어긋남이다」 뒤 부정 덧붙임 · AC5 「같은 뜻」 셋을 Law 3 줄로 좁히기 · AC4 부재 리터럴 · branch 양성 대조에 chore/x | 부분 문자열 락의 빈틈 — 막을 수준은 아니라고 마지막 리뷰가 분류했다 — 마지막 리뷰가 막을 수준이 아니라고 분류했다. 그 락을 다음에 고치는 에픽이 함께 본다 — 공시한다 | 없음 |
 | 문면 후속(계획 1 리뷰 후속): `required_sections` 처분 `fix` 와 처분 안내의 `decide` 사이 · branch-strategy 「STOP, 브랜치 먼저 생성」 줄의 worktree 가리킴 · 계획 2 Task 1 · 2 메모 위치 · 혼자인 「검사 불가」 로드맵을 고를지 · U6 문장에 `ledger pr-record` 길(손으로 연 PR) | 계획 1 범위 밖이거나 설계 질문 — 설계 질문 묶음이라 받는 에픽을 지어내지 않고 공시한다 | 없음 |
 
@@ -675,6 +679,7 @@ next_phase: superpowers:writing-plans
   - 재분해 이력 2026-10-22 머리(roadmap.md:465)의 같은 괄호는 그때의 기록이라 두었다 — 지휘자가 정한다.
 - spec 승인 · 2026-10-23 · 「승인하고 계획으로 (권장)」
 - 2026-10-24 · R14(#254) 머지 뒤 기본 브랜치를 합쳤다(R14.md §7 · roadmap.md 재분해 이력 충돌을 풀었다). 겹침 파일 셋(`conductor_state.py` · `test_conductor_ledger.py` · `test_conductor_state.py`)을 겹침 표 · AC21 에 더했다. R14 미룸 넘김 둘(번호 판정 규칙 문장 → 철학 P5, `ledger roadmaps` 줄 꼴 → epic-conductor SKILL.md)은 계획 1 이, R14 README :142 · :148 은 R14 가 끝냈다. §6 :70 · :71 행은 계획 1 Task 0 다시 확인의 사실로 고쳤다.
+- 2026-10-24 · R9 의 PR 번호를 `ledger pr-record` 로 적지 못했다. 설치된 지휘자가 spec-distill 7.3.0 이고 기계 상태에 옛 4칸 PR 줄이 남아 있다 — 8.9.x 의 `pr-refresh --reset` 을 먼저 돌리면 7.3.0 도구가 그 상태를 「더 새 판이 썼다」로 거부한다. 그래서 `--reset` 과 R9 `pr-record` 는 플러그인 업데이트 뒤 첫 지휘 진입에서 한다. 그때까지 R9 의 머지 판정은 브랜치 이름과 이력으로 돌아가고, R9 는 브랜치가 둘이라 계획 1 이 머지된 뒤에도 「머지됨」이 아니라 「일부 머지 1/2」로 보인다(R14 설계 `## 미룸` 「R9 의 PR 처럼 8.9.0 전에 연 PR 의 번호 기록」 행).
 
 ## Metadata
 
