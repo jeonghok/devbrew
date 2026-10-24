@@ -18,8 +18,8 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases_advice.sh"
 case_advice_axes_per_profile
 case_advice_engine_items_mustcatch
-case_AC1_brief_direction_only
-case_AC1_brief_direction_distortion
+case_AC1_brief_overdesign_only
+case_AC1_brief_overdesign_distortion
 case_AC3_reference_line_positive
 case_AC13_advisory_decide_ask_to_advice
 case_AC19_promoted_advisory_fix

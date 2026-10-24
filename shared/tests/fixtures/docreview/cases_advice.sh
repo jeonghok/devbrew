@@ -45,7 +45,7 @@ mc_round() {   # mc_round <dir> <doc> <critic> <out-fin> — 다음 라운드를
 }
 
 # ── AC1 — brief 프로필 fixture 둘 ──────────────────────────────────────────
-case_AC1_brief_direction_only() {
+case_AC1_brief_overdesign_only() {
   local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   assert_eq "$(gsum "$d" 'd["approval_ready"], d["round_gate_needed"]')" "(True, False)" \
     "AC1(i): overdesign decide 만 나온 라운드 1 — 승인 가능 · 라운드 게이트 없음"
@@ -53,7 +53,7 @@ case_AC1_brief_direction_only() {
   assert_eq "$(st_yaml "$d" 'len(st["decides"]), len(st["fixes"]), len(st["asks"])')" "(0, 0, 0)" "AC1(i): 차단 원장 셋이 비었다"
   rm -rf "$d"
 }
-case_AC1_brief_direction_distortion() {
+case_AC1_brief_overdesign_distortion() {
   local d; d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign-distortion.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")"
   assert_eq "$(st_yaml "$d" 'sorted(st["findings"][i]["category"] for i in list(st["decides"]) + list(st["fixes"]))')" "['distortion']" \
     "AC1(ii): distortion 은 차단 원장(fixes)에 있다"

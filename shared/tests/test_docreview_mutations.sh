@@ -789,10 +789,10 @@ mut 1/1 init_relative_doc_accepted case_init_relative_doc_refused sed_state \
   's/if not a\.doc or not os\.path\.isabs(a\.doc):/if not a.doc:/'
 # ── 참고(advisory) 라우팅 (설계 2026-09-27-review-stopping-criterion) ─────────────────────
 # (61) advisory 여집합을 뒤집는다(advisory = must_catch) — overdesign 이 must-catch 가 되어 AC1 이 RED.
-mut 1/1 advisory_axes_flipped case_AC1_brief_direction_only sed_advice \
+mut 1/1 advisory_axes_flipped case_AC1_brief_overdesign_only sed_advice \
   's/    return (frozenset(lr\["layer1"\]) | frozenset(lr\["layer2"\])) - frozenset(mc)/    return frozenset(mc)/'
 # (62) 1 걸음 호출을 지운다 — advisory decide 가 decides 에 남아 승인을 막는다.
-mut 1/1 route_step1_removed case_AC1_brief_direction_only sed_route \
+mut 1/1 route_step1_removed case_AC1_brief_overdesign_only sed_route \
   's/^    route_step1(final, advisory_axes(prof))$/    pass/'
 # (63) 1회 규칙을 지운다 — 라운드 1 에 오른 버킷이 라운드 2 에 다시 listed 된다.
 mut 1/1 advice_repeat_rule_removed case_AC5_AC9_round2 sed_state \
