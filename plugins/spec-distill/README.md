@@ -14,7 +14,7 @@
 - `/pm-interview` — 요청을 인터뷰로 다듬고 싶을 때. 인터뷰 결과를 정리한 문서(interview brief)가 나옵니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 - `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 인터뷰 조사 수)를 보고 싶을 때. 읽기만 합니다.
-- `/spec-distill:epic-conductor [<로드맵 경로>]` — 승인된 로드맵의 에픽을 이 세션에서 끝까지 지휘합니다(cost_class high — 시작 승인, 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 공시만).
+- `/spec-distill:epic-conductor [<로드맵 경로>]` — 승인된 로드맵의 에픽을 이 세션에서 끝까지 지휘합니다(cost_class high — 시작할 때 규모를 한 줄로 알리고 진행합니다 · 지출 승인을 묻지 않습니다).
 
 ```
 /pm-interview todo 앱 만들어줘
@@ -117,7 +117,7 @@
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — 인터뷰 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)의 token/key/credential placeholder 치환. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
-- **P22 (Cost class)** — 모든 skill cost_class 선언 (pm-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — medium 인 reviewing-brief 에는 진입 지출 승인 게이트가 없고(epic-conductor 의 high 는 시작 승인 게이트를 갖는다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
+- **P22 (Cost class)** — 모든 skill cost_class 선언 (pm-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — 어느 skill 도 지출 승인을 묻지 않고(epic-conductor 의 high 는 시작할 때 규모 줄을 공시한다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
 - **P23 (Decisions Stay Refutable)** — `request-framing`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `pm-interview`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 
 ### Roadmap absorption (C-numbers)
@@ -141,7 +141,7 @@
 - **Law 2 — 통합 리뷰어는 쓰지 못한다** — 에픽 사이 이음매 리뷰는 `tools: Read, Grep, Glob` 인 `integration-reviewer` 가 한다. superpowers 리뷰 요청 skill 의 틀만 빌리고 그 skill 이 부르는 쓰기 가능한 agent 는 쓰지 않는다. 지휘자가 하위의 질문을 옮긴 기록의 대조도 같은 도구만 가진 `relay-checker` 가 한다.
 - **Law 3 · P23 — 다시 불러도 같은 자리** — 지휘자는 무엇이 끝났는지 기억에 기대지 않고 git(설계문서의 승인 줄 · 판정 · 구현 대조 절)과 기계 상태에서 다시 계산한다. 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다(`tests/test_conductor_e2e.sh`) — 예외는 `## 에픽 PR` 에 적은 PR 번호다. 다시 만들 수 없어서, 지우면 그 에픽들은 번호를 다시 적을 때까지(`ledger pr-record`) 브랜치 이름 · 이력 추정으로 돌아간다.
 - **CLAUDE.md 레포 전용 값 금지** — 레포 값은 `scripts/repo_defaults.py` 하나가 출처와 함께 낸다. 로드맵 frontmatter > 레포 설정 파일 `.devbrew.md`(기본 브랜치 판) > 기계 상태(임시) > 기본값 순이고, 외부 도구 기본 경로는 그 모듈의 상수에만 있다. 지휘자 · 인터뷰 · 끝내기 펜스 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다(`tests/test_repo_literals.sh` · `tests/test_workspace_invariance.sh`).
-- **cost_class high 의 이름 붙인 예외** — 같은 세션 · 표지가 살아 있고 · 규모가 글자 그대로 같으면 이미 받은 시작 승인을 다시 쓰고 공시만 한다. 규모가 바뀌거나 다른 세션이거나 새로 잡기 · 넘겨받기 · 놓기를 거치면 다시 묻는다.
+- **P22 — 규모 공시** — epic-conductor 는 시작할 때 규모 줄(남은 에픽 · agent 약 · 순서 · 리뷰 라운드 상한 · 상한 없는 부분)을 보이고 진행한다. 멈추는 길은 끼어들기와 kill switch 다.
 
 ## 로드맵 · 에픽 묶음
 
@@ -156,7 +156,7 @@
 - `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
 - `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음. 로컬 브랜치와 `origin/<브랜치>` 가 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 3 이다(`--branch origin/<브랜치>` 도 받는다) — 이 끝 고르기는 `scripts/branch_tip.py` 하나이고 `conductor_ledger.py review-pack` 도 같이 쓴다.
 - `scripts/suite_lock.py` — 공유 스위트 잠금. 지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 기계 상태 자원 폴더의 잠금 하나(`<기계 상태 폴더>/files/suite-lock`)를 쓴다. 하위는 `run --lock <경로> --owner <이름> [--wait <초>] -- bash -c '<명령>'` 한 번으로 잡고 · 돌리고 · 푼다(못 잡으면 75 · 잠금 폴더에 쓰지 못하면 3 — 잠금 없이 돌리지 않는다). 주인이 프로세스 번호가 아닌 잠금은 살았는지 알 수 없어 훔치지 않고 주인 · 잡은 시각을 보인다.
-- `scripts/conductor_ledger.py` — 기계 상태 · 시작 승인 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(`parallel_default` — 로드맵 frontmatter · 레포 설정 파일 순, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다.
+- `scripts/conductor_ledger.py` — 기계 상태 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(`parallel_default` — 로드맵 frontmatter · 레포 설정 파일 순, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다.
 - `agents/integration-reviewer.md` — 쓰기 권한 없는 통합 리뷰어(`Read, Grep, Glob`).
 - `agents/relay-checker.md` — 쓰기 권한 없는 옮김 대조 agent(`Read, Grep, Glob`). 에픽이 끝나면 지휘자가 하위의 질문을 사용자에게 옮긴 기록마다 선택지 수 · 순서 · 라벨 · 「(권장)」 과 사용자 답이 그대로 갔는지 대조한다.
 - spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「인터뷰 다시 열기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).

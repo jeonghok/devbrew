@@ -1,5 +1,16 @@
 # Changelog
 
+## [8.10.0] — 2026-10-24
+
+### Removed
+- `conductor_ledger.py approval` · `approve` 하위 명령, `cost_class: high` 의 이름 붙인 예외(같은 세션에서 같은 규모면 받은 승인을 다시 쓴다), 기계 상태 `## 시작 승인` 쓰기. 사용자가 정한 재건이라 deprecation 창 없이 제거한다.
+
+### Changed
+- 지휘자 시작이 승인 질문 대신 4절 「규모 공시」 — 규모 줄(남은 에픽 · agent 약 · 순서)에 리뷰 라운드 상한과 상한 없는 부분을 싣고 진행한다. 멈추는 길은 끼어들기와 kill switch 다.
+- `claim` · `takeover` 는 기계 상태를 검사하고 다시 쓴다.
+- 옛 `## 시작 승인` 절은 읽고 다음 저장에서 걷는다.
+- README 의 P22 · cost_class 문장을 규모 공시로 맞췄다.
+
 ## [8.9.1] — 2026-10-24
 
 ### Changed
