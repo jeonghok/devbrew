@@ -11,7 +11,7 @@
 
 ## 감사 RUN 순서 (orchestrator = 메인 루프, 설계 §6·§20)
 1. **agent 파일 커밋 + 세션 재시작** — 레지스트리는 세션 시작에 스냅샷된다 (가정 i).
-2. **phase 0** 지출 동의 게이트 (축 고르기 · 규모 공시 · 승인) → 승인 직후 `prepare-run-dir.py` 로 실행
+2. **phase 0** 범위 고르기 · 규모 공시(축 고르기 · 「중단」 · 공시 한 줄) → 공시 직후 `prepare-run-dir.py` 로 실행
    디렉토리 생성 → consent artifact(`$RUN_DIR/consent.json`).
 3. **pre-0** `check-law2.py` (audit + smoke) → `check-no-verdict-injection.py` → 미니-workflow 스모크
    (sentinel 파일 부재를 디스크에서 확인).

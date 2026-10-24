@@ -28,7 +28,7 @@ const target = _args.target || 'unknown'
 const pack = _args.evidencePack
 const codexFindings = _args.codexFindings || []
 
-// Axes to run — chosen at the consent gate. Omitted = all six. Anything else that is not a
+// Axes to run — chosen at the scope question. Omitted = all six. Anything else that is not a
 // non-empty list of distinct integers 1..6 stops the run here, before the first dispatch.
 const AXES_RUN = (() => {
   const raw = _args.axes
@@ -688,8 +688,8 @@ for (const f of findings) {
   }
 }
 
-// ── 심층검증: two more lenses on every surviving CRITICAL/IMPORTANT — no cap; the consent gate
-// announces the scale and the count is logged right before the lenses start.
+// ── 심층검증: two more lenses on every surviving CRITICAL/IMPORTANT — no cap; the scope question and the disclosure line
+// announce the scale and the count is logged right before the lenses start.
 // (Task 28: 옛 HIGH → IMPORTANT — quality-gates와 severity 어휘 통일, §15.1 mapping)
 phase('심층검증')
 

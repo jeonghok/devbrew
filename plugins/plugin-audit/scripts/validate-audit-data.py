@@ -3,7 +3,7 @@
 
 파이프라인은 자기를 회계할 수 없다 (§9.1) → 검증을 파이프라인 밖에 둔다. RED면 렌더링·산출 보고 금지.
 
---data: 렌더링 *전*. consent 3필드 · fanout 내부 정합(fanout_declared==consent.fanout) ·
+--data: 렌더링 *전*. consent(`at` 필수 · `approved` 는 있으면 true) · fanout 내부 정합(fanout_declared==consent.fanout) ·
         배정 D/OQ(meta.assigned_d/assigned_oq, 런타임 값) 완결성 · pending 잔존 0 ·
         codex 병합(B7) · cross-model 증발 · NOQ 원소 스키마 · gate-E→NOQ 회수.
 --artifacts: 렌더링 *후*. 실제 리포트 파일의 배너(AC-3)를 본다 (골든 픽스처는 실물을 안 본다).
@@ -27,10 +27,10 @@ def validate_data(data: dict) -> list:
     assigned_d = meta.get("assigned_d", [])
     assigned_oq = meta.get("assigned_oq", [])
 
-    # consent 3필드
+    # consent: at 필수, approved 는 있으면 true
     consent = meta.get("consent", {})
-    if not consent.get("approved") is True:
-        errs.append("meta.consent.approved != true")
+    if "approved" in consent and consent.get("approved") is not True:
+        errs.append("meta.consent.approved 가 있는데 true 가 아니다 — 거절이나 잘못 적힌 기록이다")
     if not consent.get("at"):
         errs.append("meta.consent.at 없음")
     if meta.get("fanout_declared") != consent.get("fanout"):
