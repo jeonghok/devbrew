@@ -7,6 +7,7 @@
 
 ### Changed
 - `/quality-gates:artifact-critique` E3 를 범위 고르기 · 규모 공시로 바꾸고 지출 승인 문장을 걷었다.
+- `dependencies.md` 에 외부 플러그인 `pr-review-toolkit` 행(강도 기록, 판 칸 `—`)을 더했다. `measure` 는 그 행을 못 쟀다고 알리고 그대로 둔다.
 
 ## [14.7.2] — 2026-10-24
 
