@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.7.3] — 2026-10-24
+
+### Changed
+- `/quality-gates:artifact-critique` E3 를 범위 고르기 · 규모 공시로 바꾸고 지출 승인 문장을 걷었다.
+- `dependencies.md` 에 외부 플러그인 `pr-review-toolkit` 행(강도 기록, 판 칸 `—`)을 더했다. `measure` 는 그 행을 못 쟀다고 알리고 그대로 둔다.
+
 ## [14.7.2] — 2026-10-24
 
 ### Changed

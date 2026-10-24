@@ -28,7 +28,7 @@ done
 expected_names() {
   case "$1" in
     spec-distill)  echo "python git gh superpowers quality-gates claude-code" ;;
-    quality-gates) echo "python git gh claude-code" ;;
+    quality-gates) echo "python git gh claude-code pr-review-toolkit" ;;
     project-init)  echo "python python-hook claude-code" ;;
     *)             echo "python claude-code" ;;
   esac
@@ -37,14 +37,36 @@ for p in $PLUGINS; do
   f="$ROOT/plugins/$p/dependencies.md"
   got="$(cd "$ROOT" && "$PY" -I -c 'import sys; sys.path.insert(0, "shared/deps"); import check_deps
 rows = check_deps.read_table(sys.argv[1])
+skipped = [r["name"] for r in rows if r["min_version"] == "—"]
 print(" ".join(r["name"] for r in rows))
-print("ok" if all(check_deps.version_triple(r["min_version"]) and len(r["measured_on"]) == 10 for r in rows) else "unmeasured")' "$f" 2>&1)"
+print("ok" if all(check_deps.version_triple(r["min_version"]) and len(r["measured_on"]) == 10 for r in rows if r["name"] not in skipped) else "unmeasured")
+print(" ".join(skipped))' "$f" 2>&1)"
   names="$(printf '%s\n' "$got" | sed -n 1p)"
   measured="$(printf '%s\n' "$got" | sed -n 2p)"
+  skipped="$(printf '%s\n' "$got" | sed -n 3p)"
   assert_eq "$names" "$(expected_names "$p")" "$p: dependencies.md 의 행 이름"
-  assert_eq "$measured" "ok" "$p: 모든 행의 최소 판 · 잰 날짜가 채워져 있다"
+  assert_eq "$measured" "ok" "$p: 판을 잴 수 있는 모든 행의 최소 판 · 잰 날짜가 채워져 있다"
+  case "$p" in
+    quality-gates) assert_eq "$skipped" "pr-review-toolkit" "$p: 판 칸이 —(외부 플러그인)인 행은 이 하나뿐이다" ;;
+    *)             assert_eq "$skipped" "" "$p: 판 칸이 —인 행이 없다" ;;
+  esac
+  if [ -n "$skipped" ]; then
+    assert_eq "$(grep -cF -- '판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 `—` 를 적는다' "$f")" "1" "$p: 건너뛴 행이 있으면 예외 문장이 한 번 있다"
+  fi
   assert_file_grep "$f" "^plugin: ${p}\$" "$p: 머리말 plugin 이 플러그인 이름이다"
 done
+
+QGF="$ROOT/plugins/quality-gates/dependencies.md"
+prt="$(cd "$ROOT" && "$PY" -I -c 'import sys; sys.path.insert(0, "shared/deps"); import check_deps
+r = [x for x in check_deps.read_table(sys.argv[1]) if x["name"] == "pr-review-toolkit"][0]
+print("기록" if r["strength"] == "기록" else "다른 강도")
+print("있음" if "외부 플러그인" in r["when_missing"] and "재지 못한다" in r["when_missing"] else "없음")' "$QGF" 2>&1)"
+assert_eq "$(printf '%s\n' "$prt" | sed -n 1p)" "기록" "qg: pr-review-toolkit 행은 강도 기록이다"
+assert_eq "$(printf '%s\n' "$prt" | sed -n 2p)" "있음" "qg: pr-review-toolkit 행의 없을 때 칸이 외부 플러그인이라 재지 못한다고 말한다"
+qgout="$(cd "$ROOT" && "$PY" plugins/quality-gates/scripts/check_deps.py entry --plugin-root plugins/quality-gates --need python,git,gh 2>&1)"; qgrc=$?
+if [ "$qgrc" = "0" ]; then ok "qg: entry --need python,git,gh 는 새 행과 상관없이 통과한다"
+elif printf '%s' "$qgout" | grep -q '필요'; then ok "qg: entry --need python,git,gh — 이 환경 판이 최소 판 밑이라 건너뜀(rc $qgrc)"
+else no "qg: entry --need python,git,gh 가 새 행 때문에 멈췄다(rc $qgrc): $qgout"; fi
 
 # ── 3. measure — 임시 플러그인 루트에서 표를 고치고 강도 · 없을 때 칸은 그대로 ──
 mkdir -p "$TMP/bin" "$TMP/plugins/demo" "$TMP/plugins/quality-gates/.claude-plugin" \

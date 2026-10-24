@@ -166,10 +166,13 @@ class BranchPrefixTemplateTests(unittest.TestCase):
                 "git worktree add",
                 "Branch Naming Pattern",
                 "git worktree add -b",
-                "확인하지 않는다",
                 "git push -u origin",
             ]:
                 self.assertIn(needle, sec, (s, needle))
+            self.assertIn("reflog", sec, s)
+            self.assertIn("`git worktree add -b` 로 만든 이름을 모두 확인한다", sec, s)
+            self.assertNotIn("확인하지 않는다", sec, s)
+            self.assertNotIn("만 확인한다", sec, s)
 
     def test_defaults_match_prefix_table(self):
         for s in STRATEGIES:

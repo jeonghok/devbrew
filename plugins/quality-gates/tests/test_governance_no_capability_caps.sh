@@ -2,7 +2,7 @@
 # AC8a–AC8d — 규약 정렬(S4): CLAUDE.md · philosophy · plugin-authoring.md에서 능력
 # 상한(N≥5 하드 게이트 · 기본값 편향 · wall-clock budget · single-file trivia 제약)이
 # 사라졌고, 그 자리를 대체하는 재평가-가능 원칙과 agent model:inherit 규약이 들어섰고,
-# cost_class: high 승인 게이트(P17 load-bearing)는 그대로 존속하는지 검증한다.
+# cost_class: high 는 지출 승인 대신 규모를 공시하되 범위를 고르는 질문(P17)은 남는지 검증한다.
 #
 # 왜 이 락이 필요한가: 이 sweep의 앞선 태스크들은 코드/프롬프트에서 능력 억제를
 # 제거했지만, 그 억제를 정당화하던 "규약"(CLAUDE.md·철학 문서)이 남아 있으면 다음
@@ -46,7 +46,7 @@ else
   no "인용부 코퍼스가 ${#CITE_FILES[@]}개뿐 — 경로가 깨졌다 (아래 인용 판정 무의미)"
 fi
 
-# --- AC8a: 숫자 임계 · 기본값 편향 · wall-clock 부재, 승인 게이트는 존속 ---
+# --- AC8a: 숫자 임계 · 기본값 편향 · wall-clock 부재, cost_class 는 규모 공시 ---
 # N-접두 형태("N ≥ 5"/"N≥5")만 찾으면 맹점이 생긴다 — philosophy AP9 스텁은 접두
 # 없이 bare "≥5"로 같은 임계를 적었었고, 원래 sweep의 판별 질의(N-접두 전용)가
 # 이걸 놓쳤다(fix round 1). ≥/>= 뒤에 5가 바로 오는 형태를 접두 유무와 무관하게
@@ -124,20 +124,29 @@ else
   printf '      %s\n' $(printf '%s\n' "$cite_hits" | cut -d: -f1 | sort -u)
 fi
 
-# cost_class: high 승인 게이트는 양방향으로 존속을 증명한다.
+# cost_class: high 는 지출 승인 대신 규모를 한 줄로 공시한다(AC11 · AC12).
 # CLAUDE.md 본문은 `cost_class`와 `high`를 별개 backtick span으로 적어 리터럴
-# "cost_class: high" 문자열이 존재하지 않는다 — 그래서 게이트 절 자체의 고유 문구를
-# 직접 앵커한다. philosophy는 실제로 `cost_class: high` 리터럴을 갖고 있으므로 함께 확인.
-if grep -qF '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' "$CLAUDE_MD"; then
-  ok "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절 존속"
-else
-  no "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절이 사라졌다 — P17 사용자-주권 컨트롤 소실"
-fi
-if grep -qF 'cost_class: high' "$PHIL"; then
-  ok "AC8a: philosophy의 cost_class: high 리터럴 존속"
-else
-  no "AC8a: philosophy의 cost_class: high 승인 게이트 리터럴이 사라졌다"
-fi
+# "cost_class: high" 문자열이 존재하지 않는다 — 그래서 cost 줄의 고유 문장을 앵커한다.
+# 사용자 결정권(P17 사용자 주권)이 남는 자리는 범위 고르기다 — 범위 질문 양성 단언이 그것을 잠근다.
+COST_C="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CLAUDE_MD")"
+p22="$(awk '/^### P22/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+assert_contains "$COST_C" '`high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다.' "AC11: CLAUDE.md 공시 문장(양)"
+assert_contains "$COST_C" '어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다.' "AC11: 지출 승인 없음 · 상한을 여는 질문"
+assert_contains "$COST_C" '대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다.' "AC11: P17 — 사용자 결정권은 범위 고르기에 남는다(양)"
+for gone in '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' '이름 붙인 예외' 'worst-case 가 high 인 `variable`'; do
+  assert_not_contains "$(cat "$CLAUDE_MD")" "$gone" "AC11: CLAUDE.md 에 「${gone}」 없음"
+done
+assert_contains "$p22" 'cost_class: high' "AC12: P22 리터럴"
+assert_contains "$p22" '대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17)' "AC12: P22 범위 질문"
+assert_not_contains "$p22" '승인 게이트가 필수' "AC12: P22 옛 게이트 없음"
+assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
+# AC12 바이트 같음 — 설계 §2 의 확정 문안 세 줄(설계 파일에서 읽지 않는다).
+FIXED_CLAUDE='- **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.'
+FIXED_P22_1='**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.'
+FIXED_P22_2='코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 3 · `shared/tests/test_cost_disclosure.sh`'
+assert_eq "$(grep -cxF -- "$FIXED_CLAUDE" "$CLAUDE_MD")" "1" "AC12: CLAUDE.md cost 줄이 설계 §2 확정 문안과 바이트 같다"
+assert_eq "$(grep -cxF -- "$FIXED_P22_1" "$PHIL")" "1" "AC12: P22 본문 첫 줄이 설계 §2 확정 문안과 바이트 같다"
+assert_eq "$(grep -cxF -- "$FIXED_P22_2" "$PHIL")" "1" "AC12: P22 코드 줄이 설계 §2 확정 문안과 바이트 같다"
 
 # --- AC8b: philosophy :20 — Three Laws 집행은 불변, 개별 임계치는 재평가 대상 ---
 # 부분 문자열 assert는 **자기 부정문에도 만족된다**: '재평가 대상'은
@@ -254,6 +263,7 @@ assert_contains "$(cline '**Scoped agents')" '역할 프롬프트는 첫머리�
 assert_not_contains "$(cline '**Scoped agents')" 'You are NOT responsible for Z' "AC8 :48: 영어 공식 강제 없음"
 assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`dependencies.md` 표(이름 · 최소 판 · 강도 · 없을 때)' "AC8 :50"
 assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '`check_deps.py measure`' "AC8 :50 판 측정"
+assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '판을 잴 길이 없는 외부 플러그인 행만 판 칸 둘에 `—` 를 적는다' "AC8 :50 외부 플러그인 예외"
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '로드맵 단위 지휘 기계 상태(`machine.md`)' "AC8 :70 수명 넷"
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '링크 검사 없이 만든다' "AC8 :70 예외"
 assert_not_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '실패 시 디버깅을 위해' "AC8 :70 없는 동작을 쓰지 않는다"

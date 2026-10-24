@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""conductor_ledger.py — 기계 상태 쓰기 · 표지 · 시작 승인 · 로드맵 찾기(R5 계획 3 Task 4). 뒤 Task 가 클래스를 더한다.
+"""conductor_ledger.py — 기계 상태 쓰기 · 표지 · 로드맵 찾기(R5 계획 3 Task 4). 뒤 Task 가 클래스를 더한다.
 
 Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_conductor_ledger.py
 """
@@ -26,6 +26,14 @@ import suite_lock  # noqa: E402
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
 RM = "plan/rm/roadmap.md"
 ENV = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+
+# 시작 승인 절을 쓰던 판이 실제로 쓴 기계 상태 글(그 판의 render_machine 출력 그대로).
+OLD_MACHINE = (
+    "---\ntype: conductor-machine\nroadmap: docs/superpowers/roadmaps/rm/roadmap.md\nwriter: spec-distill 8.9.1\n---\n\n"
+    "## PR\n\n\n## 실행 원장\n\n\n## 자원\n\n\n## 살아 있는 agent\n\n\n## 기다리는 질문\n\n\n"
+    "## 쌓인 기록\n\n\n## 레포 설정\n\n\n## 시작 승인\n\n"
+    "- session-aaaa1111 · 2026-10-18 10:00 · 남은 에픽 2 · agent 약 6\n"
+)
 
 
 def sh(cwd, *args):
@@ -131,78 +139,35 @@ class Marker(Repo):
         self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
 
 
-class StartApproval(Repo):
-    def test_same_session_same_scale_is_disclosure(self):
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", "남은 에픽 2 · agent 약 6")
-        self.assertEqual(rc, 1)
-        self.assertIn("승인 필요", out)
-        self.assertEqual(self.cli("approve", "--roadmap", RM, "--session", SID,
-                                  "--scale", "남은 에픽 2 · agent 약 6")[0], 0)
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", "남은 에픽 2 · agent 약 6")
+class RetiredApproval(Repo):
+    def test_retired_subcommands_are_unknown(self):
+        script = str(Path(L.__file__).resolve())
+        for cmd in ("approval", "approve"):
+            p = subprocess.run([sys.executable, script, "--root", str(self.w), cmd, "--roadmap", RM,
+                                "--session", SID, "--scale", "x"], capture_output=True, encoding="utf-8")
+            self.assertEqual(p.returncode, 2, p.stderr)
+            self.assertIn("invalid choice", p.stderr)
+            self.assertIn("'%s'" % cmd, p.stderr)
+
+    def test_claim_takeover_release_still_work(self):
+        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID), (0, "acquired\n"))
+        self.assertTrue(L.mpath(self.w, RM).is_file())
+        self.assertEqual(self.cli("takeover", "--roadmap", RM, "--session", OTHER)[0], 0)
+        rc, out = self.cli("release", "--roadmap", RM, "--session", OTHER)
         self.assertEqual(rc, 0)
-        self.assertTrue(out.startswith("공시만"), out)
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", "남은 에픽 3 · agent 약 9")
-        self.assertEqual(rc, 1)
-        self.assertIn("규모가 바뀌었다", out)
-
-    def test_other_session_must_ask(self):
-        ok, why = L.scale_check([{"세션": SID, "때": "t", "규모": "s"}], OTHER, "s")
-        self.assertFalse(ok)
-        self.assertIn("이 세션의 승인이 없다", why)
-
-    def test_approve_replaces_own_row(self):
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", "a")
-        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", "b")
-        rows = cs.load(L.mpath(self.w, RM), RM)["시작 승인"]
-        self.assertEqual([r["규모"] for r in rows], ["b"])
+        self.assertIn("표지를 풀었다", out)
 
 
-class ApprovalMarker(Repo):
-    SCALE = "남은 에픽 2"
-
-    def approved(self):
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", self.SCALE)
-
-    def ask(self, session=SID):
-        return self.cli("approval", "--roadmap", RM, "--session", session, "--scale", self.SCALE)
-
-    def test_no_marker_needs_approval(self):
-        rc, out = self.ask()
-        self.assertEqual(rc, 1)
-        self.assertIn("표지를 쥐고 있지 않다", out)
-
-    def test_held_stays_disclosure(self):
-        self.approved()
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        rc, out = self.ask()
-        self.assertEqual(rc, 0)
-        self.assertTrue(out.startswith("공시만"), out)
-
-    def test_release_then_claim_needs_approval(self):
-        self.approved()
-        self.cli("release", "--roadmap", RM, "--session", SID)
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        self.assertEqual(self.ask()[0], 1)
-
-    def test_takeover_by_other_invalidates(self):
-        self.approved()
-        self.cli("takeover", "--roadmap", RM, "--session", OTHER)
-        self.assertEqual(self.ask()[0], 1)
-        self.cli("takeover", "--roadmap", RM, "--session", SID)
-        self.assertEqual(self.ask()[0], 1)
-
+class MarkerWrites(Repo):
     def test_other_cannot_add(self):
-        self.approved()
+        self.cli("claim", "--roadmap", RM, "--session", SID)
         rc, out = self.cli("add", "--roadmap", RM, "--session", OTHER, "--section", "자원",
                            "--cells", "worktree · /x · A1 · 설계 · t")
         self.assertEqual(rc, 5)
         self.assertIn(SID, out)
 
     def test_drop_where_needs_equals(self):
-        self.approved()
+        self.cli("claim", "--roadmap", RM, "--session", SID)
         rc, _o = self.cli("drop", "--roadmap", RM, "--session", SID, "--section", "자원", "--where", "경로")
         self.assertEqual(rc, 2)
 
@@ -1158,46 +1123,29 @@ class PrRefresh(Repo):
         self.assertEqual([(r["브랜치"], r["번호"]) for r in self.rows()],
                          [("feature/a1", "#7"), ("feature/a1", "#8"), ("feature/a1", "#9"), ("feature/a2", "-")])
 
-    def test_skill_reset_branch_drops_stale_approval_and_unblocks_approval(self):
-        """지휘자 3 의 「옛 PR 캐시 다시 채우기」: claim rc 3(표지는 잡음) → pr-refresh --reset → release → claim rc 0.
-        표지를 넘겨받혀 남은 이 세션의 옛 시작 승인은 지워지고, approval · approve 는 옛 줄에 막히지 않는다."""
-        scale = "남은 에픽 2 · agent 약 6"
+    def test_old_pr_row_stops_claim_and_takeover_without_writing(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
-        self.assertEqual(self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
-        self.cli("takeover", "--roadmap", RM, "--session", OTHER)   # 이 세션의 승인 줄은 남는다
-        self.cli("release", "--roadmap", RM, "--session", OTHER)
+        self.cli("release", "--roadmap", RM, "--session", SID)
         self.write_old_row()
+        before = L.mpath(self.w, RM).read_bytes()
         rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
         self.assertEqual(rc, 3, out)
-        self.assertIn("옛 판이 쓴 PR 캐시 줄", out)
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
-        self.assertEqual(rc, 3, out)                                   # 다시 채우기 전에는 같은 벽
-        self.answers["feature/a1"] = self.THREE
-        self.assertEqual(self.refresh("--reset")[0], 0)
-        self.assertEqual(self.cli("release", "--roadmap", RM, "--session", SID)[0], 0)
+        self.assertIn("--reset 으로 다시 채운다", out)
+        self.assertEqual(L.mpath(self.w, RM).read_bytes(), before)
+        self.assertEqual(cs.holder(L.mpath(self.w, RM).parent), SID)
+        rc, out = self.cli("takeover", "--roadmap", RM, "--session", OTHER)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("--reset 으로 다시 채운다", out)
+        self.assertEqual(L.mpath(self.w, RM).read_bytes(), before)
+
+    def test_claim_rewrites_old_machine_without_start_approval(self):
+        path = L.mpath(self.w, RM)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(OLD_MACHINE.replace("docs/superpowers/roadmaps/rm/roadmap.md", RM), encoding="utf-8")
+        self.assertIn("## 시작 승인", path.read_text(encoding="utf-8"))
         rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
         self.assertEqual((rc, out.strip()), (0, "acquired"))
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
-        self.assertEqual(rc, 1, out)
-        self.assertIn("승인 필요 — 이 세션의 승인이 없다", out)
-        self.assertEqual(self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
-        self.assertEqual(self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)[0], 0)
-
-    def test_reset_then_claim_without_release_keeps_stale_approval(self):
-        """양의 짝: release 없이 claim 만 다시 돌면(held) 넘겨받히기 전의 옛 시작 승인이 살아 「공시만」 이 된다."""
-        scale = "남은 에픽 2 · agent 약 6"
-        self.cli("claim", "--roadmap", RM, "--session", SID)
-        self.cli("approve", "--roadmap", RM, "--session", SID, "--scale", scale)
-        self.cli("takeover", "--roadmap", RM, "--session", OTHER)
-        self.cli("release", "--roadmap", RM, "--session", OTHER)
-        self.write_old_row()
-        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID)[0], 3)
-        self.answers["feature/a1"] = self.THREE
-        self.assertEqual(self.refresh("--reset")[0], 0)
-        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID), (0, "held\n"))
-        rc, out = self.cli("approval", "--roadmap", RM, "--session", SID, "--scale", scale)
-        self.assertEqual(rc, 0, out)
-        self.assertIn("공시만", out)
+        self.assertNotIn("## 시작 승인", path.read_text(encoding="utf-8"))
 
     def test_pr_of_another_head_name_fails_closed(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)

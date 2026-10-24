@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # R5 AC30 · AC17 — devbrew 밖 버릴 레포(기본 브랜치 trunk · 접두 work/ · 폴더는 frontmatter)에서 지휘 순환의 기계 부분:
-# 상태 → 표지 · 시작 승인 → 에픽 worktree → 설계문서 · 승인 줄 → 계획 → 구현 → 판정 · 구현 대조 절 → 스위트 대조 →
+# 상태 → 표지 · 규모 공시 → 에픽 worktree → 설계문서 · 승인 줄 → 계획 → 구현 → 판정 · 구현 대조 절 → 스위트 대조 →
 # 머지 → 정리 → 기계 상태를 지워도 같은 상태. 조사 에픽은 산출물로 단계가 매겨진다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_conductor_e2e.sh
 set -u
@@ -39,12 +39,12 @@ assert_eq "$rc" "0" "작업 목록 rc 0(기본 브랜치 trunk)"
 assert_contains "$tasks" "E1" "작업 목록에 E1"
 assert_eq "$(stage_of E1)" "준비" "E1 준비"
 
-# 2 — 표지 · 시작 승인(같은 규모면 공시만)
-L claim --roadmap "$RM" --session "$SID" >/dev/null
+# 2 — 표지 · 규모 공시(원장에 승인 하위 명령이 없다)
+L claim --roadmap "$RM" --session "$SID" >/dev/null; assert_eq "$?" "0" "claim rc 0"
 SCALE="남은 에픽 2(E1 · E2) · agent 약 6 · 순서 E1 → E2"
-L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null; assert_eq "$?" "1" "처음엔 승인 필요"
-L approve --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null
-assert_contains "$(L approval --roadmap "$RM" --session "$SID" --scale "$SCALE")" "공시만" "같은 세션 · 같은 규모면 공시만"
+SP0="$(cd "$W" && python3 "$S/conductor_state.py" path --roadmap "$RM")"
+[ -f "$SP0" ] && ok "표지를 잡으면 기계 상태 파일이 생긴다" || no "기계 상태 파일이 없다: $SP0"
+L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null 2>&1; assert_eq "$?" "2" "원장에 approval 하위 명령이 없다(argparse rc 2)"
 
 # 3 — 에픽 worktree(하니스 폴더 · 접두 work/) · 자원 기록
 WT="$(L worktree-path --name e1)"
@@ -110,8 +110,7 @@ rm -f -- "$SP"
 after="$(tasks_of)"
 assert_eq "$after" "$before" "기계 상태를 지워도 작업 목록이 같다"
 assert_contains "$(L orphans --roadmap "$RM")" "work/e2" "기계 상태를 잃으면 E2 worktree 는 주인 모름으로 다시 드러난다"
-L claim --roadmap "$RM" --session "$SID" >/dev/null
-L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null; assert_eq "$?" "1" "기계 상태를 잃으면 시작 승인을 다시 묻는다"
+L claim --roadmap "$RM" --session "$SID" >/dev/null; assert_eq "$?" "0" "기계 상태를 잃어도 claim 은 다시 잡힌다"
 
 # 10 — 레포 전용 값이 박혀 있지 않다: 이 레포에는 main · feature/ · docs/superpowers 가 없다
 assert_eq "$(g "$W" branch -a --list '*main*' | wc -l | tr -d ' ')" "0" "버릴 레포에 main 브랜치가 없다"

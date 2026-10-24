@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0] — 2026-10-24
+
+minor 인 이유 — 옛 consent.json(`approved: true`)을 검증기가 그대로 받고, 지운 지출 동의 질문은 같은 판 SKILL 안의 단계였다(커밋의 `!` 는 동작 제거를 알리는 표시다).
+
+### Removed
+- 지출 동의 질문(「승인」 · 「중단」). 사용자가 정한 재건이라 deprecation 창 없이 제거한다.
+
+### Changed
+- 첫 축 질문에 「중단」 선택지가 있고, 선택지 설명에 규모를 싣는다. 규모는 공시 한 줄로도 알린다.
+- `consent.json` 은 `{at, fanout, axes}` 를 적는다. 검증기는 `approved` 키가 없는 것을 받고, 있으면 true 만 받는다.
+- Workflow 를 쓰는 근거는 사용자의 호출이다.
+
 ## [1.5.1] — 2026-10-24
 
 ### Changed

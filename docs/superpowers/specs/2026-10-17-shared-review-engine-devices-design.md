@@ -415,7 +415,7 @@ next_phase: superpowers:writing-plans
 |---|---|---|
 | qg · project-init · plugin-audit README · CHANGELOG 의 낡은 개념(이 설계가 바꾸는 동작 밖) | 원칙 문서 · 낡은 개념 정리는 R11 범위 | R11 |
 | 링크 공유 · 문서 경로 · 상한 설정이 devbrew 밖 레포와 superpowers · gh 부재에서 통하는지 | 경로 규약 범용화 · 부재 강등은 R8 범위 끝냄 — #249(R8 계획 1) | R8 |
-| 「버그가 새면 해결책은 persona 편집」 등 규칙 문면 | 규칙 문면은 R9 범위 | R9 |
+| 「버그가 새면 해결책은 persona 편집」 등 규칙 문면 | 규칙 문면은 R9 범위 끝냄 — 03863846(R9 계획 1 #255, persona 편집 문장) | R9 |
 | `shared/tests/test_copy_of_contract.sh` 의 소비 도출이 한 플러그인 문서의 다른 플러그인 전체 경로 인용(`plugins/<다른>/scripts/<이름>`)을 소비로 읽는 오탐 — 계획 1 은 spec-distill CHANGELOG 옛 항목 문구 하나를 바꿔 피했다. 같은 락의 양성 짝이 `.md` 전량 제외 같은 넓은 제외를 못 잡고(`doc-critic.md` 짝이 없다) 제외 목록 주석이 낡았다 | 계획 1 범위 밖의 락 도출 고침 — `shared/tests` 는 R2a 영역 (R2a 끝 — 지휘자 판정 2026-10-20) 끝냄 — 9be978f5 · 0f1d9804 | R12 |
 | 계획 1 최종 리뷰의 보류 둘 중 하나: `test_qg_critique_routing.sh` 가 P1b 가 P2 보다 앞에 있는 순서를 잠그지 않는다(뒤로 옮겨도 통과) | 기능 결함이 아니라 락 보강 — 뒤 계획이 같은 파일을 고칠 때 — 끝냄: 7a77eb4c(계획 3 Task 1 — P1b 가 P2 앞이라는 순서 락) | R2a |
 | 계획 1 최종 리뷰의 보류 둘 중 하나: `case_same_name_block_broken_kills_critic`(파손 블록을 앞에) 하나로는 「첫 블록만 읽는」 구현을 못 가른다(지금은 `case_same_name_blocks_disclosed` 가 잡는다) | 기능 결함이 아니라 락 보강 — 뒤 계획이 같은 파일을 고칠 때 (R2a 끝 — 지휘자 판정 2026-10-20) 끝냄 — a1b3b45d | R12 |

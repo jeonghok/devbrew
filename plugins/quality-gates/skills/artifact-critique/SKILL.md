@@ -163,7 +163,7 @@ artifact_path_auth.py <project_dir> <path>
 > 스냅샷-복사까지 하지 않는다. static escape(committed symlink이 project_dir 밖을 가리킴)는
 > E2c가 read 前에 차단하고, step 6는 편집 직전 canonical 불변을 재검증한다.
 
-### E3 — Upfront 동의 게이트
+### E3 — 범위 고르기 · 규모 공시
 
 먼저 한도를 계산한다:
 
@@ -171,8 +171,8 @@ artifact_path_auth.py <project_dir> <path>
 artifact_max_rounds.sh
 ```
 
-`effective_max_rounds:` 값을 읽어(= env clamp, 기본 5) **동의 문구와 루프 한도로 동일하게
-사용**한다(동의 범위 = 실행 범위; consent-integrity). 상한을 넘는 라운드는 상한에서 사용자가 연 것만 돈다(9).
+`effective_max_rounds:` 값을 읽어(= env clamp, 기본 5) **고지 문구와 루프 한도로 동일하게
+사용**한다(고지 범위 = 실행 범위; disclosure-integrity). 상한을 넘는 라운드는 상한에서 사용자가 연 것만 돈다(9).
 `AskUserQuestion` 한 번에 두 질문을 싣는다:
 
 (1) 대상 목록 · 모드 · 상한:
@@ -188,8 +188,7 @@ artifact_max_rounds.sh
 > 옵션: 「1명 (권장)」 · 「2명」 · 「3명」, 기타 칸에 다른 수. 기타 칸의 글이 1 이상의 정수가 아니면 다시 묻는다.
 > 고른 수를 `<k>` 로 기록해 루프의 모든 라운드에 쓴다.
 
-이 게이트는 N을 되묻지 않는다(값은 고지). cost_class=variable(worst-case high)이라 이
-upfront 게이트가 지출-전 명시 승인이다.
+이 게이트는 N을 되묻지 않는다(값은 고지). 이 질문은 범위를 고르는 질문이다 — 라운드마다 띄울 수와 상한은 본문에 공시한다. 지출 승인을 묻지 않는다.
 
 ## 루프 (대상마다 · 라운드 N = 1..effective_max_rounds — 상한에서 사용자가 더 연다)
 

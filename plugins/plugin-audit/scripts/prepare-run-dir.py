@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""prepare-run-dir.py — plugin-audit 실행 디렉토리를 만든다 (지출 동의 승인 직후 한 번).
+"""prepare-run-dir.py — plugin-audit 실행 디렉토리를 만든다 (규모 공시 직후 한 번).
 
 <repo-root>/.claude/plugin-audit/<date>-<target>[-N]/ 을 os.mkdir 로 원자적으로 만들고 그 안에
 `*` 한 줄짜리 .gitignore 를 쓴다. 이미 있으면 -2, -3 … 을 붙여 다시 시도한다 — 기존 디렉토리를

@@ -450,7 +450,7 @@ gh 가 필수라서 머지 커밋이 없는 squash · rebase 머지도 PR 상태
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| CLAUDE.md 「최소 버전이 선언된 의존성」 · 「graceful degradation」 문장에 gh 필수 · 개발 당시 판 · superpowers 부재 동작을 반영 | 규칙 문서는 R9 범위 | R9 |
+| CLAUDE.md 「최소 버전이 선언된 의존성」 · 「graceful degradation」 문장에 gh 필수 · 개발 당시 판 · superpowers 부재 동작을 반영 | 규칙 문서는 R9 범위 끝냄 — 3a3de05d(R9 계획 1 #255, CLAUDE.md 의존 · degrade 문장) | R9 |
 | qg 판정 상태 위치와 그 뒤의 중첩 레포 리뷰 | R12 #18 | R12 |
 | AC29 픽스처 중 upstream 원격이 있는 fork(origin 의 PR 만 본다) · `-suffix` 판 문자열 | 판 확인 · PR 판정은 계획 2(§4 · §5) 몫 끝냄 — 79a97dc6(R8 계획 2, `test_workspace_invariance.sh`) | R8 |
 | `strict_frontmatter` 가 콜론 없는 머리말 줄을 오류 없이 건너뛴다 | 해결자 줄 규칙을 오류로 조이는 일 — 계획 2 · 3 의 파일 목록에 해결자가 없다 끝냄 — R14(feature/r8-device-leftovers, R14 설계 §1 #1 · §5) | R14 |

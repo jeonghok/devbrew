@@ -89,7 +89,19 @@ class TestData(unittest.TestCase):
 
     def test_consent_mismatch_is_red(self):
         bad = copy.deepcopy(VALID); bad["meta"]["consent"]["approved"] = False
-        rc, _ = run_validate(bad); self.assertEqual(rc, 1)
+        rc, err = run_validate(bad); self.assertEqual(rc, 1)
+        self.assertIn("meta.consent.approved", err)
+
+    def test_consent_without_approved_passes(self):
+        ok = copy.deepcopy(VALID); del ok["meta"]["consent"]["approved"]
+        rc, err = run_validate(ok)
+        self.assertEqual(rc, 0, f"approved 없는 consent 가 RED:\n{err}")
+
+    def test_consent_approved_string_is_red(self):
+        bad = copy.deepcopy(VALID); bad["meta"]["consent"]["approved"] = "true"
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1)
+        self.assertIn("meta.consent.approved", err)
 
     def test_pending_steelman_is_red(self):
         bad = copy.deepcopy(VALID)

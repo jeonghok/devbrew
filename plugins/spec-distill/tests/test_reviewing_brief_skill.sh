@@ -70,7 +70,7 @@ fi
 grep -qxE 'cost_class: medium' <<<"$FM" \
   && ok "지출: cost_class: medium" || no "지출: cost_class 가 medium 이 아니다"
 grep -qF 'cost_class: high' "$SKILL" \
-  && no "지출: cost_class: high 가 파일 어딘가에 남았다 — high 는 지출 승인 게이트를 요구한다(CLAUDE.md)" \
+  && no "지출: cost_class: high 가 파일 어딘가에 남았다 — high 는 크게 쓰기 전에 규모 공시를 요구한다(CLAUDE.md)" \
   || ok "지출: cost_class: high 잔존 없음"
 grep -qE '^[[:space:]]*AskUserQuestion\(\{' "$SKILL" \
   && no "지출: AskUserQuestion 호출 리터럴이 있다 — 떼기로 한 지출 승인 게이트가 되살아났다" \

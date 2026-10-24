@@ -10,9 +10,9 @@ README = PLUGIN / "README.md"
 _BUGGY_ARTIFACTS_DIR_FORM = re.compile(r'--artifacts\s+"?\$RUN_DIR/?"?(\s|$)')
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
-    "cost_class: high",                                    # 지출 게이트 owner
+    "cost_class: high",                                    # 범위 고르기 · 규모 공시 owner
     "DEVBREW_PLUGIN_AUDIT_DISABLE",                         # kill switch
-    "AskUserQuestion",                                     # 지출 동의 게이트 (C2)
+    "AskUserQuestion",                                     # 축 고르기 질문(범위)
     "check-law2.py",                                        # pre-0 정적 게이트
     "check-no-verdict-injection.py",                       # B
     "check-plugin-structure.sh",                           # E
@@ -30,7 +30,7 @@ INVARIANTS = [
     "codex-gate:begin runner=run_audit_codex_reviewer.sh",
     "자기서술은 감사 material이지 verdict 프레임이 아니다",   # AC-8b redaction (C17)
     "캐시 갱신 + 세션 재시작",                               # GC8
-    # 실행 디렉토리는 지출 동의 승인 직후 prepare-run-dir.py 가 만든다 (설계 2026-09-28 §2).
+    # 실행 디렉토리는 규모 공시 직후 prepare-run-dir.py 가 만든다 (설계 2026-09-28 §2).
     "prepare-run-dir.py",
     # 빈 RUN_DIR 가드 — Bash 도구는 셸 변수를 다음 호출로 넘기지 않는다.
     '[ -d "$RUN_DIR" ] ||',
@@ -73,23 +73,19 @@ class TestSkillOrchestration(unittest.TestCase):
         self.assertNotEqual(a, -1, "assemble --out 실행 디렉토리 경로 부재")
         self.assertLess(j, a, "journal 확보가 assemble 뒤에 옴 — 미획득 degrade가 배너에 못 실린다 (R4)")
 
-    def test_run_dir_made_after_consent(self):
-        # 거절이면 실행 디렉토리가 생기지 않는다 — 생성 호출이 동의 게이트보다 뒤에 와야 한다.
-        # 앵커는 body-unique 문구 — bare `AskUserQuestion`/`prepare-run-dir.py`는 헤더에도
-        # 나타날 수 있어 satisfiable하다.
+    def test_scope_question_has_stop_before_run_dir(self):
+        # 「중단」이면 실행 디렉토리가 생기지 않는다 — 질문 → 중단 문장 → 공시 → 생성 호출 순서.
         body = SKILL.read_text(encoding="utf-8")
-        consent_anchor = "AskUserQuestion`으로 명시 승인"
-        prep_anchor = 'scripts/prepare-run-dir.py" <target>'
-        self.assertEqual(
-            body.count(consent_anchor), 1,
-            "지출 동의 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
-        )
-        self.assertEqual(
-            body.count(prep_anchor), 1,
-            "prepare-run-dir.py 호출 문구가 body-unique 하지 않다 — 앵커 재선정 필요",
-        )
-        consent, prep = body.find(consent_anchor), body.find(prep_anchor)
-        self.assertLess(consent, prep, "prepare-run-dir.py 호출이 지출 동의 게이트보다 앞에 있다")
+        scope = "「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」"
+        stop = "「중단」이면 종료한다 — 실행 디렉토리를 만들지 않는다"
+        disclose = "(b) **규모 공시** — 질문이 아니라 한 줄이다"
+        prep = 'scripts/prepare-run-dir.py" <target>'
+        for anchor in (scope, stop, disclose, prep):
+            self.assertEqual(body.count(anchor), 1, f"앵커가 body-unique 하지 않다: {anchor}")
+        s, t, d, p = (body.find(x) for x in (scope, stop, disclose, prep))
+        self.assertLess(s, t)
+        self.assertLess(t, d)
+        self.assertLess(d, p, "prepare-run-dir.py 호출이 규모 공시보다 앞에 있다")
 
     def test_no_docs_audits_path(self):  # AC7
         for path in (SKILL, README):
@@ -117,19 +113,30 @@ class TestSkillOrchestration(unittest.TestCase):
             "(the rendered .md), per validate-audit-data.py's real CLI contract.",
         )
 
-    def test_consent_gate_announces_axes_and_scale(self):
+    def test_scope_and_disclosure_announce_axes_and_scale(self):
         body = SKILL.read_text(encoding="utf-8")
-        start = body.index("3. **지출 동의 게이트")
+        start = body.index("3. **범위 고르기 · 규모 공시")
         sec = body[start:body.index("4. **실행 디렉토리**", start)]
-        for need in ("「여섯 축 전부 (권장)」", "「축 골라서」", "상한 없음", "심층검증",
+        for need in ("「여섯 축 전부 (권장)」", "「축 골라서」", "「중단」",
+                     "감사자 6 · 반박 최대 6",
+                     "아무것도 띄우지 않고 실행 디렉토리도 만들지 않는다",
+                     "상한 없음", "심층검증",
+                     "「감사자 k · 반박 최대 k · codex 감사 k회",
                      "보안 축을 뺐다 — 사용자 파일 파괴 경로를 아무도 보지 않는다",
-                     "「검증 안 됨」"):
+                     "「검증 안 됨」", "지출 승인을 묻지 않는다"):
             self.assertIn(need, sec)
-        for gone in ("최대 8", "약 30", "6축"):
+        for gone in ("최대 8", "약 30", "6축", "AskUserQuestion`으로 명시 승인",
+                     "「승인」 · 「중단」", "지출 동의"):
             self.assertNotIn(gone, sec)
-        self.assertEqual(body.count("AskUserQuestion`으로 명시 승인"), 1)
-        self.assertIn("AskUserQuestion`으로 명시 승인", sec)
-        self.assertIn("{approved, at, fanout, axes}", body)
+        self.assertIn("{at, fanout, axes}", body)
+        self.assertNotIn("{approved, at, fanout, axes}", body)
+
+    def test_workflow_reason_is_user_invocation(self):
+        body = SKILL.read_text(encoding="utf-8")
+        sec = body.split("## Workflow", 1)[1].split("## post-1", 1)[0]
+        self.assertIn("사용자가 `/plugin-audit:plugin-audit` 를 부른 것이 이 Workflow 의 명시 요청이다. "
+                      "모델은 이 skill 을 부르지 않는다(`disable-model-invocation: true`).", sec)
+        self.assertNotIn("cost_class 게이트 통과 후", sec)
 
     def test_workflow_call_passes_axes(self):
         body = SKILL.read_text(encoding="utf-8")

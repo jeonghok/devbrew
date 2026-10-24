@@ -10,7 +10,6 @@
   claim | takeover | release --roadmap R --session S    세션 표지
   add  --roadmap R --session S --section 절 --cells "칸 · 칸 …"
   drop --roadmap R --session S --section 절 --where 칸=값
-  approval | approve --roadmap R --session S --scale "규모"   시작 승인 공시 판단 · 기록
   pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다(적은 번호는 따로 받는다)
   pr-record  --roadmap R --session S --epic E --pr <PR> [--drop]   대조한 에픽 PR 번호 줄과 PR 캐시 줄을 쓴다(--drop 은 지운다)
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
@@ -129,17 +128,6 @@ def split_cells(section: str, text: str) -> dict:
     if len(cells) != len(cols) or not all(cells):
         raise Fail(2, "%s 절은 칸 %d개(%s)다 — 받은 것: %r" % (section, len(cols), " · ".join(cols), text))
     return dict(zip(cols, cells))
-
-
-def scale_check(rows: list, session: str, scale: str):
-    """(공시만이면 True, 이유). 같은 세션의 승인이 있고 규모 줄이 글자 그대로 같을 때만 공시만이다(결정 B)."""
-    mine = [r for r in rows if r["세션"] == session]
-    if not mine:
-        return False, "이 세션의 승인이 없다"
-    last = mine[-1]
-    if last["규모"] != scale:
-        return False, "규모가 바뀌었다 — 전: %s → 지금: %s" % (last["규모"], scale)
-    return True, "이 세션에서 %s 에 승인받은 규모 그대로다" % last["때"]
 
 
 def worktrees(root) -> list:
@@ -659,17 +647,16 @@ def c_roadmaps(root, a) -> int:
     return 0
 
 
-def _drop_approval(root, a):
-    """표지를 새로 쥐면 옛 시작 승인은 효력이 없다(AC15) — 이 세션의 행을 지운다."""
-    update(root, a.roadmap, a.session,
-           lambda d: d.__setitem__("시작 승인", [r for r in d["시작 승인"] if r["세션"] != a.session]))
+def _check_state(root, a):
+    """표지를 새로 쥐거나 넘겨받은 뒤 기계 상태를 읽어 검사하고 같은 내용을 다시 쓴다 — 깨졌거나 옛 판 줄이면 쓰지 않고 rc 3."""
+    update(root, a.roadmap, a.session, lambda d: None)
 
 
 def c_claim(root, a) -> int:
     got = cs.acquire(mdir_for_write(root, a.roadmap), a.session)
     if got in ("acquired", "held"):
         if got == "acquired":
-            _drop_approval(root, a)
+            _check_state(root, a)
         print(got)
         return 0
     print("다른 세션(%s)이 이 로드맵을 지휘하고 있다 — 이 세션은 읽기 전용으로 보인다. 넘겨받을지는 사용자가 정한다(takeover)" % got)
@@ -678,14 +665,12 @@ def c_claim(root, a) -> int:
 
 def c_takeover(root, a) -> int:
     prev = cs.takeover(mdir_for_write(root, a.roadmap), a.session)
-    _drop_approval(root, a)
+    _check_state(root, a)
     print("표지를 넘겨받았다 — 이전 주인: %s" % (prev or "없음"))
     return 0
 
 
 def c_release(root, a) -> int:
-    if cs.holder(mpath(root, a.roadmap).parent) == a.session:
-        _drop_approval(root, a)
     print("표지를 풀었다" if cs.release(mpath(root, a.roadmap).parent, a.session) else "이 세션의 표지가 아니다 — 그대로 둔다")
     return 0
 
@@ -733,25 +718,6 @@ def c_drop(root, a) -> int:
     update(root, a.roadmap, a.session, change)
     print("지웠다 %d줄 — %s: %s=%s" % (len(gone), a.section, key, value))
     return 0 if gone else 1
-
-
-def c_approval(root, a) -> int:
-    owner = cs.holder(mpath(root, a.roadmap).parent)
-    if owner != a.session:
-        print("승인 필요 — 이 세션이 표지를 쥐고 있지 않다(표지를 쥔 세션: %s)" % (owner or "없음"))
-        return 1
-    ok, why = scale_check(load(root, a.roadmap)["시작 승인"], a.session, a.scale)
-    print(("공시만 — " if ok else "승인 필요 — ") + why)
-    return 0 if ok else 1
-
-
-def c_approve(root, a) -> int:
-    def change(d):
-        d["시작 승인"] = [r for r in d["시작 승인"] if r["세션"] != a.session]
-        d["시작 승인"].append({"세션": a.session, "때": now(), "규모": a.scale})
-    update(root, a.roadmap, a.session, change)
-    print("시작 승인을 적었다 — %s" % a.scale)
-    return 0
 
 
 def c_resources(root, a) -> int:
@@ -1415,8 +1381,6 @@ COMMANDS = {
     "release": (c_release, _rs),
     "add": (c_add, lambda p: (_rows(p), p.add_argument("--cells", required=True))),
     "drop": (c_drop, lambda p: (_rows(p), p.add_argument("--where", required=True))),
-    "approval": (c_approval, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
-    "approve": (c_approve, lambda p: (_rs(p), p.add_argument("--scale", required=True))),
     "resources": (c_resources, lambda p: p.add_argument("--roadmap", required=True)),
     "cleanup-check": (c_cleanup_check, lambda p: (p.add_argument("--path", required=True),
                                                   p.add_argument("--roadmap", default=None))),
