@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.3.2] — 2026-10-24
+
+### Fixed
+- 브랜치 전략 템플릿 셋의 훅 문장을 지금 훅에 맞췄다 — 훅은 실행 뒤 브랜치 reflog 를 읽어 `git worktree add -b` 로 만든 이름도 확인한다(옛 문장은 확인하지 않는다고 적혀 있었다).
+
 ## [5.3.1] — 2026-10-24
 
 ### Changed
