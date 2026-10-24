@@ -212,13 +212,10 @@ assert_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
 COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"
-assert_contains "$COST" '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' "CLAUDE.md: 원래 승인 규칙 문장이 그대로"
-for lit in '이름 붙인 예외 하나 — `epic-conductor`' '같은 세션에서 같은 규모로 다시 부르면' '규모가 바뀌거나 다른 세션이면 다시 묻는다'; do
-  assert_contains "$COST" "$lit" "CLAUDE.md 예외: $lit"
-done
-assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "1" "CLAUDE.md: 이름 붙인 예외는 하나"
-others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md | grep -v '/skills/epic-conductor/' || true)"
-assert_eq "$others" "" "예외를 주장하는 다른 skill 이 없다"
+assert_contains "$COST" '어느 클래스의 skill 도 지출 승인을 묻지 않는다' "CLAUDE.md: cost 줄이 지출 승인을 묻지 않는다(양)"
+assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "0" "CLAUDE.md: 이름 붙인 예외가 없다 — 물을 게이트가 없어 예외가 할 일이 없다"
+others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md || true)"
+assert_eq "$others" "" "예외를 주장하는 skill 이 없다(epic-conductor 포함)"
 # 지휘자 수리 2 — 보이기: 지휘자 질문과 brainstorming 대화의 모양을 나눈다 · 에픽 이름은 질문 문장 앞머리
 SHOW="$(awk '$0=="## 보이기"{f=1;next} f&&/^## /{exit} f' "$SK")"
 for lit in '질문 문장 앞머리에 에픽 이름을 쓴다' 'brainstorming 대화는 brainstorming 이 정한 메시지 모양(첫 메시지 · 열린 문장 질문 하나 · 되비춤)을 따른다' \
