@@ -411,6 +411,15 @@ class IntentsBuildUnit(unittest.TestCase):
         self.assertEqual(len(warns), 2, warns)
         self.assertTrue(all("\n" not in w for w in warns), warns)
 
+    def test_first_parent_line_unreadable_keeps_partner(self):
+        blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
+                  {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
+                   "branch_states": [{"branch": "w/e2", "tip": "b" * 40, "merged": "PR #1"}]}]
+        text, _w = self.build(blocks, [(("log",), (0, "c" * 40, "")), (("cat-file",), (0, "", "")),
+                                       (("merge-base", "--is-ancestor"), (0, "", "")), (("show",), (0, "본문", "")),
+                                       (("rev-list", "--first-parent"), (128, "", "fatal"))])
+        self.assertIn("### E2 s/E2.md(머지됨)", text.splitlines())
+
 
 class IntentsPack(RoadmapRepo):
     """review-pack 의 intents.md — 함께 진행된 에픽의 설계문서 전문(설계 §5 · 결정 D2.2 · AC10)."""
@@ -536,6 +545,30 @@ class IntentsPack(RoadmapRepo):
         text, _w = ri.build(report, "E1", tip, lambda *a: L.git(self.w, *a))
         self.assertNotIn("### E2", text)
         self.assertEqual(text.splitlines()[1], NONE_LINE)
+
+    def test_fast_forward_not_judged_merged_is_included(self):
+        # 같은 빨리 감기 — 상태 계산이 머지됨으로 보지 않으면 확인되지 않은 것이라 싣는다
+        self.start_design("E2", extra=E2_TABLE)
+        self.git(self.w, "merge", "--ff-only", "work/e2")
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+        self.start_design("E1", extra=E1_TABLE)
+        self.assertNotEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "열림", text)
+
+    def test_merged_before_design_stays_excluded_after_trunk_moves(self):
+        # 진입 커밋은 첫째 부모 줄에서 끝의 자손 가운데 가장 오래된 것이다 — 그 뒤 기본 브랜치가 더 가도 그대로
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2")
+        self.start_design("E1", extra=E1_TABLE)
+        self.write(self.w, "src/later.txt", "뒤\n")
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-m", "뒤 커밋")
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+        text, _o = self.intents()
+        self.assertNotIn("### E2", text)
 
     def test_stacked_then_more_work_merged_is_included(self):
         e2 = self.start_design("E2", extra=E2_TABLE)
