@@ -3955,7 +3955,8 @@ case_config_invalid_refused() {
   assert_contains "$err" '"reason": "config_invalid"' "config: 사유 이름"
   assert_contains "$err" "DEVBREW_DOCREVIEW_DETECTORS" "config: 변수 이름을 낸다"
   assert_contains "$err" '"value": "two"' "config: 거부된 값도 낸다"
-  for bad in 1_0 ' 2' '+2' '２'; do
+  # 값마다 int() 로는 상한(1~6) 안의 정수다 — 범위 검사가 아니라 ASCII 숫자 검사만 거절하게 한다
+  for bad in 0_3 ' 2' '+2' '２'; do
     put_snap "$d" "$s" && DEVBREW_DOCREVIEW_DETECTORS="$bad" py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; rc=$?
     assert_eq "$rc" "2" "config: 환경 값 '${bad}' 은 엄격한 정수가 아니라 거부된다"
   done
