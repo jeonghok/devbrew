@@ -16,7 +16,7 @@ next_phase: superpowers:writing-plans
 - [Goals](#goals) · [Non-goals](#non-goals) · [Anti-goals](#anti-goals) · [Constraints](#constraints)
 - [설계](#설계) — [§1 병렬 판단 줄](#1-병렬-판단-줄--작업-목록-끝의-탭-없는-한-줄) · [§2 병렬 질문](#2-병렬-질문--spec-승인-질문과-같은-호출에) · [§3 공유 파일 설정](#3-공유-파일-목록--레포-설정-키--겹침-판정의-비대칭) · [§4 이웃 결정 노출](#4-spec-리뷰의-이웃-결정--함께-진행-중인-에픽--결정-줄-꼴-셋) · [§5 의도 대조](#5-의도-대조--리뷰-묶음의-설계-의도--통합-리뷰어의-일곱째-이음매) · [§6 머지 하나씩](#6-머지-명령-줄은-하나씩--대조-기준-커밋--머지-큐) · [§7 조사 자리](#7-조사-자리--설계-전-꼼꼼히--계획-첫-과제-가볍게) · [§8 공유 파일만 겹칠 때](#8-공유-파일만-겹칠-때)
 - [있는 것 검토](#있는-것-검토) · [상류 · 하류 연계](#상류--하류-연계)
-- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan) · [Rejected Alternatives](#rejected-alternatives)
+- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan) · [Rejected Alternatives](#rejected-alternatives) · [미룸](#미룸)
 - [결정 기록](#결정-기록) · [번호 대조](#번호-대조) · [Metadata](#metadata)
 
 ## Context / Why
@@ -262,6 +262,18 @@ brief 는 이를 「D 줄」 로 불렀으나 엔진 이후 문서에는 U 줄�
 - **권장 수 3 을 에픽 병렬 판단에 쓰기(RC6).** 그 수는 오래 도는 큰 작업 agent 수다.
 - **두 설계로 나누기(«google-small-cls»).** 고칠 파일이 겹쳐 나눠도 차례로 가야 한다 — 하나로 간다(S13 · S18).
 - **인터뷰 → brainstorming 다음 세션 줄(`finishing.md`)에도 조사 문장 넣기.** 그 줄은 로드맵 에픽이 아닌 단일 brief 를 넘긴다 — 인터뷰 자체가 조사를 마친 자리라 D4 의 「에픽마다」 범위 밖이다.
+
+## 미룸
+
+| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 묶음 에픽의 설계문서가 정해진 흐름 밖에서 기본 브랜치에 먼저 직접 커밋되고 그 에픽이 스쿼시로 머지되면 `intents.md` 에서 빠질 수 있다 | 설계문서를 처음 들인 커밋으로 머지를 대신 재는 길의 남은 경우 — 브랜치 끝이 없으면 가를 근거가 없고, 정해진 흐름(설계문서는 에픽 브랜치에서 쓴다)에서는 생기지 않는다 | spec-distill 후속 수리 PR |
+| origin 소유자를 읽지 못하고 PR 캐시도 없는 레포에서 머지 뒤 브랜치를 지운 에픽을 상태 계산이 「준비」 로 본다 — `intents.md` 에서도 빠진다 | 이 설계 전부터 있던 상태 계산의 한계이고 지휘자 화면에도 같이 드러난다 | spec-distill 후속 수리 PR(`roadmap_status.py`) |
+| 작업 목록(`show --tasks`)이 설정 경고(`shared_files` 가 깨져 기본 셋으로 셈)를 보이지 않는다 | 경고는 에픽 지도(`show`)와 roadmap-status 에만 나온다 — 작업 목록 줄 모양을 늘리지 않으려 미뤘다 | spec-distill 후속 수리 PR |
+| `review_intents` 의 기준 커밋 찾기가 설계문서 이름 바꾸기를 따라가지 않는다 | 이름을 바꾸면 갈라진 점으로 재고 첫 줄 · 경고로 알린다(조용하지 않음) | spec-distill 후속 수리 PR |
+| 설계 흐름이 아닌 끝남 에픽이 `intents.md` 에서 「열림」 으로 표시된다 | 설계 §5 의 머지됨 · 열림 두 표시를 글자대로 따른 결과 — 뜻이 어긋나 보이는 표시 | spec-distill 후속 수리 PR |
+| 병렬 질문 · 「차례로」 문장 가운데 일부 구절(빈 집합 갈래 · 설계 · 계획은 그대로 · 승인 때만 · 머지 큐의 최신 반영 필수 등)은 구절째 락이 없다 | 문장째 지우는 변이는 모두 잡힌다(AC15) — 구절 단위 락은 비용 대비 뒤로 | spec-distill 후속 수리 PR |
+| 진행 중 에픽 갈래(D2.6)와 짝 조건이 함께 설 때의 질문 수 · D2.6 질문의 선택지 설명 · 생각을 바꿀 때 새 줄을 적을 설계문서 · 기다림 칸의 에픽이 여럿일 때 | 설계가 모델 판단에 맡긴 자리 — 실제 지휘에서 어긋나면 그때 문장으로 정한다 | 다음 로드맵 지휘 기록 |
 
 ## 결정 기록
 
