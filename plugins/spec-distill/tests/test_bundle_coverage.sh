@@ -214,6 +214,17 @@ out="$(python3 "$C" --json "$T/repo4/docs/x/R9.md" "$R/rej.md")"
 chmod 644 "$T/repo4/docs/superpowers/specs/r8-design.md"
 assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "N17: 이웃 설계문서를 못 읽으면 그 이웃이 배정받은 S8 · S9 는 셀 수 없음이다"
 assert_contains "$(jget "$out" "r['unknown']")" "못 읽었다" "N17: 셀 수 없음 사유가 못 읽은 문서를 댄다"
+# 읽힌 설계문서가 분명히 기각했으면 무관한 못 읽은 문서 하나가 그 기각을 셀 수 없음으로 내리지 않는다
+cp -R "$R" "$T/repo5"; printf 'x\n' > "$T/repo5/docs/superpowers/specs/zz-other.md"; chmod 000 "$T/repo5/docs/superpowers/specs/zz-other.md"
+out="$(python3 "$C" --json "$T/repo5/docs/x/R9.md" "$R/rej.md")"
+chmod 644 "$T/repo5/docs/superpowers/specs/zz-other.md"
+assert_eq "$(jget "$out" "r['unserved']")" "['S7', 'S9']" "N17: 읽힌 설계문서가 기각한 S9 는 무관한 못 읽은 문서가 있어도 받드는 에픽 없음이다"
+assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8']" "N17: 기각 없는 S8 만 그 못 읽은 문서 때문에 셀 수 없음이다"
+# 설계문서 폴더 자체를 못 읽으면(권한) 「설계문서 없음」 이 아니라 셀 수 없음이다
+cp -R "$R" "$T/repo6"; chmod 000 "$T/repo6/docs/superpowers/specs"
+out="$(python3 "$C" --json "$T/repo6/docs/x/R9.md" "$R/rej.md")"
+chmod 755 "$T/repo6/docs/superpowers/specs"
+assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "N17: 설계문서 폴더를 못 읽으면 그 폴더의 묶음이 배정받은 S8 · S9 는 셀 수 없음이다"
 
 # 13. 로드맵을 못 찾음(AC5 · AC7) — 그 항목만 셀 수 없음, rc 0, 첫 줄이 개수를 말한다
 mkdir -p "$T/lone"; cp "$R/docs/x/R9.md" "$T/lone/R9.md"

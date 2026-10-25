@@ -126,6 +126,8 @@ grep -qF '실패한 조사는 「새로움 없음」이 아니다' <<<"$SJ_RULES
   && ok "saturation-judge: 실패의 세 꼴(빈 산출+unanswered · 웹 도구 거부 · dispatch 오류)" || no "saturation-judge: 실패의 세 꼴 중 빠진 것이 있다"
 grep -qF '최근 두 묶음에 `failed: true` 항목이 하나라도 있으면 `saturated` 를 내지 않는다' <<<"$SJ_RULES" \
   && ok "saturation-judge: 최근 두 묶음의 실패 조사는 포화를 막는다" || no "saturation-judge: 실패 조사가 포화를 막는 규칙 부재"
+grep -qF 'dispatch 가 실패 · 거부돼도 그 오류 원문을 같은 블록 꼴로 남긴다' "$(dirname "$AG")/skills/pm-interview/SKILL.md" \
+  && ok "pm-interview: 실패한 dispatch 도 조사 블록으로 남겨 판정자에게 닿는다" || no "pm-interview: 실패한 dispatch 를 블록으로 남기라는 지시 부재"
 grep -qE '^ +failed: true \| false' <<<"$SJ_OUT" && ok "saturation-judge: Output 의 novelty 항목에 failed" || no "saturation-judge: Output 에 failed 필드 부재"
 grep -qF '`<research_outputs>` 가 두 묶음 미만이면 `not_saturated` 와 `kind: confirm` 빈 곳 하나(「조사가 두 묶음 미만 — 열린 결정에 닿는 조사를 하나 더」)를 낸다' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 두 묶음 미만 → not_saturated + confirm 빈 곳(규칙 4 전문)" || no "saturation-judge: 규칙 4 전문 부재"

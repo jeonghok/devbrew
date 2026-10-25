@@ -109,8 +109,10 @@ class Repo:
             found, unread = [], []
             try:
                 names = sorted(os.listdir(os.path.join(self.root, *d.split("/"))))
-            except OSError:
+            except FileNotFoundError:   # 폴더가 없다 — 설계문서가 아직 없다
                 names = []
+            except OSError:   # 폴더를 못 읽었다 — 어느 묶음의 설계문서가 있는지 모른다
+                names, unread = [], [d + "/"]
             for name in names:
                 if not name.endswith(".md"):
                     continue
@@ -344,15 +346,19 @@ def _serves(block: dict, s: str, view: dict, repo, epic: str):
     if block["id"] == epic or s not in block.get("assigned", []):
         return False, None
     found, unread = _block_specs(block, view, repo)
-    if unread:
-        return None, "%s 의 설계문서를 못 읽었다: %s" % (block["id"], unread[0])
-    for rel, text in found:
+    broken = None
+    for rel, text in found:   # 읽힌 문서의 분명한 기각이 먼저다 — 못 읽은 다른 문서가 그 기각을 셀 수 없음으로 내리지 않는다
         try:
             rows = table_rows(text)
         except FormatError as exc:
-            return None, "%s 의 설계문서 번호 대조 표를 읽지 못했다(%s): %s" % (block["id"], rel, exc)
+            broken = broken or "%s 의 설계문서 번호 대조 표를 읽지 못했다(%s): %s" % (block["id"], rel, exc)
+            continue
         if any(s in ids and verb.startswith("기각") for ids, verb, _cell in rows):
             return False, None
+    if broken:
+        return None, broken
+    if unread:
+        return None, "%s 의 설계문서를 못 읽었다: %s" % (block["id"], unread[0])
     return True, None
 
 
