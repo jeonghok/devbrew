@@ -1424,6 +1424,16 @@ class PrRecord(Repo):
     def raw(self):
         return L.mpath(self.w, RM).read_bytes()
 
+    def test_env_notices_are_shown(self):   # R14 미룸 — pr-refresh 와 같이 GH_REPO 를 무시한다고 알린다
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GH_REPO": "up/r"}):
+            rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다", out)
+        with mock.patch.dict(os.environ, {"GH_REPO": ""}):
+            rc, out = self.record("--pr", "7", "--drop")
+        self.assertNotIn("GH_REPO", out, "양의 짝: 변수가 비었으면 알리지 않는다")
+
     def test_three_forms_record_one_row(self):
         for form in ("7", "#7", "https://github.com/me/r/pull/7"):
             rc, out = self.record("--pr", form)

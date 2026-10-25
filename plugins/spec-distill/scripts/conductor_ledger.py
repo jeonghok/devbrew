@@ -1028,6 +1028,8 @@ def c_pr_refresh(root, a) -> int:
 def c_pr_record(root, a) -> int:
     """번호로 물은 PR 의 head · 교차 · base 를 그 에픽의 브랜치와 대조한 뒤에만 `## 에픽 PR` 번호 줄과 `## PR` 캐시 줄을
     한 번에 쓴다. `--drop` 은 gh 없이 (에픽, 번호) 줄을 지운다."""
+    for line in gh_repo.env_notices():
+        print("[spec-distill] " + line)
     ref = gh_repo.parse_pr_ref(a.pr)
     if ref is None:
         raise Fail(2, "PR 번호를 읽지 못했다: %r — PR URL 이나 숫자(예: --pr 123)를 준다" % a.pr)
