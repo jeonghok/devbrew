@@ -262,7 +262,7 @@ fi
 # 면제는 하나다: hooks 명령의 따옴표 없는 ${CLAUDE_PLUGIN_ROOT} 경고(선재, 2026-10-09 실측).
 # 그 면제는 qg 핸드오프 보고서 3부의 행이다.
 # manifest_bad [stderr-file] — stdin 의 validate JSON 을 판정한다. 출력 없음 = 통과, 한 줄이라도 있으면 RED 사유.
-# 실측 모양(CLI 2.1.294): 최상위 키는 {success, strict, target, manifest, contents} 정확히 다섯,
+# 실측 모양(CLI 2.1.294): 최상위 키는 {success, strict, target, manifest, contents} 정확히 다섯(뒤에 advice · directory 가 더해졌다),
 # success 는 errors · warnings 가 모두 없을 때만 true.
 manifest_bad() {
   python3 -c '
@@ -290,12 +290,29 @@ if not isinstance(d, dict):
     sys.exit(0)
 out = []
 # advice 는 2.1.295 에서 생긴 조언 배열 — 판정하지 않는다(형식만 본다).
-KNOWN = {"success", "strict", "target", "manifest", "contents", "advice"}
+# directory 는 2.1.310 에서 생긴 디렉토리 등록 점검 — 막지 않는 찾음은 판정하지 않고,
+# 막는 찾음(blocking) · error · 점검 실패(failure) · 미완료(incomplete)는 RED 다.
+KNOWN = {"success", "strict", "target", "manifest", "contents", "advice", "directory"}
 extra = sorted(set(d) - KNOWN)
 if extra:
     out.append("shape: 모르는 최상위 키 %s — 스키마 표류" % extra)
 if "advice" in d and not isinstance(d["advice"], list):
     out.append("shape: advice 가 배열이 아니다")
+if "directory" in d:
+    dr = d["directory"]
+    if not isinstance(dr, dict):
+        out.append("shape: directory 가 객체가 아니다")
+    elif not isinstance(dr.get("findings"), list):
+        out.append("shape: directory.findings 가 배열이 아니다")
+    else:
+        for f in dr["findings"]:
+            f = f if isinstance(f, dict) else {"code": repr(f), "blocking": True}
+            if f.get("blocking") is not False or f.get("severity") == "error":
+                out.append("directory %s %s %s" % (f.get("code"), f.get("severity"), f.get("message", "")))
+        if dr.get("incomplete") is not False:
+            out.append("directory: 점검이 끝나지 않았다(incomplete=%r)" % dr.get("incomplete"))
+        if dr.get("failure") is not None:
+            out.append("directory: 점검 실패 %r" % dr.get("failure"))
 m, c = d.get("manifest"), d.get("contents")
 if not isinstance(m, dict):
     out.append("shape: manifest 가 객체가 아니다")
@@ -358,6 +375,16 @@ assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"'
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[]}')" "" "manifest_bad: 깨끗한 success:true 는 통과"
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":[{"file":"x","message":"m","installLine":"/plugin install p"}]}')" "" "manifest_bad: advice 배열은 비게이팅 — 통과"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":"oops"}')" '^shape: advice 가 배열이 아니다$' "manifest_bad: advice 가 배열이 아니면 모양 사유로 RED"
+# directory — 2.1.310 에서 생긴 디렉토리 등록 점검(실측 키: profile · findings · undecided · incomplete · failure · notes).
+# 막지 않는 찾음(ICON_MISSING 등 blocking:false 경고)은 판정하지 않고, 막는 찾음 · error · 실패 · 미완료는 RED 다.
+DOK='{"profile":null,"findings":[{"code":"ICON_MISSING","severity":"warning","blocking":false,"hold":false,"file":".claude-plugin/plugin.json"}],"undecided":[],"incomplete":false,"failure":null,"notes":["n"]}'
+assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":'"$DOK"'}')" "" "manifest_bad: directory 의 막지 않는 찾음(ICON_MISSING 경고)은 통과"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":"oops"}')" '^shape: directory 가 객체가 아니다$' "manifest_bad: directory 가 객체가 아니면 모양 사유로 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":"x","incomplete":false,"failure":null}}')" '^shape: directory.findings 가 배열이 아니다$' "manifest_bad: directory.findings 가 배열이 아니면 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"X_BAD","severity":"warning","blocking":true}],"incomplete":false,"failure":null}}')" '^directory X_BAD ' "manifest_bad: directory 의 막는 찾음(blocking:true)은 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"Y_ERR","severity":"error","blocking":false}],"incomplete":false,"failure":null}}')" '^directory Y_ERR ' "manifest_bad: directory 의 error 찾음은 막지 않음 표시여도 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":true,"failure":null}}')" '^directory: 점검이 끝나지 않았다' "manifest_bad: directory 점검 미완료는 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":false,"failure":"boom"}}')" '^directory: 점검 실패' "manifest_bad: directory 점검 실패는 RED"
 printf 'boom: validator crashed\n' > "$TMP/fake.err"
 assert_contains "$(printf 'not json' | manifest_bad "$TMP/fake.err")" "stderr: boom: validator crashed" "manifest_bad: 쓸 수 없는 JSON 이면 stderr 마지막 줄을 싣는다"
 
