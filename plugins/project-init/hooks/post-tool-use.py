@@ -293,15 +293,27 @@ def _current_branch(cwd, deadline=None):
     return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else None
 
 
-def observe_branches(cwd, now, text):
+def _entered_worktree_branches(cwd, worktree_name, deadline=None):
+    """EnterWorktree 의 name 으로 만든 작업 트리(경로 끝이 `/<name>`)가 쓰는 브랜치들.
+
+    payload 의 cwd 가 옮기기 전 레포여도 그 작업 트리의 브랜치를 이 호출의 것으로 본다.
+    """
+    if not worktree_name:
+        return set()
+    tail = os.sep + worktree_name.strip("/").replace("/", os.sep)
+    trees = checked_out_elsewhere(cwd, deadline=deadline) or {}
+    return {b for b, p in trees.items() if p.endswith(tail)}
+
+
+def observe_branches(cwd, now, text, worktree_name=None):
     """Warnings for branches this tool call made just now whose names break the default branch's rule.
 
     text 는 도구 입력 글(Bash 의 명령)이다 — 새 브랜치 가운데 이 글이 이름을 가리키거나 cwd 가
-    지금 쓰는 브랜치만 이 호출이 만든 것으로 본다.
+    지금 쓰는 브랜치이거나 EnterWorktree 의 name 으로 만든 작업 트리의 브랜치만 이 호출이 만든 것으로 본다.
     """
     deadline = _deadline()
     try:
-        return _observe(cwd, now, deadline, text)
+        return _observe(cwd, now, deadline, text, worktree_name)
     except GitTimeout:
         return [(
             "project-init: git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open).",
@@ -309,13 +321,15 @@ def observe_branches(cwd, now, text):
         )]
 
 
-def _observe(cwd, now, deadline, text):
+def _observe(cwd, now, deadline, text, worktree_name=None):
     names = [n for n in new_branches(cwd, now, deadline=deadline) if n not in PROTECTED_BRANCHES]
     # 공용 git 디렉토리라 다른 세션이 막 만든 브랜치도 보인다 — 이 호출과 무관한 브랜치는 다루지
     # 않는다(그 이름을 이 세션 모델이 바꾸게 하지 않는다).
-    if any(not named_in(text, n) for n in names):
-        current = _current_branch(cwd, deadline=deadline)
-        names = [n for n in names if n == current or named_in(text, n)]
+    rest = [n for n in names if not named_in(text, n)]
+    if rest:
+        mine = {_current_branch(cwd, deadline=deadline)}
+        mine |= _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
+        names = [n for n in names if n not in rest or n in mine]
     if not names:
         return []
     pattern, notice = read_branch_rule(cwd, deadline=deadline)
@@ -448,11 +462,14 @@ def main():
     # EnterWorktree 는 관찰만 한다 — 커밋 명령이 없다.
     if not isinstance(tool_input, dict):
         tool_input = {}
+    worktree_name = None
     if tool_name == "Bash":
         text = str(tool_input.get("command", ""))
     else:
         text = " ".join(v for v in tool_input.values() if isinstance(v, str))
-    results = observe_branches(cwd, time.time(), text)
+        name = tool_input.get("name")
+        worktree_name = name if isinstance(name, str) else None
+    results = observe_branches(cwd, time.time(), text, worktree_name)
     if tool_name == "Bash":
         commit = validate_commit(text)
         if commit:

@@ -130,9 +130,21 @@ case "$ac" in *"git branch -m"*) no "작업 트리 목록을 못 읽었는데 �
   case "$sm" in *"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*"이름 규칙에 맞지 않는다"*|*"이름 규칙에 맞지 않는다"*"작업 트리 목록을 읽지 못해 이름 바꾸기 명령은 내지 않는다"*)
     ok "작업 트리 목록 실패 → 명령 없이 알리고 그 사실을 적는다" ;; *) no "작업 트리 목록 실패 안내가 없다 — $OUT" ;; esac ;; esac
 
+hook_ew() { # $1 cwd, $2 tool_input.name — EnterWorktree 의 실제 입력 꼴({"name": …})
+  OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": "EnterWorktree", "cwd": sys.argv[1], "tool_input": {"name": sys.argv[2]}}))' "$1" "$2" \
+    | CLAUDE_PROJECT_DIR="$1" python3 "$HOOK")
+}
+
 echo "EnterWorktree"
 fresh; git -C "$W" worktree add -q -b worktree-x "$W/.claude/worktrees/x"
-hook EnterWorktree "$W/.claude/worktrees/x" 'git commit -m "add thing"'; alerted worktree-x "EnterWorktree 뒤 worktree-x"
+hook_ew "$W/.claude/worktrees/x" x; alerted worktree-x "EnterWorktree 뒤 worktree-x(cwd = 새 작업 트리)"
+fresh; git -C "$W" worktree add -q -b worktree-y "$W/.claude/worktrees/y"
+hook_ew "$W" y; elsewhere worktree-y "$W/.claude/worktrees/y" "EnterWorktree 뒤 worktree-y(cwd = 옮기기 전 레포) → 이름 y 의 작업 트리 브랜치로 잡고 명령 없이 알림"
+fresh; git -C "$W" worktree add -q -b worktree-a+b "$W/.claude/worktrees/a/b"
+hook_ew "$W" a/b; elsewhere worktree-a+b "$W/.claude/worktrees/a/b" "EnterWorktree 이름에 / 가 든 경우(작업 트리 경로 a/b)"
+fresh; git -C "$W" worktree add -q -b worktree-xz "$W/.claude/worktrees/xz"
+hook_ew "$W" z; quiet "EnterWorktree 이름 z · 새 브랜치는 작업 트리 xz 의 것 → 조용"
+hook EnterWorktree "$W/.claude/worktrees/xz" 'git commit -m "add thing"'
 case "$(field systemMessage)" in *"Conventional Commits"*) no "EnterWorktree 에서 커밋 검사가 돌았다" ;; *) ok "EnterWorktree 는 관찰만(커밋 검사 없음)" ;; esac
 hook Bash "$W" 'git commit -m "add thing"'
 case "$(field systemMessage)" in *"Conventional Commits"*) ok "Bash 는 커밋 검사도 한다(양성 짝)" ;; *) no "Bash 커밋 검사가 사라졌다 — $OUT" ;; esac
