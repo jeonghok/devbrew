@@ -18,7 +18,7 @@
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 받은 gh 출력이 기대와
 다르다(pr-refresh: 다른 head · 모르는 값 / pr-record: head · 교차 레포 · base 대조 실패 · PR URL 의 레포가 origin 아님 —
-아무것도 쓰지 않는다) · 5 다른 세션의 표지.
+아무것도 쓰지 않는다) · 5 다른 세션의 표지. 예상 밖 예외도 3 이다(1 로 새지 않는다).
 """
 from __future__ import annotations
 
@@ -1440,6 +1440,9 @@ def main(argv=None) -> int:
         return exc.rc
     except cs.MachineError as exc:
         print("[spec-distill] %s" % exc)
+        return 3
+    except Exception as exc:   # 파이썬 기본 rc 1 은 「없음/아님」 으로 읽힌다(live-agent 면 같은 agent 를 또 보낸다) — 검사 불가다
+        print("[spec-distill] 내부 오류로 판정하지 못했다(%s: %s) — 이 줄을 그대로 알린다" % (type(exc).__name__, exc))
         return 3
 
 

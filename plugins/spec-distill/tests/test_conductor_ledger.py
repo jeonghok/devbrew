@@ -744,6 +744,19 @@ class LiveAgent(Repo):
         self.assertNotIn("agent 없음", out)
         self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
 
+    def test_unexpected_error_is_rc3_not_none(self):
+        """예상 밖 예외(여기서는 기계 상태 폴더를 못 여는 PermissionError)는 파이썬 기본 rc 1(「없음」)이 아니라 rc 3 이다 —
+        rc 1 이면 지휘자가 같은 계획 agent 를 한 번 더 보낸다."""
+        self._add("plan-a1 · A1 · 계획 · /w/a1 · 2026-10-18")
+        d = L.mpath(self.w, RM).parent
+        os.chmod(str(d), 0)
+        self.addCleanup(os.chmod, str(d), 0o755)
+        p = subprocess.run([sys.executable, str(Path(L.__file__)), "--root", str(self.w), "live-agent", "--roadmap", RM,
+                            "--epic", "A1", "--work", "계획"], capture_output=True, encoding="utf-8", env=ENV)
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("내부 오류", p.stdout)
+        self.assertNotIn("agent 없음", p.stdout)
+
 
 class Audit(unittest.TestCase):
     def test_handoff_section_and_after_review(self):
