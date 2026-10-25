@@ -33,8 +33,9 @@ class CompletionReportTest(unittest.TestCase):
     def test_last_line_is_one_next_action(self):
         self.assertEqual(
             self.block[-1],
-            "> 다음 할 일: 이 파일들을 커밋해 기본 브랜치에 머지하라 — 훅은 브랜치 이름 규칙을 기본 브랜치"
-            "(`origin/HEAD`) 판에서 읽어서, 머지 전에는 새 브랜치 이름을 확인하지 않고 「규칙을 찾지 못했다」고만 알린다.")
+            "> 다음 할 일: 이 파일들을 커밋해 원격 기본 브랜치에 머지하고 받아 와라(`git fetch`) — 훅은 브랜치 이름 규칙을 "
+            "`origin/HEAD` 판에서 읽어서, 그 전에는 새 브랜치 이름을 확인하지 않고 규칙을 읽지 못했다고만 알린다"
+            "(`origin/HEAD` 가 없으면 `git remote set-head origin --auto`).")
         self.assertEqual(sum(1 for ln in self.block if ln.startswith("> 다음 할 일:")), 1)
 
     def test_no_promise_of_check_before_merge(self):
