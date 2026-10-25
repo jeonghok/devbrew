@@ -6,7 +6,9 @@ Run (리포 루트에서): PYTHONDONTWRITEBYTECODE=1 python3 -m unittest plugins
 """
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,6 +18,9 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import repo_defaults as rd  # noqa: E402
+import roadmap_status as rs  # noqa: E402
+
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
 
 DEFAULT = ("plugin.json", "CHANGELOG.md", "README.md")
 
@@ -78,6 +83,133 @@ class SharedFilesSetting(unittest.TestCase):
                                   capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "a.md, b.md\n")
+
+
+def _blocks(a_res, b_res):
+    return [{"id": "A", "deps": [], "reserved": a_res}, {"id": "B", "deps": [], "reserved": b_res}]
+
+
+class Overlaps(unittest.TestCase):
+    def test_folder_and_shared_file_either_order(self):
+        for a, b in ((["plugins/x/"], ["plugins/x/README.md"]), (["plugins/x/README.md"], ["plugins/x/"])):
+            self.assertEqual(rs.overlaps(_blocks(a, b)), [], (a, b))
+
+    def test_two_folders_still_overlap(self):
+        self.assertEqual([o["blocks"] for o in rs.overlaps(_blocks(["plugins/x/"], ["plugins/x/sub/"]))], [["A", "B"]])
+
+    def test_names_argument(self):
+        self.assertEqual(rs.overlaps(_blocks(["p/NOTICE"], ["p/NOTICE"]), names=("NOTICE",)), [])
+        self.assertEqual(len(rs.overlaps(_blocks(["p/README.md"], ["p/README.md"]), names=("NOTICE",))), 1)
+
+
+class RoadmapRepo(unittest.TestCase):
+    """기본 브랜치가 trunk 인 임시 원격 + 클론. 뒤 과제의 테스트가 이어받는다."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="parrec-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                        PYTHONDONTWRITEBYTECODE="1")
+        self.origin = os.path.join(self.tmp, "origin.git")
+        self.w = os.path.join(self.tmp, "w")
+        self.git(self.tmp, "init", "--bare", "-b", "trunk", self.origin)
+        self.git(self.tmp, "init", "-b", "trunk", self.w)
+        self.git(self.w, "remote", "add", "origin", self.origin)
+        self.git(self.w, "checkout", "-B", "trunk")
+        os.makedirs(os.path.join(self.w, "plan", "br"))
+        for name in ("b.md", "b.audit.md"):
+            shutil.copy(FIXTURE / name, os.path.join(self.w, "plan", "br", name))
+        self.n = 0
+
+    def git(self, cwd, *args):
+        proc = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                               "-c", "commit.gpgsign=false", *args], cwd=cwd, env=self.env,
+                              capture_output=True, text=True, encoding="utf-8")
+        if proc.returncode != 0:
+            raise AssertionError("git %s: %s" % (" ".join(args), proc.stderr))
+        return proc.stdout
+
+    def write(self, root, rel, text):
+        path = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Path(path).write_text(text, encoding="utf-8")
+
+    def roadmap(self, blocks, settings=None, front_extra=""):
+        """blocks: (id, deps, reserved 글, ids). 빈 reserved 글은 「없음」."""
+        head = ("---\ntype: roadmap\nsource_brief: plan/br/b.md\nspecs_dir: plan/specs/\n"
+                "plans_dir: plan/plans/\n%s---\n\n# 버릴 로드맵\n\n## 에픽\n\n" % (front_extra + "\n" if front_extra else ""))
+        body = ""
+        for eid, deps, reserved, ids in blocks:
+            body += ("### %s — 에픽\n- 의도: 한 바퀴\n- 범위:\n  - 한다: 일\n  - 안 한다: 화면\n"
+                     "- 의존: %s\n- 브랜치: work/%s\n- 묶음: %s.md\n- 경로 예약: %s\n\n"
+                     % (eid, ", ".join(deps) or "없음", eid.lower(), eid, reserved or "없음"))
+            self.write(self.w, "plan/rm/%s.md" % eid,
+                       "---\ntype: epic-bundle\nepic: %s\nroadmap: plan/rm/roadmap.md\nsource_brief: plan/br/b.md\n"
+                       "ids: [%s]\n---\n\n# %s\n" % (eid, ", ".join(ids), eid))
+        tail = ("## 지휘 절차\n\n이 로드맵은 지휘자가 이끈다.\n\n## 결정 기록\n\n## 재분해 이력\n\n- 없음\n\n"
+                "## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 버릴 가정 — 근거 없음\n")
+        self.write(self.w, "plan/rm/roadmap.md", head + body + tail)
+        if settings is not None:
+            self.write(self.w, ".devbrew.md", settings)
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-m", "로드맵")
+        self.git(self.w, "push", "-u", "origin", "trunk")
+        self.git(self.w, "remote", "set-head", "origin", "--auto")
+
+    def start_design(self, epic, extra="", base="origin/HEAD"):
+        path = os.path.join(self.tmp, epic)
+        self.git(self.w, "worktree", "add", path, "-b", "work/" + epic.lower(), base)
+        self.write(path, "plan/specs/%s-design.md" % epic,
+                   "---\nsource_interview: plan/rm/%s.md\nroadmap: plan/rm/roadmap.md\n---\n\n# %s 설계\n\n"
+                   "## Goals\n\n- %s 목표\n\n## 결정 기록\n%s\n" % (epic, epic, epic, extra))
+        self.git(path, "add", "-A")
+        self.git(path, "commit", "-m", "설계 " + epic)
+        self.git(path, "push", "-u", "origin", "work/" + epic.lower())
+        return path
+
+    def merge(self, epic):
+        self.n += 1
+        self.git(self.w, "checkout", "trunk")
+        self.git(self.w, "merge", "--no-ff", "work/" + epic.lower(), "-m",
+                 "Merge pull request #%d from o/work/%s" % (self.n, epic.lower()))
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+
+    def status(self):
+        proc = subprocess.run([sys.executable, str(SCRIPTS / "roadmap_status.py"), "--json", "plan/rm/roadmap.md"],
+                              cwd=self.w, env=self.env, capture_output=True, text=True, encoding="utf-8")
+        return json.loads(proc.stdout)
+
+
+TWO = [("E1", [], "", ("C1", "S1", "OQ1")), ("E2", [], "", ("«e2e-k»", "K1"))]
+
+
+class SharedOverlapInStatus(RoadmapRepo):
+    def test_plain_fixture_is_clean(self):
+        self.roadmap(TWO)
+        r = self.status()
+        self.assertEqual((r["format_errors"], r["unknown_reasons"], r["overlaps"]), ([], [], []))
+
+    def test_shared_only_overlap_is_not_overlap(self):
+        self.roadmap([("E1", [], "plugins/p/README.md, src/a.txt", ("C1", "S1", "OQ1")),
+                      ("E2", [], "plugins/p/", ("«e2e-k»", "K1"))])
+        self.assertEqual(self.status()["overlaps"], [])
+
+    def test_real_overlap_still_reported(self):
+        self.roadmap([("E1", [], "src/a.txt", ("C1", "S1", "OQ1")), ("E2", [], "src/", ("«e2e-k»", "K1"))])
+        self.assertEqual([o["blocks"] for o in self.status()["overlaps"]], [["E1", "E2"]])
+
+    def test_repo_setting_changes_shared_list(self):
+        self.roadmap([("E1", [], "plugins/p/NOTICE", ("C1", "S1", "OQ1")),
+                      ("E2", [], "plugins/p/NOTICE", ("«e2e-k»", "K1"))],
+                     settings="---\nshared_files: NOTICE\n---\n")
+        self.assertEqual(self.status()["overlaps"], [])
+
+    def test_roadmap_layer_value_does_not_make_status_unknown(self):
+        self.roadmap(TWO, front_extra="shared_files: X.md")
+        r = self.status()
+        self.assertEqual((r["format_errors"], r["unknown_reasons"]), ([], []))
+        self.assertTrue(any("shared_files" in w for w in r["settings"]["warnings"]))
 
 
 if __name__ == "__main__":
