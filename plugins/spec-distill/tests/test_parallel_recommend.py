@@ -449,6 +449,19 @@ class IntentsBuildUnit(unittest.TestCase):
         text, _w = self.build(blocks, answers)
         self.assertIn("### E2 s/E2.md(머지됨 · %s)" % UNVERIFIED, text.splitlines())
 
+    def test_doc_entry_after_base_is_included_unmarked(self):
+        # 설계문서가 든 커밋이 기준 뒤면 함께 진행됐다고 확인된 것이다 — 표시 없이 「머지됨」
+        blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
+                  {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
+                   "branch_states": [{"branch": "w/e2", "tip": None, "merged": "PR #1"}]}]
+        events = "\x00" + "d" * 40 + "\n\nA\ts/E2.md\n"
+        text, warns = self.build(blocks, [(("log", "--first-parent"), (0, events, "")), (("log",), (0, "c" * 40, "")),
+                                          (("cat-file",), (0, "", "")), (("merge-base", "--is-ancestor"), (1, "", "")),
+                                          (("show",), (0, "본문", ""))])
+        self.assertIn("### E2 s/E2.md(머지됨)", text.splitlines())
+        self.assertNotIn(UNVERIFIED, text)
+        self.assertEqual(warns, [])
+
 
 class IntentsPack(RoadmapRepo):
     """review-pack 의 intents.md — 함께 진행된 에픽의 설계문서 전문(설계 §5 · 결정 D2.2 · AC10)."""
