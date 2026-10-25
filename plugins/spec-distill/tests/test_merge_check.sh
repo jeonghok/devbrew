@@ -200,6 +200,8 @@ assert_eq "$rc" "1" "--test-command: 사용자 답의 명령을 돌려 새 실�
 assert_contains "$out" "gamma" "--test-command: 새 이름 gamma"
 assert_contains "$out" "무엇을 돌렸나: test_command(\`bash tests/t.sh\`) — 출처 이 호출의 인자(사용자 답)" "--test-command: 무엇을 돌렸나에 출처가 이 호출의 인자다"
 assert_contains "$out" "test_command 를 이 호출의 인자(사용자 답)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "--test-command: 레포 설정 파일에 올리자고 알린다"
+out="$(mc --branch feature/an)"; rc=$?
+assert_eq "$rc" "6" "--test-command 는 그 호출에만 쓴다 — 인자 없이 다시 돌면 rc 6"
 out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '^not ok [0-9]+ - ([a-z]+)$')"; rc=$?
 assert_eq "$rc" "1" "--test-failure-pattern: 정규식으로 가른 새 이름 → rc 1"
 assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^not ok [0-9]+ - ([a-z]+)\$\`) — 출처 이 호출의 인자(사용자 답)" "--test-failure-pattern: 출처가 이 호출의 인자다"

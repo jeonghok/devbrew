@@ -78,7 +78,7 @@ def stamp() -> str:
 
 
 def pattern_error(pattern: str):
-    """`test_failure_pattern` 이 컴파일되지 않으면 그 `re.error` 글, 되면 None. `run` 과 `ledger add`(레포 설정)가 함께 부른다."""
+    """`test_failure_pattern` 이 컴파일되지 않으면 그 `re.error` 글, 되면 None. `run` 이 부른다."""
     try:
         re.compile(pattern, re.M)
     except re.error as exc:
