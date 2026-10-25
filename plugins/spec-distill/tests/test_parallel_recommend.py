@@ -364,5 +364,150 @@ class NeighborDecisions(RoadmapRepo):
         self.assertTrue(any("로드맵 상태 검사 불가" in l or "보일 수 없다" in l for l in lines), lines)
 
 
+THREE = [("E1", [], "", ("C1", "OQ1")), ("E2", [], "", ("«e2e-k»", "K1")), ("E3", [], "", ("S1",))]
+E1_TABLE = _table("C1", "OQ1")
+E2_TABLE = _table("«e2e-k»", "K1")
+E2_HEAD = "### E2 plan/specs/E2-design.md(%s)"
+E2_BODY = "- E2 목표"
+NONE_LINE = "함께 진행된 에픽 없음"
+
+
+class IntentsPack(RoadmapRepo):
+    """review-pack 의 intents.md — 함께 진행된 에픽의 설계문서 전문(설계 §5 · 결정 D2.2 · AC10)."""
+
+    def setUp(self):
+        super().setUp()
+        self.roadmap(THREE)
+        self.bin = os.path.join(self.tmp, "bin")   # git 만 있는 PATH — gh 를 뺀다
+        os.makedirs(self.bin)
+        os.symlink(shutil.which("git"), os.path.join(self.bin, "git"))
+        self.k = 0
+
+    def pack(self, epic):
+        import contextlib
+        import io
+        import conductor_ledger as L
+        self.k += 1
+        out = Path(self.tmp) / ("pack-%d" % self.k)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = self.bin
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = L.main(["--root", self.w, "review-pack", "--roadmap", "plan/rm/roadmap.md", "--epic", epic,
+                             "--branch", "work/" + epic.lower(), "--out", str(out)])
+        finally:
+            os.environ["PATH"] = old
+        return rc, buf.getvalue(), out
+
+    def intents(self, epic="E1", base_line=True):
+        rc, stdout, out = self.pack(epic)
+        self.assertEqual(rc, 0, stdout)
+        readme = (out / "README.txt").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any(l.startswith("intents.md — ") for l in readme), readme)
+        text = (out / "intents.md").read_text(encoding="utf-8")
+        if base_line:
+            self.assertTrue(text.startswith("기준 커밋 "), text[:200])
+        return text, stdout
+
+    def stage(self, epic):
+        return next(b for b in self.status()["blocks"] if b["id"] == epic)["stage"]
+
+    def design_then_merge_e2(self):
+        e1 = self.start_design("E1", extra=E1_TABLE)
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2")
+        return e1
+
+    def test_merged_before_design_is_excluded(self):
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2")
+        self.start_design("E1", extra=E1_TABLE)
+        self.assertEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertNotIn("### E2", text)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+
+    def test_merged_after_design_is_included(self):
+        self.design_then_merge_e2()
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "머지됨", text)
+        self.assertIn(E2_BODY, text)
+
+    def test_merging_trunk_does_not_move_base(self):
+        e1 = self.design_then_merge_e2()
+        self.git(e1, "merge", "--no-edit", "origin/trunk")
+        self.git(e1, "push", "origin", "work/e1")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "머지됨", text)
+
+    def test_deleted_branch_still_included(self):
+        self.design_then_merge_e2()
+        self.git(self.w, "worktree", "remove", "--force", os.path.join(self.tmp, "E2"))
+        self.git(self.w, "push", "origin", "--delete", "work/e2")
+        self.git(self.w, "branch", "-D", "work/e2")
+        # 지운 브랜치의 머지는 머지 메시지의 `<owner>/<브랜치>` 로 판정된다 — owner 가 있는 origin 주소가 필요하다.
+        # 이 뒤로는 받기 · 밀기가 없다(묶음은 로컬 ref 만 읽는다).
+        self.git(self.w, "remote", "set-url", "origin", "https://github.com/o/r.git")
+        self.assertEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "머지됨", text)
+        self.assertIn(E2_BODY, text)
+
+    def test_open_partner_and_ready_epic(self):
+        self.start_design("E1", extra=E1_TABLE)
+        self.start_design("E2", extra=E2_TABLE)
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "열림", text)
+        self.assertIn(E2_BODY, text)
+        self.assertNotIn("### E3", text)
+
+    def test_stacked_branch_is_open(self):
+        self.start_design("E2", extra=E2_TABLE)
+        self.start_design("E1", extra=E1_TABLE, base="work/e2")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "열림", text)
+
+    def test_stacked_then_more_work_merged_is_included(self):
+        e2 = self.start_design("E2", extra=E2_TABLE)
+        self.start_design("E1", extra=E1_TABLE, base="work/e2")
+        self.write(e2, "src/e2.txt", "더\n")
+        self.git(e2, "add", "-A")
+        self.git(e2, "commit", "-m", "E2 더")
+        self.git(e2, "push", "origin", "work/e2")
+        self.merge("E2")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "머지됨", text)
+
+    def test_renamed_spec_not_in_base_tree_is_included(self):
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2")
+        self.start_design("E1", extra=E1_TABLE)
+        self.git(self.w, "mv", "plan/specs/E2-design.md", "plan/specs/E2-design-v2.md")
+        self.git(self.w, "commit", "-m", "이름 바꿈")
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+        self.assertEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertIn("### E2 plan/specs/E2-design-v2.md(머지됨)", text)
+
+    def test_none(self):
+        self.start_design("E1", extra=E1_TABLE)
+        text, _o = self.intents()
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+        self.assertNotIn("###", text)
+
+    def test_status_failure_keeps_pack(self):
+        self.start_design("E1", extra=E1_TABLE)
+        path = os.path.join(self.w, "plan", "rm", "E3.md")
+        Path(path).write_text(Path(path).read_text(encoding="utf-8").replace("epic: E3", "epic: EX"), encoding="utf-8")
+        self.git(self.w, "commit", "-am", "묶음 깨뜨림")
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+        text, stdout = self.intents(base_line=False)
+        self.assertTrue(text.startswith("함께 진행된 에픽을 셀 수 없다 — "), text)
+        self.assertIn("경고: 함께 진행된 에픽을 셀 수 없다", stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
