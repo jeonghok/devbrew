@@ -92,8 +92,13 @@ mkdir -p "$T/dead2"; printf -- '- {agent: r, file: a.py, line: 1, severity: IMPO
 out="$(python3 "$SYNTH" --findings "$T/dead2/findings.yaml" --recritic "$T/dead2/없는.txt" --recritic-map "$T/dead2/map.json" 2>/dev/null)"
 assert_grep "$(first "$out")" '^리뷰를 합쳤다 — (읽지 못한 입력이 있어 지적 수를 확정하지 못했다|남은 지적 [0-9]+개\(.*\)\. 읽지 못한 입력이 있어 지적이 더 있을 수 있다)\.' "#2: 재비판자가 죽은 첫 줄도 확정하지 못했다고 말한다"
 mkdir -p "$T/dead3"; printf '[]\n' > "$T/dead3/findings.yaml"; rf_prep "$T/dead3"
-out="$(python3 "$SYNTH" --findings "$T/dead3/findings.yaml" --recritic "$T/dead3/없는.txt" --recritic-map "$T/dead3/map.json" 2>/dev/null)"
+out="$(python3 "$SYNTH" --findings "$T/dead3/findings.yaml" --recritic "$T/dead3/없는.txt" --recritic-map "$T/dead3/map.json" 2>"$T/dead3/err")"; rc=$?
 assert_not_contains "$(first "$out")" "지적 없음" "#2: 재비판자가 죽고 남은 지적이 0 이어도 첫 줄에 「지적 없음」이 없다"
+# 부재 단언의 양성 짝 — 합성기가 죽거나 아무것도 내지 않으면 위 단언은 공허하게 통과한다.
+assert_eq "$rc" "0" "#2(양의 짝): 재비판자가 죽어도 합성기는 끝까지 돈다(rc 0)"
+assert_eq "$(first "$out")" "리뷰를 합쳤다 — 읽지 못한 입력이 있어 지적 수를 확정하지 못했다. 판정을 막는 경고가 있다 — 아래를 본다." "#2(양의 짝): 재비판자가 죽고 지적 0 의 첫 줄은 확정하지 못했다고 말한다"
+assert_grep "$out" '^- 입력 실패\(주\): code-recritic — ' "#2(양의 짝): 재비판자 사망이 본문 degrade 공시에 있다"
+assert_grep "$(cat "$T/dead3/err")" '재비판 결과를 쓸 수 없다' "#2(양의 짝): stderr 가 재비판 입력 실패를 알린다"
 # 표가 있는 갈래 — 살아남은 지적이 있어도 「더 있을 수 있다」를 붙인다(Review Focus)
 got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._status_line({"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 0}, 0, True, True, True))')"
 assert_eq "$got" "리뷰를 합쳤다 — 남은 지적 1개(중요 1). 읽지 못한 입력이 있어 지적이 더 있을 수 있다. 판정을 막는 경고가 있다 — 아래를 본다." "#2: 표가 있는 갈래도 확정하지 못한 사실을 붙인다"
