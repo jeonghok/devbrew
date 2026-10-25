@@ -82,6 +82,11 @@ assert_contains "$PROBE" "except_guard=0" \
   "같은 except 본문의 처분 호출을 통과시킨다 — 분기 컨테이너는 If 뿐 아니라 Try/except 다"
 assert_contains "$PROBE" "while_boundary_rows=0" \
   "while 안의 버리는 분기를 바깥 for 의 인구로 잘못 귀속하지 않는다 (while 경계 회귀)"
+# 이름으로 부르는 처분 호출 — 원장으로 넘기는 이름만 처분이다. 줄 전체로 센다(`=1` 이 `=10` 을 받지 않게).
+assert_eq "$(printf '%s\n' "$PROBE" | grep -cx 'name_forwarder=0')" "1" \
+  "양성: 원장으로 넘기는 이름(ev)의 처분 호출은 같은 분기를 처분으로 만족시킨다"
+assert_eq "$(printf '%s\n' "$PROBE" | grep -cx 'name_other=1')" "1" \
+  "음성: print(\"hold\", x) 처럼 처분 이름 글자만 넘긴 무관한 함수는 처분이 아니다"
 
 note "── 모집단 도출 (㉮) — 두 경로를 따로 기록한다"
 note "$SCAN"
