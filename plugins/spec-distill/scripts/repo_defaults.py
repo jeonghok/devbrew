@@ -25,6 +25,7 @@ CONDUCTOR_DIR = "conductor"
 WORKTREE_HOME = ".claude/worktrees/"   # 하니스(EnterWorktree)가 worktree 를 두고 옮겨 갈 수 있는 폴더 — 외부 도구 기본값
 MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 일회용 사본 자리(잠금은 suite_lock.py 의 공유 잠금)
 PARALLEL_DEFAULT = 3                   # 지휘자가 동시에 돌리는 큰 작업의 권장 수 — 기본값이지 상한이 아니다(사용자가 늘린다)
+SHARED_FILES = ("plugin.json", "CHANGELOG.md", "README.md")   # 에픽이 함께 건드려 겹치기 쉬운 공유 파일 이름 — 기본값이지 상한이 아니다
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
 COUNT_KEYS = ("parallel_default",)
@@ -34,14 +35,15 @@ BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
 MACHINE_LABEL = "기계 상태(임시)"   # 기계 상태 층의 출처 표기 · 자리 이름
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix")
+        "review_model", "parallel_default", "branch_prefix", "shared_files")
 ROADMAP_META_KEYS = ("type", "source_brief")
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 MACHINE_LAYER_KEYS = ("test_command", "test_failure_pattern")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
 _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
-             "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX}
+             "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
+             "shared_files": SHARED_FILES}
 
 
 def _unquote(value: str) -> str:
@@ -49,6 +51,22 @@ def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
         return value[1:-1].strip()
     return value
+
+
+def _shared_files(raw: str):
+    """(이름 튜플, 사유). 경로 없는 파일 이름의 한 줄 쉼표 목록만 받는다."""
+    value = _unquote(raw)
+    if not value:
+        return None, "값이 비었다"
+    names = []
+    for item in value.split(","):
+        name = _unquote(item)
+        if not name:
+            return None, "빈 원소가 있다"
+        if "/" in name:
+            return None, "원소에 경로(`/`)가 있다"
+        names.append(name)
+    return tuple(names), None
 
 
 def _folder(key: str, raw: str):
@@ -164,8 +182,18 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
                  roadmap_path: str | None = None) -> dict:
     """로드맵 > 레포 설정 > 기계 상태 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
+    warned = []
+    cleaned = []
+    for layer, meta in (("roadmap", roadmap), ("machine", machine)):
+        if meta is not None and "shared_files" in meta:
+            meta = {k: v for k, v in meta.items() if k != "shared_files"}
+            warned.append("%s: shared_files 는 레포 설정 파일(%s)에서만 읽는다 — 이 값은 무시하고 레포 설정 값(없으면 기본 셋)을 쓴다"
+                          % (_place(layer, roadmap_path if layer == "roadmap" else None), SETTINGS_FILE))
+        cleaned.append(meta)
+    roadmap, machine = cleaned
     layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), (MACHINE_LABEL, "machine", machine))
     out = {"values": {}, "sources": {}, "errors": [], "warnings": [], "notices": list(notices)}
+    out["warnings"].extend(warned)
     usable = []
     for label, layer, meta in layers:
         if meta is None:
@@ -190,6 +218,15 @@ def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_labe
                 out["values"][key] = folder
                 if why:
                     out["errors"].append("%s: %s" % (at, why))
+            elif key == "shared_files":
+                names, why = _shared_files(raw)
+                if names is None:
+                    out["values"][key] = SHARED_FILES
+                    out["sources"][key] = "기본값(머리말 값이 깨졌다)"
+                    out["warnings"].append("%s: 공유 파일 목록은 경로 없는 파일 이름의 한 줄 쉼표 목록이다(shared_files: %r — %s) — 기본 셋(%s)을 쓴다"
+                                           % (at, _unquote(raw), why, ", ".join(SHARED_FILES)))
+                else:
+                    out["values"][key] = names
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:
@@ -550,7 +587,7 @@ def main(argv=None) -> int:
             value = result["values"][args.key]
             if value is None:
                 return 1
-            print(value)
+            print(", ".join(value) if isinstance(value, tuple) else value)
             return 0
         roadmap = getattr(args, "roadmap", None)
         if roadmap is not None:
@@ -581,7 +618,7 @@ def main(argv=None) -> int:
         return 3
     if value is None:
         return 1
-    print(value)
+    print(", ".join(value) if isinstance(value, tuple) else value)
     return 0
 
 

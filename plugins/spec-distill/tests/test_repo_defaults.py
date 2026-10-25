@@ -166,8 +166,8 @@ class Layers(unittest.TestCase):
         rd.check_layer({"type": "roadmap", "source_brief": "b.md", "specs_dir": "s/", "plans_dir": "p/", "test_command": "t",
                         "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
 
-    def test_repo_layer_accepts_all_nine_keys_and_not_meta(self):
-        self.assertEqual(len(rd.KEYS), 9)
+    def test_repo_layer_accepts_all_ten_keys_and_not_meta(self):
+        self.assertEqual(len(rd.KEYS), 10)
         rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
