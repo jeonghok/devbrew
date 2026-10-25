@@ -4,7 +4,8 @@
 # 순서(spec §5): kill switch → gh 존재 · origin(gh-repo.sh) → 인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그
 # → 길이 → 코멘트. gh 호출은 전부 `-R <origin>` 을 밝힌다.
 # 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
-# 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long.
+# 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long ·
+# gh-unauthenticated · no-origin.
 # pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
 # `failed:` 는 셋이다 — gh 가 없다(`failed: gh-unavailable`) · gh 가 로그인돼 있지 않다(`failed: gh-unauthenticated`)
 # · origin 이 없거나 URL 을 못 읽거나 gh 가 그 레포를 다루지 못한다(`failed: no-origin`).
@@ -58,8 +59,8 @@ fi
 [ "$slug_rc" -eq 0 ] && [ -n "$slug" ] \
   || { echo "publish-comment: origin 의 레포를 정하지 못해 PR 코멘트를 달지 못했다(gh-repo.sh rc ${slug_rc})" >&2; fail no-origin; }
 host="${slug%%/*}"
-# 인증 — 부작용 전(P5). 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
-auth_err="$(gh auth status --active 2>&1 >/dev/null)" \
+# 인증 — 부작용 전(P5). origin 호스트의 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
+auth_err="$(gh auth status --active --hostname "$host" 2>&1 >/dev/null)" \
   || { echo "publish-comment: gh 미인증 — gh auth login --hostname ${host} 를 돈다" >&2
        printf '%s\n' "$auth_err" | tail -n 3 >&2; fail gh-unauthenticated; }
 
