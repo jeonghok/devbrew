@@ -66,6 +66,7 @@ run_case() {   # run_case <scripts-dir> <case-fn> → "<fail> <pass> <traceback:
     . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases_advice.sh"
     _out="$(mktemp -t docreview-runcase-XXXXXX)"
     "$2" >"$_out" 2>&1
+    carry_fold >>"$_out" 2>&1; rm -f "$_CASES_CARRY"   # 케이스의 $(…) 안 거절 — finish 를 부르지 않으니 여기서 센다
     _tb=0
     grep -q '^Traceback (most recent call last):' "$_out" && _tb=1
     rm -f "$_out"

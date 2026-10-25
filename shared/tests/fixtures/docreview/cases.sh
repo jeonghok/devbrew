@@ -31,16 +31,37 @@ mk_state() {   # mk_state <doc> <profile>  → prints state dir (init 까지). �
 }
 snap() { py docreview_anchor.py snapshot "$1" > "$2"; }         # snap <doc> <out.json>
 ledger_doc() { python3 "$FX/st_get.py" "$1/docreview-state.md" 'st["doc"]'; }   # ledger_doc <state-dir> → 원장의 문서
+# put_doc 의 거절은 서브셸 안에서도 세어져야 한다 — `d="$(도우미)"` · `$(ac2_diff …)` · `$(next_round …)` 처럼
+# 도우미가 $(…) 안에서 불리면 그 안의 `no` 가 올린 실패 수는 부모 셸로 돌아오지 않는다. 서브셸이면 실패를
+# 운반 파일에도 적고, 부모(이 파일을 source 한 셸)의 carry_fold 가 다시 센다. finish 가 끝에 한 번 더 접는다.
+_CASES_SUB0=$BASH_SUBSHELL
+_CASES_CARRY="$(mktemp -t cases-carry-XXXXXX)" || { echo "[cases.sh] 실패 운반 파일을 만들지 못했다" >&2; exit 1; }
+put_fail() {   # put_fail <msg> — 실패를 센다. 서브셸이면 운반 파일에도 적는다
+  no "$1"
+  if [ "$BASH_SUBSHELL" -gt "$_CASES_SUB0" ]; then printf '%s\n' "$1" >> "$_CASES_CARRY"; fi
+  return 0
+}
+carry_fold() {   # 부모 셸에서 — 서브셸이 운반 파일에 남긴 실패를 하나씩 세고 파일을 비운다
+  [ "$BASH_SUBSHELL" -eq "$_CASES_SUB0" ] || return 0
+  [ -s "$_CASES_CARRY" ] || return 0
+  local l; while IFS= read -r l; do no "[서브셸 안에서 난 실패] $l"; done < "$_CASES_CARRY"
+  : > "$_CASES_CARRY"
+}
+eval "_cases_finish_orig() $(declare -f finish | sed 1d)"
+finish() { carry_fold; rm -f "$_CASES_CARRY"; _cases_finish_orig; }
 put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원장의 문서 자리에 옮긴다(같은 파일이면 그대로). 공유 픽스처는 덮지 않는다
-  local L; L="$(ledger_doc "$1")" || { no "[cases.sh] 원장의 문서를 읽지 못했다: $1" >&2; return 1; }
+  local L; L="$(ledger_doc "$1")" || { put_fail "[cases.sh] 원장의 문서를 읽지 못했다: $1" >&2; return 1; }
   [ "$2" -ef "$L" ] && return 0
-  case "$L" in "$FX"/*) no "[cases.sh] 원장의 문서가 공유 픽스처다 — 덮지 않는다: $L" >&2; return 1 ;; esac
-  cp "$2" "$L" || { no "[cases.sh] 문서 복사 실패: $2 → $L" >&2; return 1; }
+  case "$L" in "$FX"/*) put_fail "[cases.sh] 원장의 문서가 공유 픽스처다 — 덮지 않는다: $L" >&2; return 1 ;; esac
+  cp "$2" "$L" || { put_fail "[cases.sh] 문서 복사 실패: $2 → $L" >&2; return 1; }
 }
 put_snap() { put_doc "$1" "$(jget "$2" 'd["doc"]')"; }   # put_snap <state-dir> <snapshot.json> — 그 스냅숏을 뜬 문서를 원장의 문서 자리에. 부르는 줄은 `&&` 로 잇는다(거절이면 begin-round 를 돌리지 않는다)
 # put_snap 의 거절은 `no` 로 실패를 센다 — `$(...)` 안에서 부르면 그 수가 서브셸에서 사라진다. 그래서 `$(...)` 안에서 부르지 않는다.
+_put_in_helper() {   # _put_in_helper <state-dir> <snapshot> — 상태 폴더를 돌려주는 도우미 꼴: 안에서 put_snap 을 부르고 끝까지 간다
+  put_snap "$1" "$2"; echo ran
+}
 case_put_snap_failure_counted() {   # 공유 픽스처가 원장의 문서인 상태에 다른 문서의 스냅숏을 넣는 줄이 실패를 정확히 1 센다
-  local d s b a1 a2 r pf
+  local d s b a1 a2 a3 r pf
   d="$(mktemp -d -t docreview-XXXXXX)" || { no "put_snap 계수: 임시 폴더 실패"; return; }
   py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" >/dev/null || { no "put_snap 계수: init 실패"; rm -rf "$d"; return; }
   { cat "$FX/design-sample.md"; echo "다른 문서"; } > "$d/other.md"; s="$d/s.json"; snap "$d/other.md" "$s"
@@ -48,10 +69,19 @@ case_put_snap_failure_counted() {   # 공유 픽스처가 원장의 문서인 �
   { r=""; put_snap "$d" "$s" && r="$(py docreview_state.py begin-round --state-dir "$d")"; } 2>/dev/null
   a1=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
   { pf=put_snap; r=""; r="$($pf "$d" "$s" && py docreview_state.py begin-round --state-dir "$d")"; } 2>/dev/null
-  a2=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  a2=$((_ASSERT_FAIL - b))
+  carry_fold 2>/dev/null >/dev/null; a3=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
   assert_eq "$a1" "1" "put_snap 계수: 부름 줄을 서브셸 밖에서 돌리면 거절이 실패로 정확히 1 센다"
-  assert_eq "$a2" "0" "put_snap 계수 대조: 옛 꼴(\$(…) 안)에서는 그 실패가 세어지지 않는다"
+  assert_eq "$a2" "0" "put_snap 계수 대조: 옛 꼴(\$(…) 안)에서는 그 실패가 그 자리에서는 세어지지 않는다"
+  assert_eq "$a3" "1" "put_snap 계수: 서브셸 안 거절은 운반 파일로 넘어와 부모가 정확히 1 센다(carry_fold)"
   assert_eq "$r" "" "put_snap 계수: 거절이면 begin-round 를 돌리지 않는다"
+  # 도우미가 \$(…) 안에서 불려도(상태 폴더를 돌려주는 도우미 · ac2_diff · next_round) 그 안의 거절이 사라지지 않는다
+  b=$_ASSERT_FAIL
+  { r="$(_put_in_helper "$d" "$s")"; } 2>/dev/null
+  carry_fold >/dev/null 2>&1; a3=$((_ASSERT_FAIL - b)); _ASSERT_FAIL=$b
+  assert_eq "$a3 [$r]" "1 [ran]" "put_snap 계수: \$(도우미) 안의 거절도 부모가 정확히 1 센다"
+  b=$_ASSERT_FAIL; carry_fold >/dev/null 2>&1
+  assert_eq "$((_ASSERT_FAIL - b))" "0" "put_snap 계수: 운반 파일은 한 번 세면 비운다(두 번 세지 않는다)"
   rm -rf "$d"
   # 원장을 못 읽는 실패 · 복사 실패도 같은 줄에서 정확히 1 센다 — 세지 않으면 `put_snap … && assert_eq …` 의 단언이 조용히 빠진다
   d="$(mktemp -d -t docreview-XXXXXX)" || { no "put_snap 계수: 임시 폴더 실패"; return; }
