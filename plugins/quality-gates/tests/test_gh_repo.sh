@@ -120,7 +120,7 @@ mkrepo hs "https://github-work/o/r" || { no "픽스처 https 별칭"; finish; ex
 slug hs "$FAKEPATH"
 assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github-work/o/r:" "https 꼴은 ssh 설정을 보지 않는다"
 # 옵션 주입: '-' 로 시작하거나 호스트 글자가 아닌 것은 ssh 에 넘기지 않는다
-for url in "-oProxyCommand=touch:o/r" "git@-oProxyCommand=x:o/r" "ssh://git@-oProxyCommand=x/o/r" "git@a%b:o/r"; do
+for url in "-oProxyCommand=touch:o/r" "git@-oProxyCommand=x:o/r" "ssh://git@-oProxyCommand=x/o/r" "git@a%b:o/r" "git@-oproxycommand:o/r" "ssh://-oproxycommand/o/r"; do
   mkrepo inj - || { no "픽스처 inj"; finish; exit 1; }
   git -C "$T/inj" config remote.origin.url "$url" || { no "픽스처 $url"; finish; exit 1; }
   : > "$FAKE_SSH_ARGS"
