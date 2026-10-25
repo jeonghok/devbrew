@@ -106,6 +106,8 @@ Run: 각 파일을 읽는다. Expected: 표대로다. 다르면 무엇이 다른
 
 ### Task 1: 공유 파일 설정 키 `shared_files`
 
+**AC:** AC4
+
 **Files:**
 - Modify: `plugins/spec-distill/scripts/repo_defaults.py`
 - Create: `plugins/spec-distill/tests/test_parallel_recommend.py`
@@ -173,6 +175,8 @@ def test_quoted_whole_value_with_hash(self):
 ---
 
 ### Task 2: 상태 계산 — 해결된 공유 목록 · 겹침 대칭
+
+**AC:** AC4 · AC5 · AC15
 
 **Files:**
 - Modify: `plugins/spec-distill/scripts/roadmap_status.py`
@@ -246,6 +250,8 @@ def test_roadmap_layer_value_does_not_make_status_unknown(self):
 ---
 
 ### Task 3: 작업 목록 끝의 병렬 판단 줄
+
+**AC:** AC1 · AC2 · AC15
 
 **Files:**
 - Modify: `plugins/spec-distill/scripts/control_plane.py`
@@ -321,6 +327,8 @@ L claim --roadmap "$RM" --session "$SID" >/dev/null; assert_eq "$?" "0" "AC2: �
 
 ### Task 4: spec 리뷰의 이웃 결정 — 동시 가능 에픽 · 결정 줄 셋
 
+**AC:** AC9 · AC15
+
 **Files:**
 - Modify: `plugins/spec-distill/scripts/spec_review_bundle.py`
 - Modify: `plugins/spec-distill/tests/test_parallel_recommend.py`
@@ -358,6 +366,8 @@ def test_not_decision_lines(self):
 ---
 
 ### Task 5: 리뷰 묶음의 `intents.md`
+
+**AC:** AC10 · AC15
 
 **Files:**
 - Create: `plugins/spec-distill/scripts/review_intents.py`
@@ -402,6 +412,8 @@ def test_not_decision_lines(self):
 ---
 
 ### Task 6: 통합 리뷰어 일곱째 이음매 · dispatch 칸 · 통합 리뷰 문장
+
+**AC:** AC11 · AC15
 
 페르소나 편집 — 규칙을 더하기만 한다. 이 과제의 리뷰는 보안 리뷰 관점(규칙 제거 · 기준 완화가 없는가)을 함께 본다.
 
@@ -448,6 +460,8 @@ AC11 락: 프로필에 `tag: intents` · 이음매 7 문장 전체 · `<위 1~7 
 
 ### Task 7: 병렬 질문 · 「차례로」 확인 · 끝 줄 소비 · 소식 예외
 
+**AC:** AC3 · AC6 · AC7 · AC8 · AC15
+
 **Files:**
 - Modify: `plugins/spec-distill/references/conducting.md`(걸음 1 · 2 · 3 · 4, 손 절차 1 · 2 · 3 · 4 · 5)
 - Modify: `plugins/spec-distill/references/proceed-gate.md`
@@ -487,6 +501,8 @@ AC11 락: 프로필에 `tag: intents` · 이음매 7 문장 전체 · `<위 1~7 
 
 ### Task 8: 머지 명령 줄은 하나씩 · 대조 기준 커밋 · 머지 큐
 
+**AC:** AC12 · AC13 · AC15
+
 **Files:**
 - Modify: `plugins/spec-distill/references/conducting.md`(걸음 5 판단 · 손 절차 8)
 - Modify: `plugins/spec-distill/tests/test_parallel_recommend_docs.sh`
@@ -509,6 +525,8 @@ AC11 락: 프로필에 `tag: intents` · 이음매 7 문장 전체 · `<위 1~7 
 ---
 
 ### Task 9: 조사 자리 — 설계 전 꼼꼼히 · 계획 첫 과제 가볍게
+
+**AC:** AC14 · AC15
 
 **Files:**
 - Modify: `plugins/spec-distill/references/epic-handoff.md`
@@ -535,6 +553,8 @@ AC11 락: 프로필에 `tag: intents` · 이음매 7 문장 전체 · `<위 1~7 
 
 ### Task 10: README · ontology · CHANGELOG · 판
 
+**AC:** AC4 · AC16
+
 **Files:**
 - Modify: `plugins/spec-distill/README.md` · `plugins/spec-distill/references/roadmap-ontology.md` · `plugins/spec-distill/CHANGELOG.md` · `plugins/spec-distill/.claude-plugin/plugin.json`
 - Modify: `plugins/spec-distill/tests/test_parallel_recommend_docs.sh`
@@ -558,6 +578,8 @@ AC11 락: 프로필에 `tag: intents` · 이음매 7 문장 전체 · `<위 1~7 
 ---
 
 ### Task 11: 변이로 이빨 확인(AC15) · 끝에서 끝
+
+**AC:** AC15
 
 락과 테스트가 그 문장 · 조건을 지우면 RED 가 되는지 본다. 고치는 과제가 아니다 — RED 가 안 나는 변이가 있으면 그 락 · 테스트를 고치는 커밋을 더한다.
 
