@@ -125,12 +125,14 @@ T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 �
 # --ignore-submodules=none — 작업 트리 .gitmodules 의 submodule.<이름>.ignore(리뷰하는 변경이 더할 수 있다)나
 # 사용자 설정 diff.ignoreSubmodules 가 gitlink 를 diff 에서 숨기지 못하게 한다. session · paths 는 뒤에
 # --ignore-submodules=dirty 를 덧붙인다(뒤 플래그가 이긴다).
+# --text — 리뷰하는 변경의 .gitattributes(`-diff` · `binary`)나 앞 8KB 의 NUL 바이트 하나가 파일 내용을
+# 「Binary files … differ」 한 줄로 바꿔 리뷰어 · codex 에게서 숨기지 못하게 한다(이름 대조는 그 파일을 리뷰했다고 센다).
 # 걸러진 diff 의 git diff 한 번에 넘기는 남길 경로 수 · 글자 수 상한(인자 길이 상한 ARG_MAX 아래로).
 KEEP_BATCH_N=500
 KEEP_BATCH_CHARS=65536
-GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames --submodule=short
+GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --text --no-renames --submodule=short
       --ignore-submodules=none --src-prefix=a/ --dst-prefix=b/)
-GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
+GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv --text
               --src-prefix=a/ --dst-prefix=b/)
 
 publish() {   # 임시 파일 다섯을 제자리로

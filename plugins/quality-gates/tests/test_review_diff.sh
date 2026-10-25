@@ -84,6 +84,26 @@ case_session_includes_untracked() {
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "걸러진 diff 에도 new.py"
 }
 
+case_binary_cannot_hide_code() {
+  echo "[session — -diff 속성 · NUL 바이트가 코드를 「Binary files differ」 로 숨기지 못한다]"
+  mkfix
+  printf '*.sh -diff\n' > "$R/.gitattributes"
+  printf 'echo HIDDEN_TRACKED_ATTR\n' > "$R/src/run.sh"
+  printf 'z = 1\000\nHIDDEN_TRACKED_NUL = 1\n' > "$R/lib/nul.py"
+  g "$R" add -A; g "$R" commit -q -m hide
+  printf 'echo HIDDEN_UNTRACKED_ATTR\n' > "$R/new.sh"
+  printf 'w = 1\000\nHIDDEN_UNTRACKED_NUL = 1\n' > "$R/new_nul.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  local f m
+  for f in "$D/review-i1.diff" "$D/review-i1.full.diff"; do
+    for m in HIDDEN_TRACKED_ATTR HIDDEN_TRACKED_NUL HIDDEN_UNTRACKED_ATTR HIDDEN_UNTRACKED_NUL; do
+      assert_file_grep "$f" "^\\+.*$m" "$(basename "$f") 에 $m 줄이 그대로 있다"
+    done
+    assert_file_absent "$f" '^Binary files ' "$(basename "$f") 에 'Binary files … differ' 줄이 없다"
+  done
+}
+
 case_session_doc_excluded() {
   echo "[session — 문서 경로 제외]"
   mkfix
@@ -1126,6 +1146,7 @@ case_usage() {
 }
 
 case_session_includes_untracked
+case_binary_cannot_hide_code
 case_session_doc_excluded
 case_range_uses_frozen_pair
 case_topic_uses_boundary_tree
