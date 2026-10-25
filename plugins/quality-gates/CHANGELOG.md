@@ -7,10 +7,10 @@
 
 ### Fixed
 - SSH 설정의 별칭 호스트(`git@github-work:o/r`)로 origin 을 잡은 레포에서 `scripts/gh-repo.sh` 가 별칭을 그대로 `-R` 에 넘겨 리뷰가 멈추고 PR 코멘트도 달리지 않던 것 — SSH 꼴 origin 의 호스트를 `ssh -G` 의 hostname 으로 푼다(`*.github.com` 은 `github.com`). ssh 가 없거나 풀지 못하면 rc 3 과 사유로 멈춘다. 호스트 글자가 아닌 값은 ssh 에 넘기지 않는다.
-- gh 미로그인이 `skipped: gh-unavailable`(실패 아님)로 끝나 「gh 없음」 과 구별되지 않던 것 — `failed: gh-unauthenticated`(rc 1)로 낸다.
+- gh 미로그인이 `skipped: gh-unavailable`(실패 아님)로 끝나 「gh 없음」 과 구별되지 않던 것 — `failed: gh-unauthenticated`(rc 1)로 낸다. 인증 확인은 origin 호스트만 본다(`--hostname`) — 다른 호스트의 깨진 계정이 실패를 만들지 않는다.
 - 리뷰 diff(`scripts/review-diff.sh`)에 `--text` — 변경이 `.gitattributes` 의 `-diff` 나 NUL 바이트로 코드를 「Binary files … differ」 한 줄로 숨기지 못한다.
 - `/quality-gates:artifact-critique` 가 링크와 원본을 함께 적으면 합친다고 했지만 경로 인가는 링크를 늘 거절했다 — 그 약속을 지우고 거절 안내를 사유(`symlink_target` · `escapes_project_dir`)별로 나눴다. 링크 거절은 그대로다.
-- codex 가 0 아닌 종료로 끝나면 산출물 meta 에 종료 코드(`exit_code`)와 stderr 첫 줄(`stderr_head`, 200자에서 자름)을 남긴다 — 공유 추출기와 artifact 추출기.
+- codex 가 0 아닌 종료로 끝나면 산출물 meta 에 종료 코드(`exit_code`)와 stderr 첫 줄(`stderr_head` — 비밀처럼 생긴 20자 이상 낱말은 가리고 200자에서 자름)을 남긴다 — 공유 추출기와 artifact 추출기.
 - 낮춘 지적이 넷 이상일 때 게이트가 여러 선택이라 「전부 되올린다」 와 「그대로 둔다」 를 함께 고를 수 있던 것 — 하나만 고른다.
 - 테스트 둘이 엉뚱한 이유로 통과하던 것 — codex 러너의 잘못된 인자 세 경우가 앞 경우의 실패 표시를 읽던 것, 재비판자 사망 · 지적 0 경우에 합성기가 죽어도 통과하던 것.
 
