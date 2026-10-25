@@ -912,10 +912,13 @@ $body")"
   assert_contains "$o" "원장 자리가 레포 밖으로 풀리거나 링크를 지난다" "T8 관문(a): 검사 $i — 리뷰 산출물을 건너뛴다는 한 줄을 낸다"
 done
 assert_contains "$LKA1" "marks_rc=" "T8 관문(a): 검사 1 이 판정 줄을 낸다"
-assert_not_contains "$LKA1" "검사 불가»로 막힌다" "T8 관문(a): 검사 1 이 검사 2 · 3 을 «검사 불가» 로 막는다고 하지 않는다"
-assert_contains "$LKA2" "저자 편집 대조 불가" "T8 관문(a): 검사 2 는 대조 불가를 알리고 막지 않는다"
-assert_not_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막지 않는다"
-assert_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 은 audit 으로 대조해 통과 판정을 낸다"
+# 원장 자리를 거부한 세션은 seed 리뷰 라운드를 건너뛰었다 — 확정 직전 검사 2 · 3 은 열리지 않고 «검사 불가» 로 막는다.
+assert_contains "$LKA1" "검사 2 · 3 은 «검사 불가»로 막힌다" "T8 관문(a): 검사 1 이 검사 2 · 3 이 «검사 불가» 로 막힌다고 알린다"
+assert_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막는다"
+assert_not_contains "$LKA2" "진행한다(막지 않는다)" "T8 관문(a): 검사 2 가 막지 않고 진행한다고 하지 않는다"
+assert_contains "$LKA3" "final_drops_rc=2" "T8 관문(a): 검사 3 은 «검사 불가»(rc 2)로 막는다"
+assert_not_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 이 audit 대조만으로 통과 판정을 내지 않는다"
+assert_contains "$LKA2$LKA3" "링크를 걷어" "T8 관문(a): 막을 때 푸는 길(링크를 걷어 내고 다시 돈다)을 댄다"
 assert_eq "$(ls -A "$lko")" "" "T8 관문(a): 링크 너머 폴더가 비어 있다"
 # (b) spec-review — ## 입력 + codex 펜스
 o="$(cd "$lkr" && lk_env sess-lk000001 "spec_path='$lkr/docs/d-design.md'

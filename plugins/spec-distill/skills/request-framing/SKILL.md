@@ -410,7 +410,7 @@ SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""; LEDGER_REFUSED=""
 if [ -n "$SEED" ]; then
   SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
   STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$SEED_ABS" || true)"
-  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || { STATE_DIR=""; LEDGER_REFUSED=1; echo "[spec-distill] 원장 자리가 레포 밖으로 풀리거나 링크를 지난다(위 사유) — 리뷰 산출물(원장 · 번들 · 기준 사본)을 건너뛴다. 확정 직전 검사는 audit 기록으로 대조하고 막지 않는다." >&2; }
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || { STATE_DIR=""; LEDGER_REFUSED=1; echo "[spec-distill] 원장 자리가 레포 밖으로 풀리거나 링크를 지난다(위 사유) — 리뷰 산출물(원장 · 번들 · 기준 사본)을 건너뛴다. seed 리뷰를 돌 수 없으므로 확정 직전 검사 2 · 3 은 «검사 불가»로 막힌다 — 그 링크를 걷어 내고 이 블록부터 다시 돈다." >&2; }
 fi
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
 BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · codex 가 읽는 번들
@@ -1231,8 +1231,8 @@ echo "cnt_rc=$cnt_rc"
 
 ```bash
 # 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 원장 정리로 디렉토리가 사라졌으면 다시 만든다. 원장 자리를 거부했으면(LEDGER_REFUSED)
-# 상태 블록이 이미 한 줄로 알렸고 검사 2 · 3 은 엔진 자리 없이 돈다.
-if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; elif [ -z "${LEDGER_REFUSED:-}" ]; then echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
+# seed 리뷰 라운드가 돌지 않았으므로 검사 2 · 3 은 열리지 않는다.
+if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; elif [ -n "${LEDGER_REFUSED:-}" ]; then echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 검사 2 · 3 은 «검사 불가»로 막힌다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2; else echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
 marks_rc=0
 python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc=$?
 case "$marks_rc" in
@@ -1246,13 +1246,14 @@ echo "marks_rc=$marks_rc"
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
 반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
 다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다. 원장 자리를 거부한 세션(`## 상태` 블록이 그 한
-줄을 냈다)은 기준 사본이 없어 대조할 수 없으므로, 이 검사는 seed 전문을 보이고 막지 않습니다 — 그 사실을 게이트 앞 글에 싣습니다.
+줄을 냈다)은 seed 리뷰 라운드도 기준 사본도 없으므로 이 검사는 «검사 불가»로 막습니다 — 링크를 걷어 내고 `## 상태` 블록부터 다시 돕니다.
 
 ```bash
 final_hunks_rc=0
-if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ] && [ -f "${SEED_ABS:-}" ]; then
-  # 원장 자리를 거부했다 — 기준 사본이 없어 대조할 수 없다. seed 전문을 보이고 막지 않는다(막으면 심은 링크 하나로 게이트가 영영 닫힌다).
-  final_hunks_rc=4
+if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ]; then
+  # 원장 자리를 거부했다 — seed 리뷰가 돌지 않았고 기준 사본도 없다. 열지 않고 막는다.
+  echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 리뷰 없이 확정하지 않는다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2
+  final_hunks_rc=2
 elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_hunks_rc=2
 else
@@ -1270,23 +1271,22 @@ for h in d["hunks"]:
     print()
 ' "$STATE_DIR/hunks-final.json" ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
-  4) cat "$SEED_ABS"
-     echo "[spec-distill] 저자 편집 대조 불가 — 원장 자리를 쓰지 않아 기준 사본이 없다. seed 전문을 위에 보였다. 게이트 앞 글에 싣고 진행한다(막지 않는다)." >&2 ;;
   *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac
 ```
 
 **검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
 없으면 — 라운드가 시작되지 않았거나 원장 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
-drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다. 원장 자리를 거부한 세션도 같은
-대조로 갑니다 — 중간 파일은 원장 자리가 아니라 펜스 안의 임시 파일에 쓰고 지웁니다.
+drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다. 원장 자리를 거부한 세션은 엔진
+리뷰가 돌지 않았으므로 audit 대조로 열지 않고 «검사 불가»(rc 2)로 막습니다.
 
 ```bash
 final_drops_rc=0
 gf=""
 if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ]; then
-  # 원장 자리를 거부했다 — 엔진 원장 없이 audit 으로 대조하고, 중간 파일은 이 펜스 안에서만 쓰고 지운다.
-  gf="$(mktemp "${TMPDIR:-/tmp}/sd-gate-final.XXXXXX")" || final_drops_rc=2
+  # 원장 자리를 거부했다 — 엔진 리뷰가 돌지 않았다. audit 대조만으로 열지 않고 막는다.
+  echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 엔진 리뷰 없이 drop 검사를 통과시키지 않는다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2
+  final_drops_rc=2
 elif [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_drops_rc=2
 else
