@@ -379,6 +379,7 @@ IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
 # 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다. TOPIC 이 실값이면 그 주제의
 # audit 만 되찾는다 — 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit · seed 를 다시 쓰지 않고 새 이름으로 간다.
+# TOPIC 은 이 블록을 이어 붙이는 모든 사본에서 같은 값으로 채운다 — 글자가 하나라도 다르면 다른 회의로 읽혀 새 이름으로 갈라진다.
 TOPIC="<kebab-topic>"
 IV_NAME=""
 case "$TOPIC" in
@@ -395,6 +396,7 @@ else
   elif [ "$f_rc" -eq 2 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2
+    [ -n "$TOPIC_ARG" ] || echo "[spec-distill] 이 세션에 회의가 둘 이상이다 — 블록의 TOPIC 을 이 회의의 주제로 채워 다시 돌린다(위 경로의 <날짜>-<주제>-interview 중 하나)." >&2
   elif [ "$f_rc" -ne 0 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 을 찾지 못했다(위 사유) — 이름을 고르지 않고 멈춘다." >&2
@@ -404,7 +406,7 @@ AUDIT=""
 SEED=""
 case "$IV_NAME" in
   ""|*/*|*"<"*|*">"*|*[[:space:]]*)
-    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다." >&2 ;;
+    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다(이 세션에 회의가 둘 이상이면 TOPIC 이 고른다)." >&2 ;;
   *)
     AUDIT="${IDIR}${IV_NAME}.audit.md"
     SEED="${IDIR}${IV_NAME}.md" ;;
@@ -1187,8 +1189,8 @@ git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$A
 고쳤을 때도 1번부터 다시 돕니다.
 
 **계수 기록 — 검사 1 앞에서, 막지 않습니다.** 엔진의 라운드별 계수 줄(`docreview 계수 — …`)을 audit `## 6. 리뷰
-결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 같은
-(리뷰 정체, 라운드) 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
+결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 이
+원장이 쓴 계수 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
 이 펜스가 이 리뷰의 마지막 원장 쓰기입니다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고 끝에서 풉니다. 그 뒤에 라운드를
 다시 열거나 처분 · 답 기록 · `check-intent` 를 하려면 그보다 먼저 원장 열기(`ledger-open`)를 다시 돕니다.
 

@@ -738,6 +738,14 @@ assert_contains "$out" "다른 주제의 seed audit" "AC11: 다른 주제로 다
 rm -f "$rfr/docs/superpowers/interview/2026-10-15-b-interview.audit.md"
 out="$(rf_topic rfz)"
 printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/interview/$(date +%F)-rfz-interview.md]" && ok "AC11: 이 세션의 audit 이 하나여도 주제가 다르면 그 이름을 쓰지 않는다" || no "AC11: 하나뿐인 옛 주제 audit 을 새 주제에 다시 썼다: $out"
+# 새 주제의 audit 을 쓴 뒤 자리표 TOPIC 그대로 이어 붙인 블록은 둘 이상에서 멈추되, 푸는 길(TOPIC 을 채운다)을 댄다
+printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 주제가 둘인 세션에서 자리표 TOPIC 이면 이름을 고르지 않는다" || no "AC11: 자리표 TOPIC 으로 둘 중 하나를 골랐다: $out"
+assert_contains "$out" "TOPIC 을 이 회의의 주제로 채워 다시 돌린다" "AC11: 자리표 TOPIC 으로 둘 이상에서 멈출 때 푸는 길을 댄다"
+grep -qF 'TOPIC 은 이 블록을 이어 붙이는 모든 사본에서 같은 값으로 채운다' "$RF" && ok "AC11: 블록 주석이 TOPIC 을 모든 사본에서 같은 값으로 채우라고 한다" || no "AC11: TOPIC 을 사본마다 같게 채우라는 지시가 없다"
+rm -f "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-a-interview.md]' \
