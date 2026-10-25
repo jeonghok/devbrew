@@ -190,8 +190,8 @@ class SpecsDir(unittest.TestCase):
             self.assertIsNone(why)
             self.assertEqual(view["specs_dir"], "design/")
             block = {"kind": "bundle", "fields": {"묶음": "R5.md"}}
-            self.assertEqual(cbc._block_specs(block, view, repo), [other])
-            self.assertEqual(cbc._block_specs(block, dict(view, specs_dir="docs/superpowers/specs/"), repo), [])
+            self.assertEqual(cbc._block_specs(block, view, repo), ([("design/other.md", other)], []))
+            self.assertEqual(cbc._block_specs(block, dict(view, specs_dir="docs/superpowers/specs/"), repo), ([], []))
         finally:
             shutil.rmtree(str(tmp))
 

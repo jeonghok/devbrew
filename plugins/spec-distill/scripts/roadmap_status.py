@@ -626,6 +626,7 @@ class _GitTreeRepo:
     def __init__(self, git: Git, tree: str, specs_dir: str):
         self.git, self.tree, self.specs_dir = git, tree, specs_dir
         self._memo = {}
+        self._unread = {}
 
     def read(self, rel: str):
         return self.git.blob(self.tree, rel)
@@ -641,10 +642,17 @@ class _GitTreeRepo:
         out = []
         for path in self.git.grep_files(self.tree, source, folder):
             text = self.git.blob(self.tree, path)
+            if text is None:   # 이 묶음을 가리키는 글이 있는데 못 읽었다 — 그 묶음이 무엇을 기각했는지 모른다
+                if path not in self._unread.setdefault(folder, []):
+                    self._unread[folder].append(path)
+                continue
             if text and unquote(frontmatter(text).get("source_interview", "")) == source:
                 out.append((path, text))
         self._memo[key] = sorted(out)
         return self._memo[key]
+
+    def unreadable_specs(self, specs_dir=None) -> list:
+        return list(self._unread.get(specs_dir or self.specs_dir, []))
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str, settings: dict,

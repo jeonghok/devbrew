@@ -202,6 +202,18 @@ cp -R "$R" "$T/repo2"
 sed 's/^| S9 | 기각 | 범위 밖 |$/| S9 | 반영 | Goals |/' "$R/docs/superpowers/specs/r8-design.md" > "$T/repo2/docs/superpowers/specs/r8-design.md"
 out="$(python3 "$C" --json "$T/repo2/docs/x/R9.md" "$R/rej.md")"
 assert_eq "$(jget "$out" "r['unserved']")" "['S7']" "N17 양성 짝: R8 설계문서가 S9 를 반영하면 S9 는 받든 것이다"
+# N17 셀 수 없음 — 이웃 설계문서의 번호 대조 표가 깨졌거나 문서를 못 읽으면 받든다고 치지 않고 셀 수 없음으로 낸다
+cp -R "$R" "$T/repo3"
+sed 's/^| S9 | 기각 | 범위 밖 |$/| S9 | 보류 | 범위 밖 |/' "$R/docs/superpowers/specs/r8-design.md" > "$T/repo3/docs/superpowers/specs/r8-design.md"
+out="$(python3 "$C" --json "$T/repo3/docs/x/R9.md" "$R/rej.md")"
+assert_eq "$(jget "$out" "r['unserved']")" "['S7']" "N17: 깨진 표의 이웃이 배정받은 S8 · S9 는 받드는 에픽 없음으로 단정하지 않는다"
+assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "N17: 깨진 표의 이웃이 배정받은 S8 · S9 는 셀 수 없음이다(받든다고 치지 않는다)"
+assert_contains "$(jget "$out" "r['unknown']")" "번호 대조" "N17: 셀 수 없음 사유가 깨진 표를 댄다"
+cp -R "$R" "$T/repo4"; chmod 000 "$T/repo4/docs/superpowers/specs/r8-design.md"
+out="$(python3 "$C" --json "$T/repo4/docs/x/R9.md" "$R/rej.md")"
+chmod 644 "$T/repo4/docs/superpowers/specs/r8-design.md"
+assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "N17: 이웃 설계문서를 못 읽으면 그 이웃이 배정받은 S8 · S9 는 셀 수 없음이다"
+assert_contains "$(jget "$out" "r['unknown']")" "못 읽었다" "N17: 셀 수 없음 사유가 못 읽은 문서를 댄다"
 
 # 13. 로드맵을 못 찾음(AC5 · AC7) — 그 항목만 셀 수 없음, rc 0, 첫 줄이 개수를 말한다
 mkdir -p "$T/lone"; cp "$R/docs/x/R9.md" "$T/lone/R9.md"
