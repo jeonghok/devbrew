@@ -176,8 +176,18 @@ class Git:
         return [l.strip() for l in out.splitlines() if l.strip()]
 
     def merge_base(self, a: str, b: str):
-        rc, out = self.run("merge-base", a, b)
-        return out.strip() if rc == 0 and out.strip() else None
+        """갈라진 곳 — 공통 조상이 정말 없으면(rc 1, 얕은 클론이 아님) None. git 오류 · 얕은 클론의 rc 1 은
+        「없음」 이 아니라 셀 수 없음이다 — 실패로 세고 None."""
+        rc, out, err = self.run_err("merge-base", a, b)
+        if rc == 0 and out.strip():
+            return out.strip()
+        if rc == 1:
+            src, sout = self.run("rev-parse", "--is-shallow-repository")
+            if src == 0 and sout.strip() == "false":
+                return None
+            err = "얕은 클론이라 공통 조상을 찾지 못한 것인지 알 수 없다" if src == 0 else "얕은 클론인지 읽지 못했다"
+        self.fail("merge-base", rc, err)
+        return None
 
     def changed(self, base: str, tip: str, pathspec=None):
         args = ["diff", "--name-only", "-z", "%s...%s" % (base, tip)]
@@ -346,7 +356,10 @@ def progress(git: Git, main: str, tip: str, block: dict, bundle_path, settings: 
     block.setdefault("approved", None)
     if not specs:
         return "설계 중", "브랜치 있음 · spec 없음", [], []
+    failed_before = len(git.failures)
     base = git.merge_base(main, tip)
+    if base is None and len(git.failures) > failed_before:
+        return "알 수 없음", "spec 있음 · 기본 브랜치와 갈라진 곳을 읽지 못했다(%s)" % git.failures[-1], specs, []
     if base is None:
         return "설계 중", "spec 있음 · 기본 브랜치와 갈라진 곳을 못 찾았다", specs, []
     plans = branch_plans(git, base, tip, specs, settings["plans_dir"])
