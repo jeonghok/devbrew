@@ -123,7 +123,7 @@ elsewhere BadMain "$W" "안에 중첩된 detached 작업 트리가 cwd · 바깥
 mkdir -p "$T/wtfail"
 printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail/git"
 chmod +x "$T/wtfail/git"
-HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git branch BadPlain"
+HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git log BadMain"
 sm=$(field systemMessage); ac=$(field ac)
 case "$ac" in *"작업 트리 목록을 읽지 못해 규칙 밖 브랜치에 이름 바꾸기 명령을 내지 않았다"*) ok "작업 트리 목록 실패 → 모델 채널에 명령 없는 알림 줄" ;; *) no "작업 트리 목록 실패를 모델 채널에 알리지 않았다 — $OUT" ;; esac
 case "$ac" in *"git branch -m"*) no "작업 트리 목록을 못 읽었는데 이름 바꾸기 명령을 냈다 — $OUT" ;; *)
