@@ -26,17 +26,17 @@ from gc_common import root_escapes  # noqa: E402
 
 LEGACY_NAME = "state.local.md"
 _SEED_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-([a-z0-9]+(?:-[a-z0-9]+)*)-interview\.md")
-# 상태 파일 경로는 펜스의 셸 리터럴(`ARG_PATH='<경로>'`)에 붙는다 — 작업 트리 안 상대 경로는 이 글자만 받는다.
 _AUDIT_TOPIC = re.compile(r"\d{4}-\d{2}-\d{2}-(.+)-interview\.audit\.md")
+# 상태 파일 경로는 펜스의 셸 리터럴(`ARG_PATH='<경로>'`)에 붙는다 — 작업 트리 안 상대 경로는 이 글자만 받는다.
 _SAFE_REL = re.compile(r"[\w./ -]+")
-_SAFE_ROOT = re.compile(r"[^'\x00-\x1f\x7f]+")
+_UNSAFE_ROOT_CHARS = frozenset("'\x7f").union(chr(c) for c in range(0x20))   # 작업 트리 루트 경로에서 받지 않는 글자
 
 
 def unsafe_name(path, root) -> str | None:
     """상태 파일 경로가 셸 리터럴에 붙여도 안전한 글자만 쓰는지 — 아니면 사유."""
     real_root = os.path.realpath(str(root))
     rel = os.path.relpath(str(path), real_root)
-    if not _SAFE_ROOT.fullmatch(real_root) or not _SAFE_REL.fullmatch(rel):
+    if not real_root or _UNSAFE_ROOT_CHARS.intersection(real_root) or not _SAFE_REL.fullmatch(rel):
         return "허용 글자(글자 · 숫자 · 공백 · . _ - /) 밖의 이름이다 — 셸에 붙이지 않는다"
     return None
 
