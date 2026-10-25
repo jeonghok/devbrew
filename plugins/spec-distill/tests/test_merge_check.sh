@@ -134,6 +134,15 @@ assert_contains "$out" "beta" "test_failure_pattern: 새 이름 beta"
 assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "로드맵 값이면 출처가 로드맵이다"
 assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
 
+# 6a — test_command · 정규식 없음: 이미 있던 pytest 실패 옆의 새 ✗ 실패도 센다(알려진 꼴을 전부 센다 — 첫 꼴만이 아니다)
+mkrepo mx 'test_command: bash run.sh\n'
+put run.sh $'echo "FAILED a.py::old - x"\nexit 1'; push_base
+put run.sh $'echo "FAILED a.py::old - x"\necho "  ✗ 새 셸 실패"\nexit 1'; branch_with feature/mx
+out="$(mc --branch feature/mx)"; rc=$?
+assert_eq "$rc" "1" "섞인 꼴: 이미 있던 pytest 실패 옆의 새 ✗ 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: 새 셸 실패" "섞인 꼴: 새 이름은 ✗ 줄의 것"
+assert_contains "$out" "양쪽 다 있는 실패 1개: a.py::old" "섞인 꼴: 이미 있던 pytest 실패는 양쪽 다 있는 실패다"
+
 # 6b — AC4: 기계 상태 `## 레포 설정` 에 적은 값은 읽지 않는다 — 검사받는 하위 agent 도 쓸 수 있는 파일이다.
 #       늘 통과하는 명령을 적어 두어도 탐지한 러너가 돌아 새 실패를 잡는다(이 장면은 그 명령이 이기면 rc 0 이 된다).
 machine() {  # machine <글> — 이 레포 로드맵의 기계 상태 파일을 그 글로 쓴다
@@ -268,6 +277,9 @@ NAMES="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_c
 for t in ("FAILED a.py::t1 - x", "FAIL: t2 (m.C)", "not ok 3 - t3", "  ✗ t4", "ERROR x.py::t5 - e", "nothing here"):
     print(sorted(m.names_in(t, None)[0]), m.names_in(t, None)[1])' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$NAMES" "$(printf "%s\n" "['a.py::t1'] pytest" "['t2 (m.C)'] unittest" "['t3'] tap" "['t4'] ✗ 표시" "['x.py::t5'] pytest" "[] None")" "names_in: 알려진 모양 넷과 모양 없음"
+MIXED="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+n, s = m.names_in("FAILED a.py::t1 - x\nnot ok 3 - t3\n  ✗ t4", None); print(sorted(n), s)' "$ROOT/plugins/spec-distill/scripts")"
+assert_eq "$MIXED" "['a.py::t1', 't3', 't4'] pytest · tap · ✗ 표시" "names_in: 한 출력에 섞인 알려진 꼴을 전부 센다"
 # 10b — 러너별 모양: 셸은 ✗ · FAIL: · tap 만, 모르는 러너는 이름을 뽑지 않는다
 SHAPED="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
 t = "ERROR: diag\n  ✗ a\nFAIL: b\nnot ok 1 - c\nFAILED x.py::d - e"

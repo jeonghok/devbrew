@@ -89,9 +89,10 @@ def pattern_error(pattern: str):
 def names_in(text: str, pattern=None, shapes=None):
     """(실패 이름 집합, 쓴 모양). 모양이 하나도 안 맞으면 (빈 집합, None) — 「이름 대조 불가」 의 근거다.
 
-    pattern 이 있으면 그것만, shapes(러너별 모양)를 주면 그 모양들이 뽑은 이름의 합집합, 둘 다 없으면 알려진 모양
-    가운데 처음 맞는 것."""
-    if not pattern and shapes is not None:
+    pattern 이 있으면 그것만, 없으면 모양들(shapes — 러너별 모양, 주지 않으면 알려진 모양 전부)이 뽑은 이름의 합집합 —
+    한 출력에 꼴이 섞여도(이미 있던 pytest 실패 옆의 새 ✗ 실패) 첫 꼴만 세지 않는다."""
+    if not pattern:
+        shapes = KNOWN_SHAPES if shapes is None else shapes
         found, labels = set(), []
         for label, rx in shapes:
             got = set((m.group(1) if rx.groups else m.group(0)).strip() for m in rx.finditer(text))
@@ -99,14 +100,9 @@ def names_in(text: str, pattern=None, shapes=None):
                 found |= got
                 labels.append(label)
         return found, (" · ".join(labels) if labels else None)
-    shapes = [("test_failure_pattern", re.compile(pattern, re.M))] if pattern else list(KNOWN_SHAPES)
-    for label, rx in shapes:
-        found = set()
-        for m in rx.finditer(text):
-            found.add((m.group(1) if rx.groups else m.group(0)).strip())
-        if found:
-            return found, label
-    return set(), None
+    rx = re.compile(pattern, re.M)
+    found = set((m.group(1) if rx.groups else m.group(0)).strip() for m in rx.finditer(text))
+    return found, ("test_failure_pattern" if found else None)
 
 
 # ── 잠금 ─────────────────────────────────────────────────────────────────────
