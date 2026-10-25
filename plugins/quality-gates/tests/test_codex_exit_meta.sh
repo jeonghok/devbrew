@@ -38,6 +38,12 @@ printf 'ERROR: 401 Authorization: Bearer sk-ant-api03-SECRETTOKENVALUE0123456789
 python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s.yaml"
 assert_file_absent "$T/s.yaml" 'SECRETTOKENVALUE' "공유 추출기: stderr 첫 줄의 비밀처럼 생긴 긴 낱말을 가린다"
 assert_contains "$(meta_val "$T/s.yaml" stderr_head)" "Authorization: Bearer" "공유 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
+# 인증 실패 갈래(빈 stdout + stderr 의 인증 오류)는 stderr_preview 도 싣는다 — 같은 규칙으로 가린다.
+: > "$T/empty.jsonl"
+python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/empty.jsonl" > "$T/s2.yaml"
+assert_file_absent "$T/s2.yaml" 'SECRETTOKENVALUE' "공유 추출기: 인증 실패 갈래의 stderr_preview 도 비밀처럼 생긴 낱말을 가린다"
+assert_file_grep "$T/s2.yaml" '^  stderr_preview: ' "공유 추출기: 인증 실패 갈래에 stderr_preview 가 있다(양성 짝 — 그 갈래를 밟았다)"
+assert_eq "$(meta_val "$T/s2.yaml" reason)" "exit_nonzero" "공유 추출기: 인증 실패 갈래도 reason 은 exit_nonzero(양성 짝)"
 python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml"
 assert_file_absent "$T/c.yaml" 'stderr_head' "공유 추출기: codex 가 0 으로 끝나면 stderr 를 싣지 않는다"
 assert_file_grep "$T/c.yaml" '^  codex_failed: false$' "공유 추출기: 0 종료는 성공 표식(양성 짝)"

@@ -253,7 +253,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": stderr_text[:200],
+                "stderr_preview": _SECRET_LIKE.sub("<가림>", stderr_text[:4000])[:200],
             }
         elif stdin_text.strip() and not any_jsonl_parsed:
             # Non-empty stdin with zero parseable JSONL lines → Stage 3 fallback.
@@ -278,7 +278,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": stderr_text[:200],
+                "stderr_preview": _SECRET_LIKE.sub("<가림>", stderr_text[:4000])[:200],
             }
         else:
             meta = {
