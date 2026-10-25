@@ -52,4 +52,45 @@ M8="$(man 8)"
 assert_contains "$M8" '`python3 "<SD>"/scripts/conductor_ledger.py review-pack` 의 `intents.md`' "man 8: review-pack intents.md"
 assert_contains "$M8" '함께 진행된 에픽의 설계 의도(Goals · Non-goals · 결정 기록 · 판정)와 이 PR 의 어긋남' "man 8: 설계 의도 어긋남"
 
+# --- Task 7: AC3 끝 줄 소비 ---
+once_in "cyc 1" "$(cyc 1)" '은 작업이 아니라 병렬 판단 신호다 — 작업 목록에 넣지 않고'
+once_in "man 1" "$(man 1)" '은 작업이 아니라 병렬 판단 신호다 — 작업 목록에 넣지 않고'
+
+# --- Task 7: AC6 병렬 질문 ---
+C3="$(cyc 3)"
+once_in "cyc 3" "$C3" '「<A> 다음 — 준비 에픽 <B…> 의 구현을 <A> 구현과 겹칠까?」'
+once_in "cyc 3" "$C3" '「병렬 (권장)」(<B…> 의 계획이 끝나는 대로 구현 담당자를 보낸다'
+once_in "cyc 3" "$C3" '「차례로」(<B…> 의 설계 · 계획은 그대로 가고 구현 담당자는 <A> 의 PR 이 머지된 뒤 보낸다)'
+once_in "cyc 3" "$C3" '짝 조건이 없어도'
+once_in "man 3" "$(man 3)" '병렬 질문(「병렬 (권장)」 · 「차례로」)이 둘째 질문으로 붙을 수 있다'
+once_in "cyc 2" "$(cyc 2)" '— 걸음 3 의 병렬 질문은 소식이 아니다'
+once_in "man 2" "$(man 2)" '— 걸음 3 의 병렬 질문은 소식이 아니다'
+PGT="$(cat "$PG")"
+SRST="$(cat "$SRS")"
+assert_contains "$PGT" '지휘자 아래 승인 질문에는 다음 단계 갈래 질문이 없다(에픽의 흐름은 로드맵 `흐름:` 칸이 정한다) — 둘째 질문으로는 지휘 순환 걸음 3 의 병렬 질문만 붙을 수 있다(`conducting.md`).' "PG: 56행 새 문장"
+once_in "PG" "$PGT" '같은 호출에 지휘 순환 걸음 3 의 병렬 질문이 둘째 질문으로 붙을 수 있다(`conducting.md` 걸음 3).'
+once_in "SRS" "$SRST" '같은 호출에 지휘 순환 걸음 3 의 병렬 질문이 둘째 질문으로 붙을 수 있다(지휘 절차 걸음 3).'
+assert_not_contains "$PGT" '계획이 끝나는 대로 구현 담당자를 보낸다' "PG: 선택지 설명 복사 없음"
+assert_not_contains "$SRST" '계획이 끝나는 대로 구현 담당자를 보낸다' "SRS: 선택지 설명 복사 없음"
+
+# --- Task 7: AC7 답 기록 · 지난 답 ---
+once_in "cyc 3" "$C3" '병렬 답 · <YYYY-MM-DD HH:MM> · 「<고른 선택지>」 · 준비 에픽 <B…>'
+once_in "cyc 3" "$C3" '가장 최근(줄의 시각)'
+once_in "cyc 3" "$C3" '「지난 답: <선택지>(준비 에픽 <…>)」'
+once_in "cyc 3" "$C3" '지난 답에 없던 에픽이 하나라도 들어왔을 때만 다시 묻는다'
+once_in "cyc 3" "$C3" '승인을 골랐을 때만'
+once_in "cyc 3" "$C3" '「수정 필요」 · 「멈춤」 이면 병렬 답은 버리고'
+assert_eq "$(printf '%s\n' "$C3" | grep -F -- '- 병렬 질문:' | grep -cF '같은 세션')" "0" "병렬 질문 불릿에 같은 세션 제한 없음"
+assert_eq "$(printf '%s\n' "$C3" | grep -cF -- '- 병렬 질문:')" "1" "병렬 질문 불릿 하나"
+
+# --- Task 7: AC8 「차례로」 확인 ---
+once_in "cyc 3" "$C3" '「구현 기다림 — <에픽> 머지」'
+once_in "cyc 3" "$C3" '닿는 답이 없으면 기본(병렬)대로 보낸다'
+assert_eq "$(count "$(cyc 1)" '걸음 3 의 「차례로」 확인')" "1" "cyc 1 가리킴"
+assert_eq "$(count "$(cyc 4)" '걸음 3 의 「차례로」 확인')" "2" "cyc 4 가리킴"
+once_in "man 1" "$(man 1)" '3 의 「차례로」 확인'
+once_in "man 4" "$(man 4)" '3 의 「차례로」 확인'
+once_in "man 5" "$(man 5)" '3 의 「차례로」 확인'
+once_in "man 3" "$(man 3)" '「차례로」 확인('
+
 finish
