@@ -25,6 +25,18 @@ from gc_common import root_escapes  # noqa: E402
 
 LEGACY_NAME = "state.local.md"
 _SEED_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-([a-z0-9]+(?:-[a-z0-9]+)*)-interview\.md")
+# 상태 파일 경로는 펜스의 셸 리터럴(`ARG_PATH='<경로>'`)에 붙는다 — 작업 트리 안 상대 경로는 이 글자만 받는다.
+_SAFE_REL = re.compile(r"[\w./ -]+")
+_SAFE_ROOT = re.compile(r"[^'\x00-\x1f\x7f]+")
+
+
+def unsafe_name(path, root) -> str | None:
+    """상태 파일 경로가 셸 리터럴에 붙여도 안전한 글자만 쓰는지 — 아니면 사유."""
+    real_root = os.path.realpath(str(root))
+    rel = os.path.relpath(str(path), real_root)
+    if not _SAFE_ROOT.fullmatch(real_root) or not _SAFE_REL.fullmatch(rel):
+        return "허용 글자(글자 · 숫자 · 공백 · . _ - /) 밖의 이름이다 — 셸에 붙이지 않는다"
+    return None
 
 
 def seed_rel(seed: str) -> str:
@@ -71,6 +83,10 @@ def resume_candidates(seed: str, want: str) -> list[Path]:
     for p in sorted(Path(real_dir).glob("*-interview.state.md")):
         if inside_root(p, root):   # 링크이거나 작업 트리 밖이면 후보로 내지 않는다
             continue
+        why = unsafe_name(p, root)
+        if why:
+            print("[spec-distill] 이어 갈 후보에서 뺐다 — {0!r} ({1})".format(str(p), why), file=sys.stderr)
+            continue
         why = sibling_reason(p, root)
         if why:   # 짝 brief · audit 가 링크면 끝낼 때의 쓰기가 그 링크를 따라간다
             print("[spec-distill] 이어 갈 후보에서 뺐다 — {0} ({1})".format(p, why), file=sys.stderr)
@@ -93,6 +109,10 @@ def cmd_entry(a) -> int:
         why = inside_root(abs_arg, root)
         if why:
             print("interview-state: REJECT {0} ({1})".format(arg, why))
+            return 2
+        why = unsafe_name(abs_arg, root)
+        if why:
+            print("interview-state: REJECT {0!r} ({1})".format(arg, why))
             return 2
         why = sibling_reason(abs_arg, root)
         if why:
