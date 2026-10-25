@@ -677,26 +677,14 @@ def c_release(root, a) -> int:
 
 def c_add(root, a) -> int:
     row = split_cells(a.section, a.cells)
-    if a.section == "레포 설정":   # 읽는 쪽(merge_layers · merge_check)이 거부할 줄은 쓰지 않는다 — 같은 함수를 부른다
-        layer = {row["키"]: row["값"]}
-        try:
-            repo_defaults.check_layer(layer, "machine")
-        except repo_defaults.SettingsError as exc:
-            raise Fail(2, str(exc))
-        res = repo_defaults.merge_layers(None, None, None, layer, [])
-        if res["errors"]:
-            raise Fail(2, res["errors"][0])
-        if row["키"] == "test_failure_pattern":
-            import merge_check  # 함수 안 — merge_check 는 이 모듈을 부르지 않는다
-            why = merge_check.pattern_error(res["values"]["test_failure_pattern"])
-            if why:
-                raise Fail(2, "test_failure_pattern 정규식이 깨졌다: %s" % why)
+    if a.section == "레포 설정":   # 검사받는 하위 agent 도 쓸 수 있는 파일이라 스위트 대조가 읽지 않는다
+        raise Fail(2, "기계 상태에는 레포 설정을 적지 않는다 — 사용자가 답한 테스트 명령은 `merge_check.py run … "
+                      "--test-command \"<명령>\"`(실패 이름 정규식은 `--test-failure-pattern`)으로 그 호출에만 넘기고, "
+                      "레포 설정 파일(%s)에 올리자고 알린다" % repo_defaults.SETTINGS_FILE)
+    if a.section in cs.RETIRED_SECTIONS:
+        raise Fail(2, "%s 절은 옛 절이라 쓰지 않는다(읽을 때 버린다)" % a.section)
 
     def change(d):
-        if a.section == "레포 설정" and any(r["키"] == row["키"] for r in d[a.section]):
-            raise Fail(2, "레포 설정 절에 %s 가 이미 있다 — 바꾸려면 `ledger drop --roadmap %s --session %s "
-                          "--section \"레포 설정\" --where 키=%s` 로 지운 뒤 다시 적는다"
-                          % (row["키"], a.roadmap, a.session, row["키"]))
         d[a.section].append(row)
     update(root, a.roadmap, a.session, change)
     print("적었다 — %s: %s" % (a.section, a.cells))

@@ -131,64 +131,35 @@ put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/p
 out="$(mc --branch feature/pt)"; rc=$?
 assert_eq "$rc" "1" "test_failure_pattern: 새 이름 → rc 1"
 assert_contains "$out" "beta" "test_failure_pattern: 새 이름 beta"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "로드맵 값이면 출처가 로드맵이다"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
 
-# 6b — frontmatter 에 test_command 가 없으면 기계 상태 `## 레포 설정` 의 임시값을 돌린다(rc 6 의 답 — Ruling R33)
-mkrepo mt
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/mt
+# 6b — AC4: 기계 상태 `## 레포 설정` 에 적은 값은 읽지 않는다 — 검사받는 하위 agent 도 쓸 수 있는 파일이다.
+#       늘 통과하는 명령을 적어 두어도 탐지한 러너가 돌아 새 실패를 잡는다(이 장면은 그 명령이 이기면 rc 0 이 된다).
 machine() {  # machine <글> — 이 레포 로드맵의 기계 상태 파일을 그 글로 쓴다
   (cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, state_path as s
 p = cs.machine_path(s.state_root(), sys.argv[2]); p.parent.mkdir(parents=True, exist_ok=True)
 p.write_text(sys.argv[3], encoding="utf-8")' "$ROOT/plugins/spec-distill/scripts" "$RM" "$1")
 }
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash run.sh\n' "$RM")"
+mkrepo mt; put tests/__init__.py ''
+put tests/test_y.py $'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)'
+push_base
+put tests/test_y.py $'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 2)'
+branch_with feature/mt
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n- test_failure_pattern · ^NOPE: (.+)$\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
-assert_eq "$rc" "1" "기계 상태 임시값: 그 명령을 돌려 새 실패 → rc 1"
-assert_contains "$out" "gamma" "기계 상태 임시값: 새 이름 gamma"
-assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 기계 상태(임시)" "기계 상태 임시값: 무엇을 돌렸나에 출처를 적는다"
-assert_contains "$out" "test_command 를 기계 상태(임시)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "기계 상태 임시값: 레포 설정 파일에 올리자고 한 줄로 알린다"
+assert_eq "$rc" "1" "기계 상태의 test_command(늘 통과)를 돌리지 않는다 — 탐지한 러너가 새 실패를 잡는다 → rc 1"
+assert_contains "$out" "무엇을 돌렸나: 탐지한 러너" "기계 상태 값이 아니라 탐지 경로가 돈다"
+assert_not_contains "$out" "exit 0" "기계 상태의 명령 글이 출력 어디에도 없다"
+assert_not_contains "$out" "기계 상태(임시)" "기계 상태 출처 표기가 없다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
-assert_eq "$rc" "3" "깨진 기계 상태 → rc 3(조용히 무시하지 않는다)"
-assert_contains "$out" "기계 상태(임시)의 레포 설정을 읽지 못했다" "깨진 기계 상태 사유"
-mkrepo mf 'test_command: bash run.sh\n'
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - delta"\nexit 1'; branch_with feature/mf
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n' "$RM")"
-out="$(mc --branch feature/mf)"; rc=$?
-assert_eq "$rc" "1" "frontmatter 가 기계 상태 임시값을 이긴다"
-assert_not_contains "$out" "출처 기계 상태(임시)" "frontmatter 값이면 임시값 표시가 없다"
-assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "양의 짝: 로드맵 값이면 출처가 로드맵이다"
-assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
-
-# 6c — R8 AC5 · AC23b: 기계 상태 `## 레포 설정` · 로드맵 · 레포 설정 파일이 해결자 하나를 지난다
-mkrepo dk 'test_command: bash run.sh\n'
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/dk
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^A: (.+)$\n- test_failure_pattern · ^B: (.+)$\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 같은 키 둘 → rc 3(마지막 줄이 이기지 않는다)"
-assert_contains "$out" "같은 키가 둘이다(test_failure_pattern)" "같은 키 사유가 그 키를 말한다"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- review_model · opus\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 그 층이 받지 않는 키(review_model) → rc 3"
-assert_contains "$out" "기계 상태(임시) 은 이 설정을 받지 않는다(review_model)" "기계 상태 층이 받지 않는 키 사유"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_comand · bash run.sh\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 오타 키(test_comand) → rc 3(R14 §7 기계 층 unknown_key)"
-assert_contains "$out" "모르는 키" "기계 상태 오타 키 사유가 모르는 키라고 말한다"
-assert_contains "$out" "(test_comand)" "기계 상태 오타 키 사유가 그 키를 말한다"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · [\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "1" "기계 상태의 레포 설정 절이 깨져 있어도 읽지 않으므로 대조가 돈다 → rc 1"
+mkrepo bp 'test_command: bash run.sh\ntest_failure_pattern: "["\n'
+put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base; put b.txt b; branch_with feature/bp
+out="$(mc --branch feature/bp)"; rc=$?
 assert_eq "$rc" "3" "컴파일되지 않는 test_failure_pattern → rc 3"
-assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 기계 상태(임시): " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
-mkrepo pr 'test_command: bash run.sh\ntest_failure_pattern: "^BAD: (.+)$"\n'
-put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
-put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/pr
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^NOPE: (.+)$\n' "$RM")"
-out="$(mc --branch feature/pr)"; rc=$?
-assert_eq "$rc" "1" "로드맵의 test_failure_pattern 이 기계 상태 값을 이긴다 — 새 이름 → rc 1"
-assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^BAD: (.+)$\`) — 출처 로드맵" "정규식 출처가 로드맵이다(기계 상태 값은 안 쓴다)"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 로드맵: " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
 mkrepo rp 'test_command: bash run.sh\n'
 put .devbrew.md $'---\ntest_failure_pattern: "^BAD: (.+)$"\n---'
 put run.sh $'echo "BAD: alpha"\nexit 1'; push_base

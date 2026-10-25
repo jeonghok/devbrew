@@ -71,15 +71,15 @@ run "$C" get interview_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "작업 트리에만 있는 설정 파일은 쓰지 않는다"
 assert_contains "$ERR" "아직 기본 브랜치에 없다" "작업 트리에만 있으면 알린다"
 
-# ── 로드맵 층 · 기계 상태 층 건너뜀 ─────────────────────────────────────────
+# ── 로드맵 층(기계 상태는 설정 층이 아니다) ──────────────────────────────────
 on_trunk "$C" docs/superpowers/roadmaps/r/roadmap.md $'---\ntype: roadmap\ntest_command: make t\n---\n# r\n'
 run "$C" get test_command --roadmap docs/superpowers/roadmaps/r/roadmap.md
 assert_eq "$RC:$OUT" "0:make t" "--roadmap 은 기본 브랜치의 로드맵 머리말을 읽는다"
 assert_contains "$ERR" "출처: 로드맵" "로드맵 값의 출처"
-assert_contains "$ERR" "기계 상태 층 건너뜀 — 읽는 함수 없음" "읽는 함수가 없으면 기계 상태 층을 건너뛴다고 알린다"
+assert_not_contains "$ERR" "기계 상태" "해결자는 기계 상태 층을 갖지 않는다 — 알림에도 그 층이 없다"
 run "$C" get test_command
 assert_eq "$RC:$OUT" "1:" "로드맵을 안 주면 로드맵 값이 없다"
-assert_contains "$ERR" "로드맵 없음 — 기계 상태 층 건너뜀" "로드맵이 없으면 기계 상태 층을 건너뛴다고 알린다"
+assert_not_contains "$ERR" "기계 상태" "로드맵이 없어도 기계 상태 층 알림이 없다"
 run "$C" get test_command --roadmap docs/superpowers/roadmaps/none/roadmap.md
 assert_eq "$RC:$OUT" "3:" "기본 브랜치에 없는 로드맵은 rc 3"
 on_trunk "$C" docs/superpowers/roadmaps/r2/roadmap.md $'---\ntype: roadmap\nroadmaps_dir: x/\n---\n# r2\n'

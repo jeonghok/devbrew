@@ -3,7 +3,7 @@
 """conductor_state.py — 지휘자 기계 상태(`machine.md`)의 형식 · 읽기 · 원자 쓰기 · 세션 표지.
 
 기계 상태는 이 기계에서만 뜻이 있는 것(PR 번호 캐시 · 실행 원장 위치 · 자원 · 살아 있는 agent · 작업(로드맵 밖 일 포함) · 에픽 PR 번호 기록 · 기다리는 질문 ·
-아직 커밋하지 못한 기록 · 임시 레포 설정)만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
+아직 커밋하지 못한 기록)만 담는다. 이어 가기에 필요한 기록은 에픽 설계문서의 절이 주인이다.
 넘김 상태 계산은 읽기 전용 `roadmap_model.py` 가 하고 여기서 다시 내보낸다. 상태 계산(`roadmap_status.py`) · 화면(`control_plane.py`) · 지휘자 스크립트가 이 모듈 하나를 쓴다.
 
 명령줄(읽기만):
@@ -48,7 +48,7 @@ SECTIONS = (
 COLUMNS = dict(SECTIONS)
 EPIC_PR = "에픽 PR"
 OPTIONAL_SECTIONS = ("작업", EPIC_PR)
-RETIRED_SECTIONS = ("시작 승인",)  # 읽기에서 줄 검사 없이 버리고 쓰기에서 머리를 쓰지 않는 옛 절
+RETIRED_SECTIONS = ("레포 설정", "시작 승인")  # 읽기에서 줄 검사 없이 버리고 쓰기에서 머리를 쓰지 않는 옛 절
 RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"
 WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
 PR_STATES = ("열림", "머지됨", "닫힘")
@@ -284,16 +284,6 @@ def load(path: Path, roadmap_rel: str, skip: tuple = ()) -> dict:
     except (OSError, UnicodeDecodeError) as exc:
         raise MachineError("기계 상태 파일을 읽지 못했다: %s (%s)" % (path, type(exc).__name__))
     return parse_machine(text, roadmap_rel, skip)
-
-
-def repo_settings_rows(path, roadmap_rel: str) -> dict:
-    """`## 레포 설정` 의 키 → 값(해결자 `repo_defaults.resolve` 의 기계 상태 층). 같은 키가 둘이면 MachineError."""
-    out = {}
-    for row in load(path, roadmap_rel)["레포 설정"]:
-        if row["키"] in out:
-            raise MachineError("레포 설정 절에 같은 키가 둘이다(%s) — 한 줄만 남긴다" % row["키"])
-        out[row["키"]] = row["값"]
-    return out
 
 
 # ── 표지 · 쓰기 ──────────────────────────────────────────────────────────────

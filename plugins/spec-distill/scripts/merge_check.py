@@ -10,8 +10,8 @@
   merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
 
 무엇을 돌리나: 해결자(`repo_defaults.resolve`)가 낸 `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
-(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 · 이 로드맵 기계 상태의
-`## 레포 설정`(지휘자가 물어 임시로 둔 값) 순으로 찾고 출처를 함께 낸다 — 설정이 깨졌으면 검사 불가다. 값이 없으면 이
+(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 순으로 찾고 출처를 함께
+낸다 — 설정이 깨졌으면 검사 불가다. 기계 상태 파일은 읽지 않는다(검사받는 하위 agent 도 쓸 수 있다). 값이 없으면 이
 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
@@ -344,12 +344,11 @@ def report(res: dict) -> int:
     return 0
 
 
-def suite_settings(root: Path, roadmap: str, mroot: Path) -> tuple:
-    """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기계 상태(임시) · 기본값을 합친다 —
-    로드맵은 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가."""
+def suite_settings(root: Path, roadmap: str) -> tuple:
+    """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기본값을 합친다 —
+    둘 다 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가."""
     try:
-        res = repo_defaults.resolve(str(root), roadmap=roadmap,
-                                    machine_reader=lambda rel: cs.repo_settings_rows(mroot / cs.MACHINE_FILE, rel))
+        res = repo_defaults.resolve(str(root), roadmap=roadmap)
     except repo_defaults.SettingsError as exc:
         raise Stop(3, str(exc))
     for line in res["notices"] + res["warnings"]:
@@ -357,10 +356,6 @@ def suite_settings(root: Path, roadmap: str, mroot: Path) -> tuple:
     if res["errors"]:
         raise Stop(3, "레포 설정이 깨졌다: %s" % res["errors"][0])
     sources = dict((k, " — 출처 %s" % res["sources"][k]) for k in ("test_command", "test_failure_pattern"))
-    for key in ("test_command", "test_failure_pattern"):
-        if res["values"][key] is not None and res["sources"][key] == repo_defaults.MACHINE_LABEL:
-            print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
-                  % (key, repo_defaults.MACHINE_LABEL, repo_defaults.SETTINGS_FILE))
     return res["values"]["test_command"], res["values"]["test_failure_pattern"], sources
 
 
@@ -390,7 +385,7 @@ def run(root: Path, a) -> int:
             print(line)
     except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
-    test_command, pattern, sources = suite_settings(root, a.roadmap, mroot)
+    test_command, pattern, sources = suite_settings(root, a.roadmap)
     why = pattern_error(pattern) if pattern else None
     if why:
         raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), why))
