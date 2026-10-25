@@ -170,11 +170,16 @@ class RoadmapRepo(unittest.TestCase):
         self.git(path, "push", "-u", "origin", "work/" + epic.lower())
         return path
 
-    def merge(self, epic):
+    def merge(self, epic, squash=False):
         self.n += 1
         self.git(self.w, "checkout", "trunk")
-        self.git(self.w, "merge", "--no-ff", "work/" + epic.lower(), "-m",
-                 "Merge pull request #%d from o/work/%s" % (self.n, epic.lower()))
+        if squash:
+            # 스쿼시 머지 — 기본 브랜치에 커밋 하나만 들고 브랜치 끝은 기본 브랜치의 조상이 아니다
+            self.git(self.w, "merge", "--squash", "work/" + epic.lower())
+            self.git(self.w, "commit", "-m", "%s (#%d)" % (epic, self.n))
+        else:
+            self.git(self.w, "merge", "--no-ff", "work/" + epic.lower(), "-m",
+                     "Merge pull request #%d from o/work/%s" % (self.n, epic.lower()))
         self.git(self.w, "push", "origin", "trunk")
         self.git(self.w, "fetch", "origin")
 
@@ -370,6 +375,9 @@ E1_TABLE = _table("C1", "OQ1")
 E2_TABLE = _table("«e2e-k»", "K1")
 E2_HEAD = "### E2 plan/specs/E2-design.md(%s)"
 E2_BODY = "- E2 목표"
+UNVERIFIED = "설계 전 바탕인지 확인하지 못함"
+COUNT_LINE = ("머지됨 에픽 %d개는 이 에픽 설계 전에 끝난 바탕인지 확인하지 못해 실었다 — "
+              "머릿줄에 「설계 전 바탕인지 확인하지 못함」")
 NONE_LINE = "함께 진행된 에픽 없음"
 
 
@@ -412,13 +420,34 @@ class IntentsBuildUnit(unittest.TestCase):
         self.assertTrue(all("\n" not in w for w in warns), warns)
 
     def test_first_parent_line_unreadable_keeps_partner(self):
+        # 끝으로도 · 설계문서가 든 커밋으로도 확인하지 못했다 — 싣고, 머릿줄 표시와 첫 줄 영역의 개수로 알린다
         blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
                   {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
                    "branch_states": [{"branch": "w/e2", "tip": "b" * 40, "merged": "PR #1"}]}]
-        text, _w = self.build(blocks, [(("log",), (0, "c" * 40, "")), (("cat-file",), (0, "", "")),
-                                       (("merge-base", "--is-ancestor"), (0, "", "")), (("show",), (0, "본문", "")),
-                                       (("rev-list", "--first-parent"), (128, "", "fatal"))])
-        self.assertIn("### E2 s/E2.md(머지됨)", text.splitlines())
+        text, warns = self.build(blocks, [(("log",), (0, "c" * 40, "")), (("cat-file",), (0, "", "")),
+                                          (("merge-base", "--is-ancestor"), (0, "", "")), (("show",), (0, "본문", "")),
+                                          (("rev-list", "--first-parent"), (128, "", "fatal"))])
+        lines = text.splitlines()
+        self.assertIn("### E2 s/E2.md(머지됨 · %s)" % UNVERIFIED, lines)
+        self.assertEqual(lines[1], COUNT_LINE % 1)
+        self.assertEqual(warns, [COUNT_LINE % 1])
+
+    def test_doc_entry_path_excludes_single_branch(self):
+        # 끝의 진입 커밋을 못 읽어도 브랜치가 하나면 설계문서를 처음 더한 커밋(첫째 부모 줄)으로 잰다
+        blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
+                  {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
+                   "branch_states": [{"branch": "w/e2", "tip": "b" * 40, "merged": "PR #1"}]}]
+        events = "\x00" + "d" * 40 + "\n\nA\ts/E2.md\n"
+        answers = [(("log", "--first-parent"), (0, events, "")), (("log",), (0, "c" * 40, "")),
+                   (("cat-file",), (0, "", "")), (("merge-base", "--is-ancestor"), (0, "", "")),
+                   (("rev-list", "--first-parent"), (128, "", "fatal"))]
+        text, warns = self.build(blocks, answers)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+        self.assertEqual(warns, [])
+        # 같은 판정에 브랜치가 둘이면 설계문서 길을 쓰지 않는다(D2.2) — 확인하지 못함
+        blocks[1]["branch_states"].append({"branch": "w/e2b", "tip": None, "merged": "PR #2"})
+        text, _w = self.build(blocks, answers)
+        self.assertIn("### E2 s/E2.md(머지됨 · %s)" % UNVERIFIED, text.splitlines())
 
 
 class IntentsPack(RoadmapRepo):
@@ -592,6 +621,72 @@ class IntentsPack(RoadmapRepo):
         self.assertEqual(self.stage("E2"), "머지됨")
         text, _o = self.intents()
         self.assertIn("### E2 plan/specs/E2-design-v2.md(머지됨)", text)
+
+    def forced_build(self, more_states=()):
+        """상태 계산은 PR 캐시 없이 스쿼시 머지를 머지됨으로 보지 않는다 — E2 를 머지됨으로 얹어 build 를 직접 부른다.
+        more_states 는 E2 블록에 더할 브랜치 상태들."""
+        import conductor_ledger as L
+        import review_intents as ri
+        report = self.status()
+        e2 = next(b for b in report["blocks"] if b["id"] == "E2")
+        e2["stage"] = "머지됨"
+        for s in e2["branch_states"]:
+            s["merged"] = "PR #1 머지됨"
+        e2["branch_states"] += list(more_states)
+        e2["branches"] = e2["branches"] + [s["branch"] for s in more_states]
+        tip = self.git(self.w, "rev-parse", "work/e1").strip()
+        return ri.build(report, "E1", tip, lambda *a: L.git(self.w, *a))
+
+    def test_squash_merged_before_design_is_excluded(self):
+        # 스쿼시 머지는 브랜치 끝이 기본 브랜치에 없다 — 브랜치가 하나면 설계문서가 기본 브랜치에 든 커밋(그 머지)으로 잰다
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2", squash=True)
+        self.start_design("E1", extra=E1_TABLE)
+        text, warns = self.forced_build()
+        self.assertNotIn("### E2", text)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+        self.assertEqual(warns, [])
+
+    def test_squash_merged_after_design_is_included(self):
+        self.start_design("E1", extra=E1_TABLE)
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2", squash=True)
+        text, warns = self.forced_build()
+        self.assertIn(E2_HEAD % "머지됨", text)
+        self.assertIn(E2_BODY, text)
+        self.assertNotIn(UNVERIFIED, text)
+        self.assertEqual(warns, [])
+
+    def test_deleted_branch_merged_before_design_is_excluded(self):
+        # 브랜치를 지웠어도(끝이 없다) 브랜치가 하나면 설계문서가 기본 브랜치에 든 커밋으로 잰다
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2")
+        self.git(self.w, "worktree", "remove", "--force", os.path.join(self.tmp, "E2"))
+        self.git(self.w, "push", "origin", "--delete", "work/e2")
+        self.git(self.w, "branch", "-D", "work/e2")
+        self.git(self.w, "fetch", "--prune", "origin")
+        self.start_design("E1", extra=E1_TABLE)
+        self.git(self.w, "remote", "set-url", "origin", "https://github.com/o/r.git")
+        self.assertEqual(self.stage("E2"), "머지됨")
+        e2 = next(b for b in self.status()["blocks"] if b["id"] == "E2")
+        self.assertIsNone(e2["branch_states"][0]["tip"])
+        text, _o = self.intents()
+        self.assertNotIn("### E2", text)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+
+    def test_unverifiable_merged_is_marked_and_counted(self):
+        # 브랜치가 둘이면 설계문서 길을 쓰지 않는다(D2.2) — 스쿼시라 끝으로도 확인하지 못해 싣고 머릿줄 · 첫 줄 영역에 알린다
+        self.start_design("E2", extra=E2_TABLE)
+        self.merge("E2", squash=True)
+        self.start_design("E1", extra=E1_TABLE)
+        text, warns = self.forced_build([{"branch": "work/e2b", "tip": None, "merged": "PR #2 머지됨"}])
+        lines = text.splitlines()
+        self.assertIn(E2_HEAD % ("머지됨 · " + UNVERIFIED), lines)
+        self.assertNotIn(E2_HEAD % "머지됨", lines)
+        self.assertIn(E2_BODY, text)
+        self.assertEqual(lines[1], COUNT_LINE % 1)
+        self.assertEqual(lines[2], "")
+        self.assertIn(COUNT_LINE % 1, warns)
 
     def test_none(self):
         self.start_design("E1", extra=E1_TABLE)

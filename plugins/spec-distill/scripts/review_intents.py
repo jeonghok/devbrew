@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from control_plane import clean
 from roadmap_model import DEFAULT_REF
+from roadmap_status import first_added, parse_fp_events
 
 NOT_STARTED = ("대기", "준비")
 MERGED = "머지됨"
 UNKNOWN = "알 수 없음"
 NONE_LINE = "함께 진행된 에픽 없음"
 FALLBACK = "기준을 세울 수 없어 갈라진 점(merge-base)으로 쟀다 — %s"
+UNVERIFIED = "설계 전 바탕인지 확인하지 못함"
+COUNT_LINE = ("머지됨 에픽 %d개는 이 에픽 설계 전에 끝난 바탕인지 확인하지 못해 실었다 — "
+              "머릿줄에 「" + UNVERIFIED + "」")
+OUT, IN = "뺀다", "싣는다"
 
 
 def _one(value) -> str:
@@ -45,6 +50,18 @@ def _first_parent_line(git_fn):
     return out.split() if rc == 0 and out.strip() else None
 
 
+def _before(commit: str, base: str, git_fn):
+    """commit 이 base 이거나 그 조상이면 True, 아니면 False, 읽지 못하면 None."""
+    rc = git_fn("merge-base", "--is-ancestor", commit, base)[0]
+    return True if rc == 0 else False if rc == 1 else None
+
+
+def _memo(memo: dict, key: str, make):
+    if key not in memo:
+        memo[key] = make()
+    return memo[key]
+
+
 def _entry(tip: str, line: list, git_fn):
     """끝이 기본 브랜치에 처음 든 커밋 — 끝이 첫째 부모 줄에 있으면(빨리 감기) 끝 자체, 아니면 줄에서 끝의 자손인
     가장 오래된 커밋(머지 커밋). 끝이 기본 브랜치에 없거나 읽지 못하면 None."""
@@ -57,29 +74,61 @@ def _entry(tip: str, line: list, git_fn):
     return next((c for c in reversed(line) if c in after), None)
 
 
-def _excluded(b: dict, base, git_fn, line_memo: list) -> bool:
-    """이 에픽 설계 전에 끝난 바탕인가 — 하나라도 확인하지 못하면 아니다(싣는다)."""
-    specs = list(b.get("specs") or [])
-    states = list(b.get("branch_states") or [])
-    if base is None or not specs or not states:
-        return False
-    if any(git_fn("cat-file", "-e", "%s:%s" % (base, p))[0] != 0 for p in specs):
-        return False
+def _by_tips(states: list, base: str, git_fn, memo: dict):
+    """브랜치마다 끝이 기본 브랜치에 든 커밋으로 잰다(D2.2) — 하나라도 기준 뒤면 IN, 모두 기준 전이면 OUT,
+    끝 · 진입 커밋을 확인하지 못한 브랜치가 남으면 None."""
+    unknown = not states
     for s in states:
         if not s.get("merged") or not s.get("tip"):
-            return False
-        if not line_memo:
-            line_memo.append(_first_parent_line(git_fn))
-        entry = _entry(s["tip"], line_memo[0], git_fn) if line_memo[0] else None
-        if entry is None or git_fn("merge-base", "--is-ancestor", entry, base)[0] != 0:
-            return False
-    return True
+            unknown = True
+            continue
+        line = _memo(memo, "line", lambda: _first_parent_line(git_fn))
+        entry = _entry(s["tip"], line, git_fn) if line else None
+        before = _before(entry, base, git_fn) if entry else None
+        if before is False:
+            return IN
+        unknown = unknown or before is None
+    return None if unknown else OUT
 
 
-def _section(b: dict, git_fn, warns: list) -> list:
+def _by_docs(specs: list, base: str, git_fn, memo: dict):
+    """브랜치가 하나인 머지된 에픽 — 설계문서(산출물)를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋이 그 머지다
+    (스쿼시 · 리베이스 · 지운 브랜치에도 남는다). 모두 기준 전이면 OUT, 하나라도 기준 뒤면 IN, 못 찾으면 None.
+    처음 더한 커밋은 상태 계산의 doc_added 와 같은 규칙(first_added — 이름 바꿈을 따라간다)으로 찾는다."""
+    def events():
+        rc, out, _e = git_fn("log", "--first-parent", "-M", "--diff-filter=AR", "--name-status",
+                             "--format=%x00%H", DEFAULT_REF)
+        return parse_fp_events(out) if rc == 0 else None
+    evs = _memo(memo, "events", events)
+    added = [first_added(evs, p) for p in specs] if evs else []
+    if not added or not all(added):
+        return None
+    verdicts = [_before(a, base, git_fn) for a in added]
+    if False in verdicts:
+        return IN
+    return None if None in verdicts else OUT
+
+
+def _verdict(b: dict, base, git_fn, memo: dict):
+    """이 에픽 설계 전에 끝난 바탕이면 OUT, 함께 진행됐다고 확인되면 IN, 확인하지 못하면 None(싣는다)."""
+    specs = list(b.get("specs") or [])
+    if base is None or not specs:
+        return None
+    if any(git_fn("cat-file", "-e", "%s:%s" % (base, p))[0] != 0 for p in specs):
+        return IN   # 지금 경로의 글이 기준 트리에 없다 — 이 에픽 설계 뒤에 든 글이다
+    states = list(b.get("branch_states") or [])
+    verdict = _by_tips(states, base, git_fn, memo)
+    single = len(states) == 1 if states else len(b.get("branches") or []) == 1
+    if verdict is None and single and b.get("stage") == MERGED:
+        verdict = _by_docs(specs, base, git_fn, memo)
+    return verdict
+
+
+def _section(b: dict, git_fn, warns: list, unverified: bool) -> list:
     eid = b.get("id")
-    label = MERGED if b.get("stage") == MERGED else "열림"
-    tree = DEFAULT_REF if label == MERGED else (b.get("tip") or DEFAULT_REF)
+    merged = b.get("stage") == MERGED
+    label = (MERGED + (" · " + UNVERIFIED if unverified else "")) if merged else "열림"
+    tree = DEFAULT_REF if merged else (b.get("tip") or DEFAULT_REF)
     unknown = None
     if b.get("stage") == UNKNOWN:
         unknown = "단계를 알 수 없다 — %s" % _one(b.get("reason") or "이유 없음")
@@ -114,11 +163,20 @@ def build(report: dict, epic: str, tip: str, git_fn) -> tuple:
     base, first, warn = _base(report, epic, tip, git_fn)
     if warn:
         warns.append(warn)
-    body, line_memo = [], []
+    body, memo, n_unverified = [], {}, 0
     for b in report.get("blocks") or []:
-        if b.get("id") == epic or b.get("stage") in NOT_STARTED or _excluded(b, base, git_fn, line_memo):
+        if b.get("id") == epic or b.get("stage") in NOT_STARTED:
             continue
-        body += _section(b, git_fn, warns)
+        verdict = _verdict(b, base, git_fn, memo)
+        if verdict == OUT:
+            continue
+        unverified = verdict is None and b.get("stage") == MERGED
+        n_unverified += unverified
+        body += _section(b, git_fn, warns, unverified)
     if not body:
         return "%s\n%s\n" % (first, NONE_LINE), warns
-    return "\n".join([first, ""] + body).rstrip("\n") + "\n", warns
+    head = [first]
+    if n_unverified:
+        head.append(COUNT_LINE % n_unverified)
+        warns.append(COUNT_LINE % n_unverified)
+    return "\n".join(head + [""] + body).rstrip("\n") + "\n", warns

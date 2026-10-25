@@ -148,5 +148,8 @@ assert_contains "$AGDESC" 'checks this PR against their design intent' "프로�
 assert_eq "$(awk '$0=="    var: INTENTS"{getline; print; exit}' "$AG")" "    kind: artifact" "intents 칸 kind: artifact"
 assert_eq "$(count "$(cat "$SK")" '<intents>${INTENTS}</intents>"')" "1" "SKILL: intents 닫는 따옴표"
 
+# --- 최종 리뷰 수정 1: intents 의 확인하지 못함 표시 ---
+once_in "프로필" "$PROF" '`(머지됨 · 설계 전 바탕인지 확인하지 못함)` 은 이 에픽 설계 전에 끝난 바탕인지 확인하지 못해 실은 것이다 — 함께 진행된 에픽과 똑같이 대조한다.'
+
 # 새 단언은 이 줄 위에 덧붙인다 - finish 는 반드시 파일의 마지막 줄이다(아래에 단언을 두면 합계와 종료 코드에 잡히지 않는다).
 finish
