@@ -48,7 +48,10 @@ carry_fold() {   # 부모 셸에서 — 서브셸이 운반 파일에 남긴 실
   : > "$_CASES_CARRY"
 }
 eval "_cases_finish_orig() $(declare -f finish | sed 1d)"
-finish() { carry_fold; rm -f "$_CASES_CARRY"; _cases_finish_orig; }
+finish() {   # 운반 파일은 이 파일을 source 한 셸에서만 접고 지운다 — 서브셸의 finish 가 부모 몫을 지우지 않게
+  if [ "$BASH_SUBSHELL" -eq "$_CASES_SUB0" ]; then carry_fold; rm -f "$_CASES_CARRY"; fi
+  _cases_finish_orig
+}
 put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원장의 문서 자리에 옮긴다(같은 파일이면 그대로). 공유 픽스처는 덮지 않는다
   local L; L="$(ledger_doc "$1")" || { put_fail "[cases.sh] 원장의 문서를 읽지 못했다: $1" >&2; return 1; }
   [ "$2" -ef "$L" ] && return 0
@@ -56,7 +59,7 @@ put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원�
   cp "$2" "$L" || { put_fail "[cases.sh] 문서 복사 실패: $2 → $L" >&2; return 1; }
 }
 put_snap() { put_doc "$1" "$(jget "$2" 'd["doc"]')"; }   # put_snap <state-dir> <snapshot.json> — 그 스냅숏을 뜬 문서를 원장의 문서 자리에. 부르는 줄은 `&&` 로 잇는다(거절이면 begin-round 를 돌리지 않는다)
-# put_snap 의 거절은 `no` 로 실패를 센다 — `$(...)` 안에서 부르면 그 수가 서브셸에서 사라진다. 그래서 `$(...)` 안에서 부르지 않는다.
+# put_snap 의 거절은 `no` 로 실패를 센다 — `$(...)` 안에서 부르면 그 자리의 수는 서브셸에서 사라지고 운반 파일로만 부모에 닿는다(위 put_fail). 그래서 직접 부르는 줄은 `$(...)` 밖에서 부른다.
 _put_in_helper() {   # _put_in_helper <state-dir> <snapshot> — 상태 폴더를 돌려주는 도우미 꼴: 안에서 put_snap 을 부르고 끝까지 간다
   put_snap "$1" "$2"; echo ran
 }
@@ -3990,6 +3993,9 @@ case_config_invalid_refused() {
     put_snap "$d" "$s" && DEVBREW_DOCREVIEW_DETECTORS="$bad" py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; rc=$?
     assert_eq "$rc" "2" "config: 환경 값 '${bad}' 은 엄격한 정수가 아니라 거부된다"
   done
+  # 앞자리가 0 이 아닌 밑줄 값 — 조언 줄 수 상한(1~100) 안이라(int 로 10) 밑줄 검사만 거절한다
+  put_snap "$d" "$s" && DEVBREW_DOCREVIEW_RENDER_CAP=1_0 py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; rc=$?
+  assert_eq "$rc" "2" "config: 환경 값 RENDER_CAP='1_0' 은 상한 안이지만 엄격한 정수가 아니라 거부된다"
   assert_eq "$(st_yaml "$d" 'st["round"]')" "0" "config: 거부는 원장을 바꾸지 않는다"
   put_snap "$d" "$s" && DEVBREW_DOCREVIEW_RENDER_CAP=0 py docreview_state.py begin-round --state-dir "$d" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "2" "config: 조언 줄 수 0 은 범위 밖"

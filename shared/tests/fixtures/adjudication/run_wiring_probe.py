@@ -6,7 +6,7 @@ sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import scan  # noqa: E402
 
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
-for name in ("bad", "good", "farguard", "nested_if", "except_guard", "name_forwarder", "name_other"):
+for name in ("bad", "good", "farguard", "nested_if", "except_guard", "name_forwarder", "name_other", "name_other2"):
     rows = scan([str(FX / ("wiring_%s.py" % name))])
     print("%s=%d" % (name, len([r for r in rows if not r["guarded"]])))
 

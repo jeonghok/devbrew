@@ -385,6 +385,9 @@ assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"Y_ERR","severity":"error","blocking":false}],"incomplete":false,"failure":null}}')" '^directory Y_ERR ' "manifest_bad: directory 의 error 찾음은 막지 않음 표시여도 RED"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":true,"failure":null}}')" '^directory: 점검이 끝나지 않았다' "manifest_bad: directory 점검 미완료는 RED"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":false,"failure":"boom"}}')" '^directory: 점검 실패' "manifest_bad: directory 점검 실패는 RED"
+# 키가 빠지면(CLI 가 이름을 바꾸면) 막지 않음 · 끝남으로 읽지 않는다 — fail-closed
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"Z_NOKEY","severity":"warning"}],"incomplete":false,"failure":null}}')" '^directory Z_NOKEY ' "manifest_bad: blocking 키가 없는 찾음은 막는 것으로 읽어 RED"
+assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"failure":null}}')" '^directory: 점검이 끝나지 않았다' "manifest_bad: incomplete 키가 없으면 끝나지 않은 것으로 읽어 RED"
 printf 'boom: validator crashed\n' > "$TMP/fake.err"
 assert_contains "$(printf 'not json' | manifest_bad "$TMP/fake.err")" "stderr: boom: validator crashed" "manifest_bad: 쓸 수 없는 JSON 이면 stderr 마지막 줄을 싣는다"
 

@@ -34,6 +34,7 @@ unset DEVBREW_DOCREVIEW_DETECTORS DEVBREW_DOCREVIEW_REREVIEW_CAP DEVBREW_DOCREVI
 mkdir -p "$OUT"
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$HERE/cases.sh"
+trap 'rm -f "$_CASES_CARRY"' EXIT   # finish 를 부르지 않으므로 cases.sh 의 실패 운반 파일을 여기서 지운다
 
 # ── 절대경로 정규화 ────────────────────────────────────────────────────────
 # `docreview-state.md` 의 `doc:`·`profile:` 두 줄은 이 체크아웃의 `$REPO_ROOT` 를

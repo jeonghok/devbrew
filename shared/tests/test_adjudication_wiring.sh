@@ -87,6 +87,8 @@ assert_eq "$(printf '%s\n' "$PROBE" | grep -cx 'name_forwarder=0')" "1" \
   "양성: 원장으로 넘기는 이름(ev)의 처분 호출은 같은 분기를 처분으로 만족시킨다"
 assert_eq "$(printf '%s\n' "$PROBE" | grep -cx 'name_other=1')" "1" \
   "음성: print(\"hold\", x) 처럼 처분 이름 글자만 넘긴 무관한 함수는 처분이 아니다"
+assert_eq "$(printf '%s\n' "$PROBE" | grep -cx 'name_other2=1')" "1" \
+  "음성: 전달자 목록 밖 이름(note(\"absorbed\", x))도 처분이 아니다 — print 하나만 막는 거부 목록이 아니다"
 
 note "── 모집단 도출 (㉮) — 두 경로를 따로 기록한다"
 note "$SCAN"
