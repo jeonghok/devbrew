@@ -377,18 +377,21 @@ ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""
 IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
 [ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
-# 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다.
+# 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다. TOPIC 이 실값이면 그 주제의
+# audit 만 되찾는다 — 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit · seed 를 다시 쓰지 않고 새 이름으로 간다.
 TOPIC="<kebab-topic>"
 IV_NAME=""
+case "$TOPIC" in
+  ""|*"<"*|*">"*|*/*|*[[:space:]]*) TOPIC_ARG="" ;;
+  *) TOPIC_ARG="$TOPIC" ;;
+esac
 if [ -z "$sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못했다 — 이름을 되찾을 수 없어 두 경로를 만들지 않는다. 아래 가드들이 이름을 대고 멈춘다." >&2
 else
-  f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid")" || f_rc=$?
+  f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid" --topic "$TOPIC_ARG")" || f_rc=$?
   if [ "$f_rc" -eq 1 ]; then
-    case "$TOPIC" in
-      ""|*"<"*|*">"*|*/*|*[[:space:]]*) IV_NAME="" ;;
-      *) IV_NAME="$(date +%F)-${TOPIC}-interview" ;;
-    esac
+    IV_NAME=""
+    [ -z "$TOPIC_ARG" ] || IV_NAME="$(date +%F)-${TOPIC_ARG}-interview"
   elif [ "$f_rc" -eq 2 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2

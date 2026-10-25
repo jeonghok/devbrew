@@ -5,8 +5,9 @@ CLI (판결은 stdout 마지막 줄):
   interview_state.py entry --arg <경로|""> --session <sid> [--cwd <dir>]
   interview_state.py migrate-legacy --session <sid> --topic <kebab> [--seed <경로>] [--date D] [--cwd <dir>]
     rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부(링크 포함)/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
-  interview_state.py seed-audit-for-session --session <sid> [--cwd <dir>]
+  interview_state.py seed-audit-for-session --session <sid> [--topic <kebab>] [--cwd <dir>]
     rc: 0 이름 하나 · 1 없음 · 2 둘 이상 · 3 인터뷰 폴더를 정하지 못함(레포 설정이 깨짐)
+    --topic 이면 그 주제(`<날짜>-<주제>-interview`)의 audit 만 센다 — 다른 주제의 것만 있으면 알리고 1.
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from gc_common import root_escapes  # noqa: E402
 LEGACY_NAME = "state.local.md"
 _SEED_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-([a-z0-9]+(?:-[a-z0-9]+)*)-interview\.md")
 # 상태 파일 경로는 펜스의 셸 리터럴(`ARG_PATH='<경로>'`)에 붙는다 — 작업 트리 안 상대 경로는 이 글자만 받는다.
+_AUDIT_TOPIC = re.compile(r"\d{4}-\d{2}-\d{2}-(.+)-interview\.audit\.md")
 _SAFE_REL = re.compile(r"[\w./ -]+")
 _SAFE_ROOT = re.compile(r"[^'\x00-\x1f\x7f]+")
 
@@ -208,6 +210,15 @@ def cmd_seed_audit(a) -> int:
         fm = frontmatter_scalars(p) or {}
         if fm.get("type") == "interview-seed-audit" and fm.get("session_id") == a.session:
             hits.append(p)
+    if a.topic:
+        # 이름에서 주제를 떼지 못하는 audit 은 주제를 모른다 — 다른 주제로 단정하지 않고 후보에 남긴다
+        mine = [p for p in hits if not (m := _AUDIT_TOPIC.fullmatch(p.name)) or m.group(1) == a.topic]
+        if hits and not mine:
+            print("[spec-distill] 이 세션에 다른 주제의 seed audit 이 있다 — 주제 {0} 는 새 이름으로 연다. 같은 회의를 잇는 "
+                  "것이면 TOPIC 을 그 주제로 바꿔 다시 돌린다:".format(a.topic), file=sys.stderr)
+            for h in hits:
+                print("  {0}".format(h), file=sys.stderr)
+        hits = mine
     if not hits:
         return 1
     if len(hits) > 1:
@@ -236,6 +247,7 @@ def main(argv=None) -> int:
     x.set_defaults(fn=cmd_migrate)
     x = sp.add_parser("seed-audit-for-session")
     x.add_argument("--session", required=True)
+    x.add_argument("--topic", default="")
     x.add_argument("--cwd", default=None)
     x.set_defaults(fn=cmd_seed_audit)
     a = p.parse_args(argv)
