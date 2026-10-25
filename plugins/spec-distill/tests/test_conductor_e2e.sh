@@ -46,6 +46,13 @@ SP0="$(cd "$W" && python3 "$S/conductor_state.py" path --roadmap "$RM")"
 [ -f "$SP0" ] && ok "표지를 잡으면 기계 상태 파일이 생긴다" || no "기계 상태 파일이 없다: $SP0"
 L approval --roadmap "$RM" --session "$SID" --scale "$SCALE" >/dev/null 2>&1; assert_eq "$?" "2" "원장에 approval 하위 명령이 없다(argparse rc 2)"
 
+# 2b — AC2: 병렬 판단 줄이 나오는 상태(E1 · E2 준비)에서 기계 상태를 지워도 작업 목록이 같다
+before2="$(tasks_of)"
+assert_contains "$before2" "동시에 갈 수 있는 준비 에픽: E1(함께: E2) · E2(함께: E1)" "AC2: 병렬 판단 줄이 나오는 상태다"
+rm -f -- "$SP0"
+assert_eq "$(tasks_of)" "$before2" "AC2: 기계 상태를 지워도 병렬 판단 줄까지 같다"
+L claim --roadmap "$RM" --session "$SID" >/dev/null; assert_eq "$?" "0" "AC2: 지운 뒤 표지를 다시 잡는다"
+
 # 3 — 에픽 worktree(하니스 폴더 · 접두 work/) · 자원 기록
 WT="$(L worktree-path --name e1)"
 g "$W" worktree add -q "$WT" -b work/e1 origin/HEAD

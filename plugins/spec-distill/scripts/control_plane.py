@@ -380,6 +380,24 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     return "\n".join(lines)
 
 
+PARALLEL_LINE_HEAD = "동시에 갈 수 있는 준비 에픽: "
+NOT_PARTNER = frozenset({"대기", "알 수 없음"})
+
+
+def parallel_line(blocks):
+    """단계가 준비인 블록마다 함께 갈 짝(겹침이 없고 단계가 대기 · 알 수 없음이 아닌 것)을 한 줄로. 없으면 None."""
+    stage = {b.get("id"): b.get("stage") for b in blocks}
+    parts = []
+    for b in blocks:
+        if b.get("stage") != "준비":
+            continue
+        mates = [p.get("id") for p in b.get("parallel") or []
+                 if not p.get("overlap") and stage.get(p.get("id")) not in NOT_PARTNER]
+        if mates:
+            parts.append("%s(함께: %s)" % (b.get("id"), " · ".join(mates)))
+    return clean(PARALLEL_LINE_HEAD + " · ".join(parts)) if parts else None
+
+
 def tasks_output(items, select_error=None):
     """(표준 출력 줄들, 표준 오류 글, rc). rc 가 0 이 아니면 지휘자는 작업 목록을 바꾸지 않는다."""
     if select_error:
@@ -410,6 +428,9 @@ def tasks_output(items, select_error=None):
             continue
         state = "completed" if w["단계"] in WORK_DONE else "in_progress"
         out.append(clean("%s %s %s — %s" % (OUTSIDE, w["종류"], w["이름"], w["단계"])) + "\t" + state)
+    line = parallel_line(report.get("blocks") or [])
+    if line:
+        out.append(line)
     return out, "", 0
 
 

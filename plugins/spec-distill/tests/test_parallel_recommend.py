@@ -19,6 +19,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import repo_defaults as rd  # noqa: E402
 import roadmap_status as rs  # noqa: E402
+import control_plane as cp  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
 
@@ -178,7 +179,11 @@ class RoadmapRepo(unittest.TestCase):
     def status(self):
         proc = subprocess.run([sys.executable, str(SCRIPTS / "roadmap_status.py"), "--json", "plan/rm/roadmap.md"],
                               cwd=self.w, env=self.env, capture_output=True, text=True, encoding="utf-8")
-        return json.loads(proc.stdout)
+        try:
+            return json.loads(proc.stdout)
+        except ValueError:
+            raise AssertionError("roadmap_status.py 출력이 JSON 이 아니다: rc=%s stderr=%r stdout=%r"
+                                 % (proc.returncode, proc.stderr, proc.stdout[:200]))
 
 
 TWO = [("E1", [], "", ("C1", "S1", "OQ1")), ("E2", [], "", ("«e2e-k»", "K1"))]
@@ -210,6 +215,102 @@ class SharedOverlapInStatus(RoadmapRepo):
         r = self.status()
         self.assertEqual((r["format_errors"], r["unknown_reasons"]), ([], []))
         self.assertTrue(any("shared_files" in w for w in r["settings"]["warnings"]))
+
+
+class ReservationNoteRespectsSharedList(RoadmapRepo):
+    def _notes(self, settings):
+        self.roadmap([("E1", [], "plugins/p/", ("C1", "S1", "OQ1")), ("E2", [], "src/b.txt", ("«e2e-k»", "K1"))],
+                     settings=settings)
+        path = self.start_design("E2")
+        self.write(path, "plugins/p/NOTICE", "x\n")
+        self.git(path, "add", "-A")
+        self.git(path, "commit", "-m", "공지")
+        self.git(path, "push", "origin", "work/e2")
+        self.git(self.w, "fetch", "origin")
+        return next(b for b in self.status()["blocks"] if b["id"] == "E2")["notes"]
+
+    def test_listed_shared_file_gives_no_violation_note(self):
+        notes = self._notes("---\nshared_files: NOTICE\n---\n")
+        self.assertFalse(any("경로 예약 위반" in n for n in notes), notes)
+
+    def test_without_setting_the_note_appears(self):
+        notes = self._notes(None)
+        self.assertTrue(any("경로 예약 위반" in n and "plugins/p/NOTICE" in n for n in notes), notes)
+
+
+def _b(bid, stage, parallel=()):
+    return {"id": bid, "stage": stage, "parallel": [{"id": p, "overlap": o} for p, o in parallel]}
+
+
+class ParallelLineUnit(unittest.TestCase):
+    def test_two_ready(self):
+        self.assertEqual(cp.parallel_line([_b("R1", "준비", [("R2", [])]), _b("R2", "준비", [("R1", [])])]),
+                         "동시에 갈 수 있는 준비 에픽: R1(함께: R2) · R2(함께: R1)")
+
+    def test_filters(self):
+        self.assertIsNone(cp.parallel_line([_b("R1", "준비", [("R2", ["x/"])]), _b("R2", "준비", [("R1", ["x/"])])]))
+        self.assertIsNone(cp.parallel_line([_b("R1", "준비", [("R2", [])]), _b("R2", "대기", [("R1", [])])]))
+        self.assertIsNone(cp.parallel_line([_b("R1", "준비", [("R2", [])]), _b("R2", "알 수 없음", [("R1", [])])]))
+        self.assertIsNone(cp.parallel_line([_b("R1", "준비", [])]))
+        self.assertIsNone(cp.parallel_line([_b("R1", "설계 중", [("R2", [])]), _b("R2", "설계 중", [("R1", [])])]))
+
+    def test_in_progress_partner(self):
+        self.assertEqual(cp.parallel_line([_b("R1", "구현 중", [("R2", [])]), _b("R2", "준비", [("R1", [])])]),
+                         "동시에 갈 수 있는 준비 에픽: R2(함께: R1)")
+
+    def test_tasks_output_appends_tabless_last_line(self):
+        rep = {"exit": 0, "blocks": [dict(_b("R1", "준비", [("R2", [])]), title="가", task_status="pending"),
+                                     dict(_b("R2", "준비", [("R1", [])]), title="나", task_status="pending")]}
+        out, err, rc = cp.tasks_output([("rm.md", rep)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out[:2], ["R1 가 — 준비\tpending", "R2 나 — 준비\tpending"])
+        self.assertEqual(out[2], "동시에 갈 수 있는 준비 에픽: R1(함께: R2) · R2(함께: R1)")
+        self.assertNotIn("\t", out[2])
+
+
+LINE = "동시에 갈 수 있는 준비 에픽: "
+
+
+class ParallelLineInRepo(RoadmapRepo):
+    def tasks(self):
+        proc = subprocess.run([sys.executable, str(SCRIPTS / "control_plane.py"), "show", "--tasks",
+                               "plan/rm/roadmap.md"], cwd=self.w, env=self.env, capture_output=True,
+                              text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.splitlines()
+
+    def assert_only_last_tabless(self, lines, has_line):
+        tabless = [l for l in lines if "\t" not in l]
+        self.assertEqual(tabless, lines[-1:] if has_line else [])
+
+    def test_two_ready_no_overlap(self):
+        self.roadmap(TWO)
+        lines = self.tasks()
+        self.assertEqual(lines[-1], LINE + "E1(함께: E2) · E2(함께: E1)")
+        self.assert_only_last_tabless(lines, True)
+
+    def test_dependent_has_no_line(self):
+        self.roadmap([("E1", [], "", ("C1", "S1", "OQ1")), ("E2", ["E1"], "", ("«e2e-k»", "K1"))])
+        lines = self.tasks()
+        self.assertIn("\t", lines[-1])
+        self.assert_only_last_tabless(lines, False)
+
+    def test_real_overlap_has_no_line(self):
+        self.roadmap([("E1", [], "src/a.txt", ("C1", "S1", "OQ1")), ("E2", [], "src/a.txt", ("«e2e-k»", "K1"))])
+        self.assert_only_last_tabless(self.tasks(), False)
+
+    def test_shared_file_only_overlap_has_line(self):
+        self.roadmap([("E1", [], "plugins/p/README.md", ("C1", "S1", "OQ1")),
+                      ("E2", [], "plugins/p/", ("«e2e-k»", "K1"))])
+        self.assertEqual(self.tasks()[-1], LINE + "E1(함께: E2) · E2(함께: E1)")
+
+    def test_in_progress_partner(self):
+        self.roadmap(TWO)
+        self.start_design("E1", extra="\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n"
+                                      "| C1 | 반영 | AC1 |\n| S1 | 반영 | AC1 |\n| OQ1 | 반영 | AC1 |\n")
+        lines = self.tasks()
+        self.assertEqual(lines[-1], LINE + "E2(함께: E1)")
+        self.assert_only_last_tabless(lines, True)
 
 
 if __name__ == "__main__":
