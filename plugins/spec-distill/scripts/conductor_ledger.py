@@ -1290,7 +1290,8 @@ def c_review_pack(root, a) -> int:
               "open-<에픽>-<브랜치>.diff — 아직 기본 브랜치에 안 들어간 다른 에픽 브랜치의 diff",
               "conflicts.txt — 이 브랜치와 열린 다른 브랜치를 합칠 때 충돌할 파일(git merge-tree)",
               "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절",
-              "intents.md — 이 PR 과 함께 진행된 다른 에픽들의 설계문서 전문(머지됨 · 열림 표시)"] + skipped
+              "intents.md — 이 PR 과 함께 진행된 다른 에픽들의 설계문서 전문(머지됨 · 열림 · %s 표시)"
+              % review_intents.UNVERIFIED] + skipped
     put("README.txt", "\n".join(readme) + "\n")
     print(out)
     for f in files:

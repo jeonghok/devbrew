@@ -91,8 +91,14 @@ def _by_tips(states: list, base: str, git_fn, memo: dict):
     return None if unknown else OUT
 
 
+def _docs_come_with_merge(b: dict) -> bool:
+    """설계문서가 그 에픽 브랜치의 머지로 기본 브랜치에 드는 블록인가 — 묶음 블록이 묶음에서 찾은 설계문서만.
+    「브랜치 <설계문서 경로>」 블록과 `산출물:` 칸은 이미 있던 파일을 가리킬 수 있어 아니다."""
+    return b.get("kind") == "bundle" and "산출물" not in (b.get("extras") or {})
+
+
 def _by_docs(specs: list, base: str, git_fn, memo: dict):
-    """브랜치가 하나인 머지된 에픽 — 설계문서(산출물)를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋이 그 머지다
+    """브랜치가 하나인 머지된 묶음 에픽 — 설계문서를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋이 그 머지다
     (스쿼시 · 리베이스 · 지운 브랜치에도 남는다). 모두 기준 전이면 OUT, 하나라도 기준 뒤면 IN, 못 찾으면 None.
     처음 더한 커밋은 상태 계산의 doc_added 와 같은 규칙(first_added — 이름 바꿈을 따라간다)으로 찾는다."""
     def events():
@@ -119,7 +125,7 @@ def _verdict(b: dict, base, git_fn, memo: dict):
     states = list(b.get("branch_states") or [])
     verdict = _by_tips(states, base, git_fn, memo)
     single = len(states) == 1 if states else len(b.get("branches") or []) == 1
-    if verdict is None and single and b.get("stage") == MERGED:
+    if verdict is None and single and b.get("stage") == MERGED and _docs_come_with_merge(b):
         verdict = _by_docs(specs, base, git_fn, memo)
     return verdict
 

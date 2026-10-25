@@ -435,7 +435,7 @@ class IntentsBuildUnit(unittest.TestCase):
     def test_doc_entry_path_excludes_single_branch(self):
         # 끝의 진입 커밋을 못 읽어도 브랜치가 하나면 설계문서를 처음 더한 커밋(첫째 부모 줄)으로 잰다
         blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
-                  {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
+                  {"id": "E2", "stage": "머지됨", "kind": "bundle", "specs": ["s/E2.md"],
                    "branch_states": [{"branch": "w/e2", "tip": "b" * 40, "merged": "PR #1"}]}]
         events = "\x00" + "d" * 40 + "\n\nA\ts/E2.md\n"
         answers = [(("log", "--first-parent"), (0, events, "")), (("log",), (0, "c" * 40, "")),
@@ -452,7 +452,7 @@ class IntentsBuildUnit(unittest.TestCase):
     def test_doc_entry_after_base_is_included_unmarked(self):
         # 설계문서가 든 커밋이 기준 뒤면 함께 진행됐다고 확인된 것이다 — 표시 없이 「머지됨」
         blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
-                  {"id": "E2", "stage": "머지됨", "specs": ["s/E2.md"],
+                  {"id": "E2", "stage": "머지됨", "kind": "bundle", "specs": ["s/E2.md"],
                    "branch_states": [{"branch": "w/e2", "tip": None, "merged": "PR #1"}]}]
         events = "\x00" + "d" * 40 + "\n\nA\ts/E2.md\n"
         text, warns = self.build(blocks, [(("log", "--first-parent"), (0, events, "")), (("log",), (0, "c" * 40, "")),
@@ -496,6 +496,7 @@ class IntentsPack(RoadmapRepo):
         self.assertEqual(rc, 0, stdout)
         readme = (out / "README.txt").read_text(encoding="utf-8").splitlines()
         self.assertTrue(any(l.startswith("intents.md — ") for l in readme), readme)
+        self.assertTrue(any(l.startswith("intents.md — ") and ("· %s 표시)" % UNVERIFIED) in l for l in readme), readme)
         text = (out / "intents.md").read_text(encoding="utf-8")
         if base_line:
             self.assertTrue(text.startswith("기준 커밋 "), text[:200])
@@ -635,13 +636,14 @@ class IntentsPack(RoadmapRepo):
         text, _o = self.intents()
         self.assertIn("### E2 plan/specs/E2-design-v2.md(머지됨)", text)
 
-    def forced_build(self, more_states=()):
+    def forced_build(self, more_states=(), **e2_fields):
         """상태 계산은 PR 캐시 없이 스쿼시 머지를 머지됨으로 보지 않는다 — E2 를 머지됨으로 얹어 build 를 직접 부른다.
-        more_states 는 E2 블록에 더할 브랜치 상태들."""
+        more_states 는 E2 블록에 더할 브랜치 상태들, e2_fields 는 E2 블록에 덮을 칸(kind 등)."""
         import conductor_ledger as L
         import review_intents as ri
         report = self.status()
         e2 = next(b for b in report["blocks"] if b["id"] == "E2")
+        e2.update(e2_fields)
         e2["stage"] = "머지됨"
         for s in e2["branch_states"]:
             s["merged"] = "PR #1 머지됨"
@@ -686,6 +688,56 @@ class IntentsPack(RoadmapRepo):
         text, _o = self.intents()
         self.assertNotIn("### E2", text)
         self.assertEqual(text.splitlines()[1], NONE_LINE)
+
+    def doc_on_trunk_first(self, rel, src_branch=None, text="먼저 있던 글\n"):
+        """rel 을 기본 브랜치에 직접 커밋한다 — src_branch 가 있으면 그 브랜치의 사본을."""
+        self.git(self.w, "checkout", "trunk")
+        if src_branch:
+            self.git(self.w, "checkout", src_branch, "--", rel)
+        else:
+            self.write(self.w, rel, text)
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-m", "먼저 든 글 " + rel)
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+
+    def impl_then_squash_e2(self, e2):
+        self.write(e2, "impl/e2.txt", "구현\n")
+        self.git(e2, "add", "-A")
+        self.git(e2, "commit", "-m", "E2 구현")
+        self.git(e2, "push", "origin", "work/e2")
+        self.merge("E2", squash=True)
+
+    def test_branch_kind_doc_already_on_trunk_is_marked(self):
+        # 「브랜치 <설계문서 경로>」 블록은 이미 있던 설계문서를 가리킨다 — 문서가 든 커밋은 그 에픽의 머지가 아니다.
+        # 문서가 기본 브랜치에 먼저 들고, 이 에픽 설계 뒤에 구현이 스쿼시 머지됐다 → 싣고 표시한다
+        e2 = self.start_design("E2", extra=E2_TABLE)
+        self.doc_on_trunk_first("plan/specs/E2-design.md", src_branch="work/e2")
+        self.start_design("E1", extra=E1_TABLE)
+        self.impl_then_squash_e2(e2)
+        text, warns = self.forced_build(kind="branch")
+        lines = text.splitlines()
+        self.assertIn(E2_HEAD % ("머지됨 · " + UNVERIFIED), lines)
+        self.assertEqual(lines[1], COUNT_LINE % 1)
+        self.assertIn(COUNT_LINE % 1, warns)
+
+    def test_artifact_field_pre_existing_file_is_marked(self):
+        # 산출물 칸이 이미 있던 파일을 가리키는 묶음 에픽 — 같은 까닭으로 문서 길을 쓰지 않는다(실제 로드맵 칸으로)
+        rm = os.path.join(self.w, "plan", "rm", "roadmap.md")
+        text = Path(rm).read_text(encoding="utf-8")
+        old = "- 묶음: E2.md\n"
+        self.assertEqual(text.count(old), 1)
+        Path(rm).write_text(text.replace(old, old + "- 산출물: plan/pre/E2-out.md\n"), encoding="utf-8")
+        self.doc_on_trunk_first("plan/pre/E2-out.md")
+        e2 = self.start_design("E2", extra=E2_TABLE)
+        self.start_design("E1", extra=E1_TABLE)
+        self.impl_then_squash_e2(e2)
+        report_e2 = next(b for b in self.status()["blocks"] if b["id"] == "E2")
+        self.assertEqual((report_e2["kind"], report_e2["extras"].get("산출물")), ("bundle", "plan/pre/E2-out.md"))
+        text, warns = self.forced_build()
+        lines = text.splitlines()
+        self.assertIn("### E2 plan/pre/E2-out.md(머지됨 · %s)" % UNVERIFIED, lines)
+        self.assertEqual(lines[1], COUNT_LINE % 1)
 
     def test_unverifiable_merged_is_marked_and_counted(self):
         # 브랜치가 둘이면 설계문서 길을 쓰지 않는다(D2.2) — 스쿼시라 끝으로도 확인하지 못해 싣고 머릿줄 · 첫 줄 영역에 알린다
