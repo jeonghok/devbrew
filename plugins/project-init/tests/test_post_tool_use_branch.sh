@@ -140,8 +140,19 @@ fresh; git -C "$W" worktree add -q -b worktree-x "$W/.claude/worktrees/x"
 hook_ew "$W/.claude/worktrees/x" x; alerted worktree-x "EnterWorktree 뒤 worktree-x(cwd = 새 작업 트리)"
 fresh; git -C "$W" worktree add -q -b worktree-y "$W/.claude/worktrees/y"
 hook_ew "$W" y; elsewhere worktree-y "$W/.claude/worktrees/y" "EnterWorktree 뒤 worktree-y(cwd = 옮기기 전 레포) → 이름 y 의 작업 트리 브랜치로 잡고 명령 없이 알림"
-fresh; git -C "$W" worktree add -q -b worktree-a+b "$W/.claude/worktrees/a/b"
-hook_ew "$W" a/b; elsewhere worktree-a+b "$W/.claude/worktrees/a/b" "EnterWorktree 이름에 / 가 든 경우(작업 트리 경로 a/b)"
+# 레포 기록의 실제 꼴은 이름 feature/x → 작업 트리 .claude/worktrees/feature+x · 브랜치 worktree-feature+x 다.
+fresh; git -C "$W" worktree add -q -b worktree-a+b "$W/.claude/worktrees/a+b"
+hook_ew "$W" a/b; elsewhere worktree-a+b "$W/.claude/worktrees/a+b" "EnterWorktree 이름에 / 가 든 경우(작업 트리 경로 a+b — 기록된 꼴)"
+fresh; git -C "$W" worktree add -q -b worktree-c+d "$W/.claude/worktrees/c/d"
+hook_ew "$W" c/d; elsewhere worktree-c+d "$W/.claude/worktrees/c/d" "EnterWorktree 이름에 / 가 든 경우(작업 트리 경로 c/d — 하위 폴더 꼴)"
+mkdir -p "$T/wtfail2"
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail2/git"
+chmod +x "$T/wtfail2/git"
+fresh; git -C "$W" worktree add -q -b worktree-e "$W/.claude/worktrees/e"
+OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": "EnterWorktree", "cwd": sys.argv[1], "tool_input": {"name": "e"}}))' "$W" \
+  | PATH="$T/wtfail2:$PATH" CLAUDE_PROJECT_DIR="$W" python3 "$HOOK")
+case "$(field systemMessage)" in *"작업 트리 목록을 읽지 못해"*) ok "EnterWorktree · 작업 트리 목록 실패 → 조용히 빠지지 않고 알림" ;; *) no "EnterWorktree · 작업 트리 목록 실패를 알리지 않았다 — $OUT" ;; esac
+case "$(field ac)" in *"git branch -m"*) no "EnterWorktree · 작업 트리 목록 실패인데 이름 바꾸기 명령 — $OUT" ;; *) ok "EnterWorktree · 작업 트리 목록 실패 → 명령 없음" ;; esac
 fresh; git -C "$W" worktree add -q -b worktree-xz "$W/.claude/worktrees/xz"
 hook_ew "$W" z; quiet "EnterWorktree 이름 z · 새 브랜치는 작업 트리 xz 의 것 → 조용"
 hook EnterWorktree "$W/.claude/worktrees/xz" 'git commit -m "add thing"'

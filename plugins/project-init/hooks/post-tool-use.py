@@ -295,15 +295,19 @@ def _current_branch(cwd, deadline=None):
 
 
 def _entered_worktree_branches(cwd, worktree_name, deadline=None):
-    """EnterWorktree 의 name 으로 만든 작업 트리(경로 끝이 `/<name>`)가 쓰는 브랜치들.
+    """EnterWorktree 의 name 으로 만든 작업 트리가 쓰는 브랜치들, 작업 트리 목록을 못 읽으면 None.
 
-    payload 의 cwd 가 옮기기 전 레포여도 그 작업 트리의 브랜치를 이 호출의 것으로 본다.
+    payload 의 cwd 가 옮기기 전 레포여도 그 작업 트리의 브랜치를 이 호출의 것으로 본다. 경로 끝은
+    `/<name>` 이고, name 의 `/` 는 `+` 로(레포 기록의 꼴: feature/x → feature+x) 또는 하위 폴더로 본다.
     """
     if not worktree_name:
         return set()
-    tail = os.sep + worktree_name.strip("/").replace("/", os.sep)
-    trees = checked_out_elsewhere(cwd, deadline=deadline) or {}
-    return {b for b, p in trees.items() if p.endswith(tail)}
+    name = worktree_name.strip("/")
+    tails = {os.sep + name.replace("/", "+"), os.sep + name.replace("/", os.sep)}
+    trees = checked_out_elsewhere(cwd, deadline=deadline)
+    if trees is None:
+        return None
+    return {b for b, p in trees.items() if any(p.endswith(t) for t in tails)}
 
 
 def observe_branches(cwd, now, text, worktree_name=None):
@@ -326,13 +330,27 @@ def _observe(cwd, now, deadline, text, worktree_name=None):
     names = [n for n in new_branches(cwd, now, deadline=deadline) if n not in PROTECTED_BRANCHES]
     # 공용 git 디렉토리라 다른 세션이 막 만든 브랜치도 보인다 — 이 호출과 무관한 브랜치는 다루지
     # 않는다(그 이름을 이 세션 모델이 바꾸게 하지 않는다).
+    notes = []
     rest = [n for n in names if not named_in(text, n)]
     if rest:
         mine = {_current_branch(cwd, deadline=deadline)}
-        mine |= _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
+        entered = _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
+        mine |= entered or set()
         names = [n for n in names if n not in rest or n in mine]
+        if entered is None and any(n not in mine for n in rest):
+            # 작업 트리 목록을 못 읽어 EnterWorktree 의 브랜치를 가리지 못했다 — 조용히 빠지지 않게 알린다.
+            notes.append((
+                "project-init: 작업 트리 목록을 읽지 못해 EnterWorktree 가 만든 브랜치를 가리지 못했다 "
+                "— 그 브랜치 이름 검사를 건너뛴다(fail-open).",
+                None,
+            ))
     if not names:
-        return []
+        return notes
+    return notes + _judge(cwd, names, deadline)
+
+
+def _judge(cwd, names, deadline):
+    """이 호출의 새 브랜치 names 를 기본 브랜치 규칙으로 판정한 (사람, 모델) 알림들."""
     pattern, notice = read_branch_rule(cwd, deadline=deadline)
     if pattern is None:  # 유효 패턴 없음 → fail OPEN, loudly
         return [(notice, None)]  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
