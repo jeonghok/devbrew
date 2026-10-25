@@ -8,10 +8,13 @@
 
 명령줄:
   merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
+                    [--test-command <명령>] [--test-failure-pattern <정규식>]
 
 무엇을 돌리나: 해결자(`repo_defaults.resolve`)가 낸 `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
 (정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 순으로 찾고 출처를 함께
-낸다 — 설정이 깨졌으면 검사 불가다. 기계 상태 파일은 읽지 않는다(검사받는 하위 agent 도 쓸 수 있다). 값이 없으면 이
+낸다 — 설정이 깨졌으면 검사 불가다. 기계 상태 파일은 읽지 않는다(검사받는 하위 agent 도 쓸 수 있다). 종료 코드 6 에
+지휘자가 사용자에게 물어 얻은 답은 `--test-command` · `--test-failure-pattern` 으로 그 호출에만 넘긴다 — 출처는 「이 호출의
+인자(사용자 답)」 이고 설정 값보다 앞서며, 레포 설정 파일에 올리자고 알린다. 값이 없으면 이
 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
@@ -56,6 +59,7 @@ RUNNER_SHAPES = {
     "shell": (("✗ · FAIL: 표시", re.compile(r"^\s*(?:✗|FAIL:) (.+)$", re.M)), KNOWN_SHAPES[2]),
 }
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
+ARG_LABEL = "이 호출의 인자(사용자 답)"
 
 
 class Stop(Exception):
@@ -285,7 +289,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             raise Stop(3, "테스트 파일 수를 세지 못했다 — compute-test-scope-candidates 가 숫자를 내지 않았다")
         if count:
             raise Stop(6, "테스트로 보이는 파일 %d개를 돌릴 러너를 모른다 — 테스트 명령(`test_command`)을 정해 주면 "
-                          "레포 설정 파일(%s)에 올린다" % (count, repo_defaults.SETTINGS_FILE))
+                          "이 대조를 --test-command 로 다시 돌리고, 그 값은 레포 설정 파일(%s)에 올린다"
+                          % (count, repo_defaults.SETTINGS_FILE))
         raise Stop(7, "스위트 대조 없음 — 이 레포에서 테스트를 찾지 못했다. 통합 리뷰만 한다")
     res = {"new": [], "fixed": [], "both": [], "unit_only": [],
            "notes": ["무엇을 돌렸나: 탐지한 러너 %s" % " · ".join(sorted({r for _u, r, _g in rows}))]}
@@ -344,9 +349,10 @@ def report(res: dict) -> int:
     return 0
 
 
-def suite_settings(root: Path, roadmap: str) -> tuple:
+def suite_settings(root: Path, roadmap: str, given=None) -> tuple:
     """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기본값을 합친다 —
-    둘 다 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가."""
+    둘 다 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가. given({키: 이 호출의 인자 또는 None})이 있으면 그 값이
+    앞선다 — 종료 코드 6 의 답이다."""
     try:
         res = repo_defaults.resolve(str(root), roadmap=roadmap)
     except repo_defaults.SettingsError as exc:
@@ -355,8 +361,25 @@ def suite_settings(root: Path, roadmap: str) -> tuple:
         print("[spec-distill] " + line)
     if res["errors"]:
         raise Stop(3, "레포 설정이 깨졌다: %s" % res["errors"][0])
-    sources = dict((k, " — 출처 %s" % res["sources"][k]) for k in ("test_command", "test_failure_pattern"))
-    return res["values"]["test_command"], res["values"]["test_failure_pattern"], sources
+    keys = ("test_command", "test_failure_pattern")
+    values = dict((k, res["values"][k]) for k in keys)
+    origin = dict((k, res["sources"][k]) for k in keys)
+    for key in keys:
+        value = (given or {}).get(key)
+        if value is None:
+            continue
+        flag = "--" + key.replace("_", "-")
+        if not value.strip():
+            raise Stop(3, "%s 값이 비었다 — 값을 주거나 인자를 뺀다" % flag)
+        if values[key] is not None:
+            print("[spec-distill] %s의 %s(`%s`) 대신 이 호출의 인자를 쓴다" % (origin[key], key, values[key]))
+        values[key], origin[key] = value, ARG_LABEL
+        print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
+              % (key, ARG_LABEL, repo_defaults.SETTINGS_FILE))
+    if (given or {}).get("test_failure_pattern") is not None and values["test_command"] is None:
+        raise Stop(3, "--test-failure-pattern 은 테스트 명령과 함께만 쓴다 — --test-command 를 함께 준다")
+    sources = dict((k, " — 출처 %s" % origin[k]) for k in keys)
+    return values["test_command"], values["test_failure_pattern"], sources
 
 
 def run(root: Path, a) -> int:
@@ -385,7 +408,8 @@ def run(root: Path, a) -> int:
             print(line)
     except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
-    test_command, pattern, sources = suite_settings(root, a.roadmap)
+    test_command, pattern, sources = suite_settings(root, a.roadmap, {"test_command": a.test_command,
+                                                                       "test_failure_pattern": a.test_failure_pattern})
     why = pattern_error(pattern) if pattern else None
     if why:
         raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), why))
@@ -429,6 +453,8 @@ def main(argv=None) -> int:
     r.add_argument("--no-fetch", action="store_true")
     r.add_argument("--wait", type=float, default=0, help="잠금이 잡혀 있으면 이 초까지 기다린다(줄)")
     r.add_argument("--root")
+    r.add_argument("--test-command", help="종료 코드 6 에 사용자가 답한 테스트 명령 — 이 호출에만 쓴다")
+    r.add_argument("--test-failure-pattern", help="종료 코드 6 에 사용자가 답한 실패 이름 정규식 — 이 호출에만 쓴다")
     a = ap.parse_args(argv)
     try:
         top = a.root or git(os.getcwd(), "rev-parse", "--show-toplevel")[1]

@@ -181,6 +181,32 @@ assert_eq "$rc" "6" "실행 비트 없는 셸 테스트만 → rc 6(묻는 자�
 assert_contains "$out" "test_command" "묻는 자리: 로드맵 frontmatter 키를 말한다"
 assert_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "묻는 자리: 정한 값은 레포 설정 파일에 올린다"
 
+# 7a — 종료 코드 6 의 답: 지휘자가 사용자 답을 이 호출의 인자로만 넘긴다(기계 상태에 적지 않는다)
+mkrepo an; put tests/t.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
+put tests/t.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/an
+out="$(mc --branch feature/an)"; rc=$?
+assert_eq "$rc" "6" "인자 없음: 러너 없는 테스트 파일 → rc 6(전제)"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh")"; rc=$?
+assert_eq "$rc" "1" "--test-command: 사용자 답의 명령을 돌려 새 실패 → rc 1"
+assert_contains "$out" "gamma" "--test-command: 새 이름 gamma"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash tests/t.sh\`) — 출처 이 호출의 인자(사용자 답)" "--test-command: 무엇을 돌렸나에 출처가 이 호출의 인자다"
+assert_contains "$out" "test_command 를 이 호출의 인자(사용자 답)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "--test-command: 레포 설정 파일에 올리자고 알린다"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '^not ok [0-9]+ - ([a-z]+)$')"; rc=$?
+assert_eq "$rc" "1" "--test-failure-pattern: 정규식으로 가른 새 이름 → rc 1"
+assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^not ok [0-9]+ - ([a-z]+)\$\`) — 출처 이 호출의 인자(사용자 답)" "--test-failure-pattern: 출처가 이 호출의 인자다"
+out="$(mc --branch feature/an --test-failure-pattern '^x$')"; rc=$?
+assert_eq "$rc" "3" "--test-failure-pattern 만(돌릴 명령 없음) → rc 3"
+assert_contains "$out" "테스트 명령과 함께만" "정규식만 준 사유"
+out="$(mc --branch feature/an --test-command "")"; rc=$?
+assert_eq "$rc" "3" "빈 --test-command → rc 3"
+assert_contains "$out" "--test-command 값이 비었다" "빈 인자 사유"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '[')"; rc=$?
+assert_eq "$rc" "3" "깨진 --test-failure-pattern → rc 3"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 이 호출의 인자(사용자 답): " "깨진 인자 정규식 사유와 출처"
+W="$T/pt"; out="$(mc --branch feature/pt --test-command "bash -c 'exit 0'")"; rc=$?
+assert_eq "$rc" "0" "인자가 로드맵 값보다 앞선다(그 호출만)"
+assert_contains "$out" "로드맵의 test_command(\`bash run.sh\`) 대신 이 호출의 인자를 쓴다" "인자가 설정 값을 대신하면 그 값과 출처를 알린다"
+
 # 7b — 테스트 파일 수를 못 세면 「스위트 대조 없음」 이 아니라 검사 불가(rc 3)
 mkrepo cn; put README.md r; push_base; put x.txt x; branch_with feature/cn
 out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m

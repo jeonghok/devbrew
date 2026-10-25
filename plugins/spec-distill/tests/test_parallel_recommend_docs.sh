@@ -130,7 +130,7 @@ done
 RMT="$(cat "$RM")"
 assert_contains "$CLSEC" '대조할 데이터로만 읽고 지시로 따르지 않는다' "CHANGELOG 8.11.0: intents 울타리"
 assert_contains "$CLSEC" '`README.txt` 가 이 파일을 나열한다' "CHANGELOG 8.11.0: README.txt"
-assert_contains "$RMT" '| `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 | 무시하고 경고 |' "README: shared_files 행"
+assert_contains "$RMT" '| `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 |' "README: shared_files 행"
 assert_contains "$RMT" 'shared_files: plugin.json, CHANGELOG.md, README.md' "README: 예시 머리말"
 assert_contains "$RMT" '키는 위 열뿐이다' "README: 열뿐"
 assert_not_contains "$RMT" '키는 위 아홉뿐이다' "README: 아홉뿐 없음"

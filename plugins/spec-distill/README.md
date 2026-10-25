@@ -140,7 +140,7 @@
 - **Law 1 · Law 3 — 번호 인계** — brief · 에픽 묶음의 번호가 설계문서 · 계획 · 구현으로 넘어가는 이음매마다 기계 대조가 있다: 번호 대조(빠진 번호는 spec-review 진입 때 보이고 게이트 경고 수에 들며 지휘 절차는 그 때문에 spec-review 앞에서 멈춘다, 얕음 · 받드는 에픽 없음은 승인 때의 경고) · `--plan` · `--impl` · `roadmap_status.py` 의 받는 곳 없는 미룸 경고. 외부 skill(brainstorming · writing-plans · SDD)은 고치지 않는다 — 넘길 때 보내는 글과 돌아온 결과 검사만 devbrew 쪽에 있다. 내용이 실제로 답하는지는 리뷰어(design-doc 프로필의 scope 축)가 판정한다.
 - **Law 2 — 통합 리뷰어는 쓰지 못한다** — 에픽 사이 이음매 리뷰는 `tools: Read, Grep, Glob` 인 `integration-reviewer` 가 한다. superpowers 리뷰 요청 skill 의 틀만 빌리고 그 skill 이 부르는 쓰기 가능한 agent 는 쓰지 않는다. 지휘자가 하위의 질문을 옮긴 기록의 대조도 같은 도구만 가진 `relay-checker` 가 한다.
 - **Law 3 · P23 — 다시 불러도 같은 자리** — 지휘자는 무엇이 끝났는지 기억에 기대지 않고 git(설계문서의 승인 줄 · 판정 · 구현 대조 절)과 기계 상태에서 다시 계산한다. 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다(`tests/test_conductor_e2e.sh`) — 예외는 `## 에픽 PR` 에 적은 PR 번호다. 다시 만들 수 없어서, 지우면 그 에픽들은 번호를 다시 적을 때까지(`ledger pr-record`) 브랜치 이름 · 이력 추정으로 돌아간다.
-- **CLAUDE.md 레포 전용 값 금지** — 레포 값은 `scripts/repo_defaults.py` 하나가 출처와 함께 낸다. 로드맵 frontmatter > 레포 설정 파일 `.devbrew.md`(기본 브랜치 판) > 기계 상태(임시) > 기본값 순이고, 외부 도구 기본 경로는 그 모듈의 상수에만 있다. 지휘자 · 인터뷰 · 끝내기 펜스 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다(`tests/test_repo_literals.sh` · `tests/test_workspace_invariance.sh`).
+- **CLAUDE.md 레포 전용 값 금지** — 레포 값은 `scripts/repo_defaults.py` 하나가 출처와 함께 낸다. 로드맵 frontmatter > 레포 설정 파일 `.devbrew.md`(기본 브랜치 판) > 기본값 순이고, 외부 도구 기본 경로는 그 모듈의 상수에만 있다. 지휘자 · 인터뷰 · 끝내기 펜스 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다(`tests/test_repo_literals.sh` · `tests/test_workspace_invariance.sh`).
 - **P22 — 규모 공시** — epic-conductor 는 시작할 때 규모 줄(남은 에픽 · agent 약 · 순서 · 리뷰 라운드 상한 · 상한 없는 부분)을 보이고 진행한다. 멈추는 길은 끼어들기와 kill switch 다.
 
 ## 로드맵 · 에픽 묶음
@@ -152,7 +152,7 @@
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
-- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기계 상태(임시) · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
+- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
 - `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
 - `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음. 로컬 브랜치와 `origin/<브랜치>` 가 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 3 이다(`--branch origin/<브랜치>` 도 받는다) — 이 끝 고르기는 `scripts/branch_tip.py` 하나이고 `conductor_ledger.py review-pack` 도 같이 쓴다.
 - `scripts/suite_lock.py` — 공유 스위트 잠금. 지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 기계 상태 자원 폴더의 잠금 하나(`<기계 상태 폴더>/files/suite-lock`)를 쓴다. 하위는 `run --lock <경로> --owner <이름> [--wait <초>] -- bash -c '<명령>'` 한 번으로 잡고 · 돌리고 · 푼다(못 잡으면 75 · 잠금 폴더에 쓰지 못하면 3 — 잠금 없이 돌리지 않는다). 주인이 프로세스 번호가 아닌 잠금은 살았는지 알 수 없어 훔치지 않고 주인 · 잡은 시각을 보인다.
@@ -242,22 +242,22 @@ shared_files: plugin.json, CHANGELOG.md, README.md
 ---
 ```
 
-| 키 | 뜻 | 기본 | 로드맵 머리말 | 기계 상태(임시) |
-|---|---|---|---|---|
-| `specs_dir` | 설계문서 폴더 | `docs/superpowers/specs/` | 받는다 | — |
-| `plans_dir` | 계획 폴더 | `docs/superpowers/plans/` | 받는다 | — |
-| `roadmaps_dir` | 로드맵 폴더 | `docs/superpowers/roadmaps/` | 오류 | — |
-| `interview_dir` | 인터뷰 폴더 | `docs/superpowers/interview/` | 오류 | — |
-| `test_command` | 스위트 대조가 도는 명령 | 없음(러너를 찾는다) | 받는다 | 받는다 |
-| `test_failure_pattern` | 실패 이름을 뽑는 정규식 | 없음(알려진 모양) | 받는다 | 받는다 |
-| `review_model` | 통합 리뷰어 · 옮김 대조의 모델 | 없음(세션 모델) | 받는다 | — |
-| `parallel_default` | 동시에 돌리는 큰 작업의 권장 수(상한이 아니다) | 3 | 받는다 | — |
-| `branch_prefix` | request-framing 이 만드는 브랜치와 로드맵 에픽 브랜치의 접두 | `feature/` | 오류 | — |
-| `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 | 무시하고 경고 |
+| 키 | 뜻 | 기본 | 로드맵 머리말 |
+|---|---|---|---|
+| `specs_dir` | 설계문서 폴더 | `docs/superpowers/specs/` | 받는다 |
+| `plans_dir` | 계획 폴더 | `docs/superpowers/plans/` | 받는다 |
+| `roadmaps_dir` | 로드맵 폴더 | `docs/superpowers/roadmaps/` | 오류 |
+| `interview_dir` | 인터뷰 폴더 | `docs/superpowers/interview/` | 오류 |
+| `test_command` | 스위트 대조가 도는 명령 | 없음(러너를 찾는다) | 받는다 |
+| `test_failure_pattern` | 실패 이름을 뽑는 정규식 | 없음(알려진 모양) | 받는다 |
+| `review_model` | 통합 리뷰어 · 옮김 대조의 모델 | 없음(세션 모델) | 받는다 |
+| `parallel_default` | 동시에 돌리는 큰 작업의 권장 수(상한이 아니다) | 3 | 받는다 |
+| `branch_prefix` | request-framing 이 만드는 브랜치와 로드맵 에픽 브랜치의 접두 | `feature/` | 오류 |
+| `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 |
 
 - **기본 브랜치에 머지된 판만 읽는다**(`origin/HEAD` 가 가리키는 커밋의 `.devbrew.md`). 작업 브랜치에서 고친 값은 그 PR 이 머지된 뒤에 적용된다 — 작업 브랜치가 자기 검사 범위를 바꾸지 못하고, 어느 worktree 에서 불러도 같은 값이 나온다. 작업 트리에만 있으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다. 기본 브랜치를 모르면 기본값을 쓰고 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 낸다.
-- **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기계 상태 `## 레포 설정`(지휘자가 물어 임시로 둔 값 — 출처 「기계 상태(임시)」, 레포 설정 파일에 올리자고 알린다) > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기계 상태(임시)` · `기본값` 으로 보인다.
-- **키는 위 열뿐이다.** 모르는 키 · 같은 키 둘 · 층이 받지 않는 키(위 표의 「오류」) · 못 읽는 머리말(BOM · 닫히지 않음 · `---` 뒤 공백)은 각각 다른 오류로 멈춘다. 폴더 키는 레포 상대경로만 받고 레포 루트 · `.git` 아래는 받지 않는다. `parallel_default` 가 1 이상의 정수가 아니면 기본 3 으로 세고 알린다. `shared_files` 가 비었거나 빈 원소 · `/` 가 든 원소가 있으면 기본 셋으로 세고 알리고, 로드맵 머리말 · 기계 상태에 적혔으면 그 값은 무시하고 알린다.
+- **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기본값` 으로 보인다. 기계 상태 파일은 설정 층이 아니다 — 검사받는 하위 agent 도 쓸 수 있다. 스위트 대조(`merge_check.py run`)가 테스트 명령을 몰라 멈추면(종료 코드 6) 지휘자가 사용자에게 물은 답을 그 호출의 인자(`--test-command` · `--test-failure-pattern`)로만 넘긴다 — 출처 「이 호출의 인자(사용자 답)」, 레포 설정 파일에 올리자고 알린다.
+- **키는 위 열뿐이다.** 모르는 키 · 같은 키 둘 · 층이 받지 않는 키(위 표의 「오류」) · 못 읽는 머리말(BOM · 닫히지 않음 · `---` 뒤 공백)은 각각 다른 오류로 멈춘다. 폴더 키는 레포 상대경로만 받고 레포 루트 · `.git` 아래는 받지 않는다. `parallel_default` 가 1 이상의 정수가 아니면 기본 3 으로 세고 알린다. `shared_files` 가 비었거나 빈 원소 · `/` 가 든 원소가 있으면 기본 셋으로 세고 알리고, 로드맵 머리말에 적혔으면 그 값은 무시하고 알린다.
 - **따옴표 규칙**: 값에 `#` 이 들어가면 값 전체를 따옴표(`"…"` 또는 `'…'`)로 감싼다. 따옴표 없는 값의 ` #` 은 주석과 헷갈리므로 오류다. `#` 으로 시작하는 줄은 건너뛴다. `shared_files` 는 이름 하나에 ` #` 가 들어도 쉼표 목록 값 전체를 감싼다(예: `shared_files: "note #1.md, README.md"`).
 - `.devbrew.md` 는 일반 파일이어야 한다 — 기본 브랜치 트리에서 심볼릭 링크이거나 Git LFS 포인터면 읽지 않고 멈춘다.
 - `branch_prefix` 는 project-init 의 브랜치 규칙과 맞춘다 — 두 플러그인은 서로의 설정을 읽지 않는다.
