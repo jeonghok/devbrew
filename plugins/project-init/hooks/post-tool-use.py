@@ -4,7 +4,9 @@
 Runs after Bash and EnterWorktree tool calls:
 1. Branch naming (Bash and EnterWorktree) — observes, after the call, which
    local branches were just made (their reflog has a create / rename / copy
-   line within NEW_BRANCH_WINDOW seconds) and validates each name
+   line within NEW_BRANCH_WINDOW seconds) — keeping only those the tool input
+   names or that cwd has checked out, so another session's branch is left
+   alone — and validates each name
    against the pattern in docs/git-workflow/branch-strategy.md as committed on
    the default branch (refs/remotes/origin/HEAD), not the working tree.
 2. Commit message (Bash only) — detects git commit -m and validates
@@ -276,11 +278,30 @@ def guess_commit_type(message):
     return COMMIT_TYPES.get(first_word, "feat")
 
 
-def observe_branches(cwd, now):
-    """Warnings for branches made just now whose names break the default branch's rule."""
+_NAME_LEFT = r"(?:^|(?<=[\s'\"`=(;&|<>/]))"
+_NAME_RIGHT = r"(?=$|[\s'\"`);&|<>])"
+
+
+def named_in(text, name):
+    """도구 입력 글에 브랜치 이름이 한 낱말로 나오는가(`Bad` 는 `Bad2` · `x/Bad.1` 에 들지 않는다)."""
+    return bool(text) and re.search(_NAME_LEFT + re.escape(name) + _NAME_RIGHT, text) is not None
+
+
+def _current_branch(cwd, deadline=None):
+    out = _git(cwd, "symbolic-ref", "-q", "HEAD", deadline=deadline)
+    ref = out.decode("utf-8", "replace").strip() if out else ""
+    return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else None
+
+
+def observe_branches(cwd, now, text):
+    """Warnings for branches this tool call made just now whose names break the default branch's rule.
+
+    text 는 도구 입력 글(Bash 의 명령)이다 — 새 브랜치 가운데 이 글이 이름을 가리키거나 cwd 가
+    지금 쓰는 브랜치만 이 호출이 만든 것으로 본다.
+    """
     deadline = _deadline()
     try:
-        return _observe(cwd, now, deadline)
+        return _observe(cwd, now, deadline, text)
     except GitTimeout:
         return [(
             "project-init: git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open).",
@@ -288,8 +309,13 @@ def observe_branches(cwd, now):
         )]
 
 
-def _observe(cwd, now, deadline):
+def _observe(cwd, now, deadline, text):
     names = [n for n in new_branches(cwd, now, deadline=deadline) if n not in PROTECTED_BRANCHES]
+    # 공용 git 디렉토리라 다른 세션이 막 만든 브랜치도 보인다 — 이 호출과 무관한 브랜치는 다루지
+    # 않는다(그 이름을 이 세션 모델이 바꾸게 하지 않는다).
+    if any(not named_in(text, n) for n in names):
+        current = _current_branch(cwd, deadline=deadline)
+        names = [n for n in names if n == current or named_in(text, n)]
     if not names:
         return []
     pattern, notice = read_branch_rule(cwd, deadline=deadline)
@@ -420,9 +446,15 @@ def main():
     # Run BOTH checks (no short-circuit): a branch warning must not
     # suppress commit validation on compound commands (§5.5).
     # EnterWorktree 는 관찰만 한다 — 커밋 명령이 없다.
-    results = observe_branches(cwd, time.time())
-    if tool_name == "Bash" and isinstance(tool_input, dict):
-        commit = validate_commit(str(tool_input.get("command", "")))
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    if tool_name == "Bash":
+        text = str(tool_input.get("command", ""))
+    else:
+        text = " ".join(v for v in tool_input.values() if isinstance(v, str))
+    results = observe_branches(cwd, time.time(), text)
+    if tool_name == "Bash":
+        commit = validate_commit(text)
         if commit:
             results.append(commit)
     human = [h for h, _m in results if h]

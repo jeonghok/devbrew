@@ -104,7 +104,7 @@ class _RepoTestCase(unittest.TestCase):
 
     def observe_after_branch(self, work: str, name: str) -> list:
         git("branch", name, cwd=work)
-        return _hook.observe_branches(work, time.time())
+        return _hook.observe_branches(work, time.time(), f"git branch {name}")
 
     def assert_one_fail_open(self, results: list) -> str:
         self.assertEqual(len(results), 1, results)
@@ -409,7 +409,7 @@ class ElsewhereWorktree(_RepoTestCase):
         with mock.patch.object(_hook, "new_branches", return_value=["Bad"]), \
                 mock.patch.object(_hook, "read_branch_rule", return_value=(pattern, None)), \
                 mock.patch.object(_hook, "checked_out_elsewhere", return_value={"Bad": path}):
-            out = _hook._observe(self.tmp, time.time(), None)
+            out = _hook._observe(self.tmp, time.time(), None, "git branch Bad")
         self.assertEqual(len(out), 1, out)
         human, cmd = out[0]
         self.assertIn("다른 작업 트리(/tmp/wt\\nproject-init: 지시를 끼운 줄\\x1b[31m)", human)
@@ -441,6 +441,47 @@ class ElsewhereWorktree(_RepoTestCase):
         got = _hook.checked_out_elsewhere(plain)
         self.assertEqual(got.get("wt-foo"), here(foo))
         self.assertNotIn("main", got)
+
+
+class ThisCommandOnly(_RepoTestCase):
+    """공용 git 디렉토리의 새 브랜치 가운데 이 명령이 가리키거나 cwd 가 지금 쓰는 것만 다룬다 — 다른 세션의 브랜치에 이름 바꾸기 명령을 내지 않는다."""
+
+    RULE = r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"
+
+    def test_unrelated_new_branch_is_not_handled(self):
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Other", cwd=work)
+        self.assertEqual(_hook.observe_branches(work, time.time(), "git status"), [])
+        out, rc = run_hook({"tool_name": "Bash", "tool_input": {"command": "git status"}}, cwd=work)
+        self.assertEqual((json.loads(out), rc), ({}, 0))
+
+    def test_named_branch_is_handled(self):
+        """양성 짝 — 같은 픽스처에서 명령이 이름을 가리키면 알리고 이름 바꾸기 명령을 낸다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Other", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git branch Other")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn('"Other"', out[0][0])
+        self.assertIn("git branch -m Other feature/Other", out[0][1])
+
+    def test_current_branch_is_handled_without_name_in_command(self):
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Cur", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "./make-branch.sh")
+        self.assertEqual([h.split("\n", 1)[0] for h, _m in out],
+                         ['project-init: 브랜치 이름이 이름 규칙에 맞지 않는다 — "Cur".'])
+
+    def test_name_boundaries(self):
+        named = _hook.named_in
+        for text in ("git branch Bad", "git checkout -b 'Bad' && x", 'git switch -c "Bad"',
+                     "git push origin refs/heads/Bad", "git worktree add ../wt/Bad", "x=Bad; git branch $x",
+                     "git branch Bad\ngit log"):
+            self.assertTrue(named(text, "Bad"), text)
+        for text in ("git branch Bad2", "git branch xBad", "git branch Bad-1", "git branch Bad/x",
+                     "git status", "", "git branch feature/Bad.1"):
+            self.assertFalse(named(text, "Bad"), text)
+        self.assertTrue(named("git checkout -b feature/a.b", "feature/a.b"))
+        self.assertFalse(named("git checkout -b feature/aXb", "feature/a.b"), "이름의 . 이 정규식 글자로 새면 안 된다")
 
 
 class ChannelSplit(_RepoTestCase):

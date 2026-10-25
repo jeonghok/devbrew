@@ -114,11 +114,11 @@ hook Bash "$W" 'git checkout -b Bad15 && git commit -m "x"'; alerted Bad15 "git 
 
 echo "다른 작업 트리가 쓰는 브랜치 — 이름 바꾸기 명령을 내지 않는다"
 fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" branch BadPlain
-hook Bash "$W" "git branch BadPlain"
+hook Bash "$W" "git worktree add -b BadB $T/wtB$N && git branch BadPlain"
 elsewhere BadB "$T/wtB$N" "작업 트리 B 에서 쓰는 규칙 밖 브랜치 → 사람 채널에 B 경로 · 모델 채널에 명령 없음"
 alerted BadPlain "어디에서도 쓰지 않는 규칙 밖 브랜치 → 이름 바꾸기 명령(양성 짝)"
 fresh; git -C "$W" checkout -q -b BadMain; git -C "$W" worktree add -q --detach "$W/.claude/worktrees/x"
-hook Bash "$W/.claude/worktrees/x" "git worktree add --detach .claude/worktrees/x"
+hook Bash "$W/.claude/worktrees/x" "git checkout -b BadMain && git worktree add --detach .claude/worktrees/x"
 elsewhere BadMain "$W" "안에 중첩된 detached 작업 트리가 cwd · 바깥 main 작업 트리가 쓰는 규칙 밖 브랜치 → 명령 없음"
 mkdir -p "$T/wtfail"
 printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail/git"
@@ -141,9 +141,26 @@ echo "규칙 안 이름 · 옛 브랜치"
 fresh; git -C "$W" branch feature/ok
 hook Bash "$W" "git branch feature/ok"; quiet "규칙 안 이름 → 조용"
 fresh; git -C "$W" branch Old6; age_reflog "$W" Old6 61
-hook Bash "$W" "ls"; quiet "61초 전에 만든 규칙 밖 브랜치 → 다시 알리지 않음"
+hook Bash "$W" "git log Old6"; quiet "61초 전에 만든 규칙 밖 브랜치 → 다시 알리지 않음"
 fresh; git -C "$W" branch Old7; age_reflog "$W" Old7 30
-hook Bash "$W" "ls"; alerted Old7 "30초 전에 만든 규칙 밖 브랜치 → 알림(양성 짝)"
+hook Bash "$W" "git log Old7"; alerted Old7 "30초 전에 만든 규칙 밖 브랜치를 명령이 가리킴 → 알림(양성 짝)"
+
+echo "이 명령이 만들지 않은 브랜치 — 다른 세션의 것일 수 있어 다루지 않는다"
+# 옛 Old7 은 `ls` 뒤에도 30초 전 브랜치를 알리고 이름 바꾸기 명령까지 냈다 — 공용 git 디렉토리를
+# 보므로 다른 세션이 막 만든 브랜치의 이름을 이 세션 모델이 바꾸게 했다.
+fresh; git -C "$W" branch Other1; age_reflog "$W" Other1 30
+hook Bash "$W" "ls"; quiet "30초 전에 만든 규칙 밖 브랜치 · 이 명령은 가리키지 않음 · 지금 브랜치 아님 → 조용"
+fresh; git -C "$W" branch Other2
+hook Bash "$W" "git status"; quiet "방금 만든 규칙 밖 브랜치 · 이 명령과 무관(다른 세션) → 조용"
+fresh; git -C "$W" worktree add -q -b Other3 "$T/wtO$N"
+hook Bash "$W" "git status"; quiet "다른 작업 트리가 방금 만든 규칙 밖 브랜치 · 이 명령과 무관 → 조용"
+fresh; git -C "$W" branch Other4; git -C "$W" branch Mine4
+hook Bash "$W" "git branch Mine4"; alerted Mine4 "같은 때 둘 — 명령이 만든 Mine4 는 알림(양성 짝)"
+case "$OUT" in *Other4*) no "같은 때 둘 — 명령과 무관한 Other4 를 다뤘다 — $OUT" ;; *) ok "같은 때 둘 — 명령과 무관한 Other4 는 다루지 않음" ;; esac
+fresh; git -C "$W" branch Bad41
+hook Bash "$W" "git branch Bad4"; quiet "이름이 앞부분만 겹치는 명령(Bad4 ≠ Bad41) → 조용"
+fresh; git -C "$W" checkout -q -b Cur5; age_reflog "$W" Cur5 30
+hook Bash "$W" "ls"; alerted Cur5 "cwd 의 지금 브랜치(30초 전 만듦) → 명령 글에 없어도 이 세션의 것으로 알림"
 fresh; git -C "$W" switch -q --create Mov9; age_reflog "$W" Mov9 3600; git -C "$W" commit -q --allow-empty -m y
 hook Bash "$W" 'git commit -m "feat: y"'; quiet "마지막 줄이 커밋인 옛 브랜치 → 조용"
 
