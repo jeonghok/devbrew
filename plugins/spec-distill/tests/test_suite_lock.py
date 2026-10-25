@@ -157,6 +157,48 @@ class Lock(unittest.TestCase):
         self.assertLessEqual(len(calls), 2 * (sl.RESTORE_MAX + 1), "되돌리기가 상한을 넘어 돌았다")
         self.assertTrue(self.d.exists())
 
+    def _bounded(self, fn, seconds=10):
+        import signal
+
+        def boom(*_a):
+            raise AssertionError("take() 이 %d초 안에 끝나지 않았다(쉬지 않고 같은 자리를 돈다)" % seconds)
+        old = signal.signal(signal.SIGALRM, boom)
+        signal.alarm(seconds)
+        try:
+            return fn()
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+
+    def _unmovable_stale(self):
+        """주인 프로세스가 끝난 잠금 — 부모 폴더에 쓰기 권한이 없어 옮기지(rename) 못한다."""
+        self.own("%d gone t\n" % dead_pid())
+        os.chmod(str(self.d.parent), 0o555)
+        self.addCleanup(os.chmod, str(self.d.parent), 0o755)
+
+    def test_unmovable_stale_lock_stops_with_reason(self):
+        self._unmovable_stale()
+        with self.assertRaises(sl.Busy) as cm:
+            self._bounded(lambda: sl.take(self.d, "me", wait=0, say=lambda m: None))
+        self.assertIn("주인 없는 잠금을 옮기지 못했다", str(cm.exception))
+        self.assertIn("PermissionError", str(cm.exception))
+        self.assertTrue((self.d / "owner").is_file(), "옮기지 못한 잠금은 그대로다")
+
+    def test_unmovable_stale_lock_honours_wait_and_sleeps(self):
+        self._unmovable_stale()
+        poll, sleeps, real_sleep = sl.POLL, [], sl.time.sleep
+        sl.POLL = 0.2
+        self.addCleanup(setattr, sl, "POLL", poll)
+        sl.time.sleep = lambda x: (sleeps.append(x), real_sleep(x))
+        self.addCleanup(setattr, sl.time, "sleep", real_sleep)
+        said, start = [], time.time()
+        with self.assertRaises(sl.Busy):
+            self._bounded(lambda: sl.take(self.d, "me", wait=1, say=said.append))
+        self.assertGreaterEqual(time.time() - start, 0.9, "기다림 시간을 지킨다")
+        self.assertTrue(sleeps and all(x > 0 for x in sleeps), "다시 보기 전에 쉰다")
+        self.assertLessEqual(len(sleeps), 20, "쉬는 간격으로 돈다 — 바쁘게 돌지 않는다")
+        self.assertEqual(sum("옮기지 못했다" in m for m in said), 1, "기다리는 이유를 한 번 알린다: %r" % said)
+
     def test_describe_empty(self):
         self.assertEqual(sl.describe(self.d), "스위트 잠금: 비어 있음")
 

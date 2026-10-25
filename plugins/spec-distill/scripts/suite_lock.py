@@ -100,7 +100,7 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
     d.parent.mkdir(parents=True, exist_ok=True)
     label = " ".join(owner.split())
     deadline = time.time() + max(0.0, wait)
-    announced = False
+    announced = stuck = False
     restored = 0
     while True:
         try:
@@ -120,7 +120,15 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
             gone = d.parent / ("%s.stale-%d-%d" % (d.name, os.getpid(), int(time.time() * 1000)))
             try:
                 os.rename(str(d), str(gone))
-            except OSError:
+            except OSError as exc:   # 옮기지 못하면 바쁜 잠금처럼 기다림 상한 · 쉼을 지키고 이유를 알린다
+                why = "주인 없는 잠금을 옮기지 못했다(%s) — 잠금 폴더의 부모 권한을 확인하거나 사람이 지운다: %s" % (
+                    type(exc).__name__, describe(d))
+                if time.time() >= deadline:
+                    raise Busy(why)
+                if not stuck:
+                    say("[suite-lock] 기다린다(줄) — " + why)
+                    stuck = True
+                time.sleep(min(POLL, max(0.5, deadline - time.time())))
                 continue
             try:
                 moved = gone.stat()
