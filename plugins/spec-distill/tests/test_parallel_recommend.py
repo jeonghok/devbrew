@@ -21,6 +21,7 @@ import repo_defaults as rd  # noqa: E402
 import roadmap_status as rs  # noqa: E402
 import control_plane as cp  # noqa: E402
 import spec_review_bundle as sb  # noqa: E402
+from roadmap_model import DEFAULT_REF  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
 
@@ -370,6 +371,45 @@ E2_TABLE = _table("«e2e-k»", "K1")
 E2_HEAD = "### E2 plan/specs/E2-design.md(%s)"
 E2_BODY = "- E2 목표"
 NONE_LINE = "함께 진행된 에픽 없음"
+
+
+class IntentsBuildUnit(unittest.TestCase):
+    """build 의 갈래 가운데 실제 git 픽스처로 만들기 번거로운 것 — 가짜 git."""
+
+    def build(self, blocks, answers):
+        import review_intents as ri
+
+        def git_fn(*args):
+            for prefix, ans in answers:
+                if args[:len(prefix)] == prefix:
+                    return ans
+            return (1, "", "없음")
+        return ri.build({"blocks": blocks}, "E1", "f" * 40, git_fn)
+
+    def test_no_specs_falls_back_to_merge_base(self):
+        text, warns = self.build([{"id": "E1", "stage": "구현 중", "specs": []}],
+                                 [(("merge-base", DEFAULT_REF), (0, "a" * 40, ""))])
+        first = "기준을 세울 수 없어 갈라진 점(merge-base)으로 쟀다 — E1 의 설계문서 · 산출물이 없다"
+        self.assertEqual(text.splitlines()[:2], [first, NONE_LINE])
+        self.assertEqual(warns, [first])
+
+    def test_unreadable_unknown_and_docless(self):
+        blocks = [{"id": "E1", "stage": "구현 중", "specs": ["s/E1.md"]},
+                  {"id": "E2", "stage": "구현 중", "specs": ["s/E2.md"], "tip": "b" * 40},
+                  {"id": "E3", "stage": "알 수 없음", "reason": "로드맵 형식 깨짐", "specs": []},
+                  {"id": "E4", "stage": "설계 중", "specs": []}]
+        text, warns = self.build(blocks, [(("log",), (0, "c" * 40 + "\n", "")),
+                                          (("show",), (128, "", "fatal: 경로 없음\n둘째 줄"))])
+        lines = text.splitlines()
+        self.assertEqual(lines[0], "기준 커밋 cccccccc — E1 의 설계문서를 처음 더한 커밋")
+        self.assertIn("### E2 s/E2.md(열림)", lines)
+        self.assertIn("읽지 못함 — fatal: 경로 없음 둘째 줄", lines)
+        self.assertIn("### E3(열림)", lines)
+        self.assertIn("단계를 알 수 없다 — 로드맵 형식 깨짐", lines)
+        self.assertIn("### E4(열림)", lines)
+        self.assertIn("설계문서 없음", lines)
+        self.assertEqual(len(warns), 2, warns)
+        self.assertTrue(all("\n" not in w for w in warns), warns)
 
 
 class IntentsPack(RoadmapRepo):
