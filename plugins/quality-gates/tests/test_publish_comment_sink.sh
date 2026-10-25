@@ -47,6 +47,13 @@ esac
 exit 0
 EOF
 chmod +x "$T/bin/gh"
+# ssh 스텁: SSH 꼴 origin 의 호스트를 그대로 푼다(gh-repo.sh 가 `ssh -G` 로 별칭을 푼다 — 사용자의 ~/.ssh/config 와 무관하게).
+cat > "$T/bin/ssh" <<'EOF'
+#!/bin/sh
+for a in "$@"; do h="$a"; done
+printf 'hostname %s\n' "$h"
+EOF
+chmod +x "$T/bin/ssh"
 export GH_LOG="$T/gh.log" GH_BODY_COPY="$T/body.sent"
 
 # gh 가 없는 PATH — git · python3 만 링크로 둔다.

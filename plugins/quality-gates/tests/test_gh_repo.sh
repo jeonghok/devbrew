@@ -22,9 +22,26 @@ cat > "$T/bin/gh" <<'FAKE'
 printf '%s\n' "$*" >> "$FAKE_GH_ARGS"
 FAKE
 chmod +x "$T/bin/gh" || exit 1
+# 가짜 ssh: `ssh -G -- <호스트>` 에 ssh 설정을 푼 결과를 낸다(사용자의 ~/.ssh/config 와 무관하게).
+cat > "$T/bin/ssh" <<'FAKE'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_SSH_ARGS"
+for a in "$@"; do h="$a"; done
+case "$h" in
+  github-work) printf 'user git\nhostname github.com\nport 22\n' ;;
+  gh443) printf 'user git\nhostname ssh.github.com\nport 443\n' ;;
+  noresolve) echo "ssh: Could not resolve" >&2; exit 255 ;;
+  *) printf 'user git\nhostname %s\nport 22\n' "$h" ;;
+esac
+FAKE
+chmod +x "$T/bin/ssh" || exit 1
 for c in git tr; do ln -s "$(command -v "$c")" "$T/nogh/$c" || exit 1; done
-export FAKE_GH_ARGS="$T/args"
+mkdir -p "$T/nossh" || exit 1
+for c in git tr; do ln -s "$(command -v "$c")" "$T/nossh/$c" || exit 1; done
+ln -s "$T/bin/gh" "$T/nossh/gh" || exit 1
+export FAKE_GH_ARGS="$T/args" FAKE_SSH_ARGS="$T/sshargs"
 : > "$FAKE_GH_ARGS"
+: > "$FAKE_SSH_ARGS"
 FAKEPATH="$T/bin:$PATH"
 
 mkrepo() {  # mkrepo <이름> <origin URL|-> [<upstream URL>]
@@ -79,6 +96,37 @@ mkrepo alias gh:me/r || { no "픽스처 alias"; finish; exit 1; }
 git -C "$T/alias" config url.git@github.com:.insteadOf gh: || { no "픽스처 alias insteadOf"; finish; exit 1; }
 slug alias "$FAKEPATH"
 assert_eq "$RC:$OUT" "0:github.com/me/r" "insteadOf 로 바뀐 origin URL 을 읽는다"
+
+# ── SSH 설정의 별칭 호스트는 ssh -G 의 hostname 으로 푼다 ────────────────────
+for url in "git@github-work:o/r.git" "ssh://git@github-work/o/r.git" "ssh://git@github-work:22/o/r.git"; do
+  mkrepo sa "$url" || { no "픽스처 $url"; finish; exit 1; }
+  : > "$FAKE_SSH_ARGS"
+  slug sa "$FAKEPATH"
+  assert_eq "$RC:$OUT" "0:github.com/o/r" "SSH 별칭 ${url} → 실제 호스트 github.com/o/r"
+  assert_eq "$(cat "$FAKE_SSH_ARGS")" "-G -- github-work" "SSH 별칭 ${url} → ssh -G -- <별칭> 으로 푼다"
+done
+mkrepo s443 "git@gh443:o/r.git" || { no "픽스처 gh443"; finish; exit 1; }
+slug s443 "$FAKEPATH"
+assert_eq "$RC:$OUT" "0:github.com/o/r" "ssh.github.com(443 우회)은 gh 처럼 github.com 으로"
+mkrepo snr "git@noresolve:o/r.git" || { no "픽스처 noresolve"; finish; exit 1; }
+slug snr "$FAKEPATH"
+assert_eq "$RC:$OUT" "3:" "ssh -G 가 실패하면 rc 3 · stdout 비움"
+assert_contains "$(printf '%s\n' "$ERR" | tail -n 1)" "ssh -G -- noresolve" "푸지 못한 별칭과 확인할 명령을 알린다"
+slug sa "$T/nossh"
+assert_eq "$RC:$OUT" "3:" "ssh 가 없으면 SSH 꼴 origin 은 rc 3 · stdout 비움"
+assert_contains "$(printf '%s\n' "$ERR" | tail -n 1)" "ssh 가 없어" "ssh 없음을 알린다"
+mkrepo hs "https://github-work/o/r" || { no "픽스처 https 별칭"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug hs "$FAKEPATH"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github-work/o/r:" "https 꼴은 ssh 설정을 보지 않는다"
+# 옵션 주입: '-' 로 시작하거나 호스트 글자가 아닌 것은 ssh 에 넘기지 않는다
+for url in "-oProxyCommand=touch:o/r" "git@-oProxyCommand=x:o/r" "ssh://git@-oProxyCommand=x/o/r" "git@a%b:o/r"; do
+  mkrepo inj - || { no "픽스처 inj"; finish; exit 1; }
+  git -C "$T/inj" config remote.origin.url "$url" || { no "픽스처 $url"; finish; exit 1; }
+  : > "$FAKE_SSH_ARGS"
+  slug inj "$FAKEPATH"
+  assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "3::" "호스트 글자가 아닌 ${url} → rc 3 · ssh 를 부르지 않는다"
+done
 
 # ── 못 뽑는 URL · origin 없음 → rc 3 ─────────────────────────────────────────
 for url in "file:///x" "/srv/git/r.git" "https://github.com/r" "../r.git" "https://github.com/a/b/c" \

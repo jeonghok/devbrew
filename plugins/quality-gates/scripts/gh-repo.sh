@@ -7,7 +7,8 @@
 #
 # 멈춤(stdout 비움, 사유는 stderr 마지막 줄):
 #   exit 4 — gh 가 없다(origin 보다 먼저 본다)
-#   exit 3 — origin 이 없거나 URL 에서 호스트 · owner · repo 를 뽑지 못했다
+#   exit 3 — origin 이 없거나 URL 에서 호스트 · owner · repo 를 뽑지 못했다 · SSH 꼴 호스트를 `ssh -G` 로 풀지 못했다
+# SSH 꼴(ssh:// · scp 꼴)의 호스트는 ~/.ssh/config 별칭일 수 있어 `ssh -G` 의 hostname 으로 바꾼다(*.github.com → github.com).
 # GH_REPO · GH_HOST 가 설정돼 있으면 stderr 에 알림 한 줄씩(그래도 결과는 origin 이다).
 #
 # 사용 (리포 안에서): gh-repo.sh
@@ -34,10 +35,11 @@ url="$(git remote get-url origin 2>/dev/null)" || stop_slug
 url="${url#"${url%%[![:space:]]*}"}"
 url="${url%"${url##*[![:space:]]}"}"
 
+is_ssh=1
 case "$url" in
   *://*)
     scheme="$(printf '%s' "${url%%://*}" | LC_ALL=C tr 'A-Z' 'a-z')"
-    case "$scheme" in https|http|ssh) ;; *) stop_slug ;; esac
+    case "$scheme" in https|http) is_ssh=0 ;; ssh) ;; *) stop_slug ;; esac
     rest="${url#*://}"
     case "$rest" in */*) ;; *) stop_slug ;; esac
     hostport="${rest%%/*}"
@@ -55,6 +57,33 @@ case "$url" in
 esac
 
 host="$(printf '%s' "$host" | LC_ALL=C tr 'A-Z' 'a-z')"
+# 호스트 글자(영숫자 · '.' · '-')만, '-' 로 시작하지 않게 — ssh 인자로 넘어가도 옵션이 되지 못한다.
+case "$host" in ''|-*|*[!a-z0-9.-]*) stop_slug ;; esac
+
+# SSH 꼴(ssh:// · scp 꼴)은 ~/.ssh/config 의 별칭일 수 있다 — gh 는 -R 에 ssh 설정을 쓰지 않으므로
+# `ssh -G` 의 hostname 으로 푼다. *.github.com(ssh.github.com 443 우회 등)은 gh 처럼 github.com.
+if [ "$is_ssh" = 1 ]; then
+  if ! command -v ssh >/dev/null 2>&1; then
+    echo "origin 이 SSH 꼴(${host})인데 ssh 가 없어 실제 호스트로 풀지 못했다 — origin 을 https 꼴로 바꾸거나 ssh 를 설치한다" >&2
+    exit 3
+  fi
+  resolved=""
+  if sshcfg="$(ssh -G -- "$host" </dev/null 2>/dev/null)"; then
+    while read -r k v _; do
+      [ "$k" = hostname ] && { resolved="$v"; break; }
+    done <<EOF
+$sshcfg
+EOF
+  fi
+  resolved="$(printf '%s' "$resolved" | LC_ALL=C tr 'A-Z' 'a-z')"
+  case "$resolved" in
+    ''|-*|*[!a-z0-9.-]*)
+      echo "origin 의 SSH 호스트 ${host} 를 실제 호스트로 풀지 못했다 — ssh -G -- ${host} 의 hostname 을 확인한다" >&2
+      exit 3 ;;
+  esac
+  case "$resolved" in *.github.com) resolved=github.com ;; esac
+  host="$resolved"
+fi
 while :; do case "$path" in /*) path="${path#/}" ;; *) break ;; esac; done
 while :; do case "$path" in */) path="${path%/}" ;; *) break ;; esac; done
 case "$path" in *.git) path="${path%.git}" ;; esac
