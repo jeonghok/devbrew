@@ -157,14 +157,15 @@ def _inert(text):
 
 
 def _tail_reflog_lines(path):
-    """reflog 끝 8KB 의 온전한 줄들 — 한 명령이 만들기 뒤에 커밋 · 리셋 줄을 더 남길 수 있다."""
+    """reflog 끝 8KB 의 줄들 — 한 명령이 만들기 뒤에 커밋 · 리셋 줄을 더 남길 수 있다.
+
+    첫 줄은 앞이 잘렸을 수 있지만 버리지 않는다 — 잘림은 앞에서 생겨 시각 · 메시지는 남거나
+    (그대로 읽어도 옳다), 시각이 잘리면 너무 옛 시각이 되고, 메시지가 잘리면 탭이 없어 버려진다.
+    """
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
-        start = max(0, f.tell() - 8192)
-        f.seek(start)
+        f.seek(max(0, f.tell() - 8192))
         lines = f.read().split(b"\n")
-    if start > 0:
-        lines = lines[1:]  # 잘린 첫 줄은 시각 · 메시지를 잘못 읽게 한다
     return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()]
 
 

@@ -471,6 +471,20 @@ class ThisCommandOnly(_RepoTestCase):
         self.assertEqual([h.split("\n", 1)[0] for h, _m in out],
                          ['project-init: 브랜치 이름이 이름 규칙에 맞지 않는다 — "Cur".'])
 
+    def test_create_line_at_tail_boundary_is_kept(self):
+        # 끝 8KB 가 만들기 줄의 첫 글자에서 시작하면 그 줄은 온전하다 — 잘린 줄로 보고 버리면 안 된다.
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Big", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Big")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        old = head.rsplit(" ", 2)[0] + " 1000000000 +0000\tbranch: Created from HEAD\n"
+        room = 8192 - len(create.encode("utf-8")) - len(f"{head}\tcommit: \n".encode("utf-8"))
+        body = create + f"{head}\tcommit: " + "p" * room + "\n"
+        self.assertEqual(len(body.encode("utf-8")), 8192, "픽스처 전제: 만들기 줄부터 끝까지 정확히 8KB")
+        log.write_text(old + body, encoding="utf-8")
+        self.assertIn("Big", _hook.new_branches(work, time.time()))
+
     def test_name_boundaries(self):
         named = _hook.named_in
         for text in ("git branch Bad", "git checkout -b 'Bad' && x", 'git switch -c "Bad"',
