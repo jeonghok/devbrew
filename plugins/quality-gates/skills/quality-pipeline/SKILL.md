@@ -1597,7 +1597,7 @@ printf '%s\n' "$line"
 
 `skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `pr-mismatch` · `kill-switch` ·
 `scan-failed` · `gh-unavailable` · `too-long` · `aborted` 중 하나다. `failed: <사유>` 는 실패다 — `gh-unavailable`(gh 가 없다) ·
-`no-origin`(origin 이 없거나 그 URL 에서 레포를 못 읽거나 gh 가 그 레포를 다루지 못한다)이라 코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink
+`gh-unauthenticated`(gh 가 로그인돼 있지 않다 — `gh auth login`) · `no-origin`(origin 이 없거나 그 URL 에서 레포를 못 읽거나 gh 가 그 레포를 다루지 못한다)이라 코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink
 stderr 의 설치 · 확인 안내 줄을 그대로 보인다. 판정은 이미 났으므로
 바뀌지 않는다. `scan-failed` 면 sink 가 stderr 로 낸 finding
 (값은 가려져 있다)을 그대로 보이고 이해글을 고쳐 다시 게시하지 않는다 — 다음 `/quality-gates:quality-pipeline` 실행이 다시 쓴다.

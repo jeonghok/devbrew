@@ -189,7 +189,8 @@ case_AC13_gh_unavailable() {
     p6_single_result_line gh-absent
   fi
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
-  assert_eq "$LAST" "skipped: gh-unavailable" "AC13 미인증: 마지막 줄"
+  assert_eq "$RC:$LAST" "1:failed: gh-unauthenticated" "미인증: 건너뜀이 아니라 gh 없음과 다른 이름의 실패(rc 1)"
+  p6_single_result_line gh-unauthenticated
   assert_eq "$GHCALLS" "auth status --active" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
   grep -qF 'stub-auth-detail' "$T/err" \
     && ok "R3: 미인증이면 gh 자신의 stderr 꼬리를 보인다" || no "R3: gh 의 인증 오류가 stderr 에 없다 — $(head -n 3 "$T/err")"
