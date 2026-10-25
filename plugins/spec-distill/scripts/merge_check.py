@@ -163,6 +163,21 @@ def drop_copy(root: Path, d: Path, work: Path) -> None:
         print("[spec-distill] 일회용 사본을 git 으로 지우지 못해 폴더만 지웠다 — 남은 기록은 사용자가 정리한다(%s)" % d)
 
 
+def drop_leftovers(work: Path, keep: Path) -> None:
+    """남긴 사본 밖의 실행 폴더 항목(테스트 임시 폴더 · 행 파일 · 배정)을 지운다 — 사본은 `ledger cleanup` 이 지운다."""
+    for child in list(work.iterdir()):
+        if child == keep:
+            continue
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(str(child))
+            else:
+                child.unlink()
+        except OSError as exc:
+            print("[spec-distill] 스위트 대조의 임시 항목을 지우지 못했다(%s: %s) — 남은 것은 사용자가 정리한다"
+                  % (type(exc).__name__, child))
+
+
 # ── 테스트 명령 ──────────────────────────────────────────────────────────────
 
 def run_command(cmd: str, tree: Path, tmp: Path):
@@ -435,6 +450,8 @@ def run(root: Path, a) -> int:
                 drop_copy(root, d, work)
         if keep is None:
             shutil.rmtree(str(work), ignore_errors=True)
+        elif work.is_dir():
+            drop_leftovers(work, keep)
         drop_lock(lock)
 
 

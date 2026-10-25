@@ -340,6 +340,9 @@ class Resources(Repo):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         mc = self._mdir() / "merge-check"
         (mc / "run-x").mkdir(parents=True)
+        (mc / "run-x" / "tmp-merged").mkdir()   # 옛 판이 남긴 실행 폴더의 찌꺼기 — 사본과 함께 지운다
+        (mc / "run-x" / "units.assign").write_text("x", encoding="utf-8")
+        (mc / "run-y").mkdir()                  # 다른 실행 폴더는 건드리지 않는다
         copy = mc / "run-x" / "merged"
         sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
         (copy / "dirty.txt").write_text("x", encoding="utf-8")
@@ -353,6 +356,21 @@ class Resources(Repo):
             self.assertEqual(rc, 0, out)
             self.assertFalse(p.exists())
         self.assertEqual(self._rows(), [])
+        self.assertFalse((mc / "run-x").exists(), "합친 사본을 지우면 그 실행 폴더(임시 폴더 · 결과)도 지운다")
+        self.assertTrue((mc / "run-y").is_dir(), "다른 실행 폴더는 그대로다")
+
+    def test_cleanup_keeps_run_folder_with_another_copy(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        run = self._mdir() / "merge-check" / "run-x"
+        run.mkdir(parents=True)
+        copy, other = run / "merged", run / "base"
+        for p in (copy, other):
+            sh(self.w, "worktree", "add", "-q", "--detach", str(p), "trunk")
+        self._row(copy)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(copy))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(copy.exists())
+        self.assertTrue(other.is_dir(), "남은 사본(등록된 worktree)이 있으면 실행 폴더를 지우지 않는다")
 
     def test_cleanup_refuses_symlink_and_non_worktrees(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)

@@ -754,6 +754,13 @@ def c_cleanup(root, a) -> int:
             rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
             if rc:
                 raise Fail(3, "스위트 대조 사본을 지우지 못했다: %s" % err)
+        run = path.resolve().parent   # 실행 폴더(run-<ts>) — 남은 사본이 없으면 임시 폴더 · 결과와 함께 지운다
+        if run.is_dir() and not any((run / n).exists() for n in ("base", "merged")):
+            try:
+                shutil.rmtree(str(run))
+            except OSError as exc:
+                print("[spec-distill] 스위트 대조 실행 폴더를 지우지 못했다(%s) — 남은 것은 사용자가 정리한다: %s"
+                      % (type(exc).__name__, run))
     elif kind == "pack":
         if path.exists():
             try:

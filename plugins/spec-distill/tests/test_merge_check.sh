@@ -267,6 +267,7 @@ W="$T/ut"; out="$(mc --branch feature/ut --keep-merged)"; rc=$?
 kept="$(printf '%s\n' "$out" | sed -n 's/^남긴 사본: //p')"
 [ -n "$kept" ] && [ -d "$kept" ] && ok "사본 남기기: 경로가 있다" || no "사본 남기기: 남긴 사본이 없다"
 assert_eq "$(git -C "$W" worktree list | wc -l | tr -d ' ')" "2" "사본 남기기: 합친 사본 하나만 남는다"
+assert_eq "$(ls -A "$(dirname "$kept")" | tr '\n' ' ')" "merged " "사본 남기기: 실행 폴더에는 합친 사본만 남는다(임시 폴더 · 결과 파일은 지운다)"
 g remote set-head origin -d
 out="$(mc --branch feature/ut)"; rc=$?
 assert_eq "$rc" "3" "origin/HEAD 없음 → rc 3"
