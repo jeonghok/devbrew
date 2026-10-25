@@ -72,20 +72,46 @@ def extract_text(stream):
     return text
 
 
-def degrade(reason):
+def degrade(reason, exit_code=None, stderr_head=""):
     print("codex_failed: true")
     print(f"reason: {reason}")
+    if exit_code is not None:
+        print(f"exit_code: {exit_code}")
+    if stderr_head:
+        print(f"stderr_head: {json.dumps(stderr_head, ensure_ascii=False)}")
     return 0
+
+
+STDERR_HEAD_MAX = 200
+
+
+def first_stderr_line(path):
+    """codex stderr 의 첫 비어 있지 않은 줄 — codex_findings_to_yaml.stderr_head 와 같은 규칙(출력 못 할 글자는 `?`,
+    STDERR_HEAD_MAX 자에서 자름 — 비밀이 섞일 수 있다). 읽지 못하면 빈 문자열."""
+    if not path:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return ""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s:
+            return "".join(c if c.isprintable() else "?" for c in s)[:STDERR_HEAD_MAX]
+    return ""
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--meta-override-exit-code", type=int, default=0)
     ap.add_argument("--meta-override-reason", default="")
+    ap.add_argument("--stderr-file", default="")
     a = ap.parse_args()
 
     if a.meta_override_exit_code != 0:
-        return degrade(a.meta_override_reason or "exit_nonzero")
+        return degrade(a.meta_override_reason or "exit_nonzero", a.meta_override_exit_code,
+                       first_stderr_line(a.stderr_file))
 
     text = extract_text(sys.stdin.read())
     if not text:

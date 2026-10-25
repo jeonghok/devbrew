@@ -185,6 +185,18 @@ def _yaml_scalar(v: Any) -> str:
     return s
 
 
+STDERR_HEAD_MAX = 200
+
+
+def stderr_head(text: str) -> str:
+    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?` 로, STDERR_HEAD_MAX 자에서 자른다."""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s:
+            return "".join(c if c.isprintable() else "?" for c in s)[:STDERR_HEAD_MAX]
+    return ""
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--stderr-file", default=None)
@@ -219,6 +231,11 @@ def main() -> int:
         if args.meta_override_reason:
             meta["reason"] = args.meta_override_reason
             meta["codex_failed"] = True
+        # codex 가 0 아닌 종료로 끝났으면 왜 죽었는지 stderr 첫 줄을 meta 에만 남긴다(비밀이 섞일 수 있어 자른다).
+        if args.meta_override_exit_code:
+            head = stderr_head(stderr_text)
+            if head:
+                meta["stderr_head"] = head
         # AC9(d): surface stderr file read errors for caller visibility.
         if _stderr_read_error is not None:
             meta["stderr_read_error"] = _stderr_read_error
