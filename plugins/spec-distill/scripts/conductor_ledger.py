@@ -40,7 +40,6 @@ import branch_tip  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import gh_repo  # noqa: E402
 import repo_defaults  # noqa: E402
-import review_intents  # noqa: E402
 import suite_lock  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
                            RULINGS_HEADING, FormatError, approval_date, blob_reader, find_roadmaps, parse_roadmap,
@@ -1277,6 +1276,7 @@ def c_review_pack(root, a) -> int:
         handoffs = "(%s)" % exc
         warns.append(str(exc))
     put("handoffs.md", handoffs + "\n")
+    import review_intents  # 상태 계산을 끌어오므로 늦게 불러온다
     try:
         intents, more = review_intents.build(_status(root, a.roadmap), a.epic, tip, lambda *args: git(root, *args))
         warns.extend(more)
