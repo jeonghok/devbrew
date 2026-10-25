@@ -352,6 +352,17 @@ class NeighborDecisions(RoadmapRepo):
         self.assertTrue(any(l.startswith("  이 에픽에 의존: E2 ") for l in lines), lines)
         self.assertFalse(any("함께 진행 중" in l for l in lines), lines)
 
+    def test_format_error_roadmap_degrades_with_notice(self):
+        self.roadmap(TWO)
+        path = os.path.join(self.w, "plan", "rm", "roadmap.md")
+        text = Path(path).read_text(encoding="utf-8")
+        Path(path).write_text(text.replace("- 의존: 없음\n", "- 의존: 없음\n- 의존: 없음\n", 1), encoding="utf-8")
+        self.git(self.w, "commit", "-am", "형식 깨뜨림")
+        self.git(self.w, "push", "origin", "trunk")
+        self.assertTrue(self.status()["format_errors"])
+        lines = self.neighbors()
+        self.assertTrue(any("로드맵 상태 검사 불가" in l or "보일 수 없다" in l for l in lines), lines)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,7 +108,7 @@ def neighbors(bundle: str, root: str) -> list:
     out = ["로드맵 속 위치 — %s" % rel, "  " + _line(me)]
     out += ["  의존: " + _line(blocks[d]) for d in deps]
     out += ["  이 에픽에 의존: " + _line(blocks[d]) for d in dependents]
-    together = [p["id"] for p in me.get("parallel", []) if p["id"] in blocks and blocks[p["id"]]["specs"]]
+    together = [p["id"] for p in (me.get("parallel") or []) if p["id"] in blocks and blocks[p["id"]]["specs"]]
     out += ["  함께 진행 중: " + _line(blocks[t]) for t in together]
     if problems:
         out.append("  로드맵 상태 검사 불가 %d개 — 위 단계가 틀릴 수 있다: %s" % (len(problems), " · ".join(problems)))
