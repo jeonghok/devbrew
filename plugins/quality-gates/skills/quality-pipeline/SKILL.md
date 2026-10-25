@@ -204,7 +204,7 @@ reviewers, and it never lowers or skips a finding.
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic)
  │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝
  │   ①' 리뷰 축 합성  Review Step 3.9 — 리뷰 결과 줄(qg-verdict-args:)을 낸다
- │   ② 차등 테스트  Differential test — 끝에 차등 결과 줄을 낸다
+ │   ② 차등 테스트  Differential test — 영향받는 테스트만 (전체 스위트가 아니다) 기준선 대비로 돌리고, 끝에 차등 결과 줄을 낸다
  │   ③ 합성 · 판정  Review Step 4 · 4.5
  │   막는 지적 또는 차등 defect → Fix-loop (고치고 다시 돌기(Retry) / 지금 판정으로 끝내기 / 멈추기)
  │       Retry: 「적용」 항목만 고치고 「제외」는 기록 → 다음 iteration
