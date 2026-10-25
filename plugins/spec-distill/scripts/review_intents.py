@@ -39,7 +39,25 @@ def _base(report: dict, epic: str, tip: str, git_fn):
     return out.strip(), line, line
 
 
-def _excluded(b: dict, base, git_fn) -> bool:
+def _first_parent_line(git_fn):
+    """기본 브랜치 첫째 부모 줄의 커밋들(새것 먼저). 읽지 못하면 None."""
+    rc, out, _e = git_fn("rev-list", "--first-parent", DEFAULT_REF)
+    return out.split() if rc == 0 and out.strip() else None
+
+
+def _entry(tip: str, line: list, git_fn):
+    """끝이 기본 브랜치에 처음 든 커밋 — 끝이 첫째 부모 줄에 있으면(빨리 감기) 끝 자체, 아니면 줄에서 끝의 자손인
+    가장 오래된 커밋(머지 커밋). 끝이 기본 브랜치에 없거나 읽지 못하면 None."""
+    if tip in line:
+        return tip
+    rc, out, _e = git_fn("rev-list", "--ancestry-path", "%s..%s" % (tip, DEFAULT_REF))
+    if rc:
+        return None
+    after = set(out.split())
+    return next((c for c in reversed(line) if c in after), None)
+
+
+def _excluded(b: dict, base, git_fn, line_memo: list) -> bool:
     """이 에픽 설계 전에 끝난 바탕인가 — 하나라도 확인하지 못하면 아니다(싣는다)."""
     specs = list(b.get("specs") or [])
     states = list(b.get("branch_states") or [])
@@ -50,7 +68,10 @@ def _excluded(b: dict, base, git_fn) -> bool:
     for s in states:
         if not s.get("merged") or not s.get("tip"):
             return False
-        if git_fn("merge-base", "--is-ancestor", s["tip"], base)[0] != 0:
+        if not line_memo:
+            line_memo.append(_first_parent_line(git_fn))
+        entry = _entry(s["tip"], line_memo[0], git_fn) if line_memo[0] else None
+        if entry is None or git_fn("merge-base", "--is-ancestor", entry, base)[0] != 0:
             return False
     return True
 
@@ -93,9 +114,9 @@ def build(report: dict, epic: str, tip: str, git_fn) -> tuple:
     base, first, warn = _base(report, epic, tip, git_fn)
     if warn:
         warns.append(warn)
-    body = []
+    body, line_memo = [], []
     for b in report.get("blocks") or []:
-        if b.get("id") == epic or b.get("stage") in NOT_STARTED or _excluded(b, base, git_fn):
+        if b.get("id") == epic or b.get("stage") in NOT_STARTED or _excluded(b, base, git_fn, line_memo):
             continue
         body += _section(b, git_fn, warns)
     if not body:

@@ -508,6 +508,35 @@ class IntentsPack(RoadmapRepo):
         text, _o = self.intents()
         self.assertIn(E2_HEAD % "열림", text)
 
+    def test_stacked_then_merged_is_included(self):
+        # E2 끝은 E1 기준의 조상이지만, 기본 브랜치에 든 것(머지 커밋)은 기준 뒤다 — 함께 진행됐다
+        self.start_design("E2", extra=E2_TABLE)
+        self.start_design("E1", extra=E1_TABLE, base="work/e2")
+        self.merge("E2")
+        self.assertEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertIn(E2_HEAD % "머지됨", text)
+
+    def test_fast_forward_before_design_is_excluded(self):
+        # 머지 커밋 없이 기본 브랜치 첫째 부모 줄에 든 끝 — 그 끝 자체가 기본 브랜치에 든 커밋이다
+        self.start_design("E2", extra=E2_TABLE)
+        self.git(self.w, "merge", "--ff-only", "work/e2")
+        self.git(self.w, "push", "origin", "trunk")
+        self.git(self.w, "fetch", "origin")
+        self.start_design("E1", extra=E1_TABLE)
+        # 상태 계산은 조상 관계만으로 머지됨을 내지 않는다(PR 캐시가 있을 때 머지됨) — 그 판정을 보고서에 얹어 build 를 직접 부른다
+        import conductor_ledger as L
+        import review_intents as ri
+        report = self.status()
+        e2 = next(b for b in report["blocks"] if b["id"] == "E2")
+        e2["stage"] = "머지됨"
+        for s in e2["branch_states"]:
+            s["merged"] = "PR #1 머지됨"
+        tip = self.git(self.w, "rev-parse", "work/e1").strip()
+        text, _w = ri.build(report, "E1", tip, lambda *a: L.git(self.w, *a))
+        self.assertNotIn("### E2", text)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+
     def test_stacked_then_more_work_merged_is_included(self):
         e2 = self.start_design("E2", extra=E2_TABLE)
         self.start_design("E1", extra=E1_TABLE, base="work/e2")
