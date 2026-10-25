@@ -33,8 +33,15 @@ class CompletionReportTest(unittest.TestCase):
     def test_last_line_is_one_next_action(self):
         self.assertEqual(
             self.block[-1],
-            "> 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.")
+            "> 다음 할 일: 이 파일들을 커밋해 기본 브랜치에 머지하라 — 훅은 브랜치 이름 규칙을 기본 브랜치"
+            "(`origin/HEAD`) 판에서 읽어서, 머지 전에는 새 브랜치 이름을 확인하지 않고 「규칙을 찾지 못했다」고만 알린다.")
         self.assertEqual(sum(1 for ln in self.block if ln.startswith("> 다음 할 일:")), 1)
+
+    def test_no_promise_of_check_before_merge(self):
+        """셋업 직후 규칙 파일은 기본 브랜치에 없다 — 훅이 바로 확인한다고 약속하지 않는다."""
+        joined = "\n".join(self.block)
+        self.assertIn("> 다음 할 일:", joined, "보고 블록에 할 일 줄이 없다 — 아래 부재 단언이 공허하다")
+        self.assertNotIn("이름을 바로 확인한다", joined)
 
     def test_old_lines_are_gone(self):
         joined = "\n".join(self.block)

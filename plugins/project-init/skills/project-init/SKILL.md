@@ -317,4 +317,4 @@ placeholder 치환 매핑:
 > git 규칙을 그대로 뒀다면: 브랜치 전략과 git 규칙 파일은 바꾸지 않았다 — 위 git 항목은 해당 없다. CLAUDE.md 에서 옮겼다면 기존 `## Git Workflow` 를 바꾸지 않고 AGENTS.md 로 옮겼다.
 > 헌장 절을 옮겼다면: CLAUDE.md 에 있던 `## Project Charter` 를 AGENTS.md 로 옮겼다.
 > 옮기지 않은 절이 있다면: CLAUDE.md 의 `<절>` 은 AGENTS.md 에 이미 있어 옮기지 않았다 — CLAUDE.md 가 포인터로 바뀌며 사라졌다. `<절>` 자리에는 `## Project Charter` 또는 `## Git Workflow` 를 쓴다.
-> 다음 할 일: 새 브랜치를 하나 만들어 보라 — `git checkout -b feature/<이름>` 이면 훅이 이름을 바로 확인한다.
+> 다음 할 일: 이 파일들을 커밋해 기본 브랜치에 머지하라 — 훅은 브랜치 이름 규칙을 기본 브랜치(`origin/HEAD`) 판에서 읽어서, 머지 전에는 새 브랜치 이름을 확인하지 않고 「규칙을 찾지 못했다」고만 알린다.
