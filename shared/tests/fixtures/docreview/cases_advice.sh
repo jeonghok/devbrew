@@ -961,6 +961,26 @@ case_closed_log_after_close_vs_after_begin() {
     rm -rf "$d"
   done
 }
+case_count_line_fresh_ledger_same_doc() {
+  # 원장을 지우고(RECOVER 의 상태 폴더 지우기) 같은 문서를 처음부터 다시 리뷰하면 라운드 번호가 겹친다 — 새 원장의 계수 줄을
+  # 조용히 건너뛰지 않고(겹침을 택한다), 그 줄을 새 원장의 엔진 줄로 세어 닫힌 뒤의 손 줄을 다시 묻지 않는다.
+  local d out
+  d="$(cl_closed existing)"
+  assert_eq "$(grep -c '^- docreview 계수 — ' "$d/doc.md")" "1" "새 원장 전제: 첫 리뷰가 계수 줄 하나를 썼다"
+  find "$d" -mindepth 1 -maxdepth 1 ! -name doc.md -exec rm -rf {} +
+  assert_eq "$(ls -A "$d")" "doc.md" "새 원장 전제: 상태 폴더에 문서만 남았다"
+  py docreview_state.py init --state-dir "$d" --doc "$d/doc.md" --profile "$PROF_MC/design-doc.md" >/dev/null
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin.json"
+  out="$(py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md")"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["logged_rounds"]')" "[1]" "새 원장: 앞 리뷰가 쓴 같은 라운드 번호가 있어도 새 원장의 계수 줄을 건너뛰지 않는다"
+  assert_eq "$(grep -c '^- docreview 계수 — ' "$d/doc.md")" "2" "새 원장: 앞 리뷰의 계수 줄과 새 원장의 계수 줄이 둘 다 있다(겹침)"
+  out="$(py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md")"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["logged_rounds"]') $(grep -c '^- docreview 계수 — ' "$d/doc.md")" "[] 2" "새 원장: 같은 원장의 두 번째 호출은 다시 적지 않는다(멱등)"
+  doc_append "$d/doc.md" "$CL_H1"
+  br "$d" "$d/doc.md"; cl_finish "$d" "$d/fin2.json"
+  assert_eq "$(cl_frozen "$d/fin2.json")" "[]" "새 원장: 닫힌 뒤 결정 기록 끝에 더한 손 줄을 「허가 없이 바뀜」 으로 다시 묻지 않는다"
+  rm -rf "$d"
+}
 case_closed_log_inserted_above_count_asks() {
   local d cnt
   d="$(cl_closed existing)"; cnt="$(grep '^- docreview 계수 — ' "$d/doc.md")"

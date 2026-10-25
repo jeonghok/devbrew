@@ -242,8 +242,11 @@ def _empty(doc, profile):
         "fixes": {}, "asks": {}, "permits": {}, "applied_scopes": [],
         "decision_log": [], "rounds": {}, "pending_recritic": None,
         "rejected_lineages": {}, "escalated": [], "reraise": [],
-        "engine_lines": [], "engine_lines_since": 0,
+        "engine_lines": [], "engine_lines_since": 0, COUNT_LOGGED: [],
     }
+
+
+COUNT_LOGGED = "count_logged"   # 이 원장이 계수 줄을 쓴 (파일, 라운드) — 계수 줄 멱등의 기준(`_count_logged_here`)
 
 
 def state_path(state_dir) -> Path:
@@ -2636,8 +2639,10 @@ def cmd_advice(a) -> int:
             for k in sorted(st["rounds"], key=int):
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
-                if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
+                if "advice_new" in rep and not _count_logged_here(st, path, have, ident, int(k)):
                     engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True, kind="count")
+                    if isinstance(st.get(COUNT_LOGGED), list):
+                        st[COUNT_LOGGED].append(_count_record(path, int(k)))
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
             if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다
@@ -2657,6 +2662,21 @@ def cmd_advice(a) -> int:
     if not a.render:   # --sink · --log-file 만 준 호출 — 한 일을 JSON 으로 알린다
         _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
+
+
+def _count_record(path, rnd) -> str:
+    return "%s#r%d" % (doc_identity(str(path)), rnd)
+
+
+def _count_logged_here(st, path, text, ident, rnd) -> bool:
+    """이 원장이 그 파일에 (리뷰 정체, 라운드) 계수 줄을 이미 썼는가. 리뷰 정체는 문서마다 하나라 원장을 지우고 같은 문서를
+    처음부터 다시 리뷰하면 앞 리뷰가 쓴 같은 키의 줄이 파일에 남아 있다 — 그 줄은 이 원장의 것이 아니므로 건너뛰지 않고
+    겹쳐 쓴다(건너뛰면 새 원장에 계수 엔진 줄이 없어 닫힌 뒤의 손 줄을 다시 묻는다). 판정은 원장의 `count_logged` 기록이다.
+    그 기록이 없는 옛 원장은 파일의 키로 본다."""
+    rec = st.get(COUNT_LOGGED)
+    if not isinstance(rec, list):
+        return _adv.has_count_line(text, ident, rnd)
+    return _count_record(path, rnd) in rec
 
 
 def cmd_gate_rows(a) -> int:

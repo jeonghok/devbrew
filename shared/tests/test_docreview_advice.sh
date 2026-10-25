@@ -71,6 +71,7 @@ case_advice_count_line_nested_log
 case_advice_render_where_label
 # AC11 — 리뷰가 닫힌 뒤 결정 기록 끝의 손 줄.
 case_closed_log_after_close_vs_after_begin
+case_count_line_fresh_ledger_same_doc
 case_closed_log_inserted_above_count_asks
 case_closed_log_other_section_asks
 case_closed_log_old_ledger_asks
