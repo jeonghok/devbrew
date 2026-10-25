@@ -30,7 +30,7 @@ nb_block() {  # nb_block <id> <의존> <경로 예약>
 }
 { printf -- '---\ntype: roadmap\nsource_brief: docs/nb/brief.md\n---\n\n# 이웃 로드맵\n\n## 에픽\n\n'
   nb_block R1 없음 없음; nb_block R3 R1 "src/shared.txt"; nb_block R4 없음 "src/shared.txt"
-  nb_block R5 R3 없음; nb_block R6 없음 없음
+  nb_block R5 R3 없음; nb_block R6 R5 없음
   printf '## 결정 기록\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 이웃이 안 보인다 — 없음 [RC1]\n'
 } > "$W/docs/rm/roadmap.md"
 g add -- docs && g commit -qm "이웃 로드맵" && g push -q origin main
@@ -102,7 +102,7 @@ assert_grep "$nbr" '^  이 에픽에 의존: R5 이웃 R5 — ' "AC14: 이 에�
 assert_contains "$nbr" "    - B1 · 결정 · 2026-10-15 · 첫 결정 — 「그대로 (권장)」" "AC14: 의존 이웃의 사용자 결정 줄을 그대로"
 assert_contains "$nbr" "  R4 — 결정 줄 없음 — docs/superpowers/specs/r4-design.md" "AC14: 경로 예약이 겹치는 이웃(결정 줄 없음)"
 assert_not_contains "$nbr" "보이지 않는 줄" "AC14: 결정 줄(B<n> · 결정)이 아닌 줄은 내지 않는다"
-assert_not_contains "$nbr" "무관한 이웃" "AC14: 의존도 겹침도 없는 R6 은 내지 않는다"
+assert_not_contains "$nbr" "무관한 이웃" "AC14: 의존도 겹침도 병렬도 아닌 R6(R5 에 의존) 은 내지 않는다"
 g show feature/r6:docs/superpowers/specs/r6-design.md | grep -q 'B9 · 결정' && ok "양성 대조: R6 설계문서에는 결정 줄이 있다 — 위 부재가 공허하지 않다" || no "양성 대조: R6 설계문서에 결정 줄이 없다 — 위 부재 단언이 공허하다"
 nbr="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/nb/brief.md --root "$W")"
 assert_eq "$nbr" "" "AC14: brief 로 불리면 내지 않는다"

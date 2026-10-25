@@ -29,7 +29,7 @@ import roadmap_status as rs  # noqa: E402
 from roadmap_model import FormatError, frontmatter, section_body, unquote  # noqa: E402
 
 KINDS = ("epic-bundle", "interview-brief")
-DECISION_LINE_RE = re.compile(r"- B\d+ · 결정 · ")
+DECISION_LINE_RE = re.compile(r"- (?:[BU]\d+ · 결정 · |D\d+\.\d+ · )")
 REJECTED_HEAD = "이 설계가 받지 않기로 한 번호(번호 대조의 기각)"
 
 
@@ -108,10 +108,12 @@ def neighbors(bundle: str, root: str) -> list:
     out = ["로드맵 속 위치 — %s" % rel, "  " + _line(me)]
     out += ["  의존: " + _line(blocks[d]) for d in deps]
     out += ["  이 에픽에 의존: " + _line(blocks[d]) for d in dependents]
+    together = [p["id"] for p in (me.get("parallel") or []) if p["id"] in blocks and blocks[p["id"]]["specs"]]
+    out += ["  함께 진행 중: " + _line(blocks[t]) for t in together]
     if problems:
         out.append("  로드맵 상태 검사 불가 %d개 — 위 단계가 틀릴 수 있다: %s" % (len(problems), " · ".join(problems)))
     overlap = {x for o in report["overlaps"] if epic in o["blocks"] for x in o["blocks"] if x != epic}
-    near = set(deps) | set(dependents) | overlap
+    near = set(deps) | set(dependents) | overlap | set(together)
     main, _name = git.default_branch()
     dec = []
     for b in report["blocks"]:

@@ -53,6 +53,7 @@
 ```text
 너는 <에픽> 의 계획 agent 다. 자리: 네 worktree 에서 git switch --ignore-other-worktrees <브랜치> 로 그 브랜치에 선다(작업 기록 백업: <백업 경로 | 없음>) — 또는 <에픽 worktree 절대경로>(지휘 세션이 그 자리에 머문 채 보낼 때). origin/<브랜치> 가 앞서 있으면 git merge --ff-only origin/<브랜치> 로 맞춘 뒤 일한다(ff 가 안 되면 멈추고 보고한다). 네 worktree 밖의 git 은 조작하지 않는다. 복합 셸 명령은 스크립트 파일로 돌린다.
 흐름: <고른 흐름> — <이유>. 입력: 설계문서 <설계문서 절대경로>. 승인 게이트가 낸 계획 agent 의 입력 줄: <그 줄 그대로>.
+계획의 첫 과제는 가벼운 다시 확인이다 — 설계문서가 근거로 든 자리가 지금 코드에서도 그런지 보고, 달라졌으면 멈춰 보고한다.
 superpowers:writing-plans 를 단일 세션과 똑같이, 단계를 빼거나 다시 쓰지 말고 끝까지 돈다. 계획을 커밋한 뒤
 python3 "<SD>"/scripts/check_bundle_coverage.py --plan <설계문서> <계획>[ --acs "<이 계획 몫 AC>"] 를 돌려 빠진 AC 를 계획에 더하고 그 첫 줄을 보고한다.
 writing-plans 가 끝에 묻는 질문(계획 검토 · 실행 방식)에서 멈추고 (a) 사람에게 보일 쉬운 요약 (b) 질문 원문을 함께 돌려보낸다.

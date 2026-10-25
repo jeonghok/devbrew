@@ -2,7 +2,7 @@
 # 작업공간 불변 락(R8 AC27 · §9)과 devbrew 밖 레포 회귀 픽스처(R8 AC29 — upstream 원격이 있는 fork · `-suffix` 판 문자열 포함).
 #
 # 불변 락: 한 레포의 서로 다른 브랜치 worktree 둘(한쪽은 로드맵 · 레포 설정 파일을 고쳐 자기 브랜치에만 커밋)에서
-# 해결자 `get`(아홉 키 · 로드맵 층 포함) · 로드맵 찾기 · 상태 계산 JSON 의 stdout · stderr · rc 가 바이트까지 같다.
+# 해결자 `get`(열 키 · 로드맵 층 포함) · 로드맵 찾기 · 상태 계산 JSON 의 stdout · stderr · rc 가 바이트까지 같다.
 # 비교에서 빼는 것은 `read_tree` 가 「이 작업공간」인 칸 하나다. 양성 대조: 설정이 다른 두 레포는 다른 답을 낸다.
 #
 # 한계: 기본 브랜치를 개명한 뒤 `git fetch` 만 하고 `--prune` 하지 않으면 옛 원격 브랜치가 남아 origin/HEAD 가
@@ -27,7 +27,7 @@ T="$(cd "$T" && pwd -P)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 
-KEYS="specs_dir plans_dir roadmaps_dir interview_dir test_command test_failure_pattern review_model parallel_default branch_prefix"
+KEYS="specs_dir plans_dir roadmaps_dir interview_dir test_command test_failure_pattern review_model parallel_default branch_prefix shared_files"
 RMD=docs/superpowers/roadmaps/rm
 RM="$RMD/roadmap.md"
 
@@ -166,7 +166,7 @@ cmp_dirs() {  # cmp_dirs <A> <B> → DIFF(다른 이름들) · NCMP(비교한 �
 js() {  # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 이 테스트가 쓴 고정 문자열뿐이다.
   python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1],encoding="utf-8")); print(eval(sys.argv[2]))' "$1" "$2"
 }
-NFILES=$(( (9 * 2 + 3) * 3 ))
+NFILES=$(( (10 * 2 + 3) * 3 ))
 
 echo "=== 작업공간 불변 락(AC27) ==="
 settings "$T/inv.devbrew.md" "interview_dir: notes/interview/" 'test_command: "true"'
@@ -186,7 +186,7 @@ g "$T/inv/B" add -A; g "$T/inv/B" commit -qm "로드맵 · 설정을 자기 브�
   && ok "전제: 한쪽 브랜치만 레포 설정 파일과 로드맵을 고쳤다" || no "전제: 고친 브랜치가 기본 브랜치와 같다 — 락이 공허하다"
 battery "$T/inv/A" "$T/out-A"; battery "$T/inv/B" "$T/out-B"
 cmp_dirs "$T/out-A" "$T/out-B"
-assert_eq "$NCMP" "$NFILES" "불변: 비교한 파일 수(아홉 키 × 두 꼴 + 로드맵 찾기 + 상태 계산 둘, 각 stdout · stderr · rc)"
+assert_eq "$NCMP" "$NFILES" "불변: 비교한 파일 수(열 키 × 두 꼴 + 로드맵 찾기 + 상태 계산 둘, 각 stdout · stderr · rc)"
 assert_eq "$CRC:$DIFF" "0:" "불변: 두 worktree 의 출력이 바이트까지 같다(읽은 트리가 이 작업공간인 칸만 뺀다)"
 assert_eq "$(js "$T/out-A/status.out" "r['read_tree']")|$(js "$T/out-B/status.out" "r['read_tree']")" "기본 브랜치|기본 브랜치" \
   "불변: 경로로 준 로드맵의 상태 계산은 두 자리 다 기본 브랜치를 읽었다고 밝힌다"

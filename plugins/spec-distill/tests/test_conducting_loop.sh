@@ -25,7 +25,7 @@ for lit in '「지금 답할 수 있나」' '배경과 함께 하나씩' '질문
            'brainstorming 대화의 질문은 brainstorming 이 정한 모양 그대로다' '그 대화의 메시지와' '따로 된 메시지로' \
            'brainstorming 의 첫 메시지부터 spec 리뷰의 승인 게이트까지' '선택지는 막혔을 때만'; do once 2 "$lit"; done
 assert_not_contains "$(step 2)" '첫 줄에 에픽 이름' "걸음 2: 에픽 이름을 따로 된 첫 줄로 쓰던 옛 문장이 없다(양성 짝: 질문 문장 앞머리)"
-for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 않는다' '`AskUserQuestion` 으로 승인받는다' '`epic-handoff.md`' \
+for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 않는다' '`AskUserQuestion` 으로 승인받는다' '같은 폴더 `epic-handoff.md` 의 에픽 넘김 줄' \
            'worktree-path --name <이름>' '하니스의 새 worktree 만들기를 쓸 수 없어서' '옮기기 전에 지금 자리의 쓰기(커밋 포함)를 끝낸다' \
            '진입 사전 검사 줄의 `root=` 가 그 worktree 인지 확인한 뒤 리뷰한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
            'ledger record --spec <설계문서> --approval' '규모(몇 agent · 무엇)를 알린다' '「승인 — 계획 담당자에게」' \
@@ -105,7 +105,7 @@ SUBJ = re.compile(r"동시|병렬|한꺼번에|한 번에|큰 작업|돌리는 (
 QUANT = re.compile(r"[0-9]|하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|한 ?개|두 ?개|세 ?개|네 ?개")
 LIMIT = re.compile(r"까지만|까지 만|이하|미만|초과|넘지|넘기지|넘으면|넘는|넘게|넘을|넘어|넘기면|최대|상한|한도|제한|"
                    r"(하나|[0-9]+|한|두|세|네|둘|셋|넷|다섯) ?개?만|이상[^.]{0,10}(금지|않)|at most|no more than|max|limit|cap\b", re.I)
-NEG = re.compile(r"상한(이|은|을|도) ?(아니|없|두지 않)[가-힣]*|한도(가|는) ?(아니|없)[가-힣]*|is not a (cap|limit)|not a (cap|limit)", re.I)
+NEG = re.compile(r"머지 명령 줄은 이 로드맵의 PR 가운데 한 번에 하나만 낸다|상한(이|은|을|도) ?(아니|없|두지 않)[가-힣]*|한도(가|는) ?(아니|없)[가-힣]*|is not a (cap|limit)|not a (cap|limit)", re.I)
 W = 40  # 주어 앞뒤 이 글자 안에서만 수량 · 상한을 본다(같은 문장의 다른 상한 — 예: 리뷰 라운드 상한 — 과 엮지 않게)
 for sent in re.split(r"(?<=[.。!?])\s+|\n", sys.argv[1]):
     probe = NEG.sub("", sent)
@@ -124,7 +124,8 @@ for lit in '동시에 셋까지만 돌린다.' '병렬 agent 는 최대 3개다.
            '동시에 셋만 돌린다.' '큰 작업이 3개를 넘기면 안 된다.' '동시에 넷 이상은 금지다.' '동시에 두 개만 돌린다.' '한 번에 하나만 보낸다.'; do
   [ -n "$(cap_hits "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
-for lit in "$PAR" '권장 수는 기본 3 이고 상한이 아니다 — 사용자가 늘린다.' '좁은 재리뷰는 PR 하나에 두 번까지다.'; do
+for lit in "$PAR" '권장 수는 기본 3 이고 상한이 아니다 — 사용자가 늘린다.' '좁은 재리뷰는 PR 하나에 두 번까지다.' \
+           '머지 명령 줄은 이 로드맵의 PR 가운데 한 번에 하나만 낸다 — 낸 PR 이 머지됨이 되면 다음 PR 을 낸다.'; do
   assert_eq "$(cap_hits "$lit")" "" "양성 짝: 권장(기본값) · 사용자가 늘림 문장은 허용 — 「${lit:0:40}…」"
 done
 COMPACT="$(printf '%s\n' "$LOOP" | awk '$0=="### /compact 시점"{f=1;next} f&&/^### /{exit} f')"

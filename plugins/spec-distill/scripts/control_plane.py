@@ -10,6 +10,7 @@
                                                  검사 불가 · 로드맵 없음 · 꺼짐이면 표준 출력이 비고 표준 오류에
                                                  사유, rc 3. 기본 브랜치에 없는 로드맵이면 rc 4.
                                                  로드맵이 여럿인데 경로가 없으면 rc 2.
+                                                 끝에 탭 없는 마지막 줄 `동시에 갈 수 있는 준비 에픽: …` 이 붙을 수 있다 — 작업이 아니라 병렬 판단 신호다.
 
 단계 · 경고는 `roadmap_status.py <경로> --json`(기본 브랜치 사본)을 하위 프로세스로 불러 읽기만 한다.
 레포 파일과 git 상태를 바꾸지 않는다 — 쓰는 것은 `<git 공용 디렉토리>/devbrew/control-plane.json` 캐시 하나다.
@@ -380,6 +381,24 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     return "\n".join(lines)
 
 
+PARALLEL_LINE_HEAD = "동시에 갈 수 있는 준비 에픽: "
+NOT_PARTNER = frozenset({"대기", "알 수 없음"})
+
+
+def parallel_line(blocks):
+    """단계가 준비인 블록마다 함께 갈 짝(겹침이 없고 단계가 대기 · 알 수 없음이 아닌 것)을 한 줄로. 없으면 None."""
+    stage = {b.get("id"): b.get("stage") for b in blocks}
+    parts = []
+    for b in blocks:
+        if b.get("stage") != "준비":
+            continue
+        mates = [p.get("id") for p in b.get("parallel") or []
+                 if not p.get("overlap") and stage.get(p.get("id")) not in NOT_PARTNER]
+        if mates:
+            parts.append("%s(함께: %s)" % (b.get("id"), " · ".join(mates)))
+    return clean(PARALLEL_LINE_HEAD + " · ".join(parts)) if parts else None
+
+
 def tasks_output(items, select_error=None):
     """(표준 출력 줄들, 표준 오류 글, rc). rc 가 0 이 아니면 지휘자는 작업 목록을 바꾸지 않는다."""
     if select_error:
@@ -410,6 +429,9 @@ def tasks_output(items, select_error=None):
             continue
         state = "completed" if w["단계"] in WORK_DONE else "in_progress"
         out.append(clean("%s %s %s — %s" % (OUTSIDE, w["종류"], w["이름"], w["단계"])) + "\t" + state)
+    line = parallel_line(report.get("blocks") or [])
+    if line:
+        out.append(line)
     return out, "", 0
 
 

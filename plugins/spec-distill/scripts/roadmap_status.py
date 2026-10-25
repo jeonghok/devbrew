@@ -40,7 +40,7 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SettingsError, resolve  # noqa: E402
+from repo_defaults import SHARED_FILES, SettingsError, resolve  # noqa: E402
 from repo_defaults import default_branch as _default_branch  # noqa: E402
 from conductor_state import MachineError, machine_path, parse_machine  # noqa: E402 — PR 캐시 읽기만
 from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recorded_number  # noqa: E402 — 적은 번호 읽기만
@@ -57,7 +57,7 @@ NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시)
           "예약한 파일의 편집은 경고가 아니라 정보다 — 에픽은 병렬로 가고 충돌은 머지 때 푼다(나중 PR 이 기본 브랜치를 "
           "merge 하고 스위트를 다시 돌린다).")
 # 경로 예약 겹침 · 위반에서 빼는 공유 파일 — 버전은 머지 직전에 정한다(N6).
-SHARED_BASENAMES = ("plugin.json", "CHANGELOG.md", "README.md")
+SHARED_BASENAMES = SHARED_FILES
 TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress", "계획": "in_progress",
                "구현 중": "in_progress", "구현 끝": "in_progress", "PR": "in_progress",
                "머지됨": "completed", "끝남": "completed"}
@@ -264,8 +264,8 @@ def _reserves(entry: str, path: str) -> bool:
     return path == entry or (entry.endswith("/") and path.startswith(entry))
 
 
-def _shared(path: str) -> bool:
-    return path.rsplit("/", 1)[-1] in SHARED_BASENAMES
+def _shared(path: str, names=SHARED_BASENAMES) -> bool:
+    return path.rsplit("/", 1)[-1] in names
 
 
 def _reachable(blocks: list) -> dict:
@@ -970,10 +970,11 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             if bad:
                 b["warnings"].append("받는 곳 없는 미룸 %d개: %s — %s" % (len(bad), spec, " · ".join(bad)))
 
+    names = settings.get("shared_files") or SHARED_BASENAMES
     for b in blocks:
         if b["tip"]:
             for path in git.changed(main, b["tip"]):
-                if _shared(path):
+                if _shared(path, names):
                     continue
                 owners = [o["id"] for o in blocks
                           if any(_reserves(e, path) for e in o["reserved"])]
@@ -998,14 +999,14 @@ def coverage_warnings(result: dict, spec: str) -> list:
     return out
 
 
-def overlaps(blocks: list) -> list:
+def overlaps(blocks: list, names=SHARED_BASENAMES) -> list:
     reach, out = _reachable(blocks), []
     for i, a in enumerate(blocks):
         for b in blocks[i + 1:]:
             if b["id"] in reach[a["id"]] or a["id"] in reach[b["id"]]:
                 continue
             shared = sorted({ea for ea in a["reserved"] for eb in b["reserved"]
-                             if not _shared(ea) and (_reserves(ea, eb) or _reserves(eb, ea))})
+                             if not (_shared(ea, names) or _shared(eb, names)) and (_reserves(ea, eb) or _reserves(eb, ea))})
             if shared:
                 out.append({"blocks": [a["id"], b["id"]], "paths": shared})
     return out
@@ -1128,7 +1129,7 @@ def build(git: Git, args) -> dict:
                           default_short=main_name.split("/", 1)[1] if main_name else None)
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
     report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
-    report["overlaps"] = overlaps(blocks)
+    report["overlaps"] = overlaps(blocks, settings.get("shared_files") or SHARED_BASENAMES)
     stages = dict((b["id"], b["stage"]) for b in blocks)
     records, bad_records, rulings = {}, {}, {}
     for b in blocks:

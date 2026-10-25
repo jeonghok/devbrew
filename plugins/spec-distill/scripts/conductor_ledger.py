@@ -1276,12 +1276,22 @@ def c_review_pack(root, a) -> int:
         handoffs = "(%s)" % exc
         warns.append(str(exc))
     put("handoffs.md", handoffs + "\n")
+    import review_intents  # 상태 계산을 끌어오므로 늦게 불러온다
+    try:
+        intents, more = review_intents.build(_status(root, a.roadmap), a.epic, tip, lambda *args: git(root, *args))
+        warns.extend(more)
+    except Fail as exc:
+        intents, more = review_intents.uncountable(exc)
+        warns.extend(more)
+    put("intents.md", intents)
     readme = ["이 폴더는 통합 리뷰 묶음이다 — %s 의 %s" % (a.epic, a.branch),
               "합친 사본: %s" % (a.merged or "(넘기지 않았다)"),
               "pr.diff — 기본 브랜치에서 갈라진 뒤 이 브랜치의 diff",
               "open-<에픽>-<브랜치>.diff — 아직 기본 브랜치에 안 들어간 다른 에픽 브랜치의 diff",
               "conflicts.txt — 이 브랜치와 열린 다른 브랜치를 합칠 때 충돌할 파일(git merge-tree)",
-              "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절"] + skipped
+              "handoffs.md — 앞선 PR 들의 `## 통합 리뷰 인계` 절",
+              "intents.md — 이 PR 과 함께 진행된 다른 에픽들의 설계문서 전문(머지됨 · 열림 · %s 표시)"
+              % review_intents.UNVERIFIED] + skipped
     put("README.txt", "\n".join(readme) + "\n")
     print(out)
     for f in files:
