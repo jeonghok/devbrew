@@ -20,6 +20,7 @@ sys.path.insert(0, str(SCRIPTS))
 import repo_defaults as rd  # noqa: E402
 import roadmap_status as rs  # noqa: E402
 import control_plane as cp  # noqa: E402
+import spec_review_bundle as sb  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
 
@@ -311,6 +312,45 @@ class ParallelLineInRepo(RoadmapRepo):
         lines = self.tasks()
         self.assertEqual(lines[-1], LINE + "E2(함께: E1)")
         self.assert_only_last_tabless(lines, True)
+
+
+class DecisionLines(unittest.TestCase):
+    def test_three_forms(self):
+        for line in ("- B1 · 결정 · 2026-10-25 · 사용자 — 「가」", "- U3 · 결정 · 나", "- D2.6 · r2 · adopt · x"):
+            self.assertTrue(sb.DECISION_LINE_RE.match(line), line)
+
+    def test_not_decision_lines(self):
+        for line in ("  - D1.1 · r1 · adopt", "- D2 · 결정 · 가", "- docreview 계수 — x", "- B1 결정"):
+            self.assertFalse(sb.DECISION_LINE_RE.match(line), line)
+
+
+def _table(*ids):
+    return ("\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n"
+            + "".join("| %s | 반영 | AC1 |\n" % i for i in ids))
+
+
+class NeighborDecisions(RoadmapRepo):
+    E2_DEC = "- U1 · 결정 · 유\n- D1.1 · r1 · adopt · 디\n"
+
+    def neighbors(self):
+        return sb.neighbors(os.path.join(self.w, "plan", "rm", "E1.md"), str(self.w))
+
+    def test_parallel_epic_with_design_doc(self):
+        self.roadmap(TWO)
+        self.start_design("E2", extra=self.E2_DEC + _table("«e2e-k»", "K1"))
+        self.start_design("E1", extra=_table("C1", "S1", "OQ1"))
+        lines = self.neighbors()
+        self.assertTrue(any(l.startswith("  함께 진행 중: E2 ") for l in lines), lines)
+        self.assertIn("    - U1 · 결정 · 유", lines)
+        self.assertIn("    - D1.1 · r1 · adopt · 디", lines)
+
+    def test_dependent_is_not_parallel(self):
+        self.roadmap([("E1", [], "", ("C1", "S1", "OQ1")), ("E2", ["E1"], "", ("«e2e-k»", "K1"))])
+        self.start_design("E2", extra=self.E2_DEC + _table("«e2e-k»", "K1"))
+        self.start_design("E1", extra=_table("C1", "S1", "OQ1"))
+        lines = self.neighbors()
+        self.assertTrue(any(l.startswith("  이 에픽에 의존: E2 ") for l in lines), lines)
+        self.assertFalse(any("함께 진행 중" in l for l in lines), lines)
 
 
 if __name__ == "__main__":
