@@ -117,6 +117,16 @@ grep -qF '최근 두 묶음의 항목이 모두 `changed: []` 이고 `opened: �
 grep -qF '최근 두 묶음 중 하나라도 결정을 바꿨거나 열었으면 `not_saturated` 다' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 최근 두 묶음 중 하나라도 바꾸면 아직(규칙 3)" || no "saturation-judge: 규칙 3 의 묶음 기준 부재"
 grep -qF '「충분해 보인다」를 근거로 쓰지 않는다' <<<"$SJ_FLAT" && ok "saturation-judge: 「충분해 보인다」 금지" || no "saturation-judge: 「충분해 보인다」 금지 부재"
+# 실패한 조사는 「새로움 없음」이 아니다 — 판정 기준 절 본문 · Output 절에서 따로 찾는다(한쪽 문구가 다른 쪽을 만족시키지 않게)
+SJ_RULES="$(awk '/^## 판정 기준/{f=1;next} /^## /{f=0} f' "$AG/saturation-judge.md" | tr '\n' ' ' | tr -s ' ')"
+SJ_OUT="$(awk '/^## Output 형식/{f=1;next} /^## /{f=0} f' "$AG/saturation-judge.md")"
+{ [ -n "$SJ_RULES" ] && [ -n "$SJ_OUT" ]; } && ok "전제: saturation-judge 판정 기준 · Output 절을 떴다" || no "전제: 판정 기준 · Output 절이 비었다 — 아래 락이 공허하다"
+grep -qF '실패한 조사는 「새로움 없음」이 아니다' <<<"$SJ_RULES" && ok "saturation-judge: 실패한 조사를 새로움 없음과 가른다" || no "saturation-judge: 실패한 조사 규칙 부재"
+{ grep -qF 'evidence · repo_claims 가 둘 다 비고 unanswered 가 있는 산출' <<<"$SJ_RULES" && grep -qF '웹 도구 거부' <<<"$SJ_RULES" && grep -qF 'dispatch 오류 원문' <<<"$SJ_RULES"; } \
+  && ok "saturation-judge: 실패의 세 꼴(빈 산출+unanswered · 웹 도구 거부 · dispatch 오류)" || no "saturation-judge: 실패의 세 꼴 중 빠진 것이 있다"
+grep -qF '최근 두 묶음에 `failed: true` 항목이 하나라도 있으면 `saturated` 를 내지 않는다' <<<"$SJ_RULES" \
+  && ok "saturation-judge: 최근 두 묶음의 실패 조사는 포화를 막는다" || no "saturation-judge: 실패 조사가 포화를 막는 규칙 부재"
+grep -qE '^ +failed: true \| false' <<<"$SJ_OUT" && ok "saturation-judge: Output 의 novelty 항목에 failed" || no "saturation-judge: Output 에 failed 필드 부재"
 grep -qF '`<research_outputs>` 가 두 묶음 미만이면 `not_saturated` 와 `kind: confirm` 빈 곳 하나(「조사가 두 묶음 미만 — 열린 결정에 닿는 조사를 하나 더」)를 낸다' <<<"$SJ_FLAT" \
   && ok "saturation-judge: 두 묶음 미만 → not_saturated + confirm 빈 곳(규칙 4 전문)" || no "saturation-judge: 규칙 4 전문 부재"
 grep -qF '최근 두 묶음의 항목은 필수다' <<<"$SJ_FLAT" && ok "saturation-judge: 최근 두 묶음의 novelty 는 필수(규칙 1)" || no "saturation-judge: 규칙 1 의 필수 범위 부재"
