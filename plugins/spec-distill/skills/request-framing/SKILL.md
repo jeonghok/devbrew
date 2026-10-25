@@ -1051,7 +1051,7 @@ degrade 는 **채널 넷**으로 나갑니다 — 엔진의 셋과 이 skill 의
 | `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
 | `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
 | `marks_rc` 가 2 다(표시 검사 불가) | `pipeline` · `suppression` | `degraded` | `seed_provenance.py marks` 의 stderr — 표시가 떼어지지 않았을 수 있다 |
-| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 · 확정 직전 공시가 rc 4(원장 자리 거부) | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
+| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
 codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은

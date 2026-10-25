@@ -51,4 +51,8 @@ done
 o="$(cd "$R" && CLAUDE_PLUGIN_ROOT="$SD" python3 "$SD/scripts/interview_state.py" entry --arg "$BAD" --session sess-candname1 2>&1)"
 assert_contains "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: REJECT" "3: 허용 글자 밖 상태 파일 경로를 직접 넘기면 REJECT"
 
+# 사용자가 @ 로 직접 넘긴 경로는 스크립트가 보기 전에 셸 리터럴이 된다 — 3.6 절이 셸에 붙이기 전의 글자 확인을 지시한다.
+S36="$(awk '/^### 3\.6 /{f=1;next} /^### /{f=0} f' "$SD/skills/pm-interview/SKILL.md" | tr '\n' ' ')"
+assert_contains "$S36" "밖의 글자(작은따옴표 · \`\$\` · 백틱 · 줄바꿈 등)가 있으면 셸에 붙이지 말고 그 사유를 보이고 멈춘다" "4: 3.6 절이 직접 넘긴 경로를 셸에 붙이기 전에 글자로 확인한다"
+
 finish
