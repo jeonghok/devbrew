@@ -135,7 +135,7 @@ next_phase: superpowers:writing-plans
 
 ### §2 구성
 
-**진입.** spec-distill 의 새 진입 skill `epic-conductor`(`/spec-distill:epic-conductor [<로드맵 경로>]`). 지금의 「`/new` 뒤 `@로드맵`」 열기를 대신한다. 인자가 없으면 기본 브랜치에서 git 이 추적하는 `.md` 파일 가운데 frontmatter `type: roadmap` 이고 끝나지 않은 블록이 있는 것을 찾고(폴더를 박지 않는다), 여럿이면 묻는다. `cost_class: high` — 시작할 때 한 번 규모(남은 에픽 수 · 띄울 agent 의 대략 수 · 할 일 순서)를 보이고 `AskUserQuestion` 으로 승인받는다. 그 뒤의 dispatch 는 규모만 알리고 간다(S1 「크게 쓰기 전에는 규모만 알린다」 · 레포의 선언 없는 fan-out 금지). 끄기는 `DEVBREW_SPEC_DISTILL_DISABLE=1`(플러그인 전체) — 꺼져 있으면 손으로 따르는 절차(`references/conducting.md` 의 끝 절)를 가리키고 멈춘다.
+**진입.** spec-distill 의 새 진입 skill `epic-conductor`(`/spec-distill:epic-conductor [<로드맵 경로>]`). 지금의 「`/new` 뒤 `@로드맵`」 열기를 대신한다. 인자가 없으면 기본 브랜치에서 git 이 추적하는 `.md` 파일 가운데 frontmatter `type: roadmap` 이고 끝나지 않은 블록이 있는 것을 찾고(폴더를 박지 않는다), 여럿이면 묻는다. `cost_class: high` — 시작할 때 한 번 규모(남은 에픽 수 · 띄울 agent 의 대략 수 · 할 일 순서)를 보이고 지출 승인은 묻지 않고 간다(CLAUDE.md 의 `cost_class` 규칙 — 어느 클래스도 지출 승인을 묻지 않는다). 그 뒤의 dispatch 도 규모만 알리고 간다(S1 「크게 쓰기 전에는 규모만 알린다」 · 레포의 선언 없는 fan-out 금지). 끄기는 `DEVBREW_SPEC_DISTILL_DISABLE=1`(플러그인 전체) — 꺼져 있으면 손으로 따르는 절차(`references/conducting.md` 의 끝 절)를 가리키고 멈춘다.
 
 **절차 글 — 판단하는 부분.** skill 본문은 순환의 차례와 걸음마다 읽을 reference 만 둔다. 걸음의 내용은 reference 로:
 
@@ -292,7 +292,7 @@ next_phase: superpowers:writing-plans
 - AC12 설계문서 없는 묶음 · 묶음 아닌 블록이 계획 · 머지됨이면 번호 대조를 건너뛴 경고와 「셀 수 없음」이 난다(N17).
 - AC13 `--impl` 이 설계문서 `roadmap:` 을 읽어 상태 계산과 같은 받는 곳 규칙(실재 에픽 · `#<n>`)을 쓴다.
 - AC14 상태 계산의 설계문서 · 계획 찾기가 로드맵 frontmatter `specs_dir` · `plans_dir` 를 git 으로 읽고, 없으면 superpowers 기본 경로를 쓴다(기본 문자열은 한 상수 모듈에만).
-- AC15 진입 skill `epic-conductor`(진입 사전 검사 · `cost_class: high` · 처분 줄)가 있고, 시작할 때 규모(남은 에픽 · 띄울 agent 수 — 세션 안에서 라운드마다 도는 리뷰어 agent 포함)를 보이고 `AskUserQuestion` 으로 승인받는다. 같은 세션에서 이어 부를 때 세션 표지가 살아 있고 규모가 그대로면 승인 대신 공시만 한다. 꺼져 있으면 손 절차를 가리키고 멈춘다.
+- AC15 진입 skill `epic-conductor`(진입 사전 검사 · `cost_class: high` · 처분 줄)가 있고, 시작할 때 규모(남은 에픽 · 띄울 agent 수 — 세션 안에서 라운드마다 도는 리뷰어 agent 포함)를 보이고 지출 승인은 묻지 않는다(규모 공시만 — 처음 부를 때도 같은 세션에서 이어 부를 때도). 꺼져 있으면 손 절차를 가리키고 멈춘다.
 - AC16 `references/conducting.md` 가 지휘 순환 걸음 1~7 마다 기본값 · 판단 기준 · 부를 superpowers skill · 기록 · 기계 상태에 적을 것을 담고, 끝 절에 손으로 따르는 절차를 둔다.
 - AC17 이어 가기에 필요한 기록(판정 · 구현 대조 · 지휘 기록)이 에픽 설계문서의 절로 에픽 브랜치에 커밋되고, 기계 상태만 `<state-root>/conductor/<로드맵 폴더>/machine.md` 에 원자 쓰기된다. 지휘자를 다시 부르면 git 과 기계 상태에서 같은 상태를 계산하고, 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다.
 - AC18 `merge_check.py` 가 합친 사본을 만들고 그 레포의 스위트를 기준선과 합친 사본에서 돌려, R2a 의 공유본으로 단위를 짝짓고 양쪽 다 빨간 단위는 실패 이름으로 대조한다(이름을 못 뽑는 러너는 「이름 대조 불가 — 단위 수준만」). 동시 실행은 잠금으로 막고, 테스트 명령을 못 찾으면 묻는 자리를 내고, 테스트가 없으면 「스위트 대조 없음」을 낸다.
@@ -339,7 +339,7 @@ next_phase: superpowers:writing-plans
 - 옮기기: 이 로드맵 옮기기 전후 원문 인용 집합 같음 · 옛 로드맵 해석 결과 같음.
 - 레포 전용 값 락(AC29)과 모든 「통과가 정답인」 락은 표적 변이로 이빨을 확인한다(표기 · 값 · 위치 · 부정형 네 축).
 - 판단 동작 — 무엇이 보이면 통과인가. 버릴 레포에 두 에픽짜리 로드맵을 두고, 지휘 세션 하나의 기록(도구 호출 순서 · 사용자에게 보인 글)을 아래 관측과 대조한다. 판단의 질은 재지 않고 「그 자리에서 그 일을 했는가」만 본다.
-  - 시작: 첫 `AskUserQuestion` 앞에 남은 에픽 수 · 띄울 agent 의 대략 수 · 할 일 순서가 보이고, 그 승인 전에는 Agent dispatch 가 없다(AC15).
+  - 시작: 첫 Agent dispatch 앞에 남은 에픽 수 · 띄울 agent 의 대략 수 · 할 일 순서가 보이고, 그 사이에 지출 승인을 묻는 `AskUserQuestion` 이 없다(AC15).
   - 판정: 가짜 실행 원장에 수용 기준을 바꾸는 판정 줄을 넣으면 그 에픽의 다음 dispatch 가 멈추고 배경과 함께 질문이 나오며, 다른 에픽의 dispatch 는 이어진다. 설계 안 판정 줄만 넣으면 멈춤이 없다(AC22).
   - 사람 몫: 앞 에픽 결과에 기대는 질문은 그 에픽이 끝나기 전에 나오지 않고, 질문은 한 번에 하나씩 배경과 함께 나온다. 계획에 「설계에 없던 결정」을 심으면 질문이 나오고 그 답 전에는 구현 dispatch 가 없다. 심지 않으면 질문 없이 구현 dispatch 가 나온다(AC23).
   - 알림: `PushNotification` 호출은 사람 답이 없어 멈춘 때와 모두 끝난 때에만 있다(AC26).
