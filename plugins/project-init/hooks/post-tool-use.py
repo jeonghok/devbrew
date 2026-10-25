@@ -3,8 +3,8 @@
 
 Runs after Bash and EnterWorktree tool calls:
 1. Branch naming (Bash and EnterWorktree) — observes, after the call, which
-   local branches were just made (their reflog's last line is a create /
-   rename / copy within NEW_BRANCH_WINDOW seconds) and validates each name
+   local branches were just made (their reflog has a create / rename / copy
+   line within NEW_BRANCH_WINDOW seconds) and validates each name
    against the pattern in docs/git-workflow/branch-strategy.md as committed on
    the default branch (refs/remotes/origin/HEAD), not the working tree.
 2. Commit message (Bash only) — detects git commit -m and validates
@@ -154,12 +154,16 @@ def _inert(text):
     return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
 
 
-def _last_reflog_line(path):
+def _tail_reflog_lines(path):
+    """reflog 끝 8KB 의 온전한 줄들 — 한 명령이 만들기 뒤에 커밋 · 리셋 줄을 더 남길 수 있다."""
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
-        f.seek(max(0, f.tell() - 8192))
-        lines = [ln for ln in f.read().split(b"\n") if ln.strip()]
-    return lines[-1].decode("utf-8", "replace") if lines else ""
+        start = max(0, f.tell() - 8192)
+        f.seek(start)
+        lines = f.read().split(b"\n")
+    if start > 0:
+        lines = lines[1:]  # 잘린 첫 줄은 시각 · 메시지를 잘못 읽게 한다
+    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()]
 
 
 def _is_new_branch_line(line, branch, now, window):
@@ -181,7 +185,9 @@ def _is_new_branch_line(line, branch, now, window):
 
 
 def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None):
-    """Branches whose reflog's last line made them within `window` seconds.
+    """Branches whose reflog has a create / rename / copy line within `window` seconds.
+
+    마지막 줄만 보지 않는다 — `git checkout -b X && git commit` 은 만들기 줄 뒤에 커밋 줄을 남긴다.
 
     공용 git 디렉토리의 logs/refs/heads/** 를 직접 읽는다(브랜치마다 git 을 띄우지
     않는다 · 상태 파일 없음). 레포가 아니거나 reflog 가 없으면 빈 목록.
@@ -198,11 +204,11 @@ def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None):
             try:
                 if os.path.getmtime(path) < now - window:
                     continue
-                line = _last_reflog_line(path)
+                lines = _tail_reflog_lines(path)
             except OSError:
                 continue
             name = os.path.relpath(path, root).replace(os.sep, "/")
-            if _is_new_branch_line(line, name, now, window):
+            if any(_is_new_branch_line(ln, name, now, window) for ln in lines):
                 found.append(name)
     return sorted(found)
 

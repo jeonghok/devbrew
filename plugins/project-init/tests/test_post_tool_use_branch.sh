@@ -108,6 +108,9 @@ fresh; git -C "$W" switch -q --create Bad4
 hook Bash "$W" "git switch --create Bad4"; alerted Bad4 "git switch --create"
 fresh; git -C "$W" branch Bad5
 hook Bash "$W" "git -C $W branch Bad5"; alerted Bad5 "git -C <dir> branch"
+fresh; git -C "$W" checkout -q -b Bad15; git -C "$W" commit -q --allow-empty -m x
+case "$(tail -n 1 "$W/.git/logs/refs/heads/Bad15")" in *"	commit: x") ;; *) no "픽스처 전제: Bad15 reflog 마지막 줄이 커밋이 아니다" ;; esac
+hook Bash "$W" 'git checkout -b Bad15 && git commit -m "x"'; alerted Bad15 "git checkout -b && git commit 한 명령(reflog 마지막 줄이 커밋)"
 
 echo "다른 작업 트리가 쓰는 브랜치 — 이름 바꾸기 명령을 내지 않는다"
 fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" branch BadPlain

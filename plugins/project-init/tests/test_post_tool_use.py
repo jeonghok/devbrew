@@ -339,11 +339,22 @@ class F2SuggestionTest(unittest.TestCase):
 
 
 class MainDoubleValidationTest(_RepoTestCase):
-    """AC10 / §5.5 — main() runs BOTH checks (no `or` short-circuit)."""
+    """AC10 / §5.5 — main() runs BOTH checks (no `or` short-circuit).
+
+    픽스처는 명령이 말하는 대로 브랜치를 만들고 **실제로 커밋한다** — 그래서 그 브랜치 reflog 의
+    마지막 줄이 만들기가 아니라 `commit:` 이다(AC13).
+    """
+
+    def branch_then_commit(self, work: str, name: str, message: str) -> None:
+        git("checkout", "-q", "-b", name, cwd=work)
+        git("commit", "-q", "--allow-empty", "-m", message, cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", *name.split("/"))
+        last = log.read_text(encoding="utf-8").splitlines()[-1]
+        self.assertIn("\tcommit: ", last, "픽스처 전제가 깨졌다 — reflog 마지막 줄이 커밋이 아니다")
 
     def test_compound_failopen_runs_both_validators(self):
         work = self.repo(None)  # no strategy file -> branch fails open
-        git("branch", "feat", cwd=work)
+        self.branch_then_commit(work, "feat", "add thing")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feat && git commit -m "add thing"'}}
         out, rc = run_hook(payload, cwd=work)
@@ -354,7 +365,7 @@ class MainDoubleValidationTest(_RepoTestCase):
 
     def test_valid_branch_bad_commit_still_flags_commit(self):
         work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "feature/ok", cwd=work)
+        self.branch_then_commit(work, "feature/ok", "add thing")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "add thing"'}}
         out, rc = run_hook(payload, cwd=work)
@@ -365,12 +376,27 @@ class MainDoubleValidationTest(_RepoTestCase):
 
     def test_both_clean_emits_empty(self):
         work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "feature/ok", cwd=work)
+        self.branch_then_commit(work, "feature/ok", "feat: ok")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "feat: ok"'}}
         out, rc = run_hook(payload, cwd=work)
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)
+
+    def test_compound_bad_branch_then_commit_alerts_branch(self):
+        # 한 명령으로 규칙 밖 브랜치를 만들고 바로 커밋 — 마지막 줄이 커밋이어도 새 브랜치로 잡는다.
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        self.branch_then_commit(work, "Bad", "add thing")
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": 'git checkout -b Bad && git commit -m "add thing"'}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(rc, 0)
+        data = json.loads(out)
+        msg = data.get("systemMessage", "")
+        self.assertIn('이름 규칙에 맞지 않는다 — "Bad"', msg)
+        self.assertIn("Conventional Commits", msg)
+        ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("git branch -m Bad feature/Bad", ac)
 
 
 class ElsewhereWorktree(_RepoTestCase):
