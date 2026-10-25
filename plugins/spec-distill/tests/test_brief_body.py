@@ -19,6 +19,33 @@ import section6  # noqa: E402
 
 
 class AnchorGrammar(unittest.TestCase):
+    VERBATIM_HARD = ("```", "```python", "it's `x", "a &amp; b", "&#83;1", "<div>", "<span>x</span>",
+                     "<http://a`b>", "<!-- 숨김 -->")
+
+    def test_fenced_verbatim_passes_as_is(self):
+        # 펜스 · 외톨이 백틱 · 문자 참조 · HTML 이 든 사용자 발화는 앵커 줄 아래 열 0 펜스에 원문 그대로 실린다
+        for said in self.VERBATIM_HARD:
+            sec = "- **S1** 🗣 최초 요청:\n~~~~\n" + said + "\n~~~~\n- **S2** 🗣 답:\n  > \"둘째\""
+            ok, bad = B.anchor_lines(sec)
+            self.assertEqual(bad, [], said)
+            self.assertEqual([s for _n, s, _r in ok], ["S1", "S2"], said)
+
+    def test_refusal_names_the_fence_remedy(self):
+        # 인용 줄로 실은 같은 발화는 거부되고, 거부 말이 원문을 그대로 싣는 길(열 0 펜스)을 댄다
+        for said in self.VERBATIM_HARD:
+            ok, bad = B.anchor_lines("- **S1** 🗣 최초 요청:\n  > \"" + said + "\"")
+            self.assertTrue(bad, said)
+            for _n, why in bad:
+                self.assertIn("열 0 펜스", B.anchor_reason(why), (said, why))
+        self.assertNotIn("열 0 펜스", B.anchor_reason("anchor_shape"))
+
+    def test_fenced_verbatim_passes_coverage(self):
+        said = "it's `x &amp; <div> y"
+        body = "~~~~\n" + said + "\n~~~~\n"
+        bodies = CVC.parse_section6(
+            "## 6. 사용자 원문\n- **S1** 🗣 요청:\n" + body + "\n## 7. 끝\n", "payload")
+        self.assertIn(said, bodies["S1"])
+
     def test_accepts_column0(self):
         ok, bad = B.anchor_lines("- **S1** 「첫 말」\n- **S2** 「둘째」")
         self.assertEqual([s for _n, s, _r in ok], ["S1", "S2"])
