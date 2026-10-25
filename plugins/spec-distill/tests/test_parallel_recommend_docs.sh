@@ -114,5 +114,36 @@ once_in "계획 agent 틀" "$PLAN_SEC" '계획의 첫 과제는 가벼운 다시
 once_in "cyc 3" "$(cyc 3)" '설계 전 조사는 꼼꼼히('
 once_in "cyc 3" "$(cyc 3)" '계획의 첫 과제는 가벼운 다시 확인이다('
 
+# --- Task 10: AC4 · AC16 README · 온톨로지 · CHANGELOG · 판 + 후속 ---
+PJ="$SD/.claude-plugin/plugin.json"
+RM="$SD/README.md"
+CL="$SD/CHANGELOG.md"
+ON="$SD/references/roadmap-ontology.md"
+CP="$SD/scripts/control_plane.py"
+assert_contains "$(cat "$PJ")" '"version": "8.11.0"' "plugin.json 8.11.0"
+assert_eq "$(grep -m1 '^## \[' "$CL")" "## [8.11.0] — 2026-10-25" "CHANGELOG 첫 판 머리"
+CLSEC="$(awk '/^## \[8.11.0\]/{f=1;next} f&&/^## \[/{exit} f' "$CL")"
+for p in 'shared_files' '동시에 갈 수 있는 준비 에픽' 'intents' '일곱째 이음매'; do
+  assert_contains "$CLSEC" "$p" "CHANGELOG 8.11.0: $p"
+done
+RMT="$(cat "$RM")"
+assert_contains "$RMT" '| `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 | 무시하고 경고 |' "README: shared_files 행"
+assert_contains "$RMT" 'shared_files: plugin.json, CHANGELOG.md, README.md' "README: 예시 머리말"
+assert_contains "$RMT" '키는 위 열뿐이다' "README: 열뿐"
+assert_not_contains "$RMT" '키는 위 아홉뿐이다' "README: 아홉뿐 없음"
+assert_contains "$RMT" '`shared_files: "note #1.md, README.md"`' "README: 따옴표 예"
+assert_contains "$RMT" '함께 진행된 에픽의 설계 의도 `intents.md`' "README: intents.md"
+assert_contains "$RMT" '끝에 탭 없는 한 줄(`동시에 갈 수 있는 준비 에픽: …`)이 붙을 수 있다 — 작업이 아니라 병렬 판단 신호다.' "README: 작업 목록 끝 줄"
+assert_contains "$(cat "$ON")" '닫힌 집합 열)' "온톨로지: 열"
+assert_contains "$(cat "$ON")" '· 겹침에서 빼는 공유 파일' "온톨로지: 뜻"
+assert_contains "$(cat "$ON")" '· `shared_files` |' "온톨로지: 키"
+assert_not_contains "$(cat "$ON")" '닫힌 집합 아홉' "온톨로지: 아홉 없음"
+assert_contains "$(head -1 "$CP"; sed -n 1,20p "$CP")" '탭 없는 마지막 줄' "control_plane docstring: 탭 없는 줄"
+AGDESC="$(awk 'NR>1&&/^tools:/{exit} NR>1' "$AG" | tr '\n' ' ' | tr -s ' ')"
+assert_contains "$AGDESC" 'the full design docs of epics that progressed together (intents)' "프로필 description: 입력"
+assert_contains "$AGDESC" 'checks this PR against their design intent' "프로필 description: 일"
+assert_eq "$(awk '$0=="    var: INTENTS"{getline; print; exit}' "$AG")" "    kind: artifact" "intents 칸 kind: artifact"
+assert_eq "$(count "$(cat "$SK")" '<intents>${INTENTS}</intents>"')" "1" "SKILL: intents 닫는 따옴표"
+
 # 새 단언은 이 줄 위에 덧붙인다 - finish 는 반드시 파일의 마지막 줄이다(아래에 단언을 두면 합계와 종료 코드에 잡히지 않는다).
 finish

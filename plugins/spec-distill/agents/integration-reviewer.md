@@ -3,7 +3,8 @@ name: integration-reviewer
 description: >
   Use this agent before a roadmap epic's PR merges to review the seams between epics. Given the merged copy
   (default branch + this branch), this PR's diff, the other open epics' diffs with a conflict preview, and earlier
-  handoff notes, it reports seam defects split into 「이 PR 이 고침」 and 「뒤 에픽이 고침」. Read-only by design
+  handoff notes, and the full design docs of epics that progressed together (intents), it reports seam defects split
+  into 「이 PR 이 고침」 and 「뒤 에픽이 고침」, and checks this PR against their design intent. Read-only by design
   (Law 2 frontmatter scoping) — it never edits files.
 
   <example>Context: the conductor finished the suite comparison for a PR and assembled a review pack.
