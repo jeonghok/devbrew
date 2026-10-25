@@ -83,11 +83,12 @@ def degrade(reason, exit_code=None, stderr_head=""):
 
 
 STDERR_HEAD_MAX = 200
+SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=.]{20,}")
 
 
 def first_stderr_line(path):
     """codex stderr 의 첫 비어 있지 않은 줄 — codex_findings_to_yaml.stderr_head 와 같은 규칙(출력 못 할 글자는 `?`,
-    STDERR_HEAD_MAX 자에서 자름 — 비밀이 섞일 수 있다). 읽지 못하면 빈 문자열."""
+    비밀처럼 생긴 20자 이상 낱말은 `<가림>`, STDERR_HEAD_MAX 자에서 자름). 읽지 못하면 빈 문자열."""
     if not path:
         return ""
     try:
@@ -98,7 +99,8 @@ def first_stderr_line(path):
     for ln in text.splitlines():
         s = ln.strip()
         if s:
-            return "".join(c if c.isprintable() else "?" for c in s)[:STDERR_HEAD_MAX]
+            s = "".join(c if c.isprintable() else "?" for c in s)
+            return SECRET_LIKE.sub("<가림>", s)[:STDERR_HEAD_MAX]
     return ""
 
 

@@ -14,7 +14,7 @@ T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 
-LONG="$(printf 'E%.0s' $(seq 1 500))"
+LONG="$(printf 'word %.0s' $(seq 1 100))"
 printf '\n  ERROR: model overloaded (retry later)\nSECOND_LINE_MUST_NOT_APPEAR\n' > "$T/err.txt"
 printf '%s\nSECOND_LINE_MUST_NOT_APPEAR\n' "$LONG" > "$T/err-long.txt"
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}' > "$T/ok.jsonl"
@@ -30,9 +30,14 @@ assert_contains "$(meta_val "$T/a.yaml" stderr_head)" "ERROR: model overloaded (
 assert_file_absent "$T/a.yaml" 'SECOND_LINE_MUST_NOT_APPEAR' "공유 추출기: stderr 둘째 줄은 싣지 않는다"
 python3 "$X" --stderr-file "$T/err-long.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/b.yaml"
 v="$(meta_val "$T/b.yaml" stderr_head)"
-assert_contains "$v" "EEEE" "공유 추출기: 긴 첫 줄도 싣는다(양성 짝)"
+assert_contains "$v" "word word word" "공유 추출기: 긴 첫 줄도 싣는다(양성 짝)"
 [ "$(printf '%s' "$v" | tr -d '"'"'" | wc -c | tr -d ' ')" -le 200 ] \
   && ok "공유 추출기: stderr 첫 줄은 200자에서 자른다" || no "공유 추출기: stderr 첫 줄이 200자를 넘는다(${#v})"
+# 비밀처럼 생긴 긴 낱말(20자 이상의 영숫자 · _-+=. 연속)은 가린다 — 이 meta 는 리뷰 기록 문서로 옮겨져 커밋될 수 있다.
+printf 'ERROR: 401 Authorization: Bearer sk-ant-api03-SECRETTOKENVALUE0123456789 rejected\n' > "$T/err-secret.txt"
+python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s.yaml"
+assert_file_absent "$T/s.yaml" 'SECRETTOKENVALUE' "공유 추출기: stderr 첫 줄의 비밀처럼 생긴 긴 낱말을 가린다"
+assert_contains "$(meta_val "$T/s.yaml" stderr_head)" "Authorization: Bearer" "공유 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
 python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml"
 assert_file_absent "$T/c.yaml" 'stderr_head' "공유 추출기: codex 가 0 으로 끝나면 stderr 를 싣지 않는다"
 assert_file_grep "$T/c.yaml" '^  codex_failed: false$' "공유 추출기: 0 종료는 성공 표식(양성 짝)"
@@ -48,6 +53,9 @@ python3 "$XA" --stderr-file "$T/err-long.txt" --meta-override-exit-code 7 --meta
 v="$(sed -n 's/^stderr_head: //p' "$T/e.yaml")"
 [ -n "$v" ] && [ "$(printf '%s' "$v" | tr -d '"'"'" | wc -c | tr -d ' ')" -le 200 ] \
   && ok "artifact 추출기: stderr 첫 줄은 200자에서 자른다" || no "artifact 추출기: 200자 자르기 실패(${#v})"
+python3 "$XA" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f.yaml"
+assert_file_absent "$T/f.yaml" 'SECRETTOKENVALUE' "artifact 추출기: 비밀처럼 생긴 긴 낱말을 가린다"
+assert_contains "$(sed -n 's/^stderr_head: //p' "$T/f.yaml")" "Authorization: Bearer" "artifact 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
 
 # ── 러너 끝에서 끝: codex 스텁이 stderr 를 쓰고 7 로 끝난다 ─────────────────────
 mkdir -p "$T/bin" "$T/proot"

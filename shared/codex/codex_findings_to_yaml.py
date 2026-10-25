@@ -186,14 +186,18 @@ def _yaml_scalar(v: Any) -> str:
 
 
 STDERR_HEAD_MAX = 200
+# 비밀처럼 생긴 낱말(토큰 · 키 · JWT) — 20자 이상의 영숫자 · `_-+=.` 연속. meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다.
+_SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=.]{20,}")
 
 
 def stderr_head(text: str) -> str:
-    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?` 로, STDERR_HEAD_MAX 자에서 자른다."""
+    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?`, 비밀처럼 생긴 긴 낱말은 `<가림>` 으로 바꾸고
+    STDERR_HEAD_MAX 자에서 자른다."""
     for ln in text.splitlines():
         s = ln.strip()
         if s:
-            return "".join(c if c.isprintable() else "?" for c in s)[:STDERR_HEAD_MAX]
+            s = "".join(c if c.isprintable() else "?" for c in s)
+            return _SECRET_LIKE.sub("<가림>", s)[:STDERR_HEAD_MAX]
     return ""
 
 
