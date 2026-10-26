@@ -290,9 +290,11 @@ if not isinstance(d, dict):
     sys.exit(0)
 out = []
 # advice 는 2.1.295 에서 생긴 조언 배열 — 판정하지 않는다(형식만 본다).
-# directory 는 2.1.310 에서 생긴 디렉토리 등록 점검 — 막지 않는 찾음은 판정하지 않고,
-# 막는 찾음(blocking) · error · 점검 실패(failure) · 미완료(incomplete)는 RED 다.
+# directory 는 2.1.309 무렵부터 있는 디렉토리 등록 점검(2.1.309 · 2.1.310 에서 실측) — 하위 키도 닫힌 집합이고,
+# 막지 않는 찾음(blocking:false · hold:false)만 판정하지 않는다. 막는 찾음 · error · 보류(hold) ·
+# 정하지 못한 규칙(undecided) · 점검 실패(failure) · 미완료(incomplete) · 키 부재는 RED 다.
 KNOWN = {"success", "strict", "target", "manifest", "contents", "advice", "directory"}
+DKEYS = {"profile", "findings", "undecided", "incomplete", "failure", "notes"}
 extra = sorted(set(d) - KNOWN)
 if extra:
     out.append("shape: 모르는 최상위 키 %s — 스키마 표류" % extra)
@@ -302,17 +304,30 @@ if "directory" in d:
     dr = d["directory"]
     if not isinstance(dr, dict):
         out.append("shape: directory 가 객체가 아니다")
-    elif not isinstance(dr.get("findings"), list):
-        out.append("shape: directory.findings 가 배열이 아니다")
     else:
-        for f in dr["findings"]:
-            f = f if isinstance(f, dict) else {"code": repr(f), "blocking": True}
-            if f.get("blocking") is not False or f.get("severity") == "error":
-                out.append("directory %s %s %s" % (f.get("code"), f.get("severity"), f.get("message", "")))
+        if sorted(set(dr) - DKEYS):
+            out.append("shape: directory 의 모르는 키 %s — 스키마 표류" % sorted(set(dr) - DKEYS))
+        if sorted(DKEYS - set(dr)):
+            out.append("shape: directory 에 빠진 키 %s — 스키마 표류" % sorted(DKEYS - set(dr)))
+        if not isinstance(dr.get("findings"), list):
+            out.append("shape: directory.findings 가 배열이 아니다")
+        else:
+            for f in dr["findings"]:
+                f = f if isinstance(f, dict) else {"code": repr(f), "blocking": True}
+                if f.get("blocking") is not False or f.get("severity") == "error":
+                    out.append("directory %s %s %s" % (f.get("code"), f.get("severity"), f.get("message", "")))
+                if f.get("hold") is not False:
+                    out.append("directory %s: 보류 표시 hold=%r — 실측에 없던 상태" % (f.get("code"), f.get("hold")))
+        if not isinstance(dr.get("undecided"), list):
+            out.append("shape: directory.undecided 가 배열이 아니다")
+        elif dr["undecided"]:
+            out.append("directory: 정하지 못한 규칙 %r" % dr["undecided"])
         if dr.get("incomplete") is not False:
             out.append("directory: 점검이 끝나지 않았다(incomplete=%r)" % dr.get("incomplete"))
-        if dr.get("failure") is not None:
-            out.append("directory: 점검 실패 %r" % dr.get("failure"))
+        if "failure" not in dr:
+            out.append("directory: 점검 실패 없음을 확인할 수 없다(failure 키가 없다)")
+        elif dr["failure"] is not None:
+            out.append("directory: 점검 실패 %r" % dr["failure"])
 m, c = d.get("manifest"), d.get("contents")
 if not isinstance(m, dict):
     out.append("shape: manifest 가 객체가 아니다")
@@ -375,19 +390,41 @@ assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"'
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[]}')" "" "manifest_bad: 깨끗한 success:true 는 통과"
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":[{"file":"x","message":"m","installLine":"/plugin install p"}]}')" "" "manifest_bad: advice 배열은 비게이팅 — 통과"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":"oops"}')" '^shape: advice 가 배열이 아니다$' "manifest_bad: advice 가 배열이 아니면 모양 사유로 RED"
-# directory — 2.1.310 에서 생긴 디렉토리 등록 점검(실측 키: profile · findings · undecided · incomplete · failure · notes).
-# 막지 않는 찾음(ICON_MISSING 등 blocking:false 경고)은 판정하지 않고, 막는 찾음 · error · 실패 · 미완료는 RED 다.
+# directory — 2.1.309 무렵부터 있는 디렉토리 등록 점검(2.1.303 엔 없다, 2.1.309 · 2.1.310 에서 실측).
+# 막지 않는 찾음(ICON_MISSING 등 blocking:false · hold:false 경고)은 판정하지 않고, 그 밖은 RED 다.
 DOK='{"profile":null,"findings":[{"code":"ICON_MISSING","severity":"warning","blocking":false,"hold":false,"file":".claude-plugin/plugin.json"}],"undecided":[],"incomplete":false,"failure":null,"notes":["n"]}'
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":'"$DOK"'}')" "" "manifest_bad: directory 의 막지 않는 찾음(ICON_MISSING 경고)은 통과"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":"oops"}')" '^shape: directory 가 객체가 아니다$' "manifest_bad: directory 가 객체가 아니면 모양 사유로 RED"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":"x","incomplete":false,"failure":null}}')" '^shape: directory.findings 가 배열이 아니다$' "manifest_bad: directory.findings 가 배열이 아니면 RED"
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"X_BAD","severity":"warning","blocking":true}],"incomplete":false,"failure":null}}')" '^directory X_BAD ' "manifest_bad: directory 의 막는 찾음(blocking:true)은 RED"
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"Y_ERR","severity":"error","blocking":false}],"incomplete":false,"failure":null}}')" '^directory Y_ERR ' "manifest_bad: directory 의 error 찾음은 막지 않음 표시여도 RED"
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":true,"failure":null}}')" '^directory: 점검이 끝나지 않았다' "manifest_bad: directory 점검 미완료는 RED"
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"incomplete":false,"failure":"boom"}}')" '^directory: 점검 실패' "manifest_bad: directory 점검 실패는 RED"
-# 키가 빠지면(CLI 가 이름을 바꾸면) 막지 않음 · 끝남으로 읽지 않는다 — fail-closed
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[{"code":"Z_NOKEY","severity":"warning"}],"incomplete":false,"failure":null}}')" '^directory Z_NOKEY ' "manifest_bad: blocking 키가 없는 찾음은 막는 것으로 읽어 RED"
-assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":{"findings":[],"failure":null}}')" '^directory: 점검이 끝나지 않았다' "manifest_bad: incomplete 키가 없으면 끝나지 않은 것으로 읽어 RED"
+# md <directory 객체> — 나머지가 온전한 validate JSON 에 directory 만 갈아 끼운다. 아래 단언은 각 갈래가
+# 혼자 내는 사유 한 줄을 assert_eq 로 맞춘다(다른 갈래의 사유가 섞이면 그것도 RED).
+md() { mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"directory":'"$1"'}'; }
+assert_eq "$(md '{"profile":null,"findings":[{"code":"X_BAD","severity":"warning","blocking":true,"hold":false}],"undecided":[],"incomplete":false,"failure":null,"notes":[]}')" "directory X_BAD warning " "manifest_bad: directory 의 막는 찾음(blocking:true)은 RED"
+assert_eq "$(md '{"profile":null,"findings":[{"code":"Y_ERR","severity":"error","blocking":false,"hold":false}],"undecided":[],"incomplete":false,"failure":null,"notes":[]}')" "directory Y_ERR error " "manifest_bad: directory 의 error 찾음은 막지 않음 표시여도 RED"
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":[],"incomplete":true,"failure":null,"notes":[]}')" "directory: 점검이 끝나지 않았다(incomplete=True)" "manifest_bad: directory 점검 미완료는 RED"
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":[],"incomplete":false,"failure":"boom","notes":[]}')" "directory: 점검 실패 'boom'" "manifest_bad: directory 점검 실패는 RED"
+# 하위 키도 닫힌 집합이다(2.1.309 · 2.1.310 실측: profile · findings · undecided · incomplete · failure · notes).
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":[],"incomplete":false,"failure":null,"notes":[],"extra":1}')" "shape: directory 의 모르는 키 ['extra'] — 스키마 표류" "manifest_bad: directory 의 모르는 하위 키는 RED"
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":[],"incomplete":false,"failure":null}')" "shape: directory 에 빠진 키 ['notes'] — 스키마 표류" "manifest_bad: directory 의 빠진 하위 키는 RED"
+# undecided — 읽지 못한 파일 때문에 정하지 못한 디렉토리 규칙 코드의 목록(CLI 는 비어 있지 않으면 incomplete 도 true 로 낸다).
+# 미완료 갈래와 따로 잰다: incomplete:false 인데 undecided 가 차 있어도 RED.
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":["PRIVACY_URL_MISSING"],"incomplete":false,"failure":null,"notes":[]}')" "directory: 정하지 못한 규칙 ['PRIVACY_URL_MISSING']" "manifest_bad: directory.undecided 가 비지 않으면 RED"
+assert_eq "$(md '{"profile":null,"findings":[],"undecided":"x","incomplete":false,"failure":null,"notes":[]}')" "shape: directory.undecided 가 배열이 아니다" "manifest_bad: directory.undecided 가 배열이 아니면 RED"
+# hold — 찾음이 CLI 의 실패 판정에서 빠지는 표시(!hold && …). 2.1.310 의 규칙 표에는 hold:true 인 규칙이 없다.
+# 보류된 찾음은 실측에 없던 상태라 막지 않음 표시여도 RED 로 세운다(뜻을 다시 재고 판정을 정하라).
+assert_eq "$(md '{"profile":null,"findings":[{"code":"H_HELD","severity":"warning","blocking":false,"hold":true}],"undecided":[],"incomplete":false,"failure":null,"notes":[]}')" "directory H_HELD: 보류 표시 hold=True — 실측에 없던 상태" "manifest_bad: directory 의 hold:true 찾음은 막지 않음 표시여도 RED"
+# 키가 빠지면(CLI 가 이름을 바꾸면) 막지 않음 · 끝남 · 실패 없음 · 보류 아님으로 읽지 않는다 — fail-closed
+assert_eq "$(md '{"profile":null,"findings":[{"code":"Z_NOKEY","severity":"warning","hold":false}],"undecided":[],"incomplete":false,"failure":null,"notes":[]}')" "directory Z_NOKEY warning " "manifest_bad: blocking 키가 없는 찾음은 막는 것으로 읽어 RED"
+assert_eq "$(md '{"profile":null,"findings":[{"code":"H_NOKEY","severity":"warning","blocking":false}],"undecided":[],"incomplete":false,"failure":null,"notes":[]}')" "directory H_NOKEY: 보류 표시 hold=None — 실측에 없던 상태" "manifest_bad: hold 키가 없는 찾음은 RED"
+o_ni="$(md '{"profile":null,"findings":[],"undecided":[],"failure":null,"notes":[]}')"
+assert_grep "$o_ni" '^directory: 점검이 끝나지 않았다' "manifest_bad: incomplete 키가 없으면 끝나지 않은 것으로 읽어 RED"
+assert_grep "$o_ni" "^shape: directory 에 빠진 키 \['incomplete'\]" "manifest_bad: incomplete 키가 없으면 빠진 키로도 RED"
+o_nf="$(md '{"profile":null,"findings":[],"undecided":[],"incomplete":false,"notes":[]}')"
+assert_grep "$o_nf" '^directory: 점검 실패 없음을 확인할 수 없다\(failure 키가 없다\)$' "manifest_bad: failure 키가 없으면 실패 없음으로 읽지 않아 RED"
+assert_grep "$o_nf" "^shape: directory 에 빠진 키 \['failure'\]" "manifest_bad: failure 키가 없으면 빠진 키로도 RED"
+o_nu="$(md '{"profile":null,"findings":[],"incomplete":false,"failure":null,"notes":[]}')"
+assert_grep "$o_nu" '^shape: directory.undecided 가 배열이 아니다$' "manifest_bad: undecided 키가 없으면 정한 것으로 읽지 않아 RED"
+assert_grep "$o_nu" "^shape: directory 에 빠진 키 \['undecided'\]" "manifest_bad: undecided 키가 없으면 빠진 키로도 RED"
 printf 'boom: validator crashed\n' > "$TMP/fake.err"
 assert_contains "$(printf 'not json' | manifest_bad "$TMP/fake.err")" "stderr: boom: validator crashed" "manifest_bad: 쓸 수 없는 JSON 이면 stderr 마지막 줄을 싣는다"
 
