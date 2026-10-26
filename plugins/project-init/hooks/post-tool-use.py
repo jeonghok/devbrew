@@ -365,7 +365,9 @@ def _cwd_is_entered_worktree(cwd, worktree_name, deadline=None):
         return False
     out = _git(cwd, "rev-parse", "--show-toplevel", deadline=deadline)
     top = os.path.realpath(out.decode("utf-8", "replace").strip()) if out else ""
-    return bool(top) and any(top.endswith(t) for t in _worktree_tails(worktree_name))
+    # 메인 체크아웃의 폴더 이름이 name 과 같을 수 있다 — 링크된 작업 트리여야 EnterWorktree 가 만든 것이다.
+    return (bool(top) and any(top.endswith(t) for t in _worktree_tails(worktree_name))
+            and _cwd_is_linked_worktree(cwd, deadline=deadline))
 
 
 def observe_branches(cwd, now, text, worktree_name=None, worktree_created=False):

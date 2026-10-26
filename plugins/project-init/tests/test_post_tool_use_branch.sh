@@ -172,6 +172,8 @@ fresh; git -C "$W" worktree add -q -b worktree-sly-fox "$W/.claude/worktrees/sly
 hook_ew0 "$W"
 case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다"*"fail-open"*) ok "name 없는 EnterWorktree · cwd = 옮기기 전 레포 → 조용히 빠지지 않고 알림" ;; *) no "name 없는 EnterWorktree · 옮기기 전 레포에서 조용히 빠졌다 — $OUT" ;; esac
 case "$(field ac)" in *"git branch -m"*) no "name 없는 EnterWorktree · 옮기기 전 레포인데 이름 바꾸기 명령 — $OUT" ;; *) ok "name 없는 EnterWorktree · 옮기기 전 레포 → 명령 없음" ;; esac
+fresh; git -C "$W" checkout -q -b SharedBad
+hook_ew "$W" "$(basename "$W")"; noted SharedBad "EnterWorktree name 이 메인 체크아웃 폴더 이름과 같음 · cwd = 메인 체크아웃 → 링크된 작업 트리가 아니라 명령 없음"
 fresh; git -C "$W" branch Echo1
 hook Bash "$W" "echo git branch Echo1"; noted Echo1 "글로만 쓴 git 명령(echo) → 지금 브랜치가 아니라 명령 없음"
 fresh; git -C "$W" branch HereBad
