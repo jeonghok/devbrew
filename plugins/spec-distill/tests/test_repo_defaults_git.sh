@@ -241,8 +241,15 @@ assert_eq "$RC" "3" "roadmap-check: 머리말을 못 읽는 파일은 rc 3"
 assert_contains "$ERR" "검사 불가" "roadmap-check: 못 읽으면 검사 불가로 알린다"
 run "$RB" roadmap-check plan/roadmaps/x/none.md
 assert_eq "$RC" "3" "roadmap-check: 없는 파일은 rc 3"
-run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
-assert_not_contains "$ERR" "기계 상태 층 건너뜀" "roadmap-check: 해결자 알림(로드맵 없음 — 기계 상태 층 건너뜀)을 끝내기 펜스에 내지 않는다"
+mkrepo rn || { no "픽스처 rn"; finish; exit 1; }
+RN="$T/rn/work"
+mkdir -p "$RN/docs/superpowers/roadmaps/x"
+printf -- '---\ntype: roadmap\n---\n# x\n' > "$RN/docs/superpowers/roadmaps/x/roadmap.md"
+printf -- '---\ninterview_dir: wt/\n---\n' > "$RN/.devbrew.md"
+run "$RN" get roadmaps_dir
+assert_contains "$ERR" "아직 기본 브랜치에 없다" "양성 짝: 작업 트리에만 있는 설정 파일의 해결자 알림이 get 에는 나온다"
+run "$RN" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
+assert_eq "$RC:$OUT:$ERR" "0::" "roadmap-check: 해결자 알림(작업 트리에만 있는 설정 파일)을 끝내기 펜스에 내지 않는다 — rc 0 · stdout · stderr 빔"
 mkdir -p "$RB/plan/roadmaps/ex" "$RB/plan/roadmaps/ln" "$RB/plan/roadmaps/lfs"
 cp "$RB/plan/roadmaps/x/roadmap.md" "$RB/plan/roadmaps/ex/roadmap.md" && chmod +x "$RB/plan/roadmaps/ex/roadmap.md"
 ln -s ../x/roadmap.md "$RB/plan/roadmaps/ln/roadmap.md"
