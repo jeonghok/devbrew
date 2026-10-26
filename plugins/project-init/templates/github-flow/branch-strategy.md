@@ -67,7 +67,7 @@ git worktree remove ../<폴더>
 
 첫 push 는 `git push -u origin <접두>/<이름>` 으로 한다(origin 기준 브랜치를 따라가므로 -u 가 필요하다).
 
-이름은 위 `Branch Naming Pattern` 과 같은 규칙을 따른다. project-init 훅은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 확인한다 — 그 이름이 명령에 드러나거나 그 브랜치로 옮겨 간 경우다(변수로만 적은 이름은 검사 밖).
+이름은 위 `Branch Naming Pattern` 과 같은 규칙을 따른다. project-init 훅은 실행 뒤 브랜치 reflog 를 읽어 `git checkout -b` · `git switch -c` · `git worktree add -b` 로 만든 이름을 확인한다 — 그 이름이 명령에 드러나거나 그 브랜치로 옮겨 간 경우다(변수로만 적고 옮겨 가지도 않은 이름은 검사 밖).
 
 ## Rules for Claude
 

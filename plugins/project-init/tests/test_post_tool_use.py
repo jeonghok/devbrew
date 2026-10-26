@@ -475,6 +475,37 @@ class ThisCommandOnly(_RepoTestCase):
             self.assertIsNone(out[0][1], text)
             self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0], text)
 
+    def test_switch_to_branch_made_earlier_gets_no_rename_command(self):
+        """다른 세션이 앞서 만든 브랜치로 옮겨 가면 지금 브랜치이고 명령이 이름을 가리켜도 알리기만 한다."""
+        work = self.repo(strategy(self.RULE))
+        earlier = int(time.time()) - 10
+        subprocess.run(["git", "branch", "Other"], cwd=work, check=True, capture_output=True,
+                       env=dict(GIT_ENV, GIT_COMMITTER_DATE=f"@{earlier} +0000"))
+        git("switch", "-q", "Other", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git switch Other")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn('"Other"', out[0][0])
+        self.assertIsNone(out[0][1])
+        self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0])
+
+    def test_branch_then_switch_in_one_command_gets_rename_command(self):
+        """양성 짝 — 같은 순간에 만들고 옮겨 간 브랜치(`git branch X && git switch X`)는 이름 바꾸기 명령을 받는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Both", cwd=work)
+        git("switch", "-q", "Both", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git branch Both && git switch Both")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("git branch -m Both feature/Both", out[0][1] or "")
+
+    def test_future_dated_create_line_is_not_new(self):
+        """앞날 시각의 만들기 줄은 reflog 가 바뀔 때마다 새 브랜치로 잡히면 안 된다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Later", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Later")
+        head, _sep, msg = log.read_text(encoding="utf-8").partition("\t")
+        log.write_text(head.rsplit(" ", 2)[0] + f" {int(time.time()) + 3600} +0000\t{msg}", encoding="utf-8")
+        self.assertNotIn("Later", _hook.new_branches(work, time.time()))
+
     def test_current_branch_is_handled_without_name_in_command(self):
         work = self.repo(strategy(self.RULE))
         git("checkout", "-q", "-b", "Cur", cwd=work)
@@ -499,7 +530,7 @@ class ThisCommandOnly(_RepoTestCase):
             git("branch", "-D", name, cwd=work)
 
     def test_creation_buried_under_many_commits_is_seen(self):
-        """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 끝 8KB 밖으로 밀려도 새 브랜치로 잡는다."""
+        """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 마지막 줄에서 수십 KB 떨어져도 새 브랜치로 잡는다."""
         work = self.repo(strategy(self.RULE))
         git("branch", "Deep", cwd=work)
         log = Path(work, ".git", "logs", "refs", "heads", "Deep")
@@ -544,8 +575,25 @@ class ThisCommandOnly(_RepoTestCase):
         self.assertNotIn("Deep", _hook.new_branches(work, time.time(), unread=unread))
         self.assertEqual(unread, [], "양성 짝 — 상한 안에서 끝까지 읽으면 「못 읽음」 이 아니다")
 
+    def test_unread_branch_of_another_session_stays_quiet(self):
+        """음성 짝 — 끝까지 못 읽은 브랜치라도 지금 브랜치가 아니고 명령이 가리키지 않으면 알리지 않는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Deep2", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep2")
+        head = log.read_text(encoding="utf-8").split("\t", 1)[0]
+        log.write_text("".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(400)), encoding="utf-8")
+        old = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 16384
+        try:
+            unread = []
+            _hook.new_branches(work, time.time(), unread=unread)
+            self.assertEqual(unread, ["Deep2"], "픽스처 전제: 끝까지 못 읽었다")
+            self.assertEqual(_hook.observe_branches(work, time.time(), "ls"), [])
+        finally:
+            _hook.REFLOG_SCAN_MAX = old
+
     def test_create_line_at_tail_boundary_is_kept(self):
-        # 끝 8KB 가 만들기 줄의 첫 글자에서 시작하면 그 줄은 온전하다 — 잘린 줄로 보고 버리면 안 된다.
+        # 읽는 끝(REFLOG_SCAN_MAX)이 만들기 줄의 첫 글자에서 시작하면 그 줄은 온전하다 — 잘린 줄로 보고 버리면 안 된다.
         work = self.repo(strategy(self.RULE))
         git("branch", "Big", cwd=work)
         log = Path(work, ".git", "logs", "refs", "heads", "Big")
@@ -556,7 +604,14 @@ class ThisCommandOnly(_RepoTestCase):
         body = create + f"{head}\tcommit: " + "p" * room + "\n"
         self.assertEqual(len(body.encode("utf-8")), 8192, "픽스처 전제: 만들기 줄부터 끝까지 정확히 8KB")
         log.write_text(old + body, encoding="utf-8")
-        self.assertIn("Big", _hook.new_branches(work, time.time()))
+        limit = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 8192  # 경계가 실제로 만들기 줄 앞에 떨어지게
+        try:
+            unread = []
+            self.assertIn("Big", _hook.new_branches(work, time.time(), unread=unread))
+            self.assertEqual(unread, [])
+        finally:
+            _hook.REFLOG_SCAN_MAX = limit
 
     def test_name_boundaries(self):
         named = _hook.named_in

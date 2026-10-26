@@ -53,6 +53,7 @@ NEW_BRANCH_WINDOW = 60.0
 REFLOG_SCAN_MAX = 1 << 20  # 한 브랜치 reflog 를 거슬러 읽는 상한 — 넘으면 「끝까지 못 읽음」으로 알린다
 GIT_BUDGET = 8.0  # 한 실행의 git 호출 전체 — hooks.json 의 timeout(10초) 안
 CREATED_PREFIX = "branch: Created from "
+MOVED_PREFIX = "checkout: moving from "
 RENAMED_RE = re.compile(r"Branch: (?:renamed|copied) refs/heads/.+ to refs/heads/(.+)$")
 COMMIT_MSG_RE = re.compile(r"""git\s+commit\s+[^;|&]*-m\s+(['"])(.*?)\1""")
 HEREDOC_COMMIT_RE = re.compile(
@@ -171,30 +172,68 @@ def _reflog_lines_since(path):
         f.seek(0, os.SEEK_END)
         end = f.tell()
         start = max(0, end - REFLOG_SCAN_MAX)
-        f.seek(start)
-        buf = f.read(end - start)
-    lines = buf.split(b"\n")
+        f.seek(max(0, start - 1))
+        buf = f.read(end - max(0, start - 1))
     if start > 0:
-        lines = lines[1:]  # 앞이 잘린 줄
-    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()], start == 0
+        # 앞 바이트가 줄바꿈이면 첫 줄은 온전하다 — 줄 가운데서 시작했을 때만 그 잘린 조각을 버린다.
+        buf = buf[1:] if buf[:1] == b"\n" else buf.partition(b"\n")[2]
+    return [ln.decode("utf-8", "replace") for ln in buf.split(b"\n") if ln.strip()], start == 0
+
+
+def _line_time(line, now, window):
+    """(시각, 메시지) — reflog 한 줄이 window 초 안이면, 아니면 None. 앞날 시각(시계보다 1초 넘게 뒤)도 None."""
+    head, sep, msg = line.partition("\t")
+    parts = head.split()
+    if not sep or len(parts) < 2:
+        return None
+    try:
+        ts = int(parts[-2])
+    except ValueError:
+        return None
+    if now - ts > window or ts - now > 1:
+        return None
+    return ts, msg
 
 
 def _is_new_branch_line(line, branch, now, window):
     """reflog 한 줄이 window 초 안의 만들기 · 이름 바꾸기 · 복사인가."""
-    head, sep, msg = line.partition("\t")
-    parts = head.split()
-    if not sep or len(parts) < 2:
+    got = _line_time(line, now, window)
+    if got is None:
         return False
-    try:
-        ts = int(parts[-2])
-    except ValueError:
-        return False
-    if now - ts > window:
-        return False
+    msg = got[1]
     if msg.startswith(CREATED_PREFIX):
         return True
     m = RENAMED_RE.match(msg)
     return bool(m and m.group(1) == branch)
+
+
+def _moved_here_at_creation(cwd, name, now, deadline=None):
+    """cwd 의 HEAD 가 name 으로 옮겨 간 줄이 name 의 만들기 · 이름 바꾸기 줄과 같은 순간(1초 안)인가.
+
+    `checkout -b` · `switch -c` · 지금 브랜치의 `branch -m` 은 두 기록을 한 번에 쓴다. 다른 세션이 만든
+    브랜치로 나중에 옮겨 간 `git switch` 는 두 시각이 다르다.
+    """
+    out = _git(cwd, "rev-parse", "--git-dir", "--git-common-dir", deadline=deadline)
+    dirs = [d for d in out.decode("utf-8", "replace").split("\n") if d] if out else []
+    if len(dirs) != 2:
+        return False
+    head_log = os.path.join(cwd, dirs[0], "logs", "HEAD")
+    branch_log = os.path.join(cwd, dirs[1], "logs", "refs", "heads", *name.split("/"))
+    try:
+        made = [int(ln.partition("\t")[0].split()[-2]) for ln in _reflog_lines_since(branch_log)[0]
+                if _is_new_branch_line(ln, name, now, NEW_BRANCH_WINDOW)]
+        moved = []
+        for ln in _reflog_lines_since(head_log)[0]:
+            got = _line_time(ln, now, NEW_BRANCH_WINDOW)
+            if got is None:
+                continue
+            ts, msg = got
+            m = RENAMED_RE.match(msg)
+            if (msg.startswith(MOVED_PREFIX) and msg.rsplit(" to ", 1)[-1] == name) or (m and m.group(1) == name):
+                moved.append(ts)
+    except OSError:
+        return False
+    return any(abs(a - b) <= 1 for a in made for b in moved)
 
 
 def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None, unread=None):
@@ -392,6 +431,11 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
     rest = [n for n in names if not named_in(text, n)]
     entered = set()
     current = _current_branch(cwd, deadline=deadline) if (names or unread) else None
+    # name 없이 만든 작업 트리 — cwd 가 방금 만든 링크된 작업 트리면 그 지금 브랜치가 이 호출의 것이다.
+    fresh_worktree = bool(
+        names and worktree_created and not worktree_name
+        and _cwd_is_linked_worktree(cwd, deadline=deadline)
+        and _cwd_worktree_is_new(cwd, now, deadline=deadline))
     if rest:
         entered = _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
         mine = {current} | (entered or set())
@@ -403,7 +447,7 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
                 "— 그 브랜치 이름 검사를 건너뛴다(fail-open).",
                 None,
             ))
-        elif worktree_created and not worktree_name and any(n not in mine for n in rest):
+        elif worktree_created and not worktree_name and not fresh_worktree and any(n not in mine for n in rest):
             # name 없이(무작위 이름) 만든 작업 트리 — cwd 가 옮기기 전 레포면 어느 새 브랜치가 이 호출의 것인지 모른다.
             notes.append((
                 "project-init: EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다 "
@@ -419,15 +463,13 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
         ))
     if not names:
         return notes
-    # 이름 바꾸기 명령의 근거는 명령 글의 해석이 아니라 git 상태다 — 호출 뒤 cwd 의 지금 브랜치이면서
-    # 명령 글이 그 이름을 가리키거나, EnterWorktree 가 만든 작업 트리의 브랜치일 때만 낸다. 이름을
-    # 가리키기만 한 브랜치(다른 세션 것일 수 있다)와 명령 글이 가리키지 않는 지금 브랜치(같은 체크아웃의
-    # 다른 세션)는 알리기만 한다.
-    proven = {n for n in names if n == current and named_in(text, n)} | (entered or set())
-    if current in names and (
-            _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline)
-            or (worktree_created and not worktree_name and _cwd_is_linked_worktree(cwd, deadline=deadline)
-                and _cwd_worktree_is_new(cwd, now, deadline=deadline))):
+    # 이름 바꾸기 명령의 근거는 명령 글의 해석이 아니라 git 상태다 — 호출 뒤 cwd 의 지금 브랜치이고 명령
+    # 글이 그 이름을 가리키며 HEAD 가 그 브랜치를 만든 순간에 옮겨 갔거나, EnterWorktree 가 만든 작업
+    # 트리의 브랜치일 때만 낸다. 이름을 가리키기만 한 브랜치 · 다른 세션이 만든 브랜치로 옮겨 간 것 ·
+    # 명령 글이 가리키지 않는 지금 브랜치(같은 체크아웃의 다른 세션)는 알리기만 한다.
+    proven = {n for n in names if n == current and named_in(text, n)
+              and _moved_here_at_creation(cwd, n, now, deadline=deadline)}
+    if current in names and (_cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline) or fresh_worktree):
         # EnterWorktree 가 방금 만든 작업 트리의 지금 브랜치 — 다른 세션의 것일 수 없다.
         proven.add(current)
     return notes + _judge(cwd, names, deadline, proven)

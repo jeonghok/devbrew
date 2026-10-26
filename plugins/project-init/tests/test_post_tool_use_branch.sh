@@ -168,6 +168,15 @@ hook_ew0() { # $1 cwd — name 없이 부른 EnterWorktree(하니스가 무작�
 }
 fresh; git -C "$W" worktree add -q -b worktree-happy-cat "$W/.claude/worktrees/happy-cat"
 hook_ew0 "$W/.claude/worktrees/happy-cat"; alerted worktree-happy-cat "name 없는 EnterWorktree · cwd = 새 작업 트리 → 이 호출이 만든 브랜치로 알림 · 명령"
+fresh; git -C "$W" worktree add -q -b worktree-calm-owl "$W/.claude/worktrees/calm-owl"; git -C "$W" branch OtherSession
+hook_ew0 "$W/.claude/worktrees/calm-owl"; alerted worktree-calm-owl "name 없는 EnterWorktree · cwd = 새 작업 트리 + 무관한 새 브랜치 → 이 호출의 브랜치로 알림 · 명령"
+case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어"*) no "name 없는 EnterWorktree · 브랜치를 가렸는데 「가리지 못했다」 알림이 함께 나왔다 — $OUT" ;; *) ok "name 없는 EnterWorktree · cwd = 새 작업 트리 → 「가리지 못했다」 알림 없음" ;; esac
+hook_ewp() { # $1 cwd = tool_input.path — 이미 있는 작업 트리로 들어간 EnterWorktree
+  OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": "EnterWorktree", "cwd": sys.argv[1], "tool_input": {"path": sys.argv[1]}}))' "$1" \
+    | CLAUDE_PROJECT_DIR="$1" python3 "$HOOK")
+}
+fresh; git -C "$W" worktree add -q -b BadP "$W/.claude/worktrees/p"
+hook_ewp "$W/.claude/worktrees/p"; noted BadP "EnterWorktree 가 path 로 남이 방금 만든 작업 트리에 들어감 → 이 호출이 만든 것이 아니라 명령 없음"
 fresh; git -C "$W" worktree add -q -b worktree-sly-fox "$W/.claude/worktrees/sly-fox"
 hook_ew0 "$W"
 case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다"*"fail-open"*) ok "name 없는 EnterWorktree · cwd = 옮기기 전 레포 → 조용히 빠지지 않고 알림" ;; *) no "name 없는 EnterWorktree · 옮기기 전 레포에서 조용히 빠졌다 — $OUT" ;; esac
