@@ -150,6 +150,7 @@ docreview:
   reraise: []
   engine_lines: []
   engine_lines_since: 0
+  count_logged: []
 ---
 # docreview 원장
 - r0: init
