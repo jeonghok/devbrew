@@ -286,10 +286,13 @@ def load(path: Path, roadmap_rel: str, skip: tuple = ()) -> dict:
     return parse_machine(text, roadmap_rel, skip)
 
 
-OLD_REPO_SETTINGS_NOTICE = (
-    "기계 상태 파일에 예전 판이 적은 테스트 명령 줄(`## 레포 설정`)이 남아 있다 — 이제 그 줄은 읽지 않고 다음 저장에서 지운다. "
+_OLD_REPO_SETTINGS_TODO = (
     "그 값을 옮겨 쓰지 말고, 스위트 대조가 테스트 명령을 모른다고(종료 코드 6) 하면 "
     "사용자에게 다시 물어 --test-command 로 넘기거나 레포 설정 파일(%s)에 올린다" % repo_defaults.SETTINGS_FILE)
+OLD_REPO_SETTINGS_SEEN = ("기계 상태 파일에 예전 판이 적은 테스트 명령 줄(`## 레포 설정`)이 남아 있다 — 그 줄은 읽지 않고 "
+                          "다음 원장 쓰기에서 지운다. " + _OLD_REPO_SETTINGS_TODO)
+OLD_REPO_SETTINGS_DROPPED = ("기계 상태 파일에서 예전 판이 적은 테스트 명령 줄(`## 레포 설정`)을 지웠다 — 그 줄은 이제 "
+                             "읽지 않는다. " + _OLD_REPO_SETTINGS_TODO)
 
 
 def has_old_repo_settings(path) -> bool:

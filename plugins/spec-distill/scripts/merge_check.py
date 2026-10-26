@@ -420,7 +420,7 @@ def run(root: Path, a) -> int:
     except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
     if cs.has_old_repo_settings(mroot / cs.MACHINE_FILE):
-        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_NOTICE)
+        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_SEEN)
     test_command, pattern, sources = suite_settings(root, a.roadmap, {"test_command": a.test_command,
                                                                        "test_failure_pattern": a.test_failure_pattern})
     why = pattern_error(pattern) if pattern else None

@@ -1191,6 +1191,8 @@ class PrRefresh(Repo):
         self.assertEqual(rc, 0, out)
         self.assertIn("예전 판이 적은 테스트 명령 줄", out)
         self.assertIn("사용자에게 다시 물어 --test-command 로 넘기거나", out)
+        self.assertIn("(`## 레포 설정`)을 지웠다", out, "저장 뒤의 알림은 지웠다고 말한다")
+        self.assertNotIn("남아 있다", out, "지운 뒤에 남아 있다고 말하지 않는다")
         self.assertNotIn("exit 0", out, "옛 줄의 값을 알림에 싣지 않는다")
         self.assertEqual(out.strip().splitlines()[-1], "acquired")
         self.assertNotIn("레포 설정", path.read_text(encoding="utf-8"))

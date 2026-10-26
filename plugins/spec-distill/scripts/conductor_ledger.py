@@ -119,7 +119,7 @@ def update(root, roadmap: str, session: str, change, skip: tuple = ()) -> dict:
     except cs.MachineError as exc:
         raise Fail(3, "기계 상태를 쓰지 못했다: %s" % exc)
     if old_settings:
-        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_NOTICE)
+        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_DROPPED)
     return data
 
 

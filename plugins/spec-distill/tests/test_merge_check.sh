@@ -164,6 +164,8 @@ assert_not_contains "$out" "exit 0" "기계 상태의 명령 글이 출력 어�
 assert_not_contains "$out" "기계 상태(임시)" "기계 상태 출처 표기가 없다"
 assert_contains "$out" "예전 판이 적은 테스트 명령 줄" "옛 레포 설정 줄을 조용히 버리지 않고 읽지 않는다고 알린다"
 assert_contains "$out" "사용자에게 다시 물어 --test-command 로 넘기거나" "옛 줄 알림: 답은 다시 물어 인자로 넘긴다"
+assert_contains "$out" "(\`## 레포 설정\`)이 남아 있다" "옛 줄 알림: 스위트 대조는 쓰지 않으므로 줄이 남아 있다고 말한다"
+assert_not_contains "$out" "을 지웠다" "옛 줄 알림: 스위트 대조는 지웠다고 말하지 않는다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
 assert_eq "$rc" "1" "기계 상태의 레포 설정 절이 깨져 있어도 읽지 않으므로 대조가 돈다 → rc 1"
