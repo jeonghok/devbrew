@@ -160,6 +160,18 @@ OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": "EnterWorkt
   | PATH="$T/wtfail2:$PATH" CLAUDE_PROJECT_DIR="$W" python3 "$HOOK")
 case "$(field systemMessage)" in *"작업 트리 목록을 읽지 못해"*) ok "EnterWorktree · 작업 트리 목록 실패 → 조용히 빠지지 않고 알림" ;; *) no "EnterWorktree · 작업 트리 목록 실패를 알리지 않았다 — $OUT" ;; esac
 case "$(field ac)" in *"git branch -m"*) no "EnterWorktree · 작업 트리 목록 실패인데 이름 바꾸기 명령 — $OUT" ;; *) ok "EnterWorktree · 작업 트리 목록 실패 → 명령 없음" ;; esac
+hook_ew0() { # $1 cwd — name 없이 부른 EnterWorktree(하니스가 무작위 이름을 고른다)
+  OUT=$(python3 -I -c 'import json,sys; print(json.dumps({"tool_name": "EnterWorktree", "cwd": sys.argv[1], "tool_input": {}}))' "$1" \
+    | CLAUDE_PROJECT_DIR="$1" python3 "$HOOK")
+}
+fresh; git -C "$W" worktree add -q -b worktree-happy-cat "$W/.claude/worktrees/happy-cat"
+hook_ew0 "$W/.claude/worktrees/happy-cat"; alerted worktree-happy-cat "name 없는 EnterWorktree · cwd = 새 작업 트리 → 이 호출이 만든 브랜치로 알림 · 명령"
+fresh; git -C "$W" worktree add -q -b worktree-sly-fox "$W/.claude/worktrees/sly-fox"
+hook_ew0 "$W"
+case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다"*"fail-open"*) ok "name 없는 EnterWorktree · cwd = 옮기기 전 레포 → 조용히 빠지지 않고 알림" ;; *) no "name 없는 EnterWorktree · 옮기기 전 레포에서 조용히 빠졌다 — $OUT" ;; esac
+case "$(field ac)" in *"git branch -m"*) no "name 없는 EnterWorktree · 옮기기 전 레포인데 이름 바꾸기 명령 — $OUT" ;; *) ok "name 없는 EnterWorktree · 옮기기 전 레포 → 명령 없음" ;; esac
+fresh; git -C "$W" branch Echo1
+hook Bash "$W" "echo git branch Echo1"; noted Echo1 "글로만 쓴 git 명령(echo) → 만든 근거 아님 · 명령 없음"
 fresh; git -C "$W" worktree add -q -b worktree-xz "$W/.claude/worktrees/xz"
 hook_ew "$W" z; quiet "EnterWorktree 이름 z · 새 브랜치는 작업 트리 xz 의 것 → 조용"
 hook EnterWorktree "$W/.claude/worktrees/xz" 'git commit -m "add thing"'

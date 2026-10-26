@@ -334,12 +334,33 @@ _BRANCH_MOVE_FLAGS = {"-m", "-M", "-c", "-C", "--move", "--copy"}
 _CREATE_FLAGS = {"-b", "-B", "-c", "-C", "--create", "--force-create", "--orphan"}
 
 
-def _created_by(toks):
-    """한 명령 조각의 낱말들에서 git 이 만드는 브랜치 이름들."""
-    if "git" not in toks:
+_ASSIGN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _same_repo_dir(cwd, target):
+    """`git -C <target>` 이 cwd 의 레포를 가리키는가 — 경로가 cwd 와 같거나 서로 품는다."""
+    if cwd is None:
+        return False
+    a = os.path.realpath(cwd)
+    b = os.path.realpath(os.path.join(cwd, target))
+    return a == b or a.startswith(b.rstrip(os.sep) + os.sep) or b.startswith(a.rstrip(os.sep) + os.sep)
+
+
+def _created_by(toks, cwd=None):
+    """한 명령 조각의 낱말들에서 git 이 만드는 브랜치 이름들.
+
+    git 은 조각의 첫 명령 낱말이어야 한다(앞의 `VAR=값` 만 건너뛴다) — `echo git branch X` 는 만들지 않는다.
+    `git -C <dir>` 은 그 dir 이 cwd 의 레포일 때만 받는다.
+    """
+    j = 0
+    while j < len(toks) and _ASSIGN_RE.match(toks[j]):
+        j += 1
+    if j >= len(toks) or toks[j] != "git":
         return set()
-    i = toks.index("git") + 1
+    i = j + 1
     while i < len(toks) and toks[i].startswith("-"):
+        if toks[i] == "-C" and (i + 1 >= len(toks) or not _same_repo_dir(cwd, toks[i + 1])):
+            return set()
         i += 2 if toks[i] in ("-C", "-c") else 1
     if i >= len(toks):
         return set()
@@ -363,19 +384,20 @@ def _created_by(toks):
     return set()
 
 
-def created_in(text, name):
+def created_in(text, name, cwd=None):
     """도구 입력 글이 그 브랜치를 만드는 git 명령을 담는가 — 이름 바꾸기 명령을 낼 근거.
 
     `git branch X` · `git branch -m old X` · `git checkout|switch -b|-B|-c|-C|--create X` ·
     `git worktree add -b X` · `git worktree add <경로>/X`. 읽기 명령(`git log X`) · 다른 명령의 낱말
-    (`npm test`) · 다른 이름의 일부(`fix/X`)는 근거가 아니다.
+    (`npm test` · `echo git branch X`) · 다른 이름의 일부(`fix/X`) · 다른 레포(`git -C <다른 레포>`)는
+    근거가 아니다. 글만 보므로 실제로 돌았는지(`false && git branch X`)는 알지 못한다(README 관찰 범위).
     """
     for seg in _SEGMENT_SPLIT.split(text or ""):
         try:
             toks = shlex.split(seg)
         except ValueError:
             toks = seg.split()
-        if name in _created_by(toks):
+        if name in _created_by(toks, cwd):
             return True
     return False
 
@@ -406,6 +428,15 @@ def _worktree_tails(worktree_name):
     return {os.sep + name.replace("/", "+"), os.sep + name.replace("/", os.sep)}
 
 
+def _cwd_is_linked_worktree(cwd, deadline=None):
+    """cwd 가 링크된 작업 트리(메인 체크아웃이 아닌 것)인가 — git-dir 과 공용 git-dir 이 다르다."""
+    out = _git(cwd, "rev-parse", "--git-dir", "--git-common-dir", deadline=deadline)
+    if not out:
+        return False
+    dirs = [os.path.realpath(os.path.join(cwd, d)) for d in out.decode("utf-8", "replace").split("\n") if d]
+    return len(dirs) == 2 and dirs[0] != dirs[1]
+
+
 def _cwd_is_entered_worktree(cwd, worktree_name, deadline=None):
     """EnterWorktree 의 name 으로 만든 작업 트리가 cwd 의 작업 트리인가(payload 의 cwd 가 새 작업 트리일 때)."""
     if not worktree_name:
@@ -415,15 +446,16 @@ def _cwd_is_entered_worktree(cwd, worktree_name, deadline=None):
     return bool(top) and any(top.endswith(t) for t in _worktree_tails(worktree_name))
 
 
-def observe_branches(cwd, now, text, worktree_name=None):
+def observe_branches(cwd, now, text, worktree_name=None, worktree_created=False):
     """Warnings for branches this tool call made just now whose names break the default branch's rule.
 
     text 는 도구 입력 글(Bash 의 명령)이다 — 새 브랜치 가운데 이 글이 이름을 가리키거나 cwd 가
     지금 쓰는 브랜치이거나 EnterWorktree 의 name 으로 만든 작업 트리의 브랜치만 이 호출이 만든 것으로 본다.
+    worktree_created 는 EnterWorktree 가 새 작업 트리를 만든 호출(path 없음)이다.
     """
     deadline = _deadline()
     try:
-        return _observe(cwd, now, deadline, text, worktree_name)
+        return _observe(cwd, now, deadline, text, worktree_name, worktree_created)
     except GitTimeout:
         return [(
             "project-init: git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open).",
@@ -431,7 +463,7 @@ def observe_branches(cwd, now, text, worktree_name=None):
         )]
 
 
-def _observe(cwd, now, deadline, text, worktree_name=None):
+def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=False):
     unread = []
     names = [n for n in new_branches(cwd, now, deadline=deadline, unread=unread) if n not in PROTECTED_BRANCHES]
     # 공용 git 디렉토리라 다른 세션이 막 만든 브랜치도 보인다 — 이 호출과 무관한 브랜치는 다루지
@@ -451,6 +483,13 @@ def _observe(cwd, now, deadline, text, worktree_name=None):
                 "— 그 브랜치 이름 검사를 건너뛴다(fail-open).",
                 None,
             ))
+        elif worktree_created and not worktree_name and any(n not in mine for n in rest):
+            # name 없이(무작위 이름) 만든 작업 트리 — cwd 가 옮기기 전 레포면 어느 새 브랜치가 이 호출의 것인지 모른다.
+            notes.append((
+                "project-init: EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다 "
+                "— 그 브랜치 이름 검사를 건너뛴다(fail-open).",
+                None,
+            ))
     unread = [n for n in unread if n not in PROTECTED_BRANCHES and (named_in(text, n) or n == current)]
     if unread:
         notes.append((
@@ -462,8 +501,11 @@ def _observe(cwd, now, deadline, text, worktree_name=None):
         return notes
     # 이름 바꾸기 명령은 이 호출이 만들었다는 근거가 있는 브랜치에만 — 이름을 가리키기만 했거나
     # 지금 브랜치일 뿐이면 다른 세션이 만든 브랜치일 수 있다(같은 체크아웃 · 같은 낱말).
-    proven = {n for n in names if created_in(text, n)} | (entered or set())
-    if current in names and _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline):
+    proven = {n for n in names if created_in(text, n, cwd)} | (entered or set())
+    if current in names and (
+            _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline)
+            or (worktree_created and not worktree_name and _cwd_is_linked_worktree(cwd, deadline=deadline))):
+        # EnterWorktree 가 방금 만든 작업 트리의 지금 브랜치 — 다른 세션의 것일 수 없다.
         proven.add(current)
     return notes + _judge(cwd, names, deadline, proven)
 
@@ -611,13 +653,16 @@ def main():
     if not isinstance(tool_input, dict):
         tool_input = {}
     worktree_name = None
+    worktree_created = False
     if tool_name == "Bash":
         text = str(tool_input.get("command", ""))
     else:
         text = " ".join(v for v in tool_input.values() if isinstance(v, str))
         name = tool_input.get("name")
-        worktree_name = name if isinstance(name, str) else None
-    results = observe_branches(cwd, time.time(), text, worktree_name)
+        worktree_name = name if isinstance(name, str) and name.strip("/") else None
+        # path 가 있으면 이미 있는 작업 트리로 들어가는 호출이다 — 새 작업 트리를 만들지 않는다.
+        worktree_created = not isinstance(tool_input.get("path"), str)
+    results = observe_branches(cwd, time.time(), text, worktree_name, worktree_created)
     if tool_name == "Bash":
         commit = validate_commit(text)
         if commit:

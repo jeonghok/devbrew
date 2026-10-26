@@ -492,7 +492,7 @@ class ThisCommandOnly(_RepoTestCase):
         for text, name in (("git branch Bad", "Bad"), ("git checkout -b 'Bad' && x", "Bad"),
                            ('git switch -c "Bad"', "Bad"), ("git switch --create Bad", "Bad"),
                            ("git checkout -B Bad", "Bad"), ("git branch -m old Bad", "Bad"),
-                           ("git -C /tmp/w branch Bad", "Bad"), ("git worktree add -b Bad ../wt", "Bad"),
+                           ("git worktree add -b Bad ../wt", "Bad"), ("GIT_TRACE=0 git branch Bad", "Bad"),
                            ("git worktree add ../wt/Bad", "Bad"), ("ls; git branch Bad", "Bad"),
                            ("git branch -t Bad origin/Bad", "Bad")):
             self.assertTrue(made(text, name), text)
@@ -500,8 +500,14 @@ class ThisCommandOnly(_RepoTestCase):
                            ("git branch -d Bad", "Bad"), ("git branch --list Bad", "Bad"),
                            ("git branch -m Bad other", "Bad"), ("git checkout Bad", "Bad"),
                            ("git worktree add --detach ../wt/Bad", "Bad"), ("x=Bad; git branch $x", "Bad"),
+                           ("echo git branch Bad", "Bad"), ("printf '%s' git branch Bad", "Bad"),
                            ("", "Bad")):
             self.assertFalse(made(text, name), text)
+        # git -C 는 cwd 의 레포를 가리킬 때만 근거다 — 다른 레포에서 만든 같은 이름은 아니다.
+        self.assertTrue(made("git -C /tmp/w branch Bad", "Bad", "/tmp/w"))
+        self.assertTrue(made("git -C sub branch Bad", "Bad", "/tmp/w"))
+        self.assertFalse(made("git -C /tmp/other branch Bad", "Bad", "/tmp/w"))
+        self.assertFalse(made("git -C /tmp/w branch Bad", "Bad"), "cwd 를 모르면 -C 는 근거가 아니다")
 
     def test_creation_buried_under_many_commits_is_seen(self):
         """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 끝 8KB 밖으로 밀려도 새 브랜치로 잡는다."""

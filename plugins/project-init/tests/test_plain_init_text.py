@@ -36,8 +36,10 @@ class CompletionReportTest(unittest.TestCase):
             "> 다음 할 일: 이 파일들을 커밋해 원격 기본 브랜치에 머지하고 받아 와라(`git fetch`) — 훅은 브랜치 이름 규칙을 "
             "`origin/HEAD` 판에서 읽는다. 이번 실행이 `docs/git-workflow/branch-strategy.md` 를 새로 만들었거나 바꿨다면 "
             "머지 전까지는 기본 브랜치에 있는 판으로 검사한다(그 판이 없으면 새 브랜치 이름을 확인하지 않고 규칙을 읽지 "
-            "못했다고만 알리고, 옛 판이면 옛 규칙으로 검사한다). git 규칙을 그대로 뒀다면 훅은 기본 브랜치의 규칙으로 바로 "
-            "검사한다(`origin/HEAD` 가 없으면 `git remote set-head origin --auto`, `origin` 원격이 없으면 먼저 원격을 더한다).")
+            "못했다고만 알리고, 옛 판이면 옛 규칙으로 검사한다). git 규칙을 그대로 뒀다면 기본 브랜치에 "
+            "`docs/git-workflow/branch-strategy.md`(```` ```regex ```` 블록이 있는)가 있을 때만 훅이 바로 검사하고, 없으면 "
+            "규칙을 읽지 못했다고만 알린다(`origin/HEAD` 가 없으면 `git remote set-head origin --auto`, `origin` 원격이 "
+            "없으면 먼저 원격을 더한다).")
         self.assertEqual(sum(1 for ln in self.block if ln.startswith("> 다음 할 일:")), 1)
 
     def test_no_promise_of_check_before_merge(self):
@@ -52,7 +54,9 @@ class CompletionReportTest(unittest.TestCase):
         self.assertTrue(last.startswith("> 다음 할 일:"), last)
         self.assertIn("새로 만들었거나 바꿨다면", last)
         self.assertIn("옛 판이면 옛 규칙으로 검사한다", last)
-        self.assertIn("git 규칙을 그대로 뒀다면 훅은 기본 브랜치의 규칙으로 바로 검사한다", last)
+        self.assertIn("git 규칙을 그대로 뒀다면 기본 브랜치에", last)
+        self.assertIn("있을 때만 훅이 바로 검사하고, 없으면 규칙을 읽지 못했다고만 알린다", last)
+        self.assertNotIn("훅은 기본 브랜치의 규칙으로 바로 검사한다", last, "조건 없이 「바로 검사한다」고 약속하는 문장")
         self.assertIn("`origin` 원격이 없으면", last)
         self.assertNotIn("그 전에는 새 브랜치 이름을 확인하지 않고", last, "조건 없이 「확인하지 않는다」고 단정하는 옛 문장")
 
