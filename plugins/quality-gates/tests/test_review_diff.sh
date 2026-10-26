@@ -84,23 +84,102 @@ case_session_includes_untracked() {
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "걸러진 diff 에도 new.py"
 }
 
-case_binary_cannot_hide_code() {
-  echo "[session — -diff 속성 · NUL 바이트가 코드를 「Binary files differ」 로 숨기지 못한다]"
+bin_line() {   # bin_line <이스케이프한 이름> — 바이너리로 보여 리뷰하지 않은 경로의 줄
+  printf 'review-diff: 바뀐 경로 %s 는 바이너리로 보여(.gitattributes 의 -diff · binary 이거나 NUL 바이트) 리뷰 diff 에 내용이 없어 리뷰하지 않았다' "$1"
+}
+
+rd_mode() {   # rd_mode <mode> — 모드마다 인자를 채워 rd 를 부른다(range 는 C0..HEAD, paths 는 src · lib · 최상위 새 파일)
+  case "$1" in
+    range)
+      printf 'start: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+      rd --mode range --scope-file "$D/range-scope.txt" ;;
+    paths) rd --mode paths --globs src lib 'new*' ;;
+    *) rd --mode "$1" ;;
+  esac
+}
+
+# 「Binary files … differ」 한 줄로만 리뷰 diff 에 든 파일은 리뷰한 것으로 세지 않는다 — 이름과 함께
+# 리뷰하지 않았다고 알리고 degraded: yes. 원본 바이트는 리뷰 diff 에 넣지 않는다(--text 없음).
+case_binary_attr_not_reviewed() {
+  echo "[모든 모드 — -diff 속성으로 숨긴 셸 파일은 리뷰한 것으로 세지 않는다]"
+  local mode
+  for mode in session branch paths range; do
+    mkfix
+    printf '*.sh -diff\n' > "$R/.gitattributes"
+    printf 'echo HIDDEN_ATTR\n' > "$R/src/run.sh"
+    printf 'echo HIDDEN_SPACE\n' > "$R/src/sp ace.sh"
+    g "$R" add -A; g "$R" commit -q -m hide
+    [ "$mode" = session ] && printf 'echo HIDDEN_UNTRACKED\n' > "$R/new.sh"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" yes "$mode: degraded: yes"
+    assert_line "$ROOT/err" "$(bin_line src/run.sh)" "$mode: src/run.sh 를 리뷰하지 않았다고 이름과 함께 알린다"
+    assert_line "$ROOT/err" "$(bin_line 'src/sp\ ace.sh')" "$mode: 공백 든 이름도 이스케이프해 알린다"
+    if [ "$mode" = session ]; then
+      assert_line "$ROOT/err" "$(bin_line new.sh)" "$mode: untracked new.sh 도 알린다"
+      assert_eq "$(grep -c '바이너리로 보여' "$ROOT/err")" 3 "$mode: 알리는 줄은 셋"
+    else
+      assert_eq "$(grep -c '바이너리로 보여' "$ROOT/err")" 2 "$mode: 알리는 줄은 둘"
+    fi
+    assert_file_absent "$ROOT/err" '리뷰 diff 에 들지 못해' "$mode: 이름 대조의 다른 줄로 두 번 알리지 않는다"
+    assert_file_absent "$D/review-i1.diff" 'HIDDEN_' "$mode: 숨긴 글은 diff 에 없다(그래서 리뷰 안 됨으로 알린다)"
+  done
+}
+
+case_binary_nul_not_reviewed() {
+  echo "[session · branch — NUL 바이트 파일은 리뷰한 것으로 세지 않는다]"
+  local mode
+  for mode in session branch; do
+    mkfix
+    printf 'z = 1\000\nHIDDEN_NUL = 1\n' > "$R/lib/nul.py"
+    g "$R" add -A; g "$R" commit -q -m nul
+    [ "$mode" = session ] && printf 'w = 1\000\nHIDDEN_UNTRACKED_NUL = 1\n' > "$R/new_nul.py"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" yes "$mode: degraded: yes"
+    assert_line "$ROOT/err" "$(bin_line lib/nul.py)" "$mode: lib/nul.py 를 이름과 함께 알린다"
+    [ "$mode" = session ] \
+      && assert_line "$ROOT/err" "$(bin_line new_nul.py)" "$mode: untracked new_nul.py 도 알린다"
+  done
+}
+
+case_binary_png_bytes_not_in_diff() {
+  echo "[session — 진짜 PNG 바이트는 리뷰 diff 에 들어가지 않는다]"
   mkfix
-  printf '*.sh -diff\n' > "$R/.gitattributes"
-  printf 'echo HIDDEN_TRACKED_ATTR\n' > "$R/src/run.sh"
-  printf 'z = 1\000\nHIDDEN_TRACKED_NUL = 1\n' > "$R/lib/nul.py"
-  g "$R" add -A; g "$R" commit -q -m hide
-  printf 'echo HIDDEN_UNTRACKED_ATTR\n' > "$R/new.sh"
-  printf 'w = 1\000\nHIDDEN_UNTRACKED_NUL = 1\n' > "$R/new_nul.py"
+  # PNG 머리 + IHDR + UTF-8 이 아닌 바이트
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377\376\375\200\201' > "$R/logo.png"
+  g "$R" add -A; g "$R" commit -q -m png
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377\376\375\200\202' > "$R/new.png"
+  echo 'x = 2' > "$R/src/a.py"
   rd --mode session
   assert_eq "$RC" 0 "rc 0"
-  local f m
+  local f
   for f in "$D/review-i1.diff" "$D/review-i1.full.diff"; do
-    for m in HIDDEN_TRACKED_ATTR HIDDEN_TRACKED_NUL HIDDEN_UNTRACKED_ATTR HIDDEN_UNTRACKED_NUL; do
-      assert_file_grep "$f" "^\\+.*$m" "$(basename "$f") 에 $m 줄이 그대로 있다"
-    done
-    assert_file_absent "$f" '^Binary files ' "$(basename "$f") 에 'Binary files … differ' 줄이 없다"
+    if python3 -I -c 'import sys; d = open(sys.argv[1], "rb").read(); d.decode("utf-8"); sys.exit(1 if (b"\0" in d or b"IHDR" in d) else 0)' "$f" 2>/dev/null; then
+      ok "$(basename "$f") 에 PNG 바이트가 없다(UTF-8 로 읽힌다)"
+    else
+      no "$(basename "$f") 에 PNG 바이트가 없다(UTF-8 로 읽힌다)"
+    fi
+  done
+  assert_file_grep "$D/review-i1.diff" '^\+x = 2$' "텍스트 파일 글은 그대로 있다"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_line "$ROOT/err" "$(bin_line logo.png)" "logo.png 를 이름과 함께 알린다"
+  assert_line "$ROOT/err" "$(bin_line new.png)" "new.png 를 이름과 함께 알린다"
+}
+
+case_text_only_not_degraded() {
+  echo "[session · branch — 텍스트 파일만 바뀌면 degraded 가 아니다]"
+  local mode
+  for mode in session branch; do
+    mkfix
+    printf 'echo VISIBLE\n' > "$R/src/run.sh"
+    g "$R" add -A; g "$R" commit -q -m text
+    [ "$mode" = session ] && printf 'echo VISIBLE_UNTRACKED\n' > "$R/new.sh"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" no "$mode: degraded: no"
+    assert_file_absent "$ROOT/err" '리뷰하지 않았다' "$mode: 리뷰하지 않았다는 줄이 없다"
+    assert_file_grep "$D/review-i1.diff" '^\+echo VISIBLE$' "$mode: 셸 파일 글이 diff 에 있다"
   done
 }
 
@@ -1146,7 +1225,10 @@ case_usage() {
 }
 
 case_session_includes_untracked
-case_binary_cannot_hide_code
+case_binary_attr_not_reviewed
+case_binary_nul_not_reviewed
+case_binary_png_bytes_not_in_diff
+case_text_only_not_degraded
 case_session_doc_excluded
 case_range_uses_frozen_pair
 case_topic_uses_boundary_tree

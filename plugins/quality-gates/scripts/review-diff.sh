@@ -29,7 +29,8 @@
 # kept_model · doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
 # 비워 두고 degraded: yes · degraded_reason: <resolve-baseline.sh 의 사유> · files: - · self_state: - 로 rc 0
 # (사유가 no-default-branch 면 stderr 에 고치는 법 한 줄). 그 밖에는 degraded_reason: - 다. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
-# gitlink · 이전 qg 실행이 남긴 worktree · 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로)이 있으면 다섯
+# gitlink · 이전 qg 실행이 남긴 worktree · 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로 · git 이 바이너리로 보아
+# 「Binary files … differ」 한 줄로만 diff 에 든 경로)이 있으면 다섯
 # 파일은 그대로 쓰고 degraded: yes(files 등은 수 그대로)로 rc 0 — 기준선 degraded 와는
 # files 가 수인지로 갈린다. git 실패 rc 4, 사용 오류 rc 2.
 # 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 문서 경로는 빼지 않고 리뷰한다(stderr 한 줄 · excluded 에 세지 않는다).
@@ -125,14 +126,15 @@ T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 �
 # --ignore-submodules=none — 작업 트리 .gitmodules 의 submodule.<이름>.ignore(리뷰하는 변경이 더할 수 있다)나
 # 사용자 설정 diff.ignoreSubmodules 가 gitlink 를 diff 에서 숨기지 못하게 한다. session · paths 는 뒤에
 # --ignore-submodules=dirty 를 덧붙인다(뒤 플래그가 이긴다).
-# --text — 리뷰하는 변경의 .gitattributes(`-diff` · `binary`)나 앞 8KB 의 NUL 바이트 하나가 파일 내용을
-# 「Binary files … differ」 한 줄로 바꿔 리뷰어 · codex 에게서 숨기지 못하게 한다(이름 대조는 그 파일을 리뷰했다고 센다).
+# --text 를 붙이지 않는다 — 진짜 바이너리(이미지 · 폰트)의 원본 바이트가 리뷰어 입력에 들어가지 않게. 대신
+# git 이 바이너리로 본 파일(.gitattributes 의 `-diff` · `binary`, 앞 8KB 의 NUL 바이트 — 「Binary files … differ」
+# 한 줄로만 diff 에 든다)은 같은 플래그의 --numstat 으로 이름을 모아 리뷰하지 않았다고 알린다(say_binary).
 # 걸러진 diff 의 git diff 한 번에 넘기는 남길 경로 수 · 글자 수 상한(인자 길이 상한 ARG_MAX 아래로).
 KEEP_BATCH_N=500
 KEEP_BATCH_CHARS=65536
-GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --text --no-renames --submodule=short
+GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames --submodule=short
       --ignore-submodules=none --src-prefix=a/ --dst-prefix=b/)
-GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv --text
+GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
               --src-prefix=a/ --dst-prefix=b/)
 
 publish() {   # 임시 파일 다섯을 제자리로
@@ -232,7 +234,7 @@ QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|excl2|prefix|keep|roots|seen|files|missing|untr|ukeep)\.z'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|excl2|prefix|keep|roots|seen|files|missing|untr|ukeep|numstat|bin|reviewed|mother|mbin)\.z'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|doc-paths\.new|self-state)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
@@ -451,6 +453,11 @@ say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 
   UNREVIEWED=$((UNREVIEWED + 1))
   printf 'review-diff: 바뀐 경로 %s 가 리뷰 diff 에 들지 못해 리뷰하지 않았다\n' "$(esc_name "$1")" >&2
 }
+say_binary() {   # <경로> — git 이 바이너리로 보아 「Binary files … differ」 한 줄로만 리뷰 diff 에 든 경로
+  UNREVIEWED=$((UNREVIEWED + 1))
+  printf 'review-diff: 바뀐 경로 %s 는 바이너리로 보여(.gitattributes 의 -diff · binary 이거나 NUL 바이트) 리뷰 diff 에 내용이 없어 리뷰하지 않았다\n' \
+    "$(esc_name "$1")" >&2
+}
 
 # NUL 목록 다루기(경로는 바이트 그대로 비교한다).
 #   dirs <all.z> <excl.z>   excl 가운데 all 의 다른 경로의 폴더 이름(x 와 x/…)인 것
@@ -459,6 +466,8 @@ say_missing() {   # <경로> — 이름 대조에서 제외도 리뷰도 되지 
 #                           x/… 도 잡으므로 x 아래 경로를 따로 넘기면 다른 묶음에서 두 번 나온다
 #   docpaths <doc-paths> <drop.z> <수>  doc-paths 를 줄 단위로 옮겨 쓰며 drop 의 exclude<TAB> 줄을 reviewed<TAB> 로,
 #                           <수> 가 숫자면 excluded: 줄을 그 수로 바꾼다
+#   binary <numstat.z>      --numstat -z --no-renames 기록 가운데 「-<TAB>-」(git 이 바이너리로 본 파일)의 경로.
+#                           모양이 다른 기록이 있으면 rc 3
 NUL_PY='import sys
 def rd(p):
     with open(p, "rb") as f:
@@ -503,6 +512,13 @@ elif op == "docpaths":
         elif ln.startswith(b"exclude\t") and ln[8:] in drop:
             lines[i] = b"reviewed\t" + ln[8:]
     out.write(b"\n".join(lines))
+elif op == "binary":
+    for r in rd(sys.argv[2]):
+        parts = r.split(b"\t", 2)
+        if len(parts) != 3 or not parts[2]:
+            sys.exit(3)
+        if parts[0] == b"-" and parts[1] == b"-":
+            out.write(parts[2] + b"\0")
 elif op == "minus":
     skip = set()
     for p in sys.argv[3:]:
@@ -549,12 +565,23 @@ if [ "${#DROP[@]}" -gt 0 ]; then
 fi
 nul_list minus "$T/tracked.z" "$T/excl.z" > "$T/keep.z" || gitfail "남길 경로를 가리지 못했다"
 nul_list roots "$T/keep.z" "$T/all.z" > "$T/roots.z" || gitfail "남길 경로의 폴더 이름 대조가 실패했다"
-: > "$T/diff"; : > "$T/filtered.z"
-diff_batch() {   # KB 묶음 하나를 걸러진 diff 와 이름 목록에 덧붙인다
+: > "$T/diff"; : > "$T/filtered.z"; : > "$T/numstat.z"; : > "$T/bin.z"
+diff_batch() {   # KB 묶음 하나를 걸러진 diff 와 이름 목록 · numstat 에 덧붙인다
   "${GITD[@]}" "${REV[@]}" -- "${KB[@]}" >> "$T/diff" \
     || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
   "${GITD[@]}" --name-only -z "${REV[@]}" -- "${KB[@]}" >> "$T/filtered.z" \
     || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
+  "${GITD[@]}" --numstat -z "${REV[@]}" -- "${KB[@]}" >> "$T/numstat.z" \
+    || gitfail "걸러진 git diff --numstat 이 실패했다: ${REV[*]}"
+}
+is_binary_untracked() {   # <path> — git 이 이 untracked 파일을 바이너리로 보는가(add_untracked 와 같은 플래그)
+  local ns rc
+  [ -L "$1" ] && [ -d "$1" ] && return 1   # 폴더 링크는 링크 대상 글자를 diff 한다(add_dir_link)
+  ns="$("${GITD_NOINDEX[@]}" --numstat -- /dev/null "$1")"
+  rc=$?
+  [ "$rc" -le 1 ] || gitfail "untracked 파일의 numstat 이 실패했다(rc $rc): $(esc_name "$1")"
+  case "$ns" in "-$TAB-$TAB"*) return 0 ;; esac
+  return 1
 }
 KB=(); kb_chars=0
 while IFS= read -r -d '' x; do
@@ -574,13 +601,22 @@ while IFS= read -r -d '' f; do
   FILTERED=$((FILTERED + 1))
   add_untracked "$T/diff" "$f"
   printf '%s\0' "$f" >> "$T/seen.z" || gitfail "리뷰한 경로 목록을 쓰지 못했다"
+  if is_binary_untracked "$f"; then
+    printf '%s\0' "$f" >> "$T/bin.z" || gitfail "바이너리 경로 목록을 쓰지 못했다"
+  fi
 done < "$T/ukeep.z"
+nul_list binary "$T/numstat.z" >> "$T/bin.z" || gitfail "numstat 에서 바이너리 경로를 가리지 못했다"
 
-# 이름 대조 — (tracked + untracked 파일) − 제외 − (걸러진 이름 + 리뷰한 untracked) 가 비어야 한다. 남는
-# 경로마다 크게 알리고 degraded: yes. 중첩 레포 · 등록된 qg 트리는 아래에서 따로 알린다.
+# 이름 대조 — (tracked + untracked 파일) − 제외 − 리뷰한 경로(걸러진 이름 + 리뷰한 untracked − 바이너리로 본
+# 경로) 가 비어야 한다. 남는 경로마다 크게 알리고 degraded: yes — 바이너리로 본 경로는 say_binary, 그 밖은
+# say_missing. 중첩 레포 · 등록된 qg 트리는 아래에서 따로 알린다.
 put_z "$T/files.z" ${NAMES[@]+"${NAMES[@]}"} ${UNTR[@]+"${UNTR[@]}"} || gitfail "경로 목록을 쓰지 못했다"
-nul_list minus "$T/files.z" "$T/excl.z" "$T/seen.z" > "$T/missing.z" || gitfail "이름 대조가 실패했다"
-while IFS= read -r -d '' x; do say_missing "$x"; done < "$T/missing.z"
+nul_list minus "$T/seen.z" "$T/bin.z" > "$T/reviewed.z" || gitfail "리뷰한 경로를 가리지 못했다"
+nul_list minus "$T/files.z" "$T/excl.z" "$T/reviewed.z" > "$T/missing.z" || gitfail "이름 대조가 실패했다"
+nul_list minus "$T/missing.z" "$T/bin.z" > "$T/mother.z" || gitfail "이름 대조가 실패했다"
+nul_list minus "$T/missing.z" "$T/mother.z" > "$T/mbin.z" || gitfail "이름 대조가 실패했다"
+while IFS= read -r -d '' x; do say_missing "$x"; done < "$T/mother.z"
+while IFS= read -r -d '' x; do say_binary "$x"; done < "$T/mbin.z"
 
 for x in ${NESTED[@]+"${NESTED[@]}"}; do say_unreviewed "$x"; done
 for x in ${STALE_WT[@]+"${STALE_WT[@]}"}; do say_stale_wt "$x"; done
