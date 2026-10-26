@@ -6,7 +6,8 @@ Runs after Bash and EnterWorktree tool calls:
    local branches were just made (their reflog has a create / rename / copy
    line within NEW_BRANCH_WINDOW seconds) — keeping only those the tool input
    names or that cwd has checked out, so another session's branch is left
-   alone — and validates each name
+   alone; a rename command goes only to a branch the tool input itself
+   creates (created_in) or that EnterWorktree made — and validates each name
    against the pattern in docs/git-workflow/branch-strategy.md as committed on
    the default branch (refs/remotes/origin/HEAD), not the working tree.
 2. Commit message (Bash only) — detects git commit -m and validates
@@ -48,6 +49,8 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 DEFAULT_REF = "refs/remotes/origin/HEAD"
 STRATEGY_PATH = "docs/git-workflow/branch-strategy.md"
 NEW_BRANCH_WINDOW = 60.0
+REFLOG_CHUNK = 8192
+REFLOG_SCAN_MAX = 1 << 20  # 한 브랜치 reflog 를 거슬러 읽는 상한 — 넘으면 「끝까지 못 읽음」으로 알린다
 GIT_BUDGET = 8.0  # 한 실행의 git 호출 전체 — hooks.json 의 timeout(10초) 안
 CREATED_PREFIX = "branch: Created from "
 RENAMED_RE = re.compile(r"Branch: (?:renamed|copied) refs/heads/.+ to refs/heads/(.+)$")
@@ -156,17 +159,46 @@ def _inert(text):
     return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
 
 
-def _tail_reflog_lines(path):
-    """reflog 끝 8KB 의 줄들 — 한 명령이 만들기 뒤에 커밋 · 리셋 줄을 더 남길 수 있다.
+def _line_time(line):
+    """reflog 한 줄(bytes)의 시각, 읽지 못하면 None."""
+    head, sep, _msg = line.partition(b"\t")
+    parts = head.split()
+    if not sep or len(parts) < 2:
+        return None
+    try:
+        return int(parts[-2])
+    except ValueError:
+        return None
 
-    첫 줄은 앞이 잘렸을 수 있지만 버리지 않는다 — 잘림은 앞에서 생겨 시각 · 메시지는 남거나
-    (그대로 읽어도 옳다), 시각이 잘리면 너무 옛 시각이 되고, 메시지가 잘리면 탭이 없어 버려진다.
+
+def _reflog_lines_since(path, cutoff):
+    """(줄들, 끝까지 봤나) — reflog 를 끝에서부터 REFLOG_CHUNK 씩 거슬러 읽는다.
+
+    한 명령이 만들기 뒤에 커밋 · 리셋 줄을 얼마든지 남길 수 있다(`checkout -b X && cherry-pick A..B`).
+    cutoff 보다 옛 온전한 줄이 나오거나 파일 처음에 닿으면 멈춘다 — 그 앞 줄은 모두 더 옛 줄이다.
+    REFLOG_SCAN_MAX 에 닿아도 cutoff 까지 못 봤으면 (읽은 줄, False) 를 낸다.
     """
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
-        f.seek(max(0, f.tell() - 8192))
-        lines = f.read().split(b"\n")
-    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()]
+        end = pos = f.tell()
+        buf = b""
+        complete = True
+        while pos > 0:
+            if end - pos >= REFLOG_SCAN_MAX:
+                complete = False
+                break
+            step = min(REFLOG_CHUNK, pos)
+            pos -= step
+            f.seek(pos)
+            buf = f.read(step) + buf
+            whole = buf.split(b"\n")[1:] if pos > 0 else buf.split(b"\n")
+            first = next((t for t in map(_line_time, whole) if t is not None), None)
+            if first is not None and first < cutoff:
+                break
+    lines = buf.split(b"\n")
+    if pos > 0:
+        lines = lines[1:]  # 앞이 잘린 줄 — 그 뒤에 이미 cutoff 보다 옛 줄이 있다
+    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()], complete
 
 
 def _is_new_branch_line(line, branch, now, window):
@@ -187,10 +219,11 @@ def _is_new_branch_line(line, branch, now, window):
     return bool(m and m.group(1) == branch)
 
 
-def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None):
+def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None, unread=None):
     """Branches whose reflog has a create / rename / copy line within `window` seconds.
 
     마지막 줄만 보지 않는다 — `git checkout -b X && git commit` 은 만들기 줄 뒤에 커밋 줄을 남긴다.
+    window 안의 줄을 끝까지 읽지 못한(REFLOG_SCAN_MAX) 브랜치는 unread 목록에 더한다.
 
     공용 git 디렉토리의 logs/refs/heads/** 를 직접 읽는다(브랜치마다 git 을 띄우지
     않는다 · 상태 파일 없음). 레포가 아니거나 reflog 가 없으면 빈 목록.
@@ -207,12 +240,14 @@ def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None):
             try:
                 if os.path.getmtime(path) < now - window:
                     continue
-                lines = _tail_reflog_lines(path)
+                lines, complete = _reflog_lines_since(path, now - window)
             except OSError:
                 continue
             name = os.path.relpath(path, root).replace(os.sep, "/")
             if any(_is_new_branch_line(ln, name, now, window) for ln in lines):
                 found.append(name)
+            elif not complete and unread is not None:
+                unread.append(name)
     return sorted(found)
 
 
@@ -288,6 +323,63 @@ def named_in(text, name):
     return bool(text) and re.search(_NAME_LEFT + re.escape(name) + _NAME_RIGHT, text) is not None
 
 
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|&\n]")
+_BRANCH_READ_FLAGS = {
+    "-d", "-D", "--delete", "-l", "--list", "-a", "--all", "-r", "--remotes", "--contains",
+    "--no-contains", "--merged", "--no-merged", "--show-current", "-v", "-vv", "--verbose",
+    "--points-at", "--format", "--sort", "-u", "--set-upstream-to", "--unset-upstream",
+    "--edit-description",
+}
+_BRANCH_MOVE_FLAGS = {"-m", "-M", "-c", "-C", "--move", "--copy"}
+_CREATE_FLAGS = {"-b", "-B", "-c", "-C", "--create", "--force-create", "--orphan"}
+
+
+def _created_by(toks):
+    """한 명령 조각의 낱말들에서 git 이 만드는 브랜치 이름들."""
+    if "git" not in toks:
+        return set()
+    i = toks.index("git") + 1
+    while i < len(toks) and toks[i].startswith("-"):
+        i += 2 if toks[i] in ("-C", "-c") else 1
+    if i >= len(toks):
+        return set()
+    sub, args = toks[i], toks[i + 1:]
+    if sub == "branch":
+        if any(a.split("=", 1)[0] in _BRANCH_READ_FLAGS for a in args):
+            return set()
+        pos = [a for a in args if not a.startswith("-")]
+        if not pos:
+            return set()
+        return {pos[-1]} if any(a in _BRANCH_MOVE_FLAGS for a in args) else {pos[0]}
+    if sub in ("checkout", "switch"):
+        return {args[k + 1] for k, a in enumerate(args[:-1]) if a in _CREATE_FLAGS}
+    if sub == "worktree" and args[:1] == ["add"]:
+        rest = args[1:]
+        made = {rest[k + 1] for k, a in enumerate(rest[:-1]) if a in ("-b", "-B")}
+        if made or "--detach" in rest or "-d" in rest:
+            return made
+        pos = [a for a in rest if not a.startswith("-")]
+        return {os.path.basename(pos[0].rstrip("/"))} if pos else set()
+    return set()
+
+
+def created_in(text, name):
+    """도구 입력 글이 그 브랜치를 만드는 git 명령을 담는가 — 이름 바꾸기 명령을 낼 근거.
+
+    `git branch X` · `git branch -m old X` · `git checkout|switch -b|-B|-c|-C|--create X` ·
+    `git worktree add -b X` · `git worktree add <경로>/X`. 읽기 명령(`git log X`) · 다른 명령의 낱말
+    (`npm test`) · 다른 이름의 일부(`fix/X`)는 근거가 아니다.
+    """
+    for seg in _SEGMENT_SPLIT.split(text or ""):
+        try:
+            toks = shlex.split(seg)
+        except ValueError:
+            toks = seg.split()
+        if name in _created_by(toks):
+            return True
+    return False
+
+
 def _current_branch(cwd, deadline=None):
     out = _git(cwd, "symbolic-ref", "-q", "HEAD", deadline=deadline)
     ref = out.decode("utf-8", "replace").strip() if out else ""
@@ -302,12 +394,25 @@ def _entered_worktree_branches(cwd, worktree_name, deadline=None):
     """
     if not worktree_name:
         return set()
-    name = worktree_name.strip("/")
-    tails = {os.sep + name.replace("/", "+"), os.sep + name.replace("/", os.sep)}
+    tails = _worktree_tails(worktree_name)
     trees = checked_out_elsewhere(cwd, deadline=deadline)
     if trees is None:
         return None
     return {b for b, p in trees.items() if any(p.endswith(t) for t in tails)}
+
+
+def _worktree_tails(worktree_name):
+    name = worktree_name.strip("/")
+    return {os.sep + name.replace("/", "+"), os.sep + name.replace("/", os.sep)}
+
+
+def _cwd_is_entered_worktree(cwd, worktree_name, deadline=None):
+    """EnterWorktree 의 name 으로 만든 작업 트리가 cwd 의 작업 트리인가(payload 의 cwd 가 새 작업 트리일 때)."""
+    if not worktree_name:
+        return False
+    out = _git(cwd, "rev-parse", "--show-toplevel", deadline=deadline)
+    top = os.path.realpath(out.decode("utf-8", "replace").strip()) if out else ""
+    return bool(top) and any(top.endswith(t) for t in _worktree_tails(worktree_name))
 
 
 def observe_branches(cwd, now, text, worktree_name=None):
@@ -327,15 +432,17 @@ def observe_branches(cwd, now, text, worktree_name=None):
 
 
 def _observe(cwd, now, deadline, text, worktree_name=None):
-    names = [n for n in new_branches(cwd, now, deadline=deadline) if n not in PROTECTED_BRANCHES]
+    unread = []
+    names = [n for n in new_branches(cwd, now, deadline=deadline, unread=unread) if n not in PROTECTED_BRANCHES]
     # 공용 git 디렉토리라 다른 세션이 막 만든 브랜치도 보인다 — 이 호출과 무관한 브랜치는 다루지
     # 않는다(그 이름을 이 세션 모델이 바꾸게 하지 않는다).
     notes = []
     rest = [n for n in names if not named_in(text, n)]
+    entered = set()
+    current = _current_branch(cwd, deadline=deadline) if (rest or unread) else None
     if rest:
-        mine = {_current_branch(cwd, deadline=deadline)}
         entered = _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
-        mine |= entered or set()
+        mine = {current} | (entered or set())
         names = [n for n in names if n not in rest or n in mine]
         if entered is None and any(n not in mine for n in rest):
             # 작업 트리 목록을 못 읽어 EnterWorktree 의 브랜치를 가리지 못했다 — 조용히 빠지지 않게 알린다.
@@ -344,17 +451,39 @@ def _observe(cwd, now, deadline, text, worktree_name=None):
                 "— 그 브랜치 이름 검사를 건너뛴다(fail-open).",
                 None,
             ))
+    unread = [n for n in unread if n not in PROTECTED_BRANCHES and (named_in(text, n) or n == current)]
+    if unread:
+        notes.append((
+            f"project-init: 브랜치 {', '.join(_inert(n) for n in unread)} 의 reflog 가 길어 최근 "
+            f"{int(NEW_BRANCH_WINDOW)}초의 기록을 끝까지 읽지 못했다 — 그 브랜치 이름 검사를 건너뛴다(fail-open).",
+            None,
+        ))
     if not names:
         return notes
-    return notes + _judge(cwd, names, deadline)
+    # 이름 바꾸기 명령은 이 호출이 만들었다는 근거가 있는 브랜치에만 — 이름을 가리키기만 했거나
+    # 지금 브랜치일 뿐이면 다른 세션이 만든 브랜치일 수 있다(같은 체크아웃 · 같은 낱말).
+    proven = {n for n in names if created_in(text, n)} | (entered or set())
+    if current in names and _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline):
+        proven.add(current)
+    return notes + _judge(cwd, names, deadline, proven)
 
 
-def _judge(cwd, names, deadline):
-    """이 호출의 새 브랜치 names 를 기본 브랜치 규칙으로 판정한 (사람, 모델) 알림들."""
+UNPROVEN_NOTE = ("\n이 명령이 이 브랜치를 만들었다는 근거가 없어(이름을 가리키기만 했거나 지금 브랜치일 뿐이다) "
+                 "이 세션에서는 이름을 바꾸라고 하지 않는다.")
+
+
+def _judge(cwd, names, deadline, proven=None):
+    """이 호출의 새 브랜치 names 를 기본 브랜치 규칙으로 판정한 (사람, 모델) 알림들.
+
+    proven 밖의 브랜치는 알리기만 하고 이름 바꾸기 명령을 내지 않는다(None 이면 모두 근거 있음).
+    """
     pattern, notice = read_branch_rule(cwd, deadline=deadline)
     if pattern is None:  # 유효 패턴 없음 → fail OPEN, loudly
         return [(notice, None)]  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
     found = [(n, r) for n, r in ((n, check_branch_name(n, pattern)) for n in names) if r]
+    if proven is not None:
+        found = [(n, (h + UNPROVEN_NOTE, None)) if (c and n not in proven) else (n, (h, c))
+                 for n, (h, c) in found]
     if not any(cmd for _n, (_h, cmd) in found):
         return [r for _n, r in found]
     # 이름 바꾸기는 다른 작업 트리가 쓰는 브랜치에 내지 않는다 — git branch -m 은 그

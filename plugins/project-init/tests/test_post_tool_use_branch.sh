@@ -74,6 +74,12 @@ elsewhere() { # $1 이름, $2 작업 트리 경로, $3 label
     *) no "$3: 모델 채널에 명령 없는 알림 줄이 없다 — $OUT" ;; esac
 }
 
+noted() { # $1 이름, $2 label — 알리기만 하고 이름 바꾸기 명령은 없다(이 명령이 만들었다는 근거 없음)
+  sm=$(field systemMessage); ac=$(field ac)
+  case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*"이름을 바꾸라고 하지 않는다"*) ;; *) no "$2: 사람 채널에 근거 없음 알림이 없다 — $OUT"; return ;; esac
+  case "$ac" in *"git branch -m $1 "*) no "$2: 근거 없이 이름 바꾸기 명령을 냈다 — $OUT" ;; *) ok "$2" ;; esac
+}
+
 quiet() { # $1 label
   [ "$OUT" = "{}" ] && ok "$1" || no "$1: 조용해야 한다 — $OUT"
 }
@@ -123,7 +129,8 @@ elsewhere BadMain "$W" "안에 중첩된 detached 작업 트리가 cwd · 바깥
 mkdir -p "$T/wtfail"
 printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = worktree ] && exit 1; done\nexec "%s" "$@"\n' "$REAL_GIT" > "$T/wtfail/git"
 chmod +x "$T/wtfail/git"
-HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git log BadMain"
+# 만드는 명령이어야 이름 바꾸기 명령의 후보가 된다 — 작업 트리 목록 실패가 그 명령을 빼는지 잰다.
+HOOK_PATH="$T/wtfail:$PATH" hook Bash "$W" "git checkout -b BadMain"
 sm=$(field systemMessage); ac=$(field ac)
 case "$ac" in *"작업 트리 목록을 읽지 못해 규칙 밖 브랜치에 이름 바꾸기 명령을 내지 않았다"*) ok "작업 트리 목록 실패 → 모델 채널에 명령 없는 알림 줄" ;; *) no "작업 트리 목록 실패를 모델 채널에 알리지 않았다 — $OUT" ;; esac
 case "$ac" in *"git branch -m"*) no "작업 트리 목록을 못 읽었는데 이름 바꾸기 명령을 냈다 — $OUT" ;; *)
@@ -166,7 +173,7 @@ hook Bash "$W" "git branch feature/ok"; quiet "규칙 안 이름 → 조용"
 fresh; git -C "$W" branch Old6; age_reflog "$W" Old6 61
 hook Bash "$W" "git log Old6"; quiet "61초 전에 만든 규칙 밖 브랜치 → 다시 알리지 않음"
 fresh; git -C "$W" branch Old7; age_reflog "$W" Old7 30
-hook Bash "$W" "git log Old7"; alerted Old7 "30초 전에 만든 규칙 밖 브랜치를 명령이 가리킴 → 알림(양성 짝)"
+hook Bash "$W" "git log Old7"; noted Old7 "30초 전에 만든 규칙 밖 브랜치를 읽기 명령이 가리킴 → 알림(양성 짝) · 만든 근거가 없어 명령 없음"
 
 echo "이 명령이 만들지 않은 브랜치 — 다른 세션의 것일 수 있어 다루지 않는다"
 # 옛 Old7 은 `ls` 뒤에도 30초 전 브랜치를 알리고 이름 바꾸기 명령까지 냈다 — 공용 git 디렉토리를
@@ -183,7 +190,11 @@ case "$OUT" in *Other4*) no "같은 때 둘 — 명령과 무관한 Other4 를 �
 fresh; git -C "$W" branch Bad41
 hook Bash "$W" "git branch Bad4"; quiet "이름이 앞부분만 겹치는 명령(Bad4 ≠ Bad41) → 조용"
 fresh; git -C "$W" checkout -q -b Cur5; age_reflog "$W" Cur5 30
-hook Bash "$W" "ls"; alerted Cur5 "cwd 의 지금 브랜치(30초 전 만듦) → 명령 글에 없어도 이 세션의 것으로 알림"
+hook Bash "$W" "ls"; noted Cur5 "cwd 의 지금 브랜치(30초 전 만듦) → 명령 글에 없어도 알림 · 같은 체크아웃의 다른 세션 것일 수 있어 명령 없음"
+fresh; git -C "$W" branch test
+hook Bash "$W" "npm test"; noted test "다른 세션이 만든 브랜치 test · 이 명령은 같은 낱말일 뿐 → 명령 없음"
+fresh; git -C "$W" branch Other8; git -C "$W" checkout -q -b fix/Other8
+hook Bash "$W" "git checkout -b fix/Other8"; noted Other8 "다른 세션의 Other8 · 이 명령은 fix/Other8 을 만듦 → Other8 에 명령 없음"
 fresh; git -C "$W" switch -q --create Mov9; age_reflog "$W" Mov9 3600; git -C "$W" commit -q --allow-empty -m y
 hook Bash "$W" 'git commit -m "feat: y"'; quiet "마지막 줄이 커밋인 옛 브랜치 → 조용"
 

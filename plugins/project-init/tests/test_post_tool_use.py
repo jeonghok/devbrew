@@ -470,6 +470,71 @@ class ThisCommandOnly(_RepoTestCase):
         out = _hook.observe_branches(work, time.time(), "./make-branch.sh")
         self.assertEqual([h.split("\n", 1)[0] for h, _m in out],
                          ['project-init: 브랜치 이름이 이름 규칙에 맞지 않는다 — "Cur".'])
+        # 같은 체크아웃을 쓰는 다른 세션이 만든 브랜치일 수 있다 — 알리기만 하고 이름 바꾸기 명령은 없다.
+        self.assertIsNone(out[0][1])
+        self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0])
+
+    def test_mention_without_creation_gets_no_rename_command(self):
+        """다른 세션이 만든 브랜치를 읽기 명령 · 같은 낱말 · 더 긴 이름의 끝으로 가리켜도 이름 바꾸기 명령은 없다."""
+        work = self.repo(strategy(self.RULE))
+        for name, text in (("Other", "git log Other"), ("test", "npm test"),
+                           ("Other", "git log --oneline Other"), ("Other", "git checkout -b fix/Other")):
+            git("branch", name, cwd=work)
+            out = _hook.observe_branches(work, time.time(), text)
+            mine = [(h, m) for h, m in out if f'"{name}"' in h]
+            self.assertEqual(len(mine), 1, (text, out))
+            self.assertIsNone(mine[0][1], text)
+            self.assertIn("이름을 바꾸라고 하지 않는다", mine[0][0], text)
+            git("branch", "-D", name, cwd=work)
+
+    def test_created_in(self):
+        made = _hook.created_in
+        for text, name in (("git branch Bad", "Bad"), ("git checkout -b 'Bad' && x", "Bad"),
+                           ('git switch -c "Bad"', "Bad"), ("git switch --create Bad", "Bad"),
+                           ("git checkout -B Bad", "Bad"), ("git branch -m old Bad", "Bad"),
+                           ("git -C /tmp/w branch Bad", "Bad"), ("git worktree add -b Bad ../wt", "Bad"),
+                           ("git worktree add ../wt/Bad", "Bad"), ("ls; git branch Bad", "Bad"),
+                           ("git branch -t Bad origin/Bad", "Bad")):
+            self.assertTrue(made(text, name), text)
+        for text, name in (("git log Bad", "Bad"), ("npm test", "test"), ("git checkout -b fix/Bad", "Bad"),
+                           ("git branch -d Bad", "Bad"), ("git branch --list Bad", "Bad"),
+                           ("git branch -m Bad other", "Bad"), ("git checkout Bad", "Bad"),
+                           ("git worktree add --detach ../wt/Bad", "Bad"), ("x=Bad; git branch $x", "Bad"),
+                           ("", "Bad")):
+            self.assertFalse(made(text, name), text)
+
+    def test_creation_buried_under_many_commits_is_seen(self):
+        """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 끝 8KB 밖으로 밀려도 새 브랜치로 잡는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Deep", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        body = create + "".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(200))
+        self.assertGreater(len(body.encode("utf-8")) - len(create.encode("utf-8")), 3 * 8192, "픽스처 전제")
+        log.write_text(body, encoding="utf-8")
+        self.assertIn("Deep", _hook.new_branches(work, time.time()))
+
+    def test_reflog_beyond_scan_limit_is_reported(self):
+        """상한까지 거슬러 읽어도 최근 기록을 다 못 본 브랜치는 조용히 빠지지 않고 알린다."""
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Deep", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep")
+        head = log.read_text(encoding="utf-8").split("\t", 1)[0]
+        log.write_text("".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(400)), encoding="utf-8")
+        old = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 16384
+        try:
+            unread = []
+            self.assertNotIn("Deep", _hook.new_branches(work, time.time(), unread=unread))
+            self.assertEqual(unread, ["Deep"])
+            out = _hook.observe_branches(work, time.time(), "ls")
+        finally:
+            _hook.REFLOG_SCAN_MAX = old
+        self.assertTrue(any("reflog 가 길어" in h and "Deep" in h and "fail-open" in h for h, _m in out), out)
+        unread = []
+        self.assertNotIn("Deep", _hook.new_branches(work, time.time(), unread=unread))
+        self.assertEqual(unread, [], "양성 짝 — 상한 안에서 끝까지 읽으면 「못 읽음」 이 아니다")
 
     def test_create_line_at_tail_boundary_is_kept(self):
         # 끝 8KB 가 만들기 줄의 첫 글자에서 시작하면 그 줄은 온전하다 — 잘린 줄로 보고 버리면 안 된다.
