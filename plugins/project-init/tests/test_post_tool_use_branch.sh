@@ -172,6 +172,14 @@ fresh; git -C "$W" worktree add -q -b worktree-sly-fox "$W/.claude/worktrees/sly
 hook_ew0 "$W"
 case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다"*"fail-open"*) ok "name 없는 EnterWorktree · cwd = 옮기기 전 레포 → 조용히 빠지지 않고 알림" ;; *) no "name 없는 EnterWorktree · 옮기기 전 레포에서 조용히 빠졌다 — $OUT" ;; esac
 case "$(field ac)" in *"git branch -m"*) no "name 없는 EnterWorktree · 옮기기 전 레포인데 이름 바꾸기 명령 — $OUT" ;; *) ok "name 없는 EnterWorktree · 옮기기 전 레포 → 명령 없음" ;; esac
+fresh; git -C "$W" worktree add -q -b OldWtBad "$W/.claude/worktrees/oldwt"; git -C "$W" worktree add -q -b worktree-new "$W/.claude/worktrees/new"
+python3 -I - "$W/.git/worktrees/oldwt/logs/HEAD" <<'PY'
+import sys, time
+p = sys.argv[1]; lines = open(p, encoding="utf-8").read().splitlines()
+head, sep, msg = lines[0].partition("\t"); parts = head.split(" "); parts[-2] = str(int(time.time()) - 3600)
+lines[0] = " ".join(parts) + sep + msg; open(p, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+PY
+hook_ew0 "$W/.claude/worktrees/oldwt"; noted OldWtBad "name 없는 EnterWorktree · cwd = 한 시간 전에 만든 작업 트리(옮기기 전) → 그 브랜치에 명령 없음"
 fresh; git -C "$W" checkout -q -b SharedBad
 hook_ew "$W" "$(basename "$W")"; noted SharedBad "EnterWorktree name 이 메인 체크아웃 폴더 이름과 같음 · cwd = 메인 체크아웃 → 링크된 작업 트리가 아니라 명령 없음"
 fresh; git -C "$W" branch Echo1

@@ -50,7 +50,6 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 DEFAULT_REF = "refs/remotes/origin/HEAD"
 STRATEGY_PATH = "docs/git-workflow/branch-strategy.md"
 NEW_BRANCH_WINDOW = 60.0
-REFLOG_CHUNK = 8192
 REFLOG_SCAN_MAX = 1 << 20  # 한 브랜치 reflog 를 거슬러 읽는 상한 — 넘으면 「끝까지 못 읽음」으로 알린다
 GIT_BUDGET = 8.0  # 한 실행의 git 호출 전체 — hooks.json 의 timeout(10초) 안
 CREATED_PREFIX = "branch: Created from "
@@ -160,46 +159,24 @@ def _inert(text):
     return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
 
 
-def _line_time(line):
-    """reflog 한 줄(bytes)의 시각, 읽지 못하면 None."""
-    head, sep, _msg = line.partition(b"\t")
-    parts = head.split()
-    if not sep or len(parts) < 2:
-        return None
-    try:
-        return int(parts[-2])
-    except ValueError:
-        return None
-
-
-def _reflog_lines_since(path, cutoff):
-    """(줄들, 끝까지 봤나) — reflog 를 끝에서부터 REFLOG_CHUNK 씩 거슬러 읽는다.
+def _reflog_lines_since(path):
+    """(줄들, 처음까지 봤나) — reflog 의 끝 REFLOG_SCAN_MAX 바이트(작으면 전부)를 읽는다.
 
     한 명령이 만들기 뒤에 커밋 · 리셋 줄을 얼마든지 남길 수 있다(`checkout -b X && cherry-pick A..B`).
-    cutoff 보다 옛 온전한 줄이 나오거나 파일 처음에 닿으면 멈춘다 — 그 앞 줄은 모두 더 옛 줄이다.
-    REFLOG_SCAN_MAX 에 닿아도 cutoff 까지 못 봤으면 (읽은 줄, False) 를 낸다.
+    reflog 의 시각은 순서를 믿을 수 없다(`GIT_COMMITTER_DATE` 로 과거 시각을 쓴 커밋) — 옛 시각을
+    만나도 멈추지 않고 파일 처음이나 REFLOG_SCAN_MAX 까지 읽는다. 상한에 닿아 처음까지 못 봤으면
+    (읽은 줄, False) 를 낸다. 시간 창은 판정(_is_new_branch_line)이 줄마다 본다.
     """
     with open(path, "rb") as f:
         f.seek(0, os.SEEK_END)
-        end = pos = f.tell()
-        buf = b""
-        complete = True
-        while pos > 0:
-            if end - pos >= REFLOG_SCAN_MAX:
-                complete = False
-                break
-            step = min(REFLOG_CHUNK, pos)
-            pos -= step
-            f.seek(pos)
-            buf = f.read(step) + buf
-            whole = buf.split(b"\n")[1:] if pos > 0 else buf.split(b"\n")
-            first = next((t for t in map(_line_time, whole) if t is not None), None)
-            if first is not None and first < cutoff:
-                break
+        end = f.tell()
+        start = max(0, end - REFLOG_SCAN_MAX)
+        f.seek(start)
+        buf = f.read(end - start)
     lines = buf.split(b"\n")
-    if pos > 0:
-        lines = lines[1:]  # 앞이 잘린 줄 — 그 뒤에 이미 cutoff 보다 옛 줄이 있다
-    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()], complete
+    if start > 0:
+        lines = lines[1:]  # 앞이 잘린 줄
+    return [ln.decode("utf-8", "replace") for ln in lines if ln.strip()], start == 0
 
 
 def _is_new_branch_line(line, branch, now, window):
@@ -241,7 +218,7 @@ def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None, unread=None)
             try:
                 if os.path.getmtime(path) < now - window:
                     continue
-                lines, complete = _reflog_lines_since(path, now - window)
+                lines, complete = _reflog_lines_since(path)
             except OSError:
                 continue
             name = os.path.relpath(path, root).replace(os.sep, "/")
@@ -359,6 +336,25 @@ def _cwd_is_linked_worktree(cwd, deadline=None):
     return len(dirs) == 2 and dirs[0] != dirs[1]
 
 
+def _cwd_worktree_is_new(cwd, now, deadline=None):
+    """cwd 의 작업 트리가 방금(NEW_BRANCH_WINDOW 안) 만들어졌나 — 그 작업 트리 HEAD reflog 의 첫 줄 시각."""
+    out = _git(cwd, "rev-parse", "--git-dir", deadline=deadline)
+    if not out:
+        return False
+    log = os.path.join(cwd, out.decode("utf-8", "replace").strip(), "logs", "HEAD")
+    try:
+        with open(log, "rb") as f:
+            first = f.readline()
+    except OSError:
+        return False
+    # 작업 트리를 만든 첫 줄은 메시지(탭 뒤)가 없다 — 시각은 탭 앞 머리의 끝에서 둘째 낱말이다.
+    parts = first.partition(b"\t")[0].split()
+    try:
+        return len(parts) >= 2 and now - int(parts[-2]) <= NEW_BRANCH_WINDOW
+    except ValueError:
+        return False
+
+
 def _cwd_is_entered_worktree(cwd, worktree_name, deadline=None):
     """EnterWorktree 의 name 으로 만든 작업 트리가 cwd 의 작업 트리인가(payload 의 cwd 가 새 작업 트리일 때)."""
     if not worktree_name:
@@ -430,7 +426,8 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
     proven = {n for n in names if n == current and named_in(text, n)} | (entered or set())
     if current in names and (
             _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline)
-            or (worktree_created and not worktree_name and _cwd_is_linked_worktree(cwd, deadline=deadline))):
+            or (worktree_created and not worktree_name and _cwd_is_linked_worktree(cwd, deadline=deadline)
+                and _cwd_worktree_is_new(cwd, now, deadline=deadline))):
         # EnterWorktree 가 방금 만든 작업 트리의 지금 브랜치 — 다른 세션의 것일 수 없다.
         proven.add(current)
     return notes + _judge(cwd, names, deadline, proven)

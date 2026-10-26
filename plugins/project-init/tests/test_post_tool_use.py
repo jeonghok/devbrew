@@ -510,6 +510,19 @@ class ThisCommandOnly(_RepoTestCase):
         log.write_text(body, encoding="utf-8")
         self.assertIn("Deep", _hook.new_branches(work, time.time()))
 
+    def test_creation_before_backdated_commits_is_seen(self):
+        """만들기 뒤 과거 시각(GIT_COMMITTER_DATE)의 줄이 여러 덩어리 붙어도 옛 시각에서 멈추지 않고 잡는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Back", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Back")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        old = head.rsplit(" ", 2)[0] + " 1000000000 +0000"
+        body = create + "".join(f"{old}\tcommit: " + "p" * 200 + "\n" for _ in range(200))
+        self.assertGreater(len(body.encode("utf-8")), 3 * 8192, "픽스처 전제")
+        log.write_text(body, encoding="utf-8")
+        self.assertIn("Back", _hook.new_branches(work, time.time()))
+
     def test_reflog_beyond_scan_limit_is_reported(self):
         """상한까지 거슬러 읽어도 최근 기록을 다 못 본 브랜치는 조용히 빠지지 않고 알린다."""
         work = self.repo(strategy(self.RULE))
