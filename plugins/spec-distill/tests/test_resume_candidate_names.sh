@@ -3,6 +3,12 @@
 # 이어 갈 후보 이름이 셸 리터럴(`ARG_PATH='<후보 경로>'`)에 붙기 전에 허용 글자로 걸러진다 — 심은 이름이 명령을 돌리지 못한다.
 # 재현은 임시 레포에서만 돈다.
 set -u
+if [ "${1:-}" = "--emit-scanned" ]; then
+  echo "plugins/spec-distill/scripts/interview_state.py"
+  echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
+  echo "plugins/spec-distill/skills/pm-interview/references/state-file.md"
+  exit 0
+fi
 ROOT_REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT_REPO/plugins/spec-distill"
 . "$ROOT_REPO/shared/tests/assert.sh"
@@ -40,6 +46,10 @@ assert_eq "$cands" "$GOOD" "1: 허용 글자 밖 이름(작은따옴표 · 세�
 assert_contains "$o" "허용 글자" "1: 뺀 후보와 그 사유를 알린다"
 
 # 상태 파일 문서의 지시대로 후보마다 펜스를 다시 돈다 — 무엇이 후보로 나와도 명령이 돌지 않아야 한다.
+# 아래 재현이 따르는 그 지시가 문서에 있는지 먼저 확인한다(지시가 바뀌면 재현이 엉뚱한 길을 잰다).
+ASKS="$(awk '/^### 이어 갈 때/{f=1;next} /^### /{f=0} f' "$SD/skills/pm-interview/references/state-file.md" | tr '\n' ' ' | tr -s ' ')"
+assert_contains "$ASKS" "이어 감이면 고른 후보로 3.6 펜스를 \`ARG_PATH='<후보 경로>'\` 로 다시 돌리고" "2: 상태 파일 문서가 고른 후보로 3.6 펜스를 다시 돌리라고 한다"
+assert_contains "$ASKS" "후보 경로는 \`candidate:\` 줄의 글자 그대로만 붙인다" "2: 상태 파일 문서가 후보 경로를 candidate 줄 글자 그대로만 붙이라고 한다"
 printf '%s\n' "$cands" | while IFS= read -r c; do
   [ -n "$c" ] || continue
   in_sess "$R" "ARG_PATH='$c'
