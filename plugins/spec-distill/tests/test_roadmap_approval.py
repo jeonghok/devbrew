@@ -66,9 +66,12 @@ class ApprovalDate(unittest.TestCase):
 
 
 class FakeGit:
-    """progress 가 부르는 git 읽기만 흉내 낸다 — 커밋 하나(tip)의 파일들."""
-    def __init__(self, files, plans=()):
+    """progress 가 부르는 git 읽기만 흉내 낸다 — 커밋 하나(tip)의 파일들.
+    `failures` 는 진짜 Git 처럼 읽기 실패를 쌓는다 — progress 가 갈라진 곳을 못 읽은 것과 못 찾은 것을 이것으로 가른다."""
+    def __init__(self, files, plans=(), base_failure=None):
         self.files, self.plans = files, list(plans)
+        self.failures = []
+        self.base_failure = base_failure
 
     def grep_files(self, tree, needle, folder):
         return [p for p in self.files if p.startswith(folder)]
@@ -77,6 +80,9 @@ class FakeGit:
         return self.files.get(path)
 
     def merge_base(self, a, b):
+        if self.base_failure:
+            self.failures.append(self.base_failure)
+            return None
         return "base"
 
     def changed(self, base, tip, folder):
@@ -127,6 +133,14 @@ class Progress(unittest.TestCase):
         files = {SPEC: spec_text("- spec 승인 · 2026-10-18 · 「①」"), plan: "**Spec:** `%s`\n" % SPEC}
         got = rs.progress(FakeGit(files, [plan]), "main", "tip", b, "rm/A1.md", SETTINGS)
         self.assertEqual(got[0], "계획")
+
+    def test_unread_merge_base_is_unknown_not_designing(self):
+        b = self.block()
+        why = "git merge-base 실패(rc 128): fatal: bad object"
+        got = rs.progress(FakeGit({SPEC: spec_text("- spec 승인 · 2026-10-18 · 「①」")}, base_failure=why),
+                          "main", "tip", b, "rm/A1.md", SETTINGS)
+        self.assertEqual(got[0], "알 수 없음")
+        self.assertIn(why, got[1])
 
 
 class OneDefaultRef(unittest.TestCase):
