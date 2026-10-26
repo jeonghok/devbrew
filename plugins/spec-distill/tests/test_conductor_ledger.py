@@ -1177,6 +1177,26 @@ class PrRefresh(Repo):
         rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
         self.assertEqual((rc, out.strip()), (0, "acquired"))
         self.assertNotIn("## 시작 승인", path.read_text(encoding="utf-8"))
+        self.assertNotIn("예전 판이 적은 테스트 명령 줄", out, "옛 레포 설정 절이 비었으면 알리지 않는다")
+
+    def test_claim_tells_old_repo_settings_rows_are_dropped(self):
+        """8.11.0 까지 종료 코드 6 의 답을 적던 `## 레포 설정` 줄은 다시 쓸 때 지워진다 — 조용히 버리지 않고 한 번 알린다.
+        값은 내보이지 않는다(검사받는 하위 agent 도 쓸 수 있는 파일이다)."""
+        path = L.mpath(self.w, RM)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        old = OLD_MACHINE.replace("docs/superpowers/roadmaps/rm/roadmap.md", RM)
+        path.write_text(old.replace("## 레포 설정\n\n", "## 레포 설정\n\n- test_command · bash -c \"exit 0\"\n"),
+                        encoding="utf-8")
+        rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("예전 판이 적은 테스트 명령 줄", out)
+        self.assertIn("사용자에게 다시 물어 --test-command 로 넘기거나", out)
+        self.assertNotIn("exit 0", out, "옛 줄의 값을 알림에 싣지 않는다")
+        self.assertEqual(out.strip().splitlines()[-1], "acquired")
+        self.assertNotIn("레포 설정", path.read_text(encoding="utf-8"))
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "R1 · 절 · 글")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("예전 판이 적은 테스트 명령 줄", out, "지운 뒤에는 다시 알리지 않는다")
 
     def test_pr_of_another_head_name_fails_closed(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)

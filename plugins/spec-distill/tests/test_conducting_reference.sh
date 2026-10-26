@@ -231,6 +231,7 @@ assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.p
 assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 스위트 대조" "지휘 걸음 5(머지 전 확인): 스위트 대조 직전에 pr-refresh"
 assert_contains "$(cyc 5)" '그 답을 인자로 붙여 이 대조를 다시 돌리고(`… --keep-merged --test-command "<명령>"`' "지휘 걸음 5(rc 6): 사용자 답은 merge_check 의 --test-command 인자로 그 호출에만 넘긴다"
 assert_contains "$(cyc 5)" "답은 기계 상태에 적지 않는다" "지휘 걸음 5(rc 6): 답을 기계 상태에 적지 않는다"
+assert_contains "$(cyc 5)" "압축 · 새 세션 뒤에는 그 답을 기억하지 못하니 다시 묻는다" "지휘 걸음 5(rc 6): 압축 · 새 세션 뒤에는 답을 다시 묻는다"
 assert_not_contains "$(cyc 5)" '--section "레포 설정"' "지휘 걸음 5(rc 6): 기계 상태 레포 설정 절에 쓰라는 명령이 없다"
 before() {  # before <글> <앞> <뒤> — 앞이 뒤보다 먼저 나오면 yes
   PYTHONIOENCODING=utf-8 python3 -I -c 'import sys

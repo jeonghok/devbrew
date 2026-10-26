@@ -111,12 +111,15 @@ def update(root, roadmap: str, session: str, change, skip: tuple = ()) -> dict:
     """표지를 쥔 세션만 쓴다. 깨진 기계 상태는 읽기에서 멈춘다(빈 상태로 덮어쓰지 않는다)."""
     path = mpath(root, roadmap)
     need_holder(root, roadmap, session)
+    old_settings = cs.has_old_repo_settings(path)   # 다시 쓰면 옛 절이 사라진다 — 조용히 버리지 않는다
     data = load(root, roadmap, skip)
     change(data)
     try:
         cs.save(path, roadmap, data, session)
     except cs.MachineError as exc:
         raise Fail(3, "기계 상태를 쓰지 못했다: %s" % exc)
+    if old_settings:
+        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_NOTICE)
     return data
 
 

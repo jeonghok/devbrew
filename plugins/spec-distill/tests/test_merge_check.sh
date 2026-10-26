@@ -142,6 +142,7 @@ out="$(mc --branch feature/mx)"; rc=$?
 assert_eq "$rc" "1" "섞인 꼴: 이미 있던 pytest 실패 옆의 새 ✗ 실패 → rc 1"
 assert_contains "$out" "이 브랜치에만 있는 실패 1개: 새 셸 실패" "섞인 꼴: 새 이름은 ✗ 줄의 것"
 assert_contains "$out" "양쪽 다 있는 실패 1개: a.py::old" "섞인 꼴: 이미 있던 pytest 실패는 양쪽 다 있는 실패다"
+assert_not_contains "$out" "예전 판이 적은 테스트 명령 줄" "기계 상태에 옛 레포 설정 줄이 없으면 알리지 않는다"
 
 # 6b — AC4: 기계 상태 `## 레포 설정` 에 적은 값은 읽지 않는다 — 검사받는 하위 agent 도 쓸 수 있는 파일이다.
 #       늘 통과하는 명령을 적어 두어도 탐지한 러너가 돌아 새 실패를 잡는다(이 장면은 그 명령이 이기면 rc 0 이 된다).
@@ -161,6 +162,8 @@ assert_eq "$rc" "1" "기계 상태의 test_command(늘 통과)를 돌리지 않�
 assert_contains "$out" "무엇을 돌렸나: 탐지한 러너" "기계 상태 값이 아니라 탐지 경로가 돈다"
 assert_not_contains "$out" "exit 0" "기계 상태의 명령 글이 출력 어디에도 없다"
 assert_not_contains "$out" "기계 상태(임시)" "기계 상태 출처 표기가 없다"
+assert_contains "$out" "예전 판이 적은 테스트 명령 줄" "옛 레포 설정 줄을 조용히 버리지 않고 읽지 않는다고 알린다"
+assert_contains "$out" "사용자에게 다시 물어 --test-command 로 넘기거나" "옛 줄 알림: 답은 다시 물어 인자로 넘긴다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
 assert_eq "$rc" "1" "기계 상태의 레포 설정 절이 깨져 있어도 읽지 않으므로 대조가 돈다 → rc 1"
