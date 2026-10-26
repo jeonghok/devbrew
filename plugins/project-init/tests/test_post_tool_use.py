@@ -458,11 +458,22 @@ class ThisCommandOnly(_RepoTestCase):
     def test_named_branch_is_handled(self):
         """양성 짝 — 같은 픽스처에서 명령이 이름을 가리키면 알리고 이름 바꾸기 명령을 낸다."""
         work = self.repo(strategy(self.RULE))
-        git("branch", "Other", cwd=work)
-        out = _hook.observe_branches(work, time.time(), "git branch Other")
+        git("checkout", "-q", "-b", "Other", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git checkout -b Other")
         self.assertEqual(len(out), 1, out)
         self.assertIn('"Other"', out[0][0])
         self.assertIn("git branch -m Other feature/Other", out[0][1])
+
+    def test_created_but_not_current_gets_no_rename_command(self):
+        """명령이 이름을 가리켜도 호출 뒤 지금 브랜치가 아니면 알리기만 한다 — 다른 세션의 같은 이름일 수 있다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Plain", cwd=work)
+        for text in ("git branch Plain", 'git commit -m "$(cat <<\'EOF\'\nx\n\ngit checkout -b Plain\nEOF\n)"',
+                     "git -C sub branch Plain", "git worktree add ../wt/Plain main"):
+            out = _hook.observe_branches(work, time.time(), text)
+            self.assertEqual(len(out), 1, (text, out))
+            self.assertIsNone(out[0][1], text)
+            self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0], text)
 
     def test_current_branch_is_handled_without_name_in_command(self):
         work = self.repo(strategy(self.RULE))
@@ -486,28 +497,6 @@ class ThisCommandOnly(_RepoTestCase):
             self.assertIsNone(mine[0][1], text)
             self.assertIn("이름을 바꾸라고 하지 않는다", mine[0][0], text)
             git("branch", "-D", name, cwd=work)
-
-    def test_created_in(self):
-        made = _hook.created_in
-        for text, name in (("git branch Bad", "Bad"), ("git checkout -b 'Bad' && x", "Bad"),
-                           ('git switch -c "Bad"', "Bad"), ("git switch --create Bad", "Bad"),
-                           ("git checkout -B Bad", "Bad"), ("git branch -m old Bad", "Bad"),
-                           ("git worktree add -b Bad ../wt", "Bad"), ("GIT_TRACE=0 git branch Bad", "Bad"),
-                           ("git worktree add ../wt/Bad", "Bad"), ("ls; git branch Bad", "Bad"),
-                           ("git branch -t Bad origin/Bad", "Bad")):
-            self.assertTrue(made(text, name), text)
-        for text, name in (("git log Bad", "Bad"), ("npm test", "test"), ("git checkout -b fix/Bad", "Bad"),
-                           ("git branch -d Bad", "Bad"), ("git branch --list Bad", "Bad"),
-                           ("git branch -m Bad other", "Bad"), ("git checkout Bad", "Bad"),
-                           ("git worktree add --detach ../wt/Bad", "Bad"), ("x=Bad; git branch $x", "Bad"),
-                           ("echo git branch Bad", "Bad"), ("printf '%s' git branch Bad", "Bad"),
-                           ("", "Bad")):
-            self.assertFalse(made(text, name), text)
-        # git -C 는 cwd 의 레포를 가리킬 때만 근거다 — 다른 레포에서 만든 같은 이름은 아니다.
-        self.assertTrue(made("git -C /tmp/w branch Bad", "Bad", "/tmp/w"))
-        self.assertTrue(made("git -C sub branch Bad", "Bad", "/tmp/w"))
-        self.assertFalse(made("git -C /tmp/other branch Bad", "Bad", "/tmp/w"))
-        self.assertFalse(made("git -C /tmp/w branch Bad", "Bad"), "cwd 를 모르면 -C 는 근거가 아니다")
 
     def test_creation_buried_under_many_commits_is_seen(self):
         """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 끝 8KB 밖으로 밀려도 새 브랜치로 잡는다."""
@@ -574,8 +563,8 @@ class ChannelSplit(_RepoTestCase):
 
     def _branch_violation(self):
         work = self.repo(strategy(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "BadName", cwd=work)
-        payload = {"tool_name": "Bash", "tool_input": {"command": "git branch BadName"}}
+        git("checkout", "-q", "-b", "BadName", cwd=work)
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git checkout -b BadName"}}
         out, rc = run_hook(payload, cwd=work)
         self.assertEqual(rc, 0)
         return json.loads(out)

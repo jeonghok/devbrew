@@ -106,23 +106,25 @@ m=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="
 echo "다섯 명령 뒤 규칙 밖 이름 → 알림"
 fresh; git -C "$W" worktree add -q -b Bad1 "$T/wt1"
 hook Bash "$W" "git worktree add -b Bad1 ../wt1"; elsewhere Bad1 "$T/wt1" "git worktree add -b(다른 작업 트리에서 쓰는 브랜치)"
-fresh; git -C "$W" branch tmpa; age_reflog "$W" tmpa 3600; git -C "$W" branch -m tmpa Bad2
-hook Bash "$W" "git branch -m tmpa Bad2"; alerted Bad2 "git branch -m"
+fresh; git -C "$W" checkout -q -b tmpa; age_reflog "$W" tmpa 3600; git -C "$W" branch -m tmpa Bad2
+hook Bash "$W" "git branch -m tmpa Bad2"; alerted Bad2 "git branch -m(지금 브랜치의 이름 바꾸기)"
 fresh; git -C "$W" checkout -q -B Bad3
 hook Bash "$W" "git checkout -B Bad3"; alerted Bad3 "git checkout -B"
 fresh; git -C "$W" switch -q --create Bad4
 hook Bash "$W" "git switch --create Bad4"; alerted Bad4 "git switch --create"
-fresh; git -C "$W" branch Bad5
-hook Bash "$W" "git -C $W branch Bad5"; alerted Bad5 "git -C <dir> branch"
+fresh; git -C "$W" checkout -q -b Bad5
+hook Bash "$W" "git -C $W checkout -b Bad5"; alerted Bad5 "git -C <dir> checkout -b"
+fresh; git -C "$W" branch Plain5
+hook Bash "$W" "git branch Plain5"; noted Plain5 "만들기만 하고 옮겨 가지 않은 브랜치 → 지금 브랜치가 아니라 알림만(명령 없음)"
 fresh; git -C "$W" checkout -q -b Bad15; git -C "$W" commit -q --allow-empty -m x
 case "$(tail -n 1 "$W/.git/logs/refs/heads/Bad15")" in *"	commit: x") ;; *) no "픽스처 전제: Bad15 reflog 마지막 줄이 커밋이 아니다" ;; esac
 hook Bash "$W" 'git checkout -b Bad15 && git commit -m "x"'; alerted Bad15 "git checkout -b && git commit 한 명령(reflog 마지막 줄이 커밋)"
 
 echo "다른 작업 트리가 쓰는 브랜치 — 이름 바꾸기 명령을 내지 않는다"
-fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" branch BadPlain
-hook Bash "$W" "git worktree add -b BadB $T/wtB$N && git branch BadPlain"
+fresh; git -C "$W" worktree add -q -b BadB "$T/wtB$N"; git -C "$W" checkout -q -b BadPlain
+hook Bash "$W" "git worktree add -b BadB $T/wtB$N && git checkout -b BadPlain"
 elsewhere BadB "$T/wtB$N" "작업 트리 B 에서 쓰는 규칙 밖 브랜치 → 사람 채널에 B 경로 · 모델 채널에 명령 없음"
-alerted BadPlain "어디에서도 쓰지 않는 규칙 밖 브랜치 → 이름 바꾸기 명령(양성 짝)"
+alerted BadPlain "이 작업 트리의 지금 브랜치인 규칙 밖 브랜치 → 이름 바꾸기 명령(양성 짝)"
 fresh; git -C "$W" checkout -q -b BadMain; git -C "$W" worktree add -q --detach "$W/.claude/worktrees/x"
 hook Bash "$W/.claude/worktrees/x" "git checkout -b BadMain && git worktree add --detach .claude/worktrees/x"
 elsewhere BadMain "$W" "안에 중첩된 detached 작업 트리가 cwd · 바깥 main 작업 트리가 쓰는 규칙 밖 브랜치 → 명령 없음"
@@ -171,7 +173,16 @@ hook_ew0 "$W"
 case "$(field systemMessage)" in *"EnterWorktree 에 name 이 없어 새 작업 트리의 브랜치를 가리지 못했다"*"fail-open"*) ok "name 없는 EnterWorktree · cwd = 옮기기 전 레포 → 조용히 빠지지 않고 알림" ;; *) no "name 없는 EnterWorktree · 옮기기 전 레포에서 조용히 빠졌다 — $OUT" ;; esac
 case "$(field ac)" in *"git branch -m"*) no "name 없는 EnterWorktree · 옮기기 전 레포인데 이름 바꾸기 명령 — $OUT" ;; *) ok "name 없는 EnterWorktree · 옮기기 전 레포 → 명령 없음" ;; esac
 fresh; git -C "$W" branch Echo1
-hook Bash "$W" "echo git branch Echo1"; noted Echo1 "글로만 쓴 git 명령(echo) → 만든 근거 아님 · 명령 없음"
+hook Bash "$W" "echo git branch Echo1"; noted Echo1 "글로만 쓴 git 명령(echo) → 지금 브랜치가 아니라 명령 없음"
+fresh; git -C "$W" branch HereBad
+hook Bash "$W" "git commit -m \"\$(cat <<'EOF'
+fix: x
+
+git checkout -b HereBad
+EOF
+)\""; noted HereBad "커밋 메시지 heredoc 안의 git 명령 → 지금 브랜치가 아니라 명령 없음"
+fresh; mkdir -p "$W/sub"; git -C "$W/sub" init -q; git -C "$W" branch Nest1
+hook Bash "$W" "git -C sub branch Nest1"; noted Nest1 "안에 중첩된 다른 레포를 가리킨 명령 → 이 레포의 지금 브랜치가 아니라 명령 없음"
 fresh; git -C "$W" worktree add -q -b worktree-xz "$W/.claude/worktrees/xz"
 hook_ew "$W" z; quiet "EnterWorktree 이름 z · 새 브랜치는 작업 트리 xz 의 것 → 조용"
 hook EnterWorktree "$W/.claude/worktrees/xz" 'git commit -m "add thing"'
@@ -196,8 +207,8 @@ fresh; git -C "$W" branch Other2
 hook Bash "$W" "git status"; quiet "방금 만든 규칙 밖 브랜치 · 이 명령과 무관(다른 세션) → 조용"
 fresh; git -C "$W" worktree add -q -b Other3 "$T/wtO$N"
 hook Bash "$W" "git status"; quiet "다른 작업 트리가 방금 만든 규칙 밖 브랜치 · 이 명령과 무관 → 조용"
-fresh; git -C "$W" branch Other4; git -C "$W" branch Mine4
-hook Bash "$W" "git branch Mine4"; alerted Mine4 "같은 때 둘 — 명령이 만든 Mine4 는 알림(양성 짝)"
+fresh; git -C "$W" branch Other4; git -C "$W" checkout -q -b Mine4
+hook Bash "$W" "git checkout -b Mine4"; alerted Mine4 "같은 때 둘 — 명령이 만든 Mine4 는 알림(양성 짝)"
 case "$OUT" in *Other4*) no "같은 때 둘 — 명령과 무관한 Other4 를 다뤘다 — $OUT" ;; *) ok "같은 때 둘 — 명령과 무관한 Other4 는 다루지 않음" ;; esac
 fresh; git -C "$W" branch Bad41
 hook Bash "$W" "git branch Bad4"; quiet "이름이 앞부분만 겹치는 명령(Bad4 ≠ Bad41) → 조용"
@@ -214,8 +225,8 @@ echo "규칙 파일은 기본 브랜치 판"
 fresh; git -C "$W" switch -q --create feature/loose
 printf '# Branch Strategy\n\n```regex\n^.*$\n```\n' > "$W/docs/git-workflow/branch-strategy.md"
 git -C "$W" commit -q -am loosen
-git -C "$W" branch Bad10
-hook Bash "$W" "git branch Bad10"; alerted Bad10 "작업 브랜치에서 느슨하게 고친 규칙이 아니라 기본 브랜치 규칙으로 판정"
+git -C "$W" checkout -q -b Bad10
+hook Bash "$W" "git checkout -b Bad10"; alerted Bad10 "작업 브랜치에서 느슨하게 고친 규칙이 아니라 기본 브랜치 규칙으로 판정"
 
 echo "fail-open"
 fresh; git -C "$W" remote set-head origin -d; git -C "$W" branch Bad11

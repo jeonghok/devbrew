@@ -6,8 +6,9 @@ Runs after Bash and EnterWorktree tool calls:
    local branches were just made (their reflog has a create / rename / copy
    line within NEW_BRANCH_WINDOW seconds) — keeping only those the tool input
    names or that cwd has checked out, so another session's branch is left
-   alone; a rename command goes only to a branch the tool input itself
-   creates (created_in) or that EnterWorktree made — and validates each name
+   alone; a rename command goes only to a branch that is cwd's current
+   branch after the call and that the tool input names, or that EnterWorktree
+   made — and validates each name
    against the pattern in docs/git-workflow/branch-strategy.md as committed on
    the default branch (refs/remotes/origin/HEAD), not the working tree.
 2. Commit message (Bash only) — detects git commit -m and validates
@@ -323,85 +324,6 @@ def named_in(text, name):
     return bool(text) and re.search(_NAME_LEFT + re.escape(name) + _NAME_RIGHT, text) is not None
 
 
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|&\n]")
-_BRANCH_READ_FLAGS = {
-    "-d", "-D", "--delete", "-l", "--list", "-a", "--all", "-r", "--remotes", "--contains",
-    "--no-contains", "--merged", "--no-merged", "--show-current", "-v", "-vv", "--verbose",
-    "--points-at", "--format", "--sort", "-u", "--set-upstream-to", "--unset-upstream",
-    "--edit-description",
-}
-_BRANCH_MOVE_FLAGS = {"-m", "-M", "-c", "-C", "--move", "--copy"}
-_CREATE_FLAGS = {"-b", "-B", "-c", "-C", "--create", "--force-create", "--orphan"}
-
-
-_ASSIGN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
-
-
-def _same_repo_dir(cwd, target):
-    """`git -C <target>` 이 cwd 의 레포를 가리키는가 — 경로가 cwd 와 같거나 서로 품는다."""
-    if cwd is None:
-        return False
-    a = os.path.realpath(cwd)
-    b = os.path.realpath(os.path.join(cwd, target))
-    return a == b or a.startswith(b.rstrip(os.sep) + os.sep) or b.startswith(a.rstrip(os.sep) + os.sep)
-
-
-def _created_by(toks, cwd=None):
-    """한 명령 조각의 낱말들에서 git 이 만드는 브랜치 이름들.
-
-    git 은 조각의 첫 명령 낱말이어야 한다(앞의 `VAR=값` 만 건너뛴다) — `echo git branch X` 는 만들지 않는다.
-    `git -C <dir>` 은 그 dir 이 cwd 의 레포일 때만 받는다.
-    """
-    j = 0
-    while j < len(toks) and _ASSIGN_RE.match(toks[j]):
-        j += 1
-    if j >= len(toks) or toks[j] != "git":
-        return set()
-    i = j + 1
-    while i < len(toks) and toks[i].startswith("-"):
-        if toks[i] == "-C" and (i + 1 >= len(toks) or not _same_repo_dir(cwd, toks[i + 1])):
-            return set()
-        i += 2 if toks[i] in ("-C", "-c") else 1
-    if i >= len(toks):
-        return set()
-    sub, args = toks[i], toks[i + 1:]
-    if sub == "branch":
-        if any(a.split("=", 1)[0] in _BRANCH_READ_FLAGS for a in args):
-            return set()
-        pos = [a for a in args if not a.startswith("-")]
-        if not pos:
-            return set()
-        return {pos[-1]} if any(a in _BRANCH_MOVE_FLAGS for a in args) else {pos[0]}
-    if sub in ("checkout", "switch"):
-        return {args[k + 1] for k, a in enumerate(args[:-1]) if a in _CREATE_FLAGS}
-    if sub == "worktree" and args[:1] == ["add"]:
-        rest = args[1:]
-        made = {rest[k + 1] for k, a in enumerate(rest[:-1]) if a in ("-b", "-B")}
-        if made or "--detach" in rest or "-d" in rest:
-            return made
-        pos = [a for a in rest if not a.startswith("-")]
-        return {os.path.basename(pos[0].rstrip("/"))} if pos else set()
-    return set()
-
-
-def created_in(text, name, cwd=None):
-    """도구 입력 글이 그 브랜치를 만드는 git 명령을 담는가 — 이름 바꾸기 명령을 낼 근거.
-
-    `git branch X` · `git branch -m old X` · `git checkout|switch -b|-B|-c|-C|--create X` ·
-    `git worktree add -b X` · `git worktree add <경로>/X`. 읽기 명령(`git log X`) · 다른 명령의 낱말
-    (`npm test` · `echo git branch X`) · 다른 이름의 일부(`fix/X`) · 다른 레포(`git -C <다른 레포>`)는
-    근거가 아니다. 글만 보므로 실제로 돌았는지(`false && git branch X`)는 알지 못한다(README 관찰 범위).
-    """
-    for seg in _SEGMENT_SPLIT.split(text or ""):
-        try:
-            toks = shlex.split(seg)
-        except ValueError:
-            toks = seg.split()
-        if name in _created_by(toks, cwd):
-            return True
-    return False
-
-
 def _current_branch(cwd, deadline=None):
     out = _git(cwd, "symbolic-ref", "-q", "HEAD", deadline=deadline)
     ref = out.decode("utf-8", "replace").strip() if out else ""
@@ -471,7 +393,7 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
     notes = []
     rest = [n for n in names if not named_in(text, n)]
     entered = set()
-    current = _current_branch(cwd, deadline=deadline) if (rest or unread) else None
+    current = _current_branch(cwd, deadline=deadline) if (names or unread) else None
     if rest:
         entered = _entered_worktree_branches(cwd, worktree_name, deadline=deadline)
         mine = {current} | (entered or set())
@@ -499,9 +421,11 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
         ))
     if not names:
         return notes
-    # 이름 바꾸기 명령은 이 호출이 만들었다는 근거가 있는 브랜치에만 — 이름을 가리키기만 했거나
-    # 지금 브랜치일 뿐이면 다른 세션이 만든 브랜치일 수 있다(같은 체크아웃 · 같은 낱말).
-    proven = {n for n in names if created_in(text, n, cwd)} | (entered or set())
+    # 이름 바꾸기 명령의 근거는 명령 글의 해석이 아니라 git 상태다 — 호출 뒤 cwd 의 지금 브랜치이면서
+    # 명령 글이 그 이름을 가리키거나, EnterWorktree 가 만든 작업 트리의 브랜치일 때만 낸다. 이름을
+    # 가리키기만 한 브랜치(다른 세션 것일 수 있다)와 명령 글이 가리키지 않는 지금 브랜치(같은 체크아웃의
+    # 다른 세션)는 알리기만 한다.
+    proven = {n for n in names if n == current and named_in(text, n)} | (entered or set())
     if current in names and (
             _cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline)
             or (worktree_created and not worktree_name and _cwd_is_linked_worktree(cwd, deadline=deadline))):
@@ -510,8 +434,8 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
     return notes + _judge(cwd, names, deadline, proven)
 
 
-UNPROVEN_NOTE = ("\n이 명령이 이 브랜치를 만들었다는 근거가 없어(이름을 가리키기만 했거나 지금 브랜치일 뿐이다) "
-                 "이 세션에서는 이름을 바꾸라고 하지 않는다.")
+UNPROVEN_NOTE = ("\n이 브랜치가 이 명령의 것이라는 근거가 없어(이 명령 뒤의 지금 브랜치가 아니거나 명령이 그 이름을 "
+                 "가리키지 않는다 — 다른 세션의 것일 수 있다) 이 세션에서는 이름을 바꾸라고 하지 않는다.")
 
 
 def _judge(cwd, names, deadline, proven=None):
@@ -523,9 +447,6 @@ def _judge(cwd, names, deadline, proven=None):
     if pattern is None:  # 유효 패턴 없음 → fail OPEN, loudly
         return [(notice, None)]  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
     found = [(n, r) for n, r in ((n, check_branch_name(n, pattern)) for n in names) if r]
-    if proven is not None:
-        found = [(n, (h + UNPROVEN_NOTE, None)) if (c and n not in proven) else (n, (h, c))
-                 for n, (h, c) in found]
     if not any(cmd for _n, (_h, cmd) in found):
         return [r for _n, r in found]
     # 이름 바꾸기는 다른 작업 트리가 쓰는 브랜치에 내지 않는다 — git branch -m 은 그
@@ -536,7 +457,9 @@ def _judge(cwd, names, deadline, proven=None):
         elsewhere = None  # 이름 판정은 이미 났다 — 알림은 내고 명령만 뺀다
     out = []
     for name, (human, cmd) in found:
-        if elsewhere is None:
+        if cmd is None:
+            pass  # 규칙에서 접두를 뽑지 못한 꼴 — 모델 몫이 원래 없다
+        elif elsewhere is None:
             cmd = None
         elif name in elsewhere:
             where = _inert(elsewhere[name])
@@ -544,6 +467,9 @@ def _judge(cwd, names, deadline, proven=None):
                       "이 세션에서는 이름을 바꾸라고 하지 않는다.")
             cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {where})이 규칙 밖이다 "
                    "— 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다.")
+        elif proven is not None and name not in proven:
+            human += UNPROVEN_NOTE
+            cmd = None
         out.append((human, cmd))
     if elsewhere is None:
         out.append((
