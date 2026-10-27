@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""repo_defaults.py — 레포 설정 해결자: 로드맵 · 레포 설정 파일(기본 브랜치 판) · 기계 상태(임시) · 기본값을 합친다.
+"""repo_defaults.py — 레포 설정 해결자: 로드맵 · 레포 설정 파일(기본 브랜치 판) · 기본값을 합친다.
 
 외부 도구가 정한 기본 경로(superpowers 의 설계문서 · 계획 폴더, SDD 의 작업 폴더, 하니스의 worktree 폴더)와 이 플러그인의 지휘자 상태
 폴더 이름은 이 모듈에만 글자로 둔다. 다른 스크립트는 `resolve` 로 값과 출처를 얻는다. 읽기만 한다.
@@ -33,12 +33,10 @@ ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
-MACHINE_LABEL = "기계 상태(임시)"   # 기계 상태 층의 출처 표기 · 자리 이름
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
         "review_model", "parallel_default", "branch_prefix", "shared_files")
 ROADMAP_META_KEYS = ("type", "source_brief")
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
-MACHINE_LAYER_KEYS = ("test_command", "test_failure_pattern")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
 _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
@@ -102,11 +100,11 @@ class SettingsError(ValueError):
         self.where = where
 
 
-_places = {"repo": "레포 설정 파일(%s, 기본 브랜치 판)" % SETTINGS_FILE, "machine": MACHINE_LABEL}
+_places = {"repo": "레포 설정 파일(%s, 기본 브랜치 판)" % SETTINGS_FILE}
 
 
 def _place(where: str, path: str | None = None) -> str:
-    """층 이름(repo · roadmap · machine) → 사람이 읽는 자리 이름."""
+    """층 이름(repo · roadmap) → 사람이 읽는 자리 이름."""
     if where == "roadmap":
         return "로드맵(%s)" % path if path else "로드맵"
     return _places.get(where, where)
@@ -159,13 +157,12 @@ def strict_frontmatter(text: str, where: str, path: str | None = None) -> dict:
 
 
 def check_layer(meta: dict, layer: str, path: str | None = None) -> None:
-    """층이 받는 키 밖이면 SettingsError — 설정 키지만 그 층 몫이 아니면 layer_key, 아무 층에도 없으면 unknown_key."""
+    """층이 받는 키 밖이면 SettingsError — 설정 키지만 그 층 몫이 아니면 layer_key, 아무 층에도 없으면 unknown_key.
+    층은 로드맵 · 레포 설정 파일 둘뿐이다 — 기계 상태 파일은 검사받는 하위 agent 도 쓸 수 있어 설정 층이 아니다."""
     if layer == "roadmap":
         allowed = ROADMAP_META_KEYS + ROADMAP_LAYER_KEYS
     elif layer == "repo":
         allowed = KEYS
-    elif layer == "machine":
-        allowed = MACHINE_LAYER_KEYS
     else:
         raise ValueError("알 수 없는 층: %r" % layer)
     at = _place(layer, path)
@@ -178,20 +175,16 @@ def check_layer(meta: dict, layer: str, path: str | None = None) -> None:
         raise SettingsError("unknown_key", layer, "%s 에 모르는 키가 있다(%s) — 키 이름을 고친다" % (at, key))
 
 
-def merge_layers(roadmap, repo, repo_label, machine, notices: list, default_label: str = "기본값",
+def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = "기본값",
                  roadmap_path: str | None = None) -> dict:
-    """로드맵 > 레포 설정 > 기계 상태 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
+    """로드맵 > 레포 설정 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
     warned = []
-    cleaned = []
-    for layer, meta in (("roadmap", roadmap), ("machine", machine)):
-        if meta is not None and "shared_files" in meta:
-            meta = {k: v for k, v in meta.items() if k != "shared_files"}
-            warned.append("%s: shared_files 는 레포 설정 파일(%s)에서만 읽는다 — 이 값은 무시하고 레포 설정 값(없으면 기본 셋)을 쓴다"
-                          % (_place(layer, roadmap_path if layer == "roadmap" else None), SETTINGS_FILE))
-        cleaned.append(meta)
-    roadmap, machine = cleaned
-    layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo), (MACHINE_LABEL, "machine", machine))
+    if roadmap is not None and "shared_files" in roadmap:
+        roadmap = {k: v for k, v in roadmap.items() if k != "shared_files"}
+        warned.append("%s: shared_files 는 레포 설정 파일(%s)에서만 읽는다 — 이 값은 무시하고 레포 설정 값(없으면 기본 셋)을 쓴다"
+                      % (_place("roadmap", roadmap_path), SETTINGS_FILE))
+    layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo))
     out = {"values": {}, "sources": {}, "errors": [], "warnings": [], "notices": list(notices)}
     out["warnings"].extend(warned)
     usable = []
@@ -413,17 +406,14 @@ def _repo_file(top: str, commit, run=None) -> tuple:
     return strict_frontmatter(text, "repo"), label, []
 
 
-def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, machine_reader=None,
-            run=None) -> dict:
-    """네 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다. run(*git 인자) → (rc, 바이트) 를 주면
+def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = None, run=None) -> dict:
+    """세 층을 합친 결과(merge_layers 의 반환). roadmap 은 레포 상대 경로다. run(*git 인자) → (rc, 바이트) 를 주면
     git 을 그것으로 부르고 cwd 를 레포 최상위로 읽는다(상태줄이 시간 예산 안의 git 을 넘긴다)."""
     top = cwd if run else _toplevel(cwd)
     commit = _default_commit(top, run)   # 설정 파일과 로드맵을 같은 커밋에서 읽는다
     repo, label, notices = _repo_file(top, commit, run)
-    roadmap_meta = machine = None
-    if roadmap is None:
-        notices.append("로드맵 없음 — 기계 상태 층 건너뜀")
-    else:
+    roadmap_meta = None
+    if roadmap is not None:
         if roadmap_text is None:
             if commit is None:
                 raise SettingsError("unreadable", "roadmap", _rm.NO_DEFAULT)
@@ -431,17 +421,7 @@ def resolve(cwd: str, roadmap: str | None = None, roadmap_text: str | None = Non
             if roadmap_text is None:
                 raise SettingsError("unreadable", "roadmap", "로드맵이 기본 브랜치에 없다(%s) — 로드맵을 머지한 뒤 다시 부른다" % roadmap)
         roadmap_meta = strict_frontmatter(roadmap_text, "roadmap", roadmap)
-        if machine_reader is None:
-            notices.append("기계 상태 층 건너뜀 — 읽는 함수 없음")
-        else:
-            try:
-                machine = machine_reader(roadmap)
-            except SettingsError:
-                raise
-            except Exception as exc:
-                raise SettingsError("unreadable", "machine", "기계 상태(임시)의 레포 설정을 읽지 못했다(%s: %s) — 기계 상태 파일을 확인한다"
-                                    % (type(exc).__name__, exc))
-    return merge_layers(roadmap_meta, repo, label, machine, notices,
+    return merge_layers(roadmap_meta, repo, label, notices,
                         default_label=_no_ref_label if label is None else "기본값", roadmap_path=roadmap)
 
 
@@ -579,7 +559,7 @@ def main(argv=None) -> int:
         if args.cmd == "roadmap-check":
             return _cmd_roadmap_check(base, args.path)
         if args.cmd == "get" and args.roadmap is None and _outside_repo(base):
-            result = merge_layers(None, None, None, None, [
+            result = merge_layers(None, None, None, [
                 "git 레포 밖이라 레포 설정 파일을 읽지 못하고 기본값을 쓴다(%s)" % base], default_label=_no_ref_label)
             for line in result["notices"]:
                 _say(line)
