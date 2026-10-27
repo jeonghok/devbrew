@@ -113,6 +113,12 @@ def neutral(text: str, tree: Path, tmp: Path) -> str:
     return text
 
 
+def side_names(text: str, tree: Path, tmp: Path, pattern=None, shapes=None):
+    """(이름 집합, 쓴 모양) — 이름은 원래 출력에서 뽑고(정규식이 경로 글자를 기대할 수 있다) 뽑은 이름 안의 경로만 자리표시로 바꾼다."""
+    names, shape = names_in(text, pattern, shapes)
+    return {neutral(n, tree, tmp) for n in names}, shape
+
+
 # ── 잠금 ─────────────────────────────────────────────────────────────────────
 # 하위 agent 의 전체 스위트와 같은 잠금 하나(`suite_lock.py`) — 지휘자 대조와 담당자 스위트가 같은 시각에 돌지 않는다.
 
@@ -207,8 +213,8 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if 127 in (b_rc, m_rc):
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    b_names, _s = names_in(neutral(b_out, base, work / "tmp-base"), pattern)
-    m_names, shape = names_in(neutral(m_out, merged, work / "tmp-merged"), pattern)
+    b_names, _s = side_names(b_out, base, work / "tmp-base", pattern)
+    m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
         res["new"] = sorted(m_names - b_names)
@@ -331,8 +337,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             res["notes"].append("귀속 강등: %s" % line[len("degrade_causes: "):])
     for runner, unit, verdict in parse_attributions(p.stdout):
         shapes = RUNNER_SHAPES.get(runner, ())
-        b_names, _s = names_in(neutral(b_logs.get((runner, unit), ""), base, work / "tmp-base"), shapes=shapes)
-        m_names, _s = names_in(neutral(m_logs.get((runner, unit), ""), merged, work / "tmp-merged"), shapes=shapes)
+        b_names, _s = side_names(b_logs.get((runner, unit), ""), base, work / "tmp-base", shapes=shapes)
+        m_names, _s = side_names(m_logs.get((runner, unit), ""), merged, work / "tmp-merged", shapes=shapes)
         if verdict in NEW:
             fresh = sorted(m_names - b_names)
             res["new"] += ["%s: %s" % (unit, n) for n in fresh] or ["%s — 이름 대조 불가 — 단위 수준만" % unit]
@@ -386,15 +392,21 @@ def suite_settings(root: Path, roadmap: str, given=None) -> tuple:
     values = dict((k, res["values"][k]) for k in keys)
     origin = dict((k, res["sources"][k]) for k in keys)
     given = given or {}
+    # 쓰지 못할 값이면 레포 설정 파일에 올리자는 줄을 내기 전에 거부한다
     if given.get("test_failure_pattern") is not None and given.get("test_command") is None and values["test_command"] is None:
         raise Stop(3, "--test-failure-pattern 은 테스트 명령과 함께만 쓴다 — --test-command 를 함께 준다")
     for key in keys:
         value = given.get(key)
+        if value is not None and not value.strip():
+            raise Stop(3, "--%s 값이 비었다 — 값을 주거나 인자를 뺀다" % key.replace("_", "-"))
+    if given.get("test_failure_pattern") is not None:
+        why = pattern_error(given["test_failure_pattern"])
+        if why:
+            raise Stop(3, "test_failure_pattern 정규식이 깨졌다 — 출처 %s: %s" % (ARG_LABEL, why))
+    for key in keys:
+        value = given.get(key)
         if value is None:
             continue
-        flag = "--" + key.replace("_", "-")
-        if not value.strip():
-            raise Stop(3, "%s 값이 비었다 — 값을 주거나 인자를 뺀다" % flag)
         if values[key] is not None:
             print("[spec-distill] %s의 %s(`%s`) 대신 이 호출의 인자를 쓴다" % (origin[key], key, values[key]))
         values[key], origin[key] = value, ARG_LABEL

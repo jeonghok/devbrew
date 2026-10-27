@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MC="$ROOT/plugins/spec-distill/scripts/merge_check.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
-trap 'rm -rf "$T"' EXIT
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 RM="plan/rm/roadmap.md"
 
@@ -214,6 +214,20 @@ out="$(mc --branch feature/an --test-failure-pattern '^x$')"; rc=$?
 assert_eq "$rc" "3" "--test-failure-pattern 만(돌릴 명령 없음) → rc 3"
 assert_contains "$out" "테스트 명령과 함께만" "정규식만 준 사유"
 assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "정규식만: 쓰지 못할 값을 올리자고 먼저 알리지 않는다"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '[')"; rc=$?
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "깨진 정규식: 거부하기 전에 올리자고 알리지 않는다"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '')"; rc=$?
+assert_eq "$rc" "3" "빈 --test-failure-pattern → rc 3"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "빈 정규식: 명령 값도 올리자고 먼저 알리지 않는다"
+# 7b — 두 사본의 경로 글자(끝에서 끝): 같은 실패는 갈리지 않고, 경로를 기대하는 사용자 정규식은 원래 출력에 맞춘다
+mkrepo pp; put run.sh $'echo "  ✗ broken at $PWD/x"\necho "  ✗ tmp $TMPDIR/y"\necho "FAIL: test_old"\nexit 1'; push_base
+put run.sh $'echo "  ✗ broken at $PWD/x"\necho "  ✗ tmp $TMPDIR/y"\necho "FAIL: test_old"\necho "FAIL: $PWD/tests/test_new"\nexit 1'; branch_with feature/pp
+out="$(mc --branch feature/pp --test-command "bash run.sh" --test-failure-pattern '^  ✗ (.+)$')"; rc=$?
+assert_eq "$rc" "0" "사본 · 임시 폴더 경로가 든 같은 실패는 새 실패가 아니다 → rc 0"
+assert_contains "$out" "이 브랜치에만 있는 실패 0개" "경로만 다른 같은 실패를 새 실패로 세지 않는다"
+out="$(mc --branch feature/pp --test-command "bash run.sh" --test-failure-pattern '^FAIL: (?:/\S+/)?(test_\w+)$')"; rc=$?
+assert_eq "$rc" "1" "절대 경로를 기대하는 정규식: 원래 출력에서 이름을 뽑아 새 실패를 잡는다 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: test_new" "경로가 붙은 새 실패의 이름"
 out="$(mc --branch feature/an --test-command "")"; rc=$?
 assert_eq "$rc" "3" "빈 --test-command → rc 3"
 assert_contains "$out" "--test-command 값이 비었다" "빈 인자 사유"
