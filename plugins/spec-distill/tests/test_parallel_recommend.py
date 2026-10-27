@@ -28,8 +28,8 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
 DEFAULT = ("plugin.json", "CHANGELOG.md", "README.md")
 
 
-def merged(roadmap=None, repo=None, machine=None):
-    return rd.merge_layers(roadmap, repo, "레포 설정@0123abcd" if repo is not None else None, machine, [])
+def merged(roadmap=None, repo=None):
+    return rd.merge_layers(roadmap, repo, "레포 설정@0123abcd" if repo is not None else None, [])
 
 
 class SharedFilesSetting(unittest.TestCase):
@@ -50,13 +50,11 @@ class SharedFilesSetting(unittest.TestCase):
             self.assertEqual(m["errors"], [], bad)
             self.assertTrue(any("shared_files" in w for w in m["warnings"]), bad)
 
-    def test_roadmap_and_machine_layer_are_ignored_with_warning(self):
-        for layer in ("roadmap", "machine"):
-            kw = {layer: {"shared_files": "X.md"}, "repo": {"shared_files": "Y.md"}}
-            m = merged(**kw)
-            self.assertEqual(m["errors"], [], layer)
-            self.assertEqual(m["values"]["shared_files"], ("Y.md",), layer)
-            self.assertTrue(any("shared_files" in w for w in m["warnings"]), layer)
+    def test_roadmap_layer_is_ignored_with_warning(self):
+        m = merged(roadmap={"shared_files": "X.md"}, repo={"shared_files": "Y.md"})
+        self.assertEqual(m["errors"], [])
+        self.assertEqual(m["values"]["shared_files"], ("Y.md",))
+        self.assertTrue(any("shared_files" in w for w in m["warnings"]))
 
     def test_quoted_whole_value_with_hash(self):
         meta = rd.strict_frontmatter('---\nshared_files: "note #1.md, README.md"\n---\n', "repo")

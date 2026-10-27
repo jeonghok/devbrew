@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MC="$ROOT/plugins/spec-distill/scripts/merge_check.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
-trap 'rm -rf "$T"' EXIT
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 RM="plan/rm/roadmap.md"
 
@@ -131,64 +131,49 @@ put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/p
 out="$(mc --branch feature/pt)"; rc=$?
 assert_eq "$rc" "1" "test_failure_pattern: 새 이름 → rc 1"
 assert_contains "$out" "beta" "test_failure_pattern: 새 이름 beta"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "로드맵 값이면 출처가 로드맵이다"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
 
-# 6b — frontmatter 에 test_command 가 없으면 기계 상태 `## 레포 설정` 의 임시값을 돌린다(rc 6 의 답 — Ruling R33)
-mkrepo mt
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/mt
+# 6a — test_command · 정규식 없음: 이미 있던 pytest 실패 옆의 새 ✗ 실패도 센다(알려진 꼴을 전부 센다 — 첫 꼴만이 아니다)
+mkrepo mx 'test_command: bash run.sh\n'
+put run.sh $'echo "FAILED a.py::old - x"\nexit 1'; push_base
+put run.sh $'echo "FAILED a.py::old - x"\necho "  ✗ 새 셸 실패"\nexit 1'; branch_with feature/mx
+out="$(mc --branch feature/mx)"; rc=$?
+assert_eq "$rc" "1" "섞인 꼴: 이미 있던 pytest 실패 옆의 새 ✗ 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: 새 셸 실패" "섞인 꼴: 새 이름은 ✗ 줄의 것"
+assert_contains "$out" "양쪽 다 있는 실패 1개: a.py::old" "섞인 꼴: 이미 있던 pytest 실패는 양쪽 다 있는 실패다"
+assert_not_contains "$out" "예전 판이 적은 테스트 명령 줄" "기계 상태에 옛 레포 설정 줄이 없으면 알리지 않는다"
+
+# 6b — AC4: 기계 상태 `## 레포 설정` 에 적은 값은 읽지 않는다 — 검사받는 하위 agent 도 쓸 수 있는 파일이다.
+#       늘 통과하는 명령을 적어 두어도 탐지한 러너가 돌아 새 실패를 잡는다(이 장면은 그 명령이 이기면 rc 0 이 된다).
 machine() {  # machine <글> — 이 레포 로드맵의 기계 상태 파일을 그 글로 쓴다
   (cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state as cs, state_path as s
 p = cs.machine_path(s.state_root(), sys.argv[2]); p.parent.mkdir(parents=True, exist_ok=True)
 p.write_text(sys.argv[3], encoding="utf-8")' "$ROOT/plugins/spec-distill/scripts" "$RM" "$1")
 }
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash run.sh\n' "$RM")"
+mkrepo mt; put tests/__init__.py ''
+put tests/test_y.py $'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)'
+push_base
+put tests/test_y.py $'import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 2)'
+branch_with feature/mt
+machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n- test_failure_pattern · ^NOPE: (.+)$\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
-assert_eq "$rc" "1" "기계 상태 임시값: 그 명령을 돌려 새 실패 → rc 1"
-assert_contains "$out" "gamma" "기계 상태 임시값: 새 이름 gamma"
-assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 기계 상태(임시)" "기계 상태 임시값: 무엇을 돌렸나에 출처를 적는다"
-assert_contains "$out" "test_command 를 기계 상태(임시)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "기계 상태 임시값: 레포 설정 파일에 올리자고 한 줄로 알린다"
+assert_eq "$rc" "1" "기계 상태의 test_command(늘 통과)를 돌리지 않는다 — 탐지한 러너가 새 실패를 잡는다 → rc 1"
+assert_contains "$out" "무엇을 돌렸나: 탐지한 러너" "기계 상태 값이 아니라 탐지 경로가 돈다"
+assert_not_contains "$out" "exit 0" "기계 상태의 명령 글이 출력 어디에도 없다"
+assert_not_contains "$out" "기계 상태(임시)" "기계 상태 출처 표기가 없다"
+assert_contains "$out" "예전 판이 적은 테스트 명령 줄" "옛 레포 설정 줄을 조용히 버리지 않고 읽지 않는다고 알린다"
+assert_contains "$out" "사용자에게 다시 물어 --test-command 로 넘기거나" "옛 줄 알림: 답은 다시 물어 인자로 넘긴다"
+assert_contains "$out" "(\`## 레포 설정\`)이 남아 있다" "옛 줄 알림: 스위트 대조는 쓰지 않으므로 줄이 남아 있다고 말한다"
+assert_not_contains "$out" "을 지웠다" "옛 줄 알림: 스위트 대조는 지웠다고 말하지 않는다"
 machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- 깨진 줄\n' "$RM")"
 out="$(mc --branch feature/mt)"; rc=$?
-assert_eq "$rc" "3" "깨진 기계 상태 → rc 3(조용히 무시하지 않는다)"
-assert_contains "$out" "기계 상태(임시)의 레포 설정을 읽지 못했다" "깨진 기계 상태 사유"
-mkrepo mf 'test_command: bash run.sh\n'
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - delta"\nexit 1'; branch_with feature/mf
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_command · bash -c "exit 0"\n' "$RM")"
-out="$(mc --branch feature/mf)"; rc=$?
-assert_eq "$rc" "1" "frontmatter 가 기계 상태 임시값을 이긴다"
-assert_not_contains "$out" "출처 기계 상태(임시)" "frontmatter 값이면 임시값 표시가 없다"
-assert_contains "$out" "무엇을 돌렸나: test_command(\`bash run.sh\`) — 출처 로드맵" "양의 짝: 로드맵 값이면 출처가 로드맵이다"
-assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "로드맵 값이면 올리자는 줄이 없다"
-
-# 6c — R8 AC5 · AC23b: 기계 상태 `## 레포 설정` · 로드맵 · 레포 설정 파일이 해결자 하나를 지난다
-mkrepo dk 'test_command: bash run.sh\n'
-put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
-put run.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/dk
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^A: (.+)$\n- test_failure_pattern · ^B: (.+)$\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 같은 키 둘 → rc 3(마지막 줄이 이기지 않는다)"
-assert_contains "$out" "같은 키가 둘이다(test_failure_pattern)" "같은 키 사유가 그 키를 말한다"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- review_model · opus\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 그 층이 받지 않는 키(review_model) → rc 3"
-assert_contains "$out" "기계 상태(임시) 은 이 설정을 받지 않는다(review_model)" "기계 상태 층이 받지 않는 키 사유"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_comand · bash run.sh\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
-assert_eq "$rc" "3" "기계 상태에 오타 키(test_comand) → rc 3(R14 §7 기계 층 unknown_key)"
-assert_contains "$out" "모르는 키" "기계 상태 오타 키 사유가 모르는 키라고 말한다"
-assert_contains "$out" "(test_comand)" "기계 상태 오타 키 사유가 그 키를 말한다"
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · [\n' "$RM")"
-out="$(mc --branch feature/dk)"; rc=$?
+assert_eq "$rc" "1" "기계 상태의 레포 설정 절이 깨져 있어도 읽지 않으므로 대조가 돈다 → rc 1"
+mkrepo bp 'test_command: bash run.sh\ntest_failure_pattern: "["\n'
+put run.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base; put b.txt b; branch_with feature/bp
+out="$(mc --branch feature/bp)"; rc=$?
 assert_eq "$rc" "3" "컴파일되지 않는 test_failure_pattern → rc 3"
-assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 기계 상태(임시): " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
-mkrepo pr 'test_command: bash run.sh\ntest_failure_pattern: "^BAD: (.+)$"\n'
-put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
-put run.sh $'echo "BAD: alpha"\necho "BAD: beta"\nexit 1'; branch_with feature/pr
-machine "$(printf -- '---\ntype: conductor-machine\nroadmap: %s\n---\n\n## 레포 설정\n\n- test_failure_pattern · ^NOPE: (.+)$\n' "$RM")"
-out="$(mc --branch feature/pr)"; rc=$?
-assert_eq "$rc" "1" "로드맵의 test_failure_pattern 이 기계 상태 값을 이긴다 — 새 이름 → rc 1"
-assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^BAD: (.+)$\`) — 출처 로드맵" "정규식 출처가 로드맵이다(기계 상태 값은 안 쓴다)"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 로드맵: " "깨진 정규식 사유 문구와 출처(run 이 pattern_error 를 부른다 — 내부 오류 rc 3 과 가른다)"
 mkrepo rp 'test_command: bash run.sh\n'
 put .devbrew.md $'---\ntest_failure_pattern: "^BAD: (.+)$"\n---'
 put run.sh $'echo "BAD: alpha"\nexit 1'; push_base
@@ -209,6 +194,49 @@ out="$(mc --branch feature/ask)"; rc=$?
 assert_eq "$rc" "6" "실행 비트 없는 셸 테스트만 → rc 6(묻는 자리)"
 assert_contains "$out" "test_command" "묻는 자리: 로드맵 frontmatter 키를 말한다"
 assert_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "묻는 자리: 정한 값은 레포 설정 파일에 올린다"
+
+# 7a — 종료 코드 6 의 답: 지휘자가 사용자 답을 이 호출의 인자로만 넘긴다(기계 상태에 적지 않는다)
+mkrepo an; put tests/t.sh $'echo "not ok 1 - alpha"\nexit 1'; push_base
+put tests/t.sh $'echo "not ok 1 - alpha"\necho "not ok 2 - gamma"\nexit 1'; branch_with feature/an
+out="$(mc --branch feature/an)"; rc=$?
+assert_eq "$rc" "6" "인자 없음: 러너 없는 테스트 파일 → rc 6(전제)"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh")"; rc=$?
+assert_eq "$rc" "1" "--test-command: 사용자 답의 명령을 돌려 새 실패 → rc 1"
+assert_contains "$out" "gamma" "--test-command: 새 이름 gamma"
+assert_contains "$out" "무엇을 돌렸나: test_command(\`bash tests/t.sh\`) — 출처 이 호출의 인자(사용자 답)" "--test-command: 무엇을 돌렸나에 출처가 이 호출의 인자다"
+assert_contains "$out" "test_command 를 이 호출의 인자(사용자 답)에서 읽었다 — 이 값을 레포 설정 파일(.devbrew.md)에 올린다" "--test-command: 레포 설정 파일에 올리자고 알린다"
+out="$(mc --branch feature/an)"; rc=$?
+assert_eq "$rc" "6" "--test-command 는 그 호출에만 쓴다 — 인자 없이 다시 돌면 rc 6"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '^not ok [0-9]+ - ([a-z]+)$')"; rc=$?
+assert_eq "$rc" "1" "--test-failure-pattern: 정규식으로 가른 새 이름 → rc 1"
+assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^not ok [0-9]+ - ([a-z]+)\$\`) — 출처 이 호출의 인자(사용자 답)" "--test-failure-pattern: 출처가 이 호출의 인자다"
+out="$(mc --branch feature/an --test-failure-pattern '^x$')"; rc=$?
+assert_eq "$rc" "3" "--test-failure-pattern 만(돌릴 명령 없음) → rc 3"
+assert_contains "$out" "테스트 명령과 함께만" "정규식만 준 사유"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "정규식만: 쓰지 못할 값을 올리자고 먼저 알리지 않는다"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '[')"; rc=$?
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "깨진 정규식: 거부하기 전에 올리자고 알리지 않는다"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '')"; rc=$?
+assert_eq "$rc" "3" "빈 --test-failure-pattern → rc 3"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "빈 정규식: 명령 값도 올리자고 먼저 알리지 않는다"
+# 7b — 두 사본의 경로 글자(끝에서 끝): 같은 실패는 갈리지 않고, 경로를 기대하는 사용자 정규식은 원래 출력에 맞춘다
+mkrepo pp; put run.sh $'echo "  ✗ broken at $PWD/x"\necho "  ✗ tmp $TMPDIR/y"\necho "FAIL: test_old"\nexit 1'; push_base
+put run.sh $'echo "  ✗ broken at $PWD/x"\necho "  ✗ tmp $TMPDIR/y"\necho "FAIL: test_old"\necho "FAIL: $PWD/tests/test_new"\nexit 1'; branch_with feature/pp
+out="$(mc --branch feature/pp --test-command "bash run.sh" --test-failure-pattern '^  ✗ (.+)$')"; rc=$?
+assert_eq "$rc" "0" "사본 · 임시 폴더 경로가 든 같은 실패는 새 실패가 아니다 → rc 0"
+assert_contains "$out" "이 브랜치에만 있는 실패 0개" "경로만 다른 같은 실패를 새 실패로 세지 않는다"
+out="$(mc --branch feature/pp --test-command "bash run.sh" --test-failure-pattern '^FAIL: (?:/\S+/)?(test_\w+)$')"; rc=$?
+assert_eq "$rc" "1" "절대 경로를 기대하는 정규식: 원래 출력에서 이름을 뽑아 새 실패를 잡는다 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: test_new" "경로가 붙은 새 실패의 이름"
+out="$(mc --branch feature/an --test-command "")"; rc=$?
+assert_eq "$rc" "3" "빈 --test-command → rc 3"
+assert_contains "$out" "--test-command 값이 비었다" "빈 인자 사유"
+out="$(mc --branch feature/an --test-command "bash tests/t.sh" --test-failure-pattern '[')"; rc=$?
+assert_eq "$rc" "3" "깨진 --test-failure-pattern → rc 3"
+assert_contains "$out" "test_failure_pattern 정규식이 깨졌다 — 출처 이 호출의 인자(사용자 답): " "깨진 인자 정규식 사유와 출처"
+W="$T/pt"; out="$(mc --branch feature/pt --test-command "bash -c 'exit 0'")"; rc=$?
+assert_eq "$rc" "0" "인자가 로드맵 값보다 앞선다(그 호출만)"
+assert_contains "$out" "로드맵의 test_command(\`bash run.sh\`) 대신 이 호출의 인자를 쓴다" "인자가 설정 값을 대신하면 그 값과 출처를 알린다"
 
 # 7b — 테스트 파일 수를 못 세면 「스위트 대조 없음」 이 아니라 검사 불가(rc 3)
 mkrepo cn; put README.md r; push_base; put x.txt x; branch_with feature/cn
@@ -245,6 +273,12 @@ out="$(cd "$W" && python3 "$MC" run --roadmap "$RM" --no-fetch --branch feature/
 assert_eq "$rc" "5" "--wait 안에 못 잡으면 rc 5"
 assert_contains "$out" "기다린다(줄)" "--wait 는 줄을 선다고 알린다"
 printf '999999 x\n' > "$LOCKD/owner"
+chmod 555 "$(dirname "$LOCKD")"
+out="$(mc --branch feature/ut)"; rc=$?
+chmod 755 "$(dirname "$LOCKD")"
+assert_eq "$rc" "3" "죽은 주인의 잠금을 옮기지 못하면(부모 권한) rc 3 — 「다른 스위트가 도는 중」(5)이 아니다"
+assert_contains "$out" "주인 없는 잠금을 옮기지 못했다" "옮기지 못한 사유를 보인다"
+assert_not_contains "$out" "다른 스위트가 도는 중" "기다려도 풀리지 않는 잠금을 바쁘다고 하지 않는다"
 out="$(mc --branch feature/ut)"; rc=$?
 assert_contains "$out" "주인 없는 잠금을 풀었다" "죽은 주인의 잠금은 알리고 푼다"
 assert_eq "$rc" "1" "잠금을 푼 뒤 대조가 돈다"
@@ -261,6 +295,7 @@ W="$T/ut"; out="$(mc --branch feature/ut --keep-merged)"; rc=$?
 kept="$(printf '%s\n' "$out" | sed -n 's/^남긴 사본: //p')"
 [ -n "$kept" ] && [ -d "$kept" ] && ok "사본 남기기: 경로가 있다" || no "사본 남기기: 남긴 사본이 없다"
 assert_eq "$(git -C "$W" worktree list | wc -l | tr -d ' ')" "2" "사본 남기기: 합친 사본 하나만 남는다"
+assert_eq "$(ls -A "$(dirname "$kept")" | tr '\n' ' ')" "merged " "사본 남기기: 실행 폴더에는 합친 사본만 남는다(임시 폴더 · 결과 파일은 지운다)"
 g remote set-head origin -d
 out="$(mc --branch feature/ut)"; rc=$?
 assert_eq "$rc" "3" "origin/HEAD 없음 → rc 3"
@@ -271,12 +306,25 @@ NAMES="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_c
 for t in ("FAILED a.py::t1 - x", "FAIL: t2 (m.C)", "not ok 3 - t3", "  ✗ t4", "ERROR x.py::t5 - e", "nothing here"):
     print(sorted(m.names_in(t, None)[0]), m.names_in(t, None)[1])' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$NAMES" "$(printf "%s\n" "['a.py::t1'] pytest" "['t2 (m.C)'] unittest" "['t3'] tap" "['t4'] ✗ 표시" "['x.py::t5'] pytest" "[] None")" "names_in: 알려진 모양 넷과 모양 없음"
+MIXED="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+n, s = m.names_in("FAILED a.py::t1 - x\nnot ok 3 - t3\n  ✗ t4", None); print(sorted(n), s)' "$ROOT/plugins/spec-distill/scripts")"
+assert_eq "$MIXED" "['a.py::t1', 't3', 't4'] pytest · tap · ✗ 표시" "names_in: 한 출력에 섞인 알려진 꼴을 전부 센다"
 # 10b — 러너별 모양: 셸은 ✗ · FAIL: · tap 만, 모르는 러너는 이름을 뽑지 않는다
 SHAPED="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
 t = "ERROR: diag\n  ✗ a\nFAIL: b\nnot ok 1 - c\nFAILED x.py::d - e"
 for r in ("shell", "pytest", "unittest", "jest"):
     print(r, sorted(m.names_in(t, shapes=m.RUNNER_SHAPES.get(r, ()))[0]))' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$SHAPED" "$(printf "%s\n" "shell ['a', 'b', 'c']" "pytest ['x.py::d']" "unittest ['b', 'diag']" "jest []")" "names_in: 러너별 모양만 쓴다"
+# 10c — 두 사본의 경로 글자: 같은 실패가 사본 · 임시 폴더 경로 때문에 새 실패로 갈리지 않는다(양성 짝: 자리표시 없이는 갈린다)
+NEUT="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m; from pathlib import Path
+w = Path("/w/run-1")
+def side(s):
+    return "FAILED a.py::t - x\nERROR: cannot open %s/%s/f\n  ✗ tmp %s/tmp-%s/x" % (w, s, w, s)
+raw = sorted(m.names_in(side("merged"), None)[0] - m.names_in(side("base"), None)[0])
+neu = sorted(m.names_in(m.neutral(side("merged"), w / "merged", w / "tmp-merged"), None)[0]
+             - m.names_in(m.neutral(side("base"), w / "base", w / "tmp-base"), None)[0])
+print(len(raw), neu)' "$ROOT/plugins/spec-distill/scripts")"
+assert_eq "$NEUT" "2 []" "names_in: 사본 · 임시 폴더 경로를 자리표시로 바꾸면 같은 실패가 새 실패로 갈리지 않는다"
 
 # 11 — 브랜치 끝: 로컬과 origin 이 다르면 앞선 쪽 · 갈라지면 rc 3. 낡은 로컬은 origin 이 이미 푼 충돌을 다시 낸다
 mkrepo tip; put a.txt one; push_base

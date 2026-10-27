@@ -1487,9 +1487,10 @@ assert_eq "$(stage "$T/rm21.json" H21)" "머지됨" "수리 4: 깨진 사본만 
 
 # ── R8 AC1 — 상태 계산의 레포 설정은 해결자가 낸다: 기본 브랜치의 레포 설정 파일 · 출처 · 알림 ─────────
 assert_eq "$(js "$T/rm21.json" "r['settings']['sources']['specs_dir']")" "기본값" "레포 설정 파일이 없으면 specs_dir 출처는 기본값"
-assert_contains "$(js "$T/rm21.json" "' | '.join(r['settings']['notices'])")" "기계 상태 층 건너뜀" "보고 settings 에 해결자 알림(notices)이 실린다"
 g checkout -q main
 printf -- '---\nspecs_dir: docs/superpowers/specs/\n---\n' > "$W/.devbrew.md"
+(cd "$W" && python3 "$RS" --json docs/rm21/roadmap.md > "$T/rm21-wt.json")
+assert_contains "$(js "$T/rm21-wt.json" "' | '.join(r['settings']['notices'])")" "아직 기본 브랜치에 없다" "보고 settings 에 해결자 알림(notices)이 실린다"
 g add -- .devbrew.md && g commit -qm "레포 설정 파일" && g push -q origin main && g fetch -q origin
 (cd "$W" && python3 "$RS" --json docs/rm21/roadmap.md > "$T/rm21-repo.json")
 at="$(g rev-parse origin/HEAD | cut -c1-8)"
