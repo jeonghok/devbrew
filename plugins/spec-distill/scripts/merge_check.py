@@ -105,6 +105,14 @@ def names_in(text: str, pattern=None, shapes=None):
     return found, ("test_failure_pattern" if found else None)
 
 
+def neutral(text: str, tree: Path, tmp: Path) -> str:
+    """사본 · 임시 폴더 경로를 자리표시로 — 두 사본에서 같은 실패가 경로 글자 때문에 새 실패 · 고쳐짐으로 갈리지 않게 한다."""
+    for path, mark in ((tmp, "<tmp>"), (tree, "<tree>")):
+        for p in sorted({str(path), os.path.realpath(str(path))}, key=len, reverse=True):
+            text = text.replace(p, mark)
+    return text
+
+
 # ── 잠금 ─────────────────────────────────────────────────────────────────────
 # 하위 agent 의 전체 스위트와 같은 잠금 하나(`suite_lock.py`) — 지휘자 대조와 담당자 스위트가 같은 시각에 돌지 않는다.
 
@@ -112,6 +120,8 @@ def take_lock(d: Path, branch: str, wait: float = 0) -> None:
     try:
         suite_lock.take(d, "merge_check %s" % branch, wait)
     except suite_lock.Busy as exc:
+        if exc.stuck:   # 기다려도 풀리지 않는다 — 「다른 스위트가 도는 중」 이 아니다
+            raise Stop(3, "스위트 잠금을 잡지 못했다(%s) — 잠금 %s" % (exc, d))
         raise Stop(5, "다른 스위트가 도는 중이다(%s) — 끝난 뒤 다시 돈다(잠금 %s)" % (exc, d))
 
 
@@ -197,8 +207,8 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if 127 in (b_rc, m_rc):
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    b_names, _s = names_in(b_out, pattern)
-    m_names, shape = names_in(m_out, pattern)
+    b_names, _s = names_in(neutral(b_out, base, work / "tmp-base"), pattern)
+    m_names, shape = names_in(neutral(m_out, merged, work / "tmp-merged"), pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
         res["new"] = sorted(m_names - b_names)
@@ -321,8 +331,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             res["notes"].append("귀속 강등: %s" % line[len("degrade_causes: "):])
     for runner, unit, verdict in parse_attributions(p.stdout):
         shapes = RUNNER_SHAPES.get(runner, ())
-        b_names, _s = names_in(b_logs.get((runner, unit), ""), shapes=shapes)
-        m_names, _s = names_in(m_logs.get((runner, unit), ""), shapes=shapes)
+        b_names, _s = names_in(neutral(b_logs.get((runner, unit), ""), base, work / "tmp-base"), shapes=shapes)
+        m_names, _s = names_in(neutral(m_logs.get((runner, unit), ""), merged, work / "tmp-merged"), shapes=shapes)
         if verdict in NEW:
             fresh = sorted(m_names - b_names)
             res["new"] += ["%s: %s" % (unit, n) for n in fresh] or ["%s — 이름 대조 불가 — 단위 수준만" % unit]
@@ -375,8 +385,11 @@ def suite_settings(root: Path, roadmap: str, given=None) -> tuple:
     keys = ("test_command", "test_failure_pattern")
     values = dict((k, res["values"][k]) for k in keys)
     origin = dict((k, res["sources"][k]) for k in keys)
+    given = given or {}
+    if given.get("test_failure_pattern") is not None and given.get("test_command") is None and values["test_command"] is None:
+        raise Stop(3, "--test-failure-pattern 은 테스트 명령과 함께만 쓴다 — --test-command 를 함께 준다")
     for key in keys:
-        value = (given or {}).get(key)
+        value = given.get(key)
         if value is None:
             continue
         flag = "--" + key.replace("_", "-")
@@ -387,8 +400,6 @@ def suite_settings(root: Path, roadmap: str, given=None) -> tuple:
         values[key], origin[key] = value, ARG_LABEL
         print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
               % (key, ARG_LABEL, repo_defaults.SETTINGS_FILE))
-    if (given or {}).get("test_failure_pattern") is not None and values["test_command"] is None:
-        raise Stop(3, "--test-failure-pattern 은 테스트 명령과 함께만 쓴다 — --test-command 를 함께 준다")
     sources = dict((k, " — 출처 %s" % origin[k]) for k in keys)
     return values["test_command"], values["test_failure_pattern"], sources
 
@@ -447,14 +458,16 @@ def run(root: Path, a) -> int:
             print("남긴 사본: %s" % keep)
         return rc
     finally:
-        for d in (work / "base", work / "merged"):
-            if d != keep:
-                drop_copy(root, d, work)
-        if keep is None:
-            shutil.rmtree(str(work), ignore_errors=True)
-        elif work.is_dir():
-            drop_leftovers(work, keep)
-        drop_lock(lock)
+        try:
+            for d in (work / "base", work / "merged"):
+                if d != keep:
+                    drop_copy(root, d, work)
+            if keep is None:
+                shutil.rmtree(str(work), ignore_errors=True)
+            elif work.is_dir():
+                drop_leftovers(work, keep)
+        finally:
+            drop_lock(lock)   # 정리가 실패해도 잠금은 푼다
 
 
 def main(argv=None) -> int:

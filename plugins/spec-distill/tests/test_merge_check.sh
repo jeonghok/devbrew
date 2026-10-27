@@ -213,6 +213,7 @@ assert_contains "$out" "실패 이름 정규식: test_failure_pattern(\`^not ok 
 out="$(mc --branch feature/an --test-failure-pattern '^x$')"; rc=$?
 assert_eq "$rc" "3" "--test-failure-pattern 만(돌릴 명령 없음) → rc 3"
 assert_contains "$out" "테스트 명령과 함께만" "정규식만 준 사유"
+assert_not_contains "$out" "레포 설정 파일(.devbrew.md)에 올린다" "정규식만: 쓰지 못할 값을 올리자고 먼저 알리지 않는다"
 out="$(mc --branch feature/an --test-command "")"; rc=$?
 assert_eq "$rc" "3" "빈 --test-command → rc 3"
 assert_contains "$out" "--test-command 값이 비었다" "빈 인자 사유"
@@ -258,6 +259,12 @@ out="$(cd "$W" && python3 "$MC" run --roadmap "$RM" --no-fetch --branch feature/
 assert_eq "$rc" "5" "--wait 안에 못 잡으면 rc 5"
 assert_contains "$out" "기다린다(줄)" "--wait 는 줄을 선다고 알린다"
 printf '999999 x\n' > "$LOCKD/owner"
+chmod 555 "$(dirname "$LOCKD")"
+out="$(mc --branch feature/ut)"; rc=$?
+chmod 755 "$(dirname "$LOCKD")"
+assert_eq "$rc" "3" "죽은 주인의 잠금을 옮기지 못하면(부모 권한) rc 3 — 「다른 스위트가 도는 중」(5)이 아니다"
+assert_contains "$out" "주인 없는 잠금을 옮기지 못했다" "옮기지 못한 사유를 보인다"
+assert_not_contains "$out" "다른 스위트가 도는 중" "기다려도 풀리지 않는 잠금을 바쁘다고 하지 않는다"
 out="$(mc --branch feature/ut)"; rc=$?
 assert_contains "$out" "주인 없는 잠금을 풀었다" "죽은 주인의 잠금은 알리고 푼다"
 assert_eq "$rc" "1" "잠금을 푼 뒤 대조가 돈다"
@@ -294,6 +301,16 @@ t = "ERROR: diag\n  ✗ a\nFAIL: b\nnot ok 1 - c\nFAILED x.py::d - e"
 for r in ("shell", "pytest", "unittest", "jest"):
     print(r, sorted(m.names_in(t, shapes=m.RUNNER_SHAPES.get(r, ()))[0]))' "$ROOT/plugins/spec-distill/scripts")"
 assert_eq "$SHAPED" "$(printf "%s\n" "shell ['a', 'b', 'c']" "pytest ['x.py::d']" "unittest ['b', 'diag']" "jest []")" "names_in: 러너별 모양만 쓴다"
+# 10c — 두 사본의 경로 글자: 같은 실패가 사본 · 임시 폴더 경로 때문에 새 실패로 갈리지 않는다(양성 짝: 자리표시 없이는 갈린다)
+NEUT="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m; from pathlib import Path
+w = Path("/w/run-1")
+def side(s):
+    return "FAILED a.py::t - x\nERROR: cannot open %s/%s/f\n  ✗ tmp %s/tmp-%s/x" % (w, s, w, s)
+raw = sorted(m.names_in(side("merged"), None)[0] - m.names_in(side("base"), None)[0])
+neu = sorted(m.names_in(m.neutral(side("merged"), w / "merged", w / "tmp-merged"), None)[0]
+             - m.names_in(m.neutral(side("base"), w / "base", w / "tmp-base"), None)[0])
+print(len(raw), neu)' "$ROOT/plugins/spec-distill/scripts")"
+assert_eq "$NEUT" "2 []" "names_in: 사본 · 임시 폴더 경로를 자리표시로 바꾸면 같은 실패가 새 실패로 갈리지 않는다"
 
 # 11 — 브랜치 끝: 로컬과 origin 이 다르면 앞선 쪽 · 갈라지면 rc 3. 낡은 로컬은 origin 이 이미 푼 충돌을 다시 낸다
 mkrepo tip; put a.txt one; push_base
