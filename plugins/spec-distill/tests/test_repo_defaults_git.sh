@@ -71,15 +71,15 @@ run "$C" get interview_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "작업 트리에만 있는 설정 파일은 쓰지 않는다"
 assert_contains "$ERR" "아직 기본 브랜치에 없다" "작업 트리에만 있으면 알린다"
 
-# ── 로드맵 층 · 기계 상태 층 건너뜀 ─────────────────────────────────────────
+# ── 로드맵 층(기계 상태는 설정 층이 아니다) ──────────────────────────────────
 on_trunk "$C" docs/superpowers/roadmaps/r/roadmap.md $'---\ntype: roadmap\ntest_command: make t\n---\n# r\n'
 run "$C" get test_command --roadmap docs/superpowers/roadmaps/r/roadmap.md
 assert_eq "$RC:$OUT" "0:make t" "--roadmap 은 기본 브랜치의 로드맵 머리말을 읽는다"
 assert_contains "$ERR" "출처: 로드맵" "로드맵 값의 출처"
-assert_contains "$ERR" "기계 상태 층 건너뜀 — 읽는 함수 없음" "읽는 함수가 없으면 기계 상태 층을 건너뛴다고 알린다"
+assert_not_contains "$ERR" "기계 상태" "해결자는 기계 상태 층을 갖지 않는다 — 알림에도 그 층이 없다"
 run "$C" get test_command
 assert_eq "$RC:$OUT" "1:" "로드맵을 안 주면 로드맵 값이 없다"
-assert_contains "$ERR" "로드맵 없음 — 기계 상태 층 건너뜀" "로드맵이 없으면 기계 상태 층을 건너뛴다고 알린다"
+assert_not_contains "$ERR" "기계 상태" "로드맵이 없어도 기계 상태 층 알림이 없다"
 run "$C" get test_command --roadmap docs/superpowers/roadmaps/none/roadmap.md
 assert_eq "$RC:$OUT" "3:" "기본 브랜치에 없는 로드맵은 rc 3"
 on_trunk "$C" docs/superpowers/roadmaps/r2/roadmap.md $'---\ntype: roadmap\nroadmaps_dir: x/\n---\n# r2\n'
@@ -241,8 +241,15 @@ assert_eq "$RC" "3" "roadmap-check: 머리말을 못 읽는 파일은 rc 3"
 assert_contains "$ERR" "검사 불가" "roadmap-check: 못 읽으면 검사 불가로 알린다"
 run "$RB" roadmap-check plan/roadmaps/x/none.md
 assert_eq "$RC" "3" "roadmap-check: 없는 파일은 rc 3"
-run "$RB" roadmap-check plan/roadmaps/x/roadmap.md
-assert_not_contains "$ERR" "기계 상태 층 건너뜀" "roadmap-check: 해결자 알림(로드맵 없음 — 기계 상태 층 건너뜀)을 끝내기 펜스에 내지 않는다"
+mkrepo rn || { no "픽스처 rn"; finish; exit 1; }
+RN="$T/rn/work"
+mkdir -p "$RN/docs/superpowers/roadmaps/x"
+printf -- '---\ntype: roadmap\n---\n# x\n' > "$RN/docs/superpowers/roadmaps/x/roadmap.md"
+printf -- '---\ninterview_dir: wt/\n---\n' > "$RN/.devbrew.md"
+run "$RN" get roadmaps_dir
+assert_contains "$ERR" "아직 기본 브랜치에 없다" "양성 짝: 작업 트리에만 있는 설정 파일의 해결자 알림이 get 에는 나온다"
+run "$RN" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
+assert_eq "$RC:$OUT:$ERR" "0::" "roadmap-check: 해결자 알림(작업 트리에만 있는 설정 파일)을 끝내기 펜스에 내지 않는다 — rc 0 · stdout · stderr 빔"
 mkdir -p "$RB/plan/roadmaps/ex" "$RB/plan/roadmaps/ln" "$RB/plan/roadmaps/lfs"
 cp "$RB/plan/roadmaps/x/roadmap.md" "$RB/plan/roadmaps/ex/roadmap.md" && chmod +x "$RB/plan/roadmaps/ex/roadmap.md"
 ln -s ../x/roadmap.md "$RB/plan/roadmaps/ln/roadmap.md"

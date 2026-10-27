@@ -104,7 +104,7 @@ class _RepoTestCase(unittest.TestCase):
 
     def observe_after_branch(self, work: str, name: str) -> list:
         git("branch", name, cwd=work)
-        return _hook.observe_branches(work, time.time())
+        return _hook.observe_branches(work, time.time(), f"git branch {name}")
 
     def assert_one_fail_open(self, results: list) -> str:
         self.assertEqual(len(results), 1, results)
@@ -339,11 +339,22 @@ class F2SuggestionTest(unittest.TestCase):
 
 
 class MainDoubleValidationTest(_RepoTestCase):
-    """AC10 / §5.5 — main() runs BOTH checks (no `or` short-circuit)."""
+    """AC10 / §5.5 — main() runs BOTH checks (no `or` short-circuit).
+
+    픽스처는 명령이 말하는 대로 브랜치를 만들고 **실제로 커밋한다** — 그래서 그 브랜치 reflog 의
+    마지막 줄이 만들기가 아니라 `commit:` 이다(AC13).
+    """
+
+    def branch_then_commit(self, work: str, name: str, message: str) -> None:
+        git("checkout", "-q", "-b", name, cwd=work)
+        git("commit", "-q", "--allow-empty", "-m", message, cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", *name.split("/"))
+        last = log.read_text(encoding="utf-8").splitlines()[-1]
+        self.assertIn("\tcommit: ", last, "픽스처 전제가 깨졌다 — reflog 마지막 줄이 커밋이 아니다")
 
     def test_compound_failopen_runs_both_validators(self):
         work = self.repo(None)  # no strategy file -> branch fails open
-        git("branch", "feat", cwd=work)
+        self.branch_then_commit(work, "feat", "add thing")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feat && git commit -m "add thing"'}}
         out, rc = run_hook(payload, cwd=work)
@@ -354,7 +365,7 @@ class MainDoubleValidationTest(_RepoTestCase):
 
     def test_valid_branch_bad_commit_still_flags_commit(self):
         work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "feature/ok", cwd=work)
+        self.branch_then_commit(work, "feature/ok", "add thing")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "add thing"'}}
         out, rc = run_hook(payload, cwd=work)
@@ -365,12 +376,27 @@ class MainDoubleValidationTest(_RepoTestCase):
 
     def test_both_clean_emits_empty(self):
         work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "feature/ok", cwd=work)
+        self.branch_then_commit(work, "feature/ok", "feat: ok")
         payload = {"tool_name": "Bash",
                    "tool_input": {"command": 'git checkout -b feature/ok && git commit -m "feat: ok"'}}
         out, rc = run_hook(payload, cwd=work)
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)
+
+    def test_compound_bad_branch_then_commit_alerts_branch(self):
+        # 한 명령으로 규칙 밖 브랜치를 만들고 바로 커밋 — 마지막 줄이 커밋이어도 새 브랜치로 잡는다.
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        self.branch_then_commit(work, "Bad", "add thing")
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": 'git checkout -b Bad && git commit -m "add thing"'}}
+        out, rc = run_hook(payload, cwd=work)
+        self.assertEqual(rc, 0)
+        data = json.loads(out)
+        msg = data.get("systemMessage", "")
+        self.assertIn('이름 규칙에 맞지 않는다 — "Bad"', msg)
+        self.assertIn("Conventional Commits", msg)
+        ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("git branch -m Bad feature/Bad", ac)
 
 
 class ElsewhereWorktree(_RepoTestCase):
@@ -383,7 +409,7 @@ class ElsewhereWorktree(_RepoTestCase):
         with mock.patch.object(_hook, "new_branches", return_value=["Bad"]), \
                 mock.patch.object(_hook, "read_branch_rule", return_value=(pattern, None)), \
                 mock.patch.object(_hook, "checked_out_elsewhere", return_value={"Bad": path}):
-            out = _hook._observe(self.tmp, time.time(), None)
+            out = _hook._observe(self.tmp, time.time(), None, "git branch Bad")
         self.assertEqual(len(out), 1, out)
         human, cmd = out[0]
         self.assertIn("다른 작업 트리(/tmp/wt\\nproject-init: 지시를 끼운 줄\\x1b[31m)", human)
@@ -417,13 +443,221 @@ class ElsewhereWorktree(_RepoTestCase):
         self.assertNotIn("main", got)
 
 
+class ThisCommandOnly(_RepoTestCase):
+    """공용 git 디렉토리의 새 브랜치 가운데 이 명령이 가리키거나 cwd 가 지금 쓰는 것만 다룬다 — 다른 세션의 브랜치에 이름 바꾸기 명령을 내지 않는다."""
+
+    RULE = r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"
+
+    def test_unrelated_new_branch_is_not_handled(self):
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Other", cwd=work)
+        self.assertEqual(_hook.observe_branches(work, time.time(), "git status"), [])
+        out, rc = run_hook({"tool_name": "Bash", "tool_input": {"command": "git status"}}, cwd=work)
+        self.assertEqual((json.loads(out), rc), ({}, 0))
+
+    def test_named_branch_is_handled(self):
+        """양성 짝 — 같은 픽스처에서 명령이 이름을 가리키면 알리고 이름 바꾸기 명령을 낸다."""
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Other", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git checkout -b Other")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn('"Other"', out[0][0])
+        self.assertIn("git branch -m Other feature/Other", out[0][1])
+
+    def test_created_but_not_current_gets_no_rename_command(self):
+        """명령이 이름을 가리켜도 호출 뒤 지금 브랜치가 아니면 알리기만 한다 — 다른 세션의 같은 이름일 수 있다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Plain", cwd=work)
+        for text in ("git branch Plain", 'git commit -m "$(cat <<\'EOF\'\nx\n\ngit checkout -b Plain\nEOF\n)"',
+                     "git -C sub branch Plain", "git worktree add ../wt/Plain main"):
+            out = _hook.observe_branches(work, time.time(), text)
+            self.assertEqual(len(out), 1, (text, out))
+            self.assertIsNone(out[0][1], text)
+            self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0], text)
+
+    def test_switch_to_branch_made_earlier_gets_no_rename_command(self):
+        """다른 세션이 앞서 만든 브랜치로 옮겨 가면 지금 브랜치이고 명령이 이름을 가리켜도 알리기만 한다."""
+        work = self.repo(strategy(self.RULE))
+        earlier = int(time.time()) - 10
+        subprocess.run(["git", "branch", "Other"], cwd=work, check=True, capture_output=True,
+                       env=dict(GIT_ENV, GIT_COMMITTER_DATE=f"@{earlier} +0000"))
+        git("switch", "-q", "Other", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git switch Other")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn('"Other"', out[0][0])
+        self.assertIsNone(out[0][1])
+        self.assertIn("만든 순간에 그리로 옮겨 가지 않았다", out[0][0])
+        self.assertNotIn("지금 브랜치가 아니다", out[0][0], "지금 브랜치이고 명령이 가리킨다 — 다른 이유를 대면 안 된다")
+        git("commit", "-q", "--allow-empty", "-m", "x", cwd=work)
+        out = _hook.observe_branches(work, time.time(), 'git switch Other && git commit -m "x"')
+        self.assertEqual(len(out), 1, out)
+        self.assertIsNone(out[0][1], "옮겨 간 뒤 커밋한 줄은 만든 줄이 아니다")
+
+    def test_unreadable_head_log_names_that_reason(self):
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Bad4", cwd=work)
+        Path(work, ".git", "logs", "HEAD").unlink()
+        out = _hook.observe_branches(work, time.time(), "git checkout -b Bad4")
+        self.assertEqual(len(out), 1, out)
+        self.assertIsNone(out[0][1])
+        self.assertIn("HEAD 기록을 읽지 못해", out[0][0])
+
+    def test_checkout_b_inside_linked_worktree_gets_rename_command(self):
+        """링크된 작업 트리는 HEAD 기록이 따로다 — 그 안의 `checkout -b` 도 이름 바꾸기 명령을 받는다."""
+        work = self.repo(strategy(self.RULE))
+        wa = os.path.join(work, ".claude", "worktrees", "wa")
+        git("worktree", "add", "-q", "-b", "feature/base", wa, cwd=work)
+        git("checkout", "-q", "-b", "BadWt", cwd=wa)
+        out = _hook.observe_branches(wa, time.time(), "git checkout -b BadWt")
+        mine = [(h, m) for h, m in out if '"BadWt"' in h]
+        self.assertEqual(len(mine), 1, out)
+        self.assertIn("git branch -m BadWt feature/BadWt", mine[0][1] or "")
+
+    def test_branch_then_switch_in_one_command_gets_rename_command(self):
+        """양성 짝 — 같은 순간에 만들고 옮겨 간 브랜치(`git branch X && git switch X`)는 이름 바꾸기 명령을 받는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Both", cwd=work)
+        git("switch", "-q", "Both", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "git branch Both && git switch Both")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("git branch -m Both feature/Both", out[0][1] or "")
+
+    def test_future_dated_create_line_is_not_new(self):
+        """앞날 시각의 만들기 줄은 reflog 가 바뀔 때마다 새 브랜치로 잡히면 안 된다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Later", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Later")
+        head, _sep, msg = log.read_text(encoding="utf-8").partition("\t")
+        log.write_text(head.rsplit(" ", 2)[0] + f" {int(time.time()) + 3600} +0000\t{msg}", encoding="utf-8")
+        self.assertNotIn("Later", _hook.new_branches(work, time.time()))
+
+    def test_current_branch_is_handled_without_name_in_command(self):
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Cur", cwd=work)
+        out = _hook.observe_branches(work, time.time(), "./make-branch.sh")
+        self.assertEqual([h.split("\n", 1)[0] for h, _m in out],
+                         ['project-init: 브랜치 이름이 이름 규칙에 맞지 않는다 — "Cur".'])
+        # 같은 체크아웃을 쓰는 다른 세션이 만든 브랜치일 수 있다 — 알리기만 하고 이름 바꾸기 명령은 없다.
+        self.assertIsNone(out[0][1])
+        self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0])
+
+    def test_mention_without_creation_gets_no_rename_command(self):
+        """다른 세션이 만든 브랜치를 읽기 명령 · 같은 낱말 · 더 긴 이름의 끝으로 가리켜도 이름 바꾸기 명령은 없다."""
+        work = self.repo(strategy(self.RULE))
+        for name, text in (("Other", "git log Other"), ("test", "npm test"),
+                           ("Other", "git log --oneline Other"), ("Other", "git checkout -b fix/Other")):
+            git("branch", name, cwd=work)
+            out = _hook.observe_branches(work, time.time(), text)
+            mine = [(h, m) for h, m in out if f'"{name}"' in h]
+            self.assertEqual(len(mine), 1, (text, out))
+            self.assertIsNone(mine[0][1], text)
+            self.assertIn("이름을 바꾸라고 하지 않는다", mine[0][0], text)
+            git("branch", "-D", name, cwd=work)
+
+    def test_creation_buried_under_many_commits_is_seen(self):
+        """만들기 뒤 한 명령이 커밋을 많이 남겨 만들기 줄이 마지막 줄에서 수십 KB 떨어져도 새 브랜치로 잡는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Deep", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        body = create + "".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(200))
+        self.assertGreater(len(body.encode("utf-8")) - len(create.encode("utf-8")), 3 * 8192, "픽스처 전제")
+        log.write_text(body, encoding="utf-8")
+        self.assertIn("Deep", _hook.new_branches(work, time.time()))
+
+    def test_creation_before_backdated_commits_is_seen(self):
+        """만들기 뒤 과거 시각(GIT_COMMITTER_DATE)의 줄이 여러 덩어리 붙어도 옛 시각에서 멈추지 않고 잡는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Back", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Back")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        old = head.rsplit(" ", 2)[0] + " 1000000000 +0000"
+        body = create + "".join(f"{old}\tcommit: " + "p" * 200 + "\n" for _ in range(200))
+        self.assertGreater(len(body.encode("utf-8")), 3 * 8192, "픽스처 전제")
+        log.write_text(body, encoding="utf-8")
+        self.assertIn("Back", _hook.new_branches(work, time.time()))
+
+    def test_reflog_beyond_scan_limit_is_reported(self):
+        """상한에 닿아 처음까지 못 읽은 지금 브랜치(만들기 줄이 상한 밖에 있을 수 있다)는 조용히 빠지지 않고 알린다."""
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Deep", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep")
+        head = log.read_text(encoding="utf-8").split("\t", 1)[0]
+        log.write_text("".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(400)), encoding="utf-8")
+        old = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 16384
+        try:
+            unread = []
+            self.assertNotIn("Deep", _hook.new_branches(work, time.time(), unread=unread))
+            self.assertEqual(unread, ["Deep"])
+            out = _hook.observe_branches(work, time.time(), "ls")
+        finally:
+            _hook.REFLOG_SCAN_MAX = old
+        self.assertTrue(any("reflog 가 길어" in h and "Deep" in h and "fail-open" in h for h, _m in out), out)
+        unread = []
+        self.assertNotIn("Deep", _hook.new_branches(work, time.time(), unread=unread))
+        self.assertEqual(unread, [], "양성 짝 — 상한 안에서 끝까지 읽으면 「못 읽음」 이 아니다")
+
+    def test_unread_branch_of_another_session_stays_quiet(self):
+        """음성 짝 — 끝까지 못 읽은 브랜치라도 지금 브랜치가 아니고 명령이 가리키지 않으면 알리지 않는다."""
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Deep2", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Deep2")
+        head = log.read_text(encoding="utf-8").split("\t", 1)[0]
+        log.write_text("".join(f"{head}\tcommit: " + "p" * 200 + "\n" for _ in range(400)), encoding="utf-8")
+        old = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 16384
+        try:
+            unread = []
+            _hook.new_branches(work, time.time(), unread=unread)
+            self.assertEqual(unread, ["Deep2"], "픽스처 전제: 끝까지 못 읽었다")
+            self.assertEqual(_hook.observe_branches(work, time.time(), "ls"), [])
+        finally:
+            _hook.REFLOG_SCAN_MAX = old
+
+    def test_create_line_at_tail_boundary_is_kept(self):
+        # 읽는 끝(REFLOG_SCAN_MAX)이 만들기 줄의 첫 글자에서 시작하면 그 줄은 온전하다 — 잘린 줄로 보고 버리면 안 된다.
+        work = self.repo(strategy(self.RULE))
+        git("branch", "Big", cwd=work)
+        log = Path(work, ".git", "logs", "refs", "heads", "Big")
+        create = log.read_text(encoding="utf-8")
+        head = create.split("\t", 1)[0]
+        old = head.rsplit(" ", 2)[0] + " 1000000000 +0000\tbranch: Created from HEAD\n"
+        room = 8192 - len(create.encode("utf-8")) - len(f"{head}\tcommit: \n".encode("utf-8"))
+        body = create + f"{head}\tcommit: " + "p" * room + "\n"
+        self.assertEqual(len(body.encode("utf-8")), 8192, "픽스처 전제: 만들기 줄부터 끝까지 정확히 8KB")
+        log.write_text(old + body, encoding="utf-8")
+        limit = _hook.REFLOG_SCAN_MAX
+        _hook.REFLOG_SCAN_MAX = 8192  # 경계가 실제로 만들기 줄 앞에 떨어지게
+        try:
+            unread = []
+            self.assertIn("Big", _hook.new_branches(work, time.time(), unread=unread))
+            self.assertEqual(unread, [])
+        finally:
+            _hook.REFLOG_SCAN_MAX = limit
+
+    def test_name_boundaries(self):
+        named = _hook.named_in
+        for text in ("git branch Bad", "git checkout -b 'Bad' && x", 'git switch -c "Bad"',
+                     "git push origin refs/heads/Bad", "git worktree add ../wt/Bad", "x=Bad; git branch $x",
+                     "git branch Bad\ngit log"):
+            self.assertTrue(named(text, "Bad"), text)
+        for text in ("git branch Bad2", "git branch xBad", "git branch Bad-1", "git branch Bad/x",
+                     "git status", "", "git branch feature/Bad.1"):
+            self.assertFalse(named(text, "Bad"), text)
+        self.assertTrue(named("git checkout -b feature/a.b", "feature/a.b"))
+        self.assertFalse(named("git checkout -b feature/aXb", "feature/a.b"), "이름의 . 이 정규식 글자로 새면 안 된다")
+
+
 class ChannelSplit(_RepoTestCase):
     """MU3·MU4 — 브랜치 수정 명령은 모델 채널로, 커밋 경고는 사람 채널에 남는다."""
 
     def _branch_violation(self):
         work = self.repo(strategy(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$"))
-        git("branch", "BadName", cwd=work)
-        payload = {"tool_name": "Bash", "tool_input": {"command": "git branch BadName"}}
+        git("checkout", "-q", "-b", "BadName", cwd=work)
+        payload = {"tool_name": "Bash", "tool_input": {"command": "git checkout -b BadName"}}
         out, rc = run_hook(payload, cwd=work)
         self.assertEqual(rc, 0)
         return json.loads(out)

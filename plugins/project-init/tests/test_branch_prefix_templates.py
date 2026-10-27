@@ -170,7 +170,9 @@ class BranchPrefixTemplateTests(unittest.TestCase):
             ]:
                 self.assertIn(needle, sec, (s, needle))
             self.assertIn("reflog", sec, s)
-            self.assertIn("`git worktree add -b` 로 만든 이름을 모두 확인한다", sec, s)
+            self.assertIn("`git worktree add -b` 로 만든 이름을 확인한다 — 그 이름이 명령에 드러나거나 "
+                          "그 브랜치로 옮겨 간 경우다", sec, s)
+            self.assertNotIn("모두 확인한다", sec, s)
             self.assertNotIn("확인하지 않는다", sec, s)
             self.assertNotIn("만 확인한다", sec, s)
 
