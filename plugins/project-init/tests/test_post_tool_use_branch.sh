@@ -76,7 +76,8 @@ elsewhere() { # $1 이름, $2 작업 트리 경로, $3 label
 
 noted() { # $1 이름, $2 label — 알리기만 하고 이름 바꾸기 명령은 없다(이 명령이 만들었다는 근거 없음)
   sm=$(field systemMessage); ac=$(field ac)
-  case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*"이름을 바꾸라고 하지 않는다"*) ;; *) no "$2: 사람 채널에 근거 없음 알림이 없다 — $OUT"; return ;; esac
+  case "$sm" in *"이름 규칙에 맞지 않는다 — \"$1\""*"이 명령의 것이라는 근거가 없어"*) ;; *) no "$2: 사람 채널에 근거 없음 알림이 없다 — $OUT"; return ;; esac
+  case "$sm" in *"다른 작업 트리("*) no "$2: 근거 없음이 아니라 다른 작업 트리 갈래로 갔다 — $OUT"; return ;; esac
   case "$ac" in *"git branch -m $1 "*) no "$2: 근거 없이 이름 바꾸기 명령을 냈다 — $OUT" ;; *) ok "$2" ;; esac
 }
 
@@ -114,6 +115,8 @@ fresh; git -C "$W" switch -q --create Bad4
 hook Bash "$W" "git switch --create Bad4"; alerted Bad4 "git switch --create"
 fresh; git -C "$W" checkout -q -b Bad5
 hook Bash "$W" "git -C $W checkout -b Bad5"; alerted Bad5 "git -C <dir> checkout -b"
+fresh; mkdir -p "$W/sub"; git -C "$W/sub" checkout -q -b BadSub
+hook Bash "$W/sub" "git checkout -b BadSub"; alerted BadSub "하위 폴더에서 checkout -b(git 경로가 다른 꼴로 온다)"
 fresh; git -C "$W" branch Plain5
 hook Bash "$W" "git branch Plain5"; noted Plain5 "만들기만 하고 옮겨 가지 않은 브랜치 → 지금 브랜치가 아니라 알림만(명령 없음)"
 fresh; git -C "$W" checkout -q -b Bad15; git -C "$W" commit -q --allow-empty -m x

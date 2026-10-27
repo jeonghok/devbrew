@@ -175,8 +175,8 @@ def _reflog_lines_since(path):
         f.seek(max(0, start - 1))
         buf = f.read(end - max(0, start - 1))
     if start > 0:
-        # 앞 바이트가 줄바꿈이면 첫 줄은 온전하다 — 줄 가운데서 시작했을 때만 그 잘린 조각을 버린다.
-        buf = buf[1:] if buf[:1] == b"\n" else buf.partition(b"\n")[2]
+        # 한 바이트 앞에서 읽었다 — 첫 줄바꿈까지(앞 줄의 끝 줄바꿈이거나 잘린 조각)만 버려 온전한 첫 줄을 남긴다.
+        buf = buf.partition(b"\n")[2]
     return [ln.decode("utf-8", "replace") for ln in buf.split(b"\n") if ln.strip()], start == 0
 
 
@@ -208,7 +208,7 @@ def _is_new_branch_line(line, branch, now, window):
 
 
 def _moved_here_at_creation(cwd, name, now, deadline=None):
-    """cwd 의 HEAD 가 name 으로 옮겨 간 줄이 name 의 만들기 · 이름 바꾸기 줄과 같은 순간(1초 안)인가.
+    """cwd 의 HEAD 가 name 으로 옮겨 간 줄이 name 의 만들기 · 이름 바꾸기 줄과 같은 순간(1초 안)인가 — 기록을 못 읽으면 None.
 
     `checkout -b` · `switch -c` · 지금 브랜치의 `branch -m` 은 두 기록을 한 번에 쓴다. 다른 세션이 만든
     브랜치로 나중에 옮겨 간 `git switch` 는 두 시각이 다르다.
@@ -216,14 +216,15 @@ def _moved_here_at_creation(cwd, name, now, deadline=None):
     out = _git(cwd, "rev-parse", "--git-dir", "--git-common-dir", deadline=deadline)
     dirs = [d for d in out.decode("utf-8", "replace").split("\n") if d] if out else []
     if len(dirs) != 2:
-        return False
+        return None
     head_log = os.path.join(cwd, dirs[0], "logs", "HEAD")
     branch_log = os.path.join(cwd, dirs[1], "logs", "refs", "heads", *name.split("/"))
     try:
         made = [int(ln.partition("\t")[0].split()[-2]) for ln in _reflog_lines_since(branch_log)[0]
                 if _is_new_branch_line(ln, name, now, NEW_BRANCH_WINDOW)]
         moved = []
-        for ln in _reflog_lines_since(head_log)[0]:
+        head_lines, head_complete = _reflog_lines_since(head_log)
+        for ln in head_lines:
             got = _line_time(ln, now, NEW_BRANCH_WINDOW)
             if got is None:
                 continue
@@ -232,8 +233,10 @@ def _moved_here_at_creation(cwd, name, now, deadline=None):
             if (msg.startswith(MOVED_PREFIX) and msg.rsplit(" to ", 1)[-1] == name) or (m and m.group(1) == name):
                 moved.append(ts)
     except OSError:
-        return False
-    return any(abs(a - b) <= 1 for a in made for b in moved)
+        return None
+    if any(abs(a - b) <= 1 for a in made for b in moved):
+        return True
+    return False if head_complete else None
 
 
 def new_branches(cwd, now, window=NEW_BRANCH_WINDOW, deadline=None, unread=None):
@@ -466,23 +469,36 @@ def _observe(cwd, now, deadline, text, worktree_name=None, worktree_created=Fals
     # 이름 바꾸기 명령의 근거는 명령 글의 해석이 아니라 git 상태다 — 호출 뒤 cwd 의 지금 브랜치이고 명령
     # 글이 그 이름을 가리키며 HEAD 가 그 브랜치를 만든 순간에 옮겨 갔거나, EnterWorktree 가 만든 작업
     # 트리의 브랜치일 때만 낸다. 이름을 가리키기만 한 브랜치 · 다른 세션이 만든 브랜치로 옮겨 간 것 ·
-    # 명령 글이 가리키지 않는 지금 브랜치(같은 체크아웃의 다른 세션)는 알리기만 한다.
-    proven = {n for n in names if n == current and named_in(text, n)
-              and _moved_here_at_creation(cwd, n, now, deadline=deadline)}
+    # 명령 글이 가리키지 않는 지금 브랜치(같은 체크아웃의 다른 세션)는 알리기만 한다 — 그 이유를 브랜치마다 적는다.
+    proven, why = set(), {}
+    for n in names:
+        if n != current:
+            why[n] = "이 명령 뒤의 지금 브랜치가 아니다 — 다른 세션의 것일 수 있다"
+        elif not named_in(text, n):
+            why[n] = "명령이 그 이름을 가리키지 않는다 — 같은 체크아웃을 쓰는 다른 세션의 것일 수 있다"
+        else:
+            moved = _moved_here_at_creation(cwd, n, now, deadline=deadline)
+            if moved:
+                proven.add(n)
+            elif moved is None:
+                why[n] = "HEAD 기록을 읽지 못해 이 체크아웃이 그 브랜치를 만들며 옮겨 갔는지 가리지 못했다(fail-open)"
+            else:
+                why[n] = "이 체크아웃이 그 브랜치를 만든 순간에 그리로 옮겨 가지 않았다 — 다른 세션이 앞서 만든 브랜치일 수 있다"
     if current in names and (_cwd_is_entered_worktree(cwd, worktree_name, deadline=deadline) or fresh_worktree):
         # EnterWorktree 가 방금 만든 작업 트리의 지금 브랜치 — 다른 세션의 것일 수 없다.
         proven.add(current)
-    return notes + _judge(cwd, names, deadline, proven)
+    return notes + _judge(cwd, names, deadline, proven, why)
 
 
-UNPROVEN_NOTE = ("\n이 브랜치가 이 명령의 것이라는 근거가 없어(이 명령 뒤의 지금 브랜치가 아니거나 명령이 그 이름을 "
-                 "가리키지 않는다 — 다른 세션의 것일 수 있다) 이 세션에서는 이름을 바꾸라고 하지 않는다.")
+def _unproven_note(reason):
+    return f"\n이 브랜치가 이 명령의 것이라는 근거가 없어({reason}) 이 세션에서는 이름을 바꾸라고 하지 않는다."
 
 
-def _judge(cwd, names, deadline, proven=None):
+def _judge(cwd, names, deadline, proven=None, why=None):
     """이 호출의 새 브랜치 names 를 기본 브랜치 규칙으로 판정한 (사람, 모델) 알림들.
 
     proven 밖의 브랜치는 알리기만 하고 이름 바꾸기 명령을 내지 않는다(None 이면 모두 근거 있음).
+    why 는 근거가 없는 브랜치마다의 이유다.
     """
     pattern, notice = read_branch_rule(cwd, deadline=deadline)
     if pattern is None:  # 유효 패턴 없음 → fail OPEN, loudly
@@ -498,9 +514,7 @@ def _judge(cwd, names, deadline, proven=None):
         elsewhere = None  # 이름 판정은 이미 났다 — 알림은 내고 명령만 뺀다
     out = []
     for name, (human, cmd) in found:
-        if cmd is None:
-            pass  # 규칙에서 접두를 뽑지 못한 꼴 — 모델 몫이 원래 없다
-        elif elsewhere is None:
+        if elsewhere is None:
             cmd = None
         elif name in elsewhere:
             where = _inert(elsewhere[name])
@@ -509,7 +523,7 @@ def _judge(cwd, names, deadline, proven=None):
             cmd = (f"브랜치 {shlex.quote(name)}(작업 트리 {where})이 규칙 밖이다 "
                    "— 다른 작업 트리에서 쓰는 중이라 이름 바꾸기 명령을 내지 않는다.")
         elif proven is not None and name not in proven:
-            human += UNPROVEN_NOTE
+            human += _unproven_note((why or {}).get(name, "이 명령이 만든 브랜치인지 가리지 못했다"))
             cmd = None
         out.append((human, cmd))
     if elsewhere is None:

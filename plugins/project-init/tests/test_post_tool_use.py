@@ -486,7 +486,32 @@ class ThisCommandOnly(_RepoTestCase):
         self.assertEqual(len(out), 1, out)
         self.assertIn('"Other"', out[0][0])
         self.assertIsNone(out[0][1])
-        self.assertIn("이름을 바꾸라고 하지 않는다", out[0][0])
+        self.assertIn("만든 순간에 그리로 옮겨 가지 않았다", out[0][0])
+        self.assertNotIn("지금 브랜치가 아니다", out[0][0], "지금 브랜치이고 명령이 가리킨다 — 다른 이유를 대면 안 된다")
+        git("commit", "-q", "--allow-empty", "-m", "x", cwd=work)
+        out = _hook.observe_branches(work, time.time(), 'git switch Other && git commit -m "x"')
+        self.assertEqual(len(out), 1, out)
+        self.assertIsNone(out[0][1], "옮겨 간 뒤 커밋한 줄은 만든 줄이 아니다")
+
+    def test_unreadable_head_log_names_that_reason(self):
+        work = self.repo(strategy(self.RULE))
+        git("checkout", "-q", "-b", "Bad4", cwd=work)
+        Path(work, ".git", "logs", "HEAD").unlink()
+        out = _hook.observe_branches(work, time.time(), "git checkout -b Bad4")
+        self.assertEqual(len(out), 1, out)
+        self.assertIsNone(out[0][1])
+        self.assertIn("HEAD 기록을 읽지 못해", out[0][0])
+
+    def test_checkout_b_inside_linked_worktree_gets_rename_command(self):
+        """링크된 작업 트리는 HEAD 기록이 따로다 — 그 안의 `checkout -b` 도 이름 바꾸기 명령을 받는다."""
+        work = self.repo(strategy(self.RULE))
+        wa = os.path.join(work, ".claude", "worktrees", "wa")
+        git("worktree", "add", "-q", "-b", "feature/base", wa, cwd=work)
+        git("checkout", "-q", "-b", "BadWt", cwd=wa)
+        out = _hook.observe_branches(wa, time.time(), "git checkout -b BadWt")
+        mine = [(h, m) for h, m in out if '"BadWt"' in h]
+        self.assertEqual(len(mine), 1, out)
+        self.assertIn("git branch -m BadWt feature/BadWt", mine[0][1] or "")
 
     def test_branch_then_switch_in_one_command_gets_rename_command(self):
         """양성 짝 — 같은 순간에 만들고 옮겨 간 브랜치(`git branch X && git switch X`)는 이름 바꾸기 명령을 받는다."""
@@ -555,7 +580,7 @@ class ThisCommandOnly(_RepoTestCase):
         self.assertIn("Back", _hook.new_branches(work, time.time()))
 
     def test_reflog_beyond_scan_limit_is_reported(self):
-        """상한까지 거슬러 읽어도 최근 기록을 다 못 본 브랜치는 조용히 빠지지 않고 알린다."""
+        """상한에 닿아 처음까지 못 읽은 지금 브랜치(만들기 줄이 상한 밖에 있을 수 있다)는 조용히 빠지지 않고 알린다."""
         work = self.repo(strategy(self.RULE))
         git("checkout", "-q", "-b", "Deep", cwd=work)
         log = Path(work, ".git", "logs", "refs", "heads", "Deep")
