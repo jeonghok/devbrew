@@ -167,8 +167,8 @@ case_binary_png_bytes_not_in_diff() {
   assert_line "$ROOT/err" "$(bin_line new.png)" "new.png 를 이름과 함께 알린다"
 }
 
-case_binary_deleted_not_flagged() {
-  echo "[range — 지운 바이너리는 숨긴 내용이 없다 — 리뷰 안 됨으로 알리지 않는다]"
+case_binary_deleted_flagged() {
+  echo "[range — 바이너리로 보인 파일을 지우면 지운 줄도 가려진다 — 리뷰 안 됨으로 알린다]"
   mkfix
   printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377' > "$R/logo.png"
   g "$R" add -A; g "$R" commit -q -m png
@@ -179,9 +179,21 @@ case_binary_deleted_not_flagged() {
   printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
   rd --mode range --scope-file "$D/range-scope.txt"
   assert_eq "$RC" 0 "rc 0"
-  assert_eq "$(field degraded "$OUT")" no "degraded: no"
-  assert_file_absent "$ROOT/err" '바이너리로 보여' "지운 logo.png 를 알리지 않는다"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_file_grep "$ROOT/err" '바뀐 경로 logo.png 는 바이너리로 보여' "지운 logo.png 를 리뷰 안 됨으로 알린다"
   assert_file_grep "$D/review-i1.diff" '^deleted file mode' "지운 것은 diff 에 보인다"
+  # 양성 짝 — 텍스트 파일을 지우면 지운 줄이 diff 에 보여 알리지 않는다
+  mkfix
+  printf 'gone = 1\n' > "$R/src/old.py"
+  g "$R" add -A; g "$R" commit -q -m old
+  start=$(git -C "$R" rev-parse HEAD)
+  g "$R" rm -q src/old.py
+  g "$R" commit -q -m rm-old
+  printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$(field degraded "$OUT")" no "지운 텍스트 파일: degraded: no"
+  assert_file_absent "$ROOT/err" '바이너리로 보여' "지운 텍스트 파일은 알리지 않는다"
+  assert_file_grep "$D/review-i1.diff" '^-gone = 1' "지운 텍스트 줄은 diff 에 보인다"
 }
 
 case_text_only_not_degraded() {
@@ -1245,7 +1257,7 @@ case_session_includes_untracked
 case_binary_attr_not_reviewed
 case_binary_nul_not_reviewed
 case_binary_png_bytes_not_in_diff
-case_binary_deleted_not_flagged
+case_binary_deleted_flagged
 case_text_only_not_degraded
 case_session_doc_excluded
 case_range_uses_frozen_pair

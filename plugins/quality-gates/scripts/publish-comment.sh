@@ -61,7 +61,7 @@ fi
 host="${slug%%/*}"
 # 인증 — 부작용 전(P5). origin 호스트의 활성 계정만 본다 — 다른 호스트·두 번째 계정이 깨졌다고 게시를 잃지 않는다.
 auth_err="$(gh auth status --active --hostname "$host" 2>&1 >/dev/null)" \
-  || { echo "publish-comment: gh 미인증 — gh auth login --hostname ${host} 를 돈다" >&2
+  || { echo "publish-comment: gh 미인증(인증 확인 실패 — 로그인 안 됨 또는 ${host} 에 닿지 못함) — 로그인이 안 됐으면 gh auth login --hostname ${host} 를 돈다" >&2
        printf '%s\n' "$auth_err" | tail -n 3 >&2; fail gh-unauthenticated; }
 
 # 3. 현재 브랜치의 PR — 브랜치 이름과 origin 을 밝혀 묻는다. 이름 붙은 브랜치가 없으면(detached HEAD) PR 이 없다.

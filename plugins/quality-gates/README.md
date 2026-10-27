@@ -387,6 +387,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다.
 
 - **gh CLI** (외부, 필수) — `/quality-gates:quality-pipeline` 이 의도 출처의 PR 본문을 읽고 판정 코멘트를 게시할 때 쓴다. 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 그 진입에서 멈추고 설치 방법을 보인다(`/quality-gates:artifact-critique` 는 gh 를 쓰지 않는다). 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다.
+- **ssh** (외부, SSH 꼴 `origin` 일 때만) — `origin` 의 호스트가 `~/.ssh/config` 별칭일 수 있어 `ssh -G` 로 실제 호스트를 푼다. ssh 가 없으면 `origin` 을 https 꼴로 바꾸거나 ssh 를 설치하라고 보이고 멈춘다.
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다.
 - **e2e** — `curl`(API 시나리오를 걸을 때 오케스트레이터가 쓴다) · `pgrep` / `ps`(남은 앱 정리)가 필요하다. 웹 화면을 걸으려면 브라우저 자동화 MCP 가 있으면 좋고, 없으면 그 시나리오는 걸을 도구가 없다고 판정 줄에 남는다.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# guards: plugins/quality-gates/scripts/extract_codex_artifact_yaml.py shared/codex/codex_findings_to_yaml.py plugins/quality-gates/scripts/run_codex_reviewer.sh plugins/quality-gates/scripts/run_artifact_codex_reviewer.sh
 # codex 가 0 아닌 종료로 끝나면 산출물 meta 에 codex 의 종료 코드(`exit_code`)와 stderr 첫 줄(`stderr_head`,
 # 200자에서 자름)이 남는다 — `reason: exit_nonzero` 만으로는 왜 죽었는지 알 수 없다.
 # 중첩 YAML 러너 둘(run_codex_reviewer.sh · run_docreview_codex_reviewer.sh)은 공유 추출기
@@ -42,6 +43,12 @@ assert_contains "$(meta_val "$T/s.yaml" stderr_head)" "Authorization: Bearer" "�
 : > "$T/empty.jsonl"
 python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/empty.jsonl" > "$T/s2.yaml"
 assert_file_absent "$T/s2.yaml" 'SECRETTOKENVALUE' "공유 추출기: 인증 실패 갈래의 stderr_preview 도 비밀처럼 생긴 낱말을 가린다"
+# `/` 가 든 base64 키(조각마다 20자 미만) · 자격 증명 낱말 뒤의 짧은 값도 가린다
+printf 'ERROR: aws_secret_access_key wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY password=hunter2 denied\n' > "$T/err-slash.txt"
+python3 "$X" --stderr-file "$T/err-slash.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s3.yaml"
+assert_file_absent "$T/s3.yaml" 'bPxRfiCYEXAMPLEKEY' "공유 추출기: / 가 든 base64 키를 가린다"
+assert_file_absent "$T/s3.yaml" 'hunter2' "공유 추출기: 자격 증명 낱말 뒤의 짧은 값을 가린다"
+assert_contains "$(meta_val "$T/s3.yaml" stderr_head)" "denied" "공유 추출기: 가린 뒤에도 나머지 글은 남는다(/ 키 · 짧은 값)"
 assert_file_grep "$T/s2.yaml" '^  stderr_preview: ' "공유 추출기: 인증 실패 갈래에 stderr_preview 가 있다(양성 짝 — 그 갈래를 밟았다)"
 assert_eq "$(meta_val "$T/s2.yaml" reason)" "exit_nonzero" "공유 추출기: 인증 실패 갈래도 reason 은 exit_nonzero(양성 짝)"
 python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml"
@@ -62,6 +69,10 @@ v="$(sed -n 's/^stderr_head: //p' "$T/e.yaml")"
 python3 "$XA" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f.yaml"
 assert_file_absent "$T/f.yaml" 'SECRETTOKENVALUE' "artifact 추출기: 비밀처럼 생긴 긴 낱말을 가린다"
 assert_contains "$(sed -n 's/^stderr_head: //p' "$T/f.yaml")" "Authorization: Bearer" "artifact 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
+python3 "$XA" --stderr-file "$T/err-slash.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f2.yaml"
+assert_file_absent "$T/f2.yaml" 'bPxRfiCYEXAMPLEKEY' "artifact 추출기: / 가 든 base64 키를 가린다"
+assert_file_absent "$T/f2.yaml" 'hunter2' "artifact 추출기: 자격 증명 낱말 뒤의 짧은 값을 가린다"
+assert_eq "$(sed -n 's/^stderr_head: //p' "$T/f2.yaml")" "$(meta_val "$T/s3.yaml" stderr_head)" "두 추출기의 가림 결과가 같다(규칙 한 곳)"
 
 # ── 러너 끝에서 끝: codex 스텁이 stderr 를 쓰고 7 로 끝난다 ─────────────────────
 mkdir -p "$T/bin" "$T/proot"

@@ -571,8 +571,8 @@ diff_batch() {   # KB 묶음 하나를 걸러진 diff 와 이름 목록 · numst
     || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
   "${GITD[@]}" --name-only -z "${REV[@]}" -- "${KB[@]}" >> "$T/filtered.z" \
     || gitfail "걸러진 git diff --name-only 가 실패했다: ${REV[*]}"
-  # --diff-filter=d — 지운 파일은 숨길 새 내용이 없다(diff 에 deleted file 로 보인다).
-  "${GITD[@]}" --numstat -z --diff-filter=d "${REV[@]}" -- "${KB[@]}" >> "$T/numstat.z" \
+  # 지운 파일도 센다 — 바이너리로 보인 파일을 지우면 지운 줄도 「Binary files … differ」 한 줄에 가려진다.
+  "${GITD[@]}" --numstat -z "${REV[@]}" -- "${KB[@]}" >> "$T/numstat.z" \
     || gitfail "걸러진 git diff --numstat 이 실패했다: ${REV[*]}"
 }
 is_binary_untracked() {   # <path> — git 이 이 untracked 파일을 바이너리로 보는가(add_untracked 와 같은 플래그)

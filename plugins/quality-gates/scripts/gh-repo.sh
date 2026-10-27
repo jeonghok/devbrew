@@ -57,11 +57,13 @@ case "$url" in
 esac
 
 host="$(printf '%s' "$host" | LC_ALL=C tr 'A-Z' 'a-z')"
-# 호스트 글자(영숫자 · '.' · '-')만, '-' 로 시작하지 않게 — ssh 인자로 넘어가도 옵션이 되지 못한다.
-case "$host" in ''|-*|*[!a-z0-9.-]*) stop_slug ;; esac
+# 호스트 글자(영숫자 · '.' · '-' · ssh 별칭의 '_')만, '-' 로 시작하지 않게 — ssh 인자로 넘어가도 옵션이 되지 못한다.
+case "$host" in ''|-*|*[!a-z0-9._-]*) stop_slug ;; esac
 
 # SSH 꼴(ssh:// · scp 꼴)은 ~/.ssh/config 의 별칭일 수 있다 — gh 는 -R 에 ssh 설정을 쓰지 않으므로
 # `ssh -G` 의 hostname 으로 푼다. *.github.com(ssh.github.com 443 우회 등)은 gh 처럼 github.com.
+# github.com 자신은 풀지 않는다 — ssh 설정이 그 HostName 을 프록시 · IP 로 돌려도 gh 의 호스트는 github.com 이다.
+case "$host" in github.com|*.github.com) host=github.com; is_ssh=0 ;; esac
 if [ "$is_ssh" = 1 ]; then
   if ! command -v ssh >/dev/null 2>&1; then
     echo "origin 이 SSH 꼴(${host})인데 ssh 가 없어 실제 호스트로 풀지 못했다 — origin 을 https 꼴로 바꾸거나 ssh 를 설치한다" >&2

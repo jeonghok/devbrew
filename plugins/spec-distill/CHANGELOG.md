@@ -5,7 +5,7 @@
 patch 인 이유 — 링크로 배송하는 `scripts/codex_findings_to_yaml.py`(정본 `shared/codex/`)가 바뀌었다(quality-gates 14.7.4 와 같은 변경).
 
 ### Fixed
-- codex 가 0 아닌 종료로 끝나면 결과 meta 에 stderr 첫 줄(`stderr_head`)을 남긴다 — 「이유 없이 실패」 가 무엇 때문인지 보인다. 그 줄과 인증 실패 갈래의 `stderr_preview` 는 비밀처럼 생긴 긴 낱말을 `<가림>` 으로 가리고 200자에서 자른다.
+- codex 가 0 아닌 종료로 끝나면 결과 meta 에 stderr 첫 줄(`stderr_head`)을 남긴다 — 「이유 없이 실패」 가 무엇 때문인지 보인다. 그 줄과 인증 실패 갈래의 `stderr_preview` 는 비밀처럼 생긴 것(20자 이상 낱말 — `/` 가 든 base64 포함 — 과 자격 증명 낱말 뒤의 값)을 `<가림>` 으로 가리고 200자에서 자른다.
 
 ## [8.12.0] — 2026-10-26
 

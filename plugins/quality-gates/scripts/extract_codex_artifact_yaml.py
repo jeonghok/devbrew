@@ -82,13 +82,12 @@ def degrade(reason, exit_code=None, stderr_head=""):
     return 0
 
 
-STDERR_HEAD_MAX = 200
-SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=.]{20,}")
+from codex_findings_to_yaml import STDERR_HEAD_MAX, mask_secrets  # noqa: E402 — 같은 폴더의 공유 추출기(가림 규칙 한 곳)
 
 
 def first_stderr_line(path):
     """codex stderr 의 첫 비어 있지 않은 줄 — codex_findings_to_yaml.stderr_head 와 같은 규칙(출력 못 할 글자는 `?`,
-    비밀처럼 생긴 20자 이상 낱말은 `<가림>`, STDERR_HEAD_MAX 자에서 자름). 읽지 못하면 빈 문자열."""
+    비밀처럼 생긴 것은 mask_secrets 로 `<가림>`, STDERR_HEAD_MAX 자에서 자름). 읽지 못하면 빈 문자열."""
     if not path:
         return ""
     try:
@@ -100,7 +99,7 @@ def first_stderr_line(path):
         s = ln.strip()
         if s:
             s = "".join(c if c.isprintable() else "?" for c in s)
-            return SECRET_LIKE.sub("<가림>", s)[:STDERR_HEAD_MAX]
+            return mask_secrets(s)[:STDERR_HEAD_MAX]
     return ""
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gh-repo.sh — gh 찾기와 `-R` 에 넣을 origin(<host>/<owner>/<repo>)을 정하는 한 곳(R8 AC16 · AC20 · AC29 fork).
-# URL 판독은 spec-distill gh_repo.py 와 같은 규칙이다 — 같은 일곱 꼴 · 같은 못 뽑는 꼴.
+# URL 꼴(일곱 꼴 · 못 뽑는 꼴)은 spec-distill gh_repo.py 와 같다. SSH 별칭 풀기 · 호스트 글자 검사는 이 스크립트만 한다.
 # 픽스처는 임시 레포 + PATH 앞의 가짜 gh(불리면 인자를 파일에 적는다 — gh-repo.sh 는 gh 를 부르지 않는다).
 # Run (리포 루트에서): bash plugins/quality-gates/tests/test_gh_repo.sh
 set -u
@@ -28,7 +28,8 @@ cat > "$T/bin/ssh" <<'FAKE'
 printf '%s\n' "$*" >> "$FAKE_SSH_ARGS"
 for a in "$@"; do h="$a"; done
 case "$h" in
-  github-work) printf 'user git\nhostname github.com\nport 22\n' ;;
+  github-work|github_work) printf 'user git\nhostname github.com\nport 22\n' ;;
+  github.com) printf 'user git\nhostname ssh-proxy.corp\nport 22\n' ;;
   gh443) printf 'user git\nhostname ssh.github.com\nport 443\n' ;;
   noresolve) echo "ssh: Could not resolve" >&2; exit 255 ;;
   *) printf 'user git\nhostname %s\nport 22\n' "$h" ;;
@@ -105,6 +106,14 @@ for url in "git@github-work:o/r.git" "ssh://git@github-work/o/r.git" "ssh://git@
   assert_eq "$RC:$OUT" "0:github.com/o/r" "SSH 별칭 ${url} → 실제 호스트 github.com/o/r"
   assert_eq "$(cat "$FAKE_SSH_ARGS")" "-G -- github-work" "SSH 별칭 ${url} → ssh -G -- <별칭> 으로 푼다"
 done
+mkrepo sus "git@github_work:o/r.git" || { no "픽스처 밑줄 별칭"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug sus "$FAKEPATH"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:-G -- github_work" "밑줄이 든 SSH 별칭도 ssh -G 로 푼다"
+mkrepo spx "git@github.com:o/r.git" || { no "픽스처 github.com 프록시"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug spx "$FAKEPATH"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:" "github.com 은 풀지 않는다 — ssh 설정의 프록시 HostName 이 gh 호스트가 되지 않는다"
 mkrepo s443 "git@gh443:o/r.git" || { no "픽스처 gh443"; finish; exit 1; }
 slug s443 "$FAKEPATH"
 assert_eq "$RC:$OUT" "0:github.com/o/r" "ssh.github.com(443 우회)은 gh 처럼 github.com 으로"

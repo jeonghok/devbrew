@@ -186,18 +186,27 @@ def _yaml_scalar(v: Any) -> str:
 
 
 STDERR_HEAD_MAX = 200
-# 비밀처럼 생긴 낱말(토큰 · 키 · JWT) — 20자 이상의 영숫자 · `_-+=.` 연속. meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다.
-_SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=.]{20,}")
+# meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다 — 비밀처럼 생긴 것을 가린다.
+# 자격 증명 낱말(authorization · bearer · token · api key · password · secret …) 뒤의 값, 그리고
+# 20자 이상의 영숫자 · `_-+=./:` 연속(토큰 · 키 · JWT · `/` 가 든 base64 · user:token).
+_SECRET_KEYWORD = re.compile(
+    r"(?i)((?:(?:authorization|bearer|basic|token|api[_-]?key|password|passwd|secret)(?:\s*[:=]\s*|\s+))+)\S+")
+_SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=./:]{20,}")
+
+
+def mask_secrets(text: str) -> str:
+    """비밀처럼 생긴 것을 `<가림>` 으로 — 두 codex 추출기(이 파일 · extract_codex_artifact_yaml.py)가 함께 쓴다."""
+    return _SECRET_LIKE.sub("<가림>", _SECRET_KEYWORD.sub(lambda m: m.group(1) + "<가림>", text))
 
 
 def stderr_head(text: str) -> str:
-    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?`, 비밀처럼 생긴 긴 낱말은 `<가림>` 으로 바꾸고
+    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?`, 비밀처럼 생긴 것은 `<가림>` 으로 바꾸고
     STDERR_HEAD_MAX 자에서 자른다."""
     for ln in text.splitlines():
         s = ln.strip()
         if s:
             s = "".join(c if c.isprintable() else "?" for c in s)
-            return _SECRET_LIKE.sub("<가림>", s)[:STDERR_HEAD_MAX]
+            return mask_secrets(s)[:STDERR_HEAD_MAX]
     return ""
 
 
@@ -253,7 +262,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": _SECRET_LIKE.sub("<가림>", stderr_text[:4000])[:200],
+                "stderr_preview": mask_secrets(stderr_text[:4000])[:200],
             }
         elif stdin_text.strip() and not any_jsonl_parsed:
             # Non-empty stdin with zero parseable JSONL lines → Stage 3 fallback.
@@ -278,7 +287,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": _SECRET_LIKE.sub("<가림>", stderr_text[:4000])[:200],
+                "stderr_preview": mask_secrets(stderr_text[:4000])[:200],
             }
         else:
             meta = {
