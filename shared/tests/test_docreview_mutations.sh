@@ -89,6 +89,11 @@ for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T
     no "양성대조 실패: $c 가 clean 사본에서 이미 RED($_f) — 계측기 고장"
   fi
 done
+# 계측기 탐침 — 케이스의 $(…) 안에서 난 거절도 run_case 가 센다(carry_fold). 이 줄이 빠지면 그 거절은
+# 서브셸과 함께 사라져 양성 대조가 거짓으로 GREEN 이 된다.
+_case_subshell_refusal_probe() { _x="$(put_fail "계측 탐침: 서브셸 안 거절")"; }
+_split3 "$(run_case "$CLEAN" _case_subshell_refusal_probe)"
+assert_eq "$_f:$_tb" "1:0" "계측기: 케이스의 \$(…) 안 거절을 run_case 가 정확히 1 센다(carry_fold)"
 
 # _is_uint <값> → 참/거짓 — run_case 필드 하나가 음이 아닌 정수 «모양» 인가. 빈 문자열도
 # 거짓이다(run_case 가 죽어 아무것도 못 찍으면 이 모양이 된다, 아래 classify_result 의
