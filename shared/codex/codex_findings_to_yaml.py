@@ -189,9 +189,11 @@ STDERR_HEAD_MAX = 200
 # meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다 — codex stderr 원문은 싣지 않고 알려진 사유 분류(stderr_kind)만 싣는다.
 # 원문 첫 줄은 실행 중 화면(이 스크립트의 stderr)에만 보이고, 그때도 비밀처럼 생긴 것을 가린다.
 STDERR_KINDS = (
-    ("auth", re.compile(r"(?i)\b(401|403|unauthori[sz]ed|forbidden|not logged in|authentication|invalid api[_\s-]?key)\b")),
+    # auth 는 인증 실패 갈래의 판정(AUTH_ERROR_RE)이 받는 낱말을 모두 받는다 — 그 갈래가 other 로 빗나가지 않게.
+    ("auth", re.compile(r"(?i)\b(401|403|unauthori[sz]ed|forbidden|not logged in|authentication|auth\s+(failed|error)"
+                        r"|invalid\s+(api[_\s-]?key|token)|credentials?|expired)\b")),
     ("rate-limited", re.compile(r"(?i)\b(429|rate[\s_-]?limit\w*|too many requests)\b")),
-    ("quota", re.compile(r"(?i)\b(quota|billing|insufficient[\s_]credits?|usage limit)\b")),
+    ("quota", re.compile(r"(?i)\b(quota|billing|subscription|insufficient[\s_]credits?|usage limit)\b")),
     ("overloaded", re.compile(r"(?i)\b(overloaded|over capacity|502|503|service unavailable)\b")),
     ("timeout", re.compile(r"(?i)\b(timed? ?out|timeout|deadline exceeded)\b")),
     ("network", re.compile(r"(?i)\b(connection|network|could not resolve|enotfound|econn\w*|dns)\b")),
@@ -304,6 +306,9 @@ def main() -> int:
         return bool(stderr_text and AUTH_ERROR_RE.search(stderr_text))
 
     def apply_overrides(meta: dict) -> dict:
+        # 인증 실패 갈래는 0 종료에도 stderr 첫 줄을 화면에 보인다(0 아닌 종료는 아래 failure_kind 가 보인다).
+        if meta.get("reason") == "auth_error_in_stderr" and not args.meta_override_exit_code:
+            show_stderr_head(stderr_text)
         # Apply exit-code override unconditionally if supplied (caller knows the real exit code).
         if args.meta_override_exit_code is not None:
             meta["exit_code"] = args.meta_override_exit_code

@@ -72,12 +72,22 @@ no_secret "$T/s.yaml" "공유 추출기 meta"
 no_secret "$T/s.err" "공유 추출기 화면"
 assert_contains "$(cat "$T/s.err")" 'Authorization: Bearer <가림>' "공유 추출기: 화면의 가린 줄에 나머지 글은 남는다(양성 짝)"
 # 인증 실패 갈래(빈 stdout + stderr 의 인증 오류)도 원문 미리보기 대신 분류만 싣는다.
-python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/empty.jsonl" > "$T/s2.yaml" 2>/dev/null
+python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/empty.jsonl" > "$T/s2.yaml" 2> "$T/s2.err"
+assert_contains "$(cat "$T/s2.err")" 'stderr 첫 줄(기록하지 않음): ERROR: 401 Authorization: Bearer <가림>' "공유 추출기: 0 종료 인증 실패 갈래도 가린 첫 줄을 화면에 보인다"
+no_secret "$T/s2.err" "공유 추출기 인증 실패 갈래 화면"
 assert_eq "$(meta_val "$T/s2.yaml" reason)" "auth_error_in_stderr" "공유 추출기: 인증 실패 갈래를 밟았다(양성 짝)"
 assert_eq "$(meta_val "$T/s2.yaml" stderr_kind)" "auth" "공유 추출기: 인증 실패 갈래도 분류를 싣는다"
 assert_file_absent "$T/s2.yaml" 'stderr_preview' "공유 추출기: 인증 실패 갈래에 stderr 원문 미리보기가 없다"
 no_secret "$T/s2.yaml" "공유 추출기 인증 실패 갈래"
-python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/notjson.jsonl" > "$T/s3.yaml" 2>/dev/null
+python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/notjson.jsonl" > "$T/s3.yaml" 2> "$T/s3.err"
+assert_eq "$(cat "$T/s3.err")" "$(cat "$T/s2.err")" "공유 추출기: 인증 실패 둘째 갈래도 같은 화면 줄"
+# 인증 실패 판정(AUTH_ERROR_RE)이 받는 낱말은 분류도 auth 다 — 판정과 분류가 갈라지지 않는다.
+printf 'Error: credential expired for token abc\n' > "$T/err-cred.txt"
+python3 "$X" --stderr-file "$T/err-cred.txt" < "$T/empty.jsonl" > "$T/s4.yaml" 2> "$T/s4.err"
+assert_eq "$(meta_val "$T/s4.yaml" reason):$(meta_val "$T/s4.yaml" stderr_kind)" "auth_error_in_stderr:auth" "공유 추출기: credential · expired 는 인증 실패 갈래이자 auth 분류"
+assert_contains "$(cat "$T/s4.err")" 'stderr 첫 줄(기록하지 않음): Error: credential expired' "공유 추출기: 그 첫 줄도 화면에 보인다"
+python3 "$X" --stderr-file "$T/err-cred.txt" --meta-override-exit-code 0 --meta-override-reason "" < "$T/empty.jsonl" > /dev/null 2> "$T/s5.err"
+assert_eq "$(grep -c 'stderr 첫 줄' "$T/s5.err")" "1" "공유 추출기: 러너처럼 0 을 명시해도 화면 줄은 한 번"
 assert_eq "$(meta_val "$T/s3.yaml" reason)" "auth_error_in_stderr" "공유 추출기: 인증 실패 둘째 갈래(findings 아닌 메시지)를 밟았다(양성 짝)"
 assert_eq "$(meta_val "$T/s3.yaml" stderr_kind)" "auth" "공유 추출기: 인증 실패 둘째 갈래도 분류를 싣는다"
 assert_file_absent "$T/s3.yaml" 'stderr_preview' "공유 추출기: 인증 실패 둘째 갈래에 stderr 원문 미리보기가 없다"
@@ -91,6 +101,15 @@ assert_contains "$(cat "$T/l.err")" '실패 이벤트(기록하지 않음): You�
 printf '%s\n' '{"type":"error","message":"stream disconnected, retrying"}' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' > "$T/tf.jsonl"
 python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf.jsonl" > "$T/tf.yaml" 2>/dev/null
 assert_eq "$(meta_val "$T/tf.yaml" stderr_kind)" "rate-limited" "공유 추출기: 마지막 실패 이벤트(turn.failed)로 분류한다"
+# 「마지막」 을 가른다 — 같은 종류가 둘이면 뒤의 것이 이긴다.
+printf '%s\n' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' '{"type":"turn.failed","error":{"message":"You have hit your usage limit"}}' > "$T/tf3.jsonl"
+python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf3.jsonl" > "$T/tf3.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/tf3.yaml" stderr_kind)" "quota" "공유 추출기: turn.failed 가 둘이면 마지막 것으로 분류한다"
+printf '%s\n' '{"type":"error","message":"stream disconnected, retrying"}' '{"type":"error","message":"quota exceeded"}' > "$T/er2.jsonl"
+python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/er2.jsonl" > "$T/er2.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/er2.yaml" stderr_kind)" "quota" "공유 추출기: turn.failed 없이 error 가 둘이면 마지막 error 로 분류한다"
+python3 "$XA_EARLY" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/er2.jsonl" > "$T/er2a.yaml" 2>/dev/null
+assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/er2a.yaml")" "quota" "artifact 추출기: error 이벤트만 있어도 그것으로 분류한다"
 # turn.failed 가 뒤의 error 이벤트보다 먼저다 — error 는 재시도 알림일 수 있다.
 printf '%s\n' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' '{"type":"error","message":"stream disconnected, retrying"}' > "$T/tf2.jsonl"
 python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf2.jsonl" > "$T/tf2.yaml" 2>/dev/null
