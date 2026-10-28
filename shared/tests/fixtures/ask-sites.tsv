@@ -156,6 +156,7 @@ plugins/project-init/skills/project-init/SKILL.md	떼기	「건너뛰기」를 �
 plugins/project-init/skills/project-init/SKILL.md	떼기	여기서 `<strategy>`는 `github-flow`, `git-flow`, `trunk-based` 중 하나.	
 plugins/project-init/skills/project-init/SKILL.md	떼기	| `{{MERGE_STRATEGY}}` | Step 3 질문 2의 merge 전략 |	
 plugins/project-init/skills/project-init/SKILL.md	떼기	| **S2 (CLAUDE-only legacy)** |	
+plugins/project-init/skills/project-init/SKILL.md	꼬리	| **S4 (AGENTS exists, CLAUDE divergent or absent)** |	「중단」(아무 파일도 쓰지 않고 멈춘다). |
 plugins/project-init/skills/project-init/SKILL.md	떼기	헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고	
 plugins/plugin-audit/skills/plugin-audit/SKILL.md	꼬리	(a) **축 고르기** — `AskUserQuestion` 한 질문:	선택지 설명에 규모를 싣는다
 plugins/plugin-audit/skills/plugin-audit/SKILL.md	비움	「축 1~3 중 쓸 것」(1 정합·정직성	)

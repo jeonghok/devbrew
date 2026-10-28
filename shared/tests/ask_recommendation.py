@@ -39,7 +39,8 @@ def load_sites(path):
             if len(cells) == 3:
                 cells.append("")
             if len(cells) != 4:
-                sites.append(Site(cells[0], None, "", "", n))
+                # 칸이 맞지 않는 줄은 종류 None, 앵커 자리에 원래 줄(탭은 \t 로)을 담아 ② 사유에 그대로 보인다.
+                sites.append(Site(cells[0], None, line.replace("\t", "\\t"), "", n))
                 continue
             sites.append(Site(cells[0], cells[1], cells[2], cells[3], n))
     return sites
@@ -124,7 +125,7 @@ def check(root, files, sites):
     resolved = []  # (site, text, scope 또는 사유)
     for s in sites:
         if s.kind is None:
-            resolved.append((s, None, "칸이 넷이 아니다 — 경로 · 종류 · 앵커 · 끝"))
+            resolved.append((s, None, "칸이 넷이 아니다(경로 · 종류 · 앵커 · 끝)"))
             continue
         text = texts.get(s.path)
         if text is None:
@@ -150,12 +151,16 @@ def check(root, files, sites):
             covered.setdefault(s.path, []).append(sc)
 
     for s, text, sc in resolved:
+        if s.kind is None:
+            out.append("no ② %s:- 줄 「%s」 (목록 L%d): %s" % (s.path, s.anchor, s.lineno, sc))
+            continue
         known = text is not None and s.anchor and s.anchor in text
         where = "%s:%s" % (s.path, line_of(text, text.find(s.anchor)) if known else "-")
         label = "%s 「%s」 (목록 L%d)" % (s.kind, s.anchor, s.lineno)
         if isinstance(sc, str):
             out.append("no ② %s %s: %s" % (where, label, sc))
             continue
+        assert text is not None  # 범위가 성립했으면 글을 읽은 것이다
         if s.kind in QUESTION_KINDS:
             crossed = [o for a, o in anchor_starts.get(s.path, [])
                        if o is not s and o.kind != "떼기" and sc[0] <= a < sc[1]]

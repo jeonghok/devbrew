@@ -30,3 +30,7 @@ AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
 ## 바 — 어느 행에도 덮이지 않는 줄
 
 바: 이 문단은 `AskUserQuestion` 을 말하지만 목록에 없다.
+
+## 사 — 목록 행의 ② 사유(도구 이름 없는 줄)
+
+사-둘 사-둘 · 사-끝: 끝을 찾지 못한다 · 사-종류: 모르는 종류다.

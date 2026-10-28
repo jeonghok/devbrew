@@ -44,6 +44,10 @@ fx_rc=$?
 assert_eq "$fx_rc" "0" "fixture: 판정 모듈이 rc 0 으로 끝났다"
 assert_eq "$(printf '%s\n' "$FX_OUT" | grep '^no ')" "$(cat "$ROOT/$FX/expected.txt")" "fixture: no 줄이 expected.txt 와 같다"
 assert_contains "$FX_OUT" 'ok doc.md:5 꼬리 「가-질문:」' "fixture: 라벨 꼬리가 있는 질문은 ok"
+# ④ — 후보 파일이 없으면(빈 목록) 모듈은 「no ④」 한 줄만 내고 다른 판정을 하지 않는다.
+: > "$FXL"
+FX4_OUT="$(python3 "$ROOT/shared/tests/ask_recommendation.py" "$ROOT/$FX" "$FXL" "$ROOT/$FX/sites.tsv" 2>&1)"
+assert_eq "$FX4_OUT" "no ④ -:- 후보 줄이 0개다 — 글롭이 아무것도 고르지 않았다(공허한 통과 방지)" "fixture: 후보 0 이면 ④ 한 줄"
 
 python3 "$ROOT/shared/tests/ask_recommendation.py" "$ROOT" "$LIST" "$ROOT/shared/tests/fixtures/ask-sites.tsv" > "$RES" 2>&1
 rc=$?
