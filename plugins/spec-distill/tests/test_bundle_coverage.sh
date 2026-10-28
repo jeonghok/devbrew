@@ -225,6 +225,29 @@ cp -R "$R" "$T/repo6"; chmod 000 "$T/repo6/docs/superpowers/specs"
 out="$(python3 "$C" --json "$T/repo6/docs/x/R9.md" "$R/rej.md")"
 chmod 755 "$T/repo6/docs/superpowers/specs"
 assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "N17: 설계문서 폴더를 못 읽으면 그 폴더의 묶음이 배정받은 S8 · S9 는 셀 수 없음이다"
+# 「브랜치 <spec>」 블록 — 설계문서의 상위 폴더를 못 읽으면(권한) 「없음」 이 아니라 셀 수 없음이다
+mk_branch_r8() {  # mk_branch_r8 <레포> — R8 을 묶음 블록에서 spec 을 직접 가리키는 블록으로 바꾼다
+  python3 -I - "$1/docs/x/roadmap.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+a = "- 묶음: R8.md\n- 경로 예약: 없음\n"
+assert s.count(a) == 1
+open(p, "w", encoding="utf-8").write(s.replace(a, "- 묶음: 없음\n- 경로 예약: 없음\n- spec: docs/superpowers/specs/sub/r8-design.md\n- 발화: S8, S9\n- 항목: C8\n"))
+PY
+}
+cp -R "$R" "$T/repo7"; mk_branch_r8 "$T/repo7"; mkdir -p "$T/repo7/docs/superpowers/specs/sub"
+mv "$T/repo7/docs/superpowers/specs/r8-design.md" "$T/repo7/docs/superpowers/specs/sub/r8-design.md"
+out="$(python3 "$C" --json "$T/repo7/docs/x/R9.md" "$R/rej.md")"
+assert_eq "$(jget "$out" "r['unserved']")" "['S7', 'S9']" "브랜치 블록 전제: 읽히는 spec 이 S9 를 기각하면 S9 는 받드는 에픽 없음이다(양성 짝)"
+chmod 000 "$T/repo7/docs/superpowers/specs/sub"
+out="$(python3 "$C" --json "$T/repo7/docs/x/R9.md" "$R/rej.md")"
+chmod 755 "$T/repo7/docs/superpowers/specs/sub"
+assert_eq "$(jget "$out" "sorted(u.split(' — ')[0] for u in r['unknown'])")" "['S8', 'S9']" "브랜치 블록: spec 의 상위 폴더를 못 읽으면 그 블록이 배정받은 S8 · S9 는 셀 수 없음이다"
+assert_contains "$(jget "$out" "r['unknown']")" "못 읽었다" "브랜치 블록: 셀 수 없음 사유가 못 읽은 문서를 댄다"
+rm "$T/repo7/docs/superpowers/specs/sub/r8-design.md"
+out="$(python3 "$C" --json "$T/repo7/docs/x/R9.md" "$R/rej.md")"
+assert_eq "$(jget "$out" "(r['unserved'], r['unknown'])")" "(['S7'], [])" "브랜치 블록: spec 이 아직 없으면 배정만으로 받든다(셀 수 없음 아님 — 양성 짝)"
 
 # 13. 로드맵을 못 찾음(AC5 · AC7) — 그 항목만 셀 수 없음, rc 0, 첫 줄이 개수를 말한다
 mkdir -p "$T/lone"; cp "$R/docs/x/R9.md" "$T/lone/R9.md"

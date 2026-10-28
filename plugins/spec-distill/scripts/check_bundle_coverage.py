@@ -102,6 +102,16 @@ class Repo:
     def exists(self, rel: str) -> bool:
         return os.path.exists(os.path.join(self.root, rel))
 
+    def absent(self, rel: str) -> bool:
+        """확인된 부재만 참이다 — 상위 폴더 권한처럼 있는지 모르는 경우는 거짓(못 읽음으로 센다). 끊긴 링크도 있는 것이다."""
+        try:
+            os.lstat(os.path.join(self.root, rel))
+        except (FileNotFoundError, NotADirectoryError):
+            return True
+        except OSError:
+            return False
+        return False
+
     def specs_for(self, source: str, specs_dir: str) -> list:
         """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
         d = specs_dir.rstrip("/")
@@ -330,7 +340,11 @@ def _block_specs(block: dict, view: dict, repo):
         if not rel:
             return [], []
         text = repo.read(rel)
-        return ([(rel, text)], []) if text is not None else ([], [rel] if repo.exists(rel) else [])
+        if text is not None:
+            return [(rel, text)], []
+        absent = getattr(repo, "absent", None)   # 작업 트리 Repo — 부재와 못 읽음을 가른다
+        gone = absent(rel) if absent is not None else not repo.exists(rel)
+        return [], ([] if gone else [rel])
     if block["kind"] == "bundle":
         rdir = view["rel"].rsplit("/", 1)[0] if "/" in view["rel"] else "."
         found = repo.specs_for(rdir + "/" + block["fields"]["묶음"], view["specs_dir"])
