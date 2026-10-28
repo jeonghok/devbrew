@@ -39,6 +39,28 @@ class AnchorGrammar(unittest.TestCase):
                 self.assertIn("열 0 펜스", B.anchor_reason(why), (said, why))
         self.assertNotIn("열 0 펜스", B.anchor_reason("anchor_shape"))
 
+    def test_gate_messages_carry_the_fence_remedy(self):
+        # 사용자가 실제로 받는 거부 말 — payload N1b 와 원문 대조의 구조 위반 — 이 열 0 펜스 길을 댄다
+        sec = "## 6. 사용자 발화 원문\n\n- **S1** 🗣 최초 요청:\n  > \"a &amp; b\"\n\n## 7. Next Action\n\n- 끝\n"
+        n1b = check_brief.payload_verbatim_n1b_failures(sec, set())
+        self.assertTrue(any("열 0 펜스" in m for m in n1b), n1b)
+        with self.assertRaises(CVC.StructuralViolation) as cm:
+            CVC.parse_section6(sec, "payload")
+        self.assertIn("열 0 펜스", str(cm.exception))
+        # 호출 자리 넷(payload N1b · audit 게이트 · coverage · 원문 대조)이 모두 안내를 붙이는 함수를 거친다
+        scripts = Path(__file__).resolve().parent.parent / "scripts"
+        for name, want in (("check_brief.py", 3), ("check_verbatim_coverage.py", 1)):
+            src = (scripts / name).read_text(encoding="utf-8")
+            self.assertEqual(src.count("brief_body.anchor_reason(why)"), want, name)
+            self.assertNotIn("ANCHOR_REASON_TEXT[why]", src, name)
+
+    def test_finishing_names_the_fence_remedy(self):
+        # 인터뷰가 brief 를 쓸 때 읽는 지시 — 원문을 고치지 않고 열 0 펜스에 싣는 길과 그 예외
+        fin = (Path(__file__).resolve().parent.parent / "skills" / "pm-interview" / "references" / "finishing.md")
+        text = " ".join(fin.read_text(encoding="utf-8").split())
+        self.assertIn("앵커 줄 바로 아래 **열 0 펜스**에 그대로 싣습니다", text)
+        self.assertIn("펜스 안이라도 열 0 의 `- **S<N>**` 모양 줄은 앵커로 센다", text)
+
     def test_fenced_verbatim_passes_coverage(self):
         said = "it's `x &amp; <div> y"
         body = "~~~~\n" + said + "\n~~~~\n"
