@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.8.0] — 2026-10-29
+
+### Changed
+- 질문 자리의 추천 표시가 한 규칙을 따른다 — 추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다(여럿이면 모두, 이유는 질문 위 글에). 추천이 없으면 아무 표시도 쓰지 않는다.
+- `/quality-gates:quality-pipeline` · `/quality-gates:artifact-critique` 의 질문 자리와 e2e 승인 질문이 이 규칙을 이어받는다. e2e 승인은 고르는 것이 곧 명령 실행 승인이라 추천을 달지 않는다.
+
 ## [14.7.3] — 2026-10-24
 
 ### Changed
