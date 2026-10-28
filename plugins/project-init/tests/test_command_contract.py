@@ -447,6 +447,21 @@ class TestGitWorkflowReplaceRefusal(unittest.TestCase):
         self.assertNotIn("사용자가 거절하면 중단.", step1)
 
 
+class TestRecommendationLabelShape(unittest.TestCase):
+    """AC12 — 추천은 라벨 끝 «(권장)» 꼬리뿐이다."""
+
+    def setUp(self):
+        self.text = COMMAND.read_text(encoding="utf-8")
+
+    def test_merge_strategy_label_carries_tail(self):
+        self.assertIn("Squash merge (권장)", self.text)
+
+    def test_nonstandard_markers_are_gone(self):
+        self.assertTrue(self.text.strip(), "SKILL.md 가 비었다 — 부재 단언이 공허하다")
+        self.assertNotIn("clean history 권장", self.text)
+        self.assertNotIn("— default", self.text)
+
+
 class TestCharterGateChoice(unittest.TestCase):
     """AC31 — 재질문 3회 뒤 기계가 멈추지 않고 사용자가 고른다."""
 
@@ -455,7 +470,7 @@ class TestCharterGateChoice(unittest.TestCase):
         self.gate = section(self.text, "#### Law 1 구조적 게이트", "### Step 4:")
 
     def test_three_choices_after_three_asks(self):
-        for label in ("「건너뛰기」", "「계속 묻기」", "「중단」"):
+        for label in ("「건너뛰기 (권장)」", "「계속 묻기」", "「중단」"):
             self.assertIn(label, self.gate)
         self.assertIn("최대 3회", self.gate)
 
