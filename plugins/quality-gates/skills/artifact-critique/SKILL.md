@@ -94,7 +94,7 @@ classify_artifact_target.py <path>
 - `classification: code` → 그 대상만 빼고 알린다(남은 대상이 0 이면 **종료**). 비-코드 전용 skill 이라 코드는 자율 커밋 루프에 넣지 않는다:
   `> [quality-gates] '<path>'는 코드 파일로 보여 대상에서 뺐다 — 코드 리뷰는 /quality-gates:quality-pipeline 으로 실행하세요.`
 - `classification: non_code` → 진행.
-- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /quality-gates:quality-pipeline 을 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 그 대상을 뺀다(남은 대상이 0 이면 종료).
+- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인: *"이 파일(`<path>`)을 산출물로 비평할까요? (코드라면 /quality-gates:quality-pipeline 을 쓰세요.)"* — **예** 확인 없이 자율 루프 진입 금지. "아니오"면 그 대상을 뺀다(남은 대상이 0 이면 종료). 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다 — 「예」 · 「아니오」는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 모드를 정한다 — 모드는 실행 전체에 하나다. 인자에 `--findings-only` 가 있거나 요청이 고치지 말고 지적만 원하면
 「지적만 받기」(대상마다 한 라운드 비평만 받아 보고하고 편집 · 커밋을 하지 않는다), 아니면 「고치며 돌기」(라운드마다
@@ -137,7 +137,7 @@ artifact_change_signal.sh <path>
 지적만 받는다. 모드를 바꾸고 E2c 로 간다) /
 **그 대상만 빼고 진행**(E2b 에서 멈춘 대상만 빼고 나머지는 「고치며 돌기」로 E2c 로 간다 — E2 에서 멈췄거나 빼면 남는
 대상이 0 이면 이 선택지를 내지 않는다) /
-**멈추기**(여기서 끝낸다 — 안내 줄대로 고친 뒤 다시 부른다).
+**멈추기**(여기서 끝낸다 — 안내 줄대로 고친 뒤 다시 부른다). 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 ### E2c — 대상 경로 인가 (canonical freeze; 리뷰어 read 前)
 
@@ -175,10 +175,10 @@ artifact_max_rounds.sh
 사용**한다(고지 범위 = 실행 범위; disclosure-integrity). 상한을 넘는 라운드는 상한에서 사용자가 연 것만 돈다(9).
 `AskUserQuestion` 한 번에 두 질문을 싣는다:
 
-(1) 대상 목록 · 모드 · 상한:
+(1) 대상 목록 · 모드 · 상한 — 「실행」을 첫 자리에 두고 「(권장)」을 단다. 사용자가 부른 대상 · 모드 그대로이기 때문이다:
 > *"대상 `<대상 목록>` 을 「<모드>」로 돌릴까요? (고치며 돌기: 대상마다 최대 `<effective_max_rounds>`라운드 · 브랜치 `<branch>` 에
 > 라운드마다 커밋 / 지적만 받기: 대상마다 한 라운드 · 편집 · 커밋 없음). codex 를 쓸 수 있으면 대상 파일의 내용이 codex(바깥
-> 프로그램)에 넘어간다 — 지적만 받기는 커밋하지 않은 파일도 그대로 넘긴다."* — 옵션: **실행** / **대상 변경**(→ E1 재진입) /
+> 프로그램)에 넘어간다 — 지적만 받기는 커밋하지 않은 파일도 그대로 넘긴다."* — 옵션: **실행 (권장)** / **대상 변경**(→ E1 재진입) /
 > **지적만 받기로 바꾸기**(지금 고치며 돌기일 때 — 편집 · 커밋 없이 한 라운드 지적만) 또는 **고치며 돌기로 바꾸기**(지금 지적만
 > 받기일 때 — 고르면 E2 의 `branch_ok` 검사와 E2b 를 다시 돈다 — `project_dir` 는 E2 에서 얼린 값 그대로) / **취소**.
 
@@ -293,7 +293,7 @@ synthesize_artifact_findings.py --phase synth --findings merged.yaml --adversari
   kept-empty를 수렴으로 읽지 **않는다** → **NEEDS_RESOLUTION**: `AskUserQuestion`으로
   *"이번 라운드 adversarial 판정 실패(사유: `<degraded_reason>`) — 재시도 / 중단?"*
   (false-convergence fail-open 봉쇄). `degraded_reason`을 사용자에게 노출해 원인(adversarial
-  실패인지 findings 로드 실패인지 소스 유실인지)을 알린다.
+  실패인지 findings 로드 실패인지 소스 유실인지)을 알린다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 **4b. 지적만 받기면 여기서 끝** — 「지적만 받기」 모드면 남은 `kept` 를(SUGGESTION 포함) 보고하고 그 대상을 끝낸다 —
    5~9 와 편집 · 커밋을 하지 않는다(종료 사유 `findings_only`). `degraded: true` 면 위 NEEDS_RESOLUTION 게이트가 먼저다.
@@ -351,6 +351,8 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 수렴하지 않았으면 바로 끝내지 않고 `AskUserQuestion`:
 > *"<대상> 비평을 `<N>`라운드 돌았다(상한 `<effective_max_rounds>`) — 남은 지적 `<kept 수>`개. 한 라운드 더 돌까요?"* — 옵션:
 > **한 번 더 돌기**(라운드 하나를 더 연다 — 그 끝에 다시 묻는다) / **여기서 끝내기**(종료 사유 max_rounds).
+
+권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 기타 칸의 글이 더 여는 뜻이면 「한 번 더 돌기」와 같은 길이고, 뜻이 분명하지 않으면 다시 묻는다. 연 승인은 라운드
 히스토리에 이 줄로 남긴다 — 선택지를 골랐으면 `label` 과 선택지 이름, 기타 칸에 썼으면 `typed` 와 그 글 그대로:

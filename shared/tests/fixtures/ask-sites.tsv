@@ -117,14 +117,14 @@ plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	decisions surface 
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	Decision points are `AskUserQuestion`	
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).**	- 지적을 하나도 고르지 않았다
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	**범위 모드 갈래.**	범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	질문이 없고, Step 5 의 분류표도 만들지 않는다	범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	질문이 없고, Step 5 의 분류표도 만들지 않는다	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	그 밖의 실행은 이 질문을 띄운다:	question: "qg 반복 N: 남은 지적이 있다(<summary>). 어떻게 할까?"
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	question: "분류표의 적용/제외를 바꿀까요?	Branch on answer:
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **고치고 다시 돌기** → apply only the 적용 items	
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	첫 질문에서 고른 선택지는	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	### Max-iter decision	question: "qg 가 반복 상한(
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **한 번 더 돌기** → 아래 펜스로 한 줄을 기록하고	
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	이 질문에서 고른 선택지는	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	If `Edit` fails (`old_string not unique`	A skipped file's items are appended to
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **여러 시나리오** — 게이트 결과마다	
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **여러 시나리오** — 게이트 결과마다	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인	모드를 정한다 — 모드는 실행 전체에 하나다.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	떼기	"아니오"면 그 대상을 뺀다	
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**멈출 때의 선택**	### E2c — 대상 경로 인가

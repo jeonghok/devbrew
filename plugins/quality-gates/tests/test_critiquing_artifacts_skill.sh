@@ -70,7 +70,7 @@ assert_contains "$E3" '### E3 — 범위 고르기 · 규모 공시' "E3 머리�
 assert_contains "$E3" 'disclosure-integrity' "E3 uses effective_max_rounds (disclosure-integrity, E3 본문 고유)"
 assert_contains "$E3" '이 질문은 범위를 고르는 질문이다 — 라운드마다 띄울 수와 상한은 본문에 공시한다.' "E3 끝 문단: 범위 질문 + 본문 공시"
 assert_contains "$E3" '지출 승인을 묻지 않는다' "E3 지출 승인을 묻지 않는다"
-assert_contains "$E3" '**실행**' "E3 선택지 실행"
+assert_contains "$E3" '**실행 (권장)**' "E3 선택지 실행"
 assert_contains "$E3" '**대상 변경**' "E3 선택지 대상 변경"
 assert_contains "$E3" '**취소**' "E3 선택지 취소"
 assert_contains "$E3" '「1명 (권장)」' "E3 비평자 수 선택지"

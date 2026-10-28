@@ -716,6 +716,8 @@ AskUserQuestion({ questions: [{
   multiSelect: true }] })
 ```
 
+추천을 달지 않는다 — 낮춘 지적을 되올릴지는 리뷰 대상 코드를 쓴 쪽이 권할 수 없는 처분이다.
+
 - 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 라우팅으로 간다.
 - 지적을 골랐다(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) → 고른 `L<k>` 들(「전부 되올린다」면 `all`, 「기타」면 적힌 `L<k>` 들)로
   Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다. 그 새 출력으로 이 Step 4.5 의 표면화(제목 줄 · 원문 · 범위 파일 ·
@@ -831,10 +833,13 @@ AskUserQuestion({
 })
 ```
 
+권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 범위 모드에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+
 **지금 판정으로 끝내기** → [Final verdict](#final-verdict) with Outcome `accepted with findings iter 1`;
 **멈추기** → Final verdict with Outcome `aborted iter 1`. 범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.
 
 그 밖의 실행은 이 질문을 띄운다:
+첫 질문은 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 ```
 AskUserQuestion({
@@ -862,6 +867,8 @@ AskUserQuestion({
 })
 ```
 
+추천을 달지 않는다 — 분류표는 오케스트레이터가 자기 코드의 지적에 매긴 적용/제외다.
+
 The table can hold any number of items — the second question takes item numbers through 「기타」,
 so the gate never needs one question per item. Each number typed there flips that item (적용 ↔
 제외). A user's change overrides your classification, in either direction.
@@ -871,6 +878,7 @@ so the gate never needs one question per item. Each number typed there flips tha
 「적용」 계획대로 고치고 다음 반복을 돈다(차등 테스트 포함)." 로 바꿔 싣는다. 다른 옵션 문구는 그대로다.
 
 Branch on answer:
+첫 질문에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 - **고치고 다시 돌기** → apply only the 적용 items (after the user's changes). 차등 테스트 기원 항목은 패치가 아니라
   네가 쓴 계획이다 — 회귀 unit(예: `NEW_REGRESSION`)이 통과하도록 그 범위 안에서만 고친다. For every
   제외 item append one line to `$RD/excluded.md`: `- iter <N> · #<k> · <file> · <사유>` (a user-moved
@@ -917,6 +925,8 @@ printf 'qg-verdict-args: --excluded %s\n' "$((PREV + ADDED))"
 기본 상한은 5 다(P18). 지금 상한은 `CAP = 5 + <$RD/extra-iterations.md 의 줄 수>` 이다 — 이 결정에서 사용자가 반복을 하나
 열 때마다 아래 펜스가 한 줄을 남긴다(파일이 없으면 CAP = 5).
 
+첫 질문은 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
+
 After iteration CAP still has blocking findings or a differential defect, show the table (Step 5) and call:
 
 ```
@@ -941,6 +951,7 @@ AskUserQuestion({
 문구처럼 회귀 단위를 고치는 말로 바꿔 싣는다. 두 번째 질문의 답은 Fix-loop decision 과 같이 분류를 바꾼다.
 
 Branch on answer:
+이 질문에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 - **한 번 더 돌기** → 아래 펜스로 한 줄을 기록하고(출처 `label` · 원문은 고른 선택지 이름 「한 번 더 돌기」) Fix-loop decision 의
   「고치고 다시 돌기」와 같은 경로로 간다 — 「적용」 항목만 고치고 「제외」는 `excluded.md` 에 남긴 뒤 N += 1 하고 Review Step 1
   부터 다시 돈다(차등 테스트 포함). 한 번에 하나다 — 한 번 열면 반복 하나만 열리고, 그 반복이 또 막는 지적이나 차등 defect 로
@@ -1008,6 +1019,8 @@ AskUserQuestion({
   ]
 })
 ```
+
+권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 A skipped file's items are appended to `$RD/excluded.md` with 사유 `Edit 실패` — through the 「제외 결과 줄」 fence.
 
@@ -1150,6 +1163,7 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
   남은 시나리오를 걷지 않고, 돌아오면 고른 시나리오 전부를 1번부터 다시 걷는다. 「지금 판정으로 끝내기」 · 「멈추기」면 남은 시나리오를
   걷지 않는다. 그 밖이면 다음 시나리오의 E1 펜스로 간다. e2e 칸과 「사람이 뒤집음」은 레퍼런스 6 절 끝(가장 나쁜 결과)이 정한다.
   E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).
+  게이트에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
