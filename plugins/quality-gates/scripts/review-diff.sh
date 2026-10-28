@@ -565,7 +565,7 @@ if [ "${#DROP[@]}" -gt 0 ]; then
 fi
 nul_list minus "$T/tracked.z" "$T/excl.z" > "$T/keep.z" || gitfail "남길 경로를 가리지 못했다"
 nul_list roots "$T/keep.z" "$T/all.z" > "$T/roots.z" || gitfail "남길 경로의 폴더 이름 대조가 실패했다"
-: > "$T/diff"; : > "$T/filtered.z"; : > "$T/numstat.z"; : > "$T/bin.z"
+: > "$T/diff"; : > "$T/filtered.z"; : > "$T/numstat.z"; : > "$T/bin.z"; : > "$T/nbin.z"
 diff_batch() {   # KB 묶음 하나를 걸러진 diff 와 이름 목록 · numstat 에 덧붙인다
   "${GITD[@]}" "${REV[@]}" -- "${KB[@]}" >> "$T/diff" \
     || gitfail "걸러진 git diff 가 실패했다: ${REV[*]}"
@@ -606,7 +606,14 @@ while IFS= read -r -d '' f; do
     printf '%s\0' "$f" >> "$T/bin.z" || gitfail "바이너리 경로 목록을 쓰지 못했다"
   fi
 done < "$T/ukeep.z"
-nul_list binary "$T/numstat.z" >> "$T/bin.z" || gitfail "numstat 에서 바이너리 경로를 가리지 못했다"
+nul_list binary "$T/numstat.z" > "$T/nbin.z" || gitfail "numstat 에서 바이너리 경로를 가리지 못했다"
+# numstat 의 `-<TAB>-` 는 후보다 — 바이너리 파일의 모드만 바뀌어도 그렇게 나온다(diff 에는 old/new mode 만 있다).
+# 그 경로의 diff 에 「Binary files … differ」 줄이 실제로 있을 때만 리뷰하지 않은 것으로 센다.
+while IFS= read -r -d '' x; do
+  bd="$("${GITD[@]}" "${REV[@]}" -- ":(literal)$x")" || gitfail "바이너리 후보의 git diff 가 실패했다: $(esc_name "$x")"
+  case "$bd" in *"
+Binary files "*|"Binary files "*) printf '%s\0' "$x" >> "$T/bin.z" || gitfail "바이너리 경로 목록을 쓰지 못했다" ;; esac
+done < "$T/nbin.z"
 
 # 이름 대조 — (tracked + untracked 파일) − 제외 − 리뷰한 경로(걸러진 이름 + 리뷰한 untracked − 바이너리로 본
 # 경로) 가 비어야 한다. 남는 경로마다 크게 알리고 degraded: yes — 바이너리로 본 경로는 say_binary, 그 밖은

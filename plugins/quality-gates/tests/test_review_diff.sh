@@ -196,6 +196,24 @@ case_binary_deleted_flagged() {
   assert_file_grep "$D/review-i1.diff" '^-gone = 1' "지운 텍스트 줄은 diff 에 보인다"
 }
 
+case_binary_mode_only_not_degraded() {
+  echo "[range — 바이너리 파일의 모드만 바뀌면 diff 에 전부 보인다 — 리뷰 안 됨으로 알리지 않는다]"
+  local start
+  mkfix
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377' > "$R/logo.png"
+  g "$R" add -A; g "$R" commit -q -m png
+  start=$(git -C "$R" rev-parse HEAD)
+  chmod +x "$R/logo.png"
+  echo 'x = 3' > "$R/src/a.py"
+  g "$R" add -A; g "$R" commit -q -m mode
+  printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_grep "$D/review-i1.diff" '^new mode 100755' "모드 바뀜이 diff 에 보인다(전제)"
+  assert_eq "$(field degraded "$OUT")" no "degraded: no"
+  assert_file_absent "$ROOT/err" '바이너리로 보여' "모드만 바뀐 logo.png 를 알리지 않는다"
+}
+
 case_text_only_not_degraded() {
   echo "[session · branch — 텍스트 파일만 바뀌면 degraded 가 아니다]"
   local mode
@@ -1258,6 +1276,7 @@ case_binary_attr_not_reviewed
 case_binary_nul_not_reviewed
 case_binary_png_bytes_not_in_diff
 case_binary_deleted_flagged
+case_binary_mode_only_not_degraded
 case_text_only_not_degraded
 case_session_doc_excluded
 case_range_uses_frozen_pair

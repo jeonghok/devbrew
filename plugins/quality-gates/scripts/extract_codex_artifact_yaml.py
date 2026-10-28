@@ -72,35 +72,30 @@ def extract_text(stream):
     return text
 
 
-def degrade(reason, exit_code=None, stderr_head=""):
+def degrade(reason, exit_code=None, kind="", read_error=""):
     print("codex_failed: true")
     print(f"reason: {reason}")
     if exit_code is not None:
         print(f"exit_code: {exit_code}")
-    if stderr_head:
-        print(f"stderr_head: {json.dumps(stderr_head, ensure_ascii=False)}")
+    if kind:
+        print(f"stderr_kind: {kind}")
+    if read_error:
+        print(f"stderr_read_error: {json.dumps(read_error)}")
     return 0
 
 
-from codex_findings_to_yaml import STDERR_HEAD_MAX, mask_secrets  # noqa: E402 — 같은 폴더의 공유 추출기(가림 규칙 한 곳)
+from codex_findings_to_yaml import show_stderr_head, stderr_kind  # noqa: E402 — 같은 폴더의 공유 추출기(분류 · 가림 규칙 한 곳)
 
 
-def first_stderr_line(path):
-    """codex stderr 의 첫 비어 있지 않은 줄 — codex_findings_to_yaml.stderr_head 와 같은 규칙(출력 못 할 글자는 `?`,
-    비밀처럼 생긴 것은 mask_secrets 로 `<가림>`, STDERR_HEAD_MAX 자에서 자름). 읽지 못하면 빈 문자열."""
+def read_stderr(path):
+    """(stderr 글, 읽기 오류) — 읽지 못하면 ("", errno 또는 예외 이름). 공유 추출기와 같은 공시."""
     if not path:
-        return ""
+        return "", ""
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
-    except OSError:
-        return ""
-    for ln in text.splitlines():
-        s = ln.strip()
-        if s:
-            s = "".join(c if c.isprintable() else "?" for c in s)
-            return mask_secrets(s)[:STDERR_HEAD_MAX]
-    return ""
+            return fh.read(), ""
+    except OSError as e:
+        return "", (str(e.errno) if e.errno else type(e).__name__)
 
 
 def main():
@@ -111,8 +106,10 @@ def main():
     a = ap.parse_args()
 
     if a.meta_override_exit_code != 0:
+        text, read_error = read_stderr(a.stderr_file)
+        show_stderr_head(text)   # 원문 첫 줄은 화면에만 — 산출물에는 분류만
         return degrade(a.meta_override_reason or "exit_nonzero", a.meta_override_exit_code,
-                       first_stderr_line(a.stderr_file))
+                       stderr_kind(text), read_error)
 
     text = extract_text(sys.stdin.read())
     if not text:

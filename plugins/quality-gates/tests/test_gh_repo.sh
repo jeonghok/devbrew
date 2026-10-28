@@ -29,6 +29,7 @@ printf '%s\n' "$*" >> "$FAKE_SSH_ARGS"
 for a in "$@"; do h="$a"; done
 case "$h" in
   github-work|github_work) printf 'user git\nhostname github.com\nport 22\n' ;;
+  muser) case "$*" in *'-l git '*) printf 'user git\nhostname github.com\nport 22\n' ;; *) printf 'user x\nhostname muser\nport 22\n' ;; esac ;;
   github.com) printf 'user git\nhostname ssh-proxy.corp\nport 22\n' ;;
   gh443) printf 'user git\nhostname ssh.github.com\nport 443\n' ;;
   noresolve) echo "ssh: Could not resolve" >&2; exit 255 ;;
@@ -104,16 +105,33 @@ for url in "git@github-work:o/r.git" "ssh://git@github-work/o/r.git" "ssh://git@
   : > "$FAKE_SSH_ARGS"
   slug sa "$FAKEPATH"
   assert_eq "$RC:$OUT" "0:github.com/o/r" "SSH 별칭 ${url} → 실제 호스트 github.com/o/r"
-  assert_eq "$(cat "$FAKE_SSH_ARGS")" "-G -- github-work" "SSH 별칭 ${url} → ssh -G -- <별칭> 으로 푼다"
+  assert_eq "$(cat "$FAKE_SSH_ARGS")" "-G -l git -- github-work" "SSH 별칭 ${url} → ssh -G -l <사용자> -- <별칭> 으로 푼다"
 done
 mkrepo sus "git@github_work:o/r.git" || { no "픽스처 밑줄 별칭"; finish; exit 1; }
 : > "$FAKE_SSH_ARGS"
 slug sus "$FAKEPATH"
-assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:-G -- github_work" "밑줄이 든 SSH 별칭도 ssh -G 로 푼다"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:-G -l git -- github_work" "밑줄이 든 SSH 별칭도 ssh -G 로 푼다"
 mkrepo spx "git@github.com:o/r.git" || { no "픽스처 github.com 프록시"; finish; exit 1; }
 : > "$FAKE_SSH_ARGS"
 slug spx "$FAKEPATH"
 assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:" "github.com 은 풀지 않는다 — ssh 설정의 프록시 HostName 이 gh 호스트가 되지 않는다"
+for url in "git@muser:o/r.git" "ssh://git@muser/o/r.git"; do
+  mkrepo smu "$url" || { no "픽스처 $url"; finish; exit 1; }
+  : > "$FAKE_SSH_ARGS"
+  slug smu "$FAKEPATH"
+  assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:github.com/o/r:-G -l git -- muser" "${url}: origin 의 사용자 이름을 ssh -G -l 로 넘긴다(Match user 규칙)"
+done
+mkrepo sun "muser:o/r.git" || { no "픽스처 사용자 없는 별칭"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug sun "$FAKEPATH"
+assert_eq "$(cat "$FAKE_SSH_ARGS")" "-G -- muser" "사용자 이름이 없으면 -l 을 넘기지 않는다(양성 짝)"
+mkrepo sbu "ssh://-oProxyCommand=x@muser/o/r.git" || { no "픽스처 나쁜 사용자"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug sbu "$FAKEPATH"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "3::" "'-' 로 시작하는 사용자 이름은 ssh 에 넘기지 않는다"
+mkrepo htok "https://x-access-token:abc@github.com/o/r.git" || { no "픽스처 https 자격"; finish; exit 1; }
+slug htok "$FAKEPATH"
+assert_eq "$RC:$OUT" "0:github.com/o/r" "https 꼴의 사용자 칸(토큰)은 검사하지 않는다"
 mkrepo s443 "git@gh443:o/r.git" || { no "픽스처 gh443"; finish; exit 1; }
 slug s443 "$FAKEPATH"
 assert_eq "$RC:$OUT" "0:github.com/o/r" "ssh.github.com(443 우회)은 gh 처럼 github.com 으로"

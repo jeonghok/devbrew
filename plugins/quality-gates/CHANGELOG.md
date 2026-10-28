@@ -6,12 +6,12 @@
 ## [14.7.4] — 2026-10-25
 
 ### Fixed
-- codex 실패 meta 의 stderr 첫 줄 · 인증 실패 미리보기의 비밀 가림이 `/` 가 든 base64 키(AWS 비밀 키 등)와 자격 증명 낱말(`Authorization` · `Bearer` · `token` · `password` …) 뒤의 짧은 값도 가린다. 가림 규칙은 공유 추출기 한 곳(`mask_secrets`)에 두고 artifact 추출기가 가져다 쓴다.
+- 인증 실패 갈래의 meta 가 codex stderr 원문 미리보기(`stderr_preview`)를 싣던 것 — meta 는 리뷰 기록으로 옮겨져 커밋될 수 있어 비밀이 남을 수 있었다. 원문 대신 알려진 사유 분류(`stderr_kind`)만 싣는다.
 - SSH 설정의 별칭 호스트(`git@github-work:o/r`)로 origin 을 잡은 레포에서 `scripts/gh-repo.sh` 가 별칭을 그대로 `-R` 에 넘겨 리뷰가 멈추고 PR 코멘트도 달리지 않던 것 — SSH 꼴 origin 의 호스트를 `ssh -G` 의 hostname 으로 푼다(`*.github.com` 은 `github.com`). `github.com` 자신은 풀지 않는다 — ssh 설정이 그 HostName 을 프록시 · IP 로 돌려도 gh 호스트는 `github.com` 이다. 밑줄이 든 별칭(`github_work`)도 받는다. ssh 가 없거나 풀지 못하면 rc 3 과 사유로 멈춘다. 호스트 글자가 아닌 값은 ssh 에 넘기지 않는다.
 - gh 미로그인이 `skipped: gh-unavailable`(실패 아님)로 끝나 「gh 없음」 과 구별되지 않던 것 — `failed: gh-unauthenticated`(rc 1)로 낸다. 인증 확인은 origin 호스트만 본다(`--hostname`) — 다른 호스트의 깨진 계정이 실패를 만들지 않는다.
 - 변경이 `.gitattributes` 의 `-diff` 나 NUL 바이트로 코드를 「Binary files … differ」 한 줄로 숨겨도 리뷰 diff(`scripts/review-diff.sh`)의 이름 대조가 그 파일을 리뷰했다고 세던 것 — git 이 바이너리로 본 파일은 이름과 함께 「리뷰하지 않았다」 로 알리고 `degraded: yes`(`not-certified (error-axis)`)를 낸다 — 그런 파일을 지운 경우도 지운 줄이 가려지므로 같다. 원본 바이트는 리뷰어에게 넣지 않는다(`--text` 없음) — 이미지가 든 변경도 이 공시 줄이 붙고 인증되지 않는다.
 - `/quality-gates:artifact-critique` 가 링크와 원본을 함께 적으면 합친다고 했지만 경로 인가는 링크를 늘 거절했다 — 그 약속을 지우고 거절 안내를 사유(`symlink_target` · `escapes_project_dir`)별로 나눴다. 링크 거절은 그대로다.
-- codex 가 0 아닌 종료로 끝나면 산출물 meta 에 종료 코드(`exit_code`)와 stderr 첫 줄(`stderr_head` — 비밀처럼 생긴 20자 이상 낱말은 가리고 200자에서 자름)을 남긴다 — 공유 추출기와 artifact 추출기.
+- codex 가 0 아닌 종료로 끝나면 산출물 meta 에 종료 코드(`exit_code`)와 알려진 사유 분류(`stderr_kind` — `auth` · `rate-limited` · `quota` · `overloaded` · `timeout` · `network` · `model` · `other` · `none`)를 남긴다 — 공유 추출기와 artifact 추출기. stderr 원문 첫 줄은 기록하지 않고 화면(stderr)에만 보인다 — 비밀처럼 생긴 것(20자 이상 낱말 · 자격 증명 낱말 뒤의 값)은 가리고 200자에서 자른다. 설계문서의 「stderr 첫 줄을 meta 에 남긴다」 와 다르다 — 가림 규칙을 거듭 우회당해 기록 층에서 원문을 뺐다. stderr 를 읽지 못하면 그 사유(`stderr_read_error`)를 싣는다.
 - 낮춘 지적이 넷 이상일 때 게이트가 여러 선택이라 「전부 되올린다」 와 「그대로 둔다」 를 함께 고를 수 있던 것 — 하나만 고른다.
 - 테스트 둘이 엉뚱한 이유로 통과하던 것 — codex 러너의 잘못된 인자 세 경우가 앞 경우의 실패 표시를 읽던 것, 재비판자 사망 · 지적 0 경우에 합성기가 죽어도 통과하던 것.
 

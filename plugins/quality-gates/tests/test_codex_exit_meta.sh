@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/scripts/extract_codex_artifact_yaml.py shared/codex/codex_findings_to_yaml.py plugins/quality-gates/scripts/run_codex_reviewer.sh plugins/quality-gates/scripts/run_artifact_codex_reviewer.sh
-# codex 가 0 아닌 종료로 끝나면 산출물 meta 에 codex 의 종료 코드(`exit_code`)와 stderr 첫 줄(`stderr_head`,
-# 200자에서 자름)이 남는다 — `reason: exit_nonzero` 만으로는 왜 죽었는지 알 수 없다.
+# guards: plugins/quality-gates/scripts/codex_findings_to_yaml.py shared/codex/codex_findings_to_yaml.py plugins/quality-gates/scripts/extract_codex_artifact_yaml.py plugins/quality-gates/scripts/run_codex_reviewer.sh plugins/quality-gates/scripts/run_artifact_codex_reviewer.sh shared/docreview/scripts/run_docreview_codex_reviewer.sh
+# codex 가 0 아닌 종료로 끝나면 산출물 meta 에 codex 의 종료 코드(`exit_code`)와 알려진 사유 분류(`stderr_kind`)가
+# 남는다 — `reason: exit_nonzero` 만으로는 왜 죽었는지 알 수 없다. stderr 원문은 기록에 싣지 않는다(비밀이 섞일 수
+# 있다). 원문 첫 줄은 실행 중 화면(추출기 stderr)에만 보이고, 그때도 비밀처럼 생긴 것을 가린다.
 # 중첩 YAML 러너 둘(run_codex_reviewer.sh · run_docreview_codex_reviewer.sh)은 공유 추출기
 # codex_findings_to_yaml.py 가, 평면 YAML 러너(run_artifact_codex_reviewer.sh)는 extract_codex_artifact_yaml.py 가 쓴다.
 # codex 는 PATH 앞의 스텁이다(과금 · 네트워크 없음).
 # Run (리포 루트에서): bash plugins/quality-gates/tests/test_codex_exit_meta.sh
 set -u
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
+  plugins/quality-gates/scripts/codex_findings_to_yaml.py \
+  shared/codex/codex_findings_to_yaml.py \
+  plugins/quality-gates/scripts/extract_codex_artifact_yaml.py \
+  plugins/quality-gates/scripts/run_codex_reviewer.sh \
+  plugins/quality-gates/scripts/run_artifact_codex_reviewer.sh \
+  shared/docreview/scripts/run_docreview_codex_reviewer.sh; exit 0; }
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
 . "$ROOT/shared/tests/assert.sh"
@@ -15,64 +23,65 @@ T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 
-LONG="$(printf 'word %.0s' $(seq 1 100))"
 printf '\n  ERROR: model overloaded (retry later)\nSECOND_LINE_MUST_NOT_APPEAR\n' > "$T/err.txt"
-printf '%s\nSECOND_LINE_MUST_NOT_APPEAR\n' "$LONG" > "$T/err-long.txt"
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}' > "$T/ok.jsonl"
+: > "$T/empty.jsonl"
 meta_val() {  # meta_val <파일> <키> — meta 블록의 그 키 값(따옴표 그대로)
   sed -n "s/^  $2: //p" "$1" | head -n 1
+}
+# 비밀 꼴 넷 — 길고 / 가 든 키 · 자격 증명 낱말 뒤의 짧은 값 · 따옴표 든 키 · 띄어 쓴 값
+cat > "$T/err-secret.txt" <<'ERR'
+ERROR: 401 Authorization: Bearer sk-ant-api03-SECRETTOKENVALUE0123456789 aws wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY {"password":"hunter2"} password="correct horse battery staple" api key abc123 rejected
+ERR
+no_secret() {  # no_secret <파일> <이름>
+  local s
+  for s in SECRETTOKENVALUE bPxRfiCYEXAMPLEKEY hunter2 'horse battery' abc123; do
+    assert_file_absent "$1" "${s}" "${2}: 비밀 「${s}」 이 없다"
+  done
 }
 
 # ── 공유 추출기(중첩 YAML 러너 둘) ─────────────────────────────────────────────
 X="$QG/scripts/codex_findings_to_yaml.py"
-python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/a.yaml"
+python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/a.yaml" 2> "$T/a.err"
 assert_eq "$(meta_val "$T/a.yaml" exit_code)" "7" "공유 추출기: 0 아닌 종료면 meta 에 codex 종료 코드"
-assert_contains "$(meta_val "$T/a.yaml" stderr_head)" "ERROR: model overloaded (retry later)" "공유 추출기: meta 에 stderr 의 첫 비어 있지 않은 줄"
-assert_file_absent "$T/a.yaml" 'SECOND_LINE_MUST_NOT_APPEAR' "공유 추출기: stderr 둘째 줄은 싣지 않는다"
-python3 "$X" --stderr-file "$T/err-long.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/b.yaml"
-v="$(meta_val "$T/b.yaml" stderr_head)"
-assert_contains "$v" "word word word" "공유 추출기: 긴 첫 줄도 싣는다(양성 짝)"
-[ "$(printf '%s' "$v" | tr -d '"'"'" | wc -c | tr -d ' ')" -le 200 ] \
-  && ok "공유 추출기: stderr 첫 줄은 200자에서 자른다" || no "공유 추출기: stderr 첫 줄이 200자를 넘는다(${#v})"
-# 비밀처럼 생긴 긴 낱말(20자 이상의 영숫자 · _-+=. 연속)은 가린다 — 이 meta 는 리뷰 기록 문서로 옮겨져 커밋될 수 있다.
-printf 'ERROR: 401 Authorization: Bearer sk-ant-api03-SECRETTOKENVALUE0123456789 rejected\n' > "$T/err-secret.txt"
-python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s.yaml"
-assert_file_absent "$T/s.yaml" 'SECRETTOKENVALUE' "공유 추출기: stderr 첫 줄의 비밀처럼 생긴 긴 낱말을 가린다"
-assert_contains "$(meta_val "$T/s.yaml" stderr_head)" "Authorization: Bearer" "공유 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
-# 인증 실패 갈래(빈 stdout + stderr 의 인증 오류)는 stderr_preview 도 싣는다 — 같은 규칙으로 가린다.
-: > "$T/empty.jsonl"
-python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/empty.jsonl" > "$T/s2.yaml"
-assert_file_absent "$T/s2.yaml" 'SECRETTOKENVALUE' "공유 추출기: 인증 실패 갈래의 stderr_preview 도 비밀처럼 생긴 낱말을 가린다"
-# `/` 가 든 base64 키(조각마다 20자 미만) · 자격 증명 낱말 뒤의 짧은 값도 가린다
-printf 'ERROR: aws_secret_access_key wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY password=hunter2 denied\n' > "$T/err-slash.txt"
-python3 "$X" --stderr-file "$T/err-slash.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s3.yaml"
-assert_file_absent "$T/s3.yaml" 'bPxRfiCYEXAMPLEKEY' "공유 추출기: / 가 든 base64 키를 가린다"
-assert_file_absent "$T/s3.yaml" 'hunter2' "공유 추출기: 자격 증명 낱말 뒤의 짧은 값을 가린다"
-assert_contains "$(meta_val "$T/s3.yaml" stderr_head)" "denied" "공유 추출기: 가린 뒤에도 나머지 글은 남는다(/ 키 · 짧은 값)"
-assert_file_grep "$T/s2.yaml" '^  stderr_preview: ' "공유 추출기: 인증 실패 갈래에 stderr_preview 가 있다(양성 짝 — 그 갈래를 밟았다)"
-assert_eq "$(meta_val "$T/s2.yaml" reason)" "exit_nonzero" "공유 추출기: 인증 실패 갈래도 reason 은 exit_nonzero(양성 짝)"
-python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml"
-assert_file_absent "$T/c.yaml" 'stderr_head' "공유 추출기: codex 가 0 으로 끝나면 stderr 를 싣지 않는다"
+assert_eq "$(meta_val "$T/a.yaml" stderr_kind)" "overloaded" "공유 추출기: meta 에 stderr 사유 분류"
+assert_file_absent "$T/a.yaml" 'model overloaded' "공유 추출기: meta 에 stderr 원문을 싣지 않는다"
+assert_contains "$(cat "$T/a.err")" 'stderr 첫 줄(기록하지 않음): ERROR: model overloaded (retry later)' "공유 추출기: 원문 첫 줄은 화면에 보인다(양성 짝)"
+assert_file_absent "$T/a.err" 'SECOND_LINE_MUST_NOT_APPEAR' "공유 추출기: 화면에도 둘째 줄은 보이지 않는다"
+python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s.yaml" 2> "$T/s.err"
+assert_eq "$(meta_val "$T/s.yaml" stderr_kind)" "auth" "공유 추출기: 401 은 auth 로 분류"
+no_secret "$T/s.yaml" "공유 추출기 meta"
+no_secret "$T/s.err" "공유 추출기 화면"
+assert_contains "$(cat "$T/s.err")" 'Authorization: Bearer <가림>' "공유 추출기: 화면의 가린 줄에 나머지 글은 남는다(양성 짝)"
+# 인증 실패 갈래(빈 stdout + stderr 의 인증 오류)도 원문 미리보기 대신 분류만 싣는다.
+python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/empty.jsonl" > "$T/s2.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/s2.yaml" reason)" "auth_error_in_stderr" "공유 추출기: 인증 실패 갈래를 밟았다(양성 짝)"
+assert_eq "$(meta_val "$T/s2.yaml" stderr_kind)" "auth" "공유 추출기: 인증 실패 갈래도 분류를 싣는다"
+assert_file_absent "$T/s2.yaml" 'stderr_preview' "공유 추출기: 인증 실패 갈래에 stderr 원문 미리보기가 없다"
+no_secret "$T/s2.yaml" "공유 추출기 인증 실패 갈래"
+python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml" 2> "$T/c.err"
+assert_file_absent "$T/c.yaml" 'stderr_kind' "공유 추출기: codex 가 0 으로 끝나면 분류를 싣지 않는다"
+assert_eq "$(cat "$T/c.err")" "" "공유 추출기: 0 종료면 화면에도 stderr 를 보이지 않는다"
 assert_file_grep "$T/c.yaml" '^  codex_failed: false$' "공유 추출기: 0 종료는 성공 표식(양성 짝)"
+KINDS="$(cd "$QG/scripts" && python3 -c 'from codex_findings_to_yaml import stderr_kind as k
+for t in ("429 Too Many Requests", "request timed out", "could not resolve host x", "quota exceeded", "weird", ""):
+    print(k(t))')"
+assert_eq "$KINDS" "$(printf '%s\n' rate-limited timeout network quota other none)" "분류: 한도 · 시간 초과 · 네트워크 · 할당량 · 그 밖 · 없음"
 
 # ── 평면 YAML 추출기(artifact 러너) ───────────────────────────────────────────
 XA="$QG/scripts/extract_codex_artifact_yaml.py"
-python3 "$XA" --stderr-file "$T/err.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/d.yaml"
+python3 "$XA" --stderr-file "$T/err.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/d.yaml" 2> "$T/d.err"
 assert_file_grep "$T/d.yaml" '^codex_failed: true$' "artifact 추출기: 0 아닌 종료는 실패 표식"
 assert_eq "$(sed -n 's/^exit_code: //p' "$T/d.yaml")" "7" "artifact 추출기: codex 종료 코드를 남긴다"
-assert_contains "$(sed -n 's/^stderr_head: //p' "$T/d.yaml")" "ERROR: model overloaded (retry later)" "artifact 추출기: stderr 첫 줄을 남긴다"
-assert_file_absent "$T/d.yaml" 'SECOND_LINE_MUST_NOT_APPEAR' "artifact 추출기: stderr 둘째 줄은 싣지 않는다"
-python3 "$XA" --stderr-file "$T/err-long.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/e.yaml"
-v="$(sed -n 's/^stderr_head: //p' "$T/e.yaml")"
-[ -n "$v" ] && [ "$(printf '%s' "$v" | tr -d '"'"'" | wc -c | tr -d ' ')" -le 200 ] \
-  && ok "artifact 추출기: stderr 첫 줄은 200자에서 자른다" || no "artifact 추출기: 200자 자르기 실패(${#v})"
-python3 "$XA" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f.yaml"
-assert_file_absent "$T/f.yaml" 'SECRETTOKENVALUE' "artifact 추출기: 비밀처럼 생긴 긴 낱말을 가린다"
-assert_contains "$(sed -n 's/^stderr_head: //p' "$T/f.yaml")" "Authorization: Bearer" "artifact 추출기: 가린 뒤에도 나머지 글은 남는다(양성 짝)"
-python3 "$XA" --stderr-file "$T/err-slash.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f2.yaml"
-assert_file_absent "$T/f2.yaml" 'bPxRfiCYEXAMPLEKEY' "artifact 추출기: / 가 든 base64 키를 가린다"
-assert_file_absent "$T/f2.yaml" 'hunter2' "artifact 추출기: 자격 증명 낱말 뒤의 짧은 값을 가린다"
-assert_eq "$(sed -n 's/^stderr_head: //p' "$T/f2.yaml")" "$(meta_val "$T/s3.yaml" stderr_head)" "두 추출기의 가림 결과가 같다(규칙 한 곳)"
+assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/d.yaml")" "overloaded" "artifact 추출기: 사유 분류를 남긴다"
+assert_file_absent "$T/d.yaml" 'model overloaded' "artifact 추출기: 산출물에 stderr 원문을 싣지 않는다"
+assert_contains "$(cat "$T/d.err")" 'stderr 첫 줄(기록하지 않음): ERROR: model overloaded (retry later)' "artifact 추출기: 원문 첫 줄은 화면에 보인다(양성 짝)"
+python3 "$XA" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f.yaml" 2> "$T/f.err"
+no_secret "$T/f.yaml" "artifact 추출기 산출물"
+no_secret "$T/f.err" "artifact 추출기 화면"
+assert_eq "$(cat "$T/f.err")" "$(cat "$T/s.err")" "두 추출기의 화면 줄이 같다(규칙 한 곳)"
+python3 "$XA" --stderr-file "$T/nope/missing.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/g.yaml" 2>/dev/null
+assert_file_grep "$T/g.yaml" '^stderr_read_error: ' "artifact 추출기: stderr 를 읽지 못하면 그 사실을 남긴다"
 
 # ── 러너 끝에서 끝: codex 스텁이 stderr 를 쓰고 7 로 끝난다 ─────────────────────
 mkdir -p "$T/bin" "$T/proot"
@@ -87,13 +96,13 @@ PATH="$T/bin:$PATH" CLAUDE_PLUGIN_ROOT="$T/proot" \
   bash "$T/proot/scripts/run_codex_reviewer.sh" "$T/tiny.diff" "$ROOT" "$T/r1.yaml" >/dev/null 2>"$T/r1.err"
 assert_eq "$(meta_val "$T/r1.yaml" reason)" "exit_nonzero" "run_codex_reviewer.sh: reason exit_nonzero(양성 짝 — codex 까지 닿았다)"
 assert_eq "$(meta_val "$T/r1.yaml" exit_code)" "7" "run_codex_reviewer.sh: meta 에 codex 종료 코드"
-assert_contains "$(meta_val "$T/r1.yaml" stderr_head)" "ERROR: model overloaded" "run_codex_reviewer.sh: meta 에 codex stderr 첫 줄"
+assert_eq "$(meta_val "$T/r1.yaml" stderr_kind)" "overloaded" "run_codex_reviewer.sh: meta 에 사유 분류"
 printf '아티팩트 fixture\n' > "$T/artifact.md"
 PATH="$T/bin:$PATH" CLAUDE_PLUGIN_ROOT="$T/proot" \
   bash "$T/proot/scripts/run_artifact_codex_reviewer.sh" "$T/artifact.md" "$ROOT" "$T/r2.yaml" >/dev/null 2>"$T/r2.err"
 assert_eq "$(sed -n 's/^reason: //p' "$T/r2.yaml")" "exit_nonzero" "run_artifact_codex_reviewer.sh: reason exit_nonzero(양성 짝)"
 assert_eq "$(sed -n 's/^exit_code: //p' "$T/r2.yaml")" "7" "run_artifact_codex_reviewer.sh: 산출물에 codex 종료 코드"
-assert_contains "$(sed -n 's/^stderr_head: //p' "$T/r2.yaml")" "ERROR: model overloaded" "run_artifact_codex_reviewer.sh: 산출물에 codex stderr 첫 줄"
+assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/r2.yaml")" "overloaded" "run_artifact_codex_reviewer.sh: 산출물에 사유 분류"
 # docreview 러너는 공유 추출기에 --stderr-file 과 종료 코드를 넘긴다 — 위 공유 추출기 단언이 그 meta 를 잰다.
 DR="$ROOT/shared/docreview/scripts/run_docreview_codex_reviewer.sh"
 assert_file_grep "$DR" '^ +--stderr-file "\$STDERR_FILE" \\$' "run_docreview_codex_reviewer.sh: 공유 추출기에 codex stderr 를 넘긴다"

@@ -46,12 +46,14 @@ case "$url" in
     path="${rest#*/}"
     host="${hostport##*@}"
     host="${host%%:*}"
+    case "$hostport" in *@*) user="${hostport%@*}" ;; *) user="" ;; esac
     ;;
   *:*)
     hostport="${url%%:*}"
     path="${url#*:}"
     case "$hostport" in */*|*\\*) stop_slug ;; esac
     host="${hostport##*@}"
+    case "$hostport" in *@*) user="${hostport%@*}" ;; *) user="" ;; esac
     ;;
   *) stop_slug ;;
 esac
@@ -69,8 +71,10 @@ if [ "$is_ssh" = 1 ]; then
     echo "origin 이 SSH 꼴(${host})인데 ssh 가 없어 실제 호스트로 풀지 못했다 — origin 을 https 꼴로 바꾸거나 ssh 를 설치한다" >&2
     exit 3
   fi
+  # 사용자 이름도 같은 꼴로만 ssh 에 넘긴다(`Match user` 규칙이 이 이름으로 HostName 을 고른다).
+  case "${user:-}" in -*|*[!A-Za-z0-9._-]*) stop_slug ;; esac
   resolved=""
-  if sshcfg="$(ssh -G -- "$host" </dev/null 2>/dev/null)"; then
+  if sshcfg="$(ssh -G ${user:+-l "$user"} -- "$host" </dev/null 2>/dev/null)"; then
     while read -r k v _; do
       [ "$k" = hostname ] && { resolved="$v"; break; }
     done <<EOF

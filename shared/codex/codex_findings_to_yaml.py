@@ -186,28 +186,55 @@ def _yaml_scalar(v: Any) -> str:
 
 
 STDERR_HEAD_MAX = 200
-# meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다 — 비밀처럼 생긴 것을 가린다.
-# 자격 증명 낱말(authorization · bearer · token · api key · password · secret …) 뒤의 값, 그리고
-# 20자 이상의 영숫자 · `_-+=./:` 연속(토큰 · 키 · JWT · `/` 가 든 base64 · user:token).
+# meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다 — codex stderr 원문은 싣지 않고 알려진 사유 분류(stderr_kind)만 싣는다.
+# 원문 첫 줄은 실행 중 화면(이 스크립트의 stderr)에만 보이고, 그때도 비밀처럼 생긴 것을 가린다.
+STDERR_KINDS = (
+    ("auth", re.compile(r"(?i)\b(401|403|unauthori[sz]ed|forbidden|not logged in|authentication|invalid api[_\s-]?key)\b")),
+    ("rate-limited", re.compile(r"(?i)\b(429|rate[\s_-]?limit\w*|too many requests)\b")),
+    ("quota", re.compile(r"(?i)\b(quota|billing|insufficient[\s_]credits?|usage limit)\b")),
+    ("overloaded", re.compile(r"(?i)\b(overloaded|over capacity|502|503|service unavailable)\b")),
+    ("timeout", re.compile(r"(?i)\b(timed? ?out|timeout|deadline exceeded)\b")),
+    ("network", re.compile(r"(?i)\b(connection|network|could not resolve|enotfound|econn\w*|dns)\b")),
+    ("model", re.compile(r"(?i)\b(unknown model|model\b[^\n]{0,40}\b(not found|unsupported|does not exist))")),
+)
 _SECRET_KEYWORD = re.compile(
-    r"(?i)((?:(?:authorization|bearer|basic|token|api[_-]?key|password|passwd|secret)(?:\s*[:=]\s*|\s+))+)\S+")
+    r"(?i)((?:(?:authorization|bearer|basic|token|api[_\s-]?key|password|passwd|secret)[\"']?(?:\s*[:=]\s*|\s+))+)"
+    r"(\"[^\"]*\"|'[^']*'|\S+)")
 _SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=./:]{20,}")
 
 
+def stderr_kind(text: str) -> str:
+    """codex stderr 의 알려진 사유 분류 — 첫 4000자에서 처음 맞는 것, 맞는 것이 없으면 other, 비었으면 none."""
+    head = (text or "")[:4000]
+    if not head.strip():
+        return "none"
+    for kind, rx in STDERR_KINDS:
+        if rx.search(head):
+            return kind
+    return "other"
+
+
 def mask_secrets(text: str) -> str:
-    """비밀처럼 생긴 것을 `<가림>` 으로 — 두 codex 추출기(이 파일 · extract_codex_artifact_yaml.py)가 함께 쓴다."""
+    """화면에 보이는 stderr 첫 줄의 비밀처럼 생긴 것을 `<가림>` 으로(자격 증명 낱말 뒤의 값 · 20자 이상 연속)."""
     return _SECRET_LIKE.sub("<가림>", _SECRET_KEYWORD.sub(lambda m: m.group(1) + "<가림>", text))
 
 
 def stderr_head(text: str) -> str:
     """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?`, 비밀처럼 생긴 것은 `<가림>` 으로 바꾸고
-    STDERR_HEAD_MAX 자에서 자른다."""
+    STDERR_HEAD_MAX 자에서 자른다. 화면에만 보이고 meta 에는 싣지 않는다."""
     for ln in text.splitlines():
         s = ln.strip()
         if s:
             s = "".join(c if c.isprintable() else "?" for c in s)
             return mask_secrets(s)[:STDERR_HEAD_MAX]
     return ""
+
+
+def show_stderr_head(text: str) -> None:
+    """codex 가 실패했을 때 stderr 첫 줄을 화면(stderr)에만 보인다 — 기록 파일에는 남기지 않는다."""
+    head = stderr_head(text)
+    if head:
+        print("[codex] stderr 첫 줄(기록하지 않음): %s" % head, file=sys.stderr)
 
 
 def main() -> int:
@@ -244,11 +271,10 @@ def main() -> int:
         if args.meta_override_reason:
             meta["reason"] = args.meta_override_reason
             meta["codex_failed"] = True
-        # codex 가 0 아닌 종료로 끝났으면 왜 죽었는지 stderr 첫 줄을 meta 에만 남긴다(비밀이 섞일 수 있어 자른다).
+        # codex 가 0 아닌 종료로 끝났으면 왜 죽었는지 알려진 사유 분류만 meta 에 남긴다 — 원문 첫 줄은 화면에만.
         if args.meta_override_exit_code:
-            head = stderr_head(stderr_text)
-            if head:
-                meta["stderr_head"] = head
+            meta["stderr_kind"] = stderr_kind(stderr_text)
+            show_stderr_head(stderr_text)
         # AC9(d): surface stderr file read errors for caller visibility.
         if _stderr_read_error is not None:
             meta["stderr_read_error"] = _stderr_read_error
@@ -262,7 +288,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": mask_secrets(stderr_text[:4000])[:200],
+                "stderr_kind": stderr_kind(stderr_text),
             }
         elif stdin_text.strip() and not any_jsonl_parsed:
             # Non-empty stdin with zero parseable JSONL lines → Stage 3 fallback.
@@ -287,7 +313,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": mask_secrets(stderr_text[:4000])[:200],
+                "stderr_kind": stderr_kind(stderr_text),
             }
         else:
             meta = {

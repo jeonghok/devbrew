@@ -202,6 +202,7 @@ case_AC13_gh_unavailable() {
     && ok "미인증: stderr 에 origin 호스트의 로그인 안내" || no "미인증: 로그인 안내가 없다 — $(head -n 3 "$T/err")"
   g remote set-url origin git@ghe.example.com:o/r.git
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$GHCALLS" "auth status --active --hostname ghe.example.com" "미인증(GHE): 인증 확인이 origin 호스트를 묻는다"
   grep -qF 'gh auth login --hostname ghe.example.com' "$T/err" \
     && ok "미인증(GHE): 안내의 호스트는 origin 호스트" || no "미인증(GHE): 호스트가 다르다 — $(head -n 3 "$T/err")"
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
