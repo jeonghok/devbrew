@@ -210,10 +210,14 @@ assert_grep "$(cat "$tmp/stop.err")" 'discover-spec\.sh rc=3 \(의도 · 임시 
   "9 — 양성 짝: stop: 줄이 없는 rc 3 은 「쓸 수 없음」과 stderr 사유"
 for bad in "--bogus" "--range AAA" "--range AAA BBB CCC"; do
   : > "$tmp/ds.log"
+  # 경우마다 지난 라운드의 「성공」 산출물을 심는다 — 앞 경우가 남긴 실패 표시가 이번 경우의 답으로 읽히지 않게.
+  printf 'findings: []\nmeta:\n  codex_failed: false\n  reason: stale_previous_round\n' > "$tmp/range-bad.yaml"
   # shellcheck disable=SC2086
   range_run "$tmp/range-bad.yaml" $bad; brc=$?
   assert_eq "$brc" "2" "8 — 넷째 인자 「${bad}」 는 거부한다(exit 2)"
   assert_file_grep "$tmp/range-bad.yaml" 'codex_failed: true' "8 — 「${bad}」 거부에도 산출물은 실패 표시다(stale 아님)"
+  assert_file_grep "$tmp/range-bad.yaml" 'reason: bad_arguments' "8 — 「${bad}」 거부 사유는 bad_arguments 다"
+  assert_file_absent "$tmp/range-bad.yaml" 'stale_previous_round' "8 — 「${bad}」 거부 뒤 지난 산출물이 남지 않는다"
   [ ! -s "$tmp/ds.log" ] && ok "8 — 「${bad}」 면 discover-spec.sh 를 부르지 않는다" || no "8 — 「${bad}」 면 discover-spec.sh 를 부르지 않는다"
 done
 

@@ -247,6 +247,12 @@ assert_contains "$(cat "$S")" '멈춘 대상이 여럿이어도 질문은 하나
 assert_contains "$(cat "$S")" '**지적만 받기로 진행**(실행 전체를 「지적만 받기」로 바꾼다' "지적만 받기로 진행은 실행 전체를 바꾼다고 말한다"
 assert_contains "$(cat "$S")" '**그 대상만 빼고 진행**' "그 대상만 빼고 진행 선택지"
 assert_contains "$(cat "$S")" '와 같은 파일이라(<canonical>) 한 번만 비평한다' "같은 canonical 대상은 한 번만 비평하고 알린다"
+# artifact_path_auth.py 는 경로 어디에든 링크가 있으면 늘 거절한다(reason: symlink_target) — 링크와 원본을 합친다는
+# 약속은 지킬 수 없고, 링크 거절을 「project_dir 밖」 으로 안내하면 틀린 안내다.
+assert_not_contains "$(cat "$S")" 'symlink 와 그 대상' "E2c: 링크와 그 대상을 하나로 합친다고 말하지 않는다"
+assert_not_contains "$(cat "$S")" 'symlink 와 그것이 가리키는 파일을' "E1: 링크와 원본을 함께 적으면 합친다고 말하지 않는다"
+assert_contains "$(cat "$S")" '`reason: symlink_target` 이면 `> [quality-gates] '"'"'<path>'"'"'는 링크(symlink)라 비평하지 않습니다' "E2c: 링크 거절은 링크라고 안내한다"
+assert_contains "$(cat "$S")" '`reason: escapes_project_dir` 이면 `> [quality-gates] '"'"'<path>'"'"'가 project_dir 밖을 가리킵니다' "E2c: project_dir 밖 거절은 그 사유로 안내한다(양성 짝)"
 assert_contains "$(cat "$S")" '대상 파일의 내용이 codex(바깥' "E3 이 codex 에 파일 내용이 넘어간다고 알린다"
 assert_contains "$(cat "$S")" '부르는 수는 비평자 수 + 2(반박자 1 · codex 1), codex 를 못 쓰면 + 1' "비평자 수 질문이 라운드당 부르는 총수를 알린다"
 # 수정 1(Important 2) — 지적만 받기 보고가 판정 못 한 지적을 숨기지 않는다.

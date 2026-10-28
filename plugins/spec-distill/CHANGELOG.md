@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.12.1] — 2026-10-28
+
+patch 인 이유 — 링크로 배송하는 `scripts/codex_findings_to_yaml.py`(정본 `shared/codex/`)가 바뀌었다(quality-gates 14.7.4 와 같은 변경).
+
+### Fixed
+- codex 가 0 아닌 종료로 끝나면 결과 meta 에 알려진 사유 분류(`stderr_kind`)를 남긴다 — 「이유 없이 실패」 가 무엇 때문인지 보인다. 사유가 stdout 의 실패 이벤트(`turn.failed` · `error`)에만 있으면(사용 한도 등) 그것으로 분류하고, stderr 를 읽지 못하면 `unreadable` 이다. 인증 실패 갈래도 stderr 원문 미리보기(`stderr_preview`) 대신 분류만 싣고 가린 첫 줄은 화면에 보인다 — meta 는 커밋되는 리뷰 기록으로 옮겨질 수 있다. 원문 첫 줄은 화면(stderr)에만, 비밀처럼 생긴 것을 `<가림>` 으로 가리고 200자에서 잘라 보인다.
+
 ## [8.12.0] — 2026-10-26
 
 minor 인 이유 — 스위트 대조에 새 인자(`--test-command` · `--test-failure-pattern`)를 더한다. 지운 기계 상태 층은 같은 판 지휘 절차만 쓰던 길이고, 남은 옛 줄은 막지 않고 알린 뒤 버린다.
