@@ -138,7 +138,7 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 **Git Flow 추가:**
 
 4. **Release branch 명명** — "release 브랜치 포맷?" `release/v*` 를 권한다 — 템플릿의 꼴과 같다.
-   - `release/v*` (권장) (예: `release/v1.2.0`)
+   - `release/v*` (권장) — 예: `release/v1.2.0`
    - 커스텀 포맷
 
 ### Step 3.5: Project Charter (신규)

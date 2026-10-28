@@ -454,7 +454,12 @@ class TestRecommendationLabelShape(unittest.TestCase):
         self.text = COMMAND.read_text(encoding="utf-8")
 
     def test_merge_strategy_label_carries_tail(self):
-        self.assertIn("Squash merge (권장)", self.text)
+        step3 = section(self.text, "### Step 3:", "### Step 3.5:")
+        self.assertRegex(step3, r"(?m)^\s*- Squash merge \(권장\)$")
+
+    def test_release_label_carries_tail(self):
+        step3 = section(self.text, "### Step 3:", "### Step 3.5:")
+        self.assertRegex(step3, r"(?m)^\s*- `release/v\*` \(권장\)( — .*)?$")
 
     def test_nonstandard_markers_are_gone(self):
         self.assertTrue(self.text.strip(), "SKILL.md 가 비었다 — 부재 단언이 공허하다")
