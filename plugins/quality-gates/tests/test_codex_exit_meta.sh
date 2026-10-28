@@ -23,9 +23,23 @@ T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 
-printf '\n  ERROR: model overloaded (retry later)\nSECOND_LINE_MUST_NOT_APPEAR\n' > "$T/err.txt"
+# 둘째 줄 표지는 가림 규칙(20자 이상 연속 · 자격 증명 낱말)에 걸리지 않는 꼴이다 — 걸리면 부재 단언이 공허하다.
+SECOND='second line here'
+printf '\n  ERROR: model overloaded (retry later)\n%s\n' "$SECOND" > "$T/err.txt"
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}' > "$T/ok.jsonl"
 : > "$T/empty.jsonl"
+# codex --json 의 실제 실패 꼴(사용 한도) — 사유는 stdout 의 error · turn.failed 이벤트에 있고 stderr 는 빈다.
+cat > "$T/limit.jsonl" <<'JSONL'
+{"type":"thread.started","thread_id":"01a1801a-f63d-7873-b04e-a8bee9838965"}
+{"type":"turn.started"}
+{"type":"error","message":"You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Nov 2nd, 2026 3:13 PM."}
+{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Nov 2nd, 2026 3:13 PM."}}
+JSONL
+: > "$T/err-empty.txt"
+# 재시도로 성공한 실행 — error 이벤트가 있어도 0 으로 끝났으면 분류하지 않는다.
+{ printf '%s\n' '{"type":"error","message":"stream disconnected, retrying"}'; cat "$T/ok.jsonl"; } > "$T/retried.jsonl"
+# findings JSON 이 아닌 agent 메시지 — 인증 실패 둘째 갈래(메시지는 있으나 findings 가 없다)를 밟는다.
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"not json"}}' > "$T/notjson.jsonl"
 meta_val() {  # meta_val <파일> <키> — meta 블록의 그 키 값(따옴표 그대로)
   sed -n "s/^  $2: //p" "$1" | head -n 1
 }
@@ -47,7 +61,10 @@ assert_eq "$(meta_val "$T/a.yaml" exit_code)" "7" "공유 추출기: 0 아닌 �
 assert_eq "$(meta_val "$T/a.yaml" stderr_kind)" "overloaded" "공유 추출기: meta 에 stderr 사유 분류"
 assert_file_absent "$T/a.yaml" 'model overloaded' "공유 추출기: meta 에 stderr 원문을 싣지 않는다"
 assert_contains "$(cat "$T/a.err")" 'stderr 첫 줄(기록하지 않음): ERROR: model overloaded (retry later)' "공유 추출기: 원문 첫 줄은 화면에 보인다(양성 짝)"
-assert_file_absent "$T/a.err" 'SECOND_LINE_MUST_NOT_APPEAR' "공유 추출기: 화면에도 둘째 줄은 보이지 않는다"
+assert_file_absent "$T/a.err" "$SECOND" "공유 추출기: 화면에도 둘째 줄은 보이지 않는다"
+printf '%s\n' "$SECOND" > "$T/err-first.txt"
+python3 "$X" --stderr-file "$T/err-first.txt" --meta-override-exit-code 7 < "$T/ok.jsonl" > /dev/null 2> "$T/a1.err"
+assert_contains "$(cat "$T/a1.err")" "$SECOND" "공유 추출기: 둘째 줄 표지는 첫 줄이면 화면에 보인다(가림에 걸리지 않는 표지 — 양성 짝)"
 python3 "$X" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/s.yaml" 2> "$T/s.err"
 assert_eq "$(meta_val "$T/s.yaml" stderr_kind)" "auth" "공유 추출기: 401 은 auth 로 분류"
 no_secret "$T/s.yaml" "공유 추출기 meta"
@@ -59,6 +76,25 @@ assert_eq "$(meta_val "$T/s2.yaml" reason)" "auth_error_in_stderr" "공유 추�
 assert_eq "$(meta_val "$T/s2.yaml" stderr_kind)" "auth" "공유 추출기: 인증 실패 갈래도 분류를 싣는다"
 assert_file_absent "$T/s2.yaml" 'stderr_preview' "공유 추출기: 인증 실패 갈래에 stderr 원문 미리보기가 없다"
 no_secret "$T/s2.yaml" "공유 추출기 인증 실패 갈래"
+python3 "$X" --stderr-file "$T/err-secret.txt" < "$T/notjson.jsonl" > "$T/s3.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/s3.yaml" reason)" "auth_error_in_stderr" "공유 추출기: 인증 실패 둘째 갈래(findings 아닌 메시지)를 밟았다(양성 짝)"
+assert_eq "$(meta_val "$T/s3.yaml" stderr_kind)" "auth" "공유 추출기: 인증 실패 둘째 갈래도 분류를 싣는다"
+assert_file_absent "$T/s3.yaml" 'stderr_preview' "공유 추출기: 인증 실패 둘째 갈래에 stderr 원문 미리보기가 없다"
+no_secret "$T/s3.yaml" "공유 추출기 인증 실패 둘째 갈래"
+# 실제 실패 꼴: 사유가 stdout 의 실패 이벤트에만 있다 — 그 이벤트로 분류하고, 원문은 화면에만.
+python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 --meta-override-reason exit_nonzero < "$T/limit.jsonl" > "$T/l.yaml" 2> "$T/l.err"
+assert_eq "$(meta_val "$T/l.yaml" stderr_kind)" "quota" "공유 추출기: stderr 가 비어도 실패 이벤트(사용 한도)로 분류한다"
+assert_file_absent "$T/l.yaml" 'usage limit' "공유 추출기: 실패 이벤트 원문은 meta 에 싣지 않는다"
+assert_contains "$(cat "$T/l.err")" '실패 이벤트(기록하지 않음): You’ve hit your usage limit' "공유 추출기: 실패 이벤트 첫 줄은 화면에 보인다"
+python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 1 < "$T/limit.jsonl" > "$T/l2.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/l2.yaml" stderr_kind)" "quota" "공유 추출기: 실패 이벤트가 stderr 보다 먼저다"
+python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 0 --meta-override-reason "" < "$T/retried.jsonl" > "$T/l3.yaml" 2> "$T/l3.err"
+assert_file_absent "$T/l3.yaml" 'stderr_kind' "공유 추출기: 재시도로 0 종료면 error 이벤트가 있어도 분류하지 않는다"
+assert_eq "$(cat "$T/l3.err")" "" "공유 추출기: 재시도로 0 종료면 화면도 조용하다"
+# stderr 를 읽지 못하면 「비었다(none)」 가 아니라 「읽지 못함(unreadable)」.
+python3 "$X" --stderr-file "$T/nope/missing.txt" --meta-override-exit-code 7 < "$T/ok.jsonl" > "$T/u.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/u.yaml" stderr_kind)" "unreadable" "공유 추출기: stderr 를 읽지 못하면 unreadable"
+assert_file_grep "$T/u.yaml" '^  stderr_read_error: ' "공유 추출기: 읽기 오류도 남긴다"
 python3 "$X" --stderr-file "$T/err.txt" < "$T/ok.jsonl" > "$T/c.yaml" 2> "$T/c.err"
 assert_file_absent "$T/c.yaml" 'stderr_kind' "공유 추출기: codex 가 0 으로 끝나면 분류를 싣지 않는다"
 assert_eq "$(cat "$T/c.err")" "" "공유 추출기: 0 종료면 화면에도 stderr 를 보이지 않는다"
@@ -76,16 +112,22 @@ assert_eq "$(sed -n 's/^exit_code: //p' "$T/d.yaml")" "7" "artifact 추출기: c
 assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/d.yaml")" "overloaded" "artifact 추출기: 사유 분류를 남긴다"
 assert_file_absent "$T/d.yaml" 'model overloaded' "artifact 추출기: 산출물에 stderr 원문을 싣지 않는다"
 assert_contains "$(cat "$T/d.err")" 'stderr 첫 줄(기록하지 않음): ERROR: model overloaded (retry later)' "artifact 추출기: 원문 첫 줄은 화면에 보인다(양성 짝)"
+assert_file_absent "$T/d.err" "$SECOND" "artifact 추출기: 화면에도 둘째 줄은 보이지 않는다"
+python3 "$XA" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 --meta-override-reason exit_nonzero < "$T/limit.jsonl" > "$T/la.yaml" 2> "$T/la.err"
+assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/la.yaml")" "quota" "artifact 추출기: stderr 가 비어도 실패 이벤트(사용 한도)로 분류한다"
+assert_file_absent "$T/la.yaml" 'usage limit' "artifact 추출기: 실패 이벤트 원문은 산출물에 싣지 않는다"
+assert_eq "$(cat "$T/la.err")" "$(cat "$T/l.err")" "두 추출기의 실패 이벤트 화면 줄이 같다"
 python3 "$XA" --stderr-file "$T/err-secret.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/f.yaml" 2> "$T/f.err"
 no_secret "$T/f.yaml" "artifact 추출기 산출물"
 no_secret "$T/f.err" "artifact 추출기 화면"
 assert_eq "$(cat "$T/f.err")" "$(cat "$T/s.err")" "두 추출기의 화면 줄이 같다(규칙 한 곳)"
 python3 "$XA" --stderr-file "$T/nope/missing.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/g.yaml" 2>/dev/null
-assert_file_grep "$T/g.yaml" '^stderr_read_error: ' "artifact 추출기: stderr 를 읽지 못하면 그 사실을 남긴다"
+assert_file_grep "$T/g.yaml" '^stderr_read_error: [0-9A-Za-z]' "artifact 추출기: stderr 를 읽지 못하면 그 사실을 남긴다(공유 추출기와 같은 꼴 — 따옴표 없음)"
+assert_eq "$(sed -n 's/^stderr_kind: //p' "$T/g.yaml")" "unreadable" "artifact 추출기: stderr 를 읽지 못하면 unreadable"
 
 # ── 러너 끝에서 끝: codex 스텁이 stderr 를 쓰고 7 로 끝난다 ─────────────────────
 mkdir -p "$T/bin" "$T/proot"
-printf '#!/bin/sh\ncat >/dev/null\necho "  ERROR: model overloaded (retry later)" >&2\necho SECOND_LINE_MUST_NOT_APPEAR >&2\nexit 7\n' > "$T/bin/codex"
+printf '#!/bin/sh\ncat >/dev/null\necho "  ERROR: model overloaded (retry later)" >&2\necho "%s" >&2\nexit 7\n' "$SECOND" > "$T/bin/codex"
 chmod +x "$T/bin/codex"
 # discover-spec.sh 는 gh 로 PR 을 찾을 수 있다 — 아무것도 하지 않는 스텁으로 바꾼 플러그인 사본에서 돈다.
 cp -RL "$QG/scripts" "$T/proot/" || exit 1
@@ -97,6 +139,7 @@ PATH="$T/bin:$PATH" CLAUDE_PLUGIN_ROOT="$T/proot" \
 assert_eq "$(meta_val "$T/r1.yaml" reason)" "exit_nonzero" "run_codex_reviewer.sh: reason exit_nonzero(양성 짝 — codex 까지 닿았다)"
 assert_eq "$(meta_val "$T/r1.yaml" exit_code)" "7" "run_codex_reviewer.sh: meta 에 codex 종료 코드"
 assert_eq "$(meta_val "$T/r1.yaml" stderr_kind)" "overloaded" "run_codex_reviewer.sh: meta 에 사유 분류"
+assert_file_absent "$T/r1.yaml" "$SECOND" "run_codex_reviewer.sh: meta 에 stderr 원문이 없다"
 printf '아티팩트 fixture\n' > "$T/artifact.md"
 PATH="$T/bin:$PATH" CLAUDE_PLUGIN_ROOT="$T/proot" \
   bash "$T/proot/scripts/run_artifact_codex_reviewer.sh" "$T/artifact.md" "$ROOT" "$T/r2.yaml" >/dev/null 2>"$T/r2.err"

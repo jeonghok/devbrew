@@ -32,6 +32,7 @@ case "$h" in
   muser) case "$*" in *'-l git '*) printf 'user git\nhostname github.com\nport 22\n' ;; *) printf 'user x\nhostname muser\nport 22\n' ;; esac ;;
   github.com) printf 'user git\nhostname ssh-proxy.corp\nport 22\n' ;;
   gh443) printf 'user git\nhostname ssh.github.com\nport 443\n' ;;
+  ghe.corp) printf 'user git\nhostname 10.0.0.5\nport 22\n' ;;
   noresolve) echo "ssh: Could not resolve" >&2; exit 255 ;;
   *) printf 'user git\nhostname %s\nport 22\n' "$h" ;;
 esac
@@ -42,6 +43,9 @@ mkdir -p "$T/nossh" || exit 1
 for c in git tr; do ln -s "$(command -v "$c")" "$T/nossh/$c" || exit 1; done
 ln -s "$T/bin/gh" "$T/nossh/gh" || exit 1
 export FAKE_GH_ARGS="$T/args" FAKE_SSH_ARGS="$T/sshargs"
+# gh 설정은 빈 폴더 — 사용자의 hosts.yml 과 무관하게(아는 호스트 경우는 아래에서 이 폴더에 쓴다).
+export GH_CONFIG_DIR="$T/ghcfg"
+mkdir -p "$GH_CONFIG_DIR" || exit 1
 : > "$FAKE_GH_ARGS"
 : > "$FAKE_SSH_ARGS"
 FAKEPATH="$T/bin:$PATH"
@@ -132,6 +136,21 @@ assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "3::" "'-' 로 시작하는 사용�
 mkrepo htok "https://x-access-token:abc@github.com/o/r.git" || { no "픽스처 https 자격"; finish; exit 1; }
 slug htok "$FAKEPATH"
 assert_eq "$RC:$OUT" "0:github.com/o/r" "https 꼴의 사용자 칸(토큰)은 검사하지 않는다"
+# gh 가 아는 호스트(hosts.yml 최상위 키)는 ssh 설정이 HostName 을 IP 로 돌려도 그대로 — gh 의 호스트는 그것이다.
+mkrepo ghe "git@ghe.corp:o/r.git" || { no "픽스처 ghe.corp"; finish; exit 1; }
+: > "$FAKE_SSH_ARGS"
+slug ghe "$FAKEPATH"
+assert_eq "$RC:$OUT" "0:10.0.0.5/o/r" "gh 가 모르는 SSH 호스트는 ssh 설정으로 푼다(양성 짝)"
+assert_contains "$ERR" "origin 의 SSH 호스트 ghe.corp 를 ssh 설정(ssh -G)으로 10.0.0.5 로 풀었다" "호스트를 바꾸면 stderr 에 알린다"
+printf 'github.com:\n    user: me\n"ghe.corp":\n    git_protocol: ssh\n' > "$GH_CONFIG_DIR/hosts.yml"
+: > "$FAKE_SSH_ARGS"
+slug ghe "$FAKEPATH"
+assert_eq "$RC:$OUT:$(cat "$FAKE_SSH_ARGS")" "0:ghe.corp/o/r:" "gh 가 아는 호스트(hosts.yml)는 ssh 설정으로 바꾸지 않는다(ssh 호출 0)"
+assert_eq "$ERR" "" "gh 가 아는 호스트면 바꿈 알림이 없다"
+mkrepo ghw "git@github-work:o/r.git" || { no "픽스처 github-work"; finish; exit 1; }
+slug ghw "$FAKEPATH"
+assert_eq "$RC:$OUT" "0:github.com/o/r" "hosts.yml 에 없는 별칭은 그대로 푼다"
+rm -f "$GH_CONFIG_DIR/hosts.yml"
 mkrepo s443 "git@gh443:o/r.git" || { no "픽스처 gh443"; finish; exit 1; }
 slug s443 "$FAKEPATH"
 assert_eq "$RC:$OUT" "0:github.com/o/r" "ssh.github.com(443 우회)은 gh 처럼 github.com 으로"

@@ -204,7 +204,7 @@ _SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=./:]{20,}")
 
 
 def stderr_kind(text: str) -> str:
-    """codex stderr 의 알려진 사유 분류 — 첫 4000자에서 처음 맞는 것, 맞는 것이 없으면 other, 비었으면 none."""
+    """codex 실패 글의 알려진 사유 분류 — 첫 4000자에서 처음 맞는 것, 맞는 것이 없으면 other, 비었으면 none."""
     head = (text or "")[:4000]
     if not head.strip():
         return "none"
@@ -230,11 +230,47 @@ def stderr_head(text: str) -> str:
     return ""
 
 
-def show_stderr_head(text: str) -> None:
-    """codex 가 실패했을 때 stderr 첫 줄을 화면(stderr)에만 보인다 — 기록 파일에는 남기지 않는다."""
+def show_stderr_head(text: str, label: str = "stderr 첫 줄") -> None:
+    """codex 가 실패했을 때 그 글의 첫 줄을 화면(stderr)에만 보인다 — 기록 파일에는 남기지 않는다."""
     head = stderr_head(text)
     if head:
-        print("[codex] stderr 첫 줄(기록하지 않음): %s" % head, file=sys.stderr)
+        print("[codex] %s(기록하지 않음): %s" % (label, head), file=sys.stderr)
+
+
+def failure_event_text(jsonl: str) -> str:
+    """codex --json 스트림의 마지막 실패 이벤트(`turn.failed` 의 error.message · `error` 의 message) — 없으면 빈 글."""
+    text = ""
+    for ln in (jsonl or "").splitlines():
+        ln = ln.strip()
+        if not ln.startswith("{"):
+            continue
+        try:
+            obj = json.loads(ln)
+        except ValueError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        msg = None
+        if obj.get("type") == "turn.failed":
+            err = obj.get("error")
+            msg = err.get("message") if isinstance(err, dict) else None
+        elif obj.get("type") == "error":
+            msg = obj.get("message")
+        if isinstance(msg, str) and msg.strip():
+            text = msg
+    return text
+
+
+def failure_kind(jsonl: str, stderr_text: str, stderr_unreadable: bool) -> str:
+    """0 아닌 종료의 사유 분류(meta 의 stderr_kind) — 원문 첫 줄은 화면에만 보인다.
+    codex --json 은 실패 사유를 stdout 의 실패 이벤트에 싣고 stderr 를 비워 둘 수 있다(사용 한도 등) —
+    실패 이벤트가 있으면 그것으로, 없으면 stderr 로 분류한다. stderr 를 읽지 못했으면 none 이 아니라 unreadable."""
+    event = failure_event_text(jsonl)
+    if event:
+        show_stderr_head(event, "실패 이벤트")
+        return stderr_kind(event)
+    show_stderr_head(stderr_text)
+    return "unreadable" if stderr_unreadable else stderr_kind(stderr_text)
 
 
 def main() -> int:
@@ -273,8 +309,7 @@ def main() -> int:
             meta["codex_failed"] = True
         # codex 가 0 아닌 종료로 끝났으면 왜 죽었는지 알려진 사유 분류만 meta 에 남긴다 — 원문 첫 줄은 화면에만.
         if args.meta_override_exit_code:
-            meta["stderr_kind"] = stderr_kind(stderr_text)
-            show_stderr_head(stderr_text)
+            meta["stderr_kind"] = failure_kind(stdin_text, stderr_text, _stderr_read_error is not None)
         # AC9(d): surface stderr file read errors for caller visibility.
         if _stderr_read_error is not None:
             meta["stderr_read_error"] = _stderr_read_error

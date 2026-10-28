@@ -511,6 +511,24 @@ case_grammar_covers_state_file_format() {
   assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 산출물 없음"
 }
 
+# 락 — 이 스크립트가 임시 폴더($T)에 쓰는 이름 전부를 문법이 받는다(끊긴 실행이 남긴 것도 자기 산출물이다).
+# 이름은 스크립트에서 뽑는다 — 새 임시 파일을 더하고 문법에 빠뜨리면 여기서 빨개진다.
+case_grammar_covers_temp_names() {
+  echo "[문법이 review-diff.sh 의 임시 파일 이름을 전부 받는다]"
+  local names; names=$(grep -oE '"\$T/[A-Za-z0-9._-]+"' "$PLUGIN_DIR/scripts/review-diff.sh" | sed 's/^"\$T\///; s/"$//' | sort -u)
+  local n; n=$(printf '%s\n' "$names" | grep -c .)
+  [ "$n" -ge 25 ] && ok "임시 파일 이름을 뽑았다($n 개)" || no "임시 파일 이름이 비었거나 짧다($n 개) — 뽑는 꼴을 확인한다"
+  mkfix
+  local S="$R/.claude/quality-gates/sess12345" name
+  mkdir -p "$S/.review-diff.abc123"
+  for name in $names; do printf 'left\0over\0' > "$S/.review-diff.abc123/$name"; done
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field self_state "$OUT")" "$n" "남은 임시 파일 전부가 self_state ($n)"
+  assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 임시 파일 없음"
+  assert_eq "$(field degraded "$OUT")" no "남은 임시 파일이 리뷰 안 됨을 만들지 않는다"
+}
+
 # 우회 막기 — 건너뛰기는 이 실행의 세션 폴더(--dir)에만 묶인다. 다른 세션 폴더의 산출물 이름은 리뷰한다.
 case_self_state_bound_to_run_dir() {
   echo "[qg 산출물 건너뛰기는 이 실행의 --dir 에만 — 다른 세션 폴더는 리뷰]"
@@ -1293,6 +1311,7 @@ case_literal_pathspecs_env
 case_self_state_not_reviewed
 case_self_state_grammar
 case_grammar_covers_state_file_format
+case_grammar_covers_temp_names
 case_self_state_bound_to_run_dir
 case_unregistered_worktree_folder_disclosed
 case_dir_outside_repo_skips_nothing

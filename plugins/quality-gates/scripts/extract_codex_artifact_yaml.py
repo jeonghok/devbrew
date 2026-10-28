@@ -80,11 +80,11 @@ def degrade(reason, exit_code=None, kind="", read_error=""):
     if kind:
         print(f"stderr_kind: {kind}")
     if read_error:
-        print(f"stderr_read_error: {json.dumps(read_error)}")
+        print(f"stderr_read_error: {read_error}")   # errno 숫자 또는 예외 이름 — 공유 추출기와 같은 꼴
     return 0
 
 
-from codex_findings_to_yaml import show_stderr_head, stderr_kind  # noqa: E402 — 같은 폴더의 공유 추출기(분류 · 가림 규칙 한 곳)
+from codex_findings_to_yaml import failure_kind  # noqa: E402 — 같은 폴더의 공유 추출기(분류 · 가림 규칙 한 곳)
 
 
 def read_stderr(path):
@@ -107,9 +107,9 @@ def main():
 
     if a.meta_override_exit_code != 0:
         text, read_error = read_stderr(a.stderr_file)
-        show_stderr_head(text)   # 원문 첫 줄은 화면에만 — 산출물에는 분류만
+        # 원문 첫 줄은 화면에만 — 산출물에는 분류만(실패 이벤트가 있으면 그것으로)
         return degrade(a.meta_override_reason or "exit_nonzero", a.meta_override_exit_code,
-                       stderr_kind(text), read_error)
+                       failure_kind(sys.stdin.read(), text, bool(read_error)), read_error)
 
     text = extract_text(sys.stdin.read())
     if not text:

@@ -9,6 +9,7 @@
 #   exit 4 — gh 가 없다(origin 보다 먼저 본다)
 #   exit 3 — origin 이 없거나 URL 에서 호스트 · owner · repo 를 뽑지 못했다 · SSH 꼴 호스트를 `ssh -G` 로 풀지 못했다
 # SSH 꼴(ssh:// · scp 꼴)의 호스트는 ~/.ssh/config 별칭일 수 있어 `ssh -G` 의 hostname 으로 바꾼다(*.github.com → github.com).
+# github.com 과 gh 가 이미 아는 호스트(gh hosts.yml)는 바꾸지 않는다. 바꾸면 stderr 에 알림 한 줄.
 # GH_REPO · GH_HOST 가 설정돼 있으면 stderr 에 알림 한 줄씩(그래도 결과는 origin 이다).
 #
 # 사용 (리포 안에서): gh-repo.sh
@@ -66,6 +67,19 @@ case "$host" in ''|-*|*[!a-z0-9._-]*) stop_slug ;; esac
 # `ssh -G` 의 hostname 으로 푼다. *.github.com(ssh.github.com 443 우회 등)은 gh 처럼 github.com.
 # github.com 자신은 풀지 않는다 — ssh 설정이 그 HostName 을 프록시 · IP 로 돌려도 gh 의 호스트는 github.com 이다.
 case "$host" in github.com|*.github.com) host=github.com; is_ssh=0 ;; esac
+# gh 가 이미 아는 호스트(gh 설정 hosts.yml 의 최상위 키 — GHE 등)도 풀지 않는다 — 같은 까닭이다.
+# gh 를 부르지 않고 파일만 읽는다(이 스크립트는 gh 를 부르기 전에 돈다).
+gh_knows_host() {  # gh_knows_host <호스트>
+  local cfg="${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME:-}/.config}/gh}/hosts.yml" k
+  [ -f "$cfg" ] || return 1
+  while IFS= read -r k || [ -n "$k" ]; do
+    case "$k" in ''|' '*|'	'*|'#'*|-*) continue ;; esac
+    k="${k%%:*}"; k="${k#\"}"; k="${k%\"}"; k="${k#\'}"; k="${k%\'}"
+    [ "$(printf '%s' "$k" | LC_ALL=C tr 'A-Z' 'a-z')" = "$1" ] && return 0
+  done < "$cfg"
+  return 1
+}
+if [ "$is_ssh" = 1 ] && gh_knows_host "$host"; then is_ssh=0; fi
 if [ "$is_ssh" = 1 ]; then
   if ! command -v ssh >/dev/null 2>&1; then
     echo "origin 이 SSH 꼴(${host})인데 ssh 가 없어 실제 호스트로 풀지 못했다 — origin 을 https 꼴로 바꾸거나 ssh 를 설치한다" >&2
@@ -88,6 +102,7 @@ EOF
       exit 3 ;;
   esac
   case "$resolved" in *.github.com) resolved=github.com ;; esac
+  [ "$resolved" = "$host" ] || echo "origin 의 SSH 호스트 ${host} 를 ssh 설정(ssh -G)으로 ${resolved} 로 풀었다" >&2
   host="$resolved"
 fi
 while :; do case "$path" in /*) path="${path#/}" ;; *) break ;; esac; done
