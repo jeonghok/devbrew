@@ -84,6 +84,152 @@ case_session_includes_untracked() {
   assert_file_grep "$D/review-i1.diff" '^\+\+\+ b/new\.py$' "걸러진 diff 에도 new.py"
 }
 
+bin_line() {   # bin_line <이스케이프한 이름> — 바이너리로 보여 리뷰하지 않은 경로의 줄
+  printf 'review-diff: 바뀐 경로 %s 는 바이너리로 보여(.gitattributes 의 -diff · binary 이거나 NUL 바이트) 리뷰 diff 에 내용이 없어 리뷰하지 않았다' "$1"
+}
+
+rd_mode() {   # rd_mode <mode> — 모드마다 인자를 채워 rd 를 부른다(range 는 C0..HEAD, paths 는 src · lib · 최상위 새 파일)
+  case "$1" in
+    range)
+      printf 'start: %s\nend: %s\n' "$C0" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+      rd --mode range --scope-file "$D/range-scope.txt" ;;
+    paths) rd --mode paths --globs src lib 'new*' ;;
+    *) rd --mode "$1" ;;
+  esac
+}
+
+# 「Binary files … differ」 한 줄로만 리뷰 diff 에 든 파일은 리뷰한 것으로 세지 않는다 — 이름과 함께
+# 리뷰하지 않았다고 알리고 degraded: yes. 원본 바이트는 리뷰 diff 에 넣지 않는다(--text 없음).
+case_binary_attr_not_reviewed() {
+  echo "[모든 모드 — -diff 속성으로 숨긴 셸 파일은 리뷰한 것으로 세지 않는다]"
+  local mode
+  for mode in session branch paths range; do
+    mkfix
+    printf '*.sh -diff\n' > "$R/.gitattributes"
+    printf 'echo HIDDEN_ATTR\n' > "$R/src/run.sh"
+    printf 'echo HIDDEN_SPACE\n' > "$R/src/sp ace.sh"
+    g "$R" add -A; g "$R" commit -q -m hide
+    [ "$mode" = session ] && printf 'echo HIDDEN_UNTRACKED\n' > "$R/new.sh"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" yes "$mode: degraded: yes"
+    assert_line "$ROOT/err" "$(bin_line src/run.sh)" "$mode: src/run.sh 를 리뷰하지 않았다고 이름과 함께 알린다"
+    assert_line "$ROOT/err" "$(bin_line 'src/sp\ ace.sh')" "$mode: 공백 든 이름도 이스케이프해 알린다"
+    if [ "$mode" = session ]; then
+      assert_line "$ROOT/err" "$(bin_line new.sh)" "$mode: untracked new.sh 도 알린다"
+      assert_eq "$(grep -c '바이너리로 보여' "$ROOT/err")" 3 "$mode: 알리는 줄은 셋"
+    else
+      assert_eq "$(grep -c '바이너리로 보여' "$ROOT/err")" 2 "$mode: 알리는 줄은 둘"
+    fi
+    assert_file_absent "$ROOT/err" '리뷰 diff 에 들지 못해' "$mode: 이름 대조의 다른 줄로 두 번 알리지 않는다"
+    assert_file_absent "$D/review-i1.diff" 'HIDDEN_' "$mode: 숨긴 글은 diff 에 없다(그래서 리뷰 안 됨으로 알린다)"
+  done
+}
+
+case_binary_nul_not_reviewed() {
+  echo "[session · branch — NUL 바이트 파일은 리뷰한 것으로 세지 않는다]"
+  local mode
+  for mode in session branch; do
+    mkfix
+    printf 'z = 1\000\nHIDDEN_NUL = 1\n' > "$R/lib/nul.py"
+    g "$R" add -A; g "$R" commit -q -m nul
+    [ "$mode" = session ] && printf 'w = 1\000\nHIDDEN_UNTRACKED_NUL = 1\n' > "$R/new_nul.py"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" yes "$mode: degraded: yes"
+    assert_line "$ROOT/err" "$(bin_line lib/nul.py)" "$mode: lib/nul.py 를 이름과 함께 알린다"
+    [ "$mode" = session ] \
+      && assert_line "$ROOT/err" "$(bin_line new_nul.py)" "$mode: untracked new_nul.py 도 알린다"
+  done
+}
+
+case_binary_png_bytes_not_in_diff() {
+  echo "[session — 진짜 PNG 바이트는 리뷰 diff 에 들어가지 않는다]"
+  mkfix
+  # PNG 머리 + IHDR + UTF-8 이 아닌 바이트
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377\376\375\200\201' > "$R/logo.png"
+  g "$R" add -A; g "$R" commit -q -m png
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377\376\375\200\202' > "$R/new.png"
+  echo 'x = 2' > "$R/src/a.py"
+  rd --mode session
+  assert_eq "$RC" 0 "rc 0"
+  local f
+  for f in "$D/review-i1.diff" "$D/review-i1.full.diff"; do
+    if python3 -I -c 'import sys; d = open(sys.argv[1], "rb").read(); d.decode("utf-8"); sys.exit(1 if (b"\0" in d or b"IHDR" in d) else 0)' "$f" 2>/dev/null; then
+      ok "$(basename "$f") 에 PNG 바이트가 없다(UTF-8 로 읽힌다)"
+    else
+      no "$(basename "$f") 에 PNG 바이트가 없다(UTF-8 로 읽힌다)"
+    fi
+  done
+  assert_file_grep "$D/review-i1.diff" '^\+x = 2$' "텍스트 파일 글은 그대로 있다"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_line "$ROOT/err" "$(bin_line logo.png)" "logo.png 를 이름과 함께 알린다"
+  assert_line "$ROOT/err" "$(bin_line new.png)" "new.png 를 이름과 함께 알린다"
+}
+
+case_binary_deleted_flagged() {
+  echo "[range — 바이너리로 보인 파일을 지우면 지운 줄도 가려진다 — 리뷰 안 됨으로 알린다]"
+  mkfix
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377' > "$R/logo.png"
+  g "$R" add -A; g "$R" commit -q -m png
+  local start; start=$(git -C "$R" rev-parse HEAD)
+  g "$R" rm -q logo.png
+  echo 'x = 2' > "$R/src/a.py"
+  g "$R" add -A; g "$R" commit -q -m rm-png
+  printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+  assert_file_grep "$ROOT/err" '바뀐 경로 logo.png 는 바이너리로 보여' "지운 logo.png 를 리뷰 안 됨으로 알린다"
+  assert_file_grep "$D/review-i1.diff" '^deleted file mode' "지운 것은 diff 에 보인다"
+  # 양성 짝 — 텍스트 파일을 지우면 지운 줄이 diff 에 보여 알리지 않는다
+  mkfix
+  printf 'gone = 1\n' > "$R/src/old.py"
+  g "$R" add -A; g "$R" commit -q -m old
+  start=$(git -C "$R" rev-parse HEAD)
+  g "$R" rm -q src/old.py
+  g "$R" commit -q -m rm-old
+  printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$(field degraded "$OUT")" no "지운 텍스트 파일: degraded: no"
+  assert_file_absent "$ROOT/err" '바이너리로 보여' "지운 텍스트 파일은 알리지 않는다"
+  assert_file_grep "$D/review-i1.diff" '^-gone = 1' "지운 텍스트 줄은 diff 에 보인다"
+}
+
+case_binary_mode_only_not_degraded() {
+  echo "[range — 바이너리 파일의 모드만 바뀌면 diff 에 전부 보인다 — 리뷰 안 됨으로 알리지 않는다]"
+  local start
+  mkfix
+  printf '\211PNG\r\n\032\n\000\000\000\rIHDR\377' > "$R/logo.png"
+  g "$R" add -A; g "$R" commit -q -m png
+  start=$(git -C "$R" rev-parse HEAD)
+  chmod +x "$R/logo.png"
+  echo 'x = 3' > "$R/src/a.py"
+  g "$R" add -A; g "$R" commit -q -m mode
+  printf 'start: %s\nend: %s\n' "$start" "$(git -C "$R" rev-parse HEAD)" > "$D/range-scope.txt"
+  rd --mode range --scope-file "$D/range-scope.txt"
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_grep "$D/review-i1.diff" '^new mode 100755' "모드 바뀜이 diff 에 보인다(전제)"
+  assert_eq "$(field degraded "$OUT")" no "degraded: no"
+  assert_file_absent "$ROOT/err" '바이너리로 보여' "모드만 바뀐 logo.png 를 알리지 않는다"
+}
+
+case_text_only_not_degraded() {
+  echo "[session · branch — 텍스트 파일만 바뀌면 degraded 가 아니다]"
+  local mode
+  for mode in session branch; do
+    mkfix
+    printf 'echo VISIBLE\n' > "$R/src/run.sh"
+    g "$R" add -A; g "$R" commit -q -m text
+    [ "$mode" = session ] && printf 'echo VISIBLE_UNTRACKED\n' > "$R/new.sh"
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    assert_eq "$(field degraded "$OUT")" no "$mode: degraded: no"
+    assert_file_absent "$ROOT/err" '리뷰하지 않았다' "$mode: 리뷰하지 않았다는 줄이 없다"
+    assert_file_grep "$D/review-i1.diff" '^\+echo VISIBLE$' "$mode: 셸 파일 글이 diff 에 있다"
+  done
+}
+
 case_session_doc_excluded() {
   echo "[session — 문서 경로 제외]"
   mkfix
@@ -363,6 +509,24 @@ case_grammar_covers_state_file_format() {
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field self_state "$OUT")" "$expect" "적힌 산출물 전부가 self_state ($expect)"
   assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 산출물 없음"
+}
+
+# 락 — 이 스크립트가 임시 폴더($T)에 쓰는 이름 전부를 문법이 받는다(끊긴 실행이 남긴 것도 자기 산출물이다).
+# 이름은 스크립트에서 뽑는다 — 새 임시 파일을 더하고 문법에 빠뜨리면 여기서 빨개진다.
+case_grammar_covers_temp_names() {
+  echo "[문법이 review-diff.sh 의 임시 파일 이름을 전부 받는다]"
+  local names; names=$(grep -oE '"\$T/[A-Za-z0-9._-]+"' "$PLUGIN_DIR/scripts/review-diff.sh" | sed 's/^"\$T\///; s/"$//' | sort -u)
+  local n; n=$(printf '%s\n' "$names" | grep -c .)
+  [ "$n" -ge 25 ] && ok "임시 파일 이름을 뽑았다($n 개)" || no "임시 파일 이름이 비었거나 짧다($n 개) — 뽑는 꼴을 확인한다"
+  mkfix
+  local S="$R/.claude/quality-gates/sess12345" name
+  mkdir -p "$S/.review-diff.abc123"
+  for name in $names; do printf 'left\0over\0' > "$S/.review-diff.abc123/$name"; done
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_eq "$(field self_state "$OUT")" "$n" "남은 임시 파일 전부가 self_state ($n)"
+  assert_eq "$(field files "$OUT")" 0 "리뷰 대상으로 새 나간 임시 파일 없음"
+  assert_eq "$(field degraded "$OUT")" no "남은 임시 파일이 리뷰 안 됨을 만들지 않는다"
 }
 
 # 우회 막기 — 건너뛰기는 이 실행의 세션 폴더(--dir)에만 묶인다. 다른 세션 폴더의 산출물 이름은 리뷰한다.
@@ -1126,6 +1290,12 @@ case_usage() {
 }
 
 case_session_includes_untracked
+case_binary_attr_not_reviewed
+case_binary_nul_not_reviewed
+case_binary_png_bytes_not_in_diff
+case_binary_deleted_flagged
+case_binary_mode_only_not_degraded
+case_text_only_not_degraded
 case_session_doc_excluded
 case_range_uses_frozen_pair
 case_topic_uses_boundary_tree
@@ -1141,6 +1311,7 @@ case_literal_pathspecs_env
 case_self_state_not_reviewed
 case_self_state_grammar
 case_grammar_covers_state_file_format
+case_grammar_covers_temp_names
 case_self_state_bound_to_run_dir
 case_unregistered_worktree_folder_disclosed
 case_dir_outside_repo_skips_nothing

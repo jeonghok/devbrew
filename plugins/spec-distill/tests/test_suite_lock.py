@@ -157,6 +157,79 @@ class Lock(unittest.TestCase):
         self.assertLessEqual(len(calls), 2 * (sl.RESTORE_MAX + 1), "되돌리기가 상한을 넘어 돌았다")
         self.assertTrue(self.d.exists())
 
+    def _bounded(self, fn, seconds=10):
+        import signal
+
+        def boom(*_a):
+            raise AssertionError("take() 이 %d초 안에 끝나지 않았다(쉬지 않고 같은 자리를 돈다)" % seconds)
+        old = signal.signal(signal.SIGALRM, boom)
+        signal.alarm(seconds)
+        try:
+            return fn()
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+
+    def _unmovable_stale(self):
+        """주인 프로세스가 끝난 잠금 — 부모 폴더에 쓰기 권한이 없어 옮기지(rename) 못한다."""
+        self.own("%d gone t\n" % dead_pid())
+        os.chmod(str(self.d.parent), 0o555)
+        self.addCleanup(os.chmod, str(self.d.parent), 0o755)
+
+    def test_unmovable_stale_lock_stops_with_reason(self):
+        self._unmovable_stale()
+        with self.assertRaises(sl.Busy) as cm:
+            self._bounded(lambda: sl.take(self.d, "me", wait=0, say=lambda m: None))
+        self.assertIn("주인 없는 잠금을 옮기지 못했다", str(cm.exception))
+        self.assertIn("PermissionError", str(cm.exception))
+        self.assertTrue(cm.exception.stuck, "기다려도 풀리지 않는 갈래로 표시한다")
+        self.assertTrue((self.d / "owner").is_file(), "옮기지 못한 잠금은 그대로다")
+
+    def _rival_moves_first(self):
+        """주인 없는 잠금을 옮기려는 순간 다른 쪽이 먼저 옮기고 새로 잡았다 — 이쪽 rename 은 FileNotFoundError."""
+        self.own("%d gone t\n" % dead_pid())
+        real = sl.os.rename
+
+        def rival(src, dst):
+            sl.os.rename = real
+            real(src, src + ".rival-stale")
+            Path(src).mkdir()
+            (Path(src) / "owner").write_text("%d rival t\n" % os.getppid(), encoding="utf-8")
+            raise FileNotFoundError(src)
+        sl.os.rename = rival
+        self.addCleanup(setattr, sl.os, "rename", real)
+
+    def test_rival_moving_stale_lock_first_is_plain_busy(self):
+        self._rival_moves_first()
+        with self.assertRaises(sl.Busy) as cm:
+            self._bounded(lambda: sl.take(self.d, "me", wait=0, say=lambda m: None))
+        self.assertNotIn("옮기지 못했다", str(cm.exception))
+        self.assertIn("rival", str(cm.exception), "새 주인을 보인다")
+        self.assertFalse(cm.exception.stuck)
+
+    def test_rival_moving_stale_lock_first_waits_without_rename_notice(self):
+        self._rival_moves_first()
+        said = []
+        with self.assertRaises(sl.Busy):
+            self._bounded(lambda: sl.take(self.d, "me", wait=0.6, say=said.append))
+        self.assertFalse(any("옮기지 못했다" in m for m in said), said)
+        self.assertTrue(any("rival" in m for m in said), "바쁜 잠금으로 줄을 선다: %r" % said)
+
+    def test_unmovable_stale_lock_honours_wait_and_sleeps(self):
+        self._unmovable_stale()
+        poll, sleeps, real_sleep = sl.POLL, [], sl.time.sleep
+        sl.POLL = 0.2
+        self.addCleanup(setattr, sl, "POLL", poll)
+        sl.time.sleep = lambda x: (sleeps.append(x), real_sleep(x))
+        self.addCleanup(setattr, sl.time, "sleep", real_sleep)
+        said, start = [], time.time()
+        with self.assertRaises(sl.Busy):
+            self._bounded(lambda: sl.take(self.d, "me", wait=1, say=said.append))
+        self.assertGreaterEqual(time.time() - start, 0.9, "기다림 시간을 지킨다")
+        self.assertTrue(sleeps and all(x > 0 for x in sleeps), "다시 보기 전에 쉰다")
+        self.assertLessEqual(len(sleeps), 20, "쉬는 간격으로 돈다 — 바쁘게 돌지 않는다")
+        self.assertEqual(sum("옮기지 못했다" in m for m in said), 1, "기다리는 이유를 한 번 알린다: %r" % said)
+
     def test_describe_empty(self):
         self.assertEqual(sl.describe(self.d), "스위트 잠금: 비어 있음")
 
@@ -200,6 +273,17 @@ class Cli(unittest.TestCase):
             os.chmod(str(ro), 0o755)
         self.assertEqual(rc, sl.NO_LOCK_RC, out)
         self.assertIn("잠금 폴더에 쓰지 못했다", out)
+
+    def test_run_unmovable_stale_lock_is_no_lock_rc_not_busy(self):
+        self.d.mkdir()
+        (self.d / "owner").write_text("%d gone t\n" % dead_pid(), encoding="utf-8")
+        os.chmod(str(self.t), 0o555)
+        try:
+            rc, out = self.cli("run", "--lock", str(self.d), "--owner", "a", "--", sys.executable, "-c", "pass")
+        finally:
+            os.chmod(str(self.t), 0o755)
+        self.assertEqual(rc, sl.NO_LOCK_RC, out)
+        self.assertIn("옮기지 못했다", out)
 
     def test_run_without_command_is_usage(self):
         rc, _out = self.cli("run", "--lock", str(self.d), "--owner", "a")

@@ -53,7 +53,12 @@ case_step45_gate() {
   assert_contains "$S45" '반복마다, 판정이 clean 이어도, 범위 모드에서도' "게이트: 반복마다 · clean 이어도 · 범위 모드에서도"
   assert_contains "$S45" '`lowered: 0` 이면 게이트 없이 라우팅으로 간다' "게이트: 0 이면 묻지 않는다"
   assert_contains "$S45" 'header: "낮춘 지적",' "게이트: header"
-  assert_contains "$S45" 'multiSelect: true }] })' "게이트: 여러 개를 고른다"
+  # n ≥ 4 의 두 선택지(전부 되올린다 · 그대로 둔다)는 서로 어긋나 함께 고를 수 없어야 한다 — 하나만 고른다.
+  assert_not_contains "$S45" 'multiSelect: true }] })' "게이트: 선택 방식이 n 과 무관하게 여러 선택으로 고정돼 있지 않다"
+  assert_contains "$S45" 'multiSelect: <n ≤ 3: true · n ≥ 4: false> }] })' "게이트: 3개 이하는 여러 선택 · 4개 이상은 하나만 고른다"
+  assert_contains "$S45" 'n ≥ 4(하나만 고른다): 「전부 되올린다」 → `all` 로' "게이트: 4개 이상의 「전부 되올린다」 갈래"
+  assert_contains "$S45" 'n ≥ 4 에서 「그대로 둔다」 → 다시 합성하지 않고' "게이트: 4개 이상의 「그대로 둔다」 갈래"
+  assert_not_contains "$S45" '「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) → 고른 `L<k>` 들(「전부 되올린다」면' "게이트: 전부 되올린다와 그대로 둔다를 함께 고른 경우를 다루는 옛 문장이 없다"
   assert_contains "$S45" 'n ≤ 3: 지적마다 {label: "<파일 이름>:<줄> (L<k>)"' "게이트: 3개 이하면 지적마다 선택지"
   assert_contains "$S45" 'n ≥ 4: {label: "전부 되올린다"' "게이트: 4개 이상이면 전부 되올린다"
   assert_contains "$S45" '{label: "그대로 둔다", description: "낮춘 대로 둔다."}' "게이트: 그대로 둔다"

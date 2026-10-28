@@ -25,6 +25,8 @@ case "$1 ${2:-}" in
   "auth status")
     # GH_OTHER_ACCOUNT_BROKEN=1 — 활성 계정 밖(다른 호스트·두 번째 계정)이 깨졌다. `--active` 없이 물으면 gh 는 1 을 낸다.
     if [ "${GH_OTHER_ACCOUNT_BROKEN:-0}" = 1 ] && [ "${3:-}" != "--active" ]; then exit 1; fi
+    # GH_OTHER_HOST_BROKEN=1 — 다른 호스트(GHE 등)의 활성 계정이 깨졌다. `--hostname` 없이 물으면 gh 는 1 을 낸다.
+    if [ "${GH_OTHER_HOST_BROKEN:-0}" = 1 ] && [ "${4:-}" != "--hostname" ]; then echo 'X Failed to log in to ghe.other.example' >&2; exit 1; fi
     [ "${GH_AUTH_RC:-0}" = 0 ] || echo 'X Failed to log in to github.com account octo (stub-auth-detail)' >&2
     exit "${GH_AUTH_RC:-0}" ;;
   "pr view")
@@ -47,6 +49,13 @@ esac
 exit 0
 EOF
 chmod +x "$T/bin/gh"
+# ssh 스텁: SSH 꼴 origin 의 호스트를 그대로 푼다(gh-repo.sh 가 `ssh -G` 로 별칭을 푼다 — 사용자의 ~/.ssh/config 와 무관하게).
+cat > "$T/bin/ssh" <<'EOF'
+#!/bin/sh
+for a in "$@"; do h="$a"; done
+printf 'hostname %s\n' "$h"
+EOF
+chmod +x "$T/bin/ssh"
 export GH_LOG="$T/gh.log" GH_BODY_COPY="$T/body.sent"
 
 # gh 가 없는 PATH — git · python3 만 링크로 둔다.
@@ -182,8 +191,9 @@ case_AC13_gh_unavailable() {
     p6_single_result_line gh-absent
   fi
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
-  assert_eq "$LAST" "skipped: gh-unavailable" "AC13 미인증: 마지막 줄"
-  assert_eq "$GHCALLS" "auth status --active" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
+  assert_eq "$RC:$LAST" "1:failed: gh-unauthenticated" "미인증: 건너뜀이 아니라 gh 없음과 다른 이름의 실패(rc 1)"
+  p6_single_result_line gh-unauthenticated
+  assert_eq "$GHCALLS" "auth status --active --hostname github.com" "P5: 미인증이면 auth 확인 뒤 gh 호출이 없다"
   grep -qF 'stub-auth-detail' "$T/err" \
     && ok "R3: 미인증이면 gh 자신의 stderr 꼬리를 보인다" || no "R3: gh 의 인증 오류가 stderr 에 없다 — $(head -n 3 "$T/err")"
   grep -qF 'publish-comment: gh 미인증' "$T/err" \
@@ -192,6 +202,7 @@ case_AC13_gh_unavailable() {
     && ok "미인증: stderr 에 origin 호스트의 로그인 안내" || no "미인증: 로그인 안내가 없다 — $(head -n 3 "$T/err")"
   g remote set-url origin git@ghe.example.com:o/r.git
   GH_AUTH_RC=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$GHCALLS" "auth status --active --hostname ghe.example.com" "미인증(GHE): 인증 확인이 origin 호스트를 묻는다"
   grep -qF 'gh auth login --hostname ghe.example.com' "$T/err" \
     && ok "미인증(GHE): 안내의 호스트는 origin 호스트" || no "미인증(GHE): 호스트가 다르다 — $(head -n 3 "$T/err")"
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
@@ -210,11 +221,14 @@ case_AC13_gh_unavailable() {
   g checkout -q --detach
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: no-pr" "detached HEAD: skipped: no-pr"
-  assert_eq "$GHCALLS" "auth status --active" "detached HEAD: 인증 확인 뒤 pr view 를 부르지 않는다"
+  assert_eq "$GHCALLS" "auth status --active --hostname github.com" "detached HEAD: 인증 확인 뒤 pr view 를 부르지 않는다"
   g checkout -q feat
   # 활성 계정은 멀쩡하고 다른 계정만 깨졌으면 게시한다 — 인증 확인은 활성 계정만 본다(M3).
   GH_OTHER_ACCOUNT_BROKEN=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "M3: 다른 계정만 깨졌으면 게시한다(auth status --active)"
+  # 다른 호스트의 계정만 깨졌으면 게시한다 — 인증 확인은 origin 호스트만 본다(gh-unauthenticated 가 실패라서).
+  GH_OTHER_HOST_BROKEN=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "다른 호스트의 계정만 깨졌으면 게시한다(auth status --hostname <origin 호스트>)"
   GH_PR=error run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: gh-unavailable" "AC13 gh pr view 오류(no-pr 아님): 마지막 줄"
   # gh 가 origin 레포를 다루지 못하면(GitHub 아님 · 접근 권한 없음) 실패다(AC20).
@@ -292,7 +306,7 @@ case_P5_auth_before_side_effects() {
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   local first_line
   first_line="$(printf '%s\n' "$GHCALLS" | head -n 1)"
-  assert_eq "$first_line" "auth status --active" "P5: 첫 gh 호출은 auth status --active"
+  assert_eq "$first_line" "auth status --active --hostname github.com" "P5: 첫 gh 호출은 auth status --active"
 }
 
 # ── P4 · P7 — 본문·커밋 메시지·파일 이름은 데이터다 ─────────────────────────────

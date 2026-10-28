@@ -72,20 +72,44 @@ def extract_text(stream):
     return text
 
 
-def degrade(reason):
+def degrade(reason, exit_code=None, kind="", read_error=""):
     print("codex_failed: true")
     print(f"reason: {reason}")
+    if exit_code is not None:
+        print(f"exit_code: {exit_code}")
+    if kind:
+        print(f"stderr_kind: {kind}")
+    if read_error:
+        print(f"stderr_read_error: {read_error}")   # errno 숫자 또는 예외 이름 — 공유 추출기와 같은 꼴
     return 0
+
+
+from codex_findings_to_yaml import failure_kind  # noqa: E402 — 같은 폴더의 공유 추출기(분류 · 가림 규칙 한 곳)
+
+
+def read_stderr(path):
+    """(stderr 글, 읽기 오류) — 읽지 못하면 ("", errno 또는 예외 이름). 공유 추출기와 같은 공시."""
+    if not path:
+        return "", ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read(), ""
+    except OSError as e:
+        return "", (str(e.errno) if e.errno else type(e).__name__)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--meta-override-exit-code", type=int, default=0)
     ap.add_argument("--meta-override-reason", default="")
+    ap.add_argument("--stderr-file", default="")
     a = ap.parse_args()
 
     if a.meta_override_exit_code != 0:
-        return degrade(a.meta_override_reason or "exit_nonzero")
+        text, read_error = read_stderr(a.stderr_file)
+        # 원문 첫 줄은 화면에만 — 산출물에는 분류만(실패 이벤트가 있으면 그것으로)
+        return degrade(a.meta_override_reason or "exit_nonzero", a.meta_override_exit_code,
+                       failure_kind(sys.stdin.read(), text, bool(read_error)), read_error)
 
     text = extract_text(sys.stdin.read())
     if not text:

@@ -242,9 +242,17 @@ TERMINAL_CONSUMERS = {
 }
 
 
+# 이름으로 부르는 처분 호출을 받는 함수 이름 — 첫 인자(처분 이름)로 원장 메서드를 부르는 전달자뿐이다
+# (`docreview_route.py` 의 `ev`: `getattr(L, name)(*args)`). 목록 밖 이름은 처분이 아니다 —
+# `print("hold", x)` 가 버리는 분기를 회계된 것으로 통과시키지 않게 한다. 새 전달자는 여기에 더한다
+# (더하지 않으면 그 분기가 미배선으로 드러난다 — fail-closed).
+DISPOSITION_FORWARDERS = frozenset(("ev",))
+
+
 def _is_name_disposition_call(n):
-    """`ev("absorbed", …)` 꼴 — 함수 이름이 `Name` 이고 첫 인자가 처분 이름 문자열 상수인 호출."""
-    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and bool(n.args)
+    """`ev("absorbed", …)` 꼴 — 함수 이름이 원장 전달자(`DISPOSITION_FORWARDERS`)이고 첫 인자가 처분 이름 문자열 상수인 호출."""
+    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id in DISPOSITION_FORWARDERS and bool(n.args)
             and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)
             and n.args[0].value in DISPOSITION)
 

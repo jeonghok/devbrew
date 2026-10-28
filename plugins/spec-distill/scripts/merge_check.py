@@ -8,10 +8,13 @@
 
 명령줄:
   merge_check.py run --roadmap <로드맵 레포 상대경로> --branch <브랜치|origin/브랜치> [--keep-merged] [--no-fetch] [--wait <초>] [--root <레포>]
+                    [--test-command <명령>] [--test-failure-pattern <정규식>]
 
 무엇을 돌리나: 해결자(`repo_defaults.resolve`)가 낸 `test_command` 가 있으면 그것 — 실패 이름은 `test_failure_pattern`
-(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 · 이 로드맵 기계 상태의
-`## 레포 설정`(지휘자가 물어 임시로 둔 값) 순으로 찾고 출처를 함께 낸다 — 설정이 깨졌으면 검사 불가다. 값이 없으면 이
+(정규식, 묶음이 있으면 첫 묶음) 또는 알려진 모양. 해결자는 기본 브랜치의 로드맵 · 레포 설정 파일 순으로 찾고 출처를 함께
+낸다 — 설정이 깨졌으면 검사 불가다. 기계 상태 파일은 읽지 않는다(검사받는 하위 agent 도 쓸 수 있다). 종료 코드 6 에
+지휘자가 사용자에게 물어 얻은 답은 `--test-command` · `--test-failure-pattern` 으로 그 호출에만 넘긴다 — 출처는 「이 호출의
+인자(사용자 답)」 이고 설정 값보다 앞서며, 레포 설정 파일에 올리자고 알린다. 값이 없으면 이
 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 
@@ -56,6 +59,7 @@ RUNNER_SHAPES = {
     "shell": (("✗ · FAIL: 표시", re.compile(r"^\s*(?:✗|FAIL:) (.+)$", re.M)), KNOWN_SHAPES[2]),
 }
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
+ARG_LABEL = "이 호출의 인자(사용자 답)"
 
 
 class Stop(Exception):
@@ -74,7 +78,7 @@ def stamp() -> str:
 
 
 def pattern_error(pattern: str):
-    """`test_failure_pattern` 이 컴파일되지 않으면 그 `re.error` 글, 되면 None. `run` 과 `ledger add`(레포 설정)가 함께 부른다."""
+    """`test_failure_pattern` 이 컴파일되지 않으면 그 `re.error` 글, 되면 None. `run` 이 부른다."""
     try:
         re.compile(pattern, re.M)
     except re.error as exc:
@@ -85,9 +89,10 @@ def pattern_error(pattern: str):
 def names_in(text: str, pattern=None, shapes=None):
     """(실패 이름 집합, 쓴 모양). 모양이 하나도 안 맞으면 (빈 집합, None) — 「이름 대조 불가」 의 근거다.
 
-    pattern 이 있으면 그것만, shapes(러너별 모양)를 주면 그 모양들이 뽑은 이름의 합집합, 둘 다 없으면 알려진 모양
-    가운데 처음 맞는 것."""
-    if not pattern and shapes is not None:
+    pattern 이 있으면 그것만, 없으면 모양들(shapes — 러너별 모양, 주지 않으면 알려진 모양 전부)이 뽑은 이름의 합집합 —
+    한 출력에 꼴이 섞여도(이미 있던 pytest 실패 옆의 새 ✗ 실패) 첫 꼴만 세지 않는다."""
+    if not pattern:
+        shapes = KNOWN_SHAPES if shapes is None else shapes
         found, labels = set(), []
         for label, rx in shapes:
             got = set((m.group(1) if rx.groups else m.group(0)).strip() for m in rx.finditer(text))
@@ -95,14 +100,23 @@ def names_in(text: str, pattern=None, shapes=None):
                 found |= got
                 labels.append(label)
         return found, (" · ".join(labels) if labels else None)
-    shapes = [("test_failure_pattern", re.compile(pattern, re.M))] if pattern else list(KNOWN_SHAPES)
-    for label, rx in shapes:
-        found = set()
-        for m in rx.finditer(text):
-            found.add((m.group(1) if rx.groups else m.group(0)).strip())
-        if found:
-            return found, label
-    return set(), None
+    rx = re.compile(pattern, re.M)
+    found = set((m.group(1) if rx.groups else m.group(0)).strip() for m in rx.finditer(text))
+    return found, ("test_failure_pattern" if found else None)
+
+
+def neutral(text: str, tree: Path, tmp: Path) -> str:
+    """사본 · 임시 폴더 경로를 자리표시로 — 두 사본에서 같은 실패가 경로 글자 때문에 새 실패 · 고쳐짐으로 갈리지 않게 한다."""
+    for path, mark in ((tmp, "<tmp>"), (tree, "<tree>")):
+        for p in sorted({str(path), os.path.realpath(str(path))}, key=len, reverse=True):
+            text = text.replace(p, mark)
+    return text
+
+
+def side_names(text: str, tree: Path, tmp: Path, pattern=None, shapes=None):
+    """(이름 집합, 쓴 모양) — 이름은 원래 출력에서 뽑고(정규식이 경로 글자를 기대할 수 있다) 뽑은 이름 안의 경로만 자리표시로 바꾼다."""
+    names, shape = names_in(text, pattern, shapes)
+    return {neutral(n, tree, tmp) for n in names}, shape
 
 
 # ── 잠금 ─────────────────────────────────────────────────────────────────────
@@ -112,6 +126,8 @@ def take_lock(d: Path, branch: str, wait: float = 0) -> None:
     try:
         suite_lock.take(d, "merge_check %s" % branch, wait)
     except suite_lock.Busy as exc:
+        if exc.stuck:   # 기다려도 풀리지 않는다 — 「다른 스위트가 도는 중」 이 아니다
+            raise Stop(3, "스위트 잠금을 잡지 못했다(%s) — 잠금 %s" % (exc, d))
         raise Stop(5, "다른 스위트가 도는 중이다(%s) — 끝난 뒤 다시 돈다(잠금 %s)" % (exc, d))
 
 
@@ -163,6 +179,21 @@ def drop_copy(root: Path, d: Path, work: Path) -> None:
         print("[spec-distill] 일회용 사본을 git 으로 지우지 못해 폴더만 지웠다 — 남은 기록은 사용자가 정리한다(%s)" % d)
 
 
+def drop_leftovers(work: Path, keep: Path) -> None:
+    """남긴 사본 밖의 실행 폴더 항목(테스트 임시 폴더 · 행 파일 · 배정)을 지운다 — 사본은 `ledger cleanup` 이 지운다."""
+    for child in list(work.iterdir()):
+        if child == keep:
+            continue
+        try:
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(str(child))
+            else:
+                child.unlink()
+        except OSError as exc:
+            print("[spec-distill] 스위트 대조의 임시 항목을 지우지 못했다(%s: %s) — 남은 것은 사용자가 정리한다"
+                  % (type(exc).__name__, child))
+
+
 # ── 테스트 명령 ──────────────────────────────────────────────────────────────
 
 def run_command(cmd: str, tree: Path, tmp: Path):
@@ -182,8 +213,8 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if 127 in (b_rc, m_rc):
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    b_names, _s = names_in(b_out, pattern)
-    m_names, shape = names_in(m_out, pattern)
+    b_names, _s = side_names(b_out, base, work / "tmp-base", pattern)
+    m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
         res["new"] = sorted(m_names - b_names)
@@ -285,7 +316,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             raise Stop(3, "테스트 파일 수를 세지 못했다 — compute-test-scope-candidates 가 숫자를 내지 않았다")
         if count:
             raise Stop(6, "테스트로 보이는 파일 %d개를 돌릴 러너를 모른다 — 테스트 명령(`test_command`)을 정해 주면 "
-                          "레포 설정 파일(%s)에 올린다" % (count, repo_defaults.SETTINGS_FILE))
+                          "이 대조를 --test-command 로 다시 돌리고, 그 값은 레포 설정 파일(%s)에 올린다"
+                          % (count, repo_defaults.SETTINGS_FILE))
         raise Stop(7, "스위트 대조 없음 — 이 레포에서 테스트를 찾지 못했다. 통합 리뷰만 한다")
     res = {"new": [], "fixed": [], "both": [], "unit_only": [],
            "notes": ["무엇을 돌렸나: 탐지한 러너 %s" % " · ".join(sorted({r for _u, r, _g in rows}))]}
@@ -305,8 +337,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             res["notes"].append("귀속 강등: %s" % line[len("degrade_causes: "):])
     for runner, unit, verdict in parse_attributions(p.stdout):
         shapes = RUNNER_SHAPES.get(runner, ())
-        b_names, _s = names_in(b_logs.get((runner, unit), ""), shapes=shapes)
-        m_names, _s = names_in(m_logs.get((runner, unit), ""), shapes=shapes)
+        b_names, _s = side_names(b_logs.get((runner, unit), ""), base, work / "tmp-base", shapes=shapes)
+        m_names, _s = side_names(m_logs.get((runner, unit), ""), merged, work / "tmp-merged", shapes=shapes)
         if verdict in NEW:
             fresh = sorted(m_names - b_names)
             res["new"] += ["%s: %s" % (unit, n) for n in fresh] or ["%s — 이름 대조 불가 — 단위 수준만" % unit]
@@ -344,24 +376,44 @@ def report(res: dict) -> int:
     return 0
 
 
-def suite_settings(root: Path, roadmap: str, mroot: Path) -> tuple:
-    """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기계 상태(임시) · 기본값을 합친다 —
-    로드맵은 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가."""
+def suite_settings(root: Path, roadmap: str, given=None) -> tuple:
+    """(test_command, test_failure_pattern, 출처 꼬리표). 해결자가 로드맵 · 레포 설정 파일 · 기본값을 합친다 —
+    둘 다 해결자가 기본 브랜치 판에서 읽는다. 깨졌으면 검사 불가. given({키: 이 호출의 인자 또는 None})이 있으면 그 값이
+    앞선다 — 종료 코드 6 의 답이다."""
     try:
-        res = repo_defaults.resolve(str(root), roadmap=roadmap,
-                                    machine_reader=lambda rel: cs.repo_settings_rows(mroot / cs.MACHINE_FILE, rel))
+        res = repo_defaults.resolve(str(root), roadmap=roadmap)
     except repo_defaults.SettingsError as exc:
         raise Stop(3, str(exc))
     for line in res["notices"] + res["warnings"]:
         print("[spec-distill] " + line)
     if res["errors"]:
         raise Stop(3, "레포 설정이 깨졌다: %s" % res["errors"][0])
-    sources = dict((k, " — 출처 %s" % res["sources"][k]) for k in ("test_command", "test_failure_pattern"))
-    for key in ("test_command", "test_failure_pattern"):
-        if res["values"][key] is not None and res["sources"][key] == repo_defaults.MACHINE_LABEL:
-            print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
-                  % (key, repo_defaults.MACHINE_LABEL, repo_defaults.SETTINGS_FILE))
-    return res["values"]["test_command"], res["values"]["test_failure_pattern"], sources
+    keys = ("test_command", "test_failure_pattern")
+    values = dict((k, res["values"][k]) for k in keys)
+    origin = dict((k, res["sources"][k]) for k in keys)
+    given = given or {}
+    # 쓰지 못할 값이면 레포 설정 파일에 올리자는 줄을 내기 전에 거부한다
+    if given.get("test_failure_pattern") is not None and given.get("test_command") is None and values["test_command"] is None:
+        raise Stop(3, "--test-failure-pattern 은 테스트 명령과 함께만 쓴다 — --test-command 를 함께 준다")
+    for key in keys:
+        value = given.get(key)
+        if value is not None and not value.strip():
+            raise Stop(3, "--%s 값이 비었다 — 값을 주거나 인자를 뺀다" % key.replace("_", "-"))
+    if given.get("test_failure_pattern") is not None:
+        why = pattern_error(given["test_failure_pattern"])
+        if why:
+            raise Stop(3, "test_failure_pattern 정규식이 깨졌다 — 출처 %s: %s" % (ARG_LABEL, why))
+    for key in keys:
+        value = given.get(key)
+        if value is None:
+            continue
+        if values[key] is not None:
+            print("[spec-distill] %s의 %s(`%s`) 대신 이 호출의 인자를 쓴다" % (origin[key], key, values[key]))
+        values[key], origin[key] = value, ARG_LABEL
+        print("[spec-distill] %s 를 %s에서 읽었다 — 이 값을 레포 설정 파일(%s)에 올린다"
+              % (key, ARG_LABEL, repo_defaults.SETTINGS_FILE))
+    sources = dict((k, " — 출처 %s" % origin[k]) for k in keys)
+    return values["test_command"], values["test_failure_pattern"], sources
 
 
 def run(root: Path, a) -> int:
@@ -390,7 +442,10 @@ def run(root: Path, a) -> int:
             print(line)
     except (cs.MachineError, StateRootError) as exc:
         raise Stop(3, str(exc))
-    test_command, pattern, sources = suite_settings(root, a.roadmap, mroot)
+    if cs.has_old_repo_settings(mroot / cs.MACHINE_FILE):
+        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_SEEN)
+    test_command, pattern, sources = suite_settings(root, a.roadmap, {"test_command": a.test_command,
+                                                                       "test_failure_pattern": a.test_failure_pattern})
     why = pattern_error(pattern) if pattern else None
     if why:
         raise Stop(3, "test_failure_pattern 정규식이 깨졌다%s: %s" % (sources.get("test_failure_pattern", ""), why))
@@ -415,12 +470,16 @@ def run(root: Path, a) -> int:
             print("남긴 사본: %s" % keep)
         return rc
     finally:
-        for d in (work / "base", work / "merged"):
-            if d != keep:
-                drop_copy(root, d, work)
-        if keep is None:
-            shutil.rmtree(str(work), ignore_errors=True)
-        drop_lock(lock)
+        try:
+            for d in (work / "base", work / "merged"):
+                if d != keep:
+                    drop_copy(root, d, work)
+            if keep is None:
+                shutil.rmtree(str(work), ignore_errors=True)
+            elif work.is_dir():
+                drop_leftovers(work, keep)
+        finally:
+            drop_lock(lock)   # 정리가 실패해도 잠금은 푼다
 
 
 def main(argv=None) -> int:
@@ -434,6 +493,8 @@ def main(argv=None) -> int:
     r.add_argument("--no-fetch", action="store_true")
     r.add_argument("--wait", type=float, default=0, help="잠금이 잡혀 있으면 이 초까지 기다린다(줄)")
     r.add_argument("--root")
+    r.add_argument("--test-command", help="종료 코드 6 에 사용자가 답한 테스트 명령 — 이 호출에만 쓴다")
+    r.add_argument("--test-failure-pattern", help="종료 코드 6 에 사용자가 답한 실패 이름 정규식 — 이 호출에만 쓴다")
     a = ap.parse_args(argv)
     try:
         top = a.root or git(os.getcwd(), "rev-parse", "--show-toplevel")[1]

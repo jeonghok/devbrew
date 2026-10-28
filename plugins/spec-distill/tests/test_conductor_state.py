@@ -331,19 +331,6 @@ class Storage(unittest.TestCase):
     def test_state_root_for_common(self):
         self.assertEqual(state_path.state_root_for_common(Path("/r/.git")), Path("/r/.claude/spec-distill"))
 
-    def test_repo_settings_rows(self):   # R8 AC5 — 해결자의 기계 상태 층
-        self.assertEqual(cs.repo_settings_rows(self.path, RM), {})
-        self.path.parent.mkdir(parents=True)
-        head = "---\ntype: %s\nroadmap: %s\n---\n\n## 레포 설정\n\n" % (cs.TYPE, RM)
-        self.path.write_text(head + "- test_command · make test\n- test_failure_pattern · \"^F: (.+)$\"\n", encoding="utf-8")
-        self.assertEqual(cs.repo_settings_rows(self.path, RM),
-                         {"test_command": "make test", "test_failure_pattern": "\"^F: (.+)$\""})
-        self.path.write_text(head + "- test_command · make a\n- test_command · make b\n", encoding="utf-8")
-        with self.assertRaises(cs.MachineError) as c:
-            cs.repo_settings_rows(self.path, RM)
-        self.assertIn("같은 키가 둘이다(test_command)", str(c.exception))
-
-
 class Handoffs(unittest.TestCase):
     def test_five_states(self):
         rows = [("항목 가 · 나", "이유", "R2"), ("항목 둘", "이유", "R3"), ("항목 셋", "이유", "R4"),
@@ -463,7 +450,8 @@ class RetiredStartApproval(unittest.TestCase):
         cs.save(self.path, RM, cs.load(self.path, RM), SID)
         text = self.path.read_text(encoding="utf-8")
         self.assertNotIn("## 시작 승인", text)
-        for head in ("## PR", "## 실행 원장", "## 자원", "## 살아 있는 agent", "## 기다리는 질문", "## 쌓인 기록", "## 레포 설정"):
+        self.assertNotIn("## 레포 설정", text)
+        for head in ("## PR", "## 실행 원장", "## 자원", "## 살아 있는 agent", "## 기다리는 질문", "## 쌓인 기록"):
             self.assertIn(head + "\n", text)
 
     def test_new_file_has_no_start_approval_heading(self):
@@ -475,6 +463,18 @@ class RetiredStartApproval(unittest.TestCase):
     def test_retired_rows_are_not_checked(self):
         text = OLD_MACHINE.split("## 시작 승인")[0] + "## 시작 승인\n\n- 하나뿐\n"
         self.assertEqual(cs.parse_machine(text, RM)["시작 승인"], [])
+
+    def test_old_repo_settings_rows_are_read_and_dropped(self):
+        """옛 `## 레포 설정` 줄(깨진 줄 포함)은 줄 검사 없이 버리고, 다시 쓰면 머리째 사라진다 — 아무도 읽지 않는다."""
+        text = OLD_MACHINE.replace("## 레포 설정\n\n", "## 레포 설정\n\n- test_command · true\n- 깨진 줄\n")
+        self.assertIn("- test_command · true", text)
+        self.assertEqual(cs.parse_machine(text, RM)["레포 설정"], [])
+        self.assertFalse(hasattr(cs, "repo_settings_rows"), "기계 상태 레포 설정을 읽는 함수가 없다")
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(text, encoding="utf-8")
+        self.assertEqual(cs.acquire(self.path.parent, SID), "acquired")
+        cs.save(self.path, RM, cs.load(self.path, RM), SID)
+        self.assertNotIn("레포 설정", self.path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

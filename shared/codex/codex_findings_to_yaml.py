@@ -185,6 +185,100 @@ def _yaml_scalar(v: Any) -> str:
     return s
 
 
+STDERR_HEAD_MAX = 200
+# meta 는 리뷰 기록으로 옮겨져 커밋될 수 있다 — codex stderr 원문은 싣지 않고 알려진 사유 분류(stderr_kind)만 싣는다.
+# 원문 첫 줄은 실행 중 화면(이 스크립트의 stderr)에만 보이고, 그때도 비밀처럼 생긴 것을 가린다.
+STDERR_KINDS = (
+    # auth 는 인증 실패 갈래의 판정(AUTH_ERROR_RE)이 받는 낱말을 모두 받는다 — 그 갈래가 other 로 빗나가지 않게.
+    ("auth", re.compile(r"(?i)\b(401|403|unauthori[sz]ed|forbidden|not logged in|authentication|auth\s+(failed|error)"
+                        r"|invalid\s+(api[_\s-]?key|token)|credentials?|expired)\b")),
+    ("rate-limited", re.compile(r"(?i)\b(429|rate[\s_-]?limit\w*|too many requests)\b")),
+    ("quota", re.compile(r"(?i)\b(quota|billing|subscription|insufficient[\s_]credits?|usage limit)\b")),
+    ("overloaded", re.compile(r"(?i)\b(overloaded|over capacity|502|503|service unavailable)\b")),
+    ("timeout", re.compile(r"(?i)\b(timed? ?out|timeout|deadline exceeded)\b")),
+    ("network", re.compile(r"(?i)\b(connection|network|could not resolve|enotfound|econn\w*|dns)\b")),
+    ("model", re.compile(r"(?i)\b(unknown model|model\b[^\n]{0,40}\b(not found|unsupported|does not exist))")),
+)
+_SECRET_KEYWORD = re.compile(
+    r"(?i)((?:(?:authorization|bearer|basic|token|api[_\s-]?key|password|passwd|secret)[\"']?(?:\s*[:=]\s*|\s+))+)"
+    r"(\"[^\"]*\"|'[^']*'|\S+)")
+_SECRET_LIKE = re.compile(r"[A-Za-z0-9_\-+=./:]{20,}")
+
+
+def stderr_kind(text: str) -> str:
+    """codex 실패 글의 알려진 사유 분류 — 첫 4000자에서 처음 맞는 것, 맞는 것이 없으면 other, 비었으면 none."""
+    head = (text or "")[:4000]
+    if not head.strip():
+        return "none"
+    for kind, rx in STDERR_KINDS:
+        if rx.search(head):
+            return kind
+    return "other"
+
+
+def mask_secrets(text: str) -> str:
+    """화면에 보이는 stderr 첫 줄의 비밀처럼 생긴 것을 `<가림>` 으로(자격 증명 낱말 뒤의 값 · 20자 이상 연속)."""
+    return _SECRET_LIKE.sub("<가림>", _SECRET_KEYWORD.sub(lambda m: m.group(1) + "<가림>", text))
+
+
+def stderr_head(text: str) -> str:
+    """stderr 의 첫 비어 있지 않은 줄 — 출력할 수 없는 글자는 `?`, 비밀처럼 생긴 것은 `<가림>` 으로 바꾸고
+    STDERR_HEAD_MAX 자에서 자른다. 화면에만 보이고 meta 에는 싣지 않는다."""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s:
+            s = "".join(c if c.isprintable() else "?" for c in s)
+            return mask_secrets(s)[:STDERR_HEAD_MAX]
+    return ""
+
+
+def show_stderr_head(text: str, label: str = "stderr 첫 줄") -> None:
+    """codex 가 실패했을 때 그 글의 첫 줄을 화면(stderr)에만 보인다 — 기록 파일에는 남기지 않는다."""
+    head = stderr_head(text)
+    if head:
+        print("[codex] %s(기록하지 않음): %s" % (label, head), file=sys.stderr)
+
+
+def failure_event_text(jsonl: str) -> str:
+    """codex --json 스트림의 마지막 `turn.failed` 의 error.message — 없으면 마지막 `error` 의 message, 그것도 없으면 빈 글.
+    `error` 는 재시도 알림처럼 치명적이지 않은 것일 수 있어 `turn.failed` 가 있으면 그쪽이 이긴다."""
+    failed = other = ""
+    for ln in (jsonl or "").splitlines():
+        ln = ln.strip()
+        if not ln.startswith("{"):
+            continue
+        try:
+            obj = json.loads(ln)
+        except ValueError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") == "turn.failed":
+            err = obj.get("error")
+            msg = err.get("message") if isinstance(err, dict) else None
+            if isinstance(msg, str) and msg.strip():
+                failed = msg
+        elif obj.get("type") == "error":
+            msg = obj.get("message")
+            if isinstance(msg, str) and msg.strip():
+                other = msg
+    return failed or other
+
+
+def failure_kind(jsonl: str, stderr_text: str, stderr_unreadable: bool) -> str:
+    """0 아닌 종료의 사유 분류(meta 의 stderr_kind) — 원문 첫 줄은 화면에만 보인다.
+    codex --json 은 실패 사유를 stdout 의 실패 이벤트에 싣고 stderr 를 비워 둘 수 있다(사용 한도 등) —
+    실패 이벤트가 있으면 그것으로, 없으면 stderr 로 분류한다. stderr 를 읽지 못했으면 none 이 아니라 unreadable.
+    stderr 첫 줄은 이벤트가 있어도 화면에 보인다 — 이벤트가 재시도 알림이고 진짜 원인이 stderr 에만 있을 수 있다."""
+    event = failure_event_text(jsonl)
+    if event:
+        show_stderr_head(event, "실패 이벤트")
+    show_stderr_head(stderr_text)
+    if event:
+        return stderr_kind(event)
+    return "unreadable" if stderr_unreadable else stderr_kind(stderr_text)
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--stderr-file", default=None)
@@ -212,6 +306,9 @@ def main() -> int:
         return bool(stderr_text and AUTH_ERROR_RE.search(stderr_text))
 
     def apply_overrides(meta: dict) -> dict:
+        # 인증 실패 갈래는 0 종료에도 stderr 첫 줄을 화면에 보인다(0 아닌 종료는 아래 failure_kind 가 보인다).
+        if meta.get("reason") == "auth_error_in_stderr" and not args.meta_override_exit_code:
+            show_stderr_head(stderr_text)
         # Apply exit-code override unconditionally if supplied (caller knows the real exit code).
         if args.meta_override_exit_code is not None:
             meta["exit_code"] = args.meta_override_exit_code
@@ -219,6 +316,9 @@ def main() -> int:
         if args.meta_override_reason:
             meta["reason"] = args.meta_override_reason
             meta["codex_failed"] = True
+        # codex 가 0 아닌 종료로 끝났으면 왜 죽었는지 알려진 사유 분류만 meta 에 남긴다 — 원문 첫 줄은 화면에만.
+        if args.meta_override_exit_code:
+            meta["stderr_kind"] = failure_kind(stdin_text, stderr_text, _stderr_read_error is not None)
         # AC9(d): surface stderr file read errors for caller visibility.
         if _stderr_read_error is not None:
             meta["stderr_read_error"] = _stderr_read_error
@@ -232,7 +332,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": stderr_text[:200],
+                "stderr_kind": stderr_kind(stderr_text),
             }
         elif stdin_text.strip() and not any_jsonl_parsed:
             # Non-empty stdin with zero parseable JSONL lines → Stage 3 fallback.
@@ -257,7 +357,7 @@ def main() -> int:
                 "codex_failed": True,
                 "reason": "auth_error_in_stderr",
                 "exit_code": 0,
-                "stderr_preview": stderr_text[:200],
+                "stderr_kind": stderr_kind(stderr_text),
             }
         else:
             meta = {

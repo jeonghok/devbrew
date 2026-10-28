@@ -1100,7 +1100,7 @@ def build(git: Git, args) -> dict:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
-    try:   # 레포 설정의 기계 상태 층은 읽지 않는다 — 상태 계산이 기계 상태에서 읽는 것은 PR 캐시뿐이다(알림으로 밝힌다)
+    try:   # 해결자는 로드맵 · 레포 설정 파일 · 기본값만 합친다 — 상태 계산이 기계 상태에서 읽는 것은 PR 캐시 · 에픽 PR 번호 기록뿐이다
         resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
     except SettingsError as exc:
         resolved = {"values": {"parallel_default": None}, "sources": {}, "warnings": [], "notices": [], "errors": [str(exc)]}

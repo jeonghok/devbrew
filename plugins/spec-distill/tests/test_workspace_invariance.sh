@@ -92,7 +92,7 @@ MD
   printf '# audit\n\n## 6. 사용자 원문\n\n- 없음\n\n## 7. 확산 원자료\n\n- 없음\n' > "$w/docs/br/b.audit.md"
   printf -- '---\ntype: epic-bundle\nepic: R1\nroadmap: %s\nsource_brief: docs/br/b.md\nids: [C1, OQ1, ST1, «k1», K1, S1]\n---\n\n# R1\n' "$d/roadmap.md" > "$w/$d/R1.md"
   printf -- '---\ntype: epic-bundle\nepic: R2\nroadmap: %s\nsource_brief: docs/br/b.md\nids: [C1, S1]\n---\n\n# R2\n' "$d/roadmap.md" > "$w/$d/R2.md"
-  { printf -- '---\ntype: roadmap\nsource_brief: docs/br/b.md\n---\n\n# 로드맵\n\n## 에픽\n\n'
+  { printf -- '---\ntype: roadmap\nsource_brief: docs/br/b.md\n%s---\n\n# 로드맵\n\n## 에픽\n\n' "${4:-}"
     printf '### R1 — 에픽 하나%s\n- 의도: 하나\n- 범위: 한다 하나 / 안 한다 없음\n- 의존: 없음\n- 브랜치: feature/r1\n- 묶음: R1.md\n- 경로 예약: src/a.txt\n\n' "$3"
     printf '### R2 — 에픽 둘\n- 의도: 둘\n- 범위: 한다 둘 / 안 한다 없음\n- 의존: R1\n- 브랜치: feature/r2\n- 묶음: R2.md\n- 경로 예약: src/b.txt\n\n'
     printf '## 지휘 절차\n\n1. fetch\n\n## 결정 기록\n\n기록 없음.\n\n## 재분해 이력\n\n- 없음\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 가정 하나 — 근거 없음\n'
@@ -172,13 +172,13 @@ echo "=== 작업공간 불변 락(AC27) ==="
 settings "$T/inv.devbrew.md" "interview_dir: notes/interview/" 'test_command: "true"'
 mkrepo inv main "$T/inv.devbrew.md" || { no "픽스처 inv"; finish; exit 1; }
 IW="$T/inv/work"
-docs "$IW" "$RMD" ""
+docs "$IW" "$RMD" "" $'review_model: base-model\nparallel_default: 2\n'
 g "$IW" add -A && g "$IW" commit -qm docs && g "$IW" push -q origin main
 g "$IW" worktree add -q -b feature/r1 "$T/inv/A" main && g "$IW" worktree add -q -b feature/b "$T/inv/B" main \
   || { no "픽스처 inv: worktree 둘"; finish; exit 1; }
 printf 'a\n' > "$T/inv/A/src-a.txt"; g "$T/inv/A" add -A; g "$T/inv/A" commit -qm r1
 settings "$T/inv/B/.devbrew.md" "interview_dir: other/" "roadmaps_dir: plan/"
-docs "$T/inv/B" "$RMD" " 고침"
+docs "$T/inv/B" "$RMD" " 고침" $'review_model: branch-model\nparallel_default: 7\n'
 g "$T/inv/B" add -A; g "$T/inv/B" commit -qm "로드맵 · 설정을 자기 브랜치에서만 고침"
 [ "$(g "$T/inv/A" rev-parse --abbrev-ref HEAD) $(g "$T/inv/B" rev-parse --abbrev-ref HEAD)" = "feature/r1 feature/b" ] \
   && ok "전제: 서로 다른 브랜치의 worktree 둘" || no "전제: worktree 둘의 브랜치가 다르지 않다"
@@ -195,6 +195,11 @@ assert_eq "$(js "$T/out-A/status.out" "[(b['id'], b['read_tree']) for b in r['bl
 assert_eq "$(js "$T/out-A/status.out" "r['exit']")" "0" "전제: 상태 계산이 로드맵을 끝까지 셌다(검사 불가가 아니다)"
 assert_contains "$(cat "$T/out-A/roadmaps.out")" "$RM" "전제: 로드맵 찾기가 로드맵을 찾았다"
 assert_eq "$(cat "$T/out-A/get-interview_dir.out")" "notes/interview/" "전제: 해결자는 기본 브랜치 판의 설정 값을 낸다"
+assert_eq "$(cat "$T/out-B/getr-review_model.out")|$(cat "$T/out-B/getr-parallel_default.out")" "base-model|2" \
+  "로드맵 층: 로드맵 머리말을 고친 자리(B)에서도 해결자는 기본 브랜치 판의 로드맵 값을 낸다"
+[ "$(sed -n 's/^review_model: //p' "$T/inv/B/$RM")" = "branch-model" ] \
+  && ok "전제: B 의 작업 트리 로드맵 머리말은 다른 층 키 값을 갖는다(로드맵 층을 어디서 읽는지 가른다)" \
+  || no "전제: B 의 로드맵 머리말에 다른 층 키 값이 없다 — getr-* 비교가 공허하다"
 assert_eq "$(js "$T/out-A/status-file.out" "r['read_tree']")" "이 작업공간" "읽은 트리: --roadmap-file 은 이 작업공간"
 if cmp -s "$T/out-A/status-file.out" "$T/out-B/status-file.out"; then
   no "빼는 칸의 증인: --roadmap-file 출력이 두 자리에서 같다 — 빼는 규칙이 하는 일이 없다"

@@ -14,7 +14,17 @@ trap 'rm -rf "$T"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 python3 -m pytest --version >/dev/null 2>&1 || { no "pytest 가 없어 끝에서 끝을 걷지 못했다 — 이 기계에 pytest 를 깔고 다시 돈다"; finish; exit $?; }
 W="$T/w"; RM="plan/rm/roadmap.md"; SID="session-e2e00001"
-g() { git -C "$1" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "${@:2}"; }
+g() {  # g <레포> <git 인자…> — 빈 경로면 `git -C ""` 가 부른 쪽(실제 레포)에서 add · commit 하므로 돌지 않고 멈춘다
+  [ -n "$1" ] || { no "g: 레포 경로가 비었다 — 부른 쪽 레포에서 돌지 않게 멈춘다"; finish; exit 1; }
+  git -C "$1" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "${@:2}"
+}
+need_wt() {  # need_wt <rc> <경로> <이름> — 원장이 낸 worktree 경로가 실패 · 빈 값 · 임시 레포 밖이면 멈춘다
+  local wr; wr="$(cd "$W" && pwd -P)"   # 원장은 실제 경로(/private/var/…)를 낸다
+  case "$1:$2" in
+    0:"$W"/?*|0:"$wr"/?*) ok "worktree-path($3) 가 임시 레포 안의 경로를 냈다" ;;
+    *) no "worktree-path($3) 가 실패했거나(rc $1) 임시 레포 밖 · 빈 경로를 냈다: '$2' — 멈춘다"; finish; exit 1 ;;
+  esac
+}
 L() { (cd "$W" && python3 "$S/conductor_ledger.py" "$@"); }
 status_json() { (cd "$W" && python3 "$S/roadmap_status.py" --json "$RM"); }
 field_of() {  # field_of <필드> <블록 id>
@@ -54,7 +64,7 @@ assert_eq "$(tasks_of)" "$before2" "AC2: 기계 상태를 지워도 병렬 판�
 L claim --roadmap "$RM" --session "$SID" >/dev/null; assert_eq "$?" "0" "AC2: 지운 뒤 표지를 다시 잡는다"
 
 # 3 — 에픽 worktree(하니스 폴더 · 접두 work/) · 자원 기록
-WT="$(L worktree-path --name e1)"
+WT="$(L worktree-path --name e1)"; need_wt "$?" "$WT" e1
 g "$W" worktree add -q "$WT" -b work/e1 origin/HEAD
 L add --roadmap "$RM" --session "$SID" --section 자원 --cells "worktree · $WT · E1 · 설계 · t" >/dev/null
 mkdir -p "$WT/plan/specs"
@@ -89,7 +99,7 @@ assert_eq "$rc" "0" "스위트 대조 rc 0: $out"
 assert_contains "$out" "pytest" "스위트 대조가 탐지한 러너는 pytest"
 
 # 7 — 조사 에픽: 산출물이 브랜치에 생기면 설계 중
-WT2="$(L worktree-path --name e2)"
+WT2="$(L worktree-path --name e2)"; need_wt "$?" "$WT2" e2
 g "$W" worktree add -q "$WT2" -b work/e2 origin/HEAD
 assert_eq "$(reason_of E2)" "브랜치 있음 · spec 없음" "조사 에픽: 브랜치만으로는 산출물이 없다"
 mkdir -p "$WT2/plan/research"
