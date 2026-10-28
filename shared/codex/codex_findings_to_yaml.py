@@ -238,8 +238,9 @@ def show_stderr_head(text: str, label: str = "stderr 첫 줄") -> None:
 
 
 def failure_event_text(jsonl: str) -> str:
-    """codex --json 스트림의 마지막 실패 이벤트(`turn.failed` 의 error.message · `error` 의 message) — 없으면 빈 글."""
-    text = ""
+    """codex --json 스트림의 마지막 `turn.failed` 의 error.message — 없으면 마지막 `error` 의 message, 그것도 없으면 빈 글.
+    `error` 는 재시도 알림처럼 치명적이지 않은 것일 수 있어 `turn.failed` 가 있으면 그쪽이 이긴다."""
+    failed = other = ""
     for ln in (jsonl or "").splitlines():
         ln = ln.strip()
         if not ln.startswith("{"):
@@ -250,26 +251,29 @@ def failure_event_text(jsonl: str) -> str:
             continue
         if not isinstance(obj, dict):
             continue
-        msg = None
         if obj.get("type") == "turn.failed":
             err = obj.get("error")
             msg = err.get("message") if isinstance(err, dict) else None
+            if isinstance(msg, str) and msg.strip():
+                failed = msg
         elif obj.get("type") == "error":
             msg = obj.get("message")
-        if isinstance(msg, str) and msg.strip():
-            text = msg
-    return text
+            if isinstance(msg, str) and msg.strip():
+                other = msg
+    return failed or other
 
 
 def failure_kind(jsonl: str, stderr_text: str, stderr_unreadable: bool) -> str:
     """0 아닌 종료의 사유 분류(meta 의 stderr_kind) — 원문 첫 줄은 화면에만 보인다.
     codex --json 은 실패 사유를 stdout 의 실패 이벤트에 싣고 stderr 를 비워 둘 수 있다(사용 한도 등) —
-    실패 이벤트가 있으면 그것으로, 없으면 stderr 로 분류한다. stderr 를 읽지 못했으면 none 이 아니라 unreadable."""
+    실패 이벤트가 있으면 그것으로, 없으면 stderr 로 분류한다. stderr 를 읽지 못했으면 none 이 아니라 unreadable.
+    stderr 첫 줄은 이벤트가 있어도 화면에 보인다 — 이벤트가 재시도 알림이고 진짜 원인이 stderr 에만 있을 수 있다."""
     event = failure_event_text(jsonl)
     if event:
         show_stderr_head(event, "실패 이벤트")
-        return stderr_kind(event)
     show_stderr_head(stderr_text)
+    if event:
+        return stderr_kind(event)
     return "unreadable" if stderr_unreadable else stderr_kind(stderr_text)
 
 

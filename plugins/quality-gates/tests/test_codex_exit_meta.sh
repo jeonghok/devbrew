@@ -56,6 +56,7 @@ no_secret() {  # no_secret <파일> <이름>
 
 # ── 공유 추출기(중첩 YAML 러너 둘) ─────────────────────────────────────────────
 X="$QG/scripts/codex_findings_to_yaml.py"
+XA_EARLY="$QG/scripts/extract_codex_artifact_yaml.py"
 python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 7 --meta-override-reason exit_nonzero < "$T/ok.jsonl" > "$T/a.yaml" 2> "$T/a.err"
 assert_eq "$(meta_val "$T/a.yaml" exit_code)" "7" "공유 추출기: 0 아닌 종료면 meta 에 codex 종료 코드"
 assert_eq "$(meta_val "$T/a.yaml" stderr_kind)" "overloaded" "공유 추출기: meta 에 stderr 사유 분류"
@@ -90,6 +91,18 @@ assert_contains "$(cat "$T/l.err")" '실패 이벤트(기록하지 않음): You�
 printf '%s\n' '{"type":"error","message":"stream disconnected, retrying"}' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' > "$T/tf.jsonl"
 python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf.jsonl" > "$T/tf.yaml" 2>/dev/null
 assert_eq "$(meta_val "$T/tf.yaml" stderr_kind)" "rate-limited" "공유 추출기: 마지막 실패 이벤트(turn.failed)로 분류한다"
+# turn.failed 가 뒤의 error 이벤트보다 먼저다 — error 는 재시도 알림일 수 있다.
+printf '%s\n' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' '{"type":"error","message":"stream disconnected, retrying"}' > "$T/tf2.jsonl"
+python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf2.jsonl" > "$T/tf2.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/tf2.yaml" stderr_kind)" "rate-limited" "공유 추출기: turn.failed 가 뒤의 error 이벤트보다 먼저다"
+# turn.failed 없이 재시도 알림만 남기고 죽었으면 — 진짜 원인(stderr 첫 줄)도 화면에 보인다.
+printf '%s\n' '{"type":"error","message":"stream error: connection reset; retrying 1/5"}' > "$T/retry-only.jsonl"
+printf 'thread main panicked at src/x.rs: index out of bounds\n' > "$T/err-panic.txt"
+python3 "$X" --stderr-file "$T/err-panic.txt" --meta-override-exit-code 101 < "$T/retry-only.jsonl" > "$T/p.yaml" 2> "$T/p.err"
+assert_contains "$(cat "$T/p.err")" 'stderr 첫 줄(기록하지 않음): thread main panicked at src/x.rs: index out of bounds' "공유 추출기: 실패 이벤트가 있어도 stderr 첫 줄을 화면에 보인다"
+assert_contains "$(cat "$T/p.err")" '실패 이벤트(기록하지 않음): stream error: connection reset' "공유 추출기: 그 실패 이벤트도 화면에 보인다(양성 짝)"
+python3 "$XA_EARLY" --stderr-file "$T/err-panic.txt" --meta-override-exit-code 101 < "$T/retry-only.jsonl" > /dev/null 2> "$T/pa.err"
+assert_eq "$(cat "$T/pa.err")" "$(cat "$T/p.err")" "두 추출기의 화면 줄(이벤트 + stderr)이 같다"
 python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 1 < "$T/limit.jsonl" > "$T/l2.yaml" 2>/dev/null
 assert_eq "$(meta_val "$T/l2.yaml" stderr_kind)" "quota" "공유 추출기: 실패 이벤트가 stderr 보다 먼저다"
 python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 0 --meta-override-reason "" < "$T/retried.jsonl" > "$T/l3.yaml" 2> "$T/l3.err"
