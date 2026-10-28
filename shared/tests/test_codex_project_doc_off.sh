@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# guards: plugins/** shared/**
 # codex 를 부르는 곳 전부가 검토 트리의 AGENTS.md 를 지시로 불러오지 않게 하는 설정을
 # 실제 호출에 싣고 있는지 잰다. 대상은 도출한다 — 새 호출이 생기면 자동으로 든다.
 #
@@ -136,6 +137,8 @@ run_scan() {   # <root> ; 표준입력: 파일 목록
 }
 
 OUT="$(git ls-files | run_scan "$ROOT")"
+# `--emit-scanned` — 이 락이 판정한 호출 파일(도출 집합). test_guards_coverage_bidirectional.sh 가 위 선언과 대조한다.
+if [ "${1:-}" = "--emit-scanned" ]; then printf '%s\n' "$OUT" | awk -F'\t' '$1 == "DERIVED" { print $2 }'; exit 0; fi
 n_run="$(printf '%s\n' "$OUT" | grep -c '^DERIVED')"
 if [ "$n_run" -eq 0 ]; then
   no "도출: codex 호출 파일이 0개 — 도출 기준이 깨졌다. 아래 검사는 공허하다"
@@ -165,6 +168,34 @@ while IFS="	" read -r kind a b c; do
 done <<EOF_O
 $OUT
 EOF_O
+
+# ── 차등 선택 — 도출된 호출 파일 하나만 바뀌어도 qg 의 후보 계산이 이 락을 고르는가 ──────────
+# 이름 매핑은 .py/.js 소스만 짝짓는다 — 셸 러너가 바뀔 때 이 락이 고려지는 길은 `# guards:` 뿐이다.
+# 격리된 리포에서 잰다(실제 리포에 객체 · 참조를 쓰지 않는다).
+SEL="$ROOT/plugins/quality-gates/scripts/compute-test-scope-candidates.sh"
+SELF="shared/tests/test_codex_project_doc_off.sh"
+sel_has_self() {   # <바뀐 파일(리포 상대)> → 이 락이 후보에 들면 0
+  local R="$T/sel"
+  rm -rf "$R" && mkdir -p "$R/${SELF%/*}" "$R/$(dirname "$1")" || return 2
+  cp "$SEL" "$R/sut.sh" && cp "${SEL%/*}/resolve-baseline.sh" "$R/" && cp "$ROOT/$SELF" "$R/$SELF" || return 2
+  printf 'x\n' > "$R/$1"
+  ( cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && git add -A && git commit -qm init \
+    && git update-ref refs/remotes/origin/main main \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main \
+    && printf 'changed\n' >> "$1" \
+    && bash sut.sh --emit-guards 2>/dev/null ) | grep -qxF -- "$SELF"
+}
+n_sel=0
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  n_sel=$((n_sel+1))
+  if sel_has_self "$f"; then ok "차등 선택: $f 가 바뀌면 이 락이 후보에 든다"
+  else no "차등 선택: $f 가 바뀌어도 이 락이 후보에 들지 않는다(\`# guards:\` 를 확인)"; fi
+done <<EOF_S
+$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "DERIVED" { print $2 }')
+EOF_S
+[ "$n_sel" -eq "$n_run" ] || no "차등 선택: 잰 파일 ${n_sel}개가 도출 ${n_run}개와 다르다"
 
 # ── 판별력 대조 ────────────────────────────────────────────────────────────
 mkdir -p "$T/c"
