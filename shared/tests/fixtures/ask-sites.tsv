@@ -41,7 +41,7 @@ plugins/spec-distill/references/proceed-gate.md	꼬리	**지휘자 아래 — �
 shared/docreview/references/reviewing-document.md	지시	게이트(`decide` 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠	응답을 `decide`·`fix`·`ask` 서브커맨드로 반영.
 shared/docreview/references/reviewing-document.md	지시	**열린 것이 0 이면 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘뿐인 질문	권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다
 shared/docreview/references/reviewing-document.md	지시	**열린 것이 있으면 그 열린 항목들과 함께 「추가 라운드 1회 열기」가 별개 항목으로	「추가 라운드 1회 열기」를 고르면
-shared/docreview/references/reviewing-document.md	떼기	「추가 라운드 1회 열기」를 고르면 다음 라운드 1단계가	
+shared/docreview/references/reviewing-document.md	떼기	「추가 라운드 1회 열기」를 고르면 다음 라운드 1단계가	꼬리를 뗀 이름으로 읽는다
 shared/docreview/references/reviewing-document.md	떼기	셋 다 멱등이다. 「추가 라운드 1회 열기」를 고르면 부르지 않는다	
 shared/docreview/references/reviewing-document.md	언급	**`AskUserQuestion` 라벨의 항목별 내용**	
 plugins/spec-distill/references/docreview-profiles/brief.md	언급	`AskUserQuestion` 네 개씩 여러 번 나눠 묻는다.	
