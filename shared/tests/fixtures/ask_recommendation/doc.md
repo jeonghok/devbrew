@@ -34,3 +34,19 @@ AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
 ## 사 — 목록 행의 ② 사유(도구 이름 없는 줄)
 
 사-둘 사-둘 · 사-끝: 끝을 찾지 못한다 · 사-종류: 모르는 종류다.
+
+## 아 — 뗌 문장이 없는 떼기 문단
+
+아-뗌: 고른 라벨이 「계속」이면 진행한다.
+
+## 자 — 출처 꼬리가 없는 출처꼬리 문단
+
+자-출처: 선택지 순서는 원문 그대로 옮긴다.
+
+## 차 — (Recommended) 만 꼬리인 꼬리 질문
+
+차-질문: `AskUserQuestion` 하나 — 「Go (Recommended)」 · 「Stop」.
+
+## 카 — 한 줄에 도구 이름이 둘인 언급 행
+
+카-언급: `AskUserQuestion` 은 도구 이름이다. 카-추가: 같은 줄에 `AskUserQuestion` 질문이 하나 더 있다.

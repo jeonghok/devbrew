@@ -867,7 +867,7 @@ AskUserQuestion({
 })
 ```
 
-추천을 달지 않는다 — 분류표는 오케스트레이터가 자기 코드의 지적에 매긴 적용/제외다.
+둘째 질문(분류)에는 추천을 달지 않는다 — 분류표는 오케스트레이터가 자기 코드의 지적에 매긴 적용/제외다.
 
 The table can hold any number of items — the second question takes item numbers through 「기타」,
 so the gate never needs one question per item. Each number typed there flips that item (적용 ↔

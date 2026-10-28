@@ -37,13 +37,17 @@ assert_eq "$GIT_N" "$FIND_N" "④ 후보 파일: git 도출과 find 도출이 �
 CAND_N="$(cd "$ROOT" && while IFS= read -r f; do grep -F -- 'AskUserQuestion' "$f"; done < "$LIST" | grep -c . || true)"
 if [ "${CAND_N:-0}" -gt 0 ]; then ok "④ 후보 줄 ${CAND_N}개(0 이 아니다)"; else no "④ 후보 줄이 0개다 — 공허한 통과"; fi
 
-# fixture — 여섯 경우의 판정이 expected.txt 와 같다(모듈이 RED 넷을 실제로 내는지).
+# fixture — 열 경우의 판정이 expected.txt 와 같다(모듈이 RED 넷을 실제로 내는지).
 printf '%s\n' doc.md > "$FXL"
 FX_OUT="$(python3 "$ROOT/shared/tests/ask_recommendation.py" "$ROOT/$FX" "$FXL" "$ROOT/$FX/sites.tsv" 2>&1)"
 fx_rc=$?
 assert_eq "$fx_rc" "0" "fixture: 판정 모듈이 rc 0 으로 끝났다"
 assert_eq "$(printf '%s\n' "$FX_OUT" | grep '^no ')" "$(cat "$ROOT/$FX/expected.txt")" "fixture: no 줄이 expected.txt 와 같다"
 assert_contains "$FX_OUT" 'ok doc.md:5 꼬리 「가-질문:」' "fixture: 라벨 꼬리가 있는 질문은 ok"
+assert_contains "$FX_OUT" 'ok doc.md:48 꼬리 「차-질문:」' "fixture: 「(Recommended)」만 꼬리인 질문도 ok"
+assert_contains "$FX_OUT" 'no ③ doc.md:40 떼기' "fixture: 뗌 문장이 없는 떼기 행은 ③"
+assert_contains "$FX_OUT" 'no ③ doc.md:44 출처꼬리' "fixture: 「추천)」이 없는 출처꼬리 행은 ③"
+assert_contains "$FX_OUT" 'no ① doc.md:52 언급 행의 줄에' "fixture: 도구 이름이 둘인 언급 줄은 ①"
 # ④ — 후보 파일이 없으면(빈 목록) 모듈은 「no ④」 한 줄만 내고 다른 판정을 하지 않는다.
 : > "$FXL"
 FX4_OUT="$(python3 "$ROOT/shared/tests/ask_recommendation.py" "$ROOT/$FX" "$FXL" "$ROOT/$FX/sites.tsv" 2>&1)"

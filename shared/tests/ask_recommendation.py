@@ -8,6 +8,7 @@
   첫 `끝` 의 끝까지, 끝이 비면 앵커가 든 문단(빈 줄 사이)이다.
 - 질문 행(꼬리 · 지시 · 비움 · 출처꼬리)의 범위 안에 다른 행(떼기 제외)의 앵커 시작이 있으면 ② 다.
 - 후보 줄(`AskUserQuestion` 이 있는 줄)은 어느 행의 앵커가 시작하는 줄이거나 어느 질문 행의 범위 안이어야 한다.
+  언급 행은 앵커 줄에 `AskUserQuestion` 이 하나일 때만 그 줄을 덮는다(둘 이상이면 ①).
 """
 import io
 import re
@@ -139,13 +140,14 @@ def check(root, files, sites):
         resolved.append((s, text, scope(text, s)))
 
     anchor_lines = set()
+    mention_lines = set()
     anchor_starts = {}
     covered = {}
     for s, text, sc in resolved:
         if text is None or s.kind not in KINDS or not s.anchor or text.count(s.anchor) != 1:
             continue
         a = text.find(s.anchor)
-        anchor_lines.add((s.path, line_of(text, a)))
+        (mention_lines if s.kind == "언급" else anchor_lines).add((s.path, line_of(text, a)))
         anchor_starts.setdefault(s.path, []).append((a, s))
         if s.kind in QUESTION_KINDS and not isinstance(sc, str):
             covered.setdefault(s.path, []).append(sc)
@@ -178,9 +180,15 @@ def check(root, files, sites):
         if (rel, k) in anchor_lines:
             continue
         text = texts[rel]
+        if (rel, k) in mention_lines and ln.count(TOOL) == 1:
+            continue
         lo = len("\n".join(text.split("\n")[:k - 1])) + (1 if k > 1 else 0)
         hi = lo + len(ln)
         if any(a < hi and lo < b for a, b in covered.get(rel, [])):
+            continue
+        if (rel, k) in mention_lines:
+            out.append("no ① %s:%d 언급 행의 줄에 %s 이 둘 이상이다 — 언급 행은 한 줄에 하나만 덮는다: %s"
+                       % (rel, k, TOOL, ln.strip()[:80]))
             continue
         out.append("no ① %s:%d 후보 줄이 어느 행에도 덮이지 않는다: %s" % (rel, k, ln.strip()[:80]))
     return out
