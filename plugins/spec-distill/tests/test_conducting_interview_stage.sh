@@ -493,7 +493,7 @@ tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — �
   || no "AC13: OQ<n> 발급 규칙이 없거나 뒤집혔다 — 이어가는 결정에 새 번호를 주면 같은 결정이 둘로 갈린다"
 grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat" \
   && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
-grep -qF '첫 선택지가 추천이고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
+grep -qF '질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
 grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
   && ok "AC3: description = 고르면 무엇이 달라지는가" || no "AC3: description 규칙 부재"

@@ -20,11 +20,13 @@ AskUserQuestion({ questions: [{
   question: "사소한 일로 보고 게이트를 건너뛴다 — 그대로 / 전체 과정으로. 판정 근거: <판정 근거>.",
   multiSelect: false,
   options: [
-    {label: "그대로", description: "게이트를 건너뛴다. 아래 안내를 내고 이 skill 을 끝낸다 — 직접 처리하면 된다."},
+    {label: "그대로 (권장)", description: "게이트를 건너뛴다. 아래 안내를 내고 이 skill 을 끝낸다 — 직접 처리하면 된다."},
     {label: "전체 과정으로", description: "trivia 판정을 건너뛰고 이 skill 의 다음 단계로 간다."}
   ]
 }]})
 ```
+
+라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 - **그대로** — 다음 안내를 내고 진행하지 않는다:
 
