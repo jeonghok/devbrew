@@ -86,6 +86,10 @@ python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 --meta
 assert_eq "$(meta_val "$T/l.yaml" stderr_kind)" "quota" "공유 추출기: stderr 가 비어도 실패 이벤트(사용 한도)로 분류한다"
 assert_file_absent "$T/l.yaml" 'usage limit' "공유 추출기: 실패 이벤트 원문은 meta 에 싣지 않는다"
 assert_contains "$(cat "$T/l.err")" '실패 이벤트(기록하지 않음): You’ve hit your usage limit' "공유 추출기: 실패 이벤트 첫 줄은 화면에 보인다"
+# 앞의 error 이벤트(재시도 알림)와 끝의 turn.failed 가 다르면 마지막 실패 — turn.failed — 로 분류한다.
+printf '%s\n' '{"type":"error","message":"stream disconnected, retrying"}' '{"type":"turn.failed","error":{"message":"429 Too Many Requests"}}' > "$T/tf.jsonl"
+python3 "$X" --stderr-file "$T/err-empty.txt" --meta-override-exit-code 1 < "$T/tf.jsonl" > "$T/tf.yaml" 2>/dev/null
+assert_eq "$(meta_val "$T/tf.yaml" stderr_kind)" "rate-limited" "공유 추출기: 마지막 실패 이벤트(turn.failed)로 분류한다"
 python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 1 < "$T/limit.jsonl" > "$T/l2.yaml" 2>/dev/null
 assert_eq "$(meta_val "$T/l2.yaml" stderr_kind)" "quota" "공유 추출기: 실패 이벤트가 stderr 보다 먼저다"
 python3 "$X" --stderr-file "$T/err.txt" --meta-override-exit-code 0 --meta-override-reason "" < "$T/retried.jsonl" > "$T/l3.yaml" 2> "$T/l3.err"
