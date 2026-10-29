@@ -14,7 +14,8 @@
   suite_lock.py show --lock <잠금 폴더>
   suite_lock.py run  --lock <잠금 폴더> --owner <이름> [--wait <초>] -- <명령> [인자 …]
 
-종료 코드: show 0 · run 은 명령의 종료 코드, 잠금을 잡지 못하면 75(BUSY_RC) · 잠금 폴더에 쓰지 못하면 3(NO_LOCK_RC) · 2 사용법.
+종료 코드: show 0 · run 은 명령의 종료 코드, 잠금을 잡지 못하면 75(BUSY_RC) · 잠금 폴더에 쓰지 못하거나 주인 없는 잠금을
+옮기지 못하면 3(NO_LOCK_RC) · 2 사용법.
 """
 from __future__ import annotations
 
@@ -91,7 +92,11 @@ def describe(d: Path) -> str:
 
 
 class Busy(Exception):
-    pass
+    """잠금을 잡지 못했다. stuck 이면 바빠서가 아니라 주인 없는 잠금을 옮기지 못해서다 — 기다려도 풀리지 않는다."""
+
+    def __init__(self, msg, stuck=False):
+        super().__init__(msg)
+        self.stuck = stuck
 
 
 def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
@@ -100,7 +105,7 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
     d.parent.mkdir(parents=True, exist_ok=True)
     label = " ".join(owner.split())
     deadline = time.time() + max(0.0, wait)
-    announced = False
+    announced = stuck = False
     restored = 0
     while True:
         try:
@@ -120,7 +125,17 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
             gone = d.parent / ("%s.stale-%d-%d" % (d.name, os.getpid(), int(time.time() * 1000)))
             try:
                 os.rename(str(d), str(gone))
-            except OSError:
+            except FileNotFoundError:
+                continue   # 다른 쪽이 먼저 옮겼다 — 다시 본다(그쪽이 새로 잡았으면 바쁨으로 판정된다)
+            except OSError as exc:   # 옮기지 못하면 바쁜 잠금처럼 기다림 상한 · 쉼을 지키고 이유를 알린다
+                why = "주인 없는 잠금을 옮기지 못했다(%s) — 잠금 폴더의 부모 권한을 확인하거나 사람이 지운다: %s" % (
+                    type(exc).__name__, describe(d))
+                if time.time() >= deadline:
+                    raise Busy(why, stuck=True)
+                if not stuck:
+                    say("[suite-lock] 기다린다(줄) — " + why)
+                    stuck = True
+                time.sleep(min(POLL, max(0.5, deadline - time.time())))
                 continue
             try:
                 moved = gone.stat()
@@ -186,7 +201,7 @@ def main(argv=None) -> int:
         take(lock, a.owner, a.wait)
     except Busy as exc:
         print("[suite-lock] 잠금을 잡지 못했다 — %s" % exc)
-        return BUSY_RC
+        return NO_LOCK_RC if exc.stuck else BUSY_RC
     except OSError as exc:
         print("[suite-lock] 잠금 폴더에 쓰지 못했다: %s (%s) — 잠금 없이 돌리지 않는다" % (lock, type(exc).__name__))
         return NO_LOCK_RC

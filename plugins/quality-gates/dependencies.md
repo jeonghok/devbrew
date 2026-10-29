@@ -13,6 +13,6 @@ plugin: quality-gates
 |---|---|---|---|---|
 | python | 3.9.6 | 2026-10-22 | 멈춤 | 진입에서 멈추고 Python 3 을 설치하거나 업데이트하라고 보인다 |
 | git | 2.54.0 | 2026-10-22 | 멈춤 | 진입에서 멈추고 git 을 설치하거나 업데이트하라고 보인다 |
-| gh | 2.88.1 | 2026-10-22 | 멈춤 | gh 를 쓰는 진입(quality-pipeline)에서 멈추고 gh 설치 방법을 보인다. 인증은 첫 gh 호출이 실패할 때 `gh auth login` 을 보이고 멈춘다 |
+| gh | 2.88.1 | 2026-10-22 | 멈춤 | gh 를 쓰는 진입(quality-pipeline)에서 멈추고 gh 설치 방법을 보인다. 게시 전에 origin 호스트의 인증을 확인하고(`gh auth status --active --hostname`) 실패하면 `failed: gh-unauthenticated` 로 알린다. SSH 꼴 origin 은 ssh(`ssh -G`)로 별칭 호스트를 풀어서, ssh 가 없으면 origin 을 https 꼴로 바꾸거나 ssh 를 설치하라고 보이고 멈춘다 |
 | claude-code | 2.1.303 | 2026-10-22 | 기록 | 잰 판을 기록만 한다 |
 | pr-review-toolkit | — | — | 기록 | 외부 플러그인이라 판을 재지 못한다 — 없으면 이 리뷰어를 건너뛰고 나머지로 진행한다(README Prerequisites 의 optional 의존) |

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -151,7 +152,8 @@ class QuestionValues(unittest.TestCase):
         self.assertEqual(all_["v2_status_first_line"][:2], [3, 4])
 
     def test_qg_question_templates_count_as_status_in_both_forms(self):
-        # 바뀌기 전 영어 틀과 바뀐 뒤 한국어 틀을 똑같이 센다 — 한쪽만 세면 전후 비교가 문구 바뀜을 개선으로 읽는다.
+        # 지난 기록에 남은 틀(영어 틀 · 「최대 N번 반복했다」)도 센다 — 지난 틀을 빼면 전후 비교가 문구 바뀜을
+        # 개선으로 읽는다. 지금 SKILL 의 틀은 test_live_qg_question_templates_count_as_status 가 잰다.
         with tempfile.TemporaryDirectory() as tmp:
             c = Corpus(tmp)
             c.file("a.jsonl", [
@@ -163,6 +165,20 @@ class QuestionValues(unittest.TestCase):
             ])
             all_, _, _ = c.measure()
         self.assertEqual(all_["v2_status_first_line"][:2], [3, 4])
+
+    def test_live_qg_question_templates_count_as_status(self):
+        # 픽스처를 손으로 쓰지 않는다 — 지금 SKILL 이 묻는 qg 질문 틀(`question: "qg …"`)을 읽어 자리표를 채운다.
+        # SKILL 문구가 바뀌면 이 시험이 새 문구로 재고, 측정 도구가 그 문구를 못 세면 빨개진다.
+        skill = Path(__file__).resolve().parents[2] / "plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+        tmpl = re.findall(r'^\s*question: "(qg [^"\n]*)"', skill.read_text(encoding="utf-8"), re.M)
+        self.assertGreaterEqual(len(tmpl), 3, "SKILL 의 qg 질문 틀을 찾지 못했다 — 도출이 깨졌다")
+        self.assertTrue(any("반복 상한" in t for t in tmpl), "반복 상한 질문 틀이 도출에 없다")
+        filled = [t.replace("<CAP>", "5").replace("<summary>", "x").replace("반복 N:", "반복 2:") for t in tmpl]
+        with tempfile.TemporaryDirectory() as tmp:
+            c = Corpus(tmp)
+            c.file("a.jsonl", [human("q"), asst(auq(*filled))])
+            all_, _, _ = c.measure()
+        self.assertEqual(all_["v2_status_first_line"][:2], [len(filled), len(filled)], filled)
 
     def test_status_multi_tokens_and_unparsed(self):
         raw = json.dumps({"questions": [{"question": "평범한 질문"}, {"question": "또 하나"}]})

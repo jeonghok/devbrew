@@ -214,9 +214,9 @@ mkdir -p "$T/nogit"; cp -R "$R/docs" "$T/nogit/"
 txt="$(python3 "$C" "$T/nogit/docs/x/R9.md" "$R/rej.md")"; rc=$?
 assert_eq "$rc" "0" "레포 설정을 못 읽음: 셀 수 없음만 있으면 rc 0"
 assert_contains "$txt" "셀 수 없음 — S7 — 레포 설정을 읽지 못했다: git 레포가 아니다" "레포 설정을 못 읽은 사유 줄"
-# 13c. 해결자의 알림(기본값으로 대신한 것 · 건너뛴 층)은 stderr 로 알린다 — 조용히 대신하지 않는다
+# 13c. 해결자의 알림(기본값으로 대신한 것)은 stderr 로 알린다 — 조용히 대신하지 않는다(이 레포는 원격이 없다)
 err="$(python3 "$C" "$R/docs/x/R9.md" "$R/rej.md" 2>&1 >/dev/null)"
-assert_contains "$err" "[spec-distill] 기계 상태 층 건너뜀" "해결자 알림을 stderr 로 알린다"
+assert_contains "$err" "[spec-distill] 기본 브랜치를 알 수 없어" "해결자 알림을 stderr 로 알린다"
 
 # 14. 출력 · 종료 코드(AC7) — 빠진 번호가 하나면 rc 1(양성 짝), JSON 키
 r9_design '| C1 | 반영 | §1 |\n| D2 | 반영 | §1 |\n| S7 | 반영 | §1 |\n| S8 | 반영 | §1 |\n' > "$R/miss1.md"

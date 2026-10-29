@@ -98,8 +98,8 @@ classify_artifact_target.py <path>
 
 모드를 정한다 — 모드는 실행 전체에 하나다. 인자에 `--findings-only` 가 있거나 요청이 고치지 말고 지적만 원하면
 「지적만 받기」(대상마다 한 라운드 비평만 받아 보고하고 편집 · 커밋을 하지 않는다), 아니면 「고치며 돌기」(라운드마다
-고치고 커밋한다). `--findings-only` 는 대상 경로가 아니다. 같은 파일을 두 번 적었거나 symlink 와 그것이 가리키는 파일을
-함께 적었으면 E2c 가 `canonical` 로 하나로 합친다.
+고치고 커밋한다). `--findings-only` 는 대상 경로가 아니다. 같은 파일을 두 번 적었으면(`a.md` · `./a.md` · 절대 경로)
+E2c 가 `canonical` 로 하나로 합친다. 경로 어디에든 symlink 가 있는 대상은 E2c 가 거절한다 — 링크가 가리키는 원본 경로를 적는다.
 
 ### E2 — 브랜치 안전 (project_dir 좌표 freeze)
 
@@ -150,11 +150,14 @@ symlink을 따라 project_dir 밖 파일을 읽어(codex는 외부 프로세스�
 artifact_path_auth.py <project_dir> <path>
 ```
 
-- `auth: reject` → **종료**: `> [quality-gates] '<path>'가 project_dir 밖을 가리킵니다(symlink/traversal escape) — 대상 거부.`
+- `auth: reject` → **종료**. 안내 줄은 `reason:` 으로 고른다 —
+  `reason: symlink_target` 이면 `> [quality-gates] '<path>'는 링크(symlink)라 비평하지 않습니다(경로 어디에든 링크가 있으면 거부) — 링크가 가리키는 원본 경로를 적어 다시 부르세요.`,
+  `reason: escapes_project_dir` 이면 `> [quality-gates] '<path>'가 project_dir 밖을 가리킵니다(traversal escape) — 대상 거부.`,
+  그 밖의 사유면 `> [quality-gates] '<path>' 경로 인가 거부(<reason>) — 대상 거부.`
 - `auth: ok` → 반환된 `canonical:`을 그 대상의 이후 **모든** 단계(critic·codex·adversarial read, 편집)의
   **frozen 대상 경로**로 삼는다. **세 리뷰어 모두**의 read와 편집은 raw `<path>`가 아니라
   `canonical`을 쓴다(git 커밋/change-signal은 E2b가 검증한 tracked `<path>` 그대로).
-- 인가가 끝나면 `canonical` 이 같은 대상(같은 파일을 두 번 · symlink 와 그 대상)은 먼저 적은 하나만 남기고 알린다:
+- 인가가 끝나면 `canonical` 이 같은 대상(같은 파일을 두 번 적은 것 — 링크는 위에서 이미 거부됐다)은 먼저 적은 하나만 남기고 알린다:
   `> [quality-gates] '<path>'는 '<먼저 적은 path>'와 같은 파일이라(<canonical>) 한 번만 비평한다.`
 
 > **알려진 한계 (TOCTOU):** E2c는 경로 *문자열*을 freeze하지 캐노니컬 *inode*를 freeze하지

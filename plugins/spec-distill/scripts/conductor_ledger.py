@@ -18,7 +18,7 @@
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 받은 gh 출력이 기대와
 다르다(pr-refresh: 다른 head · 모르는 값 / pr-record: head · 교차 레포 · base 대조 실패 · PR URL 의 레포가 origin 아님 —
-아무것도 쓰지 않는다) · 5 다른 세션의 표지.
+아무것도 쓰지 않는다) · 5 다른 세션의 표지. 예상 밖 예외도 3 이다(1 로 새지 않는다).
 """
 from __future__ import annotations
 
@@ -111,12 +111,15 @@ def update(root, roadmap: str, session: str, change, skip: tuple = ()) -> dict:
     """표지를 쥔 세션만 쓴다. 깨진 기계 상태는 읽기에서 멈춘다(빈 상태로 덮어쓰지 않는다)."""
     path = mpath(root, roadmap)
     need_holder(root, roadmap, session)
+    old_settings = cs.has_old_repo_settings(path)   # 다시 쓰면 옛 절이 사라진다 — 조용히 버리지 않는다
     data = load(root, roadmap, skip)
     change(data)
     try:
         cs.save(path, roadmap, data, session)
     except cs.MachineError as exc:
         raise Fail(3, "기계 상태를 쓰지 못했다: %s" % exc)
+    if old_settings:
+        print("[spec-distill] " + cs.OLD_REPO_SETTINGS_DROPPED)
     return data
 
 
@@ -677,26 +680,14 @@ def c_release(root, a) -> int:
 
 def c_add(root, a) -> int:
     row = split_cells(a.section, a.cells)
-    if a.section == "레포 설정":   # 읽는 쪽(merge_layers · merge_check)이 거부할 줄은 쓰지 않는다 — 같은 함수를 부른다
-        layer = {row["키"]: row["값"]}
-        try:
-            repo_defaults.check_layer(layer, "machine")
-        except repo_defaults.SettingsError as exc:
-            raise Fail(2, str(exc))
-        res = repo_defaults.merge_layers(None, None, None, layer, [])
-        if res["errors"]:
-            raise Fail(2, res["errors"][0])
-        if row["키"] == "test_failure_pattern":
-            import merge_check  # 함수 안 — merge_check 는 이 모듈을 부르지 않는다
-            why = merge_check.pattern_error(res["values"]["test_failure_pattern"])
-            if why:
-                raise Fail(2, "test_failure_pattern 정규식이 깨졌다: %s" % why)
+    if a.section == "레포 설정":   # 검사받는 하위 agent 도 쓸 수 있는 파일이라 스위트 대조가 읽지 않는다
+        raise Fail(2, "기계 상태에는 레포 설정을 적지 않는다 — 사용자가 답한 테스트 명령은 `merge_check.py run … "
+                      "--test-command \"<명령>\"`(실패 이름 정규식은 `--test-failure-pattern`)으로 그 호출에만 넘기고, "
+                      "레포 설정 파일(%s)에 올리자고 알린다" % repo_defaults.SETTINGS_FILE)
+    if a.section in cs.RETIRED_SECTIONS:
+        raise Fail(2, "%s 절은 옛 절이라 쓰지 않는다(읽을 때 버린다)" % a.section)
 
     def change(d):
-        if a.section == "레포 설정" and any(r["키"] == row["키"] for r in d[a.section]):
-            raise Fail(2, "레포 설정 절에 %s 가 이미 있다 — 바꾸려면 `ledger drop --roadmap %s --session %s "
-                          "--section \"레포 설정\" --where 키=%s` 로 지운 뒤 다시 적는다"
-                          % (row["키"], a.roadmap, a.session, row["키"]))
         d[a.section].append(row)
     update(root, a.roadmap, a.session, change)
     print("적었다 — %s: %s" % (a.section, a.cells))
@@ -766,6 +757,13 @@ def c_cleanup(root, a) -> int:
             rc, _o, err = git(root, "worktree", "remove", "--force", str(path))
             if rc:
                 raise Fail(3, "스위트 대조 사본을 지우지 못했다: %s" % err)
+        run = path.resolve().parent   # 실행 폴더(run-<ts>) — 남은 사본이 없으면 임시 폴더 · 결과와 함께 지운다
+        if run.is_dir() and not any((run / n).exists() for n in ("base", "merged")):
+            try:
+                shutil.rmtree(str(run))
+            except OSError as exc:
+                print("[spec-distill] 스위트 대조 실행 폴더를 지우지 못했다(%s) — 남은 것은 사용자가 정리한다: %s"
+                      % (type(exc).__name__, run))
     elif kind == "pack":
         if path.exists():
             try:
@@ -1033,6 +1031,8 @@ def c_pr_refresh(root, a) -> int:
 def c_pr_record(root, a) -> int:
     """번호로 물은 PR 의 head · 교차 · base 를 그 에픽의 브랜치와 대조한 뒤에만 `## 에픽 PR` 번호 줄과 `## PR` 캐시 줄을
     한 번에 쓴다. `--drop` 은 gh 없이 (에픽, 번호) 줄을 지운다."""
+    for line in gh_repo.env_notices():
+        print("[spec-distill] " + line)
     ref = gh_repo.parse_pr_ref(a.pr)
     if ref is None:
         raise Fail(2, "PR 번호를 읽지 못했다: %r — PR URL 이나 숫자(예: --pr 123)를 준다" % a.pr)
@@ -1445,6 +1445,9 @@ def main(argv=None) -> int:
         return exc.rc
     except cs.MachineError as exc:
         print("[spec-distill] %s" % exc)
+        return 3
+    except Exception as exc:   # 파이썬 기본 rc 1 은 「없음/아님」 으로 읽힌다(live-agent 면 같은 agent 를 또 보낸다) — 검사 불가다
+        print("[spec-distill] 내부 오류로 판정하지 못했다(%s: %s) — 이 줄을 그대로 알린다" % (type(exc).__name__, exc))
         return 3
 
 

@@ -86,6 +86,10 @@ case_pipeline_order() {
   done
   assert_eq "$good" "1" "흐름 절이 ① 리뷰 → ② 차등 테스트 → ③ 합성·판정 순서로 적혀 있다 (C1)"
   assert_grep "$(printf '%s\n' "$body" | grep '①')" '리뷰' "① 은 리뷰다 (C1 — 리뷰가 차등보다 먼저)"
+  # ② 는 전체 스위트가 아니라 이 변경의 영향 테스트만 기준선 대비로 돈다(differential-test.md 의 영향 테스트 선택).
+  assert_grep "$(printf '%s\n' "$body" | grep '② 차등 테스트')" '영향받는 테스트만 \(bulk 러너는 그 러너 전체 — 커버리지 미보장\)' \
+    "흐름도의 ② 줄이 「영향받는 테스트만」 돈다고 말한다"
+  assert_file_grep "$REF" '영향 테스트' "양의 짝: 차등 절차 문서가 영향 테스트를 고른다"
 }
 
 case_no_gate_scope_question() {

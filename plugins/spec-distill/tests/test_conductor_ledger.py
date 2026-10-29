@@ -340,6 +340,9 @@ class Resources(Repo):
         self.cli("claim", "--roadmap", RM, "--session", SID)
         mc = self._mdir() / "merge-check"
         (mc / "run-x").mkdir(parents=True)
+        (mc / "run-x" / "tmp-merged").mkdir()   # 옛 판이 남긴 실행 폴더의 찌꺼기 — 사본과 함께 지운다
+        (mc / "run-x" / "units.assign").write_text("x", encoding="utf-8")
+        (mc / "run-y").mkdir()                  # 다른 실행 폴더는 건드리지 않는다
         copy = mc / "run-x" / "merged"
         sh(self.w, "worktree", "add", "-q", "--detach", str(copy), "trunk")
         (copy / "dirty.txt").write_text("x", encoding="utf-8")
@@ -353,6 +356,21 @@ class Resources(Repo):
             self.assertEqual(rc, 0, out)
             self.assertFalse(p.exists())
         self.assertEqual(self._rows(), [])
+        self.assertFalse((mc / "run-x").exists(), "합친 사본을 지우면 그 실행 폴더(임시 폴더 · 결과)도 지운다")
+        self.assertTrue((mc / "run-y").is_dir(), "다른 실행 폴더는 그대로다")
+
+    def test_cleanup_keeps_run_folder_with_another_copy(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        run = self._mdir() / "merge-check" / "run-x"
+        run.mkdir(parents=True)
+        copy, other = run / "merged", run / "base"
+        for p in (copy, other):
+            sh(self.w, "worktree", "add", "-q", "--detach", str(p), "trunk")
+        self._row(copy)
+        rc, out = self.cli("cleanup", "--roadmap", RM, "--session", SID, "--path", str(copy))
+        self.assertEqual(rc, 0, out)
+        self.assertFalse(copy.exists())
+        self.assertTrue(other.is_dir(), "남은 사본(등록된 worktree)이 있으면 실행 폴더를 지우지 않는다")
 
     def test_cleanup_refuses_symlink_and_non_worktrees(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -725,6 +743,19 @@ class LiveAgent(Repo):
         self.assertEqual(rc, 3)
         self.assertNotIn("agent 없음", out)
         self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
+
+    def test_unexpected_error_is_rc3_not_none(self):
+        """예상 밖 예외(여기서는 기계 상태 폴더를 못 여는 PermissionError)는 파이썬 기본 rc 1(「없음」)이 아니라 rc 3 이다 —
+        rc 1 이면 지휘자가 같은 계획 agent 를 한 번 더 보낸다."""
+        self._add("plan-a1 · A1 · 계획 · /w/a1 · 2026-10-18")
+        d = L.mpath(self.w, RM).parent
+        os.chmod(str(d), 0)
+        self.addCleanup(os.chmod, str(d), 0o755)
+        p = subprocess.run([sys.executable, str(Path(L.__file__)), "--root", str(self.w), "live-agent", "--roadmap", RM,
+                            "--epic", "A1", "--work", "계획"], capture_output=True, encoding="utf-8", env=ENV)
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("내부 오류", p.stdout)
+        self.assertNotIn("agent 없음", p.stdout)
 
 
 class Audit(unittest.TestCase):
@@ -1146,6 +1177,28 @@ class PrRefresh(Repo):
         rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
         self.assertEqual((rc, out.strip()), (0, "acquired"))
         self.assertNotIn("## 시작 승인", path.read_text(encoding="utf-8"))
+        self.assertNotIn("예전 판이 적은 테스트 명령 줄", out, "옛 레포 설정 절이 비었으면 알리지 않는다")
+
+    def test_claim_tells_old_repo_settings_rows_are_dropped(self):
+        """8.11.0 까지 종료 코드 6 의 답을 적던 `## 레포 설정` 줄은 다시 쓸 때 지워진다 — 조용히 버리지 않고 한 번 알린다.
+        값은 내보이지 않는다(검사받는 하위 agent 도 쓸 수 있는 파일이다)."""
+        path = L.mpath(self.w, RM)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        old = OLD_MACHINE.replace("docs/superpowers/roadmaps/rm/roadmap.md", RM)
+        path.write_text(old.replace("## 레포 설정\n\n", "## 레포 설정\n\n- test_command · bash -c \"exit 0\"\n"),
+                        encoding="utf-8")
+        rc, out = self.cli("claim", "--roadmap", RM, "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("예전 판이 적은 테스트 명령 줄", out)
+        self.assertIn("사용자에게 다시 물어 --test-command 로 넘기거나", out)
+        self.assertIn("(`## 레포 설정`)을 지웠다", out, "저장 뒤의 알림은 지웠다고 말한다")
+        self.assertNotIn("남아 있다", out, "지운 뒤에 남아 있다고 말하지 않는다")
+        self.assertNotIn("exit 0", out, "옛 줄의 값을 알림에 싣지 않는다")
+        self.assertEqual(out.strip().splitlines()[-1], "acquired")
+        self.assertNotIn("레포 설정", path.read_text(encoding="utf-8"))
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "R1 · 절 · 글")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("예전 판이 적은 테스트 명령 줄", out, "지운 뒤에는 다시 알리지 않는다")
 
     def test_pr_of_another_head_name_fails_closed(self):
         self.cli("claim", "--roadmap", RM, "--session", SID)
@@ -1392,6 +1445,16 @@ class PrRecord(Repo):
 
     def raw(self):
         return L.mpath(self.w, RM).read_bytes()
+
+    def test_env_notices_are_shown(self):   # R14 미룸 — pr-refresh 와 같이 GH_REPO 를 무시한다고 알린다
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GH_REPO": "up/r"}):
+            rc, out = self.record("--pr", "7")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("GH_REPO 이 설정돼 있다(up/r) — devbrew 는 -R 로 origin 을 명시해 쓴다", out)
+        with mock.patch.dict(os.environ, {"GH_REPO": ""}):
+            rc, out = self.record("--pr", "7", "--drop")
+        self.assertNotIn("GH_REPO", out, "양의 짝: 변수가 비었으면 알리지 않는다")
 
     def test_three_forms_record_one_row(self):
         for form in ("7", "#7", "https://github.com/me/r/pull/7"):
@@ -2015,70 +2078,37 @@ class ParallelTruth(Repo):
 
 
 class RepoSettingsAdd(Repo):
-    """R14 AC11 — `ledger add --section "레포 설정"` 은 읽는 쪽(merge_layers · merge_check)이 거부할 값을 쓰지 않는다."""
+    """기계 상태 `## 레포 설정` 은 옛 절이다 — 검사받는 하위 agent 도 쓸 수 있는 파일이라 스위트 대조가 읽지 않는다.
+    `ledger add` 는 그 절(과 다른 옛 절)에 쓰지 않고, 사용자 답은 `merge_check.py run --test-command` 로 그 호출에만
+    넘기라고 알린다(rc 2, 아무것도 쓰지 않는다)."""
     def setUp(self):
         super().setUp()
         self.cli("claim", "--roadmap", RM, "--session", SID)
-        rc, out = self.add("test_command · make test")
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "R1 · 절 · 글")
         self.assertEqual(rc, 0, out)
         self.before = L.mpath(self.w, RM).read_bytes()
 
-    def add(self, cells):
-        return self.cli("add", "--roadmap", RM, "--session", SID, "--section", "레포 설정", "--cells", cells)
-
-    def refused(self, cells):
-        rc, out = self.add(cells)
+    def refused(self, section, cells):
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", section, "--cells", cells)
         self.assertEqual(rc, 2, out)
         self.assertEqual(L.mpath(self.w, RM).read_bytes(), self.before, "거부면 기계 상태가 바이트까지 그대로다")
         return out
 
-    def test_duplicate_key_rc2(self):
-        out = self.refused("test_command · make check")
-        self.assertIn("레포 설정 절에 test_command 가 이미 있다", out)
-        self.assertIn("ledger drop --roadmap %s --session %s --section \"레포 설정\" --where 키=test_command" % (RM, SID), out)
+    def test_repo_settings_section_is_refused(self):
+        for cells in ("test_command · make test", "test_failure_pattern · ^FAIL: (.+)$"):
+            out = self.refused("레포 설정", cells)
+            self.assertIn("merge_check.py run", out, cells)
+            self.assertIn("--test-command", out, cells)
+            self.assertIn(".devbrew.md", out, cells)
 
-    def test_layer_key_rc2(self):
-        out = self.refused("specs_dir · docs/specs")
-        self.assertIn("이 설정을 받지 않는다(specs_dir)", out)
+    def test_other_retired_section_is_refused(self):   # 옛 절은 쓰고 나서 버린다 — 「적었다」 고 말하지 않는다
+        out = self.refused("시작 승인", "%s · 2026-10-18 10:00 · 남은 에픽 2" % SID)
+        self.assertNotIn("적었다", out)
 
-    def test_unknown_key_rc2(self):
-        out = self.refused("test_comand · make test")
-        self.assertIn("모르는 키가 있다(test_comand)", out)
-
-    def test_empty_value_rc2(self):
-        out = self.refused('test_failure_pattern · ""')
-        self.assertIn("값이 비었다(test_failure_pattern)", out)
-
-    def test_bad_pattern_rc2(self):
-        out = self.refused("test_failure_pattern · [")
-        self.assertIn("test_failure_pattern", out)
-        import merge_check
-        self.assertIn(merge_check.pattern_error("["), out, "merge_check 가 내는 정규식 오류 글을 그대로 보인다")
-
-    def test_good_pattern_is_written(self):
-        rc, out = self.add("test_failure_pattern · ^FAIL: (.+)$")
+    def test_live_section_is_written(self):   # 양의 짝
+        rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "R2 · 절 · 글")
         self.assertEqual(rc, 0, out)
-        self.assertNotEqual(L.mpath(self.w, RM).read_bytes(), self.before, "양의 짝: 맞는 값은 쓴다")
-
-    def test_reader_function_drives_writer(self):
-        from unittest import mock
-        import merge_check
-        with mock.patch.object(merge_check, "pattern_error", return_value="강제 오류"):
-            out = self.refused("test_failure_pattern · ^FAIL: (.+)$")
-        self.assertIn("강제 오류", out)
-
-    def test_end_to_end_merge_check_accepts(self):
-        import merge_check
-        import repo_defaults
-        rc, out = self.add("test_failure_pattern · \"^FAIL: (.+)$\"")
-        self.assertEqual(rc, 0, out)
-        rows = cs.repo_settings_rows(L.mpath(self.w, RM), RM)
-        self.assertEqual(sorted(rows), ["test_command", "test_failure_pattern"])
-        res = repo_defaults.merge_layers(None, None, None, rows, [])
-        self.assertEqual(res["errors"], [])
-        self.assertEqual(res["values"]["test_command"], "make test")
-        self.assertEqual(res["values"]["test_failure_pattern"], "^FAIL: (.+)$")
-        self.assertIsNone(merge_check.pattern_error(res["values"]["test_failure_pattern"]))
+        self.assertNotEqual(L.mpath(self.w, RM).read_bytes(), self.before)
 
 
 if __name__ == "__main__":

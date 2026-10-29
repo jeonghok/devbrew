@@ -232,7 +232,10 @@ assert_contains "$(cyc 1)" '`ledger claim` · `ledger takeover` · `ledger pr-re
 assert_contains "$(cyc 4)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 채운다" "지휘 걸음 4: PR 을 연 뒤 pr-refresh"
 assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "지휘 걸음 4: gh pr create 에 -R origin"
 assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 스위트 대조" "지휘 걸음 5(머지 전 확인): 스위트 대조 직전에 pr-refresh"
-assert_contains "$(cyc 5)" "같은 키를 바꿀 때는 drop 뒤 add 한다" "지휘 걸음 5(rc 6): 레포 설정의 같은 키는 drop 뒤 add 로 바꾼다(R14 AC11)"
+assert_contains "$(cyc 5)" '그 답을 인자로 붙여 이 대조를 다시 돌리고(`… --keep-merged --test-command "<명령>"`' "지휘 걸음 5(rc 6): 사용자 답은 merge_check 의 --test-command 인자로 그 호출에만 넘긴다"
+assert_contains "$(cyc 5)" "답은 기계 상태에 적지 않는다" "지휘 걸음 5(rc 6): 답을 기계 상태에 적지 않는다"
+assert_contains "$(cyc 5)" "압축 · 새 세션 뒤에는 그 답을 기억하지 못하니 다시 묻는다" "지휘 걸음 5(rc 6): 압축 · 새 세션 뒤에는 답을 다시 묻는다"
+assert_not_contains "$(cyc 5)" '--section "레포 설정"' "지휘 걸음 5(rc 6): 기계 상태 레포 설정 절에 쓰라는 명령이 없다"
 before() {  # before <글> <앞> <뒤> — 앞이 뒤보다 먼저 나오면 yes
   PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t, a, b = sys.argv[1:4]
@@ -331,10 +334,11 @@ assert_contains "$(cyc 7)" '`## 에픽 PR` 은 남기고' "지휘 걸음 7(기�
 KEEP_EPIC='`## 에픽 PR` 은 남기고 나머지를 비운다'
 wipes_epic() {  # wipes_epic <글> — `## 에픽 PR` 을 지우거나 비우는 문장(남긴다는 허용 절은 뺀다)
   local t="${1//"$KEEP_EPIC"/}"
-  printf '%s\n' "$t" | hit '에픽 PR[^.]*(지운|비운|지워|비워)'
+  printf '%s\n' "$t" | hit '에픽 PR[^.]*(지운|비운|지워|비워)|(지운|비운|지워|비워)[^.]*에픽 PR'
 }
 assert_eq "$(wipes_epic "$(cyc 7)")" "" "지휘 걸음 7: \`## 에픽 PR\` 을 지우거나 비우는 문장이 없다(AC19 — 양의 짝: 남기고)"
-for lit in '- 기계 상태: `## 에픽 PR` 도 비운다.' '- 기계 상태: 모두 비운다 — `## 에픽 PR` 까지 지운다.'; do
+for lit in '- 기계 상태: `## 에픽 PR` 도 비운다.' '- 기계 상태: 모두 비운다 — `## 에픽 PR` 까지 지운다.' \
+           '- 기계 상태: 모든 절을 비운다(`## 에픽 PR` 포함).'; do
   [ -n "$(wipes_epic "$(cyc 7) $lit")" ] && ok "양성 대조(AC19): 「${lit}」 를 잡는다" || no "양성 대조(AC19): 「${lit}」 를 못 잡는다"
 done
 assert_eq "$(wipes_epic "- 기계 상태: ${KEEP_EPIC}(남은 자원이 없을 때).")" "" "양성 짝(AC19): 남긴다는 허용 절은 잡지 않는다"

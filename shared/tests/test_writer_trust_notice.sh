@@ -122,5 +122,12 @@ synth="$(mktemp -t putsnap-XXXXXX)"
 printf '%s\n' 'x="$(put_snap "$d" "$s" && py docreview_state.py begin-round)"' > "$synth"
 assert_eq "$(old_hits "$synth")" "1" "cases.sh 부재 단언 양성 대조: 옛 꼴을 담은 합성 줄은 잡힌다"
 rm -f "$synth"
+# finish 가 끝에 운반 파일을 접는다 — 케이스가 carry_fold 를 부르지 않아도 서브셸 안 거절이 판정에 든다
+fin_out="$(REPO_ROOT="$REPO_ROOT" SCRIPTS="$SCRIPTS" DOCREVIEW_PROF_SD="$PROF_SD" bash -c '
+  . "$REPO_ROOT/shared/tests/assert.sh"; . "$REPO_ROOT/shared/tests/fixtures/docreview/cases.sh"
+  x="$(put_fail "합성 거절" 2>/dev/null)"; c="$_CASES_CARRY"; finish; rc=$?; [ -e "$c" ] && echo carry-left; echo "rc=$rc"' 2>/dev/null)"
+assert_contains "$fin_out" "Fail: 1" "finish: \$(…) 안에서만 난 거절 하나를 끝에 실패로 센다"
+assert_contains "$fin_out" "rc=1" "finish: 그 거절로 종료 코드가 1 이다"
+assert_not_contains "$fin_out" "carry-left" "finish: 운반 파일을 지운다"
 
 finish

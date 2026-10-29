@@ -225,7 +225,7 @@ next_phase: superpowers:writing-plans
 |---|---|---|
 | 「(권장)」을 그대로 따르는 비율(과의존) 측정(K7) | 인터뷰 state 는 고른 라벨만, 지휘 relay 는 git 밖, transcript 는 30일 뒤 삭제 — 가를 바탕 자료가 없다 | 바탕 자료가 생기면 따로 설계 |
 | 모델이 즉석에서 만드는 질문의 꼬리 빠짐(K5 · K4) | 정적 검사가 볼 수 없는 자리 — 정본 규칙만이 집행한다(D15 공시) | 변경 없음 — CHANGELOG 한계로 공시 |
-| relay-checker 5번은 꼬리 뗀 원문 라벨이 돌려보낸 글에 있는지만 본다 — 지휘자 꼬리가 남은 채 돌려보내도 일치 | AC9 글자 그대로이고 옛 규칙과 같은 한계, 조이면 설계를 넘는 persona 편집(최종 리뷰 · 구현 Ruling 7) | 다음 relay-checker 편집 — spec-distill 8.12.0 CHANGELOG Security 에 공시 |
+| relay-checker 5번은 꼬리 뗀 원문 라벨이 돌려보낸 글에 있는지만 본다 — 지휘자 꼬리가 남은 채 돌려보내도 일치 | AC9 글자 그대로이고 옛 규칙과 같은 한계, 조이면 설계를 넘는 persona 편집(최종 리뷰 · 구현 Ruling 7) | 다음 relay-checker 편집 — spec-distill 8.13.0 CHANGELOG Security 에 공시 |
 | 전수 검사의 ④ 수 비교에서 find 가 git-ignored `.md` 도 센다 | 지금 레포에 무시된 md 가 없어 거짓 RED 가 나지 않는다(최종 리뷰 Minor) | 무시된 md 가 생기면 `shared/tests/test_ask_recommendation.sh` 의 find 쪽을 고친다 |
 | 언급 행은 그 줄에 `AskUserQuestion` 이 하나뿐이면 줄 전체를 덮는다 | 그 하나가 진짜 질문으로 바뀌어도 ① 이 안 난다 — 「언급」 종류 정의의 한계(최종 수정 재리뷰) | 질문 자리를 더하는 리뷰가 목록을 함께 본다 |
 | `references/fresh-evidence.md` 원칙 4 「선택지로 묻는다」 문장형 자리 | 목록 · 지시 문장이 없다 — 즉석 질문 한계(§5 ①)에 든다(최종 리뷰 Minor) | 그 자리를 고칠 때 목록에 올린다 |

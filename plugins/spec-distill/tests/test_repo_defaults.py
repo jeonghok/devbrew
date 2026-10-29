@@ -122,7 +122,7 @@ class StrictFrontmatter(unittest.TestCase):
 
 class FolderSpecialChars(unittest.TestCase):
     def merged(self, key, value):
-        return rd.merge_layers(None, {key: value}, LABEL, None, [])
+        return rd.merge_layers(None, {key: value}, LABEL, [])
 
     def test_folder_special_chars(self):
         for key in ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir"):
@@ -147,7 +147,7 @@ class FolderSpecialChars(unittest.TestCase):
     def test_ordinary_folder_and_defaults_pass(self):
         m = self.merged("plans_dir", "docs/my-plans/")
         self.assertEqual((m["values"]["plans_dir"], m["errors"]), ("docs/my-plans/", []))
-        self.assertEqual(rd.merge_layers(None, {}, LABEL, None, [])["errors"], [])
+        self.assertEqual(rd.merge_layers(None, {}, LABEL, [])["errors"], [])
 
 
 class Layers(unittest.TestCase):
@@ -172,56 +172,58 @@ class Layers(unittest.TestCase):
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
 
-    def test_machine_layer_accepts_two_keys_only(self):
-        with self.assertRaises(rd.SettingsError) as c:
-            rd.check_layer({"review_model": "x"}, "machine")
-        self.assertEqual(c.exception.kind, "layer_key")
-        rd.check_layer({"test_command": "x", "test_failure_pattern": "y"}, "machine")
+    def test_machine_layer_is_gone(self):
+        """기계 상태 파일은 검사받는 하위 agent 도 쓸 수 있다 — 해결자는 그 층을 갖지 않는다(테스트 명령 · 실패 꼴 포함)."""
+        for meta in ({"test_command": "true"}, {"test_failure_pattern": "x"}, {}):
+            with self.assertRaises(ValueError) as c:
+                rd.check_layer(meta, "machine")
+            self.assertNotIsInstance(c.exception, rd.SettingsError, meta)
+        import inspect
+        self.assertNotIn("machine", inspect.signature(rd.merge_layers).parameters)
+        self.assertNotIn("machine_reader", inspect.signature(rd.resolve).parameters)
 
 
 class Merge(unittest.TestCase):
     def test_missing_key_is_default_not_error(self):
-        m = rd.merge_layers(None, {}, LABEL, None, [])
+        m = rd.merge_layers(None, {}, LABEL, [])
         self.assertEqual((m["values"]["interview_dir"], m["sources"]["interview_dir"]), (rd.INTERVIEW_DIR, "기본값"))
         self.assertEqual((m["values"]["branch_prefix"], m["values"]["roadmaps_dir"]), ("feature/", rd.ROADMAPS_DIR))
         self.assertEqual(m["errors"], [])
         self.assertEqual(list(m["values"]), list(rd.KEYS))
 
-    def test_priority_roadmap_repo_machine_constant(self):
-        m = rd.merge_layers({"test_command": "a"}, {"test_command": "b"}, LABEL, {"test_command": "c"}, [])
+    def test_priority_roadmap_repo_constant(self):
+        m = rd.merge_layers({"test_command": "a"}, {"test_command": "b"}, LABEL, [])
         self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("a", "로드맵"))
-        m = rd.merge_layers({}, {"test_command": "b"}, LABEL, {"test_command": "c"}, [])
+        m = rd.merge_layers({}, {"test_command": "b"}, LABEL, [])
         self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("b", LABEL))
-        m = rd.merge_layers({}, {}, LABEL, {"test_command": "c"}, [])
-        self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), ("c", "기계 상태(임시)"))
-        m = rd.merge_layers({}, {}, LABEL, {}, [])
+        m = rd.merge_layers({}, {}, LABEL, [])
         self.assertEqual((m["values"]["test_command"], m["sources"]["test_command"]), (None, "기본값"))
 
     def test_folder_under_git_or_root_is_error(self):
         for bad in (".git/x/", "a/.git/b/", ".GIT/x/", "a/.Git/b/", ".", "./", "/abs/", "a/../b/"):
-            m = rd.merge_layers(None, {"specs_dir": bad}, LABEL, None, [])
+            m = rd.merge_layers(None, {"specs_dir": bad}, LABEL, [])
             self.assertIsNone(m["values"]["specs_dir"], bad)
             self.assertEqual(len(m["errors"]), 1, bad)
 
     def test_old_repo_settings_meaning_is_kept(self):
         m = rd.merge_layers({"specs_dir": "design", "plans_dir": '"work/plans/"', "review_model": "opus", "test_command": "'make test'"},
-                            None, None, None, [])
+                            None, None, [])
         self.assertEqual((m["values"]["specs_dir"], m["values"]["plans_dir"]), ("design/", "work/plans/"))
         self.assertEqual((m["values"]["review_model"], m["values"]["test_command"]), ("opus", "make test"))
-        m = rd.merge_layers({"review_model": ""}, None, None, None, [])
+        m = rd.merge_layers({"review_model": ""}, None, None, [])
         self.assertIsNone(m["values"]["review_model"])
         self.assertTrue(any("review_model" in e for e in m["errors"]))
         for bad in ("0", "-1", "abc", "", "3.5", "３"):
-            m = rd.merge_layers({"parallel_default": bad}, None, None, None, [])
+            m = rd.merge_layers({"parallel_default": bad}, None, None, [])
             self.assertEqual(m["values"]["parallel_default"], 3, bad)
             self.assertEqual(m["errors"], [], bad)
             self.assertTrue(any("parallel_default" in w and "기본 3" in w for w in m["warnings"]), bad)
             self.assertEqual(m["sources"]["parallel_default"], "기본값(머리말 값이 깨졌다)", bad)
-        m = rd.merge_layers({"parallel_default": "5"}, None, None, None, [])
+        m = rd.merge_layers({"parallel_default": "5"}, None, None, [])
         self.assertEqual((m["values"]["parallel_default"], m["sources"]["parallel_default"]), (5, "로드맵"))
 
     def test_layer_violation_is_an_error_and_notices_pass_through(self):
-        m = rd.merge_layers({"branch_prefix": "x/"}, {}, LABEL, None, ["알림"])
+        m = rd.merge_layers({"branch_prefix": "x/"}, {}, LABEL, ["알림"])
         self.assertEqual(m["values"]["branch_prefix"], "feature/")
         self.assertTrue(m["errors"])
         self.assertEqual(m["notices"], ["알림"])
@@ -236,14 +238,6 @@ class InternalErrors(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
         subprocess.run(["git", "init", "-q", self.tmp], check=True, env=env)
-
-    def test_machine_reader_non_value_error_is_settings_error(self):
-        def boom(_roadmap):
-            raise RuntimeError("깨진 기계 상태")
-        with self.assertRaises(rd.SettingsError) as c:
-            rd.resolve(self.tmp, roadmap="r/roadmap.md", roadmap_text="---\ntype: roadmap\n---\n", machine_reader=boom)
-        self.assertEqual((c.exception.kind, c.exception.where), ("unreadable", "machine"))
-        self.assertIn("기계 상태(임시)", str(c.exception))
 
     def test_git_calls_never_lazy_fetch(self):
         captured = []

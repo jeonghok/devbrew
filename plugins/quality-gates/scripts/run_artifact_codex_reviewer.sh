@@ -143,6 +143,7 @@ REASON=""
 [ "$EXIT_CODE" -ne 0 ] && REASON=exit_nonzero
 
 if ! python3 "${PLUGIN_ROOT}/scripts/extract_codex_artifact_yaml.py" \
+    --stderr-file "$ERR" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$REASON" \
     < "$JSONL" > "$OUT" || [ ! -s "$OUT" ]; then
