@@ -42,10 +42,10 @@ python3 "$PI/scripts/check_deps.py" entry --plugin-root "$PI" --need python
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
-이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다. 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
+이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다. 추천 표시는 그 자리에서도 이 블록을 따른다 — 옮긴 질문과 steelman 질문의 선택지 순서, steelman 질문의 출처 표지만 예외다. 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 - 처음 보는 사람이 한 번에 이해하게 쓴다. 번호·해시·필드 이름·내부 용어는 가리키는 내용을 문장으로 먼저 쓰고 괄호 안에만 둔다. 지어낸 말은 쓰지 않거나 처음 쓸 때 풀어 쓴다.
 - 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일. 할 일은 기본 하나다 — 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다. 할 일이 없으면 없다고 쓴다. 커밋·PR 본문에는 이 순서를 적용하지 않는다.
-- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천은 「(권장)」으로 표시한다.
+- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다 — 여럿이면 모두, 이유는 질문 위 글에. 추천이 없으면 아무 표시도 쓰지 않는다.
 - 제목과 목록으로 나누되 표의 칸은 짧게 쓴다. 굵은 글씨는 꼭 필요한 곳에만 쓴다.
 - 사용자가 알 필요 없는 글은 쓰지 않는다: 도구 호출 사이의 진행 설명, 전부 정상인 항목의 나열. 확인해서 남은 것도 경고도 없으면 「이상 없음」 한 줄로 쓴다. 확인하지 못한 것·빠진 검사·셀 수 없는 것은 따로 한 줄씩 쓴다 — 없는 것과 확인 못 한 것은 다르다.
 - 판정·개수·공시 줄은 스크립트가 낸 쉬운 첫 줄을 그대로 쓰고, 자기 말로 다시 풀거나 덧붙이지 않는다. 스크립트·subagent 가 낸 원문은 고치지 않는다. 스크립트가 풀어 두지 않은 오류에만 쉬운 설명을 앞에 붙이되 통과·실패는 말하지 않는다.
@@ -63,7 +63,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 ### Step 1: 프로젝트 상태 감지
 
 1. 프로젝트 root의 AGENTS.md 와 CLAUDE.md 가 각각 존재하는지 확인
-2. 있는 파일마다 `## Git Workflow` 섹션이 이미 있는지 확인 — AGENTS.md 와 CLAUDE.md 중 어느 쪽에 있어도 기존 규칙이다(앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 그 절은 AGENTS.md 에 있다)
+2. 있는 파일마다 `## Git Workflow` 섹션이 이미 있는지 확인 — AGENTS.md 와 CLAUDE.md 중 어느 쪽에 있어도 기존 규칙이다(앞선 실행에서 「AGENTS.md 로 옮기기」를 골랐다면 그 절은 AGENTS.md 에 있다) — 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다
 3. `docs/git-workflow/` 디렉토리가 존재하는지 확인
 
 기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:
@@ -89,7 +89,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
-- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다. S4 에서 「CLAUDE.md 는 그대로 두기」를 골라 절이 옮겨지지 않으면 이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다.
+- (a) 관리 절을 담는 파일 — AGENTS.md 가 있으면 AGENTS.md, 없으면 CLAUDE.md(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md) — 에 `## Project Charter` 섹션이 존재하는가. AGENTS.md 가 있어도 거기 `## Project Charter` 가 없고 CLAUDE.md 에 있으면 CLAUDE.md 의 그 절을 읽는다 — 4c S4 「옮기기」가 4e 전에 그 절을 AGENTS.md 로 옮기므로(S2a 는 AGENTS.md 가 없는 경우라 위 규칙대로 CLAUDE.md 를 읽는다), 4e 는 옮긴 절을 제자리 갱신하고 두 번째 `## Project Charter` 를 더하지 않는다. S4 에서 「CLAUDE.md 는 그대로 두기」를 골라 절이 옮겨지지 않으면 이 경우는 4e 의 「갱신할 헌장 절이 쓸 파일에 없으면」 규칙이 맡는다. 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
@@ -111,7 +111,7 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 | **Git Flow** | `main` + `develop` + `feature/*` / `fix/*` / `release/*` / `hotfix/*` | release cycle을 가진 팀, version 관리 |
 | **Trunk-based** | `main` + 단명 `feature/*` / `fix/*` | 빠른 배포, feature flag 팀 |
 
-사용자가 선택할 때까지 대기.
+사용자가 선택할 때까지 대기. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다 — 근거는 레포 신호(`develop` 브랜치 · release 태그)다.
 
 ### Step 3: 커스터마이징 질문
 
@@ -119,13 +119,13 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
 **모든 strategy 공통:**
 
-1. **Commit scope 컨벤션** — "커밋 scope를 어떻게 정의할까요?"
+1. **Commit scope 컨벤션** — "커밋 scope를 어떻게 정의할까요?" 추천을 달지 않는다 — 커밋 scope 는 팀이 고르는 관례라 모델이 권할 근거가 없다.
    - module/디렉토리 이름 기준 (예: `feat(auth):`, `fix(api):`)
    - feature 영역 기준 (예: `feat(login):`, `fix(checkout):`)
    - scope 없음 (예: `feat:`, `fix:`)
 
-2. **기본 merge 전략** — "PR의 기본 merge 전략은?"
-   - Squash merge (clean history 권장)
+2. **기본 merge 전략** — "PR의 기본 merge 전략은?" Squash merge 를 권한다 — 기록이 깔끔하다.
+   - Squash merge (권장)
    - Merge commit (모든 commit 보존)
    - Rebase (linear history)
 
@@ -137,15 +137,15 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
 **Git Flow 추가:**
 
-4. **Release branch 명명** — "release 브랜치 포맷?"
-   - `release/v*` (예: `release/v1.2.0`) — default
+4. **Release branch 명명** — "release 브랜치 포맷?" `release/v*` 를 권한다 — 템플릿의 꼴과 같다.
+   - `release/v*` (권장) — 예: `release/v1.2.0`
    - 커스텀 포맷
 
 ### Step 3.5: Project Charter (신규)
 
 **질문 순서**: 기본은 직렬이다 — Step 3(release 브랜치 질문 포함)의 질문이 모두 끝난 뒤 헌장 질문을 시작하고, git 질문과 헌장 질문을 교차하지 않는다(답이 엉키지 않게). Phase 0 스캔은 질문이 없으므로 Step 2 · 3 질문과 겹쳐 돌려도 된다 — 예: Step 2 질문을 띄우기 전에 스캔을 시작한다. 헌장 질문 수는 git 질문 수와 따로 센다.
 
-C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻고, **거절 시 Step 3.5를 건너뛴다**(unchanged — NG7 경계상 합법, Law 1 게이트 비적용). 승인 또는 C-S1/C-S3(a)면 아래 Phase 0+1을 진행한다. C-S3(b)(docs 파일만 누락)는 질문 없이 Step 4e에서 기존 섹션 값으로 누락 파일만 생성한다.
+C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻고, **거절 시 Step 3.5를 건너뛴다**(unchanged — NG7 경계상 합법, Law 1 게이트 비적용). 승인 또는 C-S1/C-S3(a)면 아래 Phase 0+1을 진행한다. C-S3(b)(docs 파일만 누락)는 질문 없이 Step 4e에서 기존 섹션 값으로 누락 파일만 생성한다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다 — 근거는 Phase 0 스캔과 헌장 Tech Stack 이 어긋나는지다.
 
 #### Phase 0 — 사실 발견 (질문 0개)
 
@@ -178,11 +178,11 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 1. **Vision** (필수, 1문장) — "이 프로젝트의 한 문장 vision은?"
 2. **Non-goals** (필수) — "명시적으로 하지 *않을* 것 (non-goals)은?"
 3. **핵심 conventions** (필수) — "지켜야 할 핵심 코딩/구조 컨벤션은? (보통 1–3개, 더 적어도 된다)" — 받은 관례는 개수와 상관없이 모두 쓴다(자르지 않는다).
-4. **Tech-stack 확인** (필수) — Phase 0 후보를 보여주고 "감지된 tech-stack이 맞나요? 수정·추가할 것은?" (fallback 시 open-ended 입력).
+4. **Tech-stack 확인** (필수) — Phase 0 후보를 보여주고 "감지된 tech-stack이 맞나요? 수정·추가할 것은?" (fallback 시 open-ended 입력). 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 **Glossary 트리거 (AC7, 별도 질문 아님)**: 위 4개 답변 안에서 사용자가 *프로젝트 고유 도메인 용어*(일반 SW 어휘가 아닌, 이 프로젝트에서 특정 의미로 정의해 쓰는 명사 — 예: "ledger", "tenant", "rollup")를 명시적으로 정의·언급한 경우에만 glossary 후보로 수집한다. 용어를 **추측해 만들지 않는다**. 모호하면 수집하지 않는다(보수적). 수집된 용어가 0개면 `glossary.md`를 생성하지 않는다(빈 파일 금지).
 
-**쓴 수 공시와 더 묻기**: 필수 4개 항목이 Law 1 게이트(아래)를 통과한 뒤에 공시 줄을 낸다 — 사용자가 「건너뛰기」나 「중단」을 골랐으면 이 공시와 선택은 하지 않는다.
+**쓴 수 공시와 더 묻기**: 필수 4개 항목이 Law 1 게이트(아래)를 통과한 뒤에 공시 줄을 낸다 — 사용자가 「건너뛰기」나 「중단」을 골랐으면 이 공시와 선택은 하지 않는다. 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 > `[project-init] 헌장 질문 <n>개를 물었고(기본 4개) 관례 <m>개를 받았다(기본 1–3개).`
 
@@ -190,13 +190,13 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 #### Law 1 구조적 게이트 (bounded — AC10/C9)
 
-C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 뒤에도 비면 `AskUserQuestion` 한 번으로 사용자가 고른다:
+C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 뒤에도 비면 `AskUserQuestion` 한 번으로 사용자가 고른다. 「건너뛰기 (권장)」을 권한다 — 세 번 비었으면 지금은 답이 없다. git 규칙만 만들고 헌장은 다시 실행해 채운다:
 
-- 「건너뛰기」 — 헌장 단계를 건너뛴다. 헌장 절과 `docs/project/` 파일을 쓰지 않는다. git 규칙 파일은 그대로 만든다.
+- 「건너뛰기 (권장)」 — 헌장 단계를 건너뛴다. 헌장 절과 `docs/project/` 파일을 쓰지 않는다. git 규칙 파일은 그대로 만든다.
 - 「계속 묻기」 — 그 항목을 다시 최대 3회 묻고, 그래도 비면 이 선택을 다시 묻는다.
 - 「중단」 — 실행 전체를 멈춘다. Step 4 전이라 아무 파일도 쓰지 않았다.
 
-「건너뛰기」를 고르면 이렇게 알린다 (Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 git 규칙 파일도 만들지 않으므로 그 문장을 「git 규칙 파일도 바꾸지 않았다.」로 바꾼다):
+「건너뛰기」를 고르면 이렇게 알린다 (Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐다면 git 규칙 파일도 만들지 않으므로 그 문장을 「git 규칙 파일도 바꾸지 않았다.」로 바꾼다. 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다):
 
 > `[project-init] 헌장 단계를 건너뛰었다 — 미완 항목: <항목>. git 규칙 파일은 그대로 만든다. 헌장을 채우려면 /project-init:project-init 을 다시 실행하세요.`
 
@@ -217,7 +217,7 @@ C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워�
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/pr-process.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/claude-md-pointer.md`
 
-여기서 `<strategy>`는 `github-flow`, `git-flow`, `trunk-based` 중 하나.
+여기서 `<strategy>`는 `github-flow`, `git-flow`, `trunk-based` 중 하나. Step 2 · 3 에서 고른 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다 — 생성 문서에도 꼬리를 뗀 이름을 쓴다.
 
 #### 4b: Placeholder 치환
 
@@ -226,7 +226,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 | Placeholder | 치환 값 |
 |-------------|---------|
 | `{{SCOPE_CONVENTION}}` | Step 3 질문 1의 scope 룰 |
-| `{{MERGE_STRATEGY}}` | Step 3 질문 2의 merge 전략 |
+| `{{MERGE_STRATEGY}}` | Step 3 질문 2의 merge 전략 — 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다(`Squash merge` 로 쓰고 `Squash merge (권장)` 로 쓰지 않는다) |
 | `{{BRANCH_PREFIXES}}` | 전략 기본 접두 + Step 3 질문 3 에서 더한 접두를 순서대로 중복 없이 `\|` 로 이은 정규식 갈래 |
 | `{{BRANCH_PREFIX_LIST}}` | 같은 낱말을 `` `<접두>/*` `` 로 감싸 ` · ` 로 이은 목록 |
 | `{{EXTRA_PREFIX_LIST}}` | 질문 3 에서 더한 접두만 같은 꼴로 이은 목록, 없으면 `없음` |
@@ -242,7 +242,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 | State | AGENTS.md | CLAUDE.md | Action |
 |---|---|---|---|
 | **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |
-| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1 의 이전 질문 — 「AGENTS.md 로 옮기기」면 아래 S2a · S2b, 「CLAUDE.md 에 바로 쓰기」면 CLAUDE.md 안에서 관리 절만 제자리 갱신(AGENTS.md 를 만들지 않음), 「중단」이면 멈춘다. 「옮기기」를 고르면 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션과 `## Project Charter` 섹션(있으면, 관리 섹션이다) 추출, (b) AGENTS.md로 이전·새 template과 merge(헌장 절은 중복 없이 그대로 옮긴다; 「git 규칙은 그대로 두고 헌장만」이면 새 git template 을 merge 하지 않고 기존 `## Git Workflow` 를 그대로 옮긴다), (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
+| **S2 (CLAUDE-only legacy)** | 없음 | 존재 | Step 1 의 이전 질문(선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) — 「AGENTS.md 로 옮기기」면 아래 S2a · S2b, 「CLAUDE.md 에 바로 쓰기」면 CLAUDE.md 안에서 관리 절만 제자리 갱신(AGENTS.md 를 만들지 않음), 「중단」이면 멈춘다. 「옮기기」를 고르면 CLAUDE.md 내용 분기 (AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류): **S2a** 정규화 결과가 `@AGENTS.md` 아니면 full content — (a) `## Git Workflow` 섹션과 `## Project Charter` 섹션(있으면, 관리 섹션이다) 추출, (b) AGENTS.md로 이전·새 template과 merge(헌장 절은 중복 없이 그대로 옮긴다; 「git 규칙은 그대로 두고 헌장만」이면 새 git template 을 merge 하지 않고 기존 `## Git Workflow` 를 그대로 옮긴다), (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체, (d) 이전된 H1이 *원본 파일명을 지칭*하면 (`# CLAUDE.md`) `# AGENTS.md`로 재제목한다 — 그렇지 않은 H1(`# My Project` 등)은 프로젝트 제목이므로 비-관리 컨텐츠로 보존. 기존 CLAUDE.md의 `## LLM Coding Guidelines` 섹션은 plugin이 더 이상 *managed*로 취급하지 않으므로 자동으로 *비-관리 컨텐츠*로 분류되어, matrix 직후의 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존" 규칙에 따라 AGENTS.md migration 시 그대로 이전·보존됨 (사용자 4-bullet 컨텐츠 silent drop 없음). **S2b** 정규화 결과 == `@AGENTS.md`인 dangling pointer (AGENTS.md 부재) — 새 template만으로 AGENTS.md 신규 작성, CLAUDE.md unchanged. |
 | **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |
 | **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 세 선택지 — (i) CLAUDE.md가 존재하면 관리 섹션(`## Git Workflow` · `## Project Charter`)을 뺀 비-관리 컨텐츠를 AGENTS.md에서 **먼저 나오는 관리 섹션 앞**에 이전한 뒤(관리 섹션이 하나도 없으면 AGENTS.md 끝에) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체한다. 관리 섹션 뒤에 붙이지 않는다 — 헤딩 없는 본문은 바로 앞 절의 일부가 되어 그 절의 제자리 갱신(이어지는 S3 action, 다음 `/project-init:project-init` 실행)이 함께 덮는다. 관리 섹션을 이전 대상에서 빼는 것은 중복 절을 막기 위해서다. 단 AGENTS.md 에 `## Project Charter` 가 없으면 CLAUDE.md 의 `## Project Charter` 는 git 규칙 선택과 상관없이 이전한다 — 헌장 절은 중복 없이 그대로 AGENTS.md 끝에 옮긴다(S2a (b)와 같다). 포인터로 바뀐 CLAUDE.md 에는 절이 남지 않으므로 빼면 CLAUDE.md 교체와 함께 사라진다. AGENTS.md 에 같은 이름 절이 이미 있어 CLAUDE.md 의 그 절을 옮기지 않으면 advisory 와 Step 5 보고에 「CLAUDE.md 의 `<절>` 은 AGENTS.md 에 이미 있어 옮기지 않았다 — CLAUDE.md 가 포인터로 바뀌며 사라졌다」를 적는다(`<절>` 자리에는 `## Project Charter` 또는 `## Git Workflow`). 또 Step 1 에서 「git 규칙은 그대로 두고 헌장만」을 골랐고 AGENTS.md 에 `## Git Workflow` 가 없으면 CLAUDE.md 의 `## Git Workflow` 는 이전한다 — 새 template 과 merge 하지 않고 그대로 AGENTS.md 끝에 옮긴다(S2a (b)와 같다). 이 선택에서는 S3 action 이 그 절을 갱신하지 않으므로 빼면 CLAUDE.md 교체와 함께 사라진다. 원본 파일명을 지칭하는 H1(`# CLAUDE.md`)은 이전하지 않는다(S2a (d)와 같은 근거). CLAUDE.md가 없으면 `@AGENTS.md` 포인터만 쓴다. advisory는 이전될 비-관리 컨텐츠가 있다는 것을 밝힌다. 선택지: 「옮기기 (권장)」((i) 수행 + S3 action) · 「CLAUDE.md 는 그대로 두기」(S3 action 만 — AGENTS.md 관리 절 갱신, CLAUDE.md 는 손대지 않음, git-workflow 파일은 만든다. 이 선택에서 헌장 절이 CLAUDE.md 에만 있고 이번 실행이 헌장 절을 새로 쓰거나 갱신하지 않았다면(헌장 갱신을 거절했거나(C-S2) 빠진 `docs/project/` 파일만 만들었거나(C-S3 (b)) 헌장 단계를 건너뛰었을 때) AGENTS.md 에 `## Project Charter` 가 생기지 않아 실행마다 CLAUDE.md 의 헌장 절을 다시 읽는다) · 「중단」(아무 파일도 쓰지 않고 멈춘다). |
 
@@ -258,7 +258,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 #### 4e: Project Charter 발행 (§6 state matrix)
 
-헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고 C-S2 갱신을 거절하지 않았다면), Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 건너뛰기가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
+헌장 단계를 건너뛰지 않았다면(Law 1 게이트에서 「건너뛰기」를 고르지 않았고 C-S2 갱신을 거절하지 않았다면), Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 건너뛰기가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14). 선택지 이름은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 읽을 template:
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`(「CLAUDE.md 에 바로 쓰기」를 고른 실행에서는 CLAUDE.md)의 `## Project Charter` 섹션

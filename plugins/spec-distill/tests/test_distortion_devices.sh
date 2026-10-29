@@ -54,7 +54,7 @@ TE="$SD/references/trivia-escape.md"; SI="$SD/skills/pm-interview/SKILL.md"
 has   "$TE" '사소한 일로 보고 게이트를 건너뛴다 — 그대로 / 전체 과정으로' "AC16a: 우회 전에 「그대로 / 전체 과정으로」 질문이 있다"
 has   "$TE" '판정 근거: <판정 근거>' "AC16a: 질문에 판정 근거가 보인다"
 has   "$TE" 'label: "전체 과정으로"' "AC16a: 「전체 과정으로」 선택지가 있다"
-has   "$TE" 'label: "그대로"' "AC16a: 「그대로」 선택지가 있다"
+has   "$TE" 'label: "그대로 (권장)"' "AC16a: 「그대로」 선택지가 있다"
 has   "$TE" '「풀린 입력」의 첫 토큰이 정확히 `force` 면 그 토큰을 떼고 이 판정을 건너뛴다 — 나머지가 「풀린 입력」이 된다' "AC16a: 첫 토큰 force 경로가 그대로다"
 hasnt "$TE" '해당하면 다음 메시지를 출력하고 진행하지 않는다' "N11(부재): 묻지 않고 안내만 내고 끝내는 옛 문면이 없다"
 for f in "$RF" "$SI"; do
@@ -122,7 +122,7 @@ hasnt "$FN" '모든 항목을 잠정(provisional)으로 둔다' "AC12(부재): �
 hasnt "$FN" '전 항목을 `provisional`로 강등' "AC12(부재): 자동 강등 문면이 없다"
 has   "$FN" '자동 강등은 없다' "AC12: 자동 강등이 없음을 말한다"
 BA="$(awk '/^#### B-A/{f=1;print;next} /^#### /{f=0} f' "$FN" | tr '\n' ' ' | tr -s ' ')"
-for lit in '접는 줄(`… 외 K건`)이 있으면' '「참고 전부 보기」' '「접은 채로 둔다」' 'python3 -I -X utf8 -c'; do
+for lit in '접는 줄(`… 외 K건`)이 있으면' '「참고 전부 보기 (권장)」' '「접은 채로 둔다」' 'python3 -I -X utf8 -c'; do
   assert_contains "$BA" "$lit" "AC8(brief): B-A 블록에 「${lit}」 가 있다"
 done
 has   "$FN" '이 폴더의 `seed-input.md`' "포인터: B-0 이 같은 폴더의 seed-input.md 를 가리킨다"

@@ -57,7 +57,7 @@ AskUserQuestion({
     question: "다시 나눌 표와 영향을 위에 적었다. 어떻게 할까?",
     header: "재분해",
     options: [
-      {label: "이대로 다시 나눈다", description: "새 표로 로드맵 블록과 묶음을 다시 쓰고 재분해 이력에 항목 하나를 남긴다."},
+      {label: "이대로 다시 나눈다 (권장)", description: "새 표로 로드맵 블록과 묶음을 다시 쓰고 재분해 이력에 항목 하나를 남긴다."},
       {label: "고치기", description: "말로 받아 새 표를 고쳐 다시 보인다."},
       {label: "그만둔다", description: "아무것도 쓰지 않고 spec-review 게이트 ③ 의 후속 질문으로 돌아간다."}
     ],

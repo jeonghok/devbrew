@@ -5,6 +5,12 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.4.0] — 2026-10-29
+
+### Changed
+- 질문 자리의 추천 표시가 한 규칙을 따른다 — 추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다(여럿이면 모두, 이유는 질문 위 글에). 추천이 없으면 아무 표시도 쓰지 않는다.
+- merge · release 선택지의 「(권장)」 꼬리를 뗀 이름으로 읽는다 — 고른 라벨이 `{{MERGE_STRATEGY}}` 로 생성 문서(AGENTS.md)에 들어갈 때 꼬리가 새지 않는다.
+
 ## [5.3.3] — 2026-10-25
 
 ### Fixed

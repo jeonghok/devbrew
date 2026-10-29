@@ -69,11 +69,24 @@ for lit in 'You are the relay checker' 'You are responsible for' 'You are NOT re
   assert_file_grep "$RC" "$lit" "relay-checker: $lit"
 done
 assert_eq "$(fm "$RC" | grep -c 'tag: relay_files$')" "1" "relay-checker 입력 칸 relay_files"
-assert_contains "$(cat "$RC")" '「문장 권장이 라벨 꼬리로 옮겨짐」' "AC9: 문장 권장이 라벨 꼬리로 옮겨지면 어긋남"
-assert_contains "$(cat "$RC")" '「지휘자가 만든 질문의 라벨에 (권장)」' "AC9: 지휘자가 만든 질문의 라벨 (권장) 은 어긋남"
-assert_contains "$(cat "$RC")" '라벨이 아니라 문장으로 냈는데 띄운 질문의 라벨에 「(권장)」 꼬리가 붙었으면 어긋남이다' "AC9: 문장 권장 꼬리 조건 문면"
-assert_contains "$(cat "$RC")" '선택지(라벨이든 설명이든)에 「(권장)」 이 있으면 어긋남이다' "AC9: 지휘자가 만든 질문은 라벨이든 설명이든 (권장) 이 어긋남"
-assert_contains "$(cat "$RC")" 'skill 이 붙인 자리에만, 그 자리에 그대로 있는가' "AC9(양): skill 원문의 (권장) 은 그대로 대조한다"
+for lit in '「문장 권장이 라벨 꼬리로 옮겨짐」' '「지휘자가 만든 질문의 라벨에 (권장)」' '라벨이 아니라 문장으로 냈는데 띄운 질문의 라벨에 「(권장)」 꼬리가 붙었으면 어긋남이다' \
+           '선택지(라벨이든 설명이든)에 「(권장)」 이 있으면 어긋남이다' 'skill 이 붙인 자리에만, 그 자리에 그대로 있는가' '지휘자 권장은 선택지 밖 의견 줄에만 쓴다' \
+           '돌려줄 값이 글자 그대로 같은가' '하위에게 돌려보낸 글에 글자 그대로 있는가'; do
+  assert_not_contains "$(cat "$RC")" "$lit" "옮김 대조: 옛 문장 없음 — $lit"
+done
+for lit in '3. 라벨 — 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 라벨(돌려줄 값)이 글자 그대로 같은가.' \
+           '원문이 붙인 꼬리가 띄운 질문에 그대로 있는가 — 빠졌으면 어긋남이다(「원문 꼬리 빠짐」)' \
+           '원문에 없던 꼬리는 둘 중 하나일 때만 일치다: 원문이 문장으로 낸 권장이 가리킨 선택지이거나, 「지휘자 의견:」 줄이 그 선택지를 지휘자 권장으로 밝히고 이유를 단 경우.' \
+           '그 밖의 꼬리는 어긋남이다 — 「출처 없는 꼬리」 라고 적는다.' \
+           '지휘자 의견이 선택지 설명 안으로 들어갔으면 어긋남이다(「지휘자 의견:」 은 선택지 밖 한 줄이다).' \
+           '5. 사용자 답 — 하위에게 돌려보낸 글에 꼬리를 뗀 원문 라벨 글자 그대로 있는가.' \
+           '그 질문은 정본 규칙을 따르므로 라벨의 「(권장)」 꼬리는 일치이고, 지휘자 의견이 선택지 설명 안에 들어간 것만 어긋남이다.' \
+           '표시 없이 원문에 없는 선택지가 띄운 질문에 있어도 어긋남이다(원문에 없는 꼬리는 4 대로 본다)' \
+           'compares choices (count · order · labels with the 「(권장)」 tail stripped · where each 「(권장)」 tail came from)' \
+           '2. 순서 — 같은 차례인가.' '1. 선택지 수 — skill 원문과 띄운 질문의 선택지 수가 같은가.' \
+           '근거 없는 「지휘자가 만든 질문」 표시'; do
+  assert_contains "$(cat "$RC")" "$lit" "옮김 대조(양): $lit"
+done
 assert_not_contains "$(cat "$RC")" '지휘자 것이라고 밝혀 두었는지' "AC9: 옛 문장 없음"
 assert_not_contains "$BODY" '다른 세션을 열어' "다른 세션을 열라는 말이 없다"
 # agent — 쓰기 도구 없음(Law 2) · 역할 문장 · 입력 칸
