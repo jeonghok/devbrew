@@ -245,6 +245,92 @@ class SpecsDir(unittest.TestCase):
         self.assertIsNone(ok)
         self.assertIn("R9 의 설계문서를 못 읽었다: design/x.md", why)
 
+    def test_tree_repo_unread_stays_with_its_bundle(self):   # A 의 못 읽은 문서가 뒤에 본 B 의 판정에 번지지 않는다
+        import roadmap_status as rs
+        b_doc = ("---\nsource_interview: rm/B.md\n---\n\n## 번호 대조\n\n| 번호 | 처리 | 근거 |\n|---|---|---|\n"
+                 "| S9 | 기각 — x | y |\n")
+
+        class FakeTree:
+            def grep_files(self, tree, fixed, pathspec):
+                return {"rm/A.md": ["design/a.md"], "rm/B.md": ["design/b.md"]}[fixed]
+
+            def blob(self, tree, rel):
+                return b_doc if rel == "design/b.md" else None
+
+        view = {"rel": "rm/roadmap.md", "specs_dir": "design/"}
+        blk = {"A": {"id": "RA", "kind": "bundle", "fields": {"묶음": "A.md"}, "assigned": ["S8"]},
+               "B": {"id": "RB", "kind": "bundle", "fields": {"묶음": "B.md"}, "assigned": ["S8"]}}
+        for order in (("A", "B"), ("B", "A")):
+            repo = rs._GitTreeRepo(FakeTree(), "tree", "design/")
+            got = {k: cbc._serves(blk[k], "S8", view, repo, "R1") for k in order}
+            self.assertEqual(got["B"], (True, None), order)
+            self.assertEqual(got["A"], (None, "RA 의 설계문서를 못 읽었다: design/a.md"), order)
+
+    def test_tree_branch_spec_read_error_is_unknown(self):   # 트리의 브랜치 블록 spec — 확인된 부재만 「아직 없음」
+        import roadmap_status as rs
+
+        class FakeGit:
+            def __init__(self, err):
+                self.err, self.failures = err, []
+
+            def blob(self, rev, path):
+                return None
+
+            def run_err(self, *args):
+                return 128 if self.err.startswith("fatal") else 1, "", self.err
+
+            def fail(self, sub, rc, err):
+                self.failures.append(sub)
+
+        view = {"rel": "rm/roadmap.md", "specs_dir": "design/"}
+        block = {"id": "P1", "kind": "branch", "fields": {"spec": "design/p1.md"}, "assigned": ["S8"]}
+        for err, want, failed in (("fatal: path 'design/p1.md' does not exist in 'tree'\n", (True, None), []),
+                                  ("", (None, "P1 의 설계문서를 못 읽었다: design/p1.md"), ["cat-file"])):
+            git = FakeGit(err)
+            git.absent = rs.Git.absent.__get__(git)
+            repo = rs._GitTreeRepo(git, "tree", "design/")
+            self.assertEqual(cbc._serves(block, "S8", view, repo, "R1"), want, err)
+            self.assertEqual(git.failures, failed, err)
+
+    def test_git_absent_reads_real_git_messages(self):   # 부재 판독이 실제 git 의 말과 맞는다(흉내 아님)
+        import os
+        import roadmap_status as rs
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
+            for args in (["init", "-q"], ["add", "."], ["-c", "user.email=x@y", "-c", "user.name=x", "commit", "-qm", "i"]):
+                if args[0] == "add":
+                    (tmp / "d").mkdir()
+                    (tmp / "d" / "a.md").write_text("a\n", encoding="utf-8")
+                subprocess.run(["git", *args], cwd=str(tmp), env=env, check=True, capture_output=True)
+            git = rs.Git(str(tmp))
+            self.assertFalse(git.absent("HEAD", "d/a.md"))
+            self.assertTrue(git.absent("HEAD", "d/zz.md"))
+            self.assertTrue(git.absent("HEAD", "nope/zz.md"))
+            self.assertEqual(git.failures, [])
+            self.assertFalse(git.absent("deadbeef", "d/a.md"))   # 잘못된 rev — 부재가 아니다
+            self.assertEqual(len(git.failures), 1)
+        finally:
+            shutil.rmtree(str(tmp))
+
+    def test_spec_without_table_serves_broken_table_is_unknown(self):   # 표 없는 옛 설계문서는 기각 기록이 없을 뿐이다
+        class OneDoc:
+            def __init__(self, text):
+                self.text = text
+
+            def read(self, rel):
+                return self.text
+
+            def absent(self, rel):
+                return False
+
+        view = {"rel": "rm/roadmap.md", "specs_dir": "design/"}
+        block = {"id": "P1", "kind": "branch", "fields": {"spec": "design/p1.md"}, "assigned": ["S8"]}
+        self.assertEqual(cbc._serves(block, "S8", view, OneDoc("# 옛 설계\n\n본문\n"), "R1"), (True, None))
+        ok, why = cbc._serves(block, "S8", view, OneDoc("# 설계\n\n## 번호 대조\n\n| a |\n"), "R1")
+        self.assertIsNone(ok)
+        self.assertIn("번호 대조 표를 읽지 못했다", why)
+
 
 if __name__ == "__main__":
     unittest.main()

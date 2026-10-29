@@ -981,6 +981,21 @@ case_count_line_fresh_ledger_same_doc() {
   assert_eq "$(cl_frozen "$d/fin2.json")" "[]" "새 원장: 닫힌 뒤 결정 기록 끝에 더한 손 줄을 「허가 없이 바뀜」 으로 다시 묻지 않는다"
   rm -rf "$d"
 }
+case_count_line_old_ledger_idempotent() {
+  # count_logged 기록이 없는 옛 원장(이 판 전에 만든 것)은 목적지 파일의 키로 멱등을 가린다 — 부를 때마다 줄이 늘지 않는다.
+  local d out n
+  d="$(cl_closed existing)"
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2])
+st.pop("count_logged")
+s.save_state(sys.argv[2], st, "fixture: count_logged 기록 없는 옛 원장")' "$SCRIPTS" "$d"
+  assert_eq "$(st_yaml "$d" '"count_logged" in st') $(grep -c '^- docreview 계수 — ' "$d/doc.md")" "False 1" "옛 원장 전제: count_logged 기록이 없고 계수 줄은 하나다"
+  for n in 1 2; do
+    out="$(py docreview_state.py advice --state-dir "$d" --log-file "$d/doc.md")"
+    assert_eq "$(printf '%s' "$out" | jgets 'd["logged_rounds"]') $(grep -c '^- docreview 계수 — ' "$d/doc.md")" "[] 1" "옛 원장(${n}번째 호출): 파일에 같은 키의 줄이 있으면 다시 적지 않는다(멱등)"
+  done
+  rm -rf "$d"
+}
 case_closed_log_inserted_above_count_asks() {
   local d cnt
   d="$(cl_closed existing)"; cnt="$(grep '^- docreview 계수 — ' "$d/doc.md")"

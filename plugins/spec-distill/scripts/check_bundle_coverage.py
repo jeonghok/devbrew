@@ -136,8 +136,9 @@ class Repo:
             self._unread[d] = unread
         return [(rel, text) for rel, src, text in self._specs[d] if src == source]
 
-    def unreadable_specs(self, specs_dir: str) -> list:
-        """`specs_for` 가 읽지 못해 어느 묶음의 것인지 모르는 설계문서들(그 폴더를 한 번 훑은 뒤)."""
+    def unreadable_specs(self, specs_dir: str, source=None) -> list:
+        """`specs_for` 가 읽지 못해 어느 묶음의 것인지 모르는 설계문서들(그 폴더를 한 번 훑은 뒤). 못 읽은 글은 어느
+        묶음의 것인지 모르므로 source 와 상관없이 폴더 전부다."""
         return list(self._unread.get(specs_dir.rstrip("/"), []))
 
 
@@ -342,13 +343,12 @@ def _block_specs(block: dict, view: dict, repo):
         text = repo.read(rel)
         if text is not None:
             return [(rel, text)], []
-        absent = getattr(repo, "absent", None)   # 작업 트리 Repo — 부재와 못 읽음을 가른다
-        gone = absent(rel) if absent is not None else not repo.exists(rel)
-        return [], ([] if gone else [rel])
+        return [], ([] if repo.absent(rel) else [rel])   # 확인된 부재만 「아직 없음」 — 그 밖은 못 읽음
     if block["kind"] == "bundle":
         rdir = view["rel"].rsplit("/", 1)[0] if "/" in view["rel"] else "."
-        found = repo.specs_for(rdir + "/" + block["fields"]["묶음"], view["specs_dir"])
-        return found, repo.unreadable_specs(view["specs_dir"])
+        source = rdir + "/" + block["fields"]["묶음"]
+        found = repo.specs_for(source, view["specs_dir"])
+        return found, repo.unreadable_specs(view["specs_dir"], source)
     return [], []
 
 
@@ -362,6 +362,8 @@ def _serves(block: dict, s: str, view: dict, repo, epic: str):
     found, unread = _block_specs(block, view, repo)
     broken = None
     for rel, text in found:   # 읽힌 문서의 분명한 기각이 먼저다 — 못 읽은 다른 문서가 그 기각을 셀 수 없음으로 내리지 않는다
+        if section_body(text, TABLE_HEADING) is None:   # 번호 대조 절이 없는 설계문서 — 기각 기록이 없다(깨진 표가 아니다)
+            continue
         try:
             rows = table_rows(text)
         except FormatError as exc:

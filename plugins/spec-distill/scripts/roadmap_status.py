@@ -79,6 +79,7 @@ FETCH_HINT = "git fetch 뒤 다시 계산한다"
 PR_UNCHECKED = "PR 상태 미확인 — 지휘자를 돌려라"
 HOLD = "머지 판정 보류 — 기계 상태를 읽지 못해 PR 번호 기록이 있는지 모른다"
 BACKTICK_RE = re.compile(r"`([^`]+)`")
+PATH_NOT_IN_TREE_RE = re.compile(r"^fatal: path '.*' (?:does not exist in|exists on disk, but not in) '", re.M)   # LC_ALL=C
 
 
 # ── git (읽기 전용) ──────────────────────────────────────────────────────────
@@ -125,6 +126,17 @@ class Git:
 
     def exists(self, rev: str, path: str) -> bool:
         return self.run("cat-file", "-e", "%s:%s" % (rev, path))[0] == 0
+
+    def absent(self, rev: str, path: str) -> bool:
+        """확인된 부재만 참이다 — 그 트리에 경로가 없다고 git 이 말할 때. 객체 손상 · 잘못된 rev 같은 다른 실패는
+        거짓이고 failures 에 남는다(못 읽음으로 센다)."""
+        rc, _out, err = self.run_err("cat-file", "-e", "%s:%s" % (rev, path))
+        if rc == 0:
+            return False
+        if PATH_NOT_IN_TREE_RE.search(err):
+            return True
+        self.fail("cat-file", rc, err)
+        return False
 
     def is_ancestor(self, a: str, b: str) -> bool:
         return self.run("merge-base", "--is-ancestor", a, b)[0] == 0
@@ -647,25 +659,32 @@ class _GitTreeRepo:
     def exists(self, rel: str) -> bool:
         return self.git.exists(self.tree, rel)
 
+    def absent(self, rel: str) -> bool:
+        return self.git.absent(self.tree, rel)
+
     def specs_for(self, source: str, specs_dir=None) -> list:
         folder = specs_dir or self.specs_dir
         key = (source, folder)
         if key in self._memo:
             return self._memo[key]
-        out = []
+        out, unread = [], []
         for path in self.git.grep_files(self.tree, source, folder):
             text = self.git.blob(self.tree, path)
             if text is None:   # 이 묶음을 가리키는 글이 있는데 못 읽었다 — 그 묶음이 무엇을 기각했는지 모른다
-                if path not in self._unread.setdefault(folder, []):
-                    self._unread[folder].append(path)
+                unread.append(path)
                 continue
             if text and unquote(frontmatter(text).get("source_interview", "")) == source:
                 out.append((path, text))
         self._memo[key] = sorted(out)
+        self._unread[key] = unread   # 그 묶음의 grep 이 찾은 것만 — 다른 묶음의 판정에 번지지 않는다
         return self._memo[key]
 
-    def unreadable_specs(self, specs_dir=None) -> list:
-        return list(self._unread.get(specs_dir or self.specs_dir, []))
+    def unreadable_specs(self, specs_dir=None, source=None) -> list:
+        """source 의 `specs_for` 가 찾았지만 읽지 못한 설계문서들. source 가 없으면 그 폴더에서 모은 전부."""
+        folder = specs_dir or self.specs_dir
+        if source is not None:
+            return list(self._unread.get((source, folder), []))
+        return [p for (_src, f), paths in sorted(self._unread.items()) if f == folder for p in paths]
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str, settings: dict,
