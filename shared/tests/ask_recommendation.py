@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """질문 자리 추천 표시 전수 판정 — `test_ask_recommendation.sh` 의 본체.
 
-입력: 리포 루트 · 후보 파일 목록(한 줄에 리포 상대 경로 하나) · 목록 tsv(`경로<TAB>종류<TAB>앵커<TAB>끝`).
+입력: 리포 루트 · 후보 파일 목록(한 줄에 리포 상대 경로 하나) · 목록 tsv(`경로<TAB>종류<TAB>앵커<TAB>끝<TAB>덮는 줄`).
 출력: `ok <설명>` · `no <①|②|③|④> <경로>:<줄> <설명>` 줄. rc 0 = 판정 완료, rc 2 = 인자 · 파일 읽기 실패.
 
 - 앵커는 그 파일에서 정확히 한 번 나오는 한 줄 안의 글자다. 범위는 끝이 있으면 앵커 시작부터 앵커 뒤
   첫 `끝` 의 끝까지, 끝이 비면 앵커가 든 문단(빈 줄 사이)이다.
 - 질문 행(꼬리 · 지시 · 비움 · 출처꼬리)의 범위 안에 다른 행(떼기 제외)의 앵커 시작이 있으면 ② 다.
-- 후보 줄(`AskUserQuestion` 이 있는 줄)은 어느 행의 앵커가 시작하는 줄이거나 어느 질문 행의 범위 안이어야 한다.
-  언급 행은 앵커 줄에 `AskUserQuestion` 이 하나일 때만 그 줄을 덮는다(둘 이상이면 ①).
+- 후보 줄(`AskUserQuestion` 이 있는 줄)은 어느 질문 행의 앵커가 시작하는 줄이거나 어느 질문 행의 범위 안이어야 한다.
+  떼기 행의 앵커 줄은 후보 줄을 덮지 않는다. 언급 행은 앵커 줄에 `AskUserQuestion` 이 하나일 때만 그 줄을 덮는다(둘 이상이면 ①).
+- 질문 행의 범위가 앵커 줄 밖에서 덮는 후보 줄 수는 `덮는 줄` 칸(비면 0)과 같아야 한다 — 다르면 ① 이다.
+- 꼬리 행의 라벨 꼬리는 선택지 `description:` 값 안의 것을 세지 않는다.
 """
 import io
 import re
@@ -16,6 +18,7 @@ import sys
 from collections import namedtuple
 
 TAIL_RE = re.compile(r"(?<!「)\((?:권장|Recommended)\)")
+DESCRIPTION_RE = re.compile(r"""description:\s*(?:"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')""")
 DIRECTIVE = "권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다"
 EMPTY = "추천을 달지 않는다 — "
 SOURCE = "추천)"
@@ -25,7 +28,7 @@ TOOL = "AskUserQuestion"
 QUESTION_KINDS = ("꼬리", "지시", "비움", "출처꼬리")
 KINDS = QUESTION_KINDS + ("언급", "떼기")
 
-Site = namedtuple("Site", "path kind anchor end lineno")
+Site = namedtuple("Site", "path kind anchor end lines lineno")
 
 
 def load_sites(path):
@@ -37,18 +40,25 @@ def load_sites(path):
             if not line.strip() or line.startswith("#"):
                 continue
             cells = line.split("\t")
-            if len(cells) == 3:
-                cells.append("")
-            if len(cells) != 4:
+            if len(cells) in (3, 4):
+                cells += [""] * (5 - len(cells))
+            if len(cells) != 5:
                 # 칸이 맞지 않는 줄은 종류 None, 앵커 자리에 원래 줄(탭은 \t 로)을 담아 ② 사유에 그대로 보인다.
-                sites.append(Site(cells[0], None, line.replace("\t", "\\t"), "", n))
+                sites.append(Site(cells[0], None, line.replace("\t", "\\t"), "", "", n))
                 continue
-            sites.append(Site(cells[0], cells[1], cells[2], cells[3], n))
+            sites.append(Site(cells[0], cells[1], cells[2], cells[3], cells[4], n))
     return sites
 
 
 def line_of(text, offset):
     return text.count("\n", 0, offset) + 1
+
+
+def spans_line(text, k, sc):
+    """범위 sc(시작, 끝 오프셋)가 k 번째 줄과 겹치는가."""
+    lo = len("\n".join(text.split("\n")[:k - 1])) + (1 if k > 1 else 0)
+    hi = lo + len(text.split("\n")[k - 1])
+    return sc[0] < hi and lo < sc[1]
 
 
 def paragraph(text, offset):
@@ -73,6 +83,10 @@ def scope(text, site):
     """질문 범위 (시작, 끝) 오프셋. 실패면 ② 사유 문자열."""
     if site.kind not in KINDS:
         return "모르는 종류 「%s」" % site.kind
+    if site.lines and site.kind not in QUESTION_KINDS:
+        return "덮는 줄 칸 「%s」은 질문 행(%s)에만 쓴다" % (site.lines, " · ".join(QUESTION_KINDS))
+    if site.lines and not site.lines.isdigit():
+        return "덮는 줄 칸 「%s」이 수가 아니다" % site.lines
     if not site.anchor or "\n" in site.anchor:
         return "앵커가 비었다"
     n = text.count(site.anchor)
@@ -91,7 +105,7 @@ def scope(text, site):
 
 def required(kind, body):
     """범위 글에 종류가 요구하는 글자가 있으면 None, 없으면 ③ 사유."""
-    if kind == "꼬리" and not TAIL_RE.search(body):
+    if kind == "꼬리" and not TAIL_RE.search(DESCRIPTION_RE.sub("", body)):
         return "범위에 라벨 꼬리 「(권장)」 · 「(Recommended)」가 없다"
     if kind == "지시" and DIRECTIVE not in body:
         return "범위에 지시 문장이 없다"
@@ -126,7 +140,7 @@ def check(root, files, sites):
     resolved = []  # (site, text, scope 또는 사유)
     for s in sites:
         if s.kind is None:
-            resolved.append((s, None, "칸이 넷이 아니다(경로 · 종류 · 앵커 · 끝)"))
+            resolved.append((s, None, "칸 수가 맞지 않다(경로 · 종류 · 앵커 · 끝 · 덮는 줄)"))
             continue
         text = texts.get(s.path)
         if text is None:
@@ -147,7 +161,10 @@ def check(root, files, sites):
         if text is None or s.kind not in KINDS or not s.anchor or text.count(s.anchor) != 1:
             continue
         a = text.find(s.anchor)
-        (mention_lines if s.kind == "언급" else anchor_lines).add((s.path, line_of(text, a)))
+        if s.kind == "언급":
+            mention_lines.add((s.path, line_of(text, a)))
+        elif s.kind in QUESTION_KINDS:
+            anchor_lines.add((s.path, line_of(text, a)))
         anchor_starts.setdefault(s.path, []).append((a, s))
         if s.kind in QUESTION_KINDS and not isinstance(sc, str):
             covered.setdefault(s.path, []).append(sc)
@@ -170,6 +187,13 @@ def check(root, files, sites):
                 o = crossed[0]
                 out.append("no ② %s %s: 범위가 다른 행의 앵커 「%s」(목록 L%d)를 넘는다" % (where, label, o.anchor, o.lineno))
                 continue
+            inside = [k for f, k, _ in candidates
+                      if f == s.path and (f, k) not in anchor_lines and spans_line(text, k, sc)]
+            want = int(s.lines or "0")
+            if len(inside) != want:
+                out.append("no ① %s %s: 범위가 앵커 줄 밖에서 덮는 후보 줄이 %d개인데 목록의 덮는 줄은 %d이다 — 새 질문이면 행을 따로 더한다"
+                           % (where, label, len(inside), want))
+                continue
         why = required(s.kind, text[sc[0]:sc[1]])
         if why:
             out.append("no ③ %s %s: %s" % (where, label, why))
@@ -182,9 +206,7 @@ def check(root, files, sites):
         text = texts[rel]
         if (rel, k) in mention_lines and ln.count(TOOL) == 1:
             continue
-        lo = len("\n".join(text.split("\n")[:k - 1])) + (1 if k > 1 else 0)
-        hi = lo + len(ln)
-        if any(a < hi and lo < b for a, b in covered.get(rel, [])):
+        if any(spans_line(text, k, sc) for sc in covered.get(rel, [])):
             continue
         if (rel, k) in mention_lines:
             out.append("no ① %s:%d 언급 행의 줄에 %s 이 둘 이상이다 — 언급 행은 한 줄에 하나만 덮는다: %s"

@@ -1,24 +1,25 @@
-# 질문 자리 목록 — test_ask_recommendation.sh 가 읽는다. 한 줄에 경로<TAB>종류<TAB>앵커<TAB>끝(끝이 비면 앵커가 든 문단).
+# 질문 자리 목록 — test_ask_recommendation.sh 가 읽는다. 한 줄에 경로<TAB>종류<TAB>앵커<TAB>끝<TAB>덮는 줄(끝이 비면 앵커가 든 문단).
 # 종류: 꼬리 · 지시 · 비움 · 출처꼬리 · 언급 · 떼기. 앵커는 그 파일에서 정확히 한 번 나오는 한 줄 안의 글자다.
-# 경로	종류	앵커	끝
+# 덮는 줄: 질문 행의 범위가 앵커 줄 밖에서 덮는 후보 줄 수(비면 0) — 펜스 안의 `AskUserQuestion({` 줄처럼 그 질문의 것만 센다.
+# 경로	종류	앵커	끝	덮는 줄
 
 # pm-interview · trivia-escape (Task 3)
 plugins/spec-distill/skills/pm-interview/SKILL.md	꼬리	라운드마다 AskUserQuestion 1회다.	steelman 절차의 질문만 예외다(아래).
 plugins/spec-distill/skills/pm-interview/SKILL.md	떼기	해당하면 그 파일의 질문을 `<command>` = `spec-distill:pm-interview` 로 채워 띄웁니다	
-plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	2. **판정.** `AskUserQuestion` 하나:	3. **분해안 표.**
+plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	2. **판정.** `AskUserQuestion` 하나:	3. **분해안 표.**	1
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	「spec 하나로」면 Step A 로 간다	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	4. **고치기 · 승인.** `AskUserQuestion` 하나	고친 횟수는 state
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	세 번 고칠 때마다 「계속 고칠까요」를 묻고	5. **기록.**
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	**닫은 답의 출처로 멈추면 — 되묻기 갈래.**	- **닫는 선택지**면
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	- **닫는 선택지**면 그 답을	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	`AskUserQuestion`은 선택지만 담당):	
-plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	`AskUserQuestion` 으로 「계속 고친다(2번 더)」 · 「지금 목록으로 확정」 · 「brief 만 종료」를 묻습니다	카운터는 프로즈 self-tracking이 아니라
+plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	`AskUserQuestion` 으로 「계속 고친다(2번 더)」 · 「지금 목록으로 확정」 · 「brief 만 종료」를 묻습니다	카운터는 프로즈 self-tracking이 아니라	1
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	- **재제시 상한 질문의 답** (B-0):	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에	「접은 채로 둔다」
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	「참고 전부 보기」면 아래 펜스로 목록 전부를	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	#### B-2 — 단일 `AskUserQuestion` proceed 게이트	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	`AskUserQuestion` 게이트 자체는 아님)	
-plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**
+plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**	1
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	**둘째 질문 — 다른 다음 단계.**	
 plugins/spec-distill/skills/pm-interview/references/saturation.md	꼬리	그리고 `AskUserQuestion` 1회로 셋 중 하나를 받는다	「지금 포화 판정으로」
 plugins/spec-distill/skills/pm-interview/references/saturation.md	떼기	셋 중 하나를 받는다	- 「인터뷰 종료」 — SKILL 의
@@ -31,7 +32,7 @@ plugins/spec-distill/skills/pm-interview/references/saturation.md	떼기	중 하
 plugins/spec-distill/skills/pm-interview/references/state-file.md	꼬리	- `interview-state: ASK` — 앞 줄의	「새로 시작」을 묻는다
 plugins/spec-distill/skills/pm-interview/references/steelman.md	출처꼬리	- **질문**: `AskUserQuestion` 선택지 **고정 순서**	builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 plugins/spec-distill/skills/pm-interview/references/steelman.md	언급	`AskUserQuestion` 1회(자유 텍스트)로 취함/버림을 받아	
-plugins/spec-distill/references/trivia-escape.md	꼬리	해당하면 진행하기 전에 `AskUserQuestion` 한 번으로	}]})
+plugins/spec-distill/references/trivia-escape.md	꼬리	해당하면 진행하기 전에 `AskUserQuestion` 한 번으로	}]})	1
 plugins/spec-distill/references/trivia-escape.md	떼기	`<판정 근거>` 와 `<command>` 는 호출한 진입 skill 이 채운다	- **전체 과정으로** — 이 판정을 건너뛰고
 
 # 게이트 · 리뷰 결정 질문 (Task 4)
@@ -66,15 +67,15 @@ plugins/spec-distill/skills/reviewing-brief/SKILL.md	지시	`round_gate_needed` 
 plugins/spec-distill/skills/reviewing-brief/SKILL.md	지시	갈린다: **열린 것이 0 이면 1단계 선택지는	권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다
 plugins/spec-distill/skills/reviewing-brief/SKILL.md	지시	**열린 것이 있으면 그 열린 항목들과 함께 「추가 라운드 1회 열기」가 별개 항목으로	「추가 라운드 1회 열기」를 고르면
 plugins/spec-distill/skills/reviewing-brief/SKILL.md	떼기	「추가 라운드 1회 열기」를 고르면 다음 라운드가 진입 게이트부터	
-plugins/spec-distill/references/redecompose.md	꼬리	이어서 `AskUserQuestion` 하나:	multiSelect: false
+plugins/spec-distill/references/redecompose.md	꼬리	이어서 `AskUserQuestion` 하나:	multiSelect: false	1
 plugins/spec-distill/skills/epic-conductor/SKILL.md	비움	하나면 그것, 여럿이면 `AskUserQuestion` 으로 고르게 한다	종료 코드 2(없음)면
 plugins/spec-distill/skills/epic-conductor/SKILL.md	꼬리	넘겨받을지 `AskUserQuestion` 으로 묻는다	넘겨받기면 아래 펜스를 돌린 뒤
 plugins/spec-distill/skills/epic-conductor/SKILL.md	언급	사람에게 쓰는 글은 위 쉬운 말 규칙을 따른다.	
 
 # request-framing (Task 5)
 plugins/spec-distill/skills/request-framing/SKILL.md	떼기	해당하면 그 파일의 질문을 `<command>` = `spec-distill:request-framing` 으로 채워 띄운다	
-plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	`AskUserQuestion` 하나를 띄운다(`<접두>` 는 위 펜스가 낸 값):	multiSelect: false }] })
-plugins/spec-distill/skills/request-framing/SKILL.md	지시	질문과 **같은 `AskUserQuestion` 호출**에 확인 질문을 하나 더 싣습니다	- 문장마다 질문을 만들지 않는다
+plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	`AskUserQuestion` 하나를 띄운다(`<접두>` 는 위 펜스가 낸 값):	multiSelect: false }] })	1
+plugins/spec-distill/skills/request-framing/SKILL.md	지시	질문과 **같은 `AskUserQuestion` 호출**에 확인 질문을 하나 더 싣습니다	- 문장마다 질문을 만들지 않는다	1
 plugins/spec-distill/skills/request-framing/SKILL.md	떼기	- **한 질문에 풀이가 하나뿐이면** 단일 선택	꼬리를 뗀 이름으로 읽는다
 plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나	「이어 씀 — 표지를 내 것으로 바꾼다」
 plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	단독 `AskUserQuestion` 으로	묻습니다.
@@ -115,23 +116,23 @@ plugins/spec-distill/references/conducting.md	지시	지우기 전에 수정 · 
 # quality-gates (Task 7)
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	decisions surface via AskUserQuestion.	
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	Decision points are `AskUserQuestion`	
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).**	- 지적을 하나도 고르지 않았다
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	**범위 모드 갈래.**	범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).**	- 지적을 하나도 고르지 않았다	1
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	**범위 모드 갈래.**	범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.	1
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	질문이 없고, Step 5 의 분류표도 만들지 않는다	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	그 밖의 실행은 이 질문을 띄운다:	question: "qg 반복 N: 남은 지적이 있다(<summary>). 어떻게 할까?"
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	그 밖의 실행은 이 질문을 띄운다:	question: "qg 반복 N: 남은 지적이 있다(<summary>). 어떻게 할까?"	1
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	question: "분류표의 적용/제외를 바꿀까요?	Branch on answer:
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	첫 질문에서 고른 선택지는	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	### Max-iter decision	question: "qg 가 반복 상한(
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	### Max-iter decision	question: "qg 가 반복 상한(	1
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	이 질문에서 고른 선택지는	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	If `Edit` fails (`old_string not unique`	A skipped file's items are appended to
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	If `Edit` fails (`old_string not unique`	A skipped file's items are appended to	1
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **여러 시나리오** — 게이트 결과마다	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인	모드를 정한다 — 모드는 실행 전체에 하나다.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	떼기	"아니오"면 그 대상을 뺀다	
-plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**멈출 때의 선택**	### E2c — 대상 경로 인가
+plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**멈출 때의 선택**	### E2c — 대상 경로 인가	1
 plugins/quality-gates/skills/artifact-critique/SKILL.md	꼬리	`AskUserQuestion` 한 번에 두 질문을 싣는다:	/ **취소**.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	꼬리	(2) 비평자 수:	고른 수를 `<k>` 로 기록해
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	kept-empty를 수렴으로 읽지 **않는다** → **NEEDS_RESOLUTION**	**4b. 지적만 받기면 여기서 끝**
-plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**9. N+1로 반복**	기타 칸의 글이 더 여는 뜻이면
+plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**9. N+1로 반복**	기타 칸의 글이 더 여는 뜻이면	1
 plugins/quality-gates/references/e2e.md	비움	`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다.	## 3. 걷기 규칙
 plugins/quality-gates/references/e2e.md	지시	증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다.	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.
 plugins/quality-gates/references/e2e.md	떼기	| 판정안 | 선택지 |	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.

@@ -50,3 +50,35 @@ AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
 ## 카 — 한 줄에 도구 이름이 둘인 언급 행
 
 카-언급: `AskUserQuestion` 은 도구 이름이다. 카-추가: 같은 줄에 `AskUserQuestion` 질문이 하나 더 있다.
+
+## 타 — 지시 문장이 없는 지시 질문
+
+타-질문: `AskUserQuestion` 하나 — 「열기」 · 「닫기」.
+
+## 파 — 이유 문장도 꼬리도 없는 비움 질문
+
+파-질문: `AskUserQuestion` 하나 — 「A」 · 「B」.
+
+## 하 — 떼기 앵커 줄에 쓴 새 질문
+
+하-뗌: 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다. 하-새: `AskUserQuestion` 으로 「다시」 · 「그만」을 묻는다.
+
+## 거 — 질문 범위 안에 낀 새 질문
+
+거-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
+  {label: "계속 (권장)"}, {label: "멈춤"}] }] })
+```
+
+거-새: 그다음 `AskUserQuestion` 으로 「다시」 · 「그만」을 묻는다.
+
+## 너 — 설명에만 꼬리가 있는 꼬리 질문
+
+너-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
+  {label: "계속", description: "고르면 계속한다 (권장)"}, {label: "그만"}] }] })
+```
