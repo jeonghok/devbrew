@@ -59,7 +59,24 @@ class AnchorGrammar(unittest.TestCase):
         fin = (Path(__file__).resolve().parent.parent / "skills" / "pm-interview" / "references" / "finishing.md")
         text = " ".join(fin.read_text(encoding="utf-8").split())
         self.assertIn("앵커 줄 바로 아래 **열 0 펜스**에 그대로 싣습니다", text)
-        self.assertIn("펜스 안이라도 열 0 의 `- **S<N>**` 모양 줄은 앵커로 센다", text)
+        self.assertIn("무엇이 거부되는지와 그때 할 일은 게이트의 거부 말이 정하니 그 말을 따른다", text)
+
+    def test_every_refusal_names_a_next_step(self):
+        # 거부 사유마다 할 일이 하나다 — 펜스 안에서 읽지 않는 사유는 펜스 길, 나머지는 펜스 안에서도 거부되니 알리기
+        for why in B.ANCHOR_REASON_TEXT:
+            msg = B.anchor_reason(why)
+            fixable = why in B._VERBATIM_FIXABLE
+            self.assertEqual("열 0 펜스에 그대로 싣는다" in msg, fixable, why)
+            self.assertEqual("펜스 안 줄이어도 거부한다" in msg, not fixable, why)
+
+    def test_fenced_anchor_lookalike_refusal_says_so(self):
+        # 펜스 안이라도 앵커처럼 읽히는 글은 거부되고, 거부 말이 펜스로는 못 싣는다고 말한다
+        for said in ("- S2 는 빼자", "그건 **S2** 랑 같다", "__S2__ 처럼", "  - **S3** 들여 쓴 줄"):
+            ok, bad = B.anchor_lines("- **S1** 🗣 요청:\n~~~~\n" + said + "\n~~~~\n")
+            self.assertTrue(bad, said)
+            for _n, why in bad:
+                self.assertNotIn(why, B._VERBATIM_FIXABLE, (said, why))
+                self.assertIn("펜스 안 줄이어도 거부한다", B.anchor_reason(why), (said, why))
 
     def test_fenced_verbatim_passes_coverage(self):
         said = "it's `x &amp; <div> y"

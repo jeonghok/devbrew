@@ -227,6 +227,24 @@ class SpecsDir(unittest.TestCase):
         repo.specs_for("rm/R5.md", "other/")   # 같은 폴더는 메모
         self.assertEqual(fake.folders, ["design/", "other/"])
 
+    def test_tree_repo_unread_spec_is_unknown(self):   # 기본 브랜치 트리에서 찾았지만 못 읽은 설계문서 — 받든다고 치지 않는다
+        import roadmap_status as rs
+
+        class FakeTree:
+            def grep_files(self, tree, fixed, pathspec):
+                return ["design/x.md"]
+
+            def blob(self, tree, rel):
+                return None
+
+        repo = rs._GitTreeRepo(FakeTree(), "tree", "design/")
+        self.assertEqual(repo.specs_for("rm/R5.md", "design/"), [])
+        self.assertEqual(repo.unreadable_specs("design/"), ["design/x.md"])
+        block = {"id": "R9", "kind": "bundle", "fields": {"묶음": "R5.md"}, "assigned": ["S8"]}
+        ok, why = cbc._serves(block, "S8", {"rel": "rm/roadmap.md", "specs_dir": "design/"}, repo, "R1")
+        self.assertIsNone(ok)
+        self.assertIn("R9 의 설계문서를 못 읽었다: design/x.md", why)
+
 
 if __name__ == "__main__":
     unittest.main()
