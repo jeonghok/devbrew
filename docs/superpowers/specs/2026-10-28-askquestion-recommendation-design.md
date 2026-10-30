@@ -138,8 +138,8 @@ next_phase: superpowers:writing-plans
 새 테스트 하나(`shared/tests/test_ask_recommendation.sh` — 이름은 계획이 정해도 된다)와 목록 파일 하나(`shared/tests/fixtures/ask-sites.tsv` 꼴). 둘 다 설치본에 들어가지 않는다 — 모델이 실행 중 읽지 않는다.
 
 - **후보 도출** — 모델이 읽는 문서(`plugins/*/skills/**/*.md` · `plugins/*/references/**/*.md` · `plugins/*/agents/*.md` · `shared/**/references/*.md`, tests 제외)에서 `AskUserQuestion` 이 있는 줄을 `git ls-files` 글롭으로 뽑고, `find` 로 같은 수가 나오는지 양의 짝으로 맞춘다. 수(어림 60–80줄)는 계획이 글롭을 정한 뒤 도출한다.
-- **목록** — 한 줄에 `경로 · 앵커(그 파일에서 한 번만 나오는 글자) · 종류(§2 의 넷 + 「언급」)`. 「언급」은 질문 자리가 아니라 도구 이름을 말하기만 하는 줄이다. 문장으로만 묻는 자리(conducting.md 의 「사용자에게 묻는다」 꼴 — `AskUserQuestion` 글자가 없는 것)는 조사 7 이 찾은 것을 손으로 목록에 올린다.
-- **RED 조건**(넷) — ① 후보 줄인데 목록의 어느 앵커 줄도 아님(새 질문 자리가 분류 없이 생김) ② 앵커가 파일에 없거나 둘 이상(목록이 낡음) ③ 그 질문의 범위 안에 종류가 요구하는 글자가 없음(`꼬리` = 「(권장)」|「(Recommended)」, `지시` = 지시 문장, `비움` = 「추천을 달지 않는다 —」, `출처꼬리` = 「추천)」) ④ 후보가 0 이거나 git 수와 find 수가 다름(공허한 통과 방지).
+- **목록** — 한 줄에 `경로 · 종류(§2 의 넷 + 「언급」 · 「떼기」) · 앵커(그 파일에서 한 번만 나오는 글자) · 끝(비면 앵커가 든 문단) · 덮는 수`. 「언급」은 질문 자리가 아니라 도구 이름을 말하기만 하는 줄이다. 「떼기」는 고른 라벨로 갈래를 나누는 산문 자리이고 뗌 문장을 요구한다(AC10) — 질문 자리가 아니라 `AskUserQuestion` 을 맡지 않는다. 세는 단위는 줄이 아니라 `AskUserQuestion` 이 나온 자리다 — 언급 행은 한 자리를 맡고(앵커에 도구 이름이 있으면 그 자리, 없으면 앵커 줄의 첫 자리), 「덮는 수」는 질문 행의 범위 안 자리 수다(범위는 앵커 시작부터 — 끝이 비면 앵커가 든 문단 전체, 언급 행이 맡은 것 제외, 비면 0 — 산문의 도구 이름과 펜스의 `AskUserQuestion({` 가 한 질문이면 2). 언급 행은 표시를 빌려주지 않으므로 질문 범위 안에 있어도 된다. 문장으로만 묻는 자리(conducting.md 의 「사용자에게 묻는다」 꼴 — `AskUserQuestion` 글자가 없는 것)는 조사 7 이 찾은 것을 손으로 목록에 올린다.
+- **RED 조건**(넷) — ① 어느 질문 범위에도 들지 않고 언급 행도 맡지 않은 `AskUserQuestion` 자리가 있음, 또는 질문 행의 범위 안 자리 수가 그 행의 「덮는 수」와 다름(새 질문 자리가 분류 없이 생김 — 이웃 질문의 앵커 줄 · 범위 · 이미 센 줄에 끼워도 자리 수가 늘어 걸린다) ② 앵커가 파일에 없거나 둘 이상 · 질문 범위가 다른 행의 앵커를 넘음(목록이 낡음) ③ 그 질문의 범위 안에 종류가 요구하는 글자가 없음(`꼬리` = 「(권장)」|「(Recommended)」 — 범위에 `label:` 키(줄 머리 · `{` · `,` 바로 뒤 — 앞 글자만 보는 정규식이라 문자열 경계는 가리지 않는다)가 있으면 그 키의 값 안의 것만 센다, `지시` = 지시 문장, `비움` = 「추천을 달지 않는다 —」, `출처꼬리` = 「추천)」, `떼기` = 뗌 문장) ④ 후보가 0 이거나 git 수와 find 수가 다름(공허한 통과 방지).
 - **질문의 범위**(결정 D1.2) — 목록의 각 질문은 자기 범위를 따로 가진다(시작 앵커와 끝 앵커, 또는 라벨 글자 자체). 통과 근거는 그 질문에 속한 라벨 · 지시 문장 · 이유 문장뿐이다 — 한 줄이나 한 절에 질문이 여럿이어도(예: conducting.md 의 승인 질문 바로 다음 줄의 병렬 질문) 이웃 질문의 표시로 통과하지 않는다. 고정 줄 수 창(예: 30줄)은 쓰지 않는다.
 - **보지 않는 것** — 문장 표현 · 이유의 질 · 추천이 맞는지. 그리고 두 한계: ① 모델이 즉석에서 만드는 질문(라운드 규약 밖의 대화 중 질문)은 정본 규칙만이 집행한다(D15). ② 앞으로 skill 문서에 `AskUserQuestion` 글자 없이 문장으로만 묻는 질문 자리가 새로 생기면 후보로 뽑히지 않는다 — 손 목록은 지금 있는 자리만 덮는다. 그래서 Goals 4 의 「새 자리」는 도구 이름이 적힌 자리를 뜻한다. 두 한계를 테스트 머리 주석과 CHANGELOG 에 함께 적는다.
 - **실행 지점** — 새로 만들지 않는다. qg 의 차등 테스트가 고를 때와 사람이 돌릴 때만 돈다(`shared/README.md` 의 두 락과 같은 자리). qg 는 테스트 머리 30줄의 `# guards:` 글롭으로 테스트를 고르므로(`shared/test-selection/compute-test-scope-candidates.sh`), 새 검사의 `# guards:` 는 후보 글롭 넷(skills · references · agents · shared references)과 목록 파일을 모두 덮는다 — 덮지 않으면 새 질문 자리를 더한 변경에서 검사가 선택되지 않는다.
@@ -186,7 +186,7 @@ next_phase: superpowers:writing-plans
 - AC11: pm-interview 라운드 규약이 「추천이 있으면 첫 선택지」로 바뀌고 «다음 결정» 줄이 「추천: 없음 — <이유>」를 허용한다. steelman 질문의 출처 표지는 그대로다.
 - AC12: project-init 의 비표준 추천 표기(「clean history 권장」 · 「— default」)가 「(권장)」 꼬리로 바뀌었다.
 - AC13: 새 전수 검사가 있고 §5 의 RED 넷을 낸다. 「(권장)」 · 「(Recommended)」 · 출처 꼬리를 종류에 맞게 센다. 지금 레포에서 GREEN 이다.
-- AC14: 변이 여섯이 각각 새 검사를 RED 로 만든다 — `꼬리` 자리의 꼬리 지우기 · `지시` 자리의 지시 문장 지우기 · `비움` 자리의 이유 문장 지우기 · 목록에 없는 `AskUserQuestion` 줄 더하기 · 목록 앵커 하나를 파일에서 바꾸기 · 이웃 질문의 표시는 남기고 대상 질문의 표시만 지우기(conducting.md 승인 질문). 양성 대조(변이 없는 원본 GREEN)를 함께 보인다.
+- AC14: 변이 여섯이 각각 새 검사를 RED 로 만든다 — `꼬리` 자리의 꼬리 지우기 · `지시` 자리의 지시 문장 지우기 · `비움` 자리의 이유 문장 지우기 · 목록에 없는 `AskUserQuestion` 줄 더하기 · 목록 앵커 하나를 파일에서 바꾸기 · 이웃 질문의 표시는 남기고 대상 질문의 표시만 지우기(conducting.md 승인 질문). 양성 대조(변이 없는 원본 GREEN)를 함께 보인다. 리뷰 후속(qg 반복 1 · 2)으로 다섯을 더한다 — 떼기 앵커 줄에 새 질문 쓰기 · 이웃 질문 범위 안에 새 질문 끼우기 · 질문 행 앵커 줄이나 이미 센 줄에 둘째 질문 붙이기 · 라벨 꼬리를 `description` 이나 `question` 으로 옮기기. 모듈의 지시 · 비움 이유 갈래는 fixture(`shared/tests/fixtures/ask_recommendation/`)가 잠근다.
 - AC15: 라벨을 잠근 기존 테스트가 새 문면으로 고쳐졌고, 네 플러그인 + shared 테스트 전체가 기준(main) 대비 새 실패 없이 돈다. 음의 락을 지운 자리마다 양의 짝이 있다.
 - AC16: 실행 중 개입이 없다 — 어느 `hooks.json` 도 바뀌지 않았고, `docreview_state.py` 의 `_CHOICE_LABEL` 과 엔진 정답 파일이 바뀌지 않았다.
 - AC17: 바뀐 플러그인마다 `plugin.json` 판이 올랐고(minor — 규칙이 바뀐 새 표면) CHANGELOG 에 바뀐 것과 전수 검사의 한계 둘(즉석 질문은 정본 규칙만이 집행 · 도구 이름 없이 문장으로만 묻는 새 질문 자리는 후보로 뽑히지 않음 — 둘 다 테스트 머리 주석에도)이 적혀 있다.
@@ -195,8 +195,8 @@ next_phase: superpowers:writing-plans
 
 - `shared/style/plain-language.md` — §1.
 - 진입 SKILL.md 10개 — 블록 동기화(plugin-audit · project-init · artifact-critique · quality-pipeline · epic-conductor · pm-interview · request-framing · reviewing-brief · roadmap-status · spec-review), 그리고 아래 질문 자리.
-- 질문 자리(조사 7 기준, 계획이 전수로 확정): `plugins/spec-distill/skills/pm-interview/{SKILL.md,references/finishing.md,references/saturation.md,references/state-file.md}` · `plugins/spec-distill/skills/{spec-review,request-framing,reviewing-brief,epic-conductor}/SKILL.md` · `plugins/spec-distill/references/{proceed-gate.md,conducting.md,conductor-dispatch.md,trivia-escape.md,redecompose.md}` · `plugins/spec-distill/agents/relay-checker.md` · `plugins/quality-gates/skills/{quality-pipeline,artifact-critique}/SKILL.md` · `plugins/quality-gates/references/e2e.md` · `plugins/project-init/skills/project-init/SKILL.md` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` · `shared/docreview/references/reviewing-document.md`.
-- 새 파일: `shared/tests/test_ask_recommendation.sh`(+ 필요하면 같은 이름의 `.py` 본체) · `shared/tests/fixtures/ask-sites.tsv`.
+- 질문 자리(조사 7 기준, 계획이 전수로 확정): `plugins/spec-distill/skills/pm-interview/{SKILL.md,references/finishing.md,references/saturation.md}` · `plugins/spec-distill/skills/{spec-review,request-framing,reviewing-brief,epic-conductor}/SKILL.md` · `plugins/spec-distill/references/{proceed-gate.md,conducting.md,conductor-dispatch.md,trivia-escape.md,redecompose.md}` · `plugins/spec-distill/agents/relay-checker.md` · `plugins/quality-gates/skills/{quality-pipeline,artifact-critique}/SKILL.md` · `plugins/quality-gates/references/e2e.md` · `plugins/project-init/skills/project-init/SKILL.md` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` · `shared/docreview/references/reviewing-document.md`.
+- 새 파일: `shared/tests/test_ask_recommendation.sh` · 판정 본체 `shared/tests/ask_recommendation.py` · `shared/tests/fixtures/ask-sites.tsv` · 모듈 자체 시험 `shared/tests/fixtures/ask_recommendation/`.
 - 라벨 락 테스트(§6 목록, 테스트 전체 실행으로 확정).
 - `plugins/{spec-distill,quality-gates,project-init,plugin-audit}/.claude-plugin/plugin.json` · 각 `CHANGELOG.md`.
 
@@ -229,6 +229,12 @@ next_phase: superpowers:writing-plans
 | 전수 검사의 ④ 수 비교에서 find 가 git-ignored `.md` 도 센다 | 지금 레포에 무시된 md 가 없어 거짓 RED 가 나지 않는다(최종 리뷰 Minor) | 무시된 md 가 생기면 `shared/tests/test_ask_recommendation.sh` 의 find 쪽을 고친다 |
 | 언급 행은 그 줄에 `AskUserQuestion` 이 하나뿐이면 줄 전체를 덮는다 | 그 하나가 진짜 질문으로 바뀌어도 ① 이 안 난다 — 「언급」 종류 정의의 한계(최종 수정 재리뷰) | 질문 자리를 더하는 리뷰가 목록을 함께 본다 |
 | `references/fresh-evidence.md` 원칙 4 「선택지로 묻는다」 문장형 자리 | 목록 · 지시 문장이 없다 — 즉석 질문 한계(§5 ①)에 든다(최종 리뷰 Minor) | 그 자리를 고칠 때 목록에 올린다 |
+| 마크다운 꼴 선택지(표 · 목록 · 「…」)의 라벨과 설명 | 문법으로 갈리지 않아 설명 쪽에 옮긴 꼬리를 못 가른다 — `label:` 키가 있는 범위만 라벨 값 안을 본다(재결정 D5 · D6) | 그 꼴의 자리를 `label:` 꼴로 바꿀 때 |
+| qg 반복 1 의 SUGGESTION 9개 — 백틱 산문 「`(권장)`」을 꼬리로 셈 · 목록 행 지우기/언급 바꾸기가 조용함 · 둘째 질문 행(proceed-gate · request-framing)의 문단 범위에 첫 질문 꼬리 · D15 락의 범용 리터럴 · 「파일이 없다」 갈래 fixture · CHANGELOG 셋에 한계 공시 없음 · §5 · 파일 목록 · 계획 판 번호 낡음 | 막는 지적이 아니다 — §5 · 파일 목록은 이번에 고쳤다 | 다음 전수 검사 편집 — `.claude/quality-gates/` 의 result.md 가 원문을 가진다 |
+| 덮는 수는 범위 안 자리의 합계다 — 한 범위 안에서 자리 하나를 지우고 다른 줄에 새 질문을 넣으면 수가 같아 통과한다 | 자리마다 줄 위치를 목록에 박으면 문서 편집마다 목록을 고쳐야 한다(qg 반복 2 리뷰) — 두 편집을 함께 해야 하는 우회다 | 질문 자리를 바꾸는 리뷰가 목록 diff 를 함께 본다 |
+| `label:` 꼴의 한 호출에 질문을 여럿 실으면 꼬리는 그중 하나의 라벨에만 있어도 통과한다 | 범위가 호출 단위라 질문별로 가르지 않는다(qg 반복 2 리뷰) | 같은 호출에 질문을 더할 때 행을 따로 두는 것은 목록을 고치는 쪽의 몫이다 |
+| `label:` 키 자리 판정은 앞 글자(줄 머리 · `{` · `,`)만 본다 — 다른 필드 문자열 안에 `, label: '(권장)'` · `{label: '(권장)'}` 를 적거나, 선택지를 YAML 목록(`- label:`)으로 쓰면 설명 쪽 꼬리가 통과한다 | 고칠 때마다 한 단계 좁은 우회가 나왔다(qg 반복 1–3, 같은 축 세 번) — 정규식으로 파서를 흉내 내는 층위의 한계라 멈췄다. 레포에 그런 자리는 0건이다 | 선택지 꼴을 구조로 읽는 판정(실제 파서)으로 바꿀 때 |
+| 덮는 수가 실제보다 큰 쪽 · 언급 앵커가 줄의 둘째 자리일 때를 잠그는 fixture 가 없다 | 코드는 맞게 동작하고 변이에서만 드러난다(qg 반복 3 · 사용자가 되올림) | 다음 전수 검사 편집 |
 | 손 확인(Verification 5 — 설치본으로 실제 질문에 꼬리가 붙는지) | 헤드리스 실행은 Skill 도구를 거부한다 — 사람 몫 | PR 본문 「손 확인」 칸 |
 
 ## 번호 대조
@@ -305,6 +311,10 @@ next_phase: superpowers:writing-plans
 - D3.7 · r3 · adopt · 93a5c0ad#r3.1 · "현재 변경 유지(채택) — 수용 기준 (권장)" — finding 없이 바뀜: Acceptance Criteria (modified)
 - D3.8 · r3 · adopt · cca282ae#r3.1 · "고친다(채택) — 반영한 대로 (권장)" · supersedes D2.4 — 채택 후 미적용(expired): 모델이 자기가 고친 글을 남길지 되돌릴지 묻는 질문(request-framing 의 저자 편집 덩어리)을 추천 없이 두는데, 브리프는 자기 처분이라 추천을 비우는 경우를 리뷰 지적을 낮추거나 되올리는 질문으로만 좁혔고 모델의 풀이를 승인받는 질문에는 추천을 단다고 정했다. 이 예외를 넓힌 데에 사용자 결정 기록이 없다.
 - D3.9 · r3 · adopt · fa7ae6ff#r3.1 · "고친다(채택) — 순서도 예외 (권장)" — steelman 질문은 출처 표지만 정본 규칙의 예외로 남아, 새 정본의 「추천은 첫 자리에」가 steelman 의 고정 선택지 순서와 정면으로 부딪친다. 그런데 steelman 문서를 고친다는 말도, 그 순서를 예외로 둔다는 말도 없다.
+- D5 · qg 반복 1(2026-10-30) · 사용자가 낮춘 지적 L1 을 되올림 — §5 ③ 의 `꼬리` 는 선택지 `description:` 값 안의 「(권장)」을 세지 않는다. 범위 안 어디든 꼬리 글자만 있으면 통과하던 정의를 좁힌 재결정이다(설명으로 옮긴 꼬리가 통과하던 우회, codex 재현). 같은 반복에서 ① 에 「덮는 줄」 수 대조를 더했다 — D1.2(이웃 질문의 표시로 통과하지 않는다)를 구현이 지키지 못한 빈틈이다. (D6 이 둘 다 고쳐 썼다.)
+- D6 · qg 반복 2(2026-10-30) · 사용자가 낮춘 지적 L1–L3 을 되올림 — D5 의 「`description:` 값을 뺀다」는 키 표기 · 옮길 필드마다 새 우회가 나와(따옴표 키 · `question:` · `header:`) 열거를 버리고 뒤집었다: 범위에 `label:` 키가 있으면 꼬리는 `label:` 값 안에 있어야 한다. 같은 반복에서 ① 의 단위를 줄에서 `AskUserQuestion` 횟수로 바꿨다(같은 줄 · 이미 센 줄의 둘째 질문) — 이 규칙이 project-init 의 「더 묻기」 둘째 질문(목록에 없던 자리)을 찾아 `비움` 으로 올렸다.
+- D7 · qg 반복 3(2026-10-30) · 리뷰가 §5 와 코드의 「덮는 수」 정의가 어긋남을 짚었다 — 문서를 코드에 맞췄다(범위 안 모든 자리 · 언급이 맡은 것 제외). 줄 단위 상한 조항은 지웠다 — 자리 단위 합계가 같은 줄 · 이미 센 줄의 둘째 질문을 이미 잡고, 남는 것은 합계를 맞춘 바꿔치기뿐이라 미룸 표에 한계로 적었다. `label` 은 키 자리에서만 읽는다(다른 필드 값 안의 `label:` 글).
+- D8 · qg 반복 3(2026-10-31) · 사용자가 「지금 판정으로 끝내기」를 골랐다 — D7 의 「`label` 은 키 자리에서만 읽는다」는 앞 글자만 보는 정규식이라 문자열 안의 `label:` 글을 가르지 못한다. 꼬리 위치 축에서 막는 지적이 세 번째로 나와 미리 정한 멈출 조건에 걸렸고, 주장을 보장 범위로 줄이고 남은 우회를 미룸 표에 적었다. 「덮는 수」의 범위 문구도 코드대로 「앵커 시작부터」로 바로잡았다.
 - docreview 계수 — spec-distill-59ec298a/2026-10-28-askquestion-recommendation-de-0ecb8b9848239e67 r1: advice_new=1 · advice_repeat=0 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-10-28-askquestion-recommendation-de-0ecb8b9848239e67 r2: advice_new=7 · advice_repeat=1 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-10-28-askquestion-recommendation-de-0ecb8b9848239e67 r3: advice_new=0 · advice_repeat=1 · mc_preexisting_new=0
