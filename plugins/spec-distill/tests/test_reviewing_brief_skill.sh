@@ -163,9 +163,9 @@ printf 'import os, sys\nsys.exit(int(os.environ.get("STUB_VC_RC", "0")))\n' > "$
 { printf 'PR="%s"; PAYLOAD=p; STATE=s; AUDIT="%s/audit.md"; BUNDLE=""\ndrop_bundle() { return 0; }\n' "$FENCE_RT" "$FENCE_RT"
   awk '/^gate_rc=0;/{f=1} f && /^```/{exit} f' <<<"$W_GATE"; echo 'echo REACHED_ENGINE'; } > "$FENCE_RT/fence.sh"
 TODAY="$(date +%Y-%m-%d)"
-audit_with() {  # audit_with <절 머리> <증거 줄의 rc> → 그 절에 증거 줄을 둔 audit
+audit_with() {  # audit_with <절 머리> <증거 줄의 rc> [증거 줄의 날짜 — 기본 오늘] → 그 절에 증거 줄을 둔 audit
   printf '## 4. 게이트 실행 기록\n\n- check_brief.py — exit 0\n\n%s\n\n- check_verbatim_coverage.py — exit %s — skipped_by_user: 검사 없이 계속 (%s)\n\n## 5. 프로세스 로그\n' \
-    "$1" "$2" "$TODAY" > "$FENCE_RT/audit.md"
+    "$1" "$2" "${3:-$TODAY}" > "$FENCE_RT/audit.md"
 }
 fence_run() {  # fence_run <stub rc> [skip 변수 값] → "rc|stdout|stderr" 한 줄로
   local o e r
@@ -179,6 +179,7 @@ audit_with '' 3;          r3p="$(fence_run 3 1)"; r3n="$(fence_run 3)"
 audit_with '' 1;          r1p="$(fence_run 1 1)"
 audit_with '' 4;          r3w="$(fence_run 3 1)"
 audit_with '## 5. 프로세스 로그' 3; r3o="$(fence_run 3 1)"
+audit_with '' 3 2020-01-01; r3d="$(fence_run 3 1)"   # 날짜만 어긋난 증거 줄 — 지난 건너뛰기 기록의 재생
 [[ "$r0" == "0|REACHED_ENGINE|" ]] && ok "펜스 실행: rc 0 은 조용히 엔진으로 간다" || no "펜스 실행: rc 0 이 어긋났다: $r0"
 { [[ "$r3" == 1\|\|* ]] && [[ "$r3" == *'「검사 없이 계속」'* ]]; } && ok "펜스 실행: rc 3 은 멈추고(rc 1) 선택지를 말한다" || no "펜스 실행: rc 3 이 멈추지 않았다: $r3"
 { [[ "$r4" == 1\|\|* ]]; } && ok "펜스 실행: rc 4 도 멈춘다" || no "펜스 실행: rc 4 가 멈추지 않았다: $r4"
@@ -189,6 +190,7 @@ audit_with '## 5. 프로세스 로그' 3; r3o="$(fence_run 3 1)"
 [[ "$r3n" == 1\|\|* ]] && ok "펜스 실행: 증거 줄만 있고 변수가 없으면 멈춘다" || no "펜스 실행: 변수 없이 지나갔다: $r3n"
 [[ "$r3w" == 1\|\|* ]] && ok "펜스 실행: 다른 종료 코드(rc 4)의 증거 줄로는 rc 3 을 건너뛰지 못한다" || no "펜스 실행: 다른 rc 의 증거로 지나갔다: $r3w"
 [[ "$r3o" == 1\|\|* ]] && ok "펜스 실행: 게이트 실행 기록 절 밖의 증거 줄로는 건너뛰지 못한다" || no "펜스 실행: 다른 절의 줄로 지나갔다: $r3o"
+[[ "$r3d" == 1\|\|* ]] && ok "펜스 실행: 지난 날짜의 증거 줄로는 건너뛰지 못한다(날짜만 어긋난 칸)" || no "펜스 실행: 지난 날짜의 증거 줄로 지나갔다: $r3d"
 [[ "$r1p" == 1\|\|* ]] && ok "펜스 실행: rc 1(위반)은 변수와 증거 줄이 있어도 멈춘다" || no "펜스 실행: rc 1 이 건너뛰어졌다: $r1p"
 rm -rf "$FENCE_RT"
 has "$W_GATE" '고를 때만' \

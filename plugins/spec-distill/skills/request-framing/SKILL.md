@@ -377,21 +377,26 @@ ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""
 IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
 [ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
-# 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다.
+# 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다. TOPIC 이 실값이면 그 주제의
+# audit 만 되찾는다 — 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit · seed 를 다시 쓰지 않고 새 이름으로 간다.
+# TOPIC 은 이 블록을 이어 붙이는 모든 사본에서 같은 값으로 채운다 — 글자가 하나라도 다르면 다른 회의로 읽혀 새 이름으로 갈라진다.
 TOPIC="<kebab-topic>"
 IV_NAME=""
+case "$TOPIC" in
+  ""|*"<"*|*">"*|*/*|*[[:space:]]*) TOPIC_ARG="" ;;
+  *) TOPIC_ARG="$TOPIC" ;;
+esac
 if [ -z "$sid" ]; then
   echo "[spec-distill] 세션 id 를 얻지 못했다 — 이름을 되찾을 수 없어 두 경로를 만들지 않는다. 아래 가드들이 이름을 대고 멈춘다." >&2
 else
-  f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid")" || f_rc=$?
+  f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid" --topic "$TOPIC_ARG")" || f_rc=$?
   if [ "$f_rc" -eq 1 ]; then
-    case "$TOPIC" in
-      ""|*"<"*|*">"*|*/*|*[[:space:]]*) IV_NAME="" ;;
-      *) IV_NAME="$(date +%F)-${TOPIC}-interview" ;;
-    esac
+    IV_NAME=""
+    [ -z "$TOPIC_ARG" ] || IV_NAME="$(date +%F)-${TOPIC_ARG}-interview"
   elif [ "$f_rc" -eq 2 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2
+    [ -n "$TOPIC_ARG" ] || echo "[spec-distill] 이 세션에 회의가 둘 이상이다 — 블록의 TOPIC 을 이 회의의 주제로 채워 다시 돌린다(위 경로의 <날짜>-<주제>-interview 중 하나)." >&2
   elif [ "$f_rc" -ne 0 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 을 찾지 못했다(위 사유) — 이름을 고르지 않고 멈춘다." >&2
@@ -401,7 +406,7 @@ AUDIT=""
 SEED=""
 case "$IV_NAME" in
   ""|*/*|*"<"*|*">"*|*[[:space:]]*)
-    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다." >&2 ;;
+    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 첫 라운드면 이 블록의 TOPIC 을 요청 주제(공백 없는 kebab-case)로 바꿔 다시 돌려라 — audit 을 쓴 뒤에는 그 audit 의 session_id 로 되찾는다(이 세션에 회의가 둘 이상이면 TOPIC 이 고른다)." >&2 ;;
   *)
     AUDIT="${IDIR}${IV_NAME}.audit.md"
     SEED="${IDIR}${IV_NAME}.md" ;;
@@ -410,7 +415,7 @@ SEED_ABS=""; AUDIT_ABS=""; STATE_DIR=""; LEDGER_REFUSED=""
 if [ -n "$SEED" ]; then
   SEED_ABS="$(pwd)/$SEED"; AUDIT_ABS="$(pwd)/$AUDIT"
   STATE_DIR="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "$SEED_ABS" || true)"
-  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || { STATE_DIR=""; LEDGER_REFUSED=1; echo "[spec-distill] 원장 자리가 레포 밖으로 풀리거나 링크를 지난다(위 사유) — 리뷰 산출물(원장 · 번들 · 기준 사본)을 건너뛴다. 확정 직전 검사는 audit 기록으로 대조하고 막지 않는다." >&2; }
+  [ -z "${STATE_DIR:-}" ] || python3 "$SD/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || { STATE_DIR=""; LEDGER_REFUSED=1; echo "[spec-distill] 원장 자리가 레포 밖으로 풀리거나 링크를 지난다(위 사유) — 리뷰 산출물(원장 · 번들 · 기준 사본)을 건너뛴다. seed 리뷰를 돌 수 없으므로 확정 직전 검사 2 · 3 은 «검사 불가»로 막힌다 — 그 링크를 걷어 내고 이 블록부터 다시 돈다." >&2; }
 fi
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/seed.md"
 BUNDLE="${STATE_DIR:+$STATE_DIR/seed-bundle.md}"                 # 탐지 · codex 가 읽는 번들
@@ -1049,7 +1054,7 @@ degrade 는 **채널 넷**으로 나갑니다 — 엔진의 셋과 이 skill 의
 | `bundle_rc` 가 0 이 아니다 | `pipeline` · `suppression` | `unavailable` | 번들 조립 실패 — 조립기 stderr 마지막 줄 |
 | `prof_rc` 가 0 이 아니다 | `critic` · `suppression` | `unavailable` | seed 프로필 판독 불가(cat rc) |
 | `marks_rc` 가 2 다(표시 검사 불가) | `pipeline` · `suppression` | `degraded` | `seed_provenance.py marks` 의 stderr — 표시가 떼어지지 않았을 수 있다 |
-| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 · 확정 직전 공시가 rc 4(원장 자리 거부) | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
+| `base_rc` 가 0 이 아니다 · 공시 펜스가 rc 3 | `pipeline` · `all` | `degraded` | 기준 사본 부재 — 저자 편집을 비교할 수 없는 구간이 있다 |
 | `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
 
 codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advisory[]` 와 게이트 첫 줄로 이미 공시합니다. 같은
@@ -1185,8 +1190,8 @@ git commit -q --only -m 'docs(interview): <topic> interview seed + audit' -- "$A
 고쳤을 때도 1번부터 다시 돕니다.
 
 **계수 기록 — 검사 1 앞에서, 막지 않습니다.** 엔진의 라운드별 계수 줄(`docreview 계수 — …`)을 audit `## 6. 리뷰
-결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 같은
-(리뷰 정체, 라운드) 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
+결정` 에 적습니다. seed 프로필은 advisory 축이 없어 참고 목록이 늘 0건이라 보이지 않고 계수만 남깁니다. 이
+원장이 쓴 계수 줄은 다시 적지 않으므로 ③ 뒤에 다시 돌아도 됩니다. 「## 상태」 블록을 앞에 이어 붙여 돌립니다.
 이 펜스가 이 리뷰의 마지막 원장 쓰기입니다 — 표지를 잡아(이미 잡았으면 그대로) 쓰고 끝에서 풉니다. 그 뒤에 라운드를
 다시 열거나 처분 · 답 기록 · `check-intent` 를 하려면 그보다 먼저 원장 열기(`ledger-open`)를 다시 돕니다.
 
@@ -1232,8 +1237,8 @@ echo "cnt_rc=$cnt_rc"
 
 ```bash
 # 검사 2 · 3 이 엔진 자리에 파일을 쓴다 — 원장 정리로 디렉토리가 사라졌으면 다시 만든다. 원장 자리를 거부했으면(LEDGER_REFUSED)
-# 상태 블록이 이미 한 줄로 알렸고 검사 2 · 3 은 엔진 자리 없이 돈다.
-if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; elif [ -z "${LEDGER_REFUSED:-}" ]; then echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
+# seed 리뷰 라운드가 돌지 않았으므로 검사 2 · 3 은 열리지 않는다.
+if [ -n "${STATE_DIR:-}" ]; then mkdir -p "$STATE_DIR"; elif [ -n "${LEDGER_REFUSED:-}" ]; then echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 검사 2 · 3 은 «검사 불가»로 막힌다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2; else echo "[spec-distill] 리뷰 엔진 자리 없음(STATE_DIR 빈 값) — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라. 검사 2 · 3 은 «검사 불가»로 막힌다." >&2; fi
 marks_rc=0
 python3 "$SD/scripts/seed_provenance.py" marks "$SEED_ABS" "$AUDIT_ABS" || marks_rc=$?
 case "$marks_rc" in
@@ -1247,13 +1252,14 @@ echo "marks_rc=$marks_rc"
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
 반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
 다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다. 원장 자리를 거부한 세션(`## 상태` 블록이 그 한
-줄을 냈다)은 기준 사본이 없어 대조할 수 없으므로, 이 검사는 seed 전문을 보이고 막지 않습니다 — 그 사실을 게이트 앞 글에 싣습니다.
+줄을 냈다)은 seed 리뷰 라운드도 기준 사본도 없으므로 이 검사는 «검사 불가»로 막습니다 — 링크를 걷어 내고 `## 상태` 블록부터 다시 돕니다.
 
 ```bash
 final_hunks_rc=0
-if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ] && [ -f "${SEED_ABS:-}" ]; then
-  # 원장 자리를 거부했다 — 기준 사본이 없어 대조할 수 없다. seed 전문을 보이고 막지 않는다(막으면 심은 링크 하나로 게이트가 영영 닫힌다).
-  final_hunks_rc=4
+if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ]; then
+  # 원장 자리를 거부했다 — seed 리뷰가 돌지 않았고 기준 사본도 없다. 열지 않고 막는다.
+  echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 리뷰 없이 확정하지 않는다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2
+  final_hunks_rc=2
 elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_hunks_rc=2
 else
@@ -1271,23 +1277,23 @@ for h in d["hunks"]:
     print()
 ' "$STATE_DIR/hunks-final.json" ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
-  4) cat "$SEED_ABS"
-     echo "[spec-distill] 저자 편집 대조 불가 — 원장 자리를 쓰지 않아 기준 사본이 없다. seed 전문을 위에 보였다. 게이트 앞 글에 싣고 진행한다(막지 않는다)." >&2 ;;
   *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac
+echo "final_hunks_rc=$final_hunks_rc"
 ```
 
 **검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
 없으면 — 라운드가 시작되지 않았거나 원장 정리로 걷혔다 — `gate` 를 부르지 않고 audit `## 6. 리뷰 결정` 의 엔진
-drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다. 원장 자리를 거부한 세션도 같은
-대조로 갑니다 — 중간 파일은 원장 자리가 아니라 펜스 안의 임시 파일에 쓰고 지웁니다.
+drop 줄로 대조하며, 펜스가 내는 «엔진 원장 없음» 줄을 게이트 앞 글에 싣습니다. 원장 자리를 거부한 세션은 엔진
+리뷰가 돌지 않았으므로 audit 대조로 열지 않고 «검사 불가»(rc 2)로 막습니다.
 
 ```bash
 final_drops_rc=0
 gf=""
 if [ -z "${STATE_DIR:-}" ] && [ -n "${LEDGER_REFUSED:-}" ]; then
-  # 원장 자리를 거부했다 — 엔진 원장 없이 audit 으로 대조하고, 중간 파일은 이 펜스 안에서만 쓰고 지운다.
-  gf="$(mktemp "${TMPDIR:-/tmp}/sd-gate-final.XXXXXX")" || final_drops_rc=2
+  # 원장 자리를 거부했다 — 엔진 리뷰가 돌지 않았다. audit 대조만으로 열지 않고 막는다.
+  echo "[spec-distill] 원장 자리를 거부했다(링크 · 레포 밖) — 엔진 리뷰 없이 drop 검사를 통과시키지 않는다. 그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다." >&2
+  final_drops_rc=2
 elif [ -z "${STATE_DIR:-}" ] || ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   final_drops_rc=2
 else

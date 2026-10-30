@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import errno
 import json
 import os
 import re
@@ -87,7 +88,13 @@ def read(path, keep_newlines: bool = False) -> str:
 def _atomic(path: Path, data: bytes):
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".roadmap_write.")
     try:
-        os.write(fd, data)
+        view, done = memoryview(data), 0
+        while done < len(data):   # 짧은 쓰기를 다 쓴 것으로 바꿔 놓지 않는다 — 받는 만큼 이어 쓰고, 더 못 받으면 실패다
+            n = os.write(fd, view[done:])
+            if n <= 0:
+                raise OSError(errno.ENOSPC, "짧은 쓰기 — %d/%d 바이트만 썼다" % (done, len(data)), str(path))
+            done += n
+        os.fsync(fd)
         os.close(fd)
         if path.exists():
             mode = path.stat().st_mode & 0o777

@@ -113,7 +113,8 @@ user_sourced_items:
 (사용자 원문 **S1~Sn 전부**가 여기 있다 — S1 최초 요청, S2 이상 인터뷰 발화. audit `## 6. 사용자 원문` 도
  S2 이상을 같은 글자로 가진다. **추가만 허용** — 이미 있는 원문 글자는 어떤 처분으로도 고치지 않고, brief
  리뷰 중 사용자 결정 발화는 새 `S<N>` 으로 이 절 끝 · audit §6 · state `user_statements` 에 같은 write 로
- 더한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑뿐이며 요약·재서술·발췌는 금지.)
+ 더한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑·열 0 펜스 래핑(백틱 · 코드 펜스 · 문자
+ 참조 · HTML 이 든 발화 — pm-interview `references/finishing.md`)뿐이며 요약·재서술·발췌는 금지.)
 
 - **S1** 🗣 최초 요청:
   > "..."

@@ -90,6 +90,7 @@ class Repo:
     def __init__(self, root: str):
         self.root = root
         self._specs = {}
+        self._unread = {}
 
     def read(self, rel: str):
         try:
@@ -101,15 +102,27 @@ class Repo:
     def exists(self, rel: str) -> bool:
         return os.path.exists(os.path.join(self.root, rel))
 
+    def absent(self, rel: str) -> bool:
+        """확인된 부재만 참이다 — 상위 폴더 권한처럼 있는지 모르는 경우는 거짓(못 읽음으로 센다). 끊긴 링크도 있는 것이다."""
+        try:
+            os.lstat(os.path.join(self.root, rel))
+        except (FileNotFoundError, NotADirectoryError):
+            return True
+        except OSError:
+            return False
+        return False
+
     def specs_for(self, source: str, specs_dir: str) -> list:
         """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
         d = specs_dir.rstrip("/")
         if d not in self._specs:
-            found = []
+            found, unread = [], []
             try:
                 names = sorted(os.listdir(os.path.join(self.root, *d.split("/"))))
-            except OSError:
+            except FileNotFoundError:   # 폴더가 없다 — 설계문서가 아직 없다
                 names = []
+            except OSError:   # 폴더를 못 읽었다 — 어느 묶음의 설계문서가 있는지 모른다
+                names, unread = [], [d + "/"]
             for name in names:
                 if not name.endswith(".md"):
                     continue
@@ -117,8 +130,16 @@ class Repo:
                 text = self.read(rel)
                 if text is not None:
                     found.append((rel, unquote(frontmatter(text).get("source_interview", "")), text))
+                else:
+                    unread.append(rel)
             self._specs[d] = found
+            self._unread[d] = unread
         return [(rel, text) for rel, src, text in self._specs[d] if src == source]
+
+    def unreadable_specs(self, specs_dir: str, source=None) -> list:
+        """`specs_for` 가 읽지 못해 어느 묶음의 것인지 모르는 설계문서들(그 폴더를 한 번 훑은 뒤). 못 읽은 글은 어느
+        묶음의 것인지 모르므로 source 와 상관없이 폴더 전부다."""
+        return list(self._unread.get(specs_dir.rstrip("/"), []))
 
 
 def find_repo(bundle_path: str, roadmap_rel: str):
@@ -313,30 +334,48 @@ def _roadmap_view(fm: dict, repo):
     return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": specs_dir}, None
 
 
-def _block_specs(block: dict, view: dict, repo) -> list:
-    """그 블록의 작업 트리 설계문서 글들."""
+def _block_specs(block: dict, view: dict, repo):
+    """(그 블록의 작업 트리 설계문서 [(경로, 글)], 못 읽은 설계문서 경로들)."""
     if block["kind"] == "branch":
         rel = block["fields"].get("spec", "").strip().strip("`")
-        text = repo.read(rel) if rel else None
-        return [text] if text is not None else []
+        if not rel:
+            return [], []
+        text = repo.read(rel)
+        if text is not None:
+            return [(rel, text)], []
+        return [], ([] if repo.absent(rel) else [rel])   # 확인된 부재만 「아직 없음」 — 그 밖은 못 읽음
     if block["kind"] == "bundle":
         rdir = view["rel"].rsplit("/", 1)[0] if "/" in view["rel"] else "."
-        return [text for _rel, text in repo.specs_for(rdir + "/" + block["fields"]["묶음"], view["specs_dir"])]
-    return []
+        source = rdir + "/" + block["fields"]["묶음"]
+        found = repo.specs_for(source, view["specs_dir"])
+        return found, repo.unreadable_specs(view["specs_dir"], source)
+    return [], []
 
 
-def _serves(block: dict, s: str, view: dict, repo, epic: str) -> bool:
-    """다른 블록이 S 를 받드는가 — 배정됐고, 그 블록의 설계문서가 그 S 를 기각하지 않았다(N17)."""
+def _serves(block: dict, s: str, view: dict, repo, epic: str):
+    """다른 블록이 S 를 받드는가 — 배정됐고, 그 블록의 설계문서가 그 S 를 기각하지 않았다(N17).
+
+    -> (True | False | None, 사유). None 은 셀 수 없음이다 — 설계문서를 못 읽었거나 번호 대조 표가 깨져 그 블록이 S 를
+    기각했는지 모른다. 받든다고 치지 않는다."""
     if block["id"] == epic or s not in block.get("assigned", []):
-        return False
-    for text in _block_specs(block, view, repo):
+        return False, None
+    found, unread = _block_specs(block, view, repo)
+    broken = None
+    for rel, text in found:   # 읽힌 문서의 분명한 기각이 먼저다 — 못 읽은 다른 문서가 그 기각을 셀 수 없음으로 내리지 않는다
         try:
-            rows = table_rows(text)
-        except FormatError:
+            if section_body(text, TABLE_HEADING) is None:   # 번호 대조 절이 없는 설계문서 — 기각 기록이 없다(깨진 표가 아니다)
+                continue
+            rows = table_rows(text)   # 절이 둘 이상인 것도 깨진 표다(section_body 가 던진다)
+        except FormatError as exc:
+            broken = broken or "%s 의 설계문서 번호 대조 표를 읽지 못했다(%s): %s" % (block["id"], rel, exc)
             continue
         if any(s in ids and verb.startswith("기각") for ids, verb, _cell in rows):
-            return False
-    return True
+            return False, None
+    if broken:
+        return None, broken
+    if unread:
+        return None, "%s 의 설계문서를 못 읽었다: %s" % (block["id"], unread[0])
+    return True, None
 
 
 def _unchecked(reason: str) -> dict:
@@ -392,9 +431,13 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
         if absent:
             shallow += [{"id": t, "reason": "넘긴 에픽이 로드맵에 없다: " + " · ".join(absent)} for t in ids]
         for s in rejected_s:
-            if any(_serves(b, s, view, repo, epic) for b in view["blocks"]):
+            verdicts = [_serves(b, s, view, repo, epic) for b in view["blocks"]]
+            if any(v is True for v, _why in verdicts):
                 continue
-            if view["errors"]:
+            unread = [why for v, why in verdicts if v is None]
+            if unread:
+                unknown.append("%s — %s" % (s, unread[0]))
+            elif view["errors"]:
                 unknown.append("%s — 로드맵의 묶음을 다 읽지 못했다: %s" % (s, view["errors"][0]))
             else:
                 unserved.append(s)

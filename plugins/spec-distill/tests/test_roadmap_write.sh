@@ -184,8 +184,11 @@ assert_eq "$(create "$T/state4.md" docs/rm3)" "0" "실패 뒤 재실행: rc 0"
 assert_eq "$(four_empty docs/rm3/roadmap.md)" "ok" "실패 뒤 재실행: 검사기 네 목록이 빈 목록"
 
 # ── 표 오류 · 사용법 오류 ────────────────────────────────────────────────────
-table "$T/state7.md" "$P1_ROW" "${E1_ROW/| 묶음 |/| 꾸러미 |}"
+# 종류 칸만 어긋난 표 — 다른 행은 다 있어 빠진 번호 · 내부 오류로 rc 1 이 나지 않는다. 사유가 종류 칸이어야 한다.
+table "$T/state7.md" "$P1_ROW" "${E1_ROW/| 묶음 |/| 꾸러미 |}" "$E2_ROW"
 assert_eq "$(create "$T/state7.md" docs/rm6)" "1" "표 오류: rc 1"
+assert_file_has "$T/out.txt" "E1: 종류는 「묶음」 · 「브랜치 <설계문서 경로>」 · 「결정」 중 하나다" "표 오류: 사유가 종류 칸이다(빠진 번호 · 내부 오류가 아니다)"
+grep -qE 'unassigned|orphans|Traceback|내부 오류' "$T/out.txt" && no "표 오류: 종류 칸 말고 다른 사유가 섞였다 — $(head -c 300 "$T/out.txt")" || ok "표 오류: 다른 사유(빠진 번호 · 내부 오류)가 섞이지 않았다"
 [ -e "$W/docs/rm6" ] && no "표 오류: 폴더가 생겼다" || ok "표 오류: 아무것도 쓰지 않는다"
 rc=0; (cd "$W" && python3 "$RW" create --brief docs/iv/brief.md) >/dev/null 2>&1 || rc=$?
 assert_eq "$rc" "2" "사용법 오류: rc 2"

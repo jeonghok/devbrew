@@ -63,8 +63,14 @@ description: >
    오류가 아니다 — `kind: confirm` 빈 곳(그 바뀐 결정을 한 번 더 확인할 대상과 장치)을 낸다.
 4. `<research_outputs>` 가 두 묶음 미만이면 `not_saturated` 와 `kind: confirm` 빈 곳 하나(「조사가 두 묶음 미만 —
    열린 결정에 닿는 조사를 하나 더」)를 낸다.
-5. 「충분해 보인다」를 근거로 쓰지 않는다. `basis` 에는 최근 두 묶음의 novelty 요지와 그 근거 줄을 쓴다.
-6. 빈 곳마다 무엇을 보면(`look_at`) · 어느 결정이 바뀔 수 있나(`may_change`, 없으면 `opens`) · 어느 장치로
+5. 실패한 조사는 「새로움 없음」이 아니다. evidence · repo_claims 가 둘 다 비고 unanswered 가 있는 산출, 웹 도구 거부
+   (권한 · 도구 비활성으로 검색 · 가져오기를 못 함)만 담은 산출, dispatch 오류 원문(도구 오류 · 실패 메시지)만 담은
+   산출은 그 항목에 `failed: true` 를 매긴다 — 아무것도 보지 못했으니 결정을 바꾸지 않았다는 근거가 되지 않는다.
+   최근 두 묶음에 `failed: true` 항목이 하나라도 있으면 `saturated` 를 내지 않는다 — `not_saturated` 와 `kind: explore`
+   빈 곳(「조사 실패 — 묶음 <b> 의 <장치>: 다른 장치나 다른 물음으로 다시」)을 실패한 항목마다 낸다. 묶음 수를 셀 때(규칙 4)
+   실패한 항목만 든 묶음도 한 묶음으로 센다.
+6. 「충분해 보인다」를 근거로 쓰지 않는다. `basis` 에는 최근 두 묶음의 novelty 요지와 그 근거 줄을 쓴다.
+7. 빈 곳마다 무엇을 보면(`look_at`) · 어느 결정이 바뀔 수 있나(`may_change`, 없으면 `opens`) · 어느 장치로
    (`device`)를 쓴다. 같은 질문을 되풀이하지 않고 다른 접근을 먼저 고른다.
 
 ## Output 형식
@@ -75,6 +81,7 @@ novelty:
   - n: <research_outputs 번호>
     changed: [OQ3]             # 이 산출이 바꾼 결정 — 없으면 []
     opened: "<이 산출이 연 새 결정 한 줄 | 없음>"
+    failed: true | false       # 실패한 조사(규칙 5) — true 면 changed · opened 는 아무것도 보지 못한 결과다
 basis: "<최근 두 묶음의 novelty 요지 · 근거 줄>"
 gaps:                          # not_saturated 면 1개 이상
   - kind: explore | confirm    # explore = 아직 안 본 곳 · confirm = 최근 바뀐 결정의 확인

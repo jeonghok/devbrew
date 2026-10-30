@@ -726,11 +726,26 @@ out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf00000
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션 seed audit 이 둘이면 이름을 만들지 않는다" || no "AC11: 둘 이상에서 이름을 골랐다: $out"
 assert_contains "$out" "seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다" "AC11: 둘 이상이면 상태 블록이 멈춘 이유를 댄다"
-# TOPIC 을 실값으로 바꿔 둔 블록도 둘 이상에서 TOPIC 으로 새 이름을 만들지 않는다
-out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$(printf '%s\n' "$blk" | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="rfz"/')
-echo \"SEED=[\$SEED]\"" 2>&1)"
-printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 둘 이상이면 TOPIC 이 있어도 새 이름을 만들지 않는다" || no "AC11: 둘 이상에서 TOPIC 으로 새 이름을 만들었다: $out"
+# TOPIC 을 실값으로 바꿔 둔 블록은 그 주제의 audit 만 되찾는다 — 둘 이상이어도 주제가 하나를 가린다
+rf_topic() { (cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$(printf '%s\n' "$blk" | sed "s/^TOPIC=\"<kebab-topic>\"\$/TOPIC=\"$1\"/")
+echo \"SEED=[\$SEED]\"" 2>&1); }
+out="$(rf_topic b)"
+printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-b-interview.md]' && ok "AC11: 둘 이상이어도 TOPIC 이 그 주제의 audit 을 가린다" || no "AC11: TOPIC 으로 그 주제의 audit 을 되찾지 못했다: $out"
+# 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit · seed 이름을 쓰지 않는다 — 새 주제 이름으로 가고 알린다
+out="$(rf_topic rfz)"
+printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/interview/$(date +%F)-rfz-interview.md]" && ok "AC11: 다른 주제로 다시 열면 새 주제 이름을 쓴다(옛 audit · seed 를 다시 쓰지 않는다)" || no "AC11: 다른 주제인데 새 이름이 아니다: $out"
+assert_contains "$out" "다른 주제의 seed audit" "AC11: 다른 주제로 다시 열 때 옛 주제의 audit 이 있음을 알린다"
 rm -f "$rfr/docs/superpowers/interview/2026-10-15-b-interview.audit.md"
+out="$(rf_topic rfz)"
+printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/interview/$(date +%F)-rfz-interview.md]" && ok "AC11: 이 세션의 audit 이 하나여도 주제가 다르면 그 이름을 쓰지 않는다" || no "AC11: 하나뿐인 옛 주제 audit 을 새 주제에 다시 썼다: $out"
+# 새 주제의 audit 을 쓴 뒤 자리표 TOPIC 그대로 이어 붙인 블록은 둘 이상에서 멈추되, 푸는 길(TOPIC 을 채운다)을 댄다
+printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
+out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
+echo \"SEED=[\$SEED]\"" 2>&1)"
+printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 주제가 둘인 세션에서 자리표 TOPIC 이면 이름을 고르지 않는다" || no "AC11: 자리표 TOPIC 으로 둘 중 하나를 골랐다: $out"
+assert_contains "$out" "TOPIC 을 이 회의의 주제로 채워 다시 돌린다" "AC11: 자리표 TOPIC 으로 둘 이상에서 멈출 때 푸는 길을 댄다"
+grep -qF 'TOPIC 은 이 블록을 이어 붙이는 모든 사본에서 같은 값으로 채운다' "$RF" && ok "AC11: 블록 주석이 TOPIC 을 모든 사본에서 같은 값으로 채우라고 한다" || no "AC11: TOPIC 을 사본마다 같게 채우라는 지시가 없다"
+rm -f "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-a-interview.md]' \
@@ -912,10 +927,18 @@ $body")"
   assert_contains "$o" "원장 자리가 레포 밖으로 풀리거나 링크를 지난다" "T8 관문(a): 검사 $i — 리뷰 산출물을 건너뛴다는 한 줄을 낸다"
 done
 assert_contains "$LKA1" "marks_rc=" "T8 관문(a): 검사 1 이 판정 줄을 낸다"
-assert_not_contains "$LKA1" "검사 불가»로 막힌다" "T8 관문(a): 검사 1 이 검사 2 · 3 을 «검사 불가» 로 막는다고 하지 않는다"
-assert_contains "$LKA2" "저자 편집 대조 불가" "T8 관문(a): 검사 2 는 대조 불가를 알리고 막지 않는다"
-assert_not_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막지 않는다"
-assert_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 은 audit 으로 대조해 통과 판정을 낸다"
+# 원장 자리를 거부한 세션은 seed 리뷰 라운드를 건너뛰었다 — 확정 직전 검사 2 · 3 은 열리지 않고 «검사 불가» 로 막는다.
+# 아래 셋은 그 펜스만 내는 글로 잰다 — 앞에 붙인 상태 블록의 한 줄이 대신 만족시키지 않게
+assert_contains "$LKA1" "원장 자리를 거부했다(링크 · 레포 밖) — 검사 2 · 3 은 «검사 불가»로 막힌다" "T8 관문(a): 검사 1 이 검사 2 · 3 이 «검사 불가» 로 막힌다고 알린다"
+assert_contains "$LKA2" "리뷰 없이 확정하지 않는다" "T8 관문(a): 검사 2 가 원장 자리 거부를 이유로 막는다"
+assert_contains "$LKA3" "엔진 리뷰 없이 drop 검사를 통과시키지 않는다" "T8 관문(a): 검사 3 이 원장 자리 거부를 이유로 막는다"
+assert_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막는다"
+assert_not_contains "$LKA2" "진행한다(막지 않는다)" "T8 관문(a): 검사 2 가 막지 않고 진행한다고 하지 않는다"
+assert_contains "$LKA2" "final_hunks_rc=2" "T8 관문(a): 검사 2 는 «검사 불가»(rc 2)로 막는다 — 「이대로 둔다」 를 묻는 rc 3 갈래가 아니다"
+assert_not_contains "$LKA2" "「이대로 둔다 / 멈춘다」" "T8 관문(a): 검사 2 가 리뷰 없는 seed 를 이대로 둘지 묻지 않는다"
+assert_contains "$LKA3" "final_drops_rc=2" "T8 관문(a): 검사 3 은 «검사 불가»(rc 2)로 막는다"
+assert_not_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 이 audit 대조만으로 통과 판정을 내지 않는다"
+assert_contains "$LKA2$LKA3" "그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다" "T8 관문(a): 막을 때 푸는 길(링크를 걷어 내고 다시 돈다)을 댄다"
 assert_eq "$(ls -A "$lko")" "" "T8 관문(a): 링크 너머 폴더가 비어 있다"
 # (b) spec-review — ## 입력 + codex 펜스
 o="$(cd "$lkr" && lk_env sess-lk000001 "spec_path='$lkr/docs/d-design.md'

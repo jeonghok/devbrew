@@ -3,6 +3,13 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.8.1] — 2026-10-30
+
+patch 인 이유 — 링크로 배송하는 공유 docreview 엔진(`scripts/docreview_state.py` · `scripts/docreview_advice.py`, 정본 `shared/docreview/scripts/`)이 바뀌었다(spec-distill 8.13.1 과 같은 변경).
+
+### Fixed
+- 원장을 지우고 같은 문서를 처음부터 다시 리뷰하면 새 원장의 계수 줄을 건너뛰던 것 — 다시 붙일지를 키만이 아니라 그 줄을 이 원장이 썼는지(원장의 `count_logged` 기록)로 가린다. 그 기록이 없는 옛 원장은 파일의 키로 본다.
+
 ## [14.8.0] — 2026-10-29
 
 ### Changed

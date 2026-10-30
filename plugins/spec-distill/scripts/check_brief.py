@@ -589,7 +589,7 @@ def payload_verbatim_n1b_failures(payload_text: str, audit_anchors: set) -> list
     span = payload_section6_span(payload_text)
     bad = brief_body.anchor_lines(payload_text[span[0]:span[1]])[1] if span else []
     for n, why in bad:
-        out.append(f"payload §6 의 {n}번째 줄이 허용 문법 밖이다 — {brief_body.ANCHOR_REASON_TEXT[why]}({why}). "
+        out.append(f"payload §6 의 {n}번째 줄이 허용 문법 밖이다 — {brief_body.anchor_reason(why)}({why}). "
                    "§6 앵커는 줄 첫 칸의 `- **S<N>** ` 꼴만 받는다; 다른 모양의 `**S<N>**` 줄은 사용자 발화가 아니다")
     return out
 
@@ -1746,7 +1746,7 @@ def gate(path: Path) -> int:
             if not audit_sec6_absent and not audit_sec6_dup:
                 for n, why in audit_anchor_rejects(audit_text):
                     failures.append(f"audit §6 의 {n}번째 줄이 허용 문법 밖이다 — "
-                                    f"{brief_body.ANCHOR_REASON_TEXT[why]}({why})")
+                                    f"{brief_body.anchor_reason(why)}({why})")
             failures += [f"audit 에 읽는 쪽마다 다르게 읽히는 글이 있다 — {brief_body.SECTION_REASON_TEXT[why]} ({why}): {_line_no(audit_text, ln)}번째 줄"
                          for ln, why in brief_body.audit_subset_problems(audit_text)]
             if not audit_sec6_absent and attribution_block_missing(audit_text):
@@ -1949,7 +1949,7 @@ def main(argv: list[str]) -> int:
                               audit_text,
                               payload_verbatim_anchors(text) | verbatim_anchors(audit_text)),
                           "anchor_rejects": [f"audit §6 의 {n}번째 줄이 허용 문법 밖이다 — "
-                                             f"{brief_body.ANCHOR_REASON_TEXT[why]}({why})"
+                                             f"{brief_body.anchor_reason(why)}({why})"
                                              for n, why in audit_anchor_rejects(audit_text)]},
                          ensure_ascii=False))
         return 0

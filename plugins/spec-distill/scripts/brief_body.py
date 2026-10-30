@@ -362,6 +362,21 @@ ANCHOR_REASON_TEXT = {
 }
 
 
+# 하위 집합 밖 글자 때문에 거부한 줄 — 사용자 발화 원문이면 그 글자를 지우지 않고 싣는 길이 있다(열 0 펜스 안은 읽지 않는다).
+_VERBATIM_FIXABLE = frozenset(("char_ref_not_allowed", "html_block_not_allowed", "fence_indented", "autolink_backtick",
+                               "code_span_unclosed", "html_inline_not_allowed"))
+VERBATIM_FENCE_FIX = (" — 사용자 발화 원문이 이 글자를 담고 있으면 원문을 고치지 말고 `>` 인용 대신 앵커 줄 바로 아래 "
+                      "열 0 펜스에 그대로 싣는다(펜스 글자는 원문의 가장 긴 같은 글자 줄보다 길게, 예: `~~~~`)")
+# 그 밖의 사유는 앵커처럼 읽히는 글이라 펜스 안에서도 거부한다 — 펜스 안 줄도 번들에 그대로 실려 리뷰어가 앵커로 읽는다.
+ANCHOR_LOOKALIKE_FIX = (" — 펜스 안 줄이어도 거부한다: 쓴 앵커 줄 자체가 이 모양이면 열 0 `- **S<N>** ` 꼴로 고치고, "
+                        "사용자 발화 원문이 이런 글을 담고 있으면 원문 그대로는 싣지 못하니 원문을 고치지 말고 사용자에게 그 사실을 알린다")
+
+
+def anchor_reason(why):
+    """거부 사유 이름 → 사람이 읽는 말 — 사유마다 다음 할 일(펜스에 싣기 · 사용자에게 알리기) 하나를 붙인다."""
+    return ANCHOR_REASON_TEXT[why] + (VERBATIM_FENCE_FIX if why in _VERBATIM_FIXABLE else ANCHOR_LOOKALIKE_FIX)
+
+
 def _lead_ws_reason(line):
     i = 0
     while i < len(line) and line[i].isspace():
