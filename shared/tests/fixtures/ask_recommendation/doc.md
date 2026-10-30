@@ -116,3 +116,16 @@ AskUserQuestion({ "questions": [{ "question": "어떻게 할까?", "options": [
 ## 어 — 질문 범위 안의 언급(같은 줄)
 
 어-질문: 빈 답이면 `AskUserQuestion` 재질문을 한 번 더 하고, 그래도 비면 `AskUserQuestion` 하나 — 「채우기 (권장)」 · 「건너뛰기」.
+
+## 저 — 다른 필드 값 안에 적은 label 글
+
+저-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
+  {label: "계속", description: "예시 label: '(권장)'"}, {label: "그만두기"}] }] })
+```
+
+## 처 — 덮는 수가 빈 질문 문단에 끼운 새 질문
+
+처-질문: 「계속 (권장)」 · 「멈춤」을 묻는다. 처-새: 이어 `AskUserQuestion` 으로 「다시」 · 「그만」을 묻는다.

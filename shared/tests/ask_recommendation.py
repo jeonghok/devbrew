@@ -19,8 +19,9 @@ import sys
 from collections import namedtuple
 
 TAIL_RE = re.compile(r"(?<!「)\((?:권장|Recommended)\)")
-LABEL_KEY_RE = re.compile(r"""["']?\blabel["']?\s*:""")
-LABEL_RE = re.compile(r"""["']?\blabel["']?\s*:\s*(["'`])((?:(?!\1)[^\n])*)\1""")
+# label 은 키 자리(줄 머리 · `{` · `,` 바로 뒤)에서만 읽는다 — 다른 필드 값 안에 적은 `label:` 글은 라벨이 아니다.
+LABEL_KEY_RE = re.compile(r"""(?:^|[{,])\s*["']?label["']?\s*:""", re.M)
+LABEL_RE = re.compile(r"""(?:^|[{,])\s*["']?label["']?\s*:\s*(["'`])((?:(?!\1)[^\n])*)\1""", re.M)
 DIRECTIVE = "권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다"
 EMPTY = "추천을 달지 않는다 — "
 SOURCE = "추천)"
