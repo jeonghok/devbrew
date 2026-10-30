@@ -668,7 +668,11 @@ class _GitTreeRepo:
         if key in self._memo:
             return self._memo[key]
         out, unread = [], []
-        for path in self.git.grep_files(self.tree, source, folder):
+        before = len(self.git.failures)
+        paths = self.git.grep_files(self.tree, source, folder)
+        if len(self.git.failures) > before:   # grep 이 실패했다 — 이 묶음의 설계문서가 있는지 모른다(작업 트리의 폴더 못 읽음과 같다)
+            unread.append(folder)
+        for path in paths:
             text = self.git.blob(self.tree, path)
             if text is None:   # 이 묶음을 가리키는 글이 있는데 못 읽었다 — 그 묶음이 무엇을 기각했는지 모른다
                 unread.append(path)

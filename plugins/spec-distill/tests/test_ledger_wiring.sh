@@ -934,6 +934,8 @@ assert_contains "$LKA2" "리뷰 없이 확정하지 않는다" "T8 관문(a): �
 assert_contains "$LKA3" "엔진 리뷰 없이 drop 검사를 통과시키지 않는다" "T8 관문(a): 검사 3 이 원장 자리 거부를 이유로 막는다"
 assert_contains "$LKA2" "게이트를 띄우지 않는다" "T8 관문(a): 검사 2 가 게이트를 막는다"
 assert_not_contains "$LKA2" "진행한다(막지 않는다)" "T8 관문(a): 검사 2 가 막지 않고 진행한다고 하지 않는다"
+assert_contains "$LKA2" "final_hunks_rc=2" "T8 관문(a): 검사 2 는 «검사 불가»(rc 2)로 막는다 — 「이대로 둔다」 를 묻는 rc 3 갈래가 아니다"
+assert_not_contains "$LKA2" "「이대로 둔다 / 멈춘다」" "T8 관문(a): 검사 2 가 리뷰 없는 seed 를 이대로 둘지 묻지 않는다"
 assert_contains "$LKA3" "final_drops_rc=2" "T8 관문(a): 검사 3 은 «검사 불가»(rc 2)로 막는다"
 assert_not_contains "$LKA3" "final_drops_rc=0" "T8 관문(a): 검사 3 이 audit 대조만으로 통과 판정을 내지 않는다"
 assert_contains "$LKA2$LKA3" "그 링크를 걷어 내고 「## 상태」 블록부터 다시 돈다" "T8 관문(a): 막을 때 푸는 길(링크를 걷어 내고 다시 돈다)을 댄다"

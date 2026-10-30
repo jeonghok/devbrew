@@ -214,7 +214,7 @@ class SpecsDir(unittest.TestCase):
 
         class FakeTree:
             def __init__(self):
-                self.folders = []
+                self.folders, self.failures = [], []
 
             def grep_files(self, tree, fixed, pathspec):
                 self.folders.append(pathspec)
@@ -231,6 +231,8 @@ class SpecsDir(unittest.TestCase):
         import roadmap_status as rs
 
         class FakeTree:
+            failures = ()   # 이 가짜의 git 은 실패하지 않는다
+
             def grep_files(self, tree, fixed, pathspec):
                 return ["design/x.md"]
 
@@ -251,6 +253,8 @@ class SpecsDir(unittest.TestCase):
                  "| S9 | 기각 — x | y |\n")
 
         class FakeTree:
+            failures = ()   # 이 가짜의 git 은 실패하지 않는다
+
             def grep_files(self, tree, fixed, pathspec):
                 return {"rm/A.md": ["design/a.md"], "rm/B.md": ["design/b.md"]}[fixed]
 
@@ -265,6 +269,23 @@ class SpecsDir(unittest.TestCase):
             got = {k: cbc._serves(blk[k], "S8", view, repo, "R1") for k in order}
             self.assertEqual(got["B"], (True, None), order)
             self.assertEqual(got["A"], (None, "RA 의 설계문서를 못 읽었다: design/a.md"), order)
+
+    def test_tree_repo_grep_failure_is_unknown(self):   # git grep 이 실패하면 그 묶음의 설계문서가 있는지 모른다
+        import roadmap_status as rs
+
+        class FakeTree:
+            def __init__(self):
+                self.failures = []
+
+            def grep_files(self, tree, fixed, pathspec):
+                self.failures.append("git grep 실패(rc 128): x")
+                return []
+
+        repo = rs._GitTreeRepo(FakeTree(), "tree", "design/")
+        block = {"id": "R9", "kind": "bundle", "fields": {"묶음": "R5.md"}, "assigned": ["S8"]}
+        ok, why = cbc._serves(block, "S8", {"rel": "rm/roadmap.md", "specs_dir": "design/"}, repo, "R1")
+        self.assertIsNone(ok)
+        self.assertEqual(why, "R9 의 설계문서를 못 읽었다: design/")
 
     def test_tree_branch_spec_read_error_is_unknown(self):   # 트리의 브랜치 블록 spec — 확인된 부재만 「아직 없음」
         import roadmap_status as rs
@@ -328,6 +349,10 @@ class SpecsDir(unittest.TestCase):
         block = {"id": "P1", "kind": "branch", "fields": {"spec": "design/p1.md"}, "assigned": ["S8"]}
         self.assertEqual(cbc._serves(block, "S8", view, OneDoc("# 옛 설계\n\n본문\n"), "R1"), (True, None))
         ok, why = cbc._serves(block, "S8", view, OneDoc("# 설계\n\n## 번호 대조\n\n| a |\n"), "R1")
+        self.assertIsNone(ok)
+        self.assertIn("번호 대조 표를 읽지 못했다", why)
+        twice = "# 설계\n\n## 번호 대조\n\n| a |\n\n## 번호 대조 (R8)\n\n| b |\n"   # 절이 둘 — 검사 전체가 죽지 않는다
+        ok, why = cbc._serves(block, "S8", view, OneDoc(twice), "R1")
         self.assertIsNone(ok)
         self.assertIn("번호 대조 표를 읽지 못했다", why)
 

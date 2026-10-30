@@ -362,10 +362,10 @@ def _serves(block: dict, s: str, view: dict, repo, epic: str):
     found, unread = _block_specs(block, view, repo)
     broken = None
     for rel, text in found:   # 읽힌 문서의 분명한 기각이 먼저다 — 못 읽은 다른 문서가 그 기각을 셀 수 없음으로 내리지 않는다
-        if section_body(text, TABLE_HEADING) is None:   # 번호 대조 절이 없는 설계문서 — 기각 기록이 없다(깨진 표가 아니다)
-            continue
         try:
-            rows = table_rows(text)
+            if section_body(text, TABLE_HEADING) is None:   # 번호 대조 절이 없는 설계문서 — 기각 기록이 없다(깨진 표가 아니다)
+                continue
+            rows = table_rows(text)   # 절이 둘 이상인 것도 깨진 표다(section_body 가 던진다)
         except FormatError as exc:
             broken = broken or "%s 의 설계문서 번호 대조 표를 읽지 못했다(%s): %s" % (block["id"], rel, exc)
             continue

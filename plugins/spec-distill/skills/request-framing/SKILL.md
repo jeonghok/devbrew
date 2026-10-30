@@ -1278,6 +1278,7 @@ for h in d["hunks"]:
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
   *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac
+echo "final_hunks_rc=$final_hunks_rc"
 ```
 
 **검사 3 — 문구 없는 drop** — `### 게이트` 의 검사와 같습니다. 엔진 원장(`$STATE_DIR/docreview-state.md`)이
