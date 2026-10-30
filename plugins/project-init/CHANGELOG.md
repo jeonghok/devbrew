@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.4.1] — 2026-10-30
+
+### Fixed
+- 「더 묻기」를 고르면 띄우는 둘째 질문(관례 · 목표 · 성공 기준 · 사용자)이 추천 표시 규칙의 분류에서 빠져 있었다 — 사용자만 아는 사실을 묻는 질문이라 추천을 달지 않는다고 적었다.
+
 ## [5.4.0] — 2026-10-29
 
 ### Changed

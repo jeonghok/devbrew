@@ -82,3 +82,37 @@ AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
 AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [
   {label: "계속", description: "고르면 계속한다 (권장)"}, {label: "그만"}] }] })
 ```
+
+## 러 — 질문 행 앵커 줄에 쓴 둘째 질문
+
+러-질문: `AskUserQuestion` 하나 — 「계속 (권장)」 · 「멈춤」. 러-새: 이어 `AskUserQuestion` 으로 「다시」 · 「그만」을 묻는다.
+
+## 머 — 이미 센 펜스 줄에 붙인 둘째 호출
+
+머-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ questions: [{ question: "어떻게 할까?", options: [{label: "계속 (권장)"}, {label: "멈춤"}] }] }); AskUserQuestion({ questions: [{ question: "또 할까?" }] })
+```
+
+## 버 — label: 꼴인데 꼬리를 question 으로 옮긴 꼬리 질문
+
+버-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ questions: [{ question: "어떻게 할까? (권장)", options: [
+  {label: "계속"}, {label: "그치기"}] }] })
+```
+
+## 서 — 따옴표로 감싼 키 · 꼬리는 description 에
+
+서-질문: 아래 `AskUserQuestion` 하나를 띄운다.
+
+```javascript
+AskUserQuestion({ "questions": [{ "question": "어떻게 할까?", "options": [
+  {"label": "계속", "description": "고르면 계속한다 (권장)"}, {"label": "쉬기"}] }] })
+```
+
+## 어 — 질문 범위 안의 언급(같은 줄)
+
+어-질문: 빈 답이면 `AskUserQuestion` 재질문을 한 번 더 하고, 그래도 비면 `AskUserQuestion` 하나 — 「채우기 (권장)」 · 「건너뛰기」.
