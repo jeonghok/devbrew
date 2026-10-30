@@ -19,6 +19,72 @@ import section6  # noqa: E402
 
 
 class AnchorGrammar(unittest.TestCase):
+    VERBATIM_HARD = ("```", "```python", "it's `x", "a &amp; b", "&#83;1", "<div>", "<span>x</span>",
+                     "<http://a`b>", "<!-- 숨김 -->")
+
+    def test_fenced_verbatim_passes_as_is(self):
+        # 펜스 · 외톨이 백틱 · 문자 참조 · HTML 이 든 사용자 발화는 앵커 줄 아래 열 0 펜스에 원문 그대로 실린다
+        for said in self.VERBATIM_HARD:
+            sec = "- **S1** 🗣 최초 요청:\n~~~~\n" + said + "\n~~~~\n- **S2** 🗣 답:\n  > \"둘째\""
+            ok, bad = B.anchor_lines(sec)
+            self.assertEqual(bad, [], said)
+            self.assertEqual([s for _n, s, _r in ok], ["S1", "S2"], said)
+
+    def test_refusal_names_the_fence_remedy(self):
+        # 인용 줄로 실은 같은 발화는 거부되고, 거부 말이 원문을 그대로 싣는 길(열 0 펜스)을 댄다
+        for said in self.VERBATIM_HARD:
+            ok, bad = B.anchor_lines("- **S1** 🗣 최초 요청:\n  > \"" + said + "\"")
+            self.assertTrue(bad, said)
+            for _n, why in bad:
+                self.assertIn("열 0 펜스", B.anchor_reason(why), (said, why))
+        self.assertNotIn("열 0 펜스", B.anchor_reason("anchor_shape"))
+
+    def test_gate_messages_carry_the_fence_remedy(self):
+        # 사용자가 실제로 받는 거부 말 — payload N1b 와 원문 대조의 구조 위반 — 이 열 0 펜스 길을 댄다
+        sec = "## 6. 사용자 발화 원문\n\n- **S1** 🗣 최초 요청:\n  > \"a &amp; b\"\n\n## 7. Next Action\n\n- 끝\n"
+        n1b = check_brief.payload_verbatim_n1b_failures(sec, set())
+        self.assertTrue(any("열 0 펜스" in m for m in n1b), n1b)
+        with self.assertRaises(CVC.StructuralViolation) as cm:
+            CVC.parse_section6(sec, "payload")
+        self.assertIn("열 0 펜스", str(cm.exception))
+        # 호출 자리 넷(payload N1b · audit 게이트 · coverage · 원문 대조)이 모두 안내를 붙이는 함수를 거친다
+        scripts = Path(__file__).resolve().parent.parent / "scripts"
+        for name, want in (("check_brief.py", 3), ("check_verbatim_coverage.py", 1)):
+            src = (scripts / name).read_text(encoding="utf-8")
+            self.assertEqual(src.count("brief_body.anchor_reason(why)"), want, name)
+            self.assertNotIn("ANCHOR_REASON_TEXT[why]", src, name)
+
+    def test_finishing_names_the_fence_remedy(self):
+        # 인터뷰가 brief 를 쓸 때 읽는 지시 — 원문을 고치지 않고 열 0 펜스에 싣는 길과 그 예외
+        fin = (Path(__file__).resolve().parent.parent / "skills" / "pm-interview" / "references" / "finishing.md")
+        text = " ".join(fin.read_text(encoding="utf-8").split())
+        self.assertIn("앵커 줄 바로 아래 **열 0 펜스**에 그대로 싣습니다", text)
+        self.assertIn("무엇이 거부되는지와 그때 할 일은 게이트의 거부 말이 정하니 그 말을 따른다", text)
+
+    def test_every_refusal_names_a_next_step(self):
+        # 거부 사유마다 할 일이 하나다 — 펜스 안에서 읽지 않는 사유는 펜스 길, 나머지는 펜스 안에서도 거부되니 알리기
+        for why in B.ANCHOR_REASON_TEXT:
+            msg = B.anchor_reason(why)
+            fixable = why in B._VERBATIM_FIXABLE
+            self.assertEqual("열 0 펜스에 그대로 싣는다" in msg, fixable, why)
+            self.assertEqual("펜스 안 줄이어도 거부한다" in msg, not fixable, why)
+
+    def test_fenced_anchor_lookalike_refusal_says_so(self):
+        # 펜스 안이라도 앵커처럼 읽히는 글은 거부되고, 거부 말이 펜스로는 못 싣는다고 말한다
+        for said in ("- S2 는 빼자", "그건 **S2** 랑 같다", "__S2__ 처럼", "  - **S3** 들여 쓴 줄"):
+            ok, bad = B.anchor_lines("- **S1** 🗣 요청:\n~~~~\n" + said + "\n~~~~\n")
+            self.assertTrue(bad, said)
+            for _n, why in bad:
+                self.assertNotIn(why, B._VERBATIM_FIXABLE, (said, why))
+                self.assertIn("펜스 안 줄이어도 거부한다", B.anchor_reason(why), (said, why))
+
+    def test_fenced_verbatim_passes_coverage(self):
+        said = "it's `x &amp; <div> y"
+        body = "~~~~\n" + said + "\n~~~~\n"
+        bodies = CVC.parse_section6(
+            "## 6. 사용자 원문\n- **S1** 🗣 요청:\n" + body + "\n## 7. 끝\n", "payload")
+        self.assertIn(said, bodies["S1"])
+
     def test_accepts_column0(self):
         ok, bad = B.anchor_lines("- **S1** 「첫 말」\n- **S2** 「둘째」")
         self.assertEqual([s for _n, s, _r in ok], ["S1", "S2"])

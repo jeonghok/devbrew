@@ -423,6 +423,31 @@ class SeedAuditTest(Base):
         self.assertEqual(rc, 2)
         self.assertIn("2026-10-15-a-interview.audit.md", err)
 
+    def test_topic_other_than_session_audit_is_none(self):
+        # 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit 이름을 내지 않는다 — 알리고 rc 1
+        self.put("2026-10-15-a-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)
+        rc, out, err = run("seed-audit-for-session", "--session", SID, "--topic", "b", cwd=self.tmp)
+        self.assertEqual((rc, out.strip()), (1, ""))
+        self.assertIn("2026-10-15-a-interview.audit.md", err)
+
+    def test_topic_picks_its_own_audit(self):
+        self.put("2026-10-15-a-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)
+        self.put("2026-10-16-b-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)
+        rc, out, _ = run("seed-audit-for-session", "--session", SID, "--topic", "b", cwd=self.tmp)
+        self.assertEqual((rc, out.strip()), (0, "2026-10-16-b-interview"))
+
+    def test_topic_unknown_name_is_kept(self):
+        # 날짜-주제 꼴이 아닌 이름은 주제를 모른다 — 다른 주제로 단정해 버리지 않는다
+        self.put("probe-x-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)
+        rc, out, _ = run("seed-audit-for-session", "--session", SID, "--topic", "b", cwd=self.tmp)
+        self.assertEqual((rc, out.strip()), (0, "probe-x-interview"))
+
+    def test_topic_is_whole_segment_not_suffix(self):
+        # 「a」 는 「x-a」 의 audit 이 아니다
+        self.put("2026-10-15-x-a-interview.audit.md", "interview-seed-audit", "session_id: %s\n" % SID)
+        rc, out, _ = run("seed-audit-for-session", "--session", SID, "--topic", "a", cwd=self.tmp)
+        self.assertEqual((rc, out.strip()), (1, ""))
+
 
 STATE_PATH = SCRIPT.parent / "state_path.py"
 

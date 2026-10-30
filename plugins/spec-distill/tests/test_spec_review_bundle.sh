@@ -104,6 +104,13 @@ assert_contains "$nbr" "  R4 — 결정 줄 없음 — docs/superpowers/specs/r4
 assert_not_contains "$nbr" "보이지 않는 줄" "AC14: 결정 줄(B<n> · 결정)이 아닌 줄은 내지 않는다"
 assert_not_contains "$nbr" "무관한 이웃" "AC14: 의존도 겹침도 병렬도 아닌 R6(R5 에 의존) 은 내지 않는다"
 g show feature/r6:docs/superpowers/specs/r6-design.md | grep -q 'B9 · 결정' && ok "양성 대조: R6 설계문서에는 결정 줄이 있다 — 위 부재가 공허하지 않다" || no "양성 대조: R6 설계문서에 결정 줄이 없다 — 위 부재 단언이 공허하다"
+# 이웃의 결정 절이 깨져 읽지 못하면 「결정 줄 없음」 이 아니라 셀 수 없음이다
+g checkout -q feature/r4
+printf '\n## 결정 기록\n\n- B2 · 결정 · 2026-10-15 · 둘째 절\n' >> "$W/docs/superpowers/specs/r4-design.md"
+g add -- docs && g commit -qm "r4 결정 절 둘"; g checkout -q feature/r3
+nbr="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/rm/R3.md --root "$W")"
+assert_not_contains "$nbr" "R4 — 결정 줄 없음" "AC14: 결정 절이 깨진 이웃을 「결정 줄 없음」 으로 내지 않는다"
+assert_contains "$nbr" "  R4 — 셀 수 없음: 결정 기록 절을 읽지 못했다" "AC14: 결정 절이 깨진 이웃은 셀 수 없음으로 낸다"
 nbr="$(cd "$T" && python3 "$SRB" neighbors --bundle docs/nb/brief.md --root "$W")"
 assert_eq "$nbr" "" "AC14: brief 로 불리면 내지 않는다"
 put docs/rm/R9.md '---\ntype: epic-bundle\nepic: R9\nroadmap: docs/rm/roadmap.md\nsource_brief: docs/nb/brief.md\nids: [C1]\n---\n'

@@ -218,8 +218,9 @@ def _ident_part(name) -> str:
 def review_identity(state_dir) -> str:
     """영속 계수 줄의 리뷰 정체 — `<상태 루트 이름>-<루트 실경로 해시 8자>/<문서 키>`. `state-dir-for` 가 내는 자리
     `<root>/.docreview/<이름표>-<해시>` 에서는 조부모가 상태 루트라 정체가 세션과 무관하게 문서마다 하나이고, 계수 줄의
-    키(`count_key`)는 사실상 (문서, 라운드)다 — 로그 파일에 같은 키의 줄이 이미 있으면 다시 붙이지 않으므로, 원장이
-    정리된 뒤 같은 문서를 처음부터 다시 리뷰하면 번호가 겹치는 라운드의 계수 줄은 새로 붙지 않는다."""
+    키(`count_key`)는 사실상 (문서, 라운드)다. 원장이 정리된 뒤 같은 문서를 처음부터 다시 리뷰하면 번호가 겹치는
+    라운드의 키도 겹치므로, 다시 붙일지는 키만이 아니라 그 줄을 이 원장이 썼는지(줄 출처 기록)로 가린다
+    (`docreview_state._count_logged_here`)."""
     p = Path(os.path.realpath(str(state_dir)))
     root = p.parent.parent
     digest = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:8]

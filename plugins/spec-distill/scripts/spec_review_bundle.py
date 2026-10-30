@@ -127,8 +127,9 @@ def neighbors(bundle: str, root: str) -> list:
                 continue
             try:
                 body = section_body(text, "## 결정 기록") or ""
-            except FormatError:
-                body = ""
+            except FormatError as exc:   # 못 읽은 절은 「결정 줄 없음」(0)이 아니라 셀 수 없음이다
+                dec.append("  %s — 셀 수 없음: 결정 기록 절을 읽지 못했다(%s) — %s" % (b["id"], exc, spec))
+                continue
             lines = [l for l in body.splitlines() if DECISION_LINE_RE.match(l)]
             if lines:
                 dec.append("  %s — %s" % (b["id"], spec))

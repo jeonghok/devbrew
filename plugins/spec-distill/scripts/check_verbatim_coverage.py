@@ -251,7 +251,7 @@ def parse_section6(text: str, label: str) -> dict[str, str]:
     if bad:
         raise StructuralViolation(
             f"{label} §6에 문법 밖 앵커 줄이 있다 — "
-            + ", ".join(f"{n}번째 줄 {brief_body.ANCHOR_REASON_TEXT[why]}({why})" for n, why in bad[:5]))
+            + ", ".join(f"{n}번째 줄 {brief_body.anchor_reason(why)}({why})" for n, why in bad[:5]))
     bodies: dict[str, list[str]] = {}
     heads: dict[str, str] = {}
     order: list[str] = []

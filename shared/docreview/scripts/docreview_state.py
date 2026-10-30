@@ -242,8 +242,11 @@ def _empty(doc, profile):
         "fixes": {}, "asks": {}, "permits": {}, "applied_scopes": [],
         "decision_log": [], "rounds": {}, "pending_recritic": None,
         "rejected_lineages": {}, "escalated": [], "reraise": [],
-        "engine_lines": [], "engine_lines_since": 0,
+        "engine_lines": [], "engine_lines_since": 0, COUNT_LOGGED: [],
     }
+
+
+COUNT_LOGGED = "count_logged"   # 이 원장이 계수 줄을 쓴 (파일, 라운드) — 계수 줄 멱등의 기준(`_count_logged_here`)
 
 
 def state_path(state_dir) -> Path:
@@ -2581,8 +2584,9 @@ def cmd_advice(a) -> int:
 
     쓰기 플래그(`--render` · `--sink` · `--log-file`) 하나 이상이 있어야 돈다 — 목록만 읽으려면 `advice-list`
     (읽기 전용)다. 플래그 없이 부르면 rc 2 `advice_needs_flag`. 한 호출 안의 순서는 박제 → 계수 → 표시다. 이미 보인
-    항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄의 멱등 키는 (리뷰 정체, 라운드)를 목적지 파일의
-    글자로 판정한다 — 원장이 TTL 로 걷혀도 두 번 적지 않는다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
+    항목(`shown`) · 박제한 항목(`sunk`)은 다시 내지 않고, 계수 줄은 이 원장이 그 라운드의 줄을 적었다는 기록
+    (`count_logged`)으로 두 번 적지 않는다 — 새 원장은 목적지에 같은 키의 줄이 있어도 다시 적는다(겹침을 택한다). 그
+    기록이 없는 옛 원장은 (리뷰 정체, 라운드)를 목적지 파일의 글자로 판정한다. 계수 줄은 decision_log 헤딩 자신의 본문 끝(첫 하위
     헤딩 앞)에 선다 — 박제처가 그 하위 절이어도 박제 표에 끼지 않는다. 부르는 자리는 진입 skill 셋이다(절차서는 계약만).
     박제는 미박제 행 전부를 한 번의 쓰기로 적고(전부 아니면 전무), 성공하면 계수 · 표시 **앞에서** `sunk` 를 원장에
     저장한다 — 뒤 단계가 무엇으로 죽어도 다음 호출이 같은 행을 다시 적지 않는다. 쓰기 · 읽기 실패는 rc 1 과 사유
@@ -2636,8 +2640,10 @@ def cmd_advice(a) -> int:
             for k in sorted(st["rounds"], key=int):
                 rep = st["rounds"][k].get("route_report") or {}
                 have = path.read_text(encoding="utf-8") if path.is_file() else ""
-                if "advice_new" in rep and not adv.has_count_line(have, ident, int(k)):
+                if "advice_new" in rep and not _count_logged_here(st, path, have, ident, int(k)):
                     engine_append(st, path, heading, adv.count_line(ident, int(k), rep), own=True, kind="count")
+                    if isinstance(st.get(COUNT_LOGGED), list):
+                        st[COUNT_LOGGED].append(_count_record(path, int(k)))
                     logged.append(int(k))
         except (OSError, UnicodeError) as e:
             if logged:   # 이미 쓴 계수 줄의 출처 기록은 남긴다
@@ -2657,6 +2663,21 @@ def cmd_advice(a) -> int:
     if not a.render:   # --sink · --log-file 만 준 호출 — 한 일을 JSON 으로 알린다
         _emit({"ok": True, "items": adv.scrub(items), "sunk": len(sunk), "logged_rounds": logged})
     return 0
+
+
+def _count_record(path, rnd) -> str:
+    return "%s#r%d" % (doc_identity(str(path)), rnd)
+
+
+def _count_logged_here(st, path, text, ident, rnd) -> bool:
+    """이 원장이 그 파일에 (리뷰 정체, 라운드) 계수 줄을 이미 썼는가. 리뷰 정체는 문서마다 하나라 원장을 지우고 같은 문서를
+    처음부터 다시 리뷰하면 앞 리뷰가 쓴 같은 키의 줄이 파일에 남아 있다 — 그 줄은 이 원장의 것이 아니므로 건너뛰지 않고
+    겹쳐 쓴다(건너뛰면 새 원장에 계수 엔진 줄이 없어 닫힌 뒤의 손 줄을 다시 묻는다). 판정은 원장의 `count_logged` 기록이다.
+    그 기록이 없는 옛 원장은 파일의 키로 본다."""
+    rec = st.get(COUNT_LOGGED)
+    if not isinstance(rec, list):
+        return _adv.has_count_line(text, ident, rnd)
+    return _count_record(path, rnd) in rec
 
 
 def cmd_gate_rows(a) -> int:
