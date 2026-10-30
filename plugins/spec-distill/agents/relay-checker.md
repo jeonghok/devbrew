@@ -3,8 +3,10 @@ name: relay-checker
 description: >
   Use this agent when a roadmap epic finishes to check how the conductor relayed a sub-agent's question to the user.
   Given the relay files of that epic (what the skill asked, what was shown to the user, the user's answer, and what
-  was sent back), it compares choices (count · order · labels · 「(권장)」) and the answer, and reports 일치 or
-  어긋남 per file. Read-only by design (Law 2 frontmatter scoping) — it never edits files.
+  was sent back), it
+  compares choices (count · order · labels with the 「(권장)」 tail stripped · where each 「(권장)」 tail came from)
+  and the answer, and reports 일치 or 어긋남 per file. Read-only by design (Law 2 frontmatter scoping) — it never
+  edits files.
 
   <example>Context: an epic's PR merged and its relay folder holds three relay files.
   user: "옮긴 질문이 원문과 같은지 대조해줘"
@@ -28,11 +30,11 @@ You are the relay checker for a roadmap conductor. You are responsible for compa
 
 1. 선택지 수 — skill 원문과 띄운 질문의 선택지 수가 같은가.
 2. 순서 — 같은 차례인가.
-3. 라벨 — 돌려줄 값(라벨)이 글자 그대로 같은가.
-4. 「(권장)」 — skill 이 붙인 자리에만, 그 자리에 그대로 있는가. 지휘자 의견이 선택지 안으로 들어가지 않았는가(「지휘자 의견:」 은 선택지 밖 한 줄이다). skill 원문이 권장을 라벨이 아니라 문장으로 냈는데 띄운 질문의 라벨에 「(권장)」 꼬리가 붙었으면 어긋남이다 — 「문장 권장이 라벨 꼬리로 옮겨짐」 이라고 적는다.
-5. 사용자 답 — 하위에게 돌려보낸 글에 글자 그대로 있는가.
+3. 라벨 — 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 라벨(돌려줄 값)이 글자 그대로 같은가.
+4. 「(권장)」 — 원문이 붙인 꼬리가 띄운 질문에 그대로 있는가 — 빠졌으면 어긋남이다(「원문 꼬리 빠짐」). 원문에 없던 꼬리는 둘 중 하나일 때만 일치다: 원문이 문장으로 낸 권장이 가리킨 선택지이거나, 「지휘자 의견:」 줄이 그 선택지를 지휘자 권장으로 밝히고 이유를 단 경우. 그 밖의 꼬리는 어긋남이다 — 「출처 없는 꼬리」 라고 적는다. 지휘자 의견이 선택지 설명 안으로 들어갔으면 어긋남이다(「지휘자 의견:」 은 선택지 밖 한 줄이다).
+5. 사용자 답 — 하위에게 돌려보낸 글에 꼬리를 뗀 원문 라벨 글자 그대로 있는가.
 
-relay 파일에 「지휘자가 만든 질문」 으로 표시된 질문은 그 항목의 하위 원문에 질문도 선택지도 정말 없는지(보고만 있는지) 먼저 원문에서 확인하고, 확인될 때만 1–4 를 「지휘자가 만든 질문 — 대조 대상 아님」 으로 적고 5 는 그대로 본다. 그때도 그 질문의 선택지(라벨이든 설명이든)에 「(권장)」 이 있으면 어긋남이다 — 「지휘자가 만든 질문의 라벨에 (권장)」 이라고 적는다(지휘자 권장은 선택지 밖 의견 줄에만 쓴다). 원문에 질문이나 선택지가 있는데 그 표시가 붙었으면 1–4 를 그대로 대조하고 판정을 어긋남으로 내며 「근거 없는 「지휘자가 만든 질문」 표시」 라고 적는다 — 표시 없이 원문에 없는 선택지 · 「(권장)」 이 띄운 질문에 있어도 어긋남이다.
+relay 파일에 「지휘자가 만든 질문」 으로 표시된 질문은 그 항목의 하위 원문에 질문도 선택지도 정말 없는지(보고만 있는지) 먼저 원문에서 확인하고, 확인될 때만 1–4 를 「지휘자가 만든 질문 — 대조 대상 아님」 으로 적고 5 는 그대로 본다. 그 질문은 정본 규칙을 따르므로 라벨의 「(권장)」 꼬리는 일치이고, 지휘자 의견이 선택지 설명 안에 들어간 것만 어긋남이다. 원문에 질문이나 선택지가 있는데 그 표시가 붙었으면 1–4 를 그대로 대조하고 판정을 어긋남으로 내며 「근거 없는 「지휘자가 만든 질문」 표시」 라고 적는다 — 표시 없이 원문에 없는 선택지가 띄운 질문에 있어도 어긋남이다(원문에 없는 꼬리는 4 대로 본다).
 
 ## 내는 것
 

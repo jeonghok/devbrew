@@ -98,8 +98,10 @@ done
 STEPB="$(awk '/^## Step B/{f=1;next} /^## /{f=0} f' "$PG")"
 case "$STEPB" in *'**둘째 질문(선택) — 다음 단계 갈래.**'*'**기타 칸 — 「여기서 계속」.**'*) ok "AC17(정본): Step B 안 · 기타 칸 문단 앞" ;;
   *) no "AC17(정본): 둘째 질문 문단이 Step B 의 기타 칸 문단 앞에 없다" ;; esac
+assert_contains "$STEPB" '선택지는 모델의 제안 `(권장)` 이 첫 자리, 그 skill 의 기본 다음 단계가 둘째다.' "AC17(정본): 둘째 질문 순서 — 모델의 제안이 첫 자리"
+assert_not_contains "$STEPB" '기본 다음 단계 `(권장)` 과 모델의 제안 둘이다' "AC17(정본): 옛 둘째 질문 순서가 남지 않았다"
 CALL="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$RF" | tr '\n' ' ' | tr -s ' ')"
-for lit in '인터뷰 (권장)' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 이유는 게이트 앞 글에' \
+for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 이유는 게이트 앞 글에' \
            'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' '규칙 3 대로' \
            '둘째 질문이 뜨면 ①/② 이름은 정본 예시처럼 단계를 가리키지 않는다' 'slash 줄이면 운반 문장 없이 seed 경로만'; do
   assert_contains "$CALL" "$lit" "AC17: «${lit}»"

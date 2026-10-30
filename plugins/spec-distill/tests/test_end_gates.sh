@@ -44,7 +44,7 @@ assert_contains "$B2" '이 세션에서 로드맵의 에픽들을 끝까지 이�
 assert_contains "$B2" '| 하나짜리 brief · 둘째 질문 있음 | 확정하고 /compact 후 다음 단계로 (권장) | 확정하고 /new 후 다음 단계로 |' "AC23: 둘째 질문이 있으면 단계를 가리키지 않는 이름"
 for lit in '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' \
            '`${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 의 「둘째 질문(선택)」 대로' \
-           '「brainstorming (권장)」 · 「<모델의 제안>」' '제안 이유는 게이트 앞 글' \
+           '「<모델의 제안> (권장)」 · 「brainstorming」' '제안 이유는 게이트 앞 글' \
            '제안이 없으면 둘째 질문도 없다' '분해된 일에는 둘째 질문을 두지 않는다'; do
   assert_contains "$B2" "$lit" "AC23: B-2 «${lit}»"
 done
