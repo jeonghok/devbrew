@@ -41,8 +41,7 @@ printf '# 구현 계획\n\n## 공통\n\n### Task 1: 첫 걸음\n\n내용\n\n### 
 printf '# 구현 원장\n\n- Task 1: complete (commits 0a0a0a0..1b1b1b1 — 첫 걸음)\n- Ruling: Q-1 — 이름은 그대로 — 근거 하나\n- Task 2: complete (커밋 없음 — 읽기뿐)\n- Task 3: 진행 중\n' > "$T/ledger.md"
 
 # ── 만들기 ───────────────────────────────────────────────────────────────────
-assert_eq "$(sync E1 implement-plan-1-1.md)" "1" "job sync: 파일도 머리 값도 없으면 거절"
-assert_contains "$(cat "$T/out.txt")" "머리를 만들 값이 없다" "job sync: 거절 사유"
+rc="$(sync E1 implement-plan-1-1.md)"; expect "$rc" 1 "머리를 만들 값이 없다" "job sync: 파일도 머리 값도 없으면 거절"
 [ ! -e "$W/$R" ] && ok "job sync: 거절하면 파일을 만들지 않는다" || no "job sync: 거절했는데 파일이 생겼다"
 assert_eq "$(sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-at "$J")" "0" "job sync: 머리를 만든다"
 assert_contains "$(cat "$T/out.txt")" "머리 만듦" "job sync: 한 일을 말한다"
@@ -79,6 +78,10 @@ rc="$(sync E1 implement-plan-1-1.md --ledger "$T/ledger.md" --plan-file "$T/plan
 cmp -s "$W/$R" "$T/closed.md" && ok "job sync: 거절하면 바이트 그대로" || no "job sync: 끝난 파일을 바꿨다"
 rc="$(sync E1 implement-plan-1-1.md --end "$J0")"; expect "$rc" 1 "끝난 결과 파일은 고치지 않는다" "job sync: 끝난 파일에 다른 끝은 거절"
 cmp -s "$W/$R" "$T/closed.md" && ok "job sync: 다른 끝을 거절해도 바이트 그대로" || no "job sync: 다른 끝이 끝난 파일을 바꿨다"
+printf '# 넷\n\n### Task 1: 하나\n\n### Task 2: 둘\n\n### Task 3: 셋\n\n### Task 4: 넷\n' > "$T/plan4.md"
+cp "$T/ledger.md" "$T/ledger4.md"; printf -- '- Task 4: complete (commits 5555555..6666666, review clean)\n' >> "$T/ledger4.md"
+rc="$(sync E1 implement-plan-1-1.md --ledger "$T/ledger4.md" --plan-file "$T/plan4.md")"; expect "$rc" 1 "끝난 결과 파일은 고치지 않는다" "job sync: 끝난 파일에 새 Task 줄도 거절"
+cmp -s "$W/$R" "$T/closed.md" && ok "job sync: 새 Task 줄을 거절해도 바이트 그대로" || no "job sync: 끝난 파일에 Task 줄을 덧붙였다"
 
 printf '# 구현 원장\n\n- Task 1: complete (commits 0a0a0a0..1b1b1b1 — 첫 걸음)\n- Ruling: Q-1 — 이름은 그대로 — 근거 하나\n- Task 2: complete (커밋 없음 — 읽기뿐)\n- Task 3: 진행 중\n' > "$T/ledger0.md"   # 위 원장의 처음 꼴(뒤에서 더해지기 전)
 # ── 끝은 머리의 head 도 바꾼다 · 만들면서 끝내기 · 있는 머리는 그대로 ────────────────
@@ -136,7 +139,6 @@ rc="$(sync E1 implement-plan-1-12.md --ledger "$T/ledger0.md" --plan-file "$T/pl
 cmp -s "$F12" "$T/h12.before" && ok "어긋남: 거절하면 바이트 그대로(task 절 없음)" || no "어긋남: 파일을 바꿨다(task 절 없음)"
 rc="$(sync E1 implement-plan-1-12.md --ledger "$T/ledger0.md" --plan-file "$T/plan1.md")"; expect "$rc" 1 "원장은 Task 2 의 끝을 말하는데 계획 파일 $T/plan1.md 의 task 절은 1개다" "어긋남: 원장이 계획보다 많이 끝났다고 한다"
 cmp -s "$F12" "$T/h12.before" && ok "어긋남: 거절하면 바이트 그대로(번호 초과)" || no "어긋남: 파일을 바꿨다(번호 초과)"
-printf '# 넷\n\n### Task 1: 하나\n\n### Task 2: 둘\n\n### Task 3: 셋\n\n### Task 4: 넷\n' > "$T/plan4.md"
 F13="$RES/implement-plan-1-13.md"
 assert_eq "$(sync E1 implement-plan-1-13.md --role worker --bundle-at "$B" --job-at "$J0")" "0" "전체 수 변화: 준비"
 assert_eq "$(sync E1 implement-plan-1-13.md --ledger "$T/ledger0.md" --plan-file "$T/plan.md")" "0" "전체 수 변화: 전체 셋으로 한 번"
@@ -168,6 +170,25 @@ cmp -s "$W/$TM/jobs/E1/results/$A" "$T/skew.md" && ok "거절: 링크 너머의 
 rm -rf "$W/$TM/jobs/E3/results"; ln -s ../E2/results "$W/$TM/jobs/E3/results"
 rc="$(sync E3 implement-1.md --role worker --bundle-at "$B" --job-at "$J")"; expect "$rc" 1 "심볼릭 링크로는 쓰지 않는다: $TM/jobs/E3/results" "거절: 결과 폴더가 다른 과제 결과 폴더로의 링크"
 [ ! -e "$W/$TM/jobs/E2/results/implement-1.md" ] && ok "거절: 링크 너머(E2)에 파일을 만들지 않는다" || no "거절: 링크 너머(E2)에 파일이 생겼다"
+# 레포 밖의 링크로 같은 자리를 가리켜도(P3) · 결과 폴더가 다른 작업 트리로의 링크여도(P4) 따라가지 않는다
+OUTSIDE="작업 트리 안의 경로로 이어지지 않는다"
+ln -s "$W/$TM/jobs/E3/results" "$T/outer-link"
+rc="$(raw "$T/outer-link/implement-1.md" --role worker --bundle-at "$B" --job-at "$J")"; expect "$rc" 1 "$OUTSIDE" "거절: 레포 밖의 링크로 준 --result(P3)"
+[ ! -e "$W/$TM/jobs/E2/results/implement-1.md" ] && ok "거절: P3 — E2 에 파일을 만들지 않는다" || no "거절: P3 — E2 에 파일이 생겼다"
+mkdir -p "$T/other/results"; git -C "$T/other" init -q
+rm "$W/$TM/jobs/E3/results"; ln -s "$T/other/results" "$W/$TM/jobs/E3/results"
+rc="$(sync E3 implement-1.md --role worker --bundle-at "$B" --job-at "$J")"; expect "$rc" 1 "$OUTSIDE" "거절: 결과 폴더가 다른 작업 트리로의 링크(P4)"
+[ ! -e "$T/other/results/implement-1.md" ] && ok "거절: P4 — 다른 작업 트리에 파일을 만들지 않는다" || no "거절: P4 — 다른 작업 트리에 파일이 생겼다"
+# 과제 폴더가 링크(jobs/E3 → E2) · jobs 폴더가 링크
+rm "$W/$TM/jobs/E3/results"; rm -rf "$W/$TM/jobs/E3"; ln -s E2 "$W/$TM/jobs/E3"
+rc="$(sync E3 implement-1.md --role worker --bundle-at "$B" --job-at "$J")"; expect "$rc" 1 "심볼릭 링크로는 쓰지 않는다: $TM/jobs/E3" "거절: 과제 폴더가 링크"
+[ ! -e "$W/$TM/jobs/E2/results/implement-1.md" ] && ok "거절: 과제 폴더 링크 너머에 파일을 만들지 않는다" || no "거절: 과제 폴더 링크 너머에 파일이 생겼다"
+rm "$W/$TM/jobs/E3"
+mv "$W/$TM/jobs" "$W/$TM/jobs.real"; ln -s jobs.real "$W/$TM/jobs"
+rc="$(sync E1 implement-plan-1-14.md --role worker --bundle-at "$B" --job-at "$J")"; expect "$rc" 1 "심볼릭 링크로는 쓰지 않는다: $TM/jobs" "거절: jobs 폴더가 링크"
+[ ! -e "$W/$TM/jobs.real/E1/results/implement-plan-1-14.md" ] && ok "거절: jobs 링크 너머에 파일을 만들지 않는다" || no "거절: jobs 링크 너머에 파일이 생겼다"
+rm "$W/$TM/jobs"; mv "$W/$TM/jobs.real" "$W/$TM/jobs"
+mkdir -p "$W/$TM/jobs/E3/results"
 printf '머리가 없는 글\n' > "$W/$TM/jobs/E1/results/implement-plan-1-5.md"
 rc="$(sync E1 implement-plan-1-5.md --ledger "$T/ledger.md" --plan-file "$T/plan.md")"; expect "$rc" 1 "결과 파일을 읽지 못했다: $TM/jobs/E1/results/implement-plan-1-5.md — 머리(첫 줄" "거절: 읽히지 않는 결과 파일"
 assert_eq "$(cat "$W/$TM/jobs/E1/results/implement-plan-1-5.md")" "머리가 없는 글" "거절: 읽히지 않는 파일은 바이트 그대로"

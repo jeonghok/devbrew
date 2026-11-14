@@ -546,7 +546,9 @@ def _unresolved_rel(top: Path, value: str):
 
 def sync_result_path(top: Path, value: str, W) -> tuple:
     """`--result` → (Path, 레포 상대 경로, Team, 과제, (단계, 계획, 시도)). 결과 폴더의 결과 파일 이름이 아니면 Refused."""
-    rel_path = _unresolved_rel(top, value) or W.rel(top, Path(os.path.realpath(value)))
+    rel_path = _unresolved_rel(top, value)
+    if rel_path is None:   # 풀지 않은 경로가 작업 트리로 이어지지 않으면(링크 너머 · 밖) 풀린 경로로 되돌려 쓰지 않는다
+        raise W.Refused("작업 트리 안의 경로로 이어지지 않는다(심볼릭 링크 너머이거나 작업 트리 밖이다): %s" % value)
     path = top / rel_path
     _refuse_links(top, rel_path, W)   # 풀기 전 경로의 폴더 성분들 — 링크 너머에 쓰지 않는다
     if os.path.islink(str(path)):
