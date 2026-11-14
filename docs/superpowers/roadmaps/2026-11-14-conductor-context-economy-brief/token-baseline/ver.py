@@ -15,8 +15,7 @@ import baseline_lib as lib  # noqa: E402
 
 args = lib.arg_parser(__doc__).parse_args()
 backup, _, rel_of = lib.load(args)
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'message_id_in_two_files')
 stats = collections.Counter()
 responses = lib.Responses(guards)
 for rel in rel_of.values():

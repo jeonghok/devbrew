@@ -18,8 +18,7 @@ parser = lib.arg_parser(__doc__)
 parser.add_argument('--threshold', type=int, default=300, help='seconds (default 300)')
 args = parser.parse_args()
 backup, _, rel_of = lib.load(args)
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files', 'response_line_without_timestamp')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'message_id_in_two_files')
 stats = collections.Counter()
 responses = lib.Responses(guards)
 CW = 'cache_creation_input_tokens'

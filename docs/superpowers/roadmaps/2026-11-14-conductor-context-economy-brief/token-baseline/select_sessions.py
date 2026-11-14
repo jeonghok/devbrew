@@ -53,8 +53,8 @@ for path, kind in lib.backup_files(backup, guards):
         call = lib.skill_call(d, skill)
         if call:
             c[call] += 1
-        content = (d.get('message') or {}).get('content')
-        if d.get('type') == 'user' and isinstance(content, str):
+        if d.get('type') == 'user':
+            content = lib.user_text(d)
             commands.update(COMMAND.findall(content))
             if call:
                 typed = ARGS.search(content)

@@ -15,8 +15,7 @@ args = parser.parse_args()
 backup, _, rel_of = lib.load(args)
 if args.session not in rel_of:
     lib.die('unknown session label "%s"' % args.session)
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'message_id_in_two_files')
 stats = collections.Counter()
 responses = lib.Responses(guards)
 body, subs = lib.session_files(backup, rel_of[args.session], guards)

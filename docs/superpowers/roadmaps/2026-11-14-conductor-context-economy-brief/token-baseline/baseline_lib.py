@@ -17,6 +17,9 @@ GUARD_RC = 3
 USAGE_RC = 2
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORKTREE_MARK = '--claude-worktrees-'
+# Guards raised by usage(): every script that sums usage lines declares these.
+USAGE_GUARDS = ('assistant_lines_without_usage', 'usage_without_message_id', 'usage_field_missing',
+                'response_line_without_timestamp')
 AGENT_WORKTREE_MARK = WORKTREE_MARK + 'agent-'
 
 
@@ -167,6 +170,12 @@ def usage(d, stats, guards):
     if not m.get('id'):
         guards['usage_without_message_id'] += 1
         return None
+    for k in K:
+        # a field that is there with the value 0 is fine; a field that is absent or not a number is not
+        if not isinstance(u.get(k), int) or isinstance(u.get(k), bool):
+            guards['usage_field_missing'] += 1
+    if not d.get('timestamp'):
+        guards['response_line_without_timestamp'] += 1
     return m, u
 
 
@@ -196,14 +205,20 @@ def kinds(u):
     return {k: (u.get(k) or 0) for k in K}
 
 
+def user_text(d):
+    """Text of a user line: the content string, or its text blocks joined."""
+    c = (d.get('message') or {}).get('content')
+    if isinstance(c, list):
+        return ' '.join((x.get('text') or '') for x in c if isinstance(x, dict) and x.get('type') == 'text')
+    return c if isinstance(c, str) else ''
+
+
 def skill_call(d, skill):
     """Rule 7: 'slash' for a user line carrying the slash command, 'skill_tool' for a Skill tool call, else None."""
     t = d.get('type')
     c = (d.get('message') or {}).get('content')
     if t == 'user':
-        if isinstance(c, list):
-            c = ' '.join((x.get('text') or '') for x in c if isinstance(x, dict) and x.get('type') == 'text')
-        if isinstance(c, str) and ('<command-name>/%s</command-name>' % skill) in c:
+        if ('<command-name>/%s</command-name>' % skill) in user_text(d):
             return 'slash'
     elif t == 'assistant' and isinstance(c, list):
         for x in c:
@@ -211,6 +226,15 @@ def skill_call(d, skill):
                     and (x.get('input') or {}).get('skill') == skill:
                 return 'skill_tool'
     return None
+
+
+def call_time(d, skill, guards):
+    """Timestamp of a line that calls the skill, else None. A call line without a timestamp is counted."""
+    if not skill_call(d, skill):
+        return None
+    if not d.get('timestamp'):
+        guards['skill_call_without_timestamp'] += 1
+    return d.get('timestamp')
 
 
 def tool_uses(m):
@@ -238,8 +262,7 @@ def timed_responses(path, responses, stats, guards):
             continue
         m, u = mu
         if not d.get('timestamp'):
-            guards['response_line_without_timestamp'] += 1
-            continue
+            continue  # counted by usage(); the run stops before any result
         t = epoch(d['timestamp'])
         tools = set(x.get('name') for x in tool_uses(m))
         r, state = responses.add(m['id'], kinds(u), path)

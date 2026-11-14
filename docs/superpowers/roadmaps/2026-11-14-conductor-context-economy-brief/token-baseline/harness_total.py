@@ -20,15 +20,15 @@ import baseline_lib as lib  # noqa: E402
 
 args = lib.arg_parser(__doc__).parse_args()
 backup, _, rel_of = lib.load(args)
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files', 'session_without_cost_state')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'message_id_in_two_files',
+                    'session_without_cost_state', 'cost_state_field_missing', 'cost_state_empty_after_responses')
 stats = collections.Counter()
 HARNESS = dict(input_tokens='inputTokens', cache_creation_input_tokens='cacheCreationInputTokens',
                cache_read_input_tokens='cacheReadInputTokens', output_tokens='outputTokens')
 
 
 def harness_sum(usages):
-    return {k: sum((u.get(name) or 0) for u in usages) for k, name in HARNESS.items()}
+    return {k: sum((u.get(name) or 0) for u in usages if isinstance(u, dict)) for k, name in HARNESS.items()}
 
 
 def compare(harness, recs):
@@ -64,7 +64,8 @@ for s, rel in rel_of.items():
             if d.get('type') == 'api-request':
                 request_lines[part] += 1
             elif d.get('type') == 'cost-state' and path == body:
-                states.append(dict(after=last_ts, start=d.get('startTime'), usage=d.get('modelUsage') or {}))
+                usage = d.get('modelUsage')
+                states.append(dict(after=last_ts, start=d.get('startTime'), usage=usage if isinstance(usage, dict) else {}))
             mu = lib.usage(d, stats, guards)
             if mu is None:
                 continue
@@ -73,18 +74,30 @@ for s, rel in rel_of.items():
             if state == 'new':
                 r.update(ts=d.get('timestamp') or '', part=part, model=m.get('model'), tool_calls=set())
             r['tool_calls'] |= set(x.get('id') for x in lib.tool_uses(m))
-    if not states:
-        guards['session_without_cost_state'] += 1
-        continue
     recs = list(responses.rec.values())
     points = []
     for st in states:
+        before = [r for r in recs if r['ts'] <= (st['after'] or '')]
+        if not st['usage']:
+            # no modelUsage = no total to compare; once responses exist it means the line changed shape
+            guards['cost_state_empty_after_responses'] += bool(before)
+            continue
+        for usage in st['usage'].values():
+            for name in HARNESS.values():
+                # 0 is a value; an absent or non-numeric field would silently read as 0
+                value = usage.get(name) if isinstance(usage, dict) else None
+                if not isinstance(value, int) or isinstance(value, bool):
+                    guards['cost_state_field_missing'] += 1
         harness = harness_sum(st['usage'].values())
         if points and points[-1]['harness'] == harness:
             continue
-        point = compare(harness, [r for r in recs if r['ts'] <= (st['after'] or '')])
+        point = compare(harness, before)
         point['after_line_at'] = st['after']
         points.append(point)
+    states = [st for st in states if st['usage']]
+    if not states:
+        guards['session_without_cost_state'] += 1
+        continue
     last = states[-1]
     final = compare(harness_sum(last['usage'].values()), recs)
     all_recs += recs
@@ -94,7 +107,7 @@ for s, rel in rel_of.items():
         final['by_model'][model] = compare(harness_sum([usage]), [r for r in recs if r['model'] == model])
     start = last['start']
     result[s] = dict(
-        cost_state_lines=len(states), points=points, final=final,
+        cost_state_lines_with_usage=len(states), points=points, final=final,
         harness_start=datetime.datetime.fromtimestamp(start / 1000, datetime.timezone.utc).isoformat() if start else None,
         first_line_at=first_ts,
         responses_after_last_cost_state=sum(1 for r in recs if r['ts'] > (last['after'] or '')),

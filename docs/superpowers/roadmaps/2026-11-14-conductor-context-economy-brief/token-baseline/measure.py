@@ -1,6 +1,6 @@
 """Token baseline - the main measurement. Prints one JSON object.
 
-  python3 -I measure.py --backup <backup folder> > measure.out.json
+  python3 -I measure.py --backup <backup folder> > <a file outside the repo>
 
 Per configured session it sums the four token kinds for the conductor body, its sub agents and
 the sdk sessions attached to it (rules 1-6), splits the sessions named in split_at_first_call at
@@ -22,8 +22,8 @@ split = set(cfg['split_at_first_call'])
 under_cfg = cfg['output_underreported_patch_range']
 FIELDS = lib.K + ('cc_1h', 'cc_5m')
 
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files', 'cache_write_not_1h_plus_5m',
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'message_id_in_two_files',
+                    'cache_write_not_1h_plus_5m', 'skill_call_without_timestamp',
                     'agent_worktree_session_not_sdk', 'session_without_skill_call', 'unlinked_agents')
 stats = collections.Counter()
 responses = lib.Responses(guards, FIELDS)
@@ -54,8 +54,9 @@ def scan(path, sess, part, agent=None):
     for d in lib.records(path, guards):
         entrypoint = entrypoint or d.get('entrypoint')
         t = d.get('type')
-        if part == 'body' and lib.skill_call(d, skill) and d.get('timestamp'):
-            call_ts[sess].append(d['timestamp'])
+        called_at = lib.call_time(d, skill, guards) if part == 'body' else None
+        if called_at:
+            call_ts[sess].append(called_at)
         if t == 'system' and d.get('subtype') == 'compact_boundary':
             compacts[sess + '|' + part] += 1
         elif t == 'api-request' and part == 'sub':

@@ -1,6 +1,6 @@
 """Render the tables and one-line figures of token-baseline.md from the measure output.
 
-  python3 -I table.py measure.out.json
+  python3 -I table.py <measure output>
 """
 import json
 import os
@@ -102,6 +102,8 @@ for s in sessions:
     pa = d['per_agent_input'][s]
     print('- %s agent 하나당 입력계: 평균 %s · 중앙값 %s · 최대 %s (agent %s개, 응답 수 중앙값 %s · 최대 %s)' % (
         s, n(pa['mean']), n(pa['median']), n(pa['max']), n(pa['agents']), pa['responses_median'], pa['responses_max']))
+print('- usage 가 하나도 없는 하위 파일(합에 들지 않는다): ' + ' · '.join(
+    '%s %s' % (s, d['sub_files_without_usage'].get(s, 0)) for s in sessions if part(s, 'sub')))
 for name, word in (('body', '지휘 본체'), ('sub', '하위'), ('sdk', 'sdk')):
     c = a.get('ALL|' + name)
     if c:

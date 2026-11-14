@@ -16,8 +16,8 @@ import baseline_lib as lib  # noqa: E402
 
 args = lib.arg_parser(__doc__).parse_args()
 backup, cfg, rel_of = lib.load(args)
-guards = lib.Guards('jsonl_outside_subagents_layer', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'session_without_skill_call')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_outside_subagents_layer', 'session_without_skill_call',
+                    'skill_call_without_timestamp')
 stats = collections.Counter()
 naive = collections.Counter()
 attribution = {}
@@ -27,15 +27,16 @@ for s, rel in rel_of.items():
     first_lines = {}
     for path in [body] + subs:
         for d in lib.records(path, guards):
-            if path == body and lib.skill_call(d, cfg['skill']) and d.get('timestamp'):
-                calls.append(d['timestamp'])
+            called_at = lib.call_time(d, cfg['skill'], guards) if path == body else None
+            if called_at:
+                calls.append(called_at)
             mu = lib.usage(d, stats, guards)
             if mu is None:
                 continue
             m, u = mu
             naive['lines'] += 1
-            for k in lib.K:
-                naive[k] += u.get(k) or 0
+            for k, value in lib.kinds(u).items():
+                naive[k] += value
             if path == body:
                 first_lines.setdefault(m['id'], (d.get('timestamp') or '', d.get('attributionSkill') or '(none)'))
     if s in cfg['split_at_first_call']:

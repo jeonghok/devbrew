@@ -18,8 +18,7 @@ import baseline_lib as lib  # noqa: E402
 
 args = lib.arg_parser(__doc__).parse_args()
 backup, _, rel_of = lib.load(args)
-guards = lib.Guards('jsonl_in_unknown_layout', 'assistant_lines_without_usage',
-                    'usage_without_message_id', 'message_id_in_two_files')
+guards = lib.Guards(*lib.USAGE_GUARDS, 'jsonl_in_unknown_layout', 'message_id_in_two_files')
 stats = collections.Counter()
 files = lib.backup_files(backup, guards)
 owner = {}
