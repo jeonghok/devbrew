@@ -1710,6 +1710,14 @@ class TestRender(unittest.TestCase):
         self.assertEqual(_last(p), NOQ_LINE)
         after = _read(self.rd, "result.md")
         self.assertGreater(after.rindex("## 쓴소리"), after.index("## 게시"))
+        with tempfile.TemporaryDirectory() as rd:
+            _filter_rd(rd)
+            _write(yaml.safe_dump({"status": "ran", "questions": []}), rd,
+                   "intent-questions.yaml")
+            _write("## 판정\nv\n## e2e\n## 쓴소리 흉내 줄\n", rd, "result.md")
+            p = _cli("render", "--rd", rd, "--mode", "range")
+            self.assertEqual(_last(p), NOQ_LINE)
+            self.assertIn("\n## 쓴소리\n", _read(rd, "result.md"))
 
     def test_render_missing_plan_is_uncountable(self):
         os.remove(os.path.join(self.rd, "intent-plan.txt"))

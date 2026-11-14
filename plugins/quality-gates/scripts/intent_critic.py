@@ -422,8 +422,6 @@ def _prepare(args, notices: List[str]) -> str:
         raise InputError("의도 출처 JSON 파일을 읽지 못했다: %s" % args.specs_json)
     specs = _parse_specs(specs_text, notices)
     answers_root = os.path.abspath(os.path.join(args.tree_root, cfg["answers_dir"]))
-    if not _plan_value_ok(answers_root):
-        raise InputError("리뷰 트리 경로에 " + io_.REASON_CONTROL + "가 있다")
 
     e2e = _read(_path(rd, "e2e-record.md"))
     differential = _read(_path(rd, "differential.yaml"))
