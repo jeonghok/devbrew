@@ -73,10 +73,10 @@ def not_text(scope: str) -> str:
 def original_pointer(ranges, roadmap_rel: str) -> str:
     return ("전체 그림에서 이 과제의 자리 — 원자료 가운데 아래 줄 범위가 이 과제 몫이다. "
             "나머지가 어느 과제로 갔는지는 로드맵(%s)의 에픽 지도와 각 과제의 이 칸에 있다.\n\n"
-            "%s%s" % (roadmap_rel, _POINTER_PREFIX(), " · ".join("%d–%d행" % (a, b) for a, b in ranges)))
+            "%s%s" % (roadmap_rel, _pointer_prefix(), " · ".join("%d–%d행" % (a, b) for a, b in ranges)))
 
 
-def _POINTER_PREFIX() -> str:
+def _pointer_prefix() -> str:
     return "- 범위: " + team_layout.original_rel() + " "
 
 
@@ -146,7 +146,7 @@ def intent_sections(text: str) -> dict:
 
 
 def intent_ranges(text: str) -> list:
-    prefix = _POINTER_PREFIX()
+    prefix = _pointer_prefix()
     for line in intent_sections(text)["지시 원문"].split("\n"):
         if line.startswith(prefix):
             pieces = line[len(prefix):].split(" · ")
