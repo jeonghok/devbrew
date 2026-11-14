@@ -573,6 +573,18 @@ class TestOtherWorkRecord(_Fixture):
         self.assertIn("#### 의도 문서 team/other-design.md\n", block)
         self.assertIn("# 다른 팀 설계", block)
 
+    def test_model_read_file_is_not_intent_doc(self):
+        """「문서 파일」 은 넓이 판정과 같은 뜻 — 모델이 읽는 파일은 머리가 같아도 의도 문서가 아니다."""
+        repo, _ = self._fresh()
+        head = tic._fm(roadmap="docs/rm/two/roadmap.md")
+        _on_branch(repo, "feature/far", {"skills/x/SKILL.md": head + "skill-token\n",
+                                         "docs/plain-design.md": head + "plain-token\n"}, 50)
+        block = _block(_collect(repo)["text"], "### feature/far ")
+        self.assertIn("#### 의도 문서 docs/plain-design.md\n", block)
+        self.assertIn("plain-token", block)
+        self.assertNotIn("skills/x/SKILL.md", block)
+        self.assertNotIn("skill-token", block)
+
     def test_branch_heading_shape(self):
         text = _collect(self.repo, names={"a.txt"})["text"]
         head = _block(text, "### feature/other ").split("\n")[0]
@@ -601,9 +613,12 @@ class TestOtherWorkRecord(_Fixture):
     def test_no_overlap(self):
         text = _collect(self.repo, names={"q.txt"})["text"]
         self.assertEqual(ot.summary(text)[0], ["- 겹침 없음"])
+        self.assertEqual(ot.NO_OVERLAP, "- 겹침 없음")
+        self.assertEqual(ot.OVERLAP_UNKNOWN, "- 겹침 확인 못 함")
 
     def test_names_unknown(self):
         text = _collect(self.repo, names=None)["text"]
+        self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
         self.assertIn("- 바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함", _unverified(text))
         self.assertNotIn("- 바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함",
                          _unverified(_collect(self.repo, names={"q.txt"})["text"]))
@@ -668,6 +683,7 @@ class TestOtherWorkRecord(_Fixture):
                         list_prs=lambda r: called.append(r) or ([], None))["text"]
         self.assertIn("- 기본 브랜치를 찾지 못함 — 다른 브랜치와 다른 로드맵을 읽지 않았다",
                       _unverified(text))
+        self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
         self.assertEqual(_block(text, ot.HEAD_WORK), ot.HEAD_WORK)
         self.assertIn("one-intent-token", _block(text, "### 이번 로드맵 "))
         self.assertNotIn("### 다른 로드맵", text)
@@ -683,14 +699,20 @@ class TestOtherWorkRecord(_Fixture):
             return real(repo, *args)
 
         with mock.patch.object(ot, "_git", failing):
-            text = _collect(self.repo)["text"]
+            text = _collect(self.repo, names={"a.txt"})["text"]
         self.assertIn("- 읽지 못한 브랜치 1개", _unverified(text))
+        # 일부만 못 읽었으면 읽은 브랜치의 겹침은 그대로 — 빈 곳은 위 줄이 공시한다.
+        self.assertEqual(ot.summary(text)[0], ["- feature/other — a.txt"])
+        with mock.patch.object(ot, "_git", failing):
+            none_found = _collect(self.repo, names={"q.txt"})["text"]
+        self.assertEqual(ot.summary(none_found)[0], ["- 겹침 없음"])
         self.assertNotIn("- 읽지 못한 브랜치", "\n".join(_unverified(_collect(self.repo)["text"])))
 
     def test_branch_list_unreadable(self):
         with mock.patch.object(ot, "other_work", lambda repo, ref, end: ([], None)):
-            text = _collect(self.repo)["text"]
+            text = _collect(self.repo, names={"a.txt"})["text"]
         self.assertIn("- 브랜치 목록을 읽지 못함 — 다른 브랜치를 읽지 않았다", _unverified(text))
+        self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
 
     def test_worktree_count(self):
         repo, _ = self._fresh()

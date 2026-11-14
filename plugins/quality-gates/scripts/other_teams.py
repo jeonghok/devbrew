@@ -34,8 +34,10 @@ HEAD_CAP = "## 상한"
 DIFF_LINES = 120
 PR_TIMEOUT = 30
 
-NO_OVERLAP = "겹침 없음"
-NOTHING_UNVERIFIED = "없음"
+# `## 겹치는 곳` 의 빈 자리 줄 — 겹침을 다 보고 없었음 · 겹침을 정하지 못함(침묵과 0 은 다른 사실이다).
+NO_OVERLAP = "- 겹침 없음"
+OVERLAP_UNKNOWN = "- 겹침 확인 못 함"
+NOTHING_UNVERIFIED = "- 없음"
 LINE_NO_ROADMAP = "로드맵 없음"
 LINE_NO_DEFAULT = "기본 브랜치를 찾지 못함 — 다른 브랜치와 다른 로드맵을 읽지 않았다"
 LINE_NAMES_UNKNOWN = "바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함"
@@ -514,7 +516,8 @@ def _intent_docs(repo: str, entry: dict, markers: List[str]) -> List[tuple]:
     """그 브랜치 끝에서 읽은 의도 문서 `(경로, 글)` — 다른 작업이 바꾼 문서 파일 가운데."""
     docs: List[tuple] = []
     for rel in sorted(entry["paths"]):
-        if not doc_paths.is_doc_file(rel):
+        # 「문서 파일」 은 넓이 판정(review_breadth)과 같은 뜻 — 모델이 읽는 파일은 빼고.
+        if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
             continue
         text, _why = io_.read_tracked(repo, entry["sha"], rel)
         if text is not None and io_.is_intent_doc(text, markers):
@@ -610,9 +613,11 @@ def _cap(units: List[tuple], max_bytes: int) -> tuple:
     return maps, work, "상한 %d바이트 안에 %d개를 모두 실었다" % (max_bytes, total), []
 
 
-def _section(head: str, lines: List[str], empty: str) -> str:
-    body = lines if lines else [empty]
-    return head + "\n" + "".join("- %s\n" % line for line in body)
+def _section(head: str, lines: List[str], empty_line: str) -> str:
+    """머리 + `- <줄>` 들. 줄이 없으면 `empty_line`(이미 `- ` 가 붙은 줄) 하나."""
+    if not lines:
+        return "%s\n%s\n" % (head, empty_line)
+    return head + "\n" + "".join("- %s\n" % line for line in lines)
 
 
 def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
@@ -632,10 +637,12 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
     rest: List[dict] = []
     plain = 0
     prs_known = False
+    overlap_known = False  # 기본 브랜치 · 브랜치 목록 · 바뀐 파일 목록이 모두 있어야 「겹침 없음」 이라 말한다
     if default is None:
         unverified.append(LINE_NO_DEFAULT)
     else:
         entries, unreadable = other_work(repo, default[1], review_commit)
+        overlap_known = unreadable is not None and names is not None
         if unreadable is None:
             unverified.append(LINE_REFS_UNREADABLE)
         elif unreadable:
@@ -677,7 +684,7 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
     overlap_lines: List[str] = []
     for entry in overlapped:
         overlap_lines.append(_overlap_line(entry, prs_known))
-    parts = [_section(HEAD_OVERLAP, overlap_lines, NO_OVERLAP),
+    parts = [_section(HEAD_OVERLAP, overlap_lines, NO_OVERLAP if overlap_known else OVERLAP_UNKNOWN),
              _section(HEAD_UNVERIFIED, unverified, NOTHING_UNVERIFIED),
              HEAD_MAP + "\n"] + maps + [HEAD_WORK + "\n"] + work
     if plain:
