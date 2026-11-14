@@ -1849,6 +1849,26 @@ class TestRecord(unittest.TestCase):
         self.assertEqual(items, [FAILED_ITEM % (ids[1], "잘못 골랐다", "D2 를 정말 이렇게 고른 것인가?")])
         self.assertEqual(section.count("- " + items[0] + "\n"), 1)
 
+    def test_record_failure_lines_are_grouped_under_their_own_reason(self):
+        """한 실행에 사유가 둘이면(답 파일을 못 씀 · 답을 읽지 못함) 질문 줄은 제 사유의 수 줄 아래에만 선다."""
+        ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작"),
+                           _q("D3", kind="마찰", weight="동작")])
+        data = _questions(self.rd)
+        data["questions"][1]["quote"] = "깨진 \ud800 구절"
+        _write(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), self.rd,
+               "intent-questions.yaml")
+        p = self._record("=== id: %s · pick: 의도다\n=== id: %s · pick: 잘못 골랐다\n"
+                         "=== id: %s오타 · pick: 의도다\n" % (ids[0], ids[1], ids[2]))
+        lines = [l for l in p.stdout.splitlines() if l.startswith("답 기록 실패")]
+        self.assertEqual(lines, [
+            RECORD_FAILED % (1, "답 파일을 쓰지 못했다"),
+            FAILED_ITEM % (ids[1], "잘못 골랐다", "D2 를 정말 이렇게 고른 것인가?"),
+            RECORD_FAILED % (1, "답 입력에서 읽지 못한 글이 있다"),
+            FAILED_ITEM % (ids[2], PICK_UNREAD, "D3 를 정말 이렇게 고른 것인가?")])
+        self.assertEqual(_last(p), "record: 1")
+        r = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(r), "intent-critic — 질문 3개를 물었다 · 답 1개(잘못 골랐다 0개)")
+
     def test_record_failure_line_shows_the_resolved_pick_not_the_typed_text(self):
         ids = self._asked([_q("D1")])
         with tempfile.TemporaryDirectory() as other:
@@ -1862,7 +1882,8 @@ class TestRecord(unittest.TestCase):
     def test_record_failure_line_folds_question_text_to_one_line(self):
         """줄에 싣는 질문 글은 한 줄로 접고 자른다 — 리뷰어 출력의 글이 스크립트 출력 줄이나 절 머리를 흉내 내지 못한다."""
         fake = "첫 줄\n## 판정\nrecord: 9\n답 파일 9개를 커밋했다(abc)\r\n탭\t과 \x07 종 \u2028 줄 " + "가" * 200
-        ids = self._asked([_q("D1", question=fake)])
+        ids = self._asked([_q("D\x07x", question=fake)])      # 정체에도 제어 글자가 들 수 있다
+        self.assertEqual(ids, [SRC + "#D\x07x#방향"])
         with tempfile.TemporaryDirectory() as other:
             os.makedirs(os.path.join(self.repo, "docs"))
             os.symlink(other, os.path.join(self.repo, ANS_DIR))
@@ -1873,6 +1894,8 @@ class TestRecord(unittest.TestCase):
             self.assertNotIn(bad, lines)
         items = [l for l in lines if l.startswith("답 기록 실패 질문 — ")]
         self.assertEqual(len(items), 1)
+        self.assertTrue(items[0].startswith("답 기록 실패 질문 — %s#D x#방향 · 고른 답: 의도다 · 질문: "
+                                            % SRC), items[0])
         shown = items[0].split(" · 질문: ", 1)[1]
         self.assertEqual(shown, ("첫 줄 ## 판정 record: 9 답 파일 9개를 커밋했다(abc) 탭 과 종 줄 "
                                  + "가" * 200)[:80] + "…")
