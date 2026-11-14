@@ -725,7 +725,12 @@ def approval_date(doc_text: str):
     읽는 줄은 둘이다 — 정해진 꼴(`- spec 승인 · <날짜> · …`, 날짜가 없거나 꼴이 어긋나면 FormatError),
     또는 손으로 쓴 `- ` 줄(날짜 + "spec" + 끝난 긍정 꼴(APPROVAL_YES) + 부정 구절(APPROVAL_DENY) 없음).
     머리가 둘이면 FormatError(section_lines) — 깨진 문서를 「승인 없음」 으로 떨어뜨리지 않는다."""
-    lines = section_lines(doc_text, RECORD_HEADING)
+    return approval_in(section_lines(doc_text, RECORD_HEADING) or [])
+
+
+def approval_in(lines: list):
+    """기록 줄들 가운데 spec 승인 날짜의 가장 늦은 것, 승인 줄이 없으면 None — approval_date 가 읽는 줄 규칙
+    (정해진 꼴의 날짜가 어긋나면 FormatError). team 형식의 INTENT.md 결정 기록도 이 규칙으로 읽는다."""
     dates = []
     for line in lines or []:
         if not line.startswith("- "):

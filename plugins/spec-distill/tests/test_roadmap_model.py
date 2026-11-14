@@ -414,6 +414,14 @@ class TeamRoadmap(unittest.TestCase):   # R1 AC3 · P7
                                             lambda p: None, lambda p: False)
         self.assertEqual(errors, [])   # 옛 형식의 없는 묶음은 여기서 오류가 아니다(단계 계산이 「묶음 없음」으로 알린다)
 
+    def test_approval_in_is_the_line_reader(self):   # 계획 2 — INTENT.md 결정 기록이 같은 규칙으로 읽힌다
+        lines = ["- 계획 검토 · 2026-11-19 · 글", "- spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」", "- spec 승인 · 2026-11-18 · 「먼저」"]
+        self.assertEqual(M.approval_in(lines), "2026-11-20")
+        self.assertIsNone(M.approval_in(["- 결정 · 2026-11-20 · spec 승인 대기"]))
+        self.assertRaises(M.FormatError, M.approval_in, ["- spec 승인 · 11/20 · 「글」"])
+        doc = "# 문서\n\n## 지휘 기록\n\n" + "\n".join(lines) + "\n"
+        self.assertEqual(M.approval_date(doc), M.approval_in(lines))
+
 
 if __name__ == "__main__":
     unittest.main()

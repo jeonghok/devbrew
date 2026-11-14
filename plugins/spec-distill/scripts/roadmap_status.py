@@ -47,6 +47,7 @@ from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recor
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
 from state_path import state_root_for_common  # noqa: E402
 import team_layout  # noqa: E402
+import team_status  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep", "ls-tree"})
 NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 "
@@ -61,7 +62,8 @@ NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시)
 SHARED_BASENAMES = SHARED_FILES
 TASK_STATUS = {"대기": "pending", "준비": "pending", "설계 중": "in_progress", "계획": "in_progress",
                "구현 중": "in_progress", "구현 끝": "in_progress", "PR": "in_progress",
-               "머지됨": "completed", "끝남": "completed"}
+               "머지됨": "completed", "끝남": "completed",
+               "진행 중": "in_progress", "결과 받음": "in_progress"}   # 뒤의 둘은 team 형식의 설계 없는 흐름
 
 
 def task_status(stage):
@@ -715,14 +717,15 @@ class _GitTreeRepo:
 
 
 def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_dir: str, settings: dict,
-            roadmap_rel=None, pr_rows=None, pr_reason=None, default_short=None, epic_pr_rows=None):
+            roadmap_rel=None, pr_rows=None, pr_reason=None, default_short=None, epic_pr_rows=None, team=None):
     """블록마다 stage · reason · warnings · notes · specs 를 채운다. 반환: 번호 대조 검사 불가 사유 목록.
     roadmap_rel 을 주면 블록에 적힌 브랜치가 모두 머지된 에픽에서 다른 브랜치의 로드맵 사본이 더한 브랜치도 센다.
     머지됨은 브랜치마다 — (블록, 브랜치)에 적은 번호(epic_pr_rows)가 있으면 그 번호의 캐시 줄로만(merged_by_number)
     판정한다. 없으면 PR 캐시(pr_rows)에 그 브랜치의 PR 줄이 하나라도 있으면 merged_by_tips(머지 커밋) 다음 merged_by_pr, 없으면 merged_by_git ·
     결정 기록의 머지 줄로 판정하고, 「PR 0개」 줄(번호 `-` — 지휘자가 PR 이 없다고 확인함)도 없으면 블록에 「PR 상태
     미확인」을 단다. pr_reason(기계 상태 파일이 있는데 못 읽은 사유)이 있으면 번호 기록이 있는지 모르므로 모든 브랜치의
-    머지 판정을 보류한다 — 블록은 「알 수 없음」이고 사유에 pr_reason(그 할 일 포함)을 싣는다."""
+    머지 판정을 보류한다 — 블록은 「알 수 없음」이고 사유에 pr_reason(그 할 일 포함)을 싣는다.
+    team(team_status.Reader)을 주면 설계문서 · 시작 흔적 · 진행 중인 브랜치의 끝과 단계를 과제 폴더에서 센다."""
     merges = git.first_parent_merges(main) if main else []
     extra_cache = []
     no_pr = {r.get("브랜치") for r in pr_rows or [] if r.get("번호") == "-"}  # conductor_state.NO_PR
@@ -744,13 +747,22 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 owner_memo.append((None, str(exc)))
         return owner_memo[0]
 
+    def specs_of(tree, block):
+        """블록의 설계문서들(산출물 블록은 산출물) — team 이면 과제 폴더에서 찾는다."""
+        if team:
+            return team.specs(tree, block)
+        return find_specs(git, tree, block, block["bundle"], settings["specs_dir"])
+
     started_memo = {}
 
     def started(block):
         """이 에픽이 시작된 흔적 — 블록의 설계문서가 기본 브랜치에 있고 승인됐거나 그것을 가리키는 계획이 기본 브랜치에
-        있다. 끝 없는 브랜치를 PR 로 판정해도 되는지(지워진 브랜치인지 아직 만들지 않은 브랜치인지)를 가른다."""
+        있다. 끝 없는 브랜치를 PR 로 판정해도 되는지(지워진 브랜치인지 아직 만들지 않은 브랜치인지)를 가른다.
+        team 이면 기본 브랜치의 INTENT.md 에 승인 줄이 있거나 과제 폴더에 계획 파일이 있다."""
+        if team and block["id"] not in started_memo:
+            started_memo[block["id"]] = bool(team.approved(main, block)[0]) or team.planned(main, block)
         if block["id"] not in started_memo:
-            specs = find_specs(git, main, block, block["bundle"], settings["specs_dir"])
+            specs = specs_of(main, block)
             when, _why = approval_of(git, main, specs) if specs else (None, None)
             planned = bool(specs) and not when and any(
                 plan_specs(git.blob(main, p) or "") & set(specs)
@@ -771,8 +783,7 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 if rc != 0:
                     git.fail("log", rc, err)
                 events_memo.append(parse_fp_events(log) if rc == 0 else [])
-            added = (first_added(events_memo[0], s)
-                     for s in find_specs(git, main, block, block["bundle"], settings["specs_dir"]))
+            added = (first_added(events_memo[0], s) for s in specs_of(main, block))
             added_memo[block["id"]] = [a for a in added if a]
         return added_memo[block["id"]]
 
@@ -965,18 +976,30 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             why = (" · ".join(s["merged"] for s in states) if n_merged == len(states)
                    else "결정 기록의 머지 기록 %s %s" % (rec_merge["date"], rec_merge["quote"]))
             b["stage"], b["reason"], b["tip"] = "머지됨", why, None
-            b["specs"] = find_specs(git, main, b, bundle_path, settings["specs_dir"])
+            b["specs"] = specs_of(main, b)
         elif active is None:
             if n_merged:
                 nxt = next(s["branch"] for s in states if not s["merged"])
                 b["stage"], b["reason"] = "일부 머지 %d/%d" % (n_merged, len(states)), "다음 브랜치 없음: %s" % nxt
-                b["specs"] = find_specs(git, main, b, bundle_path, settings["specs_dir"])
+                b["specs"] = specs_of(main, b)
             elif undone:
                 b["stage"], b["reason"] = "대기", "의존 미완료: %s" % " · ".join(undone)
             else:
                 b["stage"], b["reason"] = "준비", "의존 완료 · 브랜치 없음"
         else:
-            stage, reason, b["specs"], b["plans"] = progress(git, main, active["tip"], b, bundle_path, settings)
+            if team:   # team 은 끝을 team_status.read_tip 으로 다시 고른다 — 갈라지면 이 블록은 셀 수 없다(Q10)
+                tip, tip_note, split = team_status.read_tip(git, active["branch"])
+                if tip_note:
+                    b["notes"].append(tip_note)
+                if split:
+                    b["stage"], b["reason"], b["tip"] = "알 수 없음", split, None
+                    continue
+                active["tip"] = b["tip"] = tip or active["tip"]
+            if team:   # 계획 번호는 그 브랜치가 블록 `브랜치:` 의 몇 번째인가
+                stage, reason, b["specs"], b["plans"] = team.progress(active["tip"], b,
+                                                                      b["branches"].index(active["branch"]) + 1)
+            else:
+                stage, reason, b["specs"], b["plans"] = progress(git, main, active["tip"], b, bundle_path, settings)
             if n_merged:
                 b["stage"] = "일부 머지 %d/%d" % (n_merged, len(states))
                 b["reason"] = "%s — %s · %s" % (active["branch"], stage, reason)
@@ -1203,15 +1226,19 @@ def build(git: Git, args) -> dict:
         report["orphans"] = sorted(s_ids - union, key=id_sort_key)
         report["unknown_ids"] = sorted(union - non_s - s_ids, key=id_sort_key)
 
-    if layout == team_layout.LAYOUT_TEAM:   # 이 판은 team 형식의 단계를 세지 않는다 — 번호 대조까지만
-        report["unknown_reasons"].append(team_layout.STAGE_PENDING)
-        report["blocks"] = _unknown_blocks(blocks, team_layout.STAGE_PENDING, report["read_tree"], ids=True)
-        return report
+    team = None
+    if layout == team_layout.LAYOUT_TEAM:   # 단계는 과제 폴더에서 센다(team_status.Reader) — 머지 판정은 옛 형식과 같은 길
+        try:
+            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read)
+        except ValueError as exc:
+            report["format_errors"].append("team 로드맵의 자리가 아니다 — %s" % exc)
+            return report
+        report["layout"] = layout
 
     pr_rows, epic_pr_rows, pr_reason = read_pr_cache(git, rel)
     cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings, roadmap_rel=rel,
                           pr_rows=pr_rows, pr_reason=pr_reason, epic_pr_rows=epic_pr_rows,
-                          default_short=main_name.split("/", 1)[1] if main_name else None)
+                          default_short=main_name.split("/", 1)[1] if main_name else None, team=team)
     report["unknown_reasons"] += ["번호 대조 검사 불가 — %s" % c for c in cov_unknown]
     report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures]
     report["overlaps"] = overlaps(blocks, settings.get("shared_files") or SHARED_BASENAMES)
@@ -1248,6 +1275,9 @@ def build(git: Git, args) -> dict:
                            for v in [field_text(b["fields"][k])] if v != "없음"),
             "parallel": parallel.get(b["id"], []), "rulings_archived": rulings.get(b["id"]),
             "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
+        if team and b["kind"] != "decision":   # team 칸은 team 로드맵의 보고에만(Q14)
+            report["blocks"][-1].update(progress=b.get("progress"), job=b.get("job") or {
+                "intent": team.team.intent(b["id"]), "plan": None, "result": None})
     return report
 
 
