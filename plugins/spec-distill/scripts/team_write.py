@@ -33,6 +33,11 @@ _SHA_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 FRONT = "---\ntype: roadmap\n"   # 로드맵 틀의 첫 두 줄 — team 로드맵은 그 뒤에 layout 줄을 넣는다
 OLD_HANDOFF = "에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다."
 TEAM_HANDOFF = "에픽마다 과제 폴더의 INTENT.md 를 넘긴다."
+HAND_FIX = ("손으로 고칠 것 — %s 의 INTENT.md(%s)는 다시 쓰지 않았다. 사용자 승인 뒤 아래대로 고치고 결정 기록에 "
+            "`- 결정 · <날짜> · 「…」` 한 줄을 남긴다. 과제 브랜치가 있으면 일꾼이 돌아온 뒤 그 브랜치의 INTENT.md 를, "
+            "없으면 이 브랜치의 것을 고친다.")
+LEFT_JOB = "사라진 에픽 %s: 과제 폴더 %s 를 그대로 뒀다 — 필요 없으면 손으로 지운다"
+INDENT = "    "
 
 
 # ── 자리 ─────────────────────────────────────────────────────────────────────
@@ -203,6 +208,12 @@ def seed_common(top: Path, roadmaps_dir: str, W) -> dict:
     return out
 
 
+def _intent_text(template: str, r, roadmap_rel: str) -> str:
+    """묶음 행 하나의 INTENT.md 글 — 목표 · 지시 원문(줄 범위) · 하지 않을 것을 행에서 채운다."""
+    return team_files.render_intent(template, r.id, team_files.KIND_EPIC, roadmap_rel, team_files.goal_text(r.intent, r.scope),
+                                    team_files.original_pointer(r.ranges, roadmap_rel), team_files.not_text(r.scope))
+
+
 def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, history, brief: Path, W) -> tuple:
     """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
     없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused."""
@@ -219,9 +230,7 @@ def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, hist
     for r in rows:
         if r.kind != R.KIND_BUNDLE:
             continue
-        rewrite[top / team.intent(r.id)] = team_files.render_intent(
-            intent_template, r.id, team_files.KIND_EPIC, roadmap_rel, team_files.goal_text(r.intent, r.scope),
-            team_files.original_pointer(r.ranges, roadmap_rel), team_files.not_text(r.scope))
+        rewrite[top / team.intent(r.id)] = _intent_text(intent_template, r, roadmap_rel)
         ids, parts = R.bundle_parts(r, idx)
         rewrite[top / team.sources(r.id)] = team_files.render_sources(r.id, r.title, ids, parts, r.receives, r.gives)
         if absent(team.keep(r.id)):
@@ -253,6 +262,66 @@ def check_rerun(top: Path, team, record: set, rewrite: dict, W):
     if left:
         raise W.Refused("생성 기록에 있는데 이번 표에 없는 과제의 파일이 남아 있다 — %s. create 는 지우지 않는다 — 재분해는 update 로 한다"
                         % " · ".join(left))
+
+
+# ── update (team) ─────────────────────────────────────────────────────────────
+
+def hand_fix(team, r) -> list:
+    """있던 과제의 INTENT.md 를 손으로 고칠 글 — 머리 줄과 목표 · 지시 원문 범위 · 하지 않을 것(글은 줄마다 네 칸 들인다)."""
+    def indented(text):
+        return [INDENT + line for line in text.split("\n")]
+    return ([PREFIX + HAND_FIX % (r.id, team.intent(r.id)), "  목표:"]
+            + indented(team_files.goal_text(r.intent, r.scope))
+            + ["  지시 원문 범위: " + team_files.format_ranges(r.ranges), "  하지 않을 것:"]
+            + indented(team_files.not_text(r.scope)))
+
+
+def update_files(top: Path, team, old: dict, new: dict, changed: list, added: list, removed: list, idx, roadmap_rel: str,
+                 W) -> tuple:
+    """(쓸 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}, 손으로 고칠 것 줄들, 알림 줄들) — update 의 team 갈래.
+
+    바뀌었거나 새로 온 묶음 행의 sources.md 는 글이 다를 때만 다시 쓴다. 새로 묶음이 된 행은 INTENT.md 와 결과 폴더의
+    빈 파일을 깐다 — INTENT.md 자리에 무엇이든(매달린 링크도) 있으면 Refused. 있던 과제의 INTENT.md 는 쓰지 않는다:
+    의도 · 범위 · 지시 원문 범위 가운데 하나라도 바뀌었으면 손으로 고칠 글을 낸다. 사라졌거나 묶음이 아니게 된 과제의
+    폴더는 건드리지 않고 알린다. 표의 범위가 원자료 사본 밖이거나 쓸 자리 · 그 폴더 성분이 심볼릭 링크면 Refused."""
+    try:
+        total = team_files.line_count((top / team.original).read_bytes())
+    except OSError as exc:
+        raise W.Refused("원자료 사본을 읽지 못했다: %s (%s)" % (team.original, exc))
+    intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
+    rewrite, once, todo, notes = {}, {}, [], []
+    for r in [new[i] for i in new if i in changed or i in added]:
+        if r.kind != R.KIND_BUNDLE:
+            continue
+        far = ["%d–%d" % ab for ab in r.ranges if ab[1] > total]
+        if far:
+            raise W.Refused("%s: 지시 원문 범위 %s 가 %s 의 %d줄 밖이다" % (r.id, " · ".join(far), team.original, total))
+        ids, parts = R.bundle_parts(r, idx)
+        text = team_files.render_sources(r.id, r.title, ids, parts, r.receives, r.gives)
+        src = team.sources(r.id)
+        _refuse_links(top, src, W)
+        if os.path.islink(str(top / src)):
+            raise W.Refused("심볼릭 링크로는 쓰지 않는다: %s" % src)
+        if not (top / src).is_file() or W.read(top / src) != text:
+            rewrite[top / src] = text
+        before = old.get(r.id)
+        if before is not None and before.kind == R.KIND_BUNDLE:
+            if (before.intent, before.scope, before.ranges) != (r.intent, r.scope, r.ranges):
+                todo += hand_fix(team, r)
+            continue
+        intent = team.intent(r.id)
+        _refuse_links(top, intent, W)
+        if os.path.lexists(str(top / intent)):
+            raise W.Refused("%s 가 이미 있다 — 새 과제 %s 의 INTENT.md 는 덮어쓰지 않는다" % (intent, r.id))
+        once[top / intent] = _intent_text(intent_template, r, roadmap_rel)
+        keep = team.keep(r.id)
+        _refuse_links(top, keep, W)
+        if not os.path.lexists(str(top / keep)):
+            once[top / keep] = ""
+    for i in old:
+        if old[i].kind == R.KIND_BUNDLE and (i in removed or (i in changed and new[i].kind != R.KIND_BUNDLE)):
+            notes.append(PREFIX + LEFT_JOB % (i, team.job(i)))
+    return rewrite, once, todo, notes
 
 
 def range_screen(top: Path, team, rows) -> list:

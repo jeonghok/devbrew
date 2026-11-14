@@ -533,4 +533,230 @@ print(" ".join(found) + " | 검사 불가 %d" % len(unchecked))
 PY
 assert_eq "$(python3 "$T/count.py" "$S" "$W" "$RD")" "${RD}old1/roadmap.md ${RD}t1/roadmap.md | 검사 불가 0" "AC8: 기본 브랜치의 로드맵은 old1 · t1 둘이고 검사 불가가 없다(역할 폴더 · HANDBOOK.md 가 같은 자리에 있어도)"
 
+# ── update · extract: team 형식의 재분해와 표 뽑기 (AC6) ─────────────────────────
+# 위 「검사의 이빨」 은 original.md 에 구간 하나를 덧붙이고 audit 의 S5 를 커밋만 한 채 끝난다 — 커밋 · push 한 깨끗한 t1 에서 시작한다
+# audit 의 S5 는 원자료 사본을 늘리려고 더한 것이라 어느 행에도 없다(검증의 orphans) — audit 에서 빼고 사본의 구간은 그대로 둔다
+sed '/^- \*\*S5\*\* /,$d' "$W/docs/iv/t-brief-interview.audit.md" > "$T/audit.nos5" && cp "$T/audit.nos5" "$W/docs/iv/t-brief-interview.audit.md"
+g add -- "${RD}t1" docs/iv/t-brief-interview.audit.md
+g commit -qm t1-appended
+g push -q origin main
+assert_eq "$(grep -c 'S5' "$W/docs/iv/t-brief-interview.audit.md")" "0" "픽스처: audit 에 S5 가 없다(t1 의 표가 모든 발화를 받는다)"
+assert_eq "$(g status --porcelain -- "${RD}t1" docs/iv)" "" "픽스처: t1 · 출처는 커밋 · push 한 깨끗한 나무다"
+assert_eq "$(check)" "0" "픽스처: 커밋한 t1 이 구조 검사를 통과한다"
+[ "$(wc -l < "$O")" -ge 14 ] && ok "픽스처: original.md 가 14줄 이상이다(E3 의 범위 13–14 가 파일 안)" || no "픽스처: original.md 가 짧다"
+
+extract() { (cd "$W" && python3 "$RW" extract --roadmap "${RD}t1/roadmap.md"); }
+tupdate() { (cd "$W" && python3 "$RW" update --roadmap "${RD}t1/roadmap.md" --brief docs/iv/t-brief-interview.md --audit docs/iv/t-brief-interview.audit.md \
+   --plan-table "$1" --date 2026-11-15 --change "픽스처 재분해" --approval "다시 나눈다") > "$T/out.txt" 2>&1; echo $?; }
+cat > "$T/cell.py" <<'PY'
+import sys
+src, dst, rid, col, val = sys.argv[1:6]
+lines = open(src, encoding="utf-8").read().split("\n")
+head, hit = None, 0
+for i, l in enumerate(lines):
+    cells = [c.strip() for c in l.strip()[1:-1].split("|")] if l.startswith("|") else None
+    if cells and cells[0] == "번호":
+        head = cells
+    elif cells and head and cells[0] == rid:
+        cells[head.index(col)] = val
+        lines[i] = "| " + " | ".join(cells) + " |"
+        hit += 1
+if hit != 1:
+    sys.exit("행 %s 를 %d번 찾았다" % (rid, hit))
+open(dst, "w", encoding="utf-8").write("\n".join(lines))
+PY
+cell() { python3 "$T/cell.py" "$@"; }   # cell <표> <새 표> <번호> <칸 이름> <값> — 그 행의 그 칸만 바꾼 사본
+changed_rows() { diff "$1" "$2" | grep '^>' | cut -d'|' -f2 | tr -d ' ' | tr '\n' ' '; }   # changed_rows <표> <새 표> — 달라진 행의 번호들
+
+extract > "$T/x1.md"
+assert_grep "$(sed -n 3p "$T/x1.md")" '\| 지시 원문 범위 \|$' "AC6: team extract 의 표 끝에 지시 원문 범위 칸"
+assert_contains "$(grep '^| E1 ' "$T/x1.md")" "| 2–4 |" "AC6: 범위는 INTENT.md 에서 뽑는다"
+assert_contains "$(grep '^| P1 ' "$T/x1.md")" "| 없음 |" "결정 행의 범위는 없음"
+assert_eq "$(grep '^| P1 ' "$T/x1.md" | awk -F' [|] ' '{print NF, $NF}')" "12 없음 |" "결정 행은 칸이 열둘이고 마지막 칸(지시 원문 범위)이 없음"
+assert_eq "$(tupdate "$T/x1.md")" "0" "AC6: 뽑은 표를 그대로 받는다"
+assert_contains "$(cat "$T/out.txt")" "바뀐 에픽이 없다" "뽑은 표 그대로면 쓰지 않는다"
+
+# 번호만 옮긴다(E1 의 D2 를 E2 로) — 목표 · 범위는 그대로
+cell "$T/x1.md" "$T/m0.md" E1 "배정 번호" "C1 · «ext-a» · S1"
+cell "$T/m0.md" "$T/moved.md" E2 "배정 번호" "D2 · ST1 · K1 · RC1 · S3 · S4"
+assert_eq "$(changed_rows "$T/x1.md" "$T/moved.md")" "E1 E2 " "픽스처 moved.md: 뽑은 표에서 E1 · E2 행만 바꿨다(배정 번호 칸)"
+assert_eq "$(grep -c 'D2' "$W/${RD}t1/jobs/E2/sources.md")" "0" "픽스처: 옮기기 전 E2 의 sources.md 에 D2 가 없다"
+cp "$W/${RD}t1/jobs/E1/INTENT.md" "$T/i1"
+cp "$W/${RD}t1/jobs/E2/INTENT.md" "$T/i2"
+assert_eq "$(tupdate "$T/moved.md")" "0" "번호만 바뀌면 rc 0"
+assert_contains "$(cat "$T/out.txt")" "머지 여부를 확인하지 못했다" "team update: 머지 여부 알림(계획 2 가 뒤집는다)"
+assert_contains "$(cat "$T/out.txt")" "[spec-distill] 머지 여부를 확인하지 못했다 — 이 판은 team 형식의 단계를 계산하지 않는다. 머지된 에픽을 바꾸지 않았는지 직접 확인한다" "team update: 머지 여부 알림 한 줄이 글자 그대로"
+assert_not_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "번호만 바뀌면 손으로 고칠 것이 없다"
+cmp -s "$W/${RD}t1/jobs/E1/INTENT.md" "$T/i1" && ok "AC6: INTENT.md 는 바이트 그대로" || no "AC6: INTENT.md 가 바뀌었다"
+cmp -s "$W/${RD}t1/jobs/E2/INTENT.md" "$T/i2" && ok "AC6: E2 의 INTENT.md 도 바이트 그대로" || no "AC6: E2 의 INTENT.md 가 바뀌었다"
+assert_file_has "$W/${RD}t1/jobs/E2/sources.md" "D2" "AC6: sources.md 는 다시 쓴다"
+assert_eq "$(grep '^ids:' "$W/${RD}t1/jobs/E1/sources.md" | grep -c 'D2')" "0" "AC6: E1 의 sources.md 머리 ids 에서 D2 가 빠졌다"
+assert_eq "$(check)" "0" "update 뒤에도 구조 검사를 통과한다"
+
+# 목표가 바뀐다(E1 의 의도) + 새 에픽 E3(번호는 E2 에서 하나 옮긴다 — 범위는 original.md 안의 줄)
+extract > "$T/x2.md"
+assert_contains "$(grep '^| E2 ' "$T/x2.md")" "D2" "update 뒤 뽑은 표: 옮긴 D2 가 E2 행에 있다"
+assert_not_contains "$(grep '^| E1 ' "$T/x2.md")" "D2" "update 뒤 뽑은 표: E1 행에는 D2 가 없다"
+cell "$T/x2.md" "$T/g0.md" E1 "의도" "새 의도 글"
+cell "$T/g0.md" "$T/g1.md" E2 "배정 번호" "D2 · ST1 · K1 · RC1 · S3"
+{ cat "$T/g1.md"; printf '%s\n' '| E3 | 새 과제 | 묶음 | 새 과제를 연다 | 한다 열기 / 안 한다 닫기 | E2 | feature/t-e3 | 없음 | S4 | 없음 | 없음 | 13–14 |'; } > "$T/goal.md"
+assert_eq "$(changed_rows "$T/x2.md" "$T/goal.md")" "E1 E2 E3 " "픽스처 goal.md: E1 의 의도 · E2 의 배정 번호(S4 를 뺐다)를 바꾸고 E3 을 더했다"
+assert_eq "$(tupdate "$T/goal.md")" "4" "AC6: 목표가 바뀌면 종료 코드 4"
+assert_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "AC6: 고칠 내용을 낸다"
+assert_contains "$(cat "$T/out.txt")" "새 의도 글" "AC6: 새 목표 글이 화면에 있다"
+assert_contains "$(cat "$T/out.txt")" "과제 브랜치가 있으면" "어느 INTENT.md 를 고치는지 말한다"
+assert_eq "$(sed -n '/손으로 고칠 것 — E1 /,/^    - 배포$/p' "$T/out.txt")" "$(printf '%s\n' \
+  "[spec-distill] 손으로 고칠 것 — E1 의 INTENT.md(${RD}t1/jobs/E1/INTENT.md)는 다시 쓰지 않았다. 사용자 승인 뒤 아래대로 고치고 결정 기록에 \`- 결정 · <날짜> · 「…」\` 한 줄을 남긴다. 과제 브랜치가 있으면 일꾼이 돌아온 뒤 그 브랜치의 INTENT.md 를, 없으면 이 브랜치의 것을 고친다." \
+  '  목표:' '    새 의도 글' '    ' '    - 범위: 폴더' '  지시 원문 범위: 2–4' '  하지 않을 것:' '    - 배포')" "AC6: 손으로 고칠 것의 글이 글자 그대로(줄마다 네 칸 들임)"
+assert_eq "$(grep -c '손으로 고칠 것 — ' "$T/out.txt")" "1" "고칠 것은 목표가 바뀐 E1 하나뿐(번호만 바뀐 E2 · 새 E3 은 없다)"
+cmp -s "$W/${RD}t1/jobs/E1/INTENT.md" "$T/i1" && ok "AC6: 목표가 바뀌어도 INTENT.md 는 그대로" || no "INTENT.md 를 다시 썼다"
+assert_file_has "$W/${RD}t1/roadmap.md" "- 의도: 새 의도 글" "쓰기는 끝났다 — 로드맵 블록이 바뀌었다"
+[ -f "$W/${RD}t1/jobs/E3/INTENT.md" ] && [ -f "$W/${RD}t1/jobs/E3/sources.md" ] && [ -f "$W/${RD}t1/jobs/E3/results/.gitkeep" ] && ok "새 과제 폴더를 만들었다" || no "새 과제 폴더가 없다"
+assert_file_has "$W/${RD}t1/jobs/E3/INTENT.md" "- 범위: intent/original.md 13–14행" "새 과제의 INTENT.md 는 표의 범위를 적는다"
+assert_eq "$(check)" "0" "종료 코드 4 뒤의 나무도 구조 검사를 통과한다"
+assert_contains "$(cat "$T/chk.txt")" "목표" "검사가 INTENT.md 와 블록의 어긋남을 알린다"
+assert_eq "$(tupdate "$T/goal.md")" "0" "같은 표로 다시: 바뀐 에픽이 없다"
+assert_contains "$(cat "$T/out.txt")" "바뀐 에픽이 없다" "같은 표로 다시: 쓰지 않았다고 말한다"
+
+# 범위만 바뀐 표(E2 의 범위 9–12 → 9–13) — 종료 코드 4, INTENT.md 는 그대로
+cp "$W/${RD}t1/jobs/E2/INTENT.md" "$T/i2"
+cell "$T/goal.md" "$T/range.md" E2 "지시 원문 범위" "9–13"
+assert_eq "$(changed_rows "$T/goal.md" "$T/range.md")" "E2 " "픽스처 range.md: E2 의 범위 칸만 바꿨다"
+assert_eq "$(tupdate "$T/range.md")" "4" "AC6: 범위만 바뀌어도 종료 코드 4"
+assert_contains "$(cat "$T/out.txt")" "  지시 원문 범위: 9–13" "AC6: 새 범위 9–13 을 화면에 낸다"
+assert_contains "$(cat "$T/out.txt")" "손으로 고칠 것 — E2 의 INTENT.md" "범위가 바뀐 E2 의 INTENT.md 를 고치라고 말한다"
+assert_eq "$(grep -c '손으로 고칠 것 — ' "$T/out.txt")" "1" "범위만 바뀐 표: 고칠 것은 E2 하나뿐"
+cmp -s "$W/${RD}t1/jobs/E2/INTENT.md" "$T/i2" && ok "AC6: 범위가 바뀌어도 INTENT.md 는 그대로" || no "범위가 바뀌었는데 INTENT.md 를 다시 썼다"
+
+# 파일 밖 범위로 바꾼 표 — 쓰지 않는다(있던 과제 · 새 과제), 거래 안의 검증이 실패하면 새 과제 폴더까지 되돌린다
+before="$(snap "$W")"
+cell "$T/goal.md" "$T/far.md" E2 "지시 원문 범위" "9999–10000"
+assert_eq "$(tupdate "$T/far.md")" "1" "Review Focus 5: 있던 과제(E2)의 범위가 파일 밖: rc 1"
+assert_contains "$(cat "$T/out.txt")" "9999–10000" "있던 과제의 범위가 파일 밖: 그 범위를 짚는다"
+same_tree "있던 과제의 범위가 파일 밖"
+E4ROW='| E4 | 넷째 과제 | 묶음 | 넷째를 연다 | 한다 넷 / 안 한다 다섯 | E2 | feature/t-e4 | 없음 | K1 | 없음 | 없음 | 2–3 |'
+cell "$T/goal.md" "$T/f0.md" E2 "배정 번호" "D2 · ST1 · RC1 · S3"
+{ cat "$T/f0.md"; printf '%s\n' "${E4ROW/2–3 |/9999–10000 |}"; } > "$T/far4.md"
+assert_eq "$(tupdate "$T/far4.md")" "1" "새 과제(E4)의 범위가 파일 밖: rc 1"
+assert_contains "$(cat "$T/out.txt")" "9999–10000" "새 과제의 범위가 파일 밖: 그 범위를 짚는다"
+same_tree "새 과제의 범위가 파일 밖"
+cell "$T/f0.md" "$T/u0.md" E1 "배정 번호" "«ext-a» · S1"
+{ cat "$T/u0.md"; printf '%s\n' "$E4ROW"; } > "$T/unas4.md"
+assert_eq "$(tupdate "$T/unas4.md")" "1" "새 과제 E4 를 더하며 C1 을 뺀 표(unassigned): rc 1"
+assert_contains "$(cat "$T/out.txt")" "검증 실패" "unassigned: 쓴 뒤의 검증이 멈췄다"
+assert_contains "$(cat "$T/out.txt")" "unassigned: C1" "unassigned: 사유에 C1"
+same_tree "unassigned(되돌림)"
+[ ! -e "$W/${RD}t1/jobs/E4" ] && ok "unassigned: 새 과제 폴더 E4 를 되돌려 지웠다" || no "unassigned: 새 과제 폴더 E4 가 남았다"
+
+# E3 을 뺀 표 — 과제 폴더는 그대로 두고 알린다
+grep -v '^| E3 ' "$T/goal.md" > "$T/n0.md"
+cell "$T/n0.md" "$T/noe3.md" E2 "배정 번호" "D2 · ST1 · K1 · RC1 · S3 · S4"
+assert_eq "$(changed_rows "$T/goal.md" "$T/noe3.md")" "E2 " "픽스처 noe3.md: E3 행을 지우고 S4 를 E2 로 돌렸다"
+assert_eq "$(tupdate "$T/noe3.md")" "0" "E3 을 뺀 표: rc 0"
+[ -f "$W/${RD}t1/jobs/E3/INTENT.md" ] && [ -f "$W/${RD}t1/jobs/E3/sources.md" ] && ok "사라진 에픽의 과제 폴더는 그대로 있다" || no "사라진 에픽의 과제 폴더를 지웠다"
+assert_contains "$(cat "$T/out.txt")" "사라진 에픽 E3" "사라진 에픽 E3 을 알린다"
+assert_contains "$(cat "$T/out.txt")" "${RD}t1/jobs/E3" "사라진 에픽의 과제 폴더 경로를 낸다"
+assert_contains "$(cat "$T/out.txt")" "[spec-distill] 사라진 에픽 E3: 과제 폴더 ${RD}t1/jobs/E3 를 그대로 뒀다 — 필요 없으면 손으로 지운다" "사라진 에픽 알림 줄이 글자 그대로"
+assert_eq "$(check)" "0" "E3 을 뺀 나무: 구조 검사 rc 0"
+assert_contains "$(cat "$T/chk.txt")" "로드맵에 없는 에픽 과제 폴더" "검사가 로드맵에 없는 에픽 과제 폴더를 알린다"
+
+# 새 에픽 E4 인데 jobs/E4/INTENT.md 가 이미 있다 — 덮어쓰지 않는다(매달린 링크여도)
+mkdir -p "$W/${RD}t1/jobs/E4"
+printf '# 사람이 먼저 둔 의도 파일\n' > "$W/${RD}t1/jobs/E4/INTENT.md"
+cp "$W/${RD}t1/jobs/E4/INTENT.md" "$T/e4.hand"
+cell "$T/noe3.md" "$T/e40.md" E2 "배정 번호" "D2 · ST1 · RC1 · S3 · S4"
+{ cat "$T/e40.md"; printf '%s\n' "$E4ROW"; } > "$T/e4.md"
+before="$(snap "$W")"
+assert_eq "$(tupdate "$T/e4.md")" "1" "새 에픽 E4 의 INTENT.md 가 이미 있다: rc 1"
+assert_contains "$(cat "$T/out.txt")" "덮어쓰지 않는다" "INTENT.md 가 이미 있다: 덮어쓰지 않는다고 말한다"
+cmp -s "$W/${RD}t1/jobs/E4/INTENT.md" "$T/e4.hand" && ok "있던 E4 INTENT.md 는 바이트 그대로" || no "있던 E4 INTENT.md 를 바꿨다"
+same_tree "새 에픽의 INTENT.md 가 이미 있다"
+rm -- "$W/${RD}t1/jobs/E4/INTENT.md"
+ln -s INTENT-gone.md "$W/${RD}t1/jobs/E4/INTENT.md"   # 레포 안을 가리키는 매달린 링크
+before="$(snap "$W")"
+assert_eq "$(tupdate "$T/e4.md")" "1" "새 에픽 E4 의 INTENT.md 자리가 매달린 링크: rc 1"
+assert_contains "$(cat "$T/out.txt")" "덮어쓰지 않는다" "매달린 링크: 덮어쓰지 않는다고 말한다"
+assert_eq "$(readlink "$W/${RD}t1/jobs/E4/INTENT.md")" "INTENT-gone.md" "매달린 링크가 그대로 있다"
+[ ! -e "$W/${RD}t1/jobs/E4/INTENT-gone.md" ] && ok "매달린 링크 너머에 쓰지 않았다" || no "매달린 링크 너머에 파일이 생겼다"
+same_tree "새 에픽의 INTENT.md 자리가 매달린 링크"
+rm -- "$W/${RD}t1/jobs/E4/INTENT.md"
+rmdir -- "$W/${RD}t1/jobs/E4"
+assert_eq "$(tupdate "$T/e4.md")" "0" "자리가 비면 새 에픽 E4 를 받는다: rc 0(양의 짝)"
+assert_file_has "$W/${RD}t1/jobs/E4/INTENT.md" "job: E4" "새 에픽 E4 의 INTENT.md 를 만들었다"
+
+# 쓴 뒤의 team 나무 검사는 거래 안에서 돈다 — 손으로 깨진 INTENT.md(E1 머리의 roadmap 이 다른 파일)가 있으면 되돌린다
+cp "$W/${RD}t1/jobs/E1/INTENT.md" "$T/i1.ok"
+sed 's/^roadmap: .*/roadmap: elsewhere.md/' "$T/i1.ok" > "$W/${RD}t1/jobs/E1/INTENT.md"
+assert_eq "$(grep -c '^roadmap: elsewhere.md$' "$W/${RD}t1/jobs/E1/INTENT.md")" "1" "픽스처: E1 INTENT.md 머리의 roadmap 을 바꿨다"
+cell "$T/e4.md" "$T/e4t.md" E4 "이름" "넷째 과제 둘"
+assert_eq "$(changed_rows "$T/e4.md" "$T/e4t.md")" "E4 " "픽스처 e4t.md: E4 의 이름 칸만 바꿨다"
+before="$(snap "$W")"
+assert_eq "$(tupdate "$T/e4t.md")" "1" "INTENT.md 가 깨진 나무에서 update: rc 1"
+assert_contains "$(cat "$T/out.txt")" "team 나무 검사 실패" "INTENT.md 가 깨진 나무: 쓴 뒤의 team 나무 검사가 멈췄다"
+same_tree "INTENT.md 가 깨진 나무(되돌림)"
+cp "$T/i1.ok" "$W/${RD}t1/jobs/E1/INTENT.md"
+
+# 모르는 layout 값 — extract · update 둘 다 옛 형식 규칙으로 읽지 않는다
+cp "$W/${RD}t1/roadmap.md" "$T/rm.keep"
+sed 's/^layout: team$/layout: no-such/' "$T/rm.keep" > "$W/${RD}t1/roadmap.md"
+assert_eq "$(grep -c '^layout: no-such$' "$W/${RD}t1/roadmap.md")" "1" "픽스처: 로드맵 머리말 layout: no-such"
+before="$(snap "$W")"
+assert_eq "$( (extract) > "$T/out.txt" 2>&1; echo $?)" "1" "layout: no-such — extract rc 1"
+assert_contains "$(cat "$T/out.txt")" "no-such" "layout: no-such — extract 가 그 값을 짚는다"
+assert_not_contains "$(cat "$T/out.txt")" "| 번호 |" "layout: no-such — extract 가 옛 형식 표를 내지 않는다"
+assert_eq "$(tupdate "$T/e4.md")" "1" "layout: no-such — update rc 1"
+assert_contains "$(cat "$T/out.txt")" "no-such" "layout: no-such — update 가 그 값을 짚는다"
+same_tree "layout: no-such"
+cp "$T/rm.keep" "$W/${RD}t1/roadmap.md"
+
+# 옛 형식 로드맵(old1)의 extract 출력에는 그 칸이 없고, 그 표에 칸을 더해 update 하면 rc 1
+oupdate() { (cd "$W" && python3 "$RW" update --roadmap "${RD}old1/roadmap.md" --brief docs/iv/t-brief-interview.md --audit docs/iv/t-brief-interview.audit.md \
+   --plan-table "$1" --date 2026-11-15 --change "옛 형식 재분해" --approval "다시 나눈다") > "$T/out.txt" 2>&1; echo $?; }
+(cd "$W" && python3 "$RW" extract --roadmap "${RD}old1/roadmap.md") > "$T/ox.md"
+assert_grep "$(sed -n 3p "$T/ox.md")" '^\| 번호 \|.*\| 넘기는 것 \|$' "옛 형식 extract: 표 머리가 넘기는 것 칸으로 끝난다"
+assert_not_contains "$(cat "$T/ox.md")" "지시 원문 범위" "옛 형식 extract: 지시 원문 범위 칸이 없다"
+assert_eq "$(oupdate "$T/ox.md")" "0" "옛 형식: 뽑은 표를 그대로 받는다(양의 짝)"
+assert_contains "$(cat "$T/out.txt")" "바뀐 에픽이 없다" "옛 형식: 뽑은 표 그대로면 쓰지 않는다"
+sed -e '3s/$/ 지시 원문 범위 |/' -e '4s/$/---|/' -e '/^| P1 /s/$/ 없음 |/' -e '/^| E1 /s/$/ 2–4 |/' -e '/^| E2 /s/$/ 9–12 |/' "$T/ox.md" > "$T/ox-col.md"
+assert_grep "$(sed -n 3p "$T/ox-col.md")" '\| 지시 원문 범위 \|$' "픽스처: 옛 표에 지시 원문 범위 칸을 더했다"
+assert_eq "$(sed -n '5,$p' "$T/ox-col.md" | awk -F' [|] ' '{print $NF}' | tr '\n' ' ')" "없음 | 2–4 | 9–12 | " "픽스처: 더한 칸의 값은 team 표로 읽힐 값이다(결정 없음 · 묶음 줄 범위)"
+cp "$W/${RD}old1/roadmap.md" "$T/old1.keep"
+before="$(snap "$W")"
+assert_eq "$(oupdate "$T/ox-col.md")" "1" "옛 형식 로드맵에 칸을 더한 표: rc 1(옛 형식의 표는 바뀌지 않는다)"
+assert_contains "$(cat "$T/out.txt")" "분해안 표 머리" "칸을 더한 표: 표 머리가 맞지 않는다고 말한다"
+cmp -s "$W/${RD}old1/roadmap.md" "$T/old1.keep" && ok "칸을 더한 표: old1 로드맵 그대로" || no "칸을 더한 표: old1 로드맵이 바뀌었다"
+same_tree "옛 형식 로드맵에 칸을 더한 표"
+# 옛 형식 update 의 있는 테스트는 test_roadmap_write.sh 가 그대로 잰다(고치지 않고 통과)
+
+# create: 기록에 없는 과제 INTENT.md 자리의 매달린 링크(레포 안을 가리킨다)는 남의 파일이다 — 파일로 바꾸지 않는다
+mkdir -p "$W/${RD}tl/jobs/E1"
+ln -s INTENT-gone.md "$W/${RD}tl/jobs/E1/INTENT.md"
+ttable "$T/tl.md" "$TP1" "$TE1" "$TE2"
+before="$(snap "$W")"
+assert_eq "$(tcreate "$T/tl.md" "${RD}tl")" "1" "create: 과제 INTENT.md 자리의 매달린 링크: rc 1"
+assert_contains "$(cat "$T/out.txt")" "덮어쓰지 않는다" "create: 매달린 링크: 덮어쓰지 않는다고 말한다"
+assert_eq "$(readlink "$W/${RD}tl/jobs/E1/INTENT.md")" "INTENT-gone.md" "create: 매달린 링크가 그대로 있다"
+[ ! -e "$W/${RD}tl/jobs/E1/INTENT-gone.md" ] && ok "create: 매달린 링크 너머에 쓰지 않았다" || no "create: 매달린 링크 너머에 파일이 생겼다"
+same_tree "create: 과제 INTENT.md 자리의 매달린 링크"
+
+# create: 화면 줄(지시 원문 범위의 글) 계산은 거래 안에서 한다 — 거기서 실패하면 쓴 것을 되돌린다(「쓰지 않았다」 와 나무가 맞다)
+cat > "$T/boom.py" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import roadmap_write
+import team_write
+def boom(*_a, **_k):
+    raise RuntimeError("화면 줄 계산 실패(테스트)")
+team_write.range_screen = boom
+sys.exit(roadmap_write.main(sys.argv[2:]))
+PY
+fresh w5
+b5="$(snap "$T/w5")"
+rc="$( (cd "$T/w5" && python3 "$T/boom.py" "$S" create --layout team --brief docs/iv/t-brief-interview.md --audit docs/iv/t-brief-interview.audit.md \
+     --plan-table "$T/w5.md" --out "${RD}tb" --title "팀 픽스처" --date 2026-11-14 --approval "이대로 승인 (권장)") > "$T/out.txt" 2>&1; echo $?)"
+assert_eq "$rc" "1" "create: 화면 줄 계산이 실패하면 rc 1"
+assert_contains "$(cat "$T/out.txt")" "화면 줄 계산 실패" "create: 화면 줄 계산 실패: 그 사유"
+[ "$(snap "$T/w5")" = "$b5" ] && ok "create: 화면 줄 계산 실패: 쓴 것을 되돌렸다" || no "create: 화면 줄 계산이 실패했는데 쓴 파일이 남았다"
+assert_eq "$(ttc "$T/w5" "$T/w5.md" "${RD}tb")" "0" "create: 같은 사본 · 같은 표를 그대로 돌리면 rc 0(양의 짝)"
+
 finish
