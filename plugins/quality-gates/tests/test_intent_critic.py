@@ -380,6 +380,12 @@ class TestEvidence(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("차등 결과를 읽지 못함 — 근거로 세지 않았다", notes)
 
+    def test_differential_of_wrong_shape_is_unreadable(self):
+        for text in ("just a string\n", "- a\n- b\n"):
+            ok, notes = io_.has_evidence(None, text)
+            self.assertFalse(ok)
+            self.assertIn("차등 결과를 읽지 못함 — 근거로 세지 않았다", notes)
+
     def test_unreadable_differential_with_walk(self):
         ok, notes = io_.has_evidence("관찰\n", "per_adapter: [")
         self.assertTrue(ok)
