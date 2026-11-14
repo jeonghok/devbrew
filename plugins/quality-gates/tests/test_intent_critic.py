@@ -1789,6 +1789,64 @@ class TestRender(unittest.TestCase):
         self.assertEqual(_last(p), NONE_LINE)
         self.assertEqual(_return_block(self.rd)[1]["status"], "skipped — 근거 없음")
 
+    def _prepared_render(self, repo, walk, differential, specs, max_bytes=120000):
+        """prepare → (필요하면) filter → render. (prepare stdout 줄들, result.md 의 intent-critic 절)."""
+        rd = tempfile.mkdtemp(dir=self.rd)
+        _write(_config_text(max_bytes=max_bytes), rd, "intent-config.txt")
+        _write("## Goals\ngoal-body\n", rd, "intent.md")
+        if walk:
+            _write(walk, rd, "e2e-record.md")
+        if differential:
+            _write(differential, rd, "differential.yaml")
+        sp = os.path.join(rd, "intent-specs.json")
+        _write(json.dumps({"intent_source": "spec-trailer", "specs": list(specs)}), sp)
+        prep = _cli("prepare", "--rd", rd, "--repo", repo, "--tree-root", repo, "--mode", "pr",
+                    "--head", "HEAD", "--review-commit", "HEAD", "--specs-json", sp)
+        self.assertEqual(prep.returncode, 0, prep.stderr)
+        if "intent-call: none" not in prep.stdout.splitlines():
+            _write(_out([], none_reason="없음"), rd, "intent-critic-1.txt")
+            _write(_out([], none_reason="없음"), rd, "intent-critic-2.txt")
+            self.assertEqual(_cli("filter", "--rd", rd).returncode, 0)
+        self.assertEqual(_cli("render", "--rd", rd, "--mode", "pr").returncode, 0)
+        section = _read(rd, "result.md").split("\n## intent-critic\n", 1)[1]
+        return prep.stdout.splitlines(), section
+
+    def test_render_carries_prepare_notices_over_cap(self):
+        """F1 (a) — 원문 없음 · 한 번에 넣음 이 결과 절에도 남는다."""
+        with tempfile.TemporaryDirectory() as d:
+            repo = _origin_repo(d)
+            out, section = self._prepared_render(repo, "관찰\n", None, [], max_bytes=10)
+        self.assertIn("intent-call: single", out)
+        for prefix in ("원문 없음 — ", "한 번에 넣음 — "):
+            self.assertTrue(any(l.startswith(prefix) for l in out), prefix)
+            self.assertIn("- " + prefix, section)
+
+    def test_render_carries_prepare_notices_none_branch(self):
+        """F1 (b) — 근거 없음(차등 결과를 읽지 못함)으로 끝나도 prepare 공시가 남는다."""
+        line = "차등 결과를 읽지 못함 — 근거로 세지 않았다"
+        with tempfile.TemporaryDirectory() as d:
+            repo = _origin_repo(d)
+            out, section = self._prepared_render(repo, None, "{ not: [yaml", [])
+        self.assertIn("intent-call: none", out)
+        self.assertIn(line, out)
+        self.assertIn("- " + line, section)
+        self.assertEqual(section.count(NONE_LINE), 1)
+
+    def test_render_carries_prepare_notices_old_document(self):
+        """F1 (c) — 옛 문서 전체 갈래의 「첫 호출에 의심이 섞였다」."""
+        with tempfile.TemporaryDirectory() as d:
+            repo = _origin_repo(d)
+            out, section = self._prepared_render(repo, "관찰\n", None, ["docs/spec_old.md"])
+        self.assertIn("첫 호출에 의심이 섞였다", out)
+        self.assertIn("- 첫 호출에 의심이 섞였다", section)
+
+    def test_render_prepare_notice_not_doubled_with_filter_notice(self):
+        with tempfile.TemporaryDirectory() as tree:
+            _write(_answer_text(), tree, ANS_DIR, _wf(1))
+            _write("broken\n", tree, ANS_DIR, "2.md")
+            _, section = self._prepared_render(tree, "관찰\n", None, [])
+        self.assertEqual(section.count("- 읽지 못한 답 파일 1\n"), 1)
+
     def test_section_first_line_states_meaning(self):
         """AC17 ② — `## intent-critic` 바로 아래 첫 줄이 의도 자체를 점검한다는 뜻을 밝힌다."""
         self._qy([self._item("D1", "answered", "의도다", ANS_DIR + "/a.md")], commit="abc")

@@ -5,6 +5,7 @@
   intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
   intent-evidence.txt · intent-origin.md · intent-roadmap.md · intent-intent.md ·
   intent-doubts.md · intent-answered.md · intent-plan.txt     prepare 가 쓴다
+  intent-prepare-notices.txt  prepare 의 공시 줄(한 줄에 하나) — render 가 결과 절 앞에 싣는다
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
   intent-return.md       gate(건너뜀) · render 가 쓴다
@@ -52,6 +53,7 @@ INTENT = "intent-intent.md"
 DOUBTS = "intent-doubts.md"
 ANSWERED = "intent-answered.md"
 PLAN = "intent-plan.txt"
+PREPARE_NOTICES = "intent-prepare-notices.txt"
 OUT1 = "intent-critic-1.txt"
 OUT2 = "intent-critic-2.txt"
 QUESTIONS = "intent-questions.yaml"
@@ -495,6 +497,23 @@ def _prepare(args, notices: List[str]) -> str:
     return call
 
 
+def _persist_prepare_notices(rd: str, notices: List[str]) -> None:
+    """공시 줄을 세션 파일에 남긴다 — 한 줄로 읽히는 것만, 결과 줄과 겹치는 근거 없음 줄은 뺀다."""
+    text = ""
+    for line in notices:
+        if io_.single_line(line) and line != NO_EVIDENCE:
+            text += line + "\n"
+    _write(_path(rd, PREPARE_NOTICES), text)
+
+
+def _prepare_notices(rd: str) -> List[str]:
+    out = []
+    for line in (_read(_path(rd, PREPARE_NOTICES)) or "").splitlines():
+        if line.strip():
+            out.append(line)
+    return out
+
+
 def cmd_prepare(args) -> int:
     notices: List[str] = []
     try:
@@ -502,6 +521,7 @@ def cmd_prepare(args) -> int:
     except InputError as exc:
         sys.stderr.write("intent_critic prepare: %s\n" % exc)
         return 4
+    _persist_prepare_notices(args.rd, notices)
     _emit(notices)
     print("intent-call: " + call)
     return 0
@@ -1142,7 +1162,15 @@ def cmd_render(args) -> int:
     status, line, notices = _outcome(plan, data, args.mode)
     rows = _rows(data, args.mode)
     lead = "" if not existing or existing.endswith("\n") else "\n"
-    _append(result_path, lead + _section(line, notices, data, rows))
+    shown = list(notices)
+    if plan is not None:
+        # prepare 의 공시가 앞에 선다. filter · record 가 다시 낸 줄은 한 번만 보인다.
+        front = []
+        for prepared in _prepare_notices(rd):
+            if prepared not in notices and prepared not in front:
+                front.append(prepared)
+        shown = front + shown
+    _append(result_path, lead + _section(line, shown, data, rows))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
     _write_return(rd, status, args.mode, commit, rows)
     _write(marker, line + "\n")

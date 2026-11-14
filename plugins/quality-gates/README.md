@@ -97,7 +97,7 @@ quality-gates/
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── intent_critic.py                      # intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 답 기록 · 렌더
 │   ├── intent_answers.py                     # 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋(push 없음)
-│   ├── intent_origin.py                      # `--origin` 으로 받은 원문 파일 · 로드맵 입력 읽기
+│   ├── intent_origin.py                      # 근거 조립 · 원문 · 로드맵 읽기(`source_interview` 따라가기) · 의심 가르기 · 경로 신뢰 경계
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── secret-scan.py                        # 게시 직전 값-차단 secret scan (FAIL CLOSED · 첫 줄 리터럴 scan_ok)
 │   ├── render-terminal.py                    # Final verdict STATUS 표 (`table`)
