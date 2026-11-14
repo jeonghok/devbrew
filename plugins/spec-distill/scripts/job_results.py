@@ -30,6 +30,8 @@ from workflow_superpowers import task_text  # noqa: E402
 RECEIVED, NOT_RECEIVED, NOT_COUNTED, STALE = "받음", "없음", "세지 않음", "낡음"
 FIRST_HEAD = "결과 대조: "
 SHOWN_FILES = 5
+NOT_A_FILE = "파일이 아닌 경로다(블롭이 아니다): %s"
+UNFINISHED = "대조를 끝내지 못했다 — 첫 줄에 실을 수를 얻지 못했다"
 PREFIX = "[spec-distill] "
 
 
@@ -72,11 +74,17 @@ def _short(commit) -> str:
 
 
 def _read(git, rev: str, path: str) -> tuple:
-    """(글 | None, 없음이 확인됐나). 글도 없고 없음도 확인되지 않으면 git 이 실패한 것이다(failures 에 남는다)."""
+    """(글 | None, 없음이 확인됐나). 글도 없고 없음도 확인되지 않으면 늘 failures 에 한 줄이 남는다 — git 이 실패했거나
+    그 경로가 파일이 아니다(폴더 · 서브모듈). 부르는 쪽은 그 줄을 unknown 으로 옮긴다."""
     text = git.blob(rev, path)
     if text is not None:
         return text, False
-    return None, git.absent(rev, path)
+    failed_before = len(git.failures)
+    if git.absent(rev, path):
+        return None, True
+    if len(git.failures) == failed_before:   # cat-file -e 가 rc 0 — 경로는 있는데 블롭이 아니다
+        git.failures.append(NOT_A_FILE % path)
+    return None, False
 
 
 def _unread(r) -> bool:
@@ -117,6 +125,9 @@ def _ac_check(git, tip: str, team, job: str, r, design: str, problems: list, unk
         if plan_text is None and not missing:
             return None   # 계획 파일을 읽지 못했다 — git 실패가 unknown 으로 옮겨진다
     scope = plan_scope(plan_text, acs)
+    if plan_text is not None and not scope:   # 셀 수 없는 범위를 0 개로 세어 통과시키지 않는다
+        unknown.append("범위를 정할 수 없다 — %s 의 task 절에 설계문서의 AC 가 없다" % team.plan(job, r.plan))
+        return None
     ri = check_impl(design, r.machine_text, only=scope)
     if ri["status"] == 3:
         problems.append("수용 기준 대조를 할 수 없다 — %s" % ri["reason"])
@@ -156,6 +167,8 @@ def check_result(git, tip: str, team, job: str, name: str) -> Check:
             r = team_files.parse_result(text)
             tail = _check_body(git, tip, team, job, name, parsed, r, problems, unknown)
     unknown += git.failures[failed_before:]
+    if not unknown and not problems and tail is None:   # 통과는 첫 줄의 수를 얻었을 때만이다
+        unknown.append(UNFINISHED)
     if unknown:
         first = "%s검사 불가 — %s" % (FIRST_HEAD, name)
     elif problems:
@@ -172,7 +185,7 @@ def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, prob
     if (r.stage, r.plan, r.attempt) != parsed:
         problems.append("머리의 단계 · 계획 · 시도(%s · %s · %s)가 이름과 다르다 — %s" % (r.stage, r.plan, r.attempt, name))
     if r.end is None:
-        if not any(p.startswith("「끝」 줄") for p in r.problems):
+        if not any(p.startswith(team_files.END_EMPTY) for p in r.problems):
             problems.append("끝 줄이 없다 — 아직 도는 중이다")
     elif r.head and r.end != r.head:
         problems.append("끝 줄의 커밋 %s 가 머리의 head 와 다르다(%s)" % (_short(r.end), _short(r.head)))
@@ -232,6 +245,8 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
                                      % (last.name, _short(last.commit), _short(head))], latest
     job_dir = team.job(job) + "/"
     design = team.design(job)
+    if not main:   # 기본 브랜치를 빼지 못하면 합쳐 들어온 변경과 이 과제의 변경을 가르지 못한다
+        return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — 기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다" % last.name], latest
     changed = git.touched(tip, [head, main], list(reserved) + list(outputs) + [design, job_dir])
     if changed is None:
         return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — 받은 뒤의 변경을 읽지 못했다" % last.name], latest

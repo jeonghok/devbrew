@@ -226,6 +226,7 @@ _NUMBER_RE = re.compile(r"[1-9][0-9]*")
 _TASK_RE = re.compile(r"Task (0|[1-9][0-9]*)/(0|[1-9][0-9]*): (끝|막힘) — (\S.*)")   # 0 은 읽고(진행 줄 깨짐이 된다) 앞의 0 은 꼴이 아니다
 _AC_RE = re.compile(r"AC[0-9]+:")
 _END_PREFIX = "끝 — "
+END_EMPTY = "「끝」 줄에 커밋 글이 없다"   # 이 사유가 있으면 「끝」 줄은 있되 읽을 커밋이 없다(job_results 가 「끝 줄이 없다」 를 덧내지 않는다)
 END_PREFIX = _END_PREFIX
 _TASK_BLOCKED = "막힘"
 _MACHINE_PREFIXES = ("Ruling:", "규칙 반증:", "산출물:")
@@ -355,7 +356,7 @@ def parse_result(text: str) -> Result:
             if ended:
                 r.problems.append("「끝」 줄이 둘이다: %s" % line)
             elif not line[len(_END_PREFIX):].strip():
-                r.problems.append("「끝」 줄에 커밋 글이 없다: %s" % line)
+                r.problems.append("%s: %s" % (END_EMPTY, line))
             else:
                 r.end = line[len(_END_PREFIX):].strip()
             ended = True

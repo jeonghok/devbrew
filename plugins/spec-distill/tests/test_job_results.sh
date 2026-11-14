@@ -55,6 +55,16 @@ elif kind == "bom":
     t = "﻿" + t
 elif kind == "crlf":
     t = t.replace("\n", "\r\n")
+elif kind == "stage-skew":
+    t = re.sub(r"(?m)^stage: .*$", "stage: plan", t)
+elif kind == "plan-skew":
+    t = re.sub(r"(?m)^plan: .*$", "plan: 2", t)
+elif kind == "empty-end":
+    t = t.replace("끝 — " + code, "끝 — ")
+elif kind == "ac-twice":
+    t = t.replace("끝 — ", "AC3: 구현됨 — 한 번\nAC3: 미룸 — 두 번\n끝 — ")
+elif kind == "ac-out-of-scope":
+    t = t.replace("끝 — ", "AC3: 구현됨 — 범위 밖이지만 적었다\n끝 — ")
 elif kind == "attempt-2":
     t = t.replace("attempt: 1", "attempt: 2")
 elif kind == "no-output":
@@ -102,7 +112,8 @@ assert_contains "$(cat "$T/out.txt")" "- 결과 받음 · 2026-11-20 · 「imple
 assert_eq "$(grep -c '^- 결과 받음 · ' "$T/out.txt")" "1" "대조: 받음 줄은 줄 머리에 한 번"
 
 # ── 거절 갈래 ────────────────────────────────────────────────────────────────
-for v in no-end end-differs no-head head-elsewhere head-ghost bundle-ghost job-ghost ac-missing ac-unknown ac-shape fenced bom crlf; do
+for v in no-end end-differs no-head head-elsewhere head-ghost bundle-ghost job-ghost ac-missing ac-unknown ac-shape fenced bom crlf \
+         stage-skew plan-skew empty-end ac-twice ac-out-of-scope; do
   variant "$GOOD" "$v" mutate "$W/$R1" "$v" || no "변이 브랜치 $v 를 만들지 못했다"
 done
 reject no-end "끝 줄이 없다" "「끝」 없음(no-end)"
@@ -121,6 +132,30 @@ assert_eq "$(jr v/crlf implement-plan-1-1.md)" "0" "대조: CRLF 는 LF 와 같�
 assert_eq "$(sed -n 1p "$T/out.txt")" "$FIRST" "대조: CRLF 의 첫 줄은 통과 그대로"
 variant "$GOOD" renamed g mv -- "$R1" "$TM/jobs/E1/results/implement-plan-1-2.md" || no "변이 브랜치 renamed 를 만들지 못했다"
 reject renamed "이름과 다르다" "이름과 머리 어긋남(renamed)" implement-plan-1-2.md
+reject stage-skew "머리의 단계 · 계획 · 시도(plan · 1 · 1)가 이름과 다르다" "이름과 머리 어긋남 — 단계 축(stage-skew)"
+reject plan-skew "머리의 단계 · 계획 · 시도(implement · 2 · 1)가 이름과 다르다" "이름과 머리 어긋남 — 계획 번호 축(plan-skew)"
+reject empty-end "「끝」 줄에 커밋 글이 없다" "끝 줄의 커밋 글이 빔(empty-end)"
+assert_eq "$(sed -n 1p "$T/out.txt")" "결과 대조: 거절 1건 — implement-plan-1-1.md" "대조: 빈 끝 줄은 「끝 줄이 없다」 를 덧내지 않는다(empty-end)"
+reject ac-twice "보고에 AC3 가 두 번 있다" "같은 AC 줄 둘 — 범위 밖 AC 라도(ac-twice)"
+assert_eq "$(jr v/ac-out-of-scope implement-plan-1-1.md)" "0" "대조: 설계에 있고 계획 범위 밖인 AC 줄은 거절이 아니다(ac-out-of-scope) — rc 0"
+assert_eq "$(sed -n 1p "$T/out.txt")" "$FIRST" "대조: 범위 밖 AC 줄은 첫 줄의 수에 실리지 않는다(ac-out-of-scope)"
+plan_noac() { put "$TM/jobs/E1/plan-1.md" "$(printf '# 번호 없는 계획\n\n### Task 1: 번호를 적지 않은 일\n\n그냥 한다.')"; }
+variant "$GOOD" plan-noac plan_noac || no "변이 브랜치 plan-noac 을 만들지 못했다"
+assert_eq "$(jr v/plan-noac implement-plan-1-1.md)" "3" "대조: 계획 파일이 있는데 범위가 비면 검사 불가(plan-noac) — rc 3"
+assert_contains "$(cat "$T/out.txt")" "검사 불가 사유: 범위를 정할 수 없다 — $TM/jobs/E1/plan-1.md" "대조: 빈 범위의 사유가 계획 파일을 댄다(plan-noac)"
+assert_not_contains "$(cat "$T/out.txt")" "- 결과 받음 · " "대조: 빈 범위면 받음 줄을 내지 않는다(plan-noac)"
+as_dir() { g rm -q -- "$1" && put "$1/inner.md" "파일 자리에 둔 폴더"; }
+variant "$GOOD" design-dir as_dir "$TM/jobs/E1/design.md" || no "변이 브랜치 design-dir 을 만들지 못했다"
+variant "$GOOD" plan-dir as_dir "$TM/jobs/E1/plan-1.md" || no "변이 브랜치 plan-dir 을 만들지 못했다"
+variant "$GOOD" result-dir as_dir "$R1" || no "변이 브랜치 result-dir 을 만들지 못했다"
+for d in design-dir:"$TM/jobs/E1/design.md" plan-dir:"$TM/jobs/E1/plan-1.md" result-dir:"$R1"; do
+  v="${d%%:*}"; at="${d#*:}"
+  assert_eq "$(jr "v/$v" implement-plan-1-1.md)" "3" "대조: 파일 자리가 폴더면 검사 불가($v) — rc 3"
+  assert_eq "$(sed -n 1p "$T/out.txt")" "결과 대조: 검사 불가 — implement-plan-1-1.md" "대조: 파일 자리가 폴더일 때의 첫 줄($v)"
+  assert_contains "$(cat "$T/out.txt")" "파일이 아닌 경로다" "대조: 파일 자리가 폴더라는 사유($v)"
+  assert_contains "$(cat "$T/out.txt")" "$at" "대조: 그 경로를 댄다($v)"
+  assert_not_contains "$(cat "$T/out.txt")" "- 결과 받음 · " "대조: 파일 자리가 폴더면 받음 줄을 내지 않는다($v)"
+done
 newer_file() { cp "$W/$R1" "$W/$TM/jobs/E1/results/implement-plan-1-2.md" && mutate "$W/$TM/jobs/E1/results/implement-plan-1-2.md" attempt-2; }
 variant "$GOOD" newer newer_file || no "변이 브랜치 newer 를 만들지 못했다"
 reject newer "더 새 시도 implement-plan-1-2.md" "더 새 시도(newer)"
@@ -175,7 +210,7 @@ assert_contains "$(cat "$T/out.txt")" "feature/tm-e1b" "브랜치: 없는 브랜
 assert_eq "$(jraw --roadmap "$RM" --job E1 --result implement-plan-3-1.md)" "2" "브랜치: 블록에 없는 계획 번호의 브랜치 — 2"
 assert_contains "$(cat "$T/out.txt")" "계획 3" "브랜치: 그 사유"
 assert_eq "$(jraw --roadmap "$RM" --job E1 --branch feature/tm-e1)" "2" "사용법: --result 없음 → 2"
-assert_contains "$(cat "$T/out.txt")" "--result" "사용법: --result 가 없다고 말한다"
+assert_contains "$(cat "$T/out.txt")" "required: --result" "사용법: --result 가 없다고 말한다"
 assert_eq "$(jraw --roadmap "$RM" --job fix-typo --result implement-1.md)" "2" "사용법: 블록이 아닌 과제에 --branch 없음 → 2"
 assert_contains "$(cat "$T/out.txt")" "--branch" "사용법: --branch 가 필요하다고 말한다"
 assert_eq "$(jraw --roadmap "$RM" --job "../x" --branch feature/tm-e1 --result implement-plan-1-1.md)" "2" "사용법: 과제 이름 꼴이 아니면 2"
@@ -194,14 +229,14 @@ assert_eq "$(jr no/such-branch implement-plan-1-1.md)" "3" "검사 불가: 브�
 assert_contains "$(cat "$T/out.txt")" "no/such-branch" "검사 불가: 그 브랜치 이름을 댄다"
 g remote set-head origin -d
 assert_eq "$(jr feature/tm-e1 implement-plan-1-1.md)" "3" "검사 불가: 기본 브랜치(origin/HEAD)를 모르면 3"
-assert_contains "$(sed -n 1p "$T/out.txt")" "결과 대조: 검사 불가 — " "검사 불가: 기본 브랜치를 모를 때의 첫 줄"
+assert_contains "$(sed -n 1p "$T/out.txt")" "결과 대조: 검사 불가 — 기본 브랜치를 알 수 없다 — origin/HEAD 가 없다" "검사 불가: 기본 브랜치를 모를 때의 첫 줄과 사유"
 g remote set-head origin main
 
 # ── Git.names · Git.touched · result_names · newest ──────────────────────────
 pyq() {  # pyq <파이썬 식> — git · team · JR · rs 를 두고 식을 출력한다. 식은 이 테스트가 쓴 고정 문자열뿐이다
   (cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status as rs, job_results as JR, team_layout as L
 git = rs.Git(sys.argv[2]); team = L.team_from_roadmap(sys.argv[3], sys.argv[4])
-print(eval(sys.argv[5]))' "$S" "$W" "$RD" "$RM" "$1")
+print(eval(sys.argv[5]))' "$S" "$W/${AT:-}" "$RD" "$RM" "$1")
 }
 g checkout -q -b names main
 for f in BLOCKED.md implement-plan-1-1.md implement-plan-1-3.md implement-plan-2-1.md review-1.md; do put "$TM/jobs/E3/results/$f" "이름만 보는 픽스처"; done
@@ -219,22 +254,24 @@ assert_eq "$(pyq 'JR.result_names(git, "f" * 40, team, "E3")')" "None" "result_n
 assert_eq "$(pyq '(git.touched("f" * 40, [], []), len(git.failures))')" "([], 0)" "Git.touched: 볼 자리가 비면 git 을 부르지 않고 []"
 assert_eq "$(pyq '(git.touched("f" * 40, [], ["src/e1/"]), len(git.failures))')" "(None, 1)" "Git.touched: git 이 실패하면 None 과 failures"
 assert_eq "$(pyq 'git.touched("feature/tm-e1", ["main"], ["src/e1/", team.design("E1")])')" "['$TM/jobs/E1/design.md', 'src/e1/a.txt']" "Git.touched: 볼 자리 아래 바뀐 파일(정렬)"
+assert_eq "$(AT=docs/tv pyq 'git.touched("feature/tm-e1", ["main"], ["src/e1/", team.design("E1")])')" "['$TM/jobs/E1/design.md', 'src/e1/a.txt']" "Git.touched: 하위 폴더에서 불러도 레포 뿌리 기준으로 같은 파일"
 assert_eq "$(pyq 'JR.plan_scope(None, ["AC1", "AC2"])')" "['AC1', 'AC2']" "plan_scope: 계획 글이 없으면 전부"
 assert_eq "$(pyq 'JR.plan_scope("# p\n\nAC1 머리 밖\n\n### Task 1: x\n\nAC3 · AC2 · AC7\n", ["AC1", "AC2", "AC3"])')" "['AC2', 'AC3']" "plan_scope: task 절의 AC 가운데 설계에 있는 것(설계의 차례)"
 
 # ── receipt — 받음 줄 다시 계산 (단계 계산 없이 닿는 갈래 · 나머지는 Task 7 의 「받음:」) ─
 rcpt() {  # rcpt <끝 ref> <받음 줄…> — E1 INTENT.md 에 줄들을 더한 글로 receipt 를 부르고 「상태|알림 / …|가장 새 이름」 을 낸다
   local tip="$1"; shift
-  (cd "$W" && python3 - "$S" "$W" "$RD" "$RM" "$tip" "$@" <<'PY'
+  (cd "$W" && python3 - "$S" "$W/${AT:-}" "$RD" "$RM" "$tip" "$@" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 import roadmap_status as rs, job_results as JR, team_layout as L, team_files as F
+import os
 git = rs.Git(sys.argv[2]); team = L.team_from_roadmap(sys.argv[3], sys.argv[4])
 main = git.commit("origin/main"); tip = git.commit(sys.argv[5]) or sys.argv[5]
 text = git.blob(main, team.intent("E1"))
 for line in sys.argv[6:]:
     text = F.append_decision(text, line) if F.decision_problem(line) is None else text.rstrip("\n") + "\n" + line + "\n"
-state, notes, latest = JR.receipt(git, main, tip, team, "E1", text, L.STAGES[2], 1, ["src/e1/"], [])
+state, notes, latest = JR.receipt(git, None if os.environ.get("NOMAIN") else main, tip, team, "E1", text, L.STAGES[2], 1, ["src/e1/"], [])
 print("%s|%s|%s" % (state, " / ".join(notes), latest))
 PY
   )
@@ -254,12 +291,18 @@ assert_eq "$(rcpt v/no-end "$LINE_GOOD")" "세지 않음|받음 줄을 세지 �
 assert_eq "$(rcpt v/newer "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — 더 새 시도 implement-plan-1-2.md 가 있다|implement-plan-1-2.md" "받음: 더 새 시도 — 낡음"
 assert_eq "$(rcpt feature/tm-e1 "- 결과 받음 · 2026-11-20 · 받았다" | cut -d'|' -f1,2)" "없음|받음 줄을 세지 않았다: 꼴이 깨졌다 — - 결과 받음 · 2026-11-20 · 받았다" "받음: 꼴이 깨진 받음 줄은 알리고 세지 않는다"
 assert_eq "$(rcpt feature/tm-e1 "- 결과 받음 · 2026-11-20 · 「implement-plan-2-1.md · $CODE · x」" | cut -d'|' -f1)" "없음" "받음: 다른 계획의 받음 줄은 보지 않는다"
+assert_eq "$(rcpt feature/tm-e1 "$LINE_GOOD" "- 결과 받음 · 2026-11-21 · 「implement-plan-2-1.md · $OTHER · x」")" "받음||implement-plan-1-1.md" "받음: 맞는 줄 뒤에 다른 계획의 받음 줄이 와도 그 결과 파일의 마지막 줄을 쓴다"
+assert_eq "$(rcpt v/result-dir "$LINE_GOOD")" "세지 않음|받음 줄을 세지 않았다: implement-plan-1-1.md — 파일이 아닌 경로다(블롭이 아니다): $R1|implement-plan-1-1.md" "받음: 결과 파일 자리가 폴더면 죽지 않고 세지 않음"
+assert_eq "$(rcpt v/design-dir "$LINE_GOOD" | cut -d'|' -f1)" "세지 않음" "받음: 설계문서 자리가 폴더면 세지 않음"
 variant "$GOOD" code-after put src/e1/b.txt "받은 뒤의 코드" || no "변이 브랜치 code-after 를 만들지 못했다"
 assert_eq "$(rcpt v/code-after "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt|implement-plan-1-1.md" "받음: head 뒤 고칠 자리 변경 — 낡음"
+assert_eq "$(AT=docs/tv rcpt v/code-after "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt|implement-plan-1-1.md" "받음: 하위 폴더에서 불러도 고칠 자리 변경을 본다"
+assert_eq "$(NOMAIN=1 rcpt v/code-after "$LINE_GOOD")" "세지 않음|받음 줄을 세지 않았다: implement-plan-1-1.md — 기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다|implement-plan-1-1.md" "받음: 기본 브랜치를 모르면 받은 뒤의 변경을 세지 않고 세지 않음"
 design_more() { printf '\n받은 뒤 설계에 더한 문단\n' >> "$W/$TM/jobs/E1/design.md"; }
 variant "$GOOD" design-after design_more || no "변이 브랜치 design-after 를 만들지 못했다"
 assert_eq "$(rcpt v/design-after "$LINE_GOOD" | cut -d'|' -f1,2)" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — $TM/jobs/E1/design.md" "받음: design.md 변경 — 낡음"
-variant "$GOOD" plan-after put "$TM/jobs/E1/plan-1.md" "계획을 바꿨다" || no "변이 브랜치 plan-after 를 만들지 못했다"
+plan_more() { printf '\n받은 뒤 계획에 더한 문단\n' >> "$W/$TM/jobs/E1/plan-1.md"; }
+variant "$GOOD" plan-after plan_more || no "변이 브랜치 plan-after 를 만들지 못했다"
 assert_eq "$(rcpt v/plan-after "$LINE_GOOD" | cut -d'|' -f1,2)" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — $TM/jobs/E1/plan-1.md" "받음: 계획 파일 변경 — 낡음"
 variant "$GOOD" intent-after decide E1 "- 결정 · 2026-11-21 · 「받은 뒤 결정 한 줄」" || no "변이 브랜치 intent-after 를 만들지 못했다"
 variant v/intent-after review-after put "$TM/jobs/E1/results/review-1.md" "검수 결과" || no "변이 브랜치 review-after 를 만들지 못했다"
@@ -270,5 +313,8 @@ assert_eq "$(rcpt v/many-after "$LINE_GOOD" | cut -d'|' -f2)" "받은 뒤 바뀜
 put src/e1/z.txt "기본 브랜치가 고친 고칠 자리" && g commit -qm "기본 브랜치에서 E1 자리" && g push -q origin main && g fetch -q origin
 g checkout -q -b v/merged "$GOOD" && g merge -q --no-ff --no-edit main && g checkout -q main
 assert_eq "$(rcpt v/merged "$LINE_GOOD")" "받음||implement-plan-1-1.md" "받음: 기본 브랜치를 합친 merge 뿐이면 받음 그대로(Review Focus 4)"
+g checkout -q -b e2side main && put src/e1/q.txt "다른 에픽이 머지 전에 고친 자리" && g commit -qm "다른 에픽" && g checkout -q main
+g checkout -q -b v/epic-merge "$GOOD" && g merge -q --no-ff --no-edit e2side && g checkout -q main
+assert_eq "$(rcpt v/epic-merge "$LINE_GOOD" | cut -d'|' -f1,2)" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/q.txt" "받음: 기본 브랜치에 없는 다른 브랜치를 합친 변경은 받은 뒤 바뀜이다(Q6)"
 
 finish

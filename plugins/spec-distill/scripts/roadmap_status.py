@@ -240,11 +240,12 @@ class Git:
 
     def touched(self, tip: str, excludes: list, paths: list):
         """tip 에서 닿고 excludes 의 어느 커밋에서도 닿지 않는 merge 아닌 커밋이 paths 아래에서 바꾼 파일(정렬 · 겹침 없음).
-        paths 는 글자 그대로의 경로다(폴더면 그 아래 전부). paths 가 비면 git 을 부르지 않고 []. 실패하면 failures 에 남기고 None."""
+        paths 는 레포 뿌리 기준 · 글자 그대로의 경로다(폴더면 그 아래 전부 — cwd 와 무관하다).
+        paths 가 비면 git 을 부르지 않고 []. 실패하면 failures 에 남기고 None."""
         if not paths:
             return []
         rc, out, err = self.run_err("log", "--no-merges", "--full-history", "--no-renames", "--format=", "--name-only", "-z",
-                                    tip, *["^" + e for e in excludes if e], "--", *[":(literal)" + p for p in paths])
+                                    tip, *["^" + e for e in excludes if e], "--", *[":(top,literal)" + p for p in paths])
         if rc != 0:
             self.fail("log", rc, err)
             return None
