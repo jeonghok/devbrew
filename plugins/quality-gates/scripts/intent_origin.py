@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import datetime
 import os
 import stat
 import subprocess
@@ -380,19 +381,39 @@ def render_scope(breadth: str, names: Optional[set], repo: str, base: str, end: 
     return "\n".join(lines) + "\n"
 
 
-def frontmatter_value(text: str, key: str) -> Optional[str]:
+def _frontmatter(text: str) -> tuple:
+    """(머리의 YAML 값 | None, 머리가 있는데 YAML 로 읽지 못했나).
+
+    YAML 은 YAMLError 말고도 예외를 낸다(없는 날짜 · 틀린 수의 ValueError 등) — 어떤 예외든 읽지 못한 머리다.
+    """
     if not text.startswith("---\n"):
-        return None
+        return (None, False)
     end = text.find("\n---", 4)
     if end < 0:
-        return None
+        return (None, False)
     try:
-        data = yaml.safe_load(text[4:end])
-    except yaml.YAMLError:
+        return (yaml.safe_load(text[4:end]), False)
+    except Exception:  # noqa: BLE001 — 남의 문서 머리 하나가 단계를 죽이지 않게
+        return (None, True)
+
+
+def frontmatter_unreadable(text: str) -> bool:
+    """머리(`---` 사이)가 있는데 YAML 로 읽히지 않는가 — 「머리 없음」 과 가르려고."""
+    return _frontmatter(text)[1]
+
+
+# 머리 값으로 받는 꼴 — 목록 · 매핑은 받지 않는다(글로 바꾸면 YAML 별칭이 펼쳐진다).
+_SCALARS = (str, int, float, datetime.date)
+
+
+def frontmatter_value(text: str, key: str) -> Optional[str]:
+    data = _frontmatter(text)[0]
+    if not isinstance(data, dict):
         return None
-    if not isinstance(data, dict) or data.get(key) is None:
+    value = data.get(key)
+    if value is None or not isinstance(value, _SCALARS):
         return None
-    return str(data[key]).strip()
+    return str(value).strip()
 
 
 # ---------------------------------------------------------------- 의도 문서 · 리뷰의 넓이

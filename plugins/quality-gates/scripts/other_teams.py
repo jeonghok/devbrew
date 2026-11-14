@@ -4,7 +4,8 @@
 git 은 `_git` 한 자리로만 부른다 — argv 목록(셸 없음) · `git -C <리포>`. 경로를 pathspec 으로
 넘길 때는 `lit` 로 경로마다 `:(literal)` 접두를 붙인다(전역 `--literal-pathspecs` 는 쓰지 않는다).
 rev 와 경로를 함께 받는 하위 명령(rev-list · log · diff · ls-tree)은 rev 뒤를 `--` 로 닫는다 — 작업
-트리에 rev 와 같은 이름의 파일(`HEAD` · 기본 ref 경로)이 있어도 rev 로만 읽힌다. 파일 내용은
+트리에 rev 와 같은 이름의 파일(`HEAD` · 기본 ref 경로)이 있어도 rev 로만 읽힌다. `log` 는
+`--no-show-signature` 를 단다 — 사용자 설정 `log.showSignature` 가 서명 글을 출력에 섞지 않게. 파일 내용은
 `intent_origin` 의 `read_tree` · `read_tracked`(추적되는 보통 파일만 · 링크 없음)로만 읽는다.
 리포를 바꾸는 명령은 쓰지 않는다. 네트워크는 `open_prs` 의 열린 PR 목록 한 번뿐이다.
 이 모듈은 `adjudication` 을 쓰지 않는다.
@@ -46,6 +47,9 @@ LINE_INTERVIEW = "인터뷰 단계의 팀은 확인 못 함 — 그 문서의 �
 LINE_WORKTREES_UNREADABLE = "다른 worktree 를 확인 못 함 — worktree 목록을 읽지 못함"
 LINE_NO_FETCH = "원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다"
 LINE_UNSEEN = "다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음"
+# 브랜치 하나의 읽기가 예외로 끝남(그 브랜치만 빠진다) · 문서 머리가 YAML 로 읽히지 않음.
+LINE_BRANCH_FAILED = "브랜치 %s 를 읽지 못함 — %s"
+LINE_FRONTMATTER = "%s 의 %s 머리를 읽지 못함 — 의도 문서인지 확인 못 함"
 PR_NO_GH = "gh 없음"
 PR_NO_ORIGIN = "origin 을 읽지 못함"
 PR_TIMED_OUT = "시간 초과"
@@ -182,8 +186,8 @@ def _branch_entry(repo: str, name: str, sha: str, stamp: int, default_ref: str,
         return None, True
     if not ahead.stdout.strip():
         return None, False
-    log = _git(repo, "log", "--no-merges", "--no-renames", "--format=", "--name-only", "-z",
-               sha, "--not", default_ref, end, "--")
+    log = _git(repo, "log", "--no-show-signature", "--no-merges", "--no-renames", "--format=",
+               "--name-only", "-z", sha, "--not", default_ref, end, "--")
     if not _ok(log):
         return None, True
     paths = _z_paths(log.stdout)
@@ -308,7 +312,7 @@ def _commit_time(repo: str, rev: str, rel: str) -> int:
     """rev 에서 rel 을 마지막으로 바꾼 커밋의 시각(unix). 모르면 0."""
     if not _rev_ok(rev):
         return 0
-    proc = _git(repo, "log", "-1", "--format=%ct", rev, "--", lit(rel))
+    proc = _git(repo, "log", "--no-show-signature", "-1", "--format=%ct", rev, "--", lit(rel))
     if not _ok(proc):
         return 0
     try:
@@ -522,15 +526,22 @@ def _pr_label(entry: dict, prs_known: bool) -> str:
 
 # ---------------------------------------------------------------- 다른 작업 항목
 
-def _intent_docs(repo: str, entry: dict, markers: List[str]) -> List[tuple]:
-    """그 브랜치 끝에서 읽은 의도 문서 `(경로, 글)` — 다른 작업이 바꾼 문서 파일 가운데."""
+def _intent_docs(repo: str, entry: dict, markers: List[str], unverified: List[str]) -> List[tuple]:
+    """그 브랜치 끝에서 읽은 의도 문서 `(경로, 글)` — 다른 작업이 바꾼 문서 파일 가운데.
+
+    머리가 YAML 로 읽히지 않는 문서는 의도 문서로 세지 않고 「확인 못 함」 에 그 브랜치 · 경로를 남긴다.
+    """
     docs: List[tuple] = []
     for rel in sorted(entry["paths"]):
         # 「문서 파일」 은 넓이 판정(review_breadth)과 같은 뜻 — 모델이 읽는 파일은 빼고.
         if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
             continue
         text, _why = io_.read_tracked(repo, entry["sha"], rel)
-        if text is not None and io_.is_intent_doc(text, markers):
+        if text is None:
+            continue
+        if io_.frontmatter_unreadable(text):
+            unverified.append(LINE_FRONTMATTER % (one_line(entry["name"]), one_line(rel)))
+        elif io_.is_intent_doc(text, markers):
             docs.append((rel, text))
     return docs
 
@@ -569,6 +580,10 @@ def _branch_unit(repo: str, entry: dict, default_ref: str, prs_known: bool,
             continue
         parts.append("#### 겹치는 파일 %s\n%s" % (one_line(rel), diff))
     return ("work", name, "".join(parts))
+
+
+def _branch_failed(entry: dict, exc: Exception) -> str:
+    return LINE_BRANCH_FAILED % (one_line(str(entry.get("name", "?"))), type(exc).__name__)
 
 
 def _overlap_line(entry: dict, prs_known: bool) -> str:
@@ -667,7 +682,11 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
         for number in _attach_prs(repo, entries, prs or []):
             unverified.append("PR #%d 내용 확인 못 함 — 그 브랜치가 이 리포에 없다" % number)
         for entry in entries:
-            entry["docs"] = _intent_docs(repo, entry, markers)
+            try:
+                entry["docs"] = _intent_docs(repo, entry, markers, unverified)
+            except Exception as exc:  # noqa: BLE001 — 브랜치 하나의 실패가 기록 전체를 지우지 않게
+                entry["docs"] = []
+                unverified.append(_branch_failed(entry, exc))
             if entry["overlap"]:
                 overlapped.append(entry)
             elif entry["docs"]:
@@ -677,7 +696,10 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
         overlapped.sort(key=lambda e: (-len(e["overlap"]), -e["time"], e["name"]))
         rest.sort(key=lambda e: (-e["time"], e["name"]))
         for entry in overlapped + rest:
-            units.append(_branch_unit(repo, entry, default[1], prs_known, unverified))
+            try:
+                units.append(_branch_unit(repo, entry, default[1], prs_known, unverified))
+            except Exception as exc:  # noqa: BLE001 — 같은 까닭(시각이 터무니없는 커밋 등)
+                unverified.append(_branch_failed(entry, exc))
     if _interview_unmarked(markers):
         unverified.append(LINE_INTERVIEW)
     worktrees = _other_worktrees(repo, tree_root)

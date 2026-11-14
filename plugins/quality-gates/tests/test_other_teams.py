@@ -150,6 +150,25 @@ def _subcommand(args):
     return args[i] if i < len(args) else None
 
 
+def _assert_logs_hide_signatures(case, calls):
+    """적힌 `log` 호출마다 `--no-show-signature` — 사용자 설정 log.showSignature 가 서명 글을 이름 목록에 섞지 않게."""
+    logs = [args for sub, _rc, args in calls if sub == "log"]
+    case.assertTrue(logs, "log 호출이 없다 — 이 단언이 공허하다")
+    for args in logs:
+        case.assertIn("--no-show-signature", args)
+
+
+# 서명 · 검증을 흉내 내는 gpg — 서명된 커밋을 네트워크 · 키 없이 만들고, 검증 때 사람이 읽는 글을 stderr 로 낸다.
+FAKE_GPG = ("#!/bin/sh\ncase \" $* \" in\n"
+            "  *\" -bsau \"*) cat >/dev/null\n"
+            "    printf -- '-----BEGIN PGP SIGNATURE-----\\n\\nZmFrZQ==\\n-----END PGP SIGNATURE-----\\n'\n"
+            "    echo '[GNUPG:] SIG_CREATED D 1 8 00 0 X' >&2; exit 0 ;;\n"
+            "  *\" --verify \"*) cat >/dev/null\n"
+            "    echo 'Good \"fake\" signature' >&2\n"
+            "    echo '[GNUPG:] GOODSIG 0 fake'; exit 0 ;;\n"
+            "esac\nexit 1\n")
+
+
 _TEMPLATE = {}
 
 
@@ -304,6 +323,30 @@ class TestOtherWork(_Fixture):
         self.assertEqual(_names(entries), ["feature/mine-next", "feature/other"])
         self.assertEqual(unreadable, 1)
 
+    def test_signed_commits_under_show_signature(self):
+        """사용자 설정 log.showSignature=true — 서명된 커밋의 서명 글이 경로 목록 · 커밋 시각에 섞이지 않는다."""
+        repo, shas = self._fresh()
+        fake = os.path.join(os.path.dirname(repo), "fake-gpg.sh")
+        tic._write(FAKE_GPG, fake)
+        os.chmod(fake, 0o755)
+        for key, value in (("gpg.format", "openpgp"), ("gpg.program", fake),
+                           ("user.signingkey", "fake")):
+            _run(repo, "config", key, value)
+        when = DAY0 + 90 * 86400
+        _run(repo, "checkout", "-q", "-b", "feature/signed", shas["c0"])
+        tic._write("s\n", repo, "sig.txt")
+        _run(repo, "add", "sig.txt")
+        _run(repo, "commit", "-q", "-S", "-m", "signed", when=when)
+        _run(repo, "checkout", "-q", "feature/mine")
+        _run(repo, "config", "log.showSignature", "true")
+        # 양성 대조 — 이 설정에서 git 은 서명 글을 이름 목록 앞에 실제로 낸다.
+        self.assertIn('Good "fake" signature',
+                      _run(repo, "log", "--format=", "--name-only", "-1", "feature/signed"))
+        entries, unreadable = self._work(repo=repo)
+        self.assertEqual(unreadable, 0)
+        self.assertEqual(_by_name(entries, "feature/signed")["paths"], {"sig.txt"})
+        self.assertEqual(ot._commit_time(repo, "feature/signed", "sig.txt"), when)
+
     def test_uncountable_when_refs_unreadable(self):
         with _NotARepo() as plain:
             self.assertEqual(ot.other_work(plain, DEFAULT_REF, "HEAD"), ([], None))
@@ -360,6 +403,7 @@ class TestReadOnlyGit(_Fixture):
         self.assertEqual({c[0] for c in calls},
                          {"symbolic-ref", "rev-parse", "for-each-ref", "rev-list", "log",
                           "diff", "merge-base"})
+        _assert_logs_hide_signatures(self, calls)
         for sub, rc, args in calls:
             self.assertIsNotNone(rc, args)
             if sub == "merge-base" and "--is-ancestor" in args:
@@ -735,6 +779,49 @@ class TestOtherWorkRecord(_Fixture):
         self.assertIn("- 브랜치 목록을 읽지 못함 — 다른 브랜치를 읽지 않았다", _unverified(text))
         self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
 
+    def test_unreadable_frontmatter_named(self):
+        """다른 브랜치 문서의 머리가 YAML 로 읽히지 않는다(없는 날짜) — 기록은 쓰이고 다른 브랜치도 그대로,
+        그 브랜치 · 문서는 「확인 못 함」 에 이름으로 남는다."""
+        repo, _ = self._fresh()
+        bad = "---\ncreated_at: 2026-02-30\nroadmap: docs/rm/two/roadmap.md\n---\n# 틀린 머리\n"
+        _on_branch(repo, "feature/far", {"docs/bad-design.md": bad}, 50)
+        text = _collect(repo, names={"a.txt"})["text"]
+        self.assertIn("- feature/far 의 docs/bad-design.md 머리를 읽지 못함 — 의도 문서인지 확인 못 함",
+                      _unverified(text))
+        self.assertEqual(ot.summary(text)[0], ["- feature/other — a.txt"])
+        self.assertIn("#### 의도 문서 team/other-design.md\n", _block(text, "### feature/other "))
+        self.assertNotIn("#### 의도 문서 docs/bad", text)
+        self.assertIn(ot.HEAD_CAP, text)
+
+    def test_one_failing_branch_is_contained(self):
+        """브랜치 하나의 읽기가 예외로 끝나도 기록 전체를 잃지 않는다 — 그 브랜치 이름이 든 「확인 못 함」 한 줄."""
+        real_docs, real_unit = ot._intent_docs, ot._branch_unit
+
+        def docs(repo, entry, *rest):
+            if entry["name"] == "feature/other":
+                raise RuntimeError("x")
+            return real_docs(repo, entry, *rest)
+
+        with mock.patch.object(ot, "_intent_docs", docs):
+            text = _collect(self.repo, names={"a.txt", "z.txt"})["text"]
+        self.assertIn("- 브랜치 feature/other 를 읽지 못함 — RuntimeError", _unverified(text))
+        # 겹침은 경로 목록에서 이미 안다 — 목록에 그대로 남는다.
+        self.assertIn("- feature/other — a.txt", ot.summary(text)[0])
+        self.assertIn("### feature/far ", text)
+        self.assertNotIn("#### 의도 문서 team/other-design.md", text)
+
+        def unit(repo, entry, *rest):
+            if entry["name"] == "feature/far":
+                raise OverflowError("x")
+            return real_unit(repo, entry, *rest)
+
+        with mock.patch.object(ot, "_branch_unit", unit):
+            text = _collect(self.repo, names={"a.txt", "z.txt"})["text"]
+        self.assertIn("- 브랜치 feature/far 를 읽지 못함 — OverflowError", _unverified(text))
+        self.assertNotIn("### feature/far ", text)
+        self.assertIn("#### 의도 문서 team/other-design.md\n", _block(text, "### feature/other "))
+        self.assertIn("- feature/far — z.txt", ot.summary(text)[0])
+
     def test_worktree_count(self):
         repo, _ = self._fresh()
         line = "- 다른 worktree 1개의 커밋 안 된 작업은 읽지 않았다"
@@ -1005,8 +1092,11 @@ class TestCollectGitForms(_Fixture):
         with mock.patch.object(ot, "_git", wrap(real_ot)), \
                 mock.patch.object(ot.io_, "_run_git", wrap(real_io)):
             text = _collect(repo, names={"team/*.md", ":(top)x.md"})["text"]
-        subs = {c[0] for c in calls}
-        self.assertTrue({"ls-tree", "show", "ls-files", "log", "diff", "worktree"} <= subs, subs)
+        # 정해진 git 읽기 명령의 전부 — 새 하위 명령(리포를 바꾸는 것 포함)이 끼면 여기서 드러난다.
+        self.assertEqual({c[0] for c in calls},
+                         {"symbolic-ref", "rev-parse", "for-each-ref", "rev-list", "log", "diff",
+                          "merge-base", "ls-tree", "show", "ls-files", "worktree"})
+        _assert_logs_hide_signatures(self, calls)
         for sub, rc, args in calls:
             self.assertIsNotNone(rc, args)
             if sub == "merge-base":
