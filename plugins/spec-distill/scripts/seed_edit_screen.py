@@ -20,6 +20,9 @@ from seed_provenance import MARK, SENT_SPLIT_RE, norm
 
 NO_REASON = "대응하는 지적 없음 — 저자가 스스로 고침"
 IND = "   "
+USED_FILE = "hunk-used-findings.txt"
+RECOMMEND_NOTE = ("(권장) 은 저자가 댄 지적을 사용자가 적용하기로 했다는 뜻입니다 — "
+                  "편집이 그 지적에 맞는지는 아래 문장으로 직접 보세요")
 
 
 def line_parts(line: str) -> list[tuple[str, str]]:
@@ -108,6 +111,96 @@ def _same_skeleton(removed: list[str], added: list[str], rem: set, add: set) -> 
     return len(b) == len(s) and all(_cell_match(x, y) for x, y in zip(b, s))
 
 
+def parse_reasons(path: str, version: str, hunk_ids: set) -> dict:
+    """이유 파일을 읽는다. 첫 줄 `seed_sha256 <판본>`, 아래는 `<덩어리 번호><탭><지적 id 들(쉼표) | 없음>`."""
+    out = {"by_hunk": {}, "dropped": 0, "stale": False, "unreadable": False, "present": False}
+    p = pathlib.Path(path)
+    if not p.is_file():
+        return out
+    out["present"] = True
+    try:
+        text = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        out["unreadable"] = True
+        return out
+    lines = [ln.rstrip("\r") for ln in text.split("\n")]
+    if lines and lines[-1] == "":
+        lines.pop()
+    if not lines or lines[0].split() != ["seed_sha256", version]:
+        out["stale"] = True
+        return out
+    for ln in lines[1:]:
+        if not ln.strip():
+            continue
+        num, tab, val = ln.partition("\t")
+        pieces = [x.strip() for x in val.split(",")]
+        if (not tab or not num.isascii() or not num.isdigit() or int(num) not in hunk_ids
+                or any(not x for x in pieces)):
+            out["dropped"] += 1
+            continue
+        ent = out["by_hunk"].setdefault(int(num), {"ids": [], "self": False})
+        for x in pieces:
+            if x == "없음":
+                ent["self"] = True
+            elif x not in ent["ids"]:
+                ent["ids"].append(x)
+    return out
+
+
+def load_ledger(state_dir: str):
+    """리뷰 원장을 읽기만 한다. 어떤 이유로든 읽지 못하면 None."""
+    try:
+        import docreview_state
+        return docreview_state.load_state(state_dir)
+    except Exception:
+        return None
+
+
+def read_used(state_dir: str):
+    """앞 화면에서 이미 댄 지적의 id 집합. 읽지 못하면 None(없는 파일은 빈 집합)."""
+    p = pathlib.Path(state_dir) / USED_FILE
+    if p.is_symlink():
+        return None
+    if not p.exists():
+        return set()
+    try:
+        return {x.strip() for x in p.read_text(encoding="utf-8").split("\n") if x.strip()}
+    except (OSError, UnicodeError):
+        return None
+
+
+def finding_status(st, fid: str, used):
+    """(갈래, 이유 조각). 갈래는 confirmed · used · answered · unverified."""
+    f = st.get("findings", {}).get(fid) if isinstance(st, dict) else None
+    if not isinstance(f, dict):
+        return "unverified", "저자가 댄 지적 %s 은 원장에서 확인되지 않는다" % fid
+    head = "지적 「%s」(%s) — " % (norm(str(f.get("summary", ""))), fid)
+    fix = st.get("fixes", {}).get(fid)
+    if isinstance(fix, dict) and fix.get("state") in ("intent_passed", "applied"):
+        why = "사용자가 「적용」 으로 처분"
+    elif _adopted(st, fid):
+        why = "사용자가 채택"
+    else:
+        ask = st.get("asks", {}).get(fid)
+        if isinstance(ask, dict) and ask.get("answered"):
+            return "answered", head + "사용자가 답한 열린 질문"
+        return "unverified", "저자가 댄 지적 %s 은 원장에서 확인되지 않는다" % fid
+    if used is not None and fid in used:
+        return "used", head + "앞 화면에서 이미 댄 지적"
+    return "confirmed", head + why
+
+
+def _adopted(st: dict, fid: str) -> bool:
+    dec = st.get("decides", {}).get(fid)
+    if not isinstance(dec, dict) or dec.get("kind") == "post":
+        return False
+    last = None
+    for e in st.get("decision_log") or []:
+        if isinstance(e, dict) and fid in (e.get("finding_ids") or []):
+            last = e.get("choice")
+    return last == "adopt"
+
+
 def hunk_view(h: dict) -> dict:
     b_units = [u for line in h["removed"] for u in line_units(line)]
     s_units = [u for line in h["added"] for u in line_units(line)]
@@ -180,16 +273,46 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     hunks = hunks_doc["hunks"]
     views = [hunk_view(h) for h in hunks]
     mark_moves(views)
-    for v in views:
-        v["reason"] = NO_REASON
-        v["recommend"] = False
     if not hunks:
+        for v in views:
+            v["reason"], v["recommend"] = NO_REASON, False
         return {"text": "저자 편집 없음", "hunks": [], "questions": [], "notices": []}
+    rs = parse_reasons(reasons_path, str(hunks_doc.get("seed_sha256", "")), {h["id"] for h in hunks})
+    st = load_ledger(state_dir)
+    used = read_used(state_dir)
+    any_ids = False
+    for h, v in zip(hunks, views):
+        ent = rs["by_hunk"].get(h["id"], {"ids": [], "self": False})
+        any_ids = any_ids or bool(ent["ids"])
+        kinds, pieces = [], []
+        for fid in ent["ids"]:
+            kind, piece = finding_status(st, fid, used)
+            kinds.append(kind)
+            pieces.append(piece)
+        if ent["self"] or not ent["ids"]:
+            pieces.append(NO_REASON)
+        v["reason"] = "\n".join(pieces)
+        v["recommend"] = bool(ent["ids"]) and not ent["self"] and all(k == "confirmed" for k in kinds) \
+            and used is not None and not final
+    notices = []
+    if rs["unreadable"]:
+        notices.append("이유 파일을 읽지 못했다 — 고친 이유를 쓰지 않았다")
+    if rs["stale"]:
+        notices.append("이유 파일이 이 공시의 것이 아니다 — 고친 이유를 쓰지 않았다")
+    if rs["dropped"] > 0:
+        notices.append("이유 파일에서 읽지 못한 줄 %d개" % rs["dropped"])
+    if any_ids and st is None:
+        notices.append("리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다")
+    if any_ids and used is None:
+        notices.append("쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다")
     lines = ["저자 편집 %d곳 — 달라진 문장만 보입니다" % len(hunks)]
+    if any(v["recommend"] for v in views):
+        lines.append(RECOMMEND_NOTE)
+    lines += notices
     for k, (h, v) in enumerate(zip(hunks, views), 1):
         lines.append("")
         lines += _render(k, h, v)
-    return {"text": "\n".join(lines), "hunks": views, "questions": [], "notices": []}
+    return {"text": "\n".join(lines), "hunks": views, "questions": [], "notices": notices}
 
 
 def main(argv=None) -> int:

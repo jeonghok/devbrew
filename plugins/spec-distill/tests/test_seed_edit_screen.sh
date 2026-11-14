@@ -197,4 +197,142 @@ assert_eq "$rc" "3" "AC8: 기준 사본이 없으면 미리 보기 rc 3"
 mk same '가. 나.\n' '가. 나.\n'; scr same
 assert_eq "$(j same '(d["text"], d["hunks"], d["questions"])')" "('저자 편집 없음', [], [])" "덩어리가 0 이면 화면 글은 「저자 편집 없음」 한 줄이다"
 
+# ── 원장 fixture — fix 셋(적용 · 처분 전 · 적용하지 않음) · decide 둘(채택 · 거부) · ask 하나(답함) ──
+L="$TMP/L"; mkdir -p "$L/state"
+printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$L/s.md"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$L/s.audit.md"
+python3 "$S/docreview_state.py" init --state-dir "$L/state" --doc "$L/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$L/state" >/dev/null
+{ printf '```docreview-layer1\n'
+  while read -r cat disp summ; do
+    printf -- '- ref: c_%s\n  category: %s\n  anchor: "#__doc__"\n  disposition: %s\n  summary: "%s"\n' "$summ" "$cat" "$disp" "$summ"
+  done <<'EOF'
+premature_closure fix SCR_FIX_APPLY
+premature_closure fix SCR_FIX_PENDING
+omission fix SCR_FIX_DROP
+inference_as_decision decide SCR_DEC_ADOPT
+inference_as_decision decide SCR_DEC_REJECT
+unfounded_addition ask SCR_ASK
+EOF
+  printf '```\n```docreview-layer2\n[]\n```\n'; } > "$L/critic.txt"
+python3 "$S/docreview_route.py" prepare-recritic --state-dir "$L/state" --critic "$L/critic.txt" > "$L/prep.json"
+python3 "$S/docreview_route.py" finalize --state-dir "$L/state" --recritic-skipped --doc "$L/s.md" > "$L/fin.json"
+idof() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print([f["id"] for f in d["findings"] if f.get("summary")==sys.argv[2]][0])' "$L/fin.json" "$1"; }
+FA="$(idof SCR_FIX_APPLY)"; FP="$(idof SCR_FIX_PENDING)"; FD="$(idof SCR_FIX_DROP)"; DA="$(idof SCR_DEC_ADOPT)"; DR="$(idof SCR_DEC_REJECT)"; AK="$(idof SCR_ASK)"
+python3 "$S/docreview_anchor.py" check-intent "$FA" --intent '#__doc__' --state-dir "$L/state" >/dev/null
+python3 "$S/docreview_state.py" fix --state-dir "$L/state" --id "$FD" --event drop --reason="적용하지 않음" --log-file "$L/s.audit.md" >/dev/null
+python3 "$S/docreview_state.py" decide --state-dir "$L/state" --id "$DA" --choice adopt --quote="채택" --log-file "$L/s.audit.md" >/dev/null
+python3 "$S/docreview_state.py" decide --state-dir "$L/state" --id "$DR" --choice reject --quote="기각" --log-file "$L/s.audit.md" >/dev/null
+python3 "$S/docreview_state.py" ask --state-dir "$L/state" --id "$AK" --answered >/dev/null
+python3 - "$S" "$L/state" "$FA" "$FP" "$FD" "$DA" "$DR" "$AK" > "$L/pre.txt" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+st = ds.load_state(sys.argv[2])
+fa, fp, fd, da, dr, ak = sys.argv[3:9]
+last = {i: e["choice"] for e in st["decision_log"] for i in e["finding_ids"]}
+print(st["fixes"][fa]["state"], st["fixes"][fp]["state"], st["fixes"][fd]["state"], last[da], last[dr], st["asks"][ak]["answered"])
+PY
+assert_eq "$(cat "$L/pre.txt")" "intent_passed pending dropped adopt reject True" "전제: 원장 fixture — 적용한 fix · 처분 전 fix · 적용하지 않은 fix · 채택한 decide · 거부한 decide · 답한 ask"
+mk2() {   # mk2 <이름> → 덩어리 둘인 화면 + 원장 사본
+  mk "$1" '가.\n\n나.\n\n다.\n' '가 고침.\n\n나.\n\n다 고침.\n'
+  cp -R "$L/state/." "$TMP/$1/state/"
+}
+ver() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["seed_sha256"])' "$TMP/$1/hunks.json"; }
+why() {   # why <이름> <줄…> → 판본이 맞는 이유 파일. 줄은 printf %b 로 푼다(\t 가 탭)
+  local n="$1" l; shift
+  { printf 'seed_sha256 %s\n' "$(ver "$n")"; for l in "$@"; do printf '%b\n' "$l"; done; } > "$TMP/$n/state/hunk-reasons.txt"
+}
+rec() { j "$1" '[h["recommend"] for h in d["hunks"]]'; }
+force() {   # force <상태 폴더> <지적 id> <칸> <값> — 엔진의 읽기 · 쓰기로 원장의 한 칸을 바꾼다(decides 의 state · kind, findings 의 summary)
+  python3 - "$S" "$1" "$2" "$3" "$4" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+st = ds.load_state(sys.argv[2])
+st["decides" if sys.argv[4] in ("state", "kind") else "findings"][sys.argv[3]][sys.argv[4]] = sys.argv[5].replace("\\n", "\n")
+ds.save_state(sys.argv[2], st)
+PY
+}
+
+# ── AC4 — 확인된 덩어리에만 권장 ────────────────────────────────────────────────
+mk2 fixok; why fixok "1\t$FA"
+before="$(sums "$TMP/fixok/state")"
+scr fixok
+assert_eq "$(sums "$TMP/fixok/state")" "$before" "AC8: 화면 조립은 원장 자리(원장 · 이유 파일)를 바꾸지 않는다"
+assert_eq "$(rec fixok)" "[True, False]" "AC4: 사용자가 적용을 고른 fix 를 댄 덩어리만 권장이다(쓴 지적 목록 파일 없음 — 첫 화면)"
+TF="$(j fixok 'd["text"]')"
+assert_contains "$TF" "   고친 이유(저자가 댐): 지적 「SCR_FIX_APPLY」(${FA}) — 사용자가 「적용」 으로 처분" "AC4: 지적의 한 줄 요약 · id · 처분이 보인다"
+assert_contains "$TF" "   고친 이유(저자가 댐): 대응하는 지적 없음 — 저자가 스스로 고침" "AC4: 이유 파일에 없는 덩어리는 대응하는 지적 없음"
+assert_eq "$(j fixok 'd["text"].split("\n")[1]')" "(권장) 은 저자가 댄 지적을 사용자가 적용하기로 했다는 뜻입니다 — 편집이 그 지적에 맞는지는 아래 문장으로 직접 보세요" "AC4: 권장이 붙은 화면은 첫머리에 권장의 뜻 한 줄"
+mk2 decok; why decok "2\t$DA"; scr decok
+assert_eq "$(rec decok)" "[False, True]" "AC4: 사용자가 채택한 decide 를 댄 덩어리도 권장이다"
+assert_contains "$(j decok 'd["text"]')" "   고친 이유(저자가 댐): 지적 「SCR_DEC_ADOPT」(${DA}) — 사용자가 채택" "AC4: 채택한 decide 의 이유 줄"
+force "$TMP/decok/state" "$DA" state expired; scr decok
+assert_eq "$(rec decok)" "[False, True]" "AC4: 결정 항목은 상태 칸이 아니라 고른 쪽으로 가른다(채택 뒤 상태가 expired 여도 권장)"
+scr fixok --final
+assert_eq "$(rec fixok)" "[False, False]" "AC4: 확정 직전 화면으로 조립하면 같은 입력에서도 권장이 없다"
+assert_contains "$(j fixok 'd["text"]')" "지적 「SCR_FIX_APPLY」(${FA}) — 사용자가 「적용」 으로 처분" "AC4: 확정 직전 화면에도 고친 이유 줄은 그대로 보인다"
+assert_not_contains "$(j fixok 'd["text"]')" "(권장)" "AC4: 확정 직전 화면 글에는 권장의 뜻 줄도 없다"
+
+# ── AC5 — 권장이 붙지 않는 경우 ─────────────────────────────────────────────────
+norec() {   # norec <이름> <라벨> <이유 줄…> — 그 이유로 조립하면 어느 덩어리에도 권장이 없다
+  local n="$1" label="$2"; shift 2
+  mk2 "$n"; why "$n" "$@"; scr "$n"
+  assert_eq "$(rec "$n")" "[False, False]" "AC5: ${label}"
+}
+norec mixed "「없음」 이 섞인 덩어리" "1\t$FA,없음"
+norec unknown "원장에 없는 id" "1\tdeadbeef#r9.9"
+assert_contains "$(j unknown 'd["text"]')" "   고친 이유(저자가 댐): 저자가 댄 지적 deadbeef#r9.9 은 원장에서 확인되지 않는다" "AC5: 원장에서 확인되지 않은 id 가 화면에 보인다"
+norec dropped "사용자가 적용하지 않기로 한 fix" "1\t$FD"
+norec pending "처분 전인 fix" "1\t$FP"
+norec partial "댄 지적 가운데 하나가 확인되지 않음" "1\t$FA,$FP"
+norec ask "ask 의 답에 따른 편집" "1\t$AK"
+assert_contains "$(j ask 'd["text"]')" "지적 「SCR_ASK」(${AK}) — 사용자가 답한 열린 질문" "AC5: ask 의 답에 따른 편집은 이유로만 보인다"
+norec rejected "사용자가 거부한 decide" "1\t$DR"
+for stt in adopted applied; do
+  force "$TMP/rejected/state" "$DR" state "$stt"; scr rejected
+  assert_eq "$(rec rejected)" "[False, False]" "AC5: 거부한 decide 는 원장 상태 칸이 ${stt} 여도 권장이 없다"
+done
+mk2 postkind; why postkind "1\t$DA"; scr postkind
+assert_eq "$(rec postkind)" "[True, False]" "AC5 양의 짝: 채택한 decide 는 권장이다"
+force "$TMP/postkind/state" "$DA" kind post; scr postkind
+assert_eq "$(rec postkind)" "[False, False]" "AC5: 「현재 변경 유지」 로 채택한 항목(kind post)은 고치라는 처분이 아니라 권장이 없다"
+mk2 used; why used "1\t$FA"; printf '%s\n' "$FA" > "$TMP/used/state/hunk-used-findings.txt"; scr used
+assert_eq "$(rec used)" "[False, False]" "AC5: 쓴 지적 목록에 든 지적"
+assert_contains "$(j used 'd["text"]')" "지적 「SCR_FIX_APPLY」(${FA}) — 앞 화면에서 이미 댄 지적" "AC5: 이미 쓴 지적이라는 사실이 화면에 보인다"
+mk2 usedbad; why usedbad "1\t$FA"; printf '\377\376' > "$TMP/usedbad/state/hunk-used-findings.txt"; scr usedbad
+assert_eq "$(rec usedbad)" "[False, False]" "AC5: 쓴 지적 목록 파일을 읽지 못한 경우(깨짐)"
+assert_contains "$(j usedbad 'd["text"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 목록을 읽지 못한 사실이 화면에 보인다"
+
+# ── AC6 — 이유 파일 · 원장이 없거나 어긋날 때 ────────────────────────────────────
+mk2 noreason; scr noreason; rc=$?
+assert_eq "$rc $(rec noreason)" "0 [False, False]" "AC6: 이유 파일이 없어도 화면이 나온다 — 전부 권장 없음"
+mk noledger '가.\n\n나.\n\n다.\n' '가 고침.\n\n나.\n\n다 고침.\n'; why noledger "1\t$FA"; scr noledger; rc=$?
+assert_eq "$rc $(rec noledger)" "0 [False, False]" "AC6: 원장이 없어도 화면이 나온다 — 전부 권장 없음"
+assert_contains "$(j noledger 'd["text"]')" "리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다" "AC6: 원장을 읽지 못한 사실이 화면에 보인다"
+mk2 badledger; why badledger "1\t$FA"; printf 'x' >> "$TMP/badledger/state/docreview-state.md"; scr badledger; rc=$?
+assert_eq "$rc $(rec badledger)" "0 [False, False]" "AC6: 깨진 원장도 같다"
+assert_contains "$(j badledger 'd["text"]')" "리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다" "AC6: 깨진 원장을 읽지 못한 사실이 보인다"
+mk2 stale; printf 'seed_sha256 0000\n1\t%s\n' "$FA" > "$TMP/stale/state/hunk-reasons.txt"; scr stale
+assert_eq "$(rec stale)" "[False, False]" "AC6: 이유 파일 첫 줄의 판본이 다르면 이유를 하나도 쓰지 않는다"
+assert_contains "$(j stale 'd["text"]')" "이유 파일이 이 공시의 것이 아니다" "AC6: 판본이 다른 사실이 화면에 보인다"
+assert_not_contains "$(j stale 'd["text"]')" "SCR_FIX_APPLY" "AC6: 판본이 다른 이유 파일의 지적은 화면에 실리지 않는다"
+mk2 nohead; printf '1\t%s\n' "$FA" > "$TMP/nohead/state/hunk-reasons.txt"; scr nohead
+assert_eq "$(rec nohead)" "[False, False]" "AC6: 이유 파일에 판본 줄이 없으면 이유를 하나도 쓰지 않는다"
+assert_contains "$(j nohead 'd["text"]')" "이유 파일이 이 공시의 것이 아니다" "AC6: 판본 줄이 없는 사실이 화면에 보인다"
+mk2 dupok; why dupok "1\t$FA" "1\t$DA"; scr dupok
+assert_eq "$(rec dupok)" "[True, False]" "AC6: 같은 덩어리 번호가 여러 줄이면 지적을 합친다(둘 다 확인됨이면 권장)"
+assert_contains "$(j dupok 'd["text"]')" "SCR_DEC_ADOPT" "AC6: 합친 지적이 모두 이유 줄에 보인다"
+mk2 dupnone; why dupnone "1\t$FA" "1\t없음"; scr dupnone
+assert_eq "$(rec dupnone)" "[False, False]" "AC6: 여러 줄 가운데 한 줄이라도 「없음」 이면 권장이 없다"
+mk2 badlines; why badlines "1\t$FA" "9\t$FA" "엉뚱한 줄" "x\t$FA"; scr badlines
+assert_eq "$(rec badlines)" "[True, False]" "AC6: 없는 덩어리 번호의 줄과 꼴이 아닌 줄은 버리고 나머지는 읽는다"
+assert_contains "$(j badlines 'd["text"]')" "이유 파일에서 읽지 못한 줄 3개" "AC6: 버린 줄 수가 화면에 보인다"
+mk2 crlf; printf 'seed_sha256 %s\r\n1\t%s\r\n2 %s\r\n' "$(ver crlf)" "$FA" "$DA" > "$TMP/crlf/state/hunk-reasons.txt"; scr crlf
+assert_eq "$(rec crlf)" "[True, False]" "Review Focus: 줄 끝이 CRLF 여도 읽고, 탭 대신 공백을 쓴 줄은 버린다(권장 쪽으로 기울지 않는다)"
+assert_contains "$(j crlf 'd["text"]')" "이유 파일에서 읽지 못한 줄 1개" "Review Focus: 탭이 없는 줄은 읽지 못한 줄로 센다"
+mk2 longsum; why longsum "1\t$FA"; force "$TMP/longsum/state" "$FA" summary '첫 줄\n둘째 줄'; scr longsum
+assert_contains "$(j longsum 'd["text"]')" "   고친 이유(저자가 댐): 지적 「첫 줄 둘째 줄」(${FA})" "Review Focus: 여러 줄 요약은 한 줄로 이어 화면 구조를 깨지 않는다"
+
 finish
