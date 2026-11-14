@@ -1,4 +1,4 @@
-"""scripts/doc_paths.py 설정 키 넓힘 · scripts/intent_answers.py (쓴소리 답 파일)."""
+"""scripts/doc_paths.py 설정 키 넓힘 · scripts/intent_answers.py (쓴소리 답 파일) · scripts/intent_origin.py (근거 · 원문 · 로드맵 · 의심)."""
 import importlib.util
 import os
 import subprocess
@@ -18,6 +18,7 @@ def _load(name):
 
 doc_paths = _load("doc_paths")
 ia = _load("intent_answers")
+io_ = _load("intent_origin")
 
 AT1 = "2026-11-14T01:02:03Z"
 AT2 = "2026-11-14T02:00:00Z"
@@ -276,6 +277,431 @@ class TestCommitAnswers(unittest.TestCase):
         paths, err = ia.write_answer_files(self.root, self.rel, [(n0, t0), (n1, t1)])
         self.assertEqual(paths, [self.rel + "/" + n0])
         self.assertEqual(err, "같은 이름의 답 파일이 이미 있다")
+
+
+def _fm(**kv):
+    body = "".join("%s: %s\n" % (k, v) for k, v in kv.items())
+    return "---\n" + body + "---\n"
+
+
+BUNDLE_BODY = (
+    "# 묶음\n## 1. 머리말\nintro-token\n## 2. 제약\nconstraint-token\n"
+    "## 3. 열린 질문\nopenq-token\n## 4. 계획\nplan-token\n"
+    "## 5. 기각 · 위험\nrisk-token\n## 6. 사용자 원문\n> 원문 줄 quote-token\n"
+    ">\n> 다시 검증할 것 — recheck-token\n> 이어지는 recheck-more\n>\n> 끝 줄 tail-token\n")
+
+ROADMAP_BODY = (
+    _fm(type="roadmap")
+    + "# 로드맵\n## 에픽\n### R1 — 본체\n- 의도: epic-body-token\n"
+    "## 위험 번호표\n- K1 — 위험 — 숨은 가정: risk-section-token\n"
+    "## 열린 질문\n- oq-section-token\n"
+    "## 지휘 절차\n- choice-body-token\n- K3 — 위험 — outside-k-token\n"
+    "> 다시 검증할 것 — rm-recheck-token\n> 이어지는 rm-more\n>\n- after-recheck-token\n")
+
+
+def _origin_repo(root):
+    """원문 · 로드맵 링크 시험용 임시 git 리포(커밋 뒤 추적 안 된 docs/new.md 포함)."""
+    _git_repo(root)
+    files = {
+        "docs/spec.md": _fm(source_interview="docs/R1.md", roadmap="docs/roadmap.md"),
+        "docs/R1.md": _fm(type="epic-bundle", source_brief="docs/brief.md",
+                          roadmap="docs/roadmap.md") + BUNDLE_BODY,
+        "docs/spec2.md": _fm(source_interview="docs/R2.md"),
+        "docs/R2.md": _fm(type="epic-bundle", source_brief="docs/brief2.md")
+        + BUNDLE_BODY.replace("-token", "-two"),
+        "docs/spec3.md": _fm(source_interview="docs/R3.md", roadmap="docs/roadmap.md"),
+        "docs/R3.md": _fm(type="epic-bundle", source_brief="docs/brief3.md")
+        + "## 6. 사용자 원문\nonly-quote-token\n",
+        "docs/roadmap.md": ROADMAP_BODY,
+        "docs/old.md": "# 옛 문서\nold-body-token\n> 다시 검증할 것 — old-recheck\n",
+        "docs/spec_old.md": _fm(source_interview="docs/old.md"),
+        "docs/spec_link.md": _fm(source_interview="docs/link.md"),
+        "docs/spec_new.md": _fm(source_interview="docs/new.md"),
+        "docs/spec_parent.md": _fm(source_interview="../x.md"),
+        "docs/spec_abs.md": _fm(source_interview="/etc/hosts"),
+        "docs/spec_dir.md": _fm(source_interview="docs"),
+        "docs/spec_nolink.md": _fm(title="t"),
+        "docs/spec_rlink.md": _fm(roadmap="docs/link.md"),
+        "docs/spec_rnew.md": _fm(roadmap="docs/new.md"),
+        "docs/spec_rparent.md": _fm(roadmap="../x.md"),
+        "docs/spec_rnone.md": _fm(source_interview="docs/R2.md"),
+    }
+    for rel, text in files.items():
+        Path(root, rel).parent.mkdir(parents=True, exist_ok=True)
+        Path(root, rel).write_text(text, encoding="utf-8")
+    os.symlink("old.md", os.path.join(root, "docs", "link.md"))
+    _git(root, "add", "docs")
+    _git(root, "commit", "-q", "-m", "fixture")
+    Path(root, "docs", "new.md").write_text("untracked\n", encoding="utf-8")
+    return root
+
+
+DIFF_GREEN = ("per_adapter:\n  - runner: pytest\n    attributions:\n      - unit: t::a\n"
+              "        verdict: STILL_GREEN\n        note: \"\"\n")
+DIFF_RED = DIFF_GREEN.replace("STILL_GREEN", "NEW_REGRESSION")
+
+
+def _diff(*verdicts):
+    out = "per_adapter:\n  - runner: pytest\n    attributions:\n"
+    for i, v in enumerate(verdicts):
+        out += "      - unit: t::u%d\n        verdict: %s\n        note: \"\"\n" % (i, v)
+    return out
+
+
+class TestEvidence(unittest.TestCase):
+    def test_all_green_is_not_evidence(self):
+        self.assertFalse(io_.has_evidence(None, DIFF_GREEN)[0])
+        self.assertEqual(io_.build_evidence(None, DIFF_GREEN), ("", 0))
+
+    def test_non_green_or_walk_is_evidence(self):
+        self.assertTrue(io_.has_evidence(None, DIFF_RED)[0])
+        self.assertTrue(io_.has_evidence("관찰 a\n", DIFF_GREEN)[0])
+
+    def test_pass_set_is_not_evidence(self):
+        self.assertFalse(io_.has_evidence(None, _diff("STILL_GREEN", "FIXED", "NEW_TEST_GREEN"))[0])
+
+    def test_one_non_pass_among_passes_is_evidence(self):
+        for v in ("PRE_EXISTING", "SILENT_DROP", "NEW_TEST_RED", "BASELINE_UNRUNNABLE"):
+            self.assertTrue(io_.has_evidence(None, _diff("STILL_GREEN", v, "FIXED"))[0], v)
+
+    def test_unknown_attribution_is_evidence(self):
+        self.assertTrue(io_.has_evidence(None, _diff("STILL_GREEN", "SOME_FUTURE_NAME"))[0])
+
+    def test_numbers_and_order(self):
+        t, n = io_.build_evidence("a\n\nb\n", DIFF_RED)
+        self.assertIn("   1\t[e2e] a", t)
+        self.assertIn("   2\t[e2e] b", t)
+        self.assertIn("   3\t[차등] per_adapter:", t)
+        self.assertEqual(io_.evidence_line_numbers(t), set(range(1, n + 1)))
+        self.assertLess(t.index("[e2e] b"), t.index("[차등]"))
+
+    def test_unreadable_differential(self):
+        ok, notes = io_.has_evidence(None, "per_adapter: [")
+        self.assertFalse(ok)
+        self.assertIn("차등 결과를 읽지 못함 — 근거로 세지 않았다", notes)
+
+    def test_unreadable_differential_with_walk(self):
+        ok, notes = io_.has_evidence("관찰\n", "per_adapter: [")
+        self.assertTrue(ok)
+        self.assertIn("차등 결과를 읽지 못함 — 근거로 세지 않았다", notes)
+        text, n = io_.build_evidence("관찰\n", "per_adapter: [")
+        self.assertEqual((n, "[차등]" in text), (1, False))
+
+    def test_empty_inputs(self):
+        self.assertEqual(io_.build_evidence(None, "\n\n"), ("", 0))
+        self.assertEqual(io_.build_evidence("\n \n", None), ("", 0))
+        self.assertFalse(io_.has_evidence("", "")[0])
+
+    def test_no_evidence_has_no_notice(self):
+        self.assertEqual(io_.has_evidence(None, DIFF_GREEN), (False, []))
+
+
+class TestReadTracked(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.R = _origin_repo(cls.tmp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_reads_committed_content(self):
+        content, why = io_.read_tracked(self.R, "HEAD", "docs/old.md")
+        self.assertIsNone(why)
+        self.assertIn("old-body-token", content)
+
+    def test_rejections_are_literal(self):
+        cases = (("/etc/hosts", "절대 경로"), ("../x.md", "상위 경로(..)"),
+                 ("docs/../../x.md", "상위 경로(..)"), (".git/config", ".git 아래"),
+                 ("docs/.git/x", ".git 아래"), ("docs/new.md", "추적 안 된 파일 또는 없음"),
+                 ("docs/none.md", "추적 안 된 파일 또는 없음"), ("", "추적 안 된 파일 또는 없음"),
+                 ("docs/link.md", "심볼릭 링크"), ("docs", "보통 파일이 아님"))
+        for rel, why in cases:
+            content, got = io_.read_tracked(self.R, "HEAD", rel)
+            self.assertEqual((content, got), (None, why), rel)
+
+    def test_bad_commit_is_untracked(self):
+        self.assertEqual(io_.read_tracked(self.R, "no-such-ref", "docs/old.md"),
+                         (None, "추적 안 된 파일 또는 없음"))
+
+    def test_frontmatter_value(self):
+        t = _fm(source_interview="docs/R1.md", n="3")
+        self.assertEqual(io_.frontmatter_value(t, "source_interview"), "docs/R1.md")
+        self.assertEqual(io_.frontmatter_value(t, "n"), "3")
+        self.assertIsNone(io_.frontmatter_value(t, "nope"))
+        self.assertIsNone(io_.frontmatter_value("no front\n", "n"))
+        self.assertIsNone(io_.frontmatter_value("---\nn: [\n---\n", "n"))
+
+
+class TestOriginLink(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.R = _origin_repo(cls.tmp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _o(self, specs, caller=None):
+        return io_.build_origin(self.R, "HEAD", "HEAD", caller, specs)
+
+    def test_follows_source_interview_and_maps_bundle_to_brief(self):
+        o = self._o(["docs/spec.md"])
+        self.assertIn("docs/brief.md", o["sources"])
+        self.assertEqual(o["aliases"]["docs/R1.md"], "docs/brief.md")
+        self.assertIn("## 6. 사용자 원문", o["origin"])
+        self.assertIn("## 2. 제약", o["origin"])
+        self.assertIn("## 5. 기각 · 위험", o["doubts"])
+        self.assertIn("## 3. 열린 질문", o["doubts"])
+        self.assertNotIn("## 5.", o["origin"])
+        self.assertNotIn("## 3.", o["origin"])
+        self.assertNotIn("intro-token", o["origin"])
+        self.assertNotIn("plan-token", o["origin"] + o["doubts"])
+        self.assertIn("다시 검증할 것", o["doubts"])
+        self.assertIn("recheck-more", o["doubts"])
+        self.assertNotIn("다시 검증할 것", o["origin"])
+        self.assertNotIn("recheck-more", o["origin"])
+        self.assertIn("quote-token", o["origin"])
+        self.assertIn("tail-token", o["origin"])
+        self.assertIn("<!-- origin-source: docs/brief.md · file: docs/R1.md -->", o["origin"])
+        self.assertFalse(o["mixed"])
+        self.assertEqual(o["notices"], [])
+
+    def test_origin_link_rejected_symlink(self):
+        o = self._o(["docs/spec_link.md"])
+        self.assertIn("원문 링크 거부 — 심볼릭 링크", o["notices"])
+        self.assertEqual(o["origin"], "원문 없음 — 원문 링크 거부")
+        self.assertIn("원문 없음 — 원문 링크 거부", o["notices"])
+        self.assertNotIn("old-body-token", o["origin"] + o["doubts"])
+        self.assertEqual(o["sources"], [])
+
+    def test_origin_link_rejected_untracked_and_dir(self):
+        o = self._o(["docs/spec_new.md"])
+        self.assertIn("원문 링크 거부 — 추적 안 된 파일 또는 없음", o["notices"])
+        self.assertNotIn("untracked", o["origin"])
+        o = self._o(["docs/spec_dir.md"])
+        self.assertIn("원문 링크 거부 — 보통 파일이 아님", o["notices"])
+
+    def test_origin_link_rejected_parent_and_abs(self):
+        o = self._o(["docs/spec_parent.md"])
+        self.assertIn("원문 링크 거부 — 상위 경로(..)", o["notices"])
+        self.assertEqual(o["origin"], "원문 없음 — 원문 링크 거부")
+        o = self._o(["docs/spec_abs.md"])
+        self.assertIn("원문 링크 거부 — 절대 경로", o["notices"])
+        self.assertEqual(o["origin"], "원문 없음 — 원문 링크 거부")
+
+    def test_spec_itself_rejected(self):
+        o = self._o(["docs/missing-spec.md"])
+        self.assertIn("원문 링크 거부 — 추적 안 된 파일 또는 없음", o["notices"])
+        self.assertEqual(o["origin"], "원문 없음 — 원문 링크 거부")
+
+    def test_caller_origin_first(self):
+        o = self._o(["docs/spec2.md"], caller="docs/R1.md")
+        self.assertIn("quote-token", o["origin"])
+        self.assertNotIn("quote-two", o["origin"])
+        self.assertEqual(o["sources"], ["docs/brief.md"])
+
+    def test_caller_origin_rejected_goes_to_no_origin(self):
+        o = self._o(["docs/spec2.md"], caller="docs/link.md")
+        self.assertIn("원문 링크 거부 — 심볼릭 링크", o["notices"])
+        self.assertEqual(o["origin"], "원문 없음 — 원문 링크 거부")
+
+    def test_caller_origin_read_at_head_commit(self):
+        o = io_.build_origin(self.R, "HEAD", "no-such-ref", "docs/R1.md", ["docs/spec2.md"])
+        self.assertIn("quote-token", o["origin"])
+        self.assertEqual(o["notices"], [])
+
+    def test_old_doc_whole_file_mixed(self):
+        o = self._o(["docs/spec_old.md"])
+        self.assertTrue(o["mixed"])
+        self.assertIn("old-body-token", o["origin"])
+        self.assertIn("직접 쓴 말 · 고른 라벨을 가르지 못함", o["notices"])
+        self.assertIn("첫 호출에 의심이 섞였다", o["notices"])
+        self.assertEqual(o["sources"], ["docs/old.md"])
+        self.assertEqual(o["aliases"], {})
+
+    def test_two_specs_each_followed(self):
+        o = self._o(["docs/spec.md", "docs/spec2.md"])
+        self.assertIn("docs/brief.md", o["sources"])
+        self.assertIn("docs/brief2.md", o["sources"])
+        self.assertEqual(o["origin"].count("<!-- origin-source:"), 2)
+        self.assertIn("quote-token", o["origin"])
+        self.assertIn("quote-two", o["origin"])
+        self.assertEqual(o["aliases"], {"docs/R1.md": "docs/brief.md",
+                                        "docs/R2.md": "docs/brief2.md"})
+
+    def test_same_bundle_twice_read_once(self):
+        o = self._o(["docs/spec.md", "docs/spec.md"])
+        self.assertEqual(o["origin"].count("<!-- origin-source:"), 1)
+
+    def test_one_rejected_one_followed(self):
+        o = self._o(["docs/spec_link.md", "docs/spec.md"])
+        self.assertIn("quote-token", o["origin"])
+        self.assertIn("원문 링크 거부 — 심볼릭 링크", o["notices"])
+        self.assertFalse(o["origin"].startswith("원문 없음"))
+
+    def test_no_specs_no_caller(self):
+        o = self._o([])
+        self.assertEqual(o["origin"], "원문 없음 — 의도 출처에 설계문서 없음")
+        self.assertIn(o["origin"], o["notices"])
+        self.assertTrue(o["roadmap"].startswith("로드맵 없음 — "))
+
+    def test_spec_without_source_interview(self):
+        o = self._o(["docs/spec_nolink.md"])
+        self.assertEqual(o["origin"], "원문 없음 — 부른 쪽 원문도 설계문서 링크도 없음")
+        self.assertIn(o["origin"], o["notices"])
+
+    def test_keys(self):
+        o = self._o([])
+        self.assertEqual(sorted(o), ["aliases", "doubts", "mixed", "notices", "origin",
+                                     "roadmap", "sources"])
+        self.assertEqual(o["doubts"], "")
+        self.assertIs(o["mixed"], False)
+
+
+class TestRoadmap(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.R = _origin_repo(cls.tmp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _o(self, specs):
+        return io_.build_origin(self.R, "HEAD", "HEAD", None, specs)
+
+    def test_roadmap_followed_once(self):
+        o = self._o(["docs/spec.md"])
+        rm = o["roadmap"]
+        self.assertEqual(rm.count("<!-- roadmap: docs/roadmap.md"), 1)
+        self.assertIn("<!-- roadmap: docs/roadmap.md · from: docs/spec.md -->", rm)
+        for kept in ("epic-body-token", "choice-body-token", "after-recheck-token"):
+            self.assertIn(kept, rm)
+        for moved in ("risk-section-token", "oq-section-token", "outside-k-token",
+                      "rm-recheck-token", "rm-more", "## 위험 번호표", "## 열린 질문"):
+            self.assertNotIn(moved, rm)
+        self.assertIn("<!-- roadmap-doubts: docs/roadmap.md -->", o["doubts"])
+        after = o["doubts"].split("<!-- roadmap-doubts: docs/roadmap.md -->", 1)[1]
+        for moved in ("risk-section-token", "oq-section-token", "outside-k-token",
+                      "rm-recheck-token", "rm-more"):
+            self.assertIn(moved, after)
+        for kept in ("epic-body-token", "choice-body-token", "after-recheck-token"):
+            self.assertNotIn(kept, o["doubts"])
+
+    def test_roadmap_only_doubts(self):
+        o = self._o(["docs/spec3.md"])
+        self.assertIn("only-quote-token", o["origin"])
+        self.assertNotIn("## 5.", o["doubts"])
+        self.assertIn("risk-section-token", o["doubts"])
+        self.assertTrue(o["doubts"].strip())
+        self.assertIn("epic-body-token", o["roadmap"])
+
+    def test_roadmap_none_in_opened_docs(self):
+        o = self._o(["docs/spec_rnone.md"])
+        self.assertEqual(o["roadmap"], "로드맵 없음 — 연 문서에 roadmap: 없음")
+        self.assertIn(o["roadmap"], o["notices"])
+        self.assertNotIn("roadmap-doubts", o["doubts"])
+
+    def test_roadmap_link_rejected_symlink_and_untracked(self):
+        for spec, why in (("docs/spec_rlink.md", "심볼릭 링크"),
+                          ("docs/spec_rnew.md", "추적 안 된 파일 또는 없음")):
+            o = self._o([spec])
+            self.assertIn("로드맵 링크 거부 — " + why, o["notices"])
+            self.assertEqual(o["roadmap"], "로드맵 없음 — 로드맵 링크 거부")
+            self.assertNotIn("untracked", o["roadmap"] + o["doubts"])
+            self.assertNotIn("old-body-token", o["roadmap"] + o["doubts"])
+
+    def test_roadmap_link_rejected_parent(self):
+        o = self._o(["docs/spec_rparent.md"])
+        self.assertIn("로드맵 링크 거부 — 상위 경로(..)", o["notices"])
+        self.assertEqual(o["roadmap"], "로드맵 없음 — 로드맵 링크 거부")
+
+    def test_roadmap_from_caller_origin_bundle(self):
+        o = io_.build_origin(self.R, "HEAD", "HEAD", "docs/R1.md", [])
+        self.assertIn("<!-- roadmap: docs/roadmap.md · from: docs/R1.md -->", o["roadmap"])
+
+
+class TestSections(unittest.TestCase):
+    def test_strip_intent_doubts(self):
+        text = ("# T\n## Goals\ngoal-body\n## Rejected Alternatives\nrejected-body\n"
+                "## 위험\nrisk-body\n## Constraints\nconstraint-body\n")
+        kept, moved = io_.strip_intent_doubts(text)
+        self.assertIn("## Goals", kept)
+        self.assertIn("goal-body", kept)
+        self.assertIn("constraint-body", kept)
+        for gone in ("Rejected", "rejected-body", "risk-body", "## 위험"):
+            self.assertNotIn(gone, kept)
+        self.assertIn("rejected-body", moved)
+        self.assertIn("risk-body", moved)
+        self.assertNotIn("goal-body", moved)
+        self.assertNotIn("constraint-body", moved)
+
+    def test_strip_intent_doubts_names_and_case(self):
+        for head in ("기각", "열린 질문", "Risk", "open question", "REJECTED"):
+            kept, moved = io_.strip_intent_doubts("## Goals\ng-body\n## %s\nd-body\n" % head)
+            self.assertNotIn("d-body", kept, head)
+            self.assertIn("d-body", moved, head)
+        kept, moved = io_.strip_intent_doubts("## Goals\ng-body\n")
+        self.assertEqual(moved, "")
+        self.assertIn("g-body", kept)
+
+    def test_strip_intent_doubts_subsection_and_children(self):
+        text = ("## 설계\nd-body\n### Open Questions\nq-body\n### 세부\nsub-body\n"
+                "## 위험\nr-body\n### 하위\nchild-body\n## 끝\nend-body\n")
+        kept, moved = io_.strip_intent_doubts(text)
+        for x in ("d-body", "sub-body", "end-body"):
+            self.assertIn(x, kept)
+        for x in ("q-body", "r-body", "child-body"):
+            self.assertNotIn(x, kept)
+            self.assertIn(x, moved)
+
+    def test_strip_intent_doubts_moves_recheck_paragraph(self):
+        text = "## Goals\ngoal-body\n- 다시 검증할 것 — v1\n  이어짐 v2\n\nafter-body\n"
+        kept, moved = io_.strip_intent_doubts(text)
+        self.assertIn("goal-body", kept)
+        self.assertIn("after-body", kept)
+        self.assertNotIn("v1", kept)
+        self.assertNotIn("v2", kept)
+        self.assertIn("v1", moved)
+        self.assertIn("v2", moved)
+
+    def test_move_recheck_paragraphs(self):
+        text = ("a-line\n> 다시 검증할 것 — x1\n> x2\n>\nb-line\n* 다시 검증할 것: y1\n\nc-line\n"
+                "다시 검증할 것을 말하면 z1\n")
+        kept, moved = io_.move_recheck_paragraphs(text)
+        for x in ("a-line", "b-line", "c-line"):
+            self.assertIn(x, kept)
+        for x in ("x1", "x2", "y1", "z1"):
+            self.assertIn(x, moved)
+            self.assertNotIn(x, kept)
+        self.assertNotIn("a-line", moved)
+        self.assertEqual(io_.move_recheck_paragraphs("none here\n"), ("none here\n", ""))
+
+    def test_split_sections(self):
+        text = "pre\n## A\na1\n### A1\nn1\n## B\nb1\n### C\nc1\n"
+        secs = io_.split_sections(text)
+        self.assertEqual([h for h, _ in secs], [None, "## A", "## B"])
+        self.assertIn("### A1", secs[1][1])
+        self.assertIn("n1", secs[1][1])
+        self.assertNotIn("b1", secs[1][1])
+        self.assertIn("b1", secs[2][1])
+        self.assertIn("c1", secs[2][1])
+        secs = io_.split_sections("### X\nx\n### Y\ny\n## Z\nz\n")
+        self.assertEqual([h for h, _ in secs], ["### X", "### Y", "## Z"])
+        self.assertEqual(io_.split_sections(""), [])
+        self.assertEqual(io_.split_sections("plain\n"), [(None, "plain\n")])
+
+    def test_split_sections_heading_needs_space(self):
+        secs = io_.split_sections("##notheading\n#### deep\n## H\nx\n")
+        self.assertEqual([h for h, _ in secs], [None, "## H"])
+
+    def test_total_bytes_korean(self):
+        self.assertEqual(io_.total_bytes("가", "a"), 4)
+        self.assertEqual(io_.total_bytes(), 0)
 
 
 if __name__ == "__main__":
