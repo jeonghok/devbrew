@@ -38,6 +38,8 @@
 | 기계 상태 | 기록 | `<state-root>/<지휘자 상태 폴더>/<로드맵 폴더>/machine.md`(폴더 이름은 `repo_defaults.CONDUCTOR_DIR`) | PR 캐시 · 실행 원장 위치 · 자원 · agent · 작업 · 기다리는 질문 · 쌓인 기록 | `PR` · `실행 원장` · `자원` → 실행 층 | 지휘자 — 이 기계에서만 뜻이 있는 것. 쌓인 기록만은 다시 만들 수 없다 — 지우기 전에 커밋한다. 형식 · 읽기 · 쓰기 · 잠금 `conductor_state.py` · 화면 `control_plane.py` · 자원 폴더의 공유 스위트 잠금(`files/suite-lock` — 지휘자 스위트 대조와 하위 agent 전체 스위트가 같이 쓴다)은 `suite_lock.py`, 경로는 `conductor_ledger.py suite-lock` 이 도출해 하위에게 싣는다 |
 | 리뷰 원장 | 기록 | 문서별 상태 디렉토리 | 라운드 · 재리뷰 상한 · finding | 문서 경로 → 설계문서 | 리뷰 엔진 |
 
+team 형식(로드맵 머리말 `layout: team`)의 폴더와 파일은 `../references/team-files.md` 가 정본이다.
+
 ## 타고 내려가기
 
 `/spec-distill:roadmap-status <로드맵> <에픽>` 이 에픽 하나의 묶음 · 설계문서 · 계획 · 브랜치 · PR · 동시에 갈 수 있는 에픽 · 열린 넘김 · 판정 줄 · 자원을 경로와 번호로 보인다. 줄마다 경로나 번호가 있어 한 단계 더 내려간다 — 설계문서 경로로 그 문서를, 계획 경로로 그 계획을, `#<n>` 으로 그 PR 을 연다.
