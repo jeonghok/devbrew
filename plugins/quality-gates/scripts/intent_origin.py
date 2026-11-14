@@ -213,22 +213,58 @@ def _split_by_heading(text: str, words: tuple) -> tuple:
     return ("".join(kept), "".join(moved))
 
 
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" \t"))
+
+
+def _is_quote(line: str) -> bool:
+    return line.lstrip().startswith(">")
+
+
+def _is_bullet(line: str) -> bool:
+    core = line.lstrip(" \t")
+    if core.startswith(("- ", "* ")):
+        return True
+    digits = core.lstrip("0123456789")
+    return len(digits) < len(core) and digits.startswith(". ")
+
+
+def _is_heading_line(line: str) -> bool:
+    core = line.lstrip("> \t")
+    return core.startswith("#") and core.lstrip("#")[:1] == " "
+
+
+def _recheck_ends(line: str, start_indent: int, start_quote: bool) -> bool:
+    """「다시 검증할 것」 문단이 이 줄 앞에서 끝나나 — 빈 줄 · `>` 만 있는 줄 · 머리 줄 ·
+    인용 밖으로 나가는 줄(또는 인용으로 들어가는 줄) · 시작 줄과 같거나 얕은 들여쓰기의 새 목록 항목."""
+    if line.strip().strip(">").strip() == "" or _is_heading_line(line):
+        return True
+    if start_quote:
+        return not _is_quote(line)
+    if _is_quote(line):
+        return True
+    return _is_bullet(line) and _indent(line) <= start_indent
+
+
 def move_recheck_paragraphs(text: str) -> tuple:
-    """「다시 검증할 것」 줄부터 그 문단 끝(빈 줄 · `>` 만 있는 줄)까지를 옮긴다 → (kept, moved)."""
+    """「다시 검증할 것」 줄부터 그 문단 끝까지를 옮긴다 → (kept, moved). 끝 줄은 옮기지 않는다."""
     kept: List[str] = []
     paras: List[str] = []
     cur: Optional[List[str]] = None
+    start_indent = 0
+    start_quote = False
     for line in text.splitlines(keepends=True):
         if cur is not None:
-            if line.strip().strip(">").strip() == "":
+            if _recheck_ends(line, start_indent, start_quote):
                 paras.append("".join(cur))
                 cur = None
-                kept.append(line)
             else:
                 cur.append(line)
-            continue
+                continue
         if line.lstrip(_LEAD).startswith(_RECHECK):
             cur = [line]
+            start_indent = _indent(line)
+            start_quote = _is_quote(line)
         else:
             kept.append(line)
     if cur is not None:

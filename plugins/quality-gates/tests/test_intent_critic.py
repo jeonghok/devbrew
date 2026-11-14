@@ -299,6 +299,18 @@ ROADMAP_BODY = (
     "> 다시 검증할 것 — rm-recheck-token\n> 이어지는 rm-more\n>\n- after-recheck-token\n")
 
 
+REAL_SHAPE_BODY = (
+    "## 6. 사용자 원문\n- **S1** 🗣 최초 요청:\n  > s1-token 첫 줄\n  >\n"
+    "  > 다시 검증할 것 — shape-recheck\n  > 이어지는 shape-more\n"
+    "- **S2** ☑ R1 답:\n  > s2-token\n- **S3** 🗣 R1 답:\n  > s3-token\n"
+    "## 7. 뒤\nlater-token\n")
+
+ROADMAP_HEADING_AFTER_RECHECK = (
+    _fm(type="roadmap") + "# 로드맵\n## 에픽\n- epic2-token\n"
+    "> 다시 검증할 것 — rm2-recheck\n> 이어지는 rm2-more\n"
+    "## 지휘 절차\n- choice2-token\n")
+
+
 def _origin_repo(root):
     """원문 · 로드맵 링크 시험용 임시 git 리포(커밋 뒤 추적 안 된 docs/new.md 포함)."""
     _git_repo(root)
@@ -313,6 +325,9 @@ def _origin_repo(root):
         "docs/R3.md": _fm(type="epic-bundle", source_brief="docs/brief3.md")
         + "## 6. 사용자 원문\nonly-quote-token\n",
         "docs/roadmap.md": ROADMAP_BODY,
+        "docs/R4.md": _fm(type="epic-bundle", source_brief="docs/brief4.md") + REAL_SHAPE_BODY,
+        "docs/roadmap2.md": ROADMAP_HEADING_AFTER_RECHECK,
+        "docs/spec_shape.md": _fm(source_interview="docs/R4.md", roadmap="docs/roadmap2.md"),
         "docs/old.md": "# 옛 문서\nold-body-token\n> 다시 검증할 것 — old-recheck\n",
         "docs/spec_old.md": _fm(source_interview="docs/old.md"),
         "docs/spec_link.md": _fm(source_interview="docs/link.md"),
@@ -548,6 +563,18 @@ class TestOriginLink(unittest.TestCase):
         self.assertIn("원문 링크 거부 — 심볼릭 링크", o["notices"])
         self.assertFalse(o["origin"].startswith("원문 없음"))
 
+    def test_real_shape_recheck_quote_keeps_following_items(self):
+        o = io_.build_origin(self.R, "HEAD", "HEAD", None, ["docs/spec_shape.md"])
+        for kept in ("s1-token", "s2-token", "s3-token", "**S2**", "**S3**"):
+            self.assertIn(kept, o["origin"])
+        for moved in ("shape-recheck", "shape-more"):
+            self.assertNotIn(moved, o["origin"])
+            self.assertIn(moved, o["doubts"])
+        for stay in ("s2-token", "s3-token", "**S2**"):
+            self.assertNotIn(stay, o["doubts"])
+        self.assertFalse(o["mixed"])
+
+
     def test_no_specs_no_caller(self):
         o = self._o([])
         self.assertEqual(o["origin"], "원문 없음 — 의도 출처에 설계문서 없음")
@@ -579,6 +606,16 @@ class TestRoadmap(unittest.TestCase):
 
     def _o(self, specs):
         return io_.build_origin(self.R, "HEAD", "HEAD", None, specs)
+
+    def test_roadmap_heading_after_recheck_stays(self):
+        o = io_.build_origin(self.R, "HEAD", "HEAD", None, ["docs/spec_shape.md"])
+        self.assertIn("## 지휘 절차", o["roadmap"])
+        self.assertIn("choice2-token", o["roadmap"])
+        self.assertIn("epic2-token", o["roadmap"])
+        self.assertNotIn("rm2-recheck", o["roadmap"])
+        self.assertIn("rm2-recheck", o["doubts"])
+        self.assertIn("rm2-more", o["doubts"])
+        self.assertNotIn("choice2-token", o["doubts"])
 
     def test_roadmap_followed_once(self):
         o = self._o(["docs/spec.md"])
@@ -704,6 +741,55 @@ class TestSections(unittest.TestCase):
     def test_split_sections_heading_needs_space(self):
         secs = io_.split_sections("##notheading\n#### deep\n## H\nx\n")
         self.assertEqual([h for h, _ in secs], [None, "## H"])
+
+    def test_recheck_paragraph_ends_at_heading(self):
+        kept, moved = io_.strip_intent_doubts(
+            "## Goals\n다시 검증할 것 — v1\n## Constraints\nconstraint-body\n")
+        self.assertIn("## Constraints", kept)
+        self.assertIn("constraint-body", kept)
+        self.assertIn("v1", moved)
+        self.assertNotIn("constraint-body", moved)
+        kept, moved = io_.move_recheck_paragraphs("> 다시 검증할 것 — v1\n> ### 소제목\n> after\n")
+        self.assertIn("### 소제목", kept)
+        self.assertNotIn("소제목", moved)
+
+    def test_recheck_quote_ends_at_next_list_item(self):
+        text = ("- **S1** 🗣 x:\n  > a\n  >\n  > 다시 검증할 것 — X\n  > X2\n"
+                "- **S2** ☑ keep-two\n- **S3** 🗣 keep-three\n")
+        kept, moved = io_.move_recheck_paragraphs(text)
+        for k in ("keep-two", "keep-three", "- **S2**", "- **S3**", "  > a"):
+            self.assertIn(k, kept)
+        self.assertIn("다시 검증할 것 — X", moved)
+        self.assertIn("X2", moved)
+        self.assertNotIn("keep-two", moved)
+
+    def test_recheck_quote_multiline_and_quote_prefix_change(self):
+        text = "> 다시 검증할 것 — a1\n> a2\n> a3\nplain-after\n> quote-after\n"
+        kept, moved = io_.move_recheck_paragraphs(text)
+        for m_ in ("a1", "a2", "a3"):
+            self.assertIn(m_, moved)
+            self.assertNotIn(m_, kept)
+        self.assertIn("plain-after", kept)
+        self.assertIn("quote-after", kept)
+        text = "다시 검증할 것 — b1\n> quote-after\n"
+        kept, moved = io_.move_recheck_paragraphs(text)
+        self.assertIn("quote-after", kept)
+        self.assertNotIn("quote-after", moved)
+
+    def test_recheck_bullet_ends_at_same_or_shallower_bullet(self):
+        text = ("- 다시 검증할 것 — b1\n  이어짐 b2\n  - 자식 b3\n- sibling-token\n"
+                "  - nested 다시 검증할 것 — c1\n  - sib2-token\n- parent-token\n")
+        kept, moved = io_.move_recheck_paragraphs(text)
+        for k in ("sibling-token", "sib2-token", "parent-token"):
+            self.assertIn(k, kept)
+        for m_ in ("b1", "b2", "b3"):
+            self.assertIn(m_, moved)
+        text = ("- 항목\n  - 다시 검증할 것 — c1\n  - sib2-token\n- parent-token\n")
+        kept, moved = io_.move_recheck_paragraphs(text)
+        self.assertIn("sib2-token", kept)
+        self.assertIn("parent-token", kept)
+        self.assertIn("c1", moved)
+        self.assertNotIn("sib2-token", moved)
 
     def test_total_bytes_korean(self):
         self.assertEqual(io_.total_bytes("가", "a"), 4)
