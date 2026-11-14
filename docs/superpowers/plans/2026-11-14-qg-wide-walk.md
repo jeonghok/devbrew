@@ -19,7 +19,7 @@
 | `differential.yaml` 의 `per_adapter` 가 없거나 목록이 아니면 공시 없이 「근거 없음」 | Task 5 — 공시 한 줄만 더한다(부르는 조건은 그대로) |
 | 설계문서 · 로드맵 읽기에서 `review_commit` 과 `head_commit` 을 가르는 테스트가 없다 | Task 5 — `TestReadSides` |
 | PR 범위가 원문 · 설계문서를 리뷰 트리가 아니라 `HEAD` 커밋에서 읽는다 | Task 2(`read_tree`) · Task 5 — 리뷰 쪽 문서 읽기를 리뷰 트리로 옮긴다 |
-| 거른 「잘못 골랐다」 질문이 돌려주는 꼴에 없다(R4 로 넘어가 있음) | 받지 않는다 — 지휘자가 가른다(「계획이 정한 것」 끝) |
+| 거른 「잘못 골랐다」 질문이 돌려주는 꼴에 없다(R4 로 넘어가 있음) | 받지 않는다 — 지휘자가 R4 에 두기로 했다(「계획이 정한 것」 끝) |
 
 ## Global Constraints
 
@@ -40,7 +40,7 @@
   - `filter`: `인용이 그 파일에 없어 거름 <n>` · `읽은 인용만 있어 거름 <n>` · `근거로 받지 않은 인용 <n>`
   - 결과 줄(넓게 보는 리뷰에서만 새로): `intent-critic — 낸 후보 <n>개가 근거 확인에서 모두 걸러짐`
   - 다른 팀 기록의 「확인 못 함」 줄은 Task 4 에 있다.
-- **git 부르기**(`other_teams.py` · `intent_origin.py`). argv 목록으로만(셸 없음), `git -C <리포>`. 경로를 넘길 때는 `--literal-pathspecs`. diff 는 `-c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames`. 리포를 바꾸는 명령(fetch · checkout · update-ref …)은 쓰지 않는다.
+- **git 부르기**(`other_teams.py` · `intent_origin.py`). argv 목록으로만(셸 없음), `git -C <리포>`. 경로를 넘길 때는 경로마다 `:(literal)` 접두를 붙인다(`-- :(literal)<경로>`). 전역 `--literal-pathspecs` 는 쓰지 않는다 — 받지 않는 하위 명령이 있고(`check-ignore` 는 rc 128), `GIT_LITERAL_PATHSPECS=1` 을 git 이 띄우는 자식에게 물려준다. 접두 꼴은 `ls-files` · `ls-tree` · `diff` · `log` 에서 git 2.54.0 으로 rc 0 을 확인했고(계획 쓸 때), Task 2 · 3 · 4 의 테스트가 쓰는 하위 명령마다 실제 git 으로 다시 잠근다. `<rev>:<경로>` 꼴(`show` · `rev-parse`)은 pathspec 이 아니라 접두가 없다. diff 는 `-c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --no-renames`. 리포를 바꾸는 명령(fetch · checkout · update-ref …)은 쓰지 않는다.
 - **네트워크.** 조회는 열린 PR 목록 한 번뿐이다(`gh pr list`, 30초). 테스트는 네트워크에 닿지 않는다 — PR 조회는 주입한 함수나 PATH 앞의 가짜 `gh` 로만 돈다. origin 이 없는 임시 리포는 `gh-repo.sh` 가 rc 3 으로 끝나 gh 를 부르지 않는다.
 - **gh 글자.** `gh` 뒤에 하위 명령이 이어지는 글자(`gh pr …` 등)는 `scripts/other_teams.py` 와 테스트 · README · CHANGELOG 에만 쓴다 — `tests/test_publish_gh_two_files.sh` 가 그 밖의 qg 추적 파일을 전부 훑는다.
 - **파이썬 규칙.** 3.9 문법. 파일을 열 때 `encoding="utf-8"`(주석 속 `open(` 도 검사된다). `"python3"` 리터럴 금지(테스트는 `sys.executable`). 헤딩 · 표시는 정규식이 아니라 문자열 메서드로. 비신뢰 글의 꼴 검사에 `re.match` + `$` 를 쓰지 않는다. 테스트는 `PYTHONDONTWRITEBYTECODE=1`. 20줄 이상 같은 블록을 두 파일에 두지 않는다(`shared/tests/test_no_new_duplication.sh`).
@@ -57,7 +57,7 @@
 ## Review Focus
 
 - **커밋도 스테이지도 안 한 새 설계문서로 qg 를 부른 경우** — 추적되지 않는 문서는 의도 문서로 세지 않는다(경로 신뢰 경계). 사람이 기대하는 것: 조용히 좁게 보지 않고 `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` 가 보인다. 테스트: Task 2 `test_untracked_doc_counted` · Task 5 `test_untracked_intent_doc_disclosed`.
-- **PR 마다 변경 기록 · 판 번호 파일이 겹치는 레포에서 큰 diff 가 상한을 다 쓰는 경우** — 나란한 로드맵의 지도가 밀려 갈라짐을 못 본다. 기대: 겹침 diff 는 파일마다 120줄에서 잘리고, 못 실은 항목은 이름과 함께 `## 상한` 에 남는다. 테스트: Task 4 `test_big_overlap_diff_does_not_starve_roadmaps`.
+- **PR 마다 변경 기록 · 판 번호 파일이 겹치는 레포에서 큰 diff 가 상한을 다 쓰는 경우** — 나란한 로드맵의 지도가 밀리면 갈라짐을 못 본다. 기대: 팀 지도가 겹침 diff 보다 먼저 실리고, 겹침 diff 는 파일마다 120줄에서 잘리며, 못 실은 항목은 이름과 함께 `## 상한` 에 남는다. 테스트: Task 4 `test_big_overlap_diff_does_not_starve_roadmaps`.
 - **리뷰어가 읽은 인용을 조금 틀리게 적은 경우** — 줄 번호가 하나 어긋남 · 글이 빈 줄 · 줄 번호가 글자열 · 줄 끝 `\r`. 기대: 빈 글은 인용이 아니다(빈 줄과 맞아 통과하면 안 된다), 앞뒤 공백 차이만 받는다. 테스트: Task 6 `test_read_quote_variants_rejected` · `test_whitespace_only_difference_accepted`.
 - **다른 팀의 글이 표지 · 절 머리를 흉내 내는 경우** — 문서 본문의 `## 겹치는 곳` 줄, 걷기 관찰 글의 `[다른 팀] ` , 줄바꿈이 든 파일 이름 · PR 제목. 기대: 근거의 갈래와 결과 절의 겹침 목록이 속지 않는다. 테스트: Task 4 `test_body_cannot_forge_summary` · Task 6 `test_fake_marker_in_run_line` · Task 7 `test_forged_heading_in_body_not_listed`.
 - **gh 가 미인증 · 느림 · JSON 아닌 응답 · origin 없음** — 기대: 단계가 멈추지 않고 `열린 PR 확인 못 함 — <사유>` 한 줄. 테스트: Task 4 `test_open_prs_failures`.
@@ -110,7 +110,7 @@
 | cd57cab4 | 받음 — 리뷰어를 부르지 않은 실행에서는 `render` 가 `other-teams.md` 의 앞 두 절을 바로 읽는다. 돌려주는 꼴에는 `other_teams`(파일 이름) · `overlaps`(수)만 싣는다(Task 7) |
 | 54df576d | 받음 — `intent_answers.py` 의 `KINDS` 를 고친다(Task 6) |
 | db5a9308 | 받음 — 그 트리에서 추적되지 않는 파일의 인용은 버린다. 테스트에 다른 worktree · 세션 폴더를 넣는다(Task 6) |
-| b6a514dd | 받음 — 순위는 설계 그대로(이번 로드맵 → 겹치는 브랜치 → 그 밖). 겹치는 브랜치 안 순서는 겹친 파일 수 → 가장 최근 → 이름. 겹치는 브랜치는 의도 문서와 겹친 파일 diff 를 함께 싣는다. 다른 로드맵이 겹침 diff 뒤인 것은 뜻한 바다 — 지금 부딪히는 자리가 먼저이고, 밀림은 파일별 diff 줄 상한(120)과 넘침 공시로 다룬다(Task 4) |
+| b6a514dd | 받음 — 순서를 다시 정했다(아래 「싣는 순서」): 팀 지도 전부 → 파일이 겹치는 브랜치 → 그 밖의 브랜치. 겹치는 브랜치 안 순서는 겹친 파일 수 → 가장 최근 → 이름. 겹치는 브랜치는 의도 문서를 먼저, 겹친 파일 diff 를 뒤에 싣는다. 다른 로드맵의 지도가 변경 기록 같은 파일의 겹침 diff 뒤로 밀리는 것은 뜻한 바가 아니어서 지도를 앞에 둔다. 파일별 diff 줄 상한(120)과 넘침 공시는 함께 둔다(Task 4) |
 | aa9e0a83 | 할 것 없음 — 설계의 Deferred 목록에서 그 두 항목은 이미 빠졌다 |
 | 9547316f | 받음 — 표시 목록 하나가 부르는 조건과 다른 팀 읽기를 함께 넓힌다. 더한 표시만 가진 문서는 따라갈 줄이 없어 `원문 없음` · `로드맵 없음` 이 공시된다(Task 5 테스트 · Task 10 README) |
 
@@ -123,7 +123,8 @@
 - **기본 브랜치.** `refs/remotes/origin/HEAD` 가 가리키는 ref 하나(`resolve-baseline.sh` 와 같은 규칙). 못 찾으면 다른 로드맵과 다른 브랜치를 읽지 않는다(이번 로드맵만).
 - **범위 모드에서 바뀐 파일 목록을 모르면** R1 조건으로 돌아간다.
 - **넓게 보는 리뷰의 빈 결과 줄.** 후보가 모두 근거 확인에서 걸러지면 `근거 없음` 이 아니라 `낸 후보 <n>개가 근거 확인에서 모두 걸러짐`. 좁은 리뷰는 R1 그대로다.
-- **받지 않은 것 — 거른 「잘못 골랐다」 를 돌려주는 꼴에.** R1 이 R4 로 넘긴 행이다. 고칠 자리(`RETURN_STATES` · `_rows`)는 Task 7 이 여는 파일이지만 R2 설계의 범위가 아니다. 지휘자가 R2 로 돌리면 Task 7 에 상태 하나(`wrong-choice-filtered` → `이미 잘못 골랐다` · `wrong_choice: yes`)를 더한다.
+- **싣는 순서 — 설계 §4 의 순서를 지휘자가 다시 정했다(2026-11-14) — 설계문서 지휘 기록에 적힌다.** 설계의 순서(이번 로드맵의 다른 에픽 → 파일이 겹치는 브랜치 → 그 밖의 로드맵과 브랜치)는 사용자가 고른 것이 아니라 지휘자의 제안이었다. 거의 모든 브랜치가 변경 기록 · 판 파일에서 겹치는 레포에서는 나란한 로드맵의 지도가 밀려 갈라짐 · 중복을 못 본다. 새 순서: ① 팀 지도 전부(이번 로드맵 → 다른 로드맵) ② 파일이 겹치는 브랜치 ③ 그 밖의 브랜치(최근 것부터). 이 계획은 설계문서를 고치지 않는다.
+- **받지 않은 것 — 거른 「잘못 골랐다」 를 돌려주는 꼴에.** R1 이 R4 로 넘긴 행이다. 지휘자가 R4 에 두기로 했다(2026-11-14) — 고칠 일을 지휘 흐름으로 넘기는 꼴은 R4 가 설계에서 정한다. Task 7 은 `RETURN_STATES` 의 상태 목록을 건드리지 않는다.
 
 ## 파일 구조
 
@@ -216,7 +217,7 @@ Expected: 셋 다 실패 0.
   - `DEFAULT_MARKERS = ("source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")`
   - `parse_markers(raw: str) -> Optional[List[str]]` — 쉼표 목록. 토큰은 `<키>` 또는 `<키>=<값>`, 글자는 ASCII 영숫자 · `_` · `-` 만(값에는 `.` 도). 빈 목록 · 틀린 토큰이 하나라도 있으면 None.
   - `is_intent_doc(text: str, markers: List[str]) -> bool`
-  - `read_tree(tree_root: str, rel: str) -> tuple` — `(내용 | None, 거부 사유 | None)`. `read_tracked` 와 같은 경로 검사 · 같은 사유 글자. 추적 여부는 `git -C <tree_root> --literal-pathspecs ls-files -s -z -- <rel>` 의 모드로(`100644` · `100755` 만, `120000` 은 `심볼릭 링크`). 경로 마디마다 `lstat` 으로 링크를 거부한다.
+  - `read_tree(tree_root: str, rel: str) -> tuple` — `(내용 | None, 거부 사유 | None)`. `read_tracked` 와 같은 경로 검사 · 같은 사유 글자. 추적 여부는 `git -C <tree_root> ls-files -s -z -- :(literal)<rel>` 의 모드로(`100644` · `100755` 만, `120000` 은 `심볼릭 링크`). 경로 마디마다 `lstat` 으로 링크를 거부한다.
   - `review_breadth(mode: str, names: Optional[set], read_doc, markers: List[str]) -> tuple` — `(breadth, intent_docs, unread)`. `read_doc(rel) -> Optional[str]`.
 - Produces(`intent_critic.py`): `OTHER_MAX_ENV` · `MARKERS_ENV` · `DEFAULT_OTHER_MAX = 80000`. `intent-config.txt` 에 네 줄(`other_teams_max_bytes` · `other_teams_max_bytes_source` · `intent_doc_markers` · `intent_doc_markers_source`). `_read_config` 는 새 키가 없으면 기본값, 있는데 틀리면 None. 돌려주는 dict 의 `other_teams_max_bytes` 는 int, `intent_doc_markers` 는 목록.
 
@@ -308,6 +309,7 @@ class TestBreadth(unittest.TestCase):
 |---|---|
 | `test_reads_tracked_and_staged` | `read_tree(repo, "a.txt") == ("x\n", None)` · `staged.md` 도 내용이 온다 |
 | `test_reads_working_copy` | `a.txt` 를 커밋 없이 `y\n` 로 고치면 `("y\n", None)` |
+| `test_glob_and_magic_names_are_literal` | 추적 파일 `docs/*.md`(`star\n`) · `docs/b.md` · `:(top)x.md`(`m\n`)가 있는 리포(목 없이 실제 git) → `read_tree(repo, "docs/*.md") == ("star\n", None)` · `read_tree(repo, ":(top)x.md") == ("m\n", None)`. `docs/*.md` 만 지우면(`git rm`) `read_tree(repo, "docs/*.md")` 의 내용이 None 이다(`docs/b.md` 로 번지지 않는다) |
 | `test_rejects` | `new.txt` → `(None, io_.REASON_UNTRACKED)` · `l.txt` → `(None, "심볼릭 링크")` · `ld/a.txt` → 내용 None · `../a.txt` → `(None, "상위 경로(..)")` · `/etc/hosts` → `(None, "절대 경로")` · `.git/config` → `(None, ".git 아래")` · `"a\n.txt"` → `(None, io_.REASON_CONTROL)` |
 
 `TestWideConfig`(`tic.TestConfig._config` 와 같은 호출 꼴):
@@ -356,6 +358,7 @@ git commit -m "feat(qg): 의도 문서 표시 · 리뷰의 넓이 · 리뷰 트�
   - `default_branch(repo: str) -> Optional[tuple]` — `(짧은 이름, 전체 ref)`. `git symbolic-ref --quiet refs/remotes/origin/HEAD` 의 대상이 실제로 있을 때만.
   - `other_work(repo: str, default_ref: str, end: str) -> tuple` — `(항목들, 읽지 못한 브랜치 수)`. 항목은 `{"name": str, "sha": str, "time": int, "paths": set, "base": Optional[str]}`, 이름 순. git 이 실패한 브랜치는 항목에 넣지 않고 수로 센다.
   - `mark_overlaps(branches: List[dict], names: Optional[set]) -> None` — 항목마다 `"overlap"`(정렬된 목록. `names` 가 None 이면 빈 목록).
+  - `_git(repo: str, *args: str)` — 이 모듈의 git 호출이 모두 지나는 한 자리(`subprocess.CompletedProcess` 또는 실행 실패 시 None). `lit(path: str) -> str` — `":(literal)" + path`.
 
 `other_work` 의 걸음(테스트가 정하지 않는 git 명령):
 
@@ -399,6 +402,7 @@ refs/remotes/origin/feature/other = feature/other 와 같은 커밋
 | `test_base_is_later_merge_base` | `feature/mine-next` 의 `base == <k2>` · `feature/other` 의 `base == <c0>` |
 | `test_overlaps` | `mark_overlaps(b, {"a.txt", "CHANGELOG.md"})` → `feature/other` 는 `["a.txt"]`, `feature/far` 는 `[]`. `names=None` 이면 모두 `[]` |
 | `test_repo_untouched` | 부르기 전후 `git for-each-ref` 와 `git status --porcelain` 출력이 같다 |
+| `test_git_forms_run_clean` | 목 없이 실제 git. `ot._git` 을 「진짜 `_git` 을 부르고 `(args[0], returncode)` 를 적는」 감싼 함수로 바꿔 끼운 뒤 `default_branch` · `other_work` · `mark_overlaps` 를 돈다 → 적힌 하위 명령 집합이 `{"symbolic-ref", "rev-parse", "for-each-ref", "rev-list", "log", "diff", "merge-base"}` 를 모두 담고, None 이 없고, `merge-base`(`--is-ancestor` 의 rc 1) 말고는 모든 rc 가 0 이다. 구현이 다른 하위 명령을 쓰면 이 집합에 더한다 — 쓰는 하위 명령이 하나도 빠지지 않게 |
 
 - [ ] **Step 2: 실패를 확인한다**
 
@@ -433,7 +437,7 @@ git commit -m "feat(qg): 다른 팀 읽기 — 다른 작업 찾기와 파일 �
 - Modify: `plugins/quality-gates/tests/test_publish_gh_two_files.sh`
 
 **Interfaces:**
-- Consumes: Task 3 의 세 함수 · `intent_origin.read_tree` · `read_tracked` · `is_intent_doc` · `frontmatter_value` · `doc_paths.is_doc_file` · `is_model_read`.
+- Consumes: Task 3 의 세 함수 · `_git` · `lit` · `intent_origin`(`import intent_origin as io_` — 테스트가 `ot.io_._run_git` 을 감싼다) 의 `read_tree` · `read_tracked` · `is_intent_doc` · `frontmatter_value` · `doc_paths.is_doc_file` · `is_model_read`.
 - Produces:
   - `FILE = "other-teams.md"` · `HEAD_OVERLAP = "## 겹치는 곳"` · `HEAD_UNVERIFIED = "## 확인 못 함"` · `HEAD_MAP = "## 팀 지도"` · `HEAD_WORK = "## 다른 작업"` · `HEAD_CAP = "## 상한"` · `DIFF_LINES = 120`
   - `epic_lines(roadmap_text: str) -> str`
@@ -480,7 +484,7 @@ git commit -m "feat(qg): 다른 팀 읽기 — 다른 작업 찾기와 파일 �
   - `다른 worktree <n>개의 커밋 안 된 작업은 읽지 않았다`(`git worktree list --porcelain` 에서 `repo` · `tree_root` 를 뺀 수가 1 이상일 때)
   - `원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다`
   - `다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음`
-- **상한.** 항목은 로드맵 하나 · 브랜치 하나가 한 단위다. 순서: ① 이번 로드맵 → ② 파일이 겹치는 브랜치(겹친 파일 수 큰 것 → 끝 커밋이 최근인 것 → 이름) → ③ 다른 로드맵과 겹치지 않는 브랜치를 함께 최근 순(로드맵의 시각은 기본 브랜치에서 그 파일을 마지막으로 바꾼 커밋). 순서대로 더하되 넣으면 `max_bytes` 를 넘는 항목은 건너뛰고 다음 항목을 이어 본다. 앞 두 절과 `## 상한` 은 늘 싣는다(상한에 세지 않는다). 겹침도 의도 문서도 없는 브랜치는 항목이 아니고 수만 적는다.
+- **상한.** 항목은 로드맵 하나 · 브랜치 하나가 한 단위다. 순서: ① 팀 지도 전부 — 이번 로드맵, 그다음 다른 로드맵들(기본 브랜치에서 그 파일을 마지막으로 바꾼 커밋이 최근인 것부터 → 경로) → ② 파일이 겹치는 브랜치(겹친 파일 수 큰 것 → 끝 커밋이 최근인 것 → 이름. 항목 안에서는 의도 문서가 먼저, 겹친 파일 diff 가 뒤) → ③ 그 밖의 브랜치(겹치지 않지만 의도 문서가 있는 것 — 끝 커밋이 최근인 것부터). 순서대로 더하되 넣으면 `max_bytes` 를 넘는 항목은 건너뛰고 다음 항목을 이어 본다. 앞 두 절과 `## 상한` 은 늘 싣는다(상한에 세지 않는다). 겹침도 의도 문서도 없는 브랜치는 항목이 아니고 수만 적는다.
 - `notices` 는 `## 상한` 의 줄이 「…개만 실었다」 일 때 그 줄 하나다.
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
@@ -504,8 +508,10 @@ Task 3 의 픽스처를 쓴다(`docs/rm/one/roadmap.md` 는 `### R1 — 하나` 
 | `test_no_default_branch` | `origin/HEAD` 를 지움 → 확인 못 함에 `기본 브랜치를 찾지 못함 — …` · `## 다른 작업` 에 브랜치 없음 · 이번 로드맵은 실린다 |
 | `test_worktree_count` | `git worktree add` 로 하나 더 만들면 `다른 worktree 1개의 커밋 안 된 작업은 읽지 않았다` |
 | `test_always_lines` | 어느 호출에나 `원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다` · `다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음` |
-| `test_cap_order_and_disclosure` | `max_bytes` 를 이번 로드맵 + `feature/other` 만 들어갈 값으로 → 그 둘이 실리고 `## 상한` 줄이 `상한 <c>바이트 — 4개 중 2개만 실었다(뺀 것: …)` 이며 `notices` 가 그 줄 하나다 |
-| `test_big_overlap_diff_does_not_starve_roadmaps` | `feature/other` 가 `CHANGELOG.md` 를 2000줄 고친 리포 · `names={"CHANGELOG.md"}` · 기본 상한 → diff 가 120줄에서 끊기고 `… <n>줄 더` 가 있으며 `two-intent-token` 이 실린다 |
+| `test_cap_order_and_disclosure` | `names={"a.txt"}` · `max_bytes` 를 두 로드맵의 지도만 들어갈 값으로 → `one-intent-token` · `two-intent-token` 이 실리고 `## 다른 작업` 에 `feature/other` 가 없으며, `## 상한` 줄이 `상한 <c>바이트 — 3개 중 2개만 실었다(뺀 것: feature/other)` 이고 `notices` 가 그 줄 하나다. 상한이 넉넉하면 `상한 <c>바이트 안에 3개를 모두 실었다` 이고 `notices` 는 비어 있다 |
+| `test_order_maps_then_overlap_then_rest` | `feature/far` 에 의도 문서를 하나 더한 리포 · `names={"a.txt"}` · 넉넉한 상한 → `text` 안의 자리가 `### 이번 로드맵` < `### 다른 로드맵` < `### feature/other` < `### feature/far` 순이고, `feature/other` 항목 안에서 `#### 의도 문서` 가 `#### 겹치는 파일` 보다 앞이다 |
+| `test_big_overlap_diff_does_not_starve_roadmaps` | `feature/other` 가 `CHANGELOG.md` 를 2000줄 고친 리포 · `names={"CHANGELOG.md"}` → 기본 상한에서 `two-intent-token` 의 자리가 `#### 겹치는 파일 CHANGELOG.md` 보다 앞이고(지도가 겹침 diff 앞에 실린다), diff 가 120줄에서 끊기며 `… <n>줄 더` 가 있다. 상한을 지도 둘만 들어갈 값으로 줄여도 `two-intent-token` 은 실리고 빠지는 것은 `feature/other` 다 |
+| `test_git_forms_run_clean_collect` | 목 없이 실제 git. 픽스처에 `feature/glob` 을 더한다 — `team/*.md` 와 `team/b.md` 를 둘 다 고치고 `:(top)x.md` 를 더한 브랜치. `ot._git` 과 `ot.io_._run_git` 을 Task 3 처럼 감싸 `collect(…, names={"team/*.md", ":(top)x.md"})` 를 돈다 → 적힌 하위 명령 집합이 `{"ls-tree", "show", "ls-files", "log", "diff", "worktree"}` 를 모두 담고, None 이 없고, `merge-base` 말고는 모든 rc 가 0 이다(구현이 쓰는 하위 명령이 더 있으면 집합에 더한다). `feature/glob` 의 겹침 줄이 `team/*.md` 와 `:(top)x.md` 둘이고, `#### 겹치는 파일 team/*.md` 아래 diff 에 `team/b.md` 의 줄이 없다 |
 | `test_symlinked_roadmap_folder_skipped` | 기본 브랜치의 `docs/rm/link`(리포 밖을 가리키는 링크)는 다른 로드맵으로 읽지 않는다 |
 | `test_body_cannot_forge_summary` | `team/other-design.md` 본문에 `## 겹치는 곳` 과 `- 가짜 — x` 줄 → `summary(text)[0]` 에 `가짜` 가 없다 |
 
