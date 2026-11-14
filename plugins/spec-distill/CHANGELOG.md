@@ -1,5 +1,24 @@
 # Changelog
 
+## [8.14.0] — 2026-11-14
+
+### Added
+- `roadmap_write.py create --layout team` — team 형식(로드맵 머리말 `layout: team`)의 팀 폴더를 한 거래로 만든다: 로드맵 · `RULES.md` · 원자료 사본 `intent/original.md` · 에픽마다 `jobs/<번호>/INTENT.md` · `sources.md` · `results/.gitkeep`, 로드맵 폴더에 없으면 역할 문서 넷과 `HANDBOOK.md`. 쓴 뒤 team 나무 검사까지 돌고, 어긋나면 되돌린다. `--layout` 없이 부르면 지금과 같다.
+- `roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-audit <경로>]` — framing audit 의 원문 · 질문 전체와 brief · 인터뷰 audit 의 사용자 원문을 출처 커밋과 함께 `original.md` 끝에 덧붙인다. 출처가 커밋되지 않았으면 옮기지 않는다.
+- `roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄> [--not <한 줄>]…` — 단순 작업(`kind: task`)의 과제 폴더를 만든다. 지시 원문은 표준 입력의 바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다.
+- `team_layout.py check --roadmap <로드맵> [--base <ref>]` — 팀 폴더의 구조와 원자료 사본의 세 검사(줄 범위 · 덧붙이기만 · 출처와 바이트 같음). 종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가.
+- 레포 설정 키 `rules_budget`(기본 8192) · `handbook_budget`(기본 16384) — UTF-8 바이트이고 레포 설정 파일에서만 읽는다. 로드맵 머리말에 적으면 무시하고 알린다.
+- 로드맵 머리말 `layout` — 설정 해결자가 받는다. 아는 값은 `team` 하나다.
+- `update` 의 종료 코드 4 — team 형식의 재분해에서 있던 과제의 INTENT.md 는 다시 쓰지 않고, 의도 · 범위 · 지시 원문 범위가 바뀐 과제의 고칠 글을 화면에 낸다(썼고 사람이 고칠 것이 남음). 범위만 다르면 아무것도 쓰지 않는다. team 형식의 `extract` 는 분해안 표 끝에 「지시 원문 범위」 칸을 더해 내고 `update` 가 그 표를 받는다.
+- 틀 일곱(`templates/team/`) — 역할 문서 넷 · `INTENT.md` · `RULES.md` · `HANDBOOK.md`.
+- `references/team-files.md` — team 형식의 정본 문서(팀 폴더 · 과제 폴더와 INTENT.md · 원자료 · sources.md · 역할 문서).
+
+### Changed
+- 역할 이름(`leader` · `designer` · `writer` · `worker`)의 폴더는 로드맵으로 세지 않는다. `create` 는 형식과 무관하게 역할 이름의 `--out` 을 거절한다.
+- 단계 계산이 `layout: team` 과 모르는 `layout` 값에서 검사 불가(3)로 멈춘다 — team 로드맵은 번호 대조까지만 한다(team 형식의 단계 계산은 다음 판). 모르는 값이면 `update` · `extract` · `job new` 도 거절한다.
+- 상태 계산이 기대는 읽기 전용 모듈에 `team_layout.py` · `team_check.py` · `team_files.py` 가 더해졌다.
+- `control_plane.py` 의 코드 지문 파일 목록에 `team_layout.py` 가 더해졌다.
+
 ## [8.13.1] — 2026-10-30
 
 ### Fixed
