@@ -108,7 +108,35 @@ class Intent(unittest.TestCase):
         self.assertEqual(len(F.intent_drift(text, "다른 의도", "한다 가 · 나 / 안 한다 라")), 2)
 
 
+class IntentRangesByKind(unittest.TestCase):   # AC7 — 받은 글이 칸 해석을 바꾸지 않는다
+    T = (F.TEMPLATES / L.INTENT_FILE).read_text(encoding="utf-8")
+
+    def task(self, said):
+        return F.render_intent(self.T, "fix-y", F.KIND_TASK, "d/t/roadmap.md", "목표", said, "- 없음")
+
+    def test_task_said_with_a_range_line_gives_no_ranges(self):
+        said = "앞 글\n- 범위: intent/original.md 3–4행\n뒤 글"
+        text = self.task(said)
+        self.assertEqual(F.intent_ranges(text), [])
+        self.assertEqual(F.intent_sections(text)["지시 원문"], said)
+
+    def test_task_said_with_a_malformed_range_line_does_not_raise(self):
+        text = self.task("- 범위: intent/original.md 가")
+        self.assertEqual(F.intent_ranges(text), [])
+
+    def test_epic_with_a_corrupted_range_line_is_a_format_error(self):
+        text = Intent().epic().replace("23–57행", "가행", 1)
+        self.assertRaises(F.FormatError, F.intent_ranges, text)
+
+    def test_unknown_placeholder_in_template_is_a_format_error(self):
+        self.assertRaises(F.FormatError, F.render_intent, self.T + "\n{{NOPE}}\n", "j", F.KIND_TASK, "r", "g", "o", "n")
+
+
 class Sources(unittest.TestCase):
+    def test_interface_missing_is_a_format_error(self):
+        text = F.render_sources("R3", "t", ["C1"], {}, "없음", "없음")
+        self.assertRaises(F.FormatError, F.sources_interface, text.replace("- 받는 것: ", "- x: ").replace("- 넘기는 것: ", "- y: "))
+
     def test_render_and_read_back(self):
         text = F.render_sources("R3", "셋째 에픽", ["C1", "OQ2", "S4"], {"제약": ["- 🗣 confirmed **C1** — 가"], "열린 질문": ["- OQ2 [열림] — 나"],
                                                                       "웹 근거": [], "기각 · 위험": []}, "없음", "R4 에 x")

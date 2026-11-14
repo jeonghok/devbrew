@@ -146,6 +146,10 @@ def intent_sections(text: str) -> dict:
 
 
 def intent_ranges(text: str) -> list:
+    lines = text.split("\n")
+    header = lines[:_header_end(lines)]
+    if "kind: " + KIND_TASK in header:
+        return []   # 단순 작업의 지시 원문은 받은 말 그대로다 — 범위 줄로 읽지 않는다
     prefix = _pointer_prefix()
     for line in intent_sections(text)["지시 원문"].split("\n"):
         if line.startswith(prefix):
