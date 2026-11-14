@@ -3039,6 +3039,32 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(text.count("\n## %s\n" % head), 1, head)
         return text.split("\n## %s\n" % head, 1)[1].split("\n## ", 1)[0]
 
+    def test_slot_files_are_read_to_the_end(self):
+        """칸 파일(다른 팀 기록이 실린 근거 파일 포함)은 끝까지 읽어 넘긴다 — 둘째 호출은 I3 을 가리킨다."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        rule = ("칸 파일이 Read 한 번에 다 읽히지 않으면(다른 팀 기록이 실린 `intent-evidence.txt` 는 커질 수 있다) "
+                "끝까지 이어 읽어 전부 넣는다 — 다 넣지 못했으면 어느 칸을 어디까지 넣었는지 사용자에게 보인다"
+                "(잘린 파일을 말없이 넘기지 않는다).")
+        self.assertEqual(text.count(rule), 1)
+        self.assertEqual(self._section("I3 첫째 호출").count(rule), 1)
+        self.assertEqual(self._section("I4 둘째 호출").count("칸 값은 I3 과 같고"), 1)
+
+    def test_result_section_only_on_rendered_runs(self):
+        """결과 절의 다른 팀 목록은 `render` 가 돈 실행에만 있다 — 건너뛴 실행의 목록은 상태 문서와 같은 말."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        i7 = self._section("I7 돌려주기")
+        lead = ("- `render` 가 돈 실행이면 `result.md` 의 `## intent-critic` 의 「다른 팀과 겹치는 곳:」 · "
+                "「다른 팀 확인 못 함:」 목록")
+        skipped = "단계를 건너뛴 실행(kill switch · 멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다"
+        self.assertEqual(text.count(lead), 1)
+        self.assertEqual(i7.count(lead), 1)
+        line = [l for l in i7.split("\n") if l.startswith(lead)][0]
+        self.assertIn(skipped + " — 건너뜀 줄과 돌려주는 꼴만 보인다.", line)
+        self.assertEqual(text.count(skipped), 1)
+        self.assertNotIn("- `result.md` 의 `## intent-critic` 의 「다른 팀과 겹치는 곳:」", text)
+        state = (REFERENCE.parent / "state-file-format.md").read_text(encoding="utf-8")
+        self.assertEqual(state.count(skipped), 1)
+
     def test_commit_todo_names_only_written_files(self):
         """커밋 안내는 쓴 답 파일(`file:` 이 `-` 가 아닌 것)만 싣는다 — 「답 파일 - 을 커밋한다」 가 나오지 않게."""
         i7 = self._section("I7 돌려주기")
