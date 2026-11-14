@@ -1,21 +1,57 @@
-"""intent-critic 의 다른 팀 읽기 — 기본 브랜치 · 다른 작업(브랜치) 찾기 · 파일 겹침.
+"""intent-critic 의 다른 팀 읽기 — 기본 브랜치 · 다른 작업(브랜치) 찾기 · 파일 겹침 · 팀 지도 ·
+진행 중인 의도 문서 · 열린 PR · 상한 · 기록(`other-teams.md` 의 글).
 
 git 은 `_git` 한 자리로만 부른다 — argv 목록(셸 없음) · `git -C <리포>`. 경로를 pathspec 으로
 넘길 때는 `lit` 로 경로마다 `:(literal)` 접두를 붙인다(전역 `--literal-pathspecs` 는 쓰지 않는다).
-rev 와 경로를 함께 받는 하위 명령(rev-list · log · diff)은 rev 뒤를 `--` 로 닫는다 — 작업 트리에
-rev 와 같은 이름의 파일(`HEAD` · 기본 ref 경로)이 있어도 rev 로만 읽힌다.
-리포를 바꾸는 명령은 쓰지 않는다. 이 모듈은 `adjudication` 을 쓰지 않는다.
+rev 와 경로를 함께 받는 하위 명령(rev-list · log · diff · ls-tree)은 rev 뒤를 `--` 로 닫는다 — 작업
+트리에 rev 와 같은 이름의 파일(`HEAD` · 기본 ref 경로)이 있어도 rev 로만 읽힌다. 파일 내용은
+`intent_origin` 의 `read_tree` · `read_tracked`(추적되는 보통 파일만 · 링크 없음)로만 읽는다.
+리포를 바꾸는 명령은 쓰지 않는다. 네트워크는 `open_prs` 의 열린 PR 목록 한 번뿐이다.
+이 모듈은 `adjudication` 을 쓰지 않는다.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
+import time
 from typing import List, Optional
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
+
+import doc_paths  # noqa: E402
+import intent_origin as io_  # noqa: E402
+
+FILE = "other-teams.md"
+HEAD_OVERLAP = "## 겹치는 곳"
+HEAD_UNVERIFIED = "## 확인 못 함"
+HEAD_MAP = "## 팀 지도"
+HEAD_WORK = "## 다른 작업"
+HEAD_CAP = "## 상한"
+DIFF_LINES = 120
+PR_TIMEOUT = 30
+
+NO_OVERLAP = "겹침 없음"
+NOTHING_UNVERIFIED = "없음"
+LINE_NO_ROADMAP = "로드맵 없음"
+LINE_NO_DEFAULT = "기본 브랜치를 찾지 못함 — 다른 브랜치와 다른 로드맵을 읽지 않았다"
+LINE_NAMES_UNKNOWN = "바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함"
+LINE_REFS_UNREADABLE = "브랜치 목록을 읽지 못함 — 다른 브랜치를 읽지 않았다"
+LINE_INTERVIEW = "인터뷰 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다"
+LINE_WORKTREES_UNREADABLE = "다른 worktree 를 확인 못 함 — worktree 목록을 읽지 못함"
+LINE_NO_FETCH = "원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다"
+LINE_UNSEEN = "다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음"
+PR_NO_GH = "gh 없음"
+PR_NO_ORIGIN = "origin 을 읽지 못함"
+PR_TIMED_OUT = "시간 초과"
+PR_BAD_REPLY = "gh 응답을 읽지 못함"
+
+_EPIC_MARK = "- 의도:"
+_EPIC_KEYS = (_EPIC_MARK, "- 범위:", "- 의존:", "- 경로 예약:")
+_DECISIONS = "## 결정 기록"
 
 ORIGIN_HEAD = "refs/remotes/origin/HEAD"
 _REMOTES = "refs/remotes/"
@@ -185,3 +221,484 @@ def mark_overlaps(branches: List[dict], names: Optional[set]) -> None:
     """항목마다 `"overlap"` — 바뀐 파일 목록(`names`)과 겹친 경로의 정렬된 목록."""
     for branch in branches:
         branch["overlap"] = sorted(branch["paths"] & names) if names is not None else []
+
+
+# ---------------------------------------------------------------- 한 줄 값 · 팀 지도
+
+def one_line(value: str) -> str:
+    """기록의 머리 줄 · 앞 두 절에 쓰는 값 — 인쇄할 수 없는 글자(줄바꿈 · 짝 없는 surrogate 포함)는 `?`."""
+    out = []
+    for ch in value:
+        out.append(ch if ch.isprintable() else "?")
+    return "".join(out)
+
+
+def _clean(text: str) -> str:
+    """UTF-8 로 쓸 수 없는 글자(짝 없는 surrogate)를 `?` 로 — 기록 쓰기가 죽지 않게."""
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
+def _heading_depth(line: str) -> int:
+    depth = len(line) - len(line.lstrip("#"))
+    return depth if depth and line[depth:depth + 1] == " " else 0
+
+
+def _epic_block_lines(block: List[str]) -> List[str]:
+    """에픽 블록(`### ` 절)에서 머리 줄 · 의도 · 범위 · 의존 · 경로 예약 줄과 바로 딸린 들여쓴 줄."""
+    out = [block[0]]
+    keep = False
+    for line in block[1:]:
+        if line.startswith(_EPIC_KEYS):
+            keep = True
+            out.append(line)
+        elif keep and line[:1] in (" ", "\t") and line.strip():
+            out.append(line)
+        else:
+            keep = False
+    return out
+
+
+def epic_lines(roadmap_text: str) -> str:
+    """로드맵의 에픽 블록(`- 의도:` 줄이 있는 `### ` 절)의 지도 줄 + `## 결정 기록` 절 통째."""
+    epics: List[List[str]] = []
+    decisions: List[str] = []
+    current: Optional[List[str]] = None
+    in_decisions = False
+    for raw in roadmap_text.split("\n"):
+        line = raw.rstrip("\r")
+        depth = _heading_depth(line)
+        if 0 < depth <= 2:
+            current = None
+            in_decisions = line.rstrip() == _DECISIONS
+            if in_decisions:
+                decisions.append(line)
+            continue
+        if in_decisions:
+            decisions.append(line)
+        elif depth == 3:
+            current = [line]
+            epics.append(current)
+        elif current is not None:
+            current.append(line)
+    out: List[str] = []
+    for block in epics:
+        for line in block[1:]:
+            if line.startswith(_EPIC_MARK):
+                out.extend(_epic_block_lines(block))
+                break
+    while decisions and not decisions[-1].strip():
+        decisions.pop()
+    out.extend(decisions)
+    return "".join(line + "\n" for line in out)
+
+
+def _unique(items) -> List[str]:
+    out: List[str] = []
+    for item in items:
+        if item not in out:
+            out.append(item)
+    return out
+
+
+def _commit_time(repo: str, rev: str, rel: str) -> int:
+    """rev 에서 rel 을 마지막으로 바꾼 커밋의 시각(unix). 모르면 0."""
+    if not _rev_ok(rev):
+        return 0
+    proc = _git(repo, "log", "-1", "--format=%ct", rev, "--", lit(rel))
+    if not _ok(proc):
+        return 0
+    try:
+        return int(_text(proc.stdout).strip() or "0")
+    except ValueError:
+        return 0
+
+
+def _siblings(listing: List[str], parent: str, filename: str) -> List[str]:
+    """`<parent>/<폴더>/<filename>` 꼴의 경로만(폴더 한 마디)."""
+    prefix = parent + "/" if parent else ""
+    out: List[str] = []
+    for path in listing:
+        if not path.startswith(prefix):
+            continue
+        parts = path[len(prefix):].split("/")
+        if len(parts) == 2 and parts[0] and parts[1] == filename:
+            out.append(path)
+    return out
+
+
+def _listing(where: str, parent: str, *head: str) -> Optional[List[str]]:
+    """`git <head…> -- :(literal)<parent>` 의 `-z` 이름 목록. 실패면 None."""
+    args = list(head) + ["--"]
+    if parent:
+        args.append(lit(parent))
+    proc = _git(where, *args)
+    if not _ok(proc):
+        return None
+    return sorted(_z_paths(proc.stdout))
+
+
+def _map_unit(head: str, rel: str, text: str) -> tuple:
+    return ("map", one_line(rel), "%s\n%s" % (head, epic_lines(text)))
+
+
+def _team_maps(repo: str, tree_root: str, review_commit: str, roadmaps: List[str],
+               default: Optional[tuple], unverified: List[str]) -> List[tuple]:
+    """팀 지도 항목 `(종류, 이름, 글)` — 이번 로드맵(리뷰 트리) → 나란한 다른 로드맵."""
+    units: List[tuple] = []
+    read_ok: List[str] = []  # 신뢰 경계를 지난 로드맵만 나란한 폴더를 찾는 기준이 된다
+    for rel in roadmaps:
+        text, why = io_.read_tree(tree_root, rel)
+        if text is None:
+            unverified.append("로드맵 %s 를 읽지 못함 — %s" % (one_line(rel), why))
+            continue
+        read_ok.append(rel)
+        units.append(_map_unit("### 이번 로드맵 %s (리뷰 트리)" % one_line(rel), rel, text))
+    if default is None:
+        return units
+    short, default_ref = default
+    found = []  # (시각, 경로, 기본 브랜치에서인가)
+    seen = set(roadmaps)
+    for parent, filename in _unique(_parents(read_ok)):
+        on_default = _listing(repo, parent, "ls-tree", "-r", "-z", "--name-only", default_ref)
+        from_default = bool(on_default)
+        listing = on_default if from_default else _listing(tree_root, parent, "ls-files", "-z")
+        if listing is None:
+            unverified.append("다른 로드맵을 찾지 못함 — %s 폴더 목록을 읽지 못함"
+                              % one_line(parent or "."))
+            continue
+        for rel in _siblings(listing, parent, filename):
+            if rel in seen:
+                continue
+            seen.add(rel)
+            rev = default_ref if from_default else review_commit
+            found.append((-_commit_time(repo, rev, rel), rel, from_default))
+    for _when, rel, from_default in sorted(found):
+        if from_default:
+            text, why = io_.read_tracked(repo, default_ref, rel)
+            where = "기본 브랜치 %s" % one_line(short)
+        else:
+            text, why = io_.read_tree(tree_root, rel)
+            where = "리뷰 트리"
+        if text is None:
+            unverified.append("로드맵 %s 를 읽지 못함 — %s" % (one_line(rel), why))
+            continue
+        units.append(_map_unit("### 다른 로드맵 %s (%s)" % (one_line(rel), where), rel, text))
+    return units
+
+
+def _parents(roadmaps: List[str]) -> List[tuple]:
+    """로드맵마다 `(부모 폴더, 파일 이름)` — 폴더가 없는(리포 맨 위) 로드맵은 나란한 폴더가 없다."""
+    out: List[tuple] = []
+    for rel in roadmaps:
+        folder, sep, filename = rel.rpartition("/")
+        if not sep or not folder:
+            continue
+        parent = folder.rpartition("/")[0]
+        out.append((parent, filename))
+    return out
+
+
+# ---------------------------------------------------------------- 열린 PR
+
+def _parse_prs(raw: bytes) -> tuple:
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        return None, PR_BAD_REPLY
+    if not isinstance(data, list):
+        return None, PR_BAD_REPLY
+    out = []
+    for item in data:
+        if not isinstance(item, dict):
+            return None, PR_BAD_REPLY
+        number, title, branch = item.get("number"), item.get("title"), item.get("headRefName")
+        if isinstance(number, bool) or not isinstance(number, int):
+            return None, PR_BAD_REPLY
+        if not isinstance(title, str) or not isinstance(branch, str):
+            return None, PR_BAD_REPLY
+        out.append({"number": number, "title": title, "branch": branch})
+    return out, None
+
+
+def open_prs(repo: str) -> tuple:
+    """`(목록 | None, 사유 | None)` — 열린 PR 의 번호 · 제목 · 브랜치 이름. gh 는 한 번, 30초 안에."""
+    try:
+        found = subprocess.run(["bash", os.path.join(HERE, "gh-repo.sh")], cwd=repo,
+                               capture_output=True, stdin=subprocess.DEVNULL, timeout=PR_TIMEOUT)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return None, PR_NO_ORIGIN
+    if found.returncode == 4:
+        return None, PR_NO_GH
+    origin = found.stdout.decode("utf-8", "replace").strip()
+    if found.returncode != 0 or not origin or origin.startswith("-") or not io_.single_line(origin):
+        return None, PR_NO_ORIGIN
+    argv = ["gh", "pr", "list", "-R", origin, "--state", "open", "--json", "number,title,headRefName", "--limit", "200"]
+    try:
+        proc = subprocess.run(argv, cwd=repo, capture_output=True, stdin=subprocess.DEVNULL,
+                              timeout=PR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return None, PR_TIMED_OUT
+    except (OSError, ValueError):
+        return None, PR_NO_GH
+    if proc.returncode != 0:
+        return None, "gh 실패(rc %d)" % proc.returncode
+    return _parse_prs(proc.stdout)
+
+
+def _names_by_tip(repo: str) -> Optional[dict]:
+    """끝 커밋 → 그 커밋을 가리키는 브랜치 이름들(로컬 이름 · 원격 이름에서 원격 접두를 뗀 것)."""
+    proc = _git(repo, "for-each-ref", "--format=%(refname)%00%(objectname)",
+                "refs/heads", "refs/remotes")
+    if not _ok(proc):
+        return None
+    names: dict = {}
+    for line in _text(proc.stdout).split("\n"):
+        ref, sep, sha = line.partition("\0")
+        if not sep:
+            continue
+        if ref.startswith(_HEADS):
+            name = ref[len(_HEADS):]
+        elif ref.startswith(_REMOTES):
+            _remote, sep, name = ref[len(_REMOTES):].partition("/")
+            if not sep or not name or name == "HEAD":
+                continue
+        else:
+            continue
+        names.setdefault(sha, set()).add(name)
+    return names
+
+
+def _attach_prs(repo: str, entries: List[dict], prs: List[dict]) -> List[int]:
+    """항목마다 `"prs"` 를 단다. 끝 커밋이 같은 다른 이름(가려진 로컬 이름 · 원격 이름)도 견준다.
+
+    돌려주는 것: 브랜치가 이 리포의 어느 ref 에도 없는 PR 번호들.
+    """
+    by_tip = _names_by_tip(repo)
+    known: set = set()
+    if by_tip is not None:
+        for names in by_tip.values():
+            known |= names
+    for entry in entries:
+        aliases = {entry["name"]}
+        if by_tip is not None:
+            aliases |= by_tip.get(entry["sha"], set())
+        entry["aliases"] = aliases
+        entry["prs"] = []
+        known |= aliases
+    missing: List[int] = []
+    for pr in sorted(prs, key=lambda p: p["number"]):
+        hit = False
+        for entry in entries:
+            if pr["branch"] in entry["aliases"]:
+                entry["prs"].append(pr)
+                hit = True
+        if not hit and pr["branch"] not in known:
+            missing.append(pr["number"])
+    return missing
+
+
+def _pr_label(entry: dict, prs_known: bool) -> str:
+    if not prs_known:
+        return "열린 PR 확인 못 함"
+    if not entry["prs"]:
+        return "열린 PR 없음"
+    labels = []
+    for pr in entry["prs"]:
+        labels.append(("PR #%d %s" % (pr["number"], one_line(pr["title"]))).rstrip())
+    return " · ".join(labels)
+
+
+# ---------------------------------------------------------------- 다른 작업 항목
+
+def _intent_docs(repo: str, entry: dict, markers: List[str]) -> List[tuple]:
+    """그 브랜치 끝에서 읽은 의도 문서 `(경로, 글)` — 다른 작업이 바꾼 문서 파일 가운데."""
+    docs: List[tuple] = []
+    for rel in sorted(entry["paths"]):
+        if not doc_paths.is_doc_file(rel):
+            continue
+        text, _why = io_.read_tracked(repo, entry["sha"], rel)
+        if text is not None and io_.is_intent_doc(text, markers):
+            docs.append((rel, text))
+    return docs
+
+
+def _overlap_diff(repo: str, base: str, sha: str, rel: str) -> Optional[str]:
+    """base..끝 의 그 파일 diff — DIFF_LINES 줄까지, 넘치면 `… <n>줄 더`. 읽지 못하면 None."""
+    proc = _git(repo, "-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff",
+                "--no-textconv", "--no-renames", base, sha, "--", lit(rel))
+    if not _ok(proc):
+        return None
+    lines = proc.stdout.decode("utf-8", "replace").split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) > DIFF_LINES:
+        lines = lines[:DIFF_LINES] + ["… %d줄 더" % (len(lines) - DIFF_LINES)]
+    return "".join(line + "\n" for line in lines)
+
+
+def _with_newline(text: str) -> str:
+    return text if not text or text.endswith("\n") else text + "\n"
+
+
+def _branch_unit(repo: str, entry: dict, default_ref: str, prs_known: bool,
+                 unverified: List[str]) -> tuple:
+    name = one_line(entry["name"])
+    stamp = time.strftime("%Y-%m-%d", time.gmtime(entry["time"]))
+    parts = ["### %s · %s · %s · %s\n" % (name, entry["sha"][:7], stamp,
+                                         _pr_label(entry, prs_known))]
+    for rel, text in entry["docs"]:
+        parts.append("#### 의도 문서 %s\n%s" % (one_line(rel), _with_newline(text)))
+    base = entry["base"] or default_ref
+    for rel in entry["overlap"]:
+        diff = _overlap_diff(repo, base, entry["sha"], rel)
+        if diff is None:
+            unverified.append("%s 의 %s diff 를 읽지 못함" % (name, one_line(rel)))
+            continue
+        parts.append("#### 겹치는 파일 %s\n%s" % (one_line(rel), diff))
+    return ("work", name, "".join(parts))
+
+
+def _overlap_line(entry: dict, prs_known: bool) -> str:
+    label = ""
+    if prs_known and entry["prs"]:
+        label = " · " + _pr_label(entry, prs_known)
+    paths = []
+    for rel in entry["overlap"]:
+        paths.append(one_line(rel))
+    return "%s%s — %s" % (one_line(entry["name"]), label, " · ".join(paths))
+
+
+def _other_worktrees(repo: str, tree_root: str) -> Optional[int]:
+    proc = _git(repo, "worktree", "list", "--porcelain")
+    if not _ok(proc):
+        return None
+    mine = {os.path.realpath(repo), os.path.realpath(tree_root)}
+    count = 0
+    for line in _text(proc.stdout).split("\n"):
+        if line.startswith("worktree ") and os.path.realpath(line[len("worktree "):]) not in mine:
+            count += 1
+    return count
+
+
+def _interview_unmarked(markers: List[str]) -> bool:
+    for marker in markers:
+        if marker not in io_.DEFAULT_MARKERS:
+            return False
+    return True
+
+
+# ---------------------------------------------------------------- 기록
+
+def _cap(units: List[tuple], max_bytes: int) -> tuple:
+    """순서대로 싣되 넘치는 항목은 건너뛰고 다음을 본다 → (실린 지도, 실린 작업, 상한 줄, 공시)."""
+    maps: List[str] = []
+    work: List[str] = []
+    skipped: List[str] = []
+    used = 0
+    for kind, name, text in units:
+        size = len(text.encode("utf-8"))
+        if used + size > max_bytes:
+            skipped.append(name)
+            continue
+        used += size
+        (maps if kind == "map" else work).append(text)
+    total = len(units)
+    if skipped:
+        line = "상한 %d바이트 — %d개 중 %d개만 실었다(뺀 것: %s)" % (
+            max_bytes, total, total - len(skipped), " · ".join(skipped))
+        return maps, work, line, [line]
+    return maps, work, "상한 %d바이트 안에 %d개를 모두 실었다" % (max_bytes, total), []
+
+
+def _section(head: str, lines: List[str], empty: str) -> str:
+    body = lines if lines else [empty]
+    return head + "\n" + "".join("- %s\n" % line for line in body)
+
+
+def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
+            roadmaps: List[str], markers: List[str], max_bytes: int, list_prs=open_prs) -> dict:
+    """다른 팀 기록 → `{"text": 기록 글, "notices": 공시 줄}`. 파일을 쓰지 않는다.
+
+    git 실패는 값으로 다룬다 — 읽지 못한 것은 「확인 못 함」 줄이 된다.
+    """
+    names = set(names) if names is not None else None
+    roadmaps = _unique(roadmaps)
+    unverified: List[str] = []
+    if not roadmaps:
+        unverified.append(LINE_NO_ROADMAP)
+    default = default_branch(repo)
+    units = _team_maps(repo, tree_root, review_commit, roadmaps, default, unverified)
+    overlapped: List[dict] = []
+    rest: List[dict] = []
+    plain = 0
+    prs_known = False
+    if default is None:
+        unverified.append(LINE_NO_DEFAULT)
+    else:
+        entries, unreadable = other_work(repo, default[1], review_commit)
+        if unreadable is None:
+            unverified.append(LINE_REFS_UNREADABLE)
+        elif unreadable:
+            unverified.append("읽지 못한 브랜치 %d개" % unreadable)
+        if names is None:
+            unverified.append(LINE_NAMES_UNKNOWN)
+        mark_overlaps(entries, names)
+        prs, why = list_prs(repo)
+        prs_known = prs is not None
+        if not prs_known:
+            unverified.append("열린 PR 확인 못 함 — %s" % one_line(str(why)))
+        for number in _attach_prs(repo, entries, prs or []):
+            unverified.append("PR #%d 내용 확인 못 함 — 그 브랜치가 이 리포에 없다" % number)
+        for entry in entries:
+            entry["docs"] = _intent_docs(repo, entry, markers)
+            if entry["overlap"]:
+                overlapped.append(entry)
+            elif entry["docs"]:
+                rest.append(entry)
+            else:
+                plain += 1
+        overlapped.sort(key=lambda e: (-len(e["overlap"]), -e["time"], e["name"]))
+        rest.sort(key=lambda e: (-e["time"], e["name"]))
+        for entry in overlapped + rest:
+            units.append(_branch_unit(repo, entry, default[1], prs_known, unverified))
+    if _interview_unmarked(markers):
+        unverified.append(LINE_INTERVIEW)
+    worktrees = _other_worktrees(repo, tree_root)
+    if worktrees is None:
+        unverified.append(LINE_WORKTREES_UNREADABLE)
+    elif worktrees:
+        unverified.append("다른 worktree %d개의 커밋 안 된 작업은 읽지 않았다" % worktrees)
+    unverified.extend((LINE_NO_FETCH, LINE_UNSEEN))
+
+    clean_units: List[tuple] = []
+    for kind, name, text in units:
+        clean_units.append((kind, _clean(name), _clean(text)))
+    maps, work, cap_line, notices = _cap(clean_units, max(0, int(max_bytes)))
+    overlap_lines: List[str] = []
+    for entry in overlapped:
+        overlap_lines.append(_overlap_line(entry, prs_known))
+    parts = [_section(HEAD_OVERLAP, overlap_lines, NO_OVERLAP),
+             _section(HEAD_UNVERIFIED, unverified, NOTHING_UNVERIFIED),
+             HEAD_MAP + "\n"] + maps + [HEAD_WORK + "\n"] + work
+    if plain:
+        parts.append("그 밖의 브랜치 %d개 — 겹침 · 의도 문서 없음\n" % plain)
+    parts.append("%s\n%s\n" % (HEAD_CAP, cap_line))
+    return {"text": _clean("".join(parts)), "notices": notices}
+
+
+def summary(text: str) -> tuple:
+    """`(겹치는 곳 줄들, 확인 못 함 줄들)` — `HEAD_MAP` 줄 앞까지만 읽는다(본문의 머리 흉내를 보지 않는다)."""
+    overlap: List[str] = []
+    unverified: List[str] = []
+    target = None
+    for raw in text.split("\n"):
+        line = raw.rstrip("\r")
+        if line == HEAD_MAP:
+            break
+        if line == HEAD_OVERLAP:
+            target = overlap
+        elif line == HEAD_UNVERIFIED:
+            target = unverified
+        elif target is not None and line.strip():
+            target.append(line)
+    return overlap, unverified
