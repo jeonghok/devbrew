@@ -340,9 +340,10 @@ def _valid_answers_dir(raw: str) -> Optional[str]:
     ok = True
     parts = value.split("/")
     for part in parts:
-        if part in ("", ".", "..", ".git") or not part.isprintable():
+        # 대소문자를 가리지 않는 파일 시스템에서는 `.GIT` 이 `.git` 이다 — 글자 크기를 접어 견준다.
+        if part in ("", ".", "..") or part.casefold() == ".git" or not part.isprintable():
             ok = False
-    if not ok or parts[0] == ".claude":
+    if not ok or parts[0].casefold() == ".claude":
         return None
     return value
 

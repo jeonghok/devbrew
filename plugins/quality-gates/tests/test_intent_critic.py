@@ -1194,6 +1194,14 @@ class TestConfig(unittest.TestCase):
             c = self._config(_env(**{ENV_DIR: bad}))
             self.assertEqual((c["answers_dir"], c["answers_dir_source"]),
                              (ANS_DIR, "default-invalid"), bad)
+        # 대소문자를 가리지 않는 파일 시스템에서는 `.GIT` 이 `.git` 이다 — 글자 크기와 무관하게 거부한다.
+        for bad in (".GIT/x", ".Git", "docs/.gIT/x", ".Claude/rules", ".CLAUDE"):
+            c = self._config(_env(**{ENV_DIR: bad}))
+            self.assertEqual((c["answers_dir"], c["answers_dir_source"]),
+                             (ANS_DIR, "default-invalid"), bad)
+        for good in ("docs/.claude", "docs/Git", "Claude/x", "Docs/QG-Answers"):
+            c = self._config(_env(**{ENV_DIR: good}))
+            self.assertEqual((c["answers_dir"], c["answers_dir_source"]), (good, "env"), good)
         for bad in ("0", "abc", "-5", "1.5", ""):
             c = self._config(_env(**{ENV_MAX: bad}))
             self.assertEqual((c["max_bytes"], c["max_bytes_source"]),
