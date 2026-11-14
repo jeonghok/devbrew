@@ -109,15 +109,21 @@ blocking_fails() {   # blocking_fails <SKILL 경로> → 빠진 차단 문장 �
   printf '%s' "$d" | grep -qF '처분하지 않고 그 질문을 다시 묻는다' || echo "hunk_reask"
   printf '%s' "$d" | grep -qF '바뀐 문장은 하나도 빼지 않는다' || echo "hunk_sentences"
   printf '%s' "$d" | grep -qF '처분 없이는 다음 단계로 가지 않는다' || echo "hunk_blocks"
+  printf '%s' "$d" | grep -qF '권장은 화면 조립이 정한다' || echo "hunk_rec_owner"
+  printf '%s' "$d" | grep -qF '저자는 꼬리를 더하거나 떼지 않고 선택지 설명에 자기 평가를 더하지 않는다' || echo "hunk_rec_author"
+  printf '%s' "$d" | grep -qF '질문 · 선택지 라벨 · 순서를 그대로 쓴다' || echo "hunk_rec_verbatim"
   printf '%s' "$f" | grep -qF '하나라도 막히면 게이트를 띄우지 않습니다' || echo "final_blocks"
 }
 bf="$(blocking_fails "$SK")"
-[ -z "$bf" ] && ok "차단 문장 일곱이 제자리에 있다(게이트 열기 · 엔진 무시 · 고르지 않은 덩어리 · 다시 묻기 · 바뀐 문장 · 덩어리 차단 · 확정 차단)" \
+[ -z "$bf" ] && ok "차단 문장 열이 제자리에 있다(게이트 열기 · 엔진 무시 · 고르지 않은 덩어리 · 다시 묻기 · 바뀐 문장 · 덩어리 차단 · 권장 주인 · 저자 꼬리 금지 · 질문 그대로 · 확정 차단)" \
   || no "차단 문장 빠짐: $(printf '%s' "$bf" | tr '\n' ' ')"
 TMPB="$(mktemp -d -t sd-framing-block-XXXXXX)" || exit 1
 for pair in "gate_open_rule|하나라도 0 이 아니면 라운드 게이트를 띄운다" "gate_engine_override|가 거짓이어도" \
             "hunk_question|고르지 않은 덩어리는 「되돌린다」 로 옮긴다" "hunk_reask|처분하지 않고 그 질문을 다시 묻는다" \
             "hunk_sentences|바뀐 문장은 하나도 빼지 않는다" "hunk_blocks|처분 없이는 다음 단계로 가지 않는다" \
+            "hunk_rec_owner|권장은 화면 조립이 정한다" \
+            "hunk_rec_author|저자는 꼬리를 더하거나 떼지 않고 선택지 설명에 자기 평가를 더하지 않는다" \
+            "hunk_rec_verbatim|질문 · 선택지 라벨 · 순서를 그대로 쓴다" \
             "final_blocks|하나라도 막히면 게이트를 띄우지 않습니다"; do
   name="${pair%%|*}"; phrase="${pair#*|}"
   PH="$phrase" python3 -c '
