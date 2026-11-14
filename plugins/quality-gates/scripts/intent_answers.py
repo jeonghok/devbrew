@@ -250,6 +250,12 @@ def _first_line(text: str) -> str:
     return lines[0] if lines else ""
 
 
+def _unstage(repo_root: str, paths: list) -> None:
+    """답 파일만 스테이지에서 내린다. HEAD 가 없어 restore 가 안 되면 캐시에서 뺀다."""
+    if _git(repo_root, "restore", "--staged", "--", *paths).returncode != 0:
+        _git(repo_root, "rm", "--cached", "--quiet", "--ignore-unmatch", "--", *paths)
+
+
 def commit_answer_files(repo_root: str, paths: list, message: str) -> tuple:
     if not paths:
         return None, "커밋할 답 파일이 없다"
@@ -257,13 +263,14 @@ def commit_answer_files(repo_root: str, paths: list, message: str) -> tuple:
         return None, "브랜치가 아니다(detached HEAD)"
     add = _git(repo_root, "add", "--", *paths)
     if add.returncode != 0:
+        _unstage(repo_root, paths)
         ignored = _git(repo_root, "check-ignore", "-q", "--", *paths).returncode == 0
         if ignored or "ignored by one of your .gitignore" in (add.stderr or ""):
             return None, "답 자리를 git 이 무시한다"
         return None, "git add 실패 — " + _first_line(add.stderr)
     commit = _git(repo_root, "commit", "--only", "-q", "-m", message, "--", *paths)
     if commit.returncode != 0:
-        _git(repo_root, "restore", "--staged", "--", *paths)
+        _unstage(repo_root, paths)
         return None, "git commit 실패 — " + (_first_line(commit.stderr) or _first_line(commit.stdout))
     rev = _git(repo_root, "rev-parse", "--short", "HEAD")
     if rev.returncode != 0:

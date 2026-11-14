@@ -110,13 +110,13 @@ class TestAnswerFile(unittest.TestCase):
 class TestReadAnswered(unittest.TestCase):
     def test_read_answered_latest_wins(self):
         with tempfile.TemporaryDirectory() as d:
-            Path(d, "1.md").write_text(_answer_text(answer="의도다", at=AT1), encoding="utf-8")
-            Path(d, "2.md").write_text(_answer_text(answer="지금은 모르겠다", at=AT2),
+            Path(d, "1.md").write_text(_answer_text(answer="지금은 모르겠다", at=AT2),
                                        encoding="utf-8")
+            Path(d, "2.md").write_text(_answer_text(answer="의도다", at=AT1), encoding="utf-8")
             answered, bad = ia.read_answered(d)
             self.assertEqual(bad, 0)
             self.assertEqual(answered[IDENT]["answer"], "지금은 모르겠다")
-            self.assertTrue(answered[IDENT]["path"].endswith("2.md"))
+            self.assertTrue(answered[IDENT]["path"].endswith("1.md"))
 
     def test_read_answered_tie_uses_filename(self):
         with tempfile.TemporaryDirectory() as d:
@@ -198,6 +198,41 @@ class TestCommitAnswers(unittest.TestCase):
         self.assertIsNone(sha)
         self.assertEqual(err, "답 자리를 git 이 무시한다")
         self.assertTrue(os.path.isfile(os.path.join(self.root, paths[0])))
+        self.assertEqual(self._staged(), [])
+
+    def test_commit_failure_ignored_dir_keeps_user_stage(self):
+        Path(self.root, "a.txt").write_text("changed\n", encoding="utf-8")
+        _git(self.root, "add", "a.txt")
+        Path(self.root, ".gitignore").write_text("docs/qg-intent-answers/\n", encoding="utf-8")
+        paths, _ = ia.write_answer_files(self.root, self.rel, self.files)
+        sha, err = ia.commit_answer_files(self.root, paths, "m")
+        self.assertEqual((sha, err), (None, "답 자리를 git 이 무시한다"))
+        self.assertEqual(self._staged(), ["a.txt"])
+
+    def test_commit_failure_one_file_ignored(self):
+        Path(self.root, "a.txt").write_text("changed\n", encoding="utf-8")
+        _git(self.root, "add", "a.txt")
+        Path(self.root, ".gitignore").write_text("*%s\n" % self.files[1][0][-20:],
+                                                 encoding="utf-8")
+        paths, _ = ia.write_answer_files(self.root, self.rel, self.files)
+        sha, err = ia.commit_answer_files(self.root, paths, "m")
+        self.assertIsNone(sha)
+        self.assertEqual(err, "답 자리를 git 이 무시한다")
+        self.assertEqual(self._staged(), ["a.txt"])
+
+    def test_commit_failure_unborn_branch_keeps_user_stage(self):
+        with tempfile.TemporaryDirectory() as d:
+            _git(d, "init", "-q", "-b", "main")
+            Path(d, "a.txt").write_text("x\n", encoding="utf-8")
+            _git(d, "add", "a.txt")
+            Path(d, ".gitignore").write_text("*%s\n" % self.files[1][0][-20:],
+                                             encoding="utf-8")
+            paths, err = ia.write_answer_files(d, self.rel, self.files)
+            self.assertIsNone(err)
+            sha, err = ia.commit_answer_files(d, paths, "m")
+            self.assertEqual((sha, err), (None, "답 자리를 git 이 무시한다"))
+            self.assertEqual(_git(d, "diff", "--cached", "--name-only").stdout.split(),
+                             ["a.txt"])
 
     def test_commit_failure_hook(self):
         Path(self.root, "a.txt").write_text("changed\n", encoding="utf-8")
