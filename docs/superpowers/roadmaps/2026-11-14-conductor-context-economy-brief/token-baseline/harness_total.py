@@ -3,11 +3,12 @@
   python3 -I harness_total.py --backup <backup folder>
 
 The body transcript of a session carries `cost-state` lines: the usage the harness itself has added
-up for the session so far (modelUsage per model; sub agents are in it, sdk sessions are not). For
+up for the session so far (modelUsage per model; sub agents are in it). For
 every configured session this prints each distinct cost-state value in file order next to the
 assistant-line sum (rules 1-3, body + sub agents) of the responses recorded up to that point, their
 ratio, and the difference per tool call. `final` compares the last cost-state with all responses,
-`all_sessions` adds the finals up.
+`all_sessions` adds the finals up. sdk sessions are separate sessions and are left out of the
+assistant-line side; whether the harness total holds them was not checked.
 """
 import collections
 import datetime
