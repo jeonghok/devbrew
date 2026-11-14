@@ -4,7 +4,7 @@
 
 명령줄:
   check_bundle_coverage.py <묶음|brief> <설계문서> [--json]        번호 대조(설계문서 단계)
-  check_bundle_coverage.py --plan <설계문서> <계획> [--acs <AC 목록>] [--json]        계획 `### Task` 절에 없는 AC — 0 · 1 · 3
+  check_bundle_coverage.py --plan <설계문서> <계획> [--acs <AC 목록>] [--json]        계획의 task 절에 없는 AC — 0 · 1 · 3
   check_bundle_coverage.py --impl <설계문서> <보고 파일> [--acs <AC 목록>] [--json]   구현 보고의 미룸 · 빠짐 — 0 · 1(경고) · 3
 `--acs` 는 그 AC 만 대조한다(`AC1~AC14 · AC39` 꼴). `--impl` 은 설계문서 frontmatter `roadmap:` 의 로드맵에서
 받는 곳 규칙(로드맵의 에픽 · `#<n>`)을 쓴다.
@@ -38,6 +38,7 @@ from repo_defaults import SettingsError, resolve  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
     collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
+from workflow_superpowers import task_text  # noqa: E402
 
 TABLE_HEADING = "## 번호 대조"
 AC_HEADING = "## Acceptance Criteria"
@@ -490,19 +491,6 @@ def deferred_rows(spec_text: str) -> list:
     return out
 
 
-def plan_task_text(plan_text: str) -> str:
-    """`### Task` 절들(머리 줄 포함)을 이어 붙인 글. 펜스 안 줄은 절 경계가 아니지만 본문에는 든다."""
-    out, on, in_fence = [], False, False
-    for line in plan_text.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and (line.startswith("## ") or line.startswith("### ")):
-            on = line.startswith("### Task")
-        if on:
-            out.append(line)
-    return "\n".join(out)
-
-
 def _acs_or_error(spec_text: str) -> list:
     acs = acceptance_ids(spec_text)
     if acs is None:
@@ -538,7 +526,7 @@ def check_plan(spec_text: str, plan_text: str, only=None) -> dict:
     acs, why = _only(acs, only)
     if why:
         return _plan_unchecked(why)
-    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(plan_task_text(plan_text))}
+    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(task_text(plan_text))}
     missing = [a for a in acs if a not in have]
     return {"status": 1 if missing else 0, "missing": missing, "ac_count": len(acs),
             "scoped": only is not None, "omitted": total - len(acs), "reason": None}

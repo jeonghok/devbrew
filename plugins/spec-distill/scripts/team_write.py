@@ -20,6 +20,7 @@ import section6  # noqa: E402
 import team_check  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
+import workflow_superpowers  # noqa: E402
 from roadmap_model import frontmatter, parse_roadmap, unquote  # noqa: E402
 
 PREFIX = "[spec-distill] "
@@ -48,15 +49,20 @@ def check_screen(unknown: list, notes: list) -> list:
 
 # ── 자리 ─────────────────────────────────────────────────────────────────────
 
-def team_for(top: Path, roadmap_dir: Path, W):
-    """로드맵 폴더(--out)의 Team. 해결자의 roadmaps_dir 바로 아래가 아니거나 · 역할 이름이거나 · `.claude` 아래면 Refused."""
+def roadmaps_dir_of(top: Path, W) -> str:
+    """해결자의 roadmaps_dir. 설정을 못 읽으면 Refused."""
     try:
         result = repo_defaults.resolve(str(top))
     except repo_defaults.SettingsError as exc:
         raise W.Refused("레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % exc)
     if result["errors"]:
         raise W.Refused("레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0])
-    roadmaps_dir = result["values"]["roadmaps_dir"]
+    return result["values"]["roadmaps_dir"]
+
+
+def team_for(top: Path, roadmap_dir: Path, W):
+    """로드맵 폴더(--out)의 Team. 해결자의 roadmaps_dir 바로 아래가 아니거나 · 역할 이름이거나 · `.claude` 아래면 Refused."""
+    roadmaps_dir = roadmaps_dir_of(top, W)
     rel_dir = W.rel(top, roadmap_dir)
     if NOT_HERE in rel_dir.split("/") or NOT_HERE in roadmaps_dir.split("/"):
         raise W.Refused("%s 아래에는 쓰지 않는다 — %s (로드맵 폴더 %s)" % (NOT_HERE, rel_dir, roadmaps_dir))
@@ -512,4 +518,131 @@ def cmd_job_new(a, W) -> int:
           % (team.job(a.name), team_files.KIND_TASK, branch))
     for line in shown:
         print(line)
+    return 0
+
+
+# ── job sync: 결과 파일 맞추기 ─────────────────────────────────────────────────
+
+SYNC_HEAD_KEYS = ("type", "stage", "plan", "attempt", "role", "head", "bundle_at", "job_at")
+
+
+def _commit_flag(flag: str, value, W) -> str:
+    if not _SHA_RE.fullmatch(value or ""):
+        raise W.Usage("%s 는 커밋 번호 꼴(소문자 16진 40자 또는 64자)이다: %r" % (flag, value))
+    return value
+
+
+def sync_result_path(top: Path, value: str, W) -> tuple:
+    """`--result` → (Path, 레포 상대 경로, Team, 과제, (단계, 계획, 시도)). 결과 폴더의 결과 파일 이름이 아니면 Refused."""
+    if os.path.islink(value):
+        raise W.Refused("심볼릭 링크로는 쓰지 않는다: %s" % value)
+    path = Path(os.path.realpath(value))
+    rel_path = W.rel(top, path)
+    if NOT_HERE in rel_path.split("/"):
+        raise W.Refused("%s 아래에는 쓰지 않는다 — %s" % (NOT_HERE, rel_path))
+    hit = team_layout.job_of_path(roadmaps_dir_of(top, W), rel_path)
+    folder, _sep, name = (hit[2] if hit else "").rpartition("/")
+    parsed = team_layout.parse_result_name(name) if hit else None
+    if not hit or folder != team_layout.RESULTS_DIR or parsed is None:
+        raise W.Refused("과제 폴더의 결과 폴더 안 결과 파일 이름이 아니다(%s/<단계>-<시도>.md 꼴): %s"
+                        % (team_layout.RESULTS_DIR, rel_path))
+    team, job, _rest = hit
+    if not (top / team.job(job)).is_dir():
+        raise W.Refused("과제 폴더가 없다: %s" % team.job(job))
+    _refuse_links(top, rel_path, W)
+    return path, rel_path, team, job, parsed
+
+
+def _new_head(parsed: tuple, role: str, bundle_at: str, job_at: str) -> str:
+    stage, plan, attempt = parsed
+    values = {"type": team_files.RESULT_TYPE, "stage": stage, "plan": plan, "attempt": attempt,
+              "role": role, "head": job_at, "bundle_at": bundle_at, "job_at": job_at}
+    lines = ["%s: %s" % (k, values[k]) for k in SYNC_HEAD_KEYS if values[k] is not None]
+    return "---\n" + "\n".join(lines) + "\n---\n\n"
+
+
+def _swap_head(text: str, commit: str) -> str:
+    """머리의 `head:` 줄을 commit 으로 — 머리 밖은 건드리지 않는다."""
+    lines = text.split("\n")
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\r") == "---":
+            break
+        if lines[i].startswith("head:"):
+            lines[i] = "head: %s%s" % (commit, "\r" if lines[i].endswith("\r") else "")
+            break
+    return "\n".join(lines)
+
+
+def _appended(text: str, new_lines: list) -> str:
+    if not new_lines:
+        return text
+    return text + ("" if text.endswith("\n") or not text else "\n") + "\n".join(new_lines) + "\n"
+
+
+def cmd_job_sync(a, W) -> int:
+    """결과 파일을 한 거래로 맞춘다 — 없으면 머리를 만들고, 원장 · 계획 파일이 있으면 변환기가 낸 줄 가운데 없는 것만 덧붙이고,
+    `--end` 면 머리의 head 를 고쳐 「끝」 줄을 단다. 있는 줄은 바이트 그대로 둔다. git 을 부르지 않는다."""
+    if bool(a.ledger) != bool(a.plan_file):
+        raise W.Usage("--ledger 와 --plan-file 은 함께만 준다")
+    if a.role is not None and a.role not in team_layout.ROLES:
+        raise W.Usage("--role 은 %s 가운데 하나다: %r" % (" · ".join(team_layout.ROLES), a.role))
+    for flag, value in (("--bundle-at", a.bundle_at), ("--job-at", a.job_at), ("--end", a.end)):
+        if value is not None:
+            _commit_flag(flag, value, W)
+    path = Path(os.path.realpath(a.result))
+    top = W.git_top(path)
+    path, rel_path, team, job, parsed = sync_result_path(top, a.result, W)
+    layout_text = W.read(top / team.roadmap) if (top / team.roadmap).is_file() else None
+    if layout_text is None or W.roadmap_layout(layout_text) != team_layout.LAYOUT_TEAM:
+        raise W.Refused("team 형식 로드맵의 과제가 아니다 — %s 가 없거나 머리말에 `%s: %s` 가 없다"
+                        % (team.roadmap, team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM))
+    new_lines = []
+    if a.ledger:
+        new_lines = workflow_superpowers.ledger_lines(W.read(Path(a.ledger)),
+                                                      workflow_superpowers.task_total(W.read(Path(a.plan_file))))
+    done = []
+    if path.exists():
+        old = W.read(path, keep_newlines=True)
+        r = team_files.parse_result(old)
+        if r.problems:
+            raise W.Refused("결과 파일을 읽지 못했다: %s — %s" % (rel_path, r.problems[0]))
+        if (r.stage, r.plan, r.attempt) != parsed:
+            raise W.Refused("결과 파일 머리의 단계 · 계획 · 시도 %s 가 이름 %s 와 다르다"
+                            % ((r.stage, r.plan, r.attempt), path.name))
+        text = old
+    else:
+        if not (a.role and a.bundle_at and a.job_at):
+            raise W.Refused("머리를 만들 값이 없다 — 결과 파일이 없으면 --role · --bundle-at · --job-at 이 모두 필요하다: %s"
+                            % rel_path)
+        old, r = None, None
+        text = _new_head(parsed, a.role, a.bundle_at, a.job_at)
+        done.append("머리 만듦")
+    have = set(line.rstrip("\r") for line in text.split("\n"))
+    new_lines = [line for line in new_lines if line not in have]
+    text = _appended(text, new_lines)
+    for label, prefix in (("Task", "Task "), ("Ruling", "Ruling:")):
+        n = sum(1 for line in new_lines if line.startswith(prefix))
+        if n:
+            done.append("%s 줄 +%d" % (label, n))
+    closed = r is not None and r.end is not None
+    if closed and (new_lines or (a.end and a.end != r.end)):
+        raise W.Refused("끝난 결과 파일은 고치지 않는다 — 다시 하는 일은 새 시도 번호다: %s" % rel_path)
+    if a.end:
+        text = _swap_head(text, a.end)
+        if not closed:
+            text = _appended(text, [team_files._END_PREFIX + a.end])
+            done.append("끝 줄")
+    if closed and text != old:
+        raise W.Refused("끝난 결과 파일은 고치지 않는다 — 다시 하는 일은 새 시도 번호다: %s" % rel_path)
+    if old is not None and text == old:
+        print(PREFIX + "바뀐 것 없음: %s" % rel_path)
+        return 0
+    txn = W.Txn()
+
+    def body():
+        txn.ensure_dir(path.parent)
+        txn.write(path, text)
+
+    W.run_txn(txn, body)
+    print(PREFIX + "결과 파일을 맞췄다: %s — %s" % (rel_path, " · ".join(done)))
     return 0
