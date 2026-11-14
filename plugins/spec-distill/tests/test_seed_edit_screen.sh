@@ -447,5 +447,8 @@ assert_eq "$(cat "$TMP/mu5/state/$U" 2>/dev/null)" "$FA" "AC10 양의 짝: 그 �
 mk2 mu6; why mu6 "1\t$FA"; printf '\377\376' > "$TMP/mu6/state/$U"; cp "$TMP/mu6/state/$U" "$TMP/mu6/used.before"
 mu mu6 "1,2"; rc=$?
 assert_eq "$rc $(cmp -s "$TMP/mu6/state/$U" "$TMP/mu6/used.before" && echo same)" "2 same" "AC10: 목록을 읽지 못하면 더하지 않고 rc 2 — 파일은 그대로다"
+mk2 mu7; why mu7 "1\t$FA"; printf '앞 지적 가\n앞 지적 나\n' > "$TMP/mu7/state/$U"
+mu mu7 "1,2"; rc=$?
+assert_eq "$rc $(cat "$TMP/mu7/state/$U")" "$(printf '0 앞 지적 가\n앞 지적 나\n%s' "$FA")" "AC10: 이미 든 목록의 끝에 더한다 — 앞의 줄은 순서 그대로 남고 새 id 가 그 뒤에 온다"
 
 finish

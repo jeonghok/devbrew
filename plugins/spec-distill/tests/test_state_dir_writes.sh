@@ -85,6 +85,20 @@ printf 'outside\n' > "$c/out/o.txt"; ln -s "$c/out/o.txt" "$c/state/hunk-used-fi
 ses_mark "$c"; rc=$?
 assert_eq "$rc" "2" "ses_used_live_link: 살아 있는 링크인 목록에도 더하지 않고 멈춘다(rc 2)"
 assert_eq "$(cat "$c/out/o.txt")" "outside" "ses_used_live_link: 바깥 파일 그대로"
+ses_case ses_used_write_link; c="$T/ses_used_write_link"
+printf 'outside\n' > "$c/out/o.txt"; ln -s "$c/out/o.txt" "$c/state/hunk-used-findings.txt"
+python3 -I - "$ROOT/plugins/spec-distill/scripts" "$c" >/dev/null 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import seed_edit_screen as m
+c = sys.argv[2]
+m.read_used = lambda state_dir: set()
+sys.exit(m.main(["mark-used", "--hunks", c + "/work/hunks.json", "--reasons", c + "/state/hunk-reasons.txt",
+                 "--state-dir", c + "/state", "--ids", "1"]))
+PY
+rc=$?
+assert_eq "$rc" "0" "ses_used_write_link: 읽기 검사를 지난 뒤의 쓰기(양의 짝) rc 0"
+assert_eq "$(cat "$c/out/o.txt")" "outside" "ses_used_write_link: 읽기 검사를 지나도 쓰기가 링크를 따라가 바깥 파일을 바꾸지 않는다"
 
 # ── docreview_state ──────────────────────────────────────────────────────
 mk_case ds_save_symlink_refused; c="$T/ds_save_symlink_refused"
