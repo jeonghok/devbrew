@@ -50,6 +50,7 @@ LINE_UNSEEN = "다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음"
 # 브랜치 하나의 읽기가 예외로 끝남(그 브랜치만 빠진다) · 문서 머리가 YAML 로 읽히지 않음.
 LINE_BRANCH_FAILED = "브랜치 %s 를 읽지 못함 — %s"
 LINE_FRONTMATTER = "%s 의 %s 머리를 읽지 못함 — 의도 문서인지 확인 못 함"
+LINE_NO_EPIC = "로드맵 %s 를 읽었지만 에픽 블록을 찾지 못함 — 글자 꼴이 다를 수 있다"
 PR_NO_GH = "gh 없음"
 PR_NO_ORIGIN = "origin 을 읽지 못함"
 PR_TIMED_OUT = "시간 초과"
@@ -266,8 +267,8 @@ def _epic_block_lines(block: List[str]) -> List[str]:
     return out
 
 
-def epic_lines(roadmap_text: str) -> str:
-    """로드맵의 에픽 블록(`- 의도:` 줄이 있는 `### ` 절)의 지도 줄 + `## 결정 기록` 절 통째."""
+def _roadmap_parts(roadmap_text: str) -> tuple:
+    """(에픽 블록들 — `- 의도:` 줄이 있는 `### ` 절, `## 결정 기록` 절의 줄들)."""
     epics: List[List[str]] = []
     decisions: List[str] = []
     current: Optional[List[str]] = None
@@ -288,16 +289,28 @@ def epic_lines(roadmap_text: str) -> str:
             epics.append(current)
         elif current is not None:
             current.append(line)
-    out: List[str] = []
+    marked: List[List[str]] = []
     for block in epics:
         for line in block[1:]:
             if line.startswith(_EPIC_MARK):
-                out.extend(_epic_block_lines(block))
+                marked.append(block)
                 break
     while decisions and not decisions[-1].strip():
         decisions.pop()
+    return marked, decisions
+
+
+def _map_body(marked: List[List[str]], decisions: List[str]) -> str:
+    out: List[str] = []
+    for block in marked:
+        out.extend(_epic_block_lines(block))
     out.extend(decisions)
     return "".join(line + "\n" for line in out)
+
+
+def epic_lines(roadmap_text: str) -> str:
+    """로드맵의 에픽 블록(`- 의도:` 줄이 있는 `### ` 절)의 지도 줄 + `## 결정 기록` 절 통째."""
+    return _map_body(*_roadmap_parts(roadmap_text))
 
 
 def _unique(items) -> List[str]:
@@ -345,8 +358,12 @@ def _listing(where: str, parent: str, *head: str) -> Optional[List[str]]:
     return sorted(_z_paths(proc.stdout))
 
 
-def _map_unit(head: str, rel: str, text: str) -> tuple:
-    return ("map", one_line(rel), "%s\n%s" % (head, epic_lines(text)))
+def _map_unit(head: str, rel: str, text: str, unverified: List[str]) -> tuple:
+    """팀 지도 항목. 에픽 블록이 하나도 없으면 「확인 못 함」 에 그 로드맵을 남긴다."""
+    marked, decisions = _roadmap_parts(text)
+    if not marked:
+        unverified.append(LINE_NO_EPIC % one_line(rel))
+    return ("map", one_line(rel), "%s\n%s" % (head, _map_body(marked, decisions)))
 
 
 def _team_maps(repo: str, tree_root: str, review_commit: str, roadmaps: List[str],
@@ -360,7 +377,8 @@ def _team_maps(repo: str, tree_root: str, review_commit: str, roadmaps: List[str
             unverified.append("로드맵 %s 를 읽지 못함 — %s" % (one_line(rel), why))
             continue
         read_ok.append(rel)
-        units.append(_map_unit("### 이번 로드맵 %s (리뷰 트리)" % one_line(rel), rel, text))
+        units.append(_map_unit("### 이번 로드맵 %s (리뷰 트리)" % one_line(rel), rel, text,
+                               unverified))
     if default is None:
         return units
     short, default_ref = default
@@ -390,7 +408,8 @@ def _team_maps(repo: str, tree_root: str, review_commit: str, roadmaps: List[str
         if text is None:
             unverified.append("로드맵 %s 를 읽지 못함 — %s" % (one_line(rel), why))
             continue
-        units.append(_map_unit("### 다른 로드맵 %s (%s)" % (one_line(rel), where), rel, text))
+        units.append(_map_unit("### 다른 로드맵 %s (%s)" % (one_line(rel), where), rel, text,
+                               unverified))
     return units
 
 

@@ -610,6 +610,80 @@ class TestTeamMap(_Fixture):
         self.assertNotIn("- 로드맵 없음", _unverified(_collect(self.repo)["text"]))
 
 
+NO_EPIC_ONE = "- 로드맵 docs/rm/one/roadmap.md 를 읽었지만 에픽 블록을 찾지 못함 — 글자 꼴이 다를 수 있다"
+NO_EPIC_TWO = "- 로드맵 docs/rm/two/roadmap.md 를 읽었지만 에픽 블록을 찾지 못함 — 글자 꼴이 다를 수 있다"
+
+
+def _no_epic_lines(text):
+    """「확인 못 함」 줄 가운데 에픽 블록을 못 찾았다는 줄."""
+    out = []
+    for line in _unverified(text):
+        if "에픽 블록을 찾지 못함" in line:
+            out.append(line)
+    return out
+
+
+class TestNoEpicRoadmap(_Fixture):
+    """읽었는데 에픽 블록이 없는 로드맵 — 「에픽 없음」 과 「글자 꼴이 달라 못 읽음」 을 가리지 못하니 「확인 못 함」 에 남긴다."""
+
+    def _with_this_roadmap(self, body):
+        repo, _ = self._fresh()
+        tic._write(tic._fm(type="roadmap") + body, repo, ROADMAP_PATH)
+        return _collect(repo)["text"]
+
+    def test_this_roadmap_without_epic_block(self):
+        text = self._with_this_roadmap("# 로드맵\n## 에픽\n### R1 — 하나\n- 브랜치: feature/x\n")
+        self.assertEqual(_no_epic_lines(text), [NO_EPIC_ONE])
+        self.assertEqual(ot.LINE_NO_EPIC % ROADMAP_PATH, NO_EPIC_ONE[2:])
+        self.assertIn("### 이번 로드맵 docs/rm/one/roadmap.md (리뷰 트리)\n", text)
+
+    def test_marker_shape_differs(self):
+        for mark in ("- 의도 : x-intent", "**의도**: x-intent", "* 의도: x-intent", "-의도: x-intent"):
+            with self.subTest(mark):
+                text = self._with_this_roadmap("# 로드맵\n## 에픽\n### R1 — 하나\n%s\n" % mark)
+                self.assertEqual(_no_epic_lines(text), [NO_EPIC_ONE])
+
+    def test_decisions_only(self):
+        text = self._with_this_roadmap("# 로드맵\n## 결정 기록\n- only-decision-token\n")
+        self.assertEqual(_no_epic_lines(text), [NO_EPIC_ONE])
+        self.assertIn("only-decision-token", _block(text, "### 이번 로드맵 "))
+
+    def test_roadmap_with_epics_has_no_line(self):
+        text = _collect(self.repo)["text"]
+        self.assertIn("one-intent-token", text)
+        self.assertIn("two-intent-token", text)
+        self.assertEqual(_no_epic_lines(text), [])
+        self.assertNotIn("에픽 블록을 찾지 못함", text)
+
+    def test_sibling_without_epic_names_sibling(self):
+        repo, _ = self._fresh()
+        _on_branch(repo, "main", {"docs/rm/two/roadmap.md": tic._fm(type="roadmap")
+                                  + "# 로드맵 둘\n## 에픽\n### R1 — 둘\n- 의도 : two-shape-token\n"}, 50)
+        text = _collect(repo)["text"]
+        self.assertEqual(_no_epic_lines(text), [NO_EPIC_TWO])
+        self.assertIn("### 다른 로드맵 docs/rm/two/roadmap.md (기본 브랜치 main)\n", text)
+
+    def test_control_characters_in_name_stay_one_line(self):
+        repo, _ = self._fresh()
+        odd = "docs/rm/evil\n## 팀 지도\r- 가짜\x1b/roadmap.md"
+        shown = "docs/rm/evil?## 팀 지도?- 가짜?/roadmap.md"
+        real = ot.io_.read_tree
+
+        def read_tree(tree_root, rel):
+            if rel == odd:
+                return ("# 로드맵\n## 에픽\n### R1\n- 브랜치: x\n", None)
+            return real(tree_root, rel)
+
+        with mock.patch.object(ot.io_, "read_tree", read_tree):
+            text = _collect(repo, roadmaps=[odd])["text"]
+        want = "- " + ot.LINE_NO_EPIC % shown
+        self.assertEqual(_no_epic_lines(text), [want])
+        self.assertEqual(text.count("\n" + ot.HEAD_MAP + "\n"), 1)
+        for line in _unverified(text):
+            self.assertTrue(line.startswith("- "), line)
+            self.assertNotIn("가짜", line.replace(want, ""))
+
+
 class TestOtherWorkRecord(_Fixture):
     def test_intent_doc_in_any_folder(self):
         text = _collect(self.repo)["text"]
