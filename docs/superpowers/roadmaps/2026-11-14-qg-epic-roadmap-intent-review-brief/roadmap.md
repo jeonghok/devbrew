@@ -39,6 +39,16 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 묶음: R3.md
 - 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/, plugins/quality-gates/scripts/setup-qg.sh
 
+### R4 — qg 리뷰 전념 — 고치기 반복을 지휘 흐름으로
+- 의도: qg 는 리뷰만 하고 스스로 고치는 반복을 걷어내 고칠 일을 지휘 흐름(구현 담당자 · 재분해)과 qg 를 부른 세션으로 넘기되 옆 세션의 지휘자 설계에 녹인다
+- 범위:
+  - 한다: qg 고치기 반복 걷어내기 · 고칠 지적을 부른 쪽에 돌려주는 꼴 · 지휘 흐름의 이미 있는 구현 길로 잇기 · 옆 세션 설계에 맞추기
+  - 안 한다: 쓴소리 리뷰어 본체 · 옆 세션의 팀 구조 자체
+- 의존: R1, R3
+- 브랜치: feature/qg-review-only
+- 묶음: R4.md
+- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/README.md
+
 ## 지휘 절차
 
 이 로드맵은 지휘자가 이끈다 — `/spec-distill:epic-conductor docs/superpowers/roadmaps/2026-11-14-qg-epic-roadmap-intent-review-brief/roadmap.md`. 다시 불러도 git 과 기계 상태에서 상태를 다시 계산해 같은 자리에서 잇는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 로 꺼 두면 spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼진다 — 지휘자 없이 진행하려면 끄지 말고 지휘자를 부르지 않은 채 spec-distill 의 `references/conducting.md` 끝 절 「손으로 따르는 절차」 를 따른다.
@@ -56,6 +66,14 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 ### 2026-11-14 · 처음 로드맵
 - 원문:
   - 「승인 (권장)」
+
+### 2026-11-14 · qg 는 리뷰만 — 고치기 반복을 걷어내 지휘 흐름으로 넘기는 새 에픽 R4
+- 바뀜: 새 에픽 R4 「아니 qg의 리뷰이후 액션인 고치는게 지휘와 갈라지다보니 qg자체 개발을 하지 말라는 의미였어」 · 「qg는 리뷰에만 집중해」 · 「1, 어떻게 네이티브하게 녹여낼지 특히 다른 세션에서 만들고 있는 설계를 두고 거기에 녹이면 좋겠네」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「아니 qg의 리뷰이후 액션인 고치는게 지휘와 갈라지다보니 qg자체 개발을 하지 말라는 의미였어」
+  - 「qg는 리뷰에만 집중해」
+  - 「1, 어떻게 네이티브하게 녹여낼지 특히 다른 세션에서 만들고 있는 설계를 두고 거기에 녹이면 좋겠네」
+  - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
