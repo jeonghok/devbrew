@@ -325,8 +325,8 @@ assert_eq "$?" 0 "변이 c(render 가 comment.md 에 덧붙인다)를 심었다"
 run_mutant c same:comment.md
 # 변이 d — 사본의 답 커밋을 경로 지정 없는 「git add -A」 · 「git commit -q -m …」 로 바꾼다. 작업 흐름이 아니라 변이 글이다.
 mkcopy "$TMP/copy-d"
-mutate "$TMP/copy-d/intent_answers.py" 'add = _git(repo_root, "add", "--", *paths)' 'add = _git(repo_root, "add", "-A")' \
-  && mutate "$TMP/copy-d/intent_answers.py" 'commit = _git(repo_root, "commit", "--only", "-q", "-m", message, "--", *paths)' \
+mutate "$TMP/copy-d/intent_answers.py" 'add = _git(repo_root, "add", "--", *specs)' 'add = _git(repo_root, "add", "-A")' \
+  && mutate "$TMP/copy-d/intent_answers.py" 'commit = _git(repo_root, "commit", "--only", "-q", "-m", message, "--", *specs)' \
        'commit = _git(repo_root, "commit", "-q", "-m", message)'
 assert_eq "$?" 0 "변이 d(답 커밋이 경로를 지정하지 않는다)를 심었다"
 run_mutant d commit-scope
