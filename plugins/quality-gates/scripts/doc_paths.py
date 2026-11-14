@@ -151,7 +151,7 @@ def is_model_read(path: str) -> bool:
 _ABSENT = object()
 
 
-def _key_state(text: Optional[str]):
+def _key_state(text: Optional[str], key: str = ENV_KEY):
     """설정 글 → 그 키의 값(없으면 _ABSENT). JSON 이 아니면 ValueError."""
     if text is None:
         return _ABSENT
@@ -159,16 +159,17 @@ def _key_state(text: Optional[str]):
     if not isinstance(obj, dict):
         return _ABSENT
     env = obj.get("env")
-    if not isinstance(env, dict) or ENV_KEY not in env:
+    if not isinstance(env, dict) or key not in env:
         return _ABSENT
-    return env[ENV_KEY]
+    return env[key]
 
 
-def settings_key_changed(base_text: Optional[str], head_text: Optional[str]) -> bool:
+def settings_key_changed(base_text: Optional[str], head_text: Optional[str],
+                         key: str = ENV_KEY) -> bool:
     if base_text == head_text:
         return False
     try:
-        return _key_state(base_text) != _key_state(head_text)
+        return _key_state(base_text, key) != _key_state(head_text, key)
     except ValueError:
         return True
 
