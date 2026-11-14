@@ -9,13 +9,14 @@
 - `team_layout.py check --roadmap <로드맵> [--base <ref>]` — 팀 폴더의 구조와 원자료 사본의 세 검사(줄 범위 · 덧붙이기만 · 출처와 바이트 같음). 종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가.
 - 레포 설정 키 `rules_budget`(기본 8192) · `handbook_budget`(기본 16384) — UTF-8 바이트이고 레포 설정 파일에서만 읽는다. 로드맵 머리말에 적으면 무시하고 알린다.
 - 로드맵 머리말 `layout` — 설정 해결자가 받는다. 아는 값은 `team` 하나다.
-- `update` 의 종료 코드 4 — team 형식의 재분해에서 있던 과제의 INTENT.md 는 다시 쓰지 않고, 의도 · 범위 · 지시 원문 범위가 바뀐 과제의 고칠 글을 화면에 낸다(썼고 사람이 고칠 것이 남음). 범위만 다르면 아무것도 쓰지 않는다. team 형식의 `extract` 는 분해안 표 끝에 「지시 원문 범위」 칸을 더해 내고 `update` 가 그 표를 받는다.
+- `update` 의 종료 코드 4 — 사람이 손으로 고칠 것이 남았다는 뜻이다. team 형식의 재분해에서 있던 과제의 INTENT.md 는 다시 쓰지 않고, 의도 · 범위 · 지시 원문 범위가 바뀐 과제의 고칠 글을 화면에 낸다. 다른 바뀜은 쓴 뒤 4 이고, 지시 원문 범위만 다르면 아무것도 쓰지 않고 4 다. 고칠 것이 없으면 0 이다. team 형식의 `extract` 는 분해안 표 끝에 「지시 원문 범위」 칸을 더해 내고 `update` 가 그 표를 받는다.
 - 틀 일곱(`templates/team/`) — 역할 문서 넷 · `INTENT.md` · `RULES.md` · `HANDBOOK.md`.
 - `references/team-files.md` — team 형식의 정본 문서(팀 폴더 · 과제 폴더와 INTENT.md · 원자료 · sources.md · 역할 문서).
 
 ### Changed
 - 역할 이름(`leader` · `designer` · `writer` · `worker`)의 폴더는 로드맵으로 세지 않는다. `create` 는 형식과 무관하게 역할 이름의 `--out` 을 거절한다.
 - 단계 계산이 `layout: team` 과 모르는 `layout` 값에서 검사 불가(3)로 멈춘다 — team 로드맵은 번호 대조까지만 한다(team 형식의 단계 계산은 다음 판). 모르는 값이면 `update` · `extract` · `job new` 도 거절한다.
+- 이 판의 team `update` 는 머지된 에픽을 가려 보호하지 못한다 — 「머지 여부를 확인하지 못했다」 를 화면에 알리고 진행한다(team 형식의 단계 계산은 다음 판에 온다).
 - 상태 계산이 기대는 읽기 전용 모듈에 `team_layout.py` · `team_check.py` · `team_files.py` 가 더해졌다.
 - `control_plane.py` 의 코드 지문 파일 목록에 `team_layout.py` 가 더해졌다.
 

@@ -62,15 +62,67 @@ class Readme(unittest.TestCase):
         self.assertIn("`roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류 · 4 ", text)
 
 
+FLOOR = (8, 14, 0)
+WORDS = ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")
+
+
+def version_tuple(text: str):
+    parts = text.split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        return None
+    return tuple(int(p) for p in parts)
+
+
+def changelog_entries(log: str) -> list:
+    """[(판 튜플, 그 판 절의 글)] — `## [x.y.z] — ` 머리 줄마다 다음 머리 앞까지."""
+    out = []
+    for line in log.split("\n"):
+        head = line.startswith("## [") and "] — " in line and version_tuple(line[4:line.index("]")])
+        if head:
+            out.append((head, []))
+        elif out:
+            out[-1][1].append(line)
+    return [(v, "\n".join(body)) for v, body in out]
+
+
+def version_problems(version: str, log: str) -> list:
+    """판 올림의 문제 줄들(없으면 []) — 판이 FLOOR 이상, 그 판의 CHANGELOG 머리가 있고, 다섯 낱말을 모두 담은 절이
+    하나뿐이며 그 절의 판이 FLOOR 이상. 뒤의 판 올림이 새 절을 더해도 맞는다."""
+    out = []
+    got = version_tuple(version)
+    if got is None or got < FLOOR:
+        out.append("plugin.json 판 %r 이 %s 보다 낮다" % (version, FLOOR))
+    if "## [%s] — " % version not in log:
+        out.append("CHANGELOG 에 지금 판 %s 의 머리가 없다" % version)
+    hits = [v for v, body in changelog_entries(log) if all(w in body for w in WORDS)]
+    if len(hits) != 1:
+        out.append("다섯 낱말을 모두 담은 CHANGELOG 절이 하나가 아니라 %d개다: %s" % (len(hits), hits))
+    elif hits[0] < FLOOR:
+        out.append("다섯 낱말을 담은 절의 판 %s 이 %s 보다 낮다" % (hits[0], FLOOR))
+    return out
+
+
 class Version(unittest.TestCase):
-    def test_bumped_with_changelog(self):
+    def read(self):
         version = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
-        self.assertGreaterEqual(tuple(int(x) for x in version.split(".")), (8, 14, 0))
-        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
-        self.assertIn("## [%s] — " % version, log)
-        entry = log.split("## [%s] — " % version, 1)[1].split("\n## [", 1)[0]
-        for word in ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4"):
-            self.assertIn(word, entry, word)
+        return version, (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    def test_bumped_with_changelog(self):
+        self.assertEqual(version_problems(*self.read()), [])
+
+    def test_logic_has_teeth(self):   # 양성 · 음성 대조 — 실제 CHANGELOG 를 고친 사본으로
+        version, log = self.read()
+        entries = changelog_entries(log)
+        self.assertGreater(len(entries), 10)   # 절을 읽었다
+        hit = [(v, body) for v, body in entries if all(w in body for w in WORDS)][0][1]
+        later = "# Changelog\n\n## [8.99.0] — 2026-12-01\n\n### Fixed\n- 다른 일\n" + log.split("\n", 1)[1]
+        self.assertEqual(version_problems("8.99.0", later), [])   # 뒤의 판 올림은 깨지 않는다
+        self.assertNotEqual(version_problems("8.99.0", log), [])   # 그 판의 머리가 없으면 잡는다
+        for word in WORDS:
+            self.assertNotEqual(version_problems(version, log.replace(hit, hit.replace(word, "x"))), [], word)
+        twice = log + "\n## [0.0.1] — 2026-01-01\n" + hit + "\n"
+        self.assertNotEqual(version_problems(version, twice), [])   # 다섯 낱말을 담은 절이 둘
+        self.assertNotEqual(version_problems("8.13.1", log), [])   # 판이 FLOOR 아래
 
 
 if __name__ == "__main__":

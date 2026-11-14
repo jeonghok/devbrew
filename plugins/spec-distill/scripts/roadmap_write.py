@@ -21,7 +21,8 @@
                           바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류 ·
-          4 썼다 — 사람이 고칠 것이 남았다(update · team 형식 — 손으로 고칠 INTENT.md 를 화면에 냈다).
+          4 사람이 손으로 고칠 것이 남았다(update · team 형식 — 손으로 고칠 INTENT.md 를 화면에 냈다. 다른 바뀜은 썼고,
+          지시 원문 범위만 다르면 아무것도 쓰지 않았다).
 
 검증은 쓴 로드맵에 `roadmap_status.py --roadmap-file <로드맵> --json` 을 돌려 format_errors · unassigned ·
 orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — 기본 브랜치(origin/HEAD)를
@@ -50,7 +51,7 @@ from roadmap_model import (  # noqa: E402
     DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
-EXIT_TODO = 4   # 썼다 — 사람이 고칠 것이 남았다
+EXIT_TODO = 4   # 사람이 손으로 고칠 것이 남았다 — 쓴 뒤일 수도, 아무것도 쓰지 않았을 수도 있다
 RECORD_HEADING = "## 생성 기록"
 LISTS = ("format_errors", "unassigned", "orphans", "unknown_ids")
 RISK_ORDER_NOTICE = ("[spec-distill] 위험 줄에 번호가 없어 줄 순서로 매겼다(brief §5 · K 번호) — "
