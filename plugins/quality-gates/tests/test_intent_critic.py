@@ -762,7 +762,7 @@ class TestOriginLink(unittest.TestCase):
     def test_keys(self):
         o = self._o([])
         self.assertEqual(sorted(o), ["aliases", "doubts", "mixed", "notices", "origin",
-                                     "roadmap", "sources"])
+                                     "roadmap", "roadmaps", "sources"])
         self.assertEqual(o["doubts"], "")
         self.assertIs(o["mixed"], False)
 
@@ -1324,9 +1324,8 @@ class TestPrepare(unittest.TestCase):
     def test_single_over_cap_counts_roadmap(self):
         _write(DIFF_RED, self.rd, "differential.yaml")
         self._prep(["docs/spec.md"])
-        parts = ("intent-evidence.txt", "intent-origin.md", "intent-roadmap.md",
-                 "intent-intent.md", "intent-doubts.md")
-        total = io_.total_bytes(*[self._f(n) for n in parts])
+        parts = ("intent-origin.md", "intent-roadmap.md", "intent-intent.md", "intent-doubts.md")
+        total = io_.total_bytes(io_.build_evidence(None, DIFF_RED)[0], *[self._f(n) for n in parts])
         without_roadmap = total - io_.total_bytes(self._f("intent-roadmap.md"))
         cap = total - 1
         self.assertGreaterEqual(cap, without_roadmap)

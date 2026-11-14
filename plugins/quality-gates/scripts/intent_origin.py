@@ -1,4 +1,4 @@
-"""intent-critic 리뷰어의 입력 조립 — 근거 · 원문 · 로드맵 · 의심 · 의도 문서 표시 · 리뷰의 넓이.
+"""intent-critic 리뷰어의 입력 조립 — 근거 · 원문 · 로드맵 · 의심 · 의도 문서 표시 · 리뷰의 넓이 · scope 칸.
 
 원문 · 로드맵 링크는 리포 안 추적 파일(보통 파일)만 따라간다. 거부된 링크는 내용을 입력에
 싣지 않고 이유만 공시한다. 이 모듈은 `adjudication` 을 쓰지 않는다 — 회계는 intent_critic.py 가 한다.
@@ -21,6 +21,10 @@ import doc_paths  # noqa: E402
 
 PASS_VERDICTS = ("STILL_GREEN", "FIXED", "NEW_TEST_GREEN")
 NOTICE_DIFF_UNREADABLE = "차등 결과를 읽지 못함 — 근거로 세지 않았다"
+NOTICE_DIFF_SHAPE = "차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다"
+MARK_E2E = "[e2e] "
+MARK_DIFF = "[차등] "
+MARK_TEAMS = "[다른 팀] "
 REASON_UNTRACKED = "추적 안 된 파일 또는 없음"
 # 리뷰 트리에서 읽은 값은 줄 단위 세션 파일(intent-plan.txt 등)로 간다 — 한 줄 · 제어 문자 없음만 받는다.
 REASON_CONTROL = "여러 줄 또는 제어 문자"
@@ -47,32 +51,38 @@ def total_bytes(*texts: str) -> int:
 # ---------------------------------------------------------------- 근거
 
 def _differential_state(differential: Optional[str]) -> tuple:
-    """(읽을 수 있나, 통과로 끝나지 않은 판정이 있나)."""
+    """(읽을 수 있나, 통과로 끝나지 않은 판정이 있나, 꼴이 맞나).
+
+    꼴이 다른 것(`per_adapter` 가 없거나 목록이 아님 · adapter 가 dict 가 아님 · `attributions` 가
+    없거나 목록이 아님 · attribution 이 dict 가 아님)은 건너뛰고 세지 않는다 — 부르는 판정은 읽은
+    부분만으로 한다.
+    """
     if differential is None or not differential.strip():
-        return (True, False)
+        return (True, False, True)
     try:
         data = yaml.safe_load(differential)
     except yaml.YAMLError:
-        return (False, False)
+        return (False, False, True)
     if data is None:
-        return (True, False)
+        return (True, False, False)
     if not isinstance(data, dict):
-        return (False, False)
+        return (False, False, True)
     adapters = data.get("per_adapter")
     if not isinstance(adapters, list):
-        return (True, False)
+        return (True, False, False)
+    non_pass = False
+    shape_ok = True
     for adapter in adapters:
-        if not isinstance(adapter, dict):
-            continue
-        attributions = adapter.get("attributions")
+        attributions = adapter.get("attributions") if isinstance(adapter, dict) else None
         if not isinstance(attributions, list):
+            shape_ok = False
             continue
         for attribution in attributions:
             if not isinstance(attribution, dict):
-                continue
-            if str(attribution.get("verdict")) not in PASS_VERDICTS:
-                return (True, True)
-    return (True, False)
+                shape_ok = False
+            elif str(attribution.get("verdict")) not in PASS_VERDICTS:
+                non_pass = True
+    return (True, non_pass, shape_ok)
 
 
 def _nonblank_lines(text: Optional[str]) -> List[str]:
@@ -84,25 +94,30 @@ def _nonblank_lines(text: Optional[str]) -> List[str]:
 
 
 def has_evidence(e2e_record: Optional[str], differential: Optional[str]) -> tuple:
-    readable, non_pass = _differential_state(differential)
+    readable, non_pass, shape_ok = _differential_state(differential)
     notices = []
     if not readable:
         notices.append(NOTICE_DIFF_UNREADABLE)
+    if not shape_ok:
+        notices.append(NOTICE_DIFF_SHAPE)
     walked = bool(_nonblank_lines(e2e_record))
     return (walked or non_pass, notices)
 
 
-def build_evidence(e2e_record: Optional[str], differential: Optional[str]) -> tuple:
-    ok, _ = has_evidence(e2e_record, differential)
-    if not ok:
-        return ("", 0)
-    readable, _ = _differential_state(differential)
+def build_evidence(e2e_record: Optional[str], differential: Optional[str],
+                   other_teams: str = "") -> tuple:
+    """번호 붙은 근거 글 → (글, 줄 수). 돌려 본 줄(`[e2e] ` · `[차등] `) 뒤에 다른 팀 기록의 빈 줄 아닌
+    줄을 `[다른 팀] ` 표지로 잇는다. 돌려 본 근거가 없어도 다른 팀 줄은 싣는다."""
     rows = []
-    for line in _nonblank_lines(e2e_record):
-        rows.append("[e2e] " + line)
-    if readable:
-        for line in _nonblank_lines(differential):
-            rows.append("[차등] " + line)
+    ok, _ = has_evidence(e2e_record, differential)
+    if ok:
+        for line in _nonblank_lines(e2e_record):
+            rows.append(MARK_E2E + line)
+        if _differential_state(differential)[0]:
+            for line in _nonblank_lines(differential):
+                rows.append(MARK_DIFF + line)
+    for line in _nonblank_lines(other_teams):
+        rows.append(MARK_TEAMS + line)
     out = []
     for n, row in enumerate(rows, 1):
         out.append("%4d\t%s" % (n, row))
@@ -185,7 +200,8 @@ def read_tracked(repo: str, commit: str, rel: str) -> tuple:
     why = _mode_rejection(*_listed_mode(tree, rel))
     if why is not None:
         return (None, why)
-    shown = _run_git(repo, "show", "%s:%s" % (commit, rel))
+    # `<rev>:<경로>` 는 pathspec 이 아니다 — 뒤를 `--` 로 닫아 같은 이름의 작업 폴더 파일과 갈리지 않게 한다.
+    shown = _run_git(repo, "show", "%s:%s" % (commit, rel), "--")
     if shown is None or shown.returncode != 0:
         return (None, REASON_UNTRACKED)
     return (shown.stdout.decode("utf-8", "replace"), None)
@@ -223,6 +239,75 @@ def read_tree(tree_root: str, rel: str) -> tuple:
     except OSError:
         return (None, REASON_UNTRACKED)
     return (data.decode("utf-8", "replace"), None)
+
+
+def read_changed_doc(tree_root: str, rel: str) -> Optional[str]:
+    """바뀐 파일 목록의 문서를 리뷰 트리에서 읽는다 — 읽지 못하면 None.
+
+    리뷰 트리에 경로가 아예 없는(지운) 문서는 빈 글이다 — 의도 문서도 「확인 못 한 문서」 도 아니다.
+    """
+    text, why = read_tree(tree_root, rel)
+    if (text is None and why == REASON_UNTRACKED and _path_rejection(rel) is None
+            and not os.path.lexists(os.path.join(tree_root, rel))):
+        return ""
+    return text
+
+
+def printable(value: str) -> str:
+    """한 줄 값 — 인쇄할 수 없는 글자(줄바꿈 · 제어 문자 · 짝 없는 surrogate)는 `?`."""
+    out = []
+    for ch in value:
+        out.append(ch if ch.isprintable() else "?")
+    return "".join(out)
+
+
+def _rev_arg_ok(rev: str) -> bool:
+    """git 인자로 넘길 rev — 비어 있지 않고 `-` 로 시작하지 않는 한 줄."""
+    return bool(rev) and not rev.startswith("-") and single_line(rev)
+
+
+def commit_titles(repo: str, base: str, end: str) -> Optional[List[str]]:
+    """`base..end` 커밋 제목(한 줄에 하나, 인쇄할 수 없는 글자는 `?`). 읽지 못하면 None."""
+    if not _rev_arg_ok(base) or not _rev_arg_ok(end):
+        return None
+    proc = _run_git(repo, "log", "--no-show-signature", "--format=%s", "%s..%s" % (base, end), "--")
+    if proc is None or proc.returncode != 0:
+        return None
+    out = []
+    for line in proc.stdout.decode("utf-8", "replace").split("\n"):
+        if line:
+            out.append(printable(line))
+    return out
+
+
+BREADTH_LABELS = {"narrow": "좁게 본다 — 코드가 바뀐 PR", "range": "넓게 본다 — 범위 모드",
+                  "intent-docs": "넓게 본다 — 의도 문서가 바뀐 변경"}
+
+
+def render_scope(breadth: str, names: Optional[set], repo: str, base: str, end: str) -> str:
+    """리뷰어의 `<scope>` 칸(`intent-scope.md`) — 넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목.
+
+    경로 · 커밋 제목은 다른 사람의 글이다 — 줄마다 `- ` 를 붙여, 어떤 값도 머리 두 줄이나 절 머리와
+    같은 줄이 되지 못하게 한다.
+    """
+    lines = ["넓이: " + BREADTH_LABELS[breadth],
+             "읽은 인용: " + ("받지 않는다" if breadth == "narrow" else "받는다"), "", "## 바뀐 파일"]
+    items = ["모름"] if names is None else []
+    for rel in sorted(names or ()):
+        items.append(printable(rel))
+    titles = None if base == "-" else commit_titles(repo, base, end)
+    if base == "-":
+        heads = ["없음 — 기준 커밋을 모름"]
+    elif titles is None:
+        heads = ["모름 — 커밋 제목을 읽지 못함"]
+    else:
+        heads = titles or ["없음"]
+    for item in items:
+        lines.append("- " + item)
+    lines += ["", "## 커밋 제목"]
+    for item in heads:
+        lines.append("- " + item)
+    return "\n".join(lines) + "\n"
 
 
 def frontmatter_value(text: str, key: str) -> Optional[str]:
@@ -462,16 +547,17 @@ def _note(st: dict, line: str) -> None:
         st["notices"].append(line)
 
 
-def _open_doc(repo: str, commit: str, rel: str, st: dict, label: str) -> Optional[str]:
+def _open_doc(read, rel: str, st: dict, label: str) -> Optional[str]:
+    """`read(rel) -> (글 | None, 사유)` 로 연다. 연 문서는 읽은 쪽과 함께 남긴다 — 로드맵도 그 쪽에서 읽는다."""
     for seen_rel, _, seen_text in st["opened"]:
         if seen_rel == rel:
             return None if rel in st["done"] else seen_text
-    text, why = read_tracked(repo, commit, rel)
+    text, why = read(rel)
     if text is None:
         _note(st, "%s — %s" % (label, why))
         st["rejected"] = True
         return None
-    st["opened"].append((rel, commit, text))
+    st["opened"].append((rel, read, text))
     return text
 
 
@@ -512,20 +598,23 @@ def _add_origin_doc(rel: str, text: str, st: dict) -> None:
         st["doubts"].append(marker + "\n" + doubt_text)
 
 
-def _follow_roadmaps(repo: str, st: dict) -> str:
+def _follow_roadmaps(st: dict) -> str:
+    """연 문서의 `roadmap:` 줄을 따라가 로드맵 칸을 짓는다. 바뀐 로드맵 자체(`own_roadmaps`)는 그 글을 싣는다."""
     seen: List[str] = []
     parts: List[str] = []
-    for rel, commit, text in list(st["opened"]):
-        path = frontmatter_value(text, "roadmap")
+    for rel, read, text in list(st["opened"]):
+        own = rel in st["own_roadmaps"]
+        path = rel if own else frontmatter_value(text, "roadmap")
         if path is None or path in seen:
             continue
         seen.append(path)
-        body, why = read_tracked(repo, commit, path)
+        body, why = (text, None) if own else read(path)
         if body is None:
             _note(st, "로드맵 링크 거부 — %s" % why)
             st["rejected_roadmap"] = True
             continue
         kept, moved = strip_roadmap_doubts(body)
+        st["roadmaps"].append(path)
         parts.append("<!-- roadmap: %s · from: %s -->\n%s" % (path, rel, kept))
         if moved.strip():
             st["doubts"].append("<!-- roadmap-doubts: %s -->\n%s" % (path, moved))
@@ -537,37 +626,67 @@ def _follow_roadmaps(repo: str, st: dict) -> str:
     return line
 
 
+def _reader(repo: str, commit: str, tree_root: Optional[str] = None):
+    if tree_root is not None:
+        return lambda rel: read_tree(tree_root, rel)
+    return lambda rel: read_tracked(repo, commit, rel)
+
+
+def _follow_changed(read, rel: str, st: dict) -> None:
+    """바뀐 의도 문서 — `source_interview:` · `source_brief:` 를 원문으로 따라가고, 로드맵 자체면 로드맵 칸에 싣는다."""
+    text = _open_doc(read, rel, st, "원문 링크 거부")
+    if text is None:
+        return
+    if frontmatter_value(text, "type") == "roadmap":
+        st["own_roadmaps"].append(rel)
+    for key in ("source_interview", "source_brief"):
+        link = frontmatter_value(text, key)
+        if link is None:
+            continue
+        linked = _open_doc(read, link, st, "원문 링크 거부")
+        if linked is not None:
+            _add_origin_doc(link, linked, st)
+
+
 def build_origin(repo: str, head_commit: str, review_commit: str,
-                 caller_origin: Optional[str], specs: list) -> dict:
+                 caller_origin: Optional[str], specs: list, changed_docs=(),
+                 tree_root: Optional[str] = None) -> dict:
+    """원문 · 의심 · 로드맵 칸. 리뷰 쪽 문서(설계문서 · 그 링크 · 바뀐 의도 문서 · 그들의 로드맵)는
+    `tree_root` 가 있으면 리뷰 트리에서, 없으면 `review_commit` 에서 읽는다. 부른 쪽 원문과 그 로드맵은
+    늘 `head_commit` 에서 읽는다."""
     st: dict = {"origin": [], "doubts": [], "sources": [], "aliases": {}, "notices": [],
-                "mixed": False, "rejected": False, "opened": [], "done": []}
+                "mixed": False, "rejected": False, "opened": [], "done": [],
+                "own_roadmaps": [], "roadmaps": []}
+    review = _reader(repo, review_commit, tree_root)
     if caller_origin:
-        text = _open_doc(repo, head_commit, caller_origin, st, "원문 링크 거부")
+        text = _open_doc(_reader(repo, head_commit), caller_origin, st, "원문 링크 거부")
         if text is not None:
             _add_origin_doc(caller_origin, text, st)
     else:
         for spec in specs:
-            spec_text = _open_doc(repo, review_commit, spec, st, "원문 링크 거부")
+            spec_text = _open_doc(review, spec, st, "원문 링크 거부")
             if spec_text is None:
                 continue
             link = frontmatter_value(spec_text, "source_interview")
             if link is None:
                 continue
-            text = _open_doc(repo, review_commit, link, st, "원문 링크 거부")
+            text = _open_doc(review, link, st, "원문 링크 거부")
             if text is not None:
                 _add_origin_doc(link, text, st)
+    for rel in changed_docs:
+        _follow_changed(review, rel, st)
     if st["origin"]:
         origin = "\n".join(st["origin"])
     else:
         if st["rejected"]:
             reason = "원문 링크 거부"
-        elif not specs and not caller_origin:
+        elif not specs and not caller_origin and not changed_docs:
             reason = "의도 출처에 설계문서 없음"
         else:
             reason = "부른 쪽 원문도 설계문서 링크도 없음"
         origin = "원문 없음 — " + reason
         _note(st, origin)
-    roadmap = _follow_roadmaps(repo, st)
+    roadmap = _follow_roadmaps(st)
     return {"origin": origin, "doubts": "\n".join(st["doubts"]), "roadmap": roadmap,
             "sources": st["sources"], "aliases": st["aliases"], "notices": st["notices"],
-            "mixed": st["mixed"]}
+            "mixed": st["mixed"], "roadmaps": st["roadmaps"]}

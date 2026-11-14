@@ -1,4 +1,6 @@
 """R2 넓게 보는 조언자 — 표시 · 넓이 · 준비 · 거름 · 렌더(scripts/intent_origin.py · intent_critic.py)."""
+import argparse
+import json
 import os
 import sys
 import tempfile
@@ -10,9 +12,57 @@ import test_intent_critic as tic  # noqa: E402 — 헬퍼만 빌린다
 io_ = tic.io_
 ia = tic.ia
 ic = tic._load("intent_critic")
+ot = tic._load("other_teams")
 MARKERS = list(io_.DEFAULT_MARKERS)
 OTHER_MAX = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
 ENV_MARKERS = "DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS"
+DIFF_SHAPE = "차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다"
+UNREAD_ONE = "의도 문서인지 확인 못 한 문서 1 — 추적되지 않는다"
+
+
+def _ok(repo, *args):
+    p = tic._git(repo, *args)
+    if p.returncode != 0:
+        raise AssertionError("git %s: %s" % (" ".join(args), p.stderr))
+    return p.stdout.strip()
+
+
+WIDE_FILES = {
+    "docs/brief.md": "## 6. 사용자 원문\nbrief-quote-token\n",
+    "docs/rm/one/roadmap.md": tic._fm(type="roadmap", source_brief="docs/brief.md")
+    + "### R1 — 하나\n- 의도: one-intent-token\n",
+    "docs/rm/one/R1.md": tic._fm(type="epic-bundle", roadmap="docs/rm/one/roadmap.md",
+                                 source_brief="docs/brief.md")
+    + "## 6. 사용자 원문\nbundle-quote-token\n",
+    "docs/specs/x-design.md": tic._fm(source_interview="docs/rm/one/R1.md",
+                                      roadmap="docs/rm/one/roadmap.md"),
+    "docs/guide.md": "# 안내\n",
+    "docs/seed.md": tic._fm(type="seed"),
+    "src/a.py": "x = 1\n",
+}
+
+
+def _wide_repo(root):
+    """넓게 보는 리뷰 시험용 리포 — 첫 커밋(init) 위에 문서 · 코드를 한 커밋으로(「wide fixture」)."""
+    os.makedirs(root, exist_ok=True)
+    tic._git_repo(root)
+    for rel, text in WIDE_FILES.items():
+        tic._write(text, root, rel)
+    _ok(root, "add", "docs", "src")
+    _ok(root, "commit", "-q", "-m", "wide fixture")
+    return root
+
+
+def _other_branch(repo):
+    """origin ref 를 세우고(원격 URL 없음 — gh 가 불리지 않는다) src/a.py 를 고친 다른 브랜치를 둔다."""
+    _ok(repo, "update-ref", "refs/remotes/origin/main", _ok(repo, "rev-parse", "HEAD"))
+    _ok(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    _ok(repo, "checkout", "-q", "-b", "feature/other")
+    tic._write("x = 2\n", repo, "src", "a.py")
+    _ok(repo, "commit", "-q", "-am", "other")
+    _ok(repo, "checkout", "-q", "main")
+    if _ok(repo, "remote"):
+        raise AssertionError("이 리포에 원격이 있으면 열린 PR 조회가 네트워크에 닿는다")
 
 
 class TestMarkers(unittest.TestCase):
@@ -237,6 +287,354 @@ class TestWideConfig(unittest.TestCase):
             with self.subTest(bad=bad):
                 tic._write(old + bad, path)
                 self.assertIsNone(ic._read_config(self.rd))
+
+
+class TestWidePrepare(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.R = _wide_repo(os.path.join(self.tmp.name, "repo"))
+        self.rd = self._new_rd()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _new_rd(self, config=None):
+        rd = tempfile.mkdtemp(dir=self.tmp.name)
+        tic._write(config or tic._config_text(), rd, "intent-config.txt")
+        tic._write("## Goals\ngoal-body\n", rd, "intent.md")
+        return rd
+
+    def _prep(self, mode="pr", names=("src/a.py",), base=None, rd=None):
+        rd = rd or self.rd
+        if names is not None:
+            tic._write("".join(n + "\n" for n in names), rd, "review-i1.names")
+        sp = os.path.join(rd, "intent-specs.json")
+        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
+        args = ["prepare", "--rd", rd, "--repo", self.R, "--tree-root", self.R, "--mode", mode,
+                "--head", "HEAD", "--review-commit", "HEAD", "--specs-json", sp]
+        if base is not None:
+            args.append("--base=" + base)
+        p = tic._cli(*args)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _f(self, name, rd=None):
+        return tic._read(rd or self.rd, name)
+
+    def _plan(self, rd=None):
+        return self._f("intent-plan.txt", rd).splitlines()
+
+    def test_range_calls_without_run_evidence(self):
+        p = self._prep(mode="range")
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertIn("breadth: range", self._plan())
+        self.assertIn("넓게 본다 — 범위 모드", p.stdout.splitlines())
+
+    def test_range_without_names_falls_back(self):
+        p = self._prep(mode="range", names=None)
+        self.assertEqual(tic._last(p), "intent-call: none")
+        self.assertIn("breadth: narrow", self._plan())
+        self.assertIn("바뀐 파일 목록이 없어 넓게 보지 않는다", p.stdout.splitlines())
+
+    def test_design_doc_only_calls(self):
+        p = self._prep(names=("docs/specs/x-design.md",))
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertIn("breadth: intent-docs", self._plan())
+        self.assertIn("넓게 본다 — 의도 문서가 바뀐 변경", p.stdout.splitlines())
+        self.assertIn("bundle-quote-token", self._f("intent-origin.md"))
+        self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+
+    def test_roadmap_only_change(self):
+        self._prep(names=("docs/rm/one/roadmap.md",))
+        self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+        self.assertIn("brief-quote-token", self._f("intent-origin.md"))
+        self.assertIn("breadth: intent-docs", self._plan())
+
+    def test_bundle_only_change(self):
+        self._prep(names=("docs/rm/one/R1.md",))
+        self.assertIn("brief-quote-token", self._f("intent-origin.md"))
+        self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+
+    def test_plain_docs_only_is_r1(self):
+        p = self._prep(names=("docs/guide.md",))
+        self.assertEqual(tic._last(p), "intent-call: none")
+        self.assertIn(tic.NONE_LINE, p.stdout.splitlines())
+        self.assertIn("breadth: narrow", self._plan())
+
+    def test_code_pr_is_r1(self):
+        p = self._prep()
+        # 부르지 않는 좁은 실행의 stdout 은 R1 과 글자까지 같다
+        self.assertEqual(p.stdout, "%s\nintent-call: none\n" % tic.NONE_LINE)
+        self.assertIn("breadth: narrow", self._plan())
+        tic._write("관찰 하나\n", self.rd, "e2e-record.md")
+        p = self._prep()
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertIn("breadth: narrow", self._plan())
+        self.assertNotIn("넓게 본다 — 범위 모드", p.stdout)
+
+    def test_overlap_alone_does_not_call(self):
+        _other_branch(self.R)
+        p = self._prep()
+        self.assertEqual(tic._last(p), "intent-call: none")
+        overlap, _unverified = ot.summary(self._f(ot.FILE))
+        self.assertEqual(overlap, ["- feature/other — src/a.py"])
+
+    def test_other_teams_rows_in_evidence(self):
+        _other_branch(self.R)
+        tic._write("관찰 하나\n", self.rd, "e2e-record.md")
+        p = self._prep()
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        rows = self._f("intent-evidence.txt").split("\n")
+        self.assertEqual(rows[0], "   1\t[e2e] 관찰 하나")
+        self.assertGreater(len(rows), 5)
+        for n, row in enumerate(rows, 1):
+            head, _, body = row.partition("\t")
+            self.assertEqual(head.strip(), str(n))
+            if n > 1:
+                self.assertTrue(body.startswith("[다른 팀] "), row)
+        self.assertIn("[다른 팀] - feature/other — src/a.py", rows[1] + rows[2])
+
+    def test_other_teams_bytes_do_not_flip_split(self):
+        _other_branch(self.R)
+        walk = "관찰 하나\n"
+        tic._write(walk, self.rd, "e2e-record.md")
+        self._prep()
+        run_input = io_.total_bytes(io_.build_evidence(walk, None)[0],
+                                    *[self._f(n) for n in ("intent-origin.md", "intent-roadmap.md",
+                                                           "intent-intent.md", "intent-doubts.md")])
+        whole_input = run_input - io_.total_bytes(io_.build_evidence(walk, None)[0]) \
+            + io_.total_bytes(self._f("intent-evidence.txt"))
+        cap = run_input + 1
+        self.assertGreater(whole_input, cap)  # 다른 팀 줄을 세면 넘는다 — 이 시험의 이빨
+        tic._write(tic._config_text(max_bytes=cap), self.rd, "intent-config.txt")
+        p = self._prep()
+        self.assertNotEqual(tic._last(p), "intent-call: single")
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        teams = io_.total_bytes(self._f(ot.FILE))
+        self.assertIn("입력 %d바이트 · 다른 팀 기록 %d바이트(상한 80000 — 나눠 부르기 판정에 넣지 않는다)"
+                      % (run_input, teams), p.stdout.splitlines())
+        tic._write(tic._config_text(max_bytes=run_input - 1), self.rd, "intent-config.txt")
+        self.assertEqual(tic._last(self._prep()), "intent-call: single")
+
+    def test_scope_file(self):
+        first = _ok(self.R, "rev-parse", "HEAD~1")
+        self._prep(mode="range", base=first)
+        lines = self._f("intent-scope.md").split("\n")
+        self.assertEqual(lines[:2], ["넓이: 넓게 본다 — 범위 모드", "읽은 인용: 받는다"])
+        self.assertEqual(lines[lines.index("## 바뀐 파일") + 1], "- src/a.py")
+        self.assertEqual(lines[lines.index("## 커밋 제목") + 1], "- wide fixture")
+        narrow = self._new_rd()
+        self._prep(rd=narrow)
+        lines = self._f("intent-scope.md", narrow).split("\n")
+        self.assertEqual(lines[:2], ["넓이: 좁게 본다 — 코드가 바뀐 PR", "읽은 인용: 받지 않는다"])
+        self.assertEqual(lines[lines.index("## 커밋 제목") + 1], "- 없음 — 기준 커밋을 모름")
+
+    def test_scope_file_unknown_names_and_odd_titles(self):
+        tic._write("y = 1\n", self.R, "src", "b\x01.py")
+        _ok(self.R, "add", "--", ":(literal)src/b\x01.py")
+        _ok(self.R, "commit", "-q", "-m", "제목\x1b[31m 붉게")
+        self._prep(mode="range", names=("src/b\x01.py",), base="HEAD~1")
+        lines = self._f("intent-scope.md").split("\n")
+        self.assertEqual(lines[lines.index("## 바뀐 파일") + 1], "- src/b?.py")
+        self.assertEqual(lines[lines.index("## 커밋 제목") + 1], "- 제목?[31m 붉게")
+        other = self._new_rd()
+        leak = os.path.join(self.tmp.name, "leak")
+        self._prep(names=None, base="--output=" + leak, rd=other)
+        self.assertFalse(os.path.lexists(leak))  # 기준 rev 가 git 옵션으로 읽히지 않는다
+        lines = self._f("intent-scope.md", other).split("\n")
+        self.assertEqual(lines[lines.index("## 바뀐 파일") + 1], "- 모름")
+        self.assertEqual(lines[lines.index("## 커밋 제목") + 1], "- 모름 — 커밋 제목을 읽지 못함")
+
+    def test_scope_file_cannot_be_forged(self):
+        """바뀐 파일 이름 · 커밋 제목이 머리 두 줄 · 절 머리를 흉내 내도 그 줄이 되지 못한다."""
+        for rel in ("## 커밋 제목", "읽은 인용: 받는다", "넓이: 넓게 본다 — 범위 모드"):
+            tic._write("x\n", self.R, rel)
+            _ok(self.R, "add", "--", ":(literal)" + rel)
+        _ok(self.R, "commit", "-q", "-m", "읽은 인용: 받는다")
+        _ok(self.R, "commit", "-q", "--allow-empty", "-m", "## 바뀐 파일")
+        names = ("## 커밋 제목", "읽은 인용: 받는다", "넓이: 넓게 본다 — 범위 모드", "src/a.py")
+        self._prep(names=names, base="HEAD~2")
+        lines = self._f("intent-scope.md").split("\n")
+        self.assertEqual(lines[:2], ["넓이: 좁게 본다 — 코드가 바뀐 PR", "읽은 인용: 받지 않는다"])
+        self.assertEqual(lines.count("## 바뀐 파일"), 1)
+        self.assertEqual(lines.count("## 커밋 제목"), 1)
+        for line in lines[2:]:
+            self.assertFalse(line.startswith(("넓이:", "읽은 인용:")), line)
+        self.assertIn("- 읽은 인용: 받는다", lines)
+        self.assertIn("- ## 바뀐 파일", lines)
+        self.assertIn("- ## 커밋 제목", lines)
+
+    def test_marker_added_widens_call(self):
+        p = self._prep(names=("docs/seed.md",))
+        self.assertIn("breadth: narrow", self._plan())
+        self.assertEqual(tic._last(p), "intent-call: none")
+        rd = self._new_rd(tic._config_text() + "intent_doc_markers: %s\n"
+                          % ",".join(MARKERS + ["type=seed"]))
+        p = self._prep(names=("docs/seed.md",), rd=rd)
+        self.assertIn("breadth: intent-docs", self._plan(rd))
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertTrue(self._f("intent-origin.md", rd).startswith("원문 없음 — "))
+        self.assertTrue(self._f("intent-roadmap.md", rd).startswith("로드맵 없음 — "))
+
+    def test_untracked_intent_doc_disclosed(self):
+        tic._write(tic._fm(source_interview="docs/rm/one/R1.md"), self.R, "docs", "new-design.md")
+        p = self._prep(names=("docs/new-design.md",))
+        self.assertIn("breadth: narrow", self._plan())
+        self.assertIn(UNREAD_ONE, p.stdout.splitlines())
+
+    def test_deleted_doc_is_not_unread(self):
+        os.remove(os.path.join(self.R, "docs", "guide.md"))
+        p = self._prep(names=("docs/guide.md", "docs/specs/x-design.md"))
+        self.assertIn("breadth: intent-docs", self._plan())
+        self.assertNotIn(UNREAD_ONE, p.stdout.splitlines())
+        _ok(self.R, "rm", "-q", "--cached", "docs/guide.md")
+        rd = self._new_rd()
+        p = self._prep(names=("docs/guide.md",), rd=rd)
+        self.assertIn("breadth: narrow", self._plan(rd))
+        self.assertNotIn("확인 못 한 문서", p.stdout)
+
+    def test_uncommitted_design_read_from_tree(self):
+        tic._write(tic._fm(source_interview="docs/brief.md"), self.R, "docs", "specs",
+                   "x-design.md")
+        self._prep(names=("docs/specs/x-design.md",))
+        origin = self._f("intent-origin.md")
+        self.assertIn("brief-quote-token", origin)
+        self.assertNotIn("bundle-quote-token", origin)
+
+    def test_teams_failure_is_fail_open(self):
+        def boom(*_a, **_k):
+            raise RuntimeError("x")
+
+        args = argparse.Namespace(repo=self.R, tree_root=self.R, review_commit="HEAD")
+        cfg = {"intent_doc_markers": MARKERS, "other_teams_max_bytes": 80000}
+        self.assertEqual(ic._teams(args, None, [], cfg, collect=boom),
+                         ("", ["다른 팀 읽기 실패 — RuntimeError"]))
+        seen = []
+
+        def fake(*a):
+            seen.append(a)
+            return {"text": "## 겹치는 곳\n- 겹침 없음\n", "notices": ["n1"]}
+
+        self.assertEqual(ic._teams(args, {"src/a.py"}, ["docs/rm/one/roadmap.md"], cfg,
+                                   collect=fake),
+                         ("## 겹치는 곳\n- 겹침 없음\n", ["n1"]))
+        self.assertEqual(seen, [(self.R, os.path.abspath(self.R), "HEAD", {"src/a.py"},
+                                 ["docs/rm/one/roadmap.md"], MARKERS, 80000)])
+
+    def test_differential_shape_disclosed(self):
+        tic._write("per_adapter: x\n", self.rd, "differential.yaml")
+        p = self._prep()
+        self.assertEqual(tic._last(p), "intent-call: none")
+        self.assertIn(DIFF_SHAPE, p.stdout.splitlines())
+        tic._write("per_adapter: []\n", self.rd, "differential.yaml")
+        p = self._prep()
+        self.assertNotIn(DIFF_SHAPE, p.stdout.splitlines())
+
+
+class TestDifferentialShape(unittest.TestCase):
+    def test_cases(self):
+        bad = ("per_adapter: x\n", "runner: x\n", "per_adapter:\n  - 3\n",
+               "per_adapter:\n  - runner: a\n", "per_adapter:\n  - attributions: x\n",
+               "per_adapter:\n  - attributions:\n      - x\n", "# 주석만\n")
+        for text in bad:
+            with self.subTest(text=text):
+                self.assertEqual(io_.has_evidence(None, text), (False, [DIFF_SHAPE]))
+        for text in ("per_adapter: []\n", tic.DIFF_GREEN, "", None):
+            with self.subTest(text=text):
+                self.assertEqual(io_.has_evidence(None, text), (False, []))
+        # 꼴이 다른 항목이 있어도 통과로 끝나지 않은 판정은 그대로 부르는 근거다
+        mixed = tic.DIFF_RED + "  - 3\n"
+        self.assertEqual(io_.has_evidence(None, mixed), (True, [DIFF_SHAPE]))
+        self.assertEqual(io_.has_evidence(None, "- a\n"),
+                         (False, ["차등 결과를 읽지 못함 — 근거로 세지 않았다"]))
+
+    def test_build_evidence_with_other_teams(self):
+        text, n = io_.build_evidence(None, None, "## 겹치는 곳\n\n- a — b\n")
+        self.assertEqual((text, n), ("   1\t[다른 팀] ## 겹치는 곳\n   2\t[다른 팀] - a — b", 2))
+        text, n = io_.build_evidence("관찰\n", tic.DIFF_GREEN, "x\ry\n")
+        self.assertEqual(text.split("\n")[0], "   1\t[e2e] 관찰")
+        self.assertEqual(text.split("\n")[-2:], ["%4d\t[다른 팀] x" % (n - 1),
+                                                 "%4d\t[다른 팀] y" % n])
+        self.assertEqual(io_.MARK_TEAMS, "[다른 팀] ")
+
+
+def _sides_repo(root):
+    """커밋 A(old) 뒤 HEAD(new) — 묶음 · 로드맵 · brief 의 본문이 바뀐다. → (리포, A)."""
+    repo = _wide_repo(root)
+    bodies = {"docs/rm/one/R1.md": ("bundle-quote-token", "%s-bundle"),
+              "docs/rm/one/roadmap.md": ("one-intent-token", "%s-roadmap"),
+              "docs/brief.md": ("brief-quote-token", "%s-brief")}
+    for rel, (token, new) in bodies.items():
+        tic._write(WIDE_FILES[rel].replace(token, new % "old"), repo, rel)
+    _ok(repo, "commit", "-q", "-am", "old")
+    a = _ok(repo, "rev-parse", "HEAD")
+    for rel, (token, new) in bodies.items():
+        tic._write(WIDE_FILES[rel].replace(token, new % "new"), repo, rel)
+    _ok(repo, "commit", "-q", "-am", "new")
+    return repo, a
+
+
+class TestReadSides(unittest.TestCase):
+    SPEC = "docs/specs/x-design.md"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.repo, cls.A = _sides_repo(os.path.join(cls.tmp.name, "repo"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_review_side_reads_review_commit(self):
+        o = io_.build_origin(self.repo, "HEAD", self.A, None, [self.SPEC])
+        self.assertIn("old-bundle", o["origin"])
+        self.assertNotIn("new-bundle", o["origin"])
+        self.assertIn("old-roadmap", o["roadmap"])
+        self.assertNotIn("new-roadmap", o["roadmap"])
+        self.assertEqual(o["roadmaps"], ["docs/rm/one/roadmap.md"])
+
+    def test_caller_origin_reads_head_commit(self):
+        o = io_.build_origin(self.repo, "HEAD", self.A, "docs/brief.md", [])
+        self.assertIn("new-brief", o["origin"])
+        self.assertNotIn("old-brief", o["origin"])
+
+    def test_tree_root_wins_for_review_side(self):
+        tree = os.path.join(self.tmp.name, "tree-a")
+        _ok(self.repo, "worktree", "add", "-q", "--detach", tree, self.A)
+        try:
+            o = io_.build_origin(self.repo, "HEAD", "HEAD", None, [self.SPEC], tree_root=tree)
+            self.assertIn("old-bundle", o["origin"])
+            self.assertNotIn("new-bundle", o["origin"])
+            tic._write(WIDE_FILES["docs/rm/one/R1.md"].replace("bundle-quote-token", "hand-edit"),
+                       tree, "docs", "rm", "one", "R1.md")
+            o = io_.build_origin(self.repo, "HEAD", "HEAD", None, [self.SPEC], tree_root=tree)
+            self.assertIn("hand-edit", o["origin"])
+            self.assertIn("old-roadmap", o["roadmap"])
+        finally:
+            _ok(self.repo, "worktree", "remove", "--force", tree)
+
+    def test_changed_docs_followed(self):
+        o = io_.build_origin(self.repo, "HEAD", "HEAD", None, [],
+                             changed_docs=["docs/rm/one/roadmap.md"])
+        self.assertIn("new-brief", o["origin"])
+        self.assertIn("new-roadmap", o["roadmap"])
+        self.assertEqual(o["roadmaps"], ["docs/rm/one/roadmap.md"])
+        both = io_.build_origin(self.repo, "HEAD", "HEAD", None, [self.SPEC],
+                                changed_docs=["docs/rm/one/R1.md"])
+        self.assertEqual(both["roadmaps"], ["docs/rm/one/roadmap.md"])
+        self.assertIn("new-bundle", both["origin"])
+
+    def test_read_tracked_rev_and_filename_alike(self):
+        """작업 폴더에 `<rev>:<경로>` 이름의 파일이 있어도 rev 로만 읽힌다."""
+        tic._write("decoy\n", self.repo, "HEAD:a.txt")
+        tic._write("decoy\n", self.repo, "%s:a.txt" % self.A)
+        try:
+            self.assertEqual(io_.read_tracked(self.repo, "HEAD", "a.txt"), ("x\n", None))
+            self.assertEqual(io_.read_tracked(self.repo, self.A, "a.txt"), ("x\n", None))
+        finally:
+            os.remove(os.path.join(self.repo, "HEAD:a.txt"))
+            os.remove(os.path.join(self.repo, "%s:a.txt" % self.A))
 
 
 if __name__ == "__main__":

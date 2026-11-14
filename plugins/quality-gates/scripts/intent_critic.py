@@ -5,6 +5,8 @@
   intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
   intent-evidence.txt · intent-origin.md · intent-roadmap.md · intent-intent.md ·
   intent-doubts.md · intent-answered.md · intent-plan.txt     prepare 가 쓴다
+  intent-scope.md       prepare 가 쓴다 — 리뷰어의 <scope> 칸(넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목)
+  other-teams.md        prepare 가 쓴다 — 다른 팀 기록(other_teams.py). 기록이 없으면 지운다
   intent-prepare-notices.txt  prepare 의 공시 줄(한 줄에 하나) — render 가 결과 절 앞에 싣는다
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
@@ -37,6 +39,7 @@ import doc_paths  # noqa: E402
 from render_disposition import disposition_report  # noqa: E402
 import intent_answers as ia  # noqa: E402
 import intent_origin as io_  # noqa: E402
+import other_teams as ot  # noqa: E402
 
 KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
 DIR_ENV = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
@@ -57,6 +60,8 @@ DOUBTS = "intent-doubts.md"
 ANSWERED = "intent-answered.md"
 PLAN = "intent-plan.txt"
 PREPARE_NOTICES = "intent-prepare-notices.txt"
+SCOPE = "intent-scope.md"
+OTHER_TEAMS = ot.FILE
 OUT1 = "intent-critic-1.txt"
 OUT2 = "intent-critic-2.txt"
 QUESTIONS = "intent-questions.yaml"
@@ -188,7 +193,9 @@ def _repeated(pairs: List[tuple], keys: tuple) -> bool:
 CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source",
                "other_teams_max_bytes", "other_teams_max_bytes_source", "intent_doc_markers",
                "intent_doc_markers_source")
-PLAN_KEYS = ("call", "mode", "tree_root", "answers_root")
+PLAN_KEYS = ("call", "mode", "tree_root", "answers_root", "breadth")
+# 리뷰의 넓이 — narrow 는 R1 그대로, 뒤 둘이 넓게 보는 리뷰다. 계획 파일에 없거나 모르는 값이면 narrow.
+BREADTHS = ("narrow", "range", "intent-docs")
 
 
 def _read_config(rd: str) -> Optional[dict]:
@@ -218,8 +225,8 @@ def _read_plan(rd: str) -> Optional[dict]:
     pairs = _key_values(text)
     if _repeated(pairs, PLAN_KEYS):
         return None
-    plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "sources": [],
-            "aliases": {}}
+    plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "breadth": "narrow",
+            "sources": [], "aliases": {}}
     for key, value in pairs:
         if key == "source":
             plan["sources"].append(value)
@@ -229,6 +236,8 @@ def _read_plan(rd: str) -> Optional[dict]:
                 plan["aliases"][bundle] = brief
         elif key in PLAN_KEYS:
             plan[key] = value
+    if plan["breadth"] not in BREADTHS:
+        plan["breadth"] = "narrow"
     return plan
 
 
@@ -453,10 +462,10 @@ def _line_ok(key: str, value) -> bool:
 
 
 def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str, sources,
-                aliases, notices: List[str]) -> None:
+                aliases, notices: List[str], breadth: str = "narrow") -> None:
     """줄 단위 계획 파일. 줄마다 써서 다시 읽으면 같은 값이 나오는지 확인하고, 아닌 출처 · 별칭은 쓰지 않고 공시한다."""
     singles = (("call", call), ("mode", mode), ("tree_root", tree_root),
-               ("answers_root", answers_root))
+               ("answers_root", answers_root), ("breadth", breadth))
     lines = []
     for key, value in singles:
         if not _line_ok(key, value):
@@ -477,6 +486,44 @@ def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str
     _write(_path(rd, PLAN), "\n".join(lines) + "\n")
 
 
+NOTICE_NO_NAMES = "바뀐 파일 목록이 없어 넓게 보지 않는다"
+NOTICE_UNREAD_DOCS = "의도 문서인지 확인 못 한 문서 %d — 추적되지 않는다"
+NOTICE_TEAMS_FAILED = "다른 팀 읽기 실패 — %s"
+NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d — 나눠 부르기 판정에 넣지 않는다)"
+
+
+def _breadth(args, tree_root: str, cfg: dict, notices: List[str]) -> tuple:
+    """(바뀐 파일 목록 | None, 넓이, 바뀐 의도 문서들). 바뀐 문서는 리뷰 트리에서 읽는다."""
+    names = _range_names(args.rd)
+    breadth, docs, unread = io_.review_breadth(
+        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel),
+        cfg["intent_doc_markers"])
+    if args.mode == "range" and names is None:
+        _add_notice(notices, NOTICE_NO_NAMES)
+    if breadth != "narrow":
+        _add_notice(notices, io_.BREADTH_LABELS[breadth])
+    if unread:
+        _add_notice(notices, NOTICE_UNREAD_DOCS % unread)
+    return names, breadth, docs
+
+
+def _teams(args, names, roadmaps, cfg, collect=ot.collect) -> tuple:
+    """다른 팀 기록 → (글, 공시 줄들). 읽기가 예외로 끝나도 단계를 멈추지 않는다(fail-open — 공시한다)."""
+    try:
+        got = collect(args.repo, os.path.abspath(args.tree_root), args.review_commit, names,
+                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"])
+        return got["text"], list(got["notices"])
+    except Exception as exc:  # noqa: BLE001 — 어떤 실패든 이름만 공시하고 다른 팀 없이 간다
+        return "", [NOTICE_TEAMS_FAILED % type(exc).__name__]
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _prepare(args, notices: List[str]) -> str:
     rd = args.rd
     if not os.path.isdir(rd):
@@ -491,18 +538,33 @@ def _prepare(args, notices: List[str]) -> str:
     tree_root = os.path.abspath(args.tree_root)
     answers_root = os.path.join(tree_root, cfg["answers_dir"])
 
+    names, breadth, docs = _breadth(args, tree_root, cfg, notices)
+    built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs,
+                             changed_docs=docs, tree_root=tree_root)
+    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg)
+    if teams_text:
+        _write(_path(rd, OTHER_TEAMS), teams_text)
+    else:
+        _remove(_path(rd, OTHER_TEAMS))
+    for line in teams_notices:
+        _add_notice(notices, line)
+    _write(_path(rd, SCOPE), io_.render_scope(breadth, names, args.repo, args.base,
+                                              args.review_commit))
+
     e2e = _read(_path(rd, "e2e-record.md"))
     differential = _read(_path(rd, "differential.yaml"))
     ok, evidence_notices = io_.has_evidence(e2e, differential)
     for line in evidence_notices:
         _add_notice(notices, line)
-    if not ok:
+    # 좁은 리뷰는 R1 그대로 돌려 본 근거가 있을 때만 부른다 — 이때 원문 조립의 공시는 내지 않는다.
+    if not ok and breadth == "narrow":
         _add_notice(notices, NO_EVIDENCE)
-        _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices)
+        _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices,
+                    breadth=breadth)
         return "none"
 
-    evidence, _count = io_.build_evidence(e2e, differential)
-    built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs)
+    run_text, _count = io_.build_evidence(e2e, differential)
+    evidence, _count = io_.build_evidence(e2e, differential, teams_text)
     for line in built["notices"]:
         _add_notice(notices, line)
     if built["mixed"]:
@@ -526,7 +588,8 @@ def _prepare(args, notices: List[str]) -> str:
     if unreadable:
         _add_notice(notices, "읽지 못한 답 파일 %d" % unreadable)
 
-    total = io_.total_bytes(evidence, built["origin"], built["roadmap"], intent_kept, doubts)
+    # 나눠 부르기 판정은 돌려 본 줄로만 한다 — 다른 팀 기록은 자기 상한으로 묶이고 재서 공시한다.
+    total = io_.total_bytes(run_text, built["origin"], built["roadmap"], intent_kept, doubts)
     if total > cfg["max_bytes"]:
         call = "single"
         _add_notice(notices, "한 번에 넣음 — 입력 %d바이트가 상한 %d바이트를 넘었다"
@@ -535,6 +598,8 @@ def _prepare(args, notices: List[str]) -> str:
         call = "first-only"
     else:
         call = "split"
+    _add_notice(notices, NOTICE_BYTES % (total, io_.total_bytes(teams_text),
+                                         cfg["other_teams_max_bytes"]))
 
     _write(_path(rd, EVIDENCE), evidence)
     _write(_path(rd, ORIGIN), built["origin"])
@@ -543,7 +608,7 @@ def _prepare(args, notices: List[str]) -> str:
     _write(_path(rd, DOUBTS), doubts)
     _write(_path(rd, ANSWERED), _answered_lines(answered))
     _write_plan(rd, call, args.mode, tree_root, answers_root, built["sources"],
-                built["aliases"], notices)
+                built["aliases"], notices, breadth=breadth)
     return call
 
 
@@ -1353,8 +1418,10 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_config)
 
     p = sub.add_parser("prepare", help="근거 · 원문 · 로드맵 · 의도 · 의심 · 답을 조립한다",
-                       description="intent-config.txt 가 먼저 있어야 한다. 공시 줄들 뒤 "
-                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4.")
+                       description="intent-config.txt 가 먼저 있어야 한다. 리뷰의 넓이를 정하고 다른 "
+                                   "팀 기록(%s) · scope 칸(%s)을 쓴다. 공시 줄들 뒤 "
+                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4."
+                                   % (OTHER_TEAMS, SCOPE))
     p.add_argument("--rd", required=True, help="qg 세션 폴더(e2e-record.md · differential.yaml · "
                                                "intent.md 를 읽는다)")
     p.add_argument("--repo", required=True, help="리포 루트(원문 · 로드맵을 git 으로 읽는다)")
@@ -1365,6 +1432,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--review-commit", required=True, help="리뷰한 커밋(설계문서 링크를 읽을 rev)")
     p.add_argument("--specs-json", required=True, help="P3 의 JSON 한 줄이 든 파일")
     p.add_argument("--origin", default=None, help="부른 쪽이 넘긴 원문(리포 상대 경로)")
+    p.add_argument("--base", default="-",
+                   help="리뷰 범위의 기준 rev — intent-scope.md 의 커밋 제목(base..review-commit)을 "
+                        "읽는다. 모르면 -")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("check-output", help="리뷰어 응답을 읽을 수 있나 본다",
