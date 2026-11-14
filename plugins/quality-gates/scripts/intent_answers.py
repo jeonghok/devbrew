@@ -273,8 +273,9 @@ def write_answer_files(repo_root: str, answers_dir: str, files: list) -> tuple:
 
 
 def _git(repo_root: str, *args: str):
-    return subprocess.run(["git", "-C", repo_root] + list(args), capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+    # --literal-pathspecs: 답 자리 값이 `:!x` · `:(exclude)x` 같은 pathspec 매직이어도 글자 그대로 읽는다.
+    return subprocess.run(["git", "-C", repo_root, "--literal-pathspecs"] + list(args),
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
 def _first_line(text: str) -> str:

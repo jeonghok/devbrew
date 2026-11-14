@@ -226,6 +226,35 @@ class TestCommitAnswers(unittest.TestCase):
         self.assertIn("?? c.txt", _git(self.root, "status", "--porcelain").stdout)
         self.assertEqual(len(_git(self.root, "log", "--oneline").stdout.splitlines()), 2)
 
+    def test_commit_pathspec_magic_dir_is_literal(self):
+        """F2 — 답 자리 값이 pathspec 매직이어도 HEAD 커밋은 답 파일뿐이고 사용자 변경은 그대로다."""
+        for magic in (":!x", ":(exclude)x"):
+            with self.subTest(dir=magic), tempfile.TemporaryDirectory() as d:
+                root = _git_repo(d)
+                Path(root, "a.txt").write_text("changed\n", encoding="utf-8")
+                _git(root, "add", "a.txt")
+                Path(root, "b.txt").write_text("changed\n", encoding="utf-8")
+                Path(root, "stray.txt").write_text("new\n", encoding="utf-8")
+                paths, err = ia.write_answer_files(root, magic, self.files)
+                self.assertIsNone(err)
+                self.assertEqual(paths, [magic + "/" + n for n, _ in self.files])
+                sha, err = ia.commit_answer_files(root, paths, "m")
+                self.assertEqual(err, None, magic)
+                self.assertTrue(sha)
+                shown = _git(root, "show", "--name-only", "--format=", "HEAD").stdout.split()
+                self.assertEqual(sorted(shown), sorted(paths))
+                self.assertEqual(_git(root, "diff", "--cached", "--name-only").stdout.split(),
+                                 ["a.txt"])
+                porcelain = _git(root, "status", "--porcelain").stdout
+                self.assertIn(" M b.txt", porcelain)
+                self.assertIn("?? stray.txt", porcelain)
+
+    def test_valid_answers_dir_rejects_leading_colon(self):
+        for magic in (":!x", ":(exclude)x", ":/x", ":docs"):
+            self.assertIsNone(ic._valid_answers_dir(magic), magic)
+        self.assertEqual(ic._valid_answers_dir("docs/qg-intent-answers"),
+                         "docs/qg-intent-answers")
+
     def test_commit_failure_detached(self):
         paths, _ = ia.write_answer_files(self.root, self.rel, self.files)
         _git(self.root, "checkout", "-q", "--detach")

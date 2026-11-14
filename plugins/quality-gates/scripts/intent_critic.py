@@ -317,7 +317,7 @@ def _settings_changed(pairs: List[tuple], key: str) -> bool:
 
 def _valid_answers_dir(raw: str) -> Optional[str]:
     value = raw.strip().rstrip("/")
-    if not value or value.startswith("/") or "\\" in value:
+    if not value or value.startswith(("/", ":")) or "\\" in value:
         return None
     ok = True
     parts = value.split("/")
