@@ -263,7 +263,7 @@ def _read_questions(rd: str) -> Optional[dict]:
         return None
     try:
         data = yaml.safe_load(text)
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAMLError 말고도(없는 날짜의 ValueError 등) 읽지 못한 파일이다
         return None
     if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
         return None
@@ -283,7 +283,7 @@ def _reads_back(text: str) -> bool:
     """YAML 로 읽으면 같은 글이 돌아오나 — 수 · 참거짓 · null 로 읽히는 글(`true` · `null` …)은 아니다."""
     try:
         return yaml.safe_load(text) == text
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAMLError 말고도 예외를 낸다(틀린 태그 · 수 등)
         return False
 
 
@@ -329,10 +329,22 @@ def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict]
 
 # ---------------------------------------------------------------- gate
 
+def _killed(rd: str, mode: str, stale=()) -> bool:
+    """kill switch 가 켜졌으면 꺼짐 처리(`stale` 세션 파일 지우기 · 돌려주는 꼴 · 꺼짐 줄)를 하고 참.
+
+    `gate` 와 `prepare` 가 함께 쓴다 — 두 자리의 꺼짐 출력이 갈라지지 않게.
+    """
+    if os.environ.get(KILL_ENV) != "1":
+        return False
+    for name in stale:
+        _remove(_path(rd, name))
+    _write_return(rd, "skipped — " + KILL_LINE, mode, "-", [])
+    print(KILL_LINE)
+    return True
+
+
 def cmd_gate(args) -> int:
-    if os.environ.get(KILL_ENV) == "1":
-        _write_return(args.rd, "skipped — " + KILL_LINE, args.mode, "-", [])
-        print(KILL_LINE)
+    if _killed(args.rd, args.mode):
         return 0
     if args.path == "final":
         print("intent-gate: run")
@@ -568,6 +580,8 @@ def _prepare(args, notices: List[str]) -> str:
         _write(_path(rd, OTHER_TEAMS), teams_text)
     else:
         _remove(_path(rd, OTHER_TEAMS))
+    # 기록을 썼으면 공시는 상한 줄뿐이다 — 리뷰어에게 실은 것을 말하니 부르지 않는 실행에서는 뺀다.
+    cap_lines = teams_notices if teams_text else []
     for line in teams_notices:
         _add_notice(notices, line)
     _write(_path(rd, SCOPE), io_.render_scope(breadth, names, args.repo, args.base,
@@ -580,6 +594,9 @@ def _prepare(args, notices: List[str]) -> str:
         _add_notice(notices, line)
     # 좁은 리뷰는 R1 그대로 돌려 본 근거가 있을 때만 부른다 — 이때 원문 조립의 공시는 내지 않는다.
     if not ok and breadth == "narrow":
+        for line in cap_lines:  # 상한 줄은 기록의 `## 상한` 에 남는다 — 출력은 R1 그대로
+            if line in notices:
+                notices.remove(line)
         _add_notice(notices, NO_EVIDENCE)
         _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices,
                     breadth=breadth)
@@ -652,6 +669,9 @@ def _prepare_notices(rd: str) -> List[str]:
 
 
 def cmd_prepare(args) -> int:
+    # gate 를 거치지 않고 불려도 스위치가 넓이 판정 · 다른 팀 읽기 · gh 조회를 끈다 — 앞 실행의 두 파일도 지운다.
+    if _killed(args.rd, args.mode, stale=(OTHER_TEAMS, SCOPE)):
+        return 0
     notices: List[str] = []
     try:
         call = _prepare(args, notices)
@@ -696,7 +716,7 @@ def _parse_output(text: Optional[str]) -> tuple:
         return None, "qg-intent-critic 펜스가 둘 이상"
     try:
         data = yaml.safe_load(bodies[0])
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — 리뷰어가 옮긴 글(날짜 꼴 등)이 YAMLError 아닌 예외를 낸다
         return None, "펜스 안 YAML 을 읽지 못함"
     if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
         return None, "questions 목록이 없음"
@@ -1554,7 +1574,9 @@ def _parser() -> argparse.ArgumentParser:
     p = sub.add_parser("prepare", help="근거 · 원문 · 로드맵 · 의도 · 의심 · 답을 조립한다",
                        description="intent-config.txt 가 먼저 있어야 한다. 리뷰의 넓이를 정하고 다른 "
                                    "팀 기록(%s) · scope 칸(%s)을 쓴다. 공시 줄들 뒤 "
-                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4."
+                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4. "
+                                   "kill switch 가 켜져 있으면 아무것도 조립하지 않고 gate 와 같은 꺼짐 "
+                                   "줄 · 돌려주는 꼴만 낸다(rc 0)."
                                    % (OTHER_TEAMS, SCOPE))
     p.add_argument("--rd", required=True, help="qg 세션 폴더(e2e-record.md · differential.yaml · "
                                                "intent.md 를 읽는다)")

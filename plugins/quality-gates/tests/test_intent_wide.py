@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import test_intent_critic as tic  # noqa: E402 — 헬퍼만 빌린다
@@ -82,6 +83,31 @@ class TestMarkers(unittest.TestCase):
         self.assertFalse(io_.is_intent_doc(tic._fm(type="design"), MARKERS))
         self.assertFalse(io_.is_intent_doc("# 제목\nroadmap: x\n", MARKERS))
         self.assertTrue(io_.is_intent_doc(tic._fm(type="seed"), MARKERS + ["type=seed"]))
+
+    def test_unreadable_or_odd_frontmatter(self):
+        """YAML 이 예외를 내는 머리(없는 날짜 · 틀린 수 · 틀린 태그)는 「머리 없음」, 스칼라가 아닌 값은 None —
+        별칭을 글로 펼치지 않는다."""
+        for bad in ("created_at: 2026-02-30", "x: 0x_", "y: !!float x", "z: [", "w: !!python/name:os.system"):
+            text = "---\n%s\nroadmap: docs/rm/x/roadmap.md\n---\n# 본문\n" % bad
+            with self.subTest(bad=bad):
+                self.assertIsNone(io_.frontmatter_value(text, "roadmap"))
+                self.assertFalse(io_.is_intent_doc(text, MARKERS))
+                self.assertTrue(io_.frontmatter_unreadable(text))
+        bomb, prev = "a: &a [x, x]\n", "a"
+        for key in "bcdefg":  # 층마다 9배 — 글로 펼치면 수 MB
+            bomb += "%s: &%s [%s]\n" % (key, key, ", ".join(["*" + prev] * 9))
+            prev = key
+        for value in ("[a, b]", "{k: v}", "*g"):
+            text = "---\n%sroadmap: %s\n---\n" % (bomb, value)
+            with self.subTest(value=value):
+                # assertIsNone 은 실패 때 값을 찍는다 — 펼친 글(수 MB)이 출력을 덮지 않게 참거짓으로 본다.
+                self.assertTrue(io_.frontmatter_value(text, "roadmap") is None, value)
+                self.assertFalse(io_.frontmatter_unreadable(text))
+        good = "---\ncreated_at: 2026-02-01\nroadmap: docs/rm/x/roadmap.md\n---\n"
+        self.assertEqual(io_.frontmatter_value(good, "created_at"), "2026-02-01")
+        self.assertEqual(io_.frontmatter_value(good, "roadmap"), "docs/rm/x/roadmap.md")
+        self.assertFalse(io_.frontmatter_unreadable(good))
+        self.assertFalse(io_.frontmatter_unreadable("# 머리 없음\n"))
 
 
 DOCS = {"docs/specs/a-design.md": tic._fm(source_interview="docs/R1.md"),
@@ -343,6 +369,8 @@ class TestWidePrepare(unittest.TestCase):
         self.assertIn("넓게 본다 — 의도 문서가 바뀐 변경", p.stdout.splitlines())
         self.assertIn("bundle-quote-token", self._f("intent-origin.md"))
         self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+        # build_origin 이 찾은 로드맵이 다른 팀 읽기에 넘어간다 — 이번 로드맵의 팀 지도가 기록에 실린다.
+        self.assertIn("### 이번 로드맵 docs/rm/one/roadmap.md (리뷰 트리)\n", self._f(ot.FILE))
 
     def test_roadmap_only_change(self):
         self._prep(names=("docs/rm/one/roadmap.md",))
@@ -371,6 +399,60 @@ class TestWidePrepare(unittest.TestCase):
         self.assertEqual(tic._last(p), "intent-call: first-only")
         self.assertIn("breadth: narrow", self._plan())
         self.assertNotIn("넓게 본다 — 범위 모드", p.stdout)
+        # 다른 브랜치가 있고 다른 팀 기록이 상한을 넘어도 부르지 않는 실행의 stdout 은 R1 그대로 —
+        # 상한 줄은 기록의 `## 상한` 에만 있다. 리뷰어를 부르면 상한 줄을 공시한다.
+        _other_branch(self.R)
+        rd = self._new_rd(tic._config_text() + "other_teams_max_bytes: 10\n")
+        p = self._prep(rd=rd)
+        self.assertEqual(p.stdout, "%s\nintent-call: none\n" % tic.NONE_LINE)
+        cap = [line for line in self._f(ot.FILE, rd).split("\n") if line.startswith("상한 10바이트 — ")]
+        self.assertEqual(len(cap), 1, self._f(ot.FILE, rd))
+        self.assertNotIn("상한 10바이트", self._f(ic.PREPARE_NOTICES, rd))
+        self.assertEqual(ot.summary(self._f(ot.FILE, rd))[0], ["- feature/other — src/a.py"])
+        tic._write("관찰 하나\n", rd, "e2e-record.md")
+        p = self._prep(rd=rd)
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertIn(cap[0], p.stdout.splitlines())
+        self.assertIn(cap[0], self._f(ic.PREPARE_NOTICES, rd).splitlines())
+
+    def test_kill_switch_stops_prepare(self):
+        """gate 를 거치지 않고 불려도 스위치가 켜져 있으면 prepare 는 넓이 판정 · 다른 팀 읽기를 하지 않고
+        앞 실행의 두 파일을 지우며, gate 가 꺼짐에서 내는 것과 같은 출력 · 돌려주는 꼴을 낸다."""
+        _other_branch(self.R)
+        kill = tic._env(**{tic.KILL: "1"})
+        tic._write("stale\n", self.rd, ot.FILE)
+        tic._write("stale\n", self.rd, ic.SCOPE)
+        tic._write("src/a.py\n", self.rd, "review-i1.names")
+        sp = os.path.join(self.rd, "intent-specs.json")
+        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
+        p = tic._cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
+                     "--mode", "range", "--head", "HEAD", "--review-commit", "HEAD",
+                     "--specs-json", sp, env=kill)
+        self.assertEqual((p.returncode, p.stdout, p.stderr), (0, ic.KILL_LINE + "\n", ""))
+        for name in (ot.FILE, ic.SCOPE, "intent-plan.txt", "intent-evidence.txt"):
+            self.assertFalse(os.path.lexists(os.path.join(self.rd, name)), name)
+        gate_rd = self._new_rd()
+        g = tic._cli("gate", "--rd", gate_rd, "--path", "final", "--mode", "range", env=kill)
+        self.assertEqual((g.returncode, g.stdout), (p.returncode, p.stdout))
+        self.assertEqual(tic._return_block(self.rd), tic._return_block(gate_rd))
+        self.assertEqual(tic._return_block(self.rd)[1]["status"], "skipped — " + ic.KILL_LINE)
+
+    def test_teams_failure_still_shown_when_not_called(self):
+        """부르지 않는 좁은 실행에서도 다른 팀 읽기 실패는 공시한다(상한 줄만 뺀다)."""
+        def boom(*_a, **_k):
+            raise RuntimeError("x")
+
+        notices = []
+        args = argparse.Namespace(rd=self.rd, repo=self.R, tree_root=self.R, review_commit="HEAD",
+                                  head="HEAD", origin=None, mode="pr", base="-",
+                                  specs_json=os.path.join(self.rd, "intent-specs.json"))
+        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), args.specs_json)
+        tic._write("src/a.py\n", self.rd, "review-i1.names")
+        real = ic._teams
+        with mock.patch.object(ic, "_teams", lambda *a: real(*a, collect=boom)):
+            call = ic._prepare(args, notices)
+        self.assertEqual(call, "none")
+        self.assertIn("다른 팀 읽기 실패 — RuntimeError", notices)
 
     def test_overlap_alone_does_not_call(self):
         _other_branch(self.R)
@@ -440,7 +522,9 @@ class TestWidePrepare(unittest.TestCase):
         other = self._new_rd()
         leak = os.path.join(self.tmp.name, "leak")
         self._prep(names=None, base="--output=" + leak, rd=other)
-        self.assertFalse(os.path.lexists(leak))  # 기준 rev 가 git 옵션으로 읽히지 않는다
+        # 기준 rev 가 git 옵션으로 읽히지 않는다 — 읽혔다면 git 은 `<leak>..HEAD` 이름의 파일을 쓴다.
+        self.assertFalse(os.path.lexists(leak + "..HEAD"))
+        self.assertEqual([n for n in os.listdir(self.tmp.name) if n.startswith("leak")], [])
         lines = self._f("intent-scope.md", other).split("\n")
         self.assertEqual(lines[lines.index("## 바뀐 파일") + 1], "- 모름")
         self.assertEqual(lines[lines.index("## 커밋 제목") + 1], "- 모름 — 커밋 제목을 읽지 못함")
@@ -475,6 +559,21 @@ class TestWidePrepare(unittest.TestCase):
         self.assertEqual(tic._last(p), "intent-call: first-only")
         self.assertTrue(self._f("intent-origin.md", rd).startswith("원문 없음 — "))
         self.assertTrue(self._f("intent-roadmap.md", rd).startswith("로드맵 없음 — "))
+
+    def test_unreadable_frontmatter_does_not_stop_prepare(self):
+        """바뀐 문서의 머리가 YAML 로 읽히지 않는다(없는 날짜) — 넓이는 정해지고 rc 0, 좁은 「근거 없음」 길의
+        출력은 R1 그대로다."""
+        bad = "---\ncreated_at: 2026-02-30\nsource_interview: docs/rm/one/R1.md\n---\n# 틀린 머리\n"
+        tic._write(bad, self.R, "docs", "bad.md")
+        _ok(self.R, "add", "docs/bad.md")
+        p = self._prep(names=("docs/bad.md",))
+        self.assertEqual(p.stdout, "%s\nintent-call: none\n" % tic.NONE_LINE)
+        self.assertIn("breadth: narrow", self._plan())
+        rd = self._new_rd()
+        p = self._prep(names=("docs/bad.md", "docs/specs/x-design.md"), rd=rd)
+        self.assertIn("breadth: intent-docs", self._plan(rd))
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        self.assertIn("bundle-quote-token", self._f("intent-origin.md", rd))
 
     def test_untracked_intent_doc_disclosed(self):
         tic._write(tic._fm(source_interview="docs/rm/one/R1.md"), self.R, "docs", "new-design.md")
@@ -638,6 +737,8 @@ class TestReadSides(unittest.TestCase):
 
 
 RQ = {"path": "a.txt", "line": 1, "text": "x"}
+# 넓은 넓이 둘 — 거르기 · 렌더의 넓은 갈래는 둘 다로 돈다(한쪽만 넓게 보는 퇴행을 잡게).
+WIDE_BREADTHS = ("range", "intent-docs")
 QUOTE_GONE = "인용이 그 파일에 없어 거름 1"
 COUNT_KEYS = ("evidence", "quote", "read_only", "answered", "over_cap", "unidentified", "broken",
               "absorbed", "cites_dropped")
@@ -657,13 +758,15 @@ class _WideRun:
         return os.path.join(self.rd, "tree")
 
     def _prepare(self, wide, **kw):
-        """리뷰 트리(a.txt 가 `x\\n` 인 git 리포)와 세션 폴더 — 넓으면 계획 파일 끝에 `breadth: range`."""
+        """리뷰 트리(a.txt 가 `x\\n` 인 git 리포)와 세션 폴더 — 넓으면 계획 파일 끝에 `breadth: <넓이>`.
+
+        `wide` 는 거짓(좁게) · 참(`range`) · 넓이 글자(`range` · `intent-docs`)."""
         os.makedirs(self._tree(), exist_ok=True)
         tic._git_repo(self._tree())
         tic._filter_rd(self.rd, **kw)
         if wide:
             with open(os.path.join(self.rd, "intent-plan.txt"), "a", encoding="utf-8") as fh:
-                fh.write("breadth: range\n")
+                fh.write("breadth: %s\n" % (wide if isinstance(wide, str) else "range"))
 
     def _filter(self, first):
         tic._write(first, self.rd, "intent-critic-1.txt")
@@ -687,14 +790,17 @@ class TestWideFilter(_WideRun, unittest.TestCase):
     """넓게 보는 리뷰의 거르기 — 읽은 인용 확인 · 근거의 갈래 · 새 종류 · 고르는 순서."""
 
     def test_read_quote_accepted_in_wide(self):
-        p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=True)
-        self.assertEqual(tic._last(p), "intent-ask: 1")
-        q = tic._by_state(self.rd, "ask")[0]
-        self.assertEqual(q["evidence_kinds"], ["읽어서 봄"])
-        self.assertEqual(q["observation"], ["[읽음] a.txt:1 x"])
-        self.assertEqual(q["read_quotes"], [RQ])
-        self.assertEqual(q["evidence_lines"], [])
-        self.assertNotIn("근거로 받지 않은 인용", p.stdout)
+        for breadth in WIDE_BREADTHS:
+            with self.subTest(breadth=breadth), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=breadth)
+                self.assertEqual(tic._last(p), "intent-ask: 1")
+                q = tic._by_state(self.rd, "ask")[0]
+                self.assertEqual(q["evidence_kinds"], ["읽어서 봄"])
+                self.assertEqual(q["observation"], ["[읽음] a.txt:1 x"])
+                self.assertEqual(q["read_quotes"], [RQ])
+                self.assertEqual(q["evidence_lines"], [])
+                self.assertNotIn("근거로 받지 않은 인용", p.stdout)
 
     def test_narrow_read_only_filtered(self):
         p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=False)
@@ -851,8 +957,9 @@ class TestWideFilter(_WideRun, unittest.TestCase):
         old = "[읽음] a.txt:1 old"
         cand = tic._q("D1", same_as=tic.ID1,
                       observation_changed={"previous": old, "now_quotes": [RQ]})
-        for wide, last in ((True, "intent-ask: 1"), (False, "intent-ask: 0")):
-            with tempfile.TemporaryDirectory() as rd:
+        cases = [(breadth, "intent-ask: 1") for breadth in WIDE_BREADTHS] + [(False, "intent-ask: 0")]
+        for wide, last in cases:
+            with self.subTest(wide=wide), tempfile.TemporaryDirectory() as rd:
                 self.rd = rd
                 p = self._run(tic._out([cand]), wide=wide, answers=[(tic.ID1, "의도다", old)])
                 self.assertEqual(tic._last(p), last, wide)
@@ -861,10 +968,11 @@ class TestWideFilter(_WideRun, unittest.TestCase):
         # 확인 안 된 지금 인용으로는 넓어도 다시 묻지 않는다.
         bad = dict(cand, observation_changed={"previous": old,
                                               "now_quotes": [dict(RQ, text="y")]})
-        with tempfile.TemporaryDirectory() as rd:
-            self.rd = rd
-            p = self._run(tic._out([bad]), wide=True, answers=[(tic.ID1, "의도다", old)])
-            self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        for breadth in WIDE_BREADTHS:
+            with self.subTest(bad=breadth), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(tic._out([bad]), wide=breadth, answers=[(tic.ID1, "의도다", old)])
+                self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
 
     def test_fake_marker_in_run_line(self):
         self._prepare(wide=True)
@@ -1031,8 +1139,9 @@ class TestWideRender(_WideRun, unittest.TestCase):
     def test_wide_all_filtered_result_line(self):
         out = tic._out([tic._q("D1", lines=[], read_quotes=[BAD_RQ]),
                         tic._q("D2", lines=[], read_quotes=[BAD_RQ])])
-        for wide, last in ((True, "intent-critic — 낸 후보 2개가 근거 확인에서 모두 걸러짐"),
-                           (False, tic.NONE_LINE)):
+        cases = [(breadth, "intent-critic — 낸 후보 2개가 근거 확인에서 모두 걸러짐")
+                 for breadth in WIDE_BREADTHS] + [(False, tic.NONE_LINE)]
+        for wide, last in cases:
             with self.subTest(wide=wide), tempfile.TemporaryDirectory() as rd:
                 self.rd = rd
                 self._run(out, wide=wide)
