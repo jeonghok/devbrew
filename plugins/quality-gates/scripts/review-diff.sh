@@ -24,10 +24,11 @@
 #   review-i<N>.doc-paths  doc_paths.py select 출력(어느 경로를 왜 뺐고 남겼는지) — 폴더 이름이라 빼지 않은 경로는
 #                          reviewed<TAB><경로> 줄, excluded: 는 뺀 뒤 수
 #   review-i<N>.self-state 건너뛴 untracked qg 상태 경로(한 줄에 하나, 없으면 빈 파일)
+#   review-i<N>.mode       이 실행이 쓴 --mode 값 한 줄 — intent_critic.py filter 가 읽는다
 #
 # stdout 11줄: mode · base · head · degraded · degraded_reason · files · filtered_files · excluded ·
 # kept_model · doc_paths_source · self_state. session · branch · paths 의 기준선이 degraded 면 다섯 파일을
-# 비워 두고 degraded: yes · degraded_reason: <resolve-baseline.sh 의 사유> · files: - · self_state: - 로 rc 0
+# 비워 두고(mode 파일은 그대로 쓴다) degraded: yes · degraded_reason: <resolve-baseline.sh 의 사유> · files: - · self_state: - 로 rc 0
 # (사유가 no-default-branch 면 stderr 에 고치는 법 한 줄). 그 밖에는 degraded_reason: - 다. 리뷰하지 못한 항목(중첩 레포 · 선언되지 않은
 # gitlink · 이전 qg 실행이 남긴 worktree · 이름 대조에서 제외도 리뷰도 되지 않은 바뀐 경로 · git 이 바이너리로 보아
 # 「Binary files … differ」 한 줄로만 diff 에 든 경로)이 있으면 다섯
@@ -117,9 +118,13 @@ OUT_FULL="$DIR/review-i$ITER.full.diff"
 OUT_DIFF="$DIR/review-i$ITER.diff"
 OUT_DOC="$DIR/review-i$ITER.doc-paths"
 OUT_SELF="$DIR/review-i$ITER.self-state"
+OUT_MODE="$DIR/review-i$ITER.mode"
 # 앞 실행의 결과가 이번 실패 뒤에 남아 읽히지 않게 먼저 지운다.
-rm -f -- "$OUT_NAMES" "$OUT_FULL" "$OUT_DIFF" "$OUT_DOC" "$OUT_SELF" || die "앞 실행의 출력 파일을 지우지 못했다: $DIR"
+rm -f -- "$OUT_NAMES" "$OUT_FULL" "$OUT_DIFF" "$OUT_DOC" "$OUT_SELF" "$OUT_MODE" \
+  || die "앞 실행의 출력 파일을 지우지 못했다: $DIR"
 T="$(mktemp -d "$DIR/.review-diff.XXXXXX")" || die "임시 폴더를 만들지 못했다: $DIR"
+# 모드는 여기서 한 번 쓴다 — 기준선 degraded 갈래도 publish 를 부르므로 모든 길이 이 파일을 갖는다.
+printf '%s\n' "$MODE" > "$T/mode" || gitfail "모드 파일을 쓰지 못했다: $DIR"
 
 # --submodule=short — 사용자 설정 diff.submodule=diff · log 가 gitlink 폴더 안에서 자식 git 을 띄워 그 폴더의
 # 설정(diff.external · textconv)을 돌리지 못하게 하위 모듈은 늘 「Subproject commit」 줄로만 낸다.
@@ -137,11 +142,12 @@ GITD=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-textconv --
 GITD_NOINDEX=(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff --no-textconv
               --src-prefix=a/ --dst-prefix=b/)
 
-publish() {   # 임시 파일 다섯을 제자리로
+publish() {   # 임시 파일 여섯을 제자리로
   mv -f -- "$T/names" "$OUT_NAMES" \
     && mv -f -- "$T/full.diff" "$OUT_FULL" \
     && mv -f -- "$T/doc-paths" "$OUT_DOC" \
     && mv -f -- "$T/self-state" "$OUT_SELF" \
+    && mv -f -- "$T/mode" "$OUT_MODE" \
     && mv -f -- "$T/diff" "$OUT_DIFF" \
     || gitfail "결과 파일을 옮기지 못했다: $DIR"
 }
@@ -233,10 +239,10 @@ QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
 QG_NAMES="$QG_NAMES"'|other-teams\.md'
 QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
-QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state)'
+QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state|mode)'
 QG_NAMES="$QG_NAMES"'|result\.md\.tmp\.[0-9]+|e2e-(before|after)\.txt\.tmp|\.resolve-range\.[A-Za-z0-9]{6}'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(tracked|untracked|filtered|raw|gitmodules|all|excl|excl2|prefix|keep|roots|seen|files|missing|untr|ukeep|numstat|bin|nbin|reviewed|mother|mbin)\.z'
-QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|doc-paths\.new|self-state)'
+QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/(names|full\.diff|diff|doc-paths|doc-paths\.new|self-state|mode)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"

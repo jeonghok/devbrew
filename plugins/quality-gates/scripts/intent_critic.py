@@ -2,7 +2,7 @@
 """intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 상한 · 답 기록 · 렌더.
 
 하위 명령은 `intent_critic.py <sub> --help` 가 정본이다. 세션 폴더(`--rd`)의 파일 이름:
-  intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
+  intent-config.txt     config 가 쓴다(answers_dir · max_bytes · other_teams_max_bytes · intent_doc_markers 와 출처)
   intent-evidence.txt · intent-origin.md · intent-roadmap.md · intent-intent.md ·
   intent-doubts.md · intent-answered.md · intent-plan.txt     prepare 가 쓴다
   intent-scope.md       prepare 가 쓴다 — 리뷰어의 <scope> 칸(넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목)
@@ -85,10 +85,13 @@ INTENT_DOUBTS_MARK = "<!-- intent-doubts -->"
 ALIAS_SEP = " -> "
 NAMES_PREFIX = "review-i"
 NAMES_SUFFIX = ".names"
+# review-diff.sh 가 반복마다 남기는 그 실행의 --mode 한 줄. filter 는 이 다섯 낱말과 글자 그대로 같을 때만 쓴다.
+MODE_SUFFIX = ".mode"
 NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 "
                  "가리지 못함")
 # 바뀐 파일 목록이 리뷰 범위가 바꾼 경로를 모두 담는 모드. paths 의 목록은 glob 에 맞는 경로뿐이다.
 WHOLE_SCOPE_MODES = ("session", "branch", "topic", "range")
+REVIEW_MODES = WHOLE_SCOPE_MODES + ("paths",)
 NAMES_PARTIAL = ("리뷰 범위가 paths 이거나 알 수 없어, 바뀐 파일 목록에 없는 답 파일은 이 범위가 "
                  "더했는지 가리지 못함")
 RANGE_ADDED = "이 범위가 더한 답 파일"
@@ -868,19 +871,25 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Opti
     return out
 
 
-def _range_names(rd: str) -> Optional[set]:
-    """마지막 반복의 `review-i<N>.names`(리뷰 범위가 바꾼 경로, 한 줄에 하나). 없으면 None."""
+def _last_iteration(rd: str) -> Optional[str]:
+    """마지막 반복의 번호 글자 — `review-i<N>.names` 가운데 N 이 가장 큰 것의 N. 없으면 None."""
     try:
         names = os.listdir(rd)
     except OSError:
         names = []
-    best, best_name = -1, None
+    best, best_number = -1, None
     for name in names:
         number = name[len(NAMES_PREFIX):-len(NAMES_SUFFIX)]
         if (name.startswith(NAMES_PREFIX) and name.endswith(NAMES_SUFFIX) and number.isdigit()
                 and number.isascii() and int(number) > best):
-            best, best_name = int(number), name
-    text = _read(_path(rd, best_name)) if best_name is not None else None
+            best, best_number = int(number), number
+    return best_number
+
+
+def _range_names(rd: str) -> Optional[set]:
+    """마지막 반복의 `review-i<N>.names`(리뷰 범위가 바꾼 경로, 한 줄에 하나). 없으면 None."""
+    number = _last_iteration(rd)
+    text = _read(_path(rd, NAMES_PREFIX + number + NAMES_SUFFIX)) if number is not None else None
     if text is None:
         return None
     out = set()
@@ -889,6 +898,29 @@ def _range_names(rd: str) -> Optional[set]:
             out.add(line)
     # 기준선이 degraded 면 review-diff.sh 가 목록을 일부러 비워 둔다 — 빈 목록은 「바뀐 것 없음」이 아니라 「모름」이다.
     return out or None
+
+
+def _review_mode(rd: str) -> Optional[str]:
+    """`_range_names` 와 같은 N 의 `review-i<N>.mode` — review-diff.sh 가 실제로 쓴 리뷰 범위 모드.
+
+    글이 다섯 낱말 가운데 하나와 끝 줄바꿈까지 글자 그대로 같을 때만 그 낱말이다. 없음 · 읽지 못함 ·
+    다른 N 뿐 · 그 밖의 글이면 None — 부르는 쪽이 `--review-mode` 인자로 간다.
+    """
+    number = _last_iteration(rd)
+    if number is None:
+        return None
+    # newline="" — 줄 끝을 바꿔 읽지 않는다(`\r\n` · `\r` 이 `\n` 으로 읽혀 맞는 일이 없게). 64 글자면
+    # 가장 긴 낱말보다 길어 더 긴 글은 맞지 않는다.
+    try:
+        with open(_path(rd, NAMES_PREFIX + number + MODE_SUFFIX), encoding="utf-8", errors="replace",
+                  newline="") as fh:
+            text = fh.read(64)
+    except OSError:
+        return None
+    if not text.endswith("\n"):
+        return None
+    word = text[:-1]
+    return word if word in REVIEW_MODES else None
 
 
 def _range_identities(rd: str, tree_root: str) -> Optional[set]:
@@ -1038,7 +1070,8 @@ def cmd_filter(args) -> int:
             status = "ran"
             answered = _load_answered(plan, rd, notices)
             ids = _range_identities(rd, plan["tree_root"])
-            whole = args.review_mode in WHOLE_SCOPE_MODES
+            # review-diff.sh 가 남긴 모드가 이긴다 — 인자는 그 파일이 없을 때의 대체값이다.
+            whole = (_review_mode(rd) or args.review_mode) in WHOLE_SCOPE_MODES
             questions = _judge(cands, plan, rd, ledger, counts, answered, ids, whole)
             if counts["answered"] and ids is None:
                 notices.append(NAMES_MISSING)
@@ -1506,11 +1539,12 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_gate)
 
     p = sub.add_parser("config", help="docs 답 자리 · 입력 상한을 읽는다",
-                       description="환경 변수 %s · %s 를 읽어 intent-config.txt 네 줄을 쓴다. 리뷰 "
+                       description="환경 변수 %s · %s · %s · %s 를 읽어 intent-config.txt 여덟 줄(네 "
+                                   "값과 저마다의 출처)을 쓴다. 리뷰 "
                                    "트리의 .claude/settings.json · settings.local.json 이 base 와 그 키가 "
                                    "다르면 기본값(default-settings-changed). --base - 는 base 를 "
                                    "모름 — 그때 리뷰 트리 설정에 그 키가 있으면 바뀐 것으로 본다."
-                                   % (DIR_ENV, MAX_ENV))
+                                   % (DIR_ENV, MAX_ENV, OTHER_MAX_ENV, MARKERS_ENV))
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--repo", required=True, help="리포 루트(base 쪽 설정을 git show 로 읽는다)")
     p.add_argument("--base", required=True, help="기준 rev, 모르면 -")
@@ -1555,7 +1589,9 @@ def _parser() -> argparse.ArgumentParser:
                                    "intent-questions.yaml 을 쓴다. 공시 줄들 뒤 「intent-ask: <k>」. rc 0.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--review-mode", default="-",
-                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값). %s 이면 바뀐 파일 "
+                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값) — 대체값이다. 세션 "
+                        "폴더에 바뀐 파일 목록과 같은 N 의 review-i<N>.mode 가 있고 그 글이 다섯 모드 "
+                        "가운데 하나면 그 값이 이긴다. %s 이면 바뀐 파일 "
                         "목록이 범위 전체다. paths · 모름(-) · 그 밖의 값이면 목록에 없는 답 파일을 "
                         "「더하지 않음」 이 아니라 「모름」 으로 표시한다." % " · ".join(WHOLE_SCOPE_MODES))
     p.set_defaults(func=cmd_filter)

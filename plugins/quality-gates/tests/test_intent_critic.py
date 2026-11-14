@@ -2563,10 +2563,12 @@ class TestFilteredListed(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, answers, cands, names=None, review_mode=None):
+    def _run(self, answers, cands, names=None, review_mode=None, modes=None):
         _filter_rd(self.rd, answers=answers)
         for n, text in (names or {}).items():
             _write(text, self.rd, "review-i%d.names" % n)
+        for n, text in (modes or {}).items():
+            _write(text, self.rd, "review-i%d.mode" % n)
         _write(_out(cands), self.rd, "intent-critic-1.txt")
         extra = [] if review_mode is None else ["--review-mode", review_mode]
         f = _cli("filter", "--rd", self.rd, *extra)
@@ -2640,6 +2642,74 @@ class TestFilteredListed(unittest.TestCase):
                 self.assertNotIn(RANGE_ADDED, row)
                 self.assertEqual(section.count("- " + NAMES_PARTIAL + "\n"), 1)
                 self.assertIn(NAMES_PARTIAL, f.stdout.splitlines())
+
+    def _row(self, names, review_mode=None, modes=None):
+        """바뀐 파일 목록에 답 파일이 없는 실행 하나 — 거른 질문의 행과 결과 절."""
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names,
+                                      review_mode=review_mode, modes=modes)
+            return self._listed(section)[0], section
+
+    def test_mode_file_wins_over_the_argument(self):
+        """(a) review-diff.sh 가 남긴 review-i<N>.mode 가 --review-mode 인자를 이긴다 — 두 방향 모두."""
+        names = {1: "a.txt\n"}
+        row, section = self._row(names, review_mode="session", modes={1: "paths\n"})
+        self.assertIn(" · " + RANGE_UNKNOWN + " — ", row)
+        self.assertEqual(section.count("- " + NAMES_PARTIAL + "\n"), 1)
+        row, section = self._row(names, review_mode="paths", modes={1: "session\n"})
+        self.assertNotIn(RANGE_UNKNOWN, row)
+        self.assertNotIn(RANGE_ADDED, row)
+        self.assertNotIn(NAMES_PARTIAL, section)
+
+    def test_mode_file_alone_sets_the_scope(self):
+        """(b) 인자 없이 파일만 — 다섯 모드 각각. 범위 전체 모드면 표시 없음, paths 면 「모름」."""
+        names = {1: "a.txt\n"}
+        for mode in ic.WHOLE_SCOPE_MODES:
+            with self.subTest(mode=mode):
+                row, section = self._row(names, modes={1: mode + "\n"})
+                self.assertNotIn(RANGE_UNKNOWN, row)
+                self.assertNotIn(NAMES_PARTIAL, section)
+        row, section = self._row(names, modes={1: "paths\n"})
+        self.assertIn(" · " + RANGE_UNKNOWN + " — ", row)
+
+    def test_mode_file_of_another_iteration_is_ignored(self):
+        """(c) 바뀐 파일 목록과 같은 N 의 파일만 읽는다 — 다른 N 의 파일은 무시하고 인자로 간다."""
+        for other in (1, 3):
+            with self.subTest(other=other):
+                row, section = self._row({2: "a.txt\n"}, modes={other: "session\n"})
+                self.assertIn(" · " + RANGE_UNKNOWN + " — ", row)
+                row, section = self._row({2: "a.txt\n"}, review_mode="session",
+                                         modes={other: "paths\n"})
+                self.assertNotIn(RANGE_UNKNOWN, row)
+
+    def test_mode_file_with_other_text_falls_back_to_the_argument(self):
+        """(d) 내용이 다섯 낱말과 글자 그대로 같지 않으면 버린다 — 인자로 가고, 인자가 없으면 「모름」."""
+        bad = ("garbage\n", "", "\n", "session", "session\nbranch\n", "session \n", " session\n",
+               "SESSION\n", "session\r\n", "session\r", "session\x00\n", "-\n", "session\n\n",
+               "session\n" + "x" * 100, "\ufeffsession\n")
+        for text in bad:
+            with self.subTest(text=text):
+                row, section = self._row({1: "a.txt\n"}, modes={1: text})
+                self.assertIn(" · " + RANGE_UNKNOWN + " — ", row)
+                row, section = self._row({1: "a.txt\n"}, review_mode="session", modes={1: text})
+                self.assertNotIn(RANGE_UNKNOWN, row)
+
+    def test_review_mode_reader(self):
+        with tempfile.TemporaryDirectory() as rd:
+            self.assertIsNone(ic._review_mode(rd))
+            _write("session\n", rd, "review-i1.mode")
+            self.assertIsNone(ic._review_mode(rd), "바뀐 파일 목록이 없으면 읽지 않는다")
+            _write("a.txt\n", rd, "review-i1.names")
+            self.assertEqual(ic._review_mode(rd), "session")
+            _write("a.txt\n", rd, "review-i10.names")
+            self.assertIsNone(ic._review_mode(rd), "더 높은 N 의 목록에 짝 mode 가 없다")
+            os.mkdir(os.path.join(rd, "review-i10.mode"))
+            self.assertIsNone(ic._review_mode(rd), "읽지 못하는 자리")
+            os.rmdir(os.path.join(rd, "review-i10.mode"))
+            _write("range\n", rd, "review-i10.mode")
+            self.assertEqual(ic._review_mode(rd), "range")
+            self.assertEqual(ic._range_names(rd), {"a.txt"})
 
     def test_paths_scope_still_marks_a_listed_answer_file_as_added(self):
         names = {1: "a.txt\n%s/%s\n" % (ANS_DIR, _wf(0))}
@@ -3017,6 +3087,12 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(fence, ['python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" '
                                  '--review-mode ' + slot])
         self.assertEqual(i5.count("마지막 iteration Step 1c 출력의 `mode:` 값"), 1)
+
+    def test_filter_doc_says_the_mode_file_wins(self):
+        """I5 가 --review-mode 는 대체값일 뿐이라고 밝힌다 — 세션 폴더의 review-i<N>.mode 가 이긴다."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(i5.count("`--review-mode` 는 세션 폴더에 마지막 iteration 의 `review-i<N>.mode` "
+                                  "가 없을 때에만 쓰인다 — 있으면 `filter` 가 그 파일의 값을 쓴다."), 1)
 
     def test_cost_line_discloses_wide_review(self):
         text = REFERENCE.read_text(encoding="utf-8")
