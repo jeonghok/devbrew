@@ -8,12 +8,14 @@ W 에서 Refused · Usage · Txn · run_txn · git_top · rel · read 를 쓴다
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brief_body  # noqa: E402
 import repo_defaults  # noqa: E402
+import roadmap_render as R  # noqa: E402
 import section6  # noqa: E402
 import team_check  # noqa: E402
 import team_files  # noqa: E402
@@ -25,7 +27,12 @@ NO_FRAMING = "framing audit 없음"
 FRAMING_TYPE = "interview-seed-audit"
 FRAMING_HEADS = ("## 1. 원문", "## 2. 질문 전체", "## 3. 긴 초안")   # 원문 · 질문 전체 구간의 경계 줄(문자열 비교)
 UNCOMMITTED = "출처 파일에 커밋되지 않은 변경이 있다: %s — 먼저 커밋한 뒤 다시 돈다"
+NO_COMMIT = "출처 파일의 커밋을 정하지 못했다: %s — git log 종료 코드 %d · 출력 %r 이 커밋 번호가 아니다"
 NOT_HERE = ".claude"
+_SHA_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+FRONT = "---\ntype: roadmap\n"   # 로드맵 틀의 첫 두 줄 — team 로드맵은 그 뒤에 layout 줄을 넣는다
+OLD_HANDOFF = "에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다."
+TEAM_HANDOFF = "에픽마다 과제 폴더의 INTENT.md 를 넘긴다."
 
 
 # ── 자리 ─────────────────────────────────────────────────────────────────────
@@ -56,9 +63,13 @@ def _committed(top: Path, rel: str, W) -> tuple:
         work = (top / rel).read_bytes()
     except OSError as exc:
         raise W.Refused("못 읽었다: %s (%s)" % (rel, exc))
-    rc, out = team_check.git_bytes(top, "log", "-1", "--format=%H", "--", rel)
-    commit = out.decode("utf-8", "replace").strip() if rc == 0 else ""
-    if not commit or team_check.show(top, commit, rel) != work:
+    rc, out = team_check.git_bytes(top, "log", "-1", "--no-show-signature", "--format=%H", "--", rel)
+    commit = out.decode("utf-8", "replace").strip()
+    if rc == 0 and not commit:   # 커밋된 적이 없다
+        raise W.Refused(UNCOMMITTED % rel)
+    if rc != 0 or not _SHA_RE.fullmatch(commit):
+        raise W.Refused(NO_COMMIT % (rel, rc, commit[:80]))
+    if team_check.show(top, commit, rel) != work:
         raise W.Refused(UNCOMMITTED % rel)
     return commit, work
 
@@ -152,8 +163,108 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W) -> list:
     b_first, b_lines, b_sids = _user_words(brief_rel, b_data, W)
     a_first, a_lines, a_sids = _user_words(audit_rel, a_data, W)
     out.append((brief_rel, b_commit, team_files.LABELS[2], b_first, b_lines, note))
-    if not a_sids <= b_sids:   # audit 의 발화가 모두 brief §6 에 있으면 audit 구간은 같은 말을 두 번 싣는 것이다
+    # audit 에 발화 번호가 있고 그것이 모두 brief §6 에 있을 때만 audit 구간은 같은 말을 두 번 싣는 것이다 —
+    # 번호가 하나도 없는 audit §6 의 글은 빈 집합이 「모두 있다」 로 읽혀 빠지면 안 된다
+    if not (a_sids and a_sids <= b_sids):
         out.append((audit_rel, a_commit, team_files.LABELS[2], a_first, a_lines, note))
+    return out
+
+
+# ── create --layout team ─────────────────────────────────────────────────────
+
+def _refuse_links(top: Path, rel: str, W):
+    """rel 의 폴더 성분(top 아래)에 심볼릭 링크가 있으면 Refused — 링크 너머에 쓰지 않는다."""
+    parts = rel.split("/")
+    for i in range(1, len(parts)):
+        if os.path.islink(str(top.joinpath(*parts[:i]))):
+            raise W.Refused("심볼릭 링크로는 쓰지 않는다: %s (%s 를 쓰려 했다)" % ("/".join(parts[:i]), rel))
+
+
+def render_team_roadmap(template: str, rows, idx, title, brief_rel, roadmap_rel, history) -> str:
+    """옛 로드맵 틀로 그린 글에 머리말 layout 줄을 넣고 넘김 문장을 바꾼다. 두 자리가 한 번씩이 아니면 TableError."""
+    text = R.render_roadmap(template, rows, idx, title, brief_rel, roadmap_rel, history, layout=team_layout.LAYOUT_TEAM)
+    for mark in (FRONT, OLD_HANDOFF):
+        if text.count(mark) != 1 or (mark == FRONT and not text.startswith(FRONT)):
+            raise R.TableError("로드맵 틀이 바뀌었다 — %r 가 한 번이 아니라 %d번 나온다(머리말은 맨 앞이어야 한다)"
+                               % (mark, text.count(mark)))
+    layout_line = "%s: %s\n" % (team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM)
+    return FRONT + layout_line + text[len(FRONT):].replace(OLD_HANDOFF, TEAM_HANDOFF)
+
+
+def seed_common(top: Path, roadmaps_dir: str, W) -> dict:
+    """로드맵 폴더 바로 아래의 공통 문서(역할 문서 넷 · HANDBOOK) 가운데 없는 것의 {Path: 틀 글}. 있는 것은 건드리지 않는다."""
+    pairs = [(team_layout.role_doc(roadmaps_dir, r), team_files.role_template(r)) for r in team_layout.ROLES]
+    pairs.append((team_layout.handbook(roadmaps_dir), team_files.TEMPLATES / team_layout.HANDBOOK_FILE))
+    out = {}
+    for rel, template in pairs:
+        _refuse_links(top, rel, W)
+        if not os.path.lexists(str(top / rel)):
+            out[top / rel] = W.read(template, keep_newlines=True)
+    return out
+
+
+def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, history, brief: Path, W) -> tuple:
+    """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
+    없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused."""
+    intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
+    rewrite = {top / team.roadmap: render_team_roadmap(W.read(R.TEMPLATE), rows, idx, title, brief_rel, roadmap_rel, history)}
+    once = {}
+
+    def absent(rel: str) -> bool:
+        _refuse_links(top, rel, W)
+        return not os.path.lexists(str(top / rel))
+
+    if absent(team.rules):
+        once[top / team.rules] = W.read(team_files.TEMPLATES / team_layout.RULES_FILE, keep_newlines=True)
+    for r in rows:
+        if r.kind != R.KIND_BUNDLE:
+            continue
+        rewrite[top / team.intent(r.id)] = team_files.render_intent(
+            intent_template, r.id, team_files.KIND_EPIC, roadmap_rel, team_files.goal_text(r.intent, r.scope),
+            team_files.original_pointer(r.ranges, roadmap_rel), team_files.not_text(r.scope))
+        ids, parts = R.bundle_parts(r, idx)
+        rewrite[top / team.sources(r.id)] = team_files.render_sources(r.id, r.title, ids, parts, r.receives, r.gives)
+        if absent(team.keep(r.id)):
+            once[top / team.keep(r.id)] = ""
+    if absent(team.original):
+        data, _notes = team_files.extend_original(b"", wanted_sections(top, brief, None, W))
+        once[top / team.original] = data.decode("utf-8")
+    for path in rewrite:
+        _refuse_links(top, path.relative_to(top).as_posix(), W)
+    once.update(seed_common(top, team.roadmaps_dir, W))
+    return rewrite, once
+
+
+def check_rerun(top: Path, team, record: set, rewrite: dict, W):
+    """다시 돌 때 멈출 자리 둘(P13) — 생성 기록에 있는 INTENT.md 에 결정 기록 줄이 있거나, 생성 기록에 있는데 이번 표에
+    없는 과제의 파일이 남아 있으면 Refused. create 는 그 파일을 고치거나 지우지 않는다 — 재분해는 update 의 몫이다."""
+    for path in sorted(rewrite):
+        rel = W.rel(top, path)
+        if path.name != team_layout.INTENT_FILE or rel not in record or not path.is_file():
+            continue
+        try:
+            decided = team_files.intent_sections(W.read(path))[team_files.SECTIONS[3]]
+        except team_files.FormatError as exc:
+            raise W.Refused("%s 의 네 칸을 읽지 못해 다시 쓰지 않는다 — %s" % (rel, exc))
+        if any(line.startswith("- ") for line in decided.split("\n")):
+            raise W.Refused("%s 의 결정 기록에 줄이 있다 — create 는 이 파일을 다시 쓰지 않는다. 재분해는 update 로 한다" % rel)
+    targets = {W.rel(top, p) for p in rewrite}
+    left = sorted(p for p in record - targets if p.startswith(team.dir + "/") and os.path.lexists(str(top / p)))
+    if left:
+        raise W.Refused("생성 기록에 있는데 이번 표에 없는 과제의 파일이 남아 있다 — %s. create 는 지우지 않는다 — 재분해는 update 로 한다"
+                        % " · ".join(left))
+
+
+def range_screen(top: Path, team, rows) -> list:
+    """과제마다 `<번호> 지시 원문 <범위>행:` 줄과 원자료 사본의 그 줄들 — 화면에만 낸다."""
+    lines = team_files.byte_lines((top / team.original).read_bytes())
+    out = []
+    for r in rows:
+        if r.kind != R.KIND_BUNDLE:
+            continue
+        out.append(PREFIX + "%s 지시 원문 %s행:" % (r.id, team_files.format_ranges(r.ranges)))
+        for a, z in r.ranges:
+            out.extend(line.decode("utf-8").rstrip("\n") for line in lines[a - 1:z])
     return out
 
 

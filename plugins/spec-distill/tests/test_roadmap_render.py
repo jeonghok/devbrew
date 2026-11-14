@@ -451,6 +451,9 @@ class TeamBlock(unittest.TestCase):
         self.assertIn("- 묶음: jobs/E1/sources.md\n", R.render_block(row, "team"))
         self.assertIn("- 묶음: E1.md\n", R.render_block(row))
 
+    def test_template_keeps_the_sentence_team_replaces(self):   # team_write.render_team_roadmap 이 이 문장을 바꾼다
+        self.assertEqual(R.TEMPLATE.read_text(encoding="utf-8").count("에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다."), 1)
+
 
 class TeamParts(unittest.TestCase):
     """bundle_parts 는 render_bundle 이 싣는 번호 줄을 칸별로 낸다 · team extract_rows 는 번호 파일과 INTENT.md 를 읽는다."""

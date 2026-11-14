@@ -4,7 +4,9 @@
 
 명령줄:
   roadmap_write.py create --brief <brief> --audit <audit> --plan-table <표 파일> --out <로드맵 폴더>
-                          --title <제목> --date <YYYY-MM-DD> --approval <승인 원문>
+                          --title <제목> --date <YYYY-MM-DD> --approval <승인 원문> [--layout team]
+                          (--layout team 이면 팀 폴더 전체를 한 거래로 만들고 쓴 뒤 team 나무 검사까지 돈다.
+                          역할 이름의 --out 은 형식과 무관하게 거절한다)
   roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표 파일>
                           --date <YYYY-MM-DD> --change <사유 한 줄> --approval <사용자 말 그대로>
                           (--approval 은 create · update 에서 여러 번 줄 수 있다)
@@ -36,6 +38,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
+import team_check  # noqa: E402
+import team_layout  # noqa: E402
 import team_write  # noqa: E402
 from roadmap_model import (  # noqa: E402
     DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
@@ -249,31 +253,44 @@ def _date(value: str) -> str:
 
 def cmd_create(a) -> int:
     out_dir = Path(os.path.realpath(a.out))
+    problem = team_layout.team_name_problem(out_dir.name)
+    if problem:   # 형식과 무관하게 — 역할 폴더와 로드맵 폴더가 같은 자리에 산다
+        raise Refused(problem)
     top = git_top(out_dir)
+    W = sys.modules[__name__]
+    team = team_write.team_for(top, out_dir, W) if a.layout else None
     roadmap = out_dir / "roadmap.md"
     brief_rel, audit_rel, roadmap_rel = rel(top, a.brief), rel(top, a.audit), rel(top, roadmap)
     _audit_path_check(a.brief, a.audit)
     date = _date(a.date)
     table_path = Path(a.plan_table)
     table_text = read(table_path)
-    rows = R.parse_table(table_text)
+    rows = R.parse_table(table_text, a.layout)
     idx = R.index_brief(read(a.brief), read(a.audit))
     history = R.history_entry(date, "처음 로드맵", [], a.approval).rstrip("\n")
-    files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
-    for r in rows:
-        if r.kind == R.KIND_BUNDLE:
-            files[out_dir / (r.id + ".md")] = R.render_bundle(r, idx, roadmap_rel, brief_rel, audit_rel)
+    once = {}   # 없을 때만 까는 파일(team) — 생성 기록에 적지 않는다
+    if team:
+        files, once = team_write.create_files(top, team, rows, idx, a.title, brief_rel, roadmap_rel, history,
+                                              Path(a.brief), W)
+    else:
+        files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
+        for r in rows:
+            if r.kind == R.KIND_BUNDLE:
+                files[out_dir / (r.id + ".md")] = R.render_bundle(r, idx, roadmap_rel, brief_rel, audit_rel)
     record = read_record(table_text)
     targets = {rel(top, p) for p in files}
     stray = sorted(rel(top, p) for p in files if p.exists() and rel(top, p) not in record)
     if stray:
         raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(stray))
-    stale = [top / p for p in sorted(record - targets) if (top / p).parent == out_dir]
+    if team:
+        team_write.check_rerun(top, team, record, files, W)
+    stale = [] if team else [top / p for p in sorted(record - targets) if (top / p).parent == out_dir]
     txn = Txn()
 
     def body():
         txn.ensure_dir(out_dir)
-        for path, text in files.items():
+        for path, text in list(files.items()) + list(once.items()):
+            txn.ensure_dir(path.parent)
             txn.write(path, text)
         for path in stale:
             if path.exists():
@@ -281,11 +298,21 @@ def cmd_create(a) -> int:
         reasons = validate(top, roadmap)
         if reasons:
             raise Refused("검증 실패 — %s" % " / ".join(reasons))
+        if team:
+            errors, unknown, _notes = team_check.check_tree(top, team)
+            if errors or unknown:
+                raise Refused("team 나무 검사 실패 — %s" % " / ".join(errors + ["검사 불가 — " + u for u in unknown]))
         txn.write(table_path, with_record(table_text, targets))
 
     run_txn(txn, body)
-    print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
-          % (roadmap_rel, len(files) - 1))
+    if team:
+        print("[spec-distill] 팀 폴더를 만들었다: %s (과제 %d개 · 없어서 깐 파일 %d개) — 검사기 네 목록이 비었고 team 나무 검사를 통과했다"
+              % (team.dir, sum(1 for r in rows if r.kind == R.KIND_BUNDLE), len(once)))
+        for line in team_write.range_screen(top, team, rows):
+            print(line)
+    else:
+        print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
+              % (roadmap_rel, len(files) - 1))
     if idx.k_by_order:
         print(RISK_ORDER_NOTICE)
     return 0
@@ -505,6 +532,7 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date"):
         c.add_argument(flag, required=True)
     c.add_argument("--approval", action="append", required=True)
+    c.add_argument("--layout", choices=team_layout.LAYOUTS)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
     m = sub.add_parser("migrate")

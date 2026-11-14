@@ -436,9 +436,9 @@ def render_bundle(r: Row, idx: BriefIndex, roadmap_rel: str, brief_rel: str, aud
 
 
 def render_roadmap(template: str, rows: list, idx: BriefIndex, title: str, brief_rel: str,
-                   roadmap_rel: str, history: str) -> str:
+                   roadmap_rel: str, history: str, layout=None) -> str:
     values = {"TITLE": title, "SOURCE_BRIEF": brief_rel, "ROADMAP": roadmap_rel,
-              "EPICS": "\n".join(render_block(r) for r in rows), "HISTORY": history,
+              "EPICS": "\n".join(render_block(r, layout) for r in rows), "HISTORY": history,
               "RISKS": "\n".join(idx.k_lines.values()) or "- 없음"}
 
     def sub(m):
