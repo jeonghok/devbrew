@@ -637,6 +637,8 @@ def collect_assigned(blocks: list, meta: dict, roadmap_rel: str, read, exists):
         if btext is None:
             if exists(bpath):
                 errors.append("%s %s을 읽지 못했다: %s" % (b["id"], label, bpath))
+            elif team:   # 번호 파일은 로드맵과 함께 만든다 — 없으면 「아직」 이 아니라 형식 깨짐이다
+                errors.append("%s 번호 파일이 없다: %s" % (b["id"], bpath))
             continue
         fm = frontmatter(btext)
         if team:

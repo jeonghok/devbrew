@@ -404,6 +404,16 @@ class TeamRoadmap(unittest.TestCase):   # R1 AC3 · P7
                                             lambda p: good.replace("job: E1", "job: E9"), lambda p: True)
         self.assertTrue(errors[0].startswith("E1 번호 파일 — "), errors)
 
+    def test_collect_assigned_missing_job_sources_is_an_error(self):
+        meta, blocks, _r, _k, _e = M.parse_roadmap(self.roadmap("jobs/E1/sources.md"))
+        _b, union, errors = M.collect_assigned([dict(b) for b in blocks], meta, "r/t/roadmap.md",
+                                               lambda p: None, lambda p: False)
+        self.assertEqual((errors, union), (["E1 번호 파일이 없다: r/t/jobs/E1/sources.md"], set()))
+        old_meta, old_blocks, _r, _k, _e = M.parse_roadmap(self.roadmap("E1.md", layout=""))
+        _b, _u, errors = M.collect_assigned([dict(b) for b in old_blocks], old_meta, "r/t/roadmap.md",
+                                            lambda p: None, lambda p: False)
+        self.assertEqual(errors, [])   # 옛 형식의 없는 묶음은 여기서 오류가 아니다(단계 계산이 「묶음 없음」으로 알린다)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -125,6 +125,14 @@ rc="$(status_of "$T/team-d2.json")"
 assert_eq "$(js "$T/team-d2.json" "r['unassigned']")" "['D2']" "team: 번호 파일에서 D2 를 빼면 unassigned 에 D2"
 assert_eq "$(js "$T/team-d2.json" "[r[k] for k in ('format_errors','orphans','unknown_ids')]")" "[[], [], []]" "team: 나머지 세 목록은 그대로 빈 목록"
 assert_eq "$rc" "3" "team: 번호가 빠져도 단계 계산은 멈춘 채(3)"
+
+# ── 번호 파일이 없으면 형식 깨짐 — 번호가 배정되지 않은 것처럼 보이지 않는다 ─────
+rm -f "$W/$D/jobs/E1/sources.md"
+rc="$(status_of "$T/team-nosrc.json")"
+assert_eq "$rc" "3" "team: 번호 파일이 없으면 검사 불가(3)"
+assert_contains "$(js "$T/team-nosrc.json" "' | '.join(r['format_errors'])")" "E1 번호 파일이 없다: $D/jobs/E1/sources.md" \
+  "team: 형식 깨짐이 없는 번호 파일의 경로를 댄다"
+assert_eq "$(js "$T/team-nosrc.json" "r['unassigned']")" "None" "team: 번호 파일이 없으면 미배정으로 세지 않는다"
 job_sources "C1, D2, OQ1, S1, S2"
 
 # 옛 형식의 묶음 — 옛 형식 계산과 「모르는 형식을 옛 규칙으로 읽지 않는다」 를 함께 잰다

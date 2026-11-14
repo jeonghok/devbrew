@@ -403,7 +403,8 @@ BUNDLE_FORMAT = (
 
 def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
     """(정렬된 ids, {칸 이름: brief 줄 목록}) — 행의 번호마다 brief 줄을 고른다. 칸 이름과 순서는 번호 파일의 칸
-    (`team_files._SOURCE_PARTS` — 제약 · 열린 질문 · 웹 근거 · 기각 · 위험)이다. brief 에서 줄을 찾지 못한 번호가 있으면 TableError."""
+    (`team_files.SOURCE_PARTS` — 제약 · 열린 질문 · 웹 근거 · 기각 · 위험)이다. brief 에서 줄을 찾지 못한 번호가 있으면 TableError,
+    칸 이름 수가 고른 줄 묶음 수와 다르면 ValueError."""
     ids = sorted(set(r.ids), key=id_sort_key)
     missing = [t for t in ids if not _is_s(t) and t not in idx.lines and t not in idx.k_lines]
     if missing:
@@ -420,7 +421,10 @@ def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
     oq = pick(lambda t: t.startswith("OQ"))
     rest = (pick(lambda t: t.startswith("RC")) + pick(lambda t: t.startswith("ST"))
             + [idx.k_lines[t] for t in ids if t.startswith("K")])
-    return ids, dict(zip(team_files._SOURCE_PARTS, (c_d, oq, keys, rest)))
+    groups = (c_d, oq, keys, rest)
+    if len(team_files.SOURCE_PARTS) != len(groups):
+        raise ValueError("번호 파일 칸 이름 %d개와 고른 줄 묶음 %d개가 다르다" % (len(team_files.SOURCE_PARTS), len(groups)))
+    return ids, dict(zip(team_files.SOURCE_PARTS, groups))
 
 
 def render_bundle(r: Row, idx: BriefIndex, roadmap_rel: str, brief_rel: str, audit_rel: str) -> str:

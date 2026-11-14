@@ -23,7 +23,7 @@ _RANGE_RE = re.compile(r"([0-9]+)[–-]([0-9]+)")
 _SLOT_RE = re.compile(r"\{\{(\w*)\}\}")
 _SCOPE_MID = " / 안 한다 "
 _SCOPE_HEAD = "한다 "
-_SOURCE_PARTS = ("제약", "열린 질문", "웹 근거", "기각 · 위험")
+SOURCE_PARTS = ("제약", "열린 질문", "웹 근거", "기각 · 위험")   # 번호 파일의 칸 — roadmap_render.bundle_parts 도 이 이름을 쓴다
 
 
 def role_template(role: str) -> Path:
@@ -176,7 +176,7 @@ def intent_drift(text: str, intent: str, scope: str) -> list:
 def render_sources(job: str, title: str, ids: list, parts: dict, receives: str, gives: str) -> str:
     out = ["---", "type: job-sources", "job: %s" % job, "ids: [%s]" % ", ".join(ids), "---", "",
            "# %s — %s · 번호 항목" % (job, title)]
-    for name in _SOURCE_PARTS:
+    for name in SOURCE_PARTS:
         out += ["", "## " + name, ""] + (list(parts.get(name) or []) or ["- 없음"])
     out += ["", "## 인터페이스", "", "- 받는 것: %s" % receives, "- 넘기는 것: %s" % gives]
     return "\n".join(out) + "\n"

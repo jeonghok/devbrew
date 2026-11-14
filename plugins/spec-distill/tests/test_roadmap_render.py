@@ -469,6 +469,15 @@ class TeamParts(unittest.TestCase):
         self.rows[1].ids.append("C99")
         self.assertRaises(R.TableError, R.bundle_parts, self.rows[1], self.idx)
 
+    def test_bundle_parts_names_come_from_team_files(self):
+        self.assertEqual(list(R.bundle_parts(self.rows[1], self.idx)[1]), list(R.team_files.SOURCE_PARTS))
+        saved = R.team_files.SOURCE_PARTS
+        try:   # 칸 이름 수가 고른 줄 묶음 수와 다르면 조용히 잘리지 않고 멈춘다
+            R.team_files.SOURCE_PARTS = saved[:3]
+            self.assertRaises(ValueError, R.bundle_parts, self.rows[1], self.idx)
+        finally:
+            R.team_files.SOURCE_PARTS = saved
+
     def team_roadmap(self):
         return ("---\ntype: roadmap\nlayout: team\nsource_brief: b.md\n---\n\n## 에픽\n\n" + R.render_block(
             R.parse_table(team_table(TEAM_E), "team")[0], "team") + "\n" + R.render_block(
