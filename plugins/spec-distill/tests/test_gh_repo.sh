@@ -251,10 +251,10 @@ assert_contains "$ERR" "gh pr create 가 PR 주소를 내지 않았다(github.co
 
 # pr-identity — 상태 · base · head · 다른 레포의 브랜치인가
 FAKE_GH_MODE=view cli "$T/fork" "$FAKEPATH" pr-identity 7
-assert_eq "$RC:$OUT" "0:OPEN main feature/x false" "pr-identity: 네 칸 한 줄"
+assert_eq "$RC:$OUT" "0:OPEN main feature/x false abc" "pr-identity: 다섯 칸 한 줄 — 끝 칸은 PR 의 head 커밋"
 assert_contains "$ARGS" "pr view 7 --json number,state,headRefName,headRefOid,isCrossRepository,baseRefName,mergeCommit -R github.com/me/r " "pr-identity: 번호와 -R origin"
 FAKE_GH_MODE=viewcross cli "$T/fork" "$FAKEPATH" pr-identity 7
-assert_eq "$RC:$OUT" "0:MERGED main feature/x true" "pr-identity: 머지된 · 다른 레포의 브랜치"
+assert_eq "$RC:$OUT" "0:MERGED main feature/x true abc" "pr-identity: 머지된 · 다른 레포의 브랜치"
 FAKE_GH_MODE=badshape cli "$T/fork" "$FAKEPATH" pr-identity 7
 assert_eq "$RC:$OUT" "3:" "pr-identity: 모양이 다르면 멈춘다"
 for bad in 0 abc -3 https://github.com/me/r/pull/7; do
@@ -285,14 +285,27 @@ assert_eq "$RC" "3" "pr-checks: gh 를 실행하지 못하면 멈춘다"
 assert_contains "$ERR" "gh 를 실행하지 못했다(" "pr-checks: 실행 실패 사유"
 cli "$T/bare" "$FAKEPATH" pr-checks 7
 assert_eq "$RC:$ARGS" "3:" "pr-checks: origin 이 없으면 gh 를 부르지 않고 멈춘다"
-cli "$T/fork" "$FAKEPATH" pr-merge 7 --squash
+SHA=0123456789abcdef0123456789abcdef01234567
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --squash --match-head-commit "$SHA"
 assert_eq "$RC" "0" "pr-merge: gh 가 성공하면 0"
-assert_contains "$ARGS" "pr merge 7 --squash -R github.com/me/r env:1:1:1" "pr-merge: 번호 · 방식 · -R origin · 프롬프트 없이"
-FAKE_GH_MODE=auth cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge
+assert_contains "$ARGS" "pr merge 7 --squash --match-head-commit $SHA -R github.com/me/r env:1:1:1" "pr-merge: 번호 · 방식 · head 커밋 · -R origin · 프롬프트 없이"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --rebase --match-head-commit "$SHA$SHA"
+assert_eq "$RC:$ARGS" "2:" "pr-merge: 80자 커밋은 사용법 오류다(양성 짝은 아래 64자)"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --rebase --match-head-commit "${SHA}0123456789abcdef01234567"
+assert_contains "$ARGS" "--match-head-commit ${SHA}0123456789abcdef01234567 -R " "pr-merge: 64자(sha256) 커밋도 받는다"
+FAKE_GH_MODE=auth cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --match-head-commit "$SHA"
 assert_eq "$RC" "4" "pr-merge: gh 의 종료 코드가 그대로 나온다"
-cli "$T/fork" "$FAKEPATH" pr-merge 7
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge
+assert_eq "$RC:$ARGS" "2:" "pr-merge: head 커밋이 없으면 사용법 오류이고 gh 를 부르지 않는다 — 커밋에 묶이지 않은 머지는 없다"
+NL='
+'
+for bad in abc1234 "${SHA%?}" "${SHA}0" "${SHA%?}G" "$(printf '%s' "$SHA" | tr 'a-f' 'A-F')" HEAD "" "$SHA$NL" " $SHA" "--admin"; do
+  cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --match-head-commit "$bad"
+  assert_eq "$RC:$ARGS" "2:" "pr-merge: 전체 SHA(16진 소문자 40자)가 아니면 사용법 오류이고 gh 를 부르지 않는다(${bad:-빈 값})"
+done
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --match-head-commit "$SHA"
 assert_eq "$RC:$ARGS" "2:" "pr-merge: 방식이 없으면 사용법 오류이고 gh 를 부르지 않는다"
-cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --squash
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --squash --match-head-commit "$SHA"
 assert_eq "$RC:$ARGS" "2:" "pr-merge: 방식이 둘이면 사용법 오류이고 gh 를 부르지 않는다"
 
 finish

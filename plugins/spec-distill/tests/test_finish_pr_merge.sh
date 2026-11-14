@@ -23,10 +23,11 @@ last() { printf '%s\n' "$1" | tail -n 1; }
 FIN="$SD/skills/pm-interview/references/finishing.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 UPH='<interview-pr 이 낸 PR 주소>'
+HPH='<interview-pr 이 낸 끝 커밋>'
 pf="$(fence "$FIN" interview-pr)"
 mf="$(fence "$FIN" interview-merge)"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
-case "$mf" in *"URL=\"$UPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
+case "$mf" in *"URL=\"$UPH\""*"HEAD_SHA=\"$HPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL · 끝 커밋 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 
 mkdir -p "$T/bin" "$T/remotes" || exit 1
 cat > "$T/bin/gh" <<'FAKE'
@@ -43,12 +44,17 @@ case "$1 $2" in
     echo "Creating pull request for feature/x into main in $FAKE_OWNER/r" >&2
     echo "https://github.com/$FAKE_OWNER/r/pull/7" ;;
   "pr view")
-    printf '{"number":%s,"state":"%s","headRefName":"%s","headRefOid":"abc","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}\n' \
-      "$3" "$(cat "$st")" "${FAKE_HEAD:-feature/x}" ;;
+    printf '{"number":%s,"state":"%s","headRefName":"%s","headRefOid":"%s","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}\n' \
+      "$3" "$(cat "$st")" "${FAKE_HEAD:-feature/x}" "$(git --git-dir="$FAKE_REMOTE" rev-parse refs/heads/feature/x)" ;;
   "pr checks")
     case "${FAKE_CHECKS:-none}" in
       none) echo "no checks reported on the 'feature/x' branch" >&2; exit 1 ;;
-      pass) printf 'build\tpass\t1s\thttps://ci.example/1\n' ;;
+      pass) case "${FAKE_MOVE:-}: $* " in 1:*" --watch "*)   # 검사를 기다리는 사이 PR 에 다른 커밋이 올라온다
+              new="$(GIT_AUTHOR_NAME=o GIT_AUTHOR_EMAIL=o@o.o GIT_COMMITTER_NAME=o GIT_COMMITTER_EMAIL=o@o.o \
+                git --git-dir="$FAKE_REMOTE" commit-tree -p refs/heads/feature/x -m moved 'refs/heads/feature/x^{tree}')" || exit 1
+              git --git-dir="$FAKE_REMOTE" update-ref refs/heads/feature/x "$new" || exit 1 ;;
+            esac
+            printf 'build\tpass\t1s\thttps://ci.example/1\n' ;;
       fail) printf 'build\tfail\t1s\thttps://ci.example/1\n'; exit 1 ;;
       hang) case " $* " in *" --watch "*) echo $$ > "$FAKE_GH_DIR/watch.pid"; exec /bin/sleep 30 ;; esac
             printf 'build\tpending\t0\thttps://ci.example/1\n'; exit 8 ;;
@@ -59,6 +65,8 @@ case "$1 $2" in
       queue:*) echo '! Pull request will be added to the merge queue for main when ready' >&2; exit 0 ;;
       reject:*|second:--merge) echo 'GraphQL: Merge commits are not allowed on this repository. (mergePullRequest)' >&2; exit 1 ;;
     esac
+    [ "$5" = "--match-head-commit" ] && [ "$6" = "$(git --git-dir="$FAKE_REMOTE" rev-parse refs/heads/feature/x)" ] \
+      || { echo 'GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)' >&2; exit 1; }
     git --git-dir="$FAKE_REMOTE" update-ref refs/heads/main refs/heads/feature/x || exit 1
     printf 'MERGED\n' > "$st" ;;
 esac
@@ -101,14 +109,16 @@ mk() {   # mk <owner> → 클론 경로. origin 은 git@github.com:<owner>/r.git
   printf '%s' "$c"
 }
 SHELL_ARGV=()
-run() {   # run <owner> <펜스 본문> [<PR 주소>] → 자리표를 바꿔 지금 셸(SHELL_ARGV)로 돈 출력. gh 호출은 $T/gh-<owner>/log 에 쌓인다
+run() {   # run <owner> <펜스 본문> [<PR 주소> [<끝 커밋>]] → 자리표를 바꿔 지금 셸(SHELL_ARGV)로 돈 출력. gh 호출은 $T/gh-<owner>/log 에 쌓인다
   local c="$T/$1" body="${2//"$PH"/$T/$1/$STEM.md}"
   body="${body//"$UPH"/${3:-$UPH}}"
+  body="${body//"$HPH"/${4:-$HPH}}"
   : > "$T/gh-$1/log"
   ( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" PATH="$T/bin:$PATH" FAKE_GH_LOG="$T/gh-$1/log" FAKE_GH_DIR="$T/gh-$1" \
       FAKE_OWNER="$1" FAKE_REMOTE="$T/remotes/$1/r.git" "${SHELL_ARGV[@]}" "$body" 2>&1 )
 }
 ghlog() { cat "$T/gh-$1/log"; }
+head_of() { printf '%s\n' "$1" | sed -n 's/^interview-pr-head: //p'; }   # PR 펜스 출력에서 끝 커밋
 remote_ref() { git --git-dir="$T/remotes/$1/r.git" rev-parse -q --verify "refs/heads/$2" 2>/dev/null || true; }
 
 for sh_name in bash zsh; do
@@ -128,6 +138,7 @@ for sh_name in bash zsh; do
   assert_grep "$(ghlog "$n")" "^pr create --base main --head feature/x --title docs\(interview\): .* --body-file [^ ]+ -R github\.com/$n/r\$" "새 PR: 만들기가 -R origin 으로 간다"
   assert_contains "$o" "interview-pr-files: ONLY" "새 PR: seed · 세 파일 · 로드맵 폴더뿐이면 ONLY"
   assert_contains "$o" "이 PR 은 인터뷰 폴더와 로드맵 폴더의 파일만 담는다." "새 PR: ONLY 의 사람 줄"
+  assert_eq "$(printf '%s\n' "$o" | tail -n 2 | head -n 1)" "interview-pr-head: $(git -C "$c" rev-parse HEAD)" "새 PR: 판결 바로 앞 줄이 push 한 끝 커밋"
 
   # 2. 이 레포 안 브랜치의 열린 PR 이 있으면 그것을 쓴다 — 다른 레포의 브랜치에서 온 PR 은 세지 않는다
   n="${P}reuse"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
@@ -170,16 +181,17 @@ for sh_name in bash zsh; do
   note "=== ${sh_name}: 머지 펜스 ==="
   # 5. 머지 — 검사 없음을 다시 본 뒤 머지, 상태 확인, origin 받기
   n="${P}merge"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
   before="$(git -C "$c" rev-parse refs/remotes/origin/main)"
-  o="$(run "$n" "$mf" "$URL")"
+  o="$(run "$n" "$mf" "$URL" "$H")"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "머지: 마지막 줄이 판결(MERGED)"
   assert_contains "$o" "[spec-distill] PR 을 머지했다(merge) — $URL" "머지: 방식과 주소를 보인다"
   L="$(ghlog "$n")"
   assert_eq "$(printf '%s\n' "$L" | grep -c "^pr checks 7 -R github.com/$n/r\$")" "6" "머지: 「검사 없음」을 여섯 번 본다"
   assert_not_contains "$L" "--watch" "머지: 검사가 없으면 기다리지 않는다"
   assert_contains "$L" "repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed github.com/$n/r" "머지: 허용 방식을 origin 레포에 묻는다"
-  assert_contains "$L" "pr merge 7 --merge -R github.com/$n/r" "머지: 번호와 -R origin 으로 머지한다"
+  assert_contains "$L" "pr merge 7 --merge --match-head-commit $H -R github.com/$n/r" "머지: 번호 · 물을 때의 끝 커밋 · -R origin 으로 머지한다"
+  assert_eq "$H" "$(git -C "$c" rev-parse HEAD)" "머지: 그 끝 커밋은 PR 펜스가 push 한 커밋이다"
   assert_eq "$(printf '%s\n' "$L" | grep -c "^pr view 7 ")" "2" "머지: 신원 확인 한 번 · 머지 뒤 상태 확인 한 번"
   assert_not_contains "$L" "$URL" "머지: gh 에 주소를 넘기지 않는다(번호와 -R 만)"
   after="$(git -C "$c" rev-parse refs/remotes/origin/main)"
@@ -187,20 +199,22 @@ for sh_name in bash zsh; do
 
   # 6. 다른 레포의 PR 주소 — gh 를 부르기 전에 거절
   n="${P}other"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$mf" "https://github.com/someone-else/r/pull/7")"
+  o="$(run "$n" "$pf")"; H="$(head_of "$o")"
+  o="$(run "$n" "$mf" "https://github.com/someone-else/r/pull/7" "$H")"
   assert_eq "$(last "$o")" "interview-merge: NONE" "다른 레포 주소: 판결 NONE"
   assert_contains "$o" "PR 주소의 레포(github.com/someone-else/r)가 origin(github.com/$n/r)이 아니다" "다른 레포 주소: gh_repo.py 의 사유"
   assert_contains "$o" "머지하지 않았다 — PR 주소가 이 레포(origin)의 PR 이 아니다(위 사유)" "다른 레포 주소: 사람 줄"
   assert_eq "$(ghlog "$n")" "" "다른 레포 주소: gh 를 한 번도 부르지 않는다"
-  o="$(run "$n" "$mf" "https://GitHub.com/${n}/R/pull/7")"
+  o="$(run "$n" "$mf" "https://GitHub.com/${n}/R/pull/7" "$H")"
   assert_not_contains "$o" "이 레포(origin)의 PR 이 아니다" "양성 짝: 대소문자만 다른 같은 레포 주소는 거절하지 않는다"
   assert_contains "$(ghlog "$n")" "pr view 7 " "양성 짝: 같은 레포 주소면 PR 을 읽는다"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "양성 짝: 같은 레포 주소면 머지까지 간다"
 
   # 7. 머지 대기열 — gh 는 rc 0 인데 PR 은 OPEN 그대로
   n="${P}queue"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
   before="$(git -C "$c" rev-parse refs/remotes/origin/main)"
-  o="$(FAKE_MERGE=queue run "$n" "$mf" "$URL")"
+  o="$(FAKE_MERGE=queue run "$n" "$mf" "$URL" "$H")"
   assert_eq "$(last "$o")" "interview-merge: NONE" "대기열: gh 가 rc 0 이어도 MERGED 가 아니면 NONE"
   assert_contains "$o" "PR 이 아직 머지되지 않았다(읽은 상태: OPEN)" "대기열: 읽은 상태를 보인다"
   assert_not_contains "$o" "PR 을 머지했다" "대기열: 머지했다고 말하지 않는다"
@@ -210,38 +224,68 @@ for sh_name in bash zsh; do
 
   # 8. 머지 뒤 origin 을 받지 못함 — 알리고 판결은 MERGED
   n="${P}nofetch"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"
-  o="$(FAKE_SSH_FAIL=1 run "$n" "$mf" "$URL")"
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  o="$(FAKE_SSH_FAIL=1 run "$n" "$mf" "$URL" "$H")"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "fetch 실패: 판결은 MERGED 그대로"
   assert_contains "$o" "머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다." "fetch 실패: 알린다"
   assert_contains "$o" "PR 을 머지했다(merge)" "fetch 실패: 머지한 사실은 보인다"
 
   # 9. 신원 불일치 · 검사 실패 · 검사 통과 · 방식 거절
   n="${P}misc"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"
-  o="$(FAKE_HEAD=other-branch run "$n" "$mf" "$URL")"
-  assert_contains "$o" "이 PR 은 열린, 이 레포의 feature/x → main PR 이 아니다(읽은 것: OPEN main other-branch false)" "신원 불일치: 읽은 것을 보이고 멈춘다"
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  o="$(FAKE_HEAD=other-branch run "$n" "$mf" "$URL" "$H")"
+  assert_contains "$o" "이 PR 은 열린, 이 레포의 feature/x → main PR 이 아니거나 끝 커밋이 물을 때(${H})와 다르다(읽은 것: OPEN main other-branch false ${H})" "신원 불일치: 읽은 것을 보이고 멈춘다"
   assert_not_contains "$(ghlog "$n")" "pr merge" "신원 불일치: 머지하지 않는다"
-  o="$(FAKE_CHECKS=fail run "$n" "$mf" "$URL")"
+  o="$(FAKE_CHECKS=fail run "$n" "$mf" "$URL" "$H")"
   assert_eq "$(last "$o")" "interview-merge: NONE" "검사 실패: 판결 NONE"
   assert_contains "$o" "CI 검사가 통과하지 않았다(rc 1, 위 목록)" "검사 실패: 사유"
   assert_not_contains "$(ghlog "$n")" "pr merge" "검사 실패: 머지하지 않는다"
-  o="$(FAKE_CHECKS=hang FAKE_SLEEP=0.01 run "$n" "$mf" "$URL")"
+  o="$(FAKE_CHECKS=hang FAKE_SLEEP=0.01 run "$n" "$mf" "$URL" "$H")"
   assert_contains "$o" "CI 검사를 30분 기다려도 끝나지 않았다" "검사가 끝나지 않음: 기다림 상한에서 멈춘다"
   wp="$(cat "$T/gh-$n/watch.pid" 2>/dev/null)" || wp=""
   [ -n "$wp" ] && ! kill -0 "$wp" 2>/dev/null && ok "검사가 끝나지 않음: 기다리던 gh 를 끝냈다" || nob "검사가 끝나지 않음: 기다리던 gh 가 남았다" "pid ${wp:-없음}"
-  o="$(FAKE_WAYS='{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' FAKE_CHECKS=pass run "$n" "$mf" "$URL")"
+  o="$(FAKE_WAYS='{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' FAKE_CHECKS=pass run "$n" "$mf" "$URL" "$H")"
   L="$(ghlog "$n")"
   assert_contains "$L" "pr checks 7 --watch --interval 15 -R github.com/$n/r" "검사 통과: 끝나길 기다린다(-R origin)"
   assert_not_contains "$L" "pr merge 7 --merge" "허용 방식: 허용하지 않는 방식은 시도하지 않는다"
   assert_contains "$o" "PR 을 머지했다(squash)" "허용 방식: 허용된 첫 방식으로 머지한다"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "검사 통과: 판결 MERGED"
   n="${P}second"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"
-  o="$(FAKE_MERGE=second run "$n" "$mf" "$URL")"
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  o="$(FAKE_MERGE=second run "$n" "$mf" "$URL" "$H")"
   assert_contains "$o" "merge 머지가 거절됐다(위 사유) — 다음 방식을 시도한다." "방식 거절: 알리고 다음 방식으로"
   assert_contains "$o" "PR 을 머지했다(squash)" "방식 거절: 다음 방식으로 머지한다"
   o="$(run "$n" "$mf")"
   assert_contains "$o" "머지하지 않았다 — PR 주소가 비었거나 자리표 그대로다" "자리표 그대로: 머지하지 않는다"
+  for bad in "" "${H}Z" "not-a-commit"; do
+    o="$(run "$n" "$mf" "$URL" "$bad")"
+    assert_contains "$o" "머지하지 않았다 — 끝 커밋이 비었거나 자리표 그대로다" "끝 커밋 자리표: 16진이 아니면 머지하지 않는다(${bad:-자리표 그대로})"
+    assert_eq "$(ghlog "$n")" "" "끝 커밋 자리표: gh 를 부르지 않는다(${bad:-자리표 그대로})"
+  done
+
+  # 10. 묻고 난 뒤 PR 의 끝 커밋이 바뀌면 머지하지 않는다
+  # 10a. 머지 펜스가 돌기 전에 바뀜 — 신원 확인에서 멈춘다
+  n="${P}moved"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  git -C "$c" commit -q --allow-empty -m "뒤에 올라온 커밋"; git -C "$c" push -q origin feature/x 2>/dev/null
+  mainref="$(remote_ref "$n" main)"
+  o="$(run "$n" "$mf" "$URL" "$H")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "끝 커밋이 바뀜(머지 전): 판결 NONE"
+  assert_contains "$o" "끝 커밋이 물을 때(${H})와 다르다(읽은 것: OPEN main feature/x false $(remote_ref "$n" feature/x))" "끝 커밋이 바뀜(머지 전): 두 커밋을 보인다"
+  assert_not_contains "$(ghlog "$n")" "pr merge" "끝 커밋이 바뀜(머지 전): 머지를 요청하지 않는다"
+  assert_eq "$(remote_ref "$n" main)" "$mainref" "끝 커밋이 바뀜(머지 전): 기본 브랜치는 그대로다"
+  # 10b. CI 를 기다리는 사이 바뀜 — 머지 요청이 물을 때의 커밋에 묶여 있어 거절되고, 다른 방식으로 다시 시도하지 않는다
+  n="${P}moved2"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  mainref="$(remote_ref "$n" main)"
+  o="$(FAKE_CHECKS=pass FAKE_MOVE=1 run "$n" "$mf" "$URL" "$H")"
+  [ "$(remote_ref "$n" feature/x)" != "$H" ] && ok "전제: 검사를 기다리는 사이 PR 의 끝 커밋이 바뀌었다" || no "전제: 끝 커밋이 그대로다 — 아래 칸이 공허하다"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "끝 커밋이 바뀜(기다리는 사이): 판결 NONE"
+  assert_contains "$(ghlog "$n")" "pr merge 7 --merge --match-head-commit $H -R github.com/$n/r" "끝 커밋이 바뀜(기다리는 사이): 머지 요청은 물을 때의 커밋에 묶여 있다"
+  assert_eq "$(ghlog "$n" | grep -c "^pr merge ")" "1" "끝 커밋이 바뀜(기다리는 사이): 다른 방식으로 다시 시도하지 않는다"
+  assert_contains "$o" "머지가 거절됐고(위 사유) PR 이 물을 때와 달라졌다" "끝 커밋이 바뀜(기다리는 사이): 사유를 보인다"
+  assert_contains "$o" "물을 때의 끝 커밋: ${H}" "끝 커밋이 바뀜(기다리는 사이): 물을 때의 커밋을 보인다"
+  assert_not_contains "$o" "PR 을 머지했다" "끝 커밋이 바뀜(기다리는 사이): 머지했다고 말하지 않는다"
+  assert_eq "$(remote_ref "$n" main)" "$mainref" "끝 커밋이 바뀜(기다리는 사이): 기본 브랜치는 그대로다"
 done
 finish

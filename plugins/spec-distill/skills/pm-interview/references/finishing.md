@@ -669,7 +669,7 @@ fi
 
 **「여기서 계속」 으로 왔으면.** 게이트의 기타 칸 갈래(정본 `proceed-gate.md` 의 「기타 칸」 — 두 줄 없이 이 세션에서 다음 세션 줄을 따른다)에서는 `interview-merge: MERGED` 를 받은 턴에만 지휘자를 부른다. 그 밖(이 절을 건너뜀 · `interview-pr: NONE` · `interview-merge: NONE` · 「직접 머지」)에는 지휘자를 부르지 않는다 — PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
-1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 기본 브랜치에 더하는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `interview-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). `interview-pr: OPEN <PR 주소>` 면 2 로, `interview-pr: NONE` 이면 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 기본 브랜치에 더하는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `interview-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). push 한 끝 커밋은 `interview-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `interview-pr: OPEN <PR 주소>` 면 2 로, `interview-pr: NONE` 이면 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- interview-pr:begin -->
 ```bash
@@ -685,6 +685,8 @@ cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --root "$top")" || def=""
 [ -n "$cur" ] && [ -n "$def" ] && [ "$cur" != "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
 url="$(python3 "$SD/scripts/gh_repo.py" pr-open --head "$cur" --base "$def" --root "$top")" || none "열린 PR 을 찾지 못했다(위 사유)"
+head_sha="$(git -C "$top" rev-parse --verify -q "refs/heads/${cur}^{commit}")" || head_sha=""
+[ -n "$head_sha" ] || none "지금 브랜치의 끝 커밋을 읽지 못했다"
 git -C "$top" push -q -u origin "$cur" || none "push 가 실패했다(위 사유)"
 if [ -z "$url" ]; then
   bf="$(mktemp)" || none "PR 본문 임시 파일을 만들지 못했다"
@@ -708,7 +710,7 @@ if [ -n "$r7" ]; then
   rdir="$(dirname -- "$r7")"
 fi
 x_rc=0
-extra="$(git -C "$top" diff --name-only "refs/remotes/origin/${def}...HEAD" -- . ":(exclude,glob)${idir}/*" ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
+extra="$(git -C "$top" diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ":(exclude,glob)${idir}/*" ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
 if [ "$x_rc" -ne 0 ]; then
   echo "[spec-distill] 이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다."
   echo "interview-pr-files: UNKNOWN"
@@ -721,21 +723,24 @@ else
   printf '%s\n' "$extra" | head -n 20 | sed 's/^/  - /'
   echo "interview-pr-files: MIXED"
 fi
+echo "interview-pr-head: $head_sha"
 echo "interview-pr: OPEN $url"
 ```
 <!-- interview-pr:end -->
 
 2. **머지 묻기.** `AskUserQuestion` 하나 — 질문 「<주제> — 지휘자는 로드맵을 기본 브랜치에서 읽어, 이 PR(<PR 주소>)이 머지돼야 에픽을 시작할 수 있다. 지금 머지할까?」, 선택지 「머지 (권장)」(고르면 CI 검사가 끝나길 기다렸다가 PR 을 기본 브랜치에 합치고, 붙여 넣을 두 줄을 보인다) · 「직접 머지」(PR 주소만 보이고, 머지한 뒤 지휘자 줄을 입력하라고 알린다). 「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다 — 인터뷰 폴더와 로드맵 폴더의 문서만 더하는 PR 이라 머지를 권한다. `MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고, 질문 앞 글에 1 의 펜스가 보인 파일 목록(세지 못했으면 그 줄)을 다시 보인다 — 무엇이 함께 머지되는지 보고 고르게 한다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
-3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 두 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 이 기다림은 polite stop 이 아니다 — ①/② 의 완료 동작(두 줄과 위치를 노출하고 턴을 끝낸다)은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 인지 먼저 확인한다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `interview-merge: MERGED` 면 두 줄을 그대로 노출하고(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 두 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로, `HEAD_SHA` 자리표를 1 의 `interview-pr-head:` 값으로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 두 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 이 기다림은 polite stop 이 아니다 — ①/② 의 완료 동작(두 줄과 위치를 노출하고 턴을 끝낸다)은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 이며 끝 커밋이 1 에서 push 한 커밋 그대로인지 먼저 확인한다. 머지도 그 커밋에 묶어 요청한다 — 묻고 난 뒤(CI 를 기다리는 사이 포함) PR 에 다른 커밋이 올라오면 머지하지 않는다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `interview-merge: MERGED` 면 두 줄을 그대로 노출하고(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 두 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- interview-merge:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
 URL="<interview-pr 이 낸 PR 주소>"
+HEAD_SHA="<interview-pr 이 낸 끝 커밋>"
 none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
 case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
+case "$HEAD_SHA" in ""|*[!0-9a-f]*) none "끝 커밋이 비었거나 자리표 그대로다" ;; esac
 top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
 [ -n "$top" ] || none "git 저장소가 아니다"
 cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
@@ -743,7 +748,7 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 [ -n "$cur" ] && [ -n "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
 num="$(python3 "$SD/scripts/gh_repo.py" pr-number "$URL" --root "$top")" || none "PR 주소가 이 레포(origin)의 PR 이 아니다(위 사유)"
 pr="$(python3 "$SD/scripts/gh_repo.py" pr-identity "$num" --root "$top")" || none "PR 을 읽지 못했다(위 사유)"
-[ "$pr" = "OPEN $def $cur false" ] || none "이 PR 은 열린, 이 레포의 ${cur} → ${def} PR 이 아니다(읽은 것: ${pr})"
+[ "$pr" = "OPEN $def $cur false $HEAD_SHA" ] || none "이 PR 은 열린, 이 레포의 ${cur} → ${def} PR 이 아니거나 끝 커밋이 물을 때(${HEAD_SHA})와 다르다(읽은 것: ${pr})"
 out="$(mktemp)" || none "검사 출력 임시 파일을 만들지 못했다"
 n=0
 while :; do
@@ -773,7 +778,7 @@ ways="$(python3 "$SD/scripts/gh_repo.py" merge-ways --root "$top")" || ways=""
 how=""
 for how in --merge --squash --rebase; do
   case " $ways " in *" $how "*) ;; *) continue ;; esac
-  if python3 "$SD/scripts/gh_repo.py" pr-merge "$num" "$how" --root "$top"; then
+  if python3 "$SD/scripts/gh_repo.py" pr-merge "$num" "$how" --match-head-commit "$HEAD_SHA" --root "$top"; then
     # gh 가 받아들였어도 머지 대기열 · 자동 머지면 아직 머지 전이다 — 상태를 다시 읽는다(15초까지).
     st=""
     n=0
@@ -794,6 +799,8 @@ for how in --merge --squash --rebase; do
     echo "interview-merge: MERGED"
     exit 0
   fi
+  pr="$(python3 "$SD/scripts/gh_repo.py" pr-identity "$num" --root "$top")" || pr=""
+  [ "$pr" = "OPEN $def $cur false $HEAD_SHA" ] || none "머지가 거절됐고(위 사유) PR 이 물을 때와 달라졌다 — 끝 커밋이 바뀌었거나 닫혔다(읽은 것: ${pr:-읽지 못함} · 물을 때의 끝 커밋: ${HEAD_SHA})"
   echo "[spec-distill] ${how#--} 머지가 거절됐다(위 사유) — 다음 방식을 시도한다."
 done
 none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · 보호 규칙 · 권한)"

@@ -18,10 +18,11 @@ CLI (모두 `--root <레포 경로>` 를 받는다 — 없으면 지금 폴더. 
   - `pr-number <PR 주소>` — 주소의 레포가 origin 일 때만 stdout 번호
   - `pr-open --head <브랜치> --base <브랜치>` — 그 레포 안 브랜치의 열린 PR 주소(없으면 빈 줄)
   - `pr-create --head <브랜치> --base <브랜치> --title <제목> --body-file <파일>` — stdout 새 PR 주소
-  - `pr-identity <번호>` — stdout `<state> <base> <head> <true|false(다른 레포의 브랜치인가)>`
+  - `pr-identity <번호>` — stdout `<state> <base> <head> <true|false(다른 레포의 브랜치인가)> <head 커밋>`
   - `merge-ways` — stdout 레포가 허용하는 머지 방식(`--merge` · `--squash` · `--rebase` 가운데, 공백으로)
-  - `pr-checks <번호> [--watch] [--interval <초>]` · `pr-merge <번호> --merge|--squash|--rebase` — gh 로
-    갈아탄다: 출력과 종료 코드가 gh 의 것 그대로다
+  - `pr-checks <번호> [--watch] [--interval <초>]` ·
+    `pr-merge <번호> --merge|--squash|--rebase --match-head-commit <커밋>` — gh 로 갈아탄다: 출력과 종료 코드가
+    gh 의 것 그대로다. 머지는 PR 의 head 가 그 커밋일 때만 된다(GitHub 이 대조한다)
 """
 from __future__ import annotations
 
@@ -39,6 +40,7 @@ ENV_NAMES = ("GH_REPO", "GH_HOST")
 AUTH_MARKS = ("auth login", "not logged", "authentication", "bad credentials", "http 401")
 UNKNOWN_MARKS = ("could not resolve to a repository", "no such type pullrequest")
 _PR_NUM_RE = re.compile(r"#?([0-9]+)")
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _PR_URL_RE = re.compile(r"https?://([^/\s]+)/([^/\s]+)/([^/\s]+)/pull/([0-9]+)/?")
 PR_FIELDS = ("number", "state", "headRefName", "headRefOid", "isCrossRepository", "baseRefName", "mergeCommit")
 MERGE_WAYS = (("mergeCommitAllowed", "--merge"), ("squashMergeAllowed", "--squash"),
@@ -245,13 +247,13 @@ def pr_create(cwd: str, head: str, base: str, title: str, body_file: str) -> str
 
 
 def pr_identity(cwd: str, number: int) -> str:
-    """`<state> <base> <head> <true|false>` 한 줄 — 끝 칸은 다른 레포의 브랜치에서 온 PR 인가."""
+    """`<state> <base> <head> <true|false> <head 커밋>` 한 줄 — 넷째 칸은 다른 레포의 브랜치에서 온 PR 인가."""
     it = pr_view(cwd, number)
-    cells = [it["state"], it["baseRefName"], it["headRefName"]]
+    cells = [it["state"], it["baseRefName"], it["headRefName"], it["headRefOid"]]
     if not all(isinstance(c, str) and c and not any(ch.isspace() for ch in c) for c in cells) \
             or not isinstance(it["isCrossRepository"], bool):
         raise GhStop("gh pr view 출력 모양이 다르다(PR #%d) — gh 판을 확인한다" % number)
-    return " ".join(cells + ["true" if it["isCrossRepository"] else "false"])
+    return " ".join(cells[:3] + ["true" if it["isCrossRepository"] else "false", cells[3]])
 
 
 def merge_ways(cwd: str) -> list:
@@ -266,6 +268,12 @@ def _pr_number(text: str) -> int:
     if not text.isdigit() or int(text) < 1:
         raise argparse.ArgumentTypeError("PR 번호는 1 이상의 숫자다: %r" % text)
     return int(text)
+
+
+def _head_commit(text: str) -> str:
+    if _COMMIT_RE.fullmatch(text) is None:
+        raise argparse.ArgumentTypeError("커밋은 16진 소문자 40자(또는 64자)의 전체 SHA 다: %r" % text)
+    return text
 
 
 def main(argv=None) -> int:
@@ -298,6 +306,8 @@ def main(argv=None) -> int:
     how = p.add_mutually_exclusive_group(required=True)
     for _key, flag in MERGE_WAYS:
         how.add_argument(flag, dest="how", action="store_const", const=flag)
+    p.add_argument("--match-head-commit", required=True, type=_head_commit,
+                   help="PR 의 head 가 이 커밋일 때만 머지한다")
     a = ap.parse_args(argv)
     root = a.root or os.getcwd()
     for line in env_notices():
@@ -319,7 +329,7 @@ def main(argv=None) -> int:
             extra = (["--watch"] if a.watch else []) + (["--interval", str(a.interval)] if a.interval else [])
             gh_exec(root, ["pr", "checks", str(a.number)] + extra)
         else:
-            gh_exec(root, ["pr", "merge", str(a.number), a.how])
+            gh_exec(root, ["pr", "merge", str(a.number), a.how, "--match-head-commit", a.match_head_commit])
     except GhStop as exc:
         print("[spec-distill] " + str(exc), file=sys.stderr)
         return 3
