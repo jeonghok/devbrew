@@ -38,6 +38,12 @@ HAND_FIX = ("손으로 고칠 것 — %s 의 INTENT.md(%s)는 다시 쓰지 않�
             "없으면 이 브랜치의 것을 고친다.")
 LEFT_JOB = "사라진 에픽 %s: 과제 폴더 %s 를 그대로 뒀다 — 필요 없으면 손으로 지운다"
 INDENT = "    "
+UNCHECKABLE = "검사 불가 — "
+
+
+def check_screen(unknown: list, notes: list) -> list:
+    """team 나무 검사의 검사 불가 줄 · 알림 줄을 화면에 낼 꼴로(머리 PREFIX, 검사 불가는 UNCHECKABLE 을 붙인다)."""
+    return [PREFIX + UNCHECKABLE + u for u in unknown] + [PREFIX + n for n in notes]
 
 
 # ── 자리 ─────────────────────────────────────────────────────────────────────
@@ -366,25 +372,35 @@ def cmd_original(a, W) -> int:
         raise W.Refused("원자료 사본 자리가 파일이 아니다: %s" % team.original)
     existing = target.read_bytes() if target.is_file() else b""
     new, notes = team_files.extend_original(existing, wanted)
-    if new == existing:
-        print(PREFIX + "원자료 사본이 이미 출처와 같다 — 쓰지 않았다: %s" % team.original)
-        return 0
     roadmap = top / team.roadmap
+    if new == existing:
+        shown = []
+        if roadmap.exists():
+            _errors, unknown, check_notes = team_check.check_tree(top, team)
+            shown = check_screen(unknown, check_notes)
+        print(PREFIX + "원자료 사본이 이미 출처와 같다 — 쓰지 않았다: %s" % team.original)
+        for line in shown:
+            print(line)
+        return 0
+    added = len(team_files.parse_original(new)) - (len(team_files.parse_original(existing)) if existing else 0)
+    shown = []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
     txn = W.Txn()
 
     def body():
         txn.ensure_dir(target.parent)
         txn.write(target, new.decode("utf-8"))
         if roadmap.exists():
-            errors, _unknown, _notes = team_check.check_tree(top, team)
+            errors, unknown, check_notes = team_check.check_tree(top, team)
             if errors:
                 raise W.Refused("검사 실패 — %s" % " / ".join(errors))
+            shown.extend(check_screen(unknown, check_notes))
 
     W.run_txn(txn, body)
     for line in notes:
         print(PREFIX + line)
-    added = len(team_files.parse_original(new)) - (len(team_files.parse_original(existing)) if existing else 0)
     print(PREFIX + "원자료 사본을 썼다: %s — 구간 %d개를 끝에 더했다" % (team.original, added))
+    for line in shown:
+        print(line)
     return 0
 
 
@@ -480,16 +496,20 @@ def cmd_job_new(a, W) -> int:
     for rel_path in targets:
         _refuse_links(top, rel_path, W)
     txn = W.Txn()
+    shown = []   # 화면 줄은 거래 안에서 계산한다
 
     def body():
         for rel_path, content in zip(targets, (intent, "")):
             txn.ensure_dir((top / rel_path).parent)
             txn.write(top / rel_path, content)
-        errors, _unknown, _notes = team_check.check_tree(top, team)
+        errors, unknown, check_notes = team_check.check_tree(top, team)
         if errors:
             raise W.Refused("team 나무 검사 실패 — %s" % " / ".join(errors))
+        shown.extend(check_screen(unknown, check_notes))
 
     W.run_txn(txn, body)
     print(PREFIX + "과제 폴더를 만들었다: %s (kind: %s · 브랜치 %s) — 브랜치를 만들거나 커밋하지 않았다"
           % (team.job(a.name), team_files.KIND_TASK, branch))
+    for line in shown:
+        print(line)
     return 0

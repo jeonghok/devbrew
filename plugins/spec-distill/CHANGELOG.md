@@ -17,6 +17,7 @@
 - 역할 이름(`leader` · `designer` · `writer` · `worker`)의 폴더는 로드맵으로 세지 않는다. `create` 는 형식과 무관하게 역할 이름의 `--out` 을 거절한다.
 - 단계 계산이 `layout: team` 과 모르는 `layout` 값에서 검사 불가(3)로 멈춘다 — team 로드맵은 번호 대조까지만 한다(team 형식의 단계 계산은 다음 판). 모르는 값이면 `update` · `extract` · `job new` 도 거절한다.
 - 이 판의 team `update` 는 머지된 에픽을 가려 보호하지 못한다 — 「머지 여부를 확인하지 못했다」 를 화면에 알리고 진행한다(team 형식의 단계 계산은 다음 판에 온다).
+- 원자료 사본의 출처 줄이 적은 커밋은 레포에서 계속 읽혀야 한다(기본 브랜치에서 닿아야 한다). squash · rebase 머지나 고쳐 쓴 브랜치로 그 커밋이 사라지면 `team_layout.py check` 는 검사 불가(3)로 멈추고 `create --layout team` · `update` 는 쓰지 않고 멈춘다. `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 낸다. 이 판에는 출처 줄의 커밋을 고치는 명령이 없다(`original.md` 는 덧붙이기만 받는다) — 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나 머지 커밋으로 머지한다. 생성기 명령은 team 나무 검사의 알림 줄도 화면에 낸다.
 - 상태 계산이 기대는 읽기 전용 모듈에 `team_layout.py` · `team_check.py` · `team_files.py` 가 더해졌다.
 - `control_plane.py` 의 코드 지문 파일 목록에 `team_layout.py` 가 더해졌다.
 

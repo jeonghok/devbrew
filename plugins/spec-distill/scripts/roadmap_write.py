@@ -271,11 +271,12 @@ def roadmap_layout(text: str):
                       % (team_layout.LAYOUT_KEY, exc.value, " · ".join(team_layout.LAYOUTS)))
 
 
-def _check_team_tree(top: Path, team):
-    """거래 안에서 — team 나무 검사의 오류 · 검사 불가가 있으면 Refused(되돌린다)."""
-    errors, unknown, _notes = team_check.check_tree(top, team)
+def _check_team_tree(top: Path, team) -> list:
+    """거래 안에서 — team 나무 검사의 오류 · 검사 불가가 있으면 Refused(되돌린다). 통과하면 알림 줄을 화면에 낼 꼴로 돌려준다."""
+    errors, unknown, notes = team_check.check_tree(top, team)
     if errors or unknown:
         raise Refused("team 나무 검사 실패 — %s" % " / ".join(errors + ["검사 불가 — " + u for u in unknown]))
+    return team_write.check_screen([], notes)
 
 
 def cmd_create(a) -> int:
@@ -314,7 +315,7 @@ def cmd_create(a) -> int:
         team_write.check_rerun(top, team, record, files, W)
     stale = [] if team else [top / p for p in sorted(record - targets) if (top / p).parent == out_dir]
     txn = Txn()
-    screen = []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
+    screen, checked = [], []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
 
     def body():
         txn.ensure_dir(out_dir)
@@ -328,7 +329,7 @@ def cmd_create(a) -> int:
         if reasons:
             raise Refused("검증 실패 — %s" % " / ".join(reasons))
         if team:
-            _check_team_tree(top, team)
+            checked.extend(_check_team_tree(top, team))
             screen.extend(team_write.range_screen(top, team, rows))
         txn.write(table_path, with_record(table_text, targets))
 
@@ -336,7 +337,7 @@ def cmd_create(a) -> int:
     if team:
         print("[spec-distill] 팀 폴더를 만들었다: %s (과제 %d개 · 없어서 깐 파일 %d개) — 검사기 네 목록이 비었고 team 나무 검사를 통과했다"
               % (team.dir, sum(1 for r in rows if r.kind == R.KIND_BUNDLE), len(once)))
-        for line in screen:
+        for line in checked + screen:
             print(line)
     else:
         print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
@@ -488,6 +489,7 @@ def cmd_update(a) -> int:
         removes += [rdir / (i + ".md") for i in removed
                     if old[i].kind == R.KIND_BUNDLE and (rdir / (i + ".md")).exists()]
     txn = Txn()
+    checked = []   # 화면 줄은 거래 안에서 계산한다
 
     def body():
         for path, text in list(writes.items()) + list(once.items()):
@@ -499,7 +501,7 @@ def cmd_update(a) -> int:
         if reasons:
             raise Refused("검증 실패 — %s" % " / ".join(reasons))
         if team:
-            _check_team_tree(top, team)
+            checked.extend(_check_team_tree(top, team))
 
     run_txn(txn, body)   # 이 뒤로는 미리 계산한 줄을 내기만 한다
     if team:
@@ -509,7 +511,7 @@ def cmd_update(a) -> int:
     else:
         print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
               % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
-    for line in notes:
+    for line in notes + checked:
         print(line)
     if idx.k_by_order:
         print(RISK_ORDER_NOTICE)

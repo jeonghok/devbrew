@@ -202,11 +202,11 @@ roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-au
 team_layout.py check --roadmap <roadmaps_dir><팀>/roadmap.md [--base <ref>]
 ```
 
-원자료의 세 검사와 팀 나무의 구조 검사가 이 명령 하나에 있다. 읽기만 한다 — 작업 폴더의 파일을 읽고 git 은 읽기 명령만 부른다. 생성기 명령(`create --layout team` · `update` · `original` · `job new`)은 쓴 직후 같은 검사를 거래 안에서 돌려 어긋나면 쓴 것을 되돌린다.
+원자료의 세 검사와 팀 나무의 구조 검사가 이 명령 하나에 있다. 읽기만 한다 — 작업 폴더의 파일을 읽고 git 은 읽기 명령만 부른다. 생성기 명령(`create --layout team` · `update` · `original` · `job new`)은 쓴 직후 같은 검사를 거래 안에서 돌려 어긋나면 쓴 것을 되돌린다. 검사의 알림 줄과 (`original` · `job new` 의) 검사 불가 줄은 그 명령이 표준 출력에 낸다.
 
 - 줄 범위 — 에픽 INTENT.md 의 지시 원문에 범위 줄이 있고, 범위가 1 이상에서 시작하고 뒤집히지 않았으며, 끝 줄이 `original.md` 의 줄 수 안이다. 단순 작업(`kind: task`)은 대상이 아니다.
 - 덧붙이기만 — 기준 ref(기본 `origin/HEAD`, `--base <ref>` 로 바꾼다)의 `original.md` 가 지금 파일의 앞머리다. 기준에 그 파일이 없으면 견줄 것이 없다. 기본 기준을 모르면 알림 줄을 내고 건너뛰고, `--base` 로 준 기준을 못 읽으면 검사 불가다.
-- 출처와 바이트 같음 — 구간마다 출처 줄의 커밋에서 그 파일의 그 줄들을 읽어 본문과 바이트로 견준다. 그 커밋이나 파일을 못 읽으면 검사 불가다.
+- 출처와 바이트 같음 — 구간마다 출처 줄의 커밋에서 그 파일의 그 줄들을 읽어 본문과 바이트로 견준다. 그 커밋이나 파일을 못 읽으면 검사 불가다. 그래서 출처 줄이 적은 커밋은 레포에서 계속 읽혀야 한다 — 기본 브랜치에서 닿는 커밋이어야 한다. squash · rebase 로 머지하거나 브랜치를 고쳐 써서 그 커밋이 사라지면 `team_layout.py check` 는 검사 불가(3)로 멈추고, `create --layout team` · `update` 는 쓰지 않고 멈춘다. `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 낸다. 이 판에는 출처 줄의 커밋을 고치는 명령이 없다 — `original.md` 는 덧붙이기만 받는다. 지금 할 수 있는 것은 둘이다: `original` 이나 `create --layout team` 이 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나, 머지 커밋으로 머지해 출처 커밋이 남게 한다.
 - 구조 — 로드맵 머리말(`type: roadmap` · `layout: team`)과 블록 형식 · `RULES.md` · `original.md` 의 구간 형식 · `roadmaps_dir` 바로 아래의 역할 문서 넷과 `HANDBOOK.md` · 결정 블록이 아닌 블록마다 INTENT.md(머리 `type: job` · `job` · `kind: epic` · `roadmap`, 네 칸) · `sources.md`(머리 `type: job-sources` · `job`, `ids`) · `results/` · 계획 번호. 블록이 없는 과제 폴더는 이름 꼴과 `kind: task` INTENT.md(`branch` · `paths` 가 비지 않음) · `results/` · 계획 번호를 본다 — `kind: epic` 인데 블록이 없으면 알림이다.
 
 종료 코드는 0 통과 · 1 어긋남 · 2 사용법(git 작업 트리 밖 · `<팀>/roadmap.md` 꼴이 아님 · 역할 이름의 팀 · `--base` 꼴) · 3 검사 불가(레포 설정을 못 읽음 · 출처를 못 읽음 · `--base` 를 못 읽음)이고, 검사 불가가 있으면 어긋남보다 앞선다. 어긋남 · 검사 불가 줄은 그 파일 경로와 무엇이 어긋났는지를 적어 표준 출력으로, 알림 줄(목표 · 하지 않을 것이 로드맵과 다름 · 블록 없는 에픽 과제 폴더 · 덧붙이기 검사 건너뜀)은 표준 오류로 내며 종료 코드를 바꾸지 않는다.

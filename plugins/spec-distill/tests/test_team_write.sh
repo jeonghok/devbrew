@@ -914,4 +914,75 @@ assert_eq "$(jobnew --name chk-job --branch fix/x --paths a.py --goal "목표" <
 assert_eq "$(check)" "0" "job new 를 마친 t1 이 구조 검사를 통과한다"
 assert_eq "$(g rev-parse HEAD)" "$head0" "P10: 실패 · 성공을 거친 뒤에도 커밋이 없다"
 
+# ── 출처 커밋이 사라진 팀 폴더 (최종 리뷰 Important 1) ────────────────────────────
+# 브랜치에서 framing audit 을 고쳐 커밋 → create --layout team → 그 브랜치를 squash 로 main 에 머지 → 새 clone.
+# 새 clone 에는 원자료 사본이 적은 출처 커밋이 없다. 같은 바이트의 나무를 출처 커밋이 남은 사본(sq)에서 양의 짝으로 잰다.
+sqcheck() { (cd "$1" && python3 "$S/team_layout.py" check --roadmap "${RD}sq/roadmap.md") > "$T/chk.txt" 2>&1; echo $?; }   # sqcheck <레포>
+sqorig() { (cd "$1" && python3 "$RW" original --brief docs/iv/t-brief-interview.md --out "${RD}sq") > "$T/out.txt" 2>&1; echo $?; }   # sqorig <레포>
+squpdate() {  # squpdate <레포> <표> — 그 레포의 sq 로드맵을 다시 나눈다, rc 를 echo 한다
+  (cd "$1" && python3 "$RW" update --roadmap "${RD}sq/roadmap.md" --brief docs/iv/t-brief-interview.md --audit docs/iv/t-brief-interview.audit.md \
+     --plan-table "$2" --date 2026-11-15 --change "출처 커밋 재분해" --approval "다시 나눈다") > "$T/out.txt" 2>&1; echo $?; }
+sqjob() {  # sqjob <레포> — 그 레포의 sq 로드맵에 단순 작업 sq-job 을 만든다, rc 를 echo 한다
+  (cd "$1" && python3 "$RW" job new --roadmap "${RD}sq/roadmap.md" --name sq-job --branch fix/sq --paths a.py --goal "출처 커밋 과제" < "$T/said2.txt") > "$T/out.txt" 2>&1; echo $?; }
+sqmoved() {  # sqmoved <레포> <새 표> — 그 레포의 sq 표를 뽑아 D2 를 E1 에서 E2 로 옮긴 표
+  (cd "$1" && python3 "$RW" extract --roadmap "${RD}sq/roadmap.md") > "$T/sqx.md"
+  cell "$T/sqx.md" "$T/sqx0.md" E1 "배정 번호" "C1 · «ext-a» · S1" && cell "$T/sqx0.md" "$2" E2 "배정 번호" "D2 · ST1 · K1 · RC1 · S3 · S4"
+}
+fresh sq
+gx "$T/sq" checkout -qb feature/sq
+printf '초안 단락 둘.\n' >> "$T/sq/docs/iv/t-seed-interview.audit.md"   # 긴 초안 절만 — 옮길 두 절의 바이트는 main 과 같다
+gx "$T/sq" add -- docs/iv && gx "$T/sq" commit -qm sq-src
+src_commit="$(gx "$T/sq" rev-parse HEAD)"
+assert_eq "$(ttc "$T/sq" "$T/sq.md" "${RD}sq")" "0" "출처 커밋 픽스처: 브랜치에서 create --layout team rc 0"
+gx "$T/sq" add -- "${RD}sq" && gx "$T/sq" commit -qm sq-team
+gx "$T/sq" checkout -q main && gx "$T/sq" merge -q --squash feature/sq > /dev/null && gx "$T/sq" commit -qm sq-squash && gx "$T/sq" push -q origin main
+stamp="$(grep -m1 '^<!-- 출처: docs/iv/t-seed-interview.audit.md@' "$T/sq/${RD}sq/intent/original.md" | sed 's/^<!-- 출처: [^@]*@\([0-9a-f]*\) .*/\1/')"
+assert_eq "$stamp" "$src_commit" "출처 커밋 픽스처: framing 구간의 출처 커밋은 브랜치의 커밋이다"
+git clone -q "$T/sq.git" "$T/sq2"
+git -C "$T/sq" cat-file -e "${stamp}^{commit}" 2>/dev/null && ok "출처 커밋 픽스처: 머지한 사본(sq)에는 그 커밋이 있다(양성 대조)" || no "출처 커밋 픽스처: sq 에 그 커밋이 없다"
+git -C "$T/sq2" cat-file -e "${stamp}^{commit}" 2>/dev/null && no "출처 커밋 픽스처: 새 clone 에 그 커밋이 남았다 — 픽스처가 읽히는 커밋으로 무너졌다" || ok "출처 커밋 픽스처: 새 clone 에는 그 커밋이 없다"
+cmp -s "$T/sq/${RD}sq/intent/original.md" "$T/sq2/${RD}sq/intent/original.md" && ok "출처 커밋 픽스처: 두 사본의 원자료 사본이 같은 바이트다" || no "출처 커밋 픽스처: 두 사본의 원자료 사본이 다르다"
+sqmoved "$T/sq2" "$T/sq2-moved.md"
+# 양의 짝 — 출처 커밋이 남은 sq(같은 나무)에서는 같은 명령이 검사 불가를 내지 않는다
+assert_eq "$(sqcheck "$T/sq")" "0" "양의 짝(sq): check rc 0"
+assert_not_contains "$(cat "$T/chk.txt")" "검사 불가" "양의 짝(sq): check 에 「검사 불가」 가 없다"
+assert_eq "$(sqorig "$T/sq")" "0" "양의 짝(sq): original rc 0"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): original 에 「검사 불가」 가 없다"
+assert_eq "$(ttc "$T/sq" "$T/sq.md" "${RD}sq")" "0" "양의 짝(sq): create 다시 rc 0"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): create 에 「검사 불가」 가 없다"
+sqmoved "$T/sq" "$T/sq-moved.md"
+assert_eq "$(squpdate "$T/sq" "$T/sq-moved.md")" "0" "양의 짝(sq): update rc 0"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): update 에 「검사 불가」 가 없다"
+assert_not_contains "$(cat "$T/out.txt")" "목표 칸이" "양의 짝(sq): 번호만 옮긴 update 에는 목표 칸 알림이 없다"
+assert_eq "$(sqjob "$T/sq")" "0" "양의 짝(sq): job new rc 0"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): job new 에 「검사 불가」 가 없다"
+# update 가 team 나무 검사의 알림을 화면에 낸다 — E1 의 의도만 바꾸면 INTENT.md 는 그대로라 목표 칸 알림이 난다
+(cd "$T/sq" && python3 "$RW" extract --roadmap "${RD}sq/roadmap.md") > "$T/sqg0.md"
+cell "$T/sqg0.md" "$T/sq-goal.md" E1 "의도" "출처 커밋 새 의도"
+assert_eq "$(squpdate "$T/sq" "$T/sq-goal.md")" "4" "update · 의도를 바꿨다: 종료 코드 4"
+assert_contains "$(cat "$T/out.txt")" "[spec-distill] ${RD}sq/jobs/E1/INTENT.md: 목표 칸이 로드맵의 의도 · 범위와 다르다" "update: team 나무 검사의 알림 줄을 화면에 낸다"
+# 새 clone(sq2) — 출처 커밋을 읽지 못한다
+assert_eq "$(sqcheck "$T/sq2")" "3" "출처 커밋이 없다: check rc 3(검사 불가)"
+assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/t-seed-interview.audit.md · 원문 " "출처 커밋이 없다: check 가 그 구간의 출처 경로와 절 이름을 낸다"
+assert_contains "$(cat "$T/chk.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: check 가 「검사 불가 — 」 로 원자료 사본을 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: check 가 그 커밋의 파일을 읽지 못했다고 말한다"
+assert_eq "$(grep -c '검사 불가 — ' "$T/chk.txt")" "2" "출처 커밋이 없다: 검사 불가 줄은 브랜치 커밋을 적은 두 구간(원문 · 질문 전체)뿐"
+b_sq2="$(snap "$T/sq2")"
+assert_eq "$(squpdate "$T/sq2" "$T/sq2-moved.md")" "1" "출처 커밋이 없다: update rc 1"
+assert_contains "$(cat "$T/out.txt")" "검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: update 가 검사 불가 사유를 낸다"
+assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: update 가 그 커밋을 짚는다"
+[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: update 뒤 나무 그대로" || no "출처 커밋이 없다: update 가 나무를 바꿨다"
+assert_eq "$(ttc "$T/sq2" "$T/sq.md" "${RD}sq")" "1" "출처 커밋이 없다: create 다시 rc 1"
+assert_contains "$(cat "$T/out.txt")" "검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: create 가 검사 불가 사유를 낸다"
+assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: create 가 그 커밋을 짚는다"
+[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: create 뒤 나무 그대로" || no "출처 커밋이 없다: create 가 나무를 바꿨다"
+assert_eq "$(sqorig "$T/sq2")" "0" "출처 커밋이 없다: original rc 0(이 명령이 만든 문제가 아니다)"
+assert_contains "$(cat "$T/out.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: original 이 검사 불가 줄을 낸다"
+assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: original 이 그 커밋을 짚는다"
+[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: original 은 쓰지 않았다(사본이 이미 출처와 같다)" || no "출처 커밋이 없다: original 이 나무를 바꿨다"
+assert_eq "$(sqjob "$T/sq2")" "0" "출처 커밋이 없다: job new rc 0"
+[ -f "$T/sq2/${RD}sq/jobs/sq-job/INTENT.md" ] && [ -f "$T/sq2/${RD}sq/jobs/sq-job/results/.gitkeep" ] && ok "출처 커밋이 없다: job new 가 과제 폴더를 만들었다" || no "출처 커밋이 없다: job new 가 과제 폴더를 만들지 않았다"
+assert_contains "$(cat "$T/out.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: job new 가 검사 불가 줄을 낸다"
+assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: job new 가 그 커밋을 짚는다"
+
 finish
