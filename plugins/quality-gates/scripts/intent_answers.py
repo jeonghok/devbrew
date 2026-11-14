@@ -21,6 +21,8 @@ TYPE_VALUE = "qg-intent-answer"
 _UNIDENTIFIED = re.compile(r"unidentified:[0-9a-f]{12}")
 _HEAD_OBS = "## 근거로 본 관찰"
 _WS = re.compile(r"\s")
+# 답 파일 이름의 꼴 — answer_filename 이 내는 모양 하나. 읽을 때(read_answered)도 이 꼴만 받는다.
+_ANSWER_NAME = re.compile(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.md")
 
 
 def make_id(source: str, what: str, kind: str) -> Optional[str]:
@@ -46,9 +48,17 @@ def split_id(ident: str) -> Optional[tuple]:
     return (parts[0], parts[1], parts[2])
 
 
+def is_answer_filename(name: str) -> bool:
+    """qg 가 쓰는 꼴(`<8자리>T<6자리>Z-<16진 12자>.md`)의 이름인가. 끝 개행도 받지 않는다(fullmatch)."""
+    return isinstance(name, str) and _ANSWER_NAME.fullmatch(name) is not None
+
+
 def answer_filename(ident: str, answered_at: str) -> str:
     stamp = re.sub(r"[-:]", "", answered_at)
-    return "%s-%s.md" % (stamp, hashlib.sha1(ident.encode("utf-8")).hexdigest()[:12])
+    name = "%s-%s.md" % (stamp, hashlib.sha1(ident.encode("utf-8")).hexdigest()[:12])
+    if not is_answer_filename(name):
+        raise ValueError("answered_at 이 YYYY-MM-DDTHH:MM:SSZ 꼴이 아니다: %r" % answered_at)
+    return name
 
 
 def _defang(text: str) -> str:
@@ -160,7 +170,7 @@ def read_answered(answers_dir: str) -> tuple:
         if not name.endswith(".md"):
             continue
         path = os.path.join(answers_dir, name)
-        if os.path.islink(path) or not os.path.isfile(path):
+        if not is_answer_filename(name) or os.path.islink(path) or not os.path.isfile(path):
             unreadable += 1
             continue
         try:

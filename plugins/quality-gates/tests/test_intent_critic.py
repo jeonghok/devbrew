@@ -30,6 +30,11 @@ AT2 = "2026-11-14T02:00:00Z"
 IDENT = "a.md#D1#방향"
 
 
+def _wf(n):
+    """qg 가 쓰는 꼴의 답 파일 이름(answer_filename 과 같은 모양) — n 이 작을수록 먼저 정렬된다."""
+    return "20261114T010203Z-%012x.md" % n
+
+
 def _git(repo, *args):
     return subprocess.run(["git", "-C", repo] + list(args), capture_output=True,
                           text=True, encoding="utf-8")
@@ -116,37 +121,56 @@ class TestAnswerFile(unittest.TestCase):
 class TestReadAnswered(unittest.TestCase):
     def test_read_answered_latest_wins(self):
         with tempfile.TemporaryDirectory() as d:
-            Path(d, "1.md").write_text(_answer_text(answer="지금은 모르겠다", at=AT2),
+            # 늦은 answered_at 이 먼저 정렬되는 파일에 있다 — 파일 이름 순서가 아니라 answered_at 이 이긴다
+            Path(d, _wf(1)).write_text(_answer_text(answer="지금은 모르겠다", at=AT2),
                                        encoding="utf-8")
-            Path(d, "2.md").write_text(_answer_text(answer="의도다", at=AT1), encoding="utf-8")
+            Path(d, _wf(2)).write_text(_answer_text(answer="의도다", at=AT1), encoding="utf-8")
             answered, bad = ia.read_answered(d)
             self.assertEqual(bad, 0)
             self.assertEqual(answered[IDENT]["answer"], "지금은 모르겠다")
-            self.assertTrue(answered[IDENT]["path"].endswith("1.md"))
+            self.assertTrue(answered[IDENT]["path"].endswith(_wf(1)))
 
     def test_read_answered_tie_uses_filename(self):
         with tempfile.TemporaryDirectory() as d:
-            Path(d, "a.md").write_text(_answer_text(answer="의도다"), encoding="utf-8")
-            Path(d, "b.md").write_text(_answer_text(answer="잘못 골랐다"), encoding="utf-8")
+            Path(d, _wf(1)).write_text(_answer_text(answer="의도다"), encoding="utf-8")
+            Path(d, _wf(2)).write_text(_answer_text(answer="잘못 골랐다"), encoding="utf-8")
             answered, _ = ia.read_answered(d)
             self.assertEqual(answered[IDENT]["answer"], "잘못 골랐다")
 
     def test_read_answered_skips_broken(self):
         with tempfile.TemporaryDirectory() as d:
-            Path(d, "1.md").write_text("no frontmatter\n", encoding="utf-8")
-            Path(d, "2.md").write_text("---\nid: [\n---\n", encoding="utf-8")
-            Path(d, "3.md").write_text(_answer_text().replace("answer: 의도다", "answer: 모름"),
+            Path(d, _wf(1)).write_text("no frontmatter\n", encoding="utf-8")
+            Path(d, _wf(2)).write_text("---\nid: [\n---\n", encoding="utf-8")
+            Path(d, _wf(3)).write_text(_answer_text().replace("answer: 의도다", "answer: 모름"),
                                        encoding="utf-8")
             real = Path(d, "real.txt")
             real.write_text(_answer_text(), encoding="utf-8")
-            os.symlink(str(real), os.path.join(d, "4.md"))
+            os.symlink(str(real), os.path.join(d, _wf(4)))
             answered, bad = ia.read_answered(d)
             self.assertEqual(answered, {})
             self.assertEqual(bad, 4)
 
+    def test_read_answered_rejects_names_qg_does_not_write(self):
+        good = ia.answer_filename(IDENT, AT1)
+        self.assertTrue(ia.is_answer_filename(good))
+        for bad in ("x.md", "a\nb.md", good[:-3] + "\n.md", good.upper(), "1" + good,
+                    good.replace("Z-", "Z_"), good + "\n"):
+            self.assertFalse(ia.is_answer_filename(bad), repr(bad))
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("x.md", "20261114T010203Z\n-000000000001.md", "1.md"):
+                Path(d, name).write_text(_answer_text(answer="의도다"), encoding="utf-8")
+            self.assertEqual(ia.read_answered(d), ({}, 3))
+            Path(d, good).write_text(_answer_text(answer="잘못 골랐다"), encoding="utf-8")
+            answered, bad = ia.read_answered(d)
+            self.assertEqual((answered[IDENT]["answer"], bad), ("잘못 골랐다", 3))
+
+    def test_answer_filename_refuses_odd_stamp(self):
+        with self.assertRaises(ValueError):
+            ia.answer_filename(IDENT, "2026-11-14 01:02")
+
     def test_unidentified_left_out_and_not_unreadable(self):
         with tempfile.TemporaryDirectory() as d:
-            Path(d, "u.md").write_text(_answer_text(ident="unidentified:0123456789ab"),
+            Path(d, _wf(1)).write_text(_answer_text(ident="unidentified:0123456789ab"),
                                        encoding="utf-8")
             self.assertEqual(ia.read_answered(d), ({}, 0))
 
@@ -873,7 +897,7 @@ def _filter_rd(rd, call="first-only", mode="pr", sources=(SRC,), aliases=None, a
     os.makedirs(root, exist_ok=True)
     for i, (ident, answer, obs) in enumerate(answers):
         _write(ia.render_answer_file(ident, "Q?", "구절", "고른 라벨", [obs], answer, answer,
-                                     "t", AT1), root, "%d.md" % i)
+                                     "t", AT1), root, _wf(i))
     walk = "".join("관찰 %d\n" % i for i in range(1, n_evidence + 1))
     _write(io_.build_evidence(walk, None)[0], rd, "intent-evidence.txt")
     _write(_config_text(), rd, "intent-config.txt")
@@ -1162,7 +1186,7 @@ class TestPrepare(unittest.TestCase):
     def test_answered_listing_and_unreadable(self):
         _write("관찰\n", self.rd, "e2e-record.md")
         with tempfile.TemporaryDirectory() as tree:
-            _write(_answer_text(), tree, ANS_DIR, "1.md")
+            _write(_answer_text(), tree, ANS_DIR, _wf(1))
             _write("broken\n", tree, ANS_DIR, "2.md")
             p = self._prep([], tree_root=tree)
             self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
@@ -1935,7 +1959,7 @@ class TestFilteredListed(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIn(ID1, rows[0])
         self.assertIn("의도다", rows[0])
-        self.assertIn(ANS_DIR + "/0.md", rows[0])
+        self.assertIn(ANS_DIR + "/" + _wf(0), rows[0])
         self.assertNotIn("이 범위가 더한 답 파일", rows[0])
 
     def test_count_and_list_agree(self):
@@ -1946,18 +1970,29 @@ class TestFilteredListed(unittest.TestCase):
         rows = self._listed(section)
         self.assertEqual(len(rows), 2)
         self.assertIn("잘못 골랐다", rows[1])
-        self.assertIn(ANS_DIR + "/1.md", rows[1])
+        self.assertIn(ANS_DIR + "/" + _wf(1), rows[1])
         self.assertIn("이미 「잘못 골랐다」 답이 있어 거른 질문:", section)
 
     def test_range_added_answer_file_is_marked(self):
-        names = {1: "a.txt\n", 2: "a.txt\n%s/0.md\n" % ANS_DIR}
+        names = {1: "a.txt\n", 2: "a.txt\n%s/%s\n" % (ANS_DIR, _wf(0))}
         f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
         self.assertIn("이 범위가 더한 답 파일", self._listed(section)[0])
         with tempfile.TemporaryDirectory() as rd:
             self.rd = rd
-            names = {1: "%s/0.md\n" % ANS_DIR, 2: "a.txt\n"}
+            names = {1: "%s/%s\n" % (ANS_DIR, _wf(0)), 2: "a.txt\n"}
             f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
             self.assertNotIn("이 범위가 더한 답 파일", self._listed(section)[0])
+
+    def test_odd_answer_file_names_do_not_filter(self):
+        root = _filter_rd(self.rd)
+        for name in ("x.md", "20261114T010203Z\n-000000000001.md"):
+            _write(ia.render_answer_file(ID1, "Q?", "구절", "고른 라벨", [OBS1], "의도다",
+                                         "의도다", "t", AT1), root, name)
+        _write(_out([_q("D1", same_as=ID1)]), self.rd, "intent-critic-1.txt")
+        p = _cli("filter", "--rd", self.rd)
+        self.assertEqual(_last(p), "intent-ask: 1")
+        self.assertNotIn("이미 답한 질문이라 거름", p.stdout)
+        self.assertEqual(ia.read_answered(root), ({}, 2))
 
     def test_no_names_list_is_disclosed(self):
         f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)])
