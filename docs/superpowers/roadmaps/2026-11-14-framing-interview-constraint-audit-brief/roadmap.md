@@ -62,20 +62,20 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 근거: S3 · S5 · S16
 
 ### F4 — 앞단의 끝
-- 의도: 앞단의 끝이 작은 일도 리더로 넘기고 넘김 글을 짧게 쓰며, 작은 일에서 건너뛴 조사 · 리뷰를 검사가 받아 사용자에게 보인다
-- 범위: 한다: 끝맺음 절차 파일 고치기(넘김 글은 짧게 · 자세한 지시는 파일 경로로 · superpowers 가 없을 때의 끝 게이트), 옆 로드맵이 넘긴 셋(분해 승인 화면에 지시 원문 범위 보이기 · 분해 전에 원자료 파일 만들기 · 새 형식을 켤 때 끝맺음의 커밋 범위에 역할 문서 넷과 HANDBOOK.md 넣기), 머지된 PR #274 의 재리뷰가 남긴 잔여 셋 고치기(질문이 떠 있는 동안 손으로 머지됐거나 gh 가 실패로 끝났는데 실제로는 머지된 PR 이 「머지하지 않았다」 로 읽히고 origin 을 받지 않는다 · 취소가 머지 요청이 나간 직후에 닿으면 판결 줄이 없어 「머지하지 않았다」 로 읽는데 실제로는 머지됐을 수 있다 · 경로 판정이 「값의 출처」 줄을 사용자에게 한 번 더 보인다), 「모델 판단으로 건너뜀 — 이유」 를 구조 검사가 받고 승인 화면 앞에서 보이기 / 안 한다: 단계 나누기와 이름 바꾸기(F5), PR #274 가 더한 「PR 과 머지」 절을 잔여 셋 밖에서 다시 짜기
+- 의도: 앞단의 끝이 넘김 글을 짧게 쓰고, 작은 일에서 건너뛴 조사 · 리뷰를 검사가 받아 사용자에게 보인다
+- 범위: 한다: 끝맺음 절차 파일 고치기(넘김 글은 짧게 · 자세한 지시는 파일 경로로 · superpowers 가 없을 때의 끝 게이트), 머지된 PR #274 의 재리뷰가 남긴 잔여 셋 고치기(질문이 떠 있는 동안 손으로 머지됐거나 gh 가 실패로 끝났는데 실제로는 머지된 PR 이 「머지하지 않았다」 로 읽히고 origin 을 받지 않는다 · 취소가 머지 요청이 나간 직후에 닿으면 판결 줄이 없어 「머지하지 않았다」 로 읽는데 실제로는 머지됐을 수 있다 · 경로 판정이 「값의 출처」 줄을 사용자에게 한 번 더 보인다), 「모델 판단으로 건너뜀 — 이유」 를 구조 검사가 받고 승인 화면 앞에서 보이기 / 안 한다: 단계 나누기와 이름 바꾸기(F5), 작은 일을 리더로 넘기기(F5), 옆 로드맵이 넘긴 넷(F5), PR #274 가 더한 「PR 과 머지」 절을 잔여 셋 밖에서 다시 짜기
 - 의존: 없음
 - 브랜치: feature/front-stage-exit
 - 묶음: F4.md
-- 경로 예약: plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/saturation.md
+- 경로 예약: plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/scripts/check_brief.py, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/saturation.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/references/brief-handoff.md
 - 크기: 중간
 - 병렬: P1 · F2 · F3 · F6 과 병렬
-- 순서 이유: 끝맺음 파일의 주인이 이 일로 정해졌다 — 넘겨받은 것은 옆 첫 에픽이 머지된 뒤에 한다
+- 순서 이유: 끝맺음 파일의 주인이 이 일로 정해졌다 — 옆 로드맵을 기다리지 않는다
 - 근거: S20 · S28
 
 ### F5 — 앞단 다시 짜기
 - 의도: 앞단 skill 글을 줄이고, 인터뷰를 컨텍스트 쌓기와 로드맵 잡기 두 단계로 나누고, F1 이 정한 이름으로 바꾼다
-- 범위: 한다: 이유 · 이력 설명 · 낡은 서술 · 옛 설계 번호 걷어내기, 단계 나누기와 단계 사이 넘김, 이름이 박힌 층(호출 이름 · 설정 키 · 설계문서 머리 키 · 파일 이름 끝 · 산출물 종류 글자 · 폴더 이름) 가운데 바꿀 것 정하기, 옛 기록을 읽는 길, major 판 올림 / 안 한다: 옛 기록 파일 옮기기, 옆 로드맵이 예약한 파일을 순서 맞추기 없이 고치기
+- 범위: 한다: 이유 · 이력 설명 · 낡은 서술 · 옛 설계 번호 걷어내기, 단계 나누기와 단계 사이 넘김, 이름이 박힌 층(호출 이름 · 설정 키 · 설계문서 머리 키 · 파일 이름 끝 · 산출물 종류 글자 · 폴더 이름) 가운데 바꿀 것 정하기, 옛 기록을 읽는 길, major 판 올림, 작은 일을 리더로 넘기기(옆 로드맵 둘째 에픽이 받는 길을 정한 뒤), 옆 로드맵이 넘긴 넷(분해 전에 원자료 파일 만들기 · 분해 승인 화면에 지시 원문 범위 보이기 · 끝내기 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 · 로드맵 생성을 인터뷰 커밋 뒤로), 묻지 않은 다섯(확인 표시가 사용자 원문 문장에 안 붙는 것 · 라운드 꼴 고정 · 의심 게이트의 추천 봉쇄 · 조사 호출 상한 · 쉬운 말 규칙의 사용자 이름)과 에픽 넘김 줄의 「사용자 선호」 라벨 / 안 한다: 옛 기록 파일 옮기기, 옆 로드맵이 예약한 파일을 순서 맞추기 없이 고치기
 - 의존: F1, F3, F4
 - 브랜치: feature/front-stage-restructure
 - 묶음: F5.md
@@ -128,6 +128,12 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 ### 2026-11-14 · 처음 로드맵
 - 원문:
   - 「승인 (권장)」
+
+### 2026-11-15 · 옆 로드맵이 넘긴 넷과 작은 일을 리더로 넘기기를 F4 에서 F5 로 옮긴다 — 넷은 지금 끝맺음의 순서로는 돌 수 없고 F5 가 만드는 「로드맵 잡기」 단계의 일이다
+- 바뀜: 바뀐 에픽 F4 · F5 「추천으로」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「추천으로」
+  - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
