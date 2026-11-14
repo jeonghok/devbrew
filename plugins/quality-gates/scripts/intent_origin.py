@@ -13,6 +13,8 @@ import yaml
 PASS_VERDICTS = ("STILL_GREEN", "FIXED", "NEW_TEST_GREEN")
 NOTICE_DIFF_UNREADABLE = "차등 결과를 읽지 못함 — 근거로 세지 않았다"
 REASON_UNTRACKED = "추적 안 된 파일 또는 없음"
+# 리뷰 트리에서 읽은 값은 줄 단위 세션 파일(intent-plan.txt 등)로 간다 — 한 줄 · 제어 문자 없음만 받는다.
+REASON_CONTROL = "여러 줄 또는 제어 문자"
 
 _INTENT_DOUBT_WORDS = ("위험", "기각", "열린 질문", "risk", "rejected", "open question")
 _ROADMAP_DOUBT_WORDS = ("위험", "열린 질문", "risk", "open question")
@@ -110,8 +112,15 @@ def _run_git(repo: str, *args: str):
         return None
 
 
+def single_line(value: str) -> bool:
+    """줄바꿈 · 탭 · 제어 문자 · 구분 문자(보통 공백 말고)가 없는 한 줄인가."""
+    return value.isprintable()
+
+
 def read_tracked(repo: str, commit: str, rel: str) -> tuple:
     """(내용 | None, 거부 사유 | None). 그 커밋에서 추적되는 보통 파일만 읽는다."""
+    if not single_line(rel):
+        return (None, REASON_CONTROL)
     if rel.startswith("/"):
         return (None, "절대 경로")
     parts = rel.split("/")
@@ -119,7 +128,7 @@ def read_tracked(repo: str, commit: str, rel: str) -> tuple:
         return (None, "상위 경로(..)")
     if ".git" in parts:
         return (None, ".git 아래")
-    if not rel or "\0" in rel:
+    if not rel:
         return (None, REASON_UNTRACKED)
     tree = _run_git(repo, "ls-tree", "-z", commit, "--", rel)
     if tree is None or tree.returncode != 0:
@@ -339,7 +348,9 @@ def _add_origin_doc(rel: str, text: str, st: dict) -> None:
     source = rel
     if frontmatter_value(text, "type") == "epic-bundle":
         brief = frontmatter_value(text, "source_brief")
-        if brief:
+        if brief and not single_line(brief):
+            _note(st, "묶음 source_brief 거부 — " + REASON_CONTROL)
+        elif brief:
             source = brief
             st["aliases"][rel] = brief
     if source not in st["sources"]:

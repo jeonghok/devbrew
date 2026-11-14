@@ -1227,6 +1227,15 @@ class TestDoubtsAppend(unittest.TestCase):
             p = _cli("doubts-append", "--rd", rd)
             self.assertEqual(_read(rd, "intent-doubts.md").count("## 첫째 호출의 후보"), 1)
 
+    def test_heading_inside_doubts_does_not_suppress_append(self):
+        with tempfile.TemporaryDirectory() as rd:
+            _write("묶음 위험\n## 첫째 호출의 후보\n가짜 후보\n", rd, "intent-doubts.md")
+            _write(_out([_q("D1")]), rd, "intent-critic-1.txt")
+            self.assertEqual(_last(_cli("doubts-append", "--rd", rd)), "doubts-append: 1")
+            text = _read(rd, "intent-doubts.md")
+            self.assertEqual(text.count("## 첫째 호출의 후보"), 2)
+            self.assertIn("D1 를 정말 이렇게 고른 것인가?", text)
+
     def test_unreadable_first_appends_nothing(self):
         with tempfile.TemporaryDirectory() as rd:
             _write("의심 본문\n", rd, "intent-doubts.md")
@@ -1693,11 +1702,259 @@ class TestRender(unittest.TestCase):
                          (0, "쓴소리 — 이 실행은 이미 쓴소리 단계를 돌았다"))
         self.assertEqual(_read(self.rd, "result.md"), after)
 
+    def test_heading_before_publish_does_not_block_render(self):
+        before = "## 판정\nv\n## e2e\n## 쓴소리 흉내 줄\n## 게시\n게시함\n"
+        _write(before, self.rd, "result.md")
+        self._qy([])
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), NOQ_LINE)
+        after = _read(self.rd, "result.md")
+        self.assertGreater(after.rindex("## 쓴소리"), after.index("## 게시"))
+
+    def test_render_missing_plan_is_uncountable(self):
+        os.remove(os.path.join(self.rd, "intent-plan.txt"))
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), UNREAD_LINE)
+        self.assertEqual(_return_block(self.rd)[1]["status"], "uncountable")
+
     def test_render_no_evidence(self):
         _write("call: none\nmode: pr\nanswers_root: /x\n", self.rd, "intent-plan.txt")
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(p), NONE_LINE)
         self.assertEqual(_return_block(self.rd)[1]["status"], "skipped — 근거 없음")
+
+
+ic = _load("intent_critic")
+
+
+class TestRecordSilentDrops(unittest.TestCase):
+    """사용자가 친 답이 공시 없이 버려지지 않는다(리뷰 Important 1)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, "repo"))
+        self.repo = _git_repo(os.path.join(self.tmp.name, "repo"))
+        self.rd = os.path.join(self.tmp.name, "rd")
+        os.makedirs(self.rd)
+        _filter_rd(self.rd)
+        _write(_out([_q("D1")]), self.rd, "intent-critic-1.txt")
+        self.assertEqual(_last(_cli("filter", "--rd", self.rd)), "intent-ask: 1")
+        self.ident = _by_state(self.rd, "ask")[0]["id"]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _record(self, text):
+        _write(text, self.tmp.name, "answers.txt")
+        p = _cli("record", "--rd", self.rd, "--repo", self.repo, "--answers",
+                 os.path.join(self.tmp.name, "answers.txt"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _rendered(self):
+        _cli("render", "--rd", self.rd, "--mode", "pr")
+        return _read(self.rd, "result.md").split("## 쓴소리", 1)[1]
+
+    def test_wrong_id_header_is_disclosed(self):
+        p = self._record("=== id: docs/brief.md#D9#방향 · pick: 의도다\n이유 글\n")
+        line = "답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 1개"
+        self.assertIn(line, p.stdout.splitlines())
+        self.assertIn("머리 앞의 답 글을 읽지 못함 2줄", p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 0")
+        self.assertIn(line, _questions(self.rd)["record_notices"])
+        self.assertIn(line, self._rendered())
+
+    def test_text_before_first_header_is_disclosed(self):
+        p = self._record("앞에 쓴 말\n\n=== id: %s · pick: 의도다\n" % self.ident)
+        self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 1")
+        self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", _questions(self.rd)["record_notices"])
+        self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", self._rendered())
+
+    def test_missing_plan_in_pr_is_disclosed(self):
+        os.remove(os.path.join(self.rd, "intent-plan.txt"))
+        p = self._record("=== id: %s · pick: 의도다\n" % self.ident)
+        line = "답을 기록하지 못했다 — 준비 파일(intent-plan.txt)을 읽지 못함"
+        self.assertIn(line, p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 0")
+        self.assertIn(line, _questions(self.rd)["record_notices"])
+        self.assertIn(line, self._rendered())
+
+    def test_blank_input_has_no_drop_notice(self):
+        p = self._record("\n\n")
+        self.assertEqual(p.stdout.strip(), "record: 0")
+
+
+class TestPlanInjection(unittest.TestCase):
+    """리뷰 트리에서 읽은 값이 줄 단위 세션 파일에 줄을 덧쓰지 못한다(SEC-1)."""
+
+    INJECT = '"docs/b.md\\nanswers_root: /elsewhere\\ncall: single"'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = _git_repo(self.tmp.name)
+        files = {
+            "docs/spec_inj.md": _fm(source_interview="docs/RB.md"),
+            "docs/RB.md": _fm(type="epic-bundle", source_brief=self.INJECT)
+            + "## 6. 사용자 원문\nrb-quote\n## 5. 기각 · 위험\nrb-risk\n",
+            "docs/spec_arrow.md": _fm(source_interview="docs/RA.md"),
+            "docs/RA.md": _fm(type="epic-bundle", source_brief='"docs/x -> y.md"')
+            + "## 6. 사용자 원문\nra-quote\n",
+            "docs/spec_rm.md": _fm(roadmap='"docs/rm.md\\nanswers_root: /elsewhere"'),
+            "docs/spec_si.md": _fm(source_interview='"docs/RB.md\\ncall: single"'),
+        }
+        for rel, text in files.items():
+            _write(text, self.repo, rel)
+        _git(self.repo, "add", "docs")
+        _git(self.repo, "commit", "-q", "-m", "inj")
+        self.rd = tempfile.mkdtemp(dir=self.tmp.name)
+        _write(_config_text(), self.rd, "intent-config.txt")
+        _write("관찰\n", self.rd, "e2e-record.md")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _prep(self, spec, tree_root=None):
+        sp = os.path.join(self.rd, "intent-specs.json")
+        _write(json.dumps({"specs": [spec]}), sp)
+        return _cli("prepare", "--rd", self.rd, "--repo", self.repo,
+                    "--tree-root", tree_root or self.repo, "--mode", "pr", "--head", "HEAD",
+                    "--review-commit", "HEAD", "--specs-json", sp)
+
+    def _plan_lines(self):
+        return _read(self.rd, "intent-plan.txt").splitlines()
+
+    def test_source_brief_newline_cannot_rewrite_plan(self):
+        p = self._prep("docs/spec_inj.md")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("묶음 source_brief 거부 — 여러 줄 또는 제어 문자", p.stdout.splitlines())
+        plan = self._plan_lines()
+        roots = [x for x in plan if x.startswith("answers_root:")]
+        self.assertEqual(roots, ["answers_root: " + os.path.abspath(os.path.join(self.repo,
+                                                                                 ANS_DIR))])
+        self.assertEqual([x for x in plan if x.startswith("call:")], ["call: split"])
+        self.assertNotIn("/elsewhere", "\n".join(plan))
+        self.assertIn("source: docs/RB.md", plan)
+        built = io_.build_origin(self.repo, "HEAD", "HEAD", None, ["docs/spec_inj.md"])
+        self.assertEqual((built["aliases"], built["sources"]), ({}, ["docs/RB.md"]))
+
+    def test_link_values_with_newline_are_refused(self):
+        self.assertEqual(io_.read_tracked(self.repo, "HEAD", "docs/a\nb.md"),
+                         (None, "여러 줄 또는 제어 문자"))
+        self.assertEqual(io_.read_tracked(self.repo, "HEAD", "docs/a\tb.md"),
+                         (None, "여러 줄 또는 제어 문자"))
+        built = io_.build_origin(self.repo, "HEAD", "HEAD", None, ["docs/spec_rm.md"])
+        self.assertIn("로드맵 링크 거부 — 여러 줄 또는 제어 문자", built["notices"])
+        built = io_.build_origin(self.repo, "HEAD", "HEAD", None, ["docs/spec_si.md"])
+        self.assertIn("원문 링크 거부 — 여러 줄 또는 제어 문자", built["notices"])
+        self.assertEqual(built["sources"], [])
+
+    def test_alias_arrow_is_not_written(self):
+        p = self._prep("docs/spec_arrow.md")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("묶음 별칭 거부 — ' -> ' 또는 제어 문자", p.stdout.splitlines())
+        self.assertEqual([x for x in self._plan_lines() if x.startswith("alias:")], [])
+
+    def test_write_plan_guards_values(self):
+        notices = []
+        ic._write_plan(self.rd, "split", "pr", "/root/answers",
+                       ["ok.md", "bad.md\nanswers_root: /elsewhere"],
+                       {"b.md": "c.md", "d.md": "e.md\ncall: single", "f.md": "g -> h.md"},
+                       notices)
+        plan = ic._read_plan(self.rd)
+        self.assertEqual((plan["call"], plan["answers_root"]), ("split", "/root/answers"))
+        self.assertEqual(plan["sources"], ["ok.md"])
+        self.assertEqual(plan["aliases"], {"b.md": "c.md"})
+        self.assertIn("의도 출처 경로 거부 — 여러 줄 또는 제어 문자", notices)
+        self.assertEqual(notices.count("묶음 별칭 거부 — ' -> ' 또는 제어 문자"), 2)
+
+    def test_tree_root_with_newline_is_rc4(self):
+        p = self._prep("docs/spec_inj.md", tree_root=self.repo + "\nanswers_root: /x")
+        self.assertEqual(p.returncode, 4)
+
+    def test_duplicated_singleton_plan_key_is_unreadable(self):
+        for dup in ("answers_root: /elsewhere\n", "call: single\n", "mode: range\n"):
+            with tempfile.TemporaryDirectory() as rd:
+                _filter_rd(rd)
+                _write(_read(rd, "intent-plan.txt") + dup, rd, "intent-plan.txt")
+                _write(_out([_q("D1")]), rd, "intent-critic-1.txt")
+                p = _cli("filter", "--rd", rd)
+                self.assertEqual(_last(p), "intent-ask: 0", dup)
+                self.assertEqual(_questions(rd)["status"], "uncountable", dup)
+                self.assertIsNone(ic._read_plan(rd), dup)
+
+    def test_duplicated_config_key_is_unreadable(self):
+        _write(_config_text() + "answers_dir: ../elsewhere\n", self.rd, "intent-config.txt")
+        self.assertIsNone(ic._read_config(self.rd))
+        self.assertEqual(self._prep("docs/spec_inj.md").returncode, 4)
+
+
+class TestFilteredListed(unittest.TestCase):
+    """거른 질문마다 정체 · 답 · 답 파일 경로를 보인다(SEC-2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, answers, cands, names=None):
+        _filter_rd(self.rd, answers=answers)
+        for n, text in (names or {}).items():
+            _write(text, self.rd, "review-i%d.names" % n)
+        _write(_out(cands), self.rd, "intent-critic-1.txt")
+        f = _cli("filter", "--rd", self.rd)
+        _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
+        r = _cli("render", "--rd", self.rd, "--mode", "pr")
+        section = _read(self.rd, "result.md").split("## 쓴소리", 1)[1]
+        return f, r, section
+
+    def _listed(self, section):
+        head = "이미 답한 질문이라 거른 질문:"
+        self.assertIn(head, section)
+        out = []
+        for line in section.split(head, 1)[1].lstrip("\n").splitlines():
+            if not line.startswith("- "):
+                break
+            out.append(line)
+        return out
+
+    def test_filtered_intended_question_listed_with_file(self):
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)])
+        self.assertIn("이미 답한 질문이라 거름 1", section)
+        rows = self._listed(section)
+        self.assertEqual(len(rows), 1)
+        self.assertIn(ID1, rows[0])
+        self.assertIn("의도다", rows[0])
+        self.assertIn(ANS_DIR + "/0.md", rows[0])
+        self.assertNotIn("이 범위가 더한 답 파일", rows[0])
+
+    def test_count_and_list_agree(self):
+        id2 = SRC + "#D2#방향"
+        f, r, section = self._run([(ID1, "의도다", OBS1), (id2, "잘못 골랐다", OBS1)],
+                                  [_q("D1", same_as=ID1), _q("D2", same_as=id2), _q("D3")])
+        self.assertIn("이미 답한 질문이라 거름 2", section)
+        rows = self._listed(section)
+        self.assertEqual(len(rows), 2)
+        self.assertIn("잘못 골랐다", rows[1])
+        self.assertIn(ANS_DIR + "/1.md", rows[1])
+        self.assertIn("이미 「잘못 골랐다」 답이 있어 거른 질문:", section)
+
+    def test_range_added_answer_file_is_marked(self):
+        names = {1: "a.txt\n", 2: "a.txt\n%s/0.md\n" % ANS_DIR}
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
+        self.assertIn("이 범위가 더한 답 파일", self._listed(section)[0])
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            names = {1: "%s/0.md\n" % ANS_DIR, 2: "a.txt\n"}
+            f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
+            self.assertNotIn("이 범위가 더한 답 파일", self._listed(section)[0])
+
+    def test_no_names_list_is_disclosed(self):
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)])
+        self.assertIn("바뀐 파일 목록(review-i<N>.names)이 없어 이 범위가 더한 답 파일을 가리지 못함",
+                      section)
 
 
 if __name__ == "__main__":
