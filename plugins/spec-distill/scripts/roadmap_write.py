@@ -16,6 +16,9 @@
   roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-audit <경로>]
                           team 형식의 원자료 사본(original.md)을 만들거나 끝에 덧붙인다(분해안을 쓰기 전에 부른다).
                           audit 은 brief 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이다
+  roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄>
+                          [--not <한 줄>]…   단순 작업(kind: task)의 과제 폴더를 만든다 — 지시 원문은 표준 입력의
+                          바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류 ·
           4 썼다 — 사람이 고칠 것이 남았다(update · team 형식 — 손으로 고칠 INTENT.md 를 화면에 냈다).
@@ -606,6 +609,12 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--brief", "--out"):
         o.add_argument(flag, required=True)
     o.add_argument("--framing-audit")
+    j = sub.add_parser("job").add_subparsers(dest="job_cmd")
+    j.required = True
+    n = j.add_parser("new")
+    for flag in ("--roadmap", "--name", "--branch", "--paths", "--goal"):
+        n.add_argument(flag, required=True)
+    n.add_argument("--not", dest="nots", action="append")
     return ap
 
 
@@ -613,8 +622,12 @@ def cmd_original(a) -> int:
     return team_write.cmd_original(a, sys.modules[__name__])
 
 
+def cmd_job(a) -> int:
+    return {"new": team_write.cmd_job_new}[a.job_cmd](a, sys.modules[__name__])
+
+
 COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
-            "original": cmd_original}
+            "original": cmd_original, "job": cmd_job}
 
 
 def main(argv=None) -> int:

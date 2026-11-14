@@ -20,7 +20,7 @@ import section6  # noqa: E402
 import team_check  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
-from roadmap_model import frontmatter, unquote  # noqa: E402
+from roadmap_model import frontmatter, parse_roadmap, unquote  # noqa: E402
 
 PREFIX = "[spec-distill] "
 NO_FRAMING = "framing audit 없음"
@@ -385,4 +385,111 @@ def cmd_original(a, W) -> int:
         print(PREFIX + line)
     added = len(team_files.parse_original(new)) - (len(team_files.parse_original(existing)) if existing else 0)
     print(PREFIX + "원자료 사본을 썼다: %s — 구간 %d개를 끝에 더했다" % (team.original, added))
+    return 0
+
+
+# ── job new: 단순 작업의 과제 폴더 ─────────────────────────────────────────────
+
+LINE_BREAKS = ("\n", "\r")
+PATH_FORBIDDEN = ("[", "]") + LINE_BREAKS   # 머리 `paths: [a, b]` 한 줄을 깨는 글자 — 쉼표는 나누는 자리라 빈 원소로 드러난다
+
+
+def _one_line(flag: str, value: str, W) -> str:
+    """빈 글이거나 줄바꿈이 든 값은 Usage — 머리 한 줄 · 칸의 한 줄에 들어갈 값이다."""
+    if not value.strip():
+        raise W.Usage("%s 가 비었다" % flag)
+    if any(c in value for c in LINE_BREAKS):
+        raise W.Usage("%s 는 한 줄이다 — 줄바꿈이 들었다: %r" % (flag, value))
+    return value
+
+
+def job_paths(value: str, W) -> list:
+    """`--paths` 의 쉼표 목록 → 앞뒤 공백을 뗀 원소들. 비었거나 빈 원소 · `[` `]` · 줄바꿈이 든 원소가 있으면 Usage."""
+    items = [p.strip() for p in value.split(",")]
+    if not value.strip():
+        raise W.Usage("--paths 가 비었다")
+    for p in items:
+        if not p:
+            raise W.Usage("--paths 에 빈 원소가 있다(쉼표가 겹치거나 끝에 있다): %r" % value)
+        if any(c in p for c in PATH_FORBIDDEN):
+            raise W.Usage("--paths 의 원소에 [ ] 나 줄바꿈을 넣지 않는다: %r" % p)
+    return items
+
+
+def received_text(data: bytes, W) -> str:
+    """표준 입력의 바이트 → 글(엄격한 UTF-8, 줄바꿈은 바꾸지 않는다). 비었거나 공백뿐이면 · UTF-8 이 아니면 Refused."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise W.Refused("받은 말(표준 입력)이 UTF-8 이 아니다(%s)" % exc)
+    if not text.strip():
+        raise W.Refused("받은 말이 비었다 — 지시 원문은 표준 입력으로 받는다")
+    return text
+
+
+def job_name_refusal(top: Path, team, name: str, roadmap_text: str):
+    """과제 이름으로 못 쓰는 사유 한 줄, 쓸 수 있으면 None — 이름 꼴 · 그 로드맵의 블록 번호(대소문자 무시) ·
+    이미 있는 과제 폴더 자리(매달린 링크도, 대소문자만 다른 이름도)."""
+    problem = team_layout.job_name_problem(name)
+    if problem:
+        return problem
+    _meta, blocks, _rec, _risk, _errors = parse_roadmap(roadmap_text)
+    hit = [b["id"] for b in blocks if str(b.get("id", "")).casefold() == name.casefold()]
+    if hit:
+        return "%s 는 로드맵 %s 의 블록 번호(%s)와 겹친다 — 에픽 · 결정 블록 번호는 과제 이름으로 쓰지 않는다" % (
+            name, team.roadmap, hit[0])
+    folder = top / team.job(name)
+    parent = folder.parent
+    taken = [n for n in (os.listdir(str(parent)) if parent.is_dir() else []) if n.casefold() == name.casefold()]
+    if os.path.lexists(str(folder)) or taken:
+        return "과제 폴더 자리가 이미 있다: %s — 덮어쓰지 않는다" % team.job(taken[0] if taken else name)
+    return None
+
+
+def cmd_job_new(a, W) -> int:
+    """team 로드맵의 팀 폴더에 단순 작업(kind: task)의 과제 폴더를 한 거래로 만든다 — INTENT.md(지시 원문은 표준 입력의
+    바이트 그대로)와 결과 폴더의 빈 파일. 쓴 뒤 team 나무 검사가 오류를 내면 되돌린다. 브랜치를 만들거나 커밋하지 않는다."""
+    goal = _one_line("--goal", a.goal, W)
+    branch = _one_line("--branch", a.branch, W)
+    paths = job_paths(a.paths, W)
+    nots = [_one_line("--not", n, W) for n in a.nots or []]
+    roadmap = Path(os.path.realpath(a.roadmap))
+    top = W.git_top(roadmap)
+    text = W.read(roadmap)
+    if W.roadmap_layout(text) != team_layout.LAYOUT_TEAM:
+        raise W.Refused("team 형식 로드맵이 아니다 — 머리말에 `%s: %s` 가 없다: %s"
+                        % (team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM, W.rel(top, roadmap)))
+    team = team_for(top, roadmap.parent, W)
+    if W.rel(top, roadmap) != team.roadmap:
+        raise W.Refused("--roadmap 은 팀 폴더의 %s 다: %s" % (team_layout.ROADMAP_FILE, W.rel(top, roadmap)))
+    refusal = job_name_refusal(top, team, a.name, text)
+    if refusal:
+        raise W.Refused(refusal)
+    said = received_text(sys.stdin.buffer.read(), W)
+    not_do = "\n".join("- %s" % n for n in nots) if nots else team_files.not_text("")
+    intent = team_files.render_intent(W.read(team_files.TEMPLATES / team_layout.INTENT_FILE), a.name, team_files.KIND_TASK,
+                                      team.roadmap, goal, said, not_do, branch, paths)
+    try:   # 쓰기 전에 되읽는다 — 받은 말 · 한 줄 값이 네 칸을 가르지 않아야 한다
+        back = team_files.intent_sections(intent)
+    except team_files.FormatError:
+        back = {}
+    if tuple(back.get(k) for k in team_files.SECTIONS[:3]) != (goal, said, not_do):
+        raise W.Refused("만든 INTENT.md 가 목표 · 지시 원문 · 하지 않을 것 칸으로 되읽히지 않는다 — 쓰지 않았다"
+                        "(--goal 이 `## <칸 이름>` 꼴이면 칸이 갈린다)")
+    targets = (team.intent(a.name), team.keep(a.name))
+    for rel_path in targets:
+        _refuse_links(top, rel_path, W)
+    txn = W.Txn()
+
+    def body():
+        for rel_path, content in zip(targets, (intent, "")):
+            txn.ensure_dir((top / rel_path).parent)
+            txn.write(top / rel_path, content)
+        errors, _unknown, _notes = team_check.check_tree(top, team)
+        if errors:
+            raise W.Refused("team 나무 검사 실패 — %s" % " / ".join(errors))
+
+    W.run_txn(txn, body)
+    print(PREFIX + "과제 폴더를 만들었다: %s (kind: %s · 브랜치 %s) — 브랜치를 만들거나 커밋하지 않았다"
+          % (team.job(a.name), team_files.KIND_TASK, branch))
     return 0

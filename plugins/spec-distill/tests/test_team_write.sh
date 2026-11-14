@@ -794,4 +794,121 @@ assert_contains "$(cat "$T/out.txt")" "화면 줄 계산 실패" "create: 화면
 [ "$(snap "$T/w5")" = "$b5" ] && ok "create: 화면 줄 계산 실패: 쓴 것을 되돌렸다" || no "create: 화면 줄 계산이 실패했는데 쓴 파일이 남았다"
 assert_eq "$(ttc "$T/w5" "$T/w5.md" "${RD}tb")" "0" "create: 같은 사본 · 같은 표를 그대로 돌리면 rc 0(양의 짝)"
 
+# ── job new: 단순 작업의 과제 폴더 (AC7) ──────────────────────────────────────
+# 위 블록들이 끝난 t1 — 묶음 E1 · E2 · E4 와 결정 P1 의 블록, 로드맵 밖 에픽 과제 폴더 E3 — 이 구조 검사를 통과하는 상태에서 시작한다
+assert_eq "$(check)" "0" "픽스처: job new 앞의 t1 이 구조 검사를 통과한다"
+assert_eq "$(sed -n '/^## 에픽/,/^## 재분해 이력/p' "$W/${RD}t1/roadmap.md" | grep '^### ' | cut -d' ' -f2 | tr '\n' ' ')" "P1 E1 E2 E4 " "픽스처: t1 로드맵의 블록 번호는 P1 · E1 · E2 · E4 다"
+[ ! -e "$W/${RD}t1/jobs/P1" ] && [ -d "$W/${RD}t1/jobs/E1" ] && [ ! -e "$W/${RD}t1/jobs/fix-typo" ] && ok "픽스처: 결정 블록 P1 은 과제 폴더가 없고 E1 은 있고 fix-typo 는 아직 없다" || no "픽스처: t1 의 jobs 아래가 예상과 다르다"
+head0="$(g rev-parse HEAD)"; branches0="$(g branch --list --format='%(refname)')"
+jobnew() { (cd "$W" && python3 "$RW" job new --roadmap "${RD}t1/roadmap.md" "$@") > "$T/out.txt" 2>&1; echo $?; }
+printf '줄 하나\n## 하지 않을 것\n{{JOB}} 그대로\r\n끝 줄바꿈 없음' > "$T/said.bin"
+assert_eq "$(jobnew --name fix-typo --branch fix/typo --paths "a/b.py, docs/c.md" --goal "오타를 고친다" --not "코드 동작 바꾸기" < "$T/said.bin")" "0" "AC7: job new rc 0"
+J="$W/${RD}t1/jobs/fix-typo"
+assert_eq "$(sed -n 1,8p "$J/INTENT.md")" "$(printf -- '---\ntype: job\njob: fix-typo\nkind: task\nroadmap: %st1/roadmap.md\nbranch: fix/typo\npaths: [a/b.py, docs/c.md]\n---' "$RD")" "AC7: 머리"
+[ -f "$J/results/.gitkeep" ] && ok "AC7: results/ 를 만든다" || no "AC7: results/ 없음"
+cat > "$T/sec.py" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import team_files as F
+s = F.intent_sections(open(sys.argv[2], "rb").read().decode("utf-8"))
+print(s["지시 원문"].encode("utf-8") == open(sys.argv[3], "rb").read(), s["목표"], s["하지 않을 것"], repr(s["결정 기록"]))
+PY
+assert_eq "$(python3 "$T/sec.py" "$S" "$J/INTENT.md" "$T/said.bin")" "True 오타를 고친다 - 코드 동작 바꾸기 ''" "AC7: 지시 원문이 받은 글과 바이트가 같다(제목 꼴 줄 · 자리표 · CRLF · 끝 줄바꿈 없음)"
+assert_eq "$(check)" "0" "task 과제 폴더가 든 나무도 구조 검사를 통과한다(범위 검사의 대상이 아니다)"
+[ ! -e "$J/sources.md" ] && ok "task 에는 sources.md 가 없다" || no "task 에 sources.md 가 있다"
+assert_eq "$(tree_of "$J")" "$(printf './INTENT.md\n./results/.gitkeep')" "AC7: 과제 폴더에는 INTENT.md 와 결과 폴더의 빈 파일만 있다"
+assert_contains "$(cat "$T/out.txt")" "${RD}t1/jobs/fix-typo" "job new 가 만든 과제 폴더 경로를 화면에 낸다"
+assert_eq "$(grep -c '^{{JOB}} 그대로' "$J/INTENT.md")" "1" "받은 말의 {{JOB}} 은 자리표로 다시 읽지 않는다(글자 그대로)"
+assert_eq "$(g rev-parse HEAD)" "$head0" "P10: job new 는 커밋하지 않는다"
+assert_eq "$(g branch --list --format='%(refname)')" "$branches0" "P10: job new 는 브랜치를 만들지 않는다"
+cp "$J/INTENT.md" "$T/fix-typo.intent"
+
+#  · --not 없이 → 하지 않을 것이 「- 없음」 · --not 을 여럿 주면 한 줄씩
+printf '둘째 일을 한다\n' > "$T/said2.txt"
+assert_eq "$(jobnew --name no-not --branch fix/no-not --paths "x.py" --goal "둘째 목표" < "$T/said2.txt")" "0" "--not 없이: rc 0"
+assert_eq "$(python3 "$T/sec.py" "$S" "$W/${RD}t1/jobs/no-not/INTENT.md" "$T/said2.txt")" "True 둘째 목표 - 없음 ''" "--not 없이: 하지 않을 것이 「- 없음」 (받은 말의 끝 줄바꿈도 그대로)"
+assert_eq "$(jobnew --name two-not --branch fix/two-not --paths "y.py" --goal "셋째 목표" --not "가 하기" --not "나 하기" < "$T/said2.txt")" "0" "--not 둘: rc 0"
+assert_eq "$(sed -n '/^## 하지 않을 것$/,/^## 결정 기록$/p' "$W/${RD}t1/jobs/two-not/INTENT.md")" "$(printf '## 하지 않을 것\n\n- 가 하기\n- 나 하기\n\n## 결정 기록')" "--not 둘: 한 줄씩 「- 」 를 붙여 준 순서로"
+assert_eq "$(check)" "0" "task 과제 폴더 셋이 든 나무도 구조 검사를 통과한다"
+
+#  · 실패한 경우마다 jobs/ 아래 나무가 그대로다 — 경우마다 부르기 직전의 레포 전체(.git 밖)의 폴더 · 파일 내용 · 링크와 견준다
+jin() {  # jin <기대 rc> <말> <라벨> <받은 말 파일> [job new 인자…] — rc · 말 · 나무 그대로를 단언한다
+  local want="$1" says="$2" label="$3" said="$4"; shift 4
+  before="$(snap "$W")"
+  assert_eq "$(jobnew "$@" < "$said")" "$want" "${label}: rc ${want}"
+  assert_contains "$(cat "$T/out.txt")" "$says" "${label}: 「${says}」"
+  same_tree "$label"
+}
+jfail() { local want="$1" says="$2" label="$3"; shift 3; jin "$want" "$says" "$label" "$T/said.bin" "$@"; }   # jfail — 받은 말 said.bin 으로 jin
+#  · --name worker / leader → rc 1 「역할 이름」 (AC7)
+for n in worker leader; do
+  jfail 1 "역할 이름" "AC7: --name ${n}" --name "$n" --branch fix/x --paths a.py --goal "목표"
+  assert_not_contains "$(cat "$T/out.txt")" "검사 실패" "AC7: --name ${n}: 쓰기 전에 이름에서 멈춘다(쓴 뒤의 나무 검사가 아니다)"
+done
+#  · --name fix-typo 다시 → rc 1 「이미 있다」, 파일 그대로 (AC7)
+jfail 1 "이미 있다" "AC7: --name fix-typo 다시" --name fix-typo --branch fix/other --paths z.py --goal "다른 목표"
+assert_not_contains "$(cat "$T/out.txt")" "검사 실패" "AC7: --name fix-typo 다시: 쓰기 전에 멈춘다"
+cmp -s "$J/INTENT.md" "$T/fix-typo.intent" && ok "AC7: 있던 fix-typo 의 INTENT.md 는 바이트 그대로" || no "AC7: 있던 fix-typo 의 INTENT.md 가 바뀌었다"
+#  · 과제 폴더 자리가 매달린 링크여도 「이미 있다」 (lexists)
+ln -s gone-folder "$W/${RD}t1/jobs/dangle"
+jfail 1 "이미 있다" "과제 폴더 자리가 매달린 링크" --name dangle --branch fix/x --paths a.py --goal "목표"
+assert_eq "$(readlink "$W/${RD}t1/jobs/dangle")" "gone-folder" "매달린 링크가 그대로 있다"
+[ ! -e "$W/${RD}t1/jobs/gone-folder" ] && ok "매달린 링크 너머에 폴더를 만들지 않았다" || no "매달린 링크 너머에 폴더가 생겼다"
+rm -- "$W/${RD}t1/jobs/dangle"
+#  · --name E1(에픽 번호) · --name P1(결정 블록 번호 — 폴더는 없다) → rc 1
+jfail 1 "블록 번호" "--name E1(묶음 블록 번호)" --name E1 --branch fix/x --paths a.py --goal "목표"
+jfail 1 "블록 번호" "--name P1(결정 블록 번호 — 과제 폴더가 없다)" --name P1 --branch fix/x --paths a.py --goal "목표"
+jfail 1 "블록 번호" "--name p1(대소문자만 다른 블록 번호)" --name p1 --branch fix/x --paths a.py --goal "목표"
+#  · --name "a/b" · ".x" · "한글" → rc 1
+for n in "a/b" ".x" "한글"; do
+  jfail 1 "작업 이름" "--name ${n}" --name "$n" --branch fix/x --paths a.py --goal "목표"
+  assert_not_contains "$(cat "$T/out.txt")" "검사 실패" "--name ${n}: 쓰기 전에 이름에서 멈춘다"
+done
+[ ! -e "$W/${RD}t1/jobs/a" ] && ok "--name a/b: jobs 아래에 a 폴더를 만들지 않았다" || no "--name a/b: a 폴더가 생겼다"
+#  · 빈 표준 입력 → rc 1 「받은 말이 비었다」 (Review Focus 3)
+jin 1 "받은 말이 비었다" "빈 표준 입력" /dev/null --name empty-in --branch fix/x --paths a.py --goal "목표"
+printf ' \r\n\n' > "$T/blank.txt"
+jin 1 "받은 말이 비었다" "공백 · 줄바꿈뿐인 표준 입력" "$T/blank.txt" --name blank-in --branch fix/x --paths a.py --goal "목표"
+#  · UTF-8 이 아닌 바이트 → rc 1
+printf '앞 글 \377\376 뒤 글\n' > "$T/bad-utf8.bin"
+jin 1 "UTF-8 이 아니다" "UTF-8 이 아닌 표준 입력" "$T/bad-utf8.bin" --name bad-in --branch fix/x --paths a.py --goal "목표"
+#  · --goal 에 줄바꿈 · --branch 가 빈 글 · --paths 가 비었거나 원소에 `[` `]` `,` 줄바꿈 → rc 2
+jfail 2 "--goal" "--goal 에 줄바꿈" --name u1 --branch fix/x --paths a.py --goal $'첫 줄\n둘째 줄'
+jfail 2 "--goal" "--goal 이 빈 글" --name u1 --branch fix/x --paths a.py --goal ""
+jfail 2 "--branch" "--branch 가 빈 글" --name u1 --branch "" --paths a.py --goal "목표"
+jfail 2 "--branch" "--branch 에 줄바꿈" --name u1 --branch $'fix/x\nfix/y' --paths a.py --goal "목표"
+jfail 2 "--paths" "--paths 가 빈 글" --name u1 --branch fix/x --paths "" --goal "목표"
+jfail 2 "--paths" "--paths 원소에 [" --name u1 --branch fix/x --paths "a[0].py" --goal "목표"
+jfail 2 "--paths" "--paths 원소에 ]" --name u1 --branch fix/x --paths "a.py, b]" --goal "목표"
+jfail 2 "--paths" "--paths 에 빈 원소(쉼표가 겹친다)" --name u1 --branch fix/x --paths "a.py,,b.py" --goal "목표"
+jfail 2 "--paths" "--paths 에 빈 원소(끝 쉼표)" --name u1 --branch fix/x --paths "a.py," --goal "목표"
+jfail 2 "--paths" "--paths 원소에 줄바꿈" --name u1 --branch fix/x --paths $'a.py\nb.py' --goal "목표"
+#  · --not 에 줄바꿈 → rc 2 (하지 않을 것 칸은 한 줄에 하나)
+jfail 2 "--not" "--not 에 줄바꿈" --name u1 --branch fix/x --paths a.py --goal "목표" --not $'가\n- 나'
+jfail 2 "--not" "--not 이 빈 글" --name u1 --branch fix/x --paths a.py --goal "목표" --not ""
+[ ! -e "$W/${RD}t1/jobs/u1" ] && ok "사용법 오류: 과제 폴더 u1 을 만들지 않았다" || no "사용법 오류인데 u1 폴더가 생겼다"
+# 한 줄 값이 칸 제목 꼴이면 쓰기 전에 되읽어 멈춘다(받은 말 안의 제목 꼴 줄은 위 AC7 처럼 그대로 받는다)
+jfail 1 "되읽히지 않는다" "--goal 이 「## 지시 원문」" --name u2 --branch fix/x --paths a.py --goal "## 지시 원문"
+#  · 옛 형식 로드맵(old1)에 → rc 1 「team 형식 로드맵이 아니다」
+before="$(snap "$W")"
+assert_eq "$( (cd "$W" && python3 "$RW" job new --roadmap "${RD}old1/roadmap.md" --name old-job --branch fix/x --paths a.py --goal "목표" < "$T/said.bin") > "$T/out.txt" 2>&1; echo $?)" "1" "옛 형식 로드맵(old1): rc 1"
+assert_contains "$(cat "$T/out.txt")" "team 형식 로드맵이 아니다" "옛 형식 로드맵: 「team 형식 로드맵이 아니다」"
+[ ! -e "$W/${RD}old1/jobs" ] && ok "옛 형식 로드맵: old1 아래에 과제 폴더를 만들지 않았다" || no "옛 형식 로드맵: old1 아래에 과제 폴더가 생겼다"
+same_tree "옛 형식 로드맵(old1)"
+# 모르는 layout 값 — 옛 형식으로도 team 형식으로도 읽지 않는다
+cp "$W/${RD}t1/roadmap.md" "$T/rm.job"
+sed 's/^layout: team$/layout: no-such/' "$T/rm.job" > "$W/${RD}t1/roadmap.md"
+assert_eq "$(grep -c '^layout: no-such$' "$W/${RD}t1/roadmap.md")" "1" "픽스처: t1 로드맵 머리말 layout: no-such"
+jfail 1 "no-such" "layout: no-such 인 로드맵" --name lay-job --branch fix/x --paths a.py --goal "목표"
+cp "$T/rm.job" "$W/${RD}t1/roadmap.md"
+# 쓴 뒤의 team 나무 검사가 실패하면 되돌린다 — 손으로 깨진 E1 INTENT.md(머리 roadmap 이 다른 파일)
+sed 's/^roadmap: .*/roadmap: elsewhere.md/' "$T/i1.ok" > "$W/${RD}t1/jobs/E1/INTENT.md"
+assert_eq "$(grep -c '^roadmap: elsewhere.md$' "$W/${RD}t1/jobs/E1/INTENT.md")" "1" "픽스처: E1 INTENT.md 머리의 roadmap 을 바꿨다"
+jfail 1 "검사 실패" "쓴 뒤의 team 나무 검사 실패" --name chk-job --branch fix/x --paths a.py --goal "목표"
+[ ! -e "$W/${RD}t1/jobs/chk-job" ] && ok "team 나무 검사 실패: 새 과제 폴더 chk-job 을 되돌려 지웠다" || no "team 나무 검사 실패: chk-job 폴더가 남았다"
+cp "$T/i1.ok" "$W/${RD}t1/jobs/E1/INTENT.md"
+assert_eq "$(jobnew --name chk-job --branch fix/x --paths a.py --goal "목표" < "$T/said.bin")" "0" "E1 을 되돌린 뒤 같은 job new: rc 0(양의 짝)"
+assert_eq "$(check)" "0" "job new 를 마친 t1 이 구조 검사를 통과한다"
+assert_eq "$(g rev-parse HEAD)" "$head0" "P10: 실패 · 성공을 거친 뒤에도 커밋이 없다"
+
 finish
