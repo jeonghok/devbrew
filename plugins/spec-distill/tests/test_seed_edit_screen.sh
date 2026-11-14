@@ -335,4 +335,12 @@ assert_contains "$(j crlf 'd["text"]')" "이유 파일에서 읽지 못한 줄 1
 mk2 longsum; why longsum "1\t$FA"; force "$TMP/longsum/state" "$FA" summary '첫 줄\n둘째 줄'; scr longsum
 assert_contains "$(j longsum 'd["text"]')" "   고친 이유(저자가 댐): 지적 「첫 줄 둘째 줄」(${FA})" "Review Focus: 여러 줄 요약은 한 줄로 이어 화면 구조를 깨지 않는다"
 
+# ── AC5 · AC6 — 읽지 못한 사실은 댄 지적이 없어도 늘 보인다 ─────────────────────────
+mk noids '가.\n\n나.\n' '가 고침.\n\n나.\n'; scr noids
+assert_contains "$(j noids 'd["text"]')" "리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다" "AC6: 이유 파일 없음 + 원장 없음 — 원장을 읽지 못한 사실이 화면 글에 보인다"
+assert_contains "$(j noids 'd["notices"]')" "리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다" "AC6: 같은 사실이 알림 목록에도 있다"
+mk2 usedbad2; printf '\377\376' > "$TMP/usedbad2/state/hunk-used-findings.txt"; scr usedbad2
+assert_contains "$(j usedbad2 'd["text"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 이유 파일 없음 + 쓴 지적 목록 깨짐 — 읽지 못한 사실이 화면 글에 보인다"
+assert_contains "$(j usedbad2 'd["notices"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 같은 사실이 알림 목록에도 있다"
+
 finish

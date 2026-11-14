@@ -280,10 +280,8 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     rs = parse_reasons(reasons_path, str(hunks_doc.get("seed_sha256", "")), {h["id"] for h in hunks})
     st = load_ledger(state_dir)
     used = read_used(state_dir)
-    any_ids = False
     for h, v in zip(hunks, views):
         ent = rs["by_hunk"].get(h["id"], {"ids": [], "self": False})
-        any_ids = any_ids or bool(ent["ids"])
         kinds, pieces = [], []
         for fid in ent["ids"]:
             kind, piece = finding_status(st, fid, used)
@@ -301,9 +299,9 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
         notices.append("이유 파일이 이 공시의 것이 아니다 — 고친 이유를 쓰지 않았다")
     if rs["dropped"] > 0:
         notices.append("이유 파일에서 읽지 못한 줄 %d개" % rs["dropped"])
-    if any_ids and st is None:
+    if st is None:
         notices.append("리뷰 원장을 읽지 못했다 — 권장을 붙이지 않는다")
-    if any_ids and used is None:
+    if used is None:
         notices.append("쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다")
     lines = ["저자 편집 %d곳 — 달라진 문장만 보입니다" % len(hunks)]
     if any(v["recommend"] for v in views):
