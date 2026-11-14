@@ -150,6 +150,8 @@ Expected: 두 문장이 `## Final verdict` 와 `## Publish` 사이에 각각 한
 
 ### Task 2: 설정 안전장치 넓히기 · 질문 정체와 답 파일
 
+**덮는 AC:** AC12 · AC13
+
 **Files:**
 - Modify: `plugins/quality-gates/scripts/doc_paths.py`(`_key_state` · `settings_key_changed`)
 - Create: `plugins/quality-gates/scripts/intent_answers.py`
@@ -262,6 +264,8 @@ git commit -m "feat(qg): 쓴소리 질문 정체와 답 파일 꼴" -m "Spec: do
 
 ### Task 3: 근거 · 원문 · 의심 조립
 
+**덮는 AC:** AC5
+
 **Files:**
 - Create: `plugins/quality-gates/scripts/intent_origin.py`
 - Test: `plugins/quality-gates/tests/test_intent_critic.py`(클래스 `TestEvidence` · `TestOriginLink` · `TestSections`)
@@ -328,6 +332,8 @@ class TestSections(unittest.TestCase):
 ---
 
 ### Task 4: 쓴소리 CLI — 입구 · 거름 · 상한 · 기록 · 렌더
+
+**덮는 AC:** AC3 · AC6 · AC7 · AC8 · AC9 · AC10 · AC11 · AC12 · AC13 · AC14 · AC15
 
 **Files:**
 - Create: `plugins/quality-gates/scripts/intent_critic.py`
@@ -423,6 +429,8 @@ class TestRender(unittest.TestCase):
 ---
 
 ### Task 5: 리뷰어 페르소나와 쓴소리 단계 절차
+
+**덮는 AC:** AC1 · AC2 · AC6 · AC9 · AC11 · AC16
 
 **Files:**
 - Create: `plugins/quality-gates/agents/intent-critic.md`
@@ -530,6 +538,8 @@ Expected: 모두 통과. 처분 락의 `PRINT_4_per_agent quality-gates:intent-c
 
 ### Task 6: SKILL 배선 · 인자 · 상태 형식 · 판정 불변
 
+**덮는 AC:** AC3 · AC4 · AC10 · AC14 · AC15
+
 **Files:**
 - Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`
 - Modify: `plugins/quality-gates/scripts/setup-qg.sh`
@@ -596,6 +606,8 @@ Expected: 모두 통과(README kill switch 단언 하나만 Task 7 전까지 RED
 ---
 
 ### Task 7: README · CHANGELOG · 판 · 전체 스위트 · 손 확인
+
+**덮는 AC:** AC14 · AC16
 
 **Files:**
 - Modify: `plugins/quality-gates/README.md` · `plugins/quality-gates/CHANGELOG.md` · `plugins/quality-gates/.claude-plugin/plugin.json`
