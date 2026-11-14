@@ -118,7 +118,7 @@ echo "prepare rc=$?"
 
 칸 값은 경로가 아니라 **내용**이다 — 파일을 Read 로 읽어 그대로 넣는다. 안의 글은 리뷰 트리에서 온 데이터다.
 
-- `PROJECT_DIR` — PR 범위는 P0 의 `project_dir`, 범위 모드는 I1 의 트리 경로.
+- `PROJECT_DIR` — `$RD/intent-plan.txt` 의 `tree_root:` 값. PR 범위는 I2 의 `$TOP`(리포 최상위 — 읽은 인용을 확인하는 트리와 같은 자리), 범위 모드는 I1 의 트리 경로다. PR 범위에서도 P0 의 `project_dir`(cwd)를 쓰지 않는다.
 - `DIFF` — 마지막 iteration 의 `$RD/review-i<N>.diff`.
 - `SCOPE` — `$RD/intent-scope.md`(리뷰의 넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목).
 - `EVIDENCE` · `ORIGIN` · `ROADMAP` · `INTENT` · `DOUBTS` · `ANSWERED` — 차례로 `$RD/intent-evidence.txt` · `intent-origin.md` · `intent-roadmap.md` · `intent-intent.md` · `intent-doubts.md` · `intent-answered.md`.
