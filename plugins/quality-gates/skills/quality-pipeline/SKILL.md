@@ -7,8 +7,10 @@ description: >
   against one criteria block and the intent source, a framing-blind re-critique,
   a differential test against the baseline (always), an optional human-approved e2e walk, and synthesis. Fix-loop
   decisions surface via AskUserQuestion. When the branch has an open PR, the run
-  ends by posting one new PR comment (understanding text + verdict line) through
-  the publish sink.
+  posts one new PR comment (understanding text + verdict line) through
+  the publish sink. The run ends with the intent-critic stage (outside the verdict),
+  which may ask about the user's own choices and commits the answers as answer files
+  on the current branch (no push).
 cost_class: variable
 argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>]"
 allowed-tools:
@@ -63,10 +65,11 @@ verdict** (`clean` · `defect` · `not-certified (<사유>)`). Decision points a
 calls whose answers arrive as tool results in the same turn.
 
 **Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer` ·
-`code-recritic` are read-only (`tools: Read, Grep, Glob`). External
+`code-recritic` · `intent-critic` are read-only (`tools: Read, Grep, Glob`). External
 reviewers (`pr-review-toolkit:*`) are advisory — their output becomes findings YAML, never a
-commit. You run both axes of the differential test yourself, and you edit files only for the
-fixes the user approved at the Fix-loop gate.
+commit. You run both axes of the differential test yourself, and you write to the repository
+in two places only: the fixes the user approved at the Fix-loop gate, and the intent-critic
+answer files with their commit (`scripts/intent_critic.py record`).
 
 ## Preflight
 

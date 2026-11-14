@@ -22,6 +22,9 @@ PUB_NEXT="그다음 intent-critic 단계를 돈다 — 판정 밖이라 판정 �
 P2_CLEAN="( cd \"\$RD\" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )"
 KILL_BULLET='- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — intent-critic 단계만 끈다(「intent-critic 꺼짐(kill switch)」 한 줄). 판정 밖 단계라 판정에 닿지 않는다. 집행은 `scripts/intent_critic.py gate` 다.'
 ALREADY="intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
+DESC_END="The run ends with the intent-critic stage (outside the verdict), which may ask about the user's own choices and commits the answers as answer files on the current branch (no push)."
+LAW2_READERS='`security-reviewer` · `code-recritic` · `intent-critic` are read-only (`tools: Read, Grep, Glob`).'
+LAW2_WRITES="you write to the repository in two places only: the fixes the user approved at the Fix-loop gate, and the intent-critic answer files with their commit (\`scripts/intent_critic.py record\`)."
 # 옛 이름은 이 파일에 이어 쓰지 않는다 — 이 파일도 아래 부재 검사의 대상이다.
 OLD="쓴""소리"
 
@@ -57,6 +60,15 @@ assert_contains "$SF" '`--origin <경로>` 는 부른 쪽이 넘기는 원문 �
 assert_file_grep "$S" '^ ├ Publish ── ' "Flow: Publish 는 마지막 가지가 아니다"
 assert_file_grep "$S" '^ └ intent-critic ── 판정 밖 질문 · 판정 · 게시 뒤 · 답 파일만 커밋 \(references/intent-critic\.md · 범위 모드는 묻지 않음\)$' "Flow: intent-critic 이 마지막 가지"
 assert_contains "$SF" 'intent-critic 답 커밋은 `scripts/intent_critic.py record` 하나가 한다 — 답 파일만 경로 지정으로, push 없이.' "Rules: 답 커밋은 record 하나"
+# frontmatter description · Law 2 문단 — 실행의 끝(intent-critic 단계)과 쓰는 것(답 파일 · 답 커밋)을 옛 문장으로 말하지 않는다.
+FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$S" | flat)"
+assert_eq "$(count "$FM" "$DESC_END")" 1 "description: 실행은 intent-critic 단계로 끝난다"
+assert_eq "$(count "$FM" "ends by posting one new PR comment")" 0 "description: 옛 문장(게시로 끝난다) 0"
+assert_eq "$(count "$FM" "posts one new PR comment (understanding text + verdict line) through the publish sink.")" 1 "description: 게시 문장은 남는다(양성 짝)"
+LAW2="$(awk '/^\*\*Law 2 \(Writer ≠ Reviewer\):\*\*/{f=1} f&&/^$/{exit} f' "$S" | flat)"
+assert_eq "$(count "$LAW2" "$LAW2_READERS")" 1 "Law 2: 읽기 전용 리뷰어 셋(intent-critic 포함)"
+assert_eq "$(count "$LAW2" "$LAW2_WRITES")" 1 "Law 2: 오케스트레이터가 쓰는 것에 답 파일 · 답 커밋"
+assert_eq "$(count "$LAW2" "you edit files only for the fixes the user approved at the Fix-loop gate.")" 0 "Law 2: 옛 문장(고침만 쓴다) 0"
 
 note "[절차 문서]"
 PF="$(cat "$PROC")"
