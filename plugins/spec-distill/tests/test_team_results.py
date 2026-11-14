@@ -18,6 +18,9 @@ import team_files as F  # noqa: E402
 H = "a" * 40
 B = "b" * 40
 J = "c" * 64
+BOM = chr(0xFEFF)   # 보이지 않는 글자는 chr 로 적어 diff 에 보이게 한다
+# str.splitlines() 가 줄을 나누는 글자 열하나(`\r\n` 포함)
+LINE_BREAKS = [chr(c) for c in (0x0A, 0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x85, 0x2028, 0x2029)] + ["\r\n"]
 
 
 def result(body="", **over):
@@ -47,12 +50,51 @@ class Parse(unittest.TestCase):
         lead = F.parse_result(result("  끝 — " + H + "\n"))   # 줄 머리가 아니면 기계 줄이 아니다
         self.assertEqual((lead.problems, lead.end), ([], None))
 
+    QUOTED = "끝 — " + H + "\nAC3: 구현됨 — 인용\nTask 9/2: 끝 — x\n산출물: no.md\n"
+    REAL = "산출물: real.md\n"
+
+    def fence_case(self, before, after, unclosed=False):
+        """펜스 밖 진짜 줄은 읽고(산출물 real.md · 앞의 Task) 인용된 기계 줄 꼴은 읽지 않는다."""
+        r = F.parse_result(result("Task 1/2: 끝 — abc1234\n" + before + self.QUOTED + after + self.REAL))
+        label = repr(before + after)
+        self.assertEqual((r.end, r.tasks, "AC3:" in r.machine_text), (None, [(1, 2, "끝", "abc1234")], False), label)
+        if unclosed:
+            self.assertEqual((r.outputs, [p for p in r.problems if "닫히지 않았다" in p]), ([], [F._UNCLOSED_FENCE]), label)
+            self.assertEqual(r.problems, [F._UNCLOSED_FENCE], label)
+        else:
+            self.assertEqual((r.problems, r.outputs), ([], ["real.md"]), label)
+
+    def test_fence_shapes(self):   # CommonMark 꼴 — 인용된 줄은 읽지 않고 펜스 밖의 진짜 줄은 읽는다
+        self.fence_case("````\n```\n", "```\n````\n")                  # 긴 펜스가 짧은 펜스를 인용한다
+        self.fence_case("~~~\n", "~~~\n")                              # 물결 펜스
+        self.fence_case("```python\n", "```\n")                        # 정보 문자열
+        self.fence_case("```\n~~~\n", "~~~\n```\n")                    # 다른 글자의 펜스는 닫지 않는다
+        self.fence_case("  ```\n", "  ```\n")                          # 들여쓴 펜스(세 칸까지)
+        self.fence_case("```\n", "", unclosed=True)                    # 닫히지 않은 펜스는 끝까지 펜스다
+        self.fence_case("````\n", "```\n", unclosed=True)              # 더 짧은 줄은 닫지 못한다
+
+    def test_short_closer_at_end_does_not_close(self):   # 파일 끝의 더 짧은 줄은 긴 펜스를 닫지 못한다
+        for body in ("````\n" + self.QUOTED + "```\n", "```\n" + self.QUOTED + "~~~\n", "```\n" + self.QUOTED + "``` 글\n",
+                     "````\n" + self.QUOTED + "```", "```\n" + self.QUOTED + "~~~"):   # 끝 줄바꿈이 없으면 짧은 줄이 마지막 줄이다
+            r = F.parse_result(result(body))
+            self.assertEqual((r.problems, r.end, r.outputs), ([F._UNCLOSED_FENCE], None, []), repr(body[-12:]))
+        for body in ("````\n" + self.QUOTED + "````\n", "````\n" + self.QUOTED + "`````", "~~~\n" + self.QUOTED + "~~~"):   # 같거나 긴 줄은 닫는다(양성 대조)
+            closed = F.parse_result(result(body))
+            self.assertEqual((closed.problems, closed.end), ([], None), repr(body[-8:]))
+
+    def test_non_fences_are_read(self):   # 펜스가 아닌 줄은 뒤의 진짜 줄을 가리지 않는다
+        for opener in ("```x```\n", "    ```\n", "\t```\n"):
+            r = F.parse_result(result(opener + self.REAL))
+            self.assertEqual((r.problems, r.outputs), ([], ["real.md"]), repr(opener))
+
     def test_line_endings(self):   # Review Focus 1
         text = result("Task 1/1: 끝 — abc1234\n끝 — " + H)
         for variant in (text, text.replace("\n", "\r\n"), text + "\n\n"):
             r = F.parse_result(variant)
             self.assertEqual((r.problems, r.end, r.head), ([], H, H), repr(variant[-12:]))
-        self.assertTrue(F.parse_result("﻿" + text).problems)
+        bom = F.parse_result(BOM + text)   # 첫 글자가 BOM 이면 머리가 없다
+        self.assertEqual(len(bom.problems), 1)
+        self.assertTrue(bom.problems[0].startswith("머리(첫 줄"), bom.problems)
 
     def test_problems_name_what_is_wrong(self):
         for text, word in ((result(), None), ("본문뿐\n", "머리"), ("---\ntype: job-result\n", "닫히지"), (result(type="job-blocked"), "type"),
@@ -70,10 +112,25 @@ class Parse(unittest.TestCase):
         self.assertIsNone(F.parse_result(result(plan=None)).plan)   # 계획 번호가 없는 결과 파일
 
     def test_machine_lines_after_end(self):   # 「끝」 뒤의 기계 줄은 종류마다 사유다
-        for tail in ("Task 1/1: 끝 — a", "AC1: 구현됨 — x", "규칙 반증: [가] 나 — 다", "산출물: x.md"):
+        for tail in ("Task 1/1: 끝 — a", "AC1: 구현됨 — x", "규칙 반증: [가] 나 — 다", "산출물: x.md", "Ruling: 뒤"):
             problems = F.parse_result(result("끝 — " + H + "\n" + tail + "\n")).problems
-            self.assertTrue(any("끝" in p for p in problems), (tail, problems))
+            self.assertTrue(any("줄 뒤에 기계 줄이 있다" in p for p in problems), (tail, problems))
         self.assertEqual(F.parse_result(result("끝 — " + H + "\n메모\n")).problems, [])   # 기계 줄이 아닌 글은 괜찮다
+
+    def test_duplicate_head_key(self):
+        text = result().replace("attempt: 2\n", "attempt: 2\nattempt: 3\n")
+        r = F.parse_result(text)
+        self.assertEqual((r.problems, r.attempt), (["머리 키 attempt 가 두 번 나온다"], 2))
+        b = F.parse_blocked(BlockedFile.TEXT.replace("attempt: 2\n", "attempt: 2\nattempt: 3\n") % H)
+        self.assertEqual(b.problems, ["머리 키 attempt 가 두 번 나온다"])
+
+    def test_task_numbers_with_leading_zero_are_not_task_lines(self):
+        for line in ("Task 01/3: 끝 — a", "Task 1/03: 끝 — a", "Task 00/3: 끝 — a"):
+            r = F.parse_result(result(line + "\n"))
+            self.assertEqual(r.tasks, [], line)
+            self.assertEqual(len(r.problems), 1, line)
+            self.assertTrue(r.problems[0].startswith("Task 줄 꼴이 아니다"), r.problems)
+            self.assertTrue(r.problems[0].endswith(": " + line), r.problems)   # 사유는 줄을 적힌 대로 싣는다
 
 
 class Progress(unittest.TestCase):
@@ -89,6 +146,11 @@ class Progress(unittest.TestCase):
             self.assertEqual((done, total), (None, None), body)
             self.assertTrue(why.startswith("진행 줄 깨짐 — "), why)
 
+    def test_reason_carries_the_line_as_written(self):
+        for line in ("Task 9/7: 끝 — a  b", "Task 0/7: 막힘 — 한  글 ", "Task 2/8: 끝 — b"):
+            body = line + "\n" if line != "Task 2/8: 끝 — b" else "Task 1/7: 끝 — a\n" + line + "\n"
+            self.assertEqual(self.p(body), (None, None, "진행 줄 깨짐 — " + line), line)
+
 
 class BlockedFile(unittest.TestCase):
     TEXT = "---\ntype: job-blocked\nstage: implement\nplan: 1\nattempt: 2\nhead: %s\n---\n\n## 무엇에 막혔나\n\n가\n\n## 풀려면 무엇이 필요한가\n\n나\n"
@@ -103,9 +165,15 @@ class BlockedFile(unittest.TestCase):
     def test_fenced_heading_is_body_and_no_plan(self):
         fenced = (self.TEXT % H) + "\n```\n## 덧붙임\n```\n"
         self.assertEqual(F.parse_blocked(fenced).problems, [])
+        longer = (self.TEXT % H) + "\n````\n```\n## 덧붙임\n```\n````\n"
+        self.assertEqual(F.parse_blocked(longer).problems, [])
         b = F.parse_blocked((self.TEXT % H).replace("plan: 1\n", ""))
         self.assertEqual((b.problems, b.plan), ([], None))
         self.assertTrue(F.parse_blocked("본문뿐\n").problems)
+
+    def test_unclosed_fence_is_a_problem(self):
+        b = F.parse_blocked((self.TEXT % H) + "\n```\n## 덧붙임\n")
+        self.assertEqual(b.problems, [F._UNCLOSED_FENCE])
 
 
 INTENT = ("---\ntype: job\njob: R3\nkind: epic\nroadmap: r/t/roadmap.md\nbranch:\npaths: []\n---\n\n## 목표\n\n가\n\n## 지시 원문\n\n"
@@ -122,6 +190,13 @@ class Decisions(unittest.TestCase):
         self.assertEqual(F.decision_lines(two), ["- spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」", "- 결정 · 2026-11-21 · 막힘을 풀었다"])
         self.assertTrue(two.startswith(INTENT))   # 앞 바이트 그대로
 
+    def test_dash_is_prepended_and_same_line_counts_once(self):
+        with_dash = F.append_decision(INTENT, "- 결정 · 2026-11-20 · 글")
+        for first, second in (("- 결정 · 2026-11-20 · 글", "결정 · 2026-11-20 · 글"), ("결정 · 2026-11-20 · 글", "- 결정 · 2026-11-20 · 글")):
+            out = F.append_decision(F.append_decision(INTENT, first), second)
+            self.assertEqual(out, with_dash, (first, second))
+            self.assertEqual(F.decision_lines(out), ["- 결정 · 2026-11-20 · 글"])
+
     def test_kinds_and_shapes(self):
         self.assertEqual(F.DECISION_KINDS, ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정"))
         ok = ["- 넘김 확인 · R1 · 0a1b2c3d · 계획에 넣었다", "- 예약 밖 변경 · 2026-11-20 · README 한 줄",
@@ -135,9 +210,18 @@ class Decisions(unittest.TestCase):
         for line in bad:
             self.assertTrue(F.decision_problem(line), line)
             self.assertRaises(F.FormatError, F.append_decision, INTENT, line)
-        for line in ("- 결정 · 2026-11-20 · 한 줄\n둘째 줄", "- 결정 · 2026-11-20 · 가 나", "- 결정 · 2026-11-20 · 가\r나"):
-            self.assertTrue(F.decision_problem(line), repr(line))
-            self.assertRaises(F.FormatError, F.append_decision, INTENT, line)
+
+    def test_every_line_separator_is_refused(self):   # str.splitlines() 가 나누는 글자 모두
+        for sep in LINE_BREAKS:
+            self.assertEqual(len(("a" + sep + "b").splitlines()), 2, repr(sep))   # 목록이 정말 줄 나눔 글자다
+            for line in ("- 결정 · 2026-11-20 · 가" + sep + "나", "- 결정 · 2026-11-20 · 가" + sep):
+                self.assertTrue(F.decision_problem(line), repr(line))
+                self.assertRaises(F.FormatError, F.append_decision, INTENT, line)
+        self.assertEqual(len(LINE_BREAKS), 11)
+
+    def test_empty_line_has_its_own_reason(self):
+        self.assertEqual(F.decision_problem(""), "빈 줄이다")
+        self.assertRaises(F.FormatError, F.append_decision, INTENT, "")
 
     def test_heading_lookalike_in_received_words(self):   # 받은 말 안의 `## 결정 기록` 꼴 줄
         task = INTENT.replace("kind: epic", "kind: task").replace("- 범위: intent/original.md 2–3행", "받은 말\n## 결정 기록\n- 결정 · 흉내")

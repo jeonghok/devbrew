@@ -15,6 +15,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import team_layout  # noqa: E402
+import section6  # noqa: E402
 from roadmap_model import CONFIRM_RE, FormatError, field_text, frontmatter, section_body, unquote  # noqa: E402,F401
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates" / "team"
@@ -222,7 +223,7 @@ BLOCKED_HEADS = ("## 무엇에 막혔나", "## 풀려면 무엇이 필요한가"
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _NUMBER_RE = re.compile(r"[1-9][0-9]*")
-_TASK_RE = re.compile(r"Task ([0-9]+)/([0-9]+): (끝|막힘) — (\S.*)")
+_TASK_RE = re.compile(r"Task (0|[1-9][0-9]*)/(0|[1-9][0-9]*): (끝|막힘) — (\S.*)")   # 0 은 읽고(진행 줄 깨짐이 된다) 앞의 0 은 꼴이 아니다
 _AC_RE = re.compile(r"AC[0-9]+:")
 _END_PREFIX = "끝 — "
 _TASK_BLOCKED = "막힘"
@@ -257,18 +258,21 @@ class Blocked:
 
 
 def _split_head(text: str) -> tuple:
-    """(머리의 키 → 값, 머리 뒤 줄들, 사유 | None). 첫 글자가 BOM 이면 머리가 없는 것이다."""
+    """(머리의 키 → 값, 머리 뒤 줄들, 사유 | None, 두 번 나온 키의 사유들). 첫 글자가 BOM 이면 머리가 없는 것이다."""
     lines = [line.rstrip("\r") for line in text.split("\n")]
     if lines[0] != "---":
-        return {}, lines, "머리(첫 줄 `---`)가 없다"
-    meta = {}
+        return {}, lines, "머리(첫 줄 `---`)가 없다", []
+    meta, dups = {}, []
     for i in range(1, len(lines)):
         if lines[i] == "---":
-            return meta, lines[i + 1:], None
+            return meta, lines[i + 1:], None, dups
         if ":" in lines[i] and lines[i][0] not in " \t-#":
             key, value = lines[i].split(":", 1)
-            meta.setdefault(key.strip(), value.strip())
-    return {}, [], "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)"
+            key = key.strip()
+            if key in meta:
+                dups.append("머리 키 %s 가 두 번 나온다" % key)
+            meta.setdefault(key, value.strip())
+    return {}, [], "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)", []
 
 
 def _head_problems(meta: dict, type_value: str, keys: tuple) -> list:
@@ -288,15 +292,28 @@ def _head_problems(meta: dict, type_value: str, keys: tuple) -> list:
     return out
 
 
-def _outside_fences(lines: list) -> list:
-    """펜스(줄 머리 공백 뒤 백틱 셋) 밖의 줄들."""
-    out, inside = [], False
+_FENCE_END_RE = re.compile(r" {0,3}(`{3,}|~{3,})[ \t]*")
+
+
+def _outside_fences(lines: list) -> tuple:
+    """(펜스 밖의 줄들, 닫히지 않은 펜스가 있나). 펜스를 세는 규칙은 section6 한 곳이다."""
+    text = "\n".join(lines)
+    spans = section6.fence_spans_in(text)
+    out, pos = [], 0
     for line in lines:
-        if line.lstrip(" \t").startswith("```"):
-            inside = not inside
-        elif not inside:
+        if not any(a <= pos < b for a, b in spans):
             out.append(line)
-    return out
+        pos += len(line) + 1
+    unclosed = False
+    if spans:
+        shown = text[spans[-1][0]:spans[-1][1]].split("\n")   # 마지막 펜스가 닫는 줄로 끝나는지 본다
+        opener = _FENCE_END_RE.match(shown[0]).group(1)
+        closer = _FENCE_END_RE.fullmatch(shown[-1])
+        unclosed = len(shown) < 2 or not (closer and closer.group(1)[0] == opener[0] and len(closer.group(1)) >= len(opener))
+    return out, unclosed
+
+
+_UNCLOSED_FENCE = "본문의 코드 펜스가 닫히지 않았다 — 끝까지 펜스 안으로 읽어 기계 줄을 읽지 않았다"
 
 
 def _is_machine(line: str) -> bool:
@@ -315,17 +332,19 @@ def _commit(meta: dict, key: str) -> Optional[str]:
 def parse_result(text: str) -> Result:
     """결과 파일 글 → Result. 던지지 않는다 — 읽지 못한 것은 problems 에 한 줄씩 적는다."""
     r = Result()
-    meta, rest, why = _split_head(text)
+    meta, rest, why, dups = _split_head(text)
     if why:
         r.problems.append(why)
         return r
-    r.problems += _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at"))
+    r.problems += dups + _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at"))
     if meta.get("role") not in team_layout.ROLES:
         r.problems.append("머리 role 이 역할 이름이 아니다: %r" % meta.get("role"))
     r.stage, r.role = meta.get("stage"), meta.get("role")
     r.head, r.bundle_at, r.job_at = _commit(meta, "head"), _commit(meta, "bundle_at"), _commit(meta, "job_at")
     r.attempt, r.plan = _number(meta, "attempt"), _number(meta, "plan")
-    body = _outside_fences(rest)
+    body, unclosed = _outside_fences(rest)
+    if unclosed:
+        r.problems.append(_UNCLOSED_FENCE)
     r.machine_text = "\n".join(body)
     ended = False
     for line in body:
@@ -376,14 +395,17 @@ def progress_of(result: Result) -> tuple:
 def parse_blocked(text: str) -> Blocked:
     """막힘 파일 글 → Blocked. 던지지 않는다."""
     b = Blocked()
-    meta, rest, why = _split_head(text)
+    meta, rest, why, dups = _split_head(text)
     if why:
         b.problems.append(why)
         return b
-    b.problems += _head_problems(meta, BLOCKED_TYPE, ("head",))
+    b.problems += dups + _head_problems(meta, BLOCKED_TYPE, ("head",))
     b.stage, b.head = meta.get("stage"), _commit(meta, "head")
     b.attempt, b.plan = _number(meta, "attempt"), _number(meta, "plan")
-    heads = tuple(line for line in _outside_fences(rest) if line.startswith("## "))
+    body, unclosed = _outside_fences(rest)
+    if unclosed:
+        b.problems.append(_UNCLOSED_FENCE)
+    heads = tuple(line for line in body if line.startswith("## "))
     if heads != BLOCKED_HEADS:
         b.problems.append("본문의 `## ` 제목이 %s 뿐이어야 한다: %s" % (" · ".join(BLOCKED_HEADS), list(heads)))
     return b
@@ -416,6 +438,8 @@ def decision_lines(intent_text: str) -> list:
 
 def decision_problem(line: str) -> Optional[str]:
     """결정 기록에 쓸 수 없는 줄이면 사유, 받을 수 있으면 None."""
+    if line == "":
+        return "빈 줄이다"
     if line.splitlines() != [line]:
         return "줄 나눔 글자가 든 줄이다: %r" % line
     if not line.startswith("- "):
@@ -435,7 +459,10 @@ def decision_problem(line: str) -> Optional[str]:
 
 
 def append_decision(intent_text: str, line: str) -> str:
-    """결정 기록 칸 맨 아래에 줄을 덧붙인 글. 같은 줄이 있으면 글 그대로, 못 받는 줄이면 FormatError."""
+    """결정 기록 칸 맨 아래에 줄을 덧붙인 글. 같은 줄이 있으면 글 그대로, 못 받는 줄이면 FormatError.
+
+    맨 앞 `- ` 가 없는 줄은 `- ` 를 앞에 붙여 받는다(있는 줄과 같은지도 붙인 꼴로 본다).
+    """
     if not line.startswith("- "):
         line = "- " + line
     why = decision_problem(line)
