@@ -86,10 +86,10 @@ assert_file_absent "$S" "^printf 'Verdict" "AC6: 옛 영어 칸 이름이 없다
 assert_file_grep "$S" 'finished\|"accepted with findings iter "\[0-9\]\*\|"aborted iter "\[0-9\]\*\)' "R15: 게시 펜스가 같은 세 결과 토큰을 받는다(양성 짝)"
 assert_contains "$SF" 'The completion report opens — before the table — with one Korean sentence: how the run ended (the 결과 cell in plain words) and the verdict value as-is' "§4: 완료 보고 첫 줄은 끝난 방식과 판정값"
 assert_contains "$SF" 'The counts stay in the verdict line — do not restate them.' "규칙 블록: 개수를 다시 풀어 쓰지 않는다"
-assert_contains "$SF" "After the publish result line, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together" "AC2: 완료 보고 끝 할 일 — 기본 하나 · 여럿이면 밝힘"
+assert_contains "$SF" "After the intent-critic result line and the return block, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together" "AC2: 완료 보고 끝 할 일 — 기본 하나 · 여럿이면 밝힘(intent-critic 결과 줄 · 돌려주는 꼴 뒤)"
 assert_not_contains "$SF" 'exactly one next action' "AC2: exactly one 없음"
-assert_contains "$SF" "the publish result line is the run's last script output." "게시 결과 줄은 스크립트 출력의 마지막이다(할 일 줄과 충돌하지 않는다)"
-assert_not_contains "$SF" "the publish result line is the run's last output." "게시 줄이 «실행의» 마지막 출력이라는 옛 문장이 없다"
+assert_contains "$SF" "the intent-critic result line (or its skip notice) is the run's last script output, followed by the return block." "intent-critic 결과 줄(또는 건너뜀 줄)이 스크립트 출력의 마지막이다(할 일 줄과 충돌하지 않는다)"
+assert_not_contains "$SF" "the publish result line is the run's last" "게시 결과 줄이 마지막 출력이라는 옛 문장이 없다(intent-critic 단계가 게시 뒤에 돈다)"
 
 # ⑤ 모델이 그대로 내는 문구 — trivia 줄 · 범위 줄 · 범위 경고
 assert_contains "$SF" '설명되는 diff 면 `작은 수정이라 파이프라인을 건너뛰었다(trivia diff) — <한 문장 설명>.` 을 보이고' "AC6: trivia 줄이 한국어다"
