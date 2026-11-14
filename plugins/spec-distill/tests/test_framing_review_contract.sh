@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py plugins/spec-distill/scripts/seed_edit_screen.py shared/tests/fixtures/ask-sites.tsv
 #
 # request-framing SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
 # 배선으로 재는 것(AC1 · AC3b · AC3d · AC4 · AC6 · AC12 · AC13 배선).
@@ -13,7 +13,8 @@ SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
   for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
            plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py \
-           shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py; do
+           shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py \
+           plugins/spec-distill/scripts/seed_edit_screen.py shared/tests/fixtures/ask-sites.tsv; do
     echo "$f"
   done
   exit 0
@@ -104,16 +105,19 @@ blocking_fails() {   # blocking_fails <SKILL 경로> → 빠진 차단 문장 �
   f="$(section "$1" '^## 확정 — proceed 게이트$' | tr '\n' ' ' | tr -s ' ')"
   printf '%s' "$g" | grep -qF '하나라도 0 이 아니면 라운드 게이트를 띄운다' || echo "gate_open_rule"
   printf '%s' "$g" | grep -qF '`round_gate_needed` 가 거짓이어도' || echo "gate_engine_override"
-  printf '%s' "$d" | grep -qF '덩어리마다 질문 하나' || echo "hunk_question"
+  printf '%s' "$d" | grep -qF '고르지 않은 덩어리는 「되돌린다」 로 옮긴다' || echo "hunk_question"
+  printf '%s' "$d" | grep -qF '처분하지 않고 그 질문을 다시 묻는다' || echo "hunk_reask"
+  printf '%s' "$d" | grep -qF '바뀐 문장은 하나도 빼지 않는다' || echo "hunk_sentences"
   printf '%s' "$d" | grep -qF '처분 없이는 다음 단계로 가지 않는다' || echo "hunk_blocks"
   printf '%s' "$f" | grep -qF '하나라도 막히면 게이트를 띄우지 않습니다' || echo "final_blocks"
 }
 bf="$(blocking_fails "$SK")"
-[ -z "$bf" ] && ok "차단 문장 다섯이 제자리에 있다(게이트 열기 · 엔진 무시 · 덩어리 질문 · 덩어리 차단 · 확정 차단)" \
+[ -z "$bf" ] && ok "차단 문장 일곱이 제자리에 있다(게이트 열기 · 엔진 무시 · 고르지 않은 덩어리 · 다시 묻기 · 바뀐 문장 · 덩어리 차단 · 확정 차단)" \
   || no "차단 문장 빠짐: $(printf '%s' "$bf" | tr '\n' ' ')"
 TMPB="$(mktemp -d -t sd-framing-block-XXXXXX)" || exit 1
 for pair in "gate_open_rule|하나라도 0 이 아니면 라운드 게이트를 띄운다" "gate_engine_override|가 거짓이어도" \
-            "hunk_question|덩어리마다 질문 하나" "hunk_blocks|처분 없이는 다음 단계로 가지 않는다" \
+            "hunk_question|고르지 않은 덩어리는 「되돌린다」 로 옮긴다" "hunk_reask|처분하지 않고 그 질문을 다시 묻는다" \
+            "hunk_sentences|바뀐 문장은 하나도 빼지 않는다" "hunk_blocks|처분 없이는 다음 단계로 가지 않는다" \
             "final_blocks|하나라도 막히면 게이트를 띄우지 않습니다"; do
   name="${pair%%|*}"; phrase="${pair#*|}"
   PH="$phrase" python3 -c '
@@ -138,7 +142,20 @@ DISC="$(subsection "$SK" '^### 저자 편집 공시')"
 DB="$(bash_lines "$DISC")"
 assert_contains "$DB" 'seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS"' "AC6: 공시 펜스가 기준 사본 diff 를 낸다(실행 줄)"
 assert_contains "$DISC" "저자 편집 없음" "AC6: 빈 diff 를 침묵과 구분한다"
-assert_contains "$DISC" "추천을 달지 않는다 — " "D15: 덩어리 처분에 저자 권장이 없다"
+assert_contains "$DISC" "추천을 달지 않는다 — 기준 사본이 없어" "기준 사본이 없는 길의 질문에는 추천이 없다(이유와 함께)"
+# ── AC9 — 두 걸음 · 이유 파일 · 한 묶음 질문 · 화면 조립 실패 ─────────────────────
+for old in "덩어리마다 질문 하나" "추천을 달지 않는다 — 어느 덩어리가" "줄이면 공시가 아니다" "따로 정한 자리"; do
+  assert_not_contains "$DISC" "$old" "AC9: 옛 규칙 문장이 없다 — ${old}"
+done
+assert_contains "$DB" 'rm -f "$STATE_DIR/hunk-reasons.txt"' "AC9: 미리 보기 펜스가 지난 이유 파일을 지운다(실행 줄)"
+assert_contains "$DB" 'seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS"' "AC9: 미리 보기 펜스가 덩어리와 판본을 낸다(실행 줄)"
+assert_contains "$DB" 'seed_edit_screen.py" screen --hunks "$STATE_DIR/hunks.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR")' "AC9: 공시 펜스가 화면을 조립한다(실행 줄 — 확정 직전 표시 없이)"
+for must in '첫 줄은 미리 보기가 낸 판본 `seed_sha256 <값>`' '고르지 않은 덩어리는 「되돌린다」 로 옮긴다' \
+            '그 덩어리가 든 질문의 답 전체를 글자 그대로 적는다' '전부 되돌리려면 기타 칸에 적어 주세요' \
+            '처분하지 않고 그 질문을 다시 묻는다' '화면 조립 실패 — 줄 전체를 보인다' '그때 질문은 권장 없이 낸다' \
+            '목록에 더하지 못하면 되돌리기 · 기록 · 교체를 하지 않습니다' '미리 보기는 `hunks` 를 부르지 않습니다'; do
+  assert_contains "$DISC" "$must" "AC9: 저자 편집 공시가 적는다 — ${must}"
+done
 ln_rev="$(printf '%s\n' "$DB" | grep -n 'seed_edit_diff.py" revert' | head -1 | cut -d: -f1)"
 ln_log="$(printf '%s\n' "$DB" | grep -n 'seed_review_log.py" log' | head -1 | cut -d: -f1)"
 ln_acc="$(printf '%s\n' "$DB" | grep -n 'seed_edit_diff.py" accept' | head -1 | cut -d: -f1)"
@@ -146,6 +163,12 @@ if [ -n "$ln_rev" ] && [ -n "$ln_log" ] && [ -n "$ln_acc" ] && [ "$ln_rev" -lt "
   ok "AC6b: 되돌리기 → 기록 → 기준 사본 교체 순서(교체는 맨 끝)"
 else
   no "AC6b: revert($ln_rev) · log($ln_log) · accept($ln_acc) 순서가 아니다 — 공시 전 교체는 그 사이 편집을 지운다"
+fi
+ln_used="$(printf '%s\n' "$DB" | grep -n 'seed_edit_screen.py" mark-used' | head -1 | cut -d: -f1)"
+if [ -n "$ln_used" ] && [ -n "$ln_rev" ] && [ "$ln_used" -lt "$ln_rev" ]; then
+  ok "AC10: 쓴 지적 목록에 더하기가 되돌리기 앞이다"
+else
+  no "AC10: mark-used($ln_used) 가 revert($ln_rev) 앞이 아니다 — 목록보다 기준 사본이 먼저 바뀔 수 있다"
 fi
 # ── T10-b — revert · accept 의 rc 4(공시 뒤 seed 재변경) 처리 규약 ────────────
 assert_contains "$DISC" "위 공시 펜스를 다시 돌려 다시 처분받습니다" "T10-b: rc 4 는 기준 사본을 바꾸지 않고 공시를 다시 돈다"
@@ -157,6 +180,8 @@ FIN="$(section "$SK" '^## 확정 — proceed 게이트$')"
 FB="$(bash_lines "$FIN")"
 assert_contains "$FB" 'seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS"' "AC6: 확정 게이트 직전에도 공시 펜스(실행 줄)"
 assert_contains "$FB" 'seed_review_log.py" check-drops' "AC12: 확정 게이트 직전 문구 없는 drop 검사(실행 줄)"
+assert_contains "$FB" 'seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS"' "AC9: 확정 게이트 직전 검사 2 도 미리 보기부터 한다(실행 줄)"
+assert_contains "$FB" 'screen --hunks "$STATE_DIR/hunks-final.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR" --final)' "AC9: 확정 직전 화면은 권장 없이 조립한다(실행 줄)"
 
 # ── AC13 — 표시 검사 배선 ─────────────────────────────────────────────────────
 AFTER="$(subsection "$SK" '^### seed 를 쓴 직후')"
@@ -353,18 +378,31 @@ assert_eq "$(cmp -s "$T/marksB/seed.md" "$T/marksB/seed.before" && echo same)" "
 mkdir -p "$T/revert1"
 printf 'line one\n' > "$T/revert1/base.md"
 printf 'line one changed\n' > "$T/revert1/seed.md"
-python3 "$S/seed_edit_diff.py" hunks "$T/revert1/base.md" "$T/revert1/seed.md" >/dev/null
+python3 "$S/seed_edit_diff.py" hunks "$T/revert1/base.md" "$T/revert1/seed.md" > "$T/revert1/hunks.json"
 cp "$T/revert1/base.md" "$T/revert1/base.before"
 cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/revert1/a.audit.md"
 n6_before="$(grep -c '^- 편집' "$T/revert1/a.audit.md" || true)"
-nth_bash_with "$DISC" 'seed_edit_diff.py" revert' | sed \
-  -e 's/<덩어리마다 한 줄 — 번호:처분>/99:되돌린다/' \
-  -e 's/<n>/1/' > "$T/revert_fence.sh"
-printf 'QUOTE_99\n' > "$T/revert1/said-hunk-99.txt"
+rev_fence() {   # rev_fence <PAIRS 한 줄> → 자리표를 채운 처분 펜스
+  nth_bash_with "$DISC" 'seed_edit_diff.py" revert' | sed \
+    -e "s/<덩어리마다 한 줄 — 번호:처분>/$1/" \
+    -e 's/<덩어리 JSON 파일 이름>/hunks.json/' \
+    -e 's/<n>/1/'
+}
 coldr() { env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 SD="$ROOT/plugins/spec-distill" STATE_DIR="$T/revert1" SEED_BASE="$T/revert1/base.md" SEED_ABS="$T/revert1/seed.md" AUDIT_ABS="$T/revert1/a.audit.md" bash "$1" 2>"$1.err"; }
+# (i) 그 화면에 없는 번호 — 번호 대조가 되돌리기 앞에서 막는다
+rev_fence '99:되돌린다' > "$T/revert_fence.sh"
+printf 'QUOTE_99\n' > "$T/revert1/said-hunk-99.txt"
 outR="$(coldr "$T/revert_fence.sh")"
+assert_contains "$outR" "rev_rc=0 log_rc=0 used_rc=2" "AC10: 그 화면에 없는 덩어리 번호(99)는 번호 대조에서 막힌다 — revert 를 부르지 않는다"
+assert_contains "$(cat "$T/revert_fence.sh.err")" "처분 목록의 번호가 이 화면의 덩어리와 다르다" "AC10: 번호가 다른 사유를 알린다"
+# (ii) revert 실패 — 공시 뒤에 seed 가 또 바뀌었다(rc 4)
+printf 'line one changed again\n' > "$T/revert1/seed.md"
+rev_fence '1:되돌린다' > "$T/revert_fence2.sh"
+printf 'QUOTE_1\n' > "$T/revert1/said-hunk-1.txt"
+outR2="$(coldr "$T/revert_fence2.sh")"
 n6_after="$(grep -c '^- 편집' "$T/revert1/a.audit.md" || true)"
-assert_contains "$outR" "rev_rc=2" "fix2: 없는 덩어리 번호(--ids 99) 는 revert rc 2 로 막힌다"
+assert_contains "$outR2" "rev_rc=4" "fix2: 공시 뒤 seed 가 바뀌면 revert 가 rc 4 로 막힌다"
+assert_not_contains "$outR$outR2" "accept_rc=" "fix2: 번호 대조 · revert 가 막히면 accept 를 부르지 않는다"
 assert_eq "$(cmp -s "$T/revert1/base.md" "$T/revert1/base.before" && echo same)" "same" "fix2: revert 실패면 기준 사본(accept)이 바뀌지 않는다"
 assert_eq "$n6_after" "$n6_before" "fix2: revert 실패면 log 도 돌지 않는다 — audit ## 6 에 편집 줄이 늘지 않는다"
 
@@ -373,6 +411,9 @@ assert_eq "$n6_after" "$n6_before" "fix2: revert 실패면 log 도 돌지 않는
 # 있는 채로 돌려, 편집이 없으면 «저자 편집 없음» 을, 있으면 덩어리를 내는지 본다.
 nth_bash_with "$DISC" 'hunks.json' > "$T/round_disc.sh"
 [ -s "$T/round_disc.sh" ] && ok "추출: 라운드 게이트 앞 공시 펜스" || no "추출: 라운드 게이트 앞 공시 펜스가 비었다"
+# 화면 조립이 실패하는 플러그인 사본 — 스크립트를 링크째 풀어 베끼고 화면 조립만 실패하는 대역으로 바꾼다
+mkdir -p "$T/sdbad"; cp -RL "$ROOT/plugins/spec-distill/scripts" "$T/sdbad/scripts"
+printf 'import sys\nsys.exit(1)\n' > "$T/sdbad/scripts/seed_edit_screen.py"
 for fence in round_disc final_disc; do
   mkdir -p "$T/d-$fence"
   printf 'SAME 줄 하나\nSAME 줄 둘\n' > "$T/d-$fence/seed.md"; cp "$T/d-$fence/seed.md" "$T/d-$fence/base.md"
@@ -384,9 +425,35 @@ for fence in round_disc final_disc; do
   [ -s "$T/d-$fence/base.md.shown" ] && ok "$fence: 공시가 보인 판본을 못박았다(.shown)" || no "$fence: .shown 이 없다 — 이 공시 뒤의 revert · accept 가 rc 4 로 막힌다"
   printf 'SAME 줄 하나\nEDITED_BY_AUTHOR 줄 둘\n' > "$T/d-$fence/seed.md"
   outH="$(coldx "$T/$fence.sh" STATE_DIR="$T/d-$fence" SEED_BASE="$T/d-$fence/base.md" SEED_ABS="$T/d-$fence/seed.md")"
-  assert_contains "$outH" "덩어리 1 — 기준" "$fence: 편집이 있으면 덩어리 머리줄을 낸다"
-  assert_contains "$outH" "+ EDITED_BY_AUTHOR 줄 둘" "$fence: 편집된 줄을 줄임 없이 낸다"
+  if grep -q 'seed_edit_diff.py" hunks' "$T/$fence.sh" && grep -q 'seed_edit_screen.py" screen' "$T/$fence.sh" && grep -qF 'print(d["text"])' "$T/$fence.sh"; then
+    ok "$fence: 펜스 하나가 hunks(공시 기록)와 화면 글 내기를 함께 한다"
+  else
+    no "$fence: hunks 와 화면 글 내기가 한 펜스에 없다 — 화면 없이 공시 기록만 남는 길이 생긴다"
+  fi
+  assert_contains "$outH" "1) 기준 2행 → 현재 2행" "$fence: 편집이 있으면 덩어리 머리줄을 낸다"
+  assert_contains "$outH" "   뺀 문장: SAME 줄 둘" "$fence: 뺀 문장을 낸다"
+  assert_contains "$outH" "   더한 문장: EDITED_BY_AUTHOR 줄 둘" "$fence: 더한 문장을 하나도 빼지 않고 낸다"
+  assert_not_contains "$outH" "SAME 줄 하나" "$fence: 그대로인 줄은 화면에 없다"
+  assert_contains "$outH" '질문 묶음: [{' "$fence: 질문 묶음을 낸다"
   assert_not_contains "$outH" "저자 편집 없음" "$fence: 편집이 있는데 «저자 편집 없음» 을 내지 않는다"
+  outX="$(coldx "$T/$fence.sh" SD="$T/sdbad" STATE_DIR="$T/d-$fence" SEED_BASE="$T/d-$fence/base.md" SEED_ABS="$T/d-$fence/seed.md")"
+  assert_contains "$outX" "화면 조립 실패 — 줄 전체를 보인다" "$fence: 화면 조립이 실패하면 그 사실을 알린다(공시는 막히지 않는다)"
+  assert_contains "$outX" "+ EDITED_BY_AUTHOR 줄 둘" "$fence: 화면 조립이 실패하면 편집된 줄을 줄임 없이 낸다"
+  assert_not_contains "$outX" "(권장)" "$fence: 화면 조립이 실패한 화면에는 권장이 없다"
+  [ -s "$T/d-$fence/base.md.shown" ] && ok "$fence: 화면 조립이 실패해도 공시 기록(.shown)은 남는다" || no "$fence: 화면 조립 실패 뒤 .shown 이 없다"
+done
+nth_bash_with "$DISC" 'seed_edit_screen.py" preview' > "$T/round_pv.sh"
+nth_bash_with "$FIN" 'seed_edit_screen.py" preview' > "$T/final_pv.sh"
+for fence in round_pv final_pv; do
+  [ -s "$T/$fence.sh" ] && ok "추출: 미리 보기 펜스($fence)" || no "추출: 미리 보기 펜스($fence)가 비었다 — 아래 판정은 무의미하다"
+  mkdir -p "$T/p-$fence"
+  printf 'SAME 줄\n' > "$T/p-$fence/base.md"; printf 'EDIT 줄\n' > "$T/p-$fence/seed.md"; printf 'STALE_REASONS\n' > "$T/p-$fence/hunk-reasons.txt"
+  outP="$(coldx "$T/$fence.sh" STATE_DIR="$T/p-$fence" SEED_BASE="$T/p-$fence/base.md" SEED_ABS="$T/p-$fence/seed.md")"
+  [ ! -e "$T/p-$fence/hunk-reasons.txt" ] && ok "$fence: 미리 보기 펜스가 지난 이유 파일을 지운다" || no "$fence: 지난 이유 파일이 남았다 — 다른 공시의 이유가 이 덩어리에 붙는다"
+  assert_contains "$outP" '"seed_sha256"' "$fence: 미리 보기가 판본을 낸다"
+  assert_contains "$outP" 'EDIT 줄' "$fence: 미리 보기가 덩어리를 낸다"
+  [ ! -e "$T/p-$fence/base.md.shown" ] && ok "$fence: 미리 보기는 공시 기록(.shown)을 남기지 않는다" || no "$fence: 미리 보기가 공시 기록을 남겼다"
+  assert_not_contains "$(cat "$T/$fence.sh")" 'seed_edit_diff.py' "$fence: 미리 보기 펜스는 hunks 를 부르지 않는다"
 done
 
 # ── 처분 펜스 — 성공 경로(되돌리기 → 기록 → 교체) · 기록 실패 · 부분 실패 뒤 재실행 ──────────
@@ -395,6 +462,7 @@ disp_fence() {   # disp_fence <PAIRS(줄바꿈은 \n 으로)> → 자리표를 �
 import os, sys
 t = sys.stdin.read()
 t = t.replace("<덩어리마다 한 줄 — 번호:처분>", os.environ["PAIRS_IN"].replace("\\n", "\n"), 1)
+t = t.replace("<덩어리 JSON 파일 이름>", "hunks.json", 1)
 sys.stdout.write(t.replace("<n>", "1"))
 '
 }
@@ -402,7 +470,7 @@ setup_disp() {   # setup_disp <디렉토리> → base · seed(한 줄 편집) ·
   mkdir -p "$1"
   printf 'KEEP 줄\nBASE_LINE 줄\n' > "$1/base.md"; printf 'KEEP 줄\nAUTHOR_EDIT 줄\n' > "$1/seed.md"
   cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$1/a.audit.md"
-  python3 "$S/seed_edit_diff.py" hunks "$1/base.md" "$1/seed.md" >/dev/null
+  python3 "$S/seed_edit_diff.py" hunks "$1/base.md" "$1/seed.md" > "$1/hunks.json"
 }
 coldd() { coldx "$1" STATE_DIR="$2" SEED_BASE="$2/base.md" SEED_ABS="$2/seed.md" AUDIT_ABS="$2/a.audit.md"; }
 n_edit() { grep -c '^- 편집 · ' "$1/a.audit.md" || true; }
@@ -437,8 +505,8 @@ mkdir -p "$T/dispD"
 printf 'L1\nBASE_2\nL3\nL4\nL5\nL6\nBASE_7\nL8\n' > "$T/dispD/base.md"
 printf 'L1\nEDIT_2\nL3\nL4\nL5\nL6\nEDIT_7\nL8\n' > "$T/dispD/seed.md"
 cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/dispD/a.audit.md"
-python3 "$S/seed_edit_diff.py" hunks "$T/dispD/base.md" "$T/dispD/seed.md" > "$T/dispD/h.json"
-assert_eq "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["hunks"]))' "$T/dispD/h.json")" "2" "처분 (d) 전제: 덩어리 둘"
+python3 "$S/seed_edit_diff.py" hunks "$T/dispD/base.md" "$T/dispD/seed.md" > "$T/dispD/hunks.json"
+assert_eq "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["hunks"]))' "$T/dispD/hunks.json")" "2" "처분 (d) 전제: 덩어리 둘"
 cp "$T/dispD/base.md" "$T/dispD/base.before"
 printf '   \n' > "$T/dispD/said-hunk-1.txt"; printf 'QUOTE_D2\n' > "$T/dispD/said-hunk-2.txt"
 disp_fence '1:되돌린다\n2:그대로 둔다' > "$T/dispD.sh"
@@ -456,7 +524,7 @@ assert_eq "$(n_edit "$T/dispD")" "3" "처분 (d): 다시 돈 만큼 편집 줄�
 assert_eq "$(cmp -s "$T/dispD/base.md" "$T/dispD/seed.md" && echo same)" "same" "처분 (d): 교체 뒤 기준 사본 = seed"
 # (e) 재사용 없음 — 끝난 처분 뒤 새 공시에 Write 없이 돌리면 지난 문구를 쓰지 않는다
 printf 'L1\nBASE_2\nL3\nL4\nL5\nL6\nEDIT_7_AGAIN\nL8\n' > "$T/dispD/seed.md"
-python3 "$S/seed_edit_diff.py" hunks "$T/dispD/base.md" "$T/dispD/seed.md" >/dev/null
+python3 "$S/seed_edit_diff.py" hunks "$T/dispD/base.md" "$T/dispD/seed.md" > "$T/dispD/hunks.json"
 outE2="$(coldd "$T/dispD.sh" "$T/dispD")"
 assert_contains "$outE2" "pre_rc=2" "처분 (e): Write 없이 다시 돌리면 지난 문구를 쓰지 않고 멈춘다"
 assert_eq "$(n_edit "$T/dispD")" "3" "처분 (e): 재사용 시도가 줄을 남기지 않았다"
@@ -466,11 +534,64 @@ disp_fence '1:그대로 둔다' > "$T/dispF.sh"
 outF1="$(coldd "$T/dispF.sh" "$T/dispF")"
 assert_contains "$outF1" "accept_rc=0" "처분 (f) 전제: 첫 공시의 처분이 끝난다"
 printf 'KEEP 줄\nAUTHOR_EDIT 줄\nSECOND_EDIT 줄\n' > "$T/dispF/seed.md"
-python3 "$S/seed_edit_diff.py" hunks "$T/dispF/base.md" "$T/dispF/seed.md" >/dev/null
+python3 "$S/seed_edit_diff.py" hunks "$T/dispF/base.md" "$T/dispF/seed.md" > "$T/dispF/hunks.json"
 printf 'QUOTE_SAME\n' > "$T/dispF/said-hunk-1.txt"
 outF2="$(coldd "$T/dispF.sh" "$T/dispF")"
 assert_contains "$outF2" "accept_rc=0" "처분 (f): 둘째 공시의 처분도 끝난다"
 assert_eq "$(grep -c '^- 편집 · r1 · 덩어리 1 · 그대로 둔다 · "QUOTE_SAME" —$' "$T/dispF/a.audit.md")" "2" "처분 (f): 같은 라운드 두 공시의 처분은 글자가 같아도 두 줄로 남는다"
+# (g) 쓴 지적 목록 — 그 화면의 이유 파일이 댄 지적 id 를 되돌리기 앞에서 더한다
+why_disp() {   # why_disp <디렉토리> <지적 id 들(쉼표)> → 판본이 맞는 이유 파일(덩어리 1)
+  printf 'seed_sha256 %s\n1\t%s\n' "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["seed_sha256"])' "$1/hunks.json")" "$2" > "$1/hunk-reasons.txt"
+}
+setup_disp "$T/dispG"; printf 'QUOTE_G\n' > "$T/dispG/said-hunk-1.txt"; why_disp "$T/dispG" "FID_G1,FID_G2"
+disp_fence '1:그대로 둔다' > "$T/dispG.sh"
+outG="$(coldd "$T/dispG.sh" "$T/dispG")"
+assert_contains "$outG" "pre_rc=0 rev_rc=0 log_rc=0 used_rc=0" "처분 (g): 목록에 더하기 · 기록이 성공한다"
+assert_contains "$outG" "accept_rc=0" "처분 (g): 끝까지 간다"
+assert_eq "$(cat "$T/dispG/hunk-used-findings.txt" 2>/dev/null)" "$(printf 'FID_G1\nFID_G2')" "AC10: 처분 펜스가 그 화면의 이유 파일이 댄 지적 id 를 쓴 지적 목록에 더한다"
+# (h) 목록에 더하지 못하면 — 되돌리기 · 기록 · 교체를 하지 않는다
+setup_disp "$T/dispH"; printf 'QUOTE_H\n' > "$T/dispH/said-hunk-1.txt"; why_disp "$T/dispH" "FID_H"
+printf '\377\376' > "$T/dispH/hunk-used-findings.txt"
+cp "$T/dispH/base.md" "$T/dispH/base.before"; cp "$T/dispH/seed.md" "$T/dispH/seed.before"
+disp_fence '1:되돌린다' > "$T/dispH.sh"
+outH2="$(coldd "$T/dispH.sh" "$T/dispH")"
+assert_contains "$outH2" "rev_rc=0 log_rc=0 used_rc=2" "AC10: 쓴 지적 목록에 더하지 못하면 멈춘다"
+assert_not_contains "$outH2" "accept_rc=" "AC10: 더하지 못하면 accept 를 부르지 않는다"
+assert_eq "$(cmp -s "$T/dispH/seed.md" "$T/dispH/seed.before" && cmp -s "$T/dispH/base.md" "$T/dispH/base.before" && echo same)" "same" "AC10: 더하지 못하면 seed 도 기준 사본도 그대로다(되돌리기 전에 멈췄다)"
+assert_eq "$(n_edit "$T/dispH")" "0" "AC10: 더하지 못하면 편집 줄을 남기지 않는다"
+assert_contains "$(cat "$T/dispH.sh.err")" "쓴 지적 목록에 더하지 못했다" "AC10: 멈춘 까닭을 알린다"
+# (i) 처분 목록에서 덩어리 하나가 빠졌다 — 아무것도 바뀌지 않는다
+mkdir -p "$T/dispI"
+printf 'L1\nBASE_2\nL3\nL4\nL5\nL6\nBASE_7\nL8\n' > "$T/dispI/base.md"
+printf 'L1\nEDIT_2\nL3\nL4\nL5\nL6\nEDIT_7\nL8\n' > "$T/dispI/seed.md"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$T/dispI/a.audit.md"
+python3 "$S/seed_edit_diff.py" hunks "$T/dispI/base.md" "$T/dispI/seed.md" > "$T/dispI/hunks.json"
+printf 'QUOTE_I\n' > "$T/dispI/said-hunk-1.txt"; why_disp "$T/dispI" "FID_I"
+cp "$T/dispI/base.md" "$T/dispI/base.before"; cp "$T/dispI/seed.md" "$T/dispI/seed.before"
+disp_fence '1:그대로 둔다' > "$T/dispI.sh"
+outI="$(coldd "$T/dispI.sh" "$T/dispI")"
+assert_contains "$outI" "used_rc=2" "AC10: 처분 목록의 번호가 그 화면의 덩어리 전부와 같지 않으면 멈춘다"
+assert_not_contains "$outI" "accept_rc=" "AC10: 번호가 빠진 처분 목록으로는 accept 를 부르지 않는다"
+assert_eq "$(cmp -s "$T/dispI/seed.md" "$T/dispI/seed.before" && cmp -s "$T/dispI/base.md" "$T/dispI/base.before" && echo same)" "same" "AC10: 번호가 빠진 처분 목록으로는 seed 도 기준 사본도 바뀌지 않는다"
+assert_eq "$(n_edit "$T/dispI")" "0" "AC10: 번호가 빠진 처분 목록으로는 편집 줄을 남기지 않는다"
+[ ! -e "$T/dispI/hunk-used-findings.txt" ] && ok "AC10: 번호가 빠진 처분 목록으로는 쓴 지적 목록도 바뀌지 않는다" || no "AC10: 번호가 빠졌는데 쓴 지적 목록이 생겼다"
+
+# ── AC11 — 추천 전수 검사가 이 자리의 새 규칙을 잰다(지우면 실패) ────────────────────
+RFREL="plugins/spec-distill/skills/request-framing/SKILL.md"
+mkdir -p "$T/ar/plugins/spec-distill/skills/request-framing"
+grep -F "$RFREL" "$ROOT/shared/tests/fixtures/ask-sites.tsv" > "$T/ar/sites.tsv"
+printf '%s\n' "$RFREL" > "$T/ar/list.txt"
+ar_no() { python3 "$ROOT/shared/tests/ask_recommendation.py" "$T/ar" "$T/ar/list.txt" "$T/ar/sites.tsv" | grep '^no ' || true; }
+cp "$SK" "$T/ar/$RFREL"
+assert_eq "$(ar_no)" "" "AC11 양성 대조: request-framing 의 질문 자리 행이 전부 통과한다"
+assert_eq "$(grep -c '처분을 한 묶음으로 묻는다' "$T/ar/sites.tsv" || true)" "1" "AC11 전제: 목록에 덩어리 질문 행이 있다"
+OLD='번 그대로 둔다 (권장)」 이 된다' NEW='번 그대로 둔다」 이 된다' python3 -c '
+import os, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[1], "w", encoding="utf-8").write(t.replace(os.environ["OLD"], os.environ["NEW"], 1))
+sys.exit(0 if os.environ["OLD"] in t else 3)
+' "$T/ar/$RFREL" || no "AC11 변이: 치환 대상을 못 찾았다 — 이 변이는 아무것도 재지 않았다"
+assert_contains "$(ar_no)" "꼬리 「- 덩어리가 있으면 **처분을 한 묶음으로 묻는다**」" "AC11 변이: 권장 라벨 문장을 지우면 추천 전수 검사가 그 행에서 실패한다"
 
 # ── 확정 직전 검사 셋 — 엔진 자리가 사라졌거나(세션 정리) 라운드가 시작되지 않았을 때 ──
 nth_bash_with "$FIN" 'gate-final.json' > "$T/final_drops.sh"
