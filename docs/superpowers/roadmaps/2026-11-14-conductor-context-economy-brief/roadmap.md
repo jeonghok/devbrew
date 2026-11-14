@@ -27,9 +27,9 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 의도: 과제 폴더 · INTENT.md · 역할 문서 · 규칙 목차 · 시작 묶음을 세워 읽기 설계의 바닥을 깐다
 - 범위: 한다: 에픽 묶음 + 지휘 기록 → INTENT.md, results/, 역할 폴더(레포 공통) · 팀 전용 목록, 규칙 목차(새 이름) · HANDBOOK 운영과 경계 장치, 시작 묶음 고르기 스크립트, devbrew 파일 기준 단계 계산 / 안 한다: 지휘 절차서 개편
 - 의존: 없음
-- 브랜치: feature/team-file-contract
+- 브랜치: feature/team-file-contract, feature/team-file-read, feature/team-file-rules
 - 묶음: R1.md
-- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/epic-handoff.md
+- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/workflow_superpowers.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/templates/team/, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/references/roadmap-ontology.md, REVIEW.md, docs/superpowers/roadmaps/HANDBOOK.md, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/
 - 크기: 큼
 - 병렬: P1 과 병렬
 - 순서 이유: 나머지가 이 파일 형식을 읽는다
@@ -41,7 +41,7 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 의존: R1
 - 브랜치: feature/conductor-stage-table
 - 묶음: R2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: R1 형식 위에서 단계가 돈다
@@ -98,6 +98,11 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 ### 2026-11-14 · 처음 로드맵
 - 원문:
   - 「승인 (권장)」
+
+### 2026-11-14 · R1 설계 승인 뒤 브랜치 · 경로 예약 · 번호 목록을 맞춘다 — 에픽 경계 · 범위 · 의존은 그대로
+- 바뀜: 바뀐 에픽 R1 · R2 · R3 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
