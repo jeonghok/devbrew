@@ -196,11 +196,22 @@ g branch -q -D feature/tm-e2
 assert_eq "$(jr feature/tm-e2 implement-1.md)" "0" "대조: 로컬 브랜치가 없으면 origin 끝을 읽는다"
 JOB=E1
 
-# 끝 — 로컬에만 있는 브랜치: rc 0 과 「아직 안 올라옴」 줄 · 갈라진 브랜치: rc 3 「갈라짐」 (Task 6 이 단언으로 켠다 — 이 과제는 --branch 가 로컬 끝을 읽는 것까지: 위의 v/* 는 모두 로컬에만 있다)
-# assert_eq "$(jr v/crlf implement-plan-1-1.md)" "0" "끝: 로컬에만 있는 브랜치 — rc 0"
-# assert_contains "$(cat "$T/out.txt")" "아직 안 올라옴" "끝: 로컬에만 있는 브랜치 — 알림"
-# (둘째 clone 이 feature/tm-e1 에 다른 커밋을 push 하고 로컬에도 커밋 하나) assert_eq "$(jr feature/tm-e1 implement-plan-1-1.md)" "3" "끝: 갈라진 브랜치 — rc 3"
-# assert_contains "$(cat "$T/out.txt")" "갈라짐" "끝: 갈라진 브랜치 — 사유"
+# 끝 — 로컬에만 있는 브랜치: rc 0 과 「아직 안 올라옴」 줄 · 갈라진 브랜치: rc 3 「갈라짐」 (위의 v/* 는 모두 로컬에만 있다)
+assert_eq "$(jr v/crlf implement-plan-1-1.md)" "0" "끝: 로컬에만 있는 브랜치 — rc 0"
+assert_contains "$(cat "$T/out.txt")" "아직 안 올라옴" "끝: 로컬에만 있는 브랜치 — 알림"
+assert_eq "$(sed -n 2p "$T/out.txt" | grep -c "^아직 안 올라옴 — v/crlf 의 로컬 끝")" "1" "끝: 알림은 첫 줄 뒤 한 줄"
+FORK="$T/fork"
+git clone -q "$T/origin.git" "$FORK"
+fk() { git -C "$FORK" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
+g branch -q x/fork feature/tm-e1 && g push -q origin x/fork
+fk fetch -q origin && fk checkout -q -b x/fork origin/x/fork
+printf 'o\n' > "$FORK/other-side.txt"
+fk add -- other-side.txt
+fk commit -qm "다른 쪽 커밋"
+fk push -q origin x/fork
+g checkout -q x/fork && put local-side.txt l && g commit -qm "로컬 쪽 커밋" && g checkout -q main && g fetch -q origin
+assert_eq "$(jr x/fork implement-plan-1-1.md)" "3" "끝: 갈라진 브랜치 — rc 3"
+assert_contains "$(cat "$T/out.txt")" "갈라짐" "끝: 갈라진 브랜치 — 사유"
 
 # ── 브랜치 고르기 · 사용법 ───────────────────────────────────────────────────
 assert_eq "$(jraw --roadmap "$RM" --job E1 --result implement-plan-1-1.md --date 2026-11-20)" "0" "브랜치: --branch 가 없으면 블록의 계획 1 번째 브랜치"

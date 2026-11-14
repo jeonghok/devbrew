@@ -712,16 +712,18 @@ for path in sys.argv[1:]:
 print("CHECKED %d" % count)
 PY
 }
-out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py" "$S/team_check.py" "$S/team_files.py" "$S/workflow_superpowers.py" "$S/job_results.py")"; rc=$?
+out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py" "$S/team_check.py" "$S/team_files.py" "$S/workflow_superpowers.py" "$S/job_results.py" "$S/team_status.py" "$S/branch_tip.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
-assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 열두 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
-assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 12" "정적 검사가 열두 스크립트를 셌다"
+assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 열네 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 14" "정적 검사가 열네 스크립트를 셌다"
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
 assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
 out="$(static_check "$T/mut_write.py")"
 assert_contains "$out" "쓰기 호출 write_text" "양성 대조: write_text 를 잡는다"
 assert_contains "$out" "네트워크 · 파일 조작 모듈 urllib.request" "양성 대조: urllib 을 잡는다"
+sed 's/\["git", \*args\]/[GIT, *args]/' "$S/branch_tip.py" > "$T/mut_tip.py"
+assert_contains "$(static_check "$T/mut_tip.py")" "git 이 아닌 subprocess" "양성 대조: branch_tip.py 의 [git, *args] 를 [GIT, *args] 로 되돌리면 정적 검사가 잡는다(그 파일이 검사받는다)"
 printf 'import subprocess\nGIT_ALLOWED = {"show", "fetch"}\n' > "$T/ctl_set.py"
 assert_contains "$(static_check "$T/ctl_set.py")" "GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" "양성 대조: 집합 리터럴 GIT_ALLOWED 를 잡는다"
 printf 'open("x", "w", encoding="utf-8")\n' > "$T/ctl_open.py"

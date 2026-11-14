@@ -8,7 +8,7 @@ import 하지 않는다 — 그쪽이 이 모듈을 가져오므로 `main()` 안
 명령줄: job_results.py check --roadmap <로드맵 레포 상대경로> --job <과제> --result <결과 파일 이름>
                             [--branch <브랜치>] [--date <YYYY-MM-DD>]
         기본 브랜치의 로드맵을 읽어 과제 브랜치 끝의 결과 파일을 대조한다. `--branch` 가 없으면 블록의 브랜치 가운데
-        결과 파일 이름의 계획 번호 번째(계획 번호가 없으면 첫째)다. 브랜치 끝은 로컬 ref, 없으면 origin ref 다.
+        결과 파일 이름의 계획 번호 번째(계획 번호가 없으면 첫째)다. 브랜치 끝은 team_status.read_tip 이 고른다.
         첫 줄이 대조 결과이고, 통과하면 리더가 결정 기록에 적을 받음 줄을 낸다.
         종료 코드 0 통과 · 1 거절 · 2 사용법 · 3 검사 불가
 """
@@ -344,11 +344,16 @@ def _check(a) -> int:
         raise Usage("team 형식 로드맵이 아니다 — %s 머리말에 `%s: %s` 가 없다"
                     % (team.roadmap, team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM))
     branch = a.branch or _branch_of(text, a.job, a.result)
-    tip = git.commit("refs/heads/" + branch) or git.commit("refs/remotes/origin/" + branch)
+    import team_status
+    tip, tip_note, split = team_status.read_tip(git, branch)
+    if split:
+        raise Unchecked(split)
     if tip is None:
         raise Unchecked("브랜치 %s 가 로컬에도 origin 에도 없다" % branch)
     c = check_result(git, tip, team, a.job, a.result)
     print(c.first)
+    if tip_note:
+        print(tip_note)
     print("브랜치: %s · 끝 %s" % (branch, tip[:8]))
     for p in c.problems:
         print("거절 사유: %s" % p)
