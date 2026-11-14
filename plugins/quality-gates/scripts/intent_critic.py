@@ -134,13 +134,18 @@ def _read(path: str) -> Optional[str]:
         return None
 
 
+# UTF-8 로 쓸 수 없는 글자(짝 없는 surrogate — YAML 의 `"\\ud800"` 이 그렇게 읽힌다)는 버리지 않고
+# `\\ud800` 꼴로 남긴다. 리뷰 트리의 답 파일 · 리뷰어 출력에서 온 그런 글이 단계를 죽이지 못한다.
+UNWRITABLE = "backslashreplace"
+
+
 def _write(path: str, text: str) -> None:
-    with open(path, "w", encoding="utf-8") as fh:
+    with open(path, "w", encoding="utf-8", errors=UNWRITABLE) as fh:
         fh.write(text)
 
 
 def _append(path: str, text: str) -> None:
-    with open(path, "a", encoding="utf-8") as fh:
+    with open(path, "a", encoding="utf-8", errors=UNWRITABLE) as fh:
         fh.write(text)
 
 
@@ -680,7 +685,7 @@ def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> O
 
 
 def _unidentified_id(question: str) -> str:
-    return "unidentified:" + hashlib.sha1(question.encode("utf-8")).hexdigest()[:12]
+    return "unidentified:" + hashlib.sha1(question.encode("utf-8", UNWRITABLE)).hexdigest()[:12]
 
 
 def _question_record(item: dict, ident: str, identified: bool, evidence: dict) -> dict:

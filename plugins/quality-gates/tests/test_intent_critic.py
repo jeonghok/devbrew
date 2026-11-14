@@ -2157,6 +2157,86 @@ class TestRecordSilentDrops(unittest.TestCase):
         self.assertEqual(p.stdout.strip(), "record: 0")
 
 
+class TestUnwritableText(unittest.TestCase):
+    """UTF-8 로 쓸 수 없는 글(짝 없는 surrogate — YAML 의 `"\\ud800"` 이 그렇게 읽힌다)이 리뷰 트리의 답
+    파일이나 리뷰어 출력에 있어도 단계가 죽지 않는다. 글은 버리지 않고 이스케이프(`\\ud800`)로 남긴다."""
+
+    ESC = "\\ud800"          # 파일에 남는 글자 여섯 — 역슬래시 · u · d800
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, "repo"))
+        self.repo = _git_repo(os.path.join(self.tmp.name, "repo"))
+        self.rd = os.path.join(self.tmp.name, "rd")
+        os.makedirs(self.rd)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _clean(self, proc, rc=0):
+        self.assertEqual(proc.returncode, rc, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        return proc
+
+    def test_prepare_survives_an_answer_file_id_it_cannot_write(self):
+        """리뷰 대상 브랜치가 답 자리에 둔 답 파일의 정체에 그런 글이 있어도 prepare 가 끝나고 계획 파일이 생긴다."""
+        planted = _answer_text().replace('id: "a.md#D1#방향"', 'id: "a%s.md#D1#방향"' % self.ESC)
+        self.assertIn(self.ESC, planted)
+        _write(planted, self.repo, ANS_DIR, _wf(1))
+        self.assertEqual(list(ia.read_answered(os.path.join(self.repo, ANS_DIR))[0]),
+                         ["a\ud800.md#D1#방향"])
+        _write(_config_text(), self.rd, "intent-config.txt")
+        _write("## Goals\ng\n", self.rd, "intent.md")
+        _write("관찰\n", self.rd, "e2e-record.md")
+        _write("{}", self.rd, "intent-specs.json")
+        p = self._clean(_cli("prepare", "--rd", self.rd, "--repo", self.repo, "--tree-root",
+                             self.repo, "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                             "--specs-json", os.path.join(self.rd, "intent-specs.json")))
+        self.assertEqual(_last(p), "intent-call: first-only")
+        self.assertIn("call: first-only\n", _read(self.rd, "intent-plan.txt"))
+        self.assertIn("- a%s.md#D1#방향 · 의도다 · " % self.ESC, _read(self.rd, "intent-answered.md"))
+
+    def test_filter_and_render_survive_a_question_they_cannot_write(self):
+        """정체를 못 가른 질문 · 가른 질문의 글에 그런 글이 있어도 filter 와 render 가 끝나고 결과 절이 생긴다."""
+        _filter_rd(self.rd)
+        _write(_out([_q("D1", kind="모르는", question="못 가른 \ud800 질문"),
+                     _q("D2", question="가른 \ud800 질문")]), self.rd, "intent-critic-1.txt")
+        p = self._clean(_cli("filter", "--rd", self.rd, "--review-mode", "session"))
+        self.assertEqual(_last(p), "intent-ask: 2")
+        ids = sorted(q["id"] for q in _by_state(self.rd, "ask"))
+        self.assertEqual(ids[0], SRC + "#D2#방향")
+        self.assertTrue(ids[1].startswith("unidentified:"), ids)
+        other = ic._unidentified_id("못 가른 \ud801 질문")
+        self.assertNotEqual(ids[1], other)          # 글자를 버리지 않는다 — 다른 글은 다른 정체다
+        _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
+        r = self._clean(_cli("render", "--rd", self.rd, "--mode", "pr"))
+        self.assertEqual(_last(r), "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개")
+        section = _read(self.rd, "result.md").split("\n## intent-critic\n", 1)[1]
+        for text in ("못 가른 %s 질문" % self.ESC, "가른 %s 질문" % self.ESC):
+            self.assertIn(text, section)
+        self.assertEqual(len(_return_block(self.rd)[1]["questions"]), 2)
+
+    def test_record_and_render_survive_a_question_identity_they_cannot_write(self):
+        """정체에 그런 글이 있는 질문 — 답 입력은 파일에서 읽으며 그 글자가 바뀌므로 머리가 맞지 않아 기록되지
+        않는다. record 는 그 사실을 공시하고 끝나며, render 는 그 정체를 이스케이프로 싣는다."""
+        _filter_rd(self.rd)
+        _write(_out([_q("D\ud800")]), self.rd, "intent-critic-1.txt")
+        self._clean(_cli("filter", "--rd", self.rd, "--review-mode", "session"))
+        ident = _by_state(self.rd, "ask")[0]["id"]
+        self.assertEqual(ident, SRC + "#D\ud800#방향")
+        answers = os.path.join(self.tmp.name, "answers.txt")
+        Path(answers).write_bytes(("=== id: %s · pick: 의도다\n" % ident)
+                                  .encode("utf-8", "surrogatepass"))
+        p = self._clean(_cli("record", "--rd", self.rd, "--repo", self.repo, "--answers", answers))
+        self.assertEqual(_last(p), "record: 0")
+        self.assertIn("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 1개", p.stdout.splitlines())
+        self.assertFalse(os.path.isdir(os.path.join(self.repo, ANS_DIR)))
+        _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
+        self._clean(_cli("render", "--rd", self.rd, "--mode", "pr"))
+        self.assertIn("| %s#D%s#방향 |" % (SRC, self.ESC), _read(self.rd, "result.md"))
+        self.assertEqual(_return_block(self.rd)[1]["questions"][0]["id"], ident)
+
+
 class TestPlanInjection(unittest.TestCase):
     """리뷰 트리에서 읽은 값이 줄 단위 세션 파일에 줄을 덧쓰지 못한다(SEC-1)."""
 
