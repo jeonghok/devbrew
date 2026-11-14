@@ -48,7 +48,7 @@ from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽�
 from state_path import state_root_for_common  # noqa: E402
 import team_layout  # noqa: E402
 
-GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
+GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep", "ls-tree"})
 NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 "
           "메시지로 알아보고 「PR 상태 미확인」을 보인다. "
           "지휘자가 PR 을 열 때 번호를 적은 에픽은 그 PR 로만 머지를 판정한다. 번호가 없는 에픽(이 판 전에 연 PR · 지휘자 밖에서 연 PR · "
@@ -228,6 +228,27 @@ class Git:
             self.fail("log", rc, err)
             return False
         return any(line.strip() in lines for body in out.split("\x1e") for line in body.splitlines())
+
+    def names(self, rev: str, folder: str):
+        """rev 의 트리에서 folder 바로 아래 이름들(정렬). 폴더가 없으면 [], git 이 실패하면 failures 에 남기고 None."""
+        prefix = folder.rstrip("/") + "/"
+        rc, out, err = self.run_err("ls-tree", "--full-tree", "--name-only", "-z", rev, "--", prefix)
+        if rc != 0:
+            self.fail("ls-tree", rc, err)
+            return None
+        return sorted(p[len(prefix):] for p in out.split("\0") if p.startswith(prefix))
+
+    def touched(self, tip: str, excludes: list, paths: list):
+        """tip 에서 닿고 excludes 의 어느 커밋에서도 닿지 않는 merge 아닌 커밋이 paths 아래에서 바꾼 파일(정렬 · 겹침 없음).
+        paths 는 글자 그대로의 경로다(폴더면 그 아래 전부). paths 가 비면 git 을 부르지 않고 []. 실패하면 failures 에 남기고 None."""
+        if not paths:
+            return []
+        rc, out, err = self.run_err("log", "--no-merges", "--full-history", "--no-renames", "--format=", "--name-only", "-z",
+                                    tip, *["^" + e for e in excludes if e], "--", *[":(literal)" + p for p in paths])
+        if rc != 0:
+            self.fail("log", rc, err)
+            return None
+        return sorted({p.lstrip("\n") for p in out.split("\0") if p.lstrip("\n")})
 
     def grep_files(self, tree: str, fixed: str, pathspec: str):
         rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
