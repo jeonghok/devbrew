@@ -43,6 +43,9 @@ DIR_ENV = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 MAX_ENV = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
 DEFAULT_DIR = "docs/qg-intent-answers"
 DEFAULT_MAX = 120000
+OTHER_MAX_ENV = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
+MARKERS_ENV = "DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS"
+DEFAULT_OTHER_MAX = 80000
 SETTINGS_FILES = (".claude/settings.json", ".claude/settings.local.json")
 
 CONFIG = "intent-config.txt"
@@ -182,7 +185,9 @@ def _repeated(pairs: List[tuple], keys: tuple) -> bool:
     return repeated
 
 
-CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source")
+CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source",
+               "other_teams_max_bytes", "other_teams_max_bytes_source", "intent_doc_markers",
+               "intent_doc_markers_source")
 PLAN_KEYS = ("call", "mode", "tree_root", "answers_root")
 
 
@@ -194,6 +199,15 @@ def _read_config(rd: str) -> Optional[dict]:
     if not cfg.get("answers_dir") or not cfg.get("max_bytes", "").isdigit():
         return None
     cfg["max_bytes"] = int(cfg["max_bytes"])
+    # R2 가 더한 키 — 없으면(옛 꼴) 기본값, 있는데 틀리면 파일을 거부한다. 짝 `_source` 없이 하나만 와도 받는다.
+    other_max = cfg.get("other_teams_max_bytes")
+    cfg["other_teams_max_bytes"] = (DEFAULT_OTHER_MAX if other_max is None
+                                    else _valid_max_bytes(other_max))
+    markers = cfg.get("intent_doc_markers")
+    cfg["intent_doc_markers"] = (list(io_.DEFAULT_MARKERS) if markers is None
+                                 else io_.parse_markers(markers))
+    if cfg["other_teams_max_bytes"] is None or cfg["intent_doc_markers"] is None:
+        return None
     return cfg
 
 
@@ -381,8 +395,15 @@ def cmd_config(args) -> int:
     pairs = _settings_pairs(args.repo, args.base, args.project_dir)
     answers_dir, dir_source = _setting(pairs, DIR_ENV, DEFAULT_DIR, _valid_answers_dir)
     max_bytes, max_source = _setting(pairs, MAX_ENV, DEFAULT_MAX, _valid_max_bytes)
+    other_max, other_source = _setting(pairs, OTHER_MAX_ENV, DEFAULT_OTHER_MAX, _valid_max_bytes)
+    markers, markers_source = _setting(pairs, MARKERS_ENV, list(io_.DEFAULT_MARKERS),
+                                       io_.parse_markers)
     lines = ["answers_dir: %s" % answers_dir, "answers_dir_source: %s" % dir_source,
-             "max_bytes: %d" % max_bytes, "max_bytes_source: %s" % max_source]
+             "max_bytes: %d" % max_bytes, "max_bytes_source: %s" % max_source,
+             "other_teams_max_bytes: %d" % other_max,
+             "other_teams_max_bytes_source: %s" % other_source,
+             "intent_doc_markers: %s" % ",".join(markers),
+             "intent_doc_markers_source: %s" % markers_source]
     _write(_path(args.rd, CONFIG), "\n".join(lines) + "\n")
     _emit(lines)
     return 0

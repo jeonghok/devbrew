@@ -975,6 +975,8 @@ SCRIPT = SCRIPTS / "intent_critic.py"
 KILL = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
 ENV_DIR = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 ENV_MAX = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
+ENV_OTHER_MAX = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
+ENV_MARKERS = "DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS"
 ANS_DIR = "docs/qg-intent-answers"
 SRC = "docs/brief.md"
 NONE_LINE = "intent-critic — 근거 없음"
@@ -987,7 +989,7 @@ MEANING = ("의도대로 만들었는지가 아니라 의도 자체"
 
 def _env(**extra):
     env = dict(os.environ)
-    for k in (KILL, ENV_DIR, ENV_MAX):
+    for k in (KILL, ENV_DIR, ENV_MAX, ENV_OTHER_MAX, ENV_MARKERS):
         env.pop(k, None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.update(extra)
@@ -1149,7 +1151,12 @@ class TestConfig(unittest.TestCase):
     def test_default_env_and_settings_changed(self):
         c = self._config()
         self.assertEqual(c, {"answers_dir": ANS_DIR, "answers_dir_source": "default",
-                             "max_bytes": "120000", "max_bytes_source": "default"})
+                             "max_bytes": "120000", "max_bytes_source": "default",
+                             "other_teams_max_bytes": "80000",
+                             "other_teams_max_bytes_source": "default",
+                             "intent_doc_markers": "source_interview,roadmap,source_brief,"
+                                                   "type=roadmap,type=epic-bundle",
+                             "intent_doc_markers_source": "default"})
         env = _env(**{ENV_DIR: "notes/answers", ENV_MAX: "5000"})
         c = self._config(env)
         self.assertEqual((c["answers_dir"], c["answers_dir_source"]), ("notes/answers", "env"))

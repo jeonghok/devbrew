@@ -1,20 +1,35 @@
-"""intent-critic 리뷰어의 입력 조립 — 근거 · 원문 · 로드맵 · 의심.
+"""intent-critic 리뷰어의 입력 조립 — 근거 · 원문 · 로드맵 · 의심 · 의도 문서 표시 · 리뷰의 넓이.
 
 원문 · 로드맵 링크는 리포 안 추적 파일(보통 파일)만 따라간다. 거부된 링크는 내용을 입력에
 싣지 않고 이유만 공시한다. 이 모듈은 `adjudication` 을 쓰지 않는다 — 회계는 intent_critic.py 가 한다.
 """
 from __future__ import annotations
 
+import os
+import stat
 import subprocess
+import sys
 from typing import List, Optional
 
-import yaml
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import yaml  # noqa: E402
+
+import doc_paths  # noqa: E402
 
 PASS_VERDICTS = ("STILL_GREEN", "FIXED", "NEW_TEST_GREEN")
 NOTICE_DIFF_UNREADABLE = "차등 결과를 읽지 못함 — 근거로 세지 않았다"
 REASON_UNTRACKED = "추적 안 된 파일 또는 없음"
 # 리뷰 트리에서 읽은 값은 줄 단위 세션 파일(intent-plan.txt 등)로 간다 — 한 줄 · 제어 문자 없음만 받는다.
 REASON_CONTROL = "여러 줄 또는 제어 문자"
+REASON_NOT_REGULAR = "보통 파일이 아님"
+REASON_LINK = "심볼릭 링크"
+REGULAR_MODES = ("100644", "100755")
+LINK_MODE = "120000"
+# 의도 문서를 가리는 머리 표시 — `<키>` 는 그 줄이 있음, `<키>=<값>` 은 그 줄의 값이 같음.
+DEFAULT_MARKERS = ("source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")
 
 _INTENT_DOUBT_WORDS = ("위험", "기각", "열린 질문", "risk", "rejected", "open question")
 _ROADMAP_DOUBT_WORDS = ("위험", "열린 질문", "risk", "open question")
@@ -117,38 +132,97 @@ def single_line(value: str) -> bool:
     return value.isprintable()
 
 
-def read_tracked(repo: str, commit: str, rel: str) -> tuple:
-    """(내용 | None, 거부 사유 | None). 그 커밋에서 추적되는 보통 파일만 읽는다."""
+def _path_rejection(rel: str) -> Optional[str]:
+    """리뷰 트리 · 커밋에서 읽을 경로의 꼴 검사 — 거부 사유, 받으면 None."""
     if not single_line(rel):
-        return (None, REASON_CONTROL)
+        return REASON_CONTROL
     if rel.startswith("/"):
-        return (None, "절대 경로")
+        return "절대 경로"
     parts = rel.split("/")
     if ".." in parts:
-        return (None, "상위 경로(..)")
-    if ".git" in parts:
-        return (None, ".git 아래")
+        return "상위 경로(..)"
+    for part in parts:
+        # 대소문자를 가리지 않는 파일 시스템에서는 `.GIT` 이 `.git` 이다 — 글자 크기를 접어 견준다.
+        if part.casefold() == ".git":
+            return ".git 아래"
     if not rel:
-        return (None, REASON_UNTRACKED)
-    tree = _run_git(repo, "ls-tree", "-z", commit, "--", rel)
-    if tree is None or tree.returncode != 0:
-        return (None, REASON_UNTRACKED)
-    mode = None
-    for entry in tree.stdout.decode("utf-8", "replace").split("\0"):
+        return REASON_UNTRACKED
+    return None
+
+
+def _listed_mode(listing, rel: str) -> tuple:
+    """`ls-tree -z` · `ls-files -s -z` 출력에서 경로가 정확히 rel 인 줄의 모드 → (모드 | None, 폴더인가)."""
+    if listing is None or listing.returncode != 0:
+        return (None, False)
+    folder = False
+    for entry in listing.stdout.decode("utf-8", "replace").split("\0"):
         meta, sep, path = entry.partition("\t")
-        if sep and path == rel:
-            mode = meta.split(" ", 1)[0]
-            break
+        if not sep:
+            continue
+        if path == rel:
+            return (meta.split(" ", 1)[0], False)
+        if path.startswith(rel + "/"):
+            folder = True
+    return (None, folder)
+
+
+def _mode_rejection(mode: Optional[str], folder: bool) -> Optional[str]:
     if mode is None:
-        return (None, REASON_UNTRACKED)
-    if mode == "120000":
-        return (None, "심볼릭 링크")
-    if mode not in ("100644", "100755"):
-        return (None, "보통 파일이 아님")
+        return REASON_NOT_REGULAR if folder else REASON_UNTRACKED
+    if mode == LINK_MODE:
+        return REASON_LINK
+    if mode not in REGULAR_MODES:
+        return REASON_NOT_REGULAR
+    return None
+
+
+def read_tracked(repo: str, commit: str, rel: str) -> tuple:
+    """(내용 | None, 거부 사유 | None). 그 커밋에서 추적되는 보통 파일만 읽는다."""
+    why = _path_rejection(rel)
+    if why is not None:
+        return (None, why)
+    tree = _run_git(repo, "ls-tree", "-z", commit, "--", ":(literal)" + rel)
+    why = _mode_rejection(*_listed_mode(tree, rel))
+    if why is not None:
+        return (None, why)
     shown = _run_git(repo, "show", "%s:%s" % (commit, rel))
     if shown is None or shown.returncode != 0:
         return (None, REASON_UNTRACKED)
     return (shown.stdout.decode("utf-8", "replace"), None)
+
+
+def read_tree(tree_root: str, rel: str) -> tuple:
+    """(내용 | None, 거부 사유 | None). 리뷰 트리(작업 사본)에서 색인에 있는 보통 파일만 읽는다.
+
+    추적 여부는 색인의 모드로 가리고, 작업 사본의 경로 마디가 하나라도 링크면 거부한다 —
+    색인에는 보통 파일인데 작업 사본에서 링크로 바뀐 마디가 트리 밖을 읽게 하지 않는다.
+    """
+    why = _path_rejection(rel)
+    if why is not None:
+        return (None, why)
+    listing = _run_git(tree_root, "ls-files", "-s", "-z", "--", ":(literal)" + rel)
+    why = _mode_rejection(*_listed_mode(listing, rel))
+    if why is not None:
+        return (None, why)
+    path = tree_root
+    info = None
+    for part in rel.split("/"):
+        path = os.path.join(path, part)
+        try:
+            info = os.lstat(path)
+        except OSError:
+            return (None, REASON_UNTRACKED)
+        if stat.S_ISLNK(info.st_mode):
+            return (None, REASON_LINK)
+    if info is None or not stat.S_ISREG(info.st_mode):
+        return (None, REASON_NOT_REGULAR)
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return (None, REASON_UNTRACKED)
+    return (data.decode("utf-8", "replace"), None)
 
 
 def frontmatter_value(text: str, key: str) -> Optional[str]:
@@ -164,6 +238,66 @@ def frontmatter_value(text: str, key: str) -> Optional[str]:
     if not isinstance(data, dict) or data.get(key) is None:
         return None
     return str(data[key]).strip()
+
+
+# ---------------------------------------------------------------- 의도 문서 · 리뷰의 넓이
+
+def _marker_chars_ok(text: str, extra: str) -> bool:
+    if not text:
+        return False
+    for ch in text:
+        if not (ch.isascii() and (ch.isalnum() or ch in "_-" + extra)):
+            return False
+    return True
+
+
+def parse_markers(raw: str) -> Optional[List[str]]:
+    """쉼표 목록 → 표시 목록. 빈 목록이거나 틀린 토큰이 하나라도 있으면 None."""
+    out: List[str] = []
+    for token in raw.split(","):
+        token = token.strip(" ")
+        key, sep, value = token.partition("=")
+        if not _marker_chars_ok(key, ""):
+            return None
+        if sep and not _marker_chars_ok(value, "."):
+            return None
+        out.append(token)
+    return out
+
+
+def is_intent_doc(text: str, markers: List[str]) -> bool:
+    for marker in markers:
+        key, sep, value = marker.partition("=")
+        found = frontmatter_value(text, key)
+        if found is not None and (not sep or found == value):
+            return True
+    return False
+
+
+def review_breadth(mode: str, names: Optional[set], read_doc, markers: List[str]) -> tuple:
+    """(넓이, 의도 문서 경로 목록, 읽지 못한 문서 수).
+
+    넓이: `range`(범위 모드 · 바뀐 파일 있음) · `intent-docs`(PR 의 바뀐 파일이 모두 문서 파일이고
+    의도 문서가 하나 이상) · `narrow`(그 밖). `read_doc(rel)` 이 None 인 문서는 의도 문서로 세지
+    않고 읽지 못한 수에 더한다.
+    """
+    if mode == "range":
+        return ("range" if names else "narrow", [], 0)
+    if mode != "pr" or not names:
+        return ("narrow", [], 0)
+    ordered = sorted(names)
+    for rel in ordered:
+        if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
+            return ("narrow", [], 0)
+    intent_docs: List[str] = []
+    unread = 0
+    for rel in ordered:
+        text = read_doc(rel)
+        if text is None:
+            unread += 1
+        elif is_intent_doc(text, markers):
+            intent_docs.append(rel)
+    return ("intent-docs" if intent_docs else "narrow", intent_docs, unread)
 
 
 # ---------------------------------------------------------------- 절 가르기
