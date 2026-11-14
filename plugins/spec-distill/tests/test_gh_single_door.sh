@@ -4,6 +4,8 @@
 # 예외 하나: 의존 판 측정(shared/deps/check_deps.py — spec-distill 에는 심볼릭 링크)의 argv `["gh", "--version"]` 는
 # 레포를 묻지 않는 판 확인이라 문이 아니다. 그 파일에서 그 argv 꼴이 `_run_version(...)` 의 유일한 인자일 때만 PROBE 로
 # 따로 내고, 정확히 하나인지 잰다(목록을 더하거나 변수에 담아 고치는 꼴은 문으로 잡는다).
+# spec-distill 문서(skill · reference · README)의 bash 펜스도 같은 문을 쓴다 — 펜스가 gh 를 직접 찾거나 명령 자리에서
+# 부르면 잡는다(주석을 뗀 줄로). 펜스는 `gh_repo.py` 의 하위 명령으로 gh 에 닿는다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_gh_single_door.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -89,6 +91,38 @@ print("CHECKED %d" % checked)
 PY
 }
 
+md_doors() {  # md_doors <파일…> — bash 펜스의 주석을 뗀 줄에서 gh 를 찾거나 명령 자리에서 부르는 자리마다 `<파일>:<줄>`.
+  # gh_repo.py 의 gh 하위 명령을 부르는 펜스 줄은 `VIA <파일>:<줄>` 로 낸다. 끝에 CHECKED <파일 수> <펜스 수>.
+  PYTHONIOENCODING=utf-8 python3 -I - "$@" <<'PY'
+import re, sys
+FIND = re.compile(r"(?:\bcommand\s+-v|\bwhich|\btype\s+-P)\s+gh(?![\w.-])")
+# 명령 자리 — 줄 머리 · `;` `&` `|` `(` `{` `!` 뒤 · `$(` 뒤 · 셸 예약어 뒤. 앞에 `NAME=값` 대입이 붙을 수 있다.
+CALL = re.compile(r"(?:^|[;&|({!]|\$\(|\b(?:if|then|do|else|elif|while|until|exec|command|env|time)\s)"
+                  r"\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*gh(?=\s|$)")
+VIA = re.compile(r"""gh_repo\.py["']?\s+(?:pr-[a-z]+|merge-ways)\b""")
+OPEN = re.compile(r"^\s*```(?:bash|sh|shell|zsh)\s*$")
+CLOSE = re.compile(r"^\s*```\s*$")
+checked = fences = 0
+for path in sys.argv[1:]:
+    checked += 1
+    inside = False
+    for i, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+        if not inside:
+            if OPEN.match(line):
+                inside, fences = True, fences + 1
+            continue
+        if CLOSE.match(line):
+            inside = False
+            continue
+        code = re.sub(r"(^|\s)#.*$", r"\1", line)
+        if FIND.search(code) or CALL.search(code):
+            print("%s:%d" % (path, i))
+        elif VIA.search(code):
+            print("VIA %s:%d" % (path, i))
+print("CHECKED %d %d" % (checked, fences))
+PY
+}
+
 echo "=== spec-distill: gh 를 찾고 부르는 자리는 gh_repo.py 하나 ==="
 PYS=()
 while IFS= read -r f; do PYS+=("$ROOT/$f"); done < <(git -C "$ROOT" ls-files -- "$SD_SCRIPTS/*.py")
@@ -142,6 +176,57 @@ case " ${got%%PROBE*}" in *" probe.py:6 "*) ok "판 측정 예외: 변수에 담
   *) no "판 측정 예외: argv = [\"gh\", \"--version\"] 뒤 조각 대입을 놓쳤다" ;; esac
 got="$(PROBE_OK="$T/fine.py" py_doors "$T/probe.py" | grep -v '^CHECKED ' | sed "s#$T/##" | tr '\n' ' ')"
 assert_eq "$got" "probe.py:2 probe.py:3 probe.py:4 probe.py:5 probe.py:6 probe.py:8 probe.py:9 " "판 측정 예외: 예외 파일이 아닌 곳의 gh --version 은 잡는다"
+
+echo "=== spec-distill 문서의 bash 펜스: gh 를 직접 찾거나 부르지 않는다 ==="
+MDS=()
+while IFS= read -r f; do
+  case "$f" in plugins/spec-distill/tests/*) continue ;; esac
+  MDS+=("$ROOT/$f")
+done < <(git -C "$ROOT" ls-files -- 'plugins/spec-distill/*.md')
+OUT="$(md_doors ${MDS[@]+"${MDS[@]}"})"
+read -r _ md_files md_fences <<EOF
+$(printf '%s\n' "$OUT" | grep '^CHECKED ' || true)
+EOF
+[ "${md_files:-0}" = "${#MDS[@]}" ] && [ "${md_files:-0}" -ge 10 ] && [ "${md_fences:-0}" -ge 20 ] \
+  && ok "spec-distill 문서 ${md_files}개의 bash 펜스 ${md_fences}개를 읽었다" \
+  || no "spec-distill 문서의 bash 펜스를 못 읽었다(문서 ${md_files:-0}/${#MDS[@]}개 · 펜스 ${md_fences:-0}개) — 아래 검사가 공허하다"
+HITS="$(printf '%s\n' "$OUT" | grep -v '^CHECKED ' | grep -v '^VIA ' | sed "s#^$ROOT/##" || true)"
+assert_eq "$HITS" "" "문서의 bash 펜스에 gh 를 직접 찾거나 부르는 줄이 없다"
+FIN_MD="plugins/spec-distill/skills/pm-interview/references/finishing.md"
+via="$(printf '%s\n' "$OUT" | grep -c "^VIA $ROOT/$FIN_MD:" || true)"
+[ "$via" -ge 6 ] && ok "양의 짝: 인터뷰 끝맺음 펜스는 gh_repo.py 하위 명령으로 gh 에 닿는다(${via}줄)" \
+  || no "양의 짝: 인터뷰 끝맺음 펜스의 gh_repo.py 하위 명령 호출을 못 찾았다(${via}줄) — 펜스가 gh 를 다른 길로 부르는지 본다"
+
+echo "=== 문서 펜스 판독기 양성 대조 ==="
+cat > "$T/bad.md" <<'MD'
+```bash
+command -v gh >/dev/null 2>&1 || exit 0
+url="$(gh pr list -R "$slug" --head "$cur")"
+  gh pr checks "$URL" > "$out" 2>&1 &
+if gh pr merge "$URL" --merge; then :; fi
+x=1 && GH_PAGER= gh api repos/o/r
+ok=1; gh
+```
+MD
+cat > "$T/fine.md" <<'MD'
+gh pr list 는 펜스 밖의 글이다
+```bash
+# gh pr list 는 주석이다
+python3 "$SD/scripts/gh_repo.py" pr-open --head "$cur" --base "$def"
+echo "gh 가 없다 — gh 를 설치한다"
+command -v ghq
+git -C "$top" push origin "$cur"   # which gh
+ghost pr list
+none "gh pr merge 가 거절됐다"
+```
+```text
+gh pr list
+```
+MD
+got="$(md_doors "$T/bad.md" | grep -v '^CHECKED ' | sed "s#^$T/##" | tr '\n' ' ')"
+assert_eq "$got" "bad.md:2 bad.md:3 bad.md:4 bad.md:5 bad.md:6 bad.md:7 " "gh 찾기 · \$( ) 안 · 줄 머리 · if 뒤 · 대입 접두 뒤 · ; 뒤의 gh 를 모두 잡는다"
+got="$(md_doors "$T/fine.md" | sed "s#$T/##" | tr '\n' ' ')"
+assert_eq "$got" "VIA fine.md:4 CHECKED 1 1 " "양성 짝: 펜스 밖 글 · 주석 · gh_repo.py 호출 · 안내 글 · 다른 이름 · 다른 언어 펜스는 잡지 않는다"
 
 echo "=== qg: gh 를 찾는 자리는 gh-repo.sh 하나 ==="
 SHS=()

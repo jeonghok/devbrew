@@ -1,0 +1,11 @@
+{
+ "skill": "spec-distill:epic-conductor",
+ "sessions": {
+  "A": "2c4cd0b0-bc55-4ac6-9130-0e998a7b92e7",
+  "B": "368c16e6-ee2a-4c50-844c-2abfc0a5e821",
+  "C": "f409604c-6647-4002-8eb4-38d31ea59a41"
+ },
+ "split_at_first_call": ["A"],
+ "output_underreported_patch_range": {"prefix": "2.1.", "from": 293, "to": 306},
+ "marker_scripts": ["conductor_state.py", "conductor_ledger.py"]
+}

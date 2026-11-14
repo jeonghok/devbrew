@@ -40,6 +40,14 @@ case "${FAKE_GH_MODE:-ok}" in
   badshape) printf '{"number":7}\n' ;;
   missingkey) printf '[{"number":7,"state":"OPEN"}]\n' ;;
   notjson) printf 'hello\n' ;;
+  open) printf '[{"url":"https://github.com/fork/r/pull/3","isCrossRepository":true},{"url":"https://github.com/me/r/pull/5","isCrossRepository":false}]\n' ;;
+  crossonly) printf '[{"url":"https://github.com/fork/r/pull/3","isCrossRepository":true}]\n' ;;
+  created) printf 'Creating pull request for feature/x into main in me/r\n' >&2; printf 'https://github.com/me/r/pull/9\n' ;;
+  nourl) printf 'done\n' ;;
+  view) printf '{"number":7,"state":"OPEN","headRefName":"feature/x","headRefOid":"abc","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}\n' ;;
+  viewcross) printf '{"number":7,"state":"MERGED","headRefName":"feature/x","headRefOid":"abc","isCrossRepository":true,"baseRefName":"main","mergeCommit":{"oid":"def"}}\n' ;;
+  ways) printf '{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}\n' ;;
+  pending) printf 'build\tpending\t0\thttps://ci.example/1\n'; printf 'still running\n' >&2; exit 8 ;;
 esac
 FAKE
 chmod +x "$T/bin/gh" || exit 1
@@ -181,5 +189,123 @@ assert_eq "$RC:$OUT" "0:github.com/me/r" "양성 대조: fork 에서 slug 는 or
 OUT="$(cd "$T/ghe" && GH_HOST=other.example "$PY" "$GR" slug 2>"$T/err")"; RC=$?; ERR="$(cat "$T/err")"
 assert_eq "$RC:$OUT" "0:ghe.example.com/o/r" "양성 대조: ghe 에서 slug 는 호스트를 보존한다"
 assert_contains "$ERR" "GH_HOST 이 설정돼 있다(other.example)" "slug 도 GH_HOST 를 알린다"
+
+# ── CLI 하위 명령 — 인터뷰 끝맺음의 PR · 머지 펜스가 gh 를 부르는 유일한 길 ──────
+cli() {  # cli <레포> <PATH> <인자…> — 다른 폴더에서 --root <레포> 로 부른다 → OUT · ERR · RC · ARGS
+  local root="$1" path="$2"; shift 2
+  : > "$FAKE_GH_ARGS"
+  OUT="$(cd "$T" && PATH="$path" "$PY" "$GR" "$@" --root "$root" 2>"$T/err")"; RC=$?
+  ERR="$(cat "$T/err")"
+  ARGS="$(tr '\n' ' ' < "$FAKE_GH_ARGS")"
+}
+cli "$T/fork" "$FAKEPATH" slug
+assert_eq "$RC:$OUT" "0:github.com/me/r" "slug --root: 지금 폴더가 아니라 --root 의 origin 을 읽는다"
+
+# pr-number — PR 주소의 레포가 origin 일 때만 번호. gh 를 부르지 않는다
+cli "$T/fork" "$FAKEPATH" pr-number https://github.com/me/r/pull/12
+assert_eq "$RC:$OUT" "0:12" "pr-number: origin 의 PR 주소면 번호"
+assert_eq "$ARGS" "" "pr-number: gh 를 부르지 않는다"
+cli "$T/fork" "$FAKEPATH" pr-number https://GitHub.com/ME/R/pull/12/
+assert_eq "$RC:$OUT" "0:12" "pr-number: 호스트 · owner · repo 의 대소문자와 끝 빗금은 가리지 않는다"
+cli "$T/fork" "$FAKEPATH" pr-number https://github.com/up/r/pull/12
+assert_eq "$RC:$OUT" "3:" "pr-number: 다른 owner 의 주소(upstream 포함)는 멈춘다"
+assert_contains "$ERR" "[spec-distill] PR 주소의 레포(github.com/up/r)가 origin(github.com/me/r)이 아니다" "pr-number: 두 레포를 보인다"
+for u in https://ghe.example.com/me/r/pull/12 https://github.com/me/other/pull/12; do
+  cli "$T/fork" "$FAKEPATH" pr-number "$u"
+  assert_eq "$RC:$OUT" "3:" "pr-number: 다른 호스트 · 다른 repo 는 멈춘다(${u})"
+done
+for u in 12 '#12' https://github.com/me/r/pull/12/files https://github.com/me/r/issues/12 ''; do
+  cli "$T/fork" "$FAKEPATH" pr-number "$u"
+  assert_eq "$RC:$OUT" "3:" "pr-number: PR 주소 꼴이 아니면 멈춘다(${u:-빈 값})"
+  assert_contains "$ERR" "PR 주소를 읽지 못했다" "pr-number: 주소 꼴 사유(${u:-빈 값})"
+done
+cli "$T/bare" "$FAKEPATH" pr-number https://github.com/me/r/pull/12
+assert_eq "$RC:$OUT" "3:" "pr-number: origin 이 없으면 멈춘다"
+
+# pr-open — 이 레포 안 브랜치의 열린 PR 주소
+FAKE_GH_MODE=open cli "$T/fork" "$FAKEPATH" pr-open --head feature/x --base main
+assert_eq "$RC:$OUT" "0:https://github.com/me/r/pull/5" "pr-open: 다른 레포의 브랜치에서 온 PR 을 건너뛰고 이 레포 것을 낸다"
+assert_contains "$ARGS" "pr list --state open --head feature/x --base main --json url,isCrossRepository --limit 20 -R github.com/me/r " "pr-open: 열린 것 · head · base · -R origin"
+FAKE_GH_MODE=crossonly cli "$T/fork" "$FAKEPATH" pr-open --head feature/x --base main
+assert_eq "$RC:$OUT" "0:" "pr-open: 다른 레포의 브랜치에서 온 PR 뿐이면 빈 줄"
+cli "$T/fork" "$FAKEPATH" pr-open --head feature/x --base main
+assert_eq "$RC:$OUT" "0:" "pr-open: 열린 PR 이 없으면 빈 줄"
+for m in badshape prs notjson; do
+  FAKE_GH_MODE=$m cli "$T/fork" "$FAKEPATH" pr-open --head feature/x --base main
+  assert_eq "$RC:$OUT" "3:" "pr-open: 모양이 다르면 멈춘다(${m})"
+done
+cli "$T/fork" "$T/nogh" pr-open --head feature/x --base main
+assert_eq "$RC:$OUT" "3:" "pr-open: gh 가 없으면 멈춘다"
+assert_contains "$ERR" "[spec-distill] gh 가 없다 — devbrew 는 gh 를 필수로 쓴다" "pr-open: gh 없음 사유"
+FAKE_GH_MODE=auth cli "$T/fork" "$FAKEPATH" pr-open --head feature/x --base main
+assert_eq "$RC:$OUT" "3:" "pr-open: 인증 실패에서 멈춘다"
+assert_contains "$ERR" "gh auth login --hostname github.com" "pr-open: 인증 사유"
+
+# pr-create — 새 PR 주소
+FAKE_GH_MODE=created cli "$T/fork" "$FAKEPATH" pr-create --head feature/x --base main --title "docs: t" --body-file "$T/body.md"
+assert_eq "$RC:$OUT" "0:https://github.com/me/r/pull/9" "pr-create: gh 가 낸 주소"
+assert_contains "$ARGS" "pr create --base main --head feature/x --title docs: t --body-file $T/body.md -R github.com/me/r " "pr-create: base · head · 제목 · 본문 파일 · -R origin"
+FAKE_GH_MODE=nourl cli "$T/fork" "$FAKEPATH" pr-create --head feature/x --base main --title t --body-file "$T/body.md"
+assert_eq "$RC:$OUT" "3:" "pr-create: 주소가 아닌 출력이면 멈춘다"
+assert_contains "$ERR" "gh pr create 가 PR 주소를 내지 않았다(github.com/me/r): done" "pr-create: 받은 줄을 보인다"
+
+# pr-identity — 상태 · base · head · 다른 레포의 브랜치인가
+FAKE_GH_MODE=view cli "$T/fork" "$FAKEPATH" pr-identity 7
+assert_eq "$RC:$OUT" "0:OPEN main feature/x false abc" "pr-identity: 다섯 칸 한 줄 — 끝 칸은 PR 의 head 커밋"
+assert_contains "$ARGS" "pr view 7 --json number,state,headRefName,headRefOid,isCrossRepository,baseRefName,mergeCommit -R github.com/me/r " "pr-identity: 번호와 -R origin"
+FAKE_GH_MODE=viewcross cli "$T/fork" "$FAKEPATH" pr-identity 7
+assert_eq "$RC:$OUT" "0:MERGED main feature/x true abc" "pr-identity: 머지된 · 다른 레포의 브랜치"
+FAKE_GH_MODE=badshape cli "$T/fork" "$FAKEPATH" pr-identity 7
+assert_eq "$RC:$OUT" "3:" "pr-identity: 모양이 다르면 멈춘다"
+for bad in 0 abc -3 https://github.com/me/r/pull/7; do
+  FAKE_GH_MODE=view cli "$T/fork" "$FAKEPATH" pr-identity "$bad"
+  assert_eq "$RC:$ARGS" "2:" "pr-identity: 번호가 1 이상의 숫자가 아니면 사용법 오류이고 gh 를 부르지 않는다(${bad})"
+done
+
+# merge-ways — 레포가 허용하는 머지 방식. repo view 는 -R 을 받지 않아 같은 값을 인자로 준다
+FAKE_GH_MODE=ways cli "$T/fork" "$FAKEPATH" merge-ways
+assert_eq "$RC:$OUT" "0:--squash --rebase" "merge-ways: 허용된 것만, merge commit → squash → rebase 순서"
+assert_contains "$ARGS" "repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed github.com/me/r env:" "merge-ways: origin 레포를 인자로 준다"
+assert_not_contains "$ARGS" " -R " "merge-ways: -R 을 붙이지 않는다"
+FAKE_GH_MODE=badshape cli "$T/fork" "$FAKEPATH" merge-ways
+assert_eq "$RC:$OUT" "3:" "merge-ways: 모양이 다르면 멈춘다"
+
+# pr-checks · pr-merge — gh 로 갈아탄다: 출력과 종료 코드가 gh 의 것 그대로
+FAKE_GH_MODE=pending cli "$T/fork" "$FAKEPATH" pr-checks 7 --watch --interval 15
+assert_eq "$RC" "8" "pr-checks: gh 의 종료 코드(8 — 검사 대기)가 그대로 나온다"
+assert_contains "$OUT" "pending" "pr-checks: gh 의 stdout 이 그대로 나온다"
+assert_contains "$ERR" "still running" "pr-checks: gh 의 stderr 가 그대로 나온다"
+assert_contains "$ARGS" "pr checks 7 --watch --interval 15 -R github.com/me/r env:1:1:1" "pr-checks: 번호 · 기다림 · -R origin · 프롬프트 없이"
+cli "$T/fork" "$FAKEPATH" pr-checks 7
+assert_contains "$ARGS" "pr checks 7 -R github.com/me/r " "pr-checks: 기다림 없이도 -R origin"
+cli "$T/fork" "$T/nogh" pr-checks 7
+assert_eq "$RC" "3" "pr-checks: gh 가 없으면 멈춘다"
+cli "$T/fork" "$T/badbin:$PATH" pr-checks 7
+assert_eq "$RC" "3" "pr-checks: gh 를 실행하지 못하면 멈춘다"
+assert_contains "$ERR" "gh 를 실행하지 못했다(" "pr-checks: 실행 실패 사유"
+cli "$T/bare" "$FAKEPATH" pr-checks 7
+assert_eq "$RC:$ARGS" "3:" "pr-checks: origin 이 없으면 gh 를 부르지 않고 멈춘다"
+SHA=0123456789abcdef0123456789abcdef01234567
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --squash --match-head-commit "$SHA"
+assert_eq "$RC" "0" "pr-merge: gh 가 성공하면 0"
+assert_contains "$ARGS" "pr merge 7 --squash --match-head-commit $SHA -R github.com/me/r env:1:1:1" "pr-merge: 번호 · 방식 · head 커밋 · -R origin · 프롬프트 없이"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --rebase --match-head-commit "$SHA$SHA"
+assert_eq "$RC:$ARGS" "2:" "pr-merge: 80자 커밋은 사용법 오류다(양성 짝은 아래 64자)"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --rebase --match-head-commit "${SHA}0123456789abcdef01234567"
+assert_contains "$ARGS" "--match-head-commit ${SHA}0123456789abcdef01234567 -R " "pr-merge: 64자(sha256) 커밋도 받는다"
+FAKE_GH_MODE=auth cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --match-head-commit "$SHA"
+assert_eq "$RC" "4" "pr-merge: gh 의 종료 코드가 그대로 나온다"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge
+assert_eq "$RC:$ARGS" "2:" "pr-merge: head 커밋이 없으면 사용법 오류이고 gh 를 부르지 않는다 — 커밋에 묶이지 않은 머지는 없다"
+NL='
+'
+for bad in abc1234 "${SHA%?}" "${SHA}0" "${SHA%?}G" "$(printf '%s' "$SHA" | tr 'a-f' 'A-F')" HEAD "" "$SHA$NL" " $SHA" "--admin"; do
+  cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --match-head-commit "$bad"
+  assert_eq "$RC:$ARGS" "2:" "pr-merge: 전체 SHA(16진 소문자 40자)가 아니면 사용법 오류이고 gh 를 부르지 않는다(${bad:-빈 값})"
+done
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --match-head-commit "$SHA"
+assert_eq "$RC:$ARGS" "2:" "pr-merge: 방식이 없으면 사용법 오류이고 gh 를 부르지 않는다"
+cli "$T/fork" "$FAKEPATH" pr-merge 7 --merge --squash --match-head-commit "$SHA"
+assert_eq "$RC:$ARGS" "2:" "pr-merge: 방식이 둘이면 사용법 오류이고 gh 를 부르지 않는다"
 
 finish
