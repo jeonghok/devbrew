@@ -227,14 +227,26 @@ def _write_questions(rd: str, data: dict) -> None:
 
 # ---------------------------------------------------------------- 돌려주는 꼴
 
-_PLAIN_BAD_START = "-?:,[]{}#&*!|>'\"%@` "
+_PLAIN_BAD_START = "-?:,[]{}#&*!|>'\"%@` 0123456789.+~"
+
+
+def _reads_back(text: str) -> bool:
+    """YAML 로 읽으면 같은 글이 돌아오나 — 수 · 참거짓 · null 로 읽히는 글(`true` · `null` …)은 아니다."""
+    try:
+        return yaml.safe_load(text) == text
+    except yaml.YAMLError:
+        return False
 
 
 def _scalar(value) -> str:
-    """YAML 한 줄 값 — 그대로 읽히는 글은 그대로, 아니면 큰따옴표로 감싼다."""
+    """YAML 한 줄 값 — 글자 그대로 읽히는 글은 그대로, 아니면 큰따옴표로 감싼다.
+
+    숫자로 시작하는 글(숫자뿐인 짧은 커밋 해시 등)은 수로 읽히지 않게 늘 감싼다.
+    """
     text = "" if value is None else str(value)
     plain = (text != "" and text[0] not in _PLAIN_BAD_START and ": " not in text
-             and " #" not in text and "\n" not in text and not text.endswith((" ", ":")))
+             and " #" not in text and "\n" not in text and not text.endswith((" ", ":"))
+             and _reads_back(text))
     return text if plain else json.dumps(text, ensure_ascii=False)
 
 

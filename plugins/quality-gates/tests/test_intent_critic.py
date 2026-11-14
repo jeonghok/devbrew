@@ -1927,6 +1927,26 @@ class TestRender(unittest.TestCase):
                 self.assertEqual([r["state"] for r in block["questions"]],
                                  [states[q["state"]] for q in questions])
 
+    def test_return_block_values_stay_strings(self):
+        """돌려주는 꼴의 값은 YAML 로 읽어도 글자 그대로다 — 숫자뿐인 짧은 해시(0 으로 시작하면 8진수로
+        읽힌다) · 지수 꼴 · 예약어처럼 보이는 값이 수 · 참거짓으로 바뀌지 않는다."""
+        for commit in ("1234567", "0123456", "12e4567", "0x12345", "true", "null", "abc1234",
+                       "failed — 브랜치가 아니다(detached HEAD)"):
+            with self.subTest(commit=commit), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                _filter_rd(rd)
+                self._qy([self._item("D1", "answered", "의도다", ANS_DIR + "/a.md")], commit=commit)
+                _cli("render", "--rd", rd, "--mode", "pr")
+                text, block = _return_block(rd)
+                self.assertEqual(block["commit"], commit)
+                line = [l for l in text.split("\n") if l.startswith("commit: ")][0]
+                self.assertIn(line, ("commit: " + commit, 'commit: "%s"' % commit))
+        self.assertEqual(ic._scalar("abc1234"), "abc1234")
+        self.assertEqual(ic._scalar("failed — 사유"), "failed — 사유")
+        # 지수 꼴은 YAML 1.2 를 따르는 다른 파서가 수로 읽는다 — 숫자로 시작하면 늘 감싼다.
+        for digits in ("1234567", "12e4567"):
+            self.assertEqual(ic._scalar(digits), '"%s"' % digits)
+
     def test_render_range_not_asked(self):
         self._qy([self._item("D1", "ask"), self._item("D2", "ask")])
         p = _cli("render", "--rd", self.rd, "--mode", "range")
