@@ -81,6 +81,15 @@ assert_eq "$(count "$PF" 'subagent_type: "quality-gates:intent-critic"')" 2 "절
 assert_eq "$(count "$PF" '// **처분** — consumer=plugins/quality-gates/scripts/intent_critic.py · fail-open')" 2 "절차 문서: 처분 줄 2"
 assert_eq "$(count "$PF" '<roadmap>${ROADMAP}</roadmap>')" 2 "절차 문서: roadmap 칸 2"
 assert_eq "$(count "$PF" '<scope>${SCOPE}</scope>')" 2 "절차 문서: scope 칸 2"
+# gate 길 — prepare(I1 · I2)로 가는 것은 `intent-gate: run` 행 하나뿐이다. 스위치 하나가 넓게 보기와 다른 팀 읽기를 함께
+# 끄는 것(AC12)은 prepare 의 검사가 아니라 이 길에 기댄다.
+GATE_RUN_ROW='| `intent-gate: run` | 아래 비용 줄을 내고 범위 모드면 [I1](#i1-리뷰-트리-범위-모드만), PR 범위면 [I2](#i2-설정--준비) |'
+GATE_SKIP_ROW='| `intent-critic 꺼짐(kill switch)` · `intent-critic — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |'
+assert_eq "$(printf '%s\n' "$PF" | grep -c -F -x -- "$GATE_RUN_ROW")" 1 "절차 문서: intent-gate: run 행이 I1 · I2 로 간다(한 번)"
+assert_eq "$(printf '%s\n' "$PF" | grep -c -F -x -- "$GATE_SKIP_ROW")" 1 "절차 문서: 꺼짐 · 건너뜀 행이 I7 로 간다(한 번)"
+assert_eq "$(printf '%s\n' "$PF" | grep '^|' | grep -F -e '꺼짐(kill switch)' -e '건너뜀(' | grep -c -F -e '(#i1-' -e '(#i2-')" 0 "절차 문서: 꺼짐 · 건너뜀 행은 I1 · I2 로 가지 않는다"
+# gate 가 내는 줄(`intent-gate:` · `intent-critic …`)로 시작하는 행 가운데 I1 · I2 로 가는 것은 하나. I1 의 출력 행(`intent-review-tree:`)은 run 뒤라 뺀다.
+assert_eq "$(printf '%s\n' "$PF" | grep -e '^| `intent-gate' -e '^| `intent-critic' | grep -c -F -e '(#i1-' -e '(#i2-')" 1 "절차 문서: I1 · I2 로 가는 gate 출력 행은 하나뿐"
 
 note "[상태 형식]"
 FMT="$(awk '/^```markdown$/{f=1;next} f&&/^```$/{exit} f' "$SFF")"
@@ -104,6 +113,8 @@ assert_contains "$SFFF" '| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 
 assert_contains "$SFFF" '다른 팀과 겹치는 곳:' "형식: 겹침 목록"
 assert_eq "$(count "$SF" 'gh 는 두 스크립트만')" 0 "Rules: 옛 gh 문장 0"
 assert_contains "$SF" '열린 PR 목록 읽기는 `scripts/other_teams.py` 가 한다' "Rules: other_teams 의 gh"
+assert_grep "$(section "$S" '## Requirement index')" '^\| gh 는 세 파일\(AC15.*\| .*`scripts/other_teams\.py`' "Requirement index: gh 행이 other_teams.py 를 든다"
+assert_eq "$(count "$SF" 'gh 는 두 파일')" 0 "Requirement index: 옛 gh 행(두 파일) 0"
 
 note "[kill switch 공시]"
 RKS="$(awk '/^### Kill switches/{f=1;next} f&&/^#{1,3} /{exit} f' "$RM")"
@@ -322,7 +333,11 @@ $res
 EOF
 done
 [ -s "$TMP/real-pr/err.txt" ] && { echo "--- pr stderr"; cat "$TMP/real-pr/err.txt"; }
-assert_eq "$(tail -n 1 "$TMP/real-wide/repo/.claude/quality-gates/$SID/verdict.out")" "$(tail -n 1 "$TMP/real-kill/repo/.claude/quality-gates/$SID/verdict.out")" "넓게 본 실행과 끈 실행의 판정 줄이 같다"
+VW="$TMP/real-wide/repo/.claude/quality-gates/$SID/verdict.out"
+VK="$TMP/real-kill/repo/.claude/quality-gates/$SID/verdict.out"
+[ -s "$VW" ] && [ -s "$VK" ]; assert_eq "$?" 0 "판정 줄 견주기: 넓게 본 실행 · 끈 실행의 verdict.out 이 둘 다 비어 있지 않다"
+assert_eq "$(tail -n 1 "$VW")" "qg: defect · 지적 0 · 차등 새 실패 1" "판정 줄 견주기: 넓게 본 실행의 판정 줄이 fixture 가 쓴 줄 그대로"
+assert_eq "$(tail -n 1 "$VW")" "$(tail -n 1 "$VK")" "넓게 본 실행과 끈 실행의 판정 줄이 같다"
 
 note "[네트워크 — 열린 PR 조회는 gh 를 부르지 않고 멈춘다]"
 assert_eq "$(git -C "$TMP/real-wide/repo" remote)" "" "넓게 본 실행의 임시 리포에 원격이 없다"

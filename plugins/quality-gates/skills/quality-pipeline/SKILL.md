@@ -1692,7 +1692,7 @@ The lessons this file carries — test names carry the same numbers.
 | E3 skill 본문에 셸 위치 인자를 쓰지 않는다 | Rules R6 |
 | P1 · P2 · P3 · P4 · P5 · P6 · P7 게시 sink | `scripts/publish-comment.sh` · `scripts/secret-scan.py` (tests: `tests/test_publish_comment_sink.sh` · `tests/test_secret_scan.py`) |
 | K-2 `## 게시` · K-3 판정 줄 · aborted 미호출 | `## Publish` 게시 펜스 (tests: `tests/test_publish_pipeline_wiring.sh`) |
-| gh 는 두 파일(AC15) · gh 찾기와 origin(`-R`)은 한 곳 | `scripts/publish-comment.sh` · `scripts/discover-spec.sh` · `scripts/gh-repo.sh` (tests: `tests/test_publish_gh_two_files.sh` · `tests/test_gh_repo.sh`) |
+| gh 는 세 파일(AC15 — `scripts/other_teams.py` 는 열린 PR 목록 읽기 한 번) · gh 찾기와 origin(`-R`)은 한 곳 | `scripts/publish-comment.sh` · `scripts/discover-spec.sh` · `scripts/other_teams.py` · `scripts/gh-repo.sh` (tests: `tests/test_publish_gh_two_files.sh` · `tests/test_gh_repo.sh`) |
 | X1 증거 없는 충족은 미확인 | `## e2e` E3 · `scripts/e2e-state.sh` propose (tests: `tests/test_e2e_state.sh`) |
 | X2 걷기 사이 코드가 바뀌면 무효 | `## e2e` E1 · E3 의 지문 비교 · E4 의 무효 행(리뷰·테스트부터 다시) (tests: `tests/test_e2e_state.sh`) |
 | X3 걷기는 로컬 origin 만 · 고치지 않는다 | e2e 레퍼런스 3 절 · Rules 의 e2e 걷기 문단 (tests: `tests/test_e2e_docs.sh`) |
