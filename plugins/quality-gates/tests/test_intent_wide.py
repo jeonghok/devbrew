@@ -709,7 +709,9 @@ class TestWideFilter(unittest.TestCase):
         tree = self._tree()
         os.symlink("a.txt", os.path.join(tree, "l.txt"))
         os.symlink(".", os.path.join(tree, "ld"))
-        self._git_ok(tree, "add", "l.txt", "ld")
+        # 끝 줄바꿈 없는 파일 — 줄 0 · 음수가 파이썬 음의 색인(끝 줄)으로 맞지 않게.
+        tic._write("x", tree, "nonl.txt")
+        self._git_ok(tree, "add", "l.txt", "ld", "nonl.txt")
         self._git_ok(tree, "commit", "-q", "-m", "links")
         tic._write("x\n", tree, "new.txt")
         # 세션 폴더(rd) 의 파일 — 리뷰 트리 위(`..`) · 절대 경로로, 그리고 pr 모드처럼 트리 안의
@@ -741,6 +743,9 @@ class TestWideFilter(unittest.TestCase):
             {"path": "a.txt", "line": 2, "text": ""},
             {"path": "a.txt", "line": 2, "text": "   "},
             {"path": "a.txt", "line": 0, "text": "x"},
+            {"path": "nonl.txt", "line": 0, "text": "x"},
+            {"path": "nonl.txt", "line": -1, "text": "x"},
+            {"path": "nonl.txt", "line": 2, "text": "x"},
             {"path": "a.txt", "line": "1", "text": "x"},
             {"path": "a.txt", "line": True, "text": "x"},
             {"path": "a.txt", "line": 1.0, "text": "x"},
@@ -755,8 +760,9 @@ class TestWideFilter(unittest.TestCase):
                 self.assertIn(QUOTE_GONE, p.stdout.splitlines())
                 self.assertEqual(tic._last(p), "intent-ask: 0")
         # 양성 대조 — 같은 준비에서 맞는 인용은 물음이 된다.
-        p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]))
-        self.assertEqual(tic._last(p), "intent-ask: 1")
+        for good in (RQ, {"path": "nonl.txt", "line": 1, "text": "x"}):
+            p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[good])]))
+            self.assertEqual(tic._last(p), "intent-ask: 1", good)
 
     def test_whitespace_only_difference_accepted(self):
         self._prepare(wide=True)
