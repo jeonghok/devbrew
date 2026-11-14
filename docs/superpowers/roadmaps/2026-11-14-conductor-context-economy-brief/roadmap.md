@@ -41,7 +41,7 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 의존: R1
 - 브랜치: feature/conductor-stage-table
 - 묶음: R2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: R1 형식 위에서 단계가 돈다
@@ -103,6 +103,11 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 바뀜: 바뀐 에픽 R1 · R2 · R3 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-14 · R2 경로 예약에서 인터뷰 끝맺음 절차 파일을 뺀다 — 그 파일은 앞단 개선 로드맵이 맡는다
+- 바뀜: 바뀐 에픽 R2 「뺀다 (권장)」
+- 원문:
+  - 「뺀다 (권장)」
 
 ## 위험 번호표
 
