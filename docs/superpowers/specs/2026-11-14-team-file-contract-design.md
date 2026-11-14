@@ -806,7 +806,7 @@ start_bundle.py --roadmap <로드맵> --job <과제> --stage <단계> [--plan <n
 
 - **정답 출처.** 에픽 묶음 `docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/R1.md`(번호 84개). 사용자 원자료는 `docs/superpowers/interview/2026-11-13-conductor-context-economy-interview.audit.md` 의 원문 절과 질문 전체 절이다.
 - **원자료 대조표.** framing 원자료를 한 줄씩 적은 표다 — F 번호 243행(인용 · 맡은 에픽 · 묶음에 실린 꼴 · 잃은 것)과 에픽별 넘김 목록. PR #276 이 `docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/framing-ledger.md` 로 올린다. 머지 전에는 그 PR 의 브랜치 `docs/framing-ledger` 에 있다. R2–R5 의 설계는 그 파일의 자기 몫 넘김 목록을 첫 입력으로 읽는다.
-- **앞단의 이름 바꾸기.** 앞단(framing · 인터뷰)의 이름을 바꾸는 일은 이 로드맵에 넣지 않고 다른 로드맵으로 넘겼다(B13). 사용자가 가른 역할은 이렇다 — 의도 싱크는 framing 의 주 역할이고, 인터뷰는 맥락 쌓기(내부 · 외부 조사)와 로드맵 잡기가 주 역할이다(B18). 어느 단계를 무엇이라 부를지는 그 로드맵이 정한다. 받은 쪽은 framing 을 하던 다른 세션이고 그 브랜치는 `feature/framing-interview-constraint-audit` 다 — 결정 기록의 「devbrew-7b」 는 그 세션의 이름이다.
+- **앞단의 이름 바꾸기.** 앞단(framing · 인터뷰)의 이름을 바꾸는 일은 이 로드맵에 넣지 않고 다른 로드맵으로 넘겼다(B13). 사용자가 가른 역할은 이렇다 — 의도 싱크는 framing 의 주 역할이고, 인터뷰는 컨텍스트 쌓기(내부 · 외부 조사)와 로드맵 잡기가 주 역할이다(B18). 어느 단계를 무엇이라 부를지는 그 로드맵이 정한다. 받은 쪽은 framing 을 하던 다른 세션이고 그 브랜치는 `feature/framing-interview-constraint-audit` 다 — 결정 기록의 「devbrew-7b」 는 그 세션의 이름이다.
 - **측정 근거.** Context 의 숫자는 P1 기준선 문서(PR #275)에 있다. 그 문서의 표는 기록된 응답 줄의 합이고 실제 사용량의 하한이다.
 - **계획과 브랜치.** 계획 셋의 브랜치 이름은 §Metadata 에 있다. 계획 2 · 3 의 브랜치는 로드맵 블록에 아직 없다.
 - **옛 형식.** 지금 도는 이 로드맵은 옛 형식이고, 이 에픽이 머지된 뒤에도 옛 형식으로 읽힌다(AC13). 새 형식으로 옮기는 것은 R5 다.
@@ -864,3 +864,7 @@ start_bundle.py --roadmap <로드맵> --job <과제> --stage <단계> [--plan <n
 | 54df576d#r4.1 | 참고(feasibility) #files-to-modify — devbrew 에 두는 HANDBOOK.md 와 역할 문서 넷은 지금 로드맵 폴더 아래에 놓이는데 그 폴더는 통째로 마지막 에픽이 예약한 경로다 — 「예약 밖」 목록과 재분해 신호가 이 사실을 적지 않는다(roadmap.md 79행 「경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, …」, 예약 위반 알림은 roadmap_status.py 1017–1027행). |
 | 2645b75d#r4.1 | 참고(ambiguity) #15-브랜치-사이-흐름 — 브랜치 끝 읽기의 네 경우에 「로컬에만 있고 아직 한 번도 올리지 않은 브랜치」가 없다 — 지금 있는 끝 고르기 함수는 이때 알림 없이 로컬을 돌려준다(branch_tip.py 51–52행). 단순 작업 과제는 새 브랜치의 첫 커밋으로 만들어지므로 이 경우가 흔하다. 「아직 안 올라옴」을 내는지 적는다. |
 | c792c0cb#r4.1 | 참고(approaches_comparison) #7-rulesmd-와-handbookmd — 규칙 파일 예산의 기본값(8KB · 16KB)이 근거도 「작성자 제안」 표시도 없이 적혀 있다 — 묶음에서 열린 질문이던 상한을 작성자가 정한 것이니, 다른 작성자 결정처럼 표시하고 무엇을 보고 고른 숫자인지 한 줄을 붙인다. |
+
+## 지휘 기록
+
+- spec 승인 · 2026-11-14 · 「열린 지적 5개를 두고 진행 — 계획 담당자에게」
