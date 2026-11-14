@@ -2157,6 +2157,121 @@ class TestRecordSilentDrops(unittest.TestCase):
         self.assertEqual(p.stdout.strip(), "record: 0")
 
 
+class TestRecordUnreadAnswers(unittest.TestCase):
+    """record 를 불렀는데(사용자가 답했다) 답을 질문에 붙이지 못한 갈래 — 그 질문은 「답하지 않음」 이 아니라
+    「답 기록 실패」 로 센다. 답 입력에 그 질문의 글이 아예 없으면 지금대로 「답하지 않음」 이다."""
+
+    UNREAD = "답 입력에서 읽지 못한 글이 있다"
+    BLOCKED = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, "repo"))
+        self.repo = _git_repo(os.path.join(self.tmp.name, "repo"))
+        self.rd = os.path.join(self.tmp.name, "rd")
+        os.makedirs(self.rd)
+        _filter_rd(self.rd)
+        _write(_out([_q("D1"), _q("D2", kind="기본값", weight="동작")]), self.rd,
+               "intent-critic-1.txt")
+        self.assertEqual(_last(_cli("filter", "--rd", self.rd, "--review-mode", "session")),
+                         "intent-ask: 2")
+        self.ids = [q["id"] for q in _by_state(self.rd, "ask")]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _fresh(self):
+        """같은 테스트 안에서 새 리포 · 세션 폴더로 다시 시작한다."""
+        self.tmp.cleanup()
+        self.setUp()
+
+    def _record(self, text, answers=None):
+        path = answers or os.path.join(self.tmp.name, "answers.txt")
+        if text is not None:
+            _write(text, path)
+        p = _cli("record", "--rd", self.rd, "--repo", self.repo, "--answers", path)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _failed_ids(self):
+        return [q["id"] for q in _questions(self.rd)["questions"] if q.get("record_failed")]
+
+    def _render(self):
+        r = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return _last(r), _read(self.rd, "result.md").split("## intent-critic", 1)[1]
+
+    def test_no_header_matched_counts_as_record_failure(self):
+        p = self._record("=== id: 모르는#정체#방향 · pick: 잘못 골랐다\n")
+        self.assertIn(RECORD_FAILED % (2, self.UNREAD), p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 0")
+        self.assertEqual(self._failed_ids(), self.ids)
+        line, section = self._render()
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+        self.assertEqual(section.count("- " + RECORD_FAILED % (2, self.UNREAD) + "\n"), 1)
+
+    def test_one_header_matched_and_stray_text_fails_the_other(self):
+        """머리 하나만 맞고 다른 머리는 정체가 틀렸다 — 틀린 머리는 라벨을 고른 답 아래의 글로 남는다."""
+        p = self._record("=== id: %s · pick: 의도다\n=== id: %s오타 · pick: 잘못 골랐다\n"
+                         % (self.ids[0], self.ids[1]))
+        self.assertIn(RECORD_FAILED % (1, self.UNREAD), p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 1")
+        self.assertEqual(self._failed_ids(), [self.ids[1]])
+        line, _section = self._render()
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 1개(잘못 골랐다 0개)")
+
+    def test_text_before_the_first_header_fails_the_unmatched_question(self):
+        p = self._record("잘못 골랐다\n=== id: %s · pick: 의도다\n" % self.ids[0])
+        self.assertIn(RECORD_FAILED % (1, self.UNREAD), p.stdout.splitlines())
+        self.assertEqual(self._failed_ids(), [self.ids[1]])
+
+    def test_unreadable_answers_or_config_counts_as_record_failure(self):
+        cases = (("answers", None), ("config", "=== id: %s · pick: 의도다\n" % self.ids[0]))
+        for what, text in cases:
+            with self.subTest(unreadable=what):
+                self._fresh()
+                if what == "config":
+                    os.remove(os.path.join(self.rd, "intent-config.txt"))
+                p = self._record(text, answers=os.path.join(self.tmp.name, "none.txt")
+                                 if text is None else None)
+                self.assertIn("답을 기록하지 못했다 — " + self.BLOCKED, p.stdout.splitlines())
+                self.assertIn(RECORD_FAILED % (2, self.BLOCKED), p.stdout.splitlines())
+                self.assertEqual(_last(p), "record: 0")
+                self.assertEqual(self._failed_ids(), self.ids)
+                line, _section = self._render()
+                self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+
+    def test_missing_plan_marks_asked_questions(self):
+        os.remove(os.path.join(self.rd, "intent-plan.txt"))
+        p = self._record("=== id: %s · pick: 의도다\n" % self.ids[0])
+        reason = "준비 파일(intent-plan.txt)을 읽지 못함"
+        self.assertIn("답을 기록하지 못했다 — " + reason, p.stdout.splitlines())
+        self.assertIn(RECORD_FAILED % (2, reason), p.stdout.splitlines())
+        self.assertEqual(self._failed_ids(), self.ids)
+
+    def test_question_without_any_answer_text_stays_unanswered(self):
+        """양성 대조 — 답 입력에 그 질문의 글이 없으면(머리도 남은 글도 없다) 「답하지 않음」 이다."""
+        cases = (
+            "=== id: %s · pick: 의도다\n" % self.ids[0],
+            "=== id: %s · pick: typed\n잘못 골랐다 — 이유\n=== id: %s오타 · pick: 의도다\n"
+            % (self.ids[0], self.ids[1]),
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                self._fresh()
+                p = self._record(text)
+                self.assertEqual(_last(p), "record: 1")
+                self.assertNotIn("답 기록 실패", p.stdout)
+                self.assertEqual(self._failed_ids(), [])
+                line, _section = self._render()
+                self.assertTrue(line.endswith(" · 답하지 않음 1개"), line)
+        self._fresh()
+        p = self._record("\n  \n")
+        self.assertEqual(p.stdout.strip(), "record: 0")
+        self.assertEqual(self._failed_ids(), [])
+        self.assertTrue(self._render()[0].endswith(" · 답하지 않음 2개"))
+
+
 class TestUnwritableText(unittest.TestCase):
     """UTF-8 로 쓸 수 없는 글(짝 없는 surrogate — YAML 의 `"\\ud800"` 이 그렇게 읽힌다)이 리뷰 트리의 답
     파일이나 리뷰어 출력에 있어도 단계가 죽지 않는다. 글은 버리지 않고 이스케이프(`\\ud800`)로 남긴다."""

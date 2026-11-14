@@ -88,6 +88,7 @@ RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
+UNREAD_INPUT = "답 입력에서 읽지 못한 글이 있다"
 UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
@@ -1007,9 +1008,37 @@ def _unique_name(ident: str, now: datetime.datetime, taken: set, directory: str)
     return name, at
 
 
-def _store_record_notices(rd: str, data: Optional[dict], notices: List[str]) -> None:
-    """record 의 공시를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
-    if data is None or not notices:
+def _stray_lines(entries: List[dict], orphan: int) -> int:
+    """어느 질문에도 붙이지 못한 답 글의 줄 수 — 첫 머리 앞의 글과, 라벨을 고른 답(머리 아래 줄이 없는 꼴)
+    아래에 남은 글. 정체가 틀린 머리 줄은 여기에 든다."""
+    stray = orphan
+    for entry in entries:
+        if entry["pick"] != TYPED:
+            for line in entry["lines"]:
+                if line.strip():
+                    stray += 1
+    return stray
+
+
+def _failed_notices(failed: List[tuple]) -> List[str]:
+    """기록되지 않은 답 [(질문, 고른 답 | None, 사유)] 의 공시 — 사유마다 수 한 줄. 그 질문에 표지를 단다."""
+    reasons: List[str] = []
+    counts: dict = {}
+    for record, _answer, reason in failed:
+        record["record_failed"] = True
+        if reason not in counts:
+            reasons.append(reason)
+            counts[reason] = 0
+        counts[reason] += 1
+    lines = []
+    for reason in reasons:
+        lines.append(RECORD_FAILED % (counts[reason], reason))
+    return lines
+
+
+def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: bool) -> None:
+    """record 의 공시 · 표지를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
+    if data is None or not (notices or changed):
         return
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     _write_questions(rd, data)
@@ -1019,37 +1048,60 @@ def _record(args) -> tuple:
     """(공시 줄들, 기록한 답 파일 수)."""
     plan = _read_plan(args.rd)
     data = _read_questions(args.rd)
-    if plan is None:
-        notices = ["답을 기록하지 못했다 — 준비 파일(%s)을 읽지 못함" % PLAN]
-        _store_record_notices(args.rd, data, notices)
-        return notices, 0
-    if plan["mode"] == "range":
+    if plan is not None and plan["mode"] == "range":
         return [], 0
     cfg = _read_config(args.rd)
     text = _read(args.answers)
-    if data is None or cfg is None or text is None:
-        notices = ["답을 기록하지 못했다 — 거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"]
-        _store_record_notices(args.rd, data, notices)
-        return notices, 0
     known: dict = {}
     pending: dict = {}
-    for record in data["questions"]:
+    asked: List[dict] = []
+    for record in (data or {}).get("questions") or []:
         if isinstance(record, dict) and record.get("state") == "ask":
             known[record["id"]] = known.get(record["id"], 0) + 1
             pending.setdefault(record["id"], []).append(record)
-    entries, orphan = parse_answer_input(text, known)
+            asked.append(record)
+    entries: List[dict] = []
+    orphan = 0
+    if data is not None and text is not None:
+        entries, orphan = parse_answer_input(text, known)
+    matched = []
+    for entry in entries:
+        matched.append((pending[entry["id"]].pop(0), entry))
+
+    blocked = None
+    if plan is None:
+        blocked = "준비 파일(%s)을 읽지 못함" % PLAN
+    elif data is None or cfg is None or text is None:
+        blocked = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
+    if blocked:
+        notices = ["답을 기록하지 못했다 — " + blocked]
+        failed = []
+        # 답 입력이 비어 있으면 받은 답이 없다 — 그때는 「답하지 않음」 으로 둔다.
+        if text is None or text.strip():
+            picked = {}
+            for record, entry in matched:
+                picked[id(record)] = _read_pick(entry)[0]
+            for record in asked:
+                failed.append((record, picked.get(id(record)), blocked))
+        notices += _failed_notices(failed)
+        _save_record(args.rd, data, notices, bool(failed))
+        return notices, 0
+
     notices = []
     if not entries and known and text.strip():
-        asked = 0
-        for ident in known:
-            asked += known[ident]
-        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % asked)
+        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % len(asked))
     if orphan:
         notices.append("머리 앞의 답 글을 읽지 못함 %d줄" % orphan)
+    # 머리가 맞지 않은 질문 — 붙이지 못한 답 글이 있으면 그 답을 읽지 못한 것이다(없으면 답하지 않은 질문이다).
+    unread = []
+    if _stray_lines(entries, orphan):
+        for ident in pending:
+            for record in pending[ident]:
+                unread.append((record, None, UNREAD_INPUT))
     if not entries:
-        _store_record_notices(args.rd, data, notices)
+        notices += _failed_notices(unread)
+        _save_record(args.rd, data, notices, bool(unread))
         return notices, 0
-    data["record_notices"] = list(data.get("record_notices") or []) + notices
     answers_dir = cfg["answers_dir"]
     target = _review_target(args.repo, answers_dir)
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -1057,8 +1109,7 @@ def _record(args) -> tuple:
     taken: set = set()
     files = []
     pairs = []
-    for entry in entries:
-        record = pending[entry["id"]].pop(0)
+    for record, entry in matched:
         answer, raw = _read_pick(entry)
         name, at = _unique_name(record["id"], now, taken, directory)
         files.append((name, ia.render_answer_file(
@@ -1067,17 +1118,16 @@ def _record(args) -> tuple:
         pairs.append((record, answer))
     paths, write_error = ia.write_answer_files(args.repo, answers_dir, files)
     # 답 파일이 생긴 질문만 답함이다. 파일을 쓰지 못한 질문은 묻는 상태로 남기고 수와 사유를 공시한다.
+    failed = []
     for i, (record, answer) in enumerate(pairs):
         if i < len(paths):
             record["state"] = "answered"
             record["answer"] = answer
             record["file"] = paths[i]
         else:
-            record["record_failed"] = True
-    if len(pairs) > len(paths):
-        notices.append(RECORD_FAILED % (len(pairs) - len(paths),
-                                        write_error or "답 파일이 없다"))
-        data["record_notices"].append(notices[-1])
+            failed.append((record, answer, write_error or "답 파일이 없다"))
+    notices += _failed_notices(failed + unread)
+    data["record_notices"] = list(data.get("record_notices") or []) + notices
     if paths:
         sha, commit_error = ia.commit_answer_files(args.repo, paths,
                                                    COMMIT_MESSAGE % len(paths))
