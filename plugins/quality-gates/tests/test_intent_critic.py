@@ -1,13 +1,16 @@
 """scripts/doc_paths.py 설정 키 넓힘 · scripts/intent_answers.py (intent-critic 답 파일) · scripts/intent_origin.py (근거 · 원문 · 로드맵 · 의심) · scripts/intent_critic.py (intent-critic CLI)."""
+import contextlib
 import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -51,6 +54,24 @@ def _git_repo(root):
     _git(root, "add", "a.txt", "b.txt")
     _git(root, "commit", "-q", "-m", "init")
     return root
+
+
+OTHER_LOCALE_LINE = "치명적: 영어가 아닌 로케일의 글"
+
+
+@contextlib.contextmanager
+def _other_locale_git():
+    """PATH 맨 앞에 git 을 감싼 스크립트를 둔다 — 진짜 git 을 그대로 부르되 실패한 호출의 stderr 를
+    영어가 아닌 한 줄로 바꾼다(영어 글에 기댄 판정은 이 안에서 갈린다). 종료 코드 · stdout 은 그대로다."""
+    real = shutil.which("git")
+    with tempfile.TemporaryDirectory() as d:
+        wrapper = Path(d, "git")
+        wrapper.write_text("#!/bin/sh\n'%s' \"$@\" 2>/dev/null\nrc=$?\n"
+                           "[ \"$rc\" -eq 0 ] || echo '%s' >&2\nexit \"$rc\"\n"
+                           % (real, OTHER_LOCALE_LINE), encoding="utf-8")
+        wrapper.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": d + os.pathsep + os.environ.get("PATH", "")}):
+            yield
 
 
 def _answer_text(ident=IDENT, answer="의도다", at=AT1):
@@ -254,6 +275,85 @@ class TestCommitAnswers(unittest.TestCase):
             self.assertIsNone(ic._valid_answers_dir(magic), magic)
         self.assertEqual(ic._valid_answers_dir("docs/qg-intent-answers"),
                          "docs/qg-intent-answers")
+
+    def test_commit_glob_chars_dir_commits_only_that_file(self):
+        """답 자리 이름에 glob 글자가 있어도 그 글자 그대로의 파일만 커밋된다 — glob 에 맞는 이웃 폴더의
+        같은 이름 파일(사용자가 스테이지한 것 · 추적되지 않는 것)은 그대로다."""
+        n0, n1 = self.files[0][0], self.files[1][0]
+        for globby, sibling in (("g*b", "gab"), ("q?x", "qax"), ("[ab]c", "ac")):
+            with self.subTest(dir=globby), tempfile.TemporaryDirectory() as d:
+                root = _git_repo(d)
+                _write("user\n", root, sibling, n0)
+                _write("user\n", root, sibling, n1)
+                _git(root, "add", "--", sibling + "/" + n0)
+                paths, err = ia.write_answer_files(root, globby, self.files)
+                self.assertIsNone(err)
+                sha, err = ia.commit_answer_files(root, paths, "m")
+                self.assertEqual(err, None, globby)
+                self.assertTrue(sha)
+                shown = _git(root, "show", "--name-only", "--format=", "HEAD").stdout.split()
+                self.assertEqual(sorted(shown), sorted(globby + "/" + n for n in (n0, n1)))
+                self.assertEqual(_git(root, "diff", "--cached", "--name-only").stdout.split(),
+                                 [sibling + "/" + n0])
+                self.assertIn("?? %s/%s" % (sibling, n1),
+                              _git(root, "status", "--porcelain", "-uall").stdout)
+
+    def test_commit_failure_glob_chars_dir_keeps_user_stage(self):
+        """커밋이 실패해 답 파일을 스테이지에서 내릴 때도 glob 에 맞는 이웃 파일은 내리지 않는다."""
+        n0 = self.files[0][0]
+        with tempfile.TemporaryDirectory() as d:
+            root = _git_repo(d)
+            _write("user\n", root, "gab", n0)
+            _git(root, "add", "--", "gab/" + n0)
+            hook = Path(root, ".git", "hooks", "pre-commit")
+            hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            hook.chmod(0o755)
+            paths, _ = ia.write_answer_files(root, "g*b", self.files)
+            sha, err = ia.commit_answer_files(root, paths, "m")
+            self.assertIsNone(sha)
+            self.assertTrue(err.startswith("git commit 실패 — "), err)
+            self.assertEqual(_git(root, "diff", "--cached", "--name-only").stdout.split(),
+                             ["gab/" + n0])
+
+    def test_commit_hook_does_not_inherit_literal_pathspecs(self):
+        """답 커밋이 띄우는 대상 레포의 pre-commit 훅은 GIT_LITERAL_PATHSPECS 를 보지 못한다 —
+        훅 안의 glob pathspec 이 평소대로 읽힌다."""
+        for n in ("1.md", "2.md"):
+            _write("x\n", self.root, "ok", n)
+        _git(self.root, "add", "ok")
+        _git(self.root, "commit", "-q", "-m", "ok")
+        seen = os.path.join(self.tmp.name, ".git", "hook-seen.txt")
+        hook = Path(self.root, ".git", "hooks", "pre-commit")
+        hook.write_text("#!/bin/sh\n"
+                        "{ echo \"literal=${GIT_LITERAL_PATHSPECS-unset}\"\n"
+                        "  echo \"glob=$(git ls-files -- 'ok/*.md' | wc -l | tr -d ' ')\"; } > '%s'\n"
+                        % seen, encoding="utf-8")
+        hook.chmod(0o755)
+        paths, _ = ia.write_answer_files(self.root, self.rel, self.files)
+        sha, err = ia.commit_answer_files(self.root, paths, "m")
+        self.assertEqual(err, None)
+        self.assertTrue(sha)
+        self.assertEqual(_read(seen).splitlines(), ["literal=unset", "glob=2"])
+
+    def test_commit_failure_ignored_reason_comes_from_check_ignore(self):
+        """「git 이 무시한다」 사유는 git 의 stderr 글이 아니라 check-ignore 판정에서 나온다 — git 의
+        글이 영어가 아니어도(다른 로케일) 같은 사유다. 무시되지 않는 경로의 add 실패는 그 사유가 아니다."""
+        name = self.files[1][0]
+        for ignore_line in ("docs/qg-intent-answers/\n", "*%s\n" % name[-20:]):
+            with self.subTest(ignore=ignore_line), tempfile.TemporaryDirectory() as d, \
+                    _other_locale_git():
+                root = _git_repo(d)
+                Path(root, "a.txt").write_text("changed\n", encoding="utf-8")
+                _git(root, "add", "a.txt")
+                Path(root, ".gitignore").write_text(ignore_line, encoding="utf-8")
+                paths, _ = ia.write_answer_files(root, self.rel, self.files)
+                sha, err = ia.commit_answer_files(root, paths, "m")
+                self.assertEqual((sha, err), (None, "답 자리를 git 이 무시한다"))
+                self.assertEqual(_git(root, "diff", "--cached", "--name-only").stdout.split(),
+                                 ["a.txt"])
+        with _other_locale_git():
+            sha, err = ia.commit_answer_files(self.root, ["docs/none.md"], "m")
+        self.assertEqual((sha, err), (None, "git add 실패 — " + OTHER_LOCALE_LINE))
 
     def test_commit_failure_detached(self):
         paths, _ = ia.write_answer_files(self.root, self.rel, self.files)
