@@ -150,8 +150,10 @@ def ordered_kinds(found: set) -> List[str]:
 
 
 def quote_line(quote: dict) -> str:
-    """확인된 읽은 인용의 관찰 줄 — `[읽음] <경로>:<줄> <글>`."""
-    return "%s%s:%d %s" % (MARK_READ, quote["path"], quote["line"], quote["text"])
+    """확인된 읽은 인용의 관찰 줄 — `[읽음] <경로>:<줄> <글>`. 경로와 글은 `printable` 로 거른다
+    (글 가운데의 줄 가름 글자가 관찰 줄을 둘로 가르지 못하게)."""
+    return "%s%s:%d %s" % (MARK_READ, printable(quote["path"]), quote["line"],
+                           printable(quote["text"]))
 
 
 def _checked_quote(tree_root: str, quote, files: dict) -> Optional[dict]:

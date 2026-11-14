@@ -643,8 +643,8 @@ COUNT_KEYS = ("evidence", "quote", "read_only", "answered", "over_cap", "unident
               "absorbed", "cites_dropped")
 
 
-class TestWideFilter(unittest.TestCase):
-    """넓게 보는 리뷰의 거르기 — 읽은 인용 확인 · 근거의 갈래 · 새 종류 · 고르는 순서."""
+class _WideRun:
+    """거르기 · 렌더 시험이 함께 쓰는 준비 — 리뷰 트리 · 세션 폴더 · filter 한 번."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -681,6 +681,10 @@ class TestWideFilter(unittest.TestCase):
     def _git_ok(self, repo, *args):
         p = tic._git(repo, *args)
         self.assertEqual(p.returncode, 0, p.stderr)
+
+
+class TestWideFilter(_WideRun, unittest.TestCase):
+    """넓게 보는 리뷰의 거르기 — 읽은 인용 확인 · 근거의 갈래 · 새 종류 · 고르는 순서."""
 
     def test_read_quote_accepted_in_wide(self):
         p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=True)
@@ -772,6 +776,24 @@ class TestWideFilter(unittest.TestCase):
         p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[quote])]))
         self.assertEqual(tic._last(p), "intent-ask: 1")
         self.assertEqual(tic._by_state(self.rd, "ask")[0]["observation"], ["[읽음] w.txt:1 x"])
+
+    def test_read_quote_line_stays_one_line(self):
+        """확인된 인용 글 가운데의 줄 가름 · 제어 글자는 관찰 줄에서 `?` — 관찰 줄이 둘로 갈라져 답 파일의
+        머리 줄을 흉내 내지 못한다. read_quotes 기록은 글자 그대로 남는다."""
+        self._prepare(wide=True)
+        odd = "a\x85b c\rd\x1be"
+        tic._write("%s\n" % odd, self._tree(), "o.txt")
+        self._git_ok(self._tree(), "add", "o.txt")
+        quote = {"path": "o.txt", "line": 1, "text": odd}
+        p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[quote])]))
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["observation"], ["[읽음] o.txt:1 a?b?c?d?e"])
+        for line in q["observation"]:
+            self.assertEqual(len(line.splitlines()), 1, line)
+            for ch in ("\x85", " ", "\r", "\x1b"):
+                self.assertNotIn(ch, line)
+        self.assertEqual(q["read_quotes"], [quote])
 
     def test_narrow_other_team_line_asks(self):
         self._prepare(wide=False)
@@ -886,6 +908,155 @@ class TestWideFilter(unittest.TestCase):
         self.assertEqual(keys[:3], ["evidence", "quote", "read_only"])
         self.assertEqual(keys[-1], "cites_dropped")
         self.assertEqual(dict(ic.COUNT_NOTICES)["cites_dropped"], "근거로 받지 않은 인용 %d")
+
+
+TEAMS = ("## 겹치는 곳\n- feature/other — a.txt\n## 확인 못 함\n- 로드맵 없음\n## 팀 지도\n"
+         "### 이번 로드맵 x\n## 겹치는 곳\n- 가짜 — y\n")
+TABLE_HEAD = "| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |"
+OVERLAP_HEAD = "다른 팀과 겹치는 곳:"
+UNVERIFIED_HEAD = "다른 팀 확인 못 함:"
+NO_RECORD = "- 다른 팀 기록 없음"
+BAD_RQ = {"path": "a.txt", "line": 1, "text": "y"}
+
+
+class TestWideRender(_WideRun, unittest.TestCase):
+    """렌더 — 근거 칸 · 다른 팀 겹침 목록 · 돌려주는 꼴의 새 칸 · 넓은 리뷰의 빈 결과 줄."""
+
+    def _render(self, mode="pr", teams=TEAMS):
+        if teams is not None:
+            tic._write(teams, self.rd, ot.FILE)
+        p = tic._cli("render", "--rd", self.rd, "--mode", mode)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        section = tic._read(self.rd, "result.md").split("\n## intent-critic\n", 1)[1]
+        return p, section
+
+    def _after(self, section, head):
+        lines = section.split("\n")
+        self.assertIn(head, lines)
+        return lines[lines.index(head) + 1]
+
+    def test_table_has_kind_column(self):
+        self._run(tic._out([tic._q("D1", lines=[1], read_quotes=[RQ])]), wide=True)
+        _p, section = self._render()
+        self.assertIn(TABLE_HEAD, section)
+        self.assertIn("|---|---|---|---|---|---|", section)
+        rows = []
+        for line in section.split("\n"):
+            if line.startswith("| " + tic.SRC):
+                rows.append(line)
+        self.assertEqual(len(rows), 1, section)
+        self.assertEqual(rows[0].split(" | ")[2], "돌려서 봄 · 읽어서 봄")
+
+    def test_r1_record_kind_is_dash(self):
+        """근거의 종류가 없는 질문 레코드(R1 꼴) — 근거 칸과 돌려주는 꼴의 evidence 가 `-`."""
+        self._prepare(wide=False)
+        data = {"status": "ran", "call": "first-only", "counts": {}, "notices": [], "commit": "-",
+                "questions": [{"id": tic.ID1, "state": "ask", "question": "Q", "target_id": "D1"}]}
+        tic._write(tic.yaml.safe_dump(data, allow_unicode=True), self.rd, "intent-questions.yaml")
+        _p, section = self._render()
+        self.assertIn("| %s | 아직 묻지 않음 | - | - | - | Q |" % tic.ID1, section)
+        text, block = tic._return_block(self.rd)
+        self.assertEqual(block["questions"][0]["evidence"], "-")
+        self.assertIn('    evidence: "-"\n', text)
+
+    def test_return_block_fields(self):
+        self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=True, mode="range")
+        self._render(mode="range")
+        text, block = tic._return_block(self.rd)
+        self.assertEqual(block["breadth"], "range")
+        self.assertEqual(block["other_teams"], "other-teams.md")
+        self.assertEqual(block["overlaps"], 1)
+        self.assertEqual(block["questions"][0]["evidence"], "읽어서 봄")
+        self.assertIn("\noverlaps: 1\n", text)
+        self.assertIn('    evidence: "읽어서 봄"\n', text)
+        keys = []
+        for line in text.split("\n"):
+            if line and not line.startswith((" ", "`")):
+                keys.append(line.split(":", 1)[0])
+        self.assertEqual(keys, ["status", "mode", "answers_dir", "answers_dir_source", "commit",
+                                "breadth", "other_teams", "overlaps", "questions"])
+        fields = []
+        for line in text.split("\n"):
+            if line.startswith("    ") or line.startswith("  - "):
+                fields.append(line.strip().lstrip("- ").split(":", 1)[0])
+        self.assertEqual(fields, ["id", "state", "answer", "wrong_choice", "file", "evidence"])
+
+    def test_overlap_list_without_reviewer(self):
+        self._prepare(wide=False, call="none")
+        p, section = self._render()
+        self.assertEqual(self._after(section, OVERLAP_HEAD), "- feature/other — a.txt")
+        self.assertEqual(self._after(section, UNVERIFIED_HEAD), "- 로드맵 없음")
+        self.assertLess(section.index(UNVERIFIED_HEAD), section.index("상한 넘어 남김:"))
+        self.assertEqual(tic._last(p), tic.NONE_LINE)
+        self.assertNotIn(NO_RECORD, section)
+
+    def test_no_overlap_line(self):
+        cases = ((ot.NO_OVERLAP, 0), (ot.OVERLAP_UNKNOWN, "-"))
+        for line, count in cases:
+            with self.subTest(line=line), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                self._prepare(wide=False, call="none")
+                teams = TEAMS.replace("- feature/other — a.txt", line, 1)
+                _p, section = self._render(teams=teams)
+                self.assertEqual(self._after(section, OVERLAP_HEAD), line)
+                self.assertEqual(tic._return_block(rd)[1]["overlaps"], count)
+
+    def test_record_without_sections(self):
+        """기록은 있는데 앞 두 절이 비었다(팀 지도 머리가 먼저 옴) — 겹침 수는 0 이 아니라 모름."""
+        self._prepare(wide=False, call="none")
+        _p, section = self._render(teams="## 팀 지도\n## 겹치는 곳\n- 가짜 — y\n")
+        self.assertEqual(self._after(section, OVERLAP_HEAD), ic.TEAMS_UNREAD)
+        self.assertEqual(self._after(section, UNVERIFIED_HEAD), ic.TEAMS_UNREAD)
+        self.assertNotIn("가짜", section)
+        self.assertEqual(tic._return_block(self.rd)[1]["overlaps"], "-")
+
+    def test_missing_record(self):
+        self._run(tic._out([tic._q("D1", lines=[1])]), wide=True)
+        _p, section = self._render(teams=None)
+        self.assertIn("\n" + NO_RECORD + "\n", section)
+        self.assertNotIn(OVERLAP_HEAD, section)
+        self.assertNotIn(UNVERIFIED_HEAD, section)
+        _text, block = tic._return_block(self.rd)
+        self.assertEqual(block["other_teams"], "-")
+        self.assertEqual(block["overlaps"], "-")
+        self.assertEqual(block["breadth"], "range")
+
+    def test_forged_heading_in_body_not_listed(self):
+        self._run(tic._out([tic._q("D1", lines=[1])]), wide=True)
+        _p, section = self._render()
+        self.assertIn("- feature/other — a.txt", section)
+        self.assertNotIn("가짜", section)
+        self.assertEqual(tic._return_block(self.rd)[1]["overlaps"], 1)
+
+    def test_wide_all_filtered_result_line(self):
+        out = tic._out([tic._q("D1", lines=[], read_quotes=[BAD_RQ]),
+                        tic._q("D2", lines=[], read_quotes=[BAD_RQ])])
+        for wide, last in ((True, "intent-critic — 낸 후보 2개가 근거 확인에서 모두 걸러짐"),
+                           (False, tic.NONE_LINE)):
+            with self.subTest(wide=wide), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                self._run(out, wide=wide)
+                p, section = self._render()
+                self.assertEqual(tic._last(p), last)
+                self.assertIn("\n- %s\n" % last, section)
+                self.assertEqual(tic._return_block(rd)[1]["status"], "ran")
+
+    def test_wide_filtered_with_answered_is_no_question(self):
+        """이미 답한 질문으로 거른 것이 있으면 「모두 걸러짐」 이 아니다(R1 의 근거 없음 판정과 같은 조건)."""
+        old = tic.OBS1
+        out = tic._out([tic._q("D1", lines=[1], same_as=tic.ID1),
+                        tic._q("D2", lines=[], read_quotes=[BAD_RQ])])
+        self._run(out, wide=True, answers=[(tic.ID1, "의도다", old)])
+        p, _section = self._render()
+        self.assertEqual(tic._last(p), tic.NOQ_LINE)
+
+    def test_gate_skip_return_has_dashes(self):
+        p = tic._cli("gate", "--rd", self.rd, "--path", "trivia")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        text, block = tic._return_block(self.rd)
+        for key in ("breadth", "other_teams", "overlaps"):
+            self.assertEqual(block[key], "-", key)
+            self.assertIn('\n%s: "-"\n' % key, text)
 
 
 if __name__ == "__main__":

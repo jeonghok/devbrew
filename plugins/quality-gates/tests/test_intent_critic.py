@@ -1968,7 +1968,7 @@ class TestRender(unittest.TestCase):
         self.assertEqual(text.count("    wrong_choice: no\n"), 3)
         self.assertEqual([r["wrong_choice"] for r in rows], [False, False, False])
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
-        self.assertIn("| 정체 | 상태 | 답 | 답 파일 | 질문 |", section)
+        self.assertIn("| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |", section)
         self.assertIn("상한 넘어 남김:", section)
         self.assertIn("D3 질문", section.split("상한 넘어 남김:", 1)[1])
         self.assertNotIn("이미 「잘못 골랐다」", section)

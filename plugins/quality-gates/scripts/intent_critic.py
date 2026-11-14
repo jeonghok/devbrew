@@ -105,6 +105,9 @@ UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
 NO_QUESTION = "intent-critic — 질문 없음"
+# 넓게 보는 리뷰에서만 — 낸 후보가 근거 확인(evidence · quote · read_only)에서 모두 걸러졌을 때.
+ALL_FILTERED = "intent-critic — 낸 후보 %d개가 근거 확인에서 모두 걸러짐"
+FILTERED_KEYS = ("evidence", "quote", "read_only")
 UNREADABLE = "intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)"
 ALREADY = "intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 SECOND_FAILED = "둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다"
@@ -130,6 +133,13 @@ COUNT_NOTICES = (
     ("cites_dropped", "근거로 받지 않은 인용 %d"),
 )
 RETURN_STATES = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
+TABLE_HEAD = "| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |"
+KIND_SEP = " · "
+# 결과 절의 다른 팀 목록 — 리뷰어를 부르지 않은 실행에도 늘 보인다.
+OVERLAP_HEAD = "다른 팀과 겹치는 곳:"
+UNVERIFIED_HEAD = "다른 팀 확인 못 함:"
+NO_TEAMS_RECORD = "- 다른 팀 기록 없음"
+TEAMS_UNREAD = "- 기록에서 이 절을 읽지 못함"
 
 
 class InputError(Exception):
@@ -286,14 +296,19 @@ def _scalar(value) -> str:
     return text if plain else json.dumps(text, ensure_ascii=False)
 
 
-def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict]) -> None:
+def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict],
+                  breadth: str = "-", other_teams: str = "-", overlaps="-") -> None:
+    """돌려주는 꼴. `overlaps` 는 겹침 수(정수 — 날 수로 쓴다) 또는 모름 `-`."""
     cfg = _read_config(rd) or {}
     lines = [RETURN_FENCE,
              "status: " + _scalar(status),
              "mode: " + _scalar(mode or "-"),
              "answers_dir: " + _scalar(cfg.get("answers_dir", "-")),
              "answers_dir_source: " + _scalar(cfg.get("answers_dir_source", "-")),
-             "commit: " + _scalar(commit or "-")]
+             "commit: " + _scalar(commit or "-"),
+             "breadth: " + _scalar(breadth or "-"),
+             "other_teams: " + _scalar(other_teams or "-"),
+             "overlaps: " + (str(overlaps) if type(overlaps) is int else _scalar(overlaps or "-"))]
     if not rows:
         lines.append("questions: []")
     else:
@@ -304,6 +319,7 @@ def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict]
         lines.append("    answer: " + _scalar(row["answer"]))
         lines.append("    wrong_choice: " + row["wrong_choice"])
         lines.append("    file: " + json.dumps(row["file"], ensure_ascii=False))
+        lines.append("    evidence: " + json.dumps(row["evidence"], ensure_ascii=False))
     lines.append("```")
     _write(_path(rd, RETURN), "\n".join(lines) + "\n")
 
@@ -1344,8 +1360,14 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         elif state == "ask" and not record.get("record_failed"):
             unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
     counts = data.get("counts") or {}
+    filtered = 0
+    for key in FILTERED_KEYS:
+        if type(counts.get(key)) is int:
+            filtered += counts[key]
     if asked == 0:
-        if counts.get("evidence") and not counts.get("answered"):
+        if filtered > 0 and not counts.get("answered"):
+            if plan["breadth"] != "narrow":
+                return "ran", ALL_FILTERED % filtered, notices
             return "ran", NO_EVIDENCE, notices
         return "ran", NO_QUESTION, notices
     if mode == "range":
@@ -1362,25 +1384,52 @@ def _rows(data: Optional[dict], mode: str) -> List[dict]:
         state = record.get("state")
         if state in RETURN_STATES:
             answer = record.get("answer") or "-"
+            # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
+            kinds = record.get("evidence_kinds")
+            evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
             rows.append({"id": _text(record.get("id")), "state": RETURN_STATES[state],
                          "answer": answer, "wrong_choice": "yes" if answer == "잘못 골랐다" else "no",
                          "file": "-" if mode == "range" else (record.get("file") or "-"),
-                         "question": record.get("question", "")})
+                         "question": record.get("question", ""), "evidence": evidence})
     return rows
 
 
-def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict]) -> str:
+def _teams_record(rd: str) -> tuple:
+    """(돌려주는 꼴의 other_teams, 겹침 줄들, 확인 못 함 줄들, 겹침 수) — `other-teams.md` 를 읽기만 한다.
+
+    줄은 `ot.summary`(팀 지도 머리 앞까지)로만 얻는다 — 다른 브랜치의 본문이 목록 줄을 흉내 내지 못한다.
+    겹침 수는 「겹침 확인 못 함」 이면 `-`(모름), 「겹침 없음」 이면 0, 그 밖에는 줄 수. 기록이 없으면 줄이 None.
+    """
+    text = _read(_path(rd, OTHER_TEAMS))
+    if text is None:
+        return "-", None, None, "-"
+    overlap, unverified = ot.summary(text)
+    if not overlap or ot.OVERLAP_UNKNOWN in overlap:
+        count = "-"
+    else:
+        count = len(overlap) - overlap.count(ot.NO_OVERLAP)
+    return OTHER_TEAMS, overlap or [TEAMS_UNREAD], unverified or [TEAMS_UNREAD], count
+
+
+def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict],
+             teams: tuple = (None, None)) -> str:
+    """결과 절. `teams` 는 `_teams_record` 의 (겹침 줄들, 확인 못 함 줄들) — None 이면 기록 없음."""
     out = ["", SECTION, "", SECTION_LEAD, "", "- " + line]
     for notice in notices:
         out.append("- " + notice)
     if data and data.get("commit_line"):
         out.append("- " + data["commit_line"])
     if rows:
-        out += ["", "| 정체 | 상태 | 답 | 답 파일 | 질문 |", "|---|---|---|---|---|"]
+        out += ["", TABLE_HEAD, "|---|---|---|---|---|---|"]
     for row in rows:
-        out.append("| %s | %s | %s | %s | %s |" % (_cell(row["id"]), row["state"],
-                                                   _cell(row["answer"]), _cell(row["file"]),
-                                                   _cell(row["question"])))
+        out.append("| %s | %s | %s | %s | %s | %s |" % (
+            _cell(row["id"]), row["state"], _cell(row["evidence"]), _cell(row["answer"]),
+            _cell(row["file"]), _cell(row["question"])))
+    overlap, unverified = teams
+    if overlap is None or unverified is None:
+        out += ["", NO_TEAMS_RECORD]
+    else:
+        out += ["", OVERLAP_HEAD] + overlap + ["", UNVERIFIED_HEAD] + unverified
     over = []
     wrong = []
     filtered = []
@@ -1426,9 +1475,11 @@ def cmd_render(args) -> int:
             if prepared not in notices and prepared not in front:
                 front.append(prepared)
         shown = front + shown
-    _append(result_path, lead + _section(line, shown, data, rows))
+    other_teams, overlap, unverified, overlaps = _teams_record(rd)
+    _append(result_path, lead + _section(line, shown, data, rows, (overlap, unverified)))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
-    _write_return(rd, status, args.mode, commit, rows)
+    breadth = "-" if plan is None else plan["breadth"]
+    _write_return(rd, status, args.mode, commit, rows, breadth, other_teams, overlaps)
     _write(marker, line + "\n")
     _emit(notices)
     print(line)
