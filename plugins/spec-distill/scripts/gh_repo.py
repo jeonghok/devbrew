@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""gh_repo.py — spec-distill 의 gh 호출을 모은 한 곳.
+"""gh_repo.py — spec-distill 의 스크립트와 문서 bash 펜스가 gh 를 부르는 한 곳.
 
 모든 호출은 `-R <host>/<owner>/<repo>`(origin URL 에서 호스트까지 도출)를 붙인다 — `-R` 을 받지 않는
 `repo view` 만 같은 값을 인자로 준다. 멈춤은 `GhStop` 하나로 내고, 그 메시지가 사람에게 보일 한 줄이다:
@@ -295,7 +295,7 @@ def main(argv=None) -> int:
     p.add_argument("--base", required=True)
     p.add_argument("--title", required=True)
     p.add_argument("--body-file", required=True)
-    cmd("pr-identity", "<state> <base> <head> <true|false>").add_argument("number", type=_pr_number)
+    cmd("pr-identity", "<state> <base> <head> <true|false> <head 커밋>").add_argument("number", type=_pr_number)
     p = cmd("pr-checks", "gh pr checks 그대로(출력 · 종료 코드)")
     p.add_argument("number", type=_pr_number)
     p.add_argument("--watch", action="store_true")

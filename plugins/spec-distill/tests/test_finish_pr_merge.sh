@@ -27,6 +27,10 @@ HPH='<interview-pr 이 낸 끝 커밋>'
 pf="$(fence "$FIN" interview-pr)"
 mf="$(fence "$FIN" interview-merge)"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
+# 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
+ASK="$(grep -F '2. **머지 묻기.**' "$FIN")"
+assert_contains "$ASK" '「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다' "본문: 권장 꼬리는 ONLY 일 때만"
+assert_contains "$ASK" '`MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고' "본문: MIXED · UNKNOWN 이면 꼬리를 뗀다"
 case "$mf" in *"URL=\"$UPH\""*"HEAD_SHA=\"$HPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL · 끝 커밋 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 
 mkdir -p "$T/bin" "$T/remotes" || exit 1
@@ -110,7 +114,8 @@ mk() {   # mk <owner> → 클론 경로. origin 은 git@github.com:<owner>/r.git
 }
 SHELL_ARGV=()
 run() {   # run <owner> <펜스 본문> [<PR 주소> [<끝 커밋>]] → 자리표를 바꿔 지금 셸(SHELL_ARGV)로 돈 출력. gh 호출은 $T/gh-<owner>/log 에 쌓인다
-  local c="$T/$1" body="${2//"$PH"/$T/$1/$STEM.md}"
+  # BRIEF_REL 을 주면 brief 자리를 그 레포 상대 경로로 바꾼다.
+  local c="$T/$1" body="${2//"$PH"/$T/$1/${BRIEF_REL:-$STEM.md}}"
   body="${body//"$UPH"/${3:-$UPH}}"
   body="${body//"$HPH"/${4:-$HPH}}"
   : > "$T/gh-$1/log"
@@ -152,17 +157,44 @@ for sh_name in bash zsh; do
 
   # 3. 인터뷰 폴더 · 로드맵 폴더 밖의 파일이 있으면 MIXED — 목록을 보이고 판결은 그대로 OPEN
   n="${P}mixed"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
-  mkdir -p "$c/src" "$c/$IDIR/sub"; printf 'x\n' > "$c/src/app.py"; printf 'x\n' > "$c/$IDIR/sub/deep.md"
+  mkdir -p "$c/src" "$c/$IDIR/sub"; printf 'x\n' > "$c/src/app.py"; printf 'x\n' > "$c/$IDIR/sub/deep.md"; printf 'x\n' > "$c/src/한글 이름.py"
   git -C "$c" add -- src "$IDIR/sub"; git -C "$c" commit -q -m "feat: code"
   o="$(run "$n" "$pf")"
   assert_eq "$(last "$o")" "interview-pr: OPEN https://github.com/$n/r/pull/7" "섞인 PR: 판결은 그대로 OPEN"
   assert_contains "$o" "interview-pr-files: MIXED" "섞인 PR: MIXED"
-  assert_contains "$o" "밖의 파일 2개도 담는다" "섞인 PR: 개수를 보인다"
+  assert_contains "$o" "밖의 파일 3개도 담는다" "섞인 PR: 개수를 보인다"
+  assert_contains "$o" "  - src/한글 이름.py" "섞인 PR: 한글 경로를 글자 그대로 보인다(8진 이스케이프가 아니다)"
   assert_contains "$o" "  - src/app.py" "섞인 PR: 코드 파일을 목록에 보인다"
   assert_contains "$o" "  - $IDIR/sub/deep.md" "섞인 PR: 인터뷰 폴더의 하위 폴더는 「바로 아래」 가 아니다"
   assert_not_contains "$o" "  - $STEM.md" "섞인 PR: brief 는 목록에 없다"
   assert_not_contains "$o" "  - $RREL/" "섞인 PR: 로드맵 폴더의 파일은 목록에 없다"
   assert_not_contains "$o" "interview-pr-files: ONLY" "섞인 PR: ONLY 를 내지 않는다"
+
+  # 3b. brief §7 이 넓은 폴더를 가리키면 그 폴더를 통째로 빼지 않는다 — 커밋 펜스와 같은 판정(check-path)을 통과한 폴더만 뺀다
+  n="${P}wide"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  mkdir -p "$c/src"; printf 'x\n' > "$c/src/app.py"; printf -- '---\ntype: roadmap\n---\n# 로드맵\n' > "$c/src/roadmap.md"
+  printf -- '---\ntype: interview-brief\n---\n## 7. Next Action\n\n분해됨 — src/roadmap.md\n' > "$c/$STEM.md"
+  git -C "$c" add -- src "$STEM.md"; git -C "$c" commit -q -m "feat: code beside a roadmap"
+  o="$(run "$n" "$pf")"
+  assert_contains "$o" "interview-pr-files: MIXED" "넓은 §7: 그 폴더 아래 코드가 있으면 MIXED"
+  assert_contains "$o" "  - src/app.py" "넓은 §7: 그 폴더의 코드를 목록에 보인다"
+  assert_contains "$o" "brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: $c/src" "넓은 §7: 빼지 않은 사실과 폴더를 보인다"
+  assert_not_contains "$o" "interview-pr-files: ONLY" "넓은 §7: ONLY 를 내지 않는다"
+  # 3c. brief 가 정해진 인터뷰 폴더 바로 아래가 아니면 그 폴더도 빼지 않는다
+  n="${P}stray"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  mkdir -p "$c/notes"; cp "$c/$STEM.md" "$c/notes/b.md"; git -C "$c" add -- notes; git -C "$c" commit -q -m "docs: stray brief"
+  o="$(BRIEF_REL=notes/b.md run "$n" "$pf")"
+  assert_contains "$o" "interview-pr-files: MIXED" "인터뷰 폴더 밖의 brief: MIXED"
+  assert_contains "$o" "  - notes/b.md" "인터뷰 폴더 밖의 brief: 그 폴더의 파일을 목록에 보인다"
+  assert_contains "$o" "brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유)" "인터뷰 폴더 밖의 brief: 빼지 않은 사실을 보인다"
+  # 3d. 파일을 세지 못하면 UNKNOWN — ONLY 를 내지 않아 권장 꼬리가 붙지 않는 쪽으로 간다
+  n="${P}unknown"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  git -C "$c" checkout -q --orphan feature/y; git -C "$c" commit -q -m "기본 브랜치와 조상이 없는 브랜치"
+  o="$(run "$n" "$pf")"
+  assert_eq "$(last "$o")" "interview-pr: OPEN https://github.com/$n/r/pull/7" "세지 못함: 판결은 그대로 OPEN"
+  assert_eq "$(printf '%s\n' "$o" | grep '^interview-pr-files: ')" "interview-pr-files: UNKNOWN" "세지 못함: 파일 줄은 UNKNOWN 하나뿐이다"
+  assert_contains "$o" "이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다." "세지 못함: 사람 줄"
+  assert_contains "$o" "no merge base" "세지 못함: git 의 사유가 위에 보인다"
 
   # 4. gh 실패(인증) — push 하기 전에 멈춘다
   n="${P}auth"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
