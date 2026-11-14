@@ -79,6 +79,7 @@ assert_eq "$(fenced "$PROC" | grep -c -E '^[[:space:]]*git[[:space:]]')" 0 "절�
 assert_eq "$(count "$PF" 'subagent_type: "quality-gates:intent-critic"')" 2 "절차 문서: dispatch 2"
 assert_eq "$(count "$PF" '// **처분** — consumer=plugins/quality-gates/scripts/intent_critic.py · fail-open')" 2 "절차 문서: 처분 줄 2"
 assert_eq "$(count "$PF" '<roadmap>${ROADMAP}</roadmap>')" 2 "절차 문서: roadmap 칸 2"
+assert_eq "$(count "$PF" '<scope>${SCOPE}</scope>')" 2 "절차 문서: scope 칸 2"
 
 note "[상태 형식]"
 FMT="$(awk '/^```markdown$/{f=1;next} f&&/^```$/{exit} f' "$SFF")"

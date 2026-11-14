@@ -1,8 +1,9 @@
 # intent-critic 단계 절차
 
-판정 줄을 보이고 게시(또는 게시 건너뜀 공시)까지 끝난 뒤에 돈다. 이번 실행에서 돌려 본 근거(걷기 기록 ·
-차등 테스트 결과)가 있을 때만 리뷰어 `quality-gates:intent-critic` 을 불러, 사용자가 고른 것 자체가 정말
-의도가 맞는지 묻는다. 입력 조립 · 거름 · 상한 · 답 기록 · 렌더는 `scripts/intent_critic.py` 의 하위 명령이
+판정 줄을 보이고 게시(또는 게시 건너뜀 공시)까지 끝난 뒤에 돈다. 리뷰어 `quality-gates:intent-critic` 을
+불러 사용자가 고른 것 자체가 정말 의도가 맞는지, 다른 팀과 갈라지거나 겹쳐 만들지 않는지 묻는다. 부르는 때는
+이번 실행에서 돌려 본 근거(걷기 기록 · 차등 테스트 결과)가 있을 때, 그리고 넓게 보는 리뷰(범위 모드 · 의도
+문서가 바뀐 변경 — `prepare` 가 정한다)일 때다 — 넓게 보는 리뷰는 근거가 없어도 부른다. 입력 조립 · 거름 · 상한 · 답 기록 · 렌더는 `scripts/intent_critic.py` 의 하위 명령이
 하고, 하위 명령의 인자 · 출력은 `intent_critic.py <하위 명령> --help` 가 정본이다.
 
 ## 지킬 것
@@ -38,7 +39,7 @@ python3 "$QG/scripts/intent_critic.py" gate --rd "$RD" --path <final | aborted |
 | `intent-gate: run` | 아래 비용 줄을 내고 범위 모드면 [I1](#i1-리뷰-트리-범위-모드만), PR 범위면 [I2](#i2-설정--준비) |
 | `intent-critic 꺼짐(kill switch)` · `intent-critic — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |
 
-비용 줄(`intent-gate: run` 일 때 한 번): `> [quality-gates] intent-critic 단계 — 리뷰어를 많아야 2번 부른다(출력을 읽지 못하면 한 번씩 다시 불러 많아야 4번). 근거가 없으면 부르지 않는다.`
+비용 줄(`intent-gate: run` 일 때 한 번): `> [quality-gates] intent-critic 단계 — 리뷰어를 많아야 2번 부른다(출력을 읽지 못하면 한 번씩 다시 불러 많아야 4번). 범위 모드와 의도 문서가 바뀐 변경은 넓게 본다 — 돌려 본 근거가 없어도 부른다. 그 밖에는 근거가 없으면 부르지 않는다. 다른 팀 읽기(git 읽기와 열린 PR 목록 한 번)가 함께 돈다.`
 
 ## I1 리뷰 트리 (범위 모드만)
 
@@ -68,11 +69,11 @@ fi
 
 ## I2 설정 · 준비
 
-`config` 는 docs 답 자리와 리뷰어 입력 상한을 정하고, `prepare` 는 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문을 세션 폴더의 `intent-*` 파일로 조립한다. 펜스의 자리 셋을 채운다:
+`config` 는 docs 답 자리 · 리뷰어 입력 상한 · 다른 팀 기록의 바이트 상한 · 의도 문서를 가리는 표시를 정하고, `prepare` 는 리뷰의 넓이를 정해 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문 · 리뷰어의 `<scope>` 칸(`intent-scope.md`)을 세션 폴더의 `intent-*` 파일로 조립하고 다른 팀 기록(`other-teams.md`)을 쓴다. 펜스의 자리 셋을 채운다:
 
 - `QG_INTENT_JSON` — P3 이 낸 JSON 한 줄을 글자 그대로. P3 이 JSON 을 남기지 못했으면 빈 줄로 둔다(`prepare` 가 공시한다).
 - `QG_INTENT_ORIGIN` — 인자에 `--origin <경로>` 가 있었으면 그 경로를 글자 그대로, 없으면 빈 줄.
-- `BASE` — PR 범위면 마지막 iteration Step 1c 출력의 `base:` 값, 모르면 `-`. 범위 모드는 펜스가 범위 파일의 `start:` 를 읽으므로 비워 둔다.
+- `BASE` — PR 범위면 마지막 iteration Step 1c 출력의 `base:` 값, 모르면 `-`. 범위 모드는 펜스가 범위 파일의 `start:` 를 읽으므로 비워 둔다. `prepare` 는 이 값으로 `<scope>` 칸의 커밋 제목(기준 커밋부터 리뷰한 커밋까지)을 읽는다.
 
 리뷰 트리 루트는 PR 범위면 리포 루트(`git rev-parse --show-toplevel`), 범위 모드면 I1 의 트리다 — `config` 는 그곳의 설정을, `prepare` 는 그곳의 docs 답 자리를 읽고 그 루트를 계획 파일에 적는다. 리뷰한 커밋은 PR 범위면 `HEAD`, 범위 모드면 끝 커밋이다.
 
@@ -96,15 +97,19 @@ case "$BASE" in ''|*[!0-9a-f]*) BASE=- ;; esac
 [ -n "$TREE" ] && [ -d "$TREE" ] || { echo "[quality-gates] intent-critic 단계의 리뷰 트리가 없다(${TREE:-빈 값}) — 준비하지 않는다" >&2; exit 5; }
 O_ARGS=(); [ -z "$ORIGIN_ARG" ] || O_ARGS=(--origin "$ORIGIN_ARG")
 python3 "$QG/scripts/intent_critic.py" config --rd "$RD" --repo "$TOP" --base "$BASE" --project-dir "$TREE" || exit
-python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" "${O_ARGS[@]}"
+python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" --base "$BASE" "${O_ARGS[@]}"
 echo "prepare rc=$?"
 ```
 
-`config` 의 네 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` 등)은 그대로 보인다.
+**넓이.** 범위 모드에서 바뀐 파일이 있거나, PR 의 바뀐 파일이 모두 문서 파일이고 그 가운데 의도 문서가 있으면 넓게 보는 리뷰다 — 돌려 본 근거가 없어도 리뷰어를 부르고 읽은 인용도 근거로 받는다. 그 밖에는 좁게 보는 리뷰(돌려 본 근거가 있을 때만 부른다)다. 넓이는 계획 파일의 `breadth:` 와 `<scope>` 칸의 첫 두 줄에 남는다.
+
+**다른 팀 읽기.** `prepare` 는 어느 넓이에서나 다른 팀 기록을 모아 `$RD/other-teams.md` 에 쓴다(기록이 비면 그 파일을 지운다). 「팀」 은 로드맵 하나다. 읽는 것은 이번 로드맵(리뷰 트리)과 나란한 다른 로드맵(기본 브랜치 끝)의 에픽 블록 · 결정 기록, 기본 브랜치에서도 리뷰한 커밋에서도 닿지 않는 커밋이 있는 브랜치(로컬 · 원격)의 바뀐 의도 문서, 이번 변경과 겹치는 파일의 그쪽 diff, 열린 PR 목록(번호 · 제목 · 브랜치 이름 · 포크 여부 — 조회 한 번)이다. 정해진 git 읽기 명령만 쓰고 리포를 바꾸지 않는다 — 원격을 새로 받지 않는다. 못 보는 것(다른 worktree 의 커밋 안 된 작업 · 이 리포에 브랜치가 없는 PR · 다른 컴퓨터와 올리지 않은 작업 · 표시가 설정에 없는 인터뷰 단계의 팀 · 읽지 못한 브랜치 목록이나 기본 브랜치)은 기록의 「확인 못 함」 절에 한 줄씩 남는다. 기록은 리뷰어를 부를 때 근거 파일에 `[다른 팀]` 줄로 실린다. `intent-call: none` 이어도 기록은 남고, 겹치는 곳 · 확인 못 함 목록은 [I6](#i6-렌더) 의 결과 절에 보인다.
+
+`config` 의 여덟 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` · `넓게 본다 — 범위 모드` · `넓게 본다 — 의도 문서가 바뀐 변경` · `바뀐 파일 목록이 없어 넓게 보지 않는다` · `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` · `다른 팀 읽기 실패 — <예외 이름>` · `입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` · `차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다` 등)은 그대로 보인다.
 
 | `prepare` 의 마지막 줄 | 그다음 |
 |---|---|
-| `intent-call: none` | 근거가 없다 — 리뷰어를 부르지 않는다. [I5](#i5-거르기--묻기--답-기록) 끝의 리뷰 트리 지우기 → [I6](#i6-렌더) |
+| `intent-call: none` | 좁게 보는 리뷰에 돌려 본 근거가 없다 — 리뷰어를 부르지 않는다. [I5](#i5-거르기--묻기--답-기록) 끝의 리뷰 트리 지우기 → [I6](#i6-렌더) |
 | `intent-call: first-only` · `intent-call: split` | [I3](#i3-첫째-호출) |
 | `intent-call: single` | 입력이 상한을 넘어 한 번에 넣는다 — I3 을 건너뛰고 [I4](#i4-둘째-호출) |
 | `prepare rc=4` | 입력을 읽지 못했다. stderr 를 그대로 보이고 I5 끝 → I6(`render` 가 셀 수 없음으로 끝낸다) |
@@ -115,6 +120,7 @@ echo "prepare rc=$?"
 
 - `PROJECT_DIR` — PR 범위는 P0 의 `project_dir`, 범위 모드는 I1 의 트리 경로.
 - `DIFF` — 마지막 iteration 의 `$RD/review-i<N>.diff`.
+- `SCOPE` — `$RD/intent-scope.md`(리뷰의 넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목).
 - `EVIDENCE` · `ORIGIN` · `ROADMAP` · `INTENT` · `DOUBTS` · `ANSWERED` — 차례로 `$RD/intent-evidence.txt` · `intent-origin.md` · `intent-roadmap.md` · `intent-intent.md` · `intent-doubts.md` · `intent-answered.md`.
 
 첫째 호출은 의심(`doubts`)을 싣지 않는다 — 근거와 원문만 보고 후보를 낸다.
@@ -126,6 +132,7 @@ Agent({
   description: "Intent critique from run evidence (qg, first call)",
   prompt: "<project_dir>${PROJECT_DIR}</project_dir>
     <diff>${DIFF}</diff>
+    <scope>${SCOPE}</scope>
     <evidence>${EVIDENCE}</evidence>
     <origin>${ORIGIN}</origin>
     <roadmap>${ROADMAP}</roadmap>
@@ -174,6 +181,7 @@ Agent({
   description: "Intent critique from run evidence (qg, second or single call)",
   prompt: "<project_dir>${PROJECT_DIR}</project_dir>
     <diff>${DIFF}</diff>
+    <scope>${SCOPE}</scope>
     <evidence>${EVIDENCE}</evidence>
     <origin>${ORIGIN}</origin>
     <roadmap>${ROADMAP}</roadmap>
@@ -193,7 +201,7 @@ Agent({
 
 ## I5 거르기 · 묻기 · 답 기록
 
-`filter` 가 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 `intent-questions.yaml` 을 쓴다. `--review-mode` 에는 마지막 iteration Step 1c 출력의 `mode:` 값을 넣고, 모르면 `-` 를 넣는다 — `paths` 범위의 바뀐 파일 목록은 glob 에 맞는 경로뿐이라, `paths` 나 `-` 면 목록에 없는 답 파일에 「범위 변경 여부를 확인하지 못함」 표시가 붙는다:
+`filter` 가 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 `intent-questions.yaml` 을 쓴다. 근거 거름은 줄 인용을 근거 파일에서, 읽은 인용을 리뷰 트리의 그 파일 그 줄에서(넓게 보는 리뷰에서만) 확인하고, 질문마다 근거의 종류(`돌려서 봄` · `다른 팀에서 봄` · `읽어서 봄`)를 남긴다. `--review-mode` 에는 마지막 iteration Step 1c 출력의 `mode:` 값을 넣고, 모르면 `-` 를 넣는다 — `paths` 범위의 바뀐 파일 목록은 glob 에 맞는 경로뿐이라, `paths` 나 `-` 면 목록에 없는 답 파일에 「범위 변경 여부를 확인하지 못함」 표시가 붙는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -202,7 +210,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" --review-mode <session | branch | topic | range | paths | ->
 ```
 
-공시 줄(`근거 없어 거름 <n>` · `이미 답한 질문이라 거름 <n>` · `상한 넘어 남김 <n>` · …)은 그대로 보인다. 거른 질문의 목록은 `render` 가 `result.md` 의 `## intent-critic` 에 남긴다 — 줄이거나 빼지 않는다.
+공시 줄(`근거 없어 거름 <n>` · `인용이 그 파일에 없어 거름 <n>` · `읽은 인용만 있어 거름 <n>` · `근거로 받지 않은 인용 <n>` · `이미 답한 질문이라 거름 <n>` · `상한 넘어 남김 <n>` · …)은 그대로 보인다. 거른 질문의 목록은 `render` 가 `result.md` 의 `## intent-critic` 에 남긴다 — 줄이거나 빼지 않는다.
 
 | 마지막 줄 · 실행 | 그다음 |
 |---|---|
@@ -218,7 +226,7 @@ python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" --review-mode <session 
 
 ```text
 AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
-  question: "<의심하는 것 — 어느 원문의 어느 선택(직접 쓴 말 | 고른 라벨)> — <질문>. 근거로 본 것: <근거 줄 한 줄>. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.",
+  question: "<의심하는 것 — 어느 원문의 어느 선택(직접 쓴 말 | 고른 라벨)> — <질문>. 근거로 본 것(<근거의 종류>): <근거 줄 한 줄>. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.",
   header: "의도 점검 <k>",
   options: [ {label: "의도다", description: "고른 그대로 둔다 — 같은 질문을 다시 묻지 않는다."},
              {label: "잘못 골랐다", description: "고칠 일로 표시한다 — qg 는 고치지 않는다."},
@@ -231,7 +239,7 @@ AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
 자리를 채우는 법 — 질문마다 `intent-questions.yaml` 의 그 항목에서:
 
 - 의심하는 것 — `target_source` 의 `target_id`(`target_source` 가 `diff` 면 「바뀐 파일 `target_id`」), 괄호 안에 `label`, 그리고 `quote` 를 「」 로 싼다.
-- 질문 — `question` 그대로. 근거 줄 — `observation` 의 첫 줄 그대로.
+- 질문 — `question` 그대로(끝에 「여기는 직접 확인해 보세요 — …」 줄이 있으면 그것도). 근거의 종류 — `evidence_kinds` 를 ` · ` 로 이은 글(없으면 이 괄호를 뺀다). 근거 줄 — `observation` 의 첫 줄 그대로(근거 파일의 줄이거나, 읽은 인용이면 `[읽음] <경로>:<줄> <글>`).
 - `<k>` — 이 질문의 차례(1부터).
 
 질문 창을 닫거나 답하지 않은 질문은 머리 줄을 쓰지 않는다. 답한 질문이 하나도 없으면 `record` 를 돌리지 않고 [I6](#i6-렌더) 으로 간다(돌려주는 꼴에는 `아직 묻지 않음` 으로 남는다). 답하지 않은 질문은 결과 줄이 `답하지 않음 <k>개` 로 가른다 — 할 일은 [I7](#i7-돌려주기).
@@ -284,13 +292,14 @@ MODE=pr; [ -f "$RD/range-scope.txt" ] && MODE=range
 python3 "$QG/scripts/intent_critic.py" render --rd "$RD" --mode "$MODE"
 ```
 
-공시 줄들 뒤 마지막 줄이 intent-critic 결과 줄이다 — 그대로 보이고, 이 줄이 실행의 마지막 스크립트 출력이다. `intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다` 면 다시 돌리지 않는다. 그다음 [I7](#i7-돌려주기).
+공시 줄들 뒤 마지막 줄이 intent-critic 결과 줄이다 — 넓게 보는 리뷰에서 낸 후보가 근거 확인에서 모두 걸러졌으면 `intent-critic — 낸 후보 <n>개가 근거 확인에서 모두 걸러짐` 이다. 그대로 보이고, 이 줄이 실행의 마지막 스크립트 출력이다. `intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다` 면 다시 돌리지 않는다. 그다음 [I7](#i7-돌려주기).
 
 ## I7 돌려주기
 
 이 절에서는 스크립트를 돌리지 않는다 — intent-critic 결과 줄(또는 건너뜀 줄)이 마지막 스크립트 출력으로 남는다.
 
-- 결과 줄 뒤에 `$RD/intent-return.md` 를 Read 로 읽어 그대로(요약 없이) 보인다 — 질문마다 정체 · 상태 · 답 · 답 파일 경로, 그리고 커밋 · docs 답 자리. 부른 흐름이 읽는 계약이다.
+- 결과 줄 뒤에 `$RD/intent-return.md` 를 Read 로 읽어 그대로(요약 없이) 보인다 — 질문마다 정체 · 상태 · 답 · 답 파일 경로 · 근거의 종류(`evidence`), 그리고 커밋 · docs 답 자리 · 리뷰의 넓이(`breadth` — `narrow` · `range` · `intent-docs`) · 다른 팀 기록 파일(`other_teams` — 없으면 `-`) · 다른 팀과 겹치는 곳의 수(`overlaps` — 모르면 `-`). 부른 흐름이 읽는 계약이다.
+- `result.md` 의 `## intent-critic` 의 「다른 팀과 겹치는 곳:」 · 「다른 팀 확인 못 함:」 목록(기록이 없으면 `- 다른 팀 기록 없음` 한 줄)도 그대로 보인다 — 리뷰어를 불렀든 안 불렀든 있다.
 - `result.md` 의 `## intent-critic` 에 「이미 답한 질문이라 거른 질문:」 목록이 있으면 그 목록도 그대로 보인다 — 어느 답 파일이 어느 질문을 걸렀는지(「이 범위가 더한 답 파일」 표시 포함) 사람이 볼 수 있어야 한다.
 - 완료 보고는 할 일로 끝낸다. 돌려주는 꼴에서 정한다:
   - `wrong_choice: yes` 인 질문이 있으면 — 「같은 브랜치에서 이어 고친다」(그 질문을 함께 적는다). qg 는 고치지 않는다.
