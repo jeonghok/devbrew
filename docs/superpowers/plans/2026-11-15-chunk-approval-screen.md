@@ -34,6 +34,8 @@
 - 저자가 쓴 이유 파일의 줄 끝이 CRLF 이거나 탭 대신 공백을 쓴 줄 — CRLF 는 읽고, 탭 없는 줄은 「읽지 못한 줄」 로 세며 어느 쪽도 권장을 더 붙이지 않는다(Task 3 `crlf`).
 - 원장의 지적 요약이 여러 줄인 경우 — 이유 줄은 한 줄로 이어져 화면의 덩어리 구조를 깨지 않는다(Task 3 `longsum`).
 - 덩어리가 아주 많은 화면(질문이 한 호출의 넷을 넘는 17개 이상 포함) — 2–40 어느 수에서도 질문마다 덩어리 둘에서 넷이고 합이 맞는다(Task 4 `split_sizes`).
+- 문단 하나를 통째로 바꾸면서 한쪽에서만 맞닿은 빈 줄을 지운 덩어리 — 사라진 빈 줄이 가려지지 않게 바뀐 문장과 함께 「문단 나눔 · 공백도 바뀜」 과 줄 전체가 보인다(Task 2 `replblank`).
+- 그대로인 문장 «사이» 의 공백만 바뀌고 같은 덩어리에서 다른 문장이 바뀐 seed — 공백 변화가 가려지지 않게 줄 전체가 함께 보인다(Task 2 `gap`). 문장 하나를 더하거나 뺀 것(줄의 첫 문장 포함)에는 줄 전체가 붙지 않는다(Task 2 `delfirst` · `insfirst`).
 
 ## 파일 구조
 
@@ -62,12 +64,14 @@
 | AC11 | 5 |
 | AC12 | 6 |
 
-## 설계 그대로 둔 가장자리(이 계획은 고치지 않는다)
+## 뼈대 비교 — 설계 1 의 규칙 문장을 AC2 에 맞춘 자리
 
-설계 1 의 뼈대 비교를 글자 그대로 구현하면 아래 둘은 「바뀐 문장만」 꼴이 되어 줄 전체가 붙지 않는다. 설계를 고치는 일이라 계획은 규칙을 바꾸지 않는다 — 구현도 설계의 규칙 그대로 두고, 설계가 바뀌면 Task 2 의 뼈대 규칙과 테스트에 한 줄씩 더한다.
+설계 1 의 뼈대 규칙을 글자 그대로 구현하면 두 가장자리가 「바뀐 문장만」 꼴이 되어, AC2 가 못박은 결과(빈 줄을 따로 넣거나 뺀 덩어리 · 그대로인 문장의 공백이 바뀐 덩어리는 줄 전체도 보인다)를 내지 못한다. Task 2 의 뼈대 규칙은 AC2 쪽으로 맞췄다 — 틀려도 더 보이는 쪽이다.
 
-- 문단 하나를 통째로 바꾸면서(양쪽 모두 그 줄이 비게 된다) 한쪽에서만 맞닿은 빈 줄을 지운 덩어리 — 빈 줄이 사라진 것이 화면에 따로 보이지 않는다.
-- 그대로인 문장 «사이» 의 공백만 바뀌고(문장 글자는 같다) 같은 덩어리에서 다른 문장이 바뀐 경우 — 공백 변화는 보이지 않는다.
+- 문단을 통째로 바꾸면서 한쪽에서만 맞닿은 빈 줄을 지운 덩어리 — 지움 때문에 비게 된 줄을 버리지 않고 「빈 자리」 로 남겨 양쪽을 줄 자리끼리 견준다. 비게 된 줄과 맞닿은 빈 줄을 함께 버리는 것은 **상대 쪽에 비게 된 줄이 하나도 없을 때만**(문단을 통째로 더하거나 지운 편집)이다.
+- 그대로인 문장 사이의 공백만 바뀐 경우 — 뼈대를 문장 목록이 아니라 «지운 문장을 그 앞 공백과 함께 잘라 낸 줄 글자» 로 견준다(문장 사이 · 줄 끝 공백과 공백뿐인 줄의 글자까지 든다). 줄에 남은 첫 문장의 앞 공백은 떼므로 문장 하나를 더하거나 뺀 편집은 그대로 「바뀐 문장만」 꼴이다.
+
+고친 규칙에 남는 가장자리는 모두 더 보이는 쪽이다(줄 전체가 함께 붙는다): 문단을 통째로 바꾸면서 같은 덩어리에서 다른 문단을 통째로 더하거나 지운 경우, 통째로 바꾼 문단의 줄 수가 달라진 경우, 문장을 빼면서 그 뒤 문장 앞의 공백 수가 달라진 경우.
 
 ---
 
@@ -161,7 +165,7 @@ Expected: `skill_final_json_mentions 2` · `state_post_reject_adopted 2` · `ver
 **Interfaces:**
 - Consumes: `seed_edit_diff.compute_hunks(base: list[str], seed: list[str]) -> list[dict]`(덩어리마다 `id` · `base: [i1, i2]` · `seed: [j1, j2]` · `removed: list[str]` · `added: list[str]` · `render`) · `seed_edit_diff._read(p)` · `seed_edit_diff._sha256(p)` · `seed_edit_diff._span(a, b)` · `seed_provenance.SENT_SPLIT_RE` · `seed_provenance.MARK` · `seed_provenance.norm`. `hunks` 가 쓴 덩어리 JSON 은 `{"base_present", "empty", "hunks", "seed_sha256"}`.
 - Produces(CLI): `seed_edit_screen.py preview <기준 사본> <seed>` · `seed_edit_screen.py screen --hunks <덩어리 JSON> --reasons <이유 파일> --state-dir <원장 폴더> [--final]`. rc 0 정상 · 2 입력 오류와 그 밖의 예외 · 3 기준 사본 부재(`preview`).
-- Produces(모듈 함수 — 테스트와 뒤 과제가 이 이름으로 부른다): `line_units(line: str) -> list[str]` · `sentence_diff(base_keys: list[str], seed_keys: list[str]) -> tuple[list[int], list[int]]` · `hunk_view(h: dict) -> dict` · `mark_moves(views: list[dict]) -> None` · `build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool = False) -> dict`.
+- Produces(모듈 함수 — 테스트와 뒤 과제가 이 이름으로 부른다): `line_parts(line: str) -> list[tuple[str, str]]` · `line_units(line: str) -> list[str]` · `sentence_diff(base_keys: list[str], seed_keys: list[str]) -> tuple[list[int], list[int]]` · `hunk_view(h: dict) -> dict` · `mark_moves(views: list[dict]) -> None` · `build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool = False) -> dict`.
 - Produces(`screen` 의 JSON): `{"text": str, "hunks": [...], "questions": [...], "notices": [str]}`. `hunks[]` 는 덩어리마다 `id` · `shape`(1–4) · `reason`(str) · `recommend`(bool) · `removed_sentences` · `added_sentences`(list[str]) · `removed_moved` · `added_moved`(list[bool], 문장 목록과 같은 길이) · `removed_idx` · `added_idx`(그 덩어리의 문장 열에서의 자리) · `kept`(int) · `summary`(str). 이 과제에서는 `reason` 이 늘 「대응하는 지적 없음 — 저자가 스스로 고침」, `recommend` 가 늘 거짓, `questions` · `notices` 가 빈 목록이다(Task 3 · 4 가 채운다). `--reasons` · `--state-dir` · `--final` 은 받되 아직 쓰지 않는다.
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다** — `plugins/spec-distill/tests/test_seed_edit_screen.sh` 를 아래 글 그대로 만든다.
@@ -272,7 +276,27 @@ blank|가. 나.\n다.\n|가. 나 고침.\n\n다.\n|[3]
 space|가  나. 다.\n|가 나. 다 고침.\n|[3]
 dup|가. 가. 나.\n|가. 나. 가.\n|[4]
 nopunct|제목 줄\n- 목록 하나\n|제목 줄\n- 목록 둘\n|[4]
+delfirst|가. 나. 다.\n|나. 다.\n|[4]
+insfirst|나. 다.\n|가. 나. 다.\n|[4]
+paddend|가.\n\n나.\n|가.\n\n나.\n\n새 문단.\n|[4]
+repl|가.\n\n옛 문단.\n\n나.\n|가.\n\n새 문단.\n\n나.\n|[4]
+chgpdel|가. 나.\n\n지울 문단.\n|가. 나 고침.\n|[4]
+replblank|가.\n옛 문단.\n\n나.\n|가.\n새 문단.\n나.\n|[3]
+gap|가.  나. 다.\n|가. 나. 다 고침.\n|[3]
+tail|가. 나. \n|가. 나 고침.\n|[4]
+tailkept|가. \n나.\n|가.\n나 고침.\n|[3]
+wsline|가. 나.\n  \n다.\n|가. 나 고침.\n\n다.\n|[3]
 EOF
+for name in delfirst insfirst paddend repl chgpdel; do
+  assert_eq "$(j "$name" '("   - " in d["text"], "   + " in d["text"], "문단 나눔" in d["text"])')" "(False, False, False)" "AC1: 문장 · 문단을 더하거나 빼거나 통째로 바꾼 것만으로 설명되면 줄 전체 꼴이 붙지 않는다 — $name"
+done
+TB="$(j replblank 'd["text"]')"
+assert_contains "$TB" "   더한 문장: 새 문단." "AC2: 문단을 통째로 바꾸면서 빈 줄을 따로 지운 덩어리도 바뀐 문장을 보인다"
+assert_contains "$TB" "   문단 나눔 · 공백도 바뀜" "AC2: 문단을 통째로 바꾸면서 한쪽에서만 맞닿은 빈 줄을 지우면 그 사실 한 줄"
+assert_contains "$TB" "   - 옛 문단." "AC2: 그 덩어리는 줄 전체 꼴이 함께 보인다(사라진 빈 줄이 드러난다)"
+TG="$(j gap 'd["text"]')"
+assert_contains "$TG" "   문단 나눔 · 공백도 바뀜" "AC2: 그대로인 문장 사이의 공백만 바뀐 것도 문장 변경과 함께면 그 사실 한 줄"
+assert_contains "$TG" "   - 가.  나. 다." "AC2: 그 덩어리는 줄 전체 꼴(기준 쪽 — 공백 둘)이 함께 보인다"
 assert_eq "$(j marked '(d["hunks"][0]["kept"], d["hunks"][0]["removed_sentences"])')" "(1, ['나.'])" "AC2: «(사용자 확인)» 이 붙은 문장은 표시째 한 단위로 그대로다"
 TM="$(j merge 'd["text"]')"
 assert_contains "$TM" "   뺀 문장: 나." "AC2: 문단을 합친 덩어리도 바뀐 문장을 보인다"
@@ -349,14 +373,14 @@ Expected: `✗ 부재: …/plugins/spec-distill/scripts/seed_edit_screen.py` 한
 
 - [ ] **Step 3: `seed_edit_screen.py` 를 쓴다** — 위 Interfaces 의 이름 그대로. 머리 주석은 하위 명령 · rc 만 적는다. 규칙:
 
-  - `line_units(line)` — `SENT_SPLIT_RE.split(line)` 의 조각 가운데 공백뿐인 것은 버린다. `조각.strip() == MARK` 이고 앞 단위가 있으면 앞 단위 끝에 `" " + MARK` 로 붙여 한 단위로 삼는다(줄의 첫 조각이 표시면 그 조각만으로 한 단위). 그 밖의 조각은 원래 글자 그대로 단위다. 문장을 견주는 열쇠는 `norm(단위)`, 화면에 내는 글은 `단위.strip()` 이다.
+  - `line_parts(line)` — 줄을 `SENT_SPLIT_RE.finditer(line)` 가 맞는 자리(문장 사이 공백)에서 가른 `(앞 공백, 단위 글자)` 쌍의 목록이다. 줄의 첫 단위는 앞 공백이 빈 글자다. 조각이 표시(`조각.strip() == MARK`)이거나 공백뿐(줄 끝의 공백)이고 앞 단위가 있으면, 그 조각을 사이 공백과 함께 앞 단위 글자 끝에 원래 글자 그대로 붙인다 — 새 단위를 만들지 않는다. 앞 단위가 없는 표시 조각은 그것만으로 한 단위이고, 공백뿐인 줄은 단위가 없다(빈 줄). `line_units(line)` 은 그 쌍들의 단위 글자 목록이다. 문장을 견주는 열쇠는 `norm(단위)`, 화면에 내는 글은 `단위.strip()` 이다.
   - `sentence_diff(base_keys, seed_keys)` — `difflib.SequenceMatcher(a=base_keys, b=seed_keys, autojunk=False).get_opcodes()` 에서 `equal` 이 아닌 구간의 기준 쪽 자리들과 지금 쪽 자리들을 낸다(뺀 문장 · 더한 문장).
   - `hunk_view(h)` — 덩어리의 `removed` 줄들과 `added` 줄들을 각각 줄마다 `line_units` 로 나눠 이어 붙인 문장 열 둘을 만들고(열쇠로) `sentence_diff` 를 **모듈 전역 이름으로** 불러 견준다(테스트가 그 이름을 바꿔 끼운다). 꼴은 위에서부터 먼저 맞는 것:
     1. 기준 쪽 열에서 뺀 자리를 지운 것과 지금 쪽 열에서 더한 자리를 지운 것이 순서까지 같지 않다 → `shape` 1. `removed_sentences` · `added_sentences` 는 빈 목록, `kept` 0.
     2. 뺀 문장도 더한 문장도 없다 → `shape` 2.
     3. 뼈대가 다르다 → `shape` 3.
     4. 뼈대가 같다 → `shape` 4.
-  - 뼈대 — 양쪽을 줄마다의 단위 목록(원래 글자)으로 놓고, 기준 쪽에서는 뺀 문장을, 지금 쪽에서는 더한 문장을 지운다. 그 지움 때문에 비게 된 줄은 버리고, 그 줄에 맞닿은 빈 줄(단위가 없는 줄) 하나도 함께 버린다 — 앞줄을 먼저 보고 없으면 뒷줄, 이미 버린 줄은 다시 세지 않는다. 그 밖의 빈 줄은 빈 목록으로 남는다. 남은 두 목록(줄마다 단위의 튜플)이 같으면 뼈대가 같은 것이다.
+  - 뼈대(위 「뼈대 비교」 절의 규칙) — 양쪽을 줄마다 한 칸으로 놓는다. 기준 쪽은 뺀 문장을, 지금 쪽은 더한 문장을 지우고 칸을 정한다: 단위가 없는 줄은 `빈 줄`(그 줄의 원래 글자를 함께 든다) · 단위가 모두 지워진 줄은 `빈 자리` · 그 밖의 줄은 남은 단위마다 `앞 공백 + 단위 글자` 를 이어 붙인 글자(그 줄에 남은 첫 단위의 앞 공백은 뺀다). 그다음, **상대 쪽에 `빈 자리` 가 하나도 없는 쪽에서만** `빈 자리` 를 버리고 그 줄에 맞닿은 `빈 줄` 하나도 함께 버린다 — 앞줄을 먼저 보고 없으면 뒷줄, 이미 버린 줄은 다시 세지 않는다. 양쪽 모두 `빈 자리` 가 있으면 아무것도 버리지 않는다. 남은 두 칸 목록이 같으면 뼈대가 같은 것이다.
   - `summary` — 꼴 1 「문장으로 가르지 못함」, 꼴 2 「바뀐 문장 없음」, 꼴 3 · 4 는 `뺀 문장 N개`(N>0 일 때) · `더한 문장 M개`(M>0 일 때) · `그대로 K문장` 을 ` · ` 로 잇는다.
   - `mark_moves(views)` — 화면의 모든 덩어리에 걸쳐, 뺀 문장과 더한 문장을 열쇠가 같은 것끼리 하나씩(앞에서부터) 짝지어 양쪽의 `removed_moved` · `added_moved` 를 참으로 한다. 한 문장은 한 번만 짝이 된다.
   - `build_screen(...)["text"]` — 덩어리가 0 이면 「저자 편집 없음」 한 줄. 아니면 첫 줄 `저자 편집 <덩어리 수>곳 — 달라진 문장만 보입니다`, 그 뒤 덩어리마다 빈 줄 하나와 아래 꼴(들여쓰기는 공백 셋):
@@ -1366,7 +1390,7 @@ git commit -m "chore(spec-distill): 판 올림 8.15.0 — 저자 편집 승인 �
 ## 마지막 전체 리뷰 (실행 방식 공통)
 
 - 브랜치 전체 리뷰에 설계문서 `## Acceptance Criteria` 의 AC1–AC12 를 싣고, 리뷰가 AC 마다 한 줄씩 `AC<n>: <구현됨|미룸|빠짐> — <근거>` 로 보고하게 한다. 그 보고를 `.claude/tmp/f2/ac-report.txt`(git 이 추적하지 않는 자리)에 적는다.
-- 리뷰에 함께 묻는다: ① 끝에서 끝 흐름 — 미리 보기가 낸 판본 → 이유 파일 첫 줄 → 공시 펜스의 덩어리 JSON → 처분 펜스의 `HUNKS_JSON` · `PAIRS` → 목록에 더하기 → 되돌리기 → 기록 → 교체가 같은 파일 이름 · 같은 번호로 이어지는가(확정 직전 사본 `hunks-final.json` 포함). ② rc 를 누가 읽는가 — `scr_rc` · `used_rc` · `rev_rc` · `log_rc` 마다 0 이 아닐 때 다음 걸음이 멈추는가. ③ 권장이 붙을 수 있는 길을 전부 세어, 사용자의 처분 없이 붙는 길이 없는가(이유 파일 줄 읽기 · 원장 읽기 실패 · 목록 읽기 실패 · 확정 직전). ④ skill 글이 화면 글을 줄이거나 빈 답으로 통과시키는 길을 열지 않는가. ⑤ 이 계획이 쓴 테스트 코드(`test_seed_edit_screen.sh` 전체 · 계약 테스트의 새 단언 · `test_state_dir_writes.sh` 의 새 칸)도 구현과 같은 기준으로 본다 — 계획이 시킨 코드라는 이유로 건너뛰지 않는다.
+- 리뷰에 함께 묻는다: ① 끝에서 끝 흐름 — 미리 보기가 낸 판본 → 이유 파일 첫 줄 → 공시 펜스의 덩어리 JSON → 처분 펜스의 `HUNKS_JSON` · `PAIRS` → 목록에 더하기 → 되돌리기 → 기록 → 교체가 같은 파일 이름 · 같은 번호로 이어지는가(확정 직전 사본 `hunks-final.json` 포함). ② rc 를 누가 읽는가 — `scr_rc` · `used_rc` · `rev_rc` · `log_rc` 마다 0 이 아닐 때 다음 걸음이 멈추는가. ③ 권장이 붙을 수 있는 길을 전부 세어, 사용자의 처분 없이 붙는 길이 없는가(이유 파일 줄 읽기 · 원장 읽기 실패 · 목록 읽기 실패 · 확정 직전). ④ skill 글이 화면 글을 줄이거나 빈 답으로 통과시키는 길을 열지 않는가. ⑤ 뼈대 규칙은 설계 1 의 문장이 아니라 AC1 · AC2 의 결과로 본다(위 「뼈대 비교」 절 — 문장과 다른 자리는 지휘 기록에 적혀 있다). ⑥ 이 계획이 쓴 테스트 코드(`test_seed_edit_screen.sh` 전체 · 계약 테스트의 새 단언 · `test_state_dir_writes.sh` 의 새 칸)도 구현과 같은 기준으로 본다 — 계획이 시킨 코드라는 이유로 건너뛰지 않는다.
 - 미룸 · 빠짐과 리뷰 후속으로 미룬 것은 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 올린다.
 - PR 을 만들기 전에 `python3 <spec-distill 플러그인 루트>/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-15-chunk-approval-screen-design.md .claude/tmp/f2/ac-report.txt` 를 돌려 경고를 사용자에게 보인다.
 - 사람에게 쓰는 글(보고 · PR 본문)은 번호 · 해시를 내용 문장 뒤 괄호에 두고, 첫 줄에 상태, 끝에 할 일(기본 하나 — 여럿이거나 병렬이면 밝힌다)을 둔다.
