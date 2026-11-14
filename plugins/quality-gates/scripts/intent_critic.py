@@ -89,6 +89,10 @@ RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
 UNREAD_INPUT = "답 입력에서 읽지 못한 글이 있다"
+# 기록되지 않은 답의 질문마다 한 줄 — 돌려주는 꼴에는 그 답이 실리지 않으므로 여기에 남긴다.
+RECORD_FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
+PICK_UNREAD = "답을 읽지 못함"
+SNIPPET = 80
 UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
@@ -1020,8 +1024,24 @@ def _stray_lines(entries: List[dict], orphan: int) -> int:
     return stray
 
 
+def _one_line(value, limit: int = 0) -> str:
+    """공시 줄에 싣는 글 — 줄바꿈 · 제어 글자를 빈칸으로 접어 한 줄로 만들고, limit 가 있으면 그 길이에서 자른다.
+
+    리뷰어 출력에서 온 글이 스크립트 출력의 줄이나 결과 절의 머리 줄을 흉내 내지 못한다.
+    """
+    chars = []
+    for ch in _text(value):
+        # 짝 없는 surrogate 는 지우지 않는다 — 쓰는 자리가 `\\ud800` 꼴로 남긴다.
+        chars.append(ch if ch.isprintable() or "\ud800" <= ch <= "\udfff" else " ")
+    text = " ".join("".join(chars).split())
+    if limit and len(text) > limit:
+        text = text[:limit] + "…"
+    return text
+
+
 def _failed_notices(failed: List[tuple]) -> List[str]:
-    """기록되지 않은 답 [(질문, 고른 답 | None, 사유)] 의 공시 — 사유마다 수 한 줄. 그 질문에 표지를 단다."""
+    """기록되지 않은 답 [(질문, 고른 답 | None, 사유)] 의 공시 — 사유마다 수 한 줄, 그 아래 질문마다 정체 ·
+    고른 답 · 질문 글 한 줄. 그 질문에 표지를 단다."""
     reasons: List[str] = []
     counts: dict = {}
     for record, _answer, reason in failed:
@@ -1033,6 +1053,11 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
     lines = []
     for reason in reasons:
         lines.append(RECORD_FAILED % (counts[reason], reason))
+        for record, answer, why in failed:
+            if why == reason:
+                lines.append(RECORD_FAILED_ITEM % (_one_line(record.get("id")),
+                                                   answer or PICK_UNREAD,
+                                                   _one_line(record.get("question"), SNIPPET)))
     return lines
 
 
@@ -1365,7 +1390,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: List[str]) -> int:
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.reconfigure(encoding="utf-8", errors=UNWRITABLE)
     args = _parser().parse_args(argv)
     return args.func(args)
 
