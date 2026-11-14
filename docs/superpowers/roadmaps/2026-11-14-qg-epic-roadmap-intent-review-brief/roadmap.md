@@ -9,32 +9,32 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 
 ## 에픽
 
-### R1 — 쓴소리 리뷰어 본체
+### R1 — intent-critic 리뷰어 본체
 - 의도: qg 안에 사용자가 고른 것 자체를 의심하는 읽기 전용 리뷰어를 PR 범위부터 세운다
 - 범위:
   - 한다: 리뷰어 agent · 입력 칸(직접 쓴 말과 고른 라벨을 갈라 보인 원문 · 묶음 · 인터뷰가 남긴 의심) · 근거 있을 때만 · 상한 · 판정 밖 질문 · 리뷰 끝에 한 번에 · 답마다 파일과 근거 키
-  - 안 한다: 넓은 걷기 · 지휘자 입구 · 이름 풀이
+  - 안 한다: 넓게 보기 · 지휘자 입구 · 이름 풀이
 - 의존: 없음
 - 브랜치: feature/qg-intent-critic
 - 묶음: R1.md
 - 경로 예약: plugins/quality-gates/agents/, plugins/quality-gates/skills/quality-pipeline/
 
-### R2 — 넓은 탐색 걷기
-- 의도: qg 의 사람 승인 걷기로 실제로 걸어 근거를 모으고(에픽 · 로드맵은 넓게) 사람이 써 볼 자리 · /verify 를 짚는다
+### R2 — 넓게 보는 조언자
+- 의도: 에픽 · 로드맵 리뷰와 설계 단계에서 intent-critic 이 만들어진 것과 다른 팀의 계획을 읽어 사용자가 놓치거나 잘못 고른 것 · 팀 사이의 갈라짐 · 조율 안 된 중복을 짚는다
 - 범위:
-  - 한다: 오케스트레이터 실행 · 돌리기 전 사람 승인 · 규모 공시 · 범위 끝 커밋 worktree 걷기 · skill 대상은 첫 질문까지 · 동시 작업 git 읽기 · 헤드리스 재측정
-  - 안 한다: 리뷰어에 실행 도구 · 실행 격리 장치
+  - 한다: 에픽 · 로드맵 리뷰와 의도 문서가 바뀐 변경에서 조언자 부르기 · 읽은 인용을 근거로 받고 스크립트가 확인 · 다른 팀 읽기(팀 지도 · 진행 중인 의도 문서 · 파일 겹침) · 근거의 종류 보이기
+  - 안 한다: 걷기 · 실행 · 새 입구 · 팀 사이 조율 자체
 - 의존: R1
 - 브랜치: feature/qg-wide-walk
 - 묶음: R2.md
-- 경로 예약: plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/
+- 경로 예약: plugins/quality-gates/scripts/, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md
 
 ### R3 — 지휘자 경유 입구
 - 의도: 에픽 · 로드맵 이름 호출을 지휘자 경유로 모으고 이름 풀이 · 두 박자 자동 호출 · 질문 옮기기 · 「잘못 골랐다」의 행선(피벗 경로 · 새 일의 씨앗)을 잇는다
 - 범위:
   - 한다: 지휘자의 에픽 · 로드맵 이름 풀이(roadmap_status --json) · 에픽 머지 뒤와 로드맵 끝 자동 호출 · 게이트 사이 질문 옮기기 · 새 일의 씨앗 · 로드맵 없는 PR 의 qg 직접 호출은 그대로 둔다
   - 안 한다: 머지된 에픽 다시 열기 · 옆 세션의 팀 구조 자체
-- 의존: R1
+- 의존: R1, R2
 - 브랜치: feature/conductor-qg-entry
 - 묶음: R3.md
 - 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/, plugins/quality-gates/scripts/setup-qg.sh
@@ -73,6 +73,19 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
   - 「아니 qg의 리뷰이후 액션인 고치는게 지휘와 갈라지다보니 qg자체 개발을 하지 말라는 의미였어」
   - 「qg는 리뷰에만 집중해」
   - 「1, 어떻게 네이티브하게 녹여낼지 특히 다른 세션에서 만들고 있는 설계를 두고 거기에 녹이면 좋겠네」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-14 · 걷기와 실행을 로드맵에서 빼고 R2 를 넓게 보는 조언자로 — R3 는 R2 뒤로, 리뷰어 이름은 intent-critic
+- 바뀜: 바뀐 에픽 R1 · R2 · R3 「같이 보는건 안돼? 두번 돌리는건 토큰 낭비 같은데, 그리고 넓은 탐색은 걷기보다는 내가 잘못된 방향으로 가는게 아닌지 보는게 더 중요해」 · 「이름도 쓴소리 리뷰어보다 다른게 좋겠어」 · 「intent-critic 좋은거 같아」 · 「의도 자체를 점검하는거라는거 잘 명시하고」 · 「내가 놓치거나 잘못 선택한걸 잡아주는 조언자 역할인거지」 · 「선택해야할게 너무 많자나 그리고 여러 팀이 돌게 되면 갈라지기도 할거고」 · 「중복이 조율 안되기도 할거고」 · 「걷기와 실행쪽을 보고싶은게 아니야」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「같이 보는건 안돼? 두번 돌리는건 토큰 낭비 같은데, 그리고 넓은 탐색은 걷기보다는 내가 잘못된 방향으로 가는게 아닌지 보는게 더 중요해」
+  - 「이름도 쓴소리 리뷰어보다 다른게 좋겠어」
+  - 「intent-critic 좋은거 같아」
+  - 「의도 자체를 점검하는거라는거 잘 명시하고」
+  - 「내가 놓치거나 잘못 선택한걸 잡아주는 조언자 역할인거지」
+  - 「선택해야할게 너무 많자나 그리고 여러 팀이 돌게 되면 갈라지기도 할거고」
+  - 「중복이 조율 안되기도 할거고」
+  - 「걷기와 실행쪽을 보고싶은게 아니야」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
