@@ -37,7 +37,7 @@ material: ~/.claude/transcript-backup/devbrew-2026-11-14/ (jsonl 2,579개 · 3.5
 
 - 이 문서의 표는 세션 기록의 assistant 줄에 적힌 사용량이다. 실제로 쓴 토큰이 아니라 그 하한이다 — 하니스가 스스로 쌓은 누계(`cost-state` 줄)는 같은 세션에서 캐시 읽기가 1.21–1.26배, 새 입력이 약 280배, 출력이 A 에서 2.5배다(«기록에 줄이 없는 사용량»).
 - 백업에서 지휘자 skill(`spec-distill:epic-conductor`)을 부른 세션은 셋이고 모두 로드맵 `2026-10-11-persistent-explore-pm-decompose` 의 것으로 골랐다(근거는 «고른 세션»). 셋을 합치면(message.id 로 한 번만 셈) 캐시 읽기 117.6억 · 캐시 쓰기 5.35억 · 새 입력 11.7만 · 출력 2,305만이다.
-- 하위 agent 가 입력계(새 입력+캐시 쓰기+캐시 읽기)의 74.9%, 캐시 쓰기의 92.3%, 출력의 72.4% 를 쓴다. 캐시 읽기 비율은 지휘 본체 98.66%, 하위 94.64% 다.
+- 하위 agent 가 입력계(새 입력+캐시 쓰기+캐시 읽기)의 74.9%, 캐시 쓰기의 92.3%, 출력의 72.4% 를 쓴다(출력 몫은 A 의 하위 출력이 덜 적혀 낮게 나온 값이다 — 추정으로는 약 87%, «셀 수 없는 것» 2). 캐시 읽기 비율은 지휘 본체 98.66%, 하위 94.64% 다.
 - 지휘 본체는 응답 하나에 평균 약 52만 토큰을 입력으로 다시 읽는다(로드맵 합 522,106 · 지휘자 skill 구간만 보면 534,001). 하위 agent 는 약 18만이다(로드맵 합 184,965).
 - 하위 agent 의 캐시 쓰기는 5분 넘게 기다린 뒤의 응답에 몰려 있다. A 하위는 응답의 1.91% 가 캐시 쓰기의 57.4%, C 하위는 0.94% 가 25.4% 다(«5분 넘는 기다림 뒤의 캐시 쓰기»).
 - 2.1.296 · 2.1.302 판 하위 기록의 출력은 덜 적혀 있다(아래 «셀 수 없는 것»). 그래서 세션 A 의 하위 출력은 assistant 줄 기준으로도 하한값이다. 판 영향이 없는 세션 C(2.1.310)를 깨끗한 비교 기준으로 쓴다.
@@ -96,7 +96,7 @@ material: ~/.claude/transcript-backup/devbrew-2026-11-14/ (jsonl 2,579개 · 3.5
 
 ### 하위 agent 의 결
 
-- 직접 대 중첩: 지휘 본체가 띄운 agent(직접)와 하위 agent 가 띄운 agent(중첩, 예: SDD 안의 구현자 · 리뷰어)를 Agent 결과의 agentId 로 가른다. A 는 직접 590 · 중첩 821, C 는 직접 142 · 중첩 15 이고 어느 쪽에도 연결되지 않은 파일은 0 이다. A 중첩 몫은 캐시 읽기 3,309,547,435(A 하위의 41.5%), C 중첩 몫은 46,420,735 다.
+- 직접 대 중첩: 지휘 본체가 띄운 agent(직접)와 하위 agent 가 띄운 agent(중첩, 예: SDD 안의 구현자 · 리뷰어)를 Agent 결과의 agentId 로 가른다. A 는 직접 590 · 중첩 821, C 는 직접 142 · 중첩 15 이고 어느 쪽에도 연결되지 않은 파일은 0 이다. 연결은 usage 가 있는 하위 파일로 센다 — usage 가 하나도 없는 하위 파일은 0개였고, 있으면 합에 들지 않으므로 멈추지 않고 수만 낸다. A 중첩 몫은 캐시 읽기 3,309,547,435(A 하위의 41.5%), C 중첩 몫은 46,420,735 다.
 - agent 하나당 입력계(그 agent 의 모든 응답의 입력계 합): A 는 평균 5,973,397 · 중앙값 1,798,707, C 는 평균 4,971,960 · 중앙값 2,883,569 다. 평균은 긴 agent 몇 개가 끈다 — agent 하나의 응답 수는 A 가 중앙값 18 · 최대 573, C 가 중앙값 23 · 최대 254 다.
 - 캐시 TTL: 지휘 본체의 캐시 쓰기는 전부 1시간 TTL(`ephemeral_1h`), 하위 agent 와 sdk 세션은 전부 5분 TTL(`ephemeral_5m`)이다. 하위 agent 는 부모 캐시를 읽지 못하고 짧은 TTL 로 다시 쓴다(«cc-prompt-caching»). 하위가 캐시 쓰기의 92% 를 차지하는 것과 맞는다.
 - 모델: 지휘 본체 응답은 전부 claude-opus-5-5 다. 하위는 opus 41,476 · sonnet 8,207 · haiku 105 응답이다.
@@ -192,14 +192,14 @@ A 의 `cost-state` 는 값이 셋이다. 첫 값은 지휘자 skill 첫 호출 �
 - 요약의 합계는 기록된 줄의 합이다. 새 입력 칸은 응답당 약 2 토큰이라 실제 새 입력에 대해 알려 주는 것이 거의 없다.
 - 줄이 없는 부분은 지휘와 하위로 가를 수 없다. 하위 몫과 캐시 읽기 비율도 그만큼 불확실하다.
 - 차이가 도구 호출 수를 따라가므로, 재설계가 도구 호출 수를 바꾸면 이 부분은 기록 밖에서 움직인다. 그래서 R5 는 두 값(assistant 줄 합 · 하니스 누계)을 함께 재서 견준다(`harness_total.py`).
-- 하니스 누계도 하한일 수 있다. 비정상 종료 때 `cost-state` 가 사용량을 잃는지 확인하지 못했다. `cost-state` 줄이 없는 세션은 견줄 수 없어 스크립트가 멈춘다.
+- 하니스 누계도 하한일 수 있다. 비정상 종료 때 `cost-state` 가 사용량을 잃는지 확인하지 못했다. 누계가 든 `cost-state` 줄이 없는 세션은 견줄 수 없어 스크립트가 멈춘다.
 
 ## 측정 방법
 
 ### 집계 규칙
 
 1. 단위: 응답 하나 = assistant 줄의 `message.id`. 같은 id 는 범위 전체(지휘 본체 · 하위 · sdk 파일)에서 한 번만 센다 — 세션 기록은 content block 마다 같은 usage 를 되풀이 적는다(«cc-issue-87303»).
-2. 되풀이 줄의 usage 가 서로 다르면 칸마다 큰 값을 쓴다. 실측에서 다른 칸은 `output_tokens` 하나뿐이었고(되풀이 줄 7,369개) 큰 값은 늘 마지막 줄의 값과 같았다.
+2. 되풀이 줄의 usage 가 서로 다르면 칸마다 큰 값을 쓴다. 실측에서 다른 칸은 `output_tokens` 하나뿐이었고(범위 전체의 되풀이 줄 54,943개 가운데 값이 달랐던 줄이 7,369개) 큰 값은 늘 마지막 줄의 값과 같았다.
 3. 네 종류: 최상위 `usage` 의 `input_tokens`(새 입력) · `cache_creation_input_tokens`(캐시 쓰기) · `cache_read_input_tokens`(캐시 읽기) · `output_tokens`(출력).
 4. 지휘 본체 = 세션 jsonl 하나. 하위 = `<세션 id>/subagents/agent-*.jsonl` 전부(중첩 포함). sdk = 위 «따로 센 것» 의 규칙. 이 규칙은 «세션 jsonl 하나 + 그 세션의 `subagents/` 폴더» 구조를 전제한다(«이 기준선을 쓸 때»).
 5. 세지 않는 것: model `<synthetic>` 줄(usage 0, 2줄). usage 는 있는데 message.id 가 없는 줄 · usage 가 없는 assistant 줄 · JSON 으로 읽히지 않는 줄은 0줄이었고, 0 이 아니면 스크립트가 멈춘다.
@@ -211,21 +211,22 @@ A 의 `cost-state` 는 값이 셋이다. 첫 값은 지휘자 skill 첫 호출 �
 
 ### 실행 방법
 
-스크립트는 이 문서 옆 `token-baseline/` 폴더에 있다. 플러그인 코드가 아니라 이 측정을 다시 하기 위한 것이다. 모두 백업을 읽기만 하고 결과를 표준 출력에 JSON 으로 낸다(`table.py` 만 표를 낸다). 출력 파일은 레포에 두지 않는다.
+스크립트는 이 문서 옆 `token-baseline/` 폴더에 있다. 플러그인 코드가 아니라 이 측정을 다시 하기 위한 것이다. 모두 백업을 읽기만 하고 결과를 표준 출력에 JSON 으로 낸다(`table.py` 만 표를 낸다). 출력 파일은 레포에 두지 않는다 — 아래처럼 레포 루트에서 돌려 레포 밖 임시 폴더에 받는다.
 
 ```
 B=~/.claude/transcript-backup/devbrew-2026-11-14
-cd docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/token-baseline
-python3 -I select_sessions.py --backup "$B" --needle 2026-10-11-persistent-explore-pm-decompose
-python3 -I measure.py --backup "$B" > measure.out.json
-python3 -I table.py measure.out.json
-python3 -I extra.py --backup "$B"
-python3 -I naive.py --backup "$B"
-python3 -I ver.py --backup "$B"
-python3 -I branch.py --backup "$B" --session C
-python3 -I gap.py --backup "$B"
-python3 -I gap_tools.py --backup "$B"
-python3 -I harness_total.py --backup "$B"
+S=docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/token-baseline
+O="$(mktemp -d)"
+python3 -I "$S/select_sessions.py" --backup "$B" --needle 2026-10-11-persistent-explore-pm-decompose > "$O/select_sessions.json"
+python3 -I "$S/measure.py" --backup "$B" > "$O/measure.json"
+python3 -I "$S/table.py" "$O/measure.json" > "$O/table.md"
+python3 -I "$S/extra.py" --backup "$B" > "$O/extra.json"
+python3 -I "$S/naive.py" --backup "$B" > "$O/naive.json"
+python3 -I "$S/ver.py" --backup "$B" > "$O/ver.json"
+python3 -I "$S/branch.py" --backup "$B" --session C > "$O/branch.json"
+python3 -I "$S/gap.py" --backup "$B" > "$O/gap.json"
+python3 -I "$S/gap_tools.py" --backup "$B" > "$O/gap_tools.json"
+python3 -I "$S/harness_total.py" --backup "$B" > "$O/harness_total.json"
 ```
 
 | 파일 | 내는 값 |
@@ -246,13 +247,15 @@ python3 -I harness_total.py --backup "$B"
 
 - JSON 객체로 읽히지 않는 줄(잘린 마지막 줄 포함) · UTF-8 이 아닌 파일. 줄을 문자열로 먼저 거르지 않고 모두 JSON 으로 읽는다.
 - usage 가 없는 assistant 줄 · usage 는 있는데 message.id 가 없는 줄.
+- usage 의 네 칸 가운데 없거나 숫자가 아닌 칸. 칸이 있고 값이 0 인 것은 정상이다.
 - 두 파일에 걸친 message.id.
 - `<세션 id>/subagents/agent-*.jsonl` 이 아닌 자리의 하위 기록(더 깊은 폴더 · 다른 이름), 백업 안 모르는 자리의 jsonl.
 - 어느 Agent 결과에도 연결되지 않은 하위 agent.
-- 지휘자 skill 호출을 찾지 못한 설정 세션.
+- 지휘자 skill 호출을 찾지 못한 설정 세션, timestamp 가 없는 호출 줄.
 - 캐시 쓰기가 1시간 몫 + 5분 몫과 다른 줄.
 - agent worktree 폴더의 세션인데 entrypoint 가 `sdk-py` 가 아닌 것.
-- timestamp 가 없는 응답 줄(`gap.py` · `gap_tools.py`), `cost-state` 줄이 없는 세션(`harness_total.py`).
+- timestamp 가 없는 응답 줄. 시각으로 지휘 전 · 뒤와 기다림을 가르므로 시각이 없으면 조용히 «지휘 전» 으로 떨어진다.
+- `harness_total.py`: 누계가 든 `cost-state` 줄이 없는 세션, 응답이 이미 있는데 `modelUsage` 가 빈 `cost-state` 줄, 모델별 누계의 네 칸 가운데 없거나 숫자가 아닌 칸.
 
 재측정(R5) 때는 `--backup` 과 `sessions.json` 의 세션 id · 가를 세션을 바꾼다. 세션 구조가 바뀌었으면 먼저 귀속 규칙을 다시 정한다(«이 기준선을 쓸 때»).
 
@@ -277,7 +280,7 @@ python3 -I harness_total.py --backup "$B"
 4. 다른 모델(codex) 호출의 토큰 — 지휘 중 리뷰가 codex 를 불러도 그 사용량은 Claude 세션 기록에 없다. 이 조사의 재료로는 셀 수 없다.
 5. 비용(USD) — `cost-state` 에 하니스가 셈한 비용(`totalCostUSD`)이 있지만 청구액인지 확인하지 않았고, 단가 환산은 이 조사의 범위가 아니라 내지 않았다.
 
-없는 것(0 으로 확인): message.id 없는 usage 줄 0 · usage 없는 assistant 줄 0 · JSON 깨진 줄 0 · 파일 사이 같은 id 겹침 0 · 연결 안 된 하위 agent 0 · `subagents/agent-*.jsonl` 밖의 하위 기록 0 · 캐시 쓰기가 1시간 몫 + 5분 몫과 다른 줄 0 · advisor 등 여러 번 돈 `usage.iterations` 0. 마지막 하나를 뺀 나머지는 0 이 아니면 스크립트가 멈춘다.
+없는 것(0 으로 확인): message.id 없는 usage 줄 0 · usage 없는 assistant 줄 0 · JSON 깨진 줄 0 · 파일 사이 같은 id 겹침 0 · 연결 안 된 하위 agent 0 · `subagents/agent-*.jsonl` 밖의 하위 기록 0 · 캐시 쓰기가 1시간 몫 + 5분 몫과 다른 줄 0 · usage 네 칸이 없거나 숫자가 아닌 줄 0 · timestamp 없는 응답 줄 0 · usage 가 하나도 없는 하위 파일 0 · advisor 등 여러 번 돈 `usage.iterations` 0. 마지막 둘을 뺀 나머지는 0 이 아니면 스크립트가 멈춘다.
 
 ## 이 기준선을 쓸 때
 
