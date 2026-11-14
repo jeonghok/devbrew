@@ -668,6 +668,27 @@ class TestOtherWorkRecord(_Fixture):
         text = _collect(repo, names={"z.txt"}, list_prs=prs)["text"]
         self.assertIn("- origin/feature/far · PR #5 먼 것 — z.txt", ot.summary(text)[0])
 
+    def test_fork_prs_never_attached(self):
+        """포크 PR 은 머리 이름이 main · 다른 팀 브랜치 · 리뷰 브랜치와 같아도 붙지 않고 늘 한 줄씩 적힌다."""
+        def prs(_repo):
+            return ([{"number": 7, "title": "같은 리포", "branch": "feature/other", "fork": False},
+                     {"number": 11, "title": "포크 main", "branch": "main", "fork": True},
+                     {"number": 12, "title": "fork collides", "branch": "feature/other",
+                      "fork": True},
+                     {"number": 13, "title": "포크 리뷰", "branch": "feature/mine", "fork": True}],
+                    None)
+
+        text = _collect(self.repo, names={"a.txt"}, list_prs=prs)["text"]
+        overlap, unverified = ot.summary(text)
+        self.assertEqual(overlap, ["- feature/other · PR #7 같은 리포 — a.txt"])
+        for number in (11, 12, 13):
+            self.assertIn("- PR #%d 내용 확인 못 함 — 그 브랜치가 이 리포에 없다" % number, unverified)
+        self.assertNotIn("- PR #7 내용 확인 못 함 — 그 브랜치가 이 리포에 없다", unverified)
+        self.assertNotIn("fork collides", text)
+        self.assertNotIn("포크 main", text)
+        self.assertTrue(_block(text, "### feature/other ").split("\n")[0].endswith(
+            " · PR #7 같은 리포"))
+
     def test_gh_unavailable(self):
         text = _collect(self.repo, names={"a.txt"},
                         list_prs=lambda repo: (None, "gh 없음"))["text"]
@@ -872,13 +893,21 @@ class TestUntrustedText(_Fixture):
 
 
 class TestOpenPrs(unittest.TestCase):
-    FAKE = ("#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$FAKE_GH_LOG\"\n"
+    FAKE = ("#!/bin/sh\nprintf '%s\\n' \"$@\" '--call--' >> \"$FAKE_GH_LOG\"\n"
             "case \"$FAKE_GH_MODE\" in\n"
             "  fail) exit 1 ;;\n"
             "  junk) echo 'not json' ;;\n"
-            "  shape) echo '[{\"number\": true, \"title\": \"t\", \"headRefName\": \"b\"}]' ;;\n"
-            "  ok) echo '[{\"number\": 7, \"title\": \"다른 팀 설계\", \"headRefName\": \"feature/other\"}]' ;;\n"
+            "  shape) echo '[{\"number\": true, \"title\": \"t\", \"headRefName\": \"b\","
+            " \"isCrossRepository\": false}]' ;;\n"
+            "  nofork) echo '[{\"number\": 7, \"title\": \"t\", \"headRefName\": \"b\"}]' ;;\n"
+            "  badfork) echo '[{\"number\": 7, \"title\": \"t\", \"headRefName\": \"b\","
+            " \"isCrossRepository\": \"true\"}]' ;;\n"
+            "  ok) echo '[{\"number\": 7, \"title\": \"다른 팀 설계\", \"headRefName\": \"feature/other\","
+            " \"isCrossRepository\": false}, {\"number\": 12, \"title\": \"포크\","
+            " \"headRefName\": \"main\", \"isCrossRepository\": true}]' ;;\n"
             "esac\n")
+    ARGV = ["pr", "list", "-R", "github.com/o/r", "--state", "open", "--json",
+            "number,title,headRefName,isCrossRepository", "--limit", "200"]
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -911,13 +940,19 @@ class TestOpenPrs(unittest.TestCase):
     def test_open_prs_failures(self):
         cases = (("fail", (None, "gh 실패(rc 1)")), ("junk", (None, "gh 응답을 읽지 못함")),
                  ("shape", (None, "gh 응답을 읽지 못함")),
-                 ("ok", ([{"number": 7, "title": "다른 팀 설계", "branch": "feature/other"}], None)))
+                 ("nofork", (None, "gh 응답을 읽지 못함")),
+                 ("badfork", (None, "gh 응답을 읽지 못함")),
+                 ("ok", ([{"number": 7, "title": "다른 팀 설계", "branch": "feature/other",
+                           "fork": False},
+                          {"number": 12, "title": "포크", "branch": "main", "fork": True}], None)))
         for mode, want in cases:
             with self.subTest(mode), self._env(mode):
                 self.assertEqual(ot.open_prs(self.with_origin), want)
-        self.assertEqual(self._calls().split("\n")[:10],
-                         ["pr", "list", "-R", "github.com/o/r", "--state", "open", "--json",
-                          "number,title,headRefName", "--limit", "200"])
+        calls = self._calls().split("--call--\n")
+        self.assertEqual(calls[-1], "")
+        self.assertEqual(len(calls) - 1, len(cases))  # 부를 때마다 gh 는 한 번
+        for call in calls[:-1]:
+            self.assertEqual(call.split("\n")[:-1], self.ARGV)
         before = self._calls()
         with self._env("ok"):
             self.assertEqual(ot.open_prs(self.no_origin), (None, "origin 을 읽지 못함"))

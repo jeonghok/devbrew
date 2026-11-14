@@ -50,6 +50,8 @@ PR_NO_GH = "gh 없음"
 PR_NO_ORIGIN = "origin 을 읽지 못함"
 PR_TIMED_OUT = "시간 초과"
 PR_BAD_REPLY = "gh 응답을 읽지 못함"
+# 열린 PR 목록에서 읽는 칸 — 포크 PR 은 머리 브랜치 이름이 이 리포의 이름과 겹칠 수 있어 따로 가린다.
+PR_FIELDS = "number,title,headRefName,isCrossRepository"
 
 _EPIC_MARK = "- 의도:"
 _EPIC_KEYS = (_EPIC_MARK, "- 범위:", "- 의존:", "- 경로 예약:")
@@ -414,16 +416,19 @@ def _parse_prs(raw: bytes) -> tuple:
         if not isinstance(item, dict):
             return None, PR_BAD_REPLY
         number, title, branch = item.get("number"), item.get("title"), item.get("headRefName")
+        fork = item.get("isCrossRepository")
         if isinstance(number, bool) or not isinstance(number, int):
             return None, PR_BAD_REPLY
         if not isinstance(title, str) or not isinstance(branch, str):
             return None, PR_BAD_REPLY
-        out.append({"number": number, "title": title, "branch": branch})
+        if not isinstance(fork, bool):  # 포크인지 모르면 짐작하지 않는다
+            return None, PR_BAD_REPLY
+        out.append({"number": number, "title": title, "branch": branch, "fork": fork})
     return out, None
 
 
 def open_prs(repo: str) -> tuple:
-    """`(목록 | None, 사유 | None)` — 열린 PR 의 번호 · 제목 · 브랜치 이름. gh 는 한 번, 30초 안에."""
+    """`(목록 | None, 사유 | None)` — 열린 PR 의 번호 · 제목 · 브랜치 이름 · 포크인가. gh 는 한 번, 30초 안에."""
     try:
         found = subprocess.run(["bash", os.path.join(HERE, "gh-repo.sh")], cwd=repo,
                                capture_output=True, stdin=subprocess.DEVNULL, timeout=PR_TIMEOUT)
@@ -434,7 +439,7 @@ def open_prs(repo: str) -> tuple:
     origin = found.stdout.decode("utf-8", "replace").strip()
     if found.returncode != 0 or not origin or origin.startswith("-") or not io_.single_line(origin):
         return None, PR_NO_ORIGIN
-    argv = ["gh", "pr", "list", "-R", origin, "--state", "open", "--json", "number,title,headRefName", "--limit", "200"]
+    argv = ["gh", "pr", "list", "-R", origin, "--state", "open", "--json", PR_FIELDS, "--limit", "200"]
     try:
         proc = subprocess.run(argv, cwd=repo, capture_output=True, stdin=subprocess.DEVNULL,
                               timeout=PR_TIMEOUT)
@@ -473,7 +478,9 @@ def _names_by_tip(repo: str) -> Optional[dict]:
 def _attach_prs(repo: str, entries: List[dict], prs: List[dict]) -> List[int]:
     """항목마다 `"prs"` 를 단다. 끝 커밋이 같은 다른 이름(가려진 로컬 이름 · 원격 이름)도 견준다.
 
-    돌려주는 것: 브랜치가 이 리포의 어느 ref 에도 없는 PR 번호들.
+    돌려주는 것: 내용을 볼 수 없는 PR 번호들 — 포크 PR 전부(머리 이름이 이 리포의 이름과
+    같아도 그 브랜치가 아니다), 그리고 브랜치가 이 리포의 어느 ref 에도 없는 PR.
+    `"fork"` 가 없는 항목(주입한 목록)은 같은 리포의 PR 로 본다.
     """
     by_tip = _names_by_tip(repo)
     known: set = set()
@@ -489,6 +496,9 @@ def _attach_prs(repo: str, entries: List[dict], prs: List[dict]) -> List[int]:
         known |= aliases
     missing: List[int] = []
     for pr in sorted(prs, key=lambda p: p["number"]):
+        if pr.get("fork", False):
+            missing.append(pr["number"])
+            continue
         hit = False
         for entry in entries:
             if pr["branch"] in entry["aliases"]:
