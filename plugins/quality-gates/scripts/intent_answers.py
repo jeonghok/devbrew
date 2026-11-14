@@ -193,6 +193,28 @@ def read_answered(answers_dir: str) -> tuple:
     return answered, unreadable
 
 
+REASON_LINKED = "답 자리가 심볼릭 링크를 지난다"
+
+
+def read_answered_under(tree_root: str, answers_dir: str) -> tuple:
+    """리뷰 트리 아래 답 자리를 읽는다 → (answered, 읽지 못한 수, 읽지 않은 사유 | None).
+
+    트리 루트 아래 경로 마디 가운데 심볼릭 링크가 하나라도 있으면 읽지 않는다 — 쓸 때와 같은 규칙이고,
+    링크 너머 파일은 리뷰 범위가 바꾼 파일 목록의 경로와 맞춰 볼 수 없다.
+    """
+    cur = os.path.normpath(tree_root)
+    linked = False
+    for part in answers_dir.split("/"):
+        if part:
+            cur = os.path.join(cur, part)
+            if os.path.islink(cur):
+                linked = True
+    if linked:
+        return {}, 0, REASON_LINKED
+    answered, unreadable = read_answered(cur)
+    return answered, unreadable, None
+
+
 def _inside(root_real: str, path_real: str) -> bool:
     return path_real == root_real or path_real.startswith(root_real.rstrip(os.sep) + os.sep)
 

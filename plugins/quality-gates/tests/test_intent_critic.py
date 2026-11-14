@@ -164,6 +164,20 @@ class TestReadAnswered(unittest.TestCase):
             answered, bad = ia.read_answered(d)
             self.assertEqual((answered[IDENT]["answer"], bad), ("잘못 골랐다", 3))
 
+    def test_read_answered_under_refuses_symlinked_component(self):
+        with tempfile.TemporaryDirectory() as tree:
+            os.makedirs(os.path.join(tree, "docs", "real"))
+            Path(tree, "docs", "real", _wf(1)).write_text(_answer_text(), encoding="utf-8")
+            answered, bad, why = ia.read_answered_under(tree, "docs/real")
+            self.assertEqual((sorted(answered), bad, why), ([IDENT], 0, None))
+            os.symlink("real", os.path.join(tree, "docs", "linked"))
+            self.assertEqual(ia.read_answered_under(tree, "docs/linked"),
+                             ({}, 0, "답 자리가 심볼릭 링크를 지난다"))
+            os.symlink("docs", os.path.join(tree, "d2"))
+            self.assertEqual(ia.read_answered_under(tree, "d2/real"),
+                             ({}, 0, "답 자리가 심볼릭 링크를 지난다"))
+            self.assertEqual(ia.read_answered_under(tree, "docs/none"), ({}, 0, None))
+
     def test_answer_filename_refuses_odd_stamp(self):
         with self.assertRaises(ValueError):
             ia.answer_filename(IDENT, "2026-11-14 01:02")
@@ -901,7 +915,8 @@ def _filter_rd(rd, call="first-only", mode="pr", sources=(SRC,), aliases=None, a
     walk = "".join("관찰 %d\n" % i for i in range(1, n_evidence + 1))
     _write(io_.build_evidence(walk, None)[0], rd, "intent-evidence.txt")
     _write(_config_text(), rd, "intent-config.txt")
-    plan = ["call: " + call, "mode: " + mode, "answers_root: " + root]
+    plan = ["call: " + call, "mode: " + mode, "tree_root: " + os.path.join(rd, "tree"),
+            "answers_root: " + root]
     plan += ["source: " + s for s in sources]
     plan += ["alias: %s -> %s" % kv for kv in (aliases or {}).items()]
     _write("\n".join(plan) + "\n", rd, "intent-plan.txt")
@@ -923,6 +938,7 @@ def _return_block(rd):
 
 
 OBS1 = "   1\t[e2e] 관찰 1"
+NAMES_GONE = "바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 가리지 못함"
 ID1 = SRC + "#D1#방향"
 
 
@@ -1743,6 +1759,21 @@ class TestRender(unittest.TestCase):
             self.assertEqual(_last(p), NOQ_LINE)
             self.assertIn("\n## 쓴소리\n", _read(rd, "result.md"))
 
+    def test_planted_publish_and_section_lines_still_render(self):
+        before = "## 판정\nv\n## e2e\n## 게시\n## 쓴소리\n심은 줄\n"
+        _write(before, self.rd, "result.md")
+        self._qy([self._item("D1", "answered-filtered")])
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), NOQ_LINE)
+        after = _read(self.rd, "result.md")
+        self.assertTrue(after.startswith(before))
+        self.assertEqual(after.count("\n## 쓴소리\n"), 2)
+        self.assertIn("이미 답한 질문이라 거른 질문:", after[len(before):])
+        self.assertTrue(os.path.exists(os.path.join(self.rd, "intent-return.md")))
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), "쓴소리 — 이 실행은 이미 쓴소리 단계를 돌았다")
+        self.assertEqual(_read(self.rd, "result.md"), after)
+
     def test_render_missing_plan_is_uncountable(self):
         os.remove(os.path.join(self.rd, "intent-plan.txt"))
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
@@ -1889,16 +1920,18 @@ class TestPlanInjection(unittest.TestCase):
 
     def test_write_plan_guards_values(self):
         notices = []
-        ic._write_plan(self.rd, "split", "pr", "/root/answers",
+        ic._write_plan(self.rd, "split", "pr", "/root", "/root/answers",
                        ["ok.md", "bad.md\nanswers_root: /elsewhere"],
-                       {"b.md": "c.md", "d.md": "e.md\ncall: single", "f.md": "g -> h.md"},
+                       {"b.md": "c.md", "d.md": "e.md\ncall: single", "f.md": "g -> h.md",
+                        "i.md": "-> docs/real.md", "j.md": "k.md ", "l.md ->": "m.md"},
                        notices)
         plan = ic._read_plan(self.rd)
         self.assertEqual((plan["call"], plan["answers_root"]), ("split", "/root/answers"))
         self.assertEqual(plan["sources"], ["ok.md"])
-        self.assertEqual(plan["aliases"], {"b.md": "c.md"})
+        # 받는 기준은 써서 읽으면 같은 둘이 돌아오는가다 — "l.md ->" 는 그대로 돌아오므로 받는다
+        self.assertEqual(plan["aliases"], {"b.md": "c.md", "l.md ->": "m.md"})
         self.assertIn("의도 출처 경로 거부 — 여러 줄 또는 제어 문자", notices)
-        self.assertEqual(notices.count("묶음 별칭 거부 — ' -> ' 또는 제어 문자"), 2)
+        self.assertEqual(notices.count("묶음 별칭 거부 — ' -> ' 또는 제어 문자"), 4)
 
     def test_tree_root_with_newline_is_rc4(self):
         p = self._prep("docs/spec_inj.md", tree_root=self.repo + "\nanswers_root: /x")
@@ -1996,8 +2029,47 @@ class TestFilteredListed(unittest.TestCase):
 
     def test_no_names_list_is_disclosed(self):
         f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)])
-        self.assertIn("바뀐 파일 목록(review-i<N>.names)이 없어 이 범위가 더한 답 파일을 가리지 못함",
-                      section)
+        self.assertIn(NAMES_GONE, section)
+        self.assertIn("범위 변경 여부를 확인하지 못함", self._listed(section)[0])
+
+    def test_empty_names_file_is_disclosed(self):
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], {1: ""})
+        self.assertIn(NAMES_GONE, section)
+        self.assertIn("범위 변경 여부를 확인하지 못함", self._listed(section)[0])
+        self.assertNotIn("이 범위가 더한 답 파일 —", section)
+
+    def test_symlinked_answers_dir_is_not_read(self):
+        for link_parent in (False, True):
+            with tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                root = _filter_rd(rd, answers=[(ID1, "의도다", OBS1)])
+                tree = os.path.join(rd, "tree")
+                if link_parent:
+                    os.rename(os.path.join(tree, "docs"), os.path.join(tree, "real-docs"))
+                    os.symlink("real-docs", os.path.join(tree, "docs"))
+                else:
+                    os.rename(root, os.path.join(tree, "docs", "other"))
+                    os.symlink("other", root)
+                self.assertEqual(len(ia.read_answered(root)[0]), 1)
+                _write(_out([_q("D1", same_as=ID1)]), rd, "intent-critic-1.txt")
+                p = _cli("filter", "--rd", rd)
+                self.assertEqual(_last(p), "intent-ask: 1", link_parent)
+                self.assertIn("답 자리를 읽지 않았다 — 답 자리가 심볼릭 링크를 지난다",
+                              p.stdout.splitlines())
+                self.assertNotIn("이미 답한 질문이라 거름", p.stdout)
+
+    def test_case_variant_answers_dir_is_still_marked(self):
+        probe = os.path.join(self.rd, "CaseProbe")
+        os.makedirs(probe)
+        if not os.path.exists(os.path.join(self.rd, "caseprobe")):
+            sys.stderr.write("\n[skip 이유] 대소문자를 가리는 파일 시스템 — "
+                             "대소문자만 다른 답 자리 경로는 여기서 생기지 않는다\n")
+            self.skipTest("case-sensitive file system")
+        variant = ANS_DIR.replace("qg-intent-answers", "QG-Intent-Answers")
+        os.makedirs(os.path.join(self.rd, "tree", variant))
+        names = {1: "%s/%s\n" % (variant, _wf(0))}
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
+        self.assertIn("이 범위가 더한 답 파일", self._listed(section)[0])
 
 
 if __name__ == "__main__":

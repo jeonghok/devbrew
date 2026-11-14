@@ -8,6 +8,7 @@
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
   intent-return.md       gate(건너뜀) · render 가 쓴다
+  intent-rendered.txt    render 가 쓴다 — 두 번째 render 는 덧붙이지 않는다
   result.md              render 가 끝에 `## 쓴소리` 를 덧붙인다
 
 쓴소리 출력은 판정 밖이다 — findings.yaml · 판정 인자 줄 · PR 코멘트에 쓰지 않는다.
@@ -66,15 +67,17 @@ HEADER = "=== id: "
 PICK_SEP = " · pick: "
 TYPED = "typed"
 SECTION = "## 쓴소리"
-PUBLISH_SECTION = "## 게시"
+RENDERED = "intent-rendered.txt"
 FIRST_CANDIDATES = "## 첫째 호출의 후보"
 INTENT_DOUBTS_MARK = "<!-- intent-doubts -->"
 ALIAS_SEP = " -> "
 NAMES_PREFIX = "review-i"
 NAMES_SUFFIX = ".names"
-NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없어 이 범위가 더한 답 파일을 "
+NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 "
                  "가리지 못함")
 RANGE_ADDED = "이 범위가 더한 답 파일"
+RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
+RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): 쓴소리 답 %d개 기록"
 
 NO_EVIDENCE = "쓴소리 — 근거 없음"
@@ -160,7 +163,7 @@ def _repeated(pairs: List[tuple], keys: tuple) -> bool:
 
 
 CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source")
-PLAN_KEYS = ("call", "mode", "answers_root")
+PLAN_KEYS = ("call", "mode", "tree_root", "answers_root")
 
 
 def _read_config(rd: str) -> Optional[dict]:
@@ -181,7 +184,8 @@ def _read_plan(rd: str) -> Optional[dict]:
     pairs = _key_values(text)
     if _repeated(pairs, PLAN_KEYS):
         return None
-    plan = {"call": "", "mode": "", "answers_root": "", "sources": [], "aliases": {}}
+    plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "sources": [],
+            "aliases": {}}
     for key, value in pairs:
         if key == "source":
             plan["sources"].append(value)
@@ -189,7 +193,7 @@ def _read_plan(rd: str) -> Optional[dict]:
             bundle, sep, brief = value.rpartition(ALIAS_SEP)
             if sep:
                 plan["aliases"][bundle] = brief
-        elif key in ("call", "mode", "answers_root"):
+        elif key in PLAN_KEYS:
             plan[key] = value
     return plan
 
@@ -389,22 +393,31 @@ def _plan_value_ok(value) -> bool:
     return isinstance(value, str) and value != "" and io_.single_line(value)
 
 
-def _write_plan(rd: str, call: str, mode: str, answers_root: str, sources, aliases,
-                notices: List[str]) -> None:
-    """줄 단위 계획 파일. 값마다 한 줄 · 제어 문자 없음을 확인하고, 아닌 출처 · 별칭은 쓰지 않고 공시한다."""
-    if not (_plan_value_ok(call) and _plan_value_ok(mode) and _plan_value_ok(answers_root)):
-        raise InputError("계획 값에 " + io_.REASON_CONTROL + "가 있다")
-    lines = ["call: " + call, "mode: " + mode, "answers_root: " + answers_root]
+def _line_ok(key: str, value) -> bool:
+    """`키: 값` 한 줄로 써서 읽으면 같은 (키, 값) 하나가 돌아오나 — 한 줄 · 제어 문자 없음 · 앞뒤 공백 없음."""
+    return _plan_value_ok(value) and _key_values(key + ": " + value) == [(key, value)]
+
+
+def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str, sources,
+                aliases, notices: List[str]) -> None:
+    """줄 단위 계획 파일. 줄마다 써서 다시 읽으면 같은 값이 나오는지 확인하고, 아닌 출처 · 별칭은 쓰지 않고 공시한다."""
+    singles = (("call", call), ("mode", mode), ("tree_root", tree_root),
+               ("answers_root", answers_root))
+    lines = []
+    for key, value in singles:
+        if not _line_ok(key, value):
+            raise InputError("계획 값 %s 에 %s가 있다" % (key, io_.REASON_CONTROL))
+        lines.append("%s: %s" % (key, value))
     for source in sources:
-        if _plan_value_ok(source):
+        if _line_ok("source", source):
             lines.append("source: " + source)
         else:
             _add_notice(notices, "의도 출처 경로 거부 — " + io_.REASON_CONTROL)
     for bundle in sorted(aliases):
-        brief = aliases[bundle]
-        if (_plan_value_ok(bundle) and _plan_value_ok(brief) and ALIAS_SEP not in bundle
-                and ALIAS_SEP not in brief):
-            lines.append("alias: %s%s%s" % (bundle, ALIAS_SEP, brief))
+        joined = "%s%s%s" % (bundle, ALIAS_SEP, aliases[bundle])
+        if (_line_ok("alias", joined)
+                and joined.rpartition(ALIAS_SEP) == (bundle, ALIAS_SEP, aliases[bundle])):
+            lines.append("alias: " + joined)
         else:
             notices.append("묶음 별칭 거부 — ' -> ' 또는 제어 문자")
     _write(_path(rd, PLAN), "\n".join(lines) + "\n")
@@ -421,7 +434,8 @@ def _prepare(args, notices: List[str]) -> str:
     if specs_text is None:
         raise InputError("의도 출처 JSON 파일을 읽지 못했다: %s" % args.specs_json)
     specs = _parse_specs(specs_text, notices)
-    answers_root = os.path.abspath(os.path.join(args.tree_root, cfg["answers_dir"]))
+    tree_root = os.path.abspath(args.tree_root)
+    answers_root = os.path.join(tree_root, cfg["answers_dir"])
 
     e2e = _read(_path(rd, "e2e-record.md"))
     differential = _read(_path(rd, "differential.yaml"))
@@ -430,7 +444,7 @@ def _prepare(args, notices: List[str]) -> str:
         _add_notice(notices, line)
     if not ok:
         _add_notice(notices, NO_EVIDENCE)
-        _write_plan(rd, "none", args.mode, answers_root, [], {}, notices)
+        _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices)
         return "none"
 
     evidence, _count = io_.build_evidence(e2e, differential)
@@ -452,7 +466,9 @@ def _prepare(args, notices: List[str]) -> str:
             doubts += "\n"
         doubts += INTENT_DOUBTS_MARK + "\n" + intent_moved
 
-    answered, unreadable = ia.read_answered(answers_root)
+    answered, unreadable, why = ia.read_answered_under(tree_root, cfg["answers_dir"])
+    if why:
+        _add_notice(notices, "답 자리를 읽지 않았다 — " + why)
     if unreadable:
         _add_notice(notices, "읽지 못한 답 파일 %d" % unreadable)
 
@@ -472,7 +488,8 @@ def _prepare(args, notices: List[str]) -> str:
     _write(_path(rd, INTENT), intent_kept)
     _write(_path(rd, DOUBTS), doubts)
     _write(_path(rd, ANSWERED), _answered_lines(answered))
-    _write_plan(rd, call, args.mode, answers_root, built["sources"], built["aliases"], notices)
+    _write_plan(rd, call, args.mode, tree_root, answers_root, built["sources"],
+                built["aliases"], notices)
     return call
 
 
@@ -690,17 +707,57 @@ def _range_names(rd: str) -> Optional[set]:
     for line in text.split("\n"):
         if line:
             out.add(line)
-    return out
+    # 기준선이 degraded 면 review-diff.sh 가 목록을 일부러 비워 둔다 — 빈 목록은 「바뀐 것 없음」이 아니라 「모름」이다.
+    return out or None
+
+
+def _range_identities(rd: str, tree_root: str) -> Optional[set]:
+    """바뀐 파일 목록의 경로를 리뷰 트리 아래에서 푼 파일 정체(st_dev, st_ino) — 철자가 아니라 파일로 맞춘다."""
+    names = _range_names(rd)
+    if names is None or not tree_root:
+        return None
+    ids = set()
+    for name in names:
+        try:
+            st = os.lstat(os.path.join(tree_root, name))
+        except OSError:
+            st = None
+        if st is not None:
+            ids.add((st.st_dev, st.st_ino))
+    return ids
+
+
+def _range_mark(path: str, ids: Optional[set]) -> str:
+    """added | not-added | unknown — 정체를 세우지 못하면 unknown 이다(표시 없이 두지 않는다)."""
+    if ids is None:
+        return "unknown"
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return "unknown"
+    return "added" if (st.st_dev, st.st_ino) in ids else "not-added"
+
+
+def _load_answered(plan: dict, rd: str, notices: List[str]) -> dict:
+    cfg = _read_config(rd)
+    if not plan["tree_root"] or cfg is None:
+        notices.append("답 자리를 읽지 않았다 — 준비 파일에 리뷰 트리 경로가 없거나 설정을 읽지 못함")
+        return {}
+    answered, unreadable, why = ia.read_answered_under(plan["tree_root"], cfg["answers_dir"])
+    if why:
+        notices.append("답 자리를 읽지 않았다 — " + why)
+    if unreadable:
+        notices.append("읽지 못한 답 파일 %d" % unreadable)
+    return answered
 
 
 def _answer_rel(answers_dir: str, path: str) -> str:
     return answers_dir.rstrip("/") + "/" + os.path.basename(path)
 
 
-def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict,
-           names: Optional[set]) -> list:
+def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answered: dict,
+           ids: Optional[set]) -> list:
     evidence = _evidence_lines(rd)
-    answered, _unreadable = ia.read_answered(plan["answers_root"])
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
     first_ids = set()
     remaining: List[dict] = []
@@ -734,7 +791,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict,
                 record["state"] = state
                 record["previous_answer"] = answered[ident]["answer"]
                 record["answer_file"] = _answer_rel(answers_dir, answered[ident]["path"])
-                record["range_added"] = names is not None and record["answer_file"] in names
+                record["range_mark"] = _range_mark(answered[ident]["path"], ids)
                 decided.append(record)
                 continue
         record["label_in_run"] = label
@@ -772,9 +829,10 @@ def cmd_filter(args) -> int:
             status = "uncountable"
         else:
             status = "ran"
-            names = _range_names(rd)
-            questions = _judge(cands, plan, rd, ledger, counts, names)
-            if counts["answered"] and names is None:
+            answered = _load_answered(plan, rd, notices)
+            ids = _range_identities(rd, plan["tree_root"])
+            questions = _judge(cands, plan, rd, ledger, counts, answered, ids)
+            if counts["answered"] and ids is None:
                 notices.append(NAMES_MISSING)
     for key, template in COUNT_NOTICES:
         if counts[key]:
@@ -983,17 +1041,6 @@ def cmd_record(args) -> int:
 
 # ---------------------------------------------------------------- render
 
-def _section_present(text: str) -> bool:
-    """`## 게시` 마지막 줄 뒤에 `## 쓴소리` 머리가 글자 그대로 있나 — 앞 절에 옮겨 적힌 글은 세지 않는다."""
-    present = False
-    for line in text.splitlines():
-        if line.startswith(PUBLISH_SECTION):
-            present = False
-        elif line.rstrip() == SECTION:
-            present = True
-    return present
-
-
 def _cell(value) -> str:
     return _text(value).replace("\n", " ").replace("|", "\\|")
 
@@ -1066,7 +1113,7 @@ def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dic
         elif record.get("state") == "wrong-choice-filtered":
             wrong.append(item)
         if record.get("state") in ("answered-filtered", "wrong-choice-filtered"):
-            mark = " · " + RANGE_ADDED if record.get("range_added") else ""
+            mark = RANGE_MARKS.get(record.get("range_mark"), "")
             filtered.append("- %s · %s · %s%s — %s" % (
                 _cell(record.get("id")), _cell(record.get("previous_answer")),
                 _cell(record.get("answer_file")), mark, _cell(record.get("question"))))
@@ -1081,10 +1128,13 @@ def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dic
 def cmd_render(args) -> int:
     rd = args.rd
     result_path = _path(rd, RESULT)
-    existing = _read(result_path) or ""
-    if _section_present(existing):
+    # 「이미 돌았나」는 이 단계가 세션 폴더에 남긴 표지로만 정한다 — result.md 글(앞 절에 옮겨 적힌
+    # 리뷰 트리 글이 섞일 수 있다)을 훑어 정하지 않는다.
+    marker = _path(rd, RENDERED)
+    if os.path.exists(marker):
         print(ALREADY)
         return 0
+    existing = _read(result_path) or ""
     plan = _read_plan(rd)
     data = _read_questions(rd) if plan is None or plan["call"] != "none" else None
     status, line, notices = _outcome(plan, data, args.mode)
@@ -1093,6 +1143,7 @@ def cmd_render(args) -> int:
     _append(result_path, lead + _section(line, notices, data, rows))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
     _write_return(rd, status, args.mode, commit, rows)
+    _write(marker, line + "\n")
     _emit(notices)
     print(line)
     return 0
