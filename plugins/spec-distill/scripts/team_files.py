@@ -226,6 +226,7 @@ _NUMBER_RE = re.compile(r"[1-9][0-9]*")
 _TASK_RE = re.compile(r"Task (0|[1-9][0-9]*)/(0|[1-9][0-9]*): (끝|막힘) — (\S.*)")   # 0 은 읽고(진행 줄 깨짐이 된다) 앞의 0 은 꼴이 아니다
 _AC_RE = re.compile(r"AC[0-9]+:")
 _END_PREFIX = "끝 — "
+END_PREFIX = _END_PREFIX
 _TASK_BLOCKED = "막힘"
 _MACHINE_PREFIXES = ("Ruling:", "규칙 반증:", "산출물:")
 

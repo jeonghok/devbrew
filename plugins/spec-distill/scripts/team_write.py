@@ -532,12 +532,25 @@ def _commit_flag(flag: str, value, W) -> str:
     return value
 
 
+def _unresolved_rel(top: Path, value: str):
+    """링크를 풀지 않은 `--result` 의 레포 상대 경로. 작업 트리 안으로 이어지는 조상을 못 찾으면 None."""
+    full = os.path.abspath(value)
+    base = full
+    while os.path.realpath(base) != str(top):
+        parent = os.path.dirname(base)
+        if parent == base:
+            return None
+        base = parent
+    return None if base == full else os.path.relpath(full, base).replace(os.sep, "/")
+
+
 def sync_result_path(top: Path, value: str, W) -> tuple:
     """`--result` → (Path, 레포 상대 경로, Team, 과제, (단계, 계획, 시도)). 결과 폴더의 결과 파일 이름이 아니면 Refused."""
-    if os.path.islink(value):
-        raise W.Refused("심볼릭 링크로는 쓰지 않는다: %s" % value)
-    path = Path(os.path.realpath(value))
-    rel_path = W.rel(top, path)
+    rel_path = _unresolved_rel(top, value) or W.rel(top, Path(os.path.realpath(value)))
+    path = top / rel_path
+    _refuse_links(top, rel_path, W)   # 풀기 전 경로의 폴더 성분들 — 링크 너머에 쓰지 않는다
+    if os.path.islink(str(path)):
+        raise W.Refused("심볼릭 링크로는 쓰지 않는다: %s" % rel_path)
     if NOT_HERE in rel_path.split("/"):
         raise W.Refused("%s 아래에는 쓰지 않는다 — %s" % (NOT_HERE, rel_path))
     hit = team_layout.job_of_path(roadmaps_dir_of(top, W), rel_path)
@@ -549,7 +562,6 @@ def sync_result_path(top: Path, value: str, W) -> tuple:
     team, job, _rest = hit
     if not (top / team.job(job)).is_dir():
         raise W.Refused("과제 폴더가 없다: %s" % team.job(job))
-    _refuse_links(top, rel_path, W)
     return path, rel_path, team, job, parsed
 
 
@@ -574,9 +586,11 @@ def _swap_head(text: str, commit: str) -> str:
 
 
 def _appended(text: str, new_lines: list) -> str:
+    """줄들을 끝에 붙인다 — 파일이 CRLF 면 CRLF 로, 끝 줄바꿈이 없으면 그 파일의 줄바꿈 하나만 보태고 붙인다."""
     if not new_lines:
         return text
-    return text + ("" if text.endswith("\n") or not text else "\n") + "\n".join(new_lines) + "\n"
+    eol = "\r\n" if "\r\n" in text else "\n"
+    return text + ("" if text.endswith("\n") or not text else eol) + eol.join(new_lines) + eol
 
 
 def cmd_job_sync(a, W) -> int:
@@ -596,10 +610,10 @@ def cmd_job_sync(a, W) -> int:
     if layout_text is None or W.roadmap_layout(layout_text) != team_layout.LAYOUT_TEAM:
         raise W.Refused("team 형식 로드맵의 과제가 아니다 — %s 가 없거나 머리말에 `%s: %s` 가 없다"
                         % (team.roadmap, team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM))
-    new_lines = []
+    new_lines, total = [], 0
     if a.ledger:
-        new_lines = workflow_superpowers.ledger_lines(W.read(Path(a.ledger)),
-                                                      workflow_superpowers.task_total(W.read(Path(a.plan_file))))
+        total = workflow_superpowers.task_total(W.read(Path(a.plan_file)))
+        new_lines = workflow_superpowers.ledger_lines(W.read(Path(a.ledger)), total)
     done = []
     if path.exists():
         old = W.read(path, keep_newlines=True)
@@ -617,7 +631,15 @@ def cmd_job_sync(a, W) -> int:
         old, r = None, None
         text = _new_head(parsed, a.role, a.bundle_at, a.job_at)
         done.append("머리 만듦")
-    have = set(line.rstrip("\r") for line in text.split("\n"))
+    for line in new_lines:   # 진행 줄이 계획과 어긋나면 쓰지 않는다 — 읽는 쪽이 「진행 줄 깨짐」 으로 부르는 꼴이다
+        if line.startswith("Task "):
+            n = int(line[len("Task "):].split("/", 1)[0])
+            if total == 0:
+                raise W.Refused("계획 파일 %s 에 task 절이 없다 — 원장의 Task %d 의 끝을 진행 줄로 쓰지 않았다" % (a.plan_file, n))
+            if n > total:
+                raise W.Refused("원장은 Task %d 의 끝을 말하는데 계획 파일 %s 의 task 절은 %d개다 — 진행 줄을 쓰지 않았다"
+                                % (n, a.plan_file, total))
+    have = set(line.rstrip("\r") for line in (r.machine_text.split("\n") if r else []))   # 펜스 밖 · 머리 아래의 줄만
     new_lines = [line for line in new_lines if line not in have]
     text = _appended(text, new_lines)
     for label, prefix in (("Task", "Task "), ("Ruling", "Ruling:")):
@@ -630,7 +652,7 @@ def cmd_job_sync(a, W) -> int:
     if a.end:
         text = _swap_head(text, a.end)
         if not closed:
-            text = _appended(text, [team_files._END_PREFIX + a.end])
+            text = _appended(text, [team_files.END_PREFIX + a.end])
             done.append("끝 줄")
     if closed and text != old:
         raise W.Refused("끝난 결과 파일은 고치지 않는다 — 다시 하는 일은 새 시도 번호다: %s" % rel_path)
