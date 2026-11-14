@@ -566,7 +566,7 @@ git commit -m "feat(spec-distill): 결과 파일 · 막힘 파일 · 결정 기�
 
 - `team_repo` — `$T/origin.git`(bare · 기본 브랜치 `main`)과 `W="$T/repo"`(clone)를 만들고, 새로 쓴 brief · audit(번호 `C1` · `D2` · `C3` · `OQ1` · `S1`–`S4` — 꼴은 `test_team_status_stub.sh` 의 것을 따르되 글은 다르게)을 커밋한 뒤 `create --layout team` 으로 팀 `tm` 을 만들어 커밋 · push 하고 `origin/HEAD` 를 세운다. `RD`(해결자 `repo_defaults.py get roadmaps_dir` 의 값) · `TM="${RD}tm"` · `RM="$TM/roadmap.md"` 를 정한다.
 - 팀 `tm` 의 블록 — `P1` 결정(`S3 · OQ1`), `E1` 묶음(브랜치 `feature/tm-e1, feature/tm-e1b` · 경로 예약 `src/e1/` · `C1 · S1`), `E2` 묶음(브랜치 `feature/tm-e2` · 경로 예약 `src/e2/` · `D2 · S2` · 블록에 `- 흐름: 조사 — 파일을 읽어 표로 낸다` 와 `- 산출물: <TM>/jobs/E2/survey.md`), `E3` 묶음(의존 `E1` · 브랜치 `feature/tm-e3` · 경로 예약 `src/e3/` · `C3 · S1 · S4` — 발화 `S1` 은 `E1` 과 `E3` 둘에 배정한다. 생성기가 그 표를 거절하면 멈춰 보고한다). 지시 원문 범위는 묶음마다 원자료 사본의 앞 구간 안이다.
-- `g <git 인자…>`(이름 · 메일을 주고 서명을 끈 W 의 git) · `js <json> <식>` · `status <json 파일> [<인자…>]`(`(cd "$W" && python3 "$RS" "$RM" --json "$@") > 파일`, rc 를 echo) · `put <경로> <글>`(쓰고 `g add`) · `decide <과제> <줄>`(작업 폴더의 그 과제 INTENT.md 에 `team_files.append_decision` 으로 한 줄 — `conductor_ledger.py record` 가 team 을 아는 것은 Task 13 이다) · `sync <과제> <결과 파일 이름> <job sync 인자…>`.
+- `g <git 인자…>`(이름 · 메일을 주고 서명을 끈 W 의 git) · `js <json> <식>` · `status <json 파일> [<인자…>]`(`(cd "$W" && python3 "$RS" "$RM" --json "$@") > 파일`, rc 를 echo) · `put <경로> <글>`(쓰고 `g add`) · `decide <과제> <줄>`(작업 폴더의 그 과제 INTENT.md 에 `team_files.append_decision` 으로 한 줄 — `conductor_ledger.py record` 가 team 을 아는 것은 Task 13 이다) · `sync <과제> <결과 파일 이름> <job sync 인자…>`(그 과제 결과 폴더의 그 이름으로 `job sync` 를 부른다 — 출력은 `$T/out.txt`, rc 를 echo). `status` 는 기본 브랜치와 브랜치 끝을 읽으므로 걸음마다 커밋하고 push 한 뒤에 부른다.
 
 - [ ] **Step 1: 변환기의 실패하는 테스트를 쓴다**
 
