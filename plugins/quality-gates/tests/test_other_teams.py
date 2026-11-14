@@ -235,6 +235,31 @@ class TestOtherWork(_Fixture):
         self.assertEqual(ot.other_work(repo, DEFAULT_REF, shas["k2"]), before)
         self.assertEqual(_names(before[0]), ["feature/far", "feature/mine-next", "feature/other"])
 
+    def test_rev_named_files_in_checkout_change_nothing(self):
+        """작업 트리의 파일 이름이 rev 와 같아도(`HEAD` · 기본 ref 경로) 결과가 같다."""
+        cases = (("HEAD 이름 파일(추적 안 됨)", ("HEAD",), False, "HEAD"),
+                 ("HEAD 이름 파일(커밋됨)", ("HEAD",), True, "HEAD"),
+                 ("기본 ref 경로 파일(추적 안 됨)", (DEFAULT_REF,), False, "k2"),
+                 ("기본 ref 경로 파일(커밋됨)", (DEFAULT_REF,), True, "k2"),
+                 ("둘 다(추적 안 됨)", ("HEAD", DEFAULT_REF), False, "HEAD"))
+        for label, files, commit, end in cases:
+            with self.subTest(label):
+                repo, shas = self._fresh()
+                rev = shas.get(end, end)
+                before = ot.other_work(repo, DEFAULT_REF, rev)
+                for rel in files:
+                    tic._write("x\n", repo, rel)
+                if commit:
+                    _run(repo, "add", "--", *files)
+                    _run(repo, "commit", "-q", "-m", "rev-named")
+                    if rev != "HEAD":  # 리뷰 끝이 새 커밋으로 옮겨 간다 — 남의 작업은 그대로여야 한다
+                        rev = _run(repo, "rev-parse", "HEAD").strip()
+                after = ot.other_work(repo, DEFAULT_REF, rev)
+                self.assertEqual(after[1], 0)
+                self.assertEqual(after, before)
+                self.assertEqual(_names(after[0]),
+                                 ["feature/far", "feature/mine-next", "feature/other"])
+
     def test_base_is_later_merge_base(self):
         entries = self._work()[0]
         self.assertEqual(_by_name(entries, "feature/mine-next")["base"], self.shas["k2"])

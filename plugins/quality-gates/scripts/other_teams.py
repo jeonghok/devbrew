@@ -2,6 +2,8 @@
 
 git 은 `_git` 한 자리로만 부른다 — argv 목록(셸 없음) · `git -C <리포>`. 경로를 pathspec 으로
 넘길 때는 `lit` 로 경로마다 `:(literal)` 접두를 붙인다(전역 `--literal-pathspecs` 는 쓰지 않는다).
+rev 와 경로를 함께 받는 하위 명령(rev-list · log · diff)은 rev 뒤를 `--` 로 닫는다 — 작업 트리에
+rev 와 같은 이름의 파일(`HEAD` · 기본 ref 경로)이 있어도 rev 로만 읽힌다.
 리포를 바꾸는 명령은 쓰지 않는다. 이 모듈은 `adjudication` 을 쓰지 않는다.
 """
 from __future__ import annotations
@@ -134,18 +136,20 @@ def _later_base(repo: str, sha: str, default_ref: str, end: str) -> Optional[str
 def _branch_entry(repo: str, name: str, sha: str, stamp: int, default_ref: str,
                   end: str) -> tuple:
     """`(항목 | None, 읽기 실패)` — 항목이 None 이고 실패가 아니면 다른 작업이 아니다."""
-    ahead = _git(repo, "rev-list", "--max-count=1", sha, "--not", default_ref, end)
+    ahead = _git(repo, "rev-list", "--max-count=1", sha, "--not", default_ref, end,
+                 "--")
     if not _ok(ahead):
         return None, True
     if not ahead.stdout.strip():
         return None, False
     log = _git(repo, "log", "--no-merges", "--no-renames", "--format=", "--name-only", "-z",
-               sha, "--not", default_ref, end)
+               sha, "--not", default_ref, end, "--")
     if not _ok(log):
         return None, True
     paths = _z_paths(log.stdout)
     diff = _git(repo, "-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff",
-                "--no-textconv", "--no-renames", "--name-only", "-z", default_ref, sha)
+                "--no-textconv", "--no-renames", "--name-only", "-z", default_ref, sha,
+                "--")
     if not _ok(diff):
         return None, True
     if not paths & _z_paths(diff.stdout):
