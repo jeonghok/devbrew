@@ -193,13 +193,13 @@ Agent({
 
 ## I5 거르기 · 묻기 · 답 기록
 
-`filter` 가 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 `intent-questions.yaml` 을 쓴다:
+`filter` 가 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 `intent-questions.yaml` 을 쓴다. `--review-mode` 에는 마지막 iteration Step 1c 출력의 `mode:` 값을 넣고, 모르면 `-` 를 넣는다 — `paths` 범위의 바뀐 파일 목록은 glob 에 맞는 경로뿐이라, `paths` 나 `-` 면 목록에 없는 답 파일에 「범위 변경 여부를 확인하지 못함」 표시가 붙는다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-python3 "$QG/scripts/intent_critic.py" filter --rd "$RD"
+python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" --review-mode <session | branch | topic | range | paths | ->
 ```
 
 공시 줄(`근거 없어 거름 <n>` · `이미 답한 질문이라 거름 <n>` · `상한 넘어 남김 <n>` · …)은 그대로 보인다. 거른 질문의 목록은 `render` 가 `result.md` 의 `## intent-critic` 에 남긴다 — 줄이거나 빼지 않는다.

@@ -79,6 +79,10 @@ NAMES_PREFIX = "review-i"
 NAMES_SUFFIX = ".names"
 NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 "
                  "가리지 못함")
+# 바뀐 파일 목록이 리뷰 범위가 바꾼 경로를 모두 담는 모드. paths 의 목록은 glob 에 맞는 경로뿐이다.
+WHOLE_SCOPE_MODES = ("session", "branch", "topic", "range")
+NAMES_PARTIAL = ("리뷰 범위가 paths 이거나 알 수 없어, 바뀐 파일 목록에 없는 답 파일은 이 범위가 "
+                 "더했는지 가리지 못함")
 RANGE_ADDED = "이 범위가 더한 답 파일"
 RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
@@ -750,15 +754,20 @@ def _range_identities(rd: str, tree_root: str) -> Optional[set]:
     return ids
 
 
-def _range_mark(path: str, ids: Optional[set]) -> str:
-    """added | not-added | unknown — 정체를 세우지 못하면 unknown 이다(표시 없이 두지 않는다)."""
+def _range_mark(path: str, ids: Optional[set], whole: bool) -> str:
+    """added | not-added | unknown — 정체를 세우지 못하면 unknown 이다(표시 없이 두지 않는다).
+
+    목록에 없다는 것은 목록이 범위 전체를 담을 때(whole)만 「더하지 않음」 이다. 아니면 unknown 이다.
+    """
     if ids is None:
         return "unknown"
     try:
         st = os.lstat(path)
     except OSError:
         return "unknown"
-    return "added" if (st.st_dev, st.st_ino) in ids else "not-added"
+    if (st.st_dev, st.st_ino) in ids:
+        return "added"
+    return "not-added" if whole else "unknown"
 
 
 def _load_answered(plan: dict, rd: str, notices: List[str]) -> dict:
@@ -779,7 +788,7 @@ def _answer_rel(answers_dir: str, path: str) -> str:
 
 
 def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answered: dict,
-           ids: Optional[set]) -> list:
+           ids: Optional[set], whole: bool) -> list:
     evidence = _evidence_lines(rd)
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
     first_ids = set()
@@ -814,7 +823,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
                 record["state"] = state
                 record["previous_answer"] = answered[ident]["answer"]
                 record["answer_file"] = _answer_rel(answers_dir, answered[ident]["path"])
-                record["range_mark"] = _range_mark(answered[ident]["path"], ids)
+                record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
                 decided.append(record)
                 continue
         record["label_in_run"] = label
@@ -854,9 +863,17 @@ def cmd_filter(args) -> int:
             status = "ran"
             answered = _load_answered(plan, rd, notices)
             ids = _range_identities(rd, plan["tree_root"])
-            questions = _judge(cands, plan, rd, ledger, counts, answered, ids)
+            whole = args.review_mode in WHOLE_SCOPE_MODES
+            questions = _judge(cands, plan, rd, ledger, counts, answered, ids, whole)
             if counts["answered"] and ids is None:
                 notices.append(NAMES_MISSING)
+            elif not whole:
+                partial = False
+                for record in questions:
+                    if record.get("range_mark") == "unknown":
+                        partial = True
+                if partial:
+                    notices.append(NAMES_PARTIAL)
     for key, template in COUNT_NOTICES:
         if counts[key]:
             notices.append(template % counts[key])
@@ -1248,6 +1265,10 @@ def _parser() -> argparse.ArgumentParser:
                                    "split=1 과 2 의 합). 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 "
                                    "intent-questions.yaml 을 쓴다. 공시 줄들 뒤 「intent-ask: <k>」. rc 0.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
+    p.add_argument("--review-mode", default="-",
+                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값). %s 이면 바뀐 파일 "
+                        "목록이 범위 전체다. paths · 모름(-) · 그 밖의 값이면 목록에 없는 답 파일을 "
+                        "「더하지 않음」 이 아니라 「모름」 으로 표시한다." % " · ".join(WHOLE_SCOPE_MODES))
     p.set_defaults(func=cmd_filter)
 
     p = sub.add_parser("record", help="답 파일을 docs 답 자리에 쓰고 그 파일만 커밋한다",

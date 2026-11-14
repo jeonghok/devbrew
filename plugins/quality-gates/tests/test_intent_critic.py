@@ -1072,6 +1072,10 @@ def _return_block(rd):
 
 OBS1 = "   1\t[e2e] 관찰 1"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
+RANGE_ADDED = "이 범위가 더한 답 파일"
+RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
+NAMES_PARTIAL = ("리뷰 범위가 paths 이거나 알 수 없어, 바뀐 파일 목록에 없는 답 파일은 이 범위가 "
+                 "더했는지 가리지 못함")
 NAMES_GONE = "바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 가리지 못함"
 ID1 = SRC + "#D1#방향"
 
@@ -2213,12 +2217,14 @@ class TestFilteredListed(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, answers, cands, names=None):
+    def _run(self, answers, cands, names=None, review_mode=None):
         _filter_rd(self.rd, answers=answers)
         for n, text in (names or {}).items():
             _write(text, self.rd, "review-i%d.names" % n)
         _write(_out(cands), self.rd, "intent-critic-1.txt")
-        f = _cli("filter", "--rd", self.rd)
+        extra = [] if review_mode is None else ["--review-mode", review_mode]
+        f = _cli("filter", "--rd", self.rd, *extra)
+        self.assertEqual(f.returncode, 0, f.stderr)
         _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
         r = _cli("render", "--rd", self.rd, "--mode", "pr")
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
@@ -2264,6 +2270,39 @@ class TestFilteredListed(unittest.TestCase):
             names = {1: "%s/%s\n" % (ANS_DIR, _wf(0)), 2: "a.txt\n"}
             f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names)
             self.assertNotIn("이 범위가 더한 답 파일", self._listed(section)[0])
+
+    def test_names_missing_the_answer_file_mean_not_added_only_for_whole_scope_modes(self):
+        """바뀐 파일 목록에 답 파일이 없을 때 — 목록이 범위 전체를 담는 모드에서만 「더하지 않음」(표시 없음)
+        이다. paths 범위의 목록은 glob 에 맞는 경로뿐이라, glob 밖에 심은 답 파일은 「모름」 으로 읽는다."""
+        names = {1: "a.txt\n"}
+        for mode in ("session", "branch", "topic", "range"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names,
+                                          review_mode=mode)
+                row = self._listed(section)[0]
+                self.assertNotIn(RANGE_UNKNOWN, row)
+                self.assertNotIn(RANGE_ADDED, row)
+                self.assertNotIn(NAMES_PARTIAL, section)
+        for mode in ("paths", "-", "모르는모드", None):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names,
+                                          review_mode=mode)
+                row = self._listed(section)[0]
+                self.assertIn(" · " + RANGE_UNKNOWN + " — ", row)
+                self.assertNotIn(RANGE_ADDED, row)
+                self.assertEqual(section.count("- " + NAMES_PARTIAL + "\n"), 1)
+                self.assertIn(NAMES_PARTIAL, f.stdout.splitlines())
+
+    def test_paths_scope_still_marks_a_listed_answer_file_as_added(self):
+        names = {1: "a.txt\n%s/%s\n" % (ANS_DIR, _wf(0))}
+        f, r, section = self._run([(ID1, "의도다", OBS1)], [_q("D1", same_as=ID1)], names,
+                                  review_mode="paths")
+        row = self._listed(section)[0]
+        self.assertIn(" · " + RANGE_ADDED + " — ", row)
+        self.assertNotIn(RANGE_UNKNOWN, row)
+        self.assertNotIn(NAMES_PARTIAL, section)
 
     def test_odd_answer_file_names_do_not_filter(self):
         root = _filter_rd(self.rd)
@@ -2586,6 +2625,16 @@ class TestProcedureDoc(unittest.TestCase):
                      "push 하기 전에 qg 를 다시 돌리면",
                      "게시가 `skipped: pr-mismatch` 로 빠진다"):
             self.assertIn(fact, bullets[0])
+
+    def test_filter_fence_passes_the_review_mode(self):
+        """I5 의 filter 펜스가 리뷰 diff 모드를 넘긴다 — 스크립트가 아는 「범위 전체」 모드 이름과 같은 낱말로."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        slot = "<%s | paths | ->" % " | ".join(ic.WHOLE_SCOPE_MODES)
+        self.assertEqual(slot, "<session | branch | topic | range | paths | ->")
+        fence = [l for l in i5.split("\n") if "intent_critic.py\" filter " in l]
+        self.assertEqual(fence, ['python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" '
+                                 '--review-mode ' + slot])
+        self.assertEqual(i5.count("마지막 iteration Step 1c 출력의 `mode:` 값"), 1)
 
 
 if __name__ == "__main__":
