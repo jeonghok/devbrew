@@ -204,4 +204,27 @@ assert "range a..b: rc 0" "[ $rc = 0 ]"
 assert "range a..b: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
 cd / && rm -rf "$TMPDIR"
 
+# --- intent-critic --origin: 값 하나를 소비하고 범위 인자로 세지 않는다 ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+out="$("$SCRIPT" --session-id "test-origin-$$" --origin docs/brief.md 2>&1)"; rc=$?
+assert "--origin <경로>: rc 0" "[ $rc = 0 ]"
+assert "--origin <경로>: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
+assert "--origin <경로>: 실행이 진행해 세션 폴더를 만든다" "test -f '.claude/quality-gates/test-origin-$$/result.md'"
+for combo in "range x --origin docs/a.md" "--paths a/* --origin docs/a.md" "--origin docs/a.md branch"; do
+  out="$("$SCRIPT" --session-id "test-origin-$$" $combo 2>&1)"; rc=$?
+  assert "범위 인자 하나 + --origin($combo): rc 0" "[ $rc = 0 ]"
+  assert "범위 인자 하나 + --origin($combo): 범위 인자 둘로 세지 않는다" "! printf '%s' \"\$out\" | grep -q '범위 인자는 하나만'"
+done
+out="$("$SCRIPT" --session-id "test-origin-$$" range x --origin docs/a.md branch 2>&1)"; rc=$?
+assert "--origin 사이의 range + branch 는 그대로 거부된다: rc 1" "[ $rc = 1 ]"
+assert "--origin 사이의 range + branch 는 그대로 거부된다: 이유" "printf '%s' \"\$out\" | grep -q '범위 인자는 하나만'"
+for rest in "" "--ensure" "-x"; do
+  out="$("$SCRIPT" --session-id "test-origin-$$" --origin $rest 2>&1)"; rc=$?
+  assert "--origin 값 없음(뒤: '$rest'): rc 1" "[ $rc = 1 ]"
+  assert "--origin 값 없음(뒤: '$rest'): 이유 한 줄" "printf '%s' \"\$out\" | grep -qxF '❌ --origin 뒤에 원문 파일 경로가 없다.'"
+done
+h="$("$SCRIPT" --help)"
+assert "--help 가 --origin 을 안내한다" "printf '%s' \"\$h\" | grep -qF -- \"--origin <path>      Caller's origin file for the intent critic (tracked file in this repo)\""
+cd / && rm -rf "$TMPDIR"
+
 finish

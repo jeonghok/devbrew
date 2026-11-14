@@ -258,6 +258,10 @@ def write_answer_files(repo_root: str, answers_dir: str, files: list) -> tuple:
             return written, "답 파일을 쓰지 못했다"
         path = os.path.join(directory, name)
         try:
+            body = text.encode("utf-8")   # 파일을 만들기 전에 — 쓸 수 없는 글이 빈 파일을 남기지 않게
+        except UnicodeEncodeError:
+            return written, "답 파일을 쓰지 못했다"
+        try:
             fd = os.open(path, flags, 0o644)
         except FileExistsError:
             return written, "같은 이름의 답 파일이 이미 있다"
@@ -265,16 +269,38 @@ def write_answer_files(repo_root: str, answers_dir: str, files: list) -> tuple:
             return written, "답 파일을 쓰지 못했다"
         try:
             with os.fdopen(fd, "wb") as fh:
-                fh.write(text.encode("utf-8"))
-        except (OSError, UnicodeEncodeError):
+                fh.write(body)
+        except OSError:
             return written, "답 파일을 쓰지 못했다"
         written.append(os.path.join(rel, name) if rel else name)
     return written, None
 
 
 def _git(repo_root: str, *args: str):
-    return subprocess.run(["git", "-C", repo_root] + list(args), capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+    return subprocess.run(["git", "-C", repo_root] + list(args),
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+def _literal(paths: list) -> list:
+    """경로마다 `:(literal)` 을 붙인 pathspec — glob 글자 · `:!x` 같은 매직 꼴이어도 그 글자 그대로의 경로다.
+
+    전역 `--literal-pathspecs` 는 쓰지 않는다: 그 플래그는 환경 변수로 `git commit` 이 띄우는 훅에 물려져
+    훅 안의 pathspec 뜻까지 바꾼다.
+    """
+    out = []
+    for path in paths:
+        out.append(":(literal)" + path)
+    return out
+
+
+def _ignored(repo_root: str, paths: list) -> bool:
+    """git 이 무시하는 경로가 하나라도 있나. check-ignore 는 pathspec 매직을 받지 않고 `-q` 는 경로 하나만
+    받는다 — 경로마다 `./` 를 붙여(맨 앞 `:` 가 매직으로 읽히지 않게) 따로 묻는다."""
+    ignored = False
+    for path in paths:
+        if _git(repo_root, "check-ignore", "-q", "--", "./" + path).returncode == 0:
+            ignored = True
+    return ignored
 
 
 def _first_line(text: str) -> str:
@@ -284,8 +310,9 @@ def _first_line(text: str) -> str:
 
 def _unstage(repo_root: str, paths: list) -> None:
     """답 파일만 스테이지에서 내린다. HEAD 가 없어 restore 가 안 되면 캐시에서 뺀다."""
-    if _git(repo_root, "restore", "--staged", "--", *paths).returncode != 0:
-        _git(repo_root, "rm", "--cached", "--quiet", "--ignore-unmatch", "--", *paths)
+    specs = _literal(paths)
+    if _git(repo_root, "restore", "--staged", "--", *specs).returncode != 0:
+        _git(repo_root, "rm", "--cached", "--quiet", "--ignore-unmatch", "--", *specs)
 
 
 def commit_answer_files(repo_root: str, paths: list, message: str) -> tuple:
@@ -293,14 +320,14 @@ def commit_answer_files(repo_root: str, paths: list, message: str) -> tuple:
         return None, "커밋할 답 파일이 없다"
     if _git(repo_root, "symbolic-ref", "-q", "HEAD").returncode != 0:
         return None, "브랜치가 아니다(detached HEAD)"
-    add = _git(repo_root, "add", "--", *paths)
+    specs = _literal(paths)
+    add = _git(repo_root, "add", "--", *specs)
     if add.returncode != 0:
         _unstage(repo_root, paths)
-        ignored = _git(repo_root, "check-ignore", "-q", "--", *paths).returncode == 0
-        if ignored or "ignored by one of your .gitignore" in (add.stderr or ""):
+        if _ignored(repo_root, paths):
             return None, "답 자리를 git 이 무시한다"
         return None, "git add 실패 — " + _first_line(add.stderr)
-    commit = _git(repo_root, "commit", "--only", "-q", "-m", message, "--", *paths)
+    commit = _git(repo_root, "commit", "--only", "-q", "-m", message, "--", *specs)
     if commit.returncode != 0:
         _unstage(repo_root, paths)
         return None, "git commit 실패 — " + (_first_line(commit.stderr) or _first_line(commit.stdout))

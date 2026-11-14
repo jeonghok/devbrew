@@ -5,6 +5,7 @@
   intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
   intent-evidence.txt · intent-origin.md · intent-roadmap.md · intent-intent.md ·
   intent-doubts.md · intent-answered.md · intent-plan.txt     prepare 가 쓴다
+  intent-prepare-notices.txt  prepare 의 공시 줄(한 줄에 하나) — render 가 결과 절 앞에 싣는다
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
   intent-return.md       gate(건너뜀) · render 가 쓴다
@@ -52,6 +53,7 @@ INTENT = "intent-intent.md"
 DOUBTS = "intent-doubts.md"
 ANSWERED = "intent-answered.md"
 PLAN = "intent-plan.txt"
+PREPARE_NOTICES = "intent-prepare-notices.txt"
 OUT1 = "intent-critic-1.txt"
 OUT2 = "intent-critic-2.txt"
 QUESTIONS = "intent-questions.yaml"
@@ -77,10 +79,21 @@ NAMES_PREFIX = "review-i"
 NAMES_SUFFIX = ".names"
 NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 "
                  "가리지 못함")
+# 바뀐 파일 목록이 리뷰 범위가 바꾼 경로를 모두 담는 모드. paths 의 목록은 glob 에 맞는 경로뿐이다.
+WHOLE_SCOPE_MODES = ("session", "branch", "topic", "range")
+NAMES_PARTIAL = ("리뷰 범위가 paths 이거나 알 수 없어, 바뀐 파일 목록에 없는 답 파일은 이 범위가 "
+                 "더했는지 가리지 못함")
 RANGE_ADDED = "이 범위가 더한 답 파일"
 RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
+RECORD_FAILED = "답 기록 실패 %d개 — %s"
+UNREAD_INPUT = "답 입력에서 읽지 못한 글이 있다"
+# 기록되지 않은 답의 질문마다 한 줄 — 돌려주는 꼴에는 그 답이 실리지 않으므로 여기에 남긴다.
+RECORD_FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
+PICK_UNREAD = "답을 읽지 못함"
+SNIPPET = 80
+UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
 NO_QUESTION = "intent-critic — 질문 없음"
@@ -126,13 +139,18 @@ def _read(path: str) -> Optional[str]:
         return None
 
 
+# UTF-8 로 쓸 수 없는 글자(짝 없는 surrogate — YAML 의 `"\\ud800"` 이 그렇게 읽힌다)는 버리지 않고
+# `\\ud800` 꼴로 남긴다. 리뷰 트리의 답 파일 · 리뷰어 출력에서 온 그런 글이 단계를 죽이지 못한다.
+UNWRITABLE = "backslashreplace"
+
+
 def _write(path: str, text: str) -> None:
-    with open(path, "w", encoding="utf-8") as fh:
+    with open(path, "w", encoding="utf-8", errors=UNWRITABLE) as fh:
         fh.write(text)
 
 
 def _append(path: str, text: str) -> None:
-    with open(path, "a", encoding="utf-8") as fh:
+    with open(path, "a", encoding="utf-8", errors=UNWRITABLE) as fh:
         fh.write(text)
 
 
@@ -219,14 +237,26 @@ def _write_questions(rd: str, data: dict) -> None:
 
 # ---------------------------------------------------------------- 돌려주는 꼴
 
-_PLAIN_BAD_START = "-?:,[]{}#&*!|>'\"%@` "
+_PLAIN_BAD_START = "-?:,[]{}#&*!|>'\"%@` 0123456789.+~"
+
+
+def _reads_back(text: str) -> bool:
+    """YAML 로 읽으면 같은 글이 돌아오나 — 수 · 참거짓 · null 로 읽히는 글(`true` · `null` …)은 아니다."""
+    try:
+        return yaml.safe_load(text) == text
+    except yaml.YAMLError:
+        return False
 
 
 def _scalar(value) -> str:
-    """YAML 한 줄 값 — 그대로 읽히는 글은 그대로, 아니면 큰따옴표로 감싼다."""
+    """YAML 한 줄 값 — 글자 그대로 읽히는 글은 그대로, 아니면 큰따옴표로 감싼다.
+
+    숫자로 시작하는 글(숫자뿐인 짧은 커밋 해시 등)은 수로 읽히지 않게 늘 감싼다.
+    """
     text = "" if value is None else str(value)
     plain = (text != "" and text[0] not in _PLAIN_BAD_START and ": " not in text
-             and " #" not in text and "\n" not in text and not text.endswith((" ", ":")))
+             and " #" not in text and "\n" not in text and not text.endswith((" ", ":"))
+             and _reads_back(text))
     return text if plain else json.dumps(text, ensure_ascii=False)
 
 
@@ -315,14 +345,15 @@ def _settings_changed(pairs: List[tuple], key: str) -> bool:
 
 def _valid_answers_dir(raw: str) -> Optional[str]:
     value = raw.strip().rstrip("/")
-    if not value or value.startswith("/") or "\\" in value:
+    if not value or value.startswith(("/", ":")) or "\\" in value:
         return None
     ok = True
     parts = value.split("/")
     for part in parts:
-        if part in ("", ".", "..", ".git") or not part.isprintable():
+        # 대소문자를 가리지 않는 파일 시스템에서는 `.GIT` 이 `.git` 이다 — 글자 크기를 접어 견준다.
+        if part in ("", ".", "..") or part.casefold() == ".git" or not part.isprintable():
             ok = False
-    if not ok or parts[0] == ".claude":
+    if not ok or parts[0].casefold() == ".claude":
         return None
     return value
 
@@ -495,6 +526,23 @@ def _prepare(args, notices: List[str]) -> str:
     return call
 
 
+def _persist_prepare_notices(rd: str, notices: List[str]) -> None:
+    """공시 줄을 세션 파일에 남긴다 — 한 줄로 읽히는 것만, 결과 줄과 겹치는 근거 없음 줄은 뺀다."""
+    text = ""
+    for line in notices:
+        if io_.single_line(line) and line != NO_EVIDENCE:
+            text += line + "\n"
+    _write(_path(rd, PREPARE_NOTICES), text)
+
+
+def _prepare_notices(rd: str) -> List[str]:
+    out = []
+    for line in (_read(_path(rd, PREPARE_NOTICES)) or "").splitlines():
+        if line.strip():
+            out.append(line)
+    return out
+
+
 def cmd_prepare(args) -> int:
     notices: List[str] = []
     try:
@@ -502,6 +550,7 @@ def cmd_prepare(args) -> int:
     except InputError as exc:
         sys.stderr.write("intent_critic prepare: %s\n" % exc)
         return 4
+    _persist_prepare_notices(args.rd, notices)
     _emit(notices)
     print("intent-call: " + call)
     return 0
@@ -641,7 +690,7 @@ def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> O
 
 
 def _unidentified_id(question: str) -> str:
-    return "unidentified:" + hashlib.sha1(question.encode("utf-8")).hexdigest()[:12]
+    return "unidentified:" + hashlib.sha1(question.encode("utf-8", UNWRITABLE)).hexdigest()[:12]
 
 
 def _question_record(item: dict, ident: str, identified: bool, evidence: dict) -> dict:
@@ -729,15 +778,20 @@ def _range_identities(rd: str, tree_root: str) -> Optional[set]:
     return ids
 
 
-def _range_mark(path: str, ids: Optional[set]) -> str:
-    """added | not-added | unknown — 정체를 세우지 못하면 unknown 이다(표시 없이 두지 않는다)."""
+def _range_mark(path: str, ids: Optional[set], whole: bool) -> str:
+    """added | not-added | unknown — 정체를 세우지 못하면 unknown 이다(표시 없이 두지 않는다).
+
+    목록에 없다는 것은 목록이 범위 전체를 담을 때(whole)만 「더하지 않음」 이다. 아니면 unknown 이다.
+    """
     if ids is None:
         return "unknown"
     try:
         st = os.lstat(path)
     except OSError:
         return "unknown"
-    return "added" if (st.st_dev, st.st_ino) in ids else "not-added"
+    if (st.st_dev, st.st_ino) in ids:
+        return "added"
+    return "not-added" if whole else "unknown"
 
 
 def _load_answered(plan: dict, rd: str, notices: List[str]) -> dict:
@@ -758,7 +812,7 @@ def _answer_rel(answers_dir: str, path: str) -> str:
 
 
 def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answered: dict,
-           ids: Optional[set]) -> list:
+           ids: Optional[set], whole: bool) -> list:
     evidence = _evidence_lines(rd)
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
     first_ids = set()
@@ -793,7 +847,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
                 record["state"] = state
                 record["previous_answer"] = answered[ident]["answer"]
                 record["answer_file"] = _answer_rel(answers_dir, answered[ident]["path"])
-                record["range_mark"] = _range_mark(answered[ident]["path"], ids)
+                record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
                 decided.append(record)
                 continue
         record["label_in_run"] = label
@@ -833,9 +887,17 @@ def cmd_filter(args) -> int:
             status = "ran"
             answered = _load_answered(plan, rd, notices)
             ids = _range_identities(rd, plan["tree_root"])
-            questions = _judge(cands, plan, rd, ledger, counts, answered, ids)
+            whole = args.review_mode in WHOLE_SCOPE_MODES
+            questions = _judge(cands, plan, rd, ledger, counts, answered, ids, whole)
             if counts["answered"] and ids is None:
                 notices.append(NAMES_MISSING)
+            elif not whole:
+                partial = False
+                for record in questions:
+                    if record.get("range_mark") == "unknown":
+                        partial = True
+                if partial:
+                    notices.append(NAMES_PARTIAL)
     for key, template in COUNT_NOTICES:
         if counts[key]:
             notices.append(template % counts[key])
@@ -950,9 +1012,58 @@ def _unique_name(ident: str, now: datetime.datetime, taken: set, directory: str)
     return name, at
 
 
-def _store_record_notices(rd: str, data: Optional[dict], notices: List[str]) -> None:
-    """record 의 공시를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
-    if data is None or not notices:
+def _stray_lines(entries: List[dict], orphan: int) -> int:
+    """어느 질문에도 붙이지 못한 답 글의 줄 수 — 첫 머리 앞의 글과, 라벨을 고른 답(머리 아래 줄이 없는 꼴)
+    아래에 남은 글. 정체가 틀린 머리 줄은 여기에 든다."""
+    stray = orphan
+    for entry in entries:
+        if entry["pick"] != TYPED:
+            for line in entry["lines"]:
+                if line.strip():
+                    stray += 1
+    return stray
+
+
+def _one_line(value, limit: int = 0) -> str:
+    """공시 줄에 싣는 글 — 줄바꿈 · 제어 글자를 빈칸으로 접어 한 줄로 만들고, limit 가 있으면 그 길이에서 자른다.
+
+    리뷰어 출력에서 온 글이 스크립트 출력의 줄이나 결과 절의 머리 줄을 흉내 내지 못한다.
+    """
+    chars = []
+    for ch in _text(value):
+        # 짝 없는 surrogate 는 지우지 않는다 — 쓰는 자리가 `\\ud800` 꼴로 남긴다.
+        chars.append(ch if ch.isprintable() or "\ud800" <= ch <= "\udfff" else " ")
+    text = " ".join("".join(chars).split())
+    if limit and len(text) > limit:
+        text = text[:limit] + "…"
+    return text
+
+
+def _failed_notices(failed: List[tuple]) -> List[str]:
+    """기록되지 않은 답 [(질문, 고른 답 | None, 사유)] 의 공시 — 사유마다 수 한 줄, 그 아래 질문마다 정체 ·
+    고른 답 · 질문 글 한 줄. 그 질문에 표지를 단다."""
+    reasons: List[str] = []
+    counts: dict = {}
+    for record, _answer, reason in failed:
+        record["record_failed"] = True
+        if reason not in counts:
+            reasons.append(reason)
+            counts[reason] = 0
+        counts[reason] += 1
+    lines = []
+    for reason in reasons:
+        lines.append(RECORD_FAILED % (counts[reason], reason))
+        for record, answer, why in failed:
+            if why == reason:
+                lines.append(RECORD_FAILED_ITEM % (_one_line(record.get("id")),
+                                                   answer or PICK_UNREAD,
+                                                   _one_line(record.get("question"), SNIPPET)))
+    return lines
+
+
+def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: bool) -> None:
+    """record 의 공시 · 표지를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
+    if data is None or not (notices or changed):
         return
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     _write_questions(rd, data)
@@ -962,37 +1073,60 @@ def _record(args) -> tuple:
     """(공시 줄들, 기록한 답 파일 수)."""
     plan = _read_plan(args.rd)
     data = _read_questions(args.rd)
-    if plan is None:
-        notices = ["답을 기록하지 못했다 — 준비 파일(%s)을 읽지 못함" % PLAN]
-        _store_record_notices(args.rd, data, notices)
-        return notices, 0
-    if plan["mode"] == "range":
+    if plan is not None and plan["mode"] == "range":
         return [], 0
     cfg = _read_config(args.rd)
     text = _read(args.answers)
-    if data is None or cfg is None or text is None:
-        notices = ["답을 기록하지 못했다 — 거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"]
-        _store_record_notices(args.rd, data, notices)
-        return notices, 0
     known: dict = {}
     pending: dict = {}
-    for record in data["questions"]:
+    asked: List[dict] = []
+    for record in (data or {}).get("questions") or []:
         if isinstance(record, dict) and record.get("state") == "ask":
             known[record["id"]] = known.get(record["id"], 0) + 1
             pending.setdefault(record["id"], []).append(record)
-    entries, orphan = parse_answer_input(text, known)
+            asked.append(record)
+    entries: List[dict] = []
+    orphan = 0
+    if data is not None and text is not None:
+        entries, orphan = parse_answer_input(text, known)
+    matched = []
+    for entry in entries:
+        matched.append((pending[entry["id"]].pop(0), entry))
+
+    blocked = None
+    if plan is None:
+        blocked = "준비 파일(%s)을 읽지 못함" % PLAN
+    elif data is None or cfg is None or text is None:
+        blocked = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
+    if blocked:
+        notices = ["답을 기록하지 못했다 — " + blocked]
+        failed = []
+        # 답 입력이 비어 있으면 받은 답이 없다 — 그때는 「답하지 않음」 으로 둔다.
+        if text is None or text.strip():
+            picked = {}
+            for record, entry in matched:
+                picked[id(record)] = _read_pick(entry)[0]
+            for record in asked:
+                failed.append((record, picked.get(id(record)), blocked))
+        notices += _failed_notices(failed)
+        _save_record(args.rd, data, notices, bool(failed))
+        return notices, 0
+
     notices = []
     if not entries and known and text.strip():
-        asked = 0
-        for ident in known:
-            asked += known[ident]
-        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % asked)
+        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % len(asked))
     if orphan:
         notices.append("머리 앞의 답 글을 읽지 못함 %d줄" % orphan)
+    # 머리가 맞지 않은 질문 — 붙이지 못한 답 글이 있으면 그 답을 읽지 못한 것이다(없으면 답하지 않은 질문이다).
+    unread = []
+    if _stray_lines(entries, orphan):
+        for ident in pending:
+            for record in pending[ident]:
+                unread.append((record, None, UNREAD_INPUT))
     if not entries:
-        _store_record_notices(args.rd, data, notices)
+        notices += _failed_notices(unread)
+        _save_record(args.rd, data, notices, bool(unread))
         return notices, 0
-    data["record_notices"] = list(data.get("record_notices") or []) + notices
     answers_dir = cfg["answers_dir"]
     target = _review_target(args.repo, answers_dir)
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -1000,8 +1134,7 @@ def _record(args) -> tuple:
     taken: set = set()
     files = []
     pairs = []
-    for entry in entries:
-        record = pending[entry["id"]].pop(0)
+    for record, entry in matched:
         answer, raw = _read_pick(entry)
         name, at = _unique_name(record["id"], now, taken, directory)
         files.append((name, ia.render_answer_file(
@@ -1009,13 +1142,17 @@ def _record(args) -> tuple:
             record.get("label", ""), record.get("observation") or [], answer, raw, target, at)))
         pairs.append((record, answer))
     paths, write_error = ia.write_answer_files(args.repo, answers_dir, files)
+    # 답 파일이 생긴 질문만 답함이다. 파일을 쓰지 못한 질문은 묻는 상태로 남기고 수와 사유를 공시한다.
+    failed = []
     for i, (record, answer) in enumerate(pairs):
-        record["state"] = "answered"
-        record["answer"] = answer
-        record["file"] = paths[i] if i < len(paths) else "-"
-    if write_error and paths:
-        notices.append("답 파일 일부를 쓰지 못했다 — %s" % write_error)
-        data["record_notices"].append(notices[-1])
+        if i < len(paths):
+            record["state"] = "answered"
+            record["answer"] = answer
+            record["file"] = paths[i]
+        else:
+            failed.append((record, answer, write_error or "답 파일이 없다"))
+    notices += _failed_notices(failed + unread)
+    data["record_notices"] = list(data.get("record_notices") or []) + notices
     if paths:
         sha, commit_error = ia.commit_answer_files(args.repo, paths,
                                                    COMMIT_MESSAGE % len(paths))
@@ -1060,7 +1197,7 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         return "uncountable", UNREADABLE, ["거르기 결과(%s)가 없음" % QUESTIONS]
     if data.get("status") == "uncountable":
         return "uncountable", UNREADABLE, notices
-    asked = answered = wrong = 0
+    asked = answered = wrong = unanswered = 0
     for record in data["questions"]:
         state = record.get("state")
         if state in ("ask", "answered"):
@@ -1069,6 +1206,8 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
             answered += 1
             if record.get("answer") == "잘못 골랐다":
                 wrong += 1
+        elif state == "ask" and not record.get("record_failed"):
+            unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
     counts = data.get("counts") or {}
     if asked == 0:
         if counts.get("evidence") and not counts.get("answered"):
@@ -1076,8 +1215,10 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         return "ran", NO_QUESTION, notices
     if mode == "range":
         return "ran", "intent-critic — 질문 %d개 아직 묻지 않음(범위 모드)" % asked, notices
-    return ("ran", "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)"
-            % (asked, answered, wrong), notices)
+    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (asked, answered, wrong)
+    if unanswered:
+        line += UNANSWERED % unanswered
+    return "ran", line, notices
 
 
 def _rows(data: Optional[dict], mode: str) -> List[dict]:
@@ -1142,7 +1283,15 @@ def cmd_render(args) -> int:
     status, line, notices = _outcome(plan, data, args.mode)
     rows = _rows(data, args.mode)
     lead = "" if not existing or existing.endswith("\n") else "\n"
-    _append(result_path, lead + _section(line, notices, data, rows))
+    shown = list(notices)
+    if plan is not None:
+        # prepare 의 공시가 앞에 선다. filter · record 가 다시 낸 줄은 한 번만 보인다.
+        front = []
+        for prepared in _prepare_notices(rd):
+            if prepared not in notices and prepared not in front:
+                front.append(prepared)
+        shown = front + shown
+    _append(result_path, lead + _section(line, shown, data, rows))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
     _write_return(rd, status, args.mode, commit, rows)
     _write(marker, line + "\n")
@@ -1214,6 +1363,10 @@ def _parser() -> argparse.ArgumentParser:
                                    "split=1 과 2 의 합). 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 "
                                    "intent-questions.yaml 을 쓴다. 공시 줄들 뒤 「intent-ask: <k>」. rc 0.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
+    p.add_argument("--review-mode", default="-",
+                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값). %s 이면 바뀐 파일 "
+                        "목록이 범위 전체다. paths · 모름(-) · 그 밖의 값이면 목록에 없는 답 파일을 "
+                        "「더하지 않음」 이 아니라 「모름」 으로 표시한다." % " · ".join(WHOLE_SCOPE_MODES))
     p.set_defaults(func=cmd_filter)
 
     p = sub.add_parser("record", help="답 파일을 docs 답 자리에 쓰고 그 파일만 커밋한다",
@@ -1237,7 +1390,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: List[str]) -> int:
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.reconfigure(encoding="utf-8", errors=UNWRITABLE)
     args = _parser().parse_args(argv)
     return args.func(args)
 
