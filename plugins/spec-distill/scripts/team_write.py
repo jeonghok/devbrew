@@ -276,6 +276,27 @@ def hand_fix(team, r) -> list:
             + indented(team_files.not_text(r.scope)))
 
 
+def hand_fixes(top: Path, team, old: dict, new: dict, W) -> list:
+    """있던 과제(옛 행 · 새 행 모두 묶음) 가운데 의도 · 범위 · 지시 원문 범위가 옛 행(지시 원문 범위는 INTENT.md 에서 읽은 것)과
+    다른 것의 손으로 고칠 글. 새 표의 묶음 행 범위가 원자료 사본 밖이면 Refused — 파일 밖 범위를 적으라고 하지 않는다."""
+    try:
+        total = team_files.line_count((top / team.original).read_bytes())
+    except OSError as exc:
+        raise W.Refused("원자료 사본을 읽지 못했다: %s (%s)" % (team.original, exc))
+    todo = []
+    for r in new.values():
+        if r.kind != R.KIND_BUNDLE:
+            continue
+        far = ["%d–%d" % ab for ab in r.ranges if ab[1] > total]
+        if far:
+            raise W.Refused("%s: 지시 원문 범위 %s 가 %s 의 %d줄 밖이다" % (r.id, " · ".join(far), team.original, total))
+        before = old.get(r.id)
+        if before is not None and before.kind == R.KIND_BUNDLE and \
+                (before.intent, before.scope, before.ranges) != (r.intent, r.scope, r.ranges):
+            todo += hand_fix(team, r)
+    return todo
+
+
 def update_files(top: Path, team, old: dict, new: dict, changed: list, added: list, removed: list, idx, roadmap_rel: str,
                  W) -> tuple:
     """(쓸 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}, 손으로 고칠 것 줄들, 알림 줄들) — update 의 team 갈래.
@@ -283,19 +304,14 @@ def update_files(top: Path, team, old: dict, new: dict, changed: list, added: li
     바뀌었거나 새로 온 묶음 행의 sources.md 는 글이 다를 때만 다시 쓴다. 새로 묶음이 된 행은 INTENT.md 와 결과 폴더의
     빈 파일을 깐다 — INTENT.md 자리에 무엇이든(매달린 링크도) 있으면 Refused. 있던 과제의 INTENT.md 는 쓰지 않는다:
     의도 · 범위 · 지시 원문 범위 가운데 하나라도 바뀌었으면 손으로 고칠 글을 낸다. 사라졌거나 묶음이 아니게 된 과제의
-    폴더는 건드리지 않고 알린다. 표의 범위가 원자료 사본 밖이거나 쓸 자리 · 그 폴더 성분이 심볼릭 링크면 Refused."""
-    try:
-        total = team_files.line_count((top / team.original).read_bytes())
-    except OSError as exc:
-        raise W.Refused("원자료 사본을 읽지 못했다: %s (%s)" % (team.original, exc))
+    폴더는 건드리지 않고 알린다. 손으로 고칠 글 · 범위 검사는 hand_fixes 의 것이다 — 범위만 다른 행(changed 밖)도 싣는다.
+    쓸 자리 · 그 폴더 성분이 심볼릭 링크면 Refused."""
+    todo = hand_fixes(top, team, old, new, W)
     intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
-    rewrite, once, todo, notes = {}, {}, [], []
+    rewrite, once, notes = {}, {}, []
     for r in [new[i] for i in new if i in changed or i in added]:
         if r.kind != R.KIND_BUNDLE:
             continue
-        far = ["%d–%d" % ab for ab in r.ranges if ab[1] > total]
-        if far:
-            raise W.Refused("%s: 지시 원문 범위 %s 가 %s 의 %d줄 밖이다" % (r.id, " · ".join(far), team.original, total))
         ids, parts = R.bundle_parts(r, idx)
         text = team_files.render_sources(r.id, r.title, ids, parts, r.receives, r.gives)
         src = team.sources(r.id)
@@ -306,8 +322,6 @@ def update_files(top: Path, team, old: dict, new: dict, changed: list, added: li
             rewrite[top / src] = text
         before = old.get(r.id)
         if before is not None and before.kind == R.KIND_BUNDLE:
-            if (before.intent, before.scope, before.ranges) != (r.intent, r.scope, r.ranges):
-                todo += hand_fix(team, r)
             continue
         intent = team.intent(r.id)
         _refuse_links(top, intent, W)

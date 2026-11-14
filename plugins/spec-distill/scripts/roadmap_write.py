@@ -54,6 +54,8 @@ RISK_ORDER_NOTICE = ("[spec-distill] 위험 줄에 번호가 없어 줄 순서�
                      "위험 줄을 지우거나 옮긴 뒤 다시 만들면 번호가 다른 위험에 붙는다. "
                      "위험 줄마다 번호를 박고(`- 위험 K<n> — …`) "
                      "다시 만들면 번호가 그 줄에 붙어 다닌다.")
+RANGES_ONLY = ("[spec-distill] 아무것도 쓰지 않았다 — 표와 로드맵은 같고, 지시 원문 범위만 과제의 INTENT.md 와 다르다. "
+               "범위는 INTENT.md 에만 있으니 아래대로 손으로 고친다")
 STAGE_PENDING_NOTICE = ("[spec-distill] 머지 여부를 확인하지 못했다 — 이 판은 team 형식의 단계를 계산하지 않는다. "
                         "머지된 에픽을 바꾸지 않았는지 직접 확인한다")
 
@@ -388,12 +390,15 @@ def used_numbers(roadmap_text: str) -> dict:
     return best
 
 
-def _canonical(row):
-    """표 행을 로드맵이 되읽히는 번호 순서로 맞춘 사본 — 묶음은 id 정렬, 그 밖은 발화(S) 먼저. 순서만 다른 표를 바뀜으로 세지 않는다."""
+def _canonical(row, team=False):
+    """표 행을 로드맵이 되읽히는 번호 순서로 맞춘 사본 — 묶음은 id 정렬, 그 밖은 발화(S) 먼저. 순서만 다른 표를 바뀜으로 세지 않는다.
+    team 이면 지시 원문 범위를 뺀다 — 범위의 집은 INTENT.md 라 범위만 다른 행은 생성기가 쓸 것이 없다(손으로 고칠 것이다)."""
     if row.kind == R.KIND_BUNDLE:
         ids = sorted(set(row.ids), key=id_sort_key)
     else:
         ids = [t for t in row.ids if R._is_s(t)] + [t for t in row.ids if not R._is_s(t)]
+    if team:
+        return dataclasses.replace(row, ids=ids, ranges=[])
     return dataclasses.replace(row, ids=ids)
 
 
@@ -422,10 +427,16 @@ def cmd_update(a) -> int:
     idx = R.index_brief(read(a.brief), read(a.audit))
     old = {r.id: r for r in old_rows}
     new = {r.id: r for r in new_rows}
-    changed = [i for i in new if i in old and _canonical(new[i]) != _canonical(old[i])]
+    changed = [i for i in new if i in old and _canonical(new[i], team) != _canonical(old[i], team)]
     added = [i for i in new if i not in old]
     removed = [i for i in old if i not in new]
     if not (changed or added or removed) and list(new) == list(old):
+        todo = team_write.hand_fixes(top, team, old, new, W) if team else []   # 범위만 다른 과제 — 쓰지 않고 고칠 글만
+        if todo:
+            print(RANGES_ONLY)
+            for line in todo:
+                print(line)
+            return EXIT_TODO
         print("[spec-distill] 바뀐 에픽이 없다 — 쓰지 않았다")
         return 0
     st = stages(top, roadmap, layout)
