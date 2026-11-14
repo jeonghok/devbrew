@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.9.0] — 2026-11-14
+
+### Added
+- intent-critic 리뷰어(`agents/intent-critic.md`, `tools: Read, Grep, Glob`) — 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다.
+- 판정 · 게시 뒤에 도는 intent-critic 단계(`skills/quality-pipeline/references/intent-critic.md` · `scripts/intent_critic.py` · `scripts/intent_answers.py` · `scripts/intent_origin.py`). 걷기 관찰이 있거나 차등 결과에 통과로 끝나지 않은 귀속이 있을 때만 리뷰어를 부르고(최대 둘, 실패 시 넷), 판정 · `findings.yaml` · 게시 본문에는 들지 않는다.
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — 이 단계만 끈다.
+- 설정 키 둘 — `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`(기본 `docs/qg-intent-answers`) · `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES`(기본 120000). 리뷰 대상 변경이 설정 파일에서 그 키를 바꾸면 기본값으로 돌아간다.
+- `/quality-gates:quality-pipeline` 의 `--origin <경로>` 인자 — 부른 쪽이 넘기는 원문 파일이고 범위 인자가 아니다.
+- 답 파일 커밋 — 사용자의 답을 docs 답 자리에 쓰고 그 파일만 경로를 지정해 지금 브랜치에 커밋한다(push 하지 않는다).
+
+### Changed
+- 완료 보고의 마지막 스크립트 출력이 intent-critic 결과 줄이다(게시 결과 줄이 아니다).
+- `scripts/doc_paths.py` 의 `settings_key_changed` 가 키 인자를 받는다(기본값은 기존 키라 호출은 그대로 된다).
+
 ## [14.8.1] — 2026-10-30
 
 patch 인 이유 — 링크로 배송하는 공유 docreview 엔진(`scripts/docreview_state.py` · `scripts/docreview_advice.py`, 정본 `shared/docreview/scripts/`)이 바뀌었다(spec-distill 8.13.1 과 같은 변경).

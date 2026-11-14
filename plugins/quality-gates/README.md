@@ -8,7 +8,8 @@
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v7.1.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분(`accept`/`reject`/`hold`/`absorbed`/`coerced`/`source_failed`/`uncountable`/`suppressed`)을 부르고, 그 배선을 `tools/adjudication/` 의 판정기와 `shared/tests/test_adjudication_{wiring,consumed}.sh` 가 강제한다. 소비자는 `synthesize_findings.py`·`synthesize_artifact_findings.py`. **범위**: 강제되는 것은 `.py` 소비자와 `Ledger` import 가 있는 자리이고, `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계).
-- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 넷(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 다섯(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`·`intent-critic`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 · C6 — intent-critic 리뷰어는 읽기 전용이고 판정 밖이다** — `intent-critic` agent 는 `tools: Read, Grep, Glob` 만 갖는다. 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검하며, 그 출력은 `findings.yaml` · 판정 인자 줄 · 게시 본문에 들지 않는다. 사용자의 답은 qg 가 docs 답 자리에 쓰고 그 파일만 커밋한다. 집행은 `plugins/quality-gates/tests/test_intent_critic_wiring.sh`.
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`code-recritic`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — 기본 substrate 는 reviewer-persona 편집이다 — 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고친다.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). 토픽 · 범위면 그 전체 diff 로 판단하고, 선언이 깨졌으면(`declaration-invalid`) trivia escape 를 쓰지 않는다.
@@ -74,6 +75,7 @@ quality-gates/
 │   ├── security-reviewer.md     # ① 보안 각도 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/quality-gates:artifact-critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/quality-gates:artifact-critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
+│   ├── intent-critic.md         # intent-critic 단계(판정 · 게시 뒤) — 사용자가 고른 의도 자체가 맞는지 근거 줄을 인용해 묻는다 (read-only · 판정 밖)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── resolve-range.sh                      # `range <시작>[..<끝>]` 을 실행 시작에 두 커밋으로 얼림(`range-scope.txt`)
@@ -93,6 +95,9 @@ quality-gates/
 │   ├── build_codex_prompt.py                 # ① 다른 모델 계열(codex-reviewer)용 prompt builder — 기준 블록 + 의도 출처
 │   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
+│   ├── intent_critic.py                      # intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 답 기록 · 렌더
+│   ├── intent_answers.py                     # 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋(push 없음)
+│   ├── intent_origin.py                      # `--origin` 으로 받은 원문 파일 · 로드맵 입력 읽기
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── secret-scan.py                        # 게시 직전 값-차단 secret scan (FAIL CLOSED · 첫 줄 리터럴 scan_ok)
 │   ├── render-terminal.py                    # Final verdict STATUS 표 (`table`)
@@ -109,6 +114,7 @@ quality-gates/
 │       ├── SKILL.md         # 한 파이프라인 실행기 — 리뷰 → 차등 테스트 → 합성 · 판정 in-turn 오케스트레이션
 │       └── references/
 │           ├── differential-test.md  # ② 차등 테스트 절차 전문 (매 iteration Read)
+│           ├── intent-critic.md      # intent-critic 단계 절차 전문 (판정 · 게시 뒤 Read)
 │           └── state-file-format.md  # 로컬 결과 result.md 형식
 └── tests/                            # Bash/Python 단위 테스트 (test_publish_comment_sink.sh, test_secret_scan.py 등)
 ```
@@ -237,7 +243,8 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기
  ├ e2e ── 시나리오 질문(여러 선택) → 고른 것마다 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── 숫자를 만든 직후의 펜스가 낸 결과 줄로 verdict.py 의 판정 줄 · result.md
- └ Publish ── sink 한 번 · posted:/skipped:/failed:
+ ├ Publish ── sink 한 번 · posted:/skipped:/failed:
+ └ intent-critic ── 판정 밖 질문 · 판정 · 게시 뒤 · 답 파일만 커밋 (범위 모드는 묻지 않음)
 ```
 
 ### Trivia escape
@@ -405,6 +412,8 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 - `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 (e2e 부팅의 준비 신호를 기다리는 초 — 넘으면 판정안이 「미확인(부팅 실패)」)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/quality-gates:quality-pipeline` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
+- `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`: `docs/qg-intent-answers` (intent-critic 답 파일 폴더 — 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
+- `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES`: 120000 (intent-critic 입력 상한 바이트 — 넘으면 한 번에 넣어 부른다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
 
 ### 문서 경로 (`DEVBREW_QUALITY_GATES_DOC_PATHS`)
 
@@ -426,6 +435,13 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 
 **`.claude/quality-gates/baseline-cache/`** — 12.x 까지의 판이 남긴 기준선 캐시 폴더다. 13.0.0 은 이 폴더를
 쓰지도 읽지도 않고 GC 도 지우지 않는다 — 남아 있으면 직접 지워도 된다.
+
+### intent-critic 답 파일
+
+intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 판정과 게시가 끝난 뒤 돌며 판정에 들지 않는다. 리뷰어는 걷기 관찰이 있거나 차등 결과에 통과로 끝나지 않은 귀속(`STILL_GREEN` · `FIXED` · `NEW_TEST_GREEN` 이 아닌 것)이 하나라도 있을 때만 부른다 — 그런 근거가 없으면 부르지 않고 「근거 없음」으로 끝낸다. 부르는 횟수는 최대 둘, 실패하면 넷이다.
+
+- 답 파일은 qg 가 지금 브랜치에 커밋하고 push 하지 않는다. 그 파일만 경로를 지정해 커밋한다.
+- 답 파일은 다음 실행의 리뷰 diff 에 들어간다. 빼려면 `DEVBREW_QUALITY_GATES_DOC_PATHS` 에 `docs/qg-intent-answers/` 를 더한다.
 
 ### Kill switches (보안 컨트롤)
 
@@ -468,6 +484,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | codex 리뷰(`scripts/run_codex_reviewer.sh`) 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
 | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도. 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` | intent-critic 단계만 끈다 — 판정에 닿지 않는다. 결과 줄은 「intent-critic 꺼짐(kill switch)」 한 줄이다. 집행 `intent_critic.py gate`. |
 
 **차등 테스트 · 스코프 단위 disable:**
 

@@ -87,6 +87,9 @@ n="$(printf '%s\n' "$RKS" | grep -c -F -- "$KILL")"
 if [ "${n:-0}" -ge 1 ]; then ok "README kill switch 표에 ${KILL} (${n})"
 else no "README kill switch 표에 ${KILL} 가 없다"; fi
 
+note "[README 뜻 문장 — AC17 자리 4]"
+assert_contains "$(flat < "$RM")" "intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다." "README: intent-critic 뜻 문장"
+
 note "[옛 이름 부재]"
 for f in "$S" "$PROC" "$SFF" "$RM" "$SCRIPTS/setup-qg.sh" "$PLUGIN_ROOT/agents/intent-critic.md" \
          "$PLUGIN_ROOT/tests/test_plain_qg_templates.sh" "$PLUGIN_ROOT/tests/test_setup_qg.sh" "$0"; do
