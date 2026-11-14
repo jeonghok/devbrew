@@ -339,14 +339,15 @@ class TestCommitAnswers(unittest.TestCase):
         """「git 이 무시한다」 사유는 git 의 stderr 글이 아니라 check-ignore 판정에서 나온다 — git 의
         글이 영어가 아니어도(다른 로케일) 같은 사유다. 무시되지 않는 경로의 add 실패는 그 사유가 아니다."""
         name = self.files[1][0]
-        for ignore_line in ("docs/qg-intent-answers/\n", "*%s\n" % name[-20:]):
-            with self.subTest(ignore=ignore_line), tempfile.TemporaryDirectory() as d, \
-                    _other_locale_git():
+        for rel, ignore_line in ((self.rel, "docs/qg-intent-answers/\n"),
+                                 (self.rel, "*%s\n" % name[-20:]), (":!x", ":!x/\n")):
+            with self.subTest(dir=rel, ignore=ignore_line), \
+                    tempfile.TemporaryDirectory() as d, _other_locale_git():
                 root = _git_repo(d)
                 Path(root, "a.txt").write_text("changed\n", encoding="utf-8")
                 _git(root, "add", "a.txt")
                 Path(root, ".gitignore").write_text(ignore_line, encoding="utf-8")
-                paths, _ = ia.write_answer_files(root, self.rel, self.files)
+                paths, _ = ia.write_answer_files(root, rel, self.files)
                 sha, err = ia.commit_answer_files(root, paths, "m")
                 self.assertEqual((sha, err), (None, "답 자리를 git 이 무시한다"))
                 self.assertEqual(_git(root, "diff", "--cached", "--name-only").stdout.split(),
