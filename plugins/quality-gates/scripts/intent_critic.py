@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""쓴소리 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 상한 · 답 기록 · 렌더.
+"""intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 상한 · 답 기록 · 렌더.
 
 하위 명령은 `intent_critic.py <sub> --help` 가 정본이다. 세션 폴더(`--rd`)의 파일 이름:
   intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
@@ -9,9 +9,9 @@
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
   intent-return.md       gate(건너뜀) · render 가 쓴다
   intent-rendered.txt    render 가 쓴다 — 두 번째 render 는 덧붙이지 않는다
-  result.md              render 가 끝에 `## 쓴소리` 를 덧붙인다
+  result.md              render 가 끝에 `## intent-critic` 을 덧붙인다
 
-쓴소리 출력은 판정 밖이다 — findings.yaml · 판정 인자 줄 · PR 코멘트에 쓰지 않는다.
+intent-critic 출력은 판정 밖이다 — findings.yaml · 판정 인자 줄 · PR 코멘트에 쓰지 않는다.
 버린 · 거른 후보는 `adjudication.Ledger` 로 센다(filter).
 """
 from __future__ import annotations
@@ -66,7 +66,9 @@ FILTER_ANSWERS = ("의도다", "잘못 골랐다")
 HEADER = "=== id: "
 PICK_SEP = " · pick: "
 TYPED = "typed"
-SECTION = "## 쓴소리"
+SECTION = "## intent-critic"
+SECTION_LEAD = ("intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · "
+                "동작)가 맞는지를 점검한다. 이 절은 판정에 들지 않는다.")
 RENDERED = "intent-rendered.txt"
 FIRST_CANDIDATES = "## 첫째 호출의 후보"
 INTENT_DOUBTS_MARK = "<!-- intent-doubts -->"
@@ -78,21 +80,21 @@ NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 �
 RANGE_ADDED = "이 범위가 더한 답 파일"
 RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
-COMMIT_MESSAGE = "docs(qg-intent): 쓴소리 답 %d개 기록"
+COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 
-NO_EVIDENCE = "쓴소리 — 근거 없음"
-NO_QUESTION = "쓴소리 — 질문 없음"
-UNREADABLE = "쓴소리 — 리뷰어 출력을 읽지 못함(셀 수 없음)"
-ALREADY = "쓴소리 — 이 실행은 이미 쓴소리 단계를 돌았다"
+NO_EVIDENCE = "intent-critic — 근거 없음"
+NO_QUESTION = "intent-critic — 질문 없음"
+UNREADABLE = "intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)"
+ALREADY = "intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 SECOND_FAILED = "둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다"
 
 GATE_SKIPS = {
-    "aborted": ("쓴소리 — 건너뜀(멈춘 실행)", "멈춘 실행"),
-    "trivia": ("쓴소리 — 건너뜀(작은 수정 — trivia)", "작은 수정 — trivia"),
-    "scope-empty": ("쓴소리 — 건너뜀(리뷰할 diff 없음)", "리뷰할 diff 없음"),
-    "tree-failed": ("쓴소리 — 리뷰 트리를 만들지 못함", "리뷰 트리를 만들지 못함"),
+    "aborted": ("intent-critic — 건너뜀(멈춘 실행)", "멈춘 실행"),
+    "trivia": ("intent-critic — 건너뜀(작은 수정 — trivia)", "작은 수정 — trivia"),
+    "scope-empty": ("intent-critic — 건너뜀(리뷰할 diff 없음)", "리뷰할 diff 없음"),
+    "tree-failed": ("intent-critic — 리뷰 트리를 만들지 못함", "리뷰 트리를 만들지 못함"),
 }
-KILL_LINE = "쓴소리 꺼짐(kill switch)"
+KILL_LINE = "intent-critic 꺼짐(kill switch)"
 
 # 거름 공시 — 0 이 아닌 것만 이 순서로 낸다.
 COUNT_NOTICES = (
@@ -673,7 +675,7 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Opti
         main, main_why, extra = None, "준비 파일의 갈래를 모름(%s)" % (call or "-"), None
     if main is None:
         ledger.source_failed("intent-critic", main_why, primary=True)
-        ledger.uncountable("쓴소리 후보", main_why)
+        ledger.uncountable("intent-critic 후보", main_why)
         return None
     out = []
     number = 1 if call != "single" else 2
@@ -819,7 +821,7 @@ def cmd_filter(args) -> int:
     questions: List[dict] = []
     if plan is None:
         status, call = "uncountable", "-"
-        ledger.uncountable("쓴소리 후보", "준비 파일(%s)이 없음" % PLAN)
+        ledger.uncountable("intent-critic 후보", "준비 파일(%s)이 없음" % PLAN)
     elif plan["call"] == "none":
         status, call = "no-evidence", "none"
     else:
@@ -839,7 +841,7 @@ def cmd_filter(args) -> int:
             notices.append(template % counts[key])
     report = ledger.report()
     for reason in report["reasons"]:
-        notices.append("쓴소리 처분 — " + reason)
+        notices.append("intent-critic 처분 — " + reason)
     asked = 0
     for record in questions:
         if record["state"] == "ask":
@@ -1073,8 +1075,8 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
             return "ran", NO_EVIDENCE, notices
         return "ran", NO_QUESTION, notices
     if mode == "range":
-        return "ran", "쓴소리 — 질문 %d개 아직 묻지 않음(범위 모드)" % asked, notices
-    return ("ran", "쓴소리 — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)"
+        return "ran", "intent-critic — 질문 %d개 아직 묻지 않음(범위 모드)" % asked, notices
+    return ("ran", "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)"
             % (asked, answered, wrong), notices)
 
 
@@ -1092,7 +1094,7 @@ def _rows(data: Optional[dict], mode: str) -> List[dict]:
 
 
 def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict]) -> str:
-    out = ["", SECTION, "", "- " + line]
+    out = ["", SECTION, "", SECTION_LEAD, "", "- " + line]
     for notice in notices:
         out.append("- " + notice)
     if data and data.get("commit_line"):
@@ -1154,7 +1156,7 @@ def cmd_render(args) -> int:
 def _parser() -> argparse.ArgumentParser:
     top = argparse.ArgumentParser(
         prog="intent_critic.py",
-        description="쓴소리 단계 — 판정 밖 질문의 입구 · 조립 · 거름 · 기록 · 렌더.")
+        description="intent-critic 단계 — 판정 밖 질문의 입구 · 조립 · 거름 · 기록 · 렌더.")
     sub = top.add_subparsers(dest="sub", metavar="<sub>")
     sub.required = True
 
@@ -1224,9 +1226,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--answers", required=True, help="답 입력 파일")
     p.set_defaults(func=cmd_record)
 
-    p = sub.add_parser("render", help="result.md 에 「## 쓴소리」 를 덧붙이고 돌려주는 꼴을 쓴다",
-                       description="공시 줄들 뒤 마지막 줄이 쓴소리 결과 줄이다. 이미 「## 쓴소리」 가 "
-                                   "있으면 덧붙이지 않는다. rc 0.")
+    p = sub.add_parser("render", help="result.md 에 「## intent-critic」 을 덧붙이고 돌려주는 꼴을 쓴다",
+                       description="공시 줄들 뒤 마지막 줄이 intent-critic 결과 줄이다. 이 세션 폴더에서 "
+                                   "이미 렌더했으면(%s) 덧붙이지 않는다. rc 0." % RENDERED)
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--mode", required=True, choices=("pr", "range"))
     p.set_defaults(func=cmd_render)

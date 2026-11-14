@@ -117,7 +117,7 @@ case_no_new_surfaces() {
   [[ -d "$PLUGIN_ROOT/agents" ]] && ok "agents/ 는 있다 (위 부재가 경로 오타로 공허하지 않다)" \
     || no "agents/ 도 없다 — PLUGIN_ROOT 가 틀렸다"
   # v10 ③: 게시 생성 agent 하나를 지워 6 → 5. ⑤: test-scope-validator 삭제로 5 → 4.
-  # R1(쓴소리 리뷰어 intent-critic 추가)으로 4 → 5.
+  # R1(intent-critic 리뷰어 추가)으로 4 → 5.
   [[ "$agents" == "5" ]] && ok "agents/ 파일 5개 불변"    || no "agents 파일 수 $agents (기대 5)"
   # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
   # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/

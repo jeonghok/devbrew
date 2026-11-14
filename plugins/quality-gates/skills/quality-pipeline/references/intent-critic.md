@@ -1,4 +1,4 @@
-# 쓴소리 단계 절차
+# intent-critic 단계 절차
 
 판정 줄을 보이고 게시(또는 게시 건너뜀 공시)까지 끝난 뒤에 돈다. 이번 실행에서 돌려 본 근거(걷기 기록 ·
 차등 테스트 결과)가 있을 때만 리뷰어 `quality-gates:intent-critic` 을 불러, 사용자가 고른 것 자체가 정말
@@ -11,7 +11,7 @@
 - 저장소에 쓰는 것은 docs 답 자리의 답 파일뿐이다. 커밋은 `record` 가 그 파일만 경로를 지정해 한다 — 오케스트레이터는 git 을 직접 부르지 않는다.
 - 리뷰 트리에서 읽은 값(frontmatter · 파일 이름 · 질문 글)을 셸 줄에 끼워 넣지 않는다 — 펜스에는 스크립트가 쓴 파일의 경로만 넘긴다. 리뷰어의 응답 · 사용자의 답 · 의도 출처 JSON 은 따옴표 here-doc 으로만 파일에 담는다.
 - fail-open 이다. 어느 펜스든 아래 표에 없는 종료 코드로 끝나면 출력을 그대로 보이고 [I5](#i5-거르기--묻기--답-기록) 끝의 리뷰 트리 지우기(범위 모드)와 [I6](#i6-렌더) 로 간다 — `render` 가 남은 파일로 결과 줄을 정한다. 실행을 멈추지 않는다.
-- 쓴소리 결과 줄(`render` 의 마지막 줄) 또는 건너뜀 줄이 실행의 마지막 스크립트 출력이다. 그 뒤에는 돌려주는 꼴을 보이고 할 일 줄로 끝낸다([I7](#i7-돌려주기)).
+- intent-critic 결과 줄(`render` 의 마지막 줄) 또는 건너뜀 줄이 실행의 마지막 스크립트 출력이다. 그 뒤에는 돌려주는 꼴을 보이고 할 일 줄로 끝낸다([I7](#i7-돌려주기)).
 - `<session-id>` 에는 이 세션의 id 를 넣는다. 범위 모드는 세션 폴더에 `range-scope.txt` 가 있는 실행이다.
 
 ## I0 입구
@@ -36,9 +36,9 @@ python3 "$QG/scripts/intent_critic.py" gate --rd "$RD" --path <final | aborted |
 | 출력 | 그다음 |
 |---|---|
 | `intent-gate: run` | 아래 비용 줄을 내고 범위 모드면 [I1](#i1-리뷰-트리-범위-모드만), PR 범위면 [I2](#i2-설정--준비) |
-| `쓴소리 꺼짐(kill switch)` · `쓴소리 — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |
+| `intent-critic 꺼짐(kill switch)` · `intent-critic — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |
 
-비용 줄(`intent-gate: run` 일 때 한 번): `> [quality-gates] 쓴소리 단계 — 리뷰어를 많아야 2번 부른다(출력을 읽지 못하면 한 번씩 다시 불러 많아야 4번). 근거가 없으면 부르지 않는다.`
+비용 줄(`intent-gate: run` 일 때 한 번): `> [quality-gates] intent-critic 단계 — 리뷰어를 많아야 2번 부른다(출력을 읽지 못하면 한 번씩 다시 불러 많아야 4번). 근거가 없으면 부르지 않는다.`
 
 ## I1 리뷰 트리 (범위 모드만)
 
@@ -64,7 +64,7 @@ fi
 | 출력 | 그다음 |
 |---|---|
 | `intent-review-tree: <경로>` | 그 경로가 이 단계의 `project_dir` 이다 — [I2](#i2-설정--준비) |
-| `쓴소리 — 리뷰 트리를 만들지 못함` | stderr 를 그대로 보인다. 그 줄이 마지막 스크립트 출력이고 판정은 그대로다 — [I7](#i7-돌려주기) |
+| `intent-critic — 리뷰 트리를 만들지 못함` | stderr 를 그대로 보인다. 그 줄이 마지막 스크립트 출력이고 판정은 그대로다 — [I7](#i7-돌려주기) |
 
 ## I2 설정 · 준비
 
@@ -93,7 +93,7 @@ else
   MODE=pr; BASE='<마지막 iteration Step 1c 출력의 base: 값 — 모르면 ->'; REVIEW=HEAD; TREE="$TOP"
 fi
 case "$BASE" in ''|*[!0-9a-f]*) BASE=- ;; esac
-[ -n "$TREE" ] && [ -d "$TREE" ] || { echo "[quality-gates] 쓴소리 단계의 리뷰 트리가 없다(${TREE:-빈 값}) — 준비하지 않는다" >&2; exit 5; }
+[ -n "$TREE" ] && [ -d "$TREE" ] || { echo "[quality-gates] intent-critic 단계의 리뷰 트리가 없다(${TREE:-빈 값}) — 준비하지 않는다" >&2; exit 5; }
 O_ARGS=(); [ -z "$ORIGIN_ARG" ] || O_ARGS=(--origin "$ORIGIN_ARG")
 python3 "$QG/scripts/intent_critic.py" config --rd "$RD" --repo "$TOP" --base "$BASE" --project-dir "$TREE" || exit
 python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" "${O_ARGS[@]}"
@@ -152,7 +152,7 @@ python3 "$QG/scripts/intent_critic.py" check-output "$RD/intent-critic-${N}.txt"
 |---|---|
 | `readable` | `first-only` 면 [I5](#i5-거르기--묻기--답-기록), `split` 이면 [I4](#i4-둘째-호출) |
 | `unreadable: <사유>` (첫 시도) | 같은 dispatch 를 한 번 다시 부르고, 응답 쓰기 펜스로 같은 파일에 덮어써 다시 본다 |
-| `unreadable: <사유>` (다시 부른 뒤) | 둘째 호출을 하지 않는다 — [I5](#i5-거르기--묻기--답-기록). `filter` 가 셀 수 없음으로 세고 결과 줄은 `쓴소리 — 리뷰어 출력을 읽지 못함(셀 수 없음)` 이다 |
+| `unreadable: <사유>` (다시 부른 뒤) | 둘째 호출을 하지 않는다 — [I5](#i5-거르기--묻기--답-기록). `filter` 가 셀 수 없음으로 세고 결과 줄은 `intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)` 이다 |
 
 ## I4 둘째 호출
 
@@ -189,7 +189,7 @@ Agent({
 |---|---|
 | `readable` | [I5](#i5-거르기--묻기--답-기록) |
 | `unreadable: <사유>` (다시 부른 뒤), `split` | 첫째 호출의 후보로 이어 간다 — [I5](#i5-거르기--묻기--답-기록). `filter` 가 `둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다` 를 공시한다 |
-| `unreadable: <사유>` (다시 부른 뒤), `single` | [I5](#i5-거르기--묻기--답-기록) — 결과 줄은 `쓴소리 — 리뷰어 출력을 읽지 못함(셀 수 없음)` 이다 |
+| `unreadable: <사유>` (다시 부른 뒤), `single` | [I5](#i5-거르기--묻기--답-기록) — 결과 줄은 `intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)` 이다 |
 
 ## I5 거르기 · 묻기 · 답 기록
 
@@ -202,7 +202,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 python3 "$QG/scripts/intent_critic.py" filter --rd "$RD"
 ```
 
-공시 줄(`근거 없어 거름 <n>` · `이미 답한 질문이라 거름 <n>` · `상한 넘어 남김 <n>` · …)은 그대로 보인다. 거른 질문의 목록은 `render` 가 `result.md` 의 `## 쓴소리` 에 남긴다 — 줄이거나 빼지 않는다.
+공시 줄(`근거 없어 거름 <n>` · `이미 답한 질문이라 거름 <n>` · `상한 넘어 남김 <n>` · …)은 그대로 보인다. 거른 질문의 목록은 `render` 가 `result.md` 의 `## intent-critic` 에 남긴다 — 줄이거나 빼지 않는다.
 
 | 마지막 줄 · 실행 | 그다음 |
 |---|---|
@@ -212,10 +212,14 @@ python3 "$QG/scripts/intent_critic.py" filter --rd "$RD"
 
 **질문 (PR 범위 · k ≥ 1).**
 
+질문 창을 띄우기 바로 전에 이 줄을 글자 그대로 보인다:
+
+> intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 아래 질문의 답은 판정을 바꾸지 않는다.
+
 ```text
 AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
   question: "<의심하는 것 — 어느 원문의 어느 선택(직접 쓴 말 | 고른 라벨)> — <질문>. 근거로 본 것: <근거 줄 한 줄>. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.",
-  header: "쓴소리 <k>",
+  header: "의도 점검 <k>",
   options: [ {label: "의도다", description: "고른 그대로 둔다 — 같은 질문을 다시 묻지 않는다."},
              {label: "잘못 골랐다", description: "고칠 일로 표시한다 — qg 는 고치지 않는다."},
              {label: "지금은 모르겠다", description: "기록만 하고 다음에 다시 물을 수 있다."} ],
@@ -267,7 +271,7 @@ fi
 
 ## I6 렌더
 
-`render` 가 `result.md` 끝(`## 게시` 뒤)에 `## 쓴소리` 를 덧붙이고 돌려주는 꼴 `$RD/intent-return.md` 를 쓴다:
+`render` 가 `result.md` 끝(`## 게시` 뒤)에 `## intent-critic` 을 덧붙이고 돌려주는 꼴 `$RD/intent-return.md` 를 쓴다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -277,14 +281,14 @@ MODE=pr; [ -f "$RD/range-scope.txt" ] && MODE=range
 python3 "$QG/scripts/intent_critic.py" render --rd "$RD" --mode "$MODE"
 ```
 
-공시 줄들 뒤 마지막 줄이 쓴소리 결과 줄이다 — 그대로 보이고, 이 줄이 실행의 마지막 스크립트 출력이다. `쓴소리 — 이 실행은 이미 쓴소리 단계를 돌았다` 면 다시 돌리지 않는다. 그다음 [I7](#i7-돌려주기).
+공시 줄들 뒤 마지막 줄이 intent-critic 결과 줄이다 — 그대로 보이고, 이 줄이 실행의 마지막 스크립트 출력이다. `intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다` 면 다시 돌리지 않는다. 그다음 [I7](#i7-돌려주기).
 
 ## I7 돌려주기
 
-이 절에서는 스크립트를 돌리지 않는다 — 쓴소리 결과 줄(또는 건너뜀 줄)이 마지막 스크립트 출력으로 남는다.
+이 절에서는 스크립트를 돌리지 않는다 — intent-critic 결과 줄(또는 건너뜀 줄)이 마지막 스크립트 출력으로 남는다.
 
 - 결과 줄 뒤에 `$RD/intent-return.md` 를 Read 로 읽어 그대로(요약 없이) 보인다 — 질문마다 정체 · 상태 · 답 · 답 파일 경로, 그리고 커밋 · docs 답 자리. 부른 흐름이 읽는 계약이다.
-- `result.md` 의 `## 쓴소리` 에 「이미 답한 질문이라 거른 질문:」 목록이 있으면 그 목록도 그대로 보인다 — 어느 답 파일이 어느 질문을 걸렀는지(「이 범위가 더한 답 파일」 표시 포함) 사람이 볼 수 있어야 한다.
+- `result.md` 의 `## intent-critic` 에 「이미 답한 질문이라 거른 질문:」 목록이 있으면 그 목록도 그대로 보인다 — 어느 답 파일이 어느 질문을 걸렀는지(「이 범위가 더한 답 파일」 표시 포함) 사람이 볼 수 있어야 한다.
 - 완료 보고는 할 일로 끝낸다. 돌려주는 꼴에서 정한다:
   - `wrong_choice: yes` 인 질문이 있으면 — 「같은 브랜치에서 이어 고친다」(그 질문을 함께 적는다). qg 는 고치지 않는다.
   - `commit:` 이 `failed — …` 이면 — 「답 파일 <`file:` 경로들>을 커밋한다」.
