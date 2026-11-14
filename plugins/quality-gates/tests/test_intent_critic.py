@@ -1,10 +1,15 @@
-"""scripts/doc_paths.py 설정 키 넓힘 · scripts/intent_answers.py (쓴소리 답 파일) · scripts/intent_origin.py (근거 · 원문 · 로드맵 · 의심)."""
+"""scripts/doc_paths.py 설정 키 넓힘 · scripts/intent_answers.py (쓴소리 답 파일) · scripts/intent_origin.py (근거 · 원문 · 로드맵 · 의심) · scripts/intent_critic.py (쓴소리 CLI)."""
+import hashlib
 import importlib.util
+import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -794,6 +799,905 @@ class TestSections(unittest.TestCase):
     def test_total_bytes_korean(self):
         self.assertEqual(io_.total_bytes("가", "a"), 4)
         self.assertEqual(io_.total_bytes(), 0)
+
+
+# ================================================================ intent_critic.py CLI
+
+SCRIPT = SCRIPTS / "intent_critic.py"
+KILL = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
+ENV_DIR = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
+ENV_MAX = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
+ANS_DIR = "docs/qg-intent-answers"
+SRC = "docs/brief.md"
+NONE_LINE = "쓴소리 — 근거 없음"
+NOQ_LINE = "쓴소리 — 질문 없음"
+UNREAD_LINE = "쓴소리 — 리뷰어 출력을 읽지 못함(셀 수 없음)"
+
+
+def _env(**extra):
+    env = dict(os.environ)
+    for k in (KILL, ENV_DIR, ENV_MAX):
+        env.pop(k, None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.update(extra)
+    return env
+
+
+def _cli(*args, env=None):
+    return subprocess.run([sys.executable, str(SCRIPT)] + [str(a) for a in args],
+                          capture_output=True, text=True, encoding="utf-8",
+                          env=env if env is not None else _env())
+
+
+def _last(proc):
+    lines = proc.stdout.strip().splitlines()
+    return lines[-1] if lines else ""
+
+
+def _read(*parts):
+    return Path(*parts).read_text(encoding="utf-8")
+
+
+def _write(text, *parts):
+    Path(*parts).parent.mkdir(parents=True, exist_ok=True)
+    Path(*parts).write_text(text, encoding="utf-8")
+
+
+def _out(questions, none_reason=None):
+    """리뷰어 출력 fixture — 산문 사이의 qg-intent-critic 펜스 하나."""
+    data = {"questions": questions}
+    if none_reason:
+        data["none_reason"] = none_reason
+    return ("살펴본 결과다.\n```qg-intent-critic\n"
+            + yaml.safe_dump(data, allow_unicode=True, sort_keys=False) + "```\n끝.\n")
+
+
+def _q(tid="D1", kind="방향", weight="방향", lines=(1,), src=SRC, question=None, **extra):
+    item = {"target_source": src, "target_id": tid, "kind": kind, "weight": weight,
+            "quote": "고른 구절", "label": "고른 라벨",
+            "question": question or ("%s 를 정말 이렇게 고른 것인가?" % tid),
+            "evidence_lines": list(lines)}
+    item.update(extra)
+    return item
+
+
+def _config_text(max_bytes=120000, answers_dir=ANS_DIR):
+    return ("answers_dir: %s\nanswers_dir_source: default\nmax_bytes: %d\n"
+            "max_bytes_source: default\n" % (answers_dir, max_bytes))
+
+
+def _filter_rd(rd, call="first-only", mode="pr", sources=(SRC,), aliases=None, answers=(),
+               n_evidence=5):
+    """filter · record · render 시험용 세션 폴더(config · plan · evidence · 리뷰 트리의 답 파일)."""
+    root = os.path.join(rd, "tree", ANS_DIR)
+    os.makedirs(root, exist_ok=True)
+    for i, (ident, answer, obs) in enumerate(answers):
+        _write(ia.render_answer_file(ident, "Q?", "구절", "고른 라벨", [obs], answer, answer,
+                                     "t", AT1), root, "%d.md" % i)
+    walk = "".join("관찰 %d\n" % i for i in range(1, n_evidence + 1))
+    _write(io_.build_evidence(walk, None)[0], rd, "intent-evidence.txt")
+    _write(_config_text(), rd, "intent-config.txt")
+    plan = ["call: " + call, "mode: " + mode, "answers_root: " + root]
+    plan += ["source: " + s for s in sources]
+    plan += ["alias: %s -> %s" % kv for kv in (aliases or {}).items()]
+    _write("\n".join(plan) + "\n", rd, "intent-plan.txt")
+    return root
+
+
+def _questions(rd):
+    return yaml.safe_load(_read(rd, "intent-questions.yaml"))
+
+
+def _by_state(rd, state):
+    return [q for q in _questions(rd)["questions"] if q["state"] == state]
+
+
+def _return_block(rd):
+    text = _read(rd, "intent-return.md")
+    body = text.split("```qg-intent-return\n", 1)[1].split("\n```", 1)[0]
+    return text, yaml.safe_load(body)
+
+
+OBS1 = "   1\t[e2e] 관찰 1"
+ID1 = SRC + "#D1#방향"
+
+
+class TestGate(unittest.TestCase):
+    def test_kill_switch_first(self):
+        for path in ("trivia", "final"):
+            with tempfile.TemporaryDirectory() as rd:
+                p = _cli("gate", "--rd", rd, "--path", path, env=_env(**{KILL: "1"}))
+                self.assertEqual(p.returncode, 0, p.stderr)
+                self.assertEqual(_last(p), "쓴소리 꺼짐(kill switch)")
+                text, block = _return_block(rd)
+                self.assertIn("status: skipped — ", text)
+                self.assertEqual(block["questions"], [])
+                self.assertFalse(os.path.exists(os.path.join(rd, "result.md")))
+
+    def test_paths(self):
+        cases = {"aborted": "쓴소리 — 건너뜀(멈춘 실행)",
+                 "trivia": "쓴소리 — 건너뜀(작은 수정 — trivia)",
+                 "scope-empty": "쓴소리 — 건너뜀(리뷰할 diff 없음)"}
+        for path, line in cases.items():
+            with tempfile.TemporaryDirectory() as rd:
+                p = _cli("gate", "--rd", rd, "--path", path)
+                self.assertEqual((p.returncode, _last(p)), (0, line), path)
+                text, block = _return_block(rd)
+                self.assertTrue(str(block["status"]).startswith("skipped — "), path)
+        with tempfile.TemporaryDirectory() as rd:
+            p = _cli("gate", "--rd", rd, "--path", "final")
+            self.assertEqual((p.returncode, _last(p)), (0, "intent-gate: run"))
+            self.assertFalse(os.path.exists(os.path.join(rd, "intent-return.md")))
+
+    def test_tree_failed_writes_return_block(self):
+        with tempfile.TemporaryDirectory() as rd:
+            p = _cli("gate", "--rd", rd, "--path", "tree-failed", "--mode", "range")
+            self.assertEqual((p.returncode, _last(p)), (0, "쓴소리 — 리뷰 트리를 만들지 못함"))
+            text, block = _return_block(rd)
+            self.assertIn("status: skipped — 리뷰 트리를 만들지 못함", text)
+            self.assertEqual(block["mode"], "range")
+
+    def test_bad_call_is_rc2(self):
+        with tempfile.TemporaryDirectory() as rd:
+            self.assertEqual(_cli("gate", "--rd", rd, "--path", "bogus").returncode, 2)
+            self.assertEqual(_cli("gate", "--path", "final").returncode, 2)
+            self.assertEqual(_cli("nope").returncode, 2)
+
+
+class TestConfig(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = _git_repo(os.path.join(self.tmp.name))
+        # 사용자 전역 excludes 가 settings.local.json 을 무시해도 이 리포에서는 .gitignore 만 본다
+        _git(self.repo, "config", "core.excludesFile", os.devnull)
+        self.rd = tempfile.mkdtemp(dir=self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _config(self, env=None, base="HEAD"):
+        p = _cli("config", "--rd", self.rd, "--repo", self.repo, "--base", base,
+                 "--project-dir", self.repo, env=env)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        out = {}
+        for line in p.stdout.strip().splitlines():
+            k, _, v = line.partition(": ")
+            out[k] = v
+        self.assertEqual(_read(self.rd, "intent-config.txt").strip(), p.stdout.strip())
+        return out
+
+    def test_default_env_and_settings_changed(self):
+        c = self._config()
+        self.assertEqual(c, {"answers_dir": ANS_DIR, "answers_dir_source": "default",
+                             "max_bytes": "120000", "max_bytes_source": "default"})
+        env = _env(**{ENV_DIR: "notes/answers", ENV_MAX: "5000"})
+        c = self._config(env)
+        self.assertEqual((c["answers_dir"], c["answers_dir_source"]), ("notes/answers", "env"))
+        self.assertEqual((c["max_bytes"], c["max_bytes_source"]), ("5000", "env"))
+        # 리뷰 트리의 .claude/settings.json 이 base 와 그 키가 다르다 → 그 키만 기본값
+        _write(json.dumps({"env": {ENV_DIR: "notes/answers"}}), self.repo, ".claude",
+               "settings.json")
+        c = self._config(env)
+        self.assertEqual((c["answers_dir"], c["answers_dir_source"]),
+                         (ANS_DIR, "default-settings-changed"))
+        self.assertEqual((c["max_bytes"], c["max_bytes_source"]), ("5000", "env"))
+        # base 에 같은 값이 커밋돼 있으면 바뀐 것이 아니다
+        _git(self.repo, "add", ".claude/settings.json")
+        _git(self.repo, "commit", "-q", "-m", "settings")
+        c = self._config(env)
+        self.assertEqual(c["answers_dir_source"], "env")
+
+    def test_local_settings_file_also_guarded(self):
+        env = _env(**{ENV_MAX: "5000"})
+        _write(json.dumps({"env": {ENV_MAX: "5000"}}), self.repo, ".claude",
+               "settings.local.json")
+        c = self._config(env)
+        self.assertEqual((c["max_bytes"], c["max_bytes_source"]),
+                         ("120000", "default-settings-changed"))
+        # git 이 무시하는 개인 설정 파일은 이 변경의 일부가 아니다
+        _write(".claude/settings.local.json\n", self.repo, ".gitignore")
+        c = self._config(env)
+        self.assertEqual((c["max_bytes"], c["max_bytes_source"]), ("5000", "env"))
+
+    def test_unknown_base(self):
+        env = _env(**{ENV_DIR: "notes/answers"})
+        c = self._config(env, base="-")
+        self.assertEqual(c["answers_dir_source"], "env")
+        _write(json.dumps({"env": {ENV_DIR: "notes/answers"}}), self.repo, ".claude",
+               "settings.json")
+        _git(self.repo, "add", ".claude/settings.json")
+        _git(self.repo, "commit", "-q", "-m", "settings")
+        c = self._config(env, base="-")
+        self.assertEqual((c["answers_dir"], c["answers_dir_source"]),
+                         (ANS_DIR, "default-settings-changed"))
+
+    def test_invalid_values(self):
+        for bad in ("../x", "/abs", ".claude/x", "a/../../b", ".git/x", " ", "."):
+            c = self._config(_env(**{ENV_DIR: bad}))
+            self.assertEqual((c["answers_dir"], c["answers_dir_source"]),
+                             (ANS_DIR, "default-invalid"), bad)
+        for bad in ("0", "abc", "-5", "1.5", ""):
+            c = self._config(_env(**{ENV_MAX: bad}))
+            self.assertEqual((c["max_bytes"], c["max_bytes_source"]),
+                             ("120000", "default-invalid"), bad)
+        c = self._config(_env(**{ENV_DIR: "docs/answers/"}))
+        self.assertEqual((c["answers_dir"], c["answers_dir_source"]), ("docs/answers", "env"))
+
+
+class TestPrepare(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.R = _origin_repo(os.path.join(cls.tmp.name))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.rd = tempfile.mkdtemp(dir=self.tmp.name)
+        _write(_config_text(), self.rd, "intent-config.txt")
+        _write("## Goals\ngoal-body\n", self.rd, "intent.md")
+
+    def _prep(self, specs=(), specs_text=None, repo=None, tree_root=None, origin=None):
+        sp = os.path.join(self.rd, "intent-specs.json")
+        if specs_text is None:
+            specs_text = json.dumps({"intent_source": "spec-trailer", "specs": list(specs)})
+        _write(specs_text, sp)
+        args = ["prepare", "--rd", self.rd, "--repo", repo or self.R,
+                "--tree-root", tree_root or repo or self.R, "--mode", "pr", "--head", "HEAD",
+                "--review-commit", "HEAD", "--specs-json", sp]
+        if origin:
+            args += ["--origin", origin]
+        p = _cli(*args)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _f(self, name):
+        return _read(self.rd, name)
+
+    def test_none_when_no_evidence(self):
+        p = self._prep()
+        self.assertEqual(_last(p), "intent-call: none")
+        self.assertIn(NONE_LINE, p.stdout.splitlines())
+        self.assertIn("call: none", self._f("intent-plan.txt").splitlines())
+
+    def test_none_when_all_green(self):
+        _write(_diff("STILL_GREEN", "FIXED", "NEW_TEST_GREEN"), self.rd, "differential.yaml")
+        p = self._prep(["docs/spec.md"])
+        self.assertEqual(_last(p), "intent-call: none")
+        self.assertIn(NONE_LINE, p.stdout.splitlines())
+
+    def test_first_only_without_doubts(self):
+        _write("관찰 하나\n", self.rd, "e2e-record.md")
+        p = self._prep([])
+        self.assertEqual(_last(p), "intent-call: first-only")
+        self.assertTrue(self._f("intent-origin.md").startswith("원문 없음 — "))
+        self.assertTrue(self._f("intent-roadmap.md").startswith("로드맵 없음 — "))
+        self.assertEqual(self._f("intent-doubts.md"), "")
+        self.assertIn("   1\t[e2e] 관찰 하나", self._f("intent-evidence.txt"))
+        self.assertIn("goal-body", self._f("intent-intent.md"))
+        plan = self._f("intent-plan.txt").splitlines()
+        self.assertIn("call: first-only", plan)
+        self.assertIn("mode: pr", plan)
+        self.assertIn("answers_root: " + os.path.abspath(os.path.join(self.R, ANS_DIR)), plan)
+        self.assertIn("원문 없음 — 의도 출처에 설계문서 없음", p.stdout.splitlines())
+
+    def test_split_with_bundle(self):
+        _write(DIFF_RED, self.rd, "differential.yaml")
+        p = self._prep(["docs/spec.md"])
+        self.assertEqual(_last(p), "intent-call: split")
+        rm, doubts = self._f("intent-roadmap.md"), self._f("intent-doubts.md")
+        self.assertIn("epic-body-token", rm)
+        for moved in ("risk-section-token", "oq-section-token", "rm-recheck-token"):
+            self.assertNotIn(moved, rm)
+            self.assertIn(moved, doubts)
+        self.assertIn("risk-token", doubts)
+        self.assertIn("quote-token", self._f("intent-origin.md"))
+        self.assertNotIn("recheck-token", self._f("intent-origin.md"))
+        plan = self._f("intent-plan.txt").splitlines()
+        self.assertIn("source: docs/brief.md", plan)
+        self.assertIn("alias: docs/R1.md -> docs/brief.md", plan)
+        self.assertIn("   1\t[차등] per_adapter:", self._f("intent-evidence.txt"))
+
+    def test_split_roadmap_doubts_without_bundle(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = _git_repo(d)
+            _write(_fm(roadmap="docs/roadmap.md"), repo, "docs", "spec_r.md")
+            _write(ROADMAP_BODY, repo, "docs", "roadmap.md")
+            _git(repo, "add", "docs")
+            _git(repo, "commit", "-q", "-m", "r")
+            _write("관찰\n", self.rd, "e2e-record.md")
+            p = self._prep(["docs/spec_r.md"], repo=repo)
+            self.assertEqual(_last(p), "intent-call: split")
+            self.assertTrue(self._f("intent-origin.md").startswith("원문 없음 — "))
+            self.assertIn("risk-section-token", self._f("intent-doubts.md"))
+            self.assertNotIn("## 5.", self._f("intent-doubts.md"))
+
+    def test_intent_doubts_moved(self):
+        _write("관찰\n", self.rd, "e2e-record.md")
+        _write("## Goals\ngoal-body\n- 다시 검증할 것 — rv-token\n\n## Risks\nrisk-body\n",
+               self.rd, "intent.md")
+        p = self._prep([])
+        self.assertEqual(_last(p), "intent-call: split")
+        kept, doubts = self._f("intent-intent.md"), self._f("intent-doubts.md")
+        self.assertIn("goal-body", kept)
+        for moved in ("risk-body", "rv-token"):
+            self.assertNotIn(moved, kept)
+            self.assertIn(moved, doubts.split("<!-- intent-doubts -->", 1)[1])
+
+    def test_single_over_cap_counts_roadmap(self):
+        _write(DIFF_RED, self.rd, "differential.yaml")
+        self._prep(["docs/spec.md"])
+        parts = ("intent-evidence.txt", "intent-origin.md", "intent-roadmap.md",
+                 "intent-intent.md", "intent-doubts.md")
+        total = io_.total_bytes(*[self._f(n) for n in parts])
+        without_roadmap = total - io_.total_bytes(self._f("intent-roadmap.md"))
+        cap = total - 1
+        self.assertGreaterEqual(cap, without_roadmap)
+        _write(_config_text(max_bytes=cap), self.rd, "intent-config.txt")
+        p = self._prep(["docs/spec.md"])
+        self.assertEqual(_last(p), "intent-call: single")
+        self.assertIn("한 번에 넣음 — 입력 %d바이트가 상한 %d바이트를 넘었다" % (total, cap),
+                      p.stdout.splitlines())
+        self.assertIn("risk-section-token", self._f("intent-doubts.md"))
+        self.assertIn("risk-token", self._f("intent-doubts.md"))
+        self.assertIn("call: single", self._f("intent-plan.txt").splitlines())
+        _write(_config_text(max_bytes=total), self.rd, "intent-config.txt")
+        self.assertEqual(_last(self._prep(["docs/spec.md"])), "intent-call: split")
+
+    def test_bad_specs_json(self):
+        _write("관찰\n", self.rd, "e2e-record.md")
+        for text in ("not json", json.dumps({"specs": "docs/spec.md"}), "[1, 2]"):
+            p = self._prep(specs_text=text)
+            self.assertIn("의도 출처 JSON 을 읽지 못함", p.stdout.splitlines(), text)
+            self.assertEqual(_last(p), "intent-call: first-only", text)
+
+    def test_mixed_old_document_is_disclosed(self):
+        _write("관찰\n", self.rd, "e2e-record.md")
+        p = self._prep(["docs/spec_old.md"])
+        self.assertIn("첫 호출에 의심이 섞였다", p.stdout.splitlines())
+        self.assertIn("직접 쓴 말 · 고른 라벨을 가르지 못함", p.stdout.splitlines())
+
+    def test_answered_listing_and_unreadable(self):
+        _write("관찰\n", self.rd, "e2e-record.md")
+        with tempfile.TemporaryDirectory() as tree:
+            _write(_answer_text(), tree, ANS_DIR, "1.md")
+            _write("broken\n", tree, ANS_DIR, "2.md")
+            p = self._prep([], tree_root=tree)
+            self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
+            self.assertIn("- %s · 의도다 · 관찰: 3\t근거" % IDENT,
+                          self._f("intent-answered.md").splitlines())
+
+    def test_missing_config_is_rc4(self):
+        os.remove(os.path.join(self.rd, "intent-config.txt"))
+        sp = os.path.join(self.rd, "intent-specs.json")
+        _write("{}", sp)
+        p = _cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
+                 "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD", "--specs-json", sp)
+        self.assertEqual(p.returncode, 4)
+        p = _cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
+                 "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                 "--specs-json", os.path.join(self.rd, "none.json"))
+        self.assertEqual(p.returncode, 4)
+
+
+class TestCheckOutput(unittest.TestCase):
+    def _check(self, text):
+        with tempfile.TemporaryDirectory() as d:
+            _write(text, d, "out.txt")
+            return _cli("check-output", os.path.join(d, "out.txt"))
+
+    def test_check_output_variants(self):
+        p = self._check(_out([_q()]))
+        self.assertEqual((p.returncode, _last(p)), (0, "readable"))
+        p = self._check(_out([], none_reason="물을 것이 없다"))
+        self.assertEqual((p.returncode, _last(p)), (0, "readable"))
+        fence = "```qg-intent-critic\nquestions: []\n```\n"
+        bad = {"two fences": fence + fence,
+               "other fence name": "```yaml\nquestions: []\n```\n",
+               "prose only": "물을 것이 없다고 본다.\n",
+               "broken yaml": "```qg-intent-critic\nquestions: [\n```\n",
+               "no questions key": "```qg-intent-critic\nnone_reason: x\n```\n",
+               "questions not a list": "```qg-intent-critic\nquestions: 3\n```\n",
+               "unclosed": "```qg-intent-critic\nquestions: []\n",
+               "empty": ""}
+        for name, text in bad.items():
+            p = self._check(text)
+            self.assertEqual(p.returncode, 3, name)
+            self.assertTrue(_last(p).startswith("unreadable: "), name)
+
+    def test_missing_file_is_unreadable(self):
+        p = _cli("check-output", "/no/such/file.txt")
+        self.assertEqual(p.returncode, 3)
+        self.assertTrue(_last(p).startswith("unreadable: "))
+
+
+class TestDoubtsAppend(unittest.TestCase):
+    def test_appends_first_candidates_once(self):
+        with tempfile.TemporaryDirectory() as rd:
+            _write("의심 본문\n", rd, "intent-doubts.md")
+            _write(_out([_q("D1"), _q("D2")]), rd, "intent-critic-1.txt")
+            p = _cli("doubts-append", "--rd", rd)
+            self.assertEqual(_last(p), "doubts-append: 2")
+            text = _read(rd, "intent-doubts.md")
+            self.assertTrue(text.startswith("의심 본문\n"))
+            self.assertIn("## 첫째 호출의 후보", text)
+            self.assertIn("D2 를 정말 이렇게 고른 것인가?", text)
+            p = _cli("doubts-append", "--rd", rd)
+            self.assertEqual(_read(rd, "intent-doubts.md").count("## 첫째 호출의 후보"), 1)
+
+    def test_unreadable_first_appends_nothing(self):
+        with tempfile.TemporaryDirectory() as rd:
+            _write("의심 본문\n", rd, "intent-doubts.md")
+            _write("산문만\n", rd, "intent-critic-1.txt")
+            p = _cli("doubts-append", "--rd", rd)
+            self.assertEqual(_last(p), "doubts-append: 0")
+            self.assertEqual(_read(rd, "intent-doubts.md"), "의심 본문\n")
+
+
+class TestFilter(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, first=None, second=None, **kw):
+        _filter_rd(self.rd, **kw)
+        if first is not None:
+            _write(first, self.rd, "intent-critic-1.txt")
+        if second is not None:
+            _write(second, self.rd, "intent-critic-2.txt")
+        p = _cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _render(self, mode="pr"):
+        p = _cli("render", "--rd", self.rd, "--mode", mode)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def test_citation_filter(self):
+        p = self._run(_out([_q("D1", lines=[]), _q("D2", lines=[99]),
+                            _q("D3", lines=["1"])]))
+        self.assertIn("근거 없어 거름 3", p.stdout.splitlines())
+        self.assertEqual(_last(p), "intent-ask: 0")
+        self.assertEqual(_last(self._render()), NONE_LINE)
+
+    def test_roadmap_question_needs_evidence(self):
+        roadmap_q = _q("D7", kind="방향", weight="방향", lines=[], quote="로드맵의 방향 구절")
+        no_key = _q("D8")
+        del no_key["evidence_lines"]
+        p = self._run(_out([roadmap_q, no_key]))
+        self.assertIn("근거 없어 거름 2", p.stdout.splitlines())
+        self.assertEqual(_last(p), "intent-ask: 0")
+
+    def test_cap_and_weight(self):
+        cands = [_q("D1", kind="기본값", weight="동작"), _q("D2", kind="마찰", weight="동작"),
+                 _q("D3", kind="방향", weight="방향"), _q("D4", kind="빠진 기능", weight="기능"),
+                 _q("D5", kind="범위 축소", weight="기능")]
+        p = self._run(_out(cands))
+        self.assertEqual(_last(p), "intent-ask: 3")
+        self.assertIn("상한 넘어 남김 2", p.stdout.splitlines())
+        self.assertEqual([q["target_id"] for q in _by_state(self.rd, "ask")], ["D3", "D4", "D5"])
+        self.assertEqual([q["target_id"] for q in _by_state(self.rd, "over-cap")], ["D1", "D2"])
+
+    def test_unknown_weight_goes_last(self):
+        p = self._run(_out([_q("D9", weight="이상함"), _q("D1", kind="기본값", weight="동작")]))
+        self.assertEqual(_last(p), "intent-ask: 2")
+        self.assertEqual([q["target_id"] for q in _by_state(self.rd, "ask")], ["D1", "D9"])
+
+    def test_same_as_filters_intended(self):
+        p = self._run(_out([_q("D1", same_as=ID1)]), answers=[(ID1, "의도다", OBS1)])
+        self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        self.assertEqual(_last(p), "intent-ask: 0")
+        self.assertEqual(_by_state(self.rd, "answered-filtered")[0]["id"], ID1)
+        self.assertEqual(_last(self._render()), NOQ_LINE)
+
+    def test_same_as_missing_or_mismatch_asks(self):
+        id2 = SRC + "#D2#방향"
+        cases = (([_q("D1")], [(ID1, "의도다", OBS1)]),
+                 ([_q("D1", same_as=id2)], [(ID1, "의도다", OBS1), (id2, "의도다", OBS1)]),
+                 ([_q("D1", same_as=ID1)], []))
+        for cands, answers in cases:
+            with tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(_out(cands), answers=answers)
+                self.assertEqual(_last(p), "intent-ask: 1", (cands, answers))
+                self.assertNotIn("이미 답한 질문이라 거름", p.stdout)
+
+    def test_unknown_answer_not_filtered(self):
+        p = self._run(_out([_q("D1", same_as=ID1)]), answers=[(ID1, "지금은 모르겠다", OBS1)])
+        self.assertEqual(_last(p), "intent-ask: 1")
+
+    def test_wrong_choice_filtered_and_listed(self):
+        p = self._run(_out([_q("D1", same_as=ID1, question="잘못 고른 그 질문")]),
+                      answers=[(ID1, "잘못 골랐다", OBS1)])
+        self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        self.assertEqual(_by_state(self.rd, "wrong-choice-filtered")[0]["id"], ID1)
+        _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
+        self.assertEqual(_last(self._render()), NOQ_LINE)
+        section = _read(self.rd, "result.md").split("## 쓴소리", 1)[1]
+        self.assertIn("이미 「잘못 골랐다」 답이 있어 거른 질문:", section)
+        self.assertIn("잘못 고른 그 질문", section.split("이미 「잘못 골랐다」", 1)[1])
+
+    def test_observation_changed_reasks(self):
+        changed = {"previous": "[e2e] 관찰 1", "now_lines": [2]}
+        p = self._run(_out([_q("D1", same_as=ID1, observation_changed=changed)]),
+                      answers=[(ID1, "의도다", OBS1)])
+        self.assertEqual(_last(p), "intent-ask: 1")
+        for bad in ({"previous": "없는 관찰 글", "now_lines": [2]},
+                    {"previous": "[e2e] 관찰 1", "now_lines": [99]},
+                    {"previous": "[e2e] 관찰 1"}, "바뀌었다"):
+            with tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(_out([_q("D1", same_as=ID1, observation_changed=bad)]),
+                              answers=[(ID1, "의도다", OBS1)])
+                self.assertEqual(_last(p), "intent-ask: 0", bad)
+                self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+
+    def test_bundle_alias_matches(self):
+        p = self._run(_out([_q("D1", src="docs/R1.md", same_as=ID1)]),
+                      aliases={"docs/R1.md": SRC}, answers=[(ID1, "의도다", OBS1)])
+        self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        self.assertEqual(_last(p), "intent-ask: 0")
+
+    def test_unidentified_asks(self):
+        text = "모르는 종류의 질문"
+        p = self._run(_out([_q("D1", kind="모르는", question=text)]))
+        self.assertEqual(_last(p), "intent-ask: 1")
+        self.assertIn("정체를 가르지 못함 1", p.stdout.splitlines())
+        ident = "unidentified:" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+        self.assertEqual(_by_state(self.rd, "ask")[0]["id"], ident)
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            p = self._run(_out([_q("D1", src="docs/other.md")]))
+            self.assertEqual(_last(p), "intent-ask: 1")
+            self.assertIn("정체를 가르지 못함 1", p.stdout.splitlines())
+
+    def test_broken_items_held(self):
+        p = self._run(_out(["문자열 항목", _q("D1", question=" "), _q("D2")]))
+        self.assertIn("항목 파손 2", p.stdout.splitlines())
+        self.assertIn("쓴소리 처분 — 보류: ", p.stdout)
+        self.assertEqual(_last(p), "intent-ask: 1")
+        disposition = _questions(self.rd)["disposition"]
+        self.assertEqual((disposition["held"], disposition["accepted"]), (2, 1))
+        self.assertEqual(disposition["held_by_class"]["항목 파손"], 2)
+
+    def test_filter_unreadable_both(self):
+        p = self._run("산문만\n", "```qg-intent-critic\nquestions: [\n```\n", call="split")
+        self.assertEqual(_last(p), "intent-ask: 0")
+        self.assertIn("쓴소리 처분 — 셀 수 없음: ", p.stdout)
+        self.assertEqual(_questions(self.rd)["status"], "uncountable")
+        disposition = _questions(self.rd)["disposition"]
+        self.assertEqual(disposition["unknown_counts"], ["쓴소리 후보"])
+        self.assertEqual(disposition["sources_failed"], 1)
+        self.assertEqual(_last(self._render()), UNREAD_LINE)
+        _, block = _return_block(self.rd)
+        self.assertEqual((block["status"], block["questions"]), ("uncountable", []))
+
+    def test_split_first_unreadable_is_uncountable_even_if_second_reads(self):
+        p = self._run("산문만\n", _out([_q("D1")]), call="split")
+        self.assertEqual(_last(p), "intent-ask: 0")
+        self.assertEqual(_last(self._render()), UNREAD_LINE)
+
+    def test_filter_second_unreadable_falls_back(self):
+        p = self._run(_out([_q("D1")]), "산문만\n", call="split")
+        self.assertIn("둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다", p.stdout.splitlines())
+        self.assertIn("쓴소리 처분 — 입력 실패(보조): ", p.stdout)
+        self.assertEqual(_last(p), "intent-ask: 1")
+
+    def test_first_only_ignores_second(self):
+        p = self._run(_out([_q("D1")]), "산문만\n", call="first-only")
+        self.assertNotIn("둘째 호출", p.stdout)
+        self.assertNotIn("쓴소리 처분", p.stdout)
+        self.assertEqual(_last(p), "intent-ask: 1")
+
+    def test_single_uses_second_only(self):
+        p = self._run(None, _out([_q("D1"), _q("D2")]), call="single")
+        self.assertEqual(_last(p), "intent-ask: 2")
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            p = self._run(_out([_q("D1")]), "산문만\n", call="single")
+            self.assertEqual(_last(p), "intent-ask: 0")
+            self.assertEqual(_questions(rd)["status"], "uncountable")
+
+    def test_split_union_absorbs_duplicate(self):
+        first = _out([_q("D1"), _q("D4", kind="기본값", weight="동작")])
+        second = _out([_q("D1", question="다시 쓴 D1"), _q("D2", kind="빠진 기능", weight="기능")])
+        p = self._run(first, second, call="split")
+        self.assertEqual(_last(p), "intent-ask: 3")
+        self.assertIn("두 호출에서 겹친 후보를 합침 1", p.stdout.splitlines())
+        asked = _by_state(self.rd, "ask")
+        self.assertEqual([q["target_id"] for q in asked], ["D1", "D2", "D4"])
+        self.assertEqual(asked[0]["question"], "D1 를 정말 이렇게 고른 것인가?")
+        disposition = _questions(self.rd)["disposition"]
+        self.assertEqual((disposition["absorbed"], disposition["accepted"]), (1, 3))
+        self.assertIs(disposition["degraded"], False)
+
+    def test_same_call_same_identity_is_not_merged(self):
+        p = self._run(_out([_q("D1", question="첫 질문"), _q("D1", question="다른 질문")]))
+        self.assertEqual(_last(p), "intent-ask: 2")
+        self.assertNotIn("합침", p.stdout)
+
+    def test_no_candidates_is_question_none(self):
+        p = self._run(_out([], none_reason="물을 것이 없다"))
+        self.assertEqual(_last(p), "intent-ask: 0")
+        self.assertEqual(_last(self._render()), NOQ_LINE)
+
+    def test_no_verdict_args_line(self):
+        os.makedirs(os.path.join(self.rd, "repo"))
+        repo = _git_repo(os.path.join(self.rd, "repo"))
+        rd = os.path.join(self.rd, "rd")
+        os.makedirs(rd)
+        outs = [_cli("gate", "--rd", rd, "--path", "final"),
+                _cli("config", "--rd", rd, "--repo", repo, "--base", "HEAD",
+                     "--project-dir", repo)]
+        _write("관찰 하나\n", rd, "e2e-record.md")
+        _write("## Goals\ng\n", rd, "intent.md")
+        _write("{}", rd, "intent-specs.json")
+        outs.append(_cli("prepare", "--rd", rd, "--repo", repo, "--tree-root", repo,
+                         "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                         "--specs-json", os.path.join(rd, "intent-specs.json")))
+        _write(_out([_q("a.txt", src="diff", kind="기본값")]), rd, "intent-critic-1.txt")
+        _write(_out([]), rd, "intent-critic-2.txt")
+        outs.append(_cli("check-output", os.path.join(rd, "intent-critic-1.txt")))
+        outs.append(_cli("doubts-append", "--rd", rd))
+        outs.append(_cli("filter", "--rd", rd))
+        _write("=== id: diff#a.txt#기본값 · pick: 의도다\n", rd, "answers.txt")
+        outs.append(_cli("record", "--rd", rd, "--repo", repo, "--answers",
+                         os.path.join(rd, "answers.txt")))
+        outs.append(_cli("render", "--rd", rd, "--mode", "pr"))
+        self.assertEqual(_last(outs[-3]), "intent-ask: 1")
+        self.assertEqual(_last(outs[-2]), "record: 1")
+        for p in outs:
+            self.assertEqual(p.returncode, 0, p.args)
+            for line in p.stdout.splitlines():
+                self.assertFalse(line.startswith("qg-verdict-args:"), line)
+
+
+class TestRecord(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, "repo"))
+        self.repo = _git_repo(os.path.join(self.tmp.name, "repo"))
+        self.rd = os.path.join(self.tmp.name, "rd")
+        os.makedirs(self.rd)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _asked(self, cands, mode="pr"):
+        _filter_rd(self.rd, mode=mode, sources=(SRC,))
+        _write(_out(cands), self.rd, "intent-critic-1.txt")
+        p = _cli("filter", "--rd", self.rd)
+        self.assertEqual(_last(p), "intent-ask: %d" % len(cands))
+        return [q["id"] for q in _by_state(self.rd, "ask")]
+
+    def _record(self, text):
+        _write(text, self.tmp.name, "answers.txt")
+        p = _cli("record", "--rd", self.rd, "--repo", self.repo, "--answers",
+                 os.path.join(self.tmp.name, "answers.txt"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _files(self):
+        d = os.path.join(self.repo, ANS_DIR)
+        return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+    def _parsed(self, name):
+        return ia.parse_answer_file(_read(self.repo, ANS_DIR, name))
+
+    def test_record_labels_writes_and_commits(self):
+        Path(self.repo, "a.txt").write_text("user change\n", encoding="utf-8")
+        _git(self.repo, "add", "a.txt")
+        _write("관찰 하나\n", self.rd, "e2e-record.md")
+        _write("## Goals\ng\n", self.rd, "intent.md")
+        _write("{}", self.rd, "intent-specs.json")
+        _cli("config", "--rd", self.rd, "--repo", self.repo, "--base", "HEAD",
+             "--project-dir", self.repo)
+        p = _cli("prepare", "--rd", self.rd, "--repo", self.repo, "--tree-root", self.repo,
+                 "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                 "--specs-json", os.path.join(self.rd, "intent-specs.json"))
+        self.assertEqual(_last(p), "intent-call: first-only")
+        _write(_out([_q("a.txt", src="diff", kind="기본값")]), self.rd, "intent-critic-1.txt")
+        self.assertEqual(_last(_cli("filter", "--rd", self.rd)), "intent-ask: 1")
+        ident = _by_state(self.rd, "ask")[0]["id"]
+        self.assertEqual(ident, "diff#a.txt#기본값")
+        p = self._record("=== id: %s · pick: 의도다\n" % ident)
+        self.assertEqual(_last(p), "record: 1")
+        self.assertIn("답 파일 1개를 커밋했다(", p.stdout)
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        parsed = self._parsed(files[0])
+        self.assertEqual((parsed["id"], parsed["answer"]), (ident, "의도다"))
+        self.assertIn("[e2e] 관찰 하나", parsed["observation"])
+        self.assertTrue(parsed["target"].startswith("tree "))
+        self.assertIn(" · dirty yes", parsed["target"])
+        shown = _git(self.repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+        self.assertEqual(shown, [ANS_DIR + "/" + files[0]])
+        self.assertEqual(_git(self.repo, "diff", "--cached", "--name-only").stdout.split(),
+                         ["a.txt"])
+        self.assertIn("docs(qg-intent): 쓴소리 답 1개 기록",
+                      _git(self.repo, "log", "-1", "--format=%s").stdout)
+        q = _by_state(self.rd, "answered")[0]
+        self.assertEqual((q["answer"], q["file"]), ("의도다", ANS_DIR + "/" + files[0]))
+
+    def test_record_typed_multiline_and_fake_header(self):
+        ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작")])
+        typed = ("잘못 골랐다 — 이유\n=== id: 모르는#정체#방향\n둘째 줄\t탭 뒤\n"
+                 "=== id: %s · pick: 아마\n=== id: %s · pick: 의도다\n" % (ids[1], ids[0]))
+        p = self._record("=== id: %s · pick: typed\n%s" % (ids[0], typed))
+        self.assertEqual(_last(p), "record: 1")
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        parsed = self._parsed(files[0])
+        self.assertEqual((parsed["id"], parsed["answer"]), (ids[0], "잘못 골랐다"))
+        body = _read(self.repo, ANS_DIR, files[0]).split("## 답 원문\n", 1)[1]
+        for part in ("잘못 골랐다 — 이유", "=== id: 모르는#정체#방향", "둘째 줄\t탭 뒤",
+                     "pick: 아마", "=== id: %s · pick: 의도다" % ids[0]):
+            self.assertIn(part, body)
+        self.assertEqual(len(_by_state(self.rd, "answered")), 1)
+        self.assertEqual(_by_state(self.rd, "ask")[0]["id"], ids[1])
+
+    def test_record_two_answers(self):
+        ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작")])
+        p = self._record("=== id: %s · pick: 잘못 골랐다\n=== id: %s · pick: 지금은 모르겠다\n"
+                         % (ids[0], ids[1]))
+        self.assertEqual(_last(p), "record: 2")
+        answers = sorted(self._parsed(n)["answer"] for n in self._files())
+        self.assertEqual(answers, ["잘못 골랐다", "지금은 모르겠다"])
+
+    def test_record_typed_unknown_prefix(self):
+        ids = self._asked([_q("D1")])
+        self._record("=== id: %s · pick: typed\n글쎄\n" % ids[0])
+        files = self._files()
+        parsed = self._parsed(files[0])
+        self.assertEqual(parsed["answer"], "지금은 모르겠다")
+        self.assertIn("글쎄", _read(self.repo, ANS_DIR, files[0]).split("## 답 원문\n", 1)[1])
+
+    def test_record_unidentified_answer_file(self):
+        ids = self._asked([_q("D1", kind="모르는", question="모르는 질문")])
+        self.assertTrue(ids[0].startswith("unidentified:"))
+        self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self.assertEqual(self._parsed(self._files()[0])["id"], ids[0])
+        self.assertEqual(ia.read_answered(os.path.join(self.repo, ANS_DIR)), ({}, 0))
+
+    def test_record_commit_failure_keeps_file(self):
+        ids = self._asked([_q("D1")])
+        _git(self.repo, "checkout", "-q", "--detach")
+        p = self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self.assertIn("답 파일을 커밋하지 못했다 — 브랜치가 아니다(detached HEAD)(파일은 남겼다)",
+                      p.stdout.splitlines())
+        self.assertEqual(_last(p), "record: 1")
+        self.assertEqual(len(self._files()), 1)
+        self.assertEqual(_questions(self.rd)["commit"], "failed — 브랜치가 아니다(detached HEAD)")
+        _cli("render", "--rd", self.rd, "--mode", "pr")
+        text, block = _return_block(self.rd)
+        self.assertIn("commit: failed — 브랜치가 아니다(detached HEAD)", text)
+        self.assertEqual(block["questions"][0]["file"], ANS_DIR + "/" + self._files()[0])
+
+    def test_record_write_failure_is_disclosed(self):
+        ids = self._asked([_q("D1")])
+        Path(self.repo, "a.txt").write_text("user change\n", encoding="utf-8")
+        _git(self.repo, "add", "a.txt")
+        with tempfile.TemporaryDirectory() as other:
+            os.makedirs(os.path.join(self.repo, "docs"))
+            os.symlink(other, os.path.join(self.repo, ANS_DIR))
+            head = _git(self.repo, "rev-parse", "HEAD").stdout
+            p = self._record("=== id: %s · pick: 의도다  \n" % ids[0])
+            self.assertIn("답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다", p.stdout.splitlines())
+            self.assertEqual(_last(p), "record: 0")
+            self.assertEqual(os.listdir(other), [])
+            self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout, head)
+            self.assertEqual(_git(self.repo, "diff", "--cached", "--name-only").stdout.split(),
+                             ["a.txt"])
+            _cli("render", "--rd", self.rd, "--mode", "pr")
+            text, block = _return_block(self.rd)
+            self.assertEqual(block["commit"], "failed — 답 자리가 심볼릭 링크다")
+            self.assertIn("답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다",
+                          _read(self.rd, "result.md"))
+
+    def test_record_does_not_write_session_drafts(self):
+        ids = self._asked([_q("D1")])
+        before = sorted(os.listdir(self.rd))
+        self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-answers")))
+        self.assertEqual(sorted(os.listdir(self.rd)), before)
+
+    def test_record_range_mode_writes_nothing(self):
+        ids = self._asked([_q("D1")], mode="range")
+        head = _git(self.repo, "rev-parse", "HEAD").stdout
+        p = self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self.assertEqual(_last(p), "record: 0")
+        self.assertEqual(self._files(), [])
+        self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout, head)
+
+
+class TestRender(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+        _filter_rd(self.rd)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _qy(self, questions, commit="-", status="ran"):
+        data = {"status": status, "call": "first-only", "counts": {}, "notices": [],
+                "commit": commit, "questions": questions}
+        _write(yaml.safe_dump(data, allow_unicode=True), self.rd, "intent-questions.yaml")
+
+    def _item(self, tid, state, answer=None, file=None):
+        q = {"id": SRC + "#%s#방향" % tid, "state": state, "question": "%s 질문 | 줄" % tid,
+             "target_id": tid}
+        if answer:
+            q["answer"] = answer
+        if file:
+            q["file"] = file
+        return q
+
+    def test_render_pr_and_return_block(self):
+        self._qy([self._item("D1", "answered", "의도다", ANS_DIR + "/a.md"),
+                  self._item("D2", "answered", "지금은 모르겠다", ANS_DIR + "/b.md"),
+                  self._item("D3", "over-cap")], commit="abc1234")
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), "쓴소리 — 질문 2개를 물었다 · 답 2개(잘못 골랐다 0개)")
+        text, block = _return_block(self.rd)
+        self.assertEqual((block["status"], block["mode"], block["commit"]),
+                         ("ran", "pr", "abc1234"))
+        self.assertEqual((block["answers_dir"], block["answers_dir_source"]), (ANS_DIR, "default"))
+        rows = block["questions"]
+        self.assertEqual([r["state"] for r in rows], ["답함", "답함", "상한 넘어 남김"])
+        self.assertEqual([r["file"] for r in rows], [ANS_DIR + "/a.md", ANS_DIR + "/b.md", "-"])
+        self.assertEqual([r["answer"] for r in rows], ["의도다", "지금은 모르겠다", "-"])
+        self.assertEqual(text.count("    wrong_choice: no\n"), 3)
+        self.assertEqual([r["wrong_choice"] for r in rows], [False, False, False])
+        section = _read(self.rd, "result.md").split("## 쓴소리", 1)[1]
+        self.assertIn("| 정체 | 상태 | 답 | 답 파일 | 질문 |", section)
+        self.assertIn("상한 넘어 남김:", section)
+        self.assertIn("D3 질문", section.split("상한 넘어 남김:", 1)[1])
+        self.assertNotIn("이미 「잘못 골랐다」", section)
+
+    def test_render_wrong_choice_counted(self):
+        self._qy([self._item("D1", "answered", "잘못 골랐다", ANS_DIR + "/a.md")], commit="abc")
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), "쓴소리 — 질문 1개를 물었다 · 답 1개(잘못 골랐다 1개)")
+        text, block = _return_block(self.rd)
+        self.assertIn("    wrong_choice: yes\n", text)
+        self.assertIs(block["questions"][0]["wrong_choice"], True)
+
+    def test_render_range_not_asked(self):
+        self._qy([self._item("D1", "ask"), self._item("D2", "ask")])
+        p = _cli("render", "--rd", self.rd, "--mode", "range")
+        self.assertEqual(_last(p), "쓴소리 — 질문 2개 아직 묻지 않음(범위 모드)")
+        text, block = _return_block(self.rd)
+        self.assertEqual(block["commit"], "-")
+        self.assertEqual([r["state"] for r in block["questions"]], ["아직 묻지 않음"] * 2)
+        self.assertEqual([r["file"] for r in block["questions"]], ["-", "-"])
+        self.assertEqual(block["mode"], "range")
+
+    def test_render_appends_after_publish_once(self):
+        before = "# 결과\n## 판정\nverdict-line\n## 게시\n게시함\n"
+        _write(before, self.rd, "result.md")
+        self._qy([])
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), NOQ_LINE)
+        after = _read(self.rd, "result.md")
+        self.assertTrue(after.startswith(before))
+        self.assertGreater(after.index("## 쓴소리"), after.index("## 게시"))
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual((p.returncode, _last(p)),
+                         (0, "쓴소리 — 이 실행은 이미 쓴소리 단계를 돌았다"))
+        self.assertEqual(_read(self.rd, "result.md"), after)
+
+    def test_render_no_evidence(self):
+        _write("call: none\nmode: pr\nanswers_root: /x\n", self.rd, "intent-plan.txt")
+        p = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(p), NONE_LINE)
+        self.assertEqual(_return_block(self.rd)[1]["status"], "skipped — 근거 없음")
 
 
 if __name__ == "__main__":
