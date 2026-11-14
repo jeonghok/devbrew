@@ -56,27 +56,34 @@ def sentence_diff(base_keys: list[str], seed_keys: list[str]) -> tuple[list[int]
     return rem, add
 
 
-def _cells(lines: list[str], gone: set) -> list[tuple[str, str]]:
+def _cells(lines: list[str], gone: set) -> list[tuple]:
+    """줄마다 (종류, 글자, 첫 남은 단위의 앞 공백). 그 단위가 줄의 원래 첫 단위면 앞 공백은 None
+    — 상대 쪽의 어떤 앞 공백과도 맞는다."""
     cells = []
     k = 0
     for line in lines:
         parts = line_parts(line)
         if not parts:
-            cells.append(("빈 줄", line))
+            cells.append(("빈 줄", line, None))
             continue
         keep = []
-        for g, u in parts:
+        for pos, (g, u) in enumerate(parts):
             if k not in gone:
-                keep.append((g, u))
+                keep.append((pos, g, u))
             k += 1
         if not keep:
-            cells.append(("빈 자리", ""))
+            cells.append(("빈 자리", "", None))
         else:
-            cells.append(("글", keep[0][1] + "".join(g + u for g, u in keep[1:])))
+            lead = None if keep[0][0] == 0 else keep[0][1]
+            cells.append(("글", keep[0][2] + "".join(g + u for _, g, u in keep[1:]), lead))
     return cells
 
 
-def _drop_holes(cells: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def _cell_match(a: tuple, b: tuple) -> bool:
+    return a[:2] == b[:2] and (a[2] is None or b[2] is None or a[2] == b[2])
+
+
+def _drop_holes(cells: list[tuple]) -> list[tuple]:
     dropped = [False] * len(cells)
     for i, c in enumerate(cells):
         if c[0] != "빈 자리":
@@ -98,7 +105,7 @@ def _same_skeleton(removed: list[str], added: list[str], rem: set, add: set) -> 
         b = _drop_holes(b)
     if not b_holes:
         s = _drop_holes(s)
-    return b == s
+    return len(b) == len(s) and all(_cell_match(x, y) for x, y in zip(b, s))
 
 
 def hunk_view(h: dict) -> dict:

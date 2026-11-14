@@ -113,8 +113,10 @@ gap|가.  나. 다.\n|가. 나. 다 고침.\n|[3]
 tail|가. 나. \n|가. 나 고침.\n|[4]
 tailkept|가. \n나.\n|가.\n나 고침.\n|[3]
 wsline|가. 나.\n  \n다.\n|가. 나 고침.\n\n다.\n|[3]
+gaphead|X. 가.\n|Y.   가.\n|[3]
+delgap|가.   나.\n|나.\n|[4]
 EOF
-for name in delfirst insfirst paddend repl chgpdel; do
+for name in delfirst insfirst paddend repl chgpdel delgap; do
   assert_eq "$(j "$name" '("   - " in d["text"], "   + " in d["text"], "문단 나눔" in d["text"])')" "(False, False, False)" "AC1: 문장 · 문단을 더하거나 빼거나 통째로 바꾼 것만으로 설명되면 줄 전체 꼴이 붙지 않는다 — $name"
 done
 TB="$(j replblank 'd["text"]')"
@@ -124,6 +126,9 @@ assert_contains "$TB" "   - 옛 문단." "AC2: 그 덩어리는 줄 전체 꼴�
 TG="$(j gap 'd["text"]')"
 assert_contains "$TG" "   문단 나눔 · 공백도 바뀜" "AC2: 그대로인 문장 사이의 공백만 바뀐 것도 문장 변경과 함께면 그 사실 한 줄"
 assert_contains "$TG" "   - 가.  나. 다." "AC2: 그 덩어리는 줄 전체 꼴(기준 쪽 — 공백 둘)이 함께 보인다"
+TH="$(j gaphead 'd["text"]')"
+assert_contains "$TH" "   문단 나눔 · 공백도 바뀜" "AC2: 줄 첫 문장을 바꾸면서 그 뒤 그대로인 문장 앞 공백을 바꾼 것도 그 사실 한 줄"
+assert_contains "$TH" "   + Y.   가." "AC2: 그 덩어리는 줄 전체 꼴(지금 쪽 — 공백 셋)이 함께 보인다"
 assert_eq "$(j marked '(d["hunks"][0]["kept"], d["hunks"][0]["removed_sentences"])')" "(1, ['나.'])" "AC2: «(사용자 확인)» 이 붙은 문장은 표시째 한 단위로 그대로다"
 TM="$(j merge 'd["text"]')"
 assert_contains "$TM" "   뺀 문장: 나." "AC2: 문단을 합친 덩어리도 바뀐 문장을 보인다"
@@ -139,6 +144,8 @@ assert_eq "$(j swap '[(h["removed_sentences"], h["removed_moved"], h["added_sent
   "[(['나.'], [True], ['라.'], [True]), (['라.'], [True], ['나.'], [True])]" "AC2: 두 문단 사이에서 맞바꾼 문장은 두 덩어리에 걸쳐 「자리 옮김」 이 붙는다"
 assert_not_contains "$(j rep 'd["text"]')" "자리 옮김" "AC2: 고친 문장에는 「자리 옮김」 이 붙지 않는다"
 assert_eq "$(j dup '(sum(d["hunks"][0]["removed_moved"]), sum(d["hunks"][0]["added_moved"]))')" "(1, 1)" "Review Focus: 같은 문장이 여럿이어도 「자리 옮김」 은 하나씩만 짝짓는다"
+mk dup2 '가. 가. 나.\n\n다.\n' '나.\n\n다. 가.\n'; scr dup2
+assert_eq "$(j dup2 '[h["removed_moved"] for h in d["hunks"]]')" "[[True, False], []]" "Review Focus: 더한 문장 하나는 뺀 문장 하나와만 짝이 된다 — 남은 같은 글자의 뺀 문장에는 「자리 옮김」 이 붙지 않는다"
 assert_eq "$(j nopunct '(d["hunks"][0]["removed_sentences"], d["hunks"][0]["added_sentences"])')" "(['- 목록 하나'], ['- 목록 둘'])" "Review Focus: 문장 끝 부호가 없는 줄은 줄 하나가 한 단위다"
 
 # ── AC3 — 바뀐 문장 없는 덩어리 · 불변식이 어긋난 덩어리 · 표시만 바뀐 편집 ─────────
