@@ -248,10 +248,10 @@ def mark_moves(views: list[dict]) -> None:
                 views[vi]["added_moved"][ai] = True
 
 
-def _render(k: int, h: dict, v: dict) -> list[str]:
+def _render(k: int, h: dict, v: dict, pieces: list) -> list[str]:
     out = ["%d) 기준 %s → 현재 %s · %s" % (k, seed_edit_diff._span(*h["base"]),
                                          seed_edit_diff._span(*h["seed"]), v["summary"])]
-    out += [IND + "고친 이유(저자가 댐): " + piece for piece in v["reason"].split("\n")]
+    out += [IND + "고친 이유(저자가 댐): " + piece for piece in pieces]
     if v["shape"] == 1:
         out.append(IND + "문장으로 가르지 못함 — 줄 전체를 보인다")
     elif v["shape"] == 2:
@@ -280,6 +280,7 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     rs = parse_reasons(reasons_path, str(hunks_doc.get("seed_sha256", "")), {h["id"] for h in hunks})
     st = load_ledger(state_dir)
     used = read_used(state_dir)
+    shown = []
     for h, v in zip(hunks, views):
         ent = rs["by_hunk"].get(h["id"], {"ids": [], "self": False})
         kinds, pieces = [], []
@@ -289,7 +290,8 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
             pieces.append(piece)
         if ent["self"] or not ent["ids"]:
             pieces.append(NO_REASON)
-        v["reason"] = "\n".join(pieces)
+        shown.append(pieces)
+        v["reason"] = " · ".join(pieces)
         v["recommend"] = bool(ent["ids"]) and not ent["self"] and all(k == "confirmed" for k in kinds) \
             and used is not None and not final
     notices = []
@@ -307,9 +309,9 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     if any(v["recommend"] for v in views):
         lines.append(RECOMMEND_NOTE)
     lines += notices
-    for k, (h, v) in enumerate(zip(hunks, views), 1):
+    for k, (h, v, pieces) in enumerate(zip(hunks, views, shown), 1):
         lines.append("")
-        lines += _render(k, h, v)
+        lines += _render(k, h, v, pieces)
     return {"text": "\n".join(lines), "hunks": views, "questions": [], "notices": notices}
 
 

@@ -343,4 +343,38 @@ mk2 usedbad2; printf '\377\376' > "$TMP/usedbad2/state/hunk-used-findings.txt"; 
 assert_contains "$(j usedbad2 'd["text"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 이유 파일 없음 + 쓴 지적 목록 깨짐 — 읽지 못한 사실이 화면 글에 보인다"
 assert_contains "$(j usedbad2 'd["notices"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 같은 사실이 알림 목록에도 있다"
 
+# ── 이유는 한 줄로 잇고, 화면 글은 조각마다 한 줄 ──────────────────────────────────
+rlines() { j "$1" 'len([x for x in d["text"].split("\n") if x.startswith("   고친 이유(저자가 댐): ")])'; }
+mk2 twofind; why twofind "1\t$FA,$DA" "2\t$FA,없음"; scr twofind
+assert_eq "$(j twofind 'd["hunks"][0]["reason"]')" "지적 「SCR_FIX_APPLY」(${FA}) — 사용자가 「적용」 으로 처분 · 지적 「SCR_DEC_ADOPT」(${DA}) — 사용자가 채택" "reason: 지적 둘을 댄 덩어리의 reason 은 줄바꿈 없이 ' · ' 로 이은 한 줄이다"
+assert_eq "$(j twofind 'd["hunks"][1]["reason"]')" "지적 「SCR_FIX_APPLY」(${FA}) — 사용자가 「적용」 으로 처분 · 대응하는 지적 없음 — 저자가 스스로 고침" "reason: 지적 + 「없음」 도 줄바꿈 없이 ' · ' 로 이은 한 줄이다"
+assert_eq "$(rlines twofind)" "4" "reason: 화면 글에는 조각마다 이유 줄이 하나씩 있다(둘 + 둘)"
+mk2 dotsum; why dotsum "1\t$FA"; force "$TMP/dotsum/state" "$FA" summary '앞 · 뒤'; scr dotsum
+assert_eq "$(rlines dotsum)" "2" "reason: 요약 글에 ' · ' 가 들어 있어도 이유 줄을 더 쪼개지 않는다(지적 조각 하나 + 다음 덩어리의 지적 없음 하나)"
+assert_contains "$(j dotsum 'd["text"]')" "   고친 이유(저자가 댐): 지적 「앞 · 뒤」(${FA}) — 사용자가 「적용」 으로 처분" "reason: 요약 글의 ' · ' 는 한 줄 안에 그대로 있다"
+
+# ── 재결정한 decide — 그 지적의 «마지막» 선택으로 가른다 ─────────────────────────────
+choices() {   # choices <상태 폴더> <지적 id> → 그 지적을 낸 decision_log 항목의 choice 들
+  python3 - "$S" "$1" "$2" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+st = ds.load_state(sys.argv[2])
+print([e["choice"] for e in st["decision_log"] if sys.argv[3] in e["finding_ids"]], [bool(e.get("supersedes")) for e in st["decision_log"] if sys.argv[3] in e["finding_ids"]])
+PY
+}
+redecide() {   # redecide <이름> <지적 id> <고른 쪽> — 그 지적을 다시 열고(상태 open) 엔진으로 다시 결정한다
+  force "$TMP/$1/state" "$2" state open
+  cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$TMP/$1/audit.md"
+  python3 "$S/docreview_state.py" decide --state-dir "$TMP/$1/state" --id "$2" --choice "$3" --quote="다시 결정" --log-file "$TMP/$1/audit.md" >/dev/null
+}
+mk2 redecA; why redecA "1\t$DA"; redecide redecA "$DA" reject
+assert_eq "$(choices "$TMP/redecA/state" "$DA")" "['adopt', 'reject'] [False, True]" "전제: 재결정 fixture — 채택한 뒤 거부한 decide 는 항목 둘이고 뒤가 앞을 잇는다"
+scr redecA
+assert_eq "$(rec redecA)" "[False, False]" "재결정: 채택한 뒤 거부한 decide 를 댄 덩어리는 권장이 없다(마지막 선택이 거부)"
+assert_contains "$(j redecA 'd["text"]')" "저자가 댄 지적 ${DA} 은 원장에서 확인되지 않는다" "재결정: 그 지적은 원장에서 확인되지 않는다고 보인다"
+mk2 redecB; why redecB "2\t$DR"; redecide redecB "$DR" adopt
+assert_eq "$(choices "$TMP/redecB/state" "$DR")" "['reject', 'adopt'] [False, True]" "전제: 재결정 fixture — 거부한 뒤 채택한 decide 는 항목 둘이고 뒤가 앞을 잇는다"
+scr redecB
+assert_eq "$(rec redecB)" "[False, True]" "재결정: 거부한 뒤 채택한 decide 를 댄 덩어리는 권장이다(마지막 선택이 채택)"
 finish
