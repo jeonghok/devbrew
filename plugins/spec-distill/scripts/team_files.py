@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import team_layout  # noqa: E402
-from roadmap_model import FormatError, section_body  # noqa: E402,F401
+from roadmap_model import FormatError, field_text, frontmatter, section_body, unquote  # noqa: E402,F401
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates" / "team"
 SECTIONS = ("목표", "지시 원문", "하지 않을 것", "결정 기록")
@@ -23,7 +23,7 @@ KIND_TASK = "task"
 _RANGE_RE = re.compile(r"([0-9]+)[–-]([0-9]+)")
 _SLOT_RE = re.compile(r"\{\{(\w*)\}\}")
 _SCOPE_MID = " / 안 한다 "
-_SCOPE_HEAD = "한다 "
+SCOPE_RE = re.compile(r"한다 (\S.*?) / 안 한다 (\S.*)")
 SOURCE_PARTS = ("제약", "열린 질문", "웹 근거", "기각 · 위험")   # 번호 파일의 칸 — roadmap_render.bundle_parts 도 이 이름을 쓴다
 
 
@@ -52,13 +52,21 @@ def format_ranges(ranges) -> str:
 
 def _split_scope(scope: str):
     """`한다 <가> / 안 한다 <나>` 꼴이면 (가, 나), 아니면 None."""
-    if "\n" in scope or not scope.startswith(_SCOPE_HEAD) or scope.count(_SCOPE_MID) != 1:
+    m = SCOPE_RE.fullmatch(scope)
+    if not m or scope.count(_SCOPE_MID) != 1:
         return None
-    head, tail = scope.split(_SCOPE_MID)
-    do = head[len(_SCOPE_HEAD):]
-    if not do or do[0].isspace() or not tail or tail[0].isspace():
-        return None
-    return do, tail
+    return m.group(1), m.group(2)
+
+
+def scope_line(value) -> str:
+    """로드맵 범위 칸(글 또는 하위 항목 목록) → `한다 … / 안 한다 …` 한 줄(INTENT.md 의 목표 · 하지 않을 것을 만든 꼴)."""
+    if isinstance(value, str):
+        return value
+    do = [i[len("한다: "):] for i in value if i.startswith("한다: ")]
+    dont = [i[len("안 한다: "):] for i in value if i.startswith("안 한다: ")]
+    if do and dont and len(do) + len(dont) == len(value):
+        return "한다 %s / 안 한다 %s" % (" · ".join(do), " · ".join(dont))
+    return field_text(value)
 
 
 def goal_text(intent: str, scope: str) -> str:
@@ -146,10 +154,16 @@ def intent_sections(text: str) -> dict:
     return out
 
 
+def intent_meta(text: str) -> dict:
+    """INTENT.md 머리의 키 → 따옴표를 벗긴 값. 머리가 없거나 닫히지 않았으면 FormatError."""
+    _header_end(text.split("\n"))
+    return {k: unquote(v) for k, v in frontmatter(text).items()}
+
+
 def intent_ranges(text: str) -> list:
     lines = text.split("\n")
-    header = lines[:_header_end(lines)]
-    if "kind: " + KIND_TASK in header:
+    _header_end(lines)
+    if intent_meta(text).get("kind") == KIND_TASK:
         return []   # 단순 작업의 지시 원문은 받은 말 그대로다 — 범위 줄로 읽지 않는다
     prefix = _pointer_prefix()
     for line in intent_sections(text)["지시 원문"].split("\n"):

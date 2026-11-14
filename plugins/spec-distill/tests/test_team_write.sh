@@ -497,6 +497,10 @@ cp "$T/i1.pushed" "$I1"
 printf '# 계획\n' > "$W/${RD}t1/jobs/E1/plan-2.md"
 assert_eq "$(check)" "1" "P4: 브랜치 하나인 과제에 plan-2.md: rc 1"
 assert_contains "$(cat "$T/chk.txt")" "plan-2.md" "P4: plan-2.md 를 짚는다"
+printf '# 계획\n' > "$W/${RD}t1/jobs/E1/plan-0.md"
+assert_eq "$(check)" "1" "P4: plan-0.md(번호 0): rc 1"
+assert_contains "$(cat "$T/chk.txt")" "plan-0.md" "P4: plan-0.md 를 짚는다"
+rm -- "${W:?}/${RD:?}t1/jobs/E1/plan-0.md"
 # original 다시 — 로드맵이 있는 나무에서 쓴 뒤의 검사가 실패하면 되돌린다
 printf -- '- **S5** 🗣 발화 (round 4):\n  > 다섯째 말\n' >> "$W/docs/iv/t-brief-interview.audit.md"
 g add -- docs/iv && g commit -qm s5

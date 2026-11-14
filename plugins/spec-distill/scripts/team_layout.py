@@ -34,10 +34,17 @@ SOURCES_FILE = "sources.md"
 DESIGN_FILE = "design.md"
 RESULTS_DIR = "results"
 KEEP_FILE = ".gitkeep"
+BLOCKED_FILE = "BLOCKED.md"
+
+STAGES = ("design", "plan", "implement", "review")
+PLANNED_STAGES = ("plan", "implement", "review")
 
 STAGE_PENDING = "이 판은 team 형식의 단계를 계산하지 않는다 — 번호 대조까지만 했다"
 
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+_PLAN_FILE_RE = re.compile(r"plan-([1-9][0-9]*)\.md")
+_PLAN_SHAPE_RE = re.compile(r"plan-([0-9]+)\.md")
+_RESULT_RE = re.compile(r"(%s)(?:-plan-([1-9][0-9]*))?-([1-9][0-9]*)\.md" % "|".join(STAGES))
 
 
 class UnknownLayout(ValueError):
@@ -96,6 +103,58 @@ def original_rel() -> str:
     return INTENT_DIR + "/" + ORIGINAL_FILE
 
 
+def plan_name(n: int) -> str:
+    if n < 1:
+        raise ValueError("계획 번호는 1 이상이다: %r" % n)
+    return "plan-%d.md" % n
+
+
+def plan_number(name: str) -> Optional[int]:
+    """`plan-<n>.md` 의 n(0 으로 시작하지 않는 1 이상의 수). 그 꼴이 아니면 None."""
+    m = _PLAN_FILE_RE.fullmatch(name)
+    return int(m.group(1)) if m else None
+
+
+def plan_shape_digits(name: str) -> Optional[str]:
+    """`plan-<숫자>.md` 모양이면 그 숫자 글자(0 · 앞의 0 포함), 아니면 None — 올바른 이름은 `plan_number` 가 가린다."""
+    m = _PLAN_SHAPE_RE.fullmatch(name)
+    return m.group(1) if m else None
+
+
+def result_name(stage: str, attempt: int, plan: Optional[int] = None) -> str:
+    if stage not in STAGES:
+        raise ValueError("단계 이름이 아니다: %r" % stage)
+    if attempt < 1:
+        raise ValueError("시도 번호는 1 이상이다: %r" % attempt)
+    if plan is None:
+        return "%s-%d.md" % (stage, attempt)
+    if stage == STAGES[0]:
+        raise ValueError("%s 결과에는 계획 번호가 붙지 않는다" % stage)
+    if plan < 1:
+        raise ValueError("계획 번호는 1 이상이다: %r" % plan)
+    return "%s-plan-%d-%d.md" % (stage, plan, attempt)
+
+
+def parse_result_name(name: str) -> Optional[tuple]:
+    """결과 파일 이름 → (단계, 계획 | None, 시도). 꼴이 아니면 None."""
+    m = _RESULT_RE.fullmatch(name)
+    if not m or (m.group(2) and m.group(1) == STAGES[0]):
+        return None
+    return (m.group(1), int(m.group(2)) if m.group(2) else None, int(m.group(3)))
+
+
+def job_of_path(roadmaps_dir: str, rel: str) -> Optional[tuple]:
+    """`<roadmaps_dir><팀>/jobs/<과제>/<나머지>` 꼴이면 (Team, 과제, 나머지), 아니면 None."""
+    if not rel.startswith(roadmaps_dir):
+        return None
+    parts = rel[len(roadmaps_dir):].split("/")
+    if len(parts) < 4 or parts[1] != JOBS_DIR or not parts[0] or not parts[3]:
+        return None
+    if team_name_problem(parts[0]) or job_name_problem(parts[2]):
+        return None
+    return Team(roadmaps_dir, parts[0]), parts[2], "/".join(parts[3:])
+
+
 def handbook(roadmaps_dir: str) -> str:
     return roadmaps_dir + HANDBOOK_FILE
 
@@ -137,6 +196,10 @@ class Team(NamedTuple):
     def inbox(self) -> str:
         return self.path(INBOX_DIR)
 
+    @property
+    def jobs(self) -> str:
+        return self.path(JOBS_DIR)
+
     def job(self, job: str, *names: str) -> str:
         return self.path(job_rel(job, *names))
 
@@ -156,9 +219,13 @@ class Team(NamedTuple):
         return self.job(job, DESIGN_FILE)
 
     def plan(self, job: str, n: int) -> str:
-        if n < 1:
-            raise ValueError("계획 번호는 1 이상이다: %r" % n)
-        return self.job(job, "plan-%d.md" % n)
+        return self.job(job, plan_name(n))
+
+    def result(self, job: str, stage: str, attempt: int, plan: Optional[int] = None) -> str:
+        return self.job(job, RESULTS_DIR, result_name(stage, attempt, plan))
+
+    def blocked(self, job: str) -> str:
+        return self.job(job, RESULTS_DIR, BLOCKED_FILE)
 
 
 def team_from_roadmap(roadmaps_dir: str, roadmap_rel: str) -> Team:

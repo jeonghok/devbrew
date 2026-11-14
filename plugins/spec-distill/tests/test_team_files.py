@@ -200,5 +200,40 @@ class Original(unittest.TestCase):
         self.assertEqual((F.parse_original(more)[-1].body, F.parse_original(more)[-1].first, notes), (b"B\n", 12, []))
 
 
+class OneScopeReader(unittest.TestCase):   # 잔여 — 「한다 … / 안 한다 …」 를 읽는 곳이 하나
+    def test_same_pattern_object_and_no_private_copy(self):
+        import roadmap_render as R
+        import team_check as C
+        self.assertIs(R.SCOPE_RE, F.SCOPE_RE)
+        self.assertFalse(hasattr(C, "_scope"))
+        self.assertFalse(hasattr(C, "_PLAN_RE"))
+
+    def test_scope_line(self):
+        self.assertEqual(F.scope_line(["한다: 가", "한다: 나", "안 한다: 다"]), "한다 가 · 나 / 안 한다 다")
+        self.assertEqual(F.scope_line("한다 가 / 안 한다 나"), "한다 가 / 안 한다 나")
+        self.assertEqual(F.scope_line(["한다: 가"]), M.field_text(["한다: 가"]))   # 둘 다 있지 않으면 칸 글 그대로
+        self.assertEqual(F.scope_line(["한다: 가", "메모"]), M.field_text(["한다: 가", "메모"]))
+
+    def test_split_matches_the_table_rule(self):   # 표가 받는 꼴과 INTENT.md 가 가르는 꼴이 같다
+        for scope, goal_tail, not_do in (("한다 가 / 안 한다 나", "가", "- 나"), ("한다 가 / 안 한다 나 / 안 한다 다", None, "- 없음"),
+                                         ("한다  가 / 안 한다 나", None, "- 없음"), ("그냥 글", None, "- 없음")):
+            self.assertEqual(F.goal_text("의도", scope), "의도\n\n- 범위: %s" % (goal_tail or scope), scope)
+            self.assertEqual(F.not_text(scope), not_do, scope)
+
+
+class IntentMeta(unittest.TestCase):   # 잔여 — kind 판정이 줄 비교가 아니다
+    HEAD = "---\ntype: job\njob: fix\nkind: %s\nroadmap: r/t/roadmap.md\nbranch: fix/x\npaths: [a.py]\n---\n\n"
+    BODY = "## 목표\n\n가\n\n## 지시 원문\n\n- 범위: intent/original.md 2–3행\n\n## 하지 않을 것\n\n- 없음\n\n## 결정 기록\n"
+
+    def test_meta_unquotes_and_trims(self):
+        for kind in ("task", '"task"', "task  ", "'task'"):
+            text = self.HEAD % kind + self.BODY
+            self.assertEqual(F.intent_meta(text)["kind"], "task", kind)
+            self.assertEqual(F.intent_ranges(text), [], kind)   # 받은 말 안의 범위 줄 꼴을 범위로 읽지 않는다
+        self.assertEqual(F.intent_ranges(self.HEAD % "epic" + self.BODY), [(2, 3)])
+        self.assertRaises(F.FormatError, F.intent_meta, "머리 없는 글\n")
+        self.assertRaises(F.FormatError, F.intent_meta, "---\nkind: task\n")
+
+
 if __name__ == "__main__":
     unittest.main()

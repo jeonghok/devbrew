@@ -23,7 +23,6 @@ import team_layout as L  # noqa: E402
 
 GIT_ALLOWED = frozenset({"cat-file", "log", "rev-parse"})
 PREFIX = "[spec-distill] "
-_PLAN_RE = re.compile(r"plan-([0-9]+)\.md")
 
 
 # ── git 읽기 ─────────────────────────────────────────────────────────────────
@@ -72,17 +71,6 @@ def _meta(text: str) -> dict:
     return {k: M.unquote(v) for k, v in M.frontmatter(text).items()}
 
 
-def _scope(value) -> str:
-    """로드맵 범위 칸 → `한다 … / 안 한다 …` 한 줄(INTENT.md 의 목표 · 하지 않을 것을 만든 꼴)."""
-    if isinstance(value, str):
-        return value
-    do = [i[len("한다: "):] for i in value if i.startswith("한다: ")]
-    dont = [i[len("안 한다: "):] for i in value if i.startswith("안 한다: ")]
-    if do and dont and len(do) + len(dont) == len(value):
-        return "한다 %s / 안 한다 %s" % (" · ".join(do), " · ".join(dont))
-    return M.field_text(value)
-
-
 # ── 검사 ─────────────────────────────────────────────────────────────────────
 
 def _intent_problems(rel: str, text, want: dict) -> list:
@@ -102,10 +90,15 @@ def _plan_problems(top: Path, team, job: str, branches: int) -> list:
     folder = top / team.job(job)
     out = []
     for name in sorted(os.listdir(str(folder))) if folder.is_dir() else []:
-        m = _PLAN_RE.fullmatch(name)
-        if m and not 1 <= int(m.group(1)) <= branches:
+        n = L.plan_number(name)
+        digits = L.plan_shape_digits(name)
+        if n is not None and 1 <= n <= branches:
+            continue
+        if n is None and digits is not None and 1 <= int(digits) <= branches:
+            out.append("%s: 계획 번호 %s 는 0 으로 시작하지 않는 수여야 한다(plan-%d.md)" % (team.job(job, name), digits, int(digits)))
+        elif digits is not None:
             out.append("%s: 계획 번호 %s 가 이 과제의 브랜치 수 %d 를 넘는다 — 계획 하나가 브랜치 하나다"
-                       % (team.job(job, name), m.group(1), branches))
+                       % (team.job(job, name), digits, branches))
     return out
 
 
@@ -189,7 +182,7 @@ def check_tree(top: Path, team, base=None) -> tuple:
                 errors.append("%s: 지시 원문 범위 %d–%d 가 %s 의 %d줄 밖이다" % (intent_rel, a, z, team.original, total))
         fields = b.get("fields") or {}
         notes.extend("%s: %s" % (intent_rel, line)
-                     for line in F.intent_drift(intent_text, M.field_text(fields.get("의도", "")), _scope(fields.get("범위", ""))))
+                     for line in F.intent_drift(intent_text, M.field_text(fields.get("의도", "")), F.scope_line(fields.get("범위", ""))))
 
     # 5 · 6. 블록이 없는 과제 폴더
     jobs_dir = top / team.path(L.JOBS_DIR)
