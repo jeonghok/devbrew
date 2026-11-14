@@ -120,11 +120,14 @@ KILL_LINE = "intent-critic 꺼짐(kill switch)"
 # 거름 공시 — 0 이 아닌 것만 이 순서로 낸다.
 COUNT_NOTICES = (
     ("evidence", "근거 없어 거름 %d"),
+    ("quote", "인용이 그 파일에 없어 거름 %d"),
+    ("read_only", "읽은 인용만 있어 거름 %d"),
     ("answered", "이미 답한 질문이라 거름 %d"),
     ("over_cap", "상한 넘어 남김 %d"),
     ("unidentified", "정체를 가르지 못함 %d"),
     ("broken", "항목 파손 %d"),
     ("absorbed", "두 호출에서 겹친 후보를 합침 %d"),
+    ("cites_dropped", "근거로 받지 않은 인용 %d"),
 )
 RETURN_STATES = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
 
@@ -753,16 +756,21 @@ def _identity(item: dict, plan: dict) -> Optional[str]:
     return ident
 
 
-def _observation_changed(value, observation: str, evidence: dict) -> bool:
+def _observation_changed(value, observation: str, evidence: dict, wide: bool,
+                         tree_root: str) -> bool:
+    """앞 답의 관찰이 바뀌었나 — 지금의 근거 줄이 맞거나, 넓은 리뷰에서 지금의 읽은 인용이 확인될 때."""
     if not isinstance(value, dict):
         return False
     previous = value.get("previous")
     if not isinstance(previous, str) or not previous.strip() or previous not in observation:
         return False
-    return _cited(value.get("now_lines"), evidence)
+    if _cited(value.get("now_lines"), evidence):
+        return True
+    return wide and bool(io_.verify_quotes(tree_root, value.get("now_quotes"))[0])
 
 
-def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> Optional[str]:
+def _answered_state(item: dict, ident: str, answered: dict, evidence: dict, wide: bool,
+                    tree_root: str) -> Optional[str]:
     """이미 답한 질문으로 거를 때의 상태. 거르지 않으면 None."""
     same = item.get("same_as")
     if not isinstance(same, str) or same != ident:
@@ -770,7 +778,8 @@ def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> O
     prev = answered.get(ident)
     if prev is None or prev["answer"] not in FILTER_ANSWERS:
         return None
-    if _observation_changed(item.get("observation_changed"), prev["observation"], evidence):
+    if _observation_changed(item.get("observation_changed"), prev["observation"], evidence,
+                            wide, tree_root):
         return None
     return "wrong-choice-filtered" if prev["answer"] == "잘못 골랐다" else "answered-filtered"
 
@@ -779,20 +788,38 @@ def _unidentified_id(question: str) -> str:
     return "unidentified:" + hashlib.sha1(question.encode("utf-8", UNWRITABLE)).hexdigest()[:12]
 
 
-def _question_record(item: dict, ident: str, identified: bool, evidence: dict) -> dict:
+def _question_record(item: dict, ident: str, identified: bool, evidence: dict, lines: list,
+                     quotes: list) -> dict:
+    """남긴 질문의 레코드 — `lines` 는 확인된 근거 줄 번호(무효면 빈 목록), `quotes` 는 확인된 읽은 인용."""
     observation = []
-    for n in item["evidence_lines"]:
+    found = set()
+    for n in lines:
         observation.append(evidence[n])
+        found.add(io_.evidence_kind(evidence[n]))
+    for quote in quotes:
+        observation.append(io_.quote_line(quote))
+    if quotes:
+        found.add(io_.KIND_READ)
     return {"id": ident, "identified": identified, "state": "",
             "target_source": _text(item.get("target_source")),
             "target_id": _text(item.get("target_id")), "kind": _text(item.get("kind")),
             "weight": _text(item.get("weight")), "quote": _text(item.get("quote")),
             "label": _text(item.get("label")), "question": _text(item.get("question")).strip(),
-            "evidence_lines": list(item["evidence_lines"]), "observation": observation}
+            "evidence_lines": list(lines), "observation": observation,
+            "read_quotes": list(quotes), "evidence_kinds": io_.ordered_kinds(found)}
 
 
-def _weight_rank(record: dict) -> int:
-    return WEIGHTS.get(record["weight"], len(WEIGHTS))
+def _pick_rank(record: dict) -> tuple:
+    """고르는 순서 — 무게, 같은 무게면 돌려 본 근거가 있는 질문이 앞(정렬이 안정이라 그다음은 들어온 순서)."""
+    run_first = 0 if io_.KIND_RUN in record["evidence_kinds"] else 1
+    return (WEIGHTS.get(record["weight"], len(WEIGHTS)), run_first)
+
+
+def _quote_count(raw) -> int:
+    """리뷰어가 적은 읽은 인용의 수 — 목록이면 그 길이, 목록이 아닌 값이 있으면 하나."""
+    if isinstance(raw, list):
+        return len(raw)
+    return 1 if raw else 0
 
 
 def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Optional[list]:
@@ -901,6 +928,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
            ids: Optional[set], whole: bool) -> list:
     evidence = _evidence_lines(rd)
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
+    wide = plan["breadth"] != "narrow"
     first_ids = set()
     remaining: List[dict] = []
     decided: List[dict] = []
@@ -909,10 +937,30 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
             ledger.hold(label, "항목 파손")
             counts["broken"] += 1
             continue
-        if not _cited(item.get("evidence_lines"), evidence):
+        # 줄 인용은 하나라도 틀리면 묶음 전체가 무효다.
+        # 읽은 인용은 넓은 리뷰에서만 리뷰 트리와 견준다.
+        cited = _cited(item.get("evidence_lines"), evidence)
+        raw_quotes = item.get("read_quotes")
+        written = _quote_count(raw_quotes)
+        quotes = io_.verify_quotes(plan["tree_root"], raw_quotes)[0] if wide else []
+        if not cited and not written:
             ledger.suppressed(label, "근거 없어 거름")
             counts["evidence"] += 1
             continue
+        if not cited and not wide:
+            ledger.suppressed(label, "읽은 인용만 있어 거름")
+            counts["read_only"] += 1
+            continue
+        if not cited and not quotes:
+            ledger.suppressed(label, "인용이 그 파일에 없어 거름")
+            counts["quote"] += 1
+            continue
+        lines = list(item["evidence_lines"]) if cited else []
+        # 남긴 질문에서 근거로 받지 않은 것 — 확인 안 된(좁으면 보지 않은) 읽은 인용마다 하나,
+        # 무효가 된 줄 인용 묶음 하나.
+        dropped = written - len(quotes)
+        if not cited and item.get("evidence_lines") not in (None, []):
+            dropped += 1
         ident = _identity(item, plan)
         if ident is not None and number == 2 and plan["call"] == "split" and ident in first_ids:
             ledger.absorbed(label, ident)
@@ -921,12 +969,12 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
         if ident is None:
             counts["unidentified"] += 1
             record = _question_record(item, _unidentified_id(_text(item.get("question")).strip()),
-                                      False, evidence)
+                                      False, evidence, lines, quotes)
         else:
             if number == 1:
                 first_ids.add(ident)
-            record = _question_record(item, ident, True, evidence)
-            state = _answered_state(item, ident, answered, evidence)
+            record = _question_record(item, ident, True, evidence, lines, quotes)
+            state = _answered_state(item, ident, answered, evidence, wide, plan["tree_root"])
             if state is not None:
                 ledger.suppressed(label, "이미 답한 질문")
                 counts["answered"] += 1
@@ -936,9 +984,10 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
                 record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
                 decided.append(record)
                 continue
+        counts["cites_dropped"] += dropped
         record["label_in_run"] = label
         remaining.append(record)
-    ordered = sorted(remaining, key=_weight_rank)
+    ordered = sorted(remaining, key=_pick_rank)
     for i, record in enumerate(ordered):
         label = record.pop("label_in_run")
         if i < CAP:
@@ -955,8 +1004,8 @@ def cmd_filter(args) -> int:
     rd = args.rd
     ledger = Ledger(items="open")
     notices: List[str] = []
-    counts = {"evidence": 0, "answered": 0, "over_cap": 0, "unidentified": 0, "broken": 0,
-              "absorbed": 0}
+    counts = {"evidence": 0, "quote": 0, "read_only": 0, "answered": 0, "over_cap": 0,
+              "unidentified": 0, "broken": 0, "absorbed": 0, "cites_dropped": 0}
     plan = _read_plan(rd)
     questions: List[dict] = []
     if plan is None:

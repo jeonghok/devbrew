@@ -637,5 +637,250 @@ class TestReadSides(unittest.TestCase):
             os.remove(os.path.join(self.repo, "%s:a.txt" % self.A))
 
 
+RQ = {"path": "a.txt", "line": 1, "text": "x"}
+QUOTE_GONE = "인용이 그 파일에 없어 거름 1"
+COUNT_KEYS = ("evidence", "quote", "read_only", "answered", "over_cap", "unidentified", "broken",
+              "absorbed", "cites_dropped")
+
+
+class TestWideFilter(unittest.TestCase):
+    """넓게 보는 리뷰의 거르기 — 읽은 인용 확인 · 근거의 갈래 · 새 종류 · 고르는 순서."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _tree(self):
+        return os.path.join(self.rd, "tree")
+
+    def _prepare(self, wide, **kw):
+        """리뷰 트리(a.txt 가 `x\\n` 인 git 리포)와 세션 폴더 — 넓으면 계획 파일 끝에 `breadth: range`."""
+        os.makedirs(self._tree(), exist_ok=True)
+        tic._git_repo(self._tree())
+        tic._filter_rd(self.rd, **kw)
+        if wide:
+            with open(os.path.join(self.rd, "intent-plan.txt"), "a", encoding="utf-8") as fh:
+                fh.write("breadth: range\n")
+
+    def _filter(self, first):
+        tic._write(first, self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _run(self, first, wide, **kw):
+        self._prepare(wide, **kw)
+        return self._filter(first)
+
+    def _evidence(self, text):
+        tic._write(text, self.rd, "intent-evidence.txt")
+
+    def _git_ok(self, repo, *args):
+        p = tic._git(repo, *args)
+        self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_read_quote_accepted_in_wide(self):
+        p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["evidence_kinds"], ["읽어서 봄"])
+        self.assertEqual(q["observation"], ["[읽음] a.txt:1 x"])
+        self.assertEqual(q["read_quotes"], [RQ])
+        self.assertEqual(q["evidence_lines"], [])
+        self.assertNotIn("근거로 받지 않은 인용", p.stdout)
+
+    def test_narrow_read_only_filtered(self):
+        p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]), wide=False)
+        self.assertIn("읽은 인용만 있어 거름 1", p.stdout.splitlines())
+        self.assertEqual(tic._last(p), "intent-ask: 0")
+        self.assertNotIn("근거 없어 거름", p.stdout)
+
+    def test_new_kinds_have_identity(self):
+        self.assertEqual(ia.make_id("diff", "a.txt", "갈라짐"), "diff#a.txt#갈라짐")
+        self.assertEqual(ia.make_id("diff", "a.txt", "중복"), "diff#a.txt#중복")
+        self.assertEqual(ia.KINDS[-1], "기타")
+        self.assertEqual(ia.KINDS[ia.KINDS.index("마찰") + 1:], ("갈라짐", "중복", "기타"))
+
+    def test_read_quote_variants_rejected(self):
+        self._prepare(wide=True)
+        tree = self._tree()
+        os.symlink("a.txt", os.path.join(tree, "l.txt"))
+        os.symlink(".", os.path.join(tree, "ld"))
+        self._git_ok(tree, "add", "l.txt", "ld")
+        self._git_ok(tree, "commit", "-q", "-m", "links")
+        tic._write("x\n", tree, "new.txt")
+        # 세션 폴더(rd) 의 파일 — 리뷰 트리 위(`..`) · 절대 경로로, 그리고 pr 모드처럼 트리 안의
+        # 무시된 세션 폴더를 상대 경로로.
+        tic._write("x\n", self.rd, "a.txt")
+        tic._write("x\n", self.rd, "session.txt")
+        tic._write(".claude/\n", tree, ".gitignore")
+        tic._write("x\n", tree, ".claude", "qg", "s1", "intent-config.txt")
+        # 다른 worktree — 트리 밖과 트리 안(`.claude/worktrees/`) 둘 다. 거기서는 a.txt 가 추적된다.
+        outside_wt = os.path.join(self.rd, "wt")
+        self._git_ok(tree, "worktree", "add", "-q", "-b", "wt-out", outside_wt)
+        self._git_ok(tree, "worktree", "add", "-q", "-b", "wt-in",
+                     os.path.join(tree, ".claude", "worktrees", "w"))
+        self.assertTrue(os.path.isfile(os.path.join(outside_wt, "a.txt")))
+        variants = (
+            {"path": "a.txt", "line": 2, "text": "x"},
+            {"path": "a.txt", "line": 1, "text": "y"},
+            {"path": "nope.txt", "line": 1, "text": "x"},
+            {"path": "../a.txt", "line": 1, "text": "x"},
+            {"path": "/etc/hosts", "line": 1, "text": "x"},
+            {"path": os.path.join(tree, "a.txt"), "line": 1, "text": "x"},
+            {"path": "l.txt", "line": 1, "text": "x"},
+            {"path": "ld/a.txt", "line": 1, "text": "x"},
+            {"path": "new.txt", "line": 1, "text": "x"},
+            {"path": os.path.join(self.rd, "session.txt"), "line": 1, "text": "x"},
+            {"path": ".claude/qg/s1/intent-config.txt", "line": 1, "text": "x"},
+            {"path": os.path.join(outside_wt, "a.txt"), "line": 1, "text": "x"},
+            {"path": ".claude/worktrees/w/a.txt", "line": 1, "text": "x"},
+            {"path": "a.txt", "line": 2, "text": ""},
+            {"path": "a.txt", "line": 2, "text": "   "},
+            {"path": "a.txt", "line": 0, "text": "x"},
+            {"path": "a.txt", "line": "1", "text": "x"},
+            {"path": "a.txt", "line": True, "text": "x"},
+            {"path": "a.txt", "line": 1.0, "text": "x"},
+            {"path": "a.txt", "line": 1},
+            {"path": ["a.txt"], "line": 1, "text": "x"},
+            {"path": "a.txt", "line": 1, "text": 1},
+            "a.txt:1 x",
+        )
+        for quote in variants:
+            with self.subTest(quote=quote):
+                p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[quote])]))
+                self.assertIn(QUOTE_GONE, p.stdout.splitlines())
+                self.assertEqual(tic._last(p), "intent-ask: 0")
+        # 양성 대조 — 같은 준비에서 맞는 인용은 물음이 된다.
+        p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]))
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+
+    def test_whitespace_only_difference_accepted(self):
+        self._prepare(wide=True)
+        tic._write("  x  \r\n", self._tree(), "w.txt")
+        self._git_ok(self._tree(), "add", "w.txt")
+        quote = {"path": "w.txt", "line": 1, "text": "x"}
+        p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[quote])]))
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        self.assertEqual(tic._by_state(self.rd, "ask")[0]["observation"], ["[읽음] w.txt:1 x"])
+
+    def test_narrow_other_team_line_asks(self):
+        self._prepare(wide=False)
+        self._evidence(io_.build_evidence("관찰\n", None, "## 겹치는 곳\n- b — a.txt\n")[0])
+        p = self._filter(tic._out([tic._q("D1", kind="갈라짐", lines=[3])]))
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["evidence_kinds"], ["다른 팀에서 봄"])
+        self.assertEqual(q["id"], tic.SRC + "#D1#갈라짐")
+        self.assertTrue(q["identified"])
+
+    def test_bad_line_with_good_quote_survives(self):
+        p = self._run(tic._out([tic._q("D1", lines=[99], read_quotes=[RQ])]), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["evidence_kinds"], ["읽어서 봄"])
+        self.assertEqual(q["evidence_lines"], [])
+        self.assertIn("근거로 받지 않은 인용 1", p.stdout.splitlines())
+
+    def test_partial_quotes_counted(self):
+        bad = {"path": "a.txt", "line": 1, "text": "y"}
+        p = self._run(tic._out([tic._q("D1", lines=[], read_quotes=[RQ, bad])]), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        self.assertIn("근거로 받지 않은 인용 1", p.stdout.splitlines())
+        self.assertEqual(tic._by_state(self.rd, "ask")[0]["read_quotes"], [RQ])
+
+    def test_narrow_ignored_quote_counted(self):
+        p = self._run(tic._out([tic._q("D1", lines=[1], read_quotes=[RQ])]), wide=False)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["evidence_kinds"], ["돌려서 봄"])
+        self.assertEqual(q["read_quotes"], [])
+        self.assertEqual(q["observation"], [tic.OBS1])
+        self.assertIn("근거로 받지 않은 인용 1", p.stdout.splitlines())
+
+    def test_kinds_combined(self):
+        p = self._run(tic._out([tic._q("D1", lines=[1], read_quotes=[RQ])]), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        q = tic._by_state(self.rd, "ask")[0]
+        self.assertEqual(q["evidence_kinds"], ["돌려서 봄", "읽어서 봄"])
+        self.assertEqual(q["observation"], [tic.OBS1, "[읽음] a.txt:1 x"])
+        self.assertNotIn("근거로 받지 않은 인용", p.stdout)
+
+    def test_run_evidence_goes_first_within_weight(self):
+        cands = [tic._q("D1", lines=[], read_quotes=[RQ]), tic._q("D2", lines=[1]),
+                 tic._q("D3", kind="빠진 기능", weight="기능", lines=[1]),
+                 tic._q("D4", kind="빠진 기능", weight="기능", lines=[], read_quotes=[RQ])]
+        p = self._run(tic._out(cands), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 3")
+        self.assertEqual([q["target_id"] for q in tic._by_state(self.rd, "ask")],
+                         ["D2", "D1", "D3"])
+        self.assertEqual([q["target_id"] for q in tic._by_state(self.rd, "over-cap")], ["D4"])
+
+    def test_reask_with_now_quotes(self):
+        old = "[읽음] a.txt:1 old"
+        cand = tic._q("D1", same_as=tic.ID1,
+                      observation_changed={"previous": old, "now_quotes": [RQ]})
+        for wide, last in ((True, "intent-ask: 1"), (False, "intent-ask: 0")):
+            with tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(tic._out([cand]), wide=wide, answers=[(tic.ID1, "의도다", old)])
+                self.assertEqual(tic._last(p), last, wide)
+                if not wide:
+                    self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        # 확인 안 된 지금 인용으로는 넓어도 다시 묻지 않는다.
+        bad = dict(cand, observation_changed={"previous": old,
+                                              "now_quotes": [dict(RQ, text="y")]})
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            p = self._run(tic._out([bad]), wide=True, answers=[(tic.ID1, "의도다", old)])
+            self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+
+    def test_fake_marker_in_run_line(self):
+        self._prepare(wide=True)
+        self._evidence(io_.build_evidence("[다른 팀] 가짜\nx\t[다른 팀] 탭 뒤\n", None)[0])
+        self.assertTrue(tic._read(self.rd, "intent-evidence.txt").startswith(
+            "   1\t[e2e] [다른 팀] 가짜"))
+        p = self._filter(tic._out([tic._q("D1", lines=[1]), tic._q("D2", lines=[2])]))
+        self.assertEqual(tic._last(p), "intent-ask: 2")
+        for q in tic._by_state(self.rd, "ask"):
+            self.assertEqual(q["evidence_kinds"], ["돌려서 봄"], q["target_id"])
+
+    def test_evidence_kind(self):
+        self.assertEqual(io_.evidence_kind("   3\t[다른 팀] - b — a.txt"), io_.KIND_TEAMS)
+        self.assertEqual(io_.evidence_kind("   1\t[e2e] [다른 팀] 가짜"), io_.KIND_RUN)
+        self.assertEqual(io_.evidence_kind("   2\t[차등] x"), io_.KIND_RUN)
+        self.assertEqual(io_.evidence_kind("[다른 팀] 탭 없음"), io_.KIND_RUN)
+
+    def test_ledger_accounts_every_candidate(self):
+        bad = {"path": "a.txt", "line": 1, "text": "y"}
+        cands = [tic._q("D1", lines=[1]), tic._q("D2", lines=[], read_quotes=[bad]),
+                 tic._q("D3", lines=[])]
+        p = self._run(tic._out(cands), wide=True)
+        self.assertEqual(tic._last(p), "intent-ask: 1")
+        self.assertIn(QUOTE_GONE, p.stdout.splitlines())
+        self.assertIn("근거 없어 거름 1", p.stdout.splitlines())
+        data = tic._questions(self.rd)
+        disposition = data["disposition"]
+        self.assertNotIn("셀 수 없음", str(disposition))
+        self.assertEqual((disposition["accepted"], disposition["suppressed"]), (1, 2))
+        self.assertEqual(disposition["unknown_counts"], [])
+        expected = dict.fromkeys(COUNT_KEYS, 0)
+        expected.update(quote=1, evidence=1)
+        self.assertEqual(data["counts"], expected)
+        self.assertEqual(list(data["counts"]), list(COUNT_KEYS))
+
+    def test_notice_order(self):
+        """공시 순서 — evidence · quote · read_only 가 앞, cites_dropped 가 맨 끝."""
+        keys = []
+        for key, _template in ic.COUNT_NOTICES:
+            keys.append(key)
+        self.assertEqual(keys[:3], ["evidence", "quote", "read_only"])
+        self.assertEqual(keys[-1], "cites_dropped")
+        self.assertEqual(dict(ic.COUNT_NOTICES)["cites_dropped"], "근거로 받지 않은 인용 %d")
+
+
 if __name__ == "__main__":
     unittest.main()

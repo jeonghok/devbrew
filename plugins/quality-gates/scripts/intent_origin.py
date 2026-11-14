@@ -124,6 +124,74 @@ def build_evidence(e2e_record: Optional[str], differential: Optional[str],
     return ("\n".join(out), len(out))
 
 
+KIND_RUN = "돌려서 봄"
+KIND_TEAMS = "다른 팀에서 봄"
+KIND_READ = "읽어서 봄"
+KINDS_ORDER = (KIND_RUN, KIND_TEAMS, KIND_READ)
+MARK_READ = "[읽음] "
+
+
+def evidence_kind(line: str) -> str:
+    """근거 줄(`<번호>\\t<표지><글>`)의 근거 종류 — 첫 탭 바로 뒤가 다른 팀 표지일 때만 다른 팀이다.
+
+    걷기 관찰 글이 `[다른 팀] ` 을 담아도 그 줄은 `[e2e] ` 로 시작하므로 돌려 본 근거로 남는다.
+    """
+    _head, sep, body = line.partition("\t")
+    return KIND_TEAMS if sep and body.startswith(MARK_TEAMS) else KIND_RUN
+
+
+def ordered_kinds(found: set) -> List[str]:
+    """근거 종류들 → `돌려서 봄` · `다른 팀에서 봄` · `읽어서 봄` 순서의 목록."""
+    out = []
+    for kind in KINDS_ORDER:
+        if kind in found:
+            out.append(kind)
+    return out
+
+
+def quote_line(quote: dict) -> str:
+    """확인된 읽은 인용의 관찰 줄 — `[읽음] <경로>:<줄> <글>`."""
+    return "%s%s:%d %s" % (MARK_READ, quote["path"], quote["line"], quote["text"])
+
+
+def _checked_quote(tree_root: str, quote, files: dict) -> Optional[dict]:
+    """인용 하나를 리뷰 트리의 그 줄과 견준다 — 맞으면 (경로 · 줄 · 걷은 글), 아니면 None.
+
+    파일은 `read_tree`(추적되는 보통 파일 · 경로 마디마다 링크 거부)로만 읽는다. 줄과 글은 앞뒤 공백만
+    걷어 견주고, 걷은 글이 비면 인용이 아니다(빈 줄과 맞아 통과하지 않게).
+    """
+    if not isinstance(quote, dict):
+        return None
+    path, line, text = quote.get("path"), quote.get("line"), quote.get("text")
+    if not isinstance(path, str) or type(line) is not int or line < 1 or not isinstance(text, str):
+        return None
+    wanted = text.strip()
+    if not wanted or not tree_root:
+        return None
+    if path not in files:
+        files[path] = read_tree(tree_root, path)[0]
+    content = files[path]
+    if content is None:
+        return None
+    rows = content.split("\n")
+    if line > len(rows) or rows[line - 1].strip() != wanted:
+        return None
+    return {"path": path, "line": line, "text": wanted}
+
+
+def verify_quotes(tree_root: str, quotes) -> tuple:
+    """리뷰어가 적은 읽은 인용들 → (확인된 인용들, 버린 수). 목록이 아니면 ([], 0)."""
+    if not isinstance(quotes, list):
+        return ([], 0)
+    kept: List[dict] = []
+    files: dict = {}
+    for quote in quotes:
+        checked = _checked_quote(tree_root, quote, files)
+        if checked is not None:
+            kept.append(checked)
+    return (kept, len(quotes) - len(kept))
+
+
 def evidence_line_numbers(text: str) -> set:
     nums = set()
     for line in text.split("\n"):
