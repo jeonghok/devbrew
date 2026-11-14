@@ -29,7 +29,7 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 의존: 없음
 - 브랜치: feature/team-file-contract, feature/team-file-read, feature/team-file-rules
 - 묶음: R1.md
-- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/workflow_superpowers.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/templates/team/, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/references/roadmap-ontology.md, REVIEW.md, docs/superpowers/roadmaps/HANDBOOK.md, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/
+- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/check_bundle_coverage.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/workflow_superpowers.py, plugins/spec-distill/scripts/team_status.py, plugins/spec-distill/scripts/branch_tip.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/templates/team/, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/references/roadmap-ontology.md, REVIEW.md, docs/superpowers/roadmaps/HANDBOOK.md, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/
 - 크기: 큼
 - 병렬: P1 과 병렬
 - 순서 이유: 나머지가 이 파일 형식을 읽는다
@@ -108,6 +108,11 @@ source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-br
 - 바뀜: 바뀐 에픽 R2 「뺀다 (권장)」
 - 원문:
   - 「뺀다 (권장)」
+
+### 2026-11-15 · R1 경로 예약에 계획 2 가 고치는 스크립트 둘을 더한다 — team 형식의 단계 계산을 담는 새 파일 team_status.py 와 읽기 전용 검사가 받는 꼴로 고치는 branch_tip.py
+- 바뀜: 바뀐 에픽 R1 「둘 다 더한다 (권장)」
+- 원문:
+  - 「둘 다 더한다 (권장)」
 
 ## 위험 번호표
 
