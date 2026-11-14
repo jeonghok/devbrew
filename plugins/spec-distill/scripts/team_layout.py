@@ -8,8 +8,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Optional
+from typing import NamedTuple, Optional
 
 LAYOUT_KEY = "layout"
 LAYOUT_TEAM = "team"
@@ -103,8 +102,7 @@ def role_doc(roadmaps_dir: str, role: str) -> str:
     return roadmaps_dir + role + "/" + ROLE_DOC
 
 
-@dataclass(frozen=True)
-class Team:
+class Team(NamedTuple):
     roadmaps_dir: str
     name: str
 
