@@ -2072,5 +2072,46 @@ class TestFilteredListed(unittest.TestCase):
         self.assertIn("이 범위가 더한 답 파일", self._listed(section)[0])
 
 
+AGENT = Path(__file__).resolve().parents[1] / "agents" / "intent-critic.md"
+SLOT_TAGS = ["project_dir", "diff", "evidence", "origin", "roadmap", "intent", "doubts",
+             "answered"]
+PERSONA_PHRASES = ("고른 것 자체를 돌려 본 근거로 의심해 묻는다", "판정하지 않고 고치지 않는다", "사수",
+                   "코드만 읽어서 본 것은 근거가 아니다", "없으면 없다고 말한다", "닫힌 점검표가 아니다",
+                   "로드맵은 근거가 아니다", "same_as", "observation_changed")
+
+
+class TestPersona(unittest.TestCase):
+    """agents/intent-critic.md — 보안-민감 페르소나(Law 2). 문구와 frontmatter 를 잠근다."""
+
+    def _split(self):
+        text = AGENT.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("---\n"), "frontmatter 로 시작하지 않는다")
+        end = text.find("\n---\n", 4)
+        self.assertGreater(end, 0, "frontmatter 가 닫히지 않는다")
+        return text[4:end], text[end + 5:]
+
+    def test_body_carries_the_rules(self):
+        _fm, body = self._split()
+        for phrase in PERSONA_PHRASES:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, body)
+
+    def test_frontmatter_is_read_only_and_unpinned(self):
+        fm, _body = self._split()
+        lines = fm.split("\n")
+        self.assertIn("tools: Read, Grep, Glob", lines)
+        self.assertIn("tag: roadmap", fm)
+        for line in lines:
+            self.assertFalse(line.lstrip("\"'").startswith("model"), "model 키: %r" % line)
+        data = yaml.safe_load(fm)
+        self.assertNotIn("model", data)
+        self.assertEqual(data["tools"], "Read, Grep, Glob")
+        self.assertEqual(data["name"], "intent-critic")
+        tags = []
+        for slot in data["input_slots"]:
+            tags.append(slot["tag"])
+        self.assertEqual(tags, SLOT_TAGS)
+
+
 if __name__ == "__main__":
     unittest.main()
