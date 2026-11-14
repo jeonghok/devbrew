@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
 import brief_body  # noqa: E402
+import team_layout  # noqa: E402
 
 ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 section4_items = brief_body.section4_items
@@ -87,6 +88,8 @@ def _roadmap_shape(path: str, roadmaps_dir: str):
     parts = path[len(roadmaps_dir):].split("/")
     if len(parts) != 2 or not parts[0]:
         return "로드맵 폴더(%s) 바로 아래 폴더 한 단계 안이 아니다" % roadmaps_dir
+    if parts[0] in team_layout.ROLES:
+        return "역할 이름(%s)은 로드맵 폴더 이름으로 쓰지 않는다" % parts[0]
     if not parts[1].endswith(".md") or parts[1] == ".md":
         return "마크다운 파일(.md)이 아니다"
     return None

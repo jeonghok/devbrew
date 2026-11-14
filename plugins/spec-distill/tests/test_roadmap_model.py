@@ -365,6 +365,15 @@ class RoadmapVerdict(unittest.TestCase):
         self.assertEqual((found, unchecked), ([self.DIR + "a/roadmap.md", self.DIR + "b/roadmap.md"], []))
         self.assertEqual(sorted(read_paths), [self.DIR + "a/roadmap.md", self.DIR + "b/roadmap.md"])
 
+    def test_role_folders_are_not_roadmaps(self):   # R1 AC8
+        text = "---\ntype: roadmap\nsource_brief: b.md\n---\n"
+        for role in ("leader", "designer", "writer", "worker"):
+            verdict, why = M.judge_roadmap(self.DIR + role + "/roadmap.md", lambda p: text, self.DIR)
+            self.assertEqual(verdict, "not_roadmap"); self.assertIn("역할 이름", why)
+        paths = [self.DIR + "HANDBOOK.md", self.DIR + "leader/CLAUDE.md", self.DIR + "x/roadmap.md"]
+        entries = M.tree_entries(b"".join(("100644 blob 0\t%s\0" % p).encode("utf-8") for p in paths), self.DIR)
+        self.assertEqual(sorted(entries), [self.DIR + "x/roadmap.md"])   # 역할 폴더의 글은 읽지도 않는다
+
 
 if __name__ == "__main__":
     unittest.main()
