@@ -375,5 +375,35 @@ class RoadmapVerdict(unittest.TestCase):
         self.assertEqual(sorted(entries), [self.DIR + "x/roadmap.md"])   # 역할 폴더의 글은 읽지도 않는다
 
 
+class TeamRoadmap(unittest.TestCase):   # R1 AC3 · P7
+    def roadmap(self, bundle_value, layout="layout: team\n"):
+        return ("---\ntype: roadmap\n%ssource_brief: b.md\n---\n\n## 에픽\n\n### E1 — 첫\n- 의도: 가\n- 범위: 나\n- 의존: 없음\n"
+                "- 브랜치: feature/e1\n- 묶음: %s\n- 경로 예약: 없음\n\n## 재분해 이력\n\n### 2026-01-01 · 처음\n- 원문:\n  - 「가」\n" % (layout, bundle_value))
+
+    def test_team_block_bundle_value(self):   # R1 P7
+        self.assertEqual(M.parse_roadmap(self.roadmap("jobs/E1/sources.md"))[4], [])
+        self.assertTrue(any("team 형식의 묶음 값" in e for e in M.parse_roadmap(self.roadmap("E1.md"))[4]))
+        self.assertTrue(any("team 형식의 묶음 값" in e for e in M.parse_roadmap(self.roadmap("jobs/E2/sources.md"))[4]))
+        self.assertEqual(M.parse_roadmap(self.roadmap("E1.md", layout=""))[4], [])            # 옛 형식은 그대로
+        self.assertTrue(M.parse_roadmap(self.roadmap("jobs/E1/sources.md", layout=""))[4])    # 옛 형식에 team 값은 오류
+
+    def test_team_rejects_branch_block(self):
+        text = self.roadmap("없음").replace("- 경로 예약: 없음\n", "- 경로 예약: 없음\n- spec: d.md\n- 발화: S1\n- 항목: C1\n")
+        self.assertTrue(any("team 형식에서는 브랜치 블록을 쓰지 않는다" in e for e in M.parse_roadmap(text)[4]))
+        self.assertEqual(M.parse_roadmap(text.replace("layout: team\n", ""))[4], [])          # 옛 형식은 받는다
+        self.assertEqual(M.parse_roadmap(self.roadmap("jobs/E1/sources.md", layout="layout: \"team\"\n"))[4], [])
+
+    def test_collect_assigned_reads_job_sources(self):
+        meta, blocks, _r, _k, errs = M.parse_roadmap(self.roadmap("jobs/E1/sources.md"))
+        good = "---\ntype: job-sources\njob: E1\nids: [C1, S1]\n---\n"
+        for text, want_err in ((good, False), (good.replace("job: E1", "job: E9"), True), (good.replace("job-sources", "epic-bundle"), True)):
+            _b, union, errors = M.collect_assigned([dict(b) for b in blocks], meta, "r/t/roadmap.md",
+                                                   lambda p: text if p == "r/t/jobs/E1/sources.md" else None, lambda p: True)
+            self.assertEqual((bool(errors), union), (want_err, set() if want_err else {"C1", "S1"}))
+        _b, _u, errors = M.collect_assigned([dict(b) for b in blocks], meta, "r/t/roadmap.md",
+                                            lambda p: good.replace("job: E1", "job: E9"), lambda p: True)
+        self.assertTrue(errors[0].startswith("E1 번호 파일 — "), errors)
+
+
 if __name__ == "__main__":
     unittest.main()

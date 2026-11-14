@@ -128,6 +128,8 @@ table "$T/state.md" "$P1_ROW" "$E1_ROW" "$E2_ROW"
 assert_eq "$(create "$T/state.md" docs/rm)" "0" "create: rc 0"
 cp "$T/out.txt" "$T/out.create1.txt"
 assert_eq "$(tree_of "$W/docs/rm")" "$(printf './E1.md\n./E2.md\n./roadmap.md')" "create: 로드맵 하나 · 묶음 둘"
+digest() { (cd "$1" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s ' "$f"; shasum -a 256 < "$f"; done) | shasum -a 256 | cut -d' ' -f1; }
+assert_eq "$(digest "$W/docs/rm")" "46e8dd68212c2e5c2939b3a45ef9d5209bff45f7fa8cf65695a62c61d4c5be99" "R1 AC3: 옛 형식 create 의 나무가 변경 전과 바이트가 같다"
 assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "create: 검사기 네 목록이 빈 목록"
 assert_file_has "$W/docs/rm/E1.md" "roadmap: docs/rm/roadmap.md" "묶음 frontmatter 의 roadmap 은 레포 상대경로"
 assert_file_has "$W/docs/rm/E1.md" "source_brief: docs/iv/brief.md" "묶음 frontmatter 의 source_brief 는 레포 상대경로"
