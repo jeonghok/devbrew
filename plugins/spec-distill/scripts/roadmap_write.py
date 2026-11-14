@@ -10,6 +10,9 @@
                           (--approval 은 create · update 에서 여러 번 줄 수 있다)
   roadmap_write.py extract --roadmap <로드맵>     로드맵 블록 · 묶음에서 분해안 표를 뽑아 낸다(쓰지 않는다)
   roadmap_write.py migrate --roadmap <로드맵>     로드맵 블록을 새 형식으로 다시 쓴다(재분해 이력은 그대로)
+  roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-audit <경로>]
+                          team 형식의 원자료 사본(original.md)을 만들거나 끝에 덧붙인다(분해안을 쓰기 전에 부른다).
+                          audit 은 brief 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이다
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류.
 
@@ -33,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
+import team_write  # noqa: E402
 from roadmap_model import (  # noqa: E402
     DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
 
@@ -509,10 +513,19 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
         u.add_argument(flag, required=True)
     u.add_argument("--approval", action="append", required=True)
+    o = sub.add_parser("original")
+    for flag in ("--brief", "--out"):
+        o.add_argument(flag, required=True)
+    o.add_argument("--framing-audit")
     return ap
 
 
-COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate}
+def cmd_original(a) -> int:
+    return team_write.cmd_original(a, sys.modules[__name__])
+
+
+COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
+            "original": cmd_original}
 
 
 def main(argv=None) -> int:

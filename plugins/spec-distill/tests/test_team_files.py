@@ -147,5 +147,58 @@ class Sources(unittest.TestCase):
         self.assertNotIn("사용자 원문", text)
 
 
+C = "a" * 40
+
+class Original(unittest.TestCase):
+    def test_marker_and_parse(self):
+        line = F.marker_line("docs/iv/x.audit.md", C, "원문", 15, 17)
+        self.assertEqual(line, "<!-- 출처: docs/iv/x.audit.md@%s · 원문 · 15–17행 · 3줄 -->" % C)
+        data = (line + "\n").encode("utf-8") + b"## 1. \xec\x9b\x90\xeb\xac\xb8\n\n## inner heading\n"
+        [s] = F.parse_original(data)
+        self.assertEqual((s.source, s.commit, s.label, s.first, s.last, s.start), ("docs/iv/x.audit.md", C, "원문", 15, 17, 2))
+        self.assertEqual(s.body, data.split(b"\n", 1)[1])
+        self.assertEqual(F.line_count(data), 4)
+
+    def test_body_cannot_forge_a_marker(self):   # 줄 수로 읽는다
+        fake = F.marker_line("evil.md", "b" * 40, "원문", 1, 1)
+        data = (F.marker_line("x.md", C, "사용자 원문", 5, 6) + "\n" + fake + "\n본문\n").encode("utf-8")
+        self.assertEqual([s.source for s in F.parse_original(data)], ["x.md"])
+
+    def test_broken(self):
+        ok = (F.marker_line("x.md", C, "원문", 1, 2) + "\n가\n나\n").encode("utf-8")
+        for bad in (b"\xea\xb0\x80\n" + ok, ok[:-4], ok + b"tail\n", ok.replace("2줄".encode("utf-8"), "3줄".encode("utf-8")), b""):
+            self.assertRaises(F.FormatError, F.parse_original, bad)
+
+    def test_extend_appends_only_the_tail(self):   # Review Focus 5 — 앞 줄이 밀리지 않는다
+        first, notes = F.extend_original(b"", [("x.md", C, "원문", 10, [b"h\n", b"a\n"], "")])
+        again, notes = F.extend_original(first, [("x.md", "c" * 40, "원문", 10, [b"h\n", b"a\n"], "")])
+        self.assertEqual((again, notes), (first, []))
+        grown, notes = F.extend_original(first, [("x.md", "c" * 40, "원문", 10, [b"h\n", b"a\n", b"b\n"], "")])
+        self.assertTrue(grown.startswith(first))
+        tail = F.parse_original(grown)[-1]
+        self.assertEqual((tail.first, tail.last, tail.body, tail.commit), (12, 12, b"b\n", "c" * 40))
+
+    def test_extend_changed_head_reappends_whole_and_says_so(self):
+        first, _ = F.extend_original(b"", [("x.md", C, "원문", 10, [b"h\n", b"a\n"], "")])
+        grown, notes = F.extend_original(first, [("x.md", "c" * 40, "원문", 10, [b"h\n", b"A\n"], "")])
+        self.assertTrue(grown.startswith(first))
+        self.assertEqual((F.parse_original(grown)[-1].body, len(notes)), (b"h\nA\n", 1))
+
+    def test_last_line_without_newline_is_refused(self):   # Review Focus 3
+        self.assertRaises(F.FormatError, F.extend_original, b"", [("x.md", C, "원문", 1, [b"no newline"], "")])
+
+    def test_note_is_kept_on_the_marker(self):
+        data, _ = F.extend_original(b"", [("b.md", C, "사용자 원문", 3, [b"x\n"], "framing audit 없음")])
+        self.assertTrue(data.decode("utf-8").splitlines()[0].endswith("· 1줄 · framing audit 없음 -->"))
+        self.assertEqual(F.parse_original(data)[0].note, "framing audit 없음")
+
+    def test_extend_after_reappend_is_stable(self):   # 통째로 다시 옮긴 뒤 같은 출처로 다시 불러도 바이트가 같다
+        first, _ = F.extend_original(b"", [("x.md", C, "원문", 10, [b"h\n", b"a\n"], "")])
+        grown, _ = F.extend_original(first, [("x.md", C, "원문", 10, [b"h\n", b"A\n"], "")])
+        self.assertEqual(F.extend_original(grown, [("x.md", C, "원문", 10, [b"h\n", b"A\n"], "")]), (grown, []))
+        more, notes = F.extend_original(grown, [("x.md", C, "원문", 10, [b"h\n", b"A\n", b"B\n"], "")])
+        self.assertEqual((F.parse_original(more)[-1].body, F.parse_original(more)[-1].first, notes), (b"B\n", 12, []))
+
+
 if __name__ == "__main__":
     unittest.main()

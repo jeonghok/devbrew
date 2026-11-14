@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""team_files.py — team 형식의 틀 위치와 과제 파일(INTENT · sources)의 글을 만들고 읽는다.
+"""team_files.py — team 형식의 틀 위치와 과제 파일(INTENT · sources)과 원자료 사본(original.md)의 글을 만들고 읽는다.
 
 글만 다룬다 — 파일을 쓰지 않고 git 을 부르지 않는다. 경로 조각은 team_layout 에서 가져온다.
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -194,3 +195,114 @@ def sources_interface(text: str) -> tuple:
     if not found:
         raise FormatError("sources 에 인터페이스 줄(받는 것 · 넘기는 것)이 없다")
     return found.get("받는 것", ""), found.get("넘기는 것", "")
+
+
+# ── 원자료 사본(original.md) ─────────────────────────────────────────────────
+# 구간마다 첫 줄이 출처 줄이고 그 아래 출처 줄이 적은 줄 수만큼이 본문이다. 파일 머리는 따로 없다.
+
+LABELS = ("원문", "질문 전체", "사용자 원문")
+REAPPENDED = "앞머리가 달라 통째로 다시 옮김"   # 이 표지가 붙은 구간부터가 그 출처의 지금 판이다
+_MARKER_RE = re.compile(r"<!-- 출처: (?P<source>\S(?:.*\S)?)@(?P<commit>[0-9a-f]{40}(?:[0-9a-f]{24})?)"
+                        r" · (?P<label>" + "|".join(re.escape(x) for x in LABELS) + r")"
+                        r" · (?P<first>[0-9]+)–(?P<last>[0-9]+)행 · (?P<count>[0-9]+)줄"
+                        r"(?: · (?P<note>\S(?:.*\S)?))? -->")
+
+
+@dataclass
+class Section:
+    source: str
+    commit: str
+    label: str
+    first: int
+    last: int
+    note: str
+    start: int   # original.md 안에서 본문 첫 줄의 번호
+    body: bytes
+
+
+def byte_lines(data: bytes) -> list:
+    """`\\n` 으로만 가른 줄들(줄바꿈을 붙인 채). `\\r` 은 줄 안의 글자로 남는다."""
+    out = [line + b"\n" for line in data.split(b"\n")]
+    out[-1] = out[-1][:-1]
+    if not out[-1]:
+        out.pop()
+    return out
+
+
+def line_count(data: bytes) -> int:
+    return len(byte_lines(data))
+
+
+def marker_line(source: str, commit: str, label: str, first: int, last: int, note: str = "") -> str:
+    if label not in LABELS:
+        raise FormatError("구간 절 이름이 아니다: %r" % label)
+    if first < 1 or last < first:
+        raise FormatError("구간 범위가 0 으로 시작하거나 뒤집혔다: %d–%d" % (first, last))
+    for value in (source, note):
+        if "\n" in value or "\r" in value:
+            raise FormatError("출처 줄에 줄바꿈을 넣지 않는다: %r" % value)
+    tail = " · %s" % note if note else ""
+    return "<!-- 출처: %s@%s · %s · %d–%d행 · %d줄%s -->" % (source, commit, label, first, last, last - first + 1, tail)
+
+
+def parse_original(data: bytes) -> list:
+    """구간 목록. 출처 줄이 적은 줄 수로 본문을 읽는다 — 본문 안의 출처 줄 꼴 글은 본문이다."""
+    if not data:
+        raise FormatError("원자료 사본이 비었다")
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise FormatError("원자료 사본이 UTF-8 이 아니다(%s)" % exc)
+    if not data.endswith(b"\n"):
+        raise FormatError("원자료 사본의 끝에 줄바꿈이 없다")
+    lines = byte_lines(data)
+    out, i = [], 0
+    while i < len(lines):
+        m = _MARKER_RE.fullmatch(lines[i][:-1].decode("utf-8"))
+        if not m:
+            raise FormatError("%d행이 구간의 출처 줄이 아니다 — 구간 밖에 줄이 있다" % (i + 1))
+        first, last, count = int(m.group("first")), int(m.group("last")), int(m.group("count"))
+        if first < 1 or last < first or last - first + 1 != count:
+            raise FormatError("%d행 출처 줄의 범위 %d–%d 와 줄 수 %d 가 어긋난다" % (i + 1, first, last, count))
+        if i + 1 + count > len(lines):
+            raise FormatError("%d행 구간의 줄이 모자란다 — %d줄 가운데 %d줄뿐이다" % (i + 1, count, len(lines) - i - 1))
+        out.append(Section(m.group("source"), m.group("commit"), m.group("label"), first, last, m.group("note") or "",
+                           i + 2, b"".join(lines[i + 1:i + 1 + count])))
+        i += 1 + count
+    return out
+
+
+def extend_original(existing: bytes, wanted: list) -> tuple:
+    """(새 바이트, 알림 줄들). wanted 는 (source, commit, label, first, lines, note) 들 — lines 는 줄바꿈을 붙인 바이트 줄.
+
+    같은 출처(경로 + 절 이름)의 지금 판(마지막 다시 옮김부터)의 본문을 이은 것이 lines 의 앞머리면 남은 줄만,
+    같으면 아무것도, 아니면 통째로 끝에 붙이고 알린다. 앞 바이트는 바꾸지 않는다."""
+    sections = parse_original(existing) if existing else []
+    out, notes = [existing], []
+    for source, commit, label, first, lines, note in wanted:
+        if not lines:
+            continue
+        for k, line in enumerate(lines):
+            if not line.endswith(b"\n"):
+                raise FormatError("%s · %s 구간의 %d행 끝에 줄바꿈이 없다 — 출처 파일 끝에 줄바꿈을 더해 커밋한 뒤 다시 돈다"
+                                  % (source, label, first + k))
+        group = [s for s in sections if (s.source, s.label) == (source, label)]
+        since = max([i for i, s in enumerate(group) if REAPPENDED in s.note.split(" · ")] or [0])
+        prev, cur = b"".join(s.body for s in group[since:]), b"".join(lines)
+        if group and cur == prev:
+            continue
+        if group and cur.startswith(prev):
+            skip, mark = prev.count(b"\n"), note
+        else:
+            skip, mark = 0, note
+            if group:
+                mark = " · ".join(x for x in (note, REAPPENDED) if x)
+                notes.append("%s · %s: 앞 줄이 사본의 지금 판과 달라 그 절을 끝에 통째로 다시 옮겼다 — 앞 구간은 그대로 둔다"
+                             % (source, label))
+        tail = lines[skip:]
+        head = marker_line(source, commit, label, first + skip, first + skip + len(tail) - 1, mark)
+        block = head.encode("utf-8") + b"\n" + b"".join(tail)
+        start = line_count(b"".join(out)) + 2
+        sections.append(Section(source, commit, label, first + skip, first + skip + len(tail) - 1, mark, start, b"".join(tail)))
+        out.append(block)
+    return b"".join(out), notes

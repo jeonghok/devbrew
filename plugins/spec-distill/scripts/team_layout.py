@@ -4,10 +4,14 @@
 
 표준 라이브러리만 import 한다 — 다른 모듈이 이 모듈을 import 하므로 거꾸로 import 하면 돈다.
 경로는 상수를 `/` 로 이어 만든다. 읽기만 한다(파일을 쓰지 않는다).
+
+명령줄: team_layout.py check --roadmap <로드맵 파일> [--base <ref>]
+        종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가 — 검사는 team_check 가 한다.
 """
 from __future__ import annotations
 
 import re
+import sys
 from typing import NamedTuple, Optional
 
 LAYOUT_KEY = "layout"
@@ -168,3 +172,12 @@ def team_from_roadmap(roadmaps_dir: str, roadmap_rel: str) -> Team:
     if problem:
         raise ValueError(problem)
     return Team(roadmaps_dir, parts[0])
+
+
+def main(argv=None) -> int:
+    import team_check  # noqa: E402 — 함수 안에서 가져온다(team_check 가 이 모듈을 가져오므로 맨 위에서 하면 import 가 돈다)
+    return team_check.run(argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
