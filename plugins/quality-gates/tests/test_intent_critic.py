@@ -2563,6 +2563,30 @@ class TestProcedureDoc(unittest.TestCase):
         i7 = self._section("I7 돌려주기")
         self.assertEqual(i7.count(shown + " 를 냈으면 — 「답 <n>개가 기록되지 않았다(<사유>)"), 1)
 
+    def test_answer_commit_needs_a_push_todo(self):
+        """답 커밋이 생긴 실행은 할 일에 push 를 싣는다 — 게시된 판정은 답 커밋 앞 커밋의 것이다."""
+        i7 = self._section("I7 돌려주기")
+        todo = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
+        self.assertEqual(i7.count(todo), 1)
+        line = [l for l in i7.split("\n") if todo in l][0]
+        self.assertTrue(line.startswith("  - `commit:` 이 커밋 해시면"), line)
+        for fact in ("push 해야 답 파일이 PR 과 함께 머지되고",
+                     "push 전에 qg 를 다시 돌리면 게시가 `skipped: pr-mismatch` 로 빠진다"):
+            self.assertIn(fact, line)
+
+    def test_readme_states_the_answer_commit_is_not_pushed(self):
+        text = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        head = "\n### intent-critic 답 파일\n"
+        self.assertEqual(text.count(head), 1)
+        section = text.split(head, 1)[1].split("\n### ", 1)[0]
+        bullets = [l for l in section.split("\n") if l.startswith("- 답 커밋은 push 하지 않는다")]
+        self.assertEqual(len(bullets), 1, section)
+        for fact in ("push 해야 답 파일이 PR 과 함께 머지된다",
+                     "게시된 판정 코멘트는 답 커밋 앞 커밋의 것이고",
+                     "push 하기 전에 qg 를 다시 돌리면",
+                     "게시가 `skipped: pr-mismatch` 로 빠진다"):
+            self.assertIn(fact, bullets[0])
+
 
 if __name__ == "__main__":
     unittest.main()

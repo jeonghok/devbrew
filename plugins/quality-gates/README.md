@@ -441,6 +441,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 판정과 게시가 끝난 뒤 돌며 판정에 들지 않는다. 리뷰어는 걷기 관찰이 있거나 차등 결과에 통과로 끝나지 않은 귀속(`STILL_GREEN` · `FIXED` · `NEW_TEST_GREEN` 이 아닌 것)이 하나라도 있을 때만 부른다 — 그런 근거가 없으면 부르지 않고 「근거 없음」으로 끝낸다. 부르는 횟수는 최대 둘, 실패하면 넷이다.
 
 - 답 파일은 qg 가 지금 브랜치에 커밋하고 push 하지 않는다. 그 파일만 경로를 지정해 커밋한다.
+- 답 커밋은 push 하지 않는다 — push 해야 답 파일이 PR 과 함께 머지된다(완료 보고의 할 일 줄이 답 커밋 해시와 함께 알린다). 게시된 판정 코멘트는 답 커밋 앞 커밋의 것이고, push 하기 전에 qg 를 다시 돌리면 PR 의 head 가 지금 HEAD 와 달라 게시가 `skipped: pr-mismatch` 로 빠진다.
 - 답 파일은 다음 실행의 리뷰 diff 에 들어간다. 빼려면 `DEVBREW_QUALITY_GATES_DOC_PATHS` 에 `docs/qg-intent-answers/` 를 더한다.
 
 ### Kill switches (보안 컨트롤)
