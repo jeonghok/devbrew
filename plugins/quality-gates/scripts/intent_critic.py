@@ -88,6 +88,7 @@ RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
+UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
 NO_QUESTION = "intent-critic — 질문 없음"
@@ -1103,7 +1104,7 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         return "uncountable", UNREADABLE, ["거르기 결과(%s)가 없음" % QUESTIONS]
     if data.get("status") == "uncountable":
         return "uncountable", UNREADABLE, notices
-    asked = answered = wrong = 0
+    asked = answered = wrong = unanswered = 0
     for record in data["questions"]:
         state = record.get("state")
         if state in ("ask", "answered"):
@@ -1112,6 +1113,8 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
             answered += 1
             if record.get("answer") == "잘못 골랐다":
                 wrong += 1
+        elif state == "ask" and not record.get("record_failed"):
+            unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
     counts = data.get("counts") or {}
     if asked == 0:
         if counts.get("evidence") and not counts.get("answered"):
@@ -1119,8 +1122,10 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         return "ran", NO_QUESTION, notices
     if mode == "range":
         return "ran", "intent-critic — 질문 %d개 아직 묻지 않음(범위 모드)" % asked, notices
-    return ("ran", "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)"
-            % (asked, answered, wrong), notices)
+    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (asked, answered, wrong)
+    if unanswered:
+        line += UNANSWERED % unanswered
+    return "ran", line, notices
 
 
 def _rows(data: Optional[dict], mode: str) -> List[dict]:

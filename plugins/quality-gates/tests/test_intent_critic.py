@@ -1899,6 +1899,34 @@ class TestRender(unittest.TestCase):
         self.assertIn("    wrong_choice: yes\n", text)
         self.assertIs(block["questions"][0]["wrong_choice"], True)
 
+    def test_render_separates_unanswered_questions(self):
+        """질문 창을 닫았거나 답하지 않은 질문 — 결과 줄이 「답하지 않음 <k>개」 로 가르고, 돌려주는 꼴에는
+        「아직 묻지 않음」 으로 남는다. 답 기록에 실패한 질문은 여기 세지 않는다(따로 공시된다)."""
+        failed = self._item("D3", "ask")
+        failed["record_failed"] = True
+        cases = (
+            ([self._item("D1", "ask"), self._item("D2", "ask")],
+             "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개"),
+            ([self._item("D1", "answered", "잘못 골랐다", ANS_DIR + "/a.md"), self._item("D2", "ask"),
+              failed, self._item("D4", "over-cap")],
+             "intent-critic — 질문 3개를 물었다 · 답 1개(잘못 골랐다 1개) · 답하지 않음 1개"),
+            ([self._item("D1", "answered", "의도다", ANS_DIR + "/a.md"), failed],
+             "intent-critic — 질문 2개를 물었다 · 답 1개(잘못 골랐다 0개)"),
+        )
+        for questions, line in cases:
+            with self.subTest(line=line), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                _filter_rd(rd)
+                self._qy(questions, commit="abc1234")
+                p = _cli("render", "--rd", rd, "--mode", "pr")
+                self.assertEqual(_last(p), line)
+                section = _read(rd, "result.md").split("\n## intent-critic\n", 1)[1]
+                self.assertIn("\n- %s\n" % line, section)
+                _text, block = _return_block(rd)
+                states = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
+                self.assertEqual([r["state"] for r in block["questions"]],
+                                 [states[q["state"]] for q in questions])
+
     def test_render_range_not_asked(self):
         self._qy([self._item("D1", "ask"), self._item("D2", "ask")])
         p = _cli("render", "--rd", self.rd, "--mode", "range")
@@ -2625,6 +2653,14 @@ class TestProcedureDoc(unittest.TestCase):
                      "push 하기 전에 qg 를 다시 돌리면",
                      "게시가 `skipped: pr-mismatch` 로 빠진다"):
             self.assertIn(fact, bullets[0])
+
+    def test_unanswered_questions_are_a_todo(self):
+        """답하지 않은 질문이 남은 실행은 할 일 줄에 그 사실을 싣는다 — 결과 줄의 글 그대로 가리킨다."""
+        shown = "`%s`" % ic.UNANSWERED.strip(" ·").replace("%d", "<k>")
+        self.assertEqual(shown, "`답하지 않음 <k>개`")
+        i7 = self._section("I7 돌려주기")
+        self.assertEqual(i7.count("결과 줄에 " + shown + " 가 있으면 — 「답하지 않은 질문 <k>개가 남았다"), 1)
+        self.assertIn("결과 줄이 " + shown + " 로 가른다", self._section("I5 거르기 · 묻기 · 답 기록"))
 
     def test_filter_fence_passes_the_review_mode(self):
         """I5 의 filter 펜스가 리뷰 diff 모드를 넘긴다 — 스크립트가 아는 「범위 전체」 모드 이름과 같은 낱말로."""
