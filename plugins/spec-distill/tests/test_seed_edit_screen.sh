@@ -377,4 +377,75 @@ mk2 redecB; why redecB "2\t$DR"; redecide redecB "$DR" adopt
 assert_eq "$(choices "$TMP/redecB/state" "$DR")" "['reject', 'adopt'] [False, True]" "전제: 재결정 fixture — 거부한 뒤 채택한 decide 는 항목 둘이고 뒤가 앞을 잇는다"
 scr redecB
 assert_eq "$(rec redecB)" "[False, True]" "재결정: 거부한 뒤 채택한 decide 를 댄 덩어리는 권장이다(마지막 선택이 채택)"
+# ── AC7 — 질문 묶음 ─────────────────────────────────────────────────────────
+mkn() {   # mkn <이름> <n> → 덩어리 n 개(문단마다 하나) + 원장 사본
+  mkdir -p "$TMP/$1/state"
+  python3 -c 'import sys
+n = int(sys.argv[3])
+open(sys.argv[1], "w", encoding="utf-8").write("".join("문단 %d.\n\n" % i for i in range(1, n + 1)))
+open(sys.argv[2], "w", encoding="utf-8").write("".join("문단 %d 고침.\n\n" % i for i in range(1, n + 1)))' "$TMP/$1/base.md" "$TMP/$1/seed.md" "$2"
+  python3 "$S/seed_edit_diff.py" hunks "$TMP/$1/base.md" "$TMP/$1/seed.md" > "$TMP/$1/hunks.json"
+  cp -R "$L/state/." "$TMP/$1/state/"
+}
+qs() { j "$1" '[(q["multi"], q["hunk_ids"]) for q in d["questions"]]'; }
+mkn q1 1; scr q1
+assert_eq "$(j q1 '[(q["multi"], q["question"], [o["label"] for o in q["options"]]) for q in d["questions"]]')" \
+  "[(False, '저자 편집 1곳을 그대로 둘까요?', ['그대로 둔다', '되돌린다'])]" "AC7: 덩어리 하나면 단일 선택이다"
+why q1 "1\t$FA"; scr q1
+assert_eq "$(j q1 '[o["label"] for o in d["questions"][0]["options"]]')" "['그대로 둔다 (권장)', '되돌린다']" "AC7: 확인된 덩어리 하나면 「그대로 둔다 (권장)」 이 첫 자리다"
+mkn q4 4; scr q4
+assert_eq "$(qs q4)" "[(True, [1, 2, 3, 4])]" "AC7: 덩어리 넷이면 질문 하나"
+assert_eq "$(j q4 '(d["questions"][0]["question"], [o["label"] for o in d["questions"][0]["options"]])')" \
+  "('그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요.', ['1번 그대로 둔다', '2번 그대로 둔다', '3번 그대로 둔다', '4번 그대로 둔다'])" "AC7: 여러 개 고르기 질문의 글과 선택지 — 선택지는 덩어리뿐이다"
+mkn q5 5; scr q5
+assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 다섯이면 3+2"
+mkn q9 9; scr q9
+assert_eq "$(qs q9)" "[(True, [1, 2, 3, 4]), (True, [5, 6, 7]), (True, [8, 9])]" "AC7: 아홉이면 4+3+2"
+why q5 "3\t$FA" "5\t$DA"; scr q5
+assert_eq "$(j q5 '[[o["label"] for o in q["options"]] for q in d["questions"]]')" \
+  "[['3번 그대로 둔다 (권장)', '1번 그대로 둔다', '2번 그대로 둔다'], ['5번 그대로 둔다 (권장)', '4번 그대로 둔다']]" "AC7: 번호 순으로 나눈 뒤 질문 안에서만 권장을 앞에 둔다"
+assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 권장이 있어도 한 질문의 덩어리 번호는 이어져 있다"
+python3 - "$S" > "$TMP/sizes.txt" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import seed_edit_screen as m
+bad = [n for n in range(2, 41) if sum(m.split_sizes(n)) != n or not all(2 <= s <= 4 for s in m.split_sizes(n))]
+print(m.split_sizes(1), m.split_sizes(13), bad)
+PY
+assert_eq "$(cat "$TMP/sizes.txt")" "[1] [4, 4, 3, 2] []" "Review Focus: 덩어리가 많아도(2–40) 나뉜 질문마다 둘에서 넷이고 합이 맞는다"
+
+# ── AC10 — 쓴 지적 목록에 더하기 ─────────────────────────────────────────────────
+mu() {   # mu <이름> <ids> [덩어리 JSON 파일 이름] → rc. stderr 는 $TMP/<이름>/mu.err
+  python3 "$X" mark-used --hunks "$TMP/$1/${3:-hunks.json}" --reasons "$TMP/$1/state/hunk-reasons.txt" --state-dir "$TMP/$1/state" --ids "$2" >/dev/null 2>"$TMP/$1/mu.err"
+}
+U="hunk-used-findings.txt"
+mk2 mu1; why mu1 "1\t$FA,$DA" "2\t$FA,없음"
+mu mu1 "1,2"; rc=$?
+assert_eq "$rc" "0" "AC10: 목록에 더하기 rc 0"
+assert_eq "$(cat "$TMP/mu1/state/$U")" "$(printf '%s\n%s' "$FA" "$DA")" "AC10: 그 화면의 이유 파일이 댄 지적 id 를 모두 더한다(같은 id 는 한 번)"
+mu mu1 "1,2"
+assert_eq "$(cat "$TMP/mu1/state/$U")" "$(printf '%s\n%s' "$FA" "$DA")" "AC10: 다시 돌려도 이미 있는 id 를 두 번 적지 않는다"
+scr mu1
+assert_eq "$(rec mu1)" "[False, False]" "AC10: 더한 뒤 다시 공시한 화면에서는 그 지적에 권장이 붙지 않는다"
+mk2 mu2; mu mu2 "1,2"; rc=$?
+[ "$rc" = 0 ] && [ ! -e "$TMP/mu2/state/$U" ] && ok "AC10: 이유 파일이 없으면 아무것도 더하지 않고 성공한다" || no "AC10: 이유 파일이 없는데 rc ${rc} 이거나 목록이 생겼다"
+mk2 mu3; printf 'seed_sha256 0000\n1\t%s\n' "$FA" > "$TMP/mu3/state/hunk-reasons.txt"; mu mu3 "1,2"; rc=$?
+[ "$rc" = 0 ] && [ ! -e "$TMP/mu3/state/$U" ] && ok "AC10: 판본이 다른 이유 파일이면 아무것도 더하지 않고 성공한다" || no "AC10: 판본이 다른데 rc ${rc} 이거나 목록이 생겼다"
+mk2 mu4; why mu4 "1\t$FA"
+for ids in "1" "1,2,3" "1,1,2" ""; do
+  mu mu4 "$ids"; rc=$?
+  [ "$rc" = 2 ] && [ ! -e "$TMP/mu4/state/$U" ] && ok "AC10: 번호가 덩어리 전부와 같지 않으면(${ids:-빈 값}) 쓰지 않고 rc 2" || no "AC10: 번호 「${ids}」 에 rc ${rc} 이거나 목록이 생겼다"
+done
+assert_contains "$(cat "$TMP/mu4/mu.err")" "처분 목록의 번호가 이 화면의 덩어리와 다르다" "AC10: 번호가 다른 사유를 알린다"
+mk2 mu5; why mu5 "1\t$FA"
+printf '가 고침.\n\n나.\n\n다 또 고침.\n' > "$TMP/mu5/seed2.md"
+python3 "$S/seed_edit_diff.py" hunks "$TMP/mu5/base.md" "$TMP/mu5/seed2.md" > "$TMP/mu5/hunks-final.json"
+mu mu5 "1,2" hunks-final.json; rc=$?
+[ "$rc" = 0 ] && [ ! -e "$TMP/mu5/state/$U" ] && ok "AC10: 넘겨받은 덩어리 JSON 의 판본과 견준다(다른 화면의 JSON 이면 더하지 않는다)" || no "AC10: 다른 판본의 JSON 인데 rc ${rc} 이거나 목록이 생겼다"
+mu mu5 "1,2"
+assert_eq "$(cat "$TMP/mu5/state/$U" 2>/dev/null)" "$FA" "AC10 양의 짝: 그 화면의 JSON 이면 더한다"
+mk2 mu6; why mu6 "1\t$FA"; printf '\377\376' > "$TMP/mu6/state/$U"; cp "$TMP/mu6/state/$U" "$TMP/mu6/used.before"
+mu mu6 "1,2"; rc=$?
+assert_eq "$rc $(cmp -s "$TMP/mu6/state/$U" "$TMP/mu6/used.before" && echo same)" "2 same" "AC10: 목록을 읽지 못하면 더하지 않고 rc 2 — 파일은 그대로다"
+
 finish

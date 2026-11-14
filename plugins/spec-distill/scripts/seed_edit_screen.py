@@ -5,6 +5,8 @@
                                             seed_sha256 포함). 공시 기록(.shown)을 남기지 않는다.
   screen --hunks <덩어리 JSON> --reasons <이유 파일> --state-dir <원장 폴더> [--final]
                                             화면 JSON({"text", "hunks", "questions", "notices"}).
+  mark-used --hunks <덩어리 JSON> --reasons <이유 파일> --state-dir <원장 폴더> --ids <쉼표로 이은 번호>
+                                            이유 파일이 댄 지적 id 를 쓴 지적 목록에 더한다.
 rc: 0 정상 · 2 입력 오류와 그 밖의 예외 · 3 기준 사본 부재(preview).
 """
 from __future__ import annotations
@@ -15,6 +17,7 @@ import json
 import pathlib
 import sys
 
+import nofollow_write
 import seed_edit_diff
 from seed_provenance import MARK, SENT_SPLIT_RE, norm
 
@@ -269,6 +272,54 @@ def _render(k: int, h: dict, v: dict, pieces: list) -> list[str]:
     return out
 
 
+def split_sizes(n: int) -> list[int]:
+    """덩어리 n 개를 질문마다 둘에서 넷으로 나눈 크기들(n 이 4 이하면 [n])."""
+    if n <= 0:
+        return []
+    if n <= 4:
+        return [n]
+    sizes = [4] * (n // 4)
+    if n % 4:
+        sizes.append(n % 4)
+    if sizes[-1] == 1:
+        sizes[-2:] = [3, 2]
+    return sizes
+
+
+MULTI_QUESTION = "그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요."
+
+
+def build_questions(views: list[dict]) -> list[dict]:
+    if not views:
+        return []
+    views = sorted(views, key=lambda v: v["id"])
+    if len(views) == 1:
+        v = views[0]
+        keep = "그대로 둔다" + (" (권장)" if v["recommend"] else "")
+        return [{"header": "저자 편집", "question": "저자 편집 1곳을 그대로 둘까요?", "multi": False,
+                 "hunk_ids": [v["id"]],
+                 "options": [{"label": keep, "description": "이 편집이 seed 에 남는다", "hunk_id": v["id"]},
+                             {"label": "되돌린다",
+                              "description": "이 편집을 지우고 기준 사본의 글로 돌아간다",
+                              "hunk_id": v["id"]}]}]
+    sizes = split_sizes(len(views))
+    out, start = [], 0
+    for size in sizes:
+        group = views[start:start + size]
+        start += size
+        ordered = [v for v in group if v["recommend"]] + [v for v in group if not v["recommend"]]
+        options = []
+        for v in ordered:
+            n = v["id"]
+            options.append({"label": "%d번 그대로 둔다" % n + (" (권장)" if v["recommend"] else ""),
+                            "description": "%s · %s" % (v["summary"], v["reason"]), "hunk_id": n})
+        first, last = group[0]["id"], group[-1]["id"]
+        out.append({"header": "저자 편집" if len(sizes) == 1 else "편집 %d–%d" % (first, last),
+                    "question": MULTI_QUESTION, "multi": True,
+                    "hunk_ids": [v["id"] for v in group], "options": options})
+    return out
+
+
 def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool = False) -> dict:
     hunks = hunks_doc["hunks"]
     views = [hunk_view(h) for h in hunks]
@@ -312,7 +363,66 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     for k, (h, v, pieces) in enumerate(zip(hunks, views, shown), 1):
         lines.append("")
         lines += _render(k, h, v, pieces)
-    return {"text": "\n".join(lines), "hunks": views, "questions": [], "notices": notices}
+    return {"text": "\n".join(lines), "hunks": views, "questions": build_questions(views),
+            "notices": notices}
+
+
+def _int_list(raw: str):
+    out = []
+    for x in raw.split(","):
+        x = x.strip()
+        if not x:
+            continue
+        if not x.isascii() or not x.isdigit():
+            return None
+        out.append(int(x))
+    return out
+
+
+def mark_used(a) -> int:
+    try:
+        doc = json.loads(pathlib.Path(a.hunks).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as e:
+        print("[spec-distill] 덩어리 JSON 을 읽지 못했다: %s (%s)" % (a.hunks, e), file=sys.stderr)
+        return 2
+    if not isinstance(doc, dict) or not isinstance(doc.get("hunks"), list):
+        print("[spec-distill] 덩어리 JSON 에 hunks 목록이 없다: %s" % a.hunks, file=sys.stderr)
+        return 2
+    ids = _int_list(a.ids)
+    if ids is None:
+        print("[spec-distill] --ids 는 쉼표로 이은 정수여야 한다: %r" % a.ids, file=sys.stderr)
+        return 2
+    hunk_ids = sorted(h["id"] for h in doc["hunks"])
+    if sorted(ids) != hunk_ids:
+        missing = [n for n in hunk_ids if n not in ids]
+        extra = sorted(set(n for n in ids if n not in hunk_ids) | set(n for n in ids if ids.count(n) > 1))
+        print("[spec-distill] 처분 목록의 번호가 이 화면의 덩어리와 다르다 — 빠진 번호 %s · 없는 번호 %s"
+              % (missing, extra), file=sys.stderr)
+        return 2
+    rs = parse_reasons(a.reasons, str(doc.get("seed_sha256", "")), set(hunk_ids))
+    skipped = "no_reasons" if not rs["present"] else "stale_reasons" if rs["stale"] or rs["unreadable"] else None
+    added: list[str] = []
+    if skipped is None:
+        used = read_used(a.state_dir)
+        if used is None:
+            print("[spec-distill] 쓴 지적 목록을 읽지 못했다 — %s" % (pathlib.Path(a.state_dir) / USED_FILE),
+                  file=sys.stderr)
+            return 2
+        for n in hunk_ids:
+            for fid in rs["by_hunk"].get(n, {"ids": []})["ids"]:
+                if fid not in used and fid not in added:
+                    added.append(fid)
+        if added:
+            path = pathlib.Path(a.state_dir) / USED_FILE
+            try:
+                old = path.read_text(encoding="utf-8") if path.exists() else ""
+                lines = [x for x in old.split("\n") if x.strip()]
+                nofollow_write.replace_bytes(str(path), ("\n".join(lines + added) + "\n").encode("utf-8"))
+            except (OSError, UnicodeError) as e:
+                print("[spec-distill] 쓴 지적 목록을 쓰지 못했다: %s (%s)" % (path, e), file=sys.stderr)
+                return 2
+    print(json.dumps({"added": added, "skipped": skipped}, ensure_ascii=False))
+    return 0
 
 
 def main(argv=None) -> int:
@@ -328,6 +438,11 @@ def main(argv=None) -> int:
     sc.add_argument("--reasons", required=True)
     sc.add_argument("--state-dir", required=True)
     sc.add_argument("--final", action="store_true")
+    mk = sp.add_parser("mark-used")
+    mk.add_argument("--hunks", required=True)
+    mk.add_argument("--reasons", required=True)
+    mk.add_argument("--state-dir", required=True)
+    mk.add_argument("--ids", required=True)
     try:
         a = p.parse_args(argv)
     except SystemExit:
@@ -348,6 +463,8 @@ def main(argv=None) -> int:
         print(json.dumps({"base_present": True, "empty": not hunks, "hunks": hunks,
                           "seed_sha256": seed_edit_diff._sha256(seed)}, ensure_ascii=False))
         return 0
+    if a.cmd == "mark-used":
+        return mark_used(a)
     try:
         doc = json.loads(pathlib.Path(a.hunks).read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError) as e:

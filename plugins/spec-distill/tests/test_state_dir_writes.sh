@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # skill 이 부르는 스크립트의 상태 폴더 쓰기가 마지막 성분의 링크를 따라가지 않는지 실행으로 잰다.
 #   · seed_edit_diff.py — 기준 사본 · .shown · .reverted
+#   · seed_edit_screen.py — 쓴 지적 목록(링크면 읽지 않고 멈춘다)
 #   · docreview_state.py — 원장(링크면 거절 · 제자리 덮어쓰기는 유지) · 시대 표지
 # 세 skill(request-framing · reviewing-brief · spec-review)의 bash 펜스 쓰기는 도출 락(scan_writes)과
 # 펜스를 잘라 실제로 돌리는 끝에서 끝 칸으로 잰다.
@@ -60,6 +61,30 @@ python3 "$SED" revert "$c/work/base.md" "$c/work/seed.md" --ids 1 >/dev/null 2>&
 assert_eq "$rc" "0" "sed_revert_markers_link: revert 성공"
 if cmp -s "$c/out/o1.txt" "$c/out/o1.keep"; then ok "sed_revert_markers_link: .shown 바깥 파일 그대로"; else no "sed_revert_markers_link: .shown 바깥 파일이 바뀌었다"; fi
 if [ -e "$c/out/o2.txt" ] || [ -L "$c/out/o2.txt" ]; then no "sed_revert_markers_link: .reverted 바깥 경로가 생겼다"; else ok "sed_revert_markers_link: .reverted 바깥 경로가 생기지 않았다"; fi
+
+# ── seed_edit_screen — 쓴 지적 목록 ─────────────────────────────────────────
+SES="$ROOT/plugins/spec-distill/scripts/seed_edit_screen.py"
+ses_case() {   # ses_case <이름> → 덩어리 하나 · 판본이 맞는 이유 파일(지적 FID_W)
+  mk_case "$1"
+  printf 'alpha\n' > "$T/$1/work/base.md"
+  python3 "$SED" hunks "$T/$1/work/base.md" "$T/$1/work/seed.md" > "$T/$1/work/hunks.json" 2>/dev/null
+  printf 'seed_sha256 %s\n1\tFID_W\n' "$(sha_of "$T/$1/work/seed.md")" > "$T/$1/state/hunk-reasons.txt"
+}
+ses_mark() { python3 "$SES" mark-used --hunks "$1/work/hunks.json" --reasons "$1/state/hunk-reasons.txt" --state-dir "$1/state" --ids 1 >/dev/null 2>&1; }
+ses_case ses_used_plain; c="$T/ses_used_plain"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "0" "ses_used_plain: 목록에 더하기 rc 0(양의 짝)"
+if plain "$c/state/hunk-used-findings.txt"; then assert_eq "$(cat "$c/state/hunk-used-findings.txt")" "FID_W" "ses_used_plain: 쓴 지적 목록은 id 를 담은 일반 파일"; else no "ses_used_plain: 쓴 지적 목록이 일반 파일이 아니다"; fi
+ses_case ses_used_dangling_link; c="$T/ses_used_dangling_link"
+ln -s "$c/out/new-target" "$c/state/hunk-used-findings.txt"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "2" "ses_used_dangling_link: 링크인 목록에는 더하지 않고 멈춘다(rc 2)"
+if [ -e "$c/out/new-target" ] || [ -L "$c/out/new-target" ]; then no "ses_used_dangling_link: 바깥 경로가 생겼다"; else ok "ses_used_dangling_link: 바깥 경로가 생기지 않았다"; fi
+ses_case ses_used_live_link; c="$T/ses_used_live_link"
+printf 'outside\n' > "$c/out/o.txt"; ln -s "$c/out/o.txt" "$c/state/hunk-used-findings.txt"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "2" "ses_used_live_link: 살아 있는 링크인 목록에도 더하지 않고 멈춘다(rc 2)"
+assert_eq "$(cat "$c/out/o.txt")" "outside" "ses_used_live_link: 바깥 파일 그대로"
 
 # ── docreview_state ──────────────────────────────────────────────────────
 mk_case ds_save_symlink_refused; c="$T/ds_save_symlink_refused"
