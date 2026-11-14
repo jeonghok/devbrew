@@ -560,7 +560,7 @@ AskUserQuestion({
 **이름이 바뀌어도 절차는 같다.** 아래 ①② 는 B-2 이름 표의 어느 이름으로 골랐든 같은 절차이고 둘째 줄만 다르다 — 분해된 일이면 아래 「다음 세션 줄 — 분해된 일 ①/② 공통」, 둘째 질문에서 제안을 골랐으면 위 「다른 다음 단계의 줄」, 그 밖에는 위 brief 줄이다. 「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.
 
 - **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 → brief 재저장 →
-  `check_brief.py gate` 재실행(통과 확인) → 분해된 일이면 B-R 다시 생성 → 아래 커밋 펜스(`interview-commit` — 세 파일, 분해된 일이면 로드맵 폴더까지) → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
+  `check_brief.py gate` 재실행(통과 확인) → 분해된 일이면 B-R 다시 생성 → 아래 커밋 펜스(`interview-commit` — 세 파일, 분해된 일이면 로드맵 폴더까지) → 분해된 일이면 아래 「PR 과 머지」 → 두 줄을 *그대로 보이게* 노출한다. 첫 줄은 맨 `/compact`
   (뒤에 아무것도 붙이지 않는다 — 붙인 텍스트는 요약 지시로만 쓰인다), 둘째 줄은 위 다음 세션 줄이다.
   두 줄을 따로 입력하라는 안내와 git 작업 트리 루트의 절대경로를 함께 낸다(정본
   `## 다음 세션 명령` 규칙 1 · 7).
@@ -661,7 +661,103 @@ fi
 - 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 — 상태 파일 포함)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 와 `[spec-distill] 커밋하지 않았다 — 로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>` 한 줄을 붙인다(커밋 펜스는 돌리지 않는다).
 - rc 2 는 사용법 오류다(작업 트리 밖 경로 · `--audit` 짝 불일치 · 날짜 꼴). 사유를 보이고, 인자가 Step A 8 의 명령과 글자 그대로인지 맞춘 뒤 한 번만 다시 돌린다. 또 rc 2 면 위의 고칠 수 없는 사유와 같이 멈춘다(advisory 와 「커밋하지 않았다」 줄).
 
-커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 세 파일과 한 커밋에 넣는다(B-1 은 커밋하지 않고 그 안내에 로드맵 폴더를 적는다). 분해된 일의 두 줄 앞에는 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 세 파일과 한 커밋에 넣는다(B-1 은 커밋하지 않고 그 안내에 로드맵 폴더를 적는다). 분해된 일의 ①/② 는 커밋 뒤 아래 「PR 과 머지」 를 거쳐 두 줄로 간다.
+
+**PR 과 머지 — 분해된 일 ①/② 만.** 지휘자는 로드맵을 기본 브랜치에서 읽는다 — 브랜치에만 있는 로드맵은 상태를 셀 수 없고, 에픽 worktree 도 기본 브랜치에서 갈라져 묶음 파일이 없다. 그래서 인터뷰가 커밋 뒤 PR 을 열고 머지를 묻는다. 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈을 때만 돈다 — 그 줄이 아니면(커밋하지 않음 · 실패 · 로드맵 폴더를 빼고 커밋) 이 절을 건너뛰고 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다. ④ · B-1 은 PR 을 열지 않는다. 두 펜스 모두 마지막 줄이 판결이고, 판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다.
+
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을 그대로 보인다. 브랜치를 push 하고, 그 브랜치에서 기본 브랜치로 가는 이 레포 안의 열린 PR 이 있으면 그것을, 없으면 새 PR 을 연다. `interview-pr: OPEN <PR 주소>` 면 2 로, `interview-pr: NONE` 이면 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+
+<!-- interview-pr:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+none() { echo "[spec-distill] PR 을 열지 않았다 — $1. 브랜치를 push 하고 PR 을 직접 열어 머지한 뒤 지휘자를 부른다."; echo "interview-pr: NONE"; exit 0; }
+case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)" ;; esac
+cwd_l="$(pwd -L)"
+case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
+top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
+[ -n "$top" ] || none "git 저장소가 아니다"
+command -v gh >/dev/null 2>&1 || none "gh 가 없다"
+cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
+def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --root "$top")" || def=""
+[ -n "$cur" ] && [ -n "$def" ] && [ "$cur" != "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
+slug="$(cd "$top" && python3 "$SD/scripts/gh_repo.py" slug)" || none "origin 레포를 알아내지 못했다(위 사유)"
+git -C "$top" push -q -u origin "$cur" || none "push 가 실패했다(위 사유)"
+url="$(gh pr list -R "$slug" --head "$cur" --base "$def" --state open --json url,isCrossRepository --jq 'map(select(.isCrossRepository | not)) | .[0].url // empty')" || none "열린 PR 을 찾지 못했다(위 사유)"
+if [ -z "$url" ]; then
+  bf="$(mktemp)" || none "PR 본문 임시 파일을 만들지 못했다"
+  rel="${BRIEF#"$top"/}"
+  case "$rel" in /*) rel="$(basename -- "$BRIEF")" ;; esac
+  printf '## Summary\n- 인터뷰 brief · audit · 상태 파일과 로드맵 폴더를 올린다: `%s`\n- 머지되면 지휘자(`/spec-distill:epic-conductor`)가 이 로드맵을 기본 브랜치에서 읽어 에픽을 시작한다.\n' "$rel" > "$bf"
+  url="$(gh pr create -R "$slug" --base "$def" --head "$cur" --title "$(git -C "$top" log -1 --format=%s)" --body-file "$bf" | tail -n 1)" || url=""
+  rm -f "$bf"
+  case "$url" in https://*/pull/[0-9]*) ;; *) none "PR 을 만들지 못했다(위 사유)" ;; esac
+  echo "[spec-distill] PR 을 열었다 — $url"
+else
+  echo "[spec-distill] 이 브랜치의 열린 PR 을 쓴다 — $url"
+fi
+echo "interview-pr: OPEN $url"
+```
+<!-- interview-pr:end -->
+
+2. **머지 묻기.** `AskUserQuestion` 하나 — 질문 「<주제> — 지휘자는 로드맵을 기본 브랜치에서 읽어, 이 PR(<PR 주소>)이 머지돼야 에픽을 시작할 수 있다. 지금 머지할까?」, 선택지 「머지 (권장)」(고르면 CI 검사가 끝나길 기다렸다가 PR 을 기본 브랜치에 합치고, 지휘자 줄로 바로 이어 간다) · 「직접 머지」(PR 주소만 보이고, 머지한 뒤 지휘자 줄을 입력하라고 알린다). brief 리뷰를 거친 문서만 더하는 PR 이라 머지를 권한다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로 바꿔 Bash 도구의 백그라운드 실행으로 돌리고(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다) 나온 `[spec-distill]` 줄을 그대로 보인다. 펜스는 그 PR 이 열려 있고, 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 인지 먼저 확인한다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. 마지막 줄이 `interview-merge: MERGED` 면 두 줄을 그대로 노출하고(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 두 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+
+<!-- interview-merge:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+URL="<interview-pr 이 낸 PR 주소>"
+none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
+case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
+case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
+command -v gh >/dev/null 2>&1 || none "gh 가 없다"
+top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
+[ -n "$top" ] || none "git 저장소가 아니다"
+cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
+def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --root "$top")" || def=""
+[ -n "$cur" ] && [ -n "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
+pr="$(gh pr view "$URL" --json state,baseRefName,headRefName,isCrossRepository --jq '[.state, .baseRefName, .headRefName, (.isCrossRepository | tostring)] | join(" ")')" || none "PR 을 읽지 못했다(위 사유)"
+[ "$pr" = "OPEN $def $cur false" ] || none "이 PR 은 열린, 이 레포의 ${cur} → ${def} PR 이 아니다(읽은 것: ${pr})"
+out="$(mktemp)" || none "검사 출력 임시 파일을 만들지 못했다"
+n=0
+while :; do
+  ck_rc=0
+  gh pr checks "$URL" > "$out" 2>&1 || ck_rc=$?
+  grep -q "no checks reported" "$out" || break
+  n=$((n + 1))
+  [ "$n" -lt 6 ] || break
+  sleep 10
+done
+if ! grep -q "no checks reported" "$out"; then
+  gh pr checks "$URL" --watch --interval 15 > "$out" 2>&1 &
+  w=$!
+  n=0
+  while kill -0 "$w" 2>/dev/null; do
+    [ "$n" -lt 120 ] || { kill "$w" 2>/dev/null; rm -f "$out"; none "CI 검사를 30분 기다려도 끝나지 않았다"; }
+    sleep 15
+    n=$((n + 1))
+  done
+  ck_rc=0
+  wait "$w" || ck_rc=$?
+  [ "$ck_rc" -eq 0 ] || { tail -n 20 "$out"; rm -f "$out"; none "CI 검사가 통과하지 않았다(rc ${ck_rc}, 위 목록)"; }
+fi
+rm -f "$out"
+ways="$(gh repo view "${URL%/pull/*}" --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed --jq '[(if .mergeCommitAllowed then "--merge" else empty end), (if .squashMergeAllowed then "--squash" else empty end), (if .rebaseMergeAllowed then "--rebase" else empty end)] | join(" ")')" || ways=""
+[ -n "$ways" ] || none "레포가 허용하는 머지 방식을 읽지 못했다"
+how=""
+for how in --merge --squash --rebase; do
+  case " $ways " in *" $how "*) ;; *) continue ;; esac
+  if gh pr merge "$URL" "$how"; then
+    echo "[spec-distill] PR 을 머지했다(${how#--}) — ${URL}"
+    echo "interview-merge: MERGED"
+    exit 0
+  fi
+  echo "[spec-distill] ${how#--} 머지가 거절됐다(위 사유) — 다음 방식을 시도한다."
+done
+none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · 보호 규칙 · 권한)"
+```
+<!-- interview-merge:end -->
 
 **다음 세션 줄 — 분해된 일 ①/② 공통**
 
