@@ -151,6 +151,23 @@ class Progress(unittest.TestCase):
             body = line + "\n" if line != "Task 2/8: 끝 — b" else "Task 1/7: 끝 — a\n" + line + "\n"
             self.assertEqual(self.p(body), (None, None, "진행 줄 깨짐 — " + line), line)
 
+    def test_reason_heads_are_constants(self):   # 계획 2 Task 7 수정 1 — 사유 머리는 한 곳(team_status 가 가져다 쓴다)
+        self.assertEqual((F.PROGRESS_NONE, F.PROGRESS_BROKEN), ("진행 줄 없음", "진행 줄 깨짐"))
+        self.assertEqual(self.p("")[2], F.PROGRESS_NONE)
+        self.assertTrue(self.p("Task 9/7: 끝 — a\n")[2].startswith(F.PROGRESS_BROKEN + " — "))
+
+    def test_lost_lines(self):   # 기계 줄을 빠뜨린 문제만 — 머리 없음 · 머리 안 닫힘 · 닫히지 않은 펜스 · 꼴이 아닌 Task 줄
+        lost = lambda text: F.lost_lines(F.parse_result(text))   # noqa: E731
+        good = result("Task 1/3: 끝 — a\n")
+        self.assertEqual(lost(good), [])
+        self.assertEqual(lost(good.replace("role: worker", "role: boss")), [])   # 머리 값 문제는 기계 줄을 빠뜨리지 않는다
+        for text, head in ((BOM + good, "머리(첫 줄 `---`)가 없다"), ("---\ntype: job-result\n", "머리가 닫히지 않았다"),
+                           (result("Task 1/3: 끝 — a\n```text\nTask 2/3: 끝 — b\n"), "본문의 코드 펜스가 닫히지 않았다"),
+                           (result("Task 1/3: 끝 — a\nTask 03/3: 끝 — b\n"), "Task 줄 꼴이 아니다")):
+            got = lost(text)
+            self.assertEqual(len(got), 1, text)
+            self.assertTrue(got[0].startswith(head), got)
+
 
 class BlockedFile(unittest.TestCase):
     TEXT = "---\ntype: job-blocked\nstage: implement\nplan: 1\nattempt: 2\nhead: %s\n---\n\n## 무엇에 막혔나\n\n가\n\n## 풀려면 무엇이 필요한가\n\n나\n"

@@ -230,6 +230,10 @@ END_EMPTY = "「끝」 줄에 커밋 글이 없다"   # 이 사유가 있으면 
 END_PREFIX = _END_PREFIX
 _TASK_BLOCKED = "막힘"
 _MACHINE_PREFIXES = ("Ruling:", "규칙 반증:", "산출물:")
+NO_HEAD = "머리(첫 줄 `---`)가 없다"
+OPEN_HEAD = "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)"
+TASK_SHAPE = "Task 줄 꼴이 아니다(Task <n>/<전체>: 끝|막힘 — <커밋>)"
+PROGRESS_NONE, PROGRESS_BROKEN = "진행 줄 없음", "진행 줄 깨짐"   # progress_of 의 사유 머리
 
 
 @dataclass
@@ -263,7 +267,7 @@ def _split_head(text: str) -> tuple:
     """(머리의 키 → 값, 머리 뒤 줄들, 사유 | None, 두 번 나온 키의 사유들). 첫 글자가 BOM 이면 머리가 없는 것이다."""
     lines = [line.rstrip("\r") for line in text.split("\n")]
     if lines[0] != "---":
-        return {}, lines, "머리(첫 줄 `---`)가 없다", []
+        return {}, lines, NO_HEAD, []
     meta, dups = {}, []
     for i in range(1, len(lines)):
         if lines[i] == "---":
@@ -274,7 +278,7 @@ def _split_head(text: str) -> tuple:
             if key in meta:
                 dups.append("머리 키 %s 가 두 번 나온다" % key)
             meta.setdefault(key, value.strip())
-    return {}, [], "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)", []
+    return {}, [], OPEN_HEAD, []
 
 
 def _head_problems(meta: dict, type_value: str, keys: tuple) -> list:
@@ -368,7 +372,7 @@ def parse_result(text: str) -> Result:
             if m:
                 r.tasks.append((int(m.group(1)), int(m.group(2)), m.group(3), m.group(4)))
             else:
-                r.problems.append("Task 줄 꼴이 아니다(Task <n>/<전체>: 끝|막힘 — <커밋>): %s" % line)
+                r.problems.append("%s: %s" % (TASK_SHAPE, line))
         elif line.startswith("Ruling:"):
             r.rulings.append(line)
         elif line.startswith("규칙 반증:"):
@@ -385,13 +389,20 @@ def parse_result(text: str) -> Result:
 def progress_of(result: Result) -> tuple:
     """`(끝난 수, 전체, None)` 또는 `(None, None, 사유)`."""
     if not result.tasks:
-        return None, None, "진행 줄 없음"
+        return None, None, PROGRESS_NONE
     total = result.tasks[0][1]
     for n, whole, state, commit in result.tasks:
         if n < 1 or whole < 1 or n > whole or whole != total:
-            return None, None, "진행 줄 깨짐 — Task %d/%d: %s — %s" % (n, whole, state, commit)
+            return None, None, "%s — Task %d/%d: %s — %s" % (PROGRESS_BROKEN, n, whole, state, commit)
     n, _, state, _ = result.tasks[-1]
     return (n - 1 if state == _TASK_BLOCKED else n), total, None
+
+
+def lost_lines(result: Result) -> list:
+    """result.problems 가운데 기계 줄을 빠뜨리게 한 것 — 머리를 못 읽어 본문을 읽지 않음 · 닫히지 않은 펜스 · 꼴이 아닌 Task 줄.
+    하나라도 있으면 진행 숫자 · 「끝」 줄의 있고 없음을 그 파일에서 셀 수 없다."""
+    return [p for p in result.problems
+            if p in (NO_HEAD, OPEN_HEAD, _UNCLOSED_FENCE) or p.startswith(TASK_SHAPE + ": ")]
 
 
 def parse_blocked(text: str) -> Blocked:

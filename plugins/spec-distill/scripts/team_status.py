@@ -21,7 +21,7 @@ SPLIT = "갈라짐"
 DESIGN_FLOW, PLAIN_FLOW = "설계 흐름", "설계 없는 흐름"
 UNKNOWN = "알 수 없음"
 IMPLEMENT = team_layout.STAGES[2]
-BROKEN_PROGRESS = "진행 줄 깨짐"   # team_files.progress_of 가 깨진 진행 줄 사유 앞에 붙이는 글
+SHALLOW = "얕은 클론이라 받음 · 진행을 셀 이력이 없다 — `git fetch --unshallow` 뒤 다시 계산한다"
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -46,6 +46,15 @@ class Reader:
 
     def __init__(self, git, main, team, read_default):
         self.git, self.main, self.team, self.read_default = git, main, team, read_default
+        self._shallow = []
+
+    def shallow(self):
+        """얕은 클론이면 사유 한 줄, 아니면 None — 한 번만 묻는다. 묻지 못해도 셀 수 없음으로 본다."""
+        if not self._shallow:
+            rc, out = self.git.run("rev-parse", "--is-shallow-repository")
+            self._shallow.append(None if rc == 0 and out.strip() == "false" else
+                                 SHALLOW if rc == 0 and out.strip() == "true" else "얕은 클론인지 읽지 못했다")
+        return self._shallow[0]
 
     def read(self, tree, path: str):
         return self.read_default(path) if tree is None else self.git.blob(tree, path)
@@ -104,13 +113,18 @@ class Reader:
         if result is None:
             block["progress"] = {"done": None, "total": None, "why": "%s 를 읽지 못했다" % path}
             return
+        lost = team_files.lost_lines(result)
+        if lost:   # 빠뜨린 기계 줄이 있으면 남은 줄로 센 수는 수가 아니다
+            block["progress"] = {"done": None, "total": None, "why": "결과 파일을 다 읽지 못했다 — %s" % lost[0]}
+            return
         done, total, why = team_files.progress_of(result)
         if why is None:
             block["progress"] = {"done": done, "total": total}
             return
         block["progress"] = {"done": None, "total": None, "why": why}
-        if why.startswith(BROKEN_PROGRESS + " — "):
-            block["notes"].append("진행 줄을 믿지 않았다: %s — %s" % (name, why[len(BROKEN_PROGRESS + " — "):]))
+        broken = team_files.PROGRESS_BROKEN + " — "
+        if why.startswith(broken):
+            block["notes"].append("진행 줄을 믿지 않았다: %s — %s" % (name, why[len(broken):]))
 
     def progress(self, tip: str, block: dict, plan: int) -> tuple:
         """(단계, 근거, 설계문서들, 계획들) — 브랜치 하나의 끝(tip)에서 그 과제의 단계(설계 §10). plan 은 그 브랜치가
@@ -122,16 +136,20 @@ class Reader:
         block.update(approved=None, progress=None, job={"intent": intent_path, "plan": number, "result": None})
         specs = self.specs(tip, block)
         plans = [] if plain or not self._has(tip, team.plan(job, plan)) else [team.plan(job, plan)]
+        block["notes"].extend(self.notices(tip, block))   # 막힘은 단계를 셀 수 없을 때도 알린다
+        shallow = self.shallow()
+        if shallow:
+            return UNKNOWN, shallow, specs, plans
         intent = self.read(tip, intent_path)
         if intent is None:
             return UNKNOWN, "%s 를 읽지 못했다" % intent_path, specs, plans
-        block["notes"].extend(self.notices(tip, block))
         try:
             state, notes, latest = job_results.receipt(self.git, self.main, tip, team, job, intent, IMPLEMENT, number,
                                                        block["reserved"], self._outputs(block))
             unread = None
-        except FormatError as exc:   # 결정 기록 칸을 찾지 못했다 — 받음 줄을 셀 수 없다
-            state, notes, latest, unread = None, [], None, str(exc)
+        except FormatError as exc:   # 결정 기록 칸을 찾지 못했다 — 받음 줄을 셀 수 없다(결과 파일 이름은 따로 구한다)
+            state, notes, unread = None, [], str(exc)
+            latest = job_results.newest(job_results.result_names(self.git, tip, team, job) or [], IMPLEMENT, number)
         block["job"]["result"] = latest
         block["notes"].extend(notes)
         result = path = None
@@ -140,9 +158,13 @@ class Reader:
             path = team.result(job, parsed[0], parsed[2], parsed[1])
             text = self.read(tip, path)
             result = team_files.parse_result(text) if text is not None else None
+            lost = team_files.lost_lines(result) if result is not None else []
+            if result is not None and result.problems:
+                block["notes"].append("결과 파일을 다 읽지 못했다: %s — %s" % (latest, result.problems[0]))
             if state == job_results.NOT_RECEIVED:
                 block["notes"].append("결과 있음 · 받음 없음: %s(%s)" % (
-                    latest, "대조를 기다린다" if result is not None and result.end else "도는 중 — 끝 줄 없음"))
+                    latest, "읽지 못함 — 끝 줄이 있는지 모른다" if result is None or lost
+                    else "대조를 기다린다" if result.end else "도는 중 — 끝 줄 없음"))
         if plain:
             if unread:
                 return "진행 중", "결정 기록 읽기 불가 — %s" % unread, specs, plans

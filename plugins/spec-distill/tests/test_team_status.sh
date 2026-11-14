@@ -75,8 +75,11 @@ prog() { blk "$1" progress; }
 notes() { js "$T/s.json" "' | '.join([b for b in r['blocks'] if b['id']=='$1'][0]['notes'])"; }
 jobf() { js "$T/s.json" "[b for b in r['blocks'] if b['id']=='$1'][0]['job']['$2']"; }   # jobf <번호> <job 칸>
 rc() { echo "$LAST_RC"; }
-step() { g add -A && g commit -qm "$1" && g push -q origin HEAD && LAST_RC="$(status "$T/s.json")"; }
-back() { g reset -q --hard "$1" && g push -q -f origin HEAD; }   # back <커밋> — 지금 브랜치를 그 커밋으로 되돌려 올린다(임시 레포)
+# 걸음이 실패하면 보고를 지운다 — 앞 걸음의 낡은 보고가 「같은 단계 그대로」 단언을 채우지 못하게(그 단언들은 빨개진다)
+fail_step() { rm -f "$T/s.json"; LAST_RC="걸음 실패"; no "걸음 실패: $1"; }
+restat() { rm -f "$T/s.json"; LAST_RC="$(status "$T/s.json")"; }
+step() { g add -A && g commit -qm "$1" && g push -q origin HEAD && restat || fail_step "$1"; }
+back() { g reset -q --hard "$1" && g push -q -f origin HEAD || fail_step "되돌리기 $1"; }   # back <커밋> — 지금 브랜치를 그 커밋으로 되돌려 올린다(임시 레포)
 sub() {  # sub <레포 상대 경로> <옛 글> <새 글> — 한 번 나오는 글을 바꾼다(없거나 둘이면 실패)
   python3 - "$W/$1" "$2" "$3" <<'PY'
 import sys
@@ -118,103 +121,132 @@ assert_eq "${BAD_RC} · $(js "$T/bad.json" "r['format_errors']")" "3 · ['team �
   "단계: 팀 자리가 아닌 team 로드맵은 형식 깨짐(3)"
 rm -rf "$W/$TM2" "$W/${RD}deep"
 
-g checkout -q -b feature/tm-e1 main && put src/e1/a.txt a && step "코드 하나"
+g checkout -q -b feature/tm-e1 main && put src/e1/a.txt a && step "코드 하나" || fail_step "코드 하나"
 assert_eq "$(st E1) · $(why E1)" "설계 중 · 브랜치 있음 · design.md 없음" "단계: 브랜치만 — 설계 중"
-put "$J1/design.md" "$DESIGN" && step "설계문서"
+put "$J1/design.md" "$DESIGN" && step "설계문서" || fail_step "설계문서"
 assert_eq "$(st E1) · $(why E1)" "설계 중 · design.md 있음 · spec 승인 줄 없음" "단계: 설계문서가 있어도 승인 줄이 없으면 설계 중"
 assert_eq "$(blk E1 specs)" "['$J1/design.md']" "단계: 설계 흐름의 설계문서는 과제 폴더의 design.md"
-decide E1 "spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」" && step "승인"
+decide E1 "spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」" && step "승인" || fail_step "승인"
 assert_eq "$(st E1) · $(why E1)" "계획 · spec 승인됨(2026-11-20) · plan-1.md 없음 · implement 결과 파일 없음" "단계: 승인 줄 — 계획"
 assert_eq "$(rc)" "0" "단계: 계획 — 경고 · 검사 불가가 없다(뒤의 rc 3 단언의 바탕)"
-put "$J1/plan-1.md" "$PLAN1" && step "계획 파일"
+put "$J1/plan-1.md" "$PLAN1" && step "계획 파일" || fail_step "계획 파일"
 assert_eq "$(st E1)" "계획" "AC9: 계획 파일만 바꾼 커밋으로는 구현 중이 아니다"
 assert_contains "$(why E1)" "plan-1.md 있음 · implement 결과 파일 없음" "단계: 계획 파일이 있으면 「있음」"
-decide E1 "계획 검토 · 2026-11-21 · 설계에 없던 결정 없음" && step "결정 기록 한 줄"
+decide E1 "계획 검토 · 2026-11-21 · 설계에 없던 결정 없음" && step "결정 기록 한 줄" || fail_step "결정 기록 한 줄"
 assert_eq "$(st E1)" "계획" "AC9: 결정 기록만 바꾼 커밋으로는 구현 중이 아니다"
-sync E1 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "결과 파일 시작"
+sync E1 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "결과 파일 시작" || fail_step "결과 파일 시작"
 assert_eq "$(st E1) · $(why E1)" "구현 중 · implement 결과 파일 있음: implement-plan-1-1.md" "단계: implement 결과 파일 — 구현 중"
 assert_eq "$(prog E1)" "{'done': None, 'total': None, 'why': '진행 줄 없음'}" "AC27: Task 줄이 없으면 숫자 없이 「진행 줄 없음」"
 assert_contains "$(notes E1)" "결과 있음 · 받음 없음: implement-plan-1-1.md(도는 중 — 끝 줄 없음)" "AC10: 결과 있음 · 받음 없음(도는 중)"
 assert_eq "$(jobf E1 intent) · $(jobf E1 plan) · $(jobf E1 result)" "$J1/INTENT.md · 1 · implement-plan-1-1.md" "Q14: job 칸 — INTENT.md · 계획 번호 · 가장 새 결과 파일"
-sync E1 implement-plan-1-1.md --ledger "$T/ledger.md" --plan-file "$W/$J1/plan-1.md" >/dev/null && step "Task 둘"
+sync E1 implement-plan-1-1.md --ledger "$T/ledger.md" --plan-file "$W/$J1/plan-1.md" >/dev/null && step "Task 둘" || fail_step "Task 둘"
 assert_eq "$(st E1) · $(prog E1)" "구현 중 · {'done': 2, 'total': 3}" "AC27: 단계 글자는 그대로이고 진행은 따로 된 칸"
-printf 'Task 9/3: 끝 — x\n' >> "$W/$R1" && step "깨진 진행 줄"
+printf 'Task 9/3: 끝 — x\n' >> "$W/$R1" && step "깨진 진행 줄" || fail_step "깨진 진행 줄"
 assert_eq "$(st E1) · $(prog E1)" "구현 중 · {'done': None, 'total': None, 'why': '진행 줄 깨짐 — Task 9/3: 끝 — x'}" "AC27: 깨진 숫자는 숫자 없이 사유로"
 assert_contains "$(notes E1)" "진행 줄을 믿지 않았다: implement-plan-1-1.md — Task 9/3: 끝 — x" "AC27: 깨진 진행 줄을 알린다"
-drop "$R1" "Task 9/3" && step "깨진 진행 줄 지움"
+drop "$R1" "Task 9/3" && step "깨진 진행 줄 지움" || fail_step "깨진 진행 줄 지움"
 assert_eq "$(prog E1)" "{'done': 2, 'total': 3}" "AC27: 그 줄을 지우면 숫자가 돌아온다"
 assert_not_contains "$(notes E1)" "진행 줄을 믿지 않았다" "AC27: 줄을 지우면 알림도 없다"
-put "$BLK" "$(printf -- '---\ntype: job-blocked\nstage: implement\nplan: 1\nattempt: 1\nhead: %s\n---\n\n## 무엇에 막혔나\n\n단계 표 픽스처가 막혔다.\n\n## 풀려면 무엇이 필요한가\n\n리더의 답 하나.' "$(g rev-parse HEAD)")" && step "막힘 파일"
+# 다 읽지 못한 결과 파일 — 기계 줄을 빠뜨렸으면 진행 숫자를 내지 않고 사유와 알림으로 낸다(AC27)
+PROG_AT="$(g rev-parse HEAD)"
+pdone() { js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E1'][0]['progress']['done']"; }
+pwhy() { js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E1'][0]['progress'].get('why')"; }
+printf 'Task 03/3: 끝 — z\n' >> "$W/$R1" && step "앞이 0 인 진행 줄" || fail_step "앞이 0 인 진행 줄"
+assert_eq "$(st E1) · $(pdone)" "구현 중 · None" "단계: 다 읽지 못한 결과 파일 — 앞이 0 인 Task 줄이 있으면 숫자를 내지 않는다(2/3 이 아니다)"
+assert_contains "$(pwhy)" "결과 파일을 다 읽지 못했다 — Task 줄 꼴이 아니다" "단계: 다 읽지 못한 결과 파일 — 진행 칸의 사유(앞이 0)"
+assert_contains "$(notes E1)" "결과 파일을 다 읽지 못했다: implement-plan-1-1.md — Task 줄 꼴이 아니다(Task <n>/<전체>: 끝|막힘 — <커밋>): Task 03/3: 끝 — z" \
+  "단계: 다 읽지 못한 결과 파일 — 첫 사유를 알린다(앞이 0)"
+back "$PROG_AT"
+OPEN_FENCE=$'```text\nTask 2/3:'
+sub "$R1" "Task 2/3:" "$OPEN_FENCE" && step "닫히지 않은 펜스" || fail_step "닫히지 않은 펜스"
+assert_eq "$(st E1) · $(pdone)" "구현 중 · None" "단계: 다 읽지 못한 결과 파일 — 닫히지 않은 펜스면 숫자를 내지 않는다(1/3 이 아니다)"
+assert_contains "$(notes E1)" "결과 파일을 다 읽지 못했다: implement-plan-1-1.md — 본문의 코드 펜스가 닫히지 않았다" "단계: 다 읽지 못한 결과 파일 — 첫 사유를 알린다(펜스)"
+back "$PROG_AT"
+put "$BLK" "$(printf -- '---\ntype: job-blocked\nstage: implement\nplan: 1\nattempt: 1\nhead: %s\n---\n\n## 무엇에 막혔나\n\n단계 표 픽스처가 막혔다.\n\n## 풀려면 무엇이 필요한가\n\n리더의 답 하나.' "$(g rev-parse HEAD)")" && step "막힘 파일" || fail_step "막힘 파일"
 assert_eq "$(st E1)" "구현 중" "AC29: 막힘 파일이 있어도 단계는 그대로"
 assert_contains "$(notes E1)" "막힘: implement plan 1 시도 1 — $BLK" "AC29: 막힘 알림 — 단계 · 계획 · 시도 · 경로"
 assert_eq "$(jobf E1 result)" "implement-plan-1-1.md" "AC29: 막힘 파일은 결과 파일로 세지 않는다"
-drop "$BLK" "## 풀려면" && step "막힘 파일 깨짐"
+drop "$BLK" "## 풀려면" && step "막힘 파일 깨짐" || fail_step "막힘 파일 깨짐"
 assert_contains "$(notes E1)" "막힘 파일을 읽지 못했다: $BLK — " "AC29: 깨진 막힘 파일은 읽지 못했다고 알린다"
-g rm -q -- "$BLK" && step "막힘 파일 지움"
+g rm -q -- "$BLK" && step "막힘 파일 지움" || fail_step "막힘 파일 지움"
 assert_not_contains "$(notes E1)" "막힘" "AC29: 막힘 파일을 지우면 막힘 알림이 사라진다"
 put src/e1/a.txt "첫 읽기의 끝난 코드" && g commit -qm "E1 코드" && CODE="$(g rev-parse HEAD)"
 printf 'AC1: 구현됨 — src/e1/a.txt\nAC2: 구현됨 — src/e1/a.txt\n' >> "$W/$R1"
-sync E1 implement-plan-1-1.md --end "$CODE" >/dev/null && step "결과 끝"
+sync E1 implement-plan-1-1.md --end "$CODE" >/dev/null && step "결과 끝" || fail_step "결과 끝"
 assert_contains "$(notes E1)" "결과 있음 · 받음 없음: implement-plan-1-1.md(대조를 기다린다)" "AC10: 끝 줄이 있으면 「대조를 기다린다」(Q11)"
 assert_eq "$(st E1)" "구현 중" "단계: 끝 줄만으로는 구현 끝이 아니다"
+END_AT="$(g rev-parse HEAD)"
+python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8", newline="").read(); open(p, "w", encoding="utf-8", newline="").write("﻿" + t)' "$W/$R1" \
+  && step "BOM 붙은 결과 파일" || fail_step "BOM 붙은 결과 파일"
+assert_eq "$(st E1) · $(pdone)" "구현 중 · None" "단계: 다 읽지 못한 결과 파일 — BOM 이 붙으면 숫자를 내지 않는다"
+assert_contains "$(notes E1)" 'implement-plan-1-1.md — 머리(첫 줄 `---`)가 없다' "단계: 다 읽지 못한 결과 파일 — 첫 사유를 알린다(BOM)"
+assert_contains "$(notes E1)" "결과 있음 · 받음 없음: implement-plan-1-1.md(읽지 못함 — 끝 줄이 있는지 모른다)" "단계: 다 읽지 못한 결과 파일 — 받음 없음 알림이 「읽지 못함」"
+assert_not_contains "$(notes E1)" "도는 중 — 끝 줄 없음" "단계: 다 읽지 못한 결과 파일 — 끝 줄이 있는 파일을 「도는 중」 이라 하지 않는다"
+back "$END_AT"
 LINE="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job E1 --result implement-plan-1-1.md --date 2026-11-22 | grep '^- 결과 받음 · ')"
 assert_contains "$LINE" "- 결과 받음 · 2026-11-22 · 「implement-plan-1-1.md · $CODE · 결과 대조: 통과 — " "받음: 대조가 받음 줄을 낸다"
-decide E1 "$LINE" && step "받음 줄"
+decide E1 "$LINE" && step "받음 줄" || fail_step "받음 줄"
 assert_eq "$(st E1) · $(why E1) · $(prog E1)" "구현 끝 · 결과 받음 줄 있음: implement-plan-1-1.md · None" "단계: 대조를 통과한 받음 줄 — 구현 끝"
 assert_not_contains "$(notes E1)" "받음 없음" "받음: 받은 뒤에는 받음 없음 알림이 없다"
 RECEIVED_AT="$(g rev-parse HEAD)"
 
 # 받음 — 갈래마다 feature/tm-e1 에 커밋을 하나 더해 단언한 뒤 RECEIVED_AT 으로 되돌린다
-put src/e1/b.txt b && step "받은 뒤 고칠 자리"
+put src/e1/b.txt b && step "받은 뒤 고칠 자리" || fail_step "받은 뒤 고칠 자리"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 고칠 자리가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt" "받음: 받은 뒤 바뀜 — 고칠 자리"
 assert_not_contains "$(notes E1)" "받음 없음" "받음: 낡은 받음 줄은 받음 없음이 아니다"
 back "$RECEIVED_AT"
-sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서"
+sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "받음: 받은 뒤 바뀜 — design.md"
 back "$RECEIVED_AT"
-sub "$J1/plan-1.md" "알림을 단다." "알림을 다시 단다." && step "받은 뒤 계획 파일"
+sub "$J1/plan-1.md" "알림을 단다." "알림을 다시 단다." && step "받은 뒤 계획 파일" || fail_step "받은 뒤 계획 파일"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 계획 파일이 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/plan-1.md" "받음: 받은 뒤 바뀜 — 계획 파일"
 back "$RECEIVED_AT"
-decide E1 "결정 · 2026-11-23 · 받은 뒤 적은 결정" && step "받은 뒤 결정 줄"
+decide E1 "결정 · 2026-11-23 · 받은 뒤 적은 결정" && step "받은 뒤 결정 줄" || fail_step "받은 뒤 결정 줄"
 assert_eq "$(st E1)" "구현 끝" "받음: INTENT.md 에 결정 줄만 더하면 구현 끝 그대로"
 back "$RECEIVED_AT"
-put "$J1/results/review-1.md" "검토 메모" && step "받은 뒤 검토 결과"
+put "$J1/results/review-1.md" "검토 메모" && step "받은 뒤 검토 결과" || fail_step "받은 뒤 검토 결과"
 assert_eq "$(st E1)" "구현 끝" "받음: 결과 폴더에 review-1.md 만 더하면 구현 끝 그대로"
 assert_not_contains "$(notes E1)" "받음 없음" "받음: implement 가 아닌 결과 파일에는 받음 없음 알림이 없다"
 back "$RECEIVED_AT"
 MAIN0="$(g rev-parse origin/main)"
 g checkout -q main && put src/e1/z.txt z && g commit -qm "기본 브랜치의 다른 변경" && g push -q origin main
-g checkout -q feature/tm-e1 && g merge -q --no-edit main && g push -q origin HEAD && LAST_RC="$(status "$T/s.json")"
+g checkout -q feature/tm-e1 && g merge -q --no-edit main && g push -q origin HEAD && restat || fail_step "기본 브랜치 merge"
 assert_eq "$(st E1)" "구현 끝" "받음: 기본 브랜치를 merge 한 커밋만 있으면 구현 끝 그대로(Review Focus 4)"
 assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "받음: 합쳐 들어온 고칠 자리 변경(src/e1/z.txt)은 세지 않는다"
 back "$RECEIVED_AT"
 g checkout -q main && back "$MAIN0" && g checkout -q feature/tm-e1
-sync E1 implement-plan-1-2.md --role worker --bundle-at "$MAIN0" --job-at "$RECEIVED_AT" >/dev/null && step "받은 뒤 새 시도"
+sync E1 implement-plan-1-2.md --role worker --bundle-at "$MAIN0" --job-at "$RECEIVED_AT" >/dev/null && step "받은 뒤 새 시도" || fail_step "받은 뒤 새 시도"
 assert_eq "$(st E1) · $(jobf E1 result)" "구현 중 · implement-plan-1-2.md" "받음: 더 새 시도가 있으면 구현 중 · job.result 는 새 시도"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — 더 새 시도 implement-plan-1-2.md 가 있다" "받음: 받은 뒤 바뀜 — 더 새 시도"
 back "$RECEIVED_AT"
-sub "$J1/INTENT.md" " · $CODE · " " · $MAIN0 · " && step "받음 줄의 커밋이 다르다"
+sub "$J1/INTENT.md" " · $CODE · " " · $MAIN0 · " && step "받음 줄의 커밋이 다르다" || fail_step "받음 줄의 커밋이 다르다"
 assert_eq "$(st E1)" "구현 중" "받음: 받음 줄의 커밋이 head 가 아니면 구현 중"
 assert_contains "$(notes E1)" "받음 줄을 세지 않았다: implement-plan-1-1.md — 받음 줄의 커밋" "받음: 받음 커밋 ≠ head 를 알린다"
 back "$RECEIVED_AT"
-sub "$J1/INTENT.md" "$LINE" "- 결과 받음 · 2026-11-22 · 받았다" && step "꼴이 깨진 받음 줄"
+sub "$J1/INTENT.md" "$LINE" "- 결과 받음 · 2026-11-22 · 받았다" && step "꼴이 깨진 받음 줄" || fail_step "꼴이 깨진 받음 줄"
 assert_eq "$(st E1)" "구현 중" "받음: 꼴이 깨진 받음 줄만 있으면 구현 중"
 assert_contains "$(notes E1)" "받음 줄을 세지 않았다: 꼴이 깨졌다 — - 결과 받음 · 2026-11-22 · 받았다" "받음: 꼴이 깨졌다"
 assert_contains "$(notes E1)" "결과 있음 · 받음 없음: implement-plan-1-1.md(대조를 기다린다)" "받음: 깨진 줄은 받음이 아니다 — 받음 없음"
 back "$RECEIVED_AT"
-drop "$R1" "AC2:" && step "받은 뒤 결과 파일이 대조를 못 넘는다"
+drop "$R1" "AC2:" && step "받은 뒤 결과 파일이 대조를 못 넘는다" || fail_step "받은 뒤 결과 파일이 대조를 못 넘는다"
 assert_eq "$(st E1)" "구현 중" "받음: 받음 줄이 가리키는 결과 파일이 대조를 못 넘으면 구현 중"
 assert_contains "$(notes E1)" "받음 줄을 세지 않았다: implement-plan-1-1.md — 보고에 없는 AC — AC2" "받음: 대조 불통을 알린다"
 back "$RECEIVED_AT"
 
 # 못 읽는 것 — INTENT.md 가 없는 끝 · 결정 기록의 승인 줄 꼴이 깨진 끝
-g rm -q -- "$J1/INTENT.md" && step "INTENT.md 지움"
+g rm -q -- "$J1/INTENT.md" && step "INTENT.md 지움" || fail_step "INTENT.md 지움"
 assert_eq "$(st E1) · $(why E1) · $(rc)" "알 수 없음 · $J1/INTENT.md 를 읽지 못했다 · 3" "단계: INTENT.md 를 그 끝에서 읽지 못하면 알 수 없음(3)"
+assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], r['format_errors'])")" "([], [])" "단계: INTENT.md 못 읽음의 3 은 그 블록 하나에서 온다(보고의 검사 불가 사유 없음)"
 back "$RECEIVED_AT"
-printf -- '- spec 승인 · 11/20 · 「글」\n' >> "$W/$J1/INTENT.md" && step "승인 줄 꼴 깨짐"
+g rm -q -- "$J1/INTENT.md" && put "$BLK" "$(printf -- '---\ntype: job-blocked\nstage: implement\nplan: 1\nattempt: 2\nhead: %s\n---\n\n## 무엇에 막혔나\n\n의도 파일이 없다.\n\n## 풀려면 무엇이 필요한가\n\n의도 파일을 되살린다.' "$RECEIVED_AT")" \
+  && step "INTENT.md 지움 · 막힘" || fail_step "INTENT.md 지움 · 막힘"
+assert_eq "$(st E1)" "알 수 없음" "단계: INTENT.md 를 못 읽은 블록 — 알 수 없음"
+assert_contains "$(notes E1)" "막힘: implement plan 1 시도 2 — $BLK" "AC29: INTENT.md 를 못 읽어도 막힘 알림은 낸다"
+back "$RECEIVED_AT"
+printf -- '- spec 승인 · 11/20 · 「글」\n' >> "$W/$J1/INTENT.md" && step "승인 줄 꼴 깨짐" || fail_step "승인 줄 꼴 깨짐"
 assert_eq "$(st E1)" "설계 중" "단계: 결정 기록의 승인 줄 꼴이 깨지면 설계 중"
 assert_contains "$(why E1)" "결정 기록 읽기 불가 — " "단계: 결정 기록 읽기 불가를 근거로 낸다"
 back "$RECEIVED_AT"
@@ -275,43 +307,45 @@ assert_contains "$(cat "$T/reader.txt")" "blocked ['막힘 파일을 읽지 못�
 assert_not_contains "$(cat "$T/reader.txt")" "Traceback" "단계: 읽는 함수들이 죽지 않는다"
 
 # 끝 — 올리지 않은 커밋은 알리고 로컬 끝으로 계산한다 · 둘째 clone 이 다른 커밋을 올려 갈라지면 알 수 없음
-put src/e1/b.txt b2 && g commit -qm "올리지 않은 커밋" && LAST_RC="$(status "$T/s.json")"
+put src/e1/b.txt b2 && g commit -qm "올리지 않은 커밋" && restat || fail_step "올리지 않은 커밋"
 assert_contains "$(notes E1)" "아직 안 올라옴 — feature/tm-e1 의 로컬 끝" "끝: 올리지 않은 커밋을 알린다"
 assert_eq "$(st E1)" "구현 중" "끝: 단계는 로컬 끝으로 계산한다(origin 끝이면 구현 끝)"
 other fetch -q origin && other checkout -q -B feature/tm-e1 origin/feature/tm-e1
 mkdir -p "$U/src/e1" && printf 'c\n' > "$U/src/e1/c.txt" && other add -- src/e1/c.txt && other commit -qm "다른 clone 의 커밋" && other push -q origin feature/tm-e1
-g fetch -q origin && LAST_RC="$(status "$T/s.json")"
+g fetch -q origin && restat || fail_step "갈라짐 받기"
 assert_eq "$(st E1) · $(rc) · $(st E2)" "알 수 없음 · 3 · 준비" "끝: 갈라지면 그 블록만 알 수 없음(3) — 다른 블록은 그대로(Q10)"
+assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], r['format_errors'])")" "([], [])" "끝: 갈라짐의 3 은 그 블록 하나에서 온다(보고의 검사 불가 사유 없음)"
 assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E1'][0]['reason'].startswith('갈라짐 — ')")" "True" "끝: 사유는 「갈라짐 — 」 으로 시작한다"
-back "$RECEIVED_AT" && LAST_RC="$(status "$T/s.json")"
+back "$RECEIVED_AT" && restat || fail_step "갈라짐 되돌리기"
 assert_eq "$(st E1) · $(rc)" "구현 끝 · 0" "끝: 되돌리면 구현 끝 · 종료 코드 0"
 
 # 설계 없는 흐름(E2 — 산출물 칸): 준비 → 진행 중 → 결과 받음
-g checkout -q -b feature/tm-e2 main && put src/e2/note.txt n && step "E2 시작"
+g checkout -q -b feature/tm-e2 main && put src/e2/note.txt n && step "E2 시작" || fail_step "E2 시작"
 assert_eq "$(st E2) · $(why E2) · $(blk E2 task_status) · $(prog E2)" "진행 중 · 브랜치 있음 · in_progress · None" "단계: 설계 없는 흐름 — 브랜치가 있으면 진행 중"
 put "$TM/jobs/E2/survey.md" "$(printf '# 조사 표\n\n| 파일 | 줄 수 |\n|---|---|\n| a.txt | 1 |')" && g commit -qm "조사 표" && CODE2="$(g rev-parse HEAD)"
 sync E2 implement-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$CODE2" >/dev/null
 printf '산출물: %s\n' "$TM/jobs/E2/survey.md" >> "$W/$TM/jobs/E2/results/implement-1.md"
-sync E2 implement-1.md --end "$CODE2" >/dev/null && step "E2 결과"
+sync E2 implement-1.md --end "$CODE2" >/dev/null && step "E2 결과" || fail_step "E2 결과"
 assert_eq "$(st E2) · $(jobf E2 plan) · $(jobf E2 result)" "진행 중 · None · implement-1.md" "단계: 설계 없는 흐름의 결과 파일은 계획 번호가 없다"
 assert_contains "$(notes E2)" "결과 있음 · 받음 없음: implement-1.md(대조를 기다린다)" "AC10: 설계 없는 흐름에도 받음 없음 알림"
 LINE2="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job E2 --result implement-1.md --date 2026-11-24 | grep '^- 결과 받음 · ')"
-decide E2 "$LINE2" && step "E2 받음 줄"
+decide E2 "$LINE2" && step "E2 받음 줄" || fail_step "E2 받음 줄"
 assert_eq "$(st E2) · $(why E2) · $(blk E2 task_status)" "결과 받음 · 결과 받음 줄 있음: implement-1.md · in_progress" "단계: 설계 없는 흐름 — 받음 줄이면 결과 받음(Q12)"
 E2_AT="$(g rev-parse HEAD)"
-sub "$TM/jobs/E2/INTENT.md" "## 결정 기록" "## 결정 기록 아님" && step "E2 결정 기록 칸 깨짐"
+sub "$TM/jobs/E2/INTENT.md" "## 결정 기록" "## 결정 기록 아님" && step "E2 결정 기록 칸 깨짐" || fail_step "E2 결정 기록 칸 깨짐"
 assert_eq "$(st E2)" "진행 중" "단계: 설계 없는 흐름 — 결정 기록을 읽지 못하면 진행 중"
 assert_contains "$(why E2)" "결정 기록 읽기 불가 — " "단계: 설계 없는 흐름 — 결정 기록 읽기 불가를 근거로 낸다"
+assert_eq "$(jobf E2 result)" "implement-1.md" "단계: 결정 기록 칸을 못 찾아도 job.result 는 가장 새 결과 파일"
 back "$E2_AT"
 
 # 둘째 브랜치(계획 2): feature/tm-e1 을 기본 브랜치에 merge 커밋으로 합친다
 g checkout -q main
 MAIN_AT="$(g rev-parse origin/main)"
-g merge -q --no-ff --no-edit feature/tm-e1 && g push -q origin main && LAST_RC="$(status "$T/s.json")"
+g merge -q --no-ff --no-edit feature/tm-e1 && g push -q origin main && restat || fail_step "기본 브랜치에 합치기"
 assert_eq "$(st E1)" "일부 머지 1/2" "단계: 브랜치 둘 가운데 하나가 머지되면 일부 머지 1/2"
-g checkout -q -b feature/tm-e1b main && put src/e1/d.txt d && step "계획 2 시작"
+g checkout -q -b feature/tm-e1b main && put src/e1/d.txt d && step "계획 2 시작" || fail_step "계획 2 시작"
 assert_contains "$(why E1)" "feature/tm-e1b — 계획 · spec 승인됨(2026-11-20) · plan-2.md 없음" "단계: 둘째 브랜치는 계획 2 로 센다"
-sync E1 implement-plan-2-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "계획 2 결과 시작"
+sync E1 implement-plan-2-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "계획 2 결과 시작" || fail_step "계획 2 결과 시작"
 assert_contains "$(why E1)" "feature/tm-e1b — 구현 중" "단계: 계획 2 의 implement 결과 파일 — 구현 중"
 assert_eq "$(jobf E1 plan) · $(jobf E1 result)" "2 · implement-plan-2-1.md" "Q14: job.plan == 2 · job.result 는 계획 2 의 결과 파일"
 
@@ -321,6 +355,53 @@ NO_RC=0; (cd "$W" && python3 "$RS" --roadmap-file "$RM" --json) > "$T/nohead.jso
 assert_eq "${NO_RC} · $(js "$T/nohead.json" "sorted(set(b['stage'] for b in r['blocks']))")" "3 · ['알 수 없음']" "Review Focus 5: origin/HEAD 가 없으면 블록이 모두 알 수 없음(3)"
 assert_not_contains "$(cat "$T/nohead.err")" "Traceback" "Review Focus 5: 표준 오류에 Traceback 이 없다"
 assert_not_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "내부 오류" "Review Focus 5: 계산이 죽지 않았다(내부 오류 없음)"
+assert_eq "$(js "$T/nohead.json" "sorted(set(b['reason'] for b in r['blocks']))")" "['기본 브랜치를 못 읽었다']" "Review Focus 5: 블록 사유는 기본 브랜치를 못 읽었다"
+assert_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "기본 브랜치를 알 수 없다 — origin/HEAD 가 없다" "Review Focus 5: 보고의 검사 불가 사유는 origin/HEAD 가 없다"
 g remote set-head origin main
 g checkout -q main
+
+# Review Focus 5 — 얕은 클론: 과제 브랜치의 받음 · 진행을 셀 이력이 없다 → 그 블록은 알 수 없음(3) · 죽지 않는다
+SH="$T/shallow"
+git clone -q --no-local --depth 1 --no-single-branch "file://$T/origin.git" "$SH" && git -C "$SH" remote set-head origin main \
+  || no "얕은 클론을 만들지 못했다"
+assert_eq "$(git -C "$SH" rev-parse --is-shallow-repository)" "true" "Review Focus 5: 픽스처가 정말 얕은 클론이다"
+SH_RC=0; (cd "$SH" && python3 "$RS" "$RM" --json) > "$T/shallow.json" 2> "$T/shallow.err" || SH_RC=$?
+assert_eq "${SH_RC} · $(js "$T/shallow.json" "[(b['id'], b['stage']) for b in r['blocks'] if b['id'] in ('E1', 'E2')]")" "3 · [('E1', '알 수 없음'), ('E2', '알 수 없음')]" \
+  "Review Focus 5: 얕은 클론이면 브랜치가 있는 블록은 알 수 없음(3)"
+assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E2'][0]")" "얕은 클론이라" "Review Focus 5: 얕은 클론의 사유"
+assert_not_contains "$(cat "$T/shallow.err")" "Traceback" "Review Focus 5: 얕은 클론에서 죽지 않는다(Traceback 없음)"
+assert_not_contains "$(js "$T/shallow.json" "r['unknown_reasons']")" "내부 오류" "Review Focus 5: 얕은 클론에서 죽지 않는다(내부 오류 없음)"
+
+# team 의 시작 흔적(compute 의 started) — PR 캐시에 그 브랜치 줄이 있고 로컬 · origin ref 가 없을 때만 불린다(E3)
+MAIN_END="$(g rev-parse HEAD)"
+python3 - "$S" "$W" "$RM" "$RECEIVED_AT" "$MAIN_END" > "$T/machine-path.txt" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import conductor_state as cs
+import roadmap_status
+from state_path import state_root_for_common
+root, rm, oid, merge = sys.argv[2:6]
+path = cs.machine_path(state_root_for_common(Path(root, roadmap_status.Git(root).common_dir()).resolve()), rm)
+path.parent.mkdir(parents=True, exist_ok=True)
+data = cs.empty()
+data["PR"].append({"브랜치": "feature/tm-e3", "번호": "#93", "상태": "머지됨", "확인한 때": "2026-11-25 09:00", "headRefOid": oid,
+                   "교차 레포": "아니오", "baseRefName": "main", "mergeCommit": merge, "쓴 세션": "session-bbbb2222"})
+path.write_text(cs.render_machine(rm, data), encoding="utf-8")
+print(path)
+PY
+restat
+assert_eq "$(st E3)" "대기" "단계: 시작 흔적 없는 team 에픽 — 같은 이름의 머지된 PR 을 세지 않는다"
+assert_contains "$(notes E3)" "같은 이름의 옛 PR #93 은 이 에픽의 PR 로 세지 않았다" "단계: 시작 흔적 없음 — 옛 PR 을 세지 않았다고 알린다"
+decide E3 "spec 승인 · 2026-11-25 · 「이대로 승인」" && g add -- "$TM/jobs/E3/INTENT.md" && g commit -qm "E3 승인(기본 브랜치)" && g push -q origin main && restat \
+  || fail_step "E3 승인(기본 브랜치)"
+assert_eq "$(st E3) · $(why E3)" "머지됨 · PR #93 머지됨(mergeCommit ${MAIN_END:0:8})" "단계: 기본 브랜치 INTENT.md 의 승인 줄이 시작 흔적 — 브랜치를 지운 머지를 센다"
+back "$MAIN_END"
+put "$TM/jobs/E3/plan-1.md" "# 이어 읽기 계획" && g commit -qm "E3 계획(기본 브랜치)" && g push -q origin main && restat || fail_step "E3 계획(기본 브랜치)"
+assert_eq "$(st E3)" "머지됨" "단계: 기본 브랜치 과제 폴더의 계획 파일도 시작 흔적"
+back "$MAIN_END"
+rm -f "$(cat "$T/machine-path.txt")"; rm -rf "$W/.claude"
+assert_eq "$(g status --porcelain --untracked-files=all)" "" "끝 상태: 작업 트리가 깨끗하다(PR 캐시를 지웠다)"
+assert_eq "$(g rev-parse --abbrev-ref HEAD) · $(g rev-parse HEAD) · $(g symbolic-ref -q refs/remotes/origin/HEAD)" "main · ${MAIN_END} · refs/remotes/origin/main" \
+  "끝 상태: main 을 연 채 · main 은 합친 커밋 · origin/HEAD 는 main"
 finish
