@@ -83,6 +83,7 @@ RANGE_ADDED = "이 범위가 더한 답 파일"
 RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
+RECORD_FAILED = "답 기록 실패 %d개 — %s"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
 NO_QUESTION = "intent-critic — 질문 없음"
@@ -1029,12 +1030,17 @@ def _record(args) -> tuple:
             record.get("label", ""), record.get("observation") or [], answer, raw, target, at)))
         pairs.append((record, answer))
     paths, write_error = ia.write_answer_files(args.repo, answers_dir, files)
+    # 답 파일이 생긴 질문만 답함이다. 파일을 쓰지 못한 질문은 묻는 상태로 남기고 수와 사유를 공시한다.
     for i, (record, answer) in enumerate(pairs):
-        record["state"] = "answered"
-        record["answer"] = answer
-        record["file"] = paths[i] if i < len(paths) else "-"
-    if write_error and paths:
-        notices.append("답 파일 일부를 쓰지 못했다 — %s" % write_error)
+        if i < len(paths):
+            record["state"] = "answered"
+            record["answer"] = answer
+            record["file"] = paths[i]
+        else:
+            record["record_failed"] = True
+    if len(pairs) > len(paths):
+        notices.append(RECORD_FAILED % (len(pairs) - len(paths),
+                                        write_error or "답 파일이 없다"))
         data["record_notices"].append(notices[-1])
     if paths:
         sha, commit_error = ia.commit_answer_files(args.repo, paths,

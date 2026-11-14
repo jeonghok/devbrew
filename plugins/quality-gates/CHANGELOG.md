@@ -12,6 +12,7 @@
 - 설정 키 둘 — `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`(기본 `docs/qg-intent-answers`) · `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES`(기본 120000). 리뷰 대상 변경이 설정 파일에서 그 키를 바꾸면 기본값으로 돌아간다.
 - `/quality-gates:quality-pipeline` 의 `--origin <경로>` 인자 — 부른 쪽이 넘기는 원문 파일이고 범위 인자가 아니다.
 - 답 파일 커밋 — 사용자의 답을 docs 답 자리에 쓰고 그 파일만 경로를 지정해 지금 브랜치에 커밋한다(push 하지 않는다).
+- 답 기록 실패 공시 — 답 파일을 쓰지 못한 답은 답함으로 세지 않고 「답 기록 실패 <n>개 — <사유>」 로 알린다. 완료 보고의 커밋 안내는 쓴 답 파일만 싣는다.
 
 ### Changed
 - 완료 보고의 마지막 스크립트 출력이 intent-critic 결과 줄이다(게시 결과 줄이 아니다).

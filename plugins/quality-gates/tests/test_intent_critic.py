@@ -1071,6 +1071,7 @@ def _return_block(rd):
 
 
 OBS1 = "   1\t[e2e] 관찰 1"
+RECORD_FAILED = "답 기록 실패 %d개 — %s"
 NAMES_GONE = "바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 가리지 못함"
 ID1 = SRC + "#D1#방향"
 
@@ -1769,18 +1770,61 @@ class TestRecord(unittest.TestCase):
             os.makedirs(os.path.join(self.repo, "docs"))
             os.symlink(other, os.path.join(self.repo, ANS_DIR))
             head = _git(self.repo, "rev-parse", "HEAD").stdout
-            p = self._record("=== id: %s · pick: 의도다  \n" % ids[0])
+            p = self._record("=== id: %s · pick: 잘못 골랐다  \n" % ids[0])
             self.assertIn("답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다", p.stdout.splitlines())
+            self.assertIn(RECORD_FAILED % (1, "답 자리가 심볼릭 링크다"), p.stdout.splitlines())
             self.assertEqual(_last(p), "record: 0")
             self.assertEqual(os.listdir(other), [])
             self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout, head)
             self.assertEqual(_git(self.repo, "diff", "--cached", "--name-only").stdout.split(),
                              ["a.txt"])
-            _cli("render", "--rd", self.rd, "--mode", "pr")
+            # 파일이 없는 질문은 답함이 아니다 — 답 · 답 파일 칸이 비고 「잘못 골랐다」 로 세지 않는다.
+            self.assertEqual(_by_state(self.rd, "answered"), [])
+            self.assertEqual([q["id"] for q in _by_state(self.rd, "ask")], ids)
+            r = _cli("render", "--rd", self.rd, "--mode", "pr")
+            self.assertEqual(_last(r), "intent-critic — 질문 1개를 물었다 · 답 0개(잘못 골랐다 0개)")
             text, block = _return_block(self.rd)
             self.assertEqual(block["commit"], "failed — 답 자리가 심볼릭 링크다")
-            self.assertIn("답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다",
-                          _read(self.rd, "result.md"))
+            row = block["questions"][0]
+            self.assertEqual((row["state"], row["answer"], row["file"], row["wrong_choice"]),
+                             ("아직 묻지 않음", "-", "-", False))
+            section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
+            self.assertIn("- 답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다\n", section)
+            self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 자리가 심볼릭 링크다")
+                                           + "\n"), 1)
+            self.assertNotIn("| 답함 |", section)
+
+    def test_record_partial_write_failure_counts_only_written(self):
+        """둘 가운데 하나만 쓴 실행 — 쓴 답만 답함 · 커밋이고, 못 쓴 답은 수와 사유로 공시된다."""
+        ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작")])
+        data = _questions(self.rd)
+        # 짝 없는 surrogate 는 UTF-8 로 쓸 수 없다 — 둘째 답 파일만 쓰기에 실패한다(구절은 답 파일에만 실린다).
+        data["questions"][1]["quote"] = "깨진 \ud800 구절"
+        _write(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), self.rd,
+               "intent-questions.yaml")
+        p = self._record("=== id: %s · pick: 의도다\n=== id: %s · pick: 잘못 골랐다\n"
+                         % (ids[0], ids[1]))
+        lines = p.stdout.splitlines()
+        self.assertIn(RECORD_FAILED % (1, "답 파일을 쓰지 못했다"), lines)
+        self.assertTrue(any(l.startswith("답 파일 1개를 커밋했다(") for l in lines), lines)
+        self.assertEqual(_last(p), "record: 1")
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        shown = _git(self.repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+        self.assertEqual(shown, [ANS_DIR + "/" + files[0]])
+        self.assertEqual(_git(self.repo, "status", "--porcelain").stdout, "")
+        self.assertEqual([q["id"] for q in _by_state(self.rd, "answered")], [ids[0]])
+        self.assertEqual([q["id"] for q in _by_state(self.rd, "ask")], [ids[1]])
+        r = _cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(_last(r), "intent-critic — 질문 2개를 물었다 · 답 1개(잘못 골랐다 0개)")
+        text, block = _return_block(self.rd)
+        rows = block["questions"]
+        self.assertEqual([(x["state"], x["answer"], x["file"], x["wrong_choice"]) for x in rows],
+                         [("답함", "의도다", ANS_DIR + "/" + files[0], False),
+                          ("아직 묻지 않음", "-", "-", False)])
+        self.assertNotIn("failed", block["commit"])
+        section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
+        self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 파일을 쓰지 못했다") + "\n"), 1)
 
     def test_record_does_not_write_session_drafts(self):
         ids = self._asked([_q("D1")])
@@ -2497,6 +2541,27 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertLess(text.index("**질문 (PR 범위 · k ≥ 1).**"), text.index(rule))
         self.assertLess(text.index(rule), text.index("**답 기록.**"))
         self.assertIn("돌려주는 꼴에는 `아직 묻지 않음` 으로 남는다", text)
+
+    def _section(self, head):
+        """절차 문서의 `## <head>` 절 본문(다음 `## ` 앞까지)."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        self.assertEqual(text.count("\n## %s\n" % head), 1, head)
+        return text.split("\n## %s\n" % head, 1)[1].split("\n## ", 1)[0]
+
+    def test_commit_todo_names_only_written_files(self):
+        """커밋 안내는 쓴 답 파일(`file:` 이 `-` 가 아닌 것)만 싣는다 — 「답 파일 - 을 커밋한다」 가 나오지 않게."""
+        i7 = self._section("I7 돌려주기")
+        self.assertEqual(i7.count("「답 파일 <`file:` 이 `-` 가 아닌 경로들>을 커밋한다」"), 1)
+        self.assertEqual(i7.count("`file:` 이 모두 `-` 면 이 줄을 싣지 않는다"), 1)
+        self.assertNotIn("<`file:` 경로들>", i7)
+
+    def test_record_failure_is_a_todo(self):
+        """답 기록 실패 공시(스크립트의 글 그대로)가 I5 표와 I7 할 일에 실린다."""
+        shown = "`%s`" % ic.RECORD_FAILED.replace("%d", "<n>").replace("%s", "<사유>")
+        self.assertEqual(shown, "`답 기록 실패 <n>개 — <사유>`")
+        self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(shown), 1)
+        i7 = self._section("I7 돌려주기")
+        self.assertEqual(i7.count(shown + " 를 냈으면 — 「답 <n>개가 기록되지 않았다(<사유>)"), 1)
 
 
 if __name__ == "__main__":

@@ -258,6 +258,10 @@ def write_answer_files(repo_root: str, answers_dir: str, files: list) -> tuple:
             return written, "답 파일을 쓰지 못했다"
         path = os.path.join(directory, name)
         try:
+            body = text.encode("utf-8")   # 파일을 만들기 전에 — 쓸 수 없는 글이 빈 파일을 남기지 않게
+        except UnicodeEncodeError:
+            return written, "답 파일을 쓰지 못했다"
+        try:
             fd = os.open(path, flags, 0o644)
         except FileExistsError:
             return written, "같은 이름의 답 파일이 이미 있다"
@@ -265,8 +269,8 @@ def write_answer_files(repo_root: str, answers_dir: str, files: list) -> tuple:
             return written, "답 파일을 쓰지 못했다"
         try:
             with os.fdopen(fd, "wb") as fh:
-                fh.write(text.encode("utf-8"))
-        except (OSError, UnicodeEncodeError):
+                fh.write(body)
+        except OSError:
             return written, "답 파일을 쓰지 못했다"
         written.append(os.path.join(rel, name) if rel else name)
     return written, None
