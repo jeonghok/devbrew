@@ -105,11 +105,24 @@ fi
 B1="$(section "$FIN" '^#### B-1 — superpowers 가용성 분기$' '^#### B-2 ')"
 [ -n "$B1" ] && ok "finishing.md: B-1 절을 읽었다" || no "finishing.md: B-1 절이 없다"
 absent="$(printf '%s\n' "$B1" | grep -F -- '- **superpowers 부재 시**' | head -1)"
-assert_contains "$absent" "brief를 완료하고" "finishing.md B-1: superpowers 가 없으면 brief 까지 만든다"
-assert_contains "$absent" "**loud advisory**" "finishing.md B-1: 크게 알린다"
-assert_contains "$absent" "**정지(STOP)**" "finishing.md B-1: 그 뒤 멈춘다"
-assert_contains "$B1" '`[spec-distill] interview brief 를 만들었다: <payload 경로>. superpowers 가 없어 여기서 멈춘다.' \
-  "finishing.md B-1: 멈춤 안내 원문이 그대로다"
+assert_contains "$absent" "**선택지 셋의 따로 된 끝 질문**을 띄운다" "F4 AC10: superpowers 가 없으면 끝 질문을 띄운다"
+assert_contains "$absent" "공통 계약(\`proceed-gate.md\` Step B)의 질문이 아니다" "F4 AC10: 그 질문은 공통 계약의 질문이 아니다"
+assert_contains "$absent" "crash·spec-mode fallback **금지**" "finishing.md B-1: crash · spec-mode fallback 금지는 그대로다"
+assert_eq "$(printf '%s\n' "$B1" | grep -c '^        {label: ')" "3" "F4 AC10: 끝 질문의 선택지는 셋이다"
+for lit in '{label: "확정하고 끝낸다 (권장)", description: "확정 후보를 확정으로 바꿔 저장하고 커밋한 뒤 여기서 끝낸다. PR 은 열지 않는다."},' \
+           '{label: "확정 목록 수정", description: "확정 후보와 함께 보인 공시를 고쳐 다시 보여 준다(두 번 고친 뒤에는 계속할지 묻는다). 아직 아무것도 확정되지 않는다."},' \
+           '{label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남는다."}' \
+           'B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다.' \
+           '질문의 상태 줄도 B-2 와 같은 꼴이다.' \
+           '커밋 펜스(`interview-commit`) → 여기서 멈춘다. 분해된 일이어도 「PR 과 머지」 로 가지 않는다.' \
+           '`[spec-distill] superpowers 가 없어 다음 단계를 열지 못했다 — 설치한 뒤 새 세션에서 아래 줄로 잇는다.`' \
+           '분해된 일이면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.' \
+           '고친 뒤에는 B-2 가 아니라 이 끝 질문을 다시 띄운다' \
+           '`[spec-distill] superpowers 가 없어 이어 갈 다음 단계가 없다.` 한 줄을 보이고 같은 질문을 다시 띄운다.' \
+           '건너뛴 것을 하라는 말이면 B-S 로 간다.'; do
+  assert_contains "$B1" "$lit" "F4 AC10: B-1 «${lit}»"
+done
+assert_not_contains "$(cat "$FIN")" 'superpowers 가 없어 여기서 멈춘다' "F4 AC10: 옛 멈춤 안내가 없다(양성 짝: 위 단언)"
 printf '%s\n' "$B1" > "$TMP/b1.md"
 bf="$(sp_fences "$TMP/b1.md")"
 assert_eq "$(printf '%s\n' "$bf" | grep -c .)" "1" "finishing.md B-1: 판 확인 펜스가 정확히 하나다"

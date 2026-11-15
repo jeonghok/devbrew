@@ -223,6 +223,18 @@ for lit in '줄은 그 블록에서 지우고 audit §2 를 그 블록에서 다
   assert_contains "$BSW" "$lit" "F4 AC14: B-S «${lit}»"
 done
 assert_contains "$SA" '사유가 「나눈 일은 건너뛸 수 없다」 면 건너뜀 줄만 지워 통과시키지 않는다 — B-S 대로 건너뛴 조사 · 리뷰를 돌린 뒤에 지운다.' "F4 AC14: Step A 의 게이트 걸음이 나눈 일 사유를 줄 지우기로 넘기지 않는다"
+# F4 AC10 — superpowers 가 없을 때의 끝 질문: B-0 · B-3 · B-R · B-4 가 새 동작에 맞는다
+B0="$(win "$FIN" '^#### B-0' '^#### ')"; B4="$(win "$FIN" '^#### B-4' '^#### ')"
+[ -n "$B0" ] && [ -n "$B4" ] && ok "F4(양성 대조): B-0 · B-4 를 떴다" || no "F4: B-0 · B-4 부재 — 아래가 공허하다"
+assert_contains "$B0" '왔던 끝 질문을 다시 띄운다 — 어떻게 끝낼지는 그 질문에서 고른다.' "F4: 재제시 상한 질문의 「지금 목록으로 확정」 설명이 왔던 끝 질문으로 돌아간다고 말한다"
+assert_contains "$B3" '왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며' "F4: 「지금 목록으로 확정」 이 돌아갈 자리"
+assert_not_contains "$B0$B3" 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다' "F4: 옛 「B-2 게이트를 다시 띄운다」 가 없다(양성 짝: 위 두 단언)"
+assert_contains "$BR" 'B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 — 「지금 목록으로 확정」은 왔던 끝 질문으로 돌아가 그 질문의 갈래에서 한 번 돈다' "F4 AC10: B-R 의 갈래 목록에 끝 질문의 두 갈래"
+assert_contains "$BR" '(B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 도 같은 펜스로 커밋한다)' "F4 AC10: 끝 질문의 두 갈래도 커밋한다"
+assert_not_contains "$BR" 'B-1 은 커밋하지 않고' "F4 AC10: 옛 「B-1 은 커밋하지 않고」 가 없다(양성 짝: 위 단언)"
+assert_contains "$B4" '(b) superpowers 가 없을 때의 B-1 끝 질문 (선택지 셋)을 거친다 — 질문 없는 **silent 종료 금지**.' "F4 AC10: Step B 를 끝내는 경로는 proceed 게이트와 B-1 끝 질문 둘이다"
+assert_not_contains "$B4" '게이트를 거치지 않는 예외' "F4 AC10: 옛 「게이트를 거치지 않는 예외」 가 없다(양성 짝: 위 단언)"
+assert_contains "$B2" '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' "F4 AC10: B-2 게이트의 선택지 넷 문장은 그대로다"
 # CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
 CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
 assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)의 둘째 질문 문단에, 지휘자 아래 승인 질문에는 둘째 질문이 없다는 문장을 더했다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"

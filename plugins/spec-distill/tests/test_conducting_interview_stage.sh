@@ -97,9 +97,9 @@ has 'optional|선택' "brainstorming invoke is optional"
 # B-0/B-2/B-3에 이미 쓰는 awk 윈도우 방식으로 **그 블록 안에서만** 찾고, 헤더가 아니라
 # 본문에만 있는 문구(`crash·spec-mode fallback`)를 함께 요구한다.
 b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
-{ printf '%s' "$b1_block" | grep -qE 'superpowers.*(부재|없).*advisory|advisory.*superpowers' \
-    && printf '%s' "$b1_block" | grep -qF 'crash·spec-mode fallback'; } \
-  && ok "AC13: superpowers-absent loud advisory (B-1 블록 스코프)" \
+{ grep -qE 'superpowers 부재 시.*끝 질문' <<<"$b1_block" \
+    && grep -qF 'crash·spec-mode fallback' <<<"$b1_block"; } \
+  && ok "AC13: superpowers 가 없으면 끝 질문으로 끝낸다 (B-1 블록 스코프)" \
   || no "AC13: B-1 블록 안에 graceful-degradation 지시가 없다"
 
 # --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
@@ -183,12 +183,12 @@ cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /head
   && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
   && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
   || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
-{ grep -qF 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다.' <<<"$cap_fence" \
+{ grep -qF '왔던 끝 질문을 다시 띄운다 — 어떻게 끝낼지는 그 질문에서 고른다.' <<<"$cap_fence" \
   && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
-  && ok "AC12: 「지금 목록으로 확정」은 B-2 게이트를 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
+  && ok "AC12: 「지금 목록으로 확정」은 왔던 끝 질문을 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
   || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"
 b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
-{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
+{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
   && grep -qF '`confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다' <<<"$b3_block" \
   && grep -qF '「brief 만 종료」는 ④ 를 따른다' <<<"$b3_block" \
   && grep -qF '`status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다' <<<"$b3_block"; } \
