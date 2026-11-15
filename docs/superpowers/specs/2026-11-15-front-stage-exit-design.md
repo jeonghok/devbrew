@@ -150,7 +150,7 @@ next_phase: superpowers:writing-plans
 
 - **이미 머지된 PR.** 머지 펜스(`interview-merge`)가 PR 을 읽었을 때 상태가 머지됨이고 바탕 · 브랜치가 같으면, 「머지하지 않았다」 가 아니라 머지됨으로 읽어 origin 을 받고 `interview-merge: MERGED` 를 낸다. gh 의 머지 명령이 실패로 끝난 뒤 다시 읽은 상태가 머지됨일 때도 같다.
 - **취소 경쟁.** 머지 요청을 보내기 직전에 표시 줄 `interview-merge-requested: <PR 번호>` 를 낸다. 출력에 판결 줄이 없고 이 표시 줄이 있으면 `NONE` 으로 읽지 않고, 읽기만 하는 다시 확인(PR 상태 한 번 읽기)을 돌려 머지됨이면 origin 을 받고 `MERGED`, 아니면 `NONE` 으로 읽는다. 표시 줄도 없으면 지금처럼 `NONE` 이다.
-- **「값의 출처」 줄.** 끝내기 커밋 단계가 보인 설정 키의 「값의 출처」 줄을 PR 단계가 다시 보이지 않는다. 그 앞 단계들(Step A · 리뷰)이 낸 줄은 건드리지 않는다.
+- **「값의 출처」 줄.** 끝내기 커밋 단계가 보인 설정 키의 「값의 출처」 줄을 PR 단계가 다시 보이지 않는다. 그 앞 단계들(Step A · 리뷰)이 낸 줄은 건드리지 않는다. 고칠 자리는 끝맺음 절차 파일의 PR 단계 펜스다 — 설정 해결자 스크립트(`repo_defaults.py`)는 옆 로드맵 둘째 에픽이 예약한 파일이라 고치지 않는다.
 
 ## 있는 것 검토
 
@@ -189,10 +189,9 @@ next_phase: superpowers:writing-plans
 
 ## Files to Modify
 
-- `plugins/spec-distill/skills/pm-interview/references/finishing.md` — 넘김 줄 · 다른 다음 단계의 줄 · B-1 · B-2 앞 글 · 머지 펜스 · 판결 읽기 문장
+- `plugins/spec-distill/skills/pm-interview/references/finishing.md` — 넘김 줄 · 다른 다음 단계의 줄 · B-1 · B-2 앞 글 · 머지 펜스 · 판결 읽기 문장 · PR 단계 펜스의 「값의 출처」 줄 한 번
 - `plugins/spec-distill/references/brief-handoff.md` (새 파일)
 - `plugins/spec-distill/scripts/check_brief.py` — 건너뜀 줄 · 검사 넷
-- `plugins/spec-distill/scripts/repo_defaults.py` 또는 펜스 — 「값의 출처」 줄 한 번(자리는 계획이 정한다)
 - `plugins/spec-distill/skills/pm-interview/SKILL.md` · `references/saturation.md`
 - `plugins/spec-distill/skills/reviewing-brief/SKILL.md`
 - `plugins/spec-distill/templates/` 의 audit 템플릿(§2 줄 모양을 싣고 있으면)
@@ -282,3 +281,4 @@ next_phase: superpowers:writing-plans
 ### Deferred to plan
 
 | 1b5475ac#r1.1 | 바뀌는 문장을 글자로 박아 둔 자리의 전수가 Files to Modify 에 없다 — 계획이 찾아 올릴 일이다. |
+- D1.1 · r1 · adopt · 3072b521#r1.1 · "고친다 — 끝맺음 절차 파일에서만 (권장)" — 「값의 출처」 줄을 고칠 자리로 설정 해결자 스크립트를 열어 두었는데, 그 파일은 옆 로드맵 둘째 에픽이 예약한 파일이고 이 설계에는 그 순서를 맞춘다는 말이 없다.
