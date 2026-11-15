@@ -126,6 +126,15 @@ for old, new in subs:
     if line.count(old) != 1:
         print("치환 자리가 하나가 아니다(%d): %s" % (line.count(old), old)); sys.exit(0)
     line = line.replace(old, new)
+# 리더 답 여덟째 — 원문 대조 셋째 칸의 값 셋과 넘김 의 근거 칸. 있는 줄에 없는 문장이라 치환 표 밖의 한 걸음으로 끼운다.
+anchor = "바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다."
+if line.count(anchor) != 1:
+    print("끼울 자리가 하나가 아니다(%d): %s" % (line.count(anchor), anchor)); sys.exit(0)
+line = line.replace(anchor, anchor + " 셋째 칸은 그대로 · 바꿈 · 넘김 가운데 하나이고 「작성자 제안」 도 근거 칸에 적으며,"
+                    " 넘김 은 근거 칸에 받는 곳을 적는다.")
 print(line)'; }
-assert_eq "$TEAM_LINE" "$(team_expected)" "AC17: team 넘김 줄 전체가 있는 줄에 brief 치환 표를 적용한 글과 같다"
+assert_eq "$TEAM_LINE" "$(team_expected)" "AC17: team 넘김 줄 전체가 있는 줄에 brief 치환 표와 리더 답 여덟째의 한 문장을 적용한 글과 같다"
+for lit in '셋째 칸은 그대로 · 바꿈 · 넘김 가운데 하나이고' '넘김 은 근거 칸에 받는 곳을 적는다'; do
+  assert_contains "$TEAM_LINE" "$lit" "리더 답 여덟째: team 넘김 줄 — 원문 대조 값 셋 · $lit"
+done
 finish

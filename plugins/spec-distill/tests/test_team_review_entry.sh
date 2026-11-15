@@ -89,6 +89,13 @@ g add -- "$J3I" && g commit -qm "E3 결정 둘" && g push -q origin feature/tm-e
 nb "$I" >/dev/null
 assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — %s\n    - 결정 · 2026-11-15 · 「이웃은 결과 파일만 읽는다」\n    - 넘김 확인 · E1 · 0123abcd · E1 의 읽기를 받는다' "$J3I")" \
   "이웃 결정: INTENT.md 결정 기록의 줄을 그대로(날짜 없는 넘김 확인 포함)"
+# 있는데 못 읽음 — 브랜치 끝의 INTENT.md 객체(느슨한 파일)를 지운다: cat-file -e 가 「경로 없음」 이 아닌 실패를 낸다
+BLOB="$(g rev-parse "feature/tm-e3:$J3I")"
+BLOB_FILE="$W/.git/objects/$(printf '%s' "$BLOB" | cut -c1-2)/$(printf '%s' "$BLOB" | cut -c3-)"
+[ -f "$BLOB_FILE" ] && rm -f "$BLOB_FILE" && ok "픽스처: 이웃 E3 의 INTENT.md 객체를 지웠다" || no "픽스처: 느슨한 객체 파일이 없다(${BLOB_FILE})"
+nb "$I" >/dev/null
+assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — 셀 수 없음: 과제 파일을 읽지 못했다 — %s' "$J3I")" \
+  "INTENT.md 를 읽지 못한 이웃: 셀 수 없음 · 읽지 못했다(「없다」 · 「결정 줄 없음」 이 아니다)"
 python3 - "$W/$J3I" <<'PY'
 import sys
 p = sys.argv[1]
