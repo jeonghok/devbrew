@@ -150,9 +150,12 @@ assert_contains "$DB" 'seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS"' "AC6: 
 assert_contains "$DISC" "저자 편집 없음" "AC6: 빈 diff 를 침묵과 구분한다"
 assert_contains "$DISC" "추천을 달지 않는다 — 기준 사본이 없어" "기준 사본이 없는 길의 질문에는 추천이 없다(이유와 함께)"
 # ── AC9 — 두 걸음 · 이유 파일 · 한 묶음 질문 · 화면 조립 실패 ─────────────────────
-for old in "덩어리마다 질문 하나" "추천을 달지 않는다 — 어느 덩어리가" "줄이면 공시가 아니다" "따로 정한 자리"; do
-  assert_not_contains "$DISC" "$old" "AC9: 옛 규칙 문장이 없다 — ${old}"
+SKT="$(cat "$SK")"
+[ -n "$SKT" ] && assert_contains "$SKT" "### 저자 편집 공시" "AC9 양의 짝: SKILL 본문 전체를 읽었다(옛 문장 부재 검사가 빈 글을 보지 않는다)" || no "AC9: SKILL 본문을 읽지 못했다 — 옛 문장 부재 검사가 무의미하다"
+for old in "덩어리마다 질문 하나" "추천을 달지 않는다 — 어느 덩어리가" "줄이면 공시가 아니다"; do
+  assert_not_contains "$SKT" "$old" "AC9: 옛 규칙 문장이 SKILL 본문 어디에도 없다 — ${old}"
 done
+assert_not_contains "$DISC" "따로 정한 자리" "AC9: 옛 규칙 문장이 없다 — 따로 정한 자리"
 assert_contains "$DB" 'rm -f "$STATE_DIR/hunk-reasons.txt"' "AC9: 미리 보기 펜스가 지난 이유 파일을 지운다(실행 줄)"
 assert_contains "$DB" 'seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS"' "AC9: 미리 보기 펜스가 덩어리와 판본을 낸다(실행 줄)"
 assert_contains "$DB" 'seed_edit_screen.py" screen --hunks "$STATE_DIR/hunks.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR")' "AC9: 공시 펜스가 화면을 조립한다(실행 줄 — 확정 직전 표시 없이)"
@@ -177,7 +180,12 @@ else
   no "AC10: mark-used($ln_used) 가 revert($ln_rev) 앞이 아니다 — 목록보다 기준 사본이 먼저 바뀔 수 있다"
 fi
 # ── T10-b — revert · accept 의 rc 4(공시 뒤 seed 재변경) 처리 규약 ────────────
-assert_contains "$DISC" "위 공시 펜스를 다시 돌려 다시 처분받습니다" "T10-b: rc 4 는 기준 사본을 바꾸지 않고 공시를 다시 돈다"
+assert_contains "$DISC" "그 화면의 미리 보기 펜스와 공시 펜스를 다시 돌려 다시 처분받습니다(확정 직전 검사 2 면 그 검사의 두 펜스)" "T10-b: rc 4 는 기준 사본을 바꾸지 않고 그 화면의 두 펜스를 다시 돈다"
+assert_contains "$DB" '그 화면의 미리 보기 펜스와 공시 펜스(확정 직전 검사 2 면 그 검사의 두 펜스)를 다시 돌려 이 처분을 다시 받아라' "T10-b: revert 실패 알림도 그 화면의 두 펜스를 가리킨다(실행 줄)"
+assert_not_contains "$SKT" "위 공시 펜스" "T10-b: rc 4 뒤 «위 공시 펜스» 로 돌아가라는 글이 SKILL 어디에도 없다 — 검사 2 에서 라운드 펜스를 가리킨다"
+assert_contains "$(section "$SK" '^## 확정 — proceed 게이트$')" '`revert` · `accept` 가 rc 4 를 내면 이 검사의 미리 보기 펜스와 공시 펜스를 다시 돌립니다' "T10-b: 검사 2 에서 rc 4 면 그 검사의 두 펜스를 다시 돈다"
+assert_contains "$DISC" '처분 펜스의 덩어리 JSON 자리에는 그 화면의 공시 펜스가 쓴 파일 이름을 넣습니다 — 라운드 게이트 앞이면 `hunks.json`' "AC10: 라운드 게이트 앞 처분은 hunks.json 을 넣는다고 적는다"
+assert_contains "$(section "$SK" '^## 확정 — proceed 게이트$')" '처분 펜스의 덩어리 JSON 자리에는 이 검사의 사본 `hunks-final.json` 을 넣습니다' "AC10: 검사 2 처분은 hunks-final.json 을 넣는다고 적는다"
 assert_contains "$DISC" "처분 하나에 한 번만" "T10-b: revert 는 처분마다 한 번만 — --ids 를 쉼표로 모아 한 번에"
 assert_contains "$DISC" "부르면 매번 «공시됨»으로 기록" "T10-b: hunks 는 사용자에게 보일 자리에서만 부른다"
 assert_contains "$DISC" "rc 4" "fix1 고정: 리터럴 rc 4 가 문구에 있다(rc 3 으로 바뀌면 RED)"
@@ -419,14 +427,24 @@ nth_bash_with "$DISC" 'hunks.json' > "$T/round_disc.sh"
 [ -s "$T/round_disc.sh" ] && ok "추출: 라운드 게이트 앞 공시 펜스" || no "추출: 라운드 게이트 앞 공시 펜스가 비었다"
 # 화면 조립이 실패하는 플러그인 사본 — 스크립트를 링크째 풀어 베끼고 화면 조립만 실패하는 대역으로 바꾼다
 mkdir -p "$T/sdbad"; cp -RL "$ROOT/plugins/spec-distill/scripts" "$T/sdbad/scripts"
-printf 'import sys\nsys.exit(1)\n' > "$T/sdbad/scripts/seed_edit_screen.py"
+# 대역은 권장이 든 화면 JSON 을 내고 실패한다 — 실패한 화면의 출력을 펜스가 흘리면 아래 「(권장)」 부재가 잡는다
+cat > "$T/sdbad/scripts/seed_edit_screen.py" <<'EOF'
+import sys
+print('{"text": "LEAK 1번 그대로 둔다 (권장)", "hunks": [], "questions": [{"options": [{"label": "1번 그대로 둔다 (권장)"}]}], "notices": []}')
+sys.exit(1)
+EOF
 for fence in round_disc final_disc; do
   mkdir -p "$T/d-$fence"
   printf 'SAME 줄 하나\nSAME 줄 둘\n' > "$T/d-$fence/seed.md"; cp "$T/d-$fence/seed.md" "$T/d-$fence/base.md"
   printf 'OLD_DISCLOSURE_QUOTE\n' > "$T/d-$fence/said-hunk-1.txt"
+  printf 'STALE\n' > "$T/d-$fence/hunks.json"; printf 'STALE\n' > "$T/d-$fence/hunks-final.json"
+  if [ "$fence" = final_disc ]; then own=hunks-final.json; other=hunks.json; else own=hunks.json; other=hunks-final.json; fi
   outE="$(coldx "$T/$fence.sh" STATE_DIR="$T/d-$fence" SEED_BASE="$T/d-$fence/base.md" SEED_ABS="$T/d-$fence/seed.md")"
   [ ! -e "$T/d-$fence/said-hunk-1.txt" ] && ok "$fence: 공시할 때 지난 공시의 덩어리 문구 파일을 지운다" \
     || no "$fence: 지난 공시의 덩어리 문구 파일이 남았다 — 번호가 다시 매겨진 덩어리에 그 문구가 쓰인다"
+  [ ! -e "$T/d-$fence/$other" ] && ok "$fence: 공시할 때 다른 화면의 덩어리 JSON($other)을 지운다" \
+    || no "$fence: 다른 화면의 덩어리 JSON($other)이 남았다 — 처분 펜스가 그 이름을 받으면 번호 대조가 엉뚱한 화면과 맞는다"
+  assert_contains "$(cat "$T/d-$fence/$own" 2>/dev/null)" '"hunks"' "$fence: 자기 덩어리 JSON($own)은 새로 쓴다(양의 짝)"
   assert_contains "$outE" "저자 편집 없음" "$fence: 기준 사본 = seed 면 «저자 편집 없음» 을 낸다"
   [ -s "$T/d-$fence/base.md.shown" ] && ok "$fence: 공시가 보인 판본을 못박았다(.shown)" || no "$fence: .shown 이 없다 — 이 공시 뒤의 revert · accept 가 rc 4 로 막힌다"
   printf 'SAME 줄 하나\nEDITED_BY_AUTHOR 줄 둘\n' > "$T/d-$fence/seed.md"
@@ -463,12 +481,16 @@ for fence in round_pv final_pv; do
 done
 
 # ── 처분 펜스 — 성공 경로(되돌리기 → 기록 → 교체) · 기록 실패 · 부분 실패 뒤 재실행 ──────────
-disp_fence() {   # disp_fence <PAIRS(줄바꿈은 \n 으로)> → 자리표를 채운 처분 펜스를 stdout 으로
-  nth_bash_with "$DISC" 'seed_edit_diff.py" revert' | PAIRS_IN="$1" python3 -c '
+DISP="$(nth_bash_with "$DISC" 'seed_edit_diff.py" revert')"
+[ -n "$DISP" ] && ok "추출: 처분 펜스(자리표 검사)" || no "추출: 처분 펜스가 비었다 — 아래 자리표 검사는 무의미하다"
+assert_contains "$DISP" 'HUNKS_JSON="$STATE_DIR/<덩어리 JSON 파일 이름>"' "AC10: 처분 펜스의 덩어리 JSON 은 자리표로 남는다(라운드 · 검사 2 가 다른 파일을 쓴다)"
+assert_not_contains "$DISP" 'HUNKS_JSON="$STATE_DIR/hunks' "AC10: 처분 펜스가 덩어리 JSON 이름을 박지 않는다"
+disp_fence() {   # disp_fence <PAIRS(줄바꿈은 \n 으로)> [덩어리 JSON 파일 이름] → 자리표를 채운 처분 펜스를 stdout 으로
+  nth_bash_with "$DISC" 'seed_edit_diff.py" revert' | PAIRS_IN="$1" JSON_IN="${2:-hunks.json}" python3 -c '
 import os, sys
 t = sys.stdin.read()
 t = t.replace("<덩어리마다 한 줄 — 번호:처분>", os.environ["PAIRS_IN"].replace("\\n", "\n"), 1)
-t = t.replace("<덩어리 JSON 파일 이름>", "hunks.json", 1)
+t = t.replace("<덩어리 JSON 파일 이름>", os.environ["JSON_IN"], 1)
 sys.stdout.write(t.replace("<n>", "1"))
 '
 }
@@ -555,6 +577,8 @@ outG="$(coldd "$T/dispG.sh" "$T/dispG")"
 assert_contains "$outG" "pre_rc=0 rev_rc=0 log_rc=0 used_rc=0" "처분 (g): 목록에 더하기 · 기록이 성공한다"
 assert_contains "$outG" "accept_rc=0" "처분 (g): 끝까지 간다"
 assert_eq "$(cat "$T/dispG/hunk-used-findings.txt" 2>/dev/null)" "$(printf 'FID_G1\nFID_G2')" "AC10: 처분 펜스가 그 화면의 이유 파일이 댄 지적 id 를 쓴 지적 목록에 더한다"
+assert_contains "$outG" '{"added": ["FID_G1", "FID_G2"], "skipped": null}' "AC10: 처분 펜스가 목록에 더한 id 를 보인다(mark-used 의 JSON)"
+assert_contains "$outB" '{"added": [], "skipped": "no_reasons"}' "AC10: 이유 파일이 없어 목록에 더하지 않은 사실을 처분 펜스가 보인다(mark-used 의 JSON)"
 # (h) 목록에 더하지 못하면 — 되돌리기 · 기록 · 교체를 하지 않는다
 setup_disp "$T/dispH"; printf 'QUOTE_H\n' > "$T/dispH/said-hunk-1.txt"; why_disp "$T/dispH" "FID_H"
 printf '\377\376' > "$T/dispH/hunk-used-findings.txt"
@@ -581,6 +605,32 @@ assert_not_contains "$outI" "accept_rc=" "AC10: 번호가 빠진 처분 목록�
 assert_eq "$(cmp -s "$T/dispI/seed.md" "$T/dispI/seed.before" && cmp -s "$T/dispI/base.md" "$T/dispI/base.before" && echo same)" "same" "AC10: 번호가 빠진 처분 목록으로는 seed 도 기준 사본도 바뀌지 않는다"
 assert_eq "$(n_edit "$T/dispI")" "0" "AC10: 번호가 빠진 처분 목록으로는 편집 줄을 남기지 않는다"
 [ ! -e "$T/dispI/hunk-used-findings.txt" ] && ok "AC10: 번호가 빠진 처분 목록으로는 쓴 지적 목록도 바뀌지 않는다" || no "AC10: 번호가 빠졌는데 쓴 지적 목록이 생겼다"
+# (j) 묵은 덩어리 JSON — 라운드 공시 뒤 검사 2 공시를 하고, 처분 펜스에 라운드의 이름(hunks.json)을 넣고 번호 하나를 빠뜨렸다
+DS="$T/dispS"; mkdir -p "$DS"
+printf 'L1\nBASE_2\nL3\nL4\nL5\nL6\nBASE_7\nL8\n' > "$DS/base.md"
+printf 'L1\nEDIT_2\nL3\nL4\nL5\nL6\nBASE_7\nL8\n' > "$DS/seed.md"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$DS/a.audit.md"
+coldx "$T/round_disc.sh" STATE_DIR="$DS" SEED_BASE="$DS/base.md" SEED_ABS="$DS/seed.md" >/dev/null
+assert_eq "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))["hunks"]))' "$DS/hunks.json" 2>/dev/null)" "1" "처분 (j) 전제: 라운드 공시가 덩어리 하나를 hunks.json 에 썼다"
+printf 'L1\nEDIT_2\nL3\nL4\nL5\nL6\nEDIT_7\nL8\n' > "$DS/seed.md"
+coldx "$T/final_disc.sh" STATE_DIR="$DS" SEED_BASE="$DS/base.md" SEED_ABS="$DS/seed.md" >/dev/null
+assert_eq "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))["hunks"]))' "$DS/hunks-final.json" 2>/dev/null)" "2" "처분 (j) 전제: 검사 2 공시가 덩어리 둘을 hunks-final.json 에 썼다"
+why_disp_final() { printf 'seed_sha256 %s\n1\tFID_S\n' "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["seed_sha256"])' "$1/hunks-final.json")" > "$1/hunk-reasons.txt"; }
+why_disp_final "$DS"; printf 'QUOTE_S1\n' > "$DS/said-hunk-1.txt"
+cp "$DS/base.md" "$DS/base.before"; cp "$DS/seed.md" "$DS/seed.before"
+disp_fence '1:그대로 둔다' hunks.json > "$T/dispS.sh"
+outS="$(coldd "$T/dispS.sh" "$DS")"
+assert_contains "$outS" "pre_rc=0" "처분 (j) 전제: 문구 파일 · 처분 글은 갖춰졌다"
+assert_not_contains "$outS" "used_rc=0" "처분 (j): 묵은 덩어리 JSON 이름을 넣으면 번호 대조가 멈춘다(used_rc ≠ 0)"
+assert_not_contains "$outS" "accept_rc=" "처분 (j): 묵은 덩어리 JSON 이름으로는 기준 사본을 교체하지 않는다"
+assert_eq "$(cmp -s "$DS/seed.md" "$DS/seed.before" && cmp -s "$DS/base.md" "$DS/base.before" && echo same)" "same" "처분 (j): seed 도 기준 사본도 그대로다 — 처분받지 않은 덩어리 2 가 기준이 되지 않는다"
+[ ! -e "$DS/hunk-used-findings.txt" ] && ok "처분 (j): 쓴 지적 목록도 바뀌지 않는다" || no "처분 (j): 묵은 JSON 으로 쓴 지적 목록이 생겼다"
+assert_eq "$(n_edit "$DS")" "0" "처분 (j): 편집 줄을 남기지 않는다"
+printf 'QUOTE_S2\n' > "$DS/said-hunk-2.txt"
+disp_fence '1:그대로 둔다\n2:그대로 둔다' hunks-final.json > "$T/dispS2.sh"
+outS2="$(coldd "$T/dispS2.sh" "$DS")"
+assert_contains "$outS2" "accept_rc=0" "처분 (j) 양의 짝: 그 화면의 JSON 과 덩어리 전부의 처분이면 끝까지 간다"
+assert_contains "$outS2" '{"added": ["FID_S"], "skipped": null}' "처분 (j) 양의 짝: 그 화면의 이유 파일이 댄 지적을 목록에 더하고 보인다"
 
 # ── AC11 — 추천 전수 검사가 이 자리의 새 규칙을 잰다(지우면 실패) ────────────────────
 RFREL="plugins/spec-distill/skills/request-framing/SKILL.md"

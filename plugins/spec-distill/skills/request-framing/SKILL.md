@@ -927,8 +927,9 @@ echo "이유 파일 경로(Write 도구로 쓴다): $STATE_DIR/hunk-reasons.txt"
 미리 보기를 건너뛰거나 이유 파일을 쓰지 않으면 전부 권장 없음입니다. 덩어리가 0 이어도 공시 펜스는 돕니다.
 
 ```bash
-# 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일을 먼저 지운다.
+# 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일과 덩어리 JSON 을 먼저 지운다.
 find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
+find "$STATE_DIR" -maxdepth 1 -name 'hunks*.json' -exec rm -f {} + 2>/dev/null || true
 hunks_rc=0
 python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || hunks_rc=$?
 case "$hunks_rc" in
@@ -1006,7 +1007,7 @@ while IFS=: read -r k choice; do
 done <<< "$PAIRS"
 [ "$n_pairs" -gt 0 ] || { echo "[spec-distill] 처분 목록(PAIRS)이 비었다 — 아무것도 바꾸지 않는다." >&2; pre_rc=2; }
 if [ "$pre_rc" -eq 0 ]; then
-  python3 "$SD/scripts/seed_edit_screen.py" mark-used --hunks "$HUNKS_JSON" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR" --ids "$ALL_IDS" >/dev/null || used_rc=$?
+  python3 "$SD/scripts/seed_edit_screen.py" mark-used --hunks "$HUNKS_JSON" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR" --ids "$ALL_IDS" || used_rc=$?
   [ "$used_rc" -eq 0 ] || echo "[spec-distill] 쓴 지적 목록에 더하지 못했다(used_rc=${used_rc}) — 되돌리기 · 기록 · 기준 사본 교체를 하지 않는다. 위 사유(처분 목록의 번호가 화면의 덩어리와 다르면 PAIRS 를, 목록 파일이면 그 파일을)를 고친 뒤 이 펜스를 다시 돌려라." >&2
 fi
 if [ "$pre_rc" -eq 0 ] && [ "$used_rc" -eq 0 ] && [ -n "$REVERT_IDS" ]; then
@@ -1024,7 +1025,7 @@ if [ "$pre_rc" -eq 0 ] && [ "$used_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ] && [ "$log
   echo "accept_rc=$accept_rc"
   [ "$accept_rc" -ne 0 ] || find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
 elif [ "$rev_rc" -ne 0 ]; then
-  echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 미리 보기 펜스와 위 공시 펜스를 다시 돌려 이 처분을 다시 받아라." >&2
+  echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 그 화면의 미리 보기 펜스와 공시 펜스(확정 직전 검사 2 면 그 검사의 두 펜스)를 다시 돌려 이 처분을 다시 받아라." >&2
 elif [ "$log_rc" -ne 0 ]; then
   echo "[spec-distill] 편집 처분 기록 실패(log_rc=$log_rc) — 기준 사본을 교체하지 않는다. 위 stderr 가 댄 문구 파일을 고친 뒤 이 펜스를 그대로 다시 돌려라(되돌리기는 표지가 막아 한 번만 일어난다 · 먼저 성공한 편집 기록 줄은 겹쳐 적히지만 그대로 둔다)." >&2
 fi
@@ -1034,7 +1035,7 @@ echo "pre_rc=$pre_rc rev_rc=$rev_rc log_rc=$log_rc used_rc=$used_rc"
 처분 펜스의 덩어리 JSON 자리에는 그 화면의 공시 펜스가 쓴 파일 이름을 넣습니다 — 라운드 게이트 앞이면 `hunks.json`, 확정 게이트 직전 검사 2 면 그 검사의 사본입니다.
 `revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀌었거나, 이 공시에서 이미 다른 번호를
 되돌린 것입니다(되돌린 뒤에는 덩어리 번호가 다시 매겨진다) — 기준 사본을 그대로 두고
-미리 보기 펜스와 위 공시 펜스를 다시 돌려 다시 처분받습니다. `revert` 는 처분 하나에 한 번만 부릅니다 — 펜스가 `PAIRS` 의
+그 화면의 미리 보기 펜스와 공시 펜스를 다시 돌려 다시 처분받습니다(확정 직전 검사 2 면 그 검사의 두 펜스). `revert` 는 처분 하나에 한 번만 부릅니다 — 펜스가 `PAIRS` 의
 「되돌린다」 번호를 전부 쉼표로 모아 `--ids` 에 한 번에 넘깁니다. `hunks` 는 그 출력을 사용자에게 보이는 자리에서만
 부릅니다 — 부르면 매번 «공시됨»으로 기록되기 때문입니다. 미리 보기는 `hunks` 를 부르지 않습니다.
 
@@ -1297,7 +1298,7 @@ echo "marks_rc=$marks_rc"
 ```
 
 **검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 두 걸음(미리 보기 → 이유 파일 → 공시)과 처분 절차 그대로입니다. 이 화면에는 권장이 붙지 않고 고친 이유 줄만
-보입니다 — 이 화면 뒤에는 리뷰 라운드가 없습니다. 처분 펜스의 덩어리 JSON 자리에는 이 검사의 사본 `hunks-final.json` 을 넣습니다. 마지막 라운드 뒤의 편집(채택 결정의
+보입니다 — 이 화면 뒤에는 리뷰 라운드가 없습니다. 처분 펜스의 덩어리 JSON 자리에는 이 검사의 사본 `hunks-final.json` 을 넣습니다. `revert` · `accept` 가 rc 4 를 내면 이 검사의 미리 보기 펜스와 공시 펜스를 다시 돌립니다. 마지막 라운드 뒤의 편집(채택 결정의
 반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
 다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다. 원장 자리를 거부한 세션(`## 상태` 블록이 그 한
 줄을 냈다)은 seed 리뷰 라운드도 기준 사본도 없으므로 이 검사는 «검사 불가»로 막습니다 — 링크를 걷어 내고 `## 상태` 블록부터 다시 돕니다.
@@ -1325,6 +1326,7 @@ elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DI
   final_hunks_rc=2
 else
   find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
+  find "$STATE_DIR" -maxdepth 1 -name 'hunks*.json' -exec rm -f {} + 2>/dev/null || true
   python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks-final.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || final_hunks_rc=$?
 fi
 case "$final_hunks_rc" in
