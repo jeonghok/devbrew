@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/brief-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -12,6 +12,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
   echo "plugins/spec-distill/references/epic-handoff.md"
+  echo "plugins/spec-distill/references/brief-handoff.md"
   echo "plugins/spec-distill/references/trivia-escape.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
   echo "plugins/spec-distill/skills/pm-interview/references/steelman.md"
@@ -54,12 +55,22 @@ SAMEP="$(para "$FIN" '**이름이 바뀌어도 절차는 같다.**')"
 [ -n "$NEWP" ] && [ -n "$SAMEP" ] && ok "양성 대조: B-3 의 「다른 다음 단계의 줄」 · 「이름이 바뀌어도 절차는 같다」 문단을 떴다" || no "B-3 새 문단 부재"
 assert_contains "$B3" '**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' "AC23: B-3 안에 있다"
 assert_contains "$B3" '**이름이 바뀌어도 절차는 같다.**' "AC23: B-3 안에 있다(절차 문단)"
-for lit in '`@<brief-path>` 를 원소로' 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.' \
-           '§3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다' \
-           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
-           '사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.' \
+for lit in '`@<brief-path>` 를 원소로' '줄에는 공통 지시를 글자로 싣지 않고' \
+           '/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다' \
            '`next_phase:` 를 고른 skill 의 완전명으로 바꾼다' '인용 줄로 두지 않는다'; do
   assert_contains "$NEWP" "$lit" "AC23: 「다른 다음 단계의 줄」 문단 «${lit}»"
+done
+# F4 AC3 — 공통 지시 네 문장은 문단이 아니라 지시 파일의 `## 공통 지시` 절에 산다(양성 짝: 문단에는 없다)
+BHF="$SD/references/brief-handoff.md"
+bhsec() { awk -v h="## $1" '$0==h{f=1;next} f&&/^## /{exit} f' "$BHF" | tr '\n' ' ' | tr -s ' '; }
+CMS="$(bhsec '공통 지시')"; BSS="$(bhsec 'brainstorming 지시')"
+[ -n "$CMS" ] && [ -n "$BSS" ] && ok "F4(양성 대조): 지시 파일의 두 절을 떴다" || no "F4: 지시 파일의 절 부재"
+for lit in 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.' \
+           '§3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다' \
+           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
+           '사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.'; do
+  assert_contains "$CMS" "$lit" "F4 AC3: 공통 지시 절 «${lit}»"
+  assert_not_contains "$NEWP" "$lit" "F4 AC3: 「다른 다음 단계의 줄」 문단에는 글자로 없다 «${lit}»"
 done
 assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.' "AC23: 같은 턴 금지가 지휘자 · 고른 skill 모두에 선다"
 EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/pm-interview/SKILL.md"
@@ -67,7 +78,8 @@ nsl() { awk -v m="$2" '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
 BL="$(nsl "$FIN" '**다음 세션 줄 — ①/② 공통**')"; EL="$(nsl "$EH" '**에픽 넘김 줄**')"
 SHARED='설계문서에 ## 있는 것 검토 절(레포 안에 이미 있는 것을 먼저 찾아 쓰고, 레포 밖 패키지 · 프레임워크 · 서비스는 후보로만 적어 사용자가 승인한 뒤에만 쓴다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.'
 assert_contains "$EL" "$SHARED" "AC22(양성 대조): 에픽 넘김 줄에 원칙 문장"
-assert_contains "$BL" "$SHARED" "AC22: brief 줄의 원칙 문장이 에픽 넘김 줄과 글자가 같다"
+assert_contains "$BSS" "$SHARED" "AC22: brief 지시 파일의 원칙 문장이 에픽 넘김 줄과 글자가 같다"
+assert_not_contains "$BL" "$SHARED" "F4 AC1: 그 원칙 문장은 brief 줄에 글자로 없다(양성 짝: 위 단언)"
 # AC18
 grep -qxF 'next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명' "$TPL" \
   && ok "AC18: 템플릿 next_phase 가 기본 다음 단계라고 말한다" || no "AC18: 템플릿 next_phase 주석 부재"

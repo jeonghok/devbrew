@@ -206,11 +206,16 @@ b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 b3_opt1="$(awk '/^- \*\*① /{f=1} /^- \*\*② /{f=0} f' <<<"$b3_block")"
 b3_opt2="$(awk '/^- \*\*② /{f=1} /^- \*\*③ /{f=0} f' <<<"$b3_block")"
 nsl_b3="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' <<<"$b3_block")"
-grep -qF '보고 후 재결정' <<<"$nsl_b3" \
-  && ok "AC3: C4 프로토콜이 ①·② 공통 다음 세션 줄에 실림" \
-  || no "AC3: B-3 의 다음 세션 줄에 C4 프로토콜이 없다"
-grep -qE '임의 변경.*금지' <<<"$nsl_b3" \
-  && ok "AC3: 임의 변경 금지 절반이 다음 세션 줄에 있다" || no "AC3: 다음 세션 줄에 임의 변경 금지가 없다"
+# F4 — C4 는 다음 세션 줄이 가리키는 지시 파일의 brainstorming 절에 산다(줄은 그 절을 가리킨다)
+bh_bs="$(awk '$0=="## brainstorming 지시"{f=1;next} f&&/^## /{exit} f' "$REPO_ROOT/plugins/spec-distill/references/brief-handoff.md")"
+grep -qF '/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다' <<<"$nsl_b3" \
+  && ok "AC3: ①·② 공통 다음 세션 줄이 지시 파일의 brainstorming 절을 가리킨다" \
+  || no "AC3: B-3 의 다음 세션 줄이 지시 파일을 가리키지 않는다"
+grep -qF '보고 후 재결정' <<<"$bh_bs" \
+  && ok "AC3: C4 프로토콜이 지시 파일의 brainstorming 절에 실림" \
+  || no "AC3: 지시 파일의 brainstorming 절에 C4 프로토콜이 없다"
+grep -qE '임의 변경.*금지' <<<"$bh_bs" \
+  && ok "AC3: 임의 변경 금지 절반이 지시 파일의 brainstorming 절에 있다" || no "AC3: 지시 파일의 brainstorming 절에 임의 변경 금지가 없다"
 for w in 1 2; do
   wv="b3_opt${w}"; win="${!wv}"
   if [[ -z "$win" ]]; then no "AC4(next-session): B-3 옵션 ${w} 창이 비었다 — 아래 단언이 공허하다"; continue; fi

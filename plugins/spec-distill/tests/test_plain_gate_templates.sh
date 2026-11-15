@@ -47,21 +47,28 @@ assert_file_grep "$PG" '「경고 없음」' "Q1: 정본이 「경고 없음」�
 
 # ⑥ 다음 세션 줄이 규칙 유지 문장을 싣는다 — 표지 블록의 한 줄에서 재고, 그 구절은 파일에 한 곳뿐이다.
 nsl() { awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
-# brainstorming 으로 넘기는 줄(finishing.md)은 낱말 규칙만 싣는다 — 메시지 모양은 brainstorming 의 것이다(지휘자 수리 2).
-for pair in "$FIN|사람에게 쓰는 글의 낱말 규칙" "$RS|사람에게 쓰는 글 규칙"; do
-  f="${pair%%|*}"; phrase="${pair#*|}"
-  l="$(nsl "$f")"; who="${f#"$REPO_ROOT"/}"
-  [ -n "$l" ] && ok "AC7(양성): ${who} 의 다음 세션 줄을 읽었다" || no "AC7(양성): ${who} 에 다음 세션 줄 표지 블록이 없다 — 아래 단언이 공허하다"
-  assert_eq "$(printf '%s' "$l" | grep -oF "$phrase" | wc -l | tr -d ' ')" "1" "AC7: ${who} 의 다음 세션 줄이 규칙 유지 문장을 싣는다"
-  assert_eq "$(grep -E '^> `' "$f" | grep -c "${phrase}(번호·해시는" || true)" "1" "AC7: ${who} 에서 그 구절은 인용 줄(다음 세션 줄) 한 곳뿐이다"
-  # 파일 전체 줄 수는 기대값에 못 박는다 — finishing.md 는 인용 줄 하나 + 「다른 다음 단계의 줄」 문단 하나, 그 밖은 하나.
-  case "$f" in "$FIN") want=2 ;; *) want=1 ;; esac
-  assert_eq "$(grep -c "${phrase}(번호·해시는" "$f" || true)" "$want" "AC7: ${who} 에서 그 구절이 든 줄은 정확히 ${want}개다"
+# brainstorming 으로 넘기는 줄(finishing.md)은 지시 파일을 가리키고, 낱말 규칙 문장은 그 파일의 두 절에 한 줄씩 산다(F4 AC1 · AC2).
+BHF="$(dirname "$PG")/brief-handoff.md"
+phrase='사람에게 쓰는 글의 낱말 규칙'
+l="$(nsl "$FIN")"
+[ -n "$l" ] && ok "AC7(양성): finishing.md 의 다음 세션 줄을 읽었다" || no "AC7(양성): finishing.md 에 다음 세션 줄 표지 블록이 없다 — 아래 단언이 공허하다"
+assert_contains "$l" '/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다' "F4 AC1: finishing.md 의 다음 세션 줄이 지시 파일의 절을 가리킨다"
+assert_eq "$(grep -c "${phrase}(번호·해시는" "$FIN" || true)" "0" "F4 AC1: finishing.md 는 낱말 규칙 문장을 글자로 싣지 않는다(양성 짝: 아래 지시 파일 단언)"
+assert_eq "$(grep -c "^- ${phrase}(번호·해시는" "$BHF" || true)" "2" "F4 AC2: 지시 파일에서 그 구절이 든 줄은 정확히 2개다(두 절에 하나씩)"
+for sec in 'brainstorming 지시' '공통 지시'; do
+  n="$(awk -v h="## ${sec}" '$0==h{f=1;next} f&&/^## /{exit} f' "$BHF" | grep -c "^- ${phrase}(번호·해시는" || true)"
+  assert_eq "$n" "1" "F4 AC2: 지시 파일의 「${sec}」 절이 규칙 유지 문장을 한 줄 싣는다"
 done
+f="$RS"; rphrase='사람에게 쓰는 글 규칙'
+l="$(nsl "$f")"; who="${f#"$REPO_ROOT"/}"
+[ -n "$l" ] && ok "AC7(양성): ${who} 의 다음 세션 줄을 읽었다" || no "AC7(양성): ${who} 에 다음 세션 줄 표지 블록이 없다 — 아래 단언이 공허하다"
+assert_eq "$(printf '%s' "$l" | grep -oF "$rphrase" | wc -l | tr -d ' ')" "1" "AC7: ${who} 의 다음 세션 줄이 규칙 유지 문장을 싣는다"
+assert_eq "$(grep -E '^> `' "$f" | grep -c "${rphrase}(번호·해시는" || true)" "1" "AC7: ${who} 에서 그 구절은 인용 줄(다음 세션 줄) 한 곳뿐이다"
+assert_eq "$(grep -c "${rphrase}(번호·해시는" "$f" || true)" "1" "AC7: ${who} 에서 그 구절이 든 줄은 정확히 1개다"
 OTHER="$(awk -v m='**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' 'index($0,m)==1{print}' "$FIN")"
 [ -n "$OTHER" ] && ok "AC7(양성): finishing.md 의 「다른 다음 단계의 줄」 문단을 읽었다" || no "AC7(양성): 「다른 다음 단계의 줄」 문단 부재"
-assert_eq "$(printf '%s' "$OTHER" | grep -c '낱말 규칙(번호·해시는' || true)" "1" "AC7: 인용 줄 밖의 둘째 자리는 「다른 다음 단계의 줄」 문단 안이다"
-assert_not_contains "$(nsl "$FIN")" '첫 줄에 상태, 끝에 할 일 하나' "지휘자 수리 2: brainstorming 으로 넘기는 줄은 메시지 순서 규칙을 싣지 않는다(양성 짝: 낱말 규칙 단언)"
+assert_contains "$OTHER" '/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다' "F4 AC3: 「다른 다음 단계의 줄」 문단이 공통 지시 절을 가리킨다"
+assert_not_contains "$(nsl "$FIN")" '첫 줄에 상태, 끝에 할 일 하나' "지휘자 수리 2: brainstorming 으로 넘기는 줄은 메시지 순서 규칙을 싣지 않는다(양성 짝: 지시 파일 단언)"
 # 꺾쇠 자리표는 줄 앞 `@<…>` 토큰에만 있다 — 목록 원소가 늘어도 통과한다(설계 G3).
 RSC="$(nsl "$RS" | sed -e 's/^> `//' -e 's/`$//')"
 assert_eq "$(LINE="$RSC" python3 -c '
