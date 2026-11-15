@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [14.10.1] — 2026-11-16
+
+### Changed
+- skill 의 `cost_class` 를 frontmatter `metadata` 아래로 옮겼다(공식 skill frontmatter 에 없는 맨 위 키를 없앤다). 값은 그대로다.
+
 ## [14.10.0] — 2026-11-15
 
 ### Added

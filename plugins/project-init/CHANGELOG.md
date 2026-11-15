@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.4.2] — 2026-11-16
+
+### Changed
+- skill 의 `cost_class` 를 frontmatter `metadata` 아래로 옮겼다(공식 skill frontmatter 에 없는 맨 위 키를 없앤다). 값은 그대로다.
+
 ## [5.4.1] — 2026-10-30
 
 ### Fixed
