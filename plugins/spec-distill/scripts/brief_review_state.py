@@ -172,6 +172,54 @@ def cmd_get(args) -> int:
     return 0
 
 
+# 질문의 경고 줄에 싣는 쉬운 말 — 열거 밖 값은 원문 그대로 둔다(숨기지 않는다).
+SHORT_COMPONENT = {"critic": "탐지 리뷰어", "direction_reviewer": "방향 리뷰어", "readback": "냉독",
+                   "codex": "codex", "verbatim_coverage": "원문 대조", "pipeline": "리뷰 전체"}
+SHORT_STATUS = {"skipped": "건너뜀", "degraded": "일부만", "unavailable": "못 돎"}
+
+
+def _short_name(rec: dict) -> str:
+    comp = str(rec.get("component", ""))
+    stat = str(rec.get("verification_status", ""))
+    return f"{SHORT_COMPONENT.get(comp, comp)} {SHORT_STATUS.get(stat, stat)}".strip()
+
+
+def _fallback_count(path: str) -> int:
+    """두 번째 채널 파일의 비어 있지 않은 줄 수 — 파일이 없으면 0."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return 0
+    return sum(1 for ln in text.splitlines() if ln.strip())
+
+
+def cmd_short(args) -> int:
+    if args.ledger_key not in LEDGER_KEYS:
+        return _fail(f"ledger-key가 닫힌 열거 밖: {args.ledger_key!r}")
+    try:
+        text = _read(Path(args.state))
+    except (OSError, UnicodeDecodeError) as exc:
+        return _fail(f"state unreadable: {exc}")
+    try:
+        recs = parse(text, args.ledger_key)["brief_review_degradations"]
+    except ValueError as exc:
+        return _fail(f"malformed: {exc}")
+    try:
+        missed = _fallback_count(args.fallback_file) if args.fallback_file else 0
+    except OSError as exc:
+        return _fail(f"fallback unreadable: {exc}")
+    counts: dict = {}
+    for rec in recs:
+        name = _short_name(rec)
+        counts[name] = counts.get(name, 0) + 1
+    parts = [name if k == 1 else f"{name} ×{k}" for name, k in counts.items()]
+    if missed:
+        parts.append(f"기록 못 한 경고 {missed}")
+    if parts:
+        print(f"brief 리뷰 경고 {len(recs) + missed}개: " + " · ".join(parts))
+    return 0
+
+
 def cmd_degrade_append(args) -> int:
     if args.component not in COMPONENTS:
         return _fail(f"component가 닫힌 열거 밖: {args.component!r}")
@@ -245,6 +293,12 @@ def main(argv: list[str]) -> int:
     # "닫힌 열거 밖"과 "인자 자체가 틀림"을 구분 못 한다.
     sp.add_argument("--ledger-key", default=KEY_DEGRADE)
     sp.set_defaults(fn=cmd_get)
+    sp = sub.add_parser("short")
+    sp.add_argument("state")
+    sp.add_argument("--ledger-key", default=KEY_DEGRADE)
+    sp.add_argument("--fallback-file", default="",
+                    help="원장 기록이 실패한 경고를 모은 두 번째 채널 파일 — 비어 있지 않은 줄마다 경고 하나")
+    sp.set_defaults(fn=cmd_short)
     sp = sub.add_parser("degrade-append")
     sp.add_argument("state")
     sp.add_argument("--component", required=True)

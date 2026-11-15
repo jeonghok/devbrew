@@ -684,6 +684,21 @@ def warning_count(result: dict) -> int:
     return sum(len(result[k]) for k in ("missing", "shallow", "unserved", "unknown"))
 
 
+SHORT_KINDS = (("missing", "빠진 번호"), ("shallow", "얕은 답"),
+               ("unserved", "받드는 에픽 없는 발화"), ("unknown", "셀 수 없음"))
+
+
+def short_line(result: dict) -> str:
+    """질문의 경고 줄에 이을 짧은 줄 — 경고가 없으면 빈 글."""
+    n = warning_count(result)
+    if n == 0:
+        return ""
+    if result.get("status") == 3:
+        return "번호 대조 경고 1개: 검사 불가"
+    parts = ["%s %d" % (name, len(result[key])) for key, name in SHORT_KINDS if result[key]]
+    return "번호 대조 경고 %d개: %s" % (n, " · ".join(parts))
+
+
 def render(result: dict) -> str:
     if result["status"] == 3:
         return "번호 대조 검사 불가 — %s" % result["reason"]

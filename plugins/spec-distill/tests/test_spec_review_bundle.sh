@@ -149,11 +149,11 @@ INPUT_SEC="$(awk '/^## 입력$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 assert_contains "$INPUT_SEC" "--bundle" "AC11: ## 입력 이 --bundle 을 받는다"
 assert_contains "$INPUT_SEC" "source_interview" "AC11: ## 입력 이 source_interview 대조를 말한다"
 GATE_SEC="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
-assert_contains "$GATE_SEC" "번호 대조 경고" "AC12: 게이트가 번호 대조 경고 수를 「경고 N개」에 더한다"
+assert_contains "$GATE_SEC" "진입 펜스가 낸 \`질문 줄:\` 뒤의 글을 질문의 경고 줄에 그대로 잇고, 번호 대조 줄 전체를 \`channel_lines\` 에 넣는다" "AC12: 게이트가 번호 대조 줄을 질문의 경고 줄에 잇는다"
 assert_file_grep "$SKILL" '^argument-hint: .*--bundle' "argument-hint 에 --bundle"
 DEG_SEC="$(awk '/^## degrade 채널$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
-assert_contains "$DEG_SEC" "진입 펜스의 \`번호 대조 경고 <N>개\` 의 N 을 여기에 더한다" "AC12: degrade 채널의 N 규칙이 번호 대조 경고를 더한다"
-assert_contains "$DEG_SEC" "번호 대조 경고 N 이 0 이 아니면 셋이 비었어도 「이상 없음」·「경고 없음」은 쓰지 않는다" "AC12: degrade 채널의 「이상 없음」 조건이 번호 대조 경고 0 을 요구한다"
+assert_contains "$DEG_SEC" "진입 펜스의 \`질문 줄:\` 뒤의 글을 질문의 경고 줄에 그대로 잇고" "AC12: degrade 채널이 번호 대조의 짧은 줄을 질문의 경고 줄에 잇는다"
+assert_contains "$DEG_SEC" "번호 대조 경고가 있으면 셋이 비었어도 「이상 없음」·「경고 없음」은 쓰지 않는다" "AC12: degrade 채널의 「이상 없음」 조건이 번호 대조 경고 0 을 요구한다"
 # ── R5 AC6 — 이웃 읽기가 산출물을 읽는다 ─────────────────────────────────────
 g checkout -q main
 nb_bundle R7 "C1"
@@ -208,7 +208,7 @@ pa="$(pos_of '<!-- advice-display:begin -->')"; pb="$(pos_of '<!-- rejected-numb
 { [ -n "$pa" ] && [ -n "$pb" ] && [ -n "$pc" ] && [ "$pa" -lt "$pb" ] && [ "$pb" -lt "$pc" ]; } \
   && ok "AC34: 기각 펜스는 참고 목록 뒤 · 로드맵 위치 앞" || no "AC34: 펜스 순서가 다르다(${pa} · ${pb} · ${pc})"
 GATE_RJ="$(awk '/^## 게이트$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
-assert_contains "$GATE_RJ" "이 수는 「경고 N개」에 더하지 않는다" "AC34: 기각 수는 경고가 아니다"
+assert_contains "$GATE_RJ" "이 수는 질문의 경고 줄에 싣지 않는다" "AC34: 기각 수는 경고가 아니다"
 assert_contains "$GATE_RJ" "**기각한 번호 — 2단계 질문 앞(N18).**" "AC34: 게이트 절에 기각 문단 머리"
 
 finish

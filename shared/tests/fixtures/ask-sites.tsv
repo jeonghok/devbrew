@@ -20,7 +20,7 @@ plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	펜스 �
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	「참고 전부 보기」면 아래 펜스로 목록 전부를	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	#### B-2 — 단일 `AskUserQuestion` proceed 게이트	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	`AskUserQuestion` 게이트 자체는 아님)	
-plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**	2
+plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**	2	4
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	**둘째 질문 — 다른 다음 단계.**	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	2. **머지 묻기.** `AskUserQuestion` 하나		1
 plugins/spec-distill/skills/pm-interview/references/saturation.md	꼬리	그리고 `AskUserQuestion` 1회로 셋 중 하나를 받는다	「지금 포화 판정으로」	1
@@ -38,7 +38,7 @@ plugins/spec-distill/references/trivia-escape.md	꼬리	해당하면 진행하�
 plugins/spec-distill/references/trivia-escape.md	떼기	`<판정 근거>` 와 `<command>` 는 호출한 진입 skill 이 채운다	- **전체 과정으로** — 이 판정을 건너뛰고
 
 # 게이트 · 리뷰 결정 질문 (Task 4)
-plugins/spec-distill/references/proceed-gate.md	꼬리	## Step B — 단일 `AskUserQuestion`	| ① | 권장 핸드오프	1
+plugins/spec-distill/references/proceed-gate.md	꼬리	## Step B — 단일 `AskUserQuestion`	다시 불러야 이어진다 |	1	4
 plugins/spec-distill/references/proceed-gate.md	꼬리	**둘째 질문(선택) — 다음 단계 갈래.**	
 plugins/spec-distill/references/proceed-gate.md	꼬리	**지휘자 아래 — 승인 질문 하나.**	
 shared/docreview/references/reviewing-document.md	지시	게이트(`decide` 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠	응답을 `decide`·`fix`·`ask` 서브커맨드로 반영.	1
@@ -58,7 +58,7 @@ plugins/spec-distill/skills/spec-review/SKILL.md	떼기	「추가 라운드 1회
 plugins/spec-distill/skills/spec-review/SKILL.md	언급	**`AskUserQuestion` 라벨의 항목별 내용**	
 plugins/spec-distill/skills/spec-review/SKILL.md	꼬리	펜스 출력에 접는 줄(`… 외 K건`)이 있으면 2단계 게이트를 띄우기 전에	「접은 채로 둔다」	1
 plugins/spec-distill/skills/spec-review/SKILL.md	떼기	「참고 전부 보기」면 아래 펜스로 엔진 목록 전부를	
-plugins/spec-distill/skills/spec-review/SKILL.md	꼬리	승인 게이트 **2단계**의 옵션 넷	| ④ | 멈춤 — 상태 보존하고 종료 |
+plugins/spec-distill/skills/spec-review/SKILL.md	꼬리	승인 게이트 **2단계**의 옵션 넷	계획이 시작되지 않아 다시 불러야 이어진다 |		4
 plugins/spec-distill/skills/spec-review/SKILL.md	지시	**③ 의 갈래와 로드맵 에픽.**	
 plugins/spec-distill/skills/spec-review/SKILL.md	떼기	③ 을 고르면 후속 질문 하나로 갈래를 묻는다	
 plugins/spec-distill/skills/spec-review/SKILL.md	꼬리	**지휘 세션이 돌린 리뷰면 — 승인 질문 하나.**	
@@ -87,7 +87,7 @@ plugins/spec-distill/skills/request-framing/SKILL.md	지시	3. **`fix` 는 사�
 plugins/spec-distill/skills/request-framing/SKILL.md	떼기	질문은 「적용 / 적용하지 않음」 둘이다.	꼬리를 뗀 이름으로 읽는다
 plugins/spec-distill/skills/request-framing/SKILL.md	비움	- 덩어리가 있으면 **덩어리마다 질문 하나**	덩어리 본문(`render`)은 질문 텍스트에
 plugins/spec-distill/skills/request-framing/SKILL.md	비움	- 기준 사본이 없으면(rc 3 — 원장이 정리됐다)	처분을 받은 뒤 순서가 계약입니다
-plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	게이트의 네 옵션은 이 모양을 그대로 씁니다	| ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
+plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	게이트의 네 옵션은 이 모양을 그대로 씁니다	인터뷰가 시작되지 않아 다시 불러야 이어진다 |		4
 plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	**다른 다음 단계(둘째 질문).**	
 plugins/spec-distill/skills/request-framing/SKILL.md	비움	덜어 낸 것이 1개 이상이면 `AskUserQuestion` 한 번으로 묻습니다	되살린 항목은 seed 에	1
 

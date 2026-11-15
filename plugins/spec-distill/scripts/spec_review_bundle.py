@@ -76,8 +76,9 @@ def entry(spec: str, bundle: str, root: str) -> list:
     if _resolve(src, root) != bpath:
         return refuse("설계문서 source_interview(%s) 와 다른 파일이다" % src)
     result = cbc.coverage(bpath, spath)
-    return [cbc.render(result), "번호 대조 경고 %d개" % cbc.warning_count(result),
-            "bundle-entry: PROCEED %s" % bpath]
+    ask = cbc.short_line(result)
+    return [cbc.render(result)] + (["질문 줄: " + ask] if ask else []) + [
+        "번호 대조 경고 %d개" % cbc.warning_count(result), "bundle-entry: PROCEED %s" % bpath]
 
 
 def _line(b: dict) -> str:
@@ -185,7 +186,8 @@ def main(argv=None) -> int:
     except Exception as exc:  # 확인이 죽어도 조용히 통과로 내지 않는다 — 사유를 줄로 낸다
         if args.cmd == "entry":
             lines = ["[spec-distill] 번호 대조 진입 검사 내부 오류 — %s: %s. --bundle 확인과 번호 대조 없이 리뷰한다."
-                     % (type(exc).__name__, exc), "번호 대조 경고 1개", "bundle-entry: PROCEED -"]
+                     % (type(exc).__name__, exc), "질문 줄: 번호 대조 경고 1개: 검사 불가", "번호 대조 경고 1개",
+                     "bundle-entry: PROCEED -"]
         elif args.cmd == "rejected":
             lines = ["%s — 셀 수 없음: 내부 오류 %s: %s" % (REJECTED_HEAD, type(exc).__name__, exc)]
         else:
