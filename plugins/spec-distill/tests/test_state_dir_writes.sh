@@ -616,6 +616,9 @@ fence_with() {   # fence_with <md> <고정 문자열> → 그 문자열을 담�
        b && /^```$/ {b=0; if (has && !done) {printf "%s", buf; done=1}; next}
        b {buf = buf $0 "\n"; if (index($0, ENVIRON["P"])) has=1}' "$1"
 }
+plant_before() {   # plant_before <스크립트> <고정 문자열> <끼울 줄> → 그 문자열을 담은 첫 줄 바로 앞에 한 줄을 끼운 사본
+  P="$2" L="$3" awk '!put && index($0, ENVIRON["P"]) {print ENVIRON["L"]; put=1} {print}' "$1"
+}
 run_fence() {   # run_fence <스크립트> [VAR=값…] → rc · stderr 는 $TR/last.err
   local s="$1"; shift
   ( cd "$R" && env -i PATH=/usr/bin:/bin PYTHONPATH="$YAMLDIR" HOME="$TR/home" TMPDIR="$TR/tmp" PYTHONDONTWRITEBYTECODE=1 \
@@ -693,11 +696,29 @@ python3 "$ROOT/shared/docreview/scripts/docreview_state.py" init --state-dir "$R
 { rf_vars; fence_with "$RF_MD" '"$STATE_DIR/hunks.json"'; } > "$TR/rf-hunks.sh"
 { rf_vars; fence_with "$RF_MD" 'gate-drops.json'; } > "$TR/rf-drops.sh"
 outside rf3; outside rf4; ln -s "$OUT/rf3" "$RFS/hunks.json"; ln -s "$OUT/rf4" "$RFS/gate-drops.json"
+# 공시 펜스는 writer 앞에서 hunks*.json 을 지운다 — 미리 심은 링크는 writer 에 닿기 전에 사라지므로 이 실행은 그 지움을 잰다
+printf 'STALE_HUNKS_FINAL\n' > "$RFS/hunks-final.json"
 run_fence "$TR/rf-hunks.sh"; rc=$?
 assert_eq "$rc" "0" "rf_hunks_and_drops_link: hunks 펜스 rc 0"
 kept rf3 rf_hunks_and_drops_link
 plain_one "$RFS/hunks.json" "rf_hunks_and_drops_link(hunks.json)"
 assert_contains "$(cat "$RFS/hunks.json" 2>/dev/null)" '"hunks"' "rf_hunks_and_drops_link: hunks.json 에 덩어리 목록(양의 짝)"
+if [ -e "$RFS/hunks-final.json" ] || [ -L "$RFS/hunks-final.json" ]; then no "rf_hunks_stale_removed: 지난 공시의 hunks-final.json 이 남았다"
+else ok "rf_hunks_stale_removed: 지난 공시의 hunks-final.json 을 지웠다"; fi
+# writer 가 링크를 만나는 실행 — 지움과 쓰기 사이에 링크가 놓인 꼴. 덩어리를 내는 줄 바로 앞에 링크를 심는 한 줄을 끼운 사본을 돌린다
+HUNKS_LINE='seed_edit_diff.py" hunks '
+PLANT="$(printf 'ln -sf "%s" "%s" && : > "%s"' "$OUT/rf5" "$RFS/hunks.json" "$TR/planted.ok")"
+plant_before "$TR/rf-hunks.sh" "$HUNKS_LINE" "$PLANT" > "$TR/rf-hunks-planted.sh"
+if [ "$(grep -cF -- "$HUNKS_LINE" "$TR/rf-hunks.sh")" = 1 ] && [ "$(grep -cxF -- "$PLANT" "$TR/rf-hunks-planted.sh")" = 1 ] \
+   && bash -n "$TR/rf-hunks-planted.sh" 2>/dev/null; then ok "추출: RF hunks 펜스에 링크를 심는 줄을 끼웠다(덩어리를 내는 줄 하나 · bash -n 통과)"
+else no "추출: RF hunks 펜스에 덩어리를 내는 줄이 하나가 아니거나 끼운 사본의 문법이 깨졌다 — 아래 판정은 무의미하다"; fi
+outside rf5
+run_fence "$TR/rf-hunks-planted.sh"; rc=$?
+[ -e "$TR/planted.ok" ] && ok "rf_hunks_writer_meets_link: 쓰기 직전에 링크를 심었다(전제)" || no "rf_hunks_writer_meets_link: 링크를 심지 못했다 — 아래 판정은 무의미하다"
+assert_eq "$rc" "0" "rf_hunks_writer_meets_link: hunks 펜스 rc 0"
+kept rf5 rf_hunks_writer_meets_link
+plain_one "$RFS/hunks.json" "rf_hunks_writer_meets_link(hunks.json)"
+assert_contains "$(cat "$RFS/hunks.json" 2>/dev/null)" '"hunks"' "rf_hunks_writer_meets_link: hunks.json 에 덩어리 목록(양의 짝)"
 run_fence "$TR/rf-drops.sh"
 kept rf4 rf_hunks_and_drops_link
 plain_one "$RFS/gate-drops.json" "rf_hunks_and_drops_link(gate-drops.json)"
