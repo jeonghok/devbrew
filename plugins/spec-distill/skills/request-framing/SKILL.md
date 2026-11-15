@@ -358,7 +358,7 @@ fi
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
-| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic-<i>.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
+| 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic-<i>.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 저자 편집 이유 파일(`hunk-reasons.txt`) · 쓴 지적 목록(`hunk-used-findings.txt`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
@@ -813,7 +813,7 @@ rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
 **사용자 문구 · 리뷰어 요약은 셸 인자에 직접 쓰지 않는다.** 큰따옴표 안의 백틱 · `$( )` 는 셸이 실행한다 —
 사용자가 적은 말도, 비신뢰 원문을 읽은 리뷰어가 쓴 요약도 그런 글자를 담을 수 있다. 받은 문구는 **Write
 도구로** 항목마다 따로 쓴다(셸의 `echo` · `printf` 로 쓰지 않는다) — 사용자 문구는 `$STATE_DIR/said-<id>.txt`,
-항목 요약은 `$STATE_DIR/note-<id>.txt`, 저자 편집 덩어리의 문구는 `$STATE_DIR/said-hunk-<k>.txt`, 추가 라운드
+항목 요약은 `$STATE_DIR/note-<id>.txt`, 저자 편집 덩어리의 문구는 `$STATE_DIR/said-hunk-<k>.txt`(그 덩어리가 든 질문의 답 전체), 추가 라운드
 승인은 `$STATE_DIR/said-extra-r<n>.txt` 다. 파일 이름이 항목을 담으므로 한 항목의 Write 를 빠뜨리면 다른
 항목의 문구를 읽는 대신 «파일 없음»으로 멈춘다. 파일은 기록이 성공하면 펜스가 지우고, 덩어리 문구는 공시할
 때마다 공시 펜스가 지운다. `seed_review_log.py log` 에는 `--quote-file` · `--note-file` 로, 엔진의 인자에는
@@ -909,13 +909,45 @@ echo "drops_rc=$drops_rc"
 seed 는 헤딩이 없어 엔진의 얼림 검사가 모든 변경을 면제합니다. 저자 편집은 기준 사본과의 diff 로 **전부**
 사용자 앞에 놓습니다 — 승인된 수정과 그 틈에 끼어든 수정을 가를 기계가 없으므로 가르지 않습니다.
 
+공시는 두 걸음입니다 — 미리 보기 펜스, 그다음 공시 펜스. 그 사이에 저자가 이유 파일을 씁니다.
+
 ```bash
-# 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일을 먼저 지운다.
+# 미리 보기 — 공시 기록을 남기지 않는다. 지난 이유 파일을 지우고 덩어리와 판본(seed_sha256)을 낸다.
+[ -n "${STATE_DIR:-}" ] || { echo "[spec-distill] 리뷰 엔진 자리가 비었다 — 「## 상태」 블록을 이 펜스 앞에 이어 붙여라." >&2; exit 1; }
+rm -f "$STATE_DIR/hunk-reasons.txt"
+pv_rc=0
+python3 "$SD/scripts/seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS" || pv_rc=$?
+echo "pv_rc=$pv_rc"
+echo "이유 파일 경로(Write 도구로 쓴다): $STATE_DIR/hunk-reasons.txt"
+```
+
+미리 보기가 낸 덩어리마다 그 편집이 어느 지적 때문인지를 저자가 이유 파일(`$STATE_DIR/hunk-reasons.txt`)에 Write 도구로 적습니다.
+첫 줄은 미리 보기가 낸 판본 `seed_sha256 <값>`, 그 아래는 줄마다 `<덩어리 번호><탭><지적 id 들(쉼표) | 없음>` 입니다.
+지적 때문이 아닌 편집은 `없음` 이고, 한 덩어리에 둘이 섞였으면 지적 id 뒤에 `없음` 을 함께 적습니다. 이유 파일은 공시마다 새로 씁니다 —
+미리 보기를 건너뛰거나 이유 파일을 쓰지 않으면 전부 권장 없음입니다. 덩어리가 0 이어도 공시 펜스는 돕니다.
+
+```bash
+# 공시할 때마다 덩어리 번호가 새로 매겨진다 — 지난 공시의 덩어리 문구 파일과 덩어리 JSON 을 먼저 지운다.
 find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
+find "$STATE_DIR" -maxdepth 1 -name 'hunks*.json' -exec rm -f {} + 2>/dev/null || true
 hunks_rc=0
 python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || hunks_rc=$?
 case "$hunks_rc" in
-  0) python3 -I -X utf8 -c '
+  0) scr_rc=0
+     scr="$(python3 "$SD/scripts/seed_edit_screen.py" screen --hunks "$STATE_DIR/hunks.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR")" || scr_rc=$?
+     if [ "$scr_rc" -eq 0 ]; then
+       printf '%s' "$scr" | python3 -I -X utf8 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["text"])
+if d["questions"]:
+    print()
+    print("질문 묶음: " + json.dumps(d["questions"], ensure_ascii=False))
+' || scr_rc=$?
+     fi
+     if [ "$scr_rc" -ne 0 ]; then
+       echo "[spec-distill] 화면 조립 실패 — 줄 전체를 보인다(scr_rc=${scr_rc}). 질문은 권장 없이 낸다."
+       python3 -I -X utf8 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 if not d["hunks"]:
@@ -923,38 +955,49 @@ if not d["hunks"]:
 for h in d["hunks"]:
     print(h["render"])
     print()
-' "$STATE_DIR/hunks.json" ;;
+' "$STATE_DIR/hunks.json"
+     fi ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라." >&2 ;;
   *) echo "[spec-distill] 저자 편집 공시 실패(rc $hunks_rc) — 게이트를 띄우지 않는다." >&2 ;;
 esac
 ```
 
 - 덩어리가 0 이면 게이트 앞 글에 **«저자 편집 없음»** 한 줄을 싣는다 — 침묵과 구분한다.
-- 덩어리가 있으면 **덩어리마다 질문 하나** — 「그대로 둔다 / 되돌린다」.
-  추천을 달지 않는다 — 어느 덩어리가 승인된 수정인지 가를 기계가 없고, 저자의 권장은 바로 그 가름을 저자가 하는 것이다.
-  덩어리 본문(`render`)은 질문 텍스트에 줄임 없이 싣는다 — 분량 상한을 두지 않는다(줄이면 공시가 아니다). 이 덩어리 본문은 규칙 블록의 「따로 정한 자리」다 — 「질문 본문엔 결정과 상태 한 줄만」의 예외로, 결정의 대상 자체라 질문에 그대로 싣는다.
+- 공시 펜스가 낸 화면 글은 게이트 앞 글에 그대로 한 번 싣는다. 바뀐 문장은 하나도 빼지 않는다 — 화면 글을 줄이거나 고쳐 쓰지 않는다. 질문 본문에는 결정 한 줄만 둔다.
+- 덩어리가 있으면 **처분을 한 묶음으로 묻는다** — 펜스가 낸 「질문 묶음」 의 질문 · 선택지 라벨 · 순서를 그대로 쓴다(한 호출에 질문 넷까지, 넘치면 다음 호출).
+  덩어리가 둘 이상이면 여러 개 고르기 질문 「그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요.」 이고 선택지는 덩어리마다 「<k>번 그대로 둔다」 다. 하나면 하나 고르기 「그대로 둔다 / 되돌린다」 다. 나뉜 질문 전부에 답해야 처분이 끝난다.
+- 권장은 화면 조립이 정한다 — 저자가 댄 지적 전부에 사용자의 고치는 쪽 처분이 원장에 있고 앞 화면에서 대지 않은 지적일 때만, 그 선택지가 질문의 첫 자리에 오고 라벨이 「<k>번 그대로 둔다 (권장)」 이 된다.
+  저자는 꼬리를 더하거나 떼지 않고 선택지 설명에 자기 평가를 더하지 않는다 — 근거는 화면 글의 이유 줄이다. 확정 게이트 직전 화면에는 권장이 없다.
+- 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다. 고른 덩어리는 「그대로 둔다」 로, 같은 질문의 고르지 않은 덩어리는 「되돌린다」 로 옮긴다 — 처분 펜스의 `PAIRS` 에 그 화면의 덩어리 번호를 하나도 빼지 않고 적는다.
+  「기타」 로 전부 되돌리라고 적었으면 그 질문의 덩어리 전부가 「되돌린다」 다. 답이 비었거나 기타 칸의 말이 어느 덩어리를 어떻게 하라는 것인지 분명하지 않으면 처분하지 않고 그 질문을 다시 묻는다 — 아무것도 고르지 않은 답으로는 되돌리지도 통과시키지도 않는다.
+- 덩어리 k 의 사용자 문구 파일(`said-hunk-<k>.txt`)에는 그 덩어리가 든 질문의 답 전체를 글자 그대로 적는다 — 고른 라벨들을 고른 순서대로 쉼표로 이은 것, 「기타」 면 적은 말이다. 고르지 않아 되돌리는 덩어리도 같다. 답에 없는 표지를 지어 적지 않는다.
+- 화면 조립이 실패하면 공시 펜스가 「화면 조립 실패 — 줄 전체를 보인다」 와 함께 덩어리의 줄 전체 꼴을 낸다 — 그것을 그대로 싣고, 그때 질문은 권장 없이 낸다(묶는 법과 넷씩 나누기는 같다 — 넷씩 나누다 하나가 남으면 마지막 두 질문을 둘 이상씩으로 나눈다).
 - 처분 없이는 다음 단계로 가지 않는다.
 - 기준 사본이 없으면(rc 3 — 원장이 정리됐다) 그 사실을 게이트 앞 글에 쓰고 seed 전문을 한 질문으로
   보여 「이대로 둔다 / 멈춘다」를 묻는다. 「이대로 둔다」면 `seed_edit_diff.py init` 으로 새 기준 사본을 뜬다.
   추천을 달지 않는다 — 기준 사본이 없어 저자 편집이 섞였는지 가를 수 없고, 권하면 저자가 자기 편집을 스스로 승인한다.
 
-처분을 받은 뒤 순서가 계약입니다 — **되돌리기 → 기록 → 기준 사본 교체.** 교체는 맨 끝에서만 합니다. 공시
-전에 교체하면 그 사이의 편집이 영영 안 보입니다.
+처분을 받은 뒤 순서가 계약입니다 — **쓴 지적 목록에 더하기 → 되돌리기 → 기록 → 기준 사본 교체.** 교체는 맨 끝에서만 합니다. 공시
+전에 교체하면 그 사이의 편집이 영영 안 보입니다. 쓴 지적 목록(`$STATE_DIR/hunk-used-findings.txt`)은 앞 화면의 이유 파일이 댄 지적 id 입니다 —
+한 번 댄 지적은 뒤 화면에서 권장의 근거가 되지 않습니다. 목록에 더하지 못하면 되돌리기 · 기록 · 교체를 하지 않습니다.
 
 ```bash
-# PAIRS 는 게이트의 답이다 — 덩어리마다 한 줄 「번호:처분」(처분은 「그대로 둔다」 또는 「되돌린다」). 덩어리 k 의
+# PAIRS 는 게이트의 답이다 — 그 화면의 덩어리마다 한 줄 「번호:처분」(처분은 「그대로 둔다」 또는 「되돌린다」). 번호는 그 화면의 덩어리
+# 전부와 같아야 한다 — 빠진 번호나 없는 번호가 있으면 아무것도 바꾸지 않는다. HUNKS_JSON 은 그 화면을 조립한 덩어리 JSON 이다. 덩어리 k 의
 # 사용자 문구는 먼저 Write 도구로 "$STATE_DIR/said-hunk-<k>.txt" 에 쓴다(공시 펜스가 공시마다 지난 파일을 지운다).
 # 문구 파일이 하나라도 없으면 아무것도 바꾸지 않는다. 기록이 전부 성공했을 때만 기준 사본을 교체한다.
 # 부분 실패 뒤에는 원인을 고치고 이 펜스를 통째로 다시 돈다 — 되돌리기는 표지(`<기준 사본>.reverted`)가 막아 같은 판본에서 한 번만
-# 일어난다. 편집 기록 줄은 그렇지 않다: 다시 돈 만큼 겹친다(덩어리 번호가 공시마다 1 부터 다시 시작해 다른 처분이 같은 줄이 되므로,
+# 일어나고, 쓴 지적 목록은 이미 있는 id 를 다시 적지 않는다. 편집 기록 줄은 그렇지 않다: 다시 돈 만큼 겹친다(덩어리 번호가 공시마다 1 부터 다시 시작해 다른 처분이 같은 줄이 되므로,
 # 같은 줄을 건너뛰면 기록이 사라진다 — 겹치는 쪽을 고른다). **겹친 줄을 지우지 마라**: 어느 것이 재실행으로 겹친 줄이고 어느 것이
 # 다른 공시의 다른 처분인지 글자로는 가를 수 없고, 겹침은 아무것도 상하게 하지 않는다 — `user-quotes` 는 문구로 묶고 `check-drops` 는
 # `거부` 와 엔진 drop 줄만 읽는다.
+HUNKS_JSON="$STATE_DIR/<덩어리 JSON 파일 이름>"
 PAIRS='<덩어리마다 한 줄 — 번호:처분>'
-pre_rc=0; rev_rc=0; log_rc=0; n_pairs=0; REVERT_IDS=""
+pre_rc=0; used_rc=0; rev_rc=0; log_rc=0; n_pairs=0; REVERT_IDS=""; ALL_IDS=""
 while IFS=: read -r k choice; do
   [ -n "$k" ] || continue
   n_pairs=$((n_pairs + 1))
+  ALL_IDS="${ALL_IDS:+${ALL_IDS},}${k}"
   [ -s "$STATE_DIR/said-hunk-${k}.txt" ] || { echo "[spec-distill] 덩어리 ${k} 의 사용자 문구 파일이 없다(${STATE_DIR}/said-hunk-${k}.txt) — 아무것도 바꾸지 않는다." >&2; pre_rc=2; }
   case "$choice" in
     되돌린다) REVERT_IDS="${REVERT_IDS:+${REVERT_IDS},}${k}" ;;
@@ -963,33 +1006,38 @@ while IFS=: read -r k choice; do
   esac
 done <<< "$PAIRS"
 [ "$n_pairs" -gt 0 ] || { echo "[spec-distill] 처분 목록(PAIRS)이 비었다 — 아무것도 바꾸지 않는다." >&2; pre_rc=2; }
-if [ "$pre_rc" -eq 0 ] && [ -n "$REVERT_IDS" ]; then
+if [ "$pre_rc" -eq 0 ]; then
+  python3 "$SD/scripts/seed_edit_screen.py" mark-used --hunks "$HUNKS_JSON" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR" --ids "$ALL_IDS" || used_rc=$?
+  [ "$used_rc" -eq 0 ] || echo "[spec-distill] 쓴 지적 목록에 더하지 못했다(used_rc=${used_rc}) — 되돌리기 · 기록 · 기준 사본 교체를 하지 않는다. 위 사유(처분 목록의 번호가 화면의 덩어리와 다르면 PAIRS 를, 목록 파일이면 그 파일을)를 고친 뒤 이 펜스를 다시 돌려라." >&2
+fi
+if [ "$pre_rc" -eq 0 ] && [ "$used_rc" -eq 0 ] && [ -n "$REVERT_IDS" ]; then
   python3 "$SD/scripts/seed_edit_diff.py" revert "$SEED_BASE" "$SEED_ABS" --ids "$REVERT_IDS" || rev_rc=$?
 fi
-if [ "$pre_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ]; then
+if [ "$pre_rc" -eq 0 ] && [ "$used_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ]; then
   while IFS=: read -r k choice; do
     [ -n "$k" ] || continue
     python3 "$SD/scripts/seed_review_log.py" log "$AUDIT_ABS" --kind 편집 --round "<n>" --target "덩어리 ${k} · ${choice}" --quote-file "$STATE_DIR/said-hunk-${k}.txt" || log_rc=$?
   done <<< "$PAIRS"
 fi
-if [ "$pre_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ] && [ "$log_rc" -eq 0 ]; then
+if [ "$pre_rc" -eq 0 ] && [ "$used_rc" -eq 0 ] && [ "$rev_rc" -eq 0 ] && [ "$log_rc" -eq 0 ]; then
   accept_rc=0
   python3 "$SD/scripts/seed_edit_diff.py" accept "$SEED_BASE" "$SEED_ABS" || accept_rc=$?
   echo "accept_rc=$accept_rc"
   [ "$accept_rc" -ne 0 ] || find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
 elif [ "$rev_rc" -ne 0 ]; then
-  echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 위 공시 펜스를 다시 돌려 이 처분을 다시 받아라." >&2
+  echo "[spec-distill] revert 실패(rev_rc=$rev_rc) — 기준 사본을 교체하지 않는다. 그 화면의 미리 보기 펜스와 공시 펜스(확정 직전 검사 2 면 그 검사의 두 펜스)를 다시 돌려 이 처분을 다시 받아라." >&2
 elif [ "$log_rc" -ne 0 ]; then
   echo "[spec-distill] 편집 처분 기록 실패(log_rc=$log_rc) — 기준 사본을 교체하지 않는다. 위 stderr 가 댄 문구 파일을 고친 뒤 이 펜스를 그대로 다시 돌려라(되돌리기는 표지가 막아 한 번만 일어난다 · 먼저 성공한 편집 기록 줄은 겹쳐 적히지만 그대로 둔다)." >&2
 fi
-echo "pre_rc=$pre_rc rev_rc=$rev_rc log_rc=$log_rc"
+echo "pre_rc=$pre_rc rev_rc=$rev_rc log_rc=$log_rc used_rc=$used_rc"
 ```
 
+처분 펜스의 덩어리 JSON 자리에는 그 화면의 공시 펜스가 쓴 파일 이름을 넣습니다 — 라운드 게이트 앞이면 `hunks.json`, 확정 게이트 직전 검사 2 면 그 검사의 사본입니다.
 `revert` · `accept` 가 rc 4 를 내면 공시(`hunks`) 뒤에 seed 가 또 바뀌었거나, 이 공시에서 이미 다른 번호를
 되돌린 것입니다(되돌린 뒤에는 덩어리 번호가 다시 매겨진다) — 기준 사본을 그대로 두고
-위 공시 펜스를 다시 돌려 다시 처분받습니다. `revert` 는 처분 하나에 한 번만 부릅니다 — 펜스가 `PAIRS` 의
+그 화면의 미리 보기 펜스와 공시 펜스를 다시 돌려 다시 처분받습니다(확정 직전 검사 2 면 그 검사의 두 펜스). `revert` 는 처분 하나에 한 번만 부릅니다 — 펜스가 `PAIRS` 의
 「되돌린다」 번호를 전부 쉼표로 모아 `--ids` 에 한 번에 넘깁니다. `hunks` 는 그 출력을 사용자에게 보이는 자리에서만
-부릅니다 — 부르면 매번 «공시됨»으로 기록되기 때문입니다.
+부릅니다 — 부르면 매번 «공시됨»으로 기록되기 때문입니다. 미리 보기는 `hunks` 를 부르지 않습니다.
 
 ### 냉독
 
@@ -1249,10 +1297,24 @@ esac
 echo "marks_rc=$marks_rc"
 ```
 
-**검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 처분 절차 그대로입니다. 마지막 라운드 뒤의 편집(채택 결정의
+**검사 2 — 저자 편집 공시** — `### 저자 편집 공시` 의 두 걸음(미리 보기 → 이유 파일 → 공시)과 처분 절차 그대로입니다. 이 화면에는 권장이 붙지 않고 고친 이유 줄만
+보입니다 — 이 화면 뒤에는 리뷰 라운드가 없습니다. 처분 펜스의 덩어리 JSON 자리에는 이 검사의 사본 `hunks-final.json` 을 넣습니다. `revert` · `accept` 가 rc 4 를 내면 이 검사의 미리 보기 펜스와 공시 펜스를 다시 돌립니다. 마지막 라운드 뒤의 편집(채택 결정의
 반영 · ③ 뒤에 다시 깎은 것)이 사용자 앞에 오는 유일한 자리입니다. 덩어리 하나라도 「되돌린다」를 받으면 검사 1 부터
 다시 돕니다 — 되돌리기가 검사 1 뒤에 뗀 표시를 되살릴 수 있습니다. 원장 자리를 거부한 세션(`## 상태` 블록이 그 한
 줄을 냈다)은 seed 리뷰 라운드도 기준 사본도 없으므로 이 검사는 «검사 불가»로 막습니다 — 링크를 걷어 내고 `## 상태` 블록부터 다시 돕니다.
+
+```bash
+# 확정 직전 미리 보기 — 공시 기록을 남기지 않는다. 지난 이유 파일을 지우고 덩어리와 판본(seed_sha256)을 낸다.
+final_pv_rc=0
+if [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ]; then
+  final_pv_rc=2
+else
+  rm -f "$STATE_DIR/hunk-reasons.txt"
+  python3 "$SD/scripts/seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS" || final_pv_rc=$?
+  echo "이유 파일 경로(Write 도구로 쓴다): $STATE_DIR/hunk-reasons.txt"
+fi
+echo "final_pv_rc=$final_pv_rc"
+```
 
 ```bash
 final_hunks_rc=0
@@ -1264,10 +1326,25 @@ elif [ -z "${STATE_DIR:-}" ] || [ -z "${SEED_BASE:-}" ] || ! mkdir -p "$STATE_DI
   final_hunks_rc=2
 else
   find "$STATE_DIR" -maxdepth 1 -name 'said-hunk-*.txt' -exec rm -f {} + 2>/dev/null || true
+  find "$STATE_DIR" -maxdepth 1 -name 'hunks*.json' -exec rm -f {} + 2>/dev/null || true
   python3 "$SD/scripts/nofollow_write.py" run --out "$STATE_DIR/hunks-final.json" -- python3 "$SD/scripts/seed_edit_diff.py" hunks "$SEED_BASE" "$SEED_ABS" || final_hunks_rc=$?
 fi
 case "$final_hunks_rc" in
-  0) python3 -I -X utf8 -c '
+  0) scr_rc=0
+     scr="$(python3 "$SD/scripts/seed_edit_screen.py" screen --hunks "$STATE_DIR/hunks-final.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR" --final)" || scr_rc=$?
+     if [ "$scr_rc" -eq 0 ]; then
+       printf '%s' "$scr" | python3 -I -X utf8 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["text"])
+if d["questions"]:
+    print()
+    print("질문 묶음: " + json.dumps(d["questions"], ensure_ascii=False))
+' || scr_rc=$?
+     fi
+     if [ "$scr_rc" -ne 0 ]; then
+       echo "[spec-distill] 화면 조립 실패 — 줄 전체를 보인다(scr_rc=${scr_rc}). 질문은 권장 없이 낸다."
+       python3 -I -X utf8 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 if not d["hunks"]:
@@ -1275,7 +1352,8 @@ if not d["hunks"]:
 for h in d["hunks"]:
     print(h["render"])
     print()
-' "$STATE_DIR/hunks-final.json" ;;
+' "$STATE_DIR/hunks-final.json"
+     fi ;;
   3) echo "[spec-distill] 기준 사본이 없다(${SEED_BASE:-}) — 저자가 seed 를 고쳤는지 대조할 수 없다. seed 전문을 보이고 「이대로 둔다 / 멈춘다」를 물어라. 게이트를 띄우지 않는다." >&2 ;;
   *) echo "[spec-distill] 확정 직전 공시 검사 불가(rc $final_hunks_rc) — 엔진 자리가 없거나(STATE_DIR='${STATE_DIR:-}') 입력을 읽지 못했다. 게이트를 띄우지 않는다." >&2 ;;
 esac

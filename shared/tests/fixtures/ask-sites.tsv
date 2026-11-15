@@ -84,7 +84,8 @@ plugins/spec-distill/skills/request-framing/SKILL.md	떼기	**audit 템플릿 �
 plugins/spec-distill/skills/request-framing/SKILL.md	지시	그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄웁니다	렌더 첫 줄(상태와 경고)은 첫 호출	1
 plugins/spec-distill/skills/request-framing/SKILL.md	지시	3. **`fix` 는 사용자가 고른 대로만 닫는다.**	- 적용 — `docreview_anchor.py check-intent
 plugins/spec-distill/skills/request-framing/SKILL.md	떼기	질문은 「적용 / 적용하지 않음」 둘이다.	꼬리를 뗀 이름으로 읽는다
-plugins/spec-distill/skills/request-framing/SKILL.md	비움	- 덩어리가 있으면 **덩어리마다 질문 하나**	덩어리 본문(`render`)은 질문 텍스트에
+plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	- 덩어리가 있으면 **처분을 한 묶음으로 묻는다**	확정 게이트 직전 화면에는 권장이 없다.
+plugins/spec-distill/skills/request-framing/SKILL.md	떼기	고른 덩어리는 「그대로 둔다」 로,	
 plugins/spec-distill/skills/request-framing/SKILL.md	비움	- 기준 사본이 없으면(rc 3 — 원장이 정리됐다)	처분을 받은 뒤 순서가 계약입니다
 plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	게이트의 네 옵션은 이 모양을 그대로 씁니다	| ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 plugins/spec-distill/skills/request-framing/SKILL.md	꼬리	**다른 다음 단계(둘째 질문).**	
@@ -137,6 +138,7 @@ plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**9. N+1로 반�
 plugins/quality-gates/references/e2e.md	비움	`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다.	## 3. 걷기 규칙	1
 plugins/quality-gates/references/e2e.md	지시	증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다.	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.	1
 plugins/quality-gates/references/e2e.md	떼기	| 판정안 | 선택지 |	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.
+plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md	비움	**질문 (PR 범위 · k ≥ 1).**	그 자체가 라벨 유도다.	1
 
 # project-init · plugin-audit (Task 8)
 plugins/project-init/skills/project-init/SKILL.md	떼기	2. 있는 파일마다 `## Git Workflow` 섹션이 이미 있는지 확인	
