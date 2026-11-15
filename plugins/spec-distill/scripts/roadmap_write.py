@@ -300,9 +300,9 @@ def cmd_create(a) -> int:
     rows = R.parse_table(table_text, a.layout)
     idx = R.index_brief(read(a.brief), read(a.audit))
     history = R.history_entry(date, "처음 로드맵", [], a.approval).rstrip("\n")
-    once = {}   # 없을 때만 까는 파일(team) — 생성 기록에 적지 않는다
+    once, said = {}, []   # 없을 때만 까는 파일 · 화면 줄(team) — 생성 기록에 적지 않는다
     if team:
-        files, once = team_write.create_files(top, team, rows, idx, a.title, brief_rel, roadmap_rel, history,
+        files, once, said = team_write.create_files(top, team, rows, idx, a.title, brief_rel, roadmap_rel, history,
                                               Path(a.brief), W)
     else:
         files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
@@ -341,7 +341,7 @@ def cmd_create(a) -> int:
     if team:
         print("[spec-distill] 팀 폴더를 만들었다: %s (과제 %d개 · 없어서 깐 파일 %d개) — 검사기 네 목록이 비었고 team 나무 검사를 통과했다"
               % (team.dir, sum(1 for r in rows if r.kind == R.KIND_BUNDLE), len(once)))
-        for line in checked + screen:
+        for line in said + checked + screen:
             print(line)
     else:
         print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"

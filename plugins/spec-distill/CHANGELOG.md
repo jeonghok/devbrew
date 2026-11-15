@@ -20,6 +20,8 @@
 - 원자료 사본의 출처 줄이 적은 커밋은 레포에서 계속 읽혀야 한다(기본 브랜치에서 닿아야 한다). squash · rebase 머지나 고쳐 쓴 브랜치로 그 커밋이 사라지면 `team_layout.py check` 는 검사 불가(3)로 멈추고 `create --layout team` · `update` 는 쓰지 않고 멈춘다. `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 낸다. 이 판에는 출처 줄의 커밋을 고치는 명령이 없다(`original.md` 는 덧붙이기만 받는다) — 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나 머지 커밋으로 머지한다. 생성기 명령은 team 나무 검사의 알림 줄도 화면에 낸다.
 - 상태 계산이 기대는 읽기 전용 모듈에 `team_layout.py` · `team_check.py` · `team_files.py` 가 더해졌다.
 - `control_plane.py` 의 코드 지문 파일 목록에 `team_layout.py` 가 더해졌다.
+- framing 을 거친 인터뷰(상태 파일의 `seed:` 가 `없음` 이 아니다)에서 framing audit 를 못 찾으면 `create --layout team` · `original` 이 쓰지 않고 멈춘다(종료 코드 1) — 사유가 찾은 자리와 `original --framing-audit <경로>` 로 푸는 길을 적는다. 찾는 자리는 인터뷰와 같이 seed 파일 이름에서만 정한다(같은 폴더, `.md` → `.audit.md`) — seed 머리의 `audit_file` 은 따르지 않는다. seed 는 있는데 framing audit 가 처음부터 없던 인터뷰(인터뷰는 `audit=없음` 으로 받아 진행한다)도 멈춘다 — 푸는 길은 명시 경로뿐이다. `--framing-audit` 로 푼 팀 폴더는 `original` 을 다시 부를 때마다(재분해) 같은 인자를 준다 — 사본에 framing 구간이 이미 있어도 인자 없이 부르면 종료 코드 1 이다. framing 을 거치지 않은 인터뷰(`seed:` 가 `없음` 이거나 비었거나 상태 파일이 없다)는 그대로 `framing audit 없음` 표지와 함께 간다.
+- `framing audit 없음` 표지를 적을 때 `original` · `create --layout team` 이 화면에 한 줄을 낸다(종료 코드는 0 그대로) — framing 원문 · 질문 전체 없이 brief 쪽만 옮겼고, framing 을 거친 인터뷰라면 `original --framing-audit <경로>` 로 덧붙인다는 줄이다. 옛 형식 `create` 의 화면은 그대로다.
 
 ## [8.14.0] — 2026-11-14
 

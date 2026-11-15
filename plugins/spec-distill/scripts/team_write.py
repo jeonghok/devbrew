@@ -25,7 +25,15 @@ from roadmap_model import frontmatter, parse_roadmap, unquote  # noqa: E402
 
 PREFIX = "[spec-distill] "
 NO_FRAMING = "framing audit 없음"
+NO_FRAMING_SAID = ("framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `%s` 을 적었다. "
+                   "framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
+                   "덧붙인다" % NO_FRAMING)
 FRAMING_TYPE = "interview-seed-audit"
+SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 인터뷰
+FRAMING_LOST = ("상태 파일 %s 의 seed 는 %s 인데 framing audit 를 찾지 못했다 — %s. "
+                "framing 원문 · 질문 전체 없이는 원자료 사본을 만들지 않는다. framing audit 의 경로를 "
+                "`original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 주어 원자료 사본을 먼저 만든다"
+                "(`create --layout team` 이 멈췄으면 그 뒤에 다시 돈다)")
 FRAMING_HEADS = ("## 1. 원문", "## 2. 질문 전체", "## 3. 긴 초안")   # 원문 · 질문 전체 구간의 경계 줄(문자열 비교)
 UNCOMMITTED = "출처 파일에 커밋되지 않은 변경이 있다: %s — 먼저 커밋한 뒤 다시 돈다"
 NO_COMMIT = "출처 파일의 커밋을 정하지 못했다: %s — git log 종료 코드 %d · 출력 %r 이 커밋 번호가 아니다"
@@ -98,26 +106,24 @@ def _decoded(rel: str, data: bytes, W) -> str:
         raise W.Refused("UTF-8 로 읽지 못했다: %s (%s)" % (rel, exc))
 
 
-def _framing_from_state(top: Path, state_rel: str, W):
-    """상태 파일의 seed 가 가리키는 framing audit(레포 상대), 못 찾으면 None."""
+def _framing_from_state(top: Path, state_rel: str, W) -> tuple:
+    """(framing audit 의 레포 상대 경로, 못 찾은 사유) — 많아야 하나만 값이다. 상태 파일이 없거나 seed 가 비었거나 「없음」 이면
+    framing 을 거치지 않은 인터뷰라 (None, None) 이다. 찾는 자리는 인터뷰가 읽는 자리와 같다 — seed 와 같은 폴더에서
+    seed 파일 이름의 `.md` 를 `.audit.md` 로 바꾼 파일. seed 머리의 audit_file 은 읽지 않는다."""
     state = top / state_rel
     if not state.is_file():
-        return None
+        return None, None
     seed = unquote(frontmatter(W.read(state)).get("seed", "").strip())
-    if not seed or seed == "없음":
-        return None
-    seed_path = top / seed
-    if not seed_path.is_file():
-        return None
-    name = unquote(frontmatter(W.read(seed_path)).get("audit_file", "").strip())
-    if not name and seed_path.name.endswith(".md"):
-        name = seed_path.name[:-3] + ".audit.md"
-    if not name:
-        return None
-    if "/" in name or name in (".", ".."):
-        raise W.Refused("seed 의 audit_file 은 seed 와 같은 폴더의 파일 이름이다: %s (%r)" % (seed, name))
-    found = seed_path.parent / name
-    return W.rel(top, found) if found.is_file() else None
+    if not seed or seed == SEED_NONE:
+        return None, None
+    if not (top / seed).is_file():
+        return None, FRAMING_LOST % (state_rel, seed, "seed 파일 %s 이 없다" % seed)
+    if not seed.endswith(".md"):
+        return None, FRAMING_LOST % (state_rel, seed, "seed 파일 이름 %s 이 .md 로 끝나지 않아 framing audit 의 이름을 정하지 못한다" % seed)
+    named = seed[:-3] + ".audit.md"
+    if not (top / named).is_file():
+        return None, FRAMING_LOST % (state_rel, seed, "seed 파일 이름으로 정한 자리 %s 에 파일이 없다" % named)
+    return W.rel(top, top / named), None
 
 
 def _framing_parts(rel: str, data: bytes, W) -> list:
@@ -160,11 +166,13 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W) -> list:
         raise W.Usage("--brief 는 .md 파일이다: %s" % brief_rel)
     stem = brief_rel[:-3]
     audit_rel = stem + ".audit.md"
-    found = _framing_from_state(top, stem + ".state.md", W)
+    found, lost = _framing_from_state(top, stem + ".state.md", W)
     given = W.rel(top, framing_audit) if framing_audit else None
     if found and given and found != given:
         raise W.Usage("--framing-audit(%s) 이 인터뷰 상태 파일이 가리키는 framing audit(%s) 와 다르다 — 하나만 쓴다"
                       % (given, found))
+    if lost and not given:   # framing 을 거친 인터뷰다 — 그 원문 없이 조용히 가지 않는다
+        raise W.Refused(lost)
     framing = found or given
     out, note = [], ""
     if framing:
@@ -185,6 +193,13 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W) -> list:
     if not (a_sids and a_sids <= b_sids):
         out.append((audit_rel, a_commit, team_files.LABELS[2], a_first, a_lines, note))
     return out
+
+
+def framing_notice(existing: bytes, new: bytes) -> list:
+    """이번에 붙인 구간(existing 뒤에 new 가 더한 것) 가운데 표지 NO_FRAMING 이 붙은 것이 있으면 화면에 낼 한 줄, 없으면 []."""
+    before = len(team_files.parse_original(existing)) if existing else 0
+    added = team_files.parse_original(new)[before:]
+    return [PREFIX + NO_FRAMING_SAID] if any(NO_FRAMING in s.note.split(" · ") for s in added) else []
 
 
 # ── create --layout team ─────────────────────────────────────────────────────
@@ -227,11 +242,12 @@ def _intent_text(template: str, r, roadmap_rel: str) -> str:
 
 
 def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, history, brief: Path, W) -> tuple:
-    """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
-    없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused."""
+    """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}, 화면 줄들). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
+    없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused.
+    화면 줄은 원자료 사본을 framing 구간 없이 만들 때의 한 줄이다."""
     intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
     rewrite = {top / team.roadmap: render_team_roadmap(W.read(R.TEMPLATE), rows, idx, title, brief_rel, roadmap_rel, history)}
-    once = {}
+    once, said = {}, []
 
     def absent(rel: str) -> bool:
         _refuse_links(top, rel, W)
@@ -250,10 +266,11 @@ def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, hist
     if absent(team.original):
         data, _notes = team_files.extend_original(b"", wanted_sections(top, brief, None, W))
         once[top / team.original] = data.decode("utf-8")
+        said = framing_notice(b"", data)
     for path in rewrite:
         _refuse_links(top, path.relative_to(top).as_posix(), W)
     once.update(seed_common(top, team.roadmaps_dir, W))
-    return rewrite, once
+    return rewrite, once, said
 
 
 def check_rerun(top: Path, team, record: set, rewrite: dict, W):
@@ -389,6 +406,7 @@ def cmd_original(a, W) -> int:
             print(line)
         return 0
     added = len(team_files.parse_original(new)) - (len(team_files.parse_original(existing)) if existing else 0)
+    said = framing_notice(existing, new)
     shown = []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
     txn = W.Txn()
 
@@ -405,7 +423,7 @@ def cmd_original(a, W) -> int:
     for line in notes:
         print(PREFIX + line)
     print(PREFIX + "원자료 사본을 썼다: %s — 구간 %d개를 끝에 더했다" % (team.original, added))
-    for line in shown:
+    for line in said + shown:
         print(line)
     return 0
 
