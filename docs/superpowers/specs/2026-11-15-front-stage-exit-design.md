@@ -342,6 +342,7 @@ next_phase: superpowers:writing-plans
 - 실행 방식 · 2026-11-15 14:20 · writing-plans 가 권한 Subagent-driven 을 구현 담당자의 미리 받은 답으로 실었다. 계획 담당자의 마지막 보고 원문은 지휘 자원 폴더 relay/F4/plan-report-received.md 에 있다
 - 경로 예약 · 2026-11-16 01:16 · 구현이 로드맵 F4 경로 예약 밖 파일을 하나 더 고쳤다 — plugins/spec-distill/skills/pm-interview/references/state-file.md 의 「끝낼 때」 문장(끝 질문의 커밋 때)이다. 지휘자가 구현 도중 더한 일이고 앞의 둘과 함께 로드맵 수정 안에 싣는다
 - 구현 뒤 · 2026-11-16 01:16 · 구현 담당자의 끝 전체 스위트(4843d535)에 실패 다섯 줄이 있었다 — 셋은 알려진 실패이고 둘(test_findings_parser.sh 의 malformed Stage 3 · spec-distill test_detect_codex.sh 의 timeout_binary_missing)은 알려진 목록 밖인데 기본 브랜치 사본에서도 같은 칸이 실패했다고 보고했다. 진짜 실패인지는 머지 전 스위트 대조가 가른다. 마지막 리뷰의 고침 커밋(b79b33a6)은 전체 스위트가 아니라 좁은 러너로 쟀다 — 스위트 대조가 다시 잰다. 커밋 e6eecae7(테스트 보강)에는 Spec 트레일러가 없다 — 이력을 고쳐 쓰지 않았다. 마지막 리뷰가 「남김」 으로 본 Minor 들은 PR 본문에 싣고 받는 곳은 사용자에게 묻는다
+- 판 번호 · 2026-11-16 01:40 · PR 을 연 뒤 기본 브랜치가 움직였다(PR #290 — 옆 로드맵 R1 계획 2 가 spec-distill 8.17.0 을 먼저 썼다). plugin.json 은 두 쪽 값이 같아 충돌 없이 합쳐져 판이 오르지 않는 꼴이었다 — 기본 브랜치를 합치며 CHANGELOG 의 이 에픽 글을 새 머리 8.18.0 아래로 옮기고 plugin.json 을 8.18.0 으로 올렸다. 돌던 스위트 대조는 옛 기본 브랜치 기준이라 멈추고 다시 돈다. 옆 로드맵의 PR #292 가 8.17.1 을 쓴다 — 나중에 머지되는 쪽이 번호를 다시 잡는다
 
 ## 판정
 
