@@ -21,6 +21,10 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 그 내용을 payload `## 3. Open Questions` 에 한 항목으로 옮긴다. 박제된 차원은 「닫혔다」가
 아니라 「사용자가 지금은 안 하기로 했다」이므로, 다음 단계가 그것을 열린 질문으로 본다.
 
+**모델 판단으로 맹점 조사를 건너뛴 floor** — `floor:blind_spot` 의 `evidence` 가 `모델 판단으로 건너뜀` 으로
+시작하면(audit §2 의 `맹점 조사` 건너뜀 줄과 짝이다) 사용자-승인 박제와 같은 길로 간다 — 그 내용을 payload
+`## 3. Open Questions` 에 한 항목으로 옮겨 다음 단계가 열린 것으로 본다.
+
 ### 분해 판단 — Step A 직전
 
 종료가 정해진 뒤 brief 를 쓰기 전에 이 일을 spec 하나로 할지 나눌지 사용자와 정한다. 나누지 않으면 아래 Step A 부터 지금 흐름 그대로다 — 로드맵을 만들지 않는다.
@@ -134,9 +138,11 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
+   모델 판단으로 첫 범위 조사를 건너뛰었으면 `coverage-mapper 0` 으로 적는다 — 대기 줄 블록의
+   `- 모델 판단으로 건너뜀 — 범위 조사: <이유>` 줄이 그 0 을 받친다(줄이 없으면 게이트가 막는다).
    그 아래에 `${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md` 의 `### audit §2 줄` 형식으로 조사 호출 줄
    한 줄을 쓰고(state `research_dispatches` · `research_limit` · `research_log` 의 `device: orchestrator` 수), 이어서 state 본문
-   `## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다 — 상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 줄이
+   `## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다 — 상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 · 모델 판단으로 건너뜀 줄이
    사건 순간 거기 쌓였습니다. 다시 짓거나 요약하지 않고, 블록에 없는 줄을 기억으로 보태지 않습니다.
    게이트는 `포화 판정 <k>:` · `사용자 종료(@S<n>)` 줄의 **마지막**을 봅니다.
    같은 때에 state 본문 각 `## R<n>` 의 `- 대체됨: <앞 믿음> → <바로잡은 사실> (조사 <n>)` 줄을 라운드 순서대로 audit
