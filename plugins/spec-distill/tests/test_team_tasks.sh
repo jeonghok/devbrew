@@ -51,6 +51,7 @@ assert_not_contains "$(js "$T/s.json" "[b['id'] for b in r['blocks']]")" "fix-ty
 # ── 머리 branch 가 다른 브랜치를 가리키는 사본은 조용히 건너뛴다 ────────────
 g checkout -q -b fix/typo-copy fix/typo && put note.txt n && g commit -qm copy && g push -q origin fix/typo-copy && again || failed "fix/typo-copy"
 assert_eq "$(jobs) · $(jnotes)" "[('fix-typo', '진행 중', 'fix/typo')] · " "과제: 다른 브랜치의 사본은 조용히 건너뛴다(한 번만 센다)"
+assert_eq "$(jget fix-typo fix/typo tip)" "$(g rev-parse fix/typo)" "Q2: 사본이 생긴 뒤에도 과제의 끝은 머리 branch(fix/typo)의 끝이다 — 사본의 끝이 아니다"
 
 # ── 머리 branch 와 이름이 맞는 브랜치에 그 과제 폴더가 없다 — 세 갈래 ─────────
 newjob wrong fix/wrong-name fix/absent && g push -q origin fix/wrong-name && again || failed "fix/wrong-name"
@@ -82,6 +83,42 @@ assert_eq "$(jobs) · $(jnotes)" "[('fix-typo', '진행 중', 'fix/typo')] · " 
 newjob solo fix/solo && again || failed "fix/solo"
 assert_contains "$(jobs)" "('solo', '진행 중', 'fix/solo')" "과제: 한 번도 올리지 않은 로컬 브랜치의 과제도 싣는다"
 assert_contains "$(jget solo fix/solo notes)" "아직 안 올라옴 — fix/solo 의 로컬 끝" "과제: 로컬에만 있으면 그 과제의 notes 에 「아직 안 올라옴」"
+# 막힘 파일(Q7 — 「막힘」 은 막힘 파일 하나로만 알린다) — 단계는 그대로이고 그 과제의 notes 에 막힘 한 줄
+SOLO_BLK="$TM/jobs/solo/results/BLOCKED.md"
+put "$SOLO_BLK" "$(printf -- '---\ntype: job-blocked\nstage: implement\nattempt: 1\nhead: %s\n---\n\n## 무엇에 막혔나\n\n로드맵 밖 일의 답을 기다린다.\n\n## 풀려면 무엇이 필요한가\n\n리더가 범위를 정해 준다.' "$(g rev-parse HEAD)")" \
+  && g commit -qm "막힌 과제" && again || failed "solo 막힘"
+assert_eq "$(jget solo fix/solo stage) · $(jget solo fix/solo task_status)" "진행 중 · in_progress" "Q7: 막힘 파일이 있어도 과제의 단계는 그대로 진행 중"
+assert_contains "$(jget solo fix/solo notes)" "막힘: implement 시도 1 — $SOLO_BLK" "Q7: 과제의 notes 에 막힘 한 줄(블록과 같은 함수)"
+assert_eq "$(js "$T/s.json" "r['exit']")" "0" "Q7: 막힘은 과제의 사정이라 종료 코드를 바꾸지 않는다"
+# 결과 파일이 있는데 결정 기록 칸을 못 찾는 과제 — 단계는 Reader.progress 그대로(진행 중 · 그 사유)이고 「결과 받음인지 셀 수 없다」 한 줄을 job_notes 에
+# (결과 파일이 없으면 받음 줄을 볼 일이 없어 단계가 진행 중으로 확실하다 — 결과 파일을 먼저 연다)
+newjob norec fix/norec && [ "$(sync norec implement-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)")" = 0 ] \
+  && python3 - "$W/$TM/jobs/norec/INTENT.md" <<'PY' && g add -A -- "$TM" && g commit -qm "결정 기록 칸 깨짐" && g push -q origin fix/norec && again || failed "fix/norec"
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+if t.count("\n## 결정 기록") != 1:
+    sys.exit("결정 기록 제목이 한 번 나오지 않는다")
+open(p, "w", encoding="utf-8").write(t.replace("\n## 결정 기록", "\n## 결정 기록이 아닌 칸"))
+PY
+assert_eq "$(jget norec fix/norec stage) · $(jget norec fix/norec task_status)" "진행 중 · in_progress" "과제: 결정 기록을 못 읽은 과제의 단계는 블록과 같다(진행 중 — 작업 상태는 진행 중이든 결과 받음이든 in_progress)"
+assert_contains "$(jget norec fix/norec reason)" "결정 기록 읽기 불가 — " "과제: 그 근거는 결정 기록 읽기 불가"
+assert_contains "$(jnotes)" "로드맵 밖 과제 norec: $TM/jobs/norec/INTENT.md 의 결정 기록을 읽지 못해 결과 받음인지 셀 수 없다 — " \
+  "과제: 결정 기록을 못 읽으면 결과 받음인지 셀 수 없다고 알린다(자신 있는 진행 중으로만 내지 않는다)"
+assert_not_contains "$(jnotes)" "로드맵 밖 과제 solo:" "과제: 결정 기록을 읽은 과제에는 그 알림이 없다(양의 짝)"
+# 머리에 branch 키가 없는 과제 — 세지 않고 그 사실을 알린다
+newjob nobr fix/nobr && grep -v '^branch: ' "$W/$TM/jobs/nobr/INTENT.md" > "$T/nobr.md" && mv "$T/nobr.md" "$W/$TM/jobs/nobr/INTENT.md" \
+  && g add -A -- "$TM" && g commit -qm "머리 branch 없음" && g push -q origin fix/nobr && again || failed "fix/nobr"
+assert_not_contains "$(jobs)" "nobr" "과제: 머리에 branch 가 없는 과제는 세지 않는다"
+assert_contains "$(jnotes)" "로드맵 밖 과제 nobr 을 세지 않았다 — 머리에 branch 가 없다" "과제: 머리에 branch 가 없다고 알린다"
+# 머리가 가리키는 브랜치에 폴더는 있는데 그 INTENT.md 머리가 깨졌다 — 「폴더가 없다」 가 아니라 진짜 사유를 한 번
+newjob hb fix/hb-a fix/hb-b && g push -q origin fix/hb-a && g checkout -q -b fix/hb-b fix/hb-a \
+  && printf -- '---\ntype: job\nkind: task\nbranch: fix/hb-b\n' > "$W/$TM/jobs/hb/INTENT.md" && g add -A -- "$TM" && g commit -qm "머리 깨짐" \
+  && g push -q origin fix/hb-b && again || failed "fix/hb-b"
+assert_not_contains "$(jnotes)" "로드맵 밖 과제 hb 을 세지 않았다" "과제: 머리가 가리키는 끝에 폴더가 있으면 「이 과제 폴더가 없다」 고 하지 않는다"
+assert_eq "$(js "$T/s.json" "[n for n in r['job_notes'] if n.startswith('로드맵 밖 과제 hb ')]")" "['로드맵 밖 과제 hb 을 세지 못했다 — $TM/jobs/hb/INTENT.md 머리를 읽지 못했다 — INTENT 머리말이 닫히지 않았다']" \
+  "과제: 그 끝의 INTENT.md 를 읽지 못한 진짜 사유를 한 번 낸다"
+g checkout -q main && g branch -q -D fix/norec fix/nobr fix/hb-a fix/hb-b && g push -q origin --delete fix/norec fix/nobr fix/hb-a fix/hb-b || failed "fix-round 브랜치 지움"
 
 # ── 갈라진 브랜치 — 싣지 않고 알림 한 줄(Q10) ──────────────────────────────
 newjob split fix/split && g push -q origin fix/split || failed "fix/split"
@@ -162,27 +199,27 @@ assert_contains "$(jnotes)" "로드맵 밖 과제 dirint 을 세지 못했다 �
 assert_not_contains "$(jobs) $(jnotes)" "loose" "과제: 기본 브랜치의 INTENT.md 없는 폴더도 조용히 건너뛴다"
 assert_eq "$RC" "0" "과제: 세지 못한 알림도 종료 코드를 바꾸지 않는다"
 
-# ── git 이 실패한 자리 — 가짜 Git 으로 이름 목록 · 브랜치 끝 목록을 막는다: 세지 못했다고 알리고 없음으로 내지 않는다 ──
+# ── git 이 실패한 자리 — 가짜 Git 으로 과제 폴더 이름 목록 · 브랜치 끝 목록을 막는다: 읽지 못함은 검사 불가(3)와 사유 ──
+# (리더 결정 — 과제의 사정은 알림 · 읽지 못함은 검사 불가)
 python3 - "$S" "$W" "$RD" "$RM" > "$T/shut.txt" 2>&1 <<'PY'
-import sys
+import argparse, sys
 sys.path.insert(0, sys.argv[1])
-import roadmap_status, team_layout, team_status
-from roadmap_model import parse_roadmap
+import roadmap_status, team_layout
 root, rd, rm = sys.argv[2:5]
-team = team_layout.team_from_roadmap(rd, rm)
-real = roadmap_status.Git(root)
-main = real.commit("refs/remotes/origin/HEAD")
-blocks = parse_roadmap(real.blob(main, rm))[1]
+jobs_dir = team_layout.team_from_roadmap(rd, rm).jobs
+main = roadmap_status.Git(root).commit("refs/remotes/origin/HEAD")
 
 
 class Shut(roadmap_status.Git):
-    """where — main: 기본 브랜치의 이름 목록 · tip: 브랜치 끝의 이름 목록 · list: 브랜치 끝 목록을 읽지 못한다."""
+    """where — main: 기본 브랜치의 과제 폴더 이름 목록 · tip: 브랜치 끝의 과제 폴더 이름 목록 · list: 브랜치 끝 목록을
+    읽지 못한다(진짜 Git 처럼 failures 에 남긴다). none: 막지 않는다(양성 대조)."""
     def __init__(self, cwd, where):
         super().__init__(cwd)
         self.where = where
 
     def names(self, rev, folder):
-        if (self.where == "main" and rev == main) or (self.where == "tip" and rev != main):
+        if folder == jobs_dir and ((self.where == "main" and rev == main) or (self.where == "tip" and rev != main)):
+            self.fail("ls-tree", 128, "fatal: 이름 목록 막힘")
             return None
         return super().names(rev, folder)
 
@@ -193,15 +230,18 @@ class Shut(roadmap_status.Git):
         return super().unmerged_tips(base)
 
 
-for where in ("main", "tip", "list"):
-    jobs, notes = team_status.task_jobs(team_status.Reader(Shut(root, where), main, team, lambda p: None), blocks)
-    print("%s | %s | %s" % (where, [(j["id"], j["stage"]) for j in jobs], " / ".join(notes)))
+for where in ("none", "main", "tip", "list"):
+    report = roadmap_status.build(Shut(root, where), argparse.Namespace(roadmap=rm, roadmap_file=None, json=True))
+    print("%s | rc %d | %s | %s | %s" % (where, roadmap_status.exit_code(report), " / ".join(report["unknown_reasons"]),
+                                        [(j["id"], j["stage"]) for j in report["jobs"]], " / ".join(report["job_notes"])))
 PY
-assert_contains "$(cat "$T/shut.txt")" "main | [] | 로드맵 밖 과제를 세지 못했다 — 기본 브랜치의 $TM/jobs 를 읽지 못했다" "git 실패: 기본 브랜치의 과제 폴더 이름을 못 읽으면 세지 못했다고 한 줄"
-assert_grep "$(cat "$T/shut.txt")" "^tip \| \[\('fix-typo', '머지됨'\)\] \| .*로드맵 밖 과제를 다 세지 못했다 — 브랜치 끝 [0-9a-f]{8} 의 $TM/jobs 를 읽지 못했다" \
-  "git 실패: 브랜치 끝의 이름 목록을 못 읽으면 그 끝을 알리고 기본 브랜치의 과제는 그대로 싣는다"
-assert_grep "$(cat "$T/shut.txt")" "^list \| \[\('fix-typo', '머지됨'\)\] \| .*로드맵 밖 과제를 다 세지 못했다 — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" \
-  "git 실패: 브랜치 끝 목록을 못 읽으면 다 세지 못했다고 알린다"
+assert_grep "$(cat "$T/shut.txt")" "^none \| rc 0 \|  \| " "git 실패: 양성 대조 — 막지 않으면 종료 코드 0 · 검사 불가 사유 없음"
+assert_contains "$(cat "$T/shut.txt")" "main | rc 3 | git 읽기 실패 — git ls-tree 실패(rc 128): fatal: 이름 목록 막힘 | [] | 로드맵 밖 과제를 세지 못했다 — 기본 브랜치의 $TM/jobs 를 읽지 못했다" \
+  "git 실패: 기본 브랜치의 과제 폴더 이름을 못 읽으면 검사 불가(3) · 사유 한 줄 · jobs 는 비고 job_notes 에 무엇을 못 셌는지"
+assert_grep "$(cat "$T/shut.txt")" "^tip \| rc 3 \| git 읽기 실패 — git ls-tree 실패\(rc 128\): fatal: 이름 목록 막힘 \| \[\('fix-typo', '머지됨'\)\] \| .*로드맵 밖 과제를 다 세지 못했다 — 브랜치 끝 [0-9a-f]{8} 의 $TM/jobs 를 읽지 못했다" \
+  "git 실패: 브랜치 끝의 이름 목록을 못 읽으면 검사 불가(3) · 같은 실패는 사유 한 줄 · 기본 브랜치의 과제는 그대로 싣는다"
+assert_grep "$(cat "$T/shut.txt")" "^list \| rc 3 \| git 읽기 실패 — git log 실패\(rc 128\): fatal: 끝 목록 막힘 \| \[\('fix-typo', '머지됨'\)\] \| .*로드맵 밖 과제를 다 세지 못했다 — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" \
+  "git 실패: 브랜치 끝 목록을 못 읽으면 검사 불가(3)와 사유"
 assert_not_contains "$(cat "$T/shut.txt")" "Traceback" "git 실패: 죽지 않는다"
 
 # ── 얕은 클론 — 브랜치의 과제는 단계를 셀 이력이 없다: 「알 수 없음」 · 머지된 과제는 머지됨 ──

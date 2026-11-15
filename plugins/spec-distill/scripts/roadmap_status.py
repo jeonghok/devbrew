@@ -1322,10 +1322,15 @@ def build(git: Git, args) -> dict:
         if team and b["kind"] != "decision":   # team 칸은 team 로드맵의 보고에만(Q14)
             report["blocks"][-1].update(progress=b.get("progress"), job=b.get("job") or {
                 "intent": team.team.intent(b["id"]), "plan": None, "result": None})
-    if team:   # 로드맵 밖 과제는 따로 된 목록이다 — 블록 목록 · 종료 코드에 들지 않는다(Q14)
+    if team:   # 로드맵 밖 과제는 따로 된 목록이다 — 과제의 사정은 알림(job_notes) · 읽지 못함은 검사 불가
+        told_failures = len(git.failures)
         report["jobs"], report["job_notes"] = team_status.task_jobs(team, blocks)
         for j in report["jobs"]:
             j["task_status"] = task_status(j["stage"])
+        for f in git.failures[told_failures:]:   # 과제 훑기의 git 읽기 실패 — 블록의 것과 같은 길 · 같은 줄은 한 번
+            line = "git 읽기 실패 — %s" % f
+            if line not in report["unknown_reasons"]:
+                report["unknown_reasons"].append(line)
     return report
 
 

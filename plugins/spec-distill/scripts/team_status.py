@@ -24,6 +24,7 @@ UNKNOWN = "알 수 없음"
 IMPLEMENT = team_layout.STAGES[2]
 SHALLOW = "얕은 클론이라 받음 · 진행을 셀 이력이 없다 — `git fetch --unshallow` 뒤 다시 계산한다"
 RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정 줄을 다 읽지 못했다"
+RECORD_UNREAD = "결정 기록 읽기 불가 — "
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -240,14 +241,14 @@ class Reader:
                     else "대조를 기다린다" if result.end else "도는 중 — 끝 줄 없음"))
         if plain:
             if unread:
-                return "진행 중", "결정 기록 읽기 불가 — %s" % unread, specs, plans
+                return "진행 중", RECORD_UNREAD + unread, specs, plans
             if state == job_results.RECEIVED:
                 return "결과 받음", "결과 받음 줄 있음: %s" % latest, specs, plans
             return "진행 중", "브랜치 있음", specs, plans
         when, why = self._approval(intent)
         block["approved"] = when
         if why:
-            return "설계 중", "결정 기록 읽기 불가 — %s" % why, specs, plans
+            return "설계 중", RECORD_UNREAD + why, specs, plans
         if not when:
             design = team_layout.DESIGN_FILE
             return "설계 중", ("%s 있음 · spec 승인 줄 없음" % design if specs else "브랜치 있음 · %s 없음" % design), specs, plans
@@ -309,7 +310,8 @@ def task_jobs(reader, blocks: list) -> tuple:
     기본 브랜치에 있으면 「머지됨」. 기본 브랜치에 들어가지 않은 브랜치 끝(Git.unmerged_tips)에서 찾은 과제는 머리
     `branch` 가 가리키는 브랜치의 끝(read_tip)에서 다시 읽어, 같은 폴더가 있고 머리가 그 이름일 때만 센다 — 다른 브랜치의
     사본은 같은 짝이라 한 번만 세어진다(Q2). 단계 · 알림 · 진행 칸은 블록과 같은 Reader.progress 가 채운다(설계 없는 흐름 —
-    진행 중 · 결과 받음, Q12). 갈라진 브랜치는 싣지 않고 알림만(Q10). 세지 못한 것은 알림으로 — 없음으로 내지 않는다."""
+    진행 중 · 결과 받음, Q12). 갈라진 브랜치는 싣지 않고 알림만(Q10). 세지 못한 것도 알림으로 — 없음으로 내지 않는다. git 이 읽지 못한 것은
+    git.failures 에도 남아 부르는 쪽(build)이 검사 불가로 올린다."""
     git, main, team = reader.git, reader.main, reader.team
     if main is None:
         return [], ["%s를 세지 못했다 — 기본 브랜치를 모른다" % OUTSIDE]
@@ -355,17 +357,26 @@ def task_jobs(reader, blocks: list) -> tuple:
             elif meta is not None and meta.get("kind") == team_files.KIND_TASK:
                 pairs.add((name, meta.get("branch", "")))
     for name, branch in sorted(pairs):
-        tip, tip_note, split = read_tip(git, branch) if branch else (None, None, None)
+        if not branch:
+            note("%s %s 을 세지 않았다 — 머리에 branch 가 없다" % (OUTSIDE, name))
+            continue
+        tip, tip_note, split = read_tip(git, branch)
         if split:
             note("%s %s: %s" % (OUTSIDE, name, split))
             continue
-        text, meta, _why = _intent_head(git, tip, team.intent(name)) if tip else (None, None, None)
+        text, meta, why = _intent_head(git, tip, team.intent(name)) if tip else (None, None, None)
+        if why:   # 폴더는 있는데 INTENT.md 를 읽지 못했다 — 「폴더가 없다」 가 아니라 그 사유를 낸다
+            uncounted(name, why)
+            continue
         if meta is None or meta.get("branch") != branch:
             note("%s %s 을 세지 않았다 — 머리의 branch(%s) 와 이름이 맞는 브랜치에 이 과제 폴더가 없다" % (OUTSIDE, name, branch))
             continue
         block = {"id": name, "kind": team_files.KIND_TASK, "fields": {}, "reserved": _head_paths(meta.get("paths", "")),
                  "notes": [tip_note] if tip_note else []}
         stage, reason, _specs, _plans = reader.progress(tip, block, 1)
+        if reason.startswith(RECORD_UNREAD):   # 단계는 블록과 같게 두되 결과 받음일 수 있음을 알린다
+            note("%s %s: %s 의 결정 기록을 읽지 못해 결과 받음인지 셀 수 없다 — %s"
+                 % (OUTSIDE, name, team.intent(name), reason[len(RECORD_UNREAD):]))
         jobs.append(_job(team, name, text, meta, stage, reason, tip, block))
     branches = {}
     for j in jobs:
