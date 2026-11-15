@@ -3,7 +3,7 @@
 ## [8.16.0] — 2026-11-15
 
 ### Added
-- `references/existing-first.md` — 설계문서의 「있는 것 검토」 절을 적는 법. 맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이고, 찾은 곳과 후보를 결론보다 먼저 적고, 후보마다 정보 여섯 칸(공식인가 · 널리 쓰임과 재는 단위 · 유지 · 안정 단계 · 실행하고 닿는 것과 알려진 보안 문제 · 라이선스와 의무)을 출처 · 날짜와 함께 보이며, 직접 만들기는 후보별 구체 이유와 사용자 승인을 거친다.
+- `references/existing-first.md` — 설계문서의 「있는 것 검토」 절을 적는 법. 맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이고, 찾은 곳과 후보를 결론보다 먼저 적고, 바깥 후보마다 정보 여섯 칸(공식인가 · 널리 쓰임과 재는 단위 · 유지 · 안정 단계 · 실행하고 닿는 것과 알려진 보안 문제 · 라이선스와 의무)을 출처 · 날짜와 함께 보이며, 직접 만들기는 후보별 구체 이유와 사용자 승인을 거친다.
 - `references/existing-first.NOTICE.txt` — 위 파일 뒤쪽 영어 절의 고지. 그 절은 공개 skill search-first(`affaan-m/everything-claude-code` 의 `skills/search-first/SKILL.md`, 커밋 `0765f7a2ca2bd5df214d3aa7ba7e7ac19db8b189`, MIT, Copyright (c) 2026 Affaan Mustafa)를 가져와 덜어 낸 것이다 — 저작권 줄 · MIT 전문 · 뺀 절 · 제자리 수정이 이 파일에 있다.
 
 ### Changed
