@@ -332,6 +332,8 @@ assert_eq "$(js "$T/s.json" "[j['stage'] for j in r['jobs'] if j['id']=='e2e-job
 assert_eq "$(jget e2e-job fix/e2e reason) · $RC" "결과 받음 줄 있음: implement-1.md · 0" "끝에서 끝: 그 근거 · 종료 코드 0"
 [ "$(snap)" = "$BEFORE" ] && ok "끝에서 끝: 상태 계산은 team 로드맵을 읽기만 한다(작업 나무 · git 상태 · ref 가 그대로)" \
   || no "끝에서 끝: 상태 계산 전후로 작업 나무가 달라졌다"
+# 전후 비교는 이 한 번의 실행만 본다 — 앞선 상태 계산이 이미 남긴 파일(같은 바이트로 다시 만든 것)은 위 비교에 안 보인다
+assert_eq "$(g status --porcelain --untracked-files=all --ignored)" "" "끝에서 끝: 상태 계산을 여러 번 돈 뒤에도 작업 나무에 git 이 모르는 파일이 없다"
 SHOW_RC=0; (cd "$W" && python3 "$CP" show "$RM") > "$T/show.txt" 2>&1 || SHOW_RC=$?
 assert_eq "$SHOW_RC" "0" "끝에서 끝: 현황 rc 0"
 assert_grep "$(cat "$T/show.txt")" "^로드맵 밖 과제:$" "끝에서 끝: 현황에 「로드맵 밖 과제:」 절"

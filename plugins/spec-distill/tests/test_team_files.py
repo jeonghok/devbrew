@@ -277,5 +277,47 @@ class TeamRoadmapTemplate(unittest.TestCase):   # 잔여 — 머리말 · 넘김
             self.assertRaises(R.TableError, TW.render_team_roadmap, template, [], None, "t", "b", "r", "h")
 
 
+class _ShutGit:   # rev-parse 가 실패하는 git — 아무것도 읽지 못한다
+    failures = []
+
+    def run(self, *args):
+        return 128, ""
+
+    def blob(self, rev, path):
+        return None
+
+    def absent(self, rev, path):
+        return False
+
+
+class BranchesWithoutFixture(unittest.TestCase):   # 분기 × 픽스처 대조가 찾은, 단언이 닿지 않던 갈래
+    def test_shallow_question_unanswered_is_not_deep(self):   # team_status.Reader.shallow — 얕은지 묻지 못함
+        import team_status as TS
+        reader = TS.Reader(_ShutGit(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
+        self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")
+        self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")   # 한 번만 묻고 같은 답
+
+    def test_unreadable_copy_has_no_framing_pair(self):   # team_write.framing_pair — 사본을 읽지 못함 · 빈 사본
+        import team_write as TW
+        self.assertIsNone(TW.framing_pair(b"not a section line\n", "docs/b.md"))   # parse_original 이 FormatError 를 낸다
+        self.assertIsNone(TW.framing_pair(b"", "docs/b.md"))
+
+    def test_origin_table_separator_with_three_cells(self):   # check_bundle_coverage — 구분 행이 칸 넷이 아님
+        import check_bundle_coverage as cbc
+        spec = "# s\n\n## 원문 대조\n\n| 원문 | 설계 | 처리 | 근거 |\n|---|---|---|\n| a | b | 그대로 | — |\n"
+        self.assertEqual(cbc.origin_notes(spec), (["원문 대조 표를 읽지 못했다 — 원문 대조 표 구분 행이 칸 넷이 아니다"], []))
+
+    def test_unchecked_impl_still_shows_notices(self):   # check_bundle_coverage.render_impl — 검사 불가(3)에도 알림 줄
+        import check_bundle_coverage as cbc
+        self.assertEqual(cbc.render_impl({"status": 3, "reason": "사유", "notices": ["n1"]}), "구현 대조 검사 불가 — 사유\n알림 — n1")
+
+    def test_neighbor_decisions_skip_and_unread_tree(self):   # spec_review_bundle._team_decisions — 과제 칸 없는 이웃 · 읽을 트리 없음
+        import spec_review_bundle as srb
+        blocks = [{"id": "P1", "stage": "끝남"},
+                  {"id": "E2", "stage": "준비", "tip": None, "job": {"intent": "docs/r/t/jobs/E2/INTENT.md"}}]
+        self.assertEqual(srb._team_decisions(_ShutGit(), None, blocks, {"P1", "E2"}),
+                         ["  E2 — 셀 수 없음: 과제 파일을 읽지 못했다 — docs/r/t/jobs/E2/INTENT.md"])
+
+
 if __name__ == "__main__":
     unittest.main()
