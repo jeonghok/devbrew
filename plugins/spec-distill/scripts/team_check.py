@@ -23,7 +23,6 @@ import team_layout as L  # noqa: E402
 
 GIT_ALLOWED = frozenset({"cat-file", "log", "rev-parse"})
 PREFIX = "[spec-distill] "
-_PLAN_RE = re.compile(r"plan-([0-9]+)\.md")
 
 
 # ── git 읽기 ─────────────────────────────────────────────────────────────────
@@ -51,6 +50,23 @@ def _commit_of(top, ref: str):
     return sha if rc == 0 and re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", sha) else None
 
 
+def _has_path(top, commit: str, rel: str) -> bool:
+    """그 커밋의 트리에 그 경로의 항목이 있다(파일 바이트는 읽지 않는다)."""
+    rc, _out = git_bytes(top, "rev-parse", "--verify", "--quiet", "%s:%s" % (commit, rel))
+    return rc == 0
+
+
+def _span(data: bytes, s) -> bytes:
+    """구간 s 의 출처 줄 범위(first–last)를 data 에서 잘라 이은 바이트 — 「같은 줄」 의 뜻."""
+    return b"".join(F.byte_lines(data)[s.first - 1:s.last])
+
+
+# 출처 커밋에서 파일을 읽지 못한 사정마다의 말 — [0] 기준과 같음(알림) · [1] 기준과 다름 · 기준에 없음 · 기준에서 못 읽음 · [2] 기준 모름
+_SRC_UNREAD = ("를 읽지 못해", "의 파일을 읽지 못했고", "의 파일을 읽지 못했다")              # 커밋을 읽지 못함
+_SRC_ABSENT = ("에 그 파일이 없어", "에 그 파일이 없고", "에 그 파일이 없다")                # 커밋은 있고 경로가 없음
+_SRC_BROKEN = ("에서 그 파일을 읽지 못해", "에서 그 파일을 읽지 못했고", "에서 그 파일을 읽지 못했다")  # 경로는 있고 읽지 못함
+
+
 # ── 읽기 ─────────────────────────────────────────────────────────────────────
 
 def _bytes(path: Path):
@@ -72,17 +88,6 @@ def _meta(text: str) -> dict:
     return {k: M.unquote(v) for k, v in M.frontmatter(text).items()}
 
 
-def _scope(value) -> str:
-    """로드맵 범위 칸 → `한다 … / 안 한다 …` 한 줄(INTENT.md 의 목표 · 하지 않을 것을 만든 꼴)."""
-    if isinstance(value, str):
-        return value
-    do = [i[len("한다: "):] for i in value if i.startswith("한다: ")]
-    dont = [i[len("안 한다: "):] for i in value if i.startswith("안 한다: ")]
-    if do and dont and len(do) + len(dont) == len(value):
-        return "한다 %s / 안 한다 %s" % (" · ".join(do), " · ".join(dont))
-    return M.field_text(value)
-
-
 # ── 검사 ─────────────────────────────────────────────────────────────────────
 
 def _intent_problems(rel: str, text, want: dict) -> list:
@@ -102,10 +107,15 @@ def _plan_problems(top: Path, team, job: str, branches: int) -> list:
     folder = top / team.job(job)
     out = []
     for name in sorted(os.listdir(str(folder))) if folder.is_dir() else []:
-        m = _PLAN_RE.fullmatch(name)
-        if m and not 1 <= int(m.group(1)) <= branches:
+        n = L.plan_number(name)
+        digits = L.plan_shape_digits(name)
+        if n is not None and 1 <= n <= branches:
+            continue
+        if n is None and digits is not None and 1 <= int(digits) <= branches:
+            out.append("%s: 계획 번호 %s 는 0 으로 시작하지 않는 수여야 한다(plan-%d.md)" % (team.job(job, name), digits, int(digits)))
+        elif digits is not None:
             out.append("%s: 계획 번호 %s 가 이 과제의 브랜치 수 %d 를 넘는다 — 계획 하나가 브랜치 하나다"
-                       % (team.job(job, name), m.group(1), branches))
+                       % (team.job(job, name), digits, branches))
     return out
 
 
@@ -189,7 +199,7 @@ def check_tree(top: Path, team, base=None) -> tuple:
                 errors.append("%s: 지시 원문 범위 %d–%d 가 %s 의 %d줄 밖이다" % (intent_rel, a, z, team.original, total))
         fields = b.get("fields") or {}
         notes.extend("%s: %s" % (intent_rel, line)
-                     for line in F.intent_drift(intent_text, M.field_text(fields.get("의도", "")), _scope(fields.get("범위", ""))))
+                     for line in F.intent_drift(intent_text, M.field_text(fields.get("의도", "")), F.scope_line(fields.get("범위", ""))))
 
     # 5 · 6. 블록이 없는 과제 폴더
     jobs_dir = top / team.path(L.JOBS_DIR)
@@ -217,19 +227,41 @@ def check_tree(top: Path, team, base=None) -> tuple:
             errors.append("%s: 결과 폴더가 없다" % team.results(name))
         errors.extend(_plan_problems(top, team, name, 1))
 
-    # 8. 옮긴 구간이 출처와 바이트가 같다
+    # 8 · 9 가 같은 기준을 본다 — base 가 있으면 그것, 없으면 기본 브랜치
+    ref = base or M.DEFAULT_REF
+    commit = _commit_of(top, ref)
+
+    # 8. 옮긴 구간이 출처와 바이트가 같다 — 출처 커밋의 파일을 읽지 못하면 기준의 같은 파일 · 같은 줄과 견준다
     for s in sections:
         where = "%s %d–%d행(출처 %s · %s %d–%d행)" % (team.original, s.start, s.start + s.last - s.first,
                                                    s.source, s.label, s.first, s.last)
         blob = show(top, s.commit, s.source)
-        if blob is None:
-            unknown.append("%s: 출처 커밋 %s 의 파일을 읽지 못했다" % (where, s.commit[:12]))
-        elif b"".join(F.byte_lines(blob)[s.first - 1:s.last]) != s.body:
-            errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
+        if blob is not None:
+            if _span(blob, s) != s.body:
+                errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
+            continue
+        lead = "%s: 출처 커밋 %s" % (where, s.commit[:12])
+        if _commit_of(top, s.commit) is None:
+            say = _SRC_UNREAD
+        elif not _has_path(top, s.commit, s.source):
+            say = _SRC_ABSENT
+        else:
+            say = _SRC_BROKEN
+        if commit is None:
+            unknown.append("%s %s — 기준(%s)을 몰라 같은 줄과 견주지 못했다" % (lead, say[2], ref))
+            continue
+        at_base = show(top, commit, s.source)
+        if at_base is None and not _has_path(top, commit, s.source):
+            unknown.append("%s %s 기준 %s 에도 그 파일이 없다" % (lead, say[1], ref))
+        elif at_base is None:
+            unknown.append("%s %s 기준 %s 의 그 파일도 읽지 못했다" % (lead, say[1], ref))
+        elif _span(at_base, s) == s.body:
+            notes.append("%s %s 기준 %s 의 같은 줄과 견줬다 — 같다" % (lead, say[0], ref))
+        else:
+            unknown.append("%s %s 기준 %s 의 같은 줄과도 다르다"
+                           " — 사본이 틀렸는지 출처가 그 뒤 고쳐졌는지 알 수 없다" % (lead, say[1], ref))
 
     # 9. 덧붙이기만 — 기준 커밋의 사본이 지금 사본의 앞머리다
-    ref = base or M.DEFAULT_REF
-    commit = _commit_of(top, ref)
     if commit is None and base:
         unknown.append("%s: 기준 %s 를 읽지 못했다" % (team.original, base))
     elif commit is None:
