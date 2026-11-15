@@ -486,6 +486,13 @@ assert_eq "$(j q1 '[(q["multi"], q["question"], [o["label"] for o in q["options"
   "[(False, '저자 편집 1곳을 그대로 둘까요?', ['그대로 둔다', '되돌린다'])]" "AC7: 덩어리 하나면 단일 선택이다"
 why q1 "1\t$FA"; scr q1
 assert_eq "$(j q1 '[o["label"] for o in d["questions"][0]["options"]]')" "['그대로 둔다 (권장)', '되돌린다']" "AC7: 확인된 덩어리 하나면 「그대로 둔다 (권장)」 이 첫 자리다"
+KEEP_GIVE='내줌: 편집이 틀렸어도 그 글이 seed 에 남아 다음 단계로 넘어간다'
+assert_eq "$(j q1 'd["questions"][0]["options"][0]["description"]')" \
+  "얻음: 이 편집이 seed 에 남는다(뺀 문장 1개 · 더한 문장 1개 · 그대로 0문장 · 고친 이유: 지적 「SCR_FIX_APPLY」(${FA}) — 사용자가 「적용」 으로 처분) · ${KEEP_GIVE}" \
+  "설명: 「그대로 둔다」 는 얻음에 덩어리 요약과 고친 이유(권장의 근거)를 싣고 내줌 한 구절을 단다"
+assert_eq "$(j q1 'd["questions"][0]["options"][1]["description"]')" \
+  "얻음: 이 편집을 지우고 기준 사본의 글로 돌아간다 · 내줌: 편집이 고친 것도 함께 사라진다 — 적용하기로 한 지적이면 다시 고쳐야 한다" \
+  "설명: 「되돌린다」 는 얻음 · 내줌 한 줄이다"
 mkn q2 2; scr q2
 assert_eq "$(qs q2)" "[(True, [1, 2])]" "AC7: 덩어리 둘이면 여러 개 고르기 질문 하나에 둘 다 든다"
 mkn q3 3; scr q3
@@ -503,6 +510,15 @@ why q5 "3\t$FA" "5\t$DA"; scr q5
 assert_eq "$(j q5 '[[o["label"] for o in q["options"]] for q in d["questions"]]')" \
   "[['3번 그대로 둔다 (권장)', '1번 그대로 둔다', '2번 그대로 둔다'], ['5번 그대로 둔다 (권장)', '4번 그대로 둔다']]" "AC7: 번호 순으로 나눈 뒤 질문 안에서만 권장을 앞에 둔다"
 assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 권장이 있어도 한 질문의 덩어리 번호는 이어져 있다"
+assert_eq "$(j q5 '[o["description"] for o in d["questions"][1]["options"]][0]')" \
+  "얻음: 이 편집이 seed 에 남는다(뺀 문장 1개 · 더한 문장 1개 · 그대로 0문장 · 고친 이유: 지적 「SCR_DEC_ADOPT」(${DA}) — 사용자가 채택) · ${KEEP_GIVE}" \
+  "설명: 여러 개 고르기의 선택지도 얻음에 덩어리 요약과 고친 이유를 싣는다"
+form_bad() {   # form_bad <이름> → 「얻음:」 으로 시작하고 「 · 내줌: 」 이 한 번인 꼴이 아닌 설명 수
+  j "$1" 'sum(1 for q in d["questions"] for o in q["options"] if not (o["description"].startswith("얻음: ") and o["description"].count(" · 내줌: ") == 1))'
+}
+assert_eq "$(form_bad q5) $(form_bad q9) $(form_bad q1)" "0 0 0" "설명: 권장이 있든 없든 모든 선택지 설명이 「얻음: … · 내줌: …」 꼴이다(q5 · q9 · q1)"
+cp -R "$TMP/q5" "$TMP/q5f"; scr q5f --final
+assert_eq "$(form_bad q5f) $(j q5f 'any(h["recommend"] for h in d["hunks"])')" "0 False" "설명: 확정 직전 화면(권장 없음)도 같은 꼴이다"
 python3 - "$S" > "$TMP/sizes.txt" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])

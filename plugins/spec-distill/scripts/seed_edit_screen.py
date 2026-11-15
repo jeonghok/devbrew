@@ -292,6 +292,14 @@ def split_sizes(n: int) -> list[int]:
 
 
 MULTI_QUESTION = "그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요."
+KEEP_GIVE = "내줌: 편집이 틀렸어도 그 글이 seed 에 남아 다음 단계로 넘어간다"
+REVERT_DESC = ("얻음: 이 편집을 지우고 기준 사본의 글로 돌아간다 · "
+               "내줌: 편집이 고친 것도 함께 사라진다 — 적용하기로 한 지적이면 다시 고쳐야 한다")
+
+
+def keep_desc(v: dict) -> str:
+    """「그대로 둔다」 의 설명 — 얻음에 덩어리 요약과 고친 이유(권장의 근거)를 싣는다."""
+    return "얻음: 이 편집이 seed 에 남는다(%s · 고친 이유: %s) · %s" % (v["summary"], v["reason"], KEEP_GIVE)
 
 
 def build_questions(views: list[dict]) -> list[dict]:
@@ -303,10 +311,8 @@ def build_questions(views: list[dict]) -> list[dict]:
         keep = "그대로 둔다" + (" (권장)" if v["recommend"] else "")
         return [{"header": "저자 편집", "question": "저자 편집 1곳을 그대로 둘까요?", "multi": False,
                  "hunk_ids": [v["id"]],
-                 "options": [{"label": keep, "description": "이 편집이 seed 에 남는다", "hunk_id": v["id"]},
-                             {"label": "되돌린다",
-                              "description": "이 편집을 지우고 기준 사본의 글로 돌아간다",
-                              "hunk_id": v["id"]}]}]
+                 "options": [{"label": keep, "description": keep_desc(v), "hunk_id": v["id"]},
+                             {"label": "되돌린다", "description": REVERT_DESC, "hunk_id": v["id"]}]}]
     sizes = split_sizes(len(views))
     out, start = [], 0
     for size in sizes:
@@ -317,7 +323,7 @@ def build_questions(views: list[dict]) -> list[dict]:
         for v in ordered:
             n = v["id"]
             options.append({"label": "%d번 그대로 둔다" % n + (" (권장)" if v["recommend"] else ""),
-                            "description": "%s · %s" % (v["summary"], v["reason"]), "hunk_id": n})
+                            "description": keep_desc(v), "hunk_id": n})
         first, last = group[0]["id"], group[-1]["id"]
         out.append({"header": "저자 편집" if len(sizes) == 1 else "편집 %d–%d" % (first, last),
                     "question": MULTI_QUESTION, "multi": True,
