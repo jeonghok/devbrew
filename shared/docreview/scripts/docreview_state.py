@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate · ask-material · advice · log-decision
+observe-diff · gate · ask-material · gate-file · advice · log-decision
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -45,6 +45,12 @@ try:
     import docreview_ask as _ask
 except ImportError:  # pragma: no cover
     _ask = None
+# 형제 모듈 — 마지막 경로 성분의 링크를 따라가지 않는 writer. 전문 파일(`gate-file`)만 쓴다. 없으면 None 이고
+# `gate-file` 이 `writer_module_missing` 으로 멈춘다.
+try:
+    import nofollow_write as _nfw
+except ImportError:  # pragma: no cover
+    _nfw = None
 
 # 값 해석(leaf 형제) — 모든 라운드의 필수 경로라 `try` 로 감싸지 않는다.
 import docreview_config as _cfg
@@ -2713,6 +2719,63 @@ def cmd_ask_material(a) -> int:
     return 0
 
 
+GATE_FILE_LINK = "링크다 — 따라가지 않는다"
+
+
+def _gate_file_items(st, n) -> list:
+    """이번 라운드(`#r<n>.`)에 판정을 지난 지적(`rejected` 가 아닌 것 — 참고로 간 항목 포함) → 원문 항목 목록, id 순.
+    두 칸은 질문 재료와 같은 값(`_ask_fields`)이다."""
+    tag = "#r%d." % n
+    out = []
+    for fid in sorted(st["findings"]):
+        f = st["findings"][fid]
+        if tag not in fid or f.get("state") == "rejected":
+            continue
+        out.append(dict(_ask_fields(f), id=fid, summary=f.get("summary"),
+                        evidence=f.get("evidence"), anchor=f.get("anchor")))
+    return out
+
+
+def _read_old_gate_file(path):
+    """옛 전문 파일 글 — 없으면 None. 링크를 따라가지 않고 일반 파일만 읽는다(아니면 OSError)."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "일반 파일이 아니다", path)
+        return fh.read().decode("utf-8")
+
+
+def cmd_gate_file(a) -> int:
+    """전문 파일 — `<state-dir>/gate-r<라운드>.md` 를 쓴다(설계 §3-2). **쓰기 명령**이지만 원장은 바꾸지 않는다.
+    「지금 게이트 글」 구역은 부를 때마다 `gate --render` 글로 새로 쓰고, 「이 라운드의 지적 원문」 구역은 옛 파일의
+    글을 그대로 잇는다(없으면 새로 짓는다). 펜스가 덧붙인 「다른 채널의 경고」 구역은 다시 쓰면 사라진다.
+    마지막 경로 성분이 링크면 쓰지 않는다 — writer 는 링크를 따라가지 않지만 그 이름을 새 파일로 바꾸기 때문이다."""
+    if _ask is None:
+        return fail("ask_module_missing", detail="docreview_ask.py 형제 사본이 이 스크립트 옆에 없다")
+    if _nfw is None:
+        return fail("writer_module_missing", detail="nofollow_write.py 형제 사본이 이 스크립트 옆에 없다")
+    st = load_state(a.state_dir)
+    g = gate_summary(st)
+    n = g["round"]
+    path = os.path.join(os.path.realpath(a.state_dir), "gate-r%d.md" % n)
+    if os.path.islink(path):
+        return fail("gate_file_write_failed", path=path, detail=GATE_FILE_LINK)
+    try:
+        originals = _ask.keep_originals(_read_old_gate_file(path))
+        if originals is None:
+            originals = _ask.originals_block(_gate_file_items(st, n))
+        text = _ask.gate_file_text(n, render_gate(st, g), originals)
+        _nfw.replace_bytes(path, text.encode("utf-8"))
+    except (OSError, UnicodeError) as e:
+        return fail("gate_file_write_failed", path=path, detail=str(e))
+    _emit({"ok": True, "path": path,
+           "shown": _ask.display_path(path, os.getcwd(), os.path.expanduser("~")), "round": n})
+    return 0
+
+
 def cmd_advice_list(a) -> int:
     """참고(advisory) 목록 — 읽기 전용. 쓰기 플래그가 없는 하위 명령이라 펜스의 원장 쓰기 락이 이름만으로 가른다."""
     if _adv is None:
@@ -2886,6 +2949,7 @@ def build_parser() -> argparse.ArgumentParser:
     x = sd(P("ask-material")); x.add_argument("--gate-file-result", default=None)
     x.add_argument("--fix-rows", action="store_true")
     x.add_argument("--ask-rows", action="store_true"); x.set_defaults(fn=cmd_ask_material)
+    x = sd(P("gate-file")); x.set_defaults(fn=cmd_gate_file)
     x = sd(P("advice")); x.add_argument("--render", action="store_true")
     x.add_argument("--cap", type=_ascii_int, default=None); x.add_argument("--where", default=None)
     x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)

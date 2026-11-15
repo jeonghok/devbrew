@@ -194,3 +194,150 @@ case_ask_material_module_missing() {           # 원장 스크립트만 복사�
     "형제 부재: ask-material 은 ask_module_missing rc 1 로 멈추고 재료를 내지 않는다"
   rm -rf "$d" "$t"
 }
+
+# ── 전문 파일(`gate-file`) — 라운드마다 파일 하나, 구역 둘(설계 §3-2 · AC5) ─────────────────
+gfile() { py docreview_state.py gate-file --state-dir "$1"; }
+gfile_prep() {   # case_ask_material_decide_bundle 과 같은 준비 → 부른 쪽의 local d · fid 에 담는다
+  d="$(ask_prep_fields)" || return 1
+  fid="$(jget "$d/fin.json" '[x["id"] for x in d["findings"] if x["disposition"]=="decide" and "다른 것을 겨눈다" in x["summary"]][0]')"
+}
+
+case_gate_file_two_zones_match_render() {
+  local d fid out p; gfile_prep || { no "case_gate_file_two_zones_match_render: 준비 실패"; return; }
+  out="$(gfile "$d")"; p="$(printf '%s' "$out" | jgets 'd["path"]')"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["ok"], d["round"]')" "(True, 1)" "전문 파일: 성공 JSON"
+  assert_eq "${p##*/}" "gate-r1.md" "전문 파일: 라운드마다 파일 하나(gate-r<라운드>.md)"
+  local zone1; zone1="$(awk '/^## 지금 게이트 글$/{f=1;next} /^## 이 라운드의 지적 원문$/{f=0} f' "$p" | sed -e '$ d')"
+  assert_eq "$zone1" "$(py docreview_state.py gate --state-dir "$d" --render)" "전문 파일: 「지금 게이트 글」 구역이 그때의 게이트 글과 같다"
+  assert_file_grep "$p" '^  고치면: §2 를 브리프 §1 의 goal 한 문장으로 되돌린다$' "전문 파일: 원문 구역에 대체안 전문"
+  assert_file_grep "$p" '^  그대로 두면: plan 이 그 자리를 스스로 지어낸다$' "전문 파일: 결정이 아닌 지적(고칠 곳)의 원문도 있다"
+  local zone2; zone2="$(sed -n '/^## 이 라운드의 지적 원문$/,$p' "$p")"   # 게이트 글도 같은 꼴의 「고치면:」 줄을 싣는다
+  assert_grep "$zone2" '^  고치면: §2 를 브리프 §1 의 goal 한 문장으로 되돌린다$' "전문 파일: 대체안 전문은 원문 구역 안에 있다"
+  assert_grep "$zone2" "^  자리: #12-files-to-modify$" "전문 파일: 원문 구역의 자리 칸은 지적의 앵커다"
+  assert_grep "$zone2" "^  근거: —$" "전문 파일: 근거가 없으면 「—」"
+  rm -rf "$d"
+}
+case_gate_file_originals_preserved() {         # 같은 준비 → gate-file → 한 결정을 adopt → gate-file
+  local d fid p a b; gfile_prep || { no "case_gate_file_originals_preserved: 준비 실패"; return; }
+  p="$(gfile "$d" | jgets 'd["path"]')"
+  a="$(sed -n '/^## 이 라운드의 지적 원문$/,$p' "$p")"
+  py docreview_state.py decide --state-dir "$d" --id "$fid" --choice adopt --quote="고친다" >/dev/null
+  gfile "$d" >/dev/null; b="$(sed -n '/^## 이 라운드의 지적 원문$/,$p' "$p")"
+  assert_eq "$b" "$a" "전문 파일: 결정을 반영한 뒤 다시 써도 원문 구역의 글이 같다"
+  assert_file_grep "$p" '다음 라운드에서 반영이 확인돼야 닫힌다' "전문 파일 짝: 「지금 게이트 글」 구역은 새 게이트 글로 바뀌었다"
+  # 새로 지어도 같은 글이 나오는 준비라 위 단언만으로는 「잇는다」와 「새로 짓는다」를 못 가른다 — 옛 구역에만 있는 줄로 가른다.
+  printf -- '- 옛 라운드 글에만 있는 줄 (zzzz0001#r1.9)\n' | py nofollow_write.py append --out "$p"
+  gfile "$d" >/dev/null
+  assert_file_grep "$p" '^- 옛 라운드 글에만 있는 줄 \(zzzz0001#r1\.9\)$' "전문 파일: 원문 구역은 옛 파일의 글을 그대로 잇는다(새로 짓지 않는다)"
+  rm -rf "$d"
+}
+case_gate_file_channel_zone_not_duplicated() { # gate-file → 펜스가 하듯 채널 구역을 덧붙임 → gate-file
+  local d fid p; gfile_prep || { no "case_gate_file_channel_zone_not_duplicated: 준비 실패"; return; }
+  p="$(gfile "$d" | jgets 'd["path"]')"
+  printf '\n## 다른 채널의 경고\n번호 대조 경고 2개\n' | py nofollow_write.py append --out "$p"
+  assert_eq "$(grep -c '^## 다른 채널의 경고$' "$p")" "1" "전문 파일 전제: 펜스가 채널 구역을 덧붙였다"
+  gfile "$d" >/dev/null
+  assert_eq "$(grep -c '^## 다른 채널의 경고$' "$p")" "0" "전문 파일: 다시 쓰면 옛 채널 구역이 사라진다(펜스가 다시 덧붙인다)"
+  assert_eq "$(grep -c '^## 이 라운드의 지적 원문$' "$p")" "1" "전문 파일: 원문 구역은 하나다"
+  assert_file_absent "$p" "번호 대조 경고 2개" "전문 파일: 옛 채널 줄이 원문 구역에 섞여 남지 않는다"
+  rm -rf "$d"
+}
+case_gate_file_advice_included() {             # case_AC1_brief_overdesign_only 와 같은 준비(참고 항목이 생기는 프로필)
+  local d p adv_id
+  d="$(route_r1 "$PROF_MC/brief.md" "$FX/brief-sample.md" "$FX/critic-brief-overdesign.txt" "$FX/codex-failed.yaml" "$FX/recritic-empty.txt")" \
+    || { no "case_gate_file_advice_included: 준비 실패"; return; }
+  adv_id="$(st_yaml "$d" '[v["id"] for v in (st.get("advice") or {}).values()][0]')"
+  assert_grep "$adv_id" '#r1\.[0-9]+$' "전문 파일 전제: 참고 원장에 라운드 1 항목이 있다"
+  p="$(gfile "$d" | jgets 'd["path"]')"
+  assert_file_grep "$p" "^- .* \(${adv_id}\)$" "전문 파일: 참고로 간 항목도 원문 구역에 있다"
+  rm -rf "$d"
+}
+case_gate_file_round_and_rejected() {          # 기본 route_r1(재비판이 하나를 기각) → 라운드 2(case_ask_material_absent_fields 와 같은 준비)
+  local d p1 p2 r1sum; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")" || { no "case_gate_file_round_and_rejected: 준비 실패"; return; }
+  local rej; rej="$(jget "$d/fin.json" 'd["rejected"][0]["id"]')"
+  p1="$(gfile "$d" | jgets 'd["path"]')"
+  assert_not_contains "$(cat "$p1")" "($rej)" "전문 파일: 재비판이 기각한 지적은 원문 구역에 없다"
+  assert_file_grep "$p1" "^- .* \(${rej%.*}\.2\)$" "전문 파일 짝: 같은 버킷의 기각되지 않은 지적은 있다"
+  r1sum="$(cksum < "$p1")"
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$(critic_now "$d" "$FX/critic-nolayer2.txt")" --codex "$(codex_now "$d" "$FX/codex-failed.yaml")" > "$d/prep2.json"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
+  p2="$(gfile "$d" | jgets 'd["path"]')"
+  assert_eq "${p2##*/}" "gate-r2.md" "전문 파일: 라운드 2 는 새 파일이다"
+  assert_eq "$(cksum < "$p1")" "$r1sum" "전문 파일: 앞 라운드 파일은 그대로 남는다"
+  assert_eq "$(sed -n '/^## 이 라운드의 지적 원문$/,$p' "$p2" | grep -c '#r1\.')" "0" "전문 파일: 원문 구역에는 이번 라운드 지적만 있다"
+  assert_file_grep "$p2" '^- .* \([0-9a-f]+#r2\.[0-9]+\)$' "전문 파일 짝: 이번 라운드 지적은 있다"
+  rm -rf "$d"
+}
+case_gate_file_symlink_refused() {
+  local d fid out rc; gfile_prep || { no "case_gate_file_symlink_refused: 준비 실패"; return; }
+  ln -s "$d/elsewhere.md" "$d/gate-r1.md"
+  out="$(gfile "$d" 2>&1)"; rc=$?
+  assert_eq "$rc" "1" "전문 파일: 마지막 성분이 링크면 쓰지 않는다(rc 1)"
+  assert_contains "$out" "gate_file_write_failed" "전문 파일: 사유를 낸다"
+  assert_contains "$out" "링크다 — 따라가지 않는다" "전문 파일: 링크라서 멈췄다고 적는다"
+  [ ! -e "$d/elsewhere.md" ] && ok "전문 파일: 링크가 가리키는 곳에 쓰지 않았다" || no "전문 파일: 링크를 따라가 썼다"
+  [ -L "$d/gate-r1.md" ] && ok "전문 파일: 링크를 일반 파일로 바꾸지 않았다" || no "전문 파일: 링크 자리를 새 파일로 바꿨다"
+  assert_contains "$(mat "$d" --gate-file-result "$out")" "전문: 전문 파일을 쓰지 못했다 — gate_file_write_failed · 링크다 — 따라가지 않는다" \
+    "전문 파일: 실패 결과를 질문 재료에 넘기면 그 사유가 전문 줄에 나온다"
+  rm -rf "$d"
+}
+case_gate_file_ledger_untouched() {
+  local d fid before; gfile_prep || { no "case_gate_file_ledger_untouched: 준비 실패"; return; }
+  before="$(cksum < "$d/docreview-state.md")"; gfile "$d" >/dev/null
+  assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "전문 파일: 원장은 바뀌지 않는다"
+  rm -rf "$d"
+}
+case_gate_file_success_feeds_material() {
+  local d fid out; gfile_prep || { no "case_gate_file_success_feeds_material: 준비 실패"; return; }
+  out="$(cd "$d" && gfile "$d")"
+  assert_eq "$(printf '%s' "$out" | jgets 'd["shown"]')" "gate-r1.md" "전문 파일: 작업 폴더 아래면 보이는 경로가 상대 경로다"
+  assert_contains "$(mat "$d" --gate-file-result "$out")" "전문: gate-r1.md" "전문 파일: 성공 결과를 넘기면 보이는 경로가 전문 줄이 된다"
+  rm -rf "$d"
+}
+case_gate_file_module_missing() {              # 원장 스크립트와 질문 모듈만 복사한 트리 — gate-file 만 사유를 내고 멈춘다
+  local d fid t rc; gfile_prep || { no "case_gate_file_module_missing: 준비 실패"; return; }
+  t="$(mktemp -d -t gfclone-XXXXXX)"
+  cp -L "$SCRIPTS/docreview_state.py" "$SCRIPTS/docreview_config.py" "$SCRIPTS/docreview_ask.py" "$t/"
+  python3 "$t/docreview_state.py" gate-file --state-dir "$d" >"$t/out" 2>"$t/err"; rc=$?
+  assert_eq "$rc $(grep -c writer_module_missing "$t/err") $(wc -c < "$t/out" | tr -d ' ') $(ls "$d" | grep -c '^gate-r')" "1 1 0 0" \
+    "형제 부재: gate-file 은 writer_module_missing rc 1 로 멈추고 파일을 쓰지 않는다"
+  rm -rf "$d" "$t"
+}
+case_gate_file_is_write_command() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+import argparse, docreview_state as S
+sub = next(a for a in S.build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+print("gate-file" in sub.choices, "ask-material" in sub.choices)')"
+  assert_eq "$got" "True True" "하위 명령: gate-file 과 ask-material 이 있다"
+  assert_not_contains "$(grep -n '^AC8_READ_ONLY=' "$REPO_ROOT/plugins/spec-distill/tests/test_ledger_wiring.sh")" "gate-file" "하위 명령: gate-file 은 읽기 전용 목록에 없다"
+}
+case_ask_display_path() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+from docreview_ask import display_path as p
+print(p("/w/repo/.claude/x.md", "/w/repo", "/h")); print(p("/h/a/x.md", "/w/repo", "/h")); print(p("/o/x.md", "/w/repo", "/h"))
+print(p("/w/repository/x.md", "/w/repo", "/h"))')"
+  assert_eq "$got" ".claude/x.md
+~/a/x.md
+/o/x.md
+/w/repository/x.md" "보이는 경로: 작업 폴더 아래면 상대, 홈 아래면 ~, 아니면 그대로(이름의 앞만 같은 폴더는 아래가 아니다)"
+}
+case_ask_originals_block_unit() {
+  local got; got="$(PYTHONPATH="$SCRIPTS" python3 -c '
+import docreview_ask as A
+print(A.originals_block([{"id": "a#r1.1", "summary": "요약 하나", "if_unfixed": None, "replacement": "줄 하나\n줄 둘",
+                          "evidence": None, "anchor": "#2-goals"}]))
+print(A.originals_block([]))
+t = A.gate_file_text(2, "게이트", "원문")
+print(repr(t))
+print(repr(A.keep_originals(t)), repr(A.keep_originals(t + "\n## 다른 채널의 경고\nx\n")), repr(A.keep_originals("# 다른 글\n")))')"
+  assert_eq "$got" "- 요약 하나 (a#r1.1)
+  그대로 두면: (리뷰어가 안 적음)
+  고치면: 줄 하나
+    줄 둘
+  근거: —
+  자리: #2-goals
+없음 — 이 라운드에 판정을 지난 지적이 없다
+'# 리뷰 2라운드 — 게이트 전문\n\n## 지금 게이트 글\n게이트\n\n## 이 라운드의 지적 원문\n원문\n'
+'원문' '원문' None" "원문 구역: 칸마다 한 줄 · 없는 칸은 부재 표기 · 여러 줄은 들여 잇는다 · 파일 꼴 · 옛 구역을 그대로 읽어 낸다"
+}

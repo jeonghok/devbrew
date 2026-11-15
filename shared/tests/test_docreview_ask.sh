@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/scripts/docreview_ask.py shared/docreview/scripts/docreview_advice.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_config.py plugins/*/references/docreview-profiles/*.md shared/tests/fixtures/docreview/**
+# guards: shared/docreview/scripts/docreview_ask.py shared/docreview/scripts/docreview_advice.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_config.py shared/docreview/scripts/nofollow_write.py plugins/*/references/docreview-profiles/*.md shared/tests/fixtures/docreview/**
 #
-# 질문에 싣는 짧은 경고 줄과 상태 줄의 행동 — 설계 2026-11-15-present-tradeoffs AC6.
+# 질문에 싣는 짧은 경고 줄 · 상태 줄 · 질문 재료 · 전문 파일의 행동 — 설계 2026-11-15-present-tradeoffs AC4–AC6.
 # 케이스 본문은 fixtures/docreview/cases_ask.sh 에 있다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/scripts/docreview_ask.py"
   echo "shared/docreview/scripts/docreview_advice.py"; echo "shared/docreview/scripts/docreview_route.py"
   echo "shared/docreview/scripts/docreview_state.py"; echo "shared/docreview/scripts/docreview_config.py"
+  echo "shared/docreview/scripts/nofollow_write.py"
   git ls-files -- 'plugins/*/references/docreview-profiles/*.md'
   bash "$(dirname "$0")/docreview_fixture_corpus.sh"; exit 0
 fi
@@ -38,4 +39,16 @@ case_ask_material_extra_round
 case_ask_material_approve_with_open_tail
 case_ask_material_gate_file_failed
 case_ask_material_module_missing
+case_gate_file_two_zones_match_render
+case_gate_file_originals_preserved
+case_gate_file_channel_zone_not_duplicated
+case_gate_file_advice_included
+case_gate_file_round_and_rejected
+case_gate_file_symlink_refused
+case_gate_file_ledger_untouched
+case_gate_file_success_feeds_material
+case_gate_file_module_missing
+case_gate_file_is_write_command
+case_ask_display_path
+case_ask_originals_block_unit
 finish

@@ -102,6 +102,73 @@ def full_text_line(result) -> str:
     return FULL_TEXT_FAILED + "결과를 읽지 못했다"
 
 
+# ── 전문 파일(`gate-file`) ─────────────────────────────────────────────────
+# 구역 머리 — 엔진은 앞 둘을 쓰고, 셋째는 부른 펜스가 파일 끝에 덧붙인다(다시 쓰면 사라진다).
+ZONE_GATE = "## 지금 게이트 글"
+ZONE_ORIGINALS = "## 이 라운드의 지적 원문"
+ZONE_CHANNELS = "## 다른 채널의 경고"
+GATE_FILE_HEAD = "# 리뷰 %d라운드 — 게이트 전문"
+ORIGINALS_NONE = "없음 — 이 라운드에 판정을 지난 지적이 없다"
+_NO_VALUE = "—"
+_ORIGINAL_FIELDS = (("그대로 두면", "if_unfixed"), ("고치면", "replacement"), ("근거", "evidence"),
+                    ("자리", "anchor"))
+
+
+def _original_value(label: str, value, absent: str) -> list:
+    """원문 한 칸 → 줄 목록. 첫 줄은 「  <이름>: 」 뒤에, 나머지 줄은 네 칸 들여 잇는다 — 들여 쓴 줄은 구역 머리
+    (`## `)와 섞이지 않는다. 비었으면 부재 표기."""
+    text = "" if value is None else str(value).strip()
+    lines = text.splitlines() if text else [absent]
+    rest = ["    " + ln if ln.strip() else "" for ln in lines[1:]]
+    return ["  %s: %s" % (label, lines[0])] + rest
+
+
+def originals_block(items: list) -> str:
+    """판정을 지난 지적 → 「이 라운드의 지적 원문」 구역 글. 항목마다 `- <요약> (<id>)` 와 들여쓴 넷.
+
+    항목 dict 의 키: `id` · `summary` · `if_unfixed` · `replacement` · `evidence` · `anchor`(없으면 None).
+    앞 둘의 부재 표기는 `ABSENT`, 근거 · 자리는 「—」다. 순서는 받은 그대로다."""
+    if not items:
+        return ORIGINALS_NONE
+    out = []
+    for it in items:
+        out.append("- %s (%s)" % (_fold(it.get("summary")) or _NO_VALUE, it["id"]))
+        for label, key in _ORIGINAL_FIELDS:
+            out.extend(_original_value(label, it.get(key), ABSENT.get(key, _NO_VALUE)))
+    return "\n".join(out)
+
+
+def keep_originals(old_text):
+    """옛 전문 파일 글 → 그 「이 라운드의 지적 원문」 구역 글(머리 줄 다음부터 채널 구역 머리 앞, 없으면 끝까지 —
+    끝 개행은 뗀다). 구역이 없거나 비었으면 None — 부른 쪽이 새로 짓는다."""
+    if old_text is None:
+        return None
+    lines = old_text.split("\n")
+    try:
+        start = lines.index(ZONE_ORIGINALS) + 1
+    except ValueError:
+        return None
+    end = lines.index(ZONE_CHANNELS, start) if ZONE_CHANNELS in lines[start:] else len(lines)
+    kept = "\n".join(lines[start:end]).rstrip("\n")
+    return kept if kept.strip() else None
+
+
+def gate_file_text(round_n: int, gate_text: str, originals: str) -> str:
+    """전문 파일 글 — 머리 · 「지금 게이트 글」 구역 · 「이 라운드의 지적 원문」 구역. 끝은 개행 하나."""
+    return "\n".join([GATE_FILE_HEAD % round_n, "", ZONE_GATE, gate_text.rstrip("\n"), "",
+                      ZONE_ORIGINALS, originals.rstrip("\n")]) + "\n"
+
+
+def display_path(path: str, cwd: str, home: str) -> str:
+    """「전문」 줄에 싣는 경로 — `cwd` 아래면 상대 경로, 아니고 `home` 아래면 `~/…`, 둘 다 아니면 그대로.
+    「아래」는 경로 성분 경계로 가른다(`/w/repo` 아래에 `/w/repository` 는 없다). 뿌리(`/`)는 기준으로 쓰지 않는다."""
+    for base, lead in ((cwd, ""), (home, "~/")):
+        base = (base or "").rstrip("/")
+        if base and path.startswith(base + "/") and len(path) > len(base) + 1:
+            return lead + path[len(base) + 1:]
+    return path
+
+
 def fixed_desc_line(label: str, key: str, n=None) -> str:
     """「<라벨> = <평문> | <얻음 · 내줌>」 — 고정 설명 한 줄. `n` 은 열린 지적 수를 받는 키에만 준다."""
     plain, trade = FIXED_DESC[key]
