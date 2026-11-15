@@ -341,6 +341,49 @@ case_degraded_session() {
     && ok "review-i1.diff 는 비어 있다" || no "review-i1.diff 가 없거나 비지 않았다"
 }
 
+# review-i<N>.mode — 실제로 쓴 --mode 한 줄. 다섯 모드와 기준선 degraded 갈래 모두 남긴다(publish 는 && 사슬이라
+# 그 파일이 없는 길이 하나라도 있으면 rc 4 로 멈춘다). 이번 실행이 실패하면 앞 실행의 파일이 남지 않는다.
+mode_file_is() {   # mode_file_is <기대 모드> <msg>
+  local f="$D/review-i1.mode"
+  if [ -f "$f" ] && [ "$(cat "$f")" = "$1" ] && [ "$(wc -l < "$f" | tr -d ' ')" = 1 ] \
+     && [ "$(wc -c < "$f" | tr -d ' ')" = "$(( ${#1} + 1 ))" ]; then ok "$2"
+  else no "$2"; printf '      want:  %s\n      got:   %s\n' "$1" "$(cat "$f" 2>/dev/null || echo '(없음)')"; fi
+}
+
+case_mode_file_records_the_mode() {
+  echo "[review-i<N>.mode — 실제로 쓴 모드 한 줄(다섯 모드 · degraded)]"
+  mkfix
+  echo 'y = 2' > "$R/lib/b.py"; g "$R" commit -q -am t1
+  echo 'x = 2' > "$R/src/a.py"
+  local mode tree
+  for mode in session branch paths range; do
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "$mode: rc 0"
+    mode_file_is "$mode" "$mode: review-i1.mode 는 「${mode}」 한 줄"
+  done
+  tree=$(git -C "$R" rev-parse "HEAD^{tree}")
+  printf 'status: ok\nboundary: %s\ntree: %s\n' "$C0" "$tree" > "$D/topic-scope.txt"
+  rd --mode topic --scope-file "$D/topic-scope.txt"
+  assert_eq "$RC" 0 "topic: rc 0"
+  mode_file_is topic "topic: review-i1.mode 는 「topic」 한 줄"
+  # 기준선 degraded 갈래 — 다섯 파일을 비워 두는 길도 mode 를 옮긴다.
+  g "$R" checkout -q --detach
+  for mode in session branch paths; do
+    rd_mode "$mode"
+    assert_eq "$RC" 0 "degraded $mode: rc 0"
+    assert_eq "$(field degraded_reason "$OUT")" detached "degraded $mode: degraded_reason: detached"
+    mode_file_is "$mode" "degraded $mode: review-i1.mode 는 「${mode}」 한 줄"
+  done
+  # 이번 실행이 범위 파일 검사에서 멈추면(rc 2) 앞 실행의 mode 가 남아 읽히지 않는다.
+  printf 'boundary: -\ntree: %s\n' "$tree" > "$D/topic-scope.txt"
+  echo session > "$D/review-i1.mode"
+  rd --mode topic --scope-file "$D/topic-scope.txt"
+  assert_eq "$RC" 2 "boundary 가 '-' 면 rc 2"
+  [ -e "$D/review-i1.mode" ] && no "실패한 실행 뒤 앞 실행의 review-i1.mode 가 남았다" \
+    || ok "실패한 실행 뒤 앞 실행의 review-i1.mode 가 없다"
+  [ -z "$(find "$D" -name '.review-diff.*' -print)" ] && ok "임시 폴더가 남지 않는다" || no "임시 폴더가 남았다"
+}
+
 # origin/HEAD 가 없는 레포 — 기준선 사유와 review-diff: 로 시작하는 고치는 법 한 줄.
 case_no_default_branch_session() {
   echo "[origin/HEAD 없음 — no-default-branch]"
@@ -1302,6 +1345,7 @@ case_topic_uses_boundary_tree
 case_settings_change_falls_back
 case_filtered_empty
 case_degraded_session
+case_mode_file_records_the_mode
 case_no_default_branch_session
 case_paths_mode
 case_no_ext_diff

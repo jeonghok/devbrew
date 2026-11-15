@@ -104,6 +104,7 @@
 - **Law 1 · Law 3 — 나누는 결정이 spec 앞에 있다** — 일을 spec 하나로 할지 나눌지를 brief 를 쓰기 전에 신호를 보이고 사용자가 승인 게이트로 정하며(숫자 컷오프 없음), 로드맵 쓰기는 «쓰고 검증하거나 원래대로 되돌린다» 로 fail-closed 다. 재분해는 승인 뒤에만 같은 로드맵 위에서 일어나 다음 사이클이 같은 지도를 이어 받는다.
 - **Law 3 (Compounding) — 로드맵 온톨로지 · 사실마다 주인 하나** — 로드맵이 가장 상류의 정본이고, 객체 · 링크 · 주인을 `references/roadmap-ontology.md` 표 하나에 둔다. 다시 불러도 같은 자리에서 이어 가도록 이어 갈 기록은 git 이 추적하는 설계문서 절에, 이 기계에서만 뜻이 있는 것만 기계 상태에 둔다(`scripts/conductor_state.py`). 링크 칸 이름의 실재는 `tests/test_roadmap_ontology.py` 가 잰다.
 - **Law 1 · P17 — 흐름을 고정하지 않는다** — 정석 흐름은 기본값이고 일의 모양이 다르면 모델이 고르되 사용자가 정한다: 에픽 넘김 줄은 블록의 `흐름:` 을 따르고, 재분해 신호는 열린 목록이며, 게이트 ③ 은 로드맵 에픽에서 「이 에픽 다시 설계」 를 고를 수 있고, 진행 게이트는 기타 칸의 「여기서 계속」 을 받는다. 승인 게이트는 설계가 받지 않기로 한 번호를 보여 사용자가 「반영」 으로 되돌릴 수 있다(N18). 문면은 `tests/test_epic_handoff.sh` · `test_decompose_surface.sh` · `test_review_handoff_order.sh` · `test_seed_at_path_handoff.sh` · `test_conducting_reference.sh` 가 잠근다. 인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고 이름이 고른 단계를 따르며, trivia 는 한 문장 기준이고 패턴은 예시다 — 이 문면은 `tests/test_end_gates.sh` 가 잠근다.
+- **Law 1 · Law 3 — 내용마다 집 하나** — 팀 형식은 사용자 원자료를 한 벌(`intent/original.md`)만 두고 과제 파일은 줄 범위로 가리킨다. 옮긴 구간은 출처 커밋과 바이트가 같아야 하고 덧붙이기만 받는다(`scripts/team_layout.py check`). 경로와 이름은 `scripts/team_layout.py` 한 곳에서 나오고 형식은 `references/team-files.md` 가 정본이다.
 
 ### Principles 흡수
 
@@ -161,12 +162,14 @@
 - `agents/relay-checker.md` — 쓰기 권한 없는 옮김 대조 agent(`Read, Grep, Glob`). 에픽이 끝나면 지휘자가 하위의 질문을 사용자에게 옮긴 기록마다 선택지 수 · 순서 · 라벨 · 「(권장)」 과 사용자 답이 그대로 갔는지 대조한다.
 - spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「인터뷰 다시 열기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).
 - `scripts/roadmap_write.py create · update · extract · migrate` — 인터뷰가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. create 는 상태 파일 `## 생성 기록` 에 적힌 파일만 덮어쓰고, 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 검증이 실패하면 새로 만든 파일은 지웁니다. `--audit` 은 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 하고(아니면 사용법 오류 2), update 는 묶음 번호 순서만 다른 표를 바뀜으로 세지 않습니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 중 하나라도 비지 않으면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다. migrate 는 옛 꼴 블록을 새 형식(범위 하위 항목)으로 다시 씁니다 — 각 블록의 `- 범위:` 줄만 고치고 바꿀 수 없는 것은 1 로 거절하며 CRLF 를 지킵니다.
+- `scripts/roadmap_write.py create --layout team · original --brief · job new` — team 형식(로드맵 머리말 `layout: team`)의 팀 폴더를 만듭니다. `create --layout team` 은 로드맵 · `RULES.md` · 원자료 사본 `intent/original.md` · 에픽마다 `jobs/<번호>/INTENT.md` · `sources.md` · `results/` 를 한 거래로 쓰고, 로드맵 폴더에 없으면 역할 문서 넷(`leader` · `designer` · `writer` · `worker` 의 `CLAUDE.md`)과 `HANDBOOK.md` 를 틀에서 깝니다(있는 파일은 바이트를 바꾸지 않고 `.claude/` 아래에는 쓰지 않습니다). `original --brief <brief> --out <로드맵 폴더>` 는 framing audit · brief · 인터뷰 audit 의 사용자 말을 출처 커밋과 함께 `original.md` 끝에 덧붙이고, `job new` 는 단순 작업의 과제 폴더를 만듭니다(지시 원문은 표준 입력 그대로). team 형식의 `update` 는 있던 INTENT.md 를 다시 쓰지 않습니다 — 과제의 목표 · 범위 · 지시 원문 범위가 바뀌어 손으로 고칠 것이 있으면 그 글을 내고 4 로, 없으면 0 으로 끝납니다(지시 원문 범위만 다르면 아무것도 쓰지 않고 4 입니다). 이 판의 team `update` 는 머지된 에픽을 가려 보호하지 못하고 그 사실을 화면에 알립니다. 지휘 절차는 아직 옛 형식(묶음 파일)을 쓰고, 새 형식을 기본으로 켜는 일은 지휘 절차 개편이 합니다. 역할 문서는 알림이고 막는 것은 도구 권한이다 — 역할 문서의 하지 않을 일은 도구를 막지 않습니다. 형식은 `references/team-files.md` 에 있습니다.
+- `scripts/team_layout.py check --roadmap <로드맵>` — team 팀 폴더의 구조와 원자료 사본의 세 검사(줄 범위 · 덧붙이기만 · 출처와 바이트 같음)를 한 번에 봅니다. 읽기만 합니다. 종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가(어긋남보다 앞섭니다). 출처와 바이트 같음은 원자료 사본의 출처 줄이 적은 커밋을 읽어 견주므로, 그 커밋은 레포에서 계속 읽혀야 합니다(기본 브랜치에서 닿아야 합니다). squash · rebase 머지나 고쳐 쓴 브랜치로 그 커밋이 사라지면 `check` 는 검사 불가(3)로 멈추고 `create --layout team` · `update` 는 쓰지 않고 멈춥니다. `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 냅니다. 이 판에는 출처 줄의 커밋을 고치는 명령이 없습니다(`original.md` 는 덧붙이기만 받습니다). 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나, 머지 커밋으로 머지해 출처 커밋이 남게 합니다.
 
 경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보입니다 — 종료 코드를 바꾸지 않고, 에픽은 병렬로 갑니다. 충돌은 머지 때 풉니다(나중에 머지하는 PR 이 main 을 merge 하고 스위트를 다시 돌립니다).
 
 머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
 
-종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가이고, `roadmap_status.py` 는 4 (로드맵이 아직 기본 브랜치에 없음)를 더 내고, `control_plane.py show --tasks` 도 4 를 낼 수 있습니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
+종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가이고, `roadmap_status.py` 는 4 (로드맵이 아직 기본 브랜치에 없음)를 더 내고, `control_plane.py show --tasks` 도 4 를 낼 수 있습니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류 · 4 사람이 손으로 고칠 것이 남음(team 형식의 재분해 — 다른 바뀜은 쓴 뒤이고, 지시 원문 범위만 다르면 아무것도 쓰지 않은 채)입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
 
 ### 상태줄
 
@@ -236,6 +239,8 @@ interview_dir: docs/superpowers/interview/
 parallel_default: 3
 branch_prefix: feature/
 shared_files: plugin.json, CHANGELOG.md, README.md
+rules_budget: 8192
+handbook_budget: 16384
 # test_command: "<스위트를 한 번 도는 명령>"
 # test_failure_pattern: "<실패 줄에서 테스트 이름을 뽑는 정규식 — 묶음이 있으면 첫 묶음>"
 # review_model: <통합 리뷰어에게 줄 모델 이름>
@@ -254,10 +259,12 @@ shared_files: plugin.json, CHANGELOG.md, README.md
 | `parallel_default` | 동시에 돌리는 큰 작업의 권장 수(상한이 아니다) | 3 | 받는다 |
 | `branch_prefix` | request-framing 이 만드는 브랜치와 로드맵 에픽 브랜치의 접두 | `feature/` | 오류 |
 | `shared_files` | 겹침 판정 · 경로 예약 위반 알림에서 빼는 파일 이름(경로 없이, 한 줄 쉼표 목록) | `plugin.json, CHANGELOG.md, README.md` | 무시하고 경고 |
+| `rules_budget` | 팀 규칙 파일(RULES.md)의 바이트 예산(UTF-8) | 8192 | 무시하고 경고 |
+| `handbook_budget` | 팀 간 공유 규칙 파일(HANDBOOK.md)의 바이트 예산(UTF-8) | 16384 | 무시하고 경고 |
 
 - **기본 브랜치에 머지된 판만 읽는다**(`origin/HEAD` 가 가리키는 커밋의 `.devbrew.md`). 작업 브랜치에서 고친 값은 그 PR 이 머지된 뒤에 적용된다 — 작업 브랜치가 자기 검사 범위를 바꾸지 못하고, 어느 worktree 에서 불러도 같은 값이 나온다. 작업 트리에만 있으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다. 기본 브랜치를 모르면 기본값을 쓰고 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 낸다.
 - **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기본값` 으로 보인다. 기계 상태 파일은 설정 층이 아니다 — 검사받는 하위 agent 도 쓸 수 있다. 스위트 대조(`merge_check.py run`)가 테스트 명령을 몰라 멈추면(종료 코드 6) 지휘자가 사용자에게 물은 답을 그 호출의 인자(`--test-command` · `--test-failure-pattern`)로만 넘긴다 — 출처 「이 호출의 인자(사용자 답)」, 레포 설정 파일에 올리자고 알린다.
-- **키는 위 열뿐이다.** 모르는 키 · 같은 키 둘 · 층이 받지 않는 키(위 표의 「오류」) · 못 읽는 머리말(BOM · 닫히지 않음 · `---` 뒤 공백)은 각각 다른 오류로 멈춘다. 폴더 키는 레포 상대경로만 받고 레포 루트 · `.git` 아래는 받지 않는다. `parallel_default` 가 1 이상의 정수가 아니면 기본 3 으로 세고 알린다. `shared_files` 가 비었거나 빈 원소 · `/` 가 든 원소가 있으면 기본 셋으로 세고 알리고, 로드맵 머리말에 적혔으면 그 값은 무시하고 알린다.
+- **키는 위 열둘뿐이다.** 모르는 키 · 같은 키 둘 · 층이 받지 않는 키(위 표의 「오류」) · 못 읽는 머리말(BOM · 닫히지 않음 · `---` 뒤 공백)은 각각 다른 오류로 멈춘다. 폴더 키는 레포 상대경로만 받고 레포 루트 · `.git` 아래는 받지 않는다. `parallel_default` 가 1 이상의 정수가 아니면 기본 3 으로 세고 알린다. `shared_files` 가 비었거나 빈 원소 · `/` 가 든 원소가 있으면 기본 셋으로 세고 알리고, 로드맵 머리말에 적혔으면 그 값은 무시하고 알린다. `rules_budget` · `handbook_budget` 이 1 이상의 정수가 아니면 기본값으로 세고 알리고, 로드맵 머리말에 적혔으면 그 값은 무시하고 알린다. 로드맵 머리말의 `layout` 은 설정이 아니라 형식 표시다(`references/team-files.md`).
 - **따옴표 규칙**: 값에 `#` 이 들어가면 값 전체를 따옴표(`"…"` 또는 `'…'`)로 감싼다. 따옴표 없는 값의 ` #` 은 주석과 헷갈리므로 오류다. `#` 으로 시작하는 줄은 건너뛴다. `shared_files` 는 이름 하나에 ` #` 가 들어도 쉼표 목록 값 전체를 감싼다(예: `shared_files: "note #1.md, README.md"`).
 - `.devbrew.md` 는 일반 파일이어야 한다 — 기본 브랜치 트리에서 심볼릭 링크이거나 Git LFS 포인터면 읽지 않고 멈춘다.
 - `branch_prefix` 는 project-init 의 브랜치 규칙과 맞춘다 — 두 플러그인은 서로의 설정을 읽지 않는다.

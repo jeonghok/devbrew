@@ -46,6 +46,7 @@ from conductor_state import MachineError, machine_path, parse_machine  # noqa: E
 from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recorded_number  # noqa: E402 — 적은 번호 읽기만
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
 from state_path import state_root_for_common  # noqa: E402
+import team_layout  # noqa: E402
 
 GIT_ALLOWED = frozenset({"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep"})
 NOTICE = ("머지됨은 PR 상태로 판정한다(지휘자가 채운 PR 캐시) — 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 "
@@ -1089,6 +1090,19 @@ def _read_sections(block: dict, heading: str, label: str):
 
 # ── 출력 ─────────────────────────────────────────────────────────────────────
 
+def _unknown_blocks(blocks: list, reason: str, read_tree, ids: bool = False) -> list:
+    """단계를 계산하지 않은 블록 — 모두 「알 수 없음」 이고 사유는 reason. ids 가 참이면 배정 번호를 싣는다."""
+    return [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
+             "stage": "알 수 없음", "reason": reason,
+             "task_status": None, "read_tree": read_tree,
+             "branch": field_text(b["fields"].get("브랜치", "")),
+             "branches": [], "branch_states": [], "tip": None, "plans": [],
+             "deps": [], "specs": [], "ids": sorted(b.get("assigned", []), key=id_sort_key) if ids else [],
+             "warnings": [], "notes": [],
+             "bundle": None, "extras": {}, "parallel": None, "rulings_archived": None}
+            for b in blocks]
+
+
 def build(git: Git, args) -> dict:
     report = {"roadmap": None, "source": None, "read_tree": None, "default_branch": None, "not_on_default": False,
               "fetched_at": git.fetched_at(), "notice": NOTICE, "blocks": [], "unassigned": None,
@@ -1123,6 +1137,13 @@ def build(git: Git, args) -> dict:
         report["unknown_reasons"].append("로드맵을 못 읽었다: %s (%s)" % (rel, src.label))
         return report
     meta, blocks, records, risk_rows, errors = parse_roadmap(text)
+    try:
+        layout = team_layout.layout_of(meta)
+    except team_layout.UnknownLayout as exc:   # 모르는 형식은 옛 형식 규칙으로 읽지 않는다 — 형식 깨짐도 번호도 세지 않는다
+        report["unknown_reasons"].append("모르는 형식 — 로드맵 머리말 layout: %s (아는 값: %s)"
+                                         % (exc.value, " · ".join(team_layout.LAYOUTS)))
+        report["blocks"] = _unknown_blocks(blocks, "모르는 형식", report["read_tree"])
+        return report
     try:   # 해결자는 로드맵 · 레포 설정 파일 · 기본값만 합친다 — 상태 계산이 기계 상태에서 읽는 것은 PR 캐시 · 에픽 PR 번호 기록뿐이다
         resolved = resolve(git.cwd, roadmap=rel, roadmap_text=text)
     except SettingsError as exc:
@@ -1133,14 +1154,7 @@ def build(git: Git, args) -> dict:
     errors = errors + resolved["errors"]
     report["format_errors"] = errors
     if errors:
-        report["blocks"] = [{"id": b["id"], "title": b["title"], "kind": b.get("kind"),
-                             "stage": "알 수 없음", "reason": "로드맵 형식 깨짐",
-                             "task_status": None, "read_tree": report["read_tree"],
-                             "branch": field_text(b["fields"].get("브랜치", "")),
-                             "branches": [], "branch_states": [], "tip": None, "plans": [],
-                             "deps": [], "specs": [], "ids": [], "warnings": [], "notes": [],
-                             "bundle": None, "extras": {}, "parallel": None, "rulings_archived": None}
-                            for b in blocks]
+        report["blocks"] = _unknown_blocks(blocks, "로드맵 형식 깨짐", report["read_tree"])
         return report
 
     roadmap_dir = rel.rsplit("/", 1)[0] if "/" in rel else "."
@@ -1166,6 +1180,11 @@ def build(git: Git, args) -> dict:
         report["unassigned"] = sorted(non_s - union, key=id_sort_key)
         report["orphans"] = sorted(s_ids - union, key=id_sort_key)
         report["unknown_ids"] = sorted(union - non_s - s_ids, key=id_sort_key)
+
+    if layout == team_layout.LAYOUT_TEAM:   # 이 판은 team 형식의 단계를 세지 않는다 — 번호 대조까지만
+        report["unknown_reasons"].append(team_layout.STAGE_PENDING)
+        report["blocks"] = _unknown_blocks(blocks, team_layout.STAGE_PENDING, report["read_tree"], ids=True)
+        return report
 
     pr_rows, epic_pr_rows, pr_reason = read_pr_cache(git, rel)
     cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings, roadmap_rel=rel,

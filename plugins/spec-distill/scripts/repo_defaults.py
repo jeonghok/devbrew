@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_model as _rm  # noqa: E402
+import team_layout  # noqa: E402
 
 SPECS_DIR = "docs/superpowers/specs/"
 PLANS_DIR = "docs/superpowers/plans/"
@@ -29,19 +30,22 @@ SHARED_FILES = ("plugin.json", "CHANGELOG.md", "README.md")   # 에픽이 함께
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
 COUNT_KEYS = ("parallel_default",)
+RULES_BUDGET = 8192                    # 팀 규칙 파일의 바이트 예산(UTF-8) — 기본값이지 상한이 아니다
+HANDBOOK_BUDGET = 16384                # 팀 간 공유 규칙 파일의 바이트 예산(UTF-8)
+BUDGET_KEYS = ("rules_budget", "handbook_budget")
 ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix", "shared_files")
-ROADMAP_META_KEYS = ("type", "source_brief")
+        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS
+ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
 _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
-             "shared_files": SHARED_FILES}
+             "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET}
 
 
 def _unquote(value: str) -> str:
@@ -180,10 +184,14 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
     """로드맵 > 레포 설정 > 상수 순으로 합친다. 잘못된 값은 errors 에 적고 그 키는 None — 기본값으로 조용히
     바꾸지 않는다. 권장 수(parallel_default)만은 깨지면 기본값 + warnings."""
     warned = []
-    if roadmap is not None and "shared_files" in roadmap:
-        roadmap = {k: v for k, v in roadmap.items() if k != "shared_files"}
-        warned.append("%s: shared_files 는 레포 설정 파일(%s)에서만 읽는다 — 이 값은 무시하고 레포 설정 값(없으면 기본 셋)을 쓴다"
-                      % (_place("roadmap", roadmap_path), SETTINGS_FILE))
+    if roadmap is not None:
+        for key in ("shared_files",) + BUDGET_KEYS:
+            if key not in roadmap:
+                continue
+            roadmap = {k: v for k, v in roadmap.items() if k != key}
+            what = "기본 셋" if key == "shared_files" else "기본값"
+            warned.append("%s: %s 는 레포 설정 파일(%s)에서만 읽는다 — 이 값은 무시하고 레포 설정 값(없으면 %s)을 쓴다"
+                          % (_place("roadmap", roadmap_path), key, SETTINGS_FILE, what))
     layers = (("로드맵", "roadmap", roadmap), (repo_label or "레포 설정", "repo", repo))
     out = {"values": {}, "sources": {}, "errors": [], "warnings": [], "notices": list(notices)}
     out["warnings"].extend(warned)
@@ -220,6 +228,15 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                                            % (at, _unquote(raw), why, ", ".join(SHARED_FILES)))
                 else:
                     out["values"][key] = names
+            elif key in BUDGET_KEYS:
+                value = _unquote(raw)
+                if value.isascii() and value.isdigit() and int(value) >= 1:
+                    out["values"][key] = int(value)
+                else:
+                    out["values"][key] = _DEFAULTS[key]
+                    out["sources"][key] = "기본값(머리말 값이 깨졌다)"
+                    out["warnings"].append("%s: 바이트 예산은 1 이상의 정수다(%s: %r) — 기본 %d 으로 센다"
+                                           % (at, key, value, _DEFAULTS[key]))
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:
