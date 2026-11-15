@@ -14,18 +14,16 @@ import os
 import subprocess
 
 GIT_ALLOWED = frozenset({"rev-parse", "merge-base"})
+_IMPORT_PATH = os.environ.get("PATH", "")   # import 때의 PATH — 그 뒤 PATH 에서 git 이 빠져도 같은 git 을 부른다
 
 
-def _find_git():
-    """import 때의 PATH 에서 git 실행 파일의 절대경로. 없으면 None(그때는 부를 때의 PATH 가 푼다)."""
-    for d in os.environ.get("PATH", "").split(os.pathsep):
-        cand = os.path.join(d or ".", "git")
-        if os.path.isfile(cand) and os.access(cand, os.X_OK):
-            return cand
-    return None
-
-
-GIT_EXE = _find_git()
+def _env():
+    """자식 프로세스의 환경 — PATH 는 import 때의 PATH 를 앞에 둔다(빈 칸은 현재 폴더라 넣지 않는다)."""
+    parts = [p for p in (_IMPORT_PATH, os.environ.get("PATH", "")) if p]
+    env = dict(os.environ)
+    if parts:
+        env["PATH"] = os.pathsep.join(parts)
+    return env
 
 
 class TipError(Exception):
@@ -35,7 +33,7 @@ class TipError(Exception):
 def _git(root, *args):
     if args[0] not in GIT_ALLOWED:
         raise ValueError("허용하지 않는 git 명령: %s" % args[0])
-    p = subprocess.run(["git", *args], executable=GIT_EXE, cwd=str(root), capture_output=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(["git", *args], cwd=str(root), env=_env(), capture_output=True, encoding="utf-8", errors="replace")
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 

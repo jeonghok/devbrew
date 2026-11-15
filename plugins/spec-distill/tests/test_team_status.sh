@@ -48,6 +48,7 @@ g checkout -q -b t/local main && put t-local.txt a && g commit -qm local
 assert_eq "$(tipof t/local)" "$(short t/local)|yes|no" "끝: 로컬에만 있는 브랜치 — 「아직 안 올라옴」(Q3)"
 g checkout -q main && g branch -q -D t/same && g fetch -q origin
 assert_eq "$(tipof t/same)" "$(short origin/t/same)|no|no" "끝: origin 에만 있는 브랜치 — origin · 알림 없음"
+assert_eq "$(tipof origin/t/same)" "$(short origin/t/same)|no|no" "끝: origin/<브랜치> 로 주면 그 원격 끝 · 로컬 끝이 아니니 알림 없음"
 assert_eq "$(tipof t/none)" "None|no|no" "끝: 둘 다 없다"
 
 # AC30 — 둘째 구현이 없다: read_tip 의 몸이 branch_tip.tip( 을 부르고 조상 판정 글자가 없다

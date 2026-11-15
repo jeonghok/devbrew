@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """job_results.py — team 형식의 결과 대조 · 받음 줄 다시 계산 · 낡음 판정. 읽기만 한다.
 
-git 은 받은 `roadmap_status.Git` 으로만 읽는다(subprocess 를 쓰지 않는다). `roadmap_status` 는 맨 위에서
+git 은 받은 `roadmap_status.Git` 으로 읽는다(이 파일은 subprocess 를 쓰지 않는다 — 명령줄의 브랜치 끝 고르기는
+`team_status.read_tip` → `branch_tip.tip` 이 읽기 전용 git 으로 한다). `roadmap_status` 는 맨 위에서
 import 하지 않는다 — 그쪽이 이 모듈을 가져오므로 `main()` 안에서 가져온다.
 
 명령줄: job_results.py check --roadmap <로드맵 레포 상대경로> --job <과제> --result <결과 파일 이름>

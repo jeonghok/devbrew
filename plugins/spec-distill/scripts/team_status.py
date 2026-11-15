@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """team_status.py — team 형식 로드맵의 읽기 쪽 모듈. 읽기만 한다.
 
-git 은 받은 `roadmap_status.Git` 으로만 읽는다. `roadmap_status` 는 이 모듈에서 import 하지 않는다.
+git 은 받은 `roadmap_status.Git` 으로 읽고, 브랜치 끝 고르기만 `branch_tip.tip` 이 자기 git 호출로 읽는다(`rev-parse` · `merge-base`).
+`roadmap_status` 는 이 모듈에서 import 하지 않는다.
 """
 from __future__ import annotations
 
