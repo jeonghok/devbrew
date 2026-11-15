@@ -210,19 +210,33 @@ def check_tree(top: Path, team, base=None) -> tuple:
             errors.append("%s: 결과 폴더가 없다" % team.results(name))
         errors.extend(_plan_problems(top, team, name, 1))
 
-    # 8. 옮긴 구간이 출처와 바이트가 같다
+    # 8 · 9 가 같은 기준을 본다 — base 가 있으면 그것, 없으면 기본 브랜치
+    ref = base or M.DEFAULT_REF
+    commit = _commit_of(top, ref)
+
+    # 8. 옮긴 구간이 출처와 바이트가 같다 — 출처 커밋의 파일을 읽지 못하면 기준의 같은 파일 · 같은 줄과 견준다
     for s in sections:
         where = "%s %d–%d행(출처 %s · %s %d–%d행)" % (team.original, s.start, s.start + s.last - s.first,
                                                    s.source, s.label, s.first, s.last)
         blob = show(top, s.commit, s.source)
-        if blob is None:
-            unknown.append("%s: 출처 커밋 %s 의 파일을 읽지 못했다" % (where, s.commit[:12]))
-        elif b"".join(F.byte_lines(blob)[s.first - 1:s.last]) != s.body:
-            errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
+        if blob is not None:
+            if b"".join(F.byte_lines(blob)[s.first - 1:s.last]) != s.body:
+                errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
+            continue
+        lead = "%s: 출처 커밋 %s" % (where, s.commit[:12])
+        if commit is None:
+            unknown.append("%s 의 파일을 읽지 못했다 — 기준(%s)을 몰라 같은 줄과 견주지 못했다" % (lead, ref))
+            continue
+        at_base = show(top, commit, s.source)
+        if at_base is None:
+            unknown.append("%s 의 파일을 읽지 못했고 기준 %s 에도 그 파일이 없다" % (lead, ref))
+        elif b"".join(F.byte_lines(at_base)[s.first - 1:s.last]) == s.body:
+            notes.append("%s 를 읽지 못해 기준 %s 의 같은 줄과 견줬다 — 같다" % (lead, ref))
+        else:
+            unknown.append("%s 의 파일을 읽지 못했고 기준 %s 의 같은 줄과도 다르다"
+                           " — 사본이 틀렸는지 출처가 그 뒤 고쳐졌는지 알 수 없다" % (lead, ref))
 
     # 9. 덧붙이기만 — 기준 커밋의 사본이 지금 사본의 앞머리다
-    ref = base or M.DEFAULT_REF
-    commit = _commit_of(top, ref)
     if commit is None and base:
         unknown.append("%s: 기준 %s 를 읽지 못했다" % (team.original, base))
     elif commit is None:

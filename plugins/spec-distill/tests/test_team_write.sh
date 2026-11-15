@@ -964,6 +964,7 @@ sqmoved "$T/sq2" "$T/sq2-moved.md"
 # 양의 짝 — 출처 커밋이 남은 sq(같은 나무)에서는 같은 명령이 검사 불가를 내지 않는다
 assert_eq "$(sqcheck "$T/sq")" "0" "양의 짝(sq): check rc 0"
 assert_not_contains "$(cat "$T/chk.txt")" "검사 불가" "양의 짝(sq): check 에 「검사 불가」 가 없다"
+assert_not_contains "$(cat "$T/chk.txt")" "를 읽지 못해 기준" "대체 대조: 읽히는 출처 커밋(sq)에는 대체 대조가 돌지 않는다"
 assert_eq "$(sqorig "$T/sq")" "0" "양의 짝(sq): original rc 0"
 assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): original 에 「검사 불가」 가 없다"
 assert_eq "$(ttc "$T/sq" "$T/sq.md" "${RD}sq")" "0" "양의 짝(sq): create 다시 rc 0"
@@ -979,28 +980,74 @@ assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): job n
 cell "$T/sqg0.md" "$T/sq-goal.md" E1 "의도" "출처 커밋 새 의도"
 assert_eq "$(squpdate "$T/sq" "$T/sq-goal.md")" "4" "update · 의도를 바꿨다: 종료 코드 4"
 assert_contains "$(cat "$T/out.txt")" "[spec-distill] ${RD}sq/jobs/E1/INTENT.md: 목표 칸이 로드맵의 의도 · 범위와 다르다" "update: team 나무 검사의 알림 줄을 화면에 낸다"
-# 새 clone(sq2) — 출처 커밋을 읽지 못한다
-assert_eq "$(sqcheck "$T/sq2")" "3" "출처 커밋이 없다: check rc 3(검사 불가)"
+# 새 clone(sq2) — 출처 커밋을 읽지 못한다. 옮긴 두 절의 바이트는 기본 브랜치와 같다 → 기준의 같은 줄과 견줘 통과한다(B22)
+assert_eq "$(sqcheck "$T/sq2")" "0" "대체 대조: 출처 커밋이 없어도 기준의 같은 줄과 같으면 check rc 0"
 assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/t-seed-interview.audit.md · 원문 " "출처 커밋이 없다: check 가 그 구간의 출처 경로와 절 이름을 낸다"
-assert_contains "$(cat "$T/chk.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: check 가 「검사 불가 — 」 로 원자료 사본을 짚는다"
-assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: check 가 그 커밋의 파일을 읽지 못했다고 말한다"
-assert_eq "$(grep -c '검사 불가 — ' "$T/chk.txt")" "2" "출처 커밋이 없다: 검사 불가 줄은 브랜치 커밋을 적은 두 구간(원문 · 질문 전체)뿐"
-b_sq2="$(snap "$T/sq2")"
-assert_eq "$(squpdate "$T/sq2" "$T/sq2-moved.md")" "1" "출처 커밋이 없다: update rc 1"
-assert_contains "$(cat "$T/out.txt")" "검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: update 가 검사 불가 사유를 낸다"
-assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: update 가 그 커밋을 짚는다"
-[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: update 뒤 나무 그대로" || no "출처 커밋이 없다: update 가 나무를 바꿨다"
-assert_eq "$(ttc "$T/sq2" "$T/sq.md" "${RD}sq")" "1" "출처 커밋이 없다: create 다시 rc 1"
-assert_contains "$(cat "$T/out.txt")" "검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: create 가 검사 불가 사유를 낸다"
-assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: create 가 그 커밋을 짚는다"
-[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: create 뒤 나무 그대로" || no "출처 커밋이 없다: create 가 나무를 바꿨다"
-assert_eq "$(sqorig "$T/sq2")" "0" "출처 커밋이 없다: original rc 0(이 명령이 만든 문제가 아니다)"
-assert_contains "$(cat "$T/out.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: original 이 검사 불가 줄을 낸다"
-assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: original 이 그 커밋을 짚는다"
-[ "$(snap "$T/sq2")" = "$b_sq2" ] && ok "출처 커밋이 없다: original 은 쓰지 않았다(사본이 이미 출처와 같다)" || no "출처 커밋이 없다: original 이 나무를 바꿨다"
-assert_eq "$(sqjob "$T/sq2")" "0" "출처 커밋이 없다: job new rc 0"
+assert_eq "$(grep -c "출처 커밋 ${stamp:0:12} 를 읽지 못해 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다" "$T/chk.txt")" "2" "대체 대조: 구간마다 알림 한 줄(원문 · 질문 전체)"
+assert_not_contains "$(cat "$T/chk.txt")" "검사 불가" "대체 대조: 통과하면 검사 불가가 없다"
+assert_eq "$(squpdate "$T/sq2" "$T/sq2-moved.md")" "0" "대체 대조: update 가 쓴다"
+assert_contains "$(cat "$T/out.txt")" "를 읽지 못해 기준 " "대체 대조: update 가 알림을 화면에 낸다"
+assert_eq "$(ttc "$T/sq2" "$T/sq.md" "${RD}sq")" "0" "대체 대조: create 다시 rc 0"
+assert_eq "$(sqorig "$T/sq2")" "0" "대체 대조: original rc 0"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "대체 대조: original 에 검사 불가 줄이 없다"
+assert_eq "$(sqjob "$T/sq2")" "0" "대체 대조: job new rc 0"
 [ -f "$T/sq2/${RD}sq/jobs/sq-job/INTENT.md" ] && [ -f "$T/sq2/${RD}sq/jobs/sq-job/results/.gitkeep" ] && ok "출처 커밋이 없다: job new 가 과제 폴더를 만들었다" || no "출처 커밋이 없다: job new 가 과제 폴더를 만들지 않았다"
-assert_contains "$(cat "$T/out.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: job new 가 검사 불가 줄을 낸다"
-assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: job new 가 그 커밋을 짚는다"
+assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "대체 대조: job new 에 검사 불가 줄이 없다"
+
+# ── 대체 대조: 기준과도 다른 경우 · 기준에 파일이 없는 경우 · 기준을 모르는 경우 ─────────────
+# 기준을 바꾸는 커밋은 모두 sq 의 main 에 쌓아 push 하고, 갈래마다 그 뒤 새 clone 을 뜬다. 출처 커밋은 어느 clone 에도 없다.
+sqcheckb() { (cd "$1" && python3 "$S/team_layout.py" check --roadmap "${RD}sq/roadmap.md" --base "$2") > "$T/chk.txt" 2>&1; echo $?; }   # sqcheckb <레포> <ref>
+FA=docs/iv/t-seed-interview.audit.md
+cp "$T/sq/$FA" "$T/fa.orig"
+git clone -q "$T/sq.git" "$T/sq5"   # sq5 — 기준을 고치기 전에 떠 둔다: 지역 main 의 두 절이 사본과 같다
+# sq3 — 기준의 「원문」 절 안 한 줄에서 글자 하나만 바꾼다(줄 수는 그대로)
+sed 's/역할마다 문서를 둔다/역할마다 문서도 둔다/' "$T/fa.orig" > "$T/sq/$FA"
+assert_eq "$(diff "$T/fa.orig" "$T/sq/$FA" | grep -c '^>')" "1" "대체 대조 픽스처(sq3): 기준 사본에서 한 줄만 바뀌었다"
+assert_eq "$(wc -l < "$T/sq/$FA")" "$(wc -l < "$T/fa.orig")" "대체 대조 픽스처(sq3): 줄 수는 그대로다"
+gx "$T/sq" commit -qm sq-base-char -- "$FA" && gx "$T/sq" push -q origin main
+git clone -q "$T/sq.git" "$T/sq3"
+git -C "$T/sq3" cat-file -e "${stamp}^{commit}" 2>/dev/null && no "대체 대조 픽스처(sq3): 출처 커밋이 남았다" || ok "대체 대조 픽스처(sq3): 출처 커밋이 없다"
+assert_eq "$(sqcheck "$T/sq3")" "3" "대체 대조: 기준의 같은 줄과 다르면 check rc 3(검사 불가)"
+assert_eq "$(grep -c '검사 불가 — ' "$T/chk.txt")" "1" "대체 대조: 검사 불가 줄은 하나(바뀐 원문 구간)"
+assert_contains "$(grep '검사 불가 — ' "$T/chk.txt")" "· 원문 " "대체 대조: 그 검사 불가 줄은 원문 구간을 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "대체 대조: 기준과 다르면 「검사 불가 — 」 로 원자료 사본을 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했고 기준 refs/remotes/origin/HEAD 의 같은 줄과도 다르다 — 사본이 틀렸는지 출처가 그 뒤 고쳐졌는지 알 수 없다" "대체 대조: 기준과 다르면 무엇과 견줬는지 적는다"
+assert_eq "$(grep ' 의 같은 줄과 견줬다 — 같다' "$T/chk.txt" | grep -c '· 질문 전체 ')" "1" "대체 대조: 그대로인 질문 전체 구간은 알림 「 — 같다」"
+assert_not_contains "$(cat "$T/chk.txt")" "바이트가 다르다" "대체 대조: 기준과 다른 것은 어긋남(1)이 아니다"
+sqmoved "$T/sq3" "$T/sq3-moved.md"
+b_sq3="$(snap "$T/sq3")"
+assert_eq "$(squpdate "$T/sq3" "$T/sq3-moved.md")" "1" "대체 대조: 기준과 다르면 update rc 1"
+assert_contains "$(cat "$T/out.txt")" "의 같은 줄과도 다르다" "대체 대조: update 가 기준과 다르다는 사유를 낸다"
+[ "$(snap "$T/sq3")" = "$b_sq3" ] && ok "대체 대조: 기준과 다르면 update 뒤 나무 그대로" || no "대체 대조: 기준과 다른데 update 가 나무를 바꿨다"
+assert_eq "$(ttc "$T/sq3" "$T/sq.md" "${RD}sq")" "1" "대체 대조: 기준과 다르면 create 다시 rc 1"
+[ "$(snap "$T/sq3")" = "$b_sq3" ] && ok "대체 대조: 기준과 다르면 create 뒤 나무 그대로" || no "대체 대조: 기준과 다른데 create 가 나무를 바꿨다"
+# sq4 — 기준에서 framing audit 파일을 지운다
+gx "$T/sq" rm -q -- "$FA" && gx "$T/sq" commit -qm sq-base-rm -- "$FA" && gx "$T/sq" push -q origin main
+git clone -q "$T/sq.git" "$T/sq4"
+[ ! -e "$T/sq4/$FA" ] && ok "대체 대조 픽스처(sq4): 기준에 framing audit 이 없다" || no "대체 대조 픽스처(sq4): framing audit 이 남았다"
+assert_eq "$(sqcheck "$T/sq4")" "3" "대체 대조: 기준에 파일이 없으면 check rc 3(검사 불가)"
+assert_eq "$(grep -c '검사 불가 — .*기준 refs/remotes/origin/HEAD 에도 그 파일이 없다' "$T/chk.txt")" "2" "대체 대조: 기준에 파일이 없다는 검사 불가 줄이 두 구간에 하나씩"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했고 기준 refs/remotes/origin/HEAD 에도 그 파일이 없다" "대체 대조: 기준에 파일이 없으면 그렇게 적는다"
+# sq6 — 기준에 framing audit 을 다시 두되 「원문」 절 맨 앞(머리 줄 다음)에 한 줄을 끼운다: 글은 같고 줄 번호만 밀렸다
+awk '{ print } /^## 1\. 원문$/ { print "> 기준 쪽에만 끼운 줄." }' "$T/fa.orig" > "$T/sq/$FA"
+grep -v '^> 기준 쪽에만 끼운 줄\.$' "$T/sq/$FA" | cmp -s - "$T/fa.orig" && ok "대체 대조 픽스처(sq6): 기준 사본은 원래 글에 한 줄만 더했다" || no "대체 대조 픽스처(sq6): 기준 사본이 한 줄 더하기가 아니다"
+gx "$T/sq" add -- "$FA" && gx "$T/sq" commit -qm sq-base-shift -- "$FA" && gx "$T/sq" push -q origin main
+git clone -q "$T/sq.git" "$T/sq6"
+assert_eq "$(sqcheck "$T/sq6")" "3" "대체 대조: 줄 수가 달라진 기준이면 check rc 3(검사 불가)"
+assert_eq "$(grep -c '검사 불가 — .*의 같은 줄과도 다르다' "$T/chk.txt")" "2" "대체 대조: 줄이 밀린 기준은 같은 줄 번호의 글이 달라 두 구간 모두 「같은 줄과도 다르다」"
+assert_contains "$(grep '같은 줄과도 다르다' "$T/chk.txt")" "· 원문 " "대체 대조: 줄이 밀린 기준 — 원문 구간도 검사 불가다"
+assert_not_contains "$(cat "$T/chk.txt")" " — 같다" "대체 대조: 줄이 밀린 기준에는 「 — 같다」 알림이 없다"
+# sq5 — 기준을 모른다(origin/HEAD 를 지운 새 clone)
+gx "$T/sq5" remote set-head origin -d
+gx "$T/sq5" rev-parse -q --verify refs/remotes/origin/HEAD > /dev/null && no "대체 대조 픽스처(sq5): origin/HEAD 가 남았다" || ok "대체 대조 픽스처(sq5): origin/HEAD 가 없다"
+assert_eq "$(sqcheck "$T/sq5")" "3" "대체 대조: 기준을 모르면 check rc 3(검사 불가)"
+assert_eq "$(grep -c "검사 불가 — .*출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다 — 기준(refs/remotes/origin/HEAD)을 몰라 같은 줄과 견주지 못했다" "$T/chk.txt")" "2" "대체 대조: 기준을 모르면 두 구간이 그렇게 적힌 검사 불가"
+assert_contains "$(cat "$T/chk.txt")" "기본 브랜치(refs/remotes/origin/HEAD)를 몰라 덧붙이기 검사를 건너뛰었다" "대체 대조: 기준을 모르면 덧붙이기 검사를 건너뛰었다는 알림은 그대로"
+assert_eq "$(sqcheckb "$T/sq5" main)" "0" "대체 대조: --base main 이면 check rc 0"
+assert_eq "$(grep -c "출처 커밋 ${stamp:0:12} 를 읽지 못해 기준 main 의 같은 줄과 견줬다 — 같다" "$T/chk.txt")" "2" "대체 대조: --base 로 준 기준의 이름을 알림에 적는다"
+assert_not_contains "$(cat "$T/chk.txt")" "refs/remotes/origin/HEAD" "대체 대조: --base 를 주면 기본 브랜치를 보지 않는다"
+assert_eq "$(sqcheckb "$T/sq5" no-such-ref)" "3" "대체 대조: --base 로 준 기준을 읽지 못하면 check rc 3"
+assert_contains "$(cat "$T/chk.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md: 기준 no-such-ref 를 읽지 못했다" "대체 대조: 읽지 못한 --base 는 지금 그대로 검사 불가"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다 — 기준(no-such-ref)을 몰라 같은 줄과 견주지 못했다" "대체 대조: 읽지 못한 --base 이면 구간도 기준을 몰라 견주지 못했다고 적는다"
 
 finish
