@@ -39,6 +39,11 @@ try:
     import docreview_advice as _adv
 except ImportError:  # pragma: no cover
     _adv = None
+# 형제 모듈 — 질문 재료(`status_line` 의 짧은 경고 줄)만 쓴다. 없으면 None 이고 다른 서브커맨드는 그대로 돈다.
+try:
+    import docreview_ask as _ask
+except ImportError:  # pragma: no cover
+    _ask = None
 
 # 값 해석(leaf 형제) — 모든 라운드의 필수 경로라 `try` 로 감싸지 않는다.
 import docreview_config as _cfg
@@ -2192,31 +2197,46 @@ NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "�
 # 쓰는 세션을 믿는 한계의 공시 — 게이트 렌더 셋째 줄 · `gate` JSON `writer_trust_notice` · spec-distill README `## 한계` 가 같은 글이다.
 WRITER_TRUST_NOTICE = "리뷰 기록과 그 안의 사용자 말은 이 대화가 직접 쓴다 — 기록을 리뷰 명령 밖에서 고치면 확인값이 안 맞는 경우만 잡히고, 확인값까지 맞춰 그럴듯하게 고친 것은 잡히지 않는다"
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
-# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
+# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장, 짧은 이름) — 위에서부터
+# 첫 일치. 짧은 이름은 질문의 상태 줄(`status_line`)이 쓴다 — 게이트 렌더에는 나가지 않는다.
 # 괄호 이름과 문장이 같은 행은 같은 사실을 두 출처가 말한 것이라 한 줄로 합치고, 사유(`why`)는 그 줄 괄호에 모은다.
 # 괄호 이름이 None 인 행은 원문의 나머지(`why`)를 괄호에 그대로 싣는다. 어느 행에도 안 맞는 원문은 그대로 낸다 —
 # 버리지 않는다(계획 P6).
 WARN_GLOSS = (
-    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
-    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다",
+     "codex 리뷰 없음"),
+    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다",
+     "codex 리뷰 없음"),
     (r"기각 경로 0 — 오탐이 걸러지지 않았다 \(doc-recritic (?P<why>.*)\)", "doc-recritic",
-     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
-    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
-    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
-    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다", "재비판 없음"),
+    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다",
+     "재비판 없음"),
+    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다",
+     "세부 검토 없음"),
+    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다",
+     "세부 검토 없음"),
+    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다",
+     "제목 없는 문서"),
+    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다",
+     "리뷰어 결과 시점 모름"),
     (r"탐지 (?P<n>\d+) 중 (?P<k>\d+) 사망 \((?P<why>.*)\)", "탐지",
-     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다"),
-    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
-    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
-    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
-    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
-    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다"),
+     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다", "탐지 리뷰어 일부 없음"),
+    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다",
+     "주 리뷰어 결과 없음"),
+    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다",
+     "보조 리뷰어 결과 없음"),
+    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다",
+     "셀 수 없는 것"),
+    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다",
+     "보류한 지적"),
+    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다",
+     "결정 id 못 찾음"),
     (r"이 자리의 결정이 아닌 id (?P<why>.*) — 참고로 둠", "결정 id",
-     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다"),
-    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다"),
-    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
+     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다", "결정 id 자리 다름"),
+    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다",
+     "결정 id 모양 틀림"),
+    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다",
+     "판정 강제 변경"),
 )
 
 
@@ -2225,10 +2245,11 @@ def _one(s) -> str:
     return " ".join(str(s).split())
 
 
-def _plain_warns(warns) -> list:
-    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다.
+def _warn_entries(warns) -> list:
+    """advisory 원문 목록 → (짧은 이름, 쉬운 경고 줄) 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다.
     한 줄로 합치는 것은 괄호 이름이 있는 행 — 같은 사실을 두 출처가 말한 것 — 뿐이다. 괄호 이름이 없는 행과
-    표에 없는 원문은 글자가 같아도 사건마다 한 줄이다(같은 모양의 깨진 항목 둘을 하나로 세면 경고 수가 준다)."""
+    표에 없는 원문은 글자가 같아도 사건마다 한 줄이다(같은 모양의 깨진 항목 둘을 하나로 세면 경고 수가 준다).
+    표에 없는 원문의 짧은 이름은 None 이다 — 버리지 않고 그대로 싣는다."""
     lines, why_of = [], {}
     for w in map(str, warns):
         m = row = None
@@ -2237,7 +2258,7 @@ def _plain_warns(warns) -> list:
             if m:
                 break
         if m and "{n}" in row[2]:   # 숫자를 싣는 행 — 문장의 {n}·{k} 를 원문의 값으로 채운다
-            row = (row[0], row[1], row[2].format(**m.groupdict()))
+            row = (row[0], row[1], row[2].format(**m.groupdict()), row[3])
         if not m:
             k = w
         elif row[1] is None:
@@ -2246,30 +2267,34 @@ def _plain_warns(warns) -> list:
             k = (row[1], row[2])
         if k not in why_of or not isinstance(k, tuple):
             why_of[k] = []
-            lines.append(k)
+            lines.append((k, row[3] if m else None))
         why = m.groupdict().get("why") if m and row[1] else None
         if why and why not in why_of[k]:
             why_of[k].append(why)
     out = []
-    for k in lines:
+    for k, short in lines:
         if isinstance(k, tuple):
             k = "%s (%s)" % (k[1], k[0] + (": " + ", ".join(why_of[k]) if why_of[k] else ""))
-        out.append(_one(k))
+        out.append((short, _one(k)))
     return out
 
 
-def _first_line(g) -> str:
-    """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
-    「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
-    경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
-    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
-    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
-    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
-    lead = None
+def _plain_warns(warns) -> list:
+    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록 — `_warn_entries` 의 줄만."""
+    return [line for _, line in _warn_entries(warns)]
+
+
+def _gate_lead(g):
+    """첫 줄 · 상태 줄 맨 앞의 공시 — 「미검증」이면 그 사유 문장, 라운드 미완이면 미완 문장, 아니면 None."""
     if g.get("unverified"):
-        lead = UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
-    elif g.get("unreviewed_reason"):
-        lead = UNROUTED_TEXT
+        return UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
+    if g.get("unreviewed_reason"):
+        return UNROUTED_TEXT
+    return None
+
+
+def _gate_warns(g) -> list:
+    """게이트 요약 → 경고 원문 목록. advisory 를 전부 싣고 codex 부재 줄을 맨 앞에 끼운다(이미 있으면 그대로)."""
     warns = list(g["advisory"])
     deg = g["degrade"]
     if deg.get("codex_absent"):
@@ -2279,7 +2304,34 @@ def _first_line(g) -> str:
             warns = [cl if w == "codex 없음 — 모델 다양성 0 (None)" else w for w in warns]
         if cl not in warns:
             warns.insert(0, cl)
-    warns = _plain_warns(warns)
+    return warns
+
+
+def status_line(g) -> str:
+    """질문의 상태 줄 — 공시가 있으면 공시 문장(+ 짧은 경고 줄), 없으면 짧은 경고 줄.
+    공시도 경고도 없으면 남은 행이 없을 때 「이상 없음」, 있을 때 「경고 없음」. 경고 수는 게이트 첫 줄과
+    같은 목록(`_gate_warns` → `_warn_entries`)에서 센다. 형제 `docreview_ask` 가 없으면 경고를 빼고 내지 않고
+    멈춘다(fail-closed)."""
+    if _ask is None:
+        raise RuntimeError("docreview_ask.py 형제 사본이 이 스크립트 옆에 없다")
+    lead = _gate_lead(g)
+    short = _ask.short_warn_line(_warn_entries(_gate_warns(g)))
+    if lead:
+        return lead + "." + (" " + short if short else "")
+    if short:
+        return short
+    return "경고 없음" if any(g[r.name] for r in GATE_ROWS) else "이상 없음"
+
+
+def _first_line(g) -> str:
+    """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
+    「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
+    경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
+    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
+    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
+    lead = _gate_lead(g)
+    warns = _plain_warns(_gate_warns(g))
     left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
     head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
     if g.get("cap_reached") or g.get("stagnation"):
