@@ -592,9 +592,9 @@ SKILL_LINE_CAP=594
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
 _total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
-[[ $(( _total - _own )) -eq 14 ]] \
-  && ok "AC3/C9 양의 짝: 블록 13줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
-  || no "AC3/C9 양의 짝: 뺀 줄 수가 14 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
+[[ $(( _total - _own )) -eq 15 ]] \
+  && ok "AC3/C9 양의 짝: 블록 14줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
+  || no "AC3/C9 양의 짝: 뺀 줄 수가 15 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do
