@@ -50,10 +50,15 @@ import team_layout  # noqa: E402
 TABLE_HEADING = "## 번호 대조"
 SOURCES_TYPE = "job-sources"
 ORIGIN_HEADING = "## 원문 대조"
-ORIGIN_SHALLOW = "원문 대조의 「바꿈」 행에 근거가 없다"
-ORIGIN_MISSING = "설계문서에 `## 원문 대조` 표가 없다"
+ORIGIN_SHALLOW_OF = "원문 대조의 「%s」 행에 근거가 없다"
 ORIGIN_CHANGED = "바꿈"
-ORIGIN_KINDS = ("그대로", ORIGIN_CHANGED)   # 셋째 칸의 값은 이 둘뿐이다 — 「작성자 제안」 표시는 넷째(근거) 칸에 적는다
+ORIGIN_SHALLOW = ORIGIN_SHALLOW_OF % ORIGIN_CHANGED
+ORIGIN_MISSING = "설계문서에 `## 원문 대조` 표가 없다"
+# 셋째 칸의 값은 이 셋뿐이다(리더 답 여덟째). 「바꿈」 · 「넘김」 은 근거 칸이 있어야 한다 — 「넘김」 의 근거는 받는 곳이다.
+# 「작성자 제안」 표시는 넷째(근거) 칸에 적는다.
+ORIGIN_KINDS = ("그대로", ORIGIN_CHANGED, "넘김")
+ORIGIN_NEEDS_REASON = (ORIGIN_CHANGED, "넘김")
+ORIGIN_BAD_KIND = "원문 대조 행의 셋째 칸이 그대로 · 바꿈 · 넘김 가운데 하나가 아니다 — %s: %r"
 NO_TEAM_ROADMAP = "로드맵을 모른다 — 번호 파일 옆 INTENT.md 머리의 roadmap 을 읽지 못했다"
 UNKNOWN_LAYOUT = "모르는 형식 — %s 머리말 %s: %s (아는 값: %s)"
 AC_HEADING = "## Acceptance Criteria"
@@ -429,8 +434,9 @@ def _unchecked(reason: str, notices=None) -> dict:
 
 
 def origin_rows(spec_text: str):
-    """`## 원문 대조` 표의 (원문 요소, 설계 요소, 그대로/바꿈, 근거) 행들. 절이 없으면 None, 표가 깨졌으면 FormatError —
-    칸이 넷이 아님 · 첫 칸이 빔 · 셋째 칸이 「그대로」 · 「바꿈」 밖의 값. 같은 절의 다음 표는 머리 · 구분 행을 건너뛴다."""
+    """`## 원문 대조` 표의 (원문 요소, 설계 요소, 그대로/바꿈/넘김, 근거) 행들 — 칸은 자리로 읽고 셋째 칸의 값은 거르지 않는다
+    (그 판정은 origin_notes 가 행마다 한다). 절이 없으면 None, 표가 깨졌으면 FormatError — 칸이 넷이 아님 · 첫 칸이 빔.
+    구분 행 꼴의 줄과 첫 표의 머리 행과 같은 줄(같은 절의 다음 표)은 데이터가 아니다."""
     body = section_body(spec_text, ORIGIN_HEADING)
     if body is None:
         return None
@@ -442,23 +448,16 @@ def origin_rows(spec_text: str):
     sep = _cells(rows[1])
     if len(sep) != 4 or not _is_sep_row(sep):
         raise FormatError("원문 대조 표 구분 행이 칸 넷이 아니다")
-    out, i = [], 2
-    while i < len(rows):
-        row, cells = rows[i], _cells(rows[i])
-        nxt = _cells(rows[i + 1]) if i + 1 < len(rows) else []
-        if _is_sep_row(nxt):   # 같은 절의 다음 표 — 그 머리 행 · 구분 행은 데이터가 아니다
-            if len(cells) != 4 or len(nxt) != 4:
-                raise FormatError("원문 대조 표 머리 행이 칸 넷이 아니다")
-            i += 2
+    head, out = _cells(rows[0]), []
+    for row in rows[2:]:
+        cells = _cells(row)
+        if _is_sep_row(cells) or cells == head:   # 같은 절의 다음 표의 머리 행 · 구분 행
             continue
         if len(cells) != 4:
             raise FormatError("원문 대조 표 행이 칸 넷이 아니다: %r" % row)
         if not cells[0]:
             raise FormatError("원문 대조 표 행의 첫 칸(원문 요소)이 비었다: %r" % row)
-        if cells[2] not in ORIGIN_KINDS:
-            raise FormatError("셋째 칸이 그대로/바꿈이 아니다(%r): %r" % (cells[2], row))
         out.append(tuple(cells))
-        i += 1
     if not out:
         raise FormatError("원문 대조 표가 없거나 데이터 행이 없다")
     return out
@@ -469,20 +468,26 @@ def _is_sep_row(cells: list) -> bool:
 
 
 def _has_reason(cell: str) -> bool:
-    """근거 칸에 글이 있나 — 대시(— · – · -)와 공백뿐이면 근거가 아니다. 「작성자 제안」 표시도 이 칸에 적는다."""
-    return bool(cell.strip("—–- "))
+    """근거 칸에 글이 있나 — 대시(— · – · -)와 공백(NBSP · U+3000 포함)뿐이면 근거가 아니다. 「작성자 제안」 표시도 이 칸에 적는다."""
+    return bool("".join(ch for ch in cell if not ch.isspace()).strip("—–-"))
 
 
 def origin_notes(spec_text: str) -> tuple:
-    """(알림 글들, 얕은 답들) — 원문 대조 표가 없거나 깨졌으면 알림, 「바꿈」 인데 근거 칸이 빈 행마다 얕은 답."""
+    """(알림 글들, 얕은 답들) — 원문 대조 표가 없거나 깨졌으면 알림 하나. 셋째 칸이 그대로 · 바꿈 · 넘김 밖인 행은 그 행만
+    알리고(얕은 답이 아니다) 나머지 행은 센다. 「바꿈」 · 「넘김」 인데 근거 칸이 빈 행마다 얕은 답(그 값을 적는다)."""
     try:
         rows = origin_rows(spec_text)
     except FormatError as exc:
         return ["원문 대조 표를 읽지 못했다 — %s" % exc], []
     if rows is None:
         return [ORIGIN_MISSING], []
-    return [], [{"id": element[:40], "reason": ORIGIN_SHALLOW}
-                for element, _design, how, why in rows if how == ORIGIN_CHANGED and not _has_reason(why)]
+    notices, shallow = [], []
+    for element, _design, how, why in rows:
+        if how not in ORIGIN_KINDS:
+            notices.append(ORIGIN_BAD_KIND % (element[:40], how))
+        elif how in ORIGIN_NEEDS_REASON and not _has_reason(why):
+            shallow.append({"id": element[:40], "reason": ORIGIN_SHALLOW_OF % how})
+    return notices, shallow
 
 
 def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadmap_rel=None) -> dict:

@@ -74,16 +74,17 @@ design "$ROWS_ALL" "$(printf '## 원문 대조\n\n| 원문 요소 | 설계 요�
 assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표 머리 행이 칸 넷이 아니다" "원문 대조: 머리 행이 칸 셋이면 「읽지 못했다」 알림"
 design "$ROWS_ALL" "$ORIGIN_HEAD"
 assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표가 없거나 데이터 행이 없다" "원문 대조: 데이터 행이 없는 표는 「읽지 못했다」 알림"
-# 셋째 칸은 「그대로」 · 「바꿈」 둘뿐이다 — 그 밖의 값은 표를 읽지 못한 것(근거 칸이 비어도 얕은 답 검사를 비켜 가지 않는다)
+# 셋째 칸은 「그대로」 · 「바꿈」 · 「넘김」 셋뿐이다(리더 답 여덟째) — 그 밖의 값은 그 행 하나의 알림이고 얕은 답이 아니다
 origin_bad() {  # origin_bad <셋째 칸> <라벨> — 근거 칸이 빈 그 행 하나로 종료 코드와 끝 줄(알림)을 잰다
   local row="| 팀 폴더 | 과제 폴더 | $1 |  |"
   design "$ROWS_ALL" "$(printf '%s\n%s' "$ORIGIN_HEAD" "$row")"
-  assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 셋째 칸이 그대로/바꿈이 아니다('$1'): '$row'" "원문 대조: 셋째 칸 $2"
+  assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 행의 셋째 칸이 그대로 · 바꿈 · 넘김 가운데 하나가 아니다 — 팀 폴더: '$1'" "원문 대조: 셋째 칸 $2"
+  assert_not_contains "$(cat "$T/out.txt")" "얕은 답" "원문 대조: 셋째 칸 $2 — 그 행은 얕은 답으로 세지 않는다"
 }
-origin_bad "바뀜" "오타(바뀜) → 「읽지 못했다」 알림 · rc 0"
-origin_bad "**바꿈**" "꾸밈(**바꿈**) → 「읽지 못했다」 알림 · rc 0"
-origin_bad "" "빈 칸 → 「읽지 못했다」 알림 · rc 0"
-origin_bad "바꿈(작성자 제안)" "「바꿈(작성자 제안)」 → 「작성자 제안」 은 근거 칸에 적는다(설계 표의 꼴) — 「읽지 못했다」 알림"
+origin_bad "바뀜" "오타(바뀜) → 그 행의 알림 · rc 0"
+origin_bad "**바꿈**" "꾸밈(**바꿈**) → 그 행의 알림 · rc 0"
+origin_bad "" "빈 칸 → 그 행의 알림 · rc 0"
+origin_bad "바꿈(작성자 제안)" "「바꿈(작성자 제안)」 → 「작성자 제안」 은 근거 칸에 적는다(설계 표의 꼴) — 그 행의 알림"
 design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | 작성자 제안 |' "$ORIGIN_HEAD")"
 assert_eq "$(cov) · $(grep -c -e '알림 — ' -e '얕은 답' "$T/out.txt")" "0 · 0" "원문 대조: 근거 칸의 「작성자 제안」 은 근거다 — 알림도 얕은 답도 없다"
 # 근거 칸이 대시뿐이면 근거가 아니다 · 첫 칸(원문 요소)이 비면 표를 읽지 못한 것 · 같은 절의 둘째 표는 머리 · 구분 행을 건너뛴다
@@ -96,6 +97,37 @@ assert_not_contains "$(cat "$T/out.txt")" "얕은 답 — :" "원문 대조: 첫
 design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | S1 |\n\n둘째 표:\n\n| 원문 요소 | 설계 요소 | 그대로/바꿈 | 근거 |\n|---|---|---|---|\n| 둘째 표 요소 | 과제 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
 cov --json >/dev/null
 assert_eq "$(jsf "([s['id'] for s in r['shallow']], r['notices'])")" "(['둘째 표 요소'], [])" "원문 대조: 같은 절의 둘째 표 — 머리 · 구분 행은 건너뛰고 데이터 행만 읽는다"
+# 이 에픽 설계문서의 원문 대조 표 꼴 — 「그대로」(근거 있음 · 빈 칸) · 「바꿈」(근거 · 작성자 제안) · 「넘김」 셋(받는 곳이 근거 칸)
+ORIGIN_DESIGN_SHAPE="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s' "$ORIGIN_HEAD" \
+  '| `team-a/` | `roadmaps/<팀>/` | 그대로 | 「팀이 곧 로드맵이다」 |' \
+  '| 규칙 한 줄에 하나 | 그대로 | 그대로 | |' \
+  '| `NOTES.md` 규칙 목록 | `RULES.md` | 바꿈 | S24 · B7 |' \
+  '| `runner-01 … 04/` | `roadmaps/worker/` 하나 | 바꿈 | 작성자 제안 — 불러 쓴다 |' \
+  '| 검토는 두 번 · 칸 다섯 채우고 알림 | 절차는 R2 | 넘김 | §미룸 |' \
+  '| 공용 규칙 폴더 잠금 | 리더만 쓴다. 도구로 막기는 R2 | 넘김 | §미룸 |' \
+  '| `flow/`(run.py · steps.json) | R2 | 넘김 | 로드맵 R2 범위 |' \
+  '| 「막히면 지어내지 말고 파일로」 | `results/` 의 막힘 파일 | 그대로 | |')"
+design "$ROWS_ALL" "$ORIGIN_DESIGN_SHAPE"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['status'], r['notices'], r['shallow'])")" "(0, [], [])" "원문 대조: 설계문서 표의 꼴(「넘김」 셋 · 근거 빈 「그대로」) — 알림 0 · 얕은 답 0"
+design "$ROWS_ALL" "$(printf '%s\n| 검토 두 번 | 절차는 R2 | 넘김 |  |' "$ORIGIN_HEAD")"
+assert_eq "$(cov)" "0" "원문 대조: 근거(받는 곳) 없는 「넘김」 도 종료 코드는 그대로"
+assert_contains "$(cat "$T/out.txt")" "얕은 답 — 검토 두 번: 원문 대조의 「넘김」 행에 근거가 없다" "원문 대조: 근거 없는 「넘김」 은 얕은 답 — 줄에 「넘김」 이 보인다"
+cov --json >/dev/null
+assert_eq "$(jsf "(len(r['shallow']), r['notices'])")" "(1, [])" "원문 대조: 근거 없는 「넘김」 — 얕은 답 하나 · 알림 없음"
+# 꼴 밖의 값은 그 행만 알리고 표를 버리지 않는다 — 같은 표의 「바꿈 · 근거 없음」 은 여전히 센다
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바뀜 | S1 |\n| 결과 파일 | 결과 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['notices'], [s['id'] for s in r['shallow']])")" "([\"원문 대조 행의 셋째 칸이 그대로 · 바꿈 · 넘김 가운데 하나가 아니다 — 팀 폴더: '바뀜'\"], ['결과 파일'])" \
+  "원문 대조: 오타 행은 그 행 하나의 알림 · 같은 표의 「바꿈 · 근거 없음」 은 얕은 답으로 남는다"
+# 데이터 행 뒤의 구분 행 꼴 줄이 그 데이터 행을 「다음 표의 머리」 로 숨기지 않는다 — 첫 표의 머리와 같은 줄만 머리로 건너뛴다
+design "$ROWS_ALL" "$(printf '%s\n| hid | b | 바꿈 |  |\n|---|---|---|---|' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "([s['id'] for s in r['shallow']], r['notices'])")" "(['hid'], [])" "원문 대조: 구분 행 꼴 줄 앞의 데이터 행은 숨지 않는다"
+# 근거 칸의 대시 사이 공백이 NBSP · U+3000 이어도 대시뿐이다
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | —\302\240— |\n| 결과 파일 | 결과 폴더 | 바꿈 | -\343\200\200- |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "[s['id'] for s in r['shallow']]")" "['팀 폴더', '결과 파일']" "원문 대조: NBSP · U+3000 을 사이에 둔 대시뿐인 근거는 근거가 아니다"
 
 # ── 받듦 — 다른 과제(E3)의 design.md 를 읽는다 ─────────────────────────────
 design "$ROWS_REJECT_S1" "$ORIGIN_OK"
