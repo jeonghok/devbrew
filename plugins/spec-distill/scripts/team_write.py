@@ -188,8 +188,10 @@ def framing_pair(existing: bytes, brief_rel: str):
 def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = b"") -> list:
     """original.md 에 옮길 구간들 — framing 원문 · framing 질문 전체 · brief §6 · audit §6 순서.
     항목은 team_files.extend_original 의 (source, commit, label, first, lines, note). framing audit 없이 옮기는 구간에는
-    표지 NO_FRAMING 을 적는다. 있는 사본(existing)에 이 인터뷰의 framing 짝(framing_pair)이 이미 들었으면 framing audit 를
-    찾지 못해도 멈추지 않고 표지도 적지 않는다 — 원문 없이 만들지 않는다는 뜻은 사본 안의 짝으로 지켜진다."""
+    표지 NO_FRAMING 을 적는다. 있는 사본(existing)에서 이 brief 의 첫 사용자 원문 구간에 표지 NO_FRAMING 이 없고 그 바로 앞에
+    같은 출처의 원문 · 질문 전체 짝이 있으면(framing_pair) framing audit 를 찾지 못해도 멈추지 않고 표지도 적지 않는다 — 원문 없이
+    만들지 않는다는 뜻은 사본 안의 짝으로 지켜진다. 그 밖에는 상태 파일의 seed 가 가리키는 framing audit 를 찾지 못하고
+    framing_audit 도 없으면 멈춘다."""
     brief_rel = W.rel(top, brief)
     if not brief_rel.endswith(".md"):
         raise W.Usage("--brief 는 .md 파일이다: %s" % brief_rel)

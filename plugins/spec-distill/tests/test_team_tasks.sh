@@ -264,6 +264,121 @@ assert_eq "${NO_RC} · $(js "$T/s.json" "(r['jobs'], r['job_notes'])")" "3 · ([
   "기본 브랜치 모름: jobs 는 비고 세지 못했다는 알림 한 줄(없음이라 하지 않는다) · 종료 코드는 블록 규칙대로 3"
 g remote set-head origin main
 
+# ── 끝에서 끝 — create --layout team(team_repo) → job new → job sync → 결과 파일 커밋 → job_results.py check 의 실제 출력 →
+#    conductor_ledger.py record 의 받음 줄 → 단계가 넘어간다. 걸음마다 앞 걸음의 종료 코드와 글을 다음 걸음이 받는다 ──
+CL="$S/conductor_ledger.py"; CP="$S/control_plane.py"
+E2E="$TM/jobs/e2e-job"
+e2e_check() {  # e2e_check <브랜치> — 결과 대조를 돌려 출력은 $T/check.txt, rc 를 echo 한다
+  local rc=0
+  (cd "$W" && python3 "$JRC" check --roadmap "$RM" --job e2e-job --result implement-1.md --branch "$1" --date 2026-11-28) > "$T/check.txt" 2>&1 || rc=$?
+  echo "$rc"
+}
+snap() {  # 작업 나무(.git 밖)의 파일 바이트 · git 이 보는 상태(무시된 파일 포함) · ref 들
+  (cd "$W" && find . -path ./.git -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum)
+  g status --porcelain --untracked-files=all --ignored
+  g for-each-ref
+}
+# 위 묶음들이 기본 브랜치에 깨진 과제 폴더(broken · dirint · loose)를 들였다 — job new 의 나무 검사가 거절하지 않는, 그 전 커밋에서 가른다
+E2E_BASE="$(g rev-parse fix/broken~1)"
+g checkout -q -b fix/e2e "$E2E_BASE" || failed "fix/e2e"
+printf '끝에서 끝으로 문서 하나를 고친다\n' > "$T/said.txt"
+E2E_RC=0; (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name e2e-job --branch fix/e2e --paths docs/e2e.md --goal "끝에서 끝 문서 하나" < "$T/said.txt") \
+  > "$T/out.txt" 2>&1 || E2E_RC=$?
+assert_eq "${E2E_RC} · $(head -1 "$T/out.txt")" "0 · [spec-distill] 과제 폴더를 만들었다: $E2E (kind: task · 브랜치 fix/e2e) — 브랜치를 만들거나 커밋하지 않았다" \
+  "끝에서 끝: job new 가 과제 폴더를 만든다"
+g add -- "$E2E" && g commit -qm "과제 폴더 e2e-job" && put docs/e2e.md "끝에서 끝으로 고친 문서" && g commit -qm "e2e 문서" \
+  && CODE="$(g rev-parse HEAD)" || failed "e2e 커밋"
+assert_eq "$(sync e2e-job implement-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$CODE") · $(cat "$T/out.txt")" \
+  "0 · [spec-distill] 결과 파일을 맞췄다: $E2E/results/implement-1.md — 머리 만듦" "끝에서 끝: job sync 가 결과 파일의 머리를 만든다"
+g add -- "$E2E" && g commit -qm "결과 파일 열기" && g push -q origin fix/e2e && again || failed "결과 파일 열기"
+assert_contains "$(jget e2e-job fix/e2e notes)" "결과 있음 · 받음 없음: implement-1.md(도는 중 — 끝 줄 없음)" "끝에서 끝: 끝 줄 전에는 「도는 중」 받음 없음 알림"
+# 끝 줄 전의 대조 — 1(거절): 받음 줄을 내지 않으므로 리더가 record 에 넘길 줄이 없다
+assert_eq "$(e2e_check fix/e2e)" "1" "끝에서 끝: 끝 줄 전의 대조는 거절(1)"
+assert_eq "$(head -1 "$T/check.txt")" "결과 대조: 거절 2건 — implement-1.md" "끝에서 끝: 거절의 첫 줄(사유 둘)"
+assert_eq "$(grep '^거절 사유: ' "$T/check.txt")" "$(printf '거절 사유: 끝 줄이 없다 — 아직 도는 중이다\n거절 사유: 산출물 줄이 없다 — 설계문서가 없는 과제는 `산출물: <경로>` 를 하나 이상 적는다')" \
+  "끝에서 끝: 거절 사유 — 끝 줄 없음 · 산출물 줄 없음(설계문서가 없는 과제)"
+assert_not_contains "$(cat "$T/check.txt")" "- 결과 받음 · " "끝에서 끝: 거절(1)이면 받음 줄을 내지 않는다"
+# 브랜치를 읽지 못한 대조 — 3(검사 불가): 받음 줄을 내지 않는다
+assert_eq "$(e2e_check fix/e2e-nowhere) · $(head -1 "$T/check.txt")" "3 · 결과 대조: 검사 불가 — 브랜치 fix/e2e-nowhere 가 로컬에도 origin 에도 없다" \
+  "끝에서 끝: 없는 브랜치의 대조는 검사 불가(3)와 그 사유"
+assert_not_contains "$(cat "$T/check.txt")" "- 결과 받음 · " "끝에서 끝: 검사 불가(3)면 받음 줄을 내지 않는다"
+printf '산출물: docs/e2e.md\n' >> "$W/$E2E/results/implement-1.md"
+assert_eq "$(sync e2e-job implement-1.md --end "$CODE") · $(cat "$T/out.txt")" "0 · [spec-distill] 결과 파일을 맞췄다: $E2E/results/implement-1.md — 끝 줄" \
+  "끝에서 끝: job sync --end 가 끝 줄을 단다"
+# 끝난 결과 파일을 다시 맞추려 하면 1(쓰지 않음) — 파일은 바이트 그대로다
+cp "$W/$E2E/results/implement-1.md" "$T/ended.md"
+assert_eq "$(sync e2e-job implement-1.md --end "$(g rev-parse origin/main)")" "1" "끝에서 끝: 끝난 결과 파일의 job sync 는 쓰지 않음(1)"
+assert_contains "$(cat "$T/out.txt")" "끝난 결과 파일은 고치지 않는다 — 다시 하는 일은 새 시도 번호다" "끝에서 끝: 그 사유"
+cmp -s "$T/ended.md" "$W/$E2E/results/implement-1.md" && ok "끝에서 끝: 쓰지 않음(1) 뒤 결과 파일은 바이트 그대로" \
+  || no "끝에서 끝: 쓰지 않음(1) 뒤 결과 파일이 바뀌었다"
+g add -- "$E2E" && g commit -qm "결과 파일 끝" && g push -q origin fix/e2e || failed "결과 파일 끝"
+# 통과(0) — 실제 출력에서 받음 줄을 떼어 record 에 넘긴다
+assert_eq "$(e2e_check fix/e2e)" "0" "끝에서 끝: 끝 줄 뒤의 대조는 통과(0)"
+FIRST="$(head -1 "$T/check.txt")"
+assert_eq "$FIRST" "결과 대조: 통과 — implement-1.md · head ${CODE:0:8} · 산출물 1개" "끝에서 끝: 통과의 첫 줄(가운뎃점 구분이 든다)"
+LINE="$(grep '^- 결과 받음 · ' "$T/check.txt")"
+assert_eq "$LINE" "- 결과 받음 · 2026-11-28 · 「implement-1.md · ${CODE} · ${FIRST}」" "끝에서 끝: 받음 줄은 「결과 파일 · head 전체 · 첫 줄 그대로」"
+assert_eq "$(grep -c '^- 결과 받음 · ' "$T/check.txt") · $(grep -cx '리더가 과제의 결정 기록에 적을 받음 줄:' "$T/check.txt")" "1 · 1" \
+  "끝에서 끝: 받음 줄은 한 줄이고 그 앞에 안내 줄이 있다"
+REC_RC=0; (cd "$W" && python3 "$CL" --root "$W" record --spec "$W/$E2E/results/implement-1.md" --line "$LINE") > "$T/rec.txt" 2>&1 || REC_RC=$?
+assert_eq "${REC_RC} · $(cat "$T/rec.txt")" "0 · 적었다(커밋은 리더가) — $W/$E2E/INTENT.md 의 결정 기록: $LINE" \
+  "끝에서 끝: record 가 과제 폴더의 파일을 받아 그 INTENT.md 결정 기록에 받음 줄을 쓴다"
+REC_RC=0; (cd "$W" && python3 "$CL" --root "$W" record --spec "$W/$E2E/INTENT.md" --line "$LINE") > "$T/rec.txt" 2>&1 || REC_RC=$?
+assert_eq "${REC_RC} · $(grep -cxF -- "$LINE" "$W/$E2E/INTENT.md")" "0 · 1" "끝에서 끝: 같은 받음 줄을 다시 record 해도 줄은 한 번"
+g add -- "$E2E" && g commit -qm "받음 줄" && g push -q origin fix/e2e || failed "받음 줄"
+BEFORE="$(snap)"
+again
+assert_eq "$(js "$T/s.json" "[j['stage'] for j in r['jobs'] if j['id']=='e2e-job']")" "['결과 받음']" "끝에서 끝: 대조 → record 의 받음 줄 → 단계가 넘어간다"
+assert_eq "$(jget e2e-job fix/e2e reason) · $RC" "결과 받음 줄 있음: implement-1.md · 0" "끝에서 끝: 그 근거 · 종료 코드 0"
+[ "$(snap)" = "$BEFORE" ] && ok "끝에서 끝: 상태 계산은 team 로드맵을 읽기만 한다(작업 나무 · git 상태 · ref 가 그대로)" \
+  || no "끝에서 끝: 상태 계산 전후로 작업 나무가 달라졌다"
+SHOW_RC=0; (cd "$W" && python3 "$CP" show "$RM") > "$T/show.txt" 2>&1 || SHOW_RC=$?
+assert_eq "$SHOW_RC" "0" "끝에서 끝: 현황 rc 0"
+assert_grep "$(cat "$T/show.txt")" "^로드맵 밖 과제:$" "끝에서 끝: 현황에 「로드맵 밖 과제:」 절"
+assert_contains "$(cat "$T/show.txt")" "    e2e-job 끝에서 끝 문서 하나 — 결과 받음 · 결과 받음 줄 있음: implement-1.md" "끝에서 끝: 현황에 그 과제의 줄"
+
+# ── 과제 훑기의 진짜 git 실패 — 브랜치 끝의 과제 폴더 트리 객체를 치운다: 실제 보고가 3 과 사유를 내고 현황이 그 사유를 보인다 ──
+g checkout -q -b fix/e2e-gone "$E2E_BASE" && printf '트리를 치울 과제\n' > "$T/said.txt" \
+  && (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name e2e-gone --branch fix/e2e-gone --paths docs/gone.md --goal "치울 트리" < "$T/said.txt") > "$T/out.txt" 2>&1 \
+  && g add -- "$TM/jobs/e2e-gone" && g commit -qm "과제 폴더 e2e-gone" && g checkout -q main || failed "fix/e2e-gone"
+GONE="$(g rev-parse "fix/e2e-gone:$TM/jobs")"
+GONE_OBJ="$W/.git/objects/${GONE:0:2}/${GONE:2}"
+if [ -f "$GONE_OBJ" ] && mv "$GONE_OBJ" "$T/gone-tree"; then
+  GONE_RC=0; (cd "$W" && python3 "$RS" "$RM" --json) > "$T/gone.json" 2>/dev/null || GONE_RC=$?
+  (cd "$W" && python3 "$CP" show "$RM") > "$T/gone-show.txt" 2>&1
+  mv "$T/gone-tree" "$GONE_OBJ"
+  assert_eq "${GONE_RC} · $(js "$T/gone.json" "[u for u in r['unknown_reasons'] if u.startswith('git 읽기 실패 — git ls-tree 실패')] != []")" "3 · True" \
+    "끝에서 끝: 과제 훑기에서 git 이 읽지 못하면 실제 보고가 검사 불가(3)와 「git 읽기 실패 — …」 사유를 낸다"
+  REASON="$(js "$T/gone.json" "[u for u in r['unknown_reasons'] if u.startswith('git 읽기 실패 — git ls-tree 실패')][0]")"
+  assert_contains "$(cat "$T/gone-show.txt")" "검사 불가: $REASON" "끝에서 끝: 현황이 그 사유를 「검사 불가: <사유>」 로 보인다"
+  assert_contains "$(js "$T/gone.json" "' | '.join(r['job_notes'])")" "로드맵 밖 과제를 다 세지 못했다 — 브랜치 끝 $(g rev-parse fix/e2e-gone | cut -c1-8) 의 $TM/jobs 를 읽지 못했다" \
+    "끝에서 끝: 무엇을 못 셌는지는 알림으로"
+  assert_contains "$(js "$T/gone.json" "[(j['id'], j['stage']) for j in r['jobs']]")" "('e2e-job', '결과 받음')" "끝에서 끝: 읽은 과제는 그대로 싣는다"
+else
+  no "끝에서 끝: 치울 트리 객체가 낱개 파일이 아니다 — $GONE_OBJ"
+fi
+g cat-file -e "$GONE" && ok "끝에서 끝: 치운 트리 객체를 되돌렸다" || no "끝에서 끝: 트리 객체를 되돌리지 못했다"
+g branch -q -D fix/e2e-gone || failed "fix/e2e-gone 지움"
+
+# ── pr-refresh 의 3 — 단계 계산이 세지 못한 블록(형식이 깨진 team 로드맵)은 PR 캐시를 채우지 않고 사유와 3 ──
+git clone -q --bare "$T/origin.git" "$T/origin-pr.git" && git clone -q "$T/origin-pr.git" "$T/prr" && git -C "$T/prr" remote set-head origin main \
+  && python3 - "$T/prr/$RM" <<'PY' && git -C "$T/prr" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qam "형식 깨짐" \
+  && git -C "$T/prr" push -q origin main || no "pr-refresh 사본을 만들지 못했다"
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+if t.count("- 의존: 없음\n") < 1:
+    sys.exit("의존 줄이 없다")
+open(p, "w", encoding="utf-8").write(t.replace("- 의존: 없음\n", "- 의존: 없음\n- 의존: 없음\n", 1))
+PY
+PR_SID="session-e2e00016"
+CLAIM_RC=0; (cd "$T/prr" && python3 "$CL" --root "$T/prr" claim --roadmap "$RM" --session "$PR_SID") > "$T/claim.txt" 2>&1 || CLAIM_RC=$?
+assert_eq "$CLAIM_RC" "0" "pr-refresh: 사본에서 세션 표지를 잡는다(아래 단언의 바탕)"
+PRR_RC=0; (cd "$T/prr" && python3 "$CL" --root "$T/prr" pr-refresh --roadmap "$RM" --session "$PR_SID") > "$T/prr.txt" 2>&1 || PRR_RC=$?
+assert_eq "$PRR_RC" "3" "pr-refresh: 세지 못한 블록이 있으면 3"
+assert_contains "$(cat "$T/prr.txt")" "[spec-distill] E1 의 단계를 세지 못해 브랜치를 읽지 못했다 — 로드맵 형식 깨짐" "pr-refresh: 그 사유(「브랜치 없음」 이 아니다)"
+assert_not_contains "$(cat "$T/prr.txt")" "브랜치 없음" "pr-refresh: 세지 못한 블록을 「브랜치 없음」 으로 말하지 않는다"
+
 g checkout -q main
 assert_eq "$(g status --porcelain --untracked-files=all)" "" "끝 상태: 작업 트리가 깨끗하다"
 assert_eq "$(g symbolic-ref -q refs/remotes/origin/HEAD)" "refs/remotes/origin/main" "끝 상태: origin/HEAD 는 main"
