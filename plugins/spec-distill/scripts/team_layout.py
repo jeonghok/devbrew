@@ -39,8 +39,6 @@ BLOCKED_FILE = "BLOCKED.md"
 STAGES = ("design", "plan", "implement", "review")
 PLANNED_STAGES = ("plan", "implement", "review")
 
-STAGE_PENDING = "이 판은 team 형식의 단계를 계산하지 않는다 — 번호 대조까지만 했다"
-
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _PLAN_FILE_RE = re.compile(r"plan-([1-9][0-9]*)\.md")
 _PLAN_SHAPE_RE = re.compile(r"plan-([0-9]+)\.md")

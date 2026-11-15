@@ -245,5 +245,37 @@ class IntentMeta(unittest.TestCase):   # 잔여 — kind 판정이 줄 비교가
         self.assertRaises(F.FormatError, F.intent_meta, "---\nkind: task\n")
 
 
+class FramingHeads(unittest.TestCase):   # 잔여 — 경계 제목을 두 곳이 따로 적지 않는다
+    def test_same_headings_as_the_audit_reader(self):
+        import seed_review_log
+        import team_write
+        self.assertEqual(tuple(team_write.FRAMING_HEADS), tuple(seed_review_log.AUDIT_HEADINGS[:3]))
+
+    def test_stage_pending_is_gone(self):
+        import roadmap_write
+        self.assertFalse(hasattr(L, "STAGE_PENDING"))
+        self.assertFalse(hasattr(roadmap_write, "STAGE_PENDING_NOTICE"))
+
+
+class TeamRoadmapTemplate(unittest.TestCase):   # 잔여 — 머리말 · 넘김 문장은 그린 글이 아니라 틀에서 바꾼다
+    def test_user_text_may_carry_the_old_sentence(self):
+        import types
+        import roadmap_render as R
+        import team_write as TW
+        idx = types.SimpleNamespace(k_lines={"K1": "- 위험 K1 — " + TW.OLD_HANDOFF})
+        text = TW.render_team_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), [], idx, "제목", "b.md", "r/t/roadmap.md", "이력")
+        self.assertTrue(text.startswith(TW.FRONT + "layout: team\n"))
+        self.assertEqual(text.count(TW.TEAM_HANDOFF), 1)
+        self.assertEqual(text.count(TW.OLD_HANDOFF), 1)   # 사용자 글(위험 줄)의 문장은 그대로
+        self.assertIn("- 위험 K1 — " + TW.OLD_HANDOFF, text)
+
+    def test_template_without_the_two_marks_is_refused_before_rendering(self):
+        import roadmap_render as R
+        import team_write as TW
+        for template in ("---\ntype: roadmap\n---\n본문\n", "본문\n" + TW.FRONT + TW.OLD_HANDOFF + "\n",
+                         TW.FRONT + "---\n" + TW.OLD_HANDOFF + TW.OLD_HANDOFF + "\n"):
+            self.assertRaises(R.TableError, TW.render_team_roadmap, template, [], None, "t", "b", "r", "h")
+
+
 if __name__ == "__main__":
     unittest.main()
