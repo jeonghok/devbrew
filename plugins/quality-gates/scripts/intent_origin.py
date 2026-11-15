@@ -141,6 +141,15 @@ def evidence_kind(line: str) -> str:
     return KIND_TEAMS if sep and body.startswith(MARK_TEAMS) else KIND_RUN
 
 
+def teams_bytes(evidence: str) -> int:
+    """근거 글에서 다른 팀 줄(`evidence_kind` 가 `KIND_TEAMS`)을 `\\n` 으로 이은 글의 UTF-8 바이트."""
+    rows = []
+    for line in evidence.split("\n"):
+        if evidence_kind(line) == KIND_TEAMS:
+            rows.append(line)
+    return len("\n".join(rows).encode("utf-8"))
+
+
 def ordered_kinds(found: set) -> List[str]:
     """근거 종류들 → `돌려서 봄` · `다른 팀에서 봄` · `읽어서 봄` 순서의 목록."""
     out = []
@@ -206,9 +215,26 @@ def evidence_line_numbers(text: str) -> set:
 
 # ---------------------------------------------------------------- 추적 파일 읽기
 
+GIT_TIMEOUT = 30
+REASON_TIMEOUT = "git 읽기가 시간 한도 %d초를 넘김" % GIT_TIMEOUT
+
+
+class _TimedOut:
+    """시간 한도를 넘긴 git 호출이 `None` 대신 돌려주는 값 — 실패한 호출처럼 읽힌다."""
+    returncode = -1
+    stdout = b""
+    stderr = b""
+
+
+TIMED_OUT = _TimedOut()
+
+
 def _run_git(repo: str, *args: str):
     try:
-        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True)
+        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True,
+                              timeout=GIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return TIMED_OUT
     except (OSError, ValueError):
         return None
 
@@ -268,11 +294,15 @@ def read_tracked(repo: str, commit: str, rel: str) -> tuple:
     if why is not None:
         return (None, why)
     tree = _run_git(repo, "ls-tree", "-z", commit, "--", ":(literal)" + rel)
+    if tree is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     why = _mode_rejection(*_listed_mode(tree, rel))
     if why is not None:
         return (None, why)
     # `<rev>:<경로>` 는 pathspec 이 아니다 — 뒤를 `--` 로 닫아 같은 이름의 작업 폴더 파일과 갈리지 않게 한다.
     shown = _run_git(repo, "show", "%s:%s" % (commit, rel), "--")
+    if shown is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     if shown is None or shown.returncode != 0:
         return (None, REASON_UNTRACKED)
     return (shown.stdout.decode("utf-8", "replace"), None)
@@ -288,6 +318,8 @@ def read_tree(tree_root: str, rel: str) -> tuple:
     if why is not None:
         return (None, why)
     listing = _run_git(tree_root, "ls-files", "-s", "-z", "--", ":(literal)" + rel)
+    if listing is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     why = _mode_rejection(*_listed_mode(listing, rel))
     if why is not None:
         return (None, why)

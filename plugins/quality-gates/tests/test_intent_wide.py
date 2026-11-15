@@ -496,11 +496,67 @@ class TestWidePrepare(unittest.TestCase):
         p = self._prep()
         self.assertNotEqual(tic._last(p), "intent-call: single")
         self.assertEqual(tic._last(p), "intent-call: first-only")
-        teams = io_.total_bytes(self._f(ot.FILE))
+        teams = io_.teams_bytes(self._f("intent-evidence.txt"))
         self.assertIn("입력 %d바이트 · 다른 팀 기록 %d바이트(상한 80000 — 나눠 부르기 판정에 넣지 않는다)"
                       % (run_input, teams), p.stdout.splitlines())
         tic._write(tic._config_text(max_bytes=run_input - 1), self.rd, "intent-config.txt")
         self.assertEqual(tic._last(self._prep()), "intent-call: single")
+
+    def _siblings_seen(self, scope_text):
+        """topic-scope.txt 를 둔 세션 폴더로 `_prepare` 를 돌려 `collect` 가 받은 siblings 를 돌려준다."""
+        seen = []
+
+        def fake(*_a, **kwargs):
+            seen.append(kwargs.get("siblings", "없음"))
+            return {"text": "", "notices": []}
+
+        if scope_text is not None:
+            tic._write(scope_text, self.rd, "topic-scope.txt")
+        tic._write("src/a.py\n", self.rd, "review-i1.names")
+        sp = os.path.join(self.rd, "intent-specs.json")
+        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
+        args = argparse.Namespace(rd=self.rd, repo=self.R, tree_root=self.R, review_commit="HEAD",
+                                  head="HEAD", origin=None, mode="pr", base="-", specs_json=sp)
+        real = ic._teams
+        with mock.patch.object(ic, "_teams", lambda *a: real(*a, collect=fake)):
+            ic._prepare(args, [])
+        self.assertEqual(len(seen), 1)
+        return seen[0]
+
+    def test_topic_scope_members_excluded(self):
+        got = self._siblings_seen("topic_key: k\nstatus: ok\nreason: -\nbranches: feature/x,feature/y\n")
+        self.assertEqual(got, {"feature/x", "feature/y"})
+        for text in ("status: merge-failed\nbranches: feature/x,feature/y\n",
+                     "status: declaration-invalid\nbranches: feature/x,feature/y\n"):
+            with self.subTest(text=text):
+                self.tearDown()
+                self.setUp()
+                self.assertIsNone(self._siblings_seen(text))
+
+    def test_topic_scope_without_members_excludes_nothing(self):
+        for text in ("status: ok\nbranches: -\n", "status: ok\nreason: -\n", None):
+            with self.subTest(text=text):
+                self.tearDown()
+                self.setUp()
+                self.assertIsNone(self._siblings_seen(text))
+
+    def test_topic_scope_member_pieces(self):
+        tic._write("status: ok\nbranches:  feature/x, ,feature/y ,\n", self.rd, "topic-scope.txt")
+        self.assertEqual(ic._topic_siblings(self.rd), {"feature/x", "feature/y"})
+
+    def test_teams_bytes_match_evidence(self):
+        _other_branch(self.R)
+        tic._write("관찰 하나\n", self.rd, "e2e-record.md")
+        p = self._prep()
+        rows = [r for r in self._f("intent-evidence.txt").split("\n")
+                if r.partition("\t")[2].startswith("[다른 팀] ")]
+        self.assertTrue(rows)
+        want = len("\n".join(rows).encode("utf-8"))
+        self.assertEqual(io_.teams_bytes(self._f("intent-evidence.txt")), want)
+        shown = [line for line in p.stdout.splitlines() if "다른 팀 기록 " in line]
+        self.assertEqual(len(shown), 1)
+        self.assertIn("다른 팀 기록 %d바이트(" % want, shown[0])
+        self.assertNotEqual(want, io_.total_bytes(self._f(ot.FILE)))
 
     def test_scope_file(self):
         first = _ok(self.R, "rev-parse", "HEAD~1")
@@ -614,15 +670,15 @@ class TestWidePrepare(unittest.TestCase):
                          ("", ["다른 팀 읽기 실패 — RuntimeError"]))
         seen = []
 
-        def fake(*a):
-            seen.append(a)
+        def fake(*a, **k):
+            seen.append((a, k))
             return {"text": "## 겹치는 곳\n- 겹침 없음\n", "notices": ["n1"]}
 
         self.assertEqual(ic._teams(args, {"src/a.py"}, ["docs/rm/one/roadmap.md"], cfg,
                                    collect=fake),
                          ("## 겹치는 곳\n- 겹침 없음\n", ["n1"]))
-        self.assertEqual(seen, [(self.R, os.path.abspath(self.R), "HEAD", {"src/a.py"},
-                                 ["docs/rm/one/roadmap.md"], MARKERS, 80000)])
+        self.assertEqual(seen, [((self.R, os.path.abspath(self.R), "HEAD", {"src/a.py"},
+                                  ["docs/rm/one/roadmap.md"], MARKERS, 80000), {"siblings": None})])
 
     def test_differential_shape_disclosed(self):
         tic._write("per_adapter: x\n", self.rd, "differential.yaml")

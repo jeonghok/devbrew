@@ -620,11 +620,35 @@ def _breadth(args, tree_root: str, cfg: dict, notices: List[str]) -> tuple:
     return names, breadth, docs
 
 
-def _teams(args, names, roadmaps, cfg, collect=ot.collect) -> tuple:
+def _topic_siblings(rd: str) -> Optional[set]:
+    """토픽 리뷰의 형제 브랜치 이름들 — `topic-scope.txt` 의 `status:` 가 `ok` 이고 `branches:` 가
+    `-` 아닌 쉼표 목록일 때만. 그 밖에는 None(아무것도 빼지 않는다)."""
+    text = _read(_path(rd, "topic-scope.txt"))
+    if text is None:
+        return None
+    status = None
+    branches = None
+    for line in text.split("\n"):
+        key, sep, value = line.partition(":")
+        if sep and key == "status" and status is None:
+            status = value.strip()
+        elif sep and key == "branches" and branches is None:
+            branches = value.strip()
+    if status != "ok" or not branches or branches == "-":
+        return None
+    names = set()
+    for piece in branches.split(","):
+        if piece.strip():
+            names.add(piece.strip())
+    return names or None
+
+
+def _teams(args, names, roadmaps, cfg, siblings=None, collect=ot.collect) -> tuple:
     """다른 팀 기록 → (글, 공시 줄들). 읽기가 예외로 끝나도 단계를 멈추지 않는다(fail-open — 공시한다)."""
     try:
         got = collect(args.repo, os.path.abspath(args.tree_root), args.review_commit, names,
-                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"])
+                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"],
+                      siblings=siblings)
         return got["text"], list(got["notices"])
     except Exception as exc:  # noqa: BLE001 — 어떤 실패든 이름만 공시하고 다른 팀 없이 간다
         return "", [NOTICE_TEAMS_FAILED % type(exc).__name__]
@@ -657,7 +681,8 @@ def _prepare(args, notices: List[str]) -> str:
                 _resolve_commit(args.repo, args.base))
     built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs,
                              changed_docs=docs, tree_root=tree_root)
-    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg)
+    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg,
+                                     _topic_siblings(rd))
     if teams_text:
         _write(_path(rd, OTHER_TEAMS), teams_text)
     else:
@@ -719,7 +744,7 @@ def _prepare(args, notices: List[str]) -> str:
         call = "first-only"
     else:
         call = "split"
-    _add_notice(notices, NOTICE_BYTES % (total, io_.total_bytes(teams_text),
+    _add_notice(notices, NOTICE_BYTES % (total, io_.teams_bytes(evidence),
                                          cfg["other_teams_max_bytes"]))
 
     _write(_path(rd, EVIDENCE), evidence)

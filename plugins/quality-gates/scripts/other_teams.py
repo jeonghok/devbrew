@@ -33,7 +33,8 @@ HEAD_MAP = "## 팀 지도"
 HEAD_WORK = "## 다른 작업"
 HEAD_CAP = "## 상한"
 DIFF_LINES = 120
-PR_TIMEOUT = 30
+PR_TIMEOUT = io_.GIT_TIMEOUT
+PR_LIMIT = 200
 
 # `## 겹치는 곳` 의 빈 자리 줄 — 겹침을 다 보고 없었음 · 겹침을 정하지 못함(침묵과 0 은 다른 사실이다).
 NO_OVERLAP = "- 겹침 없음"
@@ -51,6 +52,12 @@ LINE_UNSEEN = "다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음"
 LINE_BRANCH_FAILED = "브랜치 %s 를 읽지 못함 — %s"
 LINE_FRONTMATTER = "%s 의 %s 머리를 읽지 못함 — 의도 문서인지 확인 못 함"
 LINE_NO_EPIC = "로드맵 %s 를 읽었지만 에픽 블록을 찾지 못함 — 글자 꼴이 다를 수 있다"
+LINE_PR_LIMIT = "열린 PR 이 조회 상한에 닿아 일부를 못 봤을 수 있다"
+LINE_DIVERGED = "같은 이름의 원격 사본이 갈라져 있다 — %s"
+LINE_FOLDED = "같은 이름의 원격 사본 %d개를 로컬 브랜치와 한 작업으로 묶었다"
+LINE_SIBLINGS = "토픽 리뷰의 형제 브랜치 %d개를 다른 팀에서 뺐다 — 이번 리뷰 범위다"
+LINE_TIMEOUTS = "git 읽기 %d번이 시간 한도 %d초를 넘겨 그 읽기를 확인 못 함"
+LINE_DOC_TIMEOUT = "%s 의 %s 를 읽지 못함 — %s"
 PR_NO_GH = "gh 없음"
 PR_NO_ORIGIN = "origin 을 읽지 못함"
 PR_TIMED_OUT = "시간 초과"
@@ -68,9 +75,16 @@ _HEADS = "refs/heads/"
 _SHORT_PREFIXES = ("refs/remotes/origin/", _HEADS, _REMOTES)
 
 
+_TIMEOUTS = [0]  # 이 모듈의 git 호출 가운데 시간 한도를 넘긴 수 — `collect` 가 시작에 비운다
+
+
 def _git(repo: str, *args: str):
     try:
-        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True)
+        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True,
+                              timeout=PR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        _TIMEOUTS[0] += 1
+        return io_.TIMED_OUT
     except (OSError, ValueError):
         return None
 
@@ -119,22 +133,77 @@ def default_branch(repo: str) -> Optional[tuple]:
     return (_short_name(ref), ref)
 
 
-def _tips(repo: str) -> Optional[List[tuple]]:
-    """`(이름, sha, 시각)` — 끝 커밋 하나에 한 줄(로컬 브랜치 이름이 이긴다). 읽지 못하면 None."""
+def _ancestor(repo: str, older: str, newer: str) -> Optional[bool]:
+    """`older` 가 `newer` 의 조상인가 — git 이 답하지 못하면(실패 · 시간 한도) None."""
+    proc = _git(repo, "merge-base", "--is-ancestor", older, newer)
+    if proc is None or proc.returncode not in (0, 1):
+        return None
+    return proc.returncode == 0
+
+
+def _same_name_drops(repo: str, refs: List[tuple]) -> tuple:
+    """같은 이름의 원격 사본을 가른다 → (버릴 ref 이름들, 묶은 수, 갈라진 로컬 이름들).
+
+    원격이 로컬의 조상이면 원격을, 로컬이 원격의 조상이면 로컬을 버리고 묶음으로 센다. 서로
+    조상이 아니면 원격을 버리고 로컬 이름을 갈라짐에 남긴다. git 이 답하지 못하면 둘 다 둔다.
+    """
+    local: dict = {}
+    for ref, sha in refs:
+        if ref.startswith(_HEADS):
+            local[ref[len(_HEADS):]] = (ref, sha)
+    drops: set = set()
+    folded = 0
+    diverged: set = set()
+    for ref, sha in refs:
+        if not ref.startswith(_REMOTES):
+            continue
+        _remote, _sep, name = ref[len(_REMOTES):].partition("/")
+        if name not in local or local[name][1] == sha:
+            continue
+        local_ref, local_sha = local[name]
+        remote_old = _ancestor(repo, sha, local_sha)
+        if remote_old:
+            drops.add(ref)
+            folded += 1
+        elif remote_old is None:
+            continue
+        else:
+            local_old = _ancestor(repo, local_sha, sha)
+            if local_old:
+                drops.add(local_ref)
+                folded += 1
+            elif local_old is False:
+                drops.add(ref)
+                diverged.add(name)
+    return drops, folded, sorted(diverged)
+
+
+def _tips(repo: str, notes: Optional[dict] = None) -> Optional[List[tuple]]:
+    """`(이름, sha, 시각)` — 끝 커밋 하나에 한 줄(로컬 브랜치 이름이 이긴다). 읽지 못하면 None.
+
+    같은 이름의 원격 사본은 sha 로 접기 전에 가른다(`_same_name_drops`). `notes` 가 있으면
+    `notes["folded"]`(묶은 수) · `notes["diverged"]`(갈라진 로컬 이름들)를 채운다.
+    """
     proc = _git(repo, "for-each-ref",
                 "--format=%(refname)%00%(objectname)%00%(committerdate:unix)",
                 "refs/heads", "refs/remotes")
     if not _ok(proc):
         return None
-    chosen = {}
+    rows = []
     for line in _text(proc.stdout).split("\n"):
-        if not line:
-            continue
         fields = line.split("\0")
         if len(fields) != 3:
             continue
-        ref, sha, when = fields
-        if ref.startswith(_REMOTES) and ref.endswith("/HEAD"):
+        if fields[0].startswith(_REMOTES) and fields[0].endswith("/HEAD"):
+            continue
+        rows.append(fields)
+    drops, folded, diverged = _same_name_drops(repo, [(f[0], f[1]) for f in rows])
+    if notes is not None:
+        notes["folded"] = folded
+        notes["diverged"] = diverged
+    chosen = {}
+    for ref, sha, when in rows:
+        if ref in drops:
             continue
         local = ref.startswith(_HEADS)
         name = ref[len(_HEADS):] if local else ref[len(_REMOTES):]
@@ -203,7 +272,7 @@ def _branch_entry(repo: str, name: str, sha: str, stamp: int, default_ref: str,
     return {"name": name, "sha": sha, "time": stamp, "paths": paths, "base": base}, False
 
 
-def other_work(repo: str, default_ref: str, end: str) -> tuple:
+def other_work(repo: str, default_ref: str, end: str, notes: Optional[dict] = None) -> tuple:
     """`(항목들, 읽지 못한 브랜치 수)` — 기본 브랜치에도 `end` 에도 없는 커밋을 가진 브랜치.
 
     항목 `{"name", "sha", "time", "paths", "base"}` 는 이름 순이다. git 이 실패한 브랜치는
@@ -212,7 +281,7 @@ def other_work(repo: str, default_ref: str, end: str) -> tuple:
     """
     if not _rev_ok(default_ref) or not _rev_ok(end):
         return [], None
-    tips = _tips(repo)
+    tips = _tips(repo, notes)
     if tips is None:
         return [], None
     entries = []
@@ -243,8 +312,11 @@ def one_line(value: str) -> str:
 
 
 def _clean(text: str) -> str:
-    """UTF-8 로 쓸 수 없는 글자(짝 없는 surrogate)를 `?` 로 — 기록 쓰기가 죽지 않게."""
-    return text.encode("utf-8", "replace").decode("utf-8")
+    """`\\n` · `\\t` 밖의 인쇄할 수 없는 글자(제어 · 방향 · 짝 없는 surrogate)를 `?` 로 — 근거 줄이 늘지 않고 기록 쓰기가 죽지 않게."""
+    out = []
+    for ch in text:
+        out.append(ch if ch in "\n\t" or ch.isprintable() else "?")
+    return "".join(out).encode("utf-8", "replace").decode("utf-8")
 
 
 def _heading_depth(line: str) -> int:
@@ -462,7 +534,7 @@ def open_prs(repo: str) -> tuple:
     origin = found.stdout.decode("utf-8", "replace").strip()
     if found.returncode != 0 or not origin or origin.startswith("-") or not io_.single_line(origin):
         return None, PR_NO_ORIGIN
-    argv = ["gh", "pr", "list", "-R", origin, "--state", "open", "--json", PR_FIELDS, "--limit", "200"]
+    argv = ["gh", "pr", "list", "-R", origin, "--state", "open", "--json", PR_FIELDS, "--limit", str(PR_LIMIT)]
     try:
         proc = subprocess.run(argv, cwd=repo, capture_output=True, stdin=subprocess.DEVNULL,
                               timeout=PR_TIMEOUT)
@@ -498,14 +570,34 @@ def _names_by_tip(repo: str) -> Optional[dict]:
     return names
 
 
-def _attach_prs(repo: str, entries: List[dict], prs: List[dict]) -> List[int]:
+_UNREAD = object()  # `_attach_prs` 가 끝 커밋 이름표를 스스로 읽는다는 뜻(None 은 「읽지 못함」)
+
+
+def _without_siblings(entries: List[dict], by_tip: Optional[dict], siblings: set) -> tuple:
+    """(형제를 뺀 항목들, 뺀 수) — 항목 이름 · 그 끝 커밋을 가리키는 이름 가운데 하나가 형제면 뺀다."""
+    kept: List[dict] = []
+    removed = 0
+    for entry in entries:
+        aliases = {entry["name"]}
+        if by_tip is not None:
+            aliases |= by_tip.get(entry["sha"], set())
+        if aliases & siblings:
+            removed += 1
+        else:
+            kept.append(entry)
+    return kept, removed
+
+
+def _attach_prs(repo: str, entries: List[dict], prs: List[dict],
+                by_tip=_UNREAD) -> List[int]:
     """항목마다 `"prs"` 를 단다. 끝 커밋이 같은 다른 이름(가려진 로컬 이름 · 원격 이름)도 견준다.
 
     돌려주는 것: 내용을 볼 수 없는 PR 번호들 — 포크 PR 전부(머리 이름이 이 리포의 이름과
     같아도 그 브랜치가 아니다), 그리고 브랜치가 이 리포의 어느 ref 에도 없는 PR.
     `"fork"` 가 없는 항목(주입한 목록)은 같은 리포의 PR 로 본다.
     """
-    by_tip = _names_by_tip(repo)
+    if by_tip is _UNREAD:
+        by_tip = _names_by_tip(repo)
     known: set = set()
     if by_tip is not None:
         for names in by_tip.values():
@@ -555,10 +647,12 @@ def _intent_docs(repo: str, entry: dict, markers: List[str], unverified: List[st
         # 「문서 파일」 은 넓이 판정(review_breadth)과 같은 뜻 — 모델이 읽는 파일은 빼고.
         if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
             continue
-        text, _why = io_.read_tracked(repo, entry["sha"], rel)
+        text, why = io_.read_tracked(repo, entry["sha"], rel)
         if text is None:
-            continue
-        if io_.frontmatter_unreadable(text):
+            if why == io_.REASON_TIMEOUT:
+                unverified.append(LINE_DOC_TIMEOUT % (one_line(entry["name"]), one_line(rel),
+                                                      io_.REASON_TIMEOUT))
+        elif io_.frontmatter_unreadable(text):
             unverified.append(LINE_FRONTMATTER % (one_line(entry["name"]), one_line(rel)))
         elif io_.is_intent_doc(text, markers):
             docs.append((rel, text))
@@ -665,11 +759,13 @@ def _section(head: str, lines: List[str], empty_line: str) -> str:
 
 
 def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
-            roadmaps: List[str], markers: List[str], max_bytes: int, list_prs=open_prs) -> dict:
+            roadmaps: List[str], markers: List[str], max_bytes: int, list_prs=open_prs,
+            siblings: Optional[set] = None) -> dict:
     """다른 팀 기록 → `{"text": 기록 글, "notices": 공시 줄}`. 파일을 쓰지 않는다.
 
     git 실패는 값으로 다룬다 — 읽지 못한 것은 「확인 못 함」 줄이 된다.
     """
+    _TIMEOUTS[0] = 0
     names = set(names) if names is not None else None
     roadmaps = _unique(roadmaps)
     unverified: List[str] = []
@@ -680,12 +776,14 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
     overlapped: List[dict] = []
     rest: List[dict] = []
     plain = 0
+    notes: dict = {"folded": 0, "diverged": []}
+    dropped_siblings = 0
     prs_known = False
     overlap_known = False  # 기본 브랜치 · 브랜치 목록 · 바뀐 파일 목록이 모두 있어야 「겹침 없음」 이라 말한다
     if default is None:
         unverified.append(LINE_NO_DEFAULT)
     else:
-        entries, unreadable = other_work(repo, default[1], review_commit)
+        entries, unreadable = other_work(repo, default[1], review_commit, notes)
         overlap_known = unreadable is not None and names is not None
         if unreadable is None:
             unverified.append(LINE_REFS_UNREADABLE)
@@ -693,12 +791,19 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
             unverified.append("읽지 못한 브랜치 %d개" % unreadable)
         if names is None:
             unverified.append(LINE_NAMES_UNKNOWN)
+        for name in notes["diverged"]:
+            unverified.append(LINE_DIVERGED % one_line(name))
+        by_tip = _names_by_tip(repo) if unreadable is not None else None
+        if siblings:
+            entries, dropped_siblings = _without_siblings(entries, by_tip, siblings)
         mark_overlaps(entries, names)
         prs, why = list_prs(repo)
         prs_known = prs is not None
         if not prs_known:
             unverified.append("열린 PR 확인 못 함 — %s" % one_line(str(why)))
-        for number in _attach_prs(repo, entries, prs or []):
+        elif len(prs) >= PR_LIMIT:
+            unverified.append(LINE_PR_LIMIT)
+        for number in _attach_prs(repo, entries, prs or [], by_tip):
             unverified.append("PR #%d 내용 확인 못 함 — 그 브랜치가 이 리포에 없다" % number)
         for entry in entries:
             try:
@@ -726,6 +831,8 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
         unverified.append(LINE_WORKTREES_UNREADABLE)
     elif worktrees:
         unverified.append("다른 worktree %d개의 커밋 안 된 작업은 읽지 않았다" % worktrees)
+    if _TIMEOUTS[0]:
+        unverified.append(LINE_TIMEOUTS % (_TIMEOUTS[0], io_.GIT_TIMEOUT))
     unverified.extend((LINE_NO_FETCH, LINE_UNSEEN))
 
     clean_units: List[tuple] = []
@@ -740,6 +847,10 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
              HEAD_MAP + "\n"] + maps + [HEAD_WORK + "\n"] + work
     if plain:
         parts.append("그 밖의 브랜치 %d개 — 겹침 · 의도 문서 없음\n" % plain)
+    if notes["folded"]:
+        parts.append(LINE_FOLDED % notes["folded"] + "\n")
+    if dropped_siblings:
+        parts.append(LINE_SIBLINGS % dropped_siblings + "\n")
     parts.append("%s\n%s\n" % (HEAD_CAP, cap_line))
     return {"text": _clean("".join(parts)), "notices": notices}
 
