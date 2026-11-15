@@ -4,17 +4,19 @@ epic: P1
 source_interview: docs/superpowers/roadmaps/2026-11-14-framing-interview-constraint-audit-brief/P1.md
 roadmap: docs/superpowers/roadmaps/2026-11-14-framing-interview-constraint-audit-brief/roadmap.md
 docs_checked_at: 2026-11-15
-measured_at: 아직 재지 않음
+measured_at: 2026-11-15
 claude_code: 2.1.325
+measured_with: 화면 없는 세션 19회 · sonnet · effort medium · 사용자 설정 제외(--clean) · macOS
 ---
 
 # P1 — 공식 장치 실측
 
-공식 장치(데이터 폴더 · 설정 값 받기 · 플러그인 끄기)가 devbrew 가 쓰는 방식 — skill 이 Bash 로 부르는 스크립트 — 에서 실제로 되는지 잰 기록이다. 지금은 뼈대다: 재는 도구와 문서 확인까지 들어 있고, 실측 표의 「되는가」 칸은 도구를 돌린 뒤에 채운다.
+공식 장치(데이터 폴더 · 설정 값 받기 · 플러그인 끄기)가 devbrew 가 쓰는 방식 — skill 이 Bash 로 부르는 스크립트 — 에서 실제로 되는지 잰 기록이다. 2026-11-15 에 판 2.1.325 로 쟀고, 실측 표 31행 가운데 30행을 채웠다(한 행은 돌리지 않은 선택 단계라 「재지 못함」 이다).
 
 ## 목차
 
 - [무엇을 왜 재는가](#무엇을-왜-재는가)
+- [F7 이 읽을 사실](#f7-이-읽을-사실)
 - [실측 표](#실측-표)
   - [항목 1 데이터 폴더 쓰기와 샌드박스](#항목-1-데이터-폴더-쓰기와-샌드박스)
   - [항목 2 작업 폴더 밖 읽기와 쓰기 그리고 하위 agent](#항목-2-작업-폴더-밖-읽기와-쓰기-그리고-하위-agent)
@@ -34,8 +36,12 @@ claude_code: 2.1.325
   - [도구 전문](#도구-전문)
 - [옛 기록과 달라진 것](#옛-기록과-달라진-것)
 - [재지 못하는 것](#재지-못하는-것)
+  - [이번에 돌리지 않은 것](#이번에-돌리지-않은-것)
+  - [돌렸지만 가르지 못한 것](#돌렸지만-가르지-못한-것)
+  - [이 도구로는 재지 못하는 것](#이-도구로는-재지-못하는-것)
 - [있는 것 검토](#있는-것-검토)
 - [번호 대조](#번호-대조)
+- [지휘 기록](#지휘-기록)
 
 ## 무엇을 왜 재는가
 
@@ -43,7 +49,7 @@ claude_code: 2.1.325
 
 재는 까닭은 숨은 가정 둘이다.
 
-- K10 — skill 이 Bash 로 부르는 스크립트가 공식 데이터 폴더에 쓸 수 있다. 샌드박스를 켠 세션에서는 잰 적이 없다.
+- K10 — skill 이 Bash 로 부르는 스크립트가 공식 데이터 폴더에 쓸 수 있다. 인터뷰 때까지 샌드박스를 켠 세션에서는 잰 적이 없었다.
 - K11 — 공식 설정 값 받기(userConfig)가 스크립트까지 닿는다. 문서가 적는 길은 skill 본문 치환과 훅 프로세스뿐이다.
 
 재는 것은 로드맵 `### P1` 블록의 범위 다섯이다.
@@ -56,62 +62,88 @@ claude_code: 2.1.325
 
 하지 않는 것은 스위치 · 상태를 실제로 옮기는 일이다(F7). 열린 질문 OQ32 · OQ37 · OQ38 은 F7 이 정하고, 이 문서는 그 판단에 쓸 사실만 낸다.
 
-지금 상태: 항목 5 와 문서가 적는 것은 «문서에서 확인한 것» 에 있다. 항목 1–4 의 「되는가」 는 전부 「아직 재지 않음」 이다 — «재는 방법» 의 도구를 사용자가 돌리면 그 결과로 채운다.
+지금 상태: 항목 1–4 는 2026-11-15 에 쟀다. 결과는 «실측 표» 에, 거기서 F7 이 읽을 것은 «F7 이 읽을 사실» 에 있다. 항목 5 와 문서가 적는 것은 «문서에서 확인한 것» 에, 재지 않은 것과 가르지 못한 것은 «재지 못하는 것» 에 있다.
+
+## F7 이 읽을 사실
+
+실측에서 나온 사실과 그 조건이다. 모두 판 2.1.325 · macOS · 화면 없는 세션 · `--plugin-dir` 로 실은 플러그인 · 사용자 설정을 뺀 세션의 값이다. 권고는 없다.
+
+1. 샌드박스를 켠 세션에서 Bash 로 도는 스크립트는 데이터 폴더에 쓰지 못했다(`Operation not permitted`). skill 본문 펜스 · 사전 실행 줄 · 하위 agent 어느 길로 불려도 같았고, `sandbox.filesystem.allowWrite` 에 그 윗 폴더를 넣어도 풀리지 않았다(같은 목록의 다른 폴더는 풀렸다). 읽기는 됐다. 샌드박스를 끈 세션에서는 썼다 — 행 1-1 · 1-2 · 1-3 · 1-8 · 2-8. `--add-dir` 로 더한 실행도 막혔는데 그 까닭은 가르지 못했다 — 행 1-4.
+2. 같은 샌드박스 세션에서 훅 프로세스는 데이터 폴더에 썼다. 데이터 폴더는 세션이 플러그인을 실을 때 Claude Code 가 만들어, 훅이 처음 돌 때 이미 있었다 — 행 1-5 · 1-6.
+3. 플러그인 루트와 데이터 폴더의 경로가 스크립트에 닿는 길은 글자 치환뿐이었다. skill 본문 펜스 · 사전 실행 줄 · agent 본문에서는 치환됐고, Read 로 연 보조 파일에서는 글자 그대로 왔다. 환경변수로는 Bash 로 도는 스크립트에 오지 않고 훅 프로세스에만 왔다 — 행 3-1 · 3-2 · 3-4 · 3-5 · 3-6 · 3-8 · 3-9.
+4. 설정 값(userConfig)도 같은 길로만 닿았고, 값이 저장돼 있을 때만 닿았다. `--settings` 의 `pluginConfigs` 로 값을 준 실행에서는 본문에 치환되고 훅 환경변수로 왔다. 값을 주지 않은 실행에서는 manifest 의 `default` 가 오지 않았다 — 본문에는 `${user_config.KEY}` 글자가 그대로 남고 훅 환경변수는 없었다. 스크립트의 환경변수로는 어느 실행에서도 오지 않았다 — 행 3-3 · 3-7 · 3-8 · 3-9.
+5. Write 도구로 데이터 폴더에 쓰는 것은 다른 작업 폴더 밖 쓰기와 다른 이유(「sensitive file」)로 걸렸다. manual · acceptEdits 는 승인이 필요한 자리라 화면 없는 세션에서 거부됐고, dontAsk 는 모드가 거부했고, auto 는 분류기가 통과시켰다 — 행 1-7.
+6. 작업 폴더 밖 파일은 플러그인 폴더 안의 보조 파일까지 포함해 manual · acceptEdits 에서 Read 에 승인이 필요했다. `Read` 허용 규칙이 있거나 auto 모드면 읽혔다. 하위 agent 의 읽기도 본 대화와 같은 판정을 받았다. Bash 로 도는 스크립트가 안에서 하는 밖 쓰기는, 스크립트 명령이 승인되고 샌드박스가 꺼져 있으면 권한 판정에 걸리지 않았다 — 행 2-1 · 2-5 · 2-7 · 2-8.
+7. 플러그인 끄기(`enabledPlugins` 의 `false`)는 `--settings` 로 준 것도, 작업 폴더의 `.claude/settings.local.json` 에 둔 것도 새 세션에서 먹었다 — 진입 skill 자리에는 「isn't installed in this session」 이라는 모델의 답이 오고(rc 0) 훅은 돌지 않았다. 도는 세션은 `/reload-plugins` 전까지 skill 과 훅이 그대로 돌았다. `disableAllHooks` 는 훅만 끄고 skill 은 돌았다. 설치본을 `claude plugin disable` 로 끄는 것은 재지 않았다 — 행 4-1 – 4-6.
 
 ## 실측 표
 
-칸의 뜻: 「되는가」 는 실측 결과다(지금은 전부 「아직 재지 않음」). 「조건」 은 그 행을 재는 실행의 이름이다(«실행 목록»). 「필요한 판」 은 문서 · changelog 에서 확인한 값이고 실측이 아니다. 「근거」 의 «문서 N» 은 «문서가 적는 것» 의 행 번호다.
+실측 조건: 2026-11-15 · Claude Code 2.1.325 · macOS(arm64) · 모델 sonnet / effort medium · 사용자 설정 제외(`--clean` — `--setting-sources project,local`) · 화면 없는 세션 19회 전부 rc 0 · 합계 $1.03. 시작할 때 데이터 폴더는 없었다. `p9-bypass` 와 선택 단계 `--installed` 는 돌리지 않았다.
+
+근거 폴더는 지휘 폴더의 `files/report/P1/results/20261115-105845/` 다(추적되지 않는다). 「근거」 칸의 `runs/…` 는 그 아래 경로이고, 따로 적지 않은 판정은 같은 폴더의 `results.md` 표에서 그 실행 이름의 줄이다. 경로의 홈 폴더는 `~` 로 줄였다.
+
+칸의 뜻: 「되는가」 는 실측 결과다. 「조건」 은 그 행을 잰 실행의 이름과 설정이다(«실행 목록»). 「필요한 판」 은 문서 · changelog 에서 확인한 값이고 실측이 아니다. 「근거」 의 «문서 N» 은 «문서가 적는 것» 의 행 번호다.
+
+판정 낱말:
+
+- 됨 · 안 됨 — 그 행이 묻는 것이 일어났는가.
+- 막힘 — 권한 판정은 통과했는데 샌드박스가 실행 중에 막았다(`Operation not permitted`).
+- 거부(물을 자리) — 권한 판정이 `reject/config/asyncAgent` 이고 메시지가 「It requires approval, and this session has no approval surface — nobody can answer a permission prompt here — so it was denied automatically.」 인 것. 승인할 화면이 없어서 거부된 것이다. 화면 있는 세션에서는 물어볼 자리인데, 그때 무엇을 묻고 어떤 선택지를 주는지는 재지 못했다.
+- 거부(모드) — 권한 판정이 `reject/config/mode` 이고 메시지가 「… has been denied because Claude Code is running in don't ask mode.」 인 것. 모드가 막은 것이다.
+- 재지 못함 — 근거가 없다.
+
+통과한 호출의 권한 판정 칸에는 다섯 값이 나왔다 — `mode`(모드가 허용) · `classifier`(auto 모드의 분류기) · `rule`(허용 규칙) · 그리고 `other` 와 `subcommandResults`. `other` 는 샌드박스를 켠 실행의 Bash 호출에서만, `subcommandResults` 는 `Bash(bash *)` 허용 규칙을 준 실행의 스크립트 호출에서만 나왔다. 뒤의 두 이름의 뜻은 문서에서 확인하지 않았다.
 
 ### 항목 1 데이터 폴더 쓰기와 샌드박스
 
 | # | 장치 · 물음 | 되는가 | 조건 | 필요한 판 | 근거 |
 |---|---|---|---|---|---|
-| 1-1 | Bash 로 도는 스크립트가 데이터 폴더에 쓴다 — 샌드박스를 끈 세션 | 아직 재지 않음 | `s1-fence` | 2.1.78 | 옛 기록은 「됐다」(«옛 기록과 달라진 것» 5) |
-| 1-2 | 같은 쓰기 — 샌드박스를 켠 세션 | 아직 재지 않음 | `s2-fence-sbx` | 샌드박스 2.0.24 | «문서 5» — 데이터 폴더가 보호 경로에 드는지는 문서에 없다 |
-| 1-3 | 같은 쓰기 — `sandbox.filesystem.allowWrite` 에 데이터 폴더의 윗 폴더를 더한 세션 | 아직 재지 않음 | `s3-fence-sbx-allow` | 2.1.78 | «문서 5» — 보호 경로면 풀리지 않는다고 적는다 |
-| 1-4 | 같은 쓰기 — `--add-dir` 로 데이터 폴더를 더한 세션 | 아직 재지 않음 | `s4-fence-sbx-adddir` | — | «문서 5» |
-| 1-5 | 훅 프로세스가 데이터 폴더에 쓴다 — 샌드박스를 켠 세션 | 아직 재지 않음 | `s2-fence-sbx` 의 훅 | 2.1.78 | «문서 6» — 훅은 샌드박스 밖에서 돈다고 적는다 |
-| 1-6 | 데이터 폴더가 언제 생기는가 | 아직 재지 않음 | `s1-fence` | 2.1.78 | «문서 1» |
-| 1-7 | Write 도구로 데이터 폴더에 쓴다 — 권한 모드마다 | 아직 재지 않음 | `p1-manual` · `p2-acceptedits` · `p3-auto` · `p4-dontask` | — | «문서 9» — `.claude` 는 보호 경로다 |
-| 1-8 | 사전 실행 줄로 도는 스크립트의 같은 쓰기 — 샌드박스를 켠 세션 | 아직 재지 않음 | `s6-inject-sbx` | — | «문서 14» |
+| 1-1 | Bash 로 도는 스크립트가 데이터 폴더에 쓴다 — 샌드박스를 끈 세션 | 됨 | `s1-fence`(샌드박스 끔 · dontAsk · 허용 규칙 `Bash(bash *)`). `s5-inject` · `p3-auto` · `a2-agent-auto` 에서도 같다 | 2.1.78 | `runs/s1-fence/qzp-out/probe-fence-1.tsv` 의 `write.data.verdict` 가 `ok`. 경로는 치환으로 받은 `~/.claude/plugins/data/qzprobe-inline` 이고, 끝난 뒤 그 폴더에 `script-s1-fence-fence-1.txt` 가 남았다. 옛 기록과 같다(«옛 기록과 달라진 것» 5) |
+| 1-2 | 같은 쓰기 — 샌드박스를 켠 세션 | 막힘 | `s2-fence-sbx`(샌드박스 strict). `s6-inject-sbx` · `a3-agent-sbx` 에서도 같다 | 샌드박스 2.0.24 | `runs/s2-fence-sbx/qzp-out/probe-fence-1.tsv` 의 `write.data.write` 가 `rc=1 … Operation not permitted`. 같은 실행에서 작업 폴더 쓰기는 됨(양성 대조), 작업 폴더 밖 쓰기는 막힘(음성 대조), 임시 폴더(`/tmp/claude-<uid>`) 쓰기는 됨, 스크립트 환경에 `SANDBOX_RUNTIME` 이 있다. 같은 스크립트의 데이터 폴더 읽기는 됨(`read.data_seed`). 폴더는 세션 시작 때 이미 있어서(1-6) `mkdir -p` 는 rc 0 이었다 — 샌드박스 안에서 폴더를 새로 만드는 것은 재지 못했다 |
+| 1-3 | 같은 쓰기 — `sandbox.filesystem.allowWrite` 에 데이터 폴더의 윗 폴더를 더한 세션 | 막힘 | `s3-fence-sbx-allow` — `allowWrite` 에 `~/.claude/plugins/data` 와 대조용 폴더 하나를 넣었다 | 2.1.78 | `runs/s3-fence-sbx-allow/settings.json` 에 두 항목이 있다. 같은 실행에서 대조용 폴더 쓰기는 됨(`write.allowed.verdict ok`), 그 옆의 다른 작업 폴더 밖 쓰기는 막힘, 데이터 폴더 쓰기는 `Operation not permitted`. 설정은 그 세션에 먹었고 같은 목록의 `~/.claude` 아래 항목만 풀리지 않았다 — «문서 5» 의 「the protection still applies」 와 맞는다. 데이터 폴더 자체를 항목으로 넣은 경우는 재지 않았다 |
+| 1-4 | 같은 쓰기 — `--add-dir` 로 데이터 폴더를 더한 세션 | 막힘 | `s4-fence-sbx-adddir` — `--add-dir ~/.claude/plugins/data/qzprobe-inline` | — | init 이벤트의 `additional_directories` 에 그 폴더가 실렸고 쓰기는 `Operation not permitted` 였다. 다만 `--add-dir` 가 보호 경로가 아닌 폴더의 샌드박스 쓰기를 여는지를 보는 대조가 이 도구에 없다 — 「더한 폴더가 샌드박스 쓰기에 반영되지 않았다」 와 「반영됐는데 `~/.claude` 아래라 막혔다」 를 가르지 못한다 |
+| 1-5 | 훅 프로세스가 데이터 폴더에 쓴다 — 샌드박스를 켠 세션 | 됨 | `s2-fence-sbx` 의 SessionStart 훅(샌드박스 strict) | 2.1.78 | `runs/s2-fence-sbx/qzp-out/hook-data-write.tsv` 가 `rc=0` 이고, 끝난 뒤 데이터 폴더에 `hook-s2-fence-sbx.txt` 가 남았다(`artifacts.json` 의 `data_after`). 같은 세션의 스크립트 쓰기는 막혔다(1-2). «문서 6» 과 같다 |
+| 1-6 | 데이터 폴더가 언제 생기는가 | 됨 — 세션이 플러그인을 실을 때 Claude Code 가 만든다 | `s1-fence`(그 폴더가 없던 첫 실행) | 2.1.78 | 러너가 세션을 띄우기 직전에는 폴더가 없었고(`runs/s1-fence/meta.json` 의 `data_before.exists` 가 `false`), 그 세션의 SessionStart 훅이 돌 때는 있었다(`hooks.tsv` 첫 줄 `data_dir_exists=yes`). 이 실행의 훅 스크립트는 폴더를 만들지 않는다. 폴더 이름은 `qzprobe-inline` 으로 «문서 1» 의 규칙대로다. 훅이 없는 플러그인에서도 세션 시작에 생기는지는 재지 않았다 |
+| 1-7 | Write 도구로 데이터 폴더에 쓴다 — 권한 모드마다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드) | `p1-manual` · `p2-acceptedits` · `p3-auto` · `p4-dontask`(샌드박스 끔 · 허용 규칙 없음). `p5-manual-sbx` 도 거부(물을 자리) | — | 거부 메시지가 다른 밖 쓰기와 다르다 — 「Claude requested permissions to edit … which is a sensitive file.」 (다른 밖 쓰기는 「Path is outside allowed working directories」). auto 는 `accept/config/classifier` 로 통과했고 `tool-write-p3-auto.txt` 가 남았다. «문서 9» 의 보호 경로 표와 맞는다 |
+| 1-8 | 사전 실행 줄로 도는 스크립트의 같은 쓰기 — 샌드박스를 켠 세션 | 막힘 | `s6-inject-sbx`(샌드박스 strict) | — | `runs/s6-inject-sbx/qzp-out/probe-inject-1.tsv`: 데이터 폴더 쓰기 `Operation not permitted`, 작업 폴더 밖 쓰기도 막힘, `TMPDIR` 가 `/tmp/claude-<uid>`. 사전 실행 줄도 샌드박스 안에서 돈다. 샌드박스를 끈 `s5-inject` 에서는 같은 쓰기가 됐다 |
 
 ### 항목 2 작업 폴더 밖 읽기와 쓰기 그리고 하위 agent
 
 | # | 장치 · 물음 | 되는가 | 조건 | 필요한 판 | 근거 |
 |---|---|---|---|---|---|
-| 2-1 | Read 도구로 작업 폴더 밖 파일을 읽는다 — 권한 모드마다 | 아직 재지 않음 | `p1-manual` · `p2-acceptedits` · `p3-auto` · `p4-dontask` | — | «문서 9» |
-| 2-2 | Write 도구로 작업 폴더 밖에 쓴다 — 권한 모드마다 | 아직 재지 않음 | 같은 실행 | — | «문서 9» |
-| 2-3 | Bash `cat` 으로 작업 폴더 밖 파일을 읽는다 | 아직 재지 않음 | 같은 실행 | — | «문서 9» |
-| 2-4 | Bash 리다이렉트로 작업 폴더 밖에 쓴다 | 아직 재지 않음 | 같은 실행 | — | «문서 9» |
-| 2-5 | Bash 로 도는 스크립트가 안에서 밖에 쓴다(권한 판정이 보지 못하는 쓰기) | 아직 재지 않음 | `s1-fence` · `p1-manual` · `p2-acceptedits` · `p3-auto` · `p4-dontask` | — | «문서 9» |
-| 2-6 | 같은 걸음들 — manual 모드에 샌드박스를 켠 세션 | 아직 재지 않음 | `p5-manual-sbx` | 2.1.325 | «문서 8» |
-| 2-7 | 플러그인 폴더 안 보조 파일을 Read 로 연다(작업 폴더 밖) — 권한 모드마다 | 아직 재지 않음 | `p1`–`p4` 의 아홉째 걸음 | — | «문서 9» |
-| 2-8 | 하위 agent 가 작업 폴더 밖 파일과 데이터 폴더 파일을 읽는다(Read · Bash) | 아직 재지 않음 | `a1-agent-manual` · `a2-agent-auto` · `a3-agent-sbx` | — | «문서 15» |
+| 2-1 | Read 도구로 작업 폴더 밖 파일을 읽는다 — 권한 모드마다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드) | `p1-manual` · `p2-acceptedits` · `p3-auto` · `p4-dontask`(샌드박스 끔 · 허용 규칙 없음) | — | 거부 메시지: 「Claude requested permissions to read from … but you haven't granted it yet. Path is outside allowed working directories」. auto 는 `accept/config/mode` 다(분류기를 거치지 않았다). `Read` 허용 규칙을 준 `a3-agent-sbx` 에서는 하위 agent 의 같은 읽기가 `accept/config/rule` 로 됐다 |
+| 2-2 | Write 도구로 작업 폴더 밖에 쓴다 — 권한 모드마다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드) | 같은 실행 | — | auto 는 `accept/config/classifier` 이고 표적 폴더에 `tool-write.txt` 가 남았다. 나머지 셋은 파일이 없다. acceptEdits 가 묻지 않고 쓴 것은 작업 폴더 안 쓰기뿐이다(`accept/config/mode`) |
+| 2-3 | Bash `cat` 으로 작업 폴더 밖 파일을 읽는다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드) | 같은 실행 | — | manual · acceptEdits 의 메시지: 「cat in '…' was blocked. For security, Claude Code may only concatenate files from the allowed working directories for this session」 — 읽기 전용 명령이어도 작업 폴더 밖 파일이면 승인이 필요했다. auto 는 `classifier` |
+| 2-4 | Bash 리다이렉트로 작업 폴더 밖에 쓴다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드) | 같은 실행 | — | manual · acceptEdits 의 메시지: 「Output redirection to '…' needs approval. The path is outside the working directories for this session」. auto 는 `classifier` 이고 파일이 남았다. «문서 9» 와 같다 |
+| 2-5 | Bash 로 도는 스크립트가 안에서 밖에 쓴다(권한 판정이 보지 못하는 쓰기) | 됨 — 스크립트 명령이 승인되고 샌드박스가 꺼져 있으면 | `s1-fence` · `s5-inject`(허용 규칙) · `p3-auto` · `a2-agent-auto`(분류기) | — | 네 실행 모두 `write.outside.verdict` 가 `ok` — 권한 판정은 명령 줄만 봤고 스크립트 안의 밖 쓰기를 막지 않았다. `p1` · `p2` · `p4` 에서는 스크립트 명령 자체가 거부돼(「This command requires approval」, dontAsk 는 모드) 안의 쓰기까지 가지 못했다. 샌드박스를 켜면 같은 쓰기가 막힌다(1-2 의 음성 대조) |
+| 2-6 | 같은 걸음들 — manual 모드에 샌드박스를 켠 세션 | 걸음마다 다름 — 파일 도구 여섯 걸음 거부(물을 자리) · Bash `cat` 됨 · Bash 리다이렉트 막힘 · 스크립트 명령 거부(물을 자리) | `p5-manual-sbx`(manual · 샌드박스 strict · `autoAllowBashIfSandboxed` 켬 · 허용 규칙 없음) | 2.1.325 | `cat` 과 `printf … >` 는 묻지 않고 돌았다(`accept/config/other`). 리다이렉트는 돈 뒤 샌드박스가 막았다(「operation not permitted」, 파일 없음). 스크립트 명령은 자동 허용되지 않고 「This command requires approval」 로 거부됐다 — 왜 이 명령만 빠졌는지는 가르지 못했다(«돌렸지만 가르지 못한 것»). 파일 도구는 `p1-manual` 과 같다 |
+| 2-7 | 플러그인 폴더 안 보조 파일을 Read 로 연다(작업 폴더 밖) — 권한 모드마다 | auto 에서만 됨 — manual 거부(물을 자리) · acceptEdits 거부(물을 자리) · auto 됨 · dontAsk 거부(모드). `Read` 허용 규칙이 있으면 됨 | `p1`–`p4` 의 아홉째 걸음 · 허용 규칙을 준 `s1`–`s4` | — | 허용 규칙이 없을 때의 메시지: 「Claude requested permissions to read from …/plugin/qzprobe/skills/qz-fence/support.md, but you haven't granted it yet. Path is outside allowed working directories」. auto 는 `accept/config/mode`, 규칙을 준 실행은 `accept/config/rule`. 읽은 파일은 부른 skill(`qz-outside`)이 아니라 같은 플러그인의 다른 skill 폴더에 있다 — skill 이 자기 폴더의 파일을 읽는 경우는 재지 않았다 |
+| 2-8 | 하위 agent 가 작업 폴더 밖 파일과 데이터 폴더 파일을 읽는다(Read · Bash) | 모드마다 다름 — manual: 띄우기 됨 · 읽기 넷 거부(물을 자리) / auto: 전부 됨 / dontAsk + 허용 규칙 + 샌드박스: 읽기 됨 · 스크립트의 데이터 폴더 쓰기 막힘 | `a1-agent-manual` · `a2-agent-auto` · `a3-agent-sbx` | — | 하위 agent 의 도구 호출은 스트림에 `parent_tool_use_id` 와 함께 보였다. `a1`: Agent 호출은 `accept/config`, 하위의 Read 둘 · `cat` · 스크립트는 모두 `reject/config/asyncAgent` 로 본 대화와 같은 판정이다. `a2`: Read 는 `mode`, Bash 는 `classifier`. `a3`: Read 는 `rule`, `cat` 은 `other`, 스크립트는 `subcommandResults` 로 돌았고 그 안의 데이터 폴더 쓰기는 `Operation not permitted`, 읽기는 됐다. «문서 15» 와 같다 |
 
 ### 항목 3 변수 치환과 환경변수
 
 | # | 장치 · 물음 | 되는가 | 조건 | 필요한 판 | 근거 |
 |---|---|---|---|---|---|
-| 3-1 | 플러그인 루트(`${CLAUDE_PLUGIN_ROOT}`) 치환 — skill 본문 펜스 | 아직 재지 않음 | `s1-fence` | — | «문서 3» |
-| 3-2 | 데이터 폴더(`${CLAUDE_PLUGIN_DATA}`) 치환 — skill 본문 펜스 | 아직 재지 않음 | `s1-fence` | 2.1.78 | «문서 3» |
-| 3-3 | 설정 값(`${user_config.KEY}`) 치환 — skill 본문 펜스 | 아직 재지 않음 | `s1-fence` | 2.1.83 | «문서 4» |
-| 3-4 | 세 변수 치환 — 사전 실행 줄 | 아직 재지 않음 | `s5-inject` | — | «문서 14» |
-| 3-5 | 세 변수 치환 — Read 로 여는 보조 파일 | 아직 재지 않음 | `s1-fence` | — | 문서에 문장이 없다. 레포는 「치환되지 않는다」 를 전제로 쓴다(«있는 것 검토») |
-| 3-6 | 세 변수 치환 — agent 본문 | 아직 재지 않음 | `a1-agent-manual` · `a2-agent-auto` · `a3-agent-sbx` | 2.1.83 | «문서 2» · «문서 4» |
-| 3-7 | 설정 값의 출처 — `--settings` 로 준 `pluginConfigs` 와 manifest 기본값 | 아직 재지 않음 | `s1-fence`(실행 옵션 값) · `s2-fence-sbx`(기본값) | 2.1.207 | «문서 4» |
-| 3-8 | 세 값이 환경변수로 Bash 로 도는 스크립트에 닿는가(K11) | 아직 재지 않음 | `s1-fence` · `s5-inject` · `a3-agent-sbx` | — | «문서 2» — 닿지 않는다고 적는다 |
-| 3-9 | 세 값이 환경변수로 훅 프로세스에 닿는가 | 아직 재지 않음 | `s1-fence` 의 훅 | 2.1.83 | «문서 4» — 닿는다고 적는다 |
+| 3-1 | 플러그인 루트(`${CLAUDE_PLUGIN_ROOT}`) 치환 — skill 본문 펜스 | 됨 | `s1-fence`. 치환을 잰 모든 실행에서 같다 | — | 스트림의 Bash 호출에 명령 글이 `bash "~/.cache/qzprobe/<시각>/plugin/qzprobe/scripts/qzp.sh" fence 'QZP_ROOT=~/.cache/qzprobe/<시각>/plugin/qzprobe' …` 로 왔고, 스크립트가 받은 인자도 같다(`arg.QZP_ROOT`). 변수는 작은따옴표 안에 있었으니 셸이 아니라 Claude Code 가 바꾼 것이다 |
+| 3-2 | 데이터 폴더(`${CLAUDE_PLUGIN_DATA}`) 치환 — skill 본문 펜스 | 됨 | `s1-fence`. 모든 실행에서 같다 | 2.1.78 | `arg.QZP_DATA` 가 `~/.claude/plugins/data/qzprobe-inline` |
+| 3-3 | 설정 값(`${user_config.KEY}`) 치환 — skill 본문 펜스 | 됨 — 값을 준 실행에서 | `s1-fence`(`--settings` 의 `pluginConfigs` 로 값을 주었다) | 2.1.83 | `arg.QZP_CFG` 가 `QZP7-CFG-FLAG`. 값을 주지 않은 실행의 결과는 3-7 |
+| 3-4 | 세 변수 치환 — 사전 실행 줄 | 됨 | `s5-inject`(값을 줌) · `s6-inject-sbx`(값을 주지 않음) | — | `s5`: 세 인자 모두 값으로 왔다(`probe-inject-1.tsv`). `s6`: 루트와 데이터 폴더는 값으로, 설정 값은 글자 그대로(3-7). 스크립트의 출력 `QZP7-PROBE-RAN mode=inject n=1` 이 본문에 끼워져 모델의 답에 실렸다 |
+| 3-5 | 세 변수 치환 — Read 로 여는 보조 파일 | 안 됨 | `s1-fence`. `s2`–`s4` · `p3-auto` 에서도 같다 | — | Read 도구의 결과에 `QZP_SUP_ROOT=${CLAUDE_PLUGIN_ROOT} QZP_SUP_DATA=${CLAUDE_PLUGIN_DATA} QZP_SUP_CFG=${user_config.qz_token}` 가 글자 그대로 왔다. 레포의 전제와 같다(«있는 것 검토» 둘째 행) |
+| 3-6 | 세 변수 치환 — agent 본문 | 됨 | `a2-agent-auto`(값을 줌) · `a3-agent-sbx`(값을 주지 않음) | 2.1.83 | 하위 agent 가 부른 스크립트의 인자(`probe-agent-1.tsv`): `a2` 는 셋 다 값, `a3` 는 루트와 데이터 폴더는 값이고 설정 값은 글자 그대로(3-7). `a1-agent-manual` 은 스크립트가 거부돼 모델이 옮긴 한 줄 보고만 있다 — 약한 근거이고 셋 다 값이었다 |
+| 3-7 | 설정 값의 출처 — `--settings` 로 준 `pluginConfigs` 와 manifest 기본값 | 실행 옵션으로 준 값은 됨 · manifest 기본값은 안 됨 | 값을 준 실행: `s1` · `s5` · `p3` · `a2`. 주지 않은 실행: `s2` · `s3` · `s4` · `s6` · `a3`(모두 샌드박스를 켠 실행이기도 하다), 훅만 보면 `d0-on` · `d4-off-midsession` · `p5-manual-sbx` 도 | 2.1.207 | 값을 준 실행은 본문에 `QZP7-CFG-FLAG` 가 치환됐다. 주지 않은 실행에는 manifest 의 `default`(`QZP7-CFG-DEFAULT`)가 어디에도 오지 않았다 — 본문에는 `${user_config.qz_token}` 글자가 그대로 남고 훅 환경변수 `CLAUDE_PLUGIN_OPTION_QZ_TOKEN` 은 없었다(`option=unset`). 훅 쪽은 샌드박스를 끈 `d0-on` 에서도 없었으니 샌드박스 때문이 아니다. 본문 치환 쪽은 「값을 주지 않음」 과 「샌드박스 켬」 이 늘 함께였다 — 도구가 둘을 따로 돌리지 않았다(«돌렸지만 가르지 못한 것») |
+| 3-8 | 세 값이 환경변수로 Bash 로 도는 스크립트에 닿는가(K11) | 안 됨 | 스크립트가 돈 모든 실행(`s1`–`s6` · `p3` · `a2` · `a3`) — 값을 준 실행도 포함 | — | `env.CLAUDE_PLUGIN_ROOT` · `env.CLAUDE_PLUGIN_DATA` · `env.CLAUDE_PLUGIN_OPTION_QZ_TOKEN` 이 전부 `unset`. 스크립트가 본 `CLAUDE` 로 시작하는 이름은 `CLAUDE_CODE_…` · `CLAUDE_EFFORT` · `CLAUDE_PID` · `CLAUDECODE` 뿐이다(샌드박스에서는 `CLAUDE_TMPDIR` · `SANDBOX_RUNTIME` 이 더해진다). «문서 2» 와 같다 — K11 이 가정한 길은 이 실행들에 없었다 |
+| 3-9 | 세 값이 환경변수로 훅 프로세스에 닿는가 | 됨 — 설정 값은 값을 준 실행에서만 | `s1-fence` 의 훅(값을 줌) · `s2-fence-sbx` 의 훅(주지 않음) | 2.1.83 | `runs/s1-fence/qzp-out/hooks.tsv`: `root=set:…/plugin/qzprobe` · `data=set:~/.claude/plugins/data/qzprobe-inline` · `option=set:QZP7-CFG-FLAG`. `s2`: 루트와 데이터 폴더는 같고 `option=unset`(3-7). «문서 4» 와 같다 |
 
 ### 항목 4 플러그인 끄기
 
 | # | 장치 · 물음 | 되는가 | 조건 | 필요한 판 | 근거 |
 |---|---|---|---|---|---|
-| 4-1 | 끈 플러그인의 진입 skill 과 훅 — 새 세션, 한 번 실행에만 끔(`--settings` 의 `enabledPlugins`) | 아직 재지 않음 | `d0-on`(대조) · `d1-off-flag` | 2.0.12 | «문서 11» |
-| 4-2 | 같은 것 — 새 세션, local 설정 파일의 `enabledPlugins` 로 끔 | 아직 재지 않음 | `d2-off-local` | 2.0.12 | «문서 11» |
-| 4-3 | 도는 세션에서 끈다 — 다시 불러오기 전 | 아직 재지 않음 | `d4-off-midsession` 둘째 차례 | — | «문서 12» — 닿지 않는다고 적는다 |
-| 4-4 | 도는 세션에서 끈다 — `/reload-plugins` 뒤 | 아직 재지 않음 | `d4-off-midsession` 셋째 · 넷째 차례 | 2.1.69 · 화면 없는 세션은 2.1.260 | «문서 12» |
-| 4-5 | 훅 전부 끄기 — 한 번 실행에만(`--settings` 의 `disableAllHooks`) | 아직 재지 않음 | `d3-hooks-off` | 1.0.68 | «문서 13» |
-| 4-6 | 설치본을 `claude plugin disable --scope local` 로 끈다 — 새 세션 · 도는 세션 | 아직 재지 않음 | 선택 단계 `--installed` | 2.0.12 | «문서 11» · «문서 12» |
+| 4-1 | 끈 플러그인의 진입 skill 과 훅 — 새 세션, 한 번 실행에만 끔(`--settings` 의 `enabledPlugins`) | 됨 — 꺼진다 | `d1-off-flag`(`--settings` 에 `enabledPlugins` 의 `qzprobe@inline` 을 `false` 로) · 대조 `d0-on` | 2.0.12 | `d1`: init 이벤트의 `plugins` 에 `qzprobe@inline` 이 없고 `slash_commands` 에 `qzprobe:` 가 0개다. `/qzprobe:qz-ping` 에는 표식 글자 대신 「The `/qzprobe:qz-ping` command isn't installed in this session, so it didn't run.」 로 시작하는 모델의 답이 왔다(rc 0 · `success`). 훅 줄 0. `d0`: 플러그인 실림 · 표식 글자 `QZP7-PING-58213` · 훅 줄 셋(SessionStart · UserPromptSubmit · Stop) |
+| 4-2 | 같은 것 — 새 세션, local 설정 파일의 `enabledPlugins` 로 끔 | 됨 — 꺼진다 | `d2-off-local`(작업 폴더의 `.claude/settings.local.json` 에 같은 값 · `--settings` 없음) | 2.0.12 | `d1` 과 같은 결과다. 그 폴더는 신뢰 창을 거친 적 없는 새 폴더였다(`-p`) |
+| 4-3 | 도는 세션에서 끈다 — 다시 불러오기 전 | 안 됨 — 그대로 돈다 | `d4-off-midsession` 둘째 차례(첫 차례 뒤 러너가 작업 폴더의 `.claude/settings.local.json` 에 끄는 값을 쓰고 4초 뒤에 넣었다) | — | 둘째 차례에도 표식 글자가 왔고 훅 줄 둘(UserPromptSubmit · Stop)이 남았다. 그 차례의 init 이벤트에도 `qzprobe@inline` 이 있다(`runs/d4-off-midsession/meta.json` 의 `turns` · `stdout.jsonl`). «문서 12» 와 같다 |
+| 4-4 | 도는 세션에서 끈다 — `/reload-plugins` 뒤 | 됨 — 꺼진다 | 같은 실행의 셋째 · 넷째 차례 | 2.1.69 · 화면 없는 세션은 2.1.260 | stream-json 입력으로 넣은 `/reload-plugins` 가 돌았다 — 결과 글 「Reloaded: 0 plugins · 0 skills · 5 agents · 0 hooks · 0 plugin LSP servers」. 넷째 차례: init 이벤트에 플러그인이 없고 표식 글자 대신 「isn't installed in this session」 답이 왔고 훅 줄 0. «문서 12» 가 적지 않던 자리(stream-json 으로 넣은 것도 도는가)는 「돈다」 다 |
+| 4-5 | 훅 전부 끄기 — 한 번 실행에만(`--settings` 의 `disableAllHooks`) | 됨 — 훅만 꺼진다 | `d3-hooks-off`(`--settings` 에 `disableAllHooks` 를 `true` 로) | 1.0.68 | 플러그인은 실렸고 표식 글자가 왔다. 훅 줄 0 이고 스트림에도 훅 이벤트가 없다. «문서 13» 과 같다 |
+| 4-6 | 설치본을 `claude plugin disable --scope local` 로 끈다 — 새 세션 · 도는 세션 | 재지 못함 — 선택 단계 `--installed` 를 돌리지 않았다 | — | 2.0.12 | 근거가 없다. 4-1 – 4-4 는 `--plugin-dir` 로 실은 플러그인(`qzprobe@inline`)을 설정 값으로 끈 것이다 |
 
 ## 문서에서 확인한 것
 
@@ -208,7 +240,7 @@ claude_code: 2.1.325
 python3 "<위 kit 폴더>/qzp_run.py"
 ```
 
-시작할 때 실행 수 · 예상 비용 · 시간을 한 줄로 알리고, 끝에 결과 표 경로와 지우는 명령을 보인다. 기본 실행은 세션 19회다. 비용은 어제 실측 단가(짧은 실행 하나 약 $0.13)로 미루어 $3–6, 시간은 9–19분으로 본다 — 여러 걸음을 밟는 실행이 섞여 있어 추정이다. 합계 $8, 세션당 $1 에서 멈춘다(`--budget` 으로 바꾼다).
+시작할 때 실행 수 · 예상 비용 · 시간을 한 줄로 알리고, 끝에 결과 표 경로와 지우는 명령을 보인다. 기본 실행은 세션 19회다. 러너가 알리는 예상은 $3–6 · 9–19분이다 — 사용자 설정이 실린 세션의 어제 단가(약 $0.13)로 미룬 값이다. 2026-11-15 실측은 `--clean` 으로 19회에 $1.03, 세션마다 3–27초였다. 합계 $8, 세션당 $1 에서 멈춘다(`--budget` 으로 바꾼다).
 
 | 명령 | 하는 일 |
 |---|---|
@@ -222,7 +254,7 @@ python3 "<위 kit 폴더>/qzp_run.py"
 
 이 문서만으로 도구를 다시 만들려면 «도구 전문» 의 파일을 제목에 적힌 경로대로 한 폴더 아래에 두면 된다. python 3.9 와 bash 3.2 에서 돈다. Claude Code 는 2.1.259 이상이어야 한다(`--permission-prompts`).
 
-도구의 확인 상태: 실제 세션으로는 아직 한 번도 돌리지 않았다. 확인한 것은 넷이다 — 셸 스크립트 둘을 세션 없이 임시 폴더에서 돌려 기록 파일이 나오는 것, python 둘의 문법, `--dry-run` 으로 만든 명령 줄과 설정 파일, 어제 실측의 이벤트 꼴로 지어낸 근거에 요약 스크립트를 돌려 표가 나오는 것. 그래서 첫 실행에서 도구 쪽이 틀린 자리(예: 여러 차례를 넣는 세션, 하위 agent 의 도구 호출이 스트림에 보이는지)는 「재지 못함」 으로 나올 수 있다. 그 행은 도구를 고쳐 그 실행만 다시 돈다(`--only`).
+도구의 확인 상태: 2026-11-15 에 세션 밖 터미널에서 `--clean` 으로 한 번 돌렸다. 19회 모두 rc 0 이었고 요약 표 256줄에 「재지 못함」 이 없었다 — 여러 차례를 넣는 세션, 스트림에 보이는 하위 agent 의 도구 호출, 허용 규칙이 스크립트 명령에 맞는지까지 모두 돌았다. `p9-bypass` 와 `--installed` 는 아직 한 번도 돌리지 않았다. 도구는 그 실행 뒤에 고치지 않았다 — 아래 전문이 그때 돈 그대로다.
 
 ### 기계에 생기는 것과 바뀌는 것
 
@@ -241,6 +273,8 @@ python3 "<위 kit 폴더>/qzp_run.py"
 ### 실행 목록
 
 「허용 규칙」 은 그 실행에만 `--allowedTools` 로 준 것이다. 「샌드박스 strict」 는 `enabled` · `failIfUnavailable` · `autoAllowBashIfSandboxed` 를 켜고 `allowUnsandboxedCommands` 를 끈 설정이다 — 샌드박스 밖 재시도를 막아 판정이 갈리지 않게 한다.
+
+설정 값(`pluginConfigs`)은 `s1` · `s5` · `p1`–`p4` · `a1` · `a2` 에만 주었다. 샌드박스를 켠 실행(`s2`–`s4` · `s6` · `p5` · `a3`)과 `d` 실행에는 주지 않았다 — 설정 파일 하나에 샌드박스와 함께 싣지 않으려던 것인데, 그래서 「값을 주지 않음」 과 「샌드박스 켬」 이 늘 함께 움직인다(행 3-7).
 
 | 실행 | 재는 것 | 권한 모드 | 샌드박스 | 허용 규칙 | 그 밖 |
 |---|---|---|---|---|---|
@@ -2119,24 +2153,50 @@ Your final message is exactly one line, built from what you observed:
 
 ## 옛 기록과 달라진 것
 
+「지금 확인한 것」 은 2026-11-15 의 문서 확인과 실측이다. 실측은 «실측 표» 의 행 번호로 가리킨다.
+
 | # | 옛 기록 | 지금 확인한 것 | 처분 |
 |---|---|---|---|
-| 1 | 묶음 P1.md «cc-plugins-reference»(확인 2026-11-14): 설정 값이 「Bash 로 도는 스크립트에 환경변수로 실린다는 문장은 없다」 | 플러그인 경로 변수 셋에 대해서는 닿지 않는다는 문장이 있다 — 「The variables aren't present in the environment of commands Claude runs through the Bash tool, in the main session or in a subagent.」 (https://code.claude.com/docs/en/plugins/manifest-reference). 설정 값의 환경변수(`CLAUDE_PLUGIN_OPTION_<KEY>`)는 「exported to hook processes」 로만 적혀 있어 묶음의 읽기와 같다 | 행 3-8 · 3-9 가 잰다 |
-| 2 | 인터뷰 기록의 「확인하지 못한 것」: `enabledPlugins` 를 `--settings` 로 한 번 실행에만 덮을 수 있는지 | 문서가 적는다 — `enabledPlugins` 를 둘 수 있는 자리 표의 `flag` 행: 「The `--settings` value you pass at launch」 · 「This session only」 (https://code.claude.com/docs/en/plugins/loading) | 행 4-1 이 잰다. 진입 skill 을 한 번 실행에만 끄는 길의 후보다 |
-| 3 | 묶음 P1.md «cc-sandboxing»: 샌드박스의 기본 쓰기 자리와 보호 경로 | 그대로다. 묶음에 없던 것 하나 — 샌드박스 안 명령의 자동 허용이 기본으로 꺼졌다(문서는 2.1.324, changelog 는 2.1.325). 샌드박스를 켜기만 한 세션에서는 Bash 명령이 다시 권한 판정을 탄다 | 행 2-6 이 잰다. 도구는 `autoAllowBashIfSandboxed` 를 밝혀서 건다 |
-| 4 | 묶음 P1.md «cc-plugins-loading»: 「설정이나 디스크의 변경은 다시 불러오기 명령이나 새 세션 뒤에 닿는다」 | 그대로다. 더해진 것 — `/reload-plugins` 는 화면 없는 세션에서도 돈다(2.1.260 부터), 다만 「only when you type it into the session yourself」 (https://code.claude.com/docs/en/plugins/cli-reference) | 행 4-3 · 4-4 가 잰다 |
-| 5 | 인터뷰 조사 14: 「Bash 에서 그 폴더 아래에 쓰는 쓰기가 성공했다」 — 샌드박스를 켜지 않은 세션의 값 | 다시 재지 않았다 | 행 1-1 이 다시 잰다 |
-| 6 | 격리 설정 폴더(2026-10-09, 판 2.1.294): 내장 마켓플레이스 하나는 보인다 · 로그인이 없다 · `claude auth login` 은 된다 | 다시 재지 않았다 | 옛 기록 — 다시 확인 필요. 도구는 이 길을 쓰지 않는다 |
-| 7 | 어제 실측(2026-11-14, 판 2.1.325): `--plugin-dir` 로 실은 플러그인의 skill 이 화면 없는 실행에서 슬래시로 돈다 · 묻는 도구가 없다 · 권한 모드를 주지 않으면 기계마다 갈린다 · 거부는 rc 가 아니라 스트림에 남는다 · 실행당 약 $0.13 | 전제로 썼다. 옵션 이름은 `claude --help` 로 다시 확인했다. 어제 쓴 `--max-turns` 는 도움말에 없어서 쓰지 않고 `--max-budget-usd` 로 상한을 건다 | 도구의 전제 |
-| 8 | 어제 실측: 이 기계의 화면 없는 실행은 권한 플래그가 없으면 auto 로 시작한다 | 문서는 「In Claude Code v2.1.302 or later, `claude -p` and Agent SDK runs with no permission mode set start in Manual mode.」 라 적는다. 어긋나지 않는다 — 사용자 설정의 `defaultMode` 가 내장 기본값보다 먼저다(permission-modes 「Which mode a session starts in」) | 도구는 실행마다 모드를 밝힌다 |
-| 9 | 묶음 P1.md RC273: 레포가 적어 둔 Claude Code 판은 2.1.303 | 지금 깔린 판은 2.1.325 다. F7 이 쓰려는 장치의 판은 «장치마다 필요한 판» 에 있다 | OQ38 의 재료 |
+| 1 | 묶음 P1.md «cc-plugins-reference»(확인 2026-11-14): 설정 값이 「Bash 로 도는 스크립트에 환경변수로 실린다는 문장은 없다」 | 문서: 플러그인 경로 변수 셋은 닿지 않는다는 문장이 있다 — 「The variables aren't present in the environment of commands Claude runs through the Bash tool, in the main session or in a subagent.」 (https://code.claude.com/docs/en/plugins/manifest-reference). 실측: 경로 변수 둘과 설정 값 환경변수 모두 스크립트에 없었고(3-8) 훅 프로세스에는 있었다(3-9) | 문서와 실측이 같다. K11 의 가정은 성립하지 않았다 |
+| 2 | 인터뷰 기록의 「확인하지 못한 것」: `enabledPlugins` 를 `--settings` 로 한 번 실행에만 덮을 수 있는지 | 문서: `enabledPlugins` 를 둘 수 있는 자리 표의 `flag` 행: 「The `--settings` value you pass at launch」 · 「This session only」 (https://code.claude.com/docs/en/plugins/loading). 실측: 그렇게 끈 새 세션에서 진입 skill 과 훅이 모두 돌지 않았다(4-1) | 문서와 실측이 같다 |
+| 3 | 묶음 P1.md «cc-sandboxing»: 사용자 설정 폴더는 대부분이 보호 경로라 쓰기 허용 설정으로도 풀리지 않는다 — 「데이터 폴더가 거기 드는지는 문서에 없다」 | 문서는 그대로다. 실측: 샌드박스 안에서 도는 스크립트의 데이터 폴더 쓰기는 막혔고 `allowWrite` 에 윗 폴더를 넣어도 풀리지 않았다(1-2 · 1-3) | 문서의 빈 곳을 실측이 채웠다 — macOS · 2.1.325 에서 데이터 폴더는 풀리지 않는 쪽이다 |
+| 4 | 같은 묶음에 없던 것 | 문서: 샌드박스 안 명령의 자동 허용이 기본으로 꺼졌다(문서는 2.1.324, changelog 는 2.1.325). 실측은 자동 허용을 밝혀서 켠 세션만 쟀다(2-6) | 기본값(꺼짐)인 샌드박스 세션은 재지 않았다 |
+| 5 | 인터뷰 조사 14: 「Bash 에서 그 폴더 아래에 쓰는 쓰기가 성공했다」 — 샌드박스를 켜지 않은 세션의 값 | 실측: 샌드박스를 끈 세션에서 같은 쓰기가 됐다(1-1). 샌드박스를 켜면 막혔다(1-2) | 옛 기록과 같다. 인터뷰가 「샌드박스된 Bash 의 기본 쓰기 자리에 그 폴더는 없다」 로 고쳐 읽은 것도 실측과 맞다 |
+| 6 | 묶음 P1.md «cc-plugins-loading»: 「설정이나 디스크의 변경은 다시 불러오기 명령이나 새 세션 뒤에 닿는다」 | 실측: 도는 세션은 끈 뒤에도 그대로 돌았고(4-3) `/reload-plugins` 뒤에 꺼졌다(4-4). 문서가 적지 않던 것 — stream-json 입력으로 넣은 `/reload-plugins` 도 돌았다 | 문서와 실측이 같다 |
+| 7 | 공식 문서의 `userConfig` `default` 칸: 「Value used when the user provides nothing: a string, number, boolean, or array of strings」 (https://code.claude.com/docs/en/plugins/manifest-reference) | 실측: 값을 주지 않은 실행에 manifest 의 `default` 가 오지 않았다 — skill 본문에는 `${user_config.qz_token}` 글자가 그대로 남고 훅 환경변수는 없었다(3-7) | 문서와 실측이 어긋난 자리다. 조건은 `--plugin-dir` 로 실은 플러그인 · 화면 없는 세션 · 2.1.325 — 설치본에서는 재지 않았다 |
+| 8 | 레포의 전제(`plugins/spec-distill/skills/pm-interview/SKILL.md` 109행): Read 로 여는 파일의 플러그인 루트 변수는 「치환되지 않은 채로 온다」 | 실측: 세 변수 모두 글자 그대로 왔다(3-5). skill 본문 펜스에서는 치환됐다(3-1) | 전제가 지금 판에서도 맞다 |
+| 9 | 격리 설정 폴더(2026-10-09, 판 2.1.294): 내장 마켓플레이스 하나는 보인다 · 로그인이 없다 · `claude auth login` 은 된다 | 다시 재지 않았다 | 옛 기록 — 다시 확인 필요. 도구는 이 길을 쓰지 않는다 |
+| 10 | 어제 실측(2026-11-14, 판 2.1.325): `--plugin-dir` 로 실은 플러그인의 skill 이 화면 없는 실행에서 슬래시로 돈다 · 묻는 도구가 없다 · 거부는 rc 가 아니라 스트림에 남는다 · 실행당 약 $0.13 | 전제가 맞았다 — 19회가 모두 돌았고 거부는 전부 rc 0 · `success` 로 끝났다. 비용은 실행당 $0.03–0.09 였다 — 사용자 설정을 빼서(`--clean`) 설치된 플러그인이 실리지 않은 값이다. 어제 쓴 `--max-turns` 는 도움말에 없어서 쓰지 않았다 | 도구의 전제 |
+| 11 | 어제 실측: 이 기계의 화면 없는 실행은 권한 플래그가 없으면 auto 로 시작한다 | 문서는 「In Claude Code v2.1.302 or later, `claude -p` and Agent SDK runs with no permission mode set start in Manual mode.」 라 적는다. 어긋나지 않는다 — 사용자 설정의 `defaultMode` 가 내장 기본값보다 먼저다(permission-modes 「Which mode a session starts in」). 실측은 실행마다 모드를 밝혔고 init 이벤트의 모드가 준 값과 같았다(manual 은 `default` 로 찍힌다) | 권한 모드를 밝히지 않은 세션은 재지 않았다 |
+| 12 | 묶음 P1.md RC273: 레포가 적어 둔 Claude Code 판은 2.1.303 | 실측한 판은 2.1.325 하나다. F7 이 쓰려는 장치의 판은 «장치마다 필요한 판» 에 있다 | OQ38 의 재료. 2.1.303 에서 같은 결과가 나오는지는 재지 않았다 |
 
 ## 재지 못하는 것
 
-- 대화형 화면에서만 보이는 것 — 권한 창의 선택지, `/plugin` 화면, 설정 값 받기 창. 화면 없는 실행은 「물었을 자리」 를 거부로만 보인다.
+### 이번에 돌리지 않은 것
+
+- `p9-bypass` — bypassPermissions 모드의 작업 폴더 밖 읽기 · 쓰기. 문서의 값(전부 허용, 보호 경로도 허용)만 있다.
+- 선택 단계 `--installed` — 설치본과 실제 명령 `claude plugin disable` · `enable`. 행 4-6 이 비어 있다.
+- 화면 있는 세션 — 「거부(물을 자리)」 로 나온 자리에서 실제로 무엇을 묻고 어떤 선택지를 주는지, 승인하면 그 세션에서 어디까지 풀리는지.
+- 다른 판 — 2.1.325 하나만 쟀다. 레포가 적어 둔 2.1.303 에서 같은지는 모른다.
+- 사용자 설정이 실린 세션 — `--clean` 으로 사용자 설정(`~/.claude/settings.json`)을 뺐다. 사용자 설정이 켜 둔 플러그인(`enabledPlugins` 항목 25개)과 그 훅, 사용자 설정의 기본 권한 모드(auto)가 실린 세션에서 같은지는 재지 않았다. 러너가 읽은 사용자 설정에는 파일 · Bash 허용 규칙과 샌드박스 키가 없었다.
+- 샌드박스의 자동 허용을 끈(지금 판의 기본값) 세션, 샌드박스 밖 재시도를 열어 둔 세션 — 도구는 자동 허용을 켜고 재시도를 막고 쟀다.
+- 권한 모드를 밝히지 않은 세션.
+
+### 돌렸지만 가르지 못한 것
+
+- `--add-dir` 로 데이터 폴더를 더한 실행(1-4)이 막힌 까닭 — 더한 폴더가 샌드박스 쓰기에 반영되지 않은 것인지, 반영됐는데 `~/.claude` 아래라 막힌 것인지. `--add-dir` 로 더한 보호 경로 아닌 폴더에 써 보는 대조가 없었다.
+- 설정 값을 주지 않은 실행에서 skill 본문의 `${user_config.KEY}` 가 글자 그대로 남은 까닭(3-7) — 그 실행들은 모두 샌드박스를 켠 실행이기도 했다. 훅 환경변수 쪽은 샌드박스를 끈 실행에서도 없어서 샌드박스 때문이 아닌 것이 확인됐지만, 본문 치환 쪽은 두 조건을 따로 돌리지 않았다.
+- manual 모드에 샌드박스 자동 허용을 켠 실행(2-6)에서 스크립트 명령만 자동 허용되지 않은 까닭 — 같은 실행의 `cat` 과 `printf … >` 는 묻지 않고 돌았다. 그 명령은 인자가 `이름=값` 꼴이었고 그 가운데 하나에는 치환되지 않은 `${user_config.qz_token}` 글자가 있었다. 문서는 자동 허용에서 빠지는 예로 `make CC=clang` 을 든다. 어느 쪽 때문인지 가르지 못했다.
+- 샌드박스 안에서 데이터 폴더를 새로 만드는 것 — 폴더는 세션 시작 때 Claude Code 가 이미 만들어 두어서(1-6) 스크립트의 `mkdir -p` 는 늘 rc 0 이었다.
+- skill 이 자기 폴더의 보조 파일을 Read 로 여는 경우(2-7) — 잰 것은 같은 플러그인의 다른 skill 폴더에 있는 파일이다.
+- 권한 판정 칸의 `other` 와 `subcommandResults` 가 정확히 무엇을 뜻하는지 — 나온 자리만 적었다.
+
+### 이 도구로는 재지 못하는 것
+
+- 대화형 화면에서만 보이는 것 — 권한 창의 선택지, `/plugin` 화면, 설정 값 받기 창.
 - macOS 밖 — 샌드박스는 Linux · WSL2 에서 bubblewrap 으로 돈다. 문서는 Linux 에서 「an entry for a path that doesn't exist yet has no effect」 라 적는다. 이 도구는 돌린 기계의 값만 낸다.
 - 샌드박스에 막힌 명령을 샌드박스 밖에서 다시 돌리는 길 — 도구는 이 길을 막고 잰다. 누가 승인하는지는 문서의 표로만 안다(manual · acceptEdits 는 묻고, auto 는 분류기가 보고, dontAsk 는 거부한다).
-- 모델에 따라 달라지는 것 — 시험용 skill 은 정해진 걸음만 밟게 썼지만 sonnet · effort medium 에서만 잰다. 걸음을 건너뛴 실행은 「재지 못함」 으로 나온다.
+- 모델에 따라 달라지는 것 — 시험용 skill 은 정해진 걸음만 밟게 썼지만 sonnet · effort medium 에서만 쟀다. 이번 실행에서는 걸음을 건너뛴 것이 없었다.
 - 캐시에 복사된 설치본 — «선택 단계 설치본 끄기» 에 적었다.
 - 조직 관리 설정(managed settings)이 걸린 기계.
 - 설정 값 가운데 감춰야 하는 값(`sensitive`)과 `/config` 화면.
@@ -2163,9 +2223,9 @@ Your final message is exactly one line, built from what you observed:
 | OQ37 | 기각(F7) | 막힐 때의 길은 F7 이 정한다. 재료는 행 1-2 – 1-5(쓰기 허용 설정 · 폴더 더하기 · 훅 프로세스) |
 | OQ38 | 기각(F7) | 최소 판을 강제할지는 F7 이 정한다. 재료는 «장치마다 필요한 판» |
 | OQ39 | 기각(해결됨) | 로드맵을 가르지 않기로 한 결정이다(S38). 조사의 범위 밖 |
-| RC273 | 반영 | 문서에서 확인한 것 «장치마다 필요한 판» 의 끝 문단 · «옛 기록과 달라진 것» 9 |
+| RC273 | 반영 | 문서에서 확인한 것 «장치마다 필요한 판» 의 끝 문단 · «옛 기록과 달라진 것» 12 |
 | RC274 | 반영 | «있는 것 검토» 첫 행 — 지금 코드에서 다시 확인했다 |
-| RC275 | 반영 | 실측 표 행 3-3 · 3-7 — 시험용 플러그인이 `userConfig` 를 선언해 잰다. 네 플러그인의 manifest 는 건드리지 않는다 |
+| RC275 | 반영 | 실측 표 행 3-3 · 3-7 — 시험용 플러그인이 `userConfig` 를 선언해 쟀다. 네 플러그인의 manifest 는 건드리지 않았다 |
 | RC276 | 반영 | «있는 것 검토» 둘째 행 · 실측 표 행 3-1 · 3-5 |
 | K10 | 반영 | 실측 표 항목 1 |
 | K11 | 반영 | 실측 표 행 3-8 · 3-9 · 문서에서 확인한 것 «문서 2» · «문서 4» |
@@ -2177,7 +2237,9 @@ Your final message is exactly one line, built from what you observed:
 | S38 | 기각(범위 밖) | 로드맵 구성에 대한 결정이다 |
 | «cc-hooks» | 반영 | 문서에서 확인한 것 «문서 13» · 실측 표 행 4-5 |
 | «cc-plugins-cli» | 반영 | 문서에서 확인한 것 «문서 11» · «문서 16» · 실측 표 행 4-6 |
-| «cc-plugins-loading» | 반영 | 문서에서 확인한 것 «문서 12» · 실측 표 행 4-3 · 4-4 · «옛 기록과 달라진 것» 4 |
+| «cc-plugins-loading» | 반영 | 문서에서 확인한 것 «문서 12» · 실측 표 행 4-3 · 4-4 · «옛 기록과 달라진 것» 6 |
 | «cc-plugins-reference» | 반영 | 문서에서 확인한 것 «문서 2» · «문서 4» · «옛 기록과 달라진 것» 1 |
-| «cc-sandboxing» | 반영 | 문서에서 확인한 것 «문서 5» · «문서 6» · 실측 표 항목 1 · «옛 기록과 달라진 것» 3 |
+| «cc-sandboxing» | 반영 | 문서에서 확인한 것 «문서 5» · «문서 6» · 실측 표 항목 1 · «옛 기록과 달라진 것» 3 · 4 |
 | «cc-settings» | 반영 | 문서에서 확인한 것 «문서 7» · 재는 방법 — 도구가 실행마다 `--settings <파일>` 로만 설정을 건다 |
+
+## 지휘 기록
