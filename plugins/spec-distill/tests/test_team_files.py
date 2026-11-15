@@ -39,6 +39,16 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
         for line in ("- 과제마다 INTENT.md 부터", "- 설계안 승인 뒤에 코드", "- 실서비스 배포", "- 다른 폴더 파일 고치기", "- 승인 전 코딩"):
             self.assertIn(line + "\n", text)
 
+    def test_results_point_instead_of_copying(self):   # AC28
+        line = "- 결과 파일에 테스트 출력을 옮겨 싣지 말고 커밋과 경로로 가리킨다.\n"
+        for role in ("worker", "writer"):
+            text = F.role_template(role).read_text(encoding="utf-8")
+            self.assertIn(line, text.split("## 하지 않을 일")[0], role)
+        for role in L.ROLES:   # 어느 틀도 테스트 출력을 실으라고 하지 않는다
+            for row in F.role_template(role).read_text(encoding="utf-8").splitlines():
+                if "테스트 출력" in row:
+                    self.assertTrue("싣지 않" in row or "싣지 말" in row, (role, row))
+
     def test_no_file_named_like_auto_loaded_memory(self):
         self.assertEqual([p.name for p in F.TEMPLATES.rglob(L.ROLE_DOC)], [])
 
@@ -198,6 +208,149 @@ class Original(unittest.TestCase):
         self.assertEqual(F.extend_original(grown, [("x.md", C, "원문", 10, [b"h\n", b"A\n"], "")]), (grown, []))
         more, notes = F.extend_original(grown, [("x.md", C, "원문", 10, [b"h\n", b"A\n", b"B\n"], "")])
         self.assertEqual((F.parse_original(more)[-1].body, F.parse_original(more)[-1].first, notes), (b"B\n", 12, []))
+
+
+class OneScopeReader(unittest.TestCase):   # 잔여 — 「한다 … / 안 한다 …」 를 읽는 곳이 하나
+    def test_same_pattern_object_and_no_private_copy(self):
+        import roadmap_render as R
+        import team_check as C
+        self.assertIs(R.SCOPE_RE, F.SCOPE_RE)
+        self.assertFalse(hasattr(C, "_scope"))
+        self.assertFalse(hasattr(C, "_PLAN_RE"))
+
+    def test_scope_line(self):
+        self.assertEqual(F.scope_line(["한다: 가", "한다: 나", "안 한다: 다"]), "한다 가 · 나 / 안 한다 다")
+        self.assertEqual(F.scope_line("한다 가 / 안 한다 나"), "한다 가 / 안 한다 나")
+        self.assertEqual(F.scope_line(["한다: 가"]), M.field_text(["한다: 가"]))   # 둘 다 있지 않으면 칸 글 그대로
+        self.assertEqual(F.scope_line(["한다: 가", "메모"]), M.field_text(["한다: 가", "메모"]))
+
+    def test_split_matches_the_table_rule(self):   # 표가 받는 꼴과 INTENT.md 가 가르는 꼴이 같다
+        for scope, goal_tail, not_do in (("한다 가 / 안 한다 나", "가", "- 나"), ("한다 가 / 안 한다 나 / 안 한다 다", None, "- 없음"),
+                                         ("한다  가 / 안 한다 나", None, "- 없음"), ("그냥 글", None, "- 없음")):
+            self.assertEqual(F.goal_text("의도", scope), "의도\n\n- 범위: %s" % (goal_tail or scope), scope)
+            self.assertEqual(F.not_text(scope), not_do, scope)
+
+
+class IntentMeta(unittest.TestCase):   # 잔여 — kind 판정이 줄 비교가 아니다
+    HEAD = "---\ntype: job\njob: fix\nkind: %s\nroadmap: r/t/roadmap.md\nbranch: fix/x\npaths: [a.py]\n---\n\n"
+    BODY = "## 목표\n\n가\n\n## 지시 원문\n\n- 범위: intent/original.md 2–3행\n\n## 하지 않을 것\n\n- 없음\n\n## 결정 기록\n"
+
+    def test_meta_unquotes_and_trims(self):
+        for kind in ("task", '"task"', "task  ", "'task'"):
+            text = self.HEAD % kind + self.BODY
+            self.assertEqual(F.intent_meta(text)["kind"], "task", kind)
+            self.assertEqual(F.intent_ranges(text), [], kind)   # 받은 말 안의 범위 줄 꼴을 범위로 읽지 않는다
+        self.assertEqual(F.intent_ranges(self.HEAD % "epic" + self.BODY), [(2, 3)])
+        self.assertRaises(F.FormatError, F.intent_meta, "머리 없는 글\n")
+        self.assertRaises(F.FormatError, F.intent_meta, "---\nkind: task\n")
+
+
+class FramingHeads(unittest.TestCase):   # 잔여 — 경계 제목을 두 곳이 따로 적지 않는다
+    def test_same_headings_as_the_audit_reader(self):
+        import seed_review_log
+        import team_write
+        self.assertEqual(tuple(team_write.FRAMING_HEADS), tuple(seed_review_log.AUDIT_HEADINGS[:3]))
+
+    def test_stage_pending_is_gone(self):
+        import roadmap_write
+        self.assertFalse(hasattr(L, "STAGE_PENDING"))
+        self.assertFalse(hasattr(roadmap_write, "STAGE_PENDING_NOTICE"))
+
+
+class TeamRoadmapTemplate(unittest.TestCase):   # 잔여 — 머리말 · 넘김 문장은 그린 글이 아니라 틀에서 바꾼다
+    def test_user_text_may_carry_the_old_sentence(self):
+        import types
+        import roadmap_render as R
+        import team_write as TW
+        idx = types.SimpleNamespace(k_lines={"K1": "- 위험 K1 — " + TW.OLD_HANDOFF})
+        text = TW.render_team_roadmap(R.TEMPLATE.read_text(encoding="utf-8"), [], idx, "제목", "b.md", "r/t/roadmap.md", "이력")
+        self.assertTrue(text.startswith(TW.FRONT + "layout: team\n"))
+        self.assertEqual(text.count(TW.TEAM_HANDOFF), 1)
+        self.assertEqual(text.count(TW.OLD_HANDOFF), 1)   # 사용자 글(위험 줄)의 문장은 그대로
+        self.assertIn("- 위험 K1 — " + TW.OLD_HANDOFF, text)
+
+    def test_template_without_the_two_marks_is_refused_before_rendering(self):
+        import roadmap_render as R
+        import team_write as TW
+        for template in ("---\ntype: roadmap\n---\n본문\n", "본문\n" + TW.FRONT + TW.OLD_HANDOFF + "\n",
+                         TW.FRONT + "---\n" + TW.OLD_HANDOFF + TW.OLD_HANDOFF + "\n"):
+            self.assertRaises(R.TableError, TW.render_team_roadmap, template, [], None, "t", "b", "r", "h")
+
+
+class _ShutGit:   # rev-parse 가 실패하는 git — 아무것도 읽지 못한다
+    failures = []
+
+    def run(self, *args):
+        return 128, ""
+
+    def blob(self, rev, path):
+        return None
+
+    def absent(self, rev, path):
+        return False
+
+
+class BranchesWithoutFixture(unittest.TestCase):   # 분기 × 픽스처 대조가 찾은, 단언이 닿지 않던 갈래
+    def test_shallow_question_unanswered_is_not_deep(self):   # team_status.Reader.shallow — 얕은지 묻지 못함
+        import team_status as TS
+        asked = []
+
+        class Counted(_ShutGit):
+            def run(self, *args):
+                asked.append(args)
+                return super().run(*args)
+
+        reader = TS.Reader(Counted(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
+        self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")
+        self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")   # 한 번만 묻고 같은 답
+        self.assertEqual(asked, [("rev-parse", "--is-shallow-repository")])
+
+    def test_ancestor_git_error_is_uncountable(self):   # job_results._ancestor — rc 0 · 1 밖은 「조상 아님」 이 아니라 셀 수 없음
+        import job_results as JR
+        import roadmap_status as rs
+        import types
+
+        class Rc(rs.Git):
+            def __init__(self, rc):
+                super().__init__(".")
+                self.rc = rc
+
+            def run_err(self, *args, env=None):
+                return self.rc, "", "fatal: 조상 검사 막힘\n" if self.rc > 1 else ""
+
+            def commit(self, ref):
+                return ref
+
+        for rc, want in ((0, True), (1, False)):
+            git = Rc(rc)
+            self.assertEqual((JR._ancestor(git, "a" * 40, "b" * 40), git.failures), (want, []), rc)
+        git = Rc(128)
+        self.assertEqual((JR._ancestor(git, "a" * 40, "b" * 40), git.failures),
+                         (None, ["git merge-base 실패(rc 128): fatal: 조상 검사 막힘"]))
+        r = types.SimpleNamespace(head="a" * 40, bundle_at=None, job_at=None)
+        self.assertEqual(JR._commit_problems(Rc(128), r, "b" * 40), [])   # 셀 수 없음을 「조상이 아니다」 로 내지 않는다
+        self.assertEqual(len(JR._commit_problems(Rc(1), r, "b" * 40)), 1)   # 양의 짝 — rc 1 은 거절 사유 하나
+
+    def test_unreadable_copy_has_no_framing_pair(self):   # team_write.framing_pair — 사본을 읽지 못함 · 빈 사본
+        import team_write as TW
+        self.assertIsNone(TW.framing_pair(b"not a section line\n", "docs/b.md"))   # parse_original 이 FormatError 를 낸다
+        self.assertIsNone(TW.framing_pair(b"", "docs/b.md"))
+
+    def test_origin_table_separator_with_three_cells(self):   # check_bundle_coverage — 구분 행이 칸 넷이 아님
+        import check_bundle_coverage as cbc
+        spec = "# s\n\n## 원문 대조\n\n| 원문 | 설계 | 처리 | 근거 |\n|---|---|---|\n| a | b | 그대로 | — |\n"
+        self.assertEqual(cbc.origin_notes(spec), (["원문 대조 표를 읽지 못했다 — 원문 대조 표 구분 행이 칸 넷이 아니다"], []))
+
+    def test_unchecked_impl_still_shows_notices(self):   # check_bundle_coverage.render_impl — 검사 불가(3)에도 알림 줄
+        import check_bundle_coverage as cbc
+        self.assertEqual(cbc.render_impl({"status": 3, "reason": "사유", "notices": ["n1"]}), "구현 대조 검사 불가 — 사유\n알림 — n1")
+
+    def test_neighbor_decisions_skip_and_unread_tree(self):   # spec_review_bundle._team_decisions — 과제 칸 없는 이웃 · 읽을 트리 없음
+        import spec_review_bundle as srb
+        blocks = [{"id": "P1", "stage": "끝남"},
+                  {"id": "E2", "stage": "준비", "tip": None, "job": {"intent": "docs/r/t/jobs/E2/INTENT.md"}}]
+        self.assertEqual(srb._team_decisions(_ShutGit(), None, blocks, {"P1", "E2"}),
+                         ["  E2 — 셀 수 없음: 과제 파일을 읽지 못했다 — docs/r/t/jobs/E2/INTENT.md"])
 
 
 if __name__ == "__main__":
