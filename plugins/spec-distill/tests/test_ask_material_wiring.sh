@@ -7,6 +7,12 @@
 #   행동 — spec-review 의 펜스 글을 그대로 잘라 원장이 열린 설계문서로 돌린다(표지 주인 · 채널 줄 ·
 #          남의 표지 · 전문 파일 자리가 링크).
 set -u
+if [ "${1:-}" = "--emit-scanned" ]; then
+  echo "plugins/spec-distill/skills/spec-review/SKILL.md"
+  echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
+  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "shared/docreview/references/reviewing-document.md"; exit 0
+fi
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 . "$REPO_ROOT/shared/tests/assert.sh"
