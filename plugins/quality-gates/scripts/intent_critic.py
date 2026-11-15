@@ -2,9 +2,11 @@
 """intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 상한 · 답 기록 · 렌더.
 
 하위 명령은 `intent_critic.py <sub> --help` 가 정본이다. 세션 폴더(`--rd`)의 파일 이름:
-  intent-config.txt     config 가 쓴다(answers_dir · max_bytes 와 출처)
+  intent-config.txt     config 가 쓴다(answers_dir · max_bytes · other_teams_max_bytes · intent_doc_markers 와 출처)
   intent-evidence.txt · intent-origin.md · intent-roadmap.md · intent-intent.md ·
   intent-doubts.md · intent-answered.md · intent-plan.txt     prepare 가 쓴다
+  intent-scope.md       prepare 가 쓴다 — 리뷰어의 <scope> 칸(넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목)
+  other-teams.md        prepare 가 쓴다 — 다른 팀 기록(other_teams.py). 기록이 없으면 지운다
   intent-prepare-notices.txt  prepare 의 공시 줄(한 줄에 하나) — render 가 결과 절 앞에 싣는다
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
@@ -37,12 +39,16 @@ import doc_paths  # noqa: E402
 from render_disposition import disposition_report  # noqa: E402
 import intent_answers as ia  # noqa: E402
 import intent_origin as io_  # noqa: E402
+import other_teams as ot  # noqa: E402
 
 KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
 DIR_ENV = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 MAX_ENV = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
 DEFAULT_DIR = "docs/qg-intent-answers"
 DEFAULT_MAX = 120000
+OTHER_MAX_ENV = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
+MARKERS_ENV = "DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS"
+DEFAULT_OTHER_MAX = 80000
 SETTINGS_FILES = (".claude/settings.json", ".claude/settings.local.json")
 
 CONFIG = "intent-config.txt"
@@ -54,6 +60,8 @@ DOUBTS = "intent-doubts.md"
 ANSWERED = "intent-answered.md"
 PLAN = "intent-plan.txt"
 PREPARE_NOTICES = "intent-prepare-notices.txt"
+SCOPE = "intent-scope.md"
+OTHER_TEAMS = ot.FILE
 OUT1 = "intent-critic-1.txt"
 OUT2 = "intent-critic-2.txt"
 QUESTIONS = "intent-questions.yaml"
@@ -77,10 +85,13 @@ INTENT_DOUBTS_MARK = "<!-- intent-doubts -->"
 ALIAS_SEP = " -> "
 NAMES_PREFIX = "review-i"
 NAMES_SUFFIX = ".names"
+# review-diff.sh 가 반복마다 남기는 그 실행의 --mode 한 줄. filter 는 이 다섯 낱말과 글자 그대로 같을 때만 쓴다.
+MODE_SUFFIX = ".mode"
 NAMES_MISSING = ("바뀐 파일 목록(review-i<N>.names)이 없거나 비어 이 범위가 더한 답 파일을 "
                  "가리지 못함")
 # 바뀐 파일 목록이 리뷰 범위가 바꾼 경로를 모두 담는 모드. paths 의 목록은 glob 에 맞는 경로뿐이다.
 WHOLE_SCOPE_MODES = ("session", "branch", "topic", "range")
+REVIEW_MODES = WHOLE_SCOPE_MODES + ("paths",)
 NAMES_PARTIAL = ("리뷰 범위가 paths 이거나 알 수 없어, 바뀐 파일 목록에 없는 답 파일은 이 범위가 "
                  "더했는지 가리지 못함")
 RANGE_ADDED = "이 범위가 더한 답 파일"
@@ -97,6 +108,9 @@ UNANSWERED = " · 답하지 않음 %d개"
 
 NO_EVIDENCE = "intent-critic — 근거 없음"
 NO_QUESTION = "intent-critic — 질문 없음"
+# 넓게 보는 리뷰에서만 — 낸 후보가 근거 확인(evidence · quote · read_only)에서 모두 걸러졌을 때.
+ALL_FILTERED = "intent-critic — 낸 후보 %d개가 근거 확인에서 모두 걸러짐"
+FILTERED_KEYS = ("evidence", "quote", "read_only")
 UNREADABLE = "intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)"
 ALREADY = "intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 SECOND_FAILED = "둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다"
@@ -112,13 +126,23 @@ KILL_LINE = "intent-critic 꺼짐(kill switch)"
 # 거름 공시 — 0 이 아닌 것만 이 순서로 낸다.
 COUNT_NOTICES = (
     ("evidence", "근거 없어 거름 %d"),
+    ("quote", "인용이 그 파일에 없어 거름 %d"),
+    ("read_only", "읽은 인용만 있어 거름 %d"),
     ("answered", "이미 답한 질문이라 거름 %d"),
     ("over_cap", "상한 넘어 남김 %d"),
     ("unidentified", "정체를 가르지 못함 %d"),
     ("broken", "항목 파손 %d"),
     ("absorbed", "두 호출에서 겹친 후보를 합침 %d"),
+    ("cites_dropped", "근거로 받지 않은 인용 %d"),
 )
 RETURN_STATES = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
+TABLE_HEAD = "| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |"
+KIND_SEP = " · "
+# 결과 절의 다른 팀 목록 — 리뷰어를 부르지 않은 실행에도 늘 보인다.
+OVERLAP_HEAD = "다른 팀과 겹치는 곳:"
+UNVERIFIED_HEAD = "다른 팀 확인 못 함:"
+NO_TEAMS_RECORD = "- 다른 팀 기록 없음"
+TEAMS_UNREAD = "- 기록에서 이 절을 읽지 못함"
 
 
 class InputError(Exception):
@@ -182,8 +206,12 @@ def _repeated(pairs: List[tuple], keys: tuple) -> bool:
     return repeated
 
 
-CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source")
-PLAN_KEYS = ("call", "mode", "tree_root", "answers_root")
+CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source",
+               "other_teams_max_bytes", "other_teams_max_bytes_source", "intent_doc_markers",
+               "intent_doc_markers_source")
+PLAN_KEYS = ("call", "mode", "tree_root", "answers_root", "breadth")
+# 리뷰의 넓이 — narrow 는 R1 그대로, 뒤 둘이 넓게 보는 리뷰다. 계획 파일에 없거나 모르는 값이면 narrow.
+BREADTHS = ("narrow", "range", "intent-docs")
 
 
 def _read_config(rd: str) -> Optional[dict]:
@@ -194,6 +222,15 @@ def _read_config(rd: str) -> Optional[dict]:
     if not cfg.get("answers_dir") or not cfg.get("max_bytes", "").isdigit():
         return None
     cfg["max_bytes"] = int(cfg["max_bytes"])
+    # R2 가 더한 키 — 없으면(옛 꼴) 기본값, 있는데 틀리면 파일을 거부한다. 짝 `_source` 없이 하나만 와도 받는다.
+    other_max = cfg.get("other_teams_max_bytes")
+    cfg["other_teams_max_bytes"] = (DEFAULT_OTHER_MAX if other_max is None
+                                    else _valid_max_bytes(other_max))
+    markers = cfg.get("intent_doc_markers")
+    cfg["intent_doc_markers"] = (list(io_.DEFAULT_MARKERS) if markers is None
+                                 else io_.parse_markers(markers))
+    if cfg["other_teams_max_bytes"] is None or cfg["intent_doc_markers"] is None:
+        return None
     return cfg
 
 
@@ -204,8 +241,8 @@ def _read_plan(rd: str) -> Optional[dict]:
     pairs = _key_values(text)
     if _repeated(pairs, PLAN_KEYS):
         return None
-    plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "sources": [],
-            "aliases": {}}
+    plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "breadth": "narrow",
+            "sources": [], "aliases": {}}
     for key, value in pairs:
         if key == "source":
             plan["sources"].append(value)
@@ -215,6 +252,8 @@ def _read_plan(rd: str) -> Optional[dict]:
                 plan["aliases"][bundle] = brief
         elif key in PLAN_KEYS:
             plan[key] = value
+    if plan["breadth"] not in BREADTHS:
+        plan["breadth"] = "narrow"
     return plan
 
 
@@ -224,7 +263,7 @@ def _read_questions(rd: str) -> Optional[dict]:
         return None
     try:
         data = yaml.safe_load(text)
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAMLError 말고도(없는 날짜의 ValueError 등) 읽지 못한 파일이다
         return None
     if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
         return None
@@ -244,7 +283,7 @@ def _reads_back(text: str) -> bool:
     """YAML 로 읽으면 같은 글이 돌아오나 — 수 · 참거짓 · null 로 읽히는 글(`true` · `null` …)은 아니다."""
     try:
         return yaml.safe_load(text) == text
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAMLError 말고도 예외를 낸다(틀린 태그 · 수 등)
         return False
 
 
@@ -260,14 +299,19 @@ def _scalar(value) -> str:
     return text if plain else json.dumps(text, ensure_ascii=False)
 
 
-def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict]) -> None:
+def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict],
+                  breadth: str = "-", other_teams: str = "-", overlaps="-") -> None:
+    """돌려주는 꼴. `overlaps` 는 겹침 수(정수 — 날 수로 쓴다) 또는 모름 `-`."""
     cfg = _read_config(rd) or {}
     lines = [RETURN_FENCE,
              "status: " + _scalar(status),
              "mode: " + _scalar(mode or "-"),
              "answers_dir: " + _scalar(cfg.get("answers_dir", "-")),
              "answers_dir_source: " + _scalar(cfg.get("answers_dir_source", "-")),
-             "commit: " + _scalar(commit or "-")]
+             "commit: " + _scalar(commit or "-"),
+             "breadth: " + _scalar(breadth or "-"),
+             "other_teams: " + _scalar(other_teams or "-"),
+             "overlaps: " + (str(overlaps) if type(overlaps) is int else _scalar(overlaps or "-"))]
     if not rows:
         lines.append("questions: []")
     else:
@@ -278,16 +322,29 @@ def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict]
         lines.append("    answer: " + _scalar(row["answer"]))
         lines.append("    wrong_choice: " + row["wrong_choice"])
         lines.append("    file: " + json.dumps(row["file"], ensure_ascii=False))
+        lines.append("    evidence: " + json.dumps(row["evidence"], ensure_ascii=False))
     lines.append("```")
     _write(_path(rd, RETURN), "\n".join(lines) + "\n")
 
 
 # ---------------------------------------------------------------- gate
 
+def _killed(rd: str, mode: str, stale=()) -> bool:
+    """kill switch 가 켜졌으면 꺼짐 처리(`stale` 세션 파일 지우기 · 돌려주는 꼴 · 꺼짐 줄)를 하고 참.
+
+    `gate` 와 `prepare` 가 함께 쓴다 — 두 자리의 꺼짐 출력이 갈라지지 않게.
+    """
+    if os.environ.get(KILL_ENV) != "1":
+        return False
+    for name in stale:
+        _remove(_path(rd, name))
+    _write_return(rd, "skipped — " + KILL_LINE, mode, "-", [])
+    print(KILL_LINE)
+    return True
+
+
 def cmd_gate(args) -> int:
-    if os.environ.get(KILL_ENV) == "1":
-        _write_return(args.rd, "skipped — " + KILL_LINE, args.mode, "-", [])
-        print(KILL_LINE)
+    if _killed(args.rd, args.mode):
         return 0
     if args.path == "final":
         print("intent-gate: run")
@@ -381,8 +438,15 @@ def cmd_config(args) -> int:
     pairs = _settings_pairs(args.repo, args.base, args.project_dir)
     answers_dir, dir_source = _setting(pairs, DIR_ENV, DEFAULT_DIR, _valid_answers_dir)
     max_bytes, max_source = _setting(pairs, MAX_ENV, DEFAULT_MAX, _valid_max_bytes)
+    other_max, other_source = _setting(pairs, OTHER_MAX_ENV, DEFAULT_OTHER_MAX, _valid_max_bytes)
+    markers, markers_source = _setting(pairs, MARKERS_ENV, list(io_.DEFAULT_MARKERS),
+                                       io_.parse_markers)
     lines = ["answers_dir: %s" % answers_dir, "answers_dir_source: %s" % dir_source,
-             "max_bytes: %d" % max_bytes, "max_bytes_source: %s" % max_source]
+             "max_bytes: %d" % max_bytes, "max_bytes_source: %s" % max_source,
+             "other_teams_max_bytes: %d" % other_max,
+             "other_teams_max_bytes_source: %s" % other_source,
+             "intent_doc_markers: %s" % ",".join(markers),
+             "intent_doc_markers_source: %s" % markers_source]
     _write(_path(args.rd, CONFIG), "\n".join(lines) + "\n")
     _emit(lines)
     return 0
@@ -432,10 +496,10 @@ def _line_ok(key: str, value) -> bool:
 
 
 def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str, sources,
-                aliases, notices: List[str]) -> None:
+                aliases, notices: List[str], breadth: str = "narrow") -> None:
     """줄 단위 계획 파일. 줄마다 써서 다시 읽으면 같은 값이 나오는지 확인하고, 아닌 출처 · 별칭은 쓰지 않고 공시한다."""
     singles = (("call", call), ("mode", mode), ("tree_root", tree_root),
-               ("answers_root", answers_root))
+               ("answers_root", answers_root), ("breadth", breadth))
     lines = []
     for key, value in singles:
         if not _line_ok(key, value):
@@ -456,6 +520,44 @@ def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str
     _write(_path(rd, PLAN), "\n".join(lines) + "\n")
 
 
+NOTICE_NO_NAMES = "바뀐 파일 목록이 없어 넓게 보지 않는다"
+NOTICE_UNREAD_DOCS = "의도 문서인지 확인 못 한 문서 %d — 추적되지 않는다"
+NOTICE_TEAMS_FAILED = "다른 팀 읽기 실패 — %s"
+NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d — 나눠 부르기 판정에 넣지 않는다)"
+
+
+def _breadth(args, tree_root: str, cfg: dict, notices: List[str]) -> tuple:
+    """(바뀐 파일 목록 | None, 넓이, 바뀐 의도 문서들). 바뀐 문서는 리뷰 트리에서 읽는다."""
+    names = _range_names(args.rd)
+    breadth, docs, unread = io_.review_breadth(
+        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel),
+        cfg["intent_doc_markers"])
+    if args.mode == "range" and names is None:
+        _add_notice(notices, NOTICE_NO_NAMES)
+    if breadth != "narrow":
+        _add_notice(notices, io_.BREADTH_LABELS[breadth])
+    if unread:
+        _add_notice(notices, NOTICE_UNREAD_DOCS % unread)
+    return names, breadth, docs
+
+
+def _teams(args, names, roadmaps, cfg, collect=ot.collect) -> tuple:
+    """다른 팀 기록 → (글, 공시 줄들). 읽기가 예외로 끝나도 단계를 멈추지 않는다(fail-open — 공시한다)."""
+    try:
+        got = collect(args.repo, os.path.abspath(args.tree_root), args.review_commit, names,
+                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"])
+        return got["text"], list(got["notices"])
+    except Exception as exc:  # noqa: BLE001 — 어떤 실패든 이름만 공시하고 다른 팀 없이 간다
+        return "", [NOTICE_TEAMS_FAILED % type(exc).__name__]
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _prepare(args, notices: List[str]) -> str:
     rd = args.rd
     if not os.path.isdir(rd):
@@ -470,18 +572,38 @@ def _prepare(args, notices: List[str]) -> str:
     tree_root = os.path.abspath(args.tree_root)
     answers_root = os.path.join(tree_root, cfg["answers_dir"])
 
+    names, breadth, docs = _breadth(args, tree_root, cfg, notices)
+    built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs,
+                             changed_docs=docs, tree_root=tree_root)
+    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg)
+    if teams_text:
+        _write(_path(rd, OTHER_TEAMS), teams_text)
+    else:
+        _remove(_path(rd, OTHER_TEAMS))
+    # 기록을 썼으면 공시는 상한 줄뿐이다 — 리뷰어에게 실은 것을 말하니 부르지 않는 실행에서는 뺀다.
+    cap_lines = teams_notices if teams_text else []
+    for line in teams_notices:
+        _add_notice(notices, line)
+    _write(_path(rd, SCOPE), io_.render_scope(breadth, names, args.repo, args.base,
+                                              args.review_commit))
+
     e2e = _read(_path(rd, "e2e-record.md"))
     differential = _read(_path(rd, "differential.yaml"))
     ok, evidence_notices = io_.has_evidence(e2e, differential)
     for line in evidence_notices:
         _add_notice(notices, line)
-    if not ok:
+    # 좁은 리뷰는 R1 그대로 돌려 본 근거가 있을 때만 부른다 — 이때 원문 조립의 공시는 내지 않는다.
+    if not ok and breadth == "narrow":
+        for line in cap_lines:  # 상한 줄은 기록의 `## 상한` 에 남는다 — 출력은 R1 그대로
+            if line in notices:
+                notices.remove(line)
         _add_notice(notices, NO_EVIDENCE)
-        _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices)
+        _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices,
+                    breadth=breadth)
         return "none"
 
-    evidence, _count = io_.build_evidence(e2e, differential)
-    built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs)
+    run_text, _count = io_.build_evidence(e2e, differential)
+    evidence, _count = io_.build_evidence(e2e, differential, teams_text)
     for line in built["notices"]:
         _add_notice(notices, line)
     if built["mixed"]:
@@ -505,7 +627,8 @@ def _prepare(args, notices: List[str]) -> str:
     if unreadable:
         _add_notice(notices, "읽지 못한 답 파일 %d" % unreadable)
 
-    total = io_.total_bytes(evidence, built["origin"], built["roadmap"], intent_kept, doubts)
+    # 나눠 부르기 판정은 돌려 본 줄로만 한다 — 다른 팀 기록은 자기 상한으로 묶이고 재서 공시한다.
+    total = io_.total_bytes(run_text, built["origin"], built["roadmap"], intent_kept, doubts)
     if total > cfg["max_bytes"]:
         call = "single"
         _add_notice(notices, "한 번에 넣음 — 입력 %d바이트가 상한 %d바이트를 넘었다"
@@ -514,6 +637,8 @@ def _prepare(args, notices: List[str]) -> str:
         call = "first-only"
     else:
         call = "split"
+    _add_notice(notices, NOTICE_BYTES % (total, io_.total_bytes(teams_text),
+                                         cfg["other_teams_max_bytes"]))
 
     _write(_path(rd, EVIDENCE), evidence)
     _write(_path(rd, ORIGIN), built["origin"])
@@ -522,7 +647,7 @@ def _prepare(args, notices: List[str]) -> str:
     _write(_path(rd, DOUBTS), doubts)
     _write(_path(rd, ANSWERED), _answered_lines(answered))
     _write_plan(rd, call, args.mode, tree_root, answers_root, built["sources"],
-                built["aliases"], notices)
+                built["aliases"], notices, breadth=breadth)
     return call
 
 
@@ -544,6 +669,9 @@ def _prepare_notices(rd: str) -> List[str]:
 
 
 def cmd_prepare(args) -> int:
+    # gate 를 거치지 않고 불려도 스위치가 넓이 판정 · 다른 팀 읽기 · gh 조회를 끈다 — 앞 실행의 두 파일도 지운다.
+    if _killed(args.rd, args.mode, stale=(OTHER_TEAMS, SCOPE)):
+        return 0
     notices: List[str] = []
     try:
         call = _prepare(args, notices)
@@ -588,7 +716,7 @@ def _parse_output(text: Optional[str]) -> tuple:
         return None, "qg-intent-critic 펜스가 둘 이상"
     try:
         data = yaml.safe_load(bodies[0])
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — 리뷰어가 옮긴 글(날짜 꼴 등)이 YAMLError 아닌 예외를 낸다
         return None, "펜스 안 YAML 을 읽지 못함"
     if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
         return None, "questions 목록이 없음"
@@ -667,16 +795,21 @@ def _identity(item: dict, plan: dict) -> Optional[str]:
     return ident
 
 
-def _observation_changed(value, observation: str, evidence: dict) -> bool:
+def _observation_changed(value, observation: str, evidence: dict, wide: bool,
+                         tree_root: str) -> bool:
+    """앞 답의 관찰이 바뀌었나 — 지금의 근거 줄이 맞거나, 넓은 리뷰에서 지금의 읽은 인용이 확인될 때."""
     if not isinstance(value, dict):
         return False
     previous = value.get("previous")
     if not isinstance(previous, str) or not previous.strip() or previous not in observation:
         return False
-    return _cited(value.get("now_lines"), evidence)
+    if _cited(value.get("now_lines"), evidence):
+        return True
+    return wide and bool(io_.verify_quotes(tree_root, value.get("now_quotes"))[0])
 
 
-def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> Optional[str]:
+def _answered_state(item: dict, ident: str, answered: dict, evidence: dict, wide: bool,
+                    tree_root: str) -> Optional[str]:
     """이미 답한 질문으로 거를 때의 상태. 거르지 않으면 None."""
     same = item.get("same_as")
     if not isinstance(same, str) or same != ident:
@@ -684,7 +817,8 @@ def _answered_state(item: dict, ident: str, answered: dict, evidence: dict) -> O
     prev = answered.get(ident)
     if prev is None or prev["answer"] not in FILTER_ANSWERS:
         return None
-    if _observation_changed(item.get("observation_changed"), prev["observation"], evidence):
+    if _observation_changed(item.get("observation_changed"), prev["observation"], evidence,
+                            wide, tree_root):
         return None
     return "wrong-choice-filtered" if prev["answer"] == "잘못 골랐다" else "answered-filtered"
 
@@ -693,20 +827,38 @@ def _unidentified_id(question: str) -> str:
     return "unidentified:" + hashlib.sha1(question.encode("utf-8", UNWRITABLE)).hexdigest()[:12]
 
 
-def _question_record(item: dict, ident: str, identified: bool, evidence: dict) -> dict:
+def _question_record(item: dict, ident: str, identified: bool, evidence: dict, lines: list,
+                     quotes: list) -> dict:
+    """남긴 질문의 레코드 — `lines` 는 확인된 근거 줄 번호(무효면 빈 목록), `quotes` 는 확인된 읽은 인용."""
     observation = []
-    for n in item["evidence_lines"]:
+    found = set()
+    for n in lines:
         observation.append(evidence[n])
+        found.add(io_.evidence_kind(evidence[n]))
+    for quote in quotes:
+        observation.append(io_.quote_line(quote))
+    if quotes:
+        found.add(io_.KIND_READ)
     return {"id": ident, "identified": identified, "state": "",
             "target_source": _text(item.get("target_source")),
             "target_id": _text(item.get("target_id")), "kind": _text(item.get("kind")),
             "weight": _text(item.get("weight")), "quote": _text(item.get("quote")),
             "label": _text(item.get("label")), "question": _text(item.get("question")).strip(),
-            "evidence_lines": list(item["evidence_lines"]), "observation": observation}
+            "evidence_lines": list(lines), "observation": observation,
+            "read_quotes": list(quotes), "evidence_kinds": io_.ordered_kinds(found)}
 
 
-def _weight_rank(record: dict) -> int:
-    return WEIGHTS.get(record["weight"], len(WEIGHTS))
+def _pick_rank(record: dict) -> tuple:
+    """고르는 순서 — 무게, 같은 무게면 돌려 본 근거가 있는 질문이 앞(정렬이 안정이라 그다음은 들어온 순서)."""
+    run_first = 0 if io_.KIND_RUN in record["evidence_kinds"] else 1
+    return (WEIGHTS.get(record["weight"], len(WEIGHTS)), run_first)
+
+
+def _quote_count(raw) -> int:
+    """리뷰어가 적은 읽은 인용의 수 — 목록이면 그 길이, 목록이 아닌 값이 있으면 하나."""
+    if isinstance(raw, list):
+        return len(raw)
+    return 1 if raw else 0
 
 
 def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Optional[list]:
@@ -739,19 +891,25 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Opti
     return out
 
 
-def _range_names(rd: str) -> Optional[set]:
-    """마지막 반복의 `review-i<N>.names`(리뷰 범위가 바꾼 경로, 한 줄에 하나). 없으면 None."""
+def _last_iteration(rd: str) -> Optional[str]:
+    """마지막 반복의 번호 글자 — `review-i<N>.names` 가운데 N 이 가장 큰 것의 N. 없으면 None."""
     try:
         names = os.listdir(rd)
     except OSError:
         names = []
-    best, best_name = -1, None
+    best, best_number = -1, None
     for name in names:
         number = name[len(NAMES_PREFIX):-len(NAMES_SUFFIX)]
         if (name.startswith(NAMES_PREFIX) and name.endswith(NAMES_SUFFIX) and number.isdigit()
                 and number.isascii() and int(number) > best):
-            best, best_name = int(number), name
-    text = _read(_path(rd, best_name)) if best_name is not None else None
+            best, best_number = int(number), number
+    return best_number
+
+
+def _range_names(rd: str) -> Optional[set]:
+    """마지막 반복의 `review-i<N>.names`(리뷰 범위가 바꾼 경로, 한 줄에 하나). 없으면 None."""
+    number = _last_iteration(rd)
+    text = _read(_path(rd, NAMES_PREFIX + number + NAMES_SUFFIX)) if number is not None else None
     if text is None:
         return None
     out = set()
@@ -760,6 +918,29 @@ def _range_names(rd: str) -> Optional[set]:
             out.add(line)
     # 기준선이 degraded 면 review-diff.sh 가 목록을 일부러 비워 둔다 — 빈 목록은 「바뀐 것 없음」이 아니라 「모름」이다.
     return out or None
+
+
+def _review_mode(rd: str) -> Optional[str]:
+    """`_range_names` 와 같은 N 의 `review-i<N>.mode` — review-diff.sh 가 실제로 쓴 리뷰 범위 모드.
+
+    글이 다섯 낱말 가운데 하나와 끝 줄바꿈까지 글자 그대로 같을 때만 그 낱말이다. 없음 · 읽지 못함 ·
+    다른 N 뿐 · 그 밖의 글이면 None — 부르는 쪽이 `--review-mode` 인자로 간다.
+    """
+    number = _last_iteration(rd)
+    if number is None:
+        return None
+    # newline="" — 줄 끝을 바꿔 읽지 않는다(`\r\n` · `\r` 이 `\n` 으로 읽혀 맞는 일이 없게). 64 글자면
+    # 가장 긴 낱말보다 길어 더 긴 글은 맞지 않는다.
+    try:
+        with open(_path(rd, NAMES_PREFIX + number + MODE_SUFFIX), encoding="utf-8", errors="replace",
+                  newline="") as fh:
+            text = fh.read(64)
+    except OSError:
+        return None
+    if not text.endswith("\n"):
+        return None
+    word = text[:-1]
+    return word if word in REVIEW_MODES else None
 
 
 def _range_identities(rd: str, tree_root: str) -> Optional[set]:
@@ -815,6 +996,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
            ids: Optional[set], whole: bool) -> list:
     evidence = _evidence_lines(rd)
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
+    wide = plan["breadth"] != "narrow"
     first_ids = set()
     remaining: List[dict] = []
     decided: List[dict] = []
@@ -823,10 +1005,30 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
             ledger.hold(label, "항목 파손")
             counts["broken"] += 1
             continue
-        if not _cited(item.get("evidence_lines"), evidence):
+        # 줄 인용은 하나라도 틀리면 묶음 전체가 무효다.
+        # 읽은 인용은 넓은 리뷰에서만 리뷰 트리와 견준다.
+        cited = _cited(item.get("evidence_lines"), evidence)
+        raw_quotes = item.get("read_quotes")
+        written = _quote_count(raw_quotes)
+        quotes = io_.verify_quotes(plan["tree_root"], raw_quotes)[0] if wide else []
+        if not cited and not written:
             ledger.suppressed(label, "근거 없어 거름")
             counts["evidence"] += 1
             continue
+        if not cited and not wide:
+            ledger.suppressed(label, "읽은 인용만 있어 거름")
+            counts["read_only"] += 1
+            continue
+        if not cited and not quotes:
+            ledger.suppressed(label, "인용이 그 파일에 없어 거름")
+            counts["quote"] += 1
+            continue
+        lines = list(item["evidence_lines"]) if cited else []
+        # 남긴 질문에서 근거로 받지 않은 것 — 확인 안 된(좁으면 보지 않은) 읽은 인용마다 하나,
+        # 무효가 된 줄 인용 묶음 하나.
+        dropped = written - len(quotes)
+        if not cited and item.get("evidence_lines") not in (None, []):
+            dropped += 1
         ident = _identity(item, plan)
         if ident is not None and number == 2 and plan["call"] == "split" and ident in first_ids:
             ledger.absorbed(label, ident)
@@ -835,12 +1037,12 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
         if ident is None:
             counts["unidentified"] += 1
             record = _question_record(item, _unidentified_id(_text(item.get("question")).strip()),
-                                      False, evidence)
+                                      False, evidence, lines, quotes)
         else:
             if number == 1:
                 first_ids.add(ident)
-            record = _question_record(item, ident, True, evidence)
-            state = _answered_state(item, ident, answered, evidence)
+            record = _question_record(item, ident, True, evidence, lines, quotes)
+            state = _answered_state(item, ident, answered, evidence, wide, plan["tree_root"])
             if state is not None:
                 ledger.suppressed(label, "이미 답한 질문")
                 counts["answered"] += 1
@@ -850,9 +1052,10 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
                 record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
                 decided.append(record)
                 continue
+        counts["cites_dropped"] += dropped
         record["label_in_run"] = label
         remaining.append(record)
-    ordered = sorted(remaining, key=_weight_rank)
+    ordered = sorted(remaining, key=_pick_rank)
     for i, record in enumerate(ordered):
         label = record.pop("label_in_run")
         if i < CAP:
@@ -869,8 +1072,8 @@ def cmd_filter(args) -> int:
     rd = args.rd
     ledger = Ledger(items="open")
     notices: List[str] = []
-    counts = {"evidence": 0, "answered": 0, "over_cap": 0, "unidentified": 0, "broken": 0,
-              "absorbed": 0}
+    counts = {"evidence": 0, "quote": 0, "read_only": 0, "answered": 0, "over_cap": 0,
+              "unidentified": 0, "broken": 0, "absorbed": 0, "cites_dropped": 0}
     plan = _read_plan(rd)
     questions: List[dict] = []
     if plan is None:
@@ -887,7 +1090,8 @@ def cmd_filter(args) -> int:
             status = "ran"
             answered = _load_answered(plan, rd, notices)
             ids = _range_identities(rd, plan["tree_root"])
-            whole = args.review_mode in WHOLE_SCOPE_MODES
+            # review-diff.sh 가 남긴 모드가 이긴다 — 인자는 그 파일이 없을 때의 대체값이다.
+            whole = (_review_mode(rd) or args.review_mode) in WHOLE_SCOPE_MODES
             questions = _judge(cands, plan, rd, ledger, counts, answered, ids, whole)
             if counts["answered"] and ids is None:
                 notices.append(NAMES_MISSING)
@@ -1209,8 +1413,14 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
         elif state == "ask" and not record.get("record_failed"):
             unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
     counts = data.get("counts") or {}
+    filtered = 0
+    for key in FILTERED_KEYS:
+        if type(counts.get(key)) is int:
+            filtered += counts[key]
     if asked == 0:
-        if counts.get("evidence") and not counts.get("answered"):
+        if filtered > 0 and not counts.get("answered"):
+            if plan["breadth"] != "narrow":
+                return "ran", ALL_FILTERED % filtered, notices
             return "ran", NO_EVIDENCE, notices
         return "ran", NO_QUESTION, notices
     if mode == "range":
@@ -1227,25 +1437,52 @@ def _rows(data: Optional[dict], mode: str) -> List[dict]:
         state = record.get("state")
         if state in RETURN_STATES:
             answer = record.get("answer") or "-"
+            # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
+            kinds = record.get("evidence_kinds")
+            evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
             rows.append({"id": _text(record.get("id")), "state": RETURN_STATES[state],
                          "answer": answer, "wrong_choice": "yes" if answer == "잘못 골랐다" else "no",
                          "file": "-" if mode == "range" else (record.get("file") or "-"),
-                         "question": record.get("question", "")})
+                         "question": record.get("question", ""), "evidence": evidence})
     return rows
 
 
-def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict]) -> str:
+def _teams_record(rd: str) -> tuple:
+    """(돌려주는 꼴의 other_teams, 겹침 줄들, 확인 못 함 줄들, 겹침 수) — `other-teams.md` 를 읽기만 한다.
+
+    줄은 `ot.summary`(팀 지도 머리 앞까지)로만 얻는다 — 다른 브랜치의 본문이 목록 줄을 흉내 내지 못한다.
+    겹침 수는 「겹침 확인 못 함」 이면 `-`(모름), 「겹침 없음」 이면 0, 그 밖에는 줄 수. 기록이 없으면 줄이 None.
+    """
+    text = _read(_path(rd, OTHER_TEAMS))
+    if text is None:
+        return "-", None, None, "-"
+    overlap, unverified = ot.summary(text)
+    if not overlap or ot.OVERLAP_UNKNOWN in overlap:
+        count = "-"
+    else:
+        count = len(overlap) - overlap.count(ot.NO_OVERLAP)
+    return OTHER_TEAMS, overlap or [TEAMS_UNREAD], unverified or [TEAMS_UNREAD], count
+
+
+def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict],
+             teams: tuple = (None, None)) -> str:
+    """결과 절. `teams` 는 `_teams_record` 의 (겹침 줄들, 확인 못 함 줄들) — None 이면 기록 없음."""
     out = ["", SECTION, "", SECTION_LEAD, "", "- " + line]
     for notice in notices:
         out.append("- " + notice)
     if data and data.get("commit_line"):
         out.append("- " + data["commit_line"])
     if rows:
-        out += ["", "| 정체 | 상태 | 답 | 답 파일 | 질문 |", "|---|---|---|---|---|"]
+        out += ["", TABLE_HEAD, "|---|---|---|---|---|---|"]
     for row in rows:
-        out.append("| %s | %s | %s | %s | %s |" % (_cell(row["id"]), row["state"],
-                                                   _cell(row["answer"]), _cell(row["file"]),
-                                                   _cell(row["question"])))
+        out.append("| %s | %s | %s | %s | %s | %s |" % (
+            _cell(row["id"]), row["state"], _cell(row["evidence"]), _cell(row["answer"]),
+            _cell(row["file"]), _cell(row["question"])))
+    overlap, unverified = teams
+    if overlap is None or unverified is None:
+        out += ["", NO_TEAMS_RECORD]
+    else:
+        out += ["", OVERLAP_HEAD] + overlap + ["", UNVERIFIED_HEAD] + unverified
     over = []
     wrong = []
     filtered = []
@@ -1291,9 +1528,11 @@ def cmd_render(args) -> int:
             if prepared not in notices and prepared not in front:
                 front.append(prepared)
         shown = front + shown
-    _append(result_path, lead + _section(line, shown, data, rows))
+    other_teams, overlap, unverified, overlaps = _teams_record(rd)
+    _append(result_path, lead + _section(line, shown, data, rows, (overlap, unverified)))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
-    _write_return(rd, status, args.mode, commit, rows)
+    breadth = "-" if plan is None else plan["breadth"]
+    _write_return(rd, status, args.mode, commit, rows, breadth, other_teams, overlaps)
     _write(marker, line + "\n")
     _emit(notices)
     print(line)
@@ -1320,11 +1559,12 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_gate)
 
     p = sub.add_parser("config", help="docs 답 자리 · 입력 상한을 읽는다",
-                       description="환경 변수 %s · %s 를 읽어 intent-config.txt 네 줄을 쓴다. 리뷰 "
+                       description="환경 변수 %s · %s · %s · %s 를 읽어 intent-config.txt 여덟 줄(네 "
+                                   "값과 저마다의 출처)을 쓴다. 리뷰 "
                                    "트리의 .claude/settings.json · settings.local.json 이 base 와 그 키가 "
                                    "다르면 기본값(default-settings-changed). --base - 는 base 를 "
                                    "모름 — 그때 리뷰 트리 설정에 그 키가 있으면 바뀐 것으로 본다."
-                                   % (DIR_ENV, MAX_ENV))
+                                   % (DIR_ENV, MAX_ENV, OTHER_MAX_ENV, MARKERS_ENV))
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--repo", required=True, help="리포 루트(base 쪽 설정을 git show 로 읽는다)")
     p.add_argument("--base", required=True, help="기준 rev, 모르면 -")
@@ -1332,8 +1572,12 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_config)
 
     p = sub.add_parser("prepare", help="근거 · 원문 · 로드맵 · 의도 · 의심 · 답을 조립한다",
-                       description="intent-config.txt 가 먼저 있어야 한다. 공시 줄들 뒤 "
-                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4.")
+                       description="intent-config.txt 가 먼저 있어야 한다. 리뷰의 넓이를 정하고 다른 "
+                                   "팀 기록(%s) · scope 칸(%s)을 쓴다. 공시 줄들 뒤 "
+                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4. "
+                                   "kill switch 가 켜져 있으면 아무것도 조립하지 않고 gate 와 같은 꺼짐 "
+                                   "줄 · 돌려주는 꼴만 낸다(rc 0)."
+                                   % (OTHER_TEAMS, SCOPE))
     p.add_argument("--rd", required=True, help="qg 세션 폴더(e2e-record.md · differential.yaml · "
                                                "intent.md 를 읽는다)")
     p.add_argument("--repo", required=True, help="리포 루트(원문 · 로드맵을 git 으로 읽는다)")
@@ -1344,6 +1588,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--review-commit", required=True, help="리뷰한 커밋(설계문서 링크를 읽을 rev)")
     p.add_argument("--specs-json", required=True, help="P3 의 JSON 한 줄이 든 파일")
     p.add_argument("--origin", default=None, help="부른 쪽이 넘긴 원문(리포 상대 경로)")
+    p.add_argument("--base", default="-",
+                   help="리뷰 범위의 기준 rev — intent-scope.md 의 커밋 제목(base..review-commit)을 "
+                        "읽는다. 모르면 -")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("check-output", help="리뷰어 응답을 읽을 수 있나 본다",
@@ -1364,7 +1611,9 @@ def _parser() -> argparse.ArgumentParser:
                                    "intent-questions.yaml 을 쓴다. 공시 줄들 뒤 「intent-ask: <k>」. rc 0.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--review-mode", default="-",
-                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값). %s 이면 바뀐 파일 "
+                   help="마지막 반복의 리뷰 diff 모드(review-diff.sh 의 mode: 값) — 대체값이다. 세션 "
+                        "폴더에 바뀐 파일 목록과 같은 N 의 review-i<N>.mode 가 있고 그 글이 다섯 모드 "
+                        "가운데 하나면 그 값이 이긴다. %s 이면 바뀐 파일 "
                         "목록이 범위 전체다. paths · 모름(-) · 그 밖의 값이면 목록에 없는 답 파일을 "
                         "「더하지 않음」 이 아니라 「모름」 으로 표시한다." % " · ".join(WHOLE_SCOPE_MODES))
     p.set_defaults(func=cmd_filter)
