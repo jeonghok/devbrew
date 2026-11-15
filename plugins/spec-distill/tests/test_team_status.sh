@@ -449,11 +449,31 @@ g rm -q -- "$J1/INTENT.md" && step "INTENT.md 지움(알림)" || fail_step "INTE
 assert_contains "$(notes E1)" "$J1/INTENT.md 를 읽지 못했다" "AC28: INTENT.md 를 읽지 못하면 그 한 줄"
 assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], [b['warnings'] for b in r['blocks'] if b['id']=='E1'][0])")" "([], [])" \
   "넘김: 브랜치 끝에 INTENT.md 가 없으면 결정 기록은 빈 글 — 경고 · 검사 불가 사유가 없다"
+# 위 블록은 단계가 알 수 없음이라 보고가 결정 기록 읽기의 결과를 가린다 — 그 끝에서 record_text 를 직접 부른다
+rectext() {  # rectext — feature/tm-e1 끝에서 E1 의 Reader.record_text(빈 글이면 '', 읽지 못하면 FormatError 와 사유)
+  python3 - "$S" "$W" "$RD" "$RM" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import roadmap_status, team_layout, team_status
+from roadmap_model import FormatError, parse_roadmap
+root, rd, rm = sys.argv[2:5]
+git = roadmap_status.Git(root)
+main = git.commit("refs/remotes/origin/HEAD")
+e1 = [b for b in parse_roadmap(git.blob(main, rm))[1] if b["id"] == "E1"][0]
+reader = team_status.Reader(git, main, team_layout.team_from_roadmap(rd, rm), lambda p: git.blob(main, p), lambda p: git.absent(main, p))
+try:
+    print(repr(reader.record_text(git.commit("refs/heads/feature/tm-e1"), e1)))
+except FormatError as exc:
+    print("FormatError: %s" % exc)
+PY
+}
+assert_eq "$(rectext)" "''" "넘김: 브랜치 끝에서 INTENT.md 가 확인된 없음이면 record_text 는 빈 글을 낸다(FormatError 가 아니다)"
 back "$RECEIVED_AT"
 g rm -q -- "$J1/INTENT.md" && put "$J1/INTENT.md/x.txt" "폴더인 INTENT" && step "INTENT.md 가 폴더(브랜치 끝)" || fail_step "INTENT.md 가 폴더(브랜치 끝)"
 assert_eq "$(st E1) · $(rc)" "알 수 없음 · 3" "알림: 브랜치 끝의 INTENT.md 를 읽지 못하면 알 수 없음(3)"
 assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], [b['warnings'] for b in r['blocks'] if b['id']=='E1'][0])")" "([], [])" \
   "알림: 알 수 없음 블록의 결정 기록 · 판정 읽기 불가를 경고 · 검사 불가 사유로 겹쳐 내지 않는다"
+assert_eq "$(rectext)" "FormatError: $J1/INTENT.md 를 읽지 못했다" "넘김: 브랜치 끝의 INTENT.md 가 있는데 못 읽으면 record_text 는 FormatError(위 단언의 양의 짝)"
 back "$RECEIVED_AT"
 g checkout -q main && sub "$TM/jobs/E3/INTENT.md" "첫 읽기 위에 얹는다" "첫 읽기 위에 얹었다" && step "E3 목표 칸 고침(기본 브랜치)" || fail_step "E3 목표 칸 고침(기본 브랜치)"
 assert_contains "$(notes E3)" "INTENT.md 가 로드맵 블록과 다르다: E3 — 목표 칸이 로드맵의 의도 · 범위와 다르다" "AC28: 브랜치가 없는 과제는 기본 브랜치의 INTENT.md 를 견준다"
