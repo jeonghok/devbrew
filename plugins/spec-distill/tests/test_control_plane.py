@@ -1031,5 +1031,176 @@ class EpicView(unittest.TestCase):
         self.assertNotIn("구현 전", text)
 
 
+class TeamView(unittest.TestCase):   # R1 AC14 · AC27
+    def team_report(self):
+        e1 = dict(blk("E1", "구현 중", "in_progress"), reason="implement 결과 파일 있음: implement-plan-1-1.md", progress={"done": 3, "total": 7},
+                  notes=["막힘: implement plan 1 시도 1 — r/t/jobs/E1/results/BLOCKED.md"], job={"intent": "r/t/jobs/E1/INTENT.md", "plan": 1, "result": "implement-plan-1-1.md"})
+        e2 = dict(blk("E2", "구현 중", "in_progress"), progress={"done": None, "total": None, "why": "진행 줄 없음"}, notes=[], job=None)
+        e3 = dict(blk("E3", "구현 중", "in_progress"), progress={"done": None, "total": None, "why": "진행 줄 깨짐 — Task 9/3: 끝 — x"}, notes=[])
+        e4 = dict(blk("E4", "일부 머지 1/2", "in_progress"), progress={"done": 1, "total": 4}, notes=[])
+        e5 = dict(blk("E5", "준비", "pending"), progress=None, notes=[])
+        job = {"id": "fix-typo", "kind": "task", "title": "오타 고치기", "stage": "진행 중", "reason": "브랜치 있음", "task_status": "in_progress",
+               "branch": "fix/typo", "tip": "a" * 40, "intent": "r/t/jobs/fix-typo/INTENT.md", "progress": None, "notes": ["아직 안 올라옴 — fix/typo 의 로컬 끝"]}
+        return report([e1, e2, e3, e4, e5], layout="team", jobs=[job], job_notes=["로드맵 밖 과제 wrong 을 세지 않았다"])
+
+    def test_stage_text(self):
+        b = {x["id"]: x for x in self.team_report()["blocks"]}
+        self.assertEqual([cp.stage_text(b[k]) for k in ("E1", "E2", "E3", "E4", "E5")],
+                         ["구현 중 3/7", "구현 중(진행 줄 없음)", "구현 중(진행 줄 깨짐)", "일부 머지 1/2 · 진행 1/4", "준비"])
+        self.assertEqual(cp.stage_text(blk("R1", "구현 중", "in_progress")), "구현 중")   # 옛 형식 블록 — 칸이 없다
+
+    def test_show_lines(self):
+        lines = cp.show_text([(RM, self.team_report())], None, [], cp.first_line).split("\n")
+        self.assertTrue(any(l.startswith("E1 ") and "— 구현 중 3/7 · " in l for l in lines), lines)
+        self.assertIn("    정보: 막힘: implement plan 1 시도 1 — r/t/jobs/E1/results/BLOCKED.md", lines)
+        at = lines.index("로드맵 밖 과제:")
+        self.assertEqual(lines[at + 1:at + 4], ["    fix-typo 오타 고치기 — 진행 중 · 브랜치 있음",
+                                                 "        정보: 아직 안 올라옴 — fix/typo 의 로컬 끝", "    정보: 로드맵 밖 과제 wrong 을 세지 않았다"])
+
+    def test_task_list(self):
+        out, err, rc = cp.tasks_output([(RM, dict(self.team_report(), exit=0))])
+        self.assertEqual((err, rc), ("", 0))
+        self.assertIn("E1 %s — 구현 중 3/7\tin_progress" % self.team_report()["blocks"][0]["title"], out)
+        self.assertIn("로드맵 밖 과제 fix-typo — 진행 중\tin_progress", out)
+
+    def test_old_reports_render_as_before(self):   # AC13 — 새 칸이 없는 보고는 한 글자도 달라지지 않는다
+        old = report([blk("R1", "구현 중", "in_progress"), blk("R2", "준비", "pending")])
+        old["blocks"][0]["notes"] = ["경로 예약 위반: a 은 R2 만 예약했다"]
+        text = cp.show_text([(RM, old)], None, [], cp.first_line)
+        self.assertNotIn("정보: 경로 예약 위반", text)        # 옛 형식의 지도는 블록 알림을 보이지 않는다(지금 그대로)
+        self.assertNotIn("로드맵 밖 과제:", text)
+        self.assertIn("R1 %s — 구현 중 · " % old["blocks"][0]["title"], text)
+
+    def test_buckets_count_plain_flow_stages(self):
+        counts, other = cp.bucket_counts([(RM, report([blk("E2", "진행 중", "in_progress"), blk("E3", "결과 받음", "in_progress")]))])
+        self.assertEqual((counts["구현"], other), (2, 0))
+
+    # ── brief 밖에서 더한 분기 픽스처 ──
+
+    def test_stage_text_reason_without_number_and_empty_progress(self):
+        partly = dict(blk("E6", "구현 중", "in_progress"), progress={"done": None, "total": None, "why": "결과 파일을 다 읽지 못했다 — 3줄: 꼴이 아니다"})
+        unread = dict(blk("E7", "구현 중", "in_progress"), progress={"done": None, "total": None, "why": "r/t/x.md 를 읽지 못했다"})
+        bare = dict(blk("E8", "구현 중", "in_progress"), progress={"done": None, "total": None})
+        self.assertEqual([cp.stage_text(b) for b in (partly, unread, bare)],
+                         ["구현 중(결과 파일을 다 읽지 못했다)", "구현 중(r/t/x.md 를 읽지 못했다)", "구현 중"])
+
+    def test_show_job_notes_alone_and_untitled_job(self):
+        r = report([blk("E1", "준비", "pending")], layout="team", jobs=[], job_notes=["로드맵 밖 과제를 세지 못했다 — 기본 브랜치를 모른다"])
+        lines = cp.show_text([(RM, r)], None, [], cp.first_line).split("\n")
+        at = lines.index("로드맵 밖 과제:")   # 세지 못함은 없음처럼 보이지 않는다
+        self.assertEqual(lines[at + 1], "    정보: 로드맵 밖 과제를 세지 못했다 — 기본 브랜치를 모른다")
+        job = dict(self.team_report()["jobs"][0], title=None, notes=[])
+        r = report([], layout="team", jobs=[job], job_notes=[])
+        lines = cp.show_text([(RM, r)], None, [], cp.first_line).split("\n")
+        at = lines.index("로드맵 밖 과제:")
+        self.assertEqual(lines[at + 1:at + 2], ["    fix-typo — 진행 중 · 브랜치 있음"])
+        self.assertNotIn("None", "\n".join(lines))
+
+    def test_team_report_without_jobs_has_no_section(self):
+        r = report([blk("E1", "준비", "pending")], layout="team", jobs=[], job_notes=[])
+        self.assertNotIn("로드맵 밖 과제:", cp.show_text([(RM, r)], None, [], cp.first_line))
+
+    def test_task_list_unknown_job_keeps_and_says_why(self):
+        job = dict(self.team_report()["jobs"][0], stage="알 수 없음", task_status=None, reason="얕은 클론이라 받음 · 진행을 셀 이력이 없다")
+        ready = dict(blk("E5", "준비", "pending"), parallel=[{"id": "E6", "overlap": []}])
+        r = report([ready, blk("E6", "설계 중", "in_progress")], layout="team", jobs=[job], job_notes=[])
+        out, err, rc = cp.tasks_output([(RM, r)])
+        self.assertEqual((err, rc), ("", 0))
+        self.assertIn("로드맵 밖 과제 fix-typo — 알 수 없음 · 알 수 없음(얕은 클론이라 받음 · 진행을 셀 이력이 없다)\tkeep", out)
+        self.assertNotIn("None", "\n".join(out))
+        self.assertTrue(out[-1].startswith(cp.PARALLEL_LINE_HEAD), out)   # 병렬 신호 줄은 여전히 마지막
+
+    def test_epic_view_job_lines(self):
+        r = self.team_report()
+        lines, rc = cp.epic_view(RM, r, "E1")
+        self.assertEqual(rc, 0)
+        self.assertTrue(lines[0].startswith("E1 에픽 E1 — 구현 중 3/7 · "), lines[0])
+        at = next(i for i, l in enumerate(lines) if l.startswith("  계획: "))
+        self.assertEqual(lines[at + 1:at + 3], ["  과제 파일: r/t/jobs/E1/INTENT.md", "  결과 파일: implement-plan-1-1.md"])
+        r["blocks"][0]["job"] = dict(r["blocks"][0]["job"], result=None)
+        self.assertIn("  결과 파일: 없음", cp.epic_view(RM, r, "E1")[0])
+        for bid in ("E2", "E3"):   # job 칸이 None · 없음
+            self.assertFalse([l for l in cp.epic_view(RM, r, bid)[0] if l.startswith("  과제 파일:")], bid)
+
+    def test_result_received_gets_the_pr_overlay(self):
+        data = cs.empty()
+        data["PR"].append({"브랜치": "feature/a", "번호": "#12", "상태": "열림", "확인한 때": "2026-10-17 10:00",
+                           "headRefOid": "a" * 40, "교차 레포": "아니오", "baseRefName": "main",
+                           "mergeCommit": "-", "쓴 세션": "session-aaaa1111"})
+        got = blk("E2", "결과 받음", "in_progress", branch_states=[{"branch": "feature/a", "tip": "abcdef12", "merged": None}])
+        r = report([got], layout="team")
+        cp.overlay([(RM, r)], lambda rel: (data, None), True, default_short="main")
+        self.assertEqual((r["blocks"][0]["stage"], r["blocks"][0]["pr"]["number"]), ("PR", "#12"))
+
+    def test_team_rulings_are_labelled_result_files(self):
+        def run(**kw):
+            r = report([blk("E1", "구현 끝", "in_progress", rulings_archived=["- Ruling: 가"])], **kw)
+            cp.overlay([(RM, r)], lambda rel: (cs.empty(), None), True)
+            return r["blocks"][0]["rulings_source"], cp.epic_view(RM, r, "E1")[0]
+        source, lines = run(layout="team")
+        self.assertEqual(source, "결과 파일")
+        self.assertIn("  판정 줄: 1개(결과 파일)", lines)
+        self.assertEqual(run()[0], "설계문서 ## 판정")   # 옛 형식은 그대로
+
+
+class TeamCannotCheck(unittest.TestCase):   # 과제 훑기가 git 을 읽지 못한 team 보고 — 상태 계산이 3 과 사유를 낸다
+    WHY = "로드맵 밖 과제를 세지 못했다 — git 읽기 실패"
+
+    def views(self, r):
+        lines = cp.show_text([(RM, r)], None, [], cp.first_line).split("\n")
+        return lines, cp.tasks_output([(RM, r)]), cp.statusline_text([(RM, r)], None, 3)
+
+    def test_task_scan_failure_shows_cannot_check_with_reason(self):
+        r = report([blk("E1", "준비", "pending")], 3, layout="team", jobs=[], job_notes=[self.WHY + "(과제 폴더 이름 목록)"],
+                   unknown_reasons=[self.WHY])
+        lines, (out, err, rc), status = self.views(r)
+        self.assertIn("검사 불가: " + self.WHY, lines)
+        at = lines.index("로드맵 밖 과제:")
+        self.assertEqual(lines[at + 1], "    정보: " + self.WHY + "(과제 폴더 이름 목록)")
+        self.assertEqual((out, err, rc), ([], "검사 불가 — " + self.WHY, 3))
+        self.assertTrue(status.endswith(" · 검사 불가"), status)   # 상태줄은 사유 없이 표시만(옛 형식과 같은 길)
+
+    def test_quiet_team_report_has_no_section_and_no_cannot_check(self):   # 양의 짝
+        r = report([blk("E1", "준비", "pending")], 0, layout="team", jobs=[], job_notes=[])
+        lines, (out, err, rc), status = self.views(r)
+        self.assertFalse([l for l in lines if "로드맵 밖 과제" in l or l.startswith("검사 불가:")], lines)
+        self.assertIn("검사 불가 0개", lines[0])   # 첫 줄의 수가 0 이다
+        self.assertEqual((err, rc), ("", 0))
+        self.assertFalse([l for l in out if "로드맵 밖 과제" in l], out)
+        self.assertNotIn("검사 불가", status)
+
+    def test_early_return_without_jobs_key(self):   # 형식 깨짐 등 이른 돌아감 — jobs · job_notes 칸이 없다
+        r = report([], 3, layout="team", format_errors=["team 로드맵의 자리가 아니다 — x"])
+        lines, (out, err, rc), status = self.views(r)
+        self.assertIn("검사 불가: 형식 깨짐 — team 로드맵의 자리가 아니다 — x", lines)
+        self.assertNotIn("로드맵 밖 과제:", lines)
+        self.assertEqual((out, err, rc), ([], "검사 불가 — 형식 깨짐 — team 로드맵의 자리가 아니다 — x", 3))
+        self.assertIn("검사 불가", status)
+
+
+class CodeStampClosure(unittest.TestCase):   # Q24 — 목록을 고르지 않고 도출한다
+    OUTSIDE_THE_CACHE = {"state_path.py", "ledger_marker.py"}   # 기계 상태 쪽 — 캐시 열쇠가 아니다(있는 테스트가 못 박는다). 그 너머로는 따라가지 않는다
+
+    def closure(self, start):
+        import ast
+        seen, todo = set(), [start]
+        while todo:
+            name = todo.pop()
+            if name in seen or name in self.OUTSIDE_THE_CACHE:
+                continue
+            seen.add(name)
+            tree = ast.parse((cp.SCRIPTS / name).read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                mods = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
+                todo += [m.split(".")[0] + ".py" for m in mods if (cp.SCRIPTS / (m.split(".")[0] + ".py")).is_file()]
+        return seen
+
+    def test_every_module_the_status_computation_loads_is_stamped(self):
+        need = self.closure("roadmap_status.py")
+        self.assertEqual(sorted(need - set(cp.CODE_STAMP_FILES)), [])
+        for name in ("team_status.py", "job_results.py", "team_files.py", "team_check.py", "workflow_superpowers.py", "branch_tip.py"):
+            self.assertIn(name, need)   # 양성 대조 — 도출이 새 모듈에 닿는다
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -365,5 +365,11 @@ try:
 except b.TipError as e:
     print(e)' "$ROOT/plugins/spec-distill/scripts" "$W")"
 assert_contains "$ANC" "조상 관계를 잴 수 없다" "조상 관계 재기가 실패하면(rc 1 이 아닌 0 아닌 값) 「조상 아님」 으로 접지 않는다"
+GA="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import branch_tip as b
+try:
+    b._git(sys.argv[2], "fetch"); print("no error")
+except ValueError as e:
+    print(e)' "$ROOT/plugins/spec-distill/scripts" "$W")"
+assert_contains "$GA" "허용하지 않는 git 명령: fetch" "branch_tip._git 은 GIT_ALLOWED 밖의 명령(fetch)을 부르지 않고 거절한다"
 
 finish
