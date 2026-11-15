@@ -101,6 +101,10 @@ ok = ok and t[b1:b2].count("interview-commit") == 1 and "git commit" not in t[b1
 ok = ok and "interview-commit" in t[four:t.find("#### B-4")]
 sys.exit(0 if ok else 1)
 PY
+SF_END="$(awk '/^### 끝낼 때/{f=1;next} /^### /{f=0} f' "$SF")"
+assert_contains "$SF_END" 'B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 뒤' "AC5: state-file.md 「끝낼 때」 가 B-1 「확정하고 끝낸다」 의 커밋 때를 말한다"
+assert_contains "$SF_END" 'B-1 의 「brief만 종료」 는 종료 안내 직전' "AC5: state-file.md 「끝낼 때」 가 B-1 「brief만 종료」 의 커밋 때를 말한다"
+case "$SF_END" in *'(①/② 의 확정 반영'*) no "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 남았다";; *) ok "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 없다";; esac
 
 cf="$(fence "$FIN" interview-commit)"
 [ -n "$cf" ] && ok "AC5: 커밋 펜스(interview-commit)가 있다" || no "AC5: 커밋 펜스가 없다"
