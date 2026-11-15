@@ -235,6 +235,14 @@ assert_not_contains "$BR" 'B-1 은 커밋하지 않고' "F4 AC10: 옛 「B-1 은
 assert_contains "$B4" '(b) superpowers 가 없을 때의 B-1 끝 질문 (선택지 셋)을 거친다 — 질문 없는 **silent 종료 금지**.' "F4 AC10: Step B 를 끝내는 경로는 proceed 게이트와 B-1 끝 질문 둘이다"
 assert_not_contains "$B4" '게이트를 거치지 않는 예외' "F4 AC10: 옛 「게이트를 거치지 않는 예외」 가 없다(양성 짝: 위 단언)"
 assert_contains "$B2" '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' "F4 AC10: B-2 게이트의 선택지 넷 문장은 그대로다"
+# F4 AC10 — 옛 B-1(멈춤 · 미커밋)을 말하던 B-0 · B-3 의 문장이 새 끝 질문에 맞는다
+[ -n "$B0" ] && [ -n "$B3" ] && ok "F4(양성 대조): B-0 · B-3 창이 비어 있지 않다" || no "F4: B-0 · B-3 창이 비었다 — 아래가 공허하다"
+assert_contains "$B0" '또는 superpowers 가 없을 때 B-1 끝 질문의 「확정하고 끝낸다」 를 고를 때만 일어납니다.' "F4 AC10: B-0 의 확정 전이는 B-2 의 ①/② 와 B-1 끝 질문의 「확정하고 끝낸다」 둘로만 일어난다"
+assert_not_contains "$B0" '확정-후-진행 옵션(①/②)을 고를 때만 일어납니다' "F4 AC10: B-0 에 B-1 구절 없는 옛 확정 전이 문장이 없다(양성 짝: 위 단언)"
+assert_not_contains "$(cat "$FIN")" 'B-1 부재 advisory와 같은 톤' "F4 AC10: ④ 에 끊긴 「B-1 부재 advisory」 가리킴이 없다"
+assert_contains "$B3" 'brief terminal advisory를 내고 종료. handoff 안 함.' "F4 AC10: ④ 의 남은 글은 그대로다(양성 짝: 위 부재 단언)"
+assert_contains "$B3" '게이트(①/②)나 B-1 끝 질문의 「확정하고 끝낸다」 를 통해서만 바뀐다' "F4 AC10: ③ 의 status 변경 경로에 B-1 끝 질문이 든다"
+assert_contains "$B3" '**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 · 나눈 일이면 B-R 다시 생성 뒤 끝 안내 전, ④ 와 B-1 의 「brief만 종료」 는 종료 안내 직전, 한 번.**' "F4 AC10: 끝내기 커밋 문장이 B-1 의 때를 말한다"
 # CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
 CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
 assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)의 둘째 질문 문단에, 지휘자 아래 승인 질문에는 둘째 질문이 없다는 문장을 더했다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"
