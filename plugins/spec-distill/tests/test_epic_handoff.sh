@@ -86,4 +86,46 @@ assert_not_contains "$TEAM_LINE" "bundle-" "AC17: team 넘김 줄에 묶음 자�
 for ph in '<intent-abs>' '<intent-rel>' '<original-rel>' '<sources-rel>' '<place-sentence>'; do
   assert_eq "$(sed -n '/^## team 형식의 넘김 줄/,$p' "$EH" | grep -c -- "^- \`$ph\`")" "1" "AC17: 자리표 $ph 의 설명이 있다"
 done
+for lit in '이 과제 파일은 승인된 로드맵 <roadmap-rel>(team 형식)의 에픽 <epic-id> 다' 'roadmap 에 <roadmap-rel> 을 적는다'; do
+  assert_contains "$TEAM_LINE" "$lit" "AC17: team 넘김 줄 — 로드맵 자리 · $lit"
+done
+team_names() { LINE="$1" python3 -I -c '
+import os, re
+want = {"intent-abs", "intent-rel", "original-rel", "sources-rel", "place-sentence", "roadmap-rel", "epic-id"}
+got = set(re.findall(r"<([^<>]+)>", os.environ["LINE"]))
+print("ok" if got == want else "no 남는 것=" + " ".join(sorted(got - want)) + " 빠진 것=" + " ".join(sorted(want - got)))'; }
+assert_eq "$(team_names "$TEAM_LINE")" "ok" "AC17: team 넘김 줄의 자리표는 일곱(intent-abs · intent-rel · original-rel · sources-rel · place-sentence · roadmap-rel · epic-id)과 같다"
+assert_eq "$(team_names "$TEAM_LINE <spec-rel>")" "no 남는 것=spec-rel 빠진 것=" "양성 대조: team 줄의 모르는 자리표를 잡는다"
+# team 줄 전체 — 있는 줄에 brief 의 치환 표를 기계적으로 적용한 글과 바이트가 같다(글자 단언 뒤에 덧붙인 부정도 잡는다)
+team_expected() { OLD="$LINE" python3 -I -c '
+import os, sys
+line = os.environ["OLD"]
+subs = [
+    ("@<bundle-abs> 이 에픽 묶음으로", "@<intent-abs> 이 과제 파일로"),
+    ("이 묶음은 승인된 로드맵 <roadmap-rel> 의 에픽 <epic-id> 다",
+     "이 과제 파일은 승인된 로드맵 <roadmap-rel>(team 형식)의 에픽 <epic-id> 다"),
+    ("묶음을 다시 나눌 근거가 보이면", "과제를 다시 나눌 근거가 보이면"),
+    ("묶음의 근거가 지금도 맞는지", "번호 파일의 근거가 지금도 맞는지"),
+    ("묶음의 모든 번호(확정 · 열린 질문 · 조사 · 위험 · 발화)를 번호째 설계의 입력으로 읽는다"
+     " — /compact 요약에 기대지 말고 첨부한 묶음을 다시 읽는다.",
+     "설계 전에 원자료 <original-rel> 전체와 번호 파일 <sources-rel> 을 읽는다"
+     " — 과제 파일의 지시 원문 줄 범위는 일꾼용이고 설계는 원자료 전체를 기준으로 한다."
+     " 번호 파일의 모든 번호(확정 · 열린 질문 · 조사 · 위험)를 번호째 설계의 입력으로 읽는다"
+     " — /compact 요약에 기대지 말고 그 두 파일을 다시 읽는다."),
+    ("묶음 ids 의 모든 번호를 싣고", "번호 파일 ids 의 모든 번호를 싣고"),
+    ("다른 에픽으로 넘기는 번호는 기각 칸에 그 에픽 번호를 적는다.",
+     "다른 에픽으로 넘기는 번호는 기각 칸에 그 에픽 번호를 적는다."
+     " 설계문서에 ## 원문 대조 표(칸: 원문 요소 · 설계 요소 · 그대로/바꿈 · 근거)를 두어 원자료의 요소마다"
+     " 한 행을 싣고, 바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다."),
+    ("source_interview 에 <bundle-rel> 을", "source_interview 에 <intent-rel> 을"),
+    ("묶음의 확정 항목은 다시 묻지 않고", "번호 파일의 확정 항목은 다시 묻지 않고"),
+    ("설계문서를 쓰고 커밋한 뒤,", "<place-sentence> 설계문서를 쓰고 커밋한 뒤,"),
+    ("--bundle <bundle-rel>", "--bundle <intent-rel>"),
+]
+for old, new in subs:
+    if line.count(old) != 1:
+        print("치환 자리가 하나가 아니다(%d): %s" % (line.count(old), old)); sys.exit(0)
+    line = line.replace(old, new)
+print(line)'; }
+assert_eq "$TEAM_LINE" "$(team_expected)" "AC17: team 넘김 줄 전체가 있는 줄에 brief 치환 표를 적용한 글과 같다"
 finish

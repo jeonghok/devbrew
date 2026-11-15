@@ -73,6 +73,48 @@ assert_eq "$(nb "$I")" "0" "neighbors --bundle INTENT.md: rc 0"
 assert_eq "$(sed -n 1p "$T/out.txt")" "로드맵 속 위치 — $RM" "neighbors: 첫 줄은 INTENT.md 머리의 roadmap"
 assert_contains "$(sed -n 2p "$T/out.txt")" "  E1 첫 읽기 — " "neighbors: 둘째 줄은 머리의 job(E1) 블록"
 assert_eq "$(grep -c '^  이 에픽에 의존: E3 ' "$T/out.txt")" "1" "neighbors: 「이 에픽에 의존: E3」 줄"
+J3I="$TM/jobs/E3/INTENT.md"
+assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — 결정 줄 없음 — %s' "$J3I")" \
+  "neighbors: 설계 전(준비)인 team 이웃도 과제 파일의 결정 기록을 읽는다(기본 브랜치)"
+
+# ── neighbors — team 이웃의 결정은 그 과제 INTENT.md 의 결정 기록에서 읽는다 ─────────────
+g checkout -q -b feature/tm-e3 main
+put "$TM/jobs/E3/design.md" "$(printf -- '---\ntype: design\n---\n\n# 이어 읽기 — 이웃 결정 픽스처\n')"
+g commit -qm "E3 설계 시작" && g push -q origin feature/tm-e3 && g fetch -q origin
+assert_eq "$(nb "$I")" "0" "이웃 결정 없음: rc 0"
+assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — 결정 줄 없음 — %s' "$J3I")" "이웃 결정 없음(브랜치 끝): 「결정 줄 없음」 과 INTENT.md 경로"
+decide E3 '- 결정 · 2026-11-15 · 「이웃은 결과 파일만 읽는다」'
+decide E3 '- 넘김 확인 · E1 · 0123abcd · E1 의 읽기를 받는다'
+g add -- "$J3I" && g commit -qm "E3 결정 둘" && g push -q origin feature/tm-e3 && g fetch -q origin
+nb "$I" >/dev/null
+assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — %s\n    - 결정 · 2026-11-15 · 「이웃은 결과 파일만 읽는다」\n    - 넘김 확인 · E1 · 0123abcd · E1 의 읽기를 받는다' "$J3I")" \
+  "이웃 결정: INTENT.md 결정 기록의 줄을 그대로(날짜 없는 넘김 확인 포함)"
+python3 - "$W/$J3I" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("\n## 결정 기록\n", "\n## 결정 메모\n"))
+PY
+g add -- "$J3I" && g commit -qm "E3 결정 칸 이름을 망가뜨림" && g push -q origin feature/tm-e3 && g fetch -q origin
+nb "$I" >/dev/null
+assert_contains "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "  E3 — 셀 수 없음: 결정 기록 칸을 읽지 못했다(" "결정 칸이 깨진 이웃: 셀 수 없음 줄"
+assert_not_contains "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "결정 줄 없음" "결정 칸이 깨진 이웃: 「결정 줄 없음」 이 아니다"
+g rm -q -- "$J3I" && g commit -qm "E3 INTENT.md 지움" && g push -q origin feature/tm-e3 && g fetch -q origin
+nb "$I" >/dev/null
+assert_contains "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "  E3 — 셀 수 없음: 과제 파일이 없다 — $J3I" "INTENT.md 가 없는 이웃: 셀 수 없음 · 없다"
+assert_not_contains "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "결정 줄 없음" "INTENT.md 가 없는 이웃: 「결정 줄 없음」 이 아니다"
+g checkout -q main
+python3 - "$W/$RM" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+assert "\nlayout: team\n" in t
+open(p, "w", encoding="utf-8").write(t.replace("\nlayout: team\n", "\nlayout: crew\n", 1))
+PY
+nb "$I" >/dev/null
+assert_eq "$(tail -n 1 "$T/out.txt")" "이웃 에픽의 결정 — 셀 수 없음: 모르는 형식 — $RM 머리말 layout: crew (아는 값: team)" "모르는 layout: 결정을 옛 형식으로 읽지 않고 모르는 형식으로 멈춘다"
+g checkout -q -- "$RM"
+g push -q origin --delete feature/tm-e3 && g branch -q -D feature/tm-e3 && g fetch -q --prune origin   # 뒤 픽스처는 E3 가 준비인 레포에서
 
 # ── 단순 작업 — 번호 파일이 없는 과제 ───────────────────────────────────────
 printf '오타 하나를 고친다\n' > "$T/said.txt"

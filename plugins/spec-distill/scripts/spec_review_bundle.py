@@ -13,6 +13,8 @@ entry 의 마지막 줄은 `bundle-entry: PROCEED <정답 출처 절대경로 �
 team 형식(AC16): 과제 파일(머리 `type: job`)을 받으면 진입 번호 대조는 같은 폴더의 번호 파일로 하고
 (번호 파일이 없는 단순 작업은 건너뜀 한 줄), 경고 수 앞에 리뷰어의 정답 출처 알림(TEAM_NOTICE) 한 줄을 낸다.
 neighbors 는 정답 출처가 에픽 묶음 · 과제 파일이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.
+team 형식 로드맵에서 이웃의 결정은 그 과제 INTENT.md 의 `## 결정 기록` 줄 그대로다 — `- <종류> · <날짜> · 「…」` 꼴이고
+넘김 확인만 `- 넘김 확인 · <준 에픽> · <8자> · <근거>`(날짜 칸 없음)다. 과제 파일이 없거나 칸을 읽지 못하면 「셀 수 없음」 줄이다.
 rejected 는 설계문서 `## 번호 대조` 표의 「기각」 행을 번호 수와 목록으로 낸다(승인 게이트 2단계 앞 글 — N18).
 표 절이 없으면 아무것도 내지 않고, 표를 못 읽으면 「셀 수 없음」 줄이다 — 「없음」과 다르다.
 종료 코드는 0 이다(사용법 오류만 2) — 판정은 줄이 말한다. 읽기만 한다(roadmap_status 의 읽기 전용 git 만 부른다).
@@ -141,6 +143,13 @@ def neighbors(bundle: str, root: str) -> list:
     overlap = {x for o in report["overlaps"] if epic in o["blocks"] for x in o["blocks"] if x != epic}
     near = set(deps) | set(dependents) | overlap | set(together)
     main, _name = git.default_branch()
+    try:
+        team = team_layout.layout_of(frontmatter(_read(os.path.join(root, rel)) or "")) == team_layout.LAYOUT_TEAM
+    except team_layout.UnknownLayout as exc:   # 모르는 형식은 옛 형식 규칙으로 읽지 않는다
+        return out + ["이웃 에픽의 결정 — 셀 수 없음: %s" % cbc.unknown_layout(rel, exc.value)]
+    if team:
+        dec = _team_decisions(git, main, report["blocks"], near)
+        return out + ["이웃 에픽의 결정" + ("" if dec else " — 과제 폴더가 있는 이웃 에픽 없음")] + dec
     dec = []
     for b in report["blocks"]:
         if b["id"] not in near or not b["specs"]:
@@ -164,6 +173,33 @@ def neighbors(bundle: str, root: str) -> list:
                 dec.append("  %s — 결정 줄 없음 — %s" % (b["id"], spec))
     out.append("이웃 에픽의 결정" + ("" if dec else " — 설계문서가 있는 이웃 에픽 없음"))
     return out + dec
+
+
+def _team_decisions(git, main, blocks: list, near: set) -> list:
+    """team 이웃(과제 폴더가 있는 블록)마다 그 트리의 INTENT.md 결정 기록 줄. 없음 · 못 읽음 · 칸 깨짐은 「셀 수 없음」 이다."""
+    dec = []
+    for b in blocks:
+        job = b.get("job") or {}
+        path = job.get("intent")
+        if b["id"] not in near or not path:
+            continue
+        tree = main if b["stage"] == "머지됨" else (b.get("tip") or main)
+        text = git.blob(tree, path) if tree else None
+        if text is None:
+            why = "과제 파일이 없다" if tree and git.absent(tree, path) else "과제 파일을 읽지 못했다"
+            dec.append("  %s — 셀 수 없음: %s — %s" % (b["id"], why, path))
+            continue
+        try:
+            lines = team_files.decision_lines(text)
+        except FormatError as exc:
+            dec.append("  %s — 셀 수 없음: 결정 기록 칸을 읽지 못했다(%s) — %s" % (b["id"], exc, path))
+            continue
+        if lines:
+            dec.append("  %s — %s" % (b["id"], path))
+            dec += ["    " + l for l in lines]
+        else:
+            dec.append("  %s — 결정 줄 없음 — %s" % (b["id"], path))
+    return dec
 
 
 def rejected(spec: str, root: str) -> list:
