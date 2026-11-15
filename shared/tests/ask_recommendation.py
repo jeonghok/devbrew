@@ -14,7 +14,8 @@
   어느 질문 범위에도 들지 않고 언급 행도 맡지 않은 자리가 있는 후보 줄도 ① 이다.
 - 「설명 수」 칸은 꼬리 · 지시 · 출처꼬리 행에만 쓴다. 채운 행(수 N, 0 이면 보지 않는다)은 범위에 `label:` 키가 있으면
   `description:` 값이 N 개이고 값마다 `얻음:` · `내줌:` 이 있어야 하고, 없으면(표 · 문장 꼴) 범위의 `얻음:` 수와
-  `내줌:` 수가 각각 N 이어야 한다 — 어긋나면 ⑤ 다. `REQUIRE_DESCS` 종류의 행은 이 칸이 비면 ⑤ 다(지금은 비어 있다).
+  `내줌:` 수가 각각 N 이어야 한다 — 어긋나면 ⑤ 다. `REQUIRE_DESCS`(꼬리 · 출처꼬리) 종류의 행은 이 칸이 비면 ⑤ 다 — 선택지를
+  모델이 그 자리에서 짜는 질문은 0 을 적는다.
 - 꼬리 행의 범위에 `label:` 키가 있으면 꼬리는 `label:` 값 안에 있어야 한다. 없으면(마크다운 꼴) 범위 어디든 센다.
 """
 import io
@@ -29,7 +30,7 @@ LABEL_RE = re.compile(r"""(?:^|[{,])\s*["']?label["']?\s*:\s*(["'`])((?:(?!\1)[^
 DESC_RE = re.compile(r"""(?:^|[{,])\s*["']?description["']?\s*:\s*(["'`])((?:(?!\1)[^\n])*)\1""", re.M)
 GAIN, GIVE = "얻음:", "내줌:"
 DESC_KINDS = ("꼬리", "지시", "출처꼬리")
-REQUIRE_DESCS: tuple[str, ...] = ()  # 이 종류의 행은 「설명 수」가 비면 ⑤ 다
+REQUIRE_DESCS = ("꼬리", "출처꼬리")  # 이 종류의 행은 「설명 수」가 비면 ⑤ 다
 DIRECTIVE = "권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다"
 EMPTY = "추천을 달지 않는다 — "
 SOURCE = "추천)"
@@ -96,11 +97,11 @@ def scope(text, site):
         return "모르는 종류 「%s」" % site.kind
     if site.lines and site.kind not in QUESTION_KINDS:
         return "덮는 수 칸 「%s」은 질문 행(%s)에만 쓴다" % (site.lines, " · ".join(QUESTION_KINDS))
-    if site.lines and not site.lines.isdigit():
+    if site.lines and not site.lines.isdecimal():
         return "덮는 수 칸 「%s」이 수가 아니다" % site.lines
     if site.descs and site.kind not in DESC_KINDS:
         return "설명 수 칸 「%s」는 %s 행에만 쓴다" % (site.descs, " · ".join(DESC_KINDS))
-    if site.descs and not site.descs.isdigit():
+    if site.descs and not site.descs.isdecimal():
         return "설명 수 칸 「%s」이 수가 아니다" % site.descs
     if not site.anchor or "\n" in site.anchor:
         return "앵커가 비었다"
@@ -142,7 +143,9 @@ def required(kind, body):
 def descriptions(kind, body, descs):
     """「설명 수」 칸의 판정 — 어긋나면 ⑤ 사유, 맞거나 보지 않으면 None."""
     if not descs:
-        return "설명 수 칸이 비었다 — %s 행은 채운다" % kind if kind in REQUIRE_DESCS else None
+        if kind in REQUIRE_DESCS:
+            return "설명 수 칸이 비었다 — %s 행은 채워야 한다(없으면 0)" % " · ".join(REQUIRE_DESCS)
+        return None
     n = int(descs)
     if n == 0:
         return None
