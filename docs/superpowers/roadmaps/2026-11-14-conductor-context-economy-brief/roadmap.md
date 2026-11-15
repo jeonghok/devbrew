@@ -1,6 +1,8 @@
 ---
 type: roadmap
 source_brief: docs/superpowers/interview/2026-11-14-conductor-context-economy-brief-interview.md
+test_command: bash tools/suite/run-all.sh
+test_failure_pattern: "^FAILED (.+)$"
 ---
 
 # 지휘 맥락 경제 — my-team 구조로 지휘 재설계 — 로드맵
