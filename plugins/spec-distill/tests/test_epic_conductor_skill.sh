@@ -13,8 +13,9 @@ while IFS= read -r line; do
   [ -z "$line" ] && continue
   grep -qxF -- "$line" "$SK" && ok "머리 줄: $line" || no "머리 줄이 없다: $line"
 done <<< "$HEAD"
-assert_file_grep "$SK" '^cost_class: high$' "cost_class: high"
 fm() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
+assert_eq "$(fm "$SK" | grep -A1 -xF 'metadata:' | grep -cxF '  cost_class: high')" "1" "cost_class: high (metadata 아래)"
+assert_eq "$(fm "$SK" | grep -c '^cost_class:')" "0" "맨 위 cost_class 줄이 없다"
 assert_eq "$(fm "$SK" | grep -c '^name: epic-conductor$')" "1" "name 이 디렉토리 이름과 같다"
 BODY="$(cat "$SK")"
 sec() { awk -v h="$1" '$0==h{f=1;next} f&&/^##/{exit} f' "$SK"; }

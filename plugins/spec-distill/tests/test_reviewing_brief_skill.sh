@@ -67,8 +67,10 @@ else
 fi
 
 # ── 1. 지출 — 승인 게이트는 없고 엔진 상한이 대신한다 ─────────────────────────
-grep -qxE 'cost_class: medium' <<<"$FM" \
-  && ok "지출: cost_class: medium" || no "지출: cost_class 가 medium 이 아니다"
+[ "$(grep -A1 -xF 'metadata:' <<<"$FM" | grep -cxF '  cost_class: medium')" = "1" ] \
+  && ok "지출: cost_class: medium (metadata 아래)" || no "지출: metadata 아래 cost_class 가 medium 이 아니다"
+[ "$(grep -c '^cost_class:' <<<"$FM")" = "0" ] \
+  && ok "지출: 맨 위 cost_class 줄이 없다" || no "지출: 맨 위 cost_class 줄이 남았다"
 grep -qF 'cost_class: high' "$SKILL" \
   && no "지출: cost_class: high 가 파일 어딘가에 남았다 — high 는 크게 쓰기 전에 규모 공시를 요구한다(CLAUDE.md)" \
   || ok "지출: cost_class: high 잔존 없음"

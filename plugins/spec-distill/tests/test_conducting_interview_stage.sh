@@ -70,7 +70,9 @@ has() { grep -qiE "$1" "${CI_FILES[@]}" && ok "$2" || no "$2"; }
 # 여러 파일을 합친 스트림 — `grep -c` 는 파일마다 한 줄을 내므로 합산에는 쓸 수 없다.
 ci_cat() { cat "${CI_FILES[@]}"; }
 
-grep -q '^cost_class: variable$' "$SKILL" && ok "cost_class: variable" || no "cost_class not variable"
+CI_FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$SKILL")"
+[ "$(grep -A1 -xF 'metadata:' <<<"$CI_FM" | grep -cxF '  cost_class: variable')" = "1" ] && ok "cost_class: variable (metadata 아래)" || no "cost_class not variable under metadata"
+[ "$(grep -c '^cost_class:' <<<"$CI_FM")" = "0" ] && ok "맨 위 cost_class 줄이 없다" || no "맨 위 cost_class 줄이 남았다"
 
 has 'R1.*사용자 말 그대로' "R1 사용자 말 그대로 ritual"
 has 'R2.*Landscape' "R2 Landscape ritual"

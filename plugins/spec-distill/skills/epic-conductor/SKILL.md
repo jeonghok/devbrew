@@ -4,7 +4,8 @@ description: >
   사용자가 `/spec-distill:epic-conductor [<로드맵 경로>]` 로 부른다. 승인된 로드맵의 에픽들을 이 세션이 끝까지 지휘한다 —
   다시 불러도 git 과 기계 상태에서 상태를 다시 계산해 같은 자리에서 잇고, 사람 몫(설계 · spec 승인 · 계획의 설계에 없던 결정)은
   이 세션에서 한 번에 한 에픽씩 배경과 함께 묻고, 계획 · 구현 · 머지 전 확인은 하위 agent 와 스크립트로 병렬로 끝까지 간다.
-cost_class: high
+metadata:
+  cost_class: high
 argument-hint: "[<로드맵 경로>]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill epic-conductor)

@@ -8,7 +8,8 @@ description: >
   closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
   Optionally hands the brief to superpowers:brainstorming.
-cost_class: variable
+metadata:
+  cost_class: variable
 argument-hint: "[@<seed 경로> | rough request]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill pm-interview)

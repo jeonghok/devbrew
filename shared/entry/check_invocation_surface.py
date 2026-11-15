@@ -30,7 +30,7 @@ ENTRY_SKILLS = (
 )
 USER_ONLY = frozenset({("plugin-audit", "plugin-audit"), ("project-init", "project-init")})
 
-# 축 E — 공식 skill frontmatter 키 20개 ∪ {cost_class}.
+# 축 E — 공식 skill frontmatter 키 20개. devbrew 의 cost_class 는 공식 키 `metadata` 아래에 둔다(CLAUDE.md 컴포넌트 격리).
 # 출처: https://code.claude.com/docs/en/skills frontmatter reference (확인 2026-10-09).
 # `claude plugin validate --strict` 는 미지 키를 잡지 않는다(E0 실측 2026-10-09, CLI 2.1.294).
 # 플랫폼이 키를 더하면 이 목록이 거짓 RED 를 낸다 — 출처를 다시 확인하고 갱신한다.
@@ -38,7 +38,7 @@ SKILL_KEYS = frozenset({
     "name", "description", "when_to_use", "argument-hint", "arguments",
     "disable-model-invocation", "user-invocable", "allowed-tools", "disallowed-tools",
     "model", "effort", "context", "agent", "background", "hooks", "paths", "shell",
-    "metadata", "license", "compatibility", "cost_class",
+    "metadata", "license", "compatibility",
 })
 
 _SCRIPT = '"${{CLAUDE_SKILL_DIR}}/../../scripts/entry_preflight.py" {plugin} {skill}'
@@ -176,7 +176,7 @@ class Scan:
                 continue
             for key in fm:
                 if key not in SKILL_KEYS:
-                    L.add("E", rel, 1, "frontmatter 키 '%s' 는 공식 키 ∪ {cost_class} 밖이다" % key)
+                    L.add("E", rel, 1, "frontmatter 키 '%s' 는 공식 키 밖이다" % key)
             name = first(fm, "name")
             head_word = name.split("-")[0]
             if is_internal(fm):

@@ -7,7 +7,8 @@ description: >
   brief profile (snapshot → kill switch → detection → codex → anonymize → re-critique →
   freeze-check and routing → gate) inside a single turn, then a cold readback, and returns the
   gate result to the interview's Step B proceed gate.
-cost_class: medium
+metadata:
+  cost_class: medium
 user-invocable: false
 ---
 
