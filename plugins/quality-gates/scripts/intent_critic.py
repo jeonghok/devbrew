@@ -1264,7 +1264,7 @@ def _header_parts(line: str) -> tuple:
     number, ident = None, None
     if body.startswith(HEADER):
         digits, sep, rest = body[len(HEADER):].partition(ID_SEP)
-        if sep and digits and set(digits) <= DIGITS:
+        if sep and digits and set(digits) <= DIGITS and len(digits) <= 9:
             number, ident = int(digits), rest
     return number, ident, pick
 
@@ -1592,18 +1592,18 @@ def _question_state(record: dict, mode: str, record_ran: bool) -> Optional[str]:
     """질문 레코드 하나의 돌려주는 꼴 상태 — 거른 상태(이미 답해 거름 등)는 None."""
     state = record.get("state")
     if state == "answered":
-        return "답함"
+        return QUESTION_STATES[0]
     if state == "over-cap":
-        return "상한 넘어 남김"
+        return QUESTION_STATES[4]
     if state != "ask":
         return None
     if mode == "range":
-        return "묻지 않음"
+        return QUESTION_STATES[3]
     if record.get("record_failed"):
-        return "답 기록 실패"
+        return QUESTION_STATES[1]
     if record_ran:
-        return "답하지 않음"
-    return "묻지 않음"
+        return QUESTION_STATES[2]
+    return QUESTION_STATES[3]
 
 
 def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:

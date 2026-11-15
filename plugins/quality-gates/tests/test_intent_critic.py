@@ -973,6 +973,7 @@ class TestSections(unittest.TestCase):
 
 SCRIPT = SCRIPTS / "intent_critic.py"
 KILL = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
+GLOBAL_KILL = "DEVBREW_QUALITY_GATES_DISABLE"
 ENV_DIR = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 ENV_MAX = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
 ENV_OTHER_MAX = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
@@ -989,7 +990,7 @@ MEANING = ("의도대로 만들었는지가 아니라 의도 자체"
 
 def _env(**extra):
     env = dict(os.environ)
-    for k in (KILL, ENV_DIR, ENV_MAX, ENV_OTHER_MAX, ENV_MARKERS):
+    for k in (KILL, GLOBAL_KILL, ENV_DIR, ENV_MAX, ENV_OTHER_MAX, ENV_MARKERS):
         env.pop(k, None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.update(extra)
@@ -3137,7 +3138,10 @@ class TestProcedureDoc(unittest.TestCase):
         """I5 표는 답 기록 실패 공시(스크립트의 글 그대로)를 보이고, I7 할 일은 꼴의 `state` 칸에서 정한다."""
         shown = "`%s`" % ic.RECORD_FAILED.replace("%d", "<n>").replace("%s", "<사유>")
         self.assertEqual(shown, "`답 기록 실패 <n>개 — <사유>`")
-        self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(shown), 1)
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(i5.count(shown), 1)
+        item = ("`%s`" % ic.RECORD_FAILED_ITEM.replace("%s", "<%s>")) % ("정체", "답", "글")
+        self.assertEqual(i5.count(item), 1)
         i7 = self._section("I7 돌려주기")
         # I7 의 근거는 공시 줄이 아니라 꼴의 칸이다 — 질문의 state 와 failure · answer.
         field = "`state: %s` 인 질문이 있으면 — 「답 <n>개가 기록되지 않았다(<failure>)" % ic.QUESTION_STATES[1]

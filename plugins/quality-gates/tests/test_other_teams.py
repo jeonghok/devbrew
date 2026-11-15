@@ -1362,6 +1362,15 @@ class TestGitTimeout(_Fixture):
         for sub, timeout in calls:
             self.assertEqual(timeout, 30, sub)
 
+    def test_roadmap_timeout_names_path_and_reason(self):
+        calls = []
+        with self._slow("ls-files", calls):
+            text = _collect(self.repo, names={"a.txt"})["text"]
+        self.assertIn("- 로드맵 %s 를 읽지 못함 — %s" % (ROADMAP_PATH, ot.io_.REASON_TIMEOUT),
+                      _unverified(text))
+        self.assertIn("git 읽기가 시간 한도 30초를 넘김", ot.io_.REASON_TIMEOUT)
+        self.assertTrue(calls)
+
     def test_no_timeout_no_line(self):
         self.assertNotIn("시간 한도", "\n".join(_unverified(_collect(self.repo)["text"])))
 

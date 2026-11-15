@@ -787,6 +787,28 @@ class TestAnswerOddValues(unittest.TestCase):
             self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
             self.assertEqual(tic._by_state(rd, "answered-filtered")[0]["target_id"], "D1")
 
+    def test_answer_file_odd_values_unreadable_in_prepare(self):
+        """같은 이상한 값의 답 파일을 `prepare` 도 읽지 못한 것으로 세고, 보통 답은 그대로 읽는다."""
+        with tempfile.TemporaryDirectory() as rd:
+            root = tic._filter_rd(rd, answers=[(tic.ID1, "의도다", tic.OBS1)])
+            name = os.listdir(root)[0]
+            with open(os.path.join(root, name), encoding="utf-8") as fh:
+                text = fh.read()
+            bad = text.replace("answered_at: ", "answered_at: 2026-02-30\nold_at: ", 1)
+            self.assertNotEqual(bad, text)
+            with open(os.path.join(root, tic._wf(7)), "w", encoding="utf-8") as fh:
+                fh.write(bad)
+            tic._write("관찰\n", rd, "e2e-record.md")
+            tic._write("## Goals\ngoal-body\n", rd, "intent.md")
+            sp = os.path.join(rd, "intent-specs.json")
+            tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
+            tree = os.path.join(rd, "tree")
+            p = tic._cli("prepare", "--rd", rd, "--repo", tree, "--tree-root", tree, "--mode", "pr",
+                         "--head", "HEAD", "--review-commit", "HEAD", "--specs-json", sp)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
+            self.assertIn(tic.ID1, tic._read(rd, "intent-answered.md"))
+
 
 class TestDifferentialShape(unittest.TestCase):
     def test_cases(self):

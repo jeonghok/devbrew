@@ -38,6 +38,8 @@ def _check_vocab(case, block):
         case.assertIn(block["outcome"], ic.RETURN_OUTCOMES)
     else:
         case.assertEqual(block["outcome"], "-")
+    for row in block["questions"]:
+        case.assertIn(row["state"], ic.QUESTION_STATES)
 
 
 class TestReturnHead(unittest.TestCase):
@@ -626,6 +628,32 @@ class TestAnswerInput(unittest.TestCase):
         self.assertEqual((rows[qs[0][0]]["state"], rows[qs[0][0]]["answer"]), ("답함", "의도다"))
         self.assertEqual(rows[qs[1][0]]["state"], "답하지 않음")
 
+    def test_received_answer_beats_identity_wrong_header(self):
+        """같은 번호에 정체가 틀린 머리가 먼저 오고 받은 머리가 뒤따르면 받은 답이 이긴다 — 그 질문은 답함이다."""
+        qs = self._two()
+        text = ("=== n: %d · id: 틀린#정체#방향 · pick: 잘못 골랐다\n" % qs[0][0]
+                + self._head(qs[0], "의도다"))
+        p = self._record(text)
+        self.assertIn(MISMATCH + " 1개", p.stdout.splitlines())
+        self.assertNotIn("답 기록 실패", p.stdout)
+        self.assertEqual(tic._last(p), "record: 1")
+        _line, rows, _t = self._render()
+        self.assertEqual((rows[qs[0][0]]["state"], rows[qs[0][0]]["answer"]), ("답함", "의도다"))
+        self.assertEqual(rows[qs[1][0]]["state"], "답하지 않음")
+
+    def test_huge_number_header_counts_as_mismatched(self):
+        """5000자리 번호의 머리는 숫자로 읽지 않고(파이썬 3.11 이상의 자릿수 한도) 맞지 않는 머리로 센다."""
+        qs = self._two()
+        huge = "=== n: " + "9" * 5000 + " · id: x · pick: 의도다\n"
+        self.assertEqual(ic._header_parts(huge.rstrip("\n"))[0], None)
+        p = self._record(huge + self._head(qs[0], "의도다"))
+        lines = p.stdout.splitlines()
+        self.assertIn(MISMATCH + " 1개", lines)
+        self.assertEqual(tic._last(p), "record: 1")
+        _line, rows, _t = self._render()
+        self.assertEqual(rows[qs[0][0]]["state"], "답함")
+        self.assertEqual(rows[qs[1][0]]["state"], "답하지 않음")
+
     def test_unreadable_pick_fails_that_question(self):
         """번호 · 정체는 맞는데 고른 것이 라벨 · typed 가 아니다 — 그 질문은 답 기록 실패(답 모름)이고 아래 글은
         어디에도 싣지 않는다."""
@@ -748,6 +776,40 @@ class TestAnswerInput(unittest.TestCase):
                          ("답 기록 실패", "잘못 골랐다", True, KILL_FAILURE % var))
         self.assertEqual(second["state"], "답하지 않음")
         self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 1개")
+
+    def _switch_unreadable_case(self, var):
+        """스위치가 켜져 있고 답 입력 파일을 읽지 못하면 묻는 질문 모두가 스위치 사유의 답 기록 실패다(답은 `-`)."""
+        qs = self._two()
+        env = tic._env(**{var: "1"})
+        p = self._record(None, env=env, answers=os.path.join(self.tmp.name, "none.txt"))
+        self.assertEqual(p.stdout.splitlines()[0], KILL_RECORD % var)
+        self.assertIn("답 기록 실패 2개 — " + KILL_FAILURE % var, p.stdout.splitlines())
+        self.assertEqual(tic._last(p), "record: 0")
+        line, rows, _t = self._render()
+        for q in qs:
+            row = rows[q[0]]
+            self.assertEqual((row["state"], row["answer"], row["failure"]),
+                             ("답 기록 실패", "-", KILL_FAILURE % var))
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+
+    def test_stage_switch_with_unreadable_input_fails_all_asked(self):
+        self._switch_unreadable_case(STAGE)
+
+    def test_global_switch_with_unreadable_input_fails_all_asked(self):
+        self._switch_unreadable_case(GLOBAL)
+
+    def test_switch_with_identity_wrong_header_fails_that_question(self):
+        """스위치가 켜져 있으면 번호만 맞은 머리의 질문도 스위치 사유의 답 기록 실패다 — 읽힌 고른 답을 싣는다."""
+        qs = self._two()
+        env = tic._env(**{STAGE: "1"})
+        text = "=== n: %d · id: 틀린#정체#방향 · pick: 잘못 골랐다\n" % qs[0][0]
+        p = self._record(text, env=env)
+        self.assertEqual(tic._last(p), "record: 0")
+        _line, rows, _t = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer"], first["wrong_choice"], first["failure"]),
+                         ("답 기록 실패", "잘못 골랐다", True, KILL_FAILURE % STAGE))
+        self.assertEqual(second["state"], "답하지 않음")
 
     def test_record_stage_switch_writes_nothing(self):
         self._switch_case(STAGE, GLOBAL)
@@ -908,7 +970,7 @@ class TestReturnDoc(unittest.TestCase):
             self.assertEqual(text.count(first + ". " + second + "."), 1 if text is i7 else 0)
         # 상태 문서는 첫 문장 뒤에 지우는 스크립트를 밝힌다.
         self.assertEqual(self.state.count(first + "(`scripts/setup-qg.sh`). " + second + "(`scripts/qg-gc.py`)."), 1)
-        carry = ("나중에 쓸 부르는 쪽은 qg 를 다시 부르기 전에 `intent-return.md` 와, 다른 팀 기록이 필요하면 "
+        carry = ("나중에 쓸 부르는 쪽은 qg 를 다시 부르기 전에 `intent-return.md`(완결)와, 다른 팀 기록이 필요하면 "
                  "`session_dir` 아래 `other_teams` 값의 파일을 가져간다.")
         self.assertEqual(i7.count(carry), 1)
 
