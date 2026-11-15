@@ -41,9 +41,11 @@ def check(plugin_dir):
         # 문법상 유효하나 top-level이 object가 아닌 경우([], null, 문자열, 숫자) —
         # 뒤의 pj.get()/`k in pj`가 크래시하지 않게 dict로 강등(present=False로 기록).
         pj = {}
+    # 필수는 name 하나(CLAUDE.md §메타데이터) — 빈 문자열 · 비문자열 name 은 없는 것과 같다.
+    # version은 있으면 문자열이어야 한다 — non-string(null 등)이면 gap (codex)
     add("plugin_json_fields", bool(pj_text)
-        and all(k in pj for k in ("name", "version", "description"))
-        and isinstance(pj.get("version"), str))   # version이 non-string(null 등)이면 gap (codex)
+        and isinstance(pj.get("name"), str) and pj.get("name") != ""
+        and ("version" not in pj or isinstance(pj.get("version"), str)))
 
     readme = _read(pd / "README.md") or ""
     add("readme_principles", "Principles Instantiated" in readme)
@@ -101,11 +103,29 @@ def _has_tools_allowlist(text):
     return bool(re.search(r"^tools:", fm, re.M)) and "disallowedTools" not in fm  # allowlist, denylist 단독 금지
 
 
+def _metadata_cost_class(fm_block: str) -> bool:
+    """frontmatter `metadata:` 블록의 직속 자식 `cost_class:` 에 값이 있으면 참."""
+    in_meta, width = False, None
+    for line in fm_block.splitlines():
+        if not in_meta:
+            in_meta = re.match(r"metadata:[ \t]*$", line) is not None
+            continue
+        if not line.strip():
+            continue
+        if line[0] not in " \t":
+            return False   # 들여쓰지 않은 줄이 블록을 닫는다
+        indent = len(line) - len(line.lstrip(" \t"))
+        width = indent if width is None else width
+        if indent == width and re.match(r"cost_class:[ \t]*\S", line.lstrip(" \t")):
+            return True
+    return False
+
+
 def _has_cost_class(text):
-    # frontmatter 안의 cost_class: 키만 인정한다 — 본문(prose)이 'cost_class'를 언급해도
-    # frontmatter에 키가 없으면 gap이다 (whole-file grep은 header-satisfiable 함정).
+    # frontmatter `metadata` 아래의 cost_class 만 인정한다 — 맨 위 키와 본문 언급은 선언이 아니다
+    # (whole-file grep은 header-satisfiable 함정).
     fm = text.split("---")[1] if text.count("---") >= 2 else ""
-    return bool(re.search(r"^cost_class:", fm, re.M))
+    return _metadata_cost_class(fm)
 
 
 # hook command 문자열에서 참조 스크립트 경로 추출 (`${CLAUDE_PLUGIN_ROOT}/hooks/foo.py` 등).

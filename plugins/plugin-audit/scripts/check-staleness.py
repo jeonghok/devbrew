@@ -540,6 +540,24 @@ def _semver_at_least_1_0_0(version: str) -> bool:
     return (major, minor, patch) >= (1, 0, 0)
 
 
+def _metadata_cost_class(fm_block: str) -> bool:
+    """frontmatter `metadata:` 블록의 직속 자식 `cost_class:` 에 값이 있으면 참."""
+    in_meta, width = False, None
+    for line in fm_block.splitlines():
+        if not in_meta:
+            in_meta = re.match(r"metadata:[ \t]*$", line) is not None
+            continue
+        if not line.strip():
+            continue
+        if line[0] not in " \t":
+            return False   # 들여쓰지 않은 줄이 블록을 닫는다
+        indent = len(line) - len(line.lstrip(" \t"))
+        width = indent if width is None else width
+        if indent == width and re.match(r"cost_class:[ \t]*\S", line.lstrip(" \t")):
+            return True
+    return False
+
+
 def scan_category_absence(plugin_dir: Path, facts):
     """4개 조건부 게이트. 각 사실은 `norm` extra 필드로 어떤 규범이 부재한지 표시한다."""
     _, data = _load_plugin_json(plugin_dir)
@@ -561,9 +579,9 @@ def scan_category_absence(plugin_dir: Path, facts):
             text = skill_md.read_text(encoding="utf-8", errors="replace")
             fm = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
             block = fm.group(1) if fm else ""
-            if not re.search(r"^cost_class:", block, re.MULTILINE):
+            if not _metadata_cost_class(block):
                 emit(facts, "category absence", str(skill_md.relative_to(plugin_dir)), 1,
-                     f"skill '{skill_dir.name}'에 cost_class 선언 없음", norm="cost_class")
+                     f"skill '{skill_dir.name}'에 metadata 아래 cost_class 선언 없음", norm="cost_class")
 
     # (3) kill switch ← hook이 있을 때만.
     hook_count = _actual_hook_count(plugin_dir)
