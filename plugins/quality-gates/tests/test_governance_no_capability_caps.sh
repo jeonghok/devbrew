@@ -128,7 +128,7 @@ fi
 # CLAUDE.md 본문은 `cost_class`와 `high`를 별개 backtick span으로 적어 리터럴
 # "cost_class: high" 문자열이 존재하지 않는다 — 그래서 cost 줄의 고유 문장을 앵커한다.
 # 사용자 결정권(P17 사용자 주권)이 남는 자리는 범위 고르기다 — 범위 질문 양성 단언이 그것을 잠근다.
-COST_C="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CLAUDE_MD")"
+COST_C="$(grep -F '**모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다**' "$CLAUDE_MD")"
 p22="$(awk '/^### P22/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
 assert_contains "$COST_C" '`high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다.' "AC11: CLAUDE.md 공시 문장(양)"
 assert_contains "$COST_C" '어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다.' "AC11: 지출 승인 없음 · 상한을 여는 질문"
@@ -141,8 +141,8 @@ assert_contains "$p22" '대상 · 모드 · 취소처럼 일의 범위를 고르
 assert_not_contains "$p22" '승인 게이트가 필수' "AC12: P22 옛 게이트 없음"
 assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 # AC12 바이트 같음 — 설계 §2 의 확정 문안 세 줄(설계 파일에서 읽지 않는다).
-FIXED_CLAUDE='- **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.'
-FIXED_P22_1='**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.'
+FIXED_CLAUDE='- **모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.'
+FIXED_P22_1='**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter `metadata` 아래에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.'
 FIXED_P22_2='코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 3 · `shared/tests/test_cost_disclosure.sh`'
 assert_eq "$(grep -cxF -- "$FIXED_CLAUDE" "$CLAUDE_MD")" "1" "AC12: CLAUDE.md cost 줄이 설계 §2 확정 문안과 바이트 같다"
 assert_eq "$(grep -cxF -- "$FIXED_P22_1" "$PHIL")" "1" "AC12: P22 본문 첫 줄이 설계 §2 확정 문안과 바이트 같다"
@@ -279,6 +279,30 @@ assert_not_contains "$p13" 'hook=집행 레이어' "AC8 P13 옛 구 없음"
 STYLE="$(grep -F '`style/`' shared/README.md)"
 assert_not_grep "$STYLE" '[0-9]+곳' "AC8: shared/README 에 사본 수 숫자가 없다"
 assert_contains "$STYLE" '글롭에서 도출' "AC8: shared/README 가 도출을 말한다(양)"
+
+# --- F6 규칙 개정 — 공식 쪽으로 옮긴 규칙 문장(설계 2026-11-15-rules-toward-official) ---
+META_C="$(cline '**`plugin.json` — 필수 키와 판 올림.**')"
+assert_contains "$META_C" '`plugin.json` 의 필수 키는 `name` 하나다' "F6 AC8: 필수 키는 name 하나"
+assert_contains "$META_C" '`version` · `description` · `author` 를 빼면 `claude plugin validate` 가 경고를 낸다' "F6 AC8: 빼면 경고하는 키 셋"
+assert_contains "$META_C" '올림 단위는 기본 브랜치에 머지되는 PR 하나다 — PR 안에서 커밋마다 올리지 않는다.' "F6 AC11: 올림 단위"
+assert_contains "$META_C" '① `plugins/<X>/` 아래 파일(그 폴더 바로 아래의 `plugins/<X>/tests/` 폴더 · `CHANGELOG.md` · `README.md` 는 제외)을 바꾸거나' "F6 AC11: 올리는 때 ①"
+assert_contains "$META_C" '② X 가 심볼릭 링크로 싣는 `shared/` 파일을 바꿀 때다.' "F6 AC11: 올리는 때 ②"
+assert_contains "$META_C" '그 밖의 변경(`shared/tests/` · `tools/` · `docs/` 처럼 설치본에 실리지 않는 것)으로는 올리지 않는다.' "F6 AC11: 올리지 않는 때"
+assert_contains "$META_C" '동작에 닿지 않는 변경(주석 · 오탈자)만 있는 PR 은 이유를 PR 본문에 적고 올리지 않을 수 있다.' "F6 AC11: 판단 문장"
+assert_not_contains "$(cat "$CLAUDE_MD")" '모든 PR마다' "F6 AC11: 「모든 PR마다」 가 없다"
+assert_not_contains "$(cat "$CLAUDE_MD")" 'integrity' "F6 AC6: CLAUDE.md 에 integrity 필드 문장이 없다"
+p21="$(awk '/^### P21/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+assert_not_contains "$p21" 'integrity' "F6 AC6: P21 에 integrity 가 없다"
+assert_contains "$p21" '— state secret hygiene, description prompt-injection 리뷰가 floor.' "F6 AC6: P21 의 남은 floor 둘(양)"
+ALLOW_C="$(cline '**`allowed-tools` 는 제한이 아니다.**')"
+assert_contains "$ALLOW_C" '**이 키는 제한이 아니다.**' "F6 AC7: 틀린 것은 키에 대한 믿음"
+assert_not_contains "$ALLOW_C" '이 계층은 제한이 아니다' "F6 AC7: 「이 계층은」 이 없다"
+assert_contains "$ALLOW_C" 'skill 이 도는 동안 도구를 실제로 빼는 실재 키는 `disallowed-tools`(kebab)다' "F6 AC7: skill 의 disallowed-tools 는 실재 키"
+assert_contains "$ALLOW_C" '막지 못하므로 Law 2 의 집행 지점이 아니다' "F6 AC7: Law 2 집행 지점이 아니다"
+assert_contains "$ALLOW_C" 'agent 에서 도구를 빼는 키는 camelCase `disallowedTools` 다.' "F6 AC7: agent 쪽은 camelCase"
+SCOPED_C="$(cline '**Scoped agents')"
+assert_contains "$SCOPED_C" '**agent frontmatter 에서 도구를 다루는 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다**' "F6 D1.2: agent 도구 필드 문장"
+assert_contains "$SCOPED_C" 'skill 의 `disallowed-tools`(kebab)를 agent에 그대로 적으면' "F6 D1.2: 헷갈리는 짝에 skill 의 kebab 키"
 
 # R14 넘김 — 번호 판정
 p5="$(awk '/^### P5/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"

@@ -7,11 +7,11 @@ CLAUDE_MD = REPO / "CLAUDE.md"
 
 # checklist requirement → CLAUDE.md §Plugin Shape body-unique anchor
 ANCHORS = {
-    "plugin_json_fields": "필수: `name`, `description`, `version`",
+    "plugin_json_fields": "`plugin.json` 의 필수 키는 `name` 하나다",
     "readme_principles": '"Principles Instantiated"',
     "changelog_if_v1": "v1.0.0 이상이면 `CHANGELOG.md`",
     "agents_allowlist": "`tools:` allowlist를 선언",
-    "skills_cost_class": "모든 skill에 `cost_class` 선언",
+    "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
     "hooks_killswitch": "모든 훅에 kill switch",
     "deps_declared": "최소 버전이 선언된 의존성",
 }
@@ -61,6 +61,7 @@ class TestShapeCompleteness(unittest.TestCase):
         shape = CLAUDE_MD.read_text(encoding="utf-8").split("## Plugin Shape")[1].split("## Building")[0]
         for req, anchor in ANCHORS.items():
             self.assertIn(anchor, shape, f"checklist '{req}' anchor drifted from CLAUDE.md §Plugin Shape")
+            self.assertEqual(shape.count(anchor), 1, f"checklist '{req}' anchor is not unique in §Plugin Shape")
 
     def test_deps_declared_gap_when_cross_plugin_dispatch_without_prereqs(self):
         # cross-plugin dispatch present + no "Prerequisites" section in README → real gap
