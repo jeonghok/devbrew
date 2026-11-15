@@ -708,6 +708,10 @@ def _summary_cell(f):
 
 ASK_LINE_HEAD = "질문 줄: "
 ASK_NO_FINDINGS = "지적 없음"
+# 지적 수를 확정하지 못했을 때(주 입력 사망 · 셀 수 없음) — `_status_line` 의 「지적 수를 확정하지
+# 못했다」 · 「지적이 더 있을 수 있다」와 같은 뜻이다. 확인하지 못한 것을 0 이나 정확한 수로 쓰지 않는다.
+ASK_COUNT_UNCONFIRMED = "지적 수를 확정하지 못했다"
+ASK_MAY_BE_MORE = " (더 있을 수 있다)"
 ASK_SUMMARY_WIDTH = 80   # 요약의 코드 포인트 상한 — 넘으면 79자 + `…`
 
 
@@ -720,18 +724,24 @@ def _ask_summary(f):
     return text
 
 
-def _ask_line(findings, blocking, degrade_count):
+def _ask_line(findings, blocking, degrade_count, unconfirmed=False):
     """질문 창에 싣는 한 줄(`질문 줄: ` 뒤 글). `blocking` 은 막는 지적 수, `degrade_count` 는
     「판정 degrade」 블록의 `- ` 줄 수다. 가장 무거운 것은 심각도가 가장 높은 것 가운데 받은 순서
-    (표의 행 순서)로 첫 지적이다. degrade 가 있으면 끝에 ` · 경고 <n>개: 판정 degrade` 를 붙인다."""
+    (표의 행 순서)로 첫 지적이다. `unconfirmed`(지적 수를 확정하지 못했다)면 지적 0 은
+    「지적 수를 확정하지 못했다」, 지적이 있으면 수 뒤에 「(더 있을 수 있다)」. degrade 가 있으면 끝에
+    ` · 경고 <n>개: 판정 degrade` 를 붙인다."""
     if findings:
         top = None
         for f in findings:
             if top is None or SEV_ORDER[_norm_sev(f)] < SEV_ORDER[_norm_sev(top)]:
                 top = f
         where = " ".join(("%s:%s" % (top.get("file"), top.get("line"))).split())
-        line = "막는 지적 %d개 · 제안 %d개 — 가장 무거운 것: %s — %s" % (
-            blocking, count_split(findings)["SUGGESTION"], where, _ask_summary(top))
+        counts = "막는 지적 %d개 · 제안 %d개" % (blocking, count_split(findings)["SUGGESTION"])
+        if unconfirmed:
+            counts += ASK_MAY_BE_MORE
+        line = "%s — 가장 무거운 것: %s — %s" % (counts, where, _ask_summary(top))
+    elif unconfirmed:
+        line = ASK_COUNT_UNCONFIRMED
     else:
         line = ASK_NO_FINDINGS
     if degrade_count:
@@ -779,7 +789,7 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
            f"lowered: {len(lowered)}"]
     if restored:
         out.append("restored: " + ",".join(restored))
-    out.append(ASK_LINE_HEAD + _ask_line(findings, n_block, degrade_count))
+    out.append(ASK_LINE_HEAD + _ask_line(findings, n_block, degrade_count, unconfirmed))
     out.extend([disp_line, plumb_line, gloss_line])
     if not findings:
         if recritic_zero:

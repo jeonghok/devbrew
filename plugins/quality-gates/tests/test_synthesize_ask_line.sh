@@ -6,7 +6,7 @@
 # (n = 그 블록의 `- ` 줄 수). 자리는 `lowered:` 다음(되올림이 있으면 `restored:` 다음).
 # 요약은 「가장 무거운 것」 행 「내용」 칸의 쉬운 말 부분을 공백을 접어 80자에서 자른 것(넘으면 79자 + `…`).
 # 분기마다 fixture 가 있다: 지적 없음 · 제안만 · 맨 위 심각도가 여럿 · 80자 · 81자 · 200자 · 줄바꿈과 겹친 공백 ·
-# degrade 한 줄 · 여러 줄 · degrade 없음.
+# degrade 한 줄 · 여러 줄 · degrade 없음 · 지적 수를 확정하지 못함(지적 0 / 지적 있음).
 set -u
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." && pwd)"
@@ -141,9 +141,32 @@ assert_grep "$(printf '%s\n' "$out" | tail -1)" '^qg-verdict-args: ' "판정 꼬
 assert_grep "$(printf '%s\n' "$out" | tail -2 | head -1)" '^verdict: ' "판정 꼬리: 그 앞 줄은 verdict: 다"
 assert_eq "$(printf '%s\n' "$out" | grep -c '^질문 줄: ')" "1" "판정 꼬리: 질문 줄은 본 보고서에 한 번뿐이다"
 
+# ── 지적 수를 확정하지 못했다 — 주 입력(지적 파일 · 재비판자)이 죽었다. 상태 줄과 같은 말을 한다.
+# unc_flag <줄> — 확정하지 못했다는 말(「확정하지 못했다」 · 「더 있을 수 있다」)이 있으면 1
+unc_flag() { case "$1" in *확정하지\ 못했다*|*"더 있을 수 있다"*) echo 1 ;; *) echo 0 ;; esac; }
+FX_UNC0=$(fx unc0 '[]' 'verdicts: []')
+outu0="$(python3 "$SYNTH" --findings "$FX_UNC0/없는.yaml" --recritic "$FX_UNC0/reply.txt" --recritic-map "$FX_UNC0/map.json" 2>/dev/null)"
+assert_eq "$(askl "$outu0")" "지적 수를 확정하지 못했다 · 경고 $(deg_n "$outu0")개: 판정 degrade" "확정 못 함 · 지적 0: 「지적 수를 확정하지 못했다」(degrade 꼬리는 그대로)"
+assert_eq "$(deg_n "$outu0")" "1" "전제: 지적 파일 사망 fixture 의 degrade 블록은 한 줄이다"
+assert_not_contains "$(askl "$outu0")" "지적 없음" "확정 못 함 · 지적 0: 「지적 없음」이라고 말하지 않는다"
+assert_eq "$(unc_flag "$(printf '%s\n' "$outu0" | head -1)"):$(unc_flag "$(askl "$outu0")")" "1:1" "확정 못 함 · 지적 0: 상태 줄과 질문 줄이 같이 확정하지 못했다고 말한다"
+FX_UNC1=$(fx unc1 '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, summary: 하나, proposed_fix: f}' 'verdicts: []')
+outu1="$(python3 "$SYNTH" --findings "$FX_UNC1/findings.yaml" --recritic "$FX_UNC1/없는.txt" --recritic-map "$FX_UNC1/map.json" 2>/dev/null)"
+assert_eq "$(askl "$outu1")" "막는 지적 1개 · 제안 0개 (더 있을 수 있다) — 가장 무거운 것: a.py:1 — 하나 · 경고 $(deg_n "$outu1")개: 판정 degrade" "확정 못 함 · 지적 있음: 수 뒤에 「(더 있을 수 있다)」"
+assert_eq "$(deg_n "$outu1")" "1" "전제: 재비판자 사망 fixture 의 degrade 블록은 한 줄이다"
+assert_eq "$(unc_flag "$(printf '%s\n' "$outu1" | head -1)"):$(unc_flag "$(askl "$outu1")")" "1:1" "확정 못 함 · 지적 있음: 상태 줄과 질문 줄이 같이 더 있을 수 있다고 말한다"
+# 짝 — 확정된 실행(지적 있음 · 없음 · degrade 만 있음)에는 그 말이 없고, 상태 줄에도 없다
+for d in "$FX_TWO" "$FX_NONE"; do
+  o="$(rf_synth "$d" 2>/dev/null)"
+  assert_eq "$(unc_flag "$(printf '%s\n' "$o" | head -1)"):$(unc_flag "$(askl "$o")")" "0:0" "확정된 실행: 상태 줄도 질문 줄도 확정 못 함을 말하지 않는다 (${d##*/})"
+done
+assert_eq "$(unc_flag "$(askl "$outd")")" "0" "확정된 실행: 보조 입력만 죽은 degrade 에는 「(더 있을 수 있다)」가 없다"
+
 # ── 함수 — 출력과 같은 글(접두 없이)
 got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._ask_line([], 0, 0))')"
 assert_eq "$got" "지적 없음" "_ask_line: 지적 없음 · 경고 없음"
 got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._ask_line([], 0, 3))')"
 assert_eq "$got" "지적 없음 · 경고 3개: 판정 degrade" "_ask_line: 경고 수를 그대로 싣는다"
+got="$(PYTHONPATH="$PLUGIN_ROOT/scripts" python3 -c 'import synthesize_findings as s; print(s._ask_line([], 0, 0, True))')"
+assert_eq "$got" "지적 수를 확정하지 못했다" "_ask_line: 확정 못 함 · 지적 0 · 경고 없음"
 finish
