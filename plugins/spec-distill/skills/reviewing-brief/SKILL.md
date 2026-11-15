@@ -601,8 +601,7 @@ Agent({
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
 `round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
 연속 호출**로 나눠 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의
-질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
-「경고 N개 — 위에 적었다」 한 줄만 둔다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
+질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고, 선택지 설명 · 줄일 때의 규칙 넷 · 기타 칸의 「전문」은 절차서 8단계대로 한다 — 질문을 띄우기 직전마다 아래 질문 재료 펜스를 돈다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
 게이트다. 열린 것이 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이
 적용된다**). **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계는 열린 것의 유무로
 갈린다: **열린 것이 0 이면 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘뿐인
@@ -620,6 +619,31 @@ DEVBREW_EXTRA_APPROVAL_EOF
 extra_approval="${extra_approval%$'\n'}"
 ```
 <!-- extra-approval:end -->
+
+질문을 띄우기 직전마다 — 첫 호출 앞과, 답을 반영한 뒤 다음 호출 앞에 — 아래 펜스를 돈다. 펜스 앞에 두 인자의 대입 줄(`PAYLOAD` · `AUDIT`)과 `channel_lines` 대입을 붙여 같은 Bash 호출로 돌린다. `channel_lines` 에는 이 skill 의 다른 채널이 낸 경고 줄 전체를 글자 그대로 넣고, 없으면 빈 값으로 둔다. 펜스는 그 라운드의 게이트 전문 파일을 다시 쓰고(이 라운드의 지적 원문 구역은 그대로 둔다) 질문마다 한 묶음을 낸다. 이 펜스는 8단계 게이트에서만 돈다 — 7단계가 끝나기 전에는 돌리지 않는다. `channel_lines` 대입은 따옴표 heredoc 꼴이다: `IFS= read -r -d '' channel_lines <<'DEVBREW_CHANNEL_EOF' || true` 다음 줄부터 경고 줄을 글자 그대로 넣고 `DEVBREW_CHANNEL_EOF` 한 줄로 닫은 뒤 `channel_lines="${channel_lines%$'\n'}"` 를 둔다. 경고 줄에 구분 줄과 똑같은 줄이 있으면 여는 줄과 닫는 줄의 구분자를 줄에 없는 다른 낱말로 함께 바꾼다.
+
+<!-- ask-material:begin -->
+```bash
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+g_out="$(python3 "$PR/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+gf="$(python3 "$PR/scripts/docreview_state.py" gate-file --state-dir "$STATE_DIR" 2>&1)" || true
+gf_path="$(printf '%s' "$gf" | python3 -I -X utf8 -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["path"] if d.get("ok") else "")
+except Exception:
+    print("")')"
+if [ -n "$gf_path" ] && [ -n "${channel_lines:-}" ]; then
+  printf '\n## 다른 채널의 경고\n%s\n' "$channel_lines" | python3 "$PR/scripts/nofollow_write.py" append --out "$gf_path" \
+    || echo "[spec-distill] 다른 채널의 경고 줄을 전문 파일에 덧붙이지 못했다 — 질문에 싣는 경고 줄은 그대로다."
+fi
+python3 "$PR/scripts/docreview_state.py" ask-material --state-dir "$STATE_DIR" --gate-file-result "$gf"
+```
+<!-- ask-material:end -->
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
 `pm-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가

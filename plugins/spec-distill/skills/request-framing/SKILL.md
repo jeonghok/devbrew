@@ -781,8 +781,28 @@ rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
 
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 결정 묶음과 게이트 종류를
 냅니다. 그 묶음은 **`AskUserQuestion` 최대 4개씩 연속 호출**로 나눠 띄웁니다. 결정 질문마다 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다 — 추가 라운드 「열기 / 열지 않음」도 같다.
-렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
-「경고 N개 — 위에 적었다」 한 줄만 둔다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다.
+렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고, 선택지 설명 · 줄일 때의 규칙 넷 · 기타 칸의 「전문」은 절차서 8단계대로 한다 — 질문을 띄우기 직전마다 아래 질문 재료 펜스를 돈다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다.
+
+질문을 띄우기 직전마다 — 첫 호출 앞과, 답을 반영한 뒤 다음 호출 앞에 — 아래 펜스를 돈다. 펜스 앞에 「## 상태」 블록과 `channel_lines` 대입을 이어 붙여 같은 Bash 호출로 돌린다. `channel_lines` 에는 이 skill 의 다른 채널이 낸 경고 줄 전체를 글자 그대로 넣고, 없으면 빈 값으로 둔다. 펜스는 그 라운드의 게이트 전문 파일을 다시 쓰고(이 라운드의 지적 원문 구역은 그대로 둔다) 질문마다 한 묶음을 낸다. 이 펜스는 8단계 게이트에서만 돈다 — 7단계가 끝나기 전에는 돌리지 않는다. `channel_lines` 대입은 따옴표 heredoc 꼴이다: `IFS= read -r -d '' channel_lines <<'DEVBREW_CHANNEL_EOF' || true` 다음 줄부터 경고 줄을 글자 그대로 넣고 `DEVBREW_CHANNEL_EOF` 한 줄로 닫은 뒤 `channel_lines="${channel_lines%$'\n'}"` 를 둔다. 경고 줄에 구분 줄과 똑같은 줄이 있으면 여는 줄과 닫는 줄의 구분자를 줄에 없는 다른 낱말로 함께 바꾼다.
+
+<!-- ask-material:begin -->
+```bash
+g_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 seed 의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+gf="$(python3 "$SD/scripts/docreview_state.py" gate-file --state-dir "$STATE_DIR" 2>&1)" || true
+gf_path="$(printf '%s' "$gf" | python3 -I -X utf8 -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["path"] if d.get("ok") else "")
+except Exception:
+    print("")')"
+if [ -n "$gf_path" ] && [ -n "${channel_lines:-}" ]; then
+  printf '\n## 다른 채널의 경고\n%s\n' "$channel_lines" | python3 "$SD/scripts/nofollow_write.py" append --out "$gf_path" \
+    || echo "[spec-distill] 다른 채널의 경고 줄을 전문 파일에 덧붙이지 못했다 — 질문에 싣는 경고 줄은 그대로다."
+fi
+python3 "$SD/scripts/docreview_state.py" ask-material --state-dir "$STATE_DIR" --gate-file-result "$gf" --fix-rows --ask-rows
+```
+<!-- ask-material:end -->
+
 `approval_gate_open` 이면 승인 게이트입니다 — 1단계(열린 항목 · 「추가
 라운드 1회 열기」)는 절차서 8단계 그대로이고, 2단계(진행 옵션)는 이 skill 의 `## 확정 — proceed 게이트`
 입니다. 이 자리는 그 위에 규칙 넷을 더합니다 — seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지고, 엔진에서
@@ -798,7 +818,7 @@ rec_title="재비판 (doc-recritic)"; rec_name="recritic.txt"; record_artifact
    게이트를 열지 않는다. `ask_open` 도 올린다 — 엔진이 처분 없이 온 항목과 재비판이 더한 항목을 스스로
    `ask` 로 만들고, 그 `ask` 는 아무것도 막지 않고 답도 기록하지 않는다.
    게이트 앞 글에 `ask_open` 개수를 처분과 무관하게 싣는다.
-3. **`fix` 는 사용자가 고른 대로만 닫는다.** 질문은 「적용 / 적용하지 않음」 둘이다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+3. **`fix` 는 사용자가 고른 대로만 닫는다.** 질문은 「적용 / 적용하지 않음」 둘이다. 그 질문도 질문 재료의 묶음을 쓴다 — 본문과 두 선택지의 설명은 절차서 8단계의 선택지 설명 규칙대로다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
    - 적용 — `docreview_anchor.py check-intent <id> --intent '#__doc__' --state-dir "$STATE_DIR"` 를 부른다. 그 호출이
      결과를 스스로 원장에 적는다 — 통과면 `intent_passed` 이고 처분이 전부 끝난 뒤 편집한다. 범위 문제로 거부되면
      escalate 까지 적어 다음 라운드 `decide` 로 오고, 그 밖의 거부(`fix_not_pending` 등)는 사유를 게이트 앞 글에 싣는다. 거부면 편집하지 않는다. 통과 · 거부 어느 쪽이든 엔진 `fix` 로 같은 결과를 다시 적지 않는다.
