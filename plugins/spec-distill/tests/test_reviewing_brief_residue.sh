@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py shared/docreview/scripts/docreview_route.py
 #
 # `reviewing-brief` 의 codex 게이트 fence · `## 입력` · `## 번들` 블록을 **잘라내 차가운 셸
 # (`env -i`)에서 실행**해 디스크 사후상태를 잰다. 읽어서 판정하지 않는다 — 읽으면 옳아 보이는
@@ -41,6 +41,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
   echo "shared/docreview/scripts/docreview_state.py"
   echo "plugins/spec-distill/scripts/build_brief_bundle.py"
+  echo "shared/docreview/scripts/docreview_route.py"
   exit 0
 fi
 
