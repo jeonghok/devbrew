@@ -678,7 +678,7 @@ def _two_files(first: str, second: str, fn, unchecked) -> dict:
 
 
 def warning_count(result: dict) -> int:
-    """spec-review 게이트의 「경고 N개」에 더할 수 — 검사 불가는 1."""
+    """번호 대조 짧은 줄의 N(경고 수) — 검사 불가는 1."""
     if result.get("status") == 3:
         return 1
     return sum(len(result[k]) for k in ("missing", "shallow", "unserved", "unknown"))

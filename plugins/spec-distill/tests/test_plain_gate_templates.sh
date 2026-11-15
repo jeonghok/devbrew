@@ -154,6 +154,11 @@ assert_eq "$(cnt "$F_FIN" '모든 degrade record 는 **게이트 앞 글**(위 �
   "finishing: degrade record 는 앞 글에 쓰고 질문 본문은 정본의 규칙을 따른다"
 assert_eq "$(cnt "$F_FIN" '옵션 description 에 싣지 않습니다')" "0" "finishing: 옵션 description 에 경고를 싣지 않는다는 옛 문장이 없다(설명은 얻음 · 내줌 꼴)"
 
+# ⑭b finishing — 인터뷰 끝 게이트의 짧은 줄 출처(brief 원장 · 구조 검사 참고 · superpowers 판).
+for ph in '`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"`' '「구조 검사 참고 N개」' '「superpowers 판 다름」'; do
+  assert_eq "$(cnt "$F_FIN" "$ph")" "1" "finishing: 짧은 줄 출처 ${ph}"
+done
+
 # ⑮ 읽지 못한 채널은 「알 수 없음 — <사유>」 한 줄(M3 · M4).
 assert_eq "$(cnt "$F_FIN" '읽지 못한 채널은 「알 수 없음 — <사유>」 로 따로 한 줄 쓴다.')" "1" "알 수 없음: finishing 목록 4"
 assert_eq "$(cnt "$F_PG" '읽지 못한 채널은 「알 수 없음 — <사유>」로 따로 쓴다.')" "1" "알 수 없음: 정본"
