@@ -292,6 +292,18 @@ assert_eq "$(cat "$T/nodiff.txt")" "rc 3 | git 읽기 실패 — git diff 실패
   "AC11: 과제의 바꾼 파일을 git 이 읽지 못하면 검사 불가(3) · 같은 실패는 사유 한 줄 · 과제는 그대로 싣는다"
 
 # ── 얕은 클론 — 브랜치의 과제는 단계를 셀 이력이 없다: 「알 수 없음」 · 머지된 과제는 머지됨 ──
+# 얕은 클론 묶음 전용 과제 shal — 기본 브랜치 위 커밋 둘(과제 폴더 · 예약 밖 파일). 깊이 1 은 merge base 가 잘리고 깊이 3 은 닿는다.
+# 얕지 않은 레포에서는 예약 알림을 내는 과제다(아래 얕은 사본들의 양의 짝)
+# 기본 브랜치에는 깨진 과제 폴더가 있어 job new 의 나무 검사가 거절한다 — 깨끗한 사본에서 과제 폴더를 만들어 가져온다
+SHAL_GEN="$T/shalgen"
+git clone -q --no-local "$W" "$SHAL_GEN" && git -C "$SHAL_GEN" checkout -q "$(g rev-parse fix/broken~1)" && printf '얕은 클론 묶음의 과제\n' > "$T/said.txt" \
+  && (cd "$SHAL_GEN" && python3 "$RW" job new --roadmap "$RM" --name shal --branch fix/shal --paths docs/shal-only.md --goal "얕은 클론 묶음의 과제" < "$T/said.txt") > "$T/out.txt" 2>&1 \
+  && g checkout -q -b fix/shal main && mkdir -p "$W/$TM/jobs" && cp -R "$SHAL_GEN/$TM/jobs/shal" "$W/$TM/jobs/shal" \
+  && g add -- "$TM/jobs/shal" && g commit -qm "과제 폴더 shal" || failed "fix/shal 과제 폴더 — $(cat "$T/out.txt")"
+put docs/shal-extra.md "예약 밖 파일" && g commit -qm "shal 예약 밖 파일" && g push -q origin fix/shal && again || failed "fix/shal"
+g checkout -q main
+assert_eq "$(jget shal fix/shal stage) · $(js "$T/s.json" "[n for n in [j for j in r['jobs'] if j['id']=='shal'][0]['notes'] if '예약' in n]")" \
+  "진행 중 · ['예약 밖 변경: docs/shal-extra.md']" "얕은 클론: 얕지 않은 레포에서 shal 은 예약 알림을 낸다(양의 짝 — 알림이 처음부터 없던 과제가 아니다)"
 SH="$T/shallow"
 git clone -q --no-local --depth 1 --no-single-branch "file://$T/origin.git" "$SH" && git -C "$SH" remote set-head origin main \
   || no "얕은 클론을 만들지 못했다"
@@ -303,6 +315,31 @@ assert_contains "$(js "$T/shallow.json" "[j['reason'] for j in r['jobs'] if j['i
 assert_contains "$(js "$T/shallow.json" "[(j['id'], j['stage'], j['branch']) for j in r['jobs']]")" "('dup', '알 수 없음', 'fix/dup-a')" "얕은 클론: 과제는 목록에 있다(없다고 하지 않는다)"
 assert_contains "$(js "$T/shallow.json" "[(j['id'], j['stage']) for j in r['jobs']]")" "('fix-typo', '머지됨')" "얕은 클론: 기본 브랜치의 과제는 트리로 알 수 있어 머지됨"
 assert_not_contains "$(cat "$T/shallow.err")" "Traceback" "얕은 클론: 죽지 않는다"
+# 깊이마다 — 단계 「알 수 없음」 인 과제에는 예약을 재지 않는다: 종료 코드 0 · 예약 알림 없음 · git 읽기 실패 없음 · 근거 끝에 구절
+SH_REASON="$(PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import team_status as T; print(T.SHALLOW + " · " + T.RESERVE_UNSCANNED)' "$S")"
+shallow_depth() {  # shallow_depth <사본 폴더> <깊이> <merge base 종료 코드> <이름표> — 사본의 보고를 $T/shallow-<이름표>.json 에 쓰고 단언한다
+  local dir="$1" label="$4" mb=0 rc=0 json="$T/shallow-$4.json"
+  assert_eq "$(git -C "$dir" rev-parse --is-shallow-repository)" "true" "얕은 클론 ${label}: 픽스처가 정말 얕은 클론이다"
+  git -C "$dir" merge-base origin/main origin/fix/shal > /dev/null 2>&1 || mb=$?
+  assert_eq "$mb" "$3" "얕은 클론 ${label}: 기본 브랜치와 shal 끝의 merge base 종료 코드(깊이 ${2} — 이 깊이가 그 갈래다)"
+  (cd "$dir" && python3 "$RS" "$RM" --json) > "$json" 2> /dev/null || rc=$?
+  assert_eq "$rc" "0" "얕은 클론 ${label}: 과제의 사정은 알림만이라 종료 코드를 바꾸지 않는다"
+  assert_eq "$(js "$json" "[(j['stage'], j['task_status']) for j in r['jobs'] if j['id'] == 'shal']")" "[('알 수 없음', None)]" \
+    "얕은 클론 ${label}: shal 은 단계 「알 수 없음」"
+  assert_eq "$(js "$json" "[n for j in r['jobs'] if j['id'] == 'shal' for n in j['notes'] if '예약' in n]")" "[]" \
+    "얕은 클론 ${label}: 알 수 없는 과제에는 예약 알림(예약 밖 변경 · 경로 예약 위반)을 내지 않는다"
+  assert_eq "$(js "$json" "[u for u in r['unknown_reasons'] if 'git 읽기 실패' in u]")" "[]" \
+    "얕은 클론 ${label}: 예약 diff 를 읽지 못한 일이 검사 불가 사유에 들지 않는다"
+  assert_eq "$(js "$json" "[j['reason'] for j in r['jobs'] if j['id'] == 'shal']")" "['$SH_REASON']" \
+    "얕은 클론 ${label}: 근거는 얕은 클론 글로 시작해 예약을 재지 않았다는 구절로 끝난다"
+}
+assert_eq "$SH_RC" "0" "얕은 클론 깊이 1: 과제를 훑어도 종료 코드는 0 이다(과제의 사정은 알림)"
+shallow_depth "$SH" 1 1 d1
+SH3="$T/shallow3"
+git clone -q --no-local --depth 3 --no-single-branch "file://$T/origin.git" "$SH3" && git -C "$SH3" remote set-head origin main \
+  || no "깊이 3 얕은 클론을 만들지 못했다"
+shallow_depth "$SH3" 3 0 d3
+g push -q origin --delete fix/shal && g branch -q -D fix/shal && again || failed "fix/shal 지움"
 
 # ── 기본 브랜치를 모르는 레포 — 과제를 세지 못했다고 한 줄 ─────────────────
 g remote set-head origin -d

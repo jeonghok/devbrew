@@ -24,6 +24,7 @@ UNKNOWN = "알 수 없음"
 IMPLEMENT = team_layout.STAGES[2]
 SHALLOW = "얕은 클론이라 받음 · 진행을 셀 이력이 없다 — `git fetch --unshallow` 뒤 다시 계산한다"
 RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정 줄을 다 읽지 못했다"
+RESERVE_UNSCANNED = "바꾼 파일의 예약도 재지 않았다"
 RECORD_UNREAD = "결정 기록 읽기 불가 — "
 NO_RECEIPT, UNREAD_END = "결과 있음 · 받음 없음", "읽지 못함 — 끝 줄이 있는지 모른다"
 
@@ -381,7 +382,10 @@ def task_jobs(reader, blocks: list, scan=None) -> tuple:
                  "notes": [tip_note] if tip_note else []}
         stage, reason, _specs, _plans = reader.progress(tip, block, 1)
         if scan is not None:
-            block["notes"].extend(scan(dict(block, tip=tip)))
+            if stage == UNKNOWN:   # 잴 수 없는 과제에 예약 알림을 붙이지 않는다 — 얕은 클론은 merge base 도 잘려 diff 가 실패한다
+                reason = "%s · %s" % (reason, RESERVE_UNSCANNED)
+            else:
+                block["notes"].extend(scan(dict(block, tip=tip)))
         if reason.startswith(RECORD_UNREAD):   # 단계는 블록과 같게 두되 결과 받음일 수 있음을 알린다
             note("%s %s: %s 의 결정 기록을 읽지 못해 결과 받음인지 셀 수 없다 — %s"
                  % (OUTSIDE, name, team.intent(name), reason[len(RECORD_UNREAD):]))

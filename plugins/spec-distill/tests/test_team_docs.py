@@ -233,8 +233,9 @@ class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 
                         "불가 사유 `<번호> %s — <근거>` 로 올라 종료 코드는 3 이다." % (TS.UNKNOWN, RS.PARTIAL_UNCOUNTED), s10)
 
     def test_plain_flow_reads_design_only_when_checking(self):   # 리더 물음 1 — 설계 없는 흐름의 design.md
-        self.assertLine("- 설계 없는 흐름의 단계는 `design.md` 에 기대지 않는다 — 그 파일은 결과 대조(§5)에서만 읽는다(받음 줄을 "
-                        "다시 계산할 때도 대조다). 받음 줄이 없으면 그 자리가 파일이 아니어도(블롭이 아님) 알림은 「%s」 그대로이고, "
+        self.assertLine("- 설계 없는 흐름의 단계는 `design.md` 에 기대지 않는다 — 그 파일은 결과 대조(§5)와 번호 대조에서만 읽는다(받음 줄을 "
+                        "다시 계산할 때도 결과 대조다). 번호 대조는 설계문서가 번호를 기각했을 때 다른 블록이 그 번호를 받드는지 보려고 "
+                        "그 블록의 `design.md` 를 읽는다. 받음 줄이 없으면 그 자리가 파일이 아니어도(블롭이 아님) 알림은 「%s」 그대로이고, "
                         "`job_results.py check` 를 돌릴 때 검사 불가(종료 코드 3)가 난다." % TS.NO_RECEIPT, self.s10())
 
     def test_received_without_the_output_file(self):   # 결과 받음인데 산출물 칸의 파일이 그 끝에 없다 — 경고(1)
@@ -249,8 +250,10 @@ class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 
                         "다. 다른 블록이 예약한 파일은 `%s`, 공유 파일 · 머리 `paths` · 자기 과제 폴더 아래 · 어느 블록이 예약한 "
                         "파일을 뺀 나머지(팀 폴더의 다른 파일도 든다)는 `%s` 다. 그 과제의 알림이라 종료 코드를 바꾸지 않고, 바꾼 "
                         "파일을 git 이 읽지 못하면 `git 읽기 실패 — …` 로 검사 불가(종료 코드 3)다. 기본 브랜치에 있는 과제(%s)에는 "
-                        "내지 않는다 — 잴 브랜치 끝이 없다."
-                        % (RS.RESERVE_VIOLATION % ("<파일>", "<블록>"), RS.RESERVE_OUTSIDE % "<파일들>", TS.MERGED), self.s10())
+                        "내지 않는다 — 잴 브랜치 끝이 없다. 단계가 「%s」 인 과제(얕은 클론)에는 예약을 재지 않고 알림도 내지 않으며, 그 "
+                        "과제의 근거 끝에 `· %s` 가 붙는다."
+                        % (RS.RESERVE_VIOLATION % ("<파일>", "<블록>"), RS.RESERVE_OUTSIDE % "<파일들>", TS.MERGED,
+                           TS.UNKNOWN, TS.RESERVE_UNSCANNED), self.s10())
 
     def test_task_unreadable_result_without_a_receipt(self):   # 리더 물음 1 — 로드맵 밖 과제의 블롭 아닌 결과 파일 · 종료 코드 그대로
         scan = self.s10().split("**로드맵 밖 과제.**", 1)[1].split("**계산 결과의 칸.**", 1)[0]
