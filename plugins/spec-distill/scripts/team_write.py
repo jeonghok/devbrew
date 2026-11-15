@@ -165,18 +165,28 @@ def _user_words(rel: str, data: bytes, W) -> tuple:
     return first, team_files.byte_lines(data)[first - 1:last], sids
 
 
-def _framing_in_copy(existing: bytes) -> bool:
-    """있는 원자료 사본에 framing 구간(원문 · 질문 전체)이 이미 들었는가. 사본을 읽지 못하면 거짓 — 그 오류는 덧붙일 때 난다."""
+def framing_pair(existing: bytes, brief_rel: str):
+    """사본에 든 이 인터뷰의 framing audit 경로, 없으면 None — 이 brief 의 첫 사용자 원문 구간 바로 앞 두 구간이 같은 출처의
+    원문 · 질문 전체 차례일 때만 그 출처다(wanted_sections 가 한 번에 붙이는 차례). 짝이 아니거나 사본을 읽지 못하면 None
+    — 틀려도 멈추거나 표지를 적는 쪽으로만 틀린다."""
     try:
-        return bool(existing) and any(s.label in team_files.LABELS[:2] for s in team_files.parse_original(existing))
+        sections = team_files.parse_original(existing) if existing else []
     except team_files.FormatError:
-        return False
+        return None
+    first = next((i for i, s in enumerate(sections) if s.source == brief_rel and s.label == team_files.LABELS[2]), None)
+    if first is None or first < 2:
+        return None
+    head, questions = sections[first - 2], sections[first - 1]
+    if (head.label, questions.label) != team_files.LABELS[:2] or head.source != questions.source:
+        return None
+    return head.source
 
 
 def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = b"") -> list:
     """original.md 에 옮길 구간들 — framing 원문 · framing 질문 전체 · brief §6 · audit §6 순서.
     항목은 team_files.extend_original 의 (source, commit, label, first, lines, note). framing audit 없이 옮기는 구간에는
-    표지 NO_FRAMING 을 적는다 — 있는 사본(existing)에 framing 구간이 이미 들었으면 적지 않는다."""
+    표지 NO_FRAMING 을 적는다. 있는 사본(existing)에 이 인터뷰의 framing 짝(framing_pair)이 이미 들었으면 framing audit 를
+    찾지 못해도 멈추지 않고 표지도 적지 않는다 — 원문 없이 만들지 않는다는 뜻은 사본 안의 짝으로 지켜진다."""
     brief_rel = W.rel(top, brief)
     if not brief_rel.endswith(".md"):
         raise W.Usage("--brief 는 .md 파일이다: %s" % brief_rel)
@@ -187,7 +197,8 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
     if found and given and found != given:
         raise W.Usage("--framing-audit(%s) 이 인터뷰 상태 파일이 가리키는 framing audit(%s) 와 다르다 — 하나만 쓴다"
                       % (given, found))
-    if lost and not given:   # framing 을 거친 인터뷰다 — 그 원문 없이 조용히 가지 않는다
+    paired = framing_pair(existing, brief_rel)
+    if lost and not given and not paired:   # framing 을 거친 인터뷰다 — 그 원문 없이 조용히 가지 않는다
         raise W.Refused(lost)
     framing = found or given
     out, note = [], ""
@@ -197,7 +208,7 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
         if kind != FRAMING_TYPE:
             raise W.Refused("%s 는 framing audit 이 아니다 — 머리 type 이 %s 가 아니다(%s)" % (framing, FRAMING_TYPE, kind or "없음"))
         out += [(framing, commit, label, first, lines, "") for label, first, lines in _framing_parts(framing, data, W)]
-    elif not _framing_in_copy(existing):
+    elif not paired:
         note = NO_FRAMING
     b_commit, b_data = _committed(top, brief_rel, W)
     a_commit, a_data = _committed(top, audit_rel, W)
