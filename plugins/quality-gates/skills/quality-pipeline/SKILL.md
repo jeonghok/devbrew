@@ -710,31 +710,30 @@ The verdict is the **one** `verdict:` line at the tail of `$RV/synth.out` (with 
 이미 보였다. `lowered: 0` 이면 게이트 없이 라우팅으로 간다.
 
 ```text
-AskUserQuestion({ questions: [{
-  question: "재비판이 심각도를 낮춘 지적이 <n>개 있다(위 「낮춘 지적」 절). 되올릴 것을 고르세요 — 되올리면 원래 심각도로 판정에 들어간다.",
+AskUserQuestion({ questions: [<낮춘 지적을 표의 순서로 셋씩 묶어 묶음마다 질문 하나 — 한 호출에 넷까지, 넘으면 다음 호출> {
+  question: "재비판이 심각도를 낮춘 지적 <n>개 가운데 <이 묶음의 번호들 — 예: L1 · L2 · L3>. 되올릴 것을 고르세요 — 되올리면 원래 심각도로 판정에 들어간다.\n전문: <$RV/synth.out 의 경로><n ≥ 4 일 때만: \n전부 되올리려면 기타 칸에 「전부」>",
   header: "낮춘 지적",
-  options: <n ≤ 3: 지적마다 {label: "<파일 이름>:<줄> (L<k>)", description: "<낮춘 이유를 쉬운 말 한 줄로>"} + {label: "그대로 둔다", description: "낮춘 대로 둔다."}
-            n ≥ 4: {label: "전부 되올린다", description: "낮춘 지적 <n>개를 모두 원래 심각도로 되돌린다."} · {label: "그대로 둔다", description: "낮춘 대로 둔다."} — 일부만이면 「기타」에 번호(예: L1, L3)>,
-  multiSelect: <n ≤ 3: true · n ≥ 4: false> }] })
+  options: <이 묶음의 지적마다 {label: "<파일 이름>:<줄> (L<k>)", description: "문제: <그 지적의 내용을 쉬운 말 한 구절로> · 낮춘 이유: <쉬운 말 한 구절로>"}> + {label: "그대로 둔다", description: "이 묶음의 지적을 낮춘 대로 둔다."},
+  multiSelect: true }] })
 ```
 
 추천을 달지 않는다 — 낮춘 지적을 되올릴지는 리뷰 대상 코드를 쓴 쪽이 권할 수 없는 처분이다.
 
-n ≤ 3 은 지적을 여러 개 고를 수 있다. n ≥ 4 는 하나만 고른다 — 「전부 되올린다」 와 「그대로 둔다」 는 서로 어긋나 함께 고를 수 없다.
+문제 요약과 낮춘 이유는 「낮춘 지적」 표의 「내용」 · 「낮춘 이유」 칸에서 온다. 묶음마다 지적을 여러 개 고를 수 있다.
 
-- 지적을 하나도 고르지 않았다(n ≤ 3 에서 「그대로 둔다」만 · 빈 답) · n ≥ 4 에서 「그대로 둔다」 → 다시 합성하지 않고 아래 라우팅으로 간다.
-- 되올릴 것을 골랐다 — n ≤ 3: 고른 `L<k>` 들(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) · n ≥ 4(하나만 고른다): 「전부 되올린다」 → `all` 로 ·
-  「기타」면 적힌 `L<k>` 들로 — Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다. 그 새 출력으로 이 Step 4.5 의 표면화(제목 줄 · 원문 · 범위 파일 ·
-  degrade · 차등 요약)를 다시 한 뒤 아래 라우팅으로 간다. 새 출력에는 이 게이트를 다시 띄우지 않는다.
-- 「기타」에 `L<k>` 가 하나도 없으면 받은 글을 그대로 보이고 한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다.
-- 「기타」 칸 번호는 다시 합성하기 전에 아래 펜스로 「낮춘 지적」 표의 번호와 맞춘다 — 선택지 이름으로 고른 번호와 「전부 되올린다」(`all`)는 표에서 온 것이라 맞추지 않는다.
-  `lowered-pick: bad …` 면 받은 글과 표의 번호를 보이고 한 번만 다시 묻는다. 두 번째 답에도 표에 없는 번호가 있으면 되올리지 않고 낮춘 대로 둔 채 라우팅으로 간다
-  (그 사실을 한 줄로 알린다: `> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`).
+- 모든 묶음에서 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 라우팅으로 간다.
+- 되올릴 것을 골랐다 → 묶음마다 고른 `L<k>` 를 모아(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다. 그 새 출력으로 이 Step 4.5 의 표면화를 다시 한 뒤 아래 라우팅으로 간다. 새 출력에는 이 게이트를 다시 띄우지 않는다.
+- 기타 칸의 「전부」(같은 뜻의 말 포함) → 어느 묶음에 써도 낮춘 지적 전체다. `all` 로 되올리고 아직 띄우지 않은 호출은 건너뛴다.
+- 「전부」와 다른 답이 부딪히면 — 한 묶음에 「전부」가 있고 다른 묶음(같은 호출이든 앞 호출이든)에 「그대로 둔다」나 낱개 선택이 있다 — 어느 쪽도 적용하지 않고 질문 하나로 다시 묻는다: 선택지는 「전부 되올린다」 · 「고른 것만 되올린다」 · 「그대로 둔다」 셋이고 추천을 달지 않는다 — 되올림은 리뷰 대상 코드를 쓴 쪽이 권할 수 없는 처분이다.
+- 기타 칸에 `L<k>` 도 「전부」도 없으면 받은 글을 그대로 보이고 한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다.
+- 기타 칸의 글은 다시 합성하기 전에 아래 펜스로 맞춘다. `lowered-pick: all` 이면 `all` 로 넘긴다. `lowered-pick: bad …` 면 받은 글과 표의 번호를 보이고 한 번만 다시 묻는다(두 번째도 표에 없는 번호면 지금처럼 되올리지 않고 알린다).
+  알리는 줄: `> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`
 
 ```bash
 RV="<Step 3.5 의 절대 경로>"
 PICK='<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3>'
 KNOWN=$(sed -n '/^| 번호 | 위치 | 원래 심각도 |/,/^$/p' "$RV/synth.out" | sed -n 's/^| \(L[0-9][0-9]*\) |.*/\1/p' | tr '\n' ' ')
+case "$PICK" in 전부|all) echo "lowered-pick: all"; exit 0 ;; esac
 BAD=""
 for k in $(printf '%s' "$PICK" | tr ',' ' '); do
   case " ${KNOWN}" in *" ${k} "*) ;; *) BAD="${BAD} ${k}" ;; esac
@@ -810,12 +809,15 @@ patch with the intent source (`$RD/intent.md`):
 | 3 | 회귀 tests/test_c.py::test_x — 계획: <한 줄> | 적용 | |
 ```
 
+표를 출력할 때 같은 글을 Write 도구로 `$RV/classification.md` 에 쓴다 — 분류 질문의 `표:` 줄이 그 경로다.
+
 ### Fix-loop decision
 
 **Decision tool (N < CAP only — N = CAP always goes to Max-iter decision instead).**
 
 `<summary>` is the `**Findings:**` counts line from `$RV/synth.out`, copied verbatim; for a
 differential-origin defect with no findings, the comma-joined `<unit> · <verdict>` list.
+질문에는 `<summary>` 대신 `<ask-line>` 을 싣는다 — `$RV/synth.out` 의 `질문 줄: ` 뒤 글자 그대로다. 차등 기원 결함이고 지적이 없으면 지금처럼 `<unit> · <verdict>` 목록이다.
 
 **범위 모드 갈래.** 범위 모드면 아래 일반 질문 대신 이 질문 하나만 띄운다 — 범위는 이미 있는 커밋이고 지금 체크아웃과
 다를 수 있어, 고침을 지금 작업 트리에 적용하면 리뷰한 대상과 고친 대상이 갈린다. 그래서 「고치고 다시 돌기」와 분류
@@ -825,17 +827,19 @@ differential-origin defect with no findings, the comma-joined `<unit> · <verdic
 AskUserQuestion({
   questions: [
     {
-      question: "qg 반복 N: 남은 지적이 있다(<summary>). 범위 모드는 이미 있는 커밋을 본다 — 고칠 것은 새 브랜치에서 고친다. 어떻게 끝낼까?",
+      question: "qg 반복 N: <ask-line>\n<지적마다 한 줄 — <file>:<line> — <요약>>\n전문: <$RV/synth.out 의 경로>\n범위 모드는 이미 있는 커밋을 본다 — 고칠 것은 새 브랜치에서 고친다. 어떻게 끝낼까?",
       header: "qg 반복 N",
       options: [
-        {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
-        {label: "멈추기",               description: "이 반복에서 멈춘다. 지적은 새 브랜치에서 고친다."}
+        {label: "지금 판정으로 끝내기", description: "얻음: 지금 판정으로 바로 끝낸다 · 내줌: 남은 지적이 고쳐지지 않은 채 받아들인 것으로 기록된다"},
+        {label: "멈추기",               description: "얻음: 여기서 멈추고 지적을 새 브랜치에서 고친다 · 내줌: 판정은 남지만 이번 실행의 결과는 중단으로 기록된다"}
       ],
       multiSelect: false
     }
   ]
 })
 ```
+
+지적 줄이 여덟을 넘으면 분류 질문과 같은 기준으로 질문을 나눈다.
 
 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 범위 모드에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
@@ -849,17 +853,17 @@ AskUserQuestion({
 AskUserQuestion({
   questions: [
     {
-      question: "qg 반복 N: 남은 지적이 있다(<summary>). 어떻게 할까?",
+      question: "qg 반복 N: <ask-line>\n전문: <$RV/synth.out 의 경로>\n어떻게 할까?",
       header: "qg 반복 N",
       options: [
-        {label: "고치고 다시 돌기",      description: "분류표의 「적용」 항목을 이 턴에서 파일에 고치고 다음 반복을 돈다(차등 테스트 포함)."},
-        {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
-        {label: "멈추기",               description: "이 반복에서 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다."}
+        {label: "고치고 다시 돌기",      description: "얻음: 적용으로 분류된 지적을 고치고 리뷰와 차등 테스트로 다시 확인한다 · 내줌: 분류가 틀렸으면 틀린 고침이 이미 파일에 들어가 있다"},
+        {label: "지금 판정으로 끝내기", description: "얻음: 지금 판정으로 바로 끝낸다 · 내줌: 남은 지적이 고쳐지지 않은 채 받아들인 것으로 기록된다"},
+        {label: "멈추기",               description: "얻음: 여기서 멈추고 지적을 직접 고친 뒤 다시 돌린다 · 내줌: 이번 실행의 판정이 PR 코멘트로 남지 않는다"}
       ],
       multiSelect: false
     },
     {
-      question: "분류표의 적용/제외를 바꿀까요? 바꿀 항목 번호는 「기타」에 적는다(예: 2, 5).",
+      question: "분류표의 적용/제외를 바꿀까요? 바꿀 항목 번호는 「기타」에 적는다(예: 2, 5).\n<항목마다 한 줄 — #<번호> <지적 요약> · <적용|제외> · <제외 사유(제외일 때)>>\n표: <$RV/classification.md 의 경로>",
       header: "분류",
       options: [
         {label: "분류표 그대로",           description: "표의 적용/제외대로 고친다."},
@@ -873,13 +877,14 @@ AskUserQuestion({
 
 둘째 질문(분류)에는 추천을 달지 않는다 — 분류표는 오케스트레이터가 자기 코드의 지적에 매긴 적용/제외다.
 
+줄은 분류표에서 그대로 온다. 한 질문에 여덟 줄까지 싣고, 넘으면 같은 선택지로 질문을 나눈다(한 호출에 질문 넷까지 — 반복 게이트 질문을 포함해 센다 — 넘으면 다음 호출).
+
 The table can hold any number of items — the second question takes item numbers through 「기타」,
 so the gate never needs one question per item. Each number typed there flips that item (적용 ↔
 제외). A user's change overrides your classification, in either direction.
 
 **「고치고 다시 돌기」 옵션 문구 — 차등 테스트 기원(`blocking: 0`)에는 그대로 쓰지 않는다.** 그 트리거에는 리뷰어
-패치가 없다 — 「고치고 다시 돌기」의 `description` 을 "<summary> 에 적힌 회귀 단위(예: NEW_REGRESSION)마다
-「적용」 계획대로 고치고 다음 반복을 돈다(차등 테스트 포함)." 로 바꿔 싣는다. 다른 옵션 문구는 그대로다.
+패치가 없다 — 「고치고 다시 돌기」의 `description` 을 "얻음: 회귀가 난 테스트마다 쓴 계획대로 고치고 차등 테스트로 다시 확인한다 · 내줌: 계획이 틀렸으면 틀린 고침이 이미 파일에 들어가 있다" 로 바꿔 싣는다. 다른 옵션 문구는 그대로다.
 
 Branch on answer:
 첫 질문에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
@@ -937,12 +942,12 @@ After iteration CAP still has blocking findings or a differential defect, show t
 AskUserQuestion({
   questions: [
     {
-      question: "qg 가 반복 상한(<CAP>번 — 기본 5번)에 닿았다. 마지막 지적: <summary>. 반복을 하나 더 열까, 지금 판정으로 끝낼까, 멈출까?",
+      question: "qg 가 반복 상한(<CAP>번 — 기본 5번)에 닿았다. <ask-line>\n전문: <$RV/synth.out 의 경로>\n반복을 하나 더 열까, 지금 판정으로 끝낼까, 멈출까?",
       header: "qg 최대 반복",
       options: [
-        {label: "한 번 더 돌기",        description: "반복을 하나 더 연다 — 분류표의 「적용」 항목을 고치고 다시 돈다(차등 테스트 포함). 그 반복 끝에 다시 묻는다."},
-        {label: "지금 판정으로 끝내기", description: "남은 지적을 그대로 두고 지금 판정으로 끝낸다."},
-        {label: "멈추기",               description: "파이프라인을 멈춘다 — PR 코멘트도 달지 않는다. 지적을 고친 뒤 /quality-gates:quality-pipeline 을 다시 돌린다."}
+        {label: "한 번 더 돌기",        description: "얻음: 상한을 넘어 반복 하나를 열어 적용 지적을 고치고 다시 확인한다 · 내줌: 분류가 틀렸으면 틀린 고침이 이미 파일에 들어가 있다"},
+        {label: "지금 판정으로 끝내기", description: "얻음: 상한에서 지금 판정으로 끝낸다 · 내줌: 남은 지적이 고쳐지지 않은 채 받아들인 것으로 기록된다"},
+        {label: "멈추기",               description: "얻음: 파이프라인을 멈추고 지적을 직접 고친 뒤 다시 돌린다 · 내줌: 이번 실행의 판정이 PR 코멘트로 남지 않는다"}
       ],
       multiSelect: false
     },
@@ -951,8 +956,7 @@ AskUserQuestion({
 })
 ```
 
-차등 테스트 기원(`blocking: 0`)이면 「한 번 더 돌기」의 `description` 을 Fix-loop decision 의 「고치고 다시 돌기」 차등 기원
-문구처럼 회귀 단위를 고치는 말로 바꿔 싣는다. 두 번째 질문의 답은 Fix-loop decision 과 같이 분류를 바꾼다.
+차등 테스트 기원(`blocking: 0`)이면 「한 번 더 돌기」의 `description` 을 "얻음: 상한을 넘어 반복 하나를 열어 회귀 테스트를 고치고 다시 확인한다 · 내줌: 계획이 틀렸으면 틀린 고침이 이미 파일에 들어가 있다" 로 바꿔 싣는다. 두 번째 질문의 답은 Fix-loop decision 과 같이 분류를 바꾼다.
 
 Branch on answer:
 이 질문에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
@@ -1015,8 +1019,8 @@ AskUserQuestion({
       question: "<file> 수정에 실패했다: <reason>. 이번 수정 반복을 멈출까, 이 파일만 건너뛰고 나머지를 계속할까?",
       header: "수정 실패",
       options: [
-        {label: "이번 반복 멈추기",  description: "이번 수정 반복 전체를 멈추고 qg 판정에 실패로 올린다."},
-        {label: "이 파일만 건너뛰기", description: "이 파일의 수정만 건너뛰고 나머지 수정은 이번 반복에서 계속 적용한다."}
+        {label: "이번 반복 멈추기",  description: "얻음: 이번 수정 반복을 통째로 멈추고 실패로 판정에 올린다 · 내줌: 이번 실행이 실패 판정으로 올라가고 남은 수정은 적용되지 않는다"},
+        {label: "이 파일만 건너뛰기", description: "얻음: 나머지 수정은 계속 적용해 반복을 살린다 · 내줌: 이 파일의 지적은 고쳐지지 않은 채 「Edit 실패」 사유로 제외 기록에 남는다"}
       ],
       multiSelect: false
     }

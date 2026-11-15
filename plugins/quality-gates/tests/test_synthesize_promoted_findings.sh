@@ -289,7 +289,8 @@ added:
     confidence: 9
     sources: [security-reviewer, code-reviewer]'
 out10e="$(rf_synth "$tmp/empty" 2>/dev/null)"
-row10e="$(echo "$out10e" | grep 'evil.py' | head -1)"
+# 표의 행만 본다 — 질문 줄(`질문 줄: … evil.py:1 …`)도 위치를 싣지만 낸 곳 칸은 표에만 있다.
+row10e="$(echo "$out10e" | grep '^| .*evil\.py' | head -1)"
 if echo "$row10e" | grep -q '| code-recritic |' \
    && ! echo "$row10e" | grep -q 'security-reviewer'; then
   ok "10e — 승격 발견의 Source가 code-recritic으로 강제된다 (교차 보증 위조 불가)"
