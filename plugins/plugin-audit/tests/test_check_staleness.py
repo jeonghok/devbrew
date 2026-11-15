@@ -567,6 +567,25 @@ class TestCategoryAbsence(unittest.TestCase):
     def test_indented_cost_class_outside_metadata_flagged(self):
         self.assertEqual(len(self._cost_hits("hooks:\n  cost_class: low\n")), 1)
 
+    def test_nested_deeper_cost_class_flagged(self):
+        self.assertEqual(
+            len(self._cost_hits("metadata:\n  inner:\n    cost_class: low\n")), 1)
+
+    def test_cost_class_after_sibling_child_and_blank_line_not_flagged(self):
+        self.assertEqual(
+            len(self._cost_hits("metadata:\n  author: x\n\n  cost_class: low\n")), 0)
+
+    def test_body_only_metadata_block_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._plugin(d)
+            (p / "skills" / "doing-thing").mkdir(parents=True)
+            (p / "skills" / "doing-thing" / "SKILL.md").write_text(
+                "---\nname: doing-thing\n---\nmetadata:\n  cost_class: low\n",
+                encoding="utf-8")
+            hits = [f for f in run_sweep(p)
+                    if f["class"] == "category absence" and f.get("norm") == "cost_class"]
+        self.assertEqual(len(hits), 1)
+
     # --- kill switch ---
     def test_kill_switch_absent_with_hook_flagged(self):
         with tempfile.TemporaryDirectory() as d:
