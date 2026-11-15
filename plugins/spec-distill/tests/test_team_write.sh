@@ -985,4 +985,99 @@ assert_eq "$(sqjob "$T/sq2")" "0" "출처 커밋이 없다: job new rc 0"
 assert_contains "$(cat "$T/out.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md " "출처 커밋이 없다: job new 가 검사 불가 줄을 낸다"
 assert_contains "$(cat "$T/out.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다" "출처 커밋이 없다: job new 가 그 커밋을 짚는다"
 
+
+# ── framing 을 거친 인터뷰의 framing audit 찾기 (PR #283 통합 리뷰) ───────────────────
+# 찾는 규칙은 인터뷰와 같다 — seed 와 같은 폴더에서 seed 파일 이름의 .md 를 .audit.md 로 바꾼 파일. seed 머리의 audit_file 은 따르지 않는다.
+# 상태 파일의 seed 가 「없음」 이 아닌데 seed 파일이나 그 이름의 audit 이 없으면 쓰지 않고 멈춘다(rc 1). 푸는 길은 original --framing-audit 이다.
+# seed 가 「없음」 이거나 상태 파일이 없는 갈래는 위 t2 · xa 가 잰다.
+fresh fa
+FA="$T/fa"
+mkdir -p "$FA/docs/fa"
+fa_audit() {  # fa_audit <이름> <표시 글> — docs/fa/<이름> 에 framing audit 꼴 파일(원문 구간 여섯 줄 · 질문 전체 구간 네 줄)
+  printf -- '---\ntype: interview-seed-audit\n---\n\n# 찾기 픽스처\n\n## 1. 원문\n\n> %s 첫 줄\n> %s 가운데 줄\n> %s 끝 줄\n\n## 2. 질문 전체\n\n- 물음 — %s 는 어디서 왔나? 답: 파일 이름\n\n## 3. 긴 초안\n\n비움.\n' "$2" "$2" "$2" "$2" > "$FA/docs/fa/$1"
+}
+fa_seed() {  # fa_seed <이름> [audit_file 값] — docs/fa/<이름> 에 seed(값을 주면 머리에 audit_file 줄)
+  { printf -- '---\ntype: interview-seed\n'; [ $# -gt 1 ] && printf 'audit_file: %s\n' "$2"; printf -- '---\n\n찾기 픽스처의 seed 본문.\n'; } > "$FA/docs/fa/$1"
+}
+fa_pair() {  # fa_pair <줄기> <seed 레포 상대> — t 픽스처의 brief · audit 을 docs/fa/<줄기>-brief.* 로 베끼고 상태 파일에 그 seed 를 적는다
+  cp "$FA/docs/iv/t-brief-interview.md" "$FA/docs/fa/$1-brief.md"
+  cp "$FA/docs/iv/t-brief-interview.audit.md" "$FA/docs/fa/$1-brief.audit.md"
+  printf -- '---\ntype: interview-state\nseed: %s\n---\n' "$2" > "$FA/docs/fa/$1-brief.state.md"
+}
+fa_orig() {  # fa_orig <줄기> [인자…] — docs/fa/<줄기>-brief.md 로 팀 폴더 fa-<줄기> 에 original, rc 를 echo 한다
+  local k="$1"; shift
+  (cd "$FA" && python3 "$RW" original --brief "docs/fa/$k-brief.md" --out "${RD}fa-$k" "$@") > "$T/out.txt" 2>&1; echo $?
+}
+fa_create() {  # fa_create <줄기> — 같은 brief 로 팀 폴더 fa-<줄기> 에 create --layout team(표는 줄기마다 따로), rc 를 echo 한다
+  [ -f "$T/fa-$1.md" ] || ttable "$T/fa-$1.md" "$TP1" "$TE1" "$TE2"
+  (cd "$FA" && python3 "$RW" create --layout team --brief "docs/fa/$1-brief.md" --audit "docs/fa/$1-brief.audit.md" \
+     --plan-table "$T/fa-$1.md" --out "${RD}fa-$1" --title "찾기 픽스처" --date 2026-11-15 --approval "이대로 승인 (권장)") > "$T/out.txt" 2>&1; echo $?
+}
+fa_o() { printf '%s' "$FA/${RD}fa-$1/intent/original.md"; }   # fa_o <줄기> — 그 팀 폴더의 원자료 사본 경로
+fa_heads() { marker_heads "$(fa_o "$1")" | sed -n 1,2p; }   # fa_heads <줄기> — 첫 두 구간의 출처 경로 · 절 이름
+fa_want() { printf '%s\n' "<!-- 출처: docs/fa/$1 · 원문 -->" "<!-- 출처: docs/fa/$1 · 질문 전체 -->"; }   # fa_want <audit 이름>
+fa_match() { python3 "$T/sections_match.py" "$(fa_o "$1")" "$FA"; }
+fa_audit ka-seed.audit.md "이름-규칙-글"; fa_audit ka-other.audit.md "머리-값-글"
+fa_seed ka-seed.md ka-other.audit.md; fa_pair ka docs/fa/ka-seed.md              # 머리 값과 이름 규칙이 다른 파일을 가리키고 둘 다 있다
+fa_audit kb-seed.audit.md "kb-이름-글"; fa_seed kb-seed.md kb-gone.audit.md; fa_pair kb docs/fa/kb-seed.md   # 머리 값의 파일은 없다
+fa_seed kc-seed.md; fa_pair kc docs/fa/kc-seed.md                                # seed 는 있고 audit 이 없다
+fa_seed kd-seed.md ka-other.audit.md; fa_pair kd docs/fa/kd-seed.md              # 머리 값의 파일만 있고 이름 규칙의 파일은 없다
+fa_audit ke-seed.audit.md "ke-글"; fa_pair ke docs/fa/ke-seed.md                 # seed 파일이 없다(이름 규칙 자리의 audit 은 있다)
+fa_seed kf-seed.txt; fa_pair kf docs/fa/kf-seed.txt                              # seed 이름이 .md 로 끝나지 않는다
+gx "$FA" add -- docs/fa && gx "$FA" commit -qm fa-fixtures
+[ ! -e "$FA/docs/fa/kb-gone.audit.md" ] && [ ! -e "$FA/docs/fa/kc-seed.audit.md" ] && [ ! -e "$FA/docs/fa/kd-seed.audit.md" ] && [ ! -e "$FA/docs/fa/ke-seed.md" ] \
+  && ok "픽스처: 없어야 할 파일 넷(kb 의 머리 값 · kc · kd 의 이름 규칙 audit · ke 의 seed)이 없다" || no "픽스처: 없어야 할 파일이 있다"
+assert_eq "$(gx "$FA" status --porcelain -- docs/fa)" "" "픽스처: docs/fa 가 모두 커밋됐다"
+
+# audit_file 이 이름 규칙과 다른 파일을 가리킨다 — 이름 규칙의 파일을 옮긴다
+assert_eq "$(fa_orig ka)" "0" "audit_file 이 다른 파일: original rc 0"
+assert_eq "$(fa_heads ka)" "$(fa_want ka-seed.audit.md)" "audit_file 이 다른 파일: seed 이름으로 정한 audit 의 두 절이 실린다"
+assert_file_has "$(fa_o ka)" "> 이름-규칙-글 첫 줄" "audit_file 이 다른 파일: 이름 규칙 파일의 원문이 사본에 있다"
+assert_eq "$(grep -c '머리-값-글' "$(fa_o ka)")" "0" "audit_file 이 다른 파일: 머리 값이 가리킨 파일의 글은 없다"
+assert_eq "$(fa_match ka)" "ok" "audit_file 이 다른 파일: 구간이 출처와 바이트가 같다"
+assert_eq "$(fa_orig ka --framing-audit docs/fa/ka-other.audit.md)" "2" "audit_file 이 다른 파일: 머리 값의 파일을 --framing-audit 로 주면 이름 규칙의 파일과 달라 rc 2"
+assert_contains "$(cat "$T/out.txt")" "docs/fa/ka-seed.audit.md" "audit_file 이 다른 파일: rc 2 사유가 이름 규칙의 파일을 보인다"
+assert_eq "$(fa_orig ka --framing-audit docs/fa/ka-seed.audit.md)" "0" "audit_file 이 다른 파일: 이름 규칙의 파일을 --framing-audit 로 주면 rc 0(양의 짝)"
+# audit_file 이 없는 파일을 가리킨다 — 이름 규칙의 파일이 있으니 그것을 옮긴다(create 의 길로)
+assert_eq "$(fa_create kb)" "0" "audit_file 이 없는 파일: create --layout team rc 0"
+assert_eq "$(fa_heads kb)" "$(fa_want kb-seed.audit.md)" "audit_file 이 없는 파일: seed 이름으로 정한 audit 의 두 절이 실린다"
+assert_eq "$(grep -c 'framing audit 없음' "$(fa_o kb)")" "0" "audit_file 이 없는 파일: 「framing audit 없음」 으로 떨어지지 않는다"
+assert_eq "$(fa_match kb)" "ok" "audit_file 이 없는 파일: 구간이 출처와 바이트가 같다"
+
+# 멈춤 — 쓰지 않고 rc 1, 사유에 찾은 자리와 푸는 길
+b_fa="$(snap "$FA")"
+fa_stop() {  # fa_stop <rc> <라벨> <사유에 있어야 할 글…> — 방금 명령의 rc 1 · 사유 글 · 푸는 길 · 나무 그대로
+  local rc="$1" label="$2" out; shift 2
+  out="$(cat "$T/out.txt")"
+  assert_eq "$rc" "1" "${label}: rc 1"
+  assert_contains "$out" "framing audit 를 찾지 못했다" "${label}: 찾지 못했다고 말한다"
+  for needle; do assert_contains "$out" "$needle" "${label}: 사유에 「${needle}」"; done
+  assert_contains "$out" "original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>" "${label}: 푸는 길(original 의 --framing-audit)을 가리킨다"
+  [ "$(snap "$FA")" = "$b_fa" ] && ok "${label}: 나무 그대로(폴더 · 파일 내용 · 링크)" || no "${label}: 나무가 바뀌었다"
+}
+fa_stop "$(fa_orig kc)" "seed 는 있고 audit 이 없다 · original" "docs/fa/kc-seed.audit.md" "docs/fa/kc-brief.state.md"
+fa_stop "$(fa_create kc)" "seed 는 있고 audit 이 없다 · create" "docs/fa/kc-seed.audit.md" "docs/fa/kc-seed.md"
+fa_stop "$(fa_orig kd)" "audit_file 의 파일만 있다 · original" "docs/fa/kd-seed.audit.md"
+assert_not_contains "$(cat "$T/out.txt")" "ka-other" "audit_file 의 파일만 있다: 머리 값의 파일을 찾은 자리로 내지 않는다"
+fa_stop "$(fa_create kd)" "audit_file 의 파일만 있다 · create" "docs/fa/kd-seed.audit.md"
+fa_stop "$(fa_orig ke)" "seed 파일이 없다 · original" "seed 파일 docs/fa/ke-seed.md 이 없다"
+fa_stop "$(fa_create ke)" "seed 파일이 없다 · create" "seed 파일 docs/fa/ke-seed.md 이 없다"
+fa_stop "$(fa_orig kf)" "seed 이름이 .md 가 아니다 · original" "docs/fa/kf-seed.txt" ".md 로 끝나지 않"
+for k in kc kd ke kf; do [ ! -e "$FA/${RD}fa-$k" ] && ok "멈춤: 팀 폴더 fa-$k 를 만들지 않았다" || no "멈춤: 팀 폴더 fa-$k 가 생겼다"; done
+
+# 푸는 길 — original --framing-audit 로 원자료 사본을 먼저 만들면 create --layout team 이 그것을 그대로 받는다
+assert_eq "$(fa_orig kc --framing-audit docs/fa/ka-other.audit.md)" "0" "푸는 길: original --framing-audit rc 0"
+assert_eq "$(fa_heads kc)" "$(fa_want ka-other.audit.md)" "푸는 길: 준 audit 의 두 절이 먼저 실린다"
+cp "$(fa_o kc)" "$T/fa-kc.o"
+assert_eq "$(fa_create kc)" "0" "푸는 길: 그 뒤 create --layout team rc 0"
+cmp -s "$(fa_o kc)" "$T/fa-kc.o" && ok "푸는 길: create 는 있던 original.md 를 바이트 그대로 받는다" || no "푸는 길: create 가 original.md 를 바꿨다"
+assert_file_has "$(fa_o kc)" "> 머리-값-글 첫 줄" "푸는 길: 준 audit 의 원문이 original.md 에 있다"
+assert_eq "$(markers "$(fa_o kc)")" "4" "푸는 길: 구간 넷(원문 · 질문 전체 · brief §6 · audit §6)"
+assert_eq "$(grep -c 'framing audit 없음' "$(fa_o kc)")" "0" "푸는 길: 「framing audit 없음」 표지가 없다"
+assert_eq "$(fa_match kc)" "ok" "푸는 길: 구간이 출처와 바이트가 같다"
+assert_eq "$( (cd "$FA" && python3 "$S/team_layout.py" check --roadmap "${RD}fa-kc/roadmap.md") > "$T/chk.txt" 2>&1; echo $?)" "0" "푸는 길: 만든 나무가 구조 검사를 통과한다"
+[ -f "$FA/${RD}fa-kc/jobs/E1/INTENT.md" ] && ok "푸는 길: 과제 폴더를 만들었다" || no "푸는 길: 과제 폴더가 없다"
+assert_eq "$(fa_orig ke --framing-audit docs/fa/ke-seed.audit.md)" "0" "푸는 길: seed 파일이 없어도 --framing-audit 을 주면 rc 0"
+assert_eq "$(fa_heads ke)" "$(fa_want ke-seed.audit.md)" "푸는 길: seed 파일이 없는 짝도 준 audit 의 두 절을 싣는다"
+
 finish
