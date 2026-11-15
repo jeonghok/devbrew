@@ -166,8 +166,8 @@ class Layers(unittest.TestCase):
         rd.check_layer({"type": "roadmap", "source_brief": "b.md", "specs_dir": "s/", "plans_dir": "p/", "test_command": "t",
                         "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
 
-    def test_repo_layer_accepts_all_ten_keys_and_not_meta(self):
-        self.assertEqual(len(rd.KEYS), 10)
+    def test_repo_layer_accepts_all_keys_and_not_meta(self):
+        self.assertEqual(len(rd.KEYS), 12)
         rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
@@ -264,6 +264,46 @@ class InternalErrors(unittest.TestCase):
             rc = rd.main(["get", "interview_dir", "--root", self.tmp])
         self.assertEqual((rc, out.getvalue()), (3, ""))
         self.assertIn("내부 오류", err.getvalue())
+
+
+
+class Budgets(unittest.TestCase):   # R1 AC2
+    def test_defaults_and_repo_layer(self):
+        m = rd.merge_layers(None, {}, LABEL, [])
+        self.assertEqual((m["values"]["rules_budget"], m["values"]["handbook_budget"]), (8192, 16384))
+        m = rd.merge_layers(None, {"rules_budget": "4096", "handbook_budget": '"20000"'}, LABEL, [])
+        self.assertEqual((m["values"]["rules_budget"], m["values"]["handbook_budget"]), (4096, 20000))
+        self.assertEqual((m["sources"]["rules_budget"], m["errors"]), (LABEL, []))
+
+    def test_broken_value_falls_back_with_warning(self):
+        for bad in ("0", "-1", "8k", "", "８１９２"):
+            m = rd.merge_layers(None, {"rules_budget": bad}, LABEL, [])
+            self.assertEqual(m["values"]["rules_budget"], 8192, bad)
+            self.assertTrue(any("rules_budget" in w for w in m["warnings"]), bad)
+
+    def test_roadmap_layer_ignores_and_warns(self):
+        m = rd.merge_layers({"type": "roadmap", "rules_budget": "1", "handbook_budget": "1"}, {"rules_budget": "4096"}, LABEL, [],
+                            roadmap_path="r/roadmap.md")
+        self.assertEqual((m["values"]["rules_budget"], m["values"]["handbook_budget"], m["errors"]), (4096, 16384, []))
+        self.assertEqual(len([w for w in m["warnings"] if "레포 설정 파일" in w and "budget" in w]), 2)
+
+    def test_layout_is_roadmap_meta_not_setting(self):
+        rd.check_layer({"type": "roadmap", "source_brief": "b.md", "layout": "team"}, "roadmap")
+        rd.check_layer({"layout": "no-such"}, "roadmap")   # 값은 해결자가 판정하지 않는다
+        with self.assertRaises(rd.SettingsError) as c:
+            rd.check_layer({"layout": "team"}, "repo")
+        self.assertEqual(c.exception.kind, "unknown_key")
+        self.assertNotIn("layout", rd.KEYS)
+
+
+class ReadmeTable(unittest.TestCase):
+    def test_every_key_has_a_row(self):
+        text = (Path(__file__).resolve().parents[3] / "plugins/spec-distill/README.md").read_text(encoding="utf-8")
+        for key in rd.KEYS:
+            self.assertEqual(len([l for l in text.splitlines() if l.startswith("| `%s` |" % key)]), 1, key)
+        for key in rd.BUDGET_KEYS:
+            row = next(l for l in text.splitlines() if l.startswith("| `%s` |" % key))
+            self.assertTrue(row.rstrip().endswith("| 무시하고 경고 |"), row)
 
 
 if __name__ == "__main__":
