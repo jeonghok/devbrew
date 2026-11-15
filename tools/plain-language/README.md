@@ -1,8 +1,10 @@
 # tools/plain-language
 
-리포 안에서만 도는 쉬운 말 출력 도구 둘이다. 플러그인에 들어가지 않는다.
+리포 안에서만 도는 쉬운 말 출력 도구 셋이다. 플러그인에 들어가지 않는다.
 
 - `measure_output.py <목록.tsv>` — 고정한 세션 기록 목록(머리 `path\tsize\tmtime`)의 파일만 읽어 사람에게 보이는 글의 양을 다섯 값으로 낸다. 크기나 수정 시각이 목록과 다른 파일은 읽지 않고 따로 센다. 정의는 스크립트 머리에 있다.
 - `token_boundary.py --base <커밋>` — 규칙 블록 때문에 skill 앞 5,000토큰 경계 밖으로 새로 밀려난 절을 근사로 잰다.
+- `measure_questions.py <세션 기록 폴더…> [--pairs N]` — 질문 도구 호출을 직전에 부른 skill 로 나눠, 창 밖을 가리키는 문구가 든 질문 수 · 추천이 있는 질문 가운데 모든 설명에 얻음 · 내줌이 있는 비율 · 리뷰 결정 질문 가운데 「전문」 줄이 있는 비율을 낸다. 읽기만 하고 결과는 화면에만 낸다 — 기록은 사용자의 것이라 결과 파일을 커밋하지 않는다. 문구 목록은 `window_phrases.txt`.
+  - 고친 뒤(2026-11-15 추천의 대가 설계) 다시 잴 때의 기준: 창 밖을 가리키는 문구가 든 질문 0 · 리뷰 결정 질문의 「전문」 줄 비율 100% · 추천이 있는 질문의 얻음 · 내줌 비율이 PR 본문에 적힌 기준 수보다 높고, 모자란 질문은 `--pairs` 표본으로 읽는다 · 표본에서 리뷰어가 낸 길이 사라진 질문 0. 새 판을 깔고 리뷰를 몇 번 돈 뒤에 잰다.
 
-테스트: `cd tools/plain-language && python3 -m unittest -v test_measure_output`
+테스트: `cd tools/plain-language && python3 -m unittest -v test_measure_output test_measure_questions`
