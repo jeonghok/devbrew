@@ -56,7 +56,9 @@ assert_eq "$(names_ok "$ONE")" "ok" "AC2: 자리표는 넷(bundle-abs · bundle-
 assert_eq "$(names_ok "$ONE <spec>")" "no spec" "양성 대조: 모르는 자리표를 잡는다"
 assert_file_grep "$EH" '치환되지 않은 자리표가 남거나 경로에 공백이 있으면 쓰지 않는다' "AC2: 자리표 규칙"
 assert_file_grep "$EH" '\$\{CLAUDE_PLUGIN_ROOT\}' "줄의 스크립트 경로는 플러그인 루트 기준이고 치환 대상이다"
-assert_eq "$(grep -c '^> `@<' "$EH" || true)" "1" "인용 줄이 하나뿐이다(표지 밖에 둘째 정의가 없다)"
+assert_eq "$(grep -c '^> `@<bundle-abs> ' "$EH")" "1" "있는 넘김 줄은 하나 그대로"
+assert_eq "$(grep -c '^> `@<intent-abs> ' "$EH" || true)" "1" "team 꼴(@<intent-abs>)의 인용 줄이 하나뿐이다"
+assert_eq "$(grep '^> `@<' "$EH" | grep -cvE '^> `@<(bundle|intent)-abs> ' || true)" "0" "두 꼴 밖의 인용 줄(@<…> 첨부)이 없다 — 인용 줄은 둘뿐이다"
 # R5 계획 2 AC31 — 흐름을 고정하지 않는다 · 재분해 보고 · 고른 실행 방식 · 있는 것 검토 · 연계 · 레포 전용 값
 for n in '흐름: 칸이 있으면 brainstorming 대신 그 칸의 흐름' '설계문서 대신 산출물: 칸의 파일을 낸다' \
          '묶음을 다시 나눌 근거가 보이면' '${CLAUDE_PLUGIN_ROOT}/references/redecompose.md' \
@@ -72,4 +74,16 @@ assert_not_contains "$ONE" 'SDD 의 마지막 전체 리뷰' "AC31: 실행 방�
 assert_not_contains "$ONE" '묶음을 다시 나누지 않는다' "AC31: 나누지 말라는 금지 대신 재분해 보고(양성 짝: 근거가 보이면)"
 assert_contains "$ONE" '모델이 판단해 맞추거나 건너뛰고 그 이유를 보고한다' "AC31: 흐름에 없는 단계는 모델이 판단하고 이유를 보고한다"
 assert_not_contains "$ONE" '그 흐름이 정한 대로 한다' "AC31: 순환 문구가 없다(양성 짝: 위 줄)"
+# 계획 2 AC17 — team 형식의 넘김 줄(설계 §12 의 지시 넷). 「있는 넘김 줄은 하나 그대로」 는 위 인용 줄 수 단언이 잰다.
+assert_eq "$(grep -c '^> `@<intent-abs> 이 과제 파일로 Skill superpowers:brainstorming 을 시작하라' "$EH")" "1" "AC17: team 형식의 넘김 줄이 하나 있다"
+TEAM_LINE="$(grep -m1 '^> `@<intent-abs> ' "$EH")"
+for lit in '원자료 <original-rel> 전체와 번호 파일 <sources-rel> 을 읽는다' '설계문서에 ## 원문 대조 표(칸: 원문 요소 · 설계 요소 · 그대로/바꿈 · 근거)를 두어' \
+           '바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다' 'source_interview 에 <intent-rel> 을' '--bundle <intent-rel>' '<place-sentence>' \
+           '설계문서에 ## 번호 대조 표(칸: 번호 · 반영/기각 · 자리 또는 이유)를 두어 번호 파일 ids 의 모든 번호를 싣고'; do
+  assert_contains "$TEAM_LINE" "$lit" "AC17: team 넘김 줄 — $lit"
+done
+assert_not_contains "$TEAM_LINE" "bundle-" "AC17: team 넘김 줄에 묶음 자리표가 남지 않았다"
+for ph in '<intent-abs>' '<intent-rel>' '<original-rel>' '<sources-rel>' '<place-sentence>'; do
+  assert_eq "$(sed -n '/^## team 형식의 넘김 줄/,$p' "$EH" | grep -c -- "^- \`$ph\`")" "1" "AC17: 자리표 $ph 의 설명이 있다"
+done
 finish

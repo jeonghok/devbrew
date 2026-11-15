@@ -3,14 +3,16 @@
 """spec_review_bundle.py — spec-review 의 `--bundle`: 정답 출처 확인 · 진입 번호 대조 · 승인 때 로드맵 위치와 이웃 결정.
 
 명령줄:
-  spec_review_bundle.py entry --spec <설계문서> [--bundle <묶음|brief>] --root <레포 루트>
-  spec_review_bundle.py neighbors --bundle <묶음> --root <레포 루트>
+  spec_review_bundle.py entry --spec <설계문서> [--bundle <묶음|brief|과제 파일>] --root <레포 루트>
+  spec_review_bundle.py neighbors --bundle <묶음|과제 파일> --root <레포 루트>
   spec_review_bundle.py rejected --spec <설계문서> --root <레포 루트>
 
 entry 의 마지막 줄은 `bundle-entry: PROCEED <정답 출처 절대경로 또는 ->` 이거나 `bundle-entry: REFUSE` 다.
 `--bundle` 이 있으면 PROCEED 바로 앞 줄이 `번호 대조 경고 <N>개` 다. `--bundle` 은 리뷰어에게 가지 않는다 —
 그 값이 설계문서 frontmatter `source_interview` 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
-neighbors 는 정답 출처가 에픽 묶음이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.
+team 형식(AC16): 과제 파일(머리 `type: job`)을 받으면 진입 번호 대조는 같은 폴더의 번호 파일로 하고
+(번호 파일이 없는 단순 작업은 건너뜀 한 줄), 경고 수 앞에 리뷰어의 정답 출처 알림(TEAM_NOTICE) 한 줄을 낸다.
+neighbors 는 정답 출처가 에픽 묶음 · 과제 파일이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.
 rejected 는 설계문서 `## 번호 대조` 표의 「기각」 행을 번호 수와 목록으로 낸다(승인 게이트 2단계 앞 글 — N18).
 표 절이 없으면 아무것도 내지 않고, 표를 못 읽으면 「셀 수 없음」 줄이다 — 「없음」과 다르다.
 종료 코드는 0 이다(사용법 오류만 2) — 판정은 줄이 말한다. 읽기만 한다(roadmap_status 의 읽기 전용 git 만 부른다).
@@ -26,9 +28,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_bundle_coverage as cbc  # noqa: E402
 import roadmap_status as rs  # noqa: E402
+import team_files  # noqa: E402
+import team_layout  # noqa: E402
 from roadmap_model import FormatError, frontmatter, section_body, unquote  # noqa: E402
 
 KINDS = ("epic-bundle", "interview-brief")
+JOB_KIND = "job"
+TEAM_NOTICE = ("[spec-distill] team 형식 — 리뷰어가 번호 항목(%s)과 원자료(%s)를 정답으로 읽지 못한다. "
+               "리뷰어에게 가는 정답 출처는 %s 하나다."
+               % (team_layout.SOURCES_FILE, team_layout.original_rel(), team_layout.INTENT_FILE))
+TASK_SKIP = "번호 대조 건너뜀 — 번호 파일이 없는 과제다(단순 작업)."
 DECISION_LINE_RE = re.compile(r"- (?:[BU]\d+ · 결정 · |D\d+\.\d+ · )")
 REJECTED_HEAD = "이 설계가 받지 않기로 한 번호(번호 대조의 기각)"
 
@@ -63,8 +72,9 @@ def entry(spec: str, bundle: str, root: str) -> list:
     btext = _read(bpath)
     if btext is None:
         return refuse("파일을 읽지 못했다")
-    kind = unquote(frontmatter(btext).get("type", ""))
-    if kind not in KINDS:
+    bmeta = frontmatter(btext)
+    kind = unquote(bmeta.get("type", ""))
+    if kind not in KINDS and kind != JOB_KIND:
         return refuse("frontmatter type 이 epic-bundle · interview-brief 가 아니다(%s)" % (kind or "없음"))
     spath = _resolve(spec, root)
     stext = _read(spath)
@@ -75,9 +85,24 @@ def entry(spec: str, bundle: str, root: str) -> list:
         return refuse("설계문서 frontmatter 에 source_interview 가 없다")
     if _resolve(src, root) != bpath:
         return refuse("설계문서 source_interview(%s) 와 다른 파일이다" % src)
+    if kind == JOB_KIND:
+        text, warnings = _job_coverage(bpath, unquote(bmeta.get("kind", "")), spath)
+        return [text, TEAM_NOTICE, "번호 대조 경고 %d개" % warnings, "bundle-entry: PROCEED %s" % bpath]
     result = cbc.coverage(bpath, spath)
     return [cbc.render(result), "번호 대조 경고 %d개" % cbc.warning_count(result),
             "bundle-entry: PROCEED %s" % bpath]
+
+
+def _job_coverage(intent_path: str, job_kind: str, spec_path: str) -> tuple:
+    """과제 파일의 진입 번호 대조 — (글, 경고 수). 같은 폴더의 번호 파일이 정답 출처다.
+    번호 파일이 없으면 단순 작업(kind: task)은 건너뛰고, 그 밖의 과제는 검사 불가(경고 1)다 — 0 으로 내지 않는다."""
+    sources = os.path.join(os.path.dirname(intent_path), team_layout.SOURCES_FILE)
+    if not os.path.isfile(sources):
+        if job_kind == team_files.KIND_TASK:
+            return TASK_SKIP, 0
+        return ("번호 대조 검사 불가 — kind: %s 과제인데 번호 파일이 없다: %s" % (job_kind or "없음", sources)), 1
+    result = cbc.coverage(sources, spec_path)
+    return cbc.render(result), cbc.warning_count(result)
 
 
 def _line(b: dict) -> str:
@@ -93,9 +118,10 @@ def neighbors(bundle: str, root: str) -> list:
     if btext is None:
         return ["[spec-distill] 로드맵 속 위치를 보일 수 없다 — 묶음을 읽지 못했다: %s" % bundle]
     fm = frontmatter(btext)
-    if unquote(fm.get("type", "")) != "epic-bundle":
+    kind = unquote(fm.get("type", ""))
+    if kind not in ("epic-bundle", JOB_KIND):
         return []
-    epic, rel = unquote(fm.get("epic", "")), unquote(fm.get("roadmap", ""))
+    epic, rel = unquote(fm.get("job" if kind == JOB_KIND else "epic", "")), unquote(fm.get("roadmap", ""))
     git = rs.Git(root)
     report = rs.build(git, argparse.Namespace(roadmap=None, roadmap_file=os.path.join(root, rel), json=True))
     blocks = {b["id"]: b for b in report["blocks"]}
