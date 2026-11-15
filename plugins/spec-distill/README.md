@@ -218,6 +218,9 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 | `DEVBREW_DOCREVIEW_REREVIEW_CAP` | `rereview_cap` | 한 문서의 재리뷰 상한(0~10, 0 이면 재리뷰 없음) | 2 |
 | `DEVBREW_DOCREVIEW_RENDER_CAP` | `render_cap` | 조언 목록에 펼치는 지적 수(1~100) | 8 |
 | `DEVBREW_DOCREVIEW_SUMMARY_WIDTH` | `summary_width` | 지적 요약 줄 너비(1~500) | 60 |
+| `DEVBREW_DOCREVIEW_ASK_WIDTH` | — | 질문 설명의 기준 길이(20~500) — 넘는 원문 칸에 「줄인다」를 표시한다 | 110 |
+
+마지막 행은 질문 재료(`ask-material`)만 읽는 환경 변수다 — 프로필 필드가 없고 게이트 둘째 줄에 나오지 않는다.
 
 진입 skill 이 `advice --cap` 으로 펼치는 수를 넘기면 그 값이 `render_cap` 의 환경 변수보다 앞선다. 정수가 아니거나 범위 밖이면 그 값은 쓰지 않고 이름과 값을 밝히며 멈춘다.
 

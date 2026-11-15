@@ -129,7 +129,7 @@ sys.exit(1 if bad else 0)' "$ROOT_REPO"
 }
 GUARDED="$(derive_guarded 2>"$T/derive-guarded.err")" && DERIVE_RC=0 || DERIVE_RC=$?
 # 읽기 전용 하위 명령 — 이 락의 유일한 목록이다(정적 검사와 아래 쓰기 명령 문단 대조가 함께 쓴다).
-AC8_READ_ONLY="advice-list gate related-changes state-dir-for profile-check gate-rows exempt-anchors"
+AC8_READ_ONLY="advice-list ask-material gate related-changes state-dir-for profile-check gate-rows exempt-anchors"
 ac8_scan() {   # ac8_scan <파일> → rc 0 이면 확인 없는 쓰기 · 넘기기 · 읽을 수 없는 엔진 호출이 없다
   python3 -I - "$1" "$AC8_READ_ONLY" <<'PY'
 import re, sys
