@@ -223,6 +223,8 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
     done
     assert_contains "$RSL" '고른 실행 방식의 마지막 전체 리뷰' "AC42: 승인 게이트 다음 세션 줄이 고른 실행 방식의 마지막 전체 리뷰를 말한다"
     assert_not_contains "$RSL" 'SDD 의 마지막 전체 리뷰' "AC42: 다음 세션 줄이 SDD 로 고정하지 않는다(양성 짝: 위 줄)"
+    USED='설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.'
+    assert_contains "$RSL" "$USED" "있는 것 먼저: 승인 게이트 다음 세션 줄의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다(같은 글자: test_end_gates.sh)"
     assert_eq "$(lead_only "$RSL")" "ok" "spec-review 다음 세션 줄의 꺾쇠 자리표는 <spec_path> 뿐이다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
