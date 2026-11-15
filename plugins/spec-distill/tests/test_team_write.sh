@@ -1080,4 +1080,67 @@ assert_eq "$( (cd "$FA" && python3 "$S/team_layout.py" check --roadmap "${RD}fa-
 assert_eq "$(fa_orig ke --framing-audit docs/fa/ke-seed.audit.md)" "0" "푸는 길: seed 파일이 없어도 --framing-audit 을 주면 rc 0"
 assert_eq "$(fa_heads ke)" "$(fa_want ke-seed.audit.md)" "푸는 길: seed 파일이 없는 짝도 준 audit 의 두 절을 싣는다"
 
+
+# ── framing 구간 없이 옮길 때의 화면 줄 (PR #283 좁은 재리뷰) ────────────────────────
+# 표지 「framing audit 없음」 을 적는 갈래 넷 — seed 가 「없음」 · seed 값이 비었다 · seed 키가 없다 · 상태 파일이 없다 — 에서
+# original · create --layout team 이 화면에 한 줄을 낸다(rc 는 0 그대로). 그 뒤 original --framing-audit 로 framing 구간을 덧붙일 수 있다.
+FN_LINE='[spec-distill] framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `framing audit 없음` 을 적었다. framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 덧붙인다'
+fn_fix() {  # fn_fix <줄기> <none|empty|nokey|nostate|found> — docs/fa/<줄기>-brief.* 짝과 그 갈래의 상태 파일
+  local st="$FA/docs/fa/$1-brief.state.md"
+  cp "$FA/docs/iv/t-brief-interview.md" "$FA/docs/fa/$1-brief.md"
+  cp "$FA/docs/iv/t-brief-interview.audit.md" "$FA/docs/fa/$1-brief.audit.md"
+  case "$2" in
+    none)    printf -- '---\ntype: interview-state\nseed: 없음\nphase: 2\n---\n' > "$st" ;;
+    empty)   printf -- '---\ntype: interview-state\nseed:\nphase: 2\n---\n' > "$st" ;;
+    nokey)   printf -- '---\ntype: interview-state\nphase: 2\n---\n' > "$st" ;;
+    nostate) rm -f "$st" ;;
+    found)   printf -- '---\ntype: interview-state\nseed: docs/fa/ka-seed.md\nphase: 2\n---\n' > "$st" ;;
+  esac
+}
+fn_said() { grep -cF -- "$FN_LINE" "$T/out.txt"; }   # fn_said — 방금 명령의 화면에 그 한 줄이 몇 번 나왔나
+fn_marked() { grep -c '^<!-- 출처: .* · 사용자 원문 · .* · framing audit 없음 -->$' "$(fa_o "$1")"; }   # fn_marked <줄기> — 표지가 붙은 출처 줄 수
+for kind in none empty nokey nostate found; do fn_fix "n-$kind" "$kind"; fn_fix "o-$kind" "$kind"; done
+gx "$FA" add -- docs/fa && gx "$FA" commit -qm fn-fixtures
+assert_eq "$(grep -c '^seed:$' "$FA/docs/fa/n-empty-brief.state.md")" "1" "픽스처: 상태 파일의 seed 값이 비었다"
+assert_eq "$(grep -c '^seed' "$FA/docs/fa/n-nokey-brief.state.md")" "0" "픽스처: 상태 파일에 seed 키가 없다"
+[ -f "$FA/docs/fa/n-nokey-brief.state.md" ] && [ ! -e "$FA/docs/fa/n-nostate-brief.state.md" ] && ok "픽스처: 키 없는 상태 파일은 있고 nostate 짝은 상태 파일이 없다" || no "픽스처: 상태 파일 갈래가 섞였다"
+for kind in none empty nokey nostate; do
+  assert_eq "$(fa_orig "n-$kind")" "0" "framing 없이(${kind}) · original: rc 0"
+  assert_eq "$(fn_said)" "1" "framing 없이(${kind}) · original: 화면에 그 한 줄이 글자 그대로 한 번"
+  assert_eq "$(fn_marked "n-$kind")" "2" "framing 없이(${kind}) · original: brief 쪽 두 구간의 출처 줄 끝에 표지"
+  assert_eq "$(fa_create "o-$kind")" "0" "framing 없이(${kind}) · create --layout team: rc 0"
+  assert_eq "$(fn_said)" "1" "framing 없이(${kind}) · create --layout team: 화면에 그 한 줄이 글자 그대로 한 번"
+  assert_contains "$(cat "$T/out.txt")" "팀 폴더를 만들었다" "framing 없이(${kind}) · create --layout team: 만들었다는 줄도 그대로 낸다"
+  assert_eq "$(fn_marked "o-$kind")" "2" "framing 없이(${kind}) · create --layout team: brief 쪽 두 구간의 출처 줄 끝에 표지"
+done
+# 음의 짝 — framing audit 를 찾은 인터뷰와, 붙일 것이 없는 다시 부르기에는 그 줄이 없다
+assert_eq "$(fa_orig n-found)" "0" "framing 을 찾았다 · original: rc 0"
+assert_eq "$(fn_said)" "0" "framing 을 찾았다 · original: 그 줄이 없다"
+assert_eq "$(fn_marked n-found)" "0" "framing 을 찾았다 · original: 표지도 없다"
+assert_eq "$(fa_create o-found)" "0" "framing 을 찾았다 · create --layout team: rc 0"
+assert_eq "$(fn_said)" "0" "framing 을 찾았다 · create --layout team: 그 줄이 없다"
+assert_eq "$(fa_orig n-none)" "0" "framing 없이 · original 다시: rc 0"
+assert_contains "$(cat "$T/out.txt")" "이미 출처와 같다" "framing 없이 · original 다시: 붙이지 않았다"
+assert_eq "$(fn_said)" "0" "framing 없이 · original 다시: 표지를 새로 적지 않았으니 그 줄도 없다"
+# 덧붙이기 — 표지와 함께 만든 사본에 original --framing-audit 을 부르면 framing 구간이 끝에 붙고 앞 바이트는 그대로다
+fn_append() {  # fn_append <줄기> <라벨> — 그 사본에 ka-other 의 framing 구간을 덧붙이고 잰다
+  local o; o="$(fa_o "$1")"
+  cp "$o" "$T/fn-before.o"
+  assert_eq "$(fa_orig "$1" --framing-audit docs/fa/ka-other.audit.md)" "0" "$2: original --framing-audit rc 0"
+  assert_eq "$(fn_said)" "0" "$2: framing 구간을 붙일 때는 그 줄이 없다"
+  head -c "$(wc -c < "$T/fn-before.o")" "$o" | cmp -s - "$T/fn-before.o" && ok "$2: 앞 바이트가 그대로다" || no "$2: 앞 바이트가 바뀌었다"
+  assert_eq "$(markers "$o")" "4" "$2: 구간이 둘에서 넷이 됐다"
+  assert_eq "$(marker_heads "$o" | sed -n 3,4p)" "$(fa_want ka-other.audit.md)" "$2: 끝의 두 구간이 준 audit 의 원문 · 질문 전체다"
+  assert_file_has "$o" "> 머리-값-글 가운데 줄" "$2: 준 audit 의 원문이 사본에 있다"
+  assert_eq "$(fa_match "$1")" "ok" "$2: 구간이 출처와 바이트가 같다"
+}
+fn_append n-none "덧붙이기(original 로 만든 사본)"
+fn_append o-empty "덧붙이기(create --layout team 이 만든 사본)"
+assert_eq "$( (cd "$FA" && python3 "$S/team_layout.py" check --roadmap "${RD}fa-o-empty/roadmap.md") > "$T/chk.txt" 2>&1; echo $?)" "0" "덧붙이기(create --layout team 이 만든 사본): 덧붙인 뒤에도 구조 검사를 통과한다"
+# --framing-audit 로 푼 팀 폴더(위 kc — seed 는 있고 그 이름의 audit 이 없다)는 다시 부를 때마다 같은 인자가 든다
+assert_eq "$(fa_orig kc)" "1" "--framing-audit 로 푼 팀 폴더: 인자 없이 original 을 다시 부르면 rc 1(사본에 framing 구간이 있어도)"
+assert_contains "$(cat "$T/out.txt")" "framing audit 를 찾지 못했다" "--framing-audit 로 푼 팀 폴더: 인자 없이 다시 부르면 같은 사유로 멈춘다"
+assert_eq "$(fa_orig kc --framing-audit docs/fa/ka-other.audit.md)" "0" "--framing-audit 로 푼 팀 폴더: 같은 인자를 주면 rc 0"
+assert_contains "$(cat "$T/out.txt")" "이미 출처와 같다" "--framing-audit 로 푼 팀 폴더: 같은 인자로 다시 부르면 붙일 것이 없다"
+
 finish

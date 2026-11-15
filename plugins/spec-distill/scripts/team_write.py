@@ -24,6 +24,9 @@ from roadmap_model import frontmatter, parse_roadmap, unquote  # noqa: E402
 
 PREFIX = "[spec-distill] "
 NO_FRAMING = "framing audit 없음"
+NO_FRAMING_SAID = ("framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `%s` 을 적었다. "
+                   "framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
+                   "덧붙인다" % NO_FRAMING)
 FRAMING_TYPE = "interview-seed-audit"
 SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 인터뷰
 FRAMING_LOST = ("상태 파일 %s 의 seed 는 %s 인데 framing audit 를 찾지 못했다 — %s. "
@@ -186,6 +189,13 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W) -> list:
     return out
 
 
+def framing_notice(existing: bytes, new: bytes) -> list:
+    """이번에 붙인 구간(existing 뒤에 new 가 더한 것) 가운데 표지 NO_FRAMING 이 붙은 것이 있으면 화면에 낼 한 줄, 없으면 []."""
+    before = len(team_files.parse_original(existing)) if existing else 0
+    added = team_files.parse_original(new)[before:]
+    return [PREFIX + NO_FRAMING_SAID] if any(NO_FRAMING in s.note.split(" · ") for s in added) else []
+
+
 # ── create --layout team ─────────────────────────────────────────────────────
 
 def _refuse_links(top: Path, rel: str, W):
@@ -226,11 +236,12 @@ def _intent_text(template: str, r, roadmap_rel: str) -> str:
 
 
 def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, history, brief: Path, W) -> tuple:
-    """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
-    없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused."""
+    """(다시 쓰는 파일 {Path: 글}, 없을 때만 까는 파일 {Path: 글}, 화면 줄들). 다시 쓰는 것은 로드맵과 묶음 행마다 INTENT · sources,
+    없을 때만 까는 것은 규칙 파일 · 원자료 사본 · 결과 폴더의 빈 파일 · 공통 문서다. 폴더 성분이 링크면 Refused.
+    화면 줄은 원자료 사본을 framing 구간 없이 만들 때의 한 줄이다."""
     intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
     rewrite = {top / team.roadmap: render_team_roadmap(W.read(R.TEMPLATE), rows, idx, title, brief_rel, roadmap_rel, history)}
-    once = {}
+    once, said = {}, []
 
     def absent(rel: str) -> bool:
         _refuse_links(top, rel, W)
@@ -249,10 +260,11 @@ def create_files(top: Path, team, rows, idx, title, brief_rel, roadmap_rel, hist
     if absent(team.original):
         data, _notes = team_files.extend_original(b"", wanted_sections(top, brief, None, W))
         once[top / team.original] = data.decode("utf-8")
+        said = framing_notice(b"", data)
     for path in rewrite:
         _refuse_links(top, path.relative_to(top).as_posix(), W)
     once.update(seed_common(top, team.roadmaps_dir, W))
-    return rewrite, once
+    return rewrite, once, said
 
 
 def check_rerun(top: Path, team, record: set, rewrite: dict, W):
@@ -388,6 +400,7 @@ def cmd_original(a, W) -> int:
             print(line)
         return 0
     added = len(team_files.parse_original(new)) - (len(team_files.parse_original(existing)) if existing else 0)
+    said = framing_notice(existing, new)
     shown = []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
     txn = W.Txn()
 
@@ -404,7 +417,7 @@ def cmd_original(a, W) -> int:
     for line in notes:
         print(PREFIX + line)
     print(PREFIX + "원자료 사본을 썼다: %s — 구간 %d개를 끝에 더했다" % (team.original, added))
-    for line in shown:
+    for line in said + shown:
         print(line)
     return 0
 
