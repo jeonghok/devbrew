@@ -985,12 +985,21 @@ assert_eq "$(sqcheck "$T/sq2")" "0" "대체 대조: 출처 커밋이 없어도 �
 assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/t-seed-interview.audit.md · 원문 " "출처 커밋이 없다: check 가 그 구간의 출처 경로와 절 이름을 낸다"
 assert_eq "$(grep -c "출처 커밋 ${stamp:0:12} 를 읽지 못해 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다" "$T/chk.txt")" "2" "대체 대조: 구간마다 알림 한 줄(원문 · 질문 전체)"
 assert_not_contains "$(cat "$T/chk.txt")" "검사 불가" "대체 대조: 통과하면 검사 불가가 없다"
+sq2_note="출처 커밋 ${stamp:0:12} 를 읽지 못해 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다"
+b_u="$(snap "$T/sq2")"
 assert_eq "$(squpdate "$T/sq2" "$T/sq2-moved.md")" "0" "대체 대조: update 가 쓴다"
+[ "$(snap "$T/sq2")" != "$b_u" ] && ok "대체 대조: update 가 나무를 바꿨다(쓴다)" || no "대체 대조: update 가 rc 0 인데 나무가 그대로다"
 assert_contains "$(cat "$T/out.txt")" "를 읽지 못해 기준 " "대체 대조: update 가 알림을 화면에 낸다"
+assert_eq "$(grep -c "$sq2_note" "$T/out.txt")" "2" "대체 대조: update 의 알림은 구간마다 그 출처 커밋을 짚는다"
 assert_eq "$(ttc "$T/sq2" "$T/sq.md" "${RD}sq")" "0" "대체 대조: create 다시 rc 0"
+assert_eq "$(grep -c "$sq2_note" "$T/out.txt")" "2" "대체 대조: create 가 구간마다 알림을 화면에 낸다"
+b_o="$(snap "$T/sq2")"
 assert_eq "$(sqorig "$T/sq2")" "0" "대체 대조: original rc 0"
 assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "대체 대조: original 에 검사 불가 줄이 없다"
+assert_eq "$(grep -c "$sq2_note" "$T/out.txt")" "2" "대체 대조: original 이 구간마다 알림을 화면에 낸다"
+[ "$(snap "$T/sq2")" = "$b_o" ] && ok "출처 커밋이 없다: original 은 쓰지 않았다(사본이 이미 출처와 같다)" || no "출처 커밋이 없다: original 이 나무를 바꿨다"
 assert_eq "$(sqjob "$T/sq2")" "0" "대체 대조: job new rc 0"
+assert_eq "$(grep -c "$sq2_note" "$T/out.txt")" "2" "대체 대조: job new 가 구간마다 알림을 화면에 낸다"
 [ -f "$T/sq2/${RD}sq/jobs/sq-job/INTENT.md" ] && [ -f "$T/sq2/${RD}sq/jobs/sq-job/results/.gitkeep" ] && ok "출처 커밋이 없다: job new 가 과제 폴더를 만들었다" || no "출처 커밋이 없다: job new 가 과제 폴더를 만들지 않았다"
 assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "대체 대조: job new 에 검사 불가 줄이 없다"
 
@@ -1023,6 +1032,7 @@ assert_eq "$(ttc "$T/sq3" "$T/sq.md" "${RD}sq")" "1" "대체 대조: 기준과 �
 [ "$(snap "$T/sq3")" = "$b_sq3" ] && ok "대체 대조: 기준과 다르면 create 뒤 나무 그대로" || no "대체 대조: 기준과 다른데 create 가 나무를 바꿨다"
 # sq4 — 기준에서 framing audit 파일을 지운다
 gx "$T/sq" rm -q -- "$FA" && gx "$T/sq" commit -qm sq-base-rm -- "$FA" && gx "$T/sq" push -q origin main
+rm_commit="$(gx "$T/sq" rev-parse HEAD)"   # framing audit 이 없는 커밋 — 아래 sq8 이 출처 커밋으로 쓴다
 git clone -q "$T/sq.git" "$T/sq4"
 [ ! -e "$T/sq4/$FA" ] && ok "대체 대조 픽스처(sq4): 기준에 framing audit 이 없다" || no "대체 대조 픽스처(sq4): framing audit 이 남았다"
 assert_eq "$(sqcheck "$T/sq4")" "3" "대체 대조: 기준에 파일이 없으면 check rc 3(검사 불가)"
@@ -1030,6 +1040,7 @@ assert_eq "$(grep -c '검사 불가 — .*기준 refs/remotes/origin/HEAD 에도
 assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했고 기준 refs/remotes/origin/HEAD 에도 그 파일이 없다" "대체 대조: 기준에 파일이 없으면 그렇게 적는다"
 # sq6 — 기준에 framing audit 을 다시 두되 「원문」 절 맨 앞(머리 줄 다음)에 한 줄을 끼운다: 글은 같고 줄 번호만 밀렸다
 awk '{ print } /^## 1\. 원문$/ { print "> 기준 쪽에만 끼운 줄." }' "$T/fa.orig" > "$T/sq/$FA"
+assert_eq "$(( $(wc -l < "$T/sq/$FA") ))" "$(( $(wc -l < "$T/fa.orig") + 1 ))" "대체 대조 픽스처(sq6): 기준 사본이 원래보다 한 줄 길다(끼운 줄이 실제로 들어갔다)"
 grep -v '^> 기준 쪽에만 끼운 줄\.$' "$T/sq/$FA" | cmp -s - "$T/fa.orig" && ok "대체 대조 픽스처(sq6): 기준 사본은 원래 글에 한 줄만 더했다" || no "대체 대조 픽스처(sq6): 기준 사본이 한 줄 더하기가 아니다"
 gx "$T/sq" add -- "$FA" && gx "$T/sq" commit -qm sq-base-shift -- "$FA" && gx "$T/sq" push -q origin main
 git clone -q "$T/sq.git" "$T/sq6"
@@ -1049,6 +1060,38 @@ assert_not_contains "$(cat "$T/chk.txt")" "refs/remotes/origin/HEAD" "대체 대
 assert_eq "$(sqcheckb "$T/sq5" no-such-ref)" "3" "대체 대조: --base 로 준 기준을 읽지 못하면 check rc 3"
 assert_contains "$(cat "$T/chk.txt")" "[spec-distill] 검사 불가 — ${RD}sq/intent/original.md: 기준 no-such-ref 를 읽지 못했다" "대체 대조: 읽지 못한 --base 는 지금 그대로 검사 불가"
 assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했다 — 기준(no-such-ref)을 몰라 같은 줄과 견주지 못했다" "대체 대조: 읽지 못한 --base 이면 구간도 기준을 몰라 견주지 못했다고 적는다"
+# sq7 — 기준의 framing audit 자리에 파일 대신 폴더를 둔다: 경로는 기준에 있지만 파일로 읽지 못한다(「없다」 와 가른다)
+#   (파일 → 폴더 바꿈은 경로를 준 commit 이 받지 않는다 — 인덱스가 깨끗한 작업 사본 sqw 에서 커밋한다)
+git clone -q "$T/sq.git" "$T/sqw"
+gx "$T/sqw" rm -q -- "$FA" && mkdir "$T/sqw/$FA" && cp "$T/fa.orig" "$T/sqw/$FA/inner.md"
+gx "$T/sqw" add -- "$FA" && gx "$T/sqw" commit -qm sq-base-dir && gx "$T/sqw" push -q origin main
+dir_commit="$(gx "$T/sqw" rev-parse HEAD)"   # framing audit 자리가 폴더인 커밋 — 아래 sq8 이 출처 커밋으로도 쓴다
+git clone -q "$T/sq.git" "$T/sq7"
+[ -d "$T/sq7/$FA" ] && ok "대체 대조 픽스처(sq7): 기준의 framing audit 자리가 폴더다" || no "대체 대조 픽스처(sq7): 그 자리가 폴더가 아니다"
+assert_eq "$(sqcheck "$T/sq7")" "3" "대체 대조: 기준의 그 파일을 읽지 못하면 check rc 3(검사 불가)"
+assert_eq "$(grep -c '검사 불가 — .*기준 refs/remotes/origin/HEAD 의 그 파일도 읽지 못했다' "$T/chk.txt")" "2" "대체 대조: 기준에서 읽지 못함은 두 구간 모두 「그 파일도 읽지 못했다」"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 의 파일을 읽지 못했고 기준 refs/remotes/origin/HEAD 의 그 파일도 읽지 못했다" "대체 대조: 기준에서 읽지 못하면 그렇게 적는다"
+assert_not_contains "$(cat "$T/chk.txt")" "에도 그 파일이 없다" "대체 대조: 기준에 경로가 있으면 「없다」 라 하지 않는다"
+# sq8 — 출처 커밋은 읽히지만 그 커밋에 출처 파일이 없다: 두 구간의 출처 커밋을 framing audit 을 지운 커밋으로 바꿔 커밋한다
+gx "$T/sqw" rm -rq -- "$FA" && cp "$T/fa.orig" "$T/sqw/$FA"
+gx "$T/sqw" add -- "$FA" && gx "$T/sqw" commit -qm sq-base-back && gx "$T/sqw" push -q origin main
+git clone -q "$T/sq.git" "$T/sq8"
+cmp -s "$T/sq8/$FA" "$T/fa.orig" && ok "대체 대조 픽스처(sq8): 기준의 framing audit 이 원래 바이트다" || no "대체 대조 픽스처(sq8): 기준의 framing audit 이 원래 바이트가 아니다"
+sed "s/@${stamp} /@${rm_commit} /" "$T/sq8/${RD}sq/intent/original.md" > "$T/sq8-original.md" && cp "$T/sq8-original.md" "$T/sq8/${RD}sq/intent/original.md"
+assert_eq "$(grep -c "@${rm_commit} " "$T/sq8/${RD}sq/intent/original.md")" "2" "대체 대조 픽스처(sq8): 두 구간의 출처 커밋을 바꿨다"
+gx "$T/sq8" commit -qm sq8-stamp -- "${RD}sq/intent/original.md"
+gx "$T/sq8" cat-file -e "${rm_commit}^{commit}" 2>/dev/null && ok "대체 대조 픽스처(sq8): 그 출처 커밋은 읽힌다" || no "대체 대조 픽스처(sq8): 그 출처 커밋이 없다"
+gx "$T/sq8" cat-file -e "${rm_commit}:$FA" 2>/dev/null && no "대체 대조 픽스처(sq8): 그 커밋에 framing audit 이 있다" || ok "대체 대조 픽스처(sq8): 그 커밋에 framing audit 이 없다"
+assert_eq "$(sqcheckb "$T/sq8" HEAD)" "0" "대체 대조: 출처 커밋에 그 파일이 없어도 기준의 같은 줄과 같으면 check rc 0"
+assert_eq "$(grep -c "출처 커밋 ${rm_commit:0:12} 에 그 파일이 없어 기준 HEAD 의 같은 줄과 견줬다 — 같다" "$T/chk.txt")" "2" "대체 대조: 커밋은 읽히고 파일만 없으면 「에 그 파일이 없어」 로 적는다"
+assert_not_contains "$(cat "$T/chk.txt")" "를 읽지 못해" "대체 대조: 읽히는 출처 커밋을 「읽지 못해」 라 하지 않는다"
+# sq8 다시 — 출처 커밋을 framing audit 자리가 폴더인 커밋으로: 커밋도 경로도 있지만 파일로 읽지 못한다
+sed "s/@${rm_commit} /@${dir_commit} /" "$T/sq8/${RD}sq/intent/original.md" > "$T/sq8-original.md" && cp "$T/sq8-original.md" "$T/sq8/${RD}sq/intent/original.md"
+assert_eq "$(grep -c "@${dir_commit} " "$T/sq8/${RD}sq/intent/original.md")" "2" "대체 대조 픽스처(sq8): 두 구간의 출처 커밋을 폴더 커밋으로 바꿨다"
+gx "$T/sq8" commit -qm sq8-stamp-dir -- "${RD}sq/intent/original.md"
+assert_eq "$(sqcheckb "$T/sq8" HEAD)" "0" "대체 대조: 출처 커밋의 그 경로를 파일로 읽지 못해도 기준의 같은 줄과 같으면 check rc 0"
+assert_eq "$(grep -c "출처 커밋 ${dir_commit:0:12} 에서 그 파일을 읽지 못해 기준 HEAD 의 같은 줄과 견줬다 — 같다" "$T/chk.txt")" "2" "대체 대조: 경로는 있고 파일로 읽지 못하면 「에서 그 파일을 읽지 못해」 로 적는다"
+assert_not_contains "$(cat "$T/chk.txt")" "에 그 파일이 없어" "대체 대조: 출처 커밋에 경로가 있으면 「없어」 라 하지 않는다"
 
 
 # ── framing 을 거친 인터뷰의 framing audit 찾기 (PR #283 통합 리뷰) ───────────────────

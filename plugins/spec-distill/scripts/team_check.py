@@ -50,6 +50,23 @@ def _commit_of(top, ref: str):
     return sha if rc == 0 and re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", sha) else None
 
 
+def _has_path(top, commit: str, rel: str) -> bool:
+    """그 커밋의 트리에 그 경로의 항목이 있다(파일 바이트는 읽지 않는다)."""
+    rc, _out = git_bytes(top, "rev-parse", "--verify", "--quiet", "%s:%s" % (commit, rel))
+    return rc == 0
+
+
+def _span(data: bytes, s) -> bytes:
+    """구간 s 의 출처 줄 범위(first–last)를 data 에서 잘라 이은 바이트 — 「같은 줄」 의 뜻."""
+    return b"".join(F.byte_lines(data)[s.first - 1:s.last])
+
+
+# 출처 커밋에서 파일을 읽지 못한 사정마다의 말 — [0] 기준과 같음(알림) · [1] 기준과 다름 · 기준에 없음 · 기준에서 못 읽음 · [2] 기준 모름
+_SRC_UNREAD = ("를 읽지 못해", "의 파일을 읽지 못했고", "의 파일을 읽지 못했다")              # 커밋을 읽지 못함
+_SRC_ABSENT = ("에 그 파일이 없어", "에 그 파일이 없고", "에 그 파일이 없다")                # 커밋은 있고 경로가 없음
+_SRC_BROKEN = ("에서 그 파일을 읽지 못해", "에서 그 파일을 읽지 못했고", "에서 그 파일을 읽지 못했다")  # 경로는 있고 읽지 못함
+
+
 # ── 읽기 ─────────────────────────────────────────────────────────────────────
 
 def _bytes(path: Path):
@@ -220,21 +237,29 @@ def check_tree(top: Path, team, base=None) -> tuple:
                                                    s.source, s.label, s.first, s.last)
         blob = show(top, s.commit, s.source)
         if blob is not None:
-            if b"".join(F.byte_lines(blob)[s.first - 1:s.last]) != s.body:
+            if _span(blob, s) != s.body:
                 errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
             continue
         lead = "%s: 출처 커밋 %s" % (where, s.commit[:12])
+        if _commit_of(top, s.commit) is None:
+            say = _SRC_UNREAD
+        elif not _has_path(top, s.commit, s.source):
+            say = _SRC_ABSENT
+        else:
+            say = _SRC_BROKEN
         if commit is None:
-            unknown.append("%s 의 파일을 읽지 못했다 — 기준(%s)을 몰라 같은 줄과 견주지 못했다" % (lead, ref))
+            unknown.append("%s %s — 기준(%s)을 몰라 같은 줄과 견주지 못했다" % (lead, say[2], ref))
             continue
         at_base = show(top, commit, s.source)
-        if at_base is None:
-            unknown.append("%s 의 파일을 읽지 못했고 기준 %s 에도 그 파일이 없다" % (lead, ref))
-        elif b"".join(F.byte_lines(at_base)[s.first - 1:s.last]) == s.body:
-            notes.append("%s 를 읽지 못해 기준 %s 의 같은 줄과 견줬다 — 같다" % (lead, ref))
+        if at_base is None and not _has_path(top, commit, s.source):
+            unknown.append("%s %s 기준 %s 에도 그 파일이 없다" % (lead, say[1], ref))
+        elif at_base is None:
+            unknown.append("%s %s 기준 %s 의 그 파일도 읽지 못했다" % (lead, say[1], ref))
+        elif _span(at_base, s) == s.body:
+            notes.append("%s %s 기준 %s 의 같은 줄과 견줬다 — 같다" % (lead, say[0], ref))
         else:
-            unknown.append("%s 의 파일을 읽지 못했고 기준 %s 의 같은 줄과도 다르다"
-                           " — 사본이 틀렸는지 출처가 그 뒤 고쳐졌는지 알 수 없다" % (lead, ref))
+            unknown.append("%s %s 기준 %s 의 같은 줄과도 다르다"
+                           " — 사본이 틀렸는지 출처가 그 뒤 고쳐졌는지 알 수 없다" % (lead, say[1], ref))
 
     # 9. 덧붙이기만 — 기준 커밋의 사본이 지금 사본의 앞머리다
     if commit is None and base:
