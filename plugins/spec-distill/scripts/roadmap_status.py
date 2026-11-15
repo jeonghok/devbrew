@@ -1299,7 +1299,7 @@ def build(git: Git, args) -> dict:
             rulings[b["id"]] = [l for _spec, lines in got for l in (lines or []) if l.startswith("- ")]
     if team:   # team 의 결정 기록 · 판정 읽기가 git 을 부른다 — 그 실패도 검사 불가 사유로(옛 형식은 여기서 git 을 부르지 않는다)
         report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures[told_failures:]]
-    givers =[(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
+    givers = [(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
     report["handoffs"] = handoff_rows(givers, stages, records, record_label=record_label)
     for h in report["handoffs"]:
         if h["receiver"] in bad_records and h["state"] in ("열림", "처리됨", "확인됨"):
@@ -1322,6 +1322,10 @@ def build(git: Git, args) -> dict:
         if team and b["kind"] != "decision":   # team 칸은 team 로드맵의 보고에만(Q14)
             report["blocks"][-1].update(progress=b.get("progress"), job=b.get("job") or {
                 "intent": team.team.intent(b["id"]), "plan": None, "result": None})
+    if team:   # 로드맵 밖 과제는 따로 된 목록이다 — 블록 목록 · 종료 코드에 들지 않는다(Q14)
+        report["jobs"], report["job_notes"] = team_status.task_jobs(team, blocks)
+        for j in report["jobs"]:
+            j["task_status"] = task_status(j["stage"])
     return report
 
 

@@ -84,7 +84,8 @@ class Reader:
         return self.git.absent(tree, path)
 
     def flow(self, block: dict) -> str:
-        return PLAIN_FLOW if "산출물" in block["fields"] else DESIGN_FLOW
+        """산출물 칸이 있는 블록과 로드맵 밖 과제(kind: task)는 설계 없는 흐름이다(Q5)."""
+        return PLAIN_FLOW if "산출물" in block["fields"] or block["kind"] == team_files.KIND_TASK else DESIGN_FLOW
 
     def _outputs(self, block: dict) -> list:
         return field_list(block["fields"]["산출물"]) if "산출물" in block["fields"] else []
@@ -259,3 +260,117 @@ class Reader:
             return "구현 끝", "결과 받음 줄 있음: %s" % latest, specs, plans
         self._fill_progress(block, latest, path, result)
         return "구현 중", "%s 결과 파일 있음: %s" % (IMPLEMENT, latest), specs, plans
+
+
+# ── 로드맵 밖 과제(kind: task) ───────────────────────────────────────────────
+
+OUTSIDE = "로드맵 밖 과제"
+MERGED, ON_DEFAULT = "머지됨", "기본 브랜치에 있음"
+
+
+def _intent_head(git, rev: str, path: str) -> tuple:
+    """(글 | None, 머리 | None, 세지 못한 사유 | None) — 그 커밋의 INTENT.md. 확인된 없음은 (None, None, None)이고
+    있는데 못 읽음 · git 실패 · 머리 깨짐은 사유를 낸다."""
+    text = git.blob(rev, path)
+    if text is None:
+        return None, None, None if git.absent(rev, path) else "%s 를 읽지 못했다" % path
+    try:
+        return text, team_files.intent_meta(text), None
+    except FormatError as exc:
+        return None, None, "%s 머리를 읽지 못했다 — %s" % (path, exc)
+
+
+def _head_paths(value: str) -> list:
+    """머리 `paths: [a, b]` 의 값 → 경로들."""
+    value = value.strip()
+    if value.startswith("[") and value.endswith("]"):
+        value = value[1:-1]
+    return [p.strip() for p in value.split(",") if p.strip()]
+
+
+def _title(text: str):
+    """목표 칸의 첫 줄 — 칸을 찾지 못하면 None."""
+    try:
+        return team_files.intent_sections(text)["목표"].split("\n")[0]
+    except FormatError:
+        return None
+
+
+def _job(team, name: str, text: str, meta: dict, stage: str, reason: str, tip, block=None) -> dict:
+    """과제 하나. task_status 는 부르는 쪽이 단계 글자 표로 채운다(그 표는 roadmap_status 에 하나 있다)."""
+    return {"id": name, "kind": team_files.KIND_TASK, "title": _title(text), "stage": stage, "reason": reason,
+            "task_status": None, "branch": meta.get("branch", ""), "tip": tip, "intent": team.intent(name),
+            "progress": block.get("progress") if block else None, "notes": block["notes"] if block else []}
+
+
+def task_jobs(reader, blocks: list) -> tuple:
+    """(과제 목록, 알림 줄 목록) — 로드맵 블록이 아닌 과제 폴더 가운데 INTENT.md 머리의 kind 가 task 인 것(AC14).
+
+    기본 브랜치에 있으면 「머지됨」. 기본 브랜치에 들어가지 않은 브랜치 끝(Git.unmerged_tips)에서 찾은 과제는 머리
+    `branch` 가 가리키는 브랜치의 끝(read_tip)에서 다시 읽어, 같은 폴더가 있고 머리가 그 이름일 때만 센다 — 다른 브랜치의
+    사본은 같은 짝이라 한 번만 세어진다(Q2). 단계 · 알림 · 진행 칸은 블록과 같은 Reader.progress 가 채운다(설계 없는 흐름 —
+    진행 중 · 결과 받음, Q12). 갈라진 브랜치는 싣지 않고 알림만(Q10). 세지 못한 것은 알림으로 — 없음으로 내지 않는다."""
+    git, main, team = reader.git, reader.main, reader.team
+    if main is None:
+        return [], ["%s를 세지 못했다 — 기본 브랜치를 모른다" % OUTSIDE]
+    on_main = git.names(main, team.jobs)
+    if on_main is None:
+        return [], ["%s를 세지 못했다 — 기본 브랜치의 %s 를 읽지 못했다" % (OUTSIDE, team.jobs)]
+    taken = set(str(b["id"]).casefold() for b in blocks)
+    jobs, notes = [], []
+
+    def note(line):
+        if line not in notes:
+            notes.append(line)
+
+    def uncounted(name, why):
+        note("%s %s 을 세지 못했다 — %s" % (OUTSIDE, name, why))
+
+    known = set()
+    for name in on_main:
+        if name.casefold() in taken:
+            continue
+        known.add(name)
+        text, meta, why = _intent_head(git, main, team.intent(name))
+        if why:
+            uncounted(name, why)
+        elif meta is not None and meta.get("kind") == team_files.KIND_TASK:
+            jobs.append(_job(team, name, text, meta, MERGED, ON_DEFAULT, None))
+    pairs = set()
+    failed_before = len(git.failures)
+    tips = git.unmerged_tips(main)
+    if len(git.failures) > failed_before:
+        note("%s를 다 세지 못했다 — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" % OUTSIDE)
+    for tip in tips:
+        names = git.names(tip, team.jobs)
+        if names is None:
+            note("%s를 다 세지 못했다 — 브랜치 끝 %s 의 %s 를 읽지 못했다" % (OUTSIDE, tip[:8], team.jobs))
+            continue
+        for name in names:
+            if name.casefold() in taken or name in known:
+                continue
+            _text, meta, why = _intent_head(git, tip, team.intent(name))
+            if why:
+                uncounted(name, why)
+            elif meta is not None and meta.get("kind") == team_files.KIND_TASK:
+                pairs.add((name, meta.get("branch", "")))
+    for name, branch in sorted(pairs):
+        tip, tip_note, split = read_tip(git, branch) if branch else (None, None, None)
+        if split:
+            note("%s %s: %s" % (OUTSIDE, name, split))
+            continue
+        text, meta, _why = _intent_head(git, tip, team.intent(name)) if tip else (None, None, None)
+        if meta is None or meta.get("branch") != branch:
+            note("%s %s 을 세지 않았다 — 머리의 branch(%s) 와 이름이 맞는 브랜치에 이 과제 폴더가 없다" % (OUTSIDE, name, branch))
+            continue
+        block = {"id": name, "kind": team_files.KIND_TASK, "fields": {}, "reserved": _head_paths(meta.get("paths", "")),
+                 "notes": [tip_note] if tip_note else []}
+        stage, reason, _specs, _plans = reader.progress(tip, block, 1)
+        jobs.append(_job(team, name, text, meta, stage, reason, tip, block))
+    branches = {}
+    for j in jobs:
+        branches.setdefault(j["id"], []).append(j["branch"])
+    for name in sorted(branches):
+        if len(branches[name]) > 1:
+            note("%s 이름이 겹친다: %s — %s" % (OUTSIDE, name, " · ".join(sorted(branches[name]))))
+    return sorted(jobs, key=lambda j: (j["id"], j["branch"])), notes
