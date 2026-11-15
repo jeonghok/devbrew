@@ -1,5 +1,36 @@
 # Changelog
 
+## [8.16.0] — 2026-11-15
+
+### Changed
+- 저자 편집 승인 화면이 바뀐 문장만 보인다(뺀 문장 · 더한 문장 · 그대로인 문장 수, 문장을 더하거나 뺀 것만으로 설명되지 않는 변화가 있으면 줄 전체도). 덩어리마다 고친 이유(저자가 댄 지적의 요약 · id · 사용자의 처분, 또는 대응하는 지적 없음)가 보인다. 덩어리 처분을 한 묶음으로 묻는다 — 둘 이상이면 「그대로 둘 곳을 고르세요」 여러 개 고르기로, 한 질문에 넷까지 묻고, 고르지 않은 곳은 되돌리며 빈 답은 다시 묻는다. 저자가 댄 지적 전부에 사용자의 고치는 쪽 처분이 리뷰 기록에 있고 앞 화면에서 대지 않은 지적일 때만 「(권장)」 이 붙는다 — 확정 직전 화면에는 없고, 지적과 편집이 실제로 맞는지는 기계가 가리지 않는다.
+
+### Added
+- `scripts/seed_edit_screen.py`(하위 명령 `preview` · `screen` · `mark-used`).
+
+## [8.15.0] — 2026-11-15
+
+### Added
+- `roadmap_write.py create --layout team` — team 형식(로드맵 머리말 `layout: team`)의 팀 폴더를 한 거래로 만든다: 로드맵 · `RULES.md` · 원자료 사본 `intent/original.md` · 에픽마다 `jobs/<번호>/INTENT.md` · `sources.md` · `results/.gitkeep`, 로드맵 폴더에 없으면 역할 문서 넷과 `HANDBOOK.md`. 쓴 뒤 team 나무 검사까지 돌고, 어긋나면 되돌린다. `--layout` 없이 부르면 지금과 같다.
+- `roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-audit <경로>]` — framing audit 의 원문 · 질문 전체와 brief · 인터뷰 audit 의 사용자 원문을 출처 커밋과 함께 `original.md` 끝에 덧붙인다. 출처가 커밋되지 않았으면 옮기지 않는다.
+- `roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄> [--not <한 줄>]…` — 단순 작업(`kind: task`)의 과제 폴더를 만든다. 지시 원문은 표준 입력의 바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다.
+- `team_layout.py check --roadmap <로드맵> [--base <ref>]` — 팀 폴더의 구조와 원자료 사본의 세 검사(줄 범위 · 덧붙이기만 · 출처와 바이트 같음). 종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가.
+- 레포 설정 키 `rules_budget`(기본 8192) · `handbook_budget`(기본 16384) — UTF-8 바이트이고 레포 설정 파일에서만 읽는다. 로드맵 머리말에 적으면 무시하고 알린다.
+- 로드맵 머리말 `layout` — 설정 해결자가 받는다. 아는 값은 `team` 하나다.
+- `update` 의 종료 코드 4 — 사람이 손으로 고칠 것이 남았다는 뜻이다. team 형식의 재분해에서 있던 과제의 INTENT.md 는 다시 쓰지 않고, 의도 · 범위 · 지시 원문 범위가 바뀐 과제의 고칠 글을 화면에 낸다. 다른 바뀜은 쓴 뒤 4 이고, 지시 원문 범위만 다르면 아무것도 쓰지 않고 4 다. 고칠 것이 없으면 0 이다. team 형식의 `extract` 는 분해안 표 끝에 「지시 원문 범위」 칸을 더해 내고 `update` 가 그 표를 받는다.
+- 틀 일곱(`templates/team/`) — 역할 문서 넷 · `INTENT.md` · `RULES.md` · `HANDBOOK.md`.
+- `references/team-files.md` — team 형식의 정본 문서(팀 폴더 · 과제 폴더와 INTENT.md · 원자료 · sources.md · 역할 문서).
+
+### Changed
+- 역할 이름(`leader` · `designer` · `writer` · `worker`)의 폴더는 로드맵으로 세지 않는다. `create` 는 형식과 무관하게 역할 이름의 `--out` 을 거절한다.
+- 단계 계산이 `layout: team` 과 모르는 `layout` 값에서 검사 불가(3)로 멈춘다 — team 로드맵은 번호 대조까지만 한다(team 형식의 단계 계산은 다음 판). 모르는 값이면 `update` · `extract` · `job new` 도 거절한다.
+- 이 판의 team `update` 는 머지된 에픽을 가려 보호하지 못한다 — 「머지 여부를 확인하지 못했다」 를 화면에 알리고 진행한다(team 형식의 단계 계산은 다음 판에 온다).
+- 원자료 사본의 출처 줄이 적은 커밋은 레포에서 계속 읽혀야 한다(기본 브랜치에서 닿아야 한다). squash · rebase 머지나 고쳐 쓴 브랜치로 그 커밋이 사라지면 `team_layout.py check` 는 검사 불가(3)로 멈추고 `create --layout team` · `update` 는 쓰지 않고 멈춘다. `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 낸다. 이 판에는 출처 줄의 커밋을 고치는 명령이 없다(`original.md` 는 덧붙이기만 받는다) — 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나 머지 커밋으로 머지한다. 생성기 명령은 team 나무 검사의 알림 줄도 화면에 낸다.
+- 상태 계산이 기대는 읽기 전용 모듈에 `team_layout.py` · `team_check.py` · `team_files.py` 가 더해졌다.
+- `control_plane.py` 의 코드 지문 파일 목록에 `team_layout.py` 가 더해졌다.
+- framing 을 거친 인터뷰(상태 파일의 `seed:` 가 `없음` 이 아니다)에서 framing audit 를 못 찾으면 `create --layout team` · `original` 이 쓰지 않고 멈춘다(종료 코드 1) — 사유가 찾은 자리와 `original --framing-audit <경로>` 로 푸는 길을 적는다. 찾는 자리는 인터뷰와 같이 seed 파일 이름에서만 정한다(같은 폴더, `.md` → `.audit.md`) — seed 머리의 `audit_file` 은 따르지 않는다. seed 는 있는데 framing audit 가 처음부터 없던 인터뷰(인터뷰는 `audit=없음` 으로 받아 진행한다)도 멈춘다 — 푸는 길은 명시 경로뿐이다. `--framing-audit` 로 푼 팀 폴더는 `original` 을 다시 부를 때마다(재분해) 같은 인자를 준다 — 사본에 framing 구간이 이미 있어도 인자 없이 부르면 종료 코드 1 이다. framing 을 거치지 않은 인터뷰(`seed:` 가 `없음` 이거나 비었거나 상태 파일이 없다)는 그대로 `framing audit 없음` 표지와 함께 간다.
+- `framing audit 없음` 표지를 적을 때 `original` · `create --layout team` 이 화면에 한 줄을 낸다(종료 코드는 0 그대로) — framing 원문 · 질문 전체 없이 brief 쪽만 옮겼고, framing 을 거친 인터뷰라면 `original --framing-audit <경로>` 로 덧붙인다는 줄이다. 옛 형식 `create` 의 화면은 그대로다.
+
 ## [8.14.0] — 2026-11-14
 
 ### Added

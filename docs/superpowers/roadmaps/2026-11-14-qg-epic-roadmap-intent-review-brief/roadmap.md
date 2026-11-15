@@ -30,11 +30,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 경로 예약: plugins/quality-gates/scripts/, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md
 
 ### R3 — 지휘자 경유 입구
-- 의도: 에픽 · 로드맵 이름 호출을 지휘자 경유로 모으고 이름 풀이 · 두 박자 자동 호출 · 질문 옮기기 · 「잘못 골랐다」의 행선(피벗 경로 · 새 일의 씨앗)을 잇는다
+- 의도: 에픽 · 로드맵 이름 호출을 지휘자 경유로 모으고 이름 풀이 · 자동 호출 · 질문 옮기기 · 「잘못 골랐다」의 행선(피벗 경로 · 새 일의 씨앗)을 잇는다
 - 범위:
-  - 한다: 지휘자의 에픽 · 로드맵 이름 풀이(roadmap_status --json) · 에픽 머지 뒤와 로드맵 끝 자동 호출 · 게이트 사이 질문 옮기기 · 새 일의 씨앗 · 로드맵 없는 PR 의 qg 직접 호출은 그대로 둔다
-  - 안 한다: 머지된 에픽 다시 열기 · 옆 세션의 팀 구조 자체
-- 의존: R1, R2
+  - 한다: 지휘자의 에픽 · 로드맵 이름 풀이(roadmap_status --json) · spec 승인 앞과 에픽 머지 뒤와 로드맵 끝 자동 호출 · 게이트 사이 질문 옮기기 · 새 일의 씨앗 · 로드맵 없는 PR 의 qg 직접 호출은 그대로 둔다
+  - 안 한다: 걷기 · 실행(두 박자의 걷기 전제는 뺐다) · qg 가 돌려주는 꼴 자체(R5) · 머지된 에픽 다시 열기 · 옆 세션의 팀 구조 자체
+- 의존: R1, R2, R5
 - 브랜치: feature/conductor-qg-entry
 - 묶음: R3.md
 - 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/, plugins/quality-gates/scripts/setup-qg.sh
@@ -48,6 +48,16 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 브랜치: feature/qg-review-only
 - 묶음: R4.md
 - 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/README.md
+
+### R5 — intent-critic 돌려주는 꼴 계약 · qg 안쪽 뒤처리
+- 의도: 부르는 쪽(지휘자 · 사람이 보는 세션)이 intent-critic 의 질문을 받아 옮길 수 있게 qg 가 돌려주는 꼴을 계약으로 굳히고 R1 · R2 가 미룬 qg 안쪽 가장자리를 닫는다
+- 범위:
+  - 한다: 돌려주는 꼴에 질문 글 · 관찰 · 상태 넷(답 기록 실패 · 답하지 않음 · 묻지 않음 가르기) 싣기 · 묻지 않은 질문과 다른 팀 기록 파일의 자리와 수명 정하기 · 하위 명령을 직접 부를 때 전역 스위치 읽기 · 답 입력 읽기 · 다른 팀 읽기 · 리뷰어 입력 묶음과 공시 · 문서 머리 읽기의 남은 가장자리 · 테스트 틈
+  - 안 한다: 지휘 절차 파일 · 지휘자의 자동 호출과 질문 옮기기(R3) · qg 본문 흐름 고치기와 README 다듬기(R4) · 걷기 · 실행
+- 의존: R1, R2
+- 브랜치: feature/qg-return-contract
+- 묶음: R5.md
+- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/
 
 ## 지휘 절차
 
@@ -86,6 +96,12 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
   - 「선택해야할게 너무 많자나 그리고 여러 팀이 돌게 되면 갈라지기도 할거고」
   - 「중복이 조율 안되기도 할거고」
   - 「걷기와 실행쪽을 보고싶은게 아니야」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-15 · R3 를 둘로 — qg 가 돌려주는 꼴 계약과 qg 안쪽 뒤처리는 새 에픽 R5 로 지금, 지휘자 경유 입구(R3)는 옆 로드맵의 지휘 절차 개편 설계 뒤로. 두 박자의 걷기 전제를 뺀다
+- 바뀜: 바뀐 에픽 R3 · 새 에픽 R5 「그래」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「그래」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표

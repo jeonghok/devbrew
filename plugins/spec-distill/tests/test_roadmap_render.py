@@ -404,5 +404,101 @@ class GoldenSample(unittest.TestCase):
         self.assertEqual(R.parse_table(R.format_table(self.rows)), self.rows)
 
 
+TEAM_E = "| E1 | 첫 에픽 | 묶음 | 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | a/x.py | C1 · S1 | 없음 | 없음 | 3-9 · 12–12 |"
+TEAM_P = "| P1 | 결정 | 결정 | 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 | 없음 | S2 · OQ1 | 없음 | 없음 | 없음 |"
+
+
+def cut_last(row):   # 마지막 칸을 뗀 행(끝의 `|` 없이)
+    return row.rsplit("|", 2)[0]
+
+
+def team_table(*rows, cols=None):
+    cols = cols or (R.COLUMNS + (R.TEAM_COLUMN,))
+    return "## 분해안\n\n| " + " | ".join(cols) + " |\n|" + "---|" * len(cols) + "\n" + "\n".join(rows) + "\n"
+
+
+class TeamTable(unittest.TestCase):   # R1 AC6
+    def test_parse_and_round_trip(self):
+        rows = R.parse_table(team_table(TEAM_E, TEAM_P), "team")
+        self.assertEqual((rows[0].ranges, rows[1].ranges), ([(3, 9), (12, 12)], []))
+        out = R.format_table(rows, "team")
+        self.assertIn("| 3–9 · 12–12 |", out)
+        self.assertEqual(R.parse_table(out, "team"), rows)
+
+    def test_wide_table_keeps_team_column_last(self):
+        cols = R.COLUMNS + R.EXTRA_COLUMNS + (R.TEAM_COLUMN,)
+        rows = R.parse_table(team_table(cut_last(TEAM_E) + "| 큼 | 없음 | 없음 | 없음 | 없음 | 없음 | 3–9 |", cols=cols), "team")
+        self.assertEqual((rows[0].extras, rows[0].ranges), ({"크기": "큼"}, [(3, 9)]))
+        self.assertTrue(R.format_table(rows, "team").splitlines()[2].rstrip().endswith("| %s |" % R.TEAM_COLUMN))
+
+    def test_rejects(self):
+        for text, layout in ((team_table(TEAM_E), None),                                        # 옛 형식은 그 칸을 받지 않는다
+                             (team_table(cut_last(TEAM_E) + "|", cols=R.COLUMNS), "team"),       # team 은 그 칸이 있어야 한다
+                             (team_table(cut_last(TEAM_E) + "| 없음 |"), "team"),                # 묶음 행은 범위가 있어야 한다
+                             (team_table(cut_last(TEAM_E) + "| 9–3 |"), "team"),
+                             (team_table(cut_last(TEAM_P) + "| 1–2 |"), "team"),                 # 결정 행은 없음
+                             (team_table(TEAM_E.replace("| 묶음 |", "| 브랜치 docs/x-design.md |")), "team")):
+            self.assertRaises(R.TableError, R.parse_table, text, layout)
+
+    def test_old_table_output_unchanged(self):
+        text = team_table(cut_last(TEAM_E) + "|", cols=R.COLUMNS)
+        self.assertEqual(R.format_table(R.parse_table(text)), text)
+
+
+class TeamBlock(unittest.TestCase):
+    def test_bundle_field_points_at_sources(self):
+        row = R.parse_table(team_table(TEAM_E), "team")[0]
+        self.assertIn("- 묶음: jobs/E1/sources.md\n", R.render_block(row, "team"))
+        self.assertIn("- 묶음: E1.md\n", R.render_block(row))
+
+    def test_template_keeps_the_sentence_team_replaces(self):   # team_write.render_team_roadmap 이 이 문장을 바꾼다
+        self.assertEqual(R.TEMPLATE.read_text(encoding="utf-8").count("에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다."), 1)
+
+
+class TeamParts(unittest.TestCase):
+    """bundle_parts 는 render_bundle 이 싣는 번호 줄을 칸별로 낸다 · team extract_rows 는 번호 파일과 INTENT.md 를 읽는다."""
+
+    def setUp(self):
+        self.rows = R.parse_table(TABLE)
+        self.idx = R.index_brief(MINI_BRIEF, MINI_AUDIT)
+
+    def test_bundle_parts_match_bundle_sections(self):
+        ids, parts = R.bundle_parts(self.rows[1], self.idx)
+        self.assertEqual(ids, ["C4", "D7", "OQ3", "RC9", "K1", "K2", "ST4", "S1", "«alpha»", "«zeta»"])
+        self.assertEqual(list(parts), ["제약", "열린 질문", "웹 근거", "기각 · 위험"])
+        got = R.render_bundle(self.rows[1], self.idx, "rm/roadmap.md", "iv/b.md", "iv/b.audit.md")
+        for heading, name in (("## 2.", "제약"), ("## 3.", "열린 질문"), ("## 4.", "웹 근거"), ("## 5.", "기각 · 위험")):
+            self.assertEqual(section_body(got, heading).strip("\n"), "\n".join(parts[name]))
+        self.rows[1].ids.append("C99")
+        self.assertRaises(R.TableError, R.bundle_parts, self.rows[1], self.idx)
+
+    def test_bundle_parts_names_come_from_team_files(self):
+        self.assertEqual(list(R.bundle_parts(self.rows[1], self.idx)[1]), list(R.team_files.SOURCE_PARTS))
+        saved = R.team_files.SOURCE_PARTS
+        try:   # 칸 이름 수가 고른 줄 묶음 수와 다르면 조용히 잘리지 않고 멈춘다
+            R.team_files.SOURCE_PARTS = saved[:3]
+            self.assertRaises(ValueError, R.bundle_parts, self.rows[1], self.idx)
+        finally:
+            R.team_files.SOURCE_PARTS = saved
+
+    def team_roadmap(self):
+        return ("---\ntype: roadmap\nlayout: team\nsource_brief: b.md\n---\n\n## 에픽\n\n" + R.render_block(
+            R.parse_table(team_table(TEAM_E), "team")[0], "team") + "\n" + R.render_block(
+            R.parse_table(team_table(TEAM_P), "team")[0], "team") + "\n## 재분해 이력\n\n- 2026-01-01 · 처음\n")
+
+    def test_extract_rows_reads_sources_and_intent(self):
+        sources = "---\ntype: job-sources\njob: E1\nids: [C1, S1]\n---\n\n## 인터페이스\n\n- 받는 것: P1 의 이름\n- 넘기는 것: 없음\n"
+        intent = ("---\ntype: job\njob: E1\nkind: epic\n---\n\n## 목표\n\n가\n\n## 지시 원문\n\n- 범위: "
+                  "intent/original.md 3–9행 · 12–12행\n\n## 하지 않을 것\n\n- 나\n\n## 결정 기록\n")
+        files = {"jobs/E1/sources.md": sources, "jobs/E1/INTENT.md": intent}
+        rows = R.extract_rows(self.team_roadmap(), files.get)
+        self.assertEqual([(r.id, r.ids, r.receives, r.ranges) for r in rows],
+                         [("E1", ["C1", "S1"], "P1 의 이름", [(3, 9), (12, 12)]), ("P1", ["S2", "OQ1"], "없음", [])])
+        del files["jobs/E1/INTENT.md"]
+        with self.assertRaises(R.TableError) as cm:
+            R.extract_rows(self.team_roadmap(), files.get)
+        self.assertIn("E1 의 INTENT.md 를 읽지 못했다", str(cm.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -157,7 +157,7 @@ assert_contains "$line" "시간 초과" "양성 대조: 느린 config 호출에 
 # ── statusline_names_default ─────────────────────────────────────────────────
 S="$T/scripts"; mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
-  "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" \
+  "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/team_layout.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" \
   "$REAL/state_path.py" "$S/"
 printf '%s\n' 'import json, sys' \
   'print(json.dumps({"roadmap": sys.argv[1], "source": "x", "fetched_at": None, "notice": "", "overlaps": [], "unassigned": [], "orphans": [], "unknown_ids": [], "format_errors": [], "unknown_reasons": [], "exit": 0, "blocks": [{"id": "R1", "title": "하나", "kind": "bundle", "stage": "설계 중", "reason": "r", "task_status": "in_progress", "deps": [], "warnings": [], "notes": []}]}, ensure_ascii=False))' \
