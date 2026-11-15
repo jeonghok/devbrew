@@ -303,6 +303,39 @@ assert_contains "$ALLOW_C" 'agent 에서 도구를 빼는 키는 camelCase `disa
 SCOPED_C="$(cline '**Scoped agents')"
 assert_contains "$SCOPED_C" '**agent frontmatter 에서 도구를 다루는 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다**' "F6 D1.2: agent 도구 필드 문장"
 assert_contains "$SCOPED_C" 'skill 의 `disallowed-tools`(kebab)를 agent에 그대로 적으면' "F6 D1.2: 헷갈리는 짝에 skill 의 kebab 키"
+AUTH6="$(cat "$AUTHORING")"
+TREE6="$(awk '/^```$/{n++; next} n==1' "$AUTHORING")"
+assert_contains "$TREE6" '# 필수 키는 name 하나 — version · description · author 를 빼면 claude plugin validate 가 경고' "F6 AC8: 가이드 plugin.json 주석"
+assert_contains "$TREE6" '# frontmatter metadata 아래 cost_class 선언' "F6 AC4: 가이드 SKILL.md 주석"
+assert_contains "$TREE6" '├── dependencies.md' "F6 AC13: 트리에 dependencies.md"
+assert_contains "$TREE6" '├── references/' "F6 AC13: 트리에 references/"
+assert_contains "$TREE6" '진입 사전 검사 스크립트(entry_preflight.py' "F6 AC13: scripts 주석"
+assert_contains "$TREE6" '## 진입 단계' "F6 AC13: SKILL.md 주석이 진입 꼴을 가리킨다"
+for gone in 'quality-gates:doc-recritic' 'Phase 1.5' 'command-development' '`/create-plugin`' 'hook에서 호출하는' '시작 버전 `0.1.0`' '이 플러그인의'; do
+  assert_not_contains "$AUTH6" "$gone" "F6 AC13: 가이드에 「${gone}」 없음"
+done
+assert_contains "$AUTH6" '`spec-distill:doc-recritic`(문서 리뷰 엔진의 재비판, 공유 정본의 copy-of 사본)' "F6 AC13: 실재하는 예시 agent(양)"
+assert_contains "$AUTH6" '`plugin-dev:create-plugin` 은' "F6 AC13: create-plugin 완전명(양)"
+assert_contains "$AUTH6" '`version` 을 적는 새 플러그인은 `0.1.0` 에서 시작한다.' "F6 AC8: 끝 줄(양)"
+# 가이드가 예시로 드는 이 리포의 agent · skill 이름은 실재한다
+for p in plugins/spec-distill/agents/doc-recritic.md plugins/plugin-audit/agents/smoke-probe.md \
+         plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md \
+         plugins/plugin-audit/skills/plugin-audit/SKILL.md; do
+  [ -f "$p" ] && ok "F6 AC13: 예시 이름 실재 — $p" || no "F6 AC13: 예시 이름이 없다 — $p"
+done
+RF="plugins/spec-distill/skills/request-framing/SKILL.md"
+assert_not_contains "$(cat "$RF")" '도구를 막을 수단이 없' "F6 AC18: request-framing 에 옛 믿음 문장이 없다"
+assert_contains "$(cat "$RF")" '(does not — cannot 이 아닙니다. `allowed-tools` 는 제한이 아니고, 이 skill 은 도구를 빼는 키를 쓰지 않습니다.' "F6 AC18: 그 자리에 새 문장(양)"
+CC="docs/git-workflow/commit-conventions.md"
+assert_not_contains "$(cat "$CC")" 'release-please' "F6 AC17: 자동 릴리스 도구가 판을 올린다는 문장이 없다"
+assert_contains "$(cat "$CC")" '이 레포는 자동 릴리스 도구를 쓰지 않는다 — 판은 [CLAUDE.md](../../CLAUDE.md) 의 판 올림 규칙대로' "F6 AC17: CLAUDE.md 를 가리킨다(양)"
+n_entry="$(find plugins/*/scripts -name entry_preflight.py -type l | grep -c .)"
+case "$n_entry" in 3) w=세 ;; 4) w=네 ;; 5) w=다섯 ;; *) w="?" ;; esac
+assert_contains "$(grep -F '`entry/`' shared/README.md)" "${w} 플러그인에 심볼릭 링크" "F6 AC17: shared/README entry 수가 실제 링크 수(${n_entry})와 같다"
+assert_eq "$(grep -rl --exclude-dir=tests 'copy-of: shared/python/devbrew-python.sh' plugins | grep -c .)" "1" "F6 AC17: python 사본은 하나다(실측)"
+assert_contains "$(grep -F '`python/`' shared/README.md)" '`project-init` 에 **물리 사본**으로 배포된다' "F6 AC17: shared/README python 줄"
+assert_contains "$(cat shared/README.md)" '플러그인이 심볼릭 링크로 싣는 파일의 내용은 설치할 때 설치본에 들어간다' "F6 AC17: 폴더와 링크 내용의 구분"
+assert_contains "$(cat shared/README.md)" '판을 올리는지는 `CLAUDE.md` 의 판 올림 규칙을 따른다' "F6 AC17: 판 올림 안내"
 
 # R14 넘김 — 번호 판정
 p5="$(awk '/^### P5/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"

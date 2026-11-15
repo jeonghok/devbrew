@@ -58,7 +58,7 @@ BREAKING CHANGE: response now returns array instead of object
 | `feat:` | MINOR | `1.2.3` → `1.3.0` |
 | `BREAKING CHANGE:` (any type) | MAJOR | `1.2.3` → `2.0.0` |
 
-자동 릴리스 도구 (`release-please`, `semantic-release`)가 이 매핑으로 version bump + CHANGELOG 생성.
+이 레포는 자동 릴리스 도구를 쓰지 않는다 — 판은 [CLAUDE.md](../../CLAUDE.md) 의 판 올림 규칙대로 PR 에 한 번 손으로 올린다.
 
 ## AI-Assisted Commits
 
