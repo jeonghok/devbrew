@@ -136,7 +136,7 @@ CLAUDE.md `### 메타데이터 & 버전 관리` 첫 줄을 아래 뜻으로 다�
 
 이 에픽의 PR 자신에 정의를 적용한다 — skill 10개의 frontmatter 가 바뀌므로 네 플러그인이 모두 ① 에 걸린다. 플러그인마다 한 번씩만 올린다(plugin-audit 은 감사 기준이 바뀌어 minor, 나머지 셋은 patch — 번호는 머지 직전 기본 브랜치 위에서 정한다).
 
-**문서 셋 밖의 두 자리(사용자 확인 전 — 지휘자 제안: 함께 고친다).**
+**문서 셋 밖의 두 자리도 함께 고친다**(사용자 결정 — 「함께 고치자」. 인터뷰가 「셋 밖이라 고칠지는 묻는다」 로 남긴 자리다).
 
 - `docs/git-workflow/commit-conventions.md` 의 「자동 릴리스 도구 (`release-please`, `semantic-release`)가 이 매핑으로 version bump + CHANGELOG 생성.」 — 이 레포는 그런 도구를 쓰지 않고 손으로 올린다. 그 문장을 「이 레포는 자동 릴리스 도구를 쓰지 않는다 — 판은 CLAUDE.md 의 올림 규칙대로 PR 에 한 번 손으로 올린다」 는 뜻으로 고친다. 두 문서가 판 올림을 다르게 말하면 읽는 쪽이 아무 쪽이나 따른다.
 - `shared/README.md` 의 낡은 수 둘(`entry/` 를 세 플러그인에 링크 → 넷 · `python/` 을 세 플러그인에 사본 → project-init 하나)을 고치고, 「여기 파일이 바뀔 때 어느 플러그인의 판을 올리는지는 CLAUDE.md 의 올림 규칙」 이라는 한 줄을 둔다. 그 파일 첫머리의 「설치본에 들어가지 않는다」 는 폴더를 두고 한 말이고, 링크로 실린 파일의 내용은 설치할 때 설치본에 들어간다 — 올림 안내 한 줄이 그 문장과 어긋나 보이지 않게 그 구분을 함께 적는다.
@@ -195,7 +195,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - AC14 — agent 의 `model` 키 금지 문장과 그것을 지키는 테스트는 diff 가 없다(저술 가이드 model 문단은 예시 구절만 바뀐다).
 - AC15 — 철학 문서 P8 절과 CLAUDE.md `## The Three Laws` 절은 diff 가 없다.
 - AC16 — 전체 스위트에서 이 브랜치에만 있는 실패가 0 이다.
-- AC17(사용자가 「함께 고친다」 를 고르면) — `docs/git-workflow/commit-conventions.md` 가 자동 릴리스 도구가 판을 올린다고 말하지 않고, `shared/README.md` 의 두 수가 실제와 같다.
+- AC17 — `docs/git-workflow/commit-conventions.md` 가 자동 릴리스 도구가 판을 올린다고 말하지 않고 CLAUDE.md 의 올림 규칙을 가리킨다. `shared/README.md` 의 두 수가 실제와 같고, 판 올림 안내 한 줄과 「폴더는 설치본에 들어가지 않지만 링크로 실린 파일의 내용은 들어간다」 는 구분이 있다.
 
 ## Files to Modify
 
@@ -206,7 +206,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 감사 · 검사: `plugins/plugin-audit/scripts/check-shape-completeness.py` · `check-staleness.py` · `shared/entry/check_invocation_surface.py`
 - 테스트(문장 · 자리 · fixture): `plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `shared/tests/test_cost_disclosure.sh` · `shared/tests/test_invocation_surface.sh` · `plugins/plugin-audit/tests/test_check_shape_completeness.py` · `test_check_staleness.py` · `test_skill_orchestration.py` · `plugins/spec-distill/tests/test_epic_conductor_skill.sh` · `test_conducting_interview_stage.sh` · `test_pm_interview_entry.sh` · `test_reviewing_brief_skill.sh`
 - 네 플러그인의 `.claude-plugin/plugin.json`(판) · `CHANGELOG.md`
-- (AC17) `docs/git-workflow/commit-conventions.md` · `shared/README.md`
+- 문서 셋 밖의 두 자리: `docs/git-workflow/commit-conventions.md` · `shared/README.md`
 
 고치지 않는 것: `shared/tests/test_changelog_integrity.sh`(로드맵의 경로 예약에 있으나 고칠 것이 없다) · agent 파일 전부 · model 키 테스트 14개 파일.
 
@@ -285,7 +285,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 | RC96 · RC100 | 반영 | Constraints · 설계 5 — 판을 읽는 코드와 정합 락은 그대로 |
 | RC101 | 반영 | 설계 4 의 감사 검사 |
 | RC138 | 반영 | Context — 다시 센 수로 바꿨다 |
-| RC153 | 반영 | 설계 5 의 문서 셋 밖 두 자리 — 사용자에게 묻는다 |
+| RC153 | 반영 | 설계 5 의 문서 셋 밖 두 자리 — 사용자에게 물었고 함께 고치기로 했다(결정 기록) |
 | RC157 · RC235 · RC237 | 반영 | 설계 5 — 링크 · 사본 · 실리지 않는 것 |
 | RC242 · RC243 | 반영 | Context — 어긋난 기록 |
 | K9 | 반영 | Non-goals — 규칙 문장과 검사만, 새 코어에 맞추는 일은 다른 에픽 |
@@ -321,7 +321,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 로드맵의 F6 경로 예약은 파일 다섯이다. 이 설계의 Files to Modify 는 그보다 넓다(skill 10개의 머리 줄 · 테스트 열 개 안팎 · 감사 검사 둘 더). 예약을 맞추는 로드맵 수정은 지휘자가 따로 한다.
 - 설계의 조사는 하위 agent 넷이 했다. 보고 원문은 지휘 자원 폴더(`relay/F6/research-*.md`)에 있다 — 계획 담당자에게는 내용으로 싣는다.
 - 인터뷰의 원래 결정에서 달라진 것은 하나다 — agent 의 model 키(결정 기록의 원래 · 재결정 · 근거).
-- 설계문서 점검(builder check)이 낸 질문은 둘이다. 하나는 사용자 몫이다(문서 셋 밖의 두 자리 — 설계 5 끝). 다른 하나(감사 검사가 「옛 자리」 를 어떤 꼴로 내는가)는 지휘자가 정해 설계 1 에 적었다. 점검이 짚은 사실 둘(호출 표면 검사에 `metadata` 가 이미 있다 · 감사 검사 테스트의 앵커 둘)도 설계 1 과 Constraints 에 반영했다.
+- 설계문서 점검(builder check)이 낸 질문은 둘이다. 하나는 사용자 몫이었고 사용자가 답했다(문서 셋 밖의 두 자리 — 결정 기록). 다른 하나(감사 검사가 「옛 자리」 를 어떤 꼴로 내는가)는 지휘자가 정해 설계 1 에 적었다. 점검이 짚은 사실 둘(호출 표면 검사에 `metadata` 가 이미 있다 · 감사 검사 테스트의 앵커 둘)도 설계 1 과 Constraints 에 반영했다.
 
 ## 결정 기록
 
@@ -330,6 +330,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
   - 재결정: 금지를 그대로 둔다. 이 에픽 범위에서 「agent 의 model 키 허용」 을 빼고 OQ33 을 닫는다. (「남길쪽이 맞네」 를 이렇게 읽은 것은 지휘자의 해석이다 — 무엇이 빠지고 남는지 되짚어 보였고 정정이 없었다.)
   - 근거: 같은 날 사용자가 하위 agent 의 모델을 정의에 박지 않고 띄울 때 지침으로 고르기로 했다(이 세션의 답 「보낼 때마다 판단 (권장)」).
 - 2026-11-15 · 판 올림을 지키게 하는 길(길 1 문장만 · 길 2 문장 + 머지 전 알림 · 길 3 번호를 머지할 때 — 지휘자 추천 길 1) → 「길 1로 가자」
+- 2026-11-15 · 문서 셋 밖의 두 자리(`docs/git-workflow/commit-conventions.md` 의 자동 릴리스 문장 · `shared/README.md` 의 낡은 수와 올림 안내)를 이 PR 에서 함께 고칠지 두고 갈지(지휘자 제안 함께 고친다) → 「함께 고치자」
 
 ## 지휘 기록
 
