@@ -25,6 +25,7 @@ IMPLEMENT = team_layout.STAGES[2]
 SHALLOW = "얕은 클론이라 받음 · 진행을 셀 이력이 없다 — `git fetch --unshallow` 뒤 다시 계산한다"
 RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정 줄을 다 읽지 못했다"
 RECORD_UNREAD = "결정 기록 읽기 불가 — "
+NO_RECEIPT, UNREAD_END = "결과 있음 · 받음 없음", "읽지 못함 — 끝 줄이 있는지 모른다"
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -236,15 +237,16 @@ class Reader:
                     not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes):
                 block["notes"].append(job_results.file_note(RESULT_UNREAD, latest, result.problems[0]))
             if state == job_results.NOT_RECEIVED:
-                block["notes"].append("결과 있음 · 받음 없음: %s(%s)" % (
-                    latest, "읽지 못함 — 끝 줄이 있는지 모른다" if result is None or lost
+                block["notes"].append("%s: %s(%s)" % (
+                    NO_RECEIPT, latest, UNREAD_END if result is None or lost
                     else "대조를 기다린다" if result.end else "도는 중 — 끝 줄 없음"))
         if plain:
+            running, received = team_layout.PLAIN_FLOW_STAGES
             if unread:
-                return "진행 중", RECORD_UNREAD + unread, specs, plans
+                return running, RECORD_UNREAD + unread, specs, plans
             if state == job_results.RECEIVED:
-                return "결과 받음", "결과 받음 줄 있음: %s" % latest, specs, plans
-            return "진행 중", "브랜치 있음", specs, plans
+                return received, "결과 받음 줄 있음: %s" % latest, specs, plans
+            return running, "브랜치 있음", specs, plans
         when, why = self._approval(intent)
         block["approved"] = when
         if why:
@@ -267,6 +269,8 @@ class Reader:
 
 OUTSIDE = "로드맵 밖 과제"
 MERGED, ON_DEFAULT = "머지됨", "기본 브랜치에 있음"
+TASKS_UNCOUNTED, TASKS_PARTLY = OUTSIDE + "를 세지 못했다", OUTSIDE + "를 다 세지 못했다"   # 하나도 못 셈 · 읽은 것만 셈
+MAIN_JOBS_UNREAD = "기본 브랜치의 %s 를 읽지 못했다"
 
 
 def _intent_head(git, rev: str, path: str) -> tuple:
@@ -304,8 +308,10 @@ def _job(team, name: str, text: str, meta: dict, stage: str, reason: str, tip, b
             "progress": block.get("progress") if block else None, "notes": block["notes"] if block else []}
 
 
-def task_jobs(reader, blocks: list) -> tuple:
+def task_jobs(reader, blocks: list, scan=None) -> tuple:
     """(과제 목록, 알림 줄 목록) — 로드맵 블록이 아닌 과제 폴더 가운데 INTENT.md 머리의 kind 가 task 인 것(AC14).
+    scan(과제) 은 브랜치 끝에서 센 과제(`id` · `tip` · 머리 paths 인 `reserved`)의 예약 알림 줄들을 내고 그 과제의 notes 에
+    붙는다 — 판정은 부르는 쪽이 블록과 같은 것을 준다. 기본 브랜치에 있는 과제(머지됨)는 잴 브랜치가 없어 부르지 않는다.
 
     기본 브랜치에 있으면 「머지됨」. 기본 브랜치에 들어가지 않은 브랜치 끝(Git.unmerged_tips)에서 찾은 과제는 머리
     `branch` 가 가리키는 브랜치의 끝(read_tip)에서 다시 읽어, 같은 폴더가 있고 머리가 그 이름일 때만 센다 — 다른 브랜치의
@@ -314,10 +320,10 @@ def task_jobs(reader, blocks: list) -> tuple:
     git.failures 에도 남아 부르는 쪽(build)이 검사 불가로 올린다."""
     git, main, team = reader.git, reader.main, reader.team
     if main is None:
-        return [], ["%s를 세지 못했다 — 기본 브랜치를 모른다" % OUTSIDE]
+        return [], ["%s — 기본 브랜치를 모른다" % TASKS_UNCOUNTED]
     on_main = git.names(main, team.jobs)
     if on_main is None:
-        return [], ["%s를 세지 못했다 — 기본 브랜치의 %s 를 읽지 못했다" % (OUTSIDE, team.jobs)]
+        return [], ["%s — %s" % (TASKS_UNCOUNTED, MAIN_JOBS_UNREAD % team.jobs)]
     taken = set(str(b["id"]).casefold() for b in blocks)
     jobs, notes = [], []
 
@@ -342,11 +348,11 @@ def task_jobs(reader, blocks: list) -> tuple:
     failed_before = len(git.failures)
     tips = git.unmerged_tips(main)
     if len(git.failures) > failed_before:
-        note("%s를 다 세지 못했다 — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" % OUTSIDE)
+        note("%s — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" % TASKS_PARTLY)
     for tip in tips:
         names = git.names(tip, team.jobs)
         if names is None:
-            note("%s를 다 세지 못했다 — 브랜치 끝 %s 의 %s 를 읽지 못했다" % (OUTSIDE, tip[:8], team.jobs))
+            note("%s — 브랜치 끝 %s 의 %s 를 읽지 못했다" % (TASKS_PARTLY, tip[:8], team.jobs))
             continue
         for name in names:
             if name.casefold() in taken or name in known:
@@ -374,6 +380,8 @@ def task_jobs(reader, blocks: list) -> tuple:
         block = {"id": name, "kind": team_files.KIND_TASK, "fields": {}, "reserved": _head_paths(meta.get("paths", "")),
                  "notes": [tip_note] if tip_note else []}
         stage, reason, _specs, _plans = reader.progress(tip, block, 1)
+        if scan is not None:
+            block["notes"].extend(scan(dict(block, tip=tip)))
         if reason.startswith(RECORD_UNREAD):   # 단계는 블록과 같게 두되 결과 받음일 수 있음을 알린다
             note("%s %s: %s 의 결정 기록을 읽지 못해 결과 받음인지 셀 수 없다 — %s"
                  % (OUTSIDE, name, team.intent(name), reason[len(RECORD_UNREAD):]))

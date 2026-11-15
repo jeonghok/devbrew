@@ -123,8 +123,13 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
         import job_results as JR
         s10 = self.doc("## §10 단계 계산")
         scan = s10.split("**로드맵 밖 과제.**", 1)[1].split("**계산 결과의 칸.**", 1)[0]
-        self.assertIn("과제 폴더 이름 목록 · 브랜치 끝 목록을 git 이 읽지 못하면 `git 읽기 실패 — …` 로 검사 불가 사유에 들고(종료 코드 3) "
-                      "`%s를 다 세지 못했다 — …` 를 낸다" % TS.OUTSIDE, scan)
+        # 기본 브랜치의 목록과 브랜치 끝의 목록은 알림 글이 다르다(「세지 못했다」 · 「다 세지 못했다」) — 글은 코드의 상수에서
+        self.assertIn("기본 브랜치의 과제 폴더 이름 목록을 git 이 읽지 못하면 과제를 하나도 싣지 않고 `%s — %s` 를, 기본 브랜치에 "
+                      "들어가지 않은 브랜치 끝 목록이나 그 끝의 과제 폴더 이름 목록을 읽지 못하면 읽은 과제는 싣고 `%s — …` 를 낸다. "
+                      "둘 다 `git 읽기 실패 — …` 로 검사 불가 사유에 든다(종료 코드 3)."
+                      % (TS.TASKS_UNCOUNTED, TS.MAIN_JOBS_UNREAD % "<과제 폴더>", TS.TASKS_PARTLY), scan)
+        self.assertNotIn("과제 폴더 이름 목록 · 브랜치 끝 목록을 git 이 읽지 못하면", scan)
+        self.assertNotEqual(TS.TASKS_UNCOUNTED, TS.TASKS_PARTLY)
         self.assertIn("`%s: <이름> — %s`" % (JR.NOT_COUNTED_HEAD, JR.NOT_A_FILE % "<경로>"), scan)
         self.assertIn("받음 줄이 없으면 그 결과 파일을 대조하지 않으므로 「결과 있음 · 받음 없음」 알림만 내고 종료 코드는 바뀌지 않는다", scan)
         self.assertNotIn("그때 알림은 `로드맵 밖 과제를 다 세지 못했다 — …` 다", scan)
@@ -185,7 +190,13 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
         # 「그 밖에는」 의 경우는 진짜 명령으로 잰 것만 — audit 를 나중에 고친 사본 · 링크로 준 audit 의 사본은 짝이 남아 지나간다
         self.assertNotIn("그 audit 를 고쳐 사본과 달라진 경우", s3)
         self.assertNotIn("심볼릭 링크로 준 audit 로 만든 사본 —", s3)
-        self.assertIn("사본을 만든 뒤 그 audit 를 고치거나 지운 경우와 심볼릭 링크로 준 audit 로 만든 사본도 짝이 남아 있어 지나간다", s3)
+        # 짝이 남아 지나가는 것은 그 brief 를 옮길 때 framing 구간이 새로 붙은 사본뿐 — 다른 brief 가 이미 옮긴 audit 를 받은 사본은 멈춘다
+        self.assertNotIn("사본을 만든 뒤 그 audit 를 고치거나 지운 경우와 심볼릭 링크로 준 audit 로 만든 사본도 짝이 남아 있어 지나간다", s3)
+        self.assertIn("그 brief 를 옮길 때 framing 두 구간이 새로 붙었으면 — 심볼릭 링크로 준 audit 여도, 사본을 만든 뒤 그 audit 를 "
+                      "고치거나 지워도 — 짝이 남아 있어 지나간다(고친 audit 를 찾으면 그 절을 끝에 통째로 다시 옮긴다). 그 밖에는 — "
+                      "사본을 framing 없이 만든 뒤 ② 로 짝을 끝에 덧붙인 사본 · 구간 차례가 어긋난 사본 · 같은 팀 폴더의 다른 brief 가 "
+                      "이미 옮긴 audit 를 ② 로 받아(링크로 같은 파일을 가리켜도) framing 구간이 건너뛰어진 사본처럼 이 brief 의 첫 구간 "
+                      "바로 앞에 짝이 없으면 — 다시 부를 때마다 같은 ② 를 준다. 이 판정은 틀려도 멈추는 쪽으로만 틀린다.", s3)
         # 대체 대조의 사유 글 — 출처 쪽 말머리는 코드의 상수, 기준 쪽 글은 코드에 있는 글과 같은지 함께 본다
         for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN):
             self.assertIn("`%s`" % say[0], s3, say)
@@ -203,6 +214,57 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
                                          "`## 번호 대조` 표가 없으면 검사 불가", srb.TASK_SKIP, "결정 줄 없음", "셀 수 없음: ",
                                          "번호 대조 검사 불가 — "):
             self.assertIn(words, s10, words)
+
+
+class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 문장은 줄 통째로(뒤에 부정을 붙이면 줄이 달라진다), 글은 코드의 상수
+    def s10(self):
+        return section(DOC.read_text(encoding="utf-8"), "## §10 단계 계산")
+
+    def assertLine(self, line, text):
+        self.assertIn("\n" + line + "\n", text)
+
+    def test_partial_merge_with_an_uncounted_branch(self):   # 일부 머지가 덮은 「알 수 없음」 — 단계 글자 그대로 · 검사 불가(3)
+        import roadmap_status as RS
+        s10 = self.s10()
+        self.assertLine("- 얕은 클론에서는 브랜치가 있는 블록이 「%s」 이고 근거는 「%s」 다. 앞 브랜치가 머지된 블록은 아래 「일부 머지」 "
+                        "줄을 따른다." % (TS.UNKNOWN, TS.SHALLOW), s10)
+        self.assertLine("- 「일부 머지 n/m」 인 블록에서 지금 브랜치를 세지 못하면(얕은 클론 · 그 끝의 INTENT.md 를 읽지 못함 · 결과 "
+                        "폴더를 읽지 못함) 단계 글자는 「일부 머지 n/m」 그대로이고 근거가 `<브랜치> — %s · <사유>` 다. 그 근거가 검사 "
+                        "불가 사유 `<번호> %s — <근거>` 로 올라 종료 코드는 3 이다." % (TS.UNKNOWN, RS.PARTIAL_UNCOUNTED), s10)
+
+    def test_plain_flow_reads_design_only_when_checking(self):   # 리더 물음 1 — 설계 없는 흐름의 design.md
+        self.assertLine("- 설계 없는 흐름의 단계는 `design.md` 에 기대지 않는다 — 그 파일은 결과 대조(§5)에서만 읽는다(받음 줄을 "
+                        "다시 계산할 때도 대조다). 받음 줄이 없으면 그 자리가 파일이 아니어도(블롭이 아님) 알림은 「%s」 그대로이고, "
+                        "`job_results.py check` 를 돌릴 때 검사 불가(종료 코드 3)가 난다." % TS.NO_RECEIPT, self.s10())
+
+    def test_received_without_the_output_file(self):   # 결과 받음인데 산출물 칸의 파일이 그 끝에 없다 — 경고(1)
+        import roadmap_status as RS
+        self.assertLine("- 설계 없는 흐름의 블록이 「%s」 인데 산출물 칸이 가리키는 파일이 그 끝에 하나도 없으면 대조할 문서가 없다 — "
+                        "경고 `%s` 가 붙고 종료 코드는 경고의 규칙대로 1 이다(옛 형식에서 「계획」 이후 단계의 묶음에 붙는 경고와 같다)."
+                        % (L.PLAIN_FLOW_STAGES[1], RS.SKIP_BUNDLE.replace("%d", "<n>")), self.s10())
+
+    def test_task_reservation_notices(self):   # 로드맵 밖 과제의 예약 밖 변경 · 경로 예약 위반 — 종료 코드 그대로 · 머지된 과제는 없음
+        import roadmap_status as RS
+        self.assertLine("- 브랜치 끝에서 센 과제는 블록과 같은 판정으로 바꾼 파일을 알린다 — 고칠 자리는 INTENT.md 머리의 `paths` "
+                        "다. 다른 블록이 예약한 파일은 `%s`, 공유 파일 · 머리 `paths` · 자기 과제 폴더 아래 · 어느 블록이 예약한 "
+                        "파일을 뺀 나머지(팀 폴더의 다른 파일도 든다)는 `%s` 다. 그 과제의 알림이라 종료 코드를 바꾸지 않고, 바꾼 "
+                        "파일을 git 이 읽지 못하면 `git 읽기 실패 — …` 로 검사 불가(종료 코드 3)다. 기본 브랜치에 있는 과제(%s)에는 "
+                        "내지 않는다 — 잴 브랜치 끝이 없다."
+                        % (RS.RESERVE_VIOLATION % ("<파일>", "<블록>"), RS.RESERVE_OUTSIDE % "<파일들>", TS.MERGED), self.s10())
+
+    def test_task_unreadable_result_without_a_receipt(self):   # 리더 물음 1 — 로드맵 밖 과제의 블롭 아닌 결과 파일 · 종료 코드 그대로
+        scan = self.s10().split("**로드맵 밖 과제.**", 1)[1].split("**계산 결과의 칸.**", 1)[0]
+        self.assertIn("받음 줄이 없으면 그 결과 파일을 대조하지 않으므로 「결과 있음 · 받음 없음」 알림만 내고 종료 코드는 바뀌지 않는다. "
+                      "결과 파일이 파일이 아닌 경로(블롭이 아님)면 그 알림은 `%s: <이름>(%s)` 다 — 블록은 판정 줄을 읽다가 같은 "
+                      "파일을 읽지 못해 판정 읽기 불가 경고와 3 이 나지만, 로드맵 밖 과제는 판정 줄을 읽지 않아 종료 코드가 그대로다. "
+                      "기본 브랜치를 모르면 `%s — 기본 브랜치를 모른다` 다." % (TS.NO_RECEIPT, TS.UNREAD_END, TS.TASKS_UNCOUNTED), scan)
+
+    def test_constants_feed_the_notices(self):   # 양성 대조 — 위 단언들이 읽는 상수가 실제 알림 글을 만든다
+        import roadmap_status as RS
+        self.assertEqual(RS.RESERVE_VIOLATION % ("a", "E1"), "경로 예약 위반: a 은 E1 만 예약했다")
+        self.assertEqual(RS.RESERVE_OUTSIDE % "b", "예약 밖 변경: b")
+        self.assertEqual(RS.SKIP_BUNDLE % 2, "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음이라 배정 번호 2개를 대조하지 않았다")
+        self.assertEqual(L.PLAIN_FLOW_STAGES, ("진행 중", "결과 받음"))
 
 
 FLOOR = (8, 16, 0)

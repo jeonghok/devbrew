@@ -293,9 +293,43 @@ class _ShutGit:   # rev-parse 가 실패하는 git — 아무것도 읽지 못�
 class BranchesWithoutFixture(unittest.TestCase):   # 분기 × 픽스처 대조가 찾은, 단언이 닿지 않던 갈래
     def test_shallow_question_unanswered_is_not_deep(self):   # team_status.Reader.shallow — 얕은지 묻지 못함
         import team_status as TS
-        reader = TS.Reader(_ShutGit(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
+        asked = []
+
+        class Counted(_ShutGit):
+            def run(self, *args):
+                asked.append(args)
+                return super().run(*args)
+
+        reader = TS.Reader(Counted(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
         self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")
         self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")   # 한 번만 묻고 같은 답
+        self.assertEqual(asked, [("rev-parse", "--is-shallow-repository")])
+
+    def test_ancestor_git_error_is_uncountable(self):   # job_results._ancestor — rc 0 · 1 밖은 「조상 아님」 이 아니라 셀 수 없음
+        import job_results as JR
+        import roadmap_status as rs
+        import types
+
+        class Rc(rs.Git):
+            def __init__(self, rc):
+                super().__init__(".")
+                self.rc = rc
+
+            def run_err(self, *args, env=None):
+                return self.rc, "", "fatal: 조상 검사 막힘\n" if self.rc > 1 else ""
+
+            def commit(self, ref):
+                return ref
+
+        for rc, want in ((0, True), (1, False)):
+            git = Rc(rc)
+            self.assertEqual((JR._ancestor(git, "a" * 40, "b" * 40), git.failures), (want, []), rc)
+        git = Rc(128)
+        self.assertEqual((JR._ancestor(git, "a" * 40, "b" * 40), git.failures),
+                         (None, ["git merge-base 실패(rc 128): fatal: 조상 검사 막힘"]))
+        r = types.SimpleNamespace(head="a" * 40, bundle_at=None, job_at=None)
+        self.assertEqual(JR._commit_problems(Rc(128), r, "b" * 40), [])   # 셀 수 없음을 「조상이 아니다」 로 내지 않는다
+        self.assertEqual(len(JR._commit_problems(Rc(1), r, "b" * 40)), 1)   # 양의 짝 — rc 1 은 거절 사유 하나
 
     def test_unreadable_copy_has_no_framing_pair(self):   # team_write.framing_pair — 사본을 읽지 못함 · 빈 사본
         import team_write as TW

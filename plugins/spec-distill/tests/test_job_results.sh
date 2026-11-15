@@ -308,6 +308,11 @@ assert_eq "$(rcpt v/design-dir "$LINE_GOOD" | cut -d'|' -f1)" "세지 않음" "�
 variant "$GOOD" code-after put src/e1/b.txt "받은 뒤의 코드" || no "변이 브랜치 code-after 를 만들지 못했다"
 assert_eq "$(rcpt v/code-after "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt|implement-plan-1-1.md" "받음: head 뒤 고칠 자리 변경 — 낡음"
 assert_eq "$(AT=docs/tv rcpt v/code-after "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt|implement-plan-1-1.md" "받음: 하위 폴더에서 불러도 고칠 자리 변경을 본다"
+assert_eq "$(GIT_LITERAL_PATHSPECS=1 rcpt v/code-after "$LINE_GOOD")" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt|implement-plan-1-1.md" "받음: 환경에 GIT_LITERAL_PATHSPECS=1 이 있어도 받은 뒤 바뀜을 본다"
+assert_eq "$(GIT_LITERAL_PATHSPECS=1 pyq 'git.touched("v/code-after", ["feature/tm-e1", "main"], ["src/e1/"])')" "['src/e1/b.txt']" "Git.touched: GIT_LITERAL_PATHSPECS=1 이어도 :(top,literal) 이 그 경로를 본다"
+assert_eq "$(GIT_ICASE_PATHSPECS=1 pyq 'git.touched("v/code-after", ["feature/tm-e1", "main"], ["SRC/E1/"])')" "[]" "Git.touched: GIT_ICASE_PATHSPECS=1 이어도 글자 그대로(대소문자가 다른 경로는 보지 않는다)"
+assert_eq "$(pyq 'git.touched("v/code-after", ["feature/tm-e1", "main"], ["src/e1/"])')" "['src/e1/b.txt']" "Git.touched: 양성 대조 — 변수 없이 같은 호출이 그 파일을 본다"
+assert_eq "$(GIT_LITERAL_PATHSPECS=1 pyq 'git.env.get("GIT_LITERAL_PATHSPECS")')" "1" "Git.touched 의 환경만 끈다 — Git.env 에는 그 변수가 그대로다"
 assert_eq "$(NOMAIN=1 rcpt v/code-after "$LINE_GOOD")" "세지 않음|받음 줄을 세지 않았다: implement-plan-1-1.md — 기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다|implement-plan-1-1.md" "받음: 기본 브랜치를 모르면 받은 뒤의 변경을 세지 않고 세지 않음"
 design_more() { printf '\n받은 뒤 설계에 더한 문단\n' >> "$W/$TM/jobs/E1/design.md"; }
 variant "$GOOD" design-after design_more || no "변이 브랜치 design-after 를 만들지 못했다"

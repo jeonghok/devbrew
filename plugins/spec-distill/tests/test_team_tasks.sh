@@ -161,6 +161,32 @@ assert_contains "$(jobs)" "('dup', '진행 중', 'fix/dup-a'), ('dup', '진행 �
 assert_contains "$(jnotes)" "로드맵 밖 과제 이름이 겹친다: dup — fix/dup-a · fix/dup-b" "과제: 이름 겹침을 알린다"
 assert_not_contains "$(jnotes)" "이름이 겹친다: fix-typo" "과제: 한 브랜치에서만 실린 과제는 겹친다고 알리지 않는다(양의 짝)"
 
+# ── 단순 작업의 예약 밖 변경 · 경로 예약 위반(AC11 · 설계 §10) — 블록과 같은 판정 · 종료 코드 그대로 ──
+# 고칠 자리는 머리 paths(docs/reach-only.md). 자기 paths · 자기 과제 폴더 · 공유 파일만 바꾸면 알림이 없다
+newjob reach fix/reach && put docs/reach-only.md "자기 고칠 자리" && put "$TM/jobs/reach/memo.md" "자기 과제 폴더의 메모" \
+  && put docs/README.md "공유 파일" && put src/e1/README.md "다른 에픽의 예약 안에 있는 공유 파일" && g commit -qm "자기 자리만" && g push -q origin fix/reach && again || failed "fix/reach"
+REACH_RC="$RC"
+assert_eq "$(jget reach fix/reach stage) · $(jget reach fix/reach notes)" "진행 중 · []" \
+  "AC11: 단순 작업이 자기 paths · 자기 과제 폴더 · 공유 파일만 바꾸면 예약 알림이 없다(아래 단언들의 양의 짝)"
+bump docs/free.md "아무도 예약하지 않은 파일" "예약 밖 파일" && bump "$TM/RULES.md" "# 팀 규칙에 손댐" "팀 폴더의 다른 파일" \
+  && bump src/e1/steal.txt "E1 이 예약한 자리" "다른 에픽의 자리" || failed "fix/reach 예약 밖"
+assert_eq "$(js "$T/s.json" "[n for n in [j for j in r['jobs'] if j['id']=='reach'][0]['notes'] if '예약' in n]")" \
+  "['경로 예약 위반: src/e1/steal.txt 은 E1 만 예약했다', '예약 밖 변경: docs/free.md · $TM/RULES.md']" \
+  "AC11: 단순 작업이 다른 에픽의 예약을 바꾸면 경로 예약 위반 · 예약 밖 파일과 팀 폴더의 다른 파일은 예약 밖 변경(블록과 같은 글)"
+assert_eq "$RC" "$REACH_RC" "AC11: 단순 작업의 예약 알림은 종료 코드를 바꾸지 않는다"
+assert_not_contains "$(jnotes)" "예약" "AC11: 예약 알림은 그 과제의 notes 에 있다 — 세지 못한 사정(job_notes)이 아니다"
+assert_not_contains "$(js "$T/s.json" "[n for b in r['blocks'] for n in b['notes']]")" "steal.txt" "AC11: 과제의 변경을 블록의 알림으로 내지 않는다"
+(cd "$W" && python3 "$S/control_plane.py" show "$RM") > "$T/reach-show.txt" 2>&1
+assert_contains "$(sed -n '/^로드맵 밖 과제:$/,$p' "$T/reach-show.txt")" "        정보: 예약 밖 변경: docs/free.md · $TM/RULES.md" \
+  "AC11: 현황의 로드맵 밖 과제 절에 그 과제 아래 「정보:」 줄로 보인다"
+g checkout -q main && g branch -q -D fix/reach && g push -q origin --delete fix/reach && again || failed "fix/reach 지움"
+# 머리 paths 가 다른 에픽의 예약과 겹치면 그 자리는 자기 고칠 자리다 — 블록끼리의 겹침처럼 위반으로 내지 않는다
+g checkout -q -b fix/overlap main && printf '에픽 자리 하나를 같이 고친다\n' > "$T/said.txt" \
+  && (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name overlap --branch fix/overlap --paths src/e3/own.txt --goal "겹친 자리" < "$T/said.txt") > "$T/out.txt" 2>&1 \
+  && g add -- "$TM/jobs/overlap" && g commit -qm "과제 폴더 overlap" && bump src/e3/own.txt "E3 도 예약한 자리" "겹친 자리 고침" || failed "fix/overlap — $(cat "$T/out.txt")"
+assert_eq "$(jget overlap fix/overlap notes)" "[]" "AC11: 머리 paths 가 다른 에픽의 예약과 겹친 자리를 바꾸면 경로 예약 위반이 아니다(자기 고칠 자리)"
+g checkout -q main && g branch -q -D fix/overlap && g push -q origin --delete fix/overlap && again || failed "fix/overlap 지움"
+
 # ── 옛 형식 로드맵의 보고에는 jobs · job_notes 가 없다(Q14 · AC13) — 과제 브랜치가 여럿 있는 지금 잰다 ──
 OLD="${RD}old-shape"
 mkdir -p "$W/$OLD"
@@ -243,6 +269,27 @@ assert_grep "$(cat "$T/shut.txt")" "^tip \| rc 3 \| git 읽기 실패 — git ls
 assert_grep "$(cat "$T/shut.txt")" "^list \| rc 3 \| git 읽기 실패 — git log 실패\(rc 128\): fatal: 끝 목록 막힘 \| \[\('fix-typo', '머지됨'\)\] \| .*로드맵 밖 과제를 다 세지 못했다 — 기본 브랜치에 들어가지 않은 브랜치 끝을 읽지 못했다" \
   "git 실패: 브랜치 끝 목록을 못 읽으면 검사 불가(3)와 사유"
 assert_not_contains "$(cat "$T/shut.txt")" "Traceback" "git 실패: 죽지 않는다"
+# 과제의 예약 알림을 잴 diff 를 git 이 읽지 못하면 — 알림이 아니라 검사 불가(3). 이 픽스처에는 브랜치가 있는 블록이 없어
+# diff 를 부르는 것은 과제 훑기뿐이다(위 none 줄이 rc 0 인 같은 레포)
+python3 - "$S" "$W" "$RM" > "$T/nodiff.txt" 2>&1 <<'PY'
+import argparse, sys
+sys.path.insert(0, sys.argv[1])
+import roadmap_status
+root, rm = sys.argv[2:4]
+
+
+class NoDiff(roadmap_status.Git):
+    def changed(self, base, tip, pathspec=None):
+        self.fail("diff", 128, "fatal: diff 막힘")
+        return []
+
+
+report = roadmap_status.build(NoDiff(root), argparse.Namespace(roadmap=rm, roadmap_file=None, json=True))
+print("rc %d | %s | %s" % (roadmap_status.exit_code(report), " / ".join(report["unknown_reasons"]),
+                           sorted(set(j["stage"] for j in report["jobs"] if j["tip"]))))
+PY
+assert_eq "$(cat "$T/nodiff.txt")" "rc 3 | git 읽기 실패 — git diff 실패(rc 128): fatal: diff 막힘 | ['진행 중']" \
+  "AC11: 과제의 바꾼 파일을 git 이 읽지 못하면 검사 불가(3) · 같은 실패는 사유 한 줄 · 과제는 그대로 싣는다"
 
 # ── 얕은 클론 — 브랜치의 과제는 단계를 셀 이력이 없다: 「알 수 없음」 · 머지된 과제는 머지됨 ──
 SH="$T/shallow"

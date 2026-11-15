@@ -38,6 +38,7 @@ BLOCKED_FILE = "BLOCKED.md"
 
 STAGES = ("design", "plan", "implement", "review")
 PLANNED_STAGES = ("plan", "implement", "review")
+PLAIN_FLOW_STAGES = ("진행 중", "결과 받음")   # 설계 없는 흐름의 단계 글자(설계 §10) — 브랜치 있음 · 받음 줄 있음
 
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _PLAN_FILE_RE = re.compile(r"plan-([1-9][0-9]*)\.md")

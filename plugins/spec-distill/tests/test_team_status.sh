@@ -196,6 +196,9 @@ put src/e1/b.txt b && step "받은 뒤 고칠 자리" || fail_step "받은 뒤 �
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 고칠 자리가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt" "받음: 받은 뒤 바뀜 — 고칠 자리"
 assert_not_contains "$(notes E1)" "받음 없음" "받음: 낡은 받음 줄은 받음 없음이 아니다"
+LIT_RC="$(GIT_LITERAL_PATHSPECS=1 status "$T/s.json")"
+assert_eq "$(st E1) · ${LIT_RC}" "구현 중 · 0" "받음: 환경에 GIT_LITERAL_PATHSPECS=1 이 있어도 받은 뒤 고칠 자리가 바뀌면 구현 중"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt" "받음: 환경에 GIT_LITERAL_PATHSPECS=1 이 있어도 받은 뒤 바뀜 — 고칠 자리"
 back "$RECEIVED_AT"
 sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
@@ -333,6 +336,17 @@ LINE2="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job E2 --result imple
 decide E2 "$LINE2" && step "E2 받음 줄" || fail_step "E2 받음 줄"
 assert_eq "$(st E2) · $(why E2) · $(blk E2 task_status)" "결과 받음 · 결과 받음 줄 있음: implement-1.md · in_progress" "단계: 설계 없는 흐름 — 받음 줄이면 결과 받음(Q12)"
 E2_AT="$(g rev-parse HEAD)"
+# 결과 받음인데 로드맵의 산출물 칸이 가리키는 파일이 그 끝에 없으면 — 번호 대조를 하지 않았다는 경고(머지 전에 보인다)
+SKIP_WORDS="번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음이라 배정 번호 2개를 대조하지 않았다"
+assert_eq "$(blk E2 specs) · $(js "$T/s.json" "[w for w in [b for b in r['blocks'] if b['id']=='E2'][0]['warnings'] if '설계문서 없는 묶음이라' in w]")" \
+  "['$TM/jobs/E2/survey.md'] · []" "결과 받음: 산출물 칸의 파일이 그 끝에 있으면 번호 대조 건너뜀 경고가 없다(아래 단언의 양의 짝)"
+MAIN_E2="$(g rev-parse origin/main)"
+g checkout -q main && sub "$RM" "$TM/jobs/E2/survey.md" "$TM/jobs/E2/survey-final.md" && g add -- "$RM" \
+  && g commit -qm "산출물 칸이 일꾼이 쓰지 않은 이름" && g push -q origin main && restat || fail_step "산출물 칸 바꿈"
+assert_eq "$(st E2) · $(blk E2 specs) · $(rc)" "결과 받음 · [] · 1" "결과 받음: 산출물 칸의 파일이 없어도 단계는 결과 받음 · 종료 코드는 경고의 규칙(1)"
+assert_contains "$(js "$T/s.json" "' | '.join([b for b in r['blocks'] if b['id']=='E2'][0]['warnings'])")" "$SKIP_WORDS" \
+  "결과 받음: 산출물 칸의 파일이 그 끝에 없으면 번호 대조 건너뜀(셀 수 없음) 경고"
+back "$MAIN_E2" && g checkout -q feature/tm-e2 || fail_step "산출물 칸 되돌림"
 sub "$TM/jobs/E2/INTENT.md" "## 결정 기록" "## 결정 기록 아님" && step "E2 결정 기록 칸 깨짐" || fail_step "E2 결정 기록 칸 깨짐"
 assert_eq "$(st E2)" "진행 중" "단계: 설계 없는 흐름 — 결정 기록을 읽지 못하면 진행 중"
 assert_contains "$(why E2)" "결정 기록 읽기 불가 — " "단계: 설계 없는 흐름 — 결정 기록 읽기 불가를 근거로 낸다"
@@ -349,6 +363,26 @@ assert_contains "$(why E1)" "feature/tm-e1b — 계획 · spec 승인됨(2026-11
 sync E1 implement-plan-2-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "계획 2 결과 시작" || fail_step "계획 2 결과 시작"
 assert_contains "$(why E1)" "feature/tm-e1b — 구현 중" "단계: 계획 2 의 implement 결과 파일 — 구현 중"
 assert_eq "$(jobf E1 plan) · $(jobf E1 result)" "2 · implement-plan-2-1.md" "Q14: job.plan == 2 · job.result 는 계획 2 의 결과 파일"
+# 일부 머지가 덮는 「알 수 없음」 — git 실패 없이 지금 브랜치를 세지 못하는 갈래(INTENT.md 없음 · 얕은 클론)도 검사 불가(3)
+PARTIAL_LINE="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import roadmap_status; print(roadmap_status.PARTIAL_UNCOUNTED)' "$S")"
+assert_eq "$(js "$T/s.json" "r['unknown_reasons']")" "[]" "일부 머지: 지금 브랜치를 센 블록에는 검사 불가 사유가 없다(아래 단언들의 양의 짝)"
+E1B_AT="$(g rev-parse HEAD)"
+g rm -q -- "$J1/INTENT.md" && step "둘째 브랜치 끝에 INTENT.md 없음" || fail_step "둘째 브랜치 끝에 INTENT.md 없음"
+assert_eq "$(st E1) · $(why E1) · $(rc)" "일부 머지 1/2 · feature/tm-e1b — 알 수 없음 · $J1/INTENT.md 를 읽지 못했다 · 3" \
+  "일부 머지: 둘째 브랜치 끝에 INTENT.md 가 없으면 단계 글자는 일부 머지 그대로 · 종료 코드 3"
+assert_eq "$(js "$T/s.json" "r['unknown_reasons']")" "['E1 ${PARTIAL_LINE} — feature/tm-e1b — 알 수 없음 · $J1/INTENT.md 를 읽지 못했다']" \
+  "일부 머지: 세지 못한 지금 브랜치의 사유가 보고의 검사 불가 사유에 실린다"
+back "$E1B_AT"
+SH3="$T/shallow3"
+git clone -q --no-local --depth 3 --no-single-branch "file://$T/origin.git" "$SH3" && git -C "$SH3" remote set-head origin main \
+  || no "깊이 3 얕은 클론을 만들지 못했다"
+assert_eq "$(git -C "$SH3" rev-parse --is-shallow-repository)" "true" "일부 머지: 깊이 3 픽스처가 정말 얕은 클론이다"
+SH3_RC=0; (cd "$SH3" && python3 "$RS" "$RM" --json) > "$T/shallow3.json" 2>/dev/null || SH3_RC=$?
+assert_eq "${SH3_RC} · $(js "$T/shallow3.json" "[b['stage'] for b in r['blocks'] if b['id']=='E1'][0]")" "3 · 일부 머지 1/2" \
+  "일부 머지: 깊이 3 얕은 클론 — 첫 브랜치는 머지됨으로 보이고 종료 코드 3"
+assert_contains "$(js "$T/shallow3.json" "r['unknown_reasons']")" "E1 ${PARTIAL_LINE} — feature/tm-e1b — 알 수 없음 · 얕은 클론이라" \
+  "일부 머지: 깊이 3 얕은 클론 — 세지 못한 지금 브랜치의 사유가 검사 불가 사유에 실린다"
+rm -rf "$SH3"
 
 # Review Focus 5 — 기본 브랜치를 모르는 레포: 블록이 모두 알 수 없음(3)이고 죽지 않는다
 g remote set-head origin -d
