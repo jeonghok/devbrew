@@ -194,14 +194,19 @@ def finding_status(st, fid: str, used):
 
 
 def _adopted(st: dict, fid: str) -> bool:
+    """그 지적의 계보에서 마지막 결정이 채택이고 그 결정이 이 id 를 낼 때만 참이다."""
     dec = st.get("decides", {}).get(fid)
     if not isinstance(dec, dict) or dec.get("kind") == "post":
         return False
+    f = st.get("findings", {}).get(fid)
+    lin = f.get("lineage") if isinstance(f, dict) else None
     last = None
     for e in st.get("decision_log") or []:
-        if isinstance(e, dict) and fid in (e.get("finding_ids") or []):
-            last = e.get("choice")
-    return last == "adopt"
+        if not isinstance(e, dict):
+            continue
+        if fid in (e.get("finding_ids") or []) or (lin and e.get("lineage") == lin):
+            last = e
+    return last is not None and last.get("choice") == "adopt" and fid in (last.get("finding_ids") or [])
 
 
 def hunk_view(h: dict) -> dict:

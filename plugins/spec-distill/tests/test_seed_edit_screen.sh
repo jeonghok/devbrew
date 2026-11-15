@@ -377,6 +377,53 @@ mk2 redecB; why redecB "2\t$DR"; redecide redecB "$DR" adopt
 assert_eq "$(choices "$TMP/redecB/state" "$DR")" "['reject', 'adopt'] [False, True]" "전제: 재결정 fixture — 거부한 뒤 채택한 decide 는 항목 둘이고 뒤가 앞을 잇는다"
 scr redecB
 assert_eq "$(rec redecB)" "[False, True]" "재결정: 거부한 뒤 채택한 decide 를 댄 덩어리는 권장이다(마지막 선택이 채택)"
+# ── 채택 → 만료 → 다시 올라온 후속 — 그 계보의 «마지막» 결정이 채택이고 그 결정이 댄 id 를 낼 때만 ──────
+# 원장은 엔진으로 만든다: 라운드 1 채택 → 라운드 2 편집 없음(만료) → 후속 항목이 같은 계보로 다시 올라온다.
+LS="$TMP/LS"; mkdir -p "$LS/state"
+printf -- '---\ntype: interview-seed\n---\n\n로그인이 가끔 실패한다.\n' > "$LS/s.md"
+cp "$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md" "$LS/s.audit.md"
+python3 "$S/docreview_state.py" init --state-dir "$LS/state" --doc "$LS/s.md" --profile "$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$LS/state" >/dev/null
+printf '```docreview-layer1\n- ref: c1\n  category: inference_as_decision\n  anchor: "#__doc__"\n  disposition: decide\n  summary: "SCR_DEC_LINEAGE"\n```\n```docreview-layer2\n[]\n```\n' > "$LS/state/critic.txt"
+python3 "$S/docreview_route.py" prepare-recritic --state-dir "$LS/state" --critic "$LS/state/critic.txt" > "$LS/prep1.json"
+python3 "$S/docreview_route.py" finalize --state-dir "$LS/state" --recritic-skipped --doc "$LS/s.md" > "$LS/fin1.json"
+SA="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print([f["id"] for f in d["findings"] if f.get("summary")=="SCR_DEC_LINEAGE"][0])' "$LS/fin1.json")"
+python3 "$S/docreview_state.py" decide --state-dir "$LS/state" --id "$SA" --choice adopt --quote="채택" --log-file "$LS/s.audit.md" >/dev/null
+python3 "$S/docreview_state.py" begin-round --state-dir "$LS/state" >/dev/null
+python3 "$S/docreview_state.py" observe-diff --state-dir "$LS/state" > "$LS/obs2.json"
+printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n[]\n```\n' > "$LS/state/critic.txt"
+python3 "$S/docreview_route.py" prepare-recritic --state-dir "$LS/state" --critic "$LS/state/critic.txt" > "$LS/prep2.json"
+python3 "$S/docreview_route.py" finalize --state-dir "$LS/state" --recritic-skipped --doc "$LS/s.md" > "$LS/fin2.json"
+SB="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print([f["id"] for f in d["findings"] if f.get("lineage")==sys.argv[2]][0])' "$LS/fin2.json" "$SA")"
+cp -R "$LS/state" "$LS/state-open"
+python3 "$S/docreview_state.py" decide --state-dir "$LS/state" --id "$SB" --choice reject --quote="거부" --log-file "$LS/s.audit.md" >/dev/null
+lineage_log() {   # lineage_log <상태 폴더> → (후속이 원래 id 와 다르고 계보가 같은가, 결정 기록의 (낸 id, 고른 쪽) 열)
+  python3 - "$S" "$1" "$SA" "$SB" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+st = ds.load_state(sys.argv[2])
+a, b = sys.argv[3], sys.argv[4]
+print(a != b and st["findings"][b]["lineage"] == st["findings"][a]["lineage"],
+      [(["A" if i == a else "B" if i == b else i for i in e["finding_ids"]], e["choice"]) for e in st["decision_log"]])
+PY
+}
+assert_eq "$(lineage_log "$LS/state")" "True [(['A'], 'adopt'), (['B'], 'reject')]" "전제: 계보 fixture — 채택한 지적이 만료돼 같은 계보의 후속으로 다시 올라왔고, 사용자가 그 후속을 거부했다"
+mklin() {   # mklin <이름> <상태 폴더> → 덩어리 둘인 화면 + 그 원장 사본
+  mk "$1" '가.\n\n나.\n\n다.\n' '가 고침.\n\n나.\n\n다 고침.\n'
+  cp -R "$2/." "$TMP/$1/state/"
+}
+mklin linopen "$LS/state-open"; why linopen "1\t$SA"; scr linopen
+assert_eq "$(rec linopen)" "[True, False]" "계보 양의 짝: 만료된 채택의 후속에 아직 결정이 없으면 원래 id 를 댄 덩어리는 권장이다(계보의 마지막 결정이 그 id 의 채택)"
+mklin linrej "$LS/state"; why linrej "1\t$SA"; scr linrej
+assert_eq "$(rec linrej)" "[False, False]" "계보: 채택 → 만료 → 다시 올라온 후속을 사용자가 거부하면 원래 id 를 대도 권장이 없다"
+assert_contains "$(j linrej 'd["text"]')" "저자가 댄 지적 ${SA} 은 원장에서 확인되지 않는다" "계보: 그 원래 id 는 원장에서 확인되지 않는다고 보인다"
+assert_not_contains "$(j linrej 'd["text"]')" "사용자가 채택" "계보: 거부된 계보의 원래 id 에 「사용자가 채택」 을 붙이지 않는다"
+cp -R "$LS/state-open" "$LS/state-adoptB"
+python3 "$S/docreview_state.py" decide --state-dir "$LS/state-adoptB" --id "$SB" --choice adopt --quote="다시 채택" --log-file "$LS/s.audit.md" >/dev/null
+assert_eq "$(lineage_log "$LS/state-adoptB")" "True [(['A'], 'adopt'), (['B'], 'adopt')]" "전제: 계보 fixture — 다시 올라온 후속을 사용자가 채택했다"
+mklin linadA "$LS/state-adoptB"; why linadA "1\t$SA" "2\t$SB"; scr linadA
+assert_eq "$(rec linadA)" "[False, True]" "계보: 계보의 마지막 채택이 후속을 내면 후속 id 를 댄 덩어리만 권장이다 — 원래 id 는 그 결정이 내지 않는다"
 # ── AC7 — 질문 묶음 ─────────────────────────────────────────────────────────
 mkn() {   # mkn <이름> <n> → 덩어리 n 개(문단마다 하나) + 원장 사본
   mkdir -p "$TMP/$1/state"
