@@ -341,17 +341,21 @@ READ_WORDS = ("job_results.py", "job sync", "workflow_superpowers.py", "결과 �
 
 
 class ReadSideVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다(판정 R-R 의 꼴)
-    def read_entry(self):
-        """(형식 쪽 판, 이 일의 판, 이 일의 절 글) — 이 일의 절은 다섯 낱말 절(형식 쪽) 바로 다음 판이다. 자리로 고르므로
-        뒤의 판 항목이 READ_WORDS 를 함께 적어도 고르는 절이 바뀌지 않는다."""
-        entries = changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8"))
+    def pick_entry(self, log):
+        """(형식 쪽 판, 이 일의 판, 이 일의 절 글) — 이 일의 절은 형식 쪽 판(다섯 낱말 절)보다 뒤의 판 가운데 READ_WORDS 를
+        모두 담은 가장 이른 판이다. 자리가 아니라 항목 안의 글로 고르므로 사이에 낀 남의 항목은 건너뛰고, 더 뒤의 판이
+        같은 낱말을 함께 적어도 고르는 절이 바뀌지 않는다. 그런 절이 없으면 사유가 보이는 실패다."""
+        entries = changelog_entries(log)
         first = [v for v, body in entries if all(w in body for w in WORDS)]
         self.assertEqual(len(first), 1, first)
-        later = sorted((v, body) for v, body in entries if v > first[0])
-        self.assertTrue(later, "형식 쪽 판 뒤의 항목이 없다")
-        return first[0], later[0][0], later[0][1]
+        mine = sorted((v, body) for v, body in entries if v > first[0] and all(w in body for w in READ_WORDS))
+        self.assertTrue(mine, "형식 쪽 판 뒤에 READ_WORDS 를 모두 담은 항목이 없다")
+        return first[0], mine[0][0], mine[0][1]
 
-    def test_one_entry_after_the_format_entry(self):
+    def read_entry(self):
+        return self.pick_entry((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8"))
+
+    def test_entry_chosen_by_its_words(self):
         first, mine, body = self.read_entry()
         self.assertGreater(mine, first)   # 읽기 쪽 판이 형식 쪽 판 뒤다
         for w in READ_WORDS:
@@ -359,13 +363,29 @@ class ReadSideVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다
         current = version_tuple(json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"])
         self.assertGreaterEqual(current, mine)
 
-    def test_a_later_entry_with_the_same_words_does_not_move_the_choice(self):   # 양성 대조 — 뒤 판이 다섯 낱말을 함께 적어도
-        first, mine, body = self.read_entry()
+    def test_a_later_entry_with_the_same_words_does_not_move_the_choice(self):   # 양성 대조 — 뒤 판이 같은 낱말을 함께 적어도
         log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
         later = "# Changelog\n\n## [9.0.0] — 2026-12-01\n\n### Changed\n- %s 를 고쳤다\n" % " · ".join(READ_WORDS) + log.split("\n", 1)[1]
-        entries = changelog_entries(later)
-        pick = sorted((v, b) for v, b in entries if v > first)[0]
-        self.assertEqual((pick[0], pick[1]), (mine, body))
+        self.assertEqual(self.pick_entry(later), self.read_entry())
+
+    def test_an_entry_in_between_does_not_move_the_choice(self):   # 남의 항목이 형식 쪽 판과 이 일의 판 사이에 끼어도
+        first, mine, _body = self.read_entry()
+        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
+        head = "## [%d.%d.%d]" % mine
+        self.assertEqual(log.count(head), 1)
+        between = "## [%d.%d.%d] — 2026-01-02\n\n### Added\n- 남의 일 하나\n\n" % (first[0], first[1], first[2] + 1)
+        self.assertGreater((first[0], first[1], first[2] + 1), first)
+        self.assertGreater(mine, (first[0], first[1], first[2] + 1))
+        self.assertEqual(self.pick_entry(log.replace(head, between + head, 1)), self.read_entry())
+
+    def test_an_entry_missing_a_word_is_not_chosen(self):   # 음성 대조 — 낱말마다, 이 일의 절에서 하나를 지우면 고르지 못한다
+        first, mine, body = self.read_entry()
+        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
+        for w in READ_WORDS:
+            broken = log.replace(body, body.replace(w, "x"), 1)
+            self.assertNotEqual(broken, log, w)
+            with self.assertRaises(AssertionError, msg=w):
+                self.pick_entry(broken)
 
     def test_entry_carries_what_existing_repos_must_know(self):   # 이미 깐 레포가 손으로 맞출 줄 · 바뀐 동작
         _first, _mine, body = self.read_entry()
@@ -376,6 +396,7 @@ class ReadSideVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다
         for words in ("`references/team-files.md` §3 의 글이 정본이다", "`--framing-audit` 없이 다시 불러도 멈추지 않는다",
                       "옛 형식 문서라도", "pr-record"):
             self.assertIn(words, body, words)
+
 
 if __name__ == "__main__":
     unittest.main()
