@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# roadmap_status.py — team 로드맵(머리말 `layout: team`)은 번호 대조까지만 하고 단계 계산은 검사 불가(3)로 멈춘다 ·
-# 모르는 layout 값은 번호도 세지 않고 검사 불가 · layout 이 없는 옛 형식은 그대로 계산한다(R1 AC3 · AC12).
+# roadmap_status.py — team 로드맵(머리말 `layout: team`)은 번호 대조를 하고 단계를 과제 폴더로 계산한다(계획 2 — 단계 표는
+# test_team_status.sh) · 모르는 layout 값은 번호도 세지 않고 검사 불가 · layout 이 없는 옛 형식은 그대로 계산한다(R1 AC3 · AC12).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_team_status_stub.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -93,7 +93,7 @@ g add -- docs && g commit -qm "팀 brief" && g push -q origin main && g fetch -q
 g remote set-head origin main
 
 # ── 손으로 쓴 team 로드맵 — 해결자의 기본 roadmaps_dir 아래 팀 t1 ─────────────
-D="docs/superpowers/roadmaps/t1"
+RD="$(cd "$W" && python3 "$S/repo_defaults.py" get roadmaps_dir 2>/dev/null)"; D="${RD}t1"
 RM="$D/roadmap.md"
 mkdir -p "$W/$D/jobs/E1"
 team_roadmap() {  # team_roadmap <머리말 layout 줄(없으면 빈 글)> <묶음 값>
@@ -109,22 +109,22 @@ job_sources() {  # job_sources <ids>
 team_roadmap 'layout: team\n' jobs/E1/sources.md > "$W/$RM"
 job_sources "C1, D2, OQ1, S1, S2"
 
-# ── team: 번호 대조까지 하고 멈춘다 ──────────────────────────────────────────
+# ── team: 번호 대조를 하고 단계를 계산한다 ──────────────────────────────────
 rc="$(status_of "$T/team.json")"
-assert_eq "$rc" "3" "team 로드맵: 단계 계산은 검사 불가(3)로 멈춘다"
-assert_contains "$(js "$T/team.json" "' | '.join(r['unknown_reasons'])")" "이 판은 team 형식의 단계를 계산하지 않는다" "team: 사유를 낸다"
+assert_eq "$rc" "0" "team 로드맵: 단계를 계산한다 — 이상 없음(0)"
+assert_not_contains "$(js "$T/team.json" "' | '.join(r['unknown_reasons'])")" "이 판은" "team: 멈춤 사유가 없다"
 assert_eq "$(js "$T/team.json" "[r[k] for k in ('format_errors','unassigned','orphans','unknown_ids')]")" "[[], [], [], []]" "team: 번호 네 목록은 센다"
-assert_eq "$(js "$T/team.json" "sorted(set(b['stage'] for b in r['blocks']))")" "['알 수 없음']" "team: 블록 단계를 옛 계산으로 세지 않는다"
+assert_eq "$(js "$T/team.json" "sorted(set(b['stage'] for b in r['blocks']))")" "['준비']" "team: 브랜치가 없는 블록은 준비"
 assert_eq "$(js "$T/team.json" "[(b['id'], b['reason'], b['ids']) for b in r['blocks']]")" \
-  "[('E1', '이 판은 team 형식의 단계를 계산하지 않는다 — 번호 대조까지만 했다', ['C1', 'D2', 'OQ1', 'S1', 'S2'])]" \
-  "team: 블록 사유는 같은 글이고 ids 는 번호 파일의 배정 번호"
+  "[('E1', '의존 완료 · 브랜치 없음', ['C1', 'D2', 'OQ1', 'S1', 'S2'])]" \
+  "team: 블록 사유는 옛 형식과 같은 글이고 ids 는 번호 파일의 배정 번호"
 
 # ── 번호 하나를 번호 파일에서 빼면 unassigned 에 나온다(번호 대조가 실제로 그 파일을 읽는다) ──
 job_sources "C1, OQ1, S1, S2"
 rc="$(status_of "$T/team-d2.json")"
 assert_eq "$(js "$T/team-d2.json" "r['unassigned']")" "['D2']" "team: 번호 파일에서 D2 를 빼면 unassigned 에 D2"
 assert_eq "$(js "$T/team-d2.json" "[r[k] for k in ('format_errors','orphans','unknown_ids')]")" "[[], [], []]" "team: 나머지 세 목록은 그대로 빈 목록"
-assert_eq "$rc" "3" "team: 번호가 빠져도 단계 계산은 멈춘 채(3)"
+assert_eq "$rc" "1" "team: 번호가 빠지면 경고(1) — 미배정 번호는 경고다"
 
 # ── 번호 파일이 없으면 형식 깨짐 — 번호가 배정되지 않은 것처럼 보이지 않는다 ─────
 rm -f "$W/$D/jobs/E1/sources.md"
@@ -165,5 +165,11 @@ assert_not_contains "$(js "$T/old.json" "' | '.join(r['unknown_reasons'])")" "�
 assert_not_contains "$(js "$T/old.json" "' | '.join(r['unknown_reasons'])")" "모르는 형식" "옛 형식: 모르는 형식 사유가 없다"
 assert_eq "$(js "$T/old.json" "[r[k] for k in ('format_errors','unassigned','orphans','unknown_ids')]")" "[[], [], [], []]" "옛 형식: 번호 네 목록이 빈 목록"
 assert_eq "$(js "$T/old.json" "'알 수 없음' in [b['stage'] for b in r['blocks']]")" "False" "옛 형식: 블록 단계를 계산한다(알 수 없음이 아니다)"
+
+# ── Q14: team 칸(layout · 블록의 progress · job)은 team 로드맵의 보고에만 있다 ──────────
+assert_eq "$(js "$T/old.json" "('layout' in r, sorted(set(k for b in r['blocks'] for k in ('progress', 'job') if k in b)))")" "(False, [])" \
+  "Q14: 옛 형식의 보고에는 layout · progress · job 칸이 없다"
+assert_eq "$(js "$T/team.json" "(r.get('layout'), sorted(set(k for b in r['blocks'] for k in ('progress', 'job') if k in b)))")" "('team', ['job', 'progress'])" \
+  "Q14 양성 짝: team 로드맵의 보고에는 그 칸들이 있다"
 
 finish

@@ -4,6 +4,8 @@
 
 기계 상태(`conductor_state.py` 형식) 쓰기는 세션 표지를 쥔 세션만 한다. 이어 가기에 필요한 기록은 에픽 설계문서의
 절(`## 판정` · `## 구현 대조 — <계획>` · `## 지휘 기록`)에 쓰고, 커밋은 지휘자가 한다(이 스크립트는 커밋하지 않는다).
+team 형식(머리말 `layout: team`) 로드맵의 과제 폴더 안 문서를 `--spec` 으로 받으면 `record` · `flush` 는 그 과제
+INTENT.md 의 `## 결정 기록` 에 쓰고 `write-sections` 는 쓰지 않고 알린다 — 커밋은 리더가 한다.
 
 명령줄(모두 `--root <레포>` 선택):
   roadmaps                                             끝나지 않은 로드맵 찾기(frontmatter `type: roadmap`)
@@ -18,7 +20,8 @@
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가(gh 멈춤 — gh 없음 · origin · 인증 포함) · 4 받은 gh 출력이 기대와
 다르다(pr-refresh: 다른 head · 모르는 값 / pr-record: head · 교차 레포 · base 대조 실패 · PR URL 의 레포가 origin 아님 —
-아무것도 쓰지 않는다) · 5 다른 세션의 표지. 예상 밖 예외도 3 이다(1 로 새지 않는다).
+아무것도 쓰지 않는다) · 5 다른 세션의 표지. 예상 밖 예외도 3 이다(1 로 새지 않는다). pr-handoffs · pr-refresh · pr-record 는
+단계 계산이 세지 못한 블록(브랜치를 읽지 못함 — 「브랜치 없음」 과 다르다)에서 3 이다(pr-refresh 는 셀 수 있는 블록을 채운 뒤).
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -41,9 +45,11 @@ import conductor_state as cs  # noqa: E402
 import gh_repo  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
+import team_files  # noqa: E402
+import team_layout  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
-                           RULINGS_HEADING, FormatError, approval_date, blob_reader, find_roadmaps, parse_roadmap,
-                           section_lines, tree_entries)
+                           RULINGS_HEADING, FormatError, approval_date, blob_reader, field_list, find_roadmaps,
+                           frontmatter, parse_roadmap, section_lines, tree_entries)
 from state_path import StateRootError, ensure_state_root, state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
@@ -459,6 +465,28 @@ def _block(report: dict, epic: str) -> dict:
     return b
 
 
+UNCOUNTED_STAGE = "알 수 없음"
+UNCOUNTED = "%s 의 단계를 세지 못해 브랜치를 읽지 못했다 — %s"
+
+
+def uncounted_reason(b: dict) -> Optional[str]:
+    """단계 계산이 세지 못한 블록(단계 「알 수 없음」 · 브랜치 칸에 이름이 적힘 · 브랜치 목록 빔)이면 멈춤 글, 아니면 None(Q18).
+    「브랜치 없음」 과 「브랜치를 읽지 못함」 은 다른 사실이다 — pr-handoffs · pr-refresh · pr-record 가 이 판정 하나를 쓴다.
+    칸이 「없음」 이면 이름을 적지 않은 것이라 「브랜치 없음」 이 사실이다(field_list 가 빈 목록으로 읽는다)."""
+    if b.get("stage") != UNCOUNTED_STAGE or not field_list(str(b.get("branch") or "")) or _branches_of(b):
+        return None
+    return UNCOUNTED % (b.get("id"), b.get("reason") or "사유 없음")
+
+
+def _counted_block(report: dict, epic: str) -> dict:
+    """고른 블록. 단계 계산이 그 블록을 세지 못했으면 gh 를 부르기 전에 Fail(3)."""
+    b = _block(report, epic)
+    why = uncounted_reason(b)
+    if why:
+        raise Fail(3, why)
+    return b
+
+
 def _ref(b: dict) -> str:
     return b.get("tip") or DEFAULT_REF
 
@@ -532,7 +560,8 @@ def _roadmap_blocks(root, roadmap: str) -> list:
     rc, text, err = git(root, "show", "%s:%s" % (DEFAULT_REF, roadmap))
     if rc:
         raise Fail(3, "기본 브랜치에서 로드맵을 읽지 못했다: %s" % roadmap)
-    _m, blocks, _r, _k, errors = parse_roadmap(text)
+    meta, blocks, _r, _k, errors = parse_roadmap(text)
+    _known_layout(meta, roadmap)
     if errors:
         raise Fail(3, "로드맵 형식이 깨졌다: %s" % errors[0])
     return blocks
@@ -557,6 +586,8 @@ def _with_copy_branches(root, roadmap: str, blocks: list, warns: list) -> list:
     if broken:
         warns.append("기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 %d개는 형식이 깨져 읽은 블록만 셌다" % broken)
     for b in blocks:
+        if uncounted_reason(b):   # 세지 못한 블록에 사본의 브랜치를 더하면 「세지 못함」 이 가려진다
+            continue
         more = [br for br in extra.get(b["id"], []) if br not in (b.get("branches") or [])]
         if more:
             b["branches"] = list(b.get("branches") or []) + more
@@ -599,6 +630,54 @@ def _roadmaps_dir(root) -> str:
     if result["errors"]:
         raise Fail(3, "레포 설정을 읽지 못해 로드맵 폴더를 정하지 못했다 — %s" % result["errors"][0])
     return result["values"]["roadmaps_dir"]
+
+
+UNKNOWN_LAYOUT = "모르는 형식 — %s 머리말 %s: %s (아는 값: %s)"
+
+
+def _known_layout(meta: dict, roadmap: str) -> Optional[str]:
+    """로드맵 머리말의 형식(옛 형식이면 None). 모르는 값이면 Fail(3) — 옛 형식 규칙으로 읽지 않는다."""
+    try:
+        return team_layout.layout_of(meta)
+    except team_layout.UnknownLayout as exc:
+        raise Fail(3, UNKNOWN_LAYOUT % (roadmap, team_layout.LAYOUT_KEY, exc.value, " · ".join(team_layout.LAYOUTS)))
+
+
+def team_intent(root, spec) -> Optional[Path]:
+    """`spec` 경로가 `layout: team` 로드맵의 과제 폴더 안이면 그 과제 INTENT.md 의 경로, 아니면 None(Q17).
+    과제 폴더 꼴이 아닌 경로는 해결자를 부르지 않는다(옛 형식의 기록은 전과 같다). 모르는 layout 값이면 Fail(3)."""
+    rel = os.path.relpath(os.path.realpath(str(spec)), os.path.realpath(str(root))).replace(os.sep, "/")
+    parts = rel.split("/")
+    if parts[0] == ".." or team_layout.JOBS_DIR not in parts:
+        return None
+    hit = team_layout.job_of_path(_roadmaps_dir(root), rel)
+    if hit is None:
+        return None
+    team, job, _rest = hit
+    roadmap = Path(root) / team.roadmap
+    if not roadmap.is_file():
+        return None
+    if _known_layout(frontmatter(_read(roadmap)), team.roadmap) != team_layout.LAYOUT_TEAM:
+        return None
+    return Path(root) / team.intent(job)
+
+
+def _append_decisions(intent: Path, lines: list) -> tuple:
+    """(새 글, 더한 줄 수) — 결정 기록에 줄들을 차례로 더한 글. 못 받는 줄이면 Fail(2), 결정 기록 칸을 못 읽으면 Fail(3)
+    — 둘 다 아무것도 쓰지 않는다. 같은 줄이 이미 있으면 더하지 않는다(team_files.append_decision)."""
+    text = _read(intent)
+    added = 0
+    for line in lines:
+        why = team_files.decision_problem(_bullet(line))
+        if why:
+            raise Fail(2, "결정 기록에 쓸 수 없는 줄이라 쓰지 않았다 — %s" % why)
+        try:
+            new = team_files.append_decision(text, line)
+        except FormatError as exc:
+            raise Fail(3, "결정 기록 칸을 읽지 못했다(%s): %s" % (intent, exc))
+        added += new != text
+        text = new
+    return text, added
 
 
 def _default_roadmaps(root, main: str) -> tuple:
@@ -831,6 +910,15 @@ def c_record(root, a) -> int:
         line = a.line
     else:
         raise Fail(2, "--line 또는 --approval 이 필요하다")
+    intent = team_intent(root, path)
+    if intent is not None:
+        text, added = _append_decisions(intent, [line])
+        if not added:
+            print("이미 있어 쓰지 않았다 — %s 의 결정 기록: %s" % (intent, _bullet(line)))
+            return 0
+        write_atomic(intent, text)
+        print("적었다(커밋은 리더가) — %s 의 결정 기록: %s" % (intent, _bullet(line)))
+        return 0
     write_atomic(path, insert_record(_read(path), line))
     print("적었다(커밋은 지휘자가) — %s: %s" % (path, line))
     return 0
@@ -852,6 +940,11 @@ def c_rulings(root, a) -> int:
 
 def c_write_sections(root, a) -> int:
     path = Path(a.spec)
+    intent = team_intent(root, path)
+    if intent is not None:
+        print("[spec-distill] team 형식 — 설계문서를 고치지 않았다. 판정은 결과 파일의 Ruling 줄이, "
+              "구현 대조는 결과 파일의 AC 줄과 받음 줄이 대신한다(%s)" % intent)
+        return 0
     raw = [l for l in _read(Path(a.rulings)).splitlines() if l.strip()]
     stray = [l for l in raw if not l.startswith("- ")]
     if stray:
@@ -870,6 +963,16 @@ def c_flush(root, a) -> int:
     if owner != a.session:
         raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if r["에픽"] == a.epic and r["절"] == "지휘 기록"]
+    intent = team_intent(root, path)
+    if intent is not None:
+        text, moved = _append_decisions(intent, [r["글"] for r in rows])
+        if moved:
+            write_atomic(intent, text)
+        update(root, a.roadmap, a.session, lambda d: d.__setitem__(
+            "쌓인 기록", [r for r in d["쌓인 기록"] if not (r["에픽"] == a.epic and r["절"] == "지휘 기록")]))
+        print("쌓인 기록 %d줄을 옮겼고 %d줄은 이미 있어 건너뛰었다(커밋은 리더가) — %s 의 결정 기록"
+              % (moved, len(rows) - moved, intent))
+        return 0
     text = _read(path)
     try:
         section_lines(text, RECORD_HEADING)
@@ -910,7 +1013,7 @@ def c_live_agent(root, a) -> int:
 
 def c_pr_handoffs(root, a) -> int:
     _gh()  # gh 가 없으면 상태 계산보다 먼저 멈춘다
-    b = _block(_status(root, a.roadmap), a.epic)
+    b = _counted_block(_status(root, a.roadmap), a.epic)
     got = _prs(root, b, _epic_rows(root, a.roadmap))
     if not got:
         print("%s 브랜치 없음" % a.epic)
@@ -978,11 +1081,12 @@ def c_pr_refresh(root, a) -> int:
     epic_rows = load(root, a.roadmap, skip)[cs.EPIC_PR]  # 옛 판의 PR 줄 · 깨진 상태는 gh 를 부르기 전에 멈춘다
     report = _status_with_copies(root, a.roadmap)
     if a.epic:
-        blocks = [_block(report, a.epic)]
+        blocks = [_counted_block(report, a.epic)]
     elif a.reset:
         blocks = list(report["blocks"])  # PR 절을 비웠으니 끝난 에픽의 줄도 다시 채운다 — 아니면 squash 머지가 머지됨에서 빠진다
     else:
         blocks = [b for b in report["blocks"] if b.get("stage") not in DONE]
+    uncounted = [w for w in (uncounted_reason(b) for b in blocks) if w]   # 브랜치 목록이 비어 아래 고리가 건너뛴다 — 채운 뒤 3
     branches, epic_of = [], {}
     for b in blocks:
         for br in _branches_of(b):
@@ -1025,7 +1129,9 @@ def c_pr_refresh(root, a) -> int:
         print("[spec-distill] " + w)
     print("PR 캐시: 브랜치 %d개 · PR %d개를 %s 에 채웠다"
           % (len(branches), sum(1 for v in fresh.values() for r in v if r["번호"] != cs.NO_PR), when))
-    return 0
+    for w in uncounted:
+        print("[spec-distill] " + w)
+    return 3 if uncounted else 0
 
 
 def c_pr_record(root, a) -> int:
@@ -1061,7 +1167,7 @@ def c_pr_record(root, a) -> int:
                 (origin[0].lower(), origin[1].casefold(), origin[2].casefold()):
             raise Fail(4, "PR URL 의 레포(%s)가 origin(%s)이 아니다 — 아무것도 적지 않았다"
                        % ("/".join(url), "/".join(origin)))
-    branches = _branches_of(_block(_status_with_copies(root, a.roadmap), a.epic))
+    branches = _branches_of(_counted_block(_status_with_copies(root, a.roadmap), a.epic))
     try:
         it = gh_repo.pr_view(str(root), n)
     except gh_repo.GhStop as exc:

@@ -84,5 +84,45 @@ class LiteralsLiveInOnePlace(unittest.TestCase):   # AC1
         self.assertEqual(len(self.fragments()), 5)
 
 
+class ResultNames(unittest.TestCase):   # 계획 2 — 단계와 결과 파일 이름
+    def test_stages_and_names(self):
+        self.assertEqual(L.STAGES, ("design", "plan", "implement", "review"))
+        self.assertEqual(L.PLANNED_STAGES, ("plan", "implement", "review"))
+        self.assertEqual(L.BLOCKED_FILE, "BLOCKED.md")
+        self.assertEqual(L.result_name("implement", 2, plan=1), "implement-plan-1-2.md")
+        self.assertEqual(L.result_name("design", 1), "design-1.md")
+        self.assertEqual(L.result_name("plan", 3, plan=2), "plan-plan-2-3.md")
+        for bad in (("deploy", 1, None), ("implement", 0, None), ("implement", 1, 0), ("design", 1, 1)):
+            self.assertRaises(ValueError, L.result_name, *bad)
+
+    def test_parse_result_name(self):
+        for name, want in (("implement-plan-1-2.md", ("implement", 1, 2)), ("review-4.md", ("review", None, 4)),
+                           ("plan-plan-2-3.md", ("plan", 2, 3)), ("plan-3.md", ("plan", None, 3)), ("design-10.md", ("design", None, 10))):
+            self.assertEqual(L.parse_result_name(name), want, name)
+            self.assertEqual(L.result_name(want[0], want[2], want[1]), name)   # 왕복
+        for bad in ("BLOCKED.md", ".gitkeep", "implement-plan-01-2.md", "implement-0.md", "design-plan-1-1.md", "implement-1.md\n",
+                    "implement-plan-1.2.md", "Implement-1.md", "implement-1.txt", "implement--1.md", ""):
+            self.assertIsNone(L.parse_result_name(bad), bad)
+
+    def test_plan_names(self):
+        self.assertEqual((L.plan_name(2), L.plan_number("plan-2.md")), ("plan-2.md", 2))
+        self.assertEqual(L.Team(D, "2026-a").plan("R3", 2), D + "2026-a/jobs/R3/" + L.plan_name(2))
+        for bad in ("plan-02.md", "plan-0.md", "plan-2.md.bak", "plan-.md", "plan-2.MD", "plan-2.md\n"):
+            self.assertIsNone(L.plan_number(bad), bad)
+        self.assertRaises(ValueError, L.plan_name, 0)
+        self.assertEqual((L.plan_shape_digits("plan-0.md"), L.plan_shape_digits("plan-02.md"), L.plan_shape_digits("plan-x.md")), ("0", "02", None))
+
+    def test_job_paths(self):
+        t = L.Team(D, "2026-a")
+        self.assertEqual(t.jobs, D + "2026-a/jobs")
+        self.assertEqual(t.result("R3", "implement", 1, plan=2), D + "2026-a/jobs/R3/results/implement-plan-2-1.md")
+        self.assertEqual(t.blocked("R3"), D + "2026-a/jobs/R3/results/BLOCKED.md")
+        self.assertEqual(L.job_of_path(D, t.result("R3", "implement", 1)), (t, "R3", "results/implement-1.md"))
+        self.assertEqual(L.job_of_path(D, t.intent("fix-typo"))[1:], ("fix-typo", "INTENT.md"))
+        for bad in (t.roadmap, t.rules, t.job("R3"), t.job("R3") + "/", "elsewhere/2026-a/jobs/R3/INTENT.md",
+                    D + "worker/jobs/R3/INTENT.md", D + "2026-a/jobs/leader/INTENT.md", D + "2026-a/jobs/a b/INTENT.md", D + "jobs/R3/INTENT.md"):
+            self.assertIsNone(L.job_of_path(D, bad), bad)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,10 @@
   roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄>
                           [--not <한 줄>]…   단순 작업(kind: task)의 과제 폴더를 만든다 — 지시 원문은 표준 입력의
                           바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다
+  roadmap_write.py job sync --result <결과 파일 경로> [--role <역할> --bundle-at <커밋> --job-at <커밋>]
+                          [--ledger <원장> --plan-file <계획>] [--end <커밋>]   결과 파일을 맞춘다 — 없으면 머리를 만들고,
+                          원장의 끝난 Task · Ruling 줄 가운데 없는 것만 덧붙이고, --end 면 끝 줄을 단다.
+                          끝 줄이 있는 파일은 고치지 않는다. git 은 레포 뿌리 · 레포 설정을 읽을 때만 부른다
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류 ·
           4 사람이 손으로 고칠 것이 남았다(update · team 형식 — 손으로 고칠 INTENT.md 를 화면에 냈다. 다른 바뀜은 썼고,
@@ -60,8 +64,7 @@ RISK_ORDER_NOTICE = ("[spec-distill] 위험 줄에 번호가 없어 줄 순서�
                      "다시 만들면 번호가 그 줄에 붙어 다닌다.")
 RANGES_ONLY = ("[spec-distill] 아무것도 쓰지 않았다 — 표와 로드맵은 같고, 지시 원문 범위만 과제의 INTENT.md 와 다르다. "
                "범위는 INTENT.md 에만 있으니 아래대로 손으로 고친다")
-STAGE_PENDING_NOTICE = ("[spec-distill] 머지 여부를 확인하지 못했다 — 이 판은 team 형식의 단계를 계산하지 않는다. "
-                        "머지된 에픽을 바꾸지 않았는지 직접 확인한다")
+NO_RANGE = "%s: 지시 원문에 줄 범위가 없다 — 표의 그 행을 만들 수 없다"
 
 
 class Refused(Exception):
@@ -353,6 +356,11 @@ def cmd_extract(a) -> int:
     text = read(roadmap)
     layout = roadmap_layout(text)
     rows = R.extract_rows(text, lambda name: read(rdir / name) if (rdir / name).is_file() else None)
+    if layout == team_layout.LAYOUT_TEAM:   # 범위 칸이 「없음」 인 묶음 행은 표가 받지 않는다 — 틀린 표 대신 그 INTENT.md 를 짚는다
+        missing = [os.path.join(os.path.dirname(a.roadmap), team_layout.intent_rel(r.id))
+                   for r in rows if r.kind == R.KIND_BUNDLE and not r.ranges]
+        if missing:
+            raise Refused(" / ".join(NO_RANGE % p for p in missing))
     sys.stdout.write(R.format_table(rows, layout))
     return 0
 
@@ -362,9 +370,8 @@ NEW_ID_RE = re.compile(r"[A-Z][0-9]+")
 ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
 
 
-def stages(top: Path, roadmap: Path, layout=None) -> dict:
-    """블록 번호 → 단계. 머지 여부를 모르면 Refused. team 형식에서 블록이 모두 「이 판은 단계를 계산하지 않는다」
-    사유의 「알 수 없음」 이면 알림 한 줄을 내고 {} — 그 밖의 사유(형식 깨짐 등)가 하나라도 있으면 옛 형식처럼 Refused."""
+def stages(top: Path, roadmap: Path) -> dict:
+    """블록 번호 → 단계(옛 형식 · team 형식 모두 상태 계산이 센다). 머지 여부를 모르면 Refused."""
     out, rc, err = _status_json(top, roadmap)
     try:
         report = json.loads(out) if not err else None
@@ -372,12 +379,7 @@ def stages(top: Path, roadmap: Path, layout=None) -> dict:
         report = None
     if not isinstance(report, dict):
         raise Refused("머지 여부를 알 수 없다 — 검사기 출력을 읽지 못했다(rc %d) %s" % (rc, err))
-    blocks = report.get("blocks") or []
-    if layout == team_layout.LAYOUT_TEAM and blocks and all(
-            b.get("stage") == "알 수 없음" and b.get("reason") == team_layout.STAGE_PENDING for b in blocks):
-        print(STAGE_PENDING_NOTICE)
-        return {}
-    got = {b.get("id"): b.get("stage") for b in blocks}
+    got = {b.get("id"): b.get("stage") for b in report.get("blocks") or []}
     unknown = sorted(i for i, s in got.items() if s in (None, "알 수 없음"))
     if not got or unknown:
         why = report.get("unknown_reasons") or report.get("format_errors") or unknown or ["블록 없음"]
@@ -435,19 +437,20 @@ def cmd_update(a) -> int:
     changed = [i for i in new if i in old and _canonical(new[i], team) != _canonical(old[i], team)]
     added = [i for i in new if i not in old]
     removed = [i for i in old if i not in new]
-    if not (changed or added or removed) and list(new) == list(old):
-        todo = team_write.hand_fixes(top, team, old, new, W) if team else []   # 범위만 다른 과제 — 쓰지 않고 고칠 글만
-        if todo:
-            print(RANGES_ONLY)
-            for line in todo:
-                print(line)
-            return EXIT_TODO
+    fix_ids, todo = team_write.hand_fixes(top, team, old, new, W) if team else ([], [])   # 손으로 고칠 과제 — 범위만 다른 행도
+    unchanged = not (changed or added or removed) and list(new) == list(old)
+    if unchanged and not fix_ids:
         print("[spec-distill] 바뀐 에픽이 없다 — 쓰지 않았다")
         return 0
-    st = stages(top, roadmap, layout)
-    frozen = [i for i in changed + removed if st.get(i) in DONE]
+    st = stages(top, roadmap)
+    frozen = [i for i in changed + removed + [j for j in fix_ids if j not in changed] if st.get(i) in DONE]
     if frozen:
         raise Refused("머지되거나 끝난 에픽은 바꾸거나 지우지 않는다 — %s" % " · ".join(frozen))
+    if unchanged:   # 범위만 다른 과제 — 쓰지 않고 고칠 글만
+        print(RANGES_ONLY)
+        for line in todo:
+            print(line)
+        return EXIT_TODO
     used = used_numbers(old_text)
     bad = [i for i in added if not NEW_ID_RE.fullmatch(i) or i != i[0] + str(int(i[1:]))]
     want = []
@@ -472,10 +475,9 @@ def cmd_update(a) -> int:
                for label, ids in (("바뀐 에픽", changed), ("새 에픽", added), ("사라진 에픽", removed)) if ids]
     entry = R.history_entry(date, a.change, changes or ["순서만"], a.approval)
     new_text = R.append_history(R.replace_epics(old_text, blocks), entry)
-    writes, removes, once, todo, notes = {roadmap: new_text}, [], {}, [], []
+    writes, removes, once, notes = {roadmap: new_text}, [], {}, []
     if team:   # 있던 과제의 INTENT.md 는 쓰지 않는다 — 바뀐 것은 손으로 고칠 글(todo)로, 옛 형식의 묶음 쓰기 · 지우기는 없다
-        files, once, todo, notes = team_write.update_files(top, team, old, new, changed, added, removed, idx,
-                                                           roadmap_rel, W)
+        files, once, notes = team_write.update_files(top, team, old, new, changed, added, removed, idx, roadmap_rel, W)
         writes.update(files)
     else:
         for i in changed + added:
@@ -618,6 +620,10 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--roadmap", "--name", "--branch", "--paths", "--goal"):
         n.add_argument(flag, required=True)
     n.add_argument("--not", dest="nots", action="append")
+    y = j.add_parser("sync")
+    y.add_argument("--result", required=True)
+    for flag in ("--role", "--bundle-at", "--job-at", "--ledger", "--plan-file", "--end"):
+        y.add_argument(flag)
     return ap
 
 
@@ -626,7 +632,7 @@ def cmd_original(a) -> int:
 
 
 def cmd_job(a) -> int:
-    return {"new": team_write.cmd_job_new}[a.job_cmd](a, sys.modules[__name__])
+    return {"new": team_write.cmd_job_new, "sync": team_write.cmd_job_sync}[a.job_cmd](a, sys.modules[__name__])
 
 
 COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
