@@ -14,7 +14,7 @@ from typing import List, Optional
 import yaml
 
 KINDS = ("방향", "빠진 기능", "쓰이지 않을 기능", "범위 축소", "모호한 말 굳힘",
-         "앞 결정 뒤집힘", "기본값", "조용한 실패", "마찰", "기타")
+         "앞 결정 뒤집힘", "기본값", "조용한 실패", "마찰", "갈라짐", "중복", "기타")
 ANSWERS = ("의도다", "잘못 골랐다", "지금은 모르겠다")
 
 TYPE_VALUE = "qg-intent-answer"
