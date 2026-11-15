@@ -3134,20 +3134,24 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertNotIn("<`file:` 경로들>", i7)
 
     def test_record_failure_is_a_todo(self):
-        """답 기록 실패 공시(스크립트의 글 그대로)가 I5 표와 I7 할 일에 실린다."""
+        """I5 표는 답 기록 실패 공시(스크립트의 글 그대로)를 보이고, I7 할 일은 꼴의 `state` 칸에서 정한다."""
         shown = "`%s`" % ic.RECORD_FAILED.replace("%d", "<n>").replace("%s", "<사유>")
         self.assertEqual(shown, "`답 기록 실패 <n>개 — <사유>`")
         self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(shown), 1)
         i7 = self._section("I7 돌려주기")
-        self.assertEqual(i7.count(shown + " 를 냈으면 — 「답 <n>개가 기록되지 않았다(<사유>)"), 1)
-        # 그 아래 질문마다의 줄 — 고른 답이 「잘못 골랐다」 면 그 사실을 할 일에 적는다.
-        item = "`%s`" % (ic.RECORD_FAILED_ITEM % ("<정체>", "<답>", "<글>"))
-        self.assertEqual(item, "`답 기록 실패 질문 — <정체> · 고른 답: <답> · 질문: <글>`")
-        self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(item), 1)
-        todo = [l for l in i7.split("\n") if shown + " 를 냈으면" in l][0]
-        self.assertEqual(todo.count(item), 1)
-        self.assertIn("고른 답이 `잘못 골랐다` 면 「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", todo)
-        self.assertIn("`%s` 이면 「이 질문의 답을 읽지 못했다」" % ic.PICK_UNREAD, todo)
+        # I7 의 근거는 공시 줄이 아니라 꼴의 칸이다 — 질문의 state 와 failure · answer.
+        field = "`state: %s` 인 질문이 있으면 — 「답 <n>개가 기록되지 않았다(<failure>)" % ic.QUESTION_STATES[1]
+        self.assertEqual(i7.count(field), 1)
+        todo = [l for l in i7.split("\n") if field in l][0]
+        self.assertTrue(todo.startswith("  - "), todo)
+        self.assertNotIn(shown, i7)
+        self.assertNotIn("답 기록 실패 질문 — ", i7)
+        self.assertIn("`answer` 가 `-` 면 「이 질문의 답을 읽지 못했다」", todo)
+        # 잘못 골랐다고 답했는데 기록에 실패한 질문 — 그 사실을 wrong_choice 할 일에 적는다.
+        wrong = [l for l in i7.split("\n") if "`wrong_choice: true` 인 질문이" in l]
+        self.assertEqual(len(wrong), 1)
+        self.assertIn("「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", wrong[0])
+        self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
     def test_answer_commit_needs_a_push_todo(self):
         """답 커밋이 생긴 실행은 할 일에 push 를 싣는다 — 게시된 판정은 답 커밋 앞 커밋의 것이다."""
@@ -3174,11 +3178,12 @@ class TestProcedureDoc(unittest.TestCase):
             self.assertIn(fact, bullets[0])
 
     def test_unanswered_questions_are_a_todo(self):
-        """답하지 않은 질문이 남은 실행은 할 일 줄에 그 사실을 싣는다 — 결과 줄의 글 그대로 가리킨다."""
+        """답하지 않은 질문이 남은 실행은 할 일 줄에 그 사실을 싣는다 — 꼴의 state 칸이 정하고, 결과 줄 글은 I5 가 가른다."""
         shown = "`%s`" % ic.UNANSWERED.strip(" ·").replace("%d", "<k>")
         self.assertEqual(shown, "`답하지 않음 <k>개`")
         i7 = self._section("I7 돌려주기")
-        self.assertEqual(i7.count("결과 줄에 " + shown + " 가 있으면 — 「답하지 않은 질문 <k>개가 남았다"), 1)
+        self.assertEqual(i7.count("`state: %s` 인 질문이 있으면 — 「답하지 않은 질문 <k>개가 남았다" % ic.QUESTION_STATES[2]), 1)
+        self.assertNotIn("결과 줄에 " + shown, i7)
         self.assertIn("결과 줄이 " + shown + " 로 가른다", self._section("I5 거르기 · 묻기 · 답 기록"))
 
     def test_filter_fence_passes_the_review_mode(self):

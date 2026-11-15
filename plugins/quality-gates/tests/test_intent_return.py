@@ -756,5 +756,192 @@ class TestAnswerInput(unittest.TestCase):
         self._switch_case(GLOBAL, STAGE)
 
 
+STATE_DOC = tic.REFERENCE.parent / "state-file-format.md"
+# 상태 문서에서 칸 목록을 싣는 일곱 줄의 머리(글자 그대로 — 뒤는 백틱 토큰만).
+DOC_HEADS = (
+    "- 머리 칸(차례대로):",
+    "- 질문 칸(차례대로):",
+    "- 칸 `status` 의 값:",
+    "- 칸 `reason` 의 값(skipped):",
+    "- 칸 `reason` 의 값(failed):",
+    "- 칸 `outcome` 의 값(ran):",
+    "- 질문 칸 `state` 의 값:",
+)
+
+
+def _doc_tokens(text, head):
+    """`head` 로 시작하는 줄이 정확히 하나면 그 뒤의 백틱 토큰들, 아니면 None."""
+    lines = []
+    for line in text.split("\n"):
+        if line.startswith(head):
+            lines.append(line)
+    if len(lines) != 1:
+        return None
+    return lines[0][len(head):].split("`")[1::2]
+
+
+def _code_lists(keys=None, questions=None, statuses=None, skips=None, fails=None,
+                outcomes=None, states=None):
+    """상수에서 낸 일곱 목록 — 인자로 상수 튜플을 바꿔 끼울 수 있다(변이용)."""
+    return [list(keys if keys is not None else ic.RETURN_KEYS) + ["questions"],
+            list(questions if questions is not None else ic.QUESTION_KEYS),
+            list(statuses if statuses is not None else ic.RETURN_STATUSES),
+            list(skips if skips is not None else ic.SKIP_REASONS),
+            list(fails if fails is not None else ic.FAIL_REASONS),
+            list(outcomes if outcomes is not None else ic.RETURN_OUTCOMES),
+            list(states if states is not None else ic.QUESTION_STATES)]
+
+
+def _doc_mismatches(text, expected):
+    """문서의 일곱 줄 가운데 기대 목록과 다른 줄의 머리 — 같은 비교를 락과 이빨 시험이 함께 쓴다."""
+    bad = []
+    for head, want in zip(DOC_HEADS, expected):
+        if _doc_tokens(text, head) != want:
+            bad.append(head)
+    return bad
+
+
+def _edit_line(text, head, edit):
+    """`head` 로 시작하는 줄을 edit(줄) 로 바꾼 글(줄이 없으면 그대로)."""
+    out = []
+    for line in text.split("\n"):
+        if line.startswith(head):
+            line = edit(line)
+        out.append(line)
+    return "\n".join(out)
+
+
+class TestReturnDoc(unittest.TestCase):
+    """상태 문서의 칸 목록 · 수명 문장 · 절차 I2 · I7 의 글이 코드와 같다(AC9 · AC17)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.state = STATE_DOC.read_text(encoding="utf-8")
+        cls.proc = tic.REFERENCE.read_text(encoding="utf-8")
+
+    def _section(self, head):
+        self.assertEqual(self.proc.count("\n## %s\n" % head), 1, head)
+        return self.proc.split("\n## %s\n" % head, 1)[1].split("\n## ", 1)[0]
+
+    def test_doc_lists_match_code(self):
+        self.assertEqual(_doc_mismatches(self.state, _code_lists()), [])
+        for head, want in zip(DOC_HEADS, _code_lists()):
+            self.assertEqual(_doc_tokens(self.state, head), want, head)
+
+    def test_written_keys_match_code(self):
+        """실제 render 가 쓴 꼴의 칸 차례가 상수와 같다 — 문서 · 상수 · 쓰인 파일 셋이 이어진다."""
+        with tempfile.TemporaryDirectory() as rd:
+            tic._filter_rd(rd, mode="pr")
+            rec = {"id": "src#D1#방향", "identified": True, "state": "ask", "n": 1,
+                   "target_source": "src", "target_id": "D1", "kind": "방향", "weight": "방향",
+                   "quote": "구절", "label": "라벨", "question": "질문?",
+                   "evidence_lines": [1], "observation": ["   1\t[e2e] 관찰 1"],
+                   "read_quotes": [], "evidence_kinds": ["e2e"]}
+            data = {"status": "ran", "call": "first-only", "counts": {}, "notices": [],
+                    "commit": "-", "commit_line": "", "none_reason": "-", "record_ran": True,
+                    "questions": [rec]}
+            tic._write(ic.yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+                       rd, "intent-questions.yaml")
+            p = tic._cli("render", "--rd", rd, "--mode", "pr")
+            self.assertEqual(p.returncode, 0, p.stderr)
+            text, _block = tic._return_block(rd)
+        head_keys = []
+        question_keys = []
+        for line in text.split("\n"):
+            if line.startswith("  - "):
+                question_keys.append(line[4:].split(":", 1)[0])
+            elif line.startswith("    ") and not line.startswith("     "):
+                question_keys.append(line.strip().split(":", 1)[0])
+            elif line[:1].isalpha():
+                head_keys.append(line.split(":", 1)[0])
+        want = _code_lists()
+        self.assertEqual(head_keys, want[0])
+        self.assertEqual(question_keys, want[1])
+        self.assertEqual(_doc_tokens(self.state, DOC_HEADS[0]), head_keys)
+        self.assertEqual(_doc_tokens(self.state, DOC_HEADS[1]), question_keys)
+
+    def test_doc_lock_has_teeth(self):
+        """같은 비교를 변이한 글 · 상수에 돌려 불일치를 본다 — 지우기 · 값 바꾸기 · 더하기 · 순서 · 줄 없음."""
+        good = _code_lists()
+        self.assertEqual(_doc_mismatches(self.state, good), [])  # 양성 대조
+        for head, want in zip(DOC_HEADS, good):
+            first = "`%s`" % want[0]
+            second = "`%s`" % want[1] if len(want) > 1 else None
+            variants = {
+                "delete": lambda l: l.replace(first, "", 1),
+                "change": lambda l: l.replace(first, "`%sx`" % want[0], 1),
+                "add": lambda l: l.replace(first, first + " · `extra`", 1),
+                "drop-line": lambda l: "- 지워진 줄",
+            }
+            if second is not None:
+                variants["swap"] = lambda l: l.replace(first, "@@", 1).replace(second, first, 1).replace("@@", second, 1)
+            for name, edit in variants.items():
+                mutated = _edit_line(self.state, head, edit)
+                self.assertNotEqual(mutated, self.state, (head, name))
+                self.assertEqual(_doc_mismatches(mutated, good), [head], (head, name))
+        # 칸 값 바꾸기 — 글자 그대로 skipped -> skip
+        skip = _edit_line(self.state, DOC_HEADS[2], lambda l: l.replace("`skipped`", "`skip`", 1))
+        self.assertEqual(_doc_mismatches(skip, good), [DOC_HEADS[2]])
+        # contract 뒤에 extra 더하기
+        extra = _edit_line(self.state, DOC_HEADS[0], lambda l: l.replace("`contract`", "`contract` · `extra`", 1))
+        self.assertEqual(_doc_mismatches(extra, good), [DOC_HEADS[0]])
+        # 같은 머리의 줄이 둘이면 읽지 않는다
+        twice = self.state + "\n" + DOC_HEADS[3] + " `halted`\n"
+        self.assertIn(DOC_HEADS[3], _doc_mismatches(twice, good))
+        # 상수 쪽 변이 — 튜플에서 하나 지움 · 하나 더함
+        for kw, src in (("keys", ic.RETURN_KEYS), ("questions", ic.QUESTION_KEYS),
+                        ("statuses", ic.RETURN_STATUSES), ("skips", ic.SKIP_REASONS),
+                        ("fails", ic.FAIL_REASONS), ("outcomes", ic.RETURN_OUTCOMES),
+                        ("states", ic.QUESTION_STATES)):
+            for mutated in (tuple(src[1:]), tuple(src) + ("extra",)):
+                bad = _doc_mismatches(self.state, _code_lists(**{kw: mutated}))
+                self.assertEqual(len(bad), 1, (kw, mutated))
+
+    def test_lifetime_sentence_in_both_docs(self):
+        first = "세션 폴더는 같은 세션의 다음 qg 시작에 지워진다"
+        second = ("그 세션이 qg 를 다시 부르지 않으면, 폴더가 정리 기한(기본 24시간)보다 오래된 뒤 "
+                  "어느 세션이든 qg 를 시작할 때 지워진다")
+        i7 = self._section("I7 돌려주기")
+        for text in (self.state, i7):
+            self.assertEqual(text.count(first), 1)
+            self.assertEqual(text.count(second), 1)
+            self.assertEqual(text.count(first + ". " + second + "."), 1 if text is i7 else 0)
+        # 상태 문서는 첫 문장 뒤에 지우는 스크립트를 밝힌다.
+        self.assertEqual(self.state.count(first + "(`scripts/setup-qg.sh`). " + second + "(`scripts/qg-gc.py`)."), 1)
+        carry = ("나중에 쓸 부르는 쪽은 qg 를 다시 부르기 전에 `intent-return.md` 와, 다른 팀 기록이 필요하면 "
+                 "`session_dir` 아래 `other_teams` 값의 파일을 가져간다.")
+        self.assertEqual(i7.count(carry), 1)
+
+    def test_kill_row_and_tree_removal_agree(self):
+        """꺼짐 줄로 온 범위 모드 실행이 리뷰 트리 지우기 펜스를 지난다고 두 자리가 같이 말한다(12a)."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        para = [l for l in i5.split("\n") if l.startswith("**리뷰 트리 지우기")]
+        self.assertEqual(len(para), 1)
+        self.assertEqual(para[0].count("`prepare` 가 꺼짐 줄을 낸 실행"), 1)
+        self.assertEqual(para[0].count("꺼짐 줄로 온 실행은 `render` 를 돌지 않는다 — 이 펜스의 출력이 꺼짐 줄 뒤에 오고, "
+                                       "I7 에서 꺼짐 줄을 다시 보인다"), 1)
+        i2 = self._section("I2 설정 · 준비")
+        rows = [l for l in i2.split("\n") if l.startswith("| `intent-critic 꺼짐(kill switch)`")]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].count("돌려주는 꼴은 `prepare` 가 썼다"), 1)
+        self.assertEqual(rows[0].count("범위 모드면 [I5](#i5-거르기--묻기--답-기록) 끝의 리뷰 트리 지우기를 지나 "
+                                       "[I7](#i7-돌려주기)"), 1)
+        self.assertEqual(rows[0].count("render` 도 돌리지 않는다"), 1)
+
+    def test_i7_decides_from_fields(self):
+        """I7 의 할 일은 꼴의 칸에서 정한다 — 옛 칸 값 · 공시 줄 판독이 없다(AC9)."""
+        i7 = self._section("I7 돌려주기")
+        for field in ("`wrong_choice: true`", "`state: 답 기록 실패`", "`state: 답하지 않음`",
+                      "`state: 묻지 않음`"):
+            lines = [l for l in i7.split("\n") if l.startswith("  - " + field + " 인 질문")]
+            self.assertEqual(len(lines), 1, field)
+        for gone in ("wrong_choice: yes", "`아직 묻지 않음` 으로 남고 고른 답은 실리지 않는다",
+                     "아직 묻지 않음"):
+            self.assertNotIn(gone, i7)
+            self.assertNotIn(gone, self.state)
+        self.assertIn("질문 <k>개를 묻지 않았다 — 부르는 쪽이 사람에게 옮긴다", i7)
+        self.assertIn("질문 <k>개를 묻기 전에 끝났다 — 다시 돌려 묻는다", i7)
+
+
 if __name__ == "__main__":
     unittest.main()
