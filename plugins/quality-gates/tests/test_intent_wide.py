@@ -1066,7 +1066,7 @@ class TestWideRender(_WideRun, unittest.TestCase):
                 "questions": [{"id": tic.ID1, "state": "ask", "question": "Q", "target_id": "D1"}]}
         tic._write(tic.yaml.safe_dump(data, allow_unicode=True), self.rd, "intent-questions.yaml")
         _p, section = self._render()
-        self.assertIn("| %s | 아직 묻지 않음 | - | - | - | Q |" % tic.ID1, section)
+        self.assertIn("| %s | 묻지 않음 | - | - | - | Q |" % tic.ID1, section)
         text, block = tic._return_block(self.rd)
         self.assertEqual(block["questions"][0]["evidence"], "-")
         self.assertIn('    evidence: "-"\n', text)
@@ -1092,9 +1092,11 @@ class TestWideRender(_WideRun, unittest.TestCase):
                                 "overlaps", "questions"])
         fields = []
         for line in text.split("\n"):
-            if line.startswith("    ") or line.startswith("  - "):
+            if (line.startswith("    ") and not line.startswith("     ")) or line.startswith("  - "):
                 fields.append(line.strip().lstrip("- ").split(":", 1)[0])
-        self.assertEqual(fields, ["id", "state", "answer", "wrong_choice", "file", "evidence"])
+        self.assertEqual(fields, ["n", "id", "state", "answer", "answer_text", "wrong_choice",
+                                  "failure", "file", "evidence", "question", "target_source",
+                                  "target_id", "label", "quote", "observation"])
 
     def test_overlap_list_without_reviewer(self):
         self._prepare(wide=False, call="none")

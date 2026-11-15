@@ -154,7 +154,9 @@ COUNT_NOTICES = (
     ("absorbed", "두 호출에서 겹친 후보를 합침 %d"),
     ("cites_dropped", "근거로 받지 않은 인용 %d"),
 )
-RETURN_STATES = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
+QUESTION_STATES = ("답함", "답 기록 실패", "답하지 않음", "묻지 않음", "상한 넘어 남김")
+NOT_ASKED_RANGE = "intent-critic — 질문 %d개 묻지 않음(범위 모드)"
+NOT_ASKED_EARLY = "intent-critic — 질문 %d개 묻지 않음(묻기 전에 끝남)"
 TABLE_HEAD = "| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |"
 KIND_SEP = " · "
 # 결과 절의 다른 팀 목록 — 리뷰어를 부르지 않은 실행에도 늘 보인다.
@@ -346,12 +348,22 @@ def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
     else:
         lines.append("questions:")
     for row in rows:
-        lines.append("  - id: " + json.dumps(row["id"], ensure_ascii=False))
-        lines.append("    state: " + _scalar(row["state"]))
-        lines.append("    answer: " + _scalar(row["answer"]))
-        lines.append("    wrong_choice: " + row["wrong_choice"])
-        lines.append("    file: " + json.dumps(row["file"], ensure_ascii=False))
-        lines.append("    evidence: " + json.dumps(row["evidence"], ensure_ascii=False))
+        lines.append("  - n: " + (str(row["n"]) if type(row.get("n")) is int else _scalar("-")))
+        for key in QUESTION_KEYS[1:]:
+            value = row.get(key)
+            if key == "state":
+                lines.append("    state: " + _scalar(value))
+            elif key == "wrong_choice":
+                lines.append("    wrong_choice: " + ("true" if value else "false"))
+            elif key in ("answer_text", "observation"):
+                if not isinstance(value, list) or not value:
+                    lines.append("    %s: %s" % (key, "[]" if key == "observation" else _text_cell("-")))
+                else:
+                    lines.append("    %s:" % key)
+                    for item in value:
+                        lines.append("      - " + _text_cell(item))
+            else:
+                lines.append("    %s: %s" % (key, _text_cell(value if value else "-")))
     lines.append("```")
     _write(_path(rd, RETURN), "\n".join(lines) + "\n")
 
@@ -1119,6 +1131,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
     ordered = sorted(remaining, key=_pick_rank)
     for i, record in enumerate(ordered):
         label = record.pop("label_in_run")
+        record["n"] = i + 1
         if i < CAP:
             ledger.accept(label)
             record["state"] = "ask"
@@ -1322,8 +1335,11 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
     고른 답 · 질문 글 한 줄. 그 질문에 표지를 단다."""
     reasons: List[str] = []
     counts: dict = {}
-    for record, _answer, reason in failed:
+    for record, picked, reason in failed:
         record["record_failed"] = True
+        if picked:
+            record["failed_answer"] = picked
+        record["failure"] = reason
         if reason not in counts:
             reasons.append(reason)
             counts[reason] = 0
@@ -1341,7 +1357,7 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
 
 def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: bool) -> None:
     """record 의 공시 · 표지를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
-    if data is None or not (notices or changed):
+    if data is None:
         return
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     _write_questions(rd, data)
@@ -1353,6 +1369,8 @@ def _record(args) -> tuple:
     data = _read_questions(args.rd)
     if plan is not None and plan["mode"] == "range":
         return [], 0
+    if data is not None:
+        data["record_ran"] = True   # render 가 「묻기 전에 끝남」 과 「답하지 않음」 을 가른다
     cfg = _read_config(args.rd)
     text = _read(args.answers)
     known: dict = {}
@@ -1462,6 +1480,24 @@ def _cell(value) -> str:
     return _text(value).replace("\n", " ").replace("|", "\\|")
 
 
+def _question_state(record: dict, mode: str, record_ran: bool) -> Optional[str]:
+    """질문 레코드 하나의 돌려주는 꼴 상태 — 거른 상태(이미 답해 거름 등)는 None."""
+    state = record.get("state")
+    if state == "answered":
+        return "답함"
+    if state == "over-cap":
+        return "상한 넘어 남김"
+    if state != "ask":
+        return None
+    if mode == "range":
+        return "묻지 않음"
+    if record.get("record_failed"):
+        return "답 기록 실패"
+    if record_ran:
+        return "답하지 않음"
+    return "묻지 않음"
+
+
 def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:
     """키 `status` · `reason` · `reason_text` · `outcome` · `result_line` · `notices`."""
     notices = []
@@ -1481,17 +1517,22 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:
         first = _one_line(out["notices"][0]) if out["notices"] else ""
         out.update(status="uncountable", reason_text=first or "-", result_line=UNREADABLE)
         return out
-    asked = answered = wrong = unanswered = 0
+    record_ran = bool(data.get("record_ran"))
+    asked = answered = wrong = failed = unanswered = not_asked = 0
     for record in data["questions"]:
-        state = record.get("state")
-        if state in ("ask", "answered"):
+        if record.get("state") in ("ask", "answered"):
             asked += 1
-        if state == "answered":
+        state = _question_state(record, mode, record_ran)
+        if state == "답함":
             answered += 1
             if record.get("answer") == "잘못 골랐다":
                 wrong += 1
-        elif state == "ask" and not record.get("record_failed"):
-            unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
+        elif state == "답 기록 실패":
+            failed += 1
+        elif state == "답하지 않음":
+            unanswered += 1   # 묻고도 답을 받지 못한 질문
+        elif state == "묻지 않음":
+            not_asked += 1
     counts = data.get("counts") or {}
     filtered = 0
     for key in FILTERED_KEYS:
@@ -1508,9 +1549,13 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:
         return out
     out["outcome"] = "questions"
     if mode == "range":
-        out["result_line"] = "intent-critic — 질문 %d개 아직 묻지 않음(범위 모드)" % asked
+        out["result_line"] = NOT_ASKED_RANGE % not_asked
         return out
-    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (asked, answered, wrong)
+    if not record_ran:
+        out["result_line"] = NOT_ASKED_EARLY % not_asked
+        return out
+    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (
+        answered + failed + unanswered, answered, wrong)
     if unanswered:
         line += UNANSWERED % unanswered
     out["result_line"] = line
@@ -1518,19 +1563,38 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:
 
 
 def _rows(data: Optional[dict], mode: str) -> List[dict]:
+    """질문 칸 — 키는 `QUESTION_KEYS`. 거른 상태의 레코드는 행이 없다."""
     rows = []
+    record_ran = bool((data or {}).get("record_ran"))
     for record in (data or {}).get("questions") or []:
-        state = record.get("state")
-        if state in RETURN_STATES:
-            answer = record.get("answer") or "-"
-            # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
-            kinds = record.get("evidence_kinds")
-            evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
-            rows.append({"id": _text(record.get("id")), "state": RETURN_STATES[state],
-                         "answer": answer, "wrong_choice": "yes" if answer == "잘못 골랐다" else "no",
-                         "file": "-" if mode == "range" else (record.get("file") or "-"),
-                         "question": record.get("question", ""), "evidence": evidence})
+        state = _question_state(record, mode, record_ran)
+        if state is not None:
+            rows.append(_row(record, state, mode))
     return rows
+
+
+def _row(record: dict, state: str, mode: str) -> dict:
+    """질문 칸 하나 — 키는 `QUESTION_KEYS`."""
+    answer = "-"
+    if state == "답함":
+        answer = record.get("answer") or "-"
+    elif state == "답 기록 실패":
+        answer = record.get("failed_answer") or "-"
+    # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
+    kinds = record.get("evidence_kinds")
+    evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
+    lines = record.get("answer_text")
+    observation = record.get("observation")
+    return {"n": record.get("n"), "id": _text(record.get("id")), "state": state,
+            "answer": answer, "answer_text": lines if isinstance(lines, list) and lines else "-",
+            "wrong_choice": answer == "잘못 골랐다",
+            "failure": (record.get("failure") or "-") if state == "답 기록 실패" else "-",
+            "file": "-" if mode == "range" else (record.get("file") or "-"),
+            "evidence": evidence, "question": record.get("question", ""),
+            "target_source": record.get("target_source", ""),
+            "target_id": record.get("target_id", ""), "label": record.get("label", ""),
+            "quote": record.get("quote", ""),
+            "observation": observation if isinstance(observation, list) else []}
 
 
 def _teams_record(rd: str) -> tuple:

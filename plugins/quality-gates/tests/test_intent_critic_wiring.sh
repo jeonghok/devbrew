@@ -377,7 +377,7 @@ PY
         [ ! -e "$rd/other-teams.md" ]; r no-teams-file "$?"
         [ ! -e "$rd/intent-scope.md" ]; r no-scope-file "$?"
       else
-        [ "$last" = "intent-critic — 질문 1개 아직 묻지 않음(범위 모드)" ]; r result-line "$?"
+        [ "$last" = "intent-critic — 질문 1개 묻지 않음(범위 모드)" ]; r result-line "$?"
       fi
       if [ "$mode" = wide ]; then
         [ -f "$rd/other-teams.md" ]; r teams-file "$?"

@@ -1824,8 +1824,9 @@ class TestRecord(unittest.TestCase):
             text, block = _return_block(self.rd)
             self.assertEqual(block["commit"], "failed — 답 자리가 심볼릭 링크다")
             row = block["questions"][0]
-            self.assertEqual((row["state"], row["answer"], row["file"], row["wrong_choice"]),
-                             ("아직 묻지 않음", "-", "-", False))
+            self.assertEqual((row["state"], row["answer"], row["file"], row["wrong_choice"],
+                              row["failure"]),
+                             ("답 기록 실패", "잘못 골랐다", "-", True, "답 자리가 심볼릭 링크다"))
             section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
             self.assertIn("- 답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다\n", section)
             self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 자리가 심볼릭 링크다")
@@ -1865,7 +1866,8 @@ class TestRecord(unittest.TestCase):
         rows = block["questions"]
         self.assertEqual([(x["state"], x["answer"], x["file"], x["wrong_choice"]) for x in rows],
                          [("답함", "의도다", ANS_DIR + "/" + files[0], False),
-                          ("아직 묻지 않음", "-", "-", False)])
+                          ("답 기록 실패", "잘못 골랐다", "-", True)])
+        self.assertEqual(rows[1]["failure"], "답 파일을 쓰지 못했다")
         self.assertNotIn("failed", block["commit"])
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
         self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 파일을 쓰지 못했다") + "\n"), 1)
@@ -1955,9 +1957,11 @@ class TestRender(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _qy(self, questions, commit="-", status="ran"):
+    def _qy(self, questions, commit="-", status="ran", record_ran=True):
         data = {"status": status, "call": "first-only", "counts": {}, "notices": [],
                 "commit": commit, "questions": questions}
+        if record_ran:
+            data["record_ran"] = True
         _write(yaml.safe_dump(data, allow_unicode=True), self.rd, "intent-questions.yaml")
 
     def _item(self, tid, state, answer=None, file=None):
@@ -1983,7 +1987,7 @@ class TestRender(unittest.TestCase):
         self.assertEqual([r["state"] for r in rows], ["답함", "답함", "상한 넘어 남김"])
         self.assertEqual([r["file"] for r in rows], [ANS_DIR + "/a.md", ANS_DIR + "/b.md", "-"])
         self.assertEqual([r["answer"] for r in rows], ["의도다", "지금은 모르겠다", "-"])
-        self.assertEqual(text.count("    wrong_choice: no\n"), 3)
+        self.assertEqual(text.count("    wrong_choice: false\n"), 3)
         self.assertEqual([r["wrong_choice"] for r in rows], [False, False, False])
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
         self.assertIn("| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |", section)
@@ -1996,12 +2000,12 @@ class TestRender(unittest.TestCase):
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(p), "intent-critic — 질문 1개를 물었다 · 답 1개(잘못 골랐다 1개)")
         text, block = _return_block(self.rd)
-        self.assertIn("    wrong_choice: yes\n", text)
+        self.assertIn("    wrong_choice: true\n", text)
         self.assertIs(block["questions"][0]["wrong_choice"], True)
 
     def test_render_separates_unanswered_questions(self):
         """질문 창을 닫았거나 답하지 않은 질문 — 결과 줄이 「답하지 않음 <k>개」 로 가르고, 돌려주는 꼴에는
-        「아직 묻지 않음」 으로 남는다. 답 기록에 실패한 질문은 여기 세지 않는다(따로 공시된다)."""
+        「답하지 않음」 으로 남는다. 답 기록에 실패한 질문은 「답 기록 실패」 로 갈라 보이고 여기 세지 않는다."""
         failed = self._item("D3", "ask")
         failed["record_failed"] = True
         cases = (
@@ -2023,9 +2027,11 @@ class TestRender(unittest.TestCase):
                 section = _read(rd, "result.md").split("\n## intent-critic\n", 1)[1]
                 self.assertIn("\n- %s\n" % line, section)
                 _text, block = _return_block(rd)
-                states = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
-                self.assertEqual([r["state"] for r in block["questions"]],
-                                 [states[q["state"]] for q in questions])
+                states = {"answered": "답함", "ask": "답하지 않음", "over-cap": "상한 넘어 남김"}
+                want = []
+                for q in questions:
+                    want.append("답 기록 실패" if q.get("record_failed") else states[q["state"]])
+                self.assertEqual([r["state"] for r in block["questions"]], want)
 
     def test_return_block_values_stay_strings(self):
         """돌려주는 꼴의 값은 YAML 로 읽어도 글자 그대로다 — 숫자뿐인 짧은 해시(0 으로 시작하면 8진수로
@@ -2050,10 +2056,10 @@ class TestRender(unittest.TestCase):
     def test_render_range_not_asked(self):
         self._qy([self._item("D1", "ask"), self._item("D2", "ask")])
         p = _cli("render", "--rd", self.rd, "--mode", "range")
-        self.assertEqual(_last(p), "intent-critic — 질문 2개 아직 묻지 않음(범위 모드)")
+        self.assertEqual(_last(p), ic.NOT_ASKED_RANGE % 2)
         text, block = _return_block(self.rd)
         self.assertEqual(block["commit"], "-")
-        self.assertEqual([r["state"] for r in block["questions"]], ["아직 묻지 않음"] * 2)
+        self.assertEqual([r["state"] for r in block["questions"]], ["묻지 않음"] * 2)
         self.assertEqual([r["file"] for r in block["questions"]], ["-", "-"])
         self.assertEqual(block["mode"], "range")
 
@@ -2436,7 +2442,7 @@ class TestUnwritableText(unittest.TestCase):
         self.assertNotEqual(ids[1], other)          # 글자를 버리지 않는다 — 다른 글은 다른 정체다
         _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
         r = self._clean(_cli("render", "--rd", self.rd, "--mode", "pr"))
-        self.assertEqual(_last(r), "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개")
+        self.assertEqual(_last(r), ic.NOT_ASKED_EARLY % 2)   # record 를 돌지 않은 실행
         section = _read(self.rd, "result.md").split("\n## intent-critic\n", 1)[1]
         for text in ("못 가른 %s 질문" % self.ESC, "가른 %s 질문" % self.ESC):
             self.assertIn(text, section)

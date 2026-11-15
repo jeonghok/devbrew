@@ -314,5 +314,169 @@ class TestReturnHead(unittest.TestCase):
             self.assertEqual(ic._resolve_commit(root + "/nope", "HEAD"), "-")
 
 
+SIX = (
+    # (이름, 기대 상태, mode, record_ran, 레코드 덧칸)
+    ("answered", "답함", "pr", True, {"state": "answered", "answer": "잘못 골랐다",
+                                      "file": "docs/a.md"}),
+    ("failed", "답 기록 실패", "pr", True,
+     {"state": "ask", "record_failed": True, "failed_answer": "잘못 골랐다",
+      "failure": "답 자리가 심볼릭 링크다"}),
+    ("silent", "답하지 않음", "pr", True, {"state": "ask"}),
+    ("range", "묻지 않음", "range", False, {"state": "ask"}),
+    ("early", "묻지 않음", "pr", False, {"state": "ask"}),
+    ("over", "상한 넘어 남김", "pr", True, {"state": "over-cap"}),
+)
+QUESTION_ORDER = ["n", "id", "state", "answer", "answer_text", "wrong_choice", "failure", "file",
+                  "evidence", "question", "target_source", "target_id", "label", "quote",
+                  "observation"]
+
+
+class TestQuestionRows(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _record(self, i, extra):
+        rec = {"id": "src#D%d#방향" % i, "identified": True, "state": "ask", "n": i,
+               "target_source": "src", "target_id": "D%d" % i, "kind": "방향", "weight": "방향",
+               "quote": "구절", "label": "라벨", "question": "질문 %d?" % i,
+               "evidence_lines": [1], "observation": ["   1\t[e2e] 관찰 1"],
+               "read_quotes": [], "evidence_kinds": ["e2e"]}
+        rec.update(extra)
+        return rec
+
+    def _seed(self, extras, mode="pr", record_ran=True):
+        tic._filter_rd(self.rd, mode=mode)
+        data = {"status": "ran", "call": "first-only", "counts": {}, "notices": [],
+                "commit": "-", "commit_line": "", "none_reason": "-",
+                "questions": [self._record(i + 1, e) for i, e in enumerate(extras)]}
+        if record_ran:
+            data["record_ran"] = True
+        tic._write(ic.yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+                   self.rd, "intent-questions.yaml")
+
+    def _render(self, mode="pr"):
+        p = tic._cli("render", "--rd", self.rd, "--mode", mode)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def test_six_paths_give_five_states(self):
+        for name, state, mode, ran, extra in SIX:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as rd:
+                    self.rd = rd
+                    self._seed([extra], mode=mode, record_ran=ran)
+                    self._render(mode)
+                    _t, block = tic._return_block(rd)
+                    row = block["questions"][0]
+                    self.assertEqual(row["state"], state)
+                    result = tic._read(rd, "result.md")
+                    self.assertIn("| %s | %s |" % (row["id"], state), result)
+                    if name == "failed":
+                        self.assertEqual(row["answer"], "잘못 골랐다")
+                        self.assertIs(row["wrong_choice"], True)
+                        self.assertEqual(row["failure"], "답 자리가 심볼릭 링크다")
+        self.assertEqual(len(set(s for _n, s, _m, _r, _e in SIX)), 5)
+
+    def test_result_line_counts_match_states(self):
+        self._seed([SIX[0][4], SIX[1][4], SIX[2][4], SIX[2][4]])
+        p = self._render()
+        line = "intent-critic — 질문 4개를 물었다 · 답 1개(잘못 골랐다 1개) · 답하지 않음 2개"
+        self.assertEqual(tic._last(p), line)
+        _t, block = tic._return_block(self.rd)
+        self.assertEqual(block["result_line"], line)
+        self.assertEqual([r["state"] for r in block["questions"]].count("답하지 않음"), 2)
+
+    def test_not_asked_lines(self):
+        cases = (("range", False, "intent-critic — 질문 2개 묻지 않음(범위 모드)"),
+                 ("pr", False, "intent-critic — 질문 2개 묻지 않음(묻기 전에 끝남)"))
+        for mode, ran, line in cases:
+            with self.subTest(mode=mode):
+                with tempfile.TemporaryDirectory() as rd:
+                    self.rd = rd
+                    self._seed([{"state": "ask"}, {"state": "ask"}], mode=mode, record_ran=ran)
+                    p = self._render(mode)
+                    _t, block = tic._return_block(rd)
+                    self.assertEqual(tic._last(p), line)
+                    self.assertEqual(block["result_line"], line)
+                    self.assertNotIn("물었다", block["result_line"])
+                    self.assertNotIn("물었다", tic._last(p))
+
+    def test_wrong_choice_is_bool_text(self):
+        self._seed([SIX[0][4], SIX[2][4]])
+        self._render()
+        text, _b = tic._return_block(self.rd)
+        self.assertIn("    wrong_choice: true\n", text)
+        self.assertIn("    wrong_choice: false\n", text)
+        self.assertNotIn("wrong_choice: yes", text)
+        self.assertNotIn("wrong_choice: no\n", text)
+
+    def test_question_fields_carried(self):
+        tic._filter_rd(self.rd)
+        tic._write(tic._out([tic._q("D1", lines=[1, 2])]), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self._render()
+        rec = tic._questions(self.rd)["questions"][0]
+        _t, block = tic._return_block(self.rd)
+        row = block["questions"][0]
+        for key in ("question", "target_source", "target_id", "label", "quote"):
+            self.assertEqual(row[key], rec[key], key)
+        self.assertEqual(row["observation"], [ic._one_line(x) for x in rec["observation"]])
+        self.assertEqual(len(row["observation"]), 2)
+        self.assertEqual(row["n"], 1)
+
+    def test_numbers_unique_per_run(self):
+        tic._filter_rd(self.rd, answers=[(tic.ID1, "의도다", tic.OBS1)])
+        items = [tic._q("D2"), tic._q("D2"), tic._q("D3"), tic._q("D4"), tic._q("D5"),
+                 tic._q("D1", same_as=tic.ID1)]
+        tic._write(tic._out(items), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        records = tic._questions(self.rd)["questions"]
+        numbered = [r for r in records if r["state"] in ("ask", "over-cap")]
+        self.assertEqual(sorted(r["n"] for r in numbered), [1, 2, 3, 4, 5])
+        self.assertTrue([r for r in numbered if r["state"] == "over-cap"])
+        for rec in records:
+            if rec["state"] not in ("ask", "over-cap"):
+                self.assertNotIn("n", rec)
+        self._render()
+        _t, block = tic._return_block(self.rd)
+        self.assertEqual(sorted(r["n"] for r in block["questions"]), [1, 2, 3, 4, 5])
+
+    def test_text_fields_are_folded_and_parse(self):
+        bad = "줄\n바꿈\u2028가름\u202e방향 \"따옴표\" a: b"
+        self._seed([{"question": bad, "label": bad, "quote": bad,
+                     "observation": ["관찰\x07 하나\n둘", "   2\t[e2e] 관찰 2"]}])
+        self._render()
+        text, block = tic._return_block(self.rd)
+        row = block["questions"][0]
+        for key in ("question", "label", "quote"):
+            for ch in ("\n", "\u2028", "\u202e", "\x07"):
+                self.assertNotIn(ch, row[key], key)
+        for line in row["observation"]:
+            for ch in ("\n", "\u2028", "\u202e", "\x07"):
+                self.assertNotIn(ch, line)
+        for ch in ("\u2028", "\u202e", "\x07"):
+            self.assertNotIn(ch, text)
+        self.assertEqual(text.count("    question: "), 1)
+        self.assertIn("\"따옴표\" a: b", row["question"])
+
+    def test_question_keys_in_order(self):
+        self._seed([SIX[0][4]])
+        self._render()
+        text, _b = tic._return_block(self.rd)
+        keys = []
+        for line in text.split("\n"):
+            if line.startswith("  - "):
+                keys.append(line[4:].split(":", 1)[0])
+            elif line.startswith("    ") and not line.startswith("     "):
+                keys.append(line.strip().split(":", 1)[0])
+        self.assertEqual(keys, QUESTION_ORDER)
+
+
 if __name__ == "__main__":
     unittest.main()
