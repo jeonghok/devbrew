@@ -88,8 +88,9 @@ def entry(spec: str, bundle: str, root: str) -> list:
     if _resolve(src, root) != bpath:
         return refuse("설계문서 source_interview(%s) 와 다른 파일이다" % src)
     if kind == JOB_KIND:
-        text, warnings = _job_coverage(bpath, unquote(bmeta.get("kind", "")), spath)
-        return [text, TEAM_NOTICE, "번호 대조 경고 %d개" % warnings, "bundle-entry: PROCEED %s" % bpath]
+        text, warnings, ask = _job_coverage(bpath, unquote(bmeta.get("kind", "")), spath)
+        return [text] + (["질문 줄: " + ask] if ask else []) + [
+            TEAM_NOTICE, "번호 대조 경고 %d개" % warnings, "bundle-entry: PROCEED %s" % bpath]
     result = cbc.coverage(bpath, spath)
     ask = cbc.short_line(result)
     return [cbc.render(result)] + (["질문 줄: " + ask] if ask else []) + [
@@ -97,15 +98,16 @@ def entry(spec: str, bundle: str, root: str) -> list:
 
 
 def _job_coverage(intent_path: str, job_kind: str, spec_path: str) -> tuple:
-    """과제 파일의 진입 번호 대조 — (글, 경고 수). 같은 폴더의 번호 파일이 정답 출처다.
+    """과제 파일의 진입 번호 대조 — (글, 경고 수, 질문 줄 — 경고가 없으면 빈 글). 같은 폴더의 번호 파일이 정답 출처다.
     번호 파일이 없으면 단순 작업(kind: task)은 건너뛰고, 그 밖의 과제는 검사 불가(경고 1)다 — 0 으로 내지 않는다."""
     sources = os.path.join(os.path.dirname(intent_path), team_layout.SOURCES_FILE)
     if not os.path.isfile(sources):
         if job_kind == team_files.KIND_TASK:
-            return TASK_SKIP, 0
-        return ("번호 대조 검사 불가 — kind: %s 과제인데 번호 파일이 없다: %s" % (job_kind or "없음", sources)), 1
+            return TASK_SKIP, 0, ""
+        return (("번호 대조 검사 불가 — kind: %s 과제인데 번호 파일이 없다: %s" % (job_kind or "없음", sources)), 1,
+                "번호 대조 경고 1개: 검사 불가")
     result = cbc.coverage(sources, spec_path)
-    return cbc.render(result), cbc.warning_count(result)
+    return cbc.render(result), cbc.warning_count(result), cbc.short_line(result)
 
 
 def _line(b: dict) -> str:
