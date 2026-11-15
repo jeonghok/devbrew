@@ -183,7 +183,7 @@ cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /head
   && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
   && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
   || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
-{ grep -qF 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다.' <<<"$cap_fence" \
+{ grep -qF '얻음: 지금 확정 후보를 확정으로 바꾸고 다음 단계 질문으로 간다' <<<"$cap_fence" \
   && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
   && ok "AC12: 「지금 목록으로 확정」은 B-2 게이트를 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
   || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"

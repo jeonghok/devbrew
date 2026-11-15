@@ -20,8 +20,8 @@ AskUserQuestion({ questions: [{
   question: "사소한 일로 보고 게이트를 건너뛴다 — 그대로 / 전체 과정으로. 판정 근거: <판정 근거>.",
   multiSelect: false,
   options: [
-    {label: "그대로 (권장)", description: "게이트를 건너뛴다. 아래 안내를 내고 이 skill 을 끝낸다 — 직접 처리하면 된다."},
-    {label: "전체 과정으로", description: "trivia 판정을 건너뛰고 이 skill 의 다음 단계로 간다."}
+    {label: "그대로 (권장)", description: "얻음: 게이트를 건너뛰고 직접 처리한다 · 내줌: 사소하다는 판정이 틀렸으면 검토 없이 지나간 일이 뒤늦게 드러난다"},
+    {label: "전체 과정으로", description: "얻음: trivia 판정을 접고 skill 의 정식 단계로 간다 · 내줌: 정말 한 줄짜리 일에도 질문 라운드를 끝까지 돈다"}
   ]
 }]})
 ```

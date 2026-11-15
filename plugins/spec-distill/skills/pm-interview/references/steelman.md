@@ -89,7 +89,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   아래에 `case_for_alternative` 와 `case_for_current` 를 verbatim 으로. evidence 는 항목마다 `[부착 P<n>]` 또는 `[비부착]`
   라벨, 반증된 것은 `[반증됨]` 추가. `repo_claims` 도 항목마다 `[확인]` / `[반증됨]` / `[미확인]` 라벨과 함께 보인다.
   마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
-- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
+- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. 설명은 이렇게 쓴다 — 「유지」: 얻음: 의심한 방향을 그대로 두고 인터뷰를 잇는다 · 내줌: 대안이 더 맞았다면 대안을 기각한 채 원안이 굳는다 / 「보완」: 얻음: 방향은 두고 반박된 전제만 버려 고친다 · 내줌: 뿌리가 틀렸다면 덧댄 방향이 그대로 남는다 / 「전환」: 얻음: 대안 쪽으로 방향을 바꿔 인터뷰를 잇는다 · 내줌: 원안을 기각하게 돼, 원안이 맞았다면 그쪽 근거가 버려진다 / 「보류」: 얻음: 아무것도 버리지 않고 대안을 열린 질문으로 남긴다 · 내줌: 방향이 정해지지 않아 뒤 라운드에서 다시 물어야 한다. 보완을 고른 뒤 버릴 것을 되묻는 질문은 내줌에 담지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 
 pm-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
