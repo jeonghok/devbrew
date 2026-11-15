@@ -54,6 +54,7 @@ CLAUDE.md · 플러그인 저술 가이드 · 철학 문서의 규칙 가운데 
 - 공식 자료는 따라야 할 기준이 아니라 참고다. 공식 쪽으로 옮기는 것은 사용자가 고른 여섯 자리에 한한다(D7 · D34).
 - CLAUDE.md · 철학 문서는 옆 로드맵 둘째 에픽도 고친다. 이 에픽은 CLAUDE.md `### 메타데이터 & 버전 관리` · `### 컴포넌트 격리` 의 네 줄과 철학 문서 P21 · P22 의 두 문장만 고친다.
 - 문장을 바이트까지 비교하는 테스트가 있다(`test_governance_no_capability_caps.sh` 의 CLAUDE.md cost 줄과 P22 첫 줄). 문장과 그 테스트는 같은 커밋에서 바꾼다.
+- 감사 검사의 테스트(`plugins/plugin-audit/tests/test_check_shape_completeness.py` 의 `ANCHORS`)는 검사 항목마다 CLAUDE.md 의 구절 하나를 글자로 찾는다. 이 에픽이 바꾸는 구절은 둘이다 — 「필수: `name`, `description`, `version`」 과 「모든 skill에 `cost_class` 선언」. 설계 1 · 4 의 새 문장을 정하면 그 두 앵커를 같은 커밋에서 새 구절로 바꾼다. 앵커는 그 절 안에서 한 번만 나오는 구절이어야 한다.
 - 락을 고치면 변이로 실패를 보이고 양성 대조를 둔다(저술 가이드 「devbrew 를 고칠 때의 규칙」).
 - 판 번호를 순서 있는 값으로 읽는 코드(`conductor_state.py` 의 `own_version` · `check_deps.py`)와 CHANGELOG 정합 락은 그대로 돈다.
 
@@ -87,8 +88,10 @@ CLAUDE.md · 플러그인 저술 가이드 · 철학 문서의 규칙 가운데 
   - CLAUDE.md `### 컴포넌트 격리`: 굵은 머리 「모든 skill에 `cost_class` 선언」 → 「모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다」. 그 줄의 나머지(값 넷 · `high` 의 규모 알림 · 지출 승인을 묻지 않는다)는 한 글자도 바꾸지 않는다.
   - 철학 문서 P22 첫 문장: 「…를 frontmatter에 선언한다」 → 「…를 frontmatter `metadata` 아래에 선언한다」.
   - 저술 가이드 스타터 트리의 SKILL.md 주석.
-- **감사 검사**(plugin-audit): `check-shape-completeness.py` 와 `check-staleness.py` 가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 맨 위에만 있으면 「옛 자리 — `metadata` 아래로 옮긴다」 는 gap 을 낸다(없는 것과 다른 문장으로). 값 허용 집합은 그대로다.
-- **호출 표면 검사**(`shared/entry/check_invocation_surface.py`): skill 이 가질 수 있는 맨 위 키 목록에서 `cost_class` 를 빼고 `metadata` 를 넣는다.
+- **감사 검사**(plugin-audit): `check-shape-completeness.py` 와 `check-staleness.py` 가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 값 허용 집합은 그대로다. 맨 위에만 있는 skill 을 두 검사가 내는 꼴은 다르다(지휘자 판단).
+  - `check-shape-completeness.py` 의 출력에는 문장 칸이 없다(`requirement` · `present` · `source_doc` 셋). 맨 위에만 있으면 `skills_cost_class` 를 `present=false` 로 낸다 — 없는 것과 같은 gap 이다. 새 칸 · 새 requirement 키를 더하지 않는다(더하면 `audit-workflow.js` 와 CLAUDE.md 앵커 대조가 함께 움직인다).
+  - `check-staleness.py` 는 사실마다 문장을 낸다. 맨 위에만 있으면 「cost_class 가 옛 자리(맨 위)에 있다 — `metadata` 아래로 옮긴다」 는 뜻의 사실을, 어디에도 없으면 지금의 「선언 없음」 을 낸다.
+- **호출 표면 검사**(`shared/entry/check_invocation_surface.py`): skill 이 가질 수 있는 맨 위 키 목록(`SKILL_KEYS`)에서 `cost_class` 를 뺀다 — `metadata` 는 이미 들어 있다. 그 목록의 주석과 실패 메시지의 「공식 키 ∪ {cost_class}」 를 「공식 키」 로 고친다.
 - **agent 는 그대로.** agent 의 맨 위 `cost_class:` 와 그 값을 확인하는 테스트는 건드리지 않는다.
 - frontmatter 를 어떻게 읽을지(정규식 · 파서)는 계획이 정한다. 조건은 둘이다 — `metadata` 블록 밖의 들여쓴 `cost_class:` 를 선언으로 읽지 않고, 본문의 같은 글자를 frontmatter 로 읽지 않는다.
 
@@ -136,7 +139,8 @@ CLAUDE.md `### 메타데이터 & 버전 관리` 첫 줄을 아래 뜻으로 다�
 **문서 셋 밖의 두 자리(사용자 확인 전 — 지휘자 제안: 함께 고친다).**
 
 - `docs/git-workflow/commit-conventions.md` 의 「자동 릴리스 도구 (`release-please`, `semantic-release`)가 이 매핑으로 version bump + CHANGELOG 생성.」 — 이 레포는 그런 도구를 쓰지 않고 손으로 올린다. 그 문장을 「이 레포는 자동 릴리스 도구를 쓰지 않는다 — 판은 CLAUDE.md 의 올림 규칙대로 PR 에 한 번 손으로 올린다」 는 뜻으로 고친다. 두 문서가 판 올림을 다르게 말하면 읽는 쪽이 아무 쪽이나 따른다.
-- `shared/README.md` 의 낡은 수 둘(`entry/` 를 세 플러그인에 링크 → 넷 · `python/` 을 세 플러그인에 사본 → project-init 하나)을 고치고, 「여기 파일이 바뀔 때 어느 플러그인의 판을 올리는지는 CLAUDE.md 의 올림 규칙」 이라는 한 줄을 둔다.
+- `shared/README.md` 의 낡은 수 둘(`entry/` 를 세 플러그인에 링크 → 넷 · `python/` 을 세 플러그인에 사본 → project-init 하나)을 고치고, 「여기 파일이 바뀔 때 어느 플러그인의 판을 올리는지는 CLAUDE.md 의 올림 규칙」 이라는 한 줄을 둔다. 그 파일 첫머리의 「설치본에 들어가지 않는다」 는 폴더를 두고 한 말이고, 링크로 실린 파일의 내용은 설치할 때 설치본에 들어간다 — 올림 안내 한 줄이 그 문장과 어긋나 보이지 않게 그 구분을 함께 적는다.
+- 두 파일은 `shared/tests/test_invocation_surface.sh` 가 훑는 범위(`docs/git-workflow/**` · `shared/**`)에 든다 — 새 문장이 그 검사에 걸리지 않는지 본다.
 
 ### 6. 저술 가이드의 낡은 자리
 
@@ -176,8 +180,8 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 ## Acceptance Criteria
 
 - AC1 — skill 10개가 모두 frontmatter `metadata` 아래에 `cost_class` 를 갖고, 맨 위 `cost_class:` 줄은 skill 어디에도 없다. 값은 옮기기 전과 같다.
-- AC2 — 두 감사 검사가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 맨 위에만 있는 skill 은 「옛 자리」 gap, 어디에도 없는 skill 은 지금과 같은 gap 이다.
-- AC3 — 호출 표면 검사가 skill 의 맨 위 `metadata` 를 받고 맨 위 `cost_class` 를 모르는 키로 낸다.
+- AC2 — 두 감사 검사가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 맨 위에만 있는 skill 은 `check-shape-completeness.py` 에서 `present=false`(없는 것과 같은 gap)이고 `check-staleness.py` 에서 「옛 자리」 사실이다. 어디에도 없는 skill 은 두 검사 모두 지금과 같다. `check-shape-completeness.py` 의 출력 칸은 늘지 않는다.
+- AC3 — 호출 표면 검사가 skill 의 맨 위 `metadata` 를 받고 맨 위 `cost_class` 를 모르는 키로 낸다. 그 메시지와 주석에 「∪ {cost_class}」 가 없다.
 - AC4 — 규칙 문장 셋(CLAUDE.md cost 줄 · 철학 P22 첫 문장 · 저술 가이드 트리 주석)이 새 자리를 말하고, 그 줄의 나머지는 바뀌지 않았다. 그 문장을 확인하는 테스트(바이트 비교 포함)가 새 문장으로 통과하고 옛 문장으로 되돌리면 실패한다.
 - AC5 — agent 파일의 `cost_class:` 줄과 그 값을 확인하는 테스트는 diff 가 없다.
 - AC6 — CLAUDE.md 와 철학 문서에 plugin.json 의 `integrity` 필드를 말하는 문장이 없다.
@@ -317,6 +321,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 로드맵의 F6 경로 예약은 파일 다섯이다. 이 설계의 Files to Modify 는 그보다 넓다(skill 10개의 머리 줄 · 테스트 열 개 안팎 · 감사 검사 둘 더). 예약을 맞추는 로드맵 수정은 지휘자가 따로 한다.
 - 설계의 조사는 하위 agent 넷이 했다. 보고 원문은 지휘 자원 폴더(`relay/F6/research-*.md`)에 있다 — 계획 담당자에게는 내용으로 싣는다.
 - 인터뷰의 원래 결정에서 달라진 것은 하나다 — agent 의 model 키(결정 기록의 원래 · 재결정 · 근거).
+- 설계문서 점검(builder check)이 낸 질문은 둘이다. 하나는 사용자 몫이다(문서 셋 밖의 두 자리 — 설계 5 끝). 다른 하나(감사 검사가 「옛 자리」 를 어떤 꼴로 내는가)는 지휘자가 정해 설계 1 에 적었다. 점검이 짚은 사실 둘(호출 표면 검사에 `metadata` 가 이미 있다 · 감사 검사 테스트의 앵커 둘)도 설계 1 과 Constraints 에 반영했다.
 
 ## 결정 기록
 
