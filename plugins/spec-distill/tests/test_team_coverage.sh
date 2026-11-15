@@ -68,8 +68,28 @@ assert_eq "$(cov)" "0" "원문 대조: 「그대로」 에 근거가 비어도 r
 assert_not_contains "$(cat "$T/out.txt")" "얕은 답" "원문 대조: 「그대로」 는 근거가 비어도 얕은 답이 아니다"
 design "$ROWS_ALL" "$ORIGIN_THREE_CELLS"
 assert_eq "$(cov)" "0" "원문 대조: 칸이 셋인 행이 있어도 rc 0"
-assert_contains "$(cat "$T/out.txt")" "알림 — 원문 대조 표를 읽지 못했다 — " "원문 대조: 칸이 셋인 행은 「읽지 못했다」 알림"
-assert_not_contains "$(cat "$T/out.txt")" "얕은 답" "원문 대조: 읽지 못한 표에서 얕은 답을 세지 않는다"
+assert_eq "$(sed -n '$p' "$T/out.txt")" "알림 — 원문 대조 행의 칸이 넷이 아니라 3개다: '| 팀 폴더 | 과제 폴더 | 바꿈 |'" "원문 대조: 칸이 셋인 행은 그 행 하나의 알림(칸 수와 행)"
+assert_not_contains "$(cat "$T/out.txt")" "얕은 답" "원문 대조: 읽지 못한 행을 얕은 답으로 세지 않는다"
+# 읽지 못한 행(칸 수 · 빈 첫 칸 · 끝 | 없음)은 그 행만 알리고 표를 버리지 않는다(통제자 판정 — 리더 원칙의 확장)
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 |\n| 결과 파일 | 결과 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['notices'], [s['id'] for s in r['shallow']], r['status'])")" "([\"원문 대조 행의 칸이 넷이 아니라 3개다: '| 팀 폴더 | 과제 폴더 | 바꿈 |'\"], ['결과 파일'], 0)" \
+  "원문 대조: 칸이 셋인 행 + 「바꿈 · 근거 없음」 행 — 행 알림 하나 · 얕은 답 하나(표를 버리지 않는다)"
+design "$ROWS_ALL" "$(printf '%s\n|  | 과제 폴더 | 그대로 | S1 |\n| 검토 두 번 | 절차는 R2 | 넘김 |  |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['notices'], [s['id'] for s in r['shallow']])")" "([\"원문 대조 행의 첫 칸(원문 요소)이 비었다: '|  | 과제 폴더 | 그대로 | S1 |'\"], ['검토 두 번'])" \
+  "원문 대조: 첫 칸이 빈 행 + 「넘김 · 근거 없음」 행 — 행 알림 하나 · 얕은 답 하나"
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | S1\n| 결과 파일 | 결과 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['notices'], [s['id'] for s in r['shallow']])")" "([\"원문 대조 행이 | 로 끝나지 않는다: '| 팀 폴더 | 과제 폴더 | 바꿈 | S1'\"], ['결과 파일'])" \
+  "원문 대조: 끝 | 가 없는 행 — 행 알림 하나 · 나머지 행은 센다"
+# 칸 나누기는 옛 형식 번호 대조 표(table_rows)와 같은 _cells 다 — 이스케이프한 \| 도 칸 구분으로 세어 칸 수가 맞지 않는 행이 된다
+design "$ROWS_ALL" "$(printf '%s\n| 팀 \\| 폴더 | 과제 폴더 | 바꿈 | S1 |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "(r['notices'], r['shallow'])")" "([\"원문 대조 행의 칸이 넷이 아니라 5개다: '| 팀 \\\\\\\\| 폴더 | 과제 폴더 | 바꿈 | S1 |'\"], [])" \
+  "원문 대조: 칸 안의 \\| 는 칸 구분으로 세어 칸 수 행 알림(새 표 파서를 두지 않는다)"
+design "$ROWS_ALL" "$(printf '## 원문 대조\n\n표를 아직 쓰지 않았다.\n')"
+assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표가 없거나 데이터 행이 없다" "원문 대조: 표 행이 없는 절은 표 전체 알림"
 design "$ROWS_ALL" "$(printf '## 원문 대조\n\n| 원문 요소 | 설계 요소 | 근거 |\n|---|---|---|\n| 팀 폴더 | 과제 폴더 | S1 |')"
 assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표 머리 행이 칸 넷이 아니다" "원문 대조: 머리 행이 칸 셋이면 「읽지 못했다」 알림"
 design "$ROWS_ALL" "$ORIGIN_HEAD"
@@ -87,12 +107,12 @@ origin_bad "" "빈 칸 → 그 행의 알림 · rc 0"
 origin_bad "바꿈(작성자 제안)" "「바꿈(작성자 제안)」 → 「작성자 제안」 은 근거 칸에 적는다(설계 표의 꼴) — 그 행의 알림"
 design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | 작성자 제안 |' "$ORIGIN_HEAD")"
 assert_eq "$(cov) · $(grep -c -e '알림 — ' -e '얕은 답' "$T/out.txt")" "0 · 0" "원문 대조: 근거 칸의 「작성자 제안」 은 근거다 — 알림도 얕은 답도 없다"
-# 근거 칸이 대시뿐이면 근거가 아니다 · 첫 칸(원문 요소)이 비면 표를 읽지 못한 것 · 같은 절의 둘째 표는 머리 · 구분 행을 건너뛴다
+# 근거 칸이 대시뿐이면 근거가 아니다 · 첫 칸(원문 요소)이 비면 그 행의 알림 · 같은 절의 둘째 표는 머리 · 구분 행을 건너뛴다
 design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | — |\n| 막힘 파일 | 막힘 파일 | 바꿈 | - |' "$ORIGIN_HEAD")"
 cov --json >/dev/null
 assert_eq "$(jsf "([s['id'] for s in r['shallow']], r['notices'])")" "(['팀 폴더', '막힘 파일'], [])" "원문 대조: 근거 칸이 「—」 · 「-」 뿐인 「바꿈」 은 얕은 답"
 design "$ROWS_ALL" "$(printf '%s\n|  | 과제 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
-assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표 행의 첫 칸(원문 요소)이 비었다: '|  | 과제 폴더 | 바꿈 |  |'" "원문 대조: 첫 칸이 빈 행은 「읽지 못했다」 알림"
+assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 행의 첫 칸(원문 요소)이 비었다: '|  | 과제 폴더 | 바꿈 |  |'" "원문 대조: 첫 칸이 빈 행은 그 행 하나의 알림"
 assert_not_contains "$(cat "$T/out.txt")" "얕은 답 — :" "원문 대조: 첫 칸이 빈 행을 id 없는 얕은 답으로 세지 않는다"
 design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | S1 |\n\n둘째 표:\n\n| 원문 요소 | 설계 요소 | 그대로/바꿈 | 근거 |\n|---|---|---|---|\n| 둘째 표 요소 | 과제 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
 cov --json >/dev/null
