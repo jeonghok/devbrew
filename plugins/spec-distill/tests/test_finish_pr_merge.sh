@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 분해된 인터뷰 끝맺음의 PR 펜스(interview-pr) · 머지 펜스(interview-merge) — finishing.md 에서 뽑아 그대로 돌린다.
+# 분해된 인터뷰 끝맺음의 PR 펜스(interview-pr) · 머지 펜스(interview-merge) · 다시 확인 펜스(interview-merge-recheck)
+# — finishing.md 에서 뽑아 그대로 돌린다.
 # 펜스는 Bash 도구의 셸에서 돌므로 bash 와 zsh 둘 다에서 잰다(zsh 가 없으면 그 사실을 알리고 bash 만).
 # 픽스처: 임시 레포(origin 은 git@github.com:<owner>/r.git — 가짜 ssh 가 로컬 bare 레포로 잇는다) + PATH 앞의
 # 가짜 gh · 가짜 sleep. 실제 gh · 네트워크로 나가지 않는다.
@@ -26,12 +27,31 @@ UPH='<interview-pr 이 낸 PR 주소>'
 HPH='<interview-pr 이 낸 끝 커밋>'
 pf="$(fence "$FIN" interview-pr)"
 mf="$(fence "$FIN" interview-merge)"
+rf="$(fence "$FIN" interview-merge-recheck)"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 # 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
 ASK="$(grep -F '2. **머지 묻기.**' "$FIN")"
 assert_contains "$ASK" '「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다' "본문: 권장 꼬리는 ONLY 일 때만"
 assert_contains "$ASK" '`MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고' "본문: MIXED · UNKNOWN 이면 꼬리를 뗀다"
 case "$mf" in *"URL=\"$UPH\""*"HEAD_SHA=\"$HPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL · 끝 커밋 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
+case "$rf" in *"BRIEF=\"$PH\""*"URL=\"$UPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-identity '*) ok "전제: 다시 확인 펜스에 BRIEF · URL 자리표와 gh_repo.py 호출" ;; *) no "전제: 다시 확인 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
+case "$rf" in *"$HPH"*|*'gh_repo.py" pr-merge '*|*'gh_repo.py" pr-checks '*|*'gh_repo.py" pr-create '*|*" push "*) no "다시 확인 펜스는 읽기만 한다 — 끝 커밋 자리표 · 머지 · 검사 · 만들기 · push 가운데 하나가 있다" ;; *) ok "다시 확인 펜스는 읽기만 한다(머지 · 검사 · 만들기 · push 를 부르지 않는다)" ;; esac
+# 플러그인 루트 가드 줄은 세 펜스가 글자 그대로 같다
+g1="$(printf '%s\n' "$pf" | head -n 1)"
+case "$g1" in 'SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || {'*'exit 1; }') ok "전제: PR 펜스 첫 줄이 플러그인 루트 가드다" ;; *) no "전제: PR 펜스 첫 줄이 가드가 아니다" ;; esac
+for g in "$mf" "$rf"; do
+  assert_eq "$(printf '%s\n' "$g" | head -n 1)" "$g1" "펜스 첫 줄의 플러그인 루트 가드가 PR 펜스와 글자 그대로 같다"
+done
+# 판결 줄 없는 출력을 읽는 법은 본문이 정한다 — 표시 줄이 있으면 다시 확인, 없으면 NONE
+HEADP="$(grep -F '**PR 과 머지 — 분해된 일 ①/② 만.**' "$FIN")"
+assert_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다.' "본문(절 머리): 표시 줄이 있으면 NONE 으로 읽지 않고 다시 확인"
+assert_not_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다. ' "본문(절 머리): 옛 문장(예외 없는 NONE)이 남지 않았다"
+STEP3="$(grep -F '3. **머지.**' "$FIN")"
+assert_contains "$STEP3" '판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `interview-merge: NONE` 으로 읽어 잇는다.' "본문(3 걸음): 그만둔 출력에 표시 줄이 있으면 다시 확인, 없으면 NONE"
+assert_not_contains "$STEP3" '판결 줄이 이미 있으면 그 판결대로, 없으면 `interview-merge: NONE` 으로 읽어 잇는다' "본문(3 걸음): 옛 문장(표시 줄을 보지 않는 NONE)이 남지 않았다"
+RECP="$(grep -F '**다시 확인 — ' "$FIN")"
+assert_contains "$RECP" '**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `interview-merge-requested:` 표시 줄이 있을 때만.**' "본문(다시 확인): 도는 조건"
+assert_contains "$RECP" '(5초 간격 네 번까지)' "본문(다시 확인): 읽는 간격 · 횟수"
 
 mkdir -p "$T/bin" "$T/remotes" || exit 1
 cat > "$T/bin/gh" <<'FAKE'
@@ -48,8 +68,13 @@ case "$1 $2" in
     echo "Creating pull request for feature/x into main in $FAKE_OWNER/r" >&2
     echo "https://github.com/$FAKE_OWNER/r/pull/7" ;;
   "pr view")
-    printf '{"number":%s,"state":"%s","headRefName":"%s","headRefOid":"%s","isCrossRepository":false,"baseRefName":"main","mergeCommit":null}\n' \
-      "$3" "$(cat "$st")" "${FAKE_HEAD:-feature/x}" "$(git --git-dir="$FAKE_REMOTE" rev-parse refs/heads/feature/x)" ;;
+    [ -z "${FAKE_VIEW_AUTH:-}" ] || { echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4; }   # PR 읽기의 인증 실패
+    s="$(cat "$st")"; h="${FAKE_HEAD:-feature/x}"
+    v=$(( $(cat "$FAKE_GH_DIR/views" 2>/dev/null || echo 0) + 1 )); echo "$v" > "$FAKE_GH_DIR/views"   # 이 실행의 몇 번째 읽기인가
+    [ -z "${FAKE_VIEW_MERGED_AT:-}" ] || [ "$v" -lt "$FAKE_VIEW_MERGED_AT" ] || s=MERGED   # n 번째 읽기부터 MERGED(요청 직후의 늦은 반영)
+    [ -z "${FAKE_HEAD_FROM2:-}" ] || [ "$v" -lt 2 ] || h="$FAKE_HEAD_FROM2"                # 둘째 읽기부터 다른 브랜치
+    printf '{"number":%s,"state":"%s","headRefName":"%s","headRefOid":"%s","isCrossRepository":%s,"baseRefName":"%s","mergeCommit":null}\n' \
+      "$3" "$s" "$h" "$(git --git-dir="$FAKE_REMOTE" rev-parse refs/heads/feature/x)" "${FAKE_CROSS:-false}" "${FAKE_BASE:-main}" ;;
   "pr checks")
     case "${FAKE_CHECKS:-none}" in
       none) echo "no checks reported on the 'feature/x' branch" >&2; exit 1 ;;
@@ -72,11 +97,16 @@ case "$1 $2" in
     [ "$5" = "--match-head-commit" ] && [ "$6" = "$(git --git-dir="$FAKE_REMOTE" rev-parse refs/heads/feature/x)" ] \
       || { echo 'GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)' >&2; exit 1; }
     git --git-dir="$FAKE_REMOTE" update-ref refs/heads/main refs/heads/feature/x || exit 1
-    printf 'MERGED\n' > "$st" ;;
+    printf 'MERGED\n' > "$st"
+    case "${FAKE_MERGE:-ok}" in
+      failmerged) echo 'failed to run git: fatal: unable to access the remote' >&2; exit 1 ;;   # 머지는 됐는데 gh 는 실패로 끝난다
+      cut) kill "$(cat "$FAKE_GH_DIR/fence.pid")"; exec /bin/sleep 0.3 ;;                       # 머지는 됐는데 펜스가 판결 전에 끊긴다
+    esac ;;
 esac
 FAKE
 cat > "$T/bin/sleep" <<'FAKE'
 #!/bin/sh
+[ -z "${FAKE_SLEEP_LOG:-}" ] || printf '%s\n' "$*" >> "$FAKE_SLEEP_LOG"
 exec /bin/sleep "${FAKE_SLEEP:-0.05}"
 FAKE
 cat > "$T/bin/fakessh" <<'FAKE'
@@ -118,11 +148,19 @@ run() {   # run <owner> <펜스 본문> [<PR 주소> [<끝 커밋>]] → 자리�
   local c="$T/$1" body="${2//"$PH"/$T/$1/${BRIEF_REL:-$STEM.md}}"
   body="${body//"$UPH"/${3:-$UPH}}"
   body="${body//"$HPH"/${4:-$HPH}}"
-  : > "$T/gh-$1/log"
+  : > "$T/gh-$1/log"; : > "$T/gh-$1/sleeps"; rm -f "$T/gh-$1/views"
   ( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" PATH="$T/bin:$PATH" FAKE_GH_LOG="$T/gh-$1/log" FAKE_GH_DIR="$T/gh-$1" \
-      FAKE_OWNER="$1" FAKE_REMOTE="$T/remotes/$1/r.git" "${SHELL_ARGV[@]}" "$body" 2>&1 )
+      FAKE_SLEEP_LOG="$T/gh-$1/sleeps" FAKE_OWNER="$1" FAKE_REMOTE="$T/remotes/$1/r.git" "${SHELL_ARGV[@]}" "$body" 2>&1 )
 }
 ghlog() { cat "$T/gh-$1/log"; }
+sleeps() { tr '\n' ' ' < "$T/gh-$1/sleeps"; }   # 그 실행이 부른 sleep 의 인자들(간격)
+remote_merge() {   # remote_merge <owner> [nostate] → 원격의 main 을 feature/x 로(머지됨). nostate 가 아니면 가짜 gh 의 상태도 MERGED 로
+  git --git-dir="$T/remotes/$1/r.git" update-ref refs/heads/main refs/heads/feature/x || return 1
+  [ "${2:-}" = nostate ] || printf 'MERGED\n' > "$T/gh-$1/state"
+}
+omain() { git -C "$T/$1" rev-parse refs/remotes/origin/main; }   # 로컬이 아는 origin 기본 브랜치
+MARK='interview-merge-requested: 7'
+CUT='echo $$ > "$FAKE_GH_DIR/fence.pid"'   # 테스트만의 한 줄 — 가짜 gh 가 이 pid 를 죽여 「요청 뒤 끊김」을 만든다
 head_of() { printf '%s\n' "$1" | sed -n 's/^interview-pr-head: //p'; }   # PR 펜스 출력에서 끝 커밋
 remote_ref() { git --git-dir="$T/remotes/$1/r.git" rev-parse -q --verify "refs/heads/$2" 2>/dev/null || true; }
 
@@ -218,6 +256,7 @@ for sh_name in bash zsh; do
   o="$(run "$n" "$mf" "$URL" "$H")"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "머지: 마지막 줄이 판결(MERGED)"
   assert_contains "$o" "[spec-distill] PR 을 머지했다(merge) — $URL" "머지: 방식과 주소를 보인다"
+  assert_eq "$(printf '%s\n' "$o" | grep -e "^interview-merge-requested: " -e 'PR 을 머지했다' | tr '\n' '|')" "${MARK}|[spec-distill] PR 을 머지했다(merge) — ${URL}|" "머지: 요청 표시 줄(PR 번호) 하나가 머지한 줄보다 먼저 나온다"
   L="$(ghlog "$n")"
   assert_eq "$(printf '%s\n' "$L" | grep -c "^pr checks 7 -R github.com/$n/r\$")" "6" "머지: 「검사 없음」을 여섯 번 본다"
   assert_not_contains "$L" "--watch" "머지: 검사가 없으면 기다리지 않는다"
@@ -252,6 +291,9 @@ for sh_name in bash zsh; do
   assert_not_contains "$o" "PR 을 머지했다" "대기열: 머지했다고 말하지 않는다"
   assert_eq "$(ghlog "$n" | grep -c "^pr merge ")" "1" "대기열: 다음 머지 방식을 시도하지 않는다"
   assert_eq "$(ghlog "$n" | grep -c "^pr view 7 ")" "5" "대기열: 상태를 네 번까지 다시 읽는다(신원 확인 한 번 더)"
+  Q_SLEEPS="$(sleeps "$n" | sed 's/^\(10 \)*//')"   # 앞의 10초들은 「검사 없음」 다시 보기다 — 그 뒤가 머지 뒤 상태 읽기의 간격
+  assert_eq "$Q_SLEEPS" "5 5 5 " "대기열: 머지 뒤 상태 읽기 사이를 5초씩 세 번 쉰다"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^${MARK}\$")" "1" "대기열: 요청 표시 줄은 하나다"
   assert_eq "$(git -C "$c" rev-parse refs/remotes/origin/main)" "$before" "대기열: 머지 전이라 origin 을 받지 않는다"
 
   # 8. 머지 뒤 origin 을 받지 못함 — 알리고 판결은 MERGED
@@ -272,8 +314,10 @@ for sh_name in bash zsh; do
   assert_eq "$(last "$o")" "interview-merge: NONE" "검사 실패: 판결 NONE"
   assert_contains "$o" "CI 검사가 통과하지 않았다(rc 1, 위 목록)" "검사 실패: 사유"
   assert_not_contains "$(ghlog "$n")" "pr merge" "검사 실패: 머지하지 않는다"
+  assert_not_contains "$o" "interview-merge-requested" "검사 실패: 요청을 보내지 않았으니 표시 줄도 없다"
   o="$(FAKE_CHECKS=hang FAKE_SLEEP=0.01 run "$n" "$mf" "$URL" "$H")"
   assert_contains "$o" "CI 검사를 30분 기다려도 끝나지 않았다" "검사가 끝나지 않음: 기다림 상한에서 멈춘다"
+  assert_not_contains "$o" "interview-merge-requested" "검사가 끝나지 않음: 기다리는 동안에는 표시 줄이 없다"
   wp="$(cat "$T/gh-$n/watch.pid" 2>/dev/null)" || wp=""
   [ -n "$wp" ] && ! kill -0 "$wp" 2>/dev/null && ok "검사가 끝나지 않음: 기다리던 gh 를 끝냈다" || nob "검사가 끝나지 않음: 기다리던 gh 가 남았다" "pid ${wp:-없음}"
   o="$(FAKE_WAYS='{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' FAKE_CHECKS=pass run "$n" "$mf" "$URL" "$H")"
@@ -287,6 +331,7 @@ for sh_name in bash zsh; do
   o="$(FAKE_MERGE=second run "$n" "$mf" "$URL" "$H")"
   assert_contains "$o" "merge 머지가 거절됐다(위 사유) — 다음 방식을 시도한다." "방식 거절: 알리고 다음 방식으로"
   assert_contains "$o" "PR 을 머지했다(squash)" "방식 거절: 다음 방식으로 머지한다"
+  assert_eq "$(printf '%s\n' "$o" | grep -e "^interview-merge-requested: " -e '머지가 거절됐다' -e 'PR 을 머지했다' | sed 's/^\[spec-distill\] //;s/ — .*//;s/(위 사유)//' | tr '\n' '|')" "${MARK}|merge 머지가 거절됐다|${MARK}|PR 을 머지했다(squash)|" "방식 거절: 요청 표시 줄은 방식마다 요청 바로 앞에 낸다"
   o="$(run "$n" "$mf")"
   assert_contains "$o" "머지하지 않았다 — PR 주소가 비었거나 자리표 그대로다" "자리표 그대로: 머지하지 않는다"
   for bad in "" "${H}Z" "not-a-commit"; do
@@ -319,5 +364,165 @@ for sh_name in bash zsh; do
   assert_contains "$o" "물을 때의 끝 커밋: ${H}" "끝 커밋이 바뀜(기다리는 사이): 물을 때의 커밋을 보인다"
   assert_not_contains "$o" "PR 을 머지했다" "끝 커밋이 바뀜(기다리는 사이): 머지했다고 말하지 않는다"
   assert_eq "$(remote_ref "$n" main)" "$mainref" "끝 커밋이 바뀜(기다리는 사이): 기본 브랜치는 그대로다"
+
+  note "=== ${sh_name}: 이미 머지됨 · 실패 뒤 머지됨 ==="
+  # 11. 물을 때 이미 머지됨 — 「머지하지 않았다」 가 아니라 머지됨으로 읽고 origin 을 받는다. 검사를 기다리지도 머지를 요청하지도 않는다
+  n="${P}already"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"; remote_merge "$n"
+  for kv in "FAKE_HEAD=other-branch" "FAKE_BASE=develop" "FAKE_CROSS=true"; do   # 양의 대조 — 같은 머지 상태인데 브랜치 · 바탕 · 레포가 다르면 머지됨으로 읽지 않는다
+    o="$(export "$kv"; run "$n" "$mf" "$URL" "$H")"
+    assert_eq "$(last "$o")" "interview-merge: NONE" "이미 머지됨(대조 ${kv}): 판결 NONE"
+    assert_contains "$o" "머지하지 않았다 — 이 PR 은 열린, 이 레포의 feature/x → main PR 이 아니거나" "이미 머지됨(대조 ${kv}): 신원 불일치로 멈춘다"
+    assert_contains "$o" "(읽은 것: MERGED " "이미 머지됨(대조 ${kv}): 읽은 상태는 머지됨이다(대조가 같은 상태에서 갈린다)"
+    assert_not_contains "$o" "이미 머지돼 있다" "이미 머지됨(대조 ${kv}): 머지돼 있다고 말하지 않는다"
+    assert_eq "$(omain "$n")" "$before" "이미 머지됨(대조 ${kv}): origin 을 받지 않는다"
+  done
+  o="$(run "$n" "$mf" "$URL" "$H")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "이미 머지됨: 마지막 줄이 판결(MERGED)"
+  assert_contains "$o" "[spec-distill] PR 이 이미 머지돼 있다 — $URL" "이미 머지됨: 그 사실과 주소를 보인다"
+  assert_not_contains "$o" "머지하지 않았다" "이미 머지됨: 「머지하지 않았다」 고 말하지 않는다"
+  assert_not_contains "$o" "PR 을 머지했다" "이미 머지됨: 이 펜스가 머지했다고 말하지 않는다"
+  assert_not_contains "$o" "interview-merge-requested" "이미 머지됨: 요청을 보내지 않았으니 표시 줄도 없다"
+  L="$(ghlog "$n")"
+  assert_not_contains "$L" "pr merge" "이미 머지됨: 머지를 요청하지 않는다"
+  assert_not_contains "$L" "pr checks" "이미 머지됨: CI 검사를 기다리지 않는다"
+  assert_eq "$(printf '%s\n' "$L" | grep -c "^pr view 7 ")" "1" "이미 머지됨: PR 을 한 번 읽는다"
+  assert_eq "$(sleeps "$n")" "" "이미 머지됨: 기다리지 않는다(sleep 없음)"
+  after="$(omain "$n")"
+  [ "$before" != "$after" ] && [ "$after" = "$H" ] && ok "이미 머지됨: 로컬의 origin 기본 브랜치 ref 가 머지된 끝으로 왔다(fetch)" || nob "이미 머지됨: origin 을 받지 않았다" "$before → $after"
+  # 11b. 끝 커밋은 대조하지 않는다 — 물은 뒤 커밋이 더 올라온 채 머지됐어도 머지됨이다
+  o="$(run "$n" "$mf" "$URL" "0000000000000000000000000000000000000000")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "이미 머지됨(끝 커밋이 물을 때와 다름): 그래도 MERGED"
+  # 11c. 이미 머지됐는데 origin 을 받지 못함 — 알리고 판결은 MERGED
+  o="$(FAKE_SSH_FAIL=1 run "$n" "$mf" "$URL" "$H")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "이미 머지됨(fetch 실패): 판결은 MERGED 그대로"
+  assert_contains "$o" "머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다." "이미 머지됨(fetch 실패): 알린다"
+
+  # 12. gh 의 머지 명령이 실패로 끝났는데 다시 읽으니 머지됨 — 머지됨으로 읽고 다음 방식을 시도하지 않는다
+  n="${P}failmerged"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"
+  o="$(FAKE_MERGE=failmerged run "$n" "$mf" "$URL" "$H")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "실패 뒤 머지됨: 마지막 줄이 판결(MERGED)"
+  assert_contains "$o" "[spec-distill] gh 의 머지 명령은 실패로 끝났지만(위 사유) PR 은 머지돼 있다 — $URL" "실패 뒤 머지됨: 그 사실과 주소를 보인다"
+  assert_contains "$o" "failed to run git: fatal: unable to access the remote" "실패 뒤 머지됨: gh 의 사유가 위에 보인다"
+  assert_not_contains "$o" "머지하지 않았다" "실패 뒤 머지됨: 「머지하지 않았다」 고 말하지 않는다"
+  assert_not_contains "$o" "다음 방식을 시도한다" "실패 뒤 머지됨: 다음 방식으로 간다고 말하지 않는다"
+  assert_not_contains "$o" "PR 을 머지했다(" "실패 뒤 머지됨: 정상 경로의 머지한 줄은 내지 않는다"
+  assert_eq "$(ghlog "$n" | grep -c "^pr merge ")" "1" "실패 뒤 머지됨: 머지 요청은 한 번이다(다음 방식을 시도하지 않는다)"
+  assert_eq "$(ghlog "$n" | grep -c "^pr view 7 ")" "2" "실패 뒤 머지됨: 신원 확인 한 번 · 실패 뒤 다시 읽기 한 번"
+  after="$(omain "$n")"
+  [ "$before" != "$after" ] && [ "$after" = "$H" ] && ok "실패 뒤 머지됨: 로컬의 origin 기본 브랜치 ref 가 머지된 끝으로 왔다(fetch)" || nob "실패 뒤 머지됨: origin 을 받지 않았다" "$before → $after"
+  # 12b. 양의 대조 — 실패 뒤 다시 읽은 것이 머지됨이어도 브랜치가 다르면 머지됨으로 읽지 않는다(둘째 읽기부터 다른 브랜치)
+  n="${P}failother"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"
+  o="$(FAKE_MERGE=failmerged FAKE_HEAD_FROM2=other-branch run "$n" "$mf" "$URL" "$H")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "실패 뒤 머지됨(대조 — 다른 브랜치): 판결 NONE"
+  assert_contains "$o" "머지가 거절됐고(위 사유) PR 이 물을 때와 달라졌다 — 끝 커밋이 바뀌었거나 닫혔다(읽은 것: MERGED main other-branch false ${H}" "실패 뒤 머지됨(대조 — 다른 브랜치): 읽은 것을 보이고 멈춘다"
+  assert_eq "$(ghlog "$n" | grep -c "^pr merge ")" "1" "실패 뒤 머지됨(대조 — 다른 브랜치): 다음 방식을 시도하지 않는다"
+  assert_eq "$(omain "$n")" "$before" "실패 뒤 머지됨(대조 — 다른 브랜치): origin 을 받지 않는다"
+
+  note "=== ${sh_name}: 다시 확인 펜스 ==="
+  # 13. 요청 표시 뒤 끊김 — 머지 펜스는 판결 줄 없이 끝나고, 다시 확인 펜스가 머지됨으로 읽는다
+  n="${P}cut"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"
+  o="$(FAKE_MERGE=cut run "$n" "$CUT
+$mf" "$URL" "$H" 2>/dev/null)"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^${MARK}\$")" "1" "끊김: 출력에 요청 표시 줄이 있다"
+  assert_not_grep "$o" "^interview-merge: " "끊김: 판결 줄이 없다"
+  assert_eq "$(last "$o")" "$MARK" "끊김: 마지막 줄이 표시 줄이다(요청 바로 앞에 낸다)"
+  assert_eq "$(ghlog "$n" | grep -c "^pr merge ")" "1" "끊김: 머지 요청은 나갔다"
+  assert_eq "$(remote_ref "$n" main)" "$H" "끊김: 원격은 머지됐다"
+  assert_eq "$(omain "$n")" "$before" "끊김: 머지 펜스는 origin 을 받지 못하고 끝났다"
+  o="$(run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(머지됨): 마지막 줄이 판결(MERGED)"
+  assert_contains "$o" "[spec-distill] 다시 확인하니 PR 이 머지돼 있다 — $URL" "다시 확인(머지됨): 그 사실과 주소를 보인다"
+  assert_not_contains "$o" "머지 요청은 나갔지만" "다시 확인(머지됨): 머지되지 않았다고 말하지 않는다"
+  L="$(ghlog "$n")"
+  assert_not_contains "$L" "pr merge" "다시 확인(머지됨): 머지를 요청하지 않는다"
+  assert_not_contains "$L" "pr checks" "다시 확인(머지됨): 검사를 부르지 않는다"
+  assert_eq "$L" "pr view 7 --json number,state,headRefName,headRefOid,isCrossRepository,baseRefName,mergeCommit -R github.com/$n/r" "다시 확인(머지됨): gh 호출은 PR 읽기 한 번뿐이다(-R origin)"
+  assert_eq "$(sleeps "$n")" "" "다시 확인(머지됨): 첫 읽기에 머지됨이면 기다리지 않는다"
+  after="$(omain "$n")"
+  [ "$before" != "$after" ] && [ "$after" = "$H" ] && ok "다시 확인(머지됨): 로컬의 origin 기본 브랜치 ref 가 머지된 끝으로 왔다(fetch)" || nob "다시 확인(머지됨): origin 을 받지 않았다" "$before → $after"
+  o="$(FAKE_SSH_FAIL=1 run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(fetch 실패): 판결은 MERGED 그대로"
+  assert_contains "$o" "머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다." "다시 확인(fetch 실패): 알린다"
+
+  # 13b. 요청 직후에는 아직 열림 → 뒤 읽기에서 머지됨. 한 번 읽고 끝내지 않는다
+  n="${P}late"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"; remote_merge "$n" nostate
+  for at in 2 4; do
+    git -C "$c" update-ref refs/remotes/origin/main "$before"
+    o="$(FAKE_VIEW_MERGED_AT=$at run "$n" "$rf" "$URL")"
+    assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(${at}번째 읽기에 머지됨): 판결 MERGED"
+    assert_eq "$(ghlog "$n" | grep -c "^pr view 7 ")" "$at" "다시 확인(${at}번째 읽기에 머지됨): PR 을 ${at}번 읽는다"
+    assert_eq "$(omain "$n")" "$H" "다시 확인(${at}번째 읽기에 머지됨): origin 을 받았다"
+  done
+  assert_eq "$(sleeps "$n")" "5 5 5 " "다시 확인(4번째 읽기에 머지됨): 읽기 사이를 5초씩 세 번 쉰다"
+  # 양의 대조 — 다섯째 읽기에야 머지됨이면 네 번에서 멈춰 NONE 이다(정해진 횟수만 읽는다)
+  git -C "$c" update-ref refs/remotes/origin/main "$before"
+  o="$(FAKE_VIEW_MERGED_AT=5 run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(다섯째 읽기에야 머지됨): 네 번에서 멈춰 NONE"
+  assert_eq "$(ghlog "$n" | grep -c "^pr view 7 ")" "4" "다시 확인(다섯째 읽기에야 머지됨): PR 을 네 번 읽는다"
+  assert_eq "$(omain "$n")" "$before" "다시 확인(다섯째 읽기에야 머지됨): origin 을 받지 않는다"
+
+  # 13c. 끝까지 열림 — NONE. 요청이 나갔다는 사실과 PR 주소를 함께 알린다
+  n="${P}stillopen"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  o="$(run "$n" "$pf")"; URL="https://github.com/$n/r/pull/7"; H="$(head_of "$o")"
+  before="$(omain "$n")"
+  o="$(run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(끝까지 열림): 마지막 줄이 판결(NONE)"
+  assert_contains "$o" "[spec-distill] 머지 요청은 나갔지만 PR 이 아직 머지되지 않았다(읽은 상태: OPEN) — 머지 대기열이나 자동 머지를 쓰는 레포면 조건이 채워진 뒤 머지된다. 머지된 것을 확인한 뒤 지휘자를 부른다: $URL" "다시 확인(끝까지 열림): 요청이 나간 사실 · 읽은 상태 · PR 주소가 한 줄에"
+  assert_not_contains "$o" "머지돼 있다" "다시 확인(끝까지 열림): 머지돼 있다고 말하지 않는다"
+  L="$(ghlog "$n")"
+  assert_eq "$(printf '%s\n' "$L" | grep -c "^pr view 7 ")" "4" "다시 확인(끝까지 열림): PR 을 네 번 읽는다"
+  assert_eq "$(printf '%s\n' "$L" | grep -vc "^pr view 7 ")" "0" "다시 확인(끝까지 열림): PR 읽기 말고는 gh 를 부르지 않는다"
+  assert_eq "$(sleeps "$n")" "$Q_SLEEPS" "다시 확인(끝까지 열림): 머지 펜스의 머지 뒤 상태 읽기와 같은 간격 · 횟수로 쉰다(${Q_SLEEPS})"
+  assert_eq "$(omain "$n")" "$before" "다시 확인(끝까지 열림): origin 을 받지 않는다"
+  # 13d. 자리표 그대로 · 다른 레포 주소 — gh 를 부르지 않고 NONE
+  o="$(run "$n" "$rf")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(주소 자리표 그대로): 판결 NONE"
+  assert_contains "$o" "머지됐는지 다시 확인하지 못했다 — PR 주소가 비었거나 자리표 그대로다. 머지 요청은 나갔을 수 있다" "다시 확인(주소 자리표 그대로): 사람 줄"
+  assert_eq "$(ghlog "$n")" "" "다시 확인(주소 자리표 그대로): gh 를 부르지 않는다"
+  : > "$T/gh-$n/log"
+  o="$( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" PATH="$T/bin:$PATH" FAKE_GH_LOG="$T/gh-$n/log" "${SHELL_ARGV[@]}" "$rf" 2>&1 )"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(BRIEF 자리표 그대로): 판결 NONE"
+  assert_contains "$o" "머지됐는지 다시 확인하지 못했다 — BRIEF 가 비었거나 자리표 그대로다" "다시 확인(BRIEF 자리표 그대로): 사람 줄"
+  assert_eq "$(ghlog "$n")" "" "다시 확인(BRIEF 자리표 그대로): gh 를 부르지 않는다"
+  o="$(run "$n" "$rf" "https://github.com/someone-else/r/pull/7")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(다른 레포 주소): 판결 NONE"
+  assert_contains "$o" "PR 주소의 레포(github.com/someone-else/r)가 origin(github.com/$n/r)이 아니다" "다시 확인(다른 레포 주소): gh_repo.py 의 사유"
+  assert_contains "$o" "머지됐는지 다시 확인하지 못했다 — PR 주소가 이 레포(origin)의 PR 이 아니다(위 사유). 머지 요청은 나갔을 수 있다 — PR 에서 머지된 것을 확인한 뒤 지휘자를 부른다: https://github.com/someone-else/r/pull/7" "다시 확인(다른 레포 주소): 사람 줄에 그 주소"
+  assert_eq "$(ghlog "$n")" "" "다시 확인(다른 레포 주소): gh 를 한 번도 부르지 않는다"
+  # 13e. PR 을 읽지 못함(gh 인증 실패) — 원격이 머지돼 있어도 머지됨으로 읽지 않는다. 「끝까지 열림」 과 다른 줄로 알린다
+  remote_merge "$n"
+  o="$(FAKE_VIEW_AUTH=1 run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(읽지 못함): 마지막 줄이 판결(NONE)"
+  assert_contains "$o" "[spec-distill] 머지 요청은 나갔지만 PR 상태를 읽지 못했다(위 사유) — 머지됐는지 확인한 뒤 지휘자를 부른다: $URL" "다시 확인(읽지 못함): 요청이 나간 사실 · 읽지 못한 사실 · PR 주소가 한 줄에"
+  assert_contains "$o" "gh 인증이 안 됐다 — gh auth login --hostname github.com 를 돈다" "다시 확인(읽지 못함): gh_repo.py 의 사유가 위에 보인다"
+  assert_not_contains "$o" "아직 머지되지 않았다" "다시 확인(읽지 못함): 「끝까지 열림」 의 줄을 내지 않는다(열림으로 읽은 것이 아니다)"
+  assert_not_contains "$o" "머지돼 있다" "다시 확인(읽지 못함): 머지돼 있다고 말하지 않는다"
+  L="$(ghlog "$n")"
+  assert_eq "$(printf '%s\n' "$L" | grep -c "^pr view 7 ")" "4" "다시 확인(읽지 못함): 정해진 횟수(네 번)만큼 읽는다"
+  assert_not_contains "$L" "pr merge" "다시 확인(읽지 못함): 머지를 요청하지 않는다"
+  assert_eq "$(omain "$n")" "$before" "다시 확인(읽지 못함): origin 을 받지 않는다"
+  o="$(run "$n" "$rf" "$URL")"   # 양의 짝 — 같은 픽스처에서 읽을 수 있으면 MERGED 다(위의 NONE 은 읽지 못해서다)
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(읽지 못함의 짝): 읽을 수 있으면 MERGED"
+  git -C "$c" update-ref refs/remotes/origin/main "$before"
+  # 13f. 머지됨인데 브랜치 · 바탕 · 레포가 다르면 머지됨으로 읽지 않는다
+  for kv in "FAKE_HEAD=other-branch" "FAKE_BASE=develop" "FAKE_CROSS=true"; do
+    o="$(export "$kv"; run "$n" "$rf" "$URL")"
+    assert_eq "$(last "$o")" "interview-merge: NONE" "다시 확인(대조 ${kv}): 판결 NONE"
+    assert_contains "$o" "[spec-distill] 머지 요청은 나갔지만 읽은 PR 이 이 레포의 feature/x → main PR 이 아니다(읽은 것: MERGED " "다시 확인(대조 ${kv}): 읽은 것을 보인다"
+    assert_contains "$o" "PR 에서 직접 확인한 뒤 지휘자를 부른다: $URL" "다시 확인(대조 ${kv}): PR 주소를 싣는다"
+    assert_eq "$(omain "$n")" "$before" "다시 확인(대조 ${kv}): origin 을 받지 않는다"
+  done
+  o="$(run "$n" "$rf" "$URL")"
+  assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(대조의 짝): 같은 픽스처에서 브랜치 · 바탕 · 레포가 같으면 MERGED"
 done
 finish
