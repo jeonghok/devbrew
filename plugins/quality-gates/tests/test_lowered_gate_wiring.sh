@@ -76,7 +76,10 @@ case_step45_gate() {
   assert_contains "$S45" '묶음마다 고른 `L<k>` 를 모아(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다' "게이트: 고르면 묶음의 번호를 모아 다시 합성한다"
   assert_contains "$S45" '새 출력에는 이 게이트를 다시 띄우지 않는다' "게이트: 다시 합성한 출력에 게이트를 또 띄우지 않는다(되풀이 없음)"
   assert_contains "$S45" '한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다' "게이트: 기타 칸 재질문은 한 번뿐이다"
-  assert_contains "$S45" '기타 칸의 글은 다시 합성하기 전에 아래 펜스로 맞춘다. `lowered-pick: all` 이면 `all` 로 넘긴다.' "게이트: 기타 칸 글을 펜스로 맞춘다(M2)"
+  assert_contains "$S45" '기타 칸의 글은 다시 합성하기 전에 아래 펜스로 맞춘다. 「전부」와 같은 뜻의 말' "게이트: 기타 칸 글을 펜스로 맞춘다(M2)"
+  assert_contains "$S45" '`all` 로 펜스에 넣는다. `lowered-pick: all` 이면 `all` 로 넘긴다.' "게이트: 펜스가 all 을 내면 all 로 되올린다"
+  assert_contains "$S45" '「전부」와 같은 뜻의 말(모두 · 다 등)은 받은 글자 그대로가 아니라 `all` 로 펜스에 넣는다.' "게이트: 「전부」와 같은 뜻의 말은 all 로 펜스에 넣는다(받은 글자 그대로 넣으면 bad 로 떨어진다)"
+  assert_contains "$S45" "PICK='<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>'" "펜스: PICK 자리 설명도 같은 뜻의 말을 all 로 넣으라고 한다(불릿과 같은 규칙)"
   assert_contains "$S45" '두 번째도 표에 없는 번호면 지금처럼 되올리지 않고 알린다' "게이트: 두 번째도 틀리면 되올리지 않는다(M2)"
   assert_contains "$S45" '`> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`' "게이트: 되올리지 않았다고 알리는 줄이 남는다"
   # 순서 — 표면화(차등 요약) 뒤 · 라우팅 앞
@@ -159,7 +162,8 @@ case_pick_fence() {
   syn=$(make_synth pick 'verdicts:
   - {f: f1, verdict: lower, evidence: "의도 출처는 캐시 무효화만 요구한다"}')
   pick() {   # pick <번호들>
-    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3>|$1|" > "$ROOT/pick.sh"
+    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>|$1|" > "$ROOT/pick.sh"
+    grep -q '^PICK=.<' "$ROOT/pick.sh" && echo "자리표가 채워지지 않았다(펜스의 PICK 자리 글자가 바뀌었다)"
     bash "$ROOT/pick.sh" 2>&1
   }
   out=$(pick L1);    assert_eq "$out" "lowered-pick: ok" "표에 있는 번호(L1)는 통과"
