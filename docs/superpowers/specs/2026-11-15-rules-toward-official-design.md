@@ -11,6 +11,21 @@ next_phase: superpowers:writing-plans
 
 CLAUDE.md · 플러그인 저술 가이드 · 철학 문서의 규칙 가운데 사용자가 고른 여섯 자리를 Claude Code 공식 쪽으로 옮기고, 그 문장을 글자로 확인하는 테스트와 감사 검사를 함께 옮긴다. 새 쓰임은 짓지 않는다.
 
+## 목차
+
+- [Context / Why](#context--why) · [Goals](#goals) · [Non-goals](#non-goals) · [Anti-goals](#anti-goals) · [Constraints](#constraints) · [Approaches](#approaches)
+- [설계](#설계)
+  - [1. cost_class 를 metadata 아래로](#1-cost_class-를-metadata-아래로)
+  - [2. integrity 규칙 걷어내기](#2-integrity-규칙-걷어내기)
+  - [3. skill 의 disallowed-tools 를 규칙에 적기](#3-skill-의-disallowed-tools-를-규칙에-적기)
+  - [4. plugin.json 은 name 만 필수](#4-pluginjson-은-name-만-필수)
+  - [5. 판 올림 — 설치본이 바뀔 때, PR 에 한 번](#5-판-올림--설치본이-바뀔-때-pr-에-한-번)
+  - [6. 저술 가이드의 낡은 자리](#6-저술-가이드의-낡은-자리)
+- [있는 것 검토](#있는-것-검토) · [상류 · 하류 연계](#상류--하류-연계)
+- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan)
+- [Rejected Alternatives](#rejected-alternatives) · [남는 한계](#남는-한계) · [미룸](#미룸)
+- [번호 대조](#번호-대조) · [Metadata](#metadata) · [Handoff Context](#handoff-context) · [결정 기록](#결정-기록) · [지휘 기록](#지휘-기록)
+
 ## Context / Why
 
 사용자는 이 레포의 규칙이 레포에만 맞춰져 있는 자리를 풀고 싶어 한다 — 「내가 말하는거는 우리 레포에 바이어스 되게 보다 표준에 맞게 가자는거였어」, 「가능하면 추가보다는 푸는 쪽으로 가고」. 맞출 표준으로는 Claude Code 공식을 골랐고 「참고내용으로 두는거야」 라고 했다. 그래서 공식과 다른 자리를 항목마다 물어 고른 것만 옮긴다(D14 · D34).
@@ -89,9 +104,9 @@ CLAUDE.md · 플러그인 저술 가이드 · 철학 문서의 규칙 가운데 
   - CLAUDE.md `### 컴포넌트 격리`: 굵은 머리 「모든 skill에 `cost_class` 선언」 → 「모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다」. 그 줄의 나머지(값 넷 · `high` 의 규모 알림 · 지출 승인을 묻지 않는다)는 한 글자도 바꾸지 않는다.
   - 철학 문서 P22 첫 문장: 「…를 frontmatter에 선언한다」 → 「…를 frontmatter `metadata` 아래에 선언한다」.
   - 저술 가이드 스타터 트리의 SKILL.md 주석.
-- **감사 검사**(plugin-audit): `check-shape-completeness.py` 와 `check-staleness.py` 가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 값 허용 집합은 그대로다. 맨 위에만 있는 skill 을 두 검사가 내는 꼴은 다르다(지휘자 판단).
-  - `check-shape-completeness.py` 의 출력에는 문장 칸이 없다(`requirement` · `present` · `source_doc` 셋). 맨 위에만 있으면 `skills_cost_class` 를 `present=false` 로 낸다 — 없는 것과 같은 gap 이다. 새 칸 · 새 requirement 키를 더하지 않는다(더하면 `audit-workflow.js` 와 CLAUDE.md 앵커 대조가 함께 움직인다).
-  - `check-staleness.py` 는 사실마다 문장을 낸다. 맨 위에만 있으면 「cost_class 가 옛 자리(맨 위)에 있다 — `metadata` 아래로 옮긴다」 는 뜻의 사실을, 어디에도 없으면 지금의 「선언 없음」 을 낸다. 두 사실 모두 지금과 같은 칸으로 낸다(분류 `category absence` · `norm` 은 `cost_class`) — 그 칸으로 거르는 하류가 새 사실을 놓치지 않는다. 둘은 문장으로 가른다: 「옛 자리」 사실의 문장에만 「옛 자리」 구절이 있고, 테스트의 세 경우 fixture 도 그 구절로 가른다.
+- **감사 검사**(plugin-audit): `check-shape-completeness.py` 와 `check-staleness.py` 가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 값 허용 집합은 그대로다. 맨 위에만 있는 skill 은 두 검사 모두 「선언 없음」 과 같게 낸다 — 옛 자리를 따로 알리는 갈래는 두지 않는다(리뷰 2라운드의 줄이자는 지적을 받았다 — skill 10개를 한 PR 에서 함께 옮겨 중간 상태가 없고, 맨 위에 남은 키는 호출 표면 검사가 잡는다).
+  - `check-shape-completeness.py`: `skills_cost_class` 를 `present=false` 로 낸다. 출력 칸(`requirement` · `present` · `source_doc`)은 늘지 않는다.
+  - `check-staleness.py`: 지금의 사실 하나를 그대로 쓰되 문장만 「`metadata` 아래에 cost_class 선언 없음」 이라는 뜻으로 고친다. 분류 칸(`category absence` · `norm` 은 `cost_class`)은 그대로다.
 - **호출 표면 검사**(`shared/entry/check_invocation_surface.py`): skill 이 가질 수 있는 맨 위 키 목록(`SKILL_KEYS`)에서 `cost_class` 를 뺀다 — `metadata` 는 이미 들어 있다. 그 목록의 주석과 실패 메시지의 「공식 키 ∪ {cost_class}」 를 「공식 키」 로 고친다.
 - **agent 는 그대로.** agent 의 맨 위 `cost_class:` 와 그 값을 확인하는 테스트는 건드리지 않는다.
 - frontmatter 를 어떻게 읽을지(정규식 · 파서)는 계획이 정한다. 조건은 둘이다 — `metadata` 블록 밖의 들여쓴 `cost_class:` 를 선언으로 읽지 않고, 본문의 같은 글자를 frontmatter 로 읽지 않는다.
@@ -111,7 +126,8 @@ CLAUDE.md `### 컴포넌트 격리` 의 「`allowed-tools` 는 제한이 아니�
 - 뒤에 더한다: skill 이 도는 동안 도구를 실제로 빼는 키는 `disallowed-tools`(kebab)다. 그 skill 을 부른 턴에만 걸리고 사용자의 다음 메시지에서 풀린다. denylist 라 빠뜨린 도구와 내일 생길 도구는 막지 못한다 — Law 2 의 분리는 지금처럼 agent 의 `tools:` allowlist 로만 한다.
 - 같은 절 agent 줄의 「agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다」 를 「agent frontmatter 에서 도구를 다루는 실재 필드는 … 둘뿐이다」 로 고치고, 헷갈리는 짝에 skill 의 `disallowed-tools`(kebab)를 더한다 — agent 에 kebab 으로 적으면 조용히 무시된다. 사용자가 고른 여섯 자리 밖의 문장이라 리뷰에서 따로 물었고, 함께 고치기로 했다(결정 기록 D1.2). 이유: 공식 agent frontmatter 에는 다른 필드가 많아 지금 문장이 글자 그대로는 틀리고, skill 의 kebab 키를 규칙에 올리면 헷갈릴 짝이 하나 더 생긴다.
 - 고칠 검사 코드는 없다 — 호출 표면 검사가 skill 의 `disallowed-tools` 를 이미 허용하고, agent 의 kebab `disallowed-tools` 는 `test_agent_frontmatter_keys.sh` 가 이미 금지한다. 쓰는 skill 은 0 이고 이 에픽이 만들지 않는다.
-- 다만 이 두 줄의 낱말을 정할 때 지킬 글자 제약이 있다. `plugins/quality-gates/tests/test_law2_prose.sh` 가 CLAUDE.md 와 저술 가이드에서 두 가지를 금지한다 — 「실제 키」 라는 글자, 그리고 `allowed-tools` 와 `disallowed-tools` 를 빗금(`/`)으로 이은 짝. 새 문장은 「실재 키」 로 쓰고 두 키를 빗금으로 잇지 않는다. agent 줄을 글자로 확인하는 테스트(조사 보고: 이 파일과 `test_governance_no_capability_caps.sh`)는 고정값을 같은 커밋에서 맞춘다 — 계획의 첫 과제가 그 줄을 무는 자리를 다시 찾는다.
+- **request-framing 본문의 한 문장도 함께 고친다**(사용자 결정 — 결정 기록 B2). `plugins/spec-distill/skills/request-framing/SKILL.md` 의 「skill 계층에는 도구를 막을 수단이 없고, `allowed-tools` 는 제한이 아닙니다.」 를 「`allowed-tools` 는 제한이 아니고, 이 skill 은 도구를 빼는 키를 쓰지 않습니다」 는 뜻으로 고친다. 그 문장이 든 괄호의 나머지(does not — cannot 이 아니다)는 그대로다. 같은 뜻의 문장은 플러그인의 skill · reference · agent 에서 이 한 곳뿐이다(리뷰어 둘이 확인). 그 파일의 본문은 F3 도 고친다 — 고치는 것은 이 한 문장뿐이다.
+- 다만 이 줄들의 낱말을 정할 때 지킬 글자 제약이 있다. `plugins/quality-gates/tests/test_law2_prose.sh` 가 두 가지를 금지한다 — 「실제 키」 라는 글자(CLAUDE.md · 저술 가이드 · 플러그인 README · 모든 SKILL.md · references 에서), 그리고 `allowed-tools` 와 `disallowed-tools` 를 빗금(`/`)으로 이은 짝(CLAUDE.md 에서). 새 문장은 「실재 키」 로 쓰고 두 키를 빗금으로 잇지 않는다. agent 줄을 글자로 확인하는 테스트(조사 보고: 이 파일과 `test_governance_no_capability_caps.sh`)는 고정값을 같은 커밋에서 맞춘다 — 계획의 첫 과제가 그 줄을 무는 자리를 다시 찾는다.
 
 ### 4. plugin.json 은 name 만 필수
 
@@ -124,14 +140,14 @@ CLAUDE.md `### 컴포넌트 격리` 의 「`allowed-tools` 는 제한이 아니�
 
 CLAUDE.md `### 메타데이터 & 버전 관리` 첫 줄을 아래 뜻으로 다시 쓴다(굵은 머리 「모든 PR마다 SemVer bump가 붙는 `plugin.json`」 도 바뀐다).
 
-> `version` 을 적은 플러그인은 설치본이 바뀌는 PR 에서 판을 올린다(major = breaking, minor = 새 surface, patch = fix) — 설치본은 판 문자열로 갱신을 알아채서, 올리지 않으면 사용자는 옛 사본에 머문다. 올림 단위는 기본 브랜치에 머지되는 PR 하나다 — PR 안에서 커밋마다 올리지 않는다. 플러그인 X 를 올리는 때는 그 PR 이 ① `plugins/X/` 아래 파일(그 폴더 바로 아래의 `tests/` 폴더 · `CHANGELOG.md` · `README.md` 는 제외)을 바꾸거나 ② X 가 심볼릭 링크로 싣는 `shared/` 파일을 바꿀 때다. 그 밖의 변경(`shared/tests/` · `tools/` · `docs/` 처럼 설치본에 실리지 않는 것)으로는 올리지 않는다.
+> `version` 을 적은 플러그인은 설치본이 바뀌는 PR 에서 판을 올린다(major = breaking, minor = 새 surface, patch = fix) — 설치본은 판 문자열로 갱신을 알아채서, 올리지 않으면 사용자는 옛 사본에 머문다. 올림 단위는 기본 브랜치에 머지되는 PR 하나다 — PR 안에서 커밋마다 올리지 않는다. 플러그인 X 를 올리는 때는 그 PR 이 ① `plugins/X/` 아래 파일(그 폴더 바로 아래의 `tests/` 폴더 · `CHANGELOG.md` · `README.md` 는 제외)을 바꾸거나 ② X 가 심볼릭 링크로 싣는 `shared/` 파일을 바꿀 때다. 그 밖의 변경(`shared/tests/` · `tools/` · `docs/` 처럼 설치본에 실리지 않는 것)으로는 올리지 않는다. ① · ② 에 걸려도 동작에 닿지 않는 변경(주석 · 오탈자)만 있는 PR 은 이유를 PR 본문에 적고 올리지 않을 수 있다.
 
 정의의 근거와 경계:
 
 - **빼는 목록으로 쓴다.** 「scripts · skills · agents 가 바뀌면」 처럼 넣는 목록으로 쓰면 앞으로 생길 표면을 놓친다. `plugins/X/` 아래 전부에서 셋만 뺀다. 뺀 셋은 플러그인 폴더 바로 아래 것만이다 — 하위 폴더의 같은 이름(예: `skills/<이름>/README.md`)은 빼지 않는다. 그런 파일은 모델이 읽는 글일 수 있다.
 - **`shared/` 가 설치본에 닿는 길은 셋**이다 — 심볼릭 링크 43개 · `copy-of` 글자 사본 16개 · SKILL.md 에 박힌 「사람에게 쓰는 글」 블록 10개. 사본과 블록은 바뀌면 반드시 `plugins/X/` 안의 diff 로 드러나 ① 에 든다. 플러그인 폴더 diff 없이 설치본이 바뀌는 길은 링크뿐이라 ② 가 그것을 받는다(K21 이 걱정한 「사본을 놓쳐 판이 그대로 남는다」 는 ① 이 막는다).
 - **뺀 셋의 값.** `tests/` · `README.md` 는 설치본에 실리지만 실행 중에 읽는 코드가 없다(조사 보고). 그래서 같은 판의 설치본끼리 그 두 자리의 바이트가 다를 수 있다 — 동작은 같다.
-- **과한 쪽으로 틀린다.** 주석만 바꿔도 ① 에 걸려 올린다. 놓치는 것보다 낫다.
+- **기본은 올리는 쪽이고, 판단으로 뺄 수 있다**(사용자 결정 — 결정 기록 B1). 사용자가 고른 기준은 「설치본 동작이 바뀔 때만」 이다. 파일 기준인 ① · ② 는 그 기준을 기계 없이 따를 수 있게 한 기본값이라 주석만 바꿔도 걸린다. 그래서 동작에 닿지 않는 변경만 있는 PR 은 올리지 않을 수 있게 하되, 이유를 PR 본문에 적게 한다. 망설여지면 올린다 — 올리지 않아 생기는 잘못(사용자가 옛 사본에 머문다)이 올려서 생기는 잘못(헤딩 하나)보다 크다.
 - **`shared/` 정본만 고치고 사본을 안 고친 PR** 은 정의대로 올리지 않는다. 사본이 정본과 갈라진 것은 `test_copy_of_contract.sh` 가 잡는다 — 판 규칙의 일이 아니다.
 - **CHANGELOG 규칙은 그대로다.** 올릴 때마다 헤딩 하나를 쓴다. 정합 락(맨 위 헤딩 = plugin.json 판 · 건너뛴 번호 없음)은 고치지 않는다.
 - **지키는 것은 사람과 리뷰다**(길 1). 새 스크립트 · 락을 두지 않는다.
@@ -177,12 +193,12 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
   - skill frontmatter: Claude Code(`metadata` 내용을 읽지 않는다) · plugin-audit 의 두 검사 · 호출 표면 검사 · skill 마다의 테스트. 넷 모두 이 에픽이 함께 옮긴다.
   - 설치된 옛 판의 plugin-audit 은 새 레포를 감사하면 skill 10개를 「선언 없음」 으로 센다 — 플러그인을 갱신하면 사라진다. 도는 세션은 시작 때의 판을 쓴다.
   - CLAUDE.md 의 줄을 글자로 확인하는 테스트 묶음(`test_governance_no_capability_caps.sh` 등)은 옆 로드맵이 고칠 줄도 확인한다. 줄 단위 고정이라 서로 다른 줄을 고치는 두 PR 은 글자로는 합쳐지지만, 둘째로 머지하는 쪽이 기본 브랜치를 합친 뒤 스위트를 다시 돌려야 한다(K19).
-- **머지 순서.** 이 에픽은 진행 중인 다른 에픽이 고치는 SKILL.md 들의 맨 위 한 줄을 바꾼다(F3 · F4 · F5 · 옆 로드맵 둘째 에픽의 `epic-conductor/SKILL.md`). 본문과 다른 자리라 글자 충돌은 드물다. 이 에픽이 머지된 뒤 새 skill 을 더하는 브랜치가 옛 자리에 `cost_class` 를 두면 감사 검사와 skill 테스트가 그 브랜치의 스위트 대조에서 잡는다. 이음매 담당은 지휘자다 — 이 PR 의 머지를 옆 세션에 알린다.
+- **머지 순서.** 이 에픽은 진행 중인 다른 에픽이 고치는 SKILL.md 들의 맨 위 한 줄을 바꾼다(F3 · F4 · F5 · 옆 로드맵 둘째 에픽의 `epic-conductor/SKILL.md`). 본문과 다른 자리라 글자 충돌은 드물다. 이 에픽이 머지된 뒤 새 skill 을 더하는 브랜치가 옛 자리에 `cost_class` 를 두면 호출 표면 검사가 그 브랜치의 스위트 대조에서 잡는다 — `shared/tests/test_invocation_surface.sh` 가 레포의 실제 skill 을 훑고, 맨 위의 모르는 키를 실패로 낸다. 감사 검사의 테스트는 fixture 만 보고 skill 마다의 테스트는 이름이 박힌 기존 skill 만 봐서 이 일을 하지 못한다. request-framing 본문의 한 문장(설계 3)은 그 파일을 고칠 F3 와 한 줄이 겹칠 수 있다 — 먼저 머지된 쪽의 문장을 뒤 쪽이 기본 브랜치를 합칠 때 받는다. 이음매 담당은 지휘자다 — 이 PR 의 머지를 옆 세션에 알린다.
 
 ## Acceptance Criteria
 
 - AC1 — skill 10개가 모두 frontmatter `metadata` 아래에 `cost_class` 를 갖고, 맨 위 `cost_class:` 줄은 skill 어디에도 없다. 값은 옮기기 전과 같다.
-- AC2 — 두 감사 검사가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 맨 위에만 있는 skill 은 `check-shape-completeness.py` 에서 `present=false`(없는 것과 같은 gap)이고 `check-staleness.py` 에서 「옛 자리」 사실이다. 어디에도 없는 skill 은 두 검사 모두 지금과 같다. `check-shape-completeness.py` 의 출력 칸은 늘지 않는다.
+- AC2 — 두 감사 검사가 `metadata` 아래의 `cost_class` 를 선언으로 읽는다. 맨 위에만 있는 skill 과 어디에도 없는 skill 은 두 검사 모두 같은 「선언 없음」 으로 낸다. `check-staleness.py` 의 그 문장은 `metadata` 아래를 말한다. 두 검사의 출력 칸과 분류는 늘지 않는다.
 - AC3 — 호출 표면 검사가 skill 의 맨 위 `metadata` 를 받고 맨 위 `cost_class` 를 모르는 키로 낸다. 그 메시지와 주석에 「∪ {cost_class}」 가 없다.
 - AC4 — 규칙 문장 셋(CLAUDE.md cost 줄 · 철학 P22 첫 문장 · 저술 가이드 트리 주석)이 새 자리를 말하고, 그 줄의 나머지는 바뀌지 않았다. 그 문장을 확인하는 테스트(바이트 비교 포함)가 새 문장으로 통과하고 옛 문장으로 되돌리면 실패한다.
 - AC5 — agent 파일의 `cost_class:` 줄과 그 값을 확인하는 테스트는 diff 가 없다.
@@ -191,12 +207,13 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - AC8 — CLAUDE.md 와 저술 가이드가 plugin.json 의 필수 키를 `name` 하나로 적고, 빼면 공식 검증 명령이 경고하는 키 셋을 적는다.
 - AC9 — 감사 검사가 `name` 만 있는 plugin.json 을 gap 으로 세지 않고, `name` 이 없으면 gap 으로 센다. `version` 이 있는데 문자열이 아니면 gap 이다.
 - AC10 — 네 플러그인의 plugin.json 은 키 넷을 그대로 갖는다(`version` 값만 바뀐다). CHANGELOG 정합 락과 소개 문구 짝 락은 diff 가 없다.
-- AC11 — CLAUDE.md 의 판 올림 문장이 올림 단위(머지되는 PR 하나 · PR 에 한 번)와 올리는 때(① · ②)와 올리지 않는 때를 적고, 「모든 PR마다」 는 없다.
+- AC11 — CLAUDE.md 의 판 올림 문장이 올림 단위(머지되는 PR 하나 · PR 에 한 번)와 올리는 때(① · ②)와 올리지 않는 때를 적고, 동작에 닿지 않는 변경만 있는 PR 은 이유를 PR 본문에 적고 올리지 않을 수 있다는 판단 문장을 적는다. 「모든 PR마다」 는 없다.
 - AC12 — 이 PR 이 네 플러그인의 판을 플러그인마다 정확히 한 번 올리고, 플러그인마다 CHANGELOG 헤딩이 하나만 늘었다.
 - AC13 — 저술 가이드의 고칠 곳 표 일곱 행이 모두 고쳐졌고, 가이드가 예시로 드는 agent · skill 이름이 레포에 실재한다.
 - AC14 — agent 의 `model` 키 금지 문장과 그것을 지키는 테스트는 diff 가 없다(저술 가이드 model 문단은 예시 구절만 바뀐다).
 - AC15 — 철학 문서 P8 절과 CLAUDE.md `## The Three Laws` 절은 diff 가 없다.
 - AC16 — 전체 스위트에서 이 브랜치에만 있는 실패가 0 이다.
+- AC18 — request-framing 본문에 「skill 계층에는 도구를 막을 수단이 없다」 는 뜻의 문장이 없고, 그 자리에 「`allowed-tools` 는 제한이 아니다」 는 뜻과 「이 skill 은 도구를 빼는 키를 쓰지 않는다」 는 뜻이 있다. 그 파일의 다른 본문은 diff 가 없다.
 - AC17 — `docs/git-workflow/commit-conventions.md` 가 자동 릴리스 도구가 판을 올린다고 말하지 않고 CLAUDE.md 의 올림 규칙을 가리킨다. `shared/README.md` 의 두 수가 실제와 같고, 판 올림 안내 한 줄과 「폴더는 설치본에 들어가지 않지만 링크로 실린 파일의 내용은 들어간다」 는 구분이 있다.
 
 ## Files to Modify
@@ -204,7 +221,8 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 조사 보고의 목록이다. 계획의 첫 과제가 다시 찾아 빠진 자리를 올린다.
 
 - 규칙: `CLAUDE.md`(네 줄) · `docs/philosophy/devbrew-harness-philosophy.md`(P21 · P22 의 두 문장) · `docs/plugin-authoring.md`
-- skill 10개의 `SKILL.md` frontmatter: plugin-audit · project-init · quality-gates(artifact-critique · quality-pipeline) · spec-distill(epic-conductor · pm-interview · request-framing · reviewing-brief · roadmap-status · spec-review)
+- skill 10개의 `SKILL.md` frontmatter: plugin-audit · project-init · quality-gates(artifact-critique · quality-pipeline) · spec-distill(epic-conductor · pm-interview · request-framing · reviewing-brief · roadmap-status · spec-review). request-framing 은 본문의 한 문장도 고친다(설계 3)
+- 맨 위 `cost_class` 를 읽는 손 시나리오: `plugins/quality-gates/tests/e2e-scenarios.md`(리뷰가 찾은 자리 — 계획이 살아 있는 시나리오인지 확인해 고치거나 그대로 둔 이유를 적는다)
 - 감사 · 검사: `plugins/plugin-audit/scripts/check-shape-completeness.py` · `check-staleness.py` · `shared/entry/check_invocation_surface.py`
 - 테스트(문장 · 자리 · fixture): `plugins/quality-gates/tests/test_governance_no_capability_caps.sh` · `shared/tests/test_cost_disclosure.sh` · `shared/tests/test_invocation_surface.sh` · `plugins/plugin-audit/tests/test_check_shape_completeness.py` · `test_check_staleness.py` · `test_skill_orchestration.py` · `plugins/spec-distill/tests/test_epic_conductor_skill.sh` · `test_conducting_interview_stage.sh` · `test_pm_interview_entry.sh` · `test_reviewing_brief_skill.sh`
 - 네 플러그인의 `.claude-plugin/plugin.json`(판) · `CHANGELOG.md`
@@ -214,11 +232,12 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 
 ## Verification Plan
 
-- 자리 옮기기: skill 10개를 훑어 `metadata` 아래 값이 있고 맨 위 줄이 없음을 함께 단언한다(부재만 단언하지 않는다). 감사 검사는 세 경우(새 자리 · 옛 자리 · 없음)를 fixture 로 가른다. `metadata` 밖의 들여쓴 `cost_class:` 와 본문의 같은 글자는 선언으로 읽히지 않음을 본다.
+- 자리 옮기기: skill 10개를 훑어 `metadata` 아래 값이 있고 맨 위 줄이 없음을 함께 단언한다(부재만 단언하지 않는다). 감사 검사는 세 경우(새 자리 · 맨 위에만 · 없음)를 fixture 로 본다 — 뒤의 둘은 같은 「선언 없음」 이다. `metadata` 밖의 들여쓴 `cost_class:` 와 본문의 같은 글자는 선언으로 읽히지 않음을 본다.
 - 문장 락: 새 문장으로 통과 · 옛 문장으로 되돌리면 실패. 바이트 비교 락은 줄의 나머지가 바뀌지 않았는지도 그대로 잡는다.
 - plugin.json 검사: `name` 만 · 셋 다 · `name` 없음 · `version` 이 문자열 아님 네 경우. 지금 테스트의 「version 빠지면 gap」 단언은 방향을 뒤집는다 — 뒤집은 단언은 변이로 이빨을 확인한다.
 - 부재(integrity · 「모든 PR마다」): 지운 문장이 없음을 단언할 때 같은 줄의 남은 구절이 있음을 양성 짝으로 둔다.
 - 저술 가이드: 예시로 든 이름이 실재하는지는 파일 존재로 본다.
+- request-framing 의 문장: 옛 문장이 없음을 단언할 때 새 뜻의 구절이 그 자리에 있음을 양성 짝으로 두고, 그 파일의 나머지 본문에 diff 가 없음을 PR 본문에 적는다.
 - 손대지 않은 것: model 키 테스트 · agent 파일 · P8 절 · CHANGELOG 정합 락의 diff 가 0 임을 PR 본문에 적는다.
 - 공식 검증 명령(`claude plugin validate`)은 돌릴 수 있으면 네 플러그인에 돌려 결과를 PR 본문에 적고, 못 돌리면 「재지 못함」 으로 적는다 — 경고 문장의 근거는 공식 문서 인용이다.
 - 전체 스위트는 공유 스위트 잠금 아래에서 한 번 돈다.
@@ -229,6 +248,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - **넣는 목록으로 올림 단위를 정의하기** — 앞으로 생길 표면을 놓친다.
 - **빼는 목록을 `CHANGELOG.md` 하나로 줄이기(설치 바이트 엄격형)** — 놓치는 길은 없지만 테스트만 · README 만 바꾼 PR 도 올린다. 사용자가 정한 것은 「설치본 동작이 바뀔 때만」 이다.
 - **감사 검사가 맨 위와 `metadata` 아래를 둘 다 받기** — 옛 자리가 조용히 남는다. skill 10개를 한 PR 에서 함께 옮기므로 옮기는 동안의 중간 상태가 없다.
+- **감사 검사가 「옛 자리」 를 따로 알리기** — 처음 설계에 있던 갈래다. 한 PR 에서 함께 옮겨 중간 상태가 없고 맨 위에 남은 키는 호출 표면 검사가 잡으므로 쓰일 자리가 드물다. 감사 결과에 옛 자리 skill 이 실제로 나오고 「선언 없음」 문장만으로 고칠 곳을 찾지 못했다는 보고가 생기면 그때 가른다.
 - **agent 의 cost_class 도 옮기기** — 공식 agent frontmatter 에 자유 칸이 없다. 모르는 키를 또 하나 만드는 것이라 옮기는 뜻이 없다.
 - **CHANGELOG 정합 락 · 소개 문구 짝 락을 `version` · `description` 없는 플러그인에 맞춰 풀기** — 그런 플러그인이 없다. 쓰임이 없는 갈래를 미리 짓지 않는다.
 - **agent 의 model 키 허용(인터뷰의 원래 결정)** — 사용자가 다시 정했다(결정 기록).
@@ -250,6 +270,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 | `version` · `description` 없는 플러그인을 락 둘이 받게 하기 | 그런 플러그인이 없다 | 처음 빼는 PR |
 | agent frontmatter 의 `cost_class` 를 어디에 둘지 | 공식에 자유 칸이 없다. 규칙 문장도 skill 만 말한다 | 정해지지 않음 — 공식이 칸을 주면 다시 본다 |
 | CLAUDE.md `### 런타임 상태 & 훅` 과 감사 검사의 「모든 훅에 kill switch」 앵커 | kill switch 와 상태 자리의 일이다 | F7 |
+| 철학 문서에서 앞단(request-framing · 인터뷰)에 닿는 문장 | 이 에픽은 살피지 않았다. 앞단의 이름과 단계가 F5 에서 바뀌므로 그때 함께 본다 | F5 |
 | 저술 가이드를 새 코어(팀 구조)에 맞추기 | 옆 로드맵의 팀 구조 설계가 머지 전이라 맞출 대상이 고정돼 있지 않다 | F5 — 로드맵 수정으로 F5 의 범위와 경로 예약에 저술 가이드를 더한다 |
 
 ## 번호 대조
@@ -265,11 +286,11 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 | D17 | 반영 | 설계 1 · 2 · 3 |
 | D18 | 반영 | 설계 4 · 5. 「agent 의 model 키를 허용」 은 재결정으로 뺐다(결정 기록). kill switch 와 상태 자리는 F7 |
 | D24 | 반영 | 설계 5 |
-| D29 | 반영 | Non-goals · AC15 |
+| D29 | 반영 | P8 을 옆 로드맵에 두는 것은 Non-goals · AC15. 그 밖의 공식과 다른 자리는 설계 1 · 2 의 철학 문서 두 문장(P21 · P22)이고, 철학 문서에서 판 올림 · 필수 키 · 도구 키를 말하는 다른 문장은 없었다(조사 보고 · 리뷰어 확인). 앞단에 닿는 문장은 이 에픽이 살피지 않았다 — F5 로 미룬다(미룸 표) |
 | D40 | 반영 | 설계 4 |
 | OQ6 | 반영 | 설계 6 |
 | OQ7 | 반영 | 설계 1 · 2 · 3. 의존 선언은 Non-goals |
-| OQ9 · OQ11 | 반영 | 설계 4 · 5 |
+| OQ9 · OQ11 | 반영 | 설계 4 · 5 — plugin.json 필수 키와 판 올림. OQ9 가 함께 물은 model 키는 재결정으로 뺐고(결정 기록), kill switch 와 상태 자리는 F7 이다(Non-goals) |
 | OQ10 | 기각 | model 키 허용을 유지할지의 질문 — 재결정으로 금지를 남긴다 |
 | OQ13 | 반영 | 설계 5 — 판 번호를 남기고 릴리스마다 올리는 길 |
 | OQ21 | 반영 | Non-goals — P8 은 옆 로드맵 |
@@ -277,7 +298,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 | OQ31 | 반영 | 상류 · 하류 연계의 머지 순서 |
 | OQ33 | 기각 | model 키를 든 agent 가 생기지 않는다 — 알림 줄을 고칠 일이 없다 |
 | OQ36 | 반영 | 설계 5 의 정의 |
-| OQ39 | 반영 | Constraints — 이 에픽은 규칙 문장과 검사만 맡는다(레포 전역 이전은 F7) |
+| OQ39 | 반영 | Non-goals 의 「kill switch 와 상태 자리는 F7 이다」 줄 · 지휘 기록의 범위 줄 — 이 에픽은 규칙 문장과 검사만 맡고 레포 전역 이전은 F7 이 한다 |
 | RC14 | 반영 | 설계 6 의 model 문단 예시 |
 | RC23 · RC131 | 반영 | Non-goals · 상류 · 하류 연계 |
 | RC65 | 기각 | 「허용으로 고친다」 — 재결정으로 금지 문장을 그대로 둔다 |
@@ -296,11 +317,12 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 | K21 | 반영 | 설계 5 — 사본은 ① 에 든다 |
 | ST1 | 기각 | 「공식을 따라가」 로 물렸던 금지 유지 안을 사용자가 다시 골랐다(결정 기록) |
 | ST2 | 반영 | 설계 4 · 5 |
-| S1 · S6 · S9 · S10 · S18 · S23 · S32 · S34 | 반영 | Context / Why · Constraints · 설계 1–6 |
+| S1 · S6 · S9 · S18 · S23 · S32 · S34 | 반영 | Context / Why · Constraints · 설계 1–6 |
+| S10 | 반영 | 설계 4 · 5(plugin.json 필수 · 판 올림 완화). 같은 답의 「agent 의 model 키 허용」 은 재결정으로 뺐고(결정 기록), 「kill switch · 상태 자리를 공식으로」 는 F7 이다(Non-goals) |
 | S11 | 기각 | 「공식을 따라가」 — 같은 주제를 사용자가 다시 정했다(결정 기록) |
 | S12 | 반영 | Context 의 재검토 결과 · 설계 5 |
 | S24 · S25 · S29 | 반영 | Context · 남는 한계 — 미확인은 표시해 싣는다 · 올림 단위는 설계가 정한다 |
-| S35 · S36 · S38 | 반영 | Constraints — 인터뷰가 닫은 범위 그대로 |
+| S35 · S36 · S38 | 반영 | 설계가 답할 것 없음 — 인터뷰 절차의 선택이다(리뷰를 더 열지 않음 · 결과물에 싣는 양 · 한 로드맵에 둠). 그 결과인 이 에픽의 범위는 Non-goals 가 그대로 따른다 |
 | «cc-host-marketplace» | 반영 | 설계 5 |
 | «cc-memory» | 반영 | 설계 5 의 문서 셋 밖 두 자리 — 어긋난 두 규칙 |
 | «cc-plugins-components» | 반영 | 설계 6. model 키 부분은 재결정으로 기각 |
@@ -324,7 +346,7 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 로드맵의 F6 경로 예약은 파일 다섯이다. 이 설계의 Files to Modify 는 그보다 넓다(skill 10개의 머리 줄 · 테스트 열 개 안팎 · 감사 검사 둘 더). 로드맵 수정은 지휘자가 재분해 절차로 따로 하고, 셋을 함께 싣는다 — ① F6 범위 줄에서 「agent 의 model 키 허용」 을 빼고 로드맵의 결정 기록에 그 재결정을 적는다 ② F6 경로 예약을 이 설계의 Files to Modify 에 맞춘다 ③ F5 의 범위와 경로 예약에 「저술 가이드를 새 코어에 맞추기」 를 더한다(미룸 표). 로드맵이 고쳐지기 전에는 로드맵의 F6 범위 줄보다 이 문서의 Non-goals 와 결정 기록이 맞다 — 뒤 에픽(F7)과 다음 지휘 세션은 model 키가 허용된 것으로 읽지 않는다.
 - 설계의 조사는 하위 agent 넷이 했다. 보고 원문은 지휘 자원 폴더(`relay/F6/research-*.md`)에 있다 — 계획 담당자에게는 내용으로 싣는다.
 - 인터뷰의 원래 결정에서 달라진 것은 하나다 — agent 의 model 키(결정 기록의 원래 · 재결정 · 근거).
-- 설계문서 점검(builder check)이 낸 질문은 둘이다. 하나는 사용자 몫이었고 사용자가 답했다(문서 셋 밖의 두 자리 — 결정 기록). 다른 하나(감사 검사가 「옛 자리」 를 어떤 꼴로 내는가)는 지휘자가 정해 설계 1 에 적었다. 점검이 짚은 사실 둘(호출 표면 검사에 `metadata` 가 이미 있다 · 감사 검사 테스트의 앵커 둘)도 설계 1 과 Constraints 에 반영했다.
+- 설계문서 점검(builder check)이 낸 질문은 둘이다. 하나는 사용자 몫이었고 사용자가 답했다(문서 셋 밖의 두 자리 — 결정 기록). 다른 하나(감사 검사가 「옛 자리」 를 어떤 꼴로 내는가)는 지휘자가 정해 설계 1 에 적었다가, 리뷰 2라운드에서 그 갈래를 뺐다(Rejected Alternatives). 점검이 짚은 사실 둘(호출 표면 검사에 `metadata` 가 이미 있다 · 감사 검사 테스트의 앵커 둘)도 설계 1 과 Constraints 에 반영했다.
 
 ## 결정 기록
 
@@ -336,8 +358,14 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 2026-11-15 · 문서 셋 밖의 두 자리(`docs/git-workflow/commit-conventions.md` 의 자동 릴리스 문장 · `shared/README.md` 의 낡은 수와 올림 안내)를 이 PR 에서 함께 고칠지 두고 갈지(지휘자 제안 함께 고친다) → 「함께 고치자」
 - D1.1 · r1 · adopt · c43e2738#r1.1 · "고친다 — 미루고 받는 곳 적기 (권장)" — 저술 가이드를 새 팀 구조에 맞춰 고친다는 확정 방향의 절반이 설계 어디에도 없고 받는 곳도 적혀 있지 않은데, 대조 표는 반영으로 적는다 (D8 · K9).
 - D1.2 · r1 · adopt · c7be5763#r1.1 · "고친다 — agent 문장도 함께 (권장)" — 사용자가 고른 여섯 자리 밖의 규칙 문장 하나(agent 의 도구 필드는 둘뿐이라는 문장)를 지휘자 제안만으로 고치는데, 사용자가 그 항목을 골랐다는 기록이 없다 (D34).
+- B1 · 결정 · 2026-11-16 · 판 올림 정의의 경계 — 기본은 정의대로 올리되, 동작에 닿지 않는 변경(주석 · 오탈자)만 있는 PR 은 이유를 PR 본문에 적고 올리지 않을 수 있다는 판단 문장을 규칙에 더한다(리뷰 2라운드 참고 지적 · 설계 5 · AC11) — 「판단 문장을 더한다 (권장)」
+- B2 · 결정 · 2026-11-16 · request-framing 본문의 「skill 계층에는 도구를 막을 수단이 없고」 문장을 이 PR 에서 한 문장만 고친다(리뷰 1 · 2라운드 참고 지적 · 설계 3 · AC18) — 「이 PR 에서 한 문장만 고친다 (권장)」
 
 ## 지휘 기록
 
 - 범위 · 2026-11-15 · 설계 첫 메시지의 질문(이 규칙들 때문에 못 하고 있는 일이 있는가)은 model 키 항목 때문에 물은 것이었다. 그 항목이 빠져, 남은 여섯은 규칙 문장과 그것을 지키는 테스트 · 감사 검사까지만 설계한다고 지휘자가 정해 사용자에게 보였다(「새 쓰임을 지어 넣지는 않습니다」).
 - 조사 · 2026-11-15 · 설계 전 조사 넷(규칙 자리 · 올림 단위 · 옆 로드맵과의 겹침 · 공식 문서)을 하위 agent 로 돌렸다. 테스트는 돌리지 않았다.
+
+### Deferred to plan
+
+| 2e6610eb#r2.1 | 새로 쓰는 문장들(skill 의 disallowed-tools 줄 · name 만 필수 줄 · 판 올림 문단의 올리는 때 · 문서 셋 밖 두 자리)을 무엇으로 확인하는지의 절차가 검증 계획에 없다 — 통과 기준은 수용 기준에 있으니 명령과 순서는 계획이 정한다 (AC7 · AC8 · AC11 · AC17). |
