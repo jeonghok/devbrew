@@ -27,11 +27,13 @@ assert_eq "$GIT_N" "$FIND_N" "대상 도출: git 과 find 가 같은 수를 낸�
 # 정본의 예외 문장 — 부른 skill(예: superpowers brainstorming)이 메시지 모양을 정한 대화에서는 그 skill, 이 블록은 낱말에만.
 assert_file_grep "$ROOT/shared/style/plain-language.md" '부른 skill 이 메시지 모양을 정한 대화\(예: brainstorming\)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다\.' "정본: 부른 skill 이 메시지 모양을 정한 대화의 예외 문장"
 CANON="$(cat "$ROOT/shared/style/plain-language.md")"
-REC='추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다 — 여럿이면 모두, 이유는 질문 위 글에. 추천이 없으면 아무 표시도 쓰지 않는다.'
-EXC='추천 표시는 그 자리에서도 이 블록을 따른다 — 옮긴 질문과 steelman 질문의 선택지 순서, steelman 질문의 출처 표지만 예외다.'
-assert_eq "$(grep -cF -- "$REC" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본에 추천 문장(양)"
-assert_eq "$(grep -cF -- "$EXC" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본 3행에 추천 예외 문장(양)"
-assert_not_contains "$CANON" '추천은 「(권장)」으로 표시한다.' "AC1: 정본에 옛 추천 문장이 없다(음)"
+REC='추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다 — 여럿이면 모두. 추천이 있는 질문은 질문 창만 보고 고를 수 있게 쓴다 — 질문 위 글은 안 보일 수 있다. 모든 선택지의 설명을 「얻음: … · 내줌: …」 한 줄(길어도 세 줄)로 쓰고, 내줌은 그 선택이 틀렸다고 드러날 때 원인이 될 것 하나다. 추천이 없으면 아무 표시도 쓰지 않는다. 질문 없이 한쪽을 권하는 글에는 그 대가를 한 구절 붙인다.'
+EXC='추천 표시와 대가 표기는 그 자리에서도 이 블록을 따른다 — 옮긴 질문의 선택지 순서와 설명, steelman 질문의 선택지 순서와 출처 표지만 예외다.'
+EXA='예) 전: 설명 「더 낫다」 → 후: 「얻음: 겹치는 규칙을 한 번에 고친다 · 내줌: 일이 커져 설계가 길어진다」.'
+assert_eq "$(grep -cF -- "$REC" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본 6행에 추천과 대가 문장(양)"
+assert_eq "$(grep -cF -- "$EXC" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본 3행에 추천 · 대가 예외 문장(양)"
+assert_eq "$(grep -cxF -- "$EXA" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본에 얻음 · 내줌 예시 줄(양)"
+assert_not_contains "$CANON" '여럿이면 모두, 이유는' "AC1: 정본에 옛 추천 꼬리가 없다(음)"
 NEW='- 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일. 할 일은 기본 하나다 — 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다. 할 일이 없으면 없다고 쓴다. 커밋·PR 본문에는 이 순서를 적용하지 않는다.'
 assert_eq "$(grep -cxF -- "$NEW" "$ROOT/shared/style/plain-language.md")" "1" "AC1: 정본 순서 줄이 새 문장 그대로(양)"
 assert_not_contains "$CANON" '맨 끝에 사용자가 할 일 하나.' "AC1: 정본에 옛 「할 일 하나」 가 없다(음)"
