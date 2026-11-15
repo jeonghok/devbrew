@@ -4,14 +4,29 @@
 
 명령줄:
   roadmap_write.py create --brief <brief> --audit <audit> --plan-table <표 파일> --out <로드맵 폴더>
-                          --title <제목> --date <YYYY-MM-DD> --approval <승인 원문>
+                          --title <제목> --date <YYYY-MM-DD> --approval <승인 원문> [--layout team]
+                          (--layout team 이면 팀 폴더 전체를 한 거래로 만들고 쓴 뒤 team 나무 검사까지 돈다.
+                          역할 이름의 --out 은 형식과 무관하게 거절한다)
   roadmap_write.py update --roadmap <로드맵> --brief <brief> --audit <audit> --plan-table <새 표 파일>
                           --date <YYYY-MM-DD> --change <사유 한 줄> --approval <사용자 말 그대로>
-                          (--approval 은 create · update 에서 여러 번 줄 수 있다)
+                          (--approval 은 create · update 에서 여러 번 줄 수 있다. team 형식이면 있던 과제의 INTENT.md 는
+                          다시 쓰지 않고, 목표 · 범위 · 지시 원문 범위가 바뀐 과제는 손으로 고칠 글을 낸다)
   roadmap_write.py extract --roadmap <로드맵>     로드맵 블록 · 묶음에서 분해안 표를 뽑아 낸다(쓰지 않는다)
   roadmap_write.py migrate --roadmap <로드맵>     로드맵 블록을 새 형식으로 다시 쓴다(재분해 이력은 그대로)
+  roadmap_write.py original --brief <brief> --out <로드맵 폴더> [--framing-audit <경로>]
+                          team 형식의 원자료 사본(original.md)을 만들거나 끝에 덧붙인다(분해안을 쓰기 전에 부른다).
+                          audit 은 brief 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이다
+  roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄>
+                          [--not <한 줄>]…   단순 작업(kind: task)의 과제 폴더를 만든다 — 지시 원문은 표준 입력의
+                          바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다
+  roadmap_write.py job sync --result <결과 파일 경로> [--role <역할> --bundle-at <커밋> --job-at <커밋>]
+                          [--ledger <원장> --plan-file <계획>] [--end <커밋>]   결과 파일을 맞춘다 — 없으면 머리를 만들고,
+                          원장의 끝난 Task · Ruling 줄 가운데 없는 것만 덧붙이고, --end 면 끝 줄을 단다.
+                          끝 줄이 있는 파일은 고치지 않는다. git 은 레포 뿌리 · 레포 설정을 읽을 때만 부른다
 
-종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류.
+종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류 ·
+          4 사람이 손으로 고칠 것이 남았다(update · team 형식 — 손으로 고칠 INTENT.md 를 화면에 냈다. 다른 바뀜은 썼고,
+          지시 원문 범위만 다르면 아무것도 쓰지 않았다).
 
 검증은 쓴 로드맵에 `roadmap_status.py --roadmap-file <로드맵> --json` 을 돌려 format_errors · unassigned ·
 orphans · unknown_ids 넷이 모두 빈 목록일 때만 성공이다. 검사기의 종료 코드는 보지 않는다 — 기본 브랜치(origin/HEAD)를
@@ -33,16 +48,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import roadmap_render as R  # noqa: E402
+import team_check  # noqa: E402
+import team_layout  # noqa: E402
+import team_write  # noqa: E402
 from roadmap_model import (  # noqa: E402
     DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
+EXIT_TODO = 4   # 사람이 손으로 고칠 것이 남았다 — 쓴 뒤일 수도, 아무것도 쓰지 않았을 수도 있다
 RECORD_HEADING = "## 생성 기록"
 LISTS = ("format_errors", "unassigned", "orphans", "unknown_ids")
 RISK_ORDER_NOTICE = ("[spec-distill] 위험 줄에 번호가 없어 줄 순서로 매겼다(brief §5 · K 번호) — "
                      "위험 줄을 지우거나 옮긴 뒤 다시 만들면 번호가 다른 위험에 붙는다. "
                      "위험 줄마다 번호를 박고(`- 위험 K<n> — …`) "
                      "다시 만들면 번호가 그 줄에 붙어 다닌다.")
+RANGES_ONLY = ("[spec-distill] 아무것도 쓰지 않았다 — 표와 로드맵은 같고, 지시 원문 범위만 과제의 INTENT.md 와 다르다. "
+               "범위는 INTENT.md 에만 있으니 아래대로 손으로 고친다")
+NO_RANGE = "%s: 지시 원문에 줄 범위가 없다 — 표의 그 행을 만들 수 없다"
 
 
 class Refused(Exception):
@@ -243,33 +265,65 @@ def _date(value: str) -> str:
     return value
 
 
+def roadmap_layout(text: str):
+    """로드맵 머리말의 형식(옛 형식이면 None). 모르는 값이면 Refused — 옛 형식 규칙으로 읽지 않는다."""
+    try:
+        return team_layout.layout_of(frontmatter(text))
+    except team_layout.UnknownLayout as exc:
+        raise Refused("모르는 형식이라 읽지 않는다 — 로드맵 머리말 %s: %s (아는 값: %s)"
+                      % (team_layout.LAYOUT_KEY, exc.value, " · ".join(team_layout.LAYOUTS)))
+
+
+def _check_team_tree(top: Path, team) -> list:
+    """거래 안에서 — team 나무 검사의 오류 · 검사 불가가 있으면 Refused(되돌린다). 통과하면 알림 줄을 화면에 낼 꼴로 돌려준다."""
+    errors, unknown, notes = team_check.check_tree(top, team)
+    if errors or unknown:
+        raise Refused("team 나무 검사 실패 — %s" % " / ".join(errors + ["검사 불가 — " + u for u in unknown]))
+    return team_write.check_screen([], notes)
+
+
 def cmd_create(a) -> int:
     out_dir = Path(os.path.realpath(a.out))
+    problem = team_layout.team_name_problem(out_dir.name)
+    if problem:   # 형식과 무관하게 — 역할 폴더와 로드맵 폴더가 같은 자리에 산다
+        raise Refused(problem)
     top = git_top(out_dir)
+    W = sys.modules[__name__]
+    team = team_write.team_for(top, out_dir, W) if a.layout else None
     roadmap = out_dir / "roadmap.md"
     brief_rel, audit_rel, roadmap_rel = rel(top, a.brief), rel(top, a.audit), rel(top, roadmap)
     _audit_path_check(a.brief, a.audit)
     date = _date(a.date)
     table_path = Path(a.plan_table)
     table_text = read(table_path)
-    rows = R.parse_table(table_text)
+    rows = R.parse_table(table_text, a.layout)
     idx = R.index_brief(read(a.brief), read(a.audit))
     history = R.history_entry(date, "처음 로드맵", [], a.approval).rstrip("\n")
-    files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
-    for r in rows:
-        if r.kind == R.KIND_BUNDLE:
-            files[out_dir / (r.id + ".md")] = R.render_bundle(r, idx, roadmap_rel, brief_rel, audit_rel)
+    once, said = {}, []   # 없을 때만 까는 파일 · 화면 줄(team) — 생성 기록에 적지 않는다
+    if team:
+        files, once, said = team_write.create_files(top, team, rows, idx, a.title, brief_rel, roadmap_rel, history,
+                                              Path(a.brief), W)
+    else:
+        files = {roadmap: R.render_roadmap(read(R.TEMPLATE), rows, idx, a.title, brief_rel, roadmap_rel, history)}
+        for r in rows:
+            if r.kind == R.KIND_BUNDLE:
+                files[out_dir / (r.id + ".md")] = R.render_bundle(r, idx, roadmap_rel, brief_rel, audit_rel)
     record = read_record(table_text)
     targets = {rel(top, p) for p in files}
-    stray = sorted(rel(top, p) for p in files if p.exists() and rel(top, p) not in record)
+    present = (lambda p: os.path.lexists(str(p))) if team else (lambda p: p.exists())   # team: 매달린 링크도 남의 파일이다
+    stray = sorted(rel(top, p) for p in files if present(p) and rel(top, p) not in record)
     if stray:
         raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(stray))
-    stale = [top / p for p in sorted(record - targets) if (top / p).parent == out_dir]
+    if team:
+        team_write.check_rerun(top, team, record, files, W)
+    stale = [] if team else [top / p for p in sorted(record - targets) if (top / p).parent == out_dir]
     txn = Txn()
+    screen, checked = [], []   # 화면 줄은 거래 안에서 계산한다 — 커밋 뒤에는 예외가 날 일을 하지 않는다
 
     def body():
         txn.ensure_dir(out_dir)
-        for path, text in files.items():
+        for path, text in list(files.items()) + list(once.items()):
+            txn.ensure_dir(path.parent)
             txn.write(path, text)
         for path in stale:
             if path.exists():
@@ -277,11 +331,20 @@ def cmd_create(a) -> int:
         reasons = validate(top, roadmap)
         if reasons:
             raise Refused("검증 실패 — %s" % " / ".join(reasons))
+        if team:
+            checked.extend(_check_team_tree(top, team))
+            screen.extend(team_write.range_screen(top, team, rows))
         txn.write(table_path, with_record(table_text, targets))
 
     run_txn(txn, body)
-    print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
-          % (roadmap_rel, len(files) - 1))
+    if team:
+        print("[spec-distill] 팀 폴더를 만들었다: %s (과제 %d개 · 없어서 깐 파일 %d개) — 검사기 네 목록이 비었고 team 나무 검사를 통과했다"
+              % (team.dir, sum(1 for r in rows if r.kind == R.KIND_BUNDLE), len(once)))
+        for line in said + checked + screen:
+            print(line)
+    else:
+        print("[spec-distill] 로드맵을 만들었다: %s (묶음 %d개) — 검사기 네 목록이 비었다"
+              % (roadmap_rel, len(files) - 1))
     if idx.k_by_order:
         print(RISK_ORDER_NOTICE)
     return 0
@@ -290,9 +353,15 @@ def cmd_create(a) -> int:
 def cmd_extract(a) -> int:
     roadmap = Path(os.path.realpath(a.roadmap))
     rdir = roadmap.parent
-    rows = R.extract_rows(read(roadmap),
-                          lambda name: read(rdir / name) if (rdir / name).is_file() else None)
-    sys.stdout.write(R.format_table(rows))
+    text = read(roadmap)
+    layout = roadmap_layout(text)
+    rows = R.extract_rows(text, lambda name: read(rdir / name) if (rdir / name).is_file() else None)
+    if layout == team_layout.LAYOUT_TEAM:   # 범위 칸이 「없음」 인 묶음 행은 표가 받지 않는다 — 틀린 표 대신 그 INTENT.md 를 짚는다
+        missing = [os.path.join(os.path.dirname(a.roadmap), team_layout.intent_rel(r.id))
+                   for r in rows if r.kind == R.KIND_BUNDLE and not r.ranges]
+        if missing:
+            raise Refused(" / ".join(NO_RANGE % p for p in missing))
+    sys.stdout.write(R.format_table(rows, layout))
     return 0
 
 
@@ -302,6 +371,7 @@ ID_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z])([0-9]+)")
 
 
 def stages(top: Path, roadmap: Path) -> dict:
+    """블록 번호 → 단계(옛 형식 · team 형식 모두 상태 계산이 센다). 머지 여부를 모르면 Refused."""
     out, rc, err = _status_json(top, roadmap)
     try:
         report = json.loads(out) if not err else None
@@ -327,12 +397,15 @@ def used_numbers(roadmap_text: str) -> dict:
     return best
 
 
-def _canonical(row):
-    """표 행을 로드맵이 되읽히는 번호 순서로 맞춘 사본 — 묶음은 id 정렬, 그 밖은 발화(S) 먼저. 순서만 다른 표를 바뀜으로 세지 않는다."""
+def _canonical(row, team=False):
+    """표 행을 로드맵이 되읽히는 번호 순서로 맞춘 사본 — 묶음은 id 정렬, 그 밖은 발화(S) 먼저. 순서만 다른 표를 바뀜으로 세지 않는다.
+    team 이면 지시 원문 범위를 뺀다 — 범위의 집은 INTENT.md 라 범위만 다른 행은 생성기가 쓸 것이 없다(손으로 고칠 것이다)."""
     if row.kind == R.KIND_BUNDLE:
         ids = sorted(set(row.ids), key=id_sort_key)
     else:
         ids = [t for t in row.ids if R._is_s(t)] + [t for t in row.ids if not R._is_s(t)]
+    if team:
+        return dataclasses.replace(row, ids=ids, ranges=[])
     return dataclasses.replace(row, ids=ids)
 
 
@@ -353,21 +426,31 @@ def cmd_update(a) -> int:
     old_text = read(roadmap)
     if unquote(frontmatter(old_text).get("source_brief", "")) != brief_rel:
         raise Refused("로드맵의 source_brief 가 --brief(%s) 와 다르다" % brief_rel)
+    layout = roadmap_layout(old_text)
+    W = sys.modules[__name__]
+    team = team_write.team_for(top, rdir, W) if layout else None
     old_rows = R.extract_rows(old_text, lambda n: read(rdir / n) if (rdir / n).is_file() else None)
-    new_rows = R.parse_table(read(a.plan_table))
+    new_rows = R.parse_table(read(a.plan_table), layout)
     idx = R.index_brief(read(a.brief), read(a.audit))
     old = {r.id: r for r in old_rows}
     new = {r.id: r for r in new_rows}
-    changed = [i for i in new if i in old and _canonical(new[i]) != _canonical(old[i])]
+    changed = [i for i in new if i in old and _canonical(new[i], team) != _canonical(old[i], team)]
     added = [i for i in new if i not in old]
     removed = [i for i in old if i not in new]
-    if not (changed or added or removed) and list(new) == list(old):
+    fix_ids, todo = team_write.hand_fixes(top, team, old, new, W) if team else ([], [])   # 손으로 고칠 과제 — 범위만 다른 행도
+    unchanged = not (changed or added or removed) and list(new) == list(old)
+    if unchanged and not fix_ids:
         print("[spec-distill] 바뀐 에픽이 없다 — 쓰지 않았다")
         return 0
     st = stages(top, roadmap)
-    frozen = [i for i in changed + removed if st.get(i) in DONE]
+    frozen = [i for i in changed + removed + [j for j in fix_ids if j not in changed] if st.get(i) in DONE]
     if frozen:
         raise Refused("머지되거나 끝난 에픽은 바꾸거나 지우지 않는다 — %s" % " · ".join(frozen))
+    if unchanged:   # 범위만 다른 과제 — 쓰지 않고 고칠 글만
+        print(RANGES_ONLY)
+        for line in todo:
+            print(line)
+        return EXIT_TODO
     used = used_numbers(old_text)
     bad = [i for i in added if not NEW_ID_RE.fullmatch(i) or i != i[0] + str(int(i[1:]))]
     want = []
@@ -381,45 +464,62 @@ def cmd_update(a) -> int:
         raise Refused("새 에픽은 쓴 적 없는 다음 번호로 빈틈없이 이어 붙인다(`<대문자><숫자>`, 가장 큰 수 + 1 부터) — %s%s" % (
             "맞지 않는 번호 %s" % " · ".join(bad) if bad else "",
             "%s다음 번호 %s" % (" / " if bad else "", " / ".join(want)) if want else ""))
-    foreign = [rel(top, rdir / (i + ".md")) for i in added + changed
-               if new[i].kind == R.KIND_BUNDLE and (i not in old or old[i].kind != R.KIND_BUNDLE)
-               and (rdir / (i + ".md")).exists()]
+    foreign = [] if team else [rel(top, rdir / (i + ".md")) for i in added + changed
+                               if new[i].kind == R.KIND_BUNDLE and (i not in old or old[i].kind != R.KIND_BUNDLE)
+                               and (rdir / (i + ".md")).exists()]
     if foreign:
         raise Refused("이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s" % " · ".join(foreign))
     texts = R.epic_block_texts(old_text)
-    blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r) for r in new_rows]
+    blocks = [texts[r.id] if r.id in old and r.id not in changed else R.render_block(r, layout) for r in new_rows]
     changes = ["%s %s" % (label, " · ".join(ids))
                for label, ids in (("바뀐 에픽", changed), ("새 에픽", added), ("사라진 에픽", removed)) if ids]
     entry = R.history_entry(date, a.change, changes or ["순서만"], a.approval)
     new_text = R.append_history(R.replace_epics(old_text, blocks), entry)
-    writes, removes = {roadmap: new_text}, []
-    for i in changed + added:
-        path = rdir / (i + ".md")
-        if new[i].kind == R.KIND_BUNDLE:
-            text = R.render_bundle(new[i], idx, roadmap_rel, brief_rel, audit_rel)
-            if not path.is_file() or path.read_text(encoding="utf-8") != text:
-                writes[path] = text
-        elif i in old and old[i].kind == R.KIND_BUNDLE and path.exists():
-            removes.append(path)
-    removes += [rdir / (i + ".md") for i in removed
-                if old[i].kind == R.KIND_BUNDLE and (rdir / (i + ".md")).exists()]
+    writes, removes, once, notes = {roadmap: new_text}, [], {}, []
+    if team:   # 있던 과제의 INTENT.md 는 쓰지 않는다 — 바뀐 것은 손으로 고칠 글(todo)로, 옛 형식의 묶음 쓰기 · 지우기는 없다
+        files, once, notes = team_write.update_files(top, team, old, new, changed, added, removed, idx, roadmap_rel, W)
+        writes.update(files)
+    else:
+        for i in changed + added:
+            path = rdir / (i + ".md")
+            if new[i].kind == R.KIND_BUNDLE:
+                text = R.render_bundle(new[i], idx, roadmap_rel, brief_rel, audit_rel)
+                if not path.is_file() or path.read_text(encoding="utf-8") != text:
+                    writes[path] = text
+            elif i in old and old[i].kind == R.KIND_BUNDLE and path.exists():
+                removes.append(path)
+        removes += [rdir / (i + ".md") for i in removed
+                    if old[i].kind == R.KIND_BUNDLE and (rdir / (i + ".md")).exists()]
     txn = Txn()
+    checked = []   # 화면 줄은 거래 안에서 계산한다
 
     def body():
-        for path, text in writes.items():
+        for path, text in list(writes.items()) + list(once.items()):
+            txn.ensure_dir(path.parent)
             txn.write(path, text)
         for path in removes:
             txn.remove(path)
         reasons = validate(top, roadmap)
         if reasons:
             raise Refused("검증 실패 — %s" % " / ".join(reasons))
+        if team:
+            checked.extend(_check_team_tree(top, team))
 
-    run_txn(txn, body)
-    print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
-          % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
+    run_txn(txn, body)   # 이 뒤로는 미리 계산한 줄을 내기만 한다
+    if team:
+        print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 과제 파일 %d개 씀(없어서 깐 파일 %d개 포함) — "
+              "검사기 네 목록이 비었고 team 나무 검사를 통과했다"
+              % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1 + len(once), len(once)))
+    else:
+        print("[spec-distill] 로드맵을 다시 나눴다: %s — %s · 묶음 %d개 씀 · %d개 지움"
+              % (roadmap_rel, " · ".join(changes) or "순서만", len(writes) - 1, len(removes)))
+    for line in notes + checked:
+        print(line)
     if idx.k_by_order:
         print(RISK_ORDER_NOTICE)
-    return 0
+    for line in todo:
+        print(line)
+    return EXIT_TODO if todo else 0
 
 
 SCOPE_PREFIX = "- 범위: "
@@ -501,6 +601,7 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--brief", "--audit", "--plan-table", "--out", "--title", "--date"):
         c.add_argument(flag, required=True)
     c.add_argument("--approval", action="append", required=True)
+    c.add_argument("--layout", choices=team_layout.LAYOUTS)
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
     m = sub.add_parser("migrate")
@@ -509,10 +610,33 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in ("--roadmap", "--brief", "--audit", "--plan-table", "--date", "--change"):
         u.add_argument(flag, required=True)
     u.add_argument("--approval", action="append", required=True)
+    o = sub.add_parser("original")
+    for flag in ("--brief", "--out"):
+        o.add_argument(flag, required=True)
+    o.add_argument("--framing-audit")
+    j = sub.add_parser("job").add_subparsers(dest="job_cmd")
+    j.required = True
+    n = j.add_parser("new")
+    for flag in ("--roadmap", "--name", "--branch", "--paths", "--goal"):
+        n.add_argument(flag, required=True)
+    n.add_argument("--not", dest="nots", action="append")
+    y = j.add_parser("sync")
+    y.add_argument("--result", required=True)
+    for flag in ("--role", "--bundle-at", "--job-at", "--ledger", "--plan-file", "--end"):
+        y.add_argument(flag)
     return ap
 
 
-COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate}
+def cmd_original(a) -> int:
+    return team_write.cmd_original(a, sys.modules[__name__])
+
+
+def cmd_job(a) -> int:
+    return {"new": team_write.cmd_job_new, "sync": team_write.cmd_job_sync}[a.job_cmd](a, sys.modules[__name__])
+
+
+COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
+            "original": cmd_original, "job": cmd_job}
 
 
 def main(argv=None) -> int:

@@ -3,8 +3,8 @@
 """check_bundle_coverage.py — 정답 출처(에픽 묶음 · brief)의 번호와 설계문서 `## 번호 대조` 표를 맞춘다.
 
 명령줄:
-  check_bundle_coverage.py <묶음|brief> <설계문서> [--json]        번호 대조(설계문서 단계)
-  check_bundle_coverage.py --plan <설계문서> <계획> [--acs <AC 목록>] [--json]        계획 `### Task` 절에 없는 AC — 0 · 1 · 3
+  check_bundle_coverage.py <묶음|brief|번호 파일> <설계문서> [--json]        번호 대조(설계문서 단계)
+  check_bundle_coverage.py --plan <설계문서> <계획> [--acs <AC 목록>] [--json]        계획의 task 절에 없는 AC — 0 · 1 · 3
   check_bundle_coverage.py --impl <설계문서> <보고 파일> [--acs <AC 목록>] [--json]   구현 보고의 미룸 · 빠짐 — 0 · 1(경고) · 3
 `--acs` 는 그 AC 만 대조한다(`AC1~AC14 · AC39` 꼴). `--impl` 은 설계문서 frontmatter `roadmap:` 의 로드맵에서
 받는 곳 규칙(로드맵의 에픽 · `#<n>`)을 쓴다.
@@ -19,6 +19,11 @@
 - 받듦은 배정만으로 세지 않는다 — 다른 블록에 배정됐어도 그 블록의 작업 트리 설계문서가 그 S 를 「기각」했으면
   받들지 않는다. 설계문서가 아직 없거나 표를 못 읽으면 배정이 받듦이다.
 - brief 입력에는 로드맵이 없어 기각 에픽 · 받듦 검사를 하지 않는다.
+
+team 형식(AC15): 정답 출처가 번호 파일(머리 `type: job-sources`)이면 에픽 번호는 머리의 `job`, 로드맵 경로는 같은 폴더
+INTENT.md 머리의 `roadmap` 이다. 다른 과제가 받드는지는 그 과제 폴더의 설계문서로 본다. 이때만 설계문서의
+`## 원문 대조` 표를 읽어 알림(`notices`)과 얕은 답을 더한다 — 둘 다 종료 코드를 바꾸지 않는다.
+로드맵 머리말의 `layout` 이 모르는 값이면 옛 형식 규칙으로 읽지 않고 검사 불가(3)다.
 
 `roadmap_status.py` 는 `check(bundle_text, spec_text, repo=…)` 를 import 해 `git show` 로 읽은 글과 main 트리를 읽는 repo 를
 넘기고, status 와 함께 shallow · unserved · unknown 을 블록의 경고 줄로 싣는다(경고가 있으면 그 종료 코드는 1 이다).
@@ -38,8 +43,26 @@ from repo_defaults import SettingsError, resolve  # noqa: E402
 from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈의 공개 표면이기도 하다
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
     collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
+from workflow_superpowers import task_text  # noqa: E402
+import team_files  # noqa: E402
+import team_layout  # noqa: E402
 
 TABLE_HEADING = "## 번호 대조"
+SOURCES_TYPE = "job-sources"
+ORIGIN_HEADING = "## 원문 대조"
+ORIGIN_SHALLOW = "원문 대조의 「%s」 행에 근거가 없다"   # 「바꿈」 · 「넘김」 을 끼운다(계획의 「바꿈」 한 글자 판은 리더 답 여덟째로 바뀌었다)
+ORIGIN_CHANGED = "바꿈"
+ORIGIN_MISSING = "설계문서에 `## 원문 대조` 표가 없다"
+# 셋째 칸의 값은 이 셋뿐이다(리더 답 여덟째). 「바꿈」 · 「넘김」 은 근거 칸이 있어야 한다 — 「넘김」 의 근거는 받는 곳이다.
+# 「작성자 제안」 표시는 넷째(근거) 칸에 적는다.
+ORIGIN_KINDS = ("그대로", ORIGIN_CHANGED, "넘김")
+ORIGIN_NEEDS_REASON = (ORIGIN_CHANGED, "넘김")
+ORIGIN_BAD_KIND = "원문 대조 행의 셋째 칸이 그대로 · 바꿈 · 넘김 가운데 하나가 아니다 — %s: %r"
+ORIGIN_BAD_CELLS = "원문 대조 행의 칸이 넷이 아니라 %d개다: %r"
+ORIGIN_NO_ELEMENT = "원문 대조 행의 첫 칸(원문 요소)이 비었다: %r"
+ORIGIN_NO_PIPE = "원문 대조 행이 | 로 끝나지 않는다: %r"
+NO_TEAM_ROADMAP = "로드맵을 모른다 — 번호 파일 옆 INTENT.md 머리의 roadmap 을 읽지 못했다"
+UNKNOWN_LAYOUT = "모르는 형식 — %s 머리말 %s: %s (아는 값: %s)"
 AC_HEADING = "## Acceptance Criteria"
 # 자리 표기 — `§<n>` · `§<n>-<m>` · `AC<n>`. 숫자 뒤에 숫자가 이어지면 다른 토큰이다(AC1 ≠ AC10).
 SECTION_TOKEN_RE = re.compile(r"§(\d+)(?:-(\d+))?(?!\d)")
@@ -306,9 +329,15 @@ def _is_s(token: str) -> bool:
     return token.startswith("S") and token[1:].isdigit()
 
 
-def _roadmap_view(fm: dict, repo):
-    """(view, 사유). view 는 {"blocks", "rel", "errors", "specs_dir"} — 로드맵을 못 읽으면 None 과 사유."""
-    rel = unquote(fm.get("roadmap", ""))
+def unknown_layout(rel: str, value: str) -> str:
+    return UNKNOWN_LAYOUT % (rel, team_layout.LAYOUT_KEY, value, " · ".join(team_layout.LAYOUTS))
+
+
+def _roadmap_view(fm: dict, repo, roadmap_rel=None):
+    """(view, 사유). view 는 {"blocks", "rel", "errors", "specs_dir", "team"} — 로드맵을 못 읽으면 None 과 사유.
+    roadmap_rel 을 주면(번호 파일 — 머리에 roadmap 이 없다) 그 경로를 읽는다. team 은 로드맵이 team 형식이면 Team, 아니면 None.
+    머리말 `layout` 이 모르는 값이면 team_layout.UnknownLayout 을 던진다 — 옛 형식 규칙으로 읽지 않는다."""
+    rel = roadmap_rel if roadmap_rel is not None else unquote(fm.get("roadmap", ""))
     if not rel:
         return None, "묶음 frontmatter 에 roadmap 이 없다"
     if repo is None:
@@ -317,11 +346,17 @@ def _roadmap_view(fm: dict, repo):
     if text is None:
         return None, "로드맵을 못 읽었다: %s" % rel
     meta, blocks, _records, _risk, errors = parse_roadmap(text)
+    layout = team_layout.layout_of(meta)
     if errors:
         return None, "로드맵 형식이 깨졌다: %s" % errors[0]
     _bundles, _union, errs = collect_assigned(blocks, meta, rel, repo.read, repo.exists)
     specs_dir = getattr(repo, "specs_dir", None)   # 부르는 쪽(상태 계산)이 해결자로 이미 정한 폴더
-    if specs_dir is None:
+    roadmaps_dir = getattr(repo, "roadmaps_dir", None)
+    if specs_dir is None or (layout and roadmaps_dir is None):
+        if getattr(repo, "root", None) is None:   # 커밋 트리를 읽는 repo 는 해결자를 부를 뿌리가 없다 — 부르는 쪽이 폴더를 넘긴다
+            lacking = (["설계문서 폴더(specs_dir)"] if specs_dir is None else []) + \
+                (["로드맵 폴더(roadmaps_dir)"] if layout and roadmaps_dir is None else [])
+            return None, "레포 설정을 읽지 못했다: 읽는 자리가 %s를 넘기지 않았다" % " · ".join(lacking)
         try:
             settings = resolve(repo.root, roadmap=rel, roadmap_text=text)
         except SettingsError as exc:
@@ -330,20 +365,34 @@ def _roadmap_view(fm: dict, repo):
             print("[spec-distill] " + line, file=sys.stderr)
         if settings["errors"]:
             return None, "레포 설정이 깨졌다: %s" % settings["errors"][0]
-        specs_dir = settings["values"]["specs_dir"]
-    return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": specs_dir}, None
+        specs_dir = specs_dir or settings["values"]["specs_dir"]
+        roadmaps_dir = roadmaps_dir or settings["values"]["roadmaps_dir"]
+    team = None
+    if layout == team_layout.LAYOUT_TEAM:
+        try:
+            team = team_layout.team_from_roadmap(roadmaps_dir, rel)
+        except ValueError as exc:
+            return None, "team 로드맵의 자리가 아니다 — %s" % exc
+    return {"blocks": blocks, "rel": rel, "errors": errs, "specs_dir": specs_dir, "team": team}, None
+
+
+def _one_spec(rel: str, repo):
+    text = repo.read(rel)
+    if text is not None:
+        return [(rel, text)], []
+    return [], ([] if repo.absent(rel) else [rel])   # 확인된 부재만 「아직 없음」 — 그 밖은 못 읽음
 
 
 def _block_specs(block: dict, view: dict, repo):
-    """(그 블록의 작업 트리 설계문서 [(경로, 글)], 못 읽은 설계문서 경로들)."""
+    """(그 블록의 작업 트리 설계문서 [(경로, 글)], 못 읽은 설계문서 경로들). team 로드맵의 묶음 블록은 그 과제 폴더의
+    설계문서 하나다."""
     if block["kind"] == "branch":
         rel = block["fields"].get("spec", "").strip().strip("`")
         if not rel:
             return [], []
-        text = repo.read(rel)
-        if text is not None:
-            return [(rel, text)], []
-        return [], ([] if repo.absent(rel) else [rel])   # 확인된 부재만 「아직 없음」 — 그 밖은 못 읽음
+        return _one_spec(rel, repo)
+    if block["kind"] == "bundle" and view.get("team") is not None:
+        return _one_spec(view["team"].design(block["id"]), repo)
     if block["kind"] == "bundle":
         rdir = view["rel"].rsplit("/", 1)[0] if "/" in view["rel"] else "."
         source = rdir + "/" + block["fields"]["묶음"]
@@ -378,15 +427,96 @@ def _serves(block: dict, s: str, view: dict, repo, epic: str):
     return True, None
 
 
-def _unchecked(reason: str) -> dict:
-    return {"status": 3, "mode": None, "missing": [], "extra": [], "shallow": [], "unserved": [],
-            "unknown": [], "bundle_count": None, "table_count": None, "reason": reason}
+def _unchecked(reason: str, notices=None) -> dict:
+    out = {"status": 3, "mode": None, "missing": [], "extra": [], "shallow": [], "unserved": [],
+           "unknown": [], "bundle_count": None, "table_count": None, "reason": reason}
+    if notices is not None:   # team(번호 파일)일 때만 있는 칸
+        out.update(mode="sources", notices=notices)
+    return out
 
 
-def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> dict:
-    """정답 출처의 번호 중 표에 없는 번호(missing) · 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음."""
+def _origin_lines(spec_text: str):
+    """`## 원문 대조` 표의 데이터 행마다 (칸들 | None, 그 행을 읽지 못한 사유 | None). 절이 없으면 None.
+    표가 통째로 없을 때만 FormatError — 표 행이 없음 · 머리 행 · 구분 행이 칸 넷이 아님 · 데이터 행이 하나도 없음.
+    칸은 옛 형식 번호 대조 표와 같은 `_cells` 로 나눈다(이스케이프한 `\\|` · 백틱 안의 `|` 도 칸 구분이다).
+    구분 행 꼴의 줄과 첫 표의 머리 행과 같은 줄(같은 절의 다음 표)은 데이터가 아니다."""
+    body = section_body(spec_text, ORIGIN_HEADING)
+    if body is None:
+        return None
+    rows = [l.strip() for l in body.splitlines() if l.strip().startswith("|")]
+    if len(rows) < 3:
+        raise FormatError("원문 대조 표가 없거나 데이터 행이 없다")
+    if len(_cells(rows[0])) != 4:
+        raise FormatError("원문 대조 표 머리 행이 칸 넷이 아니다")
+    sep = _cells(rows[1])
+    if len(sep) != 4 or not _is_sep_row(sep):
+        raise FormatError("원문 대조 표 구분 행이 칸 넷이 아니다")
+    head, out = _cells(rows[0]), []
+    for row in rows[2:]:
+        if not row.endswith("|"):   # 표 행은 모두 | 로 시작한다(위에서 골랐다)
+            out.append((None, ORIGIN_NO_PIPE % row))
+            continue
+        cells = _cells(row)
+        if _is_sep_row(cells) or cells == head:   # 같은 절의 다음 표의 머리 행 · 구분 행
+            continue
+        if len(cells) != 4:
+            out.append((None, ORIGIN_BAD_CELLS % (len(cells), row)))
+        elif not cells[0]:
+            out.append((None, ORIGIN_NO_ELEMENT % row))
+        else:
+            out.append((tuple(cells), None))
+    if not out:
+        raise FormatError("원문 대조 표가 없거나 데이터 행이 없다")
+    return out
+
+
+def origin_rows(spec_text: str):
+    """`## 원문 대조` 표의 읽은 행 (원문 요소, 설계 요소, 그대로/바꿈/넘김, 근거) 들 — 칸은 자리로 읽고 셋째 칸의 값은
+    거르지 않는다. 읽지 못한 행(칸 수 · 빈 첫 칸 · 끝 | 없음)은 빠진다 — 그 알림은 origin_notes 가 낸다.
+    절이 없으면 None, 표가 통째로 없으면 FormatError."""
+    lines = _origin_lines(spec_text)
+    return None if lines is None else [cells for cells, why in lines if why is None]
+
+
+def _is_sep_row(cells: list) -> bool:
+    return bool(cells) and all(SEP_CELL_RE.fullmatch(c) for c in cells)
+
+
+def _has_reason(cell: str) -> bool:
+    """근거 칸에 글이 있나 — 대시(— · – · -)와 공백(NBSP · U+3000 포함)뿐이면 근거가 아니다. 「작성자 제안」 표시도 이 칸에 적는다."""
+    return bool("".join(ch for ch in cell if not ch.isspace()).strip("—–-"))
+
+
+def origin_notes(spec_text: str) -> tuple:
+    """(알림 글들, 얕은 답들) — 절이 없거나 표가 통째로 없으면 알림 하나. 읽지 못한 행(셋째 칸이 그대로 · 바꿈 · 넘김 밖 ·
+    칸 수 · 빈 첫 칸 · 끝 | 없음)은 그 행만 알리고(얕은 답이 아니다) 나머지 행은 센다. 「바꿈」 · 「넘김」 인데 근거 칸이 빈
+    행마다 얕은 답(그 값을 적는다)."""
+    try:
+        lines = _origin_lines(spec_text)
+    except FormatError as exc:
+        return ["원문 대조 표를 읽지 못했다 — %s" % exc], []
+    if lines is None:
+        return [ORIGIN_MISSING], []
+    notices, shallow = [], []
+    for cells, unread in lines:
+        if unread:
+            notices.append(unread)
+            continue
+        element, _design, how, why = cells
+        if how not in ORIGIN_KINDS:
+            notices.append(ORIGIN_BAD_KIND % (element[:40], how))
+        elif how in ORIGIN_NEEDS_REASON and not _has_reason(why):
+            shallow.append({"id": element[:40], "reason": ORIGIN_SHALLOW % how})
+    return notices, shallow
+
+
+def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadmap_rel=None) -> dict:
+    """정답 출처의 번호 중 표에 없는 번호(missing) · 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음.
+    정답 출처가 번호 파일이면(team) mode 는 "sources", 로드맵 경로는 roadmap_rel 이고 결과에 notices 칸이 있다."""
     fm = frontmatter(bundle_text)
-    mode = "brief" if unquote(fm.get("type", "")) == "interview-brief" else "bundle"
+    kind = unquote(fm.get("type", ""))
+    mode = "brief" if kind == "interview-brief" else ("sources" if kind == SOURCES_TYPE else "bundle")
+    notices, origin_shallow = origin_notes(spec_text) if mode == "sources" else (None, [])
     try:
         if mode == "brief":
             if audit_text is None:
@@ -398,7 +528,7 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
         rows = table_rows(spec_text)
         acs = acceptance_ids(spec_text) or []
     except FormatError as exc:
-        return _unchecked(str(exc))
+        return _unchecked(str(exc), notices)
     have = set()
     for ids, _verb, _cell in rows:
         have.update(ids)
@@ -409,8 +539,17 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
         seen.add(token)
     extra = sorted(have - seen, key=id_sort_key)
     sections, parts = design_sections(spec_text), heading_parts(spec_text)
-    view, note = _roadmap_view(fm, repo) if mode == "bundle" else (None, None)
-    epic = unquote(fm.get("epic", ""))
+    if mode == "brief":
+        view, note = None, None
+    elif mode == "sources" and not roadmap_rel:
+        view, note = None, NO_TEAM_ROADMAP
+    else:
+        try:
+            view, note = _roadmap_view(fm, repo, roadmap_rel if mode == "sources" else None)
+        except team_layout.UnknownLayout as exc:
+            return _unchecked(unknown_layout(roadmap_rel if mode == "sources" else unquote(fm.get("roadmap", "")),
+                                             exc.value), notices)
+    epic = unquote(fm.get("job" if mode == "sources" else "epic", ""))
     shallow, unserved, unknown = [], [], []
     for ids, verb, cell in rows:
         if verb.startswith("반영"):
@@ -418,7 +557,7 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
             if why:
                 shallow += [{"id": t, "reason": why} for t in ids]
             continue
-        if mode != "bundle":
+        if mode == "brief":
             continue
         known = {b["id"] for b in view["blocks"]} if view is not None else None
         epics = epic_refs(cell, known)
@@ -441,9 +580,10 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None) -> di
                 unknown.append("%s — 로드맵의 묶음을 다 읽지 못했다: %s" % (s, view["errors"][0]))
             else:
                 unserved.append(s)
+    team_only = {} if notices is None else {"notices": notices}   # 옛 형식의 결과에는 칸 하나 늘지 않는다
     return {"status": 1 if missing else 0, "mode": mode, "missing": missing, "extra": extra,
-            "shallow": shallow, "unserved": unserved, "unknown": unknown,
-            "bundle_count": len(seen), "table_count": len(have), "reason": None}
+            "shallow": shallow + origin_shallow, "unserved": unserved, "unknown": unknown,
+            "bundle_count": len(seen), "table_count": len(have), "reason": None, **team_only}
 
 
 DEFER_HEADING = "## 미룸"
@@ -490,19 +630,6 @@ def deferred_rows(spec_text: str) -> list:
     return out
 
 
-def plan_task_text(plan_text: str) -> str:
-    """`### Task` 절들(머리 줄 포함)을 이어 붙인 글. 펜스 안 줄은 절 경계가 아니지만 본문에는 든다."""
-    out, on, in_fence = [], False, False
-    for line in plan_text.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and (line.startswith("## ") or line.startswith("### ")):
-            on = line.startswith("### Task")
-        if on:
-            out.append(line)
-    return "\n".join(out)
-
-
 def _acs_or_error(spec_text: str) -> list:
     acs = acceptance_ids(spec_text)
     if acs is None:
@@ -538,7 +665,7 @@ def check_plan(spec_text: str, plan_text: str, only=None) -> dict:
     acs, why = _only(acs, only)
     if why:
         return _plan_unchecked(why)
-    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(plan_task_text(plan_text))}
+    have = {"AC" + m.group(1) for m in AC_TOKEN_RE.finditer(task_text(plan_text))}
     missing = [a for a in acs if a not in have]
     return {"status": 1 if missing else 0, "missing": missing, "ac_count": len(acs),
             "scoped": only is not None, "omitted": total - len(acs), "reason": None}
@@ -571,6 +698,19 @@ def parse_report(text: str) -> dict:
             raise FormatError("보고에 %s 가 두 번 있다" % ac)
         out[ac] = (m.group(2), m.group(3))
     return out
+
+
+IMPL_LOST = "결과 파일의 AC 줄을 다 읽지 못했다"
+
+
+def report_body(report_text: str, name: str) -> tuple:
+    """(`AC<n>:` 줄을 읽을 글, 알림 | None). 결과 파일(머리 type 이 job-result)이면 머리와 펜스 안을 뺀 본문과 알림 목록 —
+    기계 줄을 빠뜨린 사유(team_files.lost_lines)가 있으면 첫 사유 한 줄. 그 밖의 보고는 글 그대로 · None(칸 없음)."""
+    if unquote(frontmatter(report_text).get("type", "")) != team_files.RESULT_TYPE:
+        return report_text, None
+    result = team_files.parse_result(report_text)
+    lost = team_files.lost_lines(result)
+    return result.machine_text, (["%s: %s — %s" % (IMPL_LOST, name, lost[0])] if lost else [])
 
 
 def _impl_unchecked(reason: str) -> dict:
@@ -619,7 +759,8 @@ IMPL_GROUPS = (("보고에 없는 AC", "unreported"), ("미룸 표에 없는 미
 
 
 def receiver_ids(spec_path: str, spec_text: str):
-    """(로드맵 에픽 번호 집합, 사유). 설계문서에 `roadmap:` 이 없으면 (None, None) — 로드맵 없는 설계다."""
+    """(로드맵 에픽 번호 집합, 사유). 설계문서에 `roadmap:` 이 없으면 (None, None) — 로드맵 없는 설계다.
+    로드맵 머리말 `layout` 이 모르는 값이면 team_layout.UnknownLayout 을 던진다 — 옛 형식 규칙으로 읽지 않는다."""
     rel = unquote(frontmatter(spec_text).get("roadmap", ""))
     if not rel:
         return None, None
@@ -629,7 +770,8 @@ def receiver_ids(spec_path: str, spec_text: str):
     text = repo.read(rel)
     if text is None:
         return None, "로드맵을 못 읽었다: %s" % rel
-    _meta, blocks, _records, _risk, errors = parse_roadmap(text)
+    meta, blocks, _records, _risk, errors = parse_roadmap(text)
+    team_layout.layout_of(meta)
     if errors:
         return None, "로드맵 형식이 깨졌다: %s" % errors[0]
     return {b["id"] for b in blocks}, None
@@ -642,8 +784,9 @@ def _impl_status(r: dict) -> dict:
 
 
 def render_impl(r: dict) -> str:
+    notes = ["알림 — %s" % n for n in r.get("notices") or []]   # 결과 파일만 있는 칸
     if r["status"] == 3:
-        return "구현 대조 검사 불가 — %s" % r["reason"]
+        return "\n".join(["구현 대조 검사 불가 — %s" % r["reason"]] + notes)
     n = sum(len(r[k]) for _label, k in IMPL_GROUPS)
     if n:
         lines = ["구현 대조: 경고 %d개 — %s"
@@ -661,7 +804,7 @@ def render_impl(r: dict) -> str:
                  % (r["ac_count"], c["구현됨"], c["미룸"], scope, r["receiver_rule"])]
     if r["unknown_acs"]:
         lines.append("정보: 설계문서에 없는 AC 가 보고에 있다 — %s" % " · ".join(r["unknown_acs"]))
-    return "\n".join(lines)
+    return "\n".join(lines + notes)
 
 
 def _two_files(first: str, second: str, fn, unchecked) -> dict:
@@ -700,13 +843,16 @@ def short_line(result: dict) -> str:
 
 
 def render(result: dict) -> str:
+    notes = ["알림 — %s" % n for n in result.get("notices") or []]   # team(번호 파일)만 있는 칸
     if result["status"] == 3:
-        return "번호 대조 검사 불가 — %s" % result["reason"]
+        return "\n".join(["번호 대조 검사 불가 — %s" % result["reason"]] + notes)
     brief = result.get("mode") == "brief"
+    sources = result.get("mode") == "sources"
     m, sh, un, uk = (result[k] for k in ("missing", "shallow", "unserved", "unknown"))
     if not (m or sh or un or uk):
         lines = ["번호 대조: 빠진 번호 없음 (%s %d개 · 표 번호 %d개)"
-                 % ("brief 번호" if brief else "묶음 번호", result["bundle_count"], result["table_count"])]
+                 % ("brief 번호" if brief else "번호 파일 번호" if sources else "묶음 번호",
+                    result["bundle_count"], result["table_count"])]
     else:
         head = "번호 대조: 빠진 번호 %d개 · 얕은 답 %d개 · 받드는 에픽 없는 발화 %d개" % (len(m), len(sh), len(un))
         if uk:
@@ -720,8 +866,9 @@ def render(result: dict) -> str:
         lines += ["셀 수 없음 — %s" % u for u in uk]
     if result["extra"]:
         lines.append("정보: %s 없는 번호 %d개가 표에 있다 — %s"
-                     % ("brief 에" if brief else "묶음에", len(result["extra"]), " · ".join(result["extra"])))
-    return "\n".join(lines)
+                     % ("brief 에" if brief else "번호 파일에" if sources else "묶음에",
+                        len(result["extra"]), " · ".join(result["extra"])))
+    return "\n".join(lines + notes)
 
 
 def _read(path: str):
@@ -732,8 +879,20 @@ def _read(path: str):
         return None, exc
 
 
+def _intent_roadmap(sources_path: str):
+    """번호 파일과 같은 폴더 INTENT.md 머리의 roadmap. 읽지 못하거나 머리가 깨졌거나 키가 없으면 None."""
+    text, _exc = _read(os.path.join(os.path.dirname(sources_path), team_layout.INTENT_FILE))
+    if text is None:
+        return None
+    try:
+        return team_files.intent_meta(text).get("roadmap") or None
+    except FormatError:
+        return None
+
+
 def coverage(first_path: str, spec_path: str) -> dict:
-    """번호 대조 한 번 — 파일을 읽고, brief 면 옆 audit 을, 묶음이면 로드맵이 있는 레포를 찾아 check 를 부른다."""
+    """번호 대조 한 번 — 파일을 읽고, brief 면 옆 audit 을, 묶음이면 로드맵이 있는 레포를 찾아 check 를 부른다.
+    번호 파일이면 옆 INTENT.md 머리의 roadmap 으로 레포를 찾는다 — 읽지 못하면 로드맵 없이 부른다."""
     texts = []
     for path in (first_path, spec_path):
         text, exc = _read(path)
@@ -745,6 +904,9 @@ def coverage(first_path: str, spec_path: str) -> dict:
         if unquote(fm.get("type", "")) == "interview-brief":
             audit = _read(first_path[:-3] + ".audit.md")[0] if first_path.endswith(".md") else None
             return check(texts[0], texts[1], audit_text=audit)
+        if unquote(fm.get("type", "")) == SOURCES_TYPE:
+            rel = _intent_roadmap(first_path)
+            return check(texts[0], texts[1], repo=find_repo(first_path, rel), roadmap_rel=rel)
         return check(texts[0], texts[1], repo=find_repo(first_path, unquote(fm.get("roadmap", ""))))
     except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
         return _unchecked("내부 오류 — %s: %s" % (type(exc).__name__, exc))
@@ -775,8 +937,15 @@ def main(argv=None) -> int:
         text = render_plan(result)
     elif args.impl:
         def impl(spec_text, report_text):
-            ids, problem = receiver_ids(args.first, spec_text)
-            return check_impl(spec_text, report_text, only, ids, problem)
+            try:
+                ids, problem = receiver_ids(args.first, spec_text)
+            except team_layout.UnknownLayout as exc:
+                return _impl_unchecked(unknown_layout(unquote(frontmatter(spec_text).get("roadmap", "")), exc.value))
+            body, notices = report_body(report_text, os.path.basename(args.second))
+            r = check_impl(spec_text, body, only, ids, problem)
+            if notices is not None:   # 결과 파일만 있는 칸
+                r["notices"] = notices
+            return r
         result = _impl_status(_two_files(args.first, args.second, impl, _impl_unchecked))
         text = render_impl(result)
     else:

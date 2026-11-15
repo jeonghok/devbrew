@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
 import brief_body  # noqa: E402
+import team_layout  # noqa: E402
 
 ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 section4_items = brief_body.section4_items
@@ -80,6 +81,11 @@ def unquote(value: str) -> str:
     return value
 
 
+def is_team(meta: dict) -> bool:
+    """머리말 `layout` 의 따옴표 벗긴 값이 team 인가. 모르는 값의 판정은 상태 계산(`team_layout.layout_of`) 몫이다."""
+    return unquote(meta.get(team_layout.LAYOUT_KEY, "")) == team_layout.LAYOUT_TEAM
+
+
 def _roadmap_shape(path: str, roadmaps_dir: str):
     """로드맵 자리(`<roadmaps_dir><폴더>/<파일>.md`)가 아니면 사유, 맞으면 None."""
     if not path.startswith(roadmaps_dir):
@@ -87,6 +93,8 @@ def _roadmap_shape(path: str, roadmaps_dir: str):
     parts = path[len(roadmaps_dir):].split("/")
     if len(parts) != 2 or not parts[0]:
         return "로드맵 폴더(%s) 바로 아래 폴더 한 단계 안이 아니다" % roadmaps_dir
+    if parts[0] in team_layout.ROLES:
+        return "역할 이름(%s)은 로드맵 폴더 이름으로 쓰지 않는다" % parts[0]
     if not parts[1].endswith(".md") or parts[1] == ".md":
         return "마크다운 파일(.md)이 아니다"
     return None
@@ -429,8 +437,9 @@ def parse_roadmap(text: str):
     for bid in sorted({i for i in ids if ids.count(i) > 1}):
         errors.append("블록 번호 %s 가 두 번 있다" % bid)
     known = set(ids)
+    team = is_team(meta)
     for b in blocks:
-        errors.extend(_validate_block(b, known))
+        errors.extend(_validate_block(b, known, team))
     errors.extend(_cycles(blocks))
 
     records = []
@@ -464,7 +473,7 @@ def parse_roadmap(text: str):
     return meta, blocks, records, risk_rows, errors
 
 
-def _validate_block(b: dict, known: set) -> list:
+def _validate_block(b: dict, known: set, team: bool = False) -> list:
     f, bid, errs = b["fields"], b["id"], []
 
     def one(key):
@@ -484,7 +493,11 @@ def _validate_block(b: dict, known: set) -> list:
             errs.append("%s: 완료 값은 「결정 기록」이어야 한다" % bid)
         if one("묶음") != "없음":
             errs.append("%s: 확인 · 결정 블록의 묶음은 「없음」이어야 한다" % bid)
-    if kind == "bundle" and one("묶음") is not None and not BUNDLE_NAME_RE.fullmatch(one("묶음")):
+    if team and kind == "branch":
+        errs.append("%s: team 형식에서는 브랜치 블록을 쓰지 않는다" % bid)
+    elif team and kind == "bundle" and one("묶음") is not None and one("묶음") != team_layout.sources_rel(bid):
+        errs.append("%s: team 형식의 묶음 값은 %s 다" % (bid, team_layout.sources_rel(bid)))
+    elif not team and kind == "bundle" and one("묶음") is not None and not BUNDLE_NAME_RE.fullmatch(one("묶음")):
         errs.append("%s: 묶음 값은 로드맵 옆 파일 이름(R<n>.md)이어야 한다" % bid)
     deps = field_list(f.get("의존", "없음"))
     b["deps"] = deps
@@ -604,12 +617,15 @@ def brief_universe(brief: str, audit: str):
 
 def collect_assigned(blocks: list, meta: dict, roadmap_rel: str, read, exists):
     """묶음 블록의 `assigned` 를 그 묶음 `ids:` 로 채운다. 반환 (bundles, union, errors).
+    team 형식이면 묶음 값이 가리키는 번호 파일(머리 `type: job-sources` · `job: <블록 번호>`)의 `ids:` 다.
 
     bundles 는 블록 번호 → 묶음 글(못 읽으면 None), union 은 모든 블록의 배정 번호 합집합,
     errors 는 형식 깨짐 사유들. read(path) 는 글 또는 None, exists(path) 는 참/거짓 — 경로는 로드맵과
     같은 기준(레포 상대)이다.
     """
     roadmap_dir = roadmap_rel.rsplit("/", 1)[0] if "/" in roadmap_rel else "."
+    team = is_team(meta)
+    label = "번호 파일" if team else "묶음"
     bundles, union, errors = {}, set(), []
     for b in blocks:
         if b["kind"] != "bundle":
@@ -620,18 +636,23 @@ def collect_assigned(blocks: list, meta: dict, roadmap_rel: str, read, exists):
         bundles[b["id"]] = btext
         if btext is None:
             if exists(bpath):
-                errors.append("%s 묶음을 읽지 못했다: %s" % (b["id"], bpath))
+                errors.append("%s %s을 읽지 못했다: %s" % (b["id"], label, bpath))
+            elif team:   # 번호 파일은 로드맵과 함께 만든다 — 없으면 「아직」 이 아니라 형식 깨짐이다
+                errors.append("%s 번호 파일이 없다: %s" % (b["id"], bpath))
             continue
         fm = frontmatter(btext)
-        bad = [k for k, want in (("type", "epic-bundle"), ("epic", b["id"]),
-                                 ("roadmap", roadmap_rel), ("source_brief", meta.get("source_brief")))
-               if unquote(fm.get(k, "")) != want]
+        if team:
+            want_fm = (("type", "job-sources"), ("job", b["id"]))
+        else:
+            want_fm = (("type", "epic-bundle"), ("epic", b["id"]),
+                       ("roadmap", roadmap_rel), ("source_brief", meta.get("source_brief")))
+        bad = [k for k, want in want_fm if unquote(fm.get(k, "")) != want]
         try:
             if bad:
                 raise FormatError("frontmatter 가 맞지 않는다: %s" % " · ".join(bad))
             b["assigned"] = bundle_ids(btext)
         except FormatError as exc:
-            errors.append("%s 묶음 — %s" % (b["id"], exc))
+            errors.append("%s %s — %s" % (b["id"], label, exc))
             continue
         union.update(b["assigned"])
     return bundles, union, errors
@@ -704,7 +725,12 @@ def approval_date(doc_text: str):
     읽는 줄은 둘이다 — 정해진 꼴(`- spec 승인 · <날짜> · …`, 날짜가 없거나 꼴이 어긋나면 FormatError),
     또는 손으로 쓴 `- ` 줄(날짜 + "spec" + 끝난 긍정 꼴(APPROVAL_YES) + 부정 구절(APPROVAL_DENY) 없음).
     머리가 둘이면 FormatError(section_lines) — 깨진 문서를 「승인 없음」 으로 떨어뜨리지 않는다."""
-    lines = section_lines(doc_text, RECORD_HEADING)
+    return approval_in(section_lines(doc_text, RECORD_HEADING) or [])
+
+
+def approval_in(lines: list):
+    """기록 줄들 가운데 spec 승인 날짜의 가장 늦은 것, 승인 줄이 없으면 None — approval_date 가 읽는 줄 규칙
+    (정해진 꼴의 날짜가 어긋나면 FormatError). team 형식의 INTENT.md 결정 기록도 이 규칙으로 읽는다."""
     dates = []
     for line in lines or []:
         if not line.startswith("- "):
@@ -744,9 +770,10 @@ def confirmed_keys(record_text: str) -> set:
     return out
 
 
-def handoff_rows(givers, stages: dict, records: dict) -> list:
+def handoff_rows(givers, stages: dict, records: dict, record_label=None) -> list:
     """넘김 한 줄씩. givers 는 [(준 에픽, 설계문서 경로, [(항목, 이유, 받는 곳)])], stages 는 {에픽: 단계},
-    records 는 {에픽: 그 에픽 설계문서들의 `## 지휘 기록` 글}.
+    records 는 {에픽: 넘김 확인 줄을 읽는 글(설계문서들의 `## 지휘 기록` 글)}. record_label 을 주면 확인됨의
+    근거가 `<받는 에픽> <record_label>` 이다(team 형식 — 그 글이 다른 자리에서 왔다).
     상태: 열림 · 처리됨(받는 에픽 머지됨, 확인 전) · 확인됨 · 이슈(`#<n>` — 처리 여부는 GitHub) · 받는 곳 없음."""
     out = []
     for giver, spec, rows in givers:
@@ -757,7 +784,8 @@ def handoff_rows(givers, stages: dict, records: dict) -> list:
             elif not receiver_ok(recv, set(stages)):
                 row.update(state="받는 곳 없음", basis="받는 곳 %r 이 로드맵의 에픽도 `#<n>` 도 아니다" % recv)
             elif (giver, handoff_key(giver, item)) in confirmed_keys(records.get(recv, "")):
-                row.update(state="확인됨", basis="%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:]))
+                row.update(state="확인됨", basis=("%s %s" % (recv, record_label) if record_label
+                                                 else "%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:])))
             elif stages[recv] in RECEIVED:
                 row.update(state="처리됨", basis="%s 머지됨 — 확인 전" % recv)
             else:

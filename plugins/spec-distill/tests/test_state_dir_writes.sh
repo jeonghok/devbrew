@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # skill 이 부르는 스크립트의 상태 폴더 쓰기가 마지막 성분의 링크를 따라가지 않는지 실행으로 잰다.
 #   · seed_edit_diff.py — 기준 사본 · .shown · .reverted
+#   · seed_edit_screen.py — 쓴 지적 목록(링크면 읽지 않고 멈춘다)
 #   · docreview_state.py — 원장(링크면 거절 · 제자리 덮어쓰기는 유지) · 시대 표지
 # 세 skill(request-framing · reviewing-brief · spec-review)의 bash 펜스 쓰기는 도출 락(scan_writes)과
 # 펜스를 잘라 실제로 돌리는 끝에서 끝 칸으로 잰다.
@@ -60,6 +61,44 @@ python3 "$SED" revert "$c/work/base.md" "$c/work/seed.md" --ids 1 >/dev/null 2>&
 assert_eq "$rc" "0" "sed_revert_markers_link: revert 성공"
 if cmp -s "$c/out/o1.txt" "$c/out/o1.keep"; then ok "sed_revert_markers_link: .shown 바깥 파일 그대로"; else no "sed_revert_markers_link: .shown 바깥 파일이 바뀌었다"; fi
 if [ -e "$c/out/o2.txt" ] || [ -L "$c/out/o2.txt" ]; then no "sed_revert_markers_link: .reverted 바깥 경로가 생겼다"; else ok "sed_revert_markers_link: .reverted 바깥 경로가 생기지 않았다"; fi
+
+# ── seed_edit_screen — 쓴 지적 목록 ─────────────────────────────────────────
+SES="$ROOT/plugins/spec-distill/scripts/seed_edit_screen.py"
+ses_case() {   # ses_case <이름> → 덩어리 하나 · 판본이 맞는 이유 파일(지적 FID_W)
+  mk_case "$1"
+  printf 'alpha\n' > "$T/$1/work/base.md"
+  python3 "$SED" hunks "$T/$1/work/base.md" "$T/$1/work/seed.md" > "$T/$1/work/hunks.json" 2>/dev/null
+  printf 'seed_sha256 %s\n1\tFID_W\n' "$(sha_of "$T/$1/work/seed.md")" > "$T/$1/state/hunk-reasons.txt"
+}
+ses_mark() { python3 "$SES" mark-used --hunks "$1/work/hunks.json" --reasons "$1/state/hunk-reasons.txt" --state-dir "$1/state" --ids 1 >/dev/null 2>&1; }
+ses_case ses_used_plain; c="$T/ses_used_plain"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "0" "ses_used_plain: 목록에 더하기 rc 0(양의 짝)"
+if plain "$c/state/hunk-used-findings.txt"; then assert_eq "$(cat "$c/state/hunk-used-findings.txt")" "FID_W" "ses_used_plain: 쓴 지적 목록은 id 를 담은 일반 파일"; else no "ses_used_plain: 쓴 지적 목록이 일반 파일이 아니다"; fi
+ses_case ses_used_dangling_link; c="$T/ses_used_dangling_link"
+ln -s "$c/out/new-target" "$c/state/hunk-used-findings.txt"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "2" "ses_used_dangling_link: 링크인 목록에는 더하지 않고 멈춘다(rc 2)"
+if [ -e "$c/out/new-target" ] || [ -L "$c/out/new-target" ]; then no "ses_used_dangling_link: 바깥 경로가 생겼다"; else ok "ses_used_dangling_link: 바깥 경로가 생기지 않았다"; fi
+ses_case ses_used_live_link; c="$T/ses_used_live_link"
+printf 'outside\n' > "$c/out/o.txt"; ln -s "$c/out/o.txt" "$c/state/hunk-used-findings.txt"
+ses_mark "$c"; rc=$?
+assert_eq "$rc" "2" "ses_used_live_link: 살아 있는 링크인 목록에도 더하지 않고 멈춘다(rc 2)"
+assert_eq "$(cat "$c/out/o.txt")" "outside" "ses_used_live_link: 바깥 파일 그대로"
+ses_case ses_used_write_link; c="$T/ses_used_write_link"
+printf 'outside\n' > "$c/out/o.txt"; ln -s "$c/out/o.txt" "$c/state/hunk-used-findings.txt"
+python3 -I - "$ROOT/plugins/spec-distill/scripts" "$c" >/dev/null 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import seed_edit_screen as m
+c = sys.argv[2]
+m.read_used = lambda state_dir: set()
+sys.exit(m.main(["mark-used", "--hunks", c + "/work/hunks.json", "--reasons", c + "/state/hunk-reasons.txt",
+                 "--state-dir", c + "/state", "--ids", "1"]))
+PY
+rc=$?
+assert_eq "$rc" "0" "ses_used_write_link: 읽기 검사를 지난 뒤의 쓰기(양의 짝) rc 0"
+assert_eq "$(cat "$c/out/o.txt")" "outside" "ses_used_write_link: 읽기 검사를 지나도 쓰기가 링크를 따라가 바깥 파일을 바꾸지 않는다"
 
 # ── docreview_state ──────────────────────────────────────────────────────
 mk_case ds_save_symlink_refused; c="$T/ds_save_symlink_refused"
@@ -577,6 +616,9 @@ fence_with() {   # fence_with <md> <고정 문자열> → 그 문자열을 담�
        b && /^```$/ {b=0; if (has && !done) {printf "%s", buf; done=1}; next}
        b {buf = buf $0 "\n"; if (index($0, ENVIRON["P"])) has=1}' "$1"
 }
+plant_before() {   # plant_before <스크립트> <고정 문자열> <끼울 줄> → 그 문자열을 담은 첫 줄 바로 앞에 한 줄을 끼운 사본
+  P="$2" L="$3" awk '!put && index($0, ENVIRON["P"]) {print ENVIRON["L"]; put=1} {print}' "$1"
+}
 run_fence() {   # run_fence <스크립트> [VAR=값…] → rc · stderr 는 $TR/last.err
   local s="$1"; shift
   ( cd "$R" && env -i PATH=/usr/bin:/bin PYTHONPATH="$YAMLDIR" HOME="$TR/home" TMPDIR="$TR/tmp" PYTHONDONTWRITEBYTECODE=1 \
@@ -654,11 +696,29 @@ python3 "$ROOT/shared/docreview/scripts/docreview_state.py" init --state-dir "$R
 { rf_vars; fence_with "$RF_MD" '"$STATE_DIR/hunks.json"'; } > "$TR/rf-hunks.sh"
 { rf_vars; fence_with "$RF_MD" 'gate-drops.json'; } > "$TR/rf-drops.sh"
 outside rf3; outside rf4; ln -s "$OUT/rf3" "$RFS/hunks.json"; ln -s "$OUT/rf4" "$RFS/gate-drops.json"
+# 공시 펜스는 writer 앞에서 hunks*.json 을 지운다 — 미리 심은 링크는 writer 에 닿기 전에 사라지므로 이 실행은 그 지움을 잰다
+printf 'STALE_HUNKS_FINAL\n' > "$RFS/hunks-final.json"
 run_fence "$TR/rf-hunks.sh"; rc=$?
 assert_eq "$rc" "0" "rf_hunks_and_drops_link: hunks 펜스 rc 0"
 kept rf3 rf_hunks_and_drops_link
 plain_one "$RFS/hunks.json" "rf_hunks_and_drops_link(hunks.json)"
 assert_contains "$(cat "$RFS/hunks.json" 2>/dev/null)" '"hunks"' "rf_hunks_and_drops_link: hunks.json 에 덩어리 목록(양의 짝)"
+if [ -e "$RFS/hunks-final.json" ] || [ -L "$RFS/hunks-final.json" ]; then no "rf_hunks_stale_removed: 지난 공시의 hunks-final.json 이 남았다"
+else ok "rf_hunks_stale_removed: 지난 공시의 hunks-final.json 을 지웠다"; fi
+# writer 가 링크를 만나는 실행 — 지움과 쓰기 사이에 링크가 놓인 꼴. 덩어리를 내는 줄 바로 앞에 링크를 심는 한 줄을 끼운 사본을 돌린다
+HUNKS_LINE='seed_edit_diff.py" hunks '
+PLANT="$(printf 'ln -sf "%s" "%s" && : > "%s"' "$OUT/rf5" "$RFS/hunks.json" "$TR/planted.ok")"
+plant_before "$TR/rf-hunks.sh" "$HUNKS_LINE" "$PLANT" > "$TR/rf-hunks-planted.sh"
+if [ "$(grep -cF -- "$HUNKS_LINE" "$TR/rf-hunks.sh")" = 1 ] && [ "$(grep -cxF -- "$PLANT" "$TR/rf-hunks-planted.sh")" = 1 ] \
+   && bash -n "$TR/rf-hunks-planted.sh" 2>/dev/null; then ok "추출: RF hunks 펜스에 링크를 심는 줄을 끼웠다(덩어리를 내는 줄 하나 · bash -n 통과)"
+else no "추출: RF hunks 펜스에 덩어리를 내는 줄이 하나가 아니거나 끼운 사본의 문법이 깨졌다 — 아래 판정은 무의미하다"; fi
+outside rf5
+run_fence "$TR/rf-hunks-planted.sh"; rc=$?
+[ -e "$TR/planted.ok" ] && ok "rf_hunks_writer_meets_link: 쓰기 직전에 링크를 심었다(전제)" || no "rf_hunks_writer_meets_link: 링크를 심지 못했다 — 아래 판정은 무의미하다"
+assert_eq "$rc" "0" "rf_hunks_writer_meets_link: hunks 펜스 rc 0"
+kept rf5 rf_hunks_writer_meets_link
+plain_one "$RFS/hunks.json" "rf_hunks_writer_meets_link(hunks.json)"
+assert_contains "$(cat "$RFS/hunks.json" 2>/dev/null)" '"hunks"' "rf_hunks_writer_meets_link: hunks.json 에 덩어리 목록(양의 짝)"
 run_fence "$TR/rf-drops.sh"
 kept rf4 rf_hunks_and_drops_link
 plain_one "$RFS/gate-drops.json" "rf_hunks_and_drops_link(gate-drops.json)"
@@ -718,6 +778,6 @@ for kind in writable readonly; do
 done
 
 # README 한계 문장 — Write 도구 파일은 writer 로 감싸지 못한다. README 전체가 아니라 `## 한계` 절 본문에서 찾는다
-assert_contains "$(awk '$0 == "## 한계" {on=1; next} on && /^## /{exit} on' "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고' "README ## 한계: §3 한계 문장"
+assert_contains "$(awk '$0 == "## 한계" {on=1; next} on && /^## /{exit} on' "$ROOT/plugins/spec-distill/README.md")" 'Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt` · `hunk-reasons.txt`)은 writer 로 감싸지 못하고' "README ## 한계: §3 한계 문장"
 
 finish

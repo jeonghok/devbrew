@@ -93,7 +93,7 @@ assert_contains "$lim" '샌드박스를 쓰는 사용자는 리뷰 기록 폴더
 assert_contains "$lim" '`--quote-file` · `log-decision --quote` · `decide --quote`' "README ## 한계: 인용 출처 줄"
 assert_contains "$lim" '`declare-related` · `log-decision` 이 표지 확인 없이 불리거나 리뷰 명령을 거치지 않고 리뷰 기록을 쓰는 길도 위 공시로 다룬다 — 리뷰 명령은 그런 쓰기를 거부하지 않는다' \
   "README ## 한계: 엔진 밖 원장 쓰기 줄"
-P21='- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.'
+P21='- **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt` · `hunk-reasons.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.'
 P14='- **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.'
 absorb="$(subsection "$SD_README" '### Principles 흡수')"
 [ -n "$absorb" ] && ok "README: ### Principles 흡수 절이 있다" || no "README: ### Principles 흡수 절이 없다 — 아래 부재 단언이 공허하다"

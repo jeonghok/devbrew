@@ -10,10 +10,20 @@
 """
 from __future__ import annotations
 
-import shutil
+import os
 import subprocess
 
-GIT = shutil.which("git") or "git"
+GIT_ALLOWED = frozenset({"rev-parse", "merge-base"})
+_IMPORT_PATH = os.environ.get("PATH", "")   # import 때의 PATH — 그 뒤 PATH 에서 git 이 빠져도 같은 git 을 부른다
+
+
+def _env():
+    """자식 프로세스의 환경 — PATH 는 import 때의 PATH 를 앞에 둔다(빈 칸은 현재 폴더라 넣지 않는다)."""
+    parts = [p for p in (_IMPORT_PATH, os.environ.get("PATH", "")) if p]
+    env = dict(os.environ)
+    if parts:
+        env["PATH"] = os.pathsep.join(parts)
+    return env
 
 
 class TipError(Exception):
@@ -21,7 +31,9 @@ class TipError(Exception):
 
 
 def _git(root, *args):
-    p = subprocess.run([GIT, *args], cwd=str(root), capture_output=True, encoding="utf-8", errors="replace")
+    if args[0] not in GIT_ALLOWED:
+        raise ValueError("허용하지 않는 git 명령: %s" % args[0])
+    p = subprocess.run(["git", *args], cwd=str(root), env=_env(), capture_output=True, encoding="utf-8", errors="replace")
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 

@@ -8,7 +8,8 @@
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding) — 처분 회계(adjudication `Ledger`)** (v7.1.0) — 리뷰 findings 가 버려지는 자리가 `shared/adjudication/adjudication.py` 의 처분(`accept`/`reject`/`hold`/`absorbed`/`coerced`/`source_failed`/`uncountable`/`suppressed`)을 부르고, 그 배선을 `tools/adjudication/` 의 판정기와 `shared/tests/test_adjudication_{wiring,consumed}.sh` 가 강제한다. 소비자는 `synthesize_findings.py`·`synthesize_artifact_findings.py`. **범위**: 강제되는 것은 `.py` 소비자와 `Ledger` import 가 있는 자리이고, `consumer=orchestrator`/`human` 인 dispatch 자리는 `disclosure=` 리터럴 실재까지만 검사된다(CLAUDE.md 축 C 한계).
-- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 넷(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 (입력 오염 차단) — `input_slots`** (v7.1.0) — 이 플러그인의 agent 다섯(`security-reviewer`·`code-recritic`·`artifact-critic`·`artifact-adversarial`·`intent-critic`)이 frontmatter 에 받는 입력의 `tag`/`var`/`kind` 를 선언하고, 금지 종류(`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를 요구한다. 집행은 `shared/tests/test_agent_input_slots.sh`. 앞 리뷰어의 판정이 다음 리뷰어의 전제가 되는 것이 Law 2 가 도구로 못 막는 구멍이다.
+- **Law 2 · C6 — intent-critic 리뷰어는 읽기 전용이고 판정 밖이다** — `intent-critic` agent 는 `tools: Read, Grep, Glob` 만 갖는다. 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검하며, 그 출력은 `findings.yaml` · 판정 인자 줄 · 게시 본문에 들지 않는다. 사용자의 답은 qg 가 docs 답 자리에 쓰고 그 파일만 커밋한다. 넓게 보는 리뷰에서 리뷰어가 낸 읽은 인용(경로 · 줄 · 글)은 스크립트가 리뷰 트리의 그 파일 그 줄과 글자로 견줘 확인하고, 맞는 근거가 하나도 없는 질문은 거른다 — 리뷰어가 적은 인용을 그대로 믿지 않는다. 집행은 `plugins/quality-gates/tests/test_intent_critic_wiring.sh`.
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`code-recritic`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). qg 자체 agent 는 모두 쓰기 권한이 없다. 외부 추가 리뷰어(`pr-review-toolkit` 등)는 쓰기 가능할 수 있으나 advisory 이고 fix 는 오케스트레이터가 소유한다 — 테스트는 오케스트레이터가 자기가 만든 트리에서 직접 돌린다.
 - **Law 3 (Compounding)** — 기본 substrate 는 reviewer-persona 편집이다 — 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고친다.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). 토픽 · 범위면 그 전체 diff 로 판단하고, 선언이 깨졌으면(`declaration-invalid`) trivia escape 를 쓰지 않는다.
@@ -33,7 +34,7 @@
 - **C66 (Linked Artifact Flow) — 의도 출처** (v2.1.0; v10 에서 D13 사슬로; 14.1.0 에서 설계문서 여럿) — `scripts/discover-spec.sh` 가 의도 출처를 정한다: 범위 안 커밋의 `Spec:` 트레일러가 가리키는 설계문서 전부, 없으면 브랜치 커밋 메시지 + 열린 PR 본문. 그 내용이 모든 리뷰어 dispatch 와 codex 프롬프트의 `<intent>` 로 같은 기준 블록(`references/review-criteria.md`)과 함께 간다. 파일 mtime 은 읽지 않는다.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — 파이프라인의 두 diff-reading reviewer(`security-reviewer`/재비판 `code-recritic`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(재비판 코드 프로필 관문 C, PR4a 부터 `references/recritic-code-profile.md`가 싣는다). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh` · `test_code_recritic_frontmatter.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
-- **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재 · origin(`scripts/gh-repo.sh`) → 인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` · `failed: gh-unavailable`(gh 없음) · `failed: gh-unauthenticated`(gh 미로그인) · `failed: no-origin`(origin 없음 · 못 읽음 · gh 가 그 레포를 다루지 못함) 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) 둘뿐이고, 둘 다 gh 를 찾고 `-R` 에 넣을 origin 을 `scripts/gh-repo.sh` 한 곳에서 받는다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_gh_repo.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
+- **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재 · origin(`scripts/gh-repo.sh`) → 인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` · `failed: gh-unavailable`(gh 없음) · `failed: gh-unauthenticated`(gh 미로그인) · `failed: no-origin`(origin 없음 · 못 읽음 · gh 가 그 레포를 다루지 못함) 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) · `other_teams.py`(intent-critic 단계의 다른 팀 읽기 — 읽기 전용 `gh pr list` 한 번) 셋뿐이고, 셋 다 gh 를 찾고 `-R` 에 넣을 origin 을 `scripts/gh-repo.sh` 한 곳에서 받는다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_gh_repo.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
 - **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/quality-gates:quality-pipeline` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/quality-gates:quality-pipeline` 실행이 그 동의이고 게시만 끄는 길은 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다). 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/quality-gates:artifact-critique` 가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 범위 고르기 · 규모 공시; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `/quality-gates:artifact-critique <path>`+§10 스키마. 별도 skill `artifact-critique`로 위임(코드 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
@@ -74,6 +75,7 @@ quality-gates/
 │   ├── security-reviewer.md     # ① 보안 각도 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   ├── artifact-critic.md       # `/quality-gates:artifact-critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/quality-gates:artifact-critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
+│   ├── intent-critic.md         # intent-critic 단계(판정 · 게시 뒤) — 사용자가 고른 의도 자체가 맞는지 근거 줄을 인용해 묻는다 (read-only · 판정 밖)
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
 │   ├── resolve-range.sh                      # `range <시작>[..<끝>]` 을 실행 시작에 두 커밋으로 얼림(`range-scope.txt`)
@@ -93,6 +95,10 @@ quality-gates/
 │   ├── build_codex_prompt.py                 # ① 다른 모델 계열(codex-reviewer)용 prompt builder — 기준 블록 + 의도 출처
 │   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
+│   ├── intent_critic.py                      # intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 답 기록 · 렌더
+│   ├── intent_answers.py                     # 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋(push 없음)
+│   ├── intent_origin.py                      # 근거 조립 · 원문 · 로드맵 읽기(`source_interview` 따라가기) · 의심 가르기 · 경로 신뢰 경계 · 리뷰의 넓이 · 읽은 인용 확인
+│   ├── other_teams.py                        # intent-critic 의 다른 팀 읽기 — 팀 지도 · 다른 브랜치의 의도 문서 · 겹치는 파일의 diff · 열린 PR 목록(git 읽기 · gh 한 번, 리포를 바꾸지 않는다)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── secret-scan.py                        # 게시 직전 값-차단 secret scan (FAIL CLOSED · 첫 줄 리터럴 scan_ok)
 │   ├── render-terminal.py                    # Final verdict STATUS 표 (`table`)
@@ -109,6 +115,7 @@ quality-gates/
 │       ├── SKILL.md         # 한 파이프라인 실행기 — 리뷰 → 차등 테스트 → 합성 · 판정 in-turn 오케스트레이션
 │       └── references/
 │           ├── differential-test.md  # ② 차등 테스트 절차 전문 (매 iteration Read)
+│           ├── intent-critic.md      # intent-critic 단계 절차 전문 (판정 · 게시 뒤 Read)
 │           └── state-file-format.md  # 로컬 결과 result.md 형식
 └── tests/                            # Bash/Python 단위 테스트 (test_publish_comment_sink.sh, test_secret_scan.py 등)
 ```
@@ -122,6 +129,8 @@ quality-gates/
 ## Cost Class
 
 `quality-pipeline` skill은 `cost_class: variable` — 리뷰어는 시작 구성(code-reviewer · security-reviewer · codex + 신호에 맞는 조건부 + 재비판)에 모델이 근거를 적어 더한 리뷰어가 얹히고 상한은 없으며, 비용은 diff 크기와 iteration 수(기본 상한 5 — 상한에서 사용자가 하나씩 더 열 수 있다)에 따라 달라진다. trivia 로 닫힌 실행은 리뷰어를 부르지 않는다.
+
+판정 뒤의 intent-critic 단계는 리뷰어를 많아야 둘(출력을 읽지 못하면 한 번씩 다시 불러 많아야 넷) 부르고, 단계를 시작할 때 그 수를 한 줄로 알린다. 넓게 보는 리뷰(범위 모드 · 의도 문서가 바뀐 변경)에서는 돌려 본 근거가 없어도 부른다 — 아래 「intent-critic 답 파일」 절.
 
 트리거 조건과 override flag는 아래 「쓰는 법」 · 「범위」 절 참고.
 
@@ -237,7 +246,8 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기
  ├ e2e ── 시나리오 질문(여러 선택) → 고른 것마다 앱 부팅 · 걷기 → 판정안 · 걷기 직후 게이트 (끔 · 안 함도 판정 줄에 남는다)
  ├ Final verdict ── 숫자를 만든 직후의 펜스가 낸 결과 줄로 verdict.py 의 판정 줄 · result.md
- └ Publish ── sink 한 번 · posted:/skipped:/failed:
+ ├ Publish ── sink 한 번 · posted:/skipped:/failed:
+ └ intent-critic ── 판정 밖 질문 · 판정 · 게시 뒤 · 답 파일만 커밋 (범위 모드는 묻지 않음)
 ```
 
 ### Trivia escape
@@ -386,7 +396,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 
 의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다.
 
-- **gh CLI** (외부, 필수) — `/quality-gates:quality-pipeline` 이 의도 출처의 PR 본문을 읽고 판정 코멘트를 게시할 때 쓴다. 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 그 진입에서 멈추고 설치 방법을 보인다(`/quality-gates:artifact-critique` 는 gh 를 쓰지 않는다). 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다.
+- **gh CLI** (외부, 필수) — `/quality-gates:quality-pipeline` 이 의도 출처의 PR 본문을 읽고 판정 코멘트를 게시할 때, 그리고 intent-critic 단계의 다른 팀 읽기가 열린 PR 목록을 한 번 읽을 때 쓴다(그 자리는 gh 가 없거나 실패해도 멈추지 않고 `열린 PR 확인 못 함 — <사유>` 한 줄을 남긴다). 호출마다 `-R <호스트>/<owner>/<repo>` 로 `origin` 을 명시한다. 없으면 그 진입에서 멈추고 설치 방법을 보인다(`/quality-gates:artifact-critique` 는 gh 를 쓰지 않는다). 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다.
 - **ssh** (외부, SSH 꼴 `origin` 일 때만) — `origin` 의 호스트가 `~/.ssh/config` 별칭일 수 있어 `ssh -G` 로 실제 호스트를 푼다. ssh 가 없으면 `origin` 을 https 꼴로 바꾸거나 ssh 를 설치하라고 보이고 멈춘다.
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다.
@@ -405,6 +415,10 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 - `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 (e2e 부팅의 준비 신호를 기다리는 초 — 넘으면 판정안이 「미확인(부팅 실패)」)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/quality-gates:quality-pipeline` 시작마다 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
+- `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`: `docs/qg-intent-answers` (intent-critic 답 파일 폴더 — 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
+- `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES`: 120000 (intent-critic 입력 상한 바이트 — 넘으면 한 번에 넣어 부른다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
+- `DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES`: 80000 (intent-critic 다른 팀 기록의 바이트 상한 — 넘치는 항목은 싣지 않고 이름과 함께 알린다. 위 입력 상한 계산에는 들지 않는다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
+- `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`: `source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle` (의도 문서를 가리는 표시의 쉼표 목록 — 아래 「intent-critic 넓게 보기와 다른 팀 읽기」. 값은 목록 전체를 갈아 끼운다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
 
 ### 문서 경로 (`DEVBREW_QUALITY_GATES_DOC_PATHS`)
 
@@ -426,6 +440,40 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 
 **`.claude/quality-gates/baseline-cache/`** — 12.x 까지의 판이 남긴 기준선 캐시 폴더다. 13.0.0 은 이 폴더를
 쓰지도 읽지도 않고 GC 도 지우지 않는다 — 남아 있으면 직접 지워도 된다.
+
+### intent-critic 답 파일
+
+intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 사용자가 놓쳤거나 잘못 고른 것, 다른 팀과의 갈라짐(다른 팀이 같은 곳을 다른 방향으로 정했거나 고치고 있다), 조율되지 않은 중복(다른 팀이 같은 것을 따로 만들고 있다) — 이 세 가지를 근거와 함께 몇 개만 짚는 조언자다. 판정과 게시가 끝난 뒤 돌며 판정에 들지 않는다.
+
+리뷰어를 부르는 조건은 리뷰의 넓이로 갈린다. 넓이는 스크립트(`intent_critic.py prepare`)가 정하고 리뷰어가 스스로 정하지 않는다.
+
+- **넓게 보는 리뷰** — 범위 모드(`range`)에서 바뀐 파일이 있을 때, 그리고 바뀐 파일이 모두 문서 파일이고 그 가운데 의도 문서(설계문서 · 로드맵 · 에픽 묶음 — 아래 표시 목록으로 가린다)가 하나라도 있는 변경이다. 돌려 본 근거가 없어도 부른다. 걷기 기록 · 차등 결과에 더해 리뷰어가 리뷰 트리에서 읽은 인용과 다른 팀 기록도 근거로 받는다. 모델이 읽는 파일(`SKILL.md` · `agents/` 아래 등)은 문서 파일로 치지 않는다. 커밋도 스테이지도 안 한 문서는 의도 문서로 세지 않고 `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` 로 알린다.
+- **그 밖**(코드가 바뀐 PR · 의도 문서가 없는 문서만 바뀐 변경)은 부르는 조건이 전과 같다 — 걷기 관찰이 있거나 차등 결과에 통과로 끝나지 않은 귀속(`STILL_GREEN` · `FIXED` · `NEW_TEST_GREEN` 이 아닌 것)이 하나라도 있을 때만 부르고, 그런 근거가 없으면 부르지 않고 「근거 없음」으로 끝낸다. 불렀으면 다른 팀 기록도 근거로 받지만, 읽은 인용만 가진 질문은 거르고 `읽은 인용만 있어 거름 <n>` 으로 알린다. 다른 팀과 파일이 겹친다는 것만으로는 부르지 않는다.
+
+부르는 횟수는 넓이와 상관없이 최대 둘, 리뷰어 출력을 읽지 못하면 한 번씩 다시 불러 최대 넷이다 — 단계를 시작할 때 이 수를 한 줄로 알린다. 리뷰어에게 가는 전체 입력은 재서 알릴 뿐 묶지 않는다(`입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` — 리뷰어를 부른 실행마다). 입력이 `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES` 를 넘으면 자르지 않고 한 번에 넣어 부르고, 이 계산에 다른 팀 기록은 들지 않는다. 상한으로 묶이는 것은 다른 팀 기록(`DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES`)뿐이다. 리뷰어가 스스로 열어 읽는 파일은 어느 상한에도 들지 않는다.
+
+- 답 파일은 qg 가 지금 브랜치에 커밋하고 push 하지 않는다. 그 파일만 경로를 지정해 커밋한다.
+- 답 커밋은 push 하지 않는다 — push 해야 답 파일이 PR 과 함께 머지된다(완료 보고의 할 일 줄이 답 커밋 해시와 함께 알린다). 게시된 판정 코멘트는 답 커밋 앞 커밋의 것이고, push 하기 전에 qg 를 다시 돌리면 PR 의 head 가 지금 HEAD 와 달라 게시가 `skipped: pr-mismatch` 로 빠진다.
+- 답 파일은 다음 실행의 리뷰 diff 에 들어간다. 빼려면 `DEVBREW_QUALITY_GATES_DOC_PATHS` 에 `docs/qg-intent-answers/` 를 더한다.
+
+### intent-critic 넓게 보기와 다른 팀 읽기
+
+**읽은 인용.** 리뷰어는 리뷰의 넓이와 읽은 인용을 받는지, 바뀐 파일 목록과 커밋 제목을 함께 받는다. 넓게 보는 리뷰에서는 리뷰 트리를 자기 도구(읽기 전용)로 읽어 질문마다 읽은 인용(경로 · 줄 번호 · 그 줄의 글)을 근거로 달 수 있다. 리뷰 트리는 PR 범위면 리포 최상위의 작업 폴더, 범위 모드면 끝 커밋의 임시 트리다 — PR 범위에서 의도 출처의 설계문서 · 로드맵과 그 원문도 `HEAD` 커밋이 아니라 이 작업 폴더의 추적 파일에서 읽는다(`--origin` 으로 넘긴 원문만 `HEAD` 에서 읽는다). 스크립트가 인용마다 리뷰 트리의 그 파일 그 줄에 그 글이 있는지 글자로 견준다(앞뒤 공백만 걷는다). 파일이 없거나 추적되지 않거나, 글이 다르거나 비었거나, 경로가 트리 밖이거나 링크를 지나면 그 인용은 버리고, 맞는 근거가 하나도 남지 않은 질문은 거르고 `인용이 그 파일에 없어 거름 <n>` 으로 알린다. 넓게 보는 리뷰에서 낸 후보가 모두 이렇게 걸러지면 결과 줄은 `intent-critic — 낸 후보 <n>개가 근거 확인에서 모두 걸러짐` 이다. 스크립트는 인용이 실제로 있는지만 확인하고, 거기서 끌어낸 해석이 맞는지는 확인하지 못한다. 그래서 질문마다 근거의 종류(`돌려서 봄` · `다른 팀에서 봄` · `읽어서 봄`)를 질문 창 · 결과 절 표의 `근거` 칸 · 돌려주는 꼴에 보인다. 읽어서 본 근거뿐이라 확신이 서지 않는 질문에는 리뷰어가 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 달 수 있다. 질문 종류에는 `갈라짐` · `중복` 이 있다.
+
+**다른 팀 읽기.** 「팀」 은 로드맵 하나다. `scripts/other_teams.py` 가 intent-critic 단계 안에서 넓이와 상관없이 정해진 git 읽기 명령으로 모아 세션 폴더의 `other-teams.md` 에 쓴다. 읽는 것은 넷이다.
+
+- 팀 지도 — 이번 로드맵(의도 출처 문서의 `roadmap:` 줄에서 따라간 파일, 또는 바뀐 로드맵 자체 — 리뷰 트리에서)과, 그 로드맵 폴더의 부모 폴더 아래에서 같은 이름의 로드맵 파일을 가진 나란한 로드맵(기본 브랜치 끝에서 — 거기 그 폴더가 없으면 리뷰 트리에서)의 에픽 블록(의도 · 범위 · 의존 · 경로 예약 줄)과 결정 기록.
+- 다른 브랜치의 진행 중인 의도 문서 — 기본 브랜치에서도 리뷰한 커밋에서도 닿지 않는 커밋을 가진 브랜치(로컬 · 원격)마다, 그 커밋들이 바꾼 의도 문서를 그 브랜치 끝의 내용으로. 어느 폴더에 있든 싣는다. 머지된 브랜치(한 커밋으로 뭉치거나 다시 얹어 머지해, 바꾼 파일이 모두 기본 브랜치 끝과 같은 것 포함)와 이번 리뷰 자신의 브랜치는 다른 팀으로 세지 않는다.
+- 겹치는 파일 — 이번 변경이 바꾼 파일을 다른 브랜치도 고치면 그쪽 diff(파일마다 120줄까지).
+- 열린 PR 목록 — gh 가 있으면 `gh pr list` 한 번(30초)으로 번호 · 제목 · 브랜치 이름 · 포크 여부만 읽는다. 네트워크 조회는 이것 하나다. PR 의 내용과 바뀐 파일은 따로 조회하지 않고, 이 리포에 있는 브랜치에 번호와 제목을 붙인다. 포크 PR 과 브랜치가 이 리포에 없는 PR 은 `PR #<n> 내용 확인 못 함 — 그 브랜치가 이 리포에 없다` 로 적는다.
+
+리포를 바꾸지 않는다 — 원격을 새로 받지 않고 체크아웃 · 브랜치를 건드리지 않으며, 파일 내용은 리포 안의 추적되는 보통 파일만 읽는다. 못 보는 것은 기록의 「확인 못 함」 절에 한 줄씩 남는다: 다른 worktree 의 커밋 안 된 작업(worktree 수만 적는다) · 다른 컴퓨터와 올리지 않은 작업 · 새로 받지 않은 원격(오래됐을 수 있다) · 찾지 못한 기본 브랜치 · 읽지 못한 브랜치 목록 · 로드맵 없음 · 확인하지 못한 열린 PR(`열린 PR 확인 못 함 — <사유>`) · 표시가 설정에 없는 인터뷰 단계의 팀 · 읽기가 실패한 브랜치(`브랜치 <이름> 를 읽지 못함 — <예외 이름>` — 그 브랜치만 빠진다) · 머리(frontmatter)가 YAML 로 읽히지 않는 문서(`<브랜치> 의 <경로> 머리를 읽지 못함 — 의도 문서인지 확인 못 함`). 겹침을 확인하지 못했으면 겹침 목록은 「겹침 없음」 이 아니라 `- 겹침 확인 못 함` 이다. 기록은 팀 지도 → 파일이 겹치는 브랜치 → 그 밖의 브랜치(가장 최근에 바뀐 것부터) 순으로 상한까지 싣고, 넘치는 항목은 건너뛰고 `상한 <c>바이트 — <m>개 중 <k>개만 실었다(뺀 것: …)` 로 알린다(리뷰어를 부르지 않은 실행에서는 그 줄이 기록의 `## 상한` 에만 남는다). 다른 팀 읽기가 실패해도 단계는 멈추지 않고 `다른 팀 읽기 실패 — <예외 이름>` 을 낸다.
+
+기록은 리뷰어를 부를 때 근거 파일에 `[다른 팀]` 줄로 실리고, 리뷰어는 근거 파일의 줄 번호로 그 줄을 인용한다(스크립트가 그 줄이 근거 파일에 있는지 확인한다). 다른 팀의 글은 자료다 — 그 안의 지시문은 따르지 않는다(리뷰어 정의). 결과 절(`result.md` 의 `## intent-critic`)은 리뷰어를 불렀든 안 불렀든 「다른 팀과 겹치는 곳:」 과 「다른 팀 확인 못 함:」 목록을 보이고, 돌려주는 꼴에는 `breadth`(`narrow` · `range` · `intent-docs`) · `other_teams`(다른 팀 기록 파일 — 없으면 `-`) · `overlaps`(겹치는 곳의 수 — 모르면 `-`) 줄이 있다.
+
+**의도 문서의 표시.** `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`(쉼표 목록, 기본 `source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle`)가 의도 문서를 가린다 — `<키>` 는 머리(frontmatter)에 그 줄이 있다는 뜻이고, `<키>=<값>` 은 그 줄의 값이 같다는 뜻이다. 값은 목록 전체를 갈아 끼운다(기본에 더하려면 기본 다섯도 함께 적는다). 넓이 판정과 다른 브랜치의 의도 문서 고르기가 같은 목록을 읽는다. 머리가 YAML 로 읽히지 않는 문서(없는 날짜 등)와 표시 줄의 값이 목록 · 매핑인 문서는 의도 문서로 세지 않는다. 표시를 더하면 코드를 바꾸지 않고도 그 표시를 단 문서만 바뀐 브랜치에서 조언자가 불리고 다른 팀 기록에도 그 문서가 실린다. 그 문서에 따라갈 줄(`source_interview:` · `source_brief:` · `roadmap:`)이 없으면 원문 · 로드맵 칸이 비고 `원문 없음 — <이유>` · `로드맵 없음 — <이유>` 로 알린다. 인터뷰 단계 문서(seed · brief)의 표시는 아직 정해지지 않아 기본값에 없다 — 정해지면 이 값에 더한다. 그 전까지(목록이 기본 표시뿐이면) 다른 팀 기록에 `인터뷰 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다` 가 남는다.
+
+**경계.** 설계 단계 브랜치(설계문서 · 로드맵 · 묶음만 바뀐 브랜치)에서 `/quality-gates:quality-pipeline` 을 인자 없이 부르면 파이프라인이 돌아 판정 · 게시 뒤 조언자까지 간다. 「이 문서를 비평해 줘」 처럼 문서 비평을 청하면 qg 는 파이프라인을 돌리지 않고 `/quality-gates:artifact-critique` 로 안내한다 — 문서의 짜임새를 보는 비평과 의도 자체를 묻는 조언은 다른 일이다. 레포가 설계문서 폴더를 `DEVBREW_QUALITY_GATES_DOC_PATHS` 로 리뷰에서 빼면 리뷰 diff 가 비어 조언자도 건너뛴다(기본으로 빼는 것은 `README*` · `CHANGELOG*` 뿐이다).
 
 ### Kill switches (보안 컨트롤)
 
@@ -468,6 +516,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | codex 리뷰(`scripts/run_codex_reviewer.sh`) 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
 | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도. 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
+| `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` | intent-critic 단계만 끈다 — 넓게 보기와 다른 팀 읽기도 함께 끈다(둘 다 이 단계 안에서만 돈다). 판정에 닿지 않는다. 결과 줄은 「intent-critic 꺼짐(kill switch)」 한 줄이다. 집행 `intent_critic.py gate` — `prepare` 도 스위치를 스스로 읽어, `gate` 를 거치지 않고 불려도 넓이 판정 · 다른 팀 읽기 · 열린 PR 조회를 하지 않는다. |
 
 **차등 테스트 · 스코프 단위 disable:**
 

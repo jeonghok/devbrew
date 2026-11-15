@@ -106,8 +106,14 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
     # 선 `Read <…references/x.md>` 지시(quality-pipeline · pm-interview ·
     # spec-review 전부 이 형태를 쓴다 — 실측 4곳). 그 줄이 출력에 남았다는 것은 곧
     # **아직 포인터인 채로 남은 섹션이 있다**는 뜻이다.
-    local leftover
-    leftover="$(grep -nE '^[[:space:]]*Read[[:space:]]+[^[:space:]]*references/[A-Za-z0-9_./-]+\.md' "$out" || true)"
+    #
+    # 예외 하나 — `## Publish` 끝의 intent-critic 절차 포인터는 분할로 생긴 것이 아니다. 판정 · 게시
+    # 뒤에 도는 판정 밖 단계의 절차라 분할 전 문서에 없던 글이고, 되접으면 판정 파이프라인의 창에
+    # 남의 펜스가 섞인다. 그 한 줄(글자 그대로)만 남기고, 다른 포인터는 그대로 실패로 센다.
+    local leftover keep_intent
+    keep_intent='Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/intent-critic.md'
+    leftover="$(grep -nE '^[[:space:]]*Read[[:space:]]+[^[:space:]]*references/[A-Za-z0-9_./-]+\.md' "$out" \
+      | awk -v k="$keep_intent" '{ i = index($0, ":"); if (substr($0, i + 1) != k) print }' || true)"
     if [ -n "$leftover" ]; then
       printf 'reconstruct-skill.sh: 재구성 후에도 되접히지 않은 조건부-로드 포인터가 남아 있다 — SKILL.md 가 또 분할됐고 이 헬퍼는 두 섹션(differential-test · e2e)만 안다:\n%s\n' "$leftover" >&2
       rm -f "$out"

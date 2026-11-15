@@ -712,16 +712,18 @@ for path in sys.argv[1:]:
 print("CHECKED %d" % count)
 PY
 }
-out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py")"; rc=$?
+out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py" "$S/team_check.py" "$S/team_files.py" "$S/workflow_superpowers.py" "$S/job_results.py" "$S/team_status.py" "$S/branch_tip.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
-assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 일곱 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
-assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 7" "정적 검사가 일곱 스크립트를 셌다"
+assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 열네 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
+assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 14" "정적 검사가 열네 스크립트를 셌다"
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
 assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
 out="$(static_check "$T/mut_write.py")"
 assert_contains "$out" "쓰기 호출 write_text" "양성 대조: write_text 를 잡는다"
 assert_contains "$out" "네트워크 · 파일 조작 모듈 urllib.request" "양성 대조: urllib 을 잡는다"
+sed 's/\["git", \*args\]/[GIT, *args]/' "$S/branch_tip.py" > "$T/mut_tip.py"
+assert_contains "$(static_check "$T/mut_tip.py")" "git 이 아닌 subprocess" "양성 대조: branch_tip.py 사본의 subprocess 호출 머리를 [GIT, *args] 로 바꾸면 정적 검사가 「git 이 아닌 subprocess」 를 낸다"
 printf 'import subprocess\nGIT_ALLOWED = {"show", "fetch"}\n' > "$T/ctl_set.py"
 assert_contains "$(static_check "$T/ctl_set.py")" "GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" "양성 대조: 집합 리터럴 GIT_ALLOWED 를 잡는다"
 printf 'open("x", "w", encoding="utf-8")\n' > "$T/ctl_open.py"
@@ -889,8 +891,9 @@ printf 'x\n' >> "$W/README.txt"; after2="$(snap)"; git -C "$W" checkout -q -- RE
 [ "$before" != "$after2" ] && ok "양성 대조: 파일 하나를 바꾸면 비교가 잡는다" || no "양성 대조: 비교가 변화를 못 본다"
 
 # ── 6. 변이 — 첫째 부모 이력 제한(D4.24)과 조상 아님 조건(D1.1)에 이빨이 있는지 ──────
-M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" \
-  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$M/"
+M="$T/mut"; mkdir -p "$M"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/repo_defaults.py" \
+  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$S/workflow_superpowers.py" \
+  "$S/team_status.py" "$S/job_results.py" "$S/team_files.py" "$S/branch_tip.py" "$M/"
 # 변이 사본의 conductor_state 가 자기 판을 읽는 자리(../.claude-plugin) — 없으면 기계 상태를 못 읽어 변이가 머지 판정 보류로 간다
 mkdir -p "$T/.claude-plugin"; cp "$S/../.claude-plugin/plugin.json" "$T/.claude-plugin/"
 sed 's/"log", "--first-parent", "--merges"/"log", "--merges"/' "$RS" > "$M/roadmap_status.py"
@@ -944,8 +947,9 @@ assert_eq "$rc" "3" "AC9: ## 미룸 표가 깨지면 검사 불가(rc 3)"
 assert_contains "$(warns "$T/f9.json" F9)" "미룸 셀 수 없음(" "AC9: 깨진 표는 「셀 수 없음」"
 assert_contains "$(js "$T/f9.json" "r['unknown_reasons']")" "F9 미룸 표" "AC9: 셀 수 없음이 검사 불가 사유로 올라온다"
 # 변이(AC15) — 받는 곳 판정을 끄면 경고가 사라진다
-M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/repo_defaults.py" \
-  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$M3/"
+M3="$T/mut3"; mkdir -p "$M3"; cp "$S/section6.py" "$S/brief_body.py" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/repo_defaults.py" \
+  "$S/conductor_state.py" "$S/gh_repo.py" "$S/state_path.py" "$S/ledger_marker.py" "$S/workflow_superpowers.py" \
+  "$S/team_status.py" "$S/job_results.py" "$S/team_files.py" "$S/branch_tip.py" "$M3/"
 sed 's/^            bad = \[item for item, _why, recv in rows if not receiver_ok(recv, known_ids)\]$/            bad = []/' "$RS" > "$M3/roadmap_status.py"
 cmp -s "$RS" "$M3/roadmap_status.py" && no "변이 적용 안 됨(받는 곳 판정)" || ok "변이 적용됨(받는 곳 판정)"
 (cd "$W" && python3 "$M3/roadmap_status.py" --json docs/rm8/roadmap.md > "$T/md8.json")

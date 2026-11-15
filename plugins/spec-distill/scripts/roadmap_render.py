@@ -15,15 +15,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import section6  # noqa: E402
 import brief_body  # noqa: E402
+import team_files  # noqa: E402
+import team_layout  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
     BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
-    field_text, id_sort_key, is_quote, parse_ids, parse_roadmap, section_body)
+    field_text, id_sort_key, is_quote, is_team, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
 COLUMNS = ("번호", "이름", "종류", "의도", "범위", "의존", "브랜치", "경로 예약", "배정 번호", "받는 것", "넘기는 것")
 EXTRA_COLUMNS = EXTRA_FIELDS
-SCOPE_RE = re.compile(r"한다 (\S.*?) / 안 한다 (\S.*)")
+TEAM_COLUMN = "지시 원문 범위"   # team 형식 표의 마지막 칸 — 묶음 행은 원자료 줄 범위, 결정 행은 「없음」
+SCOPE_RE = team_files.SCOPE_RE
 KIND_BUNDLE, KIND_BRANCH, KIND_DECISION = "bundle", "branch", "decision"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "roadmap-template.md"
 C_LINE_RE = re.compile(r"- \S+ (?:confirmed|provisional) \*\*([CD]\d+)\*\* — ")
@@ -51,6 +54,7 @@ class Row:
     receives: str = "없음"
     gives: str = "없음"
     extras: dict = field(default_factory=dict)   # 선택 칸 — 크기 · 병렬 · 순서 이유 · 근거 · 흐름 · 산출물
+    ranges: list = field(default_factory=list)   # team 형식의 지시 원문 범위 [(첫 줄, 끝 줄)]
 
     def kind_cell(self) -> str:
         if self.kind == KIND_BUNDLE:
@@ -114,7 +118,23 @@ def _row(c: list, line: str) -> Row:
     return Row(rid, title, kind, spec, intent, scope, deps, branch, reserved, ids, recv, give, extras)
 
 
-def parse_table(text: str) -> list:
+def _team_ranges(row: Row, cell: str) -> list:
+    """team 표의 지시 원문 범위 칸 — 묶음 행은 줄 범위, 결정 행은 「없음」, 브랜치 행은 받지 않는다."""
+    if row.kind == KIND_BRANCH:
+        raise TableError("%s: team 형식에서는 브랜치 블록을 쓰지 않는다" % row.id)
+    if row.kind == KIND_DECISION:
+        if cell != "없음":
+            raise TableError("%s: 지시 원문 범위 — 결정 행은 「없음」이다: %r" % (row.id, cell))
+        return []
+    try:
+        return team_files.parse_ranges(cell)
+    except ValueError as exc:
+        raise TableError("%s: 지시 원문 범위 — %s" % (row.id, exc))
+
+
+def parse_table(text: str, layout=None) -> list:
+    team = layout == team_layout.LAYOUT_TEAM
+    tail = (TEAM_COLUMN,) if team else ()
     try:
         body = section_body(text, TABLE_HEADING)
     except FormatError as exc:
@@ -125,10 +145,13 @@ def parse_table(text: str) -> list:
     if len(lines) < 3:
         raise TableError("분해안 표가 없거나 에픽 행이 없다")
     head = _split_row(lines[0])
-    if head == list(COLUMNS):
-        width = len(COLUMNS)
-    elif head == list(COLUMNS + EXTRA_COLUMNS):
-        width = len(COLUMNS) + len(EXTRA_COLUMNS)
+    if head == list(COLUMNS + tail):
+        width = len(COLUMNS) + len(tail)
+    elif head == list(COLUMNS + EXTRA_COLUMNS + tail):
+        width = len(COLUMNS) + len(EXTRA_COLUMNS) + len(tail)
+    elif team:
+        raise TableError("team 형식 분해안 표 머리가 칸 열하나(%s) 또는 그 뒤에 선택 칸 여섯(%s)을 더한 열일곱의 끝에 「%s」 칸을 "
+                         "더한 것이 아니다" % (" · ".join(COLUMNS), " · ".join(EXTRA_COLUMNS), TEAM_COLUMN))
     else:
         raise TableError("분해안 표 머리가 칸 열하나(%s) 또는 그 뒤에 선택 칸 여섯(%s)을 더한 열일곱이 아니다"
                          % (" · ".join(COLUMNS), " · ".join(EXTRA_COLUMNS)))
@@ -140,7 +163,9 @@ def parse_table(text: str) -> list:
         cells = _split_row(line)
         if len(cells) != width:
             raise TableError("분해안 표 행의 칸 수가 머리와 다르다: %r" % line)
-        row = _row(cells, line)
+        row = _row(cells[:width - len(tail)], line)
+        if team:
+            row.ranges = _team_ranges(row, cells[-1])
         if row.id in seen:
             raise TableError("에픽 번호 %s 가 두 번 있다" % row.id)
         seen.add(row.id)
@@ -148,24 +173,50 @@ def parse_table(text: str) -> list:
     return rows
 
 
-def format_table(rows: list) -> str:
+def format_table(rows: list, layout=None) -> str:
+    team = layout == team_layout.LAYOUT_TEAM
     wide = any(r.extras for r in rows)
-    cols = COLUMNS + (EXTRA_COLUMNS if wide else ())
+    cols = COLUMNS + (EXTRA_COLUMNS if wide else ()) + ((TEAM_COLUMN,) if team else ())
     out = [TABLE_HEADING, "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in rows:
         cells = [r.id, r.title, r.kind_cell(), r.intent, r.scope, r.deps, r.branch, r.reserved,
                  " · ".join(r.ids), r.receives, r.gives]
         if wide:
             cells += [r.extras.get(k, "없음") for k in EXTRA_COLUMNS]
+        if team:
+            cells.append(team_files.format_ranges(r.ranges) or "없음")
         out.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |")
     return "\n".join(out) + "\n"
 
 
+def _team_bundle_row(b: dict, read_bundle) -> tuple:
+    """team 묶음 블록 → (ids, 받는 것, 넘기는 것, 범위). 번호 파일은 블록의 묶음 값, 범위는 그 과제의 INTENT.md 에서 읽는다."""
+    text = read_bundle(b["fields"]["묶음"])
+    if text is None:
+        raise TableError("%s 번호 파일을 읽지 못했다: %s" % (b["id"], b["fields"]["묶음"]))
+    try:
+        ids = bundle_ids(text)
+        receives, gives = team_files.sources_interface(text)
+    except FormatError as exc:
+        raise TableError("%s 번호 파일 — %s" % (b["id"], exc))
+    intent_rel = team_layout.intent_rel(b["id"])
+    intent = read_bundle(intent_rel)
+    if intent is None:
+        raise TableError("%s 의 INTENT.md 를 읽지 못했다: %s" % (b["id"], intent_rel))
+    try:
+        ranges = team_files.intent_ranges(intent)
+    except FormatError as exc:
+        raise TableError("%s 의 INTENT.md — %s" % (b["id"], exc))
+    return ids, receives, gives, ranges
+
+
 def extract_rows(roadmap_text: str, read_bundle) -> list:
-    """로드맵 블록과 묶음(frontmatter ids · §7)에서 분해안 표를 거꾸로 뽑는다."""
-    _meta, blocks, _records, _risks, errors = parse_roadmap(roadmap_text)
+    """로드맵 블록과 묶음(frontmatter ids · §7)에서 분해안 표를 거꾸로 뽑는다. team 형식이면 묶음 블록의 번호 ·
+    인터페이스는 번호 파일에서, 지시 원문 범위는 그 과제의 INTENT.md 에서 읽는다."""
+    meta, blocks, _records, _risks, errors = parse_roadmap(roadmap_text)
     if errors:
         raise TableError("로드맵 형식 깨짐 — " + " · ".join(errors))
+    team = is_team(meta)
     rows = []
     for b in blocks:
         f = b["fields"]
@@ -173,6 +224,11 @@ def extract_rows(roadmap_text: str, read_bundle) -> list:
         def t(key, f=f):
             return field_text(f[key])
         extras = dict((k, v) for k in EXTRA_COLUMNS if k in f for v in [field_text(f[k])] if v != "없음")
+        if b["kind"] == "bundle" and team:
+            ids, receives, gives, ranges = _team_bundle_row(b, read_bundle)
+            rows.append(Row(b["id"], b["title"], KIND_BUNDLE, "", t("의도"), scope_text(f["범위"]), t("의존"),
+                            t("브랜치"), t("경로 예약"), ids, receives, gives, extras, ranges))
+            continue
         if b["kind"] == "bundle":
             if f["묶음"] != b["id"] + ".md":
                 raise TableError("%s: 묶음 이름이 `%s.md` 가 아니다" % (b["id"], b["id"]))
@@ -312,11 +368,12 @@ def scope_text(value) -> str:
     return "한다 %s / 안 한다 %s" % (" · ".join(do), " · ".join(dont))
 
 
-def render_block(r: Row) -> str:
+def render_block(r: Row, layout=None) -> str:
+    bundle = team_layout.sources_rel(r.id) if layout == team_layout.LAYOUT_TEAM else r.id + ".md"
     lines = ["### %s — %s" % (r.id, r.title), "- 의도: " + r.intent] + scope_lines(r.scope) + [
         "- 의존: " + r.deps,
         "- 완료: 결정 기록" if r.kind == KIND_DECISION else "- 브랜치: " + r.branch,
-        "- 묶음: " + (r.id + ".md" if r.kind == KIND_BUNDLE else "없음"),
+        "- 묶음: " + (bundle if r.kind == KIND_BUNDLE else "없음"),
         "- 경로 예약: " + r.reserved]
     if r.kind == KIND_BRANCH:
         lines.append("- spec: " + r.spec)
@@ -344,7 +401,10 @@ BUNDLE_FORMAT = (
     "## 7. 인터페이스\n\n- 받는 것: %s\n- 넘기는 것: %s\n")
 
 
-def render_bundle(r: Row, idx: BriefIndex, roadmap_rel: str, brief_rel: str, audit_rel: str) -> str:
+def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
+    """(정렬된 ids, {칸 이름: brief 줄 목록}) — 행의 번호마다 brief 줄을 고른다. 칸 이름과 순서는 번호 파일의 칸
+    (`team_files.SOURCE_PARTS` — 제약 · 열린 질문 · 웹 근거 · 기각 · 위험)이다. brief 에서 줄을 찾지 못한 번호가 있으면 TableError,
+    칸 이름 수가 고른 줄 묶음 수와 다르면 ValueError."""
     ids = sorted(set(r.ids), key=id_sort_key)
     missing = [t for t in ids if not _is_s(t) and t not in idx.lines and t not in idx.k_lines]
     if missing:
@@ -361,17 +421,24 @@ def render_bundle(r: Row, idx: BriefIndex, roadmap_rel: str, brief_rel: str, aud
     oq = pick(lambda t: t.startswith("OQ"))
     rest = (pick(lambda t: t.startswith("RC")) + pick(lambda t: t.startswith("ST"))
             + [idx.k_lines[t] for t in ids if t.startswith("K")])
+    groups = (c_d, oq, keys, rest)
+    if len(team_files.SOURCE_PARTS) != len(groups):
+        raise ValueError("번호 파일 칸 이름 %d개와 고른 줄 묶음 %d개가 다르다" % (len(team_files.SOURCE_PARTS), len(groups)))
+    return ids, dict(zip(team_files.SOURCE_PARTS, groups))
+
+
+def render_bundle(r: Row, idx: BriefIndex, roadmap_rel: str, brief_rel: str, audit_rel: str) -> str:
+    ids, parts = bundle_parts(r, idx)
+    c_d, oq, keys, rest = ("\n".join(lines) or "- 없음" for lines in parts.values())
     return BUNDLE_FORMAT % (
         r.id, roadmap_rel, brief_rel, ", ".join(ids), r.id, r.title, brief_rel, audit_rel, roadmap_rel, r.id,
-        r.intent, r.scope, idx.goal,
-        "\n".join(c_d) or "- 없음", "\n".join(oq) or "- 없음", "\n".join(keys) or "- 없음",
-        "\n".join(rest) or "- 없음", idx.s6, r.receives, r.gives)
+        r.intent, r.scope, idx.goal, c_d, oq, keys, rest, idx.s6, r.receives, r.gives)
 
 
 def render_roadmap(template: str, rows: list, idx: BriefIndex, title: str, brief_rel: str,
-                   roadmap_rel: str, history: str) -> str:
+                   roadmap_rel: str, history: str, layout=None) -> str:
     values = {"TITLE": title, "SOURCE_BRIEF": brief_rel, "ROADMAP": roadmap_rel,
-              "EPICS": "\n".join(render_block(r) for r in rows), "HISTORY": history,
+              "EPICS": "\n".join(render_block(r, layout) for r in rows), "HISTORY": history,
               "RISKS": "\n".join(idx.k_lines.values()) or "- 없음"}
 
     def sub(m):
