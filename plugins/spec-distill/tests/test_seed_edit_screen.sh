@@ -86,9 +86,50 @@ for h, v in zip(hs, vs):
 print("ok" if hs and len(hs) == len(vs) and not bad else "bad %s" % bad)
 PY
 }
+shown() {   # shown <이름> → 화면 글에 덩어리마다 머리줄이 한 번 있고, 그 덩어리의 뺀 · 더한 문장 줄이 JSON 목록과(자리 옮김 꼴까지 순서대로)
+            #               같고, 꼴 4 가 아니면 줄 전체가 덩어리의 줄과 같으면 ok
+  python3 - "$S" "$TMP/$1/hunks.json" "$TMP/$1/screen.json" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import seed_edit_diff
+hs = json.load(open(sys.argv[2], encoding="utf-8"))["hunks"]
+d = json.load(open(sys.argv[3], encoding="utf-8"))
+vs, lines = d["hunks"], d["text"].split("\n")
+IND = "   "
+bad = []
+for k, (h, v) in enumerate(zip(hs, vs), 1):
+    head = "%d) 기준 %s → 현재 %s · %s" % (k, seed_edit_diff._span(*h["base"]), seed_edit_diff._span(*h["seed"]), v["summary"])
+    at = [i for i, x in enumerate(lines) if x == head]
+    if len(at) != 1:
+        bad.append((k, "머리줄 %d개" % len(at)))
+        continue
+    block = []
+    for x in lines[at[0] + 1:]:
+        if not x:
+            break
+        block.append(x)
+    want_rem = [(IND + ("뺀 문장(자리 옮김): " if m else "뺀 문장: ") + s) for s, m in zip(v["removed_sentences"], v["removed_moved"])]
+    want_add = [(IND + ("더한 문장(자리 옮김): " if m else "더한 문장: ") + s) for s, m in zip(v["added_sentences"], v["added_moved"])]
+    if len(want_rem) != len(v["removed_sentences"]) or len(want_add) != len(v["added_sentences"]):
+        bad.append((k, "자리 옮김 칸 수"))
+    if [x for x in block if x.startswith(IND + "뺀 문장")] != want_rem:
+        bad.append((k, "뺀 문장"))
+    if [x for x in block if x.startswith(IND + "더한 문장")] != want_add:
+        bad.append((k, "더한 문장"))
+    whole = [x for x in block if x.startswith(IND + "- ") or x.startswith(IND + "+ ")]
+    want_whole = [] if v["shape"] == 4 else [IND + "- " + x for x in h["removed"]] + [IND + "+ " + x for x in h["added"]]
+    if whole != want_whole:
+        bad.append((k, "줄 전체"))
+heads = [x for x in lines if x[:1].isdigit() and ") 기준 " in x]
+if len(heads) != len(hs):
+    bad.append(("머리줄 수", len(heads)))
+print("ok" if hs and len(hs) == len(vs) and not bad else "bad %s" % bad)
+PY
+}
 while IFS='|' read -r name base seed shapes; do
   mk "$name" "$base" "$seed"; scr "$name"
   assert_eq "$(inv "$name")" "ok" "AC2 불변식: $name"
+  assert_eq "$(shown "$name")" "ok" "AC1 · AC2 화면 글: 덩어리마다 머리줄 · 뺀 문장 · 더한 문장 · 줄 전체가 모두 실린다 — $name"
   assert_eq "$(j "$name" '[h["shape"] for h in d["hunks"]]')" "$shapes" "AC2 꼴: $name"
 done <<'EOF'
 ins|가. 나.\n|가. 새. 나.\n|[4]
@@ -116,6 +157,7 @@ wsline|가. 나.\n  \n다.\n|가. 나 고침.\n\n다.\n|[3]
 gaphead|X. 가.\n|Y.   가.\n|[3]
 delgap|가.   나.\n|나.\n|[4]
 EOF
+assert_eq "$(shown padd)" "ok" "AC1 화면 글: 통째로 더한 문단의 더한 문장이 모두 실린다 — padd"
 for name in delfirst insfirst paddend repl chgpdel delgap; do
   assert_eq "$(j "$name" '("   - " in d["text"], "   + " in d["text"], "문단 나눔" in d["text"])')" "(False, False, False)" "AC1: 문장 · 문단을 더하거나 빼거나 통째로 바꾼 것만으로 설명되면 줄 전체 꼴이 붙지 않는다 — $name"
 done
@@ -304,6 +346,10 @@ assert_contains "$(j used 'd["text"]')" "지적 「SCR_FIX_APPLY」(${FA}) — �
 mk2 usedbad; why usedbad "1\t$FA"; printf '\377\376' > "$TMP/usedbad/state/hunk-used-findings.txt"; scr usedbad
 assert_eq "$(rec usedbad)" "[False, False]" "AC5: 쓴 지적 목록 파일을 읽지 못한 경우(깨짐)"
 assert_contains "$(j usedbad 'd["text"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 목록을 읽지 못한 사실이 화면에 보인다"
+mk2 usedlink; why usedlink "1\t$FA"; ln -s "$TMP/usedlink/nowhere" "$TMP/usedlink/state/hunk-used-findings.txt"; scr usedlink
+[ -L "$TMP/usedlink/state/hunk-used-findings.txt" ] && [ ! -e "$TMP/usedlink/state/hunk-used-findings.txt" ] && ok "전제: 쓴 지적 목록이 가리키는 곳 없는 링크다" || no "전제: 쓴 지적 목록이 가리키는 곳 없는 링크가 아니다"
+assert_eq "$(rec usedlink)" "[False, False]" "AC5: 쓴 지적 목록이 가리키는 곳 없는 링크면 권장이 없다(빈 목록으로 읽지 않는다)"
+assert_contains "$(j usedlink 'd["text"]')" "쓴 지적 목록을 읽지 못했다 — 권장을 붙이지 않는다" "AC5: 링크인 목록을 읽지 못한 사실이 화면에 보인다"
 
 # ── AC6 — 이유 파일 · 원장이 없거나 어긋날 때 ────────────────────────────────────
 mk2 noreason; scr noreason; rc=$?
@@ -440,6 +486,10 @@ assert_eq "$(j q1 '[(q["multi"], q["question"], [o["label"] for o in q["options"
   "[(False, '저자 편집 1곳을 그대로 둘까요?', ['그대로 둔다', '되돌린다'])]" "AC7: 덩어리 하나면 단일 선택이다"
 why q1 "1\t$FA"; scr q1
 assert_eq "$(j q1 '[o["label"] for o in d["questions"][0]["options"]]')" "['그대로 둔다 (권장)', '되돌린다']" "AC7: 확인된 덩어리 하나면 「그대로 둔다 (권장)」 이 첫 자리다"
+mkn q2 2; scr q2
+assert_eq "$(qs q2)" "[(True, [1, 2])]" "AC7: 덩어리 둘이면 여러 개 고르기 질문 하나에 둘 다 든다"
+mkn q3 3; scr q3
+assert_eq "$(qs q3)" "[(True, [1, 2, 3])]" "AC7: 덩어리 셋이면 여러 개 고르기 질문 하나에 셋 다 든다"
 mkn q4 4; scr q4
 assert_eq "$(qs q4)" "[(True, [1, 2, 3, 4])]" "AC7: 덩어리 넷이면 질문 하나"
 assert_eq "$(j q4 '(d["questions"][0]["question"], [o["label"] for o in d["questions"][0]["options"]])')" \
@@ -448,6 +498,7 @@ mkn q5 5; scr q5
 assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 다섯이면 3+2"
 mkn q9 9; scr q9
 assert_eq "$(qs q9)" "[(True, [1, 2, 3, 4]), (True, [5, 6, 7]), (True, [8, 9])]" "AC7: 아홉이면 4+3+2"
+assert_eq "$(shown q9)" "ok" "AC1 · AC2 화면 글: 덩어리 아홉이 모두 실린다 — q9"
 why q5 "3\t$FA" "5\t$DA"; scr q5
 assert_eq "$(j q5 '[[o["label"] for o in q["options"]] for q in d["questions"]]')" \
   "[['3번 그대로 둔다 (권장)', '1번 그대로 둔다', '2번 그대로 둔다'], ['5번 그대로 둔다 (권장)', '4번 그대로 둔다']]" "AC7: 번호 순으로 나눈 뒤 질문 안에서만 권장을 앞에 둔다"
@@ -462,22 +513,26 @@ PY
 assert_eq "$(cat "$TMP/sizes.txt")" "[1] [4, 4, 3, 2] []" "Review Focus: 덩어리가 많아도(2–40) 나뉜 질문마다 둘에서 넷이고 합이 맞는다"
 
 # ── AC10 — 쓴 지적 목록에 더하기 ─────────────────────────────────────────────────
-mu() {   # mu <이름> <ids> [덩어리 JSON 파일 이름] → rc. stderr 는 $TMP/<이름>/mu.err
-  python3 "$X" mark-used --hunks "$TMP/$1/${3:-hunks.json}" --reasons "$TMP/$1/state/hunk-reasons.txt" --state-dir "$TMP/$1/state" --ids "$2" >/dev/null 2>"$TMP/$1/mu.err"
+mu() {   # mu <이름> <ids> [덩어리 JSON 파일 이름] → rc. stdout 은 $TMP/<이름>/mu.out, stderr 는 $TMP/<이름>/mu.err
+  python3 "$X" mark-used --hunks "$TMP/$1/${3:-hunks.json}" --reasons "$TMP/$1/state/hunk-reasons.txt" --state-dir "$TMP/$1/state" --ids "$2" >"$TMP/$1/mu.out" 2>"$TMP/$1/mu.err"
 }
 U="hunk-used-findings.txt"
 mk2 mu1; why mu1 "1\t$FA,$DA" "2\t$FA,없음"
 mu mu1 "1,2"; rc=$?
 assert_eq "$rc" "0" "AC10: 목록에 더하기 rc 0"
 assert_eq "$(cat "$TMP/mu1/state/$U")" "$(printf '%s\n%s' "$FA" "$DA")" "AC10: 그 화면의 이유 파일이 댄 지적 id 를 모두 더한다(같은 id 는 한 번)"
+assert_eq "$(cat "$TMP/mu1/mu.out")" "{\"added\": [\"${FA}\", \"${DA}\"], \"skipped\": null}" "AC10: 더한 id 를 stdout JSON 으로 알린다"
 mu mu1 "1,2"
 assert_eq "$(cat "$TMP/mu1/state/$U")" "$(printf '%s\n%s' "$FA" "$DA")" "AC10: 다시 돌려도 이미 있는 id 를 두 번 적지 않는다"
+assert_eq "$(cat "$TMP/mu1/mu.out")" '{"added": [], "skipped": null}' "AC10: 이미 있는 id 뿐이면 stdout JSON 의 added 가 비었다"
 scr mu1
 assert_eq "$(rec mu1)" "[False, False]" "AC10: 더한 뒤 다시 공시한 화면에서는 그 지적에 권장이 붙지 않는다"
 mk2 mu2; mu mu2 "1,2"; rc=$?
 [ "$rc" = 0 ] && [ ! -e "$TMP/mu2/state/$U" ] && ok "AC10: 이유 파일이 없으면 아무것도 더하지 않고 성공한다" || no "AC10: 이유 파일이 없는데 rc ${rc} 이거나 목록이 생겼다"
+assert_eq "$(cat "$TMP/mu2/mu.out")" '{"added": [], "skipped": "no_reasons"}' "AC10: 이유 파일이 없어 건너뛴 사실을 stdout JSON 으로 알린다"
 mk2 mu3; printf 'seed_sha256 0000\n1\t%s\n' "$FA" > "$TMP/mu3/state/hunk-reasons.txt"; mu mu3 "1,2"; rc=$?
 [ "$rc" = 0 ] && [ ! -e "$TMP/mu3/state/$U" ] && ok "AC10: 판본이 다른 이유 파일이면 아무것도 더하지 않고 성공한다" || no "AC10: 판본이 다른데 rc ${rc} 이거나 목록이 생겼다"
+assert_eq "$(cat "$TMP/mu3/mu.out")" '{"added": [], "skipped": "stale_reasons"}' "AC10: 판본이 다른 이유 파일이라 건너뛴 사실을 stdout JSON 으로 알린다"
 mk2 mu4; why mu4 "1\t$FA"
 for ids in "1" "1,2,3" "1,1,2" ""; do
   mu mu4 "$ids"; rc=$?
