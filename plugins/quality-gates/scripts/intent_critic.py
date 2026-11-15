@@ -601,6 +601,8 @@ def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str
 
 NOTICE_NO_NAMES = "바뀐 파일 목록이 없어 넓게 보지 않는다"
 NOTICE_UNREAD_DOCS = "의도 문서인지 확인 못 한 문서 %d — 추적되지 않는다"
+NOTICE_TIMED_OUT_DOCS = "의도 문서인지 확인 못 한 문서 %d — " + io_.REASON_TIMEOUT
+NOTICE_NO_TREE = "리뷰 트리가 없어 읽은 인용을 확인하지 못함"
 NOTICE_TEAMS_FAILED = "다른 팀 읽기 실패 — %s"
 NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d — 나눠 부르기 판정에 넣지 않는다)"
 
@@ -608,15 +610,18 @@ NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d �
 def _breadth(args, tree_root: str, cfg: dict, notices: List[str]) -> tuple:
     """(바뀐 파일 목록 | None, 넓이, 바뀐 의도 문서들). 바뀐 문서는 리뷰 트리에서 읽는다."""
     names = _range_names(args.rd)
+    timed_out: List[str] = []
     breadth, docs, unread = io_.review_breadth(
-        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel),
+        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel, timed_out),
         cfg["intent_doc_markers"])
     if args.mode == "range" and names is None:
         _add_notice(notices, NOTICE_NO_NAMES)
     if breadth != "narrow":
         _add_notice(notices, io_.BREADTH_LABELS[breadth])
-    if unread:
-        _add_notice(notices, NOTICE_UNREAD_DOCS % unread)
+    if unread - len(timed_out):
+        _add_notice(notices, NOTICE_UNREAD_DOCS % (unread - len(timed_out)))
+    if timed_out:
+        _add_notice(notices, NOTICE_TIMED_OUT_DOCS % len(timed_out))
     return names, breadth, docs
 
 
@@ -1199,7 +1204,12 @@ def cmd_filter(args) -> int:
         status, call = "no-evidence", "none"
     else:
         call = plan["call"]
-        cands = _candidates(plan, rd, ledger, notices, none_reasons)
+        if plan["breadth"] != "narrow" and not os.path.isdir(plan["tree_root"] or ""):
+            cands = None
+            notices.append(NOTICE_NO_TREE)
+            ledger.uncountable("intent-critic 후보", NOTICE_NO_TREE)
+        else:
+            cands = _candidates(plan, rd, ledger, notices, none_reasons)
         if cands is None:
             status = "uncountable"
         else:

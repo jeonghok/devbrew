@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -690,6 +691,103 @@ class TestWidePrepare(unittest.TestCase):
         self.assertNotIn(DIFF_SHAPE, p.stdout.splitlines())
 
 
+TIMEOUT_NOTE = "git 읽기가 시간 한도 30초를 넘김"
+
+
+class TestOriginTimeout(unittest.TestCase):
+    """시간 한도 — 원문 읽기와 넓이 판정(AC16)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.R = _wide_repo(os.path.join(self.tmp.name, "repo"))
+        self.timeouts = []
+        real = io_.subprocess.run
+
+        def fake(cmd, *a, **k):
+            self.timeouts.append(k.get("timeout"))
+            if "show" in cmd or "ls-files" in cmd:
+                raise io_.subprocess.TimeoutExpired(cmd, k.get("timeout"))
+            return real(cmd, *a, **k)
+
+        self.patch = mock.patch.object(io_.subprocess, "run", fake)
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def test_origin_timeout_is_not_untracked(self):
+        design = "docs/specs/x-design.md"
+        built = io_.build_origin(self.R, "HEAD", "HEAD", None, [design])
+        self.assertIn("%s 를 읽지 못함 — %s" % (design, TIMEOUT_NOTE), built["notices"])
+        for line in built["notices"]:
+            self.assertNotIn("추적 안 된", line)
+            if "시간 한도" in line:
+                self.assertNotIn("원문 링크 거부", line)
+        self.assertIn(30, self.timeouts)
+        self.assertEqual(set(self.timeouts), {30})
+
+    def test_breadth_timeout_disclosed_apart_from_untracked(self):
+        rd = tempfile.mkdtemp(dir=self.tmp.name)
+        tic._write("docs/specs/x-design.md\n", rd, "review-i1.names")
+        # 자식 프로세스는 대역을 받지 않는다 — 같은 프로세스에서 _breadth 를 부른다.
+        a = argparse.Namespace(rd=rd, mode="pr")
+        notices = []
+        names, breadth, docs = ic._breadth(a, self.R, {"intent_doc_markers": MARKERS}, notices)
+        self.assertEqual(breadth, "narrow")
+        self.assertIn("의도 문서인지 확인 못 한 문서 1 — " + TIMEOUT_NOTE, notices)
+        self.assertNotIn(UNREAD_ONE, notices)
+
+
+class TestHeadValues(unittest.TestCase):
+    def test_unstringable_frontmatter_is_unreadable(self):
+        class Bad(int):
+            def __str__(self):
+                raise ValueError("Exceeds the limit for integer string conversion")
+
+            __repr__ = __str__
+
+        text = "---\nroadmap: x\n---\n# 본문\n"
+        with mock.patch.object(io_.yaml, "safe_load", lambda _t: {"roadmap": Bad(3), "a": "b"}):
+            self.assertTrue(io_.frontmatter_unreadable(text))
+            self.assertIsNone(io_.frontmatter_value(text, "roadmap"))
+            self.assertFalse(io_.is_intent_doc(text, MARKERS))
+        if hasattr(sys, "set_int_max_str_digits"):
+            big = "---\nroadmap: 0x%s\n---\n" % ("f" * 5000)
+            self.assertTrue(io_.frontmatter_unreadable(big))
+            self.assertIsNone(io_.frontmatter_value(big, "roadmap"))
+            self.assertFalse(io_.is_intent_doc(big, MARKERS))
+
+    def test_differential_odd_yaml_unreadable(self):
+        self.assertEqual(io_.has_evidence(None, "a: 2026-02-30\n"),
+                         (False, ["차등 결과를 읽지 못함 — 근거로 세지 않았다"]))
+
+
+class TestAnswerOddValues(unittest.TestCase):
+    def test_answer_file_odd_values_unreadable(self):
+        with tempfile.TemporaryDirectory() as rd:
+            root = tic._filter_rd(rd, answers=[(tic.ID1, "의도다", tic.OBS1)])
+            good = sorted(os.listdir(root))
+            self.assertEqual(len(good), 1)
+            with open(os.path.join(root, good[0]), encoding="utf-8") as fh:
+                text = fh.read()
+            bad = text.replace("answered_at: ", "answered_at: 2026-02-30\nold_at: ", 1)
+            self.assertNotEqual(bad, text)
+            answered, unreadable = ia.read_answered(root)
+            self.assertEqual((len(answered), unreadable), (1, 0))
+            self.assertIsNone(ia.parse_answer_file(bad))
+            with open(os.path.join(root, tic._wf(7)), "w", encoding="utf-8") as fh:
+                fh.write(bad)
+            answered, unreadable = ia.read_answered(root)
+            self.assertEqual((len(answered), unreadable), (1, 1))
+            tic._write(tic._out([tic._q("D1", lines=[1], same_as=tic.ID1)]), rd,
+                       "intent-critic-1.txt")
+            p = tic._cli("filter", "--rd", rd)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
+            self.assertEqual(tic._by_state(rd, "answered-filtered")[0]["target_id"], "D1")
+
+
 class TestDifferentialShape(unittest.TestCase):
     def test_cases(self):
         bad = ("per_adapter: x\n", "runner: x\n", "per_adapter:\n  - 3\n",
@@ -1012,6 +1110,46 @@ class TestWideFilter(_WideRun, unittest.TestCase):
         self.assertEqual([q["target_id"] for q in tic._by_state(self.rd, "ask")],
                          ["D2", "D1", "D3"])
         self.assertEqual([q["target_id"] for q in tic._by_state(self.rd, "over-cap")], ["D4"])
+
+    def test_same_weight_teams_and_read_keep_input_order(self):
+        """같은 무게 방향의 두 후보(다른 팀 줄만 · 읽은 인용만) — 남은 차례는 늘 입력 차례(AC17 · 10c)."""
+        first = tic._q("D1", lines=[1])
+        second = tic._q("D2", lines=[], read_quotes=[RQ])
+        for order in ((first, second), (second, first)):
+            with self.subTest(order=[c["target_id"] for c in order]), \
+                    tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                self._prepare(wide=True)
+                self._evidence(io_.build_evidence(None, None, "다른 팀 줄\n")[0])
+                p = self._filter(tic._out(list(order)))
+                self.assertEqual(tic._last(p), "intent-ask: 2")
+                self.assertEqual([q["target_id"] for q in tic._by_state(self.rd, "ask")],
+                                 [c["target_id"] for c in order])
+
+    def test_wide_filter_without_tree_is_uncountable(self):
+        for breadth in WIDE_BREADTHS:
+            with self.subTest(breadth=breadth), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                self._prepare(wide=breadth)
+                shutil.rmtree(self._tree())
+                p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]))
+                lines = p.stdout.splitlines()
+                self.assertIn("리뷰 트리가 없어 읽은 인용을 확인하지 못함", lines)
+                self.assertNotIn("인용이 그 파일에 없어 거름 1", lines)
+                self.assertEqual(tic._questions(rd)["status"], "uncountable")
+                r = tic._cli("render", "--rd", rd, "--mode", "pr")
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(tic._last(r), "intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음)")
+                _text, block = tic._return_block(rd)
+                self.assertEqual(block["status"], "uncountable")
+                self.assertEqual(block["reason_text"], "리뷰 트리가 없어 읽은 인용을 확인하지 못함")
+
+    def test_narrow_filter_without_tree_still_filters(self):
+        self._prepare(wide=False)
+        shutil.rmtree(self._tree())
+        p = self._filter(tic._out([tic._q("D1", lines=[], read_quotes=[RQ])]))
+        self.assertIn("읽은 인용만 있어 거름 1", p.stdout.splitlines())
+        self.assertEqual(tic._questions(self.rd)["status"], "ran")
 
     def test_reask_with_now_quotes(self):
         old = "[읽음] a.txt:1 old"
