@@ -1246,7 +1246,8 @@ fn_append() {  # fn_append <줄기> <라벨> — 그 사본에 ka-other 의 fram
 fn_append n-none "덧붙이기(original 로 만든 사본)"
 fn_append o-empty "덧붙이기(create --layout team 이 만든 사본)"
 assert_eq "$( (cd "$FA" && python3 "$S/team_layout.py" check --roadmap "${RD}fa-o-empty/roadmap.md") > "$T/chk.txt" 2>&1; echo $?)" "0" "덧붙이기(create --layout team 이 만든 사본): 덧붙인 뒤에도 구조 검사를 통과한다"
-# --framing-audit 로 푼 팀 폴더(위 kc — seed 는 있고 그 이름의 audit 이 없다)는 다시 부를 때마다 같은 인자가 든다
+# --framing-audit 로 처음부터 만든 팀 폴더(위 kc — seed 는 있고 그 이름의 audit 이 없다)는 사본에서 brief 첫 구간 바로 앞에
+# 같은 출처의 원문 · 질문 전체 짝이 있어 인자 없이 다시 불러도 통과한다(리더 답 T-i). 짝이 없으면 지금처럼 같은 인자가 든다(아래 「짝」 블록)
 cp "$(fa_o kc)" "$T/fa-kc.o2"
 assert_eq "$(fa_orig kc)" "0" "--framing-audit 로 푼 팀 폴더: 사본의 brief 구간 바로 앞에 같은 출처의 framing 짝이 있으면 인자 없이 다시 불러도 rc 0"
 assert_contains "$(cat "$T/out.txt")" "이미 출처와 같다" "--framing-audit 로 푼 팀 폴더: 인자 없이 다시 부르면 붙일 것이 없다(멈추지 않는다)"
@@ -1255,8 +1256,9 @@ assert_eq "$(fa_orig kc --framing-audit docs/fa/ka-other.audit.md)" "0" "--frami
 assert_contains "$(cat "$T/out.txt")" "이미 출처와 같다" "--framing-audit 로 푼 팀 폴더: 같은 인자로 다시 부르면 붙일 것이 없다"
 
 # ── framing 구간이 이미 든 사본에 framing 없이 덧붙일 때 (PR #283 좁은 재리뷰 넘김 E) ─────────────
-# seed 가 「없음」 인 인터뷰의 사본을 --framing-audit 로 만든 뒤 audit §6 이 자라면, 인자 없이 부른 original 은
-# 새 꼬리 구간에 「framing audit 없음」 표지를 적지 않고 그 화면 줄도 내지 않는다. 사본에 framing 구간이 없으면 지금처럼 적는다(양의 짝).
+# seed 가 「없음」 인 인터뷰의 사본을 --framing-audit 로 처음부터 만든 뒤 audit §6 이 자라면, 인자 없이 부른 original 은
+# 새 꼬리 구간에 「framing audit 없음」 표지를 적지 않고 그 화면 줄도 내지 않는다 — 이 brief 의 첫 구간 바로 앞에 같은 출처의
+# 원문 · 질문 전체 짝이 있고 그 첫 구간에 표지가 없을 때만이다(framing_pair). 짝이 없으면 지금처럼 적는다(양의 짝).
 fn_fix e-fr none; fn_fix e-bare none
 gx "$FA" add -- docs/fa && gx "$FA" commit -qm e-fixtures
 assert_eq "$(fa_orig e-fr --framing-audit docs/fa/ka-other.audit.md)" "0" "넘김 E 픽스처: seed 「없음」 인 인터뷰의 사본을 --framing-audit 로 만든다"
@@ -1333,6 +1335,44 @@ assert_eq "$(fa_orig_in pa po)" "0" "짝이 있고 audit §6 이 자랐다: 인�
 assert_eq "$(markers "$(fa_o po)")" "7" "짝이 있고 audit §6 이 자랐다: 꼬리 구간 하나를 더 붙였다"
 assert_eq "$(grep -c 'framing audit 없음' "$(fa_o po)")" "0" "짝이 있고 audit §6 이 자랐다: 「framing audit 없음」 표지가 없다"
 assert_eq "$(fn_said)" "0" "짝이 있고 audit §6 이 자랐다: framing 없이 옮겼다는 화면 줄이 없다"
+
+# ── 다른 brief 를 위해 끝에 나중에 붙은 짝 바로 뒤에 framing 없이 옮겨진 brief (재리뷰 2 Probe M · S) ─────────────
+# qp(seed 없음)를 인자 없이 → qp 를 --framing-audit 로(짝이 끝에 붙는다) → 다른 인터뷰를 인자 없이(첫 구간에 표지, 짝 바로 뒤).
+# 그 첫 구간의 표지가 「framing 없이 옮겼다」 는 기록이므로 짝으로 읽지 않는다 — 표지 쪽(M)은 표지 · 화면 줄, 멈춤 쪽(S)은 rc 1.
+for k in qp qa qr qs qc1 qc2; do fn_fix "$k" none; done
+fa_pair qc3 docs/fa/lx-seed.md
+gx "$FA" add -- docs/fa && gx "$FA" commit -qm late-pair-fixtures
+qa_marked() { grep -c "^<!-- 출처: docs/fa/$1-brief.*framing audit 없음 -->\$" "$(fa_o "$2")"; }   # qa_marked <brief 줄기> <팀 줄기> — 그 brief 쪽 구간 가운데 표지가 붙은 것
+assert_eq "$(fa_orig_in qp mq)" "0" "늦은 짝 픽스처(M): qp 를 인자 없이 옮긴다"
+assert_eq "$(fa_orig_in qp mq --framing-audit docs/fa/ka-other.audit.md)" "0" "늦은 짝 픽스처(M): qp 에 --framing-audit 로 짝을 끝에 덧붙인다"
+assert_eq "$(fa_orig_in qa mq)" "0" "늦은 짝 픽스처(M): 다른 인터뷰 qa 를 인자 없이 옮긴다"
+assert_eq "$(marker_heads "$(fa_o mq)" | sed -n 3,5p)" "$(printf '%s\n' '<!-- 출처: docs/fa/ka-other.audit.md · 원문 -->' '<!-- 출처: docs/fa/ka-other.audit.md · 질문 전체 -->' '<!-- 출처: docs/fa/qa-brief.md · 사용자 원문 · framing audit 없음 -->')" "늦은 짝 픽스처(M): qa 의 첫 구간(표지 있음)이 짝 바로 뒤다"
+printf -- '- **S8** 🗣 발화 (round 4):\n  > 늦은 짝 뒤에 자란 말\n' >> "$FA/docs/fa/qa-brief.audit.md"
+gx "$FA" add -- docs/fa && gx "$FA" commit -qm qa-grown
+assert_eq "$(fa_orig_in qa mq)" "0" "늦은 짝 뒤 framing 없이 옮긴 brief(M): 자란 audit 를 인자 없이 붙이면 rc 0"
+assert_eq "$(qa_marked qa mq)" "3" "늦은 짝 뒤 framing 없이 옮긴 brief(M): 새 꼬리 구간에도 표지를 적는다(셋)"
+assert_eq "$(fn_said)" "1" "늦은 짝 뒤 framing 없이 옮긴 brief(M): framing 없이 옮겼다는 화면 줄을 낸다"
+assert_eq "$(fa_orig_in qr ms)" "0" "늦은 짝 픽스처(S): qr 을 인자 없이 옮긴다"
+assert_eq "$(fa_orig_in qr ms --framing-audit docs/fa/ka-other.audit.md)" "0" "늦은 짝 픽스처(S): qr 에 짝을 끝에 덧붙인다"
+assert_eq "$(fa_orig_in qs ms)" "0" "늦은 짝 픽스처(S): 다른 인터뷰 qs 를 인자 없이 옮긴다(첫 구간에 표지)"
+printf -- '---\ntype: interview-state\nseed: docs/fa/lx-seed.md\nphase: 2\n---\n' > "$FA/docs/fa/qs-brief.state.md"
+gx "$FA" add -- docs/fa && gx "$FA" commit -qm qs-seed-lost
+b_pair="$(snap "$FA")"
+pair_stop "$(fa_orig_in qs ms)" "늦은 짝 뒤 framing 없이 옮긴 brief(S): seed 의 audit 를 찾지 못하면"
+assert_eq "$(fn_said)" "0" "늦은 짝 뒤 framing 없이 옮긴 brief(S): 멈추면 화면 줄도 없다"
+# 짝 바로 뒤의 brief 가 표지 없이 옮겨진 다른 꼴 — 그 brief 의 framing 이 사본에 이미 같은 바이트로 있어 그 구간을 건너뛰었다.
+# qc1 을 Y(ka-seed)로 처음부터 → qc2 를 인자 없이 뒤 X(ka-other) 짝을 끝에 → qc3(①이 멈춘다)을 --framing-audit Y 로: Y 구간은 건너뛰고
+# qc3 의 첫 구간이 X 짝 바로 뒤에 표지 없이 붙는다. 그 brief 는 framing 원문(Y)과 함께 옮겨졌으므로 인자 없이 다시 불러도 통과한다.
+assert_eq "$(fa_orig_in qc1 mc --framing-audit docs/fa/ka-seed.audit.md)" "0" "건너뛴 framing 픽스처: qc1 을 Y 로 처음부터 만든다"
+assert_eq "$(fa_orig_in qc2 mc)" "0" "건너뛴 framing 픽스처: qc2 를 인자 없이 옮긴다"
+assert_eq "$(fa_orig_in qc2 mc --framing-audit docs/fa/ka-other.audit.md)" "0" "건너뛴 framing 픽스처: qc2 에 X 짝을 끝에 덧붙인다"
+assert_eq "$(fa_orig_in qc3 mc --framing-audit docs/fa/ka-seed.audit.md)" "0" "건너뛴 framing 픽스처: qc3 을 --framing-audit Y 로 옮긴다(Y 구간은 이미 같아 건너뛴다)"
+assert_eq "$(marker_heads "$(fa_o mc)" | sed -n 7,9p)" "$(printf '%s\n' '<!-- 출처: docs/fa/ka-other.audit.md · 원문 -->' '<!-- 출처: docs/fa/ka-other.audit.md · 질문 전체 -->' '<!-- 출처: docs/fa/qc3-brief.md · 사용자 원문 -->')" "건너뛴 framing 픽스처: qc3 의 첫 구간(표지 없음)이 X 짝 바로 뒤다"
+assert_eq "$(marker_heads "$(fa_o mc)" | grep -c 'ka-seed.audit.md · ')" "2" "건너뛴 framing 픽스처: qc3 이 받은 Y 의 원문 · 질문 전체가 사본에 있다"
+cp "$(fa_o mc)" "$T/mc.o"
+assert_eq "$(fa_orig_in qc3 mc)" "0" "건너뛴 framing: 제 framing(Y)이 사본에 있는 brief 는 인자 없이 다시 불러도 rc 0"
+assert_contains "$(cat "$T/out.txt")" "이미 출처와 같다" "건너뛴 framing: 붙일 것이 없다"
+cmp -s "$(fa_o mc)" "$T/mc.o" && ok "건너뛴 framing: 사본 바이트 그대로" || no "건너뛴 framing: 사본이 바뀌었다"
 
 # ── 머지된 에픽은 team 에서도 바꾸지 않는다(계획 1 의 P6 를 되돌린다) ─────────────
 # 픽스처: 새 사본 mg 에 create --layout team → 커밋 · push → feature/t-e1 에 커밋 하나 → main 에 merge 커밋으로 합쳐 push(E1 이 「머지됨」)

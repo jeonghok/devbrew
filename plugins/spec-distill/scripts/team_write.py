@@ -166,15 +166,18 @@ def _user_words(rel: str, data: bytes, W) -> tuple:
 
 
 def framing_pair(existing: bytes, brief_rel: str):
-    """사본에 든 이 인터뷰의 framing audit 경로, 없으면 None — 이 brief 의 첫 사용자 원문 구간 바로 앞 두 구간이 같은 출처의
-    원문 · 질문 전체 차례일 때만 그 출처다(wanted_sections 가 한 번에 붙이는 차례). 짝이 아니거나 사본을 읽지 못하면 None
-    — 틀려도 멈추거나 표지를 적는 쪽으로만 틀린다."""
+    """사본에 든 framing 짝의 출처, 없으면 None — 이 brief 의 첫 사용자 원문 구간에 표지 NO_FRAMING 이 없고, 그 바로 앞 두
+    구간이 같은 출처의 원문 · 질문 전체 차례일 때만 그 출처다(wanted_sections 가 한 번에 붙이는 차례). 표지가 있으면 그 brief 는
+    framing 없이 옮겨졌다는 기록이라 앞의 짝(다른 brief 를 위해 나중에 붙은 것)을 제 것으로 읽지 않는다. 표지 없는 첫 구간은
+    framing 구간을 손에 쥐고 붙인 것이라(같은 바이트가 이미 있어 건너뛰었으면 그 구간은 사본의 다른 자리에 있다) 그 brief 의
+    framing 원문은 사본에 있다 — 다만 돌려주는 출처가 그 brief 가 받은 audit 와 다를 수 있어 참 · 거짓으로만 쓴다.
+    짝이 아니거나 사본을 읽지 못하면 None."""
     try:
         sections = team_files.parse_original(existing) if existing else []
     except team_files.FormatError:
         return None
     first = next((i for i, s in enumerate(sections) if s.source == brief_rel and s.label == team_files.LABELS[2]), None)
-    if first is None or first < 2:
+    if first is None or first < 2 or NO_FRAMING in sections[first].note.split(" · "):
         return None
     head, questions = sections[first - 2], sections[first - 1]
     if (head.label, questions.label) != team_files.LABELS[:2] or head.source != questions.source:
