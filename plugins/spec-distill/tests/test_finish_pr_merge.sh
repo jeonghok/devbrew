@@ -46,6 +46,8 @@ done
 HEADP="$(grep -F '**PR 과 머지 — 분해된 일 ①/② 만.**' "$FIN")"
 assert_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다.' "본문(절 머리): 표시 줄이 있으면 NONE 으로 읽지 않고 다시 확인"
 assert_not_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다. ' "본문(절 머리): 옛 문장(예외 없는 NONE)이 남지 않았다"
+assert_contains "$HEADP" '이 절의 펜스는 gh 를 직접 찾거나 부르지 않고' "본문(절 머리): 펜스가 셋이라 「이 절의 펜스는 gh 를 …」 이다"
+assert_not_contains "$HEADP" '두 펜스는 gh 를' "본문(절 머리): 옛 「두 펜스는 gh 를 …」 가 남지 않았다"
 STEP3="$(grep -F '3. **머지.**' "$FIN")"
 assert_contains "$STEP3" '판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `interview-merge: NONE` 으로 읽어 잇는다.' "본문(3 걸음): 그만둔 출력에 표시 줄이 있으면 다시 확인, 없으면 NONE"
 assert_not_contains "$STEP3" '판결 줄이 이미 있으면 그 판결대로, 없으면 `interview-merge: NONE` 으로 읽어 잇는다' "본문(3 걸음): 옛 문장(표시 줄을 보지 않는 NONE)이 남지 않았다"
