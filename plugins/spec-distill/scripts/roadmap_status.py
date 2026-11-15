@@ -1063,7 +1063,8 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
     names = settings.get("shared_files") or SHARED_BASENAMES
     for b in blocks:
         if b["tip"]:
-            for path in git.changed(main, b["tip"]):
+            changed = git.changed(main, b["tip"])
+            for path in changed:
                 if _shared(path, names):
                     continue
                 owners = [o["id"] for o in blocks
@@ -1071,6 +1072,12 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
                 if owners and b["id"] not in owners:  # 정보 — 종료 코드를 바꾸지 않는다
                     b["notes"].append("경로 예약 위반: %s 은 %s 만 예약했다"
                                          % (path, " · ".join(owners)))
+            if team:   # 아무 블록도 예약하지 않은 파일(Q13) — 정보, 종료 코드를 바꾸지 않는다
+                out = team_status.outside(team.team, b, blocks, changed, lambda p: _shared(p, names), _reserves)
+                if out:
+                    b["notes"].append("예약 밖 변경: %s" % " · ".join(out))
+        if team and b["kind"] != "decision":   # INTENT.md 와 블록의 어긋남(AC28) — 브랜치 끝, 없으면 로드맵을 읽은 사본
+            b["notes"].extend(team.drift(b["tip"], b))
     return cov_unknown
 
 
@@ -1131,6 +1138,30 @@ def _read_sections(block: dict, heading: str, label: str):
             errs.append(str(exc))
             block["warnings"].append("%s 읽기 불가(%s): %s" % (label, exc, spec))
     return got, errs
+
+
+def _team_sections(team, block: dict, label: str, report: dict, records: dict, bad_records: dict, rulings: dict):
+    """team 블록의 넘김 확인 글(INTENT.md 결정 기록)과 판정(결과 파일의 `Ruling:` 줄). 결정 블록은 옛 형식처럼 빈 글 · 판정 없음.
+    읽지 못하면 옛 형식처럼 그 블록의 경고와 검사 불가 사유로 낸다 — 다만 단계가 이미 「알 수 없음」 인 블록은 그 사유가
+    같은 사실을 말하고 종료 코드도 이미 3 이라 겹쳐 내지 않는다(넘김은 그래도 셀 수 없음이 된다)."""
+    bid, tree = block["id"], block.get("tip")
+    records[bid] = ""
+    if block["kind"] == "decision":
+        return
+    told = block["stage"] != "알 수 없음"
+    try:
+        records[bid] = team.record_text(tree, block)
+    except FormatError as exc:
+        bad_records[bid] = str(exc)
+        if told:
+            block["warnings"].append("%s 읽기 불가(%s): %s" % (label, exc, team.team.intent(bid)))
+            report["unknown_reasons"].append("%s %s 읽기 불가 — %s" % (bid, label, exc))
+    try:
+        rulings[bid] = team.rulings(tree, block)
+    except FormatError as exc:
+        if told:
+            block["warnings"].append("판정 읽기 불가(%s): %s" % (exc, team.team.results(bid)))
+            report["unknown_reasons"].append("%s 판정 읽기 불가 — %s" % (bid, exc))
 
 
 # ── 출력 ─────────────────────────────────────────────────────────────────────
@@ -1229,7 +1260,7 @@ def build(git: Git, args) -> dict:
     team = None
     if layout == team_layout.LAYOUT_TEAM:   # 단계는 과제 폴더에서 센다(team_status.Reader) — 머지 판정은 옛 형식과 같은 길
         try:
-            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read)
+            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read, src.exists)
         except ValueError as exc:
             report["format_errors"].append("team 로드맵의 자리가 아니다 — %s" % exc)
             return report
@@ -1244,7 +1275,11 @@ def build(git: Git, args) -> dict:
     report["overlaps"] = overlaps(blocks, settings.get("shared_files") or SHARED_BASENAMES)
     stages = dict((b["id"], b["stage"]) for b in blocks)
     records, bad_records, rulings = {}, {}, {}
+    record_label = team_layout.INTENT_FILE + " 의 결정 기록" if team else None
     for b in blocks:
+        if team:   # 넘김 확인 줄은 INTENT.md 결정 기록에서, 판정은 결과 파일에서 읽는다
+            _team_sections(team, b, record_label, report, records, bad_records, rulings)
+            continue
         got, errs = _read_sections(b, RECORD_HEADING, "지휘 기록")
         records[b["id"]] = "\n".join("\n".join(lines or []) for _spec, lines in got)
         if errs:
@@ -1256,10 +1291,10 @@ def build(git: Git, args) -> dict:
         elif any(lines is not None for _spec, lines in got):
             rulings[b["id"]] = [l for _spec, lines in got for l in (lines or []) if l.startswith("- ")]
     givers = [(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
-    report["handoffs"] = handoff_rows(givers, stages, records)
+    report["handoffs"] = handoff_rows(givers, stages, records, record_label=record_label)
     for h in report["handoffs"]:
         if h["receiver"] in bad_records and h["state"] in ("열림", "처리됨", "확인됨"):
-            h.update(state="셀 수 없음", basis="%s 지휘 기록 읽기 불가" % h["receiver"])
+            h.update(state="셀 수 없음", basis="%s %s 읽기 불가" % (h["receiver"], record_label or "지휘 기록"))
     parallel = parallel_with(blocks, report["overlaps"])
     for b in blocks:
         ids = b["assigned"]

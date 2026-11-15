@@ -770,9 +770,10 @@ def confirmed_keys(record_text: str) -> set:
     return out
 
 
-def handoff_rows(givers, stages: dict, records: dict) -> list:
+def handoff_rows(givers, stages: dict, records: dict, record_label=None) -> list:
     """넘김 한 줄씩. givers 는 [(준 에픽, 설계문서 경로, [(항목, 이유, 받는 곳)])], stages 는 {에픽: 단계},
-    records 는 {에픽: 그 에픽 설계문서들의 `## 지휘 기록` 글}.
+    records 는 {에픽: 넘김 확인 줄을 읽는 글(설계문서들의 `## 지휘 기록` 글)}. record_label 을 주면 확인됨의
+    근거가 `<받는 에픽> <record_label>` 이다(team 형식 — 그 글이 다른 자리에서 왔다).
     상태: 열림 · 처리됨(받는 에픽 머지됨, 확인 전) · 확인됨 · 이슈(`#<n>` — 처리 여부는 GitHub) · 받는 곳 없음."""
     out = []
     for giver, spec, rows in givers:
@@ -783,7 +784,8 @@ def handoff_rows(givers, stages: dict, records: dict) -> list:
             elif not receiver_ok(recv, set(stages)):
                 row.update(state="받는 곳 없음", basis="받는 곳 %r 이 로드맵의 에픽도 `#<n>` 도 아니다" % recv)
             elif (giver, handoff_key(giver, item)) in confirmed_keys(records.get(recv, "")):
-                row.update(state="확인됨", basis="%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:]))
+                row.update(state="확인됨", basis=("%s %s" % (recv, record_label) if record_label
+                                                 else "%s 설계문서의 %s 절" % (recv, RECORD_HEADING[3:])))
             elif stages[recv] in RECEIVED:
                 row.update(state="처리됨", basis="%s 머지됨 — 확인 전" % recv)
             else:

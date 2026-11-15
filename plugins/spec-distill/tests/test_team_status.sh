@@ -404,4 +404,161 @@ rm -f "$(cat "$T/machine-path.txt")"; rm -rf "$W/.claude"
 assert_eq "$(g status --porcelain --untracked-files=all)" "" "끝 상태: 작업 트리가 깨끗하다(PR 캐시를 지웠다)"
 assert_eq "$(g rev-parse --abbrev-ref HEAD) · $(g rev-parse HEAD) · $(g symbolic-ref -q refs/remotes/origin/HEAD)" "main · ${MAIN_END} · refs/remotes/origin/main" \
   "끝 상태: main 을 연 채 · main 은 합친 커밋 · origin/HEAD 는 main"
+
+# ── 알림 — 예약 밖 변경 · INTENT.md 어긋남 · 넘김 · 판정 · 과제 폴더 안 산출물(AC11 · AC28 · AC9) ─────────
+# 시작 자리: 위 끝 상태에서 feature/tm-e1b 를 지우고 main 을 E1 을 합치기 전(MAIN_AT) · feature/tm-e1 을 RECEIVED_AT 으로 되돌린다
+g branch -q -D feature/tm-e1b && g push -q origin --delete feature/tm-e1b && back "$MAIN_AT" && g checkout -q feature/tm-e1 \
+  && back "$RECEIVED_AT" && restat || fail_step "알림 시작 자리"
+assert_eq "$(st E1) · $(why E1) · $(g rev-parse origin/main)" "구현 끝 · 결과 받음 줄 있음: implement-plan-1-1.md · ${MAIN_AT}" \
+  "알림: 시작 자리 — feature/tm-e1 이 구현 끝 · main 은 E1 을 합치기 전"
+before_rc="$(status "$T/n0.json")"
+assert_not_contains "$(notes E1)" "예약 밖 변경" "알림: 고칠 자리와 과제 폴더만 바꾼 브랜치에는 예약 밖 변경이 없다"
+assert_not_contains "$(notes E1)" "INTENT.md 가 로드맵 블록과 다르다" "알림: 고치지 않은 INTENT.md 에는 어긋남 알림이 없다(아래 단언들의 양의 짝)"
+assert_not_contains "$(notes P1)" "INTENT.md" "알림: 결정 블록은 INTENT.md 를 견주지 않는다"
+put docs/free.md x && put README.md y && put src/e3/steal.txt z && put "$TM/RULES.md" "# RULES 알림 픽스처" && step "예약 밖 파일들" || fail_step "예약 밖 파일들"
+OUTLINE="$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E1' for n in b['notes'] if n.startswith('예약 밖 변경: ')][0]")"
+assert_contains "$OUTLINE" "docs/free.md" "AC11: 아무도 예약하지 않은 파일이 이름과 함께 나온다"
+assert_contains "$OUTLINE" "$TM/RULES.md" "AC11: 팀 폴더의 다른 파일도 예약 밖 변경이다(Q13)"
+assert_not_contains "$OUTLINE" "README.md" "AC11: 공유 파일은 뺀다"
+assert_not_contains "$OUTLINE" "src/e3/steal.txt" "AC11: 다른 과제가 예약한 파일은 예약 밖 변경이 아니다"
+assert_not_contains "$OUTLINE" "src/e1/" "AC11: 자기 고칠 자리는 예약 밖 변경이 아니다"
+assert_not_contains "$OUTLINE" "$TM/jobs/E1/" "AC11: 자기 과제 폴더는 예약 밖 변경이 아니다"
+assert_eq "$OUTLINE" "예약 밖 변경: docs/free.md · $TM/RULES.md" "AC11: 예약 밖 변경은 한 줄 · 이름 순"
+assert_contains "$(notes E1)" "경로 예약 위반: src/e3/steal.txt 은 E3 만 예약했다" "AC11: 경로 예약 위반 알림은 그대로다"
+assert_eq "$(rc) · $(st E1)" "${before_rc} · 구현 끝" "AC11: 종료 코드와 단계는 그대로다"
+decide E1 "예약 밖 변경 · 2026-11-26 · 「docs/free.md 를 함께 고쳤다」" && step "예약 밖 변경 결정 줄" || fail_step "예약 밖 변경 결정 줄"
+assert_contains "$(notes E1)" "예약 밖 변경: docs/free.md · $TM/RULES.md" "Q13: 결정 기록의 예약 밖 변경 줄은 알림을 끄지 않는다"
+back "$RECEIVED_AT"
+# 어긋남(AC28) — 작업 폴더의 INTENT.md 칸 하나씩
+sub "$J1/INTENT.md" "첫 읽기를 만든다" "첫 읽기를 만든다." && step "목표 칸 고침" || fail_step "목표 칸 고침"
+assert_contains "$(notes E1)" "INTENT.md 가 로드맵 블록과 다르다: E1 — 목표 칸이 로드맵의 의도 · 범위와 다르다" "AC28: 목표 칸이 로드맵 블록과 다르면 알린다"
+assert_not_contains "$(notes E1)" "하지 않을 것 칸이" "AC28: 고치지 않은 칸은 알리지 않는다"
+assert_eq "$(rc)" "$before_rc" "AC28: 어긋남 알림은 종료 코드를 바꾸지 않는다"
+back "$RECEIVED_AT"
+sub "$J1/INTENT.md" "- 쓰기" "- 쓰기와 지우기" && step "하지 않을 것 칸 고침" || fail_step "하지 않을 것 칸 고침"
+assert_contains "$(notes E1)" "INTENT.md 가 로드맵 블록과 다르다: E1 — 하지 않을 것 칸이 로드맵의 범위(안 한다 쪽)와 다르다" "AC28: 하지 않을 것 칸이 다르면 알린다"
+assert_not_contains "$(notes E1)" "목표 칸이" "AC28: 목표 칸은 그대로라 알리지 않는다"
+back "$RECEIVED_AT"
+sub "$J1/INTENT.md" "## 목표" "## 목표 아님" && step "목표 칸 제목 깨짐" || fail_step "목표 칸 제목 깨짐"
+assert_contains "$(notes E1)" "INTENT.md 를 로드맵 블록과 견주지 못했다: E1 — 칸이 없다: ## 목표" "AC28: 칸을 찾지 못하면 견주지 못했다고 알린다"
+assert_contains "$(js "$T/s.json" "r['unknown_reasons']")" "E1 INTENT.md 의 결정 기록 읽기 불가 — 칸이 없다: ## 목표" "넘김: 단계를 센 블록의 결정 기록을 못 읽으면 검사 불가 사유"
+assert_eq "$(rc)" "3" "넘김: 결정 기록 읽기 불가는 검사 불가(3)"
+back "$RECEIVED_AT"
+g rm -q -- "$J1/INTENT.md" && step "INTENT.md 지움(알림)" || fail_step "INTENT.md 지움(알림)"
+assert_contains "$(notes E1)" "$J1/INTENT.md 를 읽지 못했다" "AC28: INTENT.md 를 읽지 못하면 그 한 줄"
+assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], [b['warnings'] for b in r['blocks'] if b['id']=='E1'][0])")" "([], [])" \
+  "알림: 알 수 없음 블록의 결정 기록 · 판정 읽기 불가를 경고 · 검사 불가 사유로 겹쳐 내지 않는다"
+back "$RECEIVED_AT"
+g checkout -q main && sub "$TM/jobs/E3/INTENT.md" "첫 읽기 위에 얹는다" "첫 읽기 위에 얹었다" && step "E3 목표 칸 고침(기본 브랜치)" || fail_step "E3 목표 칸 고침(기본 브랜치)"
+assert_contains "$(notes E3)" "INTENT.md 가 로드맵 블록과 다르다: E3 — 목표 칸이 로드맵의 의도 · 범위와 다르다" "AC28: 브랜치가 없는 과제는 기본 브랜치의 INTENT.md 를 견준다"
+assert_not_contains "$(notes E2)" "INTENT.md 가 로드맵 블록과 다르다" "AC28: 고치지 않은 E2 에는 어긋남 알림이 없다(양의 짝)"
+assert_eq "$(rc)" "$before_rc" "AC28: 기본 브랜치의 어긋남도 종료 코드를 바꾸지 않는다"
+back "$MAIN_AT"
+# 기본 브랜치의 E3 INTENT.md 가 없음 · 있는데 못 읽음 — 없음은 빈 결정 기록(옛 형식의 설계문서 없는 블록과 같다), 못 읽음은 검사 불가
+g rm -q -- "$TM/jobs/E3/INTENT.md" && step "E3 INTENT.md 지움(기본 브랜치)" || fail_step "E3 INTENT.md 지움(기본 브랜치)"
+assert_contains "$(notes E3)" "$TM/jobs/E3/INTENT.md 를 읽지 못했다" "AC28: 없는 INTENT.md 는 견주지 못했다는 한 줄"
+assert_eq "$(rc) · $(blk E3 warnings)" "${before_rc} · []" "넘김: 없는 INTENT.md 는 빈 결정 기록 — 경고 · 종료 코드 그대로"
+back "$MAIN_AT"
+g rm -q -- "$TM/jobs/E3/INTENT.md" && put "$TM/jobs/E3/INTENT.md/x.txt" "폴더인 INTENT" && step "E3 INTENT.md 가 폴더(기본 브랜치)" || fail_step "E3 INTENT.md 가 폴더(기본 브랜치)"
+assert_contains "$(blk E3 warnings)" "INTENT.md 의 결정 기록 읽기 불가($TM/jobs/E3/INTENT.md 를 읽지 못했다)" "넘김: 있는데 읽지 못한 INTENT.md 는 경고"
+assert_eq "$(rc)" "3" "넘김: 있는데 읽지 못한 INTENT.md 는 검사 불가(3)"
+back "$MAIN_AT"
+# 넘김 —과제 폴더 design.md 의 미룸 행 · 받는 과제 INTENT.md 의 넘김 확인 줄
+HO="[(h['giver'], h['receiver'], h['state'], h['basis']) for h in r['handoffs'] if h['item']=='넘길 일']"
+g checkout -q feature/tm-e1 && printf '| 넘길 일 | 이유 | E3 |\n' >> "$W/$J1/design.md" && step "E1 미룸 한 행" || fail_step "E1 미룸 한 행"
+assert_eq "$(js "$T/s.json" "$HO")" "[('E1', 'E3', '열림', 'E3 대기')]" "넘김: 과제 폴더 design.md 의 미룸 행 — 열림"
+CONFIRM="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import conductor_state; print(conductor_state.confirm_line("E1", "넘길 일", "받았다"))' "$S")"
+g checkout -q main && decide E3 "$CONFIRM" && step "E3 넘김 확인(기본 브랜치)" || fail_step "E3 넘김 확인(기본 브랜치)"
+assert_eq "$(js "$T/s.json" "$HO")" "[('E1', 'E3', '확인됨', 'E3 INTENT.md 의 결정 기록')]" "넘김: 받는 과제 INTENT.md 의 넘김 확인 줄 — 확인됨"
+sub "$TM/jobs/E3/INTENT.md" "## 결정 기록" "## 결정 기록 아님" && step "E3 결정 기록 칸 깨짐" || fail_step "E3 결정 기록 칸 깨짐"
+assert_eq "$(js "$T/s.json" "$HO")" "[('E1', 'E3', '셀 수 없음', 'E3 INTENT.md 의 결정 기록 읽기 불가')]" "넘김: 받는 과제의 결정 기록을 못 읽으면 셀 수 없음"
+back "$MAIN_AT"
+# 판정 — 결과 파일의 Ruling 줄 · 결과 파일이 없는 과제 · 결정 블록 · 읽지 못한 결과 파일
+g checkout -q feature/tm-e1 && back "$RECEIVED_AT" && sub "$R1" "끝 — $CODE" $'Ruling: 알림 픽스처의 판정 — 읽는 자리는 결과 파일이다\n끝 — '"$CODE" \
+  && step "결과 파일의 판정 줄" || fail_step "결과 파일의 판정 줄"
+assert_eq "$(blk E1 rulings_archived)" "['- Ruling: 알림 픽스처의 판정 — 읽는 자리는 결과 파일이다']" "판정: 결과 파일의 Ruling 줄에 - 를 붙여 싣는다"
+assert_eq "$(st E1)" "구현 끝" "판정: 결과 파일에 판정 줄을 더해도 구현 끝 그대로"
+assert_eq "$(blk E3 rulings_archived) · $(blk P1 rulings_archived)" "[] · None" "판정: 결과 파일이 없는 과제는 [] · 결정 블록은 None"
+back "$RECEIVED_AT"
+g checkout -q main && put "$TM/jobs/E3/results/review-1.md/x.txt" "폴더인 결과 이름" && step "E3 결과 이름의 폴더(기본 브랜치)" || fail_step "E3 결과 이름의 폴더(기본 브랜치)"
+assert_contains "$(blk E3 warnings)" "판정 읽기 불가($TM/jobs/E3/results/review-1.md 를 읽지 못했다)" "판정: 읽지 못한 결과 파일은 0 이 아니라 경고"
+assert_contains "$(js "$T/s.json" "r['unknown_reasons']")" "E3 판정 읽기 불가 — $TM/jobs/E3/results/review-1.md 를 읽지 못했다" "판정: 읽지 못한 결과 파일은 검사 불가 사유"
+assert_eq "$(rc) · $(blk E3 rulings_archived)" "3 · None" "판정: 읽지 못하면 검사 불가(3) · 판정 칸은 None"
+back "$MAIN_AT"
+# 같은 사실은 한 번 — 받음 줄이 가리키는 결과 파일을 다 읽지 못하면 받음 줄의 알림 하나로 낸다
+g checkout -q feature/tm-e1 && python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8", newline="").read(); open(p, "w", encoding="utf-8", newline="").write("﻿" + t)' "$W/$R1" \
+  && step "받은 뒤 BOM" || fail_step "받은 뒤 BOM"
+assert_contains "$(notes E1)" "받음 줄을 세지 않았다: implement-plan-1-1.md — 머리(첫 줄" "알림: 받은 뒤 다 읽지 못한 결과 파일 — 받음 줄을 세지 않았다"
+assert_eq "$(js "$T/s.json" "sum(n.count('머리(첫 줄') for b in r['blocks'] if b['id']=='E1' for n in b['notes'])")" "1" \
+  "알림: 받음 줄의 결과 파일을 다 읽지 못한 사실은 한 번만 알린다(Q13)"
+back "$RECEIVED_AT"
+# 조사 흐름(AC9) — feature/tm-e2 를 다시 쓴다: 과제 폴더 안 산출물의 번호 대조 · 미룸
+SURVEY="$(printf '# 조사 표\n\n| 파일 | 줄 수 |\n|---|---|\n| a.txt | 1 |\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| D2 | 반영 | 조사 표 |\n| S2 | 반영 | 조사 표의 칸 |\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|\n| 조사 넘김 | 표 밖의 파일 | E3 |')"
+g checkout -q feature/tm-e2 && restat || fail_step "feature/tm-e2 로"
+assert_eq "$(g rev-parse HEAD) · $(blk E2 specs)" "${E2_AT} · ['$TM/jobs/E2/survey.md']" "AC9: 산출물이 설계문서 자리다(feature/tm-e2 의 받은 끝)"
+assert_contains "$(blk E2 warnings)" "번호 대조 건너뜀" "AC9: 번호 대조 절이 없는 산출물은 건너뛴다고 경고한다(아래 「없다」 의 양의 짝)"
+put "$TM/jobs/E2/survey.md" "$SURVEY" && step "조사 표의 번호 대조 · 미룸" || fail_step "조사 표의 번호 대조 · 미룸"
+assert_eq "$(blk E2 specs)" "['$TM/jobs/E2/survey.md']" "AC9: 과제 폴더 안 산출물이 E2 의 specs"
+assert_not_contains "$(blk E2 warnings)" "번호 대조 건너뜀" "AC9: 산출물의 번호 대조 표를 읽는다"
+assert_not_contains "$(blk E2 warnings)" "생략" "AC9: 번호를 다 받들면 생략이 없다(아래 단언의 양의 짝)"
+assert_eq "$(js "$T/s.json" "[(h['giver'], h['receiver'], h['state']) for h in r['handoffs'] if h['giver']=='E2']")" "[('E2', 'E3', '열림')]" "AC9: 산출물의 미룸 표가 넘김이 된다"
+assert_not_contains "$(notes E2)" "예약 밖 변경" "AC11: 자기 과제 폴더 안 산출물은 예약 밖 변경이 아니다"
+drop "$TM/jobs/E2/survey.md" "| S2 |" && step "번호 대조에서 S2 를 지움" || fail_step "번호 대조에서 S2 를 지움"
+assert_contains "$(blk E2 warnings)" "생략: " "AC9: 번호 대조 표에서 빠진 번호는 생략"
+assert_contains "$(blk E2 warnings)" "S2" "AC9: 생략 경고가 빠진 번호를 적는다"
+back "$E2_AT"
+# 읽는 함수를 바로 부른다 — 결과 폴더를 못 읽는 가짜 Git · 기본 브랜치 모름 · 사본에서 없음을 물을 길 없음 · 옛 근거 글
+python3 - "$S" "$W" "$RD" "$RM" "$RECEIVED_AT" > "$T/notice-reader.txt" 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_state, roadmap_model, roadmap_status, team_layout, team_status
+from roadmap_model import FormatError, parse_roadmap
+root, rd, rm, tip = sys.argv[2:6]
+team = team_layout.team_from_roadmap(rd, rm)
+git = roadmap_status.Git(root)
+main = git.commit("refs/remotes/origin/HEAD")
+block = {b["id"]: b for b in parse_roadmap(git.blob(main, rm))[1]}["E1"]
+
+
+class Shut(roadmap_status.Git):
+    def names(self, rev, folder):
+        return None if folder == team.results("E1") else super().names(rev, folder)
+
+
+def tried(f):
+    try:
+        return f()
+    except FormatError as exc:
+        return "FormatError: %s" % exc
+
+
+print("rulings-folder", tried(lambda: team_status.Reader(Shut(root), main, team, lambda p: None).rulings(tip, block)))
+print("rulings-nomain", tried(lambda: team_status.Reader(git, None, team, lambda p: None).rulings(None, block)))
+print("record-no-exists", tried(lambda: team_status.Reader(git, main, team, lambda p: None).record_text(None, block)))
+rows = [("E1", "d.md", [("넘길 일", "이유", "E3")])]
+record = {"E3": conductor_state.confirm_line("E1", "넘길 일", "받았다")}
+print("old-basis", roadmap_model.handoff_rows(rows, {"E1": "구현 끝", "E3": "대기"}, record)[0]["basis"])
+PY
+assert_contains "$(cat "$T/notice-reader.txt")" "rulings-folder FormatError: $J1/results 를 읽지 못했다" "판정: 결과 폴더를 읽지 못하면 [] 가 아니라 FormatError"
+assert_contains "$(cat "$T/notice-reader.txt")" "rulings-nomain FormatError: 기본 브랜치를 몰라 결과 파일을 읽지 못했다" "판정: 기본 브랜치를 모르면 FormatError"
+assert_contains "$(cat "$T/notice-reader.txt")" "record-no-exists FormatError: $J1/INTENT.md 를 읽지 못했다" \
+  "넘김: 사본에서 없음을 확인할 길이 없으면 없음으로 치지 않는다(FormatError)"
+assert_contains "$(cat "$T/notice-reader.txt")" "old-basis E3 설계문서의 지휘 기록 절" "넘김: record_label 이 없으면 옛 근거 글 그대로"
+assert_not_contains "$(cat "$T/notice-reader.txt")" "Traceback" "알림: 읽는 함수들이 죽지 않는다"
+g checkout -q main && restat || fail_step "알림 끝"
+# 기본 브랜치를 모르면(알 수 없음 블록) 판정 · 결정 기록 읽기 불가를 블록마다 겹쳐 내지 않는다 — 그 사실은 검사 불가 사유 한 줄이 말한다
+g remote set-head origin -d
+NH_RC=0; (cd "$W" && python3 "$RS" --roadmap-file "$RM" --json) > "$T/nohead2.json" 2>/dev/null || NH_RC=$?
+assert_eq "${NH_RC} · $(js "$T/nohead2.json" "[u for u in r['unknown_reasons'] if '읽기 불가' in u]")" "3 · []" \
+  "알림: 기본 브랜치를 모르면 블록마다 판정 · 결정 기록 읽기 불가를 겹쳐 내지 않는다"
+assert_contains "$(js "$T/nohead2.json" "r['unknown_reasons']")" "기본 브랜치를 알 수 없다" "알림: 그 사실은 검사 불가 사유 한 줄이 말한다(양의 짝)"
+g remote set-head origin main
+assert_eq "$(g status --porcelain --untracked-files=all)" "" "알림 끝 상태: 작업 트리가 깨끗하다"
+assert_eq "$(g rev-parse --abbrev-ref HEAD) · $(g rev-parse HEAD) · $(g rev-parse origin/main) · $(g symbolic-ref -q refs/remotes/origin/HEAD)" \
+  "main · ${MAIN_AT} · ${MAIN_AT} · refs/remotes/origin/main" "알림 끝 상태: main 을 연 채 · main 은 E1 을 합치기 전(MAIN_AT) · origin/HEAD 는 main"
+assert_eq "$(g rev-parse feature/tm-e1 origin/feature/tm-e1 feature/tm-e2 origin/feature/tm-e2 | tr '\n' ' ')" "${RECEIVED_AT} ${RECEIVED_AT} ${E2_AT} ${E2_AT} " \
+  "알림 끝 상태: feature/tm-e1 은 RECEIVED_AT · feature/tm-e2 는 E2_AT(로컬 · origin)"
+assert_eq "$(g for-each-ref --format='%(refname)' refs/heads/feature/tm-e1b refs/heads/feature/tm-e3 refs/remotes/origin/feature/tm-e1b refs/remotes/origin/feature/tm-e3)" "" \
+  "알림 끝 상태: feature/tm-e1b · feature/tm-e3 이 없다(로컬 · origin)"
+assert_eq "$(st E1) · $(st E2) · $(st E3)" "구현 끝 · 결과 받음 · 대기" "알림 끝 상태: 단계 — E1 구현 끝 · E2 결과 받음 · E3 대기"
 finish

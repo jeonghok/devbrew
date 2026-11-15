@@ -39,6 +39,16 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
         for line in ("- 과제마다 INTENT.md 부터", "- 설계안 승인 뒤에 코드", "- 실서비스 배포", "- 다른 폴더 파일 고치기", "- 승인 전 코딩"):
             self.assertIn(line + "\n", text)
 
+    def test_results_point_instead_of_copying(self):   # AC28
+        line = "- 결과 파일에 테스트 출력을 옮겨 싣지 말고 커밋과 경로로 가리킨다.\n"
+        for role in ("worker", "writer"):
+            text = F.role_template(role).read_text(encoding="utf-8")
+            self.assertIn(line, text.split("## 하지 않을 일")[0], role)
+        for role in L.ROLES:   # 어느 틀도 테스트 출력을 실으라고 하지 않는다
+            for row in F.role_template(role).read_text(encoding="utf-8").splitlines():
+                if "테스트 출력" in row:
+                    self.assertTrue("싣지 않" in row or "싣지 말" in row, (role, row))
+
     def test_no_file_named_like_auto_loaded_memory(self):
         self.assertEqual([p.name for p in F.TEMPLATES.rglob(L.ROLE_DOC)], [])
 
