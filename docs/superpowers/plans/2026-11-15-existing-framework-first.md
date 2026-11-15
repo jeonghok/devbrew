@@ -16,7 +16,7 @@
 - 기준 글 경로(글자 그대로): `plugins/spec-distill/references/existing-first.md`. 고지 파일: `plugins/spec-distill/references/existing-first.NOTICE.txt`(`.md` 가 아니다 — 참고 글 고아 검사는 `.md` 만 읽는다).
 - 모델이 읽는 글이 기준 글을 가리킬 때의 표기(글자 그대로): `${CLAUDE_PLUGIN_ROOT}/references/existing-first.md`.
 - 마지막 전체 리뷰가 묻는 구절(글 넷에서 같은 글자): `설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.`
-- 가져오는 원문: 저장소 `affaan-m/everything-claude-code` 의 `skills/search-first/SKILL.md`, 커밋 `0765f7a2ca2bd5df214d3aa7ba7e7ac19db8b189`, 183줄, SHA-256 `76835db48dd910061d2e4271b1151793d2fddbabeb2d2866eed068b3580c55d5`. MIT, 저작권 줄 `Copyright (c) 2026 Affaan Mustafa`. 영어 그대로 두고, 빼는 절 여섯과 제자리 수정 세 곳(네 줄) 말고는 글자를 바꾸지 않는다.
+- 가져오는 원문: 저장소 `affaan-m/everything-claude-code` 의 `skills/search-first/SKILL.md`, 커밋 `0765f7a2ca2bd5df214d3aa7ba7e7ac19db8b189`, 183줄, SHA-256 `76835db48dd910061d2e4271b1151793d2fddbabeb2d2866eed068b3580c55d5`. MIT, 저작권 줄 `Copyright (c) 2026 Affaan Mustafa`. 영어 그대로 두고, 빼는 절 여섯과 제자리 수정 네 곳(다섯 줄) 말고는 글자를 바꾸지 않는다.
 - 모델이 읽는 글(기준 글 · skill · 참고 글 · 리뷰 프로필)에는 출처 · 배경 · 존재 이유를 쓰지 않는다. 출처와 라이선스는 고지 파일 · CHANGELOG · README 에만 둔다. 모델이 읽는 글은 고지 파일을 가리키지 않는다.
 - 기준 글과 넘김 글에 레포 전용 값(경로 · 테스트 명령 · 브랜치 · 모델)을 박지 않는다. 이 계획도 하위 agent 의 모델 이름을 정하지 않는다 — 실행하는 쪽이 일의 무게를 보고 그 자리에서 고른다.
 - 리뷰 프로필(`references/docreview-profiles/design-doc.md`) 편집은 리뷰어 페르소나 편집이다 — 더하기만 한다(있는 항목 · 처분 · 임계 · 머리말은 그대로). 보안 리뷰 대상이다(Task 4 · Task 7).
@@ -34,7 +34,7 @@
 - 옛 넘김 줄로 이미 쓰인 다른 에픽의 설계문서가 넓힌 리뷰 항목을 만나는 경우 — 지적은 `fix` 로 나오고 승인을 막지 않아야 한다. `approaches_comparison` 이 꼭 잡을 항목 목록에 들어가면 그 문서들의 승인이 막힌다(Task 4 의 `must_catch` 단언).
 - 넘김 글 넷 가운데 하나만 구절의 글자가 달라지는 경우 — 넷이 같은 글자여야 한다(Task 3 의 단언 넷 · 변이 「글자 하나 바꾸기」).
 - 인터뷰 문단의 문장이 문단 밖으로 옮겨지는 경우 — 파일 어딘가에 글자가 남아도 문단 창 안에 없으면 RED 여야 한다(Task 2 의 문단 창 · 변이 「Read 줄을 문단 밖으로」).
-- 가져온 영어 절이나 새 우리 절의 낱말이 참고 폴더 전체를 훑는 부재 검사에 걸리는 경우 — 새 `.md` 는 선언 없이 그 검사들의 대상이 된다. 모의 실행에서 걸린 것은 조사 agent 예시 블록의 `general-purpose` 하나였고 그 블록을 뺐다(Task 2 의 넓게 돌리기 · Task 7 의 전체 스위트).
+- 가져온 영어 절이나 새 우리 절의 낱말이 참고 폴더 전체를 훑는 부재 검사에 걸리는 경우 — 새 `.md` 는 선언 없이 그 검사들의 대상이 된다. 모의 실행에서 걸린 것은 조사 agent 예시 블록의 `general-purpose` 였고 그 블록을 뺐다. 실행에서는 추적되는 파일만 읽는 인라인 python 격리 검사가 영어 절의 pip 판 확인 명령을 잡아 `-I` 를 넣었다(Task 2 의 넓게 돌리기 · Task 7 의 전체 스위트).
 - 뒤에 머지하는 다른 로드맵의 에픽이 같은 줄을 고쳐 괄호를 글자로 박은 테스트가 깨지는 경우 — 테스트로 막을 수 없어 PR 본문과 두 지휘 세션에 전할 글로 알린다(Task 7).
 
 ## 파일 구조
@@ -284,7 +284,7 @@ Expected: `76835db48dd910061d2e4271b1151793d2fddbabeb2d2866eed068b3580c55d5`. �
 
 ```python
 #!/usr/bin/env python3
-"""기준 글과 고지 파일을 만든다 — 원문에서 줄 범위를 빼고 제자리 수정 셋을 적용한다.
+"""기준 글과 고지 파일을 만든다 — 원문에서 줄 범위를 빼고 제자리 수정 넷을 적용한다.
 
 usage: build_ref.py <upstream SKILL.md> <LICENSE> <ours.md> <out existing-first.md> <out NOTICE>
 """
@@ -312,6 +312,8 @@ DELETE = [
 EDIT = [
     (39, "│     Score candidates (functionality, maint, │", "│     Show candidate facts (functionality,    │"),
     (40, "│     community, docs, license, deps)         │", "│     maint, community, docs, license, deps)  │"),
+    (73, "| Package registry | `npm --version`, `python -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |",
+         "| Package registry | `npm --version`, `python -I -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |"),
     (75, "| MCP/docs tools | Available tool list or local MCP config | Fall back to official docs/web search |",
          "| MCP/docs tools | Available tool list | Fall back to official docs/web search |"),
     (84, "2. Is there an MCP for this? → Check `~/.claude/settings.json` and search",
@@ -319,7 +321,7 @@ EDIT = [
 ]
 for n, old, new in EDIT:
     assert lines[n - 1] == old, (n, lines[n - 1])
-    assert len(old) == len(new) or n in (75, 84), n
+    assert len(old) == len(new) or n in (73, 75, 84), n
     lines[n - 1] = new
 gone = set()
 for a, b, _ in DELETE:
@@ -347,7 +349,7 @@ note.append("")
 note.append("제자리 수정 (원문 줄 번호 · 원문 → 바꾼 글)")
 for n, old, new in EDIT:
     note.append("- %d행" % n)
-    note.append("  - 원문: " + old)
+    note.append("  - 원문: " + (old if n != 73 else "아래 바꾼 글에서 「 -I」 를 뺀 줄이다"))
     note.append("  - 바꾼 글: " + new)
 note.append("")
 note.append("그 밖의 글자는 원문 그대로다.")
@@ -369,8 +371,8 @@ shasum -a 256 plugins/spec-distill/references/existing-first.md plugins/spec-dis
 Expected: `kept 83 lines`, 그리고
 
 ```
-a425792c0e9bc7e8b21b757941a8e7c01fdc056b15ae79b525997589eeebcb2b  plugins/spec-distill/references/existing-first.md
-c619367f9829ba9ca8f69540382cf02bb79377811bde5ae83d36d64d370d8005  plugins/spec-distill/references/existing-first.NOTICE.txt
+d466c9964163b9e66f2dc703b17692d8ccf54ff8256dd2d01c48c4bca6b81965  plugins/spec-distill/references/existing-first.md
+aa19770aaa7c24dfa8fcb449f21fc338c454ced0601e9da0d156547be278c15b  plugins/spec-distill/references/existing-first.NOTICE.txt
 ```
 
 첫 값이 다르면 `ours.md` 가 Step 4 의 글자와 다른 것이다 — 그 블록과 견줘 고친다.
@@ -427,7 +429,7 @@ grep -n -i -E 'eslint|ruff|textlint|markdownlint|prettier|gofmt|jest|pytest|husk
 git grep -n -F 'existing-first.NOTICE' -- 'plugins/*/skills/*' 'plugins/*/references/*.md' 'plugins/*/agents/*' CLAUDE.md docs/philosophy
 ```
 
-Expected: 첫 수는 `4`(더해진 줄은 제자리 수정 네 줄뿐 — AC5). 둘째 · 셋째 명령은 출력이 없다(AC4 · AC6). 고지 파일을 열어 저작권 줄 · MIT 전문 · 출처 · 뺀 절 여섯 · 제자리 수정 네 줄이 있는지 눈으로 본다(AC6).
+Expected: 첫 수는 `5`(더해진 줄은 제자리 수정 다섯 줄뿐 — AC5). 둘째 · 셋째 명령은 출력이 없다(AC4 · AC6). 고지 파일을 열어 저작권 줄 · MIT 전문 · 출처 · 뺀 절 여섯 · 제자리 수정 다섯 줄이 있는지 눈으로 본다(AC6).
 
 - [ ] **Step 9: 커밋한다**
 
