@@ -650,7 +650,8 @@ def extra_branches(git: Git, main: str, rel: str, blocks: list):
     들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 이름(처음 본 차례). 계획 2 의 브랜치는 자기 브랜치의 사본에서만
     블록에 자신을 더하므로 기본 브랜치 사본만 읽으면 계획 1 머지 뒤 에픽이 「머지됨」으로 보인다. 사본의 블록이 기본 브랜치
     블록의 브랜치를 모두 품을 때만 그 블록을 잇는 사본으로 본다 — 재분해 전 · 같은 경로를 다시 쓴 낡은 사본은 세지 않는다.
-    로드맵 파일이 없는 사본은 건너뛰고, 형식이 깨진 사본은 읽을 수 있는 블록만 쓰되 그 수를 낸다.
+    로드맵 파일이 없는 사본은 건너뛰고, 형식이 깨진 사본은 읽을 수 있는 블록만 쓰되 그 수를 낸다. 머리말 `layout` 이 모르는
+    값인 사본은 블록을 하나도 쓰지 않고 깨진 사본으로 센다(옛 규칙으로 읽지 않는다).
     한계: 사본을 만든 뒤 기본 브랜치 블록의 `브랜치:` 가 바뀌면(재분해) 그 사본은 블록을 품지 못해 세지 않는다 —
     열린 브랜치에 기본 브랜치를 merge 하면(지휘 순환 걸음 6) 풀린다."""
     listed = {b["id"]: list(b["branches"]) for b in blocks if b["kind"] != "decision"}
@@ -660,9 +661,12 @@ def extra_branches(git: Git, main: str, rel: str, blocks: list):
         if not text:
             continue
         try:
-            _meta, other, _rec, _risk, errs = parse_roadmap(text)
+            meta, other, _rec, _risk, errs = parse_roadmap(text)
+            team_layout.layout_of(meta)
         except FormatError:
             other, errs = [], ["형식 깨짐"]
+        except team_layout.UnknownLayout:   # 모르는 형식의 사본은 옛 규칙으로 읽지 않는다 — 블록을 쓰지 않고 깨진 사본으로 센다
+            other, errs = [], ["모르는 형식"]
         if errs:
             broken += 1
         for ob in other:

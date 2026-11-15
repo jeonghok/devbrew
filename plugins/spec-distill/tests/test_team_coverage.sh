@@ -74,6 +74,28 @@ design "$ROWS_ALL" "$(printf '## 원문 대조\n\n| 원문 요소 | 설계 요�
 assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표 머리 행이 칸 넷이 아니다" "원문 대조: 머리 행이 칸 셋이면 「읽지 못했다」 알림"
 design "$ROWS_ALL" "$ORIGIN_HEAD"
 assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표가 없거나 데이터 행이 없다" "원문 대조: 데이터 행이 없는 표는 「읽지 못했다」 알림"
+# 셋째 칸은 「그대로」 · 「바꿈」 둘뿐이다 — 그 밖의 값은 표를 읽지 못한 것(근거 칸이 비어도 얕은 답 검사를 비켜 가지 않는다)
+origin_bad() {  # origin_bad <셋째 칸> <라벨> — 근거 칸이 빈 그 행 하나로 종료 코드와 끝 줄(알림)을 잰다
+  local row="| 팀 폴더 | 과제 폴더 | $1 |  |"
+  design "$ROWS_ALL" "$(printf '%s\n%s' "$ORIGIN_HEAD" "$row")"
+  assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 셋째 칸이 그대로/바꿈이 아니다('$1'): '$row'" "원문 대조: 셋째 칸 $2"
+}
+origin_bad "바뀜" "오타(바뀜) → 「읽지 못했다」 알림 · rc 0"
+origin_bad "**바꿈**" "꾸밈(**바꿈**) → 「읽지 못했다」 알림 · rc 0"
+origin_bad "" "빈 칸 → 「읽지 못했다」 알림 · rc 0"
+origin_bad "바꿈(작성자 제안)" "「바꿈(작성자 제안)」 → 「작성자 제안」 은 근거 칸에 적는다(설계 표의 꼴) — 「읽지 못했다」 알림"
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | 작성자 제안 |' "$ORIGIN_HEAD")"
+assert_eq "$(cov) · $(grep -c -e '알림 — ' -e '얕은 답' "$T/out.txt")" "0 · 0" "원문 대조: 근거 칸의 「작성자 제안」 은 근거다 — 알림도 얕은 답도 없다"
+# 근거 칸이 대시뿐이면 근거가 아니다 · 첫 칸(원문 요소)이 비면 표를 읽지 못한 것 · 같은 절의 둘째 표는 머리 · 구분 행을 건너뛴다
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | — |\n| 막힘 파일 | 막힘 파일 | 바꿈 | - |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "([s['id'] for s in r['shallow']], r['notices'])")" "(['팀 폴더', '막힘 파일'], [])" "원문 대조: 근거 칸이 「—」 · 「-」 뿐인 「바꿈」 은 얕은 답"
+design "$ROWS_ALL" "$(printf '%s\n|  | 과제 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
+assert_eq "$(cov) · $(sed -n '$p' "$T/out.txt")" "0 · 알림 — 원문 대조 표를 읽지 못했다 — 원문 대조 표 행의 첫 칸(원문 요소)이 비었다: '|  | 과제 폴더 | 바꿈 |  |'" "원문 대조: 첫 칸이 빈 행은 「읽지 못했다」 알림"
+assert_not_contains "$(cat "$T/out.txt")" "얕은 답 — :" "원문 대조: 첫 칸이 빈 행을 id 없는 얕은 답으로 세지 않는다"
+design "$ROWS_ALL" "$(printf '%s\n| 팀 폴더 | 과제 폴더 | 바꿈 | S1 |\n\n둘째 표:\n\n| 원문 요소 | 설계 요소 | 그대로/바꿈 | 근거 |\n|---|---|---|---|\n| 둘째 표 요소 | 과제 폴더 | 바꿈 |  |' "$ORIGIN_HEAD")"
+cov --json >/dev/null
+assert_eq "$(jsf "([s['id'] for s in r['shallow']], r['notices'])")" "(['둘째 표 요소'], [])" "원문 대조: 같은 절의 둘째 표 — 머리 · 구분 행은 건너뛰고 데이터 행만 읽는다"
 
 # ── 받듦 — 다른 과제(E3)의 design.md 를 읽는다 ─────────────────────────────
 design "$ROWS_REJECT_S1" "$ORIGIN_OK"
@@ -111,13 +133,13 @@ printf -- '---\ntype: job\njob: E1\nroadmap: %s\n---\n\n## 목표\n' "${RD}deep/
 assert_contains "$(cat "$T/out.txt")" "셀 수 없음 — S1 — team 로드맵의 자리가 아니다 — " "team 로드맵의 자리가 아니면 기각 행이 셀 수 없음"
 rm -rf "$W/${RD}deep" "$W/deep-lone"
 # 커밋 트리를 읽는 repo(뿌리 없음)가 roadmaps_dir 을 넘기지 않으면 죽지 않고 사유를 낸다
-tree_repo_view() {  # tree_repo_view — 뿌리 없는 repo 로 _roadmap_view 를 부른 값
-  (cd "$W" && python3 - "$S" "$RM") <<'PY'
+tree_repo_view() {  # tree_repo_view <specs_dir | -> <roadmaps_dir | -> — 뿌리 없는 repo 로 _roadmap_view 를 부른 값(- 는 None)
+  (cd "$W" && python3 - "$S" "$RM" "$1" "$2") <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
 import check_bundle_coverage as cbc
-class TreeRepo:   # roadmap_status._GitTreeRepo 처럼 root 가 없고 specs_dir 만 있다
-    specs_dir, roadmaps_dir = "docs/superpowers/specs/", None
+class TreeRepo:   # roadmap_status._GitTreeRepo 처럼 root 가 없다
+    specs_dir, roadmaps_dir = [None if a == "-" else a for a in sys.argv[3:5]]
     def read(self, rel):
         return open(rel, encoding="utf-8").read()
     def exists(self, rel):
@@ -125,7 +147,9 @@ class TreeRepo:   # roadmap_status._GitTreeRepo 처럼 root 가 없고 specs_dir
 print(cbc._roadmap_view({}, TreeRepo(), sys.argv[2]))
 PY
 }
-assert_contains "$(tree_repo_view)" "(None, '레포 설정을 읽지 못했다: 읽는 자리가 로드맵 폴더(roadmaps_dir)를 넘기지 않았다')" "뿌리 없는 repo 가 roadmaps_dir 을 넘기지 않으면 사유(죽지 않는다)"
+assert_contains "$(tree_repo_view docs/superpowers/specs/ -)" "(None, '레포 설정을 읽지 못했다: 읽는 자리가 로드맵 폴더(roadmaps_dir)를 넘기지 않았다')" "뿌리 없는 repo 가 roadmaps_dir 을 넘기지 않으면 사유(죽지 않는다)"
+assert_contains "$(tree_repo_view - "$RD")" "(None, '레포 설정을 읽지 못했다: 읽는 자리가 설계문서 폴더(specs_dir)를 넘기지 않았다')" "뿌리 없는 repo 가 specs_dir 을 넘기지 않으면 그 이름을 댄다"
+assert_contains "$(tree_repo_view - -)" "(None, '레포 설정을 읽지 못했다: 읽는 자리가 설계문서 폴더(specs_dir) · 로드맵 폴더(roadmaps_dir)를 넘기지 않았다')" "뿌리 없는 repo 가 둘 다 넘기지 않으면 둘 다 댄다"
 python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8").read(); s=s.replace("| C1 | 반영 | §1 |\n", ""); open(p, "w", encoding="utf-8").write(s)' "$T/lone/design.md"
 assert_eq "$(lone)" "1" "INTENT.md 없음: rc 는 빠진 번호 규칙 그대로(C1 이 빠지면 1)"
 
@@ -140,6 +164,17 @@ assert_contains "$(cat "$T/out.txt")" "미룸 표에 없는 미룸/빠짐 — AC
 sed -n '/^AC1: 구현됨 — a$/,$p' "$T/result.md" > "$T/plain.md"
 (cd "$W" && python3 "$C" --impl "$J1/design.md" "$T/plain.md") > "$T/out.txt" 2>&1
 assert_contains "$(cat "$T/out.txt")" "구현 대조 검사 불가 — 보고에 AC1 가 두 번 있다" "--impl: 결과 파일이 아닌 보고는 지금 그대로(펜스 안 줄도 읽는다)"
+impl_json() { (cd "$W" && python3 "$C" --impl "$J1/design.md" "$1" --json) > "$T/out.txt" 2>&1; }
+printf 'AC1: 구현됨 — a\nAC2: 구현됨 — b\n' > "$T/plain-ok.md"
+impl_json "$T/plain-ok.md"
+assert_eq "$(jsf "('notices' in r, r['status'])")" "(False, 0)" "--impl: 결과 파일이 아닌 보고의 --json 에는 notices 키가 없다"
+impl_json "$T/result.md"
+assert_eq "$(jsf "r['notices']")" "[]" "--impl: 다 읽은 결과 파일은 빈 notices"
+# 닫히지 않은 펜스 뒤의 AC 줄은 읽히지 않는다 — 「보고에 없는 AC」 만이 아니라 그 사유를 알린다
+printf -- '---\ntype: job-result\nstage: implement\nplan: 1\nattempt: 1\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\nAC1: 구현됨 — a\n\n```text\n열린 펜스\nAC2: 구현됨 — b\n' "$SHA" "$SHA" "$SHA" > "$T/result-open.md"
+(cd "$W" && python3 "$C" --impl "$J1/design.md" "$T/result-open.md") > "$T/out.txt" 2>&1
+assert_contains "$(cat "$T/out.txt")" "보고에 없는 AC — AC2" "--impl: 닫히지 않은 펜스 뒤의 AC2 는 보고에 없다"
+assert_eq "$(sed -n '$p' "$T/out.txt")" "알림 — 결과 파일의 AC 줄을 다 읽지 못했다: result-open.md — 본문의 코드 펜스가 닫히지 않았다 — 끝까지 펜스 안으로 읽어 기계 줄을 읽지 않았다" "--impl: 기계 줄을 빠뜨린 결과 파일은 첫 사유를 알림 끝 줄로"
 
 # ── 옛 형식 — notices 칸 · 알림 줄이 없다 ──────────────────────────────────
 mkdir -p "$T/old"
@@ -172,6 +207,8 @@ assert_eq "$(cov)" "3" "번호 대조 없는 team design.md: 검사 불가(3)"
 assert_eq "$(sed -n 1p "$T/out.txt")" '번호 대조 검사 불가 — spec 에 `## 번호 대조` 절이 없다' "번호 대조 없는 team design.md: 사유"
 cov --json >/dev/null
 assert_eq "$(jsf "(r['status'], r['notices'])")" "(3, [])" "번호 대조 없는 team design.md: team 의 검사 불가에도 notices 칸이 있다"
+printf -- '---\ntype: design\njob: E1\n---\n\n# 첫 읽기 — 표 둘 다 없는 설계\n\n### §1 하나\n\n아직 아무 표도 없다.\n' > "$W/$J1/design.md"
+assert_eq "$(cov) · $(cat "$T/out.txt")" "$(printf '3 · 번호 대조 검사 불가 — spec 에 `## 번호 대조` 절이 없다\n알림 — 설계문서에 `## 원문 대조` 표가 없다')" "번호 대조 없는 team design.md: 검사 불가(3)의 글 출력에도 알림 줄"
 rm -f "$W/$J1/design.md"
 
 # ── 단계 계산을 거쳐 — 블록 경고 · 알림 ─────────────────────────────────────
@@ -182,7 +219,7 @@ design "$ROWS_NO_C1" ""
 commit_design "원문 대조 없는 설계 · C1 빠짐"
 status "$T/s.json" >/dev/null
 assert_contains "$(blk E1 warnings)" "생략: " "단계 계산: 번호 파일의 번호가 빠지면 「생략」"
-assert_contains "$(blk E1 warnings)" "C1" "단계 계산: 빠진 번호 C1"
+assert_contains "$(blk E1 warnings)" "생략: $J1/design.md 이 번호 1개를 빠뜨렸다 — C1" "단계 계산: 빠진 번호 C1"
 assert_contains "$(blk E1 notes)" '번호 대조 알림: 설계문서에 `## 원문 대조` 표가 없다' "단계 계산: 원문 대조 표가 없다는 알림이 블록 알림에"
 design "$ROWS_ALL" "$ORIGIN_CHANGED_NO_REASON"
 commit_design "원문 대조 · 얕은 답"
@@ -204,5 +241,53 @@ printf -- '---\ntype: design\njob: E1\n---\n\n# 첫 읽기 — 표 없는 설계
 commit_design "번호 대조 표 없는 설계"
 assert_eq "$(status "$T/s.json")" "3" "단계 계산: 번호 대조 표가 없는 team design.md 는 검사 불가(3)"
 assert_contains "$(js "$T/s.json" "r['unknown_reasons']")" 'E1 spec 에 `## 번호 대조` 절이 없다' "단계 계산: 그 사유가 검사 불가 사유에"
+
+# ── 로드맵 사본의 모르는 layout(통합 리뷰 넘김 B · extra_branches) ─────────────
+# 아직 머지 안 된 브랜치의 로드맵 사본이 E2 블록에 feature/tm-e2x 를 더한다. 사본 머리말의 layout 만 바꿔 가며 잰다.
+copy_branch() {  # copy_branch <no-such | none | team> — main 에서 갈라 사본의 layout 줄을 그렇게 두고 E2 에 브랜치 하나를 더해 커밋한다
+  g checkout -q -b "copy/$1" main
+  python3 - "$W/$RM" "$1" <<'PY'
+import sys
+path, mode = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+text = text.replace("- 브랜치: feature/tm-e2\n", "- 브랜치: feature/tm-e2, feature/tm-e2x\n")
+if mode == "none":
+    text = text.replace("layout: team\n", "")
+elif mode != "team":
+    text = text.replace("layout: team\n", "layout: %s\n" % mode)
+open(path, "w", encoding="utf-8").write(text)
+PY
+  g add -- "$RM" && g commit -qm "로드맵 사본 — layout $1" && g checkout -q main
+}
+copies() {  # copies — (extra_branches 가 E2 에 더한 브랜치, 깨진 사본 수) | conductor_ledger 사본 경고들
+  (cd "$W" && python3 - "$S" "$RM") <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_ledger as cl, roadmap_status as rs
+from roadmap_model import parse_roadmap
+rm = sys.argv[2]
+blocks = parse_roadmap(open(rm, encoding="utf-8").read())[1]
+found, broken = rs.extra_branches(rs.Git("."), cl._default_sha("."), rm, blocks)
+shown = [{"id": b["id"], "kind": b["kind"], "branches": list(b["branches"]), "stage": "구현 중",
+          "branch": ", ".join(b["branches"])} for b in blocks]
+warns = []
+cl._with_copy_branches(".", rm, shown, warns)
+print("%s %d | %s" % (found.get("E2"), broken, " / ".join(warns)))
+PY
+}
+g checkout -q main
+assert_eq "$(copies)" "None 0 | " "사본: 양성 대조 — 사본 브랜치가 없으면 더한 브랜치도 깨진 사본도 없다"
+copy_branch no-such
+assert_eq "$(copies)" "None 1 | 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 1개는 형식이 깨져 읽은 블록만 셌다" \
+  "사본: 모르는 layout 의 사본은 브랜치를 더하지 않고 형식이 깨진 사본으로 센다"
+g branch -q -D copy/no-such
+copy_branch none
+assert_eq "$(copies)" "['feature/tm-e2x'] 1 | 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본 1개는 형식이 깨져 읽은 블록만 셌다 / E2: 블록 \`브랜치:\` 에 없는 feature/tm-e2x 도 열린 브랜치로 셌다 — 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 이 블록에 더했다" \
+  "사본 양의 짝: layout 줄 없는 사본은 지금과 바이트까지 같다(team 글을 옛 규칙으로 읽어 깨진 사본 1 · 읽은 블록의 브랜치는 더함)"
+g branch -q -D copy/none
+copy_branch team
+assert_eq "$(copies)" "['feature/tm-e2x'] 0 | E2: 블록 \`브랜치:\` 에 없는 feature/tm-e2x 도 열린 브랜치로 셌다 — 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 이 블록에 더했다" \
+  "사본 양의 짝: layout: team 사본은 지금처럼 E2 에 브랜치를 더한다"
+g branch -q -D copy/team
 
 finish

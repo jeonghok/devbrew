@@ -53,6 +53,7 @@ ORIGIN_HEADING = "## 원문 대조"
 ORIGIN_SHALLOW = "원문 대조의 「바꿈」 행에 근거가 없다"
 ORIGIN_MISSING = "설계문서에 `## 원문 대조` 표가 없다"
 ORIGIN_CHANGED = "바꿈"
+ORIGIN_KINDS = ("그대로", ORIGIN_CHANGED)   # 셋째 칸의 값은 이 둘뿐이다 — 「작성자 제안」 표시는 넷째(근거) 칸에 적는다
 NO_TEAM_ROADMAP = "로드맵을 모른다 — 번호 파일 옆 INTENT.md 머리의 roadmap 을 읽지 못했다"
 UNKNOWN_LAYOUT = "모르는 형식 — %s 머리말 %s: %s (아는 값: %s)"
 AC_HEADING = "## Acceptance Criteria"
@@ -346,7 +347,9 @@ def _roadmap_view(fm: dict, repo, roadmap_rel=None):
     roadmaps_dir = getattr(repo, "roadmaps_dir", None)
     if specs_dir is None or (layout and roadmaps_dir is None):
         if getattr(repo, "root", None) is None:   # 커밋 트리를 읽는 repo 는 해결자를 부를 뿌리가 없다 — 부르는 쪽이 폴더를 넘긴다
-            return None, "레포 설정을 읽지 못했다: 읽는 자리가 로드맵 폴더(roadmaps_dir)를 넘기지 않았다"
+            lacking = (["설계문서 폴더(specs_dir)"] if specs_dir is None else []) + \
+                (["로드맵 폴더(roadmaps_dir)"] if layout and roadmaps_dir is None else [])
+            return None, "레포 설정을 읽지 못했다: 읽는 자리가 %s를 넘기지 않았다" % " · ".join(lacking)
         try:
             settings = resolve(repo.root, roadmap=rel, roadmap_text=text)
         except SettingsError as exc:
@@ -426,7 +429,8 @@ def _unchecked(reason: str, notices=None) -> dict:
 
 
 def origin_rows(spec_text: str):
-    """`## 원문 대조` 표의 (원문 요소, 설계 요소, 그대로/바꿈, 근거) 행들. 절이 없으면 None, 표가 깨졌으면 FormatError."""
+    """`## 원문 대조` 표의 (원문 요소, 설계 요소, 그대로/바꿈, 근거) 행들. 절이 없으면 None, 표가 깨졌으면 FormatError —
+    칸이 넷이 아님 · 첫 칸이 빔 · 셋째 칸이 「그대로」 · 「바꿈」 밖의 값. 같은 절의 다음 표는 머리 · 구분 행을 건너뛴다."""
     body = section_body(spec_text, ORIGIN_HEADING)
     if body is None:
         return None
@@ -436,15 +440,37 @@ def origin_rows(spec_text: str):
     if len(_cells(rows[0])) != 4:
         raise FormatError("원문 대조 표 머리 행이 칸 넷이 아니다")
     sep = _cells(rows[1])
-    if len(sep) != 4 or not all(SEP_CELL_RE.fullmatch(c) for c in sep):
+    if len(sep) != 4 or not _is_sep_row(sep):
         raise FormatError("원문 대조 표 구분 행이 칸 넷이 아니다")
-    out = []
-    for row in rows[2:]:
-        cells = _cells(row)
+    out, i = [], 2
+    while i < len(rows):
+        row, cells = rows[i], _cells(rows[i])
+        nxt = _cells(rows[i + 1]) if i + 1 < len(rows) else []
+        if _is_sep_row(nxt):   # 같은 절의 다음 표 — 그 머리 행 · 구분 행은 데이터가 아니다
+            if len(cells) != 4 or len(nxt) != 4:
+                raise FormatError("원문 대조 표 머리 행이 칸 넷이 아니다")
+            i += 2
+            continue
         if len(cells) != 4:
             raise FormatError("원문 대조 표 행이 칸 넷이 아니다: %r" % row)
+        if not cells[0]:
+            raise FormatError("원문 대조 표 행의 첫 칸(원문 요소)이 비었다: %r" % row)
+        if cells[2] not in ORIGIN_KINDS:
+            raise FormatError("셋째 칸이 그대로/바꿈이 아니다(%r): %r" % (cells[2], row))
         out.append(tuple(cells))
+        i += 1
+    if not out:
+        raise FormatError("원문 대조 표가 없거나 데이터 행이 없다")
     return out
+
+
+def _is_sep_row(cells: list) -> bool:
+    return bool(cells) and all(SEP_CELL_RE.fullmatch(c) for c in cells)
+
+
+def _has_reason(cell: str) -> bool:
+    """근거 칸에 글이 있나 — 대시(— · – · -)와 공백뿐이면 근거가 아니다. 「작성자 제안」 표시도 이 칸에 적는다."""
+    return bool(cell.strip("—–- "))
 
 
 def origin_notes(spec_text: str) -> tuple:
@@ -456,7 +482,7 @@ def origin_notes(spec_text: str) -> tuple:
     if rows is None:
         return [ORIGIN_MISSING], []
     return [], [{"id": element[:40], "reason": ORIGIN_SHALLOW}
-                for element, _design, how, why in rows if how == ORIGIN_CHANGED and not why]
+                for element, _design, how, why in rows if how == ORIGIN_CHANGED and not _has_reason(why)]
 
 
 def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadmap_rel=None) -> dict:
@@ -649,11 +675,17 @@ def parse_report(text: str) -> dict:
     return out
 
 
-def report_body(report_text: str) -> str:
-    """`AC<n>:` 줄을 읽을 글 — 결과 파일(머리 type 이 job-result)이면 머리와 펜스 안을 뺀 본문, 그 밖의 보고는 그대로."""
-    if unquote(frontmatter(report_text).get("type", "")) == team_files.RESULT_TYPE:
-        return team_files.parse_result(report_text).machine_text
-    return report_text
+IMPL_LOST = "결과 파일의 AC 줄을 다 읽지 못했다"
+
+
+def report_body(report_text: str, name: str) -> tuple:
+    """(`AC<n>:` 줄을 읽을 글, 알림 | None). 결과 파일(머리 type 이 job-result)이면 머리와 펜스 안을 뺀 본문과 알림 목록 —
+    기계 줄을 빠뜨린 사유(team_files.lost_lines)가 있으면 첫 사유 한 줄. 그 밖의 보고는 글 그대로 · None(칸 없음)."""
+    if unquote(frontmatter(report_text).get("type", "")) != team_files.RESULT_TYPE:
+        return report_text, None
+    result = team_files.parse_result(report_text)
+    lost = team_files.lost_lines(result)
+    return result.machine_text, (["%s: %s — %s" % (IMPL_LOST, name, lost[0])] if lost else [])
 
 
 def _impl_unchecked(reason: str) -> dict:
@@ -727,8 +759,9 @@ def _impl_status(r: dict) -> dict:
 
 
 def render_impl(r: dict) -> str:
+    notes = ["알림 — %s" % n for n in r.get("notices") or []]   # 결과 파일만 있는 칸
     if r["status"] == 3:
-        return "구현 대조 검사 불가 — %s" % r["reason"]
+        return "\n".join(["구현 대조 검사 불가 — %s" % r["reason"]] + notes)
     n = sum(len(r[k]) for _label, k in IMPL_GROUPS)
     if n:
         lines = ["구현 대조: 경고 %d개 — %s"
@@ -746,7 +779,7 @@ def render_impl(r: dict) -> str:
                  % (r["ac_count"], c["구현됨"], c["미룸"], scope, r["receiver_rule"])]
     if r["unknown_acs"]:
         lines.append("정보: 설계문서에 없는 AC 가 보고에 있다 — %s" % " · ".join(r["unknown_acs"]))
-    return "\n".join(lines)
+    return "\n".join(lines + notes)
 
 
 def _two_files(first: str, second: str, fn, unchecked) -> dict:
@@ -770,8 +803,9 @@ def warning_count(result: dict) -> int:
 
 
 def render(result: dict) -> str:
+    notes = ["알림 — %s" % n for n in result.get("notices") or []]   # team(번호 파일)만 있는 칸
     if result["status"] == 3:
-        return "번호 대조 검사 불가 — %s" % result["reason"]
+        return "\n".join(["번호 대조 검사 불가 — %s" % result["reason"]] + notes)
     brief = result.get("mode") == "brief"
     sources = result.get("mode") == "sources"
     m, sh, un, uk = (result[k] for k in ("missing", "shallow", "unserved", "unknown"))
@@ -794,8 +828,7 @@ def render(result: dict) -> str:
         lines.append("정보: %s 없는 번호 %d개가 표에 있다 — %s"
                      % ("brief 에" if brief else "번호 파일에" if sources else "묶음에",
                         len(result["extra"]), " · ".join(result["extra"])))
-    lines += ["알림 — %s" % n for n in result.get("notices") or []]
-    return "\n".join(lines)
+    return "\n".join(lines + notes)
 
 
 def _read(path: str):
@@ -868,7 +901,11 @@ def main(argv=None) -> int:
                 ids, problem = receiver_ids(args.first, spec_text)
             except team_layout.UnknownLayout as exc:
                 return _impl_unchecked(unknown_layout(unquote(frontmatter(spec_text).get("roadmap", "")), exc.value))
-            return check_impl(spec_text, report_body(report_text), only, ids, problem)
+            body, notices = report_body(report_text, os.path.basename(args.second))
+            r = check_impl(spec_text, body, only, ids, problem)
+            if notices is not None:   # 결과 파일만 있는 칸
+                r["notices"] = notices
+            return r
         result = _impl_status(_two_files(args.first, args.second, impl, _impl_unchecked))
         text = render_impl(result)
     else:
