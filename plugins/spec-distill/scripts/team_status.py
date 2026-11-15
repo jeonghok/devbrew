@@ -23,6 +23,7 @@ DESIGN_FLOW, PLAIN_FLOW = "설계 흐름", "설계 없는 흐름"
 UNKNOWN = "알 수 없음"
 IMPLEMENT = team_layout.STAGES[2]
 SHALLOW = "얕은 클론이라 받음 · 진행을 셀 이력이 없다 — `git fetch --unshallow` 뒤 다시 계산한다"
+RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정 줄을 다 읽지 못했다"
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -54,11 +55,12 @@ def outside(team, block: dict, blocks: list, changed: list, shared, reserves) ->
 
 class Reader:
     """team 로드맵 블록의 과제 폴더를 읽어 단계를 센다. tree 는 커밋이고, None 이면 로드맵을 읽은 사본(read_default)이다.
-    exists_default 는 그 사본에 경로가 있는가 — 주지 않으면 사본에서의 없음을 확인하지 못한 것으로 본다."""
+    absent_default(경로) 는 그 사본에 그 경로가 없다고 확인됐는가(git 실패는 거짓) — 주지 않으면 사본에서의 없음을
+    확인하지 못한 것으로 본다."""
 
-    def __init__(self, git, main, team, read_default, exists_default=None):
+    def __init__(self, git, main, team, read_default, absent_default=None):
         self.git, self.main, self.team, self.read_default = git, main, team, read_default
-        self.exists_default = exists_default
+        self.absent_default = absent_default
         self._shallow = []
 
     def shallow(self):
@@ -78,7 +80,7 @@ class Reader:
     def _absent(self, tree, path: str) -> bool:
         """확인된 없음만 참이다 — 있는데 못 읽음 · git 실패 · 사본을 물을 길 없음은 거짓."""
         if tree is None:
-            return self.exists_default is not None and not self.exists_default(path)
+            return self.absent_default is not None and self.absent_default(path)
         return self.git.absent(tree, path)
 
     def flow(self, block: dict) -> str:
@@ -154,7 +156,9 @@ class Reader:
 
     def rulings(self, tree, block: dict) -> list:
         """그 과제 결과 파일들(이름 순)의 `Ruling:` 줄에 `- ` 를 붙인 것. tree 가 None 이면 기본 브랜치에서 읽는다.
-        결과 파일이 없으면 []. 결과 폴더나 결과 파일을 읽지 못하면 FormatError — 셀 수 없는 것을 [] 로 내지 않는다."""
+        결과 파일이 없으면 []. 결과 폴더나 결과 파일을 읽지 못하면 FormatError — 셀 수 없는 것을 [] 로 내지 않는다.
+        기계 줄을 빠뜨린 결과 파일(lost_lines)은 읽힌 판정 줄을 싣고 block 의 notes 에 알림 한 줄을 더한다 — 같은 파일 ·
+        같은 사유를 이미 알렸으면 덧내지 않는다(종료 코드는 그대로)."""
         rev, job = tree or self.main, block["id"]
         if rev is None:
             raise FormatError("기본 브랜치를 몰라 결과 파일을 읽지 못했다")
@@ -168,7 +172,11 @@ class Reader:
             text = self.git.blob(rev, path)
             if text is None:
                 raise FormatError("%s 를 읽지 못했다" % path)
-            out += ["- " + line for line in team_files.parse_result(text).rulings]
+            result = team_files.parse_result(text)
+            lost, notes = team_files.lost_lines(result), block.setdefault("notes", [])
+            if lost and not any(job_results.same_fact(n, name, lost[0]) for n in notes):
+                notes.append(job_results.file_note(RULINGS_UNREAD, name, lost[0]))
+            out += ["- " + line for line in result.rulings]
         return out
 
     def _fill_progress(self, block: dict, name: str, path: str, result) -> None:
@@ -223,8 +231,8 @@ class Reader:
             lost = team_files.lost_lines(result) if result is not None else []
             # 받음 줄의 대조(receipt)가 이 파일의 같은 사유를 이미 알렸으면 한 번만 낸다(Q13 — 한 사실에 알림 하나)
             if result is not None and result.problems and \
-                    not any(n.endswith("%s — %s" % (latest, result.problems[0])) for n in notes):
-                block["notes"].append("결과 파일을 다 읽지 못했다: %s — %s" % (latest, result.problems[0]))
+                    not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes):
+                block["notes"].append(job_results.file_note(RESULT_UNREAD, latest, result.problems[0]))
             if state == job_results.NOT_RECEIVED:
                 block["notes"].append("결과 있음 · 받음 없음: %s(%s)" % (
                     latest, "읽지 못함 — 끝 줄이 있는지 모른다" if result is None or lost

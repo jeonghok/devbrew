@@ -304,6 +304,12 @@ class Source:
             return self.git.exists(self.rev, path)
         return Path(self.root, path).exists()
 
+    def absent(self, path: str) -> bool:
+        """사본에 그 경로가 없다고 확인됐는가 — 기본 브랜치 사본은 git.absent(다른 git 실패는 거짓 · failures 에 남는다)."""
+        if self.rev:
+            return self.git.absent(self.rev, path)
+        return not Path(self.root, path).exists()
+
 
 # ── 단계 · 경고 ──────────────────────────────────────────────────────────────
 
@@ -1260,7 +1266,7 @@ def build(git: Git, args) -> dict:
     team = None
     if layout == team_layout.LAYOUT_TEAM:   # 단계는 과제 폴더에서 센다(team_status.Reader) — 머지 판정은 옛 형식과 같은 길
         try:
-            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read, src.exists)
+            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read, src.absent)
         except ValueError as exc:
             report["format_errors"].append("team 로드맵의 자리가 아니다 — %s" % exc)
             return report
@@ -1276,6 +1282,7 @@ def build(git: Git, args) -> dict:
     stages = dict((b["id"], b["stage"]) for b in blocks)
     records, bad_records, rulings = {}, {}, {}
     record_label = team_layout.INTENT_FILE + " 의 결정 기록" if team else None
+    told_failures = len(git.failures)
     for b in blocks:
         if team:   # 넘김 확인 줄은 INTENT.md 결정 기록에서, 판정은 결과 파일에서 읽는다
             _team_sections(team, b, record_label, report, records, bad_records, rulings)
@@ -1290,7 +1297,9 @@ def build(git: Git, args) -> dict:
             report["unknown_reasons"].append("%s 판정 읽기 불가 — %s" % (b["id"], errs[0]))
         elif any(lines is not None for _spec, lines in got):
             rulings[b["id"]] = [l for _spec, lines in got for l in (lines or []) if l.startswith("- ")]
-    givers = [(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
+    if team:   # team 의 결정 기록 · 판정 읽기가 git 을 부른다 — 그 실패도 검사 불가 사유로(옛 형식은 여기서 git 을 부르지 않는다)
+        report["unknown_reasons"] += ["git 읽기 실패 — %s" % f for f in git.failures[told_failures:]]
+    givers =[(b["id"], spec, rows) for b in blocks for spec, rows in b.get("deferred", [])]
     report["handoffs"] = handoff_rows(givers, stages, records, record_label=record_label)
     for h in report["handoffs"]:
         if h["receiver"] in bad_records and h["state"] in ("열림", "처리됨", "확인됨"):

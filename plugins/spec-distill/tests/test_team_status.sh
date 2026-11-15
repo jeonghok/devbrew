@@ -448,6 +448,11 @@ back "$RECEIVED_AT"
 g rm -q -- "$J1/INTENT.md" && step "INTENT.md 지움(알림)" || fail_step "INTENT.md 지움(알림)"
 assert_contains "$(notes E1)" "$J1/INTENT.md 를 읽지 못했다" "AC28: INTENT.md 를 읽지 못하면 그 한 줄"
 assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], [b['warnings'] for b in r['blocks'] if b['id']=='E1'][0])")" "([], [])" \
+  "넘김: 브랜치 끝에 INTENT.md 가 없으면 결정 기록은 빈 글 — 경고 · 검사 불가 사유가 없다"
+back "$RECEIVED_AT"
+g rm -q -- "$J1/INTENT.md" && put "$J1/INTENT.md/x.txt" "폴더인 INTENT" && step "INTENT.md 가 폴더(브랜치 끝)" || fail_step "INTENT.md 가 폴더(브랜치 끝)"
+assert_eq "$(st E1) · $(rc)" "알 수 없음 · 3" "알림: 브랜치 끝의 INTENT.md 를 읽지 못하면 알 수 없음(3)"
+assert_eq "$(js "$T/s.json" "(r['unknown_reasons'], [b['warnings'] for b in r['blocks'] if b['id']=='E1'][0])")" "([], [])" \
   "알림: 알 수 없음 블록의 결정 기록 · 판정 읽기 불가를 경고 · 검사 불가 사유로 겹쳐 내지 않는다"
 back "$RECEIVED_AT"
 g checkout -q main && sub "$TM/jobs/E3/INTENT.md" "첫 읽기 위에 얹는다" "첫 읽기 위에 얹었다" && step "E3 목표 칸 고침(기본 브랜치)" || fail_step "E3 목표 칸 고침(기본 브랜치)"
@@ -464,6 +469,16 @@ g rm -q -- "$TM/jobs/E3/INTENT.md" && put "$TM/jobs/E3/INTENT.md/x.txt" "폴더�
 assert_contains "$(blk E3 warnings)" "INTENT.md 의 결정 기록 읽기 불가($TM/jobs/E3/INTENT.md 를 읽지 못했다)" "넘김: 있는데 읽지 못한 INTENT.md 는 경고"
 assert_eq "$(rc)" "3" "넘김: 있는데 읽지 못한 INTENT.md 는 검사 불가(3)"
 back "$MAIN_AT"
+# git 이 기본 브랜치의 E3 INTENT.md 를 읽지 못한다(없음이 아닌 실패) — 없음으로 세지 않는다: 경고 · git 읽기 실패 · 검사 불가
+mkdir -p "$T/gitfail"
+printf '#!/bin/bash\nfor a in "$@"; do case "$a" in *:%s) echo "fatal: 객체를 읽지 못했다(흉내)" >&2; exit 128 ;; esac; done\nexec %s "$@"\n' \
+  "$TM/jobs/E3/INTENT.md" "$(command -v git)" > "$T/gitfail/git" && chmod +x "$T/gitfail/git"
+GF_RC=0; (cd "$W" && PATH="$T/gitfail:$PATH" python3 "$RS" "$RM" --json) > "$T/gitfail.json" 2>/dev/null || GF_RC=$?
+assert_eq "${GF_RC} · $(js "$T/gitfail.json" "[b['stage'] for b in r['blocks'] if b['id']=='E3'][0]")" "3 · 대기" "넘김: git 이 INTENT.md 를 읽지 못하면 검사 불가(3)"
+assert_contains "$(js "$T/gitfail.json" "[b['warnings'] for b in r['blocks'] if b['id']=='E3'][0]")" "INTENT.md 의 결정 기록 읽기 불가($TM/jobs/E3/INTENT.md 를 읽지 못했다)" \
+  "넘김: git 실패를 INTENT.md 없음으로 세지 않는다(경고)"
+assert_contains "$(js "$T/gitfail.json" "r['unknown_reasons']")" "git 읽기 실패 — git cat-file 실패(rc 128): fatal: 객체를 읽지 못했다(흉내)" \
+  "넘김: 그 git 실패가 검사 불가 사유에 남는다"
 # 넘김 —과제 폴더 design.md 의 미룸 행 · 받는 과제 INTENT.md 의 넘김 확인 줄
 HO="[(h['giver'], h['receiver'], h['state'], h['basis']) for h in r['handoffs'] if h['item']=='넘길 일']"
 g checkout -q feature/tm-e1 && printf '| 넘길 일 | 이유 | E3 |\n' >> "$W/$J1/design.md" && step "E1 미룸 한 행" || fail_step "E1 미룸 한 행"
@@ -486,8 +501,22 @@ assert_contains "$(blk E3 warnings)" "판정 읽기 불가($TM/jobs/E3/results/r
 assert_contains "$(js "$T/s.json" "r['unknown_reasons']")" "E3 판정 읽기 불가 — $TM/jobs/E3/results/review-1.md 를 읽지 못했다" "판정: 읽지 못한 결과 파일은 검사 불가 사유"
 assert_eq "$(rc) · $(blk E3 rulings_archived)" "3 · None" "판정: 읽지 못하면 검사 불가(3) · 판정 칸은 None"
 back "$MAIN_AT"
+# 판정 줄을 다 읽지 못한 결과 파일 — 다른 단계의 파일(design-1.md)에 판정 줄 · 닫히지 않은 펜스 · 판정 줄, implement 파일은 깨끗한 판정 줄
+g checkout -q feature/tm-e1 && sync E1 design-1.md --role designer --bundle-at "$MAIN_AT" --job-at "$RECEIVED_AT" >/dev/null \
+  && printf 'Ruling: 앞의 판정 — 펜스 앞\n```text\nRuling: 뒤의 판정 — 펜스 안으로 사라진다\n' >> "$W/$J1/results/design-1.md" \
+  && sub "$R1" "끝 — $CODE" $'Ruling: 새 시도의 판정 — 깨끗하다\n끝 — '"$CODE" && step "판정 줄을 다 읽지 못한 결과 파일" || fail_step "판정 줄을 다 읽지 못한 결과 파일"
+assert_eq "$(blk E1 rulings_archived)" "['- Ruling: 앞의 판정 — 펜스 앞', '- Ruling: 새 시도의 판정 — 깨끗하다']" "판정: 다 읽지 못한 결과 파일에서도 읽힌 판정 줄은 싣는다"
+assert_contains "$(notes E1)" "판정 줄을 다 읽지 못했다: design-1.md — 본문의 코드 펜스가 닫히지 않았다" "판정: 판정 줄을 다 읽지 못한 결과 파일을 알린다(0 이 아니다)"
+assert_eq "$(rc) · $(st E1)" "${before_rc} · 구현 끝" "판정: 그 알림은 종료 코드 · 단계를 바꾸지 않는다"
+back "$RECEIVED_AT"
+OPEN_AFTER=$'```text\nTask 2/3:'
+sub "$R1" "Task 2/3:" "$OPEN_AFTER" && step "받은 뒤 닫히지 않은 펜스" || fail_step "받은 뒤 닫히지 않은 펜스"
+assert_contains "$(notes E1)" "받음 줄을 세지 않았다: implement-plan-1-1.md — 본문의 코드 펜스가 닫히지 않았다" "판정: 받은 뒤 닫히지 않은 펜스 — 받음 줄을 세지 않았다"
+assert_eq "$(js "$T/s.json" "sum(n.count('본문의 코드 펜스가 닫히지 않았다') for b in r['blocks'] if b['id']=='E1' for n in b['notes'])")" "1" \
+  "판정: 같은 결과 파일 · 같은 사유를 이미 알렸으면 판정 줄 알림을 덧내지 않는다(Q13)"
+back "$RECEIVED_AT"
 # 같은 사실은 한 번 — 받음 줄이 가리키는 결과 파일을 다 읽지 못하면 받음 줄의 알림 하나로 낸다
-g checkout -q feature/tm-e1 && python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8", newline="").read(); open(p, "w", encoding="utf-8", newline="").write("﻿" + t)' "$W/$R1" \
+g checkout -q feature/tm-e1 && python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8", newline="").read(); open(p, "w", encoding="utf-8", newline="").write("\ufeff" + t)' "$W/$R1" \
   && step "받은 뒤 BOM" || fail_step "받은 뒤 BOM"
 assert_contains "$(notes E1)" "받음 줄을 세지 않았다: implement-plan-1-1.md — 머리(첫 줄" "알림: 받은 뒤 다 읽지 못한 결과 파일 — 받음 줄을 세지 않았다"
 assert_eq "$(js "$T/s.json" "sum(n.count('머리(첫 줄') for b in r['blocks'] if b['id']=='E1' for n in b['notes'])")" "1" \

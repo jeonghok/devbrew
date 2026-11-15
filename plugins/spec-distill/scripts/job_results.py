@@ -34,6 +34,17 @@ SHOWN_FILES = 5
 NOT_A_FILE = "파일이 아닌 경로다(블롭이 아니다): %s"
 UNFINISHED = "대조를 끝내지 못했다 — 첫 줄에 실을 수를 얻지 못했다"
 PREFIX = "[spec-distill] "
+NOT_COUNTED_HEAD, STALE_HEAD = "받음 줄을 세지 않았다", "받은 뒤 바뀜"
+
+
+def file_note(head: str, name: str, why: str) -> str:
+    """결과 파일 하나의 알림 줄 — `<머리>: <결과 파일 이름> — <사유>`."""
+    return "%s: %s — %s" % (head, name, why)
+
+
+def same_fact(note: str, name: str, why: str) -> bool:
+    """note 가 머리와 상관없이 결과 파일 name 의 사유 why 를 말하는 file_note 인가 — 한 사실에 알림 하나를 지키는 데 쓴다."""
+    return note.endswith(file_note("", name, why))
 
 
 class Check(NamedTuple):
@@ -236,27 +247,27 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
         return NOT_RECEIVED, notes, latest
     last = mine[-1]
     if team_layout.parse_result_name(last.name)[2] < team_layout.parse_result_name(latest)[2]:
-        return STALE, notes + ["받은 뒤 바뀜: %s — 더 새 시도 %s 가 있다" % (last.name, latest)], latest
+        return STALE, notes + [file_note(STALE_HEAD, last.name, "더 새 시도 %s 가 있다" % latest)], latest
     c = check_result(git, tip, team, job, last.name)
     if not c.ok:
-        return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — %s" % (last.name, (c.problems + c.unknown)[0])], latest
+        return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, (c.problems + c.unknown)[0])], latest
     head = c.result.head
     if last.commit != head:
-        return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — 받음 줄의 커밋 %s 가 결과 파일의 head %s 와 다르다"
-                                     % (last.name, _short(last.commit), _short(head))], latest
+        return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "받음 줄의 커밋 %s 가 결과 파일의 head %s 와 다르다"
+                                               % (_short(last.commit), _short(head)))], latest
     job_dir = team.job(job) + "/"
     design = team.design(job)
     if not main:   # 기본 브랜치를 빼지 못하면 합쳐 들어온 변경과 이 과제의 변경을 가르지 못한다
-        return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — 기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다" % last.name], latest
+        return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다")], latest
     changed = git.touched(tip, [head, main], list(reserved) + list(outputs) + [design, job_dir])
     if changed is None:
-        return NOT_COUNTED, notes + ["받음 줄을 세지 않았다: %s — 받은 뒤의 변경을 읽지 못했다" % last.name], latest
+        return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "받은 뒤의 변경을 읽지 못했다")], latest
     left = [p for p in changed if _kept(p, job_dir, design, outputs)]
     if left:
         shown = " · ".join(left[:SHOWN_FILES])
         if len(left) > SHOWN_FILES:
             shown += " 외 %d개" % (len(left) - SHOWN_FILES)
-        return STALE, notes + ["받은 뒤 바뀜: %s — %s" % (last.name, shown)], latest
+        return STALE, notes + [file_note(STALE_HEAD, last.name, shown)], latest
     return RECEIVED, notes, latest
 
 
