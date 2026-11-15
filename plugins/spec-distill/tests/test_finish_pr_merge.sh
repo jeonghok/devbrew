@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 분해된 인터뷰 끝맺음의 PR 펜스(interview-pr) · 머지 펜스(interview-merge) · 다시 확인 펜스(interview-merge-recheck)
-# — finishing.md 에서 뽑아 그대로 돌린다.
+# — finishing.md 에서 뽑아 그대로 돌린다. 「값의 출처」 줄의 짝으로 끝내기 커밋 펜스(interview-commit)도 뽑아 돌린다.
 # 펜스는 Bash 도구의 셸에서 돌므로 bash 와 zsh 둘 다에서 잰다(zsh 가 없으면 그 사실을 알리고 bash 만).
 # 픽스처: 임시 레포(origin 은 git@github.com:<owner>/r.git — 가짜 ssh 가 로컬 bare 레포로 잇는다) + PATH 앞의
 # 가짜 gh · 가짜 sleep. 실제 gh · 네트워크로 나가지 않는다.
@@ -28,6 +28,7 @@ HPH='<interview-pr 이 낸 끝 커밋>'
 pf="$(fence "$FIN" interview-pr)"
 mf="$(fence "$FIN" interview-merge)"
 rf="$(fence "$FIN" interview-merge-recheck)"
+cf="$(fence "$FIN" interview-commit)"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 # 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
 ASK="$(grep -F '2. **머지 묻기.**' "$FIN")"
@@ -36,10 +37,11 @@ assert_contains "$ASK" '`MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지�
 case "$mf" in *"URL=\"$UPH\""*"HEAD_SHA=\"$HPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL · 끝 커밋 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 case "$rf" in *"BRIEF=\"$PH\""*"URL=\"$UPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-identity '*) ok "전제: 다시 확인 펜스에 BRIEF · URL 자리표와 gh_repo.py 호출" ;; *) no "전제: 다시 확인 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 case "$rf" in *"$HPH"*|*'gh_repo.py" pr-merge '*|*'gh_repo.py" pr-checks '*|*'gh_repo.py" pr-create '*|*" push "*) no "다시 확인 펜스는 읽기만 한다 — 끝 커밋 자리표 · 머지 · 검사 · 만들기 · push 가운데 하나가 있다" ;; *) ok "다시 확인 펜스는 읽기만 한다(머지 · 검사 · 만들기 · push 를 부르지 않는다)" ;; esac
-# 플러그인 루트 가드 줄은 세 펜스가 글자 그대로 같다
+case "$cf" in *"BRIEF=\"$PH\""*'repo_defaults.py" check-path interview_dir '*'repo_defaults.py" check-path roadmaps_dir '*) ok "전제: 커밋 펜스에 BRIEF 자리표와 check-path 둘" ;; *) no "전제: 커밋 펜스를 못 뽑았다 — 「값의 출처」 짝이 공허하다" ;; esac
+# 플러그인 루트 가드 줄은 네 펜스가 글자 그대로 같다
 g1="$(printf '%s\n' "$pf" | head -n 1)"
 case "$g1" in 'SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || {'*'exit 1; }') ok "전제: PR 펜스 첫 줄이 플러그인 루트 가드다" ;; *) no "전제: PR 펜스 첫 줄이 가드가 아니다" ;; esac
-for g in "$mf" "$rf"; do
+for g in "$mf" "$rf" "$cf"; do
   assert_eq "$(printf '%s\n' "$g" | head -n 1)" "$g1" "펜스 첫 줄의 플러그인 루트 가드가 PR 펜스와 글자 그대로 같다"
 done
 # 판결 줄 없는 출력을 읽는 법은 본문이 정한다 — 표시 줄이 있으면 다시 확인, 없으면 NONE
@@ -118,7 +120,11 @@ c=""
 for a in "$@"; do c="$a"; done
 cd "$FAKE_REMOTES" && eval "exec git ${c#git-}"
 FAKE
-chmod +x "$T/bin/gh" "$T/bin/sleep" "$T/bin/fakessh" || exit 1
+REAL_MKTEMP="$(command -v mktemp)" || { echo "mktemp 없음"; exit 1; }
+# 가짜 mktemp — 실패 모드와, 만든 경로의 기록(펜스가 임시 파일을 지웠는지 본다. macOS 의 인자 없는 mktemp 는 TMPDIR 을 따르지 않는다)
+printf '%s\n' '#!/bin/sh' '[ -z "${FAKE_MKTEMP_FAIL:-}" ] || { echo "mktemp: mkstemp failed: No space left on device" >&2; exit 1; }' \
+  "f=\"\$(\"$REAL_MKTEMP\" \"\$@\")\" || exit 1" '[ -z "${FAKE_GH_DIR:-}" ] || printf "%s\n" "$f" >> "$FAKE_GH_DIR/mktemps"' 'printf "%s\n" "$f"' > "$T/bin/mktemp"
+chmod +x "$T/bin/gh" "$T/bin/sleep" "$T/bin/fakessh" "$T/bin/mktemp" || exit 1
 export GIT_SSH_COMMAND="$T/bin/fakessh" GIT_SSH_VARIANT=simple FAKE_REMOTES="$T/remotes"
 export FAKE_PR_LIST='[]'
 export FAKE_WAYS='{"mergeCommitAllowed":true,"squashMergeAllowed":true,"rebaseMergeAllowed":true}'
@@ -150,7 +156,7 @@ run() {   # run <owner> <펜스 본문> [<PR 주소> [<끝 커밋>]] → 자리�
   local c="$T/$1" body="${2//"$PH"/$T/$1/${BRIEF_REL:-$STEM.md}}"
   body="${body//"$UPH"/${3:-$UPH}}"
   body="${body//"$HPH"/${4:-$HPH}}"
-  : > "$T/gh-$1/log"; : > "$T/gh-$1/sleeps"; rm -f "$T/gh-$1/views"
+  : > "$T/gh-$1/log"; : > "$T/gh-$1/sleeps"; : > "$T/gh-$1/mktemps"; rm -f "$T/gh-$1/views"
   ( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" PATH="$T/bin:$PATH" FAKE_GH_LOG="$T/gh-$1/log" FAKE_GH_DIR="$T/gh-$1" \
       FAKE_SLEEP_LOG="$T/gh-$1/sleeps" FAKE_OWNER="$1" FAKE_REMOTE="$T/remotes/$1/r.git" "${SHELL_ARGV[@]}" "$body" 2>&1 )
 }
@@ -162,7 +168,9 @@ remote_merge() {   # remote_merge <owner> [nostate] → 원격의 main 을 featu
 }
 omain() { git -C "$T/$1" rev-parse refs/remotes/origin/main; }   # 로컬이 아는 origin 기본 브랜치
 MARK='interview-merge-requested: 7'
+SRC='값의 출처'
 CUT='echo $$ > "$FAKE_GH_DIR/fence.pid"'   # 테스트만의 한 줄 — 가짜 gh 가 이 pid 를 죽여 「요청 뒤 끊김」을 만든다
+ERRF='exec 2> "$FAKE_GH_DIR/stderr"'       # 테스트만의 한 줄 — 펜스의 stderr 를 파일로 갈라 받는다(run 의 출력에는 stdout 만 남는다)
 head_of() { printf '%s\n' "$1" | sed -n 's/^interview-pr-head: //p'; }   # PR 펜스 출력에서 끝 커밋
 remote_ref() { git --git-dir="$T/remotes/$1/r.git" rev-parse -q --verify "refs/heads/$2" 2>/dev/null || true; }
 
@@ -184,6 +192,13 @@ for sh_name in bash zsh; do
   assert_contains "$o" "interview-pr-files: ONLY" "새 PR: seed · 세 파일 · 로드맵 폴더뿐이면 ONLY"
   assert_contains "$o" "이 PR 은 인터뷰 폴더와 로드맵 폴더의 파일만 담는다." "새 PR: ONLY 의 사람 줄"
   assert_eq "$(printf '%s\n' "$o" | tail -n 2 | head -n 1)" "interview-pr-head: $(git -C "$c" rev-parse HEAD)" "새 PR: 판결 바로 앞 줄이 push 한 끝 커밋"
+  # 14a. 「값의 출처」 — 끝내기 커밋 펜스가 보인 키의 줄을 PR 펜스는 다시 보이지 않는다
+  assert_not_contains "$o" "$SRC" "값의 출처: PR 펜스 출력에 없다"
+  for kp in "interview_dir $c/$STEM.md" "roadmaps_dir $c/$RREL"; do   # 짝 1 — 걸러서 없는 것이지 원래 없는 것이 아니다
+    d="$(python3 "$SD/scripts/repo_defaults.py" check-path "${kp%% *}" "${kp#* }" --root "$c" 2>&1)" && d_rc=0 || d_rc=$?
+    assert_eq "$d_rc" "0" "값의 출처(짝 1): 같은 픽스처에서 check-path ${kp%% *} 를 직접 부르면 통과한다"
+    assert_grep "$d" "^\[spec-distill\] ${SRC}: .+\(${kp%% *}\)\$" "값의 출처(짝 1): 그때 그 줄이 나온다 — 펜스가 걸러서 없는 것이다"
+  done
 
   # 2. 이 레포 안 브랜치의 열린 PR 이 있으면 그것을 쓴다 — 다른 레포의 브랜치에서 온 PR 은 세지 않는다
   n="${P}reuse"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
@@ -220,6 +235,8 @@ for sh_name in bash zsh; do
   assert_contains "$o" "  - src/app.py" "넓은 §7: 그 폴더의 코드를 목록에 보인다"
   assert_contains "$o" "brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: $c/src" "넓은 §7: 빼지 않은 사실과 폴더를 보인다"
   assert_not_contains "$o" "interview-pr-files: ONLY" "넓은 §7: ONLY 를 내지 않는다"
+  assert_contains "$o" "[spec-distill] 부모 폴더가 다르다: src 의 부모는 / 인데 정해진 폴더는 docs/superpowers/roadmaps/ 다(roadmaps_dir) — 그 폴더 바로 아래 경로를 준다" "값의 출처(짝 2): 넓은 §7 — 해결자의 사유 줄은 그대로 보인다"
+  assert_not_contains "$o" "$SRC" "값의 출처: 넓은 §7 — 판정이 거부돼도 그 줄은 없다"
   # 3c. brief 가 정해진 인터뷰 폴더 바로 아래가 아니면 그 폴더도 빼지 않는다
   n="${P}stray"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
   mkdir -p "$c/notes"; cp "$c/$STEM.md" "$c/notes/b.md"; git -C "$c" add -- notes; git -C "$c" commit -q -m "docs: stray brief"
@@ -227,6 +244,24 @@ for sh_name in bash zsh; do
   assert_contains "$o" "interview-pr-files: MIXED" "인터뷰 폴더 밖의 brief: MIXED"
   assert_contains "$o" "  - notes/b.md" "인터뷰 폴더 밖의 brief: 그 폴더의 파일을 목록에 보인다"
   assert_contains "$o" "brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유)" "인터뷰 폴더 밖의 brief: 빼지 않은 사실을 보인다"
+  assert_contains "$o" "[spec-distill] 부모 폴더가 다르다: notes/b.md 의 부모는 notes/ 인데 정해진 폴더는 docs/superpowers/interview/ 다(interview_dir) — 그 폴더 바로 아래 경로를 준다" "값의 출처(짝 2): 인터뷰 폴더 밖의 brief — 해결자의 사유 줄은 그대로 보인다"
+  assert_not_contains "$o" "$SRC" "값의 출처: 인터뷰 폴더 밖의 brief — 판정이 거부돼도 그 줄은 없다"
+  # 걸러 낸 뒤에도 해결자의 줄은 stderr 로, 펜스의 줄은 stdout 으로 간다
+  o="$(BRIEF_REL=notes/b.md run "$n" "$ERRF
+$pf")"; e="$(cat "$T/gh-$n/stderr")"
+  assert_contains "$e" "[spec-distill] 부모 폴더가 다르다: notes/b.md 의 부모는 notes/ 인데" "값의 출처(짝 2): 해결자의 사유 줄은 stderr 로 다시 나온다"
+  assert_not_contains "$o" "부모 폴더가 다르다" "값의 출처(짝 2): 해결자의 사유 줄이 stdout 으로 옮겨 가지 않았다"
+  assert_contains "$o" "brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유)" "값의 출처(짝 2): 펜스의 줄은 stdout 그대로다"
+  assert_not_contains "$e$o" "$SRC" "값의 출처: stdout · stderr 어디에도 그 줄은 없다"
+  # 임시 파일을 못 만들면 거르지 않고 그대로 돈다 — 판정의 종료 코드(거부)와 사유 줄은 그대로이고, 그때는 「값의 출처」 줄도 보인다
+  o="$(FAKE_MKTEMP_FAIL=1 FAKE_PR_LIST='[{"url":"https://github.com/'"$n"'/r/pull/5","isCrossRepository":false}]' BRIEF_REL=notes/b.md run "$n" "$pf")"
+  assert_eq "$(last "$o")" "interview-pr: OPEN https://github.com/$n/r/pull/5" "임시 파일 실패(거부되는 판정): 판결은 그대로 OPEN"
+  assert_contains "$o" "mktemp: mkstemp failed" "임시 파일 실패(거부되는 판정): 전제 — mktemp 가 실패했다"
+  assert_contains "$o" "interview-pr-files: MIXED" "임시 파일 실패(거부되는 판정): MIXED"
+  assert_contains "$o" "  - notes/b.md" "임시 파일 실패(거부되는 판정): 판정의 거부가 그대로 읽힌다 — 그 폴더의 파일을 목록에 보인다"
+  assert_contains "$o" "brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유)" "임시 파일 실패(거부되는 판정): 판정의 거부가 그대로 읽힌다 — 빼지 않은 사실을 보인다"
+  assert_contains "$o" "[spec-distill] 부모 폴더가 다르다: notes/b.md 의 부모는 notes/ 인데" "임시 파일 실패(거부되는 판정): 사유 줄이 보인다"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: ")" "2" "임시 파일 실패(거부되는 판정): 거르지 않아 「값의 출처」 줄이 판정마다 보인다"
   # 3d. 파일을 세지 못하면 UNKNOWN — ONLY 를 내지 않아 권장 꼬리가 붙지 않는 쪽으로 간다
   n="${P}unknown"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
   git -C "$c" checkout -q --orphan feature/y; git -C "$c" commit -q -m "기본 브랜치와 조상이 없는 브랜치"
@@ -526,5 +561,42 @@ $mf" "$URL" "$H" 2>/dev/null)"
   done
   o="$(run "$n" "$rf" "$URL")"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(대조의 짝): 같은 픽스처에서 브랜치 · 바탕 · 레포가 같으면 MERGED"
+
+  note "=== ${sh_name}: 「값의 출처」 줄 ==="
+  # 14b. 끝내기 커밋 펜스는 두 키의 「값의 출처」 줄을 보이고, 이어 도는 PR 펜스는 그 줄을 다시 보이지 않는다
+  n="${P}src"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  printf 'y\n' >> "$c/$STEM.state.md"
+  o="$(run "$n" "$cf")"
+  assert_contains "$o" "brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다" "값의 출처: 끝내기 커밋 펜스가 커밋했다(PR 단계가 도는 조건)"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(interview_dir)\$")" "1" "값의 출처: 끝내기 커밋 펜스는 interview_dir 의 줄을 보인다"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(roadmaps_dir)\$")" "1" "값의 출처: 끝내기 커밋 펜스는 roadmaps_dir 의 줄을 보인다"
+  o="$(run "$n" "$pf")"
+  made=0; left=""
+  while IFS= read -r f; do made=$((made + 1)); [ ! -e "$f" ] || left="${left} ${f}"; done < "$T/gh-$n/mktemps"
+  assert_eq "$made" "3" "값의 출처(전제): PR 펜스가 임시 파일을 셋 만들었다(PR 본문 · 판정 둘)"
+  assert_eq "$left" "" "값의 출처: PR 펜스가 임시 파일을 남기지 않는다"
+  assert_eq "$(last "$o")" "interview-pr: OPEN https://github.com/$n/r/pull/7" "값의 출처: 이어 돈 PR 펜스의 판결은 OPEN"
+  assert_contains "$o" "interview-pr-files: ONLY" "값의 출처: 걸러도 두 판정은 통과로 읽힌다(ONLY)"
+  assert_not_contains "$o" "$SRC" "값의 출처: 이어 돈 PR 펜스 출력에는 그 줄이 없다"
+  # 14c. 알림 줄은 남는다 — 작업 트리에만 있는 레포 설정 파일의 알림(판정마다 한 번, 두 번)
+  printf -- '---\n---\n' > "$c/.devbrew.md"
+  o="$(run "$n" "$pf")"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] 레포 설정 파일(.devbrew.md)이 아직 기본 브랜치에 없다 — 기본값을 쓴다\$")" "2" "값의 출처: 해결자의 알림 줄은 그대로 보인다(판정 둘)"
+  assert_not_contains "$o" "$SRC" "값의 출처: 알림이 있어도 그 줄은 없다"
+  assert_contains "$o" "interview-pr-files: ONLY" "값의 출처: 알림이 있어도 판정은 통과로 읽힌다"
+  rm -f "$c/.devbrew.md"
+  # 임시 파일을 못 만들면 거르지 않고 그대로 돈다 — 통과하는 판정은 통과로 읽힌다
+  o="$(FAKE_MKTEMP_FAIL=1 FAKE_PR_LIST='[{"url":"https://github.com/'"$n"'/r/pull/5","isCrossRepository":false}]' run "$n" "$pf")"
+  assert_contains "$o" "mktemp: mkstemp failed" "임시 파일 실패(통과하는 판정): 전제 — mktemp 가 실패했다"
+  assert_contains "$o" "interview-pr-files: ONLY" "임시 파일 실패(통과하는 판정): 판정의 통과가 그대로 읽힌다(ONLY)"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: ")" "2" "임시 파일 실패(통과하는 판정): 거르지 않아 「값의 출처」 줄이 판정마다 보인다"
+  # 14d. 경고 줄은 남는다 — 기본 브랜치의 레포 설정이 깨진 값을 가질 때
+  n="${P}srcwarn"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  git -C "$c" switch -q main; printf -- '---\nparallel_default: x\n---\n' > "$c/.devbrew.md"
+  git -C "$c" add -- .devbrew.md; git -C "$c" commit -q -m "chore: settings"; git -C "$c" push -q origin main 2>/dev/null; git -C "$c" switch -q feature/x
+  o="$(run "$n" "$pf")"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "동시 작업 권장 수는 1 이상의 정수다(parallel_default: 'x')")" "2" "값의 출처: 해결자의 경고 줄은 그대로 보인다(판정 둘)"
+  assert_not_contains "$o" "$SRC" "값의 출처: 경고가 있어도 그 줄은 없다"
+  assert_contains "$o" "interview-pr-files: ONLY" "값의 출처: 경고가 있어도 판정은 통과로 읽힌다"
 done
 finish

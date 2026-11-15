@@ -757,8 +757,18 @@ else
   echo "[spec-distill] 이 브랜치의 열린 PR 을 쓴다 — $url"
 fi
 # 이 PR 이 바꾸는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것. 두 폴더는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
+# 끝내기 커밋 펜스가 같은 키로 이미 보인 「값의 출처」 줄만 뺀다 — 그 호출의 사유 · 알림 · 경고 줄과 종료 코드는 그대로다.
+nosrc() {
+  nf="$(mktemp)" || nf=""
+  [ -n "$nf" ] || { "$@"; return; }
+  n_rc=0
+  "$@" 2> "$nf" || n_rc=$?
+  grep -v '^\[spec-distill\] 값의 출처: ' "$nf" >&2
+  rm -f "$nf"
+  return "$n_rc"
+}
 idir=""
-if python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
+if nosrc python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
   idir="$(dirname -- "$BRIEF")"
 else
   echo "[spec-distill] brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
@@ -769,7 +779,7 @@ if [ -n "$r7" ]; then
   case "$r7" in "$cwd_l"/*) r7="$(pwd -P)/${r7#"$cwd_l"/}" ;; esac
   case "$r7" in /*) ;; *) r7="${top}/${r7}" ;; esac
   rdir="$(dirname -- "$r7")"
-  python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
+  nosrc python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
 fi
 x_rc=0
 extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
