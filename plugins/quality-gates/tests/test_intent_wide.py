@@ -434,8 +434,12 @@ class TestWidePrepare(unittest.TestCase):
         gate_rd = self._new_rd()
         g = tic._cli("gate", "--rd", gate_rd, "--path", "final", "--mode", "range", env=kill)
         self.assertEqual((g.returncode, g.stdout), (p.returncode, p.stdout))
-        self.assertEqual(tic._return_block(self.rd), tic._return_block(gate_rd))
-        self.assertEqual(tic._return_block(self.rd)[1]["status"], "skipped — " + ic.KILL_LINE)
+        # 세션 폴더 경로만 다르다 — 그 밖의 칸은 한 글자도 같다.
+        own, other = tic._return_block(self.rd), tic._return_block(gate_rd)
+        self.assertEqual(own[0].replace(self.rd, "<rd>"), other[0].replace(gate_rd, "<rd>"))
+        self.assertEqual(own[1]["session_dir"], os.path.abspath(self.rd))
+        block = tic._return_block(self.rd)[1]
+        self.assertEqual((block["status"], block["reason"]), ("skipped", "kill-switch"))
 
     def test_teams_failure_still_shown_when_not_called(self):
         """부르지 않는 좁은 실행에서도 다른 팀 읽기 실패는 공시한다(상한 줄만 뺀다)."""
@@ -1081,8 +1085,11 @@ class TestWideRender(_WideRun, unittest.TestCase):
         for line in text.split("\n"):
             if line and not line.startswith((" ", "`")):
                 keys.append(line.split(":", 1)[0])
-        self.assertEqual(keys, ["status", "mode", "answers_dir", "answers_dir_source", "commit",
-                                "breadth", "other_teams", "overlaps", "questions"])
+        self.assertEqual(keys, ["contract", "status", "reason", "reason_text", "outcome",
+                                "result_line", "none_reason", "mode", "reviewed_head",
+                                "reviewed_base", "session_dir", "answers_dir",
+                                "answers_dir_source", "commit", "breadth", "other_teams",
+                                "overlaps", "questions"])
         fields = []
         for line in text.split("\n"):
             if line.startswith("    ") or line.startswith("  - "):

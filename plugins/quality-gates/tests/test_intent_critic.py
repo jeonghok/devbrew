@@ -1092,7 +1092,7 @@ class TestGate(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertEqual(_last(p), "intent-critic 꺼짐(kill switch)")
                 text, block = _return_block(rd)
-                self.assertIn("status: skipped — ", text)
+                self.assertEqual((block["status"], block["reason"]), ("skipped", "kill-switch"))
                 self.assertEqual(block["questions"], [])
                 self.assertFalse(os.path.exists(os.path.join(rd, "result.md")))
 
@@ -1105,7 +1105,9 @@ class TestGate(unittest.TestCase):
                 p = _cli("gate", "--rd", rd, "--path", path)
                 self.assertEqual((p.returncode, _last(p)), (0, line), path)
                 text, block = _return_block(rd)
-                self.assertTrue(str(block["status"]).startswith("skipped — "), path)
+                self.assertEqual((block["status"], block["reason"]),
+                                 ("skipped", {"aborted": "halted", "trivia": "trivia",
+                                              "scope-empty": "empty-diff"}[path]), path)
         with tempfile.TemporaryDirectory() as rd:
             p = _cli("gate", "--rd", rd, "--path", "final")
             self.assertEqual((p.returncode, _last(p)), (0, "intent-gate: run"))
@@ -1116,7 +1118,7 @@ class TestGate(unittest.TestCase):
             p = _cli("gate", "--rd", rd, "--path", "tree-failed", "--mode", "range")
             self.assertEqual((p.returncode, _last(p)), (0, "intent-critic — 리뷰 트리를 만들지 못함"))
             text, block = _return_block(rd)
-            self.assertIn("status: skipped — 리뷰 트리를 만들지 못함", text)
+            self.assertEqual((block["status"], block["reason"]), ("failed", "tree-failed"))
             self.assertEqual(block["mode"], "range")
 
     def test_bad_call_is_rc2(self):
@@ -2111,7 +2113,8 @@ class TestRender(unittest.TestCase):
         _write("call: none\nmode: pr\nanswers_root: /x\n", self.rd, "intent-plan.txt")
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(p), NONE_LINE)
-        self.assertEqual(_return_block(self.rd)[1]["status"], "skipped — 근거 없음")
+        block = _return_block(self.rd)[1]
+        self.assertEqual((block["status"], block["reason"]), ("skipped", "no-evidence"))
 
     def _prepared_render(self, repo, walk, differential, specs, max_bytes=120000):
         """prepare → (필요하면) filter → render. (prepare stdout 줄들, result.md 의 intent-critic 절)."""
