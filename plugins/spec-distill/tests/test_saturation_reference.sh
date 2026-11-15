@@ -186,6 +186,10 @@ done
 [[ "$(grep -oF '**건너뜀.**' "$SKILL" | grep -c .)" == "1" ]] && ok "F4 AC9: 건너뜀 규칙은 SKILL 에 한 번만 정한다" || no "F4 AC9: SKILL 의 「**건너뜀.**」 이 한 번이 아니다"
 [[ "$(grep -oF '작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」' "$SKILL" | grep -c .)" == "4" ]] \
   && ok "F4 AC9: 필수 자리를 말하는 네 곳이 그 규칙을 가리킨다" || no "F4 AC9: 건너뜀 규칙을 가리키는 줄이 넷이 아니다"
+for lit in '마지막 포화 판정이 «포화» 이거나, 사용자가 종료를 골랐거나, 나누지 않을 작은 일이라 `- 모델 판단으로 건너뜀 — 포화 판정: <이유>` 줄을 `## audit §2 대기 줄` 에 덧붙였다.' \
+           '맹점 조사를 건너뛴 floor 는 예외이고 `references/saturation.md` 의 `### 건너뜀` 을 따른다'; do
+  grep -qF -- "$lit" <<<"$SKILL_FLAT" && ok "F4 AC9: SKILL «${lit}»" || no "F4 AC9: SKILL «${lit}» 부재"
+done
 FIN_FLAT_F4="$(tr '\n' ' ' < "$FIN" | tr -s ' ')"
 for lit in '**모델 판단으로 맹점 조사를 건너뛴 floor**' \
            '사용자-승인 박제와 같은 길로 간다 — 그 내용을 payload `## 3. Open Questions` 에 한 항목으로 옮겨 다음 단계가 열린 것으로 본다.' \

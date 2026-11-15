@@ -462,7 +462,7 @@ audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — �
 
 ## 닫힘 · 재개방
 
-**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두).
+**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두 — 맹점 조사를 건너뛴 floor 는 예외이고 `references/saturation.md` 의 `### 건너뜀` 을 따른다).
 sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landscape·premortem 출력은 «지금 이해»에 실려,
 steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
 원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
@@ -576,7 +576,7 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 아니다. 포화 판정 전에 끝내면 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을
 state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로 옮긴다).
 
-읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 골랐다.
+읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나, 사용자가 종료를 골랐거나, 나누지 않을 작은 일이라 `- 모델 판단으로 건너뜀 — 포화 판정: <이유>` 줄을 `## audit §2 대기 줄` 에 덧붙였다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/finishing.md
