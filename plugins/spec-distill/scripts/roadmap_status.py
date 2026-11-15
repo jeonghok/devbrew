@@ -679,8 +679,8 @@ def extra_branches(git: Git, main: str, rel: str, blocks: list):
 class _GitTreeRepo:
     """check() 가 로드맵 · 다른 묶음의 설계문서를 읽는 자리 — 작업 트리가 아니라 한 커밋(기본 브랜치)의 트리에서."""
 
-    def __init__(self, git: Git, tree: str, specs_dir: str):
-        self.git, self.tree, self.specs_dir = git, tree, specs_dir
+    def __init__(self, git: Git, tree: str, specs_dir: str, roadmaps_dir=None):
+        self.git, self.tree, self.specs_dir, self.roadmaps_dir = git, tree, specs_dir, roadmaps_dir
         self._memo = {}
         self._unread = {}
 
@@ -1045,9 +1045,11 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
             elif no_cov_section:
                 b["warnings"].append("번호 대조 건너뜀(셀 수 없음) — 산출물에 `## 번호 대조` 절이 없다: %s" % spec)
             elif b["kind"] == "bundle" and bundles.get(bid) is not None:
-                result = check(bundles[bid], spec_text, repo=_GitTreeRepo(git, main, settings["specs_dir"]) if main else None)
+                result = check(bundles[bid], spec_text, roadmap_rel=roadmap_rel,
+                               repo=_GitTreeRepo(git, main, settings["specs_dir"], settings["roadmaps_dir"]) if main else None)
                 for w in coverage_warnings(result, spec):  # 경고 줄이라 종료 코드가 1 이 될 수 있다(막는 소비자 없음)
                     b["warnings"].append(w)
+                b["notes"].extend("번호 대조 알림: %s" % n for n in result.get("notices") or [])   # team 만 — 종료 코드 그대로
                 if result["status"] == 1:
                     b["warnings"].append("생략: %s 이 번호 %d개를 빠뜨렸다 — %s" % (
                         spec, len(result["missing"]), " · ".join(result["missing"])))
