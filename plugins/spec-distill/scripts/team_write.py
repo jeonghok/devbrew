@@ -50,6 +50,8 @@ RANGE_READ = ("지시 원문 범위는 이 브랜치의 INTENT.md 에서 읽는�
               "이 브랜치에 합쳐진 뒤에 같은 표로 다시 돌아야 0 이다(그 전에는 같은 고칠 글을 다시 내고 종료 코드 4 다)")
 EPIC_SHAPED = "%s 은 에픽 번호 꼴이다 — 뒤에 올 에픽의 과제 폴더 자리를 막는다"
 FOREIGN = "이 생성기가 만들지 않은 파일은 덮어쓰지 않는다 — %s"
+LEFT_FILE = ("%s 가 이미 있다 — 묶음이 아니던 과제 %s 의 자리에 남은 파일이다(앞서 묶음이었다가 그대로 둔 과제 폴더일 수 있다). "
+             "덮어쓰지 않는다 — 손으로 옮기거나 지운 뒤 다시 돈다")
 LEFT_JOB = "사라진 에픽 %s: 과제 폴더 %s 를 그대로 뒀다 — 필요 없으면 손으로 지운다"
 INDENT = "    "
 UNCHECKABLE = "검사 불가 — "
@@ -355,7 +357,7 @@ def update_files(top: Path, team, old: dict, new: dict, changed: list, added: li
     (매달린 링크도) 있어도 Refused. 있던 과제의 INTENT.md 는 쓰지 않는다 — 손으로 고칠 글 · 범위 검사는 hand_fixes 가
     따로 낸다. 사라졌거나 묶음이 아니게 된 과제의 폴더는 건드리지 않고 알린다. 쓸 자리 · 그 폴더 성분이 심볼릭 링크면 Refused."""
     intent_template = W.read(team_files.TEMPLATES / team_layout.INTENT_FILE)
-    rewrite, once, notes, foreign = {}, {}, [], []
+    rewrite, once, notes, foreign, left = {}, {}, [], [], []
     for r in [new[i] for i in new if i in changed or i in added]:
         if r.kind != R.KIND_BUNDLE:
             continue
@@ -368,7 +370,10 @@ def update_files(top: Path, team, old: dict, new: dict, changed: list, added: li
         before = old.get(r.id)
         fresh = before is None or before.kind != R.KIND_BUNDLE
         if fresh and os.path.lexists(str(top / src)):
-            foreign.append(src)
+            if before is None:
+                foreign.append(src)
+            else:   # 묶음이 아니던 행 — 앞서 묶음이었을 때 그대로 둔 폴더일 수 있어 남의 파일이라 하지 않는다
+                left.append(LEFT_FILE % (src, r.id))
             continue
         if not (top / src).is_file() or W.read(top / src) != text:
             rewrite[top / src] = text
@@ -383,8 +388,8 @@ def update_files(top: Path, team, old: dict, new: dict, changed: list, added: li
         _refuse_links(top, keep, W)
         if not os.path.lexists(str(top / keep)):
             once[top / keep] = ""
-    if foreign:
-        raise W.Refused(FOREIGN % " · ".join(foreign))
+    if foreign or left:
+        raise W.Refused(" / ".join(([FOREIGN % " · ".join(foreign)] if foreign else []) + left))
     for i in old:
         if old[i].kind == R.KIND_BUNDLE and (i in removed or (i in changed and new[i].kind != R.KIND_BUNDLE)):
             notes.append(PREFIX + LEFT_JOB % (i, team.job(i)))

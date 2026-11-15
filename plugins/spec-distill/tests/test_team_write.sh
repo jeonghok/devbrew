@@ -1340,6 +1340,7 @@ assert_eq "$(rzjob E7)" "1" "job new --name E7: rc 1"
 assert_contains "$(cat "$T/out.txt")" "E7 은 에픽 번호 꼴이다 — 뒤에 올 에픽의 과제 폴더 자리를 막는다" "job new --name E7: 에픽 번호 꼴이라 거절한다"
 [ "$(snap "$RZ")" = "$b_rz" ] && ok "job new --name E7: 나무 그대로" || no "job new --name E7: 나무가 바뀌었다"
 assert_eq "$(rzjob E7a)" "1" "job new --name E7a: 끝 소문자 하나가 붙은 번호 꼴도 rc 1"
+assert_contains "$(cat "$T/out.txt")" "E7a 은 에픽 번호 꼴이다 — 뒤에 올 에픽의 과제 폴더 자리를 막는다" "job new --name E7a: 에픽 번호 꼴이라는 사유로 거절한다"
 assert_eq "$(rzjob e7x)" "0" "job new --name e7x: rc 0(에픽 번호 꼴이 아니다)"
 # 범위 줄이 없는 INTENT.md — extract 가 표가 틀렸다고 내지 않고 그 파일을 짚는다
 I1RZ="$RZ/${RD}rz/jobs/E1/INTENT.md"
@@ -1391,6 +1392,17 @@ cell "$T/rz-p1.md" "$T/rz-p1b.md" P1 "지시 원문 범위" "5–6"
 assert_eq "$(rzupdate "$T/rz-p1b.md")" "0" "종류 전환(결정 P1 → 묶음): rc 0"
 [ -f "$RZ/${RD}rz/jobs/P1/INTENT.md" ] && [ -f "$RZ/${RD}rz/jobs/P1/results/.gitkeep" ] && ok "종류 전환(결정 P1 → 묶음): jobs/P1/INTENT.md · .gitkeep 을 깔았다" || no "종류 전환: jobs/P1 을 깔지 않았다"
 assert_file_has "$RZ/${RD}rz/jobs/P1/INTENT.md" "- 범위: intent/original.md 5–6행" "종류 전환(결정 P1 → 묶음): INTENT.md 가 표의 범위를 적는다"
+# 종류 전환 — 결정이 된 E2 를 다시 묶음으로: 그대로 둔 과제 폴더의 파일은 덮어쓰지 않되, 남의 파일이라고 말하지 않는다
+rzextract "$T/rzx5.md" > /dev/null
+cell "$T/rzx5.md" "$T/rz-b0.md" E2 "종류" "묶음"
+cell "$T/rz-b0.md" "$T/rz-b1.md" E2 "브랜치" "feature/t-e2"
+cell "$T/rz-b1.md" "$T/rz-back.md" E2 "지시 원문 범위" "9–12"
+[ -f "$RZ/${RD}rz/jobs/E2/sources.md" ] && [ -f "$RZ/${RD}rz/jobs/E2/INTENT.md" ] && ok "픽스처: 결정이 된 E2 의 과제 폴더가 그대로 있다" || no "픽스처: E2 의 과제 폴더가 없다"
+b_rz="$(snap "$RZ")"
+assert_eq "$(rzupdate "$T/rz-back.md")" "1" "묶음 → 결정 → 묶음(E2): rc 1"
+assert_contains "$(cat "$T/out.txt")" "${RD}rz/jobs/E2/sources.md 가 이미 있다 — 묶음이 아니던 과제 E2 의 자리에 남은 파일이다" "묶음 → 결정 → 묶음(E2): 남은 파일이라는 사유"
+assert_not_contains "$(cat "$T/out.txt")" "이 생성기가 만들지 않은 파일" "묶음 → 결정 → 묶음(E2): 생성기가 만들지 않았다고 말하지 않는다"
+[ "$(snap "$RZ")" = "$b_rz" ] && ok "묶음 → 결정 → 묶음(E2): 나무 그대로" || no "묶음 → 결정 → 묶음(E2): 나무가 바뀌었다"
 # 틀의 넘김 문장이 사용자 글(brief 의 위험 줄)에도 있다 — 그린 글이 아니라 틀에서 바꾸므로 거절하지 않는다
 fresh ho
 sed 's/^- 위험 K1 — 숨은 가정: 팀 이름이 역할 이름과 겹친다 — 근거 약함$/- 위험 K1 — 숨은 가정: 에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다. — 근거 약함/' \
@@ -1401,5 +1413,34 @@ assert_eq "$(ttc "$T/ho" "$T/ho.md" "${RD}ho")" "0" "brief 의 글에 옛 넘김
 assert_contains "$(grep '^- K1 — ' "$T/ho/${RD}ho/roadmap.md")" "숨은 가정: 에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다." "사용자 글의 옛 문장은 그대로 남는다(로드맵의 위험 K1 줄)"
 assert_eq "$(grep -c '에픽마다 과제 폴더의 INTENT.md 를 넘긴다\.' "$T/ho/${RD}ho/roadmap.md")" "1" "머리 글은 team 문장 하나다"
 assert_eq "$(grep -c '에픽마다 원본 brief · 이 로드맵 · 에픽 묶음을 넘긴다\.' "$T/ho/${RD}ho/roadmap.md")" "1" "옛 문장은 사용자 글의 한 번뿐이다"
+
+# ── 단계를 셀 수 없는 team 로드맵의 update 는 쓰지 않는다(머지 여부를 모른다) ─────────────
+fresh nh
+NH="$T/nh"
+nhupdate() {  # nhupdate <표> — nh 로드맵을 다시 나눈다, rc 를 echo 한다
+  (cd "$NH" && python3 "$RW" update --roadmap "${RD}nh/roadmap.md" --brief docs/iv/t-brief-interview.md --audit docs/iv/t-brief-interview.audit.md \
+     --plan-table "$1" --date 2026-11-16 --change "모름 재분해" --approval "다시 나눈다") > "$T/out.txt" 2>&1; echo $?; }
+assert_eq "$(ttc "$NH" "$T/nh.md" "${RD}nh")" "0" "모름 픽스처: create --layout team rc 0"
+gx "$NH" add -- "${RD}nh" && gx "$NH" commit -qm nh-team && gx "$NH" push -q origin main
+(cd "$NH" && python3 "$RW" extract --roadmap "${RD}nh/roadmap.md") > "$T/nhx.md"
+cell "$T/nhx.md" "$T/nh-goal.md" E1 "의도" "모를 때 바꾼 의도"
+cell "$T/nhx.md" "$T/nh-range.md" E2 "지시 원문 범위" "9–13"
+nh_blocks() {  # nh_blocks — 기본 브랜치의 nh 로드맵 상태에서 단계를 센 블록 수(「알 수 없음」 은 세지 않는다)
+  (cd "$NH" && python3 "$RS" --json "${RD}nh/roadmap.md") > "$T/nh.json" 2>/dev/null
+  python3 -c 'import json, sys; r = json.load(open(sys.argv[1], encoding="utf-8")); print(sum(1 for b in r["blocks"] if b["stage"] != "알 수 없음"))' "$T/nh.json"
+}
+assert_eq "$(nh_blocks)" "3" "모름 픽스처 양성 대조: 기본 브랜치를 알면 세 블록의 단계를 센다"
+gx "$NH" remote set-head origin -d
+assert_eq "$(nh_blocks)" "0" "모름 픽스처: origin/HEAD 를 지우면 단계를 센 블록이 없다"
+gx "$NH" rev-parse -q --verify refs/remotes/origin/HEAD > /dev/null && no "모름 픽스처: origin/HEAD 가 남았다" || ok "모름 픽스처: origin/HEAD 가 없다"
+assert_eq "$(gx "$NH" status --porcelain)" "" "모름 픽스처: 작업 트리가 깨끗하다"
+b_nh="$(snap "$NH")"
+assert_eq "$(nhupdate "$T/nh-goal.md")" "1" "단계를 셀 수 없다 · 의도를 바꾼 표: rc 1"
+assert_contains "$(cat "$T/out.txt")" "로드맵을 쓰지 않았다 — 머지 여부를 알 수 없다" "단계를 셀 수 없다 · 의도를 바꾼 표: 머지 여부를 알 수 없다고 멈춘다"
+[ "$(snap "$NH")" = "$b_nh" ] && ok "단계를 셀 수 없다 · 의도를 바꾼 표: 나무 그대로" || no "단계를 셀 수 없다 · 의도를 바꾼 표: 나무가 바뀌었다"
+assert_eq "$(nhupdate "$T/nh-range.md")" "1" "단계를 셀 수 없다 · 범위만 바꾼 표: rc 1(종료 코드 4 가 아니다)"
+assert_contains "$(cat "$T/out.txt")" "로드맵을 쓰지 않았다 — 머지 여부를 알 수 없다" "단계를 셀 수 없다 · 범위만 바꾼 표: 머지 여부를 알 수 없다고 멈춘다"
+assert_not_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "단계를 셀 수 없다 · 범위만 바꾼 표: 고칠 글을 내지 않는다"
+[ "$(snap "$NH")" = "$b_nh" ] && ok "단계를 셀 수 없다 · 범위만 바꾼 표: 나무 그대로" || no "단계를 셀 수 없다 · 범위만 바꾼 표: 나무가 바뀌었다"
 
 finish
