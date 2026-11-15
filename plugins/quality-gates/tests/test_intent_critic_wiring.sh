@@ -309,9 +309,9 @@ run_stage() {
   step filter --rd "$rd"
   if [ "$m" = pr ]; then
     if [ "$mode" = prwide ]; then
-      printf '=== id: diff#%s#중복 · pick: 의도다\n' "$INTENT_DOC" > "$rd/intent-answers.txt"
+      printf '=== n: 1 · id: diff#%s#중복 · pick: 의도다\n' "$INTENT_DOC" > "$rd/intent-answers.txt"
     else
-      printf '=== id: diff#a.txt#기본값 · pick: 의도다\n' > "$rd/intent-answers.txt"
+      printf '=== n: 1 · id: diff#a.txt#기본값 · pick: 의도다\n' > "$rd/intent-answers.txt"
     fi
     step record --rd "$rd" --repo "$repo" --answers "$rd/intent-answers.txt"
   fi

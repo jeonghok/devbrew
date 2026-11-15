@@ -73,8 +73,13 @@ RETURN_FENCE = "```qg-intent-return"
 CAP = 3
 WEIGHTS = {"방향": 0, "기능": 1, "동작": 2}
 FILTER_ANSWERS = ("의도다", "잘못 골랐다")
-HEADER = "=== id: "
+# 답 입력의 머리 줄 — `=== n: <번호> · id: <정체> · pick: <고른 것>`. 「답 머리 꼴」 은 HEADER_SHAPES 로
+# 시작하는 줄뿐이다(옛 `=== id: ` 꼴은 받지 않고 정체가 맞지 않는 머리로 센다).
+HEADER = "=== n: "
+ID_SEP = " · id: "
 PICK_SEP = " · pick: "
+HEADER_SHAPES = ("=== n: ", "=== id: ")
+DIGITS = set("0123456789")
 TYPED = "typed"
 SECTION = "## intent-critic"
 SECTION_LEAD = ("intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · "
@@ -99,7 +104,13 @@ RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
-UNREAD_INPUT = "답 입력에서 읽지 못한 글이 있다"
+MISMATCHED = "정체가 맞지 않는 답 머리 %d개"
+MISMATCH_FAILURE = "정체가 맞지 않는 답 머리"
+DUPLICATE_HEADERS = "같은 질문 번호의 답 머리를 한 번만 받았다 — 더 나온 머리 %d개"
+NO_HEADER = "답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개"
+ORPHAN = "머리 앞의 답 글을 읽지 못함 %d줄"
+KILL_RECORD = "%s — 답 파일을 쓰지 않고 커밋하지 않았다"
+KILL_FAILURE = "kill switch(%s)가 켜져 있어 기록하지 않음"
 # 기록되지 않은 답의 질문마다 한 줄 — 돌려주는 꼴에는 그 답이 실리지 않으므로 여기에 남긴다.
 RECORD_FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
 PICK_UNREAD = "답을 읽지 못함"
@@ -379,11 +390,16 @@ def _switches_on() -> List[str]:
     return on
 
 
-def _kill_text(names: List[str]) -> str:
+def _kill_names(names: List[str]) -> str:
+    """`<변수>=1` 을 ` · ` 로 이은 글 — 전역이 앞이다."""
     parts = []
     for name in names:
         parts.append(name + "=1")
-    return "intent-critic 꺼짐(kill switch — %s)" % " · ".join(parts)
+    return " · ".join(parts)
+
+
+def _kill_text(names: List[str]) -> str:
+    return "intent-critic 꺼짐(kill switch — %s)" % _kill_names(names)
 
 
 def _killed(rd: str, mode: str, stale=()) -> bool:
@@ -1199,39 +1215,66 @@ def cmd_filter(args) -> int:
 
 # ---------------------------------------------------------------- record
 
-def _answer_header(line: str, known: dict, seen: dict) -> Optional[tuple]:
-    """머리 줄이면 (정체, 고른 것). 알려진 묻는 질문의 정체일 때만 머리다."""
-    if not line.startswith(HEADER):
-        return None
-    ident, sep, pick = line[len(HEADER):].partition(PICK_SEP)
-    pick = pick.rstrip()
-    if not sep or pick not in ia.ANSWERS + (TYPED,):
-        return None
-    if seen.get(ident, 0) >= known.get(ident, 0):
-        return None
-    return ident, pick
+def _header_parts(line: str) -> tuple:
+    """답 머리 꼴 줄 → (번호 | None, 정체 | None, 고른 것 | None).
 
-
-def parse_answer_input(text: str, known: dict) -> tuple:
-    """`=== id: <정체> · pick: <답|typed>` 머리로 가른 답들. 머리 아닌 줄은 앞 머리의 원문이다.
-
-    → (답들, 첫 머리 앞의 빈 줄 아닌 줄 수). 첫 머리 앞의 글은 붙일 질문이 없어 읽지 못한다.
+    고른 것은 `PICK_SEP` 를 오른쪽에서 갈라 얻는다(옛 `=== id: ` 꼴도). 번호와 정체는 `=== n: ` 꼴이고
+    `ID_SEP` 앞이 ASCII 숫자일 때만 읽힌다.
     """
-    seen: dict = {}
+    body, sep, pick = line.rpartition(PICK_SEP)
+    if sep:
+        pick = pick.rstrip()
+    else:
+        body, pick = line, None
+    number, ident = None, None
+    if body.startswith(HEADER):
+        digits, sep, rest = body[len(HEADER):].partition(ID_SEP)
+        if sep and digits and set(digits) <= DIGITS:
+            number, ident = int(digits), rest
+    return number, ident, pick
+
+
+def parse_answer_input(text: str, known: dict) -> dict:
+    """`=== n: <번호> · id: <정체> · pick: <답|typed>` 머리로 가른 답들. `known` 은 묻는 질문의 {번호: 정체}.
+
+    → {"entries": [{"n", "id", "pick", "lines"}], "orphan": 첫 머리 앞의 빈 줄 아닌 줄 수,
+       "mismatched": [(번호 | None, 읽힌 고른 답 | None)], "duplicates": 같은 번호의 머리가 더 나온 수}.
+    답 머리 꼴 줄은 늘 지금 답을 끝낸다. 번호 · 정체가 맞는 그 번호의 첫 머리만 답이고, 고른 것이 라벨 · typed
+    가 아니면 `pick` 이 None 인 답이다(아래 글은 싣지 않는다). 맞지 않는 머리 · 더 나온 머리와 그 아래 글은
+    어디에도 싣지 않는다. 머리 꼴이 아닌 줄(`===` 로 시작하는 다른 줄 포함)은 지금 답의 원문이다.
+    """
+    picks = ia.ANSWERS + (TYPED,)
     entries: List[dict] = []
-    current: Optional[dict] = None
+    mismatched: List[tuple] = []
+    taken: set = set()
+    duplicates = 0
     orphan = 0
+    started = False
+    current: Optional[dict] = None
     for line in text.split("\n"):
-        head = _answer_header(line.rstrip("\r"), known, seen)
-        if head is not None:
-            seen[head[0]] = seen.get(head[0], 0) + 1
-            current = {"id": head[0], "pick": head[1], "lines": []}
-            entries.append(current)
+        bare = line.rstrip("\r")
+        if bare.startswith(HEADER_SHAPES):
+            started = True
+            current = None
+            number, ident, pick = _header_parts(bare)
+            if number is not None and number in known and ident == known[number]:
+                if number in taken:
+                    duplicates += 1
+                else:
+                    taken.add(number)
+                    entry = {"n": number, "id": ident, "pick": pick if pick in picks else None,
+                             "lines": []}
+                    entries.append(entry)
+                    if entry["pick"] is not None:
+                        current = entry
+            else:
+                mismatched.append((number, pick if pick in picks else None))
         elif current is not None:
             current["lines"].append(line)
-        elif line.strip():
+        elif not started and bare.strip():
             orphan += 1
-    return entries, orphan
+    return {"entries": entries, "orphan": orphan, "mismatched": mismatched,
+            "duplicates": duplicates}
 
 
 def _read_pick(entry: dict) -> tuple:
@@ -1303,18 +1346,6 @@ def _unique_name(ident: str, now: datetime.datetime, taken: set, directory: str)
     return name, at
 
 
-def _stray_lines(entries: List[dict], orphan: int) -> int:
-    """어느 질문에도 붙이지 못한 답 글의 줄 수 — 첫 머리 앞의 글과, 라벨을 고른 답(머리 아래 줄이 없는 꼴)
-    아래에 남은 글. 정체가 틀린 머리 줄은 여기에 든다."""
-    stray = orphan
-    for entry in entries:
-        if entry["pick"] != TYPED:
-            for line in entry["lines"]:
-                if line.strip():
-                    stray += 1
-    return stray
-
-
 def _one_line(value, limit: int = 0) -> str:
     """공시 줄에 싣는 글 — 줄바꿈 · 제어 글자를 빈칸으로 접어 한 줄로 만들고, limit 가 있으면 그 길이에서 자른다.
 
@@ -1355,7 +1386,7 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
     return lines
 
 
-def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: bool) -> None:
+def _save_record(rd: str, data: Optional[dict], notices: List[str]) -> None:
     """record 의 공시 · 표지를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
     if data is None:
         return
@@ -1363,65 +1394,107 @@ def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: boo
     _write_questions(rd, data)
 
 
+def _keep_typed(record: dict, entry: dict) -> None:
+    """직접 쓴 답이면 그 원문 줄들을 질문에 남긴다 — 기록에 성공했든 실패했든 돌려주는 꼴의 `answer_text`."""
+    if entry["pick"] == TYPED:
+        raw = _read_pick(entry)[1]
+        if raw:
+            record["answer_text"] = raw.split("\n")
+
+
+def _answers_in_input(parsed: dict, by_n: dict) -> tuple:
+    """입력에 답이 있던 질문 — (받은 답 [(질문, 답 항목)], 제 사유로 기록하지 못할 답 [(질문, 고른 답 | None, 사유)]).
+
+    받은 답 · 고른 것을 읽지 못한 머리(`답을 읽지 못함`) · 번호만 맞은 머리(`정체가 맞지 않는 답 머리` — 같은
+    번호에 받은 머리가 따로 있으면 그것이 이긴다)가 든다.
+    """
+    good: List[tuple] = []
+    own: List[tuple] = []
+    hit: set = set()
+    for entry in parsed["entries"]:
+        record = by_n[entry["n"]]
+        hit.add(entry["n"])
+        if entry["pick"] is None:
+            own.append((record, None, PICK_UNREAD))
+        else:
+            good.append((record, entry))
+            _keep_typed(record, entry)
+    for number, pick in parsed["mismatched"]:
+        if number in by_n and number not in hit:
+            hit.add(number)
+            own.append((by_n[number], pick if pick in ia.ANSWERS else None, MISMATCH_FAILURE))
+    return good, own
+
+
+def _input_notices(parsed: dict, known: dict, asked: List[dict], text: Optional[str]) -> List[str]:
+    """답 입력을 읽은 공시 — 머리 없음 · 머리 앞 글 · 정체가 맞지 않는 머리(4a) · 더 나온 같은 번호 머리."""
+    notices = []
+    if not parsed["entries"] and known and text is not None and text.strip():
+        notices.append(NO_HEADER % len(asked))
+    if parsed["orphan"]:
+        notices.append(ORPHAN % parsed["orphan"])
+    if parsed["mismatched"]:
+        notices.append(MISMATCHED % len(parsed["mismatched"]))
+    if parsed["duplicates"]:
+        notices.append(DUPLICATE_HEADERS % parsed["duplicates"])
+    return notices
+
+
 def _record(args) -> tuple:
     """(공시 줄들, 기록한 답 파일 수)."""
+    switches = _switches_on()
     plan = _read_plan(args.rd)
-    data = _read_questions(args.rd)
     if plan is not None and plan["mode"] == "range":
+        if switches:
+            return [KILL_RECORD % _kill_text(switches)], 0
         return [], 0
+    data = _read_questions(args.rd)
     if data is not None:
         data["record_ran"] = True   # render 가 「묻기 전에 끝남」 과 「답하지 않음」 을 가른다
     cfg = _read_config(args.rd)
     text = _read(args.answers)
     known: dict = {}
-    pending: dict = {}
+    by_n: dict = {}
     asked: List[dict] = []
     for record in (data or {}).get("questions") or []:
         if isinstance(record, dict) and record.get("state") == "ask":
-            known[record["id"]] = known.get(record["id"], 0) + 1
-            pending.setdefault(record["id"], []).append(record)
             asked.append(record)
-    entries: List[dict] = []
-    orphan = 0
+            if type(record.get("n")) is int:
+                known[record["n"]] = record.get("id")
+                by_n[record["n"]] = record
+    parsed = {"entries": [], "orphan": 0, "mismatched": [], "duplicates": 0}
     if data is not None and text is not None:
-        entries, orphan = parse_answer_input(text, known)
-    matched = []
-    for entry in entries:
-        matched.append((pending[entry["id"]].pop(0), entry))
+        parsed = parse_answer_input(text, known)
+    good, own = _answers_in_input(parsed, by_n)
+    notices = _input_notices(parsed, known, asked, text)
 
+    # 기록하지 않는 갈래 — 입력에 답이 있던 질문에만 그 갈래의 사유로 실패 표지를 단다. 답 입력 파일 자체를
+    # 읽지 못하면 답이 있었는지 알 수 없어 묻는 질문 모두에 단다.
     blocked = None
-    if plan is None:
+    lead = None
+    if switches:
+        blocked = KILL_FAILURE % _kill_names(switches)
+        lead = KILL_RECORD % _kill_text(switches)
+    elif plan is None:
         blocked = "준비 파일(%s)을 읽지 못함" % PLAN
     elif data is None or cfg is None or text is None:
         blocked = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
     if blocked:
-        notices = ["답을 기록하지 못했다 — " + blocked]
         failed = []
-        # 답 입력이 비어 있으면 받은 답이 없다 — 그때는 「답하지 않음」 으로 둔다.
-        if text is None or text.strip():
-            picked = {}
-            for record, entry in matched:
-                picked[id(record)] = _read_pick(entry)[0]
+        if text is None:
             for record in asked:
-                failed.append((record, picked.get(id(record)), blocked))
-        notices += _failed_notices(failed)
-        _save_record(args.rd, data, notices, bool(failed))
+                failed.append((record, None, blocked))
+        for record, entry in good:
+            failed.append((record, _read_pick(entry)[0], blocked))
+        for record, picked, _why in own:
+            failed.append((record, picked, blocked))
+        notices = [lead or "답을 기록하지 못했다 — " + blocked] + notices + _failed_notices(failed)
+        _save_record(args.rd, data, notices)
         return notices, 0
 
-    notices = []
-    if not entries and known and text.strip():
-        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % len(asked))
-    if orphan:
-        notices.append("머리 앞의 답 글을 읽지 못함 %d줄" % orphan)
-    # 머리가 맞지 않은 질문 — 붙이지 못한 답 글이 있으면 그 답을 읽지 못한 것이다(없으면 답하지 않은 질문이다).
-    unread = []
-    if _stray_lines(entries, orphan):
-        for ident in pending:
-            for record in pending[ident]:
-                unread.append((record, None, UNREAD_INPUT))
-    if not entries:
-        notices += _failed_notices(unread)
-        _save_record(args.rd, data, notices, bool(unread))
+    if not good:
+        notices += _failed_notices(own)
+        _save_record(args.rd, data, notices)
         return notices, 0
     answers_dir = cfg["answers_dir"]
     target = _review_target(args.repo, answers_dir)
@@ -1430,7 +1503,7 @@ def _record(args) -> tuple:
     taken: set = set()
     files = []
     pairs = []
-    for record, entry in matched:
+    for record, entry in good:
         answer, raw = _read_pick(entry)
         name, at = _unique_name(record["id"], now, taken, directory)
         files.append((name, ia.render_answer_file(
@@ -1447,7 +1520,7 @@ def _record(args) -> tuple:
             record["file"] = paths[i]
         else:
             failed.append((record, answer, write_error or "답 파일이 없다"))
-    notices += _failed_notices(failed + unread)
+    notices += _failed_notices(failed + own)
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     if paths:
         sha, commit_error = ia.commit_answer_files(args.repo, paths,

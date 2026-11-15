@@ -477,6 +477,284 @@ class TestQuestionRows(unittest.TestCase):
                 keys.append(line.strip().split(":", 1)[0])
         self.assertEqual(keys, QUESTION_ORDER)
 
+    def test_failure_and_answer_text_cells_are_folded(self):
+        """답 기록 실패 행의 `answer` · `failure` · `answer_text`(목록 꼴) · 원문 칸도 한 줄로 접힌다."""
+        bad = "줄\n바꿈 가름‮방향\x07종 \"따옴표\" a: b"
+        self._seed([{"record_failed": True, "failed_answer": bad, "failure": bad,
+                     "answer_text": ["첫 " + bad, "둘째 줄"], "target_source": bad,
+                     "target_id": bad}])
+        self._render()
+        text, block = tic._return_block(self.rd)
+        row = block["questions"][0]
+        self.assertEqual(row["state"], "답 기록 실패")
+        for key in ("answer", "failure", "target_source", "target_id"):
+            self.assertEqual(row[key], ic._one_line(bad), key)
+        self.assertEqual(row["answer_text"], [ic._one_line("첫 " + bad), "둘째 줄"])
+        for ch in (" ", "‮", "\x07"):
+            self.assertNotIn(ch, text)
+        self.assertIn("    answer_text:\n      - %s\n      - \"둘째 줄\"\n"
+                      % json.dumps(ic._one_line("첫 " + bad), ensure_ascii=False), text)
+        self.assertIs(row["wrong_choice"], False)
+
+
+ANS_DIR = tic.ANS_DIR
+BLOCKED = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
+MISMATCH = "정체가 맞지 않는 답 머리"
+KILL_RECORD = "intent-critic 꺼짐(kill switch — %s=1) — 답 파일을 쓰지 않고 커밋하지 않았다"
+KILL_FAILURE = "kill switch(%s=1)가 켜져 있어 기록하지 않음"
+
+
+class TestAnswerInput(unittest.TestCase):
+    """답 입력 — 질문 번호 머리 · 정체가 맞지 않는 머리(4a) · 답이 있던 질문에만 실패 표지(4b) · record 의 스위치."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = os.path.join(self.tmp.name, "repo")
+        os.makedirs(self.repo)
+        tic._git_repo(self.repo)
+        self.rd = os.path.join(self.tmp.name, "rd")
+        os.makedirs(self.rd)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _asked(self, cands):
+        tic._filter_rd(self.rd)
+        tic._write(tic._out(cands), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(tic._last(p), "intent-ask: %d" % len(cands))
+        return [(q["n"], q["id"]) for q in tic._by_state(self.rd, "ask")]
+
+    def _two(self):
+        return self._asked([tic._q("D1"), tic._q("D2", kind="기본값", weight="동작")])
+
+    def _head(self, q, pick):
+        return "=== n: %d · id: %s · pick: %s\n" % (q[0], q[1], pick)
+
+    def _record(self, text, env=None, answers=None):
+        path = answers or os.path.join(self.tmp.name, "answers.txt")
+        if text is not None:
+            tic._write(text, path)
+        p = tic._cli("record", "--rd", self.rd, "--repo", self.repo, "--answers", path, env=env)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _render(self):
+        r = tic._cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        text, block = tic._return_block(self.rd)
+        _check_vocab(self, block)
+        rows = {}
+        for row in block["questions"]:
+            rows[row["n"]] = row
+        return tic._last(r), rows, text
+
+    def _files(self):
+        d = os.path.join(self.repo, ANS_DIR)
+        return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+    def _body(self, name):
+        return tic._read(self.repo, ANS_DIR, name)
+
+    def test_second_of_same_identity(self):
+        qs = self._asked([tic._q("D1", question="첫째 글"), tic._q("D1", question="둘째 글")])
+        self.assertEqual(qs[0][1], qs[1][1])
+        p = self._record(tic._header(self.rd, qs[0][1], "의도다", nth=2) + "\n")
+        self.assertEqual(tic._last(p), "record: 1")
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        body = self._body(files[0])
+        self.assertIn("## 질문\n\n둘째 글", body)
+        self.assertNotIn("첫째 글", body)
+        _line, rows, _t = self._render()
+        self.assertEqual(rows[qs[1][0]]["state"], "답함")
+        self.assertTrue(rows[qs[1][0]]["question"].startswith("둘째 글"))
+        self.assertEqual(rows[qs[0][0]]["state"], "답하지 않음")
+        self.assertTrue(rows[qs[0][0]]["question"].startswith("첫째 글"))
+
+    def test_empty_input_marks_unanswered(self):
+        self._two()
+        p = self._record("")
+        self.assertEqual(p.stdout.splitlines(), ["record: 0"])
+        line, rows, _t = self._render()
+        self.assertEqual([r["state"] for r in rows.values()], ["답하지 않음", "답하지 않음"])
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개")
+
+    def test_wrong_header_after_typed_answer(self):
+        qs = self._two()
+        text = (self._head(qs[0], "typed") + "이유 글\n"
+                + "=== n: %d · id: 틀린#정체#방향 · pick: 잘못 골랐다\n딸린 글\n" % qs[1][0])
+        p = self._record(text)
+        lines = p.stdout.splitlines()
+        self.assertIn(MISMATCH + " 1개", lines)
+        self.assertEqual(tic._last(p), "record: 1")
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        raw = self._body(files[0]).split("## 답 원문\n", 1)[1]
+        self.assertEqual(raw.strip(), "이유 글")
+        for part in ("딸린 글", "=== n:", "틀린#정체"):
+            self.assertNotIn(part, raw)
+        _line, rows, _t = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer_text"]), ("답함", ["이유 글"]))
+        self.assertEqual((second["state"], second["answer"], second["wrong_choice"], second["failure"]),
+                         ("답 기록 실패", "잘못 골랐다", True, MISMATCH))
+        self.assertEqual(second["answer_text"], "-")
+
+    def test_unknown_number_only_disclosed(self):
+        qs = self._two()
+        p = self._record("=== n: 9 · id: x · pick: 의도다\n=== id: %s · pick: 의도다\n" % qs[0][1])
+        self.assertIn(MISMATCH + " 2개", p.stdout.splitlines())
+        self.assertNotIn("답 기록 실패", p.stdout)
+        self.assertEqual(tic._last(p), "record: 0")
+        self.assertEqual(self._files(), [])
+        self.assertIn(MISMATCH + " 2개", tic._questions(self.rd)["record_notices"])
+        _line, rows, _t = self._render()
+        self.assertEqual([r["state"] for r in rows.values()], ["답하지 않음", "답하지 않음"])
+
+    def test_duplicate_number_first_wins(self):
+        qs = self._two()
+        p = self._record(self._head(qs[0], "의도다") + self._head(qs[0], "잘못 골랐다"))
+        line = "같은 질문 번호의 답 머리를 한 번만 받았다 — 더 나온 머리 1개"
+        self.assertIn(line, p.stdout.splitlines())
+        self.assertIn(line, tic._questions(self.rd)["record_notices"])
+        self.assertEqual(tic._last(p), "record: 1")
+        files = self._files()
+        self.assertEqual(len(files), 1)
+        self.assertEqual(ic.ia.parse_answer_file(self._body(files[0]))["answer"], "의도다")
+        _line, rows, _t = self._render()
+        self.assertEqual((rows[qs[0][0]]["state"], rows[qs[0][0]]["answer"]), ("답함", "의도다"))
+        self.assertEqual(rows[qs[1][0]]["state"], "답하지 않음")
+
+    def test_unreadable_pick_fails_that_question(self):
+        """번호 · 정체는 맞는데 고른 것이 라벨 · typed 가 아니다 — 그 질문은 답 기록 실패(답 모름)이고 아래 글은
+        어디에도 싣지 않는다."""
+        qs = self._two()
+        p = self._record(self._head(qs[0], "아마") + "딸린 글\n" + self._head(qs[1], "typed") + "의도다\n")
+        lines = p.stdout.splitlines()
+        self.assertIn("답 기록 실패 1개 — 답을 읽지 못함", lines)
+        self.assertNotIn(MISMATCH, p.stdout)
+        self.assertFalse([l for l in lines if l.startswith("머리 앞의")], lines)
+        self.assertEqual(tic._last(p), "record: 1")
+        raw = self._body(self._files()[0]).split("## 답 원문\n", 1)[1]
+        self.assertEqual(raw.strip(), "의도다")
+        _line, rows, _t = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer"], first["failure"], first["answer_text"]),
+                         ("답 기록 실패", "-", "답을 읽지 못함", "-"))
+        self.assertEqual((second["state"], second["answer_text"]), ("답함", ["의도다"]))
+
+    def test_typed_line_starting_with_equals_stays_text(self):
+        qs = self._two()
+        p = self._record(self._head(qs[0], "typed") + "의도다 — 이유\n=== 메모 ===\n===\n")
+        self.assertNotIn(MISMATCH, p.stdout)
+        self.assertEqual(tic._last(p), "record: 1")
+        raw = self._body(self._files()[0]).split("## 답 원문\n", 1)[1]
+        self.assertEqual(raw.strip(), "의도다 — 이유\n=== 메모 ===\n===")
+        _line, rows, _t = self._render()
+        self.assertEqual(rows[qs[0][0]]["answer_text"], ["의도다 — 이유", "=== 메모 ===", "==="])
+
+    def test_failed_answer_carried(self):
+        qs = self._asked([tic._q("D1")])
+        with tempfile.TemporaryDirectory() as other:
+            os.makedirs(os.path.join(self.repo, "docs"))
+            os.symlink(other, os.path.join(self.repo, ANS_DIR))
+            p = self._record(self._head(qs[0], "typed") + "잘못 골랐다 — 이유\n둘째 줄\n")
+            self.assertEqual(os.listdir(other), [])
+        self.assertEqual(tic._last(p), "record: 0")
+        line, rows, _t = self._render()
+        row = rows[qs[0][0]]
+        self.assertEqual((row["state"], row["answer"], row["wrong_choice"], row["failure"]),
+                         ("답 기록 실패", "잘못 골랐다", True, "답 자리가 심볼릭 링크다"))
+        self.assertEqual(row["answer_text"], ["잘못 골랐다 — 이유", "둘째 줄"])
+        # 답 기록이 돌았다 — 「묻기 전에 끝남」 이 아니다.
+        self.assertEqual(line, "intent-critic — 질문 1개를 물었다 · 답 0개(잘못 골랐다 0개)")
+
+    def test_typed_answer_text_folded_in_return(self):
+        qs = self._asked([tic._q("D1")])
+        self._record(self._head(qs[0], "typed") + "의도다 — 숨은 줄\x07종‮방향\n")
+        _line, rows, text = self._render()
+        self.assertEqual(rows[qs[0][0]]["answer_text"], [ic._one_line("의도다 — 숨은 줄\x07종‮방향")])
+        for ch in (" ", "\x07", "‮"):
+            self.assertNotIn(ch, text)
+
+    def test_typed_answer_text_on_success(self):
+        qs = self._two()
+        p = self._record(self._head(qs[0], "typed") + "의도다 — 첫 줄\n둘째 줄\n"
+                         + self._head(qs[1], "잘못 골랐다"))
+        self.assertEqual(tic._last(p), "record: 2")
+        _line, rows, text = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer"], first["answer_text"]),
+                         ("답함", "의도다", ["의도다 — 첫 줄", "둘째 줄"]))
+        self.assertEqual((second["state"], second["answer"], second["answer_text"]),
+                         ("답함", "잘못 골랐다", "-"))
+        self.assertIn("    answer_text:\n      - \"의도다 — 첫 줄\"\n      - \"둘째 줄\"\n", text)
+
+    def test_unreadable_config_fails_only_answered(self):
+        qs = self._two()
+        os.remove(os.path.join(self.rd, "intent-config.txt"))
+        p = self._record(self._head(qs[0], "잘못 골랐다"))
+        lines = p.stdout.splitlines()
+        self.assertEqual(lines[0], "답을 기록하지 못했다 — " + BLOCKED)
+        self.assertIn("답 기록 실패 1개 — " + BLOCKED, lines)
+        self.assertEqual(tic._last(p), "record: 0")
+        line, rows, _t = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer"], first["wrong_choice"], first["failure"]),
+                         ("답 기록 실패", "잘못 골랐다", True, BLOCKED))
+        self.assertEqual(second["state"], "답하지 않음")
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 1개")
+
+    def test_stray_text_does_not_fail_others(self):
+        qs = self._two()
+        p = self._record("잘못 골랐다\n" + self._head(qs[0], "의도다"))
+        self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", p.stdout.splitlines())
+        self.assertNotIn("답 기록 실패", p.stdout)
+        self.assertEqual(tic._last(p), "record: 1")
+        _line, rows, _t = self._render()
+        self.assertEqual(rows[qs[0][0]]["state"], "답함")
+        self.assertEqual(rows[qs[1][0]]["state"], "답하지 않음")
+
+    def test_unreadable_input_file_keeps_failure(self):
+        qs = self._two()
+        p = self._record(None, answers=os.path.join(self.tmp.name, "none.txt"))
+        self.assertIn("답 기록 실패 2개 — " + BLOCKED, p.stdout.splitlines())
+        self.assertEqual(tic._last(p), "record: 0")
+        line, rows, _t = self._render()
+        for q in qs:
+            self.assertEqual((rows[q[0]]["state"], rows[q[0]]["answer"]), ("답 기록 실패", "-"))
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+
+    def _switch_case(self, var, other):
+        qs = self._two()
+        head = tic._git(self.repo, "rev-parse", "HEAD").stdout
+        env = tic._env(**{var: "1"})
+        env.pop(other, None)
+        p = self._record(self._head(qs[0], "잘못 골랐다"), env=env)
+        lines = p.stdout.splitlines()
+        self.assertEqual(lines[0], KILL_RECORD % var)
+        self.assertEqual(p.stdout.count("intent-critic 꺼짐"), 1)
+        self.assertEqual(lines[-1], "record: 0")
+        self.assertFalse(os.path.lexists(os.path.join(self.repo, ANS_DIR)))
+        self.assertFalse(os.path.lexists(os.path.join(self.repo, "docs")))
+        self.assertEqual(tic._git(self.repo, "rev-parse", "HEAD").stdout, head)
+        self.assertEqual(tic._git(self.repo, "status", "--porcelain").stdout, "")
+        self.assertFalse(os.path.lexists(os.path.join(self.rd, "intent-return.md")))
+        self.assertIs(tic._questions(self.rd)["record_ran"], True)
+        line, rows, _t = self._render()
+        first, second = rows[qs[0][0]], rows[qs[1][0]]
+        self.assertEqual((first["state"], first["answer"], first["wrong_choice"], first["failure"]),
+                         ("답 기록 실패", "잘못 골랐다", True, KILL_FAILURE % var))
+        self.assertEqual(second["state"], "답하지 않음")
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 1개")
+
+    def test_record_stage_switch_writes_nothing(self):
+        self._switch_case(STAGE, GLOBAL)
+
+    def test_record_global_switch_writes_nothing(self):
+        self._switch_case(GLOBAL, STAGE)
+
 
 if __name__ == "__main__":
     unittest.main()
