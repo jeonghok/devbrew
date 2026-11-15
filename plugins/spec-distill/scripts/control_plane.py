@@ -48,8 +48,9 @@ from state_path import state_root_for_common  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 # 상태줄 묶음 — 상태 계산의 단계 이름 + R5 가 더할 이름. 대기 · 끝난 단계 · 알 수 없음은 세지 않는다.
-BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR")), ("준비", ("준비",)))
-IMPL_STAGES = ("구현 중", "구현 끝", "PR")
+BUCKETS = (("설계", ("설계 중",)), ("구현", ("계획", "구현 중", "구현 끝", "PR", "진행 중", "결과 받음")), ("준비", ("준비",)))
+IMPL_STAGES = ("구현 중", "구현 끝", "PR", "진행 중", "결과 받음")
+PR_STAGES = ("구현 끝", "결과 받음")   # 끝난 구현 — PR 캐시를 덧씌운다(「결과 받음」 은 설계 없는 흐름의 끝)
 LEDGER_MAX_BYTES = 1 << 20
 MACHINE_MAX_BYTES = 1 << 20
 LEDGER_MAX_COUNT = 50
@@ -320,6 +321,36 @@ def works_lines(report: dict) -> list:
     return lines
 
 
+JOBS_HEAD = "로드맵 밖 과제"   # team 로드맵 보고의 jobs · job_notes(로드맵 블록이 아닌 kind: task 과제)
+
+
+def stage_text(b: dict):
+    """블록 · 과제의 단계 글. 진행 칸(team 로드맵의 보고에만 있다)이 수면 `<단계> <n>/<전체>`(단계가 「일부 머지」 로
+    시작하면 `<단계> · 진행 <n>/<전체>`), 사유만 있으면 `<단계>(<사유의 「 — 」 앞부분>)`. 칸이 없거나 None 이면 단계 그대로."""
+    stage, progress = b.get("stage"), b.get("progress")
+    if not progress:
+        return stage
+    done, total = progress.get("done"), progress.get("total")
+    if isinstance(done, int) and isinstance(total, int):
+        return "%s%s%d/%d" % (stage, " · 진행 " if str(stage).startswith("일부 머지") else " ", done, total)
+    if progress.get("why"):
+        return "%s(%s)" % (stage, progress["why"].split(" — ", 1)[0])
+    return stage
+
+
+def job_lines(report: dict) -> list:
+    """「로드맵 밖 과제」 절 — 과제마다 한 줄과 그 알림, 그 뒤 세지 못한 사정(job_notes). 둘 다 비면 절이 없다."""
+    jobs, notes = report.get("jobs") or [], report.get("job_notes") or []
+    if not jobs and not notes:
+        return []
+    lines = [JOBS_HEAD + ":"]
+    for j in jobs:
+        name = " ".join(str(v) for v in (j.get("id"), j.get("title")) if v)
+        lines.append(clean("    %s — %s · %s" % (name, stage_text(j), j.get("reason"))))
+        lines += [clean("        정보: %s" % n) for n in j.get("notes") or []]
+    return lines + [clean("    정보: %s" % n) for n in notes]
+
+
 def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
     lines = []
     if select_error:
@@ -336,18 +367,22 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
                                % (report.get("default_branch") or "알 수 없음")))
         blocks = report.get("blocks") or []
         stages = dict((b.get("id"), b.get("stage")) for b in blocks)
+        team = bool(report.get("layout"))   # 블록 알림은 team 로드맵의 지도에만 보인다(옛 형식의 지도는 그대로)
         for b in blocks:
-            line = "%s %s — %s · %s" % (b.get("id"), b.get("title"), b.get("stage"), b.get("reason"))
+            line = "%s %s — %s · %s" % (b.get("id"), b.get("title"), stage_text(b), b.get("reason"))
             waiting = [d for d in b.get("deps") or [] if stages.get(d) not in DONE]
             if waiting:
                 line += " ← 기다림: " + " · ".join(waiting)
             lines.append(clean(line))
             lines += [clean("    경고: %s" % w) for w in b.get("warnings") or []]
+            if team:
+                lines += [clean("    정보: %s" % n) for n in b.get("notes") or []]
             if b.get("pr"):
                 lines.append(clean("    PR: %s" % pr_text(b["pr"])))
             lines += [clean("    원장 읽기 불가: %s — %s" % (f["path"], f["reason"])) for f in b.get("ledger_failures") or []]
             if b.get("ledger_cut"):
                 lines.append(clean("    %s" % b["ledger_cut"]))
+        lines += job_lines(report)
         for label, key in TOP_WARNINGS:
             vals = report.get(key)
             if vals is None:
@@ -399,6 +434,14 @@ def parallel_line(blocks):
     return clean(PARALLEL_LINE_HEAD + " · ".join(parts)) if parts else None
 
 
+def task_line(title: str, item: dict) -> str:
+    """작업 목록 한 줄 — 작업 상태를 모르면(단계 「알 수 없음」 등) keep 과 사유."""
+    state = item.get("task_status")
+    if state in TASK_STATES:
+        return clean(title) + "\t" + state
+    return clean("%s · 알 수 없음(%s)" % (title, item.get("reason") or "작업 상태가 없다")) + "\tkeep"
+
+
 def tasks_output(items, select_error=None):
     """(표준 출력 줄들, 표준 오류 글, rc). rc 가 0 이 아니면 지휘자는 작업 목록을 바꾸지 않는다."""
     if select_error:
@@ -415,15 +458,8 @@ def tasks_output(items, select_error=None):
         reasons = (["형식 깨짐 — %s" % e for e in report.get("format_errors") or []]
                    + list(report.get("unknown_reasons") or []))
         return [], clean("검사 불가 — %s" % (" · ".join(reasons) or "상태 계산이 3 을 냈다")), 3
-    out = []
-    for b in report.get("blocks") or []:
-        title = "%s %s — %s" % (b.get("id"), b.get("title"), b.get("stage"))
-        state = b.get("task_status")
-        if state in TASK_STATES:
-            out.append(clean(title) + "\t" + state)
-        else:
-            reason = b.get("reason") or "작업 상태가 없다"
-            out.append(clean("%s · 알 수 없음(%s)" % (title, reason)) + "\tkeep")
+    out = [task_line("%s %s — %s" % (b.get("id"), b.get("title"), stage_text(b)), b) for b in report.get("blocks") or []]
+    out += [task_line("%s %s — %s" % (JOBS_HEAD, j.get("id"), stage_text(j)), j) for j in report.get("jobs") or []]
     for w in (report.get("machine") or {}).get("작업") or []:
         if w["에픽"] != OUTSIDE:
             continue
@@ -747,7 +783,8 @@ def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
 
 
 CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "team_layout.py", "section6.py", "brief_body.py", "check_bundle_coverage.py", "control_plane.py",
-                    "repo_defaults.py", "conductor_state.py")
+                    "repo_defaults.py", "conductor_state.py", "team_files.py", "team_check.py", "team_status.py", "job_results.py",
+                    "workflow_superpowers.py", "branch_tip.py", "gh_repo.py")
 
 
 def code_stamp() -> str:
@@ -994,8 +1031,12 @@ def pr_fact(rows: list, branch: str, default_short, missing: str, first: str = "
     return {"number": best["번호"], "state": best["상태"], "source": "PR 캐시"}
 
 
-def _rulings(b: dict, paths: list, read, deadline) -> None:
-    """판정을 실행 원장에서, 못 읽은 원장이 있으면 설계문서 `## 판정` 보관본을 합쳐 b 에 싣는다."""
+DESIGN_RULINGS, TEAM_RULINGS = "설계문서 ## 판정", "결과 파일"   # 보관 판정(rulings_archived)의 출처 라벨
+
+
+def _rulings(b: dict, paths: list, read, deadline, archive: str = DESIGN_RULINGS) -> None:
+    """판정을 실행 원장에서, 못 읽은 원장이 있으면 보관 판정(archive 가 그 출처 라벨 — 옛 형식은 설계문서 `## 판정`,
+    team 형식은 결과 파일의 `Ruling:` 줄)을 합쳐 b 에 싣는다."""
     rulings, failures = None, []
     if len(paths) > LEDGER_MAX_COUNT:
         b["ledger_cut"] = "원장 %d개 중 %d개만 읽음" % (len(paths), LEDGER_MAX_COUNT)
@@ -1018,7 +1059,7 @@ def _rulings(b: dict, paths: list, read, deadline) -> None:
     if archived is not None and (rulings is None or failures):
         seen = set(r.lstrip("- ").strip() for r in rulings or [])
         rulings = (rulings or []) + [r for r in archived if r.lstrip("- ").strip() not in seen]
-        b["rulings_source"] = "실행 원장 + 설계문서 ## 판정" if had_ledger else "설계문서 ## 판정"
+        b["rulings_source"] = "실행 원장 + " + archive if had_ledger else archive
     if failures:
         b["ledger_failures"] = failures
     if rulings is not None or failures or b.get("stage") != "머지됨":
@@ -1041,6 +1082,7 @@ def overlay(items, machine_lookup, detail: bool, read=read_capped, deadline=None
     for path, report in items:
         machine, why = machine_lookup(path)
         report["machine"], report["machine_error"] = machine, why
+        archive = TEAM_RULINGS if report.get("layout") else DESIGN_RULINGS   # team 로드맵의 보관 판정은 결과 파일에서 왔다
         ledgers = {}
         for row in (machine or {}).get("실행 원장", []):
             ledgers.setdefault(row["에픽"], []).append(row["원장"])
@@ -1050,14 +1092,14 @@ def overlay(items, machine_lookup, detail: bool, read=read_capped, deadline=None
             stage = b.get("stage") or ""
             partial = stage.startswith("일부 머지")
             br = active_branch(b)
-            if br and (stage == "구현 끝" or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
+            if br and (stage in PR_STAGES or (partial and IMPL_DONE_MARK in (b.get("reason") or ""))):
                 b["pr"] = pr_fact(rows, br, default_short, PR_MISSING, epic=b.get("id"), epic_rows=epics)
-                if stage == "구현 끝" and b["pr"]["state"] == "열림":
+                if stage in PR_STAGES and b["pr"]["state"] == "열림":
                     b["stage"], b["reason"] = "PR", "%s 열림(%s)" % (b["pr"]["number"], b["pr"]["source"])
             if detail and focus is not None and b.get("id") == focus and stage == "머지됨":
                 b["merged_prs"] = merged_prs(b, rows, default_short, epics)
             if detail and (stage in IMPL_STAGES or partial or stage == "머지됨"):
-                _rulings(b, ledgers.get(b.get("id"), []), read, deadline)
+                _rulings(b, ledgers.get(b.get("id"), []), read, deadline, archive)
 
 
 def gather(cwd: str, arg, deadline: Deadline, ctx: dict, detail: bool = True, focus=None):
@@ -1218,7 +1260,7 @@ def epic_view(path: str, report: dict, epic: str):
         have = " · ".join(str(x.get("id")) for x in blocks) or "없음"
         return [clean("에픽 %s 가 로드맵 %s 에 없다 — 있는 에픽: %s" % (epic, path, have))], 2
     stages = dict((x.get("id"), x.get("stage")) for x in blocks)
-    out = [clean("%s %s — %s · %s" % (b["id"], b.get("title"), b.get("stage"), b.get("reason"))),
+    out = [clean("%s %s — %s · %s" % (b["id"], b.get("title"), stage_text(b), b.get("reason"))),
            clean("  로드맵: %s" % path)]
 
     def row(label, values):
@@ -1232,6 +1274,9 @@ def epic_view(path: str, report: dict, epic: str):
     row("묶음", [b["bundle"]] if b.get("bundle") else [])
     row("설계문서", b.get("specs") or [])
     row("계획", b.get("plans") or [])
+    if b.get("job"):   # team 로드맵 블록 — 과제 파일과 그 브랜치에서 가장 새 구현 결과 파일
+        out.append(clean("  과제 파일: %s" % b["job"].get("intent")))
+        out.append(clean("  결과 파일: %s" % (b["job"].get("result") or "없음")))
     row("브랜치", [branch_cell(s) for s in b.get("branch_states") or []])
     if b.get("pr"):
         out.append(clean("  PR: %s" % pr_text(b["pr"])))
