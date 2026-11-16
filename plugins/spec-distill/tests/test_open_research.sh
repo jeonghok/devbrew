@@ -97,5 +97,6 @@ assert_contains "$R2" '불릿 없는 한 줄' "AC14: R2 — 불릿 없는 한 �
 assert_contains "$R2" '사용자 선택(☑)으로 있을 때만 받는다' "AC14: R2 — ☑ 일 때만"
 assert_contains "$R2" '«≥1회» 는 하한이고, 사용자가 고른 「외부 선례 무관」 닫힘이 그 하한을 대신한다' "AC14: R2 — 사용자가 고른 닫힘이 sweep 하한을 대신한다"
 assert_contains "$R2" '필수 자리 둘 — 첫 질문 전 `coverage-mapper` · blind_spot 차원의 첫 `blind-spot-prober` — 은 그대로' "AC14: R2 — 필수 자리 둘을 이름으로 댄다"
+assert_contains "$R2" '은 그대로이고, 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」 을 따른다' "F4 AC9: R2 — 필수 자리의 건너뜀은 조사 상한 절의 규칙을 가리킨다"
 
 finish
