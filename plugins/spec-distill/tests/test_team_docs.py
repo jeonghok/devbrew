@@ -21,6 +21,7 @@ import team_status as TS  # noqa: E402
 
 DOC = PLUGIN / "references" / "team-files.md"
 README = PLUGIN / "README.md"
+REPO = PLUGIN.parents[1]
 
 
 class TeamFilesDoc(unittest.TestCase):   # R1 AC26 — 계획 1 몫
@@ -396,6 +397,30 @@ class ReadSideVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다
         for words in ("`references/team-files.md` §3 의 글이 정본이다", "`--framing-audit` 없이 다시 불러도 멈추지 않는다",
                       "옛 형식 문서라도", "pr-record"):
             self.assertIn(words, body, words)
+
+
+class RepoFiles(unittest.TestCase):   # R1 AC25 — devbrew 레포의 공통 문서
+    def rd(self):
+        import repo_defaults
+        front = (REPO / repo_defaults.SETTINGS_FILE).read_text(encoding="utf-8").split("---")[1]   # 설정 파일의 머리
+        self.assertNotIn("roadmaps_dir", [l.split(":")[0].strip() for l in front.splitlines()])   # 설정을 바꾸지 않았다
+        return repo_defaults.ROADMAPS_DIR   # 기본값 상수
+
+    def test_review_file_at_the_top(self):
+        text = (REPO / L.REVIEW_FILE).read_text(encoding="utf-8")
+        for part in ("테스트가 하나라도 실패", "실제로 돌려 보거나 화면을 봤을 때", "어디서 · 무엇이 · 어떤 기준에 걸렸는지 한 줄"):
+            self.assertIn(part, text)
+
+    def test_handbook_carries_the_principle(self):
+        text = (REPO / L.handbook(self.rd())).read_text(encoding="utf-8")
+        self.assertIn("잘못 쌓인 맥락은 없는 것보다 나쁘다. 이 파일의 줄은 쓰기 전에 지금 확인하고, 틀렸으면 지운다.", text)
+
+    def test_four_role_docs_with_two_sections(self):
+        for role in L.ROLES:
+            lines = (REPO / L.role_doc(self.rd(), role)).read_text(encoding="utf-8").splitlines()
+            self.assertEqual([l for l in lines if l.startswith("#")], ["## 할 일", "## 하지 않을 일"], role)
+            self.assertIn("- 받은 규칙은 쓰기 전에 지금도 맞는지 확인한다.", lines, role)
+            self.assertEqual(sorted(p.name for p in (REPO / self.rd() / role).iterdir()), [L.ROLE_DOC], role)   # 역할 폴더는 로드맵 폴더가 아니다
 
 
 if __name__ == "__main__":
