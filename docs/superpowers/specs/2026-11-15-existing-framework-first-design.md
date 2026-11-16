@@ -484,6 +484,7 @@ Matt Pocock skills 1.3.2 의 설계 어휘 skill(codebase-design)은 같은 일�
   - 재결정: 바깥 후보마다다. 그 레포가 의존으로 적어 둔 남의 것도 바깥 후보이고, 레포 안 것은 해당하는 칸만 적는다.
   - 근거: 세 자리의 글자가 달랐고, 손 확인에서 새 agent 가 레포 안 후보와 이미 의존인 패키지의 칸을 줄이거나 뺐다.
 - 2026-11-16 · 구현의 판단(기본 브랜치를 다시 합칠 때 — 사용자에게 보고한다) — 이 일보다 먼저 기본 브랜치에 들어온 것 둘에 맞춘다. 판은 그때의 기본 브랜치 판(8.17.0)에서 minor 를 하나 올린 값이 된다(§10 의 규칙 그대로). 새로 생긴 「team 형식의 넘김 줄」(`references/epic-handoff.md`)은 옛 괄호를 싣고 들어왔다 — 그 줄을 에픽 넘김 줄에 치환 표를 적용한 글과 바이트로 잠근 있는 테스트(`tests/test_epic_handoff.sh`)가 합친 트리에서 빨개졌고, 그 줄의 괄호를 §5 의 새 문장으로 바꾸고 마지막 전체 리뷰 문장 뒤에 묻는 구절을 이어 맞췄다. 새 단언은 더하지 않았다(있는 잠금이 두 자리를 모두 문다). brief 넘김 줄 · 에픽 넘김 줄의 글자는 그대로다.
+- 2026-11-16 · 구현의 판단(기본 브랜치를 한 번 더 합칠 때 — 사용자에게 보고한다) — 앞단의 끝(F4, #291)이 먼저 들어와 brief 넘김 줄의 설계 지시를 지시 파일 `references/brief-handoff.md` 의 「brainstorming 지시」 절로 옮겼다. 그래서 §5 의 새 괄호와 §7 의 묻는 구절은 brief 넘김 줄이 아니라 그 절에 싣는다 — AC8 · AC10 의 「brief 넘김 줄」은 그 줄이 가리키는 지시 절로 읽는다. 그 절을 무는 F4 의 두 테스트(`tests/test_end_gates.sh` 의 원칙 문장 · `tests/test_review_handoff_order.sh` 의 문장 열여섯 등호)를 새 글자로 맞췄고, 묻는 구절이 넘김 줄에 글자로 없다는 단언을 하나 더했다. 판은 그때의 기본 브랜치 판(8.18.0)에서 minor 를 하나 올린 8.19.0 이다.
 - docreview 계수 — spec-distill-59ec298a/2026-11-15-existing-framework-first-desi-a6be7ebf34485001 r1: advice_new=1 · advice_repeat=0 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-15-existing-framework-first-desi-a6be7ebf34485001 r2: advice_new=3 · advice_repeat=0 · mc_preexisting_new=1
 - docreview 계수 — spec-distill-59ec298a/2026-11-15-existing-framework-first-desi-a6be7ebf34485001 r3: advice_new=1 · advice_repeat=1 · mc_preexisting_new=0

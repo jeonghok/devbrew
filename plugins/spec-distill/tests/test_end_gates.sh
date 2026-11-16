@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/brief-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -12,6 +12,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
   echo "plugins/spec-distill/references/epic-handoff.md"
+  echo "plugins/spec-distill/references/brief-handoff.md"
   echo "plugins/spec-distill/references/trivia-escape.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
   echo "plugins/spec-distill/skills/pm-interview/references/steelman.md"
@@ -54,12 +55,22 @@ SAMEP="$(para "$FIN" '**이름이 바뀌어도 절차는 같다.**')"
 [ -n "$NEWP" ] && [ -n "$SAMEP" ] && ok "양성 대조: B-3 의 「다른 다음 단계의 줄」 · 「이름이 바뀌어도 절차는 같다」 문단을 떴다" || no "B-3 새 문단 부재"
 assert_contains "$B3" '**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' "AC23: B-3 안에 있다"
 assert_contains "$B3" '**이름이 바뀌어도 절차는 같다.**' "AC23: B-3 안에 있다(절차 문단)"
-for lit in '`@<brief-path>` 를 원소로' 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.' \
-           '§3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다' \
-           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
-           '사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.' \
+for lit in '`@<brief-path>` 를 원소로' '줄에는 공통 지시를 글자로 싣지 않고' \
+           '/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다' \
            '`next_phase:` 를 고른 skill 의 완전명으로 바꾼다' '인용 줄로 두지 않는다'; do
   assert_contains "$NEWP" "$lit" "AC23: 「다른 다음 단계의 줄」 문단 «${lit}»"
+done
+# F4 AC3 — 공통 지시 네 문장은 문단이 아니라 지시 파일의 `## 공통 지시` 절에 산다(양성 짝: 문단에는 없다)
+BHF="$SD/references/brief-handoff.md"
+bhsec() { awk -v h="## $1" '$0==h{f=1;next} f&&/^## /{exit} f' "$BHF" | tr '\n' ' ' | tr -s ' '; }
+CMS="$(bhsec '공통 지시')"; BSS="$(bhsec 'brainstorming 지시')"
+[ -n "$CMS" ] && [ -n "$BSS" ] && ok "F4(양성 대조): 지시 파일의 두 절을 떴다" || no "F4: 지시 파일의 절 부재"
+for lit in 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.' \
+           '§3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다' \
+           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
+           '사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.'; do
+  assert_contains "$CMS" "$lit" "F4 AC3: 공통 지시 절 «${lit}»"
+  assert_not_contains "$NEWP" "$lit" "F4 AC3: 「다른 다음 단계의 줄」 문단에는 글자로 없다 «${lit}»"
 done
 assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.' "AC23: 같은 턴 금지가 지휘자 · 고른 skill 모두에 선다"
 EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/pm-interview/SKILL.md"
@@ -67,10 +78,12 @@ nsl() { awk -v m="$2" '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
 BL="$(nsl "$FIN" '**다음 세션 줄 — ①/② 공통**')"; EL="$(nsl "$EH" '**에픽 넘김 줄**')"
 SHARED='설계문서에 ## 있는 것 검토 절(맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이다 — 찾아본 후보를 이름으로 먼저 적고, 직접 만들려면 그 후보에 대한 구체 이유를 적어 사용자 승인을 받는다. 레포 밖 것은 후보와 차이를 보여 사용자가 승인한 뒤에만 쓴다. 적는 법은 ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md 를 읽어 따른다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.'
 assert_contains "$EL" "$SHARED" "AC22(양성 대조): 에픽 넘김 줄에 원칙 문장"
-assert_contains "$BL" "$SHARED" "AC22: brief 줄의 원칙 문장이 에픽 넘김 줄과 글자가 같다"
-# 있는 것 먼저 — 넘김 줄 둘의 마지막 전체 리뷰가 고른 것을 썼는지도 묻는다(같은 글자: test_review_handoff_order.sh · test_conductor_dispatch_reference.sh)
+assert_contains "$BSS" "$SHARED" "AC22: brief 지시 파일의 원칙 문장이 에픽 넘김 줄과 글자가 같다"
+assert_not_contains "$BL" "$SHARED" "F4 AC1: 그 원칙 문장은 brief 줄에 글자로 없다(양성 짝: 위 단언)"
+# 있는 것 먼저 — brief 지시 파일과 에픽 넘김 줄의 마지막 전체 리뷰가 고른 것을 썼는지도 묻는다(같은 글자: test_review_handoff_order.sh · test_conductor_dispatch_reference.sh)
 USED='설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.'
-assert_contains "$BL" "$USED" "있는 것 먼저: brief 넘김 줄의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다"
+assert_contains "$BSS" "$USED" "있는 것 먼저: brief 지시 파일의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다"
+assert_not_contains "$BL" "$USED" "있는 것 먼저: 그 묻는 구절은 brief 줄에 글자로 없다(양성 짝: 위 단언)"
 assert_contains "$EL" "$USED" "있는 것 먼저: 에픽 넘김 줄의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다"
 # AC18
 grep -qxF 'next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명' "$TPL" \
@@ -181,6 +194,62 @@ for lit in '칸은 기본 열하나다:' \
 done
 assert_not_contains "$DT" '칸은 열하나다:' "AC24: 옛 «칸은 열하나다:» 없음(양성 짝: 위 단언)"
 [ -f "$SD/references/roadmap-ontology.md" ] && ok "AC24: 인용한 roadmap-ontology.md 가 있다" || no "AC24: roadmap-ontology.md 부재"
+# F4 AC8 · AC14 — 건너뛴 것 보이기(B-2) · 리뷰 뒤 다시 짓기(B-A) · 건너뛴 것을 나중에 돌리는 길(B-S)
+BSW="$(win "$FIN" '^#### B-S' '^#### ')"
+[ -n "$BSW" ] && ok "F4(양성 대조): B-S 를 떴다" || no "F4: B-S 부재 — 아래가 공허하다"
+for lit in '5. **건너뛴 것 <N>개** — `check_brief.py gate` 의 `advisories` 가운데 `건너뜀 — ` 으로 시작하는 줄을 `- <자리>: <이유>` 로 한 줄씩 쓴다.' \
+           '이 줄들은 경고(목록 4)에 다시 쓰지 않되 질문의 「경고 N개」 에는 센다 — 건너뛴 것이 있으면 「이상 없음」 · 「경고 없음」 을 쓰지 않는다.' \
+           '「(경고에도 있다)」 를 붙이며 경고 수에는 한 번만 센다.' \
+           '항목 끝에 「하게 하려면 기타 칸에 적는다」 한 줄을 싣는다.' \
+           '0개면 이 항목을 쓰지 않는다.' \
+           '그 줄 끝에 「— 끄기 스위치가 아니라 모델 판단으로 건너뛰었다」 를 덧붙인다(엔진의 글자는 고치지 않는다).' \
+           '**기타 칸 — 건너뛴 것을 하라는 말.** 사용자가 기타 칸에 건너뛴 것을 하라고 적으면 B-S 로 간다.' \
+           '그 말이 「여기서 계속」 인지 건너뛴 것을 하라는 것인지 불분명하면 다시 묻는다.'; do
+  assert_contains "$B2" "$lit" "F4 AC8: B-2 «${lit}»"
+done
+for lit in '적은 뒤 — 적을 참고 항목이 없어도 — audit §2 의 사건 줄을 상태 파일의 `## audit §2 대기 줄` 블록에서 다시 짓고 구조 게이트를 다시 돕니다.' \
+           '리뷰가 그 블록에 더한 건너뜀 줄은 여기서 검사에 닿고, B-2 의 게이트 앞 글이 읽는 `advisories` 는 이 실행의 것입니다.' \
+           '사유가 「나눈 일은 건너뛸 수 없다」 면 끝 질문을 띄우지 않고 아래 B-S 로 갑니다:'; do
+  assert_contains "$BA" "$lit" "F4 AC8: B-A «${lit}»"
+done
+for lit in '줄은 그 블록에서 지우고 audit §2 를 그 블록에서 다시 짓는다' \
+           '그 건너뜀 줄을 대기 줄 블록에서 지우고 Step A.5 의 「조사 계속」 갈래로 간다' \
+           '맹점 조사를 건너뛴 차원은 다시 열려 지금 규칙대로 사용자 발화로 닫힌다.' \
+           '`reviewing-brief` 를 한 라운드 더 돈다(탐지부터 — 재리뷰 상한에 든다).' \
+           '줄만 지우고 audit 을 그대로 두면 그 skill 의 진입 게이트가 옛 audit 으로 구조 게이트를 돌려 나눈 일은 다시 막힌다.' \
+           '`reviewing-brief` 의 `## 냉독` 만 돌린 뒤,' \
+           '리뷰 라운드를 다시 돌지 않고 재리뷰 상한을 쓰지 않는다.' \
+           '리뷰 부품의 줄(재비판 · codex · 읽어 보기)을 전부 지우고 audit §2 를 다시 지은 뒤 리뷰 한 라운드를 돌고, 읽어 보기도 건너뛰었으면 그 라운드 뒤에 돌린다.' \
+           '줄 하나만 지우면 남은 줄 때문에 진입 게이트가 다시 막는다.' \
+           '「추가 라운드 1회 열기」 질문의 답으로만 연다' \
+           '사용자가 열지 않으면 지운 줄을 대기 줄 블록에 그대로 되돌리고 audit §2 를 다시 지은 뒤 끝 질문으로 돌아간다' \
+           '`[spec-distill] 나눈 일은 건너뛴 리뷰 부품을 돌려야 끝낼 수 있다 — 추가 라운드를 열거나, 나누지 않기로 하면 그렇게 말해 달라.` 를 보이고 턴을 끝낸다.' \
+           '어느 쪽이든 brief 가 바뀌면 리뷰를 다시 지난다 — 바뀐 brief 가 리뷰 없이 끝 질문에 닿지 않는다.' \
+           'B-A 의 구조 게이트 펜스를 다시 돌려 그 `advisories` 로 끝 질문 앞 글을 다시 쓰고 끝 질문으로 돌아간다.' \
+           '라운드가 끝나면 Step B 를 B-0 부터 다시 돈다(B-A 의 다시 짓기 · 게이트 포함).'; do
+  assert_contains "$BSW" "$lit" "F4 AC14: B-S «${lit}»"
+done
+assert_contains "$SA" '사유가 「나눈 일은 건너뛸 수 없다」 면 건너뜀 줄만 지워 통과시키지 않는다 — B-S 대로 건너뛴 조사 · 리뷰를 돌린 뒤에 지운다.' "F4 AC14: Step A 의 게이트 걸음이 나눈 일 사유를 줄 지우기로 넘기지 않는다"
+# F4 AC10 — superpowers 가 없을 때의 끝 질문: B-0 · B-3 · B-R · B-4 가 새 동작에 맞는다
+B0="$(win "$FIN" '^#### B-0' '^#### ')"; B4="$(win "$FIN" '^#### B-4' '^#### ')"
+[ -n "$B0" ] && [ -n "$B4" ] && ok "F4(양성 대조): B-0 · B-4 를 떴다" || no "F4: B-0 · B-4 부재 — 아래가 공허하다"
+assert_contains "$B0" '왔던 끝 질문을 다시 띄운다 — 어떻게 끝낼지는 그 질문에서 고른다.' "F4: 재제시 상한 질문의 「지금 목록으로 확정」 설명이 왔던 끝 질문으로 돌아간다고 말한다"
+assert_contains "$B3" '왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며' "F4: 「지금 목록으로 확정」 이 돌아갈 자리"
+assert_not_contains "$B0$B3" 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다' "F4: 옛 「B-2 게이트를 다시 띄운다」 가 없다(양성 짝: 위 두 단언)"
+assert_contains "$BR" 'B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 — 「지금 목록으로 확정」은 왔던 끝 질문으로 돌아가 그 질문의 갈래에서 한 번 돈다' "F4 AC10: B-R 의 갈래 목록에 끝 질문의 두 갈래"
+assert_contains "$BR" '(B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 도 같은 펜스로 커밋한다)' "F4 AC10: 끝 질문의 두 갈래도 커밋한다"
+assert_not_contains "$BR" 'B-1 은 커밋하지 않고' "F4 AC10: 옛 「B-1 은 커밋하지 않고」 가 없다(양성 짝: 위 단언)"
+assert_contains "$B4" '(b) superpowers 가 없을 때의 B-1 끝 질문 (선택지 셋)을 거친다 — 질문 없는 **silent 종료 금지**.' "F4 AC10: Step B 를 끝내는 경로는 proceed 게이트와 B-1 끝 질문 둘이다"
+assert_not_contains "$B4" '게이트를 거치지 않는 예외' "F4 AC10: 옛 「게이트를 거치지 않는 예외」 가 없다(양성 짝: 위 단언)"
+assert_contains "$B2" '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' "F4 AC10: B-2 게이트의 선택지 넷 문장은 그대로다"
+# F4 AC10 — 옛 B-1(멈춤 · 미커밋)을 말하던 B-0 · B-3 의 문장이 새 끝 질문에 맞는다
+[ -n "$B0" ] && [ -n "$B3" ] && ok "F4(양성 대조): B-0 · B-3 창이 비어 있지 않다" || no "F4: B-0 · B-3 창이 비었다 — 아래가 공허하다"
+assert_contains "$B0" '또는 superpowers 가 없을 때 B-1 끝 질문의 「확정하고 끝낸다」 를 고를 때만 일어납니다.' "F4 AC10: B-0 의 확정 전이는 B-2 의 ①/② 와 B-1 끝 질문의 「확정하고 끝낸다」 둘로만 일어난다"
+assert_not_contains "$B0" '확정-후-진행 옵션(①/②)을 고를 때만 일어납니다' "F4 AC10: B-0 에 B-1 구절 없는 옛 확정 전이 문장이 없다(양성 짝: 위 단언)"
+assert_not_contains "$(cat "$FIN")" 'B-1 부재 advisory와 같은 톤' "F4 AC10: ④ 에 끊긴 「B-1 부재 advisory」 가리킴이 없다"
+assert_contains "$B3" 'brief terminal advisory를 내고 종료. handoff 안 함.' "F4 AC10: ④ 의 남은 글은 그대로다(양성 짝: 위 부재 단언)"
+assert_contains "$B3" '게이트(①/②)나 B-1 끝 질문의 「확정하고 끝낸다」 를 통해서만 바뀐다' "F4 AC10: ③ 의 status 변경 경로에 B-1 끝 질문이 든다"
+assert_contains "$B3" '**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 · 나눈 일이면 B-R 다시 생성 뒤 끝 안내 전, ④ 와 B-1 의 「brief만 종료」 는 종료 안내 직전, 한 번.**' "F4 AC10: 끝내기 커밋 문장이 B-1 의 때를 말한다"
 # CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
 CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
 assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)의 둘째 질문 문단에, 지휘자 아래 승인 질문에는 둘째 질문이 없다는 문장을 더했다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"

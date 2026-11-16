@@ -159,4 +159,42 @@ for tok in '판정자 조건' '판정자 투입' '다시 묻지 않는다' 'prob
   grep -qF -- "$tok" "$SAT" && no "부재: saturation.md 에 «${tok}»" || ok "부재: saturation.md 에 «${tok}» 없음"
 done
 grep -qE '최대 [0-9]+회|[0-9]+회까지' "$SAT" && no "부재: saturation.md 에 숫자 횟수 상한 표현" || ok "부재: 숫자 횟수 상한 표현 없음"
+# F4 AC9 · AC14 — 건너뜀 규칙(조사 쪽 셋): SKILL 이 한 번 정하고 네 곳이 그것을 가리킨다 · saturation.md 가 줄 모양과 때를 적는다
+SKIP_FLAT="$(awk '/^### 건너뜀/{f=1;print;next} /^### /{f=0} f' "$SAT" | tr '\n' ' ' | tr -s ' ')"
+[[ -n "$SKIP_FLAT" ]] && ok "F4: saturation.md 「### 건너뜀」 절을 떴다" || no "F4: saturation.md 「### 건너뜀」 절 부재 — 아래가 공허하다"
+for lit in '`- 모델 판단으로 건너뜀 — 범위 조사: <이유>` — audit §2 의 mapper 줄은 `coverage-mapper 0` 으로 적는다.' \
+           '`- 모델 판단으로 건너뜀 — 맹점 조사: <이유>` — 원장의 `floor:blind_spot` 은 `evidence` 를 `모델 판단으로 건너뜀 — <이유>` 로 적어 닫는다.' \
+           '`- 모델 판단으로 건너뜀 — 포화 판정: <이유>` — floor 다섯이 닫힌 뒤 판정자를 부르지 않고 `finishing.md` 로 간다.' \
+           '포화 판정 줄이 이미 있으면 이 줄을 쓰지 않는다' \
+           '같은 자리의 줄을 둘 두지 않는다' \
+           '`<이유>` 는 비우지 않는다.' \
+           '나누기로 정하면(분해 판단) 건너뛴 조사를 그때 돌리고 그 줄을 지운다 — 나눈 일은 구조 게이트가 건너뜀 줄을 받지 않는다.' \
+           '리뷰 쪽 셋(재비판 · codex · 읽어 보기)의 줄은 결과물 리뷰 skill 이 같은 블록에 같은 모양으로 더한다.'; do
+  grep -qF -- "$lit" <<<"$SKIP_FLAT" && ok "F4 AC9: saturation.md 건너뜀 «${lit}»" || no "F4 AC9: saturation.md 건너뜀 «${lit}» 부재"
+done
+LINES_FLAT="$(awk '/^### audit §2 줄/{f=1;print;next} /^### /{f=0} f' "$SAT" | tr '\n' ' ' | tr -s ' ')"
+grep -qF -- '- `- 모델 판단으로 건너뜀 — <범위 조사 | 맹점 조사 | 포화 판정 | 재비판 | codex | 읽어 보기>: <이유>`' <<<"$LINES_FLAT" \
+  && ok "F4 AC9: audit §2 줄 목록에 건너뜀 줄 모양(자리 여섯)" || no "F4 AC9: audit §2 줄 목록에 건너뜀 줄 모양 부재"
+grep -qF '조사나 판정을 모델 판단으로 건너뛸 때(`### 건너뜀`)' <<<"$(awk 'NR>2&&/^$/{exit} NR>2' "$SAT" | tr '\n' ' ' | tr -s ' ')" \
+  && ok "F4: saturation.md 첫 문단의 읽는 때에 건너뛸 때" || no "F4: saturation.md 첫 문단에 건너뛸 때 부재 — 그 절이 읽히지 않는다"
+for lit in '**건너뜀.** 나누지 않을 작은 일로 보이면 필수 자리 둘과 포화 판정을 이유를 적고 건너뛸 수 있다' \
+           '`- 모델 판단으로 건너뜀 — <자리>: <이유>` 한 줄을 덧붙인다' \
+           '나누기로 하면 건너뛴 조사를 그때 돌린다' \
+           '건너뛴 것은 끝 질문 앞에서 사용자에게 보이고, 사용자가 하라고 하면 그때 돌린다.'; do
+  grep -qF -- "$lit" <<<"$CAP_FLAT" && ok "F4 AC9 · AC14: SKILL 조사 상한 절 «${lit}»" || no "F4 AC9 · AC14: SKILL 조사 상한 절 «${lit}» 부재"
+done
+[[ "$(grep -oF '**건너뜀.**' "$SKILL" | grep -c .)" == "1" ]] && ok "F4 AC9: 건너뜀 규칙은 SKILL 에 한 번만 정한다" || no "F4 AC9: SKILL 의 「**건너뜀.**」 이 한 번이 아니다"
+[[ "$(grep -oF '작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」' "$SKILL" | grep -c .)" == "4" ]] \
+  && ok "F4 AC9: 필수 자리를 말하는 네 곳이 그 규칙을 가리킨다" || no "F4 AC9: 건너뜀 규칙을 가리키는 줄이 넷이 아니다"
+for lit in '마지막 포화 판정이 «포화» 이거나, 사용자가 종료를 골랐거나, 나누지 않을 작은 일이라 `- 모델 판단으로 건너뜀 — 포화 판정: <이유>` 줄을 `## audit §2 대기 줄` 에 덧붙였다.' \
+           '맹점 조사를 건너뛴 floor 는 예외이고 `references/saturation.md` 의 `### 건너뜀` 을 따른다'; do
+  grep -qF -- "$lit" <<<"$SKILL_FLAT" && ok "F4 AC9: SKILL «${lit}»" || no "F4 AC9: SKILL «${lit}» 부재"
+done
+FIN_FLAT_F4="$(tr '\n' ' ' < "$FIN" | tr -s ' ')"
+for lit in '**모델 판단으로 맹점 조사를 건너뛴 floor**' \
+           '사용자-승인 박제와 같은 길로 간다 — 그 내용을 payload `## 3. Open Questions` 에 한 항목으로 옮겨 다음 단계가 열린 것으로 본다.' \
+           '모델 판단으로 첫 범위 조사를 건너뛰었으면 `coverage-mapper 0` 으로 적는다' \
+           '사용자 종료 · 모델 판단으로 건너뜀 줄이 사건 순간 거기 쌓였습니다.'; do
+  grep -qF -- "$lit" <<<"$FIN_FLAT_F4" && ok "F4 AC9: finishing.md «${lit}»" || no "F4 AC9: finishing.md «${lit}» 부재"
+done
 finish
