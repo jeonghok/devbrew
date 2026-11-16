@@ -21,7 +21,10 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import conductor_ledger as L  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
+import team_files as TF  # noqa: E402
+import team_layout as TL  # noqa: E402
 
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
 RM = "plan/rm/roadmap.md"
@@ -2109,6 +2112,269 @@ class RepoSettingsAdd(Repo):
         rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "R2 · 절 · 글")
         self.assertEqual(rc, 0, out)
         self.assertNotEqual(L.mpath(self.w, RM).read_bytes(), self.before)
+
+
+def team_tree(case, layout="team"):
+    """작업 폴더에 해결자의 roadmaps_dir 아래 팀 tq 의 로드맵(머리말 `layout: <값>`, None 이면 그 줄 없음)과 과제 E1 의
+    INTENT.md(틀을 render_intent 로 채운 것) · 빈 design.md 를 쓴다 — (INTENT.md, design.md) 경로."""
+    rd = repo_defaults.resolve(str(case.w))["values"]["roadmaps_dir"]
+    team = TL.team_from_roadmap(rd, rd + "tq/" + TL.ROADMAP_FILE)
+    (case.w / team.job("E1")).mkdir(parents=True)
+    head = "---\ntype: roadmap\nsource_brief: b.md\n" + ("layout: %s\n" % layout if layout else "") + "---\n\n# tq\n"
+    (case.w / team.roadmap).write_text(head, encoding="utf-8")
+    tmpl = (TF.TEMPLATES / TL.INTENT_FILE).read_text(encoding="utf-8")
+    intent = case.w / team.intent("E1")
+    intent.write_text(TF.render_intent(tmpl, "E1", TF.KIND_EPIC, team.roadmap, "목표 한 줄", "원문 한 줄", "- 없음"),
+                      encoding="utf-8")
+    design = case.w / team.design("E1")
+    design.write_text("", encoding="utf-8")
+    return intent, design
+
+
+class TeamRecords(Repo):   # R1 AC16
+    def test_record_goes_to_the_job_file(self):
+        intent, design = team_tree(self)
+        before = design.read_bytes()
+        rc, out = self.cli("record", "--spec", str(design), "--approval", "--date", "2026-11-20", "--choice", "이대로 승인 (권장)")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」"])
+        self.assertEqual(design.read_bytes(), before)                    # 설계문서에는 쓰지 않는다
+        self.assertIn(str(intent), out); self.assertIn("결정 기록", out)   # 쓴 자리를 낸다
+        self.assertIn("적었다(커밋은 리더가)", out)
+        rc, out = self.cli("record", "--spec", str(intent), "--line", "- 결정 · 2026-11-21 · 막힘을 풀었다")
+        self.assertEqual((rc, len(TF.decision_lines(intent.read_text(encoding="utf-8")))), (0, 2), out)
+
+    def test_same_line_again_is_not_written_twice(self):
+        intent, _design = team_tree(self)
+        rc, _o = self.cli("record", "--spec", str(intent), "--line", "결정 · 2026-11-21 · 한 번")   # `- ` 없이도 받는다
+        self.assertEqual(rc, 0, _o)
+        before = intent.read_bytes()
+        rc, out = self.cli("record", "--spec", str(intent), "--line", "- 결정 · 2026-11-21 · 한 번")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(intent.read_bytes(), before)
+        self.assertIn("이미 있어 쓰지 않았다", out)
+        self.assertNotIn("적었다", out)
+
+    def test_receipt_line_from_job_results_chains(self):   # job_results check 가 내는 줄 → record → received
+        intent, _design = team_tree(self)
+        line = TF.received_line("2026-11-22", "implement-plan-1-1.md", "a" * 40, "대조 통과 — AC 3개")
+        rc, out = self.cli("record", "--spec", str(intent), "--line", line)
+        self.assertEqual(rc, 0, out)
+        good, broken = TF.received(intent.read_text(encoding="utf-8"))
+        self.assertEqual(([g.raw for g in good], broken), ([line], []))
+        self.assertEqual((good[0].name, good[0].commit), ("implement-plan-1-1.md", "a" * 40))
+
+    def test_record_refuses_lines_outside_the_seven_kinds(self):
+        intent, _design = team_tree(self)
+        before = intent.read_bytes()
+        for line in ("- 메모 · 2026-11-20 · 글", "- 결정 · 11/20 · 글", "- 결과 받음 · 2026-11-20 · 받았다"):
+            rc, out = self.cli("record", "--spec", str(intent), "--line", line)
+            self.assertEqual(rc, 2, (line, out))
+            self.assertNotIn("적었다", out)
+        self.assertEqual(intent.read_bytes(), before)
+
+    def test_old_layout_and_other_paths_behave_as_before(self):
+        intent, design = team_tree(self, layout=None)           # 머리말에 layout 이 없는 로드맵의 같은 자리
+        before = intent.read_bytes()
+        rc, out = self.cli("record", "--spec", str(design), "--line", "- 메모 한 줄")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("## 지휘 기록\n\n- 메모 한 줄\n", design.read_text(encoding="utf-8"))
+        self.assertTrue(out.startswith("적었다(커밋은 지휘자가) — "), out)   # 옛 글 그대로
+        self.assertEqual(intent.read_bytes(), before)
+        notes = self.w / "notes.md"                                 # 로드맵 폴더 밖의 문서
+        rc, out = self.cli("record", "--spec", str(notes), "--line", "- 메모 한 줄")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(notes.read_text(encoding="utf-8"), "---\ntype: note\n---\n\n## 지휘 기록\n\n- 메모 한 줄\n")
+        self.assertTrue(out.startswith("적었다(커밋은 지휘자가) — %s: - 메모 한 줄" % notes), out)
+
+    def test_job_shaped_path_without_a_roadmap_file_is_old_format(self):   # 로드맵 파일이 없으면 team 인지 모른다
+        intent, design = team_tree(self)
+        (self.w / str(intent.parent.parent.parent / TL.ROADMAP_FILE)).unlink()
+        before = intent.read_bytes()
+        rc, out = self.cli("record", "--spec", str(design), "--line", "- 메모 한 줄")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("적었다(커밋은 지휘자가) — "), out)
+        self.assertEqual(intent.read_bytes(), before)
+
+    def test_intent_without_decision_section_is_uncheckable(self):
+        intent, design = team_tree(self)
+        broken = intent.read_text(encoding="utf-8").replace("## 결정 기록", "## 다른 칸")
+        intent.write_text(broken, encoding="utf-8")
+        rc, out = self.cli("record", "--spec", str(design), "--line", "- 결정 · 2026-11-20 · 글")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("결정 기록 칸을 읽지 못했다", out)
+        self.assertEqual((intent.read_text(encoding="utf-8"), design.read_text(encoding="utf-8")), (broken, ""))
+
+    def test_unknown_layout_is_uncheckable(self):
+        intent, design = team_tree(self, layout="no-such")
+        before = (intent.read_bytes(), design.read_bytes())
+        rc, out = self.cli("record", "--spec", str(design), "--line", "- 결정 · 2026-11-20 · 글")
+        self.assertEqual(rc, 3, out)
+        self.assertIn("모르는 형식", out)
+        self.assertIn("no-such", out)
+        self.assertEqual((intent.read_bytes(), design.read_bytes()), before)
+
+    def pend(self, *texts):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        for text in texts:
+            rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", "E1 · 지휘 기록 · " + text)
+            self.assertEqual(rc, 0, out)
+
+    def test_flush_and_write_sections(self):
+        intent, design = team_tree(self)
+        self.pend("- 결정 · 2026-11-20 · 하나", "- 결정 · 2026-11-20 · 하나")
+        before = design.read_bytes()
+        rc, out = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "E1", "--spec", str(design))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 하나"])
+        self.assertIn("1줄을 옮겼고 1줄은 이미 있어", out)
+        self.assertIn(str(intent), out)
+        self.assertIn("(커밋은 리더가)", out)
+        self.assertEqual(design.read_bytes(), before)
+        rc, out = self.cli("pending", "--roadmap", RM, "--epic", "E1")
+        self.assertIn("쌓인 기록 없음", out)
+        r = self.w / "r.md"
+        r.write_text("- Ruling: a\n", encoding="utf-8")
+        rc, out = self.cli("write-sections", "--spec", str(design), "--plan", "p.md", "--rulings", str(r),
+                           "--impl-line", "x", "--counts", "y")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(design.read_bytes(), before)
+        self.assertIn("team 형식 — 설계문서를 고치지 않았다", out)
+        self.assertIn(str(intent), out)
+
+    def test_flush_refuses_a_line_outside_the_kinds_and_keeps_pending(self):
+        intent, design = team_tree(self)
+        self.pend("- 결정 · 2026-11-20 · 하나", "메모 한 줄")
+        before = intent.read_bytes()
+        rc, out = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "E1", "--spec", str(design))
+        self.assertEqual(rc, 2, out)
+        self.assertEqual(intent.read_bytes(), before)
+        rc, out = self.cli("pending", "--roadmap", RM, "--epic", "E1")
+        self.assertIn("- 메모 한 줄", out)
+        self.assertIn("- - 결정 · 2026-11-20 · 하나", out)
+
+
+class UncountedBlock(Repo):   # Q18 — 「브랜치 없음」 과 「브랜치를 읽지 못함」 은 다르다
+    STOP_A1 = "A1 의 단계를 세지 못해 브랜치를 읽지 못했다 — 모르는 형식"
+
+    def setUp(self):
+        super().setUp()
+        text = (self.w / RM).read_text(encoding="utf-8").replace("type: roadmap\n", "type: roadmap\nlayout: no-such\n", 1)
+        (self.w / RM).write_text(text, encoding="utf-8")
+        sh(self.w, "commit", "-qam", "unknown layout")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        self.gh_origin()
+        self.calls, self.viewed = [], []
+
+    def fake_pr_list(self, cwd, branch, limit=100):
+        self.calls.append(branch)
+        return ([gh_pr(7, "OPEN", OID1, False)] if branch == "feature/a1" else []), False
+
+    def fake_pr_view(self, cwd, number):
+        self.viewed.append(number)
+        return gh_pr(number, "OPEN", OID1, False)
+
+    def gh(self, *args):
+        from unittest import mock
+        with mock.patch.object(L.gh_repo, "pr_list", self.fake_pr_list), \
+                mock.patch.object(L.gh_repo, "pr_view", self.fake_pr_view):
+            return self.cli(*args)
+
+    def test_handoffs_stop_instead_of_saying_no_branch(self):
+        stub = self.t / "bin"
+        stub.mkdir()
+        (stub / "gh").write_text("#!/bin/sh\necho '[]'\n", encoding="utf-8")
+        (stub / "gh").chmod(0o755)
+        old = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(stub) + os.pathsep + old
+        try:
+            rc, out = self.cli("pr-handoffs", "--roadmap", RM, "--epic", "A1")
+        finally:
+            os.environ["PATH"] = old
+        self.assertEqual(rc, 3, out)
+        self.assertIn(self.STOP_A1, out)
+        self.assertNotIn("브랜치 없음", out)
+
+    def test_refresh_skips_uncounted_blocks_and_ends_3(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.gh("pr-refresh", "--roadmap", RM, "--session", SID)
+        self.assertEqual(rc, 3, out)
+        self.assertIn(self.STOP_A1, out)
+        self.assertIn("A2 의 단계를 세지 못해 브랜치를 읽지 못했다", out)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(cs.load(L.mpath(self.w, RM), RM)["PR"], [])   # PR 캐시에 줄이 생기지 않았다
+
+    def test_refresh_epic_stops_before_gh(self):
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        before = L.mpath(self.w, RM).read_bytes()
+        rc, out = self.gh("pr-refresh", "--roadmap", RM, "--session", SID, "--epic", "A1")
+        self.assertEqual(rc, 3, out)
+        self.assertIn(self.STOP_A1, out)
+        self.assertEqual(self.calls, [])
+        self.assertNotIn("PR 캐시:", out)                               # 채우는 고리까지 가지 않고 멈춘다
+        self.assertEqual(L.mpath(self.w, RM).read_bytes(), before)
+
+    def test_refresh_fills_countable_blocks_first(self):
+        from unittest import mock
+        report = {"exit": 3, "blocks": [
+            {"id": "A1", "kind": "bundle", "stage": "준비", "branch": "feature/a1", "branches": ["feature/a1"],
+             "branch_states": []},
+            {"id": "A2", "kind": "bundle", "stage": "알 수 없음", "reason": "모르는 형식", "branch": "feature/a2",
+             "branches": [], "branch_states": []}]}
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        with mock.patch.object(L, "_status", return_value=report):
+            rc, out = self.gh("pr-refresh", "--roadmap", RM, "--session", SID)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("A2 의 단계를 세지 못해 브랜치를 읽지 못했다 — 모르는 형식", out)
+        self.assertEqual(self.calls, ["feature/a1"])
+        self.assertEqual([(r["브랜치"], r["번호"]) for r in cs.load(L.mpath(self.w, RM), RM)["PR"]], [("feature/a1", "#7")])
+
+    def test_record_stops_instead_of_saying_mismatch(self):   # 통합 리뷰 넘김 A — pr-record 도 같은 자리에서 멈춘다
+        self.cli("claim", "--roadmap", RM, "--session", SID)
+        rc, out = self.gh("pr-record", "--roadmap", RM, "--session", SID, "--epic", "A1", "--pr", "7")
+        self.assertEqual(rc, 3, out)
+        self.assertIn(self.STOP_A1, out)
+        self.assertNotIn("맞지 않는다", out)
+        self.assertEqual(self.viewed, [])
+        self.assertEqual(cs.load(L.mpath(self.w, RM), RM)[cs.EPIC_PR], [])
+
+    def test_predicate_corners(self):
+        base = {"id": "X", "stage": "알 수 없음", "reason": "r", "branch": "feature/x", "branches": [], "branch_states": []}
+        self.assertEqual(L.uncounted_reason(base), "X 의 단계를 세지 못해 브랜치를 읽지 못했다 — r")
+        self.assertIsNone(L.uncounted_reason(dict(base, stage="준비")))           # 「브랜치: 없음」 인 준비 블록은 「브랜치 없음」 이다
+        self.assertIsNone(L.uncounted_reason(dict(base, branch="")))              # 브랜치 칸에 글이 없다
+        self.assertIsNone(L.uncounted_reason(dict(base, branch="없음")))          # 이름을 적지 않았다 — 「브랜치 없음」 이 사실이다
+        self.assertIsNotNone(L.uncounted_reason(dict(base, branch="feature/x · feature/y")))
+        self.assertIsNone(L.uncounted_reason(dict(base, branches=["feature/x"])))  # 센 브랜치가 있다
+        self.assertIsNone(L.uncounted_reason({"id": "Y", "fields": {}, "branches": []}))   # 단계가 없는 로드맵 블록(review-pack)
+
+    def test_copies_do_not_add_branches_to_an_uncounted_block(self):
+        from unittest import mock
+        blocks = [{"id": "A1", "kind": "bundle", "stage": "알 수 없음", "reason": "r", "branch": "feature/a1", "branches": [],
+                   "branch_states": []},
+                  {"id": "A2", "kind": "bundle", "stage": "준비", "branch": "feature/a2", "branches": ["feature/a2"],
+                   "branch_states": []}]
+        warns = []
+        with mock.patch("roadmap_status.extra_branches", return_value=({"A1": ["feature/c"], "A2": ["feature/c"]}, 0)):
+            got = L._with_copy_branches(self.w, RM, blocks, warns)
+        self.assertEqual([b["branches"] for b in got], [[], ["feature/a2", "feature/c"]])
+
+    def test_review_pack_refuses_unknown_layout(self):   # 통합 리뷰 넘김 B — 모르는 형식을 옛 형식 규칙으로 읽지 않는다
+        out_dir = self.t / "pack"
+        rc, out = self.cli("review-pack", "--roadmap", RM, "--epic", "A1", "--branch", "feature/a1", "--out", str(out_dir))
+        self.assertEqual(rc, 3, out)
+        self.assertIn("모르는 형식", out)
+        self.assertIn("layout: no-such", out)
+        self.assertFalse(out_dir.exists())
+
+    def test_team_layout_blocks_are_still_read(self):   # 양의 짝 — 막는 것은 모르는 값뿐이다
+        text = (self.w / RM).read_text(encoding="utf-8").replace("layout: no-such\n", "layout: team\n", 1)
+        for job in ("A1", "A2"):   # team 형식의 묶음 칸 값
+            text = text.replace("- 묶음: %s.md\n" % job, "- 묶음: %s\n" % TL.sources_rel(job))
+        (self.w / RM).write_text(text, encoding="utf-8")
+        sh(self.w, "commit", "-qam", "team layout")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        self.assertEqual([b["id"] for b in L._roadmap_blocks(self.w, RM)], ["A1", "A2"])
 
 
 if __name__ == "__main__":
