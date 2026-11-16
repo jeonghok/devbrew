@@ -174,7 +174,7 @@ assert_contains "$E2RF" '`extra-iterations.md`' "AC25: e2e 레퍼런스가 승�
 assert_not_contains "$E2RF" '남은 iteration 이 없' "AC25: e2e 레퍼런스에 상한을 닫힌 끝으로 말하는 옛 문장이 없다"
 assert_contains "$E2RF" 'fail 에서 「멈추기」를 고르면 실행은 aborted' "AC6: e2e 레퍼런스의 aborted 문장이 새 라벨을 부른다"
 assert_contains "$E2RF" '증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다. 질문 본문에는 판정안 한 줄, 충족하지 못한 기대 상태를 한 줄씩(없으면 「충족하지 못한 기대 상태 없음」), 「증거표: <세션 폴더의 `e2e-evidence.tsv` 경로>」 한 줄을 싣는다 — 질문 창만 보고 고를 수 있게.' "AC10: e2e 판정 질문의 본문이 판정안 · 못 채운 기대 상태 · 증거표 자리를 싣는다"
-assert_contains "$E2RF" '- `fail` 행은 Fix-loop 게이트와 같은 질문이다. 분류 질문을 띄우기 전에 SKILL.md 의 Step 5 를 먼저 한다 — 표를 출력하고 같은 글을 마지막 iteration 의 `$RV/classification.md` 에 쓴다(분류 질문의 `표:` 줄이 그 경로다).' "AC10: e2e fail 행도 분류 질문 전에 Step 5(표 · classification.md)를 거친다"
+assert_contains "$E2RF" '- `fail` 행은 Fix-loop 게이트와 같은 질문이다. 질문 본문은 이 절의 것(판정안 · 충족하지 못한 기대 상태 · 증거표 자리)이고, 선택지와 분류 질문은 Fix-loop 게이트의 것이다. 분류 질문을 띄우기 전에 SKILL.md 의 Step 5 를 먼저 한다 — 표를 출력하고 같은 글을 마지막 iteration 의 `$RV/classification.md` 에 쓴다(분류 질문의 `표:` 줄이 그 경로다).' "AC10: e2e fail 행도 분류 질문 전에 Step 5(표 · classification.md)를 거친다"
 assert_file_absent "$E2R" 'Accept|Stop|Retry /|Retry 를 넣지' "AC6: e2e 레퍼런스에 옛 선택지 이름이 없다"
 
 # ⑨ 비평 최종 보고

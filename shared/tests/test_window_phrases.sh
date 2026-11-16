@@ -34,14 +34,16 @@ assert_eq "$GIT_N" "$FIND_N" "코퍼스: 목록 도출과 find 도출이 같은 
 # 부재
 [ -f "$ROOT/$PHRASES" ] && ok "문구 목록이 있다" || no "문구 목록이 없다: $PHRASES"
 PH_N=0
-while IFS= read -r phrase; do
+PH_WANT=5   # 지금 목록의 문구 수 — 문구를 더하거나 빼면 이 수도 함께 고친다
+while IFS= read -r phrase || [ -n "$phrase" ]; do   # 끝 개행 없는 마지막 줄도 읽는다
+  phrase="$(printf '%s' "$phrase" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"   # CR · 앞뒤 공백을 턴다(measure_questions.py 와 같다)
   case "$phrase" in ''|'#'*) continue ;; esac
   PH_N=$((PH_N + 1))
   hits="$(cd "$ROOT" && while IFS= read -r f; do grep -nF -- "$phrase" "$f" | sed "s|^|${f}:|"; done < "$LIST" | cut -c1-120)"
   if [ -z "$hits" ]; then ok "부재: 「${phrase}」가 코퍼스에 없다"
   else no "부재: 「${phrase}」가 코퍼스에 있다 — $(printf '%s' "$hits" | head -3 | tr '\n' ' ')"; fi
 done < "$ROOT/$PHRASES"
-if [ "$PH_N" -gt 0 ]; then ok "문구 ${PH_N}개를 읽었다(0 이 아니다)"; else no "문구 목록이 비었다 — 공허한 통과"; fi
+assert_eq "$PH_N" "$PH_WANT" "문구 목록: 읽은 문구 수가 지금 목록의 수(${PH_WANT})와 같다 — 줄면 부재 검사가 그만큼 빈다"
 
 # 양의 짝 — 파일 · 글자(한 번 이상)
 has() {   # has <파일> <글자>
