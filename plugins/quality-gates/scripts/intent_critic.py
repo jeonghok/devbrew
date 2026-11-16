@@ -1885,10 +1885,12 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_filter)
 
     p = sub.add_parser("record", help="답 파일을 docs 답 자리에 쓰고 그 파일만 커밋한다",
-                       description="입력 꼴: 「%s<정체>%s<의도다|잘못 골랐다|지금은 모르겠다|typed>」 머리 "
-                                   "줄 뒤 다음 머리 전까지가 답 원문. 묻는 질문의 정체가 아닌 머리는 원문으로 "
-                                   "읽는다. 범위 모드면 아무것도 쓰지 않는다. 마지막 줄 「record: <n>」. rc 0."
-                                   % (HEADER, PICK_SEP))
+                       description="입력 꼴: 「%s<번호>%s<정체>%s<의도다|잘못 골랐다|지금은 모르겠다|typed>」 "
+                                   "머리 줄 뒤 다음 머리 전까지가 답 원문. 번호 · 정체가 묻는 질문과 맞지 "
+                                   "않는 머리 · 같은 번호로 더 나온 머리와 그 아래 글은 어디에도 싣지 "
+                                   "않는다. 범위 모드면 아무것도 쓰지 않는다. kill switch 가 켜져 있으면 "
+                                   "답 파일을 쓰지 않고 커밋하지 않는다. 마지막 줄 「record: <n>」. rc 0."
+                                   % (HEADER, ID_SEP, PICK_SEP))
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--repo", required=True, help="리포 루트(답 파일을 쓰고 커밋할 곳)")
     p.add_argument("--answers", required=True, help="답 입력 파일")

@@ -116,7 +116,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 ## 돌려주는 꼴 — `intent-return.md` (2판)
 
-쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(꺼짐 줄 · 건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다.
+쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(꺼짐 줄 · 건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
 
 부르는 쪽은 이 파일에서 시작해 `session_dir` 로, 거기서 `other_teams` 로 내려간다. 내부 파일(`intent-questions.yaml`)은 읽지 않는다. 나중에 쓸 부르는 쪽이 가져갈 것은 이 파일과(다른 팀 기록이 필요하면) `session_dir` 아래 `other_teams` 값의 파일 둘이다.
 
@@ -132,9 +132,9 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 - `contract` — 꼴의 판(`2`).
 - `status` · `reason` · `reason_text` — 실행의 갈래와, 건너뛰었거나 실패한 까닭의 닫힌 부호 · 사람이 읽는 글. 그 밖의 갈래는 `reason` 이 `-` 다(`uncountable` 의 `reason_text` 는 공시 줄의 첫 줄).
-- `outcome` — `ran` 일 때 질문이 왜 있고 없는지. 그 밖은 `-`. `none` 은 리뷰어가 질문을 내지 않은 실행과 낸 질문이 모두 이미 답한 질문이라 걸러진 실행을 함께 뜻한다.
+- `outcome` — `ran` 일 때 질문이 왜 있고 없는지. 그 밖은 `-`. `none` 은 리뷰어가 질문을 내지 않은 실행과 낸 질문이 모두 이미 답한 질문이라 걸러진 실행을 함께 뜻한다. 걸러진 질문의 목록은 이 파일에 없고 `result.md` 의 `## intent-critic` 절에만 있다.
 - `result_line` · `none_reason` — 사람에게 보인 결과 줄 그대로 · 리뷰어가 질문이 없다고 낸 이유(없으면 `-`).
-- `mode` · `reviewed_head` · `reviewed_base` — 범위 모드 여부와, `prepare` 때 커밋 해시로 풀어 둔 리뷰 커밋 · 기준 rev(풀지 못하면 `-`).
+- `mode` · `reviewed_head` · `reviewed_base` — 범위 모드 여부(`pr` · `range`, 모르면 `-`)와, `prepare` 때 커밋 해시로 풀어 둔 리뷰 커밋 · 기준 rev(풀지 못하면 `-`).
 - `session_dir` · `other_teams` — 세션 폴더의 절대경로 · 그 아래 다른 팀 기록 파일의 이름(없으면 `-`).
 - `answers_dir` · `answers_dir_source` · `commit` — docs 답 자리와 그 값의 출처 · 답 커밋(없으면 `-`, 못 했으면 `failed — …`).
 - `breadth` · `overlaps` — 리뷰의 넓이(`narrow` · `range` · `intent-docs`) · 다른 팀과 겹치는 곳의 수(모르면 `-`).
