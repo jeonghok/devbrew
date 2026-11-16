@@ -70,6 +70,14 @@ class Parse(unittest.TestCase):
         self.assertEqual((ok.problems, ok.counter), ((), "2026-11-20 없었다"))
         self.assertEqual(self.one("- [태그] 글 · 출처: a · 확인: b · 반례 확인: c").problems, ())   # 팀 규칙 줄에도 있어도 된다
 
+    def test_repeated_key_and_empty_condition_are_not_errors(self):
+        r = self.one("- [태그] 글 · 조건: 역할=worker, 역할=writer · 출처: a · 확인: b")
+        self.assertEqual((r.problems, r.conds), ((), {"역할": ("worker", "writer")}))
+        r = self.one("- [태그] 글 · 조건:  · 출처: a · 확인: b")
+        self.assertEqual((r.problems, r.conds), ((), {}))
+        r = self.one("- [태그] 글 · 조건: 역할=boss, 역할=worker · 출처: a · 확인: b")
+        self.assertEqual(r.problems, (TR.BAD_VALUE % ("역할", "boss"),))
+
     def test_crlf(self):   # Review Focus 2
         self.assertEqual(TR.parse_rules(GOOD + "\r\n")[0].confirm, "테스트 명령을 돌려 본다")
 

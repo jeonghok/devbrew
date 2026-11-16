@@ -89,7 +89,7 @@ def _conditions(value: str, problems: list) -> dict:
         if eq and key not in COND_KEYS:
             problems.append(BAD_KEY % key)
             continue
-        if not eq or not raw or key in conds:
+        if not eq or not raw:
             problems.append(BAD_COND % part.strip())
             continue
         values = tuple(v.strip() for v in raw.split("|"))
@@ -100,7 +100,7 @@ def _conditions(value: str, problems: list) -> dict:
         elif bad:
             problems.append(BAD_COND % part.strip())
         else:
-            conds[key] = values
+            conds[key] = conds.get(key, ()) + values
     return conds
 
 
@@ -125,10 +125,8 @@ def _rule(line_no: int, raw: str, handbook: bool) -> Rule:
         problems.append(NO_TEXT)
     conds = {}
     if _COND in seen:
-        if seen[_COND].strip():
+        if seen[_COND].strip():   # 빈 `조건:` 은 조건이 없는 것이다
             conds = _conditions(seen[_COND].strip(), problems)
-        else:
-            problems.append(BAD_COND % _COND)
     sources = tuple(s.strip() for s in seen.get(_SOURCE, "").split(_SOURCE_SEP) if s.strip())
     confirm = seen.get(_CONFIRM, "").strip() or None
     counter = seen.get(_COUNTER, "").strip() or None
@@ -143,7 +141,7 @@ def _rule(line_no: int, raw: str, handbook: bool) -> Rule:
 
 def parse_rules(text: str, handbook: bool = False) -> list:
     """규칙 줄마다 Rule. 던지지 않는다. handbook 이면 `반례 확인:` 도 필수다."""
-    if text.startswith("﻿"):
+    if text.startswith("\ufeff"):
         text = text[1:]
     out = []
     for number, line in enumerate(text.split("\n"), start=1):
@@ -263,7 +261,7 @@ def read_loaded(opened: Opened, path: str) -> Optional[_Loaded]:
     rc, out = git.run("cat-file", "-s", "%s:%s" % (opened.rev, path))
     if rc != 0 or not out.strip().isdigit():
         raise Unchecked("크기를 재지 못했다: %s" % path)
-    return _Loaded(text, int(out.strip()), "�" in text)
+    return _Loaded(text, int(out.strip()), "\ufffd" in text)
 
 
 def open_team(roadmap_arg: str, ref: Optional[str] = None, default_branch: bool = False) -> Opened:
