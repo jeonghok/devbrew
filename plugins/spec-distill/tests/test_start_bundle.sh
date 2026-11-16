@@ -157,6 +157,10 @@ assert_eq "$(line 6)" "맞추는 명령: roadmap_write.py job sync --result ${E1
 assert_eq "$(line 7)" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-1.md 에 쓴다." "과제: plan 의 쓸 자리"
 assert_eq "$(line 8)" "역할 문서 (${B}):" "과제: plan 의 역할 문서 머리"
 assert_eq "$(sed -n '9,$p' "$T/job.txt" | head -n "$(doc_lines designer)")" "$(g show "$B:${RD}designer/CLAUDE.md")" "과제: plan 의 역할 문서는 designer 의 것"
+assert_eq "$(job --job E1 --stage plan --plan 2)" "0" "과제: 계획 2 의 plan 묶음(I12 — 블록 브랜치의 둘째)"
+assert_eq "$(line 2)" "알림: 과제 브랜치 feature/tm-e1b 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다" "과제: 계획 2 는 둘째 브랜치를 본다"
+assert_eq "$(grep '^쓸 것: ' "$T/job.txt")" "쓸 것: ${E1}/results/plan-plan-2-1.md" "과제: 계획 2 의 쓸 것"
+assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-2.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
 
 # design — 과제 브랜치가 아직 없다(U4) · 원자료 전체 · 번호 파일(I5)
 E3="$TM/jobs/E3"
