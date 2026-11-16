@@ -76,10 +76,15 @@ assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄
 EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/pm-interview/SKILL.md"
 nsl() { awk -v m="$2" '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
 BL="$(nsl "$FIN" '**다음 세션 줄 — ①/② 공통**')"; EL="$(nsl "$EH" '**에픽 넘김 줄**')"
-SHARED='설계문서에 ## 있는 것 검토 절(레포 안에 이미 있는 것을 먼저 찾아 쓰고, 레포 밖 패키지 · 프레임워크 · 서비스는 후보로만 적어 사용자가 승인한 뒤에만 쓴다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.'
+SHARED='설계문서에 ## 있는 것 검토 절(맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이다 — 찾아본 후보를 이름으로 먼저 적고, 직접 만들려면 그 후보에 대한 구체 이유를 적어 사용자 승인을 받는다. 레포 밖 것은 후보와 차이를 보여 사용자가 승인한 뒤에만 쓴다. 적는 법은 ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md 를 읽어 따른다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.'
 assert_contains "$EL" "$SHARED" "AC22(양성 대조): 에픽 넘김 줄에 원칙 문장"
 assert_contains "$BSS" "$SHARED" "AC22: brief 지시 파일의 원칙 문장이 에픽 넘김 줄과 글자가 같다"
 assert_not_contains "$BL" "$SHARED" "F4 AC1: 그 원칙 문장은 brief 줄에 글자로 없다(양성 짝: 위 단언)"
+# 있는 것 먼저 — brief 지시 파일과 에픽 넘김 줄의 마지막 전체 리뷰가 고른 것을 썼는지도 묻는다(같은 글자: test_review_handoff_order.sh · test_conductor_dispatch_reference.sh)
+USED='설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.'
+assert_contains "$BSS" "$USED" "있는 것 먼저: brief 지시 파일의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다"
+assert_not_contains "$BL" "$USED" "있는 것 먼저: 그 묻는 구절은 brief 줄에 글자로 없다(양성 짝: 위 단언)"
+assert_contains "$EL" "$USED" "있는 것 먼저: 에픽 넘김 줄의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다"
 # AC18
 grep -qxF 'next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명' "$TPL" \
   && ok "AC18: 템플릿 next_phase 가 기본 다음 단계라고 말한다" || no "AC18: 템플릿 next_phase 주석 부재"
