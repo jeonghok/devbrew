@@ -90,7 +90,7 @@ R1 · R2 가 머지된 뒤 `intent-critic` 단계는 리뷰 끝에 세션 폴더
 
 ## Constraints
 
-- 경로 예약(로드맵 R5 블록) 안에서 고친다 — `intent_critic.py` · `intent_answers.py` · `intent_origin.py` · `other_teams.py` · `agents/intent-critic.md` · `skills/quality-pipeline/references/`. 테스트 · `plugin.json` · `CHANGELOG.md` 는 어느 에픽이나 함께 고치는 파일이다. `SKILL.md` · `README.md`(R4 예약)는 건드리지 않는다.
+- 경로 예약(로드맵 R5 블록) 안에서 고친다 — `intent_critic.py` · `intent_answers.py` · `intent_origin.py` · `other_teams.py` · `agents/intent-critic.md` · `skills/quality-pipeline/references/`. 테스트 · `plugin.json` · `CHANGELOG.md` 는 어느 에픽이나 함께 고치는 파일이다. `SKILL.md` · `README.md`(R4 예약)는 건드리지 않는다. 예외 하나 — qg 본문(`skills/quality-pipeline/SKILL.md`) 제목의 판 표기 한 줄은 major 판 올림에 맞춰 고친다(제목의 major 가 shipped major 와 같은지 보는 락 때문이다 · 사용자 허락 2026-11-16). 본문의 다른 줄은 건드리지 않는다.
 - 리뷰어 정의(`agents/intent-critic.md`)는 이 설계로 고칠 것이 없다. 고치게 되면 페르소나 파일이라 보안에 민감한 변경으로 리뷰한다.
 - `intent_critic.py` 의 반복문에서 일찍 빠지는 갈래는 회계 처분을 갖는다(배선 검사가 본다 — R1 계획의 판정 C11).
 - 스크립트 · 테스트가 걸리는 레포 락(UTF-8 명시 · 금지 토큰 · 20줄 중복 · CHANGELOG 연속)을 지킨다.
@@ -426,6 +426,7 @@ R1 · R2 설계문서의 `## 미룸` 에서 R5 로 온 12묶음을 행으로 가
 - 설계 대화 점검 · 2026-11-15 23:56 · 옆 지휘 세션이 사용자의 말 「설계 진행 시 나랑 brainstorming 설계 논의 안하는 경우 있더라」 를 옮겨 왔고 이 문서를 사례로 짚었다 — 이 에픽은 brainstorming 을 다시 부르지 않았고 첫 메시지 하나(접근 둘 · 지휘자 결정 셋)에 「그래」 한 번을 받고 썼다. 지휘자가 2라운드 앞에서 멈춰 그 사실을 알리고 열린 물음을 했다. 사용자: 「추천은 뭐야」 → 지휘자 추천(이 설계 그대로 2라운드 · 받는 모습의 물음은 R3 설계에서 화면 예시와 함께) → 「그래」. R3 · R4 는 에픽마다 brainstorming 을 다시 부르고 접근을 따로 된 메시지로 보인 뒤에 쓴다
 - spec 승인 · 2026-11-16 · 「승인 — 계획 담당자에게 (권장)」
 - 계획 검토 · 2026-11-16 01:10 · 계획 담당자가 설계에 없던 결정 다섯을 스스로 정하지 않고 기본값과 함께 돌려보냈다(토픽 형제를 뺀 수를 적는 자리 · 답 입력 파일을 못 읽은 때의 상태 · 같은 질문 번호의 답이 두 번 올 때 · 고른 답을 읽을 수 없는 머리 · 묻지 않은 질문의 안내 글). 지휘자가 질문 하나로 만들어 물었다(지휘자가 만든 질문 — 옮김 기록 relay-1.md). 사용자: 「다섯 다 받는다 (권장)」. 실행 방식은 로드맵의 미리 받은 답대로 writing-plans 가 권한 방식(Subagent-driven)이다. 계획: docs/superpowers/plans/2026-11-16-qg-return-contract.md
+- 구현 돌아옴 · 2026-11-16 03:50 · 구현 담당자가 과제 아홉 · 마지막 전체 리뷰 · 수리 한 번을 마치고 둘을 돌려보냈다. ① major 판 올림으로 qg 본문 제목의 판 표기를 보는 락이 실패한다 — 그 파일은 R4 예약이라 고치지 않고 올렸다. ② 마지막 리뷰의 낮은 지적 다섯(M3 · M7 · M9 · M10 · M11)을 고치지 않고 미룸 표에 올렸다. 지휘자가 질문 둘로 만들어 물었다(지휘자가 만든 질문 — 옮김 기록 relay-2.md). 사용자: 「한 줄만 고친다 (권장)」 · 「다섯 다 넘긴다 (권장)」. Constraints 에 제목 한 줄 예외를 적었다.
 
 ## Metadata
 
