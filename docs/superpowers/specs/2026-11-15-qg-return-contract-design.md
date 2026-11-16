@@ -461,3 +461,30 @@ R1 · R2 설계문서의 `## 미룸` 에서 R5 로 온 12묶음을 행으로 가
 | beeb94b9#r2.1 | 참고(ambiguity) #5-오류-없이-틀리던-것 — 원격이 앞선 경우(갈래 ②)에 로컬 끝과 원격 끝을 한 작업으로 합쳐 싣는데, 합친 수를 공시하는지가 없다 — 갈래 ① 은 묶은 수를 공시하고, Anti-goals 는 새로 묶는 항목 모두의 수를 공시하라고 한다. |
 | 81c916be#r2.1 | 참고(ambiguity) #6-멈춤--죽음-막기 — 시간 한도를 넘긴 git 읽기가 「확인 못 함」 줄로 간다고 적었지만 그 줄은 다른 팀 기록에만 있는 절이다 — 원문 · 문서 머리를 읽는 쪽의 읽기와, 지금 실패하면 말없이 건너뛰는 다른 브랜치의 의도 문서 읽기가 어디에 무엇으로 드러나는지 없다(행 6g · AC16). |
 | 89c6be4b#r2.1 | 참고(handoff_incomplete) #상류--하류-연계 — 「넘기는 곳」 줄이 미룸 표와 어긋난다 — R4 로 넘긴 「리뷰어 입력의 칸 표지를 닫는 흉내 막기」 와 R3 로 넘긴 「질문 보관 · 범위 모드 답을 기록하는 길」 이 이 줄에 없다. |
+
+## 판정
+
+### docs/superpowers/plans/2026-11-16-qg-return-contract.md
+
+- Ruling: T3↔T4 — Task 3 에서 `_record` 의 기존 쓰기 실패 갈래에 `failed_answer`(고른 답) · `failure`(사유) 두 키만 더 쓰게 해 계획 T3 Step4 단언이 서게 한다. 나머지 답 입력 재구성은 Task 4 — 계획이 T3 테스트에 그 단언을 시켰고 두 줄 쓰기라 T4 재작성과 겹쳐도 T4 가 덮는다 — 틀리면 T4 가 그 두 줄을 다시 쓴다(비용 작음).
+- Ruling: T7 「여섯 줄」 → 일곱 줄(목록과 Step3 이 일곱) — 글자 실수 — 틀릴 일 없음.
+- Ruling: Task 1(읽기만 하는 다시 확인)은 controller 가 직접 돌렸다 — grep 열 줄과 테스트 넷이라 dispatch 가 비용만 더함 — 결과: 모든 자리 있음 · 판 14.10.0 · 파이썬 셋 OK · 배선 172/172.
+- Ruling: Task 2/3/5/6/7 구현 = sonnet — 여러 파일 통합, 계획이 산문+시그니처(완전 코드 아님) → 표준 등급 — 틀리면 수리 라운드.
+- Ruling: Task 4 구현 = opus — 답 입력 파서 재작성 + _record 짝짓기 + 기존 락 30곳·클래스 재작성 + 회계 배선 제약 → 판단 필요 — 비용 큼.
+- Ruling: Task 8 구현 = sonnet — CHANGELOG 산문 + 레포 락 → 산문이라 중간 등급 바닥.
+- Ruling: 과제 리뷰 = sonnet(Task 4 리뷰는 opus) — 리뷰 바닥은 중간 등급, T4 는 위험 큼.
+- Ruling: 마지막 전체 리뷰 = opus — 가장 능력 있는 등급으로 지정.
+- Ruling: Co-Authored-By trailer differs per implementer model (Sonnet 5.5 on bbdfe24d) — truthful to the authoring model; no history rewrite — cost if wrong: cosmetic.
+- Ruling: QUESTION_STATES unused after Task 3 — Task 7 doc lock consumes it — fine.
+- Ruling: Minor 1 (typed answer under number-right/identity-wrong header loses its 잘못 골랐다 because pick=typed is not a label and the text below is dropped) — plan rule 3 + spec §5 4a 「그 아래 글은 어느 답에도 싣지 않는다」 literally mandate it; spec D13 sentence about not losing 잘못 골랐다 is satisfied for label picks. Not changing user-visible behavior myself — surface to conductor in final report as a spec gap candidate — cost if wrong: one edge case loses a typed 잘못 골랐다 until R3/R4.
+- Ruling: summary line 「원문 없음 — 원문 링크 거부」/「로드맵 링크 거부」 still shown after a timeout — reviewer: Minor, per-file line meets brief; changing the summary wording needs new user-visible text not in spec/plan → not decided here; surface to conductor in final report — cost if wrong: misleading cause label on a rare timeout.
+- Ruling: full suite runs once after the final-review fix wave (not inside Task 8) — user instruction 「전체 스위트는 잠금 아래 끝에 한 번」 and the fix wave may change code — cost if wrong: none (still once, at the end).
+- Ruling: Task 8 task review (sonnet) and final whole-branch review (opus) dispatched concurrently — both read-only, independent — cost if wrong: a Task 8 finding could duplicate in final review.
+- Ruling: final fix wave = F1–F9 (final-fix-findings.md): M1, M2 (must) + cheap non-spec items M4, M5, M6, M8, Task 7 (완결), Task 4 lock gaps, Task 6 prepare half + roadmap-timeout test — all tests/docs or robustness without new output text — cost if wrong: a slightly larger fix diff to re-review.
+- Ruling: left out of the fix wave: M3 [spec] session_dir folding (plan Global Constraints lists session_dir as a folded text cell; changing it deviates from plan), M7 (wrong reason text when branch list unreadable — touching reason texts), M9 [spec] / M10 [spec] (need spec decisions → conductor), M11 (record question-record write failure after answer commit) — surfaced to conductor; cost if wrong: these edges stay until a later epic.
+- Ruling: full suite started concurrently with the read-only re-review — saves wall time; if the re-review forces a code fix, the suite result covers d763873c only and the delta is listed — cost if wrong: a re-run.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-16-qg-return-contract.md
+
+- 구현 대조: 구현 대조: 경고 없음 (AC 19개 · 구현됨 19개 · 미룸 0개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)
+- 보고: AC 19개 중 구현됨 19 · 미룸 0 · 빠짐 0
