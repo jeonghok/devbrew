@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md
+# guards: plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/brief-handoff.md
 #
 # AC8 · AC16 — 핸드오프 자리(interview 의 다음 세션 줄 · brief 템플릿 §7 · spec-review description)가
 # brainstorming → `spec-distill:spec-review` → writing-plans 순서를 싣고, `spec-review` 의 게이트 없는
@@ -21,6 +21,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
+  echo "plugins/spec-distill/references/brief-handoff.md"
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -70,57 +71,87 @@ elif os.environ["WHAT"] == "first":
     print(re.findall(r"@<[^<>]+>", m.group(1))[0])
 else:
     print(l[m.end():])'; }
+BH="$ROOT/plugins/spec-distill/references/brief-handoff.md"
+bh_sec() { awk -v h="## $2" '$0==h{f=1;next} f&&/^## /{exit} f' "$1"; }   # bh_sec <파일> <절 이름> → 그 절의 본문
+bh_items() { bh_sec "$1" "$2" | sed -n 's/^- //p'; }                        # 그 절의 불릿 문장(불릿을 뗀 글)
+POINT_BS='시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.'
+POINT_CM='시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.'
+# 옛 다음 세션 줄의 지시 문장 열여섯 — 그 순서 그 글자(「사용자 선호:」 라벨만 뗐다). 있는 것 검토 괄호와 마지막 전체 리뷰의 묻는 구절은 에픽 넘김 줄과 같은 글자다(test_end_gates.sh).
+cat > "$TMP/want_bs.txt" <<'WANT'
+brainstorming 을 불러온 직후 첫 메시지 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_deps.py superpowers --plugin-root ${CLAUDE_PLUGIN_ROOT} --base 에 그 skill 을 불러올 때 보인 기준 폴더 경로를 넘겨 한 번 돌리고, 첫 줄이 「검증한 판과 같다」 가 아니면 그 줄을 첫 메시지에 한 줄로 보인다 — 판 확인 결과로는 멈추지 않는다.
+confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.
+brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 설계의 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다.
+설계문서에 ## 번호 대조 표(칸: 번호 · 반영/기각 · 자리 또는 이유)를 두어 brief 의 모든 번호와 brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고, 설계문서 frontmatter source_interview 에 이 brief 의 레포 루트 기준 상대경로를 적는다.
+설계문서의 수용 기준은 ## Acceptance Criteria 아래 AC1 · AC2 … 처럼 번호를 단다.
+설계의 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름(설계 → 계획 → 구현)의 의도는 지킨다.
+설계문서에 ## 있는 것 검토 절(맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이다 — 찾아본 후보를 이름으로 먼저 적고, 직접 만들려면 그 후보에 대한 구체 이유를 적어 사용자 승인을 받는다. 레포 밖 것은 후보와 차이를 보여 사용자가 승인한 뒤에만 쓴다. 적는 법은 ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md 를 읽어 따른다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.
+이 brief 의 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다.
+brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.
+설계문서를 쓰고 커밋한 뒤, brainstorming 의 설계문서 점검(builder check)과 그 질문을 마치고 문서를 승인받는 자리에서 그 설계문서 경로 뒤에 --bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여 Skill spec-distill:spec-review 를 부른다.
+superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다.
+spec-review 가 게이트 없이 끝나면 brainstorming 의 문서 승인 자리로 돌아간다.
+writing-plans 가 계획을 쓴 뒤 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --plan 에 설계문서와 계획 경로를 넘겨 돌리고, 계획에 없는 AC 는 계획에 더한다.
+고른 실행 방식의 마지막 전체 리뷰에 설계문서 ## Acceptance Criteria 의 AC 목록을 싣고, 리뷰가 AC 마다 한 줄씩 AC1: 구현됨 — 근거 꼴(판정은 구현됨 · 미룸 · 빠짐 중 하나)로 보고하게 해 그 보고를 git 이 추적하지 않는 파일에 적는다. 그 리뷰가 설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.
+미룸 · 빠짐과 리뷰 후속으로 미룬 것은 설계문서 ## 미룸 표(항목 · 이유 · 받는 곳)에 올리고, PR 을 만들기 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --impl 에 설계문서와 보고 파일 경로를 넘겨 돌려 경고를 사용자에게 보인다.
+사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지키고, 메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.
+WANT
+# 「다른 다음 단계의 줄」 이 글자로 싣던 네 문장 + 판 확인 한 문장.
+cat > "$TMP/want_cm.txt" <<'WANT'
+confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.
+brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다.
+brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.
+사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.
+부른 skill 이 `superpowers:` 로 시작하면 그 skill 을 불러온 직후 첫 메시지 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_deps.py superpowers --plugin-root ${CLAUDE_PLUGIN_ROOT} --base 에 그 skill 을 불러올 때 보인 기준 폴더 경로를 넘겨 한 번 돌리고, 첫 줄이 「검증한 판과 같다」 가 아니면 그 줄을 첫 메시지에 한 줄로 보인다 — 판 확인 결과로는 멈추지 않는다.
+WANT
 ONE="$(nsl "$FIN")"
 n1="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
 if nonempty "다음 세션 줄" "$ONE"; then
   assert_eq "$n1" "1" "다음 세션 줄 모양의 인용 줄이 finishing.md 에 정확히 하나 (①·② 가 따로 정의하지 않는다)"
   assert_eq "$(split_line "$ONE" first)" "@<brief-path>" "다음 세션 줄의 첫 토큰은 @<brief-path> (주 산출물)"
-  case "$(split_line "$ONE" rest)" in
-    "이 interview brief 로 Skill superpowers:brainstorming 을 시작하라."*) ok "다음 세션 줄이 토큰 뒤에 brainstorming 을 부른다" ;;
-    *) no "다음 세션 줄의 토큰 뒤 머리가 다르다: $ONE" ;;
-  esac
-  order "다음 세션 줄" "$ONE" "Skill superpowers:brainstorming" "spec-distill:spec-review"
-  order "다음 세션 줄" "$ONE" "spec-distill:spec-review" "writing-plans"
-  # R14 AC12 — 다음 세션이 superpowers 판을 한 번 확인한다(결과로는 멈추지 않는다)
-  assert_contains "$ONE" 'check_deps.py superpowers --plugin-root' "AC12: 다음 세션 줄이 superpowers 판 확인을 부른다"
-  assert_contains "$ONE" '판 확인 결과로는 멈추지 않는다' "AC12: 판 확인은 멈춤 조건이 아니다"
-  order "다음 세션 줄" "$ONE" "을 시작하라." "check_deps.py"
-  order "다음 세션 줄" "$ONE" "check_deps.py" "spec-distill:spec-review"
-  OTHER="$(grep -F '**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' "$FIN" || true)"
-  if nonempty "다른 다음 단계의 줄" "$OTHER"; then
-    assert_contains "$OTHER" '`superpowers:` 로 시작하면' "AC12: 다른 다음 단계의 줄이 superpowers: 로 시작하는 skill 을 말한다"
-    assert_contains "$OTHER" '판 확인 문장' "AC12: 다른 다음 단계의 줄이 판 확인 문장을 싣는다"
-  fi
-  assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
-  for n in '고른 실행 방식의 마지막 전체 리뷰' \
-           '설계의 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름(설계 → 계획 → 구현)의 의도는 지킨다.' \
-           '## 있는 것 검토 절' '사용자가 승인한 뒤에만' '## 상류 · 하류 연계 절' '레포 전용 값은 박지 말고'; do
-    assert_contains "$ONE" "$n" "AC22: brief 다음 세션 줄에 「${n}」"
-  done
-  assert_not_contains "$ONE" 'SDD 의 마지막 전체 리뷰' "AC22: 실행 방식을 SDD 로 고정하지 않는다(양성 짝: 고른 실행 방식)"
-  assert_not_contains "$ONE" '계층 · 온톨로지' "AC22: 원칙 5 는 싣지 않는다(설계 §6)"
-  for n in '§3 열린 질문 · §4 조사 · §5 위험' '번호째' '## 번호 대조 표' 'source_interview' '--bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여' \
-           'brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고' 'AC1 · AC2 … 처럼 번호를 단다' \
-           'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' '구현됨 · 미룸 · 빠짐' \
-           'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' '/compact 요약에 기대지 말고'; do
-    assert_contains "$ONE" "$n" "AC1 · AC10: brief 다음 세션 줄에 「${n}」"
-  done
-  order "다음 세션 줄" "$ONE" "--plan" "--impl"
-  assert_contains "$ONE" "게이트 없이 끝나면 brainstorming 의 문서 승인 자리로 돌아간다" "다음 세션 줄: 게이트 없는 종료의 복귀 분기를 싣는다 (AC16)"
-  # 지휘자 수리 2 — superpowers 7.0.0 brainstorming: 크기 · 건너뛰기는 사용자 선호 입력, 자리는 설계문서 점검 뒤 문서 승인
-  for n in '사용자 선호: 이 brief 의 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다.' \
-           'brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
-           'brainstorming 의 설계문서 점검(builder check)과 그 질문을 마치고 문서를 승인받는 자리에서' \
-           '메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.'; do
-    assert_contains "$ONE" "$n" "지휘자 수리 2: brief 다음 세션 줄에 「${n}」"
-  done
-  for old in '사용자 리뷰 게이트' '첫 줄에 상태, 끝에 할 일 하나'; do
-    assert_not_contains "$ONE" "$old" "지휘자 수리 2: brief 다음 세션 줄에 「${old}」 가 없다(양성 짝: 위 단언)"
-  done
-  order "다음 세션 줄" "$ONE" "사용자 선호:" "spec-distill:spec-review"
+  # F4 AC1 — 줄은 brief 첨부 · 시작 문장 · 지시 파일을 가리키는 문장뿐이다(등호 — 문장 하나가 더 붙어도 실패한다)
+  assert_eq "$(split_line "$ONE" rest)" "이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. ${POINT_BS}" "F4 AC1: 다음 세션 줄은 시작 문장과 지시 파일을 가리키는 문장뿐이다"
   assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄 안의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름뿐이다"
   assert_eq "$(lead_only '@<a> x <a> y')" "ok" "꺾쇠 규칙: 줄 앞 토큰의 이름은 줄 안에 다시 쓸 수 있다"
   assert_eq "$(lead_only '@<a> x <b> y')" "no" "꺾쇠 규칙 양성 대조: 줄 앞 토큰에 없는 이름은 거부한다"
+  # F4 AC2 — 지시 파일의 brainstorming 절이 옛 줄의 지시 문장을 그 순서 그 글자로 싣는다(등호 — 빠짐 · 순서 바뀜 · 더해짐 모두 실패)
+  [ -f "$BH" ] && ok "지시 파일이 있다: references/brief-handoff.md" || no "지시 파일이 없다: references/brief-handoff.md"
+  GOT_BS="$(bh_items "$BH" 'brainstorming 지시')"
+  assert_eq "$(printf '%s\n' "$GOT_BS" | grep -c .)" "16" "F4 AC2(양성 대조): brainstorming 지시 절에서 문장 열여섯을 읽었다"
+  assert_eq "$GOT_BS" "$(cat "$TMP/want_bs.txt")" "F4 AC2: brainstorming 지시 절이 옛 줄의 지시 문장을 순서대로 모두 싣는다"
+  assert_not_contains "$(bh_sec "$BH" 'brainstorming 지시')" '사용자 선호:' "F4 AC2: 「사용자 선호:」 라벨이 없다(양성 짝: 라벨 뗀 그 문장은 위 등호가 본다)"
+  # F4 AC1 — 옛 지시 문장은 줄에 하나도 없다(양성 짝: 같은 문장이 지시 파일에 있다 — 위 등호)
+  k=0
+  while IFS= read -r s; do
+    k=$((k + 1))
+    assert_not_contains "$ONE" "$s" "F4 AC1: 옛 지시 문장 ${k} 이 다음 세션 줄에 없다"
+  done < "$TMP/want_bs.txt"
+  assert_eq "$k" "16" "F4 AC1(양성 대조): 옛 지시 문장 열여섯을 줄과 대조했다"
+  # AC8 · AC16 — 순서는 지시 절 안에서 잰다
+  INS="$(printf '%s\n' "$GOT_BS" | tr '\n' ' ')"
+  order "brainstorming 지시 절" "$INS" "check_deps.py" "spec-distill:spec-review"
+  order "brainstorming 지시 절" "$INS" "spec-distill:spec-review" "writing-plans"
+  order "brainstorming 지시 절" "$INS" "--plan" "--impl"
+  order "brainstorming 지시 절" "$INS" "이 brief 의 설계는 설계문서를 쓰는 크기다" "spec-distill:spec-review"
+  assert_not_contains "$INS" "보다 이 순서가 우선한다" "AC1: 지시 절에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
+  assert_not_contains "$ONE" "보다 이 순서가 우선한다" "AC1: 다음 세션 줄에 brainstorming 지시를 덮어쓰는 문장이 없다(D42)"
+  # 두 절은 서로를 가리키지 않는다(양성 짝: 두 절을 읽었다 — 위 · 아래 등호)
+  assert_not_contains "$(bh_sec "$BH" 'brainstorming 지시')" '공통 지시' "F4: brainstorming 지시 절이 공통 지시 절을 가리키지 않는다"
+  assert_not_contains "$(bh_sec "$BH" '공통 지시')" 'brainstorming 지시' "F4: 공통 지시 절이 brainstorming 지시 절을 가리키지 않는다"
+  # F4 AC3 — 「다른 다음 단계의 줄」 이 공통 지시를 지시 파일의 절로 가리킨다
+  OTHER="$(grep -F '**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.**' "$FIN" || true)"
+  if nonempty "다른 다음 단계의 줄" "$OTHER"; then
+    assert_contains "$OTHER" "「${POINT_CM}」" "F4 AC3: 다른 다음 단계의 줄이 공통 지시 절을 가리키는 문장을 싣는다"
+    assert_contains "$OTHER" '줄에는 공통 지시를 글자로 싣지 않고' "F4 AC3: 공통 지시를 글자로 싣지 않는다고 적는다"
+    assert_contains "$OTHER" '판 확인도 그 절의 끝 문장이 맡는다' "F4 AC3: 판 확인은 그 절의 끝 문장이 맡는다"
+    GOT_CM="$(bh_items "$BH" '공통 지시')"
+    assert_eq "$GOT_CM" "$(cat "$TMP/want_cm.txt")" "F4 AC3: 공통 지시 절이 네 문장과 판 확인 문장을 싣는다"
+    k=0
+    while IFS= read -r s; do
+      k=$((k + 1))
+      assert_not_contains "$OTHER" "$s" "F4 AC3: 공통 지시 문장 ${k} 이 문단에 글자로 없다"
+    done < "$TMP/want_cm.txt"
+    assert_eq "$k" "5" "F4 AC3(양성 대조): 공통 지시 문장 다섯을 문단과 대조했다"
+  fi
   sed 's/Skill superpowers:brainstorming 을 시작하라\./Skill superpowers:brainstorming 을 시작하라. brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다./' "$FIN" > "$TMP/fin_mut.md"
   case "$(nsl "$TMP/fin_mut.md")" in
     *"보다 이 순서가 우선한다"*) ok "변이(AC15): 덮어쓰기 문장을 되넣으면 같은 추출이 그것을 본다 — AC1 부재 단언에 이빨이 있다" ;;
@@ -223,6 +254,8 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
     done
     assert_contains "$RSL" '고른 실행 방식의 마지막 전체 리뷰' "AC42: 승인 게이트 다음 세션 줄이 고른 실행 방식의 마지막 전체 리뷰를 말한다"
     assert_not_contains "$RSL" 'SDD 의 마지막 전체 리뷰' "AC42: 다음 세션 줄이 SDD 로 고정하지 않는다(양성 짝: 위 줄)"
+    USED='설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.'
+    assert_contains "$RSL" "$USED" "있는 것 먼저: 승인 게이트 다음 세션 줄의 마지막 전체 리뷰가 고른 것을 썼는지 묻는다(같은 글자: test_end_gates.sh)"
     assert_eq "$(lead_only "$RSL")" "ok" "spec-review 다음 세션 줄의 꺾쇠 자리표는 <spec_path> 뿐이다"
   fi
   STOP="$(printf '%s\n' "$GATE" | awk '/^- \*\*①\/② 의 정지 요건\*\*/{f=1;print;next} f&&/^- /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
