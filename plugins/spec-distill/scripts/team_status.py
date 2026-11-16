@@ -27,6 +27,8 @@ RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정
 RESERVE_UNSCANNED = "바꾼 파일의 예약도 재지 않았다"
 RECORD_UNREAD = "결정 기록 읽기 불가 — "
 NO_RECEIPT, UNREAD_END = "결과 있음 · 받음 없음", "읽지 못함 — 끝 줄이 있는지 모른다"
+STALE = "묶음 낡음"
+STALE_UNMEASURED = STALE + "을 재지 못했다"
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -183,6 +185,46 @@ class Reader:
             out += ["- " + line for line in result.rulings]
         return out
 
+    def stale(self, tip: str, block: dict) -> list:
+        """도는 일꾼(단계 · 계획마다 가장 새 시도이고 끝 줄이 없는 결과 파일)의 묶음이 낡았는가 — 알림 줄들(AC23).
+        머리 bundle_at 의 글과 지금 글이 다르면 낡았다(I4). 팀 규칙 파일은 리더가 읽는 ref 에서, 공통 규칙 파일과 그 일꾼의
+        역할 문서는 기본 브랜치에서 읽는다. 읽지 못한 결과 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다).
+        git.blob · git.commit 만 쓴다 — 알림이 종료 코드를 바꾸지 않는다."""
+        team, job = self.team, block["id"]
+        if self.main is None:
+            return []
+        names = job_results.result_names(self.git, tip, team, job)
+        if not names:
+            return []
+        parsed = [team_layout.parse_result_name(n) for n in names]
+        latest = sorted(job_results.newest(names, stage, plan) for stage, plan in set((p[0], p[1]) for p in parsed))
+        out, lead = [], None
+        for name in latest:
+            stage, plan, attempt = team_layout.parse_result_name(name)
+            if team_layout.default_role(stage) is None:   # 검수 결과 파일은 리더가 쓴다 — 받은 묶음이 없다
+                continue
+            text = self.git.blob(tip, team.result(job, stage, attempt, plan))
+            result = team_files.parse_result(text) if text is not None else None
+            if result is None or result.problems or team_files.lost_lines(result) or result.end \
+                    or result.bundle_at is None:
+                continue
+            at = self.git.commit(result.bundle_at)
+            if at is None:
+                out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
+                continue
+            if lead is None:
+                lead = self.git.commit(team_layout.leader_ref(self.main)) or ""
+            if not lead:
+                out.append("%s: %s — 팀 규칙을 읽을 커밋이 없다" % (STALE_UNMEASURED, name))
+                continue
+            roadmaps_dir = team.roadmaps_dir
+            checks = [(team.rules, lead), (team_layout.handbook(roadmaps_dir), self.main),
+                      (team_layout.role_doc(roadmaps_dir, result.role), self.main)]
+            changed = [path for path, rev in checks if self.git.blob(at, path) != self.git.blob(rev, path)]
+            if changed:
+                out.append("%s: %s — 묶은 커밋 %s 뒤에 바뀜: %s" % (STALE, name, at[:8], " · ".join(changed)))
+        return out
+
     def _fill_progress(self, block: dict, name: str, path: str, result) -> None:
         if result is None:
             block["progress"] = {"done": None, "total": None, "why": "%s 를 읽지 못했다" % path}
@@ -217,6 +259,7 @@ class Reader:
         intent = self.read(tip, intent_path)
         if intent is None:
             return UNKNOWN, "%s 를 읽지 못했다" % intent_path, specs, plans
+        block["notes"].extend(self.stale(tip, block))
         try:
             state, notes, latest = job_results.receipt(self.git, self.main, tip, team, job, intent, IMPLEMENT, number,
                                                        block["reserved"], self._outputs(block))
