@@ -47,6 +47,7 @@ assert_eq "$(sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-
 assert_contains "$(cat "$T/out.txt")" "머리 만듦" "job sync: 한 일을 말한다"
 assert_eq "$(cat "$W/$R")" "$(printf -- '---\ntype: job-result\nstage: implement\nplan: 1\nattempt: 1\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---' "$J" "$B" "$J")" "job sync: 머리 글과 키의 차례"
 assert_eq "$(tail -c 2 "$W/$R" | od -An -c | tr -d ' ')" '\n\n' "job sync: 머리 뒤에 빈 줄 하나"
+python3 -c 'import sys; data = open(sys.argv[1], "rb").read(); sys.exit(0 if data.endswith(b"---\n\n") and not data.endswith(b"---\n\n\n") else 1)' "$W/$R" && ok "job sync: 새 머리는 닫는 줄 뒤에 줄바꿈 하나와 빈 줄 하나로 끝난다" || no "job sync: 새 머리 뒤 빈 줄이 하나가 아니다"
 
 # ── 원장 · 계획에서 줄 내기 (AC27) ───────────────────────────────────────────
 assert_eq "$(sync E1 implement-plan-1-1.md --ledger "$T/ledger.md" --plan-file "$T/plan.md")" "0" "job sync: 원장에서 줄을 낸다"

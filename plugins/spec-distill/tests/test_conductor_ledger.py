@@ -2171,7 +2171,16 @@ class TeamRecords(Repo):   # R1 AC16
             rc, out = self.cli("record", "--spec", str(intent), "--line", line)
             self.assertEqual(rc, 2, (line, out))
             self.assertNotIn("적었다", out)
+            if line.startswith("- 메모"):   # 종류 밖 줄 — 사유가 결정 기록의 종류 이름을 담는다(argparse 사용법 오류와 가른다)
+                self.assertIn(TF.DECISION_KINDS[0], out, line)
         self.assertEqual(intent.read_bytes(), before)
+
+    def test_confirm_line_without_a_date_cell_is_accepted(self):   # 넘김 확인 줄은 날짜 칸이 없는 꼴이다(계획 2 의 Q16)
+        intent, _design = team_tree(self)
+        line = cs.confirm_line("E1", "넘길 일", "받았다")
+        rc, out = self.cli("record", "--spec", str(intent), "--line", line)
+        self.assertEqual(rc, 0, out)
+        self.assertIn(line, intent.read_text(encoding="utf-8").split("\n"))
 
     def test_old_layout_and_other_paths_behave_as_before(self):
         intent, design = team_tree(self, layout=None)           # 머리말에 layout 이 없는 로드맵의 같은 자리
@@ -2248,6 +2257,7 @@ class TeamRecords(Repo):   # R1 AC16
         before = intent.read_bytes()
         rc, out = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", "E1", "--spec", str(design))
         self.assertEqual(rc, 2, out)
+        self.assertIn(TF.DECISION_KINDS[0], out)   # 종류 밖 줄 — 사유가 결정 기록의 종류 이름을 담는다
         self.assertEqual(intent.read_bytes(), before)
         rc, out = self.cli("pending", "--roadmap", RM, "--epic", "E1")
         self.assertIn("- 메모 한 줄", out)
@@ -2341,7 +2351,7 @@ class UncountedBlock(Repo):   # Q18 — 「브랜치 없음」 과 「브랜치�
     def test_predicate_corners(self):
         base = {"id": "X", "stage": "알 수 없음", "reason": "r", "branch": "feature/x", "branches": [], "branch_states": []}
         self.assertEqual(L.uncounted_reason(base), "X 의 단계를 세지 못해 브랜치를 읽지 못했다 — r")
-        self.assertIsNone(L.uncounted_reason(dict(base, stage="준비")))           # 「브랜치: 없음」 인 준비 블록은 「브랜치 없음」 이다
+        self.assertIsNone(L.uncounted_reason(dict(base, stage="준비")))           # 브랜치 칸에 이름이 있어도 단계가 준비면 아직 읽을 브랜치가 없다
         self.assertIsNone(L.uncounted_reason(dict(base, branch="")))              # 브랜치 칸에 글이 없다
         self.assertIsNone(L.uncounted_reason(dict(base, branch="없음")))          # 이름을 적지 않았다 — 「브랜치 없음」 이 사실이다
         self.assertIsNotNone(L.uncounted_reason(dict(base, branch="feature/x · feature/y")))

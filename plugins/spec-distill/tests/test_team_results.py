@@ -87,6 +87,11 @@ class Parse(unittest.TestCase):
             r = F.parse_result(result(opener + self.REAL))
             self.assertEqual((r.problems, r.outputs), ([], ["real.md"]), repr(opener))
 
+    def test_real_fence_after_non_fence_shape(self):   # 펜스 아닌 꼴(네 칸 들여쓴 백틱) 뒤의 진짜 펜스는 펜스다
+        body = "    ```\n\n```\n끝 — abc1234\n```\n끝 — def5678\n"
+        r = F.parse_result(result(body))
+        self.assertEqual((r.end, r.problems), ("def5678", []))
+
     def test_line_endings(self):   # Review Focus 1
         text = result("Task 1/1: 끝 — abc1234\n끝 — " + H)
         for variant in (text, text.replace("\n", "\r\n"), text + "\n\n"):
