@@ -107,6 +107,15 @@ assert_eq "$(sync E1 implement-plan-1-8.md --job-at "$B")" "2" "머리 인자: -
 assert_eq "$(sync E1 implement-plan-1-7.md --bundle-at "$J0" --job-at "$J0")" "0" "머리 인자: 끝 줄이 있는 파일은 다른 값을 줘도 rc 0"
 assert_contains "$(cat "$T/out.txt")" "바뀐 것 없음" "머리 인자: 끝 줄이 있는 파일은 바뀐 것 없음"
 cmp -s "$RES/implement-plan-1-7.md" "$T/h7.before" && ok "머리 인자: 끝 줄이 있는 파일은 바이트 그대로다" || no "머리 인자: 끝 줄이 있는 파일을 고쳤다"
+# 두 커밋이 모두 새 값으로 바뀐다 — 앞 커밋 A 와 새 두 커밋 NB · NJ 가 서로 다르다(HEAD~2 · HEAD~1 · HEAD)
+A20="$(g rev-parse HEAD~2)"; NB="$J0"; NJ="$J"
+F20="$RES/implement-plan-1-20.md"
+assert_eq "$([ -n "$A20" ] && [ "$A20" != "$NB" ] && [ "$A20" != "$NJ" ] && [ "$NB" != "$NJ" ] && echo distinct)" "distinct" "머리 인자: 세 커밋이 서로 다르다(양성 대조)"
+assert_eq "$(sync E1 implement-plan-1-20.md --role worker --bundle-at "$A20" --job-at "$A20")" "0" "머리 인자: 이을 파일을 만든다"
+cp "$F20" "$T/h20.before"
+assert_eq "$(sync E1 implement-plan-1-20.md --bundle-at "$NB" --job-at "$NJ")" "0" "머리 인자: 이어 쓰며 두 커밋을 모두 새 값으로"
+assert_eq "$(grep -c "^bundle_at: ${NB}\$" "$F20") $(grep -c "^job_at: ${NJ}\$" "$F20") $(grep -c "^role: worker\$" "$F20") $(grep -c "${A20}" "$F20")" "1 1 1 1" "머리 인자: bundle_at 은 NB · job_at 은 NJ 로 한 번씩, role 은 그대로, 앞 값은 head 줄에만 남는다"
+assert_eq "$(diff <(grep -v -e '^bundle_at:' -e '^job_at:' "$T/h20.before") <(grep -v -e '^bundle_at:' -e '^job_at:' "$F20") | wc -l | tr -d ' ')" "0" "머리 인자: 두 커밋 줄 밖은 바이트 그대로다(둘째 파일)"
 
 # ── 줄바꿈 꼴: 끝 줄바꿈이 없는 파일 · CRLF 파일 ───────────────────────────────
 F9="$RES/implement-plan-1-9.md"
