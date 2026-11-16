@@ -90,6 +90,7 @@ sed -i.bak "s/^bundle_at: .*/bundle_at: zz/" "$W/$E3/results/plan-plan-1-1.md" &
 g add -- "$E3/results" && g commit -qm "E3 깨진 머리" && g push -q origin feature/tm-e3 && g checkout -q main
 assert_eq "$(status "$T/s.json")" "$RC0" "C6: 머리 꼴이 깨진 결과 파일 — 죽지 않는다"
 assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음: plan-plan')]")" "[]" "C6: 읽지 못한 결과 파일에 「바뀜」 을 지어내지 않는다"
+assert_eq "$(js "$T/s.json" "[n.split(' — ')[0] for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다')]")" "['묶음 낡음을 재지 못했다: plan-plan-1-1.md']" "C6: 깨진 결과 파일은 재지 못했다로 알린다"
 # ⑨ 로드맵 밖 과제
 g checkout -q -b chore/tm-fix main
 printf '로드맵에 없는 일 하나\n' > "$T/said.txt"

@@ -188,7 +188,7 @@ class Reader:
     def stale(self, tip: str, block: dict) -> list:
         """도는 일꾼(단계 · 계획마다 가장 새 시도이고 끝 줄이 없는 결과 파일)의 묶음이 낡았는가 — 알림 줄들(AC23).
         머리 bundle_at 의 글과 지금 글이 다르면 낡았다(I4). 팀 규칙 파일은 리더가 읽는 ref 에서, 공통 규칙 파일과 그 일꾼의
-        역할 문서는 기본 브랜치에서 읽는다. 읽지 못한 결과 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다).
+        역할 문서는 기본 브랜치에서 읽는다. 머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
         git.blob · git.commit 만 쓴다 — 알림이 종료 코드를 바꾸지 않는다."""
         team, job = self.team, block["id"]
         if self.main is None:
@@ -205,9 +205,15 @@ class Reader:
                 continue
             text = self.git.blob(tip, team.result(job, stage, attempt, plan))
             result = team_files.parse_result(text) if text is not None else None
-            if result is None or result.problems or team_files.lost_lines(result) or result.end \
-                    or result.bundle_at is None:
+            if result is None:
                 continue
+            if result.bundle_at is None:   # 머리 값이 없거나 꼴이 아니다 — 잴 묶음이 없다
+                if not result.end:
+                    why = next((q for q in result.problems if "bundle_at" in q), "머리에 bundle_at 이 없다")
+                    out.append("%s: %s — %s" % (STALE_UNMEASURED, name, why))
+                continue
+            if result.problems or team_files.lost_lines(result) or result.end:
+                continue   # 다른 사유로 읽지 못한 파일은 받음 · 읽지 못함 알림(Q13)이 알린다 — 한 사실에 알림 하나
             at = self.git.commit(result.bundle_at)
             if at is None:
                 out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
