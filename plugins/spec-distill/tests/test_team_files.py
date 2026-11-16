@@ -49,6 +49,12 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
                 if "테스트 출력" in row:
                     self.assertTrue("싣지 않" in row or "싣지 말" in row, (role, row))
 
+    def test_leader_template_has_the_rules_check_line_only(self):   # U10 가 — 리더 틀의 할 일 끝 한 줄
+        line = "- 규칙을 고친 뒤 규칙 검사(team_rules.py check)를 돌린다."
+        self.assertEqual(F.role_template("leader").read_text(encoding="utf-8").split("## 하지 않을 일")[0].splitlines()[-2], line)
+        for role in ("designer", "writer", "worker"):
+            self.assertNotIn(line, F.role_template(role).read_text(encoding="utf-8"), role)
+
     def test_no_file_named_like_auto_loaded_memory(self):
         self.assertEqual([p.name for p in F.TEMPLATES.rglob(L.ROLE_DOC)], [])
 
