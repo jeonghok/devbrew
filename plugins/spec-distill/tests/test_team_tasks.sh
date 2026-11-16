@@ -304,6 +304,19 @@ put docs/shal-extra.md "예약 밖 파일" && g commit -qm "shal 예약 밖 파�
 g checkout -q main
 assert_eq "$(jget shal fix/shal stage) · $(js "$T/s.json" "[n for n in [j for j in r['jobs'] if j['id']=='shal'][0]['notes'] if '예약' in n]")" \
   "진행 중 · ['예약 밖 변경: docs/shal-extra.md']" "얕은 클론: 얕지 않은 레포에서 shal 은 예약 알림을 낸다(양의 짝 — 알림이 처음부터 없던 과제가 아니다)"
+# 가드: 얕은지 묻는 호출만 실패하는 얕지 않은 레포 — 예약 알림은 떨어지지 않고 검사 불가(3)다
+FG="$T/fakegit"; mkdir -p "$FG"; REAL_GIT="$(command -v git)"
+cat > "$FG/git" <<SH
+#!/bin/sh
+case " \$* " in *" --is-shallow-repository "*) echo "fatal: simulated shallow probe" >&2; exit 128;; esac
+exec "$REAL_GIT" "\$@"
+SH
+chmod +x "$FG/git"
+G_RC=0; (cd "$W" && PATH="$FG:$PATH" python3 "$RS" "$RM" --json) > "$T/guard.json" 2>/dev/null || G_RC=$?
+assert_eq "$G_RC" "3" "가드: 얕은지 읽지 못하면 검사 불가(3)다"
+assert_contains "$(js "$T/guard.json" "r['unknown_reasons']")" "git 읽기 실패 — git rev-parse 실패(rc 128): fatal: simulated shallow probe" "가드: 사유에 그 호출이 있다"
+assert_contains "$(js "$T/guard.json" "[n for j in r['jobs'] if j['id']=='shal' for n in j['notes']]")" "예약 밖 변경: docs/shal-extra.md" "가드: 얕지 않은 레포의 예약 알림은 떨어지지 않는다"
+assert_eq "$(js "$T/guard.json" "[j['reason'] for j in r['jobs'] if j['id']=='shal'][0].endswith('예약도 재지 않았다')")" "False" "가드: 구절은 진짜 얕은 클론에만 붙는다"
 SH="$T/shallow"
 git clone -q --no-local --depth 1 --no-single-branch "file://$T/origin.git" "$SH" && git -C "$SH" remote set-head origin main \
   || no "얕은 클론을 만들지 못했다"

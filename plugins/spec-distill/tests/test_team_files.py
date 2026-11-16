@@ -298,6 +298,12 @@ class _ShutGit:   # rev-parse 가 실패하는 git — 아무것도 읽지 못�
     def run(self, *args):
         return 128, ""
 
+    def run_err(self, *args):
+        return 128, "", ""
+
+    def fail(self, sub, rc, err):
+        pass
+
     def blob(self, rev, path):
         return None
 
@@ -311,9 +317,9 @@ class BranchesWithoutFixture(unittest.TestCase):   # 분기 × 픽스처 대조�
         asked = []
 
         class Counted(_ShutGit):
-            def run(self, *args):
+            def run_err(self, *args):
                 asked.append(args)
-                return super().run(*args)
+                return super().run_err(*args)
 
         reader = TS.Reader(Counted(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
         self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")

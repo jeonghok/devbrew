@@ -687,4 +687,22 @@ assert_eq "$(g rev-parse feature/tm-e1 origin/feature/tm-e1 feature/tm-e2 origin
 assert_eq "$(g for-each-ref --format='%(refname)' refs/heads/feature/tm-e1b refs/heads/feature/tm-e3 refs/remotes/origin/feature/tm-e1b refs/remotes/origin/feature/tm-e3)" "" \
   "알림 끝 상태: feature/tm-e1b · feature/tm-e3 이 없다(로컬 · origin)"
 assert_eq "$(st E1) · $(st E2) · $(st E3)" "구현 끝 · 결과 받음 · 대기" "알림 끝 상태: 단계 — E1 구현 끝 · E2 결과 받음 · E3 대기"
+# 이름 꼴: 흐름과 다른 꼴의 implement 결과 파일은 세지 않고 알린다 — 단계 · 근거 · 종료 코드는 그대로다
+g checkout -q main && restat || fail_step "이름 꼴 시작"
+assert_not_contains "$(notes E1) | $(notes E2)" "세지 않은 결과 파일" "이름 꼴: 꼴이 맞는 결과 파일만 있는 블록에는 알림이 없다(음의 짝)"
+SHAPE_BEFORE="$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)"
+g checkout -q feature/tm-e1 && sync E1 implement-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null \
+  && step "이름 꼴: 설계 흐름에 번호 없는 이름" || fail_step "이름 꼴: 설계 흐름"
+assert_eq "$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)" "$SHAPE_BEFORE" "이름 꼴: 설계 흐름에 번호 없는 이름 — 단계 · 근거 · 종료 코드는 그 파일을 두기 전과 같다"
+assert_contains "$(notes E1)" "세지 않은 결과 파일: implement-1.md — 설계 흐름 의 implement 결과 파일은 implement-plan-1-1.md 이다" \
+  "이름 꼴: 설계 흐름에 번호 없는 이름이면 맞는 이름을 알린다"
+back "$RECEIVED_AT" && restat
+assert_not_contains "$(notes E1)" "세지 않은 결과 파일" "이름 꼴: 그 파일을 치우면 알림도 사라진다"
+g checkout -q feature/tm-e2 && sync E2 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null \
+  && step "이름 꼴: 설계 없는 흐름에 번호 붙은 이름" || fail_step "이름 꼴: 설계 없는 흐름"
+assert_eq "$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)" "$SHAPE_BEFORE" "이름 꼴: 설계 없는 흐름에 번호 붙은 이름 — 단계 · 근거 · 종료 코드는 그대로다"
+assert_contains "$(notes E2)" "세지 않은 결과 파일: implement-plan-1-1.md — 설계 없는 흐름 의 implement 결과 파일은 implement-1.md 이다" \
+  "이름 꼴: 설계 없는 흐름에 번호 붙은 이름이면 맞는 이름을 알린다"
+back "$E2_AT" && restat
+g checkout -q main
 finish
