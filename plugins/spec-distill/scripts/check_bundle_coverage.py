@@ -865,12 +865,12 @@ def _read(path: str):
 
 
 def _intent_roadmap(sources_path: str):
-    """번호 파일과 같은 폴더 INTENT.md 머리의 roadmap. 읽지 못하거나 머리가 깨졌거나 키가 없으면 None."""
+    """번호 파일과 같은 폴더 INTENT.md 머리의 roadmap. 읽지 못하거나 머리가 깨졌거나 키가 없거나 레포 상대 경로가 아니면 None."""
     text, _exc = _read(os.path.join(os.path.dirname(sources_path), team_layout.INTENT_FILE))
     if text is None:
         return None
     try:
-        return team_files.intent_meta(text).get("roadmap") or None
+        return team_files.roadmap_rel(team_files.intent_meta(text))
     except FormatError:
         return None
 

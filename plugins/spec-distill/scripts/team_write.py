@@ -641,14 +641,14 @@ def _new_head(parsed: tuple, role: str, bundle_at: str, job_at: str) -> str:
     return "---\n" + "\n".join(lines) + "\n---\n\n"
 
 
-def _swap_head(text: str, commit: str) -> str:
-    """머리의 `head:` 줄을 commit 으로 — 머리 밖은 건드리지 않는다."""
+def _swap_head(text: str, commit: str, key: str = "head") -> str:
+    """머리의 `<key>:` 줄을 commit 으로 — 머리 밖은 건드리지 않는다."""
     lines = text.split("\n")
     for i in range(1, len(lines)):
         if lines[i].rstrip("\r") == "---":
             break
-        if lines[i].startswith("head:"):
-            lines[i] = "head: %s%s" % (commit, "\r" if lines[i].endswith("\r") else "")
+        if lines[i].startswith(key + ":"):
+            lines[i] = "%s: %s%s" % (key, commit, "\r" if lines[i].endswith("\r") else "")
             break
     return "\n".join(lines)
 
@@ -700,7 +700,15 @@ def cmd_job_sync(a, W) -> int:
         old, r = None, None
         text = _new_head(parsed, a.role, a.bundle_at, a.job_at)
         done.append("머리 만듦")
-    for line in new_lines:   # 진행 줄이 계획과 어긋나면 쓰지 않는다 — 읽는 쪽이 「진행 줄 깨짐」 으로 부르는 꼴이다
+    if r is not None and r.end is None and (a.bundle_at or a.job_at):   # 이어 쓰는 파일 — 머리의 묶은 커밋 둘을 새 값으로 고친다
+        if not (a.bundle_at and a.job_at):
+            raise W.Usage("이어 쓰는 결과 파일의 머리는 --bundle-at 과 --job-at 을 함께 줘야 고친다")
+        text = _swap_head(_swap_head(text, a.bundle_at, "bundle_at"), a.job_at, "job_at")
+        if text != old:
+            done.append("묶은 커밋 고침")
+    # 계획의 task 절 수보다 큰 번호와 task 절이 없는 계획만 거절한다.
+    # 전체가 앞 줄과 달라지는 것은 쓴다 — 읽는 쪽이 마지막 줄의 전체를 쓴다
+    for line in new_lines:
         if line.startswith("Task "):
             n = int(line[len("Task "):].split("/", 1)[0])
             if total == 0:

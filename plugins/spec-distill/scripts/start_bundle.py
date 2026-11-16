@@ -229,9 +229,13 @@ def _intent(git, commit: str, path: str, job: str, roadmap: str) -> str:
         meta = team_files.intent_meta(text)
     except FormatError as exc:
         raise Refused("%s 머리를 읽지 못했다 — %s" % (path, exc))
-    for key, want in (("job", job), ("roadmap", roadmap)):
-        if meta.get(key) != want:
-            raise Refused("%s 머리의 %s 가 인자와 다르다: %r — 인자 %s" % (path, key, meta.get(key), want))
+    try:
+        head_roadmap = team_files.roadmap_rel(meta)
+    except FormatError as exc:
+        raise Refused("%s 머리를 읽지 못했다 — %s" % (path, exc))
+    for key, got, want in (("job", meta.get("job"), job), ("roadmap", head_roadmap, roadmap)):
+        if got != want:
+            raise Refused("%s 머리의 %s 가 인자와 다르다: %r — 인자 %s" % (path, key, got, want))
     return text
 
 

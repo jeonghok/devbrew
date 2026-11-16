@@ -184,6 +184,14 @@ printf -- '---\ntype: job\njob: E1\nroadmap: %s\n---\n\n## 목표\n' "${RD}deep/
 (cd "$W/deep-lone" && python3 "$C" sources.md design.md) > "$T/out.txt" 2>&1
 assert_contains "$(cat "$T/out.txt")" "셀 수 없음 — S1 — team 로드맵의 자리가 아니다 — " "team 로드맵의 자리가 아니면 기각 행이 셀 수 없음"
 rm -rf "$W/${RD}deep" "$W/deep-lone"
+# INTENT.md 머리 roadmap 이 레포 밖으로 나가는 경로(..) — 그 자리에 진짜 team 로드맵이 있어도 읽지 않고 로드맵을 모른다고 센다
+mkdir -p "$W/out-lone/a/b" "$W/out-lone/outside"
+cp "$W/$RM" "$W/out-lone/outside/roadmap.md"
+cp "$T/lone/sources.md" "$T/lone/design.md" "$W/out-lone/a/b/"
+printf -- '---\ntype: job\njob: E1\nroadmap: ../../outside/roadmap.md\n---\n\n## 목표\n' > "$W/out-lone/a/b/INTENT.md"
+assert_eq "$( (cd "$W/out-lone/a/b" && python3 "$C" sources.md design.md) > "$T/out.txt" 2>&1; echo $?)" "0" "머리 roadmap 이 .. 경로: INTENT.md 없음과 같은 rc"
+assert_contains "$(cat "$T/out.txt")" "셀 수 없음 — S1 — 로드맵을 모른다" "머리 roadmap 이 .. 경로: 그 자리의 로드맵을 읽지 않고 로드맵을 모른다고 센다"
+rm -rf "$W/out-lone"
 # 커밋 트리를 읽는 repo(뿌리 없음)가 roadmaps_dir 을 넘기지 않으면 죽지 않고 사유를 낸다
 tree_repo_view() {  # tree_repo_view <specs_dir | -> <roadmaps_dir | -> — 뿌리 없는 repo 로 _roadmap_view 를 부른 값(- 는 None)
   (cd "$W" && python3 - "$S" "$RM" "$1" "$2") <<'PY'

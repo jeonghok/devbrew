@@ -264,6 +264,17 @@ assert_eq "$(wc -c < "$T/out.txt" | tr -d ' ')" "0" "사용법: 절대 경로 --
 assert_eq "$(job --job E1 --stage implement --plan 3)" "1" "과제: 블록 브랜치 칸에 그 계획 번째가 없으면 1"
 assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 그 계획의 브랜치 없음 — 표준 출력이 비었다"
 
+# 과제 브랜치의 INTENT.md 머리 job 이 인자와 다르다 — 거절(1), 되돌려 올려 뒤 걸음에 흘리지 않는다
+g checkout -q feature/tm-e1
+python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); assert "\njob: E1\n" in s; open(p, "w", encoding="utf-8", newline="").write(s.replace("\njob: E1\n", "\njob: E9\n", 1))' "$W/$E1/INTENT.md"
+g add -- "$E1/INTENT.md" && g commit -qm "머리 job 을 바꿈" && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage implement --plan 1)" "1" "과제: 브랜치 INTENT.md 머리의 job 이 다른 이름이면 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 머리 job 이 다름 — 표준 출력이 비었다"
+g checkout -q feature/tm-e1 && g revert --no-edit HEAD >/dev/null && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "과제: 머리 job 을 되돌리면 다시 0(양성 대조)"
+
 # 로컬이 앞선 과제 브랜치 · 갈라진 과제 브랜치
 g checkout -q feature/tm-e1 && put "$E1/local.md" "올리지 않은 고침" && g commit -qm "올리지 않음"
 LOCAL="$(g rev-parse feature/tm-e1)"
