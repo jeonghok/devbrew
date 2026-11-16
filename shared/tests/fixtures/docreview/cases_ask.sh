@@ -87,6 +87,17 @@ case_ask_material_decide_bundle() {
     "질문 재료: 보류의 고정 설명이 두 꼴이고 엔진이 실제로 하는 일을 적는다"
   assert_eq "$(cksum < "$d/docreview-state.md")" "$before" "질문 재료: 원장을 쓰지 않는다(읽기 전용)"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | cksum)" "$rb" "질문 재료: 부른 뒤에도 게이트 글이 같다"
+  assert_not_contains "$m" "질문으로 뜨는 행 없음" "질문 재료: 묶음이 있으면 묶음 0 의 머리 줄은 없다(양의 짝)"
+  rm -rf "$d"
+}
+case_ask_material_no_bundles() {               # case_ask_status_nothing_left 와 같은 준비 — 질문으로 뜨는 행이 없다
+  local d m; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-empty.txt" "$FX/codex-empty-ok.yaml" "$FX/recritic-empty.txt")" \
+    || { no "case_ask_material_no_bundles: 준비 실패"; return; }
+  m="$(mat "$d" --gate-file-result '{"ok": true, "shown": "~/x/gate-r1.md"}')"
+  assert_eq "$m" "질문으로 뜨는 행 없음 — 아래 두 줄은 다음 단계 질문의 본문에 싣는다
+상태: 이상 없음
+전문: ~/x/gate-r1.md" "질문 재료: 묶음이 0 이면 머리 줄과 다음 단계 질문이 싣는 「상태」 · 「전문」 두 줄만 낸다"
+  assert_contains "$(mat "$d")" "전문: 전문 파일을 쓰지 못했다 — 쓰는 명령을 부르지 않았다" "질문 재료: 묶음이 0 이어도 전문 줄은 쓰기 결과를 따른다"
   rm -rf "$d"
 }
 case_ask_material_length_mark_uses_width() {   # case_ask_material_decide_bundle 과 같은 준비, 환경 값 20
@@ -165,6 +176,7 @@ case_ask_material_extra_round() {              # case_cap_zero_open_two_stage �
   m="$(mat "$d")"
   assert_contains "$m" "(추가 라운드)" "질문 재료: 상한에 닿으면 추가 라운드 묶음"
   assert_contains "$m" "선택지: 추가 라운드 1회 열기 / 진행 옵션으로" "질문 재료: 열린 것이 0 이면 두 선택지"
+  assert_contains "$m" "고정 설명: 추가 라운드 1회 열기 = 상한 밖 리뷰를 한 번 더 돈다 | 얻음: 고친 글을 리뷰가 한 번 더 본다 · 내줌: 상한 밖 라운드를 한 번 더 돌아 다음 단계가 그만큼 늦어진다" "질문 재료: 추가 라운드 1회 열기의 고정 설명"
   assert_contains "$m" "고정 설명: 진행 옵션으로 = 추가 라운드 없이 다음 단계 질문으로 간다 | 얻음: 리뷰를 닫고 다음 단계 질문으로 간다 · 내줌: 마지막으로 고친 글은 리뷰가 다시 보지 않는다" "질문 재료: 진행 옵션으로의 고정 설명"
   rm -rf "$d"
 }
@@ -175,6 +187,7 @@ case_ask_material_approve_with_open_tail() {   # case_AC13_open_count_and_label 
   put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" >/dev/null; put_snap "$d" "$s" && py docreview_state.py begin-round --state-dir "$d" >/dev/null
   m="$(mat "$d")"; n="$(py docreview_state.py gate --state-dir "$d" | jgets 'd["open_total"]')"
   assert_contains "$m" "선택지: 열기 / 열지 않음" "질문 재료: 열린 것이 있으면 추가 라운드는 열기 · 열지 않음"
+  assert_contains "$m" "고정 설명: 열지 않음 = 추가 라운드를 열지 않는다 — 남은 항목은 이 게이트에서 정한다 | 얻음: 리뷰를 이 라운드에서 닫는다 · 내줌: 마지막으로 고친 글은 리뷰가 다시 보지 않는다" "질문 재료: 열지 않음의 고정 설명"
   assert_contains "$m" "승인 선택지 고정 설명: 열린 지적 ${n}개를 두고 진행 = 열린 지적 ${n}개를 둔 채 다음 단계 질문으로 간다 | 얻음: 리뷰를 닫고 다음 단계로 간다 · 내줌: 열린 지적 ${n}개가 풀리지 않은 채 넘어간다" "질문 재료: 승인 선택지의 고정 설명이 꼬리에 있다"
   rm -rf "$d"
 }

@@ -171,7 +171,7 @@ pg_exc_ln="$(grep -n -x -F -- "$PG_EXC" "$PG" | head -1 | cut -d: -f1)"
 if [ -n "$pg_unknown_ln" ] && [ -n "$pg_exc_ln" ] && [ "$pg_exc_ln" = "$((pg_unknown_ln + 1))" ]; then
   ok "proceed-gate.md: 「알 수 없음」 규칙 바로 다음 줄이 그 예외 문장(전체 줄)이다 — 정본"
 else no "proceed-gate.md: 「알 수 없음」 규칙 다음 줄에 예외 문장(전체 줄)이 없다 (규칙=${pg_unknown_ln:-없음} 예외=${pg_exc_ln:-없음})"; fi
-assert_contains "$avail_line" "「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 경고 수에 들지 않는다"
+assert_contains "$avail_line" "질문의 경고 줄에 잇지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 질문의 경고 줄에 들지 않는다"
 assert_not_contains "$B1" '빈 값(`""`)으로 둔다' "finishing.md B-1: 불러오지 않았을 때 빈 경로로 스크립트를 부르지 않는다(옛 지시가 없다)"
 
 # ── 3. 손 절차 머리 · 걸음 7 ─────────────────────────────────────────────────

@@ -645,6 +645,8 @@ python3 "$PR/scripts/docreview_state.py" ask-material --state-dir "$STATE_DIR" -
 ```
 <!-- ask-material:end -->
 
+**라운드 게이트의 경고 줄.** 라운드 게이트 질문에도 brief 경고 원장의 짧은 줄(`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄)을 「상태」 줄 뒤에 「 · 」로 잇는다. 그 줄이 있으면(경고가 있으면) 「상태」 줄의 「이상 없음」·「경고 없음」은 쓰지 않는다.
+
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
 `pm-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
 확정 후보와 함께 한 번에 묻는다. 1단계가 닫히면(두 단계가 아니면 승인 게이트에 도달한 그 시점에)
@@ -736,6 +738,8 @@ G1–G7 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 2. **냉독 요약 전문 + gap 목록**(세 조각), 또는 냉독이 돌지 못한 사유.
 3. **degrade** — 아래 채널 전부를 한 줄씩.
 
+**다음 단계 질문의 두 줄 — 돌아가기 직전에 한 번.** 냉독이 끝난 뒤 Step B 로 돌아가기 직전에 `## 게이트` 의 질문 재료 펜스를 한 번 더 돈다 — 두 인자의 대입 줄과 `channel_lines` 대입(아래 `## degrade 채널` 의 brief 경고 원장 줄 전체)을 붙인다. Step B 의 다음 단계 질문의 경고 줄과 「전문」 줄은 이 출력에서 받으므로, 그 「상태」 · 「전문」 줄을 위 셋과 함께 넘긴다. 질문으로 뜨는 행이 없으면 펜스는 머리 줄(「질문으로 뜨는 행 없음 — …」)과 그 두 줄만 낸다. Step B 의 참고 목록 펜스(B-A)가 표지를 풀기 때문에 이 한 번이 표지를 푸는 펜스보다 먼저 돈 마지막 출력이다 — B-A 뒤에는 이 펜스를 돌리지 않고, 그 때문에 원장 열기를 다시 돌리지도 않는다.
+
 돌아가기 전에 같은 셋을 audit(`$AUDIT`) §5 의 `### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)` 에 템플릿
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
@@ -760,6 +764,6 @@ Step B(`pm-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이
 codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`. Claude 쪽 값은 그 라운드 선택 펜스가 낸 `CRITIC_AGENT=` 와
 advisory 에서 온다.
 
-Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓴다. 질문 본문은 정본(`proceed-gate.md`)의 본문 규칙대로 싣는다. `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄을 질문의 경고 줄에 잇고, 그 원장의 줄 전체를 `channel_lines` 에 넣는다. 전부 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는
+Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓴다. 질문 본문은 정본(`proceed-gate.md`)의 본문 규칙대로 싣는다. `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄을 질문의 경고 줄에 잇고, 그 원장의 줄 전체는 `## Step B 로 돌아간다` 의 마지막 질문 재료 펜스에 `channel_lines` 로 넣는다 — Step B 에는 그 값을 받을 펜스가 없다. 전부 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는
 **채널을 실제로 읽었다는 주장**이므로 읽지 않은 채 쓰지 않는다. `get` 이 실패하면(`ok: false`) 원장은 비어 있는
 것이 아니라 **알 수 없는** 것이므로 `degrade 원장 판독 불가 — <get 이 낸 reason>` 을 한 줄로 쓴다.

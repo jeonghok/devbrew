@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md shared/docreview/references/reviewing-document.md
+# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_ask.py shared/docreview/scripts/nofollow_write.py plugins/spec-distill/scripts/ledger_marker.py
 #
-# 리뷰 결정 질문이 엔진의 질문 재료를 싣는다(present-tradeoffs AC7 · AC3).
+# 리뷰 결정 질문이 엔진의 질문 재료를 싣는다(present-tradeoffs AC7 · AC3 · AC8).
 #   정적 — 진입 skill 셋에 질문 재료 펜스가 있고, 표지 확인이 전문 파일 쓰기보다 앞이며, 8단계 재진술이
 #          새 문장이다. 절차서 8단계가 질문 꼴 · 선택지 설명 · 줄일 때의 규칙 넷 · 기타 칸의 「전문」을 적는다.
+#          다음 단계 질문을 띄우는 자리가 두 줄을 표지를 푸는 펜스보다 먼저 돈 질문 재료 펜스에서 받는다고 적는다.
 #   행동 — spec-review 의 펜스 글을 그대로 잘라 원장이 열린 설계문서로 돌린다(표지 주인 · 채널 줄 ·
-#          남의 표지 · 전문 파일 자리가 링크).
+#          남의 표지 · 전문 파일 자리가 링크 · 질문 행 없는 승인 게이트에서 참고 목록 펜스 앞).
+#          펜스가 부르는 엔진 · writer · 표지 스크립트도 이 테스트가 실제로 돌린다(그 출력을 받는 쪽의 유일한 시험).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
-  echo "shared/docreview/references/reviewing-document.md"; exit 0
+  echo "shared/docreview/references/reviewing-document.md"
+  echo "plugins/spec-distill/references/proceed-gate.md"
+  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
+  echo "shared/docreview/scripts/docreview_state.py"
+  echo "shared/docreview/scripts/docreview_ask.py"
+  echo "shared/docreview/scripts/nofollow_write.py"
+  echo "plugins/spec-distill/scripts/ledger_marker.py"; exit 0
 fi
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
@@ -50,6 +58,23 @@ for lit in '질문마다 엔진의 질문 재료(`docreview_state.py ask-materia
   assert_eq "$(grep -cF -- "$lit" "$PROC")" "1" "절차서: ${lit:0:24}…"
 done
 [ -L "$REPO_ROOT/plugins/spec-distill/references/reviewing-document.md" ] && ok "절차서의 플러그인 쪽은 정본을 가리키는 링크다" || no "절차서의 플러그인 쪽이 링크가 아니다"
+
+# 다음 단계 질문의 두 줄 — 표지를 푸는 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서(AC8 · §4-3)
+PG="$SD/references/proceed-gate.md"; FIN="$SD/skills/pm-interview/references/finishing.md"
+assert_eq "$(grep -cF '엔진의 「상태」 줄과 「전문」 줄은 표지를 푸는 펜스(참고 목록 · 계수 기록)보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$PG")" "1" "정본: 두 줄의 출처와 순서"
+assert_eq "$(grep -cF '경고 줄과 「전문」 줄은 표지를 푸는 펜스(아래 참고 목록 펜스)보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$SR")" "1" "spec-review: 2단계 · 승인 질문 하나의 두 줄 출처"
+assert_eq "$(grep -cF '참고 목록 펜스 뒤에는 질문 재료 펜스를 돌리지 않는다' "$SR")" "1" "spec-review: 표지를 푼 뒤에는 그 펜스를 돌리지 않는다"
+assert_eq "$(grep -cF 'Step B 로 돌아가기 직전에 `## 게이트` 의 질문 재료 펜스를 한 번 더 돈다' "$RB")" "1" "reviewing-brief: 돌아가기 직전의 마지막 질문 재료 펜스"
+assert_eq "$(grep -cF '마지막 질문 재료 펜스에 `channel_lines` 로 넣는다' "$RB")" "1" "reviewing-brief: 원장 줄 전체가 그 한 번에 실린다"
+assert_eq "$(grep -cF '경고 줄과 「전문」 줄은 표지를 푸는 이 계수 기록 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$RF")" "1" "request-framing: 확정 게이트의 두 줄 출처"
+assert_eq "$(grep -cF '돈 질문 재료 펜스(B-A 가 표지를 풀기 전의 마지막 출력)의 「상태」 줄' "$FIN")" "1" "인터뷰 끝 B-2: 엔진 줄의 출처"
+assert_eq "$(grep -cF '「전문」 줄은 그 마지막 질문 재료 출력의 「전문:」 줄 그대로입니다' "$FIN")" "1" "인터뷰 끝 B-2: 전문 줄의 출처"
+assert_eq "$(grep -cF '2단계 질문의 「상태」 · 「전문」 줄은 표지를 푸는 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$PROC")" "1" "절차서 8단계: 두 줄의 출처"
+assert_eq "$(grep -cF '질문 재료 펜스가 0 이 아닌 코드로 끝나면' "$PROC")" "1" "절차서 8단계: 질문 재료가 실패했을 때의 길"
+assert_eq "$(grep -cF '그 문구는 빼고 그 채널의 짧은 줄만 싣는다' "$PROC")" "1" "절차서 8단계: 경고 없는 문구와 다른 채널 줄이 부딪힐 때"
+for f in "$RB" "$RF"; do
+  assert_eq "$(grep -cF '그 줄이 있으면(경고가 있으면) 「상태」 줄의 「이상 없음」·「경고 없음」은 쓰지 않는다.' "$f")" "1" "$(basename "$(dirname "$f")"): 라운드 게이트의 경고 없는 문구 빼기"
+done
 
 # ── 행동 — spec-review 의 펜스를 원장이 열린 설계문서로 돌린다 ─────────────────────────────
 fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜스 본문
@@ -118,5 +143,28 @@ assert_eq "$rc" "0" "링크 자리: 펜스가 rc 0 으로 끝난다"
 assert_grep "$out" '^전문: 전문 파일을 쓰지 못했다 — gate_file_write_failed' "링크 자리: 전문 줄이 쓰지 못한 사유로 시작한다"
 assert_grep "$out" '^질문 1/' "링크 자리: 질문 재료는 그대로 나온다"
 assert_eq "$(cat "$T/outside.md")" "바깥 글" "링크 자리: 링크 너머의 파일에 쓰지 않았다(채널 줄도 덧붙이지 않았다)"
+
+# 5 — 다음 단계 질문이 받는 두 줄: 원장 열기 → 지적 없는 라운드 → 질문 재료 펜스 → 참고 목록 펜스(표지를 푼다)
+repo2="$T/repo2"; mkdir -p "$repo2/docs" && git -C "$repo2" init -q
+doc2="$repo2/docs/b-design.md"; cp "$REPO_ROOT/shared/tests/fixtures/docreview/design-sample.md" "$doc2"
+run2() { ( cd "$repo2" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$OWNER" DEVBREW_SPEC_DISTILL_SESSION_ID="$OWNER" \
+             bash -c "spec_path='$doc2'
+$1" 2>&1 ); }
+assert_eq "$(run2 "$(fence "$SR" ledger-open)" | tail -n 1)" "ledger-open: HELD" "다음 단계 준비: 원장 열기가 표지를 잡았다"
+D2="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$repo2/.claude/spec-distill" --doc "$doc2")"
+python3 "$SD/scripts/docreview_state.py" init --state-dir "$D2" --doc "$doc2" --profile "$SD/references/docreview-profiles/design-doc.md" >/dev/null
+python3 "$SD/scripts/docreview_state.py" begin-round --state-dir "$D2" >/dev/null
+out="$(run2 "$(am_body "$SR")")"; rc=$?
+assert_eq "$rc" "0" "다음 단계: 표지를 쥔 채 돈 질문 재료 펜스가 rc 0 으로 끝난다"
+assert_not_grep "$out" '^질문 [0-9]+/' "다음 단계 전제: 질문으로 뜨는 행이 없다"
+assert_grep "$out" '^상태: ' "다음 단계: 묶음이 0 이어도 「상태」 줄이 나온다"
+assert_grep "$out" '^전문: [^ ]*gate-r1\.md$' "다음 단계: 묶음이 0 이어도 전문 파일 경로가 「전문」 줄로 나온다"
+adv="$(run2 "$(fence "$SR" advice-display)")"
+assert_not_grep "$adv" '^전문: ' "다음 단계: 참고 목록 펜스는 「전문:」 으로 시작하는 줄을 내지 않는다(전문 줄의 출처는 질문 재료 펜스뿐)"
+m_out="$(python3 "$SD/scripts/ledger_marker.py" check --dir "$D2" --session "$OWNER" 2>&1)"; m_rc=$?
+[ "$m_rc" -ne 0 ] && printf '%s' "$m_out" | grep -q '표지 없음' \
+  && ok "다음 단계: 참고 목록 펜스 뒤 표지가 풀린 채 끝난다" || no "다음 단계: 참고 목록 펜스 뒤에도 표지가 남았다(rc ${m_rc})"
+run2 "$(am_body "$SR")" >/dev/null; rc=$?
+assert_eq "$rc" "3" "다음 단계: 표지가 풀린 뒤의 질문 재료 펜스는 rc 3 — 그래서 두 줄은 참고 목록 펜스보다 먼저 받는다"
 
 finish

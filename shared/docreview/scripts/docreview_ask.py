@@ -67,6 +67,8 @@ EXTRA_CHOICES_OPEN = (("열기", "extra_open"), ("열지 않음", "extra_skip"))
 APPROVE_TAIL_HEAD = "승인 선택지 고정 설명: "
 FULL_TEXT_HEAD = "전문: "
 FULL_TEXT_FAILED = "전문: 전문 파일을 쓰지 못했다 — "
+# 묶음이 0 일 때의 머리 줄 — 질문이 아니라는 것과 아래 두 줄(「상태」 · 「전문」)을 받는 곳을 밝힌다.
+NO_BUNDLE_HEAD = "질문으로 뜨는 행 없음 — 아래 두 줄은 다음 단계 질문의 본문에 싣는다"
 
 
 def _fold(text) -> str:
@@ -182,8 +184,10 @@ def render_material(bundles: list, status: str, full_text: str, width: int, tail
 
     묶음 dict 의 키: `kind`(`full` · `short` · `extra`) · `id` · `summary` · `choices`(라벨 목록) ·
     `replacement` · `if_unfixed`(없으면 None) · `notes`(덧줄) · `fixed`((라벨, 고정 설명 키) 목록) ·
-    `keep_label`(고정 얻음 라벨 또는 None) · `render`(짧은 묶음의 렌더 한 줄)."""
-    out = []
+    `keep_label`(고정 얻음 라벨 또는 None) · `render`(짧은 묶음의 렌더 한 줄).
+
+    묶음이 0 이면 머리 줄(`NO_BUNDLE_HEAD`)과 「상태」 · 「전문」 두 줄을 낸다 — 다음 단계 질문이 싣는 줄이다."""
+    out = [] if bundles else ["\n".join([NO_BUNDLE_HEAD, "상태: " + status, full_text])]
     for i, b in enumerate(bundles, 1):
         lines = ["질문 %d/%d (%s)" % (i, len(bundles), "추가 라운드" if b["kind"] == "extra" else b["id"]),
                  "본문: " + _fold(b["summary"]), "상태: " + status, full_text]

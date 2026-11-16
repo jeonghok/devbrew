@@ -451,7 +451,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 
   분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
 
-- **superpowers 가용 시**: 판을 확인한 뒤 B-2 proceed 게이트 제시. 이 세션에서 superpowers skill 을 불러왔으면 아래 판 확인 펜스를 한 번 돌린다 — `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다. 불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다) B-2 게이트 앞 글(목록 4)에 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 한 줄을 쓴다. 이 줄은 경고가 아니다 — 「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다.
+- **superpowers 가용 시**: 판을 확인한 뒤 B-2 proceed 게이트 제시. 이 세션에서 superpowers skill 을 불러왔으면 아래 판 확인 펜스를 한 번 돌린다 — `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다. 불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다) B-2 게이트 앞 글(목록 4)에 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 한 줄을 쓴다. 이 줄은 경고가 아니다 — 질문의 경고 줄에 잇지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -495,11 +495,11 @@ B-1 의 superpowers 판 확인 한 줄(펜스를 돌렸고 「같다」가 아�
 `advisory[]` 원문은 하나하나가 `gate --render` 첫 줄의 경고 줄 중 하나에 대응하므로, 경고(목록 4)에는 그 첫 줄의
 경고 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않습니다. 질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.
 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 그 줄들을 따로 쓴다.
-질문의 경고 줄에 잇는 짧은 줄은 채널마다 이렇게 얻는다 — 엔진은 질문 재료의 「상태」 줄, brief 경고 원장과 두 번째 채널 파일은 `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄(`$STATE` · `$DEGRADE_FALLBACK_FILE` 은 `reviewing-brief` 의 상태 블록이 정한 값), 구조 검사의 참고 줄(`check_brief.py gate` 의 `advisories`)은 「구조 검사 참고 N개」, superpowers 판 확인은 그 줄이 「같다」가 아닐 때만 「superpowers 판 다름」이다. 「알 수 없음」 줄은 경고 수에 넣지 않고 지금처럼 따로 싣는다. 스크립트가 낸 줄은 글자를 바꾸지 않는다.
+질문의 경고 줄에 잇는 짧은 줄은 채널마다 이렇게 얻는다 — 엔진은 `reviewing-brief` 가 Step B 로 돌아가기 직전에 돈 질문 재료 펜스(B-A 가 표지를 풀기 전의 마지막 출력)의 「상태」 줄, brief 경고 원장과 두 번째 채널 파일은 `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄(`$STATE` · `$DEGRADE_FALLBACK_FILE` 은 `reviewing-brief` 의 상태 블록이 정한 값), 구조 검사의 참고 줄(`check_brief.py gate` 의 `advisories`)은 「구조 검사 참고 N개」, superpowers 판 확인은 그 줄이 「같다」가 아닐 때만 「superpowers 판 다름」이다. 「알 수 없음」 줄은 경고 수에 넣지 않고 지금처럼 따로 싣는다. 스크립트가 낸 줄은 글자를 바꾸지 않는다.
 「이상 없음」·「경고 없음」은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.
 superpowers 판 채널만 예외다(정본 `proceed-gate.md` 의 «불러오지 않았으면 읽지 않는 채널») — 이 세션이 superpowers skill 을 불러오지 않았으면 읽지 않고 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 줄을 그대로 따로 보이며, 그 줄은 경고 수에 들지 않지만 확인했다는 뜻이 아니다 — 없는 것과 확인 못 한 것은 다르다.
 
-모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다. 질문 본문에는 결정 하나와 경고 줄 · 「전문」 줄을 정본(`proceed-gate.md`)의 본문 규칙대로 싣습니다.
+모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다. 질문 본문에는 결정 하나와 경고 줄 · 「전문」 줄을 정본(`proceed-gate.md`)의 본문 규칙대로 싣습니다. 「전문」 줄은 그 마지막 질문 재료 출력의 「전문:」 줄 그대로입니다 — B-A 참고 목록 펜스의 머리 줄 안의 글이 아닙니다. B-A 가 표지를 푼 뒤에는 질문 재료 펜스를 돌리지 않고 그 때문에 원장 열기를 다시 돌리지도 않습니다 — 앞서 받은 두 줄을 씁니다. 리뷰가 돌지 않았으면(skip · 예외 경로) 「전문」 줄은 없습니다.
 
 `check_brief.py gate` 의 `advisories` 도 게이트 앞 글(목록 4)에 씁니다 — `coverage-mapper 0
 (unavailable: …)` 은 게이트가 관측할 수 없는 사실(실제 dispatch 여부)을 사람에게 넘기는
