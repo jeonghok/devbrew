@@ -82,6 +82,8 @@ assert_contains "$IMPL0" '과제 경계마다 바꾼 파일을 코퍼스로 읽�
 # 지휘자 수리 5 — 구현 틀의 마지막 전체 리뷰가 과제 사이 이음매와 계획이 쓴 테스트 코드도 묻는다
 IMPL="$(printf '%s\n' "$TPL" | awk '$0=="### 구현 agent"{f=1;next} f&&/^### /{exit} f')"
 assert_contains "$IMPL" '과제 사이 이음매(끝에서 끝 흐름 · 종료 코드를 받는 쪽 · 상태 가정)와 계획이 쓴 테스트 코드도 묻게 한다' "구현 틀: 마지막 전체 리뷰에 이음매 · 계획이 쓴 테스트 코드"
+USED='설계문서 ## 있는 것 검토 절이 고른 것을 실제로 썼는지(같은 것을 다시 만들지 않았는지)도 묻게 한다.'
+assert_contains "$IMPL" "$USED" "구현 틀: 마지막 전체 리뷰가 고른 것을 썼는지 묻는다(같은 글자: test_end_gates.sh)"
 assert_not_contains "$TXT" 'CLAUDE_PLUGIN_ROOT' "플러그인 루트 토큰을 쓰지 않는다(<SD> 자리표)"
 # 부재 락 — 옛 결정(실행 방식 고정 · Push 후 PR · 계획 검토 무대기)
 bad="$(printf '%s\n' "$TXT" | grep -nE 'Push 후 PR|푸시 후 PR|계획 검토는 기다리지 않|언제나 subagent|항상 subagent' || true)"
