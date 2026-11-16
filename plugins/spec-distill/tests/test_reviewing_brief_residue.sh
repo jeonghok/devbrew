@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/build_brief_bundle.py shared/docreview/scripts/docreview_route.py
 #
 # `reviewing-brief` 의 codex 게이트 fence · `## 입력` · `## 번들` 블록을 **잘라내 차가운 셸
 # (`env -i`)에서 실행**해 디스크 사후상태를 잰다. 읽어서 판정하지 않는다 — 읽으면 옳아 보이는
@@ -23,6 +23,10 @@
 #     `## 번들` 이 머리 없이 들어온 상대경로로도 조립되는가, 진입 게이트 실패가 직전 번들을 세 층으로
 #     치우는가(M2), 상태 디렉토리 부재의 사유를 가르는가, 따로 돈 degrade-append 의 record 가 원장 또는
 #     두 번째 채널에 닿는가(M3).
+#   · K 모델 판단 건너뜀 — fence 의 리터럴 입력에 이유를 적은 라운드가 직전 산출물을 중화하고 러너를 부르지
+#     않으며 사유(model_skip)와 이유를 공시하는가, 입력이 비면 러너가 불리는가(양의 짝), 다른 사유(kill switch ·
+#     번들 부재 · 중화 불가)와 겹치면 그 사유가 남는가, 이유 글이 셸로 새지 않는가. bash 와 zsh 로.
+#   · Q 재비판을 건너뛴 라운드(`finalize --recritic-skipped`)를 엔진이 게이트 첫 줄 경고로 내는가(brief 프로필).
 # 감지기와 kill switch 설정은 리포 정본을 복사해 쓰고 러너만 스텁이다. PATH 는 진짜 `$PATH` 를
 # 이어붙이지 않는다 — 실제 codex 로 새는 경로를 막는다. 리포의 배포 지점은 건드리지 않는다.
 set -u
@@ -37,6 +41,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
   echo "shared/docreview/scripts/docreview_state.py"
   echo "plugins/spec-distill/scripts/build_brief_bundle.py"
+  echo "shared/docreview/scripts/docreview_route.py"
   exit 0
 fi
 
@@ -155,7 +160,9 @@ stale_into() {   # stale_into <path> — 직전 라운드가 정상으로 끝낸
 SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb09lock
       rb10down rb11ctlx rb12trnc rb13pred rb21kill rb22noin rb23nopl rb24nobd rb25rc3x
       rb26nodt rb27lock rb30plce rb31swep rb32swpe rb40bndl rb41bndf rb42bnde rb43bndk
-      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd"
+      rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd
+      rb60mskp rb61mnsk rb62mwsp rb63mkil rb64mnbd rb65mlck rb66mhst rb67mhse rb68mtwo rb69mdwn
+      rb70mske rb71mzsk rb72mzno rb73mzhs rb74mzki rb75menv rb76mxpg rb77mztp"
 bad=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 || bad="$bad $s"
@@ -178,7 +185,7 @@ fire() {
   ( cd "$home" && env -i PATH="$bin:$BASE" HOME="$home" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
       CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
       STUB_WRITE="$sw" STUB_RC="$rc" STUB_ARGV_OUT="$SCRATCH/$sid.argv" \
-      "$@" bash "${WITH_FENCE:-$FENCE}" ) >/dev/null 2>"$SCRATCH/$sid.err"
+      "$@" "${WITH_SH:-bash}" "${WITH_FENCE:-$FENCE}" ) >/dev/null 2>"$SCRATCH/$sid.err"
   printf '%s' "$yml"
 }
 
@@ -643,4 +650,176 @@ chmod 644 "$SF_M3"
 { [ "$FB_M3" != /brief-degrade-fallback.txt ] && grep -q 'probe-fallback-q2' "$FB_M3" 2>/dev/null && ! grep -q 'probe-fallback-q2' "$SF_M3"; } \
   && ok "M3: 원장이 쓰기 불가면 따로 돈 블록의 record 가 머리가 다시 도출한 두 번째 채널 파일에 닿는다" \
   || no "M3: 원장 쓰기 실패의 record 가 두 번째 채널 파일($FB_M3)에 없다 — \`>> \"\"\` 로 사라졌다"
+
+# ── K) 모델 판단 건너뜀 — 펜스의 리터럴 입력에 이유를 적은 라운드 ─────────────────────────────
+# 모델이 하는 그대로 한다: 여는 줄과 닫는 줄 사이의 빈 줄을 이유로 바꾼다(따옴표 없이). 자리의 모양이
+# 다르면 fill_skip 이 rc 1 이고 아래 칸은 재지 않는다.
+#   K1 codex 를 «쓸 수 있는» 환경 + 직전 산출물 → 산출물 중화 · 러너 미호출 · 사유 줄(model_skip + 이유)
+#   K2 양의 짝 — 같은 환경에서 입력을 비워 두면(공백뿐이어도) 러너가 불리고 그 산출물이 남는다
+#   K3 끄기 스위치 · 번들 부재와 겹침 → 그 사유가 남는다 · K4 중화 실패와 겹침 → residue_unclearable 이 남는다
+#   K5 이유 글의 따옴표 · 명령 치환 · 역따옴표 · 역슬래시가 셸로 새지 않고 글자 그대로 실린다(계측기 양성 대조 포함)
+#   K6 여러 줄 이유는 한 줄로 실린다 · KD 하류가 codex 부재로 읽는다 · KE errexit · KZ zsh
+SKIP_OPEN="IFS= read -r -d '' model_skip_codex <<'DEVBREW_MODEL_SKIP_EOF' || true"
+fill_skip() {   # fill_skip <이유> <out> [원본 펜스] → 그 이유를 적은 펜스. 입력 자리의 모양이 다르면 rc 1
+  python3 -I - "${3:-$FENCE}" "$1" "$SKIP_OPEN" > "$2" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+hits = [i for i, l in enumerate(lines) if l == sys.argv[3]]
+if len(hits) != 1 or lines[hits[0] + 1 : hits[0] + 3] != ["", "DEVBREW_MODEL_SKIP_EOF"]:
+    sys.exit(1)
+lines[hits[0] + 1] = sys.argv[2]
+sys.stdout.write("\n".join(lines))
+PY
+}
+skip_lines() { grep -F 'codex 리뷰를 건너뛰었다 (reason: ' "$SCRATCH/$1.err" 2>/dev/null || true; }   # skip_lines <sid>
+hostile() {   # hostile <표지 접두> → 따옴표 · 명령 치환 · 역따옴표 · 변수 · 역슬래시(\n · \c 글자)가 든 이유 한 줄
+  printf 'a"b"c '"'"'d'"'"' $(touch %s-1) `touch %s-2` $HOME 정규식 \\n\\d \\c 끝' "$1" "$1"
+}
+WHY='작은 일이다 — 문구 한 줄 수정'
+SKIPF="$SCRATCH/fence-skip.sh"; SKIPF_E="$SCRATCH/fence-skip-errexit.sh"; SKIPF_WS="$SCRATCH/fence-skip-blank.sh"
+SKIPF_H="$SCRATCH/fence-skip-hostile.sh"; SKIPF_HE="$SCRATCH/fence-skip-hostile-errexit.sh"; SKIPF_2="$SCRATCH/fence-skip-twoline.sh"
+if fill_skip "$WHY" "$SKIPF" && fill_skip "$(printf '  \t ')" "$SKIPF_WS" && fill_skip "$(hostile "$SCRATCH/pwned-k")" "$SKIPF_H" \
+   && fill_skip "$(printf '첫 줄\n둘째 줄')" "$SKIPF_2" && bash -n "$SKIPF" && bash -n "$SKIPF_H" && bash -n "$SKIPF_2" \
+   && [ "$(grep -cF "$WHY" "$SKIPF")" = "1" ] && ! cmp -s "$FENCE" "$SKIPF"; then
+  ok "K 추출: 건너뜀 입력(여는 줄 · 빈 줄 · 닫는 줄)이 펜스에 한 번 있고 빈 줄을 이유로 바꾼 펜스가 bash -n 을 통과한다"
+  { echo 'set -euo pipefail'; cat "$SKIPF"; } > "$SKIPF_E"; { echo 'set -euo pipefail'; cat "$SKIPF_H"; } > "$SKIPF_HE"
+
+  k_skipped() {   # k_skipped <라벨> <sid> <yml> <기대 사유> <사유 줄에 있어야 할 글> — 중화 · 러너 미호출 · 사유 줄 하나
+    local label="$1" sid="$2" yml="$3" why="$4" has="$5" lines
+    cleared "$yml" \
+      && ok "$label: 직전 라운드 codex 산출물이 중화됐다 ($(state_of "$yml"))" \
+      || no "$label: 산출물이 $(state_of "$yml") 로 남았다 — 건너뛴 라운드가 직전 판정(또는 불린 러너의 것)을 이번 것으로 남긴다"
+    [ ! -e "$SCRATCH/$sid.argv" ] \
+      && ok "$label: 러너가 불리지 않았다" || no "$label: 러너가 불렸다 ($(tr '\n' '|' < "$SCRATCH/$sid.argv"))"
+    lines="$(skip_lines "$sid")"
+    assert_eq "$(printf '%s\n' "$lines" | grep -c .)" "1" "$label: 건너뜀 공시가 한 줄이다"
+    assert_contains "$lines" "codex 리뷰를 건너뛰었다 (reason: ${why})" "$label: 사유가 ${why} 다"
+    assert_contains "$lines" "$has" "$label: 그 줄이 적은 이유를 글자 그대로 싣는다"
+  }
+  k_ran() {   # k_ran <라벨> <sid> <펜스> <셸> — 같은 환경에서 러너가 인자 넷으로 불리고 그 산출물이 남는다(건너뜀 공시 없음)
+    local label="$1" sid="$2" yml
+    yml="$(WITH_SH="$4" WITH_FENCE="$3" fire "$sid" "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+    { [ "$(grep -c . "$SCRATCH/$sid.argv" 2>/dev/null || echo 0)" = "4" ] && grep -q "$NEW" "$yml" 2>/dev/null && [ -z "$(skip_lines "$sid")" ]; } \
+      && ok "$label: 같은 환경에서 러너가 인자 넷으로 불리고 이번 라운드 산출물이 남는다 — 건너뜀 칸의 미호출은 입력 때문이다" \
+      || no "$label: 러너가 불리지 않았거나($(state_of "$SCRATCH/$sid.argv") argv) 산출물이 없거나($(state_of "$yml")) 건너뜀 공시가 났다 — 건너뜀 칸이 공허하다"
+    assert_not_contains "$(cat "$SCRATCH/$sid.err" 2>/dev/null)" "모델 판단" "$label: 모델 판단 문구가 나오지 않는다"
+  }
+
+  # K1 — codex 가용 · 직전 산출물 있음 · 이유 있음. 러너 스텁은 불리면 이번 라운드 마커를 쓴다(STUB_WRITE=ok).
+  yml="$(WITH_FENCE="$SKIPF" fire rb60mskp "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K1(모델 건너뜀)" rb60mskp "$yml" model_skip "모델 판단으로 건너뛰었다 — 이유: ${WHY}"
+  # K2 — 양의 짝: 같은 환경 · 입력 없음 → 러너가 불리고 그 산출물이 남는다. 공백뿐인 입력도 같다.
+  k_ran "K2(입력 없음)" rb61mnsk "$FENCE" bash
+  k_ran "K2(공백뿐인 입력)" rb62mwsp "$SKIPF_WS" bash
+  # 입력은 펜스의 리터럴뿐이다 — 같은 이름의 환경 변수가 건너뜀을 고르지 못한다.
+  yml="$(fire rb75menv "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B" model_skip_codex="환경에서 온 값" MODEL_SKIP_CODEX="환경에서 온 값")"
+  { [ "$(grep -c . "$SCRATCH/rb75menv.argv" 2>/dev/null || echo 0)" = "4" ] && grep -q "$NEW" "$yml" 2>/dev/null && [ -z "$(skip_lines rb75menv)" ]; } \
+    && ok "K2(환경 변수): 같은 이름의 환경 변수가 있어도 펜스의 빈 입력이 이긴다 — 러너가 불린다" \
+    || no "K2(환경 변수): 환경 변수가 건너뜀을 골랐다 ($(skip_lines rb75menv))"
+  # 입력이 없는 건너뜀 공시는 덧붙는 글 없이 그 한 줄 그대로다(A 의 kill switch 셀이 남긴 stderr).
+  assert_eq "$(skip_lines rb01kill)" "[spec-distill] codex 리뷰를 건너뛰었다 (reason: kill_switch) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded)." \
+    "K2(입력 없음 · 끄기 스위치): 건너뜀 공시가 덧붙는 글 없이 한 줄 그대로다"
+  # K3 — 끄기 스위치와 겹침: 스위치 사유가 남고(보안 컨트롤이 가려지지 않는다) 적은 이유는 그 줄 끝에 실린다.
+  yml="$(WITH_FENCE="$SKIPF" fire rb63mkil "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
+  k_skipped "K3(끄기 스위치 + 모델 건너뜀)" rb63mkil "$yml" kill_switch "모델 판단 건너뜀(이유: ${WHY})보다 위 사유가 앞선다"
+  assert_not_contains "$(skip_lines rb63mkil)" "reason: model_skip" "K3: 모델 건너뜀이 끄기 스위치 사유를 덮지 않는다"
+  assert_not_contains "$(skip_lines rb63mkil)" "모델 판단으로 건너뛰었다" "K3: 스위치가 끈 라운드를 모델이 건너뛴 라운드라고 하지 않는다"
+  # K3b — 게이트 입력 부재(번들)와 겹침: 그 사유가 남는다.
+  yml="$(NO_BUNDLE=1 WITH_FENCE="$SKIPF" fire rb64mnbd "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K3b(번들 부재 + 모델 건너뜀)" rb64mnbd "$yml" gate_inputs_missing "모델 판단 건너뜀(이유: ${WHY})보다 위 사유가 앞선다"
+  # K4 — 진입 중화 실패와 겹침: codex 는 가용(스위치 없음)인데 잔존물을 못 치운다 → residue_unclearable 이 남는다.
+  at="$(where rb65mlck "$DOC_B")"; mkdir -p "$at"; yml="$at/docreview-codex.yaml"; printf 'b\n' > "$at/brief-bundle.md"
+  stale_into "$yml"; chmod 444 "$yml"; chmod 555 "$at"
+  ( cd "$SCRATCH/rb65mlck" && env -i PATH="$BIN_OK:$BASE" HOME="$SCRATCH/rb65mlck" CODEX_API_KEY=t PYTHONDONTWRITEBYTECODE=1 \
+      CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID=rb65mlck PAYLOAD="$DOC_B" STUB_WRITE=ok STUB_ARGV_OUT="$SCRATCH/rb65mlck.argv" \
+      bash "$SKIPF" ) >/dev/null 2>"$SCRATCH/rb65mlck.err"
+  k_left="$(state_of "$yml")"; chmod 755 "$at"; chmod 644 "$yml"
+  if [ "$k_left" = "absent" ] || [ "$k_left" = "0byte" ]; then
+    no "K4 전제 붕괴: 잠금이 중화를 막지 못했다 ($k_left)"
+  else
+    lines="$(skip_lines rb65mlck)"
+    assert_contains "$lines" "codex 리뷰를 건너뛰었다 (reason: residue_unclearable)" "K4(중화 실패 + 모델 건너뜀): residue_unclearable 이 남는다 ($k_left 잔존)"
+    assert_not_contains "$lines" "reason: model_skip" "K4: 모델 건너뜀이 중화 실패를 덮지 않는다"
+    assert_contains "$lines" "모델 판단 건너뜀(이유: ${WHY})보다 위 사유가 앞선다" "K4: 적은 이유는 그 줄 끝에 실린다"
+    [ ! -e "$SCRATCH/rb65mlck.argv" ] && ok "K4: 러너가 불리지 않았다" || no "K4: 중화 실패 라운드에 러너가 불렸다"
+  fi
+  # K5 — 이유 글이 셸로 새지 않는다. 계측기 양성 대조: 같은 글을 큰따옴표 대입에 넣으면 명령이 돈다.
+  printf 'v="%s"\n' "$(hostile "$SCRATCH/pwned-ctl")" > "$SCRATCH/k5-control.sh"
+  ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" bash "$SCRATCH/k5-control.sh" ) >/dev/null 2>&1
+  { [ -e "$SCRATCH/pwned-ctl-1" ] && [ -e "$SCRATCH/pwned-ctl-2" ]; } \
+    && ok "K5 양성 대조: 같은 이유 글을 큰따옴표 대입에 넣으면 안의 명령이 돈다 (표지 파일 생성 — 글이 살아 있다)" \
+    || no "K5 양성 대조 붕괴: 큰따옴표 대입에서도 표지 파일이 생기지 않는다 — 아래 부재 단언은 아무것도 재지 않는다"
+  yml="$(WITH_FENCE="$SKIPF_H" fire rb66mhst "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K5(적대 이유)" rb66mhst "$yml" model_skip "이유: $(hostile "$SCRATCH/pwned-k")"
+  yml="$(WITH_FENCE="$SKIPF_HE" fire rb67mhse "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K5(적대 이유 · errexit)" rb67mhse "$yml" model_skip "이유: $(hostile "$SCRATCH/pwned-k")"
+  # echo 가 역슬래시를 푸는 셸(zsh 기본 · bash 의 xpg_echo)에서도 이유의 `\n` · `\c` 가 공시 줄을 쪼개거나 자르지 않는다.
+  # zsh 가 없는 기계에서도 재도록 bash 에 xpg_echo 를 켠 셸로 돌린다.
+  printf '#!/bin/sh\nexec bash -O xpg_echo "$@"\n' > "$SCRATCH/bash-xpg"; chmod +x "$SCRATCH/bash-xpg"
+  [ "$("$SCRATCH/bash-xpg" -c 'echo "a\nb"' | grep -c .)" = "2" ] \
+    && ok "K5 전제: xpg_echo 를 켠 bash 의 echo 가 역슬래시를 푼다 (계측기가 살아 있다)" \
+    || no "K5 전제 붕괴: xpg_echo 셸의 echo 가 역슬래시를 풀지 않는다 — 아래 칸은 echo 회귀를 못 잡는다"
+  yml="$(WITH_SH="$SCRATCH/bash-xpg" WITH_FENCE="$SKIPF_H" fire rb76mxpg "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K5(적대 이유 · xpg_echo)" rb76mxpg "$yml" model_skip "이유: $(hostile "$SCRATCH/pwned-k")"
+  assert_eq "$(ls "$SCRATCH" | grep -c '^pwned-k')" "0" "K5: 이유 글 안의 명령이 돌지 않았다 (표지 파일 없음)"
+  # K6 — 여러 줄로 적은 이유는 한 줄로 실린다(공시는 줄 단위로 옮겨 실린다).
+  yml="$(WITH_FENCE="$SKIPF_2" fire rb68mtwo "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "K6(두 줄 이유)" rb68mtwo "$yml" model_skip "이유: 첫 줄 둘째 줄"
+  # KD — 하류: 모델이 건너뛴 라운드의 codex 경로를 prepare-recritic 이 부재로 읽고 직전 마커를 섭취하지 않는다.
+  at="$(where rb69mdwn "$DOC_B")"; mkdir -p "$at"; open_round "$at"
+  yml="$(WITH_FENCE="$SKIPF" fire rb69mdwn "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  kd="$(ingest "$at" "$yml")"
+  case "$kd" in
+    True\|*\|0\|*) ok "KD: 모델이 건너뛴 라운드에서 하류가 codex 부재로 읽고 직전 마커를 섭취하지 않는다 ($kd)" ;;
+    *) no "KD: 모델이 건너뛴 라운드에서 하류가 codex 판정을 읽는다 ($kd)" ;;
+  esac
+  # KE — errexit 을 물려받아도 같다.
+  yml="$(WITH_FENCE="$SKIPF_E" fire rb70mske "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+  k_skipped "KE(errexit)" rb70mske "$yml" model_skip "모델 판단으로 건너뛰었다 — 이유: ${WHY}"
+  # KZ — zsh(Bash 도구의 셸일 수 있다)로도 같다: 건너뜀 · 양의 짝 · 적대 이유 · 끄기 스위치 겹침.
+  ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
+  if [ -n "$ZSH_BIN" ]; then
+    yml="$(WITH_SH="$ZSH_BIN" WITH_FENCE="$SKIPF" fire rb71mzsk "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+    k_skipped "KZ(zsh · 모델 건너뜀)" rb71mzsk "$yml" model_skip "모델 판단으로 건너뛰었다 — 이유: ${WHY}"
+    k_ran "KZ(zsh · 입력 없음)" rb72mzno "$FENCE" "$ZSH_BIN"
+    yml="$(WITH_SH="$ZSH_BIN" WITH_FENCE="$SKIPF_H" fire rb73mzhs "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B")"
+    k_skipped "KZ(zsh · 적대 이유)" rb73mzhs "$yml" model_skip "이유: $(hostile "$SCRATCH/pwned-k")"
+    yml="$(WITH_SH="$ZSH_BIN" WITH_FENCE="$SKIPF" fire rb74mzki "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
+    k_skipped "KZ(zsh · 끄기 스위치 + 모델 건너뜀)" rb74mzki "$yml" kill_switch "모델 판단 건너뜀(이유: ${WHY})보다 위 사유가 앞선다"
+    assert_eq "$(ls "$SCRATCH" | grep -c '^pwned-k')" "0" "KZ(zsh): 이유 글 안의 명령이 돌지 않았다"
+    # zsh 가 heredoc 임시 파일을 못 만드는 환경(TMPPREFIX 쓰기 불가)이면 입력 읽기가 실패한다. 그래도 fence 는 errexit ·
+    # nounset 아래에서 죽지 않고, 환경의 같은 이름을 물려받지 않고, 빈 입력으로 간다 — 러너가 불린다.
+    mkdir -p "$SCRATCH/ro-tmp"; chmod 555 "$SCRATCH/ro-tmp"
+    yml="$(WITH_SH="$ZSH_BIN" WITH_FENCE="$FENCE_E" fire rb77mztp "$BIN_OK" plant ok 0 PAYLOAD="$DOC_B" TMPPREFIX="$SCRATCH/ro-tmp/zsh" model_skip_codex="환경에서 온 값")"
+    if grep -q 'here document' "$SCRATCH/rb77mztp.err" 2>/dev/null; then
+      { [ "$(grep -c . "$SCRATCH/rb77mztp.argv" 2>/dev/null || echo 0)" = "4" ] && grep -q "$NEW" "$yml" 2>/dev/null && [ -z "$(skip_lines rb77mztp)" ]; } \
+        && ok "KZ(zsh · 입력 읽기 실패): fence 가 죽지 않고 환경 값을 물려받지 않으며 러너가 불린다 (빈 입력으로 간다)" \
+        || no "KZ(zsh · 입력 읽기 실패): fence 가 죽었거나 환경 값이 건너뜀을 골랐다 — stderr 끝 줄: $(tail -n 1 "$SCRATCH/rb77mztp.err")"
+    else
+      echo "  - KZ(zsh · 입력 읽기 실패): 이 zsh 는 TMPPREFIX 가 쓰기 불가여도 heredoc 을 만든다 — 이 칸을 건너뛴다"
+    fi
+  else
+    echo "  - KZ(zsh): zsh 없음 — zsh 실행 확인을 건너뛴다"
+  fi
+else
+  no "K 추출: 건너뜀 입력 자리(여는 줄 · 빈 줄 · 닫는 줄)를 펜스에서 찾지 못했거나 채운 펜스의 문법이 깨졌다 — K 칸은 재지 않는다"
+fi
+
+# ── Q) 재비판을 건너뛴 라운드 — 엔진이 그 사실을 게이트 첫 줄의 경고로 낸다 (brief 프로필) ─────────
+# 이 자리는 재비판을 `finalize --recritic-skipped` 로 건너뛴다. 양의 짝: 재비판 블록이 온 라운드에는 그 경고가 없다.
+q_round() {   # q_round <dir> <finalize 인자…> → 게이트 렌더 첫 줄 (finalize rc 는 <dir>.rc)
+  local d="$1"; shift
+  mkdir -p "$d"; open_round "$d"; cp "$FX/critic-r1.txt" "$d/critic.txt"
+  python3 "$SDS/docreview_route.py" prepare-recritic --state-dir "$d" --critic "$d/critic.txt" > "$d/prep.json" 2>/dev/null
+  python3 "$SDS/docreview_route.py" finalize --state-dir "$d" "$@" --doc "$DOC_B" > "$d/fin.json" 2>/dev/null; echo "$?" > "$d.rc"
+  python3 "$SDS/docreview_state.py" gate --state-dir "$d" --render 2>/dev/null | sed -n 1p
+}
+Q_WARN='재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: '
+q_skip="$(q_round "$SCRATCH/q-skip" --recritic-skipped)"
+q_ran="$(q_round "$SCRATCH/q-ran" --recritic "$FX/recritic-empty.txt")"
+assert_eq "$(cat "$SCRATCH/q-skip.rc" 2>/dev/null) $(cat "$SCRATCH/q-ran.rc" 2>/dev/null)" "0 0" "Q 전제: 두 라운드의 finalize 가 rc 0 이다 (brief 프로필)"
+assert_contains "$q_skip" "$Q_WARN" "Q: 재비판을 건너뛴 라운드의 게이트 첫 줄이 재비판이 돌지 않았다고 경고한다"
+assert_contains "$q_skip" "skipped)" "Q: 그 경고의 괄호가 건너뜀(skipped)을 싣는다"
+assert_contains "$q_ran" "라운드를 마쳤다" "Q 양의 짝 전제: 재비판이 돈 라운드의 첫 줄을 읽었다"
+assert_not_contains "$q_ran" "재비판이 돌지 않아" "Q 양의 짝: 재비판이 돈 라운드의 첫 줄에는 그 경고가 없다"
 finish
