@@ -194,6 +194,21 @@ STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROO
 
 이 skill 은 표지를 풀지 않는다 — 이 원장의 마지막 쓰기는 Step B 의 참고 목록(B-A)이고, 그 펜스가 쓴 뒤 푼다.
 
+## 건너뜀 — 모델 판단
+
+나누지 않은 작은 일의 brief 면 이 자리의 부품 셋 — 재비판 · codex · 읽어 보기(냉독) — 을 이유를 적고 건너뛸 수 있다. 탐지(첫 검토)는 건너뛰지 않는다 —
+리뷰 전체를 건너뛰면 쓴 쪽이 스스로 통과시킨다(Law 2). brief §7 에 `분해됨 — ` 줄이 있으면(나눈 일) 아무것도 건너뛰지 않는다 — 구조 게이트가 그 규칙을 받친다.
+
+- **기록.** 건너뛰는 그 라운드에 상태 파일(`$STATE`) 본문 `## audit §2 대기 줄` 에 `- 모델 판단으로 건너뜀 — <재비판 | codex | 읽어 보기>: <이유>` 한 줄을 더한다.
+  줄은 자리마다 하나이고 마지막 라운드의 사실을 말한다 — 그 자리의 줄이 이미 있으면 이유만 바꿔 쓰고, 앞 라운드에서 건너뛴 부품을 이번 라운드에 돌렸으면 그 줄을 지운다.
+  이 줄은 호출자(`finishing.md` B-A 끝)가 audit §2 를 다시 지어 구조 게이트에 닿게 하고 끝 질문 앞에서 사용자에게 보인다.
+- **재비판** — 6단계 dispatch 를 하지 않고 7단계 라우팅을 `--recritic` 대신 `--recritic-skipped` 로 돌린다(엔진에 있는 길). 엔진이 재비판이 돌지 않았다는 경고를 낸다.
+- **codex** — codex 펜스를 통째로 건너뛰지 않고 그대로 돌린다. 펜스 머리의 `DEVBREW_MODEL_SKIP_EOF` 두 줄 사이 빈 줄을 이유 한 줄로 바꿔 돌린다 — 따옴표로 감싸지 않고 글자 그대로, 그 밖의 줄은 고치지 않는다(이유에 그 구분 줄과 똑같은 줄을 쓰지 않는다).
+  펜스가 직전 산출물을 지운 뒤 러너만 부르지 않는다. 펜스가 `(reason: model_skip)` 을 냈을 때만 건너뜀 줄을 더한다 — 다른 사유가 나왔으면 모델이 건너뛴 라운드가 아니다.
+- **읽어 보기** — `## 냉독` 을 돌리지 않고 Step B 로 넘기는 둘째 항목에 「읽어 보기를 건너뛰었다 — <이유>」 를 싣는다.
+- 끄기 스위치로 꺼진 부품에는 건너뜀 줄을 쓰지 않는다 — 스위치가 끈 것과 모델이 건너뛴 것은 다른 사실이고, 스위치 쪽은 지금의 degrade 기록이 말한다. 그 기록은 그대로 남긴다.
+- 건너뛴 것을 나중에 돌리는 길은 호출자의 `#### B-S` 가 정한다.
+
 ## 진입 게이트 — 매 라운드, 번들보다 먼저
 
 엔진은 게이트를 통과한 문서만 받는다. 저자 수정이 게이트를 깨뜨릴 수 있으므로 **라운드마다** 1단계
@@ -366,6 +381,14 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 # `## 프로필` 과 같은 한 줄 — Bash 도구는 호출마다 새 셸이라 앞 펜스의 대입이 여기로 오지 않는다.
 PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
+# 모델 판단으로 이 라운드의 codex 를 건너뛸 때만 아래 두 구분 줄 사이의 빈 줄을 이유 한 줄로 바꾼다 — 따옴표로
+# 감싸지 않고 글자 그대로. 비워 두면 건너뛰지 않는다. 건너뛰는 라운드도 이 펜스를 끝까지 돌린다.
+model_skip_codex=""   # 아래 읽기가 실패해도(heredoc 임시 파일을 못 만드는 셸) 빈 값 — 환경의 같은 이름을 물려받지 않는다
+IFS= read -r -d '' model_skip_codex <<'DEVBREW_MODEL_SKIP_EOF' || true
+
+DEVBREW_MODEL_SKIP_EOF
+model_skip_codex="${model_skip_codex//$'\n'/ }"
+model_skip_codex="${model_skip_codex#"${model_skip_codex%%[![:space:]]*}"}"; model_skip_codex="${model_skip_codex%"${model_skip_codex##*[![:space:]]}"}"
 # 러너 인자 넷(프로필 · 번들 · 프로젝트 · 산출물)이 이 호출 안에서 선다. `$CODEX_YAML`·`$BUNDLE` 은
 # `$STATE_DIR`(payload 의 순수 함수) 안의 파일이라 `## 입력` 과 같은 도출로 어느 셸에서나
 # 같은 파일이다. `## 입력` 을 앞에 이어 붙여 한 호출로 도는 것이 정상 경로다.
@@ -415,6 +438,17 @@ if [[ "$residue_unclear" == "1" ]]; then
   echo "[spec-distill] codex 산출물 경로를 비우지 못했다 — 지우지도 절단하지도 못했다: ${residue_left}. 이 라운드의 codex 축은 없이 간다. 5단계의 --codex 에 이 경로를 넘기지 마라 — 이번 라운드의 1단계 begin-round 가 rc 0 으로 끝났다면 prepare-recritic 이 이 파일을 부재(codex_predates_round)로 읽지만, 그 전제가 없으면 직전 라운드의 codex finding 이 이번 라운드 판정으로 섭취된다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   codex_avail=""; skip_reason="residue_unclearable"; CODEX_YAML=""
 fi
+# 모델 판단 건너뜀은 «돌 수 있던» codex 만 건너뛴다. 위에서 다른 사유(끄기 스위치 · 미설치 · 게이트 입력 부재 ·
+# 중화 실패)가 섰으면 그 사유가 남고, 적은 이유는 건너뜀 공시 끝에 함께 실린다.
+model_skip_note=""
+if [[ -n "$model_skip_codex" ]]; then
+  if [[ "$codex_avail" == "true" ]]; then
+    codex_avail=""; skip_reason="model_skip"
+    model_skip_note=" 모델 판단으로 건너뛰었다 — 이유: ${model_skip_codex}"
+  else
+    model_skip_note=" 모델 판단 건너뜀(이유: ${model_skip_codex})보다 위 사유가 앞선다 — 모델이 건너뛴 라운드가 아니다"
+  fi
+fi
 if [[ "$codex_avail" == "true" ]]; then
   runner_rc=0
   bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$BUNDLE" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
@@ -422,7 +456,7 @@ if [[ "$codex_avail" == "true" ]]; then
   # 원래 실패의 rc 를 단 채 남긴 이번 라운드의 정직한 기록을 지운다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML" || true; fi
 else
-  echo "[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded)." >&2
+  printf '%s\n' "[spec-distill] codex 리뷰를 건너뛰었다 (reason: ${skip_reason:-unknown}) — 이번 리뷰는 Claude 만 봤다. 다른 모델의 시각과 codex 쪽 웹 근거가 없다 (degraded).${model_skip_note}" >&2
 fi
 ```
 <!-- codex-gate:end -->

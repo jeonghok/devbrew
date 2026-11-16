@@ -992,7 +992,13 @@ def coverage_anchor_failures(audit_text: str, anchors: set) -> list[str]:
             continue
         key, evidence = m.group(1).strip(), m.group(3)
         cited = ANCHOR_RE.findall(evidence)
-        if not cited:
+        # 맹점 차원만 — 근거가 건너뜀으로 시작하면 §2 의 `맹점 조사` 건너뜀 줄이 앵커 요구를 대신한다.
+        # 다른 차원은 같은 근거를 써도 앵커를 요구한다. 인용한 앵커가 있으면 그것은 그대로 실재해야 한다.
+        if key == "floor:blind_spot" and evidence.strip().startswith(SKIP_PREFIX):
+            if "맹점 조사" not in skip_lines(audit_text)[0]:
+                fails.append(f"{key} 근거가 「{SKIP_PREFIX}」 인데 audit §2 에 `맹점 조사` 건너뜀 줄이 없다")
+                continue
+        elif not cited:
             fails.append(f"{key} evidence cites no S<N> anchor")
             continue
         for s in cited:
@@ -1529,7 +1535,76 @@ SAT_CONTINUE_RE = re.compile(r"^포화 판정 \d+: 판정 불가\([^)]*\) — �
 # mapper 첫 매치에서 건너뛰는 §2 의 R1 사건 줄 — 포화 판정 · 사용자 종료(`SAT_LINE_RE`)와 아래 접두.
 # 그 줄의 자유 글(판정 근거 · 사용자 선택 사유)에 `coverage-mapper <k>` 가 섞이면 mapper 줄이 빠져도
 # 그 줄이 하한 검사를 대신 진다(최종 리뷰 M1).
-SAT_EVENT_PREFIXES = ("상한 도달 ", "판정 상한 도달 ", "조사 호출 ")
+# 건너뜀 줄도 사건 줄이다 — 이유 글의 `coverage-mapper <k>` 가 mapper 줄을 대신 지지 않는다.
+SKIP_PREFIX = "모델 판단으로 건너뜀"
+SAT_EVENT_PREFIXES = ("상한 도달 ", "판정 상한 도달 ", "조사 호출 ", SKIP_PREFIX)
+
+# 건너뜀 줄 — audit §2 의 불릿 `모델 판단으로 건너뜀 — <자리>: <이유>`. 자리마다 한 줄이다.
+SKIP_SPOTS = ("범위 조사", "맹점 조사", "포화 판정", "재비판", "codex", "읽어 보기")
+SKIP_LINE_RE = re.compile(r"^모델 판단으로 건너뜀 — ([^:]+):(?:[ \t]+(\S.*))?$")
+SKIP_ADVISORY = "건너뜀 — {spot}: {reason} (모델 판단 — 사람이 확인할 것)"
+SPLIT_LINE_PREFIX = "분해됨 — "
+
+
+def _skip_bodies(audit_text: str) -> list[str]:
+    """audit §2 Budget 의 불릿 중 `모델 판단으로 건너뜀` 으로 시작하는 줄(불릿을 뗀 본문) — 문법이 맞든 아니든."""
+    sec = _section_text(audit_text, "2", "Budget")
+    return [b for b in (_strip_bullet(ln).strip() for ln in _entry_lines(sec)) if b.startswith(SKIP_PREFIX)]
+
+
+def skip_lines(audit_text: str) -> tuple[dict[str, str], list[str]]:
+    """audit §2 의 건너뜀 줄 -> (문법이 맞는 줄의 {자리: 이유} — §2 에 적힌 순서, 실패 사유).
+
+    실패: 형식 밖 · 모르는 자리 · 빈 이유 · 같은 자리 두 줄. 실패한 줄은 첫 반환값에 들지 않는다 — 그 줄은 아래 검사의
+    완화(범위 조사 0회 · 포화 판정 줄 없음 · 맹점 차원 앵커)를 열지 못한다. 같은 자리 두 줄이면 첫 줄만 든다.
+    **이 검사가 못 잡는 것**: 줄은 건너뛰는 쪽이 쓴다 — 이유가 타당한지는 보지 않고 advisory 로 사람에게 넘긴다."""
+    skips: dict[str, str] = {}
+    fails: list[str] = []
+    for body in _skip_bodies(audit_text):
+        m = SKIP_LINE_RE.match(body)
+        if not m:
+            fails.append(f"§2 Budget: 건너뜀 줄이 형식 밖이다 — `{SKIP_PREFIX} — <자리>: <이유>` 로 쓴다: {body[:80]}")
+            continue
+        spot, reason = m.group(1), (m.group(2) or "").strip()
+        if spot not in SKIP_SPOTS:
+            fails.append(f"§2 Budget: 건너뜀 줄의 자리 «{spot[:40]}» 를 모른다 — "
+                         f"건너뛸 수 있는 자리는 {' · '.join(SKIP_SPOTS)} 여섯이다")
+        elif not reason:
+            fails.append(f"§2 Budget: 건너뜀 줄 «{spot}» 의 이유가 비었다")
+        elif spot in skips:
+            dup = f"§2 Budget: 건너뜀 줄 «{spot}» 가 두 줄 이상이다 — 자리마다 한 줄만 쓴다"
+            if dup not in fails:
+                fails.append(dup)
+        else:
+            skips[spot] = reason
+    return skips, fails
+
+
+def payload_is_split(payload_text: str) -> bool:
+    """brief §7 에 `분해됨 — ` 줄이 있는가(나눈 일). 판독은 끝내기 커밋 펜스가 로드맵 폴더를 도출하는 awk 와 같다 —
+    `## 7.` 로 시작하는 줄 다음부터 다음 `## ` 줄 앞까지, 앞 공백 · `- ` · 백틱 하나를 뗀 줄이 `분해됨 — ` 로 시작하면 참.
+    두 판독이 갈라지면 한쪽은 나눈 일로 읽고 다른 쪽은 아닌 brief 가 생긴다."""
+    in7 = False
+    for ln in payload_text.split("\n"):
+        if ln.startswith("## 7."):
+            in7 = True
+            continue
+        if not in7:
+            continue
+        if ln.startswith("## "):
+            return False
+        if re.sub(r"^[ \t]*(?:- )?`?", "", ln, count=1).startswith(SPLIT_LINE_PREFIX):
+            return True
+    return False
+
+
+def skip_split_failures(payload_text: str, audit_text: str) -> list[str]:
+    """나눈 일은 건너뛸 수 없다 — brief §7 이 나눈 일인데 audit §2 에 건너뜀 줄이 하나라도 있으면 실패(문법이 틀린 줄도 센다)."""
+    bodies = _skip_bodies(audit_text)
+    if not bodies or not payload_is_split(payload_text):
+        return []
+    return [f"나눈 일은 건너뛸 수 없다 — brief §7 에 `{SPLIT_LINE_PREFIX}<로드맵 경로>` 줄이 있는데 audit §2 에 건너뜀 줄이 "
+            f"{len(bodies)}개 있다. 건너뛴 조사 · 리뷰를 돌리고 그 줄을 지운다"]
 
 
 # **불릿(데이터) 줄에 앵커한다.** 앵커가 없으면 §2 머리 «설명 산문»의 예시
@@ -1549,30 +1624,40 @@ MAPPER_RE = re.compile(
 
 
 def _is_sat_event(sec: str, pos: int) -> bool:
-    """`pos` 가 든 줄이 R1 사건 줄(포화 판정 · 사용자 종료 · 상한 도달 · 판정 상한 도달 · 조사 호출)인가."""
+    """`pos` 가 든 줄이 R1 사건 줄(포화 판정 · 사용자 종료 · 상한 도달 · 판정 상한 도달 · 조사 호출 · 건너뜀)인가."""
     start = sec.rfind("\n", 0, pos) + 1
     end = sec.find("\n", pos)
     body = _strip_bullet(sec[start:end if end != -1 else len(sec)].strip()).strip()
     return bool(SAT_LINE_RE.match(body)) or body.startswith(SAT_EVENT_PREFIXES)
 
 
+def _mapper_match(audit_text: str):
+    """audit §2 Budget 의 mapper 데이터 줄 — 사건 줄을 건너뛴 `MAPPER_RE` 첫 매치(없으면 None)."""
+    sec = _section_text(audit_text, "2", "Budget")
+    return next((c for c in MAPPER_RE.finditer(sec) if not _is_sat_event(sec, c.start(1))), None)
+
+
 def budget_mapper_failures(audit_text: str) -> tuple[list[str], list[str]]:
     """audit §2 Budget 의 `coverage-mapper <k>` (v0.57.0, spec §2.3·C4).
 
     k>=1 통과. `coverage-mapper 0 (unavailable: <이유>)` 는 advisory 통과 — 침묵과 0 을
-    가른다. 대상은 §2 의 **불릿 줄**이다(`MAPPER_RE` 주석) — 머리 설명 산문의 예시는
+    가른다. 괄호 안 이유가 비면 실패다. 사유 없는 0 은 `범위 조사` 건너뜀 줄(`skip_lines`)이 있을 때만 통과한다 —
+    mapper 줄 자체가 없으면 건너뜀 줄이 있어도 실패다. 대상은 §2 의 **불릿 줄**이다(`MAPPER_RE` 주석) — 머리 설명 산문의 예시는
     판정에 참여하지 않는다. **이 검사가 못 잡는 것**: sentinel 은 피검자가 쓰는 문구라,
     dispatch 를 건너뛴 턴이 같은 문구를 적으면 «도구 부재»와 구분하지 못한다. 그래서
     advisory 는 조용히 통과하지 않고 다음 단계 게이트 앞 글로 사람에게 간다."""
-    sec = _section_text(audit_text, "2", "Budget")
-    m = next((c for c in MAPPER_RE.finditer(sec) if not _is_sat_event(sec, c.start(1))), None)
+    m = _mapper_match(audit_text)
     if not m:
         return ["§2 Budget: coverage-mapper <k> line missing"], []
     k, reason = int(m.group(1)), m.group(2)
     if k >= 1:
         return [], []
-    if reason:
+    if reason is not None:
+        if not reason[len("unavailable:"):].strip():
+            return ["§2 Budget: coverage-mapper 0 (unavailable:) 의 사유가 비었다 — 부르지 못한 까닭을 괄호 안에 적는다"], []
         return [], [f"coverage-mapper 0 ({reason}) — 범위 조사 에이전트를 부르지 않고 통과했다 (사람이 확인할 것)"]
+    if "범위 조사" in skip_lines(audit_text)[0]:
+        return [], []   # advisory 는 건너뜀 줄마다 gate() 가 낸다
     return ["§2 Budget: coverage-mapper 0 without unavailable reason"], []
 
 
@@ -1586,11 +1671,14 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     """audit §2 의 마지막 포화 판정 줄 (설계 §5).
 
     통과: 판정자 `포화` · 사용자 종료(S 앵커 실재) · 사용자 판단 포화(S 앵커 실재, advisory).
+    판정 줄이 하나도 없으면 `포화 판정` 건너뜀 줄(`skip_lines`)이 있을 때만 통과한다.
     실패: 줄 없음 · 마지막이 `아직`(반복 빈 곳 재조사 포함) · 마지막이 `판정 불가 — 조사 계속` ·
     형식 밖. **이 검사가 못 잡는 것**: 줄은 본체가 쓴다 — 판정자를 부르지 않은 턴이 `포화` 줄을
     지어 적으면 구별하지 못한다. 그 축은 판정자 dispatch 의 처분 줄과 Step B 의 사람 확인이 진다."""
     hits = _sat_hits(audit_text)
     if not hits:
+        if "포화 판정" in skip_lines(audit_text)[0]:
+            return [], []   # 판정 줄이 하나라도 있으면 이 갈래에 오지 않는다 — 건너뜀 줄이 구해 주지 않는다
         return ["§2 Budget: 포화 판정 줄 없음 — floor 다섯이 닫힌 뒤 포화 판정자를 부르지 않았거나 "
                 "사용자 종료를 적지 않았다"], []
     last = hits[-1]
@@ -1610,6 +1698,34 @@ def saturation_failures(audit_text: str, anchors: set) -> tuple[list[str], list[
     if SAT_CONTINUE_RE.match(last):
         return ["§2 Budget: 판정 불가 뒤 사용자가 조사 계속을 골랐는데 그 뒤 포화 판정이나 사용자 종료 줄이 없다"], []
     return [f"§2 Budget: 포화 판정 줄이 형식 밖이다: {last[:80]}"], []
+
+
+def skip_conflict_failures(audit_text: str) -> list[str]:
+    """돌린 조사의 건너뜀 줄이 남았는가 — 남으면 실패다(돌린 조사가 사람에게 「건너뛴 것」 으로 보이지 않게).
+
+    조사 자리 셋만 본다: `범위 조사` 줄 + mapper 계수 1 이상 · `포화 판정` 줄 + 포화 판정 · 사용자 종료 줄 ·
+    `맹점 조사` 줄 + 건너뜀으로 시작하지 않는 `floor:blind_spot` 근거. 리뷰 부품 셋(재비판 · codex · 읽어 보기)은
+    보지 않는다 — 그 부품이 돌았는지는 이 검사가 읽는 글에 없다."""
+    skips = skip_lines(audit_text)[0]
+    fails: list[str] = []
+    if "범위 조사" in skips:
+        m = _mapper_match(audit_text)
+        if m and int(m.group(1)) >= 1:
+            fails.append(f"§2 Budget: `범위 조사` 건너뜀 줄이 있는데 mapper 줄이 coverage-mapper {int(m.group(1))} 이다 — "
+                         "범위 조사를 돌렸으면 그 건너뜀 줄을 지운다")
+    if "포화 판정" in skips:
+        hits = _sat_hits(audit_text)
+        if hits:
+            fails.append(f"§2 Budget: `포화 판정` 건너뜀 줄이 있는데 포화 판정 · 사용자 종료 줄이 {len(hits)}개 있다 — "
+                         "판정했거나 사용자가 끝냈으면 그 건너뜀 줄을 지운다")
+    if "맹점 조사" in skips:
+        for ln in _entry_lines(_section_text(audit_text, "1", "Coverage Ledger")):
+            m = LEDGER_ROW_RE.match(_strip_bullet(ln).strip())
+            if m and m.group(1).strip() == "floor:blind_spot" and not m.group(3).strip().startswith(SKIP_PREFIX):
+                fails.append(f"§2 Budget: `맹점 조사` 건너뜀 줄이 있는데 audit §1 의 floor:blind_spot 근거가 「{SKIP_PREFIX}」 으로 "
+                             "시작하지 않는다 — 맹점 조사를 돌렸으면 그 건너뜀 줄을 지운다")
+                break
+    return fails
 
 
 def closing_answer_anchors(payload_text: str, audit_text: str) -> list[tuple[str, str]]:
@@ -1772,6 +1888,10 @@ def gate(path: Path) -> int:
                     audit_text, payload_verbatim_anchors(text) | verbatim_anchors(audit_text))
                 failures += [f"saturation: {x}" for x in sf]
                 advisories += sa
+                skips, kf = skip_lines(audit_text)
+                failures += [f"건너뜀 줄: {x}" for x in
+                             kf + skip_conflict_failures(audit_text) + skip_split_failures(text, audit_text)]
+                advisories += [SKIP_ADVISORY.format(spot=s, reason=r) for s, r in skips.items()]
 
     # N1b — payload §6 이 원문 전량인가. audit §6 앵커와 대조하므로 audit 을 읽은 뒤에 돈다.
     # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라

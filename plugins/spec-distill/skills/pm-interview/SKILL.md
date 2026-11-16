@@ -297,7 +297,7 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 **여럿 동시에.** 서로 기대지 않는 조사 질문이 둘 이상이면 한 메시지에서 조사 agent 를 여럿 띄울 수 있다.
 몇 개를 언제 띄울지는 모델 판단이다. 기본은 필요할 때 하나씩이고, 여럿을 함께 띄우면 «지금 이해»에
 무엇을 왜 함께 띄웠는지 한 줄 적는다. 필수 자리 둘(첫 질문 전 `coverage-mapper`, blind_spot 차원의 첫
-`blind-spot-prober`)과 조건 자리(`steelman-builder`)는 그대로다. 함께 띄운 조사는 같은 묶음 번호를 갖는다(`## 조사 상한 · 포화 판정`).
+`blind-spot-prober`)과 조건 자리(`steelman-builder`)는 그대로다(작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」). 함께 띄운 조사는 같은 묶음 번호를 갖는다(`## 조사 상한 · 포화 판정`).
 
 **만들어 보내기.** 정해진 넷(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher`)의
 역할에 맞지 않는 조사는 본체가 그 자리에서 주문을 써 `open-researcher` 에 보낸다. 주문에는 찾을 것 · 닿는 열린
@@ -385,6 +385,9 @@ dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory
 
 조사 agent 다섯(`coverage-mapper` · `blind-spot-prober` · `steelman-builder` · `repo-researcher` · `open-researcher`)은 자격 · 예산 없이,
 그 호출이 열린 결정을 바꾸거나 새 결정을 열 수 있다고 볼 때마다 부른다. 첫 호출 필수 자리 둘은 하한으로 남는다.
+**건너뜀.** 나누지 않을 작은 일로 보이면 필수 자리 둘과 포화 판정을 이유를 적고 건너뛸 수 있다 — 건너뛴 그 순간 state 본문 `## audit §2 대기 줄` 에
+`- 모델 판단으로 건너뜀 — <자리>: <이유>` 한 줄을 덧붙인다(줄 모양은 아래 `Read` 줄의 파일 `### 건너뜀`). 나누기로 하면 건너뛴 조사를 그때 돌린다 —
+나눈 일은 구조 게이트가 건너뜀 줄을 받지 않는다. 건너뛴 것은 끝 질문 앞에서 사용자에게 보이고, 사용자가 하라고 하면 그때 돌린다.
 state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파일에서 `### 상한 값` 만 한 번 읽어 그 fence 로 `research_limit` · `saturation_limit` 를 정한다(양의 정수가 아니면 60 · 5 와 한 줄 알림).
 인터뷰의 첫 조사 agent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
 
@@ -406,7 +409,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md
 ## coverage-mapper dispatch
 
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
-orchestrator, G2). 첫 dispatch 는 필수이고(하한) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
+orchestrator, G2). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
 
 1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(S1)과 그 «다시 검증할 것» 문단, 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
@@ -460,7 +463,7 @@ audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — �
 
 ## 닫힘 · 재개방
 
-**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두).
+**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두 — 맹점 조사를 건너뛴 floor 는 예외이고 `references/saturation.md` 의 `### 건너뜀` 을 따른다).
 sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landscape·premortem 출력은 «지금 이해»에 실려,
 steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
 원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
@@ -477,7 +480,7 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 
 ## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
-`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다(하한).
+`blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다(하한). 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」 을 따른다.
 그 뒤는 새 framing · 재개방 · 포화 판정자의 빈 곳이 그 차원에 닿으면 다시 부른다 — 총량은 조사 호출 상한 하나가
 묶는다. dispatch 마다 `research_dispatches.blind_spot_prober` 를 +1 한다.
 kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
@@ -530,7 +533,7 @@ R&R 이다 — landscape · steelman · blind-spot premortem · coverage-mapper 
 
 외부 선례가 상관없는 일이면, 라운드 질문에서 「외부 선례 무관 — <이유>」를 선택지로 보인다. 사용자가 고르면 그 답
 `S<m>` 으로 landscape 를 닫고 brief §4 에 불릿 없는 한 줄 `외부 선례 무관(@S<m>) — <이유>` 를 쓴다. 게이트는 그 `S<m>` 이
-audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점은 모델 판단이다(필수 자리 둘 — 첫 질문 전 `coverage-mapper` · blind_spot 차원의 첫 `blind-spot-prober` — 은 그대로).
+audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점은 모델 판단이다(필수 자리 둘 — 첫 질문 전 `coverage-mapper` · blind_spot 차원의 첫 `blind-spot-prober` — 은 그대로이고, 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」 을 따른다).
 
 - 모든 외부 주장은 **출처 URL 필수** — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재 → **loud** 생략(crash 금지):
@@ -574,15 +577,17 @@ floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 �
 아니다. 포화 판정 전에 끝내면 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을
 state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로 옮긴다).
 
-읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 골랐다.
+읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나, 사용자가 종료를 골랐거나, 나누지 않을 작은 일이라 `- 모델 판단으로 건너뜀 — 포화 판정: <이유>` 줄을 `## audit §2 대기 줄` 에 덧붙였다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/finishing.md
 Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 둘째 줄(`epic-handoff.md`)은 로드맵 에픽의 설계를 여는 줄을 써야 할 때만 읽는다.
+셋째 줄(`brief-handoff.md`)은 끝 질문의 기타 칸에서 「여기서 계속」 을 받아 이 세션이 다음 세션 줄의 지시를 따를 때만 읽는다 — 그 밖에는 다음 세션이 읽는다.
 
 ## In-flight state migration
 
