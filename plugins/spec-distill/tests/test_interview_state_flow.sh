@@ -94,10 +94,17 @@ c = t.find("<!-- interview-commit:begin -->")
 gate = t.find("`check_brief.py gate` 재실행(통과 확인)", b3)
 three = t.find("- **③ 확정 목록 수정**", b3); four = t.find("- **④ brief만 종료**", b3)
 nocommit = lambda s: "git commit" not in s and "interview-commit" not in s and "커밋 펜스" not in s
-ok = (0 <= a < a5 < b3 < gate < c) and nocommit(t[a:b3]) and nocommit(t[three:four])
+b1, b2 = t.find("#### B-1"), t.find("#### B-2")
+ok = (0 <= a < a5 < b1 < b2 < b3 < gate < c) and nocommit(t[a:b1]) and nocommit(t[b2:b3]) and nocommit(t[three:four])
+# B-1 의 끝 질문은 커밋 펜스를 한 번 부른다(「확정하고 끝낸다」) — 펜스 자체는 B-3 에만 있다
+ok = ok and t[b1:b2].count("interview-commit") == 1 and "git commit" not in t[b1:b2]
 ok = ok and "interview-commit" in t[four:t.find("#### B-4")]
 sys.exit(0 if ok else 1)
 PY
+SF_END="$(awk '/^### 끝낼 때/{f=1;next} /^### /{f=0} f' "$SF")"
+assert_contains "$SF_END" 'B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 뒤' "AC5: state-file.md 「끝낼 때」 가 B-1 「확정하고 끝낸다」 의 커밋 때를 말한다"
+assert_contains "$SF_END" 'B-1 의 「brief만 종료」 는 종료 안내 직전' "AC5: state-file.md 「끝낼 때」 가 B-1 「brief만 종료」 의 커밋 때를 말한다"
+case "$SF_END" in *'(①/② 의 확정 반영'*) no "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 남았다";; *) ok "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 없다";; esac
 
 cf="$(fence "$FIN" interview-commit)"
 [ -n "$cf" ] && ok "AC5: 커밋 펜스(interview-commit)가 있다" || no "AC5: 커밋 펜스가 없다"
@@ -168,7 +175,8 @@ c8="$(mk detached)"; git -C "$c8" switch -q --detach
 o="$(runc "$c8")"
 assert_eq "$(git -C "$c8" rev-list --count HEAD)" "1" "AC5: detached HEAD 면 커밋하지 않는다"
 printf '%s\n' "$o" | grep -qF 'detached HEAD' && ok "AC5: detached HEAD 사유를 보인다" || no "AC5: detached 출력: $o"
-grep -qF 'brief · audit · 상태 파일은 커밋하지 않았다' "$FIN" && ok "B-1: superpowers 부재 안내가 세 파일을 커밋하지 않았다고 말한다" || no "B-1: 미커밋 안내가 없다"
+grep -qF '확정 후보를 확정으로 바꿔 저장하고 커밋한 뒤 여기서 끝낸다. PR 은 열지 않는다.' "$FIN" && ok "B-1: superpowers 가 없는 끝 질문의 「확정하고 끝낸다」 가 커밋한다고 말한다" || no "B-1: 끝 질문의 커밋 설명이 없다"
+grep -qF '브랜치에서 직접 커밋하라' "$FIN" && no "B-1: 옛 미커밋 안내가 남았다" || ok "B-1: 옛 미커밋 안내가 없다(양성 짝: 위 단언)"
 # 이어 갈 때의 「풀린 입력」 — 상태 파일 전문이 아니라 그 안의 블록
 python3 -I - "$SK" <<'PY' && ok "fix1: SKILL 3 · 3.5 가 interview-state 도 건너뛴다" || no "fix1: SKILL 3 · 3.5 가 interview-state 를 모른다"
 import sys
