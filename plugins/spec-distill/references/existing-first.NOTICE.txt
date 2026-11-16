@@ -1,0 +1,59 @@
+existing-first.md 의 「# /search-first — Research Before You Code」 부터 끝까지는 아래 글을 가져와 덜어 낸 것이다.
+
+출처
+- 저장소: https://github.com/affaan-m/everything-claude-code
+- 파일: skills/search-first/SKILL.md
+- 커밋: 0765f7a2ca2bd5df214d3aa7ba7e7ac19db8b189 (2026-09-27)
+- 원문 SHA-256: 76835db48dd910061d2e4271b1151793d2fddbabeb2d2866eed068b3580c55d5
+- 확인한 날: 2026-11-15
+
+뺀 절 (원문 줄 번호)
+- 1~7행 — 머리말(frontmatter)
+- 47~50행 — 흐름 그림의 5단계(IMPLEMENT)
+- 88~105행 — Full Mode (agent)
+- 106~127행 — Search Shortcuts by Category
+- 128~147행 — Integration Points
+- 148~176행 — Examples
+
+제자리 수정 (원문 줄 번호 · 원문 → 바꾼 글)
+- 39행
+  - 원문: │     Score candidates (functionality, maint, │
+  - 바꾼 글: │     Show candidate facts (functionality,    │
+- 40행
+  - 원문: │     community, docs, license, deps)         │
+  - 바꾼 글: │     maint, community, docs, license, deps)  │
+- 73행
+  - 원문: 아래 바꾼 글에서 「 -I」 를 뺀 줄이다
+  - 바꾼 글: | Package registry | `npm --version`, `python -I -m pip --version`, or project package manager | Use web/docs search and avoid claiming registry coverage |
+- 75행
+  - 원문: | MCP/docs tools | Available tool list or local MCP config | Fall back to official docs/web search |
+  - 바꾼 글: | MCP/docs tools | Available tool list | Fall back to official docs/web search |
+- 84행
+  - 원문: 2. Is there an MCP for this? → Check `~/.claude/settings.json` and search
+  - 바꾼 글: 2. Is there an MCP for this? → Check the available tool list and search
+
+그 밖의 글자는 원문 그대로다.
+
+라이선스
+
+MIT License
+
+Copyright (c) 2026 Affaan Mustafa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
