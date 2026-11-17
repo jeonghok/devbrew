@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.0] — 2026-11-16
+
+### Changed
+- 감사 검사가 skill 의 `cost_class` 를 frontmatter `metadata` 아래에서 읽는다 — 맨 위에만 있으면 「선언 없음」 이다. plugin.json 은 `name` 하나만 필수로 보고, `version` 이 있는데 문자열이 아니면 지금처럼 gap 이다. plugin-audit skill 의 `cost_class` 를 `metadata` 아래로 옮겼다. (옛 판의 plugin-audit 으로 새 레포를 감사하면 skill 들을 「선언 없음」 으로 센다 — 갱신하면 사라진다.)
+
 ## [1.7.0] — 2026-10-29
 
 ### Changed

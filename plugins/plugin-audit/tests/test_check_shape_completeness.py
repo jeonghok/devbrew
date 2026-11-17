@@ -7,11 +7,11 @@ CLAUDE_MD = REPO / "CLAUDE.md"
 
 # checklist requirement → CLAUDE.md §Plugin Shape body-unique anchor
 ANCHORS = {
-    "plugin_json_fields": "필수: `name`, `description`, `version`",
+    "plugin_json_fields": "`plugin.json` 의 필수 키는 `name` 하나다",
     "readme_principles": '"Principles Instantiated"',
     "changelog_if_v1": "v1.0.0 이상이면 `CHANGELOG.md`",
     "agents_allowlist": "`tools:` allowlist를 선언",
-    "skills_cost_class": "모든 skill에 `cost_class` 선언",
+    "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
     "hooks_killswitch": "모든 훅에 kill switch",
     "deps_declared": "최소 버전이 선언된 의존성",
 }
@@ -23,7 +23,7 @@ def run(plugin_dir):
     return r, (json.loads(r.stdout) if r.stdout.strip() else {})
 
 
-def _mk_plugin(d, version="0.1.0", drop_version=False):
+def _mk_plugin(d, version="0.1.0", drop_version=False, skill_fm=None):
     d = Path(d)
     (d / ".claude-plugin").mkdir(parents=True)
     pj = {"name": "myplugin", "description": "x"}
@@ -31,16 +31,71 @@ def _mk_plugin(d, version="0.1.0", drop_version=False):
         pj["version"] = version
     (d / ".claude-plugin" / "plugin.json").write_text(json.dumps(pj), encoding="utf-8")
     (d / "README.md").write_text("# myplugin\n## Principles Instantiated\n- Law 1\n", encoding="utf-8")
+    if skill_fm is not None:
+        (d / "skills" / "s").mkdir(parents=True)
+        (d / "skills" / "s" / "SKILL.md").write_text(
+            "---\nname: s\ndescription: d\n" + skill_fm + "---\nbody\n", encoding="utf-8")
     return d
 
 
 class TestShapeCompleteness(unittest.TestCase):
-    def test_version_missing_is_gap(self):   # AC-10
+    def _gaps(self, d):
+        r, obj = run(d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return {g["requirement"]: g for g in obj["shape_gaps"]}
+
+    def _cost(self, skill_fm):
         with tempfile.TemporaryDirectory() as d:
-            _mk_plugin(d, drop_version=True)
-            r, obj = run(d)
-            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-            self.assertFalse(gaps["plugin_json_fields"]["present"], "missing version not flagged")
+            _mk_plugin(d, skill_fm=skill_fm)
+            return self._gaps(d)["skills_cost_class"]["present"]
+
+    def _pj(self, obj):
+        with tempfile.TemporaryDirectory() as d:
+            _mk_plugin(d)
+            (Path(d) / ".claude-plugin" / "plugin.json").write_text(json.dumps(obj), encoding="utf-8")
+            return self._gaps(d)["plugin_json_fields"]["present"]
+
+    def test_metadata_cost_class_is_declared(self):            # AC2 새 자리
+        self.assertTrue(self._cost("metadata:\n  cost_class: high\n"))
+
+    def test_top_level_only_cost_class_is_not_declared(self):   # AC2 맨 위에만
+        self.assertFalse(self._cost("cost_class: high\n"))
+
+    def test_no_cost_class_is_not_declared(self):               # AC2 없음
+        self.assertFalse(self._cost(""))
+
+    def test_indented_cost_class_outside_metadata_is_not_declared(self):   # Review Focus 1
+        self.assertFalse(self._cost("hooks:\n  cost_class: high\n"))
+        self.assertFalse(self._cost("metadata:\n  a: 1\nhooks:\n  cost_class: high\n"))
+
+    def test_metadata_cost_class_after_sibling_child_is_declared(self):    # Review Focus 2
+        self.assertTrue(self._cost("metadata:\n  author: x\n\n  cost_class: low\n"))
+
+    def test_nested_deeper_cost_class_is_not_declared(self):
+        self.assertFalse(self._cost("metadata:\n  inner:\n    cost_class: low\n"))
+
+    def test_body_metadata_block_is_not_declared(self):         # Review Focus 3
+        with tempfile.TemporaryDirectory() as d:
+            _mk_plugin(d, skill_fm="")
+            (Path(d) / "skills" / "s" / "SKILL.md").write_text(
+                "---\nname: s\ndescription: d\n---\nmetadata:\n  cost_class: high\n", encoding="utf-8")
+            self.assertFalse(self._gaps(d)["skills_cost_class"]["present"])
+
+    def test_both_places_counts_metadata(self):                 # Review Focus 5
+        self.assertTrue(self._cost("cost_class: high\nmetadata:\n  cost_class: high\n"))
+
+    def test_name_only_plugin_json_is_not_gap(self):            # AC9
+        self.assertTrue(self._pj({"name": "myplugin"}))
+
+    def test_name_missing_is_gap(self):                         # AC9
+        self.assertFalse(self._pj({"version": "0.1.0", "description": "x"}))
+
+    def test_empty_or_nonstring_name_is_gap(self):              # Review Focus 4
+        for bad in ("", 5, None):
+            self.assertFalse(self._pj({"name": bad}), repr(bad))
+
+    def test_nonstring_version_is_gap(self):                    # AC9
+        self.assertFalse(self._pj({"name": "x", "version": 1}))
 
     def test_complete_plugin_no_json_gap(self):
         with tempfile.TemporaryDirectory() as d:
@@ -61,6 +116,7 @@ class TestShapeCompleteness(unittest.TestCase):
         shape = CLAUDE_MD.read_text(encoding="utf-8").split("## Plugin Shape")[1].split("## Building")[0]
         for req, anchor in ANCHORS.items():
             self.assertIn(anchor, shape, f"checklist '{req}' anchor drifted from CLAUDE.md §Plugin Shape")
+            self.assertEqual(shape.count(anchor), 1, f"checklist '{req}' anchor is not unique in §Plugin Shape")
 
     def test_deps_declared_gap_when_cross_plugin_dispatch_without_prereqs(self):
         # cross-plugin dispatch present + no "Prerequisites" section in README → real gap
