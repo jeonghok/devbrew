@@ -141,6 +141,9 @@ sys.exit(0 if ok else 1)
   pin_s="$(awk 'index($0,"**audit 템플릿 절 제목이 중복되면**")==1{f=1} f{print} f&&index($0,"`### 번들` 부터 다시 돕니다.")==1{exit}' "$skill")"
   [ "$pin_s" = "$OVERLAP_PIN" ] || echo overlap_unchanged
   has "$sj" 'seed 에도 가린 글만 간다' || echo seed_redacted_only
+  has "$sj" '저자가 쓰는 줄 — `## 2` 의 풀이 줄(「내가 읽은 것」) · `## 3. 긴 초안` · `## seed 에서 덜어 낸 것` 표의 항목 · 재결정 세 칸 — 에 사용자의 말을 옮길 때도 가린 글로 옮긴다(가리기 전 값을 옮겨 적지 않는다).' || echo secret_author_lines
+  { has "$sj" 'seed 는 긴 초안을 깎아 만들고 긴 초안도 가린 글로 쓰므로 seed 에도 가린 글만 간다' && ! has "$sj" 'seed 는 가린 audit 에서 압축하므로'; } || echo secret_seed_rationale
+  has "$(sec "$at" '## 3. 긴 초안' | join)" '사용자의 말을 옮길 때는 가린 글로 옮긴다(`## 1. 원문` 과 같은 가림 표시).' || echo tpl_long_draft_redaction
   has "$sk" '답이 없으면 표시 없이 «(답 없음)» 이다' || echo answer_none_mark
   has "$ex1" '그 줄 앞에 `> ` 만 붙여 쓴다' || echo wrap_prefix_only
   { ! has "$sk" '스스로 고쳐 쓴다' && has "$sk" '저자가 그 줄을 스스로 고쳐 쓰지 않는다'; } || echo self_rewrite
@@ -198,5 +201,8 @@ mutate "$SK" "$T/sk11.md" '가린 값 자체는 보이지 않는다' '가린 값
 mutate "$SK" "$T/sk12.md" 'seed 에도 가린 글만 간다' 'seed 에는 그대로 간다' && expect_fail_sk seed_redacted_only "$T/sk12.md" || no "변이 준비 실패: seed_redacted_only"
 mutate "$SK" "$T/sk13.md" '답이 없으면 표시 없이 «(답 없음)» 이다' '답이 없으면 비워 둔다' && expect_fail_sk answer_none_mark "$T/sk13.md" || no "변이 준비 실패: answer_none_mark"
 mutate "$SK" "$T/sk14.md" '그 줄 앞에 `> ` 만 붙여 쓴다' '그 줄을 알맞게 다듬어 쓴다' && expect_fail_sk wrap_prefix_only "$T/sk14.md" || no "변이 준비 실패: wrap_prefix_only"
+mutate "$SK" "$T/sk15.md" $'저자가 쓰는 줄 — `## 2` 의 풀이 줄' '저자 줄 — `## 2` 의 풀이 줄' && expect_fail_sk secret_author_lines "$T/sk15.md" || no "변이 준비 실패: secret_author_lines"
+mutate "$SK" "$T/sk16.md" 'seed 는 긴 초안을 깎아 만들고 긴 초안도 가린 글로 쓰므로 seed 에도' 'seed 는 가린 audit 에서 압축하므로 seed 에도' && expect_fail_sk secret_seed_rationale "$T/sk16.md" || no "변이 준비 실패: secret_seed_rationale"
+mutate "$AT" "$T/at5.md" '사용자의 말을 옮길 때는 가린 글로 옮긴다' '' && expect_fail tpl_long_draft_redaction "$T/at5.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_long_draft_redaction"
 
 finish
