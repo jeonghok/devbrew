@@ -36,7 +36,7 @@ Usage = team_rules.Usage
 Unchecked = team_rules.Unchecked
 DESIGN, PLAN, REVIEW = team_layout.STAGES[0], team_layout.STAGES[1], team_layout.STAGES[3]
 NO_BRANCH = "과제 브랜치 %s 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다"
-NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 과제 브랜치가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다"
+NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 브랜치가 없다"
 ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
 SYNC_LINE = "맞추는 명령: roadmap_write.py job sync --result %s --role %s --bundle-at %s --job-at %s"
@@ -192,7 +192,7 @@ def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tupl
     plain = reader.flow(block) == team_status.PLAIN_FLOW
     branches = block.get("branches") or []
     if not branches:
-        return base.commit, plain, False, [NO_BRANCH_FIELD % job]
+        raise Refused(NO_BRANCH_FIELD % job)
     n = plan or 1
     if n > len(branches):
         raise Refused("블록 %s 의 브랜치 칸에 %d 번째 브랜치가 없다(브랜치 %d개)" % (job, n, len(branches)))

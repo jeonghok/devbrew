@@ -20,6 +20,7 @@ import roadmap_render as R  # noqa: E402
 import team_status as TS  # noqa: E402
 import team_rules as TR  # noqa: E402
 import repo_defaults  # noqa: E402
+import start_bundle as SB  # noqa: E402
 
 DOC = PLUGIN / "references" / "team-files.md"
 README = PLUGIN / "README.md"
@@ -158,7 +159,7 @@ class RulesAndBundleDoc(unittest.TestCase):   # R1 AC26 — 계획 3 몫
 
     def test_section9_and_coverage_carry_the_late_decisions(self):   # B35 · B36
         s9 = self.doc("## §9 시작 묶음")
-        self.assertIn("이미 기본 브랜치에 머지됐다", s9)
+        self.assertIn("`%s%s`" % (SB.PREFIX + "멈춤 — ", SB.ALREADY_MERGED % "<과제 이름>"), s9)
         s5 = self.doc("## §5 결과 파일")
         self.assertIn("머리 roadmap 이 레포 상대 경로가 아니다", s5 + self.doc("## §10 단계 계산"))
 
@@ -481,10 +482,6 @@ class RepoFiles(unittest.TestCase):   # R1 AC25 — devbrew 레포의 공통 문
             self.assertEqual(sorted(p.name for p in (REPO / self.rd() / role).iterdir()), [L.ROLE_DOC], role)   # 역할 폴더는 로드맵 폴더가 아니다
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 RULE_WORDS = ("team_rules.py", "start_bundle.py", "묶음 낡음", "REVIEW.md")
 
 
@@ -498,3 +495,7 @@ class RulesVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다 �
         body = dict(entries)[mine[0]]
         self.assertFalse(all(w in body for w in ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")))
         self.assertIn("이미 깐", body)   # 리더 틀이 바뀐 것을 이미 깐 레포가 손으로 맞춘다(U10 가일 때)
+
+
+if __name__ == "__main__":
+    unittest.main()

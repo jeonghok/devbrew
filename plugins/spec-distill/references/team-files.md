@@ -518,7 +518,7 @@ start_bundle.py --roadmap <로드맵> --role leader
 **단계마다 다른 것.**
 
 - `design` — 원자료를 줄 범위 없이 전체로 가리키고, `sources.md` 도 기준 커밋에 있으면 `<커밋>:<경로>` 로 `읽을 것` 맨 앞에 가리킨다(설계는 원자료 전체와 번호 항목을 기준으로 한다, §3 · §4). 그 밖의 단계는 INTENT.md 가 적은 줄 범위만 가리키고 `sources.md` 는 싣지 않는다. 단순 작업(`kind: task`)은 `원자료` 줄을 내지 않는다 — 받은 말이 INTENT.md 의 지시 원문 칸에 있다.
-- `design` · `plan` — `쓸 자리` 한 줄이 더 실린다(§10 의 변환기 문장).
+- `design` · `plan` — `쓸 자리` 한 줄이 더 실린다(변환기 `workflow_superpowers.py place` 가 내는 문장 — 설계는 설계문서 자리, 계획은 계획 파일 자리를 일러 준다).
 - `review` — 역할 문서 · `쓸 것` · `맞추는 명령` 이 없고 규칙과 검수 기준을 싣는다. 검수 결과 파일은 리더가 쓴다(§5). REVIEW.md 가 기준 커밋에 없으면 `검수 기준: 없음 — REVIEW.md 가 없다` 한 줄이다.
 - `읽을 것` — INTENT.md · 설계 파일 · 계획 파일들(번호 차례)에, 같은 단계 · 같은 계획의 바로 앞 시도 결과 파일 하나와 가장 새 `review` 결과 파일 하나를 있을 때만 더한다.
 - 기본 역할 — `--role` 을 주지 않으면 `design` · `plan` 은 designer, `implement` 는 worker 다. writer 는 `--role writer` 를 줄 때만 쓴다. `review` 에는 `--role` 을 주지 않는다.
