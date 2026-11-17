@@ -14,6 +14,11 @@
 ### Fixed
 - 레포에 CLAUDE.md 가 없으면 seed 리뷰가 멈추던 것 — 번들의 그 절을 「레포 CLAUDE.md 없음」 으로 채워 조립한다.
 
+## [8.19.2] — 2026-11-17
+
+### Changed
+- skill 여섯의 `cost_class` 를 `metadata` 아래로 옮겼다. request-framing 본문의 「skill 계층에는 도구를 막을 수단이 없다」 를 「`allowed-tools` 는 제한이 아니고 이 skill 은 도구를 빼는 키를 쓰지 않는다」 로 고쳤다.
+
 ## [8.19.1] — 2026-11-17
 
 ### Changed

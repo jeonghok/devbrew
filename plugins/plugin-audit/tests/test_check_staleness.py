@@ -525,6 +525,11 @@ class TestCategoryAbsence(unittest.TestCase):
             facts = run_sweep(p)
             hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "cost_class"]
             self.assertTrue(hits)
+            h = hits[0]
+            self.assertIn("metadata", h["quote"])
+            self.assertEqual(h["norm"], "cost_class")
+            self.assertEqual(h["class"], "category absence")
+            self.assertEqual(set(h), {"class", "file", "line", "quote", "norm"})
 
     def test_no_skill_no_cost_class_fact(self):
         with tempfile.TemporaryDirectory() as d:
@@ -538,10 +543,48 @@ class TestCategoryAbsence(unittest.TestCase):
             p = self._plugin(d)
             (p / "skills" / "doing-thing").mkdir(parents=True)
             (p / "skills" / "doing-thing" / "SKILL.md").write_text(
-                "---\nname: doing-thing\ncost_class: low\n---\nbody\n", encoding="utf-8")
+                "---\nname: doing-thing\nmetadata:\n  cost_class: low\n---\nbody\n", encoding="utf-8")
             facts = run_sweep(p)
             hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "cost_class"]
             self.assertFalse(hits)
+
+    def _cost_hits(self, fm_text):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._plugin(d)
+            (p / "skills" / "doing-thing").mkdir(parents=True)
+            (p / "skills" / "doing-thing" / "SKILL.md").write_text(
+                "---\nname: doing-thing\n" + fm_text + "---\nbody\n", encoding="utf-8")
+            return [f for f in run_sweep(p)
+                    if f["class"] == "category absence" and f.get("norm") == "cost_class"]
+
+    def test_top_level_only_cost_class_flagged_same_as_absent(self):
+        absent = self._cost_hits("description: x\n")
+        top = self._cost_hits("cost_class: low\n")
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0]["quote"], absent[0]["quote"])
+        self.assertIn("metadata", top[0]["quote"])
+
+    def test_indented_cost_class_outside_metadata_flagged(self):
+        self.assertEqual(len(self._cost_hits("hooks:\n  cost_class: low\n")), 1)
+
+    def test_nested_deeper_cost_class_flagged(self):
+        self.assertEqual(
+            len(self._cost_hits("metadata:\n  inner:\n    cost_class: low\n")), 1)
+
+    def test_cost_class_after_sibling_child_and_blank_line_not_flagged(self):
+        self.assertEqual(
+            len(self._cost_hits("metadata:\n  author: x\n\n  cost_class: low\n")), 0)
+
+    def test_body_only_metadata_block_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._plugin(d)
+            (p / "skills" / "doing-thing").mkdir(parents=True)
+            (p / "skills" / "doing-thing" / "SKILL.md").write_text(
+                "---\nname: doing-thing\n---\nmetadata:\n  cost_class: low\n",
+                encoding="utf-8")
+            hits = [f for f in run_sweep(p)
+                    if f["class"] == "category absence" and f.get("norm") == "cost_class"]
+        self.assertEqual(len(hits), 1)
 
     # --- kill switch ---
     def test_kill_switch_absent_with_hook_flagged(self):

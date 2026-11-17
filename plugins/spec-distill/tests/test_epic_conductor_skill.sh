@@ -13,8 +13,9 @@ while IFS= read -r line; do
   [ -z "$line" ] && continue
   grep -qxF -- "$line" "$SK" && ok "머리 줄: $line" || no "머리 줄이 없다: $line"
 done <<< "$HEAD"
-assert_file_grep "$SK" '^cost_class: high$' "cost_class: high"
 fm() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
+assert_eq "$(fm "$SK" | grep -A1 -xF 'metadata:' | grep -cxF '  cost_class: high')" "1" "cost_class: high (metadata 아래)"
+assert_eq "$(fm "$SK" | grep -c '^cost_class:')" "0" "맨 위 cost_class 줄이 없다"
 assert_eq "$(fm "$SK" | grep -c '^name: epic-conductor$')" "1" "name 이 디렉토리 이름과 같다"
 BODY="$(cat "$SK")"
 sec() { awk -v h="$1" '$0==h{f=1;next} f&&/^##/{exit} f' "$SK"; }
@@ -224,7 +225,7 @@ assert_not_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md"
 assert_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
-COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$CM")"
+COST="$(grep -F '**모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다**' "$CM")"
 assert_contains "$COST" '어느 클래스의 skill 도 지출 승인을 묻지 않는다' "CLAUDE.md: cost 줄이 지출 승인을 묻지 않는다(양)"
 assert_eq "$(grep -c '이름 붙인 예외' "$CM")" "0" "CLAUDE.md: 이름 붙인 예외가 없다 — 물을 게이트가 없어 예외가 할 일이 없다"
 others="$(grep -l '이름 붙인 예외' "$ROOT"/plugins/*/skills/*/SKILL.md || true)"

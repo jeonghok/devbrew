@@ -56,11 +56,11 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · qg fix-loop 의 반복 상한(`plugins/quality-gates/skills/quality-pipeline/SKILL.md`)
 
 ### P21 — Security & Supply Chain
-**Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, integrity-pin된 plugin-to-plugin trust, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
+**Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
 코드: `plugins/quality-gates/scripts/publish-comment.sh` (게시 sink — kill switch · secret-scan · 비신뢰 입력) · hooks kill switch · persona=보안-민감
 
 ### P22 — Cost Awareness
-**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.
+**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter `metadata` 아래에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.
 코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 3 · `shared/tests/test_cost_disclosure.sh`
 
 ### P23 — Decisions Stay Refutable

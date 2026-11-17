@@ -110,7 +110,7 @@ assert_contains "$W_AC" '지출 승인을 묻지 않는다' "(나) artifact-crit
 assert_contains "$W_PA" '「감사자 k · 반박 최대 k · codex 감사 k회' "(나) plugin-audit step 3 (b): 규모 공시 줄 본문(감사자 k · 반박 최대 k · codex 감사 k회)"
 
 # 규칙 문서도 같은 문장을 갖는다(음성 scan 의 양의 짝).
-COST="$(grep -F '**모든 skill에 `cost_class` 선언**' "$ROOT/CLAUDE.md")"
+COST="$(grep -F '**모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다**' "$ROOT/CLAUDE.md")"
 P22="$(awk '/^### P22/{f=1;next} /^(## |### )/{f=0} f' "$ROOT/docs/philosophy/devbrew-harness-philosophy.md")"
 assert_contains "$COST" '어느 클래스의 skill 도 지출 승인을 묻지 않는다' "규칙: CLAUDE.md cost_class 줄에 지출 승인을 묻지 않는다"
 assert_contains "$P22" '어느 클래스의 스킬도 지출 승인을 묻지 않는다' "규칙: 철학 P22 에 지출 승인을 묻지 않는다"
