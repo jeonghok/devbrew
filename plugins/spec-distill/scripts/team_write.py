@@ -663,7 +663,8 @@ def _appended(text: str, new_lines: list) -> str:
 
 def cmd_job_sync(a, W) -> int:
     """결과 파일을 한 거래로 맞춘다 — 없으면 머리를 만들고, 원장 · 계획 파일이 있으면 변환기가 낸 줄 가운데 없는 것만 덧붙이고,
-    `--end` 면 머리의 head 를 고쳐 「끝」 줄을 단다. 있는 줄은 바이트 그대로 둔다. git 은 레포 뿌리와 레포 설정(`roadmaps_dir`)을
+    `--end` 면 머리의 head 를 고쳐 「끝」 줄을 단다. 「끝」 줄이 없는 있는 파일(이어 쓰는 파일)에 `--bundle-at` · `--job-at` 을
+    함께 주면 머리의 그 두 커밋을 새 값으로 고치고, 둘 가운데 하나만 주면 사용법 오류다. 그 밖의 있는 줄은 바이트 그대로 둔다. git 은 레포 뿌리와 레포 설정(`roadmaps_dir`)을
     읽을 때만 부르고, 과제 브랜치의 커밋 · 이력은 읽지 않으며 커밋하지 않는다."""
     if bool(a.ledger) != bool(a.plan_file):
         raise W.Usage("--ledger 와 --plan-file 은 함께만 준다")

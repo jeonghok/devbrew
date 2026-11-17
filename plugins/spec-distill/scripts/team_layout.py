@@ -177,7 +177,8 @@ def default_role(stage: str) -> Optional[str]:
 
 def leader_ref(default_ref: str) -> str:
     """리더가 쓰는 파일(팀 규칙 파일)을 읽을 ref. 받은 값을 그대로 돌려준다(I2).
-    R3 가 이 함수의 값만 바꾼다."""
+    R3 가 이 함수의 값을 바꿀 때 결과 파일 머리의 규칙 커밋 칸과 `job sync` 의 인자도 함께 바뀐다 —
+    「묶음 낡음」 은 팀 규칙의 그때 글을 머리 bundle_at 의 커밋에서 읽으므로, 값만 바꾸면 거짓 「묶음 낡음」 이 뜬다."""
     return default_ref
 
 
