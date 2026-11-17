@@ -126,7 +126,14 @@ def neighbors(bundle: str, root: str) -> list:
     kind = unquote(fm.get("type", ""))
     if kind not in ("epic-bundle", JOB_KIND):
         return []
-    epic, rel = unquote(fm.get("job" if kind == JOB_KIND else "epic", "")), unquote(fm.get("roadmap", ""))
+    epic = unquote(fm.get("job" if kind == JOB_KIND else "epic", ""))
+    if kind == JOB_KIND:
+        try:
+            rel = team_files.roadmap_rel({k: unquote(v) for k, v in fm.items()})
+        except FormatError as exc:   # 레포 밖을 가리키는 로드맵은 열지 않는다
+            return ["[spec-distill] 로드맵 속 위치를 보일 수 없다 — %s" % exc]
+    else:
+        rel = unquote(fm.get("roadmap", ""))
     git = rs.Git(root)
     report = rs.build(git, argparse.Namespace(roadmap=None, roadmap_file=os.path.join(root, rel), json=True))
     blocks = {b["id"]: b for b in report["blocks"]}

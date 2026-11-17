@@ -27,6 +27,9 @@ RESULT_UNREAD, RULINGS_UNREAD = "결과 파일을 다 읽지 못했다", "판정
 RESERVE_UNSCANNED = "바꾼 파일의 예약도 재지 않았다"
 RECORD_UNREAD = "결정 기록 읽기 불가 — "
 NO_RECEIPT, UNREAD_END = "결과 있음 · 받음 없음", "읽지 못함 — 끝 줄이 있는지 모른다"
+UNCOUNTED_SHAPE = "세지 않은 결과 파일"
+STALE = "묶음 낡음"
+STALE_UNMEASURED = STALE + "을 재지 못했다"
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -69,9 +72,12 @@ class Reader:
     def shallow(self):
         """얕은 클론이면 사유 한 줄, 아니면 None — 한 번만 묻는다. 묻지 못해도 셀 수 없음으로 본다."""
         if not self._shallow:
-            rc, out = self.git.run("rev-parse", "--is-shallow-repository")
-            self._shallow.append(None if rc == 0 and out.strip() == "false" else
-                                 SHALLOW if rc == 0 and out.strip() == "true" else "얕은 클론인지 읽지 못했다")
+            rc, out, err = self.git.run_err("rev-parse", "--is-shallow-repository")
+            word = out.strip()
+            if rc != 0 or word not in ("true", "false"):   # 묻지 못한 것은 git 읽기 실패로 남긴다(검사 불가 3)
+                self.git.fail("rev-parse", rc if rc != 0 else 1, err if rc != 0 else "예상 밖 출력: %s" % (word or "(빈 출력)"))
+            self._shallow.append(None if word == "false" and rc == 0 else
+                                 SHALLOW if word == "true" and rc == 0 else "얕은 클론인지 읽지 못했다")
         return self._shallow[0]
 
     def read(self, tree, path: str):
@@ -183,6 +189,54 @@ class Reader:
             out += ["- " + line for line in result.rulings]
         return out
 
+    def stale(self, tip: str, block: dict) -> list:
+        """도는 일꾼(단계 · 계획마다 가장 새 시도이고 끝 줄이 없는 결과 파일)의 묶음이 낡았는가 — 알림 줄들(AC23).
+        머리 bundle_at 의 글과 지금 글이 다르면 낡았다(I4). 팀 규칙 파일은 리더가 읽는 ref 에서, 공통 규칙 파일과 그 일꾼의
+        역할 문서는 기본 브랜치에서 읽는다. 머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
+        git.blob · git.commit 만 쓴다 — 알림이 종료 코드를 바꾸지 않는다."""
+        team, job = self.team, block["id"]
+        if self.main is None:
+            return []
+        names = job_results.result_names(self.git, tip, team, job)
+        if not names:
+            return []
+        parsed = [team_layout.parse_result_name(n) for n in names]
+        latest = sorted(job_results.newest(names, stage, plan) for stage, plan in set((p[0], p[1]) for p in parsed))
+        out, lead = [], None
+        for name in latest:
+            stage, plan, attempt = team_layout.parse_result_name(name)
+            if team_layout.default_role(stage) is None:   # 검수 결과 파일은 리더가 쓴다 — 받은 묶음이 없다
+                continue
+            text = self.git.blob(tip, team.result(job, stage, attempt, plan))
+            result = team_files.parse_result(text) if text is not None else None
+            if result is None:
+                continue
+            if result.bundle_at is None:   # 머리 값이 없거나 꼴이 아니다 — 잴 묶음이 없다
+                if not result.end:
+                    why = next((q for q in result.problems if "bundle_at" in q), None)
+                    if why is None:   # 머리를 가르지 못한 파일 — 자세한 사유는 받음 · 읽지 못함 알림이 한 번 낸다(Q13)
+                        why = "머리를 읽지 못했다" if result.problems else "머리에 bundle_at 이 없다"
+                    out.append("%s: %s — %s" % (STALE_UNMEASURED, name, why))
+                continue
+            if result.problems or team_files.lost_lines(result) or result.end:
+                continue   # 다른 사유로 읽지 못한 파일은 받음 · 읽지 못함 알림(Q13)이 알린다 — 한 사실에 알림 하나
+            at = self.git.commit(result.bundle_at)
+            if at is None:
+                out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
+                continue
+            if lead is None:
+                lead = self.git.commit(team_layout.leader_ref(self.main)) or ""
+            if not lead:
+                out.append("%s: %s — 팀 규칙을 읽을 커밋이 없다" % (STALE_UNMEASURED, name))
+                continue
+            roadmaps_dir = team.roadmaps_dir
+            checks = [(team.rules, lead), (team_layout.handbook(roadmaps_dir), self.main),
+                      (team_layout.role_doc(roadmaps_dir, result.role), self.main)]
+            changed = [path for path, rev in checks if self.git.blob(at, path) != self.git.blob(rev, path)]
+            if changed:
+                out.append("%s: %s — 묶은 커밋 %s 뒤에 바뀜: %s" % (STALE, name, at[:8], " · ".join(changed)))
+        return out
+
     def _fill_progress(self, block: dict, name: str, path: str, result) -> None:
         if result is None:
             block["progress"] = {"done": None, "total": None, "why": "%s 를 읽지 못했다" % path}
@@ -199,6 +253,18 @@ class Reader:
         broken = team_files.PROGRESS_BROKEN + " — "
         if why.startswith(broken):
             block["notes"].append("진행 줄을 믿지 않았다: %s — %s" % (name, why[len(broken):]))
+
+    def shape_notes(self, tip: str, block: dict, number, plain: bool) -> list:
+        """implement 결과 파일 이름의 계획 번호가 흐름과 다르면 세지 않았다고 알린다 — 단계 · 근거는 그대로다."""
+        names = job_results.result_names(self.git, tip, self.team, block["id"]) or []
+        flow = PLAIN_FLOW if plain else DESIGN_FLOW
+        out = []
+        for name in names:
+            stage, named, attempt = team_layout.parse_result_name(name)
+            if stage == IMPLEMENT and (named is None) != plain:
+                out.append("%s: %s — %s 의 %s 결과 파일은 %s 이다" % (
+                    UNCOUNTED_SHAPE, name, flow, IMPLEMENT, team_layout.result_name(stage, attempt, number)))
+        return out
 
     def progress(self, tip: str, block: dict, plan: int) -> tuple:
         """(단계, 근거, 설계문서들, 계획들) — 브랜치 하나의 끝(tip)에서 그 과제의 단계(설계 §10). plan 은 그 브랜치가
@@ -217,6 +283,8 @@ class Reader:
         intent = self.read(tip, intent_path)
         if intent is None:
             return UNKNOWN, "%s 를 읽지 못했다" % intent_path, specs, plans
+        block["notes"].extend(self.stale(tip, block))
+        block["notes"].extend(self.shape_notes(tip, block, number, plain))
         try:
             state, notes, latest = job_results.receipt(self.git, self.main, tip, team, job, intent, IMPLEMENT, number,
                                                        block["reserved"], self._outputs(block))
@@ -382,7 +450,7 @@ def task_jobs(reader, blocks: list, scan=None) -> tuple:
                  "notes": [tip_note] if tip_note else []}
         stage, reason, _specs, _plans = reader.progress(tip, block, 1)
         if scan is not None:
-            if stage == UNKNOWN:   # 잴 수 없는 과제에 예약 알림을 붙이지 않는다 — 얕은 클론은 merge base 도 잘려 diff 가 실패한다
+            if reader.shallow() == SHALLOW:   # 얕은 클론은 merge base 도 잘려 diff 가 실패한다 — 예약을 재지 않는다
                 reason = "%s · %s" % (reason, RESERVE_UNSCANNED)
             else:
                 block["notes"].extend(scan(dict(block, tip=tip)))

@@ -124,5 +124,16 @@ class ResultNames(unittest.TestCase):   # 계획 2 — 단계와 결과 파일 �
             self.assertIsNone(L.job_of_path(D, bad), bad)
 
 
+class RolesAndRefs(unittest.TestCase):   # 계획 3 — 기본 역할(§9) · 리더가 쓰는 파일을 읽을 ref(§15 · AC31)
+    def test_default_roles(self):
+        self.assertEqual([L.default_role(s) for s in L.STAGES], ["designer", "designer", "worker", None])
+        self.assertRaises(ValueError, L.default_role, "deploy")
+        self.assertEqual(L.LEADER_ROLE, "leader")
+
+    def test_leader_ref_is_the_default_branch_in_this_epic(self):
+        self.assertEqual(L.leader_ref("refs/remotes/origin/HEAD"), "refs/remotes/origin/HEAD")
+        self.assertEqual(L.leader_ref("0" * 40), "0" * 40)   # 커밋을 줘도 그대로
+
+
 if __name__ == "__main__":
     unittest.main()

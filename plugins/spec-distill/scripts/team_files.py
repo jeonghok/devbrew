@@ -163,6 +163,14 @@ def intent_meta(text: str) -> dict:
     return {k: unquote(v) for k, v in frontmatter(text).items()}
 
 
+def roadmap_rel(meta: dict) -> str:
+    """INTENT.md 머리 `roadmap` 의 값 — 레포 상대 경로가 아니면(빈 값 · `/` 로 시작 · 역슬래시 · `..` 조각) FormatError."""
+    value = meta.get("roadmap") or ""
+    if not value or value.startswith("/") or "\\" in value or ".." in value.split("/"):
+        raise FormatError("머리 roadmap 이 레포 상대 경로가 아니다: %s" % value)
+    return value
+
+
 def intent_ranges(text: str) -> list:
     lines = text.split("\n")
     _header_end(lines)
@@ -387,14 +395,13 @@ def parse_result(text: str) -> Result:
 
 
 def progress_of(result: Result) -> tuple:
-    """`(끝난 수, 전체, None)` 또는 `(None, None, 사유)`."""
+    """`(끝난 수, 전체, None)` 또는 `(None, None, 사유)`. 전체는 마지막 Task 줄의 것이다 — 계획의 task 절 수는 구현 중에 바뀐다."""
     if not result.tasks:
         return None, None, PROGRESS_NONE
-    total = result.tasks[0][1]
     for n, whole, state, commit in result.tasks:
-        if n < 1 or whole < 1 or n > whole or whole != total:
+        if n < 1 or whole < 1 or n > whole:
             return None, None, "%s — Task %d/%d: %s — %s" % (PROGRESS_BROKEN, n, whole, state, commit)
-    n, _, state, _ = result.tasks[-1]
+    n, total, state, _ = result.tasks[-1]
     return (n - 1 if state == _TASK_BLOCKED else n), total, None
 
 

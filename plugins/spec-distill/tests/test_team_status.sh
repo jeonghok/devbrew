@@ -181,6 +181,7 @@ python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8", newline="
   && step "BOM 붙은 결과 파일" || fail_step "BOM 붙은 결과 파일"
 assert_eq "$(st E1) · $(pdone)" "구현 중 · None" "단계: 다 읽지 못한 결과 파일 — BOM 이 붙으면 숫자를 내지 않는다"
 assert_contains "$(notes E1)" 'implement-plan-1-1.md — 머리(첫 줄 `---`)가 없다' "단계: 다 읽지 못한 결과 파일 — 첫 사유를 알린다(BOM)"
+assert_contains "$(pwhy)" '머리(첫 줄 `---`)가 없다' "단계: 다 읽지 못한 결과 파일 — 진행 칸의 사유(BOM)"
 assert_contains "$(notes E1)" "결과 있음 · 받음 없음: implement-plan-1-1.md(읽지 못함 — 끝 줄이 있는지 모른다)" "단계: 다 읽지 못한 결과 파일 — 받음 없음 알림이 「읽지 못함」"
 assert_not_contains "$(notes E1)" "도는 중 — 끝 줄 없음" "단계: 다 읽지 못한 결과 파일 — 끝 줄이 있는 파일을 「도는 중」 이라 하지 않는다"
 back "$END_AT"
@@ -323,6 +324,42 @@ assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E1'][0]['reaso
 back "$RECEIVED_AT" && restat || fail_step "갈라짐 되돌리기"
 assert_eq "$(st E1) · $(rc)" "구현 끝 · 0" "끝: 되돌리면 구현 끝 · 종료 코드 0"
 
+# 조상 판정(merge-base)만 실패시키는 가짜 git — 진짜 갈라짐의 근거와 견준다(잰 대로 못 박는다)
+REAL_GIT="$(command -v git)"
+mkdir -p "$T/fakebin"
+cat > "$T/fakebin/git" <<FAKE
+#!/bin/sh
+# merge-base 만 128 로 실패시키고 그 밖의 하위 명령은 진짜 git 으로 넘긴다
+sub=""
+skip=0
+for a in "\$@"; do
+  if [ "\$skip" = 1 ]; then skip=0; continue; fi
+  case "\$a" in
+    -c|-C) skip=1 ;;
+    -*) ;;
+    *) sub="\$a"; break ;;
+  esac
+done
+if [ "\$sub" = merge-base ]; then echo "fatal: 가짜 git — 조상 판정 실패" >&2; exit 128; fi
+exec "$REAL_GIT" "\$@"
+FAKE
+chmod +x "$T/fakebin/git"
+fakestat() { (cd "$W" && PATH="$T/fakebin:$PATH" python3 "$RS" "$RM" --json) > "$T/fake.json" 2>/dev/null; echo "$?"; }
+other fetch -q origin && other checkout -q -B feature/tm-e1 origin/feature/tm-e1
+g checkout -q feature/tm-e1 && put src/e1/b.txt b3 && g commit -qm "갈라짐 재현(로컬)" \
+  && other reset -q --hard "$RECEIVED_AT" && printf 'd\n' > "$U/src/e1/d2.txt" && other add -- src/e1/d2.txt && other commit -qm "갈라짐 재현(원격)" && other push -q -f origin HEAD:feature/tm-e1 \
+  && g fetch -q origin && restat || fail_step "진짜 갈라짐 만들기"
+SPLIT_REASON="$(why E1)"
+FAKE_RC="$(fakestat)"
+FAKE_REASON="$(js "$T/fake.json" "[b['reason'] for b in r['blocks'] if b['id']=='E1'][0]")"
+assert_eq "$(st E1) · $(rc)" "알 수 없음 · 3" "끝: 진짜 갈라짐 — 알 수 없음 · 3(가짜 git 과 견줄 바탕)"
+assert_eq "${FAKE_RC} · $(js "$T/fake.json" "[b['stage'] for b in r['blocks'] if b['id']=='E1'][0]")" "3 · 알 수 없음" "끝: 조상 판정만 실패해도 알 수 없음 · 3(진짜 갈라짐과 같다)"
+assert_contains "$SPLIT_REASON" "갈라짐 — " "끝: 진짜 갈라짐의 근거는 「갈라짐 — 」 으로 시작한다"
+assert_contains "$FAKE_REASON" "갈라짐 — " "끝: 조상 판정 실패의 근거도 「갈라짐 — 」 으로 시작한다 — 갈라짐과 가르지 않는다(지금 동작)"
+assert_contains "$FAKE_REASON" "조상 관계를 잴 수 없다" "끝: 조상 판정 실패의 근거 꼬리는 「조상 관계를 잴 수 없다」 — 진짜 갈라짐의 꼬리와 다르다(지금 동작)"
+assert_not_contains "$SPLIT_REASON" "조상 관계를 잴 수 없다" "끝: 진짜 갈라짐의 근거에는 「조상 관계를 잴 수 없다」 가 없다"
+back "$RECEIVED_AT" && restat || fail_step "갈라짐 재현 되돌리기"
+
 # 설계 없는 흐름(E2 — 산출물 칸): 준비 → 진행 중 → 결과 받음
 g checkout -q -b feature/tm-e2 main && put src/e2/note.txt n && step "E2 시작" || fail_step "E2 시작"
 assert_eq "$(st E2) · $(why E2) · $(blk E2 task_status) · $(prog E2)" "진행 중 · 브랜치 있음 · in_progress · None" "단계: 설계 없는 흐름 — 브랜치가 있으면 진행 중"
@@ -382,6 +419,8 @@ assert_eq "${SH3_RC} · $(js "$T/shallow3.json" "[b['stage'] for b in r['blocks'
   "일부 머지: 깊이 3 얕은 클론 — 첫 브랜치는 머지됨으로 보이고 종료 코드 3"
 assert_contains "$(js "$T/shallow3.json" "r['unknown_reasons']")" "E1 ${PARTIAL_LINE} — feature/tm-e1b — 알 수 없음 · 얕은 클론이라" \
   "일부 머지: 깊이 3 얕은 클론 — 세지 못한 지금 브랜치의 사유가 검사 불가 사유에 실린다"
+SH3_E2="$(js "$T/shallow3.json" "[(b['stage'], b['reason'].startswith('얕은 클론이라')) for b in r['blocks'] if b['id']=='E2'][0]")"
+assert_eq "$SH3_E2" "('알 수 없음', True)" "깊이 3 얕은 클론 — 일부 머지가 아닌 블록(E2)도 알 수 없음 · 근거는 「얕은 클론이라」 로 시작"
 rm -rf "$SH3"
 
 # Review Focus 5 — 기본 브랜치를 모르는 레포: 블록이 모두 알 수 없음(3)이고 죽지 않는다
@@ -404,6 +443,7 @@ SH_RC=0; (cd "$SH" && python3 "$RS" "$RM" --json) > "$T/shallow.json" 2> "$T/sha
 assert_eq "${SH_RC} · $(js "$T/shallow.json" "[(b['id'], b['stage']) for b in r['blocks'] if b['id'] in ('E1', 'E2')]")" "3 · [('E1', '알 수 없음'), ('E2', '알 수 없음')]" \
   "Review Focus 5: 얕은 클론이면 브랜치가 있는 블록은 알 수 없음(3)"
 assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E2'][0]")" "얕은 클론이라" "Review Focus 5: 얕은 클론의 사유"
+assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E1'][0]")" "얕은 클론이라" "Review Focus 5: 얕은 클론의 사유 — 브랜치가 있는 다른 블록(E1)도"
 assert_not_contains "$(cat "$T/shallow.err")" "Traceback" "Review Focus 5: 얕은 클론에서 죽지 않는다(Traceback 없음)"
 assert_not_contains "$(js "$T/shallow.json" "r['unknown_reasons']")" "내부 오류" "Review Focus 5: 얕은 클론에서 죽지 않는다(내부 오류 없음)"
 
@@ -439,6 +479,8 @@ rm -f "$(cat "$T/machine-path.txt")"; rm -rf "$W/.claude"
 assert_eq "$(g status --porcelain --untracked-files=all)" "" "끝 상태: 작업 트리가 깨끗하다(PR 캐시를 지웠다)"
 assert_eq "$(g rev-parse --abbrev-ref HEAD) · $(g rev-parse HEAD) · $(g symbolic-ref -q refs/remotes/origin/HEAD)" "main · ${MAIN_END} · refs/remotes/origin/main" \
   "끝 상태: main 을 연 채 · main 은 합친 커밋 · origin/HEAD 는 main"
+assert_eq "$(g rev-parse origin/main feature/tm-e1 origin/feature/tm-e1 feature/tm-e2 origin/feature/tm-e2 | tr '\n' ' ')" "${MAIN_END} ${RECEIVED_AT} ${RECEIVED_AT} ${E2_AT} ${E2_AT} " \
+  "끝 상태: origin/main 은 합친 커밋 · feature/tm-e1 · feature/tm-e2 는 되돌린 끝(로컬 · origin)"
 
 # ── 알림 — 예약 밖 변경 · INTENT.md 어긋남 · 넘김 · 판정 · 과제 폴더 안 산출물(AC11 · AC28 · AC9) ─────────
 # 시작 자리: 위 끝 상태에서 feature/tm-e1b 를 지우고 main 을 E1 을 합치기 전(MAIN_AT) · feature/tm-e1 을 RECEIVED_AT 으로 되돌린다
@@ -645,4 +687,22 @@ assert_eq "$(g rev-parse feature/tm-e1 origin/feature/tm-e1 feature/tm-e2 origin
 assert_eq "$(g for-each-ref --format='%(refname)' refs/heads/feature/tm-e1b refs/heads/feature/tm-e3 refs/remotes/origin/feature/tm-e1b refs/remotes/origin/feature/tm-e3)" "" \
   "알림 끝 상태: feature/tm-e1b · feature/tm-e3 이 없다(로컬 · origin)"
 assert_eq "$(st E1) · $(st E2) · $(st E3)" "구현 끝 · 결과 받음 · 대기" "알림 끝 상태: 단계 — E1 구현 끝 · E2 결과 받음 · E3 대기"
+# 이름 꼴: 흐름과 다른 꼴의 implement 결과 파일은 세지 않고 알린다 — 단계 · 근거 · 종료 코드는 그대로다
+g checkout -q main && restat || fail_step "이름 꼴 시작"
+assert_not_contains "$(notes E1) | $(notes E2)" "세지 않은 결과 파일" "이름 꼴: 꼴이 맞는 결과 파일만 있는 블록에는 알림이 없다(음의 짝)"
+SHAPE_BEFORE="$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)"
+g checkout -q feature/tm-e1 && sync E1 implement-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null \
+  && step "이름 꼴: 설계 흐름에 번호 없는 이름" || fail_step "이름 꼴: 설계 흐름"
+assert_eq "$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)" "$SHAPE_BEFORE" "이름 꼴: 설계 흐름에 번호 없는 이름 — 단계 · 근거 · 종료 코드는 그 파일을 두기 전과 같다"
+assert_contains "$(notes E1)" "세지 않은 결과 파일: implement-1.md — 설계 흐름 의 implement 결과 파일은 implement-plan-1-1.md 이다" \
+  "이름 꼴: 설계 흐름에 번호 없는 이름이면 맞는 이름을 알린다"
+back "$RECEIVED_AT" && restat
+assert_not_contains "$(notes E1)" "세지 않은 결과 파일" "이름 꼴: 그 파일을 치우면 알림도 사라진다"
+g checkout -q feature/tm-e2 && sync E2 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null \
+  && step "이름 꼴: 설계 없는 흐름에 번호 붙은 이름" || fail_step "이름 꼴: 설계 없는 흐름"
+assert_eq "$(st E1) · $(why E1) · $(rc) · $(st E2) · $(why E2)" "$SHAPE_BEFORE" "이름 꼴: 설계 없는 흐름에 번호 붙은 이름 — 단계 · 근거 · 종료 코드는 그대로다"
+assert_contains "$(notes E2)" "세지 않은 결과 파일: implement-plan-1-1.md — 설계 없는 흐름 의 implement 결과 파일은 implement-1.md 이다" \
+  "이름 꼴: 설계 없는 흐름에 번호 붙은 이름이면 맞는 이름을 알린다"
+back "$E2_AT" && restat
+g checkout -q main
 finish
