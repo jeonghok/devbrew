@@ -57,6 +57,13 @@ assert_eq "$(run check --roadmap "$RM")" "1" "규칙: 작업 폴더의 파일이
 assert_eq "$(grep -c -F "예산 초과" "$T/out.txt")" "1" "규칙: 작업 폴더는 파일 바이트로 잰다"
 assert_eq "$(run check --roadmap "$RM" --ref origin/main)" "0" "규칙: --ref 는 그 커밋의 바이트로 잰다"
 g checkout -q HEAD -- "$TM/RULES.md"
+# --ref 의 예산은 글자 수가 아니라 바이트 수다 — 한글 열두 자의 제목 줄은 15자 · 39바이트
+printf '# 규칙규칙규칙규칙규칙규칙\n' > "$W/$TM/RULES.md"
+printf '%s\n' '---' 'rules_budget: 20' '---' > "$W/.devbrew.md"
+g add -- .devbrew.md "$TM/RULES.md" && g commit -qm "한글 예산" && g push -q origin main && g fetch -q origin
+assert_eq "$(run check --roadmap "$RM" --ref origin/main)" "1" "규칙: --ref 의 예산은 바이트로 잰다(글자 수로는 넘지 않는 한글 줄)"
+assert_eq "$(grep -c -F "39바이트" "$T/out.txt")" "1" "규칙: --ref 의 예산 줄에 그 커밋의 바이트 수"
+g revert --no-edit HEAD > /dev/null && g push -q origin main && g fetch -q origin
 
 # ④ team 형식이 아닌 로드맵
 mkdir -p "$W/${RD}old"

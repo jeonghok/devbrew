@@ -66,6 +66,7 @@ g revert --no-edit HEAD >/dev/null && publish
 g remote set-head origin -d
 assert_eq "$(lead)" "3" "기본 브랜치 모름: 검사 불가 3"
 assert_eq "$(wc -c < "$T/lead.txt" | tr -d ' ')" "0" "기본 브랜치 모름: 표준 출력이 비었다"
+assert_contains "$(cat "$T/lead.err")" "origin/HEAD 가 없다" "기본 브랜치 모름: 사유는 기본 브랜치를 모른다는 것(뒤의 다른 지킴이 낸 3 이 아니다)"
 g remote set-head origin main
 assert_eq "$(lead)" "0" "기본 브랜치 되돌림: 0"
 
@@ -116,6 +117,19 @@ printf '기준 커밋: %s\n역할 문서 (%s):\n%s\n규칙 (%s · 팀 규칙은 
   "$(cat "$T/ls.rules")" "$(show "${RD}HANDBOOK.md")" > "$T/patched.want"
 cmp -s "$T/patched.txt" "$T/patched.want" && ok "AC31: 팀 규칙은 leader-state 의 글, 공통 규칙 · 역할 문서는 기준 커밋의 글" || no "AC31: 읽은 커밋이 기대와 다르다"
 assert_eq "$(grep -c LSMARK "$T/patched.txt")" "1" "AC31: leader-state 의 글은 팀 규칙 파일의 한 줄뿐"
+# I2 — start_bundle 을 먼저 import 한 뒤에 바꿔 끼워도 그 값이 닿는다(부를 때마다 모듈에서 찾는다)
+PRC=0
+(cd "$W" && python3 - "$S" "$RM" > "$T/patched2.txt" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import start_bundle
+import team_layout
+team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
+PY
+) || PRC=$?
+assert_eq "$PRC" "0" "I2: import 뒤에 바꾼 부름 종료 코드 0"
+cmp -s "$T/patched2.txt" "$T/patched.want" && ok "I2: import 뒤에 바꿔 끼워도 팀 규칙은 leader-state 의 글" || no "I2: import 뒤에 바꾼 ref 함수가 묶음에 닿지 않았다"
 
 # ── 과제 묶음(AC21 · AC24) ── main 을 바꾼 걸음은 되돌려 올리고, 과제 브랜치는 jpush 로 올려 J 를 다시 읽는다
 publish   # ⑧ 의 고침과 되돌림(합치면 바뀐 것 없음)을 올려 로컬 main 과 origin/main 을 맞춘다

@@ -495,6 +495,8 @@ class RulesVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다 �
         body = dict(entries)[mine[0]]
         self.assertFalse(all(w in body for w in ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")))
         self.assertIn("이미 깐", body)   # 리더 틀이 바뀐 것을 이미 깐 레포가 손으로 맞춘다(U10 가일 때)
+        for word in ("--layout team", "종료 코드 4"):   # 이 항목에는 두 낱말을 하나도 쓰지 않는다(위 단언은 다섯이 다 들 때만 걸린다)
+            self.assertNotIn(word, body)
 
 
 if __name__ == "__main__":

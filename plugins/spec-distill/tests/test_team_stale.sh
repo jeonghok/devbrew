@@ -28,9 +28,11 @@ assert_eq "$(sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-
 g add -- "$E1/results" && g commit -qm "E1 결과" && g push -q origin feature/tm-e1 && g checkout -q main
 
 RC0="$(status "$T/s.json")"
+UNK0="$(js "$T/s.json" "r['unknown_reasons']")"
 assert_eq "$(notes E1)" "[]" "낡음: 바뀐 것이 없으면 나오지 않는다"
 bump "$RULES" '- [문서] 바꾼 건 CHANGELOG에 · 출처: a · 확인: b'
 assert_eq "$(status "$T/s.json")" "$RC0" "AC23: 종료 코드는 그대로다"
+assert_eq "$(js "$T/s.json" "r['unknown_reasons']")" "$UNK0" "AC23: 검사 불가 사유도 그대로다(바탕 종료 코드가 이미 3 이라 종료 코드만으로는 못 가른다)"
 assert_eq "$(notes E1)" "['묶음 낡음: implement-plan-1-1.md — 묶은 커밋 ${B:0:8} 뒤에 바뀜: ${RULES}']" "AC23: 팀 규칙이 바뀌면 나온다"
 assert_contains "$(cd "$W" && python3 "$S/control_plane.py" show "$RM")" "정보: 묶음 낡음: implement-plan-1-1.md" "AC23: 현황의 그 과제 줄 아래에 보인다"
 unbump; status "$T/s.json" > /dev/null
@@ -64,6 +66,7 @@ g checkout -q feature/tm-e1
 assert_eq "$(sync E1 implement-plan-1-2.md --role worker --bundle-at "$GHOST" --job-at "$(g rev-parse HEAD)")" "0" "준비: 없는 커밋의 bundle_at"
 g add -- "$E1/results" && g commit -qm "E1 결과 2" && g push -q origin feature/tm-e1 && g checkout -q main
 assert_eq "$(status "$T/s.json")" "$RC0" "없는 커밋: 종료 코드는 그대로다"
+assert_eq "$(js "$T/s.json" "r['unknown_reasons']")" "$UNK0" "없는 커밋: 검사 불가 사유도 그대로다"
 assert_eq "$(notes E1)" "['묶음 낡음을 재지 못했다: implement-plan-1-2.md — 묶은 커밋 ${GHOST:0:8} 가 이 레포에 없다']" "없는 커밋: 재지 못했다 한 줄뿐이다"
 assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E1' for n in b['notes'] if n.startswith('묶음 낡음: ')]")" "[]" "없는 커밋: 「바뀜」 을 지어내지 않는다"
 # ⑦ 설계 단계의 결과 파일
@@ -91,6 +94,14 @@ g add -- "$E3/results" && g commit -qm "E3 깨진 머리" && g push -q origin fe
 assert_eq "$(status "$T/s.json")" "$RC0" "C6: 머리 꼴이 깨진 결과 파일 — 죽지 않는다"
 assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음: plan-plan')]")" "[]" "C6: 읽지 못한 결과 파일에 「바뀜」 을 지어내지 않는다"
 assert_eq "$(js "$T/s.json" "[n.split(' — ')[0] for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다')]")" "['묶음 낡음을 재지 못했다: plan-plan-1-1.md']" "C6: 깨진 결과 파일은 재지 못했다로 알린다"
+assert_contains "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다: plan-plan-1-1.md')]")" "머리 bundle_at 가 커밋 번호 꼴이 아니다: 'zz'" "C6: 재지 못한 사유는 그 머리 값의 문제다"
+# C6: 머리에 bundle_at 줄이 아예 없는 결과 파일도 재지 못했다로 알린다
+g checkout -q feature/tm-e3
+assert_eq "$(sync E3 plan-plan-2-1.md --role designer --bundle-at "$B" --job-at "$(g rev-parse HEAD)")" "0" "준비: 계획 2 결과 파일"
+sed -i.bak "/^bundle_at: /d" "$W/$E3/results/plan-plan-2-1.md" && rm -f "$W/$E3/results/plan-plan-2-1.md.bak"
+g add -- "$E3/results" && g commit -qm "E3 bundle_at 없는 머리" && g push -q origin feature/tm-e3 && g checkout -q main
+assert_eq "$(status "$T/s.json")" "$RC0" "C6: bundle_at 줄이 없는 결과 파일 — 죽지 않는다"
+assert_contains "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다: plan-plan-2-1.md')]")" "머리 bundle_at 가 커밋 번호 꼴이 아니다: None" "C6: bundle_at 줄이 없으면 재지 못했다로 알린다"
 # ⑨ 로드맵 밖 과제
 g checkout -q -b chore/tm-fix main
 printf '로드맵에 없는 일 하나\n' > "$T/said.txt"
