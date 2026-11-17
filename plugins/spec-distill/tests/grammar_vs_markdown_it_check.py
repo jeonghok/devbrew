@@ -459,6 +459,16 @@ class SeedGrammar(unittest.TestCase):
         text = "---\ntype: interview-seed\n---\n\n문장 하나.\n\n키 <REDACTED:api-key> 와 <REDACTED> 를 썼다.\n"
         self.assertEqual(self.check(text), ([], set()))
 
+    def test_structure_exclusion_is_narrow(self):
+        """제외가 좁다 — 진짜 HTML · 자동 링크는 구조로 세고, 가림 표시만 뺀다(제외를 넓히면 RED)."""
+        for mark in ["<REDACTEDX>", "<b>", "<https://x.y>"]:
+            with self.subTest(mark):
+                _found, spans = seed_structure_lines("문장 하나.\n\n앞 %s 뒤\n" % mark)
+                self.assertNotEqual(spans, [], "%s 는 구조로 세어야 한다" % mark)
+        for mark in ["<REDACTED>", "<REDACTED:api-key>"]:
+            with self.subTest(mark):
+                self.assertEqual(seed_structure_lines("문장 하나.\n\n앞 %s 뒤\n" % mark), (set(), []))
+
     def test_seed_positive_control(self):
         sp = S.parse_seed("---\ntype: interview-seed\n---\n\n문장 하나.\n\n- 항목\n")
         self.assertEqual([n for n, _w in sp.rejected], [7])
