@@ -109,7 +109,7 @@ assert_contains "$absent" "**선택지 셋의 따로 된 끝 질문**을 띄운�
 assert_contains "$absent" "공통 계약(\`proceed-gate.md\` Step B)의 질문이 아니다" "F4 AC10: 그 질문은 공통 계약의 질문이 아니다"
 assert_contains "$absent" "crash·spec-mode fallback **금지**" "finishing.md B-1: crash · spec-mode fallback 금지는 그대로다"
 assert_eq "$(printf '%s\n' "$B1" | grep -c '^        {label: ')" "3" "F4 AC10: 끝 질문의 선택지는 셋이다"
-for lit in '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · 내줌: 다음 단계는 superpowers 를 설치한 뒤 새 세션에서 직접 잇는다"},' \
+for lit in '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · 내줌: 확정 후보에 안 고친 잘못이 있으면 확정으로 굳은 채 커밋된다"},' \
            '{label: "확정 목록 수정", description: "얻음: 끝내기 전에 확정 후보와 공시를 고친다 · 내줌: 아직 아무것도 확정되지 않고 고친 뒤 이 질문을 다시 거친다"},' \
            '{label: "brief만 종료", description: "얻음: 아무것도 확정하지 않고 brief 를 여기서 끝낸다 · 내줌: 모든 항목이 잠정으로 남는다"}' \
            '「확정하고 끝낸다」 는 PR 을 열지 않는다. 「확정 목록 수정」 은 두 번 고친 뒤에는 계속할지 묻는다(B-0 의 재제시 상한).' \
