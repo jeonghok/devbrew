@@ -389,6 +389,7 @@ SEED_CASES = [
     ("setext 밑줄", "제목\n==="), ("setext 대시 밑줄", "제목\n---"),
     ("인라인 링크", "앞 [글](x) 뒤"), ("자동 링크", "앞 <https://x.y> 뒤"), ("인라인 HTML", "앞 <b>굵게</b> 뒤"),
     ("한 칸 들인 목록", " - 항목"), ("세 칸 들인 제목", "   # 제목"),
+    ("가림 표시 둘레의 진짜 HTML", "앞 <REDACTEDX> 뒤"),
 ]
 
 
@@ -401,9 +402,24 @@ def seed_structure_lines(body):
                 found.add(t.map[1])
             else:
                 found.add(t.map[0] + 1)
-        elif t.type == "inline" and t.map and any(c.type in ("link_open", "image", "html_inline") for c in t.children):
+        elif t.type == "inline" and t.map and _inline_structure(t.children):
             spans.append((t.map[0] + 1, t.map[1]))
     return found, spans
+
+
+def _inline_structure(children):
+    """인라인 자식 중 구조로 세는 것이 있는가 — 가림 표시(`<REDACTED>` 는 html_inline, `<REDACTED:라벨>` 은 autolink)는 뺀다."""
+    for i, c in enumerate(children):
+        if c.type == "html_inline" and B.P21_PLACEHOLDER_RE.fullmatch(c.content):
+            continue
+        if c.type == "link_open" and c.markup == "autolink":
+            nxt = children[i + 1] if i + 1 < len(children) else None
+            if nxt is not None and nxt.type == "text" and B.P21_PLACEHOLDER_RE.fullmatch("<" + nxt.content + ">"):
+                continue
+            return True
+        if c.type in ("link_open", "image", "html_inline"):
+            return True
+    return False
 
 
 class SeedGrammar(unittest.TestCase):
@@ -438,6 +454,10 @@ class SeedGrammar(unittest.TestCase):
                 text = "---\ntype: interview-seed\n---\n\n문장 하나.\n\n" + body + "\n"
                 missing, _rej = self.check(text)
                 self.assertEqual(missing, [], "%s: 파서는 구조로 보는데 우리는 거부하지 않은 본문 줄 %r" % (name, body))
+
+    def test_placeholder_is_not_structure(self):
+        text = "---\ntype: interview-seed\n---\n\n문장 하나.\n\n키 <REDACTED:api-key> 와 <REDACTED> 를 썼다.\n"
+        self.assertEqual(self.check(text), ([], set()))
 
     def test_seed_positive_control(self):
         sp = S.parse_seed("---\ntype: interview-seed\n---\n\n문장 하나.\n\n- 항목\n")
