@@ -11,7 +11,7 @@ trap 'rm -rf "$T"' EXIT
 team_repo && ok "팀 레포를 세웠다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 
 notes() { js "$T/s.json" "[n for b in r['blocks'] if b['id']=='$1' for n in b['notes'] if n.startswith('묶음 낡음')]"; }
-count() { js "$T/s.json" "sum(1 for b in r['blocks'] for n in b['notes'] if n.startswith('묶음 낡음'))"; }
+allstale() { js "$T/s.json" "sorted(n for b in r['blocks'] for n in b['notes'] if n.startswith('묶음 낡음'))"; }
 bump() { printf '%s\n' "$2" >> "$W/$1"; g add -- "$1"; g commit -qm "고침 $1"; g push -q origin main; g fetch -q origin; BUMPED="$(g rev-parse HEAD)"; }
 unbump() { g revert --no-edit "${1:-HEAD}" > /dev/null && g push -q origin main && g fetch -q origin; }
 RULES="$TM/RULES.md"; COMMON="${RD}HANDBOOK.md"; WORKER="${RD}worker/CLAUDE.md"; DESIGNER="${RD}designer/CLAUDE.md"
@@ -81,9 +81,10 @@ assert_eq "$(notes E3)" "[]" "설계: 바뀐 것이 없으면 나오지 않는�
 bump "$DESIGNER" '- 설계자 한 줄 둘'; D1="$BUMPED"; status "$T/s.json" > /dev/null
 assert_eq "$(notes E3)" "['묶음 낡음: design-1.md — 묶은 커밋 ${B:0:8} 뒤에 바뀜: ${DESIGNER}']" "U9: 설계 단계의 결과 파일도 알린다"
 # ⑧ 검수 기준 파일은 보지 않는다
-before="$(count)"
+before="$(allstale)"
+assert_contains "$before" "묶음 낡음: design-1.md — 묶은 커밋 ${B:0:8} 뒤에 바뀜: ${DESIGNER}" "U9: 견줄 알림 목록이 비지 않았다(양성 대조)"
 bump REVIEW.md '- 검수 기준'; V1="$BUMPED"; status "$T/s.json" > /dev/null
-assert_eq "$(count)" "$before" "U9: 검수 기준 파일이 바뀌어도 알림이 늘지 않는다"
+assert_eq "$(allstale)" "$before" "U9: 검수 기준 파일이 바뀌어도 「묶음 낡음」 알림은 글자까지 그대로다(늘지도 바뀌지도 않는다)"
 assert_not_contains "$(js "$T/s.json" "[n for b in r['blocks'] for n in b['notes']]")" "REVIEW.md" "U9: 알림에 검수 기준 파일 경로가 없다"
 unbump "$V1"; unbump "$D1"
 # C6: 머리 bundle_at 꼴이 깨진 결과 파일 — 죽지 않고 지어내지도 않는다
@@ -102,6 +103,12 @@ sed -i.bak "/^bundle_at: /d" "$W/$E3/results/plan-plan-2-1.md" && rm -f "$W/$E3/
 g add -- "$E3/results" && g commit -qm "E3 bundle_at 없는 머리" && g push -q origin feature/tm-e3 && g checkout -q main
 assert_eq "$(status "$T/s.json")" "$RC0" "C6: bundle_at 줄이 없는 결과 파일 — 죽지 않는다"
 assert_contains "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다: plan-plan-2-1.md')]")" "머리 bundle_at 가 커밋 번호 꼴이 아니다: None" "C6: bundle_at 줄이 없으면 재지 못했다로 알린다"
+# C6: 머리(첫 줄 `---`)가 없는 결과 파일 — 사유는 머리를 읽지 못했다는 것이다(bundle_at 이 없다가 아니다)
+g checkout -q feature/tm-e3
+put "$E3/results/plan-plan-3-1.md" "머리 없는 결과 파일"
+g commit -qm "E3 머리 없는 결과 파일" && g push -q origin feature/tm-e3 && g checkout -q main
+assert_eq "$(status "$T/s.json")" "$RC0" "C6: 머리 없는 결과 파일 — 종료 코드는 그대로다"
+assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if 'plan-plan-3-1.md' in n and n.startswith('묶음 낡음')]")" "['묶음 낡음을 재지 못했다: plan-plan-3-1.md — 머리를 읽지 못했다']" "C6: 머리 없는 결과 파일의 사유는 머리를 읽지 못했다는 것이다(자세한 사유는 다른 알림이 한 번 낸다 — Q13)"
 # ⑨ 로드맵 밖 과제
 g checkout -q -b chore/tm-fix main
 printf '로드맵에 없는 일 하나\n' > "$T/said.txt"

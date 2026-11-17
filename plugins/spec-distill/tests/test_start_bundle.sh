@@ -235,15 +235,15 @@ attempt() { g checkout -q feature/tm-e1 && "$@" && g add -- "$E1/results" && g c
 head_of() {  # head_of <attempt> <bundle_at> — implement · 계획 1 결과 파일의 머리 글(끝 줄 없음)
   printf -- '---\ntype: job-result\nstage: implement\nplan: 1\nattempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n' "$1" "$J" "$2" "$J"
 }
-attempt sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-at "$J" > /dev/null
+attempt sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-at "$J" > "$T/rc.txt"; assert_eq "$(cat "$T/rc.txt")" "0" "준비: 시도 1 의 머리를 만든다(job sync 0)"
 assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "쓸 것: 끝 줄 없는 시도"
 assert_eq "$(line 5)" "쓸 것: ${E1}/results/implement-plan-1-1.md" "쓸 것: 끝 줄 없는 가장 새 시도는 잇는다(U2)"
 assert_eq "$(line 4)" "읽을 것: ${E1}/INTENT.md · ${E1}/design.md · ${E1}/plan-1.md" "쓸 것: 잇는 시도 1 에는 앞 시도가 없다"
-attempt sync E1 implement-plan-1-1.md --end "$J" > /dev/null
+attempt sync E1 implement-plan-1-1.md --end "$J" > "$T/rc.txt"; assert_eq "$(cat "$T/rc.txt")" "0" "준비: 시도 1 에 끝 줄(job sync 0)"
 assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "쓸 것: 끝난 시도"
 assert_eq "$(line 5)" "쓸 것: ${E1}/results/implement-plan-1-2.md" "쓸 것: 끝 줄이 있으면 다음 번호"
 assert_eq "$(line 4)" "읽을 것: ${E1}/INTENT.md · ${E1}/design.md · ${E1}/plan-1.md · ${E1}/results/implement-plan-1-1.md" "쓸 것: 앞 시도가 읽을 것 끝에(U3)"
-attempt sync E1 review-plan-1-1.md --role leader --bundle-at "$B" --job-at "$J" > /dev/null
+attempt sync E1 review-plan-1-1.md --role leader --bundle-at "$B" --job-at "$J" > "$T/rc.txt"; assert_eq "$(cat "$T/rc.txt")" "0" "준비: 검수 결과 파일(job sync 0)"
 job --job E1 --stage implement --plan 1 > /dev/null
 assert_eq "$(line 4)" "읽을 것: ${E1}/INTENT.md · ${E1}/design.md · ${E1}/plan-1.md · ${E1}/results/implement-plan-1-1.md · ${E1}/results/review-plan-1-1.md" "쓸 것: 가장 새 검수 결과도 읽을 것 끝에(U3)"
 attempt put "$E1/results/plan-plan-1-1.md" "x"
@@ -327,6 +327,61 @@ assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 브랜치 칸 빔 �
 assert_contains "$(cat "$T/job.err")" "블록 E3 의 브랜치 칸에 브랜치가 없다" "과제: 브랜치 칸 빔 — 사유에 블록 번호"
 g revert --no-edit HEAD >/dev/null && publish
 assert_eq "$(job --job E3 --stage design)" "0" "과제: 칸을 되돌리면 다시 0(양성 대조)"
+
+# 멈춤 다섯과 그 짝(검사 불가) — 종료 코드와 표준 오류의 사유 글. 로드맵 밖 과제는 team_status 의 알림 글로 1 과 3 을 가른다
+e2push() { g push -q origin feature/tm-e2 && g fetch -q origin; }
+# ⓐ 읽을 커밋에 INTENT.md 가 없다
+g checkout -q feature/tm-e2 && g rm -q -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 INTENT.md 지움" && e2push
+E2T="$(g rev-parse feature/tm-e2)"; g checkout -q main
+assert_eq "$(job --job E2 --stage implement)" "1" "멈춤: 과제 브랜치에 INTENT.md 가 없으면 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: INTENT.md 없음 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — $TM/jobs/E2/INTENT.md 가 ${E2T} 에 없다" "멈춤: INTENT.md 없음 — 사유는 경로와 읽은 커밋"
+g checkout -q feature/tm-e2 && g revert --no-edit HEAD > /dev/null && e2push && g checkout -q main
+assert_eq "$(job --job E2 --stage implement)" "0" "멈춤: INTENT.md 를 되돌리면 다시 0(양성 대조)"
+# ⓑ 에픽 INTENT.md 의 지시 원문에 줄 범위가 없다(implement)
+g checkout -q feature/tm-e2
+python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read().split("\n"); k=[l for l in s if not l.startswith("- 범위: intent/original.md ")]; assert len(k) == len(s) - 1; open(p, "w", encoding="utf-8", newline="").write("\n".join(k))' "$W/$TM/jobs/E2/INTENT.md"
+g add -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 범위 줄 지움" && e2push && g checkout -q main
+assert_eq "$(job --job E2 --stage implement)" "1" "멈춤: 에픽 INTENT.md 에 줄 범위가 없으면 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: 범위 없음 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — $TM/jobs/E2/INTENT.md 의 지시 원문에 $TM/intent/original.md 의 줄 범위가 없다" "멈춤: 범위 없음 — 사유"
+g checkout -q feature/tm-e2 && g revert --no-edit HEAD > /dev/null && e2push && g checkout -q main
+assert_eq "$(job --job E2 --stage implement)" "0" "멈춤: 범위 줄을 되돌리면 다시 0(양성 대조)"
+# ⓒ 결정 블록은 과제가 아니다
+assert_eq "$(job --job P1 --stage implement)" "1" "멈춤: 결정 블록 이름은 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: 결정 블록 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — P1 는 로드맵의 과제 블록도 로드맵 밖 과제도 아니다" "멈춤: 결정 블록 — 사유(조사 앞 빈칸 없음)"
+# 로드맵 밖 과제의 브랜치를 세우고 올린다 — task_branch <브랜치> <이름> <머리 branch>
+task_branch() {
+  g checkout -q -b "$1" main
+  printf '로드맵 밖 일\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name "$2" --branch "$3" --paths docs/tv/ --goal "로드맵 밖 일") > "$T/out.txt" 2>&1
+  assert_eq "$?" "0" "준비: 로드맵 밖 과제 $2 ($1)"
+  g add -- "$TM/jobs/$2" && g commit -qm "과제 $2" && g push -q origin "$1" && g fetch -q origin
+  g checkout -q main
+}
+drop_branches() { g push -q origin --delete "$@" && g branch -q -D "$@" && g fetch -q --prune origin; }
+# ⓓ 같은 이름의 로드맵 밖 과제 둘
+task_branch chore/tm-dup-a dup chore/tm-dup-a
+task_branch chore/tm-dup-b dup chore/tm-dup-b
+assert_eq "$(job --job dup --stage implement)" "1" "멈춤: 같은 이름의 로드맵 밖 과제 둘은 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: 같은 이름 둘 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — 같은 이름의 로드맵 밖 과제가 둘이다: dup — chore/tm-dup-a · chore/tm-dup-b" "멈춤: 같은 이름 둘 — 사유에 두 브랜치(조사 앞 빈칸 없음)"
+drop_branches chore/tm-dup-a chore/tm-dup-b
+# ⓔ 머리 branch 가 그 폴더가 있는 브랜치가 아니다 — team_status 가 「세지 않았다」 로 알린 것은 멈춤(1)
+task_branch chore/tm-wb wrongbr chore/tm-elsewhere
+assert_eq "$(job --job wrongbr --stage implement)" "1" "멈춤: 머리 branch 가 다른 과제는 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: 머리 branch 다름 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — 로드맵 밖 과제 wrongbr 을 세지 않았다 — 머리의 branch(chore/tm-elsewhere) 와 이름이 맞는 브랜치에 이 과제 폴더가 없다" "멈춤: 머리 branch 다름 — 사유는 team_status 의 알림 글 그대로"
+drop_branches chore/tm-wb
+# ⓔ 의 짝 — team_status 가 「세지 못했다」 로 알린 것(머리가 깨진 INTENT.md)은 검사 불가(3)
+g checkout -q -b chore/tm-hb main
+put "$TM/jobs/hb/INTENT.md" "$(printf -- '---\ntype: job\nkind: task')"
+g commit -qm "깨진 머리" && g push -q origin chore/tm-hb && g fetch -q origin && g checkout -q main
+assert_eq "$(job --job hb --stage implement)" "3" "검사 불가: 머리가 깨진 로드맵 밖 과제는 3"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "검사 불가: 깨진 머리 — 표준 출력이 비었다"
+assert_eq "$(cat "$T/job.err")" "[spec-distill] 검사 불가 — 로드맵 밖 과제 hb 을 세지 못했다 — $TM/jobs/hb/INTENT.md 머리를 읽지 못했다 — INTENT 머리말이 닫히지 않았다" "검사 불가: 깨진 머리 — 사유는 team_status 의 알림 글 그대로"
+drop_branches chore/tm-hb
+assert_eq "$(job --job fix-typo --stage implement)" "0" "멈춤 픽스처를 치운 뒤 단순 작업은 그대로 0(양성 대조)"
 
 # ── 끝에서 끝 — 새 레포: create --layout team → 공통 문서 → job new → 시작 묶음 → 맞추는 명령 → 끝 줄 → 결과 대조 → 받음 줄 → 결과 받음.
 #    걸음마다 앞 걸음의 출력을 다음 걸음이 받는다 ──

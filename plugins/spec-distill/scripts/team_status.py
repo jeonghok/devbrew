@@ -213,7 +213,9 @@ class Reader:
                 continue
             if result.bundle_at is None:   # 머리 값이 없거나 꼴이 아니다 — 잴 묶음이 없다
                 if not result.end:
-                    why = next((q for q in result.problems if "bundle_at" in q), "머리에 bundle_at 이 없다")
+                    why = next((q for q in result.problems if "bundle_at" in q), None)
+                    if why is None:   # 머리를 가르지 못한 파일 — 자세한 사유는 받음 · 읽지 못함 알림이 한 번 낸다(Q13)
+                        why = "머리를 읽지 못했다" if result.problems else "머리에 bundle_at 이 없다"
                     out.append("%s: %s — %s" % (STALE_UNMEASURED, name, why))
                 continue
             if result.problems or team_files.lost_lines(result) or result.end:

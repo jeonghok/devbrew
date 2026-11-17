@@ -161,7 +161,7 @@ def _task(reader, blocks: list, job: str) -> dict:
     jobs, notes = team_status.task_jobs(reader, blocks)
     found = [j for j in jobs if j["id"] == job]
     if len(found) > 1:
-        raise Refused("같은 이름의 %s 가 둘이다: %s — %s"
+        raise Refused("같은 이름의 %s가 둘이다: %s — %s"
                       % (team_status.OUTSIDE, job, " · ".join(j["branch"] for j in found)))
     if found and found[0]["stage"] == team_status.MERGED:
         raise Refused(ALREADY_MERGED % job)
@@ -176,7 +176,7 @@ def _task(reader, blocks: list, job: str) -> dict:
         raise Unchecked(unread[0])
     if len(reader.git.failures) > failed_before:
         raise Unchecked("%s — %s" % (team_status.TASKS_UNCOUNTED, reader.git.failures[-1]))
-    raise Refused("%s 는 로드맵의 과제 블록도 %s 도 아니다" % (job, team_status.OUTSIDE))
+    raise Refused("%s 는 로드맵의 과제 블록도 %s도 아니다" % (job, team_status.OUTSIDE))
 
 
 def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tuple:
