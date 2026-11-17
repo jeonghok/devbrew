@@ -883,6 +883,7 @@ git commit -m "feat(spec-distill): 리뷰 결정 질문이 엔진의 질문 재�
 | reviewing-brief · 인터뷰 끝 게이트 | 원장 기록 실패 때의 두 번째 채널 파일 | 펜스의 writer | 스크립트가 낸다 — `short --fallback-file` (이 Task) |
 | reviewing-brief · 인터뷰 끝 게이트 | 웹 한 줄(`웹: Claude … · codex …`) | 선택 펜스 | 싣지 않는다 — 경고가 아니라 매번 앞 글에 싣는 줄이다 |
 | 인터뷰 끝 게이트 | 구조 검사의 참고 줄(`check_brief.py gate` 의 `advisories`) | `check_brief.py` | 모델이 쓴다 — 「구조 검사 참고 N개」 |
+| 인터뷰 끝 게이트(B-2 · B-1) | 건너뛴 것(`check_brief.py gate` 의 `advisories` 가운데 `건너뜀 — ` 으로 시작하는 줄 — 기준 브랜치 269ead33 을 합치며 들어온 채널, Task 14M-2) | `check_brief.py` | 모델이 쓴다 — 「건너뛴 것 N개」. 그 줄들은 위 「구조 검사 참고 N개」 에서 뺀다 |
 | 인터뷰 끝 게이트 | superpowers 판 확인 한 줄 | `check_deps.py` | 모델이 쓴다 — 「같다」가 아닐 때만 「superpowers 판 다름」. 「알 수 없음」 줄은 경고 수에 넣지 않고 지금처럼 따로 싣는다 |
 | request-framing | 이 skill 이 게이트 앞 글에 적는 줄(상태 파일이 없어 원장이 없다) | skill 글의 표 | 모델이 쓴다 — 「요청 정리 경고 N개: <component> <status> · …」 |
 | quality-pipeline | 합성 출력의 판정 degrade 줄 | `synthesize_findings.py` | Task 12 의 Step 1 이 정한다(「이 계획이 정한 것」 10) |
