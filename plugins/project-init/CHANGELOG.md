@@ -5,7 +5,7 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
-## [5.5.0] — 2026-11-16
+## [5.5.0] — 2026-11-17
 
 ### Changed
 - 추천이 있는 질문 자리(규칙 교체 · CLAUDE.md 이전 · 브랜칭 · merge · 접두 · release · 이대로 진행 / 더 묻기 · 세 번 비었을 때 · S4)의 선택지 설명이 「얻음: … · 내줌: …」 한 줄이다. 권하는 이유는 그 선택지의 얻음에 담는다.
