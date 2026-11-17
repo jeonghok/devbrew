@@ -402,3 +402,31 @@ Reference 구현 절의 「`agents/`, `references/`, `scripts/`, `skills/`를 sh
 - 재비판 입력 · 2026-11-16 · 2 · 3라운드의 재비판과 3라운드의 탐지에는 지적 목록과 프로필을 글자로 싣지 않고 작업 폴더 안 파일 경로(.claude/tmp/f6-review/)로 넘겨 읽게 했다 — 옮겨 적다 글자가 바뀌는 것을 피하려는 지휘자 판단이다. 내용은 엔진이 낸 목록과 프로필 펜스 출력 그대로다
 - 계획 검토 · 2026-11-16 01:25 · 계획 담당자가 「설계에 없던 결정」 으로 올린 열하나를 지휘자가 갈랐다. 아홉은 설계가 계획에 맡긴 일이거나 테스트 안의 배치라 묻지 않고 계획대로 간다(새 테스트 파일 shared/tests/test_skill_cost_class_place.sh · F6 단언 블록의 자리 · 규칙 문장의 최종 글자와 CLAUDE.md 첫 줄의 새 굵은 머리 · 앵커 유일 단언 · metadata 를 읽는 함수를 두 감사 스크립트에 따로 두기 · 값 표 · 손 시나리오 e2e-scenarios.md 는 역사 기록이라 그대로 · 판 번호 · 테스트 주석). 둘은 감사 검사가 내는 결과를 설계 글자보다 넓히거나 좁혀 사용자에게 물었다 — 한 줄 꼴(metadata: {cost_class: high})을 선언으로 읽을지: 「여러 줄 꼴만 읽는다 (권장)」 · name 이 빈 글자이거나 글자가 아닐 때 빠진 것으로 셀지: 「빠진 것으로 센다 (권장)」. 두 답 모두 계획 그대로다. 이 질문 둘은 지휘자가 만든 질문이다(relay/F6/relay-1.md)
 - 실행 방식 · 2026-11-16 01:25 · writing-plans 가 권한 Subagent-driven 을 구현 담당자의 미리 받은 답으로 실었다. 계획 담당자의 마지막 보고 원문은 지휘 자원 폴더 relay/F6/plan-report-received.md 에 있다
+- 판 번호 · 2026-11-17 21:51 · 기본 브랜치가 두 번 앞서 갔다 — 먼저 8.18.0(PR #291)이 머지돼 8.18.1 로 옮겼고, 이어 8.19.0 · 8.19.1 과 quality-gates 15.0.0(PR #293 · #294 · #292)이 머지돼 spec-distill 8.19.2 · quality-gates 15.0.1 로 다시 잡았다(커밋 65645a79). 충돌은 판 줄과 변경 기록 머리뿐이었다. plugin-audit 1.8.0 · project-init 5.4.2 는 그대로다
+- 구현 뒤 · 2026-11-17 21:51 · AC16 은 구현 담당자가 미룸으로 보고했고 지휘자의 스위트 대조(65645a79 대 948c37d2)가 새 실패 없음으로 닫았다. 구현 담당자의 끝 전체 스위트(2cff292a)의 실패 일곱은 모두 기본 브랜치 사본에도 있다. 마지막 리뷰가 남긴 작은 지적(감사 검사 둘의 같은 함수 16줄, 규칙 락의 integrity 부재 범위와 링크 수 갈래, 감사 파서의 작은 빈 곳, 부분 문자열 단언)은 PR 본문에 싣고 받는 곳은 사용자에게 묻는다
+- 재분해 · 2026-11-17 · 로드맵의 F6 칸을 이 설계에 맞췄다(범위에서 agent 의 model 키 허용을 빼고, F5 로 넘긴 둘을 안 한다로, 경로 예약 열여덟) — 로드맵 수정 PR #295, 사용자 승인 「이대로 다시 나눈다 (권장)」
+
+## 판정
+
+### docs/superpowers/plans/2026-11-16-rules-toward-official.md
+
+- ## 판정 전체 (원장의 Ruling: 줄, 내린 순서대로)
+- Ruling: `git switch --ignore-other-worktrees` 를 하네스가 막아(worktree 격리) 그냥 `git switch feature/rules-toward-official` 로 섰다. 그 브랜치를 쥔 worktree 가 없어 효과는 같다 — 틀려도 드는 값: 없음(85854676 에 섰다).
+- Ruling: Task 1(읽기만 하는 재확인 — diff 없음)은 컨트롤러가 직접 돌렸고 구현 · 리뷰 agent 를 띄우지 않았다 — 리뷰할 것이 없다 — 틀려도 드는 값: 놓친 확인 각도 하나. 파일마다 과제 리뷰가 덮는다.
+- Ruling: Task 7 Step 5(설계 `## 미룸` 표에 행 추가)는 지휘자 지시로 하지 않는다. 미룸 · 빠짐 · 리뷰 후속은 이 보고에 목록으로 싣는다 — 틀려도 드는 값: 나중에 docs 커밋 하나.
+- Ruling: Task 6 — origin/main 이 움직였으므로 Task 6 시작 때 합치고 그 위의 다음 번호(1.8.0 · 5.4.2 · 14.10.1 · 8.17.1)로 정한다 — 지휘자 지시 — 틀려도 드는 값: 번호 다시 매기기.
+- Ruling: 스위트 주인 이름은 f6-impl. 전체 스위트는 끝에 suite_lock 으로만 돌리고 과제 agent 는 돌리지 않는다.
+- Ruling: 리뷰어는 `feature-dev:code-reviewer`(Write · Edit · Bash 없음 — Law 2)로 띄운다. 파일을 못 쓰니 보고를 글로 돌려준다 — 틀려도 드는 값: 리뷰 글이 컨트롤러 맥락에 들어온다.
+- Ruling: Task 2 Step 2 는 「대조 넷」 이라 적었지만 테스트의 대조 단언은 다섯이다. 다섯 모두 옮기기 전에도 통과해야 한다 — 계획 글자 실수.
+- Ruling: Task 5 의 저술 가이드 줄 번호는 이 브랜치에서 45 · 48 이다(계획은 47 · 50). 글자로 찾아 고친다 — 틀려도 드는 값: 없음.
+- Ruling: Task 2 가 `shared/tests/test_variant_of_contract.sh` 를 고친 것을 받는다. V3 가 실제 spec-review SKILL.md 를 복제하고 variant_of.py 는 중첩 frontmatter 를 거절하기 때문이다. 두면 스위트가 RED 가 되고 variant_of.py 는 그대로다 — 틀려도 드는 값: 계획 목록 밖 테스트 파일 하나. (마지막 리뷰 결론: variant-of 마커는 agent 전용이라 실제 한계가 아니다.)
+- Ruling: `_metadata_cost_class` 16줄이 두 감사 스크립트에 그대로 겹치지만 고치지 않는다. 계획과 지휘자 계획 검토가 self-contained 사본 둘을 골랐고, 20줄 중복 락 밑이다. 몸통 비교 락은 계획 밖 새 테스트다 — 틀려도 드는 값: 한 사본만 고치는 미래 수정이 다른 쪽을 놓친다. 다음 일 후보로 올린다.
+- Ruling: Task 5 가 파이썬 사본 수 grep 에 `--exclude-dir=tests` 를 더한 것을 받는다. 테스트 파일 자신이 그 글자를 품어 2 를 셌다(계획 글자 결함). 뜻은 같다 — 틀려도 드는 값: tests/ 아래 둔 미래 사본은 세지 않는다.
+- Ruling: SDD 의 「마지막 리뷰 뒤 작업 폴더 삭제」 는 지휘자 지시로 하지 않는다 — 틀려도 드는 값: 디스크만.
+- Ruling: 고침 묶음은 Important 하나와 Minor 둘(place 깊이 · staleness 사본 테스트)이다. Minor 둘은 남긴다 — governance :293 의 `integrity` 부재 범위는 좁히면 CLAUDE.md 전체를 거는 AC6 이 약해진다(틀려도 드는 값: 무관한 integrity 문장이 생기면 거짓 RED). governance :333 의 case 3/4/5 는 꾸밈 문제다(틀려도 드는 값: 링크가 6개가 되면 헷갈리는 메시지).
+- Ruling: 줄 서 있던 내 스위트를 멈추고 고침 묶음을 먼저 넣었다. 잠금은 'merge_check feature/front-stage-exit'(01:40:23)이 쥐고 있었고 내 실행은 시작 전이었다 — 틀려도 드는 값: 없음.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-16-rules-toward-official.md
+
+- 구현 대조: 경고 6개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 6개 · 받는 곳 검사 불가 0개 · 빠짐 0개
+- 보고: AC 18개 중 구현됨 18 · 미룸 0 · 빠짐 0
