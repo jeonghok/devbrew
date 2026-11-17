@@ -290,6 +290,7 @@ assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 갈라짐 — 표�
 merged_task() {   # merged_task <이름> <브랜치> <머지 뒤 브랜치를 지우는가: yes|no>
   g checkout -q -b "$2" main
   printf '머지될 일\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name "$1" --branch "$2" --paths docs/tv/ --goal "머지된 작업") > "$T/out.txt" 2>&1
+  assert_eq "$?" "0" "과제: 머지될 단순 작업($1)을 만들었다"
   g add -- "$TM/jobs/$1" && g commit -qm "단순 작업 $1"
   g checkout -q main && g merge -q --no-ff "$2" -m "머지 $1" && publish
   if [ "$3" = yes ]; then g branch -q -D "$2"; fi

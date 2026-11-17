@@ -866,7 +866,7 @@ def _read(path: str):
 
 def _intent_roadmap(sources_path: str):
     """(roadmap, 사유). 번호 파일과 같은 폴더 INTENT.md 머리의 roadmap — 읽지 못하거나 머리가 깨졌으면 (None, None),
-    키가 없거나 레포 상대 경로가 아니면 (None, 그 FormatError 의 글)."""
+    키가 없거나 빈 값이면 (None, None), 값이 레포 상대 경로가 아니면 (None, 그 FormatError 의 글)."""
     text, _exc = _read(os.path.join(os.path.dirname(sources_path), team_layout.INTENT_FILE))
     if text is None:
         return None, None
@@ -877,7 +877,7 @@ def _intent_roadmap(sources_path: str):
     try:
         return team_files.roadmap_rel(meta), None
     except FormatError as exc:
-        return None, str(exc)
+        return None, (str(exc) if meta.get("roadmap") else None)   # 키가 없거나 빈 값이면 사유를 더하지 않는다
 
 
 def coverage(first_path: str, spec_path: str) -> dict:
