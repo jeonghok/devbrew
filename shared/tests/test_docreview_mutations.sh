@@ -732,8 +732,10 @@ mut 1/1 warns_need_left case_T40_codex_absent_nothing_left_first_line sed_state 
   's/^    if warns:$/    if warns and left:/'
 # ── 쉬운 말 출력 PR 2 Task 5 (PR 1 이연 항목) ─────────────────────────────────
 # 경고 원문을 쉬운 줄로 바꾸는 호출을 떼기 — 첫 줄에 엔진 원문이 그대로 선다.
+# [present-tradeoffs Task 4 재앵커] 원문 모으기가 `_gate_warns(g)` 로 나가면서 대상 줄이
+# `warns = _plain_warns(warns)` → `warns = _plain_warns(_gate_warns(g))` 로 바뀌었다. 겨누는 규칙은 같다.
 mut 1/1 warns_plain_gloss_off case_plain_warns_first_line sed_state \
-  's/^    warns = _plain_warns(warns)$//'
+  's/^    warns = _plain_warns(_gate_warns(g))$/    warns = _gate_warns(g)/'
 # 같은 사실의 합치기를 끄기 — 원문마다 키가 따로 생겨 codex 부재가 첫 줄에 두 번 나온다.
 mut 1/1 warns_same_fact_not_merged case_plain_warns_first_line sed_state \
   's/^            k = (row\[1\], row\[2\])$/            k = (row[1], row[2], w)/'

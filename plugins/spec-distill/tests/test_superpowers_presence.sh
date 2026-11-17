@@ -109,11 +109,13 @@ assert_contains "$absent" "**선택지 셋의 따로 된 끝 질문**을 띄운�
 assert_contains "$absent" "공통 계약(\`proceed-gate.md\` Step B)의 질문이 아니다" "F4 AC10: 그 질문은 공통 계약의 질문이 아니다"
 assert_contains "$absent" "crash·spec-mode fallback **금지**" "finishing.md B-1: crash · spec-mode fallback 금지는 그대로다"
 assert_eq "$(printf '%s\n' "$B1" | grep -c '^        {label: ')" "3" "F4 AC10: 끝 질문의 선택지는 셋이다"
-for lit in '{label: "확정하고 끝낸다 (권장)", description: "확정 후보를 확정으로 바꿔 저장하고 커밋한 뒤 여기서 끝낸다. PR 은 열지 않는다."},' \
-           '{label: "확정 목록 수정", description: "확정 후보와 함께 보인 공시를 고쳐 다시 보여 준다(두 번 고친 뒤에는 계속할지 묻는다). 아직 아무것도 확정되지 않는다."},' \
-           '{label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남는다."}' \
+for lit in '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · 내줌: 확정 후보에 안 고친 잘못이 있으면 확정으로 굳은 채 커밋된다"},' \
+           '{label: "확정 목록 수정", description: "얻음: 끝내기 전에 확정 후보와 공시를 고친다 · 내줌: 아직 아무것도 확정되지 않고 고친 뒤 이 질문을 다시 거친다"},' \
+           '{label: "brief만 종료", description: "얻음: 아무것도 확정하지 않고 brief 를 여기서 끝낸다 · 내줌: 모든 항목이 잠정으로 남는다"}' \
+           '「확정하고 끝낸다」 는 PR 을 열지 않는다. 「확정 목록 수정」 은 두 번 고친 뒤에는 계속할지 묻는다(B-0 의 재제시 상한).' \
            'B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다.' \
-           '질문의 상태 줄도 B-2 와 같은 꼴이다.' \
+           '질문의 상태 줄도 B-2 와 같은 꼴이다 — 경고 줄과 「전문」 줄은 B-2 의 본문 규칙대로 싣는다.' \
+           '<경고 줄 — 채널마다의 짧은 줄을 「 · 」로 이은 것 | 경고 없음 | 이상 없음>. 전문: <경로>. superpowers 가 없어 다음 단계로 넘기지 않는다.' \
            '커밋 펜스(`interview-commit`) → 여기서 멈춘다. 분해된 일이어도 「PR 과 머지」 로 가지 않는다.' \
            '`[spec-distill] superpowers 가 없어 다음 단계를 열지 못했다 — 설치한 뒤 새 세션에서 아래 줄로 잇는다.`' \
            '분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.' \
@@ -184,7 +186,7 @@ pg_exc_ln="$(grep -n -x -F -- "$PG_EXC" "$PG" | head -1 | cut -d: -f1)"
 if [ -n "$pg_unknown_ln" ] && [ -n "$pg_exc_ln" ] && [ "$pg_exc_ln" = "$((pg_unknown_ln + 1))" ]; then
   ok "proceed-gate.md: 「알 수 없음」 규칙 바로 다음 줄이 그 예외 문장(전체 줄)이다 — 정본"
 else no "proceed-gate.md: 「알 수 없음」 규칙 다음 줄에 예외 문장(전체 줄)이 없다 (규칙=${pg_unknown_ln:-없음} 예외=${pg_exc_ln:-없음})"; fi
-assert_contains "$avail_line" "「경고 N개」에 넣지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 경고 수에 들지 않는다"
+assert_contains "$avail_line" "질문의 경고 줄에 잇지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다" "finishing.md B-1: 그 줄은 질문의 경고 줄에 들지 않는다"
 assert_not_contains "$B1" '빈 값(`""`)으로 둔다' "finishing.md B-1: 불러오지 않았을 때 빈 경로로 스크립트를 부르지 않는다(옛 지시가 없다)"
 
 # ── 3. 손 절차 머리 · 걸음 7 ─────────────────────────────────────────────────

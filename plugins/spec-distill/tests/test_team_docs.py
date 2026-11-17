@@ -330,7 +330,7 @@ class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 
         self.assertEqual(L.PLAIN_FLOW_STAGES, ("진행 중", "결과 받음"))
 
 
-FLOOR = (8, 20, 0)
+FLOOR = (8, 21, 0)
 FORMAT_FLOOR = (8, 15, 0)   # 다섯 낱말을 담은 절(형식 쪽 판)의 바닥
 WORDS = ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")
 
@@ -392,7 +392,7 @@ class Version(unittest.TestCase):
         twice = log + "\n## [0.0.1] — 2026-01-01\n" + hit + "\n"
         self.assertNotEqual(version_problems(version, twice), [])   # 다섯 낱말을 담은 절이 둘
         self.assertNotEqual(version_problems("8.13.1", log), [])   # 판이 FLOOR 아래
-        below = version_problems("8.19.1", log)   # 이 일보다 먼저 기본 브랜치에 있던 판 — 그 머리는 있으니 걸리는 것은 바닥 하나다
+        below = version_problems("8.20.0", log)   # 이 일보다 먼저 기본 브랜치에 있던 판 — 그 머리는 있으니 걸리는 것은 바닥 하나다
         self.assertEqual(len(below), 1, below)
         self.assertIn("보다 낮다", below[0])
 

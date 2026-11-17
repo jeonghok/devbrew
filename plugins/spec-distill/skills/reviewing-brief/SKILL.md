@@ -16,16 +16,17 @@ user-invocable: false
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
-이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다. 추천 표시는 그 자리에서도 이 블록을 따른다 — 옮긴 질문과 steelman 질문의 선택지 순서, steelman 질문의 출처 표지만 예외다. 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
+이 절은 사용자에게 보이는 글(답변·보고·질문·선택지·경고·PR 본문·커밋)에만 적용한다. 지시문·subagent 프롬프트·state 파일에는 적용하지 않는다. 아래 절차가 출력 형식·원문 보존·분량을 따로 정한 자리에서는 그 절차를 따른다. 추천 표시와 대가 표기는 그 자리에서도 이 블록을 따른다 — 옮긴 질문의 선택지 순서와 설명, steelman 질문의 선택지 순서와 출처 표지만 예외다. 부른 skill 이 메시지 모양을 정한 대화(예: brainstorming)에서는 그 skill 을 따르고, 이 블록은 낱말에만 적용한다.
 - 처음 보는 사람이 한 번에 이해하게 쓴다. 번호·해시·필드 이름·내부 용어는 가리키는 내용을 문장으로 먼저 쓰고 괄호 안에만 둔다. 지어낸 말은 쓰지 않거나 처음 쓸 때 풀어 쓴다.
 - 순서: 첫 줄에 지금 상태(무엇을 했고 어디까지 왔나) 한 문장, 가운데에 이유·근거, 맨 끝에 사용자가 할 일. 할 일은 기본 하나다 — 여럿이거나 함께(병렬로) 할 수 있으면 그렇다고 밝히고 함께 쓴다. 할 일이 없으면 없다고 쓴다. 커밋·PR 본문에는 이 순서를 적용하지 않는다.
-- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다 — 여럿이면 모두, 이유는 질문 위 글에. 추천이 없으면 아무 표시도 쓰지 않는다.
+- 질문 하나에 결정 하나. 선택지 이름은 짧은 쉬운 말로, 설명에는 고르면 무엇이 달라지는지만 쓴다. 본문에 없던 주제를 선택지에서 꺼내지 않는다. 추천이 있으면 그 선택지를 첫 자리에 두고 라벨 끝에 「(권장)」을 단다 — 여럿이면 모두. 추천이 있는 질문은 질문 창만 보고 고를 수 있게 쓴다 — 질문 위 글은 안 보일 수 있다. 모든 선택지의 설명을 「얻음: … · 내줌: …」 한 줄(길어도 세 줄)로 쓰고, 내줌은 그 선택이 틀렸다고 드러날 때 원인이 될 것 하나다. 추천이 없으면 아무 표시도 쓰지 않는다. 질문 없이 한쪽을 권하는 글에는 그 대가를 한 구절 붙인다.
 - 제목과 목록으로 나누되 표의 칸은 짧게 쓴다. 굵은 글씨는 꼭 필요한 곳에만 쓴다.
 - 사용자가 알 필요 없는 글은 쓰지 않는다: 도구 호출 사이의 진행 설명, 전부 정상인 항목의 나열. 확인해서 남은 것도 경고도 없으면 「이상 없음」 한 줄로 쓴다. 확인하지 못한 것·빠진 검사·셀 수 없는 것은 따로 한 줄씩 쓴다 — 없는 것과 확인 못 한 것은 다르다.
 - 판정·개수·공시 줄은 스크립트가 낸 쉬운 첫 줄을 그대로 쓰고, 자기 말로 다시 풀거나 덧붙이지 않는다. 스크립트·subagent 가 낸 원문은 고치지 않는다. 스크립트가 풀어 두지 않은 오류에만 쉬운 설명을 앞에 붙이되 통과·실패는 말하지 않는다.
 - 사용자와 대화하는 언어로 쓴다. 코드·명령·고유명사·자연스러운 대응어가 없는 기술어는 영어 그대로 둔다. 커밋·PR은 그 레포의 규칙을 따르고, 없으면 대화 언어로 쓴다.
 예) 전: `[미적용 fix] 3720b2b7#r1.1` → 후: 리뷰가 고치라고 한 곳 하나가 아직 안 고쳐졌다(3720b2b7#r1.1).
 예) 전: (codex 정상 · 재비판 정상 · 저자 편집 없음 · ask_open 0건) → 후: 이상 없음.
+예) 전: 설명 「더 낫다」 → 후: 「얻음: 겹치는 규칙을 한 번에 고친다 · 내줌: 일이 커져 설계가 길어진다」.
 <!-- plain-language:end -->
 
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
@@ -175,7 +176,7 @@ echo "ledger-open: ${lo}"
 | 마지막 줄 | 동작 |
 |---|---|
 | `ledger-open: HELD` | 진입 게이트로 간다 |
-| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
+| `ledger-open: OTHER:<sid>` · `OTHER:(알 수 없는 표지)` | 멈추고 `AskUserQuestion` 하나 — 「그만둠 (권장)」/「이어 씀 — 표지를 내 것으로 바꾼다」. 설명은 이렇게 쓴다 — 「그만둠」: 얻음: 다른 세션의 리뷰와 표지를 건드리지 않는다 · 내줌: 이 브리프는 리뷰 없이 다음 단계 질문으로 넘어간다 / 「이어 씀」: 얻음: 이 세션이 그 브리프의 리뷰를 이어서 돌린다 · 내줌: 다른 세션이 아직 돌고 있었다면 그 세션의 리뷰 기록을 가로챈다. 이어 씀이면 아래 넘겨받기 펜스를 돈 뒤 이 펜스를 다시 돈다. 그만둠이면 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
 | `ledger-open: NO_SESSION` · `NO_DIR` · `ERROR` | 그 `[spec-distill]` 줄을 보이고 record(`pipeline` / `all` / `unavailable`, reason = 판결)를 남기고 Step B 로 돌아간다 |
 
 <!-- ledger-takeover:begin -->
@@ -274,7 +275,7 @@ fi
 [ "$vc_rc" -eq 0 ] || echo "[spec-distill] 원문 완전성 검사(닫은 답의 출처 대조 포함)를 건너뛰고 계속한다 — 사용자가 「검사 없이 계속」을 골랐다(check_verbatim_coverage rc ${vc_rc}). 원문이 빠짐없이 옮겨졌는지는 확인되지 않았다." >&2
 ```
 
-`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(라운드를 시작하지 않고 끝낸다) · 「검사 없이 계속」(이 검사만 건너뛰고 리뷰를 시작한다 — 닫은 답의 출처 대조 포함). 「검사 없이 계속」을 고르면 두 곳에 남긴다 — audit `## 4. 게이트 실행 기록` 에 `- check_verbatim_coverage.py — exit <rc> — skipped_by_user: 검사 없이 계속 (<오늘 날짜 YYYY-MM-DD>)` 줄을 더하고, degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남긴다. 그다음 같은 펜스를 `DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1` 을 덧붙여 다시 돈다 — 펜스는 이 변수가 있고 **그리고** audit 게이트 실행 기록 절에 오늘 날짜 · 같은 종료 코드의 그 줄이 있을 때만 원문 완전성 검사 하나를 건너뛴다(위반 rc 1 은 건너뛰지 않는다 · 구조 게이트는 그대로 돈다). 줄이 없으면 변수가 있어도 멈추고 그 사실을 알린다. 그 줄은 이 skill 을 돌리는 쪽이 사용자의 답을 받은 뒤 남기는 감사 기록이고, 사용자 동의의 증명이 아니다 — 펜스는 기록이 남았는지만 본다. 건너뛰면 펜스가 어떤 종료 코드를 건너뛰었는지 알리는 줄을 낸다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
+`vc_rc` 가 1 이 아닌 non-zero 이면 펜스가 위 문장을 내고 멈춘다. 이때 `AskUserQuestion` 하나를 띄운다 — 질문 「원문이 빠짐없이 옮겨졌는지 확인하지 못했다. 어떻게 할까?」, 선택지 「멈춘다 (권장)」(얻음: 원문이 빠졌는지 확인될 때까지 라운드를 시작하지 않고 끝낸다 · 내줌: 브리프가 리뷰 없이 멈춰 원인을 고친 뒤 다시 불러야 한다) · 「검사 없이 계속」(얻음: 이 검사만 건너뛰고 리뷰를 바로 시작한다 · 내줌: 원문이 빠졌어도 통과하고 닫은 답의 출처 대조도 건너뛴다). 「검사 없이 계속」을 고르면 두 곳에 남긴다 — audit `## 4. 게이트 실행 기록` 에 `- check_verbatim_coverage.py — exit <rc> — skipped_by_user: 검사 없이 계속 (<오늘 날짜 YYYY-MM-DD>)` 줄을 더하고, degrade 원장에 record(`verbatim_coverage` / `completeness` / `skipped`, reason = `skipped_by_user: 검사 없이 계속`)를 남긴다. 그다음 같은 펜스를 `DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE=1` 을 덧붙여 다시 돈다 — 펜스는 이 변수가 있고 **그리고** audit 게이트 실행 기록 절에 오늘 날짜 · 같은 종료 코드의 그 줄이 있을 때만 원문 완전성 검사 하나를 건너뛴다(위반 rc 1 은 건너뛰지 않는다 · 구조 게이트는 그대로 돈다). 줄이 없으면 변수가 있어도 멈추고 그 사실을 알린다. 그 줄은 이 skill 을 돌리는 쪽이 사용자의 답을 받은 뒤 남기는 감사 기록이고, 사용자 동의의 증명이 아니다 — 펜스는 기록이 남았는지만 본다. 건너뛰면 펜스가 어떤 종료 코드를 건너뛰었는지 알리는 줄을 낸다. 사용자가 답하지 않았거나 「멈춘다 (권장)」이면 라운드를 시작하지 않는다.
 
 | `vc_rc` | 뜻 | 동작 |
 |---|---|---|
@@ -359,7 +360,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/reviewing-document.md
 - 엔진 호출마다 `## 입력` 의 머리를 앞에 붙인다 — `$PAYLOAD` 는 머리가 절대화한 값이고 `$STATE_DIR` 은 그 문서의 자리다
 
 **원장 쓰기 전 확인.** 절차서의 원장 쓰기 명령 — `docreview_state.py` 의 `init` · `begin-round` ·
-`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision`, `docreview_route.py` 의
+`record-findings` · `decide` · `fix` · `ask` · `defer` · `observe-diff` · `advice` · `declare-related` · `log-decision` · `gate-file`, `docreview_route.py` 의
 `prepare-recritic` · `finalize`, `docreview_anchor.py check-intent` — 은 전부 같은 Bash 호출 안에서 머리 뒤에 놓인 아래 한 줄
 **다음에만** 부른다. rc 가 0 이 아니면 그 명령을 부르지 않고 사유를 보이고 멈춘다 — 다른 세션이 표지를 넘겨받았거나
 표지가 없다.
@@ -635,8 +636,7 @@ Agent({
 엔진 8단계의 `docreview_state.py gate --state-dir "$STATE_DIR" --render` 가 어느 게이트인지 정한다.
 `round_gate_needed` 면 라운드 게이트(결정 묶음 + 차단 `ask`, 렌더 순서)를 **`AskUserQuestion` 최대 4개씩
 연속 호출**로 나눠 띄운다 — 도구가 호출당 질문을 4개로 제한하고, 한 결정을 다른 결정의
-질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문에는 그 질문의 결정 하나와, 경고가 있으면
-「경고 N개 — 위에 적었다」 한 줄만 둔다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
+질문에 묶으면 그 결정의 선택지가 사라지기 때문이다. 렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다. 질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고, 선택지 설명 · 줄일 때의 규칙 넷 · 기타 칸의 「전문」은 절차서 8단계대로 한다 — 질문을 띄우기 직전마다 아래 질문 재료 펜스를 돈다. 한 호출에 묶는 질문은 서로의 답에 기대지 않는 결정이다 — 다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인
 게이트다. 열린 것이 남아 있으면 두 단계다(**1단계는 라운드 게이트와 같은 형태라 같은 분할이
 적용된다**). **상한 도달이면 열린 것이 0 이어도 항상 두 단계다** — 그때 1단계는 열린 것의 유무로
 갈린다: **열린 것이 0 이면 1단계 선택지는 「추가 라운드 1회 열기」와 「진행 옵션으로」 둘뿐인
@@ -654,6 +654,33 @@ DEVBREW_EXTRA_APPROVAL_EOF
 extra_approval="${extra_approval%$'\n'}"
 ```
 <!-- extra-approval:end -->
+
+질문을 띄우기 직전마다 — 첫 호출 앞과, 답을 반영한 뒤 다음 호출 앞에 — 아래 펜스를 돈다. 펜스 앞에 두 인자의 대입 줄(`PAYLOAD` · `AUDIT`)과 `channel_lines` 대입을 붙여 같은 Bash 호출로 돌린다. `channel_lines` 에는 이 skill 의 다른 채널이 낸 경고 줄 전체를 글자 그대로 넣고, 없으면 빈 값으로 둔다. 펜스는 그 라운드의 게이트 전문 파일을 다시 쓰고(이 라운드의 지적 원문 구역은 그대로 둔다) 질문마다 한 묶음을 낸다. 이 펜스는 8단계 게이트에서만 돈다 — 7단계가 끝나기 전에는 돌리지 않는다. `channel_lines` 대입은 따옴표 heredoc 꼴이다: `IFS= read -r -d '' channel_lines <<'DEVBREW_CHANNEL_EOF' || true` 다음 줄부터 경고 줄을 글자 그대로 넣고 `DEVBREW_CHANNEL_EOF` 한 줄로 닫은 뒤 `channel_lines="${channel_lines%$'\n'}"` 를 둔다. 경고 줄에 구분 줄과 똑같은 줄이 있으면 여는 줄과 닫는 줄의 구분자를 줄에 없는 다른 낱말로 함께 바꾼다.
+
+<!-- ask-material:begin -->
+```bash
+PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
+STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
+[ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
+g_out="$(python3 "$PR/scripts/ledger_marker.py" check --dir "$STATE_DIR" --session "$harness_sid" 2>&1)" || { printf '%s\n' "$g_out"; case "$g_out" in *"표지 없음"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 없다(끝맺음 펜스가 풀었다). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; *"다른 세션"*) echo "[spec-distill] 원장 쓰기를 멈췄다 — 이 문서의 리뷰 표지가 이 세션 것이 아니다(위 사유). 이어 가려면 원장 열기의 표지 질문에서 「이어 씀」을 고른다.";; *) echo "[spec-distill] 원장 쓰기를 멈췄다 — 리뷰 표지를 확인하지 못했다(위 사유). 원장 열기 펜스(ledger-open)를 먼저 다시 돌려라.";; esac; exit 3; }
+gf="$(python3 "$PR/scripts/docreview_state.py" gate-file --state-dir "$STATE_DIR" 2>&1)" || true
+gf_path="$(printf '%s' "$gf" | python3 -I -X utf8 -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["path"] if d.get("ok") else "")
+except Exception:
+    print("")')"
+if [ -n "$gf_path" ] && [ -n "${channel_lines:-}" ]; then
+  printf '\n## 다른 채널의 경고\n%s\n' "$channel_lines" | python3 "$PR/scripts/nofollow_write.py" append --out "$gf_path" \
+    || echo "[spec-distill] 다른 채널의 경고 줄을 전문 파일에 덧붙이지 못했다 — 질문에 싣는 경고 줄은 그대로다."
+fi
+python3 "$PR/scripts/docreview_state.py" ask-material --state-dir "$STATE_DIR" --gate-file-result "$gf"
+```
+<!-- ask-material:end -->
+
+**라운드 게이트의 경고 줄.** 라운드 게이트 질문에도 brief 경고 원장의 짧은 줄(`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄)을 「상태」 줄 뒤에 「 · 」로 잇는다. 그 줄이 있으면(경고가 있으면) 「상태」 줄의 「이상 없음」·「경고 없음」은 쓰지 않는다.
 
 **승인 게이트 2단계(진행 옵션 넷)는 이 skill 이 띄우지 않는다.** 진행 결정은 호출자
 `pm-interview` 종료 Step B 의 몫이다 — 같은 공통 계약(`proceed-gate.md`)을 쓰는 그 게이트가
@@ -746,6 +773,8 @@ G1–G7 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 **�
 2. **냉독 요약 전문 + gap 목록**(세 조각), 또는 냉독이 돌지 못한 사유.
 3. **degrade** — 아래 채널 전부를 한 줄씩.
 
+**다음 단계 질문의 두 줄 — 돌아가기 직전에 한 번.** 냉독이 끝난 뒤(`## 건너뜀 — 모델 판단` 으로 냉독을 건너뛰었으면 그 자리에서) Step B 로 돌아가기 직전에 `## 게이트` 의 질문 재료 펜스를 한 번 더 돈다 — 두 인자의 대입 줄과 `channel_lines` 대입(아래 `## degrade 채널` 의 brief 경고 원장 줄 전체)을 붙인다. Step B 의 다음 단계 질문의 경고 줄과 「전문」 줄은 이 출력에서 받으므로, 그 「상태」 · 「전문」 줄을 위 셋과 함께 넘긴다. 질문으로 뜨는 행이 없으면 펜스는 머리 줄(「질문으로 뜨는 행 없음 — …」)과 그 두 줄만 낸다. Step B 의 참고 목록 펜스(B-A)가 표지를 풀기 때문에 이 한 번이 표지를 푸는 펜스보다 먼저 돈 마지막 출력이다 — B-A 뒤에는 이 펜스를 돌리지 않고, 그 때문에 원장 열기를 다시 돌리지도 않는다. 호출자의 `#### B-S` 가 건너뛴 읽어 보기를 나중에 `## 냉독` 만 돌릴 때도 같다 — 앞서 받은 두 줄을 쓴다.
+
 돌아가기 전에 같은 셋을 audit(`$AUDIT`) §5 의 `### brief 리뷰 (reviewing-brief — 문서 리뷰 엔진)` 에 템플릿
 줄 모양대로 한 줄씩 채운다 — 기록이지 게이트가 아니다. 결정 자체는 엔진이 `## 8. 리뷰 결정` 에 이미 썼다.
 
@@ -760,17 +789,16 @@ Step B(`pm-interview` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보이
   degrade 사유) · `fin.json` 의 `blocks`(참/거짓 하나 — critic 사망 · 항목 소실 · 셀 수 없음일 때만 참, 사유는 `advisory[]`) ·
   `docreview_state.py gate --render` 의 **첫 줄**(그 라운드의 상태와 경고(렌더 첫 줄) — 「미검증」 라운드면 그 공시가 맨 앞이다).
   `advisory[]` 원문은 하나하나가 이 첫 줄의 경고 줄 중 하나에 대응한다(같은 사실을 두 출처가 말한 원문은 한 줄로 합친다).
-  게이트 앞 글에는 이 첫 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않는다. 질문의 「경고 N개」에서 엔진 몫은
-  렌더 첫 줄의 N 이고, 이 자리의 두 채널의 경고 줄은 그 위에 더한다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).
+  게이트 앞 글에는 이 첫 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않는다. 질문의 경고 줄은
+  엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 그 줄들을 따로 쓴다.
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
   번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
   실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
 
-그리고 매번 싣는 한 줄 — `웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> ·
+그리고 매번 싣는 한 줄(경고가 아니라 질문의 경고 줄에는 싣지 않는다) — `웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> ·
 codex <켜짐 | 꺼짐(DISABLE_WEB) | codex 부재>`. Claude 쪽 값은 그 라운드 선택 펜스가 낸 `CRITIC_AGENT=` 와
 advisory 에서 온다.
 
-Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓴다(질문 본문에는
-「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄). 전부 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는
-**채널을 실제로 읽었다는 주장**이므로 읽지 않은 채 쓰지 않는다. 「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다. `get` 이 실패하면(`ok: false`) 원장은 비어 있는
+Step B 게이트를 띄우기 **직전에** 이 채널들을 읽어 하나도 빠뜨리지 않고 게이트 앞 글에 쓴다. 질문 본문은 정본(`proceed-gate.md`)의 본문 규칙대로 싣는다. `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄을 질문의 경고 줄에 잇고, 그 원장의 줄 전체는 `## Step B 로 돌아간다` 의 마지막 질문 재료 펜스에 `channel_lines` 로 넣는다 — Step B 에는 그 값을 받을 펜스가 없다. 전부 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는
+**채널을 실제로 읽었다는 주장**이므로 읽지 않은 채 쓰지 않는다. `get` 이 실패하면(`ok: false`) 원장은 비어 있는
 것이 아니라 **알 수 없는** 것이므로 `degrade 원장 판독 불가 — <get 이 낸 reason>` 을 한 줄로 쓴다.

@@ -53,21 +53,35 @@ case_step45_gate() {
   assert_contains "$S45" '반복마다, 판정이 clean 이어도, 범위 모드에서도' "게이트: 반복마다 · clean 이어도 · 범위 모드에서도"
   assert_contains "$S45" '`lowered: 0` 이면 게이트 없이 라우팅으로 간다' "게이트: 0 이면 묻지 않는다"
   assert_contains "$S45" 'header: "낮춘 지적",' "게이트: header"
-  # n ≥ 4 의 두 선택지(전부 되올린다 · 그대로 둔다)는 서로 어긋나 함께 고를 수 없어야 한다 — 하나만 고른다.
-  assert_not_contains "$S45" 'multiSelect: true }] })' "게이트: 선택 방식이 n 과 무관하게 여러 선택으로 고정돼 있지 않다"
-  assert_contains "$S45" 'multiSelect: <n ≤ 3: true · n ≥ 4: false> }] })' "게이트: 3개 이하는 여러 선택 · 4개 이상은 하나만 고른다"
-  assert_contains "$S45" 'n ≥ 4(하나만 고른다): 「전부 되올린다」 → `all` 로' "게이트: 4개 이상의 「전부 되올린다」 갈래"
-  assert_contains "$S45" 'n ≥ 4 에서 「그대로 둔다」 → 다시 합성하지 않고' "게이트: 4개 이상의 「그대로 둔다」 갈래"
+  # 묶음(셋씩)마다 지적을 여러 개 고른다 — 「전부」는 선택지가 아니라 기타 칸의 글이다.
+  assert_contains "$S45" 'multiSelect: true }] })' "게이트: 묶음마다 여러 개를 고를 수 있다"
+  assert_not_contains "$S45" 'multiSelect: <n ≤ 3: true · n ≥ 4: false> }] })' "게이트: n 에 따라 선택 방식이 갈리던 옛 꼴이 없다"
+  assert_not_contains "$S45" '{label: "전부 되올린다"' "게이트: 「전부 되올린다」 선택지가 없다"
+  assert_contains "$S45" '낮춘 지적을 표의 순서로 셋씩 묶어 묶음마다 질문 하나' "게이트: 넷 이상이면 셋씩 나눠 묻는다"
+  assert_contains "$S45" '한 호출에 넷까지, 넘으면 다음 호출' "게이트: 묶음 질문은 한 호출에 넷까지"
+  assert_contains "$S45" 'description: "문제: <그 지적의 내용을 쉬운 말 한 구절로> · 낮춘 이유: <쉬운 말 한 구절로>"' "게이트: 설명에 문제 요약과 낮춘 이유"
+  assert_contains "$S45" '<이 묶음의 지적마다 {label: "<파일 이름>:<줄> (L<k>)"' "게이트: 묶음의 지적마다 선택지"
+  assert_contains "$S45" '{label: "그대로 둔다", description: "이 묶음의 지적을 낮춘 대로 둔다."}' "게이트: 그대로 둔다"
+  assert_contains "$S45" '전부 되올리려면 기타 칸에 「전부」' "게이트: 넷 이상이면 본문에 「전부」 안내"
+  assert_contains "$S45" '전문: <$RV/synth.out 의 경로>' "게이트: 질문 본문이 전문 자리를 싣는다"
+  assert_contains "$S45" 'question: "재비판이 심각도를 낮춘 지적 <n>개 가운데 <이 묶음의 번호들 — 예: L1 · L2 · L3>.' "게이트: 질문 본문이 이 묶음의 번호를 싣는다"
+  assert_not_contains "$S45" '(위 「낮춘 지적」 절)' "게이트: 질문 창 밖의 절을 가리키지 않는다(위 양성 짝)"
+  assert_contains "$S45" '문제 요약과 낮춘 이유는 「낮춘 지적」 표의 「내용」 · 「낮춘 이유」 칸에서 온다.' "게이트: 설명의 출처가 표의 칸이다"
+  assert_contains "$S45" '모든 묶음에서 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 라우팅으로 간다' "게이트: 아무것도 고르지 않으면 라우팅"
+  assert_contains "$S45" '기타 칸의 「전부」(같은 뜻의 말 포함) → 어느 묶음에 써도 낮춘 지적 전체다. `all` 로 되올리고 아직 띄우지 않은 호출은 건너뛴다' "게이트: 「전부」는 낮춘 지적 전체다"
+  assert_contains "$S45" '어느 쪽도 적용하지 않고 질문 하나로 다시 묻는다' "게이트: 「전부」와 다른 답이 부딪히면 다시 묻는다"
+  assert_contains "$S45" '「전부 되올린다」 · 「고른 것만 되올린다」 · 「그대로 둔다」 셋이고 추천을 달지 않는다' "게이트: 다시 묻는 질문의 선택지 셋"
   assert_not_contains "$S45" '「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) → 고른 `L<k>` 들(「전부 되올린다」면' "게이트: 전부 되올린다와 그대로 둔다를 함께 고른 경우를 다루는 옛 문장이 없다"
-  assert_contains "$S45" 'n ≤ 3: 지적마다 {label: "<파일 이름>:<줄> (L<k>)"' "게이트: 3개 이하면 지적마다 선택지"
-  assert_contains "$S45" 'n ≥ 4: {label: "전부 되올린다"' "게이트: 4개 이상이면 전부 되올린다"
-  assert_contains "$S45" '{label: "그대로 둔다", description: "낮춘 대로 둔다."}' "게이트: 그대로 둔다"
-  assert_contains "$S45" '일부만이면 「기타」에 번호(예: L1, L3)' "게이트: 일부는 기타 칸 번호"
-  assert_contains "$S45" 'Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다' "게이트: 고르면 다시 합성한다"
+  assert_not_contains "$S45" '일부만이면 「기타」에 번호(예: L1, L3)' "게이트: n ≥ 4 의 기타 칸 번호 안내(옛 꼴)가 없다"
+  assert_contains "$S45" '묶음마다 고른 `L<k>` 를 모아(「그대로 둔다」를 함께 골랐어도 고른 지적이 이긴다) Step 4 의 「되올려 다시 합성하기」를 돌려 `$RV/synth.out` 을 덮는다' "게이트: 고르면 묶음의 번호를 모아 다시 합성한다"
   assert_contains "$S45" '새 출력에는 이 게이트를 다시 띄우지 않는다' "게이트: 다시 합성한 출력에 게이트를 또 띄우지 않는다(되풀이 없음)"
   assert_contains "$S45" '한 번만 다시 묻는다 — 두 번째도 없으면 그대로 둔다' "게이트: 기타 칸 재질문은 한 번뿐이다"
-  assert_contains "$S45" '「기타」 칸 번호는 다시 합성하기 전에 아래 펜스로 「낮춘 지적」 표의 번호와 맞춘다' "게이트: 기타 칸 번호를 표와 맞춘다(M2)"
-  assert_contains "$S45" '두 번째 답에도 표에 없는 번호가 있으면 되올리지 않고 낮춘 대로 둔 채 라우팅으로 간다' "게이트: 두 번째도 틀리면 낮춘 대로 두고 계속한다(M2)"
+  assert_contains "$S45" '기타 칸의 글은 다시 합성하기 전에 아래 펜스로 맞춘다. 「전부」와 같은 뜻의 말' "게이트: 기타 칸 글을 펜스로 맞춘다(M2)"
+  assert_contains "$S45" '`all` 로 펜스에 넣는다. `lowered-pick: all` 이면 `all` 로 넘긴다.' "게이트: 펜스가 all 을 내면 all 로 되올린다"
+  assert_contains "$S45" '「전부」와 같은 뜻의 말(모두 · 다 등)은 받은 글자 그대로가 아니라 `all` 로 펜스에 넣는다.' "게이트: 「전부」와 같은 뜻의 말은 all 로 펜스에 넣는다(받은 글자 그대로 넣으면 bad 로 떨어진다)"
+  assert_contains "$S45" "PICK='<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>'" "펜스: PICK 자리 설명도 같은 뜻의 말을 all 로 넣으라고 한다(불릿과 같은 규칙)"
+  assert_contains "$S45" '두 번째도 표에 없는 번호면 지금처럼 되올리지 않고 알린다' "게이트: 두 번째도 틀리면 되올리지 않는다(M2)"
+  assert_contains "$S45" '`> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`' "게이트: 되올리지 않았다고 알리는 줄이 남는다"
   # 순서 — 표면화(차등 요약) 뒤 · 라우팅 앞
   local diffsum gate route
   diffsum=$(line_of "$S45" '**차등 요약 (판정 줄 옆).**')
@@ -148,7 +162,8 @@ case_pick_fence() {
   syn=$(make_synth pick 'verdicts:
   - {f: f1, verdict: lower, evidence: "의도 출처는 캐시 무효화만 요구한다"}')
   pick() {   # pick <번호들>
-    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3>|$1|" > "$ROOT/pick.sh"
+    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>|$1|" > "$ROOT/pick.sh"
+    grep -q '^PICK=.<' "$ROOT/pick.sh" && echo "자리표가 채워지지 않았다(펜스의 PICK 자리 글자가 바뀌었다)"
     bash "$ROOT/pick.sh" 2>&1
   }
   out=$(pick L1);    assert_eq "$out" "lowered-pick: ok" "표에 있는 번호(L1)는 통과"
@@ -156,6 +171,12 @@ case_pick_fence() {
   out=$(pick L2);    assert_eq "$out" "lowered-pick: bad L2 (표의 번호: L1)" "표에 없는 번호만이면 bad"
   out=$(pick L11);   assert_eq "$out" "lowered-pick: bad L11 (표의 번호: L1)" "앞자리가 같은 번호(L11)를 L1 로 읽지 않는다"
   out=$(pick 1);     assert_eq "$out" "lowered-pick: bad 1 (표의 번호: L1)" "L 없는 번호(1)는 표의 L1 의 일부로 읽지 않는다(낱말 단위로 맞춘다)"
+  # 「전부」 · all — 표의 번호와 맞추지 않고 전체로 넘긴다. 섞은 글은 받지 않는다.
+  out=$(pick '전부');    assert_eq "$out" "lowered-pick: all" "펜스: 「전부」를 받는다"
+  out=$(pick 'all');     assert_eq "$out" "lowered-pick: all" "펜스: all 을 받는다"
+  out=$(pick 'L1,전부'); assert_contains "$out" "lowered-pick: bad" "펜스: 번호와 「전부」를 섞은 글은 받지 않는다"
+  out=$(pick 'L1,all');  assert_contains "$out" "lowered-pick: bad" "펜스: 번호와 all 을 섞은 글도 받지 않는다"
+  out=$(pick '전부다');  assert_contains "$out" "lowered-pick: bad" "펜스: 「전부」로 시작할 뿐인 글은 전체로 읽지 않는다"
 }
 
 case_persona() {

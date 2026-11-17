@@ -31,6 +31,7 @@ assert_eq "$(tail -n 2 "$T/out.txt" | head -n 1)" "번호 대조 경고 0개" "A
 assert_eq "$(grep -c 'team 형식 — 리뷰어가 번호 항목(sources.md)과 원자료(intent/original.md)를 정답으로 읽지 못한다' "$T/out.txt")" "1" "AC16: 알림 한 줄"
 assert_contains "$(sed -n 1p "$T/out.txt")" "번호 대조: 빠진 번호 없음 (번호 파일 번호" "AC16: 진입 번호 대조는 옆 번호 파일로 한다"
 assert_eq "$(tail -n 3 "$T/out.txt" | head -n 1)" "[spec-distill] team 형식 — 리뷰어가 번호 항목(sources.md)과 원자료(intent/original.md)를 정답으로 읽지 못한다. 리뷰어에게 가는 정답 출처는 INTENT.md 하나다." "AC16: 경고 수 바로 앞 줄이 알림 전체(번호 대조 글은 그 앞 — 글의 줄 수는 재지 않는다)"
+assert_not_contains "$(cat "$T/out.txt")" "질문 줄:" "AC16: 경고가 0 이면 「질문 줄:」 을 내지 않는다"
 
 # 번호 하나를 표에서 뺀 설계문서 — 경고 1개 · PROCEED 그대로
 design_at "$TM/jobs/E1/design.md" "$I" '| S1 | 반영 | §1 |'
@@ -38,6 +39,8 @@ assert_eq "$(ent "$TM/jobs/E1/design.md" "$I")" "0" "빠진 번호: rc 0"
 assert_eq "$(tail -n 2 "$T/out.txt" | head -n 1)" "번호 대조 경고 1개" "빠진 번호: 번호 대조 경고 1개"
 assert_eq "$(tail -n 1 "$T/out.txt")" "bundle-entry: PROCEED $W/$I" "빠진 번호: PROCEED 그대로"
 assert_contains "$(cat "$T/out.txt")" "빠진 번호 1개 — C1" "빠진 번호: 번호 파일의 C1 이 빠졌다고 말한다"
+assert_eq "$(grep -c '^질문 줄: 번호 대조 경고 1개: 빠진 번호 1$' "$T/out.txt")" "1" "빠진 번호: 질문의 경고 줄에 이을 「질문 줄:」 을 옛 형식과 같은 꼴로 낸다"
+assert_contains "$(tail -n 3 "$T/out.txt" | head -n 1)" "[spec-distill] team 형식 — 리뷰어가 번호 항목" "빠진 번호: 질문 줄이 있어도 경고 수 바로 앞 줄은 알림이다"
 
 # source_interview 가 다른 과제의 INTENT.md — 거절
 design_at "$TM/jobs/E1/design.md" "$TM/jobs/E3/INTENT.md" '| C1 · S1 | 반영 | §1 |'
@@ -59,6 +62,7 @@ ent "$TM/jobs/E1/design.md" "$I" >/dev/null
 assert_contains "$(sed -n 1p "$T/out.txt")" "번호 대조 검사 불가 — kind: epic 과제인데 번호 파일이 없다" "번호 파일 없는 에픽: 검사 불가 줄"
 assert_not_contains "$(cat "$T/out.txt")" "단순 작업" "번호 파일 없는 에픽: 단순 작업이라 말하지 않는다"
 assert_eq "$(tail -n 2 "$T/out.txt" | head -n 1)" "번호 대조 경고 1개" "번호 파일 없는 에픽: 경고 1개(셀 수 없음은 0 이 아니다)"
+assert_eq "$(grep -c '^질문 줄: 번호 대조 경고 1개: 검사 불가$' "$T/out.txt")" "1" "번호 파일 없는 에픽: 「질문 줄:」 이 검사 불가를 말한다"
 assert_eq "$(tail -n 1 "$T/out.txt")" "bundle-entry: PROCEED $W/$I" "번호 파일 없는 에픽: PROCEED"
 mv "$T/e1-sources.held" "$W/$TM/jobs/E1/sources.md"
 
@@ -142,6 +146,7 @@ assert_eq "$(ent "$TM/jobs/fix-entry/design.md" "$IT")" "0" "단순 작업: rc 0
 assert_eq "$(sed -n 1p "$T/out.txt")" "번호 대조 건너뜀 — 번호 파일이 없는 과제다(단순 작업)." "단순 작업: 건너뜀 한 줄"
 assert_eq "$(grep -c 'team 형식 — 리뷰어가 번호 항목' "$T/out.txt")" "1" "단순 작업: 알림 한 줄"
 assert_eq "$(tail -n 2 "$T/out.txt" | head -n 1)" "번호 대조 경고 0개" "단순 작업: 경고 0개"
+assert_not_contains "$(cat "$T/out.txt")" "질문 줄:" "단순 작업: 경고가 없으면 「질문 줄:」 을 내지 않는다"
 assert_eq "$(tail -n 1 "$T/out.txt")" "bundle-entry: PROCEED $W/$IT" "단순 작업: PROCEED"
 assert_eq "$(nb "$IT") · $(wc -c < "$T/out.txt" | tr -d ' ')" "0 · 0" "neighbors: 로드맵에 블록이 없는 단순 작업은 아무것도 내지 않는다"
 finish

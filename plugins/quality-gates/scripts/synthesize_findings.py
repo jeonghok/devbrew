@@ -22,7 +22,8 @@
   --restore-lowered L  되올린 낮춘 지적 번호(`L1,L3` · `all`, `--recritic` 과 함께) — `_parse_restore`
 
 본 보고서는 개수 줄 다음에 `blocking: N`(살아남은 CRITICAL·IMPORTANT) · `optional: M`(SUGGESTION) ·
-`lowered: K`(K-4 · `_lowered_lines`)를 싣는다. confidence 는 읽지 않는다 — 오탐 거르기는 재비판의 관문 A 가 한다.
+`lowered: K`(K-4 · `_lowered_lines`)를 싣고, 그다음(되올림이 있으면 `restored:` 다음) 질문 창에 싣는 한 줄
+`질문 줄: …`(`_ask_line`)을 싣는다. confidence 는 읽지 않는다 — 오탐 거르기는 재비판의 관문 A 가 한다.
 
 exit: 0 정상 · 2 잘못된 호출 · 4 판정축 실패(stdout 비움).
 """
@@ -705,6 +706,49 @@ def _summary_cell(f):
     return _cell(f.get("summary", ""))
 
 
+ASK_LINE_HEAD = "질문 줄: "
+ASK_NO_FINDINGS = "지적 없음"
+# 지적 수를 확정하지 못했을 때(주 입력 사망 · 셀 수 없음) — `_status_line` 의 「지적 수를 확정하지
+# 못했다」 · 「지적이 더 있을 수 있다」와 같은 뜻이다. 확인하지 못한 것을 0 이나 정확한 수로 쓰지 않는다.
+ASK_COUNT_UNCONFIRMED = "지적 수를 확정하지 못했다"
+ASK_MAY_BE_MORE = " (더 있을 수 있다)"
+ASK_SUMMARY_WIDTH = 80   # 요약의 코드 포인트 상한 — 넘으면 79자 + `…`
+
+
+def _ask_summary(f):
+    """질문 줄의 요약 — 「내용」 칸의 쉬운 말 부분(`plain`, 없으면 요약)을 공백을 접어 80자에서 자른다."""
+    text = f["plain"] if _has_plain(f) else f.get("summary", "")
+    text = " ".join(str(text).split())
+    if len(text) > ASK_SUMMARY_WIDTH:
+        text = text[:ASK_SUMMARY_WIDTH - 1] + "…"
+    return text
+
+
+def _ask_line(findings, blocking, degrade_count, unconfirmed=False):
+    """질문 창에 싣는 한 줄(`질문 줄: ` 뒤 글). `blocking` 은 막는 지적 수, `degrade_count` 는
+    「판정 degrade」 블록의 `- ` 줄 수다. 가장 무거운 것은 심각도가 가장 높은 것 가운데 받은 순서
+    (표의 행 순서)로 첫 지적이다. `unconfirmed`(지적 수를 확정하지 못했다)면 지적 0 은
+    「지적 수를 확정하지 못했다」, 지적이 있으면 수 뒤에 「(더 있을 수 있다)」. degrade 가 있으면 끝에
+    ` · 경고 <n>개: 판정 degrade` 를 붙인다."""
+    if findings:
+        top = None
+        for f in findings:
+            if top is None or SEV_ORDER[_norm_sev(f)] < SEV_ORDER[_norm_sev(top)]:
+                top = f
+        where = " ".join(("%s:%s" % (top.get("file"), top.get("line"))).split())
+        counts = "막는 지적 %d개 · 제안 %d개" % (blocking, count_split(findings)["SUGGESTION"])
+        if unconfirmed:
+            counts += ASK_MAY_BE_MORE
+        line = "%s — 가장 무거운 것: %s — %s" % (counts, where, _ask_summary(top))
+    elif unconfirmed:
+        line = ASK_COUNT_UNCONFIRMED
+    else:
+        line = ASK_NO_FINDINGS
+    if degrade_count:
+        line += " · 경고 %d개: %s" % (degrade_count, DEGRADE_MARKER)
+    return line
+
+
 RESTORED_PREFIX = "(사용자가 되올림) "
 
 
@@ -734,12 +778,18 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     for e in lowered:
         if e["restored"]:
             restored.append(e["label"])
+    degrade_lines = _degrade_block(report, blocking)
+    degrade_count = 0
+    for line in degrade_lines:
+        if line.startswith("- "):
+            degrade_count += 1
     out = [_status_line(counts, dropped_malformed, report["degraded"], blocking, unconfirmed),
            "## 리뷰 지적 (합친 결과)", "", counts_line,
            f"blocking: {n_block}", f"optional: {counts['SUGGESTION']}",
            f"lowered: {len(lowered)}"]
     if restored:
         out.append("restored: " + ",".join(restored))
+    out.append(ASK_LINE_HEAD + _ask_line(findings, n_block, degrade_count, unconfirmed))
     out.extend([disp_line, plumb_line, gloss_line])
     if not findings:
         if recritic_zero:
@@ -749,11 +799,10 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
                 f"{dropped_malformed}개 지적을 버렸다 — 형식이 깨졌다(dropped as malformed — 매핑이 아니거나, "
                 "목록이어야 할 자리가 목록이 아니거나, file · severity · summary 가 없다. 자세한 내용은 stderr). "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다.")
-        out.extend(_degrade_block(report, blocking))
+        out.extend(degrade_lines)
         return "\n".join(out) + "\n"
 
     out.append("")
-    degrade_lines = _degrade_block(report, blocking)
     if degrade_lines:
         out.extend(degrade_lines)
         out.append("")

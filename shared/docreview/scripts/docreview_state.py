@@ -8,7 +8,7 @@ frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
-observe-diff · gate · advice · log-decision
+observe-diff · gate · ask-material · gate-file · advice · log-decision
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
 
 상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
@@ -39,6 +39,18 @@ try:
     import docreview_advice as _adv
 except ImportError:  # pragma: no cover
     _adv = None
+# 형제 모듈 — 질문 재료(`status_line` 의 짧은 경고 줄 · `ask-material`)만 쓴다. 없으면 None 이고 다른 서브커맨드는
+# 그대로 돈다(`ask-material` 은 `ask_module_missing` 으로 멈춘다).
+try:
+    import docreview_ask as _ask
+except ImportError:  # pragma: no cover
+    _ask = None
+# 형제 모듈 — 마지막 경로 성분의 링크를 따라가지 않는 writer. 전문 파일(`gate-file`)만 쓴다. 없으면 None 이고
+# `gate-file` 이 `writer_module_missing` 으로 멈춘다.
+try:
+    import nofollow_write as _nfw
+except ImportError:  # pragma: no cover
+    _nfw = None
 
 # 값 해석(leaf 형제) — 모든 라운드의 필수 경로라 `try` 로 감싸지 않는다.
 import docreview_config as _cfg
@@ -2192,31 +2204,46 @@ NEXT_MODE_GLOSS = {"budget": "재리뷰 횟수 안에서", "extra_approval": "�
 # 쓰는 세션을 믿는 한계의 공시 — 게이트 렌더 셋째 줄 · `gate` JSON `writer_trust_notice` · spec-distill README `## 한계` 가 같은 글이다.
 WRITER_TRUST_NOTICE = "리뷰 기록과 그 안의 사용자 말은 이 대화가 직접 쓴다 — 기록을 리뷰 명령 밖에서 고치면 확인값이 안 맞는 경우만 잡히고, 확인값까지 맞춰 그럴듯하게 고친 것은 잡히지 않는다"
 # 렌더 첫 줄 경고의 사람말(쉬운 말 출력 설계 §3 · 계획 Q9). advisory 원문은 기계가 읽는 값이라(`fin.json` · 원장의
-# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장) — 위에서부터 첫 일치.
+# `route_report` · 테스트) 그대로 두고 렌더에서만 바꾼다. 행: (원문 정규식, 괄호 이름, 쉬운 문장, 짧은 이름) — 위에서부터
+# 첫 일치. 짧은 이름은 질문의 상태 줄(`status_line`)이 쓴다 — 게이트 렌더에는 나가지 않는다.
 # 괄호 이름과 문장이 같은 행은 같은 사실을 두 출처가 말한 것이라 한 줄로 합치고, 사유(`why`)는 그 줄 괄호에 모은다.
 # 괄호 이름이 None 인 행은 원문의 나머지(`why`)를 괄호에 그대로 싣는다. 어느 행에도 안 맞는 원문은 그대로 낸다 —
 # 버리지 않는다(계획 P6).
 WARN_GLOSS = (
-    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
-    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다"),
+    (r"codex 없음 — 모델 다양성 0 \((?P<why>.*)\)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다",
+     "codex 리뷰 없음"),
+    (r"입력 실패\(보조\): codex — (?P<why>.*)", "codex", "codex 리뷰가 없어 다른 모델의 시각이 빠졌다",
+     "codex 리뷰 없음"),
     (r"기각 경로 0 — 오탐이 걸러지지 않았다 \(doc-recritic (?P<why>.*)\)", "doc-recritic",
-     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
-    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다"),
-    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다"),
-    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다"),
-    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다"),
+     "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다", "재비판 없음"),
+    (r"입력 실패\(보조\): doc-recritic — (?P<why>.*)", "doc-recritic", "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다",
+     "재비판 없음"),
+    (r"셀 수 없음: layer2 — (?P<why>.*)", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다",
+     "세부 검토 없음"),
+    (r"상세 미검증 — 층 2 블록 없음", "layer2", "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다",
+     "세부 검토 없음"),
+    (re.escape("앵커 불가 — 얼림·보호 부류 비활성, 모든 fix 가 문서 전체 범위"), "앵커 불가", "문서에 제목이 없어 지적의 자리를 가리키지 못한다 — 얼림·보호 검사가 꺼졌고 모든 수정이 문서 전체 범위다",
+     "제목 없는 문서"),
+    (r"critic 시점 판별 불가 \((?P<why>.*)\)", "critic 시점", "리뷰어 결과가 이번 라운드 것인지 확인하지 못했다",
+     "리뷰어 결과 시점 모름"),
     (r"탐지 (?P<n>\d+) 중 (?P<k>\d+) 사망 \((?P<why>.*)\)", "탐지",
-     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다"),
-    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다"),
-    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다"),
-    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다"),
-    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다"),
-    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다"),
+     "탐지 리뷰어 {n}명 중 {k}명이 결과를 내지 못했다 — 남은 리뷰어 결과로 갔다", "탐지 리뷰어 일부 없음"),
+    (r"입력 실패\(주\): (?P<why>.*)", None, "꼭 있어야 할 리뷰어 결과를 읽지 못했다",
+     "주 리뷰어 결과 없음"),
+    (r"입력 실패\(보조\): (?P<why>.*)", None, "보조 리뷰어 결과를 읽지 못했다",
+     "보조 리뷰어 결과 없음"),
+    (r"셀 수 없음: (?P<why>.*)", None, "셀 수 없는 것이 있다",
+     "셀 수 없는 것"),
+    (r"보류: (?P<why>.*)", None, "판정하지 못하고 보류한 지적이 있다",
+     "보류한 지적"),
+    (r"없는 결정 id (?P<why>.*) — 참고로 둠", "결정 id", "지적이 가리킨 결정을 기록에서 찾지 못해 참고로 두었다",
+     "결정 id 못 찾음"),
     (r"이 자리의 결정이 아닌 id (?P<why>.*) — 참고로 둠", "결정 id",
-     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다"),
-    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다"),
-    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다"),
+     "지적이 가리킨 결정이 이 자리를 다룬 사용자의 채택이 아니라서 참고로 두었다", "결정 id 자리 다름"),
+    (re.escape("형식이 아닌 결정 id — 참고로 둠"), "결정 id", "지적에 붙은 결정 id 의 모양이 틀려 참고로 두었다",
+     "결정 id 모양 틀림"),
+    (r"강제\(게이트 변경\): (?P<why>.*)", None, "판정 값을 강제로 바꿨고 그 때문에 게이트 결과가 달라졌다",
+     "판정 강제 변경"),
 )
 
 
@@ -2225,10 +2252,11 @@ def _one(s) -> str:
     return " ".join(str(s).split())
 
 
-def _plain_warns(warns) -> list:
-    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다.
+def _warn_entries(warns) -> list:
+    """advisory 원문 목록 → (짧은 이름, 쉬운 경고 줄) 목록(WARN_GLOSS). 순서는 원문이 처음 나온 순서다.
     한 줄로 합치는 것은 괄호 이름이 있는 행 — 같은 사실을 두 출처가 말한 것 — 뿐이다. 괄호 이름이 없는 행과
-    표에 없는 원문은 글자가 같아도 사건마다 한 줄이다(같은 모양의 깨진 항목 둘을 하나로 세면 경고 수가 준다)."""
+    표에 없는 원문은 글자가 같아도 사건마다 한 줄이다(같은 모양의 깨진 항목 둘을 하나로 세면 경고 수가 준다).
+    표에 없는 원문의 짧은 이름은 None 이다 — 버리지 않고 그대로 싣는다."""
     lines, why_of = [], {}
     for w in map(str, warns):
         m = row = None
@@ -2237,7 +2265,7 @@ def _plain_warns(warns) -> list:
             if m:
                 break
         if m and "{n}" in row[2]:   # 숫자를 싣는 행 — 문장의 {n}·{k} 를 원문의 값으로 채운다
-            row = (row[0], row[1], row[2].format(**m.groupdict()))
+            row = (row[0], row[1], row[2].format(**m.groupdict()), row[3])
         if not m:
             k = w
         elif row[1] is None:
@@ -2246,30 +2274,34 @@ def _plain_warns(warns) -> list:
             k = (row[1], row[2])
         if k not in why_of or not isinstance(k, tuple):
             why_of[k] = []
-            lines.append(k)
+            lines.append((k, row[3] if m else None))
         why = m.groupdict().get("why") if m and row[1] else None
         if why and why not in why_of[k]:
             why_of[k].append(why)
     out = []
-    for k in lines:
+    for k, short in lines:
         if isinstance(k, tuple):
             k = "%s (%s)" % (k[1], k[0] + (": " + ", ".join(why_of[k]) if why_of[k] else ""))
-        out.append(_one(k))
+        out.append((short, _one(k)))
     return out
 
 
-def _first_line(g) -> str:
-    """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
-    「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
-    경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
-    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
-    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
-    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
-    lead = None
+def _plain_warns(warns) -> list:
+    """advisory 원문 목록 → 첫 줄에 싣는 쉬운 경고 줄 목록 — `_warn_entries` 의 줄만."""
+    return [line for _, line in _warn_entries(warns)]
+
+
+def _gate_lead(g):
+    """첫 줄 · 상태 줄 맨 앞의 공시 — 「미검증」이면 그 사유 문장, 라운드 미완이면 미완 문장, 아니면 None."""
     if g.get("unverified"):
-        lead = UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
-    elif g.get("unreviewed_reason"):
-        lead = UNROUTED_TEXT
+        return UNVERIFIED_TEXT.get(g["unverified"], "「미검증」 (%s)" % g["unverified"])
+    if g.get("unreviewed_reason"):
+        return UNROUTED_TEXT
+    return None
+
+
+def _gate_warns(g) -> list:
+    """게이트 요약 → 경고 원문 목록. advisory 를 전부 싣고 codex 부재 줄을 맨 앞에 끼운다(이미 있으면 그대로)."""
     warns = list(g["advisory"])
     deg = g["degrade"]
     if deg.get("codex_absent"):
@@ -2279,7 +2311,34 @@ def _first_line(g) -> str:
             warns = [cl if w == "codex 없음 — 모델 다양성 0 (None)" else w for w in warns]
         if cl not in warns:
             warns.insert(0, cl)
-    warns = _plain_warns(warns)
+    return warns
+
+
+def status_line(g) -> str:
+    """질문의 상태 줄 — 공시가 있으면 공시 문장(+ 짧은 경고 줄), 없으면 짧은 경고 줄.
+    공시도 경고도 없으면 남은 행이 없을 때 「이상 없음」, 있을 때 「경고 없음」. 경고 수는 게이트 첫 줄과
+    같은 목록(`_gate_warns` → `_warn_entries`)에서 센다. 형제 `docreview_ask` 가 없으면 경고를 빼고 내지 않고
+    멈춘다(fail-closed)."""
+    if _ask is None:
+        raise RuntimeError("docreview_ask.py 형제 사본이 이 스크립트 옆에 없다")
+    lead = _gate_lead(g)
+    short = _ask.short_warn_line(_warn_entries(_gate_warns(g)))
+    if lead:
+        return lead + "." + (" " + short if short else "")
+    if short:
+        return short
+    return "경고 없음" if any(g[r.name] for r in GATE_ROWS) else "이상 없음"
+
+
+def _first_line(g) -> str:
+    """첫 줄 = 그 라운드의 상태와 경고 공시 한 문장(쉬운 말 출력 설계 §3).
+    「이상 없음」은 리뷰를 마친 라운드에 남은 행도 경고도 없을 때만, 「경고 없음」은 남은 것은 있고
+    경고가 없을 때만 쓴다. 「미검증」·라운드 미완이면 그 공시가 맨 앞이고 두 문구 어느 것도 쓰지 않는다.
+    경고는 advisory 를 전부 싣는다 — codex 부재만 싣고 나머지를 버리지 않는다. 원문은 `_plain_warns` 가 쉬운 줄로
+    바꾸고, 같은 사실을 두 출처가 말한 원문은 한 줄로 합친다(계획 Q9). 「미검증」·라운드 미완이면 「남은 것 없음」도
+    쓰지 않는다 — 세지 못한 라운드다(계획 Q10)."""
+    lead = _gate_lead(g)
+    warns = _plain_warns(_gate_warns(g))
     left = ["%s %d개" % (STATE_GLOSS.get(r.name, r.name), len(g[r.name])) for r in GATE_ROWS if g[r.name]]
     head = ("리뷰 %d라운드" if lead else "리뷰 %d라운드를 마쳤다") % g["round"]
     if g.get("cap_reached") or g.get("stagnation"):
@@ -2568,6 +2627,155 @@ def cmd_gate(a) -> int:
     return 0
 
 
+# 질문 재료의 고정 설명 키 — 사후(post) 결정은 선택지마다, 사전(pre) 결정은 「보류」만 결과가 정해져 있다.
+_ASK_FIXED_KEY = {"pre": {"hold": "hold"},
+                  "post": {"adopt": "post_adopt", "reject": "post_reject", "hold": "hold"}}
+
+
+def _ask_fields(f) -> dict:
+    """질문 재료의 두 칸 — `decision_view` 의 값, 없으면 finding 의 같은 이름 칸. 비었거나 라우터가 채운 부재 표기면
+    None(리뷰어가 그 글자를 직접 적었으면 그대로 둔다)."""
+    dv = f.get("decision_view") or {}
+    out = {}
+    for k in ("replacement", "if_unfixed"):
+        v = dv.get(k) or f.get(k)
+        if v is not None and (not _one(v) or (v == _ask.ABSENT[k] and not f.get(k))):
+            v = None
+        out[k] = v
+    return out
+
+
+def _ask_notes(st, fid) -> list:
+    """덧줄 — 게이트 렌더가 그 결정에 붙이는 줄을 같은 글자로(앞의 이음 표지만 뗀다). 순서: 사후 채택의 뜻 ·
+    반대라고 한 결정 · 「고친다」를 고를 수 없는 이유 · 원복이 돌아갈 글."""
+    f, d = st["findings"][fid], st["decides"].get(fid) or {}
+    notes = []
+    post = _post_kind_notice(d)
+    if post:
+        notes.append(post[len(" — "):])
+    if f.get("contradicts"):
+        notes.append("반대라고 한 결정: " + _one(f["contradicts"]))
+    for ln in _adopt_unavailable_line(st, fid) + _revert_target_flagged_line(st, fid):
+        notes.append(ln[len("  ↳ "):] if ln.startswith("  ↳ ") else ln)
+    return notes
+
+
+def _ask_bundles(st, g, fix_rows, ask_rows) -> list:
+    """질문으로 뜨는 행 → 묶음 dict 목록(GATE_ROWS 렌더 순서). 결정 꼴의 행은 전체 묶음, 적용 여부를 묻는 수정 행은
+    `fix_rows` 일 때만 전체 묶음, 수정의 전제가 되는 질문은 짧은 묶음, 답을 기다리는 질문은 `ask_rows` 일 때만 짧은
+    묶음. 그 밖의 행은 내지 않는다. 상한에 닿은 두 단계 게이트면 맨 끝에 추가 라운드 묶음."""
+    out = []
+    blank = {"replacement": None, "if_unfixed": None, "notes": [], "fixed": [],
+             "keep_label": None, "render": None}
+    for row in GATE_ROWS:
+        for fid in g[row.name]:
+            f = st["findings"][fid]
+            b = dict(blank, id=fid, summary=f.get("summary"), choices=[])
+            if row.name in ("open_decide", "blocked_expired"):
+                kind = (st["decides"].get(fid) or {}).get("kind")
+                keys = _ASK_FIXED_KEY["post" if kind == "post" else "pre"]
+                ch = decide_choices(st, fid)
+                keep = kind != "post" and "reject" in ch   # 사후 결정의 「원복」은 지금 글을 남기지 않는다
+                b.update(_ask_fields(f), kind="full", choices=[choice_label(c, kind) for c in ch],
+                         notes=_ask_notes(st, fid),
+                         fixed=[(choice_label(c, kind), keys[c]) for c in ch if c in keys],
+                         keep_label=choice_label("reject", kind) if keep else None)
+            elif row.name == "unapplied_fix" and fix_rows:
+                b.update(_ask_fields(f), kind="full", choices=list(_ask.FIX_CHOICES),
+                         keep_label=_ask.FIX_CHOICES[1])
+            elif row.name == "blocking_ask_open" or (row.name == "ask_open" and ask_rows):
+                ln = GATE_RENDERERS[row.render](st, g, fid)[0]
+                b.update(kind="short", render=ln[2:] if ln.startswith("- ") else ln)
+            else:
+                continue
+            out.append(b)
+    if g["two_stage"] and g["next_round_mode"] == "extra_approval":
+        ch = _ask.EXTRA_CHOICES_READY if g["approval_ready"] else _ask.EXTRA_CHOICES_OPEN
+        out.append(dict(blank, kind="extra", id=None, summary=_ask.EXTRA_SUMMARY,
+                        choices=[label for label, _ in ch], fixed=list(ch)))
+    return out
+
+
+def cmd_ask_material(a) -> int:
+    """질문 재료 — 질문으로 뜨는 행마다 진입 skill 이 질문 창에 싣는 재료(설계 §3-1). **읽기 전용** — 원장도 파일도
+    쓰지 않는다. 「전문」 줄은 `--gate-file-result`(쓰는 명령 `gate-file` 이 낸 JSON 글)에서 온다."""
+    if _ask is None:
+        return fail("ask_module_missing", detail="docreview_ask.py 형제 사본이 이 스크립트 옆에 없다")
+    try:
+        width = _cfg.ask_width(os.environ)
+    except _cfg.ConfigInvalid as e:
+        fail("config_invalid", name=e.name, value=str(e.raw), where=e.where,
+             allowed=_cfg.ask_width_range())
+        return 2
+    st = load_state(a.state_dir)
+    g = gate_summary(st)
+    tail = []
+    if g["two_stage"] and not g["approval_ready"]:
+        n = g["open_total"]
+        tail.append(_ask.APPROVE_TAIL_HEAD
+                    + _ask.fixed_desc_line(APPROVE_WITH_OPEN % n, "approve_with_open", n))
+    print(_ask.render_material(_ask_bundles(st, g, a.fix_rows, a.ask_rows), status_line(g),
+                               _ask.full_text_line(a.gate_file_result), width, tail))
+    return 0
+
+
+GATE_FILE_LINK = "링크다 — 따라가지 않는다"
+
+
+def _gate_file_items(st, n) -> list:
+    """이번 라운드(`#r<n>.`)에 판정을 지난 지적(`rejected` 가 아닌 것 — 참고로 간 항목 포함) → 원문 항목 목록, id 순.
+    두 칸은 질문 재료와 같은 값(`_ask_fields`)이다."""
+    tag = "#r%d." % n
+    out = []
+    for fid in sorted(st["findings"]):
+        f = st["findings"][fid]
+        if tag not in fid or f.get("state") == "rejected":
+            continue
+        out.append(dict(_ask_fields(f), id=fid, summary=f.get("summary"),
+                        evidence=f.get("evidence"), anchor=f.get("anchor")))
+    return out
+
+
+def _read_old_gate_file(path):
+    """옛 전문 파일 글 — 없으면 None. 링크를 따라가지 않고 일반 파일만 읽는다(아니면 OSError)."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "일반 파일이 아니다", path)
+        return fh.read().decode("utf-8")
+
+
+def cmd_gate_file(a) -> int:
+    """전문 파일 — `<state-dir>/gate-r<라운드>.md` 를 쓴다(설계 §3-2). **쓰기 명령**이지만 원장은 바꾸지 않는다.
+    「지금 게이트 글」 구역은 부를 때마다 `gate --render` 글로 새로 쓰고, 「이 라운드의 지적 원문」 구역은 옛 파일의
+    글을 그대로 잇는다(없으면 새로 짓는다). 펜스가 덧붙인 「다른 채널의 경고」 구역은 다시 쓰면 사라진다.
+    마지막 경로 성분이 링크면 쓰지 않는다 — writer 는 링크를 따라가지 않지만 그 이름을 새 파일로 바꾸기 때문이다."""
+    if _ask is None:
+        return fail("ask_module_missing", detail="docreview_ask.py 형제 사본이 이 스크립트 옆에 없다")
+    if _nfw is None:
+        return fail("writer_module_missing", detail="nofollow_write.py 형제 사본이 이 스크립트 옆에 없다")
+    st = load_state(a.state_dir)
+    g = gate_summary(st)
+    n = g["round"]
+    path = os.path.join(os.path.realpath(a.state_dir), "gate-r%d.md" % n)
+    if os.path.islink(path):
+        return fail("gate_file_write_failed", path=path, detail=GATE_FILE_LINK)
+    try:
+        originals = _ask.keep_originals(_read_old_gate_file(path))
+        if originals is None:
+            originals = _ask.originals_block(_gate_file_items(st, n))
+        text = _ask.gate_file_text(n, render_gate(st, g), originals)
+        _nfw.replace_bytes(path, text.encode("utf-8"))
+    except (OSError, UnicodeError) as e:
+        return fail("gate_file_write_failed", path=path, detail=str(e))
+    _emit({"ok": True, "path": path,
+           "shown": _ask.display_path(path, os.getcwd(), os.path.expanduser("~")), "round": n})
+    return 0
+
+
 def cmd_advice_list(a) -> int:
     """참고(advisory) 목록 — 읽기 전용. 쓰기 플래그가 없는 하위 명령이라 펜스의 원장 쓰기 락이 이름만으로 가른다."""
     if _adv is None:
@@ -2738,6 +2946,10 @@ def build_parser() -> argparse.ArgumentParser:
     x = sd(P("related-changes")); x.set_defaults(fn=cmd_related_changes)
     x = sd(P("observe-diff")); x.set_defaults(fn=cmd_observe_diff)
     x = sd(P("gate")); x.add_argument("--render", action="store_true"); x.set_defaults(fn=cmd_gate)
+    x = sd(P("ask-material")); x.add_argument("--gate-file-result", default=None)
+    x.add_argument("--fix-rows", action="store_true")
+    x.add_argument("--ask-rows", action="store_true"); x.set_defaults(fn=cmd_ask_material)
+    x = sd(P("gate-file")); x.set_defaults(fn=cmd_gate_file)
     x = sd(P("advice")); x.add_argument("--render", action="store_true")
     x.add_argument("--cap", type=_ascii_int, default=None); x.add_argument("--where", default=None)
     x.add_argument("--sink", default=None); x.add_argument("--log-file", default=None)
