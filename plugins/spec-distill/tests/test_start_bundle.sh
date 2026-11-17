@@ -314,4 +314,51 @@ assert_contains "$(cat "$T/job.err")" "블록 E3 의 브랜치 칸에 브랜치�
 g revert --no-edit HEAD >/dev/null && publish
 assert_eq "$(job --job E3 --stage design)" "0" "과제: 칸을 되돌리면 다시 0(양성 대조)"
 
+# ── 끝에서 끝 — 새 레포: create --layout team → 공통 문서 → job new → 시작 묶음 → 맞추는 명령 → 끝 줄 → 결과 대조 → 받음 줄 → 결과 받음.
+#    걸음마다 앞 걸음의 출력을 다음 걸음이 받는다 ──
+T1="$T"; T="$(mktemp -d)" || exit 1
+[ -n "$T" ] && [ -d "$T" ] || exit 1
+trap 'rm -rf "$T1" "$T"' EXIT
+W="$T/repo"
+team_repo && ok "끝에서 끝: 새 팀 레포를 세웠다(${TM})" || { no "끝에서 끝: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" && g commit -qm "공통 문서" && publish
+assert_eq "$?" "0" "끝에서 끝: 공통 문서를 기본 브랜치에 올렸다"
+EJ="$TM/jobs/e2e"
+g checkout -q -b chore/e2e main
+NEW_RC=0; printf '문서 하나를 고친다\n' > "$T/said.txt"
+(cd "$W" && python3 "$RW" job new --roadmap "$RM" --name e2e --branch chore/e2e --paths docs/tv/ --goal "문서 하나 고치기" < "$T/said.txt") > "$T/out.txt" 2>&1 || NEW_RC=$?
+assert_eq "$NEW_RC" "0" "끝에서 끝: job new 0"
+g add -- "$EJ" && g commit -qm "과제 폴더 e2e" && g push -q origin chore/e2e && g fetch -q origin
+assert_eq "$?" "0" "끝에서 끝: 과제 폴더를 커밋해 올렸다"
+EJT="$(g rev-parse chore/e2e)"
+E_RC=0; (cd "$W" && python3 "$SBP" --roadmap "$RM" --job e2e --stage implement) > "$T/e2e.txt" 2> "$T/e2e.err" || E_RC=$?
+assert_eq "$E_RC" "0" "끝에서 끝: 시작 묶음 0"
+assert_eq "$(sed -n 1p "$T/e2e.txt")" "기준 커밋: ${B} · 과제 브랜치 ${EJT}" "끝에서 끝: 묶음 첫 줄은 기준 커밋과 과제 브랜치 끝"
+CMD="$(grep '^맞추는 명령: ' "$T/e2e.txt")"
+assert_eq "$(printf '%s' "$CMD" | cut -d' ' -f1-5)" "맞추는 명령: roadmap_write.py job sync" "끝에서 끝: 맞추는 명령 줄이 있다"
+read -r -a SYNC_ARGS <<< "${CMD#*roadmap_write.py }"
+S_RC=0; (cd "$W" && python3 "$RW" "${SYNC_ARGS[@]}") > "$T/out.txt" 2>&1 || S_RC=$?
+assert_eq "${S_RC} · $(cat "$T/out.txt")" "0 · [spec-distill] 결과 파일을 맞췄다: ${EJ}/results/implement-1.md — 머리 만듦" "끝에서 끝: 맞추는 명령을 그대로 돌리면 결과 파일의 머리를 만든다"
+ER="$W/$EJ/results/implement-1.md"
+assert_eq "$(grep '^bundle_at: ' "$ER") · $(grep '^job_at: ' "$ER")" "bundle_at: ${B} · job_at: ${EJT}" "끝에서 끝: 결과 파일 머리의 bundle_at · job_at 이 묶음 첫 줄의 두 커밋"
+put docs/tv/fixed.md "끝에서 끝으로 고친 문서" && g commit -qm "고친 문서" && ECODE="$(g rev-parse HEAD)"
+printf '산출물: docs/tv/fixed.md\n' >> "$ER"
+assert_eq "$(sync e2e implement-1.md --end "$ECODE")" "0" "끝에서 끝: job sync --end 0"
+g add -- "$EJ" && g commit -qm "결과 파일" && g push -q origin chore/e2e && g fetch -q origin
+assert_eq "$?" "0" "끝에서 끝: 결과 파일을 커밋해 올렸다"
+echeck() { local rc=0; (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" --job e2e --result implement-1.md --branch chore/e2e --date 2026-11-30) > "$T/check.txt" 2>&1 || rc=$?; echo "$rc"; }
+assert_eq "$(echeck)" "0" "끝에서 끝: 결과 대조 0"
+ELINE="$(grep '^- 결과 받음 · ' "$T/check.txt")"
+assert_eq "$ELINE" "- 결과 받음 · 2026-11-30 · 「implement-1.md · ${ECODE} · $(head -n 1 "$T/check.txt")」" "끝에서 끝: 결과 대조가 받음 줄을 낸다"
+decide e2e "$ELINE" && g add -- "$EJ" && g commit -qm "받음 줄" && g push -q origin chore/e2e && g fetch -q origin
+assert_eq "$?" "0" "끝에서 끝: 받음 줄을 INTENT.md 에 적어 올렸다"
+assert_eq "$(status "$T/s.json")" "0" "끝에서 끝: 단계 계산 0"
+assert_eq "$(js "$T/s.json" "[j['stage'] for j in r['jobs'] if j['id']=='e2e']")" "['결과 받음']" "끝에서 끝: 그 과제가 결과 받음"
+# AC24 — bundle_at 을 이 레포에 없는 커밋으로 바꿔 올리면 결과 대조가 거절(1)하고 사유에 bundle_at
+python3 -c 'import sys; p, old, new = sys.argv[1:4]; s=open(p, encoding="utf-8", newline="").read(); assert s.count(old) == 1; open(p, "w", encoding="utf-8", newline="").write(s.replace(old, new))' \
+  "$ER" "bundle_at: ${B}" "bundle_at: 0123456789abcdef0123456789abcdef01234567"
+g add -- "$EJ" && g commit -qm "bundle_at 을 없는 커밋으로" && g push -q origin chore/e2e && g fetch -q origin
+assert_eq "$(echeck)" "1" "끝에서 끝: AC24 — bundle_at 이 없는 커밋이면 거절 1"
+assert_contains "$(grep '^거절 사유: ' "$T/check.txt")" "bundle_at" "끝에서 끝: AC24 — 거절 사유에 bundle_at"
+
 finish
