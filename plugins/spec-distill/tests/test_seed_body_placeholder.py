@@ -21,7 +21,7 @@ ACCEPT = ["값은 <REDACTED> 로 가렸다.", "키 <REDACTED:api-key> 를 썼다
           "비밀 <SECRET_x> 이다.", "열쇠 <KEY-a.b> 다.", "접속 <CREDENTIAL:db> 다.", "자리 <PLACEHOLDER:x> 다."]
 REJECT = ["<REDACTED> 로 시작한다.", "앞 <redacted> 뒤", "앞 <REDACTED: 공백> 뒤", "앞 <REDACTEDX> 뒤",
           "앞 <b>굵게</b> 뒤", "앞 <https://x.y> 뒤", "- <REDACTED> 목록", "앞 [<REDACTED>](x) 뒤",
-          "앞 <REDACTED:www.x> 뒤"]
+          "앞 <REDACTED:www.x> 뒤", "키 <REDACTED> 와 <b>굵게</b> 다.", "키 <<REDACTED>> 다."]
 
 
 class Placeholder(unittest.TestCase):
