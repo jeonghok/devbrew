@@ -5,6 +5,8 @@
                                             seed_sha256 포함). 공시 기록(.shown)을 남기지 않는다.
   screen --hunks <덩어리 JSON> --reasons <이유 파일> --state-dir <원장 폴더> [--final]
                                             화면 JSON({"text", "hunks", "questions", "notices"}).
+                                            선택지 설명은 질문 기준 길이(DEVBREW_DOCREVIEW_ASK_WIDTH ·
+                                            기본 110) 안에 든다 — 값이 잘못되면 rc 2.
   mark-used --hunks <덩어리 JSON> --reasons <이유 파일> --state-dir <원장 폴더> --ids <쉼표로 이은 번호>
                                             이유 파일이 댄 지적 id 를 쓴 지적 목록에 더한다.
 rc: 0 정상 · 2 입력 오류와 그 밖의 예외 · 3 기준 사본 부재(preview).
@@ -14,9 +16,12 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 import pathlib
 import sys
 
+import docreview_advice
+import docreview_config
 import nofollow_write
 import seed_edit_diff
 from seed_provenance import MARK, SENT_SPLIT_RE, norm
@@ -292,9 +297,27 @@ def split_sizes(n: int) -> list[int]:
 
 
 MULTI_QUESTION = "그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요."
+KEEP_HEAD = "얻음: 편집이 남는다(%s · 고친 이유(저자가 댐): "
+KEEP_TAIL = ") · 내줌: 틀린 편집도 남는다"
+REVERT_DESC = ("얻음: 기준 사본의 글로 돌아간다 · "
+               "내줌: 편집이 고친 것도 사라진다 — 지적을 고친 편집이면 그 지적은 안 고친 채 남는다")
+REASON_MIN = 12   # 요약이 길어 자리가 모자라도 이유 줄은 이만큼(「…」 포함) 싣는다
 
 
-def build_questions(views: list[dict]) -> list[dict]:
+def _unmark(s: str) -> str:
+    """설명 표지(얻음: · 내줌:)를 흉내 낸 글자가 설명의 꼴을 흐리지 않게 콜론 앞에 공백을 넣는다."""
+    return s.replace("얻음:", "얻음 :").replace("내줌:", "내줌 :")
+
+
+def keep_desc(v: dict, width: int) -> str:
+    """「그대로 둔다」 의 설명 — 얻음에 덩어리 요약(그대로)과 고친 이유(권장의 근거 — 넘치면 끝을 「…」 로)를 싣는다.
+    전체가 질문 기준 길이(`width`) 안에 들게 이유 줄만 엔진의 줄임(`docreview_advice.clip`)으로 줄인다."""
+    head = KEEP_HEAD % v["summary"]
+    room = max(width - len(head) - len(KEEP_TAIL), REASON_MIN)
+    return head + docreview_advice.clip(_unmark(v["reason"]), room) + KEEP_TAIL
+
+
+def build_questions(views: list[dict], width: int = docreview_config.ASK_WIDTH_DEFAULT) -> list[dict]:
     if not views:
         return []
     views = sorted(views, key=lambda v: v["id"])
@@ -303,10 +326,8 @@ def build_questions(views: list[dict]) -> list[dict]:
         keep = "그대로 둔다" + (" (권장)" if v["recommend"] else "")
         return [{"header": "저자 편집", "question": "저자 편집 1곳을 그대로 둘까요?", "multi": False,
                  "hunk_ids": [v["id"]],
-                 "options": [{"label": keep, "description": "이 편집이 seed 에 남는다", "hunk_id": v["id"]},
-                             {"label": "되돌린다",
-                              "description": "이 편집을 지우고 기준 사본의 글로 돌아간다",
-                              "hunk_id": v["id"]}]}]
+                 "options": [{"label": keep, "description": keep_desc(v, width), "hunk_id": v["id"]},
+                             {"label": "되돌린다", "description": REVERT_DESC, "hunk_id": v["id"]}]}]
     sizes = split_sizes(len(views))
     out, start = [], 0
     for size in sizes:
@@ -317,7 +338,7 @@ def build_questions(views: list[dict]) -> list[dict]:
         for v in ordered:
             n = v["id"]
             options.append({"label": "%d번 그대로 둔다" % n + (" (권장)" if v["recommend"] else ""),
-                            "description": "%s · %s" % (v["summary"], v["reason"]), "hunk_id": n})
+                            "description": keep_desc(v, width), "hunk_id": n})
         first, last = group[0]["id"], group[-1]["id"]
         out.append({"header": "저자 편집" if len(sizes) == 1 else "편집 %d–%d" % (first, last),
                     "question": MULTI_QUESTION, "multi": True,
@@ -325,7 +346,8 @@ def build_questions(views: list[dict]) -> list[dict]:
     return out
 
 
-def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool = False) -> dict:
+def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool = False,
+                 width: int = docreview_config.ASK_WIDTH_DEFAULT) -> dict:
     hunks = hunks_doc["hunks"]
     views = [hunk_view(h) for h in hunks]
     mark_moves(views)
@@ -368,7 +390,7 @@ def build_screen(hunks_doc: dict, reasons_path: str, state_dir: str, final: bool
     for k, (h, v, pieces) in enumerate(zip(hunks, views, shown), 1):
         lines.append("")
         lines += _render(k, h, v, pieces)
-    return {"text": "\n".join(lines), "hunks": views, "questions": build_questions(views),
+    return {"text": "\n".join(lines), "hunks": views, "questions": build_questions(views, width),
             "notices": notices}
 
 
@@ -478,7 +500,13 @@ def main(argv=None) -> int:
     if not isinstance(doc, dict) or not isinstance(doc.get("hunks"), list):
         print("[spec-distill] 덩어리 JSON 에 hunks 목록이 없다: %s" % a.hunks, file=sys.stderr)
         return 2
-    print(json.dumps(build_screen(doc, a.reasons, a.state_dir, a.final), ensure_ascii=False))
+    try:
+        width = docreview_config.ask_width(os.environ)
+    except docreview_config.ConfigInvalid as e:
+        print("[spec-distill] 질문 설명 기준 길이 %s=%r 이 허용 범위(%s)의 정수가 아니다"
+              % (docreview_config.ASK_WIDTH_ENV, e.raw, docreview_config.ask_width_range()), file=sys.stderr)
+        return 2
+    print(json.dumps(build_screen(doc, a.reasons, a.state_dir, a.final, width), ensure_ascii=False))
     return 0
 
 

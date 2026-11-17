@@ -222,7 +222,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 
 ## 설정
 
-문서 리뷰 엔진은 값 넷을 쓴다. 정하는 순서는 기본 < 프로필 < 진입 < 환경 변수이고, 바꾼 값은 다음 라운드부터 적용된다. 라운드마다 게이트 둘째 줄에 쓴 값과 그 출처를 밝힌다. 프로필 필드 이름은 환경 변수 이름과 짝이다(`detectors` · `rereview_cap` · `render_cap` · `summary_width`).
+문서 리뷰 엔진은 값 넷을 쓴다(표의 마지막 행인 질문 기준 길이는 환경 변수로만 정하고 라운드 설정에는 넣지 않으므로 이 넷에 들지 않는다). 정하는 순서는 기본 < 프로필 < 진입 < 환경 변수이고, 바꾼 값은 다음 라운드부터 적용된다. 라운드마다 게이트 둘째 줄에 쓴 값과 그 출처를 밝힌다. 프로필 필드 이름은 환경 변수 이름과 짝이다(`detectors` · `rereview_cap` · `render_cap` · `summary_width`).
 
 | 환경 변수 | 프로필 필드 | 뜻 | 기본 |
 |---|---|---|---|
@@ -230,6 +230,9 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 | `DEVBREW_DOCREVIEW_REREVIEW_CAP` | `rereview_cap` | 한 문서의 재리뷰 상한(0~10, 0 이면 재리뷰 없음) | 2 |
 | `DEVBREW_DOCREVIEW_RENDER_CAP` | `render_cap` | 조언 목록에 펼치는 지적 수(1~100) | 8 |
 | `DEVBREW_DOCREVIEW_SUMMARY_WIDTH` | `summary_width` | 지적 요약 줄 너비(1~500) | 60 |
+| `DEVBREW_DOCREVIEW_ASK_WIDTH` | — | 질문 설명의 기준 길이(20~500) — 넘는 원문 칸에 「줄인다」를 표시한다 | 110 |
+
+마지막 행은 질문 재료(`ask-material`)만 읽는 환경 변수다 — 프로필 필드가 없고 게이트 둘째 줄에 나오지 않는다.
 
 진입 skill 이 `advice --cap` 으로 펼치는 수를 넘기면 그 값이 `render_cap` 의 환경 변수보다 앞선다. 정수가 아니거나 범위 밖이면 그 값은 쓰지 않고 이름과 값을 밝히며 멈춘다.
 
@@ -351,6 +354,7 @@ handbook_budget: 16384
 - 지휘자가 연 PR 은 열 때(쌓아 연 PR 은 바탕을 기본 브랜치로 바꾼 직후) 번호가 적힌다. 그 밖의 PR(손으로 연 PR · 이 판 전에 연 PR)은 지휘 세션에서 `ledger pr-record --roadmap <로드맵> --session <세션> --epic <에픽> --pr <번호>` 를 한 번 부르면 된다(번호는 숫자만) — 그 명령이 PR 캐시 줄까지 써서 바로 그 번호로 판정된다. 적기 전까지 그 PR 의 에픽은 브랜치 이름과 이력으로 판정된다. 쓰기는 지휘 표지를 쥔 세션만 한다.
 - **한계 — 상태 폴더 쓰기의 링크 (P21)** — 펜스의 상태 폴더 쓰기는 writer(`scripts/nofollow_write.py`)를 거쳐 링크를 따라가지 않는다. 다만 Write 도구로 쓰는 상태 폴더 파일(`said-*.txt` · `readback.txt` · `note-<id>.txt` · `critic*.txt` · `recritic.txt` · `hunk-reasons.txt`)은 writer 로 감싸지 못하고, writer 는 마지막 경로 성분만 지키며, 실행 중 다시 심는 링크는 지키지 않는다. 러너의 `write_failclosed` · `_degrade_if_empty` 는 첫 쓰기 뒤라 그대로다.
 - **한계 — 원장 정리의 뿌리 (P14)** — request-framing 의 원장 정리와 지휘자는 지금 작업 폴더 레포의 뿌리를 쓴다 — 다른 레포의 문서를 리뷰하는 동안에는 지금 작업 폴더 레포의 원장이 그때 정리되지 않는다.
+- 질문 글의 레포 검사(`shared/tests/test_ask_recommendation.sh`)는 글자의 있고 없음만 본다 — 설명의 내용이 형식만 채운 것인지 · 모델이 그 자리에서 짜는 질문이 규칙을 따랐는지 · 줄인 글이 원문과 뜻이 같은지는 세션 기록 재측정(`tools/plain-language/measure_questions.py`)과 화면 확인이 본다.
 
 ## Prerequisites
 

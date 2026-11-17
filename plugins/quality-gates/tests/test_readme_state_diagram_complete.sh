@@ -36,7 +36,7 @@ EXPECTED_MARKERS=(
   "② differential test"
   "③ synthesize → verdict"
   "AskUserQuestion"
-  "남은 지적이 있다"
+  "AskUserQuestion (질문 줄: 지적 수 · 가장 무거운 지적 하나 · 전문 자리)"
   "Final verdict"
 )
 missing=()
@@ -54,7 +54,8 @@ fi
 
 # Negative lock — two-gate diagram markers must not survive the one-pipeline
 # merge (positive markers above are the paired mutation target).
-for gone in "Runtime gate dispatch" "Review gate iter loop" "gate scope?" "NEEDS_RESOLUTION" "⑤ synthesize" "Final summary" "findings remain"; do
+# 「남은 지적이 있다」는 반복 게이트의 옛 질문 문구다 — 질문이 질문 줄 · 전문 자리를 싣게 바뀌었다(위 양성 짝).
+for gone in "Runtime gate dispatch" "Review gate iter loop" "gate scope?" "NEEDS_RESOLUTION" "⑤ synthesize" "Final summary" "findings remain" "남은 지적이 있다"; do
   if grep -qF "$gone" "$README"; then
     echo "FAIL: README still carries the two-gate diagram marker: $gone"
     exit 1

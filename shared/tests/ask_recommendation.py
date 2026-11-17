@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """질문 자리 추천 표시 전수 판정 — `test_ask_recommendation.sh` 의 본체.
 
-입력: 리포 루트 · 후보 파일 목록(한 줄에 리포 상대 경로 하나) · 목록 tsv(`경로<TAB>종류<TAB>앵커<TAB>끝<TAB>덮는 수`).
-출력: `ok <설명>` · `no <①|②|③|④> <경로>:<줄> <설명>` 줄. rc 0 = 판정 완료, rc 2 = 인자 · 파일 읽기 실패.
+입력: 리포 루트 · 후보 파일 목록(한 줄에 리포 상대 경로 하나) · 목록 tsv(`경로<TAB>종류<TAB>앵커<TAB>끝<TAB>덮는 수<TAB>설명 수`,
+뒤 칸 둘은 비어도 된다).
+출력: `ok <설명>` · `no <①|②|③|④|⑤> <경로>:<줄> <설명>` 줄. rc 0 = 판정 완료, rc 2 = 인자 · 파일 읽기 실패.
 
 - 앵커는 그 파일에서 정확히 한 번 나오는 한 줄 안의 글자다. 범위는 끝이 있으면 앵커 시작부터 앵커 뒤
   첫 `끝` 의 끝까지, 끝이 비면 앵커가 든 문단(빈 줄 사이)이다.
@@ -11,6 +12,10 @@
   그 자리, 없으면 앵커 줄의 첫 자리. 떼기 행은 맡지 않는다.
 - 질문 행의 범위 안 자리 수(언급 행이 맡은 것을 뺀다)는 `덮는 수` 칸(비면 0)과 같아야 한다 — 다르면 ① 이다.
   어느 질문 범위에도 들지 않고 언급 행도 맡지 않은 자리가 있는 후보 줄도 ① 이다.
+- 「설명 수」 칸은 꼬리 · 지시 · 출처꼬리 행에만 쓴다. 채운 행(수 N, 0 이면 보지 않는다)은 범위에 `label:` 키가 있으면
+  `description:` 값이 N 개이고 값마다 `얻음:` · `내줌:` 이 있어야 하고, 없으면(표 · 문장 꼴) 범위의 `얻음:` 수와
+  `내줌:` 수가 각각 N 이어야 한다 — 어긋나면 ⑤ 다. `REQUIRE_DESCS`(꼬리 · 출처꼬리) 종류의 행은 이 칸이 비면 ⑤ 다 — 선택지를
+  모델이 그 자리에서 짜는 질문은 0 을 적는다.
 - 꼬리 행의 범위에 `label:` 키가 있으면 꼬리는 `label:` 값 안에 있어야 한다. 없으면(마크다운 꼴) 범위 어디든 센다.
 """
 import io
@@ -22,6 +27,10 @@ TAIL_RE = re.compile(r"(?<!「)\((?:권장|Recommended)\)")
 # label 은 키 자리(줄 머리 · `{` · `,` 바로 뒤)에서만 읽는다 — 앞 글자만 보므로 문자열 안의 `, label:` 글과 YAML 목록 꼴(`- label:`)은 가르지 못한다(설계 미룸 표).
 LABEL_KEY_RE = re.compile(r"""(?:^|[{,])\s*["']?label["']?\s*:""", re.M)
 LABEL_RE = re.compile(r"""(?:^|[{,])\s*["']?label["']?\s*:\s*(["'`])((?:(?!\1)[^\n])*)\1""", re.M)
+DESC_RE = re.compile(r"""(?:^|[{,])\s*["']?description["']?\s*:\s*(["'`])((?:(?!\1)[^\n])*)\1""", re.M)
+GAIN, GIVE = "얻음:", "내줌:"
+DESC_KINDS = ("꼬리", "지시", "출처꼬리")
+REQUIRE_DESCS = ("꼬리", "출처꼬리")  # 이 종류의 행은 「설명 수」가 비면 ⑤ 다
 DIRECTIVE = "권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다"
 EMPTY = "추천을 달지 않는다 — "
 SOURCE = "추천)"
@@ -31,7 +40,7 @@ TOOL = "AskUserQuestion"
 QUESTION_KINDS = ("꼬리", "지시", "비움", "출처꼬리")
 KINDS = QUESTION_KINDS + ("언급", "떼기")
 
-Site = namedtuple("Site", "path kind anchor end lines lineno")
+Site = namedtuple("Site", "path kind anchor end lines descs lineno")
 
 
 def load_sites(path):
@@ -43,13 +52,13 @@ def load_sites(path):
             if not line.strip() or line.startswith("#"):
                 continue
             cells = line.split("\t")
-            if len(cells) in (3, 4):
-                cells += [""] * (5 - len(cells))
-            if len(cells) != 5:
+            if 3 <= len(cells) <= 5:
+                cells += [""] * (6 - len(cells))
+            if len(cells) != 6:
                 # 칸이 맞지 않는 줄은 종류 None, 앵커 자리에 원래 줄(탭은 \t 로)을 담아 ② 사유에 그대로 보인다.
-                sites.append(Site(cells[0], None, line.replace("\t", "\\t"), "", "", n))
+                sites.append(Site(cells[0], None, line.replace("\t", "\\t"), "", "", "", n))
                 continue
-            sites.append(Site(cells[0], cells[1], cells[2], cells[3], cells[4], n))
+            sites.append(Site(cells[0], cells[1], cells[2], cells[3], cells[4], cells[5], n))
     return sites
 
 
@@ -88,8 +97,12 @@ def scope(text, site):
         return "모르는 종류 「%s」" % site.kind
     if site.lines and site.kind not in QUESTION_KINDS:
         return "덮는 수 칸 「%s」은 질문 행(%s)에만 쓴다" % (site.lines, " · ".join(QUESTION_KINDS))
-    if site.lines and not site.lines.isdigit():
+    if site.lines and not site.lines.isdecimal():
         return "덮는 수 칸 「%s」이 수가 아니다" % site.lines
+    if site.descs and site.kind not in DESC_KINDS:
+        return "설명 수 칸 「%s」는 %s 행에만 쓴다" % (site.descs, " · ".join(DESC_KINDS))
+    if site.descs and not site.descs.isdecimal():
+        return "설명 수 칸 「%s」이 수가 아니다" % site.descs
     if not site.anchor or "\n" in site.anchor:
         return "앵커가 비었다"
     n = text.count(site.anchor)
@@ -127,6 +140,31 @@ def required(kind, body):
     return None
 
 
+def descriptions(kind, body, descs):
+    """「설명 수」 칸의 판정 — 어긋나면 ⑤ 사유, 맞거나 보지 않으면 None."""
+    if not descs:
+        if kind in REQUIRE_DESCS:
+            return "설명 수 칸이 비었다 — %s 행은 채워야 한다(없으면 0)" % " · ".join(REQUIRE_DESCS)
+        return None
+    n = int(descs)
+    if n == 0:
+        return None
+    if LABEL_KEY_RE.search(body):
+        vals = [m.group(2) for m in DESC_RE.finditer(body)]
+        if len(vals) != n:
+            return "범위의 설명이 %d개인데 목록의 설명 수는 %d다" % (len(vals), n)
+        for key in (GAIN, GIVE):
+            bad = sum(1 for v in vals if key not in v)
+            if bad:
+                return "설명 %d개 가운데 %d개에 「%s」이 없다" % (n, bad, key)
+        return None
+    for key in (GAIN, GIVE):
+        have = body.count(key)
+        if have != n:
+            return "범위의 「%s」이 %d개인데 목록의 설명 수는 %d이다" % (key, have, n)
+    return None
+
+
 def check(root, files, sites):
     out = []
     texts = {}
@@ -146,7 +184,7 @@ def check(root, files, sites):
     resolved = []  # (site, text, scope 또는 사유)
     for s in sites:
         if s.kind is None:
-            resolved.append((s, None, "칸 수가 맞지 않다(경로 · 종류 · 앵커 · 끝 · 덮는 수)"))
+            resolved.append((s, None, "칸 수가 맞지 않다(경로 · 종류 · 앵커 · 끝 · 덮는 수 · 설명 수)"))
             continue
         text = texts.get(s.path)
         if text is None:
@@ -217,6 +255,10 @@ def check(root, files, sites):
         why = required(s.kind, text[sc[0]:sc[1]])
         if why:
             out.append("no ③ %s %s: %s" % (where, label, why))
+            continue
+        why = descriptions(s.kind, text[sc[0]:sc[1]], s.descs)
+        if why:
+            out.append("no ⑤ %s %s: %s" % (where, label, why))
             continue
         out.append("ok %s %s" % (where, label))
 

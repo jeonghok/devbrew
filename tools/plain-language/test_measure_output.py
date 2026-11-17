@@ -173,7 +173,10 @@ class QuestionValues(unittest.TestCase):
         tmpl = re.findall(r'^\s*question: "(qg [^"\n]*)"', skill.read_text(encoding="utf-8"), re.M)
         self.assertGreaterEqual(len(tmpl), 3, "SKILL 의 qg 질문 틀을 찾지 못했다 — 도출이 깨졌다")
         self.assertTrue(any("반복 상한" in t for t in tmpl), "반복 상한 질문 틀이 도출에 없다")
-        filled = [t.replace("<CAP>", "5").replace("<summary>", "x").replace("반복 N:", "반복 2:") for t in tmpl]
+        self.assertTrue(all("<ask-line>" in t for t in tmpl), "qg 질문 틀이 질문 줄(<ask-line>)을 싣지 않는다")
+        # 틀의 `\n` 은 질문 본문의 줄바꿈이다 — 첫 줄(상태 줄)이 무엇인지는 실제 줄바꿈으로 잰다.
+        filled = [t.replace("<CAP>", "5").replace("<ask-line>", "막는 지적 1개 · 제안 0개 — 가장 무거운 것: a.py:1 — x")
+                  .replace("반복 N:", "반복 2:").replace("\\n", "\n") for t in tmpl]
         with tempfile.TemporaryDirectory() as tmp:
             c = Corpus(tmp)
             c.file("a.jsonl", [human("q"), asst(auq(*filled))])
