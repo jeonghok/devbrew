@@ -3,11 +3,11 @@
 # (interview brief handoff 재설계: payload/audit 분리 + user_statements + 4옵션 게이트).
 # 이 스위트는 세 층을 검사한다: (1) T20/AC14 — 이 spec(2026-07-25-...-design.md §8 AC14/
 # T20)이 정의하는 진짜 acceptance criteria. (2) CHANGELOG append-only 보존 체크 — AC 번호가
-# 아니다. 어느 spec의 AC도 아닌 devbrew repo 컨벤션("플러그인 건드리는 PR마다 version bump
+# 아니다. 어느 spec의 AC도 아닌 devbrew repo 컨벤션("설치본이 바뀌는 PR 에 version bump
 # + CHANGELOG entry")을 집행하는 순수 회귀 락이라 AC 라벨을 붙이지 않는다(붙이면 다른 spec의
 # 같은 번호 AC와 충돌 — 아래 참고). (3) README-sync 키워드 스윕도 같은 이유로 AC 라벨 없음.
 # plugin.json version은 0.26 이상 floor로 assert(patch digit는 의도적으로 unpin) — devbrew의
-# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 patch pin은 다음 doc-only
+# "설치본이 바뀌는 PR 은 판을 한 번 올린다" 규칙 때문에 리터럴 patch pin은 다음
 # bump마다 stale-red. 정확한-minor pin(예: `0\.25\.[0-9]+`)도 같은 병이다 — "이 버전 이후
 # shipped" 의도를 "정확히 이 minor"로 좁혀 다음 minor bump마다 stale-red가 된다(Task 14 실증).
 # floor로 전환: v0.23.0 feature가 여전히 shipped임을 뜻하는 invariant는 이제 "0.26 이상"으로

@@ -30,9 +30,13 @@ grep -q '^name: pm-interview$' "$SKILL" \
 grep -q '^description:' "$SKILL" \
     && ok "AC2: description preserved" \
     || no "AC2: description field broken"
-grep -q '^cost_class: variable$' "$SKILL" \
-    && ok "AC2: cost_class: variable (v0.12.0)" \
-    || no "AC2: cost_class not variable"
+PM_FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$SKILL")"
+[ "$(grep -A1 -xF 'metadata:' <<<"$PM_FM" | grep -cxF '  cost_class: variable')" = "1" ] \
+    && ok "AC2: cost_class: variable (metadata 아래)" \
+    || no "AC2: cost_class not variable under metadata"
+[ "$(grep -c '^cost_class:' <<<"$PM_FM")" = "0" ] \
+    && ok "AC2: 맨 위 cost_class 줄이 없다" \
+    || no "AC2: 맨 위 cost_class 줄이 남았다"
 
 # AC3 — 옛 command 는 alias 없이 사라졌고, spec-review 의 re-entry 참조는 산다
 [ ! -e "$SD/commands/inter""view.md" ] \

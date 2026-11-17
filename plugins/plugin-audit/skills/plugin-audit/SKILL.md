@@ -5,7 +5,8 @@ description: >
   `/plugin-audit:plugin-audit <target> [--seed <path>]` 로 부른다(모델은 부르지 않는다).
   고른 축(기본 여섯) 발견 → 적대적 반박 → blind codex co-audit → 우선순위 갭 리포트.
   범위 고르기 · 규모 공시·정적 게이트·Workflow·결정론 post-1 조립을 소유한다.
-cost_class: high
+metadata:
+  cost_class: high
 argument-hint: <target> [--seed <path>]
 disable-model-invocation: true
 allowed-tools:

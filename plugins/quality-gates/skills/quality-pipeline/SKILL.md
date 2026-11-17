@@ -11,7 +11,8 @@ description: >
   the publish sink. The run ends with the intent-critic stage (outside the verdict),
   which may ask about the user's own choices and commits the answers as answer files
   on the current branch (no push).
-cost_class: variable
+metadata:
+  cost_class: variable
 argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)

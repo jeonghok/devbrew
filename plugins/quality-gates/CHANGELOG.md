@@ -26,6 +26,11 @@
 ### Removed
 - 낮춘 지적 게이트의 「전부 되올린다」 선택지 — 기타 칸의 「전부」로 바뀌었다.
 
+## [15.0.1] — 2026-11-17
+
+### Changed
+- skill 의 `cost_class` 를 frontmatter `metadata` 아래로 옮겼다(공식 skill frontmatter 에 없는 맨 위 키를 없앤다). 값은 그대로다.
+
 ## [15.0.0] — 2026-11-16
 
 ### Changed

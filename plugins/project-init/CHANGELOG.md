@@ -13,6 +13,11 @@
 - 공통 규칙 블록(`shared/style/plain-language.md` 의 같은 바이트 사본) — 추천에는 내주는 것을 함께 적고, 질문 없이 한쪽을 권하는 글에는 대가 한 구절을 붙인다.
 - 이 검사가 못 보는 것 셋: 설명의 내용이 형식만 채운 것인지 · 모델이 그 자리에서 짜는 질문이 규칙을 따랐는지 · 줄인 글이 원문과 뜻이 같은지. 레포 테스트는 글자의 있고 없음만 본다 — 세션 기록 재측정(`tools/plain-language/measure_questions.py`)과 화면 확인이 본다.
 
+## [5.4.2] — 2026-11-16
+
+### Changed
+- skill 의 `cost_class` 를 frontmatter `metadata` 아래로 옮겼다(공식 skill frontmatter 에 없는 맨 위 키를 없앤다). 값은 그대로다.
+
 ## [5.4.1] — 2026-10-30
 
 ### Fixed

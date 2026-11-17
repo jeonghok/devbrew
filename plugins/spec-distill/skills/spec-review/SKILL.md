@@ -8,7 +8,8 @@ description: >
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
   proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
-cost_class: medium
+metadata:
+  cost_class: medium
 argument-hint: <설계문서 경로> [--bundle <에픽 묶음|interview brief>]
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review)

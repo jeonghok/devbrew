@@ -3,7 +3,8 @@ name: project-init
 description: >
   프로젝트의 git workflow 규칙(브랜치 전략 · 커밋 규약 · PR 절차)과 project charter 를 대화형으로
   초기화한다. 사용자가 `/project-init:project-init` 으로 부른다 — 파일을 쓰는 셋업이라 모델은 부르지 않는다.
-cost_class: low
+metadata:
+  cost_class: low
 disable-model-invocation: true
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" project-init project-init)
