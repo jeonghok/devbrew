@@ -427,9 +427,10 @@ def _no_prs(repo):
 
 
 def _collect(repo, names=None, roadmaps=(ROADMAP_PATH,), markers=None, max_bytes=CAP,
-             list_prs=_no_prs, review_commit="HEAD"):
+             list_prs=_no_prs, review_commit="HEAD", siblings=None):
     return ot.collect(repo, repo, review_commit, names, list(roadmaps),
-                      MARKERS if markers is None else markers, max_bytes, list_prs=list_prs)
+                      MARKERS if markers is None else markers, max_bytes, list_prs=list_prs,
+                      siblings=siblings)
 
 
 def _on_branch(repo, branch, files, day, msg="more"):
@@ -848,7 +849,7 @@ class TestOtherWorkRecord(_Fixture):
         self.assertNotIn("- 읽지 못한 브랜치", "\n".join(_unverified(_collect(self.repo)["text"])))
 
     def test_branch_list_unreadable(self):
-        with mock.patch.object(ot, "other_work", lambda repo, ref, end: ([], None)):
+        with mock.patch.object(ot, "other_work", lambda repo, ref, end, notes=None: ([], None)):
             text = _collect(self.repo, names={"a.txt"})["text"]
         self.assertIn("- 브랜치 목록을 읽지 못함 — 다른 브랜치를 읽지 않았다", _unverified(text))
         self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
@@ -1198,6 +1199,245 @@ class TestCollectGitForms(_Fixture):
         snap = TestReadOnlyGit._snapshot(self, repo)
         _collect(repo, names={"a.txt"})
         self.assertEqual(TestReadOnlyGit._snapshot(self, repo), snap)
+
+
+def _commit_off(repo, base, files, day, msg="off"):
+    """`base` 위에 커밋 하나를 얹고(ref 는 남기지 않는다) 그 sha 를 돌려준다 — feature/mine 으로 돌아온다."""
+    clock = _Clock()
+    clock.n = day - 1
+    _run(repo, "checkout", "-q", "-b", "tmp-off", base)
+    sha = _commit(repo, clock, msg, files)
+    _run(repo, "checkout", "-q", "feature/mine")
+    _run(repo, "branch", "-q", "-D", "tmp-off")
+    return sha
+
+
+def _far_local(repo, remote_sha, local_sha, remote="origin"):
+    """feature/far 의 로컬 끝과 `refs/remotes/<원격>/feature/far` 를 세운다."""
+    _run(repo, "update-ref", "refs/heads/feature/far", local_sha)
+    _run(repo, "update-ref", "refs/remotes/%s/feature/far" % remote, remote_sha)
+
+
+def _heads(text):
+    return [line for line in text.split("\n") if line.startswith("### ")]
+
+
+FOLDED = "같은 이름의 원격 사본 1개를 로컬 브랜치와 한 작업으로 묶었다"
+DIVERGED = "- 같은 이름의 원격 사본이 갈라져 있다 — feature/far"
+
+
+class TestSameNameRemote(_Fixture):
+    def test_remote_behind_local_folded(self):
+        repo, shas = self._fresh()
+        newer = _commit_off(repo, shas["f1"], {"z.txt": "z2\n"}, 50)
+        _far_local(repo, shas["f1"], newer)
+        text = _collect(repo, names={"z.txt"})["text"]
+        self.assertFalse([h for h in _heads(text) if h.startswith("### origin/feature/far")])
+        self.assertIn("### feature/far · %s" % newer[:7], text)
+        self.assertIn(FOLDED, _block(text, ot.HEAD_WORK))
+
+    def test_remote_ahead_listed_and_counted(self):
+        repo, shas = self._fresh()
+        newer = _commit_off(repo, shas["f1"], {"z.txt": "z2\n"}, 50)
+        _far_local(repo, newer, shas["f1"])
+        for end in ("HEAD", shas["f1"]):  # 로컬이 리뷰 끝이어도 원격 끝이 실린다
+            with self.subTest(end=end):
+                text = _collect(repo, names={"z.txt"}, review_commit=end)["text"]
+                self.assertIn("### origin/feature/far · %s" % newer[:7], text)
+                self.assertNotIn("### feature/far ", text)
+                self.assertIn(FOLDED, _block(text, ot.HEAD_WORK))
+
+    def test_diverged_not_listed(self):
+        repo, shas = self._fresh()
+        local = _commit_off(repo, shas["f1"], {"z.txt": "local\n"}, 50)
+        remote = _commit_off(repo, shas["f1"], {"a.txt": "remote\n"}, 51)
+        _far_local(repo, remote, local)
+        text = _collect(repo, names={"a.txt"})["text"]
+        overlap, unverified = ot.summary(text)
+        self.assertIn(DIVERGED, unverified)
+        self.assertNotIn("### origin/feature/far", text)
+        for line in overlap:
+            self.assertNotIn("far", line)
+        self.assertNotIn("한 작업으로 묶었다", text)
+
+    def test_other_remote_name_also_folds(self):
+        repo, shas = self._fresh()
+        newer = _commit_off(repo, shas["f1"], {"z.txt": "z2\n"}, 50)
+        _far_local(repo, shas["f1"], newer, remote="upstream")
+        text = _collect(repo, names={"z.txt"})["text"]
+        self.assertNotIn("### upstream/feature/far", text)
+        self.assertIn(FOLDED, text)
+
+    def test_range_and_pr_same_rule(self):
+        repo, shas = self._fresh()
+        local = _commit_off(repo, shas["f1"], {"z.txt": "local\n"}, 50)
+        remote = _commit_off(repo, shas["f1"], {"a.txt": "remote\n"}, 51)
+        _far_local(repo, remote, local)
+        tip = _run(repo, "rev-parse", "HEAD").strip()
+        by_sha = _collect(repo, names={"a.txt"}, review_commit=tip)["text"]
+        by_head = _collect(repo, names={"a.txt"}, review_commit="HEAD")["text"]
+        self.assertEqual(_block(by_sha, ot.HEAD_WORK), _block(by_head, ot.HEAD_WORK))
+        self.assertEqual(_unverified(by_sha), _unverified(by_head))
+        self.assertIn(DIVERGED, _unverified(by_sha))
+
+    def test_notes_filled(self):
+        repo, shas = self._fresh()
+        newer = _commit_off(repo, shas["f1"], {"z.txt": "z2\n"}, 50)
+        _far_local(repo, shas["f1"], newer)
+        notes = {}
+        ot.other_work(repo, DEFAULT_REF, "HEAD", notes)
+        self.assertEqual(notes, {"folded": 1, "diverged": []})
+
+
+class TestTopicSiblings(_Fixture):
+    def test_members_excluded_and_counted(self):
+        text = _collect(self.repo, names={"a.txt"},
+                        siblings={"feature/mine-next", "feature/other"})["text"]
+        self.assertFalse([h for h in _heads(text) if "other" in h or "mine-next" in h])
+        self.assertEqual(ot.summary(text)[0], ["- 겹침 없음"])
+        self.assertIn("토픽 리뷰의 형제 브랜치 2개를 다른 팀에서 뺐다 — 이번 리뷰 범위다",
+                      _block(text, ot.HEAD_WORK))
+
+    def test_remote_name_of_member_excluded(self):
+        repo, _ = self._fresh()
+        _run(repo, "branch", "-D", "feature/other")
+        self.assertIn("- origin/feature/other — a.txt", ot.summary(_collect(repo, names={"a.txt"})["text"])[0])
+        text = _collect(repo, names={"a.txt"}, siblings={"feature/other"})["text"]
+        self.assertEqual(ot.summary(text)[0], ["- 겹침 없음"])
+        self.assertFalse([h for h in _heads(text) if "other" in h])
+        self.assertIn("형제 브랜치 1개를", text)
+
+    def test_ancestor_sibling_excluded(self):
+        repo, shas = self._fresh()
+        a = _commit_off(repo, shas["c0"], {"a.txt": "a\nsib-a\n"}, 50)
+        b = _commit_off(repo, a, {"a.txt": "a\nsib-a\nsib-b\n"}, 51)
+        _run(repo, "branch", "feature/sib-a", a)
+        _run(repo, "branch", "feature/sib-b", b)
+        before = _collect(repo, names={"a.txt"})["text"]
+        self.assertIn("feature/sib-a", "".join(ot.summary(before)[0]))
+        text = _collect(repo, names={"a.txt"}, siblings={"feature/sib-a", "feature/sib-b"})["text"]
+        self.assertNotIn("sib-", "".join(ot.summary(text)[0]))
+        self.assertIn("형제 브랜치 2개를", text)
+
+    def test_no_siblings_keeps_all(self):
+        plain = _collect(self.repo, names={"a.txt"})["text"]
+        self.assertEqual(_collect(self.repo, names={"a.txt"}, siblings=None)["text"], plain)
+        self.assertNotIn("형제 브랜치", plain)
+        self.assertIn("- feature/other — a.txt", ot.summary(plain)[0])
+
+
+class TestGitTimeout(_Fixture):
+    def _slow(self, only, calls):
+        real = subprocess.run
+
+        def slow(argv, *args, **kwargs):
+            if argv[0] == "git":
+                sub = _subcommand(argv[3:])
+                calls.append((sub, kwargs.get("timeout")))
+                if sub == only:
+                    raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
+            return real(argv, *args, **kwargs)
+
+        return mock.patch.object(ot.subprocess, "run", slow)
+
+    def test_refs_timeout_is_disclosed(self):
+        calls = []
+        with self._slow("for-each-ref", calls):
+            text = _collect(self.repo, names={"a.txt"})["text"]
+        unverified = _unverified(text)
+        self.assertIn("- git 읽기 1번이 시간 한도 30초를 넘겨 그 읽기를 확인 못 함", unverified)
+        self.assertIn("- 브랜치 목록을 읽지 못함 — 다른 브랜치를 읽지 않았다", unverified)
+        self.assertTrue(calls)
+        for sub, timeout in calls:
+            self.assertEqual(timeout, 30, sub)
+
+    def test_doc_timeout_names_branch_and_path(self):
+        calls = []
+        with self._slow("show", calls):
+            text = _collect(self.repo, names={"a.txt"})["text"]
+        self.assertIn("- feature/other 의 team/other-design.md 를 읽지 못함 — "
+                      "git 읽기가 시간 한도 30초를 넘김", _unverified(text))
+        self.assertNotIn("그 읽기를 확인 못 함", "\n".join(_unverified(text)))
+        self.assertTrue(calls)
+        for sub, timeout in calls:
+            self.assertEqual(timeout, 30, sub)
+
+    def test_roadmap_timeout_names_path_and_reason(self):
+        calls = []
+        with self._slow("ls-files", calls):
+            text = _collect(self.repo, names={"a.txt"})["text"]
+        self.assertIn("- 로드맵 %s 를 읽지 못함 — %s" % (ROADMAP_PATH, ot.io_.REASON_TIMEOUT),
+                      _unverified(text))
+        self.assertIn("git 읽기가 시간 한도 30초를 넘김", ot.io_.REASON_TIMEOUT)
+        self.assertTrue(calls)
+
+    def test_no_timeout_no_line(self):
+        self.assertNotIn("시간 한도", "\n".join(_unverified(_collect(self.repo)["text"])))
+
+    def test_timed_out_value_reads_as_failed_call(self):
+        timed_out = ot.io_.TIMED_OUT
+        self.assertEqual((timed_out.returncode, timed_out.stdout, timed_out.stderr), (-1, b"", b""))
+        self.assertEqual(ot.PR_TIMEOUT, ot.io_.GIT_TIMEOUT)
+
+
+class TestOpenPrLimit(_Fixture):
+    @staticmethod
+    def _prs(count):
+        def listing(_repo):
+            return ([{"number": n, "title": "t", "branch": "feature/other", "fork": False}
+                     for n in range(1, count + 1)], None)
+        return listing
+
+    def test_limit_reached_is_disclosed(self):
+        limit = "- 열린 PR 이 조회 상한에 닿아 일부를 못 봤을 수 있다"
+        self.assertEqual(ot.PR_LIMIT, 200)
+        for count, shown in ((200, True), (199, False), (201, True)):
+            with self.subTest(count=count):
+                text = _collect(self.repo, names={"a.txt"}, list_prs=self._prs(count))["text"]
+                self.assertEqual(limit in _unverified(text), shown)
+
+    def test_open_prs_passes_the_limit(self):
+        seen = []
+
+        def fake(argv, *args, **kwargs):
+            seen.append(list(argv))
+            out = b"github.com/o/r\n" if argv[0] == "bash" else b"[]"
+            return subprocess.CompletedProcess(argv, 0, out, b"")
+
+        with mock.patch.object(ot.subprocess, "run", fake):
+            self.assertEqual(ot.open_prs(self.repo), ([], None))
+        gh = [argv for argv in seen if argv[0] == "gh"][0]
+        self.assertEqual(gh[gh.index("--limit") + 1], str(ot.PR_LIMIT))
+
+
+class TestBodyCharacters(_Fixture):
+    def test_unprintable_characters_replaced(self):
+        repo, _ = self._fresh()
+        body = "x‮y\x1b[31mz w\rv\tkeep\nline2\n"
+        _on_branch(repo, "feature/other", {"team/other-design.md": tic._fm(
+            roadmap="docs/rm/two/roadmap.md") + body}, 50)
+        text = _collect(repo, names={"a.txt"})["text"]
+        for bad in ("‮", "\x1b", " ", "\r"):
+            self.assertNotIn(bad, text)
+        self.assertIn("x?y?[31mz?w?v\tkeep\nline2\n", text)
+        _evidence, count = ot.io_.build_evidence(None, None, text)
+        self.assertEqual(count, len([line for line in text.split("\n") if line.strip()]))
+
+    def test_clean_keeps_tab_and_newline_only(self):
+        self.assertEqual(ot._clean("a\tb\nc\x07d\ud800e‏f"), "a\tb\nc?d?e?f")
+
+
+class TestLaterBase(_Fixture):
+    def test_bases_differ_not_ancestor_takes_default(self):
+        repo, shas = self._fresh()
+        d1 = _commit_off(repo, shas["c0"], {"d.txt": "d\n"}, 60)
+        e1 = _commit_off(repo, shas["c0"], {"e.txt": "e\n"}, 61)
+        _run(repo, "checkout", "-q", "-b", "tmp-merge", d1)
+        _run(repo, "merge", "-q", "--no-ff", "--no-edit", "-m", "both", e1)
+        merged = _run(repo, "rev-parse", "HEAD").strip()
+        _run(repo, "checkout", "-q", "feature/mine")
+        _run(repo, "branch", "-q", "-D", "tmp-merge")
+        self.assertEqual(ot._later_base(repo, merged, d1, e1), d1)
 
 
 if __name__ == "__main__":

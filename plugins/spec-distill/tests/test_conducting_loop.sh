@@ -30,7 +30,8 @@ for lit in '한 번에 한 에픽씩' '다른 세션을 열라는 줄을 주지 
            '진입 사전 검사 줄의 `root=` 가 그 worktree 인지 확인한 뒤 리뷰한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
            'ledger record --spec <설계문서> --approval' '규모(몇 agent · 무엇)를 알린다' '「승인 — 계획 담당자에게 (권장)」' \
            '같은 턴에 아래 보내기대로 계획 agent 를 보낸다' '지휘 소식(상태 · 목록 · 다른 에픽 소식)은 그 메시지에 얹지 않는다' \
-           '묶음의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다' '`isolation: "worktree"`' 'git switch --ignore-other-worktrees <에픽 브랜치>' \
+           '묶음의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다' '설계를 시작하는 에픽마다 `superpowers:brainstorming` 을 다시 부른다 — 같은 세션에서 앞 에픽 때 부른 것으로 갈음하지 않는다' '설계문서는 사용자가 접근을 고른 뒤에 쓴다 — 묶음의 확정 항목에 대한 되비춤만으로, 조사 결과에 대한 한마디 수락만으로 쓰지 않는다' \
+           '답이 추천 수락으로만 이어지면 사용자만 답할 수 있는 물음(무엇을 왜)을 물었는지 다시 본다' '`isolation: "worktree"`' 'git switch --ignore-other-worktrees <에픽 브랜치>' \
            '그 agent 가 돌아올 때까지 그 worktree 를 떠나지 않는다' '임시 파일에 쓴 뒤 `cp` 로 옮긴다' '세션이 옮기면 격리 없이 띄운 하위 agent 도 따라 옮긴다' \
            '`git -C <에픽 worktree> switch --detach` 로 그 브랜치를 놓는다' '깨끗하지 않으면 보내지 않고 보인다' \
            'agent 가 쓴 worktree 를 `## 자원` 의 그 에픽 worktree 로 바꿔 적고' '그 브랜치를 체크아웃한 worktree 가 둘 이상이면 쓰지 않고 멈춰 보인다' \
