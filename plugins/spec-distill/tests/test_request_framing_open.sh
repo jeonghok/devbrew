@@ -102,7 +102,7 @@ case "$STEPB" in *'**둘째 질문(선택) — 다음 단계 갈래.**'*'**기�
 assert_contains "$STEPB" '선택지는 모델의 제안 `(권장)` 이 첫 자리, 그 skill 의 기본 다음 단계가 둘째다.' "AC17(정본): 둘째 질문 순서 — 모델의 제안이 첫 자리"
 assert_not_contains "$STEPB" '기본 다음 단계 `(권장)` 과 모델의 제안 둘이다' "AC17(정본): 옛 둘째 질문 순서가 남지 않았다"
 CALL="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$RF" | tr '\n' ' ' | tr -s ' ')"
-for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 이유는 게이트 앞 글에' \
+for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 선택지의 설명은 「얻음: <제안 이유> · 내줌: <그 제안이 틀렸을 때 원인이 될 것 하나>」로 쓴다' \
            '규칙 3 대로' \
            '둘째 질문이 뜨면 ①/② 이름은 정본 예시처럼 단계를 가리키지 않는다' 'slash 줄이면 운반 문장 없이 seed 경로만'; do
   assert_contains "$CALL" "$lit" "AC17: «${lit}»"
@@ -137,5 +137,8 @@ out="$(run_rs)"; rc=$?
 assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 있으면 0"
 assert_eq "$(tail -1 <<<"$out")" "raw-source: FOUND ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 있음 → FOUND 판결 줄"
 fi
+assert_eq "$(grep -cF '두 꼴 모두 추천을 달지 않는다 — 풀이는 저자가 쓴 것이라' "$RF")" "1" "AC13: 풀이 확인 질문은 추천을 달지 않고 이유를 적는다"
+assert_eq "$(grep -cF '두 꼴 모두 권하는 쪽이 있으면 첫 자리로 옮기고' "$RF")" "0" "AC13: 옛 추천 지시가 없다"
+assert_eq "$(awk -F'\t' '$3 ~ /확인 질문을 하나 더 싣습니다/ {print $2}' "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "비움" "AC13: 목록의 종류가 비움이다"
 
 finish

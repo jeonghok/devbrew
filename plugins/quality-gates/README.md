@@ -240,7 +240,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
  │   ①' review-axis synthesis — 리뷰 결과 줄(qg-verdict-args:)을 차등 테스트 전에 낸다
  │   ② differential test — 기준선 vs 봉인된 HEAD (매 iteration)
  │   ③ synthesize → verdict: clean | defect | not-certified
- │   막는 지적 또는 차등 defect → AskUserQuestion ("남은 지적이 있다…")
+ │   막는 지적 또는 차등 defect → AskUserQuestion (질문 줄: 지적 수 · 가장 무거운 지적 하나 · 전문 자리)
  │       분류표(항목마다 적용 / 제외 + 사유) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기
  │       고치고 다시 돌기: 「적용」만 Edit, 「제외」는 excluded.md → 다음 iteration
  │   N = CAP 에서 남으면 → 한 번 더 돌기(반복 하나만 연다) / 지금 판정으로 끝내기 / 멈추기

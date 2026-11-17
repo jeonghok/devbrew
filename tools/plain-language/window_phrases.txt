@@ -1,0 +1,6 @@
+# 질문 창 밖의 글을 가리키는 문구 — measure_questions.py 와 shared/tests/test_window_phrases.sh 가 함께 읽는다.
+위에 적었다
+이유는 질문 위 글에
+제안 이유는 게이트 앞 글
+(위 「낮춘 지적」 절)
+옵션 description 에 싣지 않습니다

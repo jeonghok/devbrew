@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
 #
 # 쉬운 말 출력 설계 §4 · AC7 — 모든 게이트 질문은 결정 하나와 상태 한 줄만 담고, 경고 목록은 앞 글에 쓴다.
 # 「채널을 읽은 뒤에만 없음을 쓴다」 계약은 그대로 남는다.
@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   git -C "$REPO_ROOT" ls-files -- 'plugins/spec-distill/skills/*/SKILL.md' \
     plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
-    shared/docreview/references/reviewing-document.md
+    shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
   exit 0
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
@@ -24,10 +24,11 @@ n="$(grep -rF -- 'header: "Proceed"' "$SD/skills" "$SD/references" | grep -c . |
 assert_eq "$n" "0" "AC7: 게이트 머리글이 「Proceed」가 아니다"
 assert_file_grep "$FIN" 'header: "다음 단계"' "AC7 양의 짝: B-2 머리글이 「다음 단계」다"
 
-# ② B-2 질문 한 줄이 경고 목록 대신 개수 한 줄만 싣는다.
+# ② B-2 질문 한 줄이 경고 목록 대신 경고 줄 하나와 「전문」 줄만 싣는다.
 QLINE="$(awk '/^#### B-2/{f=1} f && /^[[:space:]]*question:/{print; exit}' "$FIN")"
 [ -n "$QLINE" ] && ok "B-2 question 줄을 찾았다" || no "B-2 question 줄이 없다 — 아래 단언이 공허하다"
-assert_contains "$QLINE" '위에 적었다' "AC7: B-2 질문이 경고를 「경고 N개 — 위에 적었다」 한 줄로 가리킨다"
+assert_contains "$QLINE" '경고 줄 — 채널마다의 짧은 줄' "AC7: B-2 질문이 경고를 채널마다의 짧은 줄을 이은 한 줄로 싣는다"
+assert_contains "$QLINE" '전문: <경로>' "AC7: B-2 질문이 「전문」 줄 자리를 싣는다"
 assert_not_contains "$QLINE" 'degrade:' "AC7: B-2 질문이 degrade 줄 목록 자리를 싣지 않는다"
 assert_not_contains "$QLINE" '게이트 advisory:' "AC7: B-2 질문이 advisory 목록 자리를 싣지 않는다"
 
@@ -88,12 +89,12 @@ assert_file_grep "$FR" 'disclosure=proceed 게이트 앞 글' "Q3 양의 짝: �
 assert_file_absent "$FR" '규칙 블록의 「따로 정한 자리」' "Q4: 저자 편집 덩어리를 질문에 그대로 싣는 예외가 없다"
 assert_file_grep "$FR" '공시 펜스가 낸 화면 글은 게이트 앞 글에 그대로 한 번 싣는다' "Q4 양의 짝: 저자 편집 화면은 게이트 앞 글에 싣고 질문 본문에는 결정 한 줄만 둔다"
 
-# ⑨ 게이트 질문의 「경고 N개」는 렌더 첫 줄의 N 이다 — 첫 줄은 같은 사실의 원문들을 한 줄로 합쳐 사실을 세므로
-#    앞 글에 `advisory[]` 원문을 다시 늘어놓으면 질문의 N 과 앞 글의 줄 수가 갈린다(계획 Q9). 줄바꿈을 접어 잰다.
+# ⑨ 게이트 질문의 경고 줄은 엔진의 상태 줄을 잇는다 — 렌더 첫 줄은 같은 사실의 원문들을 한 줄로 합쳐 사실을 세므로
+#    앞 글에 `advisory[]` 원문을 다시 늘어놓으면 질문의 경고 줄과 앞 글의 줄 수가 갈린다(계획 Q9). 줄바꿈을 접어 잰다.
 for f in "$RS" "$RB" "$FR" "$FIN"; do
   flat="$(tr '\n' ' ' < "$f" | tr -s ' ')"
-  assert_eq "$(printf '%s' "$flat" | grep -oF '렌더 첫 줄의 N 이' | wc -l | tr -d ' ')" "1" \
-    "Q9: $(basename "$(dirname "$f")") 가 질문의 경고 수를 렌더 첫 줄의 N 으로 정한다"
+  assert_eq "$(printf '%s' "$flat" | grep -oF '질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.' | wc -l | tr -d ' ')" "1" \
+    "Q9: $(basename "$(dirname "$f")") 가 질문의 경고 줄을 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것으로 정한다"
   assert_eq "$(printf '%s' "$flat" | grep -oF '`advisory[]` 원문을 다시 늘어놓지 않' | wc -l | tr -d ' ')" "1" \
     "Q9: $(basename "$(dirname "$f")") 가 앞 글에 advisory 원문을 다시 늘어놓지 않는다고 적는다"
 done
@@ -104,31 +105,44 @@ flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 cnt() { printf '%s' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
 F_RS="$(flat "$RS")"; F_RB="$(flat "$RB")"; F_FR="$(flat "$FR")"; F_FIN="$(flat "$FIN")"; F_PG="$(flat "$PG")"; F_RD="$(flat "$RD")"
 
-# ⑩ 「미검증」·라운드 미완이면 질문의 상태 줄이 그 공시다(최종 리뷰 I1) — 게이트 질문을 정하는 여덟 자리에 같은 글자로.
-S1='「미검증」이거나 리뷰를 마치지 못한 라운드면 질문의 상태 줄은 렌더 첫 줄의 첫 문장(그 공시)이고, 「이상 없음」·「경고 없음」은 쓰지 않는다. 경고가 있으면 그 뒤에 「경고 N개 — 위에 적었다」를 붙인다.'
-STEP8='질문 본문에는 그 질문의 결정 하나와, 경고가 있으면 「경고 N개 — 위에 적었다」 한 줄만 둔다.'
-for v in F_RS:2 F_RB:2 F_FR:2 F_PG:1 F_RD:1; do
-  n="${v%%:*}"; t="${!n}"
-  assert_eq "$(cnt "$t" "$S1")" "${v##*:}" "I1: ${v%%:*} 에 미검증 라운드의 질문 상태 줄 문장이 ${v##*:}번 있다"
-done
-for v in F_RS F_RB F_FR F_RD; do
+# ⑩ 게이트 질문의 본문 규칙(최종 리뷰 I1) — 라운드 게이트(8단계)와 승인(다음 단계) 게이트는 규칙이 다르다.
+# 라운드 게이트의 질문 본문은 엔진의 질문 재료가 정한다 — 진입 skill 셋은 S1, 절차서는 STEP8.
+# 승인 게이트의 본문 규칙은 정본(`proceed-gate.md`)이 정하고(PGBODY) 나머지 자리는 그 정본을 가리킨다(PGREF).
+S1='질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고, 선택지 설명 · 줄일 때의 규칙 넷 · 기타 칸의 「전문」은 절차서 8단계대로 한다 — 질문을 띄우기 직전마다 아래 질문 재료 펜스를 돈다.'
+STEP8='질문마다 엔진의 질문 재료(`docreview_state.py ask-material`) 한 묶음을 쓴다.'
+for v in F_RS F_RB F_FR; do
   t="${!v}"
-  assert_eq "$(cnt "$t" "${STEP8} ${S1}")" "1" "I1: ${v} 의 라운드 게이트(8단계) 질문 규칙 바로 뒤에 그 문장이 있다"
+  assert_eq "$(cnt "$t" "$S1")" "1" "I1: ${v} 에 라운드 게이트(8단계) 질문 본문 문장이 한 번 있다"
+  assert_eq "$(cnt "$t" "첫 호출 **앞 글**에 한 번 쓴다. ${S1}")" "1" "I1: ${v} 의 8단계 렌더 첫 줄 문장 바로 뒤에 그 문장이 있다"
 done
-assert_eq "$(cnt "$F_RS" "읽지 않은 채 쓰지 않는다. ${S1}")" "1" "I1: spec-review 승인 게이트 문단 끝에 그 문장이 있다"
-assert_eq "$(cnt "$F_RB" "읽지 않은 채 쓰지 않는다. ${S1}")" "1" "I1: reviewing-brief Step B 문단에 그 문장이 있다"
-assert_eq "$(cnt "$F_FR" "읽지 않은 채 쓰지 않습니다. ${S1}")" "1" "I1: request-framing 확정 게이트 문단에 그 문장이 있다"
-assert_eq "$(cnt "$F_PG" "한 줄만 둔다. ${S1} 머리글은")" "1" "I1: 정본의 질문 본문 규칙 바로 뒤에 그 문장이 있다"
+assert_eq "$(cnt "$F_RD" "첫 호출 **앞 글**에 한 번 쓴다. 질문은 질문 창만 보고 고를 수 있게 싣는다 — ${STEP8}")" "1" "I1: F_RD 의 8단계 렌더 첫 줄 문장 바로 뒤에 질문 재료 문장이 있다"
+PGBODY='질문 본문에는 결정 하나, 경고 줄 하나, 「전문: <경로>」 한 줄을 둔다.'
+PGREF='정본(`proceed-gate.md`)의 본문 규칙대로'
+assert_eq "$(cnt "$F_PG" "$PGBODY")" "1" "I1: 정본(proceed-gate.md)에 승인 게이트의 질문 본문 규칙이 한 번 있다"
+assert_eq "$(cnt "$F_PG" "선택지 넷의 설명은 위 표의 얻음 · 내줌 꼴이다. 머리글은")" "1" "I1: 정본의 본문 규칙이 선택지 설명을 표로 가리키고 머리글 문장으로 이어진다"
+assert_eq "$(cnt "$F_RS" "읽지 않은 채 쓰지 않는다. ${S1}")" "0" "I1: spec-review 승인 게이트 문단에 라운드 게이트 문장이 들어가지 않는다"
+assert_eq "$(cnt "$F_RS" "승인 게이트 질문의 본문은 ${PGREF} 싣는다.")" "1" "I1: spec-review 승인 게이트 문단이 정본의 본문 규칙을 가리킨다"
+assert_eq "$(cnt "$F_RB" "$PGREF")" "1" "I1: reviewing-brief Step B 문단이 정본의 본문 규칙을 가리킨다"
+assert_eq "$(cnt "$F_FR" "$PGREF")" "1" "I1: request-framing 확정 게이트 문단이 정본의 본문 규칙을 가리킨다"
+assert_eq "$(cnt "$F_FIN" "$PGREF")" "1" "I1: finishing B-2 가 정본의 본문 규칙을 가리킨다"
 
-# ⑪ 렌더 첫 줄의 끝 문구는 엔진 몫의 결론이고 엔진 밖 채널의 경고는 「그 밖의 경고 M개:」 줄이다(최종 리뷰 I2).
-S2='렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 「그 밖의 경고 M개:」 줄로 쓰고, 전체 결론은 질문의 상태 줄이 정한다(엔진 K + 그 밖의 M).'
-assert_eq "$(cnt "$F_FIN" "다른 채널의 경고 줄은 그 위에 더합니다. ${S2}")" "1" "I2: finishing 이 다른 채널 경고 줄을 더하고 바로 뒤에 엔진 몫 문장을 둔다"
-assert_eq "$(cnt "$F_RB" "이 자리의 두 채널의 경고 줄은 그 위에 더한다. ${S2}")" "1" "I2: reviewing-brief 가 다른 채널 경고 줄을 더하고 바로 뒤에 엔진 몫 문장을 둔다"
-assert_eq "$(cnt "$F_FR" "이 skill 채널의 경고 줄은 그 위에 더한다. ${S2}")" "1" "I2: request-framing 이 다른 채널 경고 줄을 더하고 바로 뒤에 엔진 몫 문장을 둔다"
-for v in F_FIN F_RB F_FR; do
+# ⑪ 질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다(최종 리뷰 I2).
+S2='렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다.'
+S3='질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.'
+assert_eq "$(cnt "$F_FIN" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: finishing 이 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
+assert_eq "$(cnt "$F_RB" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: reviewing-brief 가 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
+assert_eq "$(cnt "$F_FR" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: request-framing 이 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
+assert_eq "$(cnt "$F_RS" "$S3")" "1" "I2: spec-review 가 이은 줄 문장을 한 번 둔다"
+for v in F_FIN F_RB F_FR F_RS; do
   t="${!v}"
-  assert_eq "$(cnt "$t" "$S2")" "1" "I2: ${v} 에 엔진 몫 문장이 정확히 한 번 있다"
+  assert_eq "$(cnt "$t" "$S2")" "$([ "$v" = F_RS ] && echo 0 || echo 1)" "I2: ${v} 의 엔진 몫 문장 수"
+  assert_eq "$(printf '%s' "$t" | grep -oE '그 위에 더|엔진 K \+ 그 밖의 M|경고 N개 — 위에 적었다|「경고 N개」에 (더|넣)' | wc -l | tr -d ' ')" "0" "I2: ${v} 에 개수를 더하라는 옛 문장이 없다"
 done
+# 같은 옛 이름을 인용하는 지휘 절차도 본다(마지막 전체 리뷰 M3) — 양의 짝은 그 자리의 새 문장.
+CD="$SD/references/conducting.md"
+assert_eq "$(grep -oE '그 위에 더|엔진 K \+ 그 밖의 M|경고 N개 — 위에 적었다|「경고 N개」에 (더|넣)' "$CD" | wc -l | tr -d ' ')" "0" "M3: conducting.md 에 「경고 N개」에 더하라는 옛 문장이 없다"
+assert_eq "$(grep -cF '검사 불가는 막지 않고 승인 질문의 경고 줄에 번호 대조의 짧은 줄로 이어진다' "$CD")" "1" "M3 양의 짝: conducting.md 의 번호 대조 경고가 승인 질문의 경고 줄로 간다"
+assert_eq "$(cnt "$F_FIN" '이 줄은 경고가 아니다 — 질문의 경고 줄에 잇지 않고')" "1" "M3 양의 짝: finishing B-1 의 판 확인 줄은 질문의 경고 줄에 잇지 않는다"
 
 # ⑫ 「이상 없음」·「경고 없음」 구분과 그 조건(「…때만」) — 파일마다 실제 글자. reviewing-document.md 에는 이 구분 문장이 없다.
 assert_eq "$(cnt "$F_RS" '셋 다 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는')" "1" "구분: spec-review 승인 게이트의 「셋 다 비었을 때만」 구분"
@@ -138,25 +152,25 @@ assert_eq "$(cnt "$F_FIN" '남은 항목(위 3)도 없을 때만 「이상 없�
 assert_eq "$(cnt "$F_PG" '채널을 다 읽었는데 경고가 없으면, 남은 항목도 없으면 「이상 없음」, 남은 항목이 있으면 「경고 없음」 한 줄이다 — 침묵과')" "1" "구분: 정본의 이상 없음/경고 없음 구분"
 assert_eq "$(cnt "$F_FR" '경고가 없을 때의 두 문구는 **채널을 실제로 읽었다는 주장**이라 읽지 않은 채 쓰지 않습니다.')" "1" "구분: request-framing 이 경고 없을 때의 두 문구를 읽은 뒤에만 쓴다"
 
-# ⑬ 질문 본문에는 결정과 상태 한 줄만 — 자리마다 그 문장(M5 · M7).
-for v in F_RS F_RB F_FR F_RD; do
-  t="${!v}"
-  assert_eq "$(cnt "$t" "$STEP8")" "1" "질문 본문: ${v} 의 라운드 게이트 질문 규칙"
-done
-assert_eq "$(cnt "$F_RS" '승인 게이트 질문에는 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둔다. 셋 다')" "1" "질문 본문: spec-review 승인 게이트 질문은 상태 한 줄만"
-assert_eq "$(cnt "$F_RB" '(질문 본문에는 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄). 전부')" "1" "질문 본문: reviewing-brief Step B 질문은 상태 한 줄만"
-assert_eq "$(cnt "$F_FR" '질문 본문에는 결정 하나와 「경고 N개 — 위에 적었다」(또는 「경고 없음」·「이상 없음」) 한 줄만 둡니다. 경고가')" "1" "질문 본문: request-framing 확정 게이트 질문은 결정과 상태 한 줄만"
-assert_eq "$(cnt "$F_PG" '질문 본문에는 결정 하나와 「경고 N개 — 위에 적었다」 (또는 「경고 없음」·「이상 없음」) 한 줄만 둔다.')" "1" "질문 본문: 정본"
-assert_eq "$(cnt "$F_FIN" '질문 본문에는 결정 하나와 그 개수 한 줄 (「경고 N개 — 위에 적었다」 또는 「경고 없음」·「이상 없음」)만 둡니다.')" "1" "질문 본문: finishing B-2"
+# ⑬ 질문 본문의 규칙 — 라운드 게이트는 STEP8, 승인 게이트는 정본 한 곳과 그것을 가리키는 자리들(M5 · M7).
+assert_eq "$(cnt "$F_RD" "$STEP8")" "1" "질문 본문: F_RD 의 라운드 게이트 질문 규칙"
+assert_eq "$(cnt "$F_RS" "$PGREF")" "1" "질문 본문: spec-review 는 degrade 채널 끝 문단에서만 정본을 가리킨다"
+assert_eq "$(cnt "$F_FIN" '질문 본문에는 결정 하나와 경고 줄 · 「전문」 줄을 정본(`proceed-gate.md`)의 본문 규칙대로 싣습니다.')" "1" "질문 본문: finishing B-2"
 for v in F_RS F_RB F_FR F_FIN F_PG F_RD; do
   t="${!v}"
   assert_eq "$(printf '%s' "$t" | grep -oE '질문[^.]*한 줄씩|한 줄씩[^.]*질문' | wc -l | tr -d ' ')" "0" \
     "질문 본문: ${v} 에 경고를 질문에 한 줄씩 싣는 문장이 없다(위 양의 짝과 함께)"
 done
 
-# ⑭ finishing — degrade record 는 앞 글에만, 옵션 description 에는 싣지 않는다(M11).
-assert_eq "$(cnt "$F_FIN" '모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다 — 옵션 description 에 싣지 않습니다. 사용자가')" "1" \
-  "finishing: degrade record 를 옵션 description 에 싣지 않는다"
+# ⑭ finishing — degrade record 는 앞 글에 한 줄씩, 질문 본문은 정본의 규칙대로(M11).
+assert_eq "$(cnt "$F_FIN" '모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다. 질문 본문에는')" "1" \
+  "finishing: degrade record 는 앞 글에 쓰고 질문 본문은 정본의 규칙을 따른다"
+assert_eq "$(cnt "$F_FIN" '옵션 description 에 싣지 않습니다')" "0" "finishing: 옵션 description 에 경고를 싣지 않는다는 옛 문장이 없다(설명은 얻음 · 내줌 꼴)"
+
+# ⑭b finishing — 인터뷰 끝 게이트의 짧은 줄 출처(brief 원장 · 구조 검사 참고 · superpowers 판).
+for ph in '`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"`' '「구조 검사 참고 N개」' '「superpowers 판 다름」'; do
+  assert_eq "$(cnt "$F_FIN" "$ph")" "1" "finishing: 짧은 줄 출처 ${ph}"
+done
 
 # ⑮ 읽지 못한 채널은 「알 수 없음 — <사유>」 한 줄(M3 · M4).
 assert_eq "$(cnt "$F_FIN" '읽지 못한 채널은 「알 수 없음 — <사유>」 로 따로 한 줄 쓴다.')" "1" "알 수 없음: finishing 목록 4"

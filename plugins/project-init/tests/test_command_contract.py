@@ -455,7 +455,19 @@ class TestRecommendationLabelShape(unittest.TestCase):
 
     def test_merge_strategy_label_carries_tail(self):
         step3 = section(self.text, "### Step 3:", "### Step 3.5:")
-        self.assertRegex(step3, r"(?m)^\s*- Squash merge \(권장\)$")
+        self.assertRegex(
+            step3,
+            r"(?m)^\s*- Squash merge \(권장\) — 얻음: PR 하나가 main 에 커밋 하나로 남아 기록이 깔끔하다"
+            r" · 내줌: 가지 안의 낱개 커밋 기록이 main 에서 사라진다$",
+        )
+
+    def test_branching_table_carries_gain_and_cost(self):
+        step2 = section(self.text, "### Step 2:", "### Step 3:")
+        self.assertIn("| Strategy | Branches | 설명 |", step2)
+        self.assertNotIn("Best for", step2)
+        self.assertIn("| **GitHub Flow** | `main` + `feature/*` / `fix/*` | 얻음: main 과 feature · fix 가지만으로 가볍게 쓴다 · 내줌: ", step2)
+        self.assertEqual(step2.count("얻음:"), 3)
+        self.assertEqual(step2.count("내줌:"), 3)
 
     def test_release_label_carries_tail(self):
         step3 = section(self.text, "### Step 3:", "### Step 3.5:")

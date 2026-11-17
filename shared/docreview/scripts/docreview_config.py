@@ -1,4 +1,4 @@
-"""docreview_config.py — 엔진 값(탐지 수 · 재리뷰 상한 · 조언 줄 수 · 요약 폭)을 한 곳에서 푼다 (leaf 모듈).
+"""docreview_config.py — 엔진 값(탐지 수 · 재리뷰 상한 · 조언 줄 수 · 요약 폭 · 질문 기준 길이)을 한 곳에서 푼다 (leaf 모듈).
 
 순서는 기본 < 프로필 < 진입 < 환경 — 뒤가 이긴다. 진입 선언은 탐지 수에만 있다(`begin-round --detectors`).
 값이 정수가 아니거나 허용 범위 밖이면 `ConfigInvalid` — 부르는 쪽이 라운드를 시작하지 않는다.
@@ -61,6 +61,30 @@ def resolve(prof, entry, env) -> dict:
             val, src = _int(k, raw, "환경 " + ENV[k]), "환경"
         out[k] = {"value": val, "source": src}
     return out
+
+
+# 질문 설명의 기준 길이 — 질문 재료(`ask-material`)만 읽는다. 라운드 설정(원장의 `config`)에 넣지 않는다:
+# 넣으면 게이트 둘째 줄과 원장 · JSON 이 바뀐다. 환경 변수 하나뿐이고 프로필 필드 · 진입 값이 없다.
+ASK_WIDTH_DEFAULT = 110
+ASK_WIDTH_ENV = "DEVBREW_DOCREVIEW_ASK_WIDTH"
+ASK_WIDTH_MIN, ASK_WIDTH_MAX = 20, 500
+
+
+def ask_width_range() -> str:
+    return "%d~%d" % (ASK_WIDTH_MIN, ASK_WIDTH_MAX)
+
+
+def ask_width(env) -> int:
+    """환경의 기준 길이 — 없거나 빈 글이면 기본값. ASCII 숫자가 아니거나 범위 밖이면 `ConfigInvalid`."""
+    raw = env.get(ASK_WIDTH_ENV)
+    if raw is None or raw == "":
+        return ASK_WIDTH_DEFAULT
+    if not isinstance(raw, str) or not _ENV_INT.fullmatch(raw):
+        raise ConfigInvalid("ask_width", raw, "환경 " + ASK_WIDTH_ENV)
+    v = int(raw, 10)
+    if v < ASK_WIDTH_MIN or v > ASK_WIDTH_MAX:
+        raise ConfigInvalid("ask_width", raw, "환경 " + ASK_WIDTH_ENV)
+    return v
 
 
 def _pick(cfg, k):

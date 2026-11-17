@@ -73,6 +73,10 @@ assert_contains "$E3" '지출 승인을 묻지 않는다' "E3 지출 승인을 �
 assert_contains "$E3" '**실행 (권장)**' "E3 선택지 실행"
 assert_contains "$E3" '**대상 변경**' "E3 선택지 대상 변경"
 assert_contains "$E3" '**취소**' "E3 선택지 취소"
+assert_contains "$E3" '권하는 이유는 「실행」의 얻음에 담는다.' "E3 첫째 질문: 권하는 이유는 「실행」의 얻음에 담는다(질문 위 글이 아니다)"
+assert_not_contains "$E3" '이유(사용자가 부른 대상 · 모드 그대로다)는 질문 위 글에 쓴다' "E3 첫째 질문: 이유를 질문 위 글에 쓰라는 옛 문장이 없다"
+assert_contains "$E3" '「실행」: 얻음: 부른 대상과 모드 그대로 바로 돈다 · 내줌: codex 를 쓸 수 있으면 대상 파일 내용이 바깥 프로그램에 넘어간다' "E3 첫째 질문: 「실행」 설명이 얻음 · 내줌이다"
+assert_contains "$E3" '「3명」: 얻음: 지적을 가장 넓게 찾는다(라운드마다 5명, codex 못 쓰면 4명)' "E3 둘째 질문: 「3명」 설명이 라운드당 부르는 수를 싣는다"
 assert_contains "$E3" '「1명 (권장)」' "E3 비평자 수 선택지"
 assert_contains "$E3" 'effective_max_rounds' "E3 effective_max_rounds"
 assert_not_contains "$E3" 'consent-integrity' "E3 에 consent-integrity 없다"
@@ -246,6 +250,8 @@ assert_contains "$(cat "$S")" '`auth: reject` → **종료**' "E2c 거부는 실
 assert_contains "$(cat "$S")" '멈춘 대상이 여럿이어도 질문은 하나이고' "멈춘 대상이 여럿이어도 질문은 하나"
 assert_contains "$(cat "$S")" '**지적만 받기로 진행**(실행 전체를 「지적만 받기」로 바꾼다' "지적만 받기로 진행은 실행 전체를 바꾼다고 말한다"
 assert_contains "$(cat "$S")" '**그 대상만 빼고 진행**' "그 대상만 빼고 진행 선택지"
+assert_contains "$(cat "$S")" '「멈추기」: 얻음: 멈춘 이유를 직접 고친 뒤 처음부터 다시 부를 수 있다 · 내줌: 이번 실행에서는 어느 대상도 비평되지 않는다' "멈출 때의 선택: 「멈추기」 설명이 얻음 · 내줌이다"
+assert_not_contains "$(cat "$S")" '안내 줄대로 고친 뒤 다시 부른다' "멈출 때의 선택: 「멈추기」 설명이 질문 밖 안내 줄을 가리키지 않는다"
 assert_contains "$(cat "$S")" '와 같은 파일이라(<canonical>) 한 번만 비평한다' "같은 canonical 대상은 한 번만 비평하고 알린다"
 # artifact_path_auth.py 는 경로 어디에든 링크가 있으면 늘 거절한다(reason: symlink_target) — 링크와 원본을 합친다는
 # 약속은 지킬 수 없고, 링크 거절을 「project_dir 밖」 으로 안내하면 틀린 안내다.

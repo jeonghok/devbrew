@@ -185,7 +185,7 @@ cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /head
   && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
   && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
   || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
-{ grep -qF '왔던 끝 질문을 다시 띄운다 — 어떻게 끝낼지는 그 질문에서 고른다.' <<<"$cap_fence" \
+{ grep -qF '얻음: 지금 확정 후보를 확정으로 바꾸고 왔던 끝 질문으로 돌아가 끝낼 길을 고른다' <<<"$cap_fence" \
   && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
   && ok "AC12: 「지금 목록으로 확정」은 왔던 끝 질문을 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
   || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"
@@ -502,8 +502,13 @@ grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat"
   && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
 grep -qF '질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
-grep -qF '고르면 무엇이 달라지는가' <<<"$round_flat" \
-  && ok "AC3: description = 고르면 무엇이 달라지는가" || no "AC3: description 규칙 부재"
+grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+  && ok "AC3: description = 얻음 · 내줌 한 줄" || no "AC3: description 규칙 부재"
+case "$nd_line" in *트레이드오프*) no "AC12: «다음 결정» 줄에 트레이드오프 조각이 남아 있다" ;; *) ok "AC12: «다음 결정» 줄에 트레이드오프 조각이 없다" ;; esac
+grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+  && ok "AC12: 추천이 없는 라운드에도 얻음 · 내줌 꼴" || no "AC12: 설명 규칙이 없다"
+grep -qF '<선택지마다 한 줄 — 「<라벨>」 — 얻음: … · 내줌: …>' <<<"$round_block" \
+  && ok "AC12: 상태 파일 기록에 선택지와 설명이 남는다" || no "AC12: 양식에 선택지 줄이 없다"
 grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면' <<<"$round_flat" \
   && ok "C1: 되묻기 발동 조건 넷(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)" \
   || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
@@ -600,9 +605,9 @@ SKILL_LINE_CAP=604
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
 _total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
-[[ $(( _total - _own )) -eq 14 ]] \
-  && ok "AC3/C9 양의 짝: 블록 13줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
-  || no "AC3/C9 양의 짝: 뺀 줄 수가 14 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
+[[ $(( _total - _own )) -eq 15 ]] \
+  && ok "AC3/C9 양의 짝: 블록 14줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
+  || no "AC3/C9 양의 짝: 뺀 줄 수가 15 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
 
 # 있는 것 먼저 — 문단이 대상 · 기본 · 정보 여섯 칸 · 조사 규약 · 기준 글 Read 줄을 담는다(문단 창 안에서만 잰다)
 EF_PARA="$(awk '/^\*\*있는 것 먼저\.\*\*/{f=1} /^`open-researcher` 를 띄우는 메시지마다/{f=0} f' "$SKILL")"

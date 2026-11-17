@@ -484,8 +484,39 @@ qs() { j "$1" '[(q["multi"], q["hunk_ids"]) for q in d["questions"]]'; }
 mkn q1 1; scr q1
 assert_eq "$(j q1 '[(q["multi"], q["question"], [o["label"] for o in q["options"]]) for q in d["questions"]]')" \
   "[(False, '저자 편집 1곳을 그대로 둘까요?', ['그대로 둔다', '되돌린다'])]" "AC7: 덩어리 하나면 단일 선택이다"
+SUM1='뺀 문장 1개 · 더한 문장 1개 · 그대로 0문장'
+KEEP_GIVE='내줌: 틀린 편집도 남는다'
+REVERT='얻음: 기준 사본의 글로 돌아간다 · 내줌: 편집이 고친 것도 사라진다 — 지적을 고친 편집이면 그 지적은 안 고친 채 남는다'
+assert_eq "$(j q1 '[o["description"] for o in d["questions"][0]["options"]]')" \
+  "['얻음: 편집이 남는다(${SUM1} · 고친 이유(저자가 댐): 대응하는 지적 없음 — 저자가 스스로 고침) · ${KEEP_GIVE}', '${REVERT}']" \
+  "설명: 권장 없는 하나 고르기 — 이유 줄이 「대응하는 지적 없음」 이면 그대로 다 싣는다(기준 길이 안)"
 why q1 "1\t$FA"; scr q1
 assert_eq "$(j q1 '[o["label"] for o in d["questions"][0]["options"]]')" "['그대로 둔다 (권장)', '되돌린다']" "AC7: 확인된 덩어리 하나면 「그대로 둔다 (권장)」 이 첫 자리다"
+assert_eq "$(j q1 'd["questions"][0]["options"][0]["description"]')" \
+  "얻음: 편집이 남는다(${SUM1} · 고친 이유(저자가 댐): 지적 「SCR_FIX_APPLY」(${FA}) …) · ${KEEP_GIVE}" \
+  "설명: 「그대로 둔다」 는 얻음에 덩어리 요약(그대로)과 고친 이유(권장의 근거 — 넘치는 끝은 「…」)를 싣고 내줌 한 구절을 단다"
+assert_eq "$(j q1 'd["questions"][0]["options"][1]["description"]')" "$REVERT" \
+  "설명: 「되돌린다」 는 얻음 · 내줌 한 줄이다 — 내줌은 라운드 사이 · 확정 직전 두 화면에서 모두 참이다"
+assert_eq "$(j q1 '[len(o["description"]) <= 110 for o in d["questions"][0]["options"]]')" "[True, True]" \
+  "설명: 기본 기준 길이(110자) 안이다"
+cp -R "$TMP/q1" "$TMP/q1w"
+DEVBREW_DOCREVIEW_ASK_WIDTH=100 scr q1w
+assert_eq "$(j q1w 'len(d["questions"][0]["options"][0]["description"])')" "100" \
+  "설명: 기준 길이는 엔진과 같은 환경 값(DEVBREW_DOCREVIEW_ASK_WIDTH)에서 읽는다 — 100 이면 이유 줄을 100자에 맞춰 줄인다"
+DEVBREW_DOCREVIEW_ASK_WIDTH=abc scr q1w 2>"$TMP/q1w.err"; rc=$?
+assert_eq "$rc $(grep -c 'DEVBREW_DOCREVIEW_ASK_WIDTH' "$TMP/q1w.err")" "2 1" "설명: 기준 길이 환경 값이 잘못되면 rc 2 와 사유 한 줄(공시 펜스는 줄 전체 꼴 · 권장 없음으로 떨어진다)"
+cp -R "$TMP/q1" "$TMP/q1long"
+force "$TMP/q1long/state" "$FA" summary "$(python3 -c 'print("긴" * 137)')"
+scr q1long
+assert_eq "$(j q1long '(len(d["questions"][0]["options"][0]["description"]) <= 110, d["questions"][0]["options"][0]["description"].endswith("…) · " + "내줌: 틀린 편집도 남는다"), d["hunks"][0]["recommend"])')" \
+  "(True, True, True)" "설명: 지적 요약이 137자여도 설명은 기준 길이 안이고 이유 줄의 끝만 「…」 로 잘린다(권장은 그대로)"
+assert_contains "$(j q1long 'd["text"]')" "$(python3 -c 'print("긴" * 137)')" "설명: 잘린 이유 줄의 전문은 화면 글에 그대로 있다"
+mkn q1x 1; why q1x '1\tx) · 내줌: 없음 · (y'; scr q1x
+assert_eq "$(j q1x 'd["questions"][0]["options"][0]["description"]')" \
+  "얻음: 편집이 남는다(${SUM1} · 고친 이유(저자가 댐): 저자가 댄 지적 x) · 내줌 : 없음 · (y 은 원장에서 …) · ${KEEP_GIVE}" \
+  "설명: 원장에 없는 지적 id 가 표지 글자(내줌:)를 담아도 설명의 「 · 내줌: 」 은 하나다 — 이유 줄은 「원장에서 확인되지 않는다」"
+assert_eq "$(j q1x '(d["questions"][0]["options"][0]["description"].startswith("얻음: "), d["questions"][0]["options"][0]["description"].count(" · 내줌: "), d["questions"][0]["options"][0]["description"].count("얻음:"))')" \
+  "(True, 1, 1)" "설명: 어떤 이유 글이 와도 머리 「얻음: 」 하나 · 「 · 내줌: 」 하나다"
 mkn q2 2; scr q2
 assert_eq "$(qs q2)" "[(True, [1, 2])]" "AC7: 덩어리 둘이면 여러 개 고르기 질문 하나에 둘 다 든다"
 mkn q3 3; scr q3
@@ -503,6 +534,17 @@ why q5 "3\t$FA" "5\t$DA"; scr q5
 assert_eq "$(j q5 '[[o["label"] for o in q["options"]] for q in d["questions"]]')" \
   "[['3번 그대로 둔다 (권장)', '1번 그대로 둔다', '2번 그대로 둔다'], ['5번 그대로 둔다 (권장)', '4번 그대로 둔다']]" "AC7: 번호 순으로 나눈 뒤 질문 안에서만 권장을 앞에 둔다"
 assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 권장이 있어도 한 질문의 덩어리 번호는 이어져 있다"
+assert_eq "$(j q5 '[o["description"] for o in d["questions"][1]["options"]][0]')" \
+  "얻음: 편집이 남는다(${SUM1} · 고친 이유(저자가 댐): 지적 「SCR_DEC_ADOPT」(${DA}) …) · ${KEEP_GIVE}" \
+  "설명: 여러 개 고르기의 선택지도 얻음에 덩어리 요약과 고친 이유를 싣는다"
+assert_eq "$(j q5 'max(len(o["description"]) for q in d["questions"] for o in q["options"])') $(j q9 'max(len(o["description"]) for q in d["questions"] for o in q["options"])')" \
+  "110 98" "설명: 여러 개 고르기 선택지(넷까지)마다 기준 길이 안이다 — 권장 있는 q5 · 권장 없는 q9"
+form_bad() {   # form_bad <이름> → 「얻음:」 으로 시작하고 「 · 내줌: 」 이 한 번인 꼴이 아닌 설명 수
+  j "$1" 'sum(1 for q in d["questions"] for o in q["options"] if not (o["description"].startswith("얻음: ") and o["description"].count(" · 내줌: ") == 1))'
+}
+assert_eq "$(form_bad q5) $(form_bad q9) $(form_bad q1)" "0 0 0" "설명: 권장이 있든 없든 모든 선택지 설명이 「얻음: … · 내줌: …」 꼴이다(q5 · q9 · q1)"
+cp -R "$TMP/q5" "$TMP/q5f"; scr q5f --final
+assert_eq "$(form_bad q5f) $(j q5f 'any(h["recommend"] for h in d["hunks"])')" "0 False" "설명: 확정 직전 화면(권장 없음)도 같은 꼴이다"
 python3 - "$S" > "$TMP/sizes.txt" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])

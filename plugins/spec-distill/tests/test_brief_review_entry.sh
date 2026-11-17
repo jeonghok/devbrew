@@ -269,9 +269,9 @@ QLINE="$(grep -E '^[[:space:]]*question:' <<<"$QFENCE" | head -1)"
 # 케이스를 놓치지 않는다. 반대로 진짜 렌더가 문자열 안에 있으면 트레일링 "//" 코멘트가
 # 나중에 붙어도(무해한 편집) false-fail 없이 계속 PASS다.
 QLINE_CODE="$(strip_trailing_linecomment "$QLINE")"
-grep -qF '위에 적었다' <<<"$QLINE_CODE" \
-  && ok "B-2 question: 라인이 경고를 개수 한 줄로 가리킨다 (placement, load-bearing)" \
-  || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 「위에 적었다」 부재 — 경고 개수 줄이 description 이나 죽은 // 코멘트로 옮겨 갔다"
+grep -qF '경고 줄 — 채널마다의 짧은 줄' <<<"$QLINE_CODE" \
+  && ok "B-2 question: 라인이 경고를 채널마다의 짧은 줄을 이은 경고 줄로 싣는다 (placement, load-bearing)" \
+  || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 「경고 줄 — 채널마다의 짧은 줄」 부재 — 경고 줄이 description 이나 죽은 // 코멘트로 옮겨 갔다"
 grep -qF 'degrade:' <<<"$QLINE_CODE" \
   && no "B-2 question: 라인에 degrade 목록 자리가 남았다 — 목록은 게이트 앞 글로 갔다" \
   || ok "B-2 question: 라인에 degrade 목록 자리 없음"

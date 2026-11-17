@@ -111,7 +111,7 @@ blocking_fails() {   # blocking_fails <SKILL 경로> → 빠진 차단 문장 �
   printf '%s' "$d" | grep -qF '처분 없이는 다음 단계로 가지 않는다' || echo "hunk_blocks"
   printf '%s' "$d" | grep -qF '권장은 화면 조립이 정한다' || echo "hunk_rec_owner"
   printf '%s' "$d" | grep -qF '저자는 꼬리를 더하거나 떼지 않고 선택지 설명에 자기 평가를 더하지 않는다' || echo "hunk_rec_author"
-  printf '%s' "$d" | grep -qF '질문 · 선택지 라벨 · 순서를 그대로 쓴다' || echo "hunk_rec_verbatim"
+  printf '%s' "$d" | grep -qF '질문 · 선택지 라벨 · 설명 · 순서를 그대로 쓴다' || echo "hunk_rec_verbatim"
   printf '%s' "$f" | grep -qF '하나라도 막히면 게이트를 띄우지 않습니다' || echo "final_blocks"
 }
 bf="$(blocking_fails "$SK")"
@@ -123,7 +123,7 @@ for pair in "gate_open_rule|하나라도 0 이 아니면 라운드 게이트를 
             "hunk_sentences|바뀐 문장은 하나도 빼지 않는다" "hunk_blocks|처분 없이는 다음 단계로 가지 않는다" \
             "hunk_rec_owner|권장은 화면 조립이 정한다" \
             "hunk_rec_author|저자는 꼬리를 더하거나 떼지 않고 선택지 설명에 자기 평가를 더하지 않는다" \
-            "hunk_rec_verbatim|질문 · 선택지 라벨 · 순서를 그대로 쓴다" \
+            "hunk_rec_verbatim|질문 · 선택지 라벨 · 설명 · 순서를 그대로 쓴다" \
             "final_blocks|하나라도 막히면 게이트를 띄우지 않습니다"; do
   name="${pair%%|*}"; phrase="${pair#*|}"
   PH="$phrase" python3 -c '

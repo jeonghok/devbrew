@@ -54,17 +54,19 @@ python3 "$SD/scripts/roadmap_write.py" extract --roadmap="$roadmap_path"
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "다시 나눌 표와 영향을 위에 적었다. 어떻게 할까?",
+    question: "다시 나눌 표의 신호 셋 — 덩어리 <n> · 파일 영역 <n> · 원문 갈래 <n>. 어떻게 할까?",
     header: "재분해",
     options: [
-      {label: "이대로 다시 나눈다 (권장)", description: "새 표로 로드맵 블록과 묶음을 다시 쓰고 재분해 이력에 항목 하나를 남긴다."},
-      {label: "고치기", description: "말로 받아 새 표를 고쳐 다시 보인다."},
-      {label: "그만둔다", description: "아무것도 쓰지 않고 spec-review 게이트 ③ 의 후속 질문으로 돌아간다."}
+      {label: "이대로 다시 나눈다 (권장)", description: "얻음: 새 표로 로드맵과 묶음을 다시 쓰고 이력에 남긴다 · 내줌: 진행 중 에픽의 범위가 바뀌면 그 설계문서에 따로 남겨야 한다"},
+      {label: "고치기", description: "얻음: 고칠 곳을 말로 알려 새 표를 다시 받는다 · 내줌: 고친 표의 영향을 다시 읽고 판단해야 해서 다시 나누기가 늦어진다"},
+      {label: "그만둔다", description: "얻음: 아무것도 쓰지 않고 spec-review 의 후속 질문으로 돌아간다 · 내줌: 다시 나누려던 이유가 풀리지 않은 채 후속 질문에서 다시 골라야 한다"}
     ],
     multiSelect: false
   }]
 })
 ```
+
+질문 본문의 `<n>` 은 새 표에서 센 값이다 — 인터뷰 끝의 분해 판단과 같은 세 신호다. 권하는 쪽의 이유는 그 선택지의 얻음에 담는다 — 권고 줄에 대가를 따로 붙이지 않는다.
 
 ## 4. 번호 규칙
 
