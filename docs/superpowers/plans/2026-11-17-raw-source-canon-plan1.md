@@ -373,18 +373,18 @@ seed 는 가린 audit 에서 압축하므로 seed 에도 가린 글만 간다. �
 **Interfaces:**
 - Consumes: Task 2 의 `raw_source.py locate --seed` 와 판결 줄 `raw-source: FOUND <경로>`.
 
-그 문단의 「평문 줄(외부 skill)이면 운반 문장에 「seed 전문을 … 입력으로 삼는다」를 싣고,」 를 아래로 바꾸고, 문단 바로 뒤에 펜스를 둔다. slash 줄 갈래(「slash 줄이면 운반 문장 없이 seed 경로만 넘긴다.」)와 문단의 나머지는 그대로다.
+그 문단의 「평문 줄(외부 skill)이면 운반 문장에 「seed 전문을 … 입력으로 삼는다」를 싣고,」 를 아래로 바꾸고, 문단 바로 뒤에 펜스를 둔다. slash 줄 갈래(「slash 줄이면 운반 문장 없이 seed 경로만 넘긴다.」)와 문단의 나머지는 그대로다. 원자료를 찾지 못해도 멈추지 않는다 — 설계의 되돌아오는 길(「원자료를 찾지 못하면 뒤 단계는 seed 만으로 가고 그 사실을 보인다」)대로 seed 만 넘기고 그 사실을 보인다. 옛 문장(seed 전문을 사용자 원문 자리에 둔다)은 어느 갈래에도 남기지 않는다.
 
 ```
-평문 줄(외부 skill)이면 운반 문장에 「seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일 <기록 파일 절대경로> 의 원자료다(`## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구). 그 파일을 읽어 그 skill 의 사용자 원문(첫 요청)으로 삼는다」를 싣는다. `<기록 파일 절대경로>` 는 아래 펜스가 낸 마지막 줄 `raw-source: FOUND <경로>` 의 경로다 — 마지막 줄이 그 꼴이 아니면 그 줄을 보이고 다음 세션 줄을 노출하지 않는다.
+평문 줄(외부 skill)이면 아래 펜스의 판결 줄(stdout 의 `raw-source: ` 줄)로 운반 문장을 고른다. `raw-source: FOUND <경로>` 면 「seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일 <기록 파일 절대경로> 의 원자료다(`## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구). 그 파일을 읽어 그 skill 의 사용자 원문(첫 요청)으로 삼는다」를 싣는다 — `<기록 파일 절대경로>` 는 그 줄의 경로다. 그 밖이면(`raw-source: LOST <사유>` 이거나 판결 줄이 없다) 「seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 원자료(framing 기록 파일)를 찾지 못했다(<사유>) — seed 만 넘긴다」를 싣고, 게이트 앞 글에 `원자료(framing 기록 파일)를 찾지 못했다 — <사유>. 다음 단계에는 seed 만 넘긴다` 한 줄을 보인 뒤 다음 세션 줄을 노출한다. `<사유>` 는 LOST 줄의 사유이고, 판결 줄이 없으면 `판결 줄이 없다(종료 코드 <n>)` 다.
 ```
 
 ```bash
-# 다른 다음 단계 — framing 기록 파일의 자리. 앞에 「## 상태」 블록을 이어 붙인다.
-python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS"
+# 다른 다음 단계 — framing 기록 파일의 자리. 앞에 「## 상태」 블록을 이어 붙인다. 찾지 못해도(종료 코드 3) 멈추지 않는다.
+python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || echo "[spec-distill] 원자료 판결 종료 코드 $? — 위 판결 줄로 운반 문장을 고른다(멈추지 않는다)" >&2
 ```
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다** — `test_request_framing_open.sh` 의 `for lit in …` 목록에서 옛 문장을 새 운반 문장(「seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다.」 부터 「사용자 원문(첫 요청)으로 삼는다」 까지 글자 그대로)과 `raw_source.py" locate --seed "$SEED_ABS"` · `` `raw-source: FOUND <경로>` 의 경로다 `` 로 바꾸고, `assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"` 를 더한다. 펜스 실행 단언: 임시 폴더에 seed · 기록 파일을 두고 `SD` · `SEED_ABS` 를 채워 그 펜스 본문을 `env -i PATH="$PATH" bash` 로 돌려 마지막 줄이 `raw-source: FOUND <그 기록 파일 절대경로>` 인지 본다.
+- [ ] **Step 1: 실패하는 테스트를 쓴다** — `test_request_framing_open.sh` 의 `for lit in …` 목록에서 옛 문장을 빼고 아래 리터럴을 넣는다: 찾은 갈래의 운반 문장(「seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은」 부터 「사용자 원문(첫 요청)으로 삼는다」 까지 글자 그대로) · 찾지 못한 갈래의 운반 문장(「원자료(framing 기록 파일)를 찾지 못했다(<사유>) — seed 만 넘긴다」) · 보이는 한 줄(`` `원자료(framing 기록 파일)를 찾지 못했다 — <사유>. 다음 단계에는 seed 만 넘긴다` ``) · `판결 줄이 없다(종료 코드 <n>)` · `raw_source.py" locate --seed "$SEED_ABS" ||`. `assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"` 와 `assert_not_contains "$CALL" '다음 세션 줄을 노출하지 않는다' "AC22: 찾지 못해도 멈추지 않는다"` 를 더한다. 펜스 실행 단언 둘 — 임시 폴더에 seed 를 두고 `SD` · `SEED_ABS` 를 채워 그 펜스 본문을 `env -i PATH="$PATH" bash` 로 돌린다: ① 기록 파일이 있으면 stdout 마지막 줄이 `raw-source: FOUND <그 기록 파일 절대경로>` 이고 rc 0 ② 기록 파일이 없으면 stdout 마지막 줄이 `raw-source: LOST seed 옆에 framing 기록 파일이 없다 — <그 자리>` 이고 펜스의 rc 가 0(뒤 걸음이 끊기지 않는다)이며 stderr 에 `원자료 판결 종료 코드 3` 이 있다.
 - [ ] **Step 2: 실패를 본다** — `PYTHONDONTWRITEBYTECODE=1 bash plugins/spec-distill/tests/test_request_framing_open.sh` · Expected: ✗.
 - [ ] **Step 3: SKILL 을 위 글자대로 고친다.**
 - [ ] **Step 4: 통과를 본다** — 같은 명령 + `bash shared/tests/test_ask_recommendation.sh` + `bash plugins/spec-distill/tests/test_seed_at_path_handoff.sh` + `bash shared/tests/test_inline_python_isolated.sh`. Expected: 통과.
@@ -438,3 +438,13 @@ python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS"
 - [ ] **Step 2: 그 보고를 위 파일에 적는다.**
 - [ ] **Step 3: 미룸 · 빠짐과 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 올린다** — 계획 2 몫은 받는 곳 「F3 계획 2」 가 아니라 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 한다(`check_bundle_coverage.py --impl` 규칙) — 그 이름은 지휘자에게 묻는다.
 - [ ] **Step 4: PR 을 만들기 전에** `python3 /Users/jeonghokim/.claude/plugins/cache/devbrew/spec-distill/8.14.0/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-16-raw-source-canon-design.md .claude/tmp/raw-source-canon-plan1-ac-report.md` 를 돌려 경고를 사용자에게 보인다.
+
+## 실행 방식
+
+미리 받은 답: Subagent-driven(superpowers:subagent-driven-development) — Task 5 · 6 · 7 이 같은 글자와 테스트 함수를 나눠 쓰고 보안 리뷰 대상 프로필과 비밀값 규칙을 건드려, Task 마다 새 리뷰어가 어긋난 글자를 다음 Task 전에 잡는다.
+
+## 계획 2 로 넘기는 것
+
+- 기본 브랜치에서 인터뷰 본문(`skills/pm-interview/SKILL.md`)의 줄 수 상한이 604 로 올랐다(`test_conducting_interview_stage.sh` 의 `SKILL_LINE_CAP=604`) — 설계 Constraints 의 「594 미만」 은 낡았다. 계획 2 는 합친 기본 브랜치 위에서 다시 센다.
+- 진입 단계(인터뷰 본문 · `seed-input.md` 의 「가르는 것은 기계다」 문단)가 seed 경로에서 기록 파일 경로를 도출하는 문장을 이 모듈(`raw_source.py locate --seed`)로 가리키게 하는 일(설계 1 끝)은 계획 2 몫이다.
+- framing 「다른 다음 단계」 의 slash 줄 갈래는 운반 문장이 없어 기록 파일 자리가 가지 않는다 — 받는 쪽은 seed 머리의 역할 문장(Task 5 가 seed 템플릿에 더한다)과 seed 머리의 `audit_file:` 로만 안다. 설계문서 남는 한계에 적는 것은 지휘자 몫이다.
