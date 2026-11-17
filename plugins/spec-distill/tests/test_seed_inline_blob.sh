@@ -97,14 +97,42 @@ done
 
 # ── 재료 부재 셋 — exit 2 + 어느 인자인지 ─────────────────────────────────────
 for pair in "seed_file:$TMP/nope.md $TMP/seed.audit.md $TMP/CLAUDE.md" \
-            "audit_file:$TMP/seed.md $TMP/nope.md $TMP/CLAUDE.md" \
-            "claude_md_file:$TMP/seed.md $TMP/seed.audit.md $TMP/nope.md"; do
+            "audit_file:$TMP/seed.md $TMP/nope.md $TMP/CLAUDE.md"; do
   label="${pair%%:*}"; args="${pair#*:}"
   # shellcheck disable=SC2086
   python3 "$SCRIPT" $args >/dev/null 2>"$TMP/e.txt"; rc=$?
   assert_eq "$rc" "2" "$label 부재 → exit 2"
   grep -q "$label" "$TMP/e.txt" && ok "$label 부재: stderr 가 인자를 댄다" || no "$label 부재: stderr 가 불명확하다"
 done
+# CLAUDE.md 없음 — 멈추지 않고 그 사실을 번들에 글자로 남긴다(AC15)
+out_nc="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/nope.md" 2>"$TMP/e_nc.txt")"; rc=$?
+assert_eq "$rc" "0" "CLAUDE.md 없음 → 조립한다"
+assert_contains "$out_nc" "$(printf '## 레포 CLAUDE.md\n\n레포 CLAUDE.md 없음')" "번들에 「레포 CLAUDE.md 없음」"
+assert_contains "$(cat "$TMP/e_nc.txt")" "[spec-distill] 경고: 레포 CLAUDE.md 가 없다(" "stderr 가 알린다"
+ln -s "$TMP/gone-target.md" "$TMP/dangling.md"; mkdir -p "$TMP/claude-dir.md"
+for bad in "$TMP/dangling.md" "$TMP/claude-dir.md"; do   # 깨진 것은 없는 것이 아니다
+  python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$bad" >/dev/null 2>"$TMP/e_bad.txt"; assert_eq "$?" "2" "$(basename "$bad") → exit 2"
+  assert_contains "$(cat "$TMP/e_bad.txt")" "claude_md_file not found:" "$(basename "$bad") → 기존 메시지"
+done
+# 임시 git 레포(CLAUDE.md 없음)의 루트에서 skill 펜스와 같은 인자 `CLAUDE.md` 로
+GR="$TMP/gitrepo"; mkdir -p "$GR/docs"
+git -C "$GR" init -q 2>/dev/null
+cp "$TMP/seed.md" "$GR/docs/s.md"
+python3 - "$TMP/seed.audit.md" "$GR/docs/s.audit.md" "$GR/docs/s2.audit.md" "$GR/docs/s3.audit.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+sep = "### 받은 글 — 직접 친 글 · 사용자 · 2026-11-17 · 라운드 2 의 답"
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+open(sys.argv[3], "w", encoding="utf-8").write(t.replace("RAW_TEXT_MARKER", sep + "\nRAW_TEXT_MARKER", 1))
+open(sys.argv[4], "w", encoding="utf-8").write(t.replace("RAW_TEXT_MARKER", "### 다른 제목\nRAW_TEXT_MARKER", 1))
+PY
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s.audit.md CLAUDE.md --for detect >"$TMP/g_out.txt" 2>"$TMP/g_err.txt" ); rc=$?
+assert_eq "$rc" "0" "git 레포 루트 · CLAUDE.md 없음 → rc 0"
+assert_contains "$(cat "$TMP/g_out.txt")" "레포 CLAUDE.md 없음" "git 레포: 번들에 「레포 CLAUDE.md 없음」"
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s2.audit.md CLAUDE.md >/dev/null 2>"$TMP/g_err2.txt" )
+assert_not_contains "$(cat "$TMP/g_err2.txt")" "heading-모양" "받은 글 구분 줄은 heading-모양 경고에서 빠진다"
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s3.audit.md CLAUDE.md >/dev/null 2>"$TMP/g_err3.txt" )
+assert_contains "$(cat "$TMP/g_err3.txt")" "heading-모양" "다른 제목 모양 줄은 여전히 경고한다(양성 짝)"
 python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" --for bogus >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "--for 에 모르는 소비자 → exit 2"
 

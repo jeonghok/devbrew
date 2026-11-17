@@ -18,6 +18,9 @@
 공허하게 나온다. `## 2` · `## 6` 이 없거나 `## 2` 가 비었으면 `[spec-distill]` 경고를 내고 「(없음)」으로
 조립한다(첫 라운드의 `## 6` 은 비어 있는 것이 정상이다).
 
+레포 CLAUDE.md 가 없으면 그 절을 「레포 CLAUDE.md 없음」 한 줄로 채운다(있는데 파일이 아니면 rc 2 — 끊긴 링크 ·
+폴더는 없는 것이 아니다).
+
 재료는 **명시적 파일 경로**로만 받는다 — seed frontmatter 의 `audit_file:` 을 따라가는 자동 유추는
 하지 않는다. 유추가 실패했을 때의 침묵이 잘못된 재료로 리뷰를 태우는 것보다 나쁘다.
 
@@ -33,6 +36,7 @@ Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--fo
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import re
 import sys
@@ -71,6 +75,14 @@ FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.S)
 # 줄(예: 사용자 답 뒤에 붙은 `# 다른 제목`)은 여전히 걸린다.
 ROUND_SCAFFOLD_RE = re.compile(r'^### 라운드 \d+$')
 
+# audit `## 1. 원문` 안에서 받은 글마다 호스트가 쓰는 구분 줄의 머리 — 위 `### 라운드 <n>` 과 같은 이유로 경고에서
+# 뺀다(정상 기록 파일마다 받은 글마다 경고하면 신호를 잃는다). Task 5 의 락이 audit 템플릿의 구분 줄 머리와
+# 이 패턴을 맞춰 본다 — 글자를 바꾸면 그 락이 함께 RED.
+RECEIVED_SEPARATOR_RE = re.compile(r"^### 받은 글 — \S")
+
+# CLAUDE.md 가 없는 레포의 번들이 그 절에 싣는 한 줄.
+CLAUDE_MD_ABSENT = "레포 CLAUDE.md 없음"
+
 
 def seed_body(text: str) -> str:
     """frontmatter 를 뺀 seed 본문 — 리뷰 대상은 사람이 읽는 메시지다(check_seed.py 의 body_of 와 같은 이유)."""
@@ -92,22 +104,25 @@ def _heading_line_no(text: str, heading: str) -> int | None:
 
 def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[int]:
     """`heading` 절 본문 안에서 heading-모양(`section6.HEADING_SHAPED_RE`)으로 보이는 줄의 audit 파일
-    절대 줄 번호. `## 2. 질문 전체` 의 `### 라운드 <n>` 스캐폴드는 뺀다. 절이 없으면 빈 목록."""
+    절대 줄 번호. `## 2. 질문 전체` 의 `### 라운드 <n>` 스캐폴드와 `## 1. 원문` 의 받은 글 구분 줄은 뺀다. 절이 없으면 빈 목록."""
     start = _heading_line_no(audit_text, heading)
     if start is None:
         return []
     exempt_round_scaffold = heading == "## 2. 질문 전체"
+    exempt_received_separator = heading == "## 1. 원문"
     out = []
     for i, line in enumerate(body.split("\n")):
         if not section6.HEADING_SHAPED_RE.match(line):
             continue
         if exempt_round_scaffold and ROUND_SCAFFOLD_RE.match(line.strip()):
             continue
+        if exempt_received_separator and RECEIVED_SEPARATOR_RE.match(line.strip()):
+            continue
         out.append(start + 1 + i)
     return out
 
 
-def assemble(seed_text: str, audit_text: str, claude_md_text: str, consumer: str = "detect") -> str:
+def assemble(seed_text: str, audit_text: str, claude_md_text: str | None, consumer: str = "detect") -> str:
     sec_raw, sec_questions, sec_decisions = UNTRUSTED_VERBATIM_SECTIONS
     parts = [
         "## 초안 (interview-seed 본문)\n\n" + seed_body(seed_text).strip(),
@@ -123,7 +138,8 @@ def assemble(seed_text: str, audit_text: str, claude_md_text: str, consumer: str
     else:
         parts.append(f"## 리뷰 결정 (audit `{sec_decisions}`)\n\n"
                      + _or_none(section_body(audit_text, sec_decisions)))
-    parts.append("## 레포 CLAUDE.md\n\n" + claude_md_text.strip())
+    parts.append("## 레포 CLAUDE.md\n\n"
+                 + (CLAUDE_MD_ABSENT if claude_md_text is None else claude_md_text.strip()))
     return "\n\n".join(parts) + "\n"
 
 
@@ -140,14 +156,22 @@ def main() -> int:
         "audit_file": pathlib.Path(args.audit_file),
         "claude_md_file": pathlib.Path(args.claude_md_file),
     }
+    claude_md_absent = False
     for label, path in paths.items():
+        if label == "claude_md_file" and not os.path.lexists(path):
+            # 없는 것은 계속한다. 있는데 파일이 아닌 것(끊긴 링크 · 폴더)은 아래 검사가 그대로 멈춘다.
+            claude_md_absent = True
+            print(f"[spec-distill] 경고: 레포 CLAUDE.md 가 없다({path}) — 번들의 그 절을 "
+                  f"「{CLAUDE_MD_ABSENT}」 한 줄로 채워 조립한다", file=sys.stderr)
+            continue
         if not path.is_file():
             print(f"{label} not found: {path}", file=sys.stderr)
             return 2
 
     seed_text = paths["seed_file"].read_text(encoding="utf-8", errors="replace")
     audit_text = read_audit_text(paths["audit_file"], "replace")
-    claude_md_text = paths["claude_md_file"].read_text(encoding="utf-8", errors="replace")
+    claude_md_text = (None if claude_md_absent
+                      else paths["claude_md_file"].read_text(encoding="utf-8", errors="replace"))
 
     sep = separator_lines(audit_text)
     if sep:
