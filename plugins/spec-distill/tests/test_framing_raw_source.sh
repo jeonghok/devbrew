@@ -49,6 +49,7 @@ framing_fails() {
   local T0; T0="$(mktemp -d)"
   s1="$(sec "$at" '## 1. 원문')"; s2="$(sec "$at" '## 2. 질문 전체')"
   has "$s1" 'token · key · credential 로 보이는 값은 쓰기 전에 가림 표시' || echo tpl_redaction
+  has "$(printf '%s\n' "$s1" | join)" '라벨은 공백 없이 글자 · 숫자 · `.` · `_` · `-` 로 64자까지' || echo tpl_label_form
   {
     has "$s1" '`### 받은 글 — <갈래> · <준 이> · <날짜>[ · 라운드 <n> 의 답]`' &&
     has "$s1" '설명 문장을 따로 두지 않는다' &&
@@ -86,10 +87,14 @@ sys.exit(0 if m.RECEIVED_SEPARATOR_RE.match(sys.argv[2] + "직접 친 글") else
   sec_s="$(subsec "$skill" '### 비밀값 가리기 — 사용자의 말을 쓰기 전에')"
   [ -n "$sec_s" ] || echo secret_section
   sj="$(printf '%s\n' "$sec_s" | join)"
-  for p in '`## 1. 원문`' '직접 적은 답' '«당신이 답한 것»' '«사용자가 적은 말»' '`said-r<n>.txt`' '`said-<id>.txt`' \
+  # 여덟 줄마다 그 줄에만 있는 글자를 든다 — 한 줄을 지우면 그 줄의 항목이 실패한다.
+  for p in '받은 글(주제 질문의 답 포함)' '직접 적은 답' '«당신이 답한 것»' '«사용자가 적은 말»' '`said-r<n>.txt`' '결정 답과 거부 줄의 사용자 문구' \
            '막지 않는 질문의 답' '`said-hunk-<k>.txt`' '`said-extra-r<n>.txt`' '`## 5. degrade`'; do
     has "$sj" "$p" || echo "secret_path:$p"
   done
+  has "$sj" '어느 길이든 쓰기 **전에**' || echo secret_before_write
+  has "$sj" '가린 값 자체는 보이지 않는다' || echo secret_value_hidden
+  has "$sj" '`:` 뒤의 라벨은 공백 없이 글자 · 숫자 · `.` · `_` · `-` 로 64자까지다' || echo secret_label_form
   { has "$sj" '`비밀값으로 보여 가린 곳 <N>개 — <라벨들>`' && has "$sj" '가린 것이 없으면 그 줄을 내지 않는다'; } || echo secret_report_line
   # 토큰 모양 집합 — 새 절 == 인터뷰 본문 「Secret 기록 금지」 문단, 각 토큰이 호스트의 P21 정규식에 맞는다.
   printf '%s\n' "$sec_s" > "$T0/sec.txt"
@@ -135,6 +140,9 @@ sys.exit(0 if ok else 1)
   } || echo overlap_same_question
   pin_s="$(awk 'index($0,"**audit 템플릿 절 제목이 중복되면**")==1{f=1} f{print} f&&index($0,"`### 번들` 부터 다시 돕니다.")==1{exit}' "$skill")"
   [ "$pin_s" = "$OVERLAP_PIN" ] || echo overlap_unchanged
+  has "$sj" 'seed 에도 가린 글만 간다' || echo seed_redacted_only
+  has "$sk" '답이 없으면 표시 없이 «(답 없음)» 이다' || echo answer_none_mark
+  has "$ex1" '그 줄 앞에 `> ` 만 붙여 쓴다' || echo wrap_prefix_only
   { ! has "$sk" '스스로 고쳐 쓴다' && has "$sk" '저자가 그 줄을 스스로 고쳐 쓰지 않는다'; } || echo self_rewrite
   rm -rf "$T0"
 }
@@ -180,6 +188,15 @@ mutate "$SK" "$T/sk2.md" '`<KEY:...>`' '`<KEYS:...>`' && expect_fail_sk secret_t
 mutate "$SK" "$T/sk3.md" '- 제목 줄 겹침 물음의 선택과 문구 — `## 5. degrade` 한 줄' '- 제목 줄 겹침 물음의 선택과 문구' && expect_fail_sk 'secret_path:`## 5. degrade`' "$T/sk3.md" || no "변이 준비 실패: secret_path"
 mutate "$SK" "$T/sk4.md" $'고른 라벨만\n   있는 답은 덧붙이지 않는다. ' '' && expect_fail_sk typed_append "$T/sk4.md" || no "변이 준비 실패: typed_append"
 mutate "$SK" "$T/sk5.md" '(권장) / 멈춘다」를' '/ 멈춘다」를' && expect_fail_sk overlap_unchanged "$T/sk5.md" || no "변이 준비 실패: overlap_unchanged"
+mutate "$AT" "$T/at4.md" '라벨은 공백 없이 글자 · 숫자 · `.` · `_` · `-` 로 64자까지' '라벨은 아무 글자나' && expect_fail tpl_label_form "$T/at4.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_label_form"
 mutate "$SK" "$T/sk6.md" '저자가 그 줄을 스스로 고쳐 쓰지 않는다' '저자가 그 줄을 스스로 고쳐 쓴다' && expect_fail_sk self_rewrite "$T/sk6.md" || no "변이 준비 실패: self_rewrite"
+mutate "$SK" "$T/sk7.md" '`:` 뒤의 라벨은 공백 없이' '`:` 뒤의 라벨은 공백도 넣어' && expect_fail_sk secret_label_form "$T/sk7.md" || no "변이 준비 실패: secret_label_form"
+mutate "$SK" "$T/sk8.md" $'- `## 1. 원문` 의 받은 글(주제 질문의 답 포함)\n' '' && expect_fail_sk 'secret_path:받은 글(주제 질문의 답 포함)' "$T/sk8.md" || no "변이 준비 실패: secret_path 첫 줄"
+mutate "$SK" "$T/sk9.md" $'- 결정 답과 거부 줄의 사용자 문구(`said-<id>.txt`)\n' '' && expect_fail_sk 'secret_path:결정 답과 거부 줄의 사용자 문구' "$T/sk9.md" || no "변이 준비 실패: secret_path 넷째 줄"
+mutate "$SK" "$T/sk10.md" '어느 길이든 쓰기 **전에**' '어느 길이든 쓴 **뒤에**' && expect_fail_sk secret_before_write "$T/sk10.md" || no "변이 준비 실패: secret_before_write"
+mutate "$SK" "$T/sk11.md" '가린 값 자체는 보이지 않는다' '가린 값도 함께 보인다' && expect_fail_sk secret_value_hidden "$T/sk11.md" || no "변이 준비 실패: secret_value_hidden"
+mutate "$SK" "$T/sk12.md" 'seed 에도 가린 글만 간다' 'seed 에는 그대로 간다' && expect_fail_sk seed_redacted_only "$T/sk12.md" || no "변이 준비 실패: seed_redacted_only"
+mutate "$SK" "$T/sk13.md" '답이 없으면 표시 없이 «(답 없음)» 이다' '답이 없으면 비워 둔다' && expect_fail_sk answer_none_mark "$T/sk13.md" || no "변이 준비 실패: answer_none_mark"
+mutate "$SK" "$T/sk14.md" '그 줄 앞에 `> ` 만 붙여 쓴다' '그 줄을 알맞게 다듬어 쓴다' && expect_fail_sk wrap_prefix_only "$T/sk14.md" || no "변이 준비 실패: wrap_prefix_only"
 
 finish
