@@ -142,6 +142,31 @@ class InterviewMode(RepoCase):
         self.assertEqual(self.run_("--interview", "docs/b.state.md"),
                          (3, "raw-source: LOST " + RS.R_SEED_UNRECORDED))
 
+    def _no_framing_for(self, text):
+        put(self.repo, "docs/b.state.md", text)
+        self.assertEqual(self.run_("--interview", "docs/b.state.md"), (0, "raw-source: NO-FRAMING"))
+        v = RS.locate_from_interview(str(Path(self.repo) / "docs/b.state.md"))
+        self.assertEqual(v.kind, "NO-FRAMING")
+
+    def test_block_three_tilde_fence(self):
+        self._no_framing_for("---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n~~~\n"
+                             + SEED.rstrip("\n") + "\n~~~\n")
+
+    def test_block_backtick_fence(self):
+        self._no_framing_for("---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n````\n"
+                             + SEED.rstrip("\n") + "\n````\n")
+
+    def test_block_prose_before_fence(self):
+        self._no_framing_for("---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n먼저 한 줄.\n\n~~~~\n"
+                             + SEED.rstrip("\n") + "\n~~~~\n")
+
+    def test_block_fenced_other_type(self):
+        self._no_framing_for(state_text("없음", "---\ntype: interview-brief\n---\n\n문장 하나."))
+
+    def test_block_heading_only_in_frontmatter(self):
+        self._no_framing_for("---\ntype: interview-state\nseed: 없음\n## 풀린 입력\n~~~~\n---\n"
+                             "type: interview-seed\n---\n~~~~\n")
+
     def test_no_block(self):
         put(self.repo, "docs/b.state.md", "---\ntype: interview-state\nseed: 없음\n---\n\n본문\n")
         self.assertEqual(self.run_("--interview", "docs/b.state.md"), (0, "raw-source: NO-FRAMING"))
