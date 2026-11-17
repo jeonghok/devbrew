@@ -97,9 +97,9 @@ has 'optional|선택' "brainstorming invoke is optional"
 # B-0/B-2/B-3에 이미 쓰는 awk 윈도우 방식으로 **그 블록 안에서만** 찾고, 헤더가 아니라
 # 본문에만 있는 문구(`crash·spec-mode fallback`)를 함께 요구한다.
 b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
-{ printf '%s' "$b1_block" | grep -qE 'superpowers.*(부재|없).*advisory|advisory.*superpowers' \
-    && printf '%s' "$b1_block" | grep -qF 'crash·spec-mode fallback'; } \
-  && ok "AC13: superpowers-absent loud advisory (B-1 블록 스코프)" \
+{ grep -qE 'superpowers 부재 시.*끝 질문' <<<"$b1_block" \
+    && grep -qF 'crash·spec-mode fallback' <<<"$b1_block"; } \
+  && ok "AC13: superpowers 가 없으면 끝 질문으로 끝낸다 (B-1 블록 스코프)" \
   || no "AC13: B-1 블록 안에 graceful-degradation 지시가 없다"
 
 # --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
@@ -183,15 +183,15 @@ cap_fence="$(awk '/^```javascript/{buf="";inf=1;next} /^```/{if(inf&&buf ~ /head
   && grep -qF '{label: "brief 만 종료"' <<<"$cap_fence"; } \
   && ok "AC12: 재제시 상한이 2회 뒤 ③ 에서 AskUserQuestion 펜스로 세 선택을 묻는다" \
   || no "AC12: 재제시 상한 방아쇠 문구 또는 AskUserQuestion 펜스가 없다"
-{ grep -qF '얻음: 지금 확정 후보를 확정으로 바꾸고 다음 단계 질문으로 간다' <<<"$cap_fence" \
+{ grep -qF '얻음: 지금 확정 후보를 확정으로 바꾸고 왔던 끝 질문으로 돌아가 끝낼 길을 고른다' <<<"$cap_fence" \
   && ! grep -qF 'brainstorming' <<<"$cap_prose"; } \
-  && ok "AC12: 「지금 목록으로 확정」은 B-2 게이트를 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
+  && ok "AC12: 「지금 목록으로 확정」은 왔던 끝 질문을 다시 띄우고 상한 경로에 brainstorming handoff 가 없다" \
   || no "AC12: 「지금 목록으로 확정」이 게이트를 다시 띄우지 않거나 상한 경로가 brainstorming 을 언급한다"
 b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN" | tr '\n' ' ' | tr -s ' ')"
-{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
+{ grep -qF '「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며 스스로 멈추거나 넘기지 않는다' <<<"$b3_block" \
   && grep -qF '`confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다' <<<"$b3_block" \
   && grep -qF '「brief 만 종료」는 ④ 를 따른다' <<<"$b3_block" \
-  && grep -qF '`status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다' <<<"$b3_block"; } \
+  && grep -qF '`status` 는 이 편집으로 바뀌지 않고 게이트(①/②)나 B-1 끝 질문의 「확정하고 끝낸다」 를 통해서만 바뀐다' <<<"$b3_block"; } \
   && ok "AC12: B-3 이 재제시 상한 질문의 세 답과 확정된 목록 ③ 을 명시한다" \
   || no "AC12: B-3 에 재제시 상한 답 처리 또는 확정 목록 ③ 문장이 없다"
 grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
@@ -206,11 +206,16 @@ b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 b3_opt1="$(awk '/^- \*\*① /{f=1} /^- \*\*② /{f=0} f' <<<"$b3_block")"
 b3_opt2="$(awk '/^- \*\*② /{f=1} /^- \*\*③ /{f=0} f' <<<"$b3_block")"
 nsl_b3="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' <<<"$b3_block")"
-grep -qF '보고 후 재결정' <<<"$nsl_b3" \
-  && ok "AC3: C4 프로토콜이 ①·② 공통 다음 세션 줄에 실림" \
-  || no "AC3: B-3 의 다음 세션 줄에 C4 프로토콜이 없다"
-grep -qE '임의 변경.*금지' <<<"$nsl_b3" \
-  && ok "AC3: 임의 변경 금지 절반이 다음 세션 줄에 있다" || no "AC3: 다음 세션 줄에 임의 변경 금지가 없다"
+# F4 — C4 는 다음 세션 줄이 가리키는 지시 파일의 brainstorming 절에 산다(줄은 그 절을 가리킨다)
+bh_bs="$(awk '$0=="## brainstorming 지시"{f=1;next} f&&/^## /{exit} f' "$REPO_ROOT/plugins/spec-distill/references/brief-handoff.md")"
+grep -qF '/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다' <<<"$nsl_b3" \
+  && ok "AC3: ①·② 공통 다음 세션 줄이 지시 파일의 brainstorming 절을 가리킨다" \
+  || no "AC3: B-3 의 다음 세션 줄이 지시 파일을 가리키지 않는다"
+grep -qF '보고 후 재결정' <<<"$bh_bs" \
+  && ok "AC3: C4 프로토콜이 지시 파일의 brainstorming 절에 실림" \
+  || no "AC3: 지시 파일의 brainstorming 절에 C4 프로토콜이 없다"
+grep -qE '임의 변경.*금지' <<<"$bh_bs" \
+  && ok "AC3: 임의 변경 금지 절반이 지시 파일의 brainstorming 절에 있다" || no "AC3: 지시 파일의 brainstorming 절에 임의 변경 금지가 없다"
 for w in 1 2; do
   wv="b3_opt${w}"; win="${!wv}"
   if [[ -z "$win" ]]; then no "AC4(next-session): B-3 옵션 ${w} 창이 비었다 — 아래 단언이 공허하다"; continue; fi
@@ -592,7 +597,8 @@ done
 # 2026-10-19 R10 조사 열기: `## 조사 열기` 절(여럿 동시에 · 만들어 보내기 · 있는 것 먼저 · 웹 펜스 · 요약 펜스 ·
 # open-researcher dispatch)과 라운드 질문 묶기 · V1 웹 주장 문장을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 564 + 8.
 # 2026-10-22 R8 계획 2: 진입 단계 `### 1.5 의존 확인`(펜스 · 결과 표)을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 586 + 8.
-SKILL_LINE_CAP=594
+# 2026-11-15 있는 것 먼저: 「있는 것 먼저」 문단에 대상 · 기본 · 정보 여섯 칸 · 조사 규약 · 기준 글 Read 줄을 더한다. 순증이라 래칫을 올린다 — 실측 596 + 8.
+SKILL_LINE_CAP=604
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
@@ -600,6 +606,19 @@ _total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
 [[ $(( _total - _own )) -eq 15 ]] \
   && ok "AC3/C9 양의 짝: 블록 14줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
   || no "AC3/C9 양의 짝: 뺀 줄 수가 15 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
+
+# 있는 것 먼저 — 문단이 대상 · 기본 · 정보 여섯 칸 · 조사 규약 · 기준 글 Read 줄을 담는다(문단 창 안에서만 잰다)
+EF_PARA="$(awk '/^\*\*있는 것 먼저\.\*\*/{f=1} /^`open-researcher` 를 띄우는 메시지마다/{f=0} f' "$SKILL")"
+for lit in '바깥의 있는 것(플랫폼 기본 기능 · 남이 만들어 유지하는 플러그인과 skill · 널리 쓰이는 패키지와 도구)을 웹으로 찾는다.' \
+           '기본은 맞는 것이 있으면 그 위에서 만드는 쪽이다.' \
+           '후보마다 정보 여섯 칸(공식인가 · 널리 쓰임과 재는 단위 · 유지 · 안정 단계 · 실행하고 닿는 것과 알려진 보안 문제 · 라이선스와 의무)을 함께 싣는다.' \
+           '바깥 것은 사용자 검토 뒤에만 쓴다 — 후보와 차이를 보이고 묻는다.' \
+           '만들 것이 없는 일(조사 · 결정만)이면 건너뛰고 이유를 적는다.' \
+           '조사를 띄우는 일은 이 skill 의 조사 규약(조사 agent · 띄우기 전 펜스 · 주장 계약 · 본체 확인 · 호출 상한)을 그대로 따른다.' \
+           'Read ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md'; do
+  assert_contains "$EF_PARA" "$lit" "있는 것 먼저: 문단에 «${lit}»"
+done
+assert_not_contains "$EF_PARA" '바깥의 성숙한 것' "있는 것 먼저: 옛 「성숙한 것」 없음(양성 짝: 위 대상 단언)"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do

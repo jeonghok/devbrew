@@ -19,6 +19,8 @@ plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	`AskUser
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	- **재제시 상한 질문의 답** (B-0):	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	펜스 출력에 접는 줄(`… 외 K건`)이 있으면 박제로 가기 전에	못 본 채 brief 에 박제된다	1	2
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	「참고 전부 보기」면 아래 펜스로 목록 전부를	
+plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	**선택지 셋의 따로 된 끝 질문**을 띄운다	multiSelect: false	1
+plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	끝 질문의 답은 라벨 끝의	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	#### B-2 — 단일 `AskUserQuestion` proceed 게이트	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	`AskUserQuestion` 게이트 자체는 아님)	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**	2	4

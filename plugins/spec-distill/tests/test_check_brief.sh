@@ -2903,4 +2903,328 @@ out="$(irr_run fresh_after)"; rc=$?
 { [[ $rc -ne 0 ]] && grep -qF '결정 연결 없음' <<<"$out"; } \
   && ok "AC9 fresh_after(양성 대조): 확인 꼬리를 연결 뒤에 두면 red «결정 연결 없음»" \
   || { no "AC9 fresh_after: 연결 뒤 꼬리가 통과했거나 사유가 다르다 (rc=${rc})"; printf '    %s\n' "$out"; }
+# --- F4(설계 2026-11-15-front-stage-exit §2 · AC4–AC7): audit §2 의 건너뜀 줄 ------------------------
+# 줄 꼴은 `- 모델 판단으로 건너뜀 — <자리>: <이유>`, 자리는 여섯이다. 정상 쌍을 $TMPD 로 복사해 줄 하나씩만 바꾼다.
+# rc 만 보지 않는다 — 실패는 사유 글자를, 통과는 advisory 글자(JSON `advisories` 와 stderr 둘 다)와 그 개수를 함께 본다.
+SKP='모델 판단으로 건너뜀'
+SKROAD='분해됨 — docs/superpowers/roadmaps/2026-11-15-sample/roadmap.md'
+skip_adv() { printf '건너뜀 — %s: %s (모델 판단 — 사람이 확인할 것)' "$1" "$2"; }   # $1 = 자리, $2 = 이유
+skip_edit() {  # $1 = stem, $2… = 변형(순서대로). 하나라도 안 먹으면 no 를 센다 — 아래 단언이 원래 쌍을 다시 재지 않게.
+  python3 -I - "$TMPD/$1" "${@:2}" <<'PY' || no "F4/건너뜀: $1 변형이 적용되지 않았다 — 아래 단언이 공허하다"
+import re, sys
+stem, ops = sys.argv[1], sys.argv[2:]
+ap, pp = stem + ".audit.md", stem + ".md"
+a = open(ap, encoding="utf-8").read()
+p = open(pp, encoding="utf-8").read()
+MAP = r"^[-*] agent dispatch: coverage-mapper .*\n"
+
+
+def sub1(rx, rep, t):
+    t2, n = re.subn(rx, rep, t, count=1, flags=re.M)
+    if n != 1:
+        sys.exit("변형 실패: " + rx)
+    return t2
+
+
+def under(head, line, t):   # 절 머리 바로 아래(첫 줄)에 줄 하나를 넣는다
+    return sub1("^(" + head + r"\n\n?)", lambda m: m.group(1) + line + "\n", t)
+
+
+for op in ops:
+    k, _, v = op.partition("=")
+    if k == "add":          # audit §2 의 첫 줄로 넣는다(mapper 줄보다 앞)
+        a = under(r"## 2\. Budget", v, a)
+    elif k == "a5":         # audit §5 의 첫 줄로 넣는다(§2 밖)
+        a = under(r"## 5\. 프로세스 로그", v, a)
+    elif k == "del":        # 그 글자로 시작하는 불릿 줄 하나를 지운다
+        a = sub1(r"^[-*] " + re.escape(v) + r".*\n", "", a)
+    elif k == "mapper":     # mapper 데이터 줄의 계수 자리를 바꾼다
+        a = sub1(r"coverage-mapper 1$", lambda m: "coverage-mapper " + v, a)
+    elif k == "nomapper":
+        a = sub1(MAP, "", a)
+    elif k == "nosat":      # 포화 판정 · 사용자 종료 줄을 모두 지운다
+        a, n = re.subn(r"^[-*] (포화 판정 \d+:|사용자 종료\(@S\d+\)).*\n", "", a, flags=re.M)
+        if n < 1:
+            sys.exit("변형 실패: 포화 줄이 없다")
+    elif k == "sat":        # 포화 줄을 이 줄로 바꾼다
+        a = sub1(r"^[-*] 포화 판정 \d+:.*$", lambda m: v, a)
+    elif k == "row":        # row=<키>=<근거> — 원장의 닫힌 행 근거를 바꾼다
+        key, _, ev = v.partition("=")
+        a = sub1(r"^- " + re.escape(key) + r" — closed — .*$", lambda m: "- %s — closed — %s" % (key, ev), a)
+    elif k == "p7":         # payload §7 의 첫 줄로 넣는다
+        p = under(r"## 7\. Next Action", v + "\n", p)
+    elif k == "p7end":      # payload §7 의 마지막 줄로 덧붙인다(§7 이 마지막 절이다)
+        p = p.rstrip("\n") + "\n\n" + v + "\n"
+    elif k == "p0":         # payload §0 의 첫 줄로 넣는다(§7 밖)
+        p = under(r"## 0\. 한눈에", v + "\n", p)
+    else:
+        sys.exit("모르는 변형: " + op)
+open(ap, "w", encoding="utf-8").write(a)
+open(pp, "w", encoding="utf-8").write(p)
+PY
+}
+skip_json() {  # $1 = gate stdout(JSON), $2 = failures|advisories — 한 줄에 하나
+  python3 -I -c 'import json, sys
+for x in json.loads(sys.argv[1]).get(sys.argv[2], []):
+    print(x)' "$1" "$2"
+}
+skip_run() {  # $1 = stem → out · rc · fl(실패 줄) · adv(advisory 줄) · nadv(건너뜀 advisory 수). stderr 는 $TMPD/$1.err
+  out="$(python3 "$SCRIPT" gate "$TMPD/$1.md" 2>"$TMPD/$1.err")"; rc=$?
+  fl="$(skip_json "$out" failures)" || fl="(JSON 아님)"
+  adv="$(skip_json "$out" advisories)" || adv="(JSON 아님)"
+  nadv="$(grep -c '^건너뜀 — ' <<<"$adv")"
+}
+skip_pass() {  # $1 = stem, $2 = 라벨, $3… = 나와야 할 건너뜀 advisory 줄(글자 그대로 · 이것이 전부여야 한다)
+  local good=1 a
+  skip_run "$1"
+  [[ $rc -eq 0 && -z "$fl" && "$nadv" == "$(($# - 2))" ]] || good=0
+  for a in "${@:3}"; do
+    grep -qxF -- "$a" <<<"$adv" || good=0
+    grep -qxF -- "$a" "$TMPD/$1.err" || good=0
+  done
+  [[ $good -eq 1 ]] && ok "F4/건너뜀: $2 → 통과 · 건너뜀 advisory $(($# - 2))줄" \
+    || { no "F4/건너뜀: $2 가 red 이거나 advisory 가 다르다 (rc=${rc} · 건너뜀 advisory ${nadv}줄)"; printf '    %s\n' "$out"; }
+}
+skip_fail() {  # $1 = stem, $2 = 라벨, $3 = 건너뜀 advisory 수, $4… = 실패 사유에 있어야 할 글자(전부)
+  local good=1 w
+  skip_run "$1"
+  [[ $rc -ne 0 && "$nadv" == "$3" ]] || good=0
+  for w in "${@:4}"; do grep -qF -- "$w" <<<"$fl" || good=0; done
+  [[ $good -eq 1 ]] && ok "F4/건너뜀: $2 → red «${4}»" \
+    || { no "F4/건너뜀: $2 가 통과했거나 사유 · advisory 수가 다르다 (rc=${rc} · 건너뜀 advisory ${nadv}줄)"; printf '    %s\n' "$out"; }
+}
+
+SKEV="${SKP} — 고칠 파일이 하나뿐이라 맹점 조사를 돌리지 않았다"
+skip_base() {  # $1 = stem, $2 = 자리 — 그 조사를 실제로 건너뛴 audit 꼴로 맞춘다(조사 자리 셋. 리뷰 부품 셋은 그대로 둔다)
+  case "$2" in
+    "범위 조사") skip_edit "$1" "mapper=0" ;;
+    "포화 판정") skip_edit "$1" nosat ;;
+    "맹점 조사") skip_edit "$1" "row=floor:blind_spot=${SKEV}" ;;
+  esac
+}
+
+# 양성 대조 — 정상 쌍은 건너뜀 줄 없이 통과하고 건너뜀 advisory 가 0줄이다. 아래 칸은 모두 여기서 줄 하나씩 움직인다.
+ac3_pair sk_ctl
+skip_pass sk_ctl "양성 대조: 건너뜀 줄 없는 정상 쌍"
+
+# (1) 자리 여섯 × 문법 넷 + 나눈 일 — AC4 · AC6 · advisory
+skn=0
+for sp in "범위 조사" "맹점 조사" "포화 판정" "재비판" "codex" "읽어 보기"; do
+  skn=$((skn + 1)); st="sk${skn}"
+  ac3_pair "${st}_ok"; skip_base "${st}_ok" "${sp}"; skip_edit "${st}_ok" "add=- ${SKP} — ${sp}: 고칠 파일이 하나뿐인 작은 일"
+  skip_pass "${st}_ok" "「${sp}」 줄 하나" "$(skip_adv "${sp}" '고칠 파일이 하나뿐인 작은 일')"
+  # 나눈 일 — 같은 audit 에 payload §7 만 바꾼다. 통과하던 쌍이 실패로 갈린다.
+  sk_sum="$(cksum < "$TMPD/${st}_ok.audit.md")"
+  skip_edit "${st}_ok" "p7=${SKROAD}"
+  { [[ "$(cksum < "$TMPD/${st}_ok.audit.md")" == "$sk_sum" ]] && grep -qxF -- "${SKROAD}" "$TMPD/${st}_ok.md"; } \
+    && ok "F4/건너뜀(양성대조): 「${sp}」 — audit 은 그대로이고 payload §7 에만 분해됨 줄이 들어갔다" \
+    || no "F4/건너뜀(양성대조): 「${sp}」 — 나눈 일 변형이 적용되지 않았거나 audit 이 바뀌었다"
+  skip_fail "${st}_ok" "「${sp}」 줄 + 나눈 일" 1 '건너뜀 줄: 나눈 일은 건너뛸 수 없다'
+  ac3_pair "${st}_unk"; skip_base "${st}_unk" "${sp}"; skip_edit "${st}_unk" "add=- ${SKP} — ${sp} 둘째: 작은 일"
+  skip_fail "${st}_unk" "모르는 자리 「${sp} 둘째」" 0 "건너뜀 줄: §2 Budget: 건너뜀 줄의 자리 «${sp} 둘째» 를 모른다"
+  ac3_pair "${st}_empty"; skip_base "${st}_empty" "${sp}"; skip_edit "${st}_empty" "add=- ${SKP} — ${sp}:"
+  skip_fail "${st}_empty" "「${sp}」 빈 이유" 0 "건너뜀 줄: §2 Budget: 건너뜀 줄 «${sp}» 의 이유가 비었다"
+  ac3_pair "${st}_blank"; skip_base "${st}_blank" "${sp}"; skip_edit "${st}_blank" "add=- ${SKP} — ${sp}:   "
+  skip_fail "${st}_blank" "「${sp}」 공백뿐인 이유" 0 "건너뜀 줄: §2 Budget: 건너뜀 줄 «${sp}» 의 이유가 비었다"
+  ac3_pair "${st}_dup"; skip_base "${st}_dup" "${sp}"; skip_edit "${st}_dup" "add=- ${SKP} — ${sp}: 둘째 이유" "add=- ${SKP} — ${sp}: 첫 이유"
+  skip_fail "${st}_dup" "「${sp}」 두 줄" 1 "건너뜀 줄: §2 Budget: 건너뜀 줄 «${sp}» 가 두 줄 이상이다"
+done
+
+# (2) 문법 — 자리 집합 밖 · 형식 밖. 리뷰의 탐지는 건너뛸 수 있는 자리가 아니다.
+skn=0
+for bad in "탐지" "Codex" "범위조사"; do
+  skn=$((skn + 1)); ac3_pair "sk_unk${skn}"; skip_edit "sk_unk${skn}" "add=- ${SKP} — ${bad}: 작은 일"
+  skip_fail "sk_unk${skn}" "모르는 자리 「${bad}」" 0 "건너뜀 줄의 자리 «${bad}» 를 모른다"
+done
+skn=0
+for bad in "${SKP} - 범위 조사: 작은 일" "${SKP} — 범위 조사 작은 일" "${SKP} — 범위 조사:작은 일" "${SKP}" "${SKP} — : 작은 일"; do
+  skn=$((skn + 1)); ac3_pair "sk_form${skn}"; skip_edit "sk_form${skn}" "add=- ${bad}"
+  skip_fail "sk_form${skn}" "형식 밖 「${bad}」" 0 '건너뜀 줄: §2 Budget: 건너뜀 줄이 형식 밖이다'
+done
+# 불릿 어휘는 형제와 같은 `[-*]` 다.
+ac3_pair sk_star; skip_edit sk_star "add=* ${SKP} — codex: 작은 일"
+skip_pass sk_star "«*» 불릿 건너뜀 줄" "$(skip_adv codex '작은 일')"
+# 여러 줄 — 줄마다 advisory 한 줄, §2 에 적힌 순서대로.
+ac3_pair sk_multi
+skip_edit sk_multi "add=- ${SKP} — 읽어 보기: 셋째" "add=- ${SKP} — codex: 둘째" "add=- ${SKP} — 재비판: 첫째"
+skip_pass sk_multi "리뷰 부품 셋" "$(skip_adv 재비판 첫째)" "$(skip_adv codex 둘째)" "$(skip_adv '읽어 보기' 셋째)"
+assert_eq "$(grep '^건너뜀 — ' <<<"$adv")" "$(printf '%s\n%s\n%s' "$(skip_adv 재비판 첫째)" "$(skip_adv codex 둘째)" "$(skip_adv '읽어 보기' 셋째)")" \
+  "F4/건너뜀: advisory 는 §2 에 적힌 순서대로 나온다"
+
+# (3) 범위 조사 — `coverage-mapper 0` 은 `범위 조사` 줄이 있을 때만 통과한다(AC5). 줄만 지우면 실패한다.
+ac3_pair sk_map; skip_edit sk_map "mapper=0" "add=- ${SKP} — 범위 조사: 고칠 파일이 하나뿐"
+{ grep -qE '^- agent dispatch: coverage-mapper 0$' "$TMPD/sk_map.audit.md" && ! grep -q 'unavailable' "$TMPD/sk_map.audit.md"; } \
+  && ok "F4/건너뜀(양성대조): mapper 줄이 사유 없는 0 이다" || no "F4/건너뜀(양성대조): mapper 0 변형이 적용되지 않았다"
+skip_pass sk_map "coverage-mapper 0 + 「범위 조사」 줄" "$(skip_adv '범위 조사' '고칠 파일이 하나뿐')"
+grep -q 'coverage-mapper' <<<"$adv" \
+  && no "F4/건너뜀: 범위 조사 건너뜀이 unavailable advisory 로도 나왔다" || ok "F4/건너뜀: 범위 조사 건너뜀은 건너뜀 advisory 한 줄로만 나온다"
+skip_edit sk_map "del=${SKP} — 범위 조사"
+skip_fail sk_map "같은 쌍에서 「범위 조사」 줄만 지움" 0 'coverage-mapper budget: §2 Budget: coverage-mapper 0 without unavailable reason'
+ac3_pair sk_map_other; skip_edit sk_map_other "mapper=0" "add=- ${SKP} — 재비판: 작은 일"
+skip_fail sk_map_other "coverage-mapper 0 + 다른 자리(재비판) 줄" 1 'coverage-mapper 0 without unavailable reason'
+ac3_pair sk_map_bad; skip_edit sk_map_bad "mapper=0" "add=- ${SKP} — 범위 조사:"
+skip_fail sk_map_bad "coverage-mapper 0 + 이유가 빈 「범위 조사」 줄(문법 실패 줄은 완화를 열지 않는다)" 0 \
+  '건너뜀 줄 «범위 조사» 의 이유가 비었다' 'coverage-mapper 0 without unavailable reason'
+ac3_pair sk_map_mid; skip_edit sk_map_mid "mapper=0" "add=- 메모 — ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_map_mid "coverage-mapper 0 + 줄 머리가 아닌 자리의 건너뜀 글" 0 'coverage-mapper 0 without unavailable reason'
+ac3_pair sk_map_s5; skip_edit sk_map_s5 "mapper=0" "a5=- ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_map_s5 "coverage-mapper 0 + §2 밖(§5)의 건너뜀 줄" 0 'coverage-mapper 0 without unavailable reason'
+# mapper 줄 자체가 없으면 건너뜀 줄이 있어도 실패 — 그리고 건너뜀 줄 이유의 `coverage-mapper <k>` 가 mapper 줄을 대신 지지 않는다.
+skn=0
+for why in "작은 일" "coverage-mapper 3 번 부를 일이 아니다" "coverage-mapper 0 (unavailable: 도구 부재) 와 같다"; do
+  skn=$((skn + 1)); ac3_pair "sk_ev${skn}"; skip_edit "sk_ev${skn}" "add=- ${SKP} — 범위 조사: ${why}" nomapper
+  ! grep -q '^[-*] agent dispatch: coverage-mapper' "$TMPD/sk_ev${skn}.audit.md" \
+    && ok "F4/건너뜀(양성대조): mapper 데이터 줄이 없다(이유 「${why}」)" || no "F4/건너뜀(양성대조): mapper 줄 삭제가 적용되지 않았다"
+  skip_fail "sk_ev${skn}" "mapper 줄 없음 + 「범위 조사」 줄(이유 「${why}」)" 1 'coverage-mapper budget: §2 Budget: coverage-mapper <k> line missing'
+done
+# AC7 — `(unavailable:)` 의 빈 이유는 실패. 양의 짝: 이유가 있으면 지금처럼 advisory 통과.
+skn=0
+for un in "(unavailable:)" "(unavailable:   )" "(unavailable: )"; do
+  skn=$((skn + 1)); ac3_pair "sk_un${skn}"; skip_edit "sk_un${skn}" "mapper=0 ${un}"
+  skip_fail "sk_un${skn}" "coverage-mapper 0 ${un}" 0 'coverage-mapper budget: §2 Budget: coverage-mapper 0 (unavailable:) 의 사유가 비었다'
+done
+ac3_pair sk_un_ok; skip_edit sk_un_ok "mapper=0 (unavailable: Agent 도구 부재)"
+skip_pass sk_un_ok "coverage-mapper 0 (unavailable: Agent 도구 부재)"
+grep -qxF 'coverage-mapper 0 (unavailable: Agent 도구 부재) — 범위 조사 에이전트를 부르지 않고 통과했다 (사람이 확인할 것)' <<<"$adv" \
+  && ok "F4/건너뜀: 이유가 있는 unavailable 은 지금처럼 advisory 로 통과한다" \
+  || { no "F4/건너뜀: 이유가 있는 unavailable 의 advisory 가 없다"; printf '    %s\n' "$out"; }
+ac3_pair sk_un_skip; skip_edit sk_un_skip "mapper=0 (unavailable:)" "add=- ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_un_skip "(unavailable:) 빈 이유 + 「범위 조사」 줄(건너뜀 줄이 빈 괄호를 구하지 않는다)" 1 'coverage-mapper 0 (unavailable:) 의 사유가 비었다'
+
+# (4) 포화 판정 — 판정 줄이 하나도 없을 때만 `포화 판정` 줄이 통과시킨다(AC5). 판정 줄이 있으면 지금 규칙 그대로다.
+ac3_pair sk_sat; skip_edit sk_sat nosat "add=- ${SKP} — 포화 판정: 조사 한 번으로 끝난 일"
+grep -qE '^[-*] (포화 판정 [0-9]+:|사용자 종료\(@S)' "$TMPD/sk_sat.audit.md" \
+  && no "F4/건너뜀(양성대조): 포화 판정 줄이 남아 있다 — 아래 통과 단언이 공허하다" || ok "F4/건너뜀(양성대조): 판정 줄이 하나도 없다"
+skip_pass sk_sat "판정 줄 없음 + 「포화 판정」 줄" "$(skip_adv '포화 판정' '조사 한 번으로 끝난 일')"
+skip_edit sk_sat "del=${SKP} — 포화 판정"
+skip_fail sk_sat "같은 쌍에서 「포화 판정」 줄만 지움" 0 'saturation: §2 Budget: 포화 판정 줄 없음'
+ac3_pair sk_sat_other; skip_edit sk_sat_other nosat "add=- ${SKP} — codex: 작은 일"
+skip_fail sk_sat_other "판정 줄 없음 + 다른 자리(codex) 줄" 1 'saturation: §2 Budget: 포화 판정 줄 없음'
+skn=0
+for spec in "- 포화 판정 1: 아직 — 빈 곳 2개|마지막 포화 판정이 «아직»" \
+            "- 포화 판정 1: 판정 불가(Agent 도구 부재) — 조사 계속(@S2)|판정 불가 뒤 사용자가 조사 계속을 골랐는데" \
+            "- 포화 판정 1: 대충 끝났다|포화 판정 줄이 형식 밖이다"; do
+  skn=$((skn + 1)); ac3_pair "sk_sat${skn}"
+  skip_edit "sk_sat${skn}" "sat=${spec%%|*}" "add=- ${SKP} — 포화 판정: 작은 일"
+  skip_fail "sk_sat${skn}" "판정 줄 「${spec%%|*}」 + 「포화 판정」 줄(건너뜀 줄이 구해 주지 않는다)" 1 "saturation: §2 Budget: ${spec##*|}"
+done
+
+# (5) 맹점 조사 — 맹점 차원만, 근거가 건너뜀으로 시작하고 `맹점 조사` 줄이 있을 때 앵커 요구를 면제한다(AC5).
+SKNOLINE='floor:blind_spot 근거가 「모델 판단으로 건너뜀」 인데 audit §2 에 `맹점 조사` 건너뜀 줄이 없다'
+ac3_pair sk_bs; skip_edit sk_bs "row=floor:blind_spot=${SKEV}" "add=- ${SKP} — 맹점 조사: 고칠 파일이 하나뿐"
+sk_row="$(grep -E '^- floor:blind_spot — closed — ' "$TMPD/sk_bs.audit.md")"
+{ [[ -z "$sk_row" ]] || grep -qE '(^|[^A-Za-z])S[0-9]' <<<"$sk_row"; } \
+  && no "F4/건너뜀(양성대조): 맹점 행에 S 앵커가 남아 있다 — 아래 통과 단언이 공허하다" || ok "F4/건너뜀(양성대조): 맹점 행 근거에 S 앵커가 없다"
+skip_pass sk_bs "앵커 없는 맹점 근거(건너뜀) + 「맹점 조사」 줄" "$(skip_adv '맹점 조사' '고칠 파일이 하나뿐')"
+skip_edit sk_bs "del=${SKP} — 맹점 조사"
+skip_fail sk_bs "같은 쌍에서 「맹점 조사」 줄만 지움" 0 "coverage anchors:" "${SKNOLINE}"
+ac3_pair sk_bs_other; skip_edit sk_bs_other "row=floor:blind_spot=${SKEV}" "add=- ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_bs_other "맹점 근거(건너뜀) + 다른 자리(범위 조사) 줄" 1 "${SKNOLINE}"
+ac3_pair sk_bs_anch; skip_edit sk_bs_anch "row=floor:blind_spot=${SKEV} (@S1)"
+skip_fail sk_bs_anch "맹점 근거(건너뜀)가 실재 S 를 인용해도 「맹점 조사」 줄이 없으면 실패" 0 "${SKNOLINE}"
+ac3_pair sk_bs_plain; skip_edit sk_bs_plain "row=floor:blind_spot=§5 cold-start 위험" "add=- ${SKP} — 맹점 조사: 작은 일"
+skip_fail sk_bs_plain "근거가 건너뜀으로 시작하지 않으면 「맹점 조사」 줄이 있어도 앵커 요구" 1 'floor:blind_spot evidence cites no S<N> anchor'
+ac3_pair sk_bs_mid; skip_edit sk_bs_mid "row=floor:blind_spot=§5 위험 — ${SKP}" "add=- ${SKP} — 맹점 조사: 작은 일"
+skip_fail sk_bs_mid "근거 가운데의 건너뜀 글은 면제를 열지 않는다" 1 'floor:blind_spot evidence cites no S<N> anchor'
+ac3_pair sk_bs_dangle; skip_edit sk_bs_dangle "row=floor:blind_spot=${SKEV} (@S77)" "add=- ${SKP} — 맹점 조사: 작은 일"
+skip_fail sk_bs_dangle "면제된 맹점 근거가 없는 S 를 인용" 1 'floor:blind_spot evidence anchor S77 not found'
+# 다른 차원은 같은 근거를 써도 앵커를 요구한다(맹점 행은 면제된 꼴로 두어 그 차원의 사유만 남긴다).
+skn=0
+for key in "floor:landscape" "floor:root_problem" "derived:rendering-strategy"; do
+  skn=$((skn + 1)); ac3_pair "sk_fl${skn}"
+  skip_edit "sk_fl${skn}" "row=floor:blind_spot=${SKEV}" "row=${key}=${SKEV}" "add=- ${SKP} — 맹점 조사: 작은 일"
+  skip_fail "sk_fl${skn}" "${key} 근거(건너뜀) + 「맹점 조사」 줄" 1 "${key} evidence cites no S<N> anchor"
+done
+
+# (6) 나눈 일 — 판독은 끝내기 커밋 펜스의 awk 와 같다: `## 7.` 절 안에서 앞 공백 · `- ` · 백틱을 뗀 줄이 `분해됨 — ` 로 시작.
+# 양의 짝: 나눈 일이어도 건너뜀 줄이 없으면 통과한다.
+ac3_pair sk_split; skip_edit sk_split "p7=${SKROAD}"
+skip_pass sk_split "나눈 일 + 건너뜀 줄 없음"
+skn=0
+for op in "p7=- ${SKROAD}" "p7=\`${SKROAD}\`" "p7=  ${SKROAD}" "p7=- \`${SKROAD}\`" "p7end=${SKROAD}"; do
+  skn=$((skn + 1)); ac3_pair "sk_sp${skn}"; skip_edit "sk_sp${skn}" "$op" "add=- ${SKP} — 재비판: 작은 일"
+  skip_fail "sk_sp${skn}" "나눈 일(${op%%=*} 「${op#*=}」) + 건너뜀 줄" 1 '건너뜀 줄: 나눈 일은 건너뛸 수 없다'
+done
+# §7 밖의 같은 글자 · §7 안의 줄 머리가 아닌 글자는 나눈 일이 아니다.
+skn=0
+for op in "p0=${SKROAD}" "p7=(분해된 일이면 첫 줄은 \`분해됨 — <로드맵 경로>\` 이다.)"; do
+  skn=$((skn + 1)); ac3_pair "sk_nsp${skn}"; skip_edit "sk_nsp${skn}" "$op" "add=- ${SKP} — 재비판: 작은 일"
+  grep -qF -- '분해됨 — ' "$TMPD/sk_nsp${skn}.md" \
+    && ok "F4/건너뜀(양성대조): payload 에 「분해됨 — 」 글자가 있다(${op%%=*})" || no "F4/건너뜀(양성대조): 분해됨 글자 변형이 적용되지 않았다"
+  skip_pass "sk_nsp${skn}" "나눈 일이 아닌 「분해됨 — 」 글자(${op%%=*}) + 건너뜀 줄" "$(skip_adv 재비판 '작은 일')"
+done
+# 문법이 틀린 건너뜀 줄도 「하나라도」 에 든다 — 두 사유가 함께 나온다.
+ac3_pair sk_split_bad; skip_edit sk_split_bad "p7=${SKROAD}" "add=- ${SKP} — 탐지: 작은 일"
+skip_fail sk_split_bad "나눈 일 + 문법이 틀린 건너뜀 줄" 0 '건너뜀 줄: 나눈 일은 건너뛸 수 없다' '건너뜀 줄의 자리 «탐지» 를 모른다'
+
+# (8) 돌린 조사의 건너뜀 줄이 남으면 실패한다 — 그 줄만 지우면 통과한다. 리뷰 부품 셋에는 이 검사가 없다((1) 의 통과 칸).
+SKCF_MAP='건너뜀 줄: §2 Budget: `범위 조사` 건너뜀 줄이 있는데 mapper 줄이 coverage-mapper'
+SKCF_SAT='건너뜀 줄: §2 Budget: `포화 판정` 건너뜀 줄이 있는데 포화 판정 · 사용자 종료 줄이'
+SKCF_BS='건너뜀 줄: §2 Budget: `맹점 조사` 건너뜀 줄이 있는데 audit §1 의 floor:blind_spot 근거가 「모델 판단으로 건너뜀」 으로 시작하지 않는다 — 맹점 조사를 돌렸으면 그 건너뜀 줄을 지운다'
+ac3_pair sk_cf_map; skip_edit sk_cf_map "add=- ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_cf_map "coverage-mapper 1 + 「범위 조사」 줄" 1 "${SKCF_MAP} 1 이다 — 범위 조사를 돌렸으면 그 건너뜀 줄을 지운다"
+skip_edit sk_cf_map "del=${SKP} — 범위 조사"
+skip_pass sk_cf_map "같은 쌍에서 남은 「범위 조사」 줄만 지움"
+ac3_pair sk_cf_map3; skip_edit sk_cf_map3 "mapper=3" "add=- ${SKP} — 범위 조사: 작은 일"
+skip_fail sk_cf_map3 "coverage-mapper 3 + 「범위 조사」 줄" 1 "${SKCF_MAP} 3 이다"
+ac3_pair sk_cf_sat; skip_edit sk_cf_sat "add=- ${SKP} — 포화 판정: 작은 일"
+skip_fail sk_cf_sat "통과 꼴 판정 줄(포화) + 「포화 판정」 줄" 1 "${SKCF_SAT} 1개 있다 — 판정했거나 사용자가 끝냈으면 그 건너뜀 줄을 지운다"
+grep -q '^saturation:' <<<"$fl" \
+  && no "F4/건너뜀: 통과 꼴 판정 줄인데 포화 검사도 실패했다 — 모순 사유만 나와야 한다" || ok "F4/건너뜀: 통과 꼴 판정 줄 + 「포화 판정」 줄의 실패는 모순 사유 하나다"
+skip_edit sk_cf_sat "del=${SKP} — 포화 판정"
+skip_pass sk_cf_sat "같은 쌍에서 남은 「포화 판정」 줄만 지움"
+ac3_pair sk_cf_stop; skip_edit sk_cf_stop "sat=- 사용자 종료(@S2) — 포화 판정 전" "add=- ${SKP} — 포화 판정: 작은 일"
+skip_fail sk_cf_stop "사용자 종료 줄 + 「포화 판정」 줄" 1 "${SKCF_SAT} 1개 있다"
+ac3_pair sk_cf_bs; skip_edit sk_cf_bs "add=- ${SKP} — 맹점 조사: 작은 일"
+skip_fail sk_cf_bs "실재 S 를 인용한 맹점 근거 + 「맹점 조사」 줄" 1 "${SKCF_BS}"
+skip_edit sk_cf_bs "del=${SKP} — 맹점 조사"
+skip_pass sk_cf_bs "같은 쌍에서 남은 「맹점 조사」 줄만 지움"
+ac3_pair sk_cf_frozen; skip_edit sk_cf_frozen "row=floor:blind_spot=사용자-승인 박제(@S1) — §Open Questions 참조" "add=- ${SKP} — 맹점 조사: 작은 일"
+skip_fail sk_cf_frozen "박제로 닫은 맹점 근거 + 「맹점 조사」 줄" 1 "${SKCF_BS}"
+
+# (9) 입력 꼴 — `*` 불릿과 들여 쓴 불릿은 `-` 불릿과 같은 판정을 받는다(mapper · 포화 판정 줄의 형제 관례).
+skn=0
+for form in "* " "  - " "  * "; do
+  skn=$((skn + 1)); st="sk_f${skn}"
+  ac3_pair "${st}_adv"; skip_edit "${st}_adv" "add=${form}${SKP} — 재비판: 작은 일"
+  grep -qxF -- "${form}${SKP} — 재비판: 작은 일" "$TMPD/${st}_adv.audit.md" \
+    && ok "F4/건너뜀(양성대조): 건너뜀 줄이 「${form}」 꼴로 들어갔다" || no "F4/건너뜀(양성대조): 「${form}」 꼴 변형이 적용되지 않았다"
+  skip_pass "${st}_adv" "「${form}」 꼴 건너뜀 줄" "$(skip_adv 재비판 '작은 일')"
+  ac3_pair "${st}_unk"; skip_edit "${st}_unk" "add=${form}${SKP} — 탐지: 작은 일"
+  skip_fail "${st}_unk" "「${form}」 꼴 모르는 자리" 0 '건너뜀 줄의 자리 «탐지» 를 모른다'
+  ac3_pair "${st}_empty"; skip_edit "${st}_empty" "add=${form}${SKP} — codex:"
+  skip_fail "${st}_empty" "「${form}」 꼴 빈 이유" 0 '건너뜀 줄 «codex» 의 이유가 비었다'
+  ac3_pair "${st}_dup"; skip_edit "${st}_dup" "add=${form}${SKP} — codex: 둘째" "add=- ${SKP} — codex: 첫째"
+  skip_fail "${st}_dup" "「- 」 꼴과 「${form}」 꼴이 같은 자리 두 줄" 1 '건너뜀 줄 «codex» 가 두 줄 이상이다'
+  ac3_pair "${st}_map"; skip_edit "${st}_map" "mapper=0" "add=${form}${SKP} — 범위 조사: 작은 일"
+  skip_pass "${st}_map" "「${form}」 꼴 「범위 조사」 줄 + coverage-mapper 0" "$(skip_adv '범위 조사' '작은 일')"
+  ac3_pair "${st}_sat"; skip_edit "${st}_sat" nosat "add=${form}${SKP} — 포화 판정: 작은 일"
+  skip_pass "${st}_sat" "「${form}」 꼴 「포화 판정」 줄 + 판정 줄 없음" "$(skip_adv '포화 판정' '작은 일')"
+  ac3_pair "${st}_bs"; skip_edit "${st}_bs" "row=floor:blind_spot=${SKEV}" "add=${form}${SKP} — 맹점 조사: 작은 일"
+  skip_pass "${st}_bs" "「${form}」 꼴 「맹점 조사」 줄 + 건너뜀 근거" "$(skip_adv '맹점 조사' '작은 일')"
+  ac3_pair "${st}_cf"; skip_edit "${st}_cf" "add=${form}${SKP} — 범위 조사: 작은 일"
+  skip_fail "${st}_cf" "「${form}」 꼴 「범위 조사」 줄 + coverage-mapper 1" 1 "${SKCF_MAP} 1 이다"
+  ac3_pair "${st}_split"; skip_edit "${st}_split" "p7=${SKROAD}" "add=${form}${SKP} — 읽어 보기: 작은 일"
+  skip_fail "${st}_split" "「${form}」 꼴 건너뜀 줄 + 나눈 일" 1 '건너뜀 줄: 나눈 일은 건너뛸 수 없다'
+done
+# 이유 글의 판정 줄 글자는 판정 줄을 대신 지지 않는다 — 진짜 판정 줄도 `포화 판정` 건너뜀 줄도 없으면 여전히 「줄 없음」 이다.
+skn=0
+for why in "포화 판정 1: 포화 — 조사가 새로 연 것이 없다" "사용자 종료(@S2) — 포화 판정 전"; do
+  skn=$((skn + 1)); ac3_pair "sk_why${skn}"; skip_edit "sk_why${skn}" nosat "add=- ${SKP} — 재비판: ${why}"
+  { ! grep -qE '^[-*] (포화 판정 [0-9]+:|사용자 종료\(@S)' "$TMPD/sk_why${skn}.audit.md" && grep -qF -- "${why}" "$TMPD/sk_why${skn}.audit.md"; } \
+    && ok "F4/건너뜀(양성대조): 판정 줄 글자는 건너뜀 줄의 이유에만 있다(「${why}」)" || no "F4/건너뜀(양성대조): 이유 글 변형이 적용되지 않았다"
+  skip_fail "sk_why${skn}" "판정 줄 없음 + 이유에 「${why}」 를 적은 재비판 줄" 1 'saturation: §2 Budget: 포화 판정 줄 없음'
+done
+# 자리와 이유는 첫 `: ` 에서만 가른다 — 이유 글의 `: ` · ` — ` 는 글자 그대로 advisory 에 나온다.
+SKLONG='한도: 남음 — 그래도 작은 일: 파일 하나 — 끝'
+ac3_pair sk_long; skip_edit sk_long "add=- ${SKP} — codex: ${SKLONG}"
+skip_pass sk_long "이유에 「: 」 와 「 — 」 가 여럿" "$(skip_adv codex "${SKLONG}")"
+
+# (7) 출하 템플릿 — §2 설명 산문이 건너뜀 줄 꼴을 가르치지만 그대로 옮긴 audit 은 건너뜀으로 읽히지 않는다.
+grep -qF -- "${SKP}" "$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md" \
+  && ok "F4/건너뜀(양성대조): 출하 audit 템플릿이 건너뜀 줄 꼴을 적는다" || no "F4/건너뜀(양성대조): 출하 audit 템플릿에 건너뜀 줄 설명이 없다 — 아래 단언이 공허하다"
+skip_run tpl
+{ [[ $rc -eq 0 && "$nadv" == "0" ]]; } \
+  && ok "F4/건너뜀: 채운 출하 템플릿 쌍은 건너뜀 advisory 없이 통과한다(설명 산문은 판정에 참여하지 않는다)" \
+  || { no "F4/건너뜀: 출하 템플릿이 건너뜀으로 읽혔거나 red 다 (rc=${rc} · 건너뜀 advisory ${nadv}줄)"; printf '    %s\n' "$out"; }
 finish

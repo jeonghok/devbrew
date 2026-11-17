@@ -21,6 +21,10 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 그 내용을 payload `## 3. Open Questions` 에 한 항목으로 옮긴다. 박제된 차원은 「닫혔다」가
 아니라 「사용자가 지금은 안 하기로 했다」이므로, 다음 단계가 그것을 열린 질문으로 본다.
 
+**모델 판단으로 맹점 조사를 건너뛴 floor** — `floor:blind_spot` 의 `evidence` 가 `모델 판단으로 건너뜀` 으로
+시작하면(audit §2 의 `맹점 조사` 건너뜀 줄과 짝이다) 사용자-승인 박제와 같은 길로 간다 — 그 내용을 payload
+`## 3. Open Questions` 에 한 항목으로 옮겨 다음 단계가 열린 것으로 본다.
+
 ### 분해 판단 — Step A 직전
 
 종료가 정해진 뒤 brief 를 쓰기 전에 이 일을 spec 하나로 할지 나눌지 사용자와 정한다. 나누지 않으면 아래 Step A 부터 지금 흐름 그대로다 — 로드맵을 만들지 않는다.
@@ -135,9 +139,11 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    설명 산문에 적은 숫자는 세어지지 않습니다. dispatch 가 불가능했던 환경이면
    `coverage-mapper 0 (unavailable: <이유>)` — 게이트는 이를 advisory 로 통과시키고 Step B 가
    사람에게 보입니다.
+   모델 판단으로 첫 범위 조사를 건너뛰었으면 `coverage-mapper 0` 으로 적는다 — 대기 줄 블록의
+   `- 모델 판단으로 건너뜀 — 범위 조사: <이유>` 줄이 그 0 을 받친다(줄이 없으면 게이트가 막는다).
    그 아래에 `${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md` 의 `### audit §2 줄` 형식으로 조사 호출 줄
    한 줄을 쓰고(state `research_dispatches` · `research_limit` · `research_log` 의 `device: orchestrator` 수), 이어서 state 본문
-   `## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다 — 상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 줄이
+   `## audit §2 대기 줄` 블록을 글자 그대로 순서대로 옮겨 씁니다 — 상한 도달 · 판정 상한 도달 · 포화 판정 · 사용자 종료 · 모델 판단으로 건너뜀 줄이
    사건 순간 거기 쌓였습니다. 다시 짓거나 요약하지 않고, 블록에 없는 줄을 기억으로 보태지 않습니다.
    게이트는 `포화 판정 <k>:` · `사용자 종료(@S<n>)` 줄의 **마지막**을 봅니다.
    같은 때에 state 본문 각 `## R<n>` 의 `- 대체됨: <앞 믿음> → <바로잡은 사실> (조사 <n>)` 줄을 라운드 순서대로 audit
@@ -208,6 +214,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    0건 sentinel 누락**·포화 판정 줄 없음 · 마지막 판정 «아직» · 판정 불가 뒤 조사 계속이 마지막 · 형식 밖). 통과(exit 0)할 때까지 반복합니다. 마지막 항목은 이 단계에서
    **매번** 발화할 수 있는 유일한 실패입니다 — Step A는 정의상 전부 `provisional`이므로,
    위 3의 sentinel을 빠뜨리면 첫 게이트 실행이 항상 red입니다.
+   사유가 「나눈 일은 건너뛸 수 없다」 면 건너뜀 줄만 지워 통과시키지 않는다 — B-S 대로 건너뛴 조사 · 리뷰를 돌린 뒤에 지운다.
 8. **로드맵 · 묶음 생성 — 분해된 일만.** 분해 판단에서 표를 승인했으면 게이트를 통과한 직후 생성기를 돌린다. 제목과 승인 원문은 각자의 heredoc 자리에 따옴표로 감싸지 않고 글자 그대로 넣는다. 제목에 줄바꿈이 있으면 넣지 말고 멈춰 그 사실을 사용자에게 보인다. 넣는 글에 그 자리의 구분 줄(`DEVBREW_ROADMAP_TITLE_EOF` · `DEVBREW_ROADMAP_APPROVAL_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 생성기는 말 하나를 한 줄로만 받는다 — 승인 원문이 여러 줄이거나 말이 여럿이면 `AF1=` 줄부터 그 닫는 구분 줄까지를 줄마다 `AF2` · `AF3` … 으로 하나씩 더하고, `--approval="$(cat "$AF<k>")"` 를 하나씩 붙인다(`=` 꼴 — 「-」 로 시작하는 말도 옵션으로 읽히지 않는다). 승인 원문은 이 펜스가 만든 임시 파일에만 살고 펜스가 끝나면 지워진다 — 세션 상태 폴더에 쓰지 않는다. 펜스 줄과 더하는 `AF<k>` 줄은 맨 앞 칸에서 시작한다 — 구분 줄 앞에 칸이 있으면 heredoc 이 닫히지 않는다:
 
 ```bash
@@ -292,7 +299,7 @@ skill 밑에도 두지 않았습니다.
 #### B-0 — 확정 후보 제시 (게이트에 흡수, AC2)
 
 Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입니다. `confirmed`로의
-전이는 아래 B-2 게이트에서 사용자가 확정-후-진행 옵션(①/②)을 고를 때만 일어납니다.
+전이는 아래 B-2 게이트에서 사용자가 확정-후-진행 옵션(①/②)을 고를 때, 또는 superpowers 가 없을 때 B-1 끝 질문의 「확정하고 끝낸다」 를 고를 때만 일어납니다.
 별도 확인 의례를 만들지 않는 이유는 종료 시 사용자 상호작용이 2회가 되기 때문입니다 —
 확인을 기존 proceed 게이트에 흡수해 1회로 유지합니다.
 
@@ -333,7 +340,7 @@ AskUserQuestion({ questions: [{
   multiSelect: false,
   options: [
     {label: "계속 고친다(2번 더)", description: "얻음: 카운터를 0 으로 돌려 확정 목록을 더 고친다 · 내줌: 확정이 또 미뤄지고 같은 목록을 두 번 더 확인해야 한다"},
-    {label: "지금 목록으로 확정", description: "얻음: 지금 확정 후보를 확정으로 바꾸고 다음 단계 질문으로 간다 · 내줌: 안 고친 잘못이 있으면 확정으로 굳은 채 넘어간다"},
+    {label: "지금 목록으로 확정", description: "얻음: 지금 확정 후보를 확정으로 바꾸고 왔던 끝 질문으로 돌아가 끝낼 길을 고른다 · 내줌: 안 고친 잘못이 있으면 확정으로 굳은 채 넘어간다"},
     {label: "brief 만 종료", description: "얻음: 아무것도 확정하지 않고 여기서 끝낸다 · 내줌: 모든 항목이 잠정으로 남고 다음 단계로 넘어가지 않는다"}
   ]
 }]})
@@ -435,7 +442,9 @@ for it in items:
   `- OQ<n> [열림] — [참고 · <category>] <summary>` 를 함께 적습니다. `<n>` 은 §3 · §0 의 가장 큰 OQ 번호 다음입니다.
 - **없으면(알고 있으면 되는 위험) §5.** `- 위험 K<n> — 리뷰 참고 | [<category>] <anchor> — <summary> (리뷰 <id>)`(`<n>` 은 Step A 「위험 번호」 의 다음 수 — 지운 위험의 번호는 다시 쓰지 않는다) 로 적습니다. brief 의 위험 줄에 번호가 없으면(옛 brief) 이 줄도 번호 없이 `- 위험 — 리뷰 참고 | …` 로 쓴다.
 
-적은 뒤 구조 게이트를 다시 돕니다. failures 가 있으면 고치고 다시 돕니다:
+적은 뒤 — 적을 참고 항목이 없어도 — audit §2 의 사건 줄을 상태 파일의 `## audit §2 대기 줄` 블록에서 다시 짓고 구조 게이트를 다시 돕니다.
+리뷰가 그 블록에 더한 건너뜀 줄은 여기서 검사에 닿고, B-2 의 게이트 앞 글이 읽는 `advisories` 는 이 실행의 것입니다.
+failures 가 있으면 고치고 다시 돕니다. 사유가 「나눈 일은 건너뛸 수 없다」 면 끝 질문을 띄우지 않고 아래 B-S 로 갑니다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -443,13 +452,53 @@ PAYLOAD="<Step A.5 의 PAYLOAD 절대경로>"
 python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 ```
 
+#### B-S — 건너뛴 것을 나중에 돌릴 때
+
+두 경우에 온다 — 나누기로 정해 구조 게이트가 「나눈 일은 건너뛸 수 없다」 로 막았을 때와, 끝 질문(B-2 · B-1)의 기타 칸에
+사용자가 건너뛴 것을 하라고 적었을 때. 새 길을 만들지 않고 지금 있는 길로 돌아간다. 건너뜀 줄의 집은 상태 파일의
+`## audit §2 대기 줄` 블록이다 — 줄은 그 블록에서 지우고 audit §2 를 그 블록에서 다시 짓는다(audit 만 고치면 다음에 다시 지을 때 되살아난다).
+
+- **조사(범위 조사 · 맹점 조사 · 포화 판정)** — 그 건너뜀 줄을 대기 줄 블록에서 지우고 Step A.5 의 「조사 계속」 갈래로 간다(라운드 루프로
+  돌아가 그 조사를 돌리고, 다시 닫을 때 이 끝맺음을 처음부터 돈다). 맹점 조사를 건너뛴 차원은 다시 열려 지금 규칙대로 사용자 발화로 닫힌다.
+- **재비판 · codex** — 그 건너뜀 줄을 대기 줄 블록에서 지우고 audit §2 를 다시 지은 뒤 `reviewing-brief` 를 한 라운드 더 돈다(탐지부터 —
+  재리뷰 상한에 든다). 줄만 지우고 audit 을 그대로 두면 그 skill 의 진입 게이트가 옛 audit 으로 구조 게이트를 돌려 나눈 일은 다시 막힌다.
+  라운드가 끝나면 Step B 를 B-0 부터 다시 돈다(B-A 의 다시 짓기 · 게이트 포함).
+- **읽어 보기** — 그 건너뜀 줄을 지우고 audit §2 를 다시 지은 뒤 `reviewing-brief` 의 `## 냉독` 만 돌린 뒤, B-A 의 구조 게이트 펜스를 다시 돌려 그 `advisories` 로 끝 질문 앞 글을 다시 쓰고 끝 질문으로 돌아간다.
+  리뷰 라운드를 다시 돌지 않고 재리뷰 상한을 쓰지 않는다.
+- **나눈 일이라 게이트가 막았을 때** — 건너뛴 리뷰 부품을 모두 돌린다. 리뷰 부품의 줄(재비판 · codex · 읽어 보기)을 전부 지우고 audit §2 를
+  다시 지은 뒤 리뷰 한 라운드를 돌고, 읽어 보기도 건너뛰었으면 그 라운드 뒤에 돌린다. 줄 하나만 지우면 남은 줄 때문에 진입 게이트가 다시 막는다.
+  조사 줄이 남아 있으면 위 조사 갈래가 먼저다.
+- **재리뷰 상한이 차 있으면** — 그 라운드는 `reviewing-brief` 의 `## 게이트` 가 정한 「추가 라운드 1회 열기」 질문의 답으로만 연다(끝 질문의 기타 칸에
+  적은 말을 그 승인으로 쓰지 않는다). 사용자가 열지 않으면 지운 줄을 대기 줄 블록에 그대로 되돌리고 audit §2 를 다시 지은 뒤 끝 질문으로
+  돌아간다 — 건너뛴 것이 그대로 보인다. 나눈 일이면 끝 질문으로 가지 못한다 — 줄을 되돌린 뒤
+  `[spec-distill] 나눈 일은 건너뛴 리뷰 부품을 돌려야 끝낼 수 있다 — 추가 라운드를 열거나, 나누지 않기로 하면 그렇게 말해 달라.` 를 보이고 턴을 끝낸다.
+- 어느 쪽이든 brief 가 바뀌면 리뷰를 다시 지난다 — 바뀐 brief 가 리뷰 없이 끝 질문에 닿지 않는다.
+
 #### B-1 — superpowers 가용성 분기
 
-- **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(다음 세션에 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
+- **superpowers 부재 시**: 다음 단계로 넘길 대상이 없어 B-2 의 proceed 게이트 대신 **선택지 셋의 따로 된 끝 질문**을 띄운다 — 공통 계약(`proceed-gate.md` Step B)의 질문이 아니다. crash·spec-mode fallback **금지**(단독 완결, graceful degrade).
+  질문 앞에 B-0 의 확정 후보와 B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다. superpowers 판 채널은 읽지 않는다(확인할 판이 없다). 질문의 상태 줄도 B-2 와 같은 꼴이다.
 
-  > `[spec-distill] interview brief 를 만들었다: <payload 경로>. superpowers 가 없어 여기서 멈춘다. 이 brief 를 다음 작업의 입력으로 쓰세요. brief · audit · 상태 파일은 커밋하지 않았다 — 브랜치에서 직접 커밋하라.`
+  ```javascript
+  AskUserQuestion({
+    questions: [{
+      question: "interview brief 를 만들었다: <brief-path> (구조 검사 통과 · 리뷰 <게이트 결과 한 줄>). 경고 <N>개 — 위에 적었다 | 경고 없음 | 이상 없음. superpowers 가 없어 다음 단계로 넘기지 않는다. 어떻게 끝낼까?",
+      header: "끝내기",
+      options: [
+        {label: "확정하고 끝낸다 (권장)", description: "확정 후보를 확정으로 바꿔 저장하고 커밋한 뒤 여기서 끝낸다. PR 은 열지 않는다."},
+        {label: "확정 목록 수정", description: "확정 후보와 함께 보인 공시를 고쳐 다시 보여 준다(두 번 고친 뒤에는 계속할지 묻는다). 아직 아무것도 확정되지 않는다."},
+        {label: "brief만 종료", description: "brief 를 여기서 끝낸다. 모든 항목이 잠정으로 남는다."}
+      ],
+      multiSelect: false
+    }]
+  })
+  ```
 
-  분해된 일이면 끝 문장은 `brief · audit · 상태 파일 · 로드맵 폴더(<Step A 8 의 --out 값>)는 커밋하지 않았다 — 브랜치에서 함께 직접 커밋하라.` 다(B-R 다시 생성 뒤에 낸다).
+  끝 질문의 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+  - **확정하고 끝낸다** — B-3 의 확정 반영 절차 → `check_brief.py gate` 재실행(통과 확인) → 분해된 일이면 B-R 다시 생성 → 커밋 펜스(`interview-commit`) → 여기서 멈춘다. 분해된 일이어도 「PR 과 머지」 로 가지 않는다. 끝에 `[spec-distill] superpowers 가 없어 다음 단계를 열지 못했다 — 설치한 뒤 새 세션에서 아래 줄로 잇는다.` 와 다음 세션 줄(하나짜리 일은 brief 줄, 분해된 일은 지휘자 줄 — 자리표 치환 규칙은 B-3 그대로)을 보인다. 분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+  - **확정 목록 수정** — B-3 의 ③ 과 같다. 고친 뒤에는 B-2 가 아니라 이 끝 질문을 다시 띄운다(재제시 상한 질문의 「지금 목록으로 확정」 도 이 끝 질문으로 돌아온다).
+  - **brief만 종료** — B-3 의 ④ 와 같다.
+  - 기타 칸에 「여기서 계속」 이 적히면 `[spec-distill] superpowers 가 없어 이어 갈 다음 단계가 없다.` 한 줄을 보이고 같은 질문을 다시 띄운다. 건너뛴 것을 하라는 말이면 B-S 로 간다.
 
 - **superpowers 가용 시**: 판을 확인한 뒤 B-2 proceed 게이트 제시. 이 세션에서 superpowers skill 을 불러왔으면 아래 판 확인 펜스를 한 번 돌린다 — `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다. 불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다) B-2 게이트 앞 글(목록 4)에 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 한 줄을 쓴다. 이 줄은 경고가 아니다 — 질문의 경고 줄에 잇지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다.
 
@@ -487,6 +536,12 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
    `check_brief.py gate` 의 `advisories` 도 여기 쓴다. 채널을 다 읽었는데 경고가 없으면, 남은 항목(위 3)도
    없을 때만 「이상 없음」, 남은 항목이 있으면 「경고 없음」 한 줄이다. 읽지 못한 채널은 「알 수 없음 — <사유>」
    로 따로 한 줄 쓴다.
+   엔진의 재비판 경고 줄(「재비판이 돌지 않아 …」)은 괄호에 `kill switch` 라고 적혀 나온다 — `재비판` 건너뜀 줄이 있는 라운드면
+   그 줄 끝에 「— 끄기 스위치가 아니라 모델 판단으로 건너뛰었다」 를 덧붙인다(엔진의 글자는 고치지 않는다).
+5. **건너뛴 것 <N>개** — `check_brief.py gate` 의 `advisories` 가운데 `건너뜀 — ` 으로 시작하는 줄을 `- <자리>: <이유>` 로 한 줄씩 쓴다.
+   이 줄들은 경고(목록 4)에 다시 쓰지 않되 질문의 「경고 N개」 에는 센다 — 건너뛴 것이 있으면 「이상 없음」 · 「경고 없음」 을 쓰지 않는다.
+   재비판 · codex 를 건너뛴 라운드는 엔진이 그 부품이 돌지 않았다는 경고를 따로 낸다 — 그 경고는 목록 4 에 그대로 두고, 여기의 그 줄 끝에
+   「(경고에도 있다)」 를 붙이며 경고 수에는 한 번만 센다. 항목 끝에 「하게 하려면 기타 칸에 적는다」 한 줄을 싣는다. 0개면 이 항목을 쓰지 않는다.
 
 **이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
 `reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
@@ -526,6 +581,8 @@ AskUserQuestion({
 })
 ```
 
+**기타 칸 — 건너뛴 것을 하라는 말.** 사용자가 기타 칸에 건너뛴 것을 하라고 적으면 B-S 로 간다. 그 말이 「여기서 계속」 인지 건너뛴 것을 하라는 것인지 불분명하면 다시 묻는다.
+
 **①② 이름 — 일의 모양에 따라.** 위 호출은 하나짜리 brief 에 둘째 질문이 없을 때의 모양이다. 선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로이고 ①② 의 이름과 설명만 다음 단계에 맞춘다:
 
 | 일 | ① | ② | 설명이 말하는 다음 단계 |
@@ -542,7 +599,7 @@ AskUserQuestion({
 
 **규약의 거처 (C5).** `superpowers:brainstorming`은 spec-distill을 모르고 brief frontmatter를
 읽지 않습니다 — 전달은 순수 프로즈 경로입니다. 그래서 C4 재결정 프로토콜은 brief 파일이
-아니라 **다음 세션 줄**(brainstorming 을 부르는 호출 프롬프트)에 싣습니다. brief는 순수 데이터(`source`/`status`/
+아니라 **다음 세션 줄**(brainstorming 을 부르는 호출 프롬프트)이 가리키는 지시 파일(`${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md`)에 싣습니다. brief는 순수 데이터(`source`/`status`/
 `evidence`)만 나릅니다. ①과 ② 는 같은 줄을 씁니다.
 
 **확정 반영 절차 (①/② 공통).** `provisional` → `confirmed` 전이와 함께, Step A가 confirmed
@@ -553,14 +610,14 @@ AskUserQuestion({
 
 **다음 세션 줄 — ①/② 공통**
 
-> `@<brief-path> 이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. brainstorming 을 불러온 직후 첫 메시지 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_deps.py superpowers --plugin-root ${CLAUDE_PLUGIN_ROOT} --base 에 그 skill 을 불러올 때 보인 기준 폴더 경로를 넘겨 한 번 돌리고, 첫 줄이 「검증한 판과 같다」 가 아니면 그 줄을 첫 메시지에 한 줄로 보인다 — 판 확인 결과로는 멈추지 않는다. confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지. brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 설계의 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다. 설계문서에 ## 번호 대조 표(칸: 번호 · 반영/기각 · 자리 또는 이유)를 두어 brief 의 모든 번호와 brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고, 설계문서 frontmatter source_interview 에 이 brief 의 레포 루트 기준 상대경로를 적는다. 설계문서의 수용 기준은 ## Acceptance Criteria 아래 AC1 · AC2 … 처럼 번호를 단다. 설계의 규칙은 「기본은 X, 일의 모양이 다르면 모델이 판단하고 이유를 적는다」로 쓰고 정석 흐름(설계 → 계획 → 구현)의 의도는 지킨다. 설계문서에 ## 있는 것 검토 절(레포 안에 이미 있는 것을 먼저 찾아 쓰고, 레포 밖 패키지 · 프레임워크 · 서비스는 후보로만 적어 사용자가 승인한 뒤에만 쓴다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다. 사용자 선호: 이 brief 의 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다. brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다. 설계문서를 쓰고 커밋한 뒤, brainstorming 의 설계문서 점검(builder check)과 그 질문을 마치고 문서를 승인받는 자리에서 그 설계문서 경로 뒤에 --bundle 과 source_interview 에 적은 것과 같은 상대경로를 붙여 Skill spec-distill:spec-review 를 부른다. superpowers:writing-plans 는 spec-review 의 승인 게이트에서 진행이 선택된 뒤에만 부른다. spec-review 가 게이트 없이 끝나면 brainstorming 의 문서 승인 자리로 돌아간다. writing-plans 가 계획을 쓴 뒤 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --plan 에 설계문서와 계획 경로를 넘겨 돌리고, 계획에 없는 AC 는 계획에 더한다. 고른 실행 방식의 마지막 전체 리뷰에 설계문서 ## Acceptance Criteria 의 AC 목록을 싣고, 리뷰가 AC 마다 한 줄씩 AC1: 구현됨 — 근거 꼴(판정은 구현됨 · 미룸 · 빠짐 중 하나)로 보고하게 해 그 보고를 git 이 추적하지 않는 파일에 적는다. 미룸 · 빠짐과 리뷰 후속으로 미룬 것은 설계문서 ## 미룸 표(항목 · 이유 · 받는 곳)에 올리고, PR 을 만들기 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --impl 에 설계문서와 보고 파일 경로를 넘겨 돌려 경고를 사용자에게 보인다. 사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지키고, 메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.`
+> `@<brief-path> 이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. 시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.`
 
 줄 앞의 `@<brief-path>` 는 Step A.5 의 `PAYLOAD` 값, 곧 brief 의 절대경로로 치환한 뒤 노출한다. 줄 안의 `${CLAUDE_PLUGIN_ROOT}` 는 이 플러그인의 절대경로로 바꿔 노출한다 — 이 파일에서는 그 변수가 치환되지 않은 채 읽히고, 새 세션에는 그 변수가 없다. 치환하지 않은
 자리표가 남거나 경로에 공백이 있으면 노출하지 않고 `[spec-distill] 다음 세션 줄을 만들 수 없다 — <사유>. brief: <PAYLOAD 값>. 새 세션에서 이 brief 를 직접 첨부하고 아래 문장을 그대로 붙여 넣어 brainstorming 을 시작하라.`
 한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). 사람이 이 줄의 유일한 운반자다 — 자동으로 이어지지 않는다.
 로드맵 에픽의 설계를 여는 줄은 이 줄이 아니라 `${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄이다 — 지휘 세션이 쓴다.
 
-**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.** ①/② 의 둘째 줄은 위 brief 줄 대신 정본 `## 다음 세션 명령` 규칙 3 대로 고른 skill 의 모양으로 짓고 `@<brief-path>` 를 원소로 삼는다. 줄에는 위 brief 줄의 공통 지시를 이 글자로 싣는다 — 「confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.」 · 「brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다.」 · 「brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.」 · 「사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.」 자리표 치환 · 거부 · 위치 공시는 위 brief 줄과 같다. 이 줄은 표지 블록 밖이라 인용 줄로 두지 않는다. 고른 skill 이 `superpowers:` 로 시작하면 위 brief 줄의 판 확인 문장도 `brainstorming` 을 그 skill 이름으로 바꿔 싣는다. 확정 반영 write 에서 brief frontmatter `next_phase:` 를 고른 skill 의 완전명으로 바꾼다.
+**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.** ①/② 의 둘째 줄은 위 brief 줄 대신 정본 `## 다음 세션 명령` 규칙 3 대로 고른 skill 의 모양으로 짓고 `@<brief-path>` 를 원소로 삼는다. 줄에는 공통 지시를 글자로 싣지 않고 이 문장을 싣는다 — 「시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.」 판 확인도 그 절의 끝 문장이 맡는다(부른 skill 이 `superpowers:` 로 시작할 때). 자리표 치환 · 거부 · 위치 공시는 위 brief 줄과 같다. 이 줄은 표지 블록 밖이라 인용 줄로 두지 않는다. 확정 반영 write 에서 brief frontmatter `next_phase:` 를 고른 skill 의 완전명으로 바꾼다.
 
 **이름이 바뀌어도 절차는 같다.** 아래 ①② 는 B-2 이름 표의 어느 이름으로 골랐든 같은 절차이고 둘째 줄만 다르다 — 분해된 일이면 아래 「다음 세션 줄 — 분해된 일 ①/② 공통」, 둘째 질문에서 제안을 골랐으면 위 「다른 다음 단계의 줄」, 그 밖에는 위 brief 줄이다. 「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.
 
@@ -580,12 +637,12 @@ AskUserQuestion({
 
 - **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0 으로 돌아가 수정된
   목록을 재제시(2회에 닿으면 B-0 의 재제시 상한 질문). 이미 확정된 목록에서 ③ 을 골랐다면 확정된 목록을
-  고치는 것이다 — `status` 는 이 편집으로 바뀌지 않고 게이트(①/②)를 통해서만 바뀐다.
+  고치는 것이다 — `status` 는 이 편집으로 바뀌지 않고 게이트(①/②)나 B-1 끝 질문의 「확정하고 끝낸다」 를 통해서만 바뀐다.
 
 - **④ brief만 종료**: 전 항목 `provisional` 유지. 분해된 일이면 B-R 다시 생성 뒤, 아래 커밋 펜스(`interview-commit`)를 돌린 뒤 brief terminal
-  advisory(B-1 부재 advisory와 같은 톤)를 내고 종료. handoff 안 함.
+  advisory를 내고 종료. handoff 안 함.
 
-**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, ④ 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
+**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 · 나눈 일이면 B-R 다시 생성 뒤 끝 안내 전, ④ 와 B-1 의 「brief만 종료」 는 종료 안내 직전, 한 번.** ③ 은 커밋하지 않는다.
 게이트 재실행이 통과하지 않으면 커밋하지 않는다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고,
 나온 `[spec-distill]` 줄을 그대로 보인다. 펜스는 brief 가 사는 레포(`top`)를 기준으로 돌고 해결자 `repo_defaults.py` 를 모두 `--root "$top"` 으로 부른다.
 로드맵 폴더는 펜스가 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 도출한다 —
@@ -653,22 +710,22 @@ fi
 ```
 <!-- interview-commit:end -->
 
-- **재제시 상한 질문의 답** (B-0): 「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 B-2 게이트를 다시 띄우며
-  스스로 멈추거나 넘기지 않는다 — 다음 단계는 그 게이트에서 고른다. 「계속 고친다(2번 더)」는 state 에
+- **재제시 상한 질문의 답** (B-0): 「지금 목록으로 확정」은 확정 반영 절차를 적용한 뒤 왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며
+  스스로 멈추거나 넘기지 않는다 — 어떻게 끝낼지는 그 질문에서 고른다. 「계속 고친다(2번 더)」는 state 에
   `confirm_repost_count = 0` 을 쓰고 B-0 으로 돌아간다. 「brief 만 종료」는 ④ 를 따른다. 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 #### B-R — 로드맵 다시 생성 (분해된 일만)
 
-분해된 일이면 Step B 를 끝내는 모든 갈래(① · ② · ④ · 재제시 상한 질문의 「brief 만 종료」(=④) · B-1 superpowers 부재 정지 — 「지금 목록으로 확정」은 B-2 로 돌아가 그 게이트의 갈래에서 한 번 돈다)에서, 그 갈래가 brief 를 마지막으로 쓴 직후 · 두 줄이나 정지 문구를 보이기 전에 Step A 8 의 명령을 그대로 언제나 한 번 더 돌린다. 항목이 바뀌었는지와 상관없다 — 확정 반영은 brief 줄을 늘 바꾸고, 리뷰 · B-A 박제도 항목을 더한다. 두 번째 실행은 첫 실행이 표 파일에 적은 `## 생성 기록` 에 있는 파일만 덮어쓰고 기록 밖의 파일은 건드리지 않는다. rc 1 이면 사유를 보이고 갈래를 사유로 가른다.
+분해된 일이면 Step B 를 끝내는 모든 갈래(① · ② · ④ · 재제시 상한 질문의 「brief 만 종료」(=④) · B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 — 「지금 목록으로 확정」은 왔던 끝 질문으로 돌아가 그 질문의 갈래에서 한 번 돈다)에서, 그 갈래가 brief 를 마지막으로 쓴 직후 · 두 줄이나 끝 안내를 보이기 전에 Step A 8 의 명령을 그대로 언제나 한 번 더 돌린다. 항목이 바뀌었는지와 상관없다 — 확정 반영은 brief 줄을 늘 바꾸고, 리뷰 · B-A 박제도 항목을 더한다. 두 번째 실행은 첫 실행이 표 파일에 적은 `## 생성 기록` 에 있는 파일만 덮어쓰고 기록 밖의 파일은 건드리지 않는다. rc 1 이면 사유를 보이고 갈래를 사유로 가른다.
 
 - 사유가 `unassigned` · `orphans` · `unknown_ids` 이거나 `brief 에서 줄을 찾지 못한 번호` 면 — 보통 B-A 가 brief 에 `OQ<n>` 줄이나 `위험 — 리뷰 참고` 줄을 더해 새 번호가 생긴 것이다. `unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다. `brief 에서 줄을 찾지 못한 번호` 면 그 번호를 brief 에서 찾아 가른다 — brief 에 없으면 `unknown_ids` 와 같이 표에서 뺀다. brief 에 있으면 생성기가 그 줄을 읽지 못한 것이다(생성기의 빈틈) — 표를 고치지 않고 그 번호와 사유를 그대로 보이고 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다. 새 번호를 보이고 분해 판단 3–5(표 고치기 · 승인)로 그 번호를 배정한다. 승인되면 Step A 8 의 명령**만** 다시 돌린 뒤, 같은 Step B 갈래를 이어 간다(커밋 펜스, 분해된 일의 ①/② 면 그 뒤 「PR 과 머지」, 그다음 두 줄이나 정지 문구). Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다 — 사용자는 이미 ①/② 를 골랐다. 그 되돌아온 길에서 사용자가 「spec 하나로」 를 고르면: 이미 성공한 생성이 있으니 상태 파일 `## 생성 기록` 에 적힌 파일(생성된 로드맵 폴더의 파일)을 지우고 brief §7 의 `분해됨 — <로드맵 경로>` 줄을 뺀 뒤, 나누지 않은 일의 다음 세션 줄로 이어 간다.
 - 사유가 `brief §5 위험 줄 가운데 K 번호가 없는 줄이 있다` 나 `brief §5 위험 줄의 K 번호가 겹친다` 면 표가 아니라 brief 를 고친다 — 번호 없는 줄에는 메시지가 말한 번호부터 박고(로드맵 `## 위험 번호표` 에 더 큰 K 가 있으면 그다음 수부터), 겹친 번호는 한 줄을 Step A 「위험 번호」 의 다음 수로 바꾼다. 그다음 Step A 8 의 명령을 한 번만 다시 돌리고 위 갈래대로 가른다 — 또 같은 사유면 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다.
 - 표로 고칠 수 없는 사유(생성기가 만들지 않은 파일의 덮어쓰기 거부 · 못 읽는 파일 — 상태 파일 포함)면 사유를 그대로 보이고 멈춘다. 표로 돌아가 반복하지 않고, 멈춤에는 로드맵이 최신이 아니라는 advisory 와 `[spec-distill] 커밋하지 않았다 — 로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>` 한 줄을 붙인다(커밋 펜스는 돌리지 않는다).
 - rc 2 는 사용법 오류다(작업 트리 밖 경로 · `--audit` 짝 불일치 · 날짜 꼴). 사유를 보이고, 인자가 Step A 8 의 명령과 글자 그대로인지 맞춘 뒤 한 번만 다시 돌린다. 또 rc 2 면 위의 고칠 수 없는 사유와 같이 멈춘다(advisory 와 「커밋하지 않았다」 줄).
 
-커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 세 파일과 한 커밋에 넣는다(B-1 은 커밋하지 않고 그 안내에 로드맵 폴더를 적는다). 분해된 일의 ①/② 는 커밋 뒤 아래 「PR 과 머지」 를 거쳐 두 줄로 간다.
+커밋 전에 도는 단계라 이 결과가 커밋 대상이다 — 그 갈래의 커밋 펜스(`interview-commit`)가 brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 세 파일과 한 커밋에 넣는다(B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 도 같은 펜스로 커밋한다). 분해된 일의 ①/② 는 커밋 뒤 아래 「PR 과 머지」 를 거쳐 두 줄로 간다.
 
-**PR 과 머지 — 분해된 일 ①/② 만.** 지휘자는 로드맵을 기본 브랜치에서 읽는다 — 브랜치에만 있는 로드맵은 상태를 셀 수 없고, 에픽 worktree 도 기본 브랜치에서 갈라져 묶음 파일이 없다. 그래서 인터뷰가 커밋 뒤 PR 을 열고 머지를 묻는다. 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈을 때만 돈다 — 그 줄이 아니면(커밋하지 않음 · 실패 · 로드맵 폴더를 빼고 커밋) 이 절을 건너뛰고 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다. ④ · B-1 은 PR 을 열지 않는다. 두 펜스 모두 마지막 줄이 판결이고, 판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다. 두 펜스는 gh 를 직접 찾거나 부르지 않고 `gh_repo.py` 의 하위 명령으로만 부른다 — 그 모듈이 gh 를 찾고 origin 레포를 명시한다.
+**PR 과 머지 — 분해된 일 ①/② 만.** 지휘자는 로드맵을 기본 브랜치에서 읽는다 — 브랜치에만 있는 로드맵은 상태를 셀 수 없고, 에픽 worktree 도 기본 브랜치에서 갈라져 묶음 파일이 없다. 그래서 인터뷰가 커밋 뒤 PR 을 열고 머지를 묻는다. 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈을 때만 돈다 — 그 줄이 아니면(커밋하지 않음 · 실패 · 로드맵 폴더를 빼고 커밋) 이 절을 건너뛰고 두 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다. ④ · B-1 은 PR 을 열지 않는다. 펜스는 모두 마지막 줄이 판결이고, 판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 이 절의 펜스는 gh 를 직접 찾거나 부르지 않고 `gh_repo.py` 의 하위 명령으로만 부른다 — 그 모듈이 gh 를 찾고 origin 레포를 명시한다.
 
 **「여기서 계속」 으로 왔으면.** 게이트의 기타 칸 갈래(정본 `proceed-gate.md` 의 「기타 칸」 — 두 줄 없이 이 세션에서 다음 세션 줄을 따른다)에서는 `interview-merge: MERGED` 를 받은 턴에만 지휘자를 부른다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 부르지 않는다 — 그 줄과 아래 지휘자 줄을 보이고 턴을 끝낸다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `interview-pr: NONE` · `interview-merge: NONE` · 「직접 머지」)에는 지휘자를 부르지 않는다 — PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
@@ -704,8 +761,18 @@ else
   echo "[spec-distill] 이 브랜치의 열린 PR 을 쓴다 — $url"
 fi
 # 이 PR 이 바꾸는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것. 두 폴더는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
+# 끝내기 커밋 펜스가 같은 키로 이미 보인 「값의 출처」 줄만 뺀다 — 그 호출의 사유 · 알림 · 경고 줄과 종료 코드는 그대로다.
+nosrc() {
+  nf="$(mktemp)" || nf=""
+  [ -n "$nf" ] || { "$@"; return; }
+  n_rc=0
+  "$@" 2> "$nf" || n_rc=$?
+  grep -v '^\[spec-distill\] 값의 출처: ' "$nf" >&2
+  rm -f "$nf"
+  return "$n_rc"
+}
 idir=""
-if python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
+if nosrc python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
   idir="$(dirname -- "$BRIEF")"
 else
   echo "[spec-distill] brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
@@ -716,7 +783,7 @@ if [ -n "$r7" ]; then
   case "$r7" in "$cwd_l"/*) r7="$(pwd -P)/${r7#"$cwd_l"/}" ;; esac
   case "$r7" in /*) ;; *) r7="${top}/${r7}" ;; esac
   rdir="$(dirname -- "$r7")"
-  python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
+  nosrc python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
 fi
 x_rc=0
 extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
@@ -738,7 +805,7 @@ echo "interview-pr: OPEN $url"
 <!-- interview-pr:end -->
 
 2. **머지 묻기.** `AskUserQuestion` 하나 — 질문 「<주제> — 지휘자는 로드맵을 기본 브랜치에서 읽어, 이 PR(<PR 주소>)이 머지돼야 에픽을 시작할 수 있다. 지금 머지할까?」, 선택지 「머지 (권장)」(얻음: CI 검사 뒤 PR 을 기본 브랜치에 합치고 붙여 넣을 두 줄을 바로 보인다 · 내줌: 합친 뒤에는 되돌리기 번거롭고 CI 를 기다리는 동안 턴이 끝난 채 멈춰 있다) · 「직접 머지」(얻음: 머지 시점과 방식을 내가 정한다 · 내줌: 머지한 뒤 지휘자 줄을 직접 입력해야 해서 한 단계가 사람 몫으로 남는다). 「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다 — 그 두 폴더(인터뷰 폴더 바로 아래 · 로드맵 폴더)의 파일만 바꾸는 PR 이라 머지를 권한다. `MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고, 질문 앞 글에 1 의 펜스가 보인 파일 목록(세지 못했으면 그 줄)을 다시 보인다 — 무엇이 함께 머지되는지 보고 고르게 한다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
-3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로, `HEAD_SHA` 자리표를 1 의 `interview-pr-head:` 값으로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 두 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 사용자가 그만두라고 하면 그 백그라운드 작업을 끝낸다(작업을 끝내면 펜스가 기다리던 gh 도 함께 끝나 머지로 가지 않는다) — 끝낸 출력에 판결 줄이 이미 있으면 그 판결대로, 없으면 `interview-merge: NONE` 으로 읽어 잇는다. 이 기다림은 polite stop 이 아니다 — ①/② 의 완료 동작(두 줄과 위치를 노출하고 턴을 끝낸다)은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 이며 끝 커밋이 1 에서 push 한 커밋 그대로인지 먼저 확인한다. 머지도 그 커밋에 묶어 요청한다 — 묻고 난 뒤(CI 를 기다리는 사이 포함) PR 에 다른 커밋이 올라오면 머지하지 않는다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `interview-merge: MERGED` 면 두 줄을 그대로 노출하고(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 두 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로, `HEAD_SHA` 자리표를 1 의 `interview-pr-head:` 값으로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 두 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 사용자가 그만두라고 하면 그 백그라운드 작업을 끝낸다(작업을 끝내면 펜스가 기다리던 gh 도 함께 끝나 머지로 가지 않는다) — 끝낸 출력에 판결 줄이 이미 있으면 그 판결대로 잇는다. 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `interview-merge: NONE` 으로 읽어 잇는다. 이 기다림은 polite stop 이 아니다 — ①/② 의 완료 동작(두 줄과 위치를 노출하고 턴을 끝낸다)은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 이며 끝 커밋이 1 에서 push 한 커밋 그대로인지 먼저 확인한다. 그 PR 이 이미 머지돼 있으면(상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR) 검사를 기다리지도 머지를 요청하지도 않고 머지됨으로 읽는다 — origin 을 받고 판결은 `MERGED` 다. 머지도 그 커밋에 묶어 요청한다 — 묻고 난 뒤(CI 를 기다리는 사이 포함) PR 에 다른 커밋이 올라오면 머지하지 않는다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. 방식마다 요청을 보내기 직전에 표시 줄 `interview-merge-requested: <PR 번호>` 를 낸다. gh 의 머지 명령이 실패로 끝났어도 다시 읽은 PR 이 머지돼 있으면 다음 방식을 시도하지 않고 머지됨으로 읽는다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `interview-merge: MERGED` 면 두 줄을 그대로 노출하고(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 두 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- interview-merge:begin -->
 ```bash
@@ -747,6 +814,7 @@ BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
 URL="<interview-pr 이 낸 PR 주소>"
 HEAD_SHA="<interview-pr 이 낸 끝 커밋>"
 none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
+merged() { git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."; echo "interview-merge: MERGED"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
 case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
 case "$HEAD_SHA" in ""|*[!0-9a-f]*) none "끝 커밋이 비었거나 자리표 그대로다" ;; esac
@@ -757,6 +825,8 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 [ -n "$cur" ] && [ -n "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
 num="$(python3 "$SD/scripts/gh_repo.py" pr-number "$URL" --root "$top")" || none "PR 주소가 이 레포(origin)의 PR 이 아니다(위 사유)"
 pr="$(python3 "$SD/scripts/gh_repo.py" pr-identity "$num" --root "$top")" || none "PR 을 읽지 못했다(위 사유)"
+# 이미 머지된 PR — 상태가 머지됨이고 바탕 · 브랜치가 같은 이 레포의 PR 이면 머지됨으로 읽는다(끝 커밋은 대조하지 않는다).
+case "$pr" in "MERGED $def $cur false "*) echo "[spec-distill] PR 이 이미 머지돼 있다 — ${URL}"; merged ;; esac
 [ "$pr" = "OPEN $def $cur false $HEAD_SHA" ] || none "이 PR 은 열린, 이 레포의 ${cur} → ${def} PR 이 아니거나 끝 커밋이 물을 때(${HEAD_SHA})와 다르다(읽은 것: ${pr})"
 out="$(mktemp)" || none "검사 출력 임시 파일을 만들지 못했다"
 n=0
@@ -787,6 +857,8 @@ ways="$(python3 "$SD/scripts/gh_repo.py" merge-ways --root "$top")" || ways=""
 how=""
 for how in --merge --squash --rebase; do
   case " $ways " in *" $how "*) ;; *) continue ;; esac
+  # 요청을 보내기 직전의 표시 줄 — 판결 줄 없이 끝난 출력에 이 줄이 있으면 다시 확인 펜스가 돈다.
+  echo "interview-merge-requested: $num"
   if python3 "$SD/scripts/gh_repo.py" pr-merge "$num" "$how" --match-head-commit "$HEAD_SHA" --root "$top"; then
     # gh 가 받아들였어도 머지 대기열 · 자동 머지면 아직 머지 전이다 — 상태를 다시 읽는다(15초까지).
     st=""
@@ -804,17 +876,61 @@ for how in --merge --squash --rebase; do
       exit 0
     fi
     echo "[spec-distill] PR 을 머지했다(${how#--}) — ${URL}"
-    git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."
-    echo "interview-merge: MERGED"
-    exit 0
+    merged
   fi
   pr="$(python3 "$SD/scripts/gh_repo.py" pr-identity "$num" --root "$top")" || pr=""
+  case "$pr" in "MERGED $def $cur false "*) echo "[spec-distill] gh 의 머지 명령은 실패로 끝났지만(위 사유) PR 은 머지돼 있다 — ${URL}"; merged ;; esac
   [ "$pr" = "OPEN $def $cur false $HEAD_SHA" ] || none "머지가 거절됐고(위 사유) PR 이 물을 때와 달라졌다 — 끝 커밋이 바뀌었거나 닫혔다(읽은 것: ${pr:-읽지 못함} · 물을 때의 끝 커밋: ${HEAD_SHA})"
   echo "[spec-distill] ${how#--} 머지가 거절됐다(위 사유) — 다음 방식을 시도한다."
 done
 none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · 보호 규칙 · 권한)"
 ```
 <!-- interview-merge:end -->
+
+**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `interview-merge-requested:` 표시 줄이 있을 때만.** 아래 펜스의 `BRIEF` · `URL` 자리표를 3 과 같은 값으로 바꿔 돌리고(백그라운드로 띄우지 않는다 — 기다림은 15초까지다) 나온 `[spec-distill]` 줄을 그대로 보인 뒤 그 판결대로 잇는다. 펜스는 읽기만 한다 — 머지를 요청하지도 CI 검사를 기다리지도 않는다. PR 주소의 레포가 origin 인지 대조하고, PR 상태를 머지 펜스의 머지 뒤 상태 읽기와 같은 간격 · 횟수(5초 간격 네 번까지)로 읽는다. 상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR 이면 origin 을 받고 `interview-merge: MERGED`, 끝까지 아니면 머지 요청이 나갔다는 사실과 PR 주소를 알리고 `interview-merge: NONE` 이다 — PR 상태를 끝까지 읽지 못했을 때(gh 인증 · 네트워크)도 머지됨으로 읽지 않고, 읽지 못했다는 사실을 따로 알린다.
+
+<!-- interview-merge-recheck:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+URL="<interview-pr 이 낸 PR 주소>"
+none() { echo "[spec-distill] 머지됐는지 다시 확인하지 못했다 — $1. 머지 요청은 나갔을 수 있다 — PR 에서 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
+case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
+case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
+top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
+[ -n "$top" ] || none "git 저장소가 아니다"
+cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
+def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --root "$top")" || def=""
+[ -n "$cur" ] && [ -n "$def" ] || none "지금 브랜치(${cur:-없음})나 기본 브랜치(${def:-없음})를 가르지 못했다"
+num="$(python3 "$SD/scripts/gh_repo.py" pr-number "$URL" --root "$top")" || none "PR 주소가 이 레포(origin)의 PR 이 아니다(위 사유)"
+# 요청 직후에는 아직 열림으로 보일 수 있다 — 머지 펜스의 머지 뒤 상태 읽기와 같은 간격 · 횟수로 읽는다(15초까지).
+pr=""
+n=0
+while :; do
+  pr="$(python3 "$SD/scripts/gh_repo.py" pr-identity "$num" --root "$top")" || pr=""
+  n=$((n + 1))
+  case "$pr" in "MERGED $def $cur false "*) break ;; esac
+  [ "$n" -lt 4 ] || break
+  sleep 5
+done
+case "$pr" in
+  "MERGED $def $cur false "*)
+    echo "[spec-distill] 다시 확인하니 PR 이 머지돼 있다 — ${URL}"
+    git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."
+    echo "interview-merge: MERGED" ;;
+  "MERGED "*)
+    echo "[spec-distill] 머지 요청은 나갔지만 읽은 PR 이 이 레포의 ${cur} → ${def} PR 이 아니다(읽은 것: ${pr}) — PR 에서 직접 확인한 뒤 지휘자를 부른다: ${URL}"
+    echo "interview-merge: NONE" ;;
+  "")
+    echo "[spec-distill] 머지 요청은 나갔지만 PR 상태를 읽지 못했다(위 사유) — 머지됐는지 확인한 뒤 지휘자를 부른다: ${URL}"
+    echo "interview-merge: NONE" ;;
+  *)
+    st="${pr%% *}"
+    echo "[spec-distill] 머지 요청은 나갔지만 PR 이 아직 머지되지 않았다(읽은 상태: ${st}) — 머지 대기열이나 자동 머지를 쓰는 레포면 조건이 채워진 뒤 머지된다. 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"
+    echo "interview-merge: NONE" ;;
+esac
+```
+<!-- interview-merge-recheck:end -->
 
 **다음 세션 줄 — 분해된 일 ①/② 공통**
 
@@ -829,9 +945,8 @@ none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · �
 
 - **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate 하고 두 줄 명령을 노출하지 않고
   끝내는 것은 **polite stop** — 금지(①/② 의 완료는 B-3 대로 두 줄과 위치를 노출하고 턴을 끝내는 것이다). Step B 를 *종료*하는
-  모든 경로는 (a) 위 proceed 게이트를 거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외
-  (superpowers 부재 — B-1)면 명시적 advisory 단락을 동반해야 한다 — 게이트-less **silent 종료
-  금지**.
+  모든 경로는 (a) 위 proceed 게이트를 거치거나(①/②/③/④), (b) superpowers 가 없을 때의 B-1 끝 질문
+  (선택지 셋)을 거친다 — 질문 없는 **silent 종료 금지**.
 - **cross-compact 조기진행 금지**: ①·② 의 정지 요건과 다음 턴 진입 조건은 B-3 ①·② 에 인라인으로
   있습니다(그것이 이 skill 의 실행형이자 기계적 검증 앵커입니다). 예외는 없습니다.
 
