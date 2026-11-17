@@ -102,9 +102,33 @@ assert_contains "$STEPB" '선택지는 모델의 제안 `(권장)` 이 첫 자�
 assert_not_contains "$STEPB" '기본 다음 단계 `(권장)` 과 모델의 제안 둘이다' "AC17(정본): 옛 둘째 질문 순서가 남지 않았다"
 CALL="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$RF" | tr '\n' ' ' | tr -s ' ')"
 for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 이유는 게이트 앞 글에' \
-           'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' '규칙 3 대로' \
+           '규칙 3 대로' \
            '둘째 질문이 뜨면 ①/② 이름은 정본 예시처럼 단계를 가리키지 않는다' 'slash 줄이면 운반 문장 없이 seed 경로만'; do
   assert_contains "$CALL" "$lit" "AC17: «${lit}»"
 done
+
+for lit in 'seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일 <기록 파일 절대경로> 의 원자료다(`## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구). 그 파일을 읽어 그 skill 의 사용자 원문(첫 요청)으로 삼는다' \
+           '원자료(framing 기록 파일)를 찾지 못했다(<사유>) — seed 만 넘긴다' \
+           '`원자료(framing 기록 파일)를 찾지 못했다 — <사유>. 다음 단계에는 seed 만 넘긴다`' \
+           '판결 줄이 없다(종료 코드 <n>)' 'raw_source.py" locate --seed "$SEED_ABS" ||'; do
+  assert_contains "$CALL" "$lit" "AC22: «${lit}»"
+done
+assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"
+assert_not_contains "$CALL" '다음 세션 줄을 노출하지 않는다' "AC22: 찾지 못해도 멈추지 않는다"
+# 펜스 실행 — 「다른 다음 단계」 문단 바로 뒤 첫 bash 펜스(앞에 「## 상태」 블록이 붙는 자리라 SD · SEED_ABS 를 채워 돌린다)
+RSF="$SCRATCH/rs-fence.sh"
+awk 'index($0,"**다른 다음 단계(둘째 질문).**")==1{f=1; next} f&&/^```bash$/{b=1; next} f&&b&&/^```$/{exit} f&&b' "$RF" > "$RSF"
+bash -n "$RSF" && [ -s "$RSF" ] && ok "AC22(양성대조): 원자료 자리 펜스를 떴다" || no "AC22: 원자료 자리 펜스 부재 또는 구문 오류"
+RSD="$SCRATCH/rs"; mkdir -p "$RSD"
+SEED_ABS="$RSD/x-interview-seed.md"; printf 'seed\n' > "$SEED_ABS"
+run_rs() { env -i PATH="$PATH" SD="$SD" SEED_ABS="$SEED_ABS" bash "$RSF" 2>"$SCRATCH/rs.err"; }
+out="$(run_rs)"; rc=$?
+assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 없어도 0(뒤 걸음이 끊기지 않는다)"
+assert_eq "$(tail -1 <<<"$out")" "raw-source: LOST seed 옆에 framing 기록 파일이 없다 — ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 없음 → LOST 판결 줄"
+assert_contains "$(cat "$SCRATCH/rs.err")" '원자료 판결 종료 코드 3' "AC22: 찾지 못하면 stderr 에 종료 코드 3"
+printf -- '---\ntype: interview-seed-audit\n---\n' >"$RSD/x-interview-seed.audit.md"
+out="$(run_rs)"; rc=$?
+assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 있으면 0"
+assert_eq "$(tail -1 <<<"$out")" "raw-source: FOUND ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 있음 → FOUND 판결 줄"
 
 finish
