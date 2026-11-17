@@ -191,6 +191,8 @@ cp "$T/lone/sources.md" "$T/lone/design.md" "$W/out-lone/a/b/"
 printf -- '---\ntype: job\njob: E1\nroadmap: ../../outside/roadmap.md\n---\n\n## 목표\n' > "$W/out-lone/a/b/INTENT.md"
 assert_eq "$( (cd "$W/out-lone/a/b" && python3 "$C" sources.md design.md) > "$T/out.txt" 2>&1; echo $?)" "0" "머리 roadmap 이 .. 경로: INTENT.md 없음과 같은 rc"
 assert_contains "$(cat "$T/out.txt")" "셀 수 없음 — S1 — 로드맵을 모른다" "머리 roadmap 이 .. 경로: 그 자리의 로드맵을 읽지 않고 로드맵을 모른다고 센다"
+assert_contains "$(cat "$T/out.txt")" "레포 상대 경로가 아니다: ../../outside/roadmap.md" "머리 roadmap 이 .. 경로: 셀 수 없음 줄에 사유가 함께 나온다(글)"
+assert_contains "$( (cd "$W/out-lone/a/b" && python3 "$C" sources.md design.md --json) 2>&1)" "레포 상대 경로가 아니다: ../../outside/roadmap.md" "머리 roadmap 이 .. 경로: 사유가 --json 에도 나온다"
 rm -rf "$W/out-lone"
 # 커밋 트리를 읽는 repo(뿌리 없음)가 roadmaps_dir 을 넘기지 않으면 죽지 않고 사유를 낸다
 tree_repo_view() {  # tree_repo_view <specs_dir | -> <roadmaps_dir | -> — 뿌리 없는 repo 로 _roadmap_view 를 부른 값(- 는 None)

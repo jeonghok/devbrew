@@ -37,6 +37,7 @@ Unchecked = team_rules.Unchecked
 DESIGN, PLAN, REVIEW = team_layout.STAGES[0], team_layout.STAGES[1], team_layout.STAGES[3]
 NO_BRANCH = "과제 브랜치 %s 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다"
 NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 과제 브랜치가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다"
+ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
 SYNC_LINE = "맞추는 명령: roadmap_write.py job sync --result %s --role %s --bundle-at %s --job-at %s"
 
@@ -162,6 +163,8 @@ def _task(reader, blocks: list, job: str) -> dict:
     if len(found) > 1:
         raise Refused("같은 이름의 %s 가 둘이다: %s — %s"
                       % (team_status.OUTSIDE, job, " · ".join(j["branch"] for j in found)))
+    if found and found[0]["stage"] == team_status.MERGED:
+        raise Refused(ALREADY_MERGED % job)
     if found:
         return found[0]
     heads = ("%s %s " % (team_status.OUTSIDE, job), "%s %s:" % (team_status.OUTSIDE, job))

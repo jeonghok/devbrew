@@ -286,4 +286,22 @@ g checkout -q feature/tm-e1 && g push -q origin feature/tm-e1 && g commit --amen
 assert_eq "$(job --job E1 --stage implement --plan 1)" "3" "과제: 갈라진 과제 브랜치는 검사 불가 3"
 assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 갈라짐 — 표준 출력이 비었다"
 
+# 이미 기본 브랜치에 머지된 단순 작업 — 묶음을 내지 않고 1(브랜치를 지웠든 남겼든 같다)
+merged_task() {   # merged_task <이름> <브랜치> <머지 뒤 브랜치를 지우는가: yes|no>
+  g checkout -q -b "$2" main
+  printf '머지될 일\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name "$1" --branch "$2" --paths docs/tv/ --goal "머지된 작업") > "$T/out.txt" 2>&1
+  g add -- "$TM/jobs/$1" && g commit -qm "단순 작업 $1"
+  g checkout -q main && g merge -q --no-ff "$2" -m "머지 $1" && publish
+  if [ "$3" = yes ]; then g branch -q -D "$2"; fi
+}
+merged_task gone-task chore/tm-gone yes
+assert_eq "$(job --job gone-task --stage implement)" "1" "과제: 머지 뒤 브랜치를 지운 단순 작업은 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 머지된 단순 작업(브랜치 없음) — 표준 출력이 비었다"
+assert_contains "$(cat "$T/job.err")" "gone-task 는 이미 기본 브랜치에 머지됐다" "과제: 머지된 단순 작업(브랜치 없음) — 사유"
+merged_task kept-task chore/tm-kept no
+assert_eq "$(job --job kept-task --stage implement)" "1" "과제: 머지만 하고 브랜치를 남긴 단순 작업도 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 머지된 단순 작업(브랜치 남음) — 표준 출력이 비었다"
+assert_contains "$(cat "$T/job.err")" "kept-task 는 이미 기본 브랜치에 머지됐다" "과제: 머지된 단순 작업(브랜치 남음) — 사유"
+assert_eq "$(job --job fix-typo --stage implement)" "0" "과제: 머지되지 않은 단순 작업은 그대로 0(양성 대조)"
+
 finish
