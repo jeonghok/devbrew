@@ -49,6 +49,12 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
                 if "테스트 출력" in row:
                     self.assertTrue("싣지 않" in row or "싣지 말" in row, (role, row))
 
+    def test_leader_template_has_the_rules_check_line_only(self):   # U10 가 — 리더 틀의 할 일 끝 한 줄
+        line = "- 규칙을 고친 뒤 규칙 검사(team_rules.py check)를 돌린다."
+        self.assertEqual(F.role_template("leader").read_text(encoding="utf-8").split("## 하지 않을 일")[0].splitlines()[-2], line)
+        for role in ("designer", "writer", "worker"):
+            self.assertNotIn(line, F.role_template(role).read_text(encoding="utf-8"), role)
+
     def test_no_file_named_like_auto_loaded_memory(self):
         self.assertEqual([p.name for p in F.TEMPLATES.rglob(L.ROLE_DOC)], [])
 
@@ -231,6 +237,21 @@ class OneScopeReader(unittest.TestCase):   # 잔여 — 「한다 … / 안 한�
             self.assertEqual(F.not_text(scope), not_do, scope)
 
 
+class RoadmapRel(unittest.TestCase):   # I11 — INTENT.md 머리 roadmap 은 레포 상대 경로다
+    def test_relative_path_is_returned(self):
+        self.assertEqual(F.roadmap_rel({"roadmap": "docs/x/tm/roadmap.md"}), "docs/x/tm/roadmap.md")
+        self.assertEqual(F.roadmap_rel({"roadmap": "docs/a..b/roadmap.md"}), "docs/a..b/roadmap.md")   # 조각이 `..` 인 것만 막는다
+
+    def test_everything_else_is_a_format_error(self):
+        for meta in ({}, {"roadmap": ""}, {"roadmap": "/abs/roadmap.md"}, {"roadmap": "../out/roadmap.md"},
+                     {"roadmap": "docs/../../out.md"}, {"roadmap": "docs\\x\\roadmap.md"}):
+            with self.assertRaises(M.FormatError, msg=str(meta)):
+                F.roadmap_rel(meta)
+        with self.assertRaises(M.FormatError) as cm:
+            F.roadmap_rel({"roadmap": "../out/roadmap.md"})
+        self.assertIn("머리 roadmap 이 레포 상대 경로가 아니다: ../out/roadmap.md", str(cm.exception))
+
+
 class IntentMeta(unittest.TestCase):   # 잔여 — kind 판정이 줄 비교가 아니다
     HEAD = "---\ntype: job\njob: fix\nkind: %s\nroadmap: r/t/roadmap.md\nbranch: fix/x\npaths: [a.py]\n---\n\n"
     BODY = "## 목표\n\n가\n\n## 지시 원문\n\n- 범위: intent/original.md 2–3행\n\n## 하지 않을 것\n\n- 없음\n\n## 결정 기록\n"
@@ -283,6 +304,12 @@ class _ShutGit:   # rev-parse 가 실패하는 git — 아무것도 읽지 못�
     def run(self, *args):
         return 128, ""
 
+    def run_err(self, *args):
+        return 128, "", ""
+
+    def fail(self, sub, rc, err):
+        pass
+
     def blob(self, rev, path):
         return None
 
@@ -296,9 +323,9 @@ class BranchesWithoutFixture(unittest.TestCase):   # 분기 × 픽스처 대조�
         asked = []
 
         class Counted(_ShutGit):
-            def run(self, *args):
+            def run_err(self, *args):
                 asked.append(args)
-                return super().run(*args)
+                return super().run_err(*args)
 
         reader = TS.Reader(Counted(), "0" * 40, L.Team("docs/r/", "t"), lambda p: None)
         self.assertEqual(reader.shallow(), "얕은 클론인지 읽지 못했다")

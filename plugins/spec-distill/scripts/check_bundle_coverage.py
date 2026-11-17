@@ -510,7 +510,7 @@ def origin_notes(spec_text: str) -> tuple:
     return notices, shallow
 
 
-def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadmap_rel=None) -> dict:
+def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadmap_rel=None, roadmap_why=None) -> dict:
     """정답 출처의 번호 중 표에 없는 번호(missing) · 얕은 답 · 받드는 에픽 없는 발화 · 셀 수 없음.
     정답 출처가 번호 파일이면(team) mode 는 "sources", 로드맵 경로는 roadmap_rel 이고 결과에 notices 칸이 있다."""
     fm = frontmatter(bundle_text)
@@ -542,7 +542,7 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadm
     if mode == "brief":
         view, note = None, None
     elif mode == "sources" and not roadmap_rel:
-        view, note = None, NO_TEAM_ROADMAP
+        view, note = None, NO_TEAM_ROADMAP + (" — %s" % roadmap_why if roadmap_why else "")
     else:
         try:
             view, note = _roadmap_view(fm, repo, roadmap_rel if mode == "sources" else None)
@@ -880,14 +880,19 @@ def _read(path: str):
 
 
 def _intent_roadmap(sources_path: str):
-    """번호 파일과 같은 폴더 INTENT.md 머리의 roadmap. 읽지 못하거나 머리가 깨졌거나 키가 없으면 None."""
+    """(roadmap, 사유). 번호 파일과 같은 폴더 INTENT.md 머리의 roadmap — 읽지 못하거나 머리가 깨졌으면 (None, None),
+    키가 없거나 빈 값이면 (None, None), 값이 레포 상대 경로가 아니면 (None, 그 FormatError 의 글)."""
     text, _exc = _read(os.path.join(os.path.dirname(sources_path), team_layout.INTENT_FILE))
     if text is None:
-        return None
+        return None, None
     try:
-        return team_files.intent_meta(text).get("roadmap") or None
+        meta = team_files.intent_meta(text)
     except FormatError:
-        return None
+        return None, None
+    try:
+        return team_files.roadmap_rel(meta), None
+    except FormatError as exc:
+        return None, (str(exc) if meta.get("roadmap") else None)   # 키가 없거나 빈 값이면 사유를 더하지 않는다
 
 
 def coverage(first_path: str, spec_path: str) -> dict:
@@ -905,8 +910,8 @@ def coverage(first_path: str, spec_path: str) -> dict:
             audit = _read(first_path[:-3] + ".audit.md")[0] if first_path.endswith(".md") else None
             return check(texts[0], texts[1], audit_text=audit)
         if unquote(fm.get("type", "")) == SOURCES_TYPE:
-            rel = _intent_roadmap(first_path)
-            return check(texts[0], texts[1], repo=find_repo(first_path, rel), roadmap_rel=rel)
+            rel, why = _intent_roadmap(first_path)
+            return check(texts[0], texts[1], repo=find_repo(first_path, rel), roadmap_rel=rel, roadmap_why=why)
         return check(texts[0], texts[1], repo=find_repo(first_path, unquote(fm.get("roadmap", ""))))
     except Exception as exc:  # 검사 자체가 죽어도 이상 없음(0)으로 내지 않는다
         return _unchecked("내부 오류 — %s: %s" % (type(exc).__name__, exc))

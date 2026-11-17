@@ -87,6 +87,11 @@ class Parse(unittest.TestCase):
             r = F.parse_result(result(opener + self.REAL))
             self.assertEqual((r.problems, r.outputs), ([], ["real.md"]), repr(opener))
 
+    def test_real_fence_after_non_fence_shape(self):   # 펜스 아닌 꼴(네 칸 들여쓴 백틱) 뒤의 진짜 펜스는 펜스다
+        body = "    ```\n\n```\n끝 — abc1234\n```\n끝 — def5678\n"
+        r = F.parse_result(result(body))
+        self.assertEqual((r.end, r.problems), ("def5678", []))
+
     def test_line_endings(self):   # Review Focus 1
         text = result("Task 1/1: 끝 — abc1234\n끝 — " + H)
         for variant in (text, text.replace("\n", "\r\n"), text + "\n\n"):
@@ -141,15 +146,24 @@ class Progress(unittest.TestCase):
         self.assertEqual(self.p(""), (None, None, "진행 줄 없음"))
         self.assertEqual(self.p("Task 1/7: 끝 — a\nTask 3/7: 끝 — b\n"), (3, 7, None))
         self.assertEqual(self.p("Task 1/7: 끝 — a\nTask 2/7: 막힘 — b\n"), (1, 7, None))   # Q7
-        for body in ("Task 9/7: 끝 — a\n", "Task 0/7: 끝 — a\n", "Task 1/0: 끝 — a\n", "Task 1/7: 끝 — a\nTask 2/8: 끝 — b\n"):
+        for body in ("Task 9/7: 끝 — a\n", "Task 0/7: 끝 — a\n", "Task 1/0: 끝 — a\n"):
             done, total, why = self.p(body)
             self.assertEqual((done, total), (None, None), body)
             self.assertTrue(why.startswith("진행 줄 깨짐 — "), why)
 
     def test_reason_carries_the_line_as_written(self):
-        for line in ("Task 9/7: 끝 — a  b", "Task 0/7: 막힘 — 한  글 ", "Task 2/8: 끝 — b"):
-            body = line + "\n" if line != "Task 2/8: 끝 — b" else "Task 1/7: 끝 — a\n" + line + "\n"
-            self.assertEqual(self.p(body), (None, None, "진행 줄 깨짐 — " + line), line)
+        for line in ("Task 9/7: 끝 — a  b", "Task 0/7: 막힘 — 한  글 "):
+            self.assertEqual(self.p(line + "\n"), (None, None, "진행 줄 깨짐 — " + line), line)
+
+    def test_total_follows_the_last_line(self):   # 구현 중에 계획의 task 절이 늘거나 줄었다(U13)
+        grew = "Task 1/5: 끝 — aaa1111\nTask 2/5: 끝 — bbb2222\nTask 3/6: 끝 — ccc3333\n"
+        self.assertEqual(self.p(grew), (3, 6, None))
+        shrank = "Task 1/5: 끝 — aaa1111\nTask 2/4: 막힘 — bbb2222\n"
+        self.assertEqual(self.p(shrank), (1, 4, None))
+
+    def test_a_number_above_its_own_total_is_still_broken(self):
+        why = self.p("Task 6/5: 끝 — aaa1111\nTask 2/6: 끝 — bbb2222\n")[2]
+        self.assertTrue(why.startswith("진행 줄 깨짐 — Task 6/5"), why)
 
     def test_reason_heads_are_constants(self):   # 계획 2 Task 7 수정 1 — 사유 머리는 한 곳(team_status 가 가져다 쓴다)
         self.assertEqual((F.PROGRESS_NONE, F.PROGRESS_BROKEN), ("진행 줄 없음", "진행 줄 깨짐"))
