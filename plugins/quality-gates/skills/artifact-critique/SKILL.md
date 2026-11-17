@@ -9,7 +9,8 @@ description: >
   findings-only pass reports findings without editing. Bounded by max-rounds (the user opens more
   rounds at the cap) + stagnation + kill switch. Not a code gate — code targets route to
   /quality-gates:quality-pipeline (one pipeline, one verdict).
-cost_class: variable
+metadata:
+  cost_class: variable
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates artifact-critique)
 ---

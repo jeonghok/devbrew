@@ -37,14 +37,14 @@ ENTRY = [("spec-distill", "request-framing", False), ("spec-distill", "pm-interv
          ("project-init", "project-init", True),
          ("quality-gates", "quality-pipeline", False), ("quality-gates", "artifact-critique", False)]
 for p, s, user_only in ENTRY:
-    fm = "---\nname: %s\ndescription: x\ncost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")
+    fm = "---\nname: %s\ndescription: x\nmetadata:\n  cost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")
     rows = ("\n| `[devbrew-entry] ok …` | 간다 |\n| `[devbrew-entry] disabled …` | 멈춘다 |\n"
             "| `[devbrew-entry] error …` | 멈춘다 |\n| `[shell command execution disabled by policy]` | 멈춘다 |\n"
             "| 감시줄 없음 · 그 밖 | 멈춘다 |\n")
     w("plugins/%s/skills/%s/SKILL.md" % (p, s), fm + head(p, s) + rows + "\n## 본문\n\n/%s:%s 로 부른다.\n" % (p, s))
     w("plugins/%s/scripts/entry_preflight.py" % p, "# stub\n")
 w("plugins/spec-distill/skills/reviewing-brief/SKILL.md",
-  "---\nname: reviewing-brief\ndescription: x\ncost_class: medium\nuser-invocable: false\n---\n\nbody\n")
+  "---\nname: reviewing-brief\ndescription: x\nmetadata:\n  cost_class: medium\nuser-invocable: false\n---\n\nbody\n")
 w("plugins/spec-distill/README.md", "# spec-distill\n\n`/pm-interview` 를 친다.\n")
 w("README.md", "# r\n")
 subprocess.run(["git", "init", "-q", d], check=True)
