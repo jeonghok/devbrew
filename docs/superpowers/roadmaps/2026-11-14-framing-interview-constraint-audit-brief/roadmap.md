@@ -50,15 +50,15 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 근거: S21
 
 ### F3 — 원자료 정본 사슬
-- 의도: 사용자가 준 원자료를 줄이지 않은 파일 하나가 정본이 되고 앞단이 처음부터 의도 폴더에 쓴다
-- 범위: 한다: framing 이 원자료를 의도 폴더의 원자료 파일에 글자 그대로 쓰기, 결과물(brief · audit)을 의도 폴더에 쓰기, seed 가 맡을 일과 seed 문법, 인터뷰 결과물의 사용자 원문 첫 칸과 리뷰 정답 출처, 비밀값 가리기, 고른 선택지 문장과 직접 쓴 말의 구분, 로드맵 없는 일 · framing 없이 시작한 일의 자리 / 안 한다: 옛 기록 옮기기, 옆 로드맵의 생성기 고치기
+- 의도: 사용자가 준 원자료를 줄이지 않은 글이 정본이 되고, framing 뒤의 모든 단계가 seed(모델이 줄인 글)가 아니라 그 원자료를 사용자의 말로 읽는다
+- 범위: 한다: 원자료를 찾는 길을 한 곳에 두기(새 모듈), framing 이 사용자의 말을 적는 모든 길의 비밀값 가리기, 고른 선택지 문장과 직접 쓴 말의 구분, 원문 절의 구분 줄, 인터뷰가 원자료 읽기, 인터뷰 결과물의 사용자 원문 첫 칸(원문 절과 질문 전체 절)과 리뷰 정답 출처(결과물 리뷰 기준과 설계문서 리뷰 기준), 끝맺음이 비밀값으로 보이는 값에서 멈추기, seed 가 맡을 일과 seed 문법, framing 에서 다른 다음 단계로 바로 가는 길, CLAUDE.md 없는 레포의 seed 리뷰 재료 / 안 한다: 원자료와 결과물을 의도 폴더에 처음부터 쓰기(옆 로드맵으로 넘김 — 설계 대화의 재결정), 로드맵 없는 일 · framing 없이 시작한 일의 새 자리(옆 로드맵 둘째 에픽), 옛 기록 옮기기, 옆 로드맵의 생성기 고치기
 - 의존: F2
-- 브랜치: feature/raw-source-canon
+- 브랜치: feature/raw-source-canon, feature/raw-source-readers
 - 묶음: F3.md
-- 경로 예약: plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/scripts/seed_body.py, plugins/spec-distill/scripts/build_seed_inline_blob.py, plugins/spec-distill/skills/pm-interview/references/seed-input.md, plugins/spec-distill/references/docreview-profiles/seed.md, plugins/spec-distill/references/docreview-profiles/brief.md
+- 경로 예약: plugins/spec-distill/scripts/raw_source.py, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/templates/interview-seed-audit-template.md, plugins/spec-distill/templates/interview-seed-template.md, plugins/spec-distill/scripts/seed_body.py, plugins/spec-distill/scripts/build_seed_inline_blob.py, plugins/spec-distill/references/docreview-profiles/seed.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/seed-input.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, plugins/spec-distill/skills/pm-interview/references/state-file.md, plugins/spec-distill/skills/pm-interview/references/steelman.md, plugins/spec-distill/agents/coverage-mapper.md, plugins/spec-distill/agents/blind-spot-prober.md, plugins/spec-distill/templates/interview-brief-template.md, plugins/spec-distill/scripts/check_verbatim_coverage.py, plugins/spec-distill/scripts/build_brief_bundle.py, plugins/spec-distill/references/docreview-profiles/brief.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md
 - 크기: 큼
 - 병렬: F4 · F6 과 병렬
-- 순서 이유: 옆 로드맵 첫 에픽의 형식이 머지된 뒤 그 형식에 쓴다
+- 순서 이유: 옆 로드맵을 기다리지 않고 읽는 쪽부터 고친다 — 둘째 계획(인터뷰와 결과물 리뷰 쪽)은 첫째 계획의 PR 이 머지된 뒤다
 - 근거: S3 · S5 · S16
 
 ### F4 — 앞단의 끝
@@ -75,22 +75,22 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 
 ### F5 — 앞단 다시 짜기
 - 의도: 앞단 skill 글을 줄이고, 인터뷰를 컨텍스트 쌓기와 로드맵 잡기 두 단계로 나누고, F1 이 정한 이름으로 바꾼다
-- 범위: 한다: 이유 · 이력 설명 · 낡은 서술 · 옛 설계 번호 걷어내기, 단계 나누기와 단계 사이 넘김, 이름이 박힌 층(호출 이름 · 설정 키 · 설계문서 머리 키 · 파일 이름 끝 · 산출물 종류 글자 · 폴더 이름) 가운데 바꿀 것 정하기, 옛 기록을 읽는 길, major 판 올림, 작은 일을 리더로 넘기기(옆 로드맵 둘째 에픽이 받는 길을 정한 뒤), 옆 로드맵이 넘긴 넷(분해 전에 원자료 파일 만들기 · 분해 승인 화면에 지시 원문 범위 보이기 · 끝내기 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 · 로드맵 생성을 인터뷰 커밋 뒤로), 묻지 않은 다섯(확인 표시가 사용자 원문 문장에 안 붙는 것 · 라운드 꼴 고정 · 의심 게이트의 추천 봉쇄 · 조사 호출 상한 · 쉬운 말 규칙의 사용자 이름)과 에픽 넘김 줄의 「사용자 선호」 라벨 / 안 한다: 옛 기록 파일 옮기기, 옆 로드맵이 예약한 파일을 순서 맞추기 없이 고치기
-- 의존: F1, F3, F4
+- 범위: 한다: 이유 · 이력 설명 · 낡은 서술 · 옛 설계 번호 걷어내기, 단계 나누기와 단계 사이 넘김, 이름이 박힌 층(호출 이름 · 설정 키 · 설계문서 머리 키 · 파일 이름 끝 · 산출물 종류 글자 · 폴더 이름) 가운데 바꿀 것 정하기, 옛 기록을 읽는 길, major 판 올림, 작은 일을 리더로 넘기기(옆 로드맵 둘째 에픽이 받는 길을 정한 뒤), 옆 로드맵이 넘긴 넷(분해 전에 원자료 파일 만들기 · 분해 승인 화면에 지시 원문 범위 보이기 · 끝내기 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 · 로드맵 생성을 인터뷰 커밋 뒤로), 묻지 않은 다섯(확인 표시가 사용자 원문 문장에 안 붙는 것 · 라운드 꼴 고정 · 의심 게이트의 추천 봉쇄 · 조사 호출 상한 · 쉬운 말 규칙의 사용자 이름)과 에픽 넘김 줄의 「사용자 선호」 라벨, 저술 가이드를 새 코어(팀 구조)에 맞추기(F6 이 넘김 — 옆 로드맵의 팀 구조가 머지된 뒤), 철학 문서의 P8 밖에서 앞단에 닿는 문장과 낡은 서술 훑기(F6 이 넘김), F4 가 넘긴 것(에픽 넘김 글의 낡은 문장 하나 · 끝맺음 마지막 리뷰가 남긴 작은 지적들 · 인터뷰 소개 문구와 종료 조건 문장이 건너뜀을 말하지 않는 것 — 할지는 설계 대화에서 다시 묻는다), 나눈 두 단계 모두가 원자료를 읽게 하기(F3 이 넘김) / 안 한다: 옛 기록 파일 옮기기, 옆 로드맵이 예약한 파일을 순서 맞추기 없이 고치기
+- 의존: F1, F3, F4, F6
 - 브랜치: feature/front-stage-restructure
 - 묶음: F5.md
-- 경로 예약: plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, shared/tests/test_invocation_surface.sh
+- 경로 예약: plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, shared/tests/test_invocation_surface.sh, docs/plugin-authoring.md, docs/philosophy/devbrew-harness-philosophy.md
 - 크기: 큼
 - 순서 이유: 동작을 바꾸는 에픽이 끝난 뒤에 글 줄이기 · 나누기 · 이름 바꾸기를 한다 — 락이 의도한 변경과 회귀를 가르게
 - 근거: S2 · S8 · S17 · 조사 10
 
 ### F6 — 규칙 개정
 - 의도: CLAUDE.md · 저술 가이드 · 철학 문서에서 공식과 다른 자리 가운데 사용자가 고른 것을 공식 쪽으로 옮기고 낡은 서술을 고친다
-- 범위: 한다: cost_class 를 metadata 아래로, integrity 규칙 걷어내기, skill 의 disallowed-tools 반영, agent 의 model 키 허용, plugin.json 필수 키 완화, 판 올림을 설치본 동작이 바뀔 때로(올림 단위의 정의 포함), 저술 가이드의 낡은 예시와 문법 안내, 철학 문서의 P8 밖 문장, 그 규칙을 글자로 박은 락과 감사 검사 / 안 한다: 원칙 P8 문장(옆 로드맵), 의존을 plugin.json 에 선언하기, kill switch 와 상태 자리(F7)
+- 범위: 한다: cost_class 를 metadata 아래로, integrity 규칙 걷어내기, skill 의 disallowed-tools 반영, plugin.json 필수 키 완화, 판 올림을 설치본 동작이 바뀔 때로(올림 단위의 정의 포함), 저술 가이드의 낡은 예시와 문법 안내, 철학 문서의 P8 밖 두 문장(integrity · cost_class 를 말하는 자리), 그 규칙을 글자로 박은 락과 감사 검사 / 안 한다: agent 의 model 키 허용(설계 대화에서 다시 정했다 — 이 로드맵은 하지 않는다), 저술 가이드를 새 코어에 맞추기(F5), 철학 문서의 앞단에 닿는 문장과 낡은 서술 훑기(F5), 원칙 P8 문장(옆 로드맵), 의존을 plugin.json 에 선언하기, kill switch 와 상태 자리(F7)
 - 의존: 없음
 - 브랜치: feature/rules-toward-official
 - 묶음: F6.md
-- 경로 예약: CLAUDE.md, docs/plugin-authoring.md, docs/philosophy/devbrew-harness-philosophy.md, plugins/plugin-audit/scripts/check-shape-completeness.py, shared/tests/test_changelog_integrity.sh
+- 경로 예약: CLAUDE.md, docs/plugin-authoring.md, docs/philosophy/devbrew-harness-philosophy.md, docs/git-workflow/commit-conventions.md, shared/README.md, shared/entry/check_invocation_surface.py, plugins/plugin-audit/scripts/check-shape-completeness.py, plugins/plugin-audit/scripts/check-staleness.py, plugins/plugin-audit/skills/plugin-audit/SKILL.md, plugins/project-init/skills/project-init/SKILL.md, plugins/quality-gates/skills/artifact-critique/SKILL.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/reviewing-brief/SKILL.md, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md
 - 크기: 큼
 - 병렬: P1 · F2 · F3 · F4 와 병렬
 - 순서 이유: 옆 로드맵 둘째 에픽과 같은 파일이라 머지 순서를 맞춘다
@@ -98,7 +98,7 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 
 ### F7 — 스위치와 상태 자리 이전
 - 의도: 환경변수 kill switch 와 프로젝트 안 상태 폴더를 공식 장치로 옮긴다
-- 범위: 한다: 스위치마다 공식 대응물 정하기(플러그인 끄기 · skill 거부 규칙 · 플러그인 사용자 옵션)와 대응물이 없는 것만 환경변수로 남기기, 상태 파일마다 공식 데이터 폴더(프로젝트마다 갈리게)로 갈 것과 꼭 둬야 해서 docs 아래로 갈 것 가르기, 비교용 작업 사본을 그냥 워크트리로, 쓰기가 막히는 세션의 길, 옛 환경변수를 한 판 동안 함께 읽고 꺼져 있음을 알리기, kill switch 은퇴 공시, Claude Code 최소 판 / 안 한다: 실측(P1)
+- 범위: 한다: 스위치마다 공식 대응물 정하기(플러그인 끄기 · skill 거부 규칙 · 플러그인 사용자 옵션)와 대응물이 없는 것만 환경변수로 남기기, 상태 파일마다 공식 데이터 폴더(프로젝트마다 갈리게)로 갈 것과 꼭 둬야 해서 docs 아래로 갈 것 가르기, 비교용 작업 사본을 그냥 워크트리로, 쓰기가 막히는 세션의 길, 옛 환경변수를 한 판 동안 함께 읽고 꺼져 있음을 알리기, kill switch 은퇴 공시, Claude Code 최소 판, 모델 판단으로 건너뛴 재비판을 리뷰 엔진이 kill switch 사유로 적는 글자 가르기(F4 가 넘김), CLAUDE.md 의 런타임 상태 · 훅 절과 감사 검사의 「모든 훅에 kill switch」 문장(F6 이 넘김) / 안 한다: 실측(P1)
 - 의존: P1, F6
 - 브랜치: feature/official-switches-state
 - 묶음: F7.md
@@ -133,6 +133,12 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 바뀜: 바뀐 에픽 F4 · F5 「추천으로」 · 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「추천으로」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-17 · 설계 대화에서 정한 것을 에픽 칸에 맞춘다 — F3 은 의도 폴더에 쓰기를 옆 로드맵으로 넘기고(길 1) 범위 · 브랜치 · 경로 예약을 승인된 설계에 맞춘다, F6 은 agent 의 model 키 허용을 범위에서 빼고(설계 대화의 재결정) 넘긴 둘을 F5 가 받는다, F7 은 F4 · F6 이 넘긴 둘을 받는다
+- 바뀜: 바뀐 에픽 F3 · F5 · F6 · F7 「길 1로 가자」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「길 1로 가자」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
