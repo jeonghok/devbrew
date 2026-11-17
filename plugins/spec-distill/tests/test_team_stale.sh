@@ -141,5 +141,16 @@ patched same
 assert_eq "$(e2)" "[]" "AC31: 바꾸지 않은 보고에는 그 결과 파일의 알림이 없다"
 patched swap
 assert_eq "$(e2)" "['묶음 낡음: implement-1.md — 묶은 커밋 ${B2:0:8} 뒤에 바뀜: ${RULES}']" "AC31: 바꾼 보고에는 팀 규칙 파일 경로만 든다(공통 규칙 파일은 기본 브랜치에서 읽는다)"
+# I2 — roadmap_status(그리고 team_status)를 먼저 import 한 뒤에 바꿔 끼워도 그 값이 닿는다(부를 때마다 모듈에서 찾는다)
+(cd "$W" && python3 - "$S" "$RM" > "$T/p.json" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import roadmap_status
+import team_layout
+team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+sys.exit(roadmap_status.main([sys.argv[2], "--json"]))
+PY
+) 2> /dev/null
+assert_eq "$(e2)" "['묶음 낡음: implement-1.md — 묶은 커밋 ${B2:0:8} 뒤에 바뀜: ${RULES}']" "I2: import 뒤에 바꿔 끼워도 팀 규칙 파일 경로가 든다"
 
 finish
