@@ -592,7 +592,8 @@ done
 # 2026-10-19 R10 조사 열기: `## 조사 열기` 절(여럿 동시에 · 만들어 보내기 · 있는 것 먼저 · 웹 펜스 · 요약 펜스 ·
 # open-researcher dispatch)과 라운드 질문 묶기 · V1 웹 주장 문장을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 564 + 8.
 # 2026-10-22 R8 계획 2: 진입 단계 `### 1.5 의존 확인`(펜스 · 결과 표)을 더한다. 삭제 0 의 순증이라 래칫을 올린다 — 실측 586 + 8.
-SKILL_LINE_CAP=594
+# 2026-11-15 있는 것 먼저: 「있는 것 먼저」 문단에 대상 · 기본 · 정보 여섯 칸 · 조사 규약 · 기준 글 Read 줄을 더한다. 순증이라 래칫을 올린다 — 실측 596 + 8.
+SKILL_LINE_CAP=604
 [[ "$(skill_own_lines "$SKILL")" -lt "$SKILL_LINE_CAP" ]] \
   && ok "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") < $SKILL_LINE_CAP (규칙 블록 제외 — 조사 특화 순증 + 진입 단계 흡수)" \
   || no "AC3/C9: SKILL.md 자기 줄 수 $(skill_own_lines "$SKILL") ≥ $SKILL_LINE_CAP"
@@ -600,6 +601,19 @@ _total="$(wc -l < "$SKILL" | tr -d ' ')"; _own="$(skill_own_lines "$SKILL")"
 [[ $(( _total - _own )) -eq 14 ]] \
   && ok "AC3/C9 양의 짝: 블록 13줄 + 뒤 빈 줄 1 이 정확히 빠졌다 (${_total} − ${_own})" \
   || no "AC3/C9 양의 짝: 뺀 줄 수가 14 가 아니다 (${_total} − ${_own}) — 블록이 없거나 함수가 깨졌다"
+
+# 있는 것 먼저 — 문단이 대상 · 기본 · 정보 여섯 칸 · 조사 규약 · 기준 글 Read 줄을 담는다(문단 창 안에서만 잰다)
+EF_PARA="$(awk '/^\*\*있는 것 먼저\.\*\*/{f=1} /^`open-researcher` 를 띄우는 메시지마다/{f=0} f' "$SKILL")"
+for lit in '바깥의 있는 것(플랫폼 기본 기능 · 남이 만들어 유지하는 플러그인과 skill · 널리 쓰이는 패키지와 도구)을 웹으로 찾는다.' \
+           '기본은 맞는 것이 있으면 그 위에서 만드는 쪽이다.' \
+           '후보마다 정보 여섯 칸(공식인가 · 널리 쓰임과 재는 단위 · 유지 · 안정 단계 · 실행하고 닿는 것과 알려진 보안 문제 · 라이선스와 의무)을 함께 싣는다.' \
+           '바깥 것은 사용자 검토 뒤에만 쓴다 — 후보와 차이를 보이고 묻는다.' \
+           '만들 것이 없는 일(조사 · 결정만)이면 건너뛰고 이유를 적는다.' \
+           '조사를 띄우는 일은 이 skill 의 조사 규약(조사 agent · 띄우기 전 펜스 · 주장 계약 · 본체 확인 · 호출 상한)을 그대로 따른다.' \
+           'Read ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md'; do
+  assert_contains "$EF_PARA" "$lit" "있는 것 먼저: 문단에 «${lit}»"
+done
+assert_not_contains "$EF_PARA" '바깥의 성숙한 것' "있는 것 먼저: 옛 「성숙한 것」 없음(양성 짝: 위 대상 단언)"
 
 # 제거 (G7·AC1·AC14) — 존재 검사가 아니라 부재 검사이므로 CI_ALL 전체
 for tok in 'teach-lite' 'teach-heavy' 'teach-beat' 'general-purpose'; do

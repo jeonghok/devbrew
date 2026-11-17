@@ -973,6 +973,7 @@ class TestSections(unittest.TestCase):
 
 SCRIPT = SCRIPTS / "intent_critic.py"
 KILL = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
+GLOBAL_KILL = "DEVBREW_QUALITY_GATES_DISABLE"
 ENV_DIR = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 ENV_MAX = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
 ENV_OTHER_MAX = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
@@ -989,7 +990,7 @@ MEANING = ("의도대로 만들었는지가 아니라 의도 자체"
 
 def _env(**extra):
     env = dict(os.environ)
-    for k in (KILL, ENV_DIR, ENV_MAX, ENV_OTHER_MAX, ENV_MARKERS):
+    for k in (KILL, GLOBAL_KILL, ENV_DIR, ENV_MAX, ENV_OTHER_MAX, ENV_MARKERS):
         env.pop(k, None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.update(extra)
@@ -1072,7 +1073,14 @@ def _return_block(rd):
     return text, yaml.safe_load(body)
 
 
-OBS1 = "   1\t[e2e] 관찰 1"
+def _header(rd, ident, pick, nth=1):
+    """record 입력의 머리 줄(끝 줄바꿈 없음) — 질문 기록에서 정체가 ident 인 nth 번째 묻는 질문의 번호를 읽어 넣는다."""
+    numbers = [q["n"] for q in _questions(rd)["questions"]
+               if q.get("state") == "ask" and q.get("id") == ident]
+    return "=== n: %d · id: %s · pick: %s" % (numbers[nth - 1], ident, pick)
+
+
+OBS1 ="   1\t[e2e] 관찰 1"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
 FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
 PICK_UNREAD = "답을 읽지 못함"
@@ -1092,7 +1100,7 @@ class TestGate(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertEqual(_last(p), "intent-critic 꺼짐(kill switch)")
                 text, block = _return_block(rd)
-                self.assertIn("status: skipped — ", text)
+                self.assertEqual((block["status"], block["reason"]), ("skipped", "kill-switch"))
                 self.assertEqual(block["questions"], [])
                 self.assertFalse(os.path.exists(os.path.join(rd, "result.md")))
 
@@ -1105,7 +1113,9 @@ class TestGate(unittest.TestCase):
                 p = _cli("gate", "--rd", rd, "--path", path)
                 self.assertEqual((p.returncode, _last(p)), (0, line), path)
                 text, block = _return_block(rd)
-                self.assertTrue(str(block["status"]).startswith("skipped — "), path)
+                self.assertEqual((block["status"], block["reason"]),
+                                 ("skipped", {"aborted": "halted", "trivia": "trivia",
+                                              "scope-empty": "empty-diff"}[path]), path)
         with tempfile.TemporaryDirectory() as rd:
             p = _cli("gate", "--rd", rd, "--path", "final")
             self.assertEqual((p.returncode, _last(p)), (0, "intent-gate: run"))
@@ -1116,7 +1126,7 @@ class TestGate(unittest.TestCase):
             p = _cli("gate", "--rd", rd, "--path", "tree-failed", "--mode", "range")
             self.assertEqual((p.returncode, _last(p)), (0, "intent-critic — 리뷰 트리를 만들지 못함"))
             text, block = _return_block(rd)
-            self.assertIn("status: skipped — 리뷰 트리를 만들지 못함", text)
+            self.assertEqual((block["status"], block["reason"]), ("failed", "tree-failed"))
             self.assertEqual(block["mode"], "range")
 
     def test_bad_call_is_rc2(self):
@@ -1665,7 +1675,7 @@ class TestFilter(unittest.TestCase):
         outs.append(_cli("check-output", os.path.join(rd, "intent-critic-1.txt")))
         outs.append(_cli("doubts-append", "--rd", rd))
         outs.append(_cli("filter", "--rd", rd))
-        _write("=== id: diff#a.txt#기본값 · pick: 의도다\n", rd, "answers.txt")
+        _write(_header(rd, "diff#a.txt#기본값", "의도다") + "\n", rd, "answers.txt")
         outs.append(_cli("record", "--rd", rd, "--repo", repo, "--answers",
                          os.path.join(rd, "answers.txt")))
         outs.append(_cli("render", "--rd", rd, "--mode", "pr"))
@@ -1725,7 +1735,7 @@ class TestRecord(unittest.TestCase):
         self.assertEqual(_last(_cli("filter", "--rd", self.rd)), "intent-ask: 1")
         ident = _by_state(self.rd, "ask")[0]["id"]
         self.assertEqual(ident, "diff#a.txt#기본값")
-        p = self._record("=== id: %s · pick: 의도다\n" % ident)
+        p = self._record(_header(self.rd, ident, "의도다") + "\n")
         self.assertEqual(_last(p), "record: 1")
         self.assertIn("답 파일 1개를 커밋했다(", p.stdout)
         files = self._files()
@@ -1745,33 +1755,37 @@ class TestRecord(unittest.TestCase):
         self.assertEqual((q["answer"], q["file"]), ("의도다", ANS_DIR + "/" + files[0]))
 
     def test_record_typed_multiline_and_fake_header(self):
+        """답 머리 꼴(`=== n: ` · `=== id: `)이 아닌 줄은 typed 답의 원문이다. 머리 꼴 줄은 답을 끝내고, 번호가 묻는
+        질문을 가리키지 않는 머리와 그 아래 글은 어느 답에도 실리지 않는다."""
         ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작")])
-        typed = ("잘못 골랐다 — 이유\n=== id: 모르는#정체#방향\n둘째 줄\t탭 뒤\n"
-                 "=== id: %s · pick: 아마\n=== id: %s · pick: 의도다\n" % (ids[1], ids[0]))
-        p = self._record("=== id: %s · pick: typed\n%s" % (ids[0], typed))
+        typed = ("잘못 골랐다 — 이유\n==== id: 머리 아님\n둘째 줄\t탭 뒤\n=== n:2 붙여 씀\n"
+                 "=== id: 모르는#정체#방향\n뒤 글\n=== id: %s · pick: 의도다\n" % ids[1])
+        p = self._record(_header(self.rd, ids[0], "typed") + "\n" + typed)
         self.assertEqual(_last(p), "record: 1")
+        self.assertIn("정체가 맞지 않는 답 머리 2개", p.stdout.splitlines())
+        self.assertNotIn("답 기록 실패", p.stdout)
         files = self._files()
         self.assertEqual(len(files), 1)
         parsed = self._parsed(files[0])
         self.assertEqual((parsed["id"], parsed["answer"]), (ids[0], "잘못 골랐다"))
         body = _read(self.repo, ANS_DIR, files[0]).split("## 답 원문\n", 1)[1]
-        for part in ("잘못 골랐다 — 이유", "=== id: 모르는#정체#방향", "둘째 줄\t탭 뒤",
-                     "pick: 아마", "=== id: %s · pick: 의도다" % ids[0]):
-            self.assertIn(part, body)
+        self.assertEqual(body.strip(), "잘못 골랐다 — 이유\n==== id: 머리 아님\n둘째 줄\t탭 뒤\n"
+                                       "=== n:2 붙여 씀")
         self.assertEqual(len(_by_state(self.rd, "answered")), 1)
         self.assertEqual(_by_state(self.rd, "ask")[0]["id"], ids[1])
+        self.assertNotIn("record_failed", _by_state(self.rd, "ask")[0])
 
     def test_record_two_answers(self):
         ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작")])
-        p = self._record("=== id: %s · pick: 잘못 골랐다\n=== id: %s · pick: 지금은 모르겠다\n"
-                         % (ids[0], ids[1]))
+        p = self._record(_header(self.rd, ids[0], "잘못 골랐다") + "\n"
+                         + _header(self.rd, ids[1], "지금은 모르겠다") + "\n")
         self.assertEqual(_last(p), "record: 2")
         answers = sorted(self._parsed(n)["answer"] for n in self._files())
         self.assertEqual(answers, ["잘못 골랐다", "지금은 모르겠다"])
 
     def test_record_typed_unknown_prefix(self):
         ids = self._asked([_q("D1")])
-        self._record("=== id: %s · pick: typed\n글쎄\n" % ids[0])
+        self._record(_header(self.rd, ids[0], "typed") + "\n글쎄\n")
         files = self._files()
         parsed = self._parsed(files[0])
         self.assertEqual(parsed["answer"], "지금은 모르겠다")
@@ -1780,14 +1794,14 @@ class TestRecord(unittest.TestCase):
     def test_record_unidentified_answer_file(self):
         ids = self._asked([_q("D1", kind="모르는", question="모르는 질문")])
         self.assertTrue(ids[0].startswith("unidentified:"))
-        self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self._record(_header(self.rd, ids[0], "의도다") + "\n")
         self.assertEqual(self._parsed(self._files()[0])["id"], ids[0])
         self.assertEqual(ia.read_answered(os.path.join(self.repo, ANS_DIR)), ({}, 0))
 
     def test_record_commit_failure_keeps_file(self):
         ids = self._asked([_q("D1")])
         _git(self.repo, "checkout", "-q", "--detach")
-        p = self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        p = self._record(_header(self.rd, ids[0], "의도다") + "\n")
         self.assertIn("답 파일을 커밋하지 못했다 — 브랜치가 아니다(detached HEAD)(파일은 남겼다)",
                       p.stdout.splitlines())
         self.assertEqual(_last(p), "record: 1")
@@ -1806,7 +1820,7 @@ class TestRecord(unittest.TestCase):
             os.makedirs(os.path.join(self.repo, "docs"))
             os.symlink(other, os.path.join(self.repo, ANS_DIR))
             head = _git(self.repo, "rev-parse", "HEAD").stdout
-            p = self._record("=== id: %s · pick: 잘못 골랐다  \n" % ids[0])
+            p = self._record(_header(self.rd, ids[0], "잘못 골랐다") + "  \n")
             self.assertIn("답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다", p.stdout.splitlines())
             self.assertIn(RECORD_FAILED % (1, "답 자리가 심볼릭 링크다"), p.stdout.splitlines())
             self.assertEqual(_last(p), "record: 0")
@@ -1822,8 +1836,9 @@ class TestRecord(unittest.TestCase):
             text, block = _return_block(self.rd)
             self.assertEqual(block["commit"], "failed — 답 자리가 심볼릭 링크다")
             row = block["questions"][0]
-            self.assertEqual((row["state"], row["answer"], row["file"], row["wrong_choice"]),
-                             ("아직 묻지 않음", "-", "-", False))
+            self.assertEqual((row["state"], row["answer"], row["file"], row["wrong_choice"],
+                              row["failure"]),
+                             ("답 기록 실패", "잘못 골랐다", "-", True, "답 자리가 심볼릭 링크다"))
             section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
             self.assertIn("- 답 파일을 쓰지 못했다 — 답 자리가 심볼릭 링크다\n", section)
             self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 자리가 심볼릭 링크다")
@@ -1844,8 +1859,8 @@ class TestRecord(unittest.TestCase):
         data["questions"][1]["quote"] = "깨진 \ud800 구절"
         _write(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), self.rd,
                "intent-questions.yaml")
-        p = self._record("=== id: %s · pick: 의도다\n=== id: %s · pick: 잘못 골랐다\n"
-                         % (ids[0], ids[1]))
+        p = self._record(_header(self.rd, ids[0], "의도다") + "\n"
+                         + _header(self.rd, ids[1], "잘못 골랐다") + "\n")
         lines = p.stdout.splitlines()
         self.assertIn(RECORD_FAILED % (1, "답 파일을 쓰지 못했다"), lines)
         self.assertTrue(any(l.startswith("답 파일 1개를 커밋했다(") for l in lines), lines)
@@ -1863,7 +1878,8 @@ class TestRecord(unittest.TestCase):
         rows = block["questions"]
         self.assertEqual([(x["state"], x["answer"], x["file"], x["wrong_choice"]) for x in rows],
                          [("답함", "의도다", ANS_DIR + "/" + files[0], False),
-                          ("아직 묻지 않음", "-", "-", False)])
+                          ("답 기록 실패", "잘못 골랐다", "-", True)])
+        self.assertEqual(rows[1]["failure"], "답 파일을 쓰지 못했다")
         self.assertNotIn("failed", block["commit"])
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
         self.assertEqual(section.count("- " + RECORD_FAILED % (1, "답 파일을 쓰지 못했다") + "\n"), 1)
@@ -1872,21 +1888,22 @@ class TestRecord(unittest.TestCase):
         self.assertEqual(section.count("- " + items[0] + "\n"), 1)
 
     def test_record_failure_lines_are_grouped_under_their_own_reason(self):
-        """한 실행에 사유가 둘이면(답 파일을 못 씀 · 답을 읽지 못함) 질문 줄은 제 사유의 수 줄 아래에만 선다."""
+        """한 실행에 사유가 둘이면(답 파일을 못 씀 · 정체가 맞지 않는 답 머리) 질문 줄은 제 사유의 수 줄 아래에만 선다."""
         ids = self._asked([_q("D1"), _q("D2", kind="기본값", weight="동작"),
                            _q("D3", kind="마찰", weight="동작")])
         data = _questions(self.rd)
         data["questions"][1]["quote"] = "깨진 \ud800 구절"
         _write(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), self.rd,
                "intent-questions.yaml")
-        p = self._record("=== id: %s · pick: 의도다\n=== id: %s · pick: 잘못 골랐다\n"
-                         "=== id: %s오타 · pick: 의도다\n" % (ids[0], ids[1], ids[2]))
+        third = _header(self.rd, ids[2], "의도다").replace(ids[2], ids[2] + "오타")
+        p = self._record(_header(self.rd, ids[0], "의도다") + "\n"
+                         + _header(self.rd, ids[1], "잘못 골랐다") + "\n" + third + "\n")
         lines = [l for l in p.stdout.splitlines() if l.startswith("답 기록 실패")]
         self.assertEqual(lines, [
             RECORD_FAILED % (1, "답 파일을 쓰지 못했다"),
             FAILED_ITEM % (ids[1], "잘못 골랐다", "D2 를 정말 이렇게 고른 것인가?"),
-            RECORD_FAILED % (1, "답 입력에서 읽지 못한 글이 있다"),
-            FAILED_ITEM % (ids[2], PICK_UNREAD, "D3 를 정말 이렇게 고른 것인가?")])
+            RECORD_FAILED % (1, "정체가 맞지 않는 답 머리"),
+            FAILED_ITEM % (ids[2], "의도다", "D3 를 정말 이렇게 고른 것인가?")])
         self.assertEqual(_last(p), "record: 1")
         r = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(r), "intent-critic — 질문 3개를 물었다 · 답 1개(잘못 골랐다 0개)")
@@ -1896,7 +1913,7 @@ class TestRecord(unittest.TestCase):
         with tempfile.TemporaryDirectory() as other:
             os.makedirs(os.path.join(self.repo, "docs"))
             os.symlink(other, os.path.join(self.repo, ANS_DIR))
-            p = self._record("=== id: %s · pick: typed\n잘못 골랐다 — 긴 이유\n둘째 줄\n" % ids[0])
+            p = self._record(_header(self.rd, ids[0], "typed") + "\n잘못 골랐다 — 긴 이유\n둘째 줄\n")
         items = [l for l in p.stdout.splitlines() if l.startswith("답 기록 실패 질문 — ")]
         self.assertEqual(items, [FAILED_ITEM % (ids[0], "잘못 골랐다", "D1 를 정말 이렇게 고른 것인가?")])
         self.assertNotIn("긴 이유", p.stdout)
@@ -1909,7 +1926,7 @@ class TestRecord(unittest.TestCase):
         with tempfile.TemporaryDirectory() as other:
             os.makedirs(os.path.join(self.repo, "docs"))
             os.symlink(other, os.path.join(self.repo, ANS_DIR))
-            p = self._record("=== id: %s · pick: 의도다\n" % ids[0])
+            p = self._record(_header(self.rd, ids[0], "의도다") + "\n")
         lines = p.stdout.split("\n")
         self.assertEqual(lines[-2:], ["record: 0", ""])
         for bad in ("## 판정", "record: 9", "답 파일 9개를 커밋했다(abc)"):
@@ -1931,14 +1948,14 @@ class TestRecord(unittest.TestCase):
     def test_record_does_not_write_session_drafts(self):
         ids = self._asked([_q("D1")])
         before = sorted(os.listdir(self.rd))
-        self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        self._record(_header(self.rd, ids[0], "의도다") + "\n")
         self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-answers")))
         self.assertEqual(sorted(os.listdir(self.rd)), before)
 
     def test_record_range_mode_writes_nothing(self):
         ids = self._asked([_q("D1")], mode="range")
         head = _git(self.repo, "rev-parse", "HEAD").stdout
-        p = self._record("=== id: %s · pick: 의도다\n" % ids[0])
+        p = self._record(_header(self.rd, ids[0], "의도다") + "\n")
         self.assertEqual(_last(p), "record: 0")
         self.assertEqual(self._files(), [])
         self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout, head)
@@ -1953,9 +1970,11 @@ class TestRender(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _qy(self, questions, commit="-", status="ran"):
+    def _qy(self, questions, commit="-", status="ran", record_ran=True):
         data = {"status": status, "call": "first-only", "counts": {}, "notices": [],
                 "commit": commit, "questions": questions}
+        if record_ran:
+            data["record_ran"] = True
         _write(yaml.safe_dump(data, allow_unicode=True), self.rd, "intent-questions.yaml")
 
     def _item(self, tid, state, answer=None, file=None):
@@ -1981,7 +2000,7 @@ class TestRender(unittest.TestCase):
         self.assertEqual([r["state"] for r in rows], ["답함", "답함", "상한 넘어 남김"])
         self.assertEqual([r["file"] for r in rows], [ANS_DIR + "/a.md", ANS_DIR + "/b.md", "-"])
         self.assertEqual([r["answer"] for r in rows], ["의도다", "지금은 모르겠다", "-"])
-        self.assertEqual(text.count("    wrong_choice: no\n"), 3)
+        self.assertEqual(text.count("    wrong_choice: false\n"), 3)
         self.assertEqual([r["wrong_choice"] for r in rows], [False, False, False])
         section = _read(self.rd, "result.md").split("## intent-critic", 1)[1]
         self.assertIn("| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |", section)
@@ -1994,12 +2013,12 @@ class TestRender(unittest.TestCase):
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(p), "intent-critic — 질문 1개를 물었다 · 답 1개(잘못 골랐다 1개)")
         text, block = _return_block(self.rd)
-        self.assertIn("    wrong_choice: yes\n", text)
+        self.assertIn("    wrong_choice: true\n", text)
         self.assertIs(block["questions"][0]["wrong_choice"], True)
 
     def test_render_separates_unanswered_questions(self):
         """질문 창을 닫았거나 답하지 않은 질문 — 결과 줄이 「답하지 않음 <k>개」 로 가르고, 돌려주는 꼴에는
-        「아직 묻지 않음」 으로 남는다. 답 기록에 실패한 질문은 여기 세지 않는다(따로 공시된다)."""
+        「답하지 않음」 으로 남는다. 답 기록에 실패한 질문은 「답 기록 실패」 로 갈라 보이고 여기 세지 않는다."""
         failed = self._item("D3", "ask")
         failed["record_failed"] = True
         cases = (
@@ -2021,9 +2040,11 @@ class TestRender(unittest.TestCase):
                 section = _read(rd, "result.md").split("\n## intent-critic\n", 1)[1]
                 self.assertIn("\n- %s\n" % line, section)
                 _text, block = _return_block(rd)
-                states = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
-                self.assertEqual([r["state"] for r in block["questions"]],
-                                 [states[q["state"]] for q in questions])
+                states = {"answered": "답함", "ask": "답하지 않음", "over-cap": "상한 넘어 남김"}
+                want = []
+                for q in questions:
+                    want.append("답 기록 실패" if q.get("record_failed") else states[q["state"]])
+                self.assertEqual([r["state"] for r in block["questions"]], want)
 
     def test_return_block_values_stay_strings(self):
         """돌려주는 꼴의 값은 YAML 로 읽어도 글자 그대로다 — 숫자뿐인 짧은 해시(0 으로 시작하면 8진수로
@@ -2048,10 +2069,10 @@ class TestRender(unittest.TestCase):
     def test_render_range_not_asked(self):
         self._qy([self._item("D1", "ask"), self._item("D2", "ask")])
         p = _cli("render", "--rd", self.rd, "--mode", "range")
-        self.assertEqual(_last(p), "intent-critic — 질문 2개 아직 묻지 않음(범위 모드)")
+        self.assertEqual(_last(p), ic.NOT_ASKED_RANGE % 2)
         text, block = _return_block(self.rd)
         self.assertEqual(block["commit"], "-")
-        self.assertEqual([r["state"] for r in block["questions"]], ["아직 묻지 않음"] * 2)
+        self.assertEqual([r["state"] for r in block["questions"]], ["묻지 않음"] * 2)
         self.assertEqual([r["file"] for r in block["questions"]], ["-", "-"])
         self.assertEqual(block["mode"], "range")
 
@@ -2111,7 +2132,8 @@ class TestRender(unittest.TestCase):
         _write("call: none\nmode: pr\nanswers_root: /x\n", self.rd, "intent-plan.txt")
         p = _cli("render", "--rd", self.rd, "--mode", "pr")
         self.assertEqual(_last(p), NONE_LINE)
-        self.assertEqual(_return_block(self.rd)[1]["status"], "skipped — 근거 없음")
+        block = _return_block(self.rd)[1]
+        self.assertEqual((block["status"], block["reason"]), ("skipped", "no-evidence"))
 
     def _prepared_render(self, repo, walk, differential, specs, max_bytes=120000):
         """prepare → (필요하면) filter → render. (prepare stdout 줄들, result.md 의 intent-critic 절)."""
@@ -2218,16 +2240,21 @@ class TestRecordSilentDrops(unittest.TestCase):
         return _read(self.rd, "result.md").split("## intent-critic", 1)[1]
 
     def test_wrong_id_header_is_disclosed(self):
-        p = self._record("=== id: docs/brief.md#D9#방향 · pick: 의도다\n이유 글\n")
+        """옛 꼴(번호 없는) 머리는 받지 않는다 — 정체가 맞지 않는 머리로 공시되고, 그 아래 글은 머리 앞 글로 세지 않는다."""
+        p = self._record("=== id: %s · pick: 의도다\n이유 글\n" % self.ident)
+        lines = p.stdout.splitlines()
         line = "답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 1개"
-        self.assertIn(line, p.stdout.splitlines())
-        self.assertIn("머리 앞의 답 글을 읽지 못함 2줄", p.stdout.splitlines())
+        self.assertIn(line, lines)
+        self.assertIn("정체가 맞지 않는 답 머리 1개", lines)
+        self.assertFalse([l for l in lines if l.startswith("머리 앞의 답 글을 읽지 못함")], lines)
+        self.assertNotIn("답 기록 실패", p.stdout)
         self.assertEqual(_last(p), "record: 0")
-        self.assertIn(line, _questions(self.rd)["record_notices"])
-        self.assertIn(line, self._rendered())
+        for notice in (line, "정체가 맞지 않는 답 머리 1개"):
+            self.assertIn(notice, _questions(self.rd)["record_notices"])
+            self.assertIn(notice, self._rendered())
 
     def test_text_before_first_header_is_disclosed(self):
-        p = self._record("앞에 쓴 말\n\n=== id: %s · pick: 의도다\n" % self.ident)
+        p = self._record("앞에 쓴 말\n\n" + _header(self.rd, self.ident, "의도다") + "\n")
         self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", p.stdout.splitlines())
         self.assertEqual(_last(p), "record: 1")
         self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", _questions(self.rd)["record_notices"])
@@ -2235,7 +2262,7 @@ class TestRecordSilentDrops(unittest.TestCase):
 
     def test_missing_plan_in_pr_is_disclosed(self):
         os.remove(os.path.join(self.rd, "intent-plan.txt"))
-        p = self._record("=== id: %s · pick: 의도다\n" % self.ident)
+        p = self._record(_header(self.rd, self.ident, "의도다") + "\n")
         line = "답을 기록하지 못했다 — 준비 파일(intent-plan.txt)을 읽지 못함"
         self.assertIn(line, p.stdout.splitlines())
         self.assertEqual(_last(p), "record: 0")
@@ -2248,10 +2275,11 @@ class TestRecordSilentDrops(unittest.TestCase):
 
 
 class TestRecordUnreadAnswers(unittest.TestCase):
-    """record 를 불렀는데(사용자가 답했다) 답을 질문에 붙이지 못한 갈래 — 그 질문은 「답하지 않음」 이 아니라
-    「답 기록 실패」 로 센다. 답 입력에 그 질문의 글이 아예 없으면 지금대로 「답하지 않음」 이다."""
+    """답 기록 실패 표지는 입력에 그 질문의 답이 있던 질문(받은 답 · 번호만 맞은 머리)에만 단다(4b). 맞는 머리가
+    없거나 붙이지 못한 글만 있는 질문은 「답하지 않음」 이다. 예외 — 답 입력 파일 자체를 읽지 못하면 답이 있었는지
+    알 수 없어 묻는 질문 모두가 「답 기록 실패」 다."""
 
-    UNREAD = "답 입력에서 읽지 못한 글이 있다"
+    MISMATCH = "정체가 맞지 않는 답 머리"
     BLOCKED = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
 
     def setUp(self):
@@ -2291,76 +2319,83 @@ class TestRecordUnreadAnswers(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return _last(r), _read(self.rd, "result.md").split("## intent-critic", 1)[1]
 
-    def test_no_header_matched_counts_as_record_failure(self):
-        p = self._record("=== id: 모르는#정체#방향 · pick: 잘못 골랐다\n")
-        self.assertIn(RECORD_FAILED % (2, self.UNREAD), p.stdout.splitlines())
+    def test_no_header_matched_leaves_questions_unanswered(self):
+        p = self._record("=== id: 모르는#정체#방향 · pick: 잘못 골랐다\n=== n: 9 · id: x · pick: 의도다\n")
+        lines = p.stdout.splitlines()
+        self.assertIn(self.MISMATCH + " 2개", lines)
+        self.assertNotIn("답 기록 실패", p.stdout)
         self.assertEqual(_last(p), "record: 0")
-        self.assertEqual(self._failed_ids(), self.ids)
+        self.assertEqual(self._failed_ids(), [])
         line, section = self._render()
-        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
-        self.assertEqual(section.count("- " + RECORD_FAILED % (2, self.UNREAD) + "\n"), 1)
-        items = [l for l in p.stdout.splitlines() if l.startswith("답 기록 실패 질문 — ")]
-        self.assertEqual(items, [FAILED_ITEM % (self.ids[0], PICK_UNREAD, "D1 를 정말 이렇게 고른 것인가?"),
-                                 FAILED_ITEM % (self.ids[1], PICK_UNREAD, "D2 를 정말 이렇게 고른 것인가?")])
-        for item in items:
-            self.assertEqual(section.count("- " + item + "\n"), 1)
+        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개")
+        self.assertEqual(section.count("- " + self.MISMATCH + " 2개\n"), 1)
+        self.assertNotIn("답 기록 실패", section)
 
-    def test_one_header_matched_and_stray_text_fails_the_other(self):
-        """머리 하나만 맞고 다른 머리는 정체가 틀렸다 — 틀린 머리는 라벨을 고른 답 아래의 글로 남는다."""
-        p = self._record("=== id: %s · pick: 의도다\n=== id: %s오타 · pick: 잘못 골랐다\n"
-                         % (self.ids[0], self.ids[1]))
-        self.assertIn(RECORD_FAILED % (1, self.UNREAD), p.stdout.splitlines())
+    def test_number_only_header_fails_that_question(self):
+        """머리 하나는 맞고 다른 머리는 번호만 맞았다(정체 오타) — 그 질문은 머리의 고른 답과 함께 답 기록 실패다."""
+        wrong = _header(self.rd, self.ids[1], "잘못 골랐다").replace(self.ids[1], self.ids[1] + "오타")
+        p = self._record(_header(self.rd, self.ids[0], "의도다") + "\n" + wrong + "\n")
+        lines = p.stdout.splitlines()
+        self.assertIn(self.MISMATCH + " 1개", lines)
+        self.assertIn(RECORD_FAILED % (1, self.MISMATCH), lines)
+        self.assertIn(FAILED_ITEM % (self.ids[1], "잘못 골랐다", "D2 를 정말 이렇게 고른 것인가?"), lines)
         self.assertEqual(_last(p), "record: 1")
         self.assertEqual(self._failed_ids(), [self.ids[1]])
         line, _section = self._render()
         self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 1개(잘못 골랐다 0개)")
 
-    def test_text_before_the_first_header_fails_the_unmatched_question(self):
-        p = self._record("잘못 골랐다\n=== id: %s · pick: 의도다\n" % self.ids[0])
-        self.assertIn(RECORD_FAILED % (1, self.UNREAD), p.stdout.splitlines())
-        self.assertEqual(self._failed_ids(), [self.ids[1]])
+    def test_text_before_the_first_header_leaves_the_other_unanswered(self):
+        p = self._record("잘못 골랐다\n" + _header(self.rd, self.ids[0], "의도다") + "\n")
+        self.assertIn("머리 앞의 답 글을 읽지 못함 1줄", p.stdout.splitlines())
+        self.assertNotIn("답 기록 실패", p.stdout)
+        self.assertEqual(self._failed_ids(), [])
+        self.assertTrue(self._render()[0].endswith(" · 답하지 않음 1개"))
 
-    def test_unreadable_answers_or_config_counts_as_record_failure(self):
-        cases = (("answers", None), ("config", "=== id: %s · pick: 의도다\n" % self.ids[0]))
-        for what, text in cases:
-            with self.subTest(unreadable=what):
-                self._fresh()
-                if what == "config":
-                    os.remove(os.path.join(self.rd, "intent-config.txt"))
-                p = self._record(text, answers=os.path.join(self.tmp.name, "none.txt")
-                                 if text is None else None)
-                self.assertIn("답을 기록하지 못했다 — " + self.BLOCKED, p.stdout.splitlines())
-                self.assertIn(RECORD_FAILED % (2, self.BLOCKED), p.stdout.splitlines())
-                self.assertEqual(_last(p), "record: 0")
-                self.assertEqual(self._failed_ids(), self.ids)
-                # 답 입력을 읽었으면 머리가 맞은 질문의 고른 답은 안다 — 못 읽었으면 「답을 읽지 못함」 이다.
-                first = "의도다" if what == "config" else PICK_UNREAD
-                items = [l for l in p.stdout.splitlines() if l.startswith("답 기록 실패 질문 — ")]
-                self.assertEqual(items, [
-                    FAILED_ITEM % (self.ids[0], first, "D1 를 정말 이렇게 고른 것인가?"),
-                    FAILED_ITEM % (self.ids[1], PICK_UNREAD, "D2 를 정말 이렇게 고른 것인가?")])
-                line, _section = self._render()
-                self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+    def test_unreadable_answers_or_config(self):
+        # 답 입력을 읽지 못함 — 답이 있었는지 모른다: 묻는 질문 모두 실패(고른 답 모름).
+        p = self._record(None, answers=os.path.join(self.tmp.name, "none.txt"))
+        lines = p.stdout.splitlines()
+        self.assertIn("답을 기록하지 못했다 — " + self.BLOCKED, lines)
+        self.assertIn(RECORD_FAILED % (2, self.BLOCKED), lines)
+        self.assertEqual(_last(p), "record: 0")
+        self.assertEqual(self._failed_ids(), self.ids)
+        items = [l for l in lines if l.startswith("답 기록 실패 질문 — ")]
+        self.assertEqual(items, [
+            FAILED_ITEM % (self.ids[0], PICK_UNREAD, "D1 를 정말 이렇게 고른 것인가?"),
+            FAILED_ITEM % (self.ids[1], PICK_UNREAD, "D2 를 정말 이렇게 고른 것인가?")])
+        self.assertEqual(self._render()[0], "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
+        # 설정을 읽지 못함 — 답이 있던 질문만 실패이고 고른 답이 실린다.
+        self._fresh()
+        os.remove(os.path.join(self.rd, "intent-config.txt"))
+        p = self._record(_header(self.rd, self.ids[0], "의도다") + "\n")
+        lines = p.stdout.splitlines()
+        self.assertIn("답을 기록하지 못했다 — " + self.BLOCKED, lines)
+        self.assertIn(RECORD_FAILED % (1, self.BLOCKED), lines)
+        self.assertEqual(_last(p), "record: 0")
+        self.assertEqual(self._failed_ids(), [self.ids[0]])
+        items = [l for l in lines if l.startswith("답 기록 실패 질문 — ")]
+        self.assertEqual(items, [FAILED_ITEM % (self.ids[0], "의도다", "D1 를 정말 이렇게 고른 것인가?")])
+        self.assertEqual(self._render()[0],
+                         "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 1개")
 
-    def test_missing_plan_marks_asked_questions(self):
+    def test_missing_plan_marks_answered_question(self):
         os.remove(os.path.join(self.rd, "intent-plan.txt"))
-        p = self._record("=== id: %s · pick: 의도다\n" % self.ids[0])
+        p = self._record(_header(self.rd, self.ids[0], "의도다") + "\n")
         reason = "준비 파일(intent-plan.txt)을 읽지 못함"
         self.assertIn("답을 기록하지 못했다 — " + reason, p.stdout.splitlines())
-        self.assertIn(RECORD_FAILED % (2, reason), p.stdout.splitlines())
-        self.assertEqual(self._failed_ids(), self.ids)
+        self.assertIn(RECORD_FAILED % (1, reason), p.stdout.splitlines())
+        self.assertEqual(self._failed_ids(), [self.ids[0]])
 
     def test_question_without_any_answer_text_stays_unanswered(self):
         """양성 대조 — 답 입력에 그 질문의 글이 없으면(머리도 남은 글도 없다) 「답하지 않음」 이다."""
         cases = (
-            "=== id: %s · pick: 의도다\n" % self.ids[0],
-            "=== id: %s · pick: typed\n잘못 골랐다 — 이유\n=== id: %s오타 · pick: 의도다\n"
-            % (self.ids[0], self.ids[1]),
+            (self.ids[0], "의도다", ""),
+            (self.ids[0], "typed", "잘못 골랐다 — 이유\n=== id: %s오타 · pick: 의도다\n" % self.ids[1]),
         )
-        for text in cases:
-            with self.subTest(text=text):
+        for ident, pick, rest in cases:
+            with self.subTest(pick=pick):
                 self._fresh()
-                p = self._record(text)
+                p = self._record(_header(self.rd, ident, pick) + "\n" + rest)
                 self.assertEqual(_last(p), "record: 1")
                 self.assertNotIn("답 기록 실패", p.stdout)
                 self.assertEqual(self._failed_ids(), [])
@@ -2433,27 +2468,30 @@ class TestUnwritableText(unittest.TestCase):
         self.assertNotEqual(ids[1], other)          # 글자를 버리지 않는다 — 다른 글은 다른 정체다
         _write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
         r = self._clean(_cli("render", "--rd", self.rd, "--mode", "pr"))
-        self.assertEqual(_last(r), "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 2개")
+        self.assertEqual(_last(r), ic.NOT_ASKED_EARLY % 2)   # record 를 돌지 않은 실행
         section = _read(self.rd, "result.md").split("\n## intent-critic\n", 1)[1]
         for text in ("못 가른 %s 질문" % self.ESC, "가른 %s 질문" % self.ESC):
             self.assertIn(text, section)
         self.assertEqual(len(_return_block(self.rd)[1]["questions"]), 2)
 
     def test_record_and_render_survive_a_question_identity_they_cannot_write(self):
-        """정체에 그런 글이 있는 질문 — 답 입력은 파일에서 읽으며 그 글자가 바뀌므로 머리가 맞지 않아 기록되지
-        않는다. record 는 그 사실을 공시하고 끝나며, render 는 그 정체를 이스케이프로 싣는다."""
+        """정체에 그런 글이 있는 질문 — 답 입력은 파일에서 읽으며 그 글자가 바뀌므로 머리의 정체가 맞지 않아 기록되지
+        않는다. 번호는 그 질문을 가리키므로 그 질문은 머리의 고른 답과 함께 「답 기록 실패」 이고, render 는 그
+        정체를 이스케이프로 싣는다."""
         _filter_rd(self.rd)
         _write(_out([_q("D\ud800")]), self.rd, "intent-critic-1.txt")
         self._clean(_cli("filter", "--rd", self.rd, "--review-mode", "session"))
         ident = _by_state(self.rd, "ask")[0]["id"]
         self.assertEqual(ident, SRC + "#D\ud800#방향")
         answers = os.path.join(self.tmp.name, "answers.txt")
-        Path(answers).write_bytes(("=== id: %s · pick: 의도다\n" % ident)
+        Path(answers).write_bytes((_header(self.rd, ident, "의도다") + "\n")
                                   .encode("utf-8", "surrogatepass"))
         p = self._clean(_cli("record", "--rd", self.rd, "--repo", self.repo, "--answers", answers))
         self.assertEqual(_last(p), "record: 0")
         self.assertIn("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 1개", p.stdout.splitlines())
-        self.assertIn(FAILED_ITEM % ("%s#D%s#방향" % (SRC, self.ESC), PICK_UNREAD,
+        self.assertIn("정체가 맞지 않는 답 머리 1개", p.stdout.splitlines())
+        self.assertIn(RECORD_FAILED % (1, "정체가 맞지 않는 답 머리"), p.stdout.splitlines())
+        self.assertIn(FAILED_ITEM % ("%s#D%s#방향" % (SRC, self.ESC), "의도다",
                                      "D%s 를 정말 이렇게 고른 것인가?" % self.ESC),
                       p.stdout.splitlines())
         self.assertFalse(os.path.isdir(os.path.join(self.repo, ANS_DIR)))
@@ -3023,15 +3061,39 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(len(shown), 1, text[start:dialog])
         self.assertTrue(shown[0].startswith("> intent-critic "), shown[0])
 
-    def test_unanswered_questions_are_not_recorded(self):
-        """F3 — 닫거나 답하지 않은 질문은 머리 줄이 없고, 답이 하나도 없으면 record 를 돌리지 않는다."""
+    def test_shown_question_window_always_runs_record(self):
+        """F3 · AC2 — 닫거나 답하지 않은 질문은 머리 줄이 없고, 질문 창을 보였으면 답이 하나도 없어도 record 를
+        빈 입력으로 돈다(그래야 「답하지 않음」 이 「묻지 않음」 과 갈린다)."""
         text = REFERENCE.read_text(encoding="utf-8")
-        rule = ("질문 창을 닫거나 답하지 않은 질문은 머리 줄을 쓰지 않는다. 답한 질문이 하나도 없으면 "
-                "`record` 를 돌리지 않고 [I6](#i6-렌더) 으로 간다")
+        rule = ("질문 창을 닫거나 답하지 않은 질문은 머리 줄을 쓰지 않는다. 질문 창을 보였으면 답한 질문이 하나도 "
+                "없어도 `record` 를 돈다 — 입력 파일을 머리 줄 없이 비워 둔다. `record` 가 돈 실행의 답하지 "
+                "않은 질문은 돌려주는 꼴에 `답하지 않음` 으로 남고 결과 줄이 `답하지 않음 <k>개` 로 가른다 — "
+                "할 일은 [I7](#i7-돌려주기).")
         self.assertEqual(text.count(rule), 1)
         self.assertLess(text.index("**질문 (PR 범위 · k ≥ 1).**"), text.index(rule))
         self.assertLess(text.index(rule), text.index("**답 기록.**"))
-        self.assertIn("돌려주는 꼴에는 `아직 묻지 않음` 으로 남는다", text)
+        self.assertNotIn("`record` 를 돌리지 않고", text)
+
+    def test_answer_header_carries_question_number(self):
+        """D13 — 질문 창 머리 · 답 입력 머리 줄이 질문 번호를 쓰고, 번호 없는 머리는 받지 않는다고 적는다."""
+        section = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(section.count('header: "의도 점검 <n>"'), 1)
+        self.assertEqual(section.count("- `<n>` — 그 항목의 `n`."), 1)
+        self.assertEqual(section.count(
+            "`=== n: <그 항목의 n> · id: <그 항목의 id> · pick: <고른 것>`. 번호 없는 머리 줄 · 번호와 정체가 "
+            "맞지 않는 머리 줄은 받지 않는다 — 그 줄과 아래 글은 어느 답에도 실리지 않고 "
+            "`정체가 맞지 않는 답 머리 <n>개` 로 공시된다."), 1)
+        self.assertEqual(section.count("\n=== n: <첫 질문의 n> · id: <첫 질문의 id> · pick: "), 1)
+        self.assertNotIn("=== id: <", section)
+        self.assertNotIn("<k>` — 이 질문의 차례", section)
+        self.assertEqual(section.count(
+            "| `intent-critic 꺼짐(kill switch — …) — 답 파일을 쓰지 않고 커밋하지 않았다` | 그대로 보이고 "
+            "[I6](#i6-렌더) — 답이 있던 질문은 `답 기록 실패` 로 남는다 |"), 1)
+        self.assertEqual(section.count("| 범위 모드 | 묻지 않는다 — 질문은 모두 `묻지 않음` 으로 돌려준다."), 1)
+        self.assertEqual(section.count("답 파일을 쓰지 못했거나 · 스위치로 막혔거나 · 머리가 맞지 않은 답이다"), 1)
+        # 문서의 머리 꼴이 스크립트가 받는 꼴과 같다.
+        self.assertTrue(ic.HEADER.startswith("=== n: ") and ic.ID_SEP == " · id: "
+                        and ic.PICK_SEP == " · pick: ")
 
     def _section(self, head):
         """절차 문서의 `## <head>` 절 본문(다음 `## ` 앞까지)."""
@@ -3073,20 +3135,27 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertNotIn("<`file:` 경로들>", i7)
 
     def test_record_failure_is_a_todo(self):
-        """답 기록 실패 공시(스크립트의 글 그대로)가 I5 표와 I7 할 일에 실린다."""
+        """I5 표는 답 기록 실패 공시(스크립트의 글 그대로)를 보이고, I7 할 일은 꼴의 `state` 칸에서 정한다."""
         shown = "`%s`" % ic.RECORD_FAILED.replace("%d", "<n>").replace("%s", "<사유>")
         self.assertEqual(shown, "`답 기록 실패 <n>개 — <사유>`")
-        self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(shown), 1)
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(i5.count(shown), 1)
+        item = ("`%s`" % ic.RECORD_FAILED_ITEM.replace("%s", "<%s>")) % ("정체", "답", "글")
+        self.assertEqual(i5.count(item), 1)
         i7 = self._section("I7 돌려주기")
-        self.assertEqual(i7.count(shown + " 를 냈으면 — 「답 <n>개가 기록되지 않았다(<사유>)"), 1)
-        # 그 아래 질문마다의 줄 — 고른 답이 「잘못 골랐다」 면 그 사실을 할 일에 적는다.
-        item = "`%s`" % (ic.RECORD_FAILED_ITEM % ("<정체>", "<답>", "<글>"))
-        self.assertEqual(item, "`답 기록 실패 질문 — <정체> · 고른 답: <답> · 질문: <글>`")
-        self.assertEqual(self._section("I5 거르기 · 묻기 · 답 기록").count(item), 1)
-        todo = [l for l in i7.split("\n") if shown + " 를 냈으면" in l][0]
-        self.assertEqual(todo.count(item), 1)
-        self.assertIn("고른 답이 `잘못 골랐다` 면 「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", todo)
-        self.assertIn("`%s` 이면 「이 질문의 답을 읽지 못했다」" % ic.PICK_UNREAD, todo)
+        # I7 의 근거는 공시 줄이 아니라 꼴의 칸이다 — 질문의 state 와 failure · answer.
+        field = "`state: %s` 인 질문이 있으면 — 「답 <n>개가 기록되지 않았다(<failure>)" % ic.QUESTION_STATES[1]
+        self.assertEqual(i7.count(field), 1)
+        todo = [l for l in i7.split("\n") if field in l][0]
+        self.assertTrue(todo.startswith("  - "), todo)
+        self.assertNotIn(shown, i7)
+        self.assertNotIn("답 기록 실패 질문 — ", i7)
+        self.assertIn("`answer` 가 `-` 면 「이 질문의 답을 읽지 못했다」", todo)
+        # 잘못 골랐다고 답했는데 기록에 실패한 질문 — 그 사실을 wrong_choice 할 일에 적는다.
+        wrong = [l for l in i7.split("\n") if "`wrong_choice: true` 인 질문이" in l]
+        self.assertEqual(len(wrong), 1)
+        self.assertIn("「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", wrong[0])
+        self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
     def test_answer_commit_needs_a_push_todo(self):
         """답 커밋이 생긴 실행은 할 일에 push 를 싣는다 — 게시된 판정은 답 커밋 앞 커밋의 것이다."""
@@ -3113,11 +3182,12 @@ class TestProcedureDoc(unittest.TestCase):
             self.assertIn(fact, bullets[0])
 
     def test_unanswered_questions_are_a_todo(self):
-        """답하지 않은 질문이 남은 실행은 할 일 줄에 그 사실을 싣는다 — 결과 줄의 글 그대로 가리킨다."""
+        """답하지 않은 질문이 남은 실행은 할 일 줄에 그 사실을 싣는다 — 꼴의 state 칸이 정하고, 결과 줄 글은 I5 가 가른다."""
         shown = "`%s`" % ic.UNANSWERED.strip(" ·").replace("%d", "<k>")
         self.assertEqual(shown, "`답하지 않음 <k>개`")
         i7 = self._section("I7 돌려주기")
-        self.assertEqual(i7.count("결과 줄에 " + shown + " 가 있으면 — 「답하지 않은 질문 <k>개가 남았다"), 1)
+        self.assertEqual(i7.count("`state: %s` 인 질문이 있으면 — 「답하지 않은 질문 <k>개가 남았다" % ic.QUESTION_STATES[2]), 1)
+        self.assertNotIn("결과 줄에 " + shown, i7)
         self.assertIn("결과 줄이 " + shown + " 로 가른다", self._section("I5 거르기 · 묻기 · 답 기록"))
 
     def test_filter_fence_passes_the_review_mode(self):

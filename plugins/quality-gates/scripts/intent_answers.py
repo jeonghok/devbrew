@@ -137,7 +137,7 @@ def parse_answer_file(text: str) -> Optional[dict]:
         return None
     try:
         data = yaml.safe_load(head)
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAML 은 YAMLError 말고도 낸다(없는 날짜 등)
         return None
     if not isinstance(data, dict) or data.get("type") != TYPE_VALUE:
         return None
@@ -151,10 +151,13 @@ def parse_answer_file(text: str) -> Optional[dict]:
         return None
     at = data.get("answered_at")
     target = data.get("target")
-    return {"id": ident, "answer": answer,
-            "answered_at": "" if at is None else str(at),
-            "observation": _observation(body),
-            "target": "" if target is None else str(target)}
+    try:
+        return {"id": ident, "answer": answer,
+                "answered_at": "" if at is None else str(at),
+                "observation": _observation(body),
+                "target": "" if target is None else str(target)}
+    except Exception:  # noqa: BLE001 — 글로 바꿀 수 없는 값은 읽지 못한 답 파일
+        return None
 
 
 def read_answered(answers_dir: str) -> tuple:
@@ -179,7 +182,10 @@ def read_answered(answers_dir: str) -> tuple:
         except (OSError, UnicodeDecodeError):
             unreadable += 1
             continue
-        parsed = parse_answer_file(text)
+        try:
+            parsed = parse_answer_file(text)
+        except Exception:  # noqa: BLE001 — 답 파일 하나가 읽기 전체를 죽이지 않게
+            parsed = None
         if parsed is None:
             unreadable += 1
             continue

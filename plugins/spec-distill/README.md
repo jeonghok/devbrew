@@ -110,6 +110,7 @@
 ### Principles 흡수
 
 - 한계는 `## 한계` 절에 있다.
+- **P8 (재사용) — 있는 것 먼저** — 설계를 타는 일에서 맞는 있는 것이 있으면 그 위에서 만드는 것을 기본으로 둔다. 적는 법은 `references/existing-first.md` 한 곳에 있고, 인터뷰의 「있는 것 먼저」 문단과 넘김 줄 둘이 그 글을 가리킨다. 설계문서 리뷰의 층 2 `approaches_comparison` 이 「있는 것 검토」 절을 읽고, 마지막 전체 리뷰가 고른 것을 실제로 썼는지 묻는다.
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/pm-interview` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
@@ -154,6 +155,7 @@
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
+- `references/existing-first.md` — 설계문서의 「있는 것 검토」 절을 적는 법(기본 · 대상 · 탐색 증거 · 정보 여섯 칸 · 맞는지 · 렌즈 · 쓰는 꼴 · 견줄 축 · 직접 만들기의 이유 · 승인 · 수용 기준 · 고침). 인터뷰와 설계 세션이 읽습니다. 뒤쪽 영어 절은 MIT 로 가져온 글이고 고지는 `references/existing-first.NOTICE.txt` 에 있습니다.
 - `references/brief-handoff.md` — 인터뷰 끝의 다음 세션 줄이 가리키는 지시 파일. 절이 둘이다 — brainstorming 으로 가는 세션이 읽는 「brainstorming 지시」 와 다른 다음 단계로 가는 세션이 읽는 「공통 지시」.
 - `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
 - `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
@@ -320,6 +322,7 @@ handbook_budget: 16384
   `doc-recritic` 은 `tools:` 에 웹 도구가 아예 없고 `design-doc.md` 프로필이 `web: false` 를
   고정해서 켜고 끌 것이 없다. 이 스위치는 `request-framing` 의 이름 조회(웹을 이름 확인에만 쓰는
   자리)도 끈다 — 조회 직전마다 정확히 `1` 인지 보고, 켜져 있으면 조회를 건너뛴다.
+  설계 세션이 `references/existing-first.md` 를 따라 바깥을 찾는 일도 이 스위치를 보게 적혀 있다 — 그 글의 문장이 전부이고, 막는 펜스나 훅은 없다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — `request-framing` 진입 직후의 워크트리
   질문을 **묻지 않고** 현재 디렉토리에서 진행한다. `EnterWorktree` 도구 부재와 같은 경로다.
   audit §5 에 «워크트리 없음 —» 강등 기록이 남고, 어느 경우도 seed 작성을 막지 않는다.
@@ -364,3 +367,5 @@ handbook_budget: 16384
 ## License
 
 (devbrew root 정책 따름.)
+
+`references/existing-first.md` 의 뒤쪽 영어 절은 MIT 로 가져온 글이다 — 저작권 줄 · 전문 · 출처는 `references/existing-first.NOTICE.txt`.

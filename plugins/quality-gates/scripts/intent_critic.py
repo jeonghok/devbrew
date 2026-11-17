@@ -73,8 +73,13 @@ RETURN_FENCE = "```qg-intent-return"
 CAP = 3
 WEIGHTS = {"방향": 0, "기능": 1, "동작": 2}
 FILTER_ANSWERS = ("의도다", "잘못 골랐다")
-HEADER = "=== id: "
+# 답 입력의 머리 줄 — `=== n: <번호> · id: <정체> · pick: <고른 것>`. 「답 머리 꼴」 은 HEADER_SHAPES 로
+# 시작하는 줄뿐이다(옛 `=== id: ` 꼴은 받지 않고 정체가 맞지 않는 머리로 센다).
+HEADER = "=== n: "
+ID_SEP = " · id: "
 PICK_SEP = " · pick: "
+HEADER_SHAPES = ("=== n: ", "=== id: ")
+DIGITS = set("0123456789")
 TYPED = "typed"
 SECTION = "## intent-critic"
 SECTION_LEAD = ("intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · "
@@ -99,8 +104,14 @@ RANGE_UNKNOWN = "범위 변경 여부를 확인하지 못함"
 RANGE_MARKS = {"added": " · " + RANGE_ADDED, "unknown": " · " + RANGE_UNKNOWN}
 COMMIT_MESSAGE = "docs(qg-intent): intent-critic 답 %d개 기록"
 RECORD_FAILED = "답 기록 실패 %d개 — %s"
-UNREAD_INPUT = "답 입력에서 읽지 못한 글이 있다"
-# 기록되지 않은 답의 질문마다 한 줄 — 돌려주는 꼴에는 그 답이 실리지 않으므로 여기에 남긴다.
+MISMATCHED = "정체가 맞지 않는 답 머리 %d개"
+MISMATCH_FAILURE = "정체가 맞지 않는 답 머리"
+DUPLICATE_HEADERS = "같은 질문 번호의 답 머리를 한 번만 받았다 — 더 나온 머리 %d개"
+NO_HEADER = "답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개"
+ORPHAN = "머리 앞의 답 글을 읽지 못함 %d줄"
+KILL_RECORD = "%s — 답 파일을 쓰지 않고 커밋하지 않았다"
+KILL_FAILURE = "kill switch(%s)가 켜져 있어 기록하지 않음"
+# 기록되지 않은 답의 질문마다 한 줄 — 공시로 사람에게 보이는 글이다. 돌려주는 꼴도 그 답을 싣는다(질문의 `answer` · `failure`).
 RECORD_FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
 PICK_UNREAD = "답을 읽지 못함"
 SNIPPET = 80
@@ -115,13 +126,32 @@ UNREADABLE = "intent-critic — 리뷰어 출력을 읽지 못함(셀 수 없음
 ALREADY = "intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 SECOND_FAILED = "둘째 호출 출력을 읽지 못함 — 첫째 호출의 후보만 쓴다"
 
+# 길 → (건너뜀 줄, 사유 글, 상태, 부호)
 GATE_SKIPS = {
-    "aborted": ("intent-critic — 건너뜀(멈춘 실행)", "멈춘 실행"),
-    "trivia": ("intent-critic — 건너뜀(작은 수정 — trivia)", "작은 수정 — trivia"),
-    "scope-empty": ("intent-critic — 건너뜀(리뷰할 diff 없음)", "리뷰할 diff 없음"),
-    "tree-failed": ("intent-critic — 리뷰 트리를 만들지 못함", "리뷰 트리를 만들지 못함"),
+    "aborted": ("intent-critic — 건너뜀(멈춘 실행)", "멈춘 실행", "skipped", "halted"),
+    "trivia": ("intent-critic — 건너뜀(작은 수정 — trivia)", "작은 수정 — trivia",
+               "skipped", "trivia"),
+    "scope-empty": ("intent-critic — 건너뜀(리뷰할 diff 없음)", "리뷰할 diff 없음",
+                    "skipped", "empty-diff"),
+    "tree-failed": ("intent-critic — 리뷰 트리를 만들지 못함", "리뷰 트리를 만들지 못함",
+                    "failed", "tree-failed"),
 }
 KILL_LINE = "intent-critic 꺼짐(kill switch)"
+GLOBAL_KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE"
+
+# 돌려주는 꼴 2판 — 닫힌 어휘와 칸 차례.
+CONTRACT = 2
+RETURN_KEYS = ("contract", "status", "reason", "reason_text", "outcome", "result_line",
+               "none_reason", "mode", "reviewed_head", "reviewed_base", "session_dir",
+               "answers_dir", "answers_dir_source", "commit", "breadth", "other_teams",
+               "overlaps")
+QUESTION_KEYS = ("n", "id", "state", "answer", "answer_text", "wrong_choice", "failure", "file",
+                 "evidence", "question", "target_source", "target_id", "label", "quote",
+                 "observation")
+RETURN_STATUSES = ("ran", "uncountable", "skipped", "failed")
+SKIP_REASONS = ("kill-switch", "halted", "trivia", "empty-diff", "no-evidence")
+FAIL_REASONS = ("tree-failed",)
+RETURN_OUTCOMES = ("questions", "none", "no-evidence", "all-filtered")
 
 # 거름 공시 — 0 이 아닌 것만 이 순서로 낸다.
 COUNT_NOTICES = (
@@ -135,7 +165,9 @@ COUNT_NOTICES = (
     ("absorbed", "두 호출에서 겹친 후보를 합침 %d"),
     ("cites_dropped", "근거로 받지 않은 인용 %d"),
 )
-RETURN_STATES = {"answered": "답함", "ask": "아직 묻지 않음", "over-cap": "상한 넘어 남김"}
+QUESTION_STATES = ("답함", "답 기록 실패", "답하지 않음", "묻지 않음", "상한 넘어 남김")
+NOT_ASKED_RANGE = "intent-critic — 질문 %d개 묻지 않음(범위 모드)"
+NOT_ASKED_EARLY = "intent-critic — 질문 %d개 묻지 않음(묻기 전에 끝남)"
 TABLE_HEAD = "| 정체 | 상태 | 근거 | 답 | 답 파일 | 질문 |"
 KIND_SEP = " · "
 # 결과 절의 다른 팀 목록 — 리뷰어를 부르지 않은 실행에도 늘 보인다.
@@ -209,7 +241,8 @@ def _repeated(pairs: List[tuple], keys: tuple) -> bool:
 CONFIG_KEYS = ("answers_dir", "answers_dir_source", "max_bytes", "max_bytes_source",
                "other_teams_max_bytes", "other_teams_max_bytes_source", "intent_doc_markers",
                "intent_doc_markers_source")
-PLAN_KEYS = ("call", "mode", "tree_root", "answers_root", "breadth")
+PLAN_KEYS = ("call", "mode", "tree_root", "answers_root", "breadth", "reviewed_head",
+             "reviewed_base")
 # 리뷰의 넓이 — narrow 는 R1 그대로, 뒤 둘이 넓게 보는 리뷰다. 계획 파일에 없거나 모르는 값이면 narrow.
 BREADTHS = ("narrow", "range", "intent-docs")
 
@@ -242,7 +275,7 @@ def _read_plan(rd: str) -> Optional[dict]:
     if _repeated(pairs, PLAN_KEYS):
         return None
     plan = {"call": "", "mode": "", "tree_root": "", "answers_root": "", "breadth": "narrow",
-            "sources": [], "aliases": {}}
+            "reviewed_head": "-", "reviewed_base": "-", "sources": [], "aliases": {}}
     for key, value in pairs:
         if key == "source":
             plan["sources"].append(value)
@@ -299,46 +332,89 @@ def _scalar(value) -> str:
     return text if plain else json.dumps(text, ensure_ascii=False)
 
 
-def _write_return(rd: str, status: str, mode: str, commit: str, rows: List[dict],
-                  breadth: str = "-", other_teams: str = "-", overlaps="-") -> None:
-    """돌려주는 꼴. `overlaps` 는 겹침 수(정수 — 날 수로 쓴다) 또는 모름 `-`."""
+def _text_cell(value) -> str:
+    """글 칸 — 한 줄로 접어 큰따옴표로 싼다."""
+    return json.dumps(_one_line(value), ensure_ascii=False)
+
+
+def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
+    """돌려주는 꼴 2판. `head` 에 없는 칸은 `-`. `overlaps` 는 겹침 수(정수 — 날 수로) 또는 모름 `-`."""
     cfg = _read_config(rd) or {}
-    lines = [RETURN_FENCE,
-             "status: " + _scalar(status),
-             "mode: " + _scalar(mode or "-"),
-             "answers_dir: " + _scalar(cfg.get("answers_dir", "-")),
-             "answers_dir_source: " + _scalar(cfg.get("answers_dir_source", "-")),
-             "commit: " + _scalar(commit or "-"),
-             "breadth: " + _scalar(breadth or "-"),
-             "other_teams: " + _scalar(other_teams or "-"),
-             "overlaps: " + (str(overlaps) if type(overlaps) is int else _scalar(overlaps or "-"))]
+    values = dict(head)
+    values["contract"] = CONTRACT
+    values["session_dir"] = os.path.abspath(rd)
+    values["answers_dir"] = cfg.get("answers_dir", "-")
+    values["answers_dir_source"] = cfg.get("answers_dir_source", "-")
+    lines = [RETURN_FENCE]
+    for key in RETURN_KEYS:
+        value = values.get(key)
+        if key in ("reason_text", "result_line", "none_reason", "session_dir"):
+            lines.append("%s: %s" % (key, _text_cell(value if value else "-")))
+        elif key == "contract" or (key == "overlaps" and type(value) is int):
+            lines.append("%s: %d" % (key, value))
+        else:
+            lines.append("%s: %s" % (key, _scalar(value if value else "-")))
     if not rows:
         lines.append("questions: []")
     else:
         lines.append("questions:")
     for row in rows:
-        lines.append("  - id: " + json.dumps(row["id"], ensure_ascii=False))
-        lines.append("    state: " + _scalar(row["state"]))
-        lines.append("    answer: " + _scalar(row["answer"]))
-        lines.append("    wrong_choice: " + row["wrong_choice"])
-        lines.append("    file: " + json.dumps(row["file"], ensure_ascii=False))
-        lines.append("    evidence: " + json.dumps(row["evidence"], ensure_ascii=False))
+        lines.append("  - n: " + (str(row["n"]) if type(row.get("n")) is int else _scalar("-")))
+        for key in QUESTION_KEYS[1:]:
+            value = row.get(key)
+            if key == "state":
+                lines.append("    state: " + _scalar(value))
+            elif key == "wrong_choice":
+                lines.append("    wrong_choice: " + ("true" if value else "false"))
+            elif key in ("answer_text", "observation"):
+                if not isinstance(value, list) or not value:
+                    lines.append("    %s: %s" % (key, "[]" if key == "observation" else _text_cell("-")))
+                else:
+                    lines.append("    %s:" % key)
+                    for item in value:
+                        lines.append("      - " + _text_cell(item))
+            else:
+                lines.append("    %s: %s" % (key, _text_cell(value if value else "-")))
     lines.append("```")
     _write(_path(rd, RETURN), "\n".join(lines) + "\n")
 
 
 # ---------------------------------------------------------------- gate
 
+def _switches_on() -> List[str]:
+    """켜진(`== "1"`) 끄기 스위치 변수 이름 — 전역이 앞이다."""
+    on: List[str] = []
+    for name in (GLOBAL_KILL_ENV, KILL_ENV):
+        if os.environ.get(name) == "1":
+            on.append(name)
+    return on
+
+
+def _kill_names(names: List[str]) -> str:
+    """`<변수>=1` 을 ` · ` 로 이은 글 — 전역이 앞이다."""
+    parts = []
+    for name in names:
+        parts.append(name + "=1")
+    return " · ".join(parts)
+
+
+def _kill_text(names: List[str]) -> str:
+    return "intent-critic 꺼짐(kill switch — %s)" % _kill_names(names)
+
+
 def _killed(rd: str, mode: str, stale=()) -> bool:
     """kill switch 가 켜졌으면 꺼짐 처리(`stale` 세션 파일 지우기 · 돌려주는 꼴 · 꺼짐 줄)를 하고 참.
 
     `gate` 와 `prepare` 가 함께 쓴다 — 두 자리의 꺼짐 출력이 갈라지지 않게.
     """
-    if os.environ.get(KILL_ENV) != "1":
+    names = _switches_on()
+    if not names:
         return False
     for name in stale:
         _remove(_path(rd, name))
-    _write_return(rd, "skipped — " + KILL_LINE, mode, "-", [])
+    _write_return(rd, {"status": "skipped", "reason": "kill-switch",
+                       "reason_text": _kill_text(names), "outcome": "-",
+                       "result_line": KILL_LINE, "mode": mode}, [])
     print(KILL_LINE)
     return True
 
@@ -349,8 +425,9 @@ def cmd_gate(args) -> int:
     if args.path == "final":
         print("intent-gate: run")
         return 0
-    line, reason = GATE_SKIPS[args.path]
-    _write_return(args.rd, "skipped — " + reason, args.mode, "-", [])
+    line, reason_text, status, reason = GATE_SKIPS[args.path]
+    _write_return(args.rd, {"status": status, "reason": reason, "reason_text": reason_text,
+                            "outcome": "-", "result_line": line, "mode": args.mode}, [])
     print(line)
     return 0
 
@@ -496,10 +573,12 @@ def _line_ok(key: str, value) -> bool:
 
 
 def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str, sources,
-                aliases, notices: List[str], breadth: str = "narrow") -> None:
+                aliases, notices: List[str], breadth: str = "narrow",
+                reviewed: tuple = ("-", "-")) -> None:
     """줄 단위 계획 파일. 줄마다 써서 다시 읽으면 같은 값이 나오는지 확인하고, 아닌 출처 · 별칭은 쓰지 않고 공시한다."""
     singles = (("call", call), ("mode", mode), ("tree_root", tree_root),
-               ("answers_root", answers_root), ("breadth", breadth))
+               ("answers_root", answers_root), ("breadth", breadth),
+               ("reviewed_head", reviewed[0]), ("reviewed_base", reviewed[1]))
     lines = []
     for key, value in singles:
         if not _line_ok(key, value):
@@ -522,6 +601,8 @@ def _write_plan(rd: str, call: str, mode: str, tree_root: str, answers_root: str
 
 NOTICE_NO_NAMES = "바뀐 파일 목록이 없어 넓게 보지 않는다"
 NOTICE_UNREAD_DOCS = "의도 문서인지 확인 못 한 문서 %d — 추적되지 않는다"
+NOTICE_TIMED_OUT_DOCS = "의도 문서인지 확인 못 한 문서 %d — " + io_.REASON_TIMEOUT
+NOTICE_NO_TREE = "리뷰 트리가 없어 읽은 인용을 확인하지 못함"
 NOTICE_TEAMS_FAILED = "다른 팀 읽기 실패 — %s"
 NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d — 나눠 부르기 판정에 넣지 않는다)"
 
@@ -529,23 +610,50 @@ NOTICE_BYTES = "입력 %d바이트 · 다른 팀 기록 %d바이트(상한 %d �
 def _breadth(args, tree_root: str, cfg: dict, notices: List[str]) -> tuple:
     """(바뀐 파일 목록 | None, 넓이, 바뀐 의도 문서들). 바뀐 문서는 리뷰 트리에서 읽는다."""
     names = _range_names(args.rd)
+    timed_out: List[str] = []
     breadth, docs, unread = io_.review_breadth(
-        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel),
+        args.mode, names, lambda rel: io_.read_changed_doc(tree_root, rel, timed_out),
         cfg["intent_doc_markers"])
     if args.mode == "range" and names is None:
         _add_notice(notices, NOTICE_NO_NAMES)
     if breadth != "narrow":
         _add_notice(notices, io_.BREADTH_LABELS[breadth])
-    if unread:
-        _add_notice(notices, NOTICE_UNREAD_DOCS % unread)
+    if unread - len(timed_out):
+        _add_notice(notices, NOTICE_UNREAD_DOCS % (unread - len(timed_out)))
+    if timed_out:
+        _add_notice(notices, NOTICE_TIMED_OUT_DOCS % len(timed_out))
     return names, breadth, docs
 
 
-def _teams(args, names, roadmaps, cfg, collect=ot.collect) -> tuple:
+def _topic_siblings(rd: str) -> Optional[set]:
+    """토픽 리뷰의 형제 브랜치 이름들 — `topic-scope.txt` 의 `status:` 가 `ok` 이고 `branches:` 가
+    `-` 아닌 쉼표 목록일 때만. 그 밖에는 None(아무것도 빼지 않는다)."""
+    text = _read(_path(rd, "topic-scope.txt"))
+    if text is None:
+        return None
+    status = None
+    branches = None
+    for line in text.split("\n"):
+        key, sep, value = line.partition(":")
+        if sep and key == "status" and status is None:
+            status = value.strip()
+        elif sep and key == "branches" and branches is None:
+            branches = value.strip()
+    if status != "ok" or not branches or branches == "-":
+        return None
+    names = set()
+    for piece in branches.split(","):
+        if piece.strip():
+            names.add(piece.strip())
+    return names or None
+
+
+def _teams(args, names, roadmaps, cfg, siblings=None, collect=ot.collect) -> tuple:
     """다른 팀 기록 → (글, 공시 줄들). 읽기가 예외로 끝나도 단계를 멈추지 않는다(fail-open — 공시한다)."""
     try:
         got = collect(args.repo, os.path.abspath(args.tree_root), args.review_commit, names,
-                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"])
+                      roadmaps, cfg["intent_doc_markers"], cfg["other_teams_max_bytes"],
+                      siblings=siblings)
         return got["text"], list(got["notices"])
     except Exception as exc:  # noqa: BLE001 — 어떤 실패든 이름만 공시하고 다른 팀 없이 간다
         return "", [NOTICE_TEAMS_FAILED % type(exc).__name__]
@@ -573,9 +681,13 @@ def _prepare(args, notices: List[str]) -> str:
     answers_root = os.path.join(tree_root, cfg["answers_dir"])
 
     names, breadth, docs = _breadth(args, tree_root, cfg, notices)
+    # PR 범위의 리뷰 커밋은 글자 HEAD 로 오고 답 커밋이 HEAD 를 옮긴다 — 지금 해시로 풀어 둔다.
+    reviewed = (_resolve_commit(args.repo, args.review_commit),
+                _resolve_commit(args.repo, args.base))
     built = io_.build_origin(args.repo, args.head, args.review_commit, args.origin, specs,
                              changed_docs=docs, tree_root=tree_root)
-    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg)
+    teams_text, teams_notices = _teams(args, names, built["roadmaps"], cfg,
+                                     _topic_siblings(rd))
     if teams_text:
         _write(_path(rd, OTHER_TEAMS), teams_text)
     else:
@@ -599,7 +711,7 @@ def _prepare(args, notices: List[str]) -> str:
                 notices.remove(line)
         _add_notice(notices, NO_EVIDENCE)
         _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices,
-                    breadth=breadth)
+                    breadth=breadth, reviewed=reviewed)
         return "none"
 
     run_text, _count = io_.build_evidence(e2e, differential)
@@ -637,7 +749,7 @@ def _prepare(args, notices: List[str]) -> str:
         call = "first-only"
     else:
         call = "split"
-    _add_notice(notices, NOTICE_BYTES % (total, io_.total_bytes(teams_text),
+    _add_notice(notices, NOTICE_BYTES % (total, io_.teams_bytes(evidence),
                                          cfg["other_teams_max_bytes"]))
 
     _write(_path(rd, EVIDENCE), evidence)
@@ -647,7 +759,7 @@ def _prepare(args, notices: List[str]) -> str:
     _write(_path(rd, DOUBTS), doubts)
     _write(_path(rd, ANSWERED), _answered_lines(answered))
     _write_plan(rd, call, args.mode, tree_root, answers_root, built["sources"],
-                built["aliases"], notices, breadth=breadth)
+                built["aliases"], notices, breadth=breadth, reviewed=reviewed)
     return call
 
 
@@ -861,8 +973,12 @@ def _quote_count(raw) -> int:
     return 1 if raw else 0
 
 
-def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Optional[list]:
-    """[(라벨, 호출 번호, 항목)] — 첫째 출력을 쓸 수 없으면 None(셀 수 없음)."""
+def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str],
+                reasons: List[str]) -> Optional[list]:
+    """[(라벨, 호출 번호, 항목)] — 첫째 출력을 쓸 수 없으면 None(셀 수 없음).
+
+    쓴 출력의 `none_reason` 이 빈 글 아닌 글이면 한 줄로 접어 `reasons` 에 더한다.
+    """
     call = plan["call"]
     first, first_why = _parse_output(_read(_path(rd, OUT1)))
     second, second_why = _parse_output(_read(_path(rd, OUT2)))
@@ -879,6 +995,9 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str]) -> Opti
         ledger.uncountable("intent-critic 후보", main_why)
         return None
     out = []
+    for used in (main, extra):
+        if used is not None and _one_line(used.get("none_reason")):
+            reasons.append(_one_line(used.get("none_reason")))
     number = 1 if call != "single" else 2
     for i, item in enumerate(main["questions"], 1):
         out.append(("%s %d" % ("첫째" if number == 1 else "한 번", i), number, item))
@@ -1058,6 +1177,7 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
     ordered = sorted(remaining, key=_pick_rank)
     for i, record in enumerate(ordered):
         label = record.pop("label_in_run")
+        record["n"] = i + 1
         if i < CAP:
             ledger.accept(label)
             record["state"] = "ask"
@@ -1076,6 +1196,7 @@ def cmd_filter(args) -> int:
               "unidentified": 0, "broken": 0, "absorbed": 0, "cites_dropped": 0}
     plan = _read_plan(rd)
     questions: List[dict] = []
+    none_reasons: List[str] = []
     if plan is None:
         status, call = "uncountable", "-"
         ledger.uncountable("intent-critic 후보", "준비 파일(%s)이 없음" % PLAN)
@@ -1083,7 +1204,12 @@ def cmd_filter(args) -> int:
         status, call = "no-evidence", "none"
     else:
         call = plan["call"]
-        cands = _candidates(plan, rd, ledger, notices)
+        if plan["breadth"] != "narrow" and not os.path.isdir(plan["tree_root"] or ""):
+            cands = None
+            notices.append(NOTICE_NO_TREE)
+            ledger.uncountable("intent-critic 후보", NOTICE_NO_TREE)
+        else:
+            cands = _candidates(plan, rd, ledger, notices, none_reasons)
         if cands is None:
             status = "uncountable"
         else:
@@ -1115,6 +1241,7 @@ def cmd_filter(args) -> int:
     _write_questions(rd, {"status": status, "call": call, "counts": counts,
                           "disposition": disposition_report(report, ledger.held_by_class()),
                           "notices": notices, "commit": "-", "commit_line": "",
+                          "none_reason": " / ".join(none_reasons) if none_reasons else "-",
                           "questions": questions})
     _emit(notices)
     print("intent-ask: %d" % asked)
@@ -1123,39 +1250,66 @@ def cmd_filter(args) -> int:
 
 # ---------------------------------------------------------------- record
 
-def _answer_header(line: str, known: dict, seen: dict) -> Optional[tuple]:
-    """머리 줄이면 (정체, 고른 것). 알려진 묻는 질문의 정체일 때만 머리다."""
-    if not line.startswith(HEADER):
-        return None
-    ident, sep, pick = line[len(HEADER):].partition(PICK_SEP)
-    pick = pick.rstrip()
-    if not sep or pick not in ia.ANSWERS + (TYPED,):
-        return None
-    if seen.get(ident, 0) >= known.get(ident, 0):
-        return None
-    return ident, pick
+def _header_parts(line: str) -> tuple:
+    """답 머리 꼴 줄 → (번호 | None, 정체 | None, 고른 것 | None).
 
-
-def parse_answer_input(text: str, known: dict) -> tuple:
-    """`=== id: <정체> · pick: <답|typed>` 머리로 가른 답들. 머리 아닌 줄은 앞 머리의 원문이다.
-
-    → (답들, 첫 머리 앞의 빈 줄 아닌 줄 수). 첫 머리 앞의 글은 붙일 질문이 없어 읽지 못한다.
+    고른 것은 `PICK_SEP` 를 오른쪽에서 갈라 얻는다(옛 `=== id: ` 꼴도). 번호와 정체는 `=== n: ` 꼴이고
+    `ID_SEP` 앞이 ASCII 숫자일 때만 읽힌다.
     """
-    seen: dict = {}
+    body, sep, pick = line.rpartition(PICK_SEP)
+    if sep:
+        pick = pick.rstrip()
+    else:
+        body, pick = line, None
+    number, ident = None, None
+    if body.startswith(HEADER):
+        digits, sep, rest = body[len(HEADER):].partition(ID_SEP)
+        if sep and digits and set(digits) <= DIGITS and len(digits) <= 9:
+            number, ident = int(digits), rest
+    return number, ident, pick
+
+
+def parse_answer_input(text: str, known: dict) -> dict:
+    """`=== n: <번호> · id: <정체> · pick: <답|typed>` 머리로 가른 답들. `known` 은 묻는 질문의 {번호: 정체}.
+
+    → {"entries": [{"n", "id", "pick", "lines"}], "orphan": 첫 머리 앞의 빈 줄 아닌 줄 수,
+       "mismatched": [(번호 | None, 읽힌 고른 답 | None)], "duplicates": 같은 번호의 머리가 더 나온 수}.
+    답 머리 꼴 줄은 늘 지금 답을 끝낸다. 번호 · 정체가 맞는 그 번호의 첫 머리만 답이고, 고른 것이 라벨 · typed
+    가 아니면 `pick` 이 None 인 답이다(아래 글은 싣지 않는다). 맞지 않는 머리 · 더 나온 머리와 그 아래 글은
+    어디에도 싣지 않는다. 머리 꼴이 아닌 줄(`===` 로 시작하는 다른 줄 포함)은 지금 답의 원문이다.
+    """
+    picks = ia.ANSWERS + (TYPED,)
     entries: List[dict] = []
-    current: Optional[dict] = None
+    mismatched: List[tuple] = []
+    taken: set = set()
+    duplicates = 0
     orphan = 0
+    started = False
+    current: Optional[dict] = None
     for line in text.split("\n"):
-        head = _answer_header(line.rstrip("\r"), known, seen)
-        if head is not None:
-            seen[head[0]] = seen.get(head[0], 0) + 1
-            current = {"id": head[0], "pick": head[1], "lines": []}
-            entries.append(current)
+        bare = line.rstrip("\r")
+        if bare.startswith(HEADER_SHAPES):
+            started = True
+            current = None
+            number, ident, pick = _header_parts(bare)
+            if number is not None and number in known and ident == known[number]:
+                if number in taken:
+                    duplicates += 1
+                else:
+                    taken.add(number)
+                    entry = {"n": number, "id": ident, "pick": pick if pick in picks else None,
+                             "lines": []}
+                    entries.append(entry)
+                    if entry["pick"] is not None:
+                        current = entry
+            else:
+                mismatched.append((number, pick if pick in picks else None))
         elif current is not None:
             current["lines"].append(line)
-        elif line.strip():
+        elif not started and bare.strip():
             orphan += 1
-    return entries, orphan
+    return {"entries": entries, "orphan": orphan, "mismatched": mismatched,
+            "duplicates": duplicates}
 
 
 def _read_pick(entry: dict) -> tuple:
@@ -1179,6 +1333,17 @@ def _git_out(repo: str, *args: str) -> Optional[str]:
     if res.returncode != 0:
         return None
     return res.stdout.decode("utf-8", "replace")
+
+
+def _resolve_commit(repo: str, rev: str) -> str:
+    """rev 를 커밋 해시(40자 16진)로 푼다 — `-` · `-` 로 시작하는 글 · 못 푸는 rev 는 `-`."""
+    if rev == "-" or rev.startswith("-"):
+        return "-"
+    out = _git_out(repo, "rev-parse", "--verify", "--quiet", rev + "^{commit}")
+    sha = (out or "").strip()
+    if len(sha) == 40 and set(sha) <= set("0123456789abcdef"):
+        return sha
+    return "-"
 
 
 def _review_target(repo: str, answers_dir: str) -> str:
@@ -1216,18 +1381,6 @@ def _unique_name(ident: str, now: datetime.datetime, taken: set, directory: str)
     return name, at
 
 
-def _stray_lines(entries: List[dict], orphan: int) -> int:
-    """어느 질문에도 붙이지 못한 답 글의 줄 수 — 첫 머리 앞의 글과, 라벨을 고른 답(머리 아래 줄이 없는 꼴)
-    아래에 남은 글. 정체가 틀린 머리 줄은 여기에 든다."""
-    stray = orphan
-    for entry in entries:
-        if entry["pick"] != TYPED:
-            for line in entry["lines"]:
-                if line.strip():
-                    stray += 1
-    return stray
-
-
 def _one_line(value, limit: int = 0) -> str:
     """공시 줄에 싣는 글 — 줄바꿈 · 제어 글자를 빈칸으로 접어 한 줄로 만들고, limit 가 있으면 그 길이에서 자른다.
 
@@ -1248,8 +1401,11 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
     고른 답 · 질문 글 한 줄. 그 질문에 표지를 단다."""
     reasons: List[str] = []
     counts: dict = {}
-    for record, _answer, reason in failed:
+    for record, picked, reason in failed:
         record["record_failed"] = True
+        if picked:
+            record["failed_answer"] = picked
+        record["failure"] = reason
         if reason not in counts:
             reasons.append(reason)
             counts[reason] = 0
@@ -1265,71 +1421,115 @@ def _failed_notices(failed: List[tuple]) -> List[str]:
     return lines
 
 
-def _save_record(rd: str, data: Optional[dict], notices: List[str], changed: bool) -> None:
+def _save_record(rd: str, data: Optional[dict], notices: List[str]) -> None:
     """record 의 공시 · 표지를 거르기 결과에 남겨 render 가 result.md 에 보이게 한다."""
-    if data is None or not (notices or changed):
+    if data is None:
         return
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     _write_questions(rd, data)
 
 
+def _keep_typed(record: dict, entry: dict) -> None:
+    """직접 쓴 답이면 그 원문 줄들을 질문에 남긴다 — 기록에 성공했든 실패했든 돌려주는 꼴의 `answer_text`."""
+    if entry["pick"] == TYPED:
+        raw = _read_pick(entry)[1]
+        if raw:
+            record["answer_text"] = raw.split("\n")
+
+
+def _answers_in_input(parsed: dict, by_n: dict) -> tuple:
+    """입력에 답이 있던 질문 — (받은 답 [(질문, 답 항목)], 제 사유로 기록하지 못할 답 [(질문, 고른 답 | None, 사유)]).
+
+    받은 답 · 고른 것을 읽지 못한 머리(`답을 읽지 못함`) · 번호만 맞은 머리(`정체가 맞지 않는 답 머리` — 같은
+    번호에 받은 머리가 따로 있으면 그것이 이긴다)가 든다.
+    """
+    good: List[tuple] = []
+    own: List[tuple] = []
+    hit: set = set()
+    for entry in parsed["entries"]:
+        record = by_n[entry["n"]]
+        hit.add(entry["n"])
+        if entry["pick"] is None:
+            own.append((record, None, PICK_UNREAD))
+        else:
+            good.append((record, entry))
+            _keep_typed(record, entry)
+    for number, pick in parsed["mismatched"]:
+        if number in by_n and number not in hit:
+            hit.add(number)
+            own.append((by_n[number], pick if pick in ia.ANSWERS else None, MISMATCH_FAILURE))
+    return good, own
+
+
+def _input_notices(parsed: dict, known: dict, asked: List[dict], text: Optional[str]) -> List[str]:
+    """답 입력을 읽은 공시 — 머리 없음 · 머리 앞 글 · 정체가 맞지 않는 머리(4a) · 더 나온 같은 번호 머리."""
+    notices = []
+    if not parsed["entries"] and known and text is not None and text.strip():
+        notices.append(NO_HEADER % len(asked))
+    if parsed["orphan"]:
+        notices.append(ORPHAN % parsed["orphan"])
+    if parsed["mismatched"]:
+        notices.append(MISMATCHED % len(parsed["mismatched"]))
+    if parsed["duplicates"]:
+        notices.append(DUPLICATE_HEADERS % parsed["duplicates"])
+    return notices
+
+
 def _record(args) -> tuple:
     """(공시 줄들, 기록한 답 파일 수)."""
+    switches = _switches_on()
     plan = _read_plan(args.rd)
-    data = _read_questions(args.rd)
     if plan is not None and plan["mode"] == "range":
+        if switches:
+            return [KILL_RECORD % _kill_text(switches)], 0
         return [], 0
+    data = _read_questions(args.rd)
+    if data is not None:
+        data["record_ran"] = True   # render 가 「묻기 전에 끝남」 과 「답하지 않음」 을 가른다
     cfg = _read_config(args.rd)
     text = _read(args.answers)
     known: dict = {}
-    pending: dict = {}
+    by_n: dict = {}
     asked: List[dict] = []
     for record in (data or {}).get("questions") or []:
         if isinstance(record, dict) and record.get("state") == "ask":
-            known[record["id"]] = known.get(record["id"], 0) + 1
-            pending.setdefault(record["id"], []).append(record)
             asked.append(record)
-    entries: List[dict] = []
-    orphan = 0
+            if type(record.get("n")) is int:
+                known[record["n"]] = record.get("id")
+                by_n[record["n"]] = record
+    parsed = {"entries": [], "orphan": 0, "mismatched": [], "duplicates": 0}
     if data is not None and text is not None:
-        entries, orphan = parse_answer_input(text, known)
-    matched = []
-    for entry in entries:
-        matched.append((pending[entry["id"]].pop(0), entry))
+        parsed = parse_answer_input(text, known)
+    good, own = _answers_in_input(parsed, by_n)
+    notices = _input_notices(parsed, known, asked, text)
 
+    # 기록하지 않는 갈래 — 입력에 답이 있던 질문에만 그 갈래의 사유로 실패 표지를 단다. 답 입력 파일 자체를
+    # 읽지 못하면 답이 있었는지 알 수 없어 묻는 질문 모두에 단다.
     blocked = None
-    if plan is None:
+    lead = None
+    if switches:
+        blocked = KILL_FAILURE % _kill_names(switches)
+        lead = KILL_RECORD % _kill_text(switches)
+    elif plan is None:
         blocked = "준비 파일(%s)을 읽지 못함" % PLAN
     elif data is None or cfg is None or text is None:
         blocked = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
     if blocked:
-        notices = ["답을 기록하지 못했다 — " + blocked]
         failed = []
-        # 답 입력이 비어 있으면 받은 답이 없다 — 그때는 「답하지 않음」 으로 둔다.
-        if text is None or text.strip():
-            picked = {}
-            for record, entry in matched:
-                picked[id(record)] = _read_pick(entry)[0]
+        if text is None:
             for record in asked:
-                failed.append((record, picked.get(id(record)), blocked))
-        notices += _failed_notices(failed)
-        _save_record(args.rd, data, notices, bool(failed))
+                failed.append((record, None, blocked))
+        for record, entry in good:
+            failed.append((record, _read_pick(entry)[0], blocked))
+        for record, picked, _why in own:
+            failed.append((record, picked, blocked))
+        notices = [lead or "답을 기록하지 못했다 — " + blocked] + notices + _failed_notices(failed)
+        _save_record(args.rd, data, notices)
         return notices, 0
 
-    notices = []
-    if not entries and known and text.strip():
-        notices.append("답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개" % len(asked))
-    if orphan:
-        notices.append("머리 앞의 답 글을 읽지 못함 %d줄" % orphan)
-    # 머리가 맞지 않은 질문 — 붙이지 못한 답 글이 있으면 그 답을 읽지 못한 것이다(없으면 답하지 않은 질문이다).
-    unread = []
-    if _stray_lines(entries, orphan):
-        for ident in pending:
-            for record in pending[ident]:
-                unread.append((record, None, UNREAD_INPUT))
-    if not entries:
-        notices += _failed_notices(unread)
-        _save_record(args.rd, data, notices, bool(unread))
+    if not good:
+        notices += _failed_notices(own)
+        _save_record(args.rd, data, notices)
         return notices, 0
     answers_dir = cfg["answers_dir"]
     target = _review_target(args.repo, answers_dir)
@@ -1338,7 +1538,7 @@ def _record(args) -> tuple:
     taken: set = set()
     files = []
     pairs = []
-    for record, entry in matched:
+    for record, entry in good:
         answer, raw = _read_pick(entry)
         name, at = _unique_name(record["id"], now, taken, directory)
         files.append((name, ia.render_answer_file(
@@ -1355,7 +1555,7 @@ def _record(args) -> tuple:
             record["file"] = paths[i]
         else:
             failed.append((record, answer, write_error or "답 파일이 없다"))
-    notices += _failed_notices(failed + unread)
+    notices += _failed_notices(failed + own)
     data["record_notices"] = list(data.get("record_notices") or []) + notices
     if paths:
         sha, commit_error = ia.commit_answer_files(args.repo, paths,
@@ -1388,30 +1588,59 @@ def _cell(value) -> str:
     return _text(value).replace("\n", " ").replace("|", "\\|")
 
 
-def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
-    """(상태, 결과 줄, 공시 줄들)."""
+def _question_state(record: dict, mode: str, record_ran: bool) -> Optional[str]:
+    """질문 레코드 하나의 돌려주는 꼴 상태 — 거른 상태(이미 답해 거름 등)는 None."""
+    state = record.get("state")
+    if state == "answered":
+        return QUESTION_STATES[0]
+    if state == "over-cap":
+        return QUESTION_STATES[4]
+    if state != "ask":
+        return None
+    if mode == "range":
+        return QUESTION_STATES[3]
+    if record.get("record_failed"):
+        return QUESTION_STATES[1]
+    if record_ran:
+        return QUESTION_STATES[2]
+    return QUESTION_STATES[3]
+
+
+def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> dict:
+    """키 `status` · `reason` · `reason_text` · `outcome` · `result_line` · `notices`."""
     notices = []
     if data is not None:
         notices = list(data.get("notices") or []) + list(data.get("record_notices") or [])
+    out = {"status": "ran", "reason": "-", "reason_text": "-", "outcome": "-",
+           "result_line": "", "notices": notices}
     if plan is None:
-        return "uncountable", UNREADABLE, ["준비 파일(%s)을 읽지 못함" % PLAN] + notices
-    if plan["call"] == "none":
-        return "skipped — 근거 없음", NO_EVIDENCE, []
-    if data is None:
-        return "uncountable", UNREADABLE, ["거르기 결과(%s)가 없음" % QUESTIONS]
-    if data.get("status") == "uncountable":
-        return "uncountable", UNREADABLE, notices
-    asked = answered = wrong = unanswered = 0
+        out["notices"] = ["준비 파일(%s)을 읽지 못함" % PLAN] + notices
+    elif plan["call"] == "none":
+        out.update(status="skipped", reason="no-evidence", reason_text="근거 없음",
+                   result_line=NO_EVIDENCE, notices=[])
+        return out
+    elif data is None:
+        out["notices"] = ["거르기 결과(%s)가 없음" % QUESTIONS]
+    if plan is None or data is None or data.get("status") == "uncountable":
+        first = _one_line(out["notices"][0]) if out["notices"] else ""
+        out.update(status="uncountable", reason_text=first or "-", result_line=UNREADABLE)
+        return out
+    record_ran = bool(data.get("record_ran"))
+    asked = answered = wrong = failed = unanswered = not_asked = 0
     for record in data["questions"]:
-        state = record.get("state")
-        if state in ("ask", "answered"):
+        if record.get("state") in ("ask", "answered"):
             asked += 1
-        if state == "answered":
+        state = _question_state(record, mode, record_ran)
+        if state == "답함":
             answered += 1
             if record.get("answer") == "잘못 골랐다":
                 wrong += 1
-        elif state == "ask" and not record.get("record_failed"):
-            unanswered += 1   # 묻고도 답을 받지 못한 질문 — 답 기록 실패는 따로 공시된다
+        elif state == "답 기록 실패":
+            failed += 1
+        elif state == "답하지 않음":
+            unanswered += 1   # 묻고도 답을 받지 못한 질문
+        elif state == "묻지 않음":
+            not_asked += 1
     counts = data.get("counts") or {}
     filtered = 0
     for key in FILTERED_KEYS:
@@ -1420,31 +1649,60 @@ def _outcome(plan: Optional[dict], data: Optional[dict], mode: str) -> tuple:
     if asked == 0:
         if filtered > 0 and not counts.get("answered"):
             if plan["breadth"] != "narrow":
-                return "ran", ALL_FILTERED % filtered, notices
-            return "ran", NO_EVIDENCE, notices
-        return "ran", NO_QUESTION, notices
+                out.update(outcome="all-filtered", result_line=ALL_FILTERED % filtered)
+            else:
+                out.update(outcome="no-evidence", result_line=NO_EVIDENCE)
+        else:
+            out.update(outcome="none", result_line=NO_QUESTION)
+        return out
+    out["outcome"] = "questions"
     if mode == "range":
-        return "ran", "intent-critic — 질문 %d개 아직 묻지 않음(범위 모드)" % asked, notices
-    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (asked, answered, wrong)
+        out["result_line"] = NOT_ASKED_RANGE % not_asked
+        return out
+    if not record_ran:
+        out["result_line"] = NOT_ASKED_EARLY % not_asked
+        return out
+    line = "intent-critic — 질문 %d개를 물었다 · 답 %d개(잘못 골랐다 %d개)" % (
+        answered + failed + unanswered, answered, wrong)
     if unanswered:
         line += UNANSWERED % unanswered
-    return "ran", line, notices
+    out["result_line"] = line
+    return out
 
 
 def _rows(data: Optional[dict], mode: str) -> List[dict]:
+    """질문 칸 — 키는 `QUESTION_KEYS`. 거른 상태의 레코드는 행이 없다."""
     rows = []
+    record_ran = bool((data or {}).get("record_ran"))
     for record in (data or {}).get("questions") or []:
-        state = record.get("state")
-        if state in RETURN_STATES:
-            answer = record.get("answer") or "-"
-            # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
-            kinds = record.get("evidence_kinds")
-            evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
-            rows.append({"id": _text(record.get("id")), "state": RETURN_STATES[state],
-                         "answer": answer, "wrong_choice": "yes" if answer == "잘못 골랐다" else "no",
-                         "file": "-" if mode == "range" else (record.get("file") or "-"),
-                         "question": record.get("question", ""), "evidence": evidence})
+        state = _question_state(record, mode, record_ran)
+        if state is not None:
+            rows.append(_row(record, state, mode))
     return rows
+
+
+def _row(record: dict, state: str, mode: str) -> dict:
+    """질문 칸 하나 — 키는 `QUESTION_KEYS`."""
+    answer = "-"
+    if state == "답함":
+        answer = record.get("answer") or "-"
+    elif state == "답 기록 실패":
+        answer = record.get("failed_answer") or "-"
+    # 근거의 종류가 없는 레코드(R1 꼴)는 `-`.
+    kinds = record.get("evidence_kinds")
+    evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
+    lines = record.get("answer_text")
+    observation = record.get("observation")
+    return {"n": record.get("n"), "id": _text(record.get("id")), "state": state,
+            "answer": answer, "answer_text": lines if isinstance(lines, list) and lines else "-",
+            "wrong_choice": answer == "잘못 골랐다",
+            "failure": (record.get("failure") or "-") if state == "답 기록 실패" else "-",
+            "file": "-" if mode == "range" else (record.get("file") or "-"),
+            "evidence": evidence, "question": record.get("question", ""),
+            "target_source": record.get("target_source", ""),
+            "target_id": record.get("target_id", ""), "label": record.get("label", ""),
+            "quote": record.get("quote", ""),
+            "observation": observation if isinstance(observation, list) else []}
 
 
 def _teams_record(rd: str) -> tuple:
@@ -1517,7 +1775,8 @@ def cmd_render(args) -> int:
     existing = _read(result_path) or ""
     plan = _read_plan(rd)
     data = _read_questions(rd) if plan is None or plan["call"] != "none" else None
-    status, line, notices = _outcome(plan, data, args.mode)
+    outcome = _outcome(plan, data, args.mode)
+    line, notices = outcome["result_line"], outcome["notices"]
     rows = _rows(data, args.mode)
     lead = "" if not existing or existing.endswith("\n") else "\n"
     shown = list(notices)
@@ -1532,7 +1791,14 @@ def cmd_render(args) -> int:
     _append(result_path, lead + _section(line, shown, data, rows, (overlap, unverified)))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
     breadth = "-" if plan is None else plan["breadth"]
-    _write_return(rd, status, args.mode, commit, rows, breadth, other_teams, overlaps)
+    head = {"status": outcome["status"], "reason": outcome["reason"],
+            "reason_text": outcome["reason_text"], "outcome": outcome["outcome"],
+            "result_line": line, "none_reason": (data or {}).get("none_reason") or "-",
+            "mode": args.mode, "reviewed_head": "-" if plan is None else plan["reviewed_head"],
+            "reviewed_base": "-" if plan is None else plan["reviewed_base"],
+            "commit": commit, "breadth": breadth, "other_teams": other_teams,
+            "overlaps": overlaps}
+    _write_return(rd, head, rows)
     _write(marker, line + "\n")
     _emit(notices)
     print(line)
@@ -1619,10 +1885,12 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_filter)
 
     p = sub.add_parser("record", help="답 파일을 docs 답 자리에 쓰고 그 파일만 커밋한다",
-                       description="입력 꼴: 「%s<정체>%s<의도다|잘못 골랐다|지금은 모르겠다|typed>」 머리 "
-                                   "줄 뒤 다음 머리 전까지가 답 원문. 묻는 질문의 정체가 아닌 머리는 원문으로 "
-                                   "읽는다. 범위 모드면 아무것도 쓰지 않는다. 마지막 줄 「record: <n>」. rc 0."
-                                   % (HEADER, PICK_SEP))
+                       description="입력 꼴: 「%s<번호>%s<정체>%s<의도다|잘못 골랐다|지금은 모르겠다|typed>」 "
+                                   "머리 줄 뒤 다음 머리 전까지가 답 원문. 번호 · 정체가 묻는 질문과 맞지 "
+                                   "않는 머리 · 같은 번호로 더 나온 머리와 그 아래 글은 어디에도 싣지 "
+                                   "않는다. 범위 모드면 아무것도 쓰지 않는다. kill switch 가 켜져 있으면 "
+                                   "답 파일을 쓰지 않고 커밋하지 않는다. 마지막 줄 「record: <n>」. rc 0."
+                                   % (HEADER, ID_SEP, PICK_SEP))
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--repo", required=True, help="리포 루트(답 파일을 쓰고 커밋할 곳)")
     p.add_argument("--answers", required=True, help="답 입력 파일")
