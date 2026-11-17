@@ -7,21 +7,23 @@ devbrew의 새 플러그인 스캐폴딩 워크스루 — `CLAUDE.md`의 `## Bui
 ```
 plugins/<your-plugin>/
 ├── .claude-plugin/
-│   └── plugin.json           # 필수 — name, version (0.1.0로 시작), description
+│   └── plugin.json           # 필수 키는 name 하나 — version · description · author 를 빼면 claude plugin validate 가 경고. version 을 적으면 0.1.0 에서 시작
 ├── README.md                 # 필수 — "Principles Instantiated" 섹션 포함
+├── dependencies.md           # 기대는 도구 · 다른 플러그인의 표(이름 · 최소 판 · 강도 · 없을 때) — 판 칸은 check_deps.py measure 가 잰다
 ├── CHANGELOG.md              # version ≥ v1.0.0이면 필수
 ├── skills/<name>/            # 진입 skill 은 짧은 kebab(spec-review), 내부 skill(user-invocable: false)은 동명사(reviewing-brief)
-│   └── SKILL.md              # cost_class 선언, frontmatter trigger
+│   └── SKILL.md              # frontmatter metadata 아래 cost_class 선언 · trigger. 진입 skill 의 꼴(allowed-tools 한 줄 · ! 사전 검사 줄 · ## 진입 단계)은 있는 진입 skill(plugins/spec-distill/skills/spec-review/SKILL.md)을 본보기로
 ├── agents/                   # optional — 각각 tools: allowlist 선언 (fail-closed)
+├── references/               # optional — skill · agent 가 필요할 때 읽는 긴 절차 · 계약
 ├── hooks/                    # optional — 각각 DEVBREW_<PLUGIN>_DISABLE=1 opt-out
-├── scripts/                  # optional — hook에서 호출하는 shell/python 헬퍼
+├── scripts/                  # optional — 진입 skill 이 있으면 진입 사전 검사 스크립트(entry_preflight.py, shared/entry/ 정본의 심볼릭 링크)가 여기 있다. 그 밖에 hook · skill 이 부르는 shell/python 헬퍼
 ├── templates/                # optional — 플러그인이 설치하는 정적 파일
 └── tests/                    # optional — 테스트는 여기 하나로. hooks/tests·scripts/tests 신설 금지
 ```
 
 - **agent frontmatter 에 `model` 키를 두지 않는다.** 리터럴 티어(`opus`/`sonnet`/`haiku`)는 세션의 모델 선택을 덮어쓰고, `inherit` 는 사용자의 subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓴다 — CLI 2.1.261 실측(2026-09-06, `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md` §A). 키가 없으면 하니스는 「사용자 설정 → 세션 모델」 순으로 위임한다. 어느 값이든 하니스가 티어를 정하는 것이라 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.
-  - **dispatch 시점의 `model` 인자는 오케스트레이터의 재량이다.** 세션 모델이 어떤 것이든 상황에 맞는 티어를 고를 수 있다 — 단, 그 agent 의 출력이 **게이트 판정(verdict·findings)이나 측정(readback 류)에 들어가면 인자를 넘기지 않는다.** writer 인 오케스트레이터가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다. 재량은 프로브·생성기처럼 사람이 읽는 출력만 내는 agent(예: `smoke-probe`)에 한한다. **재량이 없는 쪽의 예** — 게이트 판정에 들어가서 인자를 넘기지 않는 쪽 — 로 `quality-gates:doc-recritic`(Phase 1.5 재비판, 공유 정본의 copy-of 사본)이 있다: frontmatter 에 `model` 키가 없고 dispatch 펜스에도 `model:` 인자가 없다. 정본
-frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 플러그인의
+  - **dispatch 시점의 `model` 인자는 오케스트레이터의 재량이다.** 세션 모델이 어떤 것이든 상황에 맞는 티어를 고를 수 있다 — 단, 그 agent 의 출력이 **게이트 판정(verdict·findings)이나 측정(readback 류)에 들어가면 인자를 넘기지 않는다.** writer 인 오케스트레이터가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다. 재량은 프로브·생성기처럼 사람이 읽는 출력만 내는 agent(예: `smoke-probe`)에 한한다. **재량이 없는 쪽의 예** — 게이트 판정에 들어가서 인자를 넘기지 않는 쪽 — 로 `spec-distill:doc-recritic`(문서 리뷰 엔진의 재비판, 공유 정본의 copy-of 사본)이 있다: frontmatter 에 `model` 키가 없고 dispatch 펜스에도 `model:` 인자가 없다. 정본
+frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, spec-distill 의
 사본이 그 정본과 바이트 동일함은 `shared/tests/test_copy_of_contract.sh` 가 잰다.
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
@@ -42,10 +44,10 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 **단계별 문법 레퍼런스** — `plugin-dev`(claude-plugins-official)가 Claude Code 컴포넌트 문법을 skill로 shipping한다. 기본은 해당 단계에 들어갈 때 그 단계의 skill 을 로드하는 것이다 — 다른 순서가 맞으면 이유를 적는다:
 
 - **설계 (brainstorming)** — `plugin-dev:plugin-structure`. 컴포넌트 타입, `plugin.json` 스키마, 디렉토리 레이아웃. 이 단계의 기본 skill 이다.
-- **구현** — shipping하는 surface별로 `plugin-dev:skill-development` / `command-development` / `agent-development` / `hook-development` / `mcp-integration`.
+- **구현** — shipping하는 surface별로 `plugin-dev:skill-development` / `agent-development` / `hook-development` / `mcp-integration`.
 - **검증** — `/plugin-audit:plugin-audit` (읽기전용 고른 축(기본 여섯) 감사 → 적대적 반박 → codex 병렬 co-audit).
 
-`plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev`의 `/create-plugin`은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
+`plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev:create-plugin` 은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
 
 **devbrew 를 고칠 때의 규칙:**
 
@@ -55,4 +57,4 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, 이 �
 - 새 셸 테스트는 실행 비트를 붙여(`100755`) 커밋한다.
 - 플러그인 파일을 subagent 에 넘길 때는 경로가 아니라 내용으로 싣는다 — 설치본 캐시는 작업 폴더 밖이라 subagent 가 못 읽을 수 있다.
 
-**Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족 + 시작 버전 `0.1.0`.
+**Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족. `version` 을 적는 새 플러그인은 `0.1.0` 에서 시작한다.

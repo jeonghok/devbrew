@@ -321,9 +321,22 @@ mkdir -p "$S/shared/tests" "$S/shared/docreview/agents" "$S/plugins/x/skills/a" 
 cp "$ROOT/shared/tests/test_no_new_duplication.sh" "$ROOT/shared/tests/assert.sh" "$ROOT/shared/tests/variant_of.py" "$S/shared/tests/"
 cp "$ROOT/shared/docreview/agents/doc-critic.md" "$ROOT/shared/docreview/agents/doc-critic-web.md" "$S/shared/docreview/agents/"
 SRC="$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md"
-cp "$SRC" "$S/plugins/x/skills/a/SKILL.md"
+# variant-of 의 frontmatter 문법은 중첩 블록을 받지 않는다 — 복제 원본에서 metadata 블록(cost_class)만 뺀다
+python3 -I - "$SRC" "$S/plugins/x/skills/a/SKILL.md" <<'PY2'
+import sys
+src, dst = sys.argv[1:3]
+lines = open(src, encoding="utf-8").read().split("\n")
+out, fm = [], True
+for i, ln in enumerate(lines):
+    if i > 0 and ln == "---":
+        fm = False
+    if fm and (ln == "metadata:" or ln.startswith("  cost_class:")):
+        continue
+    out.append(ln)
+open(dst, "w", encoding="utf-8").write("\n".join(out))
+PY2
 # 복제본 — 마커 + name 변경 + 본문 첫 `## ` 앞 두 줄 끼움(리뷰의 probe 와 같은 모양)
-python3 - "$SRC" "$S/plugins/x/skills/b/SKILL.md" <<'PY'
+python3 - "$S/plugins/x/skills/a/SKILL.md" "$S/plugins/x/skills/b/SKILL.md" <<'PY'
 import sys
 src, dst = sys.argv[1:3]
 lines = open(src, encoding="utf-8").read().split("\n")

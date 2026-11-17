@@ -55,7 +55,8 @@ class TestSkillOrchestration(unittest.TestCase):
 
     def test_cost_class_high_in_frontmatter(self):
         fm = SKILL.read_text(encoding="utf-8").split("---")[1]
-        self.assertIn("cost_class: high", fm)
+        self.assertIn("metadata:\n  cost_class: high", fm)
+        self.assertNotRegex(fm, r"(?m)^cost_class:")
 
     def test_journal_acquired_before_assembly(self):  # H R4 (codex re-verify)
         # journal 확보가 assemble/render 뒤에 오면, journal 미획득을 degraded[]에 넣어 배너에 반영할 수
