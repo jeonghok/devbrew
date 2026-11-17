@@ -88,6 +88,12 @@ class SeedMode(RepoCase):
         self.assertEqual(self.run_("--seed", "docs/s.md"),
                          (3, "raw-source: LOST " + RS.R_AUDIT_TYPE.format(audit="docs/s.audit.md", kind="없음")))
 
+    def test_audit_type_empty_value(self):
+        put(self.repo, "docs/s.md", SEED)
+        put(self.repo, "docs/s.audit.md", "---\ntype:\n---\n\n본문\n")
+        self.assertEqual(self.run_("--seed", "docs/s.md"),
+                         (3, "raw-source: LOST " + RS.R_AUDIT_TYPE.format(audit="docs/s.audit.md", kind="없음")))
+
     def test_audit_unreadable(self):
         put(self.repo, "docs/s.md", SEED)
         p = Path(self.repo) / "docs/s.audit.md"
@@ -151,6 +157,12 @@ class InterviewMode(RepoCase):
     def test_block_three_tilde_fence(self):
         self._no_framing_for("---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n~~~\n"
                              + SEED.rstrip("\n") + "\n~~~\n")
+
+    def test_block_five_tilde_fence(self):
+        put(self.repo, "docs/b.state.md", "---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n~~~~~\n"
+            + SEED.rstrip("\n") + "\n~~~~~\n")
+        self.assertEqual(self.run_("--interview", "docs/b.state.md"),
+                         (3, "raw-source: LOST " + RS.R_SEED_UNRECORDED))
 
     def test_block_backtick_fence(self):
         self._no_framing_for("---\ntype: interview-state\nseed: 없음\n---\n\n## 풀린 입력\n\n````\n"

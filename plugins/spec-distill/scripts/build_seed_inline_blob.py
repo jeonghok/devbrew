@@ -158,7 +158,19 @@ def main() -> int:
     }
     claude_md_absent = False
     for label, path in paths.items():
-        if label == "claude_md_file" and not os.path.lexists(path):
+        if label == "claude_md_file":
+            try:
+                os.lstat(path)
+            except (FileNotFoundError, NotADirectoryError):
+                missing = True
+            except OSError as e:  # 권한 거부 같은 것은 없는 것이 아니다 — 멈춘다.
+                print(f"{label} not found: {path} ({type(e).__name__}: {e.strerror})", file=sys.stderr)
+                return 2
+            else:
+                missing = False
+        else:
+            missing = False
+        if label == "claude_md_file" and missing:
             # 없는 것은 계속한다. 있는데 파일이 아닌 것(끊긴 링크 · 폴더)은 아래 검사가 그대로 멈춘다.
             claude_md_absent = True
             print(f"[spec-distill] 경고: 레포 CLAUDE.md 가 없다({path}) — 번들의 그 절을 "

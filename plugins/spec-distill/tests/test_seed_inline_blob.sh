@@ -114,6 +114,17 @@ for bad in "$TMP/dangling.md" "$TMP/claude-dir.md"; do   # 깨진 것은 없는 
   python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$bad" >/dev/null 2>"$TMP/e_bad.txt"; assert_eq "$?" "2" "$(basename "$bad") → exit 2"
   assert_contains "$(cat "$TMP/e_bad.txt")" "claude_md_file not found:" "$(basename "$bad") → 기존 메시지"
 done
+# 파일 밑의 경로(NotADirectoryError)는 없음이다. 권한 거부는 없음이 아니다 — 멈춘다(rc 2).
+python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/seed.md/CLAUDE.md" >/dev/null 2>"$TMP/e_nd.txt"
+assert_eq "$?" "0" "파일 밑의 CLAUDE.md 경로 → 없음으로 읽고 조립한다"
+mkdir -p "$TMP/noperm"; : > "$TMP/noperm/CLAUDE.md"; chmod 000 "$TMP/noperm"
+if [ "$(id -u)" != "0" ] && [ ! -e "$TMP/noperm/CLAUDE.md" ] && ! ls "$TMP/noperm/CLAUDE.md" >/dev/null 2>&1; then
+  python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/noperm/CLAUDE.md" >/dev/null 2>"$TMP/e_perm.txt"; assert_eq "$?" "2" "권한 거부 → 없음으로 접지 않고 exit 2"
+  assert_contains "$(cat "$TMP/e_perm.txt")" "claude_md_file not found:" "권한 거부 → 인자를 대는 메시지"
+else
+  ok "권한 거부 케이스는 이 환경에서 만들 수 없어 건너뛴다(root 이거나 chmod 가 막지 않는다)"
+fi
+chmod 755 "$TMP/noperm"
 # 임시 git 레포(CLAUDE.md 없음)의 루트에서 skill 펜스와 같은 인자 `CLAUDE.md` 로
 GR="$TMP/gitrepo"; mkdir -p "$GR/docs"
 git -C "$GR" init -q 2>/dev/null

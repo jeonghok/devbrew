@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
 #
 # request-framing 의 이름 조회(AC16)와 다음 단계 둘째 질문(AC17).
 # AC16 — 레포로 설명이 안 되는 이름만 짧게 조회해 audit `### 이름 조회` 에 남기고 seed 에는 싣지 않는다.
@@ -16,6 +16,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/references/proceed-gate.md"
   echo "plugins/spec-distill/templates/interview-seed-audit-template.md"
+  echo "plugins/spec-distill/scripts/raw_source.py"
   exit 0
 fi
 
@@ -110,7 +111,8 @@ done
 for lit in 'seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일 <기록 파일 절대경로> 의 원자료다(`## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구). 그 파일을 읽어 그 skill 의 사용자 원문(첫 요청)으로 삼는다' \
            '원자료(framing 기록 파일)를 찾지 못했다(<사유>) — seed 만 넘긴다' \
            '`원자료(framing 기록 파일)를 찾지 못했다 — <사유>. 다음 단계에는 seed 만 넘긴다`' \
-           '판결 줄이 없다(종료 코드 <n>)' 'raw_source.py" locate --seed "$SEED_ABS" ||'; do
+           '판결 줄이 없다(종료 코드 <n>)' 'raw_source.py" locate --seed "$SEED_ABS" ||' \
+           '한 줄을 보인 뒤 다음 세션 줄을 노출한다'; do
   assert_contains "$CALL" "$lit" "AC22: «${lit}»"
 done
 assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"
@@ -119,6 +121,10 @@ assert_not_contains "$CALL" '다음 세션 줄을 노출하지 않는다' "AC22:
 RSF="$SCRATCH/rs-fence.sh"
 awk 'index($0,"**다른 다음 단계(둘째 질문).**")==1{f=1; next} f&&/^```bash$/{b=1; next} f&&b&&/^```$/{exit} f&&b' "$RF" > "$RSF"
 bash -n "$RSF" && [ -s "$RSF" ] && ok "AC22(양성대조): 원자료 자리 펜스를 떴다" || no "AC22: 원자료 자리 펜스 부재 또는 구문 오류"
+# 뜬 본문이 원자료 판결 펜스가 아니면(펜스가 지워져 다음 bash 펜스를 뜬 경우) 실행하지 않는다.
+RS_RUN=0
+if grep -qF 'raw_source.py" locate --seed' "$RSF"; then RS_RUN=1; ok "AC22: 뜬 펜스가 원자료 판결 펜스다"; else no "AC22: 뜬 펜스에 raw_source.py locate --seed 가 없다 — 실행하지 않는다"; fi
+if [ "$RS_RUN" = 1 ]; then
 RSD="$SCRATCH/rs"; mkdir -p "$RSD"
 SEED_ABS="$RSD/x-interview-seed.md"; printf 'seed\n' > "$SEED_ABS"
 run_rs() { env -i PATH="$PATH" SD="$SD" SEED_ABS="$SEED_ABS" bash "$RSF" 2>"$SCRATCH/rs.err"; }
@@ -130,5 +136,6 @@ printf -- '---\ntype: interview-seed-audit\n---\n' >"$RSD/x-interview-seed.audit
 out="$(run_rs)"; rc=$?
 assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 있으면 0"
 assert_eq "$(tail -1 <<<"$out")" "raw-source: FOUND ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 있음 → FOUND 판결 줄"
+fi
 
 finish

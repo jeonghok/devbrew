@@ -77,7 +77,7 @@ def _chain(seed: str, base: "Path | None") -> Verdict:
     if not at(audit).is_file():
         return _lost(R_AUDIT_MISSING.format(audit=audit))
     fm = frontmatter_scalars(at(audit))
-    kind = "읽지 못함" if fm is None else fm.get("type", "없음")
+    kind = "읽지 못함" if fm is None else fm.get("type") or "없음"
     if kind != AUDIT_TYPE:
         return _lost(R_AUDIT_TYPE.format(audit=audit, kind=kind))
     return _found(audit)
