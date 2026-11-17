@@ -305,4 +305,13 @@ assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 머지된 단순 �
 assert_contains "$(cat "$T/job.err")" "kept-task 는 이미 기본 브랜치에 머지됐다" "과제: 머지된 단순 작업(브랜치 남음) — 사유"
 assert_eq "$(job --job fix-typo --stage implement)" "0" "과제: 머지되지 않은 단순 작업은 그대로 0(양성 대조)"
 
+# 설계 흐름 블록의 브랜치 칸이 비었다 — 멈춘다(1) · 표준 출력은 비고 사유가 블록 번호와 함께 표준 오류로 간다
+python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); old="- 브랜치: feature/tm-e3\n"; assert s.count(old) == 1; open(p, "w", encoding="utf-8", newline="").write(s.replace(old, "- 브랜치:\n"))' "$W/$TM/roadmap.md"
+g add -- "$TM/roadmap.md" && g commit -qm "E3 브랜치 칸 비움" && publish
+assert_eq "$(job --job E3 --stage design)" "1" "과제: 블록의 브랜치 칸이 비면 1"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 브랜치 칸 빔 — 표준 출력이 비었다"
+assert_contains "$(cat "$T/job.err")" "블록 E3 의 브랜치 칸에 브랜치가 없다" "과제: 브랜치 칸 빔 — 사유에 블록 번호"
+g revert --no-edit HEAD >/dev/null && publish
+assert_eq "$(job --job E3 --stage design)" "0" "과제: 칸을 되돌리면 다시 0(양성 대조)"
+
 finish
