@@ -62,7 +62,7 @@ def _differential_state(differential: Optional[str]) -> tuple:
         return (True, False, True)
     try:
         data = yaml.safe_load(differential)
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001 — YAML 은 YAMLError 말고도 낸다(없는 날짜 · 틀린 수의 ValueError)
         return (False, False, True)
     if data is None:
         return (True, False, False)
@@ -141,6 +141,15 @@ def evidence_kind(line: str) -> str:
     return KIND_TEAMS if sep and body.startswith(MARK_TEAMS) else KIND_RUN
 
 
+def teams_bytes(evidence: str) -> int:
+    """근거 글에서 다른 팀 줄(`evidence_kind` 가 `KIND_TEAMS`)을 `\\n` 으로 이은 글의 UTF-8 바이트."""
+    rows = []
+    for line in evidence.split("\n"):
+        if evidence_kind(line) == KIND_TEAMS:
+            rows.append(line)
+    return len("\n".join(rows).encode("utf-8"))
+
+
 def ordered_kinds(found: set) -> List[str]:
     """근거 종류들 → `돌려서 봄` · `다른 팀에서 봄` · `읽어서 봄` 순서의 목록."""
     out = []
@@ -206,9 +215,26 @@ def evidence_line_numbers(text: str) -> set:
 
 # ---------------------------------------------------------------- 추적 파일 읽기
 
+GIT_TIMEOUT = 30
+REASON_TIMEOUT = "git 읽기가 시간 한도 %d초를 넘김" % GIT_TIMEOUT
+
+
+class _TimedOut:
+    """시간 한도를 넘긴 git 호출이 `None` 대신 돌려주는 값 — 실패한 호출처럼 읽힌다."""
+    returncode = -1
+    stdout = b""
+    stderr = b""
+
+
+TIMED_OUT = _TimedOut()
+
+
 def _run_git(repo: str, *args: str):
     try:
-        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True)
+        return subprocess.run(["git", "-C", repo] + list(args), capture_output=True,
+                              timeout=GIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return TIMED_OUT
     except (OSError, ValueError):
         return None
 
@@ -268,11 +294,15 @@ def read_tracked(repo: str, commit: str, rel: str) -> tuple:
     if why is not None:
         return (None, why)
     tree = _run_git(repo, "ls-tree", "-z", commit, "--", ":(literal)" + rel)
+    if tree is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     why = _mode_rejection(*_listed_mode(tree, rel))
     if why is not None:
         return (None, why)
     # `<rev>:<경로>` 는 pathspec 이 아니다 — 뒤를 `--` 로 닫아 같은 이름의 작업 폴더 파일과 갈리지 않게 한다.
     shown = _run_git(repo, "show", "%s:%s" % (commit, rel), "--")
+    if shown is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     if shown is None or shown.returncode != 0:
         return (None, REASON_UNTRACKED)
     return (shown.stdout.decode("utf-8", "replace"), None)
@@ -288,6 +318,8 @@ def read_tree(tree_root: str, rel: str) -> tuple:
     if why is not None:
         return (None, why)
     listing = _run_git(tree_root, "ls-files", "-s", "-z", "--", ":(literal)" + rel)
+    if listing is TIMED_OUT:
+        return (None, REASON_TIMEOUT)
     why = _mode_rejection(*_listed_mode(listing, rel))
     if why is not None:
         return (None, why)
@@ -312,12 +344,15 @@ def read_tree(tree_root: str, rel: str) -> tuple:
     return (data.decode("utf-8", "replace"), None)
 
 
-def read_changed_doc(tree_root: str, rel: str) -> Optional[str]:
+def read_changed_doc(tree_root: str, rel: str, timed_out: Optional[list] = None) -> Optional[str]:
     """바뀐 파일 목록의 문서를 리뷰 트리에서 읽는다 — 읽지 못하면 None.
 
     리뷰 트리에 경로가 아예 없는(지운) 문서는 빈 글이다 — 의도 문서도 「확인 못 한 문서」 도 아니다.
+    시간 한도로 못 읽으면 `timed_out` 에 `rel` 을 더한다.
     """
     text, why = read_tree(tree_root, rel)
+    if why == REASON_TIMEOUT and timed_out is not None:
+        timed_out.append(rel)
     if (text is None and why == REASON_UNTRACKED and _path_rejection(rel) is None
             and not os.path.lexists(os.path.join(tree_root, rel))):
         return ""
@@ -392,7 +427,12 @@ def _frontmatter(text: str) -> tuple:
     if end < 0:
         return (None, False)
     try:
-        return (yaml.safe_load(text[4:end]), False)
+        data = yaml.safe_load(text[4:end])
+        if isinstance(data, dict):
+            for value in data.values():
+                if isinstance(value, _SCALARS):
+                    str(value)  # 글로 바꿀 수 없는 값(아주 큰 정수 등)은 예외로 드러난다
+        return (data, False)
     except Exception:  # noqa: BLE001 — 남의 문서 머리 하나가 단계를 죽이지 않게
         return (None, True)
 
@@ -413,7 +453,10 @@ def frontmatter_value(text: str, key: str) -> Optional[str]:
     value = data.get(key)
     if value is None or not isinstance(value, _SCALARS):
         return None
-    return str(value).strip()
+    try:
+        return str(value).strip()
+    except Exception:  # noqa: BLE001 — 글로 바꿀 수 없는 값은 없는 값이다
+        return None
 
 
 # ---------------------------------------------------------------- 의도 문서 · 리뷰의 넓이
@@ -645,7 +688,10 @@ def _open_doc(read, rel: str, st: dict, label: str) -> Optional[str]:
             return None if rel in st["done"] else seen_text
     text, why = read(rel)
     if text is None:
-        _note(st, "%s — %s" % (label, why))
+        if why == REASON_TIMEOUT:
+            _note(st, "%s 를 읽지 못함 — %s" % (rel, REASON_TIMEOUT))
+        else:
+            _note(st, "%s — %s" % (label, why))
         st["rejected"] = True
         return None
     st["opened"].append((rel, read, text))
@@ -701,7 +747,10 @@ def _follow_roadmaps(st: dict) -> str:
         seen.append(path)
         body, why = (text, None) if own else read(path)
         if body is None:
-            _note(st, "로드맵 링크 거부 — %s" % why)
+            if why == REASON_TIMEOUT:
+                _note(st, "로드맵 %s 를 읽지 못함 — %s" % (path, why))
+            else:
+                _note(st, "로드맵 링크 거부 — %s" % why)
             st["rejected_roadmap"] = True
             continue
         kept, moved = strip_roadmap_doubts(body)
