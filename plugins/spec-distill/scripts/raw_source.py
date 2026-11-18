@@ -209,7 +209,7 @@ def label_kind(anchor_rest: str) -> "str | None":
     """`brief_body.anchor_lines` 가 낸 앵커 본문(`🗣 최초 요청(…):`) → "raw" | "unloadable" | "lost" | None.
     앞의 표시 낱말 `🗣`(뒤의 U+FE0F 는 뗀다) 하나와 끝의 `:` 를 떼고 세 라벨과 글자 전체로 견준다."""
     mark, sep, rest = anchor_rest.partition(" ")
-    if not sep or mark.replace("️", "") != ANCHOR_MARK or not rest.endswith(":"):
+    if not sep or mark.replace("\ufe0f", "") != ANCHOR_MARK or not rest.endswith(":"):
         return None
     rest = rest[:-1]
     for label, kind in _KINDS:

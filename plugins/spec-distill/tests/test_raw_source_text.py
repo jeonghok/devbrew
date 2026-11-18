@@ -38,21 +38,21 @@ UNLOADABLE = {   # 이름: (글, 사유 이름) — 첫 거부 줄의 사유
     "밑줄 발화 번호": ("글 __S4__ 글", "anchor_in_body"),
     "S 번호 목록": ("- S2 로 시작하는 목록", "anchor_in_body"),
     "S 번호 번호 목록": ("1. S2 번호 목록", "anchor_in_body"),
-    "줄 나눔 글자 뒤 앵커": ("앞 - **S9** 뒤", "anchor_line_separator"),
+    "줄 나눔 글자 뒤 앵커": ("앞\u2028- **S9** 뒤", "anchor_line_separator"),
     "이스케이프": ("\\*\\*S3\\*\\* 이스케이프", "anchor_markup"),
     "문자 참조": ("&#42;&#42;S3&#42;&#42;", "anchor_markup"),
     # 다른 줄 나눔 글자는 범용 줄바꿈으로 읽는 쪽에서 들여쓰기 없는 새 줄이 된다
-    "앵커 꼴이 아닌 줄 나눔 글자": ("앞 뒤 줄", "line_separator"),
+    "앵커 꼴이 아닌 줄 나눔 글자": ("앞\u2028뒤 줄", "line_separator"),
     "홀로 선 CR": ("앞\r뒤 줄", "line_separator"),
     # 다시 확인(과제 1)이 실제 코드에서 더 찾은 가지
-    "NBSP 로 시작하는 앵커 꼴": (" - **S2** x", "anchor_unicode_space"),
+    "NBSP 로 시작하는 앵커 꼴": ("\u00a0- **S2** x", "anchor_unicode_space"),
     "인용 앵커": ("> **S2** x", "anchor_indented"),
     "HTML 로 감싼 앵커": ("- <b>**S9**</b>", "anchor_in_body"),
     "+ 목록 머리": ("+ S2 목록", "anchor_in_body"),
     "목록 머리 이스케이프": ("- \\*\\*S4\\*\\*", "anchor_markup"),
     "VT 뒤 앵커": ("앞\x0b- **S9** 뒤", "anchor_line_separator"),
 }
-SEPARATOR_CHARS = "\r\x0b "
+SEPARATOR_CHARS = "\r\x0b\u2028"
 
 E1 = '- D1.1 · r1 · accept · F1 · "고친다 — 이렇게 (권장)" — 고칠 문장'
 E_EMPTY = '- D1.2 · r1 · reject · F2 · "" — 문구 없이 눌린 처분'
@@ -148,7 +148,7 @@ class LoadForm(RepoCase):
                     self.assertIn(("원문 절", 3, "line_separator"), probs)
 
     def test_separator_after_anchor_reason(self):
-        probs = RS.load_problems(FX.audit_text(raw1="앞 - **S9** 뒤"))
+        probs = RS.load_problems(FX.audit_text(raw1="앞\u2028- **S9** 뒤"))
         self.assertEqual(probs, [("원문 절", 3, "anchor_line_separator"), ("원문 절", 3, "line_separator")])
 
     def test_question_lines_with_s_numbers(self):
@@ -186,7 +186,7 @@ class LoadForm(RepoCase):
         self.assertEqual(RS.label_kind("🗣 " + RS.LABEL_UNLOADABLE + ":"), "unloadable")
         self.assertEqual(RS.label_kind("🗣 " + RS.LABEL_LOST + ":"), "lost")
         self.assertIsNone(RS.label_kind("🗣 최초 요청:"))
-        self.assertEqual(RS.label_kind("🗣️ " + RS.LABEL_LOST + ":"), "lost")
+        self.assertEqual(RS.label_kind("🗣\ufe0f " + RS.LABEL_LOST + ":"), "lost")
         self.assertIsNone(RS.label_kind("🗣 " + RS.LABEL_RAW))
         self.assertIsNone(RS.label_kind("🗣 " + RS.LABEL_RAW + ": 뒤 글"))
         for n, sid, rest in brief_body.anchor_lines(RS.anchor_line(RS.LABEL_UNLOADABLE))[0]:
@@ -294,7 +294,7 @@ class Cli(RepoCase):
         self.assertEqual(Path(fx["brief"]).read_bytes(), before)
 
     def test_unloadable_counts_lines(self):
-        fx = self.make(raw1="앞 - **S9** 뒤")   # 한 줄에 사유 둘 — 한 줄로 센다
+        fx = self.make(raw1="앞\u2028- **S9** 뒤")   # 한 줄에 사유 둘 — 한 줄로 센다
         cp = self.run_(fx, "place", "--interview", BRIEF)
         self.assertEqual((cp.returncode, last(cp.stdout)),
                          (4, "raw-source: UNLOADABLE 1줄 — 첫 줄 원문 절 3째 줄(anchor_line_separator)"))
