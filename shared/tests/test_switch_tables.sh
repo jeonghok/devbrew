@@ -150,4 +150,29 @@ for p in plugins:
             else: no("%s %s 를 읽는 곳이 없다" % (p, n))
 '
 
+note "E. entry_skills_show_switch_lines"
+run_section E '
+PRE_LINE = "!`python3 \"${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py\" "
+SENT = " 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다."
+ANCHOR = "이 절이 다른 모든 절보다 먼저 돈다."
+entries = []
+for f in sorted(glob.glob(os.path.join(root, "plugins", "*", "skills", "*", "SKILL.md"))):
+    with open(f, "rb") as fh: txt = fh.read().decode("utf-8")
+    if any(ln.startswith(PRE_LINE) for ln in txt.split("\n")): entries.append((f, txt))
+if len(entries) == 9: ok("사전 검사 줄이 있는 진입 skill 이 아홉이다")
+else: no("사전 검사 줄이 있는 진입 skill 이 %d 개다(기대 9)" % len(entries))
+for f, txt in entries:
+    name = os.path.relpath(f, root)
+    lines = txt.split("\n")
+    heads = [k for k, ln in enumerate(lines) if ln == "## 진입 단계"]
+    if len(heads) != 1: no(name + " 의 `## 진입 단계` 절이 %d 개다" % len(heads)); continue
+    e = heads[0] + 1
+    while e < len(lines) and not lines[e].startswith("## "): e += 1
+    sec = lines[heads[0] + 1:e]
+    hits = [ln for ln in sec if SENT.lstrip() in ln]
+    if len(hits) != 1: no(name + " 진입 단계 절에 문장이 %d 번 있다(기대 1)" % len(hits)); continue
+    if hits[0].startswith(ANCHOR) and hits[0].endswith(SENT): ok(name + " 문장이 앵커 줄 끝에 있다")
+    else: no(name + " 문장이 든 줄이 앵커로 시작하고 문장으로 끝나지 않는다")
+'
+
 finish
