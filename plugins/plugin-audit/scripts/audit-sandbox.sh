@@ -3,15 +3,18 @@
 #
 # Subcommands:
 #   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
-#                                  snapshot digest (disposable worktree mirroring the
+#                                  snapshot digest (disposable worktree at
+#                                  <repo>/.claude/worktrees/audit-rt-<sid8>, mirroring the
 #                                  working tree, git-ignored files excluded; sealed as
 #                                  commit B; snapshot sealed by an orchestrator-held digest)
 #   mutation-guard <sandbox> <B> <snapshot-digest>
 #                                -> echoes YAML: tracked_diff / disallowed_new_files /
 #                                   guard_flags / forced_downgrade (pure git).
 #                                   Verifies the snapshot digest before trusting it.
-#   remove <abs-path>            -> best-effort `git worktree remove --force`, only under
-#                                   <repo>/.claude/plugin-audit/worktrees/
+#   remove <abs-path>            -> best-effort removal of own copies only:
+#                                   <repo>/.claude/worktrees/audit-rt-<1-8 chars> and the old
+#                                   <repo>/.claude/plugin-audit/worktrees/rt-<1-8 chars>.
+#                                   A link is removed as a link; a worktree holding a branch is kept.
 #
 # Kill switch: DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
 # (distinct from die's exit 2). The caller (scripts/run-own-tests.sh) then skips the run.
@@ -24,6 +27,71 @@
 set -u
 
 die() { echo "audit-sandbox: $*" >&2; exit 2; }
+
+# 이 스크립트가 지우는 것은 자기 이름 꼴의 사본뿐이다 — 새 자리 `<top>/.claude/worktrees/audit-rt-<sid8>`
+# 는 사용자 · 지휘자의 worktree 와 같은 폴더라서, 자리 · 이름 · 브랜치 여부를 모두 맞춘 것만 지운다.
+# 판정은 글자가 아니라 신원(물리 경로 · -ef)으로 한다 — 대소문자를 구분하지 않는 파일시스템에서
+# 이름이 대소문자만 다른 사용자 폴더가 자기 것으로 읽히지 않게.
+
+# 마지막 성분은 풀지 않고(링크는 링크로 남긴다) 부모만 물리 경로로 푼다. 부모가 없으면 받은 그대로.
+resolve_leaf() {   # <path>
+  local dir leaf
+  dir=$(dirname "$1"); leaf=$(basename "$1")
+  if [[ -d "$dir" ]]; then
+    dir=$(cd "$dir" && pwd -P) || return 1
+    printf '%s/%s\n' "$dir" "$leaf"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# 등록된 worktree 가 브랜치를 쥐고 있나 — porcelain 블록마다 경로를 신원으로 견준다.
+# 그 경로가 등록돼 있고 브랜치를 쥐면 참, 등록이 없거나 detached 면 거짓.
+holds_branch() {   # <abs-path>
+  local want cur="" branch="" line
+  want=$(resolve_leaf "$1")
+  while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      if [[ -n "$cur" ]] && { [[ "$cur" == "$want" ]] || [[ "$cur" -ef "$1" ]]; }; then
+        [[ -n "$branch" ]]; return
+      fi
+      cur=""; branch=""
+    elif [[ "$line" == "worktree "* ]]; then
+      cur=$(resolve_leaf "${line#worktree }")
+    elif [[ "$line" == "branch "* ]]; then
+      branch="${line#branch }"
+    fi
+  done < <(git worktree list --porcelain 2>/dev/null; echo)
+  return 1
+}
+
+# 폴더 안에 그 이름이 글자 그대로 있나 (find -name 은 대소문자를 구분한다).
+spelled_exactly() {   # <dir> <name>
+  [[ -n "$(find "$1" -mindepth 1 -maxdepth 1 -name "$2" -print 2>/dev/null)" ]]
+}
+
+# 자기 이름 꼴의 사본 하나를 치운다. 부모가 아예 없으면 할 일이 없다. 부모를 끝까지 풀어 기대한 자리가
+# 아니면(링크 · 리포 밖) 지우지 않고 멈춘다. 링크는 링크만 지운다 · 이름이 대소문자만 다르면 멈춘다 ·
+# 브랜치를 쥔 worktree 는 멈춘다 · 그 밖은 지운다.
+drop_own_copy() {   # <path> <expected-physical-parent>
+  local path="$1" want_parent="$2" real_parent
+  real_parent=$(cd "$(dirname "$path")" 2>/dev/null && pwd -P) || return 0
+  [[ "$real_parent" == "$want_parent" ]] \
+    || die "사본 자리가 기대한 곳이 아니다(링크?) — 지우지 않는다: $(dirname "$path") -> $real_parent"
+  if [[ -L "$path" || -e "$path" ]]; then
+    spelled_exactly "$real_parent" "$(basename "$path")" \
+      || die "이름이 대소문자만 다른 항목이다 — 지우지 않는다: $path"
+  fi
+  git worktree prune >/dev/null 2>&1 || true
+  if [[ -L "$path" ]]; then
+    rm -f -- "$path" || die "링크를 지우지 못했다: $path"
+  elif [[ -e "$path" ]]; then
+    if holds_branch "$path"; then die "브랜치를 쥔 worktree 라 지우지 않는다: $path"; fi
+    git worktree remove --force --force "$path" >/dev/null 2>&1 || rm -rf -- "$path" \
+      || die "사본을 지우지 못했다: $path"
+  fi
+  git worktree prune >/dev/null 2>&1 || true
+}
 
 case "${1:-}" in
   create-sandbox)
@@ -41,19 +109,34 @@ case "${1:-}" in
     sid="$2"
     sid_short="${sid:0:8}"
     [[ -n "$sid_short" ]] || die "empty session-id"
+    case "$sid_short" in
+      *[!A-Za-z0-9_-]*) die "bad session-id (A-Z a-z 0-9 _ - 만 허용): $sid" ;;
+    esac
     main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
     main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
-    parent="$main_root/.claude/plugin-audit/worktrees"
+    [[ -n "$main_root" ]] || die "empty repo root"
+    parent="$main_root/.claude/worktrees"
+    # 리뷰 대상 리포가 커밋한 `.claude` · `.claude/worktrees` 링크가 리포 밖을 가리키면 아래 지우기가
+    # 리포 밖에서 일어난다. 만들기 전에 가장 깊은 실재 조상을, 만든 뒤에 parent 를 물리 경로로 풀어 견준다.
+    anc="$parent"
+    while [[ -n "$anc" && "$anc" != "/" && ! -d "$anc" ]]; do anc=$(dirname "$anc"); done
+    anc=$(cd "$anc" && pwd -P) || die "cd failed: $anc"
+    case "$anc/" in
+      "$main_root"/*) ;;
+      *) die "사본 자리가 리포 밖을 가리킨다 — 만들지 않는다: $parent -> $anc" ;;
+    esac
     mkdir -p "$parent" || die "cannot create $parent"
-    sandbox="$parent/rt-${sid_short}"
+    parent=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
+    [[ "$parent" == "$main_root/.claude/worktrees" ]] \
+      || die "사본 자리가 기대한 곳이 아니다(리포 안의 다른 곳을 가리키는 링크?) — 만들지 않는다: $parent"
+    sandbox="$parent/audit-rt-${sid_short}"
 
-    # Idempotent: clear any stale sandbox so a fresh baseline can't inherit
-    # prior-run state.
-    git worktree prune >/dev/null 2>&1 || true
-    if [[ -e "$sandbox" ]]; then
-      git worktree remove --force "$sandbox" >/dev/null 2>&1 || rm -rf "$sandbox"
-      git worktree prune >/dev/null 2>&1 || true
-    fi
+    # Idempotent: 앞 실행이 남긴 같은 이름의 사본은 일회용이라 치우고 다시 만든다 — 새 기준선이
+    # 앞 실행의 상태를 물려받지 않게. 옛 자리(`.claude/plugin-audit/worktrees/rt-<sid8>`)는 같은 세션 이름만
+    # 치운다 — 다른 세션의 옛 사본은 건드리지 않는다.
+    drop_own_copy "$main_root/.claude/plugin-audit/worktrees/rt-${sid_short}" \
+      "$main_root/.claude/plugin-audit/worktrees"
+    drop_own_copy "$sandbox" "$parent"
     git worktree add --detach "$sandbox" HEAD >/dev/null 2>&1 \
       || die "git worktree add failed (sandbox: $sandbox)"
 
@@ -69,7 +152,9 @@ case "${1:-}" in
     while IFS= read -r -d '' rel; do
       [[ -z "$rel" ]] && continue
       case "$rel" in
-        .claude/plugin-audit/worktrees/*) continue ;;  # never copy a sandbox into itself
+        # 어떤 세션의 사본이든 사본 안으로 복사하지 않는다 — 새 자리의 audit-rt-* 와 옛 자리 전부.
+        # 같은 폴더의 다른 worktree(.claude/worktrees/feat-x 등)는 지금처럼 복사된다.
+        .claude/worktrees/audit-rt-*|.claude/plugin-audit/worktrees/*) continue ;;
       esac
       src="$main_root/$rel"
       if [[ -e "$src" || -L "$src" ]]; then
@@ -451,20 +536,39 @@ case "${1:-}" in
     # 같은 의미의 다른 사본: plugins/quality-gates/scripts/qg-worktree.sh 의 `remove` — 의미가 같다(가드 바꾸면 둘 다).
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
     target="$2"
-    # 이 플러그인 네임스페이스(<repo>/.claude/plugin-audit/worktrees/) 밖은 지우지 않는다.
-    # 대상의 가장 깊은 실재 조상을 실경로로 풀어 비교한다(macOS /var → /private/var).
+    # 받는 것: <repo>/.claude/worktrees/audit-rt-<1~8자> 와 옛 <repo>/.claude/plugin-audit/worktrees/rt-<1~8자> 뿐.
+    # 앞의 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
     top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     top=$(cd "$top" && pwd -P) || die "cd failed: $top"
-    ns="$top/.claude/plugin-audit/worktrees"
-    anc="$target"; rest=""
-    while [[ -n "$anc" && ! -d "$anc" ]]; do rest="/$(basename "$anc")$rest"; anc=$(dirname "$anc"); done
+    [[ -n "$top" ]] || die "empty repo root"
+    # 마지막 성분은 풀지 않는다(링크는 링크로 본다). 부모는 가장 깊은 실재 조상을 실경로로 풀어 붙인다(macOS /var → /private/var).
+    leaf=$(basename "$target")
+    anc=$(dirname "$target"); rest=""
+    while [[ -n "$anc" && ! -d "$anc" && "$anc" != "/" && "$anc" != "." ]]; do
+      rest="/$(basename "$anc")$rest"; anc=$(dirname "$anc")
+    done
     if [[ -d "$anc" ]]; then anc=$(cd "$anc" && pwd -P) || die "cd failed: $anc"; fi
-    case "$anc$rest" in
-      "$ns"/*) ;;
-      *) die "refuse to remove outside namespace: $target" ;;
+    tparent="$anc$rest"
+    in_scope=0
+    case "$tparent" in
+      "$top/.claude/worktrees")
+        [[ "$leaf" =~ ^audit-rt-[A-Za-z0-9_-]{1,8}$ ]] && in_scope=1 ;;
+      "$top/.claude/plugin-audit/worktrees")
+        [[ "$leaf" =~ ^rt-[A-Za-z0-9_-]{1,8}$ ]] && in_scope=1 ;;
     esac
-    [[ -d "$target" ]] || exit 0
-    git worktree remove --force "$target" 2>/dev/null || rm -rf -- "$target" \
+    [[ "$in_scope" -eq 1 ]] || die "refuse to remove outside namespace: $target"
+    victim="$tparent/$leaf"
+    if [[ -L "$victim" || -e "$victim" ]]; then
+      spelled_exactly "$tparent" "$leaf" \
+        || die "이름이 대소문자만 다른 항목이다 — 지우지 않는다: $target"
+    fi
+    if [[ -L "$victim" ]]; then
+      rm -f -- "$victim" || die "링크를 지우지 못했다: $target"   # 링크만 지운다 — 가리키는 곳은 건드리지 않는다
+      exit 0
+    fi
+    [[ -d "$victim" ]] || exit 0
+    if holds_branch "$victim"; then die "브랜치를 쥔 worktree 라 지우지 않는다: $target"; fi
+    git worktree remove --force --force "$victim" 2>/dev/null || rm -rf -- "$victim" \
       || die "worktree remove and rm -rf both failed: $target"
     ;;
   *)

@@ -1,5 +1,40 @@
 # Changelog
 
+## [8.23.0] — 2026-11-18
+
+### Added
+- 끄기 변수 표(`switches.md`)와 진입 skill 첫머리의 `[devbrew-switch]` 줄 · README 「끄는 길」.
+
+### Deprecated
+- 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
+- `DEVBREW_SPEC_DISTILL_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` — 대신: 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` — 대신: 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` — 대신: 질문에 「아니오」 로 답한다
+- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_QUALITY_GATES_DISABLE_WEB` — 대신: `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
+- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 대신: 상태줄 설정을 지운다
+- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+
+## [8.22.0] — 2026-11-18
+
+### Added
+- 원자료를 찾는 길 한 곳 — `scripts/raw_source.py locate` 가 seed 나 인터뷰 경로를 받아 framing 기록 파일을 찾았는지 · framing 없는 인터뷰인지 · 찾지 못했는지(사유와 함께)를 낸다.
+
+### Changed
+- framing 이 사용자의 말을 기록 파일에 쓰기 전에 비밀값으로 보이는 값을 가리고, 가린 곳이 있으면 그 수와 라벨을 한 줄로 보인다.
+- framing 이 사용자의 말을 옮겨 쓰는 저자 줄(풀이 줄 · 긴 초안 · seed 에서 덜어 낸 것 표 · 재결정 칸)에도 같은 가림을 건다.
+- framing 기록의 답 줄이 고른 라벨과 직접 적은 말을 「라벨」 · 「적음」 표시로 가른다. 직접 적은 답은 원문 절에도 글자 그대로 남고, 원문 절의 저자 줄은 「### 받은 글 — 」 구분 줄 하나로 정해졌다.
+- seed 는 「모델이 줄인 글」 로 다뤄진다 — 다른 다음 단계로 평문 줄로 넘길 때 seed 와 함께 framing 기록 파일의 자리를 넘긴다(slash 줄은 seed 경로만 넘긴다). seed 본문은 줄 안의 가림 표시를 받는다.
+- seed 리뷰어 프로필에 읽는 법 문단이 더해졌다 — 저자가 쓴 구분 줄과 「라벨」 이 붙은 답은 사용자의 말이 아니다.
+- framing 이 받은 글에 audit 절 제목과 겹치는 줄이 있을 때 쓰기 전에 묻는 물음에 이 자리에 맞는 선택지 설명이 붙고, 「멈춘다」 는 그 글을 기록 파일에 쓰지 않고 그 자리에서 멈춘다. 원자료를 찾지 못한 채 다른 다음 단계로 넘기는 사건은 degrade 채널 표에 한 행으로 올라 질문의 경고 줄에도 닿는다.
+
+### Fixed
+- 레포에 CLAUDE.md 가 없으면 seed 리뷰가 멈추던 것 — 번들의 그 절을 「레포 CLAUDE.md 없음」 으로 채워 조립한다.
+- 레포에 CLAUDE.md 가 없을 때 그 경고가 한 라운드에 두 번(탐지 · 재비판 번들 조립마다) 나가던 것 — 재비판 호출에 `--no-absent-warning` 을 붙여 한 번만 나간다.
+
 ## [8.21.0] — 2026-11-17
 
 ### Added

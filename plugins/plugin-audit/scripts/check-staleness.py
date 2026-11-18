@@ -527,7 +527,6 @@ def scan_declared_surface(plugin_dir: Path, facts, excluded: Optional[dict] = No
 # emit하지 않는다 ("해당 없음"도 사실이 아니다 — facts는 관측된 것만 담는다).
 # ---------------------------------------------------------------------------
 
-KILL_SWITCH_RE = re.compile(r"DEVBREW_[A-Z0-9_]*_DISABLE|DEVBREW_SKIP_HOOKS|[Kk]ill switch|kill\s*switch")
 PRINCIPLES_HEADING_RE = re.compile(
     r"^##\s*(?:Principles Instantiated|인스턴스화한\s*원칙)\s*$", re.MULTILINE)
 
@@ -547,7 +546,7 @@ def _metadata_cost_class(fm_block: str) -> bool:
         if not in_meta:
             in_meta = re.match(r"metadata:[ \t]*$", line) is not None
             continue
-        if not line.strip():
+        if not line.strip() or line[0] == "#":
             continue
         if line[0] not in " \t":
             return False   # 들여쓰지 않은 줄이 블록을 닫는다
@@ -559,7 +558,7 @@ def _metadata_cost_class(fm_block: str) -> bool:
 
 
 def scan_category_absence(plugin_dir: Path, facts):
-    """4개 조건부 게이트. 각 사실은 `norm` extra 필드로 어떤 규범이 부재한지 표시한다."""
+    """3개 조건부 게이트. 각 사실은 `norm` extra 필드로 어떤 규범이 부재한지 표시한다."""
     _, data = _load_plugin_json(plugin_dir)
     version = (data or {}).get("version", "")
 
@@ -583,17 +582,7 @@ def scan_category_absence(plugin_dir: Path, facts):
                 emit(facts, "category absence", str(skill_md.relative_to(plugin_dir)), 1,
                      f"skill '{skill_dir.name}'에 metadata 아래 cost_class 선언 없음", norm="cost_class")
 
-    # (3) kill switch ← hook이 있을 때만.
-    hook_count = _actual_hook_count(plugin_dir)
-    if hook_count > 0:
-        readme = plugin_dir / "README.md"
-        readme_text = readme.read_text(encoding="utf-8", errors="replace") if readme.is_file() else ""
-        if not KILL_SWITCH_RE.search(readme_text):
-            emit(facts, "category absence", "README.md", 0,
-                 "hook이 있는데 kill switch(DEVBREW_<PLUGIN>_DISABLE/DEVBREW_SKIP_HOOKS) 미문서화",
-                 norm="kill switch")
-
-    # (4) Principles Instantiated ← README가 있을 때만.
+    # (3) Principles Instantiated ← README가 있을 때만.
     readme = plugin_dir / "README.md"
     if readme.is_file():
         readme_text = readme.read_text(encoding="utf-8", errors="replace")

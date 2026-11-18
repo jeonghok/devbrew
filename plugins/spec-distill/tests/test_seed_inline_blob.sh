@@ -97,14 +97,53 @@ done
 
 # ── 재료 부재 셋 — exit 2 + 어느 인자인지 ─────────────────────────────────────
 for pair in "seed_file:$TMP/nope.md $TMP/seed.audit.md $TMP/CLAUDE.md" \
-            "audit_file:$TMP/seed.md $TMP/nope.md $TMP/CLAUDE.md" \
-            "claude_md_file:$TMP/seed.md $TMP/seed.audit.md $TMP/nope.md"; do
+            "audit_file:$TMP/seed.md $TMP/nope.md $TMP/CLAUDE.md"; do
   label="${pair%%:*}"; args="${pair#*:}"
   # shellcheck disable=SC2086
   python3 "$SCRIPT" $args >/dev/null 2>"$TMP/e.txt"; rc=$?
   assert_eq "$rc" "2" "$label 부재 → exit 2"
   grep -q "$label" "$TMP/e.txt" && ok "$label 부재: stderr 가 인자를 댄다" || no "$label 부재: stderr 가 불명확하다"
 done
+# CLAUDE.md 없음 — 멈추지 않고 그 사실을 번들에 글자로 남긴다(AC15)
+out_nc="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/nope.md" 2>"$TMP/e_nc.txt")"; rc=$?
+assert_eq "$rc" "0" "CLAUDE.md 없음 → 조립한다"
+assert_contains "$out_nc" "$(printf '## 레포 CLAUDE.md\n\n레포 CLAUDE.md 없음')" "번들에 「레포 CLAUDE.md 없음」"
+assert_contains "$(cat "$TMP/e_nc.txt")" "[spec-distill] 경고: 레포 CLAUDE.md 가 없다(" "stderr 가 알린다"
+ln -s "$TMP/gone-target.md" "$TMP/dangling.md"; mkdir -p "$TMP/claude-dir.md"
+for bad in "$TMP/dangling.md" "$TMP/claude-dir.md"; do   # 깨진 것은 없는 것이 아니다
+  python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$bad" >/dev/null 2>"$TMP/e_bad.txt"; assert_eq "$?" "2" "$(basename "$bad") → exit 2"
+  assert_contains "$(cat "$TMP/e_bad.txt")" "claude_md_file not found:" "$(basename "$bad") → 기존 메시지"
+done
+# 파일 밑의 경로(NotADirectoryError)는 없음이다. 권한 거부는 없음이 아니다 — 멈춘다(rc 2).
+python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/seed.md/CLAUDE.md" >/dev/null 2>"$TMP/e_nd.txt"
+assert_eq "$?" "0" "파일 밑의 CLAUDE.md 경로 → 없음으로 읽고 조립한다"
+mkdir -p "$TMP/noperm"; : > "$TMP/noperm/CLAUDE.md"; chmod 000 "$TMP/noperm"
+if [ "$(id -u)" != "0" ] && [ ! -e "$TMP/noperm/CLAUDE.md" ] && ! ls "$TMP/noperm/CLAUDE.md" >/dev/null 2>&1; then
+  python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/noperm/CLAUDE.md" >/dev/null 2>"$TMP/e_perm.txt"; assert_eq "$?" "2" "권한 거부 → 없음으로 접지 않고 exit 2"
+  assert_contains "$(cat "$TMP/e_perm.txt")" "claude_md_file not found:" "권한 거부 → 인자를 대는 메시지"
+else
+  ok "권한 거부 케이스는 이 환경에서 만들 수 없어 건너뛴다(root 이거나 chmod 가 막지 않는다)"
+fi
+chmod 755 "$TMP/noperm"
+# 임시 git 레포(CLAUDE.md 없음)의 루트에서 skill 펜스와 같은 인자 `CLAUDE.md` 로
+GR="$TMP/gitrepo"; mkdir -p "$GR/docs"
+git -C "$GR" init -q 2>/dev/null
+cp "$TMP/seed.md" "$GR/docs/s.md"
+python3 - "$TMP/seed.audit.md" "$GR/docs/s.audit.md" "$GR/docs/s2.audit.md" "$GR/docs/s3.audit.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+sep = "### 받은 글 — 직접 친 글 · 사용자 · 2026-11-17 · 라운드 2 의 답"
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+open(sys.argv[3], "w", encoding="utf-8").write(t.replace("RAW_TEXT_MARKER", sep + "\nRAW_TEXT_MARKER", 1))
+open(sys.argv[4], "w", encoding="utf-8").write(t.replace("RAW_TEXT_MARKER", "### 다른 제목\nRAW_TEXT_MARKER", 1))
+PY
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s.audit.md CLAUDE.md --for detect >"$TMP/g_out.txt" 2>"$TMP/g_err.txt" ); rc=$?
+assert_eq "$rc" "0" "git 레포 루트 · CLAUDE.md 없음 → rc 0"
+assert_contains "$(cat "$TMP/g_out.txt")" "레포 CLAUDE.md 없음" "git 레포: 번들에 「레포 CLAUDE.md 없음」"
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s2.audit.md CLAUDE.md >/dev/null 2>"$TMP/g_err2.txt" )
+assert_not_contains "$(cat "$TMP/g_err2.txt")" "heading-모양" "받은 글 구분 줄은 heading-모양 경고에서 빠진다"
+( cd "$GR" && python3 "$SCRIPT" docs/s.md docs/s3.audit.md CLAUDE.md >/dev/null 2>"$TMP/g_err3.txt" )
+assert_contains "$(cat "$TMP/g_err3.txt")" "heading-모양" "다른 제목 모양 줄은 여전히 경고한다(양성 짝)"
 python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" --for bogus >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "--for 에 모르는 소비자 → exit 2"
 
@@ -308,4 +347,46 @@ EOF
 cout="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/cont.audit.md" "$TMP/CLAUDE.md" 2>"$TMP/cerr.txt")"; rc=$?
 assert_eq "$rc" "0" "연속줄: exit 0(경고일 뿐 막지 않는다)"
 assert_contains "$(cat "$TMP/cerr.txt")" '## 2. 질문 전체' "연속줄: ### 라운드 <n> 이 아닌 heading-모양 줄은 ## 2. 질문 전체 를 이름으로 경고한다"
+# ── 한 라운드에 「CLAUDE.md 없음」 경고는 한 번 — SKILL 번들 펜스의 두 호출 줄(탐지 · 재비판)을 그대로 떠서
+# CLAUDE.md 가 없는 폴더에서 돌리고 stderr 의 경고 줄을 센다. 0 도 2 도 실패다(삼키지도 되풀이하지도 않는다).
+SKB="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
+warn_count() { # <SKILL> <SD 루트> → 경고 줄 수 · 호출 줄이 둘이 아니면 CALLS · 조립이 실패하면 BUILD
+  local sk="$1" sdr="$2" d; d="$(mktemp -d "$TMP/wc-XXXXXX")"
+  grep -F 'build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md' "$sk" | sed 's/^ *//' > "$d/calls.sh"
+  [ "$(grep -c . "$d/calls.sh")" = "2" ] || { echo CALLS; return; }
+  ( cd "$d" && SD="$sdr" SEED_ABS="$TMP/seed.md" AUDIT_ABS="$TMP/seed.audit.md" BUNDLE="$d/b1.txt" BUNDLE_RC="$d/b2.txt" bash -c 'bundle_rc=0; . ./calls.sh; exit $bundle_rc' ) 2>"$d/err.txt"
+  [ "$?" = "0" ] && [ -s "$d/b1.txt" ] && [ -s "$d/b2.txt" ] || { echo BUILD; return; }
+  grep -c '경고: 레포 CLAUDE.md 가 없다(' "$d/err.txt" || true
+}
+assert_eq "$(warn_count "$SKB" "$ROOT/plugins/spec-distill")" "1" "경고 한 번: 번들 펜스의 두 호출이 CLAUDE.md 없음 경고를 정확히 한 번 낸다(양성 대조)"
+# 변이 — 사본에서 첫 출현만 바꾼다. 둘째 호출에서 플래그를 빼면 둘, 첫 호출에도 붙이면 0 이다.
+mut_sk() { # <사본> <옛> <새>
+  python3 -I -c '
+import sys
+src, dst, old, new = sys.argv[1:5]
+t = open(src, encoding="utf-8").read()
+if old not in t:
+    sys.exit(1)
+open(dst, "w", encoding="utf-8").write(t.replace(old, new, 1))
+' "$SKB" "$1" "$2" "$3"
+}
+mut_sk "$TMP/sk-two.md" ' --for recritic --no-absent-warning ||' ' --for recritic ||' && assert_eq "$(warn_count "$TMP/sk-two.md" "$ROOT/plugins/spec-distill")" "2" "경고 한 번: 둘째 호출에서 플래그를 빼면 경고가 둘 → 실패" || no "변이 준비 실패: 경고 둘"
+mut_sk "$TMP/sk-zero.md" ' --for detect ||' ' --for detect --no-absent-warning ||' && assert_eq "$(warn_count "$TMP/sk-zero.md" "$ROOT/plugins/spec-distill")" "0" "경고 한 번: 첫 호출에도 플래그를 붙이면 경고가 0 → 실패" || no "변이 준비 실패: 경고 0"
+# 스크립트 변이 — 플래그가 아무것도 끄지 못하면(펜스는 그대로) 둘이다.
+mkdir -p "$TMP/sdm" && cp -RL "$ROOT/plugins/spec-distill/scripts" "$TMP/sdm/scripts"
+python3 -I -c '
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+assert "if not args.no_absent_warning:" in t
+open(p, "w", encoding="utf-8").write(t.replace("if not args.no_absent_warning:", "if True:", 1))
+' "$TMP/sdm/scripts/build_seed_inline_blob.py"
+assert_eq "$(warn_count "$SKB" "$TMP/sdm")" "2" "경고 한 번: 스크립트가 플래그를 무시하면 경고가 둘 → 실패"
+# 플래그를 켜도 번들 본문의 「레포 CLAUDE.md 없음」 은 그대로다.
+out_q="$(python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/nope.md" --for recritic --no-absent-warning 2>"$TMP/e_q.txt")"; rc=$?
+assert_eq "$rc" "0" "플래그 켬 + CLAUDE.md 없음 → rc 0"
+assert_contains "$out_q" "$(printf '## 레포 CLAUDE.md\n\n레포 CLAUDE.md 없음')" "플래그 켬: 번들 본문의 「레포 CLAUDE.md 없음」 은 그대로"
+assert_not_contains "$(cat "$TMP/e_q.txt")" "레포 CLAUDE.md 가 없다(" "플래그 켬: 경고만 끈다"
+ln -s "$TMP/gone-target-2.md" "$TMP/dangling2.md"
+python3 "$SCRIPT" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/dangling2.md" --for recritic --no-absent-warning >/dev/null 2>&1; assert_eq "$?" "2" "플래그 켬: 끊긴 링크는 여전히 rc 2"
 finish

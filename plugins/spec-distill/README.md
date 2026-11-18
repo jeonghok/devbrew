@@ -121,7 +121,7 @@
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
-- **P21 (Secret 기록 금지 / untrusted input)** — 인터뷰 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)의 token/key/credential placeholder 치환. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
+- **P21 (Secret 기록 금지 / untrusted input)** — 인터뷰 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)과 framing 기록 파일(seed 의 audit — 원문 절 · 질문 답 · 사용자가 적은 말 · 리뷰 결정의 사용자 문구 등 사용자의 말을 적는 모든 길)의 token/key/credential placeholder 치환. seed 본문은 줄 안의 가림 표시를 받는다. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (pm-interview: variable / request-framing: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — 어느 skill 도 지출 승인을 묻지 않고(epic-conductor 의 high 는 시작할 때 규모 줄을 공시한다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
 - **P23 (Decisions Stay Refutable)** — `request-framing`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `pm-interview`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 인터뷰 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 
@@ -154,6 +154,7 @@
 
 - `scripts/roadmap_status.py <로드맵 경로>` — 기본 브랜치(`origin/HEAD`)의 로드맵과 git 을 읽어 에픽마다 단계와 경고를 냅니다. 아직 기본 브랜치에 없는 로드맵은(이때 종료 코드 4) `--roadmap-file <파일>` 로 줍니다. 머지됨은 PR 상태로 판정합니다(지휘자가 채운 PR 캐시 — 기계 상태의 `## PR` 표). 지휘자가 PR 을 열 때 번호를 적은 에픽은 그 PR 로만 머지를 판정합니다. 번호가 없는 에픽(이 판 전에 연 PR · 지휘자 밖에서 연 PR · 번호 기록이 없는 다른 기계)은 브랜치 이름과 이력으로 알아보며, 같은 이름의 옛 브랜치가 머지됨으로 보이거나 머지된 에픽이 빠지는 틈이 남습니다. 번호 기록은 기계 상태라 이 기계에만 있습니다. 다만 브랜치 끝이 기본 브랜치 머지 커밋의 둘째 부모면 PR 캐시와 상관없이 머지됨입니다(끝은 로컬 끝, 로컬 끝이 원격 끝보다 뒤처져 있으면 원격 끝). 로컬 끝이 없거나 기본 브랜치 안에서 원격 끝보다 앞이면, 원격 끝의 머지 커밋(로컬 끝이 없으면 PR 캐시로 고른 PR 의 `mergeCommit` 도)은 그 에픽의 설계문서(산출물 블록은 산출물)를 기본 브랜치 첫째 부모 줄에 처음 더한 커밋보다 엄격히 먼저면 세지 않습니다 — 같은 이름의 옛 브랜치가 남긴 원격 ref 를 거릅니다. 이름을 바꾼 문서는 기본 브랜치에서의 이름 바꿈을 옛 이름의 추가까지 따라가 견주고(복사는 따라가지 않습니다), 견줄 커밋이 없으면(문서가 기본 브랜치에 없음) 8.6.0 처럼 셉니다. 거꾸로, 문서가 첫 머지보다 뒤에 기본 브랜치에 들어온 에픽은 로컬 브랜치가 없으면 머지됨으로 보이지 않습니다(같은 이름 재사용과 모양이 같아 가르지 못함 — 번호를 적지 않은 에픽에 남는 틈입니다). PR 캐시는 그런 머지 커밋이 없는 squash · rebase 머지를 판정합니다. 이 레포의 PR 이 기본 브랜치로 머지됐고, 그 PR 의 `headRefOid` 가 브랜치 끝(로컬, 없으면 원격 — 로컬이 원격보다 뒤처져 있으면 원격, 다르면 둘 다 보입니다)과 같고, `mergeCommit` 이 기본 브랜치에 들어 있을 때만 머지됨입니다 — fork 에서 온 같은 이름의 PR · 다른 base 로 머지된 PR · 머지 뒤 커밋이 더 붙은 브랜치는 머지됨이 아닙니다. 브랜치가 지워졌으면(로컬 · 원격 ref 모두 없음) 시작 흔적이 있는 에픽(승인된 설계문서, 또는 `**Spec:**` 로 그 설계문서를 가리키는 계획이 기본 브랜치에 있음)이거나 그 설계문서 · 산출물이 기본 브랜치 첫째 부모 줄에 더해져 있을 때만 캐시의 `headRefOid` 로 판정하고(위 나이 검사를 건다) 「브랜치 끝 없이 판정」을 알립니다 — 흔적이 없으면 아직 만들지 않은 브랜치로 보고 같은 이름의 옛 PR 을 세지 않으며 「브랜치가 없다 — …」 를 알립니다. 끝 없이 판정할 때 같은 이름의 머지된 PR 이 여럿이면 「셀 수 없음」입니다. gh 는 머지됐다는데 `mergeCommit` 을 아직 받지 않았으면 「머지됨(받기 전)」 경고만 내고 끝난 단계로 세지 않습니다. 캐시가 없으면 머지 커밋과 이 레포 소유자의 머지 메시지(`Merge pull request #<n> from <owner>/<브랜치>`)로 알아보고 「PR 상태 미확인」을 보입니다. 결정 기록의 머지 줄은 PR 없이 로컬에서 머지한 경우에만 씁니다. 기계 상태 파일이 있는데 읽을 수 없으면 머지 판정을 보류합니다(블록 「알 수 없음」, 종료 코드 3) — 이유에 무엇을 돌려야 하는지 적습니다. 지휘자가 PR 이 하나도 없다고 확인한 브랜치는 PR 캐시에 「PR 0개」 줄(확인한 때)로 남아 「PR 상태 미확인」을 보이지 않습니다. 설계문서 · 계획 폴더는 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)의 `specs_dir` · `plans_dir` 에서 찾고, 단계는 브랜치마다 · 계획마다 구현 중 · 구현 끝까지 셉니다. 블록에 적힌 브랜치가 모두 머지된 에픽은 기본 브랜치에 아직 들어가지 않은 브랜치의 로드맵 사본이 그 블록에 더한 브랜치(사본의 블록이 기본 브랜치 블록의 브랜치를 모두 품고, 그 브랜치가 있고 아직 머지되지 않았을 때만)도 세어 「일부 머지」 로 내고 그 사실을 정보 줄로 밝힙니다 — 다음 계획의 브랜치가 자기 브랜치에서만 블록에 자신을 더한 경우입니다. 사본을 만든 뒤 기본 브랜치 블록의 `브랜치:` 가 바뀌면 그 사본은 세지 않습니다 — 열린 브랜치에 기본 브랜치를 merge 하면 풀립니다.
 - `scripts/check_bundle_coverage.py <묶음|brief> <설계문서>` — 정답 출처의 번호가 설계문서 `## 번호 대조` 표에 다 있는지(빠지면 종료 코드 1), 반영 칸이 설계문서의 실제 자리를 가리키는지 · 기각한 번호를 받드는 에픽이 있는지(경고 줄 — 종료 코드는 그대로) 봅니다. 로드맵을 못 찾으면 그 항목은 「셀 수 없음」으로 셉니다.
+- `scripts/raw_source.py locate --seed <seed> | --interview <brief|상태 파일>` — 원자료(framing 기록 파일)를 찾는 길 한 곳. 마지막 줄 판결 `raw-source: FOUND <경로>` · `raw-source: NO-FRAMING`(종료 0) · `raw-source: LOST <사유>`(종료 3) · 인자 오류(종료 2).
 - `scripts/check_bundle_coverage.py --plan <설계문서> <계획>` · `--impl <설계문서> <보고 파일>` — 설계문서 AC 가 계획 Task 에 다 있는지, 구현 보고의 미룸 · 빠짐이 설계문서 `## 미룸` 표에 받는 곳과 함께 올랐는지 봅니다. `--acs <AC 목록>` 이면 그 AC 만 대조합니다. `--impl` 의 받는 곳은 설계문서 `roadmap:` 의 로드맵에 있는 에픽이나 `#<n>` 이어야 합니다.
 - `scripts/spec_review_bundle.py` — `spec-review <설계문서> --bundle <묶음|brief>` 의 정답 출처 확인 · 진입 대조 · 승인 때 로드맵 위치와 이웃 결정. `rejected` 는 승인 게이트 2단계 앞 글에 설계가 받지 않기로 한 번호(번호 대조의 기각)의 수와 목록을 냅니다 — 되돌리려면 게이트 ③ 의 후속 질문 기타 칸에 번호를 적습니다.
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
@@ -297,6 +298,36 @@ handbook_budget: 16384
 - 상태 폴더 `.claude/spec-distill/` 는 처음 쓸 때 안에 `*` 한 줄짜리 `.gitignore` 를 두어 스스로를 무시한다 — 레포의 `.gitignore` 를 고치지 않아도 된다. 그 아래 파일이 이미 git 에 추적되고 있으면 멈춘다: `git rm --cached -r .claude/spec-distill` 로 추적을 푼 뒤 다시 돈다.
 - bare 레포에 worktree 를 두고 쓰는 배치면 상태 폴더는 bare 레포 안(`<bare 레포>/.claude/spec-distill`)에 생겨 레포마다 갈린다. `GIT_DIR` · `GIT_WORK_TREE` 가 설정돼 있으면 한 줄로 알린다.
 - Claude Code 가 worktree 를 두는 `.claude/worktrees/` 는 레포 `.gitignore` 에 더한다. 더하지 않으면 quality-gates 가 그 아래 worktree 를 「추적 안 되는 중첩 레포」로 보고 리뷰하지 않아 판정이 degraded 가 된다 — 그 한 줄을 더하면 풀린다(2026-10-21 실측).
+
+## 끄는 길
+
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable spec-distill`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"spec-distill@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+
+2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+
+3. **표.**
+
+<!-- switches:begin -->
+| 이름 | 끄는 것 | 상태 | 대신할 길 |
+|---|---|---|---|
+| `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` | codex 리뷰 | 남음 | — |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WEB` | 인터뷰와 brief 리뷰의 웹 조사 | 남음 | — |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 지휘자의 스위트 대조가 저장소 테스트를 돌리기 | 남음 | — |
+| `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | request-framing 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
+| `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_WEB` | brief 리뷰가 codex 에 여는 웹 검색 | 은퇴 예정 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+| `DEVBREW_SKIP_HOOKS=spec-distill:statusline` | 상태줄과 로드맵 지도 | 은퇴 예정 | 상태줄 설정을 지운다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+<!-- switches:end -->
+
+은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+
+4. **자세한 동작.** `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 같은 변수마다 자세한 동작은 아래 「끄는 법」 절에 있다.
 
 ## 끄는 법
 

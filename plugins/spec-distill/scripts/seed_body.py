@@ -22,7 +22,7 @@ seed 는 다음 세션에 보내는 메시지이지 문서가 아니다: frontma
   **목록을 받지 않는 이유**: seed 템플릿 예시에 목록이 없고, 목록은 문단을 항목 양식으로 바꾼다.
 - 줄 안: URL 스킴(`<영문자>…://` · `mailto:`)과 `www.` · 도메인으로 시작하는 주소(`example.com/…` — `bare_domain`) · HTML 문자 참조
   (`&#91;` · `&amp;` — `char_ref`) · `[` · `]`(링크 · 참조 · 태그 · 체크박스 문법) · `<` 바로 뒤
-  공백 아닌 글자(HTML · 자동 링크)가 없다. **인라인 코드도 면제하지 않는다** — 코드 구간의 경계(백틱 길이 ·
+  공백 아닌 글자(HTML · 자동 링크)가 없다. 가림 표시(`brief_body.P21_PLACEHOLDER_RE` — `<REDACTED>` · `<REDACTED:라벨>` 등)는 줄 안에서 받는다 — 줄 머리의 `<` 는 지금처럼 거부한다. **인라인 코드도 면제하지 않는다** — 코드 구간의 경계(백틱 길이 ·
   이웃 백틱 · 백슬래시 이스케이프)를 이 파일이 따로 계산하면 렌더러와 어긋나는 흉내 파서가 된다(``` ``<h2>`
   ``` 가 날 HTML 로, `` \\`[x](y)` `` 가 진짜 링크로 렌더된다). 백틱 자체는 받는다 — 경로 · 명령을 적는 데
   쓰이고(템플릿 예시의 `` `src/auth/` ``), 금지 글자가 없는 한 어떻게 갈라 읽어도 구조가 생기지 않는다. 확인 표시는 정본 «(사용자 확인)» 글자 그대로만 — 괄호류로 감싼 `사용자확인` 의 다른
@@ -38,6 +38,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from brief_body import P21_PLACEHOLDER_RE
 from seed_review_log import fold_for_match
 
 MARK = "(사용자 확인)"
@@ -166,7 +167,9 @@ def line_problem(line: str) -> str | None:
         return "char_ref"
     if BARE_DOMAIN_RE.search(f):
         return "bare_domain"
-    if "[" in f or "]" in f or ANGLE_RE.search(f):
+    masked = fold_for_match(
+        P21_PLACEHOLDER_RE.sub(lambda m: "x" * len(m.group(0)), line)).casefold()
+    if "[" in masked or "]" in masked or ANGLE_RE.search(masked):
         return "링크 · 태그 · HTML 문법"
     spans = mark_spans(line)
     if len(spans) != len(marks_in_flat(fold_flat(line))):

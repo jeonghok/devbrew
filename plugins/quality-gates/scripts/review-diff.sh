@@ -226,7 +226,8 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             SKILL.md 의 $RD/ 쓰기(range-scope.txt · review-tree.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
-#   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> —
+#   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/worktrees/qg-(base|head)-<sid 앞 8자>(옛 자리
+#             .claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> 는 다른 실행이 남긴 트리로만 알린다) —
 #             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. 8자가 이 실행의 세션 폴더(--dir)
 #             이름의 앞 8자(SID8 — 영숫자 · _ · - 여덟 자가 아니면 건너뛰기 없음)와 같고 `git worktree list`
 #             에 같은 물리 경로로 등록된 것만 건너뛴다. 다른 세션 접미의 등록된 트리는 리뷰하지 않고 이전 qg
@@ -247,14 +248,14 @@ QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"
 # qg 일회용 트리 이름 꼴 전부(qg-worktree.sh 는 sid 앞 1~8자를 쓴다)와 이 세션의 것.
-QG_WT_ANY_RE='^\.claude/quality-gates/worktrees/(base|head)-[A-Za-z0-9_-]{1,8}/$'
+QG_WT_ANY_RE='^\.claude/(worktrees/qg-|quality-gates/worktrees/)(base|head)-[A-Za-z0-9_-]{1,8}/$'
 QG_WT_RE=""
 SID8="${DIR##*/}"; SID8="${SID8:0:8}"
 case "$SID8" in
   ????????)
     case "$SID8" in
       *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) ;;
-      *) QG_WT_RE='^\.claude/quality-gates/worktrees/(base|head)-'"$SID8"'/$' ;;
+      *) QG_WT_RE='^\.claude/worktrees/qg-(base|head)-'"$SID8"'/$' ;;
     esac ;;
 esac
 DIR_REL=""

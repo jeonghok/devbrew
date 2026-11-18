@@ -696,6 +696,24 @@ test('no DEEP_CAP in source', async () => {
   assert.ok(src.includes('상한 없음'), 'positive pair — the no-cap wording is present')
 })
 
+// 축 3 질문이 훅 kill switch 를 요구하지 않는다 — 기능 끄기 변수만 묻는다.
+// AXES 는 export 가 없어 소스 텍스트의 축 3 창(`n: 3,` 부터 `n: 4,` 앞)을 읽는다.
+test('axis 3 question asks for the per-feature switch, not the hook kill switch', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const src = fs.readFileSync(path.join(here, '..', 'scripts', 'audit-workflow.js'), 'utf8')
+  const a = src.search(/^[ \t]*n: 3,/m)
+  const b = src.search(/^[ \t]*n: 4,/m)
+  assert.ok(a >= 0 && b > a, 'axis 3 window must exist')
+  const win = src.slice(a, b)
+  assert.ok(win.includes('kill switch'), 'positive pair — the switch item is still there')
+  assert.ok(win.includes('DEVBREW_<PLUGIN>_DISABLE_<기능>'), 'asks for the per-feature switch')
+  assert.ok(!win.includes('DEVBREW_<PLUGIN>_DISABLE`'), 'no whole-plugin disable name')
+  assert.ok(!win.includes('DEVBREW_SKIP_HOOKS'), 'no hook skip name')
+})
+
 // 심층검증의 «모르겠다» 한 표가 통과로 세지면 안 된다 — DEEP_SCHEMA 가 {refuted:false, uncertain:true}
 // 를 허용하던 자리. 코드가 기본 verdict(refuted)를 강제한다.
 const deepFlagStub = (votes) => {
