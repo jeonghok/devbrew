@@ -83,7 +83,7 @@ class StateUnreadable(ValueError):
 
 
 class SectionsUnreadable(ValueError):
-    """두 절 가운데 하나를 자르지 못했다."""
+    """두 절 가운데 하나를 자르지 못했거나 기록의 절 구조가 어긋났다."""
 
 
 @dataclass(frozen=True)
