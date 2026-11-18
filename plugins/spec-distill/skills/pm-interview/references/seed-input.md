@@ -1,13 +1,12 @@
 ## seed 를 입력으로 받았을 때
 
-「풀린 입력」이 `type: interview-seed` frontmatter 를 가진 문서면, 그것은 **Phase 0 에서
-사용자가 확정한 메시지**다. Phase 0 은 사용자에게 `/spec-distill:pm-interview @<seed 경로>` 를 치게 하고,
+「풀린 입력」이 `type: interview-seed` frontmatter 를 가진 문서면, 그것은 **다음 세션의 첫 턴에 넘기는, 모델이 줄인 글**이다. 사용자의 말은 seed 옆 기록 파일(audit)의 원자료다. Phase 0 은 사용자에게 `/spec-distill:pm-interview @<seed 경로>` 를 치게 하고,
 이 skill 의 `## 진입 단계` 2 가 그 파일을 전문(frontmatter 포함)으로 풀어 「풀린 입력」으로 삼는다(그 호출 모양의
 정본은 `request-framing` 의 「호출 모양」 절이다). 그 frontmatter 줄이 seed 를 알아보는 유일한 표지다 —
 본문만 오면 seed 로 인식되지 않아 아래 규약이 발동하지 않는다.
 
 - **§6 `S1` 은 「풀린 입력」 원문 그대로다**(frontmatter 포함) — `finishing.md` 의 S1
-  규약과 같은 값이다. 그것이 이 세션의 최초 사용자 발화다.
+  규약과 같은 값이다.
 - **seed 의 마지막 문단 «다시 검증할 것 —»** 은 R1 의 «지금 이해»·질문의 재료이자 coverage-mapper 첫
   dispatch 의 입력이다. 문단이 없으면 seed 본문 전체를 그 입력으로 쓰되 무표시 문장은 전부 미확인이다.
 - **seed 에는 태그가 없다.** seed 게이트가 막는 `[open:`/`[추론:`/`[외부:` 구분을 seed 에서 읽으려
