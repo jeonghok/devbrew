@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
 #
 # request-framing 의 이름 조회(AC16)와 다음 단계 둘째 질문(AC17).
 # AC16 — 레포로 설명이 안 되는 이름만 짧게 조회해 audit `### 이름 조회` 에 남기고 seed 에는 싣지 않는다.
@@ -16,6 +16,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/request-framing/SKILL.md"
   echo "plugins/spec-distill/references/proceed-gate.md"
   echo "plugins/spec-distill/templates/interview-seed-audit-template.md"
+  echo "plugins/spec-distill/scripts/raw_source.py"
   exit 0
 fi
 
@@ -102,11 +103,66 @@ assert_contains "$STEPB" '선택지는 모델의 제안 `(권장)` 이 첫 자�
 assert_not_contains "$STEPB" '기본 다음 단계 `(권장)` 과 모델의 제안 둘이다' "AC17(정본): 옛 둘째 질문 순서가 남지 않았다"
 CALL="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$RF" | tr '\n' ' ' | tr -s ' ')"
 for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 선택지의 설명은 「얻음: <제안 이유> · 내줌: <그 제안이 틀렸을 때 원인이 될 것 하나>」로 쓴다' \
-           'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' '규칙 3 대로' \
+           '규칙 3 대로' \
            '둘째 질문이 뜨면 ①/② 이름은 정본 예시처럼 단계를 가리키지 않는다' 'slash 줄이면 운반 문장 없이 seed 경로만'; do
   assert_contains "$CALL" "$lit" "AC17: «${lit}»"
 done
 
+for lit in 'seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일 <기록 파일 절대경로> 의 원자료다(`## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구). 그 파일을 읽어 그 skill 의 사용자 원문(첫 요청)으로 삼는다' \
+           '원자료(framing 기록 파일)를 찾지 못했다(<사유>) — seed 만 넘긴다' \
+           '`원자료(framing 기록 파일)를 찾지 못했다 — <사유>. 다음 단계에는 seed 만 넘긴다`' \
+           '판결 줄이 없다(종료 코드 <n>)' 'raw_source.py" locate --seed "$SEED_ABS" ||' \
+           '한 줄을 보인 뒤 다음 세션 줄을 노출한다'; do
+  assert_contains "$CALL" "$lit" "AC22: «${lit}»"
+done
+assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"
+assert_not_contains "$CALL" '다음 세션 줄을 노출하지 않는다' "AC22: 찾지 못해도 멈추지 않는다"
+# 펜스를 언제 도는가 — 게이트를 보이기 전에 한 번, 그 판결 줄이 게이트 앞 글의 줄 · 질문의 경고 줄을 함께 정한다.
+rf_when_fails() { # <SKILL> — 실패한 항목 이름을 한 줄씩(빈 출력 = 통과)
+  local c; c="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$1" | tr '\n' ' ' | tr -s ' ')"
+  case "$c" in *'평문 줄(외부 skill)이면 게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다'*) ;; *) echo fence_before_gate ;; esac
+  case "$c" in *'판결을 찾지 못한 사건은 `## degrade 채널` 표의 「다른 다음 단계」 행으로 질문의 경고 줄에도 오기 때문이다'*) ;; *) echo fence_warning_row ;; esac
+  case "$c" in *'게이트를 보이기 **전에**'*'raw_source.py" locate --seed'*) ;; *) echo fence_order ;; esac
+}
+RW0="$(rf_when_fails "$RF")"
+[ -z "$RW0" ] && ok "AC22: 펜스를 게이트 앞에서 한 번 도는 문장 · 경고 행 연결 — 실제 파일 전 항목 통과(양성 대조)" || no "AC22: 펜스 시점 항목 실패: $(printf '%s' "$RW0" | tr '\n' ' ')"
+rf_mut() { # <사본> <옛> <새>
+  python3 -I -c '
+import sys
+src, dst, old, new = sys.argv[1:5]
+t = open(src, encoding="utf-8").read()
+if old not in t:
+    sys.exit(1)
+open(dst, "w", encoding="utf-8").write(t.replace(old, new, 1))
+' "$RF" "$1" "$2" "$3"
+}
+rf_expect() { # <항목> <사본>
+  local o; o="$(rf_when_fails "$2")"
+  if printf '%s\n' "$o" | grep -qxF "$1"; then ok "AC22 변이 → $1 로 실패"; else no "AC22 변이가 $1 로 실패하지 않았다"; fi
+}
+rf_mut "$SCRATCH/rfm1.md" '게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다' '게이트를 보인 뒤 아래 펜스를 돌린다' && rf_expect fence_before_gate "$SCRATCH/rfm1.md" || no "AC22 변이 준비 실패: fence_before_gate"
+rf_mut "$SCRATCH/rfm2.md" '「다른 다음 단계」 행으로 질문의 경고 줄에도 오기 때문이다' '행으로 온다' && rf_expect fence_warning_row "$SCRATCH/rfm2.md" || no "AC22 변이 준비 실패: fence_warning_row"
+rf_mut "$SCRATCH/rfm3.md" '게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다' '아래 펜스를 한 번 돌린다' && rf_expect fence_order "$SCRATCH/rfm3.md" || no "AC22 변이 준비 실패: fence_order"
+# 펜스 실행 — 「다른 다음 단계」 문단 바로 뒤 첫 bash 펜스(앞에 「## 상태」 블록이 붙는 자리라 SD · SEED_ABS 를 채워 돌린다)
+RSF="$SCRATCH/rs-fence.sh"
+awk 'index($0,"**다른 다음 단계(둘째 질문).**")==1{f=1; next} f&&/^```bash$/{b=1; next} f&&b&&/^```$/{exit} f&&b' "$RF" > "$RSF"
+bash -n "$RSF" && [ -s "$RSF" ] && ok "AC22(양성대조): 원자료 자리 펜스를 떴다" || no "AC22: 원자료 자리 펜스 부재 또는 구문 오류"
+# 뜬 본문이 원자료 판결 펜스가 아니면(펜스가 지워져 다음 bash 펜스를 뜬 경우) 실행하지 않는다.
+RS_RUN=0
+if grep -qF 'raw_source.py" locate --seed' "$RSF"; then RS_RUN=1; ok "AC22: 뜬 펜스가 원자료 판결 펜스다"; else no "AC22: 뜬 펜스에 raw_source.py locate --seed 가 없다 — 실행하지 않는다"; fi
+if [ "$RS_RUN" = 1 ]; then
+RSD="$SCRATCH/rs"; mkdir -p "$RSD"
+SEED_ABS="$RSD/x-interview-seed.md"; printf 'seed\n' > "$SEED_ABS"
+run_rs() { env -i PATH="$PATH" SD="$SD" SEED_ABS="$SEED_ABS" bash "$RSF" 2>"$SCRATCH/rs.err"; }
+out="$(run_rs)"; rc=$?
+assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 없어도 0(뒤 걸음이 끊기지 않는다)"
+assert_eq "$(tail -1 <<<"$out")" "raw-source: LOST seed 옆에 framing 기록 파일이 없다 — ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 없음 → LOST 판결 줄"
+assert_contains "$(cat "$SCRATCH/rs.err")" '원자료 판결 종료 코드 3' "AC22: 찾지 못하면 stderr 에 종료 코드 3"
+printf -- '---\ntype: interview-seed-audit\n---\n' >"$RSD/x-interview-seed.audit.md"
+out="$(run_rs)"; rc=$?
+assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 있으면 0"
+assert_eq "$(tail -1 <<<"$out")" "raw-source: FOUND ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 있음 → FOUND 판결 줄"
+fi
 assert_eq "$(grep -cF '두 꼴 모두 추천을 달지 않는다 — 풀이는 저자가 쓴 것이라' "$RF")" "1" "AC13: 풀이 확인 질문은 추천을 달지 않고 이유를 적는다"
 assert_eq "$(grep -cF '두 꼴 모두 권하는 쪽이 있으면 첫 자리로 옮기고' "$RF")" "0" "AC13: 옛 추천 지시가 없다"
 assert_eq "$(awk -F'\t' '$3 ~ /확인 질문을 하나 더 싣습니다/ {print $2}' "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "비움" "AC13: 목록의 종류가 비움이다"
