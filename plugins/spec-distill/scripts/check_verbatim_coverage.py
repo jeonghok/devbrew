@@ -36,6 +36,16 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
       인가. 레코드가 없거나 `chosen` 이 아닌 값(`verbatim` · `Chosen` · `selected` …) → red(`not_chosen`).
       레코드에 `source` 가 없거나 비면 검사 불가(exit 3). 빈 원장 조기 반환보다 **먼저** 판정한다 — 원장을
       비우는 것으로 위반이 검사 불가로 내려가지 않는다. 줄 문법은 `check_brief` 의 것을 import 한다.
+  L4: 첫 칸 — `raw_source.locate_from_state(<상태 파일>)` 의 판결 × payload §6 `S1` 앵커의 라벨(`raw_source.label_kind`).
+      FOUND·raw 는 S1 항목의 글(앵커 줄 다음 줄부터, 끝의 빈 줄을 뗀 것)을 framing 기록(`read_audit_text`)에서
+      `raw_source.load_blocks` 로 다시 만든 `블록1 + "\\n" + 블록2` 와 정규화 없이 글자로 견준다(`body_mismatch`).
+      FOUND·unloadable 은 `load_problems` 가 비면 `label_unloadable_but_loadable` · FOUND·lost 는 `label_lost_but_found` ·
+      LOST·raw|unloadable 은 `label_raw_but_lost` · NO-FRAMING·셋 가운데 하나는 `label_on_no_framing` → red(`first_cell`).
+      FOUND · LOST 에서 라벨이 셋 밖이면 알림(옛 꼴) · LOST·lost 와 NO-FRAMING·셋 밖은 통과. 기록 파일이나 두 절을 읽지
+      못하면 검사 불가(exit 3). 빈 원장 조기 반환보다 먼저 돈다. 고치지 않는다 — 위반으로 보이기만 한다.
+  L5: 표시 — 원장 기록마다(그 S 가 payload §6 에 있을 때) 앵커 본문 첫 낱말(U+FE0F 를 뗀 것)이 `chosen` ↔ ☑ ·
+      `verbatim` ↔ 🗣 인가. 어긋나면 첫 칸 라벨이 셋 가운데 하나일 때 red(`source_mismatch`), 아니면 알림.
+      `source` 가 둘 밖(없음 · 빈 값 · 다른 값)이면 알림(표시 대조 불가). 원장에 없는 `S1` 은 돌지 않는다.
 
 정규화 N1–N5 (spec §5.5) — **순서 고정 `N1 → N2 → N3 → N4 → N5`**:
   N1 각 줄 앞 인용 마커 1회 제거 · N2 강조/링크 제거 · N3 연속 whitespace(개행 포함)
@@ -47,7 +57,8 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
 
 exit 계약:
   0  위반 없음
-  1  **위반 발견** (missing_ids · not_contained · unknown_ids · not_chosen 중 하나라도 비어 있지 않음) — 호출자는 차단
+  1  **위반 발견** (missing_ids · not_contained · unknown_ids · not_chosen · first_cell · source_mismatch 중 하나라도
+     비어 있지 않음) — 호출자는 차단. `advisories` 의 알림은 종료 코드를 바꾸지 않는다
   3  검사 불가 (파일 부재·파싱 실패 — 의도적으로 매핑된 경로) — 호출자는 차단, 사용자가 「검사 없이 계속」을 고를 때만 계속
   4  내부 오류 (미처리 예외) — Python 기본 종료 코드 1을 절대 쓰지 않는다.
      `main()`이 top-level `try/except`로 감싸여 있고, "exit 1은 오직 명시적 위반
@@ -73,6 +84,8 @@ if _SCRIPTS_DIR not in sys.path:
 import section6  # noqa: E402
 import brief_body  # noqa: E402
 import check_brief  # noqa: E402
+import raw_source  # noqa: E402
+import seed_review_log  # noqa: E402
 
 EXIT_OK = 0
 EXIT_VIOLATION = 1
@@ -92,6 +105,22 @@ ANCHOR_LINE_RE = brief_body.ANCHOR_LINE_RE
 # 위장해 L2 비교를 통째로 강등시키는 경로는 열리지 않는다.
 P21_PLACEHOLDER_RE = brief_body.P21_PLACEHOLDER_RE   # 정규식은 brief_body 가 소유한다(§6 판독이 같은 토큰을 거부하지 않는다)
 CLOSING_KIND_TEXT = {"irrelevant": "외부 선례 무관", "saturation": "사용자 판단 포화"}
+
+# L4 — 첫 칸의 알림 · 위반 글(계획이 정한 글자).
+FIRST_CELL_OLD = "옛 꼴의 첫 칸 — seed 전문이 사용자 원문 자리에 있다"
+FIRST_CELL_BODY = "첫 칸 위반 — %s의 글자가 framing 기록과 다르다(정규화 없이 견준다)"
+FIRST_CELL_TEXT = {
+    "label_unloadable_but_loadable": ("첫 칸 위반 — 그대로 실을 수 있는 원자료인데 "
+                                      "「그대로 싣지 못함」 라벨을 달았다"),
+    "label_lost_but_found": "첫 칸 위반 — 원자료를 찾았는데 「찾지 못함」 라벨을 달았다",
+    "label_raw_but_lost": "첫 칸 위반 — 원자료를 찾지 못했는데(%s) 원자료 라벨을 달았다",
+    "label_on_no_framing": "첫 칸 위반 — framing 없는 인터뷰인데 원자료 라벨을 달았다",
+}
+FIRST_CELL_UNREADABLE = ("검사 불가 — framing 기록의 원문 절 · 질문 전체 절을 읽지 못해 "
+                         "첫 칸을 견주지 못했다(%s)")
+FIRST_CELL_NO_VERDICT = "검사 불가 — 원자료 판결을 내지 못해 첫 칸을 견주지 못했다(%s)"
+# L5 — 상태 파일 `source` ↔ 결과물 앵커의 표시 낱말.
+SOURCE_MARK = {"chosen": "☑", "verbatim": raw_source.ANCHOR_MARK}
 
 
 class ParseError(Exception):
@@ -290,8 +319,81 @@ def parse_section6_union(payload_text: str, audit_text: str) -> dict[str, str]:
     return merged
 
 
+def section6_heads(text: str) -> dict[str, tuple[str, list[str]]]:
+    """payload §6 앵커마다 (앵커 본문, 뒤따르는 줄). `parse_section6` 이 문법을 이미 본 뒤에 부른다."""
+    body = section6.body(text) or ""
+    return {sid: (rest or "", following) for sid, rest, following in brief_body.anchor_items(body)[0]}
+
+
+def first_cell(state_path: Path, s1: "tuple[str, list[str]] | None") -> tuple[str | None, list[str], list[str], bool]:
+    """L4 -> (첫 칸 라벨 종류, 위반 이름, advisories, 검사 불가인가). 읽기만 한다 — 결과물도 기록 파일도 고치지 않는다."""
+    kind = raw_source.label_kind(s1[0]) if s1 is not None else None
+    try:
+        v = raw_source.locate_from_state(state_path)
+    except ValueError as exc:   # StateUnreadable — 판결이 없으면 견주지 못한다
+        return kind, [], [FIRST_CELL_NO_VERDICT % exc], True
+    if v.kind == "NO-FRAMING":
+        if kind is None:
+            return kind, [], [], False
+        return kind, ["label_on_no_framing"], [FIRST_CELL_TEXT["label_on_no_framing"]], False
+    if kind is None:
+        return kind, [], [FIRST_CELL_OLD], False
+    if v.kind == "LOST":
+        if kind == "lost":
+            return kind, [], [], False
+        return kind, ["label_raw_but_lost"], [FIRST_CELL_TEXT["label_raw_but_lost"] % v.reason], False
+    if kind == "lost":
+        return kind, ["label_lost_but_found"], [FIRST_CELL_TEXT["label_lost_but_found"]], False
+    try:
+        audit_text = seed_review_log.read_audit_text(raw_source.audit_file(state_path, v))
+        if kind == "unloadable":
+            if raw_source.load_problems(audit_text):
+                return kind, [], [], False
+            return kind, ["label_unloadable_but_loadable"], [FIRST_CELL_TEXT["label_unloadable_but_loadable"]], False
+        b1, b2 = raw_source.load_blocks(audit_text)
+    except (OSError, UnicodeDecodeError, raw_source.SectionsUnreadable) as exc:
+        return kind, [], [FIRST_CELL_UNREADABLE % exc], True
+    lines = list(s1[1])
+    while lines and not lines[-1].strip():
+        lines.pop()
+    got = "\n".join(lines)
+    if got == b1 + "\n" + b2:
+        return kind, [], [], False
+    names = raw_source.SECTION_NAMES
+    which = [n for n, bad in ((names[0], not got.startswith(b1 + "\n")), (names[1], not got.endswith("\n" + b2))) if bad]
+    # 두 블록이 앞뒤에 그대로 있고 사이에 글이 끼었으면 어느 한 절로 가르지 못한다 — 둘 다 댄다.
+    return kind, ["body_mismatch"], [FIRST_CELL_BODY % " · ".join(which or names)], False
+
+
+def source_marks(statements: list[dict], heads: dict[str, tuple[str, list[str]]], new_label: bool
+                 ) -> tuple[list[str], list[str]]:
+    """L5 -> (어긋난 S — 새 라벨일 때만, advisories). 원장 기록마다 돈다 — 원장에 없는 S1 은 돌지 않는다."""
+    bad: set[str] = set()
+    adv: list[str] = []
+    for st in statements:
+        sid = st["id"]
+        if sid not in heads:
+            continue
+        want = SOURCE_MARK.get(st["source"] or "")
+        if want is None:
+            adv.append(f"표시 대조 불가 — {sid}: source {st['source'] or '없음'}")
+            continue
+        word = heads[sid][0].partition(" ")[0].replace("\ufe0f", "")
+        if word == want:
+            continue
+        shown = word if word in SOURCE_MARK.values() else "없음"
+        tail = f"{sid}: 결과물의 표시 {shown} · 상태 파일의 source {st['source']}"
+        if new_label:
+            bad.add(sid)
+            adv.append("표시 위반 — " + tail)
+        else:
+            adv.append("표시 어긋남(알림) — " + tail)
+    return sorted(bad, key=lambda s: int(s[1:])), adv
+
+
 def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, dict]:
-    result: dict = {"missing_ids": [], "not_contained": [], "unknown_ids": [], "not_chosen": [], "advisories": []}
+    result: dict = {"missing_ids": [], "not_contained": [], "unknown_ids": [], "not_chosen": [],
+                    "first_cell": [], "source_mismatch": [], "advisories": []}
     try:
         payload_text = payload_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -352,6 +454,15 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
             f"인터뷰를 닫은 답 {label}이 고른 선택지로 기록되지 않았다 — 마무리 단계(finishing Step A.5)가 "
             "그 질문을 선택지로 다시 묻는다. 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 인터뷰라 이어 갈 수 없다")
 
+    # L4 · L5 — 첫 칸과 표시. L3 처럼 빈 원장 조기 반환보다 먼저 돈다.
+    heads = section6_heads(payload_text)
+    kind, result["first_cell"], adv, unreadable = first_cell(state_path, heads.get("S1"))
+    result["advisories"].extend(adv)
+    saw_indeterminate = saw_indeterminate or unreadable
+    result["source_mismatch"], adv = source_marks(statements, heads, kind is not None)
+    result["advisories"].extend(adv)
+    gated = result["not_chosen"] or result["first_cell"] or result["source_mismatch"]
+
     # 빈 전칭명제는 clean이 아니다. 원장에 statement가 0건이면 L1·L2 어느 것도 돌지 않고
     # 루프가 통째로 skip되는데, 그것을 "위반 없음"으로 집계하면 **원장을 비우는 것만으로**
     # 완전성 검사가 조용히 우회된다(같은 diff가 test_agent_frontmatter_keys.sh의 빈-glob
@@ -360,7 +471,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
         result["advisories"].append(
             "검사 불가 — state 원장에 user_statements가 0건이다 (대조 대상 없음). "
             "빈 집합 위의 '위반 없음'은 검증이 아니다")
-        return (EXIT_VIOLATION if result["not_chosen"] else EXIT_INDETERMINATE), result
+        return (EXIT_VIOLATION if gated else EXIT_INDETERMINATE), result
 
     for st in statements:
         sid = st["id"]
@@ -408,7 +519,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     known = {st["id"] for st in statements} | {"S1"}
     result["unknown_ids"] = sorted(pay_ids - known, key=lambda s: int(s[1:]))
 
-    if result["missing_ids"] or result["not_contained"] or result["unknown_ids"] or result["not_chosen"]:
+    if result["missing_ids"] or result["not_contained"] or result["unknown_ids"] or gated:
         return EXIT_VIOLATION, result
     if saw_indeterminate:
         return EXIT_INDETERMINATE, result
@@ -432,6 +543,7 @@ def main(argv: list[str]) -> int:
         code, result = run(Path(argv[1]), Path(argv[2]), Path(argv[3]))
     except Exception as exc:  # noqa: BLE001 — 계약: 어떤 예외도 exit 4 (1로 새지 않는다)
         print(json.dumps({"missing_ids": [], "not_contained": [], "unknown_ids": [], "not_chosen": [],
+                          "first_cell": [], "source_mismatch": [],
                           "advisories": [f"내부 오류: {type(exc).__name__}: {exc}"]},
                          ensure_ascii=False))
         return EXIT_INTERNAL

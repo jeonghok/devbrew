@@ -12,6 +12,7 @@ plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	2. **판
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	「spec 하나로」면 Step A 로 간다	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	4. **고치기 · 승인.** `AskUserQuestion` 하나	고친 횟수는 state	1	3
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	세 번 고칠 때마다 「계속 고칠까요」를 묻고	5. **기록.**
+plugins/spec-distill/skills/pm-interview/references/finishing.md	꼬리	**비밀값 확인 — 싣기 전에, 갈래를 가르기 전에.**		1	3
 plugins/spec-distill/skills/pm-interview/references/finishing.md	지시	**닫은 답의 출처로 멈추면 — 되묻기 갈래.**	- **닫는 선택지**면	1
 plugins/spec-distill/skills/pm-interview/references/finishing.md	떼기	- **닫는 선택지**면 그 답을	
 plugins/spec-distill/skills/pm-interview/references/finishing.md	언급	`AskUserQuestion`은 선택지만 담당):	
