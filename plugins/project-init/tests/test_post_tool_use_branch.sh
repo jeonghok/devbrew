@@ -277,6 +277,17 @@ sm=$(field systemMessage)
 case "$sm" in *"git 이 제시간에 끝나지 않아 새 브랜치 이름 검사를 건너뛴다(fail-open)"*"Conventional Commits"*) ok "시간 초과 → fail-open 안내 + 커밋 검사" ;; *) no "시간 초과 안내 · 커밋 검사가 없다 — $OUT" ;; esac
 [ "$el" -lt 10 ] && ok "훅이 ${el}초에 끝났다(hooks.json timeout 10초 안)" || no "훅이 ${el}초 걸렸다 — 10초 timeout 을 넘는다"
 
+echo "일회용 사본(detached) — 브랜치가 없어 알림도 없다"
+# 양성 짝: .claude/worktrees/ 아래라도 브랜치를 쥔 작업 트리는 같은 자리에서 알림이 난다.
+fresh; git -C "$W" worktree add -q -b BadHold "$W/.claude/worktrees/qg-hold"
+hook Bash "$W" "git worktree add -b BadHold $W/.claude/worktrees/qg-hold"; elsewhere BadHold "$W/.claude/worktrees/qg-hold" "양성 짝 · .claude/worktrees/ 아래 브랜치를 쥔 작업 트리 → 알림"
+for pair in "qg-base-sess1234|bash /x/scripts/qg-worktree.sh create-baseline abc sess1234" "audit-rt-sess1234|bash /x/scripts/audit-sandbox.sh create-sandbox sess1234"; do
+  name=${pair%%|*}; cmd=${pair#*|}
+  fresh; git -C "$W" worktree add -q --detach "$W/.claude/worktrees/$name" HEAD
+  hook Bash "$W" "$cmd"
+  if [ -z "$(field ac)" ] && [ -z "$(field systemMessage)" ]; then ok "$name(detached) 사본 만들기 → 알림 · 명령 없음"; else no "$name(detached): 알림이 났다 — $OUT"; fi
+done
+
 echo "kill switch — git 을 부르기 전에 끝난다"
 mkdir -p "$T/fakebin"
 printf '#!/bin/sh\necho "$*" >> "%s/git.log"\nexec "%s" "$@"\n' "$T" "$REAL_GIT" > "$T/fakebin/git"
