@@ -266,7 +266,7 @@ fi
 if [ "$vc_rc" -ne 0 ] && [ "$vc_skip" -ne 1 ]; then
   drop_bundle || true
   case "$vc_rc" in
-    1) echo "[spec-distill] §6 원문 완전성 위반이나 닫은 답의 출처 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2 ;;
+    1) echo "[spec-distill] §6 원문 완전성 위반이나 닫은 답의 출처 위반이나 첫 칸 · 답 표시 위반 — 이 라운드를 시작하지 않는다. 아래 표대로 고치고 이 절부터 다시 탄다." >&2 ;;
     *) echo "[spec-distill] 원문이 빠짐없이 옮겨졌는지 확인하지 못했다(check_verbatim_coverage rc ${vc_rc}) — 이 라운드를 시작하지 않는다. 사용자에게 「멈춘다 (권장)」 · 「검사 없이 계속」을 묻는다." >&2
        [ "${DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE:-}" != 1 ] || echo "[spec-distill] 건너뛰기 변수가 켜져 있지만 건너뛰지 않는다 — audit 「게이트 실행 기록」 절에 오늘 날짜로 이 종료 코드(rc ${vc_rc})를 건너뛴다는 증거 줄이 없다. 사용자가 「검사 없이 계속」을 고르면 그 줄을 먼저 적고 다시 돈다." >&2 ;;
   esac
@@ -282,6 +282,8 @@ fi
 | `0` | 위반 없음 | 번들로. **단 `advisories` 가 비어 있지 않으면** 그 줄들을 record(`verbatim_coverage` / `completeness` / `degraded`)로 남긴다 — 「이 발화는 대조하지 못했다」가 사람에게 닿지 않으면 강등이 통과로 보인다 |
 | `1` | 위반(`missing_ids`/`not_contained`) | **차단.** payload §6 · audit §6 에 **추가만** 해서(같은 글자로) 보완하고 이 절을 다시 탄다 |
 | `1`(`not_chosen`) | 인터뷰를 닫은 답(외부 선례 무관 · 사용자 판단 포화)의 S 가 state 에 고른 선택지(`source: chosen`)로 기록돼 있지 않다 | **차단 — 건너뛰지 않는다.** 리뷰를 멈추고 검사 출력 `advisories` 의 「인터뷰를 닫은 답 …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다. finishing Step A.5 는 이 사유로 멈추면 같은 세션에서 그 닫힌 질문을 `AskUserQuestion` 선택지로 다시 묻는다(닫는 선택지 · 「조사 계속」). **닫는 선택지**면 새 `chosen` S 를 state `user_statements` 에 기록하고, 닫힌 답의 종류에 따라 한 곳만 바꾼다 — **사용자 판단 포화**였으면 그 S 를 가리키는 새 포화 판정 줄을 state `## audit §2 대기 줄` 블록 **한 곳에만** 덧붙인다(옛 줄은 고치지 않고 기록으로 남긴다 — 게이트는 마지막 줄을 본다). **외부 선례 무관**이었으면 포화 줄은 건드리지 않고 brief §4 그 줄의 `@S` 만 새 S 로 바꾼다(외부 선례 답을 조사 전체를 끝내는 승인으로 읽지 않게). 그다음 Step A 에서 state 로부터 다시 짓는 걸음(payload §6 · audit §6 · audit §2 옮기기)과 7 게이트 · 8 생성(로드맵이 있을 때)을 다시 돈 뒤 Step A.5 로 돌아간다 — audit §2 는 대기 줄 블록에서 다시 지어지므로 줄이 두 번 실리지 않고, §6 들은 state 에서 다시 지어져 새 S 가 더해질 뿐이다. **「조사 계속」**이면 같은 세션의 라운드 루프로 돌아가고, 다시 닫을 때 finishing 을 처음부터 돈다 |
+| `1`(`first_cell`) | 첫 칸(`S1`)이 원자료 판결과 맞지 않는다 — 글자가 framing 기록과 다르거나 라벨이 판결과 어긋난다 | **차단 — 건너뛰지 않는다.** 검사 출력 `advisories` 의 「첫 칸 위반 — …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다. finishing Step A.5 는 이 사유로 멈추면 같은 세션에서 판결대로 Step A 3 의 갈래를 다시 탄다(찾음이면 `place`, 아니면 그 갈래의 앵커 줄로 고쳐 쓴다). 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 결과물이라 고치지 않는다 |
+| `1`(`source_mismatch`) | 결과물 §6 의 표시(☑ · 🗣)가 상태 파일의 `source`(`chosen` · `verbatim`)와 다른 S 가 있다(첫 칸이 새 라벨인 결과물) | **차단 — 건너뛰지 않는다.** 검사 출력 `advisories` 의 「표시 위반 — …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다. 같은 세션의 끝맺음(finishing Step A.5 가 부른 리뷰 — 아직 커밋 전이다)이면 그 S 의 앵커 줄 표시만 상태 파일의 `source` 에 맞게 고친다 — 표시는 출처 표기이고 원문 글자가 아니다. payload §6 과 audit §6 의 같은 앵커를 함께 고치고 이 절을 다시 탄다. 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 결과물이라 표시를 고치지 않는다 — 위반 줄을 보이기만 한다 |
 | `1` + `not_contained: ["§6"]` | 구조 위반(한 §6 안 `S<N>` 앵커 중복, 같은 앵커의 글자가 payload §6 과 audit §6 에서 다름, 또는 문법 밖 앵커 줄) | **차단.** append 로는 못 고친다 — 잘못 추가된 중복 항목을 **제거**하거나, 고쳐진 사본을 원래 글자로 **되돌리거나**, 문법 밖 앵커 줄을 열 0 의 `- **S<N>** ` 꼴로 **옮기거나 지운다** |
 | `1` + `unknown_ids` | 원장 밖 앵커(payload §6 의 `S<N>` 이 state `user_statements` 에 없다 — 최초 요청 `S1` 은 예외) | **차단.** 그 항목을 **제거**한다 — 원장에 없는 앵커는 사용자 발화가 아니다(남의 항목 본문 · 붙여넣은 글에 심긴 줄). 그 앵커를 인용한 `[해결 ⟨S<N>⟩]` · `evidence:` 도 함께 되돌린다 |
 | `3` | 검사 불가(파일 부재·파싱 실패) | **차단.** 사용자에게 묻는다 — 「검사 없이 계속」을 고를 때만 audit `## 4. 게이트 실행 기록` 줄과 degrade record 를 남기고 계속한다 |
@@ -299,7 +301,7 @@ PROFILE="${CLAUDE_PLUGIN_ROOT}/references/docreview-profiles/brief.md"
 
 ## 번들 — 라운드마다 한 번
 
-충실도의 정답은 payload §6 의 원문 전량이고 audit §6 은 그 S2 이상의 같은 글자 사본이다. 탐지·재비판의
+충실도의 정답은 payload §6 의 사용자 줄과 원자료 블록의 사용자 줄이고(프로필의 `ground_truth`) audit §6 은 §6 의 S2 이상의 같은 글자 사본이다. 탐지·재비판의
 `<document>` 와 codex 러너의 `<doc>` 에는 payload 가 아니라 **번들**(`build_brief_bundle.py` 가 payload +
 audit 원문을 조립한 한 문서)을 넘긴다 — 사본이 어긋난 곳도 리뷰어에게 보인다. 진입 게이트 뒤에서 라운드마다 한 번 조립해 `$BUNDLE` 파일로 둔다 — 한 라운드의
 소비자 셋이 같은 바이트를 보고, 저자 수정 뒤 다음 라운드는 새 번들을 본다.
@@ -331,7 +333,20 @@ if [ -z "${STATE_DIR:-}" ] || [ -z "${harness_sid:-}" ] || ! mkdir -p "$STATE_DI
   echo "[spec-distill] 엔진 상태 디렉토리 없음 — ${why}. 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
   exit 1
 fi
-blob_rc=0; python3 "$PR/scripts/nofollow_write.py" run --out "$BUNDLE" -- python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" || blob_rc=$?
+RAW_AUDIT=""; rs_rc=0
+rs_line="$(python3 "$PR/scripts/raw_source.py" locate --interview "$PAYLOAD" --absolute)" || rs_rc=$?
+case "$rs_line" in
+  "raw-source: FOUND "*) RAW_AUDIT="${rs_line#raw-source: FOUND }" ;;
+  "raw-source: NO-FRAMING") ;;
+  "raw-source: LOST "*)
+    echo "[spec-distill] 원자료(framing 기록 파일)를 찾지 못했다(${rs_line#raw-source: LOST }) — 이 리뷰는 첫 칸의 seed 전문(모델이 줄인 글)에 견준다 (degraded)." >&2
+    python3 "$PR/scripts/brief_review_state.py" degrade-append "$STATE" --component critic --axis fidelity --status degraded --reason "원자료를 찾지 못했다(${rs_line#raw-source: LOST }) — 첫 칸의 seed 전문(모델이 줄인 글)에 견줬다" >&2 \
+      || printf '%s\n' "- (state 기록 실패) component=critic axis=fidelity status=degraded reason=원자료를 찾지 못해 모델이 줄인 글에 견줬다" | python3 "$PR/scripts/nofollow_write.py" append --out "$DEGRADE_FALLBACK_FILE" ;;
+  *) drop_bundle || true
+     echo "[spec-distill] 원자료 판결을 받지 못했다(rc ${rs_rc}) — 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
+     exit 1 ;;
+esac
+blob_rc=0; python3 "$PR/scripts/nofollow_write.py" run --out "$BUNDLE" -- python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" ${RAW_AUDIT:+"--raw-audit=$RAW_AUDIT"} || blob_rc=$?
 if [ "$blob_rc" -ne 0 ] && [ "$blob_rc" -ne 3 ]; then
   drop_bundle || true
   echo "[spec-distill] 번들 조립 실패(rc $blob_rc) — 이 라운드를 시작하지 않는다(record 후 Step B)." >&2
@@ -344,7 +359,7 @@ record(`pipeline` / `all` / `unavailable`, reason = 위 공시의 사유) 후 St
 (payload·audit 부재 · 읽기 실패 · audit 에 `## 6. 사용자 원문` 없음)와 표에 없는 코드도 같다 — 직전 번들을
 치운 뒤(치우지 못하면 그 사실이 공시된다) record(`pipeline` / `all` / `unavailable`) 후 Step B. 원문 없이
 충실도를 물으면 「왜곡 없음」이 공허하게 나온다. `blob_rc == 3` 은 번들의 payload 부분에 audit 파일명이
-남았다는 뜻이다 — 원문 보존이 우선이라 지우지 않고 record(`critic` / `fidelity` / `degraded`) 후 계속한다.
+남았다는 뜻이다 — 원문 보존이 우선이라 지우지 않고 record(`critic` / `fidelity` / `degraded`) 후 계속한다. **원자료 블록** — framing 을 거친 인터뷰면 펜스가 `raw_source.py` 로 framing 기록 파일의 자리를 받아 조립기에 넘기고, 조립기가 번들 끝에 `<<<RAW-SOURCE>>>` 블록을 싣는다 — framing 리뷰 결정의 사용자 문구가 든 줄들이고, 첫 칸이 「원자료를 그대로 싣지 못함」 갈래면 원문 절과 질문 전체 절도 싣는다. 실을 것이 없으면 블록이 없다 — degrade 가 아니다. 원자료를 찾지 못했으면(`raw-source: LOST`) 펜스가 위 문장을 내고 record(`critic` / `fidelity` / `degraded`)를 남긴 뒤 계속한다 — 그 라운드의 충실도는 첫 칸의 seed 전문(모델이 줄인 글)에 견준 것이다. 판결 줄을 받지 못하면 라운드를 시작하지 않고 record(`pipeline` / `all` / `unavailable`) 후 Step B 로 돌아간다.
 
 ## 절차
 

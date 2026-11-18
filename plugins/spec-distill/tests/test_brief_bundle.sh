@@ -226,4 +226,109 @@ printf '%s' "$t16out" | grep -qE '\*\*S[2-9]' \
   || ok "T16: 거절 시 아무것도 내보내지 않는다 (빈 ground truth 로 「왜곡 없음」이 나오는 경로 차단)"
 rm -rf "$T16D"
 
+# ── RS: 원자료 블록 (AC10) ──────────────────────────────────────────────────
+# framing 을 거친 인터뷰면 조립기가 번들 끝에 `<<<RAW-SOURCE>>>` 블록을 싣는다 — framing 리뷰 결정의
+# 사용자 문구가 든 줄들이고, 첫 칸이 「그대로 싣지 못함」 갈래면 두 절도 싣는다. 레포는 도우미로 짓는다.
+RSD="$(mktemp -d)" || exit 1
+rs_make() {   # rs_make <폴더> <recorded|unloadable|noquote|no-framing|lost> → 키=값 줄
+  python3 - "$SD" "$1" "$2" <<'PY'
+import sys
+sd, folder, case = sys.argv[1:4]
+sys.path.insert(0, sd + "/tests")
+sys.path.insert(0, sd + "/scripts")
+import raw_source_fixture as fx
+import raw_source as rs
+kw = {}
+if case == "unloadable":
+    kw["raw1"] = fx.RAW1 + "\n앞 글 **S3** 뒤 글"
+    kw["s1_line"] = rs.anchor_line(rs.LABEL_UNLOADABLE) + '\n  > "대시보드가 너무 느려요."'
+elif case == "noquote":
+    kw["decisions"] = '- D1.1 · r1 · accept · F1 · "" — 문구 없는 결정'
+elif case in ("no-framing", "lost"):
+    kw["mode"] = case
+for k, v in fx.make_repo(folder, **kw).items():
+    print("%s=%s" % (k, v))
+PY
+}
+kv() { printf '%s\n' "$2" | sed -n "s/^$1=//p"; }
+after_marker() { awk 'f{print} $0=="<<<RAW-SOURCE>>>"{f=1}'; }
+place() { python3 "$SD/scripts/raw_source.py" place --interview "$1" >/dev/null 2>&1; }
+
+# RS1 — FOUND · 문구 있는 결정 줄 둘
+m1="$(rs_make "$RSD/r1" recorded)"; b1="$(kv brief "$m1")"; a1="$(kv audit "$m1")"; f1="$(kv framing "$m1")"
+place "$b1" || no "RS1(전제): place 가 실패했다"
+o1="$(python3 "$B" "$b1" "$a1" --raw-audit="$f1" 2>"$RSD/e1")"; r1=$?
+[[ $r1 -eq 0 ]] && ok "RS1: FOUND + --raw-audit → rc 0" || no "RS1: rc $r1 — $(head -c 300 "$RSD/e1")"
+n1="$(printf '%s\n' "$o1" | grep -cx '<<<RAW-SOURCE>>>')"
+[[ "$n1" -eq 1 ]] && ok "RS1: 줄 전체가 <<<RAW-SOURCE>>> 인 줄이 하나다" || no "RS1: 표지 줄이 ${n1}개"
+tail1="$(printf '%s\n' "$o1" | after_marker)"
+dec="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import raw_source_fixture as f; print(f.DECISIONS)' "$SD/tests")"
+nd=0
+while IFS= read -r d; do
+  [ -n "$d" ] || continue; nd=$((nd+1))
+  printf '%s\n' "$tail1" | grep -qxF -- "$d" && ok "RS1: 결정 줄이 표지 뒤에 글자 그대로 있다 — ${d%% — *}" \
+    || no "RS1: 표지 뒤에 결정 줄이 없다 — $d"
+done <<<"$dec"
+[[ $nd -eq 2 ]] || no "RS1(양성): 픽스처 결정 줄을 ${nd}개 읽었다(2 기대)"
+if [[ "$n1" -ne 1 ]]; then
+  no "RS1: 표지가 없어 다음 줄과 두 절의 부재를 잴 수 없다 (앵커 부재 — vacuous pass 방지)"
+else
+  [[ -z "$(printf '%s\n' "$tail1" | head -n 1)" ]] && ok "RS1: 표지 다음 줄이 빈 줄이다 (setext 승격 없음)" \
+    || no "RS1: 표지 다음 줄이 '$(printf '%s\n' "$tail1" | head -n 1)'"
+  printf '%s\n' "$tail1" | grep -qxF '    ## 1. 원문' && no "RS1: 첫 칸에 이미 실린 두 절을 표지 뒤에 다시 실었다" \
+    || ok "RS1: 첫 칸에 실린 두 절은 다시 싣지 않는다"
+fi
+
+# RS2 — FOUND 인데 --raw-audit 가 없다
+o2="$(python3 "$B" "$b1" "$a1" 2>"$RSD/e2")"; r2=$?
+{ [[ $r2 -eq 2 ]] && [[ -z "$o2" ]]; } && ok "RS2: FOUND 인데 --raw-audit 없음 → rc 2 · 빈 출력" \
+  || no "RS2: rc $r2 · 출력 ${#o2}자 — 사용자 문구 없이 조립했다"
+grep -qF -- '--raw-audit 를 받지 못했다' "$RSD/e2" && ok "RS2: 사유를 공시한다" || no "RS2: 사유 줄이 없다 — $(head -c 300 "$RSD/e2")"
+
+# RS3 — 다른 기록 파일 사본
+cp "$f1" "$RSD/r1/docs/iv/other.audit.md"
+python3 "$B" "$b1" "$a1" --raw-audit="$RSD/r1/docs/iv/other.audit.md" >/dev/null 2>"$RSD/e3"; r3=$?
+{ [[ $r3 -eq 2 ]] && grep -qF '원자료 신원 불일치' "$RSD/e3"; } && ok "RS3: 바이트가 같은 다른 기록 파일 → rc 2 (원자료 신원 불일치)" \
+  || no "RS3: rc $r3 — $(head -c 300 "$RSD/e3")"
+
+# RS4 — 「그대로 싣지 못함」 갈래: 두 절을 함께 싣는다
+m4="$(rs_make "$RSD/r4" unloadable)"; b4="$(kv brief "$m4")"; a4="$(kv audit "$m4")"; f4="$(kv framing "$m4")"
+python3 "$SD/scripts/raw_source.py" place --interview "$b4" >/dev/null 2>&1; p4=$?
+[[ $p4 -eq 4 ]] && ok "RS4(양성): 이 기록은 첫 칸에 그대로 싣지 못한다 (place rc 4)" || no "RS4(양성): place rc $p4 — 갈래 픽스처가 아니다"
+o4="$(python3 "$B" "$b4" "$a4" --raw-audit="$f4" 2>"$RSD/e4")"; r4=$?
+tail4="$(printf '%s\n' "$o4" | after_marker)"
+{ [[ $r4 -eq 0 ]] && printf '%s\n' "$tail4" | grep -qxF '    ## 1. 원문' && printf '%s\n' "$tail4" | grep -qxF '    ## 2. 질문 전체'; } \
+  && ok "RS4: 표지 뒤에 원문 절과 질문 전체 절이 실린다" || no "RS4: rc $r4 · 두 절이 표지 뒤에 없다 — $(head -c 300 "$RSD/e4")"
+
+# RS5 — 결정 줄에 문구가 없고 두 절은 첫 칸에 있다
+m5="$(rs_make "$RSD/r5" noquote)"; b5="$(kv brief "$m5")"; a5="$(kv audit "$m5")"; f5="$(kv framing "$m5")"
+place "$b5" || no "RS5(전제): place 가 실패했다"
+o5="$(python3 "$B" "$b5" "$a5" --raw-audit="$f5" 2>"$RSD/e5")"; r5=$?
+{ [[ $r5 -eq 0 ]] && ! printf '%s\n' "$o5" | grep -qx '<<<RAW-SOURCE>>>'; } \
+  && ok "RS5: 실을 것이 없으면 rc 0 · 표지 없음" || no "RS5: rc $r5 · 실을 것이 없는데 표지가 있거나 실패했다"
+
+# RS6 — framing 없음 · 찾지 못함
+for mode in no-framing lost; do
+  m6="$(rs_make "$RSD/r6-$mode" "$mode")"
+  o6="$(python3 "$B" "$(kv brief "$m6")" "$(kv audit "$m6")" 2>"$RSD/e6")"; r6=$?
+  { [[ $r6 -eq 0 ]] && [[ -n "$o6" ]] && ! printf '%s\n' "$o6" | grep -qx '<<<RAW-SOURCE>>>'; } \
+    && ok "RS6($mode): rc 0 · 표지 없음" || no "RS6($mode): rc $r6 — $(head -c 300 "$RSD/e6")"
+done
+m6="$(rs_make "$RSD/r6b" no-framing)"
+python3 "$B" "$(kv brief "$m6")" "$(kv audit "$m6")" --raw-audit="$(kv framing "$m6")" >/dev/null 2>"$RSD/e6b"; r6b=$?
+{ [[ $r6b -eq 2 ]] && grep -qF 'FOUND 가 아닌데 --raw-audit 를 받았다' "$RSD/e6b"; } \
+  && ok "RS6: framing 없는 인터뷰에 --raw-audit 를 주면 rc 2" \
+  || no "RS6: framing 없는 인터뷰가 --raw-audit 를 받고 rc $r6b — $(head -c 300 "$RSD/e6b")"
+
+# RS7 — 표지 튜플의 셋째 값이 번들이 실제로 찍는 표지 줄이다
+mk3="$(python3 -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bb", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(m.UNTRUSTED_VERBATIM_MARKERS[2])' "$B")"
+printed="$(printf '%s\n' "$o1" | grep -E '^<<<[A-Z-]+>>>$' | grep -vx '<<<PAYLOAD>>>' | grep -vx '<<<AUDIT-VERBATIM>>>')"
+{ [[ "$mk3" == "<<<RAW-SOURCE>>>" ]] && [[ "$printed" == "$mk3" ]]; } \
+  && ok "RS7: UNTRUSTED_VERBATIM_MARKERS[2] 가 번들이 찍는 표지 줄과 같다" \
+  || no "RS7: 튜플 셋째 값 '$mk3' · 번들이 찍은 표지 '$printed'"
+rm -rf "$RSD"
+
 exit $fail

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """build_brief_bundle.py — 문서 리뷰 엔진 한 라운드의 소비자 셋(탐지 · 재비판 · codex)이 공유하는
-번들 (payload + audit §6).
+번들 (payload + audit §6 + 원자료 블록).
+
+CLI: build_brief_bundle.py <payload> <audit> [--raw-audit <framing 기록 파일>]
+
+원자료 블록 — payload 경로로 `raw_source.locate_from_interview` 의 판결을 받는다. FOUND 면 `--raw-audit` 로
+그 framing 기록 파일을 받아 `raw_source.review_block` 의 글(framing 리뷰 결정 가운데 사용자 문구가 든 줄들 —
+payload §6 `S1` 의 라벨이 「원자료를 그대로 싣지 못함」 이면 원문 절 · 질문 전체 절의 두 블록이 먼저)을 번들
+끝 `<<<RAW-SOURCE>>>` 표지 뒤에 싣는다. 실을 것이 없으면 표지도 없다. LOST · NO-FRAMING 이면 블록이 없다 —
+찾지 못한 사실의 기록은 부르는 펜스가 한다.
 
 형제 `build_seed_inline_blob.py`의 **구조**를 이식한다(명시 경로 → 라벨 붙은 조립 →
 stdout). 조립 로직이 소비자마다 따로 있으면 한쪽만 고쳐질 때 리뷰어끼리 다른
@@ -21,7 +29,9 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 **절 헤딩은 벗긴다** — 안 벗기면 payload의 같은 헤딩과 바이트 동일해져, 라벨을 붙여도
 "§6을 보라"는 지시가 먼저 나오는 쪽(payload §6)에 걸린다.
 
-exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음(무디스패치) /
+exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음 · 상태 파일을 읽지 못함 · 원자료를 찾았는데
+`--raw-audit` 없음 · `--raw-audit` 가 이 인터뷰의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 ·
+framing 기록 파일을 읽지 못함(무디스패치) /
 3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
 """
 from __future__ import annotations
@@ -39,6 +49,9 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
 import check_brief  # noqa: E402  — audit 신원 결속(아래 `blessed_audit`)
+import brief_body  # noqa: E402
+import raw_source  # noqa: E402
+import seed_review_log  # noqa: E402
 
 REDACT_KEYS = ("audit_file", "name", "created_at")
 
@@ -49,21 +62,22 @@ def own_audit_re(audit_name: str):
     return re.compile(r"(?<![\w.-])" + re.escape(audit_name) + r"\b")
 
 
-# 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 두 리터럴 표지 — 이 번들을
-# 받는 리뷰어에게 두 원문 자리를 알려 주는 문면(지금은 brief 프로필
+# 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 리터럴 표지 — 이 번들을
+# 받는 리뷰어에게 원문 자리를 알려 주는 문면(지금은 brief 프로필
 # `references/docreview-profiles/brief.md` 의 층 2 절 — 탐지·재비판 agent 와 codex 러너가 함께
-# 싣는다)은 반드시 **둘 다** 이름으로 가리켜야 한다. 하나만 가리키면 다른 쪽 원문에는 injection
+# 싣는다)은 반드시 **전부** 이름으로 가리켜야 한다. 하나만 가리키면 다른 쪽 원문에는 injection
 # 경계가 없어진다(task-10 fix round 2 실측 — 라벨 토큰만 가리키고 payload 쪽 §6은 빠뜨린 결함).
 #
-# 왜 이 둘인가: `<<<PAYLOAD>>>` 다음에 실리는 payload 본문은 자신의 `## 6. 사용자 원문`
+# 왜 앞의 둘인가: `<<<PAYLOAD>>>` 다음에 실리는 payload 본문은 자신의 `## 6. 사용자 원문`
 # 절(S1~Sn 원문 전량)을 **바이트 그대로** 담고 있다 — redact_frontmatter()는 frontmatter 세 키만
 # 건드리고 body는 손대지 않는다(위 모듈 docstring의 "실린 audit §6의 절 헤딩은 벗긴다 —
 # 안 벗기면 payload의 같은 헤딩과 바이트 동일해진다"는 대칭으로, payload 쪽 헤딩은 애초에
 # 벗길 대상이 아니라 그대로 남는다). audit_verbatim()이 만드는 두 번째 블록(S2 이상의 같은 글자 사본)은
-# `<<<AUDIT-VERBATIM>>>` 라벨이 표지한다. 이 튜플이 정본이다 — 번들 포맷이 바뀌어 세
-# 번째 위치가 생기면 여기만 늘리면 되고, 프로필 문면이 그 표지를 놓치면
-# shared/tests/test_docreview_profiles.sh 의 교차 대조(이 튜플에서 도출)가 잡는다.
-UNTRUSTED_VERBATIM_MARKERS = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>")
+# `<<<AUDIT-VERBATIM>>>` 라벨이 표지한다. 셋째 `<<<RAW-SOURCE>>>` 는 번들 끝의 원자료 블록(framing
+# 기록의 사용자 문구)이다. 이 튜플이 정본이다 — 번들 포맷에 위치가 더 생기면 여기만 늘리면 되고,
+# 프로필 문면이 그 표지를 놓치면 shared/tests/test_docreview_profiles.sh 의 교차 대조(이 튜플에서
+# 도출)가 잡는다.
+UNTRUSTED_VERBATIM_MARKERS = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>", "<<<RAW-SOURCE>>>")
 
 
 def redact_frontmatter(text: str) -> str:
@@ -96,22 +110,64 @@ def blessed_audit(payload_path: pathlib.Path, payload_text: str):
     return check_brief.resolve_audit(payload_path, check_brief._frontmatter(payload_text))
 
 
-def assemble(payload_text: str, verbatim: str) -> str:
+def assemble(payload_text: str, verbatim: str, raw_block: str = "") -> str:
     # 라벨 다음 줄에 **빈 줄**을 둔다(task-10 fix). payload는 frontmatter `---`로
     # 시작하므로, 라벨 바로 다음 줄이 그 `---`이면 CommonMark가 라벨 텍스트를 setext
     # h2(`<h2>`)로 승격시킨다 — `## 6. 사용자 원문`과 같은 헤딩 네임스페이스에 들어가
     # 이 파일이 막으려는 바로 그 헤딩-충돌이 라벨 도입 자체로 재발한다. 빈 줄은 앞
     # 텍스트를 단락 나머지와 분리해 setext 후보에서 제외시킨다(CommonMark: setext
     # underline은 바로 앞 줄이 같은 단락에 속할 때만 성립).
-    _, audit_label = UNTRUSTED_VERBATIM_MARKERS  # 소비자 계약과 실제 출력을 한 값으로 묶는다
-    return (f"<<<PAYLOAD>>>\n\n{redact_frontmatter(payload_text).strip()}\n\n"
-            f"{audit_label}\n\n{verbatim}\n")
+    # 소비자 계약과 실제 출력을 한 값으로 묶는다 — 자리로 꺼낸다(풀어 담으면 표지가 늘 때 ValueError).
+    audit_label = UNTRUSTED_VERBATIM_MARKERS[1]
+    out = (f"<<<PAYLOAD>>>\n\n{redact_frontmatter(payload_text).strip()}\n\n"
+           f"{audit_label}\n\n{verbatim}\n")
+    if raw_block:
+        out += f"\n{UNTRUSTED_VERBATIM_MARKERS[2]}\n\n{raw_block}\n"
+    return out
+
+
+def first_cell_unloadable(payload_text: str) -> bool:
+    """payload §6 `S1` 앵커 본문의 라벨이 「원자료를 그대로 싣지 못함」 갈래인가."""
+    body = section6.body(payload_text)
+    if body is None:
+        return False
+    s1 = next((rest for _, sid, rest in brief_body.anchor_lines(body)[0] if sid == "S1"), None)
+    return s1 is not None and raw_source.label_kind(s1) == "unloadable"
+
+
+def raw_source_block(payload_path: pathlib.Path, payload_text: str, raw_audit):
+    """-> (원자료 블록 글, 오류 문장). 오류가 있으면 조립하지 않는다(rc 2)."""
+    try:
+        state = raw_source.state_of(str(payload_path))
+        v = raw_source.locate_from_state(state)
+    except ValueError as exc:   # 인자 꼴 · StateUnreadable
+        return "", f"원자료 판결을 받지 못했다 — {exc}"
+    if v.kind != "FOUND":
+        if raw_audit is not None:
+            return "", (f"원자료 판결이 FOUND 가 아닌데 --raw-audit 를 받았다 — {raw_audit} "
+                        f"({raw_source.verdict_line(v)})")
+        return "", None
+    own = raw_source.audit_file(state, v)
+    if raw_audit is None:
+        return "", (f"원자료를 찾았는데 --raw-audit 를 받지 못했다 — {own}. "
+                    "사용자 문구 없이 충실도를 물으면 「왜곡 없음」 이 나온다.")
+    if pathlib.Path(raw_audit).resolve() != own.resolve():
+        return "", f"원자료 신원 불일치: 넘겨받은 {raw_audit} vs 이 인터뷰의 framing 기록 {own}"
+    try:
+        text = seed_review_log.read_audit_text(own)
+    except (OSError, UnicodeDecodeError) as exc:
+        return "", f"framing 기록 파일을 읽지 못했다 — {own}: {exc}"
+    try:
+        return raw_source.review_block(text, first_cell_unloadable(payload_text)), None
+    except ValueError as exc:   # SectionsUnreadable — 두 절을 실어야 하는데 자르지 못했다
+        return "", f"framing 기록의 두 절을 자르지 못했다 — {exc}"
 
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="build_brief_bundle.py")
     p.add_argument("payload_file")
     p.add_argument("audit_file")
+    p.add_argument("--raw-audit", default=None)
     args = p.parse_args()
     paths = {"payload_file": pathlib.Path(args.payload_file),
              "audit_file": pathlib.Path(args.audit_file)}
@@ -143,8 +199,12 @@ def main() -> int:
               "원문 없이(또는 어느 원문인지 모른 채) 충실도를 물으면 「왜곡 없음」이 "
               "나온다. 조립하지 않는다.", file=sys.stderr)
         return 2
+    raw_block, raw_err = raw_source_block(paths["payload_file"], payload_text, args.raw_audit)
+    if raw_err is not None:
+        print(raw_err, file=sys.stderr)
+        return 2
     redacted_payload = redact_frontmatter(payload_text)
-    sys.stdout.write(assemble(payload_text, verbatim))
+    sys.stdout.write(assemble(payload_text, verbatim, raw_block))
     # 위생 스캔은 **payload 부분에만** 건다. 번들이 audit 내용을 의도적으로 싣게 됐으므로
     # 전체를 스캔하면 정상 동작이 매번 exit 3을 낸다.
     if own_audit_re(blessed.name).search(redacted_payload):
