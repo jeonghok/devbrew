@@ -41,9 +41,9 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의도: 지휘의 걸음을 단계표로 세우고 순서 · 승인을 스크립트가 지키게 하며 사용자 자리를 걸음에 못 박는다
 - 범위: 한다: 단계표(형식 · 실행기 칸 · 사람 단계), 순서 강제 + 사람 승인 탈출구(승인된 설계 없이는 계획 · 구현이 시작되지 않는다 · 해시 승인), 같은 단계 연속 실패 멈춤, 사용자 자리(방향 · 설계 대화, 계획이 나왔을 때 · 구현 중 설계에 닿는 물음 · PR 전), 담당자 물음을 원문 그대로 옮기기, 담당자는 시작 묶음으로만 보낸다(보내는 글 틀을 시작 묶음으로), 사람 줄은 세션 기록에서 사람이 한 말 · 고른 답을 찾아 적는다(모델이 지어낸 줄은 통과하지 못한다), 동시 수 레포 설정, SDD 고침 루프 위임, superpowers 결합을 단계 맞춤으로, P8 · CLAUDE.md 개정 / 안 한다: 세션으로 보내기 · 거두기, 절차서 쪼개기 · 리더 다시 띄우기, 상태 브랜치
 - 의존: R1
-- 브랜치: feature/conductor-stage-table
+- 브랜치: feature/conductor-stage-table, feature/conductor-walk-table
 - 묶음: R2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/scripts/conductor_ledger.py
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/references/walk-table.md, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: R1 형식 위에서 단계가 돈다
@@ -179,6 +179,12 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「그래」
   - 「그니까 모델이 사람이 한거로 치팅 못하게한다는거지? 리워드 해킹같은」
+
+### 2026-11-19 · R2 설계 승인 뒤 브랜치와 경로 예약을 맞춘다 — 계획 2 의 브랜치를 더하고 승인된 설계가 고치는 파일 열여섯을 경로 예약에 더한다. 범위 · 의존 · 묶음은 그대로
+- 바뀜: 바뀐 에픽 R2 「이대로 다시 나눈다 (권장)」 · 「PR #302에 함께 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+  - 「PR #302에 함께 (권장)」
 
 ## 위험 번호표
 
