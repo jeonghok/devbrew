@@ -298,6 +298,36 @@ handbook_budget: 16384
 - bare 레포에 worktree 를 두고 쓰는 배치면 상태 폴더는 bare 레포 안(`<bare 레포>/.claude/spec-distill`)에 생겨 레포마다 갈린다. `GIT_DIR` · `GIT_WORK_TREE` 가 설정돼 있으면 한 줄로 알린다.
 - Claude Code 가 worktree 를 두는 `.claude/worktrees/` 는 레포 `.gitignore` 에 더한다. 더하지 않으면 quality-gates 가 그 아래 worktree 를 「추적 안 되는 중첩 레포」로 보고 리뷰하지 않아 판정이 degraded 가 된다 — 그 한 줄을 더하면 풀린다(2026-10-21 실측).
 
+## 끄는 길
+
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable spec-distill`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"spec-distill@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+
+2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+
+3. **표.**
+
+<!-- switches:begin -->
+| 이름 | 끄는 것 | 상태 | 대신할 길 |
+|---|---|---|---|
+| `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` | codex 리뷰 | 남음 | — |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WEB` | 인터뷰와 brief 리뷰의 웹 조사 | 남음 | — |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 지휘자의 스위트 대조가 저장소 테스트를 돌리기 | 남음 | — |
+| `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | request-framing 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
+| `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_WEB` | brief 리뷰가 codex 에 여는 웹 검색 | 은퇴 예정 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+| `DEVBREW_SKIP_HOOKS=spec-distill:statusline` | 상태줄과 로드맵 지도 | 은퇴 예정 | 상태줄 설정을 지운다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+<!-- switches:end -->
+
+은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+
+4. **자세한 동작.** `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 같은 변수마다 자세한 동작은 아래 「끄는 법」 절에 있다.
+
 ## 끄는 법
 
 ### 먼저 — 설계문서 리뷰를 끄는 법

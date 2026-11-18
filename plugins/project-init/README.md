@@ -85,6 +85,23 @@ plugins/project-init/
   훅 자리에서만 나가는데, 지금 devbrew 에는 그 자리가 없어 안내 없이 조용히 건너뜁니다.
   `$DEVBREW_PYTHON`으로 인터프리터를 직접 지정할 수 있습니다.
 
+## 끄는 길
+
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable project-init`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"project-init@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+
+2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+
+3. **표.**
+
+<!-- switches:begin -->
+| 이름 | 끄는 것 | 상태 | 대신할 길 |
+|---|---|---|---|
+| `DEVBREW_PROJECT_INIT_DISABLE` | project-init 전체(훅과 셋업) | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` | 브랜치 · 커밋 확인 훅 | 은퇴 예정 | 플러그인 끄기, 또는 설정의 `disableAllHooks` |
+<!-- switches:end -->
+
+은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+
 ## 통합
 
 다른 플러그인과 함께 동작:
