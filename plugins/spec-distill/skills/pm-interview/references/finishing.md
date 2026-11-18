@@ -90,8 +90,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **최초 요청 원문은 `S1`이다.** 「풀린 입력」(진입 단계 2 의 결과 — rough request 그대로이거나
    `@경로` 의 파일 전문)을 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
    상태 파일로 이어 간 인터뷰면 「풀린 입력」은 그 파일의 `## 풀린 입력` 블록이다(`state-file.md`).
-   Phase 0 을 거친 세션에서는 `## 진입 단계` 2 가 `@경로` 를 풀었든 사용자가 전문을 붙여넣었든
-   그 「풀린 입력」이 `interview-seed` 파일 전문이고, 그때도 같은 규칙이 그대로 적용됩니다:
+   framing 없이 시작한 인터뷰의 `S1` 은 이 「풀린 입력」 그대로다(첫 입력이 곧 원자료다):
    ```yaml
    - id: S1
      source: verbatim
@@ -105,6 +104,17 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    `check_verbatim_coverage.py`의 앵커 중복·포함 검사가 red를 냅니다).
    비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다 — 번호는
    `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
+   **seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.** 「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다. payload §6 맨 앞에 앵커 줄 `- **S1** 🗣 최초 요청:` 한 줄만 두고(본문 없이) payload · audit · 상태 파일을 쓴 뒤 아래 순서로 간다. audit §6 에는 `S1` 을 두지 않는다.
+   ```bash
+   SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+   python3 "$SD/scripts/raw_source.py" locate --interview "<Step A 2 의 payload 경로>" --absolute || echo "[spec-distill] 원자료 판결 종료 코드 $? — 위 판결 줄대로 간다(멈추지 않는다)" >&2
+   ```
+   - `raw-source: FOUND <경로>` — 아래 「비밀값 확인」 을 먼저 하고, 그 뒤 `python3 "$SD/scripts/raw_source.py" place --interview "<payload 경로>"` 를 같은 꼴의 펜스로 돌린다. 마지막 줄이 `raw-source: PLACED …` 면 스크립트가 `S1` 항목을 써 넣었다 — 앵커 라벨은 「최초 요청(원자료 — framing 기록의 원문 절과 질문 전체 절)」 이고 본문은 framing 기록의 두 절이 글자 그대로다. 그 항목에 손대지 않는다. seed 전문은 payload 에 싣지 않는다.
+   - `place` 의 마지막 줄이 `raw-source: UNLOADABLE <n>줄 — 첫 줄 …` 이면 그 글은 결과물 문법이 받지 않아 그대로 싣지 못한다. 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 그대로 싣지 못함 — 모델이 줄인 글. 원자료는 framing 기록의 원문 절과 질문 전체 절):` 로 쓰고 본문에 seed 전문(「풀린 입력」)을 지금 규칙대로 싣는다(P21 치환 · 열 0 펜스). 사용자에게 `원자료를 그대로 싣지 못했다 — 결과물 문법이 받지 않는 줄 <n>개(첫 줄: <판결 줄의 절 이름과 줄 번호>). 첫 칸에는 seed 전문(모델이 줄인 글)을 실었다` 한 줄을 보인다. 원문의 글자를 고쳐 싣지 않는다. 한 절만 싣지도 않는다.
+   - `raw-source: LOST <사유>` — 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 찾지 못함 — 모델이 줄인 글):` 로 쓰고 본문에 seed 전문을 지금 규칙대로 싣는다.
+   - `raw-source: NO-FRAMING` — 위의 「풀린 입력」 규칙 그대로다.
+   **비밀값 확인 — 싣기 전에, 갈래를 가르기 전에.** 판결이 FOUND 면 `place` 를 돌리기 전에 그 기록 파일의 `## 1. 원문` 절과 `## 2. 질문 전체` 절을 읽는다. token · key · credential 로 보이는 값이 있으면 **싣지 않고 멈춘다** — 그대로 싣지 못하는 갈래로 갈 글이어도 이 확인이 먼저다. 값 자체는 보이지 않고 `첫 칸에 실을 글에 비밀값으로 보이는 값이 있다 — <원문 절 | 질문 전체 절> <k>째 줄, <무엇으로 보이는지>` 를 값마다 한 줄을 보인 뒤 `AskUserQuestion` 하나로 묻는다 — 「기록부터 가린다 (권장)」(얻음: framing 기록 파일의 그 값을 가림 표시로 바꾼 뒤 가린 글을 첫 칸에 싣는다 · 내줌: 이미 쓴 기록 파일을 고쳐 쓰고, 커밋돼 있었다면 그 값은 git 이력에 남는다) · 「비밀값이 아니다 — 그대로 싣는다」(얻음: 잘못 본 값을 건드리지 않고 원문 글자 그대로 싣는다 · 내줌: 정말 비밀값이면 결과물과 그 사본에 그대로 커밋된다) · 「멈춘다」(얻음: 아무것도 싣지 않고 끝맺음을 멈춘다 · 내줌: 결과물이 완성되지 않아 값을 처리한 뒤 다시 끝맺어야 한다).
+   「기록부터 가린다」 면 framing 기록 파일의 그 값을 먼저 `<REDACTED>` 나 `<REDACTED:라벨>` 로 바꾸고(SKILL 의 「Secret 기록 금지」 집합), 같은 값이 seed 파일이나 상태 파일의 `## 풀린 입력` 블록에 있으면 같은 표시로 함께 가린 뒤 `가린 자리 <N>곳 — <파일 · 절 · 줄>` 을 보인다. 그 뒤에 `place` 를 돌린다 — 기록이 먼저라 첫 칸과 기록의 글자가 같다. 첫 칸에서만 가리는 길은 없다. 바꾸는 것은 사용자가 고른 그 값뿐이다. 가린 파일은 B-3 의 커밋 펜스가 결과물과 같은 커밋에 넣는다. 그 기록 파일이 이미 커밋돼 있었으면(`git log -1 --format=%h -- <경로>` 가 비지 않는다) `이 값은 git 이력의 옛 커밋에 남아 있다 — 값을 폐기하고 바꾸는 것이 먼저다` 한 줄을 보인다.
    원문 보존은 **관례가 아니라 요구**입니다 — N1b 가 payload §6 앵커가 S1 부터 빠짐없고
    audit §6 앵커를 다 포함하는지 보고, `check_verbatim_coverage.py`(brief 리뷰 진입 게이트)가
    state 발화 전량이 payload §6 에 같은 글자로 있는지 봅니다. 앵커 줄은 열 0 의 `- **S<N>**` 꼴만
@@ -649,6 +659,7 @@ AskUserQuestion({
 그 줄이 없으면 나누지 않은 일이고(B-R 의 「spec 하나로」 갈래가 그 줄을 뺀다), 있으면 그 폴더가 있고 git 이 커밋할 파일이 들어 있을 때만 세 파일과 한 커밋에 든다.
 brief 가 레포 설정의 인터뷰 폴더(`interview_dir`) 바로 아래가 아니거나, 로드맵 폴더가 레포 설정의 로드맵 폴더(`roadmaps_dir`) 바로 아래가 아니거나(대소문자만 다른 경로 포함), 폴더가 아닌 것이거나, §7 의 파일이 `roadmap-check` 를 통과하지 못하면 커밋하지 않는다.
 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치가 없거나 원격과 다르면 커밋하지 않고, 원격과 대조하지 못하면 그 알림을 보이고 커밋한다. 어느 갈래도 진행은 막지 않는다.
+원자료를 찾은 인터뷰에서 framing 기록 파일이나 seed 파일에 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있으면 같은 커밋에 넣고 그 사실을 한 줄로 알린다.
 
 <!-- interview-commit:begin -->
 ```bash
@@ -683,6 +694,19 @@ if [ -n "$r7" ]; then
   fi
 fi
 python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || { echo "[spec-distill] 커밋하지 않았다 — 세 파일(분해된 일이면 로드맵 폴더까지) 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+# 원자료를 찾은 인터뷰의 framing 기록 파일 · seed 파일 — 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있는 것만 같은 커밋에 넣는다.
+RAW_A=""
+RAW_S=""
+rv="$(python3 "$SD/scripts/raw_source.py" locate --interview "$BRIEF" --absolute 2>/dev/null)" || rv=""
+case "$rv" in "raw-source: FOUND "*) RAW_A="${rv#raw-source: FOUND }"; RAW_S="${RAW_A%.audit.md}.md" ;; esac
+[ -z "$RAW_A" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_A" 2>/dev/null)" ] || RAW_A=""
+[ -z "$RAW_S" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_S" 2>/dev/null)" ] || RAW_S=""
+if [ -n "${RAW_A}${RAW_S}" ]; then
+  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
+  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
+  python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
+  echo "[spec-distill] framing 기록 쪽의 커밋되지 않은 변경을 같은 커밋에 넣는다: ${RAW_A:+${RAW_A} }${RAW_S}"
+fi
 # 커밋할 파일은 git 이 정한다(인덱스 + 무시되지 않은 새 파일) — 무시 파일뿐인 폴더는 경로 지정 커밋을 실패시키므로 뺀다.
 if [ -n "$RDIR" ] && [ -z "$(git -C "$top" ls-files --cached --others --exclude-standard -- "$RDIR")" ]; then
   echo "[spec-distill] 로드맵 폴더에 커밋할 파일이 없어 빼고 진행한다: ${RDIR}"
@@ -698,8 +722,8 @@ cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 [ -n "$cur" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: ${FILES}"; exit 0; }
 [ "$cur" != "$def" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: ${FILES}"; exit 0; }
 c_rc=0
-git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
-[ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || c_rc=$?
+git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?
+[ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?
 if [ "$c_rc" -ne 0 ]; then
   echo "[spec-distill] 커밋이 실패했다(rc ${c_rc}) — 파일은 docs 에 있다: ${FILES}"
 elif [ -n "$RDIR" ]; then

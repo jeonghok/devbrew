@@ -95,7 +95,10 @@ gate = t.find("`check_brief.py gate` 재실행(통과 확인)", b3)
 three = t.find("- **③ 확정 목록 수정**", b3); four = t.find("- **④ brief만 종료**", b3)
 nocommit = lambda s: "git commit" not in s and "interview-commit" not in s and "커밋 펜스" not in s
 b1, b2 = t.find("#### B-1"), t.find("#### B-2")
-ok = (0 <= a < a5 < b1 < b2 < b3 < gate < c) and nocommit(t[a:b1]) and nocommit(t[b2:b3]) and nocommit(t[three:four])
+# Step A 의 비밀값 가림 문단은 B-3 의 펜스를 가리키기만 한다(그 자리에서 커밋하지 않는다) — 그 한 문장만 뺀다.
+ptr = "가린 파일은 B-3 의 커밋 펜스가 결과물과 같은 커밋에 넣는다."
+ok = (0 <= a < a5 < b1 < b2 < b3 < gate < c) and t[a:b1].count(ptr) == 1 and nocommit(t[a:b1].replace(ptr, ""))
+ok = ok and nocommit(t[b2:b3]) and nocommit(t[three:four])
 # B-1 의 끝 질문은 커밋 펜스를 한 번 부른다(「확정하고 끝낸다」) — 펜스 자체는 B-3 에만 있다
 ok = ok and t[b1:b2].count("interview-commit") == 1 and "git commit" not in t[b1:b2]
 ok = ok and "interview-commit" in t[four:t.find("#### B-4")]
@@ -175,6 +178,58 @@ c8="$(mk detached)"; git -C "$c8" switch -q --detach
 o="$(runc "$c8")"
 assert_eq "$(git -C "$c8" rev-list --count HEAD)" "1" "AC5: detached HEAD 면 커밋하지 않는다"
 printf '%s\n' "$o" | grep -qF 'detached HEAD' && ok "AC5: detached HEAD 사유를 보인다" || no "AC5: detached 출력: $o"
+# 원자료를 찾은 인터뷰 — framing 기록 파일 · seed 파일에 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있으면 결과물과 같은 커밋에 든다
+RAW_NOTE='framing 기록 쪽의 커밋되지 않은 변경을 같은 커밋에 넣는다'
+IVR="docs/superpowers/interview"
+mkraw() {   # mkraw <이름> <committed|fresh> → 상태 파일 seed: 가 seed 를 가리키는 기능 브랜치 클론(seed 옆에 framing 기록)
+  local c; c="$(mk "$1")"; git -C "$c" switch -q -c feature/raw
+  printf -- '---\ntype: interview-state\nseed: %s/2026-10-15-s-interview.md\n---\n## R1\n' "$IVR" > "$c/$IVR/2026-10-15-t-interview.state.md"
+  printf -- '---\ntype: interview-seed\n---\n줄인 요청 한 줄\n' > "$c/$IVR/2026-10-15-s-interview.md"
+  printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\n원문 한 줄 가릴 값\n' > "$c/$IVR/2026-10-15-s-interview.audit.md"
+  if [ "$2" = committed ]; then
+    git -C "$c" add -- "$IVR/2026-10-15-s-interview.md" "$IVR/2026-10-15-s-interview.audit.md"
+    git -C "$c" commit -q -m framing
+  fi
+  printf '%s' "$c"
+}
+head_files() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' '; }
+THREE="$IVR/2026-10-15-t-interview.audit.md $IVR/2026-10-15-t-interview.md $IVR/2026-10-15-t-interview.state.md "
+# ① 커밋돼 있던 기록 파일만 고쳤다(가림) → 그 변경이 brief 와 같은 커밋에 든다
+r1="$(mkraw raw-dirty committed)"
+printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\n원문 한 줄 <REDACTED>\n' > "$r1/$IVR/2026-10-15-s-interview.audit.md"
+o="$(runc "$r1")"
+assert_eq "$(head_files "$r1")" "$IVR/2026-10-15-s-interview.audit.md $THREE" "B9 ①: 고친 framing 기록 파일이 brief 와 같은 커밋에 든다"
+assert_eq "$(git -C "$r1" status --porcelain -- "$IVR")" "" "B9 ①: 커밋 뒤 인터뷰 폴더에 남은 변경이 없다"
+assert_contains "$o" "${RAW_NOTE}: $r1/$IVR/2026-10-15-s-interview.audit.md" "B9 ①: 같은 커밋에 넣은 기록 파일을 한 줄로 알린다"
+# ② 기록 파일에 변경이 없다 → 커밋의 파일은 전과 같은 셋이고 알림 줄이 없다
+r2="$(mkraw raw-clean committed)"
+o="$(runc "$r2")"
+assert_eq "$(head_files "$r2")" "$THREE" "B9 ②: 변경 없는 framing 기록 · seed 는 커밋에 들지 않는다"
+assert_not_contains "$o" "$RAW_NOTE" "B9 ②: 그때 알림 줄이 없다"
+printf '%s\n' "$o" | grep -qF 'brief · audit · 상태 파일을 커밋했다' && ok "B9 ②: 세 파일 커밋 줄은 그대로다" || no "B9 ②: 커밋 출력: $o"
+# ③ 커밋된 적 없는 기록 파일 · seed → 둘 다 결과물과 같은 커밋에 들고 알림 줄이 두 파일을 적는다
+r3="$(mkraw raw-fresh fresh)"
+o="$(runc "$r3")"
+assert_eq "$(head_files "$r3")" "$IVR/2026-10-15-s-interview.audit.md $IVR/2026-10-15-s-interview.md $THREE" "B9 ③: 커밋된 적 없는 framing 기록 · seed 가 brief 와 같은 커밋에 든다"
+assert_contains "$o" "${RAW_NOTE}: $r3/$IVR/2026-10-15-s-interview.audit.md $r3/$IVR/2026-10-15-s-interview.md" "B9 ③: 알림 줄이 두 파일을 적는다"
+# ④ seed · 기록이 정해진 인터뷰 폴더 밖(커밋된 적 없음) → 어느 것도 커밋하지 않고 사유와 경로를 보인다(git add 경로는 해결자가 판정한다)
+r4="$(mkraw raw-elsewhere fresh)"; mkdir -p "$r4/docs/elsewhere"
+mv -- "$r4/$IVR/2026-10-15-s-interview.md" "$r4/$IVR/2026-10-15-s-interview.audit.md" "$r4/docs/elsewhere/"
+printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-interview.md\n---\n## R1\n' > "$r4/$IVR/2026-10-15-t-interview.state.md"
+o="$(runc "$r4")"
+assert_eq "$(git -C "$r4" rev-list --count HEAD)" "1" "B9 ④: 인터뷰 폴더 밖의 framing 기록 · seed 면 커밋하지 않는다"
+assert_eq "$(git -C "$r4" diff --cached --name-only)" "" "B9 ④: 그때 아무것도 stage 하지 않는다"
+assert_contains "$o" "커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다" "B9 ④: 그 사유를 보인다"
+assert_contains "$o" "$r4/docs/elsewhere/2026-10-15-s-interview.audit.md" "B9 ④: 사유 줄에 기록 파일 경로가 있다"
+# ⑤ 같은 폴더 밖에서 기록은 깨끗하고 seed 만 고쳤다 → seed 쪽 판정이 커밋을 막는다
+r5="$(mkraw raw-elsewhere-seed fresh)"; mkdir -p "$r5/docs/elsewhere"
+mv -- "$r5/$IVR/2026-10-15-s-interview.md" "$r5/$IVR/2026-10-15-s-interview.audit.md" "$r5/docs/elsewhere/"
+git -C "$r5" add -- docs/elsewhere; git -C "$r5" commit -q -m framing-elsewhere
+printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-interview.md\n---\n## R1\n' > "$r5/$IVR/2026-10-15-t-interview.state.md"
+printf -- '---\ntype: interview-seed\n---\n<REDACTED>\n' > "$r5/docs/elsewhere/2026-10-15-s-interview.md"
+o="$(runc "$r5")"
+assert_eq "$(git -C "$r5" rev-list --count HEAD)" "2" "B9 ⑤: 인터뷰 폴더 밖의 seed 만 고쳤어도 커밋하지 않는다"
+assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
 grep -qF '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · ' "$FIN" && grep -qF '「확정하고 끝낸다」 는 PR 을 열지 않는다.' "$FIN" && ok "B-1: superpowers 가 없는 끝 질문의 「확정하고 끝낸다」 가 커밋한다고 말한다" || no "B-1: 끝 질문의 커밋 설명이 없다"
 grep -qF '브랜치에서 직접 커밋하라' "$FIN" && no "B-1: 옛 미커밋 안내가 남았다" || ok "B-1: 옛 미커밋 안내가 없다(양성 짝: 위 단언)"
 # 이어 갈 때의 「풀린 입력」 — 상태 파일 전문이 아니라 그 안의 블록

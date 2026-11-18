@@ -216,7 +216,8 @@ assert_file_grep   "$TPL"    '`/spec-distill:pm-interview @<seed 경로>` 가 �
 assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 옛 핸드오프 서술이 없다"
 assert_file_grep   "$SEEDIN" '`/spec-distill:pm-interview @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
 assert_file_absent "$SEEDIN" '붙여넣게 하고' "§4: seed-input 에 옛 도착 경로가 없다"
-assert_file_grep   "$FIN"    '`@경로` 를 풀었든 사용자가 전문을 붙여넣었든' "§4: finishing S1 문장이 두 도착 경로를 다 적는다"
+# 두 도착 경로(`@경로` · 붙여넣기) 모두 「풀린 입력」이 seed 전문이 된다 — finishing 은 그 조건 하나로 S1 갈래를 연다.
+assert_file_grep   "$FIN"    '「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다' "§4: finishing S1 문장이 seed 전문(두 도착 경로)의 갈래를 적는다"
 assert_file_absent "$README" '다음 세션 첫 턴에 붙여넣는 메시지' "§4: README 흐름도에 옛 서술이 없다"
 
 finish
