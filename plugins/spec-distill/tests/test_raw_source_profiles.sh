@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md
+# guards: plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/raw_source.py shared/docreview/scripts/docreview_state.py
 #
 # brief 프로필과 설계문서 프로필이 첫 칸의 사용자 줄과 모델 줄을 갈라 읽으라고 «이름 짓는가».
 # 재는 것은 문구의 실재다 — 리뷰어가 실제로 그렇게 읽는지는 못 잰다.
@@ -8,7 +8,9 @@
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   git ls-files -- 'plugins/spec-distill/references/docreview-profiles/brief.md' \
-                  'plugins/spec-distill/references/docreview-profiles/design-doc.md'
+                  'plugins/spec-distill/references/docreview-profiles/design-doc.md' \
+                  'plugins/spec-distill/scripts/raw_source.py' \
+                  'shared/docreview/scripts/docreview_state.py'   # 라벨 상수 셋(LABEL_*) · profile-check
   exit 0
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"

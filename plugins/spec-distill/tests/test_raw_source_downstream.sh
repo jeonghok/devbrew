@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/scripts/roadmap_write.py
+# guards: plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/scripts/roadmap_write.py plugins/spec-distill/scripts/team_write.py plugins/spec-distill/scripts/team_files.py plugins/spec-distill/scripts/team_check.py
 #
 # 새 첫 칸(원자료 사본이 든 S1)이 옆 로드맵 생성기와 에픽 묶음까지 따라가는지 잰다(AC16 · AC17 · AC19).
 #   original — 원자료 사본(intent/original.md)의 사용자 원문 구간에 framing 기록의 두 절이 있고 seed 전문은 어디에도 없다.
@@ -8,7 +8,11 @@
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/scripts/raw_source.py"
-  echo "plugins/spec-distill/scripts/roadmap_write.py"; exit 0
+  echo "plugins/spec-distill/scripts/roadmap_write.py"
+  # roadmap_write 의 original 이 실제로 부르는 옆 로드맵 생성기 셋(cmd_original · extend_original · git_bytes)
+  echo "plugins/spec-distill/scripts/team_write.py"
+  echo "plugins/spec-distill/scripts/team_files.py"
+  echo "plugins/spec-distill/scripts/team_check.py"; exit 0
 fi
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
