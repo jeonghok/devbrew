@@ -228,8 +228,15 @@ class Decisions(unittest.TestCase):
             self.assertEqual(out, with_dash, (first, second))
             self.assertEqual(F.decision_lines(out), ["- 결정 · 2026-11-20 · 글"])
 
+    def test_new_kinds_are_accepted(self):
+        for line in ("- 흐름 승인 · 2026-11-18 · 「설계 없이 진행」 · INTENT.md@0123abcd · 근거 00000000-0000-4000-8000-00000000aaaa:00000000-0000-4000-8000-000000000001#1",
+                     "- 걸음 건너뜀 · 2026-11-18 · 「건너뛴다」 · 계획 검토 plan 2 · INTENT.md@0123abcd · 근거 00000000-0000-4000-8000-00000000aaaa:00000000-0000-4000-8000-000000000001#1"):
+            self.assertIsNone(F.decision_problem(line), line)
+        self.assertEqual(F.DECISION_KINDS[:7], ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정"))
+        self.assertIsNotNone(F.decision_problem("- 흐름승인 · 2026-11-18 · 「설계 없이 진행」"))
+
     def test_kinds_and_shapes(self):
-        self.assertEqual(F.DECISION_KINDS, ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정"))
+        self.assertEqual(F.DECISION_KINDS, ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정", "흐름 승인", "걸음 건너뜀"))
         ok = ["- 넘김 확인 · R1 · 0a1b2c3d · 계획에 넣었다", "- 예약 밖 변경 · 2026-11-20 · README 한 줄",
               "- 결과 받음 · 2026-11-20 · 「implement-plan-1-2.md · %s · 결과 대조: 통과 — …」" % H]
         for line in ok:
