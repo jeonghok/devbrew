@@ -1344,7 +1344,7 @@ git commit -m "feat(spec-distill): 단계 계산이 근거 있는 승인 줄만 
 
 **Interfaces:**
 - Consumes: `human_lines.missing` · `Scope` · `GATE_OFF`(과제 6) · `Reader.scope` · `Reader.gate_on`(과제 8) · 과제 7 의 도우미.
-- Produces: `start_bundle.py --job … --stage …` 는 묶음을 만들기 전에 `human_lines.missing(scope, stage, a.plan, plain, deep=True)` 를 부르고, 사유가 있으면 `Refused(첫 사유)` 다 — 종료 코드 1 · 표준 출력 빔 · 표준 오류 `[spec-distill] 멈춤 — <사유>` 한 줄(J18). `scope` 의 `tip` 은 그 묶음이 읽는 과제 브랜치 커밋이고, 줄은 블록의 브랜치 전부(로드맵 밖 과제는 그 과제의 브랜치)와 기본 브랜치에서 모은다. `human_gate` 가 꺼져 있으면 알림 목록 맨 앞에 `human_lines.GATE_OFF` 를 넣는다.
+- Produces: `start_bundle.locate(git, base, blocks, job, plan) -> tuple` 이 다섯째 값으로 그 과제의 브랜치 이름들(블록은 `브랜치:` 칸 전부 · 로드맵 밖 과제는 그 과제의 브랜치 하나)을 돌려준다. `start_bundle.py --job … --stage …` 는 묶음을 만들기 전에 `human_lines.missing(scope, stage, a.plan, plain, deep=True)` 를 부르고, 사유가 있으면 `Refused(첫 사유)` 다 — 종료 코드 1 · 표준 출력 빔 · 표준 오류 `[spec-distill] 멈춤 — <사유>` 한 줄(J18). `scope` 의 `tip` 은 그 묶음이 읽는 과제 브랜치 커밋이고, 줄은 블록의 브랜치 전부(로드맵 밖 과제는 그 과제의 브랜치)와 기본 브랜치에서 모은다. `human_gate` 가 꺼져 있으면 알림 목록 맨 앞에 `human_lines.GATE_OFF` 를 넣는다.
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
@@ -1353,10 +1353,10 @@ git commit -m "feat(spec-distill): 단계 계산이 근거 있는 승인 줄만 
 | # | 준비 | 명령 | 기대 |
 |---|---|---|---|
 | 1 | 승인 줄 없음 | `bundle --job E1 --stage design` | `0`(design 은 관문이 없다) |
-| 2 | 〃 | `bundle --job E1 --stage plan --plan 1` | `1` · 표준 출력 빔 · 표준 오류가 한 줄이고 `멈춤 — \`spec 승인\` 줄이 없다` 와 `record --human` 이 있다 |
+| 2 | 〃 | `bundle --job E1 --stage plan --plan 1` | `1` · 표준 출력 빔 · 표준 오류가 한 줄이고 `멈춤 — ` · `` `spec 승인` 줄이 없다 `` · `record --human` 이 있다 |
 | 3 | 손으로 `decide E1 "spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"` 를 커밋해 올린다 | 위와 같다 | `1` · 표준 오류에 `근거 없음` |
-| 4 | `approved "spec 승인" E1 - - 2026-11-20` 뒤 올린다 | 위와 같다 | `0` · 묶음 첫 줄이 `기준 커밋: ` 으로 시작(양성 대조) |
-| 5 | 4 의 줄을 커밋만 하고 올리지 않은 채, 작업 폴더의 INTENT.md 에 손으로 줄을 더 적는다(커밋 안 함) | 위와 같다 | 4 와 같은 결과 — 관문은 커밋된 끝만 읽는다. 그 뒤 되돌린다 |
+| 4 | `human "spec 승인" E1 - - 2026-11-20` 으로 줄을 작업 폴더에만 적는다(커밋하지 않는다) | 위와 같다 | `1` — 관문은 커밋된 끝만 읽는다 |
+| 5 | 4 의 줄을 커밋해 올린다 | 위와 같다 | `0` · 묶음 첫 줄이 `기준 커밋: ` 으로 시작(양성 대조) |
 | 6 | `plan-1.md` 를 커밋해 올린다 | `bundle --job E1 --stage implement --plan 1` | `1` · 표준 오류에 `` `계획 검토` 줄 `` 과 `계획 1` |
 | 7 | `approved "계획 검토" E1 1 - 2026-11-21` 뒤 올린다 | 위와 같다 · `--stage review --plan 1` | 둘 다 `0` |
 | 8 | 세션 기록 폴더를 치운다(`mv`) | `bundle --job E1 --stage implement --plan 1` | `1` · 표준 오류에 `확인 못 함` 과 `다시 승인받는다`. 그 뒤 되돌린다 |
@@ -1375,11 +1375,11 @@ git commit -m "feat(spec-distill): 단계 계산이 근거 있는 승인 줄만 
 - [ ] **Step 2: 돌려서 실패를 본다**
 
 Run: `chmod +x plugins/spec-distill/tests/test_human_gate.sh && bash plugins/spec-distill/tests/test_human_gate.sh | grep -E '✗' | head -5`
-Expected: 2 · 3 · 6 · 8 · 9 · 13 · 15 · 18 의 줄이 ✗(지금은 묶음이 나간다)
+Expected: 2 · 3 · 4 · 6 · 8 · 9 · 13 · 15 · 18 의 줄이 ✗(지금은 묶음이 나간다)
 
 - [ ] **Step 3: 구현한다**
 
-`_job_bundle` 에서 INTENT.md 를 읽은 바로 뒤, 묶음 글을 짓기 전에 관문을 본다. 블록의 브랜치 목록은 `block.get("branches")`, 로드맵 밖 과제는 `locate` 가 찾은 그 과제의 브랜치다(`locate` 가 브랜치 이름도 돌려주게 한다).
+`_job_bundle` 에서 INTENT.md 를 읽은 바로 뒤, 묶음 글을 짓기 전에 관문을 본다. 줄을 모을 브랜치는 `locate` 의 다섯째 값이다.
 
 - [ ] **Step 4: 기존 테스트를 관문 아래로 옮긴다**
 
@@ -1575,7 +1575,7 @@ git commit -m "feat(spec-distill): 승인 없는 구현 결과를 받지 않고 
 | o1 | `conductor_ledger.py record --spec <옛 설계문서> --approval --date 2026-11-20 --choice "승인 — 계획 담당자에게"` | 0 · `## 지휘 기록` 의 마지막 줄이 정확히 `- spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」`(판 · 근거 칸이 없다) |
 | o2 | `… --line "계획 검토 · 2026-11-20 · 「글」"` | 0 · 그 줄이 적혔다 |
 | o3 | `conductor_ledger.py record --human "spec 승인" --roadmap <옛 로드맵> --job A1` · `ask-head …` · `human-check …` | 셋 다 2 · 출력에 `team 형식` |
-| o4 | `roadmap_status.py <옛 로드맵>` | o1 의 줄로 그 에픽이 「계획」 이다(근거 칸 없는 줄이 옛 형식에서는 그대로 센다) |
+| o4 | `roadmap_status.py <옛 로드맵> --json`(그 에픽 브랜치에 설계문서가 있고 계획은 없다) | 그 블록의 근거가 `spec 승인됨(2026-11-20) · 계획 없음` 이다 — 근거 칸 없는 줄이 옛 형식에서는 지금처럼 승인으로 세어진다 |
 | o5 | 설정에 `human_gate: 끔` · `켬` 을 번갈아 올리고 o1 · o4 | 결과가 같다(옛 형식은 이 키를 보지 않는다) |
 
 그리고 `git diff origin/main --stat -- plugins/spec-distill/tests/test_roadmap_status.sh plugins/spec-distill/tests/test_roadmap_model.py` 를 과제 보고에 붙인다 — 옛 형식 테스트에서 바뀐 것은 과제 3 이 더한 테스트 하나뿐이어야 한다.
