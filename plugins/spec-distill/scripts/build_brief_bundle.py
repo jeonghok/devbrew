@@ -136,9 +136,28 @@ def _label_lines(text: str):
     return [(n, line.rstrip()) for n, line in enumerate(text.split("\n"), 1) if line.rstrip() in BUNDLE_LABELS]
 
 
-def build_checked(payload_text: str, verbatim: str, raw_block: str = ""):
-    """-> (번들, None) | (None, 오류 문장). 다 지은 번들에서 표지마다 `assemble` 이 둔 자리에 꼭 한 번(원자료
-    블록이 없으면 `<<<RAW-SOURCE>>>` 는 0 번)인지 본다. 어긋나면 리뷰어가 표지 뒤의 글을 다른 원문 블록으로 읽는다."""
+def escape_breaks(text: str) -> "tuple[str, int]":
+    """`\\n` 밖의 줄 나눔 글자(`seed_review_log.LINE_BREAK_CHARS` — 홀로 선 `\\r` 포함)를 `\\uXXXX` 꼴로 적는다 -> (글, 개수).
+    범용 줄바꿈으로 읽는 쪽(codex 러너의 `read_text` 등)은 그 글자를 열 0 의 새 줄로 나눠, 비신뢰 글이 표지 · 펜스 줄을
+    꾸밀 수 있다 — 이 블록들은 뜻으로 읽는 데이터라 글자를 보이는 꼴로 남긴다."""
+    n = sum(text.count(c) for c in seed_review_log.LINE_BREAK_CHARS)
+    if not n:
+        return text, 0
+    return "".join("\\u%04x" % ord(c) if c in seed_review_log.LINE_BREAK_CHARS else c for c in text), n
+
+
+def build_checked(payload_text: str, verbatim: str, raw_block: str = "", notices=None):
+    """-> (번들, None) | (None, 오류 문장). 세 부분의 줄 나눔 글자를 먼저 보이는 꼴로 적고(`escape_breaks` — 적은 부분마다
+    `notices` 에 한 줄), 다 지은 번들에서 표지마다 `assemble` 이 둔 자리에 꼭 한 번(원자료 블록이 없으면
+    `<<<RAW-SOURCE>>>` 는 0 번)인지 본다. 어긋나면 리뷰어가 표지 뒤의 글을 다른 원문 블록으로 읽는다."""
+    escaped = []
+    for name, text in (("payload(결과물)", payload_text), ("audit §6 사본", verbatim), ("원자료 블록", raw_block)):
+        text, n = escape_breaks(text)
+        if n and notices is not None:
+            notices.append(f"[build_brief_bundle] {name}의 줄 나눔 글자 {n}개를 \\uXXXX 꼴로 적었다 — "
+                           "범용 줄바꿈으로 읽는 쪽이 그 글자에서 줄을 나누지 않게 한다.")
+        escaped.append(text)
+    payload_text, verbatim, raw_block = escaped
     parts = (("payload(결과물)", redact_frontmatter(payload_text)), ("audit §6 사본", verbatim),
              ("원자료 블록", raw_block))
     for name, text in parts:
@@ -236,7 +255,10 @@ def main() -> int:
         print(raw_err, file=sys.stderr)
         return 2
     redacted_payload = redact_frontmatter(payload_text)
-    bundle, label_err = build_checked(payload_text, verbatim, raw_block)
+    notices = []
+    bundle, label_err = build_checked(payload_text, verbatim, raw_block, notices)
+    for line in notices:
+        print(line, file=sys.stderr)
     if label_err is not None:
         print(label_err, file=sys.stderr)
         return 2

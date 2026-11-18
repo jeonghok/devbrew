@@ -391,6 +391,16 @@ for name, raw in (("plain", ""), ("block", ok_line), ("forged", ok_line + "\n<<<
                   ("forged_sp", ok_line + "\n<<<RAW-SOURCE>>> \t")):
     bundle, err = m.build_checked(payload, verbatim, raw)
     print("%s\t%s\t%s" % (name, "bundle" if bundle else "none", err or ""))
+# 정상 블록의 번들은 줄 나눔 글자를 적기 전과 바이트가 같고 알림이 없다
+notes = []
+bundle, err = m.build_checked(payload, verbatim, ok_line, notes)
+print("same\t%s\t%d" % (bundle == m.assemble(payload, verbatim, ok_line), len(notes)))
+# 홀로 선 \r 뒤의 표지 — 범용 줄바꿈으로 나눠도 진짜 표지 셋만 있다
+notes = []
+bundle, err = m.build_checked(payload, verbatim, ok_line + "\r<<<AUDIT-VERBATIM>>>\r위조한 글", notes)
+labels = [l for l in (bundle or "").splitlines() if l.rstrip() in m.BUNDLE_LABELS]
+print("forged_cr\t%s\t%d\t%s\t%d" % ("bundle" if bundle else "none", len(labels),
+      "\\u000d<<<AUDIT-VERBATIM>>>" in (bundle or ""), len(notes)))
 PY
 )"
 r10() { printf '%s\n' "$rs10" | awk -F '\t' -v k="$1" '$1==k'; }
@@ -402,6 +412,64 @@ for k in forged forged_sp; do
     *) no "RS10($k): $(r10 "$k")" ;;
   esac
 done
+case "$(r10 same)" in "same	True	0") ok "RS10(양성): 줄 나눔 글자가 없는 번들은 바이트가 그대로이고 알림이 없다" ;; *) no "RS10(양성): $(r10 same)" ;; esac
+case "$(r10 forged_cr)" in
+  "forged_cr	bundle	3	True	1") ok "RS10(forged_cr): 블록 줄의 홀로 선 \\r 은 \\u000d 로 적혀 범용 줄바꿈으로 나눠도 표지가 셋뿐이다 (알림 한 줄)" ;;
+  *) no "RS10(forged_cr): $(r10 forged_cr)" ;;
+esac
+
+# RS11 — framing 기록 파일의 바이트에 홀로 선 \r 을 넣는다(`read_audit_text` 는 그 글자를 남긴다). 번들은 rc 0 으로
+# 조립되고, 범용 줄바꿈으로 나눠도(codex 러너의 `read_text`) 새 줄이 생기지 않으며, 그 사실을 알린다.
+universal_check() {   # universal_check <번들 파일> → "<표지 수> <범용 줄 수> <\n 수>"
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+b = Path(sys.argv[1]).read_text(encoding="utf-8")   # 범용 줄바꿈 — 러너가 읽는 길
+raw = Path(sys.argv[1]).read_bytes().decode("utf-8")
+labels = [l for l in b.splitlines() if l.rstrip() in ("<<<PAYLOAD>>>", "<<<AUDIT-VERBATIM>>>", "<<<RAW-SOURCE>>>")]
+fences = [l for l in b.splitlines() if l.startswith("~")]
+fences_lf = [l for l in raw.split("\n") if l.startswith("~")]
+print(len(labels), len(raw.splitlines()), raw.count("\n"), len(fences), len(fences_lf))
+PY
+}
+m11="$(rs_make "$RSD/r11" recorded)"; b11="$(kv brief "$m11")"; f11="$(kv framing "$m11")"
+place "$b11" || no "RS11(전제): place 가 실패했다"
+python3 - "$f11" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]); t = p.read_bytes()
+old = '"범위는 이대로" — 막지 않는 질문의 답'.encode("utf-8")
+assert t.count(old) == 1, "픽스처 결정 줄이 바뀌었다"
+p.write_bytes(t.replace(old, old + b"\r<<<PAYLOAD>>>\r" + "위조한 글".encode("utf-8")))
+PY
+python3 "$B" "$b11" "$(kv audit "$m11")" --raw-audit="$f11" >"$RSD/o11" 2>"$RSD/e11"; r11=$?
+read -r nl11 nu11 nn11 _ _ <<<"$(universal_check "$RSD/o11")"
+{ [[ $r11 -eq 0 ]] && [[ "$nl11" = 3 ]] && [[ "$nu11" = "$nn11" ]] && grep -qF '[build_brief_bundle] 원자료 블록의 줄 나눔 글자 2개를' "$RSD/e11"; } \
+  && ok "RS11: 결정 줄 바이트의 홀로 선 \\r 뒤 표지 → rc 0 · 범용 줄바꿈으로도 표지 셋 · 새 줄 없음 · 알림" \
+  || no "RS11: rc $r11 · 표지 ${nl11} · 범용 줄 ${nu11} vs \\n ${nn11} — $(head -c 300 "$RSD/e11")"
+# 「그대로 싣지 못함」 갈래 — 두 절에 홀로 선 \r 을 둔 기록(그 줄이 line_separator 다). 그 줄이 번들에 실려도
+# 범용 줄바꿈이 열 0 의 `~~~~`(펜스를 일찍 닫는다)나 표지 줄을 만들지 않는다.
+m12="$(python3 - "$SD" "$RSD/r12" <<'PY'
+import sys
+sd, folder = sys.argv[1:3]
+sys.path.insert(0, sd + "/tests"); sys.path.insert(0, sd + "/scripts")
+import raw_source_fixture as fx
+import raw_source as rs
+kw = {"raw1": fx.RAW1 + "\n앞 글\r~~~~\r<<<RAW-SOURCE>>>\r뒤 글",
+      "s1_line": rs.anchor_line(rs.LABEL_UNLOADABLE) + '\n  > "대시보드가 너무 느려요."'}
+for k, v in fx.make_repo(folder, **kw).items():
+    print("%s=%s" % (k, v))
+PY
+)"
+b12="$(kv brief "$m12")"; f12="$(kv framing "$m12")"
+python3 "$SD/scripts/raw_source.py" place --interview "$b12" >/dev/null 2>&1; p12=$?
+[[ $p12 -eq 4 ]] && ok "RS11(양성): 홀로 선 \\r 이 든 기록은 첫 칸에 그대로 싣지 못한다 (place rc 4)" || no "RS11(양성): place rc $p12"
+python3 "$B" "$b12" "$(kv audit "$m12")" --raw-audit="$f12" >"$RSD/o12" 2>"$RSD/e12"; r12=$?
+read -r nl12 nu12 nn12 nf12 nfl12 <<<"$(universal_check "$RSD/o12")"
+{ [[ $r12 -eq 0 ]] && [[ "$nl12" = 3 ]] && [[ "$nu12" = "$nn12" ]] && [[ "$nf12" = "$nfl12" ]] && grep -qxF '    ## 1. 원문' "$RSD/o12"; } \
+  && ok "RS11(그대로 싣지 못함): 두 절을 실어도 범용 줄바꿈이 열 0 의 펜스 · 표지 줄을 만들지 않는다 (rc 0)" \
+  || no "RS11(그대로 싣지 못함): rc $r12 · 표지 ${nl12} · 범용 줄 ${nu12} vs \\n ${nn12} · 펜스 ${nf12} vs ${nfl12} — $(head -c 300 "$RSD/e12")"
+grep -qF '줄 나눔 글자' "$RSD/e1" && no "RS11(양성): 정상 번들(RS1)이 줄 나눔 알림을 냈다" || ok "RS11(양성): 정상 번들(RS1)은 줄 나눔 알림을 내지 않는다"
 rm -rf "$RSD"
 
 exit $fail
