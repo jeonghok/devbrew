@@ -126,7 +126,7 @@ class ResultNames(unittest.TestCase):   # 계획 2 — 단계와 결과 파일 �
 
 class RolesAndRefs(unittest.TestCase):   # 계획 3 — 기본 역할(§9) · 리더가 쓰는 파일을 읽을 ref(§15 · AC31)
     def test_default_roles(self):
-        self.assertEqual([L.default_role(s) for s in L.STAGES], ["designer", "designer", "worker", None])
+        self.assertEqual([L.default_role(s) for s in L.STAGES], ["leader", "worker", "worker", None])
         self.assertRaises(ValueError, L.default_role, "deploy")
         self.assertEqual(L.LEADER_ROLE, "leader")
 

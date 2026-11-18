@@ -357,8 +357,8 @@ def _check_args(a) -> None:
     problem = team_layout.job_name_problem(a.job)
     if problem:
         raise Usage(problem)
-    if a.role == leader:
-        raise Usage("과제 묶음에는 --role %s 를 주지 않는다" % leader)
+    if a.role == leader and a.stage != DESIGN:
+        raise Usage("과제 묶음의 --role %s 는 %s 단계에서만 준다" % (leader, DESIGN))
     if a.stage == DESIGN and a.plan is not None:
         raise Usage("%s 단계에는 --plan 을 주지 않는다" % DESIGN)
     if a.stage == REVIEW and a.role is not None:
