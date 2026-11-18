@@ -11,6 +11,8 @@ WT="$PLUGIN_DIR/scripts/audit-sandbox.sh"
 mk_sandbox() {
   # Build a repo, seal a sandbox via create-sandbox, echo "<sandbox>\n<base>\n<digest>".
   local r; r=$(mktemp -d)
+  # 빈 값이면 `cd ""` 는 아무것도 하지 않아 아래 git 명령이 부른 곳의 cwd 에서 돈다 — 첫 git 전에 멈춘다.
+  [ -n "$r" ] && [ -d "$r" ] || return 1
   (cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t)
   printf 'orig\n' > "$r/tracked.txt"
   printf 'node_modules/\n.env\n' > "$r/.gitignore"
@@ -169,7 +171,7 @@ G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 cleanup_sandbox "$SANDBOX"
 
 echo "[R2-AC3(a): force-tracked ignored file, no mutation -> forced_downgrade: no (I-NEW-2)]"
-R=$(mktemp -d)
+R=$(mktemp -d); [ -n "$R" ] && [ -d "$R" ] || exit 2
 (cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t)
 printf 'orig\n' > "$R/tracked.txt"
 printf '*.log\n.env\n' > "$R/.gitignore"
@@ -286,7 +288,7 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
 rm -f "$EXC"; cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(iii-tilde): ~/-relative core.excludesFile smuggle -> ignore_channel_tampered]"
-THOME=$(mktemp -d); R=$(mktemp -d)
+THOME=$(mktemp -d); R=$(mktemp -d); [ -n "$THOME" ] && [ -d "$THOME" ] && [ -n "$R" ] && [ -d "$R" ] || exit 2
 (cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t)
 printf 'orig\n' > "$R/tracked.txt"
 printf 'node_modules/\n.env\n' > "$R/.gitignore"

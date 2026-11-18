@@ -11,6 +11,8 @@ WT="$PLUGIN_DIR/scripts/audit-sandbox.sh"
 # --- Build a realistic repo with committed + uncommitted + ignored state ---
 mk_repo() {
   local r; r=$(mktemp -d)
+  # 빈 값이면 `cd ""` 는 아무것도 하지 않아 아래 git 명령이 부른 곳의 cwd 에서 돈다 — 첫 git 전에 멈춘다.
+  [ -n "$r" ] && [ -d "$r" ] || return 1
   (cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t)
   # committed tracked files
   printf 'orig\n' > "$r/tracked.txt"
@@ -29,8 +31,18 @@ mk_repo() {
   echo "$r"
 }
 
+# 호출은 $(...) 안이 아니라 부모 셸에서 한다 — 부분 셸의 exit 는 스크립트를 멈추지 못한다. 결과는 REPO · OUTSIDE.
+mk_repo_checked() {
+  REPO=$(mk_repo)
+  [ -n "$REPO" ] && [ -d "$REPO/.git" ] || { echo "mk_repo 실패: '$REPO'" >&2; exit 2; }
+}
+mk_outside_checked() {
+  OUTSIDE=$(mktemp -d)
+  [ -n "$OUTSIDE" ] && [ -d "$OUTSIDE" ] || { echo "mktemp 실패: '$OUTSIDE'" >&2; exit 2; }
+}
+
 echo "[create-sandbox: reflection + exclusion]"
-REPO=$(mk_repo)
+mk_repo_checked
 SID="sandbox01234567"
 OUT=$(cd "$REPO" && "$WT" create-sandbox "$SID" 2>/dev/null)
 SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
@@ -59,7 +71,7 @@ clean=$(cd "$SANDBOX" && git status --porcelain 2>/dev/null)
 rm -rf "$REPO"
 
 echo "[create-sandbox: byte-faithful binary / mode / symlink]"
-REPO=$(mk_repo)
+mk_repo_checked
 # binary change
 printf '\x00\x01\x02BIN\xff' > "$REPO/blob.bin"
 # mode change on a tracked file (chmod +x)
@@ -78,7 +90,7 @@ if cmp -s "$REPO/blob.bin" "$SANDBOX/blob.bin"; then ok "binary byte-identical";
 rm -rf "$REPO"
 
 echo "[create-sandbox: deletion honored]"
-REPO=$(mk_repo)
+mk_repo_checked
 rm "$REPO/src/mod.js"   # delete a tracked file in the working tree
 OUT=$(cd "$REPO" && "$WT" create-sandbox "deletion01234567" 2>/dev/null)
 SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
@@ -87,7 +99,7 @@ SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
 rm -rf "$REPO"
 
 echo "[create-sandbox: staged-but-uncommitted reflected in baseline]"
-REPO=$(mk_repo)
+mk_repo_checked
 printf 'STAGED CONTENT\n' > "$REPO/staged.txt"
 ( cd "$REPO" && git add staged.txt )   # staged in index, NOT committed
 OUT=$(cd "$REPO" && "$WT" create-sandbox "staged0123456789" 2>/dev/null)
@@ -106,7 +118,7 @@ ERRF=$(mktemp)
 # kill_case <label> <env assignments...> — exit 3, 아무것도 만들지 않음, stderr 정확히 한 줄.
 kill_case() {
   local label="$1"; shift
-  local r; r=$(mk_repo)
+  mk_repo_checked; local r="$REPO"
   ( cd "$r" && env -u "$NEW_SW" -u "$OLD_SW" "$@" "$WT" create-sandbox "kill01234567" >/dev/null 2>"$ERRF" )
   local rc=$?
   [ "$rc" -eq 3 ] && ok "$label → exit 3" || no "$label exit was $rc (want 3)"
@@ -133,7 +145,7 @@ echo "[create-sandbox: kill switch — 값 전체 일치만 (양의 짝)]"
 # 스위치가 없거나 값이 정확히 1 이 아니면 샌드박스가 선다 — 위 exit 3 이 「무엇이든 막는다」가
 # 아니라는 증거.
 for assign in "" "$OLD_SW=0" "$OLD_SW=true" "$OLD_SW=11" "$NEW_SW=0"; do
-  REPO=$(mk_repo)
+  mk_repo_checked
   if [ -n "$assign" ]; then
     OUT=$(cd "$REPO" && env -u "$NEW_SW" -u "$OLD_SW" "$assign" "$WT" create-sandbox "pos0123456789" 2>/dev/null); rc=$?
   else
@@ -151,16 +163,6 @@ rm -f "$ERRF"
 # 사본 자리 — <top>/.claude/worktrees/audit-rt-<sid8> (사용자 · 지휘자 worktree 와 같은 폴더를 쓴다)
 # ---------------------------------------------------------------------------
 phys() { (cd "$1" && pwd -P); }
-# 임시 저장소가 정말 만들어졌는지 — 빈 값이면 `cd ""` 가 지금 디렉터리를 가리키므로 부모 셸에서 검사한다.
-# 호출은 $(...) 안이 아니라 부모 셸에서 한다 — 부분 셸의 exit 는 스크립트를 멈추지 못한다. 결과는 REPO · OUTSIDE.
-mk_repo_checked() {
-  REPO=$(mk_repo)
-  [ -n "$REPO" ] && [ -d "$REPO/.git" ] || { echo "mk_repo 실패: '$REPO'" >&2; exit 2; }
-}
-mk_outside_checked() {
-  OUTSIDE=$(mktemp -d)
-  [ -n "$OUTSIDE" ] && [ -d "$OUTSIDE" ] || { echo "mktemp 실패: '$OUTSIDE'" >&2; exit 2; }
-}
 
 echo "[사본 자리: 본 체크아웃과 linked worktree 둘 다 <top>/.claude/worktrees/audit-rt-<sid8>]"
 mk_repo_checked
@@ -294,7 +296,7 @@ SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
 rm -rf "$REPO"
 
 echo "[remove: namespace guard]"
-REPO=$(mk_repo)
+mk_repo_checked
 OUT=$(cd "$REPO" && "$WT" create-sandbox "remove012345678" 2>/dev/null)
 SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
 mkdir -p "$REPO/outside-ns" && : > "$REPO/outside-ns/keep"
