@@ -1005,6 +1005,7 @@ git commit -m "feat(spec-distill): 사람 줄의 꼴 · 본문 · 판과 꼴 판
 | 건너뜀 줄인데 `names_gate(질문 글, 관문 이름)` 이 거짓이다 | `어긋남` — `그 질문에 관문 이름 <이름> 이 없다` |
 | `scope.lines` 에 글자가 다른 줄이면서 `parse` 되고 `key` 가 같은 줄이 있다(세션이 달라도 같은 답이다 — J3) | `어긋남` — `같은 답을 근거로 쓴 줄이 또 있다` |
 | 그 밖 | `지남` |
+
 관문 하나(`passed`):
 
 - `scope.gate_on` 이 참이면 — 후보는 `is_human(raw) == kind` 인 줄이다(`KIND_PLAN` 은 `parse` 되면 `plan` 이 같은 줄만, `parse` 되지 않는 줄은 후보로 남는다). 후보 가운데 판정이 `지남` 인 줄이 있으면 `(Passed(그 날짜, False), None)`. 없으면 `KIND_SPEC` · `KIND_PLAN` 은 `parse` 된 `걸음 건너뜀` 줄 가운데 `gate == gate_name(kind, plan)` 이고 판정이 `지남` 인 줄을 찾아 있으면 `(Passed(그 날짜, True), None)`. 그래도 없으면 `(None, 사유)` — 후보가 없으면 `NO_LINE`, 있으면 마지막 후보의 `"%s — %s" % (판정, 사유)`.
@@ -1638,6 +1639,7 @@ git commit -m "feat(spec-distill): 시작 묶음이 사람 줄을 대조하고 �
 | 32 | 설계 없는 흐름의 블록 E2 — `approved "흐름 승인"` 뒤 `implement-1.md` 를 끝까지 써 올리고 `feature/tm-e2` 를 기본 브랜치에 머지해 올린다 | `bundle --job E2 --stage implement` | `1` · `이미 기본 브랜치에 머지됐다`(AC14 — 설계 없는 흐름) |
 | 33 | 그 브랜치를 로컬과 origin 에서 지운다 | 위와 같다 | `1` · 표준 오류에 `implement-1.md` 와 `머지됐다`(설계 없는 흐름의 자취는 기본 브랜치의 `implement` 결과 파일이다) |
 | 34 | 브랜치를 만든 적 없는 설계 없는 흐름의 블록(새 레포 사본의 E2) | 위와 같다 | 표준 오류에 `머지됐다` 가 없다(양성 대조) |
+
 `tests/test_start_bundle.sh` — 「맞추는 명령」 을 재는 줄들의 기대를 새 꼴로 고치고(`맞추는 명령: python3 ${S}/roadmap_write.py job sync --result …` — `$S` 는 그 테스트가 쓰는 스크립트 폴더의 절대 경로다), 「끝에서 끝」 절의 「맞추는 명령을 그대로 돌리면」 걸음을 인자를 다시 가르지 않고 줄을 그대로 돌리게 고친다:
 
 ```bash
@@ -1709,6 +1711,7 @@ git commit -m "feat(spec-distill): 머지된 계획과 이어진 구현 실패�
 | 57 | 자취도 사람 줄도 없는 과제(브랜치만 있다) | `led human-check --roadmap "$RM" --job <그 과제>` | `0` · 출력이 정확히 `사람 줄 없음` |
 | 58 | `human_gate: 끔` 을 올린다 | 53 의 명령 | 첫 줄이 `사람 줄 대조가 꺼져 있다` |
 | 59 | 없는 과제 · 옛 형식 로드맵 | `led human-check …` | `2` |
+
 - [ ] **Step 2: 돌려서 실패를 본다**
 
 Run: `bash plugins/spec-distill/tests/test_human_gate.sh | grep -E '✗' | tail -8`
