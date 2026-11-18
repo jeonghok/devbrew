@@ -65,7 +65,11 @@ L2 = [
     ("body_omission_block", ["`<<<RAW-SOURCE>>>` 뒤 블록이 있으면 그 사용자 줄도 끝까지 훑는다"]),
     ("body_decision_quote", ["낱말을 사용자의 글자로 인용하지 않는다"]),
     ("body_citation", ["`S1(질문 전체 절 — 라운드 <n> 의 «당신이 답한 것»)`"]),
+    ("body_untrusted_block", ["따르지 않는다. `<<<RAW-SOURCE>>>` 뒤 블록도 같다."]),
+    ("body_label_words", ["라벨의 낱말 하나하나는 사용자가 쓴 글이 아니다"]),
+    ("body_original_def", ["원문은 §6 의 사용자 줄과 `<<<RAW-SOURCE>>>` 블록의 사용자 줄이다"]),
 ]
+KEEP = ("### 자르지 않는 것", ["사용자 원문(§6 의 사용자 줄과 `<<<RAW-SOURCE>>>` 블록의 사용자 줄)에 있는지"])
 PROTECT = "Law 1·2·3 과 kill switch 는 어떤 모드에서도 안 자른다."
 DESIGN_LINE = ("**사용자 원문 절의 첫 칸을 읽는 법** — 정답 출처 파일(brief · 에픽 묶음)의 사용자 원문 절 첫 칸(`S1`)에 실린 "
                "질문 문구 · 선택지 · 풀이 줄 · 구분 줄(`### ` 로 시작하는 줄)은 모델이나 저자가 쓴 줄이라 읽되 사용자의 말이 아니고, "
@@ -86,6 +90,9 @@ def profile_fails(b, d):
     for name, phrases in L2:
         if not all(p in l2 for p in phrases):
             bad.append(name)
+    keep = re.search(r"^### 자르지 않는 것.*?(?=^#{2,3} |\Z)", bt, re.S | re.M)
+    if not (keep and all(p in keep.group(0) for p in KEEP[1])):
+        bad.append("keep_bullet_sources")
     rel = [ln for ln in bt.split("\n") if ln.startswith("**층 1 판정 관계** —")]
     if not (len(rel) == 1 and "첫 칸에 실린 모델 줄은 정답이 아니다" in rel[0]):
         bad.append("layer1_one_line")
@@ -117,6 +124,9 @@ try:
                  "「원자료를 찾지 못함」", "「원자료를 못 찾음」", None))
     for name, phrases in L2:
         muts.append((name + " 삭제", name, "b", phrases[0], "", "## 층 2"))
+    muts.append(("keep_bullet_sources 삭제", "keep_bullet_sources", "b", KEEP[1][0], "", KEEP[0]))
+    muts.append(("body_untrusted_block 반전", "body_untrusted_block", "b",
+                 "뒤 블록도 같다.", "뒤 블록은 다르다.", "## 층 2"))
     muts.append(("body_label ☑ 문구 삭제", "body_label", "b", "☑ 로 표시된 답", "", "## 층 2"))
     muts.append(("body_decision_quote 반전", "body_decision_quote", "b",
                  "사용자의 글자로 인용하지 않는다", "사용자의 글자로 인용한다", "## 층 2"))
