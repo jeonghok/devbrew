@@ -25,10 +25,10 @@ mk_sandbox() {
 cleanup_sandbox() {
   local sb="$1"
   case "$sb" in
-    */.claude/plugin-audit/worktrees/?*) ;;
+    */.claude/worktrees/audit-rt-?*) ;;
     *) echo "  ⚠ cleanup_sandbox: refusing unexpected path '$sb'" >&2; return 0 ;;
   esac
-  local repo="${sb%/.claude/plugin-audit/worktrees/*}"
+  local repo="${sb%/.claude/worktrees/audit-rt-*}"
   [[ -n "$repo" && "$repo" != "$sb" && -d "$repo" ]] \
     || { echo "  ⚠ cleanup_sandbox: bad repo root for '$sb'" >&2; return 0; }
   case "$repo" in
@@ -433,7 +433,7 @@ cleanup_sandbox "$SANDBOX"
 echo "[R2-AC2(iii): core.excludesFile-hidden new file, Layer 2 forged-off -> Layer 1b sole catch]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
 SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
-REPO="${SANDBOX%/.claude/plugin-audit/worktrees/*}"
+REPO="${SANDBOX%/.claude/worktrees/audit-rt-*}"
 EXC="$REPO/.qg_excludes"; echo 'onlyhack.js' > "$EXC"          # throwaway-internal path (N-4: no host ~/.gitconfig)
 git -C "$SANDBOX" config --local core.excludesFile "$EXC"
 printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
