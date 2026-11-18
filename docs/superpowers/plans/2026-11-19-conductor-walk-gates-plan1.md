@@ -73,7 +73,7 @@
 | # | 자리 | 정한 것 | 이유 | 다른 길 |
 |---|---|---|---|---|
 | J1 | 근거 칸의 「항목 번호」 | 질문 창 답이 실린 기록 항목의 `uuid` 뒤에 `#<그 호출 안 질문의 순번(1부터)>` 을 붙인다 — `근거 <세션>:<uuid>#<n>` | 이어받은 세션은 앞 기록을 같은 `uuid` 로 복사한다(계획을 쓸 때 잰 것: 질문 창 항목 5건이 파일 둘에 있었다). 줄 번호로 적으면 복사된 같은 답을 두 번 쓸 수 있다. 한 호출의 질문 여럿은 순번으로 가른다 | 파일의 줄 번호 |
-| J2 | 사람이 답했는지 가르는 칸 | 답 항목의 `permissionDecision` 이다(설계 §2 — 4bb70b98). `decision` 이 `accept` 이고 `source` 가 허용 목록(`user_temporary`)에 있으면 사람. 칸이 없거나 사전이 아니거나 **수락인데 출처가 허용 목록에도 사람 아님 목록에도 없는 값**이면 「확인 못 함」. `decision` 이 `accept` 가 아니거나 출처가 사람 아님 목록(측정으로 채운다 — 지금은 비었다)에 있으면 사람 아님(「어긋남」) | 사용자가 정했다(2026-11-19). 계획을 쓸 때 잰 답 592건(2.1.296 – 2.1.326)이 모두 허용 목록의 꼴이었다 | 모르는 출처를 「어긋남」 으로 |
+| J2 | 사람이 답했는지 가르는 칸 | 조건은 셋이다(설계 §2 — 50be32c1 · 사용자 2026-11-19 「cli 만 받는다」) — 답 항목의 `permissionDecision.decision` 이 `accept` · `permissionDecision.source` 가 허용 목록(`user_temporary`) · 그 항목의 `entrypoint` 가 허용 목록(`cli`). 사람이 아니라고 잰 값(`source` 가 `hook` · `entrypoint` 가 `sdk-cli`)과 수락이 아닌 결정은 「어긋남」, 칸이 없거나 두 목록 어디에도 없는 값은 「확인 못 함」 이다(`entrypoint` 칸이 없는 항목 포함). 사람 아님이 먼저다 — `entrypoint` 가 `sdk-cli` 면 출처를 몰라도 「어긋남」 이다. 고른 답이 빈 결과(`answers` 0개)는 답이 아니다. 목록 넷은 `session_record.py` 한 곳에 둔다 | 잰 값이다(2026-11-19 · 2.1.327). 프로그램이 권한 질문에 대신 답한 세션은 `permissionDecision` 이 사람 답과 같고 `entrypoint` 만 다르다 | 모르는 값을 「어긋남」 으로 |
 | J3 | 이어받은 세션 | 기록 파일은 이름으로 찾고, 항목 안의 `sessionId` 는 대조하지 않는다. 같은 답인지는 `uuid#순번` 으로만 가른다 — 앞 세션을 이어받은 세션은 복사된 앞 답으로 줄을 적을 수 있고, 같은 답은 세션이 달라도 한 번만 근거가 된다(설계 §2 — 4bb70b98) | 계획을 쓸 때 세션 파일 643개에서 파일 이름과 다른 `sessionId` 는 없었고 같은 `uuid` 가 파일 둘에 있는 것이 5건이었다 | `sessionId` 가 파일 이름과 다르면 「어긋남」 |
 | J4 | 본문을 견줄 때의 다듬기 | 뺄 절을 뺀 뒤 끝의 빈 줄만 뗀다. 줄 안의 글자는 그대로 견준다 | 기록 절을 빼면 끝의 빈 줄 수가 달라진다 | 줄 끝 공백도 떼기 |
 | J5 | 「본문을 마지막으로 바꾼 커밋」 을 찾는 법 | 그 브랜치 끝에서 그 파일을 건드린 커밋을 새것부터 보며, 본문이 끝의 본문과 같은 동안 거슬러 올라간 가장 오래된 커밋 | 승인 게이트가 기록 절만 고친 커밋은 판을 바꾸지 않아야 한다 | 그 파일을 마지막으로 건드린 커밋 |
@@ -97,14 +97,14 @@
 | J23 | 같은 답으로 `record --human` 을 다시 부름 | 쓸 줄이 글자까지 같은 줄로 이미 있으면 쓰지 않고 0, 그 답이 다른 줄의 근거면 1 | 지금 `record` 의 「이미 있어 쓰지 않았다」 와 같게 | 늘 1 |
 | J24 | `human-check` 가 내는 것과 종료 코드 | 줄마다 한 줄씩 낸다 — ① 그 과제의 사람 줄마다 `<판정> — <줄>`, `지남` 이 아니면 그 아래 `    사유: <사유>` ② 관문 표로 볼 때 **있어야 하는데 지난 줄이 없는 관문**마다 ``줄 없음 — `<종류>` 줄[(계획 <n>)]`` 과 그 아래 `    사유: <자취>`(예: ``줄 없음 — `계획 검토` 줄(계획 1)`` / `    사유: implement-plan-1-1.md 가 있다`). 있어야 하는 때 — 설계 흐름: 계획 파일 · `plan` · `implement` · `review` 결과 파일 · 받음 줄 가운데 하나라도 있으면 `spec 승인`, 계획 n 의 `implement` · `review` 결과 파일이나 받음 줄이 있으면 `계획 검토`(계획 n). 설계 없는 흐름: 결과 파일이나 받음 줄이 있으면 `흐름 승인`. 그 종류의 줄이 있는데 지나지 못한 것은 ① 이 이미 보이므로 ② 에 다시 내지 않는다. 낼 줄이 하나도 없으면 `사람 줄 없음` 한 줄. 종료 코드: 0 모든 줄이 `지남` 이고 `줄 없음` 이 없다 · 1 그 밖 · 2 사용법 · 3 로드맵 · 레포를 읽지 못함 | AC23 은 줄마다 판정을 낸다고만 한다. 설계 §3(D4.16)이 드러내려는 길 — 승인 줄 없이 받음 줄을 손으로 적은 것 — 은 있는 줄만 보면 0 으로 깨끗하게 나온다 | 있는 줄만 판정한다 |
 | J25 | 테스트가 사람 줄을 만드는 길 | 손으로 줄을 적지 않는다. 자료에서 만든 가짜 세션 기록(`tests/fixtures/session_fixture.py`)과 `ask-head` · `record --human` 을 실제로 부르는 도우미(`tests/fixtures/team_repo.sh` 의 `human`)로 만든다 | 관문 아래에서는 손으로 적은 승인 줄이 「근거 없음」 이다. R1 의 team 테스트가 계획 · 구현 묶음을 받으려면 진짜 꼴의 줄이 필요하다 | 테스트 레포를 `human_gate: 끔` 으로 |
-| J26 | 사람 없이 답이 나오는 길의 측정 | 구현 담당은 Claude Code 를 다시 띄우지 않는다. 지휘자가 따로 재서 값을 보낸다(헤드리스 · 권한 모드 · 훅 · 모델이 `answers` 를 스스로 채우는 길). 받은 값을 반영하는 자리는 이 계획 끝 「측정 값을 받으면」 한 곳이다. 받기 전에는 허용 목록(J2)으로 가고 「재지 못함」 에 적는다 | 허용 목록은 모르는 값을 「확인 못 함」 으로 본다 — 닫힌 쪽이다 | 구현 담당이 `claude -p` 로 잰다 |
+| J26 | 사람 없이 답이 나오는 길의 측정 | 지휘자가 쟀다(2026-11-19 · Claude Code 2.1.327 · 과제 1 Step 3 의 표). 잰 값은 계획에 들어 있다 — `session_record.py` 의 목록 넷(과제 2) · 자료 네 꼴(과제 1) · `record --human` 과 대조 판정의 테스트(과제 6 · 7) · 끝에서 끝(과제 12) · `dependencies.md`(과제 13). 구현 담당은 Claude Code 를 다시 띄우지 않는다. 새 값을 재면 넣는 자리는 이 계획 끝 「잰 것과 넣은 자리」 다 | 설계 Verification Plan(50be32c1) | 구현 담당이 `claude -p` 로 잰다 |
 | J27 | `started()` 가 쓰는 승인 읽기 | 그대로 둔다(`Reader.approved`) | 그 함수는 관문이 아니라 「지워진 브랜치인가 아직 만들지 않은 브랜치인가」 를 가르는 흔적이다 | 꼴 판정으로 바꾼다 |
-| J28 | 사람 줄의 날짜 | 인자로 받지 않는다(`--date` 없음). `record --human` 은 **그 답 항목의 `timestamp`** 를 이 기계의 지역 시각으로 바꾼 날짜를 적는다. 대조 판정은 줄의 날짜가 그 시각의 날짜(UTC)와 하루 넘게 다르면 「어긋남」 이다(시간대 차이는 하루를 넘지 않는다). 답 항목에 `timestamp` 가 없거나 읽지 못하면 「확인 못 함」 | 설계의 명령 꼴(§2 「쓰는 길」)에 날짜 인자가 없다. 날짜가 단계 사유(`spec 승인됨(<날짜>)`)에 그대로 실리므로 지어낼 길을 남기지 않는다 — 근거 자신에서 나온다 | 명령이 도는 날의 날짜(시계를 믿는다) · UTC 날짜(아침 일찍 한 승인이 전날로 적힌다) |
+| J28 | 사람 줄의 날짜 | 인자로 받지 않는다(`--date` 없음). `record --human` 은 **그 답 항목의 `timestamp`** 를 이 기계의 지역 시각으로 바꾼 날짜를 적는다. 답 항목에 `timestamp` 가 없거나 읽지 못하면 「확인 못 함」 이다(적을 날짜가 없다). **대조 판정은 날짜를 견주지 않는다** | 설계의 명령 꼴(§2 「쓰는 길」)에 날짜 인자가 없다. 줄을 답에 묶는 것은 근거 칸이고 날짜는 보이는 값일 뿐이다 — 판정 표(설계 §2)에 사유를 늘리지 않는다 | 명령이 도는 날의 날짜(시계를 믿는다) · 대조 판정이 날짜도 견준다(판정 표에 사유가 하나 는다) |
 | J29 | 상태 계산의 잠금 목록 | 새 모듈 둘을 `tests/test_roadmap_status.sh` 의 정적 검사 목록(열넷 → 열여섯)과 변이 사본 목록 둘에 넣는다. 두 모듈은 그 검사의 규칙(Global Constraints)을 지켜 쓴다 — 상태 계산이 가져오는 쪽과 아닌 쪽으로 가르지 않는다 | 두 모듈 모두 읽기만 한다. `team_status` · `job_results` 가 `human_lines` 를 가져오고 `human_lines` 가 `session_record` 를 가져온다 | 대조 판정을 다른 파일로 갈라 상태 계산이 `session_record` 를 가져오지 않게 한다 |
 | J30 | 머지된 계획 멈춤이 걸리는 단계 | 모든 단계다(`design` 포함 — `--plan` 이 없으면 첫째 브랜치를 본다) | 설계 §3 「머지가 끝난 계획」 과 AC14 에 단계 제한이 없다. R1 이 단순 작업에 정한 것(B35)도 단계를 가리지 않는다 | `plan` · `implement` · `review` 에만 |
 | J31 | 결과 대조가 관문을 보는 결과 | 대조하는 결과 파일의 **단계로 §3 표를 본다** — `design` 결과는 없음 · `plan` 결과는 `spec 승인` · `implement` · `review` 결과는 `spec 승인` 과 `계획 검토`(계획 n) · 설계 없는 흐름의 결과는 `흐름 승인` | §3 표의 머리가 「달라는 묶음 · 받는 결과」 이고 `plan` 줄이 `spec 승인` 이다. AC10 · §3 글머리가 말하는 구현 결과는 이 규칙의 한 줄이다. 받음 줄이 단계를 넘기는 것은 구현뿐이지만(§4) 명령은 `plan` 결과도 대조하고 받음 줄을 낸다(R1 §5) | `implement` 결과에만 건다 |
 | J32 | 결과 대조가 흐름을 정하는 길 | 로드맵에서만 정한다 — 그 과제가 블록이면 `Reader.flow(블록)`(산출물 칸이 있으면 설계 없는 흐름 — R1), 블록이 아니면(로드맵 밖 과제) 설계 없는 흐름이다. `--branch` 는 읽을 브랜치만 정하고 흐름을 바꾸지 않는다 | 블록 과제에 `--branch` 를 준다고 관문이 `흐름 승인` 으로 바뀌면 안 된다 | — |
-| J33 | 꼴이 달라진 기록 항목 | 질문 창 호출에 짝지어진 결과 항목인데 읽을 칸이 없거나 꼴이 다르면(`isSidechain` 칸 없음 · `sourceToolAssistantUUID` 없음 또는 호출 항목과 다름 · `toolUseResult` 가 사전이 아님 · `answers` 가 사전이 아님 · 그 질문의 답이 없거나 글자가 아님 · `timestamp` 없음) 「답이 아니다」 로 넘기지 않고 `알 수 없음` 으로 싣는다 — `record --human` 은 3, 대조 판정은 「확인 못 함」 이다. 답이 아닌 것으로 넘기는 것은 꼴을 아는 것뿐이다 — 거절(`is_error: true`) · `isSidechain: true` · 짝이 되는 호출이 그 파일에 없는 결과 | 칸 이름이 바뀐 판에서 조용히 「없다」(1 · 「어긋남」)가 되면 다시 묻고 또 1 이 나오는 일을 되풀이한다. 3 은 끄는 길을 안내한다(AC6) | 꼴이 다르면 답이 아닌 것으로 넘긴다 |
+| J33 | 꼴이 달라진 기록 항목 | 질문 창 호출에 짝지어진 결과 항목인데 읽을 칸이 없거나 꼴이 다르면(`isSidechain` 칸 없음 · `sourceToolAssistantUUID` 없음 또는 호출 항목과 다름 · `toolUseResult` 가 사전이 아님 · `answers` 가 사전이 아님 · 그 질문의 답이 없거나 글자가 아님 · `timestamp` 없음 · `entrypoint` 없음) 「답이 아니다」 로 넘기지 않고 `알 수 없음` 으로 싣는다 — `record --human` 은 3, 대조 판정은 「확인 못 함」 이다. 답이 아닌 것으로 넘기는 것은 꼴을 아는 것뿐이다 — 거절(`is_error: true`) · `isSidechain: true` · 짝이 되는 호출이 그 파일에 없는 결과 · 고른 답이 빈 결과. **한 호출 안에 글이 같은 질문이 둘이면 그 호출은 쓰지 않되 조용히 넘기지 않는다** — `record --human` 이 쓸 답을 찾지 못해 1 로 끝날 때, 그 머리로 시작하는 그런 호출이 있었으면 「같은 글의 질문이 둘인 호출이 있어 쓰지 않았다」 를 함께 낸다 | 칸 이름이 바뀐 판에서 조용히 「없다」(1 · 「어긋남」)가 되면 다시 묻고 또 1 이 나오는 일을 되풀이한다. 3 은 끄는 길을 안내한다(AC6) | 꼴이 다르면 답이 아닌 것으로 넘긴다 |
 
 **`### Deferred to plan` 확인.** 표의 항목을 Handoff 가 말한 둘로 갈랐다. 장치를 빼서 해당 없는 것 — `964aa074`(물음 옮기기 대조) · `56f7a2b9`(PR 전 확인 줄) · `f29944a4`(연속 실패 설정 키) · `0764aeb1` · `a94449da`(옛 형식 검사) · `68f5b017` 의 옮긴 물음 부분. 계획 1 이 받는 것 — `2e6610eb`(훅 · 키 입력을 측정 목록에 → 과제 1 · J26) · `eac92f65`(부른 세션을 기록으로 증명하는 길이 되는지 → 과제 1 이 재서 보고만 한다. 동작은 더하지 않는다) · `d0120803#r4.1`(머지된 계획을 아는 길 → J11). 그 밖은 설계 본문에 반영돼 있고 계획 1 의 과제가 그 본문을 따른다(`4e9c6b95` → 과제 7 의 커밋 검사 · `d0120803#r2.1` → 과제 11 · `a7e7e856` · `dd52ae68` → 과제 4 · `abcf8f1a` → Global Constraints · `226040f3` · `0dad47c7`(막힘은 세지 않는다) → 과제 10 · `f5a6cb16` · `71edd879` → J9 · `4c69520b` → 과제 6). 걸음표 · 원문 대조 · 번호 대조에 관한 항목(`16e0e602` · `52cb7c7a` · `17563e51` · `a86f8ade` · `fccf272b` · `7c2453be` · `a231cc98` · `9665f71d` · `e1b5b3be`)은 본문에 반영됐고 계획 1 에 닿는 코드가 없다.
 
@@ -135,20 +135,21 @@
 **AC:** AC5 · AC6 의 근거(읽는 규칙) — 판정은 과제 2 · 6 · 7 이 한다.
 
 **Files:**
-- Create: `plugins/spec-distill/tests/fixtures/session-record/answer.jsonl` · `answer-multi.jsonl` · `rejected.jsonl` · `typed.jsonl` · `peer.jsonl` · `notification.jsonl`
+- Create: `plugins/spec-distill/tests/fixtures/session-record/answer.jsonl` · `answer-multi.jsonl` · `rejected.jsonl` · `typed.jsonl` · `peer.jsonl` · `notification.jsonl` · `hook-answer.jsonl` · `sdk-answer.jsonl` · `empty-answer.jsonl` · `other-entrypoint.jsonl`
 - Create: `plugins/spec-distill/tests/fixtures/session_fixture.py`
 - Test: `plugins/spec-distill/tests/test_session_fixture.py`
 
 **Interfaces:**
 - Produces (`tests/fixtures/session_fixture.py` — 뒤 과제의 테스트가 가져온다):
   - `record_path(config_dir, session, project="fixture") -> pathlib.Path` — `<config_dir>/projects/<project>/<session>.jsonl`
-  - `add_answer(config_dir, session, questions, who="human", sidechain=False, subagent=False, entry=None, when="2026-01-01T12:00:00.000Z", drop=(), project="fixture") -> str` — `questions` 는 `[(질문 글, 고른 글), …]`. 호출 항목과 답 항목 두 줄을 그 세션 기록에 덧붙이고(파일 · 폴더가 없으면 만든다) 답 항목의 `uuid` 를 돌려준다.
-    - `who` — `"human"`(자료 그대로) · `"unknown"`(답 항목에서 `permissionDecision` 칸을 뺀다) · `"other"`(`permissionDecision.source` 를 `fixture_other` 로 — 수락인데 모르는 출처) · `"denied"`(`decision` 을 `reject`, `source` 를 `user_reject` 로 — `answers` 는 그대로 둔다)
+  - `add_answer(config_dir, session, questions, who="human", sidechain=False, subagent=False, entry=None, when="2026-01-01T12:00:00.000Z", drop=(), entrypoint="cli", empty=False, project="fixture") -> str` — `questions` 는 `[(질문 글, 고른 글), …]`. 호출 항목과 답 항목 두 줄을 그 세션 기록에 덧붙이고(파일 · 폴더가 없으면 만든다) 답 항목의 `uuid` 를 돌려준다.
+    - `who` — `"human"`(자료 그대로) · `"unknown"`(답 항목에서 `permissionDecision` 칸을 뺀다) · `"other"`(`permissionDecision.source` 를 `fixture_other` 로 — 수락인데 모르는 출처) · `"denied"`(`decision` 을 `reject`, `source` 를 `user_reject` 로 — `answers` 는 그대로 둔다) · `"hook"`(`permissionDecision` 을 자료 `hook-answer.jsonl` 의 꼴 — `decision: accept` · `source: hook` · `reasonType: hook` — 로 바꾼다)
+    - `entrypoint` — 두 항목의 `entrypoint` 칸의 값(자료는 `cli`). `"sdk-cli"` 는 프로그램이 대신 답한 세션, `"fixture_other"` 는 모르는 값이다. `empty=True` 면 `toolUseResult.answers` 가 빈 사전이다(답 없이 수락)
     - `sidechain=True` 면 두 항목의 `isSidechain` 이 참이다. `subagent=True` 면 `<config_dir>/projects/<project>/<session>/subagents/agent-fixture.jsonl` 에 쓴다. `entry` 를 주면 답 항목의 `uuid` 가 그 값이다. `when` 은 답 항목의 `timestamp` 다
-    - `drop` — 뺄 칸 이름들: `"isSidechain"`(두 항목에서 칸을 뺀다) · `"sourceToolAssistantUUID"` · `"timestamp"`(답 항목에서 뺀다) · `"answers"`(`toolUseResult` 에서 `answers` 를 뺀다) · `"toolUseResult"`(사전을 글자 `자리표시` 로 바꾼다)
+    - `drop` — 뺄 칸 이름들: `"isSidechain"` · `"entrypoint"`(두 항목에서 칸을 뺀다) · `"sourceToolAssistantUUID"` · `"timestamp"`(답 항목에서 뺀다) · `"answers"`(`toolUseResult` 에서 `answers` 를 뺀다) · `"toolUseResult"`(사전을 글자 `자리표시` 로 바꾼다)
   - `add_lines(config_dir, session, name, project="fixture") -> None` — 자료 파일 `session-record/<name>.jsonl` 의 줄을 그대로 덧붙인다
   - `add_text(config_dir, session, name, text, project="fixture") -> None` — 자료 `<name>.jsonl`(`typed` · `peer` · `notification`)의 첫 항목을 틀로 `message.content` 를 `text` 로 바꿔 한 줄 덧붙인다
-  - 명령줄: `session_fixture.py answer --config <폴더> --session <세션> --question <글> --label <글> [--question <글> --label <글> …] [--who human|unknown|other|denied] [--entry <uuid>] [--when <시각>] [--drop <칸>]… [--sidechain] [--subagent]` → 답 항목의 `uuid` 한 줄 · `session_fixture.py lines --config <폴더> --session <세션> --name <자료 이름>` · `session_fixture.py text --config <폴더> --session <세션> --name <자료 이름> --text <글>`
+  - 명령줄: `session_fixture.py answer --config <폴더> --session <세션> --question <글> --label <글> [--question <글> --label <글> …] [--who human|unknown|other|denied|hook] [--entrypoint <값>] [--empty] [--entry <uuid>] [--when <시각>] [--drop <칸>]… [--sidechain] [--subagent]` → 답 항목의 `uuid` 한 줄 · `session_fixture.py lines --config <폴더> --session <세션> --name <자료 이름>` · `session_fixture.py text --config <폴더> --session <세션> --name <자료 이름> --text <글>`
 - [ ] **Step 1: 다시 확인**
 
 레포 뿌리에서 돈다. 기대와 다르면 멈춘다.
@@ -188,12 +189,24 @@ git diff --stat origin/main -- scripts/conductor_ledger.py scripts/team_files.py
 | 파일 이름과 다른 `sessionId` 를 가진 세션 파일 | 0/643 |
 | 같은 `uuid` 의 질문 창 항목이 파일 둘에 있는 것 | 5(이어받은 세션이 앞 기록을 복사한다) |
 | 호출 줄과 답 줄 사이 | 바로 다음 줄 1 · 2 – 5줄 369 · 그보다 멂 222 — 사이에 다른 항목이 낀다 |
+| 답 항목의 `entrypoint` | 592건 모두 `cli`(터미널에서 띄운 세션) |
 
 기대 — 칸 이름과 값의 종류가 표와 같다(개수는 달라도 된다). 새 판에서 칸 이름이 바뀌었거나 `permissionDecision.source` 에 표에 없는 값이 있으면 멈춰 보고한다.
 
-- [ ] **Step 3: 사람 없이 답이 나오는 길(J26)**
+- [ ] **Step 3: 사람 없이 답이 나오는 길(J26) — 잰 값을 확인한다**
 
-구현 담당은 Claude Code 를 다시 띄우지 않는다. 이 측정은 지휘자가 따로 한다 — 기다리지 않는다. 지휘자가 보낸 글에 측정 값이 있으면 이 계획 끝 「측정 값을 받으면」 절의 다섯 자리에 그대로 반영하고, 없으면 허용 목록(`decision: accept` · `source: user_temporary`)만으로 가며 「재지 못함」 의 그 줄을 과제 보고에 그대로 옮긴다. 어느 길의 답이 사람 답과 **같은 값**으로 남는다는 값을 받았으면 멈추고 지휘자에게 돌려보낸다 — 설계 Constraints 의 「막지 못한다」 목록과 Verification Plan 의 문장에 닿으므로 구현 담당이 정하지 않는다.
+구현 담당은 Claude Code 를 다시 띄우지 않는다. 이 측정은 지휘자가 끝냈다(2026-11-19 · Claude Code 2.1.327 · `claude` 호출 16번). 잰 값은 아래이고, 이 값이 과제 2 의 목록 넷과 Step 6 의 자료 네 꼴에 들어 있는지만 본다 — 이 과제에서 더 재지 않는다.
+
+| 길 | 답 항목에 남는 것 | 읽는 규칙(과제 2) |
+|---|---|---|
+| 사람이 터미널에서 고른 답(기준) | `permissionDecision` 이 `decision: accept` · `source: user_temporary`, `entrypoint` 가 `cli` | 사람 |
+| 헤드리스(`-p`) · 권한 모드 여섯 | 질문 창 도구가 없다 — 답 항목이 생기지 않는다(없는 도구를 부르면 `is_error: true` 이고 `permissionDecision` 칸이 없다) | 답이 아니다 |
+| 훅(`PreToolUse` 가 답을 채움) | `permissionDecision` 이 `decision: accept` · `source: hook` · `reasonType: hook`(`grantScope` · `reasonCode` 없음) | 사람 아님 |
+| 프로그램이 권한 질문에 대신 답하는 세션 | `permissionDecision` 이 사람 답과 같다(`accept` · `user_temporary`). `entrypoint` 가 `sdk-cli` 다 | 사람 아님 |
+| 모델이 `answers` 를 스스로 채움 | Claude Code 가 떼어 낸다 — 채운 답은 결과로 돌아오지 않는다 | — |
+| 답 없이 수락(빈 답) | `toolUseResult.answers` 가 0개인데 `permissionDecision` 은 `accept` · `user_temporary` 다 | 답이 아니다 |
+
+재지 못한 것(대화형 세션의 훅 · 터미널이 아닌 화면의 `entrypoint` 값 · 키 입력)은 이 계획 끝 「재지 못함」 에 있다.
 - [ ] **Step 4: 자료의 락을 쓴다(실패하는 테스트)**
 
 `plugins/spec-distill/tests/test_session_fixture.py`:
@@ -219,7 +232,7 @@ sys.path.insert(0, str(HERE / "fixtures"))
 import session_fixture as SF  # noqa: E402
 
 DATA = HERE / "fixtures" / "session-record"
-NAMES = ("answer", "answer-multi", "rejected", "typed", "peer", "notification")
+NAMES = ("answer", "answer-multi", "rejected", "typed", "peer", "notification", "hook-answer", "sdk-answer", "empty-answer", "other-entrypoint")
 SAFE = [re.compile(p) for p in (
     r"자리표시( [가-힣]+)*( [0-9]+)?",                       # 질문 · 라벨 · 글
     r"[A-Za-z_-]{1,24}",                                      # 고정 낱말(type · name · source …)
@@ -247,7 +260,7 @@ def entries(name):
 
 class Privacy(unittest.TestCase):
     def test_files_exist_and_parse(self):
-        self.assertEqual(sorted(p.stem for p in DATA.glob("*.jsonl") if not p.stem.startswith("not-human-")), sorted(NAMES))
+        self.assertEqual(sorted(p.stem for p in DATA.glob("*.jsonl")), sorted(NAMES))
         for name in NAMES:
             self.assertTrue(entries(name), name)
 
@@ -277,6 +290,22 @@ class Shape(unittest.TestCase):
         self.assertEqual(list(res["toolUseResult"]["answers"]), [block["input"]["questions"][0]["question"]])
         for col in ("origin", "turnOrigin", "promptSource"):
             self.assertNotIn(col, res)
+
+    def test_measured_shapes(self):   # J26 — 2.1.327 에서 잰 네 꼴. answer.jsonl 과 다른 칸만 본다
+        base_use, base_res = entries("answer")
+        self.assertEqual((base_use["entrypoint"], base_res["entrypoint"]), ("cli", "cli"))
+        hook = entries("hook-answer")[1]
+        self.assertEqual(hook["permissionDecision"], {"decision": "accept", "source": "hook", "reasonType": "hook"})
+        sdk_use, sdk = entries("sdk-answer")
+        self.assertEqual((sdk_use["entrypoint"], sdk["entrypoint"]), ("sdk-cli", "sdk-cli"))
+        self.assertEqual(sdk["permissionDecision"], base_res["permissionDecision"])            # 사람 답과 같은 값으로 남는다
+        empty = entries("empty-answer")[1]
+        self.assertEqual((empty["toolUseResult"]["answers"], empty["permissionDecision"]), ({}, base_res["permissionDecision"]))
+        self.assertNotIn("is_error", empty["message"]["content"][0])
+        other = entries("other-entrypoint")[1]
+        self.assertEqual((other["entrypoint"], other["permissionDecision"]), ("fixture_other", base_res["permissionDecision"]))
+        for name in ("hook-answer", "empty-answer", "other-entrypoint"):
+            self.assertEqual(len(entries(name)), 2, name)
 
     def test_other_fixtures(self):
         self.assertEqual(len(entries("answer-multi")[0]["message"]["content"][0]["input"]["questions"]), 2)
@@ -330,6 +359,12 @@ class Builder(unittest.TestCase):
             SF.add_answer(d, sid, [("q7", "a")], drop=("isSidechain", "timestamp", "toolUseResult"))
             use, res = [json.loads(l) for l in SF.record_path(d, sid).read_text(encoding="utf-8").splitlines()[-2:]]
             self.assertEqual(("isSidechain" in use, "isSidechain" in res, "timestamp" in res, res["toolUseResult"]), (False, False, False, "자리표시"))
+            SF.add_answer(d, sid, [("q8", "a")], who="hook", entrypoint="sdk-cli", empty=True)
+            use, res = [json.loads(l) for l in SF.record_path(d, sid).read_text(encoding="utf-8").splitlines()[-2:]]
+            self.assertEqual((use["entrypoint"], res["entrypoint"], res["permissionDecision"]["source"], res["toolUseResult"]["answers"]),
+                             ("sdk-cli", "sdk-cli", "hook", {}))
+            SF.add_answer(d, sid, [("q9", "a")], drop=("entrypoint",))
+            self.assertNotIn("entrypoint", json.loads(SF.record_path(d, sid).read_text(encoding="utf-8").splitlines()[-1]))
             SF.add_text(d, sid, "peer", "R2 @0123abcd — 자리표시 질문")
             self.assertEqual(json.loads(SF.record_path(d, sid).read_text(encoding="utf-8").splitlines()[-1])["message"]["content"],
                              "R2 @0123abcd — 자리표시 질문")
@@ -355,6 +390,10 @@ Expected: `ModuleNotFoundError: No module named 'session_fixture'`
 | `typed.jsonl` | 사람이 친 말 셋 — `origin`+`turnOrigin`+`promptSource` 가 다 있는 것 · `turnOrigin`+`promptSource` 만 있는 것 · 셋 다 없는 것. `message.content` 는 글자 |
 | `peer.jsonl` | 다른 세션이 보낸 글 하나(`origin.kind` 가 사람이 아닌 값) |
 | `notification.jsonl` | 작업 알림 하나(`origin.kind: task-notification`) |
+| `hook-answer.jsonl` | `answer.jsonl` 의 두 줄에서 답 항목의 `permissionDecision` 만 `{"decision": "accept", "source": "hook", "reasonType": "hook"}` 로 다르다(훅이 채운 답 — Step 3 의 표) |
+| `sdk-answer.jsonl` | 두 항목의 `entrypoint` 만 `sdk-cli` 로 다르다(프로그램이 권한 질문에 대신 답한 세션 — `permissionDecision` 은 사람 답과 같다) |
+| `empty-answer.jsonl` | 답 항목의 `toolUseResult.answers` 만 빈 사전으로 다르다(답 없이 수락 — `is_error` 는 없다) |
+| `other-entrypoint.jsonl` | 두 항목의 `entrypoint` 만 `fixture_other` 로 다르다(잰 적 없는 값 — 터미널이 아닌 화면) |
 
 `session_fixture.py` 는 `answer.jsonl` 의 두 항목을 틀로 읽어 질문 · 선택지 · 답 · `uuid` · 도구 호출 번호를 바꿔 넣는다(질문마다 선택지는 고른 글과 `자리표시 다른 선택지` 둘). 새 `uuid` 는 `uuid.uuid4()` 다.
 
@@ -370,7 +409,7 @@ git add plugins/spec-distill/tests/fixtures/session-record plugins/spec-distill/
 git commit -m "test(spec-distill): 세션 기록 자료와 가짜 기록 도우미를 더한다"
 ```
 
-과제 보고에 적는다 — 「다시 확인 — 설계 · 계획과 같다」(또는 달랐던 줄), Step 2 에서 다시 잰 판의 범위, Step 3 에서 받은 측정 값을 어디에 반영했는지 또는 「재지 못함」.
+과제 보고에 적는다 — 「다시 확인 — 설계 · 계획과 같다」(또는 달랐던 줄), Step 2 에서 다시 잰 판의 범위, Step 3 의 잰 값이 목록 넷과 자료 네 꼴에 들어 있는지.
 
 ---
 
@@ -385,29 +424,30 @@ git commit -m "test(spec-distill): 세션 기록 자료와 가짜 기록 도우�
 **Interfaces:**
 - Consumes: 과제 1 의 `session_fixture`(테스트만).
 - Produces:
-  - `TOOL = "AskUserQuestion"` · `HUMAN_SOURCES = ("user_temporary",)` · `NOT_HUMAN_SOURCES = ()`(측정으로 채운다 — 이 계획 끝 「측정 값을 받으면」) · `HUMAN, NOT_HUMAN, UNKNOWN = "사람", "사람 아님", "알 수 없음"`
+  - `TOOL = "AskUserQuestion"` · `HUMAN_SOURCES = ("user_temporary",)` · `NOT_HUMAN_SOURCES = ("hook",)` · `HUMAN_ENTRYPOINTS = ("cli",)` · `NOT_HUMAN_ENTRYPOINTS = ("sdk-cli",)`(넷 모두 잰 값이다 — 과제 1 Step 3 · J2) · `HUMAN, NOT_HUMAN, UNKNOWN = "사람", "사람 아님", "알 수 없음"`
   - `class Unreadable(Exception)` — 「확인 못 함」 의 사유(`str(exc)` 가 한 줄 한국어)
   - `class Answer(NamedTuple)` — `session: str`(파일 이름의 세션 번호) · `entry: str`(답 항목의 `uuid`) · `index: int`(그 호출 안 질문의 순번, 1부터) · `question: str`(호출 항목의 질문 글) · `label: str`(고른 글자 그대로 — 읽지 못했으면 `""`) · `who: str` · `why: str`(`who` 가 `HUMAN` 이 아닐 때 사유 한 줄, 아니면 `""`) · `when: str`(답 항목의 `timestamp` 글자 — 없으면 `""`). `key` 속성은 `"%s#%d" % (entry, index)`
   - `config_dir(environ=None) -> pathlib.Path` — `CLAUDE_CONFIG_DIR` 이 비지 않았으면 그 값, 아니면 `Path.home() / ".claude"`
   - `locate(session: str, environ=None) -> pathlib.Path` — `<설정 폴더>/projects/*/<session>.jsonl` 이 정확히 하나면 그 경로. 세션 번호 꼴(`[A-Za-z0-9_-]{8,}` — `state_path.SESSION_PATTERN` 과 같은 글자)이 아니거나 없거나 둘 이상이면 `Unreadable`
   - `answers(path) -> list` — 그 파일의 질문 창 답들(파일 차례). 파일을 열지 못하거나 읽은 JSON 줄이 하나도 없으면 `Unreadable`
   - `find(path, key: str) -> Optional[Answer]` — `key` 가 `<uuid>#<n>` 인 답
+  - `duplicates(path) -> list` — 한 호출 안에 글이 같은 질문이 둘이라 쓰지 않은 호출의 질문 글들(파일 차례 · 겹침 없이). `record --human` 이 쓸 답을 찾지 못했을 때 사유에 싣는다(J33)
   - `day(when: str, local: bool) -> Optional[str]` — 그 시각의 날짜(`YYYY-MM-DD`). `local` 이 참이면 이 기계의 지역 날짜, 거짓이면 UTC 날짜. 읽지 못하면 `None`(J28)
 
 읽는 규칙(과제 1 의 표 · J2 · J33):
 
 - 줄마다 JSON 객체 하나다. JSON 이 아닌 줄(반만 쓰인 마지막 줄 포함)은 건너뛴다. `"AskUserQuestion"` 이나 `"tool_result"` 글자가 없는 줄은 JSON 으로 풀지 않는다(큰 기록).
-- **호출.** `type` 이 `assistant` 인 항목의 `message.content` 블록 가운데 `type: tool_use` · `name: AskUserQuestion`. `input.questions` 가 목록이고 질문마다 `question` 이 글자여야 한다 — 아니면 그 호출은 쓰지 않는다. 같은 호출 안에 질문 글이 같은 것이 둘이면 그 호출은 쓰지 않는다.
+- **호출.** `type` 이 `assistant` 인 항목의 `message.content` 블록 가운데 `type: tool_use` · `name: AskUserQuestion`. `input.questions` 가 목록이고 질문마다 `question` 이 글자여야 한다 — 아니면 그 호출은 쓰지 않는다. 같은 호출 안에 질문 글이 같은 것이 둘이면 그 호출은 쓰지 않고(고른 답을 질문에 짝지을 수 없다) 그 질문 글을 `duplicates` 가 낸다.
 - **결과.** `type` 이 `user` 인 항목의 `tool_result` 블록 가운데 `tool_use_id` 가 **같은 파일에서 앞서 읽은** 호출의 `id` 인 것. 짝이 되는 호출이 없으면 답이 아니다.
-- **답이 아닌 것으로 넘기는 것(꼴을 아는 것).** 호출 항목이나 결과 항목의 `isSidechain` 이 `True` 다 · 결과 블록의 `is_error` 가 참이다(거절).
+- **답이 아닌 것으로 넘기는 것(꼴을 아는 것).** 호출 항목이나 결과 항목의 `isSidechain` 이 `True` 다 · 결과 블록의 `is_error` 가 참이다(거절 · 없는 도구) · `toolUseResult.answers` 가 **빈 사전**이다(답 없이 수락 — 사람 답과 같은 `permissionDecision` 으로 남지만 고른 답이 없다).
 - **그 밖의 결과는 질문마다 `Answer` 하나로 싣는다.** 아래에서 처음 걸리는 것이 `who` 와 `why` 를 정한다.
   1. 호출 항목이나 결과 항목에 `isSidechain` 칸이 없다 → `UNKNOWN` — `주 대화인지 가를 칸(isSidechain)이 없다`
   2. 결과 항목에 `sourceToolAssistantUUID` 가 없거나 호출 항목의 `uuid` 와 다르다 → `UNKNOWN` — `호출과 결과를 잇는 칸(sourceToolAssistantUUID)이 없거나 다르다`
-  3. `toolUseResult` 가 사전이 아니거나 그 `answers` 가 사전이 아니거나 `answers[질문 글]` 이 글자가 아니다 → `UNKNOWN` — `고른 답을 읽을 칸(toolUseResult.answers)이 없거나 꼴이 다르다`. `label` 은 `""` 다
+  3. `toolUseResult` 가 사전이 아니거나 그 `answers` 가 사전이 아니거나, `answers` 가 비지 않았는데 `answers[질문 글]` 이 글자가 아니다 → `UNKNOWN` — `고른 답을 읽을 칸(toolUseResult.answers)이 없거나 꼴이 다르다`. `label` 은 `""` 다
   4. 결과 항목의 `timestamp` 를 `day` 가 읽지 못한다 → `UNKNOWN` — `답한 시각(timestamp)을 읽지 못했다`
   5. `permissionDecision` 칸이 없거나 사전이 아니다 → `UNKNOWN` — `사람이 답했는지 가를 칸(permissionDecision)이 없다`
-  6. `decision` 이 `accept` 가 아니다, 또는 `source` 가 `NOT_HUMAN_SOURCES` 에 있다 → `NOT_HUMAN` — `사람이 질문 창에서 고른 답이 아니다(<decision> · <source>)`
-  7. `source` 가 `HUMAN_SOURCES` 에 없다 → `UNKNOWN` — `수락의 출처(<source>)가 아는 값이 아니다`
+  6. `decision` 이 `accept` 가 아니다, 또는 `source` 가 `NOT_HUMAN_SOURCES` 에 있다, 또는 결과 항목의 `entrypoint` 가 `NOT_HUMAN_ENTRYPOINTS` 에 있다 → `NOT_HUMAN` — `사람이 질문 창에서 고른 답이 아니다(<decision> · <source> · <entrypoint>)`
+  7. `source` 가 `HUMAN_SOURCES` 에 없다 → `UNKNOWN` — `수락의 출처(<source>)가 아는 값이 아니다`. 결과 항목에 `entrypoint` 칸이 없거나 그 값이 `HUMAN_ENTRYPOINTS` 에 없다 → `UNKNOWN` — `세션을 띄운 방식(entrypoint: <값 또는 「칸 없음」>)이 아는 값이 아니다`
   8. 그 밖 → `HUMAN`
 - `day` — 시각 글자의 앞 19자(`YYYY-MM-DDTHH:MM:SS`)를 UTC 로 읽는다(`calendar.timegm(time.strptime(…))` — 이 모듈은 이름이 `replace` 인 호출을 쓰지 못한다).
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
@@ -453,31 +493,51 @@ class Answers(unittest.TestCase):
                          [(1, "첫 질문", "가"), (2, "둘째 질문", "나")])
 
     def test_who(self):
-        for who in ("unknown", "other", "denied", "human"):
+        for who in ("unknown", "other", "denied", "hook", "human"):
             SF.add_answer(d, SID, [("q " + who, "a")], who=who)
         got = R.answers(SF.record_path(d, SID))
-        self.assertEqual([a.who for a in got], [R.UNKNOWN, R.UNKNOWN, R.NOT_HUMAN, R.HUMAN])
-        self.assertEqual([bool(a.why) for a in got], [True, True, True, False])
+        self.assertEqual([a.who for a in got], [R.UNKNOWN, R.UNKNOWN, R.NOT_HUMAN, R.NOT_HUMAN, R.HUMAN])
+        self.assertEqual([bool(a.why) for a in got], [True, True, True, True, False])
         self.assertIn("permissionDecision", got[0].why)
         self.assertIn("fixture_other", got[1].why)
+        self.assertIn("hook", got[3].why)
 
-    def test_measured_sources_go_to_the_two_lists(self):   # 측정 값을 받으면 두 목록에 넣는다 — 「측정 값을 받으면」
-        self.assertEqual((R.HUMAN_SOURCES, R.NOT_HUMAN_SOURCES[:0]), (("user_temporary",), ()))
+    def test_entrypoint(self):   # 사용자 2026-11-19 「cli 만 받는다」
+        SF.add_answer(d, SID, [("q sdk", "a")], entrypoint="sdk-cli")           # 프로그램이 대신 답한 세션 — permissionDecision 은 사람과 같다
+        SF.add_answer(d, SID, [("q other", "a")], entrypoint="fixture_other")  # 잰 적 없는 값
+        SF.add_answer(d, SID, [("q none", "a")], drop=("entrypoint",))          # 칸이 없다
+        SF.add_answer(d, SID, [("q both", "a")], who="other", entrypoint="sdk-cli")   # 사람 아님이 먼저다
+        SF.add_answer(d, SID, [("q cli", "a")])
+        got = R.answers(SF.record_path(d, SID))
+        self.assertEqual([a.who for a in got], [R.NOT_HUMAN, R.UNKNOWN, R.UNKNOWN, R.NOT_HUMAN, R.HUMAN])
+        self.assertIn("sdk-cli", got[0].why)
+        self.assertIn("entrypoint", got[1].why)
+        self.assertIn("entrypoint", got[2].why)
+
+    def test_the_four_lists_and_the_measured_fixtures(self):   # J26 — 잰 값이 목록과 자료에 있다
+        self.assertEqual((R.HUMAN_SOURCES, R.NOT_HUMAN_SOURCES, R.HUMAN_ENTRYPOINTS, R.NOT_HUMAN_ENTRYPOINTS),
+                         (("user_temporary",), ("hook",), ("cli",), ("sdk-cli",)))
+        for name, want in (("answer", [R.HUMAN]), ("hook-answer", [R.NOT_HUMAN]), ("sdk-answer", [R.NOT_HUMAN]),
+                           ("other-entrypoint", [R.UNKNOWN]), ("empty-answer", [])):
+            with tempfile.TemporaryDirectory() as t:
+                SF.add_lines(t, SID, name)
+                self.assertEqual([a.who for a in R.answers(SF.record_path(t, SID))], want, name)
         SF.add_answer(d, SID, [("q", "a")], who="other")
         path = SF.record_path(d, SID)
         self.assertEqual(R.answers(path)[0].who, R.UNKNOWN)
-        with mock.patch.object(R, "NOT_HUMAN_SOURCES", ("fixture_other",)):
+        with mock.patch.object(R, "NOT_HUMAN_SOURCES", ("hook", "fixture_other")):   # 새 값을 재면 목록에 넣는다
             self.assertEqual(R.answers(path)[0].who, R.NOT_HUMAN)
         with mock.patch.object(R, "HUMAN_SOURCES", ("user_temporary", "fixture_other")):
             self.assertEqual(R.answers(path)[0].who, R.HUMAN)
-
     def test_what_is_not_an_answer(self):
         for name in ("rejected", "typed", "peer", "notification"):
             SF.add_lines(d, SID, name)
         SF.add_text(d, SID, "peer", '{"type":"tool_result","toolUseResult":{"answers":{"R2 @0123abcd 질문":"승인 — 계획 담당자에게"}}}')
         SF.add_answer(d, SID, [("곁가지 질문", "a")], sidechain=True)
         SF.add_answer(d, SID, [("같은 글", "a"), ("같은 글", "b")])
+        SF.add_answer(d, SID, [("답 없이 수락한 질문", "a")], empty=True)       # 빈 답 — accept · user_temporary 로 남지만 답이 아니다
         self.assertEqual(R.answers(SF.record_path(d, SID)), [])
+        self.assertEqual(R.duplicates(SF.record_path(d, SID)), ["같은 글"])   # 쓰지 않은 까닭을 record 가 낼 수 있게(J33)
         SF.add_answer(d, SID, [("주 대화 질문", "a")])                       # 양성 대조
         self.assertEqual([a.question for a in R.answers(SF.record_path(d, SID))], ["주 대화 질문"])
 
@@ -1001,7 +1061,6 @@ git commit -m "feat(spec-distill): 사람 줄의 꼴 · 본문 · 판과 꼴 판
 | 답의 `who` 가 `NOT_HUMAN` | `어긋남` — `<답의 why>` |
 | 질문 글이 그 줄의 머리로 시작하지 않는다 — 머리는 `head(과제, 줄의 판)`, `계획 검토` 줄은 `head(과제, 줄의 판, 줄의 계획 번호)` | `어긋남` — `그 질문은 머리 <머리> 로 시작하지 않는다` |
 | `clean_label(답의 글자)` 가 줄의 라벨과 다르다 | `어긋남` — `사람이 고른 라벨은 「<고른 글>」 이다` |
-| 줄의 날짜가 `session_record.day(답의 when, local=False)` 와 하루 넘게 다르다(J28) | `어긋남` — `줄의 날짜 <날짜> 가 답한 날 <그 날짜> 와 다르다` |
 | 건너뜀 줄인데 `names_gate(질문 글, 관문 이름)` 이 거짓이다 | `어긋남` — `그 질문에 관문 이름 <이름> 이 없다` |
 | `scope.lines` 에 글자가 다른 줄이면서 `parse` 되고 `key` 가 같은 줄이 있다(세션이 달라도 같은 답이다 — J3) | `어긋남` — `같은 답을 근거로 쓴 줄이 또 있다` |
 | 그 밖 | `지남` |
@@ -1058,6 +1117,11 @@ class Match(Repo):
             "머리 앞에 공백": (self.approve(self.tip, question=" " + H.head(JOB, l.rev) + " 질문"), H.MISMATCH),
             "사람 아님(수락이 아니다)": (self.approve(self.tip, who="denied"), H.MISMATCH),
             "모르는 출처": (self.approve(self.tip, who="other"), H.UNCHECKED),
+            "훅이 채운 답": (self.approve(self.tip, who="hook"), H.MISMATCH),
+            "프로그램이 대신 답한 세션": (self.approve(self.tip, entrypoint="sdk-cli"), H.MISMATCH),
+            "모르는 entrypoint": (self.approve(self.tip, entrypoint="fixture_other"), H.UNCHECKED),
+            "entrypoint 칸 없음": (self.approve(self.tip, drop=("entrypoint",)), H.UNCHECKED),
+            "빈 답": (self.approve(self.tip, empty=True), H.MISMATCH),
             "곁가지 항목": (self.approve(self.tip, sidechain=True), H.MISMATCH),
             "하위 agent 기록": (self.approve(self.tip, subagent=True), H.MISMATCH),
             "아는 칸 없음": (self.approve(self.tip, who="unknown"), H.UNCHECKED),
@@ -1112,14 +1176,11 @@ class Match(Repo):
         two = self.approve(both, H.KIND_PLAN, 2)
         self.assertEqual(self.v(two, [one, two], tip=both), H.PASS)
 
-    def test_date_comes_from_the_answer(self):   # J28
+    def test_date_is_not_compared(self):   # J28 — 줄을 답에 묶는 것은 근거 칸이다. 날짜는 보이는 값일 뿐이다
         real = self.approve(self.tip, when="2026-11-18T23:30:00.000Z")
         self.assertIn(" · 2026-11-18 · ", real)
-        for near in ("2026-11-18", "2026-11-19", "2026-11-17"):                              # 시간대 차이는 하루를 넘지 않는다
-            self.assertEqual(self.v(re.sub("2026-11-18", near, real)), H.PASS, near)
-        for forged in ("2026-11-20", "2026-11-16", "2025-11-18"):
-            self.assertEqual(self.v(re.sub("2026-11-18", forged, real)), H.MISMATCH, forged)
-
+        self.assertEqual(self.v(real), H.PASS)
+        self.assertEqual(self.v(re.sub("2026-11-18", "2026-12-25", real)), H.PASS)
     def test_gate_names_are_not_matched_as_substrings(self):
         q = H.head(JOB, self.c4[:8]) + " — 계획 검토 plan 12 를 건너뛸까요"
         twelve = self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 12", question=q)
@@ -1275,7 +1336,9 @@ git commit -m "feat(spec-distill): 사람 줄의 대조 판정과 관문 표를 
 | `gate_on` 이 거짓일 때의 갈래를 켜진 갈래로 | 뒤집기 |
 | `RETRY_STOP` 과 무관하게 `retry_open` 이 늘 참 | 값 바꾸기 |
 | `계획 검토` 줄의 머리에서 계획 번호를 뺀다(`head(과제, 판)`) | 값 바꾸기 |
-| 날짜 검사를 지운다 · 하루를 이틀로 | 지우기 · 값 바꾸기 |
+| `session_record` 의 `entrypoint` 검사를 지운다 | 지우기(「프로그램이 대신 답한 세션」 이 붉어야 한다) |
+| `NOT_HUMAN_ENTRYPOINTS` · `NOT_HUMAN_SOURCES` 를 비운다 | 값 바꾸기(「어긋남」 이 「확인 못 함」 이 된다 — 두 줄이 붉어야 한다) |
+| 빈 `answers` 를 답으로 싣는다 | 값 바꾸기 |
 | `names_gate` 를 `name in text` 로 | 값 바꾸기 |
 | `who` 가 `UNKNOWN` 일 때 「어긋남」 을 낸다 | 값 바꾸기 |
 | `expected` 가 받음 줄을 보지 않는다 | 지우기 |
@@ -1340,7 +1403,7 @@ approved() {  # approved <human 의 인자…> — 줄을 적고 그 과제의 I
 3. **커밋돼 있는가.** 묶일 파일(`human_lines.bound_name`)이 `HEAD` 에 없으면 1 `<파일> 이 커밋돼 있지 않다`. 작업 폴더의 글과 `HEAD` 의 글의 **본문**이 다르면 1 `<파일> 의 본문에 커밋되지 않은 변경이 있다 — 커밋한 뒤 다시 묻는다`. 기록 절만 다른 것은 지난다.
 4. **머리.** `human_lines.head(과제, human_lines.version(git, "HEAD", 경로), 계획)` — 계획 번호는 `계획 검토` 일 때만 준다. `ask-head` 는 여기서 머리를 내고 끝난다.
 5. **세션 기록(`record` 만).** 표지의 세션(`cs.holder(mpath(root, roadmap).parent)`)이 없으면 3 `확인 못 함 — 이 로드맵의 지휘 표지가 없다(먼저 claim)`. `session_record.locate` · `answers` 가 `Unreadable` 이면 3 `확인 못 함 — <사유>`. 3 의 글 끝에는 늘 ` — 세션 기록의 꼴이 바뀐 것이면 레포 설정 human_gate: 끔 으로 연다` 를 붙인다(AC6).
-6. **답 고르기.** 그 과제의 줄을 모은다 — 쓸 브랜치를 뺀 그 과제의 브랜치 끝들(`team_status.read_tip`) · 기본 브랜치 · `HEAD` 를 `human_lines.collect` 로 읽고, 작업 폴더 INTENT.md 의 결정 기록 줄을 더한다. 기록의 답을 **뒤에서부터** 보아 다음을 모두 채우는 첫 답을 고른다 — 질문 글이 머리로 시작한다(`starts_with_head`) · 건너뜀이면 `names_gate(질문 글, --gate 의 이름)` 이 참이다 · `who` 가 `NOT_HUMAN` 이 아니다 · 그 답의 `key` 를 근거로 쓴 줄이 모은 줄에 없다(쓰려는 줄과 글자가 같은 줄은 빼고 본다 — 세션이 달라도 `key` 가 같으면 쓴 것이다). 고른 답의 `who` 가 `UNKNOWN` 이면 3 `확인 못 함 — <답의 why>`(5 의 꼬리를 붙인다). 고른 답이 없으면 1 `쓰지 않았다 — 머리 <머리> 로 시작하는 질문 창 답이 지휘 세션 기록에 없다`.
+6. **답 고르기.** 그 과제의 줄을 모은다 — 쓸 브랜치를 뺀 그 과제의 브랜치 끝들(`team_status.read_tip`) · 기본 브랜치 · `HEAD` 를 `human_lines.collect` 로 읽고, 작업 폴더 INTENT.md 의 결정 기록 줄을 더한다. 기록의 답을 **뒤에서부터** 보아 다음을 모두 채우는 첫 답을 고른다 — 질문 글이 머리로 시작한다(`starts_with_head`) · 건너뜀이면 `names_gate(질문 글, --gate 의 이름)` 이 참이다 · `who` 가 `NOT_HUMAN` 이 아니다 · 그 답의 `key` 를 근거로 쓴 줄이 모은 줄에 없다(쓰려는 줄과 글자가 같은 줄은 빼고 본다 — 세션이 달라도 `key` 가 같으면 쓴 것이다). 고른 답의 `who` 가 `UNKNOWN` 이면 3 `확인 못 함 — <답의 why>`(5 의 꼬리를 붙인다). 고른 답이 없으면 1 `쓰지 않았다 — 머리 <머리> 로 시작하는 질문 창 답이 지휘 세션 기록에 없다`. 이때 `session_record.duplicates` 의 질문 글 가운데 그 머리로 시작하는 것이 있으면 글 끝에 ` — 같은 글의 질문이 둘인 호출이 있어 쓰지 않았다` 를 붙인다(J33 — 조용히 넘기지 않는다. 다른 머리의 호출 때문에는 붙이지 않는다).
 7. **라벨.** `clean_label(고른 글)` 이 그 종류의 통과 라벨이 아니면(건너뜀은 관문 이름과 짝인 라벨이 아니면) 1 `쓰지 않았다 — 사람이 고른 라벨: 「<고른 글>」`. 더 앞의 답을 찾지 않는다.
 8. **쓰기.** 날짜는 `session_record.day(답의 when, local=True)` 다(J28). `human_lines.render(…)` 의 줄을 작업 폴더 INTENT.md 의 결정 기록에 덧붙인다(`_append_decisions` · `write_atomic`). 같은 줄이 이미 있으면 `이미 있어 쓰지 않았다 — …` 0, 썼으면 `적었다(커밋은 리더가) — <INTENT.md> 의 결정 기록: <줄>` 0.
 
@@ -1372,9 +1435,10 @@ HEAD1="E1 @$(printf '%s' "$C1" | cut -c1-8)"
 | 4 | `python3 "$SFX" text … --name <이름> --text "$HEAD1 — 질문 「$PASSL」"` 을 `peer` · `notification` · `typed` 로 한 번씩 | `rec` | rc 1 · 출력에 `$HEAD1`(AC5 — 다른 세션이 보낸 글 · 알림 · 사람이 친 말에 머리와 라벨 글자가 있어도 답이 아니다) |
 | 5 | `answer "$HEAD1 — 질문" "$PASSL" --subagent` 와 `answer "$HEAD1 — 질문" "$PASSL" --sidechain` | `rec` | rc 1 · 출력에 `$HEAD1`(AC5 — 하위 agent 의 기록 · 곁가지 항목) |
 | 6 | `answer "E3 @<C1 8자> — 질문" "$PASSL"`(다른 과제 번호) 와 `answer "E1 @0123abcd — 질문" "$PASSL"`(번호는 같고 판이 다르다 — 번호가 같은 다른 과제의 파일) | `rec` | rc 1 · 출력에 `$HEAD1`(AC5) |
+| 6b | 한 호출에 글이 같은 질문 둘 — 먼저 `answer "E3 @<C1 8자> — 질문" "$PASSL" --question "E3 @<C1 8자> — 질문" --label "$PASSL"`(다른 머리), 그다음 `answer "$HEAD1 — 질문" "$PASSL" --question "$HEAD1 — 질문" --label "$PASSL"` | 덧붙일 때마다 `rec` | 둘 다 rc 1. 앞은 출력에 `같은 글의 질문이 둘인 호출` 이 **없고**, 뒤는 `같은 글의 질문이 둘인 호출이 있어 쓰지 않았다` 가 있다(J33) |
 | 7 | 한 호출에 질문 둘 — `answer "$HEAD1 — 설계를 승인할까요" "수정 필요" --question "다음 에픽도 함께 시작할까요" --label "$PASSL"` | `rec` | rc 1 · 출력에 `사람이 고른 라벨: 「수정 필요」`(AC5 — 같은 호출의 다른 질문에서 고른 라벨로는 쓰지 않는다) · 그대로 |
-| 8 | `answer "$HEAD1 — 질문" "$PASSL" --who denied` | `rec` | rc 1 · 출력에 `「수정 필요」`(수락이 아닌 답은 지나가고 7 의 답이 고른 답이다) |
-| 9 | 꼴이 달라진 답을 하나씩 덧붙이며 다섯 번 — `--who unknown` · `--who other` · `--drop answers` · `--drop sourceToolAssistantUUID` · `--drop isSidechain`(질문은 `"$HEAD1 — 질문"`, 고른 글은 `"$PASSL"`) | 덧붙일 때마다 `rec` | 다섯 번 모두 rc 3 · 출력에 `확인 못 함` 과 `human_gate: 끔` · 그대로(AC6 — 조용히 1 이 되지 않는다) |
+| 8 | 사람이 아니라고 잰 답을 하나씩 덧붙이며 네 번 — `--who denied` · `--who hook`(훅이 채운 답) · `--entrypoint sdk-cli`(프로그램이 대신 답한 세션) · `--empty`(고른 답이 빈 결과). 질문은 `"$HEAD1 — 질문"`, 고른 글은 `"$PASSL"` | 덧붙일 때마다 `rec` | 네 번 모두 rc 1 · 출력에 `「수정 필요」`(AC5 — 그 답들은 지나가고 7 의 답이 고른 답이다) · 그대로 |
+| 9 | 가를 수 없는 답을 하나씩 덧붙이며 일곱 번 — `--who unknown` · `--who other` · `--entrypoint fixture_other` · `--drop entrypoint` · `--drop answers` · `--drop sourceToolAssistantUUID` · `--drop isSidechain`(질문은 `"$HEAD1 — 질문"`, 고른 글은 `"$PASSL"`) | 덧붙일 때마다 `rec` | 일곱 번 모두 rc 3 · 출력에 `확인 못 함` 과 `human_gate: 끔` · 그대로(AC6 — 조용히 1 이 되지 않는다) |
 | 10 | 기록 파일을 읽지 못하게 한다(`chmod 000` — 그래도 읽히면(root) 이 줄은 건너뛰고 그렇다고 적는다) | `rec` | rc 3 · 출력에 `확인 못 함`(AC6 — 읽지 못함). 그 뒤 `chmod 644` |
 | 11 | `answer "$HEAD1 — 질문" "$PASSL (권장)" --when 2026-11-20T12:00:00.000Z`(uuid 를 `U1` 로) | `rec` | rc 0 · `intent_tail` 이 `- spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」 · design.md@<C1 8자> · 근거 ${SID}:${U1}#1`(날짜는 답한 시각에서 온다 — J28) · 커밋은 되지 않았다(`g status --short -- "$TM"` 에 INTENT.md) |
 | 12 | — | `rec` 을 한 번 더 | rc 0 · 출력에 `이미 있어 쓰지 않았다` · `intent_lines` 그대로 |
@@ -1771,8 +1835,12 @@ git commit -m "feat(spec-distill): 승인 없는 구현 결과를 받지 않고 
 | 같은 근거를 두 번 쓴 줄 | 진짜 답 하나를 가리키는 줄 둘(둘째는 날짜만 하루 다르다) | 둘 다 `어긋남` |
 | 진짜 옛 답 · 판만 새 커밋 | 진짜 답 뒤에 설계 본문을 고쳐 커밋하고 줄의 판을 새 커밋으로 | `어긋남` |
 | 다른 계획의 답 | `plan-1.md` · `plan-2.md` 를 한 커밋에서 고친 뒤 머리 `E3 plan 2 @<판>` 에 답한 것을 `plan-1.md@<판>` 줄의 근거로 | `어긋남` |
-| 날짜만 바꾼 줄 | 진짜 답 · 줄의 날짜를 열흘 뒤로 | `어긋남` |
-| 모르는 출처의 답 | `--who other` | `확인 못 함` |
+| 프로그램이 대신 답한 세션의 답 | **다른 세션 번호의 기록**을 `--entrypoint sdk-cli` 로 짓는다(`python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session <다른 세션 번호> --entrypoint sdk-cli …`) — E3 의 머리로 시작하는 질문에 통과 라벨로 답한 진짜 꼴의 답이다. 줄은 `근거 <그 세션 번호>:<uuid>#1` 로 손으로 쓴다 | `어긋남` |
+| 훅이 채운 답 | `--who hook` | `어긋남` |
+| 고른 답이 빈 결과 | `--empty` | `어긋남`(답이 아니라 기록에 없는 것으로 읽힌다) |
+| 모르는 출처의 답 · 모르는 `entrypoint` · `entrypoint` 칸 없음 | `--who other` · `--entrypoint fixture_other` · `--drop entrypoint` | 셋 다 `확인 못 함` |
+
+「프로그램이 대신 답한 세션의 답」 줄이 이 표의 가운데다 — 대조 판정은 줄에 적힌 세션의 기록을 읽으므로, 리더가 사람 없이 답하는 세션을 따로 돌려 진짜 꼴의 답을 만들고 그 세션 번호를 근거로 손으로 줄을 쓰는 길이 실제 우회다. 세 자리 모두 지나지 못해야 한다.
 
 끝으로 양성 대조 — 같은 과제에 진짜 줄(`approved`)을 적으면 세 자리가 0 이다. 그리고 그 줄이 두 브랜치 끝에 함께 있을 때(과제 9 의 14b 와 같은 준비) `human-check` 가 그 줄을 **한 번만** 내고 `지남` 이다.
 
@@ -1873,7 +1941,7 @@ class HumanLines(unittest.TestCase):   # R2 AC22 — 계획 1 몫
         for word in ("human_gate", "record --human", "사람 줄"):
             self.assertIn(word, readme, word)
         deps = (PLUGIN / "dependencies.md").read_text(encoding="utf-8")
-        for word in ("세션 기록", "AskUserQuestion", "toolUseResult", "permissionDecision", "sourceToolAssistantUUID", "isSidechain"):
+        for word in ("세션 기록", "AskUserQuestion", "toolUseResult", "permissionDecision", "entrypoint", "sourceToolAssistantUUID", "isSidechain", "2.1.296", "2.1.327", "sdk-cli", "hook"):
             self.assertIn(word, deps, word)
         top = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## [")[1]
         for word in ("record --human", "human_gate", "worker"):
@@ -1890,13 +1958,13 @@ Expected: `HumanLines` 의 두 테스트 FAIL
 - [ ] **Step 3: 문서를 쓴다**
 
 - `references/team-files.md`
-  - §2 「결정 기록」 글머리 — 사람 줄 넷은 대기 줄로 쌓지 않고 `record --human` 이 그 브랜치의 INTENT.md 에 바로 쓰며 리더가 바로 커밋한다는 문장. 사람 줄의 꼴 · 종류와 묶이는 파일 · 통과 라벨 표(Global Constraints 의 글자) · 질문 머리(`<과제 번호> @<판>` · `계획 검토` 는 `<과제 번호> plan <n> @<판>`) · 관문 이름 넷 · 근거 칸(`근거 <세션>:<항목>` — 항목은 답 항목의 번호와 질문의 순번) · 날짜(「날짜는 인자로 받지 않는다 — 답한 시각에서 온다」 · 대조는 하루 넘게 다르면 어긋남) · 이어받은 세션은 앞 답을 적을 수 있고 같은 답은 세션이 달라도 한 번만 근거가 된다.
+  - §2 「결정 기록」 글머리 — 사람 줄 넷은 대기 줄로 쌓지 않고 `record --human` 이 그 브랜치의 INTENT.md 에 바로 쓰며 리더가 바로 커밋한다는 문장. 사람 줄의 꼴 · 종류와 묶이는 파일 · 통과 라벨 표(Global Constraints 의 글자) · 질문 머리(`<과제 번호> @<판>` · `계획 검토` 는 `<과제 번호> plan <n> @<판>`) · 관문 이름 넷 · 근거 칸(`근거 <세션>:<항목>` — 항목은 답 항목의 번호와 질문의 순번) · 날짜(「날짜는 인자로 받지 않는다 — 답한 시각에서 온다」. 대조 판정은 날짜를 견주지 않는다) · 사람 답의 조건 셋(`decision: accept` · `source` · `entrypoint`)과 사람이 아니라고 잰 값 둘 · 이어받은 세션은 앞 답을 적을 수 있고 같은 답은 세션이 달라도 한 번만 근거가 된다.
   - §5 「결정 기록에 쓰는 줄」 — `--approval` · `--line` · `flush` 는 team 형식에서 사람 줄 종류를 받지 않는다(2). `ask-head` · `record --human` 의 인자 · 종료 코드(3 은 끄는 길을 함께 보인다) · 「커밋된 뒤에 묻는다」 · 「쓸 브랜치의 worktree 에서 부른다」. 결과 대조가 결과의 단계로 관문 표를 본다는 것(J31) · 흐름은 로드맵에서만 정한다는 것(J32) · `human-check` 의 출력 두 가지와 예시(`<판정> — <줄>` · ``줄 없음 — `<종류>` 줄`` · `    사유: …`)와 종료 코드(J24).
   - §9 시작 묶음 — 관문 표 · 멈춤의 종료 코드와 사유 줄 · 머지된 계획 멈춤(단계를 가리지 않는다 · 브랜치 끝이 없고 기본 브랜치에 그 계획의 자취가 있을 때의 글 「상태 보기는 이 브랜치를 머지로 세지 못한다」 와 그 까닭 — J11) · 연속 실패 멈춤(2 로 고정 · 산 받음 줄은 결과 대조를 다시 지나는 것 · 막힘은 세지 않는다 · 설계와 계획 단계에는 없다 · 설계 없는 흐름의 이름 `다시 시도 구현 시도 <k>`) · `알림: 사람 줄 대조가 꺼져 있다`.
   - §10 단계 계산 — 표의 「설계 중」 · 「계획」 줄을 꼴 판정으로 고친다(판정 다섯과 표 · 세션 기록을 읽지 않는다 · 건너뜀 줄 · 근거 글자 J15). 「`계획 검토` 줄도 단계의 근거가 아니다」 문장은 남기고 「구현 묶음과 구현 결과의 관문이다(§9 · §5)」 를 잇는다.
   - 판정 표(설계 §2 의 다섯 줄)와 「막지 못하는 것」 넷(설계 Constraints 그대로)을 §10 뒤에 `### 사람 줄의 판정` 으로 둔다. 문서가 300줄을 넘으므로 `## 목차` 가 있으면 같은 커밋에서 맞춘다.
 - `README.md` — 지휘자 절에 사람 줄과 관문을 세 문장으로(무엇을 막나 · 어떻게 적나 · 끄는 길 `human_gate: 끔` 과 그때 보이는 알림). 설정 키 표에 `human_gate`. 「Principles Instantiated」 에 Law 1 한 줄(승인된 설계 없이는 계획 · 구현이 시작되지 않는다 — 스크립트가 지킨다). 바뀐 기본 역할 한 줄. **P8 은 적지 않는다** — 철학 문서의 P8 줄을 고치는 것은 계획 2 다(두 문서가 다른 말을 하지 않게).
-- `dependencies.md` — 표 아래에 `## 세션 기록` 절: 사람 줄이 Claude Code 의 세션 기록 파일에 기댄다는 것, 읽는 칸(과제 1 의 표에서 칸 이름만 — `permissionDecision` · `sourceToolAssistantUUID` · `toolUseResult.answers` · `isSidechain` · `timestamp`), 확인한 판의 범위(과제 1 Step 2 가 잰 값), 칸은 Claude Code 의 문서에 없고 판에 따라 바뀔 수 있으며 바뀌면 「확인 못 함」 이 되고 여는 길은 `human_gate: 끔` 이라는 것, 사람 없이 답이 나오는 길의 측정(받은 값 또는 「재지 못함」 — 이 계획 끝 「측정 값을 받으면」). 표의 판 칸은 손으로 고치지 않고 `python3 scripts/check_deps.py measure …`(그 파일 머리의 명령)로 다시 잰다.
+- `dependencies.md` — 표 아래에 `## 세션 기록` 절: 사람 줄이 Claude Code 의 세션 기록 파일에 기댄다는 것, 기대는 칸(`permissionDecision` · `entrypoint` · `toolUseResult.answers` · `sourceToolAssistantUUID` · `isSidechain` — 날짜를 정하는 `timestamp` 도), 확인한 판(2.1.296 – 2.1.327), 사람 답의 조건 셋과 사람이 아니라고 잰 값 둘(`source: hook` · `entrypoint: sdk-cli`), 칸은 Claude Code 의 문서에 없고 판에 따라 바뀔 수 있으며 바뀌면 「확인 못 함」 이 되고 여는 길은 `human_gate: 끔` 이라는 것, 재지 못한 것 셋(이 계획 끝 「재지 못함」). 표의 판 칸은 손으로 고치지 않고 `python3 scripts/check_deps.py measure …`(그 파일 머리의 명령)로 다시 잰다.
 - `CHANGELOG.md` — 새 머리 `## [<다음 minor>] — <날짜>`. Added: `record --human` · `ask-head` · `human-check` · `human_gate` · 결정 줄 종류 둘 · 시작 묶음과 결과 대조의 관문 · 머지된 계획 멈춤 · 연속 실패 멈춤. Changed: team 형식에서 `--approval` · `--line` 이 사람 줄 종류를 받지 않는다 · 단계 계산이 근거 있는 승인 줄만 센다 · 기본 역할(계획 worker · 설계 leader) · 「맞추는 명령」 줄의 꼴. 옛 형식 로드맵은 달라지지 않는다는 한 줄.
 - `plugin.json` — 판.
 
@@ -1939,22 +2007,21 @@ Global Constraints 의 잠금 줄 그대로 돈다. 못 잡으면 주인 · 잡�
 
 을 돌려 경고를 사용자에게 보인다. PR 본문에는 J21(두 계획 사이의 역할 문서) · J11(더한 갈래로 멈출 때 상태 보기는 머지로 세지 못한다) · 아래 「재지 못함」 · 기존 테스트를 옮긴 목록을 적는다.
 
-## 측정 값을 받으면(J26)
+## 잰 것과 넣은 자리(J26)
 
-지휘자가 따로 재는 것 — 질문 창이 사람 없이 답을 내는 길(헤드리스 · 권한 모드 · 훅)과 모델이 `answers` 를 스스로 채우는 길. 값(그 길의 답 항목에 남는 `permissionDecision` 의 `decision` · `source` 와 `entrypoint`, 또는 「그 길로는 답 항목이 생기지 않는다」)을 받으면 아래 다섯 자리에만 반영한다. 받는 때가 구현 중이든 뒤든 같다.
+질문 창이 사람 없이 답을 내는 길은 지휘자가 쟀다(2026-11-19 · Claude Code 2.1.327 · 값은 과제 1 Step 3 의 표). 잰 값이 들어간 자리는 아래 다섯이다. 뒤에 새 값을 재면(다른 판 · 재지 못한 길) 같은 다섯 자리에만 넣는다.
 
-| # | 자리 | 무엇을 |
+| # | 자리 | 지금 든 것 |
 |---|---|---|
-| 1 | `scripts/session_record.py` 의 `HUMAN_SOURCES` | 사람이 고른 답에 남는다고 잰 출처 값(지금 `user_temporary` 하나) |
-| 2 | `scripts/session_record.py` 의 `NOT_HUMAN_SOURCES` | 사람 없이 나온 답에 남는다고 잰 출처 값(지금 비었다). 여기 든 값은 「어긋남」, 두 목록 어디에도 없는 값은 「확인 못 함」 이다 |
-| 3 | `tests/fixtures/session-record/not-human-<길>.jsonl` 과 `tests/test_session_record.py` 의 `test_measured_sources_go_to_the_two_lists` | 그 길의 답 항목을 개인 정보를 지워 자료로 넣고(과제 1 의 규칙 · 락), 그 자료를 읽으면 `who` 가 `NOT_HUMAN` 이라는 단언 한 줄 |
-| 4 | `dependencies.md` 의 `## 세션 기록` 절 | 길마다 잰 값과 잰 Claude Code 의 판 |
-| 5 | 이 계획의 「재지 못함」 첫 줄 | 잰 길을 지운다 |
+| 1 | `scripts/session_record.py` 의 `HUMAN_SOURCES` · `HUMAN_ENTRYPOINTS` | 사람 답 — `user_temporary` · `cli` |
+| 2 | `scripts/session_record.py` 의 `NOT_HUMAN_SOURCES` · `NOT_HUMAN_ENTRYPOINTS` | 사람이 아니라고 잰 값 — `hook` · `sdk-cli`. 여기 든 값은 「어긋남」, 네 목록 어디에도 없는 값과 없는 칸은 「확인 못 함」 이다 |
+| 3 | `tests/fixtures/session-record/` 의 네 꼴과 `tests/test_session_record.py` 의 `test_the_four_lists_and_the_measured_fixtures` | `hook-answer` · `sdk-answer` · `empty-answer` · `other-entrypoint` — 자료마다 읽은 `who` 의 단언 한 줄 |
+| 4 | `dependencies.md` 의 `## 세션 기록` 절 | 기대는 칸 · 확인한 판(2.1.296 – 2.1.327) · 잰 값 |
+| 5 | 이 계획의 「재지 못함」 첫 줄 | 재지 못한 셋 |
 
-값이 **사람 답과 같은 값**(`decision: accept` · `source: user_temporary`)이면 다섯 자리에 반영하지 않고 멈춘다 — 허용 목록으로는 가를 수 없다. 설계 Constraints 의 「막지 못한다」 목록과 Verification Plan 의 문장에 닿으므로 지휘자와 사용자가 정한다(다른 칸으로 가를 수 있는지 — 예: `entrypoint` — 도 그때 정한다).
-
+새로 잰 길의 답이 **사람 답의 조건 셋을 모두 채우면**(`accept` · `user_temporary` · `cli`) 다섯 자리에 넣지 않고 멈춘다 — 목록으로는 가를 수 없다. 설계 Constraints 의 「막지 못한다」 목록에 닿으므로 지휘자와 사용자가 정한다.
 ## 재지 못함
 
-- **질문 창이 사람 없이 답을 내는 길**(헤드리스 · 권한 모드 · 훅 · 모델이 `answers` 를 스스로 채우는 길 · 다른 세션의 키 입력) — 구현 담당은 Claude Code 를 다시 띄우지 않는다(J26). 앞의 넷은 지휘자가 따로 재고 있고 값은 「측정 값을 받으면」 의 다섯 자리에 반영한다. 받기 전에는 사람 답의 허용 목록(`permissionDecision` 의 `decision: accept` · `source: user_temporary`)으로 가고 모르는 출처는 「확인 못 함」 이다. 다른 세션의 키 입력은 터미널에 글쇠가 들어가는 것이라 기록에서 사람 답과 갈리지 않을 수 있다 — 그렇다면 설계 Constraints 의 「막지 못한다」 목록에 닿는다.
+- **질문 창이 사람 없이 답을 내는 길 가운데 셋**(헤드리스 · 권한 모드 · 훅 · 프로그램이 대신 답하는 세션 · 모델이 답 칸을 스스로 채우는 길 · 빈 답은 쟀다 — 「잰 것과 넣은 자리」). 재지 못한 것 — ① **대화형 세션의 훅**: 훅이 답을 채우면 `source: hook` 으로 남는 것은 프로그램이 대신 답하는 세션에서만 봤다. 터미널 세션에서도 그렇게 남으리라는 것은 추측이다 ② **터미널이 아닌 화면의 `entrypoint` 값**: 그 화면에서 사람이 한 답은 허용 목록에 없어 「확인 못 함」 이 된다(닫힌 쪽 — 그 값을 재면 「잰 것과 넣은 자리」 에 넣는다) ③ **키 입력**: 다른 세션이나 프로그램이 리더의 터미널에 글쇠를 넣어 고른 답은 기록에서 사람 답과 갈리지 않는다(설계 Constraints 의 「막지 못한다」). 프로그램이 대신 답하는 세션이 `entrypoint` 칸까지 터미널 세션처럼 꾸밀 수 있는지도 재지 못했다(환경 변수로 한 번 해 본 것은 통하지 않았다 — 설계 Constraints).
 - **`record --human` 을 부른 호출이 그때 기록에 쓰여 있는지**(`eac92f65`) — 같은 이유. 동작에는 쓰지 않는다.
 - **설치본에서의 한 번** — 진짜 지휘 세션에서 질문 창으로 승인하고 `record --human` 이 그 답을 찾는지는 team 형식 로드맵이 도는 때(E1 이 새 형식을 켠 뒤)에 처음 실제로 돈다. PR 본문에 손으로 한 번 확인하는 법을 적는다 — 임시 레포에 team 형식 로드맵을 만들고(`roadmap_write.py create --layout team`), 지휘 세션에서 `ask-head` 의 머리로 질문 창을 띄워 답한 뒤 `record --human` 을 부른다.
