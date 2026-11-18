@@ -19,11 +19,18 @@ import session_fixture as SF  # noqa: E402
 
 DATA = HERE / "fixtures" / "session-record"
 NAMES = ("answer", "answer-multi", "rejected", "typed", "peer", "notification", "hook-answer", "sdk-answer", "empty-answer", "other-entrypoint")
+FIXED = frozenset({   # 기록의 고정 낱말(type · name · role · decision · source · entrypoint · kind …) — 사용자 글이 아니다
+    "AskUserQuestion", "accept", "assistant", "cli", "external", "fixture_other", "high", "hook", "human", "interactive",
+    "peer", "queued", "reject", "sdk-cli", "system", "task-notification", "task_notification", "tool_result", "tool_use",
+    "typed", "user", "user_reject", "user_temporary"})
 SAFE = [re.compile(p) for p in (
-    r"자리표시( [가-힣]+)*( [0-9]+)?",                       # 질문 · 라벨 · 글
-    r"[A-Za-z_-]{1,24}",                                      # 고정 낱말(type · name · source …)
+    r"자리표시(?: (?:질문|라벨|설명|결과|머리|글|다른 선택지))?(?: [0-9]+)?",   # 닫힌 꼬리 낱말 + 번호만
     r"0{8}-0{4}-4000-8000-0{9}[0-9a-f]{3}",                   # 가짜 uuid
     r"toolu_fixture_[0-9]+", r"2\.1\.[0-9]{3}", r"2026-01-01T00:00:[0-9]{2}\.000Z")]
+
+
+def is_safe(s):
+    return s in FIXED or any(r.fullmatch(s) for r in SAFE)
 
 
 def strings(value, under_answers=False):
@@ -54,11 +61,12 @@ class Privacy(unittest.TestCase):
         for path in sorted(DATA.glob("*.jsonl")):
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 for s in strings(json.loads(line)):
-                    self.assertTrue(any(r.fullmatch(s) for r in SAFE), "%s:%d %r" % (path.name, n, s[:12]))
+                    self.assertTrue(is_safe(s), "%s:%d %r" % (path.name, n, s[:12]))
 
     def test_the_lock_bites(self):   # 양성 대조 — 경로 · 이메일 · 한글 문장은 걸린다
-        for bad in ("/Users/someone/x", "a@b.example", "설계를 승인할까요?", "0123abcd-0000-4000-8000-000000000001"):
-            self.assertFalse(any(r.fullmatch(bad) for r in SAFE), bad)
+        for bad in ("/Users/someone/x", "a@b.example", "설계를 승인할까요?", "0123abcd-0000-4000-8000-000000000001",
+                    "main", "feature-conductor-stage", "jeongho-kim", "secret", "sk-ant-abc", "자리표시 설계를 승인할까요"):
+            self.assertFalse(is_safe(bad), bad)
 
 
 class Shape(unittest.TestCase):
