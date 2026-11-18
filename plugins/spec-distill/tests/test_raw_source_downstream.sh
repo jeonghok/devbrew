@@ -245,10 +245,18 @@ else ok "mutant_seeded_bundle_seed: 묶음 §6 의 seed전문표지 를 seedfree
 # untouched — 옆 생성기 파일이 기본 브랜치와 같다. 비교 기준을 못 구하면 건너뛴다(빈 기준으로 통과하지 않는다).
 # untouched_diff <레포> <기준> <경로…> — 기준 대비 그 경로들의 diff --stat. 같으면 빈 출력.
 untouched_diff() { local r="$1" b="$2"; shift 2; git -C "$r" diff --stat "$b" -- "$@"; }
-SIDE="plugins/spec-distill/scripts/team_write.pyplugins/spec-distill/scripts/team_files.py
+SIDE="plugins/spec-distill/scripts/team_write.py plugins/spec-distill/scripts/team_files.py
 plugins/spec-distill/scripts/team_check.py plugins/spec-distill/scripts/roadmap_write.py
 plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/scripts/roadmap_render.py
 plugins/spec-distill/tests/test_team_write.sh plugins/spec-distill/tests/test_team_files.py"
+# side_missing <레포> <경로…> — 추적되지 않는 경로(오타 · 이어 붙은 경로)를 한 줄에 모아 낸다. 다 있으면 빈 출력.
+side_missing() {
+  local r="$1" m="" p; shift
+  for p in "$@"; do git -C "$r" ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || m="$m $p"; done
+  echo "$m"
+}
+# shellcheck disable=SC2086
+assert_eq "$(side_missing "$ROOT" $SIDE)" "" "untouched_paths_tracked: 목록의 모든 경로가 추적되는 파일이다(없는 경로를 diff 하면 조용히 비는 것을 막는다)"
 MB=""
 if git -C "$ROOT" rev-parse -q --verify origin/HEAD >/dev/null 2>&1; then
   MB="$(git -C "$ROOT" merge-base HEAD origin/HEAD 2>/dev/null)"
