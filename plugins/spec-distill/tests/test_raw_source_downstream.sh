@@ -229,6 +229,10 @@ build seeded seeded || { echo "seeded 레포 실패"; exit 1; }
 S="$T/seeded"; SW="$S/repo"
 SE1="$(ls "$SW/${RD}rm1/"E1.md "$SW/${RD}rm1/"*/E1.md 2>/dev/null | head -1)"
 assert_eq "$(cat "$S/place.rc")$(cat "$S/orig.rc")$(cat "$S/create.rc")" "000" "mutant_seeded_rc: place · original · create 모두 rc 0"
+if span_ok "$SW/${RD}t1/intent/original.md" "$S/span2.txt"; then no "mutant_seeded_span_ok: 묶은 span_ok 가 seed 가 든 구간을 통과시켰다(이빨 없음)"
+else ok "mutant_seeded_span_ok: 묶은 span_ok 가 seed 가 든 구간을 거절한다"; fi
+if [ -n "$SE1" ] && bundle_ok "$SE1" "$S/b6b.txt"; then no "mutant_seeded_bundle_ok: 묶은 bundle_ok 가 seed 가 든 절을 통과시켰다(이빨 없음)"
+else ok "mutant_seeded_bundle_ok: 묶은 bundle_ok 가 seed 가 든 절을 거절한다"; fi
 if span_pos "$SW/${RD}t1/intent/original.md" "$S/span.txt"; then ok "mutant_seeded_span_pos: 양의 글은 통과(실패는 seed 갈래에서만 난다)"
 else no "mutant_seeded_span_pos: 양의 글이 없다 — 변이가 두 갈래를 함께 건드렸다"; fi
 if seedfree "$S/span.txt"; then no "mutant_seeded_span_seed: 구간에 seed전문표지 가 있는데 seedfree 가 통과했다(이빨 없음)"
@@ -239,7 +243,9 @@ if seedfree "$S/b6.txt"; then no "mutant_seeded_bundle_seed: 묶음 §6 에 seed
 else ok "mutant_seeded_bundle_seed: 묶음 §6 의 seed전문표지 를 seedfree 가 잡는다"; fi
 
 # untouched — 옆 생성기 파일이 기본 브랜치와 같다. 비교 기준을 못 구하면 건너뛴다(빈 기준으로 통과하지 않는다).
-SIDE="plugins/spec-distill/scripts/team_write.py plugins/spec-distill/scripts/team_files.py
+# untouched_diff <레포> <기준> <경로…> — 기준 대비 그 경로들의 diff --stat. 같으면 빈 출력.
+untouched_diff() { local r="$1" b="$2"; shift 2; git -C "$r" diff --stat "$b" -- "$@"; }
+SIDE="plugins/spec-distill/scripts/team_write.pyplugins/spec-distill/scripts/team_files.py
 plugins/spec-distill/scripts/team_check.py plugins/spec-distill/scripts/roadmap_write.py
 plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/scripts/roadmap_render.py
 plugins/spec-distill/tests/test_team_write.sh plugins/spec-distill/tests/test_team_files.py"
@@ -249,12 +255,17 @@ if git -C "$ROOT" rev-parse -q --verify origin/HEAD >/dev/null 2>&1; then
 fi
 if [ -n "$MB" ]; then
   # shellcheck disable=SC2086
-  assert_eq "$(git -C "$ROOT" diff --stat "$MB" -- $SIDE)" "" "untouched: 옆 생성기 파일이 기본 브랜치와 같다"
-  # 음의 짝 — 같은 diff 가 이 브랜치에서 바뀐 파일(이 테스트)에는 출력을 낸다
-  if [ -n "$(git -C "$ROOT" diff --stat "$MB" -- plugins/spec-distill/tests/test_raw_source_downstream.sh)" ]; then
-    ok "untouched_negative_pair: 같은 diff 가 바뀐 파일에는 출력을 낸다"
-  else no "untouched_negative_pair: 바뀐 파일에도 diff 가 비었다 — 기준이 틀렸다"; fi
+  assert_eq "$(untouched_diff "$ROOT" "$MB" $SIDE)" "" "untouched: 옆 생성기 파일이 기본 브랜치와 같다"
 else
   note "untouched 건너뜀 — origin/HEAD 나 merge-base 를 구하지 못했다"
 fi
+# 음의 짝 — 이 테스트가 짓는 임시 레포에서 기준 커밋 뒤에 파일을 바꾸면 같은 함수가 출력을 낸다(이 브랜치의 상태와 무관)
+NEG="$T/neg"; mkdir -p "$NEG"
+git -C "$NEG" init -q
+printf 'a\n' > "$NEG/side.py"
+g_ "$NEG" add -- side.py && g_ "$NEG" commit -qm base
+assert_eq "$(untouched_diff "$NEG" HEAD side.py)" "" "untouched_negative_base: 바꾸기 전에는 diff 가 비었다"
+printf 'b\n' > "$NEG/side.py"
+if [ -n "$(untouched_diff "$NEG" HEAD side.py)" ]; then ok "untouched_negative_pair: 바꾼 뒤에는 같은 함수가 출력을 낸다"
+else no "untouched_negative_pair: 바꿨는데도 diff 가 비었다 — untouched_diff 가 변경을 못 본다"; fi
 finish
