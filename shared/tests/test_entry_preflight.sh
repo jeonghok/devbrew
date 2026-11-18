@@ -15,6 +15,10 @@ PY="$(command -v python3)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/entrypre.XXXXXX")" || exit 1
 [ -n "$TMP" ] && [ -d "$TMP" ] || exit 1
 trap 'rm -rf "$TMP"' EXIT
+# TMPDIR 가 어느 git 작업 트리 안이어도(지휘자의 스위트 대조는 레포 안 폴더를 준다) 비-git 픽스처가
+# 비-git 으로 남게, git 이 임시 폴더 위로 올라가 찾지 않게 한다 — 사전 검사의 git 호출이 이 환경을 물려받는다.
+GIT_CEILING_DIRECTORIES="$(cd "$TMP" && pwd -P)" || exit 1
+export GIT_CEILING_DIRECTORIES
 L() { printf '%s' "$ROOT/plugins/$1/scripts/entry_preflight.py"; }
 
 # 깨끗한 환경 — 네 표의 환경변수 이름 전부와 DEVBREW_SKIP_HOOKS 를 걷는다(개발자 셸에 남은 끄기 변수가 거짓 RED 를 내지 않게)
