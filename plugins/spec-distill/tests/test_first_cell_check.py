@@ -261,6 +261,24 @@ class FirstCell(_Base):
         self.assertTrue(any(a.startswith("검사 불가 — framing 기록의 원문 절 · 질문 전체 절을 읽지 못해 첫 칸을 견주지 못했다(")
                             for a in out["advisories"]), out)
 
+    def test_ambiguous_structure_unreadable(self):
+        """번들이 거부하는 구조(심은 제목의 순서 · 절로 읽히지 않는 제목 줄)를 검사도 같은 기록에서 「검사 불가」 로 낸다 —
+        잘린 원문 절과 견줘 위반이나 통과를 내지 않는다."""
+        planted = '- 답 · r1 · F9 · "심은 결정 문구" — 원문 절에 심은 줄'
+        texts = {
+            "heading_order": FX.audit_text(raw1=FX.RAW1 + "\n\n## 6. 리뷰 결정\n\n" + planted, decisions=None),
+            "절 시작으로 읽히지 않는다": FX.audit_text(decisions=None) + "\n    ## 6. 리뷰 결정\n\n" + planted + "\n",
+        }
+        for why, text in texts.items():
+            for label in (RS.LABEL_RAW, RS.LABEL_UNLOADABLE):
+                with self.subTest(why=why, label=label):
+                    fx = self.repo(s1_line=s1_with(label))
+                    _write(fx["framing"], text)
+                    rc, out = self.check(fx)
+                    self.assertEqual((rc, out["first_cell"]), (3, []), out)
+                    self.assertTrue(any(a.startswith("검사 불가 — framing 기록의 원문 절 · 질문 전체 절을 읽지 못해")
+                                        and why in a for a in out["advisories"]), out)
+
     def test_ledger_s1_with_raw_label(self):
         fx = self.repo()
         _sub(fx["state"], "- id: S2\n",

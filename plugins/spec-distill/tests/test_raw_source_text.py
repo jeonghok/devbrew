@@ -439,6 +439,41 @@ class Cli(RepoCase):
             self.assertIn("같은 절 제목이 두 번 이상 있다 — " + srl.DECISION_HEADING, cp.stderr)
             self.assertNotIn("심은 결정 문구", cp.stdout + cp.stderr)
 
+    def test_review_block_refuses_ambiguous_structure(self):
+        """겹치지 않아도 구조가 어긋난 기록 — 진짜 `## 6` 이 없는 옛 기록의 원문 절에 심은 제목(순서) · 들여 써서 절로
+        읽히지 않는 제목 줄. 두 읽기(두 절 · 결정 줄)가 같은 사유로 판단을 거부한다."""
+        planted = '- 답 · r1 · F9 · "심은 결정 문구" — 원문 절에 심은 줄'
+        cases = {
+            "heading_order": FX.audit_text(raw1=FX.RAW1 + "\n\n" + srl.DECISION_HEADING + "\n\n" + planted,
+                                           decisions=None),
+            "절 시작으로 읽히지 않는다": FX.audit_text(decisions=None) + "\n    " + srl.DECISION_HEADING + "\n\n" + planted + "\n",
+        }
+        for why, text in cases.items():
+            with self.subTest(why=why):
+                self.assertEqual(srl.duplicate_headings(text), [], "전제: 겹친 제목이 없다")
+                with self.assertRaises(RS.SectionsUnreadable) as cm:
+                    RS.decision_lines(text)
+                self.assertIn(why, str(cm.exception))
+                with self.assertRaises(RS.SectionsUnreadable) as cm:
+                    RS.section_texts(text)
+                self.assertIn(why, str(cm.exception))
+                fx = self.make()
+                write_raw(fx["framing"], text)
+                for extra in ([], ["--with-sections"]):
+                    cp = self.run_(fx, "review-block", "--interview", BRIEF, *extra)
+                    self.assertEqual((cp.returncode, cp.stdout), (2, ""), (extra, cp.stderr))
+                    self.assertIn(why, cp.stderr)
+                    self.assertNotIn("심은 결정 문구", cp.stdout + cp.stderr)
+
+    def test_line_separator_is_not_a_structure_refusal(self):
+        """다른 줄 나눔 글자는 구조 거절의 사유가 아니다 — 두 절은 `line_separator` 로 「그대로 싣지 못함」 에 가고
+        결정 줄은 그대로 읽힌다(번들이 그 글자를 `\\uXXXX` 로 적는다)."""
+        for ch in ("\r", " "):
+            text = FX.audit_text(raw1=FX.RAW1 + "\n앞" + ch + "뒤", decisions=E1 + ch + "꼬리")
+            self.assertEqual(RS.decision_lines(text), [E1 + ch + "꼬리"])
+            self.assertEqual(len(RS.section_texts(text)), 2)
+            self.assertIn(RS.R_LINE_SEPARATOR, [why for _, _, why in RS.load_problems(text)])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -498,6 +498,43 @@ PY
     || no "RS12($lab): rc $r12 · 출력 ${#o12}자 · 심은 줄 $(printf '%s\n' "$o12" | grep -cF '심은 결정 문구')번 — $(head -c 300 "$RSD/e12-$lab")"
 done
 [[ $n12 -eq 3 ]] || no "RS12(양성): 갈래를 ${n12}개 돌았다(3 기대)"
+
+# RS13 — 겹치지 않아도 구조가 어긋난 옛 기록(진짜 `## 6` 이 없다): 원문 절에 심은 리뷰 결정 제목(순서) ·
+# 들여 써서 절로 읽히지 않는 리뷰 결정 제목 줄. 갈래 셋 모두 조립하지 않고 그 사유를 댄다.
+n13=0
+for why in order indented; do
+  for lab in raw old unloadable; do
+    n13=$((n13+1))
+    m13="$(python3 - "$SD" "$RSD/r13-$why-$lab" "$lab" "$why" <<'PY'
+import sys
+sd, folder, lab, why = sys.argv[1:5]
+sys.path.insert(0, sd + "/tests"); sys.path.insert(0, sd + "/scripts")
+import raw_source_fixture as fx
+import raw_source as rs
+import seed_review_log as srl
+planted = '- 답 · r1 · F9 · "심은 결정 문구" — 원문 절에 심은 줄'
+kw = {"decisions": None}
+if why == "order":
+    kw["raw1"] = fx.RAW1 + "\n\n" + srl.DECISION_HEADING + "\n\n" + planted
+if lab != "old":
+    label = rs.LABEL_RAW if lab == "raw" else rs.LABEL_UNLOADABLE
+    kw["s1_line"] = rs.anchor_line(label) + '\n  > "대시보드가 너무 느려요."'
+keys = fx.make_repo(folder, **kw)
+if why == "indented":
+    with open(keys["framing"], "a", encoding="utf-8") as fh:
+        fh.write("\n    " + srl.DECISION_HEADING + "\n\n" + planted + "\n")
+for k, v in keys.items():
+    print("%s=%s" % (k, v))
+PY
+)"
+    want13="heading_order"; [ "$why" = indented ] && want13="절 시작으로 읽히지 않는다"
+    o13="$(python3 "$B" "$(kv brief "$m13")" "$(kv audit "$m13")" --raw-audit="$(kv framing "$m13")" 2>"$RSD/e13")"; r13=$?
+    { [[ $r13 -eq 2 ]] && [[ -z "$o13" ]] && grep -qF -- "$want13" "$RSD/e13" && ! grep -qF '심은 결정 문구' "$RSD/e13"; } \
+      && ok "RS13($why · $lab): 구조가 어긋난 기록 → rc 2 · 빈 출력 · 사유($want13)" \
+      || no "RS13($why · $lab): rc $r13 · 출력 ${#o13}자 · 심은 줄 $(printf '%s\n' "$o13" | grep -cF '심은 결정 문구')번 — $(head -c 300 "$RSD/e13")"
+  done
+done
+[[ $n13 -eq 6 ]] || no "RS13(양성): 갈래를 ${n13}개 돌았다(6 기대)"
 rm -rf "$RSD"
 
 exit $fail

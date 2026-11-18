@@ -222,20 +222,35 @@ def _lf(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
-def _refuse_duplicate_headings(text: str) -> None:
-    """일곱 제목 가운데 하나가 두 번 이상 나오면 `SectionsUnreadable` — 심긴 제목이 절의 시작을 가릴 수 있다."""
+_SEPARATOR_TO_SPACE = {ord(c): " " for c in srl.LINE_BREAK_CHARS}
+
+
+def _refuse_ambiguous_structure(text: str) -> None:
+    """`seed_review_log.require_unambiguous` 의 구조 거절 셋을 탄다 — 일곱 제목의 겹침 · 순서(`heading_structure`) ·
+    절 시작으로 읽히지 않는 제목 줄(`heading_lines`). 어긋나면 `SectionsUnreadable` — 심긴 제목이 절의 시작과 끝을 가린다.
+    다른 줄 나눔 글자는 거절하지 않는다(두 절은 `load_problems` 의 `line_separator` 로, 결정 줄은 번들의 `\\uXXXX` 로
+    받는다) — 순서는 그 글자를 빈칸으로 바꾼 글에서 잰다(`\\n` 으로 나눈 줄과 제목 판정은 그대로다).
+    `## 6` 의 기록 꼴이 아닌 줄은 거절하지 않고 `decision_lines` 가 건너뛴다."""
     dup = srl.duplicate_headings(text)
     if dup:
         raise SectionsUnreadable("framing 기록에 같은 절 제목이 두 번 이상 있다 — %s 줄 %s"
                                  % (dup[0][0], "·".join(map(str, dup[0][1]))))
+    order = srl.heading_structure(text.translate(_SEPARATOR_TO_SPACE))
+    if order:
+        raise SectionsUnreadable("framing 기록의 절 순서가 템플릿과 다르다 — %s" % "; ".join(order))
+    for heading in srl.AUDIT_HEADINGS:
+        found = srl.heading_lines(text, heading)
+        if found and not any(ok for _, ok in found):
+            raise SectionsUnreadable("framing 기록의 「%s」 줄이 절 시작으로 읽히지 않는다(들여 쓴 줄) — 줄 %s"
+                                     % (heading, "·".join(str(i + 1) for i, _ in found)))
 
 
 def section_texts(audit_text: str) -> "tuple[str, str]":
     """두 절 — 제목 줄부터, 끝의 빈 줄(빈칸 · 탭뿐인 줄)을 뗀 글. 제목 줄 바로 뒤의 빈 줄은 그대로 둔다.
-    절을 자르지 못하거나(`section_body` 가 None) 일곱 제목 가운데 하나가 두 번 이상 나오면(심긴 제목이 절을 자를 수
-    있다) `SectionsUnreadable`."""
+    절을 자르지 못하거나(`section_body` 가 None) 일곱 제목의 구조가 어긋나면(`_refuse_ambiguous_structure` — 심긴
+    제목이 절을 자를 수 있다) `SectionsUnreadable`."""
     text = _lf(audit_text)
-    _refuse_duplicate_headings(text)
+    _refuse_ambiguous_structure(text)
     out = []
     for heading in srl.AUDIT_HEADINGS[:2]:
         body = srl.section_body(text, heading)
@@ -305,10 +320,10 @@ def unloadable_line(problems: "list[tuple[str, int, str]]") -> str:
 
 def decision_lines(audit_text: str) -> "list[str]":
     """리뷰 결정 줄 가운데 큰따옴표 안 문구가 비지 않은 줄, 글자 그대로. 절이 없으면 빈 목록 · 기록 꼴이 아닌 줄은
-    건너뛴다(옛 기록). 일곱 제목 가운데 하나가 두 번 이상이면 `section_texts` 와 같이 `SectionsUnreadable` — 원문 절에
-    심긴 제목과 기록 줄이 사용자 결정 문구로 실린다."""
+    건너뛴다(옛 기록). 일곱 제목의 구조가 어긋나면 `section_texts` 와 같이 `SectionsUnreadable` — 원문 절에 심긴
+    제목과 기록 줄이 사용자 결정 문구로 실린다."""
     text = _lf(audit_text)
-    _refuse_duplicate_headings(text)
+    _refuse_ambiguous_structure(text)
     body = srl.section_body(text, srl.DECISION_HEADING)
     if body is None:
         return []
