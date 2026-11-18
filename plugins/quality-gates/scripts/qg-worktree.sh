@@ -37,7 +37,9 @@ phys_path() {   # <path>
   printf '%s\n' "$1"
 }
 
-# 등록 판정의 단일 읽기 — `git worktree list --porcelain` 의 블록에서 물리 경로가 같은 worktree 를 찾는다.
+# 등록 판정의 단일 읽기 — `git worktree list --porcelain` 의 블록에서 같은 worktree 를 찾는다.
+# 글자가 아니라 신원(물리 경로 · 같은 inode)으로 견준다 — 대소문자를 구분하지 않는 파일시스템에서
+# 이름이 대소문자만 다른 사용자 worktree 도 같은 것으로 잡는다.
 # 등록돼 있으면 그 브랜치 이름(브랜치를 쥐지 않았으면 `-`)을 내고 rc 0, 등록돼 있지 않으면 rc 1.
 wt_registered_branch() {   # <abs-path>
   local want line p="" br="-"
@@ -46,7 +48,7 @@ wt_registered_branch() {   # <abs-path>
     case "$line" in
       "worktree "*) p=$(phys_path "${line#worktree }"); br="-" ;;
       "branch "*) br="${line#branch }" ;;
-      "") if [[ -n "$p" && "$p" == "$want" ]]; then printf '%s\n' "$br"; return 0; fi; p="" ;;
+      "") if [[ -n "$p" ]] && { [[ "$p" == "$want" ]] || [[ "$p" -ef "$1" ]]; }; then printf '%s\n' "$br"; return 0; fi; p="" ;;
     esac
   done < <(git worktree list --porcelain 2>/dev/null; echo)
   return 1
@@ -56,6 +58,12 @@ holds_branch() {   # <abs-path> — 등록된 worktree 가 브랜치를 쥐고 �
   local br
   br=$(wt_registered_branch "$1") || return 1
   [[ "$br" != "-" ]]
+}
+
+# 폴더 안에 그 이름이 글자 그대로 있나 — 대소문자를 구분하지 않는 파일시스템에서 `qg-base-x` 가
+# `QG-Base-x` 를 열어 주는 것을 자기 것으로 착각하지 않기 위함.
+has_exact_entry() {   # <dir> <name>
+  [[ -n "$(find "$1" -mindepth 1 -maxdepth 1 -name "$2" -print 2>/dev/null)" ]]
 }
 
 # 세션 id 앞 8자를 검증해 낸다.
@@ -68,12 +76,18 @@ sid_short_of() {   # <session-id>
   printf '%s\n' "$s"
 }
 
-# 앞 실행이 남긴 같은 이름의 사본을 치운다. 부모가 기대한 자리가 아니면 건드리지 않는다.
+# 앞 실행이 남긴 같은 이름의 사본을 치운다. 부모 폴더가 아예 없으면 할 일이 없다. 부모를 끝까지 풀었을 때
+# 기대한 자리가 아니면(링크로 리포 안 다른 곳 · 밖을 가리킨다) 지우지 않고 멈춘다.
 # 링크는 링크만 지운다 · 브랜치를 쥔 등록된 worktree 는 지우지 않고 멈춘다 · 그 밖은 지운다.
-clear_stale_copy() {   # <path> <expected-parent> [quiet-skip]
+clear_stale_copy() {   # <path> <expected-parent>
   local wt="$1" want_parent="$2" real_parent
-  real_parent=$(phys_path "$(dirname "$wt")")
-  [[ "$real_parent" == "$want_parent" ]] || return 0
+  real_parent=$(cd "$(dirname "$wt")" 2>/dev/null && pwd -P) || return 0
+  [[ "$real_parent" == "$want_parent" ]] \
+    || die "일회용 트리 자리가 기대한 곳이 아니다(링크?) — 지우지 않는다: $(dirname "$wt") -> $real_parent"
+  if [[ -L "$wt" || -e "$wt" ]]; then
+    has_exact_entry "$real_parent" "$(basename "$wt")" \
+      || die "이름이 대소문자만 다른 항목이다 — 지우지 않는다: $wt"
+  fi
   git worktree prune >/dev/null 2>&1 || true
   if [[ -L "$wt" ]]; then
     rm -f -- "$wt" || die "앞 실행이 남긴 링크를 지우지 못했다: $wt"
@@ -221,13 +235,17 @@ case "${1:-}" in
         [[ "$t_name" =~ ^(base|head)-[A-Za-z0-9_-]{1,8}$ ]] && scope_ok=1 ;;
     esac
     [[ "$scope_ok" -eq 1 ]] || die "refuse to remove outside namespace: $target"
+    if [[ -L "$target_real" || -e "$target_real" ]]; then
+      has_exact_entry "$t_parent" "$t_name" \
+        || die "이름이 대소문자만 다른 항목이다 — 지우지 않는다: $target"
+    fi
     if [[ -L "$target_real" ]]; then
       rm -f -- "$target_real" || die "링크를 지우지 못했다: $target"   # 링크만 지운다 — 가리키는 곳은 건드리지 않는다
       exit 0
     fi
     [[ -d "$target_real" ]] || exit 0  # idempotent
     holds_branch "$target_real" && die "브랜치를 쥔 worktree 라 지우지 않는다: $target"
-    git worktree remove --force "$target_real" 2>/dev/null \
+    git worktree remove --force --force "$target_real" 2>/dev/null \
       || rm -rf -- "$target_real" \
       || die "rm -rf fallback also failed: $target"  # fallback when git lost track
     ;;
@@ -240,7 +258,8 @@ case "${1:-}" in
     for op_prefix in base head; do
       op_rel=".claude/worktrees/qg-${op_prefix}-${op_sid}"
       [[ -d "$op_top/$op_rel" && ! -L "$op_top/$op_rel" ]] || continue
-      wt_registered_branch "$op_top/$op_rel" >/dev/null && printf '%s\n' "$op_rel"
+      op_br=$(wt_registered_branch "$op_top/$op_rel") || continue
+      [[ "$op_br" == "-" ]] && printf '%s\n' "$op_rel"
     done
     exit 0
     ;;

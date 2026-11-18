@@ -17,9 +17,14 @@ new_repo() {   # 커밋 하나짜리 일회용 리포 — 경로를 낸다
   printf '%s' "$r"
 }
 
+mk_repo() {   # 부모 셸에서 검사한다 — $(new_repo) 안의 exit 는 서브셸만 끝낸다
+  REPO=$(new_repo "$@")
+  [ -n "$REPO" ] && [ -d "$REPO" ] || { echo "임시 리포를 만들지 못했다" >&2; exit 1; }
+}
+
 # --- surface: branch 모드와 샌드박스 하위명령은 없다 (v10) ---
 echo "[surface]"
-REPO=$(new_repo)
+mk_repo
 for sub in sanitize validate-branch create create-sandbox mutation-guard; do
   err=$(cd "$REPO" && "$WT" "$sub" x y 2>&1 >/dev/null); rc=$?
   if [ "$rc" -eq 2 ] && printf '%s' "$err" | grep -q "unknown subcommand: $sub"; then
@@ -36,7 +41,7 @@ rm -rf "$REPO"
 
 # --- remove ---
 echo "[remove]"
-REPO=$(new_repo)
+mk_repo
 base_sha=$(cd "$REPO" && git rev-parse HEAD)
 WTPATH=$(cd "$REPO" && "$WT" create-baseline "$base_sha" "remove-test12345" 2>/dev/null)
 [ -d "$WTPATH" ] || { no "create-baseline precondition"; }
@@ -60,7 +65,7 @@ head_rel() { printf '.claude/worktrees/qg-%s-%s' "$1" "${2:0:8}"; }
 
 echo "[new_location]"
 for mode in plain ignore; do
-  REPO=$(new_repo "$mode"); TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
+  mk_repo "$mode"; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
   b=$(cd "$REPO" && "$WT" create-baseline "$sha" "newloc1234567" 2>/dev/null)
   (cd "$REPO" && git commit -q --allow-empty -m second); sha2=$(cd "$REPO" && git rev-parse HEAD)
   printf 'mode: range\nstatus: ok\nstart: %s\nend: %s\n' "$sha" "$sha2" > "$REPO/range.txt"
@@ -78,7 +83,7 @@ done
 
 echo "[keep_others]"
 for mode in plain ignore; do
-  REPO=$(new_repo "$mode"); TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
+  mk_repo "$mode"; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
   mkdir -p "$REPO/.claude/worktrees"
   (cd "$REPO" && git worktree add -q -b feat-x "$REPO/.claude/worktrees/feat-x" "$sha" && \
     git worktree add -q --detach "$REPO/.claude/worktrees/other" "$sha")
@@ -94,7 +99,7 @@ for mode in plain ignore; do
 done
 
 echo "[branch_holding_same_name_stops]"
-REPO=$(new_repo); TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
 mkdir -p "$REPO/.claude/worktrees"
 (cd "$REPO" && git worktree add -q -b mine "$REPO/.claude/worktrees/qg-base-brhold12" "$sha")
 echo keep > "$REPO/.claude/worktrees/qg-base-brhold12/f"
@@ -104,7 +109,7 @@ echo keep > "$REPO/.claude/worktrees/qg-base-brhold12/f"
 rm -rf "$REPO"
 
 echo "[recover_same_name]"
-REPO=$(new_repo); TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
 OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1
 echo precious > "$OUT/p.txt"
 mkdir -p "$REPO/.claude/worktrees"
@@ -127,7 +132,7 @@ w2=$(cd "$REPO" && "$WT" create-baseline "$sha" "recov123" 2>/dev/null)
 rm -rf "$REPO" "$OUT"
 
 echo "[escape_refused]"
-REPO=$(new_repo); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
 OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1
 mkdir -p "$REPO/.claude"; ln -s "$OUT" "$REPO/.claude/worktrees"
 (cd "$REPO" && "$WT" create-baseline "$sha" "escape12" >/dev/null 2>&1); assert_eq "$?" "2" ".claude/worktrees 가 밖을 가리키면 rc 2"
@@ -135,7 +140,7 @@ mkdir -p "$REPO/.claude"; ln -s "$OUT" "$REPO/.claude/worktrees"
 rm -rf "$REPO" "$OUT"
 
 echo "[old_location_cleaned]"
-REPO=$(new_repo); TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
 mkdir -p "$REPO/.claude/quality-gates/worktrees"
 (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/quality-gates/worktrees/base-oldloc12" "$sha" && \
   git worktree add -q --detach "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" "$sha")
@@ -148,7 +153,7 @@ w=$(cd "$REPO" && "$WT" create-baseline "$sha" "oldloc1234" 2>/dev/null)
 rm -rf "$REPO"
 
 echo "[remove_scope]"
-REPO=$(new_repo); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
 mkdir -p "$REPO/.claude/worktrees"
 (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/worktrees/feat-x" "$sha")
 for t in "$REPO/.claude/worktrees/feat-x" "$REPO/.claude/worktrees" "$REPO/.claude/worktrees/qg-base-x/.." \
@@ -161,7 +166,7 @@ done
 rm -rf "$REPO"
 
 echo "[own_paths]"
-REPO=$(new_repo); sha=$(cd "$REPO" && git rev-parse HEAD)
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
 mkdir -p "$REPO/.claude/worktrees"
 (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/worktrees/qg-head-ownp1234" "$sha")
 out=$(cd "$REPO" && "$WT" own-paths "ownp12345678"); assert_eq "$?" "0" "own-paths rc 0"
@@ -177,5 +182,43 @@ out=$(cd "$REPO" && "$WT" own-paths "ownp12345678"); assert_eq "$out" "" "지운
 (cd "$REPO" && "$WT" own-paths "a b" >/dev/null 2>&1); assert_eq "$?" "2" "나쁜 session id 는 rc 2"
 (cd "$REPO" && "$WT" own-paths "" >/dev/null 2>&1); assert_eq "$?" "2" "빈 session id 는 rc 2"
 (cd "$REPO" && "$WT" own-paths >/dev/null 2>&1); assert_eq "$?" "2" "인자 없으면 rc 2"
+rm -rf "$REPO"
+echo "[old_location_escape_refused]"
+for shape in inrepo outside; do
+  mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+  OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1
+  if [ "$shape" = inrepo ]; then dest="$REPO/src"; lnk="../../src"; else dest="$OUT"; lnk="$OUT"; fi
+  mkdir -p "$dest/base-sess1234" "$REPO/.claude/quality-gates"; echo keep > "$dest/base-sess1234/user.txt"
+  ln -s "$lnk" "$REPO/.claude/quality-gates/worktrees"
+  (cd "$REPO" && "$WT" create-baseline "$sha" "sess12345678" >/dev/null 2>&1); assert_eq "$?" "2" "[$shape] 옛 자리 폴더가 링크면 만들기 rc 2"
+  [ -f "$dest/base-sess1234/user.txt" ] && ok "[$shape] 링크 너머 파일이 그대로다" || no "[$shape] 링크 너머를 지웠다"
+  rm -f "$REPO/.claude/quality-gates/worktrees"
+  # 한 단계 위(.claude/quality-gates)가 링크인 모양
+  rmdir "$REPO/.claude/quality-gates"; mkdir -p "$dest/worktrees/base-sess1234"; echo keep > "$dest/worktrees/base-sess1234/user.txt"
+  ln -s "$dest" "$REPO/.claude/quality-gates"
+  (cd "$REPO" && "$WT" create-baseline "$sha" "sess12345678" >/dev/null 2>&1); assert_eq "$?" "2" "[$shape] .claude/quality-gates 가 링크면 만들기 rc 2"
+  [ -f "$dest/worktrees/base-sess1234/user.txt" ] && ok "[$shape] 상위 링크 너머 파일이 그대로다" || no "[$shape] 상위 링크 너머를 지웠다"
+  rm -rf "$REPO" "$OUT"
+done
+
+echo "[case_variant_branch_holder]"
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+mkdir -p "$REPO/.claude/worktrees"
+(cd "$REPO" && git worktree add -q -b userbr "$REPO/.claude/worktrees/QG-Base-casev123" "$sha")
+echo keep > "$REPO/.claude/worktrees/QG-Base-casev123/f"
+if [ -d "$REPO/.claude/worktrees/qg-base-casev123" ]; then
+  (cd "$REPO" && "$WT" remove "$REPO/.claude/worktrees/qg-base-casev123" >/dev/null 2>&1); assert_eq "$?" "2" "대소문자만 다른 브랜치 worktree 는 remove rc 2"
+  (cd "$REPO" && "$WT" create-baseline "$sha" "casev123" >/dev/null 2>&1); assert_eq "$?" "2" "대소문자만 다른 브랜치 worktree 는 만들기 rc 2"
+  [ -f "$REPO/.claude/worktrees/QG-Base-casev123/f" ] && ok "그 worktree 가 그대로다" || no "대소문자만 다른 사용자 worktree 를 지웠다"
+else
+  echo "  SKIP: 대소문자를 구분하는 파일시스템이라 이 모양을 만들 수 없다 (case_variant_branch_holder 를 재지 못함)"
+fi
+rm -rf "$REPO"
+
+echo "[own_paths_branch_holder]"
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+mkdir -p "$REPO/.claude/worktrees"
+(cd "$REPO" && git worktree add -q -b userbr2 "$REPO/.claude/worktrees/qg-base-ownbr123" "$sha")
+out=$(cd "$REPO" && "$WT" own-paths "ownbr123"); assert_eq "$out" "" "브랜치를 쥔 같은 이름은 자기 사본으로 내지 않는다"
 rm -rf "$REPO"
 finish
