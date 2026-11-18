@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0] — 2026-11-18
+
+### Added
+- 끄기 변수 표(`switches.md`)와 진입 skill 첫머리의 `[devbrew-switch]` 줄 · README 「끄는 길」.
+
+### Changed
+- 자체 테스트 사본을 `.claude/worktrees/audit-rt-…` 에 만든다. 레포 밖이면 만들지 않는다.
+- 훅 kill switch 를 감사 요건에서 뺐다.
+- 0열 주석을 읽는 파서를 고쳤다.
+
+### Deprecated
+- 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
+- `DEVBREW_PLUGIN_AUDIT_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` — 대신: `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` — codex 는 쓰되 웹만 막는 길은 없어진다
+
 ## [1.9.0] — 2026-11-17
 
 ### Changed

@@ -3,6 +3,25 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [15.2.0] — 2026-11-18
+
+### Added
+- 끄기 변수 표(`switches.md`)와 진입 skill 첫머리의 `[devbrew-switch]` 줄 · README 「끄는 길」.
+
+### Changed
+- 비교용 사본을 `.claude/worktrees/qg-…` 에 만든다. 리뷰 범위 · 봉인 · 지문은 이 세션의 등록된 qg 사본만 빼고, 같은 폴더의 사용자 worktree 는 지금처럼 다룬다.
+- 훅 kill switch 를 감사 요건에서 뺐다.
+- 0열 주석을 읽는 파서를 고쳤다.
+
+### Deprecated
+- 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
+- `DEVBREW_QUALITY_GATES_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` — 대신: 없음 — 보안 리뷰는 늘 돈다
+- `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` — 대신: `/quality-gates:artifact-critique` 를 부르지 않는다
+- `DEVBREW_QUALITY_GATES_DISABLE_E2E` — 대신: e2e 질문에 「아니오」 로 답한다. 실행 자체를 막으려면 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST`
+- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC` — 대신: 없음 — 읽기만 하는 단계다
+- `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` — 대신: 유예 시간 `DEVBREW_QUALITY_GATES_TTL_HOURS` 를 크게 준다
+
 ## [15.1.0] — 2026-11-17
 
 ### Added

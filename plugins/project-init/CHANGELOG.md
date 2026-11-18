@@ -5,6 +5,16 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.6.0] — 2026-11-18
+
+### Added
+- 끄기 변수 표(`switches.md`)와 진입 skill 첫머리의 `[devbrew-switch]` 줄 · README 「끄는 길」.
+
+### Deprecated
+- 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
+- `DEVBREW_PROJECT_INIT_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` — 대신: 플러그인 끄기, 또는 설정의 `disableAllHooks`
+
 ## [5.5.0] — 2026-11-17
 
 ### Changed
