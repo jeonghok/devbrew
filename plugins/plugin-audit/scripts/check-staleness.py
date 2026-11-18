@@ -546,7 +546,7 @@ def _metadata_cost_class(fm_block: str) -> bool:
         if not in_meta:
             in_meta = re.match(r"metadata:[ \t]*$", line) is not None
             continue
-        if not line.strip():
+        if not line.strip() or line[0] == "#":
             continue
         if line[0] not in " \t":
             return False   # 들여쓰지 않은 줄이 블록을 닫는다

@@ -1,4 +1,4 @@
-import json, subprocess, sys, tempfile, unittest
+import ast, json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-shape-completeness.py"
@@ -82,6 +82,24 @@ class TestShapeCompleteness(unittest.TestCase):
 
     def test_both_places_counts_metadata(self):                 # Review Focus 5
         self.assertTrue(self._cost("cost_class: high\nmetadata:\n  cost_class: high\n"))
+
+    def test_zero_column_comment_inside_metadata(self):         # AC16 — 0열 주석은 블록을 닫지 않는다
+        self.assertTrue(self._cost("metadata:\n# note\n  cost_class: low\n"))
+
+    def test_one_line_form_is_not_declared(self):               # 한 줄 꼴은 블록이 아니다
+        self.assertFalse(self._cost("metadata: {cost_class: low}\n"))
+
+    def test_tab_indent_is_declared(self):                      # J16 — 탭 들여쓰기는 선언 (지금 동작)
+        self.assertTrue(self._cost("metadata:\n\tcost_class: low\n"))
+
+    def test_two_copies_are_identical(self):                    # 두 사본의 _metadata_cost_class 는 글자 그대로 같다
+        def _fn_source(name):
+            path = SCRIPT.parent / name
+            text = path.read_text(encoding="utf-8")
+            fn = next(n for n in ast.parse(text).body
+                      if isinstance(n, ast.FunctionDef) and n.name == "_metadata_cost_class")
+            return ast.get_source_segment(text, fn)
+        self.assertEqual(_fn_source("check-shape-completeness.py"), _fn_source("check-staleness.py"))
 
     def test_name_only_plugin_json_is_not_gap(self):            # AC9
         self.assertTrue(self._pj({"name": "myplugin"}))
