@@ -134,7 +134,7 @@ next_phase: superpowers:writing-plans
 |---|---|
 | 통째 끄기 넷 `DEVBREW_<PLUGIN>_DISABLE` | Claude Code 의 플러그인 끄기 |
 | 보안 리뷰어 끄기 `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` | 없다 — 보안 리뷰는 늘 돈다(읽는 코드가 없던 스위치) |
-| 재비판 끄기 `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` · brief 리뷰 끄기 `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | 없다 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다(F4). 둘 다 읽는 코드가 없던 스위치다 |
+| 재비판 끄기 `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` · brief 리뷰 끄기 `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | 없다 — 재비판은 작은 일에서 건너뛰는 것을 모델 판단이 이유를 적고 한다(F4). brief 리뷰는 첫 검토가 늘 돌고, 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것만 모델 판단이 이유를 적고 한다(결정 기록의 2026-11-18 재결정). 둘 다 읽는 코드가 없던 스위치다 |
 | 워크트리 질문 끄기 `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | 질문에 「아니오」 로 답한다(읽는 코드가 없던 스위치) |
 | 설계문서 리뷰 끄기 둘 — `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` · `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 그 skill 을 부르지 않는다 |
 | 문서 비평 끄기 `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` | 그 skill 을 부르지 않는다 |
@@ -142,7 +142,7 @@ next_phase: superpowers:writing-plans
 | 감사의 codex 웹 검색 끄기 `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` | codex 끄기. 감사에서 codex 는 쓰되 웹 검색만 막는 길은 없어진다(남는 한계) |
 | e2e 끄기 `DEVBREW_QUALITY_GATES_DISABLE_E2E` | e2e 는 원래 묻고 돈다 — 「아니오」 로 답한다. 실행 자체를 막으려면 차등 테스트 끄기 |
 | 의도 점검 끄기 `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC` | 없다 — 읽기만 하는 단계다 |
-| project-init 훅 끄기(`DEVBREW_SKIP_HOOKS` 의 그 훅 토큰) | 플러그인 끄기, 또는 설정의 `disableAllHooks` |
+| project-init 훅 끄기(`DEVBREW_SKIP_HOOKS` 의 그 훅 토큰) | 플러그인 끄기, 또는 설정의 `disableAllHooks`(모든 플러그인의 훅이 함께 꺼진다) |
 | 로드맵 지도 끄기(`DEVBREW_SKIP_HOOKS=spec-distill:statusline`) | 상태줄 설정을 지운다. 이 스위치는 지휘자의 상태 계산까지 꺼서 지휘를 멈추게 했다 |
 | 원장 정리 끄기 둘(`spec-distill:SessionEnd` 와 그 별칭 · `spec-distill:spec-distill-gc`) | 유예 시간 변수 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
 | 세션 폴더 정리 끄기(`quality-gates:qg-gc`) | 유예 시간 변수 `DEVBREW_QUALITY_GATES_TTL_HOURS` 를 크게 준다 |
@@ -515,6 +515,8 @@ CLAUDE.md `### 런타임 상태 & 훅` 의 두 글머리를 아래로 바꾼다.
 - docreview 계수 — spec-distill-59ec298a/2026-11-18-official-switches-state-desig-5e7f1bba9c846139 r2: advice_new=6 · advice_repeat=4 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-18-official-switches-state-desig-5e7f1bba9c846139 r3: advice_new=3 · advice_repeat=5 · mc_preexisting_new=1
 - 재분해 · 2026-11-18 · 로드맵의 F7 칸(의도, 범위, 브랜치, 경로 예약, 순서 이유, 넘기는 것)을 이 설계에 맞췄다 — 범위는 넓어지지 않았다. 좁혀진 것(상태 파일을 공식 데이터 폴더나 docs 로 옮기기, 플러그인 사용자 옵션과 skill 거부 규칙, Claude Code 최소 판 강제, 지휘 기계 상태와 지휘자의 스위트 대조 사본 옮기기)은 로드맵의 「안 한다」 로 옮겼고 받는 에픽은 이 로드맵에 없다(미룸 표). 브랜치는 둘(둘째 계획 feature/switch-retirement), 경로 예약은 실제로 고칠 파일이다. 로드맵 수정 PR #300 — 「이대로 다시 나눈다 (권장)」
+- 재결정 · 2026-11-18 · 설계 1 「없어지는 20개와 대신할 길」 표의 brief 리뷰 끄기 변수 칸 — 원래: 「없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다」 · 재결정: 「없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다」 · 근거: 통합 리뷰 지적 — F4 「앞단의 끝」 이 건너뜀을 그 셋으로 못 박았고 첫 검토는 건너뛰지 않는다(Law 2). 이 칸은 skill 첫머리에 글자 그대로 나간다. 설계 1 의 표 칸도 같은 뜻으로 고쳤다(지휘자가 만든 질문) — 「이 글로 고친다 (권장)」
+- 결정 · 2026-11-18 · 재지 않은 것 둘에 단서를 단다 — 네 README 의 통째 끄기 문단에 「`claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다」 를, project-init 표의 `disableAllHooks` 칸에 「(모든 플러그인의 훅이 함께 꺼진다)」 를 더한다. CLAUDE.md 의 규칙 글자와 표의 통째 끄기 칸은 그대로다. 설계 1 의 표 칸도 같은 글로 고쳤다(통합 리뷰의 관찰. 지휘자가 만든 질문) — 「이 PR 에서 단서를 단다 (권장)」
 
 ## 지휘 기록
 
@@ -557,6 +559,8 @@ CLAUDE.md `### 런타임 상태 & 훅` 의 두 글머리를 아래로 바꾼다.
 - 스위트 대조 · 2026-11-18 20:48 · 전체 스위트 대조(끝 f47638c8, 기본 브랜치 edc981c6 기준, 19:09~20:46)가 새 실패 28개를 냈다 — 전부 진입 사전 검사 테스트(shared/tests/test_entry_preflight.sh)의 이 PR 이 더한 단언이다. 원인은 하나다: 그 단언들이 감시줄까지 통째로 견주는데, 감시줄의 root 값은 테스트의 임시 폴더가 git 작업 트리 밖이라고 가정한다. 지휘자의 스위트 대조는 임시 폴더를 레포 안(지휘 폴더의 대조 사본 옆)에 두어 root 가 본 체크아웃으로 풀린다. 끄기 변수 줄 자체는 기대와 같았다. 같은 가정 때문에 그 파일의 「비-git: root_source=cwd」 는 기본 브랜치에서도 실패한다(양쪽 다 있는 실패 11개 가운데 하나). 지휘 세션이 합친 사본에서 임시 폴더 자리만 바꿔 재현했다(레포 밖 130/0, 레포 안 101/29). 구현 담당자에게 테스트를 임시 폴더 자리에 기대지 않게 고치게 하고 전체 대조를 다시 돈다
 - 리뷰 뒤 반영 · 2026-11-18 20:52 · 구현 담당자가 테스트 한 파일만 고쳤다(커밋 08752259 — 임시 폴더를 만든 직후 git 이 그 위로 올라가 찾지 않게 환경 값 하나를 준다, 넉 줄). 단언은 바꾸지 않았다. 담당자의 확인: 임시 폴더가 레포 밖이든 안이든 통과 130 실패 0, 고침을 지우면 레포 안에서 실패 29, 끄기 변수 줄의 머리나 감시줄의 root 를 바꾸는 변이에 해당 단언이 실패한다. 같은 가정으로 기본 브랜치에서도 실패하던 기존 단언 하나(비-git 의 root_source)가 함께 풀렸다. 동작을 바꾸지 않는 테스트 수정이라 좁은 재리뷰를 따로 받지 않고, 아직 돌지 않은 통합 리뷰가 함께 본다. 전체 스위트 대조를 다시 돈다
 - 머지 전 확인 · 2026-11-18 22:27 · AC17 은 구현 담당자가 미룸으로 보고했고 지휘자의 스위트 대조가 닫았다 — 고친 뒤의 끝 08752259 대 기본 브랜치 09f35df3, 전체 스위트: 새 실패 없음(이 브랜치에만 있는 실패 0개, 기본 브랜치에만 있는 실패 1개, 양쪽 다 있는 실패 10개). 판정과 구현 대조 절을 이 커밋에 싣는다. 이 커밋 뒤에는 대조를 다시 돌지 않는다(설계문서만 바뀐다)
+- 통합 리뷰 · 2026-11-18 22:47 · 통합 리뷰가 머지를 막을 결함 없이 지적 넷을 냈다(이 PR 이 고침 셋 — brief 리뷰 끄기 변수의 대신할 길 칸이 F4 의 결정과 어긋남, 규칙 인용 락이 무시되는 경로를 통째로 건너뜀, 진입 사전 검사 테스트의 지키는 파일 선언에 끄기 변수 표가 없음. 뒤 에픽이 고침 하나 — 진입 skill 수 아홉과 표의 skill 이름은 F5). 지휘 세션이 셋 다 파일을 읽어 확인했다. 칸의 글자와 재지 않은 것의 단서 둘은 승인된 설계의 표 글자를 바꾸는 일이라 사용자에게 물었고(결정 기록의 두 줄, 원문은 relay-1), 락 둘은 원래 세기로 되돌리는 수리라 묻지 않았다. 구현 담당자를 이어 불러 한 번에 고치게 했다. 좁은 재리뷰는 두 번까지이고 남는 지적은 둘째 판으로 넘긴다고 PR 본문에 먼저 적었다
+- 리뷰 뒤 반영 · 2026-11-18 23:02 · 구현 담당자가 통합 리뷰의 다섯 자리를 고쳤다(커밋 b3691702 — brief 리뷰 끄기 변수의 대신할 길 칸과 재지 않은 것의 단서 둘, 693af544 — 규칙 인용 락이 건너뛰는 인용을 이름 목록 하나(.claude/worktrees)로 못 박고 집합이 정확히 같을 때만 통과, 00b122bb — 진입 사전 검사 테스트의 지키는 파일 선언에 끄기 변수 표 넷과 quality-gates 의 사전 검사 링크). 판정 표의 Task 5 줄(규칙 인용 락이 git 이 무시하는 경로를 건너뛴다)은 이 고침으로 낡았다 — 이제 git 의 무시 판정에 기대지 않는다. 담당자의 판정 넷: 이름 목록은 경로 단위로 묶는다(문서마다 따로가 아니다), 무시 판정은 남기지 않는다, quality-gates 링크는 선언만이 아니라 테스트가 실제로 읽게 한다(단언 셋 늘어 133), 판은 다시 올리지 않는다. 락과 보이는 글자를 바꾼 수정이라 같은 리뷰어의 좁은 재리뷰를 받고 전체 스위트 대조를 다시 돈다
 
 ## 판정
 
