@@ -28,8 +28,8 @@ seed: <작업 트리 루트 기준 seed 상대경로 | 없음>
 
 본문 맨 앞에는 `## 풀린 입력` 블록을 두고 「풀린 입력」(진입 단계 2 의 결과 — NEW-SEED 면 Read 한 seed 전문, NEW 면 받은 요청
 그대로)을 P21 secret placeholder 치환을 적용한 뒤 그대로 적는다 — token · key · credential 꼴은 SKILL 의 치환 토큰(`<REDACTED>` ·
-`<REDACTED:라벨>` 등)으로 바꾼다. brief §6 의 `S1` 이 담을 글과 같은 치환본이다. 물결표 펜스(`~~~~`)로 감싸고, 원문에 그만큼 긴
-물결표 줄이 있으면 펜스를 더 길게 한다. 치환 뒤에는 이 블록을 고치지 않는다 — 이어 갈 때 `S1` 이 여기서 나온다.
+`<REDACTED:라벨>` 등)으로 바꾼다. framing 없이 시작한 인터뷰와 원자료를 찾지 못했거나 그대로 싣지 못한 인터뷰에서는 brief §6 의 `S1` 이 담을 글과 같은 치환본이다(원자료를 찾아 실은 인터뷰의 `S1` 에는 이 블록이 아니라 원자료가 실린다). 물결표 펜스(`~~~~`)로 감싸고, 원문에 그만큼 긴
+물결표 줄이 있으면 펜스를 더 길게 한다. 치환 뒤에는 이 블록을 고치지 않는다 — 이어 갈 때 「풀린 입력」 이 여기서 나온다(끝맺음의 비밀값 확인이 사용자가 고른 값을 가리는 것만 예외다 — `finishing.md` Step A 3).
 
 - 판결이 `interview-state: NEW-SEED <주제> seed=<상대경로>` 면 첫 라운드 **전에** 만든다 — `<주제>` 를 그대로 topic 으로,
   `seed=` 값을 `seed:` 로 쓴다.
@@ -59,6 +59,45 @@ python3 "$SD/scripts/state_path.py" interview-state --topic "<kebab 주제>"
   옮긴 파일) 옛 기록에 남은 최초 요청을 쓰고, 그것도 없으면 「풀린 입력」은 없음(`S1` 없음)이다 — 그 사실을 사용자에게 한 번 알린다.
 - 이어 갈 때는 고른 파일의 절대경로가 그 인터뷰의 정체다. brief · audit 경로는 그 이름에서 `.state.md` 를 떼어 도출하고,
   날짜 · 주제로 다시 계산하지 않는다.
+
+### 원자료 — 판결 뒤
+
+framing 을 거친 인터뷰에서 사용자의 말은 seed 가 아니라 framing 기록 파일의 원자료다 — `## 1. 원문` 절에서 `### ` 로 시작하는 구분 줄을 뺀 전부 · `## 2. 질문 전체` 절의 «당신이 답한 것» 줄과 «사용자가 적은 말» 칸 · `## 6. 리뷰 결정` 절의 사용자 문구. seed 는 모델이 줄인 글이다. 위 판결을 처리한 뒤 인터뷰에 들어가기 전에 원자료를 찾아 읽는다 — 경로 글자를 직접 짓지 않는다.
+
+| 자리 | 동작 |
+|---|---|
+| `NEW-SEED` — 상태 파일을 만든 직후 | 펜스를 `SEED_ABS` · `STATE` 둘 다 채워 돌린다 |
+| `RESUME`(`LEGACY` 를 옮긴 뒤 포함) | 펜스를 `STATE` 만 채워 돌린다 — 이어 가는 세션은 앞 세션이 읽은 글을 갖고 있지 않다 |
+| `NEW` 인데 seed 를 경로로 받았다(진입 판정이 seed 로 여는 인터뷰가 아니라고 냈다) | 펜스를 `SEED_ABS` 만 채워 돌리고(분류기용), `[spec-distill] 원자료: 찾지 못함 — seed 경로가 상태 파일에 기록되지 않는다` 를 낸다 |
+| `NEW` 인데 seed 를 붙여 넣었다 | 펜스를 돌리지 않고 `[spec-distill] 원자료: 찾지 못함 — 붙여 넣은 seed` 를 낸다 |
+| `NEW` 이고 seed 가 아니다 | 아무것도 하지 않는다 — 첫 입력이 곧 원자료다 |
+
+펜스 앞에 `SEED_ABS='<진입 단계 2 에서 Read 한 seed 절대경로 — 없으면 빈 값>'` · `STATE='<상태 파일 절대경로 — 없으면 빈 값>'` 두 줄을 붙여 같은 Bash 호출로 돌린다(SKILL 3.6 의 `ARG_PATH` 와 같은 글자 확인을 거친 경로만 붙인다):
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+if [ -n "${SEED_ABS:-}" ]; then
+  echo "[spec-distill] seed 옆 기록 파일(분류기용):"
+  rc=0; python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || rc=$?
+  if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 2 — 판결 줄이 없다. 「seed 원문 대조」 줄은 audit=없음(<위 [raw_source] 줄>) 로 낸다" >&2
+  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 위 판결 줄로 「seed 원문 대조」 줄을 낸다(멈추지 않는다)" >&2; fi
+fi
+if [ -n "${STATE:-}" ]; then
+  [ -f "$STATE" ] || { echo "[spec-distill] 상태 파일이 없다(${STATE}) — 원자료 판결은 상태 파일이 생긴 뒤에 받는다. 상태 파일을 만든 뒤 다시 돌린다" >&2; exit 1; }
+  echo "[spec-distill] 이 인터뷰의 원자료:"
+  rc=0; python3 "$SD/scripts/raw_source.py" locate --interview "$STATE" --absolute || rc=$?
+  if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 2 — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다" >&2
+  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 위 판결 줄대로 간다(멈추지 않는다)" >&2; fi
+fi
+```
+
+- 「seed 옆 기록 파일(분류기용)」 아래의 판결 줄이 SKILL 진입 단계 2 의 `[spec-distill] seed 원문 대조: seed=… · audit=…` 줄을 채운다 — `raw-source: FOUND <경로>` 면 그 경로, 아니면 `audit=없음(<사유>)`. seed 문장의 출처 분류는 아래의 원자료 판결과 무관하게 이 줄로 한다.
+- 「이 인터뷰의 원자료」 아래의 판결 줄마다:
+  - `raw-source: FOUND <절대경로>` — 그 파일의 세 절(`## 1. 원문` · `## 2. 질문 전체` · `## 6. 리뷰 결정`)을 Read 로 읽고 `[spec-distill] 원자료: 읽음 — <절대경로>` 를 낸다.
+  - `raw-source: LOST <사유>` — `[spec-distill] 원자료: 찾지 못함 — <사유>` 를 낸다.
+  - `raw-source: NO-FRAMING` — `[spec-distill] 원자료: 없음 — framing 없는 인터뷰` 를 낸다.
+  - 판결 줄이 없다 — 펜스 출력을 그대로 보이고 `[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>)` 를 낸다.
+- 원자료를 찾지 못한 인터뷰는 막지 않고 지금처럼 간다. 첫 라운드의 «지금 이해» 에 `원자료를 찾지 못했다(<사유>) — seed 만 읽는다` 한 줄을 밝힌다. 끝맺음의 첫 칸과 결과물 리뷰는 같은 판결을 상태 파일에서 다시 받는다(`finishing.md` Step A 3).
 
 ### 옛 자리의 진행 기록
 

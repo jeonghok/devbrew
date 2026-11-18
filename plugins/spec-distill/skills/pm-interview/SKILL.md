@@ -75,11 +75,11 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 > `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.`
 
-**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, 읽은 파일의 절대경로에서 audit 경로를 도출한다 — 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. seed frontmatter 의 `audit_file:` 은 따라가지 않는다. 그 파일을 Read 로 확인하고, 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
 
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
 
-읽지 못하면 `audit=없음(<관측한 사유>)` 로 낸다. 이 줄은 「풀린 입력」에 넣지 않는다 — 「풀린 입력」은 seed 전문 그대로여야 brief §6 의 `S1` 이 바뀌지 않는다. `references/seed-input.md` 의 seed 입력 규약이 이 줄의 두 경로로 문장마다 출처와 확인을 가른다.
+판결이 찾음이 아니면 `audit=없음(<판결 줄의 사유>)` 로 낸다. 이 줄은 「풀린 입력」에 넣지 않는다 — 「풀린 입력」은 seed 전문 그대로이고 상태 파일의 `## 풀린 입력` 블록이 된다(이어 가기에 쓰인다 — seed 는 모델이 줄인 글이라 brief §6 의 `S1` 에는 원자료가 실린다). `references/seed-input.md` 의 seed 입력 규약이 이 줄의 두 경로로 문장마다 출처와 확인을 가른다.
 
 발동하지 않았으면 「풀린 입력」은 이 skill 이 받은 인자 그대로다(비어 있을 수 있다).
 
@@ -219,7 +219,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
   순서보다 앞선다.
 - **인자 없이 `/spec-distill:pm-interview` 를 부른 경로의 R1** 은 seed 도 직전 답도 없으므로 «지금 이해»를 «아직 없음»으로
   두고 질문으로 무엇을 다룰지 묻는다. coverage-mapper 첫 dispatch 시점은 아래 coverage-mapper 절이 정한다.
-- 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`).
+- 답은 `user_statements` 에 `S<m>` 하나로 append 한다(선택지 = `chosen`, «기타» 자유 입력 = `verbatim`). 한 답에 고른 것과 적은 말이 섞였으면 S 둘로 적는다 — 고른 라벨들은 `chosen` 인 S 하나, 직접 적은 말은 `verbatim` 인 S 하나이고 둘은 같은 라운드다(적은 말은 그 S 에 글자 그대로만 남는다).
   번호 공식은 «사용자 발화 기록» 절 그대로.
 - **V1 검문소 — 조사 주장을 «지금 이해»에 싣기 전에.** 계약(`## 조사 주장 계약`)이 산출한
   `repo_claims[]` 항목마다 orchestrator 가 자기 `Read`/`Grep` 으로 ① 경로 실재 → ② 앵커 실재 →
@@ -422,7 +422,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
 orchestrator, G2). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
 
-1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(S1)과 그 «다시 검증할 것» 문단, 원장 초기 상태.
+1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(모델이 줄인 글)과 그 «다시 검증할 것» 문단, 원자료의 경로(진입 단계의 원자료 판결이 찾음일 때 — 글을 통째로 싣지 않고 레포 안 경로로 주어 읽게 한다), 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
    받은 뒤 R2 전에.
 2. **그 뒤는 결정에 닿을 수 있을 때마다.** 재개방 · 새 결정 · 포화 판정자의 빈 곳이 새 파생 차원을
@@ -453,7 +453,7 @@ fi
 
 ```
 Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
-        prompt: "seed 원문 전량(§6 S1 이 될 값 그대로): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+        prompt: "seed 전문(모델이 줄인 글이다 — 사용자의 말이 아니다. 사용자의 말은 framing 기록 파일의 원자료이고 그 경로는 «진입 단계의 원자료 판결이 찾음이면 그 경로, 아니면 '찾지 못함'»다. 경로가 있으면 그 파일의 `## 1. 원문` 절과 `## 2. 질문 전체` 절을 Read 로 읽는다): <seed>${SEED_TEXT}</seed>. seed 의 «다시 검증할 것 —» 문단(Phase 0 이 추론·외부·열린 것으로 아는 항목. 규약 위반 seed 면 빈 값): <reverify>${SEED_REVERIFY}</reverify>. coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · 재개방이면 reopen_log 마지막 항목): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
 // **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + audit §2 unavailable 사유
 ```
 
@@ -499,7 +499,7 @@ codebase 근거·사용자 판단으로 기록).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "지금까지의 framing(사용자 원문 — S1 과 문제를 서술한 발화 — 과 확인한 사실 · 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+        prompt: "지금까지의 framing(사용자의 말 — 원자료와 문제를 서술한 발화. seed 는 모델이 줄인 글이라 사용자의 말로 싣지 않는다 — 과 확인한 사실 · 사용자 제약 요지): <framing>${FRAMING}</framing>. 조사 주장 계약(내용 전문): <claims_contract>${CLAIMS_CONTRACT}</claims_contract>. 지금 열린 결정: <open_decisions>${OPEN_DECISIONS}</open_decisions>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
 // **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
