@@ -615,3 +615,4 @@ R1 설계문서(`docs/superpowers/specs/2026-11-14-team-file-contract-design.md`
 ## 지휘 기록
 
 - spec 승인 · 2026-11-19 · 「승인 — 계획 담당자에게」
+- 결정 · 2026-11-19 · 계획 2 의 브랜치는 feature/conductor-walk-table 이다 — 로드맵 재분해 이력(2026-11-19)에 경로 예약 열여섯과 함께 더했다 · 사용자 「이대로 다시 나눈다 (권장)」
