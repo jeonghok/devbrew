@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/entry/entry_preflight.py plugins/*/switches.md plugins/*/README.md
+# guards: shared/entry/entry_preflight.py plugins/**
 # 끄기 변수 표(switches.md) 넷과 README 「끄는 길」 의 대조.
 #   A 표를 읽는다 · B 수를 센다 · C README 표가 switches.md 와 바이트로 같다 · D 남음 이름에 읽는 곳이 있다
 set -u
@@ -23,7 +23,35 @@ out = []
 def ok(t): out.append("OK " + t)
 def no(t): out.append("NO " + t)
 def rd(p): return m.read_table(m.table_path(os.path.join(root, "plugins", p, "scripts", "entry_preflight.py")), p)
+import subprocess
+SKIP_BASE = ("switches.md", "README.md", "CHANGELOG.md", "entry_preflight.py")
+def skipped(ln):
+    s = ln.lstrip()
+    if s.startswith("#") or s.startswith("print("): return True
+    return (s.split(None, 1) or [""])[0] in ("echo", "printf")
+def scan_files(p):   # 절 D 가 읽는 플러그인 파일 — (상대 경로, 센 줄들). 링크는 대상 내용을 읽는다
+    ls = subprocess.run(["git", "-C", root, "ls-files", "-z", "--", "plugins/" + p],
+                        stdout=subprocess.PIPE, check=True).stdout.decode("utf-8").split("\0")
+    files = []
+    for f in ls:
+        if not f or "/tests/" in f or os.path.basename(f) in SKIP_BASE: continue
+        try:
+            with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
+        except (OSError, UnicodeDecodeError): continue
+        files.append((f, [ln for ln in txt.split("\n") if not skipped(ln)]))
+    return files
 '
+if [ "${1:-}" = "--emit-scanned" ]; then   # 이 테스트가 실제로 읽는 경로 — 읽는 코드와 같은 도출로 낸다
+  "$PY" -I -c "$PRE
+seen = set()
+for p in plugins:
+    for n in ('switches.md', 'README.md'): seen.add('plugins/' + p + '/' + n)
+    for f, _ in scan_files(p): seen.add(f)
+seen.add('shared/entry/entry_preflight.py')
+for f in glob.glob(os.path.join(root, 'plugins', '*', 'skills', '*', 'SKILL.md')): seen.add(os.path.relpath(f, root))
+print(chr(10).join(sorted(seen)))" "$ROOT"
+  exit 0
+fi
 run_section() {   # run_section <이름> <파이썬 본문> — 파이썬이 낸 OK/NO 줄을 판정으로 옮긴다
   local f="$TMP/$1.out"
   "$PY" -I -c "$PRE
@@ -104,7 +132,8 @@ for p in plugins:
     got = "\n".join(mid)
     if got == want: ok(p + " README 표가 switches.md 와 바이트로 같다")
     else: no(p + " README 표가 switches.md 와 다르다")
-    text = "\n".join(sec)
+    # 구절은 표 밖의 글에서만 센다 — 표의 칸이 구절을 채워 주면 산문을 지워도 통과한다
+    text = "\n".join(sec[:b[0]] + sec[en[0] + 1:])
     for ph in PHRASES:
         if ph in text: ok(p + " 절에 " + ph + " 가 있다")
         else: no(p + " 절에 " + ph + " 가 없다")
@@ -112,24 +141,10 @@ for p in plugins:
 
 note "D. kept_names_have_readers"
 run_section D '
-import subprocess
-SKIP_BASE = ("switches.md", "README.md", "CHANGELOG.md", "entry_preflight.py")
-def skipped(ln):
-    s = ln.lstrip()
-    if s.startswith("#") or s.startswith("print("): return True
-    return (s.split(None, 1) or [""])[0] in ("echo", "printf")
 for p in plugins:
     try: rows = rd(p)
     except m.TableError: no(p + " 표를 못 읽는다"); continue
-    ls = subprocess.run(["git", "-C", root, "ls-files", "-z", "--", "plugins/" + p],
-                        stdout=subprocess.PIPE, check=True).stdout.decode("utf-8").split("\0")
-    files = []
-    for f in ls:
-        if not f or "/tests/" in f or os.path.basename(f) in SKIP_BASE: continue
-        try:
-            with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
-        except (OSError, UnicodeDecodeError): continue
-        files.append((f, [ln for ln in txt.split("\n") if not skipped(ln)]))
+    files = scan_files(p)
     confs = {}
     for f, lines in files:
         if f.endswith(".conf"):
