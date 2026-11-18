@@ -153,6 +153,7 @@ class Match(SeededRepo):
             "다른 과제의 답": (self.approve(self.tip, question="E2 @%s — 질문" % l.rev), H.MISMATCH),
             "라벨만 바꾼 줄": (self.approve(self.tip, picked="수정 필요"), H.MISMATCH),
             "머리 앞에 공백": (self.approve(self.tip, question=" " + H.head(JOB, l.rev) + " 질문"), H.MISMATCH),
+            "머리 뒤에 16진 글자(더 긴 판)": (self.approve(self.tip, question=H.head(JOB, l.rev) + "0 질문"), H.MISMATCH),
             "사람 아님(수락이 아니다)": (self.approve(self.tip, who="denied"), H.MISMATCH),
             "모르는 출처": (self.approve(self.tip, who="other"), H.UNCHECKED),
             "훅이 채운 답": (self.approve(self.tip, who="hook"), H.MISMATCH),
@@ -346,8 +347,8 @@ class Gates(SeededRepo):
         b = self.commit(TEAM.intent(JOB), INTENT + "\n" + one + "\n- 결정 · 2026-11-19 · 「둘」\n", "줄 둘")
         self.assertEqual(H.collect(self.git, TEAM, JOB, [a, b, a, self.c1]), ((one, "- 결정 · 2026-11-19 · 「둘」"), []))   # c1 에는 INTENT.md 가 없다
         broken = self.commit(TEAM.intent(JOB), "머리 없는 글\n", "깨진 INTENT")
-        lines, notes = H.collect(self.git, TEAM, JOB, [broken, b])
-        self.assertEqual((len(lines), len(notes), broken[:8] in notes[0]), (2, 1, True))
+        lines, notes = H.collect(self.git, TEAM, JOB, [broken, b, broken])
+        self.assertEqual((len(lines), len(notes), broken[:8] in notes[0]), (2, 1, True))   # 같은 끝은 한 번만 읽고 한 번만 알린다
 
     def test_expected_lines_from_traces(self):   # J24 — human-check 가 「있어야 하는데 없는 줄」 을 찾는 표
         self.assertEqual(H.expected(False, [], [], []), [])
