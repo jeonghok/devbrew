@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py shared/killswitch/kill_switch_active.py
+# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py shared/killswitch/kill_switch_active.py plugins/*/switches.md
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 S="$ROOT/shared/entry/entry_preflight.py"
+# 사전 검사 링크와 끄기 변수 표를 싣는 플러그인 — 아래 「깨끗한 환경」 과 절 1 이 이 목록으로 읽고, --emit-scanned 도 이 목록으로 낸다
+PLUGINS="spec-distill quality-gates plugin-audit project-init"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  printf '%s\n' shared/entry/entry_preflight.py shared/killswitch/kill_switch_active.py \
-    plugins/spec-distill/scripts/entry_preflight.py plugins/plugin-audit/scripts/entry_preflight.py \
-    plugins/project-init/scripts/entry_preflight.py
+  printf '%s\n' shared/entry/entry_preflight.py shared/killswitch/kill_switch_active.py
+  for p in $PLUGINS; do
+    printf '%s\n' "plugins/$p/scripts/entry_preflight.py" "plugins/$p/switches.md"
+  done
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -31,7 +34,7 @@ for p in sys.argv[3:]:
     for r in m.read_table(m.table_path(sys.argv[2]+"/plugins/"+p+"/scripts/entry_preflight.py"),p):
         for n in r["names"]:
             if "=" not in n and n not in seen: seen.append(n)
-print(" ".join(seen))' "$S" "$ROOT" spec-distill quality-gates plugin-audit project-init)"
+print(" ".join(seen))' "$S" "$ROOT" $PLUGINS)"
 set -- $NAMES
 NNAMES=$#
 CLEAN="env -u DEVBREW_SKIP_HOOKS"
@@ -39,8 +42,8 @@ for n in $NAMES; do CLEAN="$CLEAN -u $n"; done
 if [ "$NNAMES" -gt 0 ]; then ok "깨끗한 환경: 네 표에서 끄기 변수 $NNAMES 개를 도출했다"
 else no "깨끗한 환경: 도출 수가 0 이다 — CLEAN 이 비었다"; fi
 
-# 1. 리포 안 — 세 배포 지점이 정본 링크이고 ok 줄의 root 가 리포 루트다
-for p in spec-distill plugin-audit project-init; do
+# 1. 리포 안 — 네 배포 지점이 정본 링크이고 ok 줄의 root 가 리포 루트다
+for p in $PLUGINS; do
   link="$ROOT/plugins/$p/scripts/entry_preflight.py"
   tgt=""
   [ -L "$link" ] && tgt="$(cd "$(dirname "$link")" && cd "$(dirname "$(readlink "$link")")" && pwd -P)/$(basename "$(readlink "$link")")"
