@@ -97,14 +97,14 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 근거: S6 · S9 · S10 · S18 · S23
 
 ### F7 — 스위치와 상태 자리 이전
-- 의도: 환경변수 kill switch 와 프로젝트 안 상태 폴더를 공식 장치로 옮긴다
-- 범위: 한다: 스위치마다 공식 대응물 정하기(플러그인 끄기 · skill 거부 규칙 · 플러그인 사용자 옵션)와 대응물이 없는 것만 환경변수로 남기기, 상태 파일마다 공식 데이터 폴더(프로젝트마다 갈리게)로 갈 것과 꼭 둬야 해서 docs 아래로 갈 것 가르기, 비교용 작업 사본을 그냥 워크트리로, 쓰기가 막히는 세션의 길, 옛 환경변수를 한 판 동안 함께 읽고 꺼져 있음을 알리기, kill switch 은퇴 공시, Claude Code 최소 판, 모델 판단으로 건너뛴 재비판을 리뷰 엔진이 kill switch 사유로 적는 글자 가르기(F4 가 넘김), CLAUDE.md 의 런타임 상태 · 훅 절과 감사 검사의 「모든 훅에 kill switch」 문장(F6 이 넘김) / 안 한다: 실측(P1)
+- 의도: 플러그인을 통째로 끄는 길을 Claude Code 의 플러그인 끄기로 바꾸고 끄는 환경변수를 줄이며, 플러그인 폴더 아래의 일회용 작업 사본을 `.claude/worktrees/` 로 옮긴다
+- 범위: 한다: 통째 끄기를 공식 플러그인 끄기로 바꾸기(통째 끄기 변수 넷 은퇴), 끄는 환경변수를 일곱만 남기고 스물을 은퇴시키기(첫 판은 옛 변수가 그대로 듣고 알리고 둘째 판에서 읽는 코드와 문장을 지운다), 켜진 끄기 변수를 skill 첫머리에 보이기(플러그인마다 끄기 변수 표 하나), 둘째 판에서 은퇴한 통째 끄기 변수가 켜져 있으면 계속할지 한 번 묻기, 품질 게이트와 감사의 일회용 작업 사본을 `.claude/worktrees/` 로 옮기기, 상태 자리의 규칙을 성격별 네 갈래로 CLAUDE.md 에 적기, 감사 검사에서 훅 kill switch 요건을 빼고 끄기 변수마다 읽는 코드 요건을 더하기, kill switch 은퇴 공시, 모델 판단으로 건너뛴 재비판을 리뷰 엔진이 kill switch 사유로 적는 글자 고치기(F4 가 넘김), CLAUDE.md 의 런타임 상태 · 훅 절과 감사 검사의 「모든 훅에 kill switch」 문장(F6 이 넘김), F6 의 마지막 리뷰가 남긴 작은 지적 가운데 고치기로 한 둘 / 안 한다: 실측(P1), 상태 파일을 공식 데이터 폴더나 docs 로 옮기기, 플러그인 사용자 옵션과 skill 거부 규칙 쓰기, Claude Code 최소 판 강제, 지휘 기계 상태와 지휘자의 스위트 대조 사본 옮기기(옆 로드맵)
 - 의존: P1, F6
-- 브랜치: feature/official-switches-state
+- 브랜치: feature/official-switches-state, feature/switch-retirement
 - 묶음: F7.md
-- 경로 예약: CLAUDE.md, shared/killswitch/kill_switch_active.py, shared/entry/entry_preflight.py, plugins/spec-distill/scripts/state_path.py, plugins/quality-gates/scripts/setup-qg.sh, plugins/plugin-audit/scripts/prepare-run-dir.py
+- 경로 예약: CLAUDE.md, shared/entry/entry_preflight.py, shared/killswitch/kill_switch_active.py, shared/python/devbrew-python.sh, plugins/spec-distill/switches.md, plugins/quality-gates/switches.md, plugins/plugin-audit/switches.md, plugins/project-init/switches.md, plugins/spec-distill/README.md, plugins/quality-gates/README.md, plugins/plugin-audit/README.md, plugins/project-init/README.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/roadmap-status/SKILL.md, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/artifact-critique/SKILL.md, plugins/plugin-audit/skills/plugin-audit/SKILL.md, plugins/project-init/skills/project-init/SKILL.md, plugins/quality-gates/scripts/qg-worktree.sh, plugins/quality-gates/scripts/review-diff.sh, plugins/quality-gates/scripts/seal-worktree.sh, plugins/quality-gates/scripts/e2e-state.sh, plugins/plugin-audit/scripts/audit-sandbox.sh, plugins/plugin-audit/scripts/check-shape-completeness.py, plugins/plugin-audit/scripts/check-staleness.py, plugins/plugin-audit/scripts/audit-workflow.js, plugins/quality-gates/tests/test_governance_no_capability_caps.sh, shared/tests/test_entry_preflight.sh, shared/tests/test_switch_tables.sh, shared/tests/test_python_floor.sh, docs/plugin-authoring.md, plugins/spec-distill/scripts/review_entry.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/ledger_sweep.py, plugins/quality-gates/scripts/qg-gc.py, plugins/quality-gates/scripts/setup-qg.sh, plugins/project-init/hooks/post-tool-use.py, shared/docreview/scripts/docreview_route.py, docs/philosophy/devbrew-harness-philosophy.md
 - 크기: 큼
-- 순서 이유: 실측과 규칙 개정이 먼저 있어야 무엇으로 옮길지 정한다
+- 순서 이유: 실측과 규칙 개정이 먼저 있어야 무엇으로 옮길지 정한다. 둘째 계획(은퇴한 변수를 실제로 지우는 판)은 F3 의 둘째 계획과 F5 가 머지된 뒤에 시작한다 — 옛 변수를 한 판 동안 듣는 기간이 실제 기간이 되고 F5 가 다시 짠 skill 글에서 한 번만 지운다
 - 근거: S13 · S14 · S22 · S26 · S27
 
 ## 지휘 절차
@@ -139,6 +139,11 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 바뀜: 바뀐 에픽 F3 · F5 · F6 · F7 「길 1로 가자」 · 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「길 1로 가자」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-18 · F7 의 칸을 승인된 설계에 맞춘다 — 범위를 좁히고(통째 끄기만 공식으로, 끄기 변수 일곱만 남김, 작업 사본 둘만 옮김) 브랜치를 둘로, 경로 예약을 실제로 고칠 파일로
+- 바뀜: 바뀐 에픽 F7 「이대로 다시 나눈다 (권장)」
+- 원문:
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
