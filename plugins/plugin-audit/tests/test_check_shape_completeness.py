@@ -1,4 +1,4 @@
-import json, os, subprocess, sys, tempfile, unittest
+import json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-shape-completeness.py"
@@ -12,7 +12,6 @@ ANCHORS = {
     "changelog_if_v1": "v1.0.0 이상이면 `CHANGELOG.md`",
     "agents_allowlist": "`tools:` allowlist를 선언",
     "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
-    "hooks_killswitch": "모든 훅에 kill switch",
     "deps_declared": "최소 버전이 선언된 의존성",
 }
 
@@ -201,86 +200,35 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertFalse(gaps["skills_cost_class"]["present"],
                              "frontmatter에 cost_class 없는데 본문 언급이 present=True로 통과 (header-satisfiable)")
 
-    def test_hooks_killswitch_ignores_non_registered_files(self):  # F (qg 2026-07-20 round-2)
-        # codex: _hook_scripts가 hooks/ 아래를 통째 rglob해 tests/·__init__.py·헬퍼(비-등록 파일)까지
-        # 훅으로 오인 → 정상 플러그인(project-init·spec-distill)에 거짓 "kill switch 부재" 사실. hooks.json이
-        # 등록한 command 스크립트만 봐야 한다. 등록 훅(real-hook.py)엔 kill switch 있음, 비-등록 tests/엔 없음.
+    def test_hook_without_switch_is_not_a_gap(self):  # AC9 — 훅에 끄기 변수를 요구하지 않는다
+        # 등록된 훅 스크립트가 어떤 끄기 변수도 읽지 않아도 요건 목록에 hooks_killswitch 가 없고,
+        # 나머지 항목은 훅이 없을 때와 같은 값이다.
         with tempfile.TemporaryDirectory() as d:
             dd = _mk_plugin(d)
-            hooks = dd / "hooks"; (hooks / "tests").mkdir(parents=True)
+            hooks = dd / "hooks"; hooks.mkdir()
             (hooks / "hooks.json").write_text(json.dumps({
                 "hooks": {"PostToolUse": [{"hooks": [
-                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/real-hook.py"}]}]}
+                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/h.py"}]}]}
             }), encoding="utf-8")
-            (hooks / "real-hook.py").write_text(
-                "import os\nif os.environ.get('DEVBREW_MYPLUGIN_DISABLE'):\n    raise SystemExit\n", encoding="utf-8")
-            (hooks / "tests" / "test_real_hook.py").write_text("assert True  # no kill switch\n", encoding="utf-8")
-            (hooks / "tests" / "__init__.py").write_text("", encoding="utf-8")
-            r, obj = run(dd)
-            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-            self.assertTrue(gaps["hooks_killswitch"]["present"],
-                            "비-등록 hooks/tests/ 파일이 훅으로 오인돼 거짓 kill-switch 부재 (over-glob)")
+            (hooks / "h.py").write_text("print('no switch here')\n", encoding="utf-8")
+            gaps = self._gaps(dd)
+            self.assertNotIn("hooks_killswitch", gaps)
+            for req in ("plugin_json_fields", "readme_principles", "changelog_if_v1",
+                        "agents_allowlist", "skills_cost_class"):
+                self.assertTrue(gaps[req]["present"], req)
+            self.assertTrue(gaps["deps_declared"]["present"])
 
-    def test_hooks_killswitch_malformed_json_is_gap(self):  # F round-2 (codex re-verify R2)
-        # malformed hooks.json → 파싱 실패 → 등록 스크립트 []  → all([])로 조용히 통과하던 fail-open.
-        # 판정 불가는 fail-closed로 gap이어야 한다.
+    def test_checklist_names(self):  # AC9 — 요건은 정확히 여섯
         with tempfile.TemporaryDirectory() as d:
-            dd = _mk_plugin(d)
-            hooks = dd / "hooks"; hooks.mkdir()
-            (hooks / "hooks.json").write_text("{ not valid json ", encoding="utf-8")
-            r, obj = run(dd)
-            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-            self.assertFalse(gaps["hooks_killswitch"]["present"],
-                             "malformed hooks.json이 all([])로 조용히 통과 (fail-open)")
+            _mk_plugin(d)
+            names = [g["requirement"] for g in self._gaps_list(d)]
+            self.assertEqual(names, ["plugin_json_fields", "readme_principles", "changelog_if_v1",
+                                     "agents_allowlist", "skills_cost_class", "deps_declared"])
 
-    def test_hooks_killswitch_dangling_registered_script_is_gap(self):  # F round-2 R2
-        # hooks.json이 등록한 command가 참조하는 스크립트가 디스크에 부재 → 검증 불가(dangling) → gap.
-        with tempfile.TemporaryDirectory() as d:
-            dd = _mk_plugin(d)
-            hooks = dd / "hooks"; hooks.mkdir()
-            (hooks / "hooks.json").write_text(json.dumps({
-                "hooks": {"PostToolUse": [{"hooks": [
-                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/ghost.py"}]}]}
-            }), encoding="utf-8")   # ghost.py를 만들지 않음
-            r, obj = run(dd)
-            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-            self.assertFalse(gaps["hooks_killswitch"]["present"],
-                             "등록된 hook 스크립트가 부재(dangling)인데 통과 (검증 불가 fail-open)")
-
-    def test_hooks_killswitch_path_traversal_is_gap(self):  # V2-4 (codex re-verify round-2, security)
-        # 악성 hooks.json의 등록 command가 `../`로 plugin root 밖을 가리키면, 무관한 외부 파일로
-        # kill-switch 검사를 만족시키는 read-oracle/traversal이 된다. containment로 plugin root 밖은
-        # 판독 전에 거부(gap)해야 한다. 외부 파일은 kill-switch 토큰을 가져 — 미차단 시 present=True(버그).
-        with tempfile.TemporaryDirectory() as outside:
-            evil = Path(outside) / "evil.py"
-            evil.write_text("# DEVBREW_X_DISABLE — plugin 밖 파일\n", encoding="utf-8")
-            with tempfile.TemporaryDirectory() as d:
-                dd = _mk_plugin(d)
-                hooks = dd / "hooks"; hooks.mkdir()
-                rel = os.path.relpath(evil, dd)   # ${CLAUDE_PLUGIN_ROOT}(=dd) 기준 상대경로 (../ 포함)
-                (hooks / "hooks.json").write_text(json.dumps({
-                    "hooks": {"PostToolUse": [{"hooks": [
-                        {"type": "command", "command": f"python3 ${{CLAUDE_PLUGIN_ROOT}}/{rel}"}]}]}
-                }), encoding="utf-8")
-                r, obj = run(dd)
-                gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-                self.assertFalse(gaps["hooks_killswitch"]["present"],
-                                 "../ traversal이 외부 파일로 kill-switch 검사를 만족 (read-oracle 미차단)")
-
-    def test_hooks_killswitch_flags_registered_hook_without_switch(self):  # F 반대 이빨
-        # 검사 무력화 방지: hooks.json이 등록한 훅이 kill switch를 안 가지면 여전히 gap이어야 한다.
-        with tempfile.TemporaryDirectory() as d:
-            dd = _mk_plugin(d)
-            hooks = dd / "hooks"; hooks.mkdir()
-            (hooks / "hooks.json").write_text(json.dumps({
-                "hooks": {"PostToolUse": [{"hooks": [
-                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/bad-hook.py"}]}]}
-            }), encoding="utf-8")
-            (hooks / "bad-hook.py").write_text("print('no kill switch here')\n", encoding="utf-8")
-            r, obj = run(dd)
-            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
-            self.assertFalse(gaps["hooks_killswitch"]["present"],
-                             "등록된 훅이 kill switch 없는데 통과 (검사가 무력화됨)")
+    def _gaps_list(self, d):
+        r, obj = run(d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return obj["shape_gaps"]
 
     def test_deps_declared_self_reference_not_counted_as_cross_plugin(self):
         # agents/x.md references the plugin's OWN namespace ("myplugin:helper") → not cross-plugin
@@ -296,41 +244,6 @@ class TestShapeCompleteness(unittest.TestCase):
             gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
             self.assertTrue(gaps["deps_declared"]["present"],
                              "self-reference should not count as cross-plugin dispatch")
-
-
-    def _killswitch_present(self, script_body):
-        with tempfile.TemporaryDirectory() as d:
-            dd = _mk_plugin(d)
-            (dd / ".claude-plugin" / "plugin.json").write_text(
-                json.dumps({"name": "demo-x", "description": "x", "version": "0.1.0"}), encoding="utf-8")
-            hooks = dd / "hooks"; hooks.mkdir()
-            (hooks / "hooks.json").write_text(json.dumps({
-                "hooks": {"PostToolUse": [{"hooks": [
-                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/h.py"}]}]}
-            }), encoding="utf-8")
-            (hooks / "h.py").write_text(script_body, encoding="utf-8")
-            r, obj = run(dd)
-            return {g["requirement"]: g for g in obj["shape_gaps"]}["hooks_killswitch"]["present"]
-
-    def test_foreign_switch_only_is_gap(self):  # AC26
-        self.assertFalse(self._killswitch_present("import os\nos.environ.get('DEVBREW_QUALITY_GATES_DISABLE')\n"))
-
-    def test_sub_switch_only_is_gap(self):  # AC26
-        self.assertFalse(self._killswitch_present("import os\nos.environ.get('DEVBREW_DEMO_X_DISABLE_WEB')\n"))
-
-    def test_own_switch_ok(self):
-        self.assertTrue(self._killswitch_present("import os\nos.environ.get('DEVBREW_DEMO_X_DISABLE')\n"))
-
-    def test_skip_hooks_ok(self):
-        self.assertTrue(self._killswitch_present("import os\nos.environ.get('DEVBREW_SKIP_HOOKS')\n"))
-
-    def test_shared_module_ok(self):
-        self.assertTrue(self._killswitch_present(
-            'from kill_switch_active import kill_switch_active\nkill_switch_active("demo-x", "h", "PostToolUse")\n'))
-
-    def test_shared_module_other_name_is_gap(self):
-        self.assertFalse(self._killswitch_present(
-            'from kill_switch_active import kill_switch_active\nkill_switch_active("other", "h", "PostToolUse")\n'))
 
 
 if __name__ == "__main__":
