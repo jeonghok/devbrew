@@ -47,6 +47,12 @@ class Locate(Base):
         SF.add_answer(d, SID, [("q", "a")], project="other")
         self.assertRaises(R.Unreadable, R.locate, SID, env)                 # 둘
 
+    def test_a_trailing_newline_is_not_a_session_name(self):
+        d, env = self.d, self.env
+        SF.add_answer(d, SID, [("q", "a")])
+        self.assertEqual(R.locate(SID, env), SF.record_path(d, SID))       # 양성 대조
+        self.assertRaises(R.Unreadable, R.locate, SID + "\n", env)
+
     def test_subagent_files_are_not_session_files(self):
         d, env = self.d, self.env
         SF.add_answer(d, SID, [("q", "a")], subagent=True)
@@ -224,12 +230,73 @@ class MeasuredShapes(Base):
     def write(self, path, rows):
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
-    def test_questions_as_a_string_is_a_call_not_used(self):
+    def test_questions_as_json_text_is_read(self):   # I2(a)
         path, rows = self.rows()
-        rows[0]["message"]["content"][0]["input"]["questions"] = "자리표시 글자"
+        inp = rows[0]["message"]["content"][0]["input"]
+        inp["questions"] = json.dumps(inp["questions"], ensure_ascii=False)
         self.write(path, rows)
-        self.assertEqual(R.answers(path), [])
-        self.assertEqual(R.duplicates(path), [])
+        self.assertEqual([(a.label, a.who) for a in R.answers(path)], [("a", R.HUMAN)])
+        self.assertEqual(R.unreadable(path), [])
+
+    def test_unreadable_call_with_a_paired_result_is_listed_not_answered(self):   # I2(b)
+        for name, change in (("글자", lambda q: "R2 @0123abcd 질문\n둘째 줄"), ("질문 글 없음", lambda q: [{"header": "h"}]),
+                             ("빈 목록", lambda q: []), ("목록 아님", lambda q: 7)):
+            path, rows = self.rows()
+            rows[0]["message"]["content"][0]["input"]["questions"] = change(None)
+            self.write(path, rows)
+            self.assertEqual(R.answers(path), [], name)
+            got = R.unreadable(path)
+            self.assertEqual([(u.entry, u.session) for u in got], [(rows[1]["uuid"], SID)], name)
+            self.assertEqual(got[0].text, "R2 @0123abcd 질문 둘째 줄" if name == "글자" else "", name)
+            os.remove(str(path))
+        path, rows = self.rows()   # 양성 대조 — 읽을 수 있는 호출은 목록에 없다
+        self.assertEqual(R.unreadable(path), [])
+
+    def test_unreadable_call_listed_only_for_a_plain_result(self):
+        for name, change in (("오류", lambda rows: rows[1]["message"]["content"][0].update(is_error=True)),
+                             ("곁가지 결과", lambda rows: rows[1].update(isSidechain=True)),
+                             ("곁가지 호출", lambda rows: rows[0].update(isSidechain=True)),
+                             ("짝 없음", lambda rows: rows.pop())):
+            path, rows = self.rows()
+            rows[0]["message"]["content"][0]["input"]["questions"] = "자리표시 글자"
+            change(rows)
+            self.write(path, rows)
+            self.assertEqual(R.unreadable(path), [], name)
+            self.assertEqual(R.answers(path), [], name)
+            os.remove(str(path))
+
+    def test_known_not_human_wins_over_a_broken_shape(self):   # J2 · M1
+        for entrypoint, who in (("sdk-cli", "human"), ("cli", "hook"), ("cli", "denied")):
+            for drop in (("isSidechain",), ("sourceToolAssistantUUID",), ("answers",), ("toolUseResult",), ("timestamp",)):
+                with tempfile.TemporaryDirectory() as t:
+                    SF.add_answer(t, SID, [("q", "a")], who=who, entrypoint=entrypoint, drop=drop)
+                    self.assertEqual([a.who for a in R.answers(SF.record_path(t, SID))], [R.NOT_HUMAN], (entrypoint, who, drop))
+        with tempfile.TemporaryDirectory() as t:   # 양성 대조 — 사람 아님 단서가 없으면 같은 모양이 알 수 없음
+            SF.add_answer(t, SID, [("q", "a")], drop=("isSidechain",))
+            self.assertEqual([a.who for a in R.answers(SF.record_path(t, SID))], [R.UNKNOWN])
+
+    def test_missing_or_odd_decision_is_unknown(self):   # I1 — 출처 · 방식이 사람 값이어도 결정이 없으면 사람이 아니다
+        for name, change in (("칸 없음", lambda perm: perm.pop("decision")), ("null", lambda perm: perm.update(decision=None)),
+                             ("숫자", lambda perm: perm.update(decision=5)), ("목록", lambda perm: perm.update(decision=["accept"]))):
+            path, rows = self.rows()
+            change(rows[1]["permissionDecision"])
+            self.write(path, rows)
+            got = R.answers(path)
+            self.assertEqual([a.who for a in got], [R.UNKNOWN], name)
+            self.assertIn("permissionDecision", got[0].why, name)
+            os.remove(str(path))
+        path, rows = self.rows()   # 양성 대조
+        self.assertEqual([a.who for a in R.answers(path)], [R.HUMAN])
+
+    def test_unknown_values_in_why_are_short_one_liners(self):   # M3
+        path, rows = self.rows()
+        rows[1]["permissionDecision"]["source"] = "첫 줄\n" + "x" * 200
+        self.write(path, rows)
+        got = R.answers(path)[0]
+        self.assertEqual(got.who, R.UNKNOWN)
+        self.assertNotIn("\n", got.why)
+        self.assertNotIn("x" * 50, got.why)
+        self.assertLess(len(got.why), 100)
 
     def test_call_carrying_answers_is_still_read(self):
         path, rows = self.rows()

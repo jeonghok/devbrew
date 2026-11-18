@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""session_record.py — 세션 기록에서 질문 창(AskUserQuestion)의 답을 읽는다. 읽기만 하고 표준 라이브러리만 쓴다."""
+"""session_record.py — 세션 기록에서 질문 창(AskUserQuestion)의 답을 읽는다. 읽기만 하고 표준 라이브러리만 쓴다.
+
+- answers(path): 읽은 답. find(path, key): 그 중 `<uuid>#<n>` 인 것.
+- duplicates(path): 한 호출 안에 글이 같은 질문이 둘이라 쓰지 않은 호출의 질문 글.
+- unreadable(path): 질문을 읽지 못해 쓰지 않았지만 짝이 되는 결과(오류 아님 · 곁가지 아님)가 있는 호출.
+  답으로 싣지 않는다. 쓸 답을 찾지 못했을 때 「읽지 못한 질문 창 호출이 있다」 를 알리는 데 쓴다.
+"""
 from __future__ import annotations
 
 import calendar
@@ -21,10 +27,17 @@ HUMAN, NOT_HUMAN, UNKNOWN = "사람", "사람 아님", "알 수 없음"
 SESSION_PATTERN = r"[A-Za-z0-9_-]{8,}"
 _TIME = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
 _ABSENT = "칸 없음"
+_SHORT = 40
 
 
 class Unreadable(Exception):
     """확인 못 함의 사유 — str(exc) 가 한 줄 한국어다."""
+
+
+class UnreadableCall(NamedTuple):
+    session: str
+    entry: str   # 짝이 되는 결과 항목의 uuid
+    text: str    # 읽을 수 있는 앞 글(질문 글 또는 글자 입력의 앞 80자 · 한 줄). 읽을 수 없으면 ""
 
 
 class Answer(NamedTuple):
@@ -93,6 +106,11 @@ def _questions_of(inp):
         if not isinstance(inp, dict):
             return None
     qs = inp.get("questions")
+    if isinstance(qs, str):   # 목록이 글자로 담긴 호출 — JSON 으로 풀린 목록만 쓴다
+        try:
+            qs = json.loads(qs)
+        except ValueError:
+            return None
     if not isinstance(qs, list) or not qs:
         return None
     texts = []
@@ -103,6 +121,14 @@ def _questions_of(inp):
     return texts
 
 
+def _hint(inp):
+    """읽지 못한 호출의 앞 글 — 읽을 수 있을 때만(한 줄 · 80자)."""
+    qs = inp.get("questions") if isinstance(inp, dict) else None
+    if isinstance(qs, list) and qs and isinstance(qs[0], dict):
+        qs = qs[0].get("question")
+    return " ".join(qs.split())[:80] if isinstance(qs, str) else ""
+
+
 def _blocks(row):
     msg = row.get("message")
     content = msg.get("content") if isinstance(msg, dict) else None
@@ -111,21 +137,32 @@ def _blocks(row):
     return [b for b in content if isinstance(b, dict)]
 
 
-def _text(value, default=_ABSENT):
-    return value if isinstance(value, str) and value else default
+def _text(value):
+    """기록의 값을 사유 글에 넣을 때 — 한 줄 · 40자 이내."""
+    if value is None:
+        return _ABSENT
+    shown = repr(value)
+    return shown if len(shown) <= _SHORT else shown[:_SHORT - 1] + "…"
 
 
-def _judge(res, perm, label_ok):
-    """(who, why) — 규칙 순서는 J2: 꼴 → 사람 아님 → 칸 없음 → 아는 값."""
-    if not label_ok:
-        return UNKNOWN, "고른 답을 읽을 칸(toolUseResult.answers)이 없거나 꼴이 다르다"
+def _not_human(res, perm):
+    """사람 아님이 먼저다(J2) — 모양을 보기 전에 가른다. 아니면 None."""
     entry = res.get("entrypoint")
     decision = perm.get("decision") if isinstance(perm, dict) else None
     source = perm.get("source") if isinstance(perm, dict) else None
     if (isinstance(decision, str) and decision != "accept") or source in NOT_HUMAN_SOURCES \
             or entry in NOT_HUMAN_ENTRYPOINTS:
-        return NOT_HUMAN, "사람이 질문 창에서 고른 답이 아니다(%s · %s · %s)" % (
-            _text(decision), _text(source), _text(entry))
+        return "사람이 질문 창에서 고른 답이 아니다(%s · %s · %s)" % (_text(decision), _text(source), _text(entry))
+    return None
+
+
+def _judge(res, perm, label_ok):
+    """(who, why) — 사람 아님은 이미 가려졌다. 꼴 → 칸 없음 → 아는 값."""
+    if not label_ok:
+        return UNKNOWN, "고른 답을 읽을 칸(toolUseResult.answers)이 없거나 꼴이 다르다"
+    entry = res.get("entrypoint")
+    decision = perm.get("decision") if isinstance(perm, dict) else None
+    source = perm.get("source") if isinstance(perm, dict) else None
     if day(res.get("timestamp"), False) is None:
         return UNKNOWN, "답한 시각(timestamp)을 읽지 못했다"
     if not isinstance(perm, dict) or not isinstance(decision, str):
@@ -138,11 +175,11 @@ def _judge(res, perm, label_ok):
 
 
 def _scan(path):
-    """(답 목록, 쓰지 않은 호출의 질문 글 목록). 파일을 열지 못하거나 읽은 JSON 줄이 없으면 Unreadable."""
+    """(답 목록, 쓰지 않은 호출의 질문 글 목록, 읽지 못한 호출 목록). 파일을 열지 못하거나 읽은 JSON 줄이 없으면 Unreadable."""
     session = Path(path).name
     if session.endswith(".jsonl"):
         session = session[:-6]
-    calls, out, dups, seen = {}, [], [], set()
+    calls, bad, out, dups, lost, seen = {}, {}, [], [], [], set()
     parsed = 0
     try:
         with open(str(path), encoding="utf-8", errors="replace") as f:
@@ -170,7 +207,10 @@ def _scan(path):
                         if b.get("type") != "tool_use" or b.get("name") != TOOL or not isinstance(b.get("id"), str):
                             continue
                         qs = _questions_of(b.get("input"))
-                        if qs is None or row.get("isSidechain") is True:
+                        if row.get("isSidechain") is True:
+                            continue
+                        if qs is None:
+                            bad.setdefault(b["id"], _hint(b.get("input")))
                             continue
                         if len(set(qs)) != len(qs):
                             for q in qs:
@@ -180,13 +220,21 @@ def _scan(path):
                         calls.setdefault(b["id"], (row, qs))
                 elif kind == "user":
                     for b in _blocks(row):
-                        if b.get("type") == "tool_result" and b.get("tool_use_id") in calls:
+                        if b.get("type") != "tool_result":
+                            continue
+                        if b.get("tool_use_id") in calls:
                             _result(session, calls[b["tool_use_id"]], row, b, out)
+                        elif b.get("tool_use_id") in bad and row.get("isSidechain") is not True and not b.get("is_error"):
+                            lost.append(UnreadableCall(session, _entry(row), bad[b["tool_use_id"]]))
     except OSError as exc:
         raise Unreadable("세션 기록을 읽지 못했다: %s — %s" % (Path(path).name, exc.__class__.__name__))
     if not parsed:
         raise Unreadable("세션 기록에서 읽은 JSON 줄이 없다: %s" % Path(path).name)
-    return out, dups
+    return out, dups, lost
+
+
+def _entry(res):
+    return res.get("uuid") if isinstance(res.get("uuid"), str) else ""
 
 
 def _result(session, call, res, block, out):
@@ -198,7 +246,14 @@ def _result(session, call, res, block, out):
     if isinstance(ans, dict) and not ans:
         return   # 답 없이 수락 — 고른 답이 없다
     when = res.get("timestamp") if isinstance(res.get("timestamp"), str) else ""
-    entry = res.get("uuid") if isinstance(res.get("uuid"), str) else ""
+    entry = _entry(res)
+    perm = res.get("permissionDecision")
+    refused = _not_human(res, perm)
+    if refused:   # 사람 아님이 먼저다 — 모양이 달라도 어긋남이다
+        for i, q in enumerate(qs, 1):
+            ok = isinstance(ans, dict) and isinstance(ans.get(q), str)
+            out.append(Answer(session, entry, i, q, ans[q] if ok else "", NOT_HUMAN, refused, when))
+        return
     shape = None
     if not isinstance(use.get("isSidechain"), bool) or not isinstance(res.get("isSidechain"), bool):
         shape = "주 대화인지 가를 칸(isSidechain)이 없다"
@@ -210,7 +265,7 @@ def _result(session, call, res, block, out):
             continue
         ok = isinstance(ans, dict) and isinstance(ans.get(q), str)
         label = ans[q] if ok else ""
-        who, why = _judge(res, res.get("permissionDecision"), ok)
+        who, why = _judge(res, perm, ok)
         out.append(Answer(session, entry, i, q, label, who, why, when))
 
 
@@ -227,3 +282,7 @@ def find(path, key):
 
 def duplicates(path):
     return _scan(path)[1]
+
+
+def unreadable(path):
+    return _scan(path)[2]
