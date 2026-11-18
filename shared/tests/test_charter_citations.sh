@@ -7,7 +7,8 @@
 # 이름은 두 갈래로 도출한다 — 모양 하나로는 진짜 인용과 예시 이름(명명 규칙 · 금지 예시)을 못 가른다.
 #  1. 모양으로 인식되는 인용은 실재한다 — 백틱 토큰 · 마크다운 링크 대상 중 `/` 를 품은 경로,
 #     이 리포 plugins/ 의 플러그인을 가리키는 `<플러그인>:<이름>`. 템플릿 · 글롭 · 맨 파일명 ·
-#     리포 밖 플러그인 · 경로 아닌 모양 · git 이 무시하는 런타임 자리는 건너뛰고 수를 공시한다(조용히 재해석하지 않는다).
+#     리포 밖 플러그인 · 경로 아닌 모양은 건너뛰고 수를 공시한다(조용히 재해석하지 않는다).
+#     추적 파일이 아닌 경로는 이름 목록(UNTRACKED_CITED)에 있는 것만 건너뛰고, 건너뛴 집합이 그 목록과 같아야 한다.
 #  2. 이력에서 사라진 이름은 헌장에 없다 — HEAD 이력에서 agent · 스크립트 · 플러그인으로 존재했으나
 #     지금 어떤 추적 파일 이름으로도 없는 식별자 모양(`-` `_` `.` 를 품은) 이름. 백틱 밖 산문도 잰다.
 #     한 단어 이름(예: adversarial)은 산문 낱말과 부딪쳐 건너뛴다 — 이 락이 못 보는 자리다.
@@ -97,7 +98,15 @@ def members(pl):
 
 
 PLUGREF = re.compile(r"[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9-]*")
-skipped = {"템플릿": 0, "글롭": 0, "맨 파일명": 0, "리포 밖 플러그인·자리표시": 0, "경로 아닌 모양": 0, "git 이 무시하는 런타임 자리": 0}
+skipped = {"템플릿": 0, "글롭": 0, "맨 파일명": 0, "리포 밖 플러그인·자리표시": 0, "경로 아닌 모양": 0}
+# 추적 파일이 아닌 채로 인용해도 되는 자리 — 이름으로 못 박는다(끝의 `/` 를 뗀 꼴). 런타임에 생기는 폴더라
+# 추적 파일로는 실재를 댈 수 없는 것만 올린다. 실제로 건너뛴 경로 집합이 이 목록과 정확히 같아야 한다 —
+# 목록에 없는 경로는 「그 경로가 리포에 없다」 로, 목록에만 남은 이름은 「낡았다」 로 실패한다.
+# git 의 무시 판정은 쓰지 않는다 — 무시 규칙은 환경마다 다르고, 폴더째 무시는 그 아래 오타를 덮는다.
+UNTRACKED_CITED = (
+    ".claude/worktrees",
+)
+untracked_seen = {}
 checked = []
 for doc, text in texts.items():
     toks = re.findall(r"`([^`\n]+)`", text) + re.findall(r"\]\(([^)\s]+)\)", text)
@@ -139,17 +148,11 @@ for doc, text in texts.items():
             path = os.path.normpath(os.path.join(os.path.dirname(doc), path))
         path = path.rstrip("/")
         if path not in tracked_set and path not in tracked_dirs:
-            # git 이 무시하는 자리(런타임 상태 · 작업 사본 폴더)는 추적 파일이 아니라 실재 대조에서 빼고 수를 공시한다.
-            # check-ignore rc 0 = 무시됨, 1 = 무시 안 됨, 그 밖 = 판정 불가(조용히 통과시키지 않는다).
-            rc_ig, _ = git("check-ignore", "-q", "--", path)
-            if rc_ig == 0:
-                skipped["git 이 무시하는 런타임 자리"] += 1
+            if path in UNTRACKED_CITED:
+                untracked_seen[path] = untracked_seen.get(path, 0) + 1
                 continue
             checked.append((doc, tok))
-            if rc_ig == 1:
-                out("NO", f"{doc}: `{tok}` — 그 경로가 리포에 없다")
-            else:
-                out("NO", f"{doc}: `{tok}` — 그 경로가 리포에 없고 git check-ignore 도 판정하지 못했다(rc={rc_ig})")
+            out("NO", f"{doc}: `{tok}` — 그 경로가 리포에 없다")
         else:
             checked.append((doc, tok))
 n_claude = sum(1 for d, _ in checked if d == "CLAUDE.md")
@@ -157,7 +160,17 @@ if len(checked) >= 10 and n_claude >= 3:
     out("OK", f"모양 인용 {len(checked)}건을 실재와 대조했다(CLAUDE.md {n_claude}건 — 하한 전체 10 · CLAUDE.md 3)")
 else:
     out("NO", f"모양 인용이 {len(checked)}건(CLAUDE.md {n_claude}건)뿐이다 — 도출이 무너졌다(하한 10 · 3)")
-out("NOTE", "건너뛴 모양 — " + " · ".join(f"{k} {v}" for k, v in skipped.items()))
+# 건너뛴 집합 = 이름 목록(집합 등호). 목록 밖의 없는 경로는 위에서 이미 실패했다 — 여기서는 목록에만 남은 이름을 잡는다.
+stale = sorted(set(UNTRACKED_CITED) - set(untracked_seen))
+for name in stale:
+    out("NO", f"건너뛸 이름 목록의 `{name}` 이 낡았다 — 헌장이 더는 인용하지 않거나 이제 추적되는 경로다(목록에서 지운다)")
+if len(set(UNTRACKED_CITED)) != len(UNTRACKED_CITED):
+    out("NO", "건너뛸 이름 목록에 같은 이름이 두 번 있다")
+elif set(untracked_seen) == set(UNTRACKED_CITED):
+    out("OK", f"추적 밖 자리로 건너뛴 인용이 이름 목록과 정확히 같다({len(UNTRACKED_CITED)}개)")
+names = " · ".join(f"{k} {v}건" for k, v in sorted(untracked_seen.items())) or "-"
+out("NOTE", "건너뛴 모양 — " + " · ".join(f"{k} {v}" for k, v in skipped.items())
+    + f" · 이름으로 못 박은 추적 밖 자리 {sum(untracked_seen.values())}({names})")
 
 # ── 갈래 2: 이력에서 사라진 이름은 헌장에 없다 ──────────────────────────────
 rc, hist = git("log", "HEAD", "--no-renames", "--format=", "--name-only", "--diff-filter=A", "--",
