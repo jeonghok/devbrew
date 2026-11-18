@@ -200,7 +200,7 @@ printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\n원문 한 줄 
 o="$(runc "$r1")"
 assert_eq "$(head_files "$r1")" "$IVR/2026-10-15-s-interview.audit.md $THREE" "B9 ①: 고친 framing 기록 파일이 brief 와 같은 커밋에 든다"
 assert_eq "$(git -C "$r1" status --porcelain -- "$IVR")" "" "B9 ①: 커밋 뒤 인터뷰 폴더에 남은 변경이 없다"
-assert_contains "$o" "${RAW_NOTE}: $r1/$IVR/2026-10-15-s-interview.audit.md" "B9 ①: 같은 커밋에 넣은 기록 파일을 한 줄로 알린다"
+grep -qxF "[spec-distill] ${RAW_NOTE}: $r1/$IVR/2026-10-15-s-interview.audit.md" <<<"$o" && ok "B9 ①: 같은 커밋에 넣은 기록 파일을 한 줄로 알린다(끝 공백 없음)" || nob "B9 ①: 알림 줄" "$o"
 # ② 기록 파일에 변경이 없다 → 커밋의 파일은 전과 같은 셋이고 알림 줄이 없다
 r2="$(mkraw raw-clean committed)"
 o="$(runc "$r2")"
@@ -211,7 +211,7 @@ printf '%s\n' "$o" | grep -qF 'brief · audit · 상태 파일을 커밋했다' 
 r3="$(mkraw raw-fresh fresh)"
 o="$(runc "$r3")"
 assert_eq "$(head_files "$r3")" "$IVR/2026-10-15-s-interview.audit.md $IVR/2026-10-15-s-interview.md $THREE" "B9 ③: 커밋된 적 없는 framing 기록 · seed 가 brief 와 같은 커밋에 든다"
-assert_contains "$o" "${RAW_NOTE}: $r3/$IVR/2026-10-15-s-interview.audit.md $r3/$IVR/2026-10-15-s-interview.md" "B9 ③: 알림 줄이 두 파일을 적는다"
+grep -qxF "[spec-distill] ${RAW_NOTE}: $r3/$IVR/2026-10-15-s-interview.audit.md · $r3/$IVR/2026-10-15-s-interview.md" <<<"$o" && ok "B9 ③: 알림 줄이 두 파일을 적는다" || nob "B9 ③: 알림 줄" "$o"
 # ④ seed · 기록이 정해진 인터뷰 폴더 밖(커밋된 적 없음) → 어느 것도 커밋하지 않고 사유와 경로를 보인다(git add 경로는 해결자가 판정한다)
 r4="$(mkraw raw-elsewhere fresh)"; mkdir -p "$r4/docs/elsewhere"
 mv -- "$r4/$IVR/2026-10-15-s-interview.md" "$r4/$IVR/2026-10-15-s-interview.audit.md" "$r4/docs/elsewhere/"
@@ -230,6 +230,20 @@ printf -- '---\ntype: interview-seed\n---\n<REDACTED>\n' > "$r5/docs/elsewhere/2
 o="$(runc "$r5")"
 assert_eq "$(git -C "$r5" rev-list --count HEAD)" "2" "B9 ⑤: 인터뷰 폴더 밖의 seed 만 고쳤어도 커밋하지 않는다"
 assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
+# ⑥ 기본 브랜치 위에서 기록 · seed 가 커밋된 적 없다 → 커밋하지 않고, 넣는다는 알림 없이 「브랜치에서 커밋하라」 목록에 두 파일이 든다
+r6="$(mkraw raw-main fresh)"; git -C "$r6" switch -q main
+o="$(runc "$r6")"
+assert_eq "$(git -C "$r6" rev-list --count HEAD)" "1" "B9 ⑥: 기본 브랜치면 커밋하지 않는다"
+assert_not_contains "$o" "$RAW_NOTE" "B9 ⑥: 거절 전에 넣는다고 알리지 않는다"
+grep -qxF "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(main)에 있다. 브랜치에서 커밋하라: $r6/$IVR/2026-10-15-t-interview.md · $r6/$IVR/2026-10-15-t-interview.audit.md · $r6/$IVR/2026-10-15-t-interview.state.md · $r6/$IVR/2026-10-15-s-interview.audit.md · $r6/$IVR/2026-10-15-s-interview.md" <<<"$o" \
+  && ok "B9 ⑥: 거절 줄의 목록에 framing 기록 · seed 가 든다" || nob "B9 ⑥: 거절 줄" "$o"
+# ⑦ 기본 브랜치 위에서 기록만 고쳤다 → 거절 줄의 목록 끝은 기록 파일이다(seed 없음 · 남는 「 · 」 없음)
+r7="$(mkraw raw-main-rec fresh)"; git -C "$r7" switch -q main
+git -C "$r7" add -- "$IVR/2026-10-15-s-interview.md" "$IVR/2026-10-15-s-interview.audit.md"; git -C "$r7" commit -q -m framing
+printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\n원문 한 줄 <REDACTED>\n' > "$r7/$IVR/2026-10-15-s-interview.audit.md"
+o="$(runc "$r7")"
+grep -qxF "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(main)에 있다. 브랜치에서 커밋하라: $r7/$IVR/2026-10-15-t-interview.md · $r7/$IVR/2026-10-15-t-interview.audit.md · $r7/$IVR/2026-10-15-t-interview.state.md · $r7/$IVR/2026-10-15-s-interview.audit.md" <<<"$o" \
+  && ok "B9 ⑦: 바뀐 기록 파일만 거절 줄 목록 끝에 든다" || nob "B9 ⑦: 거절 줄" "$o"
 grep -qF '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · ' "$FIN" && grep -qF '「확정하고 끝낸다」 는 PR 을 열지 않는다.' "$FIN" && ok "B-1: superpowers 가 없는 끝 질문의 「확정하고 끝낸다」 가 커밋한다고 말한다" || no "B-1: 끝 질문의 커밋 설명이 없다"
 grep -qF '브랜치에서 직접 커밋하라' "$FIN" && no "B-1: 옛 미커밋 안내가 남았다" || ok "B-1: 옛 미커밋 안내가 없다(양성 짝: 위 단언)"
 # 이어 갈 때의 「풀린 입력」 — 상태 파일 전문이 아니라 그 안의 블록

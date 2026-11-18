@@ -113,6 +113,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    - `place` 의 마지막 줄이 `raw-source: UNLOADABLE <n>줄 — 첫 줄 …` 이면 그 글은 결과물 문법이 받지 않아 그대로 싣지 못한다. 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 그대로 싣지 못함 — 모델이 줄인 글. 원자료는 framing 기록의 원문 절과 질문 전체 절):` 로 쓰고 본문에 seed 전문(「풀린 입력」)을 지금 규칙대로 싣는다(P21 치환 · 열 0 펜스). 사용자에게 `원자료를 그대로 싣지 못했다 — 결과물 문법이 받지 않는 줄 <n>개(첫 줄: <판결 줄의 절 이름과 줄 번호>). 첫 칸에는 seed 전문(모델이 줄인 글)을 실었다` 한 줄을 보인다. 원문의 글자를 고쳐 싣지 않는다. 한 절만 싣지도 않는다.
    - `raw-source: LOST <사유>` — 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 찾지 못함 — 모델이 줄인 글):` 로 쓰고 본문에 seed 전문을 지금 규칙대로 싣는다.
    - `raw-source: NO-FRAMING` — 위의 「풀린 입력」 규칙 그대로다.
+   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.
    **비밀값 확인 — 싣기 전에, 갈래를 가르기 전에.** 판결이 FOUND 면 `place` 를 돌리기 전에 그 기록 파일의 `## 1. 원문` 절과 `## 2. 질문 전체` 절을 읽는다. token · key · credential 로 보이는 값이 있으면 **싣지 않고 멈춘다** — 그대로 싣지 못하는 갈래로 갈 글이어도 이 확인이 먼저다. 값 자체는 보이지 않고 `첫 칸에 실을 글에 비밀값으로 보이는 값이 있다 — <원문 절 | 질문 전체 절> <k>째 줄, <무엇으로 보이는지>` 를 값마다 한 줄을 보인 뒤 `AskUserQuestion` 하나로 묻는다 — 「기록부터 가린다 (권장)」(얻음: framing 기록 파일의 그 값을 가림 표시로 바꾼 뒤 가린 글을 첫 칸에 싣는다 · 내줌: 이미 쓴 기록 파일을 고쳐 쓰고, 커밋돼 있었다면 그 값은 git 이력에 남는다) · 「비밀값이 아니다 — 그대로 싣는다」(얻음: 잘못 본 값을 건드리지 않고 원문 글자 그대로 싣는다 · 내줌: 정말 비밀값이면 결과물과 그 사본에 그대로 커밋된다) · 「멈춘다」(얻음: 아무것도 싣지 않고 끝맺음을 멈춘다 · 내줌: 결과물이 완성되지 않아 값을 처리한 뒤 다시 끝맺어야 한다).
    「기록부터 가린다」 면 framing 기록 파일의 그 값을 먼저 `<REDACTED>` 나 `<REDACTED:라벨>` 로 바꾸고(SKILL 의 「Secret 기록 금지」 집합), 같은 값이 seed 파일이나 상태 파일의 `## 풀린 입력` 블록에 있으면 같은 표시로 함께 가린 뒤 `가린 자리 <N>곳 — <파일 · 절 · 줄>` 을 보인다. 그 뒤에 `place` 를 돌린다 — 기록이 먼저라 첫 칸과 기록의 글자가 같다. 첫 칸에서만 가리는 길은 없다. 바꾸는 것은 사용자가 고른 그 값뿐이다. 가린 파일은 B-3 의 커밋 펜스가 결과물과 같은 커밋에 넣는다. 그 기록 파일이 이미 커밋돼 있었으면(`git log -1 --format=%h -- <경로>` 가 비지 않는다) `이 값은 git 이력의 옛 커밋에 남아 있다 — 값을 폐기하고 바꾸는 것이 먼저다` 한 줄을 보인다.
    원문 보존은 **관례가 아니라 요구**입니다 — N1b 가 payload §6 앵커가 S1 부터 빠짐없고
@@ -702,10 +703,10 @@ case "$rv" in "raw-source: FOUND "*) RAW_A="${rv#raw-source: FOUND }"; RAW_S="${
 [ -z "$RAW_A" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_A" 2>/dev/null)" ] || RAW_A=""
 [ -z "$RAW_S" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_S" 2>/dev/null)" ] || RAW_S=""
 if [ -n "${RAW_A}${RAW_S}" ]; then
-  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
-  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
-  python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES} · ${RAW_A} · ${RAW_S}"; exit 0; }
-  echo "[spec-distill] framing 기록 쪽의 커밋되지 않은 변경을 같은 커밋에 넣는다: ${RAW_A:+${RAW_A} }${RAW_S}"
+  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
+  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
+  python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
+  FILES="${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"
 fi
 # 커밋할 파일은 git 이 정한다(인덱스 + 무시되지 않은 새 파일) — 무시 파일뿐인 폴더는 경로 지정 커밋을 실패시키므로 뺀다.
 if [ -n "$RDIR" ] && [ -z "$(git -C "$top" ls-files --cached --others --exclude-standard -- "$RDIR")" ]; then
@@ -721,6 +722,7 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 [ -n "$cur" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 브랜치에서 커밋하라: ${FILES}"; exit 0; }
 [ "$cur" != "$def" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 브랜치에서 커밋하라: ${FILES}"; exit 0; }
+[ -z "${RAW_A}${RAW_S}" ] || echo "[spec-distill] framing 기록 쪽의 커밋되지 않은 변경을 같은 커밋에 넣는다: ${RAW_A}${RAW_A:+${RAW_S:+ · }}${RAW_S}"
 c_rc=0
 git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?
 [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(interview): $(basename -- "$stem") brief · audit · 상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?

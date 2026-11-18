@@ -89,6 +89,8 @@ checks.append(("secret_order", in_order(A, 0, "framing 기록 파일의 그 값�
                                         "그 뒤에 `place` 를 돌린다")))
 checks.append(("secret_same_commit", has("결과물과 같은 커밋에 넣는다")
                and line_has('git -C "$top" add', "RAW_A") and line_has("commit -q --only", "RAW_A")))
+checks.append(("no_verdict_stop", has("판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다",
+                                      "빈 앵커 줄로 나아가지 않는다")))
 checks.append(("secret_history", has("이 값은 git 이력의 옛 커밋에 남아 있다 — 값을 폐기하고 바꾸는 것이 먼저다")))
 checks.append(("no_first_cell_only", has("첫 칸에서만 가리는 길은 없다") and "첫 칸에서만 가린다" not in A))
 checks.append(("old_rule_gone", has("**최초 요청 원문은 `S1`이다.**")
@@ -102,7 +104,7 @@ FIRST_CELL_PY
 
 got="$(finishing_fails "$FIN" "$TPL")"
 for n in s1_not_seed labels place_cmd unloadable_notice secret_stop secret_options secret_order \
-         secret_same_commit secret_history no_first_cell_only old_rule_gone template; do
+         secret_same_commit no_verdict_stop secret_history no_first_cell_only old_rule_gone template; do
   if grep -qx -- "$n" <<<"$got"; then no "끝맺음 첫 칸 — ${n}"; else ok "끝맺음 첫 칸 — ${n}"; fi
 done
 [ -z "$got" ] || printf '      실패 이름: %s\n' "$(tr '\n' ' ' <<<"$got")"
@@ -134,5 +136,7 @@ breaks secret_same_commit fin 'add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$R
 breaks labels fin '원자료를 찾지 못함 — 모델이 줄인 글' '원자료를 찾지 못함 — 사용자 원문'
 breaks old_rule_gone fin '그대로다(첫 입력이 곧 원자료다):' '그대로다. 그때도 같은 규칙이 그대로 적용됩니다:'
 breaks no_first_cell_only fin '첫 칸에서만 가리는 길은 없다' '첫 칸에서만 가린다'
+breaks no_verdict_stop fin '   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.' ''
+breaks no_verdict_stop fin '빈 앵커 줄로 나아가지 않는다' '빈 앵커 줄로 나아간다'
 breaks template tpl '앵커 라벨로 밝힌다' '라벨로 적는다'
 finish
