@@ -13,7 +13,7 @@
 ### Deprecated
 - 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
 - `DEVBREW_PROJECT_INIT_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
-- `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` — 대신: 플러그인 끄기, 또는 설정의 `disableAllHooks`
+- `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` — 대신: 플러그인 끄기, 또는 설정의 `disableAllHooks`(모든 플러그인의 훅이 함께 꺼진다)
 
 ## [5.5.0] — 2026-11-17
 

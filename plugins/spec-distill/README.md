@@ -301,7 +301,7 @@ handbook_budget: 16384
 
 ## 끄는 길
 
-1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable spec-distill`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"spec-distill@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable spec-distill`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"spec-distill@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
 
 2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
 
@@ -315,7 +315,7 @@ handbook_budget: 16384
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 지휘자의 스위트 대조가 저장소 테스트를 돌리기 | 남음 | — |
 | `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
 | `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
-| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
 | `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | request-framing 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
 | `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
