@@ -380,32 +380,6 @@ assert_eq "$(field want_nonempty "$bad_report")" "yes" \
 assert_eq "$(field parsed "$bad_report")" "yes" "A14/C7: 경로에 따옴표가 있어도 stdout 이 유효한 JSON 문서 하나다"
 assert_eq "$(field mentions_ignored "$bad_report")" "yes" "A14/AC8: 그 안내가 \$DEVBREW_PYTHON 무시 «사유» 를 싣는다 (고치는 법 문장이 아니라)"
 
-# A11 (AC11 의 파일-국소 전제) plugin-audit 의 kill switch 판정 `_has_killswitch(text, own)` 은
-#     그 플러그인 자기 이름의 DEVBREW_<자기>_DISABLE · DEVBREW_SKIP_HOOKS ·
-#     kill_switch_active("<자기>" 중 하나를 찾는다. 해석기는 플러그인마다 같은 사본이라 자기
-#     이름을 글자로 못 적고 DEVBREW_SKIP_HOOKS 로 통과한다 — 그래서 모르는 이름(fix-ture)으로
-#     판정기를 직접 부른다. 음의 짝: 본문에서 DEVBREW_SKIP_HOOKS 만 지우면 거짓이어야 한다 —
-#     이것이 없으면 판정기를 못 불러도, 다른 줄이 우연히 맞아도 양성 단언이 헛돈다.
-#     감사기 전체를 실제로 돌리는 것은 축 C(AC11)이고, 이 단언은 「어느 파일이 원인인지」를
-#     바로 가리키는 국소 신호다.
-a11_report="$(python3 - "$ROOT/plugins/plugin-audit/scripts/check-shape-completeness.py" \
-  "$ROOT/$RESOLVER" <<'PY_A11'
-import importlib.util, sys
-try:
-    spec = importlib.util.spec_from_file_location("shape_audit", sys.argv[1])
-    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-    text = open(sys.argv[2], encoding="utf-8").read()
-    print("whole: %s" % m._has_killswitch(text, "fix-ture"))
-    print("stripped: %s" % m._has_killswitch(text.replace("DEVBREW_SKIP_HOOKS", ""), "fix-ture"))
-except Exception as e:
-    print("whole: error %s" % type(e).__name__); print("stripped: error")
-PY_A11
-)"
-assert_eq "$(field whole "$a11_report")" "True" \
-  "A11: plugin-audit 판정기가 해석기 본문을 모르는 플러그인 이름으로도 kill switch 존중으로 읽는다"
-assert_eq "$(field stripped "$a11_report")" "False" \
-  "A11: 음의 짝 — 본문에서 DEVBREW_SKIP_HOOKS 를 지우면 판정기가 거짓을 낸다"
-
 note "── 축 I: 비-절대 PATH 항목 (설계 2026-09-23 AC1~AC4 · AC8) ──────────────"
 # 해석기의 두 탐색(2단계 `python3` · 3단계 `python3.*`)이 PATH 의 절대 경로가 아닌 항목
 # (빈 항목 · `.` · 상대 경로 · 빈 PATH)을 쓰지 않는다는 것을 **실행으로** 잰다. 훅의 cwd 는
@@ -570,11 +544,6 @@ for c in $(printf '%s\n%s\n' "$COPY_FILES" "$REQ_COPIES" | sort -u); do
 done
 [ "$n_copy" -ge 1 ] && ok "B: 사본 자리 ${n_copy}건을 훑었다 (vacuous 아님)" || no "B: 사본 자리를 하나도 도출하지 못했다 — 축 B 가 아무것도 안 잰다"
 
-# **감사기 판정은 여기서 재지 않는다.** `hooks.json` 이 아직 해석기를 가리키지 않으므로
-# plugin-audit 는 사본을 읽지조차 않는다 — 사본을 통째로 지워도 `hooks_killswitch` 는
-# True 다〔실측〕. 여기 두면 「감사기가 커버된다」는 착시만 만든다. AC11 의 감사기 절반은
-# 배선이 생기는 아래 **축 C** 가 지고, 그 자리에서 심볼릭 링크 변이가 판정을 뒤집는다.
-
 note "── 축 C: 배선 — hooks.json 1 자리 (AC1) ──────────────────────────────"
 
 cmds_of() {   # hooks.json 하나에서 «(이벤트 키, command)» 쌍을 전부. 한 줄 = `<이벤트> <command>`.
@@ -712,29 +681,6 @@ $hj_cmds
 EOF
 done
 assert_eq "$n_shexec" "1" "C/AC9: 실행으로 잰 command 자리가 1건이다"
-
-# ── AC11 의 «감사기» 절반 — 이 자리에서 비로소 이빨이 생긴다 ─────────────────
-# Task 2 에서는 이 단언이 아무것도 재지 못했다: `hooks.json` 이 해석기를 가리키지 않아
-# plugin-audit 가 사본을 읽지조차 않았고, 사본을 통째로 지워도 True 였다〔실측〕.
-# 배선이 생긴 지금부터는 command 의 `.sh` 와 `.py` 를 **둘 다** 판독하므로,
-# 해석기가 심볼릭 링크면 `.resolve()` 가 `shared/` 로 풀려 containment 가 거부되고
-# 해석기를 부르는 플러그인 모두에 거짓 「kill switch 부재」가 난다(C9·R13). 대상 플러그인은
-# 축 B 의 REQ_COPIES(hooks.json 이 해석기를 부르는 플러그인)에서 도출한다 — 새로 배선된 플러그인이
-# 이 판정에서 조용히 빠지지 않게.
-n_audit=0
-for c in $REQ_COPIES; do
-  p="${c#plugins/}"; p="${p%%/*}"
-  n_audit=$((n_audit+1))
-  v="$(python3 plugins/plugin-audit/scripts/check-shape-completeness.py "plugins/$p" 2>/dev/null \
-      | python3 -c 'import json,sys
-try: d = json.load(sys.stdin)["shape_gaps"]
-except Exception: print("unreadable"); raise SystemExit(0)
-m = [g["present"] for g in d if g["requirement"] == "hooks_killswitch"]
-print(m[0] if m else "absent")')"
-  assert_eq "$v" "True" "C/AC11: plugin-audit 가 $p 의 hooks_killswitch 를 참으로 낸다"
-done
-[ "$n_audit" -ge 1 ] && ok "C/AC11: 감사기 판정 대상 ${n_audit}개를 도출했다 (vacuous 아님)" \
-  || no "C/AC11: 감사기 판정 대상을 하나도 도출하지 못했다"
 
 note "── 축 C2: PATH 격리 시뮬레이션 (AC12 · L3) ───────────────────────────"
 # **먼저 이 PATH 의 python3 가 정말 바닥 미만인지 확인한다.** Apple 이 그것을 올리면

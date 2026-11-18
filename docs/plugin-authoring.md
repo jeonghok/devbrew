@@ -10,12 +10,13 @@ plugins/<your-plugin>/
 │   └── plugin.json           # 필수 키는 name 하나 — version · description · author 를 빼면 claude plugin validate 가 경고. version 을 적으면 0.1.0 에서 시작
 ├── README.md                 # 필수 — "Principles Instantiated" 섹션 포함
 ├── dependencies.md           # 기대는 도구 · 다른 플러그인의 표(이름 · 최소 판 · 강도 · 없을 때) — 판 칸은 check_deps.py measure 가 잰다
+├── switches.md             # 진입 skill 이 있으면 필수 — 끄기 변수 표(이름 · 끄는 것 · 상태 · 대신할 길). 진입 사전 검사가 읽고 README 「끄는 길」 이 같다. 끄기 변수가 없으면 머리줄 둘만
 ├── CHANGELOG.md              # version ≥ v1.0.0이면 필수
 ├── skills/<name>/            # 진입 skill 은 짧은 kebab(spec-review), 내부 skill(user-invocable: false)은 동명사(reviewing-brief)
 │   └── SKILL.md              # frontmatter metadata 아래 cost_class 선언 · trigger. 진입 skill 의 꼴(allowed-tools 한 줄 · ! 사전 검사 줄 · ## 진입 단계)은 있는 진입 skill(plugins/spec-distill/skills/spec-review/SKILL.md)을 본보기로
 ├── agents/                   # optional — 각각 tools: allowlist 선언 (fail-closed)
 ├── references/               # optional — skill · agent 가 필요할 때 읽는 긴 절차 · 계약
-├── hooks/                    # optional — 각각 DEVBREW_<PLUGIN>_DISABLE=1 opt-out
+├── hooks/                    # optional — 끄는 길은 Claude Code 의 플러그인 끄기다(통째 끄기용 환경변수를 두지 않는다)
 ├── scripts/                  # optional — 진입 skill 이 있으면 진입 사전 검사 스크립트(entry_preflight.py, shared/entry/ 정본의 심볼릭 링크)가 여기 있다. 그 밖에 hook · skill 이 부르는 shell/python 헬퍼
 ├── templates/                # optional — 플러그인이 설치하는 정적 파일
 └── tests/                    # optional — 테스트는 여기 하나로. hooks/tests·scripts/tests 신설 금지

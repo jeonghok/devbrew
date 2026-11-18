@@ -42,7 +42,7 @@ case_create_baseline() {
 
   # 네임스페이스: worktrees/ 아래여야 remove 가드가 적용된다
   case "$out" in
-    */.claude/quality-gates/worktrees/*) ok "worktrees/ 네임스페이스 안" ;;
+    */.claude/worktrees/qg-*) ok "worktrees/ 네임스페이스 안" ;;
     *) no "네임스페이스 밖: $out" ;;
   esac
   # 내용이 merge_base 상태인가 (HEAD의 v2가 아니라 v1)
@@ -179,7 +179,7 @@ case_head_and_baseline_coexist() {
 
   [[ "$b" != "$h" ]] && ok "두 축이 서로 다른 경로" || no "두 축이 같은 경로: $b"
   case "$h" in
-    */.claude/quality-gates/worktrees/*) ok "HEAD 축도 worktrees/ 네임스페이스 안" ;;
+    */.claude/worktrees/qg-*) ok "HEAD 축도 worktrees/ 네임스페이스 안" ;;
     *) no "네임스페이스 밖: $h" ;;
   esac
 

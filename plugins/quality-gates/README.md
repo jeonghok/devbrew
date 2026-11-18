@@ -24,7 +24,7 @@
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
-- **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
+- **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — 플러그인이 스스로 만드는 일회용 worktree 는 작업 트리 꼭대기의 `.claude/worktrees/` 에 플러그인이 드러나는 이름(`qg-base-<sid 8자>`)으로 만든다 — CLAUDE.md 상태 글머리 ②.
 - **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. 로컬 결과(`result.md`)가 세션 폴더 마커 · GC mtime anchor 이고, setup 은 그 frontmatter(session_id · started_at)와 제목만 쓴다.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every fix-loop iteration
@@ -405,6 +405,32 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
 | pr-review-toolkit | 아니오 | 리뷰어 | 추가 리뷰어(code-reviewer 강한 default 등); 미설치 시 graceful degrade |
+
+## 끄는 길
+
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable quality-gates`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"quality-gates@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+
+2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+
+3. **표.**
+
+<!-- switches:begin -->
+| 이름 | 끄는 것 | 상태 | 대신할 길 |
+|---|---|---|---|
+| `DEVBREW_QUALITY_GATES_DISABLE_CODEX` | codex 리뷰 | 남음 | — |
+| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 리뷰 대상 저장소의 테스트 실행(차등 테스트 · e2e 부팅) | 남음 | — |
+| `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` | 열린 PR 에 코멘트 달기 | 남음 | — |
+| `DEVBREW_QUALITY_GATES_DISABLE` | quality-gates 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` | 보안 리뷰어 | 은퇴 예정 | 없음 — 보안 리뷰는 늘 돈다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` | 문서 비평 | 은퇴 예정 | `/quality-gates:artifact-critique` 를 부르지 않는다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_E2E` | e2e 걷기 | 은퇴 예정 | e2e 질문에 「아니오」 로 답한다. 실행 자체를 막으려면 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` |
+| `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC` | 의도 점검 | 은퇴 예정 | 없음 — 읽기만 하는 단계다 |
+| `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` | 남의 세션 폴더 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_QUALITY_GATES_TTL_HOURS` 를 크게 준다 |
+<!-- switches:end -->
+
+은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+
+4. **자세한 동작.** 변수마다 자세한 동작은 아래 「Kill switches (보안 컨트롤)」 절에 있다.
 
 ## 설정
 

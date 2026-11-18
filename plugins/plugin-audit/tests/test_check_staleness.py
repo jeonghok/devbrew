@@ -481,9 +481,8 @@ class TestDeclaredSurface(unittest.TestCase):
 
 class TestCategoryAbsence(unittest.TestCase):
     """category absence — 유일하게 규범을 전제하는 클래스. 조건이 안 걸리면 아무것도 emit
-    안 한다 (해당 없음도 사실이 아니다). 4개 조건부 게이트: CHANGELOG(version>=1.0.0일 때만),
-    cost_class(skill 있을 때만), kill switch(hook 있을 때만), Principles Instantiated
-    (README 있을 때만)."""
+    안 한다 (해당 없음도 사실이 아니다). 3개 조건부 게이트: CHANGELOG(version>=1.0.0일 때만),
+    cost_class(skill 있을 때만), Principles Instantiated(README 있을 때만)."""
 
     def _plugin(self, tmp, version="1.0.0"):
         p = Path(tmp) / "myplugin"; p.mkdir()
@@ -586,8 +585,8 @@ class TestCategoryAbsence(unittest.TestCase):
                     if f["class"] == "category absence" and f.get("norm") == "cost_class"]
         self.assertEqual(len(hits), 1)
 
-    # --- kill switch ---
-    def test_kill_switch_absent_with_hook_flagged(self):
+    # --- kill switch: 훅에 끄기 변수 문서화를 요구하지 않는다 ---
+    def test_hook_without_readme_switch_is_not_a_fact(self):
         with tempfile.TemporaryDirectory() as d:
             p = self._plugin(d)
             (p / "hooks").mkdir()
@@ -598,27 +597,7 @@ class TestCategoryAbsence(unittest.TestCase):
                                           encoding="utf-8")
             facts = run_sweep(p)
             hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "kill switch"]
-            self.assertTrue(hits)
-
-    def test_no_hook_no_kill_switch_fact(self):
-        with tempfile.TemporaryDirectory() as d:
-            p = self._plugin(d)  # no hooks/ dir
-            facts = run_sweep(p)
-            hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "kill switch"]
-            self.assertFalse(hits, "hook이 없는데 kill switch 부재를 사실로 위장 배달함")
-
-    def test_kill_switch_present_not_flagged(self):
-        with tempfile.TemporaryDirectory() as d:
-            p = self._plugin(d)
-            (p / "hooks").mkdir()
-            (p / "hooks" / "hooks.json").write_text(
-                json.dumps({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [{}]}]}}),
-                encoding="utf-8")
-            (p / "README.md").write_text(
-                "Kill switch: `DEVBREW_MYPLUGIN_DISABLE=1`\n", encoding="utf-8")
-            facts = run_sweep(p)
-            hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "kill switch"]
-            self.assertFalse(hits)
+            self.assertFalse(hits, "훅이 있고 끄기 변수 언급이 없다는 것을 더는 사실로 내지 않는다")
 
     # --- Principles Instantiated ---
     def test_principles_absent_with_readme_flagged(self):
