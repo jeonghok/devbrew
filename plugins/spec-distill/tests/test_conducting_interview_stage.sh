@@ -937,7 +937,8 @@ grep -q 'interview_round >= 2\|interview_round>=2' "${CI_ALL[@]}" \
 # **다른 문서의** 절 번호를 인용할 수 있다 — 이 검사는 그것을 payload 좌표와 구별하지
 # 못한다. 거짓 RED 지만 시끄러우므로 안전하다.
 # 공유 계약에서는 절을 번호가 아니라 **제목**으로 인용하는 것이 회피책이다.
-retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" || true)"
+# 제외는 형식 정본 문서 team-files.md 의 자기 절 제목(`## §<숫자>`)뿐이다 — 그 문서 자신의 절 번호이지 은퇴한 payload 좌표가 아니다.
+retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" | grep -vE 'references/team-files\.md:[0-9]+:## §[0-9]' || true)"
 [[ -z "$retired_secs" ]] \
   && ok "V11: 은퇴 payload 좌표(§8/§9) 잔존 0" \
   || { no "V11: 은퇴 payload 좌표(§8/§9)가 SKILL에 잔존:"; printf '%s\n' "$retired_secs"; }

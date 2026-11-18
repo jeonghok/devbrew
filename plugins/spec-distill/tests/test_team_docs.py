@@ -18,16 +18,21 @@ import team_layout as L  # noqa: E402
 import team_files as F  # noqa: E402
 import roadmap_render as R  # noqa: E402
 import team_status as TS  # noqa: E402
+import team_rules as TR  # noqa: E402
+import repo_defaults  # noqa: E402
+import start_bundle as SB  # noqa: E402
 
 DOC = PLUGIN / "references" / "team-files.md"
 README = PLUGIN / "README.md"
+REPO = PLUGIN.parents[1]
 
 
 class TeamFilesDoc(unittest.TestCase):   # R1 AC26 — 계획 1 몫
     def test_sections_of_this_plan(self):
         heads = [l for l in DOC.read_text(encoding="utf-8").splitlines() if l.startswith("## ")]
         self.assertEqual(heads, ["## §1 팀 폴더", "## §2 과제 폴더와 INTENT.md", "## §3 원자료", "## §4 sources.md", "## §5 결과 파일",
-                                 "## §6 역할 문서", "## §10 단계 계산"])
+                                 "## §6 역할 문서", "## §7 RULES.md 와 HANDBOOK.md", "## §8 REVIEW.md", "## §9 시작 묶음",
+                                 "## §10 단계 계산", "## §15 브랜치 사이 흐름"])
 
     def test_names_come_from_the_code(self):
         text = DOC.read_text(encoding="utf-8")
@@ -107,6 +112,61 @@ class ReadSideDoc(unittest.TestCase):   # R1 AC26 — 계획 2 몫
         for name in ("job sync", "job_results.py check", "workflow_superpowers.py", "로드맵 밖 과제", "결과 받음"):
             self.assertIn(name, text, name)
         self.assertNotIn("이 판에는 출처 줄의 커밋을 고치는 명령이 없습니다", text)
+
+
+class RulesAndBundleDoc(unittest.TestCase):   # R1 AC26 — 계획 3 몫
+    def doc(self, head):
+        return section(DOC.read_text(encoding="utf-8"), head)
+
+    def test_section7_grammar_and_the_users_six_lines(self):
+        s = self.doc("## §7 RULES.md 와 HANDBOOK.md")
+        for line in ("[테스트] 고친 곳엔 테스트 먼저", "[배포] 실 서비스는 사람만", "[문서] 바꾼 건 CHANGELOG에",
+                     "[폴더] 남의 폴더 고치지 않기", "[보고] 끝나면 leader에게", "[설계] 승인 전엔 코드 짜지 않기"):
+            self.assertIn("\n" + line + "\n", s)   # 원문 대조 — 글자 그대로
+        for word in TR.MARKERS + repo_defaults.BUDGET_KEYS + ("team_rules.py check", "team_rules.py candidates", "--ref"):
+            self.assertIn(word, s)
+
+    def test_section9_two_ways_and_the_lines(self):   # AC24 — 묶음을 건네는 두 길
+        s = self.doc("## §9 시작 묶음")
+        for part in ("일꾼이 직접 돌린다", "임시 파일로 받아 그 경로를 넘긴다", "리더는 그 출력을 읽지 않는다",
+                     "start_bundle.py --roadmap", "--role " + L.LEADER_ROLE, "기준 커밋:", "읽을 것:", "쓸 것:", "검수 기준"):
+            self.assertIn(part, s)
+
+    def test_section15_flow_table(self):   # AC31
+        s = self.doc("## §15 브랜치 사이 흐름")
+        rows = [l for l in s.splitlines() if l.startswith("| ")]
+        self.assertEqual(len(rows), 9)   # 머리 행 하나 · 파일 여덟 행(가름 행은 `|---` 로 시작해 들지 않는다)
+        for part in ("leader_ref", "기준 커밋", TS.STALE, "origin"):
+            self.assertIn(part, s)
+
+    def test_no_pointer_to_a_later_plan_is_left(self):   # 음의 락 + 양의 짝
+        text = DOC.read_text(encoding="utf-8")
+        self.assertNotIn("계획 3 이", text)
+        self.assertGreaterEqual(text.count("리더가 쓰는 자리(§15)"), 3)
+
+    def test_section10_new_notices(self):
+        s = self.doc("## §10 단계 계산")
+        for part in (TS.STALE + ": ", TS.STALE + "을 재지 못했다", TS.UNCOUNTED_SHAPE, "얕은지"):
+            self.assertIn(part, s)
+
+    def test_section10_shallow_guard_is_narrowed_after_the_old_sentence(self):   # C1 — 옛 문장은 그대로, 좁힘은 새 문장
+        s = self.doc("## §10 단계 계산")
+        old = "단계가 「%s」 인 과제(얕은 클론)에는 예약을 재지 않고 알림도 내지 않으며" % TS.UNKNOWN
+        self.assertIn(old, s)
+        tail = s.split(old, 1)[1]
+        self.assertIn("재지 않는 것은 얕은 클론일 때뿐이다", tail)
+        self.assertIn("얕은지 읽지 못하면", tail)
+
+    def test_section9_and_coverage_carry_the_late_decisions(self):   # B35 · B36
+        s9 = self.doc("## §9 시작 묶음")
+        self.assertIn("`%s%s`" % (SB.PREFIX + "멈춤 — ", SB.ALREADY_MERGED % "<과제 이름>"), s9)
+        s5 = self.doc("## §5 결과 파일")
+        self.assertIn("머리 roadmap 이 레포 상대 경로가 아니다", s5 + self.doc("## §10 단계 계산"))
+
+    def test_readme_names_the_new_commands(self):
+        text = README.read_text(encoding="utf-8")
+        for part in ("scripts/start_bundle.py", "scripts/team_rules.py", TS.STALE):
+            self.assertIn(part, text)
 
 
 class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해진 것 — 문서에 남아야 하는 글(코드의 글자는 코드에서 읽는다)
@@ -270,7 +330,7 @@ class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 
         self.assertEqual(L.PLAIN_FLOW_STAGES, ("진행 중", "결과 받음"))
 
 
-FLOOR = (8, 17, 0)
+FLOOR = (8, 21, 0)
 FORMAT_FLOOR = (8, 15, 0)   # 다섯 낱말을 담은 절(형식 쪽 판)의 바닥
 WORDS = ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")
 
@@ -332,7 +392,7 @@ class Version(unittest.TestCase):
         twice = log + "\n## [0.0.1] — 2026-01-01\n" + hit + "\n"
         self.assertNotEqual(version_problems(version, twice), [])   # 다섯 낱말을 담은 절이 둘
         self.assertNotEqual(version_problems("8.13.1", log), [])   # 판이 FLOOR 아래
-        below = version_problems("8.16.0", log)   # 이 일보다 먼저 기본 브랜치에 있던 판 — 그 머리는 있으니 걸리는 것은 바닥 하나다
+        below = version_problems("8.20.0", log)   # 이 일보다 먼저 기본 브랜치에 있던 판 — 그 머리는 있으니 걸리는 것은 바닥 하나다
         self.assertEqual(len(below), 1, below)
         self.assertIn("보다 낮다", below[0])
 
@@ -396,6 +456,47 @@ class ReadSideVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다
         for words in ("`references/team-files.md` §3 의 글이 정본이다", "`--framing-audit` 없이 다시 불러도 멈추지 않는다",
                       "옛 형식 문서라도", "pr-record"):
             self.assertIn(words, body, words)
+
+
+class RepoFiles(unittest.TestCase):   # R1 AC25 — devbrew 레포의 공통 문서
+    def rd(self):
+        import repo_defaults
+        front = (REPO / repo_defaults.SETTINGS_FILE).read_text(encoding="utf-8").split("---")[1]   # 설정 파일의 머리
+        self.assertNotIn("roadmaps_dir", [l.split(":")[0].strip() for l in front.splitlines()])   # 설정을 바꾸지 않았다
+        return repo_defaults.ROADMAPS_DIR   # 기본값 상수
+
+    def test_review_file_at_the_top(self):
+        text = (REPO / L.REVIEW_FILE).read_text(encoding="utf-8")
+        for part in ("테스트가 하나라도 실패", "실제로 돌려 보거나 화면을 봤을 때", "어디서 · 무엇이 · 어떤 기준에 걸렸는지 한 줄"):
+            self.assertIn(part, text)
+
+    def test_handbook_carries_the_principle(self):
+        text = (REPO / L.handbook(self.rd())).read_text(encoding="utf-8")
+        self.assertIn("잘못 쌓인 맥락은 없는 것보다 나쁘다. 이 파일의 줄은 쓰기 전에 지금 확인하고, 틀렸으면 지운다.", text)
+
+    def test_four_role_docs_with_two_sections(self):
+        for role in L.ROLES:
+            lines = (REPO / L.role_doc(self.rd(), role)).read_text(encoding="utf-8").splitlines()
+            self.assertEqual([l for l in lines if l.startswith("#")], ["## 할 일", "## 하지 않을 일"], role)
+            self.assertIn("- 받은 규칙은 쓰기 전에 지금도 맞는지 확인한다.", lines, role)
+            self.assertEqual(sorted(p.name for p in (REPO / self.rd() / role).iterdir()), [L.ROLE_DOC], role)   # 역할 폴더는 로드맵 폴더가 아니다
+
+
+RULE_WORDS = ("team_rules.py", "start_bundle.py", "묶음 낡음", "REVIEW.md")
+
+
+class RulesVersion(unittest.TestCase):   # 판 글자를 못 박지 않는다 — 읽기 쪽 항목보다 뒤의 판 가운데 가장 이른 것
+    def test_entry_chosen_by_its_words(self):
+        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
+        entries = changelog_entries(log)
+        read_side = min(v for v, body in entries if all(w in body for w in READ_WORDS))
+        mine = sorted(v for v, body in entries if v > read_side and all(w in body for w in RULE_WORDS))
+        self.assertTrue(mine, "읽기 쪽 판 뒤에 RULE_WORDS 를 모두 담은 항목이 없다")
+        body = dict(entries)[mine[0]]
+        self.assertFalse(all(w in body for w in ("--layout team", "rules_budget", "handbook_budget", "job new", "종료 코드 4")))
+        self.assertIn("이미 깐", body)   # 리더 틀이 바뀐 것을 이미 깐 레포가 손으로 맞춘다(U10 가일 때)
+        for word in ("--layout team", "종료 코드 4"):   # 이 항목에는 두 낱말을 하나도 쓰지 않는다(위 단언은 다섯이 다 들 때만 걸린다)
+            self.assertNotIn(word, body)
 
 
 if __name__ == "__main__":

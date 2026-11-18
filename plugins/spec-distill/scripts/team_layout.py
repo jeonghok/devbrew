@@ -18,6 +18,7 @@ LAYOUT_KEY = "layout"
 LAYOUT_TEAM = "team"
 LAYOUTS = (LAYOUT_TEAM,)
 ROLES = ("leader", "designer", "writer", "worker")
+LEADER_ROLE = ROLES[0]
 
 ROADMAP_FILE = "roadmap.md"
 RULES_FILE = "RULES.md"
@@ -39,6 +40,9 @@ BLOCKED_FILE = "BLOCKED.md"
 STAGES = ("design", "plan", "implement", "review")
 PLANNED_STAGES = ("plan", "implement", "review")
 PLAIN_FLOW_STAGES = ("진행 중", "결과 받음")   # 설계 없는 흐름의 단계 글자(설계 §10) — 브랜치 있음 · 받음 줄 있음
+
+# 단계의 기본 역할 — STAGES 의 차례와 같다. review 는 None(역할 문서를 주지 않는다, 설계 §6).
+_DEFAULT_ROLES = dict(zip(STAGES, (ROLES[1], ROLES[1], ROLES[3], None)))
 
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _PLAN_FILE_RE = re.compile(r"plan-([1-9][0-9]*)\.md")
@@ -162,6 +166,20 @@ def role_doc(roadmaps_dir: str, role: str) -> str:
     if role not in ROLES:
         raise ValueError("역할 이름이 아니다: %r" % role)
     return roadmaps_dir + role + "/" + ROLE_DOC
+
+
+def default_role(stage: str) -> Optional[str]:
+    """단계의 기본 역할. review 는 None(역할 문서를 주지 않는다). STAGES 밖이면 ValueError."""
+    if stage not in _DEFAULT_ROLES:
+        raise ValueError("단계 이름이 아니다: %r" % stage)
+    return _DEFAULT_ROLES[stage]
+
+
+def leader_ref(default_ref: str) -> str:
+    """리더가 쓰는 파일(팀 규칙 파일)을 읽을 ref. 받은 값을 그대로 돌려준다(I2).
+    R3 가 이 함수의 값을 바꿀 때 결과 파일 머리의 규칙 커밋 칸과 `job sync` 의 인자도 함께 바뀐다 —
+    「묶음 낡음」 은 팀 규칙의 그때 글을 머리 bundle_at 의 커밋에서 읽으므로, 값만 바꾸면 거짓 「묶음 낡음」 이 뜬다."""
+    return default_ref
 
 
 class Team(NamedTuple):

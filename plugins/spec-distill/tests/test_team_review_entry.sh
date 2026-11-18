@@ -81,6 +81,15 @@ J3I="$TM/jobs/E3/INTENT.md"
 assert_eq "$(sed -n '/^이웃 에픽의 결정/,$p' "$T/out.txt")" "$(printf '이웃 에픽의 결정\n  E3 — 결정 줄 없음 — %s' "$J3I")" \
   "neighbors: 설계 전(준비)인 team 이웃도 과제 파일의 결정 기록을 읽는다(기본 브랜치)"
 
+# INTENT.md 머리 roadmap 이 레포 밖으로 나가는 경로 — 그 자리에 진짜 team 로드맵이 있어도 열지 않는다
+mkdir -p "$W/out-neighbors/a" "$W/out-neighbors/outside"
+cp "$W/$RM" "$W/out-neighbors/outside/roadmap.md"
+printf -- '---\ntype: job\njob: E1\nroadmap: ../../outside/roadmap.md\n---\n\n## 목표\n' > "$W/out-neighbors/a/INTENT.md"
+assert_eq "$(nb "out-neighbors/a/INTENT.md")" "0" "neighbors: 머리 roadmap 이 .. 경로여도 rc 0(종료 코드는 그대로)"
+assert_not_contains "$(cat "$T/out.txt")" "로드맵 속 위치 — " "neighbors: 머리 roadmap 이 .. 경로면 그 자리의 로드맵을 열지 않는다"
+assert_contains "$(cat "$T/out.txt")" "레포 상대 경로가 아니다" "neighbors: 머리 roadmap 이 .. 경로면 사유를 댄다"
+rm -rf "$W/out-neighbors"
+
 # ── neighbors — team 이웃의 결정은 그 과제 INTENT.md 의 결정 기록에서 읽는다 ─────────────
 g checkout -q -b feature/tm-e3 main
 put "$TM/jobs/E3/design.md" "$(printf -- '---\ntype: design\n---\n\n# 이어 읽기 — 이웃 결정 픽스처\n')"
