@@ -311,4 +311,56 @@ mkdir -p "$REPO/outside-ns" && : > "$REPO/outside-ns/keep"
 (cd "$REPO" && "$WT" remove "$SANDBOX") && [ ! -d "$SANDBOX" ] \
   && ok "remove 는 네임스페이스 안의 샌드박스를 지운다 (양의 짝)" || no "샌드박스가 남았다"
 rm -rf "$REPO"
+echo "[remove: 이름 범위 — 자기 꼴이 아닌 이름은 rc 2 · 그대로 둔다]"
+mk_repo_checked; mk_outside_checked
+WTS="$REPO/.claude/worktrees"; OLDW="$REPO/.claude/plugin-audit/worktrees"
+mkdir -p "$WTS" "$OLDW" "$OLDW/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc"
+(cd "$REPO" && git worktree add -q --detach "$WTS/user-detached" HEAD && git branch feat-x && git worktree add -q "$WTS/feat-x" feat-x) >/dev/null 2>&1
+for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$OLDW/feat-x" "$OUTSIDE"; do printf 'keep\n' > "$d/keep.txt"; done
+mkdir -p "$OLDW/rt-123456789" "$OLDW/rt-" && printf 'keep\n' > "$OLDW/rt-123456789/keep.txt" && printf 'keep\n' > "$OLDW/rt-/keep.txt"
+mkdir -p "$WTS/audit-rt-" && printf 'keep\n' > "$WTS/audit-rt-/keep.txt"
+for t in "$WTS/feat-x" "$WTS/user-detached" "$WTS/plain-folder" "$WTS/audit-rt-12345678x" "$WTS/audit-rt-123456789" "$WTS/audit-rt-" \
+         "$WTS/audit-rt-x/../feat-x" "$WTS/AUDIT-RT-case0001" "$WTS/qg-base-abc" "$OLDW/feat-x" "$OLDW/rt-123456789" "$OLDW/rt-" "$OUTSIDE" "$WTS" "$OLDW"; do
+  (cd "$REPO" && "$WT" remove "$t" >/dev/null 2>&1); assert_eq "$?" "2" "범위 밖 이름은 rc 2: ${t#$REPO}"
+done
+for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$WTS/audit-rt-" "$OLDW/feat-x" "$OLDW/rt-123456789" "$OLDW/rt-" "$OUTSIDE"; do
+  [ -f "$d/keep.txt" ] && ok "그대로다: ${d#$REPO}" || no "범위 밖 대상이 사라졌다: ${d#$REPO}"
+done
+(cd "$REPO" && git worktree list | grep -q "user-detached") && (cd "$REPO" && git worktree list | grep -q "feat-x") \
+  && ok "사용자 worktree 등록이 그대로다" || no "사용자 worktree 등록이 풀렸다"
+# 양의 짝 — 자기 이름은 새 자리 · 옛 자리 모두 받는다
+mkdir -p "$WTS/audit-rt-ok000001" "$OLDW/rt-okold001" && : > "$WTS/audit-rt-ok000001/f" && : > "$OLDW/rt-okold001/f"
+(cd "$REPO" && "$WT" remove "$WTS/audit-rt-ok000001" >/dev/null 2>&1); assert_eq "$?" "0" "자기 이름(새 자리)은 받는다"
+(cd "$REPO" && "$WT" remove "$OLDW/rt-okold001" >/dev/null 2>&1); assert_eq "$?" "0" "자기 이름(옛 자리)은 받는다"
+[ ! -e "$WTS/audit-rt-ok000001" ] && [ ! -e "$OLDW/rt-okold001" ] && ok "자기 이름 둘이 지워졌다" || no "자기 이름이 남았다"
+rm -rf "$REPO" "$OUTSIDE"
+
+echo "[링크는 링크만 지운다 — 링크가 등록된 사용자 worktree 를 가리킬 때]"
+for kind in branch detached; do
+  mk_repo_checked
+  WTS="$REPO/.claude/worktrees"; mkdir -p "$WTS"
+  if [ "$kind" = branch ]; then
+    (cd "$REPO" && git branch userbr && git worktree add -q "$WTS/userwt" userbr) >/dev/null 2>&1
+  else
+    (cd "$REPO" && git worktree add -q --detach "$WTS/userwt" HEAD) >/dev/null 2>&1
+  fi
+  printf 'mine\n' > "$WTS/userwt/mine.txt"
+  # 만들기 복구 — 링크를 치우고 사본을 만든다
+  ln -s "$WTS/userwt" "$WTS/audit-rt-ulnk0123"
+  OUT=$(cd "$REPO" && "$WT" create-sandbox "ulnk0123456789" 2>/dev/null); rc=$?
+  SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
+  [ "$rc" -eq 0 ] && [ -d "$SANDBOX" ] && [ ! -L "$SANDBOX" ] && ok "[$kind] 링크 자리에 사본을 만든다" || no "[$kind] 링크 자리 rc=$rc"
+  [ -f "$WTS/userwt/mine.txt" ] && ok "[$kind] 만들기 뒤 사용자 worktree 파일이 그대로다" || no "[$kind] 만들기가 링크 대상 worktree 를 지웠다"
+  (cd "$REPO" && git worktree list --porcelain | grep -q "^worktree .*/userwt$") && ok "[$kind] 사용자 worktree 등록이 그대로다" || no "[$kind] 사용자 worktree 등록이 풀렸다"
+  [ "$kind" != branch ] || { (cd "$REPO" && git rev-parse --verify -q userbr >/dev/null) && ok "[branch] 브랜치가 그대로다" || no "[branch] 브랜치가 사라졌다"; }
+  # remove
+  ln -s "$WTS/userwt" "$WTS/audit-rt-ulnk0999"
+  (cd "$REPO" && "$WT" remove "$WTS/audit-rt-ulnk0999" >/dev/null 2>&1); assert_eq "$?" "0" "[$kind] remove 는 링크를 받는다"
+  [ ! -L "$WTS/audit-rt-ulnk0999" ] && ok "[$kind] remove 가 링크를 지웠다" || no "[$kind] 링크가 남았다"
+  [ -f "$WTS/userwt/mine.txt" ] && ok "[$kind] remove 뒤 사용자 worktree 파일이 그대로다" || no "[$kind] remove 가 링크 대상 worktree 를 지웠다"
+  (cd "$REPO" && git worktree list --porcelain | grep -q "^worktree .*/userwt$") && ok "[$kind] remove 뒤 등록이 그대로다" || no "[$kind] remove 뒤 등록이 풀렸다"
+  [ "$kind" != branch ] || { (cd "$REPO" && git rev-parse --verify -q userbr >/dev/null) && ok "[branch] remove 뒤 브랜치가 그대로다" || no "[branch] remove 뒤 브랜치가 사라졌다"; }
+  rm -rf "$REPO"
+done
+
 finish
