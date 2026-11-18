@@ -4,7 +4,9 @@
 # Subcommands:
 #   memo-init <project-dir>      -> 리포 밖 실행 안 메모 디렉토리의 절대 경로 (표지 .qg-memo). 리포 안이면 exit 2
 #   memo-drop <memo-dir>         -> 표지가 있는 메모만 지운다. 없는 경로는 exit 0, 표지 없으면 exit 2
-#   remove <abs-path>            -> best-effort `git worktree remove --force`
+#   remove <abs-path>            -> 자기 사본(<top>/.claude/worktrees/qg-(base|head)-<sid8> · 옛 자리 포함)만
+#                                   best-effort 로 지운다. 브랜치를 쥔 worktree · 링크 대상은 건드리지 않는다
+#   own-paths <session-id>       -> 이 세션의 등록된 사본의 레포 기준 상대 경로 한 줄씩 (없으면 빈 출력)
 #   create-baseline <merge-base-sha> <session-id>
 #                                -> echoes absolute worktree path; detached at merge_base,
 #                                   NO working-tree overlay (baseline must not inherit
@@ -27,7 +29,64 @@ set -u
 
 die() { echo "qg-worktree: $*" >&2; exit 2; }
 
-# 주어진 커밋에 detached 된 일회용 워크트리를 플러그인 네임스페이스 안에 만든다.
+# 경로의 물리 경로 — 마지막 성분은 풀지 않는다(링크는 링크로 남는다). 부모가 없으면 받은 그대로.
+phys_path() {   # <path>
+  local d b
+  d=$(dirname "$1"); b=$(basename "$1")
+  if [[ -d "$d" ]]; then d=$(cd "$d" && pwd -P) && printf '%s/%s\n' "$d" "$b" && return 0; fi
+  printf '%s\n' "$1"
+}
+
+# 등록 판정의 단일 읽기 — `git worktree list --porcelain` 의 블록에서 물리 경로가 같은 worktree 를 찾는다.
+# 등록돼 있으면 그 브랜치 이름(브랜치를 쥐지 않았으면 `-`)을 내고 rc 0, 등록돼 있지 않으면 rc 1.
+wt_registered_branch() {   # <abs-path>
+  local want line p="" br="-"
+  want=$(phys_path "$1")
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) p=$(phys_path "${line#worktree }"); br="-" ;;
+      "branch "*) br="${line#branch }" ;;
+      "") if [[ -n "$p" && "$p" == "$want" ]]; then printf '%s\n' "$br"; return 0; fi; p="" ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null; echo)
+  return 1
+}
+
+holds_branch() {   # <abs-path> — 등록된 worktree 가 브랜치를 쥐고 있으면 참
+  local br
+  br=$(wt_registered_branch "$1") || return 1
+  [[ "$br" != "-" ]]
+}
+
+# 세션 id 앞 8자를 검증해 낸다.
+sid_short_of() {   # <session-id>
+  local s="${1:0:8}"
+  [[ -n "$s" ]] || die "empty session-id"
+  case "$s" in
+    *[!A-Za-z0-9_-]*) die "bad session-id (A-Z a-z 0-9 _ - 만 허용): $1" ;;
+  esac
+  printf '%s\n' "$s"
+}
+
+# 앞 실행이 남긴 같은 이름의 사본을 치운다. 부모가 기대한 자리가 아니면 건드리지 않는다.
+# 링크는 링크만 지운다 · 브랜치를 쥔 등록된 worktree 는 지우지 않고 멈춘다 · 그 밖은 지운다.
+clear_stale_copy() {   # <path> <expected-parent> [quiet-skip]
+  local wt="$1" want_parent="$2" real_parent
+  real_parent=$(phys_path "$(dirname "$wt")")
+  [[ "$real_parent" == "$want_parent" ]] || return 0
+  git worktree prune >/dev/null 2>&1 || true
+  if [[ -L "$wt" ]]; then
+    rm -f -- "$wt" || die "앞 실행이 남긴 링크를 지우지 못했다: $wt"
+  elif [[ -e "$wt" ]]; then
+    holds_branch "$wt" && die "자기 이름의 사본이 브랜치를 쥐고 있다 — 지우지 않는다: $wt"
+    git worktree remove --force --force "$wt" >/dev/null 2>&1 || rm -rf -- "$wt" \
+      || die "앞 실행이 남긴 트리를 지우지 못했다: $wt"
+  fi
+  git worktree prune >/dev/null 2>&1 || true
+}
+
+# 주어진 커밋에 detached 된 일회용 워크트리를 `<top>/.claude/worktrees/qg-<prefix>-<sid8>` 에 만든다.
+# 그 폴더는 사용자 · 지휘자의 worktree 와 함께 쓰므로 자기 이름 꼴만 다룬다.
 # 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base, 선언 경로는 경계) 과
 # `create-head`(HEAD 축 = seal-worktree.sh 가 봉인한 커밋, 선언 경로(`--topic`)는
 # topic-head.sh 가 합친 커밋).
@@ -40,14 +99,10 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   local sid_short main_root parent wt p_anc
   git rev-parse --verify --quiet "$sha^{commit}" >/dev/null 2>&1 \
     || die "not a commit: $sha"
-  sid_short="${sid:0:8}"
-  [[ -n "$sid_short" ]] || die "empty session-id"
-  case "$sid_short" in
-    *[!A-Za-z0-9_-]*) die "bad session-id (A-Z a-z 0-9 _ - 만 허용): $sid" ;;
-  esac
+  sid_short=$(sid_short_of "$sid") || exit 2
   main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
   main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
-  parent="$main_root/.claude/quality-gates/worktrees"
+  parent="$main_root/.claude/worktrees"
   # 리뷰 대상 리포가 커밋한 `.claude` 심볼릭 링크가 리포 밖을 가리키면 아래 강제 삭제가 리포 밖에서 일어난다.
   # 만들기 전에 가장 깊은 기존 조상을, 만든 뒤에 parent 를 정규화해 main_root 아래인지 본다.
   p_anc="$parent"
@@ -59,20 +114,16 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
   esac
   mkdir -p "$parent" || die "cannot create $parent"
   parent=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
-  [[ "$parent" == "$main_root/.claude/quality-gates/worktrees" ]] \
-    || die "일회용 트리 이름공간이 기대한 자리가 아니다(링크?) — 만들지 않는다: $parent"
-  wt="$parent/${prefix}-${sid_short}"
+  [[ "$parent" == "$main_root/.claude/worktrees" ]] \
+    || die "일회용 트리 자리가 기대한 곳이 아니다(링크?) — 만들지 않는다: $parent"
+  wt="$parent/qg-${prefix}-${sid_short}"
 
-  # 이 이름공간의 base-·head- 트리는 일회용이다. 앞 실행이 남긴 것은 지우고 다시 만든다 —
+  # 옛 자리(`.claude/quality-gates/worktrees/`)의 같은 세션 이름만 치운다 — 다른 세션의 옛 사본은 건드리지 않는다.
+  clear_stale_copy "$main_root/.claude/quality-gates/worktrees/${prefix}-${sid_short}" \
+    "$main_root/.claude/quality-gates/worktrees"
+  # 새 자리의 같은 이름은 일회용이다. 앞 실행이 남긴 것은 지우고 다시 만든다 —
   # 남겨 두면 그 세션은 다음 차등에서 트리를 못 만든다(R23).
-  git worktree prune >/dev/null 2>&1 || true
-  if [[ -L "$wt" ]]; then
-    rm -f -- "$wt" || die "앞 실행이 남긴 링크를 지우지 못했다: $wt"
-  elif [[ -e "$wt" ]]; then
-    git worktree remove --force --force "$wt" >/dev/null 2>&1 || rm -rf -- "$wt" \
-      || die "앞 실행이 남긴 트리를 지우지 못했다: $wt"
-  fi
-  git worktree prune >/dev/null 2>&1 || true
+  clear_stale_copy "$wt" "$parent"
   git worktree add --detach "$wt" "$sha" >/dev/null 2>&1 \
     || die "git worktree add failed (${prefix}: $wt)"
   printf '%s\n' "$wt"
@@ -145,30 +196,53 @@ case "${1:-}" in
     # 같은 의미의 다른 사본: plugins/plugin-audit/scripts/audit-sandbox.sh 의 `remove` — 의미가 같다(가드 바꾸면 둘 다).
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
     target="$2"
-    # Safety: only allow paths under <repo>/.claude/quality-gates/worktrees/
+    # 받는 것: <repo>/.claude/worktrees/qg-(base|head)-<1~8자> 와 옛 <repo>/.claude/quality-gates/worktrees/(base|head)-<1~8자> 뿐.
+    # 앞의 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     # Canonicalize repo_root to resolve symlinks (macOS /var → /private/var)
     repo_root=$(cd "$repo_root" && pwd -P) || die "cd failed: $repo_root"
-    parent="$repo_root/.claude/quality-gates/worktrees"
-    # Canonicalize target by resolving its deepest existing ancestor.
-    # Walk up until we find an existing dir, resolve it, then reattach the rest.
-    t_path="$target" t_suffix=""
-    while [[ -n "$t_path" && ! -d "$t_path" ]]; do
+    # 마지막 성분은 풀지 않는다(링크는 링크로 본다). 부모는 가장 깊은 실재 조상을 풀어 붙인다.
+    t_name=$(basename "$target")
+    t_path=$(dirname "$target") t_suffix=""
+    while [[ -n "$t_path" && ! -d "$t_path" && "$t_path" != "/" && "$t_path" != "." ]]; do
       t_suffix="/$(basename "$t_path")$t_suffix"
       t_path=$(dirname "$t_path")
     done
     if [[ -d "$t_path" ]]; then
       t_path=$(cd "$t_path" && pwd -P) || die "cd failed: $t_path"
     fi
-    target_real="$t_path$t_suffix"
-    case "$target_real" in
-      "$parent"/*) ;;
-      *) die "refuse to remove outside namespace: $target" ;;
+    t_parent="$t_path$t_suffix"
+    target_real="$t_parent/$t_name"
+    scope_ok=0
+    case "$t_parent" in
+      "$repo_root/.claude/worktrees")
+        [[ "$t_name" =~ ^qg-(base|head)-[A-Za-z0-9_-]{1,8}$ ]] && scope_ok=1 ;;
+      "$repo_root/.claude/quality-gates/worktrees")
+        [[ "$t_name" =~ ^(base|head)-[A-Za-z0-9_-]{1,8}$ ]] && scope_ok=1 ;;
     esac
-    [[ -d "$target" ]] || exit 0  # idempotent
-    git worktree remove --force "$target" 2>/dev/null \
-      || rm -rf "$target" \
+    [[ "$scope_ok" -eq 1 ]] || die "refuse to remove outside namespace: $target"
+    if [[ -L "$target_real" ]]; then
+      rm -f -- "$target_real" || die "링크를 지우지 못했다: $target"   # 링크만 지운다 — 가리키는 곳은 건드리지 않는다
+      exit 0
+    fi
+    [[ -d "$target_real" ]] || exit 0  # idempotent
+    holds_branch "$target_real" && die "브랜치를 쥔 worktree 라 지우지 않는다: $target"
+    git worktree remove --force "$target_real" 2>/dev/null \
+      || rm -rf -- "$target_real" \
       || die "rm -rf fallback also failed: $target"  # fallback when git lost track
+    ;;
+  own-paths)
+    # 이 세션의 등록된 사본의 레포 기준 상대 경로를 한 줄씩 낸다(없으면 빈 출력). 봉인 · 리뷰 범위 · 지문이 쓴다.
+    [[ $# -eq 2 ]] || die "usage: own-paths <session-id>"
+    op_sid=$(sid_short_of "$2") || exit 2
+    op_top=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
+    op_top=$(cd "$op_top" && pwd -P) || die "cd failed: $op_top"
+    for op_prefix in base head; do
+      op_rel=".claude/worktrees/qg-${op_prefix}-${op_sid}"
+      [[ -d "$op_top/$op_rel" && ! -L "$op_top/$op_rel" ]] || continue
+      wt_registered_branch "$op_top/$op_rel" >/dev/null && printf '%s\n' "$op_rel"
+    done
+    exit 0
     ;;
   memo-init)
     # 실행 안 메모 — 한 번의 /quality-gates:quality-pipeline 동안 기준선 행 · 배정 · 대조 산출을 담는다. 검사 대상 트리
