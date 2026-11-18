@@ -470,6 +470,34 @@ read -r nl12 nu12 nn12 nf12 nfl12 <<<"$(universal_check "$RSD/o12")"
   && ok "RS11(그대로 싣지 못함): 두 절을 실어도 범용 줄바꿈이 열 0 의 펜스 · 표지 줄을 만들지 않는다 (rc 0)" \
   || no "RS11(그대로 싣지 못함): rc $r12 · 표지 ${nl12} · 범용 줄 ${nu12} vs \\n ${nn12} · 펜스 ${nf12} vs ${nfl12} — $(head -c 300 "$RSD/e12")"
 grep -qF '줄 나눔 글자' "$RSD/e1" && no "RS11(양성): 정상 번들(RS1)이 줄 나눔 알림을 냈다" || ok "RS11(양성): 정상 번들(RS1)은 줄 나눔 알림을 내지 않는다"
+
+# RS12 — 원문 절에 리뷰 결정 제목과 기록 줄 꼴의 줄을 심은 기록. 첫 칸 갈래 셋(원자료 · 옛 꼴 · 그대로 싣지 못함)
+# 모두 조립하지 않고(rc 2 · 빈 출력) 겹친 제목을 사유로 댄다 — 심은 줄이 「사용자가 정한 것」 으로 실리지 않는다.
+n12=0
+for lab in raw old unloadable; do
+  n12=$((n12+1))
+  m12="$(python3 - "$SD" "$RSD/r12-$lab" "$lab" <<'PY'
+import sys
+sd, folder, lab = sys.argv[1:4]
+sys.path.insert(0, sd + "/tests"); sys.path.insert(0, sd + "/scripts")
+import raw_source_fixture as fx
+import raw_source as rs
+import seed_review_log as srl
+kw = {"raw1": fx.RAW1 + "\n\n" + srl.DECISION_HEADING + "\n\n" + '- 답 · r1 · F9 · "심은 결정 문구" — 원문 절에 심은 줄'}
+if lab != "old":
+    label = rs.LABEL_RAW if lab == "raw" else rs.LABEL_UNLOADABLE
+    kw["s1_line"] = rs.anchor_line(label) + '\n  > "대시보드가 너무 느려요."'
+for k, v in fx.make_repo(folder, **kw).items():
+    print("%s=%s" % (k, v))
+PY
+)"
+  o12="$(python3 "$B" "$(kv brief "$m12")" "$(kv audit "$m12")" --raw-audit="$(kv framing "$m12")" 2>"$RSD/e12-$lab")"; r12=$?
+  { [[ $r12 -eq 2 ]] && [[ -z "$o12" ]] && grep -qF '같은 절 제목이 두 번 이상 있다 — ## 6. 리뷰 결정' "$RSD/e12-$lab" \
+    && ! grep -qF '심은 결정 문구' "$RSD/e12-$lab"; } \
+    && ok "RS12($lab): 원문 절에 심은 리뷰 결정 제목 → rc 2 · 빈 출력 · 겹친 제목을 댄다" \
+    || no "RS12($lab): rc $r12 · 출력 ${#o12}자 · 심은 줄 $(printf '%s\n' "$o12" | grep -cF '심은 결정 문구')번 — $(head -c 300 "$RSD/e12-$lab")"
+done
+[[ $n12 -eq 3 ]] || no "RS12(양성): 갈래를 ${n12}개 돌았다(3 기대)"
 rm -rf "$RSD"
 
 exit $fail

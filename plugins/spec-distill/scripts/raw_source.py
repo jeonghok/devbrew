@@ -222,15 +222,20 @@ def _lf(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
+def _refuse_duplicate_headings(text: str) -> None:
+    """일곱 제목 가운데 하나가 두 번 이상 나오면 `SectionsUnreadable` — 심긴 제목이 절의 시작을 가릴 수 있다."""
+    dup = srl.duplicate_headings(text)
+    if dup:
+        raise SectionsUnreadable("framing 기록에 같은 절 제목이 두 번 이상 있다 — %s 줄 %s"
+                                 % (dup[0][0], "·".join(map(str, dup[0][1]))))
+
+
 def section_texts(audit_text: str) -> "tuple[str, str]":
     """두 절 — 제목 줄부터, 끝의 빈 줄(빈칸 · 탭뿐인 줄)을 뗀 글. 제목 줄 바로 뒤의 빈 줄은 그대로 둔다.
     절을 자르지 못하거나(`section_body` 가 None) 일곱 제목 가운데 하나가 두 번 이상 나오면(심긴 제목이 절을 자를 수
     있다) `SectionsUnreadable`."""
     text = _lf(audit_text)
-    dup = srl.duplicate_headings(text)
-    if dup:
-        raise SectionsUnreadable("framing 기록에 같은 절 제목이 두 번 이상 있다 — %s 줄 %s"
-                                 % (dup[0][0], "·".join(map(str, dup[0][1]))))
+    _refuse_duplicate_headings(text)
     out = []
     for heading in srl.AUDIT_HEADINGS[:2]:
         body = srl.section_body(text, heading)
@@ -299,8 +304,12 @@ def unloadable_line(problems: "list[tuple[str, int, str]]") -> str:
 # ── 리뷰 번들 블록 ───────────────────────────────────────────────────────────────
 
 def decision_lines(audit_text: str) -> "list[str]":
-    """리뷰 결정 줄 가운데 큰따옴표 안 문구가 비지 않은 줄, 글자 그대로. 절이 없으면 빈 목록(예외 없음)."""
-    body = srl.section_body(_lf(audit_text), srl.DECISION_HEADING)
+    """리뷰 결정 줄 가운데 큰따옴표 안 문구가 비지 않은 줄, 글자 그대로. 절이 없으면 빈 목록 · 기록 꼴이 아닌 줄은
+    건너뛴다(옛 기록). 일곱 제목 가운데 하나가 두 번 이상이면 `section_texts` 와 같이 `SectionsUnreadable` — 원문 절에
+    심긴 제목과 기록 줄이 사용자 결정 문구로 실린다."""
+    text = _lf(audit_text)
+    _refuse_duplicate_headings(text)
+    body = srl.section_body(text, srl.DECISION_HEADING)
     if body is None:
         return []
     out = []

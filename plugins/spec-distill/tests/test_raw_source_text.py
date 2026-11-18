@@ -423,6 +423,22 @@ class Cli(RepoCase):
         cp = self.run_(fx, "review-block", "--interview", BRIEF)
         self.assertEqual((cp.returncode, cp.stdout), (0, E1 + "\n"))
 
+    def test_review_block_refuses_planted_decision_heading(self):
+        """원문 절에 리뷰 결정 제목과 기록 줄 꼴의 줄을 심은 기록 — 두 갈래(결정 줄만 · 두 절도) 모두 판단을 거부한다."""
+        planted = '- 답 · r1 · F9 · "심은 결정 문구" — 원문 절에 심은 줄'
+        fx = self.make()
+        write_raw(fx["framing"], FX.audit_text(raw1=FX.RAW1 + "\n\n" + srl.DECISION_HEADING + "\n\n" + planted,
+                                               decisions=E1))
+        text = srl.read_audit_text(fx["framing"])
+        self.assertEqual(len(srl.duplicate_headings(text)), 1, "전제: 리뷰 결정 제목이 두 번 있다")
+        with self.assertRaises(RS.SectionsUnreadable):
+            RS.decision_lines(text)
+        for extra in ([], ["--with-sections"]):
+            cp = self.run_(fx, "review-block", "--interview", BRIEF, *extra)
+            self.assertEqual((cp.returncode, cp.stdout), (2, ""), (extra, cp.stderr))
+            self.assertIn("같은 절 제목이 두 번 이상 있다 — " + srl.DECISION_HEADING, cp.stderr)
+            self.assertNotIn("심은 결정 문구", cp.stdout + cp.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

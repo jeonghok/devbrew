@@ -210,8 +210,8 @@ def raw_source_block(payload_path: pathlib.Path, payload_text: str, raw_audit):
         return "", f"framing 기록 파일을 읽지 못했다 — {own}: {exc}"
     try:
         return raw_source.review_block(text, first_cell_unloadable(payload_text)), None
-    except ValueError as exc:   # SectionsUnreadable — 두 절을 실어야 하는데 자르지 못했다
-        return "", f"framing 기록의 두 절을 자르지 못했다 — {exc}"
+    except ValueError as exc:   # SectionsUnreadable — 절 제목이 겹쳤거나 실을 두 절을 자르지 못했다
+        return "", f"framing 기록의 절을 자르지 못했다 — {exc}"
 
 
 def main() -> int:
