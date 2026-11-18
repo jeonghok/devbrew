@@ -490,3 +490,30 @@ framing 뒤의 모든 단계가 seed(모델이 줄인 글)가 아니라 사용�
 - 판 번호 · 2026-11-17 23:19 · 기본 브랜치 789bd918(규칙 개정 PR #296 — spec-distill 8.19.2)을 합치고 이 에픽의 판 8.20.0 을 그 위에 두었다(커밋 5ec15adf). 충돌은 판 줄과 변경 기록 머리뿐이었다
 - 옮긴 질문 · 2026-11-17 22:43 · 구현 담당자가 계획 1 마지막 리뷰의 Important 1(비밀값 가리기가 모델이 사용자의 말을 옮겨 쓰는 줄에는 걸려 있지 않다)을 사용자 몫으로 돌려보냈다. 받은 글에 질문과 선택지가 없어 지휘자가 질문을 만들었다(지휘 자원 폴더 relay/F3/relay-1.md). 사용자 답 「고친다 — 모델이 옮겨 쓰는 줄도 (권장)」 — 결정 기록 B7. 같은 구현 담당자가 고쳤다(커밋 0763dd56 — skill 문장 하나와 근거 문장 하나, 기록 파일 템플릿 구절 하나, 락 셋, 좁은 재리뷰 한 번에 지적 없음)
 - 구현 뒤 남은 것 · 2026-11-17 23:19 · 계획 1 마지막 리뷰가 남긴 작은 지적 셋은 PR 본문에 싣는다 — CLAUDE.md 가 없는 레포에서 경고가 라운드마다 두 번 보인다(Minor 8), 쓰기 전 겹침 물음에서 「멈춘다」 를 골랐을 때의 뒤처리가 비어 있다(Minor 9), 다른 다음 단계의 판결 펜스를 언제 돌리는지가 없다(Minor 10). 뒤의 둘은 skill 동작을 더하는 일이라 받는 곳을 사용자에게 묻는다. Minor 5 · 6 · 12 는 둘째 계획이 받는다(미룸 표). AC18 은 구현 담당자가 미룸으로 보고했고 지휘자의 스위트 대조가 가른다
+- 판 번호 · 2026-11-18 11:44 · 기본 브랜치가 두 번 앞서 갔다 — 다른 로드맵의 PR #297 이 spec-distill 을 8.20.0 으로 올려 8.21.0 으로 옮겼고(커밋 5fe02796, 충돌 셋 — 변경 기록, request-framing 본문, 그 테스트), 이어 PR #298 이 8.21.0 으로 올려 8.22.0 으로 다시 잡았다(커밋 f0e739c4, 충돌은 변경 기록 하나). 두 번 다 같은 판 문자열이라 plugin.json 은 충돌로 뜨지 않았다 — 기본 브랜치의 판을 직접 견줘 올렸다
+- 머지 전 확인 · 2026-11-18 11:44 · AC18 은 구현 담당자가 미룸으로 보고했고 지휘자의 스위트 대조가 닫았다 — f0e739c4 대 68c7674c 새 실패 없음(이 브랜치에만 있는 실패 0개, 양쪽 다 있는 실패 11개). 앞서 5fe02796 대 f0a437c0 대조도 새 실패 없음이었다. 첫 합치기에서 PR #297 이 겹침 물음 문단(AC6 이 글자를 바꾸지 않는다고 적은 문단)에 선택지 설명 한 문장을 더했다 — 구현 담당자와 지휘자는 AC6 을 「이 브랜치가 그 문단을 바꾸지 않는다」 로 읽어 확인용 글자를 기본 브랜치 것에 맞췄다(물음의 라벨, 순서, 동작은 그대로다)
+- 남은 작은 지적 · 2026-11-18 11:44 · 마지막 리뷰의 작은 지적 가운데 셋이 남았다 — CLAUDE.md 없음 경고가 라운드마다 두 번 보인다(8), 쓰기 전 겹침 물음에서 「멈춘다」 를 고른 뒤의 뒤처리가 비어 있다(9), 판결 펜스를 언제 돌리는지가 없다(10). 9 와 10 은 skill 동작을 더하는 일이라 구현 담당자가 손대지 않았다. 받는 곳은 사용자에게 묻는다. 설계문서 「남는 한계」 의 slash 줄 문장(받는 쪽이 seed 머리의 역할 문장으로 안다)은 사실과 다르다는 지적(17)도 있다 — 그 역할 문장은 seed 템플릿의 예시 밖에만 있고 받는 쪽이 아는 길은 audit_file 칸뿐이다. 둘째 계획이 그 문장을 고친다
+
+## 판정
+
+### docs/superpowers/plans/2026-11-17-raw-source-canon-plan1.md
+
+- ## 판정 전체 (ledger 의 Ruling: 줄, 내린 순서대로)
+- 1. Ruling: T6 `secret_tokens` extracts tokens with `<[A-Z]{2,}(:[^>]*)?>` (two+ capitals) from both sources — `<N>` in the report-line form is a count placeholder, not a mark; the plan's 1-capital pattern fails on the plan's own mandated text — cost if wrong: a 1-letter mark name would escape the set lock (no such mark exists in P21 set).
+- 2. Ruling: Task 1 executed inline by controller (read-only greps, no files) — dispatch overhead buys nothing — cost if wrong: none (results recorded above).
+- 3. Ruling: final review model = fable (highest tier per user's memory: session default/top) — conductor asked 「가장 높은 등급」 — cost if wrong: slightly different review depth.
+- 4. Ruling: Task 3 plan-mandated finding — fix additively (new direct seed_structure_lines assertions), keep plan's test — spec AC13 needs the cross-check to discriminate; no plan text forbids extra tests — cost if wrong: one extra test
+- 5. Ruling: Task 3 extra edit to test_seed_provenance.sh cp lists accepted — required by new seed_body→brief_body import — cost if wrong: none
+- 6. Ruling: Task 6 dispatch also fixes Task 5 minor — line-joining in framing_fails normalizes newline+indent to one space (used by seed_role negatives and Task 6 typed_append) and adds an inject-old-phrase mutation — Task 6 edits the same file and needs the same join for typed_append — cost if wrong: small extra diff in Task 6
+- 7. Ruling: final I1 (redaction scope for author-written lines — 풀이 줄 · 긴 초안 · 덜어 낸 것 표 · 재결정 칸) parked and surfaced to conductor as a question — it adds skill behavior the spec does not state (memory rule: no spec/visible-behavior change without discussion) — cost if wrong: a secret quoted in the long draft could reach the committed audit/seed until decided
+- 8. Ruling: final I2 fixed on the writing side (label form sentence in SKILL redaction section + template) — spec Constraints define the mark set as what P21_PLACEHOLDER_RE knows, so stating its label form implements the spec rather than extending it — cost if wrong: one extra sentence the user did not word
+- 9. Ruling: final I3 · I4 (plan-mandated lock gaps) fixed additively — locks on security text must have teeth (Verification Plan: deleting/reverting a sentence must fail) — cost if wrong: extra test items
+- 10. Ruling: final-wave also folds cheap Minors 1 · 2 · 3 · 4 · 7 · 11 · 13 · 14 · 15 · 16 (lock teeth, accuracy of user-visible text, missing-vs-broken) — one fix wave per skill rule; each is local — cost if wrong: small extra diff
+- 11. Ruling: final Minors 5 · 6 · 12 deferred to F3 plan 2 (receiver F3 per pre-answer) — they concern plan-2 call sites (interview entry/finishing) and the S1 wording plan 2 rewrites — cost if wrong: plan 2 misses a caution
+- 12. Ruling: final Minors 8 · 9 · 10 left and reported (duplicate warning line is visible not swallowed; 9 · 10 add skill behavior beyond the brief) ; Minor 17 (design doc 남는 한계 wording) reported to conductor — design doc is the conductor's file — cost if wrong: small doc drift
+- 13. Ruling: finishing menu = option 3 (keep branch as-is), skill not re-invoked — conductor pre-answered; push/PR are the conductor's — cost if wrong: none
+
+## 구현 대조 — docs/superpowers/plans/2026-11-17-raw-source-canon-plan1.md
+
+- 구현 대조: 경고 5개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 5개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 11개)
+- 보고: 이 계획 몫 AC 13개 중 구현됨 13 · 미룸 0 · 빠짐 0
