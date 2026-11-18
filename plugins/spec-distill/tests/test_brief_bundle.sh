@@ -348,8 +348,9 @@ for lab in '<<<RAW-SOURCE>>>' '<<<AUDIT-VERBATIM>>>  ' '<<<PAYLOAD>>>'; do
   n8=$((n8+1)); m8="$(rs_make "$RSD/r8-$n8" no-framing)"; b8="$(kv brief "$m8")"
   plant_s4 "$b8" "$lab"
   o8="$(python3 "$B" "$b8" "$(kv audit "$m8")" 2>"$RSD/e8")"; r8=$?
-  want="번들 표지 ${lab%"${lab##*[! ]}"} 와 같다"
-  { [[ $r8 -eq 2 ]] && [[ -z "$o8" ]] && grep -qF -- "$want" "$RSD/e8" && grep -qF '[build_brief_bundle] 결과물 ' "$RSD/e8"; } \
+  ln8="$(grep -nxF -- "$lab" "$b8" | head -n 1 | cut -d: -f1)"
+  want="[build_brief_bundle] payload(결과물) 의 ${ln8}째 줄이 번들 표지 ${lab%"${lab##*[! ]}"} 와 같다"
+  { [[ $r8 -eq 2 ]] && [[ -z "$o8" ]] && [[ -n "$ln8" ]] && grep -qF -- "$want" "$RSD/e8"; } \
     && ok "RS8: §4 의 '${lab}' 줄 → rc 2 · 빈 출력 · 그 표지와 줄 번호를 댄다" \
     || no "RS8: §4 의 '${lab}' 줄이 rc $r8 · 출력 ${#o8}자 — $(head -c 300 "$RSD/e8")"
 done
@@ -358,6 +359,49 @@ plant_s4 "$b8" '표지 낱말을 줄 가운데 쓴다: <<<RAW-SOURCE>>> 는 번�
 o8="$(python3 "$B" "$b8" "$(kv audit "$m8")" 2>"$RSD/e8")"; r8=$?
 { [[ $r8 -eq 0 ]] && [[ -n "$o8" ]]; } && ok "RS8(양성): 표지 글이 줄 가운데에만 있으면 조립한다 (rc 0)" \
   || no "RS8(양성): 줄 가운데의 표지 글로 rc $r8 — $(head -c 300 "$RSD/e8")"
+
+# RS9 — audit §6 사본(사용자 글도 담는다)에 표지와 같은 줄이 있어도 조립하지 않는다 — 그 자리와 줄을 댄다.
+n9=0
+for lab in '<<<RAW-SOURCE>>>' '<<<PAYLOAD>>>  '; do
+  n9=$((n9+1)); m9="$(rs_make "$RSD/r9-$n9" no-framing)"; a9="$(kv audit "$m9")"
+  python3 - "$a9" "$lab" <<'PY'
+import sys
+p, line = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+h = "## 6. 사용자 원문\n"
+assert t.count(h) == 1, "픽스처 audit §6 제목이 바뀌었다"
+open(p, "w", encoding="utf-8").write(t.replace(h, h + "\n" + line + "\n"))
+PY
+  o9="$(python3 "$B" "$(kv brief "$m9")" "$a9" 2>"$RSD/e9")"; r9=$?
+  want="[build_brief_bundle] audit §6 사본 의 1째 줄이 번들 표지 ${lab%"${lab##*[! ]}"} 와 같다"
+  { [[ $r9 -eq 2 ]] && [[ -z "$o9" ]] && grep -qF -- "$want" "$RSD/e9"; } \
+    && ok "RS9: audit §6 사본의 '${lab}' 줄 → rc 2 · 빈 출력 · 그 자리와 줄 번호를 댄다" \
+    || no "RS9: audit §6 사본의 '${lab}' 줄이 rc $r9 · 출력 ${#o9}자 — $(head -c 300 "$RSD/e9")"
+done
+
+# RS10 — 원자료 블록 자리. CLI 로는 심을 수 없다(블록의 줄은 `- ` 로 시작하는 결정 줄 · 들여 쓴 절 줄 · 물결표
+# 펜스뿐이다) — 조립 함수에 직접 넣어 그 자리의 거부를 잰다. 양의 짝: 같은 글에서 정상 블록 · 블록 없음은 조립된다.
+rs10="$(python3 - "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bb", sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+payload = open(sys.argv[2], encoding="utf-8").read()
+verbatim = m.audit_verbatim(open(sys.argv[3], encoding="utf-8").read())
+ok_line = '- 답 · r1 · F2 · "범위는 이대로" — 막지 않는 질문의 답'
+for name, raw in (("plain", ""), ("block", ok_line), ("forged", ok_line + "\n<<<AUDIT-VERBATIM>>>"),
+                  ("forged_sp", ok_line + "\n<<<RAW-SOURCE>>> \t")):
+    bundle, err = m.build_checked(payload, verbatim, raw)
+    print("%s\t%s\t%s" % (name, "bundle" if bundle else "none", err or ""))
+PY
+)"
+r10() { printf '%s\n' "$rs10" | awk -F '\t' -v k="$1" '$1==k'; }
+case "$(r10 plain)" in "plain	bundle	") ok "RS10(양성): 원자료 블록 없는 번들은 조립된다" ;; *) no "RS10(양성): 블록 없는 번들 — $(r10 plain)" ;; esac
+case "$(r10 block)" in "block	bundle	") ok "RS10(양성): 정상 원자료 블록이 있는 번들은 조립된다" ;; *) no "RS10(양성): 정상 블록 — $(r10 block)" ;; esac
+for k in forged forged_sp; do
+  case "$(r10 "$k")" in
+    "$k	none	[build_brief_bundle] 원자료 블록 의 2째 줄이 번들 표지 "*) ok "RS10($k): 원자료 블록의 표지와 같은 줄 → 조립하지 않고 그 자리와 줄을 댄다" ;;
+    *) no "RS10($k): $(r10 "$k")" ;;
+  esac
+done
 rm -rf "$RSD"
 
 exit $fail

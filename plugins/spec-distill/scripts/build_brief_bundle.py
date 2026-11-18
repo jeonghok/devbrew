@@ -31,7 +31,8 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 
 exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음 · 상태 파일을 읽지 못함 · 원자료를 찾았는데
 `--raw-audit` 없음 · `--raw-audit` 가 이 인터뷰의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 ·
-framing 기록 파일을 읽지 못함 · payload 의 한 줄(줄 끝 공백을 뗀 글)이 번들 표지와 같음(무디스패치) /
+framing 기록 파일을 읽지 못함 · payload · audit §6 사본 · 원자료 블록의 한 줄(줄 끝 공백을 뗀 글)이 번들 표지와 같음 —
+다 지은 번들에서 표지마다 제자리 한 번이 아님(무디스패치) /
 3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
 """
 from __future__ import annotations
@@ -129,13 +130,32 @@ def assemble(payload_text: str, verbatim: str, raw_block: str = "") -> str:
 BUNDLE_LABELS = ("<<<PAYLOAD>>>", UNTRUSTED_VERBATIM_MARKERS[1], UNTRUSTED_VERBATIM_MARKERS[2])
 
 
-def forged_label(payload_part: str):
-    """payload 부분에서 줄 끝 공백을 뗀 글이 번들 표지와 같은 첫 줄 -> (줄 번호, 표지). 없으면 None.
-    그런 줄이 있으면 리뷰어가 그 뒤의 모델 글을 번들의 원문 블록으로 읽는다."""
-    for n, line in enumerate(payload_part.split("\n"), 1):
-        if line.rstrip() in BUNDLE_LABELS:
-            return n, line.rstrip()
-    return None
+def _label_lines(text: str):
+    """줄 끝 공백을 뗀 글이 번들 표지와 같은 줄 -> [(줄 번호, 표지)]. 앞에 빈칸이 있는 줄은 표지가 아니다 —
+    `assemble` 은 표지를 열 0 에만 내고, 들여 쓴 줄은 블록 안의 내용(첫 칸의 빈칸 넷 싣는 꼴 등)이다."""
+    return [(n, line.rstrip()) for n, line in enumerate(text.split("\n"), 1) if line.rstrip() in BUNDLE_LABELS]
+
+
+def build_checked(payload_text: str, verbatim: str, raw_block: str = ""):
+    """-> (번들, None) | (None, 오류 문장). 다 지은 번들에서 표지마다 `assemble` 이 둔 자리에 꼭 한 번(원자료
+    블록이 없으면 `<<<RAW-SOURCE>>>` 는 0 번)인지 본다. 어긋나면 리뷰어가 표지 뒤의 글을 다른 원문 블록으로 읽는다."""
+    parts = (("payload(결과물)", redact_frontmatter(payload_text)), ("audit §6 사본", verbatim),
+             ("원자료 블록", raw_block))
+    for name, text in parts:
+        hits = _label_lines(text)
+        if hits:
+            n, label = hits[0]
+            return None, (f"[build_brief_bundle] {name} 의 {n}째 줄이 번들 표지 {label} 와 같다 — 리뷰어가 그 뒤를 "
+                          "번들의 원문 블록으로 읽는다. 조립하지 않는다(그 줄을 고친 뒤 다시 돈다).")
+    bundle = assemble(payload_text, verbatim, raw_block)
+    p = len(redact_frontmatter(payload_text).strip().split("\n"))
+    v = len(verbatim.split("\n"))
+    want = [(1, BUNDLE_LABELS[0]), (p + 4, BUNDLE_LABELS[1])] + ([(p + v + 7, BUNDLE_LABELS[2])] if raw_block else [])
+    got = _label_lines(bundle)
+    if got != want:
+        return None, (f"[build_brief_bundle] 다 지은 번들의 표지 줄이 제자리 한 번씩이 아니다 — 있는 자리 {got} · "
+                      f"둔 자리 {want}. 조립하지 않는다.")
+    return bundle, None
 
 
 def first_cell_unloadable(payload_text: str) -> bool:
@@ -216,12 +236,11 @@ def main() -> int:
         print(raw_err, file=sys.stderr)
         return 2
     redacted_payload = redact_frontmatter(payload_text)
-    forged = forged_label(redacted_payload)
-    if forged is not None:
-        print(f"[build_brief_bundle] 결과물 {forged[0]}째 줄이 번들 표지 {forged[1]} 와 같다 — 리뷰어가 그 뒤를 "
-              "번들의 원문 블록으로 읽는다. 조립하지 않는다(그 줄을 고친 뒤 다시 돈다).", file=sys.stderr)
+    bundle, label_err = build_checked(payload_text, verbatim, raw_block)
+    if label_err is not None:
+        print(label_err, file=sys.stderr)
         return 2
-    sys.stdout.write(assemble(payload_text, verbatim, raw_block))
+    sys.stdout.write(bundle)
     # 위생 스캔은 **payload 부분에만** 건다. 번들이 audit 내용을 의도적으로 싣게 됐으므로
     # 전체를 스캔하면 정상 동작이 매번 exit 3을 낸다.
     if own_audit_re(blessed.name).search(redacted_payload):
