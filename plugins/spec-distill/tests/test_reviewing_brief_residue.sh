@@ -108,6 +108,7 @@ for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py 
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
 ln -s "$ROOT/plugins/spec-distill/scripts/build_brief_bundle.py" "$PR/scripts/build_brief_bundle.py"
+ln -s "$ROOT/plugins/spec-distill/scripts/raw_source.py" "$PR/scripts/raw_source.py"   # `## 번들` 이 원자료 판결을 받는다
 ln -s "$ROOT/plugins/spec-distill/references" "$PR/references"
 DETECTOR="$PR/scripts/detect_codex.sh"
 cat > "$PR/scripts/run_docreview_codex_reviewer.sh" <<'STUB'
@@ -159,7 +160,7 @@ stale_into() {   # stale_into <path> — 직전 라운드가 정상으로 끝낸
 # ── 계측기 전제 — 쓰는 sid 전부가 세션 이름 검사와 문서별 도출을 통과하는가 ────
 SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb09lock
       rb10down rb11ctlx rb12trnc rb13pred rb21kill rb22noin rb23nopl rb24nobd rb25rc3x
-      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb40bndl rb41bndf rb42bnde rb43bndk
+      rb26nodt rb27lock rb30plce rb31swep rb32swpe rb40bndl rb41bndf rb42bnde rb43bndk rb44rsls rb45rsrc
       rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd
       rb60mskp rb61mnsk rb62mwsp rb63mkil rb64mnbd rb65mlck rb66mhst rb67mhse rb68mtwo rb69mdwn
       rb70mske rb71mzsk rb72mzno rb73mzhs rb74mzki rb75menv rb76mxpg rb77mztp"
@@ -572,6 +573,69 @@ bnd="$(where rb51relb "$home/docs/brief-sample.md")/brief-bundle.md"
 { [ "$rc" = "0" ] && grep -qF '<<<AUDIT-VERBATIM>>>' "$bnd" 2>/dev/null; } \
   && ok "I1: \`## 번들\` 이 따로 상대경로로 돌아도 그 문서의 자리에 번들을 조립한다" \
   || no "I1: \`## 번들\` 을 따로 상대경로로 돌리면 rc=$rc · 번들 $(state_of "$bnd") — $(head -c 200 "$SCRATCH/rb51relb.alone.err" 2>/dev/null)"
+
+# RS — `## 번들` 펜스가 원자료 판결을 받아 조립기에 넘긴다. 찾지 못함은 공시 + degrade record 후 계속,
+# 찾음은 번들에 `<<<RAW-SOURCE>>>` 블록이 실린다. 레포는 원자료 도우미로 짓는다(degrade-append 가 있는 배포 루트).
+rs_repo() {   # rs_repo <폴더> <mode> → 키=값 줄
+  python3 "$ROOT/plugins/spec-distill/tests/raw_source_fixture.py" make "$1" --mode "$2"
+}
+rs_kv() { printf '%s\n' "$2" | sed -n "s/^$1=//p"; }
+m="$(rs_repo "$SCRATCH/rs-lost" lost)"; rsb="$(rs_kv brief "$m")"; rsa="$(rs_kv audit "$m")"; rss="$(rs_kv state "$m")"
+python3 "$SDS/brief_review_state.py" init "$rss" >/dev/null 2>&1 || no "RS(lost) 전제: degrade 원장 줄을 심지 못했다"
+rc=0; alone rb44rsls "$BUNDLE_BLK" "$RPR" PAYLOAD="$rsb" AUDIT="$rsa" || rc=$?
+rs_rec=1
+python3 - "$rss" <<'PY' && rs_rec=0
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+ledger = text.split("brief_review_degradations:", 1)[1].split("\n---", 1)[0]
+sys.exit(0 if any("component: critic" in r and "affected_axis: fidelity" in r and "verification_status: degraded" in r
+                  and "모델이 줄인 글" in r for r in ledger.split("\n  - ")) else 1)
+PY
+{ [ "$rc" = "0" ] && grep -qF '원자료(framing 기록 파일)를 찾지 못했다(' "$SCRATCH/rb44rsls.alone.err" && [ "$rs_rec" = 0 ]; } \
+  && ok "RS(lost): 원자료를 찾지 못하면 공시하고 critic · fidelity · degraded record 를 남긴 뒤 번들을 조립한다 (rc 0)" \
+  || no "RS(lost): rc=$rc · record=$rs_rec — $(head -c 300 "$SCRATCH/rb44rsls.alone.err" 2>/dev/null)"
+m="$(rs_repo "$SCRATCH/rs-rec" recorded)"; rsb="$(rs_kv brief "$m")"; rsa="$(rs_kv audit "$m")"
+rc=0; alone rb45rsrc "$BUNDLE_BLK" "$RPR" PAYLOAD="$rsb" AUDIT="$rsa" || rc=$?
+rs_root="$(cd "$SCRATCH/rb45rsrc" && python3 "$RPR/scripts/state_path.py" state-root-for "$rsb")"
+bnd="$(python3 "$RPR/scripts/docreview_state.py" state-dir-for --root "$rs_root" --doc "$rsb")/brief-bundle.md"
+{ [ "$rc" = "0" ] && grep -qx '<<<RAW-SOURCE>>>' "$bnd" 2>/dev/null; } \
+  && ok "RS(recorded): framing 기록을 찾으면 펜스가 조립기에 넘겨 번들에 <<<RAW-SOURCE>>> 블록이 실린다" \
+  || no "RS(recorded): rc=$rc · 번들 $(state_of "$bnd") — $(head -c 300 "$SCRATCH/rb45rsrc.alone.err" 2>/dev/null)"
+
+# RS 문면 — vc_rc 표의 두 행과 「원자료 블록」 문단. 표시 위반 행의 두 갈래는 그 한 줄 안에서 문다 —
+# 비슷한 문장이 first_cell 행에도 있어 파일 전체에서 찾으면 한 행이 갈래를 잃어도 통과한다.
+grep -qF '| `1`(`first_cell`) |' "$SKILL" && ok "RS 문면: vc_rc 표에 first_cell 행이 있다" || no "RS 문면: vc_rc 표에 first_cell 행이 없다"
+grep -qF '| `1`(`source_mismatch`) |' "$SKILL" && ok "RS 문면: vc_rc 표에 source_mismatch 행이 있다" || no "RS 문면: vc_rc 표에 source_mismatch 행이 없다"
+grep -qF '실을 것이 없으면 블록이 없다 — degrade 가 아니다' "$SKILL" \
+  && ok "RS 문면: 「원자료 블록」 문단이 빈 블록은 degrade 가 아니라고 말한다" || no "RS 문면: 「원자료 블록」 문단에 빈 블록의 뜻이 없다"
+sm_row_ok() {   # sm_row_ok <SKILL 사본> — source_mismatch 행 한 줄 안에 두 갈래가 다 있는가
+  local row
+  row="$(grep -F '| `1`(`source_mismatch`) |' "$1" | head -n 1)"
+  [ -n "$row" ] || return 1
+  printf '%s\n' "$row" | grep -qF '같은 세션의 끝맺음(finishing Step A.5 가 부른 리뷰 — 아직 커밋 전이다)이면 그 S 의 앵커 줄 표시만 상태 파일의 `source` 에 맞게 고친다' \
+    && printf '%s\n' "$row" | grep -qF '이 리뷰를 다른 세션에서 따로 불렀다면 끝난 결과물이라 표시를 고치지 않는다 — 위반 줄을 보이기만 한다'
+}
+sm_row_ok "$SKILL" && ok "RS 문면: source_mismatch 행이 끝맺음 중 고침 · 따로 부른 리뷰는 보이기만 함 두 갈래를 한 줄에 싣는다" \
+  || no "RS 문면: source_mismatch 행에 두 갈래 중 하나가 없다"
+sm_mutate() {   # sm_mutate <바꿀 글> <새 글> <사본> — source_mismatch 행에서만 바꾼다
+  python3 - "$SKILL" "$3" "$1" "$2" <<'PY'
+import sys
+src, dst, old, new = sys.argv[1:5]
+out = []
+for line in open(src, encoding="utf-8").read().split("\n"):
+    if line.startswith("| `1`(`source_mismatch`) |"):
+        assert old in line, "변이 대상 글이 그 행에 없다"
+        line = line.replace(old, new)
+    out.append(line)
+open(dst, "w", encoding="utf-8").write("\n".join(out))
+PY
+}
+sm_mutate ' 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 결과물이라 표시를 고치지 않는다 — 위반 줄을 보이기만 한다' '' "$SCRATCH/sm-m1.md" \
+  && ! sm_row_ok "$SCRATCH/sm-m1.md" && ok "RS 문면 변이: 따로 부른 리뷰의 갈래 문장을 지우면 실패한다" \
+  || no "RS 문면 변이: 따로 부른 리뷰의 갈래 문장을 지워도 통과한다 — 이 락은 이빨이 없다"
+sm_mutate '표시를 고치지 않는다' '표시를 고친다' "$SCRATCH/sm-m2.md" \
+  && ! sm_row_ok "$SCRATCH/sm-m2.md" && ok "RS 문면 변이: 「표시를 고치지 않는다」 를 「표시를 고친다」 로 바꾸면 실패한다" \
+  || no "RS 문면 변이: 「표시를 고친다」 로 바꿔도 통과한다 — 이 락은 이빨이 없다"
 
 # M2 — 진입 게이트가 막히면 직전 라운드 번들을 세 층으로 치운다(지움 → 절단 → 공시).
 gate_case() {   # gate_case <라벨> <sid> <디렉토리 권한> <파일 권한> <기대: absent|0byte|stuck> <블록>
