@@ -132,14 +132,15 @@ case_seal_excludes_qg_namespace() {
   git init -q; git config user.email t@t.test; git config user.name tester
   echo tracked > a.txt; git add -A; git commit -qm base    # .gitignore 없음
   mkdir -p .claude/quality-gates/sess0002; echo state > .claude/quality-gates/sess0002/pipeline.md
-  git worktree add -q --detach .claude/quality-gates/worktrees/base-sess0002 HEAD
+  git worktree add -q --detach .claude/worktrees/qg-base-sess0002 HEAD
   echo changed > a.txt
   local B rc=0; B=$(bash "$SEAL" seal "sess0002xyz") || rc=$?
   assert_eq "$rc" "0" "qg 상태가 워킹트리에 있어도 봉인이 성공한다"
   local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
   assert_not_grep "$names" '^\.claude/quality-gates/' "qg 네임스페이스는 봉인되지 않는다"
+  assert_not_grep "$names" '^\.claude/worktrees/qg-base-sess0002' "이 세션의 등록된 일회용 사본은 봉인되지 않는다(무시 안 됨 갈래)"
   assert_eq "$(git show "$B:a.txt")" "changed" "리뷰 대상 변경은 봉인된다(양의 짝)"
-  git worktree remove --force .claude/quality-gates/worktrees/base-sess0002 >/dev/null 2>&1
+  git worktree remove --force .claude/worktrees/qg-base-sess0002 >/dev/null 2>&1
   cd / && rm -rf "$R"
 }
 
@@ -150,14 +151,15 @@ case_seal_excludes_qg_namespace() {
 case_seal_excludes_qg_namespace_when_ignored() {
   mk_repo
   mkdir -p .claude/quality-gates/sess0004; echo state > .claude/quality-gates/sess0004/pipeline.md
-  git worktree add -q --detach .claude/quality-gates/worktrees/base-sess0004 HEAD
+  git worktree add -q --detach .claude/worktrees/qg-base-sess0004 HEAD
   echo changed > a.txt
   local B rc=0; B=$(bash "$SEAL" seal "sess0004xyz") || rc=$?
   assert_eq "$rc" "0" "네임스페이스가 .gitignore 로 이미 덮여 있어도 봉인이 성공한다"
   local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
   assert_not_grep "$names" '^\.claude/quality-gates/' "이미 무시된 네임스페이스도 봉인 트리에 없다"
+  assert_not_grep "$names" '^\.claude/worktrees/qg-base-sess0004' "이 세션의 등록된 일회용 사본은 봉인되지 않는다(무시됨 갈래)"
   assert_eq "$(git show "$B:a.txt")" "changed" "리뷰 대상 변경은 봉인된다(양의 짝)"
-  git worktree remove --force .claude/quality-gates/worktrees/base-sess0004 >/dev/null 2>&1
+  git worktree remove --force .claude/worktrees/qg-base-sess0004 >/dev/null 2>&1
   cleanup
 }
 
@@ -217,6 +219,26 @@ case_authoritative_guard_dies_when_index_reachable() {
   cd / && rm -rf "$R"
 }
 
+# AC14 양성 대조 — .claude/ 를 무시하지 않는 저장소에서 같은 폴더의 사용자 worktree 와 다른 세션 이름
+# (qg-base-zzzzzzzz)은 지금처럼 봉인 트리에 실린다(gitlink). 이 세션의 사본만 빠진다.
+case_seal_keeps_user_worktree() {
+  local R; R=$(mktemp -d) || exit 1; [ -n "$R" ] && [ -d "$R" ] || exit 1; cd "$R" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  echo tracked > a.txt; git add -A; git commit -qm base    # .gitignore 없음
+  git worktree add -q --detach .claude/worktrees/qg-base-sess0007 HEAD
+  git worktree add -q --detach .claude/worktrees/feat-x HEAD
+  git worktree add -q --detach .claude/worktrees/qg-base-zzzzzzzz HEAD
+  echo changed > a.txt
+  local B rc=0; B=$(bash "$SEAL" seal "sess0007xyz") || rc=$?
+  assert_eq "$rc" "0" "사용자 worktree 가 있어도 봉인이 성공한다"
+  local names; names=$(git ls-tree -r --name-only "$B" 2>/dev/null)
+  [ -n "$names" ] || { no "봉인 트리가 비었다"; cd / && rm -rf "$R"; return; }
+  assert_grep     "$names" '^\.claude/worktrees/feat-x$' "사용자 worktree 는 봉인 트리에 실린다(양성 대조 — 새로 빠지지 않는다)"
+  assert_grep     "$names" '^\.claude/worktrees/qg-base-zzzzzzzz$' "다른 세션 이름의 사본은 실린다"
+  assert_not_grep "$names" '^\.claude/worktrees/qg-base-sess0007' "이 세션의 등록된 사본만 빠진다"
+  cd / && rm -rf "$R"
+}
+
 case_usage() {
   mk_repo
   local rc; bash "$SEAL" 2>/dev/null; rc=$?
@@ -231,6 +253,7 @@ for c in case_seal_content case_no_index_in_tree case_no_side_effects \
          case_seal_excludes_qg_namespace case_seal_excludes_qg_namespace_when_ignored \
          case_seal_succeeds_with_unreadable_file_in_namespace \
          case_seal_preserves_head_tracked_file_in_namespace \
+         case_seal_keeps_user_worktree \
          case_authoritative_guard_dies_when_index_reachable case_usage; do
   echo "== $c"; $c
 done

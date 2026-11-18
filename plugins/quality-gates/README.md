@@ -24,7 +24,7 @@
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
-- **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 플러그인 공통 컨벤션으로 확립해, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
+- **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — 플러그인이 스스로 만드는 일회용 worktree 는 작업 트리 꼭대기의 `.claude/worktrees/` 에 플러그인이 드러나는 이름(`qg-base-<sid 8자>`)으로 만든다 — CLAUDE.md 상태 글머리 ②.
 - **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. 로컬 결과(`result.md`)가 세션 폴더 마커 · GC mtime anchor 이고, setup 은 그 frontmatter(session_id · started_at)와 제목만 쓴다.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every fix-loop iteration

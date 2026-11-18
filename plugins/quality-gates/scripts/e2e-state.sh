@@ -2,6 +2,8 @@
 # e2e-state.sh — e2e 걷기의 결정론 부품.
 #
 #   fingerprint --out <file>        코드 상태 지문(HEAD · 추적 파일 변경 · 무시되지 않는 untracked)
+#   fingerprint 는 --out 이 <top>/.claude/quality-gates/<sid>/ 아래일 때만 그 세션의 등록된 일회용 사본
+#   (.claude/worktrees/qg-(base|head)-<sid 8자>)을 지문에서 뺀다 — 그 밖의 --out 은 새로 빼지 않는다.
 #   fingerprint 는 마지막 줄에 `sha256: <지문 파일의 해시>` 를 낸다 — 부른 쪽이 그 값을 리포 밖(대화)에 들고 있다가
 #   compare 에 넘기면, 걷는 사이 리포 안의 before 지문을 고쳐 쓴 것이 드러난다.
 #   compare [--before-sha256 <hex>] <before> <after>
@@ -54,10 +56,21 @@ cmd_fingerprint() {
   done
   [ -n "$out" ] || die "usage: e2e-state.sh fingerprint --out <file>"
   killed_by_switch && exit 3
-  GIT_OPTIONAL_LOCKS=0 python3 -I -X utf8 - "$out" <<'PY'
+  local own="" top="" odir="" sid=""
+  top=$(git rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P) || top=""
+  odir=$(dirname "$out")
+  if [ -n "$top" ] && [ -d "$odir" ]; then
+    odir=$(cd "$odir" && pwd -P) || odir=""
+    if [ -n "$odir" ] && [ "$(dirname "$odir")" = "$top/.claude/quality-gates" ]; then
+      sid=$(basename "$odir")
+      own=$(bash "$(dirname "${BASH_SOURCE[0]}")/qg-worktree.sh" own-paths "$sid" 2>/dev/null) || own=""
+    fi
+  fi
+  GIT_OPTIONAL_LOCKS=0 python3 -I -X utf8 - "$out" "$own" <<'PY'
 import hashlib, json, os, stat, subprocess, sys
 
 out = sys.argv[1]
+OWN = [p for p in sys.argv[2].split("\n") if p]
 
 
 def fail(msg):
@@ -78,9 +91,9 @@ def git(*args):
 top = git("rev-parse", "--show-toplevel").decode("utf-8", "surrogateescape").strip()
 os.chdir(top)
 head = git("rev-parse", "--verify", "HEAD").decode().strip()
-EXCLUDE = ":(exclude).claude/quality-gates"
-tracked = [p for p in git("diff", "HEAD", "--name-only", "-z", "--no-renames", "--", ".", EXCLUDE).split(b"\0") if p]
-untracked = [p for p in git("ls-files", "--others", "--exclude-standard", "-z", "--", ".", EXCLUDE).split(b"\0") if p]
+EXCLUDE = [":(exclude).claude/quality-gates"] + [":(exclude)" + p for p in OWN]
+tracked = [p for p in git("diff", "HEAD", "--name-only", "-z", "--no-renames", "--", ".", *EXCLUDE).split(b"\0") if p]
+untracked = [p for p in git("ls-files", "--others", "--exclude-standard", "-z", "--", ".", *EXCLUDE).split(b"\0") if p]
 
 
 def digest(raw):
