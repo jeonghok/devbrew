@@ -258,6 +258,7 @@ case "${1:-}" in
     for op_prefix in base head; do
       op_rel=".claude/worktrees/qg-${op_prefix}-${op_sid}"
       [[ -d "$op_top/$op_rel" && ! -L "$op_top/$op_rel" ]] || continue
+      has_exact_entry "$op_top/.claude/worktrees" "qg-${op_prefix}-${op_sid}" || continue   # 대소문자만 다른 사용자 worktree 는 자기 것이 아니다
       op_br=$(wt_registered_branch "$op_top/$op_rel") || continue
       [[ "$op_br" == "-" ]] && printf '%s\n' "$op_rel"
     done

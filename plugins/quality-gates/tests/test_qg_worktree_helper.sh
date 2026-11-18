@@ -221,4 +221,23 @@ mkdir -p "$REPO/.claude/worktrees"
 (cd "$REPO" && git worktree add -q -b userbr2 "$REPO/.claude/worktrees/qg-base-ownbr123" "$sha")
 out=$(cd "$REPO" && "$WT" own-paths "ownbr123"); assert_eq "$out" "" "브랜치를 쥔 같은 이름은 자기 사본으로 내지 않는다"
 rm -rf "$REPO"
+echo "[own_paths_case_variant_and_alias]"
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+mkdir -p "$REPO/.claude/worktrees"
+(cd "$REPO" && git worktree add -q --detach "$REPO/.claude/worktrees/QG-Base-ownc1234" "$sha")
+if [ -d "$REPO/.claude/worktrees/qg-base-ownc1234" ]; then
+  out=$(cd "$REPO" && "$WT" own-paths "ownc1234"); assert_eq "$out" "" "대소문자만 다른 detached 사용자 worktree 는 own-paths 에 없다"
+else
+  echo "  SKIP: 대소문자를 구분하는 파일시스템이라 이 모양을 만들 수 없다 (own_paths_case_variant 를 재지 못함)"
+fi
+rm -rf "$REPO"
+# 별칭 경로(링크 낀 경로)로 등록한 정확한 이름의 사본은 자기 것으로 센다
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+ALIAS_DIR=$(mktemp -d); [ -n "$ALIAS_DIR" ] && [ -d "$ALIAS_DIR" ] || exit 1
+ln -s "$REPO" "$ALIAS_DIR/alias"
+mkdir -p "$REPO/.claude/worktrees"
+(cd "$REPO" && git worktree add -q --detach "$ALIAS_DIR/alias/.claude/worktrees/qg-head-alias123" "$sha")
+out=$(cd "$REPO" && "$WT" own-paths "alias123"); assert_eq "$out" ".claude/worktrees/qg-head-alias123" "별칭 경로로 등록한 정확한 이름의 사본도 낸다"
+rm -rf "$REPO" "$ALIAS_DIR"
+
 finish
