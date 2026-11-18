@@ -53,6 +53,25 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 
 리포트의 `[severity]` 배지는 `CRITICAL`/`IMPORTANT`/`SUGGESTION` 셋이다. 옛 4어휘(`HIGH` 등)로 쓰인 과거 리포트는 렌더되지만 정렬에서 맨 뒤로 간다.
 
+## 끄는 길
+
+1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable plugin-audit`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"plugin-audit@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
+
+2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+
+3. **표.**
+
+<!-- switches:begin -->
+| 이름 | 끄는 것 | 상태 | 대신할 길 |
+|---|---|---|---|
+| `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` | codex 감사 | 남음 | — |
+| `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` · `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` | 감사 대상 플러그인의 테스트 실행 | 남음 | — |
+| `DEVBREW_PLUGIN_AUDIT_DISABLE` | plugin-audit 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` | codex 감사의 웹 검색 | 은퇴 예정 | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` — codex 는 쓰되 웹만 막는 길은 없어진다 |
+<!-- switches:end -->
+
+은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+
 ## Prerequisites (cross-plugin 의존)
 
 의존마다의 최소 판 · 잰 날짜 · 없을 때 동작은 [`dependencies.md`](dependencies.md) 에 있다. 최소 판은 이 판을 개발 · 검증할 때 깔려 있던 판이고, 진입마다 쓰는 의존의 판을 그 표와 대조해(`scripts/check_deps.py entry`) 없거나 낮으면 멈춘다. 이 플러그인은 gh 를 쓰지 않는다.
@@ -91,7 +110,7 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
   independent-refutation(majority-vote consensus 금지 — popularity trap).
 - **P21 (untrusted-input)** — 감사 대상 파일 내용은 데이터지 지시가 아니다(C). Secret 기록 금지.
 - **P22 (cost 인지)** — `cost_class: high` + 규모 공시 한 줄(fan-out 선언). 범위 고르기 질문은 남는다.
-- **훅 kill switch (감사 기준)** — 대상 플러그인의 훅은 자기 이름의 스위치(`DEVBREW_<OWN>_DISABLE` · `DEVBREW_SKIP_HOOKS`)를 따라야 한다. 다른 플러그인 스위치나 하위 스위치만 있으면 gap 이다.
+- **끄는 길 (감사 기준)** — 훅에 kill switch 를 요구하지 않는다. 훅을 끄는 길은 Claude Code 의 플러그인 끄기다(CLAUDE.md 「끄는 길은 공식 장치 먼저」).
 - **정직성 (degraded 배너)** — optional 의존성 부재/검증기 크래시/grounding 미검증은 crash가 아니라
   loud degrade + 리포트 상단 배너(품질 게이트 아님, 정직성 컨트롤).
 

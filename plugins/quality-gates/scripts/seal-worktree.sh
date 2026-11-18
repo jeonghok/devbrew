@@ -34,6 +34,8 @@ trap 'rm -f "$SEAL_INDEX" "$SEAL_INDEX.lock"' EXIT
 
 # `export` 가 load-bearing 이다 — 그냥 대입하면 아래 git 들이 **실제 인덱스**를 쓴다.
 # 서브셸로 감싸 이 스크립트의 나머지 환경에 새지 않게 한다.
+# 이 세션의 등록된 일회용 사본(.claude/worktrees/qg-(base|head)-<sid 8자>)의 경로 — 실패하면 빈 값(새로 빼지 않는다).
+own=$(bash "$(dirname "${BASH_SOURCE[0]}")/qg-worktree.sh" own-paths "$sid" 2>/dev/null) || own=""
 B=$(
   export GIT_INDEX_FILE="$SEAL_INDEX"
   cd "$main_root" || exit 1
@@ -50,10 +52,20 @@ B=$(
   # 가 이미 넣어 둔 HEAD 추적 항목(그 네임스페이스 아래 커밋된 파일이 있다면)을 add 가
   # 건드리지 않고 그대로 둔다 — add 뒤 rm --cached 로 걷어내는 방식은 origin 을 안 가리고
   # HEAD 항목까지 지워 버렸다(리뷰 지적).
-  if git check-ignore -q .claude/quality-gates; then
+  # 이 세션의 등록된 사본(.claude/worktrees/qg-(base|head)-<sid 8자>)도 같은 이유로 갈래를 탄다 — 그 경로만 뺀다.
+  # 같은 폴더의 사용자 worktree · 다른 세션 이름은 지금처럼 실린다.
+  excl=()
+  git check-ignore -q .claude/quality-gates || excl+=(':(exclude).claude/quality-gates')
+  while IFS= read -r op; do
+    [ -n "$op" ] || continue
+    git check-ignore -q "$op" || excl+=(":(exclude)$op")
+  done <<EOF_OWN
+$own
+EOF_OWN
+  if [ "${#excl[@]}" -eq 0 ]; then
     git -c advice.addEmbeddedRepo=false add -A || exit 1
   else
-    git -c advice.addEmbeddedRepo=false add -A -- . ':(exclude).claude/quality-gates' || exit 1
+    git -c advice.addEmbeddedRepo=false add -A -- . "${excl[@]}" || exit 1
   fi
   TREE=$(git write-tree) || exit 1
   git -c user.email=qg-seal@devbrew.local \

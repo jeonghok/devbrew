@@ -267,9 +267,11 @@ assert_contains "$(cline '**최소 버전이 선언된 의존성.**')" '판을 �
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '로드맵 단위 지휘 기계 상태(`machine.md`)' "AC8 :70 수명 넷"
 assert_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '링크 검사 없이 만든다' "AC8 :70 예외"
 assert_not_contains "$(cline '**JSON이 아니라 마크다운 state.**')" '실패 시 디버깅을 위해' "AC8 :70 없는 동작을 쓰지 않는다"
-assert_contains "$(cline '**모든 훅에 kill switch.**')" '그 플러그인의 훅과 진입 skill 을 끈다' "AC8 :71"
-assert_contains "$(cline '**모든 훅에 kill switch.**')" '진입 사전 검사는 이 변수를 읽지 않는다' "AC8 :71 SKIP_HOOKS 는 사전 검사 밖"
-assert_not_contains "$(cline '**모든 훅에 kill switch.**')" '진입 skill 자체는 끄지 않는다' "AC8 :71 review-entry 와 어긋나는 구 없음"
+STATE_LINE='- **JSON이 아니라 마크다운 state.** 상태 자리는 성격으로 가른다 — ① 세션과 리뷰어가 읽고 쓰는 런타임 state 는 `.claude/<plugin>/` 하위에 산다(git-ignored) ② 플러그인이 스스로 만드는 일회용 작업 사본(git worktree)은 작업 트리 꼭대기의 `.claude/worktrees/` 에 그 플러그인이 드러나는 이름으로 만들고 자기가 만든 것만 지운다(예외 — 지휘자의 스위트 대조 사본은 지휘 기계 상태 폴더 아래에 둔다) ③ 스크립트만 쓰고 잃어도 다시 만들 수 있는 캐시는 Claude Code 의 플러그인 데이터 폴더(`${CLAUDE_PLUGIN_DATA}`)에 프로젝트마다 갈리게 두고, 쓰지 못하면 알리고 캐시 없이 돈다 ④ 인터뷰처럼 세션을 넘어 남아야 하는 기록은 docs 의 추적 파일에 두고 산출물과 함께 커밋한다. ① 의 수명은 넷이다 — 세션 단위(`.claude/<plugin>/<session-id>/<file>` — 다음 시작 때 지우고 TTL GC 가 남은 것을 치운다. 지금은 qg 다) · 문서 단위 리뷰 원장(그 문서가 사라질 때 정리) · 로드맵 단위 지휘 기계 상태(`machine.md`) · 실행 단위 산출(plugin-audit 실행 폴더 — 지우지 않는다). spec-distill 의 상태 루트는 worktree 에서 불러도 메인 레포 쪽이고 처음 만들 때 자기 `.gitignore` 를 둔다. spec-distill 펜스의 상태 폴더 쓰기는 writer(`nofollow_write`)를 거쳐 마지막 경로 성분의 링크를 따라가지 않는다. 예외 하나 — plugin-audit 실행 폴더는 넘겨받은 `--repo-root`(기본 cwd) 아래에 링크 검사 없이 만든다. **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).'
+SWITCH_LINE='- **끄는 길은 공식 장치 먼저.** 플러그인을 통째로 끄는 길은 Claude Code 의 플러그인 끄기다(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 통째 끄기용 환경변수를 두지 않는다. 끄는 환경변수(`DEVBREW_<PLUGIN>_DISABLE_<기능>=1`)는 skill 이 묻지 않고 하는 일 가운데 사용자가 막고 싶을 수 있는데 공식 장치로 막을 길이 없는 것(내용을 바깥으로 보냄 · 남의 코드를 실행 · 바깥에 글을 올림)에만 둔다. 끄기 변수마다 읽는 코드가 있다 — skill 문장으로만 꺼지는 스위치는 두지 않는다. 켜진 끄기 변수는 진입 사전 검사가 skill 첫머리에 한 줄로 보인다. 끄기 변수는 보안 컨트롤이다 — 읽는 코드는 그 값을 무시할 수 없고, 은퇴는 한 판 동안 옛 이름을 그대로 듣고 알린 뒤에 하며 CHANGELOG `Removed` 와 README 에 공시한다.'
+assert_eq "$(cline '**JSON이 아니라 마크다운 state.**')" "$STATE_LINE" "F7 AC8: 상태 글머리가 설계 5 문안과 바이트 같다(한 줄 전체)"
+assert_eq "$(cline '**끄는 길은 공식 장치 먼저.**')" "$SWITCH_LINE" "F7 AC8: 끄는 길 글머리가 설계 5 문안과 바이트 같다(한 줄 전체)"
+assert_not_contains "$(cat "$CLAUDE_MD")" '모든 훅에 kill switch' "F7 AC8: 옛 kill switch 글머리가 없다(양의 짝은 위 SWITCH_LINE)"
 assert_contains "$(cline '**훅 공존.**')" 'Hooks Installed(한국어 README 는 「설치된 Hook」)' "AC8 :72"
 assert_contains "$(cline '**Loud logging')" '필수 의존(`dependencies.md` 강도 멈춤)은 이유와 설치 방법을 보이고 멈춘다' "AC8 :73"
 assert_contains "$(grep -F '## 목차' "$CLAUDE_MD")" '한 번 쓰고 닫는 계획 · 기록은 모델이 판단한다' "AC8 :103"
@@ -289,8 +291,20 @@ assert_contains "$META_C" '① `plugins/<X>/` 아래 파일(그 폴더 바로 �
 assert_contains "$META_C" '② X 가 심볼릭 링크로 싣는 `shared/` 파일을 바꿀 때다.' "F6 AC11: 올리는 때 ②"
 assert_contains "$META_C" '그 밖의 변경(`shared/tests/` · `tools/` · `docs/` 처럼 설치본에 실리지 않는 것)으로는 올리지 않는다.' "F6 AC11: 올리지 않는 때"
 assert_contains "$META_C" '동작에 닿지 않는 변경(주석 · 오탈자)만 있는 PR 은 이유를 PR 본문에 적고 올리지 않을 수 있다.' "F6 AC11: 판단 문장"
-assert_not_contains "$(cat "$CLAUDE_MD")" '모든 PR마다' "F6 AC11: 「모든 PR마다」 가 없다"
-assert_not_contains "$(cat "$CLAUDE_MD")" 'integrity' "F6 AC6: CLAUDE.md 에 integrity 필드 문장이 없다"
+# ps_banned <파일>: `## Plugin Shape` 절(제목 다음 줄부터 다음 `## ` 앞까지)에 있는 금지 낱말을 낸다
+ps_banned() { awk '/^## Plugin Shape$/{f=1;next} /^## /{f=0} f' "$1" | grep -o -e 'integrity' -e '모든 PR마다' | sort -u; }
+assert_eq "$(ps_banned "$CLAUDE_MD")" "" "F6 AC11 · AC6: Plugin Shape 절에 「모든 PR마다」 · integrity 가 없다"
+PSD="$(mktemp -d)"
+if [ -z "$PSD" ] || [ ! -d "$PSD" ]; then
+  no "F7 AC10: mktemp 실패"
+else
+  awk '{print} /^## Doc Conventions$/{print "모든 PR마다 integrity"}' "$CLAUDE_MD" > "$PSD/outside.md"
+  awk '{print} /^## Plugin Shape$/{print "모든 PR마다 integrity"}' "$CLAUDE_MD" > "$PSD/inside.md"
+  assert_eq "$(ps_banned "$PSD/outside.md")" "" "F7 AC10: 절 밖(Doc Conventions)의 두 낱말은 판정에 안 걸린다"
+  assert_contains "$(ps_banned "$PSD/inside.md")" 'integrity' "F7 AC10: 절 안에 넣은 integrity 는 걸린다(양성 대조)"
+  assert_contains "$(ps_banned "$PSD/inside.md")" '모든 PR마다' "F7 AC10: 절 안에 넣은 「모든 PR마다」 는 걸린다(양성 대조)"
+  rm -rf "$PSD"
+fi
 p21="$(awk '/^### P21/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
 assert_not_contains "$p21" 'integrity' "F6 AC6: P21 에 integrity 가 없다"
 assert_contains "$p21" '— state secret hygiene, description prompt-injection 리뷰가 floor.' "F6 AC6: P21 의 남은 floor 둘(양)"
@@ -309,6 +323,8 @@ assert_contains "$TREE6" '# 필수 키는 name 하나 — version · description
 assert_contains "$TREE6" '# frontmatter metadata 아래 cost_class 선언' "F6 AC4: 가이드 SKILL.md 주석"
 assert_contains "$TREE6" '├── dependencies.md' "F6 AC13: 트리에 dependencies.md"
 assert_contains "$TREE6" '├── references/' "F6 AC13: 트리에 references/"
+assert_contains "$TREE6" '├── switches.md' "F7 AC8: 트리에 switches.md"
+assert_not_contains "$TREE6" 'DEVBREW_<PLUGIN>_DISABLE=1 opt-out' "F7 AC8: 트리 hooks 주석에 통째 끄기 변수 opt-out 이 없다"
 assert_contains "$TREE6" '진입 사전 검사 스크립트(entry_preflight.py' "F6 AC13: scripts 주석"
 assert_contains "$TREE6" '## 진입 단계' "F6 AC13: SKILL.md 주석이 진입 꼴을 가리킨다"
 for gone in 'quality-gates:doc-recritic' 'Phase 1.5' 'command-development' '`/create-plugin`' 'hook에서 호출하는' '시작 버전 `0.1.0`' '이 플러그인의'; do

@@ -204,6 +204,29 @@ case_X2_exclusion_is_exactly_own_namespace() {
 # ── X4 · AC20a · AC21 — 띄운 프로세스는 모든 종료 경로에서 내린다 ─────────────────────
 left() { pgrep -f "sleep $MARK" | wc -l | tr -d ' '; }
 
+# AC14 · J15 — 지문은 --out 이 <top>/.claude/quality-gates/<sid>/ 아래일 때만 그 세션의 등록된 일회용 사본
+# (.claude/worktrees/qg-head-<sid 8자>)을 뺀다. 그 밖의 --out · 같은 폴더의 사용자 worktree 는 새로 빠지지 않는다.
+case_AC14_J15_own_copy_excluded_only_for_session_out() {
+  local d; d=$(new_repo); [ -n "$d" ] && [ -d "$d" ] || { no "new_repo 실패"; return; }
+  local s="$d/.claude/quality-gates/sess0009"; mkdir -p "$s"
+  fp "$d" "$s/b"
+  git -C "$d" worktree add -q --detach "$d/.claude/worktrees/qg-head-sess0009" HEAD || no "사본 등록 실패"
+  fp "$d" "$s/a"
+  local out rc=0; out=$(cmp_out "$d" "$s/b" "$s/a") || rc=$?
+  assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "same" "AC14: 세션 폴더의 --out 이면 이 세션의 등록된 사본이 지문에 실리지 않는다"
+  assert_eq "$rc" "0" "AC14: 사본이 생겨도 compare 는 exit 0"
+  # J15 — --out 이 세션 폴더가 아니면 사본이 지문에 실린다(새로 빼지 않는다).
+  fp "$d" "$d/x-after"
+  grep -q 'qg-head-sess0009' "$d/x-after" && ok "J15: 세션 폴더가 아닌 --out 은 사본을 빼지 않는다" || no "J15: 사본이 지문에 없다"
+  grep -q 'qg-head-sess0009' "$s/a" && no "AC14: 세션 지문에 사본이 실렸다" || ok "AC14: 세션 지문에 사본이 없다(음성 짝)"
+  # 사용자 worktree · 다른 세션 이름은 세션 폴더의 --out 이어도 지문에 실린다.
+  git -C "$d" worktree add -q --detach "$d/.claude/worktrees/feat-x" HEAD || no "사용자 worktree 등록 실패"
+  git -C "$d" worktree add -q --detach "$d/.claude/worktrees/qg-head-zzzzzzzz" HEAD || no "타 세션 사본 등록 실패"
+  fp "$d" "$s/c"
+  grep -q 'feat-x' "$s/c" && ok "AC14: 사용자 worktree 는 세션 지문에 실린다(양성 대조)" || no "AC14: 사용자 worktree 가 지문에서 빠졌다"
+  grep -q 'qg-head-zzzzzzzz' "$s/c" && ok "AC14: 다른 세션 이름의 사본은 세션 지문에 실린다" || no "AC14: 다른 세션 사본이 빠졌다"
+}
+
 case_X4_AC21_stop_takes_down_whole_group() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
   local cmd="(sleep $MARK) & bash -c 'sleep $MARK' & echo ready-$MARK; sleep $MARK"

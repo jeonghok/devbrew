@@ -78,12 +78,12 @@ case_R23_remove_refuses_outside_namespace() {
 # D9 — 리뷰 대상 리포가 커밋한 `.claude` 심볼릭 링크가 리포 밖을 가리켜도 강제 삭제는 리포 밖에서 일어나지 않는다.
 case_R23_symlinked_namespace_is_refused() {
   mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
-  mkdir -p "$R/outside/quality-gates/worktrees/base-sess1234"
-  echo keep > "$R/outside/quality-gates/worktrees/base-sess1234/f"
+  mkdir -p "$R/outside/worktrees/qg-base-sess1234"
+  echo keep > "$R/outside/worktrees/qg-base-sess1234/f"
   ln -s "$R/outside" "$R/repo/.claude"
   ( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" ) >/dev/null 2>&1; local rc=$?
   assert_eq "$rc" "2" "D9: .claude 가 리포 밖을 가리키면 거부"
-  [ -f "$R/outside/quality-gates/worktrees/base-sess1234/f" ] && ok "D9: 리포 밖 디렉토리가 그대로다" || no "D9: 리포 밖을 지웠다"
+  [ -f "$R/outside/worktrees/qg-base-sess1234/f" ] && ok "D9: 리포 밖 디렉토리가 그대로다" || no "D9: 리포 밖을 지웠다"
   rmrepo
 }
 
@@ -128,11 +128,11 @@ case_R23_locked_stale_tree_is_replaced() {
 }
 case_R23_in_repo_symlinked_namespace_is_refused() {
   mkrepo; local base; base=$(git -C "$R/repo" rev-parse HEAD)
-  mkdir -p "$R/repo/src/base-sess1234" "$R/repo/.claude/quality-gates"
-  echo precious > "$R/repo/src/base-sess1234/user.txt"
-  ln -s ../../src "$R/repo/.claude/quality-gates/worktrees"
+  mkdir -p "$R/repo/src/qg-base-sess1234" "$R/repo/.claude"
+  echo precious > "$R/repo/src/qg-base-sess1234/user.txt"
+  ln -s ../src "$R/repo/.claude/worktrees"
   ( cd "$R/repo" && bash "$WT" create-baseline "$base" "sess12345678" ) >/dev/null 2>&1; assert_eq "$?" "2" "M2: 이름공간이 리포 안 다른 곳이면 거부"
-  [ -f "$R/repo/src/base-sess1234/user.txt" ] && ok "M2: 사용자 파일이 살아 있다" || no "M2: 사용자 파일을 지웠다"
+  [ -f "$R/repo/src/qg-base-sess1234/user.txt" ] && ok "M2: 사용자 파일이 살아 있다" || no "M2: 사용자 파일을 지웠다"
   rmrepo
 }
 case_R23_bad_session_id_is_refused() {

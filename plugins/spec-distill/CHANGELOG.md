@@ -17,6 +17,24 @@
 - 끝맺음은 원자료 스크립트가 판결 줄 없이 끝나면(종료 2) 멈춘다. 인터뷰 진입은 seed 로 이어 가고 그 사유를 첫 라운드에 밝힌다.
 - 끝맺음의 자동 커밋이 framing 기록과 seed 에 커밋 안 된 변경이 있으면(한 번도 커밋 안 된 파일 포함) 함께 넣고 한 줄로 이름을 밝힌다. 인터뷰 폴더 밖에 있으면 커밋하지 않고 손으로 커밋할 파일을 이름으로 알린다.
 
+## [8.23.0] — 2026-11-18
+
+### Added
+- 끄기 변수 표(`switches.md`)와 진입 skill 첫머리의 `[devbrew-switch]` 줄 · README 「끄는 길」.
+
+### Deprecated
+- 아래 끄기 변수는 곧 은퇴한다 — 지금은 그대로 끈다.
+- `DEVBREW_SPEC_DISTILL_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` — 대신: 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` — 대신: 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` — 대신: 질문에 「아니오」 로 답한다
+- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_QUALITY_GATES_DISABLE_WEB` — 대신: `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
+- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 대신: 상태줄 설정을 지운다
+- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+
 ## [8.22.0] — 2026-11-18
 
 ### Added

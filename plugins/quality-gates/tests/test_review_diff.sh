@@ -53,7 +53,7 @@ assert_line() {   # assert_line <file> <정확한 한 줄> <msg>
 }
 
 stale_line() {   # stale_line <레포> <트리 이름> — 이전 qg 실행이 남긴 worktree 의 이유 줄(절대 경로)
-  local p; p="$(cd "$1" && pwd -P)/.claude/quality-gates/worktrees/$2"
+  local p; p="$(cd "$1" && pwd -P)/.claude/$2"
   printf 'review-diff: 이전 qg 실행이 남긴 worktree %s 는 리뷰하지 않았다 — 다른 qg 실행이 쓰고 있지 않으면 git worktree remove --force %s 로 지운 뒤 다시 돌려라' \
     "$p" "$p"
 }
@@ -522,8 +522,8 @@ case_self_state_grammar() {
     assert_file_grep "$S/review-i1.self-state" "^\\.claude/quality-gates/sess12345/${p//./\\.}\$" "건너뛴다: $p"
   done
   if [ -n "$wt" ] && [ -d "$wt" ]; then
-    assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sess1234/$' "qg 일회용 트리는 건너뛴다"
-    assert_file_absent "$S/review-i1.names" 'worktrees/base-' "일회용 트리는 names 에 없다"
+    assert_file_grep "$S/review-i1.self-state" '^\.claude/worktrees/qg-base-sess1234/$' "qg 일회용 트리는 건너뛴다"
+    assert_file_absent "$S/review-i1.names" 'worktrees/qg-base-' "일회용 트리는 names 에 없다"
   else
     no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
   fi
@@ -617,24 +617,24 @@ case_self_state_bound_to_run_dir() {
 NESTED_TAIL='는 리뷰하지 않았다 — 그 레포 설정을 믿지 않고는 안을 안전하게 읽을 수 없다. .gitignore 에 넣거나 레포 밖으로 옮긴 뒤 다시 돌려라'
 GITLINK_TAIL='는 리뷰하지 않았다 — diff 에는 커밋 줄만 있다. 그 안의 변경은 따로 리뷰하고, 하위 모듈로 들일 것이 아니면 git rm --cached 로 빼라'
 case_unregistered_worktree_folder_disclosed() {
-  echo "[등록되지 않은 worktrees/base-… 폴더는 건너뛰지 않고 알린다]"
+  echo "[등록되지 않은 worktrees/qg-base-… 폴더는 건너뛰지 않고 알린다]"
   mkfix
-  local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/quality-gates/worktrees/base-abcdefgh"
+  local S="$R/.claude/quality-gates/mysess001" FW="$R/.claude/worktrees/qg-base-abcdefgh"
   mkdir -p "$S" "$FW"
   git init -q -b trunk "$FW"; echo 'evil_marker = 1' > "$FW/evil.py"; g "$FW" add -A; g "$FW" commit -q -m x
   local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" mysess001 2>/dev/null)
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-abcdefgh/$' "가짜 트리 폴더는 names 에 있다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/worktrees/qg-base-abcdefgh/$' "가짜 트리 폴더는 names 에 있다"
   assert_file_absent "$S/review-i1.full.diff" 'evil_marker' "가짜 트리 폴더 안의 글은 diff 에 없다"
-  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/quality-gates/worktrees/base-abcdefgh/ ${NESTED_TAIL}\$" \
+  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/worktrees/qg-base-abcdefgh/ ${NESTED_TAIL}\$" \
     "가짜 트리 폴더를 크게 알린다"
-  assert_file_absent "$S/review-i1.self-state" 'base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
+  assert_file_absent "$S/review-i1.self-state" 'qg-base-abcdefgh' "가짜 트리 폴더는 self_state 에 없다"
   assert_eq "$(field degraded "$OUT")" yes "가짜 트리 폴더(리뷰하지 못한 항목)가 있으면 degraded: yes"
-  assert_file_absent "$S/review-i1.names" 'base-mysess00' "등록된 qg 트리는 names 에 없다"
-  assert_file_absent "$ROOT/err" 'base-mysess00' "등록된 qg 트리는 알리지 않는다(건너뜀)"
+  assert_file_absent "$S/review-i1.names" 'qg-base-mysess00' "등록된 qg 트리는 names 에 없다"
+  assert_file_absent "$ROOT/err" 'qg-base-mysess00' "등록된 qg 트리는 알리지 않는다(건너뜀)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then
-    assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-mysess00/$' \
+    assert_file_grep "$S/review-i1.self-state" '^\.claude/worktrees/qg-base-mysess00/$' \
       "등록된 qg 트리는 건너뛴다"
   else
     no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
@@ -655,11 +655,11 @@ case_dir_outside_repo_skips_nothing() {
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   assert_eq "$(field files "$OUT")" 3 "files: 3 (세션 폴더의 산출물 · 등록된 트리도 센다)"
   assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/mysess001/result\.md$' "names 에 result.md"
-  assert_file_grep "$D/review-i1.names" '^\.claude/quality-gates/worktrees/base-mysess00/$' "names 에 등록된 트리"
+  assert_file_grep "$D/review-i1.names" '^\.claude/worktrees/qg-base-mysess00/$' "names 에 등록된 트리"
   [ -f "$D/review-i1.self-state" ] && [ ! -s "$D/review-i1.self-state" ] \
     && ok "self-state 파일은 있고 비어 있다" || no "self-state 파일이 없거나 비지 않았다"
   assert_file_grep "$ROOT/err" '리포 밖' "stderr 가 건너뛰지 않는 이유를 말한다"
-  assert_line "$ROOT/err" "$(stale_line "$R" base-mysess00)" \
+  assert_line "$ROOT/err" "$(stale_line "$R" worktrees/qg-base-mysess00)" \
     "건너뛰지 않은 등록된 트리도 크게 알린다(리뷰하지 않은 qg 트리로)"
   assert_file_absent "$ROOT/err" '중첩 레포' "등록된 qg 트리는 중첩 레포 갈래로 가지 않는다"
   assert_eq "$(field degraded "$OUT")" yes "건너뛰지 않은 등록된 트리가 있으면 degraded: yes"
@@ -804,10 +804,10 @@ case_other_session_worktree_degraded() {
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
   assert_eq "$(field degraded "$OUT")" yes "다른 세션 트리가 있으면 degraded: yes"
-  assert_line "$ROOT/err" "$(stale_line "$R" base-sessBBBB)" "이유 줄 — 이전 qg 실행 · 지우는 명령"
+  assert_line "$ROOT/err" "$(stale_line "$R" worktrees/qg-base-sessBBBB)" "이유 줄 — 이전 qg 실행 · 지우는 명령"
   assert_file_absent "$ROOT/err" '중첩 레포' "중첩 레포 줄로 알리지 않는다"
-  assert_file_absent "$S/review-i1.self-state" 'base-sessBBBB' "다른 세션 트리는 self_state 에 없다"
-  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessBBBB/$' "names 에 다른 세션 트리"
+  assert_file_absent "$S/review-i1.self-state" 'qg-base-sessBBBB' "다른 세션 트리는 self_state 에 없다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/worktrees/qg-base-sessBBBB/$' "names 에 다른 세션 트리"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   # 알린 명령이 실제로 그 트리를 지운다(절대 경로 — 레포 안 어느 폴더에서 돌려도 같다).
   local cmd; cmd=$(sed -n 's/^.* 쓰고 있지 않으면 \(git worktree remove --force .*\) 로 지운 뒤 다시 돌려라$/\1/p' "$ROOT/err")
@@ -821,14 +821,38 @@ case_other_session_worktree_degraded() {
   rdd "$S" --mode session
   assert_eq "$(field degraded "$OUT")" no "양성 짝: degraded: no"
   assert_eq "$(field self_state "$OUT")" 1 "양성 짝: self_state: 1"
-  assert_file_grep "$S/review-i1.self-state" '^\.claude/quality-gates/worktrees/base-sessAAAA/$' "양성 짝: 이 세션 트리는 건너뛴다"
+  assert_file_grep "$S/review-i1.self-state" '^\.claude/worktrees/qg-base-sessAAAA/$' "양성 짝: 이 세션 트리는 건너뛴다"
   assert_file_absent "$ROOT/err" 'worktree' "양성 짝: 알리는 줄 없음"
   # 세션 폴더 이름이 8자 미만이면 건너뛰기 없음 — 이 세션 트리도 리뷰하지 않은 항목으로 알린다.
   local S2="$R/.claude/quality-gates/sessAAA"; mkdir -p "$S2"
   rdd "$S2" --mode session
   assert_eq "$(field self_state "$OUT")" 0 "8자 미만 세션 폴더: self_state: 0"
   assert_eq "$(field degraded "$OUT")" yes "8자 미만 세션 폴더: degraded: yes"
-  assert_line "$ROOT/err" "$(stale_line "$R" base-sessAAAA)" "8자 미만 세션 폴더: 이 세션 트리도 이유 줄로 알린다"
+  assert_line "$ROOT/err" "$(stale_line "$R" worktrees/qg-base-sessAAAA)" "8자 미만 세션 폴더: 이 세션 트리도 이유 줄로 알린다"
+}
+
+# J14 · AC14 — 옛 자리(.claude/quality-gates/worktrees/)의 등록된 사본은 어느 세션 것이든 이전 실행이 남긴 트리로
+# 알린다(건너뛰지 않는다). 새 자리의 사용자 worktree(feat-x)는 지금처럼 중첩 레포로 알린다 — 새로 빠지지 않는다.
+case_old_location_and_user_worktree_still_disclosed() {
+  echo "[옛 자리의 등록된 사본 · 사용자 worktree — 건너뛰지 않고 알린다]"
+  mkfix
+  [ -n "${R:-}" ] && [ -d "$R" ] || { no "mkfix 실패"; return; }
+  local S="$R/.claude/quality-gates/sessAAAA0000"; mkdir -p "$S"
+  git -C "$R" worktree add -q --detach "$R/.claude/quality-gates/worktrees/base-sessAAAA" "$C0" \
+    && ok "옛 자리에 이 세션 접미의 사본을 등록했다" || no "옛 자리 사본을 만들지 못했다"
+  git -C "$R" worktree add -q --detach "$R/.claude/worktrees/feat-x" "$C0" \
+    && ok "사용자 worktree 를 등록했다" || no "사용자 worktree 를 만들지 못했다"
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_line "$ROOT/err" "$(stale_line "$R" quality-gates/worktrees/base-sessAAAA)" \
+    "J14: 옛 자리의 등록된 사본은 이 세션 접미여도 이전 실행이 남긴 트리로 알린다"
+  assert_file_absent "$S/review-i1.self-state" 'base-sessAAAA' "J14: 옛 자리 사본은 self_state 에 없다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessAAAA/$' "J14: names 에 옛 자리 사본"
+  assert_file_grep "$S/review-i1.names" '^\.claude/worktrees/feat-x/$' "AC14: 사용자 worktree 는 names 에 있다(빠지지 않는다)"
+  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/worktrees/feat-x/ ${NESTED_TAIL}\$" "AC14: 사용자 worktree 는 중첩 레포로 알린다"
+  assert_file_absent "$S/review-i1.self-state" 'feat-x' "AC14: 사용자 worktree 는 self_state 에 없다"
+  assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
+  assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
 }
 
 # 걸러진 diff 는 남길 경로를 묶음으로 나눠 부른다(인자 길이 상한). 묶음을 이어도 빠지거나 겹치는 경로가 없다.
@@ -1364,6 +1388,7 @@ case_excluded_prefix_not_swallowed
 case_name_reconcile_catches_missing
 case_all_excluded_no_pathspec
 case_other_session_worktree_degraded
+case_old_location_and_user_worktree_still_disclosed
 case_keep_batches
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed

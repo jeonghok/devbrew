@@ -10,7 +10,6 @@ CHECKLIST = [
     ("changelog_if_v1", "CLAUDE.md §메타데이터"),
     ("agents_allowlist", "CLAUDE.md §컴포넌트 격리"),
     ("skills_cost_class", "CLAUDE.md §컴포넌트 격리"),
-    ("hooks_killswitch", "CLAUDE.md §런타임 상태 & 훅"),
     ("deps_declared", "CLAUDE.md §컴포넌트 격리"),
 ]
 
@@ -63,8 +62,6 @@ def check(plugin_dir):
     add("skills_cost_class", all(_has_cost_class(_read(s) or "") for s in skills) if skills else True)
 
     own_name = pj.get("name", "")
-    add("hooks_killswitch", _hooks_killswitch_present(pd, own_name))
-
     cross_dispatch = _has_cross_plugin_dispatch(pd, own_name)
     add("deps_declared",
         (not cross_dispatch) or ("Prerequisites" in readme) or ("prerequisites" in readme.lower()))
@@ -110,7 +107,7 @@ def _metadata_cost_class(fm_block: str) -> bool:
         if not in_meta:
             in_meta = re.match(r"metadata:[ \t]*$", line) is not None
             continue
-        if not line.strip():
+        if not line.strip() or line[0] == "#":
             continue
         if line[0] not in " \t":
             return False   # 들여쓰지 않은 줄이 블록을 닫는다
@@ -126,85 +123,6 @@ def _has_cost_class(text):
     # (whole-file grep은 header-satisfiable 함정).
     fm = text.split("---")[1] if text.count("---") >= 2 else ""
     return _metadata_cost_class(fm)
-
-
-# hook command 문자열에서 참조 스크립트 경로 추출 (`${CLAUDE_PLUGIN_ROOT}/hooks/foo.py` 등).
-# 접두 `${CLAUDE_PLUGIN_ROOT}/`(또는 중괄호 없는 `$CLAUDE_PLUGIN_ROOT/`)는 optional로 소비하고
-# .py/.sh로 끝나는 상대 경로를 캡처한다.
-_CMD_SCRIPT_RE = re.compile(r"(?:\$\{?CLAUDE_PLUGIN_ROOT\}?/)?([\w./-]+\.(?:py|sh))")
-
-
-def _walk_hook_commands(data):
-    """이미 파싱된 hooks.json 데이터에서 command 문자열을 재귀 수집."""
-    cmds = []
-
-    def walk(o):
-        if isinstance(o, dict):
-            for k, v in o.items():
-                if k == "command" and isinstance(v, str):
-                    cmds.append(v)
-                else:
-                    walk(v)
-        elif isinstance(o, list):
-            for x in o:
-                walk(x)
-
-    walk(data)
-    return cmds
-
-
-def _hooks_killswitch_present(pd, own_name):
-    # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
-    # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·비-등록 공유 헬퍼까지 훅으로 오인해
-    # 정상 플러그인에 거짓 "kill switch 부재"를 낸다 (qg 2026-07-20 codex, over-glob)
-    # → hooks.json의 command가 가리키는 스크립트만 검증한다.
-    # 당시의 실측 사례는 spec-distill 의 `state_path.py` 였다. 그 파일은 이후 그 플러그인의
-    # `scripts/` 로 옮겨졌고, 지금은 어느 플러그인의 hooks/ 에도 비-등록 `.py` 가 없다 —
-    # 그래도 이 가드는 남는다. 사례가 없다는 것이 규칙이 없어도 된다는 뜻은 아니다.
-    # 단, **판정 불가**는 fail-closed로 gap이어야 한다 (codex re-verify R2): malformed hooks.json /
-    # 해석 불가 command / 등록됐으나 디스크에 부재한 스크립트를 빈 리스트→all([])로 조용히 통과시키면
-    # fail-open이다. 판정할 수 있을 때만 True/False, 판정 불가면 False.
-    hj = pd / "hooks" / "hooks.json"
-    if not hj.exists():
-        return True   # 훅 없음 → kill switch 요건 없음
-    try:
-        text = _read(hj)
-        data = json.loads(text) if text else None
-    except (ValueError, TypeError):
-        return False  # malformed hooks.json → 판정 불가 → gap (fail-closed)
-    if not isinstance(data, (dict, list)):
-        return False
-    root = pd.resolve()
-    scripts, seen = [], set()
-    for cmd in _walk_hook_commands(data):
-        for m in _CMD_SCRIPT_RE.finditer(cmd):
-            cand = (pd / m.group(1).lstrip("/")).resolve()
-            # containment: command가 `../`/symlink로 plugin root 밖을 가리키면(악성 hooks.json) 무관한
-            # 외부 파일로 kill-switch 검사를 만족시키는 read-oracle/traversal이 된다 → 판독 전에 거부(gap,
-            # fail-closed). grounding의 containment와 같은 패턴 (codex re-verify round-2, security).
-            try:
-                cand.relative_to(root)
-            except ValueError:
-                return False
-            if cand not in seen:
-                seen.add(cand)
-                scripts.append(cand)
-    if any(not c.is_file() for c in scripts):
-        return False  # 등록된 hook 스크립트가 디스크에 부재(dangling) → 검증 불가 → gap
-    return all(_has_killswitch(_read(c) or "", own_name) for c in scripts)
-
-
-def _has_killswitch(text, own_name):
-    # 받는 꼴: 그 플러그인 자기 이름의 DEVBREW_<OWN>_DISABLE(뒤에 [A-Z0-9_] 가 이어지지 않는 것) ·
-    # DEVBREW_SKIP_HOOKS · 공유 모듈 호출 kill_switch_active("<own_name>". 남의 스위치 · 하위 스위치는 아니다.
-    if "DEVBREW_SKIP_HOOKS" in text:
-        return True
-    if not isinstance(own_name, str) or not own_name:
-        return False
-    own = own_name.upper().replace("-", "_")
-    if re.search(r"(?<![A-Z0-9_])DEVBREW_" + re.escape(own) + r"_DISABLE(?![A-Z0-9_])", text):
-        return True
-    return bool(re.search(r"kill_switch_active\(\s*[\"']" + re.escape(own_name) + r"[\"']", text))
 
 
 def main(argv):
