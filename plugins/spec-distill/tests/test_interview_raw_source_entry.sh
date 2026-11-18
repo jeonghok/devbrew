@@ -144,6 +144,11 @@ want("state_section", placed
      and "원자료를 찾지 못했다(<사유>) — seed 만 읽는다" in sec
      and "막지 않고" in sec)
 want("state_resume", "이어 가는 세션은 앞 세션이 읽은 글을 갖고 있지 않다" in sec)
+resume_row = [r for r in rows if r.startswith("| `RESUME`(`LEGACY` 를 옮긴 뒤 포함) |")]
+want("state_resume_seed", len(resume_row) == 1
+     and "진입 인자가 seed 경로였으면(`ASK` 의 「이어 감」 등) `SEED_ABS` 도 채운다" in resume_row[0]
+     and "「seed 원문 대조」 줄" in resume_row[0]
+     and "`STATE` 만 채워" not in resume_row[0])
 want("state_no_verdict",
      "`[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>: <[raw_source] 줄>)`" in sec
      and "끝맺음은 같은 판결 없이는 멈추므로(`finishing.md` Step A 3) 그 사유를 첫 라운드에 함께 밝힌다" in sec)
@@ -218,6 +223,9 @@ break_at "$B/agents/coverage-mapper.md" 'seed 전문(모델이 줄인 글)과' '
 B="$(bundle)"
 break_at "$B/skills/pm-interview/references/state-file.md" '| `RESUME`(`LEGACY` 를 옮긴 뒤 포함) |' --drop-line \
   && bites state_section "$B" "RESUME 행 삭제" || no "변이 준비 실패: state_section"
+B="$(bundle)"
+break_at "$B/skills/pm-interview/references/state-file.md" '진입 인자가 seed 경로였으면(`ASK` 의 「이어 감」 등) `SEED_ABS` 도 채운다' '' \
+  && bites state_resume_seed "$B" "RESUME 행의 SEED_ABS 구절 삭제" || no "변이 준비 실패: state_resume_seed"
 B="$(bundle)"
 break_at "$B/skills/pm-interview/references/state-file.md" '[ -f "$STATE" ]' --drop-line \
   && bites fence_no_state:bash "$B" "펜스의 상태 파일 확인 줄 삭제" || no "변이 준비 실패: fence_no_state"
