@@ -175,6 +175,14 @@ class FirstCell(_Base):
         rc, out = self.check(fx)
         self.assert_ok(rc, out)
 
+    def test_lone_cr_unloadable_label(self):
+        # 검사 쪽도 기록을 `read_audit_text` 로 읽는다 — 범용 줄바꿈으로 읽으면 홀로 선 \r 이 줄 나눔이 되어 정당한 라벨이 위반이 된다
+        fx = self.repo(raw1="앞\r뒤 줄", s1_line=s1_with(RS.LABEL_UNLOADABLE))
+        self.assertIn(b"\xec\x95\x9e\r\xeb\x92\xa4", Path(fx["framing"]).read_bytes())
+        rc, out = self.check(fx)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(out["first_cell"], [], out)
+
     def test_unloadable_label_but_loadable(self):
         fx = self.repo(s1_line=s1_with(RS.LABEL_UNLOADABLE))
         rc, out = self.check(fx)
@@ -328,14 +336,18 @@ class Marks(_Base):
         self.assertFalse([a for a in out["advisories"] if "S1" in a], out)
 
     def test_source_absent_not_compared(self):
-        for repl in ("- id: S2\n", "- id: S2\n  source: typed\n", '- id: S2\n  source: ""\n'):
+        cases = (("- id: S2\n", "source 없음"), ('- id: S2\n  source: ""\n', "source 없음"),
+                 ("- id: S2\n  source: typed\n", "source typed"))
+        for repl, tail in cases:
             with self.subTest(repl=repl):
                 fx = self.repo()
                 self.place(fx)
                 _sub(fx["state"], "- id: S2\n  source: verbatim\n", repl)
                 rc, out = self.check(fx)
                 self.assert_ok(rc, out)
-                self.assertIn("표시 대조 불가 — S2: source 없음", out["advisories"])
+                self.assertIn("표시 대조 불가 — S2: " + tail, out["advisories"])
+                self.assertEqual([a for a in out["advisories"] if a.startswith("표시 대조 불가")],
+                                 ["표시 대조 불가 — S2: " + tail], out)
 
 
 if __name__ == "__main__":

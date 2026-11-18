@@ -13,13 +13,13 @@ raw_source.py review-block --interview P [--with-sections]
 
 판결 줄(새 것): raw-source: PLACED <결과물 경로 — 받은 글자에서 도출한 것>
               raw-source: UNLOADABLE <n>줄 — 첫 줄 <절 이름> <k>째 줄(<사유 이름>)
-종료 코드: 글을 냈거나 써 넣었다 · NO-FRAMING 0 / LOST 3 / UNLOADABLE 4 / 인자 오류 · 읽지 못함 2
+종료 코드: 글을 냈거나 써 넣었다 · NO-FRAMING 0 / LOST 3 / UNLOADABLE 4 / 인자 오류 · 읽지 못함 · 쓰지 못함 2
 
 locate 의 판결 줄 — stdout 마지막 줄이다(다른 줄은 stdout 에 내지 않는다)
     raw-source: FOUND <framing 기록 파일 경로>
     raw-source: NO-FRAMING
     raw-source: LOST <사유>
-인자 오류 · 읽지 못함은 stderr `[raw_source] …` 한 줄이다. 새 명령 셋의 P 는 있는 파일이어야 한다.
+인자 오류 · 읽지 못함 · 쓰지 못함은 stderr `[raw_source] …` 한 줄이다(판결 줄은 내지 않는다). 새 명령 셋의 P 는 있는 파일이어야 한다.
 
 찾는 길: seed 이름 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. 받은 글자에서 도출하고 링크를 풀지 않으며, seed 머리의
 `audit_file:` 은 읽지 않는다. `--interview` 는 상태 파일 `seed:` 값(작업 트리 루트 기준 상대 경로)에서 같은 길로 간다.
@@ -435,7 +435,10 @@ def _cmd_text(a) -> int:
         return _err("결과물을 읽지 못했다 — %s" % brief_s)
     new = placed_text(old, item)
     if new != old:
-        _write_atomic(brief, new)
+        try:
+            _write_atomic(brief, new)
+        except OSError:
+            return _err("결과물을 쓰지 못했다 — %s" % brief_s)
     print("raw-source: PLACED %s" % brief_s, file=out)
     return 0
 

@@ -327,19 +327,38 @@ class Cli(RepoCase):
 
         fx = self.make()
         real = Path(self._td.name) / "real-brief.md"
-        real.write_bytes(Path(fx["brief"]).read_bytes())
+        orig = Path(fx["brief"]).read_bytes()
+        real.write_bytes(orig)
         os.unlink(fx["brief"])
         os.symlink(str(real), fx["brief"])
         for p in (BRIEF, STATE):
             cp = self.run_(fx, "place", "--interview", p)
             self.assertEqual(cp.returncode, 2, p)
             self.assertNotIn("raw-source:", cp.stdout)
-        self.assertEqual(real.read_bytes(), Path(fx["brief"]).read_bytes())
+        self.assertEqual(real.read_bytes(), orig)
 
         cp = self.run_(fx, "place", "--interview", "docs/iv/none.md")
         self.assertEqual(cp.returncode, 2)
         self.assertNotIn("raw-source:", cp.stdout)
         self.assertEqual(last(cp.stderr), "[raw_source] 파일이 없다 — docs/iv/none.md")
+
+    def test_place_write_fails(self):
+        fx = self.make()
+        folder = Path(fx["brief"]).parent
+        before = Path(fx["brief"]).read_bytes()
+        mode = folder.stat().st_mode
+        os.chmod(str(folder), 0o555)
+        self.addCleanup(os.chmod, str(folder), mode)
+        if os.access(str(folder), os.W_OK):
+            print("test_place_write_fails 건너뜀 — 읽기 전용 폴더에도 쓸 수 있다(루트로 돈다)", file=sys.stderr)
+            self.skipTest("읽기 전용 폴더에도 쓸 수 있다")
+        cp = self.run_(fx, "place", "--interview", BRIEF)
+        self.assertEqual(cp.returncode, 2, cp.stdout + cp.stderr)
+        self.assertNotIn("raw-source:", cp.stdout)
+        self.assertNotIn("Traceback", cp.stderr)
+        self.assertEqual(last(cp.stderr), "[raw_source] 결과물을 쓰지 못했다 — " + BRIEF)
+        self.assertEqual(Path(fx["brief"]).read_bytes(), before)
+        self.assertEqual(sorted(x.name for x in folder.iterdir() if x.name.endswith(".tmp")), [])
 
     def test_missing_path(self):
         fx = self.make()

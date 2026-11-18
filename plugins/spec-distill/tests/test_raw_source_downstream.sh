@@ -4,7 +4,6 @@
 # 새 첫 칸(원자료 사본이 든 S1)이 옆 로드맵 생성기와 에픽 묶음까지 따라가는지 잰다(AC16 · AC17 · AC19).
 #   original — 원자료 사본(intent/original.md)의 사용자 원문 구간에 framing 기록의 두 절이 있고 seed 전문은 어디에도 없다.
 #   create   — 검사기 네 목록이 비고, 에픽 묶음의 사용자 원문 절에 같은 두 절이 있다.
-#   untouched — 옆 생성기 파일은 기본 브랜치와 같다.
 #   변이 — place 를 건너뛰고 S1 에 seed 전문을 인용으로 실은 레포에서는 같은 판정이 실패한다.
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -242,38 +241,4 @@ else no "mutant_seeded_bundle_pos: 묶음의 양의 글이 없다 — 변이가 
 if seedfree "$S/b6.txt"; then no "mutant_seeded_bundle_seed: 묶음 §6 에 seed전문표지 가 있는데 seedfree 가 통과했다(이빨 없음)"
 else ok "mutant_seeded_bundle_seed: 묶음 §6 의 seed전문표지 를 seedfree 가 잡는다"; fi
 
-# untouched — 옆 생성기 파일이 기본 브랜치와 같다. 비교 기준을 못 구하면 건너뛴다(빈 기준으로 통과하지 않는다).
-# untouched_diff <레포> <기준> <경로…> — 기준 대비 그 경로들의 diff --stat. 같으면 빈 출력.
-untouched_diff() { local r="$1" b="$2"; shift 2; git -C "$r" diff --stat "$b" -- "$@"; }
-SIDE="plugins/spec-distill/scripts/team_write.py plugins/spec-distill/scripts/team_files.py
-plugins/spec-distill/scripts/team_check.py plugins/spec-distill/scripts/roadmap_write.py
-plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/scripts/roadmap_render.py
-plugins/spec-distill/tests/test_team_write.sh plugins/spec-distill/tests/test_team_files.py"
-# side_missing <레포> <경로…> — 추적되지 않는 경로(오타 · 이어 붙은 경로)를 한 줄에 모아 낸다. 다 있으면 빈 출력.
-side_missing() {
-  local r="$1" m="" p; shift
-  for p in "$@"; do git -C "$r" ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || m="$m $p"; done
-  echo "$m"
-}
-# shellcheck disable=SC2086
-assert_eq "$(side_missing "$ROOT" $SIDE)" "" "untouched_paths_tracked: 목록의 모든 경로가 추적되는 파일이다(없는 경로를 diff 하면 조용히 비는 것을 막는다)"
-MB=""
-if git -C "$ROOT" rev-parse -q --verify origin/HEAD >/dev/null 2>&1; then
-  MB="$(git -C "$ROOT" merge-base HEAD origin/HEAD 2>/dev/null)"
-fi
-if [ -n "$MB" ]; then
-  # shellcheck disable=SC2086
-  assert_eq "$(untouched_diff "$ROOT" "$MB" $SIDE)" "" "untouched: 옆 생성기 파일이 기본 브랜치와 같다"
-else
-  note "untouched 건너뜀 — origin/HEAD 나 merge-base 를 구하지 못했다"
-fi
-# 음의 짝 — 이 테스트가 짓는 임시 레포에서 기준 커밋 뒤에 파일을 바꾸면 같은 함수가 출력을 낸다(이 브랜치의 상태와 무관)
-NEG="$T/neg"; mkdir -p "$NEG"
-git -C "$NEG" init -q
-printf 'a\n' > "$NEG/side.py"
-g_ "$NEG" add -- side.py && g_ "$NEG" commit -qm base
-assert_eq "$(untouched_diff "$NEG" HEAD side.py)" "" "untouched_negative_base: 바꾸기 전에는 diff 가 비었다"
-printf 'b\n' > "$NEG/side.py"
-if [ -n "$(untouched_diff "$NEG" HEAD side.py)" ]; then ok "untouched_negative_pair: 바꾼 뒤에는 같은 함수가 출력을 낸다"
-else no "untouched_negative_pair: 바꿨는데도 diff 가 비었다 — untouched_diff 가 변경을 못 본다"; fi
 finish

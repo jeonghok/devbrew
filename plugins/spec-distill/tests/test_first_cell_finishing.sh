@@ -7,6 +7,7 @@
 #   상수와 글자가 같다. 싣기 전에 비밀값으로 보이는 값에서 멈추고 묻는다 — 기록부터 가리고 첫 칸에서만
 #   가리는 길은 없다. 가린 기록 파일은 커밋 펜스가 결과물과 같은 커밋에 넣는다.
 #   brief 템플릿 §6 안내가 같은 규약을 가리킨다.
+#   Step A.5 — 리뷰가 첫 칸 · 표시로 멈추면 이 끝맺음 안(커밋 전)에서만 고치고, 세션을 넘긴 리뷰는 고치지 않는다.
 #   변이 — 각 단언을 하나씩 깨 그 이름이 실패로 나오는지 본다(변이 자리가 없으면 그것도 실패다).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
@@ -48,6 +49,8 @@ fence_lines = fin[c0:c1].split("\n") if 0 <= c0 < c1 else []
 t0 = tpl.find("\n## 6.")
 t1 = tpl.find("\n## ", t0 + 1)
 T6 = joined(tpl[t0:t1]) if 0 <= t0 < t1 else ""
+b1 = fin.find("### Step B", a1 + 1) if a1 >= 0 else -1
+A5 = joined(fin[a1:b1]) if 0 <= a1 < b1 else ""
 
 
 def has(*needles):
@@ -95,6 +98,13 @@ checks.append(("secret_history", has("이 값은 git 이력의 옛 커밋에 남
 checks.append(("no_first_cell_only", has("첫 칸에서만 가리는 길은 없다") and "첫 칸에서만 가린다" not in A))
 checks.append(("old_rule_gone", has("**최초 요청 원문은 `S1`이다.**")
                and "그때도 같은 규칙이 그대로 적용됩니다" not in joined(fin)))
+checks.append(("review_stop_exception", bool(A5) and in_order(
+    A5, 0, "`reviewing-brief` 가 진입 게이트에서 `first_cell` · `source_mismatch` 로 멈추면",
+    "그 skill 의 `vc_rc` 표 그 행대로 간다",
+    "이 끝맺음 안(커밋 전)에서만 첫 칸은 Step A 3 의 갈래를 다시 타고",
+    "표시는 상태 파일의 `source` 에 맞춘다",
+    "세션을 넘겨 따로 부른 리뷰는 끝난 결과물이라 고치지 않는다",
+    "**닫은 답의 출처로 멈추면 — 되묻기 갈래.**")))
 checks.append(("template", bool(T6) and "손으로 옮겨 치지 않는다" in T6 and "앵커 라벨로 밝힌다" in T6))
 for name, passed in checks:
     if not passed:
@@ -104,7 +114,8 @@ FIRST_CELL_PY
 
 got="$(finishing_fails "$FIN" "$TPL")"
 for n in s1_not_seed labels place_cmd unloadable_notice secret_stop secret_options secret_order \
-         secret_same_commit no_verdict_stop secret_history no_first_cell_only old_rule_gone template; do
+         secret_same_commit no_verdict_stop secret_history no_first_cell_only old_rule_gone review_stop_exception \
+         template; do
   if grep -qx -- "$n" <<<"$got"; then no "끝맺음 첫 칸 — ${n}"; else ok "끝맺음 첫 칸 — ${n}"; fi
 done
 [ -z "$got" ] || printf '      실패 이름: %s\n' "$(tr '\n' ' ' <<<"$got")"
@@ -139,6 +150,8 @@ breaks no_first_cell_only fin '첫 칸에서만 가리는 길은 없다' '첫 �
 breaks no_verdict_stop fin '   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.' ''
 breaks no_verdict_stop fin '빈 앵커 줄로 나아가지 않는다' '빈 앵커 줄로 나아간다'
 breaks template tpl '앵커 라벨로 밝힌다' '라벨로 적는다'
+breaks review_stop_exception fin '`reviewing-brief` 가 진입 게이트에서 `first_cell` · `source_mismatch` 로 멈추면 그 skill 의 `vc_rc` 표 그 행대로 간다 — 이 끝맺음 안(커밋 전)에서만 첫 칸은 Step A 3 의 갈래를 다시 타고 표시는 상태 파일의 `source` 에 맞춘다. 세션을 넘겨 따로 부른 리뷰는 끝난 결과물이라 고치지 않는다.' ''
+breaks review_stop_exception fin '끝난 결과물이라 고치지 않는다' '끝난 결과물이라 고친다'
 
 # 행동 — Step A 의 locate 펜스를 떠서 종료 코드만 내는 가짜 raw_source.py 로 돌린다.
 # 종료 코드 2(판결 줄 없음)는 멈춘다고 말하고 「멈추지 않는다」 를 말하지 않는다 · 3(LOST)은 판결 줄대로 간다 · 0 은 말이 없다.

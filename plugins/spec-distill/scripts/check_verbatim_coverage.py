@@ -376,7 +376,7 @@ def source_marks(statements: list[dict], heads: dict[str, tuple[str, list[str]]]
             continue
         want = SOURCE_MARK.get(st["source"] or "")
         if want is None:
-            adv.append(f"표시 대조 불가 — {sid}: source 없음")
+            adv.append(f"표시 대조 불가 — {sid}: source {st['source'] or '없음'}")
             continue
         word = heads[sid][0].partition(" ")[0].replace("\ufe0f", "")
         if word == want:
