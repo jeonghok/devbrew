@@ -131,6 +131,31 @@ w2=$(cd "$REPO" && "$WT" create-baseline "$sha" "recov123" 2>/dev/null)
 [ -d "$w2" ] && [ ! -e "$w2/junk2" ] && ok "브랜치 없는 같은 이름 worktree 는 지우고 다시 만든다" || no "detached 같은 이름 복구 실패"
 rm -rf "$REPO" "$OUT"
 
+echo "[link_to_registered_user_worktree]"
+for kind in branch detached; do
+  mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+  mkdir -p "$REPO/.claude/worktrees"
+  if [ "$kind" = branch ]; then
+    (cd "$REPO" && git worktree add -q -b userbr "$REPO/.claude/worktrees/userwt" "$sha")
+  else
+    (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/worktrees/userwt" "$sha")
+  fi
+  echo mine > "$REPO/.claude/worktrees/userwt/mine.txt"
+  ln -s "$REPO/.claude/worktrees/userwt" "$REPO/.claude/worktrees/qg-base-ulnk0123"
+  w=$(cd "$REPO" && "$WT" create-baseline "$sha" "ulnk0123" 2>/dev/null); rc=$?
+  [ "$rc" -eq 0 ] && [ -d "$w" ] && [ ! -L "$w" ] && ok "[$kind] 링크 자리에 새 사본이 생겼다" || no "[$kind] 링크 자리 rc=$rc"
+  [ -f "$REPO/.claude/worktrees/userwt/mine.txt" ] && ok "[$kind] 만들기 뒤 사용자 worktree 파일이 그대로다" || no "[$kind] 만들기가 링크 대상 worktree 를 지웠다"
+  (cd "$REPO" && git worktree list --porcelain | grep -q "^worktree .*/userwt$") && ok "[$kind] 사용자 worktree 등록이 그대로다" || no "[$kind] 사용자 worktree 등록이 풀렸다"
+  [ "$kind" != branch ] || { (cd "$REPO" && git rev-parse --verify -q userbr >/dev/null) && ok "[branch] 브랜치가 그대로다" || no "[branch] 브랜치가 사라졌다"; }
+  ln -s "$REPO/.claude/worktrees/userwt" "$REPO/.claude/worktrees/qg-head-ulnk0123"
+  (cd "$REPO" && "$WT" remove "$REPO/.claude/worktrees/qg-head-ulnk0123" >/dev/null 2>&1); assert_eq "$?" "0" "[$kind] remove 는 링크를 받는다"
+  [ ! -L "$REPO/.claude/worktrees/qg-head-ulnk0123" ] && ok "[$kind] remove 가 링크를 지웠다" || no "[$kind] 링크가 남았다"
+  [ -f "$REPO/.claude/worktrees/userwt/mine.txt" ] && ok "[$kind] remove 뒤 사용자 worktree 파일이 그대로다" || no "[$kind] remove 가 링크 대상 worktree 를 지웠다"
+  (cd "$REPO" && git worktree list --porcelain | grep -q "^worktree .*/userwt$") && ok "[$kind] remove 뒤 등록이 그대로다" || no "[$kind] remove 뒤 등록이 풀렸다"
+  [ "$kind" != branch ] || { (cd "$REPO" && git rev-parse --verify -q userbr >/dev/null) && ok "[branch] remove 뒤 브랜치가 그대로다" || no "[branch] remove 뒤 브랜치가 사라졌다"; }
+  rm -rf "$REPO"
+done
+
 echo "[escape_refused]"
 mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
 OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1
