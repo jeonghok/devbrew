@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/build_seed_inline_blob.py
+# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/pm-interview/SKILL.md
 #
 # 원문이 받은 글자 그대로 남는 규약(raw-source canon)의 문면 락 — 기록 파일(audit) 템플릿의 `## 1` ·
 # `## 2` 설명, seed 템플릿 · seed 입력 규약의 «seed 는 모델이 줄인 글» 문장, seed 리뷰 프로필의 읽는 법.
@@ -16,7 +16,7 @@ SCRIPTS="$ROOT/plugins/spec-distill/scripts"
 if [ "${1:-}" = "--emit-scanned" ]; then
   for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md \
            plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md \
-           plugins/spec-distill/scripts/build_seed_inline_blob.py; do
+           plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/pm-interview/SKILL.md; do
     echo "$f"
   done
   exit 0
@@ -147,6 +147,20 @@ sys.exit(0 if ok else 1)
   has "$sk" '답이 없으면 표시 없이 «(답 없음)» 이다' || echo answer_none_mark
   has "$ex1" '그 줄 앞에 `> ` 만 붙여 쓴다' || echo wrap_prefix_only
   { ! has "$sk" '스스로 고쳐 쓴다' && has "$sk" '저자가 그 줄을 스스로 고쳐 쓰지 않는다'; } || echo self_rewrite
+  # 쓰기 전 겹침 물음 — 이 자리의 선택지 설명과 「멈춘다」 행동(사용자 결정: 쓰지 않고 그 자리에서 멈춘다)
+  has "$ex1" '「감싼다」: 얻음: 겹친 줄만 표시하고 받은 글을 바로 기록 파일에 쓴다 · 내줌: 그 줄 앞에 `> ` 가 붙어 한 줄이 받은 글과 달라진다' || echo pre_write_desc_wrap
+  has "$ex1" '「멈춘다」: 얻음: 받은 글을 한 글자도 바꾸지 않는다 · 내줌: 그 글이 기록 파일에 들어가지 않아 사용자가 그 줄을 고쳐 다시 줄 때까지 다음 걸음으로 가지 못한다' || echo pre_write_desc_stop
+  { ! has "$ex1" '번들 단계부터 다시 돈다' && ! has "$ex1" '리뷰가 시작되지 않고'; } || echo pre_write_desc_not_bundle
+  has "$ex1" '「멈춘다」면 그 글을 기록 파일에 쓰지 않고 그 자리에서 멈춘다' || echo pre_write_stop_action
+  has "$ex1" '사용자가 그 줄을 고친 글을 다시 주면 이어 가고, 받은 글은 한 글자도 바꾸지 않는다' || echo pre_write_stop_resume
+  # degrade 채널 표 — 「다른 다음 단계」 의 원자료 찾지 못함 행(맨 아래 — 위에서부터 먼저 맞는 행이 이기는 순서를 깨지 않는다)
+  local dg dgrow dgrows dglast
+  dg="$(sec "$skill" '## degrade 채널')"
+  dgrow="$(printf '%s\n' "$dg" | grep -F '`raw-source: LOST`' | grep '^|' || true)"
+  { has "$dgrow" '| 「다른 다음 단계」 의 평문 줄에서' && has "$dgrow" '`handoff` · `raw-source` | `degraded` |' && has "$dgrow" '`판결 줄이 없다(종료 코드 <n>)`' && has "$dgrow" '다음 단계에는 seed 만 넘긴다'; } || echo degrade_row_raw_source
+  dgrows="$(printf '%s\n' "$dg" | grep '^| ' | grep -vF '| 관측 |' || true)"
+  dglast="$(printf '%s\n' "$dgrows" | tail -1)"
+  { [ -n "$dgrow" ] && [ "$dglast" = "$dgrow" ]; } || echo degrade_row_last
   rm -rf "$T0"
 }
 
@@ -204,5 +218,25 @@ mutate "$SK" "$T/sk14.md" '그 줄 앞에 `> ` 만 붙여 쓴다' '그 줄을 �
 mutate "$SK" "$T/sk15.md" $'저자가 쓰는 줄 — `## 2` 의 풀이 줄' '저자 줄 — `## 2` 의 풀이 줄' && expect_fail_sk secret_author_lines "$T/sk15.md" || no "변이 준비 실패: secret_author_lines"
 mutate "$SK" "$T/sk16.md" 'seed 는 긴 초안을 깎아 만들고 긴 초안도 가린 글로 쓰므로 seed 에도' 'seed 는 가린 audit 에서 압축하므로 seed 에도' && expect_fail_sk secret_seed_rationale "$T/sk16.md" || no "변이 준비 실패: secret_seed_rationale"
 mutate "$AT" "$T/at5.md" '사용자의 말을 옮길 때는 가린 글로 옮긴다' '' && expect_fail tpl_long_draft_redaction "$T/at5.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_long_draft_redaction"
+mutate "$SK" "$T/sk17.md" '얻음: 겹친 줄만 표시하고 받은 글을 바로 기록 파일에 쓴다' '얻음: 겹친 줄만 표시한다' && expect_fail_sk pre_write_desc_wrap "$T/sk17.md" || no "변이 준비 실패: pre_write_desc_wrap"
+mutate "$SK" "$T/sk18.md" '얻음: 받은 글을 한 글자도 바꾸지 않는다 · 내줌: 그 글이' '얻음: 받은 글을 지킨다 · 내줌: 그 글이' && expect_fail_sk pre_write_desc_stop "$T/sk18.md" || no "변이 준비 실패: pre_write_desc_stop"
+mutate "$SK" "$T/sk19.md" '다음 걸음으로 가지 못한다.' '다음 걸음으로 가지 못하고 번들 단계부터 다시 돈다.' && expect_fail_sk pre_write_desc_not_bundle "$T/sk19.md" || no "변이 준비 실패: pre_write_desc_not_bundle"
+mutate "$SK" "$T/sk20.md" '「멈춘다」면 그 글을 기록 파일에 쓰지 않고 그 자리에서 멈춘다' '「멈춘다」면 그 글을 기록 파일에 쓰고 멈춘다' && expect_fail_sk pre_write_stop_action "$T/sk20.md" || no "변이 준비 실패: pre_write_stop_action"
+mutate "$SK" "$T/sk21.md" '사용자가 그 줄을 고친 글을 다시 주면 이어 가고, 받은 글은 한 글자도 바꾸지 않는다' '사용자가 그 줄을 고친 글을 다시 주면 이어 간다' && expect_fail_sk pre_write_stop_resume "$T/sk21.md" || no "변이 준비 실패: pre_write_stop_resume"
+mutate "$SK" "$T/sk22.md" '| 「다른 다음 단계」 의 평문 줄에서' '| 평문 줄에서' && expect_fail_sk degrade_row_raw_source "$T/sk22.md" || no "변이 준비 실패: degrade_row_raw_source(행 머리)"
+mutate "$SK" "$T/sk23.md" '`handoff` · `raw-source` | `degraded`' '`handoff` · `raw-source` | `unavailable`' && expect_fail_sk degrade_row_raw_source "$T/sk23.md" || no "변이 준비 실패: degrade_row_raw_source(status)"
+# 순서 변이 — 같은 행을 표 맨 위(첫 행)로 올리면 「위에서부터 먼저 맞는 행」 순서가 달라진다.
+python3 -I - "$SK" "$T/sk24.md" <<'PYEOF'
+import sys
+src, dst = sys.argv[1:3]
+lines = open(src, encoding="utf-8").read().split("\n")
+i = next(k for k, l in enumerate(lines) if l.startswith("| ") and "`raw-source: LOST`" in l)
+row = lines.pop(i)
+j = next(k for k, l in enumerate(lines) if l.startswith("| 원장 열기가 `HELD`"))
+lines.insert(j, row)
+open(dst, "w", encoding="utf-8").write("\n".join(lines))
+PYEOF
+expect_fail_sk degrade_row_last "$T/sk24.md"
+# 겹침 물음 문단(AC6)과 구분 — 이 자리의 설명이 번들 자리 설명 문단을 건드리지 않는다(양성 대조: 실제 파일의 overlap_unchanged 는 통과)
 
 finish

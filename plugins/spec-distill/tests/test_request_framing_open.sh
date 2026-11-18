@@ -117,6 +117,32 @@ for lit in 'seed(<seed 절대경로>)는 모델이 줄인 글이다 — 사용�
 done
 assert_not_contains "$CALL" 'seed 전문을 그 skill 의 사용자 원문(첫 요청 — 인터뷰의 S1 과 같은 자리)으로 삼아 원문 그대로 입력으로 삼는다' "AC22: 옛 운반 문장이 없다"
 assert_not_contains "$CALL" '다음 세션 줄을 노출하지 않는다' "AC22: 찾지 못해도 멈추지 않는다"
+# 펜스를 언제 도는가 — 게이트를 보이기 전에 한 번, 그 판결 줄이 게이트 앞 글의 줄 · 질문의 경고 줄을 함께 정한다.
+rf_when_fails() { # <SKILL> — 실패한 항목 이름을 한 줄씩(빈 출력 = 통과)
+  local c; c="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$1" | tr '\n' ' ' | tr -s ' ')"
+  case "$c" in *'평문 줄(외부 skill)이면 게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다'*) ;; *) echo fence_before_gate ;; esac
+  case "$c" in *'판결을 찾지 못한 사건은 `## degrade 채널` 표의 「다른 다음 단계」 행으로 질문의 경고 줄에도 오기 때문이다'*) ;; *) echo fence_warning_row ;; esac
+  case "$c" in *'게이트를 보이기 **전에**'*'raw_source.py" locate --seed'*) ;; *) echo fence_order ;; esac
+}
+RW0="$(rf_when_fails "$RF")"
+[ -z "$RW0" ] && ok "AC22: 펜스를 게이트 앞에서 한 번 도는 문장 · 경고 행 연결 — 실제 파일 전 항목 통과(양성 대조)" || no "AC22: 펜스 시점 항목 실패: $(printf '%s' "$RW0" | tr '\n' ' ')"
+rf_mut() { # <사본> <옛> <새>
+  python3 -I -c '
+import sys
+src, dst, old, new = sys.argv[1:5]
+t = open(src, encoding="utf-8").read()
+if old not in t:
+    sys.exit(1)
+open(dst, "w", encoding="utf-8").write(t.replace(old, new, 1))
+' "$RF" "$1" "$2" "$3"
+}
+rf_expect() { # <항목> <사본>
+  local o; o="$(rf_when_fails "$2")"
+  if printf '%s\n' "$o" | grep -qxF "$1"; then ok "AC22 변이 → $1 로 실패"; else no "AC22 변이가 $1 로 실패하지 않았다"; fi
+}
+rf_mut "$SCRATCH/rfm1.md" '게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다' '게이트를 보인 뒤 아래 펜스를 돌린다' && rf_expect fence_before_gate "$SCRATCH/rfm1.md" || no "AC22 변이 준비 실패: fence_before_gate"
+rf_mut "$SCRATCH/rfm2.md" '「다른 다음 단계」 행으로 질문의 경고 줄에도 오기 때문이다' '행으로 온다' && rf_expect fence_warning_row "$SCRATCH/rfm2.md" || no "AC22 변이 준비 실패: fence_warning_row"
+rf_mut "$SCRATCH/rfm3.md" '게이트를 보이기 **전에** 아래 펜스를 한 번 돌린다' '아래 펜스를 한 번 돌린다' && rf_expect fence_order "$SCRATCH/rfm3.md" || no "AC22 변이 준비 실패: fence_order"
 # 펜스 실행 — 「다른 다음 단계」 문단 바로 뒤 첫 bash 펜스(앞에 「## 상태」 블록이 붙는 자리라 SD · SEED_ABS 를 채워 돌린다)
 RSF="$SCRATCH/rs-fence.sh"
 awk 'index($0,"**다른 다음 단계(둘째 질문).**")==1{f=1; next} f&&/^```bash$/{b=1; next} f&&b&&/^```$/{exit} f&&b' "$RF" > "$RSF"

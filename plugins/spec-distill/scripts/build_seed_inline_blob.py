@@ -31,7 +31,11 @@
 (`heading_structure`) 조립하지 않는다 — 어느 occurrence 가 진짜인지 이 코드가 골라 버리면 그 선택 자체가
 공격 표면이 된다.
 
-Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic]
+Usage: build_seed_inline_blob.py <seed_file> <audit_file> <claude_md_file> [--for detect|recritic] [--no-absent-warning]
+
+`--no-absent-warning` 은 「레포 CLAUDE.md 가 없다」 stderr 경고만 끈다 — 한 라운드가 이 스크립트를 두 번 부르므로
+(탐지 · 재비판) 둘째 호출에만 붙여 경고가 라운드에 한 번만 나가게 한다. 번들 본문의 「레포 CLAUDE.md 없음」 한 줄과
+그 밖의 모든 stderr 는 그대로다.
 """
 from __future__ import annotations
 
@@ -149,6 +153,7 @@ def main() -> int:
     p.add_argument("audit_file")
     p.add_argument("claude_md_file")
     p.add_argument("--for", dest="consumer", choices=("detect", "recritic"), default="detect")
+    p.add_argument("--no-absent-warning", dest="no_absent_warning", action="store_true")
     args = p.parse_args()
 
     paths = {
@@ -173,8 +178,9 @@ def main() -> int:
         if label == "claude_md_file" and missing:
             # 없는 것은 계속한다. 있는데 파일이 아닌 것(끊긴 링크 · 폴더)은 아래 검사가 그대로 멈춘다.
             claude_md_absent = True
-            print(f"[spec-distill] 경고: 레포 CLAUDE.md 가 없다({path}) — 번들의 그 절을 "
-                  f"「{CLAUDE_MD_ABSENT}」 한 줄로 채워 조립한다", file=sys.stderr)
+            if not args.no_absent_warning:
+                print(f"[spec-distill] 경고: 레포 CLAUDE.md 가 없다({path}) — 번들의 그 절을 "
+                      f"「{CLAUDE_MD_ABSENT}」 한 줄로 채워 조립한다", file=sys.stderr)
             continue
         if not path.is_file():
             print(f"{label} not found: {path}", file=sys.stderr)
