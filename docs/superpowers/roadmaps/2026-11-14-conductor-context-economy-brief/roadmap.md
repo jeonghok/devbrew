@@ -39,11 +39,11 @@ test_failure_pattern: "^FAILED (.+)$"
 
 ### R2 — 지휘 걸음과 관문
 - 의도: 지휘의 걸음을 단계표로 세우고 순서 · 승인을 스크립트가 지키게 하며 사용자 자리를 걸음에 못 박는다
-- 범위: 한다: 단계표(형식 · 실행기 칸 · 사람 단계), 순서 강제 + 사람 승인 탈출구(승인된 설계 없이는 계획 · 구현이 시작되지 않는다 · 해시 승인), 같은 단계 연속 실패 멈춤, 사용자 자리(방향 · 설계 대화, 계획이 나왔을 때 · 구현 중 설계에 닿는 물음 · PR 전), 담당자 물음을 원문 그대로 옮기기, 동시 수 레포 설정, SDD 고침 루프 위임, superpowers 결합을 단계 맞춤으로, P8 · CLAUDE.md 개정 / 안 한다: 세션으로 보내기 · 거두기, 절차서 쪼개기 · 리더 다시 띄우기, 상태 브랜치
+- 범위: 한다: 단계표(형식 · 실행기 칸 · 사람 단계), 순서 강제 + 사람 승인 탈출구(승인된 설계 없이는 계획 · 구현이 시작되지 않는다 · 해시 승인), 같은 단계 연속 실패 멈춤, 사용자 자리(방향 · 설계 대화, 계획이 나왔을 때 · 구현 중 설계에 닿는 물음 · PR 전), 담당자 물음을 원문 그대로 옮기기, 담당자는 시작 묶음으로만 보낸다(보내는 글 틀을 시작 묶음으로), 사람 줄은 세션 기록에서 사람이 한 말 · 고른 답을 찾아 적는다(모델이 지어낸 줄은 통과하지 못한다), 동시 수 레포 설정, SDD 고침 루프 위임, superpowers 결합을 단계 맞춤으로, P8 · CLAUDE.md 개정 / 안 한다: 세션으로 보내기 · 거두기, 절차서 쪼개기 · 리더 다시 띄우기, 상태 브랜치
 - 의존: R1
 - 브랜치: feature/conductor-stage-table
 - 묶음: R2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/scripts/conductor_ledger.py
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: R1 형식 위에서 단계가 돈다
@@ -51,7 +51,7 @@ test_failure_pattern: "^FAILED (.+)$"
 
 ### E1 — 세션 담당자와 위아래 소통
 - 의도: 계획부터의 담당자를 세션으로 띄우고 거두며 지휘자 – 담당자 – 하위 사이 소통 창구를 하나로 정한다
-- 범위: 한다: 담당자를 세션으로 띄우기(시작 묶음으로만 · herdr 권장 · 없으면 하위 agent), 결과 파일을 쓰고 닫기 · 띄운 세션 거두기 확인, 위아래 소통 계약(창구 하나 · 받았음과 답했음 · 글이 왔음을 아는 길 · 보낸 쪽 확인 — 양식으로 모델을 묶지 않는다), 도는 담당자에게 닿는 답 · 방향 고침, 사용자가 담당자에게 직접 한 말을 과제 파일로, 담당자끼리는 지휘자가 푼다, 새 형식을 기본으로 · 보내는 글 틀을 시작 묶음으로 · 마지막 보고를 결과 파일로, 모델 고르기 지침, 스크립트 · 다른 모델 한곳으로 / 안 한다: 다른 서버에서 띄우기, 로드맵 사이 소통, 단계와 교대 사이
+- 범위: 한다: 담당자를 세션으로 띄우기(herdr 권장 · 없으면 하위 agent), 결과 파일을 쓰고 닫기 · 띄운 세션 거두기 확인, 위아래 소통 계약(창구 하나 · 받았음과 답했음 · 글이 왔음을 아는 길 · 보낸 쪽 확인 — 양식으로 모델을 묶지 않는다), 도는 담당자에게 닿는 답 · 방향 고침, 사용자가 담당자에게 직접 한 말을 과제 파일로, 담당자끼리는 지휘자가 푼다, 새 형식을 기본으로 · 마지막 보고를 결과 파일로, 모델 고르기 지침, 스크립트 · 다른 모델 한곳으로 / 안 한다: 다른 서버에서 띄우기, 로드맵 사이 소통, 단계와 교대 사이
 - 의존: R1, R2
 - 브랜치: feature/session-workers
 - 묶음: E1.md
@@ -173,6 +173,12 @@ test_failure_pattern: "^FAILED (.+)$"
   - 「우리 파일방식 r1에서 만든거랑 인터뷰 브리프등 있자나 그거 잊지말고」
   - 「다 뼈아프지만 지휘자-담당자-하위 이간 위아래ㅜ소통이 잘되어야겠지 그리고 소통 창구가 뭔지 통일되어야 서로 대화가 될거고 담당자끼리는 지휘자가 풀어야하고」
   - 「단계와 교대 사이는 다른 에픽이 풀자」
+
+### 2026-11-18 · 「담당자는 시작 묶음으로만 보낸다」 를 세션 담당자 에픽에서 R2 로 옮긴다 — 관문이 지금의 하위 agent 담당자에게도 바로 걸리게. 사람 줄은 세션 기록에서 찾아 적는다는 것을 R2 범위에 더한다
+- 바뀜: 바뀐 에픽 R2 · E1 「그래」 · 「그니까 모델이 사람이 한거로 치팅 못하게한다는거지? 리워드 해킹같은」
+- 원문:
+  - 「그래」
+  - 「그니까 모델이 사람이 한거로 치팅 못하게한다는거지? 리워드 해킹같은」
 
 ## 위험 번호표
 
