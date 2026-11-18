@@ -296,7 +296,10 @@ rm -f "$tmps"
 # 이 위양성은 red 로 드러났다 — 단방향 assert 였다면 조용히 통과했을 자리).
 MUTD="$(mktemp -d)" || exit 1
 tmpm="$MUTD/check_verbatim_coverage.py"
-for sib in section6 brief_body check_brief skepticism; do cp "$(dirname "$SCRIPT")/$sib.py" "$MUTD/"; done
+# 첫 칸 검사(L4)가 쓰는 `raw_source.py` 와 그것이 쓰는 형제(`state_path` · `seed_review_log` · `docreview_advice` · `docreview_config`)도 옮긴다.
+for sib in section6 brief_body check_brief skepticism raw_source state_path seed_review_log docreview_advice docreview_config; do
+  cp "$(dirname "$SCRIPT")/$sib.py" "$MUTD/"
+done
 MUT_PY="$(mktemp)" || exit 1
 cat > "$MUT_PY" <<'MUTEOF'
 import re, sys
