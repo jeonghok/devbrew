@@ -139,4 +139,69 @@ breaks no_first_cell_only fin '첫 칸에서만 가리는 길은 없다' '첫 �
 breaks no_verdict_stop fin '   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.' ''
 breaks no_verdict_stop fin '빈 앵커 줄로 나아가지 않는다' '빈 앵커 줄로 나아간다'
 breaks template tpl '앵커 라벨로 밝힌다' '라벨로 적는다'
+
+# 행동 — Step A 의 locate 펜스를 떠서 종료 코드만 내는 가짜 raw_source.py 로 돌린다.
+# 종료 코드 2(판결 줄 없음)는 멈춘다고 말하고 「멈추지 않는다」 를 말하지 않는다 · 3(LOST)은 판결 줄대로 간다 · 0 은 말이 없다.
+STUB="$W/stub"; mkdir -p "$STUB/scripts"
+cat > "$STUB/scripts/raw_source.py" <<'STUB_PY'
+import os
+import sys
+
+code = int(os.environ["RS_STUB_RC"])
+if code == 2:
+    sys.stderr.write("[raw_source] 가짜 — 판결 줄 없음\n")
+else:
+    print("raw-source: LOST 가짜" if code == 3 else "raw-source: NO-FRAMING")
+sys.exit(code)
+STUB_PY
+locate_fence() {   # locate_fence <finishing.md> → Step A 「seed 로 시작한」 문단 다음 첫 bash 펜스 본문(세 칸 들여쓰기를 뗀다)
+  python3 -I -B - "$1" <<'LOCATE_PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+i = t.find("**seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.**")
+lines = t[i:].split("\n") if i >= 0 else []
+body, inside = [], False
+for ln in lines:
+    if ln.strip() == "```bash":
+        inside = True
+        continue
+    if inside and ln.strip() == "```":
+        break
+    if inside:
+        body.append(ln[3:] if ln.startswith("   ") else ln)
+print("\n".join(body))
+LOCATE_PY
+}
+# verdict_says <finishing.md> <셸> <종료 코드> → 펜스의 stderr 중 [spec-distill] 줄
+verdict_says() {
+  local body; body="$(locate_fence "$1")"
+  ( cd "$W" && CLAUDE_PLUGIN_ROOT="$STUB" RS_STUB_RC="$3" "$2" -c "$body" 2>&1 >/dev/null ) | grep -F '[spec-distill]'
+}
+RC2_LINE='[spec-distill] 원자료 판결 종료 코드 2 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다'
+RC3_LINE='[spec-distill] 원자료 판결 종료 코드 3 — 위 판결 줄대로 간다(멈추지 않는다)'
+SHELLS="bash"; [ -x /bin/zsh ] && SHELLS="bash /bin/zsh"
+for sh in $SHELLS; do
+  o2="$(verdict_says "$FIN" "$sh" 2)"; o3="$(verdict_says "$FIN" "$sh" 3)"; o0="$(verdict_says "$FIN" "$sh" 0)"
+  assert_eq "$o2" "$RC2_LINE" "locate 펜스(${sh}) — 종료 코드 2 는 판결 줄이 없어 멈춘다고 말한다"
+  assert_not_contains "$o2" "멈추지 않는다" "locate 펜스(${sh}) — 종료 코드 2 에 「멈추지 않는다」 가 없다"
+  assert_eq "$o3" "$RC3_LINE" "locate 펜스(${sh}) — 종료 코드 3(LOST)은 판결 줄대로 간다"
+  assert_eq "$o0" "" "locate 펜스(${sh}) — 종료 코드 0 은 말이 없다"
+done
+# 변이 — 옛 꼴(종료 코드와 상관없이 「멈추지 않는다」)로 되돌리면 종료 코드 2 칸이 실패한다
+cp "$FIN" "$W/fin-old.md"
+python3 -I -B - "$W/fin-old.md" <<'OLD_ECHO_PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+start = s.index("   rc=0; python3 \"$SD/scripts/raw_source.py\" locate --interview")
+end = s.index("fi\n", start) + 3
+old = ('   python3 "$SD/scripts/raw_source.py" locate --interview "<Step A 2 의 payload 경로>" --absolute'
+       ' || echo "[spec-distill] 원자료 판결 종료 코드 $? — 위 판결 줄대로 간다(멈추지 않는다)" >&2\n')
+open(p, "w", encoding="utf-8").write(s[:start] + old + s[end:])
+OLD_ECHO_PY
+m2="$(verdict_says "$W/fin-old.md" bash 2)"
+case "$m2" in
+  *"멈추지 않는다"*) ok "변이(옛 echo)가 종료 코드 2 칸을 깬다" ;;
+  *) no "변이(옛 echo)가 종료 코드 2 칸을 깨지 못했다 (출력: ${m2})" ;;
+esac
 finish

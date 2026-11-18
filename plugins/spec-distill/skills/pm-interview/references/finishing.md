@@ -107,7 +107,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.** 「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다. payload §6 맨 앞에 앵커 줄 `- **S1** 🗣 최초 요청:` 한 줄만 두고(본문 없이) payload · audit · 상태 파일을 쓴 뒤 아래 순서로 간다. audit §6 에는 `S1` 을 두지 않는다.
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   python3 "$SD/scripts/raw_source.py" locate --interview "<Step A 2 의 payload 경로>" --absolute || echo "[spec-distill] 원자료 판결 종료 코드 $? — 위 판결 줄대로 간다(멈추지 않는다)" >&2
+   rc=0; python3 "$SD/scripts/raw_source.py" locate --interview "<Step A 2 의 payload 경로>" --absolute || rc=$?
+   if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 원자료 판결 종료 코드 2 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다" >&2
+   elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 원자료 판결 종료 코드 ${rc} — 위 판결 줄대로 간다(멈추지 않는다)" >&2; fi
    ```
    - `raw-source: FOUND <경로>` — 아래 「비밀값 확인」 을 먼저 하고, 그 뒤 `python3 "$SD/scripts/raw_source.py" place --interview "<payload 경로>"` 를 같은 꼴의 펜스로 돌린다. 마지막 줄이 `raw-source: PLACED …` 면 스크립트가 `S1` 항목을 써 넣었다 — 앵커 라벨은 「최초 요청(원자료 — framing 기록의 원문 절과 질문 전체 절)」 이고 본문은 framing 기록의 두 절이 글자 그대로다. 그 항목에 손대지 않는다. seed 전문은 payload 에 싣지 않는다.
    - `place` 의 마지막 줄이 `raw-source: UNLOADABLE <n>줄 — 첫 줄 …` 이면 그 글은 결과물 문법이 받지 않아 그대로 싣지 못한다. 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 그대로 싣지 못함 — 모델이 줄인 글. 원자료는 framing 기록의 원문 절과 질문 전체 절):` 로 쓰고 본문에 seed 전문(「풀린 입력」)을 지금 규칙대로 싣는다(P21 치환 · 열 0 펜스). 사용자에게 `원자료를 그대로 싣지 못했다 — 결과물 문법이 받지 않는 줄 <n>개(첫 줄: <판결 줄의 절 이름과 줄 번호>). 첫 칸에는 seed 전문(모델이 줄인 글)을 실었다` 한 줄을 보인다. 원문의 글자를 고쳐 싣지 않는다. 한 절만 싣지도 않는다.
