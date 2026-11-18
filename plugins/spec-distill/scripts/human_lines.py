@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""human_lines.py — 사람 줄(spec 승인 · 계획 검토 · 흐름 승인 · 걸음 건너뜀)의 꼴 · 통과 라벨 표 · 관문 이름 · 본문 · 판과 꼴 판정이 사는 한 곳.
+"""human_lines.py — 사람 줄(spec 승인 · 계획 검토 · 흐름 승인 · 걸음 건너뜀)의 꼴 · 통과 라벨 표 · 관문 이름 · 본문 · 판 ·
+꼴 판정 · 대조 판정 · 관문 표가 사는 한 곳.
 
-읽기만 한다 — 파일을 쓰지 않고 세션 기록을 읽지 않는다. git 은 부르는 쪽이 넘긴 객체(`roadmap_status.Git`)로만 읽는다.
+읽기만 한다 — 파일을 쓰지 않는다. 세션 기록은 대조 판정(`match`)만 `session_record` 로 읽고, 꼴 판정(`shape`)은 읽지 않는다.
+git 은 부르는 쪽이 넘긴 객체(`roadmap_status.Git`)로만 읽는다. 관문 표는 이 파일의 상수다 — 설정 · 걸음표 · 환경에서 읽지 않는다.
 """
 from __future__ import annotations
 
@@ -12,7 +14,9 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import roadmap_model  # noqa: E402
 import section6  # noqa: E402
+import session_record  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
 
@@ -24,6 +28,15 @@ PASS_LABELS = {KIND_SPEC: ("승인 — 계획 담당자에게",), KIND_PLAN: ("�
 RECOMMENDED = "(권장)"
 
 PASS, NO_EVIDENCE, MISMATCH, UNCHECKED, STALE = "지남", "근거 없음", "어긋남", "확인 못 함", "낡음"
+
+GATES = {"design": (), "plan": (KIND_SPEC,), "implement": (KIND_SPEC, KIND_PLAN), "review": (KIND_SPEC, KIND_PLAN)}
+PLAIN_GATES = (KIND_FLOW,)
+RETRY_STOP = 2
+GATE_OFF = "사람 줄 대조가 꺼져 있다"
+NO_LINE = "줄이 없다"
+_HAD, _GOT = "%s 가 있다", "%s 의 받음 줄이 있다"
+_AGAIN = "질문 창으로 다시 승인받는다"
+_OPEN = "기록의 꼴이 바뀐 것이면 레포 설정 human_gate: 끔 으로 연다"
 
 RECORD_HEADS = ("## 결정 기록", "## 지휘 기록", "## 미룸", "## 판정", "## 구현 대조")
 DEFERRED_HEAD = "### Deferred to plan"
@@ -284,3 +297,211 @@ def shape(scope: Scope, raw: str) -> Verdict:
         return Verdict(STALE, "%s 의 본문이 승인한 판 %s 뒤에 바뀌었다 — 달라진 곳을 보이고 다시 승인받는다" % (line.file, line.rev),
                        line, raw)
     return Verdict(PASS, "승인한 판 %s 의 본문과 같다" % line.rev, line, raw)
+
+
+class Passed(NamedTuple):
+    date: str
+    skipped: bool   # 건너뜀 줄로 지났다
+
+
+def _unchecked(line: Line, raw: str, why: str, shape_changed: bool = False) -> Verdict:
+    tail = "%s. %s" % (_AGAIN, _OPEN) if shape_changed else _AGAIN
+    return Verdict(UNCHECKED, "%s — %s" % (why, tail), line, raw)
+
+
+def _no_answer(path, line: Line, raw: str) -> Verdict:
+    """근거의 `uuid#n` 답이 없을 때 — 그 항목에 질문을 읽지 못한 호출의 결과가 있으면 가를 수 없다(확인 못 함)."""
+    try:
+        lost = [c for c in session_record.unreadable(path) if c.entry == line.entry]
+    except session_record.Unreadable as exc:
+        return _unchecked(line, raw, str(exc))
+    if lost:
+        return _unchecked(line, raw, "근거가 가리키는 질문 창 호출의 질문을 읽지 못했다", True)
+    return Verdict(MISMATCH, "근거가 가리키는 질문 창 답이 세션 기록에 없다", line, raw)
+
+
+def match(scope: Scope, raw: str) -> Verdict:
+    """대조 판정 — 꼴 판정을 지난 줄을 근거 칸이 가리키는 질문 창 답과 견준다. 날짜는 견주지 않는다(J28)."""
+    first = shape(scope, raw)
+    if first.verdict != PASS:
+        return first
+    line = first.line
+    try:
+        path = session_record.locate(line.session)
+        ans = session_record.find(path, line.key)
+    except session_record.Unreadable as exc:
+        return _unchecked(line, raw, str(exc))
+    if ans is None:
+        return _no_answer(path, line, raw)
+    if ans.who == session_record.UNKNOWN:
+        return _unchecked(line, raw, ans.why, True)
+    if ans.who != session_record.HUMAN:
+        return Verdict(MISMATCH, ans.why or "사람이 질문 창에서 고른 답이 아니다", line, raw)
+    plan = line.plan if line.kind == KIND_PLAN else None
+    if not starts_with_head(ans.question, scope.job, line.rev, plan):
+        return Verdict(MISMATCH, "그 질문은 머리 %s 로 시작하지 않는다" % head(scope.job, line.rev, plan), line, raw)
+    picked = clean_label(ans.label)
+    if picked != line.label:
+        return Verdict(MISMATCH, "사람이 고른 라벨은 「%s」 이다" % picked, line, raw)
+    if line.kind == KIND_SKIP and not names_gate(ans.question, line.gate):
+        return Verdict(MISMATCH, "그 질문에 관문 이름 %s 이 없다" % line.gate, line, raw)
+    for other in scope.lines:
+        twin = parse(other) if other != raw else None
+        if twin is not None and twin.key == line.key:   # 세션이 달라도 같은 답이다(J3)
+            return Verdict(MISMATCH, "같은 답을 근거로 쓴 줄이 또 있다", line, raw)
+    return Verdict(PASS, "질문 창 답 %s:%s 과 맞는다" % (line.session, line.key), line, raw)
+
+
+def needed(stage: str, plan: Optional[int], plain: bool) -> list:
+    """관문 표 — [(종류, 계획 | None), …]. 설계 없는 흐름이면 어느 단계든 흐름 승인 하나."""
+    if plain:
+        return [(k, None) for k in PLAIN_GATES]
+    return [(k, plan if k == KIND_PLAN else None) for k in GATES[stage]]
+
+
+def _skip_gate(kind: str, plan: Optional[int]) -> Optional[str]:
+    if kind == KIND_SPEC or (kind == KIND_PLAN and plan is not None):
+        return gate_name(kind, plan)
+    return None
+
+
+def _dated(raw, kind: str) -> Optional[str]:
+    """`- <종류> · <YYYY-MM-DD> · ` 로 시작하는 줄이면 그 날짜, 아니면 None."""
+    prefix = "- %s · " % kind
+    if not isinstance(raw, str) or not raw.startswith(prefix):
+        return None
+    rest = raw[len(prefix):]
+    if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", rest[:10]) is None or not rest[10:].startswith(" · "):
+        return None
+    return rest[:10]
+
+
+def _names_skip(raw, name: str) -> bool:
+    return isinstance(raw, str) and raw.startswith("- %s · " % KIND_SKIP) and names_gate(raw, name)
+
+
+def _passed_off(scope: Scope, kind: str, plan: Optional[int]) -> tuple:
+    """관문이 꺼졌을 때(J9) — 줄이 있는지만 본다. 세션 기록도 판도 보지 않는다."""
+    why = NO_LINE
+    if kind == KIND_SPEC:
+        try:
+            date = roadmap_model.approval_in(list(scope.lines))
+        except roadmap_model.FormatError as exc:
+            date, why = None, "%s — %s" % (MISMATCH, exc)
+        if date:
+            return Passed(date, False), None
+    else:
+        for raw in scope.lines:
+            date = _dated(raw, kind)
+            if date:
+                return Passed(date, False), None
+    name = _skip_gate(kind, plan)
+    for raw in scope.lines if name is not None else ():
+        if _names_skip(raw, name):
+            return Passed(_dated(raw, KIND_SKIP) or "", True), None
+    return None, why
+
+
+def passed(scope: Scope, kind: str, plan: Optional[int], deep: bool) -> tuple:
+    """관문 하나 — (Passed | None, 사유 | None). deep 이 참이면 대조 판정, 거짓이면 꼴 판정으로 본다."""
+    if not scope.gate_on:
+        return _passed_off(scope, kind, plan)
+    judge = match if deep else shape
+    last = None
+    for raw in scope.lines:
+        if is_human(raw) != kind:
+            continue
+        line = parse(raw)
+        if kind == KIND_PLAN and line is not None and line.plan != plan:
+            continue
+        got = judge(scope, raw)
+        if got.verdict == PASS:
+            return Passed(got.line.date, False), None
+        last = got
+    name = _skip_gate(kind, plan)
+    for raw in scope.lines if name is not None else ():
+        skip = parse(raw) if is_human(raw) == KIND_SKIP else None
+        if skip is not None and skip.gate == name and judge(scope, raw).verdict == PASS:
+            return Passed(skip.date, True), None
+    if last is None:
+        return None, NO_LINE
+    return None, "%s — %s" % (last.verdict, last.why)
+
+
+def missing(scope: Scope, stage: str, plan: Optional[int], plain: bool, deep: bool) -> list:
+    """지나지 못한 관문마다 사유 한 줄 — 관문 표의 차례."""
+    out = []
+    for kind, n in needed(stage, plan, plain):
+        got, why = passed(scope, kind, n, deep)
+        if got is not None:
+            continue
+        where = "" if n is None else "(계획 %d)" % n
+        if why == NO_LINE:
+            out.append("`%s` 줄이 없다%s — 질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 적는다" % (kind, where, kind))
+            continue
+        text = "`%s` 줄이 지나지 못했다%s: %s" % (kind, where, why)
+        if why.startswith(NO_EVIDENCE + " — ") or why.startswith(MISMATCH + " — "):
+            text += " — 질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 다시 적는다" % kind
+        out.append(text)
+    return out
+
+
+def retry_open(scope: Scope, plan: Optional[int], attempt: int, deep: bool) -> bool:
+    """그 시도를 푸는 산 `걸음 건너뜀` 줄(다시 시도)이 있는가."""
+    name = retry_name(plan, attempt)
+    if not scope.gate_on:
+        return any(_names_skip(raw, name) for raw in scope.lines)
+    judge = match if deep else shape
+    for raw in scope.lines:
+        skip = parse(raw) if is_human(raw) == KIND_SKIP else None
+        if skip is not None and skip.gate == name and judge(scope, raw).verdict == PASS:
+            return True
+    return False
+
+
+def collect(git, team, job: str, tips) -> tuple:
+    """(겹침 없는 결정 기록 줄들 — 처음 나온 차례, 알림 줄들). 끝마다 그 과제 INTENT.md 의 결정 기록 줄을 한 번씩 읽는다."""
+    path = team.intent(job)
+    lines, seen, notes, done = [], set(), [], set()
+    for tip in tips:
+        if tip in done:
+            continue
+        done.add(tip)
+        text = git.blob(tip, path)
+        if text is None:
+            if not git.absent(tip, path):
+                notes.append("%s 의 결정 기록을 읽지 못했다 — git 이 %s 를 읽지 못했다" % (tip[:8], team_layout.INTENT_FILE))
+            continue
+        try:
+            found = team_files.decision_lines(text)
+        except roadmap_model.FormatError as exc:
+            notes.append("%s 의 결정 기록을 읽지 못했다 — %s" % (tip[:8], exc))
+            continue
+        for one in found:
+            if one not in seen:
+                seen.add(one)
+                lines.append(one)
+    return tuple(lines), notes
+
+
+def expected(plain: bool, plan_files: list, result_names: list, received_names: list) -> list:
+    """자취로 볼 때 있어야 하는 사람 줄(J24) — [(종류, 계획 | None, 자취 글), …]. 차례는 spec 승인 · 계획 검토(계획 번호 차례)."""
+    results = [(n, team_layout.parse_result_name(n)) for n in sorted(result_names)]
+    results = [(n, r) for n, r in results if r is not None]
+    received = [(n, team_layout.parse_result_name(n)) for n in received_names]
+    if plain:
+        traces = [_HAD % n for n, _ in results] + [_GOT % n for n, _ in received]
+        return [(KIND_FLOW, None, traces[0])] if traces else []
+    out = []
+    spec = [_HAD % n for n in sorted(plan_files)] + [_HAD % n for n, r in results if r[0] in team_layout.PLANNED_STAGES] \
+        + [_GOT % n for n, _ in received]
+    if spec:
+        out.append((KIND_SPEC, None, spec[0]))
+    built = team_layout.PLANNED_STAGES[1:]
+    plans = sorted({r[1] for _, r in results if r[0] in built and r[1] is not None}
+                   | {r[1] for _, r in received if r is not None and r[1] is not None})
+    for n in plans:
+        traces = [_HAD % x for x, r in results if r[0] in built and r[1] == n] \
+            + [_GOT % x for x, r in received if r is not None and r[1] == n]
+        out.append((KIND_PLAN, n, traces[0]))
+    return out
