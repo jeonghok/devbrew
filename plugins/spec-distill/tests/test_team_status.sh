@@ -773,15 +773,20 @@ g checkout -q main && printf '%s\n' '---' 'human_gate: 켬' '---' > "$W/.devbrew
 assert_eq "$(st E3)" "설계 중" "AC20: 설정을 되돌리면 손으로 적은 줄은 다시 지나지 못한다"
 assert_not_contains "$(notes E3) | $(notes E2) | $(js "$T/s.json" "' | '.join([j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'])")" "사람 줄 대조가 꺼져 있다" \
   "AC20: 켜지면 어느 알림에도 그 줄이 없다(양성 대조)"
-# h — 설정을 읽지 못하면 켜진 것으로 본다(J19) — 깨진 .devbrew.md · 손으로 적은 줄(위 d 의 줄이 이 브랜치에 있다)
-g checkout -q main && printf '%s\n' 'frontmatter 가 없는 설정' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "깨진 설정" \
-  && g push -q origin main && g fetch -q origin && restat || fail_step "깨진 설정"
-assert_eq "$(st E3)" "설계 중" "J19: 설정을 읽지 못하면 관문은 켜진 채 — 손으로 적은 줄은 지나지 못한다"
-assert_not_contains "$(notes E3)" "사람 줄 대조가 꺼져 있다" "J19: 설정을 읽지 못한 것은 꺼짐 알림이 아니다"
-# i — 설정에 오류가 있으면(끔 이 적혀 있어도) 켜진 것으로 본다(J19 — errors)
-g checkout -q main && printf '%s\n' '---' 'human_gate: 끔' 'no_such_key: 1' '---' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "오류 있는 설정" \
-  && g push -q origin main && g fetch -q origin && restat || fail_step "오류 있는 설정"
-assert_eq "$(st E3)" "설계 중" "J19: 설정에 오류가 있으면 끔 이 적혀 있어도 관문은 켜진 채"
-assert_not_contains "$(notes E3)" "사람 줄 대조가 꺼져 있다" "J19: 오류 있는 설정은 꺼짐 알림이 아니다"
+# h · i — 설정을 읽지 못하거나 오류가 있으면 켜진 것으로 본다(J19). 현황 보고는 설정 오류를 알 수 없음(3)으로 먼저 올리므로
+# 이 기본값은 Reader 를 직접 불러 잰다(시작 묶음이 Reader 를 따로 만든다)
+gate_of() {  # gate_of <.devbrew.md 글> — 기본 브랜치에 그 설정을 올리고 새 Reader 의 gate_on() 을 낸다
+  g checkout -q main && printf '%s\n' "$1" > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "설정 시험" \
+    && g push -q origin main && g fetch -q origin || { echo "설정 올리기 실패"; return; }
+  python3 - "$S" "$W" <<'PY2'
+import sys
+sys.path.insert(0, sys.argv[1])
+import roadmap_status, team_status
+print(team_status.Reader(roadmap_status.Git(sys.argv[2]), None, None, None).gate_on())
+PY2
+}
+assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\n---')")" "False" "J19 양의 짝: 읽은 설정이 끔 이면 관문이 꺼진다"
+assert_eq "$(gate_of 'frontmatter 가 없는 설정')" "True" "J19: 설정을 읽지 못하면(SettingsError) 관문은 켜진 채"
+assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\nno_such_key: 1\n---')")" "True" "J19: 설정에 오류가 있으면 끔 이 적혀 있어도 관문은 켜진 채"
 T="$T0"
 finish
