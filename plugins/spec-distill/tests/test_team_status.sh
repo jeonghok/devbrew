@@ -127,8 +127,16 @@ assert_eq "$(st E1) · $(why E1)" "설계 중 · 브랜치 있음 · design.md �
 put "$J1/design.md" "$DESIGN" && step "설계문서" || fail_step "설계문서"
 assert_eq "$(st E1) · $(why E1)" "설계 중 · design.md 있음 · spec 승인 줄 없음" "단계: 설계문서가 있어도 승인 줄이 없으면 설계 중"
 assert_eq "$(blk E1 specs)" "['$J1/design.md']" "단계: 설계 흐름의 설계문서는 과제 폴더의 design.md"
-decide E1 "spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」" && step "승인" || fail_step "승인"
+claim || no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"
+decide E1 "spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」" && step "손으로 적은 승인 줄" || fail_step "손으로 적은 승인 줄"
+assert_eq "$(st E1)" "설계 중" "AC8: 손으로 적은 승인 줄로는 계획이 되지 않는다"
+assert_contains "$(why E1)" "design.md 있음 · spec 승인 줄이 지나지 못했다 — 근거 없음" "AC8: 사유에 판정"
+drop "$TM/jobs/E1/INTENT.md" "spec 승인 · 2026-11-20"
+[ "$(human "spec 승인" E1 - - 2026-11-20)" = "0" ] && step "승인" || fail_step "승인"
 assert_eq "$(st E1) · $(why E1)" "계획 · spec 승인됨(2026-11-20) · plan-1.md 없음 · implement 결과 파일 없음" "단계: 승인 줄 — 계획"
+mv "$CLAUDE_CONFIG_DIR" "$T/claude.away" && restat
+assert_eq "$(st E1)" "계획" "AC8: 단계 계산은 세션 기록을 읽지 않는다"
+mv "$T/claude.away" "$CLAUDE_CONFIG_DIR"
 assert_eq "$(rc)" "0" "단계: 계획 — 경고 · 검사 불가가 없다(뒤의 rc 3 단언의 바탕)"
 put "$J1/plan-1.md" "$PLAN1" && step "계획 파일" || fail_step "계획 파일"
 assert_eq "$(st E1)" "계획" "AC9: 계획 파일만 바꾼 커밋으로는 구현 중이 아니다"
@@ -201,7 +209,10 @@ LIT_RC="$(GIT_LITERAL_PATHSPECS=1 status "$T/s.json")"
 assert_eq "$(st E1) · ${LIT_RC}" "구현 중 · 0" "받음: 환경에 GIT_LITERAL_PATHSPECS=1 이 있어도 받은 뒤 고칠 자리가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/b.txt" "받음: 환경에 GIT_LITERAL_PATHSPECS=1 이 있어도 받은 뒤 바뀜 — 고칠 자리"
 back "$RECEIVED_AT"
-sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
+sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 알림 글 | 나중에 정한다 | plan-1.md |" && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "받음: 받은 뒤 바뀜 — design.md"
 back "$RECEIVED_AT"
@@ -705,4 +716,54 @@ assert_contains "$(notes E2)" "세지 않은 결과 파일: implement-plan-1-1.m
   "이름 꼴: 설계 없는 흐름에 번호 붙은 이름이면 맞는 이름을 알린다"
 back "$E2_AT" && restat
 g checkout -q main
+# ── 사람 줄 관문 — 근거 있는 승인 줄만 단계를 넘긴다(AC8 · AC12 · AC20) ──────────────────────────────
+# 새 레포(E3) — 위 레포의 상태와 겹치지 않게 임시 폴더 하나를 더 쓴다
+T0="$T"; T="$T0/gate"; mkdir -p "$T"; W="$T/repo"; export CLAUDE_CONFIG_DIR="$T/claude"
+team_repo && ok "관문 레포를 세웠다(${TM})" || { no "관문 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+J3="$TM/jobs/E3"
+g add -A -- "$RD" && g commit -qm "공통 문서" && g push -q origin main
+claim || no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"
+g checkout -q -b feature/tm-e3 main && put "$J3/design.md" "$(printf '%s' "$DESIGN" | sed 's/^job: E1$/job: E3/')" && step "E3 설계문서" || fail_step "E3 설계문서"
+approved "spec 승인" E3 - - 2026-11-25 && g push -q origin HEAD && restat || fail_step "E3 승인"
+assert_eq "$(st E3) · $(why E3)" "계획 · spec 승인됨(2026-11-25) · plan-1.md 없음 · implement 결과 파일 없음" "AC8: 승인 줄이 지나면 계획(새 레포)"
+G_OK="$(g rev-parse HEAD)"
+# a — 기록 절 · 미룸 절만 고친다
+printf '\n## 지휘 기록\n\n- 메모 하나\n' >> "$W/$J3/design.md"
+sub "$J3/design.md" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 알림 글 | 나중에 정한다 | plan-1.md |" && step "기록 절 · 미룸 절" || fail_step "기록 절 · 미룸 절"
+assert_eq "$(st E3)" "계획" "AC8: 기록 절 · 미룸 절은 승인을 낡게 하지 않는다"
+# b — 본문을 고친다
+sub "$J3/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "본문 고침" || fail_step "본문 고침"
+assert_eq "$(st E3)" "설계 중" "AC8: 승인 뒤 본문을 고치면 설계 중"
+assert_contains "$(why E3)" "낡음" "AC8: 본문을 고친 사유에 낡음"
+G_STALE="$(g rev-parse HEAD)"
+# c — 건너뜀 줄
+approved "걸음 건너뜀" E3 - "spec 승인" 2026-11-26 && g push -q origin HEAD && restat || fail_step "E3 건너뜀"
+assert_eq "$(st E3)" "계획" "AC12: 건너뜀 줄로 지나면 계획"
+case "$(why E3)" in "spec 승인 건너뜀(2026-11-26)"*) ok "AC12: 근거의 앞머리가 spec 승인 건너뜀(2026-11-26)" ;; *) no "AC12: 근거의 앞머리 — $(why E3)" ;; esac
+# d — 건너뜀 줄 없이 관문을 끄고 손으로 적은 줄
+back "$G_STALE"
+g checkout -q main && printf '%s\n' '---' 'human_gate: 끔' '---' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "관문 끔" \
+  && g push -q origin main && g fetch -q origin && g checkout -q feature/tm-e3 || fail_step "관문 끔"
+decide E3 "spec 승인 · 2026-11-27 · 「글」" && step "손으로 적은 승인 줄(관문 꺼짐)" || fail_step "손으로 적은 승인 줄(관문 꺼짐)"
+assert_eq "$(st E3)" "계획" "AC20: 관문이 꺼지면 손으로 적은 줄도 지난다"
+assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E3'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 도는 과제의 첫 알림 줄"
+# e — 설계 없는 흐름 · 로드맵 밖 과제
+g checkout -q -b feature/tm-e2 main && put src/e2/note.txt n && step "E2 시작(관문 꺼짐)" || fail_step "E2 시작(관문 꺼짐)"
+g checkout -q -b chore/tm-gate main
+printf '로드맵 밖 일\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name gate-task --branch chore/tm-gate --paths docs/tv/ --goal "로드맵 밖 일") > "$T/out.txt" 2>&1
+g add -- "$TM/jobs/gate-task" && g commit -qm "과제 gate-task" && g push -q origin chore/tm-gate && g fetch -q origin && restat || fail_step "로드맵 밖 과제"
+assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E2'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 설계 없는 흐름 블록의 첫 알림 줄"
+assert_eq "$(js "$T/s.json" "[j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 로드맵 밖 과제의 첫 알림 줄"
+# f — 브랜치 없는 블록
+assert_not_contains "$(notes E1)" "사람 줄 대조가 꺼져 있다" "AC20: 브랜치 없는 블록(준비)에는 그 줄이 없다"
+# g — 되돌린다(양성 대조)
+g checkout -q main && printf '%s\n' '---' 'human_gate: 켬' '---' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "관문 켬" \
+  && g push -q origin main && g fetch -q origin && restat || fail_step "관문 켬"
+assert_eq "$(st E3)" "설계 중" "AC20: 설정을 되돌리면 손으로 적은 줄은 다시 지나지 못한다"
+assert_not_contains "$(notes E3) | $(notes E2) | $(js "$T/s.json" "' | '.join([j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'])")" "사람 줄 대조가 꺼져 있다" \
+  "AC20: 켜지면 어느 알림에도 그 줄이 없다(양성 대조)"
+T="$T0"
 finish

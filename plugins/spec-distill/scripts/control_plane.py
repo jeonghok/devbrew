@@ -784,7 +784,7 @@ def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
 
 CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "team_layout.py", "section6.py", "brief_body.py", "check_bundle_coverage.py", "control_plane.py",
                     "repo_defaults.py", "conductor_state.py", "team_files.py", "team_check.py", "team_status.py", "job_results.py",
-                    "workflow_superpowers.py", "branch_tip.py", "gh_repo.py")
+                    "workflow_superpowers.py", "branch_tip.py", "gh_repo.py", "human_lines.py", "session_record.py")
 
 
 def code_stamp() -> str:
