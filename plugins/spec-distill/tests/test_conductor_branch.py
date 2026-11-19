@@ -10,6 +10,7 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import unittest
@@ -291,3 +292,194 @@ class OthersTextCannotBuildPaths(StateRepo):
         self.g("update-ref", "refs/heads/conductor/-y", trunk)
         self.g("update-ref", "refs/heads/conductor/" + ALPHA, trunk)
         self.assertEqual(CB.state_names(self.w), sorted([ALPHA, BETA]))
+
+
+def cli(repo, *args, env=None):
+    p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(repo), *args],
+                       cwd=str(repo), env=env or ENV, capture_output=True, encoding="utf-8")
+    return p.returncode, p.stdout + p.stderr
+
+
+class Ensure(StateRepo):
+    def test_creates_an_unrelated_branch_and_touches_no_checkout(self):
+        self.claim()
+        (self.w / "dirty.txt").write_text("x", encoding="utf-8")
+        self.g("add", "dirty.txt")
+        (self.w / rm(ALPHA)).write_text("고친 채 둔 파일\n", encoding="utf-8")
+        before = self.snap()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("만들었다 — conductor/" + ALPHA, out)
+        tip = CB.local_tip(self.w, ALPHA)
+        self.assertEqual(self.g("rev-list", "--count", tip), "1")
+        self.assertEqual(self.g("ls-tree", "-r", tip), "")                                   # 코드가 없다
+        self.assertEqual(self.g("merge-base", "trunk", tip, check=False), "")                # 이력을 나누지 않는다
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), tip)             # origin 에 올라갔다
+        self.assertEqual(self.snap(), before)                                                # HEAD · index · 추적 파일 그대로
+        refs = self.refs()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, self.refs()), (0, refs))                                       # 있으면 아무것도 바꾸지 않는다
+        self.assertIn("있다 — conductor/" + ALPHA, out)
+
+    def test_only_the_marker_holder_writes(self):
+        refs = self.refs()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)   # 표지 없음
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        self.claim(session=OTHER)
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)   # 다른 세션의 표지
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        rc, _ = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", OTHER)   # 양성 대조
+        self.assertEqual(rc, 0)
+
+    def test_rule_refusal_and_off_do_not_create(self):
+        self.claim()
+        self.put({RULE_DOC: RULE_NO})
+        refs_w, refs_o = self.refs(), self.refs(self.o)
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("이 레포의 브랜치 규칙이 conductor/ 를 받지 않는다", out)
+        self.assertEqual((self.refs(), self.refs(self.o)), (refs_w, refs_o))
+        self.put({RULE_DOC: RULE_OK, ".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("상태 브랜치가 꺼져 있다", out)
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
+        self.put({".devbrew.md": "---\nstate_branch: 켬\n---\n"})                     # 양성 대조 — 규칙이 받고 켜져 있으면 만든다
+        rc, _ = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertIsNotNone(CB.local_tip(self.w, ALPHA))
+
+    def test_roadmap_that_is_not_on_the_default_branch_gets_no_branch(self):
+        ghost = "docs/superpowers/roadmaps/2026-09-09-ghost/roadmap.md"
+        self.claim("2026-09-09-ghost")
+        refs = self.refs()
+        rc, out = cli(self.w, "ensure", "--roadmap", ghost, "--session", SID)
+        self.assertEqual((rc, self.refs()), (1, refs), out)
+
+    def test_a_branch_named_conductor_blocks_creation_loudly(self):   # Review Focus 5
+        self.claim()
+        self.g("branch", "conductor", "trunk")
+        before = self.snap()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("refs/heads/conductor", out)
+        self.assertEqual(self.snap(), before)
+
+    def test_no_git_identity_stops_without_leftovers(self):   # Review Focus 3
+        self.claim()
+        for key in ("user.name", "user.email"):
+            self.g("config", "--unset", key)
+        self.g("config", "user.useConfigOnly", "true")
+        refs = self.refs()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, self.refs()), (3, refs), out)
+        self.assertIn("git config user.name", out)
+
+
+class Write(StateRepo):
+    def setUp(self):
+        super().setUp()
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.team = CB.team_of(self.w, rm(ALPHA))
+
+    def put_status(self, text, repo=None):
+        return CB.write(repo or self.w, rm(ALPHA), SID, lambda base: {self.team.status: text}, "STATUS")
+
+    def test_one_write_is_one_commit_and_no_checkout_moves(self):
+        linked = self.t / "linked"
+        self.g("worktree", "add", "-q", str(linked), "-b", "feature/x", "trunk")
+        (linked / "wip.txt").write_text("x", encoding="utf-8")
+        before = (self.snap(), self.snap(linked))
+        first = CB.local_tip(self.w, ALPHA)
+        r1 = self.put_status("하나\n")
+        r2 = self.put_status("둘\n", repo=linked)                       # 다른 worktree 에서 불러도 같은 브랜치에 쓴다
+        self.assertEqual((self.snap(), self.snap(linked)), before)
+        self.assertEqual(self.g("rev-list", "--count", r2.commit), "3")
+        self.assertEqual((self.g("rev-parse", r1.commit + "^"), self.g("rev-parse", r2.commit + "^")), (first, r1.commit))
+        self.assertEqual(CB.read(self.w, r2.commit, self.team.status), "둘\n")
+        self.assertTrue(r2.pushed)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), r2.commit)
+        self.assertRegex(self.g("log", "-1", "--format=%s", r2.commit), r"^chore\(conductor\): STATUS · 세션 aaaa1111$")
+
+    def test_nothing_changed_writes_nothing(self):
+        r = self.put_status("같다\n")
+        refs = self.refs()
+        again = self.put_status("같다\n")
+        self.assertEqual((again.commit, self.refs()), (None, refs))
+        self.assertIsNone(CB.write(self.w, rm(ALPHA), SID, lambda base: None, "빈 고침").commit)
+        self.assertIsNotNone(r.commit)
+
+    def test_delete_and_nested_paths(self):
+        letter = self.team.inbox + "/" + BETA + "/2026-11-19-01.md"
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: "글\n", self.team.status: "s\n"}, "둘")
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: None}, "지움")
+        self.assertEqual([p for _m, p in CB.names(self.w, r.commit, self.team.dir + "/")], [self.team.status])
+
+    def test_paths_outside_the_roadmap_folder_are_refused(self):
+        refs = self.refs()
+        for path in ("src/code.py", self.team.dir + "/../x.md", "/abs.md", rm(BETA)):
+            with self.assertRaises(CB.BranchError, msg=path) as c:
+                CB.write(self.w, rm(ALPHA), SID, lambda base: {path: "x\n"}, "밖")
+            self.assertEqual(c.exception.rc, 3)
+        self.assertEqual(self.refs(), refs)
+
+    def test_ref_moves_only_from_the_tip_that_was_read(self):
+        """읽은 뒤 다른 쓰기가 끼어들면 그 커밋 위에서 다시 만든다. 뒤집으면 붉다 — update-ref 의 옛 값 인자를 빼면 ref 가
+        그대로 덮여 edit 가 한 번만 불리고(calls[1] 이 없다) 끼어든 커밋이 내 커밋의 조상이 아니게 된다."""
+        calls, intruder = [], []
+
+        def edit(base):
+            calls.append(base.commit)
+            if len(calls) == 1:   # 첫 읽기와 ref 옮기기 사이에 다른 쓰기가 끼어든다
+                tree = self.g("rev-parse", base.commit + "^{tree}")
+                intruder.append(self.g("commit-tree", tree, "-p", base.commit, "-m", "끼어든 쓰기"))
+                self.g("update-ref", CB.ref_of(ALPHA), intruder[0], base.commit)
+            return {self.team.status: "내 쓰기\n"}
+        r = CB.write(self.w, rm(ALPHA), SID, edit, "STATUS")
+        self.assertEqual(calls[1], intruder[0])
+        self.assertEqual(self.g("rev-parse", r.commit + "^"), intruder[0])
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", intruder[0], r.commit), 0)   # 종료 코드로 잰다 — 이 명령은 출력이 없다
+        self.assertEqual(len(calls), 2)
+
+    def test_write_before_ensure_and_without_the_marker(self):
+        with self.assertRaises(CB.BranchError) as c:
+            CB.write(self.w, rm(ALPHA), OTHER, lambda base: {self.team.status: "x\n"}, "STATUS")
+        self.assertEqual(c.exception.rc, 5)
+        self.claim(BETA)
+        with self.assertRaises(CB.BranchError) as c:
+            CB.write(self.w, rm(BETA), SID, lambda base: {CB.team_of(self.w, rm(BETA)).status: "x\n"}, "STATUS")
+        self.assertEqual(c.exception.rc, 1)
+
+    def test_shallow_clone_writes(self):
+        d = self.clone("sh", "--depth", "1", "--no-local")
+        self.assertEqual(self.g("rev-parse", "--is-shallow-repository", repo=d), "true")
+        self.claim(repo=d)
+        before = self.snap(d)
+        CB.ensure(d, rm(ALPHA), SID)                                # 원격에 이미 있다 — 과제 6 이 받아 오게 한다. 이 과제에서는 만들기만 본다
+        r = CB.write(d, rm(ALPHA), SID, lambda base: {self.team.status: "얕은 클론\n"}, "STATUS")
+        self.assertIsNotNone(r.commit)
+        self.assertEqual(self.snap(d), before)
+
+
+class WriteBoundary(unittest.TestCase):
+    """경계 락 — 쓰기 바닥이 쓰는 git 명령 · 쓰면 안 되는 이름을 파일 본문으로 읽는다."""
+    SRC = (SCRIPTS / "conductor_branch.py").read_text(encoding="utf-8")
+
+    def test_write_floor_uses_only_plumbing_and_never_touches_the_checkout(self):
+        for word in ("checkout", "switch", "worktree", "stash", "reset", "rebase", "commit", "merge"):
+            self.assertNotIn(word, CB.GIT_ALLOWED, word)
+        for word in ("hash-object", "read-tree", "update-index", "write-tree", "commit-tree", "update-ref", "push"):
+            self.assertIn(word, CB.GIT_ALLOWED, word)
+        calls = set(re.findall(r'git\(\s*root,\s*"([a-z-]+)"', self.SRC))
+        self.assertTrue(calls <= CB.GIT_ALLOWED, calls - CB.GIT_ALLOWED)
+        self.assertIn("GIT_INDEX_FILE", self.SRC)      # 임시 index — 작업 폴더의 index 를 쓰지 않는다
+        self.assertNotIn('"add"', self.SRC)
+
+    def test_update_ref_always_carries_the_old_value(self):
+        self.assertRegex(self.SRC, r'"update-ref",\s*ref_of\(name\),\s*commit,\s*tip or ZERO_OID')
+        self.assertEqual(CB.ZERO_OID, "0" * 40)
+
+    def test_not_pushed_label_and_result_shape(self):
+        self.assertEqual(CB.NOT_PUSHED, "아직 안 올라옴")
+        self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes"))
+        self.assertEqual(CB.Base._fields, ("commit", "read", "names"))
