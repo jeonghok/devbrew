@@ -1330,11 +1330,11 @@ grep -qF '새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 �
 # Task 11b: 절 전문이 $SEED_REF 로 옮겨갔다 — 윈도우도 거기서 뜬다.
 seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SEED_REF")"
 seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
-# 리터럴은 finishing.md 의 S1 규약("<「풀린 입력」 원문 그대로>", frontmatter 포함)과 같은
-# 값을 요구한다 — "seed 본문 전체"라는 표현은 frontmatter 제외로 읽힐 수 있어 규약과 갈린다.
-{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 「풀린 입력」 원문 그대로다' <<<"$seed_flat"; } \
-  && ok "v0.41.0: seed 본문이 §6 S1 이 된다 (finishing.md S1 규약과 같은 값)" \
-  || no "v0.41.0: seed 본문 = §6 S1 규약이 없다"
+# 리터럴은 finishing.md 의 S1 규약(첫 칸은 seed 가 아니라 framing 기록의 원자료 — 찾지 못했을 때만
+# 「풀린 입력」)과 같은 값을 요구한다.
+{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 seed 가 아니라 원자료다' <<<"$seed_flat"; } \
+  && ok "v0.41.0: §6 S1 은 seed 가 아니라 원자료다 (finishing.md S1 규약과 같은 값)" \
+  || no "v0.41.0: §6 S1 = 원자료 규약이 없다"
 grep -qF '다시 검증할 것' <<<"$seed_flat" \
   && ok "AC11: seed 의 «다시 검증할 것» 문단을 R1/coverage-mapper 입력으로" \
   || no "AC11: seed 재검증 문단 소비 부재"

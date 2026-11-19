@@ -56,7 +56,7 @@ admit 판정은 orchestrator가 합니다(G2, Law 2).
 
 ## Input
 
-- seed 전문(S1)과 그 «다시 검증할 것» 문단(있으면).
+- seed 전문(모델이 줄인 글)과 그 «다시 검증할 것» 문단(있으면).
 - 원장 상태(floor + 이미 admit된 derived).
 - 재개방 dispatch면 그 차원의 `reopen_log` 마지막 항목.
 - (있으면) 현재까지의 사용자 제약 요지, External Landscape 발췌.
