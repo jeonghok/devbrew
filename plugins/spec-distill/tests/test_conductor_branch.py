@@ -414,6 +414,7 @@ class Write(StateRepo):
         CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: "글\n", self.team.status: "s\n"}, "둘")
         r = CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: None}, "지움")
         self.assertEqual([p for _m, p in CB.names(self.w, r.commit, self.team.dir + "/")], [self.team.status])
+        self.assertEqual([m for m, _p in CB.names(self.w, r.commit, self.team.dir + "/")], ["100644"])   # 보통 파일 모드로 쓴다
 
     def test_paths_outside_the_roadmap_folder_are_refused(self):
         refs = self.refs()
