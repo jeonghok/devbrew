@@ -379,7 +379,7 @@ def _gate_reasons(scope, result: str, plain: bool) -> list:
         return []
     stage, plan = parsed[0], parsed[1]
     out = []
-    if not plain and plan is None and stage in team_layout.PLANNED_STAGES[1:]:   # 계획 번호가 없으면 계획 검토 관문을 고를 수 없다
+    if scope.gate_on and not plain and plan is None and stage in team_layout.PLANNED_STAGES[1:]:   # 켜져 있으면 계획 번호 없는 이름은 계획 검토 줄을 고를 수 없어 어차피 지나지 못한다 — 사유만 또렷이. 꺼졌으면 J9(줄의 유무)
         out.append("결과 파일 이름에 계획 번호가 없어 `%s` 관문을 볼 수 없다: %s — `%s-plan-<n>-<시도>.md` 꼴로 쓴다"
                    % (human_lines.KIND_PLAN, result, stage))
     return human_lines.missing(scope, stage, plan, plain, deep=True) if not out else \

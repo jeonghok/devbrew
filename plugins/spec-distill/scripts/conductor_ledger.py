@@ -1289,6 +1289,33 @@ def _check_traces(rs, team, job: str, tips: list) -> tuple:
     return sorted(plans), sorted(results), got
 
 
+NOT_COUNTED = "줄로 세지 않는다"
+
+
+def _counts_off(scope, raw: str) -> bool:
+    """관문이 꺼졌을 때(J9) 이 줄 하나가 관문을 지나는 줄로 세어지는가 — 결과 대조가 쓰는 `passed` 에 그 줄만 넣어 묻는다."""
+    kind = HL.is_human(raw)
+    one = HL.Scope(scope.git, scope.team, scope.job, scope.tip, (raw,), False)
+    if kind != HL.KIND_SKIP:
+        return HL.passed(one, kind, None, deep=True)[0] is not None
+    named = HL.gate_names_in(raw)
+    if len(named) != 1:
+        return False
+    if named[0].startswith("다시 시도"):
+        return HL.retry_open(one, *_retry_of(named[0]), deep=True)
+    m = re.fullmatch(r"계획 검토 plan ([0-9]+)", named[0])
+    if m:
+        return HL.passed(one, HL.KIND_PLAN, int(m.group(1)), deep=True)[0] is not None
+    return HL.passed(one, HL.KIND_SPEC, None, deep=True)[0] is not None
+
+
+def _retry_of(gate: str) -> tuple:
+    m = re.fullmatch(r"다시 시도 plan ([0-9]+) 시도 ([0-9]+)", gate)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None, int(gate.rsplit(" ", 1)[1])
+
+
 def _has_kind(scope, kind: str, plan: Optional[int]) -> bool:
     """그 종류(와 계획)의 줄이 하나라도 있는가 — 그 관문 이름의 건너뜀 줄도 센다. 꼴을 못 읽은 계획 검토 줄은 어느 계획의 것인지 모른다."""
     name = HL.gate_name(kind, plan) if kind in (HL.KIND_SPEC, HL.KIND_PLAN) else None
@@ -1325,7 +1352,12 @@ def c_human_check(root, a) -> int:
             continue
         shown += 1
         if not gate_on:
-            out.append("%s — %s" % (HL.PASS, raw))
+            if _counts_off(scope_at(main), raw):
+                out.append("%s — %s" % (HL.PASS, raw))
+            else:
+                out.append("%s — %s" % (NOT_COUNTED, raw))
+                out.append("    사유: 꺼진 대조(J9)는 날짜 칸 · 관문 이름이 맞는 줄만 줄로 센다")
+                ok = False
             continue
         parsed = HL.parse(raw)
         got = HL.match(scope_at(pick(parsed.plan if parsed is not None else None)), raw)
@@ -1336,8 +1368,8 @@ def c_human_check(root, a) -> int:
     plans, results, received = _check_traces(rs, team, a.job, every)
     for kind, plan, trace in HL.expected(plain, plans, results, received):
         scope = scope_at(pick(plan))
-        if HL.passed(scope, kind, plan, deep=True)[0] is not None or _has_kind(scope, kind, plan):
-            continue
+        if HL.passed(scope, kind, plan, deep=True)[0] is not None or (gate_on and _has_kind(scope, kind, plan)):
+            continue   # 꺼졌으면 결과 대조와 같은 길(passed — 줄의 유무) 하나로만 본다
         out.append("줄 없음 — `%s` 줄%s" % (kind, "" if plan is None else "(계획 %d)" % plan))
         out.append("    사유: %s" % trace)
         shown += 1

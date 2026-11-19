@@ -498,7 +498,7 @@ start_bundle.py --roadmap <로드맵> --role leader
 원자료: <기준 커밋>:<원자료 경로> 23–57행 · 75–87행
 읽을 것: <경로> · <경로> …
 쓸 것: <결과 파일 경로>
-맞추는 명령: python3 <roadmap_write.py 의 절대 경로> job sync --result <쓸 것> --role <역할> --bundle-at <기준 커밋> --job-at <과제 브랜치 커밋>
+맞추는 명령: python3 "<roadmap_write.py 의 절대 경로>" job sync --result <쓸 것> --role <역할> --bundle-at <기준 커밋> --job-at <과제 브랜치 커밋>
 쓸 자리: <설계 또는 계획 파일>   ← design · plan 만
 역할 문서 (<기준 커밋>):
 <그 역할 문서의 내용>
