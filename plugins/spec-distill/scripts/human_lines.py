@@ -50,6 +50,7 @@ _LINE_RE = re.compile(
 _SKIP_GATES = (re.compile(r"spec 승인"), re.compile(r"계획 검토 plan %s" % _NUM))
 _RETRY_GATES = (re.compile(r"다시 시도 plan %s 시도 %s" % (_NUM, _NUM)), re.compile(r"다시 시도 구현 시도 %s" % _NUM))
 _GATE_PLAN_RE = re.compile(r".* plan ([1-9][0-9]*)(?: .*)?")
+_GATE_NAME_RE = re.compile(r"spec 승인|계획 검토 plan %s|다시 시도 plan %s 시도 %s|다시 시도 구현 시도 %s" % (_NUM, _NUM, _NUM, _NUM))
 
 
 class Line(NamedTuple):
@@ -194,6 +195,17 @@ def names_gate(text: str, name: str) -> bool:
     return False
 
 
+def gate_names_in(text: str) -> list:
+    """글에 든 건너뜀 · 다시 시도 관문 이름들(처음 나온 차례 · 겹침 없이). 이름 바로 뒤에 숫자가 이어지면 그 이름이 아니다."""
+    out = []
+    for m in _GATE_NAME_RE.finditer(text if isinstance(text, str) else ""):
+        if m.end() < len(text) and "0" <= text[m.end()] <= "9":
+            continue
+        if m.group(0) not in out:
+            out.append(m.group(0))
+    return out
+
+
 def _heading_level(line: str) -> int:
     if line.startswith("### "):
         return 3
@@ -205,7 +217,13 @@ def _heading_level(line: str) -> int:
 
 
 def _is_head(line: str, title: str) -> bool:
-    return line == title or line.startswith(title + " ")
+    """제목이 정확히 title 이다. `## 구현 대조` 만 `## 구현 대조 — <계획 파일 경로>` 꼴도 받는다(설계 §2 「본문」)."""
+    if line == title:
+        return True
+    if not line.startswith(roadmap_model.IMPL_PREFIX) or title != roadmap_model.IMPL_PREFIX[:-3]:
+        return False
+    path = line[len(roadmap_model.IMPL_PREFIX):]
+    return path.endswith(".md") and len(path) > 3 and path.split() == [path]
 
 
 def _trim_blank_tail(lines: list) -> str:
@@ -345,6 +363,9 @@ def match(scope: Scope, raw: str) -> Verdict:
         return Verdict(MISMATCH, "사람이 고른 라벨은 「%s」 이다" % picked, line, raw)
     if line.kind == KIND_SKIP and not names_gate(ans.question, line.gate):
         return Verdict(MISMATCH, "그 질문에 관문 이름 %s 이 없다" % line.gate, line, raw)
+    named = gate_names_in(ans.question) if line.kind == KIND_SKIP else []
+    if len(named) > 1:   # 질문 하나가 관문 하나만 가리킨다 — 한 번의 답으로 묻지 않은 관문의 줄을 지어내지 못하게
+        return Verdict(MISMATCH, "그 질문에 관문 이름이 둘 이상 있다(%s) — 관문마다 따로 묻는다" % " · ".join(named), line, raw)
     for other in scope.lines:
         twin = parse(other) if other != raw else None
         if twin is not None and twin.key == line.key:   # 세션이 달라도 같은 답이다(J3)
@@ -442,25 +463,26 @@ def missing(scope: Scope, stage: str, plan: Optional[int], plain: bool, deep: bo
             continue
         where = "" if n is None else "(계획 %d)" % n
         if why == NO_LINE:
-            out.append("`%s` 줄이 없다%s — %s" % (kind, where, _write_hint(kind, scope.gate_on, False)))
+            out.append("`%s` 줄이 없다%s — %s" % (kind, where, _write_hint(scope, kind, False)))
             continue
         text = "`%s` 줄이 지나지 못했다%s: %s" % (kind, where, why)
         if why.startswith(NO_EVIDENCE + " — ") or why.startswith(MISMATCH + " — "):
-            text += " — " + _write_hint(kind, scope.gate_on, True)
+            text += " — " + _write_hint(scope, kind, True)
         out.append(text)
     return out
 
 
-def _write_hint(kind: str, gate_on: bool, again: bool) -> str:
+def _write_hint(scope: Scope, kind: str, again: bool) -> str:
     """줄을 (다시) 적는 길. 켜져 있으면 질문 창 답에서만(`record --human`), 꺼져 있으면 글로(§8 — 설계 승인은 옛 방식,
     나머지 종류는 `record --line`)."""
     verb = "다시 적는다" if again else "적는다"
-    if gate_on:
+    at = scope.team.intent(scope.job)   # 과제 폴더 안 경로면 record 가 그 과제의 INTENT.md 에 쓴다
+    if scope.gate_on:
         return "질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 %s" % (kind, verb)
     if kind == KIND_SPEC:
-        how = "`conductor_ledger.py record --approval --choice \"<고른 글>\"`"
+        how = "`conductor_ledger.py record --spec %s --approval --date <YYYY-MM-DD> --choice \"<고른 글>\"`" % at
     else:
-        how = "`conductor_ledger.py record --line \"%s · <YYYY-MM-DD> · 「<고른 글>」\"`" % kind
+        how = "`conductor_ledger.py record --spec %s --line \"%s · <YYYY-MM-DD> · 「<고른 글>」\"`" % (at, kind)
     return "%s — 글로 %s: %s" % (GATE_OFF, verb, how)
 
 

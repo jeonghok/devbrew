@@ -112,6 +112,33 @@ class ShapeVerdict(Repo):
             self.assertEqual((none.verdict, none.line), (H.NO_EVIDENCE, None))
 
 
+class RecordHeads(Repo):   # 설계 §2 「본문」 — 기록 절은 정확한 제목과 구현 대조의 정해진 꼬리만
+    def test_suffixed_titles_are_body(self):
+        base = H.body_of("design.md", DESIGN)
+        impl = DESIGN + "\n## 구현 대조 — docs/superpowers/plans/x-plan1.md\n\n- 대조 줄\n"
+        self.assertEqual(H.body_of("design.md", impl), base)                              # 정해진 꼬리는 기록 절이다
+        self.assertEqual(H.body_of("design.md", DESIGN + "\n## 구현 대조\n\n- 대조 줄\n"), base)
+        for heading in ("## 미룸 그리고 새 설계", "## 결정 기록 더함", "## 구현 대조 —", "## 구현 대조 — ", "## 구현 대조 — 경로 둘.md",
+                        "## 구현 대조 — x-plan1.txt", "## 판정들"):
+            self.assertNotEqual(H.body_of("design.md", DESIGN + "\n%s\n\n설계 글\n" % heading), base, heading)
+        deferred = DESIGN.split("### Deferred to plan\n", 1)
+        self.assertNotEqual(H.body_of("design.md", deferred[0] + "### Deferred to plan 2\n" + deferred[1]), base)
+        self.assertEqual(H.body_of("design.md", DESIGN.split("| 항목 |", 1)[0] + "| 항목 |\n| 바뀐 미룬 항목 |" + DESIGN.split("| 항목 |", 1)[1]), base)   # 양성 대조
+
+    def test_design_under_a_suffixed_title_goes_stale(self):
+        path = TEAM.design(JOB)
+        sneaky = DESIGN + "\n## 미룸 그리고 새 설계\n\n승인 때의 글\n"
+        c1 = self.commit(path, sneaky, "설계")
+        c2 = self.commit(path, sneaky.split("승인 때의 글")[0] + "승인 뒤 바꾼 설계\n", "기록 절처럼 보이는 제목 아래 고침")
+        line = H.render(H.KIND_SPEC, "2026-11-18", "승인 — 계획 담당자에게", "design.md", c1[:8], S, E + "#1")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/nonexistent/claude"}):
+            self.assertEqual(H.shape(self.scope(c2), line).verdict, H.STALE)
+            c0 = self.commit(path, DESIGN, "되돌림")
+            line0 = H.render(H.KIND_SPEC, "2026-11-18", "승인 — 계획 담당자에게", "design.md", c0[:8], S, E + "#1")
+            c4 = self.commit(path, DESIGN + "\n## 구현 대조 — docs/superpowers/plans/x-plan1.md\n\n- 대조\n", "구현 대조 절 다시")
+            self.assertEqual(H.shape(self.scope(c4), line0).verdict, H.PASS)            # 양성 대조 — 기록 절만 더했다
+
+
 class SeededRepo(Repo):
     """c1 설계 · c2 plan-1.md · c3 plan-2.md · c4 INTENT.md — 파일마다 다른 커밋이다. tip = c4."""
 
@@ -227,6 +254,30 @@ class Match(SeededRepo):
         one = re.sub("계획 검토 plan 12 · ", "계획 검토 plan 1 · ", twelve)
         self.assertEqual(H.parse(one).gate, "계획 검토 plan 1")
         self.assertEqual(self.v(one), H.MISMATCH)
+
+    def test_skip_question_names_only_its_gate(self):   # 설계 §2 · §4 · AC5 — 질문 하나가 관문 하나만 가리킨다
+        head = H.head(JOB, self.c4[:8])
+        both = head + " — spec 승인 은 받았다. 계획 검토 plan 2 를 건너뛸까요"
+        self.assertEqual(H.gate_names_in(both), ["spec 승인", "계획 검토 plan 2"])
+        real2 = self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2", question=both)
+        forged = re.sub("계획 검토 plan 2 · ", "spec 승인 · ", real2)                       # 묻지 않은 관문의 줄을 지어냈다
+        for raw in (real2, forged):
+            got = H.match(self.scope(self.tip, (raw,)), raw)
+            self.assertEqual(got.verdict, H.MISMATCH, raw)
+            self.assertIn("관문 이름이 둘 이상", got.why)
+        self.assertEqual(H.passed(self.scope(self.tip, (forged,)), H.KIND_SPEC, None, True)[0], None)
+        plans = head + " — 계획 검토 plan 1 과 계획 검토 plan 2 를 건너뛸까요"
+        p1 = self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 1", question=plans)
+        self.assertEqual([self.v(p1), self.v(re.sub("계획 검토 plan 1 · ", "계획 검토 plan 2 · ", p1))], [H.MISMATCH, H.MISMATCH])
+        retries = head + " — 다시 시도 plan 1 시도 3 · 다시 시도 plan 1 시도 4"
+        self.assertEqual(self.v(self.approve(self.tip, H.KIND_SKIP, gate="다시 시도 plan 1 시도 3", question=retries)), H.MISMATCH)
+        mixed = head + " — 다시 시도 구현 시도 3 (다시 시도 plan 1 시도 3 아님)"
+        self.assertEqual(self.v(self.approve(self.tip, H.KIND_SKIP, gate="다시 시도 구현 시도 3", question=mixed)), H.MISMATCH)
+        once = head + " — 계획 검토 plan 2 를 건너뛸까요 (계획 검토 plan 2 만)"                # 양성 대조 — 같은 이름을 두 번 쓴 것은 하나다
+        self.assertEqual(H.gate_names_in(once), ["계획 검토 plan 2"])
+        self.assertEqual(self.v(self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2", question=once)), H.PASS)
+        self.assertEqual(H.gate_names_in(head + " — 계획 검토 plan 12 · spec 승인2 · 계획 검토 plan 01"), ["계획 검토 plan 12"])   # 숫자가 이어지면 그 이름이 아니다
+        self.assertEqual(H.gate_names_in(head + " — 다시 시도 plan 1 시도 31"), ["다시 시도 plan 1 시도 31"])
 
     def test_changed_record_shapes_are_unchecked(self):   # J33 — 조용히 「어긋남」 이 되지 않는다
         for drop in (("isSidechain",), ("sourceToolAssistantUUID",), ("answers",), ("toolUseResult",), ("timestamp",)):
@@ -374,11 +425,13 @@ class Gates(SeededRepo):
 
     def test_gate_off_guidance_writes_by_text(self):   # §8 — 꺼져 있으면 질문 창 답이 아니라 글로 적는다
         off = self.miss([], "implement", 1, gate_on=False)
-        self.assertEqual(off, ["`spec 승인` 줄이 없다 — 사람 줄 대조가 꺼져 있다 — 글로 적는다: `conductor_ledger.py record --approval --choice \"<고른 글>\"`",
+        at = TEAM.intent(JOB)                                                             # 과제 폴더 안 경로면 record 가 그 과제의 INTENT.md 에 쓴다
+        self.assertEqual(off, ["`spec 승인` 줄이 없다 — 사람 줄 대조가 꺼져 있다 — 글로 적는다: "
+                               "`conductor_ledger.py record --spec %s --approval --date <YYYY-MM-DD> --choice \"<고른 글>\"`" % at,
                                "`계획 검토` 줄이 없다(계획 1) — 사람 줄 대조가 꺼져 있다 — 글로 적는다: "
-                               "`conductor_ledger.py record --line \"계획 검토 · <YYYY-MM-DD> · 「<고른 글>」\"`"])
+                               "`conductor_ledger.py record --spec %s --line \"계획 검토 · <YYYY-MM-DD> · 「<고른 글>」\"`" % at])
         flow = self.miss([], "implement", None, plain=True, gate_on=False)[0]
-        self.assertIn('record --line "흐름 승인 · ', flow)
+        self.assertIn('record --spec %s --line "흐름 승인 · ' % TEAM.intent(JOB), flow)
         on = self.miss([], "implement", 1)                                               # 양성 대조 — 켜져 있으면 질문 창 답에서만
         self.assertTrue(all("record --human" in x and "--line" not in x and "--approval" not in x for x in on), on)
         self.assertTrue(all("record --human" not in x for x in off + [flow]), off)
@@ -389,7 +442,7 @@ class Gates(SeededRepo):
         self.assertEqual(got, None)
         self.assertTrue(why.startswith("어긋남 — "), why)
         text = self.miss([bad], "plan", 1, gate_on=False)[0]
-        self.assertTrue(text.startswith("`spec 승인` 줄이 지나지 못했다: 어긋남 — ") and "record --approval --choice" in text, text)
+        self.assertTrue(text.startswith("`spec 승인` 줄이 지나지 못했다: 어긋남 — ") and "record --spec %s --approval --date <YYYY-MM-DD> --choice" % TEAM.intent(JOB) in text, text)
         skip_spec = "- 걸음 건너뜀 · 2026-11-18 · 「건너뛴다」 · spec 승인"
         self.assertEqual(H.passed(self.scope(self.tip, (bad, skip_spec), False), H.KIND_SPEC, None, True), (H.Passed("2026-11-18", True), None))
         dateless = "- 걸음 건너뜀 · 「건너뛴다」 · 계획 검토 plan 1"
