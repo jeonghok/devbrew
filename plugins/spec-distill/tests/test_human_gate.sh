@@ -145,5 +145,102 @@ B="$(g rev-parse origin/main)"
 assert_eq "$(sed -n 1p "$T/b.txt")" "기준 커밋: ${B} · 과제 브랜치 ${B}" "C2: 첫 줄은 기준 커밋 둘"
 assert_eq "$(sed -n 2p "$T/b.txt")" "알림: 과제 브랜치 feature/tm-e1b 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다" "C2: 둘째 브랜치 없음 알림"
 
+# ── 묶음 D — 연속 실패 멈춤 · 머지된 계획(AC13 · AC14). 이 묶음의 E1 은 새 레포에서 설계 · 계획 · 승인을 갖춘다 ──
+new_repo "$T0/d" && ok "D: 팀 레포를 세웠다" || { no "D: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+g checkout -q -b feature/tm-e1 main
+put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
+g commit -qm "E1 설계" && push_br feature/tm-e1
+approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+put "$E1/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다.\n')"
+g commit -qm "E1 계획 1" && push_br feature/tm-e1
+approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+D_IMPL=(--job E1 --stage implement --plan 1)
+finish_attempt() {  # finish_attempt <k> [AC 줄] — 받은 묶음의 맞추는 명령 줄 그대로 implement-plan-1-<k>.md 를 만들고, 준 줄을 넣고, 끝 줄을 적어 올린다
+  local k="$1" ac="${2:-}" cmd code
+  g checkout -q feature/tm-e1
+  [ "$(bundle "${D_IMPL[@]}")" = "0" ] || { echo "finish_attempt ${k}: 묶음이 나가지 않았다 — $(cat "$T/b.err")" >&2; return 1; }
+  cmd="$(grep '^맞추는 명령: ' "$T/b.txt")"
+  (cd "$W" && bash -c "${cmd#맞추는 명령: }") > "$T/out.txt" 2>&1 || { echo "finish_attempt ${k}: 맞추기 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  put "src/e1/a${k}.txt" "시도 ${k}" && g commit -qm "시도 ${k} 코드" && code="$(g rev-parse HEAD)"
+  [ -z "$ac" ] || printf '%s\n' "$ac" >> "$W/$E1/results/implement-plan-1-${k}.md"
+  [ "$(sync E1 "implement-plan-1-${k}.md" --end "$code")" = "0" ] || { echo "finish_attempt ${k}: 끝 줄 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  g add -- "$E1" && g commit -qm "결과 ${k}" && push_br feature/tm-e1
+}
+write_line() { sed -n 's/^쓸 것: //p' "$T/b.txt"; }
+
+finish_attempt 1 && ok "20: 준비 — 시도 1 을 끝냈다(받음 줄 없음)" || no "20: 준비 — 시도 1"
+check 0 "20: 실패 하나로는 멈추지 않는다" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-2.md" "20: 쓸 것은 시도 2"
+put "$E1/results/BLOCKED.md" "$(printf -- '---\ntype: job-blocked\nhead: %s\n---\n\n## 무엇에 막혔나\n\n자리표시\n\n## 풀려면 무엇이 필요한가\n\n자리표시\n' "$(g rev-parse HEAD)")"
+g commit -qm "막힘 파일" && push_br feature/tm-e1
+check 0 "21: 실패 하나와 막힘 파일로는 멈추지 않는다(AC13 — 막힘을 세면 여기서 멈춘다)" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-2.md" "21: 쓸 것은 여전히 시도 2"
+finish_attempt 2 && ok "22: 준비 — 시도 2 를 끝냈다(받음 줄 없음)" || no "22: 준비 — 시도 2"
+check 1 "22: 이어진 실패 둘이면 멈춘다(AC13)" "${D_IMPL[@]}"
+assert_contains "$(err)" "구현 시도 2번이 이어서 받아지지 않았다" "22: 이어진 수는 둘(막힘 파일을 세지 않는다)"
+assert_not_contains "$(err)" "구현 시도 3번" "22: 막힘 파일이 수를 늘리지 않는다"
+assert_contains "$(err)" "다시 시도 plan 1 시도 3" "22: 푸는 관문 이름은 시도 3"
+check 0 "23: 계획 단계에는 이 멈춤이 없다" --job E1 --stage plan --plan 1
+check 0 "23: 설계 단계에도 없다" --job E1 --stage design
+approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 3" 2026-11-23 && push_br feature/tm-e1
+check 0 "24: 다시 시도 줄이 시도 3 을 푼다" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-3.md" "24: 쓸 것은 시도 3"
+finish_attempt 3 && ok "25: 준비 — 시도 3 을 끝냈다(받음 줄 없음)" || no "25: 준비 — 시도 3"
+check 1 "25: 그 줄은 시도 3 하나만 풀었다" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 4" "25: 다음 관문은 시도 4"
+HEAD3="$(sed -n 's/^head: //p' "$W/$E1/results/implement-plan-1-3.md")"
+decide E1 "- 결과 받음 · 2026-11-24 · 「implement-plan-1-3.md · ${HEAD3} · 결과 대조: 통과 — 자리표시」" && g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 받음 줄" && push_br feature/tm-e1
+check 1 "26: 손으로 적은 받음 줄로는 멈춤이 풀리지 않는다(AC13 — 결과 파일이 대조를 지나지 못한다)" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 4" "26: 여전히 시도 4 의 관문"
+approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 4" 2026-11-24 && push_br feature/tm-e1
+finish_attempt 4 "AC1: 구현됨 — 자리표시" && ok "27: 준비 — 시도 4 를 AC 줄과 함께 끝냈다" || no "27: 준비 — 시도 4"
+(cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" --job E1 --result implement-plan-1-4.md --branch feature/tm-e1 --date 2026-11-25) > "$T/check.txt" 2>&1
+assert_eq "$?" "0" "27: 시도 4 의 결과 대조가 통과한다"
+RLINE="$(grep '^- 결과 받음 · ' "$T/check.txt")"
+assert_eq "$(led record --spec "$E1/INTENT.md" --line "$RLINE")" "0" "27: 받음 줄을 record 로 적었다"
+g add -- "$E1/INTENT.md" && g commit -qm "받음 줄 — 시도 4" && push_br feature/tm-e1
+check 0 "27: 결과 대조를 지난 받음 줄이 이어짐을 끊는다(26 의 양성 대조)" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-5.md" "27: 쓸 것은 시도 5"
+
+g checkout -q main && g merge -q --no-ff -m "E1 계획 1 합침" feature/tm-e1 && push_main
+for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do
+  # shellcheck disable=SC2086
+  check 1 "28: 머지된 계획은 ${stage%% *} 단계도 멈춘다(AC14 · J30)" --job E1 --stage $stage
+  assert_contains "$(err)" "이미 기본 브랜치에 머지됐다" "28: 사유(${stage%% *})"
+done
+g branch -q -D feature/tm-e1 && g push -q origin --delete feature/tm-e1 && g fetch -q --prune origin
+for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do
+  # shellcheck disable=SC2086
+  check 1 "29: 브랜치를 지워도 머지된 계획은 멈춘다(${stage%% *})" --job E1 --stage $stage
+  assert_contains "$(err)" "이미 기본 브랜치에 머지됐다" "29: 사유(${stage%% *})"
+  assert_contains "$(err)" "상태 보기는 이 브랜치를 머지로 세지 못한다" "29: 더한 갈래로 멈췄다(J11 — ${stage%% *})"
+done
+bundle --job E1 --stage plan --plan 2 > /dev/null
+assert_not_contains "$(err)" "머지됐다" "30: 계획 2 는 머지되지 않았다"
+
+# ── 묶음 F — 한 번도 브랜치를 만들지 않은 E3 · E2(머지 검사의 양성 대조) ──
+new_repo "$T0/f" && ok "F: 팀 레포를 세웠다" || { no "F: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+check 0 "31: 브랜치를 만든 적 없는 E3 의 design 은 나간다" --job E3 --stage design
+assert_contains "$(grep '^알림: ' "$T/b.txt")" "과제 브랜치 feature/tm-e3 가 아직 없다" "31: 브랜치 없음 알림"
+check 1 "31: 같은 E3 의 plan 은 승인 줄에서 멈춘다" --job E3 --stage plan --plan 1
+assert_contains "$(err)" '`spec 승인` 줄이 없다' "31: 사유는 승인 줄 없음"
+assert_not_contains "$(err)" "머지됐다" "31: 없는 브랜치를 머지로 읽지 않는다"
+check 1 "34: 브랜치를 만든 적 없는 E2 는 흐름 승인에서 멈춘다" --job E2 --stage implement
+assert_not_contains "$(err)" "머지됐다" "34: 없는 브랜치를 머지로 읽지 않는다(32 · 33 의 양성 대조)"
+
+# ── 묶음 G — 설계 없는 흐름의 E2 가 머지된다 ──
+new_repo "$T0/g" && ok "G: 팀 레포를 세웠다" || { no "G: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+g checkout -q -b feature/tm-e2 main
+approved "흐름 승인" E2 - - 2026-11-22
+put "$E2/results/implement-1.md" "$(printf -- '---\ntype: job-result\nstage: implement\nattempt: 1\nrole: worker\nhead: %s\n---\n\n산출물: src/e2/x.md\n끝 — %s\n' "$(g rev-parse HEAD)" "$(g rev-parse HEAD)")"
+g commit -qm "E2 결과 1" && push_br feature/tm-e2
+g checkout -q main && g merge -q --no-ff -m "E2 합침" feature/tm-e2 && push_main
+check 1 "32: 머지된 설계 없는 흐름은 멈춘다(AC14)" --job E2 --stage implement
+assert_contains "$(err)" "이미 기본 브랜치에 머지됐다" "32: 사유"
+g branch -q -D feature/tm-e2 && g push -q origin --delete feature/tm-e2 && g fetch -q --prune origin
+check 1 "33: 브랜치를 지워도 멈춘다" --job E2 --stage implement
+assert_contains "$(err)" "implement-1.md" "33: 자취는 기본 브랜치의 implement 결과 파일이다"
+assert_contains "$(err)" "머지됐다" "33: 머지됐다"
+
 use_repo "$T0/a"
 finish

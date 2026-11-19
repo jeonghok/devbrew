@@ -162,8 +162,10 @@ def _output_check(git, r, problems: list) -> str:
     return "산출물 %d개" % len(r.outputs)
 
 
-def check_result(git, tip: str, team, job: str, name: str) -> Check:
-    """tip 의 결과 파일 name 을 대조한다. 사유는 모두 모아 problems 에, 읽지 못한 것은 unknown 에 한 줄씩 둔다."""
+def check_result(git, tip: str, team, job: str, name: str, newer_ok: bool = False) -> Check:
+    """tip 의 결과 파일 name 을 대조한다. 사유는 모두 모아 problems 에, 읽지 못한 것은 unknown 에 한 줄씩 둔다.
+
+    newer_ok 가 참이면 「더 새 시도가 있다」 사유 하나만 넣지 않는다(앞 시도의 받음을 다시 잴 때 — 다른 사유는 그대로)."""
     failed_before = len(git.failures)
     problems, unknown, r, tail = [], [], None, None
     parsed = team_layout.parse_result_name(name)
@@ -177,7 +179,7 @@ def check_result(git, tip: str, team, job: str, name: str) -> Check:
                 problems.append("그 끝(%s)에 결과 파일이 없다: %s" % (_short(tip), path))
         else:
             r = team_files.parse_result(text)
-            tail = _check_body(git, tip, team, job, name, parsed, r, problems, unknown)
+            tail = _check_body(git, tip, team, job, name, parsed, r, problems, unknown, newer_ok)
     unknown += git.failures[failed_before:]
     if not unknown and not problems and tail is None:   # 통과는 첫 줄의 수를 얻었을 때만이다
         unknown.append(UNFINISHED)
@@ -190,7 +192,7 @@ def check_result(git, tip: str, team, job: str, name: str) -> Check:
     return Check(not unknown and not problems, first, problems, unknown, r)
 
 
-def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, problems: list, unknown: list):
+def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, problems: list, unknown: list, newer_ok: bool):
     problems += r.problems
     if _unread(r):
         return None
@@ -203,7 +205,7 @@ def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, prob
         problems.append("끝 줄의 커밋 %s 가 머리의 head 와 다르다(%s)" % (_short(r.end), _short(r.head)))
     problems += _commit_problems(git, r, tip)
     names = result_names(git, tip, team, job)
-    if names is not None:
+    if names is not None and not newer_ok:
         latest = newest(names, parsed[0], parsed[1])
         if latest and team_layout.parse_result_name(latest)[2] > parsed[2]:
             problems.append("같은 단계 · 같은 계획의 더 새 시도 %s 가 있다" % latest)
@@ -269,6 +271,39 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
             shown += " 외 %d개" % (len(left) - SHOWN_FILES)
         return STALE, notes + [file_note(STALE_HEAD, last.name, shown)], latest
     return RECEIVED, notes, latest
+
+
+def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> list:
+    """그 계획의 implement 시도 가운데 번호가 before 보다 작은 것을 큰 번호부터 보아, 「끝」 줄이 있고 산 받음 줄이 없는
+    시도의 이름들(이어지는 만큼). 「끝」 줄이 없거나 읽지 못한 시도 · 산 받음 줄이 있는 시도를 만나면 멈춘다(J12).
+
+    산 받음 줄 — 그 결과 파일의 이름과 머리 head 를 가리키는 꼴 맞는 받음 줄이 있고 그 결과 파일이 「더 새 시도」 사유 없이
+    결과 대조를 지난다. 막힘 파일은 결과 파일 이름이 아니라 시도가 아니다."""
+    names = result_names(git, tip, team, job)
+    if names is None:
+        return []
+    stage = team_layout.STAGES[2]
+    mine = []
+    for name in names:
+        parsed = team_layout.parse_result_name(name)
+        if parsed and parsed[0] == stage and parsed[1] == plan and parsed[2] < before:
+            mine.append((parsed[2], name))
+    good, _broken = team_files.received(intent_text)
+    out = []
+    for _attempt, name in sorted(mine, reverse=True):
+        text = git.blob(tip, team.job(job, team_layout.RESULTS_DIR, name))
+        r = team_files.parse_result(text) if text is not None else None
+        if r is None or r.problems or r.end is None:
+            break
+        if any(x.name == name and x.commit == r.head for x in good) and check_result(git, tip, team, job, name, newer_ok=True).ok:
+            break
+        out.append(name)
+    return out
+
+
+def failed_streak(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> int:
+    """연속 실패 수 — failed_attempts 의 길이."""
+    return len(failed_attempts(git, tip, team, job, intent_text, plan, before))
 
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────

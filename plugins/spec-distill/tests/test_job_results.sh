@@ -253,6 +253,9 @@ g checkout -q -b names main
 for f in BLOCKED.md implement-plan-1-1.md implement-plan-1-3.md implement-plan-2-1.md review-1.md; do put "$TM/jobs/E3/results/$f" "이름만 보는 픽스처"; done
 g commit -qm "결과 폴더 이름들" && NAMES="$(g rev-parse HEAD)" && g checkout -q main
 export NAMES
+assert_eq "$(pyq 'JR.check_result(git, git.commit("v/newer"), team, "E1", "implement-plan-1-1.md", newer_ok=True).problems')" "[]" "대조: newer_ok=True 면 「더 새 시도」 사유가 없다(newer)"
+assert_contains "$(pyq 'JR.check_result(git, git.commit("v/newer"), team, "E1", "implement-plan-1-1.md").problems')" "더 새 시도 implement-plan-1-2.md" "대조: newer_ok 없이는 그 사유가 있다(양성 대조)"
+assert_contains "$(pyq 'JR.check_result(git, git.commit("v/no-end"), team, "E1", "implement-plan-1-1.md", newer_ok=True).problems')" "끝 줄이 없다" "대조: newer_ok=True 여도 다른 사유는 그대로다"
 assert_eq "$(pyq 'git.names(__import__("os").environ["NAMES"], team.results("E3"))')" "['.gitkeep', 'BLOCKED.md', 'implement-plan-1-1.md', 'implement-plan-1-3.md', 'implement-plan-2-1.md', 'review-1.md']" "Git.names: 폴더 바로 아래 이름들(정렬)"
 assert_eq "$(pyq 'git.names("main", team.results("E9"))')" "[]" "Git.names: 없는 폴더는 []"
 assert_eq "$(pyq '(git.names("f" * 40, team.results("E3")), len(git.failures))')" "(None, 1)" "Git.names: git 이 실패하면 None 과 failures"

@@ -40,7 +40,9 @@ NO_BRANCH = "과제 브랜치 %s 가 아직 없다 — 과제 폴더를 기준 �
 NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 브랜치가 없다"
 ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
-SYNC_LINE = "맞추는 명령: roadmap_write.py job sync --result %s --role %s --bundle-at %s --job-at %s"
+SYNC_LINE = "맞추는 명령: python3 %s job sync --result %s --role %s --bundle-at %s --job-at %s"
+MERGED_PLAN = "%s 는 이미 기본 브랜치에 머지됐다(%s) — 머지 뒤에 고칠 일은 새 계획이나 새 과제로 연다"
+UNMERGED_UNKNOWN = "머지 여부를 확인하지 못했다: %s"
 
 
 class Refused(Exception):
@@ -281,6 +283,33 @@ def _read_list(git, base: Base, job: str, stage: str, names: list) -> list:
     return read + [team.plan(job, n) for n in sorted(n for n in map(team_layout.plan_number, names) if n is not None)]
 
 
+def _merged_stop(git, base: Base, blocks: list, job: str, plan: Optional[int], plain: bool) -> None:
+    """블록의 과제라면 그 계획이 이미 기본 브랜치에 머지됐는지 본다(J30 — 단계를 가리지 않는다). 머지됐으면 Refused,
+    확인하지 못하면 Unchecked(검사 불가 3 — 사람 줄 관문이 아니다)."""
+    block = _block(blocks, job)
+    if block is None:
+        return
+    report = roadmap_status.build(git, argparse.Namespace(roadmap=base.team.roadmap, roadmap_file=None, json=False))
+    mine = next((b for b in report.get("blocks", []) if b.get("id") == job), None)
+    if mine is None:
+        raise Unchecked(UNMERGED_UNKNOWN % "상태 보고에 그 블록이 없다")
+    n = plan or 1
+    basis, why = team_status.plan_merged(_reader(git, base), dict(mine, fields=block["fields"]), n)
+    if why:
+        raise Unchecked(UNMERGED_UNKNOWN % why)
+    if basis:
+        raise Refused(MERGED_PLAN % (job if plain else "%s 의 계획 %d" % (job, n), basis))
+
+
+def _streak_stop(git, commit: str, team, job: str, scope, intent: str, number: Optional[int], attempt: int) -> None:
+    """구현 단계에서 앞 시도 둘이 이어서 받아지지 않았고 이 시도를 푸는 `걸음 건너뜀` 줄도 없으면 Refused."""
+    failed = job_results.failed_attempts(git, commit, team, job, intent, number, attempt)
+    if len(failed) >= human_lines.RETRY_STOP and not human_lines.retry_open(scope, number, attempt, deep=True):
+        raise Refused("구현 시도 %d번이 이어서 받아지지 않았다(%s) — 사용자에게 가서 다시 할지 정한다. 다시 하기로 하면 "
+                      "질문 창으로 확인받고 `걸음 건너뜀` 줄(%s)을 적는다"
+                      % (len(failed), " · ".join(reversed(failed)), human_lines.retry_name(number, attempt)))
+
+
 def _job_bundle(a) -> str:
     git = roadmap_status.Git(os.getcwd())
     base = open_base(git, a.roadmap)
@@ -291,6 +320,7 @@ def _job_bundle(a) -> str:
         _plan_rule(stage, a.plan, _reader(git, base).flow(block) == team_status.PLAIN_FLOW)
     commit, plain, simple, notices, branches = locate(git, base, blocks, job, a.plan)
     _plan_rule(stage, a.plan, plain)
+    _merged_stop(git, base, blocks, job, a.plan, plain)
     intent_path = team.intent(job)
     intent = _intent(git, commit, intent_path, job, team.roadmap)
     reader = _reader(git, base)
@@ -323,9 +353,12 @@ def _job_bundle(a) -> str:
         attempt, previous = attempt_of(results, lambda name: git.blob(commit, result_path(name)), stage, number)
         if previous:
             read.append(result_path(previous))
+        if stage == team_layout.STAGES[2]:
+            _streak_stop(git, commit, team, job, scope, intent, number, attempt)
         write = team.result(job, stage, attempt, number)
         role = a.role or team_layout.default_role(stage)
-        tail = ["쓸 것: %s" % write, SYNC_LINE % (write, role, base.commit, commit)]
+        tail = ["쓸 것: %s" % write, SYNC_LINE % (roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py")),
+                                                 write, role, base.commit, commit)]
         if stage == DESIGN:
             tail.append("쓸 자리: %s" % place_sentence(team.design(job), stage))
         elif stage == PLAN:

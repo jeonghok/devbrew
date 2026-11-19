@@ -372,6 +372,47 @@ class Reader:
         return "구현 중", "%s 결과 파일 있음: %s" % (IMPLEMENT, latest), specs, plans
 
 
+# ── 머지된 계획(J11) ─────────────────────────────────────────────────────────
+
+NOT_COUNTED_AS_MERGED = "상태 보기는 이 브랜치를 머지로 세지 못한다"
+
+
+def plan_merged(reader, block: dict, n: int) -> tuple:
+    """(머지 근거 | None, 셀 수 없는 사유 | None) — 블록의 n 번째 계획(설계 없는 흐름은 첫째 브랜치)의 브랜치가 머지됐는가.
+
+    상태 보고의 branch_states 를 쓰고, 끝이 로컬에도 origin 에도 없는데 기본 브랜치에 그 계획의 자취(설계 흐름은 계획 파일,
+    설계 없는 흐름은 implement 결과 파일)가 있으면 머지돼 지워진 것으로 읽는다 — 이 갈래는 상태 보기가 머지로 세지 못한다.
+
+    block 은 상태 보고의 블록에 로드맵 블록의 `fields` 를 더한 것이다(흐름을 가르는 데 Reader.flow 가 쓴다)."""
+    states = block.get("branch_states") or []
+    if n < 1 or n > len(states):
+        return None, None
+    state = states[n - 1]
+    if state.get("uncountable"):
+        return None, state["uncountable"]
+    if state.get("merged"):
+        return state["merged"], None
+    if state.get("tip") is not None or not reader.main:
+        return None, None
+    job, team, git = block["id"], reader.team, reader.git
+    if reader.flow(block) == PLAIN_FLOW:
+        names = job_results.result_names(git, reader.main, team, job)
+        if names is None:
+            return None, "기본 브랜치의 결과 폴더를 읽지 못했다: %s" % team.results(job)
+        trace = [team.job(job, team_layout.RESULTS_DIR, x) for x in names
+                 if team_layout.parse_result_name(x)[0] == IMPLEMENT]
+        path = trace[0] if trace else None
+    else:
+        path = team.plan(job, n)
+        if not git.exists(reader.main, path):
+            if not git.absent(reader.main, path):
+                return None, "기본 브랜치의 %s 를 읽지 못했다" % path
+            path = None
+    if path is None:
+        return None, None
+    return "브랜치는 없고 기본 브랜치에 %s 가 있다 — %s" % (path, NOT_COUNTED_AS_MERGED), None
+
+
 # ── 로드맵 밖 과제(kind: task) ───────────────────────────────────────────────
 
 OUTSIDE = "로드맵 밖 과제"

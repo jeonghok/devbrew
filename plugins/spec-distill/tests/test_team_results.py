@@ -9,11 +9,14 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "plugins" / "spec-distill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+import job_results  # noqa: E402
 import team_files as F  # noqa: E402
+import team_layout  # noqa: E402
 
 H = "a" * 40
 B = "b" * 40
@@ -291,6 +294,92 @@ class ReceivedLines(unittest.TestCase):
         self.assertEqual(([r.commit for r in got], broken), ([H, B], []))
         self.assertEqual(got[-1].raw, "- 결과 받음 · 2026-11-21 · 「implement-1.md · %s · 글」" % B)
         self.assertEqual(F.received(INTENT), ([], []))
+
+
+class FakeGit:
+    """결과 폴더의 이름 목록과 글을 돌려주는 작은 git — 이어짐을 세는 규칙만 잰다."""
+
+    def __init__(self, files):
+        self.files = files
+
+    def names(self, tip, folder):
+        prefix = folder.rstrip("/") + "/"
+        return sorted(p[len(prefix):] for p in self.files if p.startswith(prefix))
+
+    def blob(self, tip, path):
+        return self.files.get(path)
+
+
+class FailedStreak(unittest.TestCase):
+    """job_results.failed_streak — 「끝」 줄이 있고 산 받음 줄이 없는 implement 시도가 이어지는 수(J12)."""
+
+    TEAM = team_layout.team_from_roadmap("r/", "r/tm/roadmap.md")
+
+    def build(self, attempts, received=(), blocked=False, other=()):
+        """attempts: [(계획, 시도, 끝 줄 있음)]. received: 받음 줄을 적을 (계획, 시도). other: 다른 단계의 (단계, 계획, 시도) 끝난 결과."""
+        files = {}
+        for plan, attempt, ended in attempts:
+            name = team_layout.result_name("implement", attempt, plan)
+            files[self.TEAM.job("E1", "results", name)] = result("산출물: a.md\n" + ("끝 — " + H + "\n" if ended else ""),
+                                                                  plan=str(plan) if plan else None, attempt=str(attempt))
+        for stage, plan, attempt in other:
+            name = team_layout.result_name(stage, attempt, plan)
+            files[self.TEAM.job("E1", "results", name)] = result("끝 — " + H + "\n", stage=stage, plan=str(plan), attempt=str(attempt))
+        if blocked:
+            files[self.TEAM.blocked("E1")] = "막힘"
+        text = INTENT
+        for plan, attempt in received:
+            text = F.append_decision(text, F.received_line("2026-11-20", team_layout.result_name("implement", attempt, plan), H, "결과 대조: 통과 — x"))
+        return FakeGit(files), text
+
+    def streak(self, attempts, before, plan=1, received=(), passes=(), commit_differs=(), **kw):
+        """passes: 대조를 통과하는 (계획, 시도). 그 밖의 시도는 대조 거절이다."""
+        git, text = self.build(attempts, received=received, **kw)
+        calls = []
+
+        def fake_check(g, tip, team, job, name, newer_ok=False):
+            calls.append((name, newer_ok))
+            ok = any(team_layout.result_name("implement", a, p) == name for p, a in passes)
+            return job_results.Check(ok, "", [] if ok else ["거절"], [], None)
+
+        if commit_differs:   # 받음 줄의 커밋이 그 파일의 head 와 다르다
+            for plan_, attempt in commit_differs:
+                name = team_layout.result_name("implement", attempt, plan_)
+                text = F.append_decision(text, F.received_line("2026-11-20", name, B, "결과 대조: 통과 — x"))
+        with mock.patch.object(job_results, "check_result", fake_check):
+            got = job_results.failed_streak(git, "tip", self.TEAM, "E1", text, plan, before)
+        for _name, newer_ok in calls:
+            self.assertTrue(newer_ok, "산 받음 줄을 다시 잴 때는 newer_ok=True 로 부른다")
+        return got
+
+    def test_table(self):
+        self.assertEqual(self.streak([], 1), 0)
+        self.assertEqual(self.streak([(1, 1, True)], 2), 1)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3), 2)
+        # 1 은 받음(대조 통과) · 2 는 받음 줄 없음 — 1 에서 멈춘다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, received=[(1, 1)], passes=[(1, 1)]), 1)
+        # 손으로 쓴 받음 줄(꼴은 맞고 대조는 거절) — 산 받음 줄이 아니다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, received=[(1, 1)]), 2)
+        # 받음 줄의 커밋이 head 와 다르다(대조는 통과)
+        self.assertEqual(self.streak([(1, 1, True)], 2, commit_differs=[(1, 1)], passes=[(1, 1)]), 1)
+        # 도는 중인 시도(끝 줄 없음)는 이어짐을 끊는다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, False)], 3), 0)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True), (1, 3, False)], 3), 2)
+        # 계획 1 의 시도 하나 · 계획 2 의 시도 둘 — 계획 1 만 본다
+        att = [(1, 1, True), (2, 1, True), (2, 2, True)]
+        self.assertEqual(self.streak(att, 2, plan=1), 1)
+        self.assertEqual(self.streak(att, 3, plan=2), 2)
+        # 구현 시도만 센다 — design · plan 결과는 시도가 아니다
+        self.assertEqual(self.streak([(1, 1, True)], 2, other=[("plan", 1, 1), ("plan", 1, 2)]), 1)
+        # 막힘 파일은 시도가 아니다
+        self.assertEqual(self.streak([(1, 1, True)], 2, blocked=True), 1)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, blocked=True), 2)
+
+    def test_unreadable_attempt_breaks(self):
+        git, text = self.build([(1, 1, True), (1, 2, True)])
+        path = self.TEAM.result("E1", "implement", 2, 1)
+        git.files[path] = "머리가 없는 글"
+        self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 0)
 
 
 if __name__ == "__main__":
