@@ -12,8 +12,6 @@ T="$T0"
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
 
 err() { cat "$T/b.err"; }
-push_main() { g push -q origin main && g fetch -q origin; }
-push_br() { g push -q origin "$1" && g fetch -q origin; }
 SPECL="spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
 
 # ── 묶음 A — 설계 흐름(E1)과 설계 없는 흐름(E2) ──
@@ -253,19 +251,6 @@ assert_contains "$(err)" "implement-1.md" "33: 자취는 기본 브랜치의 imp
 assert_contains "$(err)" "머지됐다" "33: 머지됐다"
 
 # ── 결과 대조(job_results.py check)의 관문 — 과제 11. 묶음마다 새 레포 · 새 과제 ──
-rcheck() { (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" "$@" --date 2026-11-30) > "$T/c.txt" 2>&1; local rc=$?; [ -z "${DBG:-}" ] || { echo "--- rcheck $* rc=$rc" >&2; cat "$T/c.txt" >&2; }; echo "$rc"; }
-reasons() { grep '^거절 사유: ' "$T/c.txt"; }
-hand_result() {  # hand_result <과제> <단계> <계획|-> <시도> [본문 줄…] — 지금 브랜치에 끝까지 쓴 결과 파일을 올린다(시작 묶음 없이 띄워진 담당자)
-  local job="$1" stage="$2" plan="$3" k="$4" name head dir="$W/$TM/jobs/$1/results" planline=""
-  shift 4
-  head="$(g rev-parse HEAD)"
-  if [ "$plan" = "-" ]; then name="${stage}-${k}.md"; else name="${stage}-plan-${plan}-${k}.md"; planline="plan: ${plan}"; fi
-  mkdir -p "$dir"
-  { printf -- '---\ntype: job-result\nstage: %s\n' "$stage"; [ -z "$planline" ] || printf '%s\n' "$planline"
-    printf 'attempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n' "$k" "$head" "$head" "$head"
-    for l in "$@"; do printf '%s\n' "$l"; done; printf '끝 — %s\n' "$head"; } > "$dir/$name"
-  g add -- "$TM/jobs/$job/results" && g commit -qm "${job} ${name}" && push_br "$(g symbolic-ref --short HEAD)"
-}
 e1_state() {  # feature/tm-e1 에 설계 · 계획 1(두 판) · 구현 결과 1 을 끝까지 올린다. 사람 줄은 적지 않는다. PLAN_R1 은 계획의 첫 판
   g checkout -q -b feature/tm-e1 main
   put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"

@@ -14,21 +14,8 @@ T="$T0"
 
 PASSL="승인 — 계획 담당자에게"
 SIDX="00000000-0000-4000-8000-00000000c0e0"   # 사람 없이 답하는 다른 세션
-push_br() { g push -q origin "$1" && g fetch -q origin; }
-push_main() { g push -q origin main && g fetch -q origin; }
 err() { cat "$T/b.err"; }
-rchk() { (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" "$@" --date 2026-11-30) > "$T/c.txt" 2>&1; local rc=$?; [ -z "${DBG:-}" ] || { echo "--- rchk $* rc=$rc" >&2; cat "$T/c.txt" >&2; }; echo "$rc"; }
-reasons() { grep '^거절 사유: ' "$T/c.txt"; }
 stage_of() { js "$T/s.json" "[b['stage'] for b in r['blocks'] if b['id']=='$1'][0]"; }
-mk_result() {  # mk_result <과제> <단계> <계획|-> <시도> [본문 줄…] — 지금 브랜치에 끝까지 쓴 결과 파일을 커밋해 올린다
-  local job="$1" stage="$2" plan="$3" k="$4" tip name hdr=""; shift 4
-  tip="$(g rev-parse HEAD)"
-  if [ "$plan" = "-" ]; then name="${stage}-${k}.md"; else name="${stage}-plan-${plan}-${k}.md"; hdr="plan: ${plan}"$'\n'; fi
-  mkdir -p "$W/$TM/jobs/$job/results"
-  printf -- '---\ntype: job-result\nstage: %s\n%sattempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n%s\n끝 — %s\n' \
-    "$stage" "$hdr" "$k" "$tip" "$tip" "$tip" "$(printf '%s\n' "$@")" "$tip" > "$W/$TM/jobs/$job/results/$name"
-  g add -- "$TM/jobs/$job/results" && g commit -qm "${job} ${name}" && push_br "$(g symbolic-ref --short HEAD)"
-}
 
 # ══ 1. 끝에서 끝 — 손으로 적는 줄 없이 E1 을 설계 끝까지 ══
 new_repo "$T0/a" && ok "1: 팀 레포를 세웠다(${TM})" || { no "1: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
@@ -68,7 +55,7 @@ check 0 "7: 계획 검토 뒤 implement 묶음이 나간다" --job E1 --stage im
 assert_contains "$(grep '^맞추는 명령: ' "$T/b.txt")" "--role worker" "7: 구현 단계의 맞추는 명령도 worker 다"
 
 finish_attempt 1 "AC1: 구현됨 — src/e1/a1.txt" && ok "8: 맞추는 명령을 돌려 예약 경로 코드와 AC · 끝 줄이 있는 결과를 올렸다" || no "8: 시도 1"
-assert_eq "$(rchk --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "0" "9: 결과 대조를 지난다"
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "0" "9: 결과 대조를 지난다"
 RLINE="$(grep '^- 결과 받음 · ' "$T/c.txt")"
 assert_contains "$RLINE" "- 결과 받음 · 2026-11-30 · 「implement-plan-1-1.md · " "9: 받음 줄이 난다"
 assert_eq "$(led record --spec "$E1/INTENT.md" --line "$RLINE")" "0" "9: 받음 줄을 record 로 적었다"
@@ -99,7 +86,7 @@ g revert --no-edit HEAD >/dev/null && push_br feature/tm-e1
 check 0 "13: 되돌리면 구현 묶음이 다시 나간다(양성 대조)" --job E1 --stage implement --plan 1
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "13: 되돌리면 human-check 0"
 assert_eq "$(status "$T/s.json") $(stage_of E1)" "0 구현 중" "13: 되돌려도 상태는 구현 중이다 — 받은 뒤 design.md 를 건드린 커밋이 있으면 본문이 같아도 「받은 뒤 바뀜」(구현 묶음과 human-check 는 본문으로 가르니 열린다)"
-assert_contains "$(js "$T/s.json" "[b['notes'] for b in r['blocks'] if b['id']=='E1']")" "받은 뒤 바뀜: implement-plan-1-1.md" "13: 그 사유는 받은 뒤 바뀜이다"
+assert_contains "$(js "$T/s.json" "[b['notes'] for b in r['blocks'] if b['id']=='E1']")" "받은 뒤 바뀜: implement-plan-1-1.md — $E1/design.md" "13: 그 사유는 받은 뒤 바뀜이고 design.md 를 짚는다"
 
 python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); assert "미룬 것 하나" in s; open(p, "w", encoding="utf-8", newline="").write(s.replace("미룬 것 하나", "미룬 것 둘", 1))' "$W/$E1/design.md"
 g add -- "$E1/design.md" && g commit -qm "E1 설계 미룸 고침" && push_br feature/tm-e1
@@ -111,12 +98,12 @@ g revert --no-edit HEAD >/dev/null && push_br feature/tm-e1
 g checkout -q -b feature/tm-e2 main && push_br feature/tm-e2
 check 1 "15: 설계 없는 흐름은 흐름 승인 없이 묶음이 멈춘다" --job E2 --stage implement
 assert_contains "$(err)" '`흐름 승인` 줄이 없다' "15: 사유"
-put src/e2/x.md "산출물" && g commit -qm "E2 산출물" && mk_result E2 implement - 1 "산출물: src/e2/x.md"
-assert_eq "$(rchk --job E2 --result implement-1.md)" "1" "15: 흐름 승인 없이는 결과도 받지 않는다"
+put src/e2/x.md "산출물" && g commit -qm "E2 산출물" && hand_result E2 implement - 1 "산출물: src/e2/x.md"
+assert_eq "$(rcheck --job E2 --result implement-1.md)" "1" "15: 흐름 승인 없이는 결과도 받지 않는다"
 assert_contains "$(reasons)" '`흐름 승인` 줄이 없다' "15: 결과 사유"
 approved "흐름 승인" E2 - - 2026-03-07 && push_br feature/tm-e2
 check 0 "16: 흐름 승인이 있으면 묶음이 나간다" --job E2 --stage implement
-assert_eq "$(rchk --job E2 --result implement-1.md)" "0" "16: 결과도 받는다"
+assert_eq "$(rcheck --job E2 --result implement-1.md)" "0" "16: 결과도 받는다"
 
 # ══ 2. 지어낸 줄 × 세 자리(E3) ══
 mk_e3() {  # 새 E3 과제 브랜치 — 설계 · plan-1.md · 끝까지 쓴 implement-plan-1-1.md. 앞의 같은 이름 브랜치는 지운다
@@ -125,7 +112,7 @@ mk_e3() {  # 새 E3 과제 브랜치 — 설계 · plan-1.md · 끝까지 쓴 im
   g checkout -q -b feature/tm-e3 main
   put "$E3/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
   put "$E3/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다.\n')"
-  g commit -qm "E3 설계 · 계획" && mk_result E3 implement 1 1 "AC1: 구현됨 — 자리표시"
+  g commit -qm "E3 설계 · 계획" && hand_result E3 implement 1 1 "AC1: 구현됨 — 자리표시"
 }
 hd() {  # hd <종류> [계획] — 지금 커밋된 본문의 질문 머리(ask-head 의 표준 출력)
   local a=(--human "$1" --roadmap "$RM" --job E3)
@@ -150,23 +137,27 @@ plant() {  # plant <줄…> — E3 INTENT.md 에 손으로 줄을 적어 커밋�
 }
 unplant() { g revert --no-edit "$1..HEAD" >/dev/null && push_br feature/tm-e3; }   # unplant <표지 커밋> — 그 뒤 커밋을 모두 되돌린다
 trio() {  # trio <이름> <spec|plan> <판정> <사유 조각> <줄 수> — 세 자리가 모두 지나지 못하고, 사유가 그 줄 하나 탓이다
-  local name="$1" which="$2" verdict="$3" frag="$4" n="$5" kind stage
-  if [ "$which" = "spec" ]; then kind="spec 승인"; stage="plan"; else kind="계획 검토"; stage="implement"; fi
+  local name="$1" which="$2" verdict="$3" frag="$4" n="$5" cause="${6:-}" kind other stage
+  if [ "$which" = "spec" ]; then kind="spec 승인"; other="계획 검토"; stage="plan"; else kind="계획 검토"; other="spec 승인"; stage="implement"; fi
   check 1 "${name}: 시작 묶음(${stage})이 멈춘다" --job E3 --stage "$stage" --plan 1
+  assert_contains "$(err)" "\`${kind}\` 줄이 지나지 못했다" "${name}: 묶음 사유가 지어낸 종류(${kind})를 짚는다"
   assert_contains "$(err)" "$verdict" "${name}: 묶음 사유에 ${verdict}"
-  assert_eq "$(rchk --job E3 --result implement-plan-1-1.md)" "1" "${name}: 결과 대조가 거절한다"
+  assert_eq "$(rcheck --job E3 --result implement-plan-1-1.md)" "1" "${name}: 결과 대조가 거절한다"
   assert_eq "$(grep -c '^- 결과 받음' "$T/c.txt")" "0" "${name}: 받음 줄이 없다"
+  assert_contains "$(reasons)" "\`${kind}\` 줄이 지나지 못했다" "${name}: 결과 대조 사유가 지어낸 종류(${kind})를 짚는다"
   assert_contains "$(reasons)" "$verdict" "${name}: 결과 대조 사유에 ${verdict}"
   assert_eq "$(led human-check --roadmap "$RM" --job E3)" "1" "${name}: human-check 가 1"
   assert_eq "$(grep -c "^${verdict} — - ${kind} · " "$T/led.txt")" "$n" "${name}: 지어낸 줄이 표의 판정(${verdict})으로 시작한다"
   assert_eq "$(grep -c "^지남 — - ${kind} · " "$T/led.txt")" "0" "${name}: 그 종류의 줄이 지남으로 나오지 않는다"
+  assert_eq "$(grep -c "^지남 — - ${other} · " "$T/led.txt")" "1" "${name}: 먼저 둔 다른 관문(${other})의 진짜 줄은 지남이다"
   assert_contains "$(cat "$T/led.txt")" "$frag" "${name}: human-check 사유 글"
+  [ -z "$cause" ] || assert_contains "$(cat "$T/led.txt")" "$cause" "${name}: 사유가 이 원인(${cause})을 가린다"
 }
 passes() {  # passes <이름> — 같은 준비에서 진짜 줄이 둘 다 있으면 세 자리가 모두 0(양성 대조)
   local name="$1"
   check 0 "${name}: 시작 묶음(plan)이 나간다" --job E3 --stage plan --plan 1
   check 0 "${name}: 시작 묶음(implement)이 나간다" --job E3 --stage implement --plan 1
-  assert_eq "$(rchk --job E3 --result implement-plan-1-1.md)" "0" "${name}: 결과 대조를 지난다"
+  assert_eq "$(rcheck --job E3 --result implement-plan-1-1.md)" "0" "${name}: 결과 대조를 지난다"
   assert_eq "$(grep -c '^- 결과 받음' "$T/c.txt")" "1" "${name}: 받음 줄이 하나 난다"
   assert_eq "$(led human-check --roadmap "$RM" --job E3)" "0" "${name}: human-check 0"
   assert_eq "$(grep -c '^지남 — ' "$T/led.txt")" "2" "${name}: 두 줄 모두 지남"
@@ -229,7 +220,7 @@ unplant "$M"
 M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
 (python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SIDX" --entrypoint sdk-cli --question "${H} — 설계를 승인할까요" --label "$PASSL" > "$T/entry.txt")
 plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SIDX" "$(key_now)")"
-trio "S8 프로그램이 대신 답한 세션의 답(sdk-cli)" spec "어긋남" "사람이" 1
+trio "S8 프로그램이 대신 답한 세션의 답(sdk-cli)" spec "어긋남" "사람이" 1 "sdk-cli"
 unplant "$M"
 
 for how in "--who hook" "--empty"; do
@@ -239,7 +230,7 @@ for how in "--who hook" "--empty"; do
   plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
   case "$how" in
     "--empty") trio "S9 고른 답이 빈 결과(${how})" spec "어긋남" "세션 기록에 없다" 1 ;;
-    *) trio "S9 훅이 채운 답(${how})" spec "어긋남" "사람이" 1 ;;
+    *) trio "S9 훅이 채운 답(${how})" spec "어긋남" "사람이" 1 "hook" ;;
   esac
   unplant "$M"
 done
@@ -249,7 +240,12 @@ for how in "--who other" "--entrypoint fixture_other" "--drop entrypoint"; do
   # shellcheck disable=SC2086
   answer "${H} — 설계를 승인할까요" "$PASSL" $how
   plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-  trio "S10 모르는 출처(${how})" spec "확인 못 함" "질문 창으로 다시 승인받는다" 1
+  case "$how" in
+    "--who other") cause="fixture_other" ;;
+    "--entrypoint fixture_other") cause="fixture_other" ;;
+    *) cause="entrypoint" ;;
+  esac
+  trio "S10 모르는 출처(${how})" spec "확인 못 함" "질문 창으로 다시 승인받는다" 1 "$cause"
   unplant "$M"
 done
 
@@ -280,6 +276,7 @@ put "$E3/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 �
 put "$E3/plan-2.md" "$(printf '# 계획 둘\n\n### Task 1: 둘째\n\nAC1 도 부른다.\n')"
 g commit -qm "E3 계획 1 고침 · 계획 2" && push_br feature/tm-e3
 H="$(hd "$PLANKIND" 1)"; H="${H/ plan 1 @/ plan 2 @}"   # 계획 2 의 브랜치가 없어 ask-head 로는 못 받는다 — 머리 꼴만 바꾼다
+case "$H" in "E3 plan 2 @"????????) ok "P3: 준비 — 머리가 계획 2 의 꼴이다" ;; *) no "P3: 준비 — 머리가 계획 2 의 꼴이 아니다: ${H}" ;; esac
 answer "${H} — 계획대로 구현할까요" "계획대로 구현한다"
 plant "$(rend "$PLANKIND" 2026-03-13 "계획대로 구현한다" plan-1.md "$(rev_of "$H")" "$SID" "$(key_now)")"
 trio "P3 다른 계획의 답" plan "어긋남" "시작하지 않는다" 1
@@ -289,7 +286,7 @@ unplant "$M"
 g checkout -q main && printf -- '---\nhuman_gate: 아무거나\n---\n' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "깨진 human_gate" && push_main && g checkout -q feature/tm-e3
 check 3 "P4: 깨진 human_gate 값이면 시작 묶음이 검사 불가(3)로 멈춘다" --job E3 --stage implement --plan 1
 assert_contains "$(err)" "human_gate" "P4: 사유가 그 설정을 짚는다"
-assert_eq "$(rchk --job E3 --result implement-plan-1-1.md)" "3" "P4: 결과 대조도 3"
+assert_eq "$(rcheck --job E3 --result implement-plan-1-1.md)" "3" "P4: 결과 대조도 3"
 assert_eq "$(grep -c '^- 결과 받음' "$T/c.txt")" "0" "P4: 받음 줄이 없다"
 assert_not_contains "$(cat "$T/b.err" "$T/c.txt")" "대조가 꺼져 있다" "P4: 깨진 값이 관문을 끄지 않는다"
 g checkout -q main && g revert --no-edit HEAD >/dev/null && push_main && g checkout -q feature/tm-e3
@@ -353,6 +350,9 @@ claim_old && ok "o6: 준비 — 옛 로드맵의 지휘 표지" || no "o6: 지�
 assert_eq "$(led add --roadmap "$ORM" --session "$SID" --section "쌓인 기록" --cells "A1 · 지휘 기록 · spec 승인 · 2026-11-20 · 「승인」")" "0" "o6: 쌓인 기록 1 — $(cat "$T/led.txt")"
 assert_eq "$(led add --roadmap "$ORM" --session "$SID" --section "쌓인 기록" --cells "A1 · 지휘 기록 · 계획 검토 · 2026-11-20 · 「글」")" "0" "o6: 쌓인 기록 2"
 cp "$T/spec-orig.md" "$T/spec-flush.md"
+assert_eq "$(led pending --roadmap "$ORM")" "0" "o6: flush 전 pending 종료 코드"
+assert_contains "$(cat "$T/led.txt")" "spec 승인 · 2026-11-20 · 「승인」" "o6: flush 전에는 쌓인 기록에 두 줄이 있다(비었다는 단언의 양성 짝)"
+assert_contains "$(cat "$T/led.txt")" "계획 검토 · 2026-11-20 · 「글」" "o6: flush 전 둘째 줄"
 assert_eq "$(led flush --roadmap "$ORM" --session "$SID" --epic A1 --spec "$T/spec-flush.md")" "0" "o6: 옛 형식의 flush 는 0"
 assert_contains "$(cat "$T/spec-flush.md")" "- spec 승인 · 2026-11-20 · 「승인」" "o6: spec 승인 줄이 옮겨졌다"
 assert_contains "$(cat "$T/spec-flush.md")" "- 계획 검토 · 2026-11-20 · 「글」" "o6: 계획 검토 줄이 옮겨졌다"

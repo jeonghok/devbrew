@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
 # source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
-# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · push_br · push_main · rcheck · reasons · hand_result · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
@@ -96,6 +96,21 @@ finish_attempt() {  # finish_attempt <k> [AC 줄] — E1 의 implement 계획 1 
   g add -- "$E1" && g commit -qm "결과 ${k}" && g push -q origin feature/tm-e1 && g fetch -q origin
 }
 write_line() { sed -n 's/^쓸 것: //p' "$T/b.txt"; }   # 마지막 bundle 이 낸 쓸 것 줄의 경로
+push_br() { g push -q origin "$1" && g fetch -q origin; }   # push_br <브랜치> — 올리고 받아 둔다
+push_main() { g push -q origin main && g fetch -q origin; }
+rcheck() { (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" "$@" --date 2026-11-30) > "$T/c.txt" 2>&1; local rc=$?; [ -z "${DBG:-}" ] || { echo "--- rcheck $* rc=$rc" >&2; cat "$T/c.txt" >&2; }; echo "$rc"; }
+reasons() { grep '^거절 사유: ' "$T/c.txt"; }
+hand_result() {  # hand_result <과제> <단계> <계획|-> <시도> [본문 줄…] — 지금 브랜치에 끝까지 쓴 결과 파일을 올린다(시작 묶음 없이 띄워진 담당자)
+  local job="$1" stage="$2" plan="$3" k="$4" name head dir="$W/$TM/jobs/$1/results" planline=""
+  shift 4
+  head="$(g rev-parse HEAD)"
+  if [ "$plan" = "-" ]; then name="${stage}-${k}.md"; else name="${stage}-plan-${plan}-${k}.md"; planline="plan: ${plan}"; fi
+  mkdir -p "$dir"
+  { printf -- '---\ntype: job-result\nstage: %s\n' "$stage"; [ -z "$planline" ] || printf '%s\n' "$planline"
+    printf 'attempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n' "$k" "$head" "$head" "$head"
+    for l in "$@"; do printf '%s\n' "$l"; done; printf '끝 — %s\n' "$head"; } > "$dir/$name"
+  g add -- "$TM/jobs/$job/results" && g commit -qm "${job} ${name}" && push_br "$(g symbolic-ref --short HEAD)"
+}
 
 use_repo() {  # use_repo <폴더> — 그 폴더에 선 팀 레포를 쓰도록 T · W · CLAUDE_CONFIG_DIR 를 옮긴다
   T="$1"; W="$T/repo"; CLAUDE_CONFIG_DIR="$T/claude"; export CLAUDE_CONFIG_DIR
