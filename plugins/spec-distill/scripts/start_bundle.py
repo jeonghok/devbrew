@@ -297,6 +297,11 @@ def _job_bundle(a) -> str:
     scope = reader.scope(commit, job, branches)
     reasons = human_lines.missing(scope, stage, a.plan, plain, deep=True)
     if reasons:
+        n = a.plan or 1
+        if (not simple and n > 1 and len(branches) >= n and notices[:1] == [NO_BRANCH % branches[n - 1]]
+                and human_lines.UNCHECKED in reasons[0]):   # 그 계획의 브랜치가 아직 없어 기준 커밋에서 설계를 못 읽었다
+            raise Refused("%s — 계획 %d 의 브랜치 %s 가 아직 없다: %s 의 끝에서 그 브랜치를 만들거나 앞 계획을 먼저 머지한 뒤 다시 부른다"
+                          % (reasons[0], n, branches[n - 1], branches[0]))
         raise Refused(reasons[0])
     if not scope.gate_on:
         notices = [human_lines.GATE_OFF] + notices

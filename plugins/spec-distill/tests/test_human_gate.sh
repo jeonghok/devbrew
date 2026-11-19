@@ -14,7 +14,6 @@ T="$T0"
 err() { cat "$T/b.err"; }
 push_main() { g push -q origin main && g fetch -q origin; }
 push_br() { g push -q origin "$1" && g fetch -q origin; }
-short() { printf '%s' "$1" | cut -c1-8; }
 SPECL="spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
 
 # ── 묶음 A — 설계 흐름(E1)과 설계 없는 흐름(E2) ──
@@ -43,7 +42,7 @@ check 1 "4: 커밋하지 않은 줄은 관문이 읽지 않는다" --job E1 --st
 
 g add -- "$E1/INTENT.md" && g commit -qm "spec 승인 — E1" && push_br feature/tm-e1
 check 0 "5: 커밋해 올리면 plan 묶음이 나간다" --job E1 --stage plan --plan 1
-assert_eq "$(sed -n 1p "$T/b.txt" | cut -c1-7)" "기준 커밋: " "5: 양성 대조 — 묶음 첫 줄"
+case "$(sed -n 1p "$T/b.txt")" in "기준 커밋: "*) ok "5: 양성 대조 — 묶음 첫 줄" ;; *) no "5: 양성 대조 — 묶음 첫 줄" ;; esac
 
 put "$E1/plan-1.md" "E1 계획 한 줄" && g commit -qm "E1 계획 1" && push_br feature/tm-e1
 check 1 "6: 계획 검토 줄이 없으면 implement 가 멈춘다" --job E1 --stage implement --plan 1
@@ -58,6 +57,9 @@ mv "$CLAUDE_CONFIG_DIR" "$T/claude.away"
 check 1 "8: 세션 기록이 없으면 확인 못 함으로 멈춘다" --job E1 --stage implement --plan 1
 assert_contains "$(err)" "확인 못 함" "8: 사유에 확인 못 함"
 assert_contains "$(err)" "다시 승인받는다" "8: 다시 승인받는 길"
+assert_eq "$(err | wc -l | tr -d ' ')" "1" "8: 닫힌 관문이 둘이어도 표준 오류는 한 줄이다(J18)"
+assert_contains "$(err)" '`spec 승인`' "8: 첫 닫힌 관문(spec 승인)만 낸다(J18)"
+assert_not_contains "$(err)" '`계획 검토`' "8: 둘째 관문의 사유는 싣지 않는다(J18)"
 mv "$T/claude.away" "$CLAUDE_CONFIG_DIR"
 check 0 "8: 기록을 되돌리면 다시 나간다(양성 대조)" --job E1 --stage implement --plan 1
 
@@ -118,13 +120,30 @@ check 0 "17: human_gate 끔이면 손으로 적은 줄로 나간다" --job E3 --
 assert_eq "$(sed -n 2p "$T/b.txt")" "알림: 사람 줄 대조가 꺼져 있다" "17: 묶음 둘째 줄이 꺼짐 알림이다(AC20)"
 g revert --no-edit HEAD >/dev/null && push_main
 check 1 "18: 설정을 되돌리면 같은 묶음이 멈춘다(양성 대조)" --job E3 --stage plan --plan 1
-assert_not_contains "$(sed -n 1,3p "$T/b.txt")" "알림: 사람 줄 대조가 꺼져 있다" "18: 꺼짐 알림도 없다"
+assert_contains "$(err)" "근거 없음" "18: 관문이 켜져 있어 손으로 적은 줄이 근거 없음으로 막힌다"
+assert_not_contains "$(err)" "대조가 꺼져 있다" "18: 꺼짐 안내가 없다"
 printf '%s\n' '---' 'human_gate: 켬' 'rules_budget: 40000' '---' > "$W/.devbrew.md"
 g add -- .devbrew.md && g commit -qm "관문 켬 · 다른 키" && push_main
 check 1 "19: 다른 설정 키가 있어도 관문은 그대로 막는다" --job E3 --stage plan --plan 1
 assert_contains "$(err)" '`spec 승인` 줄이' "19: 사유는 그 관문의 것이다"
 g revert --no-edit HEAD >/dev/null && push_main
-DEVBREW_SPEC_DISTILL_GATE=off DEVBREW_HUMAN_GATE=끔 human_gate=끔 check 1 "19: 환경 변수로는 관문이 꺼지지 않는다" --job E3 --stage plan --plan 1
+DEVBREW_SPEC_DISTILL_DISABLE=1 DEVBREW_SKIP_HOOKS=spec-distill:human-gate DEVBREW_SPEC_DISTILL_GATE=off DEVBREW_HUMAN_GATE=끔 human_gate=끔 check 1 "19: 환경 변수로는 관문이 꺼지지 않는다" --job E3 --stage plan --plan 1
+
+# ── 묶음 C — 계획 n 의 브랜치가 아직 없다(team-files: 에픽의 첫 보내기는 늘 이 경우) ──
+new_repo "$T0/c" && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+g checkout -q -b feature/tm-e1 main
+put "$E1/design.md" "E1 설계 한 줄"
+g commit -qm "E1 설계" && push_br feature/tm-e1
+approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+check 1 "C1: 계획 1 이 머지되지 않았고 계획 2 의 브랜치가 없으면 멈춘다" --job E1 --stage plan --plan 2
+assert_eq "$(err | wc -l | tr -d ' ')" "1" "C1: 표준 오류는 한 줄이다"
+assert_contains "$(err)" "확인 못 함" "C1: 사유"
+assert_contains "$(err)" "계획 2 의 브랜치 feature/tm-e1b 가 아직 없다: feature/tm-e1 의 끝에서 그 브랜치를 만들거나 앞 계획을 먼저 머지한 뒤 다시 부른다" "C1: 다음 할 일(브랜치 이름과 첫 브랜치)"
+g checkout -q main && g merge -q --no-ff feature/tm-e1 -m "계획 1 머지" && push_main
+check 0 "C2: 계획 1 이 머지돼 기준 커밋에 설계가 있으면 브랜치 없이도 묶음이 나간다" --job E1 --stage plan --plan 2
+B="$(g rev-parse origin/main)"
+assert_eq "$(sed -n 1p "$T/b.txt")" "기준 커밋: ${B} · 과제 브랜치 ${B}" "C2: 첫 줄은 기준 커밋 둘"
+assert_eq "$(sed -n 2p "$T/b.txt")" "알림: 과제 브랜치 feature/tm-e1b 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다" "C2: 둘째 브랜치 없음 알림"
 
 use_repo "$T0/a"
 finish
