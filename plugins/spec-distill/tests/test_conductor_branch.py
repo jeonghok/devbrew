@@ -6,6 +6,8 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_c
 """
 from __future__ import annotations
 
+import datetime
+import importlib.util
 import json
 import os
 import subprocess
@@ -15,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, rm  # noqa: E402
+import conductor_branch as CB  # noqa: E402
 
 
 class Fixture(StateRepo):
@@ -45,3 +48,221 @@ class Fixture(StateRepo):
         self.assertEqual(os.environ["GIT_CONFIG_GLOBAL"], "/dev/null")
         self.assertEqual(self.rc("merge-base", "--is-ancestor", "trunk", "feature/a1"), 0)
         self.assertEqual(self.rc("merge-base", "--is-ancestor", "feature/a1", "trunk"), 1)   # 양성 대조 — rc 가 실제로 갈린다
+
+
+RULE_OK = "# B\n\n```regex\n^(feature|fix)/[a-z0-9][a-z0-9.-]*$|^conductor/[a-z0-9][a-z0-9.-]*$\n```\n"
+RULE_NO = "# B\n\n```regex\n^(feature|fix)/[a-z0-9][a-z0-9.-]*$\n```\n"
+RULE_DOC = "docs/git-workflow/branch-strategy.md"
+
+
+class Names(StateRepo):
+    def test_name_branch_and_team_paths(self):
+        self.assertEqual(CB.roadmap_name(rm(ALPHA)), ALPHA)
+        self.assertEqual((CB.branch_of(ALPHA), CB.ref_of(ALPHA)), ("conductor/" + ALPHA, "refs/heads/conductor/" + ALPHA))
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.assertEqual((team.status, team.inbox), ("docs/superpowers/roadmaps/%s/STATUS.md" % ALPHA, "docs/superpowers/roadmaps/%s/inbox" % ALPHA))
+        for bad in ("roadmap.md", "docs/superpowers/roadmaps/a/b/roadmap.md", "elsewhere/x/roadmap.md"):
+            with self.assertRaises(CB.BranchError, msg=bad) as c:
+                CB.team_of(self.w, bad)
+            self.assertEqual(c.exception.rc, 2)
+
+    def test_stamp_carries_the_offset_and_compares_across_zones(self):
+        kst = datetime.timezone(datetime.timedelta(hours=9))
+        text = CB.stamp(datetime.datetime(2026, 11, 19, 2, 30, tzinfo=kst))
+        self.assertEqual(text, "2026-11-19 02:30 +0900")
+        self.assertLess(CB.parse_stamp(text), CB.parse_stamp("2026-11-18 18:00 +0000"))   # 02:30 +0900 은 17:30 UTC 다
+        for bad in ("2026-11-19 02:30", "2026-11-19 02:30 +09:00", "2026-11-19 02:30 +0900\n", " 2026-11-19 02:30 +0900",
+                    "2026-13-45 99:99 +9999", "2026-02-30 10:00 +0900", "2026-11-19 24:00 +0900", "2026-11-19 02:30 +2460",   # 꼴은 맞고 달력 · 시계에 없다
+                    "٢٠٢٦-11-19 02:30 +0900", "", None):   # ٢ 는 다른 문자 체계의 숫자 2 다
+            self.assertIsNone(CB.parse_stamp(bad), bad)
+        self.assertIsNotNone(CB.parse_stamp(CB.stamp()))
+
+
+class Availability(StateRepo):
+    def test_default_is_usable(self):
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))   # 규칙 문서가 없는 레포 — 만든다
+
+    def test_off_and_broken_setting(self):
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        self.assertEqual(CB.availability(self.w, rm(ALPHA)), "상태 브랜치가 꺼져 있다")
+        self.put({".devbrew.md": "---\nstate_branch: off\n---\n"})
+        why = CB.availability(self.w, rm(ALPHA))
+        self.assertTrue(why.startswith("레포 설정을 읽지 못해 상태 브랜치를 쓰지 않는다 — "), why)
+        self.assertIn("state_branch", why)
+
+    def test_a_setting_file_that_cannot_be_trusted_never_reads_as_on(self):
+        """끔 옆의 오류 하나가 끔을 지우지 못한다. 뒤집으면 붉다 — state_branch 값만 보면 첫 경우가 None(쓸 수 있다)이 된다."""
+        for text in ("---\nstate_branch: 끔\nstate_brunch: 끔\n---\n",          # 오타 난 키 하나 — 해결자가 레포 층을 통째로 버린다
+                     "---\nstate_branch: 끔\ntest_command: \n---\n",            # 다른 키의 빈 값 — 해결자가 오류로 낸다
+                     "---\nstate_branch: 끔\nstate_branch: 끔\n---\n",          # 같은 키 둘 — 해결자가 예외를 던진다
+                     "\ufeff---\nstate_branch: 끔\n---\n",                       # 머리말 앞의 BOM — 예외
+                     "---\nstate_branch: 끔\n"):                                 # 닫히지 않은 머리말 — 예외
+            self.put({".devbrew.md": text}, message=repr(text))
+            why = CB.availability(self.w, rm(ALPHA))
+            self.assertIsNotNone(why, text)
+            self.assertTrue(why.startswith("레포 설정을 읽지 못해 상태 브랜치를 쓰지 않는다 — "), (text, why))
+        self.put({".devbrew.md": "---\nstate_branch: 켬\nstate_brunch: 끔\n---\n"})   # 켬이어도 읽지 못한 설정으로는 쓰지 않는다
+        self.assertTrue(CB.availability(self.w, rm(ALPHA)).startswith("레포 설정을 읽지 못해"))
+        self.put({".devbrew.md": "---\nstate_branch: 켬\nparallel_default: 2\n---\n"})   # 양성 대조 — 오류가 없으면 쓸 수 있다
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
+
+    def test_setting_is_read_from_the_default_branch_not_the_working_tree(self):
+        (self.w / ".devbrew.md").write_text("---\nstate_branch: 끔\n---\n", encoding="utf-8")   # 커밋하지 않았다
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
+
+    def test_folder_name_outside_the_shape(self):
+        from conductor_branch_fixture import roadmap_text
+        self.put({"docs/superpowers/roadmaps/2026_Alpha/roadmap.md": roadmap_text("x", self.BETA_BLOCKS)})
+        why = CB.availability(self.w, "docs/superpowers/roadmaps/2026_Alpha/roadmap.md")
+        self.assertIn("2026_Alpha", why)
+        self.assertIn("소문자", why)
+        for name in ("a..b", "x.lock", "alpha.", "-alpha", ".alpha", "al pha", "alphа"):   # 마지막은 다른 문자 체계의 a 다 · git 이 ref 로 받지 않는 꼴 셋(J56)
+            self.assertFalse(CB.name_ok(name), name)
+            self.assertIn("쓸 수 없다", CB.availability(self.w, "docs/superpowers/roadmaps/%s/roadmap.md" % name), name)
+        for name in (ALPHA, "a", "0", "a.b-c", "v1.2"):
+            self.assertTrue(CB.name_ok(name), name)
+
+    def test_branch_rule(self):
+        self.put({RULE_DOC: RULE_OK})
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
+        self.put({RULE_DOC: RULE_NO})
+        self.assertEqual(CB.availability(self.w, rm(ALPHA)),
+                         "이 레포의 브랜치 규칙이 conductor/ 를 받지 않는다 — 규칙 문서에 갈래를 더하거나 state_branch 를 끈다")
+
+    def test_rule_document_without_a_usable_rule_closes(self):   # J9 — 훅은 건너뛰지만 여기서는 만들지 않는다
+        for text in ("# 규칙이 없는 문서\n", "```regex\n\n```\n", "```regex\n^(feature\n```\n"):
+            self.put({RULE_DOC: text})
+            why = CB.availability(self.w, rm(ALPHA))
+            self.assertIn("브랜치 규칙을 읽지 못했다", why, text)
+        (self.w / RULE_DOC).write_bytes(b"```regex\n^\xff$\n```\n")
+        self.g("commit", "-qam", "binary")
+        self.g("push", "-q", "origin", "trunk")
+        self.assertIn("브랜치 규칙을 읽지 못했다", CB.availability(self.w, rm(ALPHA)))
+
+    def test_unknown_default_branch(self):
+        self.put({RULE_DOC: RULE_NO})
+        self.g("remote", "set-head", "origin", "--delete")            # origin 은 있는데 기본 브랜치를 모른다 — 규칙을 읽을 곳이 없다
+        why = CB.availability(self.w, rm(ALPHA))
+        self.assertIn("브랜치 규칙을 읽지 못했다", why)
+        self.assertIn("set-head", why)
+        self.g("remote", "remove", "origin")                          # origin 이 아예 없다 — 올릴 곳이 없으니 로컬에 쓴다
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
+
+    def test_same_verdict_as_the_project_init_hook(self):   # 같은 읽기 · 같은 호출 — 훅이 경고하면 여기서도 받지 않는다
+        hook_path = Path(__file__).resolve().parents[3] / "plugins" / "project-init" / "hooks" / "post-tool-use.py"
+        if not hook_path.is_file():
+            self.skipTest("project-init 훅이 이 트리에 없다")
+        spec = importlib.util.spec_from_file_location("post_tool_use_hook", hook_path)
+        hook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hook)
+        name = CB.branch_of(ALPHA)
+        seen = set()
+        for rule in ("^(feature|fix)/[a-z0-9][a-z0-9.-]*$|^conductor/[a-z0-9][a-z0-9.-]*$", "^(feature|fix)/[a-z0-9][a-z0-9.-]*$",
+                     "^conductor/", "^(feature|conductor)/[a-z]+$", "conductor/[a-z0-9.-]+", "^.*$"):
+            self.put({RULE_DOC: "```regex\n%s\n```\n" % rule}, message=rule)
+            kind, pattern = CB.branch_rule(self.w)
+            self.assertEqual(kind, "규칙", rule)
+            hook_ok = hook.check_branch_name(name, hook.read_branch_rule(str(self.w))[0]) is None
+            self.assertEqual(CB.availability(self.w, rm(ALPHA)) is None, hook_ok, rule)
+            seen.add(hook_ok)
+        self.assertEqual(seen, {True, False})   # 표가 두 답을 다 지난다
+
+
+class Reading(StateRepo):
+    def test_read_names_and_tips(self):
+        trunk = self.g("rev-parse", "trunk")
+        self.assertIn("# 알파 — 로드맵", CB.read(self.w, trunk, rm(ALPHA)))
+        self.assertIsNone(CB.read(self.w, trunk, "no/such.md"))
+        self.assertIn(("100644", rm(BETA)), CB.names(self.w, trunk, "docs/superpowers/roadmaps/"))
+        self.assertEqual(CB.names(self.w, trunk, "no/such/"), [])
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
+        self.assertEqual((CB.seen_tip(self.w, ALPHA), CB.state_names(self.w)), ((None, None), []))
+        self.g("update-ref", CB.ref_of(BETA), trunk)   # 양성 대조 — 있는 브랜치는 보인다
+        self.assertEqual((CB.local_tip(self.w, BETA), CB.seen_tip(self.w, BETA), CB.state_names(self.w)), (trunk, (trunk, None), [BETA]))
+
+    def test_seen_tip_reads_the_side_that_is_ahead_and_refuses_only_a_split(self):   # J54
+        old = self.g("rev-parse", "trunk")
+        self.put({"x.txt": "x\n"})
+        new = self.g("rev-parse", "trunk")                                     # old 가 new 의 조상이다
+        tracking = "refs/remotes/origin/conductor/" + BETA
+        for local_at, remote_at in ((old, new), (new, old), (new, new)):
+            self.g("update-ref", CB.ref_of(BETA), local_at)
+            self.g("update-ref", tracking, remote_at)
+            self.assertEqual(CB.seen_tip(self.w, BETA), (new, None), (local_at, remote_at))   # 한 커밋 달라도 읽는다 — 사유가 없다
+        side = self.g("commit-tree", old + "^{tree}", "-p", old, "-m", "갈라진 쪽")
+        self.g("update-ref", CB.ref_of(BETA), side)
+        tip, why = CB.seen_tip(self.w, BETA)                                   # 갈라졌을 때만 읽지 않는다
+        self.assertIsNone(tip)
+        self.assertTrue(why)
+        self.g("update-ref", "-d", tracking)
+        self.assertEqual(CB.seen_tip(self.w, BETA), (side, None))              # 로컬만 있으면 그것
+
+    def test_roadmaps_and_which_are_unfinished(self):
+        self.assertEqual(CB.roadmap_paths(self.w), {ALPHA: rm(ALPHA), BETA: rm(BETA)})
+        self.assertEqual([(r.name, r.path, r.unfinished, r.why) for r in CB.roadmaps(self.w)],
+                         [(ALPHA, rm(ALPHA), True, None), (BETA, rm(BETA), True, None)])
+        self.epic_branch("feature/b1", {"src/b.py": "x\n"})
+        self.merge_epic("feature/b1")                                   # BETA 의 하나뿐인 에픽이 머지됐다
+        table = {r.name: r for r in CB.roadmaps(self.w)}
+        self.assertEqual((table[ALPHA].unfinished, table[BETA].unfinished), (True, False))
+        self.assertEqual([b["stage"] for b in table[BETA].report["blocks"]], ["머지됨"])
+        self.put({"docs/superpowers/roadmaps/2026-01-03-broken/roadmap.md": "---\ntype: roadmap\nsource_brief: b.md\n---\n\n# 깨진 로드맵\n"})
+        broken = {r.name: r for r in CB.roadmaps(self.w)}["2026-01-03-broken"]
+        self.assertEqual((broken.report, broken.unfinished), (None, True))   # 셀 수 없는 로드맵은 끝난 것으로 치지 않는다
+        self.assertTrue(broken.why)
+
+    def test_git_runner_is_closed(self):
+        with self.assertRaises(RuntimeError):
+            CB.git(self.w, "checkout", "trunk")
+        for word in ("checkout", "switch", "worktree", "stash", "reset", "rebase", "commit", "merge"):
+            self.assertNotIn(word, CB.GIT_ALLOWED, word)
+
+
+class Showing(unittest.TestCase):
+    def test_visible_turns_control_and_direction_characters_into_text(self):   # J51
+        raw = "a\x1b[2Kb\u202ec\u2028d\x00e\tf\u200bg\x85h\rI\x0bj\x0ck\u2066l"
+        out = CB.visible(raw)
+        self.assertEqual(out, "a\\x1b[2Kb\\u202ec\\u2028d\\x00e\tf\\u200bg\\x85h\\x0dI\\x0bj\\x0ck\\u2066l")
+        plain = "가 · 나 — 「다」 ──── │ <경로> abc 123"
+        self.assertEqual(CB.visible(plain), plain)                              # 보통 글자는 그대로
+
+    def test_machine_name_matches_only_as_a_word(self):   # J18
+        from unittest import mock
+        import socket
+        with mock.patch.object(socket, "gethostname", return_value="dev.local"):
+            pat = CB.machine_pattern()
+            for text, hit in (("devbrew 의 문서", False), ("mydev 폴더", False), ("dev2", False), ("dev 에서", True), ("(DEV)", True),
+                              ("dev.local/x", True), ("에서dev", True)):
+                self.assertEqual(bool(pat.search(text)), hit, text)
+        with mock.patch.object(socket, "gethostname", return_value="pc"):
+            self.assertIsNone(CB.machine_pattern())                                # 두 글자 이름은 낱말로도 너무 흔하다
+
+    def test_redact_hides_remote_addresses_and_absolute_paths(self):   # J55
+        for raw, want in (("fatal: unable to access 'https://user:t0ken@example.invalid/a/b.git/': failed", "fatal: unable to access '<원격>': failed"),
+                          ("ssh: connect to host git@example.invalid:me/repo.git port 22", "ssh: connect to host <원격> port 22"),
+                          ("fatal: '/private/tmp/x/gone.git' does not appear to be a git repository", "fatal: '<경로>' does not appear to be a git repository"),
+                          ("! [rejected] (fetch first)", "! [rejected] (fetch first)")):
+            self.assertEqual(CB.redact(raw), want, raw)
+
+
+class AvailabilityWithoutAnOrigin(StateRepo):
+    """기본 브랜치를 몰라 설정 층을 건너뛴 레포 — 설정 파일이 있을 때만 닫는다(P1)."""
+
+    def drop_origin(self):
+        self.g("remote", "remove", "origin")
+
+    def test_unread_settings_file_closes_when_the_default_branch_is_unknown(self):
+        (self.w / ".devbrew.md").write_text("---\nstate_branch: 끔\n---\n", encoding="utf-8")   # 커밋하지 않은 작업 폴더의 파일
+        self.drop_origin()
+        why = CB.availability(self.w, rm(ALPHA))
+        self.assertTrue(why.startswith("레포 설정을 읽지 못해 상태 브랜치를 쓰지 않는다 — "), why)
+        self.assertNotEqual(why, "상태 브랜치가 꺼져 있다")
+
+    def test_settings_file_in_head_alone_closes_too(self):
+        self.put({".devbrew.md": "---\nstate_branch: 켬\n---\n"})
+        self.drop_origin()
+        self.assertTrue(CB.availability(self.w, rm(ALPHA)).startswith("레포 설정을 읽지 못해 상태 브랜치를 쓰지 않는다 — "))
+
+    def test_no_settings_file_means_local_writes_stay_open(self):   # 양성 대조
+        self.drop_origin()
+        self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
