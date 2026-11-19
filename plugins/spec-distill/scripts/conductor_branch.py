@@ -63,12 +63,27 @@ class BranchError(Exception):
 
 # ── git ──────────────────────────────────────────────────────────────────────
 
+PUSH_FORMS = ("--porcelain",)   # push 가 받는 옵션은 이것뿐이다 — force · mirror · delete 는 옵션 이름이 무엇이든 받지 않는다
+
+
+def _check_write_form(args) -> None:
+    """쓰는 하위 명령의 위험한 꼴을 문에서 거절한다 — push 의 force · `+`/`:` 갈래, 옛 값 없는 update-ref."""
+    rest = args[1:]
+    if args[0] == "push":
+        for a in rest:
+            if (a.startswith("-") and a not in PUSH_FORMS) or a.startswith("+") or a.startswith(":"):
+                raise RuntimeError("git push 는 덮어쓰기 없이 올리는 꼴만 부른다: %r" % (a,))
+    if args[0] == "update-ref" and (len(rest) != 3 or any(a.startswith("-") for a in rest)):
+        raise RuntimeError("git update-ref 는 옛 값을 함께 준 꼴만 부른다: %r" % (rest,))
+
+
 def _run(root, *args, env=None, data=None, timeout=None) -> tuple:
     """(rc, stdout 바이트, stderr 바이트). 허용 목록 밖 하위 명령은 RuntimeError."""
     if not args or args[0] not in GIT_ALLOWED:
         raise RuntimeError("허용하지 않는 git 하위 명령: %r" % (args[:1],))
     if args[0] == "config" and args[1:2] not in tuple((f,) for f in CONFIG_READ_FORMS):
         raise RuntimeError("git config 는 읽는 꼴만 부른다: %r" % (args,))
+    _check_write_form(args)
     full = dict(os.environ)   # 부를 때의 환경 — import 때 굳히지 않는다
     full.update(env or {})
     full["LC_ALL"] = "C"
@@ -455,7 +470,7 @@ def _build_commit(root, tip: Optional[str], changes: dict, message: str, force: 
             else:
                 rc, blob, err = git(root, "hash-object", "-w", "--stdin", env=env, data=text)
                 if rc == 0:
-                    rc, _o, err = git(root, "update-index", "--add", "--replace", "--cacheinfo",
+                    rc, _o, err = git(root, "update-index", "--add", "--cacheinfo",
                                       "100644,%s,%s" % (blob.strip(), path), env=env)
             if rc:
                 raise _git_fail(err, "상태 브랜치에 쓸 글을 만들지 못했다")
@@ -558,6 +573,9 @@ def main(argv=None) -> int:
     except BranchError as exc:
         print("[spec-distill] " + str(exc), file=sys.stderr)
         return exc.rc
+    except Exception as exc:   # 예상 밖 예외도 종료 코드 3 — 쓰지 못한 것이다
+        print("[spec-distill] 상태 브랜치를 쓰지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))), file=sys.stderr)
+        return 3
     for line in res.notes:
         print("[spec-distill] " + line)
     return 0

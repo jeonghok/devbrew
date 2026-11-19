@@ -15,6 +15,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, rm  # noqa: E402
@@ -361,8 +362,9 @@ class Ensure(StateRepo):
         before = self.snap()
         rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
         self.assertEqual(rc, 3, out)
-        self.assertIn("refs/heads/conductor", out)
+        self.assertIn("cannot lock ref 'refs/heads/conductor/" + ALPHA + "': 'refs/heads/conductor' exists", out)   # git 의 사유 줄이 실린다
         self.assertEqual(self.snap(), before)
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
 
     def test_no_git_identity_stops_without_leftovers(self):   # Review Focus 3
         self.claim()
@@ -370,9 +372,24 @@ class Ensure(StateRepo):
             self.g("config", "--unset", key)
         self.g("config", "user.useConfigOnly", "true")
         refs = self.refs()
-        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)
+        scratch = self.t / "scratch-tmp"
+        scratch.mkdir()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID, env=dict(ENV, TMPDIR=str(scratch)))
         self.assertEqual((rc, self.refs()), (3, refs), out)
         self.assertIn("git config user.name", out)
+        self.assertEqual(list(scratch.iterdir()), [])                       # 임시 index 폴더가 남지 않았다
+        made = []
+        real = CB.tempfile.mkdtemp
+
+        def spy(*a, **k):
+            made.append(real(*a, **k))
+            return made[-1]
+        with mock.patch.object(CB.tempfile, "mkdtemp", spy):
+            with self.assertRaises(CB.BranchError) as c:
+                CB.ensure(self.w, rm(ALPHA), SID)
+        self.assertEqual(c.exception.rc, 3)
+        self.assertEqual(len(made), 1)                                      # 양성 대조 — 임시 index 는 실제로 만들어졌고
+        self.assertFalse(os.path.exists(made[0]))                           # 지워졌다
 
 
 class Write(StateRepo):
@@ -460,6 +477,72 @@ class Write(StateRepo):
         r = CB.write(d, rm(ALPHA), SID, lambda base: {self.team.status: "얕은 클론\n"}, "STATUS")
         self.assertIsNotNone(r.commit)
         self.assertEqual(self.snap(d), before)
+
+
+class WriteFloorGuards(StateRepo):
+    def setUp(self):
+        super().setUp()
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.team = CB.team_of(self.w, rm(ALPHA))
+
+    def put_status(self, text):
+        return CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: text}, "STATUS")
+
+    def test_directory_and_file_conflicts_stop_and_write_nothing(self):   # I4 — 덮어써 지우지 않는다
+        leaf = self.team.dir + "/x"
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {leaf: "파일\n"}, "파일")
+        refs = self.refs()
+        for conflict in (leaf + "/y", ):
+            with self.assertRaises(CB.BranchError, msg=conflict) as c:
+                CB.write(self.w, rm(ALPHA), SID, lambda base: {conflict: "아래\n"}, "충돌")
+            self.assertEqual(c.exception.rc, 3)
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.dir + "/d/z": "z\n"}, "폴더")
+        refs = self.refs()
+        with self.assertRaises(CB.BranchError) as c:                          # 폴더가 있는 자리에 파일
+            CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.dir + "/d": "파일\n"}, "충돌")
+        self.assertEqual((c.exception.rc, self.refs()), (3, refs))
+        self.assertEqual(CB.read(self.w, CB.local_tip(self.w, ALPHA), self.team.dir + "/d/z"), "z\n")
+
+    def test_push_lands_exactly_on_the_local_commit(self):               # I1
+        r = self.put_status("올라간다\n")
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), r.commit)
+        d = self.clone("sh2", "--depth", "1", "--no-local")
+        self.claim(repo=d)
+        remote_before = self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o)
+        CB.ensure(d, rm(ALPHA), SID)                                       # 관계없는 뿌리를 만들고 — 올리기는 거절돼야 한다
+        res = CB.write(d, rm(ALPHA), SID, lambda base: {self.team.status: "덮으려 한다\n"}, "STATUS")
+        self.assertFalse(res.pushed)
+        self.assertTrue(res.notes and res.notes[0].startswith(CB.NOT_PUSHED), res.notes)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), remote_before)   # 원격 끝이 덮이지 않았다
+
+
+class MainCatchesEverything(StateRepo):
+    def test_unexpected_exception_exits_3_with_one_line(self):            # I3
+        import contextlib
+        import io
+        err = io.StringIO()
+        with mock.patch.object(CB, "ensure", side_effect=RuntimeError("boom\n둘째 줄")), contextlib.redirect_stderr(err):
+            rc = CB.main(["--root", str(self.w), "ensure", "--roadmap", rm(ALPHA), "--session", SID])
+        self.assertEqual(rc, 3)
+        self.assertEqual(len(err.getvalue().strip().splitlines()), 1)
+        self.assertIn("RuntimeError", err.getvalue())
+
+
+class GitGateGuards(StateRepo):
+    def test_push_and_update_ref_refuse_overwriting_forms(self):         # I1
+        ref = CB.ref_of(ALPHA)
+        bad_push = (("--force", "origin", ref + ":" + ref), ("-f", "origin", ref + ":" + ref), ("--force-with-lease", "origin", ref),
+                    ("--mirror", "origin"), ("--delete", "origin", ref), ("-d", "origin", ref), ("--porcelain", "origin", "+" + ref + ":" + ref),
+                    ("--porcelain", "origin", ":" + ref))
+        for form in bad_push:
+            with self.assertRaises(RuntimeError, msg=form):
+                CB.git(self.w, "push", *form)
+        for form in (("-d", ref), (ref, "a" * 40), (ref, "a" * 40, "b" * 40, "c" * 40), ("--no-deref", ref, "a" * 40, "b" * 40)):
+            with self.assertRaises(RuntimeError, msg=form):
+                CB.git(self.w, "update-ref", *form)
+        rc, _o, _e = CB.git(self.w, "push", "--porcelain", "origin", "HEAD:refs/heads/probe")   # 양성 대조 — 덮어쓰지 않는 꼴은 돈다
+        self.assertEqual(rc, 0)
 
 
 class WriteBoundary(unittest.TestCase):
