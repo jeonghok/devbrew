@@ -285,6 +285,16 @@ plant "$(rend "$PLANKIND" 2026-03-13 "계획대로 구현한다" plan-1.md "$(re
 trio "P3 다른 계획의 답" plan "어긋남" "시작하지 않는다" 1
 unplant "$M"
 
+# 깨진 human_gate 값은 관문을 열지 않는다 — 설정을 읽지 못한 것은 검사 불가(3)이고 묶음 · 받음 줄은 나오지 않는다
+g checkout -q main && printf -- '---\nhuman_gate: 아무거나\n---\n' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "깨진 human_gate" && push_main && g checkout -q feature/tm-e3
+check 3 "P4: 깨진 human_gate 값이면 시작 묶음이 검사 불가(3)로 멈춘다" --job E3 --stage implement --plan 1
+assert_contains "$(err)" "human_gate" "P4: 사유가 그 설정을 짚는다"
+assert_eq "$(rchk --job E3 --result implement-plan-1-1.md)" "3" "P4: 결과 대조도 3"
+assert_eq "$(grep -c '^- 결과 받음' "$T/c.txt")" "0" "P4: 받음 줄이 없다"
+assert_not_contains "$(cat "$T/b.err" "$T/c.txt")" "대조가 꺼져 있다" "P4: 깨진 값이 관문을 끄지 않는다"
+g checkout -q main && g revert --no-edit HEAD >/dev/null && push_main && g checkout -q feature/tm-e3
+check 0 "P4: 설정을 되돌리면 같은 묶음이 나간다(양성 대조)" --job E3 --stage plan --plan 1
+
 approved "$PLANKIND" E3 1 - 2026-03-13 && push_br feature/tm-e3
 passes "P+"
 
