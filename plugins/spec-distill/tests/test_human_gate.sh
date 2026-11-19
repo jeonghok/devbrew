@@ -206,9 +206,13 @@ assert_contains "$(err)" "다시 시도 plan 1 시도 8" "27d: 다음 관문은 
 hand_attempt 8 "AC1: 구현됨 — 끝 줄 뒤의 기계 줄" && ok "27e: 준비 — 끝 줄 뒤에 기계 줄이 있는 시도 8 을 손으로 썼다" || no "27e: 준비 — 시도 8"
 check 1 "27e: 끝 줄 뒤의 기계 줄이 있는 시도도 실패로 센다(AC13)" "${D_IMPL[@]}"
 assert_contains "$(err)" "다시 시도 plan 1 시도 9" "27e: 다음 관문은 시도 9"
-approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 9" 2026-11-26 && push_br feature/tm-e1
-check 0 "27f: 사람의 다시 시도 줄은 그 시도를 푼다(27d · 27e 의 양성 대조)" "${D_IMPL[@]}"
-assert_eq "$(write_line)" "$E1/results/implement-plan-1-9.md" "27f: 쓸 것은 시도 9"
+sed -e 's/^attempt: 6$/attempt: 9/' -e '/^끝 — /d' "$W/$E1/results/implement-plan-1-6.md" > "$W/$E1/results/implement-plan-1-9.md" && printf '산출물:\n' >> "$W/$E1/results/implement-plan-1-9.md" \
+  && g add -- "$E1" && g commit -qm "끝 줄을 지우고 빈 산출물 줄을 넣은 시도 9" && push_br feature/tm-e1 && ok "27e2: 준비 — 끝 줄을 지우고 빈 산출물 줄을 둔 시도 9 를 손으로 고쳤다" || no "27e2: 준비 — 시도 9"
+check 1 "27e2: 끝 줄을 지우고 꼴 문제를 남겨도 멈춤이 풀리지 않는다(AC13 — 시작 묶음은 다음 번호를 낸다)" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 10" "27e2: 다음 관문은 시도 10"
+approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 10" 2026-11-26 && push_br feature/tm-e1
+check 0 "27f: 사람의 다시 시도 줄은 그 시도를 푼다(27d · 27e · 27e2 의 양성 대조)" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-10.md" "27f: 쓸 것은 시도 10"
 
 g checkout -q main && g merge -q --no-ff -m "E1 계획 1 합침" feature/tm-e1 && push_main
 for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do

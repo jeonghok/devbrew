@@ -139,7 +139,7 @@ def attempt_of(names: list, read, stage: str, number: Optional[int]) -> tuple:
     attempt = team_layout.parse_result_name(latest)[2]
     text = read(latest)
     result = team_files.parse_result(text) if text is not None else None
-    if result is None or result.problems or result.end is not None:
+    if not job_results.in_progress(result):
         attempt += 1
     earlier = [n for n in names if (team_layout.parse_result_name(n) or (None, None, attempt))[2] < attempt]
     return attempt, job_results.newest(earlier, stage, number)

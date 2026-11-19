@@ -273,6 +273,11 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
     return RECEIVED, notes, latest
 
 
+def in_progress(r) -> bool:
+    """도는 중인 시도인가 — 읽혔고 꼴 문제가 없고 「끝」 줄이 없다. 시작 묶음이 같은 번호를 잇는 조건이자 연속 실패가 끊기는 조건이다."""
+    return r is not None and not r.problems and r.end is None
+
+
 def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> list:
     """그 계획의 implement 시도 가운데 번호가 before 보다 작은 것을 큰 번호부터 보아, 「끝」 줄이 있고 산 받음 줄이 없는
     시도의 이름들(이어지는 만큼). 머리를 읽지 못한 시도 · 「끝」 줄이 없는 시도 · 산 받음 줄이 있는 시도를 만나면 멈춘다(J12).
@@ -297,7 +302,7 @@ def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, befor
         if text is None:   # 있는데 읽지 못했다 — 이어짐을 끊지 않고 검사 불가로 낸다
             raise Unchecked("결과 파일을 읽지 못했다: %s" % path)
         r = team_files.parse_result(text)
-        if _unread(r) or (r.end is None and not any(x.startswith(team_files.END_EMPTY) for x in r.problems)):   # 머리를 읽지 못한 시도 · 도는 중인 시도(끝 줄이 없다)만 끊는다
+        if _unread(r) or in_progress(r):   # 머리를 읽지 못한 시도 · 도는 중인 시도만 끊는다
             break
         if any(x.name == name and x.commit == r.head for x in good) and check_result(git, tip, team, job, name, newer_ok=True).ok:
             break

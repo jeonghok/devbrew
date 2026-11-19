@@ -385,6 +385,13 @@ class FailedStreak(unittest.TestCase):
             with mock.patch.object(job_results, "check_result", lambda *a, **k: job_results.Check(True, "", [], [], None)):
                 self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 2, label)
 
+    def test_dropped_end_line_with_problem_still_counts(self):   # 「끝」 을 지우고 꼴 문제를 남긴 시도 — 시작 묶음은 다음 번호를 내므로 도는 중이 아니다
+        git, text = self.build([(1, 1, True), (1, 2, True)], bodies={(1, 2): "산출물:\n"})
+        r = F.parse_result(result("산출물:\n"))
+        self.assertEqual((r.end is None, bool(r.problems), job_results.in_progress(r)), (True, True, False))
+        with mock.patch.object(job_results, "check_result", lambda *a, **k: job_results.Check(True, "", [], [], None)):
+            self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 2)
+
     def test_blob_read_failure_is_unchecked(self):
         git, text = self.build([(1, 1, True)])
         del git.files[self.TEAM.result("E1", "implement", 1, 1)]
