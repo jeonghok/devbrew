@@ -418,11 +418,16 @@ def passed(scope: Scope, kind: str, plan: Optional[int], deep: bool) -> tuple:
         if got.verdict == PASS:
             return Passed(got.line.date, False), None
         last = got
-    name = _skip_gate(kind, plan)
+    name, last_skip = _skip_gate(kind, plan), None
     for raw in scope.lines if name is not None else ():
         skip = parse(raw) if is_human(raw) == KIND_SKIP else None
-        if skip is not None and skip.gate == name and judge(scope, raw).verdict == PASS:
+        if skip is None or skip.gate != name:
+            continue
+        got = judge(scope, raw)
+        if got.verdict == PASS:
             return Passed(skip.date, True), None
+        last_skip = got
+    last = last or last_skip   # 그 관문의 건너뜀 줄만 있고 지나지 못했으면 그 판정을 낸다 — 「줄이 없다」 로 감추지 않는다
     if last is None:
         return None, NO_LINE
     return None, "%s — %s" % (last.verdict, last.why)
@@ -437,13 +442,26 @@ def missing(scope: Scope, stage: str, plan: Optional[int], plain: bool, deep: bo
             continue
         where = "" if n is None else "(계획 %d)" % n
         if why == NO_LINE:
-            out.append("`%s` 줄이 없다%s — 질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 적는다" % (kind, where, kind))
+            out.append("`%s` 줄이 없다%s — %s" % (kind, where, _write_hint(kind, scope.gate_on, False)))
             continue
         text = "`%s` 줄이 지나지 못했다%s: %s" % (kind, where, why)
         if why.startswith(NO_EVIDENCE + " — ") or why.startswith(MISMATCH + " — "):
-            text += " — 질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 다시 적는다" % kind
+            text += " — " + _write_hint(kind, scope.gate_on, True)
         out.append(text)
     return out
+
+
+def _write_hint(kind: str, gate_on: bool, again: bool) -> str:
+    """줄을 (다시) 적는 길. 켜져 있으면 질문 창 답에서만(`record --human`), 꺼져 있으면 글로(§8 — 설계 승인은 옛 방식,
+    나머지 종류는 `record --line`)."""
+    verb = "다시 적는다" if again else "적는다"
+    if gate_on:
+        return "질문 창으로 승인받고 `conductor_ledger.py record --human \"%s\"` 로 %s" % (kind, verb)
+    if kind == KIND_SPEC:
+        how = "`conductor_ledger.py record --approval --choice \"<고른 글>\"`"
+    else:
+        how = "`conductor_ledger.py record --line \"%s · <YYYY-MM-DD> · 「<고른 글>」\"`" % kind
+    return "%s — 글로 %s: %s" % (GATE_OFF, verb, how)
 
 
 def retry_open(scope: Scope, plan: Optional[int], attempt: int, deep: bool) -> bool:
@@ -485,23 +503,20 @@ def collect(git, team, job: str, tips) -> tuple:
 
 
 def expected(plain: bool, plan_files: list, result_names: list, received_names: list) -> list:
-    """자취로 볼 때 있어야 하는 사람 줄(J24) — [(종류, 계획 | None, 자취 글), …]. 차례는 spec 승인 · 계획 검토(계획 번호 차례)."""
-    results = [(n, team_layout.parse_result_name(n)) for n in sorted(result_names)]
-    results = [(n, r) for n, r in results if r is not None]
-    received = [(n, team_layout.parse_result_name(n)) for n in received_names]
+    """자취로 볼 때 있어야 하는 사람 줄(J24) — [(종류, 계획 | None, 자취 글), …]. 차례는 spec 승인 · 계획 검토(계획 번호 차례).
+
+    받음 줄은 그 결과 파일과 같이 단계로 가른다 — 관문 표(§3)로 볼 때 그 결과가 지나야 했던 관문만 있어야 한다.
+    """
+    named = [(_HAD % n, team_layout.parse_result_name(n)) for n in sorted(result_names)] \
+        + [(_GOT % n, team_layout.parse_result_name(n)) for n in received_names]
+    traces = [(text, r) for text, r in named if r is not None]
     if plain:
-        traces = [_HAD % n for n, _ in results] + [_GOT % n for n, _ in received]
-        return [(KIND_FLOW, None, traces[0])] if traces else []
+        return [(KIND_FLOW, None, traces[0][0])] if traces else []
     out = []
-    spec = [_HAD % n for n in sorted(plan_files)] + [_HAD % n for n, r in results if r[0] in team_layout.PLANNED_STAGES] \
-        + [_GOT % n for n, _ in received]
+    spec = [_HAD % n for n in sorted(plan_files)] + [text for text, r in traces if r[0] in team_layout.PLANNED_STAGES]
     if spec:
         out.append((KIND_SPEC, None, spec[0]))
     built = team_layout.PLANNED_STAGES[1:]
-    plans = sorted({r[1] for _, r in results if r[0] in built and r[1] is not None}
-                   | {r[1] for _, r in received if r is not None and r[1] is not None})
-    for n in plans:
-        traces = [_HAD % x for x, r in results if r[0] in built and r[1] == n] \
-            + [_GOT % x for x, r in received if r is not None and r[1] == n]
-        out.append((KIND_PLAN, n, traces[0]))
+    for n in sorted({r[1] for _, r in traces if r[0] in built and r[1] is not None}):
+        out.append((KIND_PLAN, n, next(text for text, r in traces if r[0] in built and r[1] == n)))
     return out

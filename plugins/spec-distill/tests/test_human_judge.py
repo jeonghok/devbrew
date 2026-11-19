@@ -363,6 +363,65 @@ class Gates(SeededRepo):
         self.assertEqual(H.expected(True, [], ["implement-1.md"], []), [("흐름 승인", None, "implement-1.md 가 있다")])
         self.assertEqual(H.expected(True, [], [], ["implement-1.md"]), [("흐름 승인", None, "implement-1.md 의 받음 줄이 있다")])
 
+    def test_received_lines_follow_the_gate_table_by_stage(self):   # J24 · AC23 — 받음 줄도 결과 파일처럼 단계로 가른다
+        self.assertEqual(H.expected(False, [], [], ["plan-plan-3-1.md"]), [("spec 승인", None, "plan-plan-3-1.md 의 받음 줄이 있다")])
+        self.assertEqual(H.expected(False, [], [], ["design-1.md"]), [])
+        self.assertEqual(H.expected(False, [], [], ["review-plan-2-1.md"]),
+                         [("spec 승인", None, "review-plan-2-1.md 의 받음 줄이 있다"), ("계획 검토", 2, "review-plan-2-1.md 의 받음 줄이 있다")])
+        self.assertEqual(H.expected(False, [], [], ["결과 아님.md"]), [])
+        self.assertEqual(H.expected(False, [], ["plan-plan-3-1.md"], ["plan-plan-3-1.md", "implement-plan-3-1.md"]),
+                         [("spec 승인", None, "plan-plan-3-1.md 가 있다"), ("계획 검토", 3, "implement-plan-3-1.md 의 받음 줄이 있다")])
+
+    def test_gate_off_guidance_writes_by_text(self):   # §8 — 꺼져 있으면 질문 창 답이 아니라 글로 적는다
+        off = self.miss([], "implement", 1, gate_on=False)
+        self.assertEqual(off, ["`spec 승인` 줄이 없다 — 사람 줄 대조가 꺼져 있다 — 글로 적는다: `conductor_ledger.py record --approval --choice \"<고른 글>\"`",
+                               "`계획 검토` 줄이 없다(계획 1) — 사람 줄 대조가 꺼져 있다 — 글로 적는다: "
+                               "`conductor_ledger.py record --line \"계획 검토 · <YYYY-MM-DD> · 「<고른 글>」\"`"])
+        flow = self.miss([], "implement", None, plain=True, gate_on=False)[0]
+        self.assertIn('record --line "흐름 승인 · ', flow)
+        on = self.miss([], "implement", 1)                                               # 양성 대조 — 켜져 있으면 질문 창 답에서만
+        self.assertTrue(all("record --human" in x and "--line" not in x and "--approval" not in x for x in on), on)
+        self.assertTrue(all("record --human" not in x for x in off + [flow]), off)
+
+    def test_gate_off_malformed_spec_line_and_dateless_skip(self):
+        bad = "- spec 승인 · 2026-11-1 · 「승인」"                                        # 정해진 꼴의 날짜가 어긋났다(approval_in 의 옛 규칙)
+        got, why = H.passed(self.scope(self.tip, (bad,), False), H.KIND_SPEC, None, True)
+        self.assertEqual(got, None)
+        self.assertTrue(why.startswith("어긋남 — "), why)
+        text = self.miss([bad], "plan", 1, gate_on=False)[0]
+        self.assertTrue(text.startswith("`spec 승인` 줄이 지나지 못했다: 어긋남 — ") and "record --approval --choice" in text, text)
+        skip_spec = "- 걸음 건너뜀 · 2026-11-18 · 「건너뛴다」 · spec 승인"
+        self.assertEqual(H.passed(self.scope(self.tip, (bad, skip_spec), False), H.KIND_SPEC, None, True), (H.Passed("2026-11-18", True), None))
+        dateless = "- 걸음 건너뜀 · 「건너뛴다」 · 계획 검토 plan 1"
+        self.assertEqual(H.passed(self.scope(self.tip, (dateless,), False), H.KIND_PLAN, 1, True), (H.Passed("", True), None))
+        self.assertEqual(H.passed(self.scope(self.tip, (dateless,), False), H.KIND_PLAN, 2, True), (None, H.NO_LINE))
+
+    def test_collect_notes_a_tip_git_cannot_read(self):   # 없는 것과 읽지 못한 것은 다르다
+        b = self.commit(TEAM.intent(JOB), INTENT + "\n- 결정 · 2026-11-19 · 「둘」\n", "줄")
+        lines, notes = H.collect(self.git, TEAM, JOB, ["deadbeef", b, self.c1])      # git 이 「객체 이름이 아니다」 로 실패한다(경로 없음이 아니다)
+        self.assertEqual((lines, len(notes)), (("- 결정 · 2026-11-19 · 「둘」",), 1))
+        self.assertIn("deadbeef 의 결정 기록을 읽지 못했다", notes[0])
+
+    def test_rerecord_tail_only_for_no_evidence_and_mismatch(self):
+        real = self.approve(self.tip)
+        c5 = self.commit(TEAM.design(JOB), DESIGN.replace("본문 하나", "본문 둘"), "승인 뒤 본문 고침")
+        stale = H.missing(self.scope(c5, (real,)), "plan", 1, False, True)[0]
+        self.assertTrue(stale.startswith("`spec 승인` 줄이 지나지 못했다: 낡음 — ") and "record --human" not in stale, stale)
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/nonexistent/claude"}):
+            unchecked = self.miss([real], "plan", 1)[0]
+        self.assertTrue(unchecked.startswith("`spec 승인` 줄이 지나지 못했다: 확인 못 함 — ") and "record --human" not in unchecked, unchecked)
+        hand = self.miss(["- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」"], "plan", 1)[0]          # 양성 대조
+        self.assertTrue(hand.endswith('— 질문 창으로 승인받고 `conductor_ledger.py record --human "spec 승인"` 로 다시 적는다'), hand)
+
+    def test_failing_skip_line_is_not_hidden_as_no_line(self):
+        forged = self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 1")
+        forged = re.sub("계획 검토 plan 1 · ", "spec 승인 · ", forged)               # 질문에 spec 승인 이 없다
+        self.assertEqual(H.parse(forged).gate, "spec 승인")
+        got, why = H.passed(self.scope(self.tip, (forged,)), H.KIND_SPEC, None, True)
+        self.assertEqual((got, why), (None, "어긋남 — 그 질문에 관문 이름 spec 승인 이 없다"))
+        self.assertTrue(self.miss([forged], "plan", 1)[0].startswith("`spec 승인` 줄이 지나지 못했다: 어긋남 — "))
+        self.assertEqual(H.passed(self.scope(self.tip, ()), H.KIND_SPEC, None, True), (None, H.NO_LINE))   # 줄이 정말 없을 때만 「줄이 없다」
+
     def test_shallow_and_deep(self):
         spec = self.approve(self.tip)
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/nonexistent/claude"}):
