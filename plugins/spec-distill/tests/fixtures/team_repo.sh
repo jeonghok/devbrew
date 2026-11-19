@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
 # source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
-# answer · human · approved)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
@@ -73,6 +73,26 @@ human() {  # human <종류> <과제> [계획|-] [관문 이름|-] [날짜] — �
 }
 approved() {  # approved <human 의 인자…> — 줄을 적고 그 과제의 INTENT.md 를 커밋한다
   [ "$(human "$@")" = "0" ] && g add -- "$TM/jobs/$2/INTENT.md" && g commit -qm "$1 — $2"
+}
+
+bundle() {  # bundle <start_bundle 인자…> — W 에서 과제 시작 묶음을 불러 rc 를 echo 한다. 출력은 $T/b.txt · 표준 오류는 $T/b.err
+  (cd "$W" && python3 "$S/start_bundle.py" --roadmap "$RM" "$@") > "$T/b.txt" 2> "$T/b.err"; echo $?
+}
+refused() { [ "$(bundle "$@")" = "1" ] && [ ! -s "$T/b.txt" ]; }   # 멈춤(1)이고 표준 출력이 빈다
+check() {  # check <기대 rc> <메시지> <bundle 인자…> — rc 를 재고, 0 이 아니면 표준 출력이 빈 것도 잰다
+  local want="$1" msg="$2"; shift 2
+  assert_eq "$(bundle "$@")" "$want" "$msg"
+  [ "$want" = "0" ] || assert_eq "$(wc -c < "$T/b.txt" | tr -d ' ')" "0" "$msg — 표준 출력이 비었다"
+}
+use_repo() {  # use_repo <폴더> — 그 폴더에 선 팀 레포를 쓰도록 T · W · CLAUDE_CONFIG_DIR 를 옮긴다
+  T="$1"; W="$T/repo"; CLAUDE_CONFIG_DIR="$T/claude"; export CLAUDE_CONFIG_DIR
+}
+new_repo() {  # new_repo <새 폴더> — 새 팀 레포를 세우고 공통 문서를 기본 브랜치에 올리고 지휘 표지를 쥔다. use_repo 도 한다
+  mkdir -p "$1" || return 1
+  use_repo "$1"
+  team_repo || return 1
+  g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" && g commit -qm "공통 문서" \
+    && g push -q origin main && g fetch -q origin && claim
 }
 
 team_repo() {

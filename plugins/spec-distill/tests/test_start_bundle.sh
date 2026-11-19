@@ -23,6 +23,7 @@ publish() { g push -q origin main && g fetch -q origin; B="$(g rev-parse origin/
     '- [셋] 경로 한정 · 조건: 경로=nowhere/** · 출처: a · 확인: b'
 } > "$W/$TM/RULES.md"
 g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" "$TM/RULES.md" && g commit -qm "공통 문서 · 규칙" && publish
+claim && ok "지휘 표지를 쥐었다(사람 줄을 적으려면 있어야 한다)" || no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"
 
 assert_eq "$(lead)" "0" "리더: 종료 코드 0"
 printf '기준 커밋: %s\n역할 문서 (%s):\n%s\n규칙 (%s):\n%s\n%s\n' "$B" "$B" "$(show "${RD}leader/CLAUDE.md")" "$B" \
@@ -142,6 +143,7 @@ g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "E1 설계 한 줄"
 put "$E1/plan-1.md" "E1 계획 한 줄"
 g commit -qm "E1 설계 · 계획" && jpush
+approved "spec 승인" E1 - - 2026-11-20 && approved "계획 검토" E1 1 - 2026-11-21 && jpush   # 관문 — 승인 줄이 있어야 plan · implement · review 묶음이 나간다
 g checkout -q main
 
 assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "과제: implement 묶음"
@@ -171,8 +173,11 @@ assert_eq "$(line 6)" "맞추는 명령: roadmap_write.py job sync --result ${E1
 assert_eq "$(line 7)" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-1.md 에 쓴다." "과제: plan 의 쓸 자리"
 assert_eq "$(line 8)" "역할 문서 (${B}):" "과제: plan 의 역할 문서 머리"
 assert_eq "$(sed -n '9,$p' "$T/job.txt" | head -n "$(doc_lines worker)")" "$(g show "$B:${RD}worker/CLAUDE.md")" "과제: plan 의 역할 문서는 worker 의 것"
+# 둘째 브랜치도 설계 파일이 있어야 spec 승인 줄을 대조한다 — 첫 브랜치의 끝에서 갈라 계획 2 를 더해 올린다
+g checkout -q -b feature/tm-e1b feature/tm-e1 && put "$E1/plan-2.md" "E1 계획 둘" && g commit -qm "E1 계획 2" && g push -q origin feature/tm-e1b && g fetch -q origin
+E1B="$(g rev-parse feature/tm-e1b)"; g checkout -q main
 assert_eq "$(job --job E1 --stage plan --plan 2)" "0" "과제: 계획 2 의 plan 묶음(I12 — 블록 브랜치의 둘째)"
-assert_eq "$(line 2)" "알림: 과제 브랜치 feature/tm-e1b 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다" "과제: 계획 2 는 둘째 브랜치를 본다"
+assert_eq "$(line 1)" "기준 커밋: ${B} · 과제 브랜치 ${E1B}" "과제: 계획 2 는 둘째 브랜치를 본다"
 assert_eq "$(grep '^쓸 것: ' "$T/job.txt")" "쓸 것: ${E1}/results/plan-plan-2-1.md" "과제: 계획 2 의 쓸 것"
 assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-2.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
 
@@ -209,7 +214,7 @@ assert_eq "$(tail -n 3 "$T/job.txt")" "$(printf '검수 기준 (%s):\n- 반려 �
 g revert --no-edit HEAD >/dev/null && publish
 
 # E2 — 산출물 칸이 있는 블록(설계 없는 흐름, U1)
-g branch -q feature/tm-e2 main && g push -q origin feature/tm-e2 && g fetch -q origin
+g checkout -q -b feature/tm-e2 main && approved "흐름 승인" E2 - - 2026-11-22 && g push -q origin feature/tm-e2 && g fetch -q origin && g checkout -q main
 assert_eq "$(job --job E2 --stage implement)" "0" "과제: 설계 없는 흐름의 implement"
 assert_eq "$(line 1)" "기준 커밋: ${B} · 과제 브랜치 $(g rev-parse feature/tm-e2)" "과제: E2 의 둘째 커밋은 그 브랜치 끝"
 assert_eq "$(line 3)" "원자료: ${B}:${TM}/intent/original.md 5–7행" "과제: 설계 없는 흐름의 블록도 원자료 범위가 있다"
@@ -225,7 +230,8 @@ assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 사용자 선호: 
 # 단순 작업(I8 · U5)
 g checkout -q -b chore/tm-fix main
 printf '오타를 고친다\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name fix-typo --branch chore/tm-fix --paths docs/tv/ --goal "오타 고치기") > "$T/out.txt" 2>&1
-g add -- "$TM/jobs/fix-typo" && g commit -qm "단순 작업" && g push -q origin chore/tm-fix && g fetch -q origin
+g add -- "$TM/jobs/fix-typo" && g commit -qm "단순 작업"
+approved "흐름 승인" fix-typo - - 2026-11-23 && g push -q origin chore/tm-fix && g fetch -q origin
 FIX="$(g rev-parse chore/tm-fix)"
 g checkout -q main
 assert_eq "$(job --job fix-typo --stage implement)" "0" "과제: 단순 작업 묶음"
@@ -347,11 +353,12 @@ assert_eq "$(job --job E2 --stage implement)" "0" "멈춤: INTENT.md 를 되돌�
 # ⓑ 에픽 INTENT.md 의 지시 원문에 줄 범위가 없다(implement)
 g checkout -q feature/tm-e2
 python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read().split("\n"); k=[l for l in s if not l.startswith("- 범위: intent/original.md ")]; assert len(k) == len(s) - 1; open(p, "w", encoding="utf-8", newline="").write("\n".join(k))' "$W/$TM/jobs/E2/INTENT.md"
-g add -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 범위 줄 지움" && e2push && g checkout -q main
+g add -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 범위 줄 지움"
+approved "흐름 승인" E2 - - 2026-11-24 && e2push && g checkout -q main   # 본문이 바뀌었으니 관문을 다시 지나게 승인부터 다시 받는다
 assert_eq "$(job --job E2 --stage implement)" "1" "멈춤: 에픽 INTENT.md 에 줄 범위가 없으면 1"
 assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "멈춤: 범위 없음 — 표준 출력이 비었다"
 assert_eq "$(cat "$T/job.err")" "[spec-distill] 멈춤 — $TM/jobs/E2/INTENT.md 의 지시 원문에 $TM/intent/original.md 의 줄 범위가 없다" "멈춤: 범위 없음 — 사유"
-g checkout -q feature/tm-e2 && g revert --no-edit HEAD > /dev/null && e2push && g checkout -q main
+g checkout -q feature/tm-e2 && g revert --no-edit HEAD~1 > /dev/null && e2push && g checkout -q main
 assert_eq "$(job --job E2 --stage implement)" "0" "멈춤: 범위 줄을 되돌리면 다시 0(양성 대조)"
 # ⓒ 결정 블록은 과제가 아니다
 assert_eq "$(job --job P1 --stage implement)" "1" "멈춤: 결정 블록 이름은 1"
@@ -394,16 +401,17 @@ assert_eq "$(job --job fix-typo --stage implement)" "0" "멈춤 픽스처를 치
 T1="$T"; T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T1" "$T"' EXIT
-W="$T/repo"
+W="$T/repo"; CLAUDE_CONFIG_DIR="$T/claude"; export CLAUDE_CONFIG_DIR
 team_repo && ok "끝에서 끝: 새 팀 레포를 세웠다(${TM})" || { no "끝에서 끝: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
-g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" && g commit -qm "공통 문서" && publish
-assert_eq "$?" "0" "끝에서 끝: 공통 문서를 기본 브랜치에 올렸다"
+g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" && g commit -qm "공통 문서" && publish && claim
+assert_eq "$?" "0" "끝에서 끝: 공통 문서를 기본 브랜치에 올리고 지휘 표지를 쥐었다"
 EJ="$TM/jobs/e2e"
 g checkout -q -b chore/e2e main
 NEW_RC=0; printf '문서 하나를 고친다\n' > "$T/said.txt"
 (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name e2e --branch chore/e2e --paths docs/tv/ --goal "문서 하나 고치기" < "$T/said.txt") > "$T/out.txt" 2>&1 || NEW_RC=$?
 assert_eq "$NEW_RC" "0" "끝에서 끝: job new 0"
-g add -- "$EJ" && g commit -qm "과제 폴더 e2e" && g push -q origin chore/e2e && g fetch -q origin
+g add -- "$EJ" && g commit -qm "과제 폴더 e2e"
+approved "흐름 승인" e2e - - 2026-11-30 && g push -q origin chore/e2e && g fetch -q origin
 assert_eq "$?" "0" "끝에서 끝: 과제 폴더를 커밋해 올렸다"
 EJT="$(g rev-parse chore/e2e)"
 E_RC=0; (cd "$W" && python3 "$SBP" --roadmap "$RM" --job e2e --stage implement) > "$T/e2e.txt" 2> "$T/e2e.err" || E_RC=$?

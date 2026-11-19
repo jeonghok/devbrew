@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import human_lines  # noqa: E402
 import job_results  # noqa: E402
 import repo_defaults  # noqa: E402
 import roadmap_status  # noqa: E402
@@ -180,7 +181,9 @@ def _task(reader, blocks: list, job: str) -> dict:
 
 
 def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tuple:
-    """(과제 브랜치 커밋, 흐름이 설계 없는 흐름인가, 단순 작업인가, 알림들).
+    """(과제 브랜치 커밋, 흐름이 설계 없는 흐름인가, 단순 작업인가, 알림들, 그 과제의 브랜치 이름들).
+
+    브랜치 이름들은 블록 `브랜치:` 칸 전부(로드맵 밖 과제는 그 과제의 브랜치 하나)이고 관문의 줄을 모을 때 쓴다.
 
     에픽은 블록 `브랜치:` 의 plan 번째(없으면 첫째, I12), 단순 작업은 INTENT.md 머리 branch(I8). 끝은 read_tip 이 고른다."""
     reader = _reader(git, base)
@@ -188,7 +191,7 @@ def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tupl
     if block is None:
         task = _task(reader, blocks, job)
         commit, notices = _branch_commit(git, base, task["branch"])
-        return commit, True, True, notices
+        return commit, True, True, notices, [task["branch"]]
     plain = reader.flow(block) == team_status.PLAIN_FLOW
     branches = block.get("branches") or []
     if not branches:
@@ -197,7 +200,7 @@ def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tupl
     if n > len(branches):
         raise Refused("블록 %s 의 브랜치 칸에 %d 번째 브랜치가 없다(브랜치 %d개)" % (job, n, len(branches)))
     commit, notices = _branch_commit(git, base, branches[n - 1])
-    return commit, plain, False, notices
+    return commit, plain, False, notices, list(branches)
 
 
 def _plan_rule(stage: str, plan: Optional[int], plain: bool) -> None:
@@ -286,10 +289,17 @@ def _job_bundle(a) -> str:
     block = _block(blocks, job)
     if block is not None:   # 흐름을 아는 블록은 브랜치를 고르기 전에 인자부터 본다
         _plan_rule(stage, a.plan, _reader(git, base).flow(block) == team_status.PLAIN_FLOW)
-    commit, plain, simple, notices = locate(git, base, blocks, job, a.plan)
+    commit, plain, simple, notices, branches = locate(git, base, blocks, job, a.plan)
     _plan_rule(stage, a.plan, plain)
     intent_path = team.intent(job)
     intent = _intent(git, commit, intent_path, job, team.roadmap)
+    reader = _reader(git, base)
+    scope = reader.scope(commit, job, branches)
+    reasons = human_lines.missing(scope, stage, a.plan, plain, deep=True)
+    if reasons:
+        raise Refused(reasons[0])
+    if not scope.gate_on:
+        notices = [human_lines.GATE_OFF] + notices
     names = git.names(commit, team.job(job))
     results = job_results.result_names(git, commit, team, job)
     if names is None or results is None:
