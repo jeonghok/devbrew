@@ -231,6 +231,7 @@ class Showing(unittest.TestCase):
         import socket
         with mock.patch.object(socket, "gethostname", return_value="dev.local"):
             pat = CB.machine_pattern()
+            self.assertEqual(pat.search("on dev.local/x").group(0), "dev.local")      # 온 이름이 짧은 이름보다 먼저다 — 짧은 이름이 가로채면 `.local` 이 남는다
             for text, hit in (("devbrew 의 문서", False), ("mydev 폴더", False), ("dev2", False), ("dev 에서", True), ("(DEV)", True),
                               ("dev.local/x", True), ("에서dev", True)):
                 self.assertEqual(bool(pat.search(text)), hit, text)
