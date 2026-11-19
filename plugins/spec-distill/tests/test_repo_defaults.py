@@ -167,7 +167,7 @@ class Layers(unittest.TestCase):
                         "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
 
     def test_repo_layer_accepts_all_keys_and_not_meta(self):
-        self.assertEqual(len(rd.KEYS), 12)
+        self.assertEqual(len(rd.KEYS), 13)
         rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
@@ -304,6 +304,40 @@ class ReadmeTable(unittest.TestCase):
         for key in rd.BUDGET_KEYS:
             row = next(l for l in text.splitlines() if l.startswith("| `%s` |" % key))
             self.assertTrue(row.rstrip().endswith("| 무시하고 경고 |"), row)
+
+
+class StateBranchKey(unittest.TestCase):   # R3 AC14
+    def merged(self, repo=None, roadmap=None):
+        return rd.merge_layers(roadmap, repo, LABEL, [])
+
+    def test_default_is_on(self):
+        out = self.merged()
+        self.assertEqual((out["values"]["state_branch"], out["sources"]["state_branch"]), ("켬", "기본값"))
+        self.assertTrue(rd.state_branch_on(out["values"]))
+
+    def test_off_only_by_the_exact_word(self):
+        out = self.merged(repo={"state_branch": "끔"})
+        self.assertEqual((out["values"]["state_branch"], out["errors"]), ("끔", []))
+        self.assertFalse(rd.state_branch_on(out["values"]))
+        self.assertTrue(rd.state_branch_on(self.merged(repo={"state_branch": '"켬"'})["values"]))
+
+    def test_other_words_are_errors_and_count_as_off(self):   # 닫는 쪽 — 깨진 값으로는 원격에 쓰지 않는다
+        for word in ("off", "false", "0", "꺼짐", "켬켬", "끔끔", ""):
+            out = self.merged(repo={"state_branch": '"%s"' % word})
+            self.assertIsNone(out["values"]["state_branch"], word)
+            self.assertEqual(len(out["errors"]), 1, word)
+            self.assertIn("state_branch", out["errors"][0])
+            self.assertFalse(rd.state_branch_on(out["values"]), word)
+
+    def test_roadmap_layer_does_not_take_it(self):
+        out = self.merged(roadmap={"type": "roadmap", "source_brief": "b.md", "state_branch": "끔"})
+        self.assertTrue(any("state_branch" in e for e in out["errors"]))
+        self.assertTrue(rd.state_branch_on(out["values"]))   # 로드맵 머리말의 값으로는 꺼지지 않는다
+
+    def test_constants(self):
+        self.assertEqual(rd.BRANCH_RULE_FILE, "docs/git-workflow/branch-strategy.md")
+        self.assertEqual((rd.VERSION_FILE, rd.SHARED_FILES), ("plugin.json", ("plugin.json", "CHANGELOG.md", "README.md")))
+        self.assertEqual(rd.KEYS[-1], "state_branch")
 
 
 if __name__ == "__main__":

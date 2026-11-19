@@ -26,7 +26,8 @@ CONDUCTOR_DIR = "conductor"
 WORKTREE_HOME = ".claude/worktrees/"   # 하니스(EnterWorktree)가 worktree 를 두고 옮겨 갈 수 있는 폴더 — 외부 도구 기본값
 MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 일회용 사본 자리(잠금은 suite_lock.py 의 공유 잠금)
 PARALLEL_DEFAULT = 3                   # 지휘자가 동시에 돌리는 큰 작업의 권장 수 — 기본값이지 상한이 아니다(사용자가 늘린다)
-SHARED_FILES = ("plugin.json", "CHANGELOG.md", "README.md")   # 에픽이 함께 건드려 겹치기 쉬운 공유 파일 이름 — 기본값이지 상한이 아니다
+VERSION_FILE = "plugin.json"             # 플러그인 판 파일의 이름
+SHARED_FILES = (VERSION_FILE, "CHANGELOG.md", "README.md")   # 에픽이 함께 건드려 겹치기 쉬운 공유 파일 이름 — 기본값이지 상한이 아니다
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
 COUNT_KEYS = ("parallel_default",)
@@ -37,15 +38,24 @@ ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
+BRANCH_RULE_FILE = "docs/git-workflow/branch-strategy.md"   # 브랜치 규칙 문서의 자리
+STATE_BRANCH_ON = "켬"
+STATE_BRANCH_OFF = "끔"
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS
+        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("state_branch",)
 ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
 _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
-             "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET}
+             "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET,
+             "state_branch": STATE_BRANCH_ON}
+
+
+def state_branch_on(values: dict) -> bool:
+    """깨진 값(None)은 꺼진 것이다 — 원격에 쓰는 일은 닫는 쪽이 「쓰지 않는다」 다."""
+    return values.get("state_branch") == STATE_BRANCH_ON
 
 
 def _unquote(value: str) -> str:
@@ -237,6 +247,13 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                     out["sources"][key] = "기본값(머리말 값이 깨졌다)"
                     out["warnings"].append("%s: 바이트 예산은 1 이상의 정수다(%s: %r) — 기본 %d 으로 센다"
                                            % (at, key, value, _DEFAULTS[key]))
+            elif key == "state_branch":
+                value = _unquote(raw)
+                if value in (STATE_BRANCH_ON, STATE_BRANCH_OFF):
+                    out["values"][key] = value
+                else:
+                    out["values"][key] = None
+                    out["errors"].append("%s: state_branch 는 켬 · 끔 가운데 하나다(%r) — 값을 고치거나 키를 지운다" % (at, value))
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:
