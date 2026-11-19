@@ -21,6 +21,20 @@ out() { cat "$T/led.txt"; }
 rec() { led record --human "spec 승인" --roadmap "$RM" --job E1; }
 short() { printf '%s' "$1" | cut -c1-8; }
 push_main() { g push -q origin main && g fetch -q origin; }
+unreadable_call() {  # unreadable_call <세션> <질문 목록 자리의 글> — 질문 목록이 JSON 이 아닌 글인 질문 창 호출과 그 결과를 덧붙인다
+  python3 - "$SFX" "$CLAUDE_CONFIG_DIR" "$1" "$2" <<'PY'
+import json, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]).parent))
+import session_fixture as F
+config, session, text = sys.argv[2], sys.argv[3], sys.argv[4]
+F.add_answer(config, session, [("자리표시", "자리표시")])
+path = F.record_path(config, session)
+rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l]
+rows[-2]["message"]["content"][0]["input"]["questions"] = text
+path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+PY
+}
 PASSL="승인 — 계획 담당자에게"
 g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## 지휘 기록\n')" && g commit -qm "E1 설계"; C1="$(g rev-parse HEAD)"
@@ -167,6 +181,13 @@ assert_eq "$(out)" "E1 plan 1 @$(short "$C2")" "AC4: 계획 검토 머리는 <�
 # 20 · 21 — 이어받기 전 세션에만 있는 답은 다시 묻는다, 복사돼 있으면 적는다(J3)
 answer "E1 plan 1 @$(short "$C2") — 질문" "계획대로 구현한다" --when 2026-11-21T12:00:00.000Z; U2="$(cat "$T/entry.txt")"
 assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "1" "AC5: 표지의 세션 기록에 없는 답 — 1"
+# 20b — 질문을 읽지 못한 호출: 그 머리의 것일 수 있으면 3(J33), 다른 글이면 그대로 1
+unreadable_call "$SID2" "다른 글의 질문"
+assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "1" "AC6: 다른 글로 시작하는 읽지 못한 호출 — 그대로 1"
+unreadable_call "$SID2" "E1 plan 1 @$(short "$C2") — 질문"
+assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "3" "AC6: 머리로 시작하는 읽지 못한 호출 — 3"
+assert_contains "$(out)" "확인 못 함" "AC6: 읽지 못한 호출 — 확인 못 함"
+assert_contains "$(out)" "human_gate: 끔" "AC6: 읽지 못한 호출 — 끄는 길"
 python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID2" --question "E1 plan 1 @$(short "$C2") — 질문" \
   --label "계획대로 구현한다" --entry "$U2" --when 2026-11-21T12:00:00.000Z > /dev/null
 assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "0" "AC5: 이어받은 세션에 복사된 답 — 0"
@@ -179,6 +200,19 @@ g checkout -q -b feature/tm-e1b
 assert_eq "$(led ask-head --human "계획 검토" --roadmap "$RM" --job E1 --plan 2)" "0" "AC4: 계획 2 의 머리는 계획 2 의 브랜치에서"
 assert_eq "$(out)" "E1 plan 2 @$(short "$C2")" "AC4: 계획 2 의 머리 — 판은 같고 계획 번호가 다르다"
 assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 2)" "1" "AC5: 다른 계획을 두고 한 답 — 1"
+# 22b — 이미 다른 줄의 근거인 답은 건너뛰고 더 앞의 답을 고른다
+P2Q="E1 plan 2 @$(short "$C2") — 질문"
+python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID2" --question "$P2Q" --label "계획대로 구현한다" \
+  --when 2026-11-21T12:00:00.000Z > "$T/entry.txt"; UOLD="$(cat "$T/entry.txt")"
+led takeover --roadmap "$RM" --session "$SID" > /dev/null
+answer "$P2Q" "계획대로 구현한다" --when 2026-11-21T13:00:00.000Z; UNEW="$(cat "$T/entry.txt")"
+assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 2)" "0" "AC5: 계획 2 의 답 — SID 로 적는다"
+python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID2" --question "$P2Q" --label "계획대로 구현한다" \
+  --entry "$UNEW" --when 2026-11-21T13:00:00.000Z > /dev/null
+led takeover --roadmap "$RM" --session "$SID2" > /dev/null
+assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 2)" "0" "AC5: 맨 뒤 답이 이미 근거면 더 앞의 답으로 0"
+assert_contains "$(out)" "근거 ${SID2}:${UOLD}#1" "AC5: 더 앞의 답(이어받은 세션의 것)을 골랐다"
+g checkout -q -- "$E1/INTENT.md"
 g checkout -q feature/tm-e1
 
 # 23 — 걸음 건너뜀(답은 SID 에 쓴다)
