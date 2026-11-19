@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
-# source 하면 S · RW · RS · W · g · js · status · put · decide · sync 가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
+# answer · human · approved)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
 RS="$S/roadmap_status.py"
 W="$T/repo"
+SID="00000000-0000-4000-8000-00000000c0de"          # 지휘 표지를 쥔 가짜 세션
+SID2="00000000-0000-4000-8000-00000000c0df"         # 그 세션을 이어받은 가짜 세션
+export CLAUDE_CONFIG_DIR="$T/claude"                  # 세션 기록 자리 — 실제 설정 폴더를 읽지 않는다
+export TZ=UTC                                         # 사람 줄의 날짜는 답한 시각의 지역 날짜다 — 테스트는 UTC 로 고정한다
+CL="$S/conductor_ledger.py"
+SFX="$ROOT/plugins/spec-distill/tests/fixtures/session_fixture.py"
 
 g() { git -C "$W" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c init.defaultBranch=main "$@"; }
 # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 부르는 테스트가 쓴 고정 문자열뿐이다.
@@ -35,6 +42,37 @@ sync() {  # sync <과제> <결과 파일 이름> <job sync 인자…> — 그 �
   local job="$1" name="$2"; shift 2
   (cd "$W" && python3 "$RW" job sync --result "$TM/jobs/${job}/results/${name}" "$@") > "$T/out.txt" 2>&1
   echo $?
+}
+
+led() { (cd "$W" && python3 "$CL" "$@") > "$T/led.txt" 2>&1; echo $?; }   # 지휘 원장 명령 — rc 를 echo, 출력은 $T/led.txt
+claim() { [ "$(led claim --roadmap "$RM" --session "$SID")" = "0" ]; }
+answer() {  # answer <질문 글> <고른 글> [session_fixture answer 의 나머지 인자…] — 지휘 세션 기록에 질문 창 답 하나를 덧붙인다. 답 항목의 uuid 는 $T/entry.txt
+  local q="$1" a="$2"; shift 2
+  python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID" --question "$q" --label "$a" "$@" > "$T/entry.txt"
+}
+human() {  # human <종류> <과제> [계획|-] [관문 이름|-] [날짜] — 머리를 받아 통과 라벨로 답한 기록을 짓고 줄을 적는다. 날짜를 주면 그날 낮 12시(UTC)에 답한 것으로 짓는다. rc 를 echo(커밋은 부르는 쪽)
+  # 관문 이름에 계획 번호가 있으면 --plan 으로도 넘긴다 — 그 계획의 브랜치에 쓴다(J7). 머리는 ask-head 의 표준 출력에서만 받는다.
+  local kind="$1" job="$2" plan="${3:--}" gate="${4:--}" date="${5:-}" label head q rc
+  case "$kind" in
+    "spec 승인") label="승인 — 계획 담당자에게 (권장)" ;;
+    "계획 검토") label="계획대로 구현한다" ;;
+    "흐름 승인") label="설계 없이 진행" ;;
+    *) case "$gate" in "다시 시도"*) label="다시 시도한다" ;; *) label="건너뛴다" ;; esac ;;
+  esac
+  if [ "$plan" = "-" ] && [ "$gate" != "-" ]; then
+    plan="$(printf '%s\n' "$gate" | sed -n 's/.* plan \([1-9][0-9]*\).*/\1/p')"
+    [ -n "$plan" ] || plan="-"
+  fi
+  set -- --human "$kind" --roadmap "$RM" --job "$job"
+  [ "$plan" = "-" ] || set -- "$@" --plan "$plan"
+  head="$(cd "$W" && python3 "$CL" ask-head "$@" 2> "$T/led.txt")"; rc=$?
+  if [ "$rc" != "0" ]; then echo "ask-head 실패(rc ${rc}) — ${head} $(cat "$T/led.txt")" >&2; echo 1; return; fi
+  if [ "$gate" = "-" ]; then q="${head} — 자리표시 질문"; else q="${head} — ${gate} 자리표시 질문"; set -- "$@" --gate "$gate"; fi
+  if [ -n "$date" ]; then answer "$q" "$label" --when "${date}T12:00:00.000Z"; else answer "$q" "$label"; fi
+  led record "$@"
+}
+approved() {  # approved <human 의 인자…> — 줄을 적고 그 과제의 INTENT.md 를 커밋한다
+  [ "$(human "$@")" = "0" ] && g add -- "$TM/jobs/$2/INTENT.md" && g commit -qm "$1 — $2"
 }
 
 team_repo() {
