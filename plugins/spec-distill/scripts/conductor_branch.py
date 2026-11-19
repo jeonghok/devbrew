@@ -41,7 +41,8 @@ SETTINGS_UNREADABLE = "레포 설정을 읽지 못해 상태 브랜치를 쓰지
 NO_BRANCH = "상태 브랜치 없음"
 RULE_VERDICTS = ("없음", "규칙", "읽지 못함")
 DONE_STAGES = ("머지됨", "끝남")
-GIT_ALLOWED = frozenset({"rev-parse", "cat-file", "ls-tree", "for-each-ref", "config", "merge-base"})
+GIT_ALLOWED = frozenset({"rev-parse", "cat-file", "ls-tree", "for-each-ref", "config"})
+CONFIG_READ_FORMS = ("--get", "--get-all", "--get-regexp")   # `config` 는 읽는 꼴만 받는다 — 쓰는 꼴은 허용 밖이다
 _NO_STATUS = "상태 계산 출력을 읽지 못했다(rc %d)"
 
 
@@ -57,6 +58,8 @@ def _run(root, *args, env=None, data=None, timeout=None) -> tuple:
     """(rc, stdout 바이트, stderr 바이트). 허용 목록 밖 하위 명령은 RuntimeError."""
     if not args or args[0] not in GIT_ALLOWED:
         raise RuntimeError("허용하지 않는 git 하위 명령: %r" % (args[:1],))
+    if args[0] == "config" and args[1:2] not in tuple((f,) for f in CONFIG_READ_FORMS):
+        raise RuntimeError("git config 는 읽는 꼴만 부른다: %r" % (args,))
     full = dict(os.environ)   # 부를 때의 환경 — import 때 굳히지 않는다
     full.update(env or {})
     full["LC_ALL"] = "C"
@@ -119,6 +122,9 @@ def team_of(root, roadmap_rel: str) -> team_layout.Team:
     parts = roadmap_rel[len(folder):].split("/") if roadmap_rel.startswith(folder) else []
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise BranchError(2, "로드맵이 로드맵 폴더(%s) 바로 아래 폴더 한 단계 안이 아니다: %s" % (folder, roadmap_rel))
+    reserved = team_layout.ROLES + (team_layout.INBOX_DIR, team_layout.INTENT_DIR, team_layout.JOBS_DIR, team_layout.RESULTS_DIR)
+    if not name_ok(parts[0]) or parts[0] in reserved:
+        raise BranchError(2, "로드맵 폴더 이름 %s 은 팀 폴더 이름으로 쓸 수 없다: %s" % (visible(parts[0]), visible(roadmap_rel)))
     return team_layout.Team(folder, parts[0])
 
 
@@ -303,7 +309,7 @@ def state_names(root) -> list:
     if rc == 0:
         for line in out.splitlines():
             for head in ("refs/heads/" + STATE_BRANCH_PREFIX, "refs/remotes/origin/" + STATE_BRANCH_PREFIX):
-                if line.startswith(head) and line[len(head):]:
+                if line.startswith(head) and name_ok(line[len(head):]):   # 남이 올린 꼬리는 꼴 밖이면 내지 않는다
                     found.add(line[len(head):])
     return sorted(found)
 

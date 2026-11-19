@@ -214,6 +214,10 @@ class Reading(StateRepo):
     def test_git_runner_is_closed(self):
         with self.assertRaises(RuntimeError):
             CB.git(self.w, "checkout", "trunk")
+        for write_form in (("config", "user.name", "x"), ("config", "--unset", "user.name"), ("config", "--add", "a.b", "c"), ("config",)):
+            with self.assertRaises(RuntimeError, msg=write_form):
+                CB.git(self.w, *write_form)
+        self.assertEqual(CB.git(self.w, "config", "--get", "remote.origin.url")[0], 0)   # 양성 대조 — 읽는 꼴은 돈다
         for word in ("checkout", "switch", "worktree", "stash", "reset", "rebase", "commit", "merge"):
             self.assertNotIn(word, CB.GIT_ALLOWED, word)
 
@@ -223,6 +227,9 @@ class Showing(unittest.TestCase):
         raw = "a\x1b[2Kb\u202ec\u2028d\x00e\tf\u200bg\x85h\rI\x0bj\x0ck\u2066l"
         out = CB.visible(raw)
         self.assertEqual(out, "a\\x1b[2Kb\\u202ec\\u2028d\\x00e\tf\\u200bg\\x85h\\x0dI\\x0bj\\x0ck\\u2066l")
+        # 나머지 범주와 0xFFFF 위 글자 — Zp · Cs · Co · \\U 갈래
+        wide = CB.visible("a\u2029b\ud800c\ue000d\U000e0001e\U000f0000f")
+        self.assertEqual(wide, "a\\u2029b\\ud800c\\ue000d\\U000e0001e\\U000f0000f")
         plain = "가 · 나 — 「다」 ──── │ <경로> abc 123"
         self.assertEqual(CB.visible(plain), plain)                              # 보통 글자는 그대로
 
@@ -267,3 +274,20 @@ class AvailabilityWithoutAnOrigin(StateRepo):
     def test_no_settings_file_means_local_writes_stay_open(self):   # 양성 대조
         self.drop_origin()
         self.assertIsNone(CB.availability(self.w, rm(ALPHA)))
+
+
+class OthersTextCannotBuildPaths(StateRepo):
+    def test_team_of_refuses_dot_dot_role_and_bad_names(self):
+        for bad in ("..", ".", "inbox", "leader", "jobs", "Alpha", "-x", "a b", "x.lock"):
+            with self.assertRaises(CB.BranchError, msg=bad) as c:
+                CB.team_of(self.w, "docs/superpowers/roadmaps/%s/roadmap.md" % bad)
+            self.assertEqual(c.exception.rc, 2, bad)
+        self.assertEqual(CB.team_of(self.w, rm(ALPHA)).name, ALPHA)   # 양성 대조
+
+    def test_state_names_keeps_only_well_formed_tails_on_both_sides(self):
+        trunk = self.g("rev-parse", "trunk")
+        for tail in ("-x", "Ev\u202eil", "a/b", BETA):
+            self.g("update-ref", "refs/remotes/origin/conductor/" + tail, trunk)
+        self.g("update-ref", "refs/heads/conductor/-y", trunk)
+        self.g("update-ref", "refs/heads/conductor/" + ALPHA, trunk)
+        self.assertEqual(CB.state_names(self.w), sorted([ALPHA, BETA]))
