@@ -301,6 +301,7 @@ assert_contains "$(cat "$W/$E1/INTENT.md")" "- 결정 · 2026-11-23 · 「쌓인
 led release --roadmap "$RM" --session "$SID" > /dev/null
 assert_eq "$(led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "3" "AC6: 지휘 표지가 없으면 3"
 assert_contains "$(out)" "확인 못 함" "AC6: 표지 없음 — 확인 못 함"
+assert_contains "$(out)" "지휘 표지가 없다(먼저 claim)" "AC6: 표지 없음 — 사유는 표지가 없다는 것"
 claim || no "표지를 다시 쥐지 못했다"
 mkdir -p "$T/none"
 assert_eq "$(export CLAUDE_CONFIG_DIR="$T/none"; led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "3" "AC6: 세션 기록 파일을 찾지 못하면 3"
