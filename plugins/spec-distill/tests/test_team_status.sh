@@ -216,6 +216,10 @@ sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "받음: 받은 뒤 바뀜 — design.md"
 back "$RECEIVED_AT"
+sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서 본문" || fail_step "받은 뒤 설계문서 본문"
+assert_eq "$(st E1)" "설계 중" "AC8: 받은 뒤 design.md 본문을 고치면 승인이 낡아 구현 단계에서도 설계 중"
+assert_contains "$(why E1)" "낡음" "AC8: 받은 뒤 본문을 고친 사유에 낡음"
+back "$RECEIVED_AT"
 sub "$J1/plan-1.md" "알림을 단다." "알림을 다시 단다." && step "받은 뒤 계획 파일" || fail_step "받은 뒤 계획 파일"
 assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 계획 파일이 바뀌면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/plan-1.md" "받음: 받은 뒤 바뀜 — 계획 파일"
@@ -749,15 +753,19 @@ g checkout -q main && printf '%s\n' '---' 'human_gate: 끔' '---' > "$W/.devbrew
   && g push -q origin main && g fetch -q origin && g checkout -q feature/tm-e3 || fail_step "관문 끔"
 decide E3 "spec 승인 · 2026-11-27 · 「글」" && step "손으로 적은 승인 줄(관문 꺼짐)" || fail_step "손으로 적은 승인 줄(관문 꺼짐)"
 assert_eq "$(st E3)" "계획" "AC20: 관문이 꺼지면 손으로 적은 줄도 지난다"
+case "$(why E3)" in "spec 승인됨(2026-11-27)"*) ok "AC20: 손으로 적은 줄의 날짜가 근거다(낡은 줄 2026-11-25 가 아니다)" ;; *) no "AC20: 손으로 적은 줄의 날짜 — $(why E3)" ;; esac
 assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E3'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 도는 과제의 첫 알림 줄"
 # e — 설계 없는 흐름 · 로드맵 밖 과제
 g checkout -q -b feature/tm-e2 main && put src/e2/note.txt n && step "E2 시작(관문 꺼짐)" || fail_step "E2 시작(관문 꺼짐)"
 g checkout -q -b chore/tm-gate main
 printf '로드맵 밖 일\n' | (cd "$W" && python3 "$RW" job new --roadmap "$RM" --name gate-task --branch chore/tm-gate --paths docs/tv/ --goal "로드맵 밖 일") > "$T/out.txt" 2>&1
-g add -- "$TM/jobs/gate-task" && g commit -qm "과제 gate-task" && g push -q origin chore/tm-gate && g fetch -q origin && restat || fail_step "로드맵 밖 과제"
+g add -- "$TM/jobs/gate-task" && g commit -qm "과제 gate-task" && g push -q origin chore/tm-gate && g fetch -q origin \
+  && put docs/tv/ahead.txt a && g commit -qm "올리지 않은 커밋" && restat || fail_step "로드맵 밖 과제"
+assert_contains "$(js "$T/s.json" "' | '.join([j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'])")" "아직 안 올라옴" "AC20 전제: 로드맵 밖 과제에 올라오지 않은 끝 알림이 있다(첫 줄 단언이 맞물린다)"
 assert_eq "$(js "$T/s.json" "[b for b in r['blocks'] if b['id']=='E2'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 설계 없는 흐름 블록의 첫 알림 줄"
 assert_eq "$(js "$T/s.json" "[j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'][0]")" "사람 줄 대조가 꺼져 있다" "AC20: 로드맵 밖 과제의 첫 알림 줄"
 # f — 브랜치 없는 블록
+assert_eq "$(st E1)" "준비" "AC20 전제: E1 은 브랜치가 없어 준비"
 assert_not_contains "$(notes E1)" "사람 줄 대조가 꺼져 있다" "AC20: 브랜치 없는 블록(준비)에는 그 줄이 없다"
 # g — 되돌린다(양성 대조)
 g checkout -q main && printf '%s\n' '---' 'human_gate: 켬' '---' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "관문 켬" \
@@ -765,5 +773,15 @@ g checkout -q main && printf '%s\n' '---' 'human_gate: 켬' '---' > "$W/.devbrew
 assert_eq "$(st E3)" "설계 중" "AC20: 설정을 되돌리면 손으로 적은 줄은 다시 지나지 못한다"
 assert_not_contains "$(notes E3) | $(notes E2) | $(js "$T/s.json" "' | '.join([j for j in r['jobs'] if j['id']=='gate-task'][0]['notes'])")" "사람 줄 대조가 꺼져 있다" \
   "AC20: 켜지면 어느 알림에도 그 줄이 없다(양성 대조)"
+# h — 설정을 읽지 못하면 켜진 것으로 본다(J19) — 깨진 .devbrew.md · 손으로 적은 줄(위 d 의 줄이 이 브랜치에 있다)
+g checkout -q main && printf '%s\n' 'frontmatter 가 없는 설정' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "깨진 설정" \
+  && g push -q origin main && g fetch -q origin && restat || fail_step "깨진 설정"
+assert_eq "$(st E3)" "설계 중" "J19: 설정을 읽지 못하면 관문은 켜진 채 — 손으로 적은 줄은 지나지 못한다"
+assert_not_contains "$(notes E3)" "사람 줄 대조가 꺼져 있다" "J19: 설정을 읽지 못한 것은 꺼짐 알림이 아니다"
+# i — 설정에 오류가 있으면(끔 이 적혀 있어도) 켜진 것으로 본다(J19 — errors)
+g checkout -q main && printf '%s\n' '---' 'human_gate: 끔' 'no_such_key: 1' '---' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "오류 있는 설정" \
+  && g push -q origin main && g fetch -q origin && restat || fail_step "오류 있는 설정"
+assert_eq "$(st E3)" "설계 중" "J19: 설정에 오류가 있으면 끔 이 적혀 있어도 관문은 켜진 채"
+assert_not_contains "$(notes E3)" "사람 줄 대조가 꺼져 있다" "J19: 오류 있는 설정은 꺼짐 알림이 아니다"
 T="$T0"
 finish
