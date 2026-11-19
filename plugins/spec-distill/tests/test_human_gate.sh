@@ -252,5 +252,182 @@ check 1 "33: 브랜치를 지워도 멈춘다" --job E2 --stage implement
 assert_contains "$(err)" "implement-1.md" "33: 자취는 기본 브랜치의 implement 결과 파일이다"
 assert_contains "$(err)" "머지됐다" "33: 머지됐다"
 
+# ── 결과 대조(job_results.py check)의 관문 — 과제 11. 묶음마다 새 레포 · 새 과제 ──
+rcheck() { (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" "$@" --date 2026-11-30) > "$T/c.txt" 2>&1; local rc=$?; [ -z "${DBG:-}" ] || { echo "--- rcheck $* rc=$rc" >&2; cat "$T/c.txt" >&2; }; echo "$rc"; }
+reasons() { grep '^거절 사유: ' "$T/c.txt"; }
+hand_result() {  # hand_result <과제> <단계> <계획|-> <시도> [본문 줄…] — 지금 브랜치에 끝까지 쓴 결과 파일을 올린다(시작 묶음 없이 띄워진 담당자)
+  local job="$1" stage="$2" plan="$3" k="$4" name head dir="$W/$TM/jobs/$1/results" planline=""
+  shift 4
+  head="$(g rev-parse HEAD)"
+  if [ "$plan" = "-" ]; then name="${stage}-${k}.md"; else name="${stage}-plan-${plan}-${k}.md"; planline="plan: ${plan}"; fi
+  mkdir -p "$dir"
+  { printf -- '---\ntype: job-result\nstage: %s\n' "$stage"; [ -z "$planline" ] || printf '%s\n' "$planline"
+    printf 'attempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n' "$k" "$head" "$head" "$head"
+    for l in "$@"; do printf '%s\n' "$l"; done; printf '끝 — %s\n' "$head"; } > "$dir/$name"
+  g add -- "$TM/jobs/$job/results" && g commit -qm "${job} ${name}" && push_br "$(g symbolic-ref --short HEAD)"
+}
+e1_state() {  # feature/tm-e1 에 설계 · 계획 1(두 판) · 구현 결과 1 을 끝까지 올린다. 사람 줄은 적지 않는다. PLAN_R1 은 계획의 첫 판
+  g checkout -q -b feature/tm-e1 main
+  put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
+  g commit -qm "E1 설계" && push_br feature/tm-e1
+  put "$E1/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다.\n')"
+  g commit -qm "E1 계획 1 첫 판" && PLAN_R1="$(g rev-parse HEAD | cut -c1-8)"
+  put "$E1/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다. 둘째 판.\n')"
+  g commit -qm "E1 계획 1 둘째 판" && push_br feature/tm-e1
+  hand_result E1 implement 1 1 "AC1: 구현됨 — 자리표시"
+}
+line_of() { grep "^- $1 · " "$W/$E1/INTENT.md" | head -1; }
+edit_intent() {  # edit_intent <바꿀 글> <새 글> — E1 INTENT.md 의 그 글을 한 번 바꾸고 커밋해 올린다
+  python3 - "$W/$E1/INTENT.md" "$1" "$2" <<'PY'
+import sys
+p, old, new = sys.argv[1:4]
+s = open(p, encoding="utf-8", newline="").read()
+assert old in s, old
+open(p, "w", encoding="utf-8", newline="").write(s.replace(old, new, 1))
+PY
+  g add -- "$E1/INTENT.md" && g commit -qm "INTENT 고침" && push_br feature/tm-e1
+}
+
+# 묶음 H — E1(설계 흐름) · E2(설계 없는 흐름). 41 – 49
+new_repo "$T0/h" && ok "H: 팀 레포를 세웠다" || { no "H: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+e1_state && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "1" "41: 계획 검토 줄이 없으면 구현 결과를 받지 않는다(AC10)"
+case "$(sed -n 1p "$T/c.txt")" in "결과 대조: 거절 "*) ok "41: 첫 줄이 거절" ;; *) no "41: 첫 줄이 거절 — $(sed -n 1p "$T/c.txt")" ;; esac
+assert_contains "$(reasons)" '`계획 검토` 줄이 없다' "41: 거절 사유"
+assert_eq "$(grep -c '^- 결과 받음' "$T/c.txt")" "0" "41: 받음 줄을 내지 않는다"
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "1" "42: --branch 를 주어도 같다"
+assert_contains "$(reasons)" '`계획 검토` 줄이 없다' "42: 사유는 계획 검토다"
+assert_not_contains "$(reasons)" '`흐름 승인`' "42: --branch 가 흐름을 바꾸지 않는다(J32)"
+approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "0" "43: 계획 검토 줄이 있으면 받는다"
+assert_eq "$(grep -c '^- 결과 받음 · 2026-11-30 · 「implement-plan-1-1.md · ' "$T/c.txt")" "1" "43: 받음 줄 한 줄(양성 대조)"
+mv "$CLAUDE_CONFIG_DIR" "$T/claude.away"
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "1" "44: 세션 기록이 없으면 받지 않는다(AC11)"
+assert_contains "$(reasons)" "확인 못 함" "44: 확인 못 함"
+assert_contains "$(reasons)" "다시 승인받는다" "44: 다시 승인받는 길"
+mv "$T/claude.away" "$CLAUDE_CONFIG_DIR"
+OLD_LINE="$(line_of "계획 검토")"
+edit_intent "$(printf '%s' "$OLD_LINE" | sed 's/.*근거 [^:]*:\([0-9a-f-]\{36\}\)#.*/\1/')" "ffffffff-ffff-4fff-8fff-ffffffffffff"
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "1" "45: 없는 uuid 를 가리키는 줄은 받지 않는다"
+assert_contains "$(reasons)" "어긋남" "45: 어긋남"
+g revert --no-edit HEAD >/dev/null && push_br feature/tm-e1
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "0" "45b: 되돌리면 받는다(양성 대조)"
+OLD_REV="$(printf '%s' "$OLD_LINE" | sed 's/.*plan-1.md@\([0-9a-f]\{8\}\).*/\1/')"
+put "$E1/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다. 셋째 판.\n')"
+g commit -qm "E1 계획 1 셋째 판" && push_br feature/tm-e1
+edit_intent "plan-1.md@${OLD_REV}" "plan-1.md@$(g rev-parse HEAD | cut -c1-8)"
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "1" "46: 옛 답에 판만 새것인 줄은 받지 않는다(AC11)"
+assert_contains "$(reasons)" "어긋남" "46: 어긋남"
+python3 - "$W/$E1/INTENT.md" <<'PY'
+import sys
+p = sys.argv[1]
+out = [l for l in open(p, encoding="utf-8", newline="").read().split("\n") if not l.startswith("- 계획 검토 · ")]
+open(p, "w", encoding="utf-8", newline="").write("\n".join(out))
+PY
+g add -- "$E1/INTENT.md" && g commit -qm "계획 검토 줄 지움" && push_br feature/tm-e1
+approved "걸음 건너뜀" E1 - "계획 검토 plan 1" 2026-11-22 && push_br feature/tm-e1
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "0" "47: 건너뜀 줄이 계획 검토 관문을 푼다(AC12)"
+g checkout -q -b feature/tm-e2 main
+put "src/e2/x.md" "산출물" && g commit -qm "E2 산출물" && push_br feature/tm-e2
+hand_result E2 implement - 1 "산출물: src/e2/x.md"
+assert_eq "$(rcheck --job E2 --result implement-1.md)" "1" "48: 흐름 승인이 없으면 받지 않는다(AC10)"
+assert_contains "$(reasons)" '`흐름 승인` 줄이 없다' "48: 사유"
+approved "흐름 승인" E2 - - 2026-11-22 && push_br feature/tm-e2
+assert_eq "$(rcheck --job E2 --result implement-1.md)" "0" "49: 흐름 승인 줄이 있으면 받는다"
+
+# 묶음 J — E3(설계 흐름)의 plan · design 결과. 50 · 51
+new_repo "$T0/j" && ok "J: 팀 레포를 세웠다" || { no "J: 팀 레포를 세우지 못했다"; finish; exit 1; }
+g checkout -q -b feature/tm-e3 main
+put "$E3/design.md" "$(printf '# 설계\n\n본문\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
+g commit -qm "E3 설계" && push_br feature/tm-e3
+hand_result E3 plan 1 1 "AC1: 구현됨 — 자리표시"
+hand_result E3 design - 1
+rcheck --job E3 --result plan-plan-1-1.md >/dev/null
+assert_contains "$(reasons)" '`spec 승인` 줄이 없다' "50: plan 결과는 spec 승인을 본다(J31)"
+assert_not_contains "$(reasons)" '`계획 검토`' "50: 계획 검토는 보지 않는다"
+rcheck --job E3 --result design-1.md >/dev/null
+assert_not_contains "$(cat "$T/c.txt")" '` 줄이' "50: design 결과는 관문 사유가 붙지 않는다"
+approved "spec 승인" E3 - - 2026-11-22 && push_br feature/tm-e3
+rcheck --job E3 --result plan-plan-1-1.md >/dev/null
+assert_not_contains "$(reasons)" 'spec 승인' "51: spec 승인 줄이 있으면 그 사유가 없다(양성 대조)"
+
+# 묶음 K — 관문을 끈 새 과제 E1. 52
+new_repo "$T0/k" && ok "K: 팀 레포를 세웠다" || { no "K: 팀 레포를 세우지 못했다"; finish; exit 1; }
+e1_state
+decide E1 "$SPECL" && decide E1 "계획 검토 · 2026-11-21 · 「계획대로 구현한다」" 2>/dev/null
+python3 - "$W/$E1/INTENT.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8", newline="").read()
+if "- 계획 검토 · " not in s:
+    sys.exit(1)
+PY
+g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 줄" && push_br feature/tm-e1
+g checkout -q main
+printf '%s\n' '---' 'human_gate: 끔' '---' > "$W/.devbrew.md"
+g add -- .devbrew.md && g commit -qm "관문 끔" && push_main
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "0" "52: human_gate 끔이면 손으로 적은 줄로 받는다"
+assert_eq "$(sed -n 2p "$T/c.txt")" "알림: 사람 줄 대조가 꺼져 있다" "52: 둘째 줄이 꺼짐 알림이다(J10)"
+g revert --no-edit HEAD >/dev/null && push_main
+assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "1" "52: 되돌리면 받지 않는다(양성 대조)"
+
+# 묶음 I — human-check. 이 묶음의 E1 은 새 레포에서 설계 · 계획 · 결과 · 승인 둘을 갖춘다. 53 · 54 · 58
+new_repo "$T0/i" && ok "I: 팀 레포를 세웠다" || { no "I: 팀 레포를 세우지 못했다"; finish; exit 1; }
+e1_state && approved "spec 승인" E1 - - 2026-11-20 && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+BEFORE="$(cksum < "$W/$E1/INTENT.md")|$(g status --short -- "$TM")"
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "53: 모든 줄이 지나면 0"
+assert_eq "$(wc -l < "$T/led.txt" | tr -d ' ')" "2" "53: 줄 수는 사람 줄 수와 같다"
+assert_eq "$(grep -c '^지남 — ' "$T/led.txt")" "2" "53: 모두 지남"
+assert_eq "$(cksum < "$W/$E1/INTENT.md")|$(g status --short -- "$TM")" "$BEFORE" "53: 아무것도 쓰지 않는다(AC23)"
+printf '%s\n' '---' 'human_gate: 끔' '---' > "$W/.devbrew.md"
+g checkout -q main && g add -- .devbrew.md && g commit -qm "관문 끔" && push_main && g checkout -q feature/tm-e1
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "58: 관문을 끄고 불러도 줄이 있으면 0"
+assert_eq "$(sed -n 1p "$T/led.txt")" "사람 줄 대조가 꺼져 있다" "58: 첫 줄이 꺼짐 안내다"
+g checkout -q main && g revert --no-edit HEAD >/dev/null && push_main && g checkout -q feature/tm-e1
+SPEC_LINE="$(line_of "spec 승인")"
+PLAN_LINE="$(line_of "계획 검토")"
+decide E1 "- spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
+decide E1 "$(printf '%s' "$SPEC_LINE" | sed 's/:[0-9a-f-]\{36\}#/:ffffffff-ffff-4fff-8fff-ffffffffffff#/' | sed 's/- spec 승인 · 2026-11-20/- spec 승인 · 2026-11-21/')"
+decide E1 "$(printf '%s' "$PLAN_LINE" | sed "s/plan-1.md@[0-9a-f]\{8\}/plan-1.md@${PLAN_R1}/" | sed 's/:[0-9a-f-]\{36\}#/:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa#/')"
+decide E1 "$(printf '%s' "$SPEC_LINE" | sed 's/근거 [A-Za-z0-9_-]*:[0-9a-f-]\{36\}#/근거 deadbeef-0000-4000-8000-00000000dead:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb#/' | sed 's/2026-11-20/2026-11-22/')"
+g add -- "$E1/INTENT.md" && g commit -qm "나쁜 줄 넷" && push_br feature/tm-e1
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "54: 지나지 못한 줄이 있으면 1"
+for v in "근거 없음" "어긋남" "낡음" "확인 못 함"; do
+  assert_eq "$(grep -c "^${v} — " "$T/led.txt")" "1" "54: ${v} 줄이 하나"
+done
+assert_eq "$(grep -c '^지남 — ' "$T/led.txt")" "2" "54: 진짜 줄 둘은 지남"
+assert_eq "$(grep -c '^    사유: ' "$T/led.txt")" "4" "54: 지나지 못한 줄마다 사유가 아래에 붙는다"
+assert_eq "$(awk 'prev !~ /^지남 — / && prev != "" && $0 ~ /^    사유: / {n++} {prev=$0} END{print n+0}' "$T/led.txt")" "4" "54: 사유 줄은 지나지 못한 줄 바로 아래다"
+assert_eq "$(grep -c '^줄 없음' "$T/led.txt")" "0" "54: 줄이 있는 종류는 줄 없음에 다시 내지 않는다"
+
+# 묶음 L — 승인 줄 없이 받음 줄만 손으로 적었다. 55
+new_repo "$T0/l" && ok "L: 팀 레포를 세웠다" || { no "L: 팀 레포를 세우지 못했다"; finish; exit 1; }
+e1_state && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+decide E1 "- 결과 받음 · 2026-11-24 · 「implement-plan-1-1.md · $(g rev-parse HEAD) · 결과 대조: 통과 — 자리표시」"
+g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 받음 줄" && push_br feature/tm-e1
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "55: 계획 검토 줄이 없으면 1"
+assert_contains "$(cat "$T/led.txt")" '줄 없음 — `계획 검토` 줄(계획 1)' "55: 줄 없음"
+assert_contains "$(cat "$T/led.txt")" "    사유: implement-plan-1-1.md 가 있다" "55: 자취"
+assert_eq "$(grep -c '^지남 — - spec 승인' "$T/led.txt")" "1" "55: spec 승인 줄은 지남"
+assert_not_contains "$(cat "$T/led.txt")" '줄 없음 — `spec 승인`' "55: spec 승인은 줄 없음이 아니다"
+
+# 묶음 M — 자취만 있고 줄이 없다. 56 · 57
+new_repo "$T0/m" && ok "M: 팀 레포를 세웠다" || { no "M: 팀 레포를 세우지 못했다"; finish; exit 1; }
+g checkout -q -b feature/tm-e2 main
+put "src/e2/x.md" "산출물" && g commit -qm "E2 산출물" && push_br feature/tm-e2
+hand_result E2 implement - 1 "산출물: src/e2/x.md"
+g checkout -q -b feature/tm-e1 main
+put "$E1/design.md" "$(printf '# 설계\n\n본문\n')" && put "$E1/plan-1.md" "계획" && g commit -qm "E1 설계 · 계획" && push_br feature/tm-e1
+g checkout -q main && g checkout -q -b feature/tm-e3 main && push_br feature/tm-e3
+assert_eq "$(led human-check --roadmap "$RM" --job E2)" "1" "56: 결과 파일만 있고 흐름 승인 줄이 없으면 1"
+assert_contains "$(cat "$T/led.txt")" '줄 없음 — `흐름 승인` 줄' "56: 흐름 승인 줄 없음"
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "56: 계획 파일만 있고 사람 줄이 없으면 1"
+assert_contains "$(cat "$T/led.txt")" '줄 없음 — `spec 승인` 줄' "56: spec 승인 줄 없음"
+assert_eq "$(led human-check --roadmap "$RM" --job E3)" "0" "57: 자취도 줄도 없으면 0"
+assert_eq "$(cat "$T/led.txt")" "사람 줄 없음" "57: 출력이 사람 줄 없음 하나다"
+assert_eq "$(led human-check --roadmap "$RM" --job NOPE)" "2" "59: 없는 과제는 2"
+mkdir -p "$W/docs/old" && printf '%s\n' '---' 'type: roadmap' '---' '' '# 옛 형식' > "$W/docs/old/roadmap.md"
+assert_eq "$(led human-check --roadmap docs/old/roadmap.md --job E1)" "2" "59: 옛 형식 로드맵은 2"
+
 use_repo "$T0/a"
 finish

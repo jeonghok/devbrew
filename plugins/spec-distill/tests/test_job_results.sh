@@ -10,6 +10,7 @@ trap 'rm -rf "$T"' EXIT
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
 JRC="$S/job_results.py"
 team_repo && ok "팀 레포를 세웠다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+claim || { no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"; finish; }   # 사람 줄 관문(과제 11)이 대조 전에 결과의 줄을 본다
 
 JOB=E1
 jr() {  # jr <브랜치> <결과 파일 이름> [인자…] — $JOB 의 결과 파일을 대조하고 rc 를 echo 한다. 출력은 $T/out.txt
@@ -100,7 +101,10 @@ export CODE OTHER
 assert_eq "$(sync E1 implement-plan-1-1.md --role worker --bundle-at "$B" --job-at "$CODE")" "0" "준비: 결과 파일 머리"
 printf 'AC1: 구현됨 — src/e1/a.txt\nAC2: 미룸 — 다음 계획\n' >> "$W/$R1"
 assert_eq "$(sync E1 implement-plan-1-1.md --end "$CODE")" "0" "준비: 끝 줄"
-g add -- "$R1" && g commit -qm "E1 결과" && g push -q origin feature/tm-e1 && GOOD="$(g rev-parse HEAD)"
+g add -- "$R1" && g commit -qm "E1 결과"
+assert_eq "$(human "spec 승인" E1 - - 2026-11-20)" "0" "준비: E1 의 spec 승인 줄"
+assert_eq "$(human "계획 검토" E1 1 - 2026-11-21)" "0" "준비: E1 의 계획 검토 줄"
+g add -- "$TM/jobs/E1/INTENT.md" && g commit -qm "E1 승인 줄" && g push -q origin feature/tm-e1 && GOOD="$(g rev-parse HEAD)"
 export GOOD
 g checkout -q main
 
@@ -183,7 +187,9 @@ g commit -qm "E2 조사 표" && SURVEY="$(g rev-parse HEAD)"
 assert_eq "$(sync E2 implement-1.md --role worker --bundle-at "$B" --job-at "$SURVEY")" "0" "준비: E2 결과 파일 머리"
 printf '산출물: %s/jobs/E2/survey.md\n' "$TM" >> "$W/$R2"
 assert_eq "$(sync E2 implement-1.md --end "$SURVEY")" "0" "준비: E2 끝 줄"
-g add -- "$R2" && g commit -qm "E2 결과" && g push -q origin feature/tm-e2 && GOOD2="$(g rev-parse HEAD)"
+g add -- "$R2" && g commit -qm "E2 결과"
+assert_eq "$(human "흐름 승인" E2 - - 2026-11-22)" "0" "준비: E2 의 흐름 승인 줄"
+g add -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 승인 줄" && g push -q origin feature/tm-e2 && GOOD2="$(g rev-parse HEAD)"
 g checkout -q main
 JOB=E2
 assert_eq "$(jr feature/tm-e2 implement-1.md)" "0" "대조: 설계 없는 흐름 통과 rc 0"

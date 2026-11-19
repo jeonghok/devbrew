@@ -18,6 +18,8 @@ INTENT.md 의 `## 결정 기록` 에 쓰고 `write-sections` 는 쓰지 않고 �
   ask-head --human K --roadmap R --job J [--plan n]    사람 줄 질문 머리 한 줄(team 형식). 0 · 1 · 2 · 3
   record --human K --roadmap R --job J [--plan n] [--gate G]   지휘 세션 기록의 질문 창 답에서만 사람 줄을 적는다.
                                                        0 적었다(또는 같은 줄이 있다) · 1 쓰지 않았다 · 2 사용법 · 3 확인 못 함
+  human-check --roadmap R --job J                      그 과제의 사람 줄마다 대조 판정 · 있어야 하는데 없는 줄(team 형식). 아무것도 쓰지 않는다.
+                                                       0 모두 지남 · 1 그 밖 · 2 사용법 · 3 읽지 못함
   suite-lock --roadmap R                               공유 스위트 잠금 경로 · 주인 · 잡은 시각
   progress   --roadmap R                               실행 원장마다 마지막 고친 시각 · 마지막 줄
 
@@ -1210,6 +1212,144 @@ def c_record_human(root, a) -> int:
         raise Fail(3, msg)
 
 
+def _check_tips(rs, branches: list, merged: list, main: str) -> tuple:
+    """(줄의 계획 번호 → 끝 고르기, 알림들). 끝은 계획 번호가 있는 줄은 그 계획의 브랜치 끝, 그 밖은 아직 머지되지 않은 가장 앞 브랜치 끝,
+    끝이 없으면 기본 브랜치다(J17)."""
+    import team_status
+    tips, notes = [], []
+    for br in branches:
+        tip, _note, split = team_status.read_tip(rs, br)
+        if split:
+            notes.append("%s 의 줄을 읽지 않았다 — %s" % (br, split))
+        tips.append(tip)
+    front = next((t for t, done in zip(tips, merged) if t and not done), None) or main
+
+    def pick(plan):
+        if plan is not None and 1 <= plan <= len(tips) and tips[plan - 1]:
+            return tips[plan - 1]
+        return front if plan is None else main
+    return pick, notes
+
+
+def _check_job(root, a) -> tuple:
+    """(team, git, reader, 기본 브랜치 커밋, 과제 브랜치 이름들, 머지 여부들, 설계 없는 흐름인가) — 로드맵 블록이면 블록의 브랜치들, 로드맵 밖 과제면 그 브랜치."""
+    import roadmap_status
+    import team_status
+    roadmap = a.roadmap.strip("/")
+    rpath = Path(root) / roadmap
+    if not rpath.is_file() or _known_layout(frontmatter(_read(rpath)), roadmap) != team_layout.LAYOUT_TEAM:
+        raise Fail(2, "%s 는 team 형식 로드맵이 아니다" % roadmap)
+    try:
+        team = team_layout.team_from_roadmap(_roadmaps_dir(root), roadmap)
+    except ValueError as exc:
+        raise Fail(2, str(exc))
+    if team_layout.job_name_problem(a.job):
+        raise Fail(2, "과제 이름이 아니다: %r" % a.job)
+    report = _status(root, roadmap)
+    rs = roadmap_status.Git(str(root))
+    main = _default_sha(root)
+    reader = team_status.Reader(rs, main, team, lambda path: rs.blob(main, path), lambda path: rs.absent(main, path))
+    block = next((b for b in _roadmap_blocks(root, roadmap) if b.get("id") == a.job and b.get("kind") != "decision"), None)
+    if block is not None:
+        mine = next((x for x in report.get("blocks") or [] if x.get("id") == a.job), None)
+        states = (mine or {}).get("branch_states") or []
+        branches = list(block.get("branches") or [])
+        merged = [bool(i < len(states) and states[i].get("merged") and not states[i].get("uncountable"))
+                  for i in range(len(branches))]
+        return team, rs, reader, main, branches, merged, reader.flow(block) == team_status.PLAIN_FLOW
+    found = [j for j in report.get("jobs") or [] if j.get("id") == a.job]
+    if not found:
+        raise Fail(2, "과제 %s 가 로드맵의 과제 블록에도 로드맵 밖 과제에도 없다" % a.job)
+    if len(found) > 1:
+        raise Fail(1, "같은 이름의 로드맵 밖 과제가 둘이다: %s — %s" % (a.job, " · ".join(j.get("branch", "") for j in found)))
+    branch = found[0].get("branch")
+    return team, rs, reader, main, [branch] if branch else [], [found[0].get("stage") == team_status.MERGED], True
+
+
+def _check_traces(rs, team, job: str, tips: list) -> tuple:
+    """(계획 파일 이름들, 결과 파일 이름들, 꼴 맞는 받음 줄의 결과 파일 이름들) — 그 과제의 브랜치 끝들과 기본 브랜치에서 모은다."""
+    import job_results
+    plans, results, got, done = set(), set(), [], set()
+    for tip in tips:
+        if tip in done:
+            continue
+        done.add(tip)
+        names = rs.names(tip, team.job(job))
+        found = job_results.result_names(rs, tip, team, job)
+        if names is None or found is None:
+            raise Fail(3, "과제 폴더를 읽지 못했다: %s — %s" % (team.job(job), (rs.failures or ["?"])[-1]))
+        plans.update(n for n in names if team_layout.plan_number(n) is not None)
+        results.update(found)
+        text = rs.blob(tip, team.intent(job))
+        if text is not None:
+            try:
+                got += [x.name for x in team_files.received(text)[0] if x.name not in got]
+            except FormatError as exc:
+                raise Fail(3, "결정 기록 칸을 읽지 못했다(%s): %s" % (tip[:8], exc))
+    return sorted(plans), sorted(results), got
+
+
+def _has_kind(scope, kind: str, plan: Optional[int]) -> bool:
+    """그 종류(와 계획)의 줄이 하나라도 있는가 — 그 관문 이름의 건너뜀 줄도 센다. 꼴을 못 읽은 계획 검토 줄은 어느 계획의 것인지 모른다."""
+    name = HL.gate_name(kind, plan) if kind in (HL.KIND_SPEC, HL.KIND_PLAN) else None
+    for raw in scope.lines:
+        who = HL.is_human(raw)
+        if who == kind:
+            line = HL.parse(raw)
+            if kind != HL.KIND_PLAN or line is None or line.plan == plan:
+                return True
+        elif who == HL.KIND_SKIP and name is not None and HL.names_gate(raw, name):
+            return True
+    return False
+
+
+def c_human_check(root, a) -> int:
+    """human-check — 그 과제의 사람 줄마다 대조 판정을 보이고, 관문 표로 있어야 하는데 줄이 하나도 없는 자리를 드러낸다(J24).
+    아무것도 쓰지 않는다. 0 모두 지남 · 1 지나지 못한 줄이나 없는 줄 · 2 사용법 · 3 읽지 못함."""
+    team, rs, reader, main, branches, merged, plain = _check_job(root, a)
+    pick, notes = _check_tips(rs, branches, merged, main)
+    every = reader.job_tips(branches)
+    lines, more = HL.collect(rs, team, a.job, every)
+    gate_on = reader.gate_on()
+
+    def scope_at(tip):
+        return HL.Scope(rs, team, a.job, tip, lines, gate_on)
+    out, ok = [], True
+    if not gate_on:
+        out.append(HL.GATE_OFF)
+    for note in notes + list(more):
+        out.append("알림: %s" % note)
+    shown = 0
+    for raw in lines:
+        if HL.is_human(raw) is None:
+            continue
+        shown += 1
+        if not gate_on:
+            out.append("%s — %s" % (HL.PASS, raw))
+            continue
+        parsed = HL.parse(raw)
+        got = HL.match(scope_at(pick(parsed.plan if parsed is not None else None)), raw)
+        out.append("%s — %s" % (got.verdict, raw))
+        if got.verdict != HL.PASS:
+            out.append("    사유: %s" % got.why)
+            ok = False
+    plans, results, received = _check_traces(rs, team, a.job, every)
+    for kind, plan, trace in HL.expected(plain, plans, results, received):
+        scope = scope_at(pick(plan))
+        if HL.passed(scope, kind, plan, deep=True)[0] is not None or _has_kind(scope, kind, plan):
+            continue
+        out.append("줄 없음 — `%s` 줄%s" % (kind, "" if plan is None else "(계획 %d)" % plan))
+        out.append("    사유: %s" % trace)
+        shown += 1
+        ok = False
+    if rs.failures:
+        raise Fail(3, "git 을 읽지 못했다 — %s" % rs.failures[-1])
+    if not shown:
+        out.append("사람 줄 없음")
+    print("\n".join(out))
+    return 0 if ok else 1
+
+
 def c_rulings(root, a) -> int:
     got = harvest(_read(Path(a.report)), [_read(Path(p)) for p in a.ledger or []])
     if not got["lines"]:
@@ -1794,6 +1934,7 @@ COMMANDS = {
                                     p.add_argument("--approval", action="store_true"), p.add_argument("--date"),
                                     p.add_argument("--choice"), p.add_argument("--human"), p.add_argument("--roadmap"),
                                     p.add_argument("--job"), p.add_argument("--plan"), p.add_argument("--gate"))),
+    "human-check": (c_human_check, lambda p: (p.add_argument("--roadmap", required=True), p.add_argument("--job", required=True))),
     "rulings": (c_rulings, lambda p: (p.add_argument("--report", required=True),
                                       p.add_argument("--ledger", action="append"), p.add_argument("--out"))),
     "write-sections": (c_write_sections, lambda p: (p.add_argument("--spec", required=True),
