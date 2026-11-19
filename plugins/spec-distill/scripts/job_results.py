@@ -275,13 +275,14 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
 
 def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> list:
     """그 계획의 implement 시도 가운데 번호가 before 보다 작은 것을 큰 번호부터 보아, 「끝」 줄이 있고 산 받음 줄이 없는
-    시도의 이름들(이어지는 만큼). 「끝」 줄이 없거나 읽지 못한 시도 · 산 받음 줄이 있는 시도를 만나면 멈춘다(J12).
+    시도의 이름들(이어지는 만큼). 머리를 읽지 못한 시도 · 「끝」 줄이 없는 시도 · 산 받음 줄이 있는 시도를 만나면 멈춘다(J12).
+    끝났으나 꼴 문제가 있는 시도는 실패로 센다. 결과 파일을 git 이 읽지 못하면 Unchecked 를 낸다.
 
     산 받음 줄 — 그 결과 파일의 이름과 머리 head 를 가리키는 꼴 맞는 받음 줄이 있고 그 결과 파일이 「더 새 시도」 사유 없이
     결과 대조를 지난다. 막힘 파일은 결과 파일 이름이 아니라 시도가 아니다."""
     names = result_names(git, tip, team, job)
     if names is None:
-        return []
+        raise Unchecked("결과 폴더를 읽지 못했다: %s" % team.results(job))
     stage = team_layout.STAGES[2]
     mine = []
     for name in names:
@@ -291,13 +292,16 @@ def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, befor
     good, _broken = team_files.received(intent_text)
     out = []
     for _attempt, name in sorted(mine, reverse=True):
-        text = git.blob(tip, team.job(job, team_layout.RESULTS_DIR, name))
-        r = team_files.parse_result(text) if text is not None else None
-        if r is None or r.problems or r.end is None:
+        path = team.job(job, team_layout.RESULTS_DIR, name)
+        text = git.blob(tip, path)
+        if text is None:   # 있는데 읽지 못했다 — 이어짐을 끊지 않고 검사 불가로 낸다
+            raise Unchecked("결과 파일을 읽지 못했다: %s" % path)
+        r = team_files.parse_result(text)
+        if _unread(r) or (r.end is None and not any(x.startswith(team_files.END_EMPTY) for x in r.problems)):   # 머리를 읽지 못한 시도 · 도는 중인 시도(끝 줄이 없다)만 끊는다
             break
         if any(x.name == name and x.commit == r.head for x in good) and check_result(git, tip, team, job, name, newer_ok=True).ok:
             break
-        out.append(name)
+        out.append(name)   # 끝났으나 꼴 문제가 있는 시도는 산 받음 줄을 가질 수 없는 실패다
     return out
 
 

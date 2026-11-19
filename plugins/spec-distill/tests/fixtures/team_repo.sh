@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
 # source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
-# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
@@ -84,6 +84,19 @@ check() {  # check <기대 rc> <메시지> <bundle 인자…> — rc 를 재고,
   assert_eq "$(bundle "$@")" "$want" "$msg"
   [ "$want" = "0" ] || assert_eq "$(wc -c < "$T/b.txt" | tr -d ' ')" "0" "$msg — 표준 출력이 비었다"
 }
+finish_attempt() {  # finish_attempt <k> [AC 줄] — E1 의 implement 계획 1 시도 k: 묶음의 맞추는 명령 줄 그대로 결과 파일을 만들고, 준 줄을 넣고, 끝 줄을 적어 올린다(feature/tm-e1)
+  local k="$1" ac="${2:-}" cmd code E1="$TM/jobs/E1"
+  g checkout -q feature/tm-e1
+  [ "$(bundle --job E1 --stage implement --plan 1)" = "0" ] || { echo "finish_attempt ${k}: 묶음이 나가지 않았다 — $(cat "$T/b.err")" >&2; return 1; }
+  cmd="$(grep '^맞추는 명령: ' "$T/b.txt")"
+  (cd "$W" && bash -c "${cmd#맞추는 명령: }") > "$T/out.txt" 2>&1 || { echo "finish_attempt ${k}: 맞추기 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  put "src/e1/a${k}.txt" "시도 ${k}" && g commit -qm "시도 ${k} 코드" && code="$(g rev-parse HEAD)"
+  [ -z "$ac" ] || printf '%s\n' "$ac" >> "$W/$E1/results/implement-plan-1-${k}.md"
+  [ "$(sync E1 "implement-plan-1-${k}.md" --end "$code")" = "0" ] || { echo "finish_attempt ${k}: 끝 줄 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  g add -- "$E1" && g commit -qm "결과 ${k}" && g push -q origin feature/tm-e1 && g fetch -q origin
+}
+write_line() { sed -n 's/^쓸 것: //p' "$T/b.txt"; }   # 마지막 bundle 이 낸 쓸 것 줄의 경로
+
 use_repo() {  # use_repo <폴더> — 그 폴더에 선 팀 레포를 쓰도록 T · W · CLAUDE_CONFIG_DIR 를 옮긴다
   T="$1"; W="$T/repo"; CLAUDE_CONFIG_DIR="$T/claude"; export CLAUDE_CONFIG_DIR
 }

@@ -45,6 +45,12 @@ MERGED_PLAN = "%s 는 이미 기본 브랜치에 머지됐다(%s) — 머지 뒤
 UNMERGED_UNKNOWN = "머지 여부를 확인하지 못했다: %s"
 
 
+def sync_line(write: str, role: str, bundle_at: str, job_at: str) -> str:
+    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13)."""
+    words = [roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py"))]
+    return SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
+
+
 class Refused(Exception):
     """묶음을 낼 수 없어 멈춘다(종료 코드 1)."""
 
@@ -303,7 +309,10 @@ def _merged_stop(git, base: Base, blocks: list, job: str, plan: Optional[int], p
 
 def _streak_stop(git, commit: str, team, job: str, scope, intent: str, number: Optional[int], attempt: int) -> None:
     """구현 단계에서 앞 시도 둘이 이어서 받아지지 않았고 이 시도를 푸는 `걸음 건너뜀` 줄도 없으면 Refused."""
-    failed = job_results.failed_attempts(git, commit, team, job, intent, number, attempt)
+    try:
+        failed = job_results.failed_attempts(git, commit, team, job, intent, number, attempt)
+    except job_results.Unchecked as exc:
+        raise Unchecked(str(exc))
     if len(failed) >= human_lines.RETRY_STOP and not human_lines.retry_open(scope, number, attempt, deep=True):
         raise Refused("구현 시도 %d번이 이어서 받아지지 않았다(%s) — 사용자에게 가서 다시 할지 정한다. 다시 하기로 하면 "
                       "질문 창으로 확인받고 `걸음 건너뜀` 줄(%s)을 적는다"
@@ -357,8 +366,7 @@ def _job_bundle(a) -> str:
             _streak_stop(git, commit, team, job, scope, intent, number, attempt)
         write = team.result(job, stage, attempt, number)
         role = a.role or team_layout.default_role(stage)
-        tail = ["쓸 것: %s" % write, SYNC_LINE % (roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py")),
-                                                 write, role, base.commit, commit)]
+        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit)]
         if stage == DESIGN:
             tail.append("쓸 자리: %s" % place_sentence(team.design(job), stage))
         elif stage == PLAN:

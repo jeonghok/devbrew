@@ -396,6 +396,11 @@ assert_eq "$(cat "$T/job.err")" "[spec-distill] 검사 불가 — 로드맵 밖 
 drop_branches chore/tm-hb
 assert_eq "$(job --job fix-typo --stage implement)" "0" "멈춤 픽스처를 치운 뒤 단순 작업은 그대로 0(양성 대조)"
 
+# AC16 · J13 — 맞추는 명령의 낱말마다 셸에 그대로 붙여도 되게 감싼다(공백 · 작은따옴표가 든 경로도 한 낱말이다)
+SYNC_Q="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import start_bundle as B; print(B.sync_line("my dir/it'"'"'s.md", "worker", "abc", "def"))' "$S")"
+assert_contains "$SYNC_Q" "--result 'my dir/it'\\''s.md' --role worker --bundle-at abc --job-at def" "AC16: 쓸 것의 경로가 낱말 하나로 감싸인다"
+assert_eq "$(bash -c "set -- ${SYNC_Q#*job sync }; echo \$#:\$2")" "8:my dir/it's.md" "AC16: 줄을 셸에 붙이면 낱말 여덟이고 경로는 한 낱말이다"
+
 # ── 끝에서 끝 — 새 레포: create --layout team → 공통 문서 → job new → 시작 묶음 → 맞추는 명령 → 끝 줄 → 결과 대조 → 받음 줄 → 결과 받음.
 #    걸음마다 앞 걸음의 출력을 다음 걸음이 받는다 ──
 T1="$T"; T="$(mktemp -d)" || exit 1

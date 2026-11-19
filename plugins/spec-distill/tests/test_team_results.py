@@ -315,12 +315,13 @@ class FailedStreak(unittest.TestCase):
 
     TEAM = team_layout.team_from_roadmap("r/", "r/tm/roadmap.md")
 
-    def build(self, attempts, received=(), blocked=False, other=()):
+    def build(self, attempts, received=(), blocked=False, other=(), bodies=None):
         """attempts: [(계획, 시도, 끝 줄 있음)]. received: 받음 줄을 적을 (계획, 시도). other: 다른 단계의 (단계, 계획, 시도) 끝난 결과."""
         files = {}
         for plan, attempt, ended in attempts:
             name = team_layout.result_name("implement", attempt, plan)
-            files[self.TEAM.job("E1", "results", name)] = result("산출물: a.md\n" + ("끝 — " + H + "\n" if ended else ""),
+            body = (bodies or {}).get((plan, attempt))
+            files[self.TEAM.job("E1", "results", name)] = result("산출물: a.md\n" + ("끝 — " + H + "\n" if ended else "") if body is None else body,
                                                                   plan=str(plan) if plan else None, attempt=str(attempt))
         for stage, plan, attempt in other:
             name = team_layout.result_name(stage, attempt, plan)
@@ -374,6 +375,21 @@ class FailedStreak(unittest.TestCase):
         # 막힘 파일은 시도가 아니다
         self.assertEqual(self.streak([(1, 1, True)], 2, blocked=True), 1)
         self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, blocked=True), 2)
+
+    def test_ended_attempt_with_format_problems_counts(self):   # 끝났으나 꼴 문제가 있는 시도는 산 받음 줄을 가질 수 없는 실패다
+        end = "끝 — " + H + "\n"
+        for label, body in (("끝 줄 둘", "산출물: a.md\n" + end + end), ("끝 줄 뒤의 기계 줄", "산출물: a.md\n" + end + "산출물: b.md\n"),
+                            ("끝 줄이 비었다", "산출물: a.md\n끝 —  \n")):
+            git, text = self.build([(1, 1, True), (1, 2, True)], bodies={(1, 2): body})
+            self.assertTrue(F.parse_result(result(body)).problems, label)
+            with mock.patch.object(job_results, "check_result", lambda *a, **k: job_results.Check(True, "", [], [], None)):
+                self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 2, label)
+
+    def test_blob_read_failure_is_unchecked(self):
+        git, text = self.build([(1, 1, True)])
+        del git.files[self.TEAM.result("E1", "implement", 1, 1)]
+        git.names = lambda tip, folder: [team_layout.result_name("implement", 1, 1)]
+        self.assertRaises(job_results.Unchecked, job_results.failed_streak, git, "tip", self.TEAM, "E1", text, 1, 2)
 
     def test_unreadable_attempt_breaks(self):
         git, text = self.build([(1, 1, True), (1, 2, True)])

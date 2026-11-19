@@ -155,18 +155,6 @@ put "$E1/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 �
 g commit -qm "E1 계획 1" && push_br feature/tm-e1
 approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
 D_IMPL=(--job E1 --stage implement --plan 1)
-finish_attempt() {  # finish_attempt <k> [AC 줄] — 받은 묶음의 맞추는 명령 줄 그대로 implement-plan-1-<k>.md 를 만들고, 준 줄을 넣고, 끝 줄을 적어 올린다
-  local k="$1" ac="${2:-}" cmd code
-  g checkout -q feature/tm-e1
-  [ "$(bundle "${D_IMPL[@]}")" = "0" ] || { echo "finish_attempt ${k}: 묶음이 나가지 않았다 — $(cat "$T/b.err")" >&2; return 1; }
-  cmd="$(grep '^맞추는 명령: ' "$T/b.txt")"
-  (cd "$W" && bash -c "${cmd#맞추는 명령: }") > "$T/out.txt" 2>&1 || { echo "finish_attempt ${k}: 맞추기 실패 — $(cat "$T/out.txt")" >&2; return 1; }
-  put "src/e1/a${k}.txt" "시도 ${k}" && g commit -qm "시도 ${k} 코드" && code="$(g rev-parse HEAD)"
-  [ -z "$ac" ] || printf '%s\n' "$ac" >> "$W/$E1/results/implement-plan-1-${k}.md"
-  [ "$(sync E1 "implement-plan-1-${k}.md" --end "$code")" = "0" ] || { echo "finish_attempt ${k}: 끝 줄 실패 — $(cat "$T/out.txt")" >&2; return 1; }
-  g add -- "$E1" && g commit -qm "결과 ${k}" && push_br feature/tm-e1
-}
-write_line() { sed -n 's/^쓸 것: //p' "$T/b.txt"; }
 
 finish_attempt 1 && ok "20: 준비 — 시도 1 을 끝냈다(받음 줄 없음)" || no "20: 준비 — 시도 1"
 check 0 "20: 실패 하나로는 멈추지 않는다" "${D_IMPL[@]}"
@@ -201,12 +189,33 @@ assert_eq "$(led record --spec "$E1/INTENT.md" --line "$RLINE")" "0" "27: 받음
 g add -- "$E1/INTENT.md" && g commit -qm "받음 줄 — 시도 4" && push_br feature/tm-e1
 check 0 "27: 결과 대조를 지난 받음 줄이 이어짐을 끊는다(26 의 양성 대조)" "${D_IMPL[@]}"
 assert_eq "$(write_line)" "$E1/results/implement-plan-1-5.md" "27: 쓸 것은 시도 5"
+finish_attempt 5 && ok "27b: 준비 — 시도 5 를 AC 줄 없이 끝냈다" || no "27b: 준비 — 시도 5"
+check 0 "27b: 시도 4 의 받음 줄은 더 새 시도 5 가 있어도 산 받음 줄이다 — 이어진 실패는 하나뿐이다" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-6.md" "27b: 쓸 것은 시도 6"
+finish_attempt 6 && ok "27c: 준비 — 시도 6 을 AC 줄 없이 끝냈다" || no "27c: 준비 — 시도 6"
+check 1 "27c: 시도 5 · 6 이 이어서 실패하면 다시 멈춘다" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 7" "27c: 푸는 관문은 시도 7"
+hand_attempt() {  # hand_attempt <k> <덧붙일 줄> — 시도 6 의 결과 파일을 시도 k 로 베끼고 끝 줄 뒤에 그 줄을 덧붙여 올린다(모델이 손으로 쓴 파일)
+  local k="$1" extra="$2" src="$W/$E1/results/implement-plan-1-6.md" dst="$W/$E1/results/implement-plan-1-$1.md"
+  sed "s/^attempt: 6\$/attempt: ${k}/" "$src" > "$dst" && printf '%s\n' "$extra" >> "$dst" \
+    && g add -- "$E1" && g commit -qm "손으로 쓴 시도 ${k}" && push_br feature/tm-e1
+}
+hand_attempt 7 "끝 — $(sed -n 's/^head: //p' "$W/$E1/results/implement-plan-1-6.md")" && ok "27d: 준비 — 끝 줄이 둘인 시도 7 을 손으로 썼다" || no "27d: 준비 — 시도 7"
+check 1 "27d: 끝 줄이 둘인 끝난 시도는 실패로 센다 — 손으로 써도 멈춤이 풀리지 않는다(AC13)" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 8" "27d: 다음 관문은 시도 8"
+hand_attempt 8 "AC1: 구현됨 — 끝 줄 뒤의 기계 줄" && ok "27e: 준비 — 끝 줄 뒤에 기계 줄이 있는 시도 8 을 손으로 썼다" || no "27e: 준비 — 시도 8"
+check 1 "27e: 끝 줄 뒤의 기계 줄이 있는 시도도 실패로 센다(AC13)" "${D_IMPL[@]}"
+assert_contains "$(err)" "다시 시도 plan 1 시도 9" "27e: 다음 관문은 시도 9"
+approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 9" 2026-11-26 && push_br feature/tm-e1
+check 0 "27f: 사람의 다시 시도 줄은 그 시도를 푼다(27d · 27e 의 양성 대조)" "${D_IMPL[@]}"
+assert_eq "$(write_line)" "$E1/results/implement-plan-1-9.md" "27f: 쓸 것은 시도 9"
 
 g checkout -q main && g merge -q --no-ff -m "E1 계획 1 합침" feature/tm-e1 && push_main
 for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do
   # shellcheck disable=SC2086
   check 1 "28: 머지된 계획은 ${stage%% *} 단계도 멈춘다(AC14 · J30)" --job E1 --stage $stage
   assert_contains "$(err)" "이미 기본 브랜치에 머지됐다" "28: 사유(${stage%% *})"
+  assert_not_contains "$(err)" "상태 보기는 이 브랜치를 머지로 세지 못한다" "28: 브랜치가 있으면 상태 보기의 머지 근거가 먼저다(${stage%% *})"
 done
 g branch -q -D feature/tm-e1 && g push -q origin --delete feature/tm-e1 && g fetch -q --prune origin
 for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do
@@ -215,7 +224,7 @@ for stage in "implement --plan 1" "plan --plan 1" "review --plan 1" "design"; do
   assert_contains "$(err)" "이미 기본 브랜치에 머지됐다" "29: 사유(${stage%% *})"
   assert_contains "$(err)" "상태 보기는 이 브랜치를 머지로 세지 못한다" "29: 더한 갈래로 멈췄다(J11 — ${stage%% *})"
 done
-bundle --job E1 --stage plan --plan 2 > /dev/null
+check 0 "30: 계획 2 는 머지되지 않았으니 묶음이 나간다(양성 대조)" --job E1 --stage plan --plan 2
 assert_not_contains "$(err)" "머지됐다" "30: 계획 2 는 머지되지 않았다"
 
 # ── 묶음 F — 한 번도 브랜치를 만들지 않은 E3 · E2(머지 검사의 양성 대조) ──
@@ -226,6 +235,7 @@ check 1 "31: 같은 E3 의 plan 은 승인 줄에서 멈춘다" --job E3 --stage
 assert_contains "$(err)" '`spec 승인` 줄이 없다' "31: 사유는 승인 줄 없음"
 assert_not_contains "$(err)" "머지됐다" "31: 없는 브랜치를 머지로 읽지 않는다"
 check 1 "34: 브랜치를 만든 적 없는 E2 는 흐름 승인에서 멈춘다" --job E2 --stage implement
+assert_contains "$(err)" '`흐름 승인` 줄이 없다' "34: 사유는 흐름 승인 줄 없음"
 assert_not_contains "$(err)" "머지됐다" "34: 없는 브랜치를 머지로 읽지 않는다(32 · 33 의 양성 대조)"
 
 # ── 묶음 G — 설계 없는 흐름의 E2 가 머지된다 ──
