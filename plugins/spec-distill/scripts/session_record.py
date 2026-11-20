@@ -94,7 +94,7 @@ def day(when, local):
 def _questions_of(inp):
     """호출 입력의 질문 글 목록. 읽지 못하면 None.
 
-    measure_questions._parse_questions 와 같이 `__unparsedToolInput.raw` 로만 남은 입력은 JSON 으로 푼다.
+    `__unparsedToolInput.raw` 로만 남은 입력은 그 글을 JSON 으로 풀어 읽는다.
     """
     if not isinstance(inp, dict):
         return None
@@ -198,7 +198,7 @@ def _scan(path):
                 parsed += 1
                 uid = row.get("uuid")
                 if isinstance(uid, str):
-                    if uid in seen:   # 이어받은 세션이 복사한 같은 항목은 처음 것만 읽는다(measure_questions 와 같다)
+                    if uid in seen:   # 이어받은 세션이 복사한 같은 uuid 의 항목은 처음 것만 읽는다
                         continue
                     seen.add(uid)
                 kind = row.get("type")

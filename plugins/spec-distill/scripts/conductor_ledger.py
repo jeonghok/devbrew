@@ -1098,9 +1098,28 @@ def _human_target(root, a, record: bool = False) -> Target:
     return Target(team, a.job, kind, head_plan, path, HL.head(a.job, rev, head_plan), rs, rev, tip, tuple(others), gate)
 
 
-def c_ask_head(root, a) -> int:
+def _with_human_tail(fn, root, a) -> int:
+    """사람 줄 명령의 3 은 글이 늘 「확인 못 함」 으로 시작하고 끄는 길로 끝난다(AC6) — record --human 과 ask-head 가 같이 쓴다."""
+    try:
+        return fn(root, a)
+    except Fail as exc:
+        if exc.rc != 3:
+            raise
+        msg = str(exc)
+        if not msg.startswith(HL.UNCHECKED):
+            msg = "%s — %s" % (HL.UNCHECKED, msg)
+        if not msg.endswith(HUMAN_TAIL):
+            msg += HUMAN_TAIL
+        raise Fail(3, msg)
+
+
+def _ask_head(root, a) -> int:
     print(_human_target(root, a).head)
     return 0
+
+
+def c_ask_head(root, a) -> int:
+    return _with_human_tail(_ask_head, root, a)
 
 
 def _job_lines(root, t: Target) -> tuple:
@@ -1198,18 +1217,7 @@ def _record_human(root, a) -> int:
 
 
 def c_record_human(root, a) -> int:
-    """record --human — 3 의 글은 늘 「확인 못 함」 으로 시작하고 끄는 길로 끝난다(AC6)."""
-    try:
-        return _record_human(root, a)
-    except Fail as exc:
-        if exc.rc != 3:
-            raise
-        msg = str(exc)
-        if not msg.startswith(HL.UNCHECKED):
-            msg = "%s — %s" % (HL.UNCHECKED, msg)
-        if not msg.endswith(HUMAN_TAIL):
-            msg += HUMAN_TAIL
-        raise Fail(3, msg)
+    return _with_human_tail(_record_human, root, a)
 
 
 def _check_tips(rs, branches: list, merged: list, main: str) -> tuple:

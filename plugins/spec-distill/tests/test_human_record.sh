@@ -329,4 +329,13 @@ g checkout -q feature/tm-e1
 assert_eq "$(led record --spec "$W/$E1/design.md" --approval --date 2026-11-23 --choice "이대로")" "2" "AC3: 설정을 되돌리면 다시 2(양성 대조)"
 assert_contains "$(out)" "record --human" "AC3: 되돌린 뒤 — record --human 으로 보낸다"
 
+# 35 — ask-head 의 3 도 record --human 처럼 「확인 못 함」 으로 시작하고 끄는 길로 끝난다(AC6). 되돌리면 다시 0(양성 대조)
+g checkout -q main && printf -- '---\nhuman_gate: 아무거나\n---\n' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "깨진 human_gate" && push_main && g checkout -q feature/tm-e1
+assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "3" "AC6: 설정을 읽지 못하면 ask-head 3"
+assert_contains "$(out)" "확인 못 함" "AC6: ask-head 3 — 확인 못 함으로 시작한다"
+assert_contains "$(out)" "human_gate: 끔 으로 연다" "AC6: ask-head 3 — record --human 과 같은 끄는 길 꼬리"
+case "$(out)" in *"human_gate: 끔 으로 연다") ok "AC6: ask-head 3 — 글이 끄는 길로 끝난다" ;; *) no "AC6: ask-head 3 — 글이 끄는 길로 끝나지 않는다" ;; esac
+g checkout -q main && g revert --no-edit HEAD > /dev/null && push_main && g checkout -q feature/tm-e1
+assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "AC6: 설정을 되돌리면 ask-head 0(양성 대조)"
+
 finish
