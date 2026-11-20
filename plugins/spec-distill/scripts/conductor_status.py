@@ -151,6 +151,19 @@ def rules_gap(root, roadmap_rel: str, tip: Optional[str]) -> int:
     return sum(1 for d in difflib.ndiff(theirs.splitlines(), mine.splitlines()) if d.startswith(("+ ", "- ")))
 
 
+def leftovers(root, roadmap_rel: str, tip: Optional[str] = None) -> dict:
+    """지우기 전에 보이는 남은 것 넷 — 상대가 아직 받지 않은 보낸 글 · 내가 답하지 않은 온 질문 · 남은 대기 줄 · 안 올린 규칙 고침.
+    `tip` 이 없으면 로컬 끝에서 센다. 남은 대기 줄은 그 끝의 `pending.md` 에서 `- ` 로 시작하는 줄 수다(파일이 없으면 0)."""
+    team = CB.team_of(root, roadmap_rel)
+    if tip is None:
+        tip = CB.local_tip(root, team.name)
+    pending = (CB.read(root, tip, team.path(CB.PENDING_FILE)) or "") if tip is not None else ""
+    return {"unreceived": CM.counts(root, team.name, tip, CB.roadmaps(root)).unreceived,
+            "unanswered": CM.unanswered(root, team.name, tip),
+            "pending": sum(1 for line in pending.splitlines() if line.startswith("- ")),
+            "rules": rules_gap(root, roadmap_rel, tip)}
+
+
 def _title(root, roadmap_rel: str, folder: str, base: Optional[str]) -> str:
     text = CB.read(root, base, roadmap_rel) if base else None
     for line in (text or "").split("\n"):

@@ -1004,3 +1004,134 @@ class PublishBoundary(unittest.TestCase):
         self.assertEqual(len(sites), 1, sites)
         self.assertIn('"refs/remotes/origin/"', self.SRC)
         self.assertEqual(CB.NET_TIMEOUT, 60)
+
+
+class Delete(StateRepo):
+    def setUp(self):
+        super().setUp()
+        import conductor_mail as CM
+        for name in (ALPHA, BETA):
+            self.claim(name)
+            CB.ensure(self.w, rm(name), SID)
+        CM.send(self.w, rm(ALPHA), SID, BETA, "예고", "아직 읽지 않았을 글")
+        CM.send(self.w, rm(BETA), SID, ALPHA, "질문", "답을 기다리는 질문")
+        team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 줄 하나\n- A1 · 결정 기록 · 줄 둘\n"}, "대기 줄")
+
+    def test_without_confirmation_it_counts_and_keeps_the_branch(self):
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (1, tip), out)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), tip)
+        self.assertIn("상대가 아직 받지 않은 보낸 글 1 · 내가 답하지 않은 온 질문 1 · 남은 대기 줄 2 · 안 올린 규칙 고침 0줄", out)
+        self.assertIn("--confirmed", out)
+
+    def test_confirmed_deletes_local_and_remote_and_nothing_else(self):
+        before, beta = self.snap(), CB.local_tip(self.w, BETA)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 0, out)
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
+        self.assertEqual(self.g("rev-parse", "--verify", "-q", CB.ref_of(ALPHA), repo=self.o, check=False), "")
+        self.assertEqual((self.snap(), CB.local_tip(self.w, BETA)), (before, beta))               # 다른 로드맵의 브랜치와 작업 폴더는 그대로
+        self.assertEqual(self.g("rev-parse", CB.ref_of(BETA), repo=self.o), beta)
+        self.assertEqual(self.g("for-each-ref", "refs/remotes/origin/conductor/" + ALPHA), "")     # 원격 추적 ref 도 남지 않는다
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 1, out)                                                              # 이미 없다
+
+    def test_only_the_marker_holder_deletes(self):
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", OTHER, "--confirmed")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (5, tip), out)
+
+    def test_remote_that_moved_is_not_deleted_and_the_count_is_taken_again(self):   # J39 — 다른 기계가 올린 글을 세지 않고 지우지 않는다
+        """뒤집으면 붉다 — 받아 와 견주지 않고 지우면 첫 --confirmed 가 0 으로 끝나고 다른 기계의 글이 원격에서 사라진다."""
+        import conductor_mail as CM
+        m2 = self.clone("m2")
+        self.claim(repo=m2)
+        CB.ensure(m2, rm(ALPHA), SID)
+        theirs = CM.send(m2, rm(ALPHA), SID, BETA, "예고", "다른 기계가 올린 글")[0].commit
+        mine = CB.local_tip(self.w, ALPHA)
+        self.assertNotEqual(mine, theirs)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 1, out)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), theirs)                # 원격은 그대로다
+        self.assertIn("상대가 아직 받지 않은 보낸 글 2 · ", out)                                      # 받아 온 끝에서 다시 셌다(이 기계의 것 1 + 다른 기계의 것 1)
+        self.assertEqual(CB.local_tip(self.w, ALPHA), theirs)                                       # 로컬은 받아 온 끝으로 옮겨졌다 — 다음 확인은 같은 끝을 센다
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.g("rev-parse", "--verify", "-q", CB.ref_of(ALPHA), repo=self.o, check=False), "")
+
+    def test_remote_that_cannot_be_reached_keeps_the_local_branch(self):
+        self.g("remote", "set-url", "origin", "file://" + str(self.t / "gone.git"))
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (3, tip), out)                        # 원격을 먼저 지운다 — 못 지우면 로컬도 둔다
+
+    def test_local_commit_not_pushed_is_kept_and_not_moved(self):
+        """로컬만 앞선 채(올리지 못한 커밋)로는 원격이 같다고 볼 수 없다 — 지우지 않고 로컬 끝도 옮기지 않는다."""
+        import conductor_mail as CM
+        self.g("remote", "set-url", "--push", "origin", "file://" + str(self.t / "gone.git"))
+        CM.send(self.w, rm(ALPHA), SID, BETA, "예고", "올리지 못한 글")
+        mine, remote = CB.local_tip(self.w, ALPHA), self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o)
+        self.assertNotEqual(mine, remote)
+        self.g("remote", "set-url", "--push", "origin", str(self.o))
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA), self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o)), (1, mine, remote), out)
+        self.assertIn("올리지 못한 커밋", out)
+
+    def test_branch_missing_on_the_remote_deletes_the_local_one_only(self):
+        self.g("push", "origin", ":" + CB.ref_of(ALPHA))
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 0, out)
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
+        self.assertIn("원격에는 없었다", out)
+
+    def test_a_repo_with_the_branch_switched_off_can_still_delete_what_is_left(self):
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual(rc, 0, out)
+        self.assertIsNone(CB.local_tip(self.w, ALPHA))
+
+    def test_leftovers_count_four_things_at_a_given_or_local_tip(self):
+        import conductor_status as cstat
+        want = {"unreceived": 1, "unanswered": 1, "pending": 2, "rules": 0}
+        self.assertEqual(cstat.leftovers(self.w, rm(ALPHA)), want)
+        self.assertEqual(cstat.leftovers(self.w, rm(ALPHA), CB.local_tip(self.w, ALPHA)), want)
+        self.assertEqual(cstat.leftovers(self.w, rm(BETA))["pending"], 0)                        # 파일이 없으면 0
+
+
+class DeleteGateGuards(StateRepo):
+    def test_delete_forms_are_refused_unless_the_delete_mark_is_given_for_that_exact_form(self):
+        ref, oid = CB.ref_of(ALPHA), "a" * 40
+        for form in (("push", "--porcelain", "origin", ":" + ref), ("update-ref", "-d", ref, oid)):
+            with self.assertRaises(RuntimeError, msg=form):
+                CB.git(self.w, *form)                                                              # 표지 없이는 지우는 꼴이 문에서 막힌다
+        for form in (("push", "--porcelain", "origin", ":refs/heads/trunk"), ("push", "--porcelain", "origin", ":refs/heads/feature/a1"),
+                     ("push", "--force", "origin", ":" + ref), ("push", "--delete", "origin", ref), ("push", "--porcelain", "origin", "+" + ref + ":" + ref),
+                     ("push", "--porcelain", "origin", ":" + ref, ":" + CB.ref_of(BETA)), ("push", "--porcelain", "origin", ref + ":" + ref),
+                     ("update-ref", "-d", "refs/heads/trunk", oid), ("update-ref", "-d", ref), ("update-ref", "-d", ref, "main"),
+                     ("update-ref", "--no-deref", "-d", ref, oid), ("fetch", "--quiet", "origin", "+%s:refs/remotes/origin/x" % ref),
+                     ("ls-remote", "origin", ref), ("rev-parse", "HEAD")):
+            with self.assertRaises(RuntimeError, msg=form):
+                CB.git(self.w, *form, delete=True)                                                 # 표지가 있어도 그 두 꼴 밖은 막힌다
+        self.assertEqual(CB.git(self.w, "update-ref", "-d", "refs/remotes/origin/conductor/" + ALPHA, oid, delete=True)[0] in (0, 1), True)   # 양성 대조 — 문을 지난다(없는 ref 라 git 이 거절해도 RuntimeError 는 아니다)
+
+
+class DeleteBoundary(unittest.TestCase):
+    SRC = (SCRIPTS / "conductor_branch.py").read_text(encoding="utf-8")
+
+    def test_only_the_delete_function_passes_the_delete_mark(self):
+        body = self.SRC.split("def delete(", 1)[1].split("# ── 명령줄", 1)[0]
+        outside = self.SRC.replace(body, "")
+        self.assertEqual(re.findall(r"delete=True\)", outside), ["delete=True)"], "표지를 넘기는 호출은 _git_delete 하나뿐이다")
+        self.assertEqual(len(re.findall(r"_git_delete\(root", body)), 3)
+        self.assertNotIn("delete=True", body)
+        self.assertRegex(body, r'"update-ref", "-d", ref, tip')                                   # 로컬 ref 는 읽었던 끝을 옛 값으로 걸어 지운다
+
+    def test_remote_is_deleted_before_local_and_confirmation_gates_everything(self):
+        body = self.SRC.split("def delete(", 1)[1].split("# ── 명령줄", 1)[0]
+        self.assertLess(body.index("--confirmed"), body.index('"ls-remote"'))                      # 확인 없이 원격을 보지도 않는다
+        self.assertLess(body.index('"push", "--porcelain", "origin", ":"'), body.index('"update-ref", "-d", ref, tip'))
+        self.assertNotIn("availability(", body)
+        self.assertIn("import conductor_status", body)
+        self.assertNotRegex(self.SRC.split("def delete(", 1)[0], r"(?m)^import conductor_status|^from conductor_status")

@@ -80,9 +80,27 @@ LS_REMOTE_FORMS = ("--exit-code",)
 TRACKING_PREFIX = "refs/remotes/origin/"
 
 
-def _check_write_form(args) -> None:
+DELETABLE_PREFIXES = ("refs/heads/conductor/", TRACKING_PREFIX + "conductor/")   # 지우는 꼴이 닿는 ref — 상태 브랜치와 그 원격 추적 ref 뿐이다
+OID_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def _check_delete_form(args) -> None:
+    """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain origin :<상태 브랜치 ref>` 와 `update-ref -d <ref> <옛 값>`.
+    그 밖의 하위 명령 · 꼴은 이 표지가 있어도 거절한다."""
+    rest = args[1:]
+    if args[0] == "push" and len(rest) == 3 and rest[0] == "--porcelain" and rest[1] == "origin" and rest[2].startswith(":" + DELETABLE_PREFIXES[0]):
+        return
+    if args[0] == "update-ref" and len(rest) == 3 and rest[0] == "-d" and rest[1].startswith(DELETABLE_PREFIXES) and OID_RE.fullmatch(rest[2]):
+        return
+    raise RuntimeError("지우기 표지는 상태 브랜치를 지우는 꼴에만 받는다: %r" % (args,))
+
+
+def _check_write_form(args, delete: bool = False) -> None:
     """쓰는 하위 명령의 위험한 꼴을 문에서 거절한다 — push 의 force · `+`/`:` 갈래, 옛 값 없는 update-ref,
-    로컬 ref 를 덮는 fetch, 다른 프로그램을 부르는 옵션(`--upload-pack` 등)."""
+    로컬 ref 를 덮는 fetch, 다른 프로그램을 부르는 옵션(`--upload-pack` 등). 지우는 꼴은 `delete=True` 일 때 그 꼴만 받는다."""
+    if delete:
+        _check_delete_form(args)
+        return
     rest = args[1:]
     if args[0] == "push":
         for a in rest:
@@ -100,13 +118,13 @@ def _check_write_form(args) -> None:
         raise RuntimeError("git update-ref 는 옛 값을 함께 준 꼴만 부른다: %r" % (rest,))
 
 
-def _run(root, *args, env=None, data=None, timeout=None) -> tuple:
+def _run(root, *args, env=None, data=None, timeout=None, delete: bool = False) -> tuple:
     """(rc, stdout 바이트, stderr 바이트). 허용 목록 밖 하위 명령은 RuntimeError."""
     if not args or args[0] not in GIT_ALLOWED:
         raise RuntimeError("허용하지 않는 git 하위 명령: %r" % (args[:1],))
     if args[0] == "config" and args[1:2] not in tuple((f,) for f in CONFIG_READ_FORMS):
         raise RuntimeError("git config 는 읽는 꼴만 부른다: %r" % (args,))
-    _check_write_form(args)
+    _check_write_form(args, delete)
     full = dict(os.environ)   # 부를 때의 환경 — import 때 굳히지 않는다
     full.update(env or {})
     full["LC_ALL"] = "C"
@@ -123,10 +141,15 @@ def _run(root, *args, env=None, data=None, timeout=None) -> tuple:
     return p.returncode, p.stdout, p.stderr
 
 
-def git(root, *args, env=None, data=None, timeout=None) -> tuple:
+def git(root, *args, env=None, data=None, timeout=None, delete: bool = False) -> tuple:
     """(rc, stdout, stderr) — 글로 푼 git 호출. 허용 목록(GIT_ALLOWED) 밖이면 RuntimeError."""
-    rc, out, err = _run(root, *args, env=env, data=data, timeout=timeout)
+    rc, out, err = _run(root, *args, env=env, data=data, timeout=timeout, delete=delete)
     return rc, out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
+
+
+def _git_delete(root, *args, timeout=None) -> tuple:
+    """지우는 꼴의 git 호출 — `delete` 의 두 자리만 부른다(`_check_delete_form`)."""
+    return git(root, *args, timeout=timeout, delete=True)
 
 
 # ── 이름 ─────────────────────────────────────────────────────────────────────
@@ -822,6 +845,64 @@ def ensure(root, roadmap_rel: str, session: str) -> Result:
     return res._replace(notes=("만들었다 — %s(%s)" % (branch_of(team.name), res.commit[:8]),) + tail)
 
 
+# ── 지우기 ───────────────────────────────────────────────────────────────────
+
+def _counts_line(left: dict) -> str:
+    return ("상대가 아직 받지 않은 보낸 글 %d · 내가 답하지 않은 온 질문 %d · 남은 대기 줄 %d · 안 올린 규칙 고침 %d줄"
+            % (left["unreceived"], left["unanswered"], left["pending"], left["rules"]))
+
+
+def delete(root, roadmap_rel: str, session: str, confirmed: bool = False) -> tuple:
+    """(지운 끝, 알릴 줄들). 확인이 없으면 수를 알리고 BranchError(1) — 지우지 않는다. 확인이 있어도 원격 끝이 로컬 끝과 다르면
+    지우지 않고 받아 온 끝에서 다시 센 수를 알린다(BranchError(1)). 원격을 먼저 지우고(못 지우면 BranchError(3), 로컬은 둔다)
+    로컬 ref 를 읽었던 끝을 옛 값으로 걸어 지운다. `availability` 는 보지 않는다 — 꺼 둔 레포에서도 남은 브랜치를 지운다."""
+    import conductor_status as cstat   # 맨 위에서 가져오면 서로 가져온다
+    team = team_of(root, roadmap_rel)
+    _need_marker(root, roadmap_rel, session)
+    tip = local_tip(root, team.name)
+    if tip is None:
+        raise BranchError(1, "상태 브랜치가 없다")
+    if not confirmed:
+        raise BranchError(1, "%s — 지우려면 사용자 확인 뒤 --confirmed 를 붙여 다시 부른다" % _counts_line(cstat.leftovers(root, roadmap_rel, tip)))
+    ref = ref_of(team.name)
+    remote_exists = False
+    if _origin_exists(root) is True:
+        rc, _o, err = git(root, "ls-remote", "--exit-code", "origin", ref, timeout=NET_TIMEOUT)
+        if rc == 0:
+            remote_exists = True
+        elif rc != 2:
+            raise BranchError(3, "원격에 닿지 못해 지우지 않았다 — %s" % _net_reason("", err))
+    if remote_exists:
+        remote, why = _fetch(root, team.name)
+        if remote is None:
+            raise BranchError(3, "원격의 끝을 받아 오지 못해 지우지 않았다 — %s" % why)
+        if remote != tip:
+            rc, ahead, err = git(root, "rev-list", "%s..%s" % (remote, tip))
+            if rc != 0:
+                raise _git_fail(err, "원격 끝과 로컬 끝을 견주지 못했다")
+            if ahead.strip():   # 로컬이 받아 온 끝의 조상이 아니다 — 이 기계의 올리지 못한 커밋이 있다
+                behind = git(root, "rev-list", "-1", "%s..%s" % (tip, remote))[1].strip()
+                raise BranchError(1, ("이 기계의 올리지 못한 커밋과 다른 곳의 커밋이 함께 있다 — 다음 쓰기(`sync` · `send` · `ack` · `waiting`)가 둘을 맞춘 뒤 다시 부른다"
+                                      if behind else "이 기계에 올리지 못한 커밋이 있다 — 다음 쓰기(`sync` · `send` · `ack` · `waiting`)가 올린 뒤 다시 부른다"))
+            rc, _o, err = git(root, "update-ref", ref, remote, tip)   # 읽었던 끝이 그대로일 때만 받아 온 끝으로 옮긴다
+            if rc != 0:
+                raise _git_fail(err, "로컬 상태 브랜치를 받아 온 끝으로 옮기지 못했다")
+            raise BranchError(1, "원격에 이 기계가 세지 않은 커밋이 있다 — 받아 온 끝에서 다시 셌다: %s — 지우려면 사용자 확인 뒤 --confirmed 를 붙여 다시 부른다"
+                              % _counts_line(cstat.leftovers(root, roadmap_rel, remote)))
+        rc, out, err = _git_delete(root, "push", "--porcelain", "origin", ":" + ref, timeout=NET_TIMEOUT)
+        if rc != 0:
+            raise BranchError(3, "원격의 상태 브랜치를 지우지 못했다 — 로컬은 두었다: %s" % _net_reason(out, err))
+    rc, _o, err = _git_delete(root, "update-ref", "-d", ref, tip)
+    if rc != 0:
+        raise _git_fail(err, "로컬 상태 브랜치를 지우지 못했다")
+    track = TRACKING_PREFIX + branch_of(team.name)
+    seen = branch_tip.resolve(root, track)
+    if seen is not None:
+        _git_delete(root, "update-ref", "-d", track, seen)
+    where = "로컬과 원격" if remote_exists else "로컬(원격에는 없었다)"
+    return tip, ("지웠다 — %s 의 %s(%s)" % (where, branch_of(team.name), tip[:8]),)
+
+
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
 
 def main(argv=None) -> int:
@@ -831,9 +912,17 @@ def main(argv=None) -> int:
     en = sub.add_parser("ensure", help="상태 브랜치가 없으면 만든다")
     en.add_argument("--roadmap", required=True)
     en.add_argument("--session", required=True)
+    de = sub.add_parser("delete", help="상태 브랜치를 지운다 — 확인 표시가 없으면 남은 것의 수만 낸다")
+    de.add_argument("--roadmap", required=True)
+    de.add_argument("--session", required=True)
+    de.add_argument("--confirmed", action="store_true")
     args = ap.parse_args(argv)
     try:
-        res = ensure(args.root, args.roadmap, args.session)
+        if args.cmd == "delete":
+            _tip, notes = delete(args.root, args.roadmap, args.session, args.confirmed)
+            res = Result(None, False, None, notes)
+        else:
+            res = ensure(args.root, args.roadmap, args.session)
     except BranchError as exc:
         print("[spec-distill] " + str(exc), file=sys.stderr)
         return exc.rc
