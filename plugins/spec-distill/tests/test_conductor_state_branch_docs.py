@@ -21,7 +21,7 @@ import conductor_branch as CB  # noqa: E402
 import conductor_ledger as L  # noqa: E402
 import control_plane as cp  # noqa: E402
 import team_layout as TL  # noqa: E402
-from conductor_branch_fixture import ALPHA, ENV, SID, StateRepo, rm  # noqa: E402
+from conductor_branch_fixture import ALPHA, ENV, ROADMAPS, SID, StateRepo, rm, roadmap_text  # noqa: E402
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
@@ -136,6 +136,26 @@ class Closure(unittest.TestCase):   # J41 — 상태 계산은 새 모듈을 가
 
 
 class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명령 출력이 바뀌지 않는다
+    FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
+    QUESTION = "미뤄 둔 질문"
+    NOTE = "쌓아 둔 기록 한 줄"
+    RES_PATH = "/tmp/old-behaviour-res"
+
+    def setUp(self):
+        super().setUp()
+        # 검사가 통과하는 로드맵 — brief · audit 이 읽히고, 번호가 묶음에 배정되고, 위험 번호표가 brief 와 같다.
+        # (brief 가 없으면 「검사 불가」 라 show --tasks 가 늘 같은 오류 줄이고 에픽 화면이 그려지지 않는다.)
+        files = {"plan/br/b.md": (self.FIXTURE / "b.md").read_text(encoding="utf-8"),
+                 "plan/br/b.audit.md": (self.FIXTURE / "b.audit.md").read_text(encoding="utf-8")}
+        ids = {"A1": ("C1", "S1", "OQ1"), "A2": ("«e2e-k»", "K1")}
+        for eid, got in ids.items():
+            files[ROADMAPS + ALPHA + "/%s.md" % eid] = (
+                "---\ntype: epic-bundle\nepic: %s\nroadmap: %s\nsource_brief: plan/br/b.md\nids: [%s]\n---\n\n# %s\n"
+                % (eid, rm(ALPHA), ", ".join(got), eid))
+        text = roadmap_text("알파 — 로드맵", self.ALPHA_BLOCKS).replace("source_brief: b.md", "source_brief: plan/br/b.md")
+        files[rm(ALPHA)] = text.replace("## 위험 번호표\n", "## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 버릴 가정 — 근거 없음\n")
+        self.put(files)
+
     def run_script(self, name, *args):
         p = subprocess.run([sys.executable, str(cp.SCRIPTS / name), *args], cwd=str(self.w), env=ENV, capture_output=True, encoding="utf-8")
         return p.returncode, p.stdout, p.stderr
@@ -148,12 +168,22 @@ class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명�
 
     def test_status_screen_and_ledger_do_not_change_when_questions_and_a_state_branch_exist(self):
         # 붉어지는 뒤집기: 상태 화면 · 원장 명령이 상태 브랜치(ensure · sync · waiting add)에 따라 출력을 바꾸면 붉다.
-        # 양성 대조: 아래 두 단언 — 심은 질문이 기계 상태에 있고 비교할 출력이 비지 않았다.
+        #   옛 형식 로드맵이 상태 브랜치의 빈 원본으로 읽히면 심어 둔 줄이 사라져 붉다.
+        # 양성 대조: 아래 단언들 — 로드맵이 검사를 통과하고(show --tasks rc 0), 에픽 화면이 심은 질문을 그리고,
+        #   pending · resources 가 심은 줄을 낸다. 그래서 같은 출력끼리의 비교가 빈 것끼리가 아니다.
         self.claim()
-        L.update(self.w, rm(ALPHA), SID, lambda d: d["기다리는 질문"].append({"에픽": "A2", "기대는 일": "A1 구현", "질문": "미뤄 둔 질문"}))
+        L.update(self.w, rm(ALPHA), SID, lambda d: (d["기다리는 질문"].append({"에픽": "A2", "기대는 일": "A1 구현", "질문": self.QUESTION}),
+                                                    d["쌓인 기록"].append({"에픽": "A2", "절": "지휘 기록", "글": self.NOTE}),
+                                                    d["자원"].append({"종류": "file", "경로": self.RES_PATH, "에픽": "A2", "용도": "옛 형식 대조",
+                                                                     "만든 때": "2026-01-01 00:00 +0000"})))
         before = self.outputs()
-        self.assertEqual([r["질문"] for r in L.load(self.w, rm(ALPHA))["기다리는 질문"]], ["미뤄 둔 질문"])   # 심은 질문이 기계 상태에 실제로 있다
+        self.assertEqual([r["질문"] for r in L.load(self.w, rm(ALPHA))["기다리는 질문"]], [self.QUESTION])   # 심은 질문이 기계 상태에 실제로 있다
         self.assertTrue(all(out or err for _rc, out, err in before), before)   # 비교가 빈 출력끼리가 아니다
+        self.assertEqual(before[1][0], 0, before[1])                          # 로드맵이 검사를 통과한다 — show --tasks 가 오류 줄이 아니다
+        self.assertIn("검사 불가 0개", before[0][1])
+        self.assertIn(self.QUESTION, before[2][1])                            # 에픽 화면이 실제로 그려지고 기다리는 질문을 싣는다
+        self.assertIn(self.NOTE, before[3][1])                                # pending 이 심은 줄을 낸다(「쌓인 기록 없음」 이 아니다)
+        self.assertIn(self.RES_PATH, before[4][1])                            # resources 가 심은 줄을 낸다(「없음」 이 아니다)
         CB.ensure(self.w, rm(ALPHA), SID)
         CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "턴 끝")
         CS.sync(self.w, rm(ALPHA), SID)

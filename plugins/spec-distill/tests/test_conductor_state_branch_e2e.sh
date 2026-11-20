@@ -79,6 +79,8 @@ run "$CB_" conductor_status.py show --roadmap "$RB"; rcis 0 "4 show rc 0"
 assert_contains "$OUT" "온 글 1 ·" "4 온 글 1"
 assert_contains "$OUT" "- $AL → 질문 · src/shared.py · " "4 온 글 줄"
 assert_not_contains "$OUT" "먼저 머지해도 되나" "4 show 에는 본문이 없다"
+run "$CA" conductor_status.py show --roadmap "$RA"; rcis 0 "4 A 의 show rc 0"
+assert_contains "$OUT" "아직 받지 않은 보낸 글 1 · 답 기다리는 글 1" "4 보낸 쪽 수는 1 이다(0 에서만 재지 않는다)"
 
 note "# 5 — B: read"
 run "$CB_" conductor_mail.py read --roadmap "$RB"; rcis 0 "5 read rc 0"
