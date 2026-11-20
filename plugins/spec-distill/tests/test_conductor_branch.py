@@ -797,6 +797,29 @@ class Publish(StateRepo):
         self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄\n")
         self.assertEqual(len(calls), 3)                                                  # 옮기기 실패도 한 번으로 센다
 
+    def test_push_outcome_needs_the_bang_flag_and_the_third_cell(self):
+        ref = "refs/heads/conductor/x:refs/heads/conductor/x"
+        for text in (" \t%s\t[rejected] (fetch first)\n" % ref, "=\t%s\t[rejected] (non-fast-forward)\n" % ref,
+                     "!\t[rejected]\t%s\n" % ref, "!\t%s\n" % ref):
+            self.assertEqual(CB.push_outcome(1, text), "failed", text)
+        self.assertEqual(CB.push_outcome(1, "To o\n!\t%s\t[rejected] (stale info)\n" % ref), "behind")   # 양성 대조
+
+    def test_letters_renamed_within_one_replayed_commit_count_each_other(self):   # J23 — 이 다시 얹기에서 앞서 더한 이름도 센다
+        """뒤집으면 붉다 — 한 커밋 안에서 앞서 더한 이름을 세지 않으면 둘이 같은 번호를 받아 하나가 덮이고,
+        그대로 더한 이름을 세지 않으면 다른 폴더의 같은 이름이 또 그대로 더해진다."""
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        inbox = self.team.inbox + "/"
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-01.md": "이쪽 가\n", inbox + "all/2026-11-19-02.md": "이쪽 나\n",
+                                                       inbox + "all/2026-11-19-05.md": "이쪽 다\n", inbox + BETA + "/2026-11-19-05.md": "이쪽 라\n"}, "편지")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-01.md": "저쪽 1\n", inbox + "all/2026-11-19-02.md": "저쪽 2\n"}, "편지")
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        got = {p[len(inbox):]: CB.read(self.w, r.commit, p) for _m, p in CB.names(self.w, r.commit, inbox)}
+        # 경로 차례(BETA 폴더가 먼저) — BETA/05 는 그대로, 겹치는 all/01 · all/02 · all/05 는 06 · 07 · 08
+        self.assertEqual(got, {"all/2026-11-19-01.md": "저쪽 1\n", "all/2026-11-19-02.md": "저쪽 2\n", BETA + "/2026-11-19-05.md": "이쪽 라\n",
+                               "all/2026-11-19-06.md": "이쪽 가\n", "all/2026-11-19-07.md": "이쪽 나\n", "all/2026-11-19-08.md": "이쪽 다\n"})
+
     def test_failed_push_reason_is_the_rejection_cell_not_the_error_banner(self):   # 과제 5 리뷰 M4
         hook = self.o / "hooks" / "pre-receive"
         hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
