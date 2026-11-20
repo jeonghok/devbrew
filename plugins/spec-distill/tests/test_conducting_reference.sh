@@ -386,7 +386,9 @@ pats = [r"origin/main", r"(?<![A-Za-z])main(?![A-Za-z])", r"(?<![A-Za-z])opus(?!
         r"(?<![A-Za-z])master(?![A-Za-z])", r"(?<![A-Za-z])sonnet(?![A-Za-z])", r"(?<![A-Za-z])haiku(?![A-Za-z])",
         r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md",
         r"worktree 의 spec-distill"]
+PTR = "${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md"   # 걸음 1 의 상태 브랜치 절차 문서 가리킴 하나만 면제
 for i, line in enumerate(text.splitlines(), 1):
+    line = line.replace(PTR, "")
     for p in pats:
         if re.search(p, line):
             print("%d: %s — %s" % (i, p, line.strip()[:80]))
