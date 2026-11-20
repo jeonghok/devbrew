@@ -477,5 +477,42 @@ class RetiredStartApproval(unittest.TestCase):
         self.assertNotIn("레포 설정", self.path.read_text(encoding="utf-8"))
 
 
+class AskingNow(unittest.TestCase):   # R3 AC6
+    ROW = {"에픽": "R2", "종류": "계획 검토", "건 길": "질문 창", "언제부터": "2026-11-19 02:05 +0900", "세션": "session-aaaa1111"}
+
+    def test_round_trip_and_place(self):
+        data = cs.empty()
+        data[cs.ASKING].append(dict(self.ROW))
+        data["기다리는 질문"].append({"에픽": "R5", "기대는 일": "구현", "질문": "범위 · 인터페이스를 어떻게 할까"})
+        text = cs.render_machine(RM, data)
+        self.assertIn("## 지금 묻는 질문\n\n- R2 · 계획 검토 · 질문 창 · 2026-11-19 02:05 +0900 · session-aaaa1111\n", text)
+        self.assertLess(text.index("## 기다리는 질문"), text.index("## 지금 묻는 질문"))
+        back = cs.parse_machine(text, RM)
+        self.assertEqual(back[cs.ASKING], [self.ROW])
+        self.assertEqual(back["기다리는 질문"], data["기다리는 질문"])   # 옛 절은 그대로다
+
+    def test_empty_section_writes_no_heading(self):   # 옛 판이 이 파일을 읽는다
+        self.assertNotIn("지금 묻는 질문", cs.render_machine(RM, cs.empty()))
+
+    def test_cells_are_closed(self):
+        for key, bad in (("에픽", "r2"), ("에픽", "R2x9"), ("에픽", "R\u0662"), ("종류", "계획"), ("종류", "계획 검토함"), ("건 길", "질문"),
+                         ("언제부터", "2026-11-19 02:05"), ("언제부터", "2026-11-19 02:05 +09:00"),
+                         ("언제부터", "\u0662\u0660\u0662\u0666-11-19 02:05 +0900"), ("세션", "short")):   # 아랍 인도 숫자다
+            data = cs.empty()
+            data[cs.ASKING].append(dict(self.ROW, **{key: bad}))
+            with self.assertRaises(cs.MachineError, msg="%s=%r" % (key, bad)):
+                cs.render_machine(RM, data)
+        data = cs.empty()
+        data[cs.ASKING].append(dict(self.ROW, 에픽="로드맵 밖", 종류="그 밖", **{"건 길": "턴 끝"}))
+        cs.parse_machine(cs.render_machine(RM, data), RM)   # 양성 대조 — 닫힌 목록의 다른 값은 받는다
+
+    def test_closed_lists(self):
+        self.assertEqual(cs.ASK_KINDS, ("설계 대화", "spec 승인", "계획 검토", "흐름 승인", "걸음 건너뜀", "옮긴 질문", "머지", "그 밖"))
+        self.assertEqual((cs.ASK_VIA, cs.ASK_WINDOW, cs.ASK_NO_EPIC), (("질문 창", "턴 끝"), "질문 창", "로드맵 밖"))
+        self.assertIsNone(cs.STAMP_RE.fullmatch("2026-11-19 02:05 +09:00"))
+        self.assertIsNotNone(cs.STAMP_RE.fullmatch("2026-13-45 99:99 +9999"))   # 꼴만 본다 — 달력에 없는 값은 parse_stamp 가 None 으로 거른다(과제 4)
+        self.assertIsNone(cs.ASK_EPIC_RE.fullmatch("R2 지시: 무엇을 하라"))
+
+
 if __name__ == "__main__":
     unittest.main()

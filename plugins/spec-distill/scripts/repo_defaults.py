@@ -26,7 +26,8 @@ CONDUCTOR_DIR = "conductor"
 WORKTREE_HOME = ".claude/worktrees/"   # 하니스(EnterWorktree)가 worktree 를 두고 옮겨 갈 수 있는 폴더 — 외부 도구 기본값
 MERGE_CHECK_DIR = "merge-check"        # 기계 상태 폴더 안의 스위트 대조 일회용 사본 자리(잠금은 suite_lock.py 의 공유 잠금)
 PARALLEL_DEFAULT = 3                   # 지휘자가 동시에 돌리는 큰 작업의 권장 수 — 기본값이지 상한이 아니다(사용자가 늘린다)
-SHARED_FILES = ("plugin.json", "CHANGELOG.md", "README.md")   # 에픽이 함께 건드려 겹치기 쉬운 공유 파일 이름 — 기본값이지 상한이 아니다
+VERSION_FILE = "plugin.json"             # 플러그인 판 파일의 이름
+SHARED_FILES = (VERSION_FILE, "CHANGELOG.md", "README.md")   # 에픽이 함께 건드려 겹치기 쉬운 공유 파일 이름 — 기본값이지 상한이 아니다
 DIR_KEYS = ("specs_dir", "plans_dir")
 TEXT_KEYS = ("test_command", "review_model")
 COUNT_KEYS = ("parallel_default",)
@@ -37,10 +38,13 @@ ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
+BRANCH_RULE_FILE = "docs/git-workflow/branch-strategy.md"   # 브랜치 규칙 문서의 자리
+STATE_BRANCH_ON = "켬"
+STATE_BRANCH_OFF = "끔"
 HUMAN_GATE_ON = "켬"
 HUMAN_GATE_OFF = "끔"
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("walk_table", "human_gate")
+        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("walk_table", "human_gate", "state_branch")
 ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
@@ -48,12 +52,17 @@ _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROA
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
              "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET,
-             "walk_table": None, "human_gate": HUMAN_GATE_ON}
+             "walk_table": None, "human_gate": HUMAN_GATE_ON, "state_branch": STATE_BRANCH_ON}
 
 
 def gate_on(values: dict) -> bool:
     """사람 줄 관문이 켜져 있는가 — 값이 없거나 깨져 None 이어도 켜진 것이다. 환경은 읽지 않는다."""
     return values.get("human_gate") != HUMAN_GATE_OFF
+
+
+def state_branch_on(values: dict) -> bool:
+    """깨진 값(None)은 꺼진 것이다 — 원격에 쓰는 일은 닫는 쪽이 「쓰지 않는다」 다."""
+    return values.get("state_branch") == STATE_BRANCH_ON
 
 
 def _unquote(value: str) -> str:
@@ -269,6 +278,13 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                     out["values"][key] = None
                     out["errors"].append("%s: human_gate 는 %s · %s 가운데 하나다(%r) — 값을 고치거나 키를 지운다"
                                          % (at, HUMAN_GATE_ON, HUMAN_GATE_OFF, value))
+            elif key == "state_branch":
+                value = _unquote(raw)
+                if value in (STATE_BRANCH_ON, STATE_BRANCH_OFF):
+                    out["values"][key] = value
+                else:
+                    out["values"][key] = None
+                    out["errors"].append("%s: state_branch 는 켬 · 끔 가운데 하나다(%r) — 값을 고치거나 키를 지운다" % (at, value))
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:
