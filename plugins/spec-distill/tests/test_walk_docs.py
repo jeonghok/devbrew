@@ -1,7 +1,6 @@
 """걸음표 · 걸음 보기 · 보내는 글 틀 · 지휘 절차의 team 절 문서 검사."""
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import sys
@@ -13,7 +12,7 @@ sys.path.insert(0, str(_HERE.parent / "scripts"))
 sys.path.insert(0, str(_HERE))
 import human_lines as H
 import walk_table as W
-from test_team_docs import changelog_entries, version_tuple
+from test_team_docs import changelog_entries
 
 PLUGIN = _HERE.parent
 REF = PLUGIN / "references"
@@ -171,10 +170,9 @@ class Docs(unittest.TestCase):   # R2 AC22 — 계획 2 몫
         readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
         for word in ("walk_table", "walk_table.py next", "걸음표"):
             self.assertIn(word, readme, word)
-        version = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
         sections = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8"))
-                    if ver == version_tuple(version)]
-        self.assertEqual(len(sections), 1, version)   # 판 번호로 고른다 — 리터럴 판을 박지 않는다
+                    if ver == (8, 27, 0)]
+        self.assertEqual(len(sections), 1)   # 걸음표가 들어온 판의 절 — 지금 판으로 고르면 다음 판 올림에 다른 절을 본다
         for word in ("walk_table", "walk_table.py", "걸음표", "conductor-dispatch.md", "P8"):
             self.assertIn(word, sections[0], word)
 
