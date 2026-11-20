@@ -364,9 +364,10 @@ class HumanLines(unittest.TestCase):   # R2 AC22 — 계획 1 몫
         deps = (PLUGIN / "dependencies.md").read_text(encoding="utf-8")
         for word in ("세션 기록", "AskUserQuestion", "toolUseResult", "permissionDecision", "entrypoint", "sourceToolAssistantUUID", "isSidechain", "2.1.296", "2.1.327", "sdk-cli", "hook"):
             self.assertIn(word, deps, word)
-        top = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## [")[1]
+        sections = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")) if ver == (8, 25, 0)]
+        self.assertEqual(len(sections), 1, "CHANGELOG 에 8.25.0 절이 하나가 아니다")   # 맨 위 절이 아니라 이름으로 고른다 — 뒤의 판 올림이 새 절을 더해도 맞는다
         for word in ("record --human", "human_gate", "worker"):
-            self.assertIn(word, top, word)
+            self.assertIn(word, sections[0], word)
 
 
 FLOOR = (8, 21, 0)
