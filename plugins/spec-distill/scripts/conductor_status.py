@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import difflib
+import json
 import re
 import sys
 from pathlib import Path
@@ -26,6 +27,10 @@ import conductor_ledger as L  # noqa: E402
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
+import roadmap_model  # noqa: E402
+import roadmap_status as RS  # noqa: E402
+import suite_lock  # noqa: E402
+from state_path import state_root  # noqa: E402
 
 STATUS_SECTIONS = ("에픽", "열린 PR", "기다리는 질문", "작업", "편지", "안 올린 규칙 고침")
 NONE_LINE = "없음"
@@ -298,6 +303,236 @@ def waiting_clear(root, roadmap_rel: str, session: str, epic: str, kind: Optiona
         d[cs.ASKING] = [r for r in d[cs.ASKING] if not hit(r)]
     L.update(root, roadmap_rel, session, change)
     return len(gone), sync(root, roadmap_rel, session, now=now, lower_window=False)
+
+
+# ── 로드맵 사이 ──────────────────────────────────────────────────────────────
+
+SHA_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?")
+HOLD_TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} ([0-9]{2}:[0-9]{2}):[0-9]{2}")
+
+
+def _main_commit(root) -> str:
+    sha = repo_defaults.default_branch(str(root))[0]
+    if not sha or not SHA_RE.fullmatch(sha):
+        raise CB.BranchError(3, "다른 로드맵과 닿는 것을 셀 수 없다 — 기본 브랜치를 찾지 못했다")
+    return sha
+
+
+def _shared_names(root) -> tuple:
+    try:
+        result = repo_defaults.resolve(str(root))
+    except repo_defaults.SettingsError as exc:
+        raise CB.BranchError(3, "%s — %s" % (CB.SETTINGS_UNREADABLE, CB.visible(str(exc))))
+    names = result["values"].get("shared_files")
+    if result["errors"] or not names:
+        why = (result["errors"] or ["공유 파일 값이 없다"])[0]
+        raise CB.BranchError(3, "%s — %s" % (CB.SETTINGS_UNREADABLE, CB.visible(why)))
+    return tuple(names)
+
+
+def _unchecked_note(block: dict) -> bool:
+    return any(str(n).startswith(RS.PR_UNCHECKED) for n in block.get("notes") or [])
+
+
+def open_branches(root, road) -> list:
+    """그 로드맵의 열린 브랜치 — 끝나지 않은 블록의 머지되지 않고 끝이 있는 브랜치마다 한 줄(J32)."""
+    out = []
+    for b in (road.report or {}).get("blocks") or []:
+        if b.get("stage") in CB.DONE_STAGES:
+            continue
+        unchecked = _unchecked_note(b)
+        for s in b.get("branch_states") or []:
+            if s.get("tip") and not s.get("merged") and SHA_RE.fullmatch(s["tip"]):
+                out.append({"epic": b["id"], "branch": CB.visible(s["branch"]), "tip": s["tip"], "unchecked": unchecked})
+    return sorted(out, key=lambda o: (o["epic"], o["branch"]))
+
+
+def _unfinished_blocks(root, road, main: str) -> list:
+    """기본 브랜치의 로드맵 글에서 읽은 끝나지 않은 블록 — [(번호, 단계, 예약, 의존, 미확인)]. 형식 오류면 BranchError(3)."""
+    text = CB.read(root, main, road.path)
+    if text is None:
+        raise CB.BranchError(3, "기본 브랜치에서 로드맵 글을 읽지 못했다")
+    _meta, parsed, _rec, _risk, errors = roadmap_model.parse_roadmap(text)
+    if errors:
+        raise CB.BranchError(3, "로드맵 형식 오류 — %s" % errors[0])
+    by_id = {b["id"]: b for b in (road.report or {}).get("blocks") or []}
+    out = []
+    for p in parsed:
+        got = by_id.get(p["id"])
+        if p.get("kind") == "decision" or got is None or got.get("stage") in CB.DONE_STAGES:
+            continue
+        out.append((p["id"], got["stage"], list(p.get("reserved") or []), list(p.get("deps") or []), _unchecked_note(got)))
+    return out
+
+
+def reserve_overlaps(root, mine, other, shared) -> list:
+    """두 로드맵의 끝나지 않은 블록 가운데 경로 예약이 겹치는 쌍 — 번호를 `<로드맵 이름>:<번호>` 로 바꿔 넘겨 겹치지 않게 한다."""
+    main = _main_commit(root)
+    rows, info = [], {}
+    for road in (mine, other):
+        for bid, stage, reserved, deps, unchecked in _unfinished_blocks(root, road, main):
+            key = "%s:%s" % (road.name, bid)
+            info[key] = (road.name, bid, stage, unchecked)
+            rows.append({"id": key, "reserved": reserved, "deps": ["%s:%s" % (road.name, d) for d in deps]})
+    out = []
+    for pair in RS.overlaps(rows, shared):
+        a, b = pair["blocks"]
+        if info[a][0] == info[b][0]:
+            continue
+        mine_k, theirs_k = (a, b) if info[a][0] == mine.name else (b, a)
+        for path in pair["paths"]:
+            out.append({"path": CB.visible(path), "theirs": (info[theirs_k][1], info[theirs_k][2]),
+                        "mine": (info[mine_k][1], info[mine_k][2]), "unchecked": info[theirs_k][3]})
+    return sorted(out, key=lambda r: (r["path"], r["theirs"], r["mine"]))
+
+
+def changed_overlaps(git, main: str, mine_open: list, other_open: list, shared) -> list:
+    """열린 브랜치 쌍이 같은 파일을 바꿨는가 — 공유 파일은 뺀다."""
+    cache = {}
+
+    def changed(tip):
+        if tip not in cache:
+            cache[tip] = {p for p in git.changed(main, tip) if not RS._shared(p, shared)}
+        return cache[tip]
+    out = []
+    for m in mine_open:
+        for t in other_open:
+            for path in sorted(changed(m["tip"]) & changed(t["tip"])):
+                out.append({"path": CB.visible(path), "theirs": t["branch"], "mine": m["branch"], "unchecked": t["unchecked"]})
+    return out
+
+
+def _json_of(git, rev: str, path: str):
+    """(이름, 판) — 읽지 못하거나 꼴 밖이면 (None, None)."""
+    text = git.blob(rev, path)
+    try:
+        data = json.loads(text) if text is not None else None
+    except (ValueError, RecursionError):
+        return None, None
+    if not isinstance(data, dict) or not isinstance(data.get("version"), str) or not VERSION_RE.fullmatch(data["version"]):
+        return None, None
+    name = data.get("name")
+    return (name if isinstance(name, str) and name else path), data["version"]
+
+
+def version_claims(root, git, main: str, open_by_roadmap: dict, shared) -> tuple:
+    """(같은 판을 둘 이상이 잡은 것, 읽지 못한 판 파일 수). 판 파일 이름이 공유 파일 목록에 없으면 ([], 0)."""
+    if repo_defaults.VERSION_FILE not in shared:
+        return [], 0
+    rc, out, err = git.run_err("ls-tree", "-r", "-z", "--name-only", main)
+    if rc != 0:
+        git.fail("ls-tree", rc, err)
+        return [], 0
+    paths = sorted(p for p in out.split("\0") if p and p.rsplit("/", 1)[-1] == repo_defaults.VERSION_FILE)
+    claims, unreadable = [], 0
+    for path in paths:
+        name, base = _json_of(git, main, path)
+        if base is None:
+            unreadable += 1
+            continue
+        held = {}
+        for road_name, opened in open_by_roadmap.items():
+            for o in opened:
+                if not git.exists(o["tip"], path):
+                    continue   # 이 브랜치는 그 파일을 갖지 않는다 — 읽지 못한 것이 아니다
+                _n, version = _json_of(git, o["tip"], path)
+                if version is None:
+                    unreadable += 1
+                elif version != base:
+                    held.setdefault(version, set()).add((CB.visible(road_name), o["branch"]))
+        for version, holders in sorted(held.items()):
+            if len(holders) >= 2:
+                claims.append({"name": CB.visible(name), "base": base, "version": version, "holders": sorted(holders)})
+    return claims, unreadable
+
+
+def default_moves(git, main: str, mine_open: list, reserved: list, shared) -> list:
+    """내 열린 브랜치마다 기본 브랜치가 얼마나 앞섰고 그 가운데 내 예약 경로를 건드린 커밋이 몇인가(J33)."""
+    diffs = {}
+
+    def paths_of(commit):
+        if commit not in diffs:
+            rc, out, err = git.run_err("diff", "--name-only", "-z", commit + "^1", commit)
+            if rc != 0:
+                git.fail("diff", rc, err)
+            diffs[commit] = [p for p in out.split("\0") if p] if rc == 0 else []
+        return diffs[commit]
+    out = []
+    for m in mine_open:
+        rc, log, err = git.run_err("log", "--first-parent", "--format=%H", "%s..%s" % (m["tip"], main))
+        if rc != 0:
+            git.fail("log", rc, err)
+            continue
+        commits = [c for c in log.split() if SHA_RE.fullmatch(c)]
+        if not commits:
+            continue
+        touching, found = 0, set()
+        for c in commits:
+            hit = {p for p in paths_of(c) if not RS._shared(p, shared) and any(RS._reserves(e, p) for e in reserved)}
+            if hit:
+                touching += 1
+                found |= hit
+        out.append({"branch": m["branch"], "ahead": len(commits), "touching": touching,
+                    "paths": sorted(CB.visible(p) for p in found)})
+    return sorted(out, key=lambda r: r["branch"])
+
+
+def suites(root, table: list, me: str) -> list:
+    """끝나지 않은 다른 로드맵 가운데 스위트 잠금을 쥐고 돌고 있는 것 — 잡은 시각은 `HH:MM` 만(J36)."""
+    out = []
+    for road in table:
+        if road.name == me or not road.unfinished:
+            continue
+        try:
+            held = suite_lock.state(suite_lock.lock_path(cs.machine_dir(state_root(str(root)), road.path)))
+        except cs.MachineError:
+            continue
+        if held["held"] and held["busy"]:
+            m = HOLD_TIME_RE.fullmatch(held["taken_at"])
+            out.append({"roadmap": CB.visible(road.name), "since": m.group(1) if m else NO_TIME})
+    return sorted(out, key=lambda s: s["roadmap"])
+
+
+def cross_view(root, roadmap_rel: str, now=None) -> dict:
+    """내 로드맵과 다른 로드맵 사이의 계산 — 자료만 돌려준다. 다른 지휘자의 STATUS 는 읽지 않는다(J35)."""
+    now = now or datetime.datetime.now().astimezone()
+    me = CB.team_of(root, roadmap_rel).name
+    table = CB.roadmaps(root)
+    mine = next((r for r in table if r.name == me), None)
+    if mine is None or mine.path != roadmap_rel or mine.report is None:
+        raise CB.BranchError(3, "상태를 셀 수 없다 — %s" % CB.visible(mine.why if mine and mine.why else "기본 브랜치에 이 로드맵이 없다"))
+    main, shared = _main_commit(root), _shared_names(root)
+    git = RS.Git(str(root))
+    view = {"me": me, "computed": CB.stamp(now), "reserve": [], "changed": [], "versions": [], "version_unreadable": 0,
+            "moves": [], "suites": [], "unchecked_roadmaps": []}
+    mine_open = open_branches(root, mine)
+    open_by = {me: mine_open}
+    for road in table:
+        if road.name == me or not road.unfinished:
+            continue
+        if road.report is None:
+            view["unchecked_roadmaps"].append((CB.visible(road.name), CB.visible(road.why or "셀 수 없음")))
+            continue
+        try:
+            reserved = reserve_overlaps(root, mine, road, shared)
+        except CB.BranchError as exc:
+            view["unchecked_roadmaps"].append((CB.visible(road.name), CB.visible(str(exc))))
+            continue
+        opened = open_branches(root, road)
+        open_by[road.name] = opened
+        label = CB.visible(road.name)
+        view["reserve"] += [dict(r, roadmap=label) for r in reserved]
+        view["changed"] += [dict(r, roadmap=label) for r in changed_overlaps(git, main, mine_open, opened, shared)]
+    view["reserve"].sort(key=lambda r: (r["roadmap"], r["path"]))
+    view["changed"].sort(key=lambda r: (r["roadmap"], r["path"]))
+    view["versions"], view["version_unreadable"] = version_claims(root, git, main, open_by, shared)
+    mine_reserved = [e for _i, _s, reserved, _d, _u in _unfinished_blocks(root, mine, main) for e in reserved]
+    view["moves"] = default_moves(git, main, mine_open, mine_reserved, shared)
+    view["suites"] = suites(root, table, me)
+    if git.failures:
+        view["unchecked_roadmaps"].append(("git", CB.visible(git.failures[0])))
+    return view
 
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
