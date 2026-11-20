@@ -858,18 +858,34 @@ def _counts_line(left: dict) -> str:
             % (left["unreceived"], left["unanswered"], left["pending"], left["rules"]))
 
 
-def delete(root, roadmap_rel: str, session: str, confirmed: bool = False) -> tuple:
-    """(지운 끝, 알릴 줄들). 확인이 없으면 수를 알리고 BranchError(1) — 지우지 않는다. 확인이 있어도 원격 끝이 로컬 끝과 다르면
-    지우지 않고 받아 온 끝에서 다시 센 수를 알린다(BranchError(1)). 원격을 먼저 지우고(못 지우면 BranchError(3), 로컬은 둔다)
+def _count_report(cstat, root, roadmap_rel: str, tip: str, lead: str = "") -> str:
+    """수 넷 줄과 그 수를 센 끝(40자) 줄 — 확인은 이 끝을 `--confirmed` 로 받는다."""
+    return ("%s%s — 지우려면 사용자 확인 뒤 `--confirmed <수를 센 끝>` 을 붙여 다시 부른다\n수를 센 끝: %s"
+            % (lead, _counts_line(cstat.leftovers(root, roadmap_rel, tip)), tip))
+
+
+def _counted_tip_ok(counted: str, tip: str) -> bool:
+    """`--confirmed` 로 받은 끝(전체 40자 또는 앞 8자)이 tip 과 전체 일치인가. 앞 8자는 닫힌 꼴을 지난 뒤 앞 8자끼리 ==."""
+    if re.fullmatch(r"[0-9a-f]{40}", counted):
+        return counted == tip
+    return counted == tip[:8]
+
+
+def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
+    """(지운 끝, 알릴 줄들). `confirmed` 가 없으면 수와 수를 센 끝을 알리고 BranchError(1) — 지우지 않는다. 있으면 수를 센 끝(40자 또는
+    앞 8자 — 꼴이 다르면 BranchError(2))이고, 받아 온 원격 끝과 로컬 끝이 둘 다 그 끝과 같을 때만 지운다(원격이 없으면 로컬 끝만).
+    다르면 지우지 않고 지금 끝에서 다시 센 수와 새 끝을 알린다(BranchError(1)). 원격을 먼저 지우고(못 지우면 BranchError(3), 로컬은 둔다)
     로컬 ref 를 읽었던 끝을 옛 값으로 걸어 지운다. `availability` 는 보지 않는다 — 꺼 둔 레포에서도 남은 브랜치를 지운다."""
     import conductor_status as cstat   # 맨 위에서 가져오면 서로 가져온다
     team = team_of(root, roadmap_rel)
     _need_marker(root, roadmap_rel, session)
+    if confirmed is not None and not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{8})", confirmed):
+        raise BranchError(2, "--confirmed 는 수를 센 끝(40자 또는 앞 8자)을 받는다")
     tip = local_tip(root, team.name)
     if tip is None:
         raise BranchError(1, "상태 브랜치가 없다")
-    if not confirmed:
-        raise BranchError(1, "%s — 지우려면 사용자 확인 뒤 --confirmed 를 붙여 다시 부른다" % _counts_line(cstat.leftovers(root, roadmap_rel, tip)))
+    if confirmed is None:
+        raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip))
     ref = ref_of(team.name)
     remote_exists = False
     has_origin = _origin_exists(root)
@@ -896,11 +912,14 @@ def delete(root, roadmap_rel: str, session: str, confirmed: bool = False) -> tup
             rc, _o, err = git(root, "update-ref", ref, remote, tip)   # 읽었던 끝이 그대로일 때만 받아 온 끝으로 옮긴다
             if rc != 0:
                 raise _git_fail(err, "로컬 상태 브랜치를 받아 온 끝으로 옮기지 못했다")
-            raise BranchError(1, "원격에 이 기계가 세지 않은 커밋이 있다 — 받아 온 끝에서 다시 셌다: %s — 지우려면 사용자 확인 뒤 --confirmed 를 붙여 다시 부른다"
-                              % _counts_line(cstat.leftovers(root, roadmap_rel, remote)))
+            raise BranchError(1, _count_report(cstat, root, roadmap_rel, remote, "원격에 이 기계가 세지 않은 커밋이 있다 — 받아 온 끝에서 다시 셌다: "))
+        if not _counted_tip_ok(confirmed, tip):   # 로컬이 받아 온 끝과 같아졌어도 수를 센 끝이 아니면 세지 않은 글이 있다
+            raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))
         rc, out, err = _git_delete(root, "push", "--porcelain", "origin", ":" + ref, timeout=NET_TIMEOUT)
         if rc != 0:
             raise BranchError(3, "원격의 상태 브랜치를 지우지 못했다 — 로컬은 두었다: %s" % _net_reason(out, err))
+    if not remote_exists and not _counted_tip_ok(confirmed, tip):
+        raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))
     rc, _o, err = _git_delete(root, "update-ref", "-d", ref, tip)
     if rc != 0:
         raise _git_fail(err, "로컬 상태 브랜치를 지우지 못했다")
@@ -924,7 +943,7 @@ def main(argv=None) -> int:
     de = sub.add_parser("delete", help="상태 브랜치를 지운다 — 확인 표시가 없으면 남은 것의 수만 낸다")
     de.add_argument("--roadmap", required=True)
     de.add_argument("--session", required=True)
-    de.add_argument("--confirmed", action="store_true")
+    de.add_argument("--confirmed", metavar="수를_센_끝")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "delete":

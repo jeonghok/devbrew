@@ -75,7 +75,7 @@
 - 기계 상태: `## 쌓인 기록` · `## 자원`(지운 worktree 빼기).
 
 ### 7. 끝
-- 기본값: 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로(인터뷰 → 분해 → 에픽 설계 → spec-review → 계획 · 구현 대조 → 작업 목록 · 상태줄)와 설계 흐름이 아닌 에픽의 경로를 실제 명령으로 걷는다. 그때 품질 게이트(`/quality-gates:quality-pipeline`)를 한 번, 로드맵 시작 커밋부터 지금 기본 브랜치까지 돌린다. 표지를 풀기 전에 `python3 "<SD>"/scripts/conductor_branch.py delete --roadmap <로드맵> --session <세션>` 이 낸 수를 사용자에게 보이고 확인받은 뒤 `--confirmed` 를 붙여 상태 브랜치를 지운다(`conductor-state-branch.md`).
+- 기본값: 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로(인터뷰 → 분해 → 에픽 설계 → spec-review → 계획 · 구현 대조 → 작업 목록 · 상태줄)와 설계 흐름이 아닌 에픽의 경로를 실제 명령으로 걷는다. 그때 품질 게이트(`/quality-gates:quality-pipeline`)를 한 번, 로드맵 시작 커밋부터 지금 기본 브랜치까지 돌린다. 표지를 풀기 전에 `python3 "<SD>"/scripts/conductor_branch.py delete --roadmap <로드맵> --session <세션>` 이 낸 수와 수를 센 끝을 사용자에게 보이고 확인받은 뒤 `--confirmed <수를 센 끝>` 을 붙여 상태 브랜치를 지운다(`conductor-state-branch.md`).
 - 판단: skill 목록에 `quality-gates:quality-pipeline` 이 없으면 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다. 품질 게이트가 범위 입력을 받는지는 그 skill 의 인자 안내로 정한다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 지적은 후속 PR 하나로. 넘김이 모두 처리됐는지 `python3 "<SD>"/scripts/control_plane.py show <로드맵> <에픽>` 의 열린 넘김으로 확인하고, 쌓인 기록이 남았으면 기록만 담은 로드맵 수정 PR 로 싣고 실은 줄은 걸음 6 처럼 뺀다. 쓴 자원을 `ledger resources` · `ledger orphans` 로 보고 정리한 뒤 표지를 푼다(`ledger release`).
 - 부를 skill: `/quality-gates:quality-pipeline`(범위 입력이 있을 때).
 - 기록: 끝에서 끝으로 걸어 본 결과 · 품질 게이트를 건너뛴 사실 → 마지막 로드맵 수정 PR 본문 `## 지휘 기록`.

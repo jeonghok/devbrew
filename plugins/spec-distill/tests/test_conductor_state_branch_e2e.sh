@@ -124,7 +124,7 @@ note "# 10 — A: delete"
 run "$CA" conductor_branch.py delete --roadmap "$RA" --session "$SA"; rcis 1 "10 확인 없이는 1"
 case "$(printf '%s\n' "$OUT" | grep -v '^$' | head -n 1)" in *"상대가 아직 받지 않은 보낸 글 0 · 내가 답하지 않은 온 질문 0"*) ok "10 수 넷 줄" ;; *) no "10 수 넷 줄이 아니다: $OUT" ;; esac
 remote_has "conductor/$AL" && ok "10 확인 전엔 브랜치가 남는다" || no "10 확인 전에 브랜치가 사라졌다"
-run "$CA" conductor_branch.py delete --roadmap "$RA" --session "$SA" --confirmed; rcis 0 "10 --confirmed 는 0"
+run "$CA" conductor_branch.py delete --roadmap "$RA" --session "$SA" --confirmed "$(git -C "$CA" rev-parse "conductor/$AL")"; rcis 0 "10 --confirmed <수를 센 끝> 은 0"
 remote_has "conductor/$AL" && no "10 conductor/$AL 가 남아 있다" || ok "10 origin 에 conductor/$AL 가 없다"
 remote_has "conductor/$BE" && ok "10 conductor/$BE 는 있다" || no "10 conductor/$BE 가 사라졌다"
 
