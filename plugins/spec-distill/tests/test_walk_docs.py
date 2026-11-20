@@ -119,5 +119,13 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
             self.assertIn("human_gate: 끔", text, path.name)
 
 
+class ReviewProfile(unittest.TestCase):   # R2 AC18 · K19
+    def test_scope_axis_flags_unmarked_decisions(self):
+        text = (REF / "docreview-profiles/design-doc.md").read_text(encoding="utf-8")
+        scope = next(l for l in text.splitlines() if l.startswith("- `scope` — "))
+        for word in ("「작성자 제안」", "근거가 없", "표시도 없는 결정"):
+            self.assertIn(word, scope, word)
+
+
 if __name__ == "__main__":
     unittest.main()
