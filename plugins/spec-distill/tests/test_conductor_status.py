@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, rm  # noqa: E402
+from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, block, rm, roadmap_text  # noqa: E402
 import conductor_branch as CB  # noqa: E402
 import conductor_ledger as L  # noqa: E402
 import conductor_mail as CM  # noqa: E402
@@ -251,6 +251,32 @@ class Scrub(StatusRepo):
             self.assertEqual(out.count("<경로>"), 2, out)
         self.assertEqual(CS.scrub("홈 ~/notes 끝", self.w), "홈 <경로> 끝")
         self.assertEqual(CS.scrub("줄\n바꿈\r끝\u2028x", self.w), "줄 바꿈 끝\\u2028x")
+
+
+    def test_paths_glued_to_a_character_are_covered(self):   # AC5 — 앞 글자가 붙은 절대경로
+        for text in ("(/var/folders/ab/cd)", "경로=/opt/tools/bin", "위치:/private/tmp/x", "(~/notes/a)"):
+            self.assertEqual(CS.scrub(text, self.w).count("<경로>"), 1, text)
+            self.assertNotIn("/", CS.scrub(text, self.w).replace("<경로>", ""), text)
+        self.assertEqual(CS.scrub("a/b 1/2 and/or", self.w), "a/b 1/2 and/or")   # 양성 대조 — 경로가 아닌 슬래시는 그대로다
+
+
+class SessionNoticeAndTwoFiles(StatusRepo):
+    def test_my_own_status_written_after_my_claim_is_not_told(self):
+        marker = self.mdir / cs.MARKER
+        os.utime(str(marker), (at(10).timestamp(), at(10).timestamp()))
+        self.assertTrue(CS.sync(self.w, rm(ALPHA), SID, now=at(100)).wrote)
+        again = CS.sync(self.w, rm(ALPHA), SID, now=at(200))
+        self.assertFalse(any(CS.OTHER_SESSION in n for n in again.notes), again.notes)
+
+    def test_two_roadmap_files_in_one_folder_are_never_mixed(self):
+        second = "docs/superpowers/roadmaps/%s/second.md" % ALPHA
+        self.put({second: roadmap_text("둘째 — 로드맵", block("Z1", "엉뚱", "feature/z1"))})
+        with self.assertRaises(CB.BranchError) as ctx:
+            CS.build_status(self.w, second, SID, CB.local_tip(self.w, ALPHA), now=T0)
+        self.assertEqual(ctx.exception.rc, 3)
+        mine = CS.build_status(self.w, rm(ALPHA), SID, CB.local_tip(self.w, ALPHA), now=T0)
+        self.assertEqual((mine.title, mine.roadmap), ("알파 — 로드맵", rm(ALPHA)))
+        self.assertTrue(all("엉뚱" not in line for line in mine.sections["에픽"]))
 
 
 class WindowAndFloor(StatusRepo):

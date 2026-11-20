@@ -98,7 +98,7 @@ def _refuse(why: str) -> CB.BranchError:
     return CB.BranchError(2, why)
 
 
-def _private_roots(root) -> set:
+def private_roots(root) -> set:
     """about 에 부분 문자열로도 실리면 안 되는 이 기계의 절대경로 — 레포 뿌리 · 상태 루트 · 홈 폴더(절대 · 실경로)."""
     found = set()
     for base in (Path(str(root)), CB.state_path.state_root(str(root)), Path.home()):
@@ -115,7 +115,7 @@ def _check_about(root, about: str) -> None:
         raise _refuse("about 에 제어 글자 · 줄바꿈 · 방향 제어 글자를 쓰지 않는다")
     if any(w.startswith(("/", "~")) for w in about.split()) or PATH_IN_TEXT_RE.search(about):
         raise _refuse("about 에 경로(/ 나 ~ 로 시작하는 낱말 · 낱말 중간의 절대경로)를 쓰지 않는다 — 레포 안 경로는 상대로 적는다")
-    for base in _private_roots(root):
+    for base in private_roots(root):
         if base in about:
             raise _refuse("about 에 이 레포 · 상태 루트 · 홈 폴더의 절대경로를 쓰지 않는다")
     pattern = CB.machine_pattern()

@@ -109,14 +109,15 @@ def parse_status(text: str) -> Status:
 def scrub(text: str, root) -> str:
     """STATUS 에 싣는 재료 칸의 글 — 줄바꿈은 빈칸, 이 기계의 경로는 `<경로>`, 기계 이름은 `<기계>`(J18)."""
     text = "".join(" " if ch in "\r\n" else ch for ch in str(text))
-    roots = CM._private_roots(root)
+    roots = CM.private_roots(root)
     out = []
     for tok in re.split(r"(\s+)", text):
         hits = [tok.find(r) for r in roots if r in tok]
+        shape = CM.PATH_IN_TEXT_RE.search(tok)   # 앞에 글자가 붙어도 절대경로 꼴이면 잡는다 — 편지 about 과 한 정의다
+        if shape is not None:
+            hits.append(shape.start())
         if hits:
             tok = tok[:min(hits)] + PATH_MARK
-        elif tok.startswith("~/"):
-            tok = PATH_MARK
         out.append(tok)
     text = CB.redact("".join(out))
     pattern = CB.machine_pattern()
@@ -164,6 +165,8 @@ def build_status(root, roadmap_rel: str, session: str, tip: Optional[str], now=N
     team = CB.team_of(root, roadmap_rel)
     table = CB.roadmaps(root)
     mine = [r for r in table if r.name == team.name]
+    if mine and mine[0].path != roadmap_rel:   # 한 폴더의 다른 로드맵 파일의 보고를 섞어 싣지 않는다(J22)
+        raise CB.BranchError(3, "이 상태 브랜치는 다른 로드맵 파일의 것이다(%s) — 쓰지 않는다" % CB.visible(mine[0].path))
     if not mine or mine[0].report is None:
         raise CB.BranchError(3, "상태를 셀 수 없다 — %s" % CB.visible(mine[0].why if mine else "기본 브랜치에 이 로드맵이 없다"))
     base = repo_defaults.default_branch(str(root))[0]
