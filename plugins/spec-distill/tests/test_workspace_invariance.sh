@@ -169,7 +169,7 @@ js() {  # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 이 테�
 NFILES=$(( (14 * 2 + 3) * 3 ))
 
 echo "=== 작업공간 불변 락(AC27) ==="
-settings "$T/inv.devbrew.md" "interview_dir: notes/interview/" 'test_command: "true"'
+settings "$T/inv.devbrew.md" "interview_dir: notes/interview/" 'test_command: "true"' "human_gate: 끔"
 mkrepo inv main "$T/inv.devbrew.md" || { no "픽스처 inv"; finish; exit 1; }
 IW="$T/inv/work"
 docs "$IW" "$RMD" "" $'review_model: base-model\nparallel_default: 2\n'
@@ -195,6 +195,7 @@ assert_eq "$(js "$T/out-A/status.out" "[(b['id'], b['read_tree']) for b in r['bl
 assert_eq "$(js "$T/out-A/status.out" "r['exit']")" "0" "전제: 상태 계산이 로드맵을 끝까지 셌다(검사 불가가 아니다)"
 assert_contains "$(cat "$T/out-A/roadmaps.out")" "$RM" "전제: 로드맵 찾기가 로드맵을 찾았다"
 assert_eq "$(cat "$T/out-A/get-interview_dir.out")" "notes/interview/" "전제: 해결자는 기본 브랜치 판의 설정 값을 낸다"
+assert_eq "$(cat "$T/out-A/get-human_gate.out")|$(cat "$T/out-B/get-human_gate.out")" "끔|끔" "전제: human_gate 도 기본 브랜치 판의 값(끔)을 두 자리 다 낸다"
 assert_eq "$(cat "$T/out-B/getr-review_model.out")|$(cat "$T/out-B/getr-parallel_default.out")" "base-model|2" \
   "로드맵 층: 로드맵 머리말을 고친 자리(B)에서도 해결자는 기본 브랜치 판의 로드맵 값을 낸다"
 [ "$(sed -n 's/^review_model: //p' "$T/inv/B/$RM")" = "branch-model" ] \
@@ -216,6 +217,8 @@ battery "$T/oth/work" "$T/out-O"
 cmp_dirs "$T/out-A" "$T/out-O"
 assert_eq "$(cat "$T/out-O/get-interview_dir.out")" "elsewhere/" "양성 대조: 다른 레포의 get interview_dir"
 assert_contains "$DIFF" "get-interview_dir.out" "양성 대조: 비교가 get interview_dir 의 차이를 본다"
+assert_eq "$(cat "$T/out-O/get-human_gate.out")" "켬" "양성 대조: 설정에 human_gate 가 없는 레포는 켬"
+assert_contains "$DIFF" "get-human_gate.out" "양성 대조: 비교가 get human_gate 의 차이를 본다"
 assert_contains "$DIFF" "status.out" "양성 대조: 비교가 상태 계산 JSON 의 차이를 본다(빼는 칸이 전체를 덮지 않는다)"
 
 echo "=== devbrew 밖 레포: 기본 브랜치 trunk 끝에서 끝(AC29) ==="

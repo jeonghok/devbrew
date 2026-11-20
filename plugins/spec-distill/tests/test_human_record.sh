@@ -319,6 +319,7 @@ mkdir -p "$T/none"
 assert_eq "$(export CLAUDE_CONFIG_DIR="$T/none"; led record --human "계획 검토" --roadmap "$RM" --job E1 --plan 1)" "3" "AC6: 세션 기록 파일을 찾지 못하면 3"
 assert_contains "$(out)" "확인 못 함" "AC6: 기록 없음 — 확인 못 함"
 assert_contains "$(out)" "human_gate: 끔" "AC6: 기록 없음 — 끄는 길"
+case "$(out)" in "[spec-distill] 확인 못 함 — "*"human_gate: 끔 으로 연다") ok "AC6: 기록 없음 — 글이 확인 못 함으로 시작해 끄는 길로 끝난다(K22)" ;; *) no "AC6: 기록 없음 — 글의 처음과 끝이 어긋난다 — $(out)" ;; esac
 
 # 34 — human_gate: 끔 이면 글로 적는다(AC20). 되돌리면 다시 막는다(양성 대조)
 g add -- "$E1/INTENT.md" && g commit -qm "결정 줄"
@@ -371,6 +372,23 @@ case "$(stale_why)" in "    사유: feature/tm-e1b 끝에서: "*) ok "K12: 사�
 g revert --no-edit HEAD > /dev/null && push_br feature/tm-e1b
 hdesign "본문 하나" "미룬 것 둘" && g commit -qm "E1 설계 미룸 고침(둘째 브랜치)" && push_br feature/tm-e1b
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "K12: 둘째 브랜치 끝에서 미룸 절만 고치면 human-check 0"
+use_repo "$T0"
+
+# d1 · d2 — 새 레포에서(14b 의 「수정 필요」 답이 이 레포의 E1 머리에 닿지 않게). 지역 날짜 · 갈라진 형제 브랜치(K9 · K12 미룸)
+new_repo "$T0/d" && ok "d: 새 팀 레포를 세웠다" || { no "d: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+g checkout -q -b feature/tm-e1 main
+put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## 지휘 기록\n')" && g commit -qm "E1 설계" && push_br feature/tm-e1
+DH="E1 @$(short "$(g rev-parse HEAD)")"
+# d1 — 답한 시각 2026-11-20 23:30 UTC 는 Asia/Seoul 에서 11-21 이다 — 줄의 날짜는 지역 날짜다
+answer "$DH — 질문" "$PASSL" --when 2026-11-20T23:30:00.000Z
+assert_eq "$(export TZ=Asia/Seoul; rec)" "0" "J28: Asia/Seoul 에서 답한 시각이 UTC 로는 전날이어도 0"
+case "$(intent_tail)" in "- spec 승인 · 2026-11-21 · "*) ok "J28: 줄의 날짜는 지역 날짜(Asia/Seoul)다" ;; *) no "J28: 줄의 날짜가 지역 날짜가 아니다 — $(intent_tail)" ;; esac
+g add -- "$E1/INTENT.md" && g commit -qm "spec 승인 줄" && push_br feature/tm-e1
+# d2 — d1 의 답은 지역 날짜 줄의 근거라 같은 TZ 로 다시 부른다(다른 TZ 면 다른 줄이라 그 답이 쓰인 것으로 센다). 둘째 브랜치가 로컬과 원격으로 갈라졌다(tests/test_start_bundle.sh 의 갈라진 과제 브랜치와 같은 준비 — origin 을 조상으로 옮기면 로컬을 쓴다)
+g checkout -q -b feature/tm-e1b feature/tm-e1 && put "$E1/side.md" "둘째 브랜치 글" && g commit -qm "둘째 브랜치" && push_br feature/tm-e1b
+g commit --amend -qm "갈라짐" && g checkout -q feature/tm-e1
+assert_eq "$(export TZ=Asia/Seoul; rec)" "0" "K12: 형제 브랜치가 갈라져 있어도 첫째 브랜치의 record --human 은 0"
+assert_contains "$(out)" "알림: feature/tm-e1b 의 줄을 읽지 않았다" "K12: 갈라진 형제 브랜치의 줄을 읽지 않았다고 알린다"
 use_repo "$T0"
 
 finish
