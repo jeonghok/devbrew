@@ -100,6 +100,29 @@ class Computed(CrossRepo):
         cs.save(path, rm(BETA), data, SID)                                 # 그 브랜치의 PR 을 확인한 기록이 이 기계에 있다
         self.assertEqual([r["unchecked"] for r in self.view()["reserve"]], [False])
 
+    def test_overlaps_inside_one_roadmap_are_not_cross_roadmap_overlaps(self):   # 내 로드맵 안 · 상대 로드맵 안의 겹침은 이 계산의 몫이 아니다
+        plain = self.view()["reserve"]
+        self.put({rm(ALPHA): roadmap_text("알파", self.ALPHA_BLOCKS + block("A3", "나", "feature/a3", "src/a.py")),
+                  rm(BETA): roadmap_text("베타", self.BETA_BLOCKS + block("B2", "아", "feature/b2", "src/b.py"))})
+        self.assertEqual(self.view()["reserve"], plain)
+
+    def test_merges_into_the_default_branch_count_once_not_per_side_commit(self):
+        self.g("checkout", "-q", "-b", "side", "trunk")
+        for n in ("one", "two"):
+            (self.w / ("docs/%s.md" % n)).parent.mkdir(parents=True, exist_ok=True)
+            (self.w / ("docs/%s.md" % n)).write_text(n, encoding="utf-8")
+            self.g("add", "-A")
+            self.g("commit", "-qm", "docs: " + n)
+        self.g("checkout", "-q", "trunk")
+        self.merge_epic("side")
+        self.assertEqual(self.view()["moves"], [{"branch": "feature/a1", "ahead": 1, "touching": 0, "paths": []}])
+
+    def test_unreadable_version_file_is_counted_not_dropped(self):
+        self.epic_branch("feature/a2", {PLUGIN: "{ not json"})
+        v = self.view()
+        self.assertEqual(v["version_unreadable"], 1)
+        self.assertEqual(v["versions"][0]["holders"], [(ALPHA, "feature/a1"), (BETA, "feature/b1")])
+
     def test_running_suite_of_another_roadmap(self):
         lock = suite_lock.lock_path(cs.machine_dir(state_root(str(self.w)), rm(BETA)))
         lock.mkdir(parents=True)
