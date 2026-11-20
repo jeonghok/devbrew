@@ -31,9 +31,17 @@ class LineShape(unittest.TestCase):
         for kind in H.KINDS:
             self.assertIn(kind, F.DECISION_KINDS)
 
-    def test_spec_label_is_the_one_the_approval_question_offers(self):   # J20 — 계획 2 가 나머지 라벨을 더한다
-        text = (REPO / "plugins/spec-distill/references/conducting.md").read_text(encoding="utf-8")
-        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED), text)
+    def test_pass_labels_are_the_ones_the_questions_offer(self):   # 계획 1 J20 · 미룸(통과 라벨 락에 spec-review)
+        ref = REPO / "plugins/spec-distill"
+        text = (ref / "references/conducting.md").read_text(encoding="utf-8")
+        team = text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0]
+        spec = "「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED)
+        for path in ("references/conducting.md", "references/proceed-gate.md", "skills/spec-review/SKILL.md"):
+            self.assertIn(spec, (ref / path).read_text(encoding="utf-8"), path)
+        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_PLAN][0], H.RECOMMENDED), team)
+        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_FLOW][0], H.RECOMMENDED), team)
+        for label in H.PASS_LABELS[H.KIND_SKIP]:
+            self.assertIn("「%s」" % label, team)
 
     def test_both_recommend_tails_come_off_once(self):   # test_human_lines.py LineShape — K11 (가)
         self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (Recommended)"), "승인 — 계획 담당자에게")

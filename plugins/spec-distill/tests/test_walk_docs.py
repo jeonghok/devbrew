@@ -63,5 +63,56 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
             self.assertEqual(fence_under(self.TEXT, heading), fence_under(old, heading), heading)
 
 
+POINTER = "team 형식 로드맵이면 아래 `## team 형식 로드맵` 절을 따른다"
+
+
+def team_section(text):
+    return text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0] if "\n## team 형식 로드맵\n" in text else ""
+
+
+def step(text, n):
+    body = text.split("\n### %d. " % n, 1)[1]
+    return body.split("\n### ", 1)[0].split("\n## ", 1)[0]
+
+
+class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
+    TEXT = (REF / "conducting.md").read_text(encoding="utf-8")
+    TEAM = team_section(TEXT)
+
+    def test_five_seats_and_the_walk_first(self):
+        for seat in ("방향 확인", "설계 대화와 승인", "계획 확인", "구현 중 물음", "PR 전 확인"):
+            self.assertIn("| %s |" % seat, self.TEAM, seat)
+        for word in ("scripts/walk_table.py next --roadmap <로드맵> --job <과제>", "걸음표를 따른다", "다음 걸음의 칸으로",
+                     "conductor-dispatch.md` 의 `### team 형식 — 계획 · 구현 담당자",
+                     "ledger ask-head --human <종류> --roadmap <로드맵> --job <과제>", "ledger record --human <종류> --roadmap <로드맵> --job <과제>",
+                     "ledger human-check --roadmap <로드맵> --job <과제>", "그대로 보인다", "계획이 나올 때마다", "목록으로 보이고",
+                     "실행 방식은 그 칸으로 답한다"):
+            self.assertIn(word, self.TEAM, word)
+        self.assertNotIn("--approval", self.TEAM)
+        self.assertNotIn("--choice", self.TEAM)
+
+    def test_section_sits_before_the_manual_steps(self):   # test_conducting_loop.sh:11 과 같은 사실을 여기서도
+        heads = [l for l in self.TEXT.splitlines() if l.startswith("## ")]
+        self.assertEqual(heads[-2:], ["## team 형식 로드맵", "## 손으로 따르는 절차"])
+
+    def test_one_pointer_per_step_before_the_skill_cell(self):   # AC21 · K17 — 걸음마다 「- 부를 skill:」 바로 앞
+        self.assertIn("ledger record --spec <설계문서> --approval --date <YYYY-MM-DD> --choice", self.TEXT)   # 옛 형식 줄은 그대로
+        for n in (2, 3, 4, 5):
+            lines = step(self.TEXT, n).splitlines()
+            at = [i for i, l in enumerate(lines) if POINTER in l]
+            self.assertEqual(len(at), 1, n)
+            self.assertTrue(lines[at[0] + 1].startswith("- 부를 skill:"), n)
+        for n in (1, 6, 7):
+            self.assertNotIn(POINTER, step(self.TEXT, n), n)
+
+    def test_gate_docs_carry_the_head_record_human_and_the_off_path(self):
+        for path in (REF / "proceed-gate.md", PLUGIN / "skills/spec-review/SKILL.md", PLUGIN / "skills/epic-conductor/SKILL.md"):
+            self.assertIn("ask-head", path.read_text(encoding="utf-8"), path.name)
+        for path in (REF / "proceed-gate.md", PLUGIN / "skills/spec-review/SKILL.md"):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('record --human "spec 승인"', text, path.name)
+            self.assertIn("human_gate: 끔", text, path.name)
+
+
 if __name__ == "__main__":
     unittest.main()
