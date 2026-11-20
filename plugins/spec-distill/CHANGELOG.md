@@ -4,9 +4,9 @@
 
 ### Added
 - 지휘자 상태 브랜치 — 로드맵마다 `conductor/<로드맵 폴더 이름>` 브랜치에 현황(`STATUS.md`)과 로드맵끼리 주고받는 편지를 올린다(코드 없음 · 기본 브랜치에 머지하지 않음). 스크립트 셋: `scripts/conductor_branch.py`(`ensure` · `delete` — 지우기는 확인 없이 돌리면 넷의 수와 「수를 센 끝」 을 내고 `--confirmed <40자|앞 8자>` 로 로컬 끝 · 원격 끝이 모두 그 끝일 때만 지운다) · `scripts/conductor_status.py`(`sync` · `waiting add` · `waiting clear` · `show`) · `scripts/conductor_mail.py`(`send` · `read` · `ack` — 편지 번호는 그 날짜 편지함 전체의 최댓값 다음).
-- 레포 설정 `state_branch`(`켬` · `끔`, 기본 켬) — 끄면 이 절차 전부를 건너뛴다.
+- 레포 설정 `state_branch`(`켬` · `끔`, 기본 켬) — 끄면 `ensure` · `sync` · `waiting` · `send` · `ack` 는 쓰지 않고 「상태 브랜치가 꺼져 있다」 를 내며 0 으로 끝난다. `show` 는 계산되는 줄만 낸다. `delete` 는 끈 상태에서도 돈다(남은 브랜치를 치우는 길 — 표지와 `--confirmed <수를 센 끝>` 이 있어야 지운다).
 - 기계 상태의 「지금 묻는 질문」 절 — 기다리는 질문을 STATUS 에 싣는다.
-- `references/conductor-state-branch.md` — 현황 · 편지 · 지우기 절차. 지휘 순환 걸음 1 · 2 · 7 의 문장이 이 절차를 가리킨다.
+- `references/conductor-state-branch.md` — 현황 · 편지 · 지우기 절차와 종료 코드를 받았을 때의 표. 지휘 순환 걸음 1 · 2 · 7 의 문장이 이 절차를 가리킨다.
 - 객체 지도(`references/roadmap-ontology.md`)에 새 줄 넷 — 상태 브랜치 · STATUS · 편지 · 받음 줄.
 
 ### Changed

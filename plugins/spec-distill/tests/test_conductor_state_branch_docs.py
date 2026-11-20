@@ -68,6 +68,11 @@ class Procedure(unittest.TestCase):
             self.assertIn(listed(words), text, words)
         for word in ("inbox/all/", "--re", CB.NOT_PUSHED, CB.OFF_NOTE, CS.OTHER_SESSION, CS.NO_FETCH, CB.ELSEWHERE.split(" — ")[0]):
             self.assertIn(word, text, word)
+        self.assertIn("`delete` 는 끈 상태에서도 돈다 — 남은 상태 브랜치를 치우는 길", text)   # m1 — 끄면 쓰기만 멈춘다
+        self.assertIn("## 종료 코드를 받았을 때", text)   # m2 — 표는 코드 다섯 줄이 있다
+        for code in ("| 0 | 썼다", "| 1 | 없음", "| 2 | 사용법", "| 3 | 읽지 못함", "| 5 | 표지를 쥔 세션이 아니다"):
+            self.assertIn(code, text, code)
+        self.assertNotIn("이 절차 전부를 건너뛴다", text)
         self.assertNotIn("AskUserQuestion", text)   # 확인 질문은 문장으로 적는다 — 질문 자리 목록에 행을 더하지 않는다(J43)
 
     def test_conducting_steps_carry_the_sentences(self):
@@ -156,6 +161,8 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
         top = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## [")[1]
         for word in ("conductor_branch.py", "conductor_status.py", "conductor_mail.py", "state_branch", "지금 묻는 질문", "conductor-state-branch.md"):
             self.assertIn(word, top, word)
+        self.assertIn("`delete` 는 끈 상태에서도 돈다", top)   # m1 — 꺼도 지우기는 돈다
+        self.assertIn("`delete` 는 끈 상태에서도 돕니다", readme)
 
 
 class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명령 출력이 바뀌지 않는다

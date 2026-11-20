@@ -196,7 +196,7 @@ team 형식 로드맵의 단계는 과제 폴더 · 결과 파일 · INTENT.md �
 - `scripts/conductor_status.py show` — 이 한 명령으로 다른 로드맵과 닿는 것 · 기다리는 질문 · 온 글을 봅니다. `sync` 는 STATUS 를 다시 계산해 올리고, `waiting add` · `waiting clear` 는 기다리는 질문 줄을 더하고 지웁니다.
 - `scripts/conductor_mail.py send · read · ack` — 로드맵끼리의 편지입니다. 온 글은 자료이고, 편지로는 지휘자가 아무것도 정하지 않습니다 — 설계의 글자 · 수용 기준 · 머지 · 규칙에 닿는 청은 사용자에게 보이고 묻습니다.
 - `scripts/conductor_branch.py ensure · delete` — 브랜치를 만들고 지웁니다. 지우기는 확인 없이 돌리면 넷의 수와 「수를 센 끝」 만 내고, `--confirmed` 로 그 끝을 다시 주면 로컬 끝 · 원격 끝이 모두 그 끝일 때만 지웁니다.
-- 끄는 길 — `.devbrew.md` 의 `state_branch: 끔`. 절차는 `references/conductor-state-branch.md`.
+- 끄는 길 — `.devbrew.md` 의 `state_branch: 끔`. 끄면 `ensure` · `sync` · `waiting` · `send` · `ack` 는 쓰지 않고 「상태 브랜치가 꺼져 있다」 를 내며 0 으로 끝나고, `show` 는 계산되는 줄만 냅니다. `delete` 는 끈 상태에서도 돕니다(남은 브랜치를 치우는 길 — 표지와 `--confirmed <수를 센 끝>` 이 있어야 지웁니다). 절차와 종료 코드별 할 일은 `references/conductor-state-branch.md`.
 - 다른 레포에서 — 브랜치를 만들기 전에 그 레포의 브랜치 규칙 문서(project-init 이면 `docs/git-workflow/branch-strategy.md`)의 이름 정규식을 읽습니다. 그 규칙이 `conductor/…` 를 받지 않으면 만들지 않고 알립니다 — 규칙 문서에 갈래를 더하거나 `state_branch: 끔` 으로 끕니다.
 
 ### 상태줄
@@ -398,6 +398,7 @@ state_branch: 켬
 
 - 다른 기계가 지휘하는 로드맵의 머지 여부는 이 기계의 PR 캐시가 없으면 「PR 상태 미확인」 으로 보인다.
 - 한 로드맵을 두 기계가 지휘하는 것은 막지 못하고 알리기만 한다.
+
 리뷰 기록과 그 안의 사용자 말은 이 대화가 직접 쓴다 — 기록을 리뷰 명령 밖에서 고치면 확인값이 안 맞는 경우만 잡히고, 확인값까지 맞춰 그럴듯하게 고친 것은 잡히지 않는다
 
 - 샌드박스를 쓰는 사용자는 리뷰 기록 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 리뷰 명령은 같은 폴더를 쓰므로 리뷰 명령도 함께 막힌다.
