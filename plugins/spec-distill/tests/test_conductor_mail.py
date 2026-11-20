@@ -433,14 +433,16 @@ class Inbox(MailRepo):
         self.assertEqual(now()[:3], (1, 1, 1))                                  # 받은 뒤 바뀐 글은 다시 받지 않은 글이다
 
     def test_ack_records_the_letters_own_commit_not_the_branch_tip(self):   # J26
-        self.send(ALPHA, "예고", "하나", frm=BETA)
-        first = CB.local_tip(self.w, BETA)
+        first, _ = self.send(ALPHA, "예고", "하나", frm=BETA)
+        self.send(ALPHA, "예고", "둘", frm=BETA)
+        tip = CB.local_tip(self.w, BETA)
+        self.assertNotEqual(tip, first.commit)                                    # 받기 전에 보낸 쪽의 끝이 글 하나의 커밋을 지나 앞서 있다
         CM.ack(self.w, rm(ALPHA), SID, BETA + "/2026-11-19-01.md", now=NOW)
-        self.send(ALPHA, "예고", "둘", frm=BETA)                                  # 받은 뒤 보낸 쪽의 끝이 앞으로 간다
-        self.assertNotEqual(CB.local_tip(self.w, BETA), first)
-        self.assertEqual([l.body for l in CM.incoming(self.w, ALPHA, self.me()).letters], ["둘\n"])
         line = CB.read(self.w, self.me(), self.team.path(CB.RECEIVED_FILE))
-        self.assertIn("%s/2026-11-19-01.md · %s · " % (BETA, first), line)
+        self.assertRegex(line, r"^- %s/2026-11-19-01\.md · %s · " % (BETA, first.commit))
+        self.assertNotIn(tip, line)
+        self.assertEqual([l.body for l in CM.incoming(self.w, ALPHA, self.me()).letters], ["둘\n"])
+
 
     def test_ack_off_without_origin_head_writes_nothing_and_exits_0(self):   # AC14 · 쓰는 명령은 가용성을 먼저 본다
         self.send(ALPHA, "예고", "하나", frm=BETA)
