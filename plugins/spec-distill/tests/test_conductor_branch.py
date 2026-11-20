@@ -968,7 +968,7 @@ class LetterNames(unittest.TestCase):
         self.assertEqual(N(["2026-11-19-98.md"], "2026-11-19"), "2026-11-19-99.md")                          # 경계 양성 대조
         with self.assertRaises(CB.BranchError) as c:
             N(["x/2026-11-19-99.md"], "2026-11-19")
-        self.assertEqual(c.exception.rc, 3)
+        self.assertEqual(c.exception.rc, 2)
 
 
 class PublishGateGuards(StateRepo):

@@ -33,6 +33,7 @@ ABOUT_MAX = 200
 LONG_NOTE = "길다 — 자세한 것은 파일로 남기고 경로를 적는다"
 FILE_RE = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})\.md")   # 남의 글을 읽는다 — `\d` 는 다른 문자의 숫자도 받는다
 HEAD_LINE_RE = re.compile(r"([a-z_]+): (\S(?:.*\S)?)")
+PATH_IN_TEXT_RE = re.compile(r"(?<![A-Za-z0-9])(?:/[^\s/]+/|~/)")   # 앞 글자가 무엇이든 `/` 둘 이상인 절대경로 꼴 · `~/`
 REPLY_RE = re.compile(r"([^/]+)/(.+)")
 FENCE = "---"
 
@@ -89,16 +90,26 @@ def _refuse(why: str) -> CB.BranchError:
     return CB.BranchError(2, why)
 
 
+def _private_roots(root) -> set:
+    """about 에 부분 문자열로도 실리면 안 되는 이 기계의 절대경로 — 레포 뿌리 · 상태 루트 · 홈 폴더(절대 · 실경로)."""
+    found = set()
+    for base in (Path(str(root)), CB.state_path.state_root(str(root)), Path.home()):
+        for shape in (base.absolute(), base.resolve()):
+            if len(str(shape)) > 1:
+                found.add(str(shape))
+    return found
+
+
 def _check_about(root, about: str) -> None:
     if len(about) > ABOUT_MAX:
         raise _refuse("about 은 %d 자까지다" % ABOUT_MAX)
     if CB.visible(about) != about:
         raise _refuse("about 에 제어 글자 · 줄바꿈 · 방향 제어 글자를 쓰지 않는다")
-    if any(w.startswith(("/", "~")) for w in about.split()):
-        raise _refuse("about 에 경로(/ 나 ~ 로 시작하는 낱말)를 쓰지 않는다 — 레포 안 경로는 상대로 적는다")
-    for base in {str(Path(str(root)).absolute()), str(Path(str(root)).resolve())}:
-        if len(base) > 1 and base in about:
-            raise _refuse("about 에 이 레포의 절대경로를 쓰지 않는다")
+    if any(w.startswith(("/", "~")) for w in about.split()) or PATH_IN_TEXT_RE.search(about):
+        raise _refuse("about 에 경로(/ 나 ~ 로 시작하는 낱말 · 낱말 중간의 절대경로)를 쓰지 않는다 — 레포 안 경로는 상대로 적는다")
+    for base in _private_roots(root):
+        if base in about:
+            raise _refuse("about 에 이 레포 · 상태 루트 · 홈 폴더의 절대경로를 쓰지 않는다")
     pattern = CB.machine_pattern()
     if pattern is not None and pattern.search(about):
         raise _refuse("about 에 이 기계의 이름을 쓰지 않는다")
@@ -151,6 +162,9 @@ def send(root, roadmap_rel: str, session: str, to: str, kind: str, body: str, ab
     """(Result, 알림 한 줄 또는 None). 받지 않는 값은 BranchError(2) 이고 아무것도 쓰지 않는다."""
     mine = CB.roadmap_name(roadmap_rel)
     team = CB.team_of(root, roadmap_rel)
+    off = CB.availability(root, roadmap_rel)   # 꺼짐 · 규칙 거절이 값 검사보다 먼저다(AC14) — 값 검사는 기본 브랜치를 읽는다
+    if off:
+        return CB.Result(None, False, None, (off,)), None
     _check_values(root, mine, to, kind, about, re_)
     sent_at = CB.stamp(now)
     chosen = []
@@ -164,7 +178,7 @@ def send(root, roadmap_rel: str, session: str, to: str, kind: str, body: str, ab
     res = CB.write(root, roadmap_rel, session, edit, "편지 %s/%s" % (to, kind))
     if res.commit is None:
         return res, None
-    if len(body) > BODY_MAX:
+    if len(body.rstrip("\n")) > BODY_MAX:   # 쓴 본문 기준
         res = res._replace(notes=tuple(res.notes) + (LONG_NOTE,))
     return res, "%s 지휘자의 글 — %s:%s" % (mine, CB.branch_of(mine), chosen[-1])
 

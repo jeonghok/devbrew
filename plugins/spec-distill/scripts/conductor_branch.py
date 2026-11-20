@@ -587,14 +587,14 @@ def _commit_stamp(root, commit: str) -> str:
 
 def next_letter_name(names, day: str) -> str:
     """그 날짜의 다음 편지 이름 `<날짜>-NN.md` — 받은 이름들(경로여도 된다) 가운데 그 날짜의 가장 큰 번호 + 1.
-    중간의 빈 번호는 다시 쓰지 않는다(지운 글의 이름을 받음 줄이 아직 가리킬 수 있다). 99 를 넘으면 BranchError(3)."""
+    중간의 빈 번호는 다시 쓰지 않는다(지운 글의 이름을 받음 줄이 아직 가리킬 수 있다). 99 를 넘으면 BranchError(2)."""
     top = 0
     for path in names:
         m = LETTER_RE.fullmatch(path.rsplit("/", 1)[-1])
         if m and m.group(1) == day:
             top = max(top, int(m.group(2)))
     if top >= LETTER_MAX:
-        raise BranchError(3, "%s 의 편지 번호가 %d 을 넘는다 — 더 쓰지 않는다" % (visible(day), LETTER_MAX))
+        raise BranchError(2, "%s 의 편지 번호가 %d 을 넘는다 — 더 쓰지 않는다" % (visible(day), LETTER_MAX))
     return "%s-%02d.md" % (day, top + 1)
 
 

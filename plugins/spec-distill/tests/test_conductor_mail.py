@@ -159,3 +159,76 @@ class Send(MailRepo):
         rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", SID, "--to", BETA, "--kind", "예고", "--body", "글")
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (0, tip), out)
         self.assertIn("상태 브랜치가 꺼져 있다", out)
+
+
+class Closures(MailRepo):
+    """남의 글을 닫는 분기마다 그 분기를 없애면 붉어지는 케이스 — 음성은 그 분기만 걸리게 짠다."""
+    STAMP = "2026-11-19 02:40 +0900"
+
+    def plant(self, folder, name, text, sender=BETA):
+        """sender 의 상태 브랜치에 글을 직접 둔다(받는 이 폴더 아래)."""
+        team = CB.team_of(self.w, rm(sender))
+        CB.write(self.w, rm(sender), SID, lambda base: {"%s/%s/%s" % (team.inbox, folder, name): text}, "심기")
+
+    def answer(self, name):
+        return self.send(BETA, "답", "된다", re_=BETA + "/" + name)
+
+    def test_reply_needs_the_planted_letter_to_be_from_the_receiver_to_the_folder_and_well_formed(self):
+        good = CM.render_letter(BETA, ALPHA, "질문", self.STAMP, "q")
+        for name, text in (("2026-11-19-01.md", good.replace("from: " + BETA, "from: " + OTHER_NAME)),      # from 이 받는 이가 아니다
+                           ("2026-11-19-02.md", good.replace("to: " + ALPHA, "to: " + CM.ALL)),           # to 가 놓인 폴더와 다르다
+                           ("2026-11-19-03.md", "머리 없는 글\n")):                                          # 꼴이 깨졌다
+            self.plant(ALPHA, name, text)
+            with self.assertRaises(CB.BranchError, msg=name) as c:
+                self.answer(name)
+            self.assertEqual(c.exception.rc, 2)
+        self.plant(ALPHA, "2026-11-19-04.md", good)
+        self.assertIsNotNone(self.answer("2026-11-19-04.md")[0].commit)       # 양성 대조
+
+    def test_reply_may_name_a_letter_that_came_to_all(self):
+        self.send(CM.ALL, "예고", "공지", frm=BETA)
+        result, _ = self.send(BETA, "답", "봤다", re_=BETA + "/2026-11-19-01.md")
+        self.assertIsNotNone(result.commit)
+
+    def test_reader_closes_about_too(self):
+        for about in ("가" * 201, "x\x1by", "x‮y", "x y"):
+            with self.assertRaises(CM.LetterError, msg=repr(about)):
+                CM.parse_letter(GOOD.replace("about: src/shared.py", "about: " + about))
+        CM.parse_letter(GOOD.replace("about: src/shared.py", "about: " + "가" * 200))      # 양성 대조
+
+    def test_about_refuses_the_machines_absolute_paths_wherever_they_sit(self):
+        from unittest import mock
+        home = "/Users/zed"
+        with mock.patch.object(Path, "home", return_value=Path(home)):
+            for about in ("see:%s/x" % home, "(%s/x)" % home, "file://%s/a" % home, "x" + home, "x" + str(self.w),
+                          "x" + str(CB.state_path.state_root(str(self.w))), "a,/opt/x/y"):
+                with self.assertRaises(CB.BranchError, msg=about) as c:
+                    self.send(BETA, "예고", about=about)
+                self.assertEqual(c.exception.rc, 2)
+            self.assertIsNotNone(self.send(BETA, "예고", about="src/a.py · docs/a/b.md · PR #12")[0].commit)   # 양성 대조
+
+    def test_off_setting_wins_over_value_checks_even_without_origin(self):
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        self.g("remote", "remove", "origin")
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", SID, "--to", BETA, "--kind", "예고", "--body", "글")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (0, tip), out)     # 기본 브랜치를 몰라 설정을 못 읽어도 3 이 아니라 사유 한 줄과 0
+        self.assertIn("상태 브랜치를 쓰지 않는다", out)
+
+    def test_long_body_note_counts_the_stored_body(self):
+        res, _ = self.send(BETA, "예고", "가" * 2000 + "\n")
+        self.assertNotIn(CM.LONG_NOTE, res.notes)
+        res, _ = self.send(BETA, "예고", "가" * 2001)
+        self.assertEqual(res.notes[-1], CM.LONG_NOTE)
+
+    def test_receivers_branch_is_untouched(self):
+        tip = CB.local_tip(self.w, BETA)
+        self.send(BETA, "예고")
+        self.assertEqual(CB.local_tip(self.w, BETA), tip)
+
+
+OTHER_NAME = "2026-01-03-gamma"
+
+
+if __name__ == "__main__":
+    unittest.main()
