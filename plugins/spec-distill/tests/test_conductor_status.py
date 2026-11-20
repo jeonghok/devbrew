@@ -173,7 +173,7 @@ class Sync(StatusRepo):
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (0, tip), out)
         self.assertIn("상태 브랜치가 꺼져 있다", out)
 
-    def test_another_session_writing_after_my_claim_is_told(self):   # 설계 §1 — Deferred 0b618227 의 두 경우
+    def test_another_session_writing_after_my_claim_is_told(self):   # 설계 §1 — Deferred 0b618227 의 두 경우  # R3 AC22
         marker = self.mdir / cs.MARKER
         cs.takeover(self.mdir, OTHER)
         CS.sync(self.w, rm(ALPHA), OTHER, now=at(0))                                 # 다른 세션이 쓴 현황
@@ -198,7 +198,7 @@ class Sync(StatusRepo):
         self.g("fetch", "-q", "origin")                                              # 지휘 순환의 걸음 1 이 받아 온다 — 로컬 끝은 그대로다
         self.assertNotEqual(CB.local_tip(self.w, ALPHA), self.g("rev-parse", "refs/remotes/origin/conductor/" + ALPHA))
 
-    def test_status_another_machine_pushed_after_my_claim_is_told(self):   # J21 — 두 기계 사이: 그 현황은 origin 추적 ref 에만 있다
+    def test_status_another_machine_pushed_after_my_claim_is_told(self):   # J21 — 두 기계 사이: 그 현황은 origin 추적 ref 에만 있다  # R3 AC22
         """뒤집으면 붉다 — 지금 STATUS 를 로컬 끝에서 읽으면 다른 기계가 올린 현황이 보이지 않아 알림이 나지 않는다."""
         marker = self.mdir / cs.MARKER
         os.utime(str(marker), (at(10).timestamp(), at(10).timestamp()))             # 내 표지는 +10분에 잡았다
@@ -208,7 +208,7 @@ class Sync(StatusRepo):
         self.assertTrue(loud.wrote)                                                  # 알리기만 한다
         self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), CB.local_tip(self.w, ALPHA))
 
-    def test_status_another_machine_pushed_before_my_claim_is_not_told(self):
+    def test_status_another_machine_pushed_before_my_claim_is_not_told(self):  # R3 AC22
         marker = self.mdir / cs.MARKER
         self.other_machine_syncs(200)
         os.utime(str(marker), (at(250).timestamp(), at(250).timestamp()))           # 내 표지는 그 현황보다 뒤에 잡았다(넘겨받은 경우)

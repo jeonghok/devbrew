@@ -1038,7 +1038,7 @@ class Delete(StateRepo):
         team = CB.team_of(self.w, rm(ALPHA))
         CB.write(self.w, rm(ALPHA), SID, lambda base: {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 줄 하나\n- A1 · 결정 기록 · 줄 둘\n"}, "대기 줄")
 
-    def test_without_confirmation_it_counts_and_keeps_the_branch(self):
+    def test_without_confirmation_it_counts_and_keeps_the_branch(self):  # R3 AC23
         tip = CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (1, tip), out)
@@ -1048,7 +1048,7 @@ class Delete(StateRepo):
         self.assertIn("수를 센 끝: " + tip, out)
         self.assertEqual(len([ln for ln in out.splitlines() if ln.startswith("[spec-distill] ") or ln.startswith("수를 센 끝")]), 2)
 
-    def test_confirmed_deletes_local_and_remote_and_nothing_else(self):
+    def test_confirmed_deletes_local_and_remote_and_nothing_else(self):  # R3 AC23
         before, beta, tip = self.snap(), CB.local_tip(self.w, BETA), CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip)
         self.assertEqual(rc, 0, out)
@@ -1075,12 +1075,12 @@ class Delete(StateRepo):
         self.assertEqual(cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)[0], 1)
         self.assertEqual(cs.load(path, rm(ALPHA))[cs.TRUST], before)
 
-    def test_only_the_marker_holder_deletes(self):
+    def test_only_the_marker_holder_deletes(self):  # R3 AC23
         tip = CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", OTHER, "--confirmed", CB.local_tip(self.w, ALPHA))
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (5, tip), out)
 
-    def test_remote_that_moved_is_not_deleted_and_the_count_is_taken_again(self):   # J39 — 다른 기계가 올린 글을 세지 않고 지우지 않는다
+    def test_remote_that_moved_is_not_deleted_and_the_count_is_taken_again(self):   # J39 — 다른 기계가 올린 글을 세지 않고 지우지 않는다  # R3 AC23
         """뒤집으면 붉다 — 받아 와 견주지 않고 지우면 첫 --confirmed 가 0 으로 끝나고 다른 기계의 글이 원격에서 사라진다."""
         import conductor_mail as CM
         m2 = self.clone("m2")
@@ -1124,7 +1124,7 @@ class Delete(StateRepo):
         self.assertIsNone(CB.local_tip(self.w, ALPHA))
         self.assertIn("원격에는 없었다", out)
 
-    def test_a_repo_with_the_branch_switched_off_can_still_delete_what_is_left(self):
+    def test_a_repo_with_the_branch_switched_off_can_still_delete_what_is_left(self):  # R3 AC23
         self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", CB.local_tip(self.w, ALPHA) or "0" * 40)
         self.assertEqual(rc, 0, out)
