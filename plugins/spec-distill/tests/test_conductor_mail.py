@@ -335,7 +335,8 @@ class Inbox(MailRepo):
         rc, out = cli(self.w, "read", "--roadmap", rm(ALPHA))
         self.assertEqual(rc, 0, out)
         self.assertIn("꼴이 맞지 않아 내지 않은 글 5", out)
-        self.assertIsInstance(CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w)), CM.Counts)
+        self.send(BETA, "질문", "읽는 쪽이 심은 글을 지나가나")                          # 내가 보낸 글이 있어야 세는 쪽이 BETA 의 받은 편지함을 읽는다
+        self.assertEqual(CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w)), CM.Counts(1, 1, 1, 0, 0, 0))
 
     def test_a_branch_one_commit_ahead_on_either_side_is_still_read(self):   # J54
         self.send(ALPHA, "예고", "하나", frm=BETA)
@@ -430,6 +431,40 @@ class Inbox(MailRepo):
         CB.write(self.w, rm(ALPHA), SID, lambda b: {team.inbox + "/" + BETA + "/2026-11-19-01.md":
                  CM.render_letter(ALPHA, BETA, "질문", "2026-11-19 02:40 +0900", "바꾼 질문")}, "바꿈")
         self.assertEqual(now()[:3], (1, 1, 1))                                  # 받은 뒤 바뀐 글은 다시 받지 않은 글이다
+
+    def test_ack_records_the_letters_own_commit_not_the_branch_tip(self):   # J26
+        self.send(ALPHA, "예고", "하나", frm=BETA)
+        first = CB.local_tip(self.w, BETA)
+        CM.ack(self.w, rm(ALPHA), SID, BETA + "/2026-11-19-01.md", now=NOW)
+        self.send(ALPHA, "예고", "둘", frm=BETA)                                  # 받은 뒤 보낸 쪽의 끝이 앞으로 간다
+        self.assertNotEqual(CB.local_tip(self.w, BETA), first)
+        self.assertEqual([l.body for l in CM.incoming(self.w, ALPHA, self.me()).letters], ["둘\n"])
+        line = CB.read(self.w, self.me(), self.team.path(CB.RECEIVED_FILE))
+        self.assertIn("%s/2026-11-19-01.md · %s · " % (BETA, first), line)
+
+    def test_ack_off_without_origin_head_writes_nothing_and_exits_0(self):   # AC14 · 쓰는 명령은 가용성을 먼저 본다
+        self.send(ALPHA, "예고", "하나", frm=BETA)
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        self.g("remote", "remove", "origin")
+        tip = self.me()
+        rc, out = cli(self.w, "ack", "--roadmap", rm(ALPHA), "--session", SID, "--letter", BETA + "/2026-11-19-01.md")
+        self.assertEqual((rc, self.me()), (0, tip), out)
+        self.assertIn("상태 브랜치를 쓰지 않는다", out)
+
+    def test_counts_acked_is_the_number_of_well_formed_lines(self):   # J53
+        self.send(ALPHA, "예고", "하나", frm=BETA)
+        self.assertEqual(CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w)).acked, 0)
+        CM.ack(self.w, rm(ALPHA), SID, BETA + "/2026-11-19-01.md", now=NOW)
+        self.assertEqual(CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w)).acked, 1)
+        path = self.team.path(CB.RECEIVED_FILE)
+        line = CB.read(self.w, self.me(), path).splitlines()[0]
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {path: b.read(path) + line + "\n끊어진 줄\n"}, "겹친 줄")
+        self.assertEqual(CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w)).acked, 2)     # 겹친 줄도 줄이다 · 꼴 밖 줄은 아니다
+
+    def test_receiver_absent_from_the_unfinished_list_counts_as_finished(self):   # J28
+        self.send(BETA, "질문", "되나")
+        table = [r for r in CB.roadmaps(self.w) if r.name != BETA]
+        self.assertEqual(CM.counts(self.w, ALPHA, self.me(), table), CM.Counts(1, 0, 0, 0, 0, 1))
 
     def test_read_moves_no_ref(self):
         self.send(ALPHA, "예고", "하나", frm=BETA)

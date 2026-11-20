@@ -281,17 +281,22 @@ def letters_on(root, name: str, commit: str) -> Box:
     return Box(letters, malformed, wrong_from)
 
 
-def acked(root, name: str, commit: Optional[str]) -> set:
-    """내 `received.md` 의 꼴 맞는 줄의 {(ident, 커밋 40자)}."""
+def _received_lines(root, name: str, commit: Optional[str]) -> list:
+    """내 `received.md` 의 꼴 맞는 줄마다 (ident, 커밋 40자) — 겹친 줄도 따로 센다."""
     if commit is None:
-        return set()
+        return []
     text = CB.read(root, commit, _team(root, name).path(CB.RECEIVED_FILE))
-    found = set()
+    found = []
     for line in (text or "").split("\n"):
         m = RECEIVED_RE.fullmatch(line)
         if m and CB.parse_stamp(m.group(3)) is not None:
-            found.add((m.group(1), m.group(2)))
+            found.append((m.group(1), m.group(2)))
     return found
+
+
+def acked(root, name: str, commit: Optional[str]) -> set:
+    """내 `received.md` 의 꼴 맞는 줄의 {(ident, 커밋 40자)}."""
+    return set(_received_lines(root, name, commit))
 
 
 def _sorted(letters) -> list:
@@ -327,41 +332,57 @@ def incoming(root, me: str, tip: Optional[str]) -> Incoming:
     return found._replace(letters=[l for l in found.letters if (l.ident, l.commit) not in done])
 
 
-def _answered(root, me: str, tip: Optional[str], other: str, ident: str) -> bool:
-    return tip is not None and any(l.to == other and l.re == ident for l in letters_on(root, me, tip).letters)
+class _Seen:
+    """한 번 부르는 동안만 사는 읽기 캐시 — 같은 로드맵의 브랜치를 한 번만 읽는다."""
+    def __init__(self, root):
+        self.root = root
+        self._boxes = {}
+        self._acked = {}
+
+    def box(self, name: str):
+        """(끝, Box) — 읽을 끝이 없으면 (None, 빈 Box)."""
+        if name not in self._boxes:
+            tip, _why = CB.seen_tip(self.root, name) if CB.name_ok(name) else (None, None)
+            self._boxes[name] = (tip, letters_on(self.root, name, tip) if tip is not None else Box([], 0, 0))
+        return self._boxes[name]
+
+    def acked(self, name: str) -> set:
+        if name not in self._acked:
+            self._acked[name] = acked(self.root, name, self.box(name)[0])
+        return self._acked[name]
 
 
 def unanswered(root, me: str, tip: Optional[str]) -> int:
     """나에게 온 질문 가운데 내 브랜치에 그 글을 `re` 로 가리키는 글이 없는 수."""
+    mine = letters_on(root, me, tip).letters if tip is not None else []
     return sum(1 for l in _addressed(root, me).letters
-               if l.kind == QUESTION and l.to == me and not _answered(root, me, tip, l.sender, l.ident))
+               if l.kind == QUESTION and l.to == me and not any(m.to == l.sender and m.re == l.ident for m in mine))
 
 
 def counts(root, me: str, tip: Optional[str], table: list) -> Counts:
-    """내가 보낸 글의 받는 이별 상태(J28) — 글 하나가 받는 이마다 한 번 센다."""
-    rows = {r.name: r for r in table}
+    """내가 보낸 글의 받는 이별 상태(J28) — 글 하나가 받는 이마다 한 번 센다. 끝나지 않은 로드맵 표에 없는 받는 이는 끝난 것으로 친다."""
+    unfinished = {r.name for r in table if r.unfinished}
     mine = letters_on(root, me, tip).letters if tip is not None else []
     have = set(CB.state_names(root))
+    seen = _Seen(root)
     sent = unreceived = awaiting = no_branch = to_finished = 0
     for letter in mine:
         if letter.to == me:
             continue
         sent += 1
         named = letter.to != ALL
-        for rcv in ([letter.to] if named else sorted(n for n, r in rows.items() if r.unfinished and n != me)):
-            row = rows.get(rcv)
-            if row is not None and not row.unfinished:
-                to_finished += named
+        for rcv in ([letter.to] if named else sorted(n for n in unfinished if n != me)):
+            if rcv not in unfinished:
+                to_finished += 1
                 continue
-            rtip, _why = CB.seen_tip(root, rcv) if rcv in have and CB.name_ok(rcv) else (None, None)
-            theirs = letters_on(root, rcv, rtip).letters if rtip is not None else []
-            if rtip is None and rcv not in have:
+            theirs = seen.box(rcv)[1].letters if rcv in have else []
+            if rcv not in have:
                 no_branch += 1
-            if (letter.ident, letter.commit) not in acked(root, rcv, rtip):
+            if (letter.ident, letter.commit) not in (seen.acked(rcv) if rcv in have else set()):
                 unreceived += 1
             if letter.kind == QUESTION and not any(t.to == me and t.re == letter.ident for t in theirs):
                 awaiting += 1
-    return Counts(sent, unreceived, awaiting, len(acked(root, me, tip)), no_branch, to_finished)
+    return Counts(sent, unreceived, awaiting, len(_received_lines(root, me, tip)), no_branch, to_finished)
 
 
 def framed(letter: Letter) -> str:
