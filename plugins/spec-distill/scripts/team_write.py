@@ -660,6 +660,18 @@ def _swap_head(text: str, commit: str, key: str = "head", insert_after: Optional
     return "\n".join(lines)
 
 
+def _drop_head(text: str, key: str) -> str:
+    """머리의 `<key>:` 줄을 지운다 — 머리 밖과 다른 줄은 건드리지 않는다. 없으면 글 그대로."""
+    lines = text.split("\n")
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\r") == "---":
+            break
+        if lines[i].startswith(key + ":"):
+            del lines[i]
+            break
+    return "\n".join(lines)
+
+
 def _appended(text: str, new_lines: list) -> str:
     """줄들을 끝에 붙인다 — 파일이 CRLF 면 CRLF 로, 끝 줄바꿈이 없으면 그 파일의 줄바꿈 하나만 보태고 붙인다."""
     if not new_lines:
@@ -671,7 +683,9 @@ def _appended(text: str, new_lines: list) -> str:
 def cmd_job_sync(a, W) -> int:
     """결과 파일을 한 거래로 맞춘다 — 없으면 머리를 만들고, 원장 · 계획 파일이 있으면 변환기가 낸 줄 가운데 없는 것만 덧붙이고,
     `--end` 면 머리의 head 를 고쳐 「끝」 줄을 단다. 「끝」 줄이 없는 결과 파일(이어 쓰는 파일)에 `--bundle-at` · `--job-at` 을
-    함께 주면 머리의 그 두 커밋을 새 값으로 고치고, 둘 가운데 하나만 주면 사용법 오류다. 그 밖의 있는 줄은 바이트 그대로 둔다. git 은 레포 뿌리와 레포 설정(`roadmaps_dir`)을
+    함께 주면 머리의 그 두 커밋을 새 값으로 고치고, 둘 가운데 하나만 주면 사용법 오류다. `--rules-at`(팀 규칙을 읽은
+    상태 브랜치 커밋)은 그 둘과 함께만 받는다 — 새 머리와 이어 쓰는 파일에서는 `bundle_at` 바로 뒤에 적고, 이어 쓰는
+    파일에 그 둘만 주면(기본 브랜치에서 규칙을 읽은 묶음) 머리의 옛 `rules_at` 줄을 지운다. 그 밖의 있는 줄은 바이트 그대로 둔다. git 은 레포 뿌리와 레포 설정(`roadmaps_dir`)을
     읽을 때만 부르고, 과제 브랜치의 커밋 · 이력은 읽지 않으며 커밋하지 않는다."""
     if bool(a.ledger) != bool(a.plan_file):
         raise W.Usage("--ledger 와 --plan-file 은 함께만 준다")
@@ -716,6 +730,8 @@ def cmd_job_sync(a, W) -> int:
         text = _swap_head(_swap_head(text, a.bundle_at, "bundle_at"), a.job_at, "job_at")
         if a.rules_at:
             text = _swap_head(text, a.rules_at, "rules_at", insert_after="bundle_at")
+        else:   # 기본 브랜치에서 규칙을 읽은 묶음 — 옛 rules_at 이 남으면 묶음 낡음이 다른 커밋의 규칙과 견준다
+            text = _drop_head(text, "rules_at")
         if text != old:
             done.append("묶은 커밋 고침")
     # 계획의 task 절 수보다 큰 번호와 task 절이 없는 계획만 거절한다.

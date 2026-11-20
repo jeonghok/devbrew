@@ -145,4 +145,19 @@ assert_not_contains "$(cat "$T/b.txt")" "$NEW1" "10 사본의 줄도 싣지 않�
 assert_not_contains "$(sync_cmd)" "--rules-at" "10 맞추는 명령에 --rules-at 이 없다"
 g checkout -q main
 
+note "# 11 — 남의 고침 동안 기본 브랜치 규칙으로 이어 쓰면 옛 rules_at 을 지우고 bundle_at 에서 견준다"
+R2="$W/$E1/results/implement-plan-1-2.md"
+status "$T/s.json" >/dev/null
+assert_contains "$(stale_notes)" "묶음 낡음: implement-plan-1-2.md — 묶은 커밋 ${B:0:8} 뒤에 바뀜: ${RULES}" "11 이어 쓰기 전에는 옛 rules_at(TIP2)과 기본 브랜치를 견줘 낡음(양성 대조)"
+g checkout -q feature/tm-e1
+assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "11 이어 쓰는 묶음 rc 0 — $(cat "$T/b.err")"
+assert_eq "$(grep '^쓸 것: ' "$T/b.txt")" "쓸 것: ${E1}/results/implement-plan-1-2.md" "11 끝 줄이 없는 시도 2 를 잇는다"
+assert_not_contains "$(sync_cmd)" "--rules-at" "11 맞추는 명령에 --rules-at 이 없다"
+assert_eq "$(run_sync)" "0" "11 이어 쓰는 맞추는 명령 rc 0 — $(cat "$T/out.txt")"
+assert_eq "$(grep -c '^rules_at:' "$R2")" "0" "11 옛 rules_at 줄이 지워졌다"
+up "E1 결과 2 이어 씀"
+g checkout -q main
+status "$T/s.json" >/dev/null
+assert_not_contains "$(stale_notes)" "implement-plan-1-2.md" "11 이어 쓴 결과에는 묶음 낡음이 없다"
+
 finish
