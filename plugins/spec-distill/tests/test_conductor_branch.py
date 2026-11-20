@@ -778,6 +778,25 @@ class Publish(StateRepo):
         self.assertTrue(r.notes[0].startswith("원격의 것을 받아 왔다 — "), r.notes)
         self.assertEqual(self.g("rev-list", "--count", CB.ref_of(ALPHA), repo=self.o), "1")
 
+    def test_a_local_write_during_a_remake_is_replayed_not_overwritten(self):   # 옛 값 조건 — 다시 만들기의 update-ref
+        """뒤집으면 붉다 — 다시 만든 끝을 그 시도가 읽은 로컬 끝이 아닌 값을 옛 값으로 두면 그 사이 로컬에 끼어든 커밋이 사라진다."""
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        pending, calls = self.team.path(CB.PENDING_FILE), []
+
+        def edit(base):
+            calls.append(base.commit)
+            if len(calls) == 2:   # 첫 다시 만들기 — 받아 온 뒤 · ref 를 옮기기 전에 로컬에 다른 쓰기가 끼어든다
+                local = CB.local_tip(self.w, ALPHA)
+                sneak = CB._build_commit(self.w, local, {pending: "- 끼어든 줄\n"}, "끼어든 쓰기", False)
+                self.g("update-ref", CB.ref_of(ALPHA), sneak, local)
+            return {self.team.status: "내 STATUS\n"}
+        r = CB.write(self.w, rm(ALPHA), SID, edit, "STATUS")
+        self.assertTrue(r.pushed)
+        self.assertEqual(CB.read(self.w, r.commit, pending), "- 끼어든 줄\n")         # 끼어든 커밋은 다음 시도에서 다시 얹혔다
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄\n")
+        self.assertEqual(len(calls), 3)                                                  # 옮기기 실패도 한 번으로 센다
+
     def test_failed_push_reason_is_the_rejection_cell_not_the_error_banner(self):   # 과제 5 리뷰 M4
         hook = self.o / "hooks" / "pre-receive"
         hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
