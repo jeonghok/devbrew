@@ -1664,7 +1664,9 @@ def _recorded_mismatch(br: str, n: int, it: dict) -> list:
 def c_pr_refresh(root, a) -> int:
     """대상 블록(없으면 끝나지 않은 블록 전부, `--reset` 이면 끝난 블록까지)의 브랜치마다 그 head 이름의 PR 을 모두 받아
     그 브랜치의 PR 줄을 통째로 바꾼다. PR 이 없는 브랜치는 「PR 0개」 줄 하나로 확인한 때를 남긴다. 번호를 적은 브랜치는
-    그 번호를 목록에 없으면 따로 받아 줄을 두고, 그 PR 이 브랜치와 어긋나면 그 줄만 빼고 경고한다(rc 0)."""
+    그 번호를 목록에 없으면 따로 받아 줄을 두고, 그 PR 이 브랜치와 어긋나면 그 줄만 빼고 경고한다(rc 0).
+    `--epic` 이 없으면 team 로드맵의 로드맵 밖 단순 작업(`jobs` — `--reset` 이 아니면 끝나지 않은 것)의 브랜치도 채우고
+    그 줄의 에픽 칸은 과제 이름이다."""
     if a.reset and a.epic:
         raise Fail(2, "`--reset` 은 PR 절 전체를 다시 채운다 — `--epic` 을 빼고 다시 돌려라")
     for line in gh_repo.env_notices():
@@ -1686,6 +1688,12 @@ def c_pr_refresh(root, a) -> int:
             if br not in branches:
                 branches.append(br)
                 epic_of[br] = b.get("id")
+    if not a.epic:   # 로드맵 밖 단순 작업의 브랜치도 채운다 — 그 줄의 에픽 칸은 과제 이름이다(R3 M23)
+        for j in report.get("jobs") or []:
+            br = j.get("branch")
+            if br and br not in branches and (a.reset or j.get("stage") not in DONE):
+                branches.append(br)
+                epic_of[br] = j.get("id")
     when = now()
     fresh, warns = {}, []
     for br in branches:

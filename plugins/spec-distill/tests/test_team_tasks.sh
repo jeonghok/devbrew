@@ -533,6 +533,52 @@ PY
 assert_eq "$(grep -F " · 과제 폴더 없음" "$T/fresh-show.txt" | sed 's/ — .*//')" "$(printf '    구현 E2 계획 1\n    수리 지휘자 수리')" \
   "AC18: 상태 보기가 과제 폴더를 지운 블록의 작업 줄과 어디에도 과제가 없는 로드맵 밖 작업 줄만 「과제 폴더 없음」 으로 알린다"
 assert_contains "$(cat "$T/fresh-show.txt")" "    구현 E1 계획 1 — E1 · 진행 · 담당 없음 · -" "AC18: 과제 폴더가 있는 블록의 작업 줄은 그대로(양의 짝 — 작업 줄이 화면에 있다)"
+
+# ── pr-refresh 의 단순 작업 과제(R3 AC18 · M23) — 같은 새 팀 레포에서 가짜 gh(pr_list)로 잰다 ──
+# 앞 단언이 지운 E2 의 INTENT.md 를 되살린다 — job new 의 나무 검사가 깨진 과제 폴더를 거절한다
+g revert --no-edit "$(g log -1 --format=%H -- "$TM/jobs/E2/INTENT.md")" > "$T/out.txt" 2>&1 && g push -q origin main || failed "E2 INTENT.md 되살림 — $(cat "$T/out.txt")"
+# 머지된 과제 pre-merged: 과제 폴더를 기본 브랜치에 올려 단계가 머지됨이 되게 한다
+newjob pre-merged chore/pre-merged && g checkout -q main && g merge -q --no-ff chore/pre-merged -m "pre-merged 머지" && g push -q origin main && again \
+  || failed "chore/pre-merged"
+assert_eq "$(js "$T/s.json" "sorted((j['id'], j['stage'], j['branch']) for j in r['jobs'])")" "[('pre-merged', '머지됨', 'chore/pre-merged'), ('solo', '진행 중', 'fix/solo')]" \
+  "M23: 진행 중 과제 하나 · 머지된 과제 하나(아래 단언의 바탕)"
+prr() {  # prr [pr-refresh 인자…] — 가짜 pr_list 로 pr-refresh 를 돌려 「rc | gh 가 받은 브랜치 | PR 캐시의 (브랜치, 번호, 상태, 확인한 때 비었나)」 를 한 줄로 낸다
+  python3 - "$S" "$W" "$RM" "$SID" "$@" <<'PY2'
+import io, sys
+from contextlib import redirect_stdout
+from pathlib import Path
+from unittest import mock
+sys.path.insert(0, sys.argv[1])
+import conductor_ledger as L
+import conductor_state as cs
+root, rm, sid = sys.argv[2:5]
+calls = []
+def fake_pr_list(cwd, branch, limit=100):
+    calls.append(branch)
+    return [{"number": 41, "state": "OPEN", "headRefName": branch, "headRefOid": "a" * 40, "isCrossRepository": False,
+             "baseRefName": "main", "mergeCommit": None}] if branch.endswith(("solo", "pre-merged")) else [], False
+buf = io.StringIO()
+with mock.patch.object(L.gh_repo, "pr_list", fake_pr_list), mock.patch.object(L.gh_repo, "origin_slug", return_value=("github.com", "me", "r")), \
+        redirect_stdout(buf):
+    rc = L.main(["--root", root, "pr-refresh", "--roadmap", rm, "--session", sid] + sys.argv[5:])
+rows = cs.load(L.mpath(Path(root), rm), rm)["PR"]
+print("%d | %s | %s | %s" % (rc, sorted(calls), sorted((r["브랜치"], r["번호"], r["상태"], r["쓴 세션"] == sid) for r in rows if r["번호"] != cs.NO_PR),
+                           buf.getvalue().strip().splitlines()[-1]))
+PY2
+}
+PRR1="$(prr)"
+assert_contains "$PRR1" "('fix/solo', '#41', '열림', True)" "M23: pr-refresh 가 단순 작업 과제의 브랜치 PR 을 기계 상태 PR 캐시에 채운다"
+assert_contains "$PRR1" "'fix/solo'" "M23: gh 가 그 브랜치를 받았다"
+assert_not_contains "$PRR1" "chore/pre-merged" "M23: 머지된 과제는 --reset 없이는 채우지 않는다"
+assert_eq "$(printf '%s' "$PRR1" | sed -n 's/.*브랜치 \([0-9]*\)개.*/\1/p')" "$(printf '%s' "$PRR1" | python3 -c 'import sys,ast; print(len(ast.literal_eval(sys.stdin.read().split(" | ")[1])))')" \
+  "M23: 출력의 브랜치 수가 gh 가 받은 브랜치 수와 같다(과제 브랜치가 센 수에 든다)"
+PRR2="$(prr --epic E1)"
+PRR2_CALLS="$(printf '%s' "$PRR2" | awk -F' [|] ' '{print $2}')"   # 앞 실행이 채운 캐시 줄은 남으니 gh 가 받은 브랜치만 본다
+assert_not_contains "$PRR2_CALLS" "fix/solo" "M23: --epic 이면 그 블록만 — gh 가 과제 브랜치를 받지 않는다"
+PRR3="$(prr --reset)"
+assert_contains "$PRR3" "('chore/pre-merged', '#41', '열림', True)" "M23: --reset 이면 머지된 과제의 브랜치도 채운다"
+assert_contains "$PRR3" "('fix/solo', '#41', '열림', True)" "M23: --reset 에서도 진행 중 과제는 채운다"
+
 use_repo "$T0"
 
 finish
