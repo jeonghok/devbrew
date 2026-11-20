@@ -234,6 +234,18 @@ def _kept(path: str, job_dir: str, design: str, outputs: list) -> bool:
     return any(path == o or path.startswith(o.rstrip("/") + "/") for o in outputs)
 
 
+def _same_since(git, head: str, tip: str, path: str) -> bool:
+    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 설계 파일 · 계획 파일 · INTENT.md 는 body_of 의 본문으로, 그 밖은 글 전체로 견준다.
+    둘 다 없으면 같다 · 하나만 없거나 git 이 읽지 못했으면 다르다(낡음 쪽 — 닫는 쪽)."""
+    before, now = git.blob(head, path), git.blob(tip, path)
+    if before is None or now is None:
+        return before is None and now is None
+    name = path.rsplit("/", 1)[-1]
+    if name in (team_layout.DESIGN_FILE, team_layout.INTENT_FILE) or team_layout.plan_number(name) is not None:
+        return human_lines.body_of(name, before) == human_lines.body_of(name, now)
+    return before == now
+
+
 def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: str, plan,
             reserved: list, outputs: list) -> tuple:
     """(상태, 알림 줄 목록, 가장 새 결과 파일 이름 | None). 결정 기록의 받음 줄을 그 결과 파일로 다시 잰다.
@@ -267,7 +279,7 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
     changed = git.touched(tip, [head, main], list(reserved) + list(outputs) + [design, job_dir])
     if changed is None:
         return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "받은 뒤의 변경을 읽지 못했다")], latest
-    left = [p for p in changed if _kept(p, job_dir, design, outputs)]
+    left = [p for p in changed if _kept(p, job_dir, design, outputs) and not _same_since(git, head, tip, p)]
     if left:
         shown = " · ".join(left[:SHOWN_FILES])
         if len(left) > SHOWN_FILES:

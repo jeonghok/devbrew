@@ -214,8 +214,8 @@ sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
 |---|---|---|" "| 항목 | 이유 | 받는 곳 |
 |---|---|---|
 | 알림 글 | 나중에 정한다 | plan-1.md |" && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
-assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
-assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "받음: 받은 뒤 바뀜 — design.md"
+assert_eq "$(st E1)" "구현 끝" "받음: 받은 뒤 design.md 의 미룸 절만 바뀌면 구현 끝 그대로(K13 — 본문으로 견준다)"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "받음: 미룸 절만 바뀐 design.md 는 받은 뒤 바뀜이 아니다(본문 견줌 — 아래 r2 와 같은 규칙)"
 back "$RECEIVED_AT"
 sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서 본문" || fail_step "받은 뒤 설계문서 본문"
 assert_eq "$(st E1)" "설계 중" "AC8: 받은 뒤 design.md 본문을 고치면 승인이 낡아 구현 단계에서도 설계 중"
@@ -791,4 +791,47 @@ assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\n---')")" "False" "J19 �
 assert_eq "$(gate_of 'frontmatter 가 없는 설정')" "True" "J19: 설정을 읽지 못하면(SettingsError) 관문은 켜진 채"
 assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\nno_such_key: 1\n---')")" "True" "J19: 설정에 오류가 있으면 끔 이 적혀 있어도 관문은 켜진 채"
 T="$T0"
+
+# ── 받음 줄의 낡음 — 받은 head 와 지금 끝의 글을 견준다(K13 · 새 레포) ─────────────────────────────
+new_repo "$T0/rcpt" && ok "받음 낡음: 팀 레포를 세웠다(${TM})" || { no "받음 낡음: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+J1="$TM/jobs/E1"
+R1="$J1/results/implement-plan-1-1.md"
+RDESIGN="$(printf -- '---\ntype: design\njob: E1\n---\n\n# 받음 낡음 픽스처 설계\n\n## Goals\n\n- 받은 뒤의 변경을 센다.\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## Acceptance Criteria\n\n- AC1: 받은 뒤 바뀐 글을 센다\n- AC2: 되돌린 글은 세지 않는다\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|')"
+RPLAN="$(printf '# 받음 낡음 픽스처 계획 1\n\n### Task 1: 견주기\n\nAC1 · AC2 를 만든다.')"
+g checkout -q -b feature/tm-e1 main && put src/e1/a.txt a && step "받음 낡음: 코드 하나" || fail_step "받음 낡음: 코드 하나"
+put "$J1/design.md" "$RDESIGN" && step "받음 낡음: 설계문서" || fail_step "받음 낡음: 설계문서"
+approved "spec 승인" E1 - - 2026-11-20 && g push -q origin HEAD || fail_step "받음 낡음: 승인"
+put "$J1/plan-1.md" "$RPLAN" && step "받음 낡음: 계획 파일" || fail_step "받음 낡음: 계획 파일"
+approved "계획 검토" E1 1 - 2026-11-21 && g push -q origin HEAD || fail_step "받음 낡음: 계획 검토"
+sync E1 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "받음 낡음: 결과 시작" || fail_step "받음 낡음: 결과 시작"
+put src/e1/a.txt "끝난 코드" && g commit -qm "받음 낡음: 코드" && RCODE="$(g rev-parse HEAD)"
+printf 'AC1: 구현됨 — src/e1/a.txt\nAC2: 구현됨 — src/e1/a.txt\n' >> "$W/$R1"
+sync E1 implement-plan-1-1.md --end "$RCODE" >/dev/null && step "받음 낡음: 결과 끝" || fail_step "받음 낡음: 결과 끝"
+RLINE="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job E1 --result implement-plan-1-1.md --date 2026-11-22 | grep '^- 결과 받음 · ')"
+decide E1 "$RLINE" && step "받음 낡음: 받음 줄" || fail_step "받음 낡음: 받음 줄"
+RAT="$(g rev-parse HEAD)"
+
+assert_eq "$(st E1)" "구현 끝" "r1: 받은 뒤 고침이 없으면 구현 끝(양성 대조)"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r1: 받은 뒤 바뀜 알림이 없다"
+sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 알림 글 | 나중에 정한다 | plan-1.md |" && step "r2 미룸 절" || fail_step "r2 미룸 절"
+assert_eq "$(st E1)" "구현 끝" "r2: 설계 파일의 미룸 절에 한 줄만 더하면 구현 끝 그대로"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r2: 미룸 절만 고친 설계 파일은 받은 뒤 바뀜이 아니다"
+back "$RAT"
+put src/e1/a.txt "받은 뒤 고친 코드" && step "r3 고침" || fail_step "r3 고침"
+put src/e1/a.txt "끝난 코드" && step "r3 되돌림" || fail_step "r3 되돌림"
+assert_eq "$(st E1)" "구현 끝" "r3: 예약 경로 파일을 고쳤다 되돌리면 구현 끝 그대로"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r3: 되돌린 파일은 받은 뒤 바뀜이 아니다"
+back "$RAT"
+sub "$J1/design.md" "- 받은 뒤의 변경을 센다." "- 받은 뒤의 변경을 다시 센다." && step "r4 설계 본문" || fail_step "r4 설계 본문"
+assert_eq "$(st E1)" "설계 중" "r4: 설계 본문을 고치면 승인이 낡아 설계 중(AC8) — 받음 줄의 낡음은 아래 알림이 잰다"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "r4: 알림에 받은 뒤 바뀜과 설계 파일 경로"
+back "$RAT"
+put src/e1/a.txt "받은 뒤 고친 코드" && step "r5 고침" || fail_step "r5 고침"
+assert_eq "$(st E1)" "구현 중" "r5: 예약 경로 파일을 고치고 되돌리지 않으면 구현 중"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/a.txt" "r5: 알림에 그 경로"
+back "$RAT"
+use_repo "$T0"
 finish
