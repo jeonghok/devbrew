@@ -158,7 +158,10 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
         for word in ("### 지휘자 상태 브랜치", "conductor/<로드맵 폴더 이름>", "STATUS.md", "conductor_status.py show",
                      "conductor_mail.py send", "conductor_branch.py ensure", "branch-strategy.md", "수를 센 끝"):
             self.assertIn(word, readme, word)
-        top = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## [")[1]
+        heads = ("\n" + (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")).split("\n## [")[1:]
+        mine = [body for body in heads if body.startswith("8.26.0] — ")]
+        self.assertEqual(len(mine), 1, "CHANGELOG 에 8.26.0 절이 하나가 아니다")   # 맨 위 절이 아니라 판 번호로 고른다 — 뒤의 판 올림이 새 절을 더해도 맞는다
+        top = mine[0]
         for word in ("conductor_branch.py", "conductor_status.py", "conductor_mail.py", "state_branch", "지금 묻는 질문", "conductor-state-branch.md"):
             self.assertIn(word, top, word)
         self.assertIn("`delete` 는 끈 상태에서도 돈다", top)   # m1 — 꺼도 지우기는 돈다
