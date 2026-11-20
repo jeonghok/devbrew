@@ -298,7 +298,7 @@ def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = Tr
         if age <= STALE_AFTER:
             return Synced(None, tuple(notes) + (UNCHANGED,), False)
     if split is None:   # 받아 온 끝 위에서 쓴다 — 로컬 끝에서 고침을 셈하면 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다
-        LS.catch_up(root, team.name, tip)
+        notes.extend(LS.catch_up(root, team.name, tip))   # 앞당겼으면 「다른 곳에서 이 브랜치에 썼다」 — 다시 만들 때와 같은 알림
 
     def edit(base):   # 사본이 같아 지우면 STATUS 의 줄 수도 0 이다 — 같은 글이라 남은 줄이 없다
         changes = {team.status: render_status(build_status(root, roadmap_rel, session, base.commit, now))}

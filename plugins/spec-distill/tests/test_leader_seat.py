@@ -341,6 +341,23 @@ class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을
         self.assertNotIn(LS.RESET_PENDING_LEFT, res.notes)
         self.assertNotIn(cs.TRUST_WHY[0], [r["까닭"] for r in self.rows()])
 
+    def test_moving_onto_the_fetched_tip_tells_elsewhere(self):   # AC3 — 앞당긴 끝은 다른 곳이 쓴 것이다 · 붉어지는 변이: 알림을 뺀다
+        self.foreign_edit("o1", {self.team.status: "x\n"})
+        seen = self.tip()
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual(res.notes, (CB.ELSEWHERE % (seen[:8], CB._commit_stamp(str(self.w), seen)),))
+        self.assertEqual(res.made, (res.commit,))   # 앞당긴 끝은 「씀」 이 아니다(B3)
+        self.assertNotIn(seen, [r["끝"] for r in self.rows()])
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, drop=NEW)   # 양성 대조 — 로컬이 이미 읽을 끝이면 알리지 않는다
+        self.assertEqual(res.notes, ())
+
+    def test_reset_onto_the_fetched_tip_tells_elsewhere(self):
+        self.foreign_edit()
+        seen = self.tip()
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertEqual(res.notes[0], CB.ELSEWHERE % (seen[:8], CB._commit_stamp(str(self.w), seen)))
+        self.assertEqual(res.notes[-1], LS.RESET_DONE)
+
     def test_glyphs_are_the_read_side_constants(self):   # F9 — 다시 치지 않는다
         self.assertEqual((LS.FOREIGN, LS.FOREIGN_UNMEASURED, LS.RULES_BASE_FILE), (TS.FOREIGN, TS.FOREIGN_UNMEASURED, TS.RULES_BASE_FILE))
 
@@ -438,6 +455,35 @@ class RulesBranch(TeamRepo):   # R3 AC17
         with self.assertRaises(CB.BranchError) as cm:
             LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")
         self.assertEqual((cm.exception.rc, str(cm.exception)), (1, LS.FOREIGN % 1 + LS.REFUSE_TAIL))
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
+
+    def test_command_line_unmeasured_foreign_refuses(self):   # None 도 1 — 남의 머지 커밋이 규칙 경로에 있다 · 붉어지는 변이: None 갈래를 뺀다
+        old = self.write({self.team.rules: "- 옛 줄\n"}).commit
+        mine = self.write({self.team.status: "s\n"}).commit
+        other = self.clone("merger")
+        self.g("fetch", "-q", "origin", SPEC, repo=other)
+        tree = self.g("rev-parse", old + "^{tree}", repo=other)
+        b = self.g("commit-tree", tree, "-p", old, "-m", "B", repo=other)
+        m = self.g("commit-tree", tree, "-p", mine, "-p", b, "-m", "M", repo=other)
+        self.g("push", "-q", "origin", "%s:refs/heads/conductor/%s" % (m, ALPHA), repo=other)
+        self.g("fetch", "-q", "origin", SPEC)
+        self.assertIsNone(LS.foreign(str(self.w), rm(ALPHA), m, TS.rules_paths(self.team)))   # 양성 대조
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules")
+        self.assertEqual((rc, out.strip().splitlines()[-1:]),
+                         (1, ["[spec-distill] " + LS.FOREIGN_UNMEASURED + LS.REFUSE_TAIL]), out)
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
+
+    def test_command_line_diverged_state_branch_refuses(self):   # 갈라진 상태 브랜치 — _read_tip 이 1 · 붉어지는 변이: 로컬 끝을 읽는다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.foreign_edit("o1", {self.team.status: "x\n"})
+        local = self.g("rev-parse", "refs/heads/conductor/" + ALPHA)
+        mine = self.g("commit-tree", self.g("rev-parse", local + "^{tree}"), "-p", local, "-m", "올리지 못한 내 커밋")
+        self.g("update-ref", "refs/heads/conductor/" + ALPHA, mine, local)
+        seen, split = CB.seen_tip(str(self.w), ALPHA)
+        self.assertEqual((seen, bool(split)), (None, True))   # 양성 대조 — 정말 갈라졌다
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules")
+        self.assertEqual((rc, out.strip().splitlines()[-1:]),
+                         (1, ["[spec-distill] %s — %s" % (LS.FOREIGN_UNMEASURED, CB.visible(split))]), out)
         self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
 
     def test_off_switch_tells_and_makes_nothing(self):   # 0 — 쓸 수 없어 알리고 넘어간다

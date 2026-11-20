@@ -181,6 +181,7 @@ assert_eq "$(gap)" "- 0줄" "12 사본이 없으면 0줄"
 note "# 13 — 올릴 것이면 남긴다"
 assert_eq "$(cb rules-add --roadmap "$RM" --session "$SID" --line "$NEW1")" "0" "13 rules-add rc 0 — $(cat "$T/cb.txt")"
 assert_eq "$(csync)" "0" "13 sync rc 0 — $(cat "$T/cs.txt")"
+assert_not_contains "$(cat "$T/cs.txt")" "다른 곳에서 이 브랜치에 썼다" "13 남이 쓰지 않았으면 알리지 않는다(아래 17 의 짝)"
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "있다 있다" "13 올릴 사본은 남는다"
 assert_eq "$(gap)" "- 1줄" "13 STATUS 가 1줄"
 
@@ -224,6 +225,7 @@ FOREIGN_TIP="$(copy "$O3" "$SID2" "${MAIN_RULES}"$'\n')"   # 끝 줄바꿈은 $(
 g fetch -q origin
 assert_eq "$(g rev-parse "refs/remotes/origin/$STATE")" "$FOREIGN_TIP" "17 남이 사본을 기본 브랜치 글과 같게 고친 끝을 받아 왔다(양성 대조)"
 assert_eq "$(csync)" "0" "17 sync rc 0 — $(cat "$T/cs.txt")"
+assert_contains "$(cat "$T/cs.txt")" "[spec-distill] 다른 곳에서 이 브랜치에 썼다 — ${FOREIGN_TIP:0:8} · " "17 받아 온 남의 끝 위로 앞당겼으면 알린다(AC3)"
 assert_eq "$(g merge-base --is-ancestor "$FOREIGN_TIP" "$(stip)" && echo 위)" "위" "17 sync 가 남의 끝 위에 썼다(양성 대조)"
 assert_eq "$(g rev-parse "$(stip):$RULES")" "$(g rev-parse "origin/main:$RULES")" "17 사본은 기본 브랜치 글과 바이트까지 같다(양성 대조 — 남의 고침만이 지우지 않는 까닭)"
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "있다 있다" "17 확인되지 않은 남의 고침이면 지우지 않는다"

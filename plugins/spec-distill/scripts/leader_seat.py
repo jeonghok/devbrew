@@ -81,20 +81,22 @@ def confirm_at(root, roadmap_rel: str, session: str, tip: str) -> tuple:
     return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
 
 
-def catch_up(root, name: str, seen: Optional[str]) -> None:
+def catch_up(root, name: str, seen: Optional[str]) -> tuple:
     """로컬 상태 브랜치가 읽을 끝의 조상이면 읽을 끝으로 앞당긴다 — 쓰기(`CB.write`)는 로컬 끝에서 고침을 셈한다.
-    받아 오기는 원격 추적 ref 만 옮기므로, 앞당기지 않으면 고침이 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다."""
+    받아 오기는 원격 추적 ref 만 옮기므로, 앞당기지 않으면 고침이 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다.
+    옮겼으면 알릴 줄 하나(`CB.ELSEWHERE` — 올리기가 거절돼 다시 만들 때와 같은 꼴), 아니면 빈 튜플. 옮긴 끝은 「씀」 이 아니다."""
     local = CB.local_tip(root, name)
     if seen is None or local is None or local == seen:
-        return
+        return ()
     rc, out, err = CB.git(root, "rev-list", "-1", "%s..%s" % (seen, local))
     if rc != 0:
         raise CB._git_fail(err, "로컬 상태 브랜치와 읽을 끝을 견주지 못했다")
     if out.strip():   # 로컬에 읽을 끝에 없는 커밋이 있다 — 앞당기지 않는다(올리기가 맞춘다)
-        return
+        return ()
     rc, _o, err = CB.git(root, "update-ref", CB.ref_of(name), seen, local)
     if rc != 0:
         raise CB._git_fail(err, "로컬 상태 브랜치를 읽을 끝으로 앞당기지 못했다")
+    return (CB.ELSEWHERE % (seen[:8], CB._commit_stamp(root, seen)),)
 
 
 def _need_team(root, roadmap_rel: str, main: str) -> None:
@@ -171,7 +173,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
         raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
     if found:
         raise CB.BranchError(1, FOREIGN % len(found) + REFUSE_TAIL)
-    catch_up(root, team.name, seen)
+    moved = catch_up(root, team.name, seen)
 
     def edit(base):
         copy = base.read(team.rules)
@@ -191,12 +193,13 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
             changes[base_path] = BASE_HEAD + main + "\n"
         return changes
 
-    return CB.write(root, roadmap_rel, session, edit, "규칙 더함" if add is not None else "규칙 뺌")
+    res = CB.write(root, roadmap_rel, session, edit, "규칙 더함" if add is not None else "규칙 뺌")
+    return res._replace(notes=moved + res.notes)
 
 
 def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Result:
     seen = _read_tip(root, team.name)   # 갈라졌으면 지우지 않는다 — 로컬 끝만 보면 원격의 사본을 「없다」 고 넘긴다
-    catch_up(root, team.name, seen)
+    moved = catch_up(root, team.name, seen)
 
     def edit(base):
         if base.read(team.rules) is None and base.read(base_path) is None:
@@ -204,6 +207,7 @@ def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Res
         return {team.rules: None, base_path: None}
 
     res = CB.write(root, roadmap_rel, session, edit, "규칙 되돌림")
+    res = res._replace(notes=moved + res.notes)   # 앞당긴 알림이 먼저다 — 아래 갈래의 알림은 뒤에 붙는다
     if res.commit is None:
         return res._replace(notes=res.notes + (NO_COPY,))
     if CB.read(root, res.commit, team.rules) is not None or CB.read(root, res.commit, base_path) is not None:
