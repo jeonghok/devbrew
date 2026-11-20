@@ -282,7 +282,7 @@ class SessionNoticeAndTwoFiles(StatusRepo):
 class WindowAndFloor(StatusRepo):
     def ask(self, via, session=SID):
         def change(d):
-            d[cs.ASKING].append({"에픽": "A1", "종류": "계획 확인", "건 길": via, "언제부터": "2026-11-19 02:05 +0900", "세션": session})
+            d[cs.ASKING].append({"에픽": "A1", "종류": "계획 검토", "건 길": via, "언제부터": "2026-11-19 02:05 +0900", "세션": session})
         self.machine(change)
 
     def asking(self):
@@ -312,7 +312,7 @@ class WindowAndFloor(StatusRepo):
                                                     "언제부터": "2026-11-19 01:00 +0900", "세션": SID}))
         CS.sync(self.w, rm(ALPHA), SID, now=T0, lower_window=False)
         self.assertEqual(CS.parse_status(self.status_text()).sections["기다리는 질문"],
-                         ["로드맵 밖 · 머지 · 2026-11-19 01:00 +0900", "A1 · 계획 확인 · 2026-11-19 02:05 +0900"])
+                         ["로드맵 밖 · 머지 · 2026-11-19 01:00 +0900", "A1 · 계획 검토 · 2026-11-19 02:05 +0900"])
 
     def test_unreadable_previous_status_is_replaced_with_a_note(self):
         CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "손으로 고친 글\n"}, "심기")
@@ -330,10 +330,10 @@ class Waiting(StatusRepo):
         """뒤집으면 붉다 — sync 가 건 길을 보지 않고 다 내리면 아래 턴 끝 줄 단언이, 아무것도 내리지 않으면 첫 단언이 실패한다."""
         self.machine(lambda d: d["기다리는 질문"].append({"에픽": "A2", "기대는 일": "A1 구현", "질문": "미뤄 둔 질문"}))
         old_section = L.load(self.w, rm(ALPHA))["기다리는 질문"]
-        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(0))
         CS.waiting_add(self.w, rm(ALPHA), SID, "A2", "머지", "턴 끝", now=at(1))
-        self.assertEqual(self.rows(), [("A1", "계획 확인", "질문 창", "2026-11-19 02:30 +0900", SID), ("A2", "머지", "턴 끝", "2026-11-19 02:31 +0900", SID)])
-        self.assertIn("## 기다리는 질문\n- A1 · 계획 확인 · 2026-11-19 02:30 +0900\n- A2 · 머지 · 2026-11-19 02:31 +0900\n", self.status_text())
+        self.assertEqual(self.rows(), [("A1", "계획 검토", "질문 창", "2026-11-19 02:30 +0900", SID), ("A2", "머지", "턴 끝", "2026-11-19 02:31 +0900", SID)])
+        self.assertIn("## 기다리는 질문\n- A1 · 계획 검토 · 2026-11-19 02:30 +0900\n- A2 · 머지 · 2026-11-19 02:31 +0900\n", self.status_text())
         CS.sync(self.w, rm(ALPHA), SID, now=at(5))                    # 그 세션이 다시 돌았다 — 질문 창 줄만 내려간다
         self.assertEqual([r[:2] for r in self.rows()], [("A2", "머지")])
         self.assertIn("## 기다리는 질문\n- A2 · 머지 · 2026-11-19 02:31 +0900\n", self.status_text())
@@ -344,8 +344,8 @@ class Waiting(StatusRepo):
         self.assertNotIn("미뤄 둔 질문", self.status_text())
 
     def test_add_does_not_lower_window_rows_of_its_own_sync(self):   # J14 — add 안의 STATUS 쓰기가 줄을 내리면 방금 올린 줄이 사라진다
-        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
-        self.assertEqual([r[:3] for r in self.rows()], [("A1", "계획 확인", "질문 창")])
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(0))
+        self.assertEqual([r[:3] for r in self.rows()], [("A1", "계획 검토", "질문 창")])
         CS.waiting_clear(self.w, rm(ALPHA), SID, "A9", now=at(1))     # 내릴 줄이 없는 clear 도 질문 창 줄을 내리지 않는다
         self.assertEqual(len(self.rows()), 1)
 
@@ -358,7 +358,7 @@ class Waiting(StatusRepo):
 
     def test_window_question_is_lowered_even_when_nothing_can_be_written(self):   # J57 · AC6
         """뒤집으면 붉다 — 줄 내리기를 쓸 수 있는지 · 브랜치가 있는지 뒤에 두면 꺼진 레포와 브랜치 없는 로드맵에서 줄이 쌓이기만 한다."""
-        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(0))
         self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
         out = CS.sync(self.w, rm(ALPHA), SID, now=at(5))
         self.assertEqual((self.rows(), out.wrote), ([], False))                      # 꺼져 있어도 기계 상태의 줄은 내려간다
@@ -383,7 +383,7 @@ class Waiting(StatusRepo):
         self.assertEqual(self.rows(), [("A1", "머지", "턴 끝", "2026-11-19 02:30 +0900", SID)])
 
     def test_closed_values(self):
-        for epic, kind, via in (("a1", "머지", "턴 끝"), ("A1", "계획", "턴 끝"), ("A1", "계획 확인 ", "턴 끝"), ("A1", "머지", "창"), ("A1", "머지", "질문 창 ")):
+        for epic, kind, via in (("a1", "머지", "턴 끝"), ("A1", "계획", "턴 끝"), ("A1", "계획 검토 ", "턴 끝"), ("A1", "계획 확인", "턴 끝"), ("A1", "머지", "창"), ("A1", "머지", "질문 창 ")):
             with self.assertRaises(CB.BranchError, msg=(epic, kind, via)) as c:
                 CS.waiting_add(self.w, rm(ALPHA), SID, epic, kind, via, now=at(0))
             self.assertEqual(c.exception.rc, 2)
@@ -394,9 +394,9 @@ class Waiting(StatusRepo):
         self.assertEqual(CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", now=at(0))[0], 1)
 
     def test_command_and_switch_off(self):
-        rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1", "--kind", "계획 확인", "--via", "질문 창")
+        rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1", "--kind", "계획 검토", "--via", "질문 창")
         self.assertEqual(rc, 0, out)
-        self.assertRegex(self.status_text(), r"## 기다리는 질문\n- A1 · 계획 확인 · [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} [+-][0-9]{4}\n")
+        self.assertRegex(self.status_text(), r"## 기다리는 질문\n- A1 · 계획 검토 · [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} [+-][0-9]{4}\n")
         rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", OTHER, "--epic", "A2", "--kind", "머지", "--via", "턴 끝")
         self.assertEqual(rc, 5, out)
         rc, out = cli(self.w, "waiting", "clear", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1")

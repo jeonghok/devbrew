@@ -189,14 +189,14 @@ class Show(CrossRepo):
 
     def test_waiting_questions_of_every_roadmap_oldest_first_across_time_zones(self):
         utc = datetime.timezone.utc
-        CS.waiting_add(self.w, rm(BETA), SID, "B1", "계획 확인", "턴 끝", now=datetime.datetime(2026, 11, 18, 16, 40, tzinfo=utc))   # 01:40 +0900
+        CS.waiting_add(self.w, rm(BETA), SID, "B1", "계획 검토", "턴 끝", now=datetime.datetime(2026, 11, 18, 16, 40, tzinfo=utc))   # 01:40 +0900
         CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "spec 승인", "턴 끝", now=at(-25))                                              # 02:05 +0900
         out = CS.render_view(CS.cross_view(self.w, rm(ALPHA), now=T0), now=T0)
         block = out[out.index("사용자를 기다리는 질문 (오래된 순)\n"):out.index("온 글 ")]
-        self.assertRegex(block, r"\A사용자를 기다리는 질문 \(오래된 순\)\n- %s · B1 · 계획 확인 · [^\n]+부터   \(STATUS \d+(분|시간) 전 계산\)\n"
+        self.assertRegex(block, r"\A사용자를 기다리는 질문 \(오래된 순\)\n- %s · B1 · 계획 검토 · [^\n]+부터   \(STATUS \d+(분|시간) 전 계산\)\n"
                                 r"- 이 로드맵 · A1 · spec 승인 · [^\n]+부터\n\Z" % BETA)
         local = datetime.datetime(2026, 11, 18, 16, 40, tzinfo=utc).astimezone()
-        self.assertIn(" · B1 · 계획 확인 · %s부터" % local.strftime("%H:%M" if local.date() == T0.astimezone().date() else "%m-%d %H:%M"), block)
+        self.assertIn(" · B1 · 계획 검토 · %s부터" % local.strftime("%H:%M" if local.date() == T0.astimezone().date() else "%m-%d %H:%M"), block)
 
     def test_status_age_missing_branch_and_unreadable_status(self):
         CS.sync(self.w, rm(BETA), SID, now=T0)

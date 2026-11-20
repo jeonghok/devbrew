@@ -19,6 +19,7 @@ sys.path.insert(0, str(PLUGIN / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import conductor_branch as CB  # noqa: E402
 import conductor_ledger as L  # noqa: E402
+import human_lines as HL  # noqa: E402
 import control_plane as cp  # noqa: E402
 import team_layout as TL  # noqa: E402
 from conductor_branch_fixture import ALPHA, ENV, ROADMAPS, SID, StateRepo, rm, roadmap_text  # noqa: E402
@@ -73,6 +74,9 @@ class Procedure(unittest.TestCase):
         for code in ("| 0 | 썼다", "| 1 | 없음", "| 2 | 사용법", "| 3 | 읽지 못함", "| 5 | 표지를 쥔 세션이 아니다"):
             self.assertIn(code, text, code)
         self.assertNotIn("이 절차 전부를 건너뛴다", text)
+        self.assertIn("종류는 사람 줄의 종류와 같은 이름을 쓴다(`spec 승인` · `계획 검토` · `흐름 승인` · `걸음 건너뜀`). 사람 줄이 없는 질문은 `설계 대화` · `옮긴 질문` · `머지` 로 적고, 그 밖의 것(감사 같은)은 `그 밖` 이다.", text)
+        self.assertEqual(cs.ASK_KINDS[1:5], ("spec 승인", "계획 검토", "흐름 승인", "걸음 건너뜀"))   # 글자 리터럴 — 사람 줄의 종류와 같은 글자
+        self.assertEqual(cs.ASK_KINDS[1:5], HL.KINDS)
         self.assertNotIn("AskUserQuestion", text)   # 확인 질문은 문장으로 적는다 — 질문 자리 목록에 행을 더하지 않는다(J43)
 
     def test_conducting_steps_carry_the_sentences(self):
@@ -218,7 +222,7 @@ class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명�
         self.assertIn(self.NOTE, before[3][1])                                # pending 이 심은 줄을 낸다(「쌓인 기록 없음」 이 아니다)
         self.assertIn(self.RES_PATH, before[4][1])                            # resources 가 심은 줄을 낸다(「없음」 이 아니다)
         CB.ensure(self.w, rm(ALPHA), SID)
-        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "턴 끝")
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "턴 끝")
         CS.sync(self.w, rm(ALPHA), SID)
         self.assertTrue(CB.local_tip(self.w, CB.roadmap_name(rm(ALPHA))))   # 양성 대조 — 상태 브랜치가 실제로 섰다
         self.assertEqual(self.outputs(), before)
