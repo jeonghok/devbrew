@@ -833,5 +833,12 @@ put src/e1/a.txt "받은 뒤 고친 코드" && step "r5 고침" || fail_step "r5
 assert_eq "$(st E1)" "구현 중" "r5: 예약 경로 파일을 고치고 되돌리지 않으면 구현 중"
 assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/a.txt" "r5: 알림에 그 경로"
 back "$RAT"
+printf '끝난 코드\r\n' > "$W/src/e1/a.txt" && step "r6 줄바꿈만" || fail_step "r6 줄바꿈만"
+assert_eq "$(st E1)" "구현 중" "r6: 줄바꿈만 바꾼 예약 경로 파일도 받은 뒤 바뀜이다(객체 번호로 견준다)"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/a.txt" "r6: 알림에 그 경로"
+back "$RAT"
+printf '\377\n' > "$W/src/e1/a.txt" && g add -- src/e1/a.txt && g commit -qm "r7 바이트 하나" && printf '\376\n' > "$W/src/e1/a.txt" && step "r7 다른 바이트" || fail_step "r7 다른 바이트"
+assert_eq "$(st E1)" "구현 중" "r7: 읽을 수 없는 바이트로 바뀐 예약 경로 파일(디코드하면 같아 보인다)도 받은 뒤 바뀜이다"
+back "$RAT"
 use_repo "$T0"
 finish

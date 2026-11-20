@@ -234,16 +234,26 @@ def _kept(path: str, job_dir: str, design: str, outputs: list) -> bool:
     return any(path == o or path.startswith(o.rstrip("/") + "/") for o in outputs)
 
 
+def _oid(git, rev: str, path: str):
+    """그 판의 그 경로가 가리키는 객체 번호 — 읽히지 않으면 None(없음과 읽지 못함을 가르지 않는다)."""
+    rc, out = git.run("rev-parse", "--verify", "%s:%s" % (rev, path))
+    return out.strip() if rc == 0 and out.strip() else None
+
+
 def _same_since(git, head: str, tip: str, path: str) -> bool:
-    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 설계 파일 · 계획 파일 · INTENT.md 는 body_of 의 본문으로, 그 밖은 글 전체로 견준다.
-    둘 다 없으면 같다 · 하나만 없거나 git 이 읽지 못했으면 다르다(낡음 쪽 — 닫는 쪽)."""
-    before, now = git.blob(head, path), git.blob(tip, path)
-    if before is None or now is None:
-        return before is None and now is None
+    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 설계 파일 · 계획 파일 · INTENT.md 는 body_of 의 본문으로 견주고,
+    그 밖은 객체 번호로 견준다(바이너리 · 링크 · 줄바꿈까지 그대로). 읽지 못한 쪽이 있으면 부재를 git 에 확인해
+    양쪽 다 확인된 부재일 때만 같다 — git 이 읽지 못한 것은 다르다(낡음 쪽 — 닫는 쪽)."""
     name = path.rsplit("/", 1)[-1]
     if name in (team_layout.DESIGN_FILE, team_layout.INTENT_FILE) or team_layout.plan_number(name) is not None:
-        return human_lines.body_of(name, before) == human_lines.body_of(name, now)
-    return before == now
+        before, now = git.blob(head, path), git.blob(tip, path)
+        if before is not None and now is not None:
+            return human_lines.body_of(name, before) == human_lines.body_of(name, now)
+    else:
+        before, now = _oid(git, head, path), _oid(git, tip, path)
+        if before is not None and now is not None:
+            return before == now
+    return git.absent(head, path) and git.absent(tip, path)
 
 
 def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: str, plan,
