@@ -2,7 +2,7 @@
 
 지휘 세션이 qg 리뷰 자리에 닿았을 때 따르는 절차다.
 
-`<SD>` · `<로드맵>` · `<세션>` · `ledger <명령>` 은 플러그인 `references/conducting.md` 의 정의를 쓴다.
+`<SD>` · `<로드맵>` · `<세션>` · `ledger <명령>` 은 `${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 정의를 쓴다.
 
 ## 호출 줄
 
@@ -83,7 +83,7 @@ skill 목록에 `quality-gates:quality-pipeline` 이 없으면 그 자리마다 
 
 ### 보내는 글
 
-플러그인 `references/conductor-dispatch.md` 의 「늘 싣는 것」 가운데 자리 · 임시 폴더 · 금지 · 스위트 잠금 줄을 그대로 싣고 아래 틀을 더한다. 자리 줄 가운데 에픽 브랜치에 서는 말은 틀의 첫 줄로 대신한다 — qg 담당자는 브랜치를 쥐지 않는다. 칸(`<…>`)은 채워서 싣는다.
+`${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md` 의 「늘 싣는 것」 가운데 자리 · 임시 폴더 · 금지 · 스위트 잠금 줄을 그대로 싣고 아래 틀을 더한다. 자리 줄 가운데 에픽 브랜치에 서는 말은 틀의 첫 줄로 대신한다 — qg 담당자는 브랜치를 쥐지 않는다. 칸(`<…>`)은 채워서 싣는다.
 
 ```text
 너는 qg 리뷰 담당자다. 자리: 네 격리 worktree 에서 `git fetch origin` 뒤 `git switch --detach origin/HEAD` 로 기본 브랜치 끝에 선다(브랜치를 쥐지 않는다). 원문 파일은 그 커밋에 있다.
