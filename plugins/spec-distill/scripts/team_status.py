@@ -12,7 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import branch_tip  # noqa: E402
+import human_lines  # noqa: E402
 import job_results  # noqa: E402
+import repo_defaults  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from roadmap_model import FormatError, approval_in, field_list, field_text  # noqa: E402
@@ -68,6 +70,7 @@ class Reader:
         self.git, self.main, self.team, self.read_default = git, main, team, read_default
         self.absent_default = absent_default
         self._shallow = []
+        self._gate = []
 
     def shallow(self):
         """얕은 클론이면 사유 한 줄, 아니면 None — 한 번만 묻는다. 묻지 못해도 셀 수 없음으로 본다."""
@@ -79,6 +82,31 @@ class Reader:
             self._shallow.append(None if word == "false" and rc == 0 else
                                  SHALLOW if word == "true" and rc == 0 else "얕은 클론인지 읽지 못했다")
         return self._shallow[0]
+
+    def gate_on(self) -> bool:
+        """사람 줄 관문이 켜져 있는가 — 처음 불릴 때 레포 설정을 읽어 둔다. 설정을 읽지 못하면 켜진 것이다(J19)."""
+        if not self._gate:
+            try:
+                resolved = repo_defaults.resolve(self.git.cwd)
+                self._gate.append(bool(resolved["errors"]) or repo_defaults.gate_on(resolved["values"]))
+            except repo_defaults.SettingsError:
+                self._gate.append(True)
+        return self._gate[0]
+
+    def job_tips(self, branches: list) -> list:
+        """그 과제 블록 브랜치들의 끝(read_tip 이 고른 것 — 끝이 없거나 갈라진 브랜치는 뺀다) 뒤에 기본 브랜치 커밋, 겹침 없이."""
+        out = []
+        for name in branches:
+            commit = read_tip(self.git, name)[0]
+            if commit and commit not in out:
+                out.append(commit)
+        if self.main and self.main not in out:
+            out.append(self.main)
+        return out
+
+    def scope(self, tip: str, job: str, branches: list) -> human_lines.Scope:
+        lines, _notes = human_lines.collect(self.git, self.team, job, [tip] + self.job_tips(branches))
+        return human_lines.Scope(self.git, self.team, job, tip, lines, self.gate_on())
 
     def read(self, tree, path: str):
         return self.read_default(path) if tree is None else self.git.blob(tree, path)
@@ -270,6 +298,10 @@ class Reader:
         """(단계, 근거, 설계문서들, 계획들) — 브랜치 하나의 끝(tip)에서 그 과제의 단계(설계 §10). plan 은 그 브랜치가
         블록 `브랜치:` 의 몇 번째인가(1 부터). block 의 approved · progress · job 을 채우고 알림을 notes 에 더한다."""
         team, job = self.team, block["id"]
+        if not self.gate_on():   # 도는 과제마다 첫 알림 줄(J10) — 흐름을 가르기 전에
+            notes = block.setdefault("notes", [])
+            if human_lines.GATE_OFF not in notes:
+                notes.insert(0, human_lines.GATE_OFF)
         plain = self.flow(block) == PLAIN_FLOW
         number = None if plain else plan
         intent_path = team.intent(job)
@@ -316,22 +348,69 @@ class Reader:
             if state == job_results.RECEIVED:
                 return received, "결과 받음 줄 있음: %s" % latest, specs, plans
             return running, "브랜치 있음", specs, plans
-        when, why = self._approval(intent)
-        block["approved"] = when
+        _when, why = self._approval(intent)
         if why:
+            block["approved"] = None
             return "설계 중", RECORD_UNREAD + why, specs, plans
-        if not when:
+        got, no = human_lines.passed(self.scope(tip, job, block.get("branches") or []), human_lines.KIND_SPEC, None, deep=False)
+        when = got.date if got else None
+        block["approved"] = when
+        if got is None:
             design = team_layout.DESIGN_FILE
+            if no != human_lines.NO_LINE:
+                return "설계 중", "%s 있음 · spec 승인 줄이 지나지 못했다 — %s" % (design, no), specs, plans
             return "설계 중", ("%s 있음 · spec 승인 줄 없음" % design if specs else "브랜치 있음 · %s 없음" % design), specs, plans
+        word = "승인 건너뜀" if got.skipped else "승인됨"   # 건너뜀 줄로 지났으면 근거의 앞머리가 다르다
         if latest is None:
             if state == job_results.NOT_COUNTED:   # 결과 폴더를 읽지 못했다 — 「결과 파일 없음」 이라고 하지 않는다
                 return UNKNOWN, "%s 를 읽지 못했다" % team.results(job), specs, plans
-            return "계획", "spec 승인됨(%s) · %s %s · %s 결과 파일 없음" % (
-                when, team_layout.plan_name(plan), "있음" if plans else "없음", IMPLEMENT), specs, plans
+            return "계획", "spec %s(%s) · %s %s · %s 결과 파일 없음" % (
+                word, when, team_layout.plan_name(plan), "있음" if plans else "없음", IMPLEMENT), specs, plans
         if state == job_results.RECEIVED:
             return "구현 끝", "결과 받음 줄 있음: %s" % latest, specs, plans
         self._fill_progress(block, latest, path, result)
         return "구현 중", "%s 결과 파일 있음: %s" % (IMPLEMENT, latest), specs, plans
+
+
+# ── 머지된 계획(J11) ─────────────────────────────────────────────────────────
+
+NOT_COUNTED_AS_MERGED = "상태 보기는 이 브랜치를 머지로 세지 못한다"
+
+
+def plan_merged(reader, block: dict, n: int) -> tuple:
+    """(머지 근거 | None, 셀 수 없는 사유 | None) — 블록의 n 번째 계획(설계 없는 흐름은 첫째 브랜치)의 브랜치가 머지됐는가.
+
+    상태 보고의 branch_states 를 쓰고, 끝이 로컬에도 origin 에도 없는데 기본 브랜치에 그 계획의 자취(설계 흐름은 계획 파일,
+    설계 없는 흐름은 implement 결과 파일)가 있으면 머지돼 지워진 것으로 읽는다 — 이 갈래는 상태 보기가 머지로 세지 못한다.
+
+    block 은 상태 보고의 블록에 로드맵 블록의 `fields` 를 더한 것이다(흐름을 가르는 데 Reader.flow 가 쓴다)."""
+    states = block.get("branch_states") or []
+    if n < 1 or n > len(states):
+        return None, None
+    state = states[n - 1]
+    if state.get("uncountable"):
+        return None, state["uncountable"]
+    if state.get("merged"):
+        return state["merged"], None
+    if state.get("tip") is not None or not reader.main:
+        return None, None
+    job, team, git = block["id"], reader.team, reader.git
+    if reader.flow(block) == PLAIN_FLOW:
+        names = job_results.result_names(git, reader.main, team, job)
+        if names is None:
+            return None, "기본 브랜치의 결과 폴더를 읽지 못했다: %s" % team.results(job)
+        trace = [team.job(job, team_layout.RESULTS_DIR, x) for x in names
+                 if team_layout.parse_result_name(x)[0] == IMPLEMENT]
+        path = trace[0] if trace else None
+    else:
+        path = team.plan(job, n)
+        if not git.exists(reader.main, path):
+            if not git.absent(reader.main, path):
+                return None, "기본 브랜치의 %s 를 읽지 못했다" % path
+            path = None
+    if path is None:
+        return None, None
+    return "브랜치는 없고 기본 브랜치에 %s 가 있다 — %s" % (path, NOT_COUNTED_AS_MERGED), None
 
 
 # ── 로드맵 밖 과제(kind: task) ───────────────────────────────────────────────

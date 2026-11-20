@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
-# source 하면 S · RW · RS · W · g · js · status · put · decide · sync 가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
+# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · push_br · push_main · rcheck · reasons · hand_result · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
 RS="$S/roadmap_status.py"
 W="$T/repo"
+SID="00000000-0000-4000-8000-00000000c0de"          # 지휘 표지를 쥔 가짜 세션
+SID2="00000000-0000-4000-8000-00000000c0df"         # 그 세션을 이어받은 가짜 세션
+export CLAUDE_CONFIG_DIR="$T/claude"                  # 세션 기록 자리 — 실제 설정 폴더를 읽지 않는다
+export TZ=UTC                                         # 사람 줄의 날짜는 답한 시각의 지역 날짜다 — 테스트는 UTC 로 고정한다
+CL="$S/conductor_ledger.py"
+SFX="$ROOT/plugins/spec-distill/tests/fixtures/session_fixture.py"
 
 g() { git -C "$W" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c init.defaultBranch=main "$@"; }
 # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 부르는 테스트가 쓴 고정 문자열뿐이다.
@@ -35,6 +42,85 @@ sync() {  # sync <과제> <결과 파일 이름> <job sync 인자…> — 그 �
   local job="$1" name="$2"; shift 2
   (cd "$W" && python3 "$RW" job sync --result "$TM/jobs/${job}/results/${name}" "$@") > "$T/out.txt" 2>&1
   echo $?
+}
+
+led() { (cd "$W" && python3 "$CL" "$@") > "$T/led.txt" 2>&1; echo $?; }   # 지휘 원장 명령 — rc 를 echo, 출력은 $T/led.txt
+claim() { [ "$(led claim --roadmap "$RM" --session "$SID")" = "0" ]; }
+answer() {  # answer <질문 글> <고른 글> [session_fixture answer 의 나머지 인자…] — 지휘 세션 기록에 질문 창 답 하나를 덧붙인다. 답 항목의 uuid 는 $T/entry.txt
+  local q="$1" a="$2"; shift 2
+  python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID" --question "$q" --label "$a" "$@" > "$T/entry.txt"
+}
+human() {  # human <종류> <과제> [계획|-] [관문 이름|-] [날짜] — 머리를 받아 통과 라벨로 답한 기록을 짓고 줄을 적는다. 날짜를 주면 그날 낮 12시(UTC)에 답한 것으로 짓는다. rc 를 echo(커밋은 부르는 쪽)
+  # 관문 이름에 계획 번호가 있으면 --plan 으로도 넘긴다 — 그 계획의 브랜치에 쓴다(J7). 머리는 ask-head 의 표준 출력에서만 받는다.
+  local kind="$1" job="$2" plan="${3:--}" gate="${4:--}" date="${5:-}" label head q rc
+  case "$kind" in
+    "spec 승인") label="승인 — 계획 담당자에게 (권장)" ;;
+    "계획 검토") label="계획대로 구현한다" ;;
+    "흐름 승인") label="설계 없이 진행" ;;
+    *) case "$gate" in "다시 시도"*) label="다시 시도한다" ;; *) label="건너뛴다" ;; esac ;;
+  esac
+  if [ "$plan" = "-" ] && [ "$gate" != "-" ]; then
+    plan="$(printf '%s\n' "$gate" | sed -n 's/.* plan \([1-9][0-9]*\).*/\1/p')"
+    [ -n "$plan" ] || plan="-"
+  fi
+  set -- --human "$kind" --roadmap "$RM" --job "$job"
+  [ "$plan" = "-" ] || set -- "$@" --plan "$plan"
+  head="$(cd "$W" && python3 "$CL" ask-head "$@" 2> "$T/led.txt")"; rc=$?
+  if [ "$rc" != "0" ]; then echo "ask-head 실패(rc ${rc}) — ${head} $(cat "$T/led.txt")" >&2; echo 1; return; fi
+  if [ "$gate" = "-" ]; then q="${head} — 자리표시 질문"; else q="${head} — ${gate} 자리표시 질문"; set -- "$@" --gate "$gate"; fi
+  if [ -n "$date" ]; then answer "$q" "$label" --when "${date}T12:00:00.000Z"; else answer "$q" "$label"; fi
+  led record "$@"
+}
+approved() {  # approved <human 의 인자…> — 줄을 적고 그 과제의 INTENT.md 를 커밋한다
+  [ "$(human "$@")" = "0" ] && g add -- "$TM/jobs/$2/INTENT.md" && g commit -qm "$1 — $2"
+}
+
+bundle() {  # bundle <start_bundle 인자…> — W 에서 과제 시작 묶음을 불러 rc 를 echo 한다. 출력은 $T/b.txt · 표준 오류는 $T/b.err
+  (cd "$W" && python3 "$S/start_bundle.py" --roadmap "$RM" "$@") > "$T/b.txt" 2> "$T/b.err"; echo $?
+}
+refused() { [ "$(bundle "$@")" = "1" ] && [ ! -s "$T/b.txt" ]; }   # 멈춤(1)이고 표준 출력이 빈다
+check() {  # check <기대 rc> <메시지> <bundle 인자…> — rc 를 재고, 0 이 아니면 표준 출력이 빈 것도 잰다
+  local want="$1" msg="$2"; shift 2
+  assert_eq "$(bundle "$@")" "$want" "$msg"
+  [ "$want" = "0" ] || assert_eq "$(wc -c < "$T/b.txt" | tr -d ' ')" "0" "$msg — 표준 출력이 비었다"
+}
+finish_attempt() {  # finish_attempt <k> [AC 줄] — E1 의 implement 계획 1 시도 k: 묶음의 맞추는 명령 줄 그대로 결과 파일을 만들고, 준 줄을 넣고, 끝 줄을 적어 올린다(feature/tm-e1)
+  local k="$1" ac="${2:-}" cmd code E1="$TM/jobs/E1"
+  g checkout -q feature/tm-e1
+  [ "$(bundle --job E1 --stage implement --plan 1)" = "0" ] || { echo "finish_attempt ${k}: 묶음이 나가지 않았다 — $(cat "$T/b.err")" >&2; return 1; }
+  cmd="$(grep '^맞추는 명령: ' "$T/b.txt")"
+  (cd "$W" && bash -c "${cmd#맞추는 명령: }") > "$T/out.txt" 2>&1 || { echo "finish_attempt ${k}: 맞추기 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  put "src/e1/a${k}.txt" "시도 ${k}" && g commit -qm "시도 ${k} 코드" && code="$(g rev-parse HEAD)"
+  [ -z "$ac" ] || printf '%s\n' "$ac" >> "$W/$E1/results/implement-plan-1-${k}.md"
+  [ "$(sync E1 "implement-plan-1-${k}.md" --end "$code")" = "0" ] || { echo "finish_attempt ${k}: 끝 줄 실패 — $(cat "$T/out.txt")" >&2; return 1; }
+  g add -- "$E1" && g commit -qm "결과 ${k}" && g push -q origin feature/tm-e1 && g fetch -q origin
+}
+write_line() { sed -n 's/^쓸 것: //p' "$T/b.txt"; }   # 마지막 bundle 이 낸 쓸 것 줄의 경로
+push_br() { g push -q origin "$1" && g fetch -q origin; }   # push_br <브랜치> — 올리고 받아 둔다
+push_main() { g push -q origin main && g fetch -q origin; }
+rcheck() { (cd "$W" && python3 "$S/job_results.py" check --roadmap "$RM" "$@" --date 2026-11-30) > "$T/c.txt" 2>&1; local rc=$?; [ -z "${DBG:-}" ] || { echo "--- rcheck $* rc=$rc" >&2; cat "$T/c.txt" >&2; }; echo "$rc"; }
+reasons() { grep '^거절 사유: ' "$T/c.txt"; }
+hand_result() {  # hand_result <과제> <단계> <계획|-> <시도> [본문 줄…] — 지금 브랜치에 끝까지 쓴 결과 파일을 올린다(시작 묶음 없이 띄워진 담당자)
+  local job="$1" stage="$2" plan="$3" k="$4" name head dir="$W/$TM/jobs/$1/results" planline=""
+  shift 4
+  head="$(g rev-parse HEAD)"
+  if [ "$plan" = "-" ]; then name="${stage}-${k}.md"; else name="${stage}-plan-${plan}-${k}.md"; planline="plan: ${plan}"; fi
+  mkdir -p "$dir"
+  { printf -- '---\ntype: job-result\nstage: %s\n' "$stage"; [ -z "$planline" ] || printf '%s\n' "$planline"
+    printf 'attempt: %s\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\n' "$k" "$head" "$head" "$head"
+    for l in "$@"; do printf '%s\n' "$l"; done; printf '끝 — %s\n' "$head"; } > "$dir/$name"
+  g add -- "$TM/jobs/$job/results" && g commit -qm "${job} ${name}" && push_br "$(g symbolic-ref --short HEAD)"
+}
+
+use_repo() {  # use_repo <폴더> — 그 폴더에 선 팀 레포를 쓰도록 T · W · CLAUDE_CONFIG_DIR 를 옮긴다
+  T="$1"; W="$T/repo"; CLAUDE_CONFIG_DIR="$T/claude"; export CLAUDE_CONFIG_DIR
+}
+new_repo() {  # new_repo <새 폴더> — 새 팀 레포를 세우고 공통 문서를 기본 브랜치에 올리고 지휘 표지를 쥔다. use_repo 도 한다
+  mkdir -p "$1" || return 1
+  use_repo "$1"
+  team_repo || return 1
+  g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" && g commit -qm "공통 문서" \
+    && g push -q origin main && g fetch -q origin && claim
 }
 
 team_repo() {

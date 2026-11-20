@@ -37,15 +37,23 @@ ROADMAPS_DIR = "docs/superpowers/roadmaps/"
 INTERVIEW_DIR = "docs/superpowers/interview/"
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
+HUMAN_GATE_ON = "켬"
+HUMAN_GATE_OFF = "끔"
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS
+        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("human_gate",)
 ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
 _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
-             "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET}
+             "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET,
+             "human_gate": HUMAN_GATE_ON}
+
+
+def gate_on(values: dict) -> bool:
+    """사람 줄 관문이 켜져 있는가 — 값이 없거나 깨져 None 이어도 켜진 것이다. 환경은 읽지 않는다."""
+    return values.get("human_gate") != HUMAN_GATE_OFF
 
 
 def _unquote(value: str) -> str:
@@ -237,6 +245,14 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                     out["sources"][key] = "기본값(머리말 값이 깨졌다)"
                     out["warnings"].append("%s: 바이트 예산은 1 이상의 정수다(%s: %r) — 기본 %d 으로 센다"
                                            % (at, key, value, _DEFAULTS[key]))
+            elif key == "human_gate":
+                value = _unquote(raw)
+                if value in (HUMAN_GATE_ON, HUMAN_GATE_OFF):
+                    out["values"][key] = value
+                else:
+                    out["values"][key] = None
+                    out["errors"].append("%s: human_gate 는 %s · %s 가운데 하나다(%r) — 값을 고치거나 키를 지운다"
+                                         % (at, HUMAN_GATE_ON, HUMAN_GATE_OFF, value))
             elif key == "parallel_default":
                 value = _unquote(raw)
                 if value.isascii() and value.isdigit() and int(value) >= 1:

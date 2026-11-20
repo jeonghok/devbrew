@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import human_lines  # noqa: E402
 import job_results  # noqa: E402
 import repo_defaults  # noqa: E402
 import roadmap_status  # noqa: E402
@@ -39,7 +40,15 @@ NO_BRANCH = "과제 브랜치 %s 가 아직 없다 — 과제 폴더를 기준 �
 NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 브랜치가 없다"
 ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
-SYNC_LINE = "맞추는 명령: roadmap_write.py job sync --result %s --role %s --bundle-at %s --job-at %s"
+SYNC_LINE = "맞추는 명령: python3 %s job sync --result %s --role %s --bundle-at %s --job-at %s"
+MERGED_PLAN = "%s 는 이미 기본 브랜치에 머지됐다(%s) — 머지 뒤에 고칠 일은 새 계획이나 새 과제로 연다"
+UNMERGED_UNKNOWN = "머지 여부를 확인하지 못했다: %s"
+
+
+def sync_line(write: str, role: str, bundle_at: str, job_at: str) -> str:
+    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13)."""
+    words = [roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py"))]
+    return SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
 
 
 class Refused(Exception):
@@ -130,7 +139,7 @@ def attempt_of(names: list, read, stage: str, number: Optional[int]) -> tuple:
     attempt = team_layout.parse_result_name(latest)[2]
     text = read(latest)
     result = team_files.parse_result(text) if text is not None else None
-    if result is None or result.problems or result.end is not None:
+    if not job_results.in_progress(result):
         attempt += 1
     earlier = [n for n in names if (team_layout.parse_result_name(n) or (None, None, attempt))[2] < attempt]
     return attempt, job_results.newest(earlier, stage, number)
@@ -180,7 +189,9 @@ def _task(reader, blocks: list, job: str) -> dict:
 
 
 def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tuple:
-    """(과제 브랜치 커밋, 흐름이 설계 없는 흐름인가, 단순 작업인가, 알림들).
+    """(과제 브랜치 커밋, 흐름이 설계 없는 흐름인가, 단순 작업인가, 알림들, 그 과제의 브랜치 이름들).
+
+    브랜치 이름들은 블록 `브랜치:` 칸 전부(로드맵 밖 과제는 그 과제의 브랜치 하나)이고 관문의 줄을 모을 때 쓴다.
 
     에픽은 블록 `브랜치:` 의 plan 번째(없으면 첫째, I12), 단순 작업은 INTENT.md 머리 branch(I8). 끝은 read_tip 이 고른다."""
     reader = _reader(git, base)
@@ -188,7 +199,7 @@ def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tupl
     if block is None:
         task = _task(reader, blocks, job)
         commit, notices = _branch_commit(git, base, task["branch"])
-        return commit, True, True, notices
+        return commit, True, True, notices, [task["branch"]]
     plain = reader.flow(block) == team_status.PLAIN_FLOW
     branches = block.get("branches") or []
     if not branches:
@@ -197,7 +208,7 @@ def locate(git, base: Base, blocks: list, job: str, plan: Optional[int]) -> tupl
     if n > len(branches):
         raise Refused("블록 %s 의 브랜치 칸에 %d 번째 브랜치가 없다(브랜치 %d개)" % (job, n, len(branches)))
     commit, notices = _branch_commit(git, base, branches[n - 1])
-    return commit, plain, False, notices
+    return commit, plain, False, notices, list(branches)
 
 
 def _plan_rule(stage: str, plan: Optional[int], plain: bool) -> None:
@@ -278,6 +289,36 @@ def _read_list(git, base: Base, job: str, stage: str, names: list) -> list:
     return read + [team.plan(job, n) for n in sorted(n for n in map(team_layout.plan_number, names) if n is not None)]
 
 
+def _merged_stop(git, base: Base, blocks: list, job: str, plan: Optional[int], plain: bool) -> None:
+    """블록의 과제라면 그 계획이 이미 기본 브랜치에 머지됐는지 본다(J30 — 단계를 가리지 않는다). 머지됐으면 Refused,
+    확인하지 못하면 Unchecked(검사 불가 3 — 사람 줄 관문이 아니다)."""
+    block = _block(blocks, job)
+    if block is None:
+        return
+    report = roadmap_status.build(git, argparse.Namespace(roadmap=base.team.roadmap, roadmap_file=None, json=False))
+    mine = next((b for b in report.get("blocks", []) if b.get("id") == job), None)
+    if mine is None:
+        raise Unchecked(UNMERGED_UNKNOWN % "상태 보고에 그 블록이 없다")
+    n = plan or 1
+    basis, why = team_status.plan_merged(_reader(git, base), dict(mine, fields=block["fields"]), n)
+    if why:
+        raise Unchecked(UNMERGED_UNKNOWN % why)
+    if basis:
+        raise Refused(MERGED_PLAN % (job if plain else "%s 의 계획 %d" % (job, n), basis))
+
+
+def _streak_stop(git, commit: str, team, job: str, scope, intent: str, number: Optional[int], attempt: int) -> None:
+    """구현 단계에서 앞 시도 둘이 이어서 받아지지 않았고 이 시도를 푸는 `걸음 건너뜀` 줄도 없으면 Refused."""
+    try:
+        failed = job_results.failed_attempts(git, commit, team, job, intent, number, attempt)
+    except job_results.Unchecked as exc:
+        raise Unchecked(str(exc))
+    if len(failed) >= human_lines.RETRY_STOP and not human_lines.retry_open(scope, number, attempt, deep=True):
+        raise Refused("구현 시도 %d번이 이어서 받아지지 않았다(%s) — 사용자에게 가서 다시 할지 정한다. 다시 하기로 하면 "
+                      "질문 창으로 확인받고 `걸음 건너뜀` 줄(%s)을 적는다"
+                      % (len(failed), " · ".join(reversed(failed)), human_lines.retry_name(number, attempt)))
+
+
 def _job_bundle(a) -> str:
     git = roadmap_status.Git(os.getcwd())
     base = open_base(git, a.roadmap)
@@ -286,10 +327,23 @@ def _job_bundle(a) -> str:
     block = _block(blocks, job)
     if block is not None:   # 흐름을 아는 블록은 브랜치를 고르기 전에 인자부터 본다
         _plan_rule(stage, a.plan, _reader(git, base).flow(block) == team_status.PLAIN_FLOW)
-    commit, plain, simple, notices = locate(git, base, blocks, job, a.plan)
+    commit, plain, simple, notices, branches = locate(git, base, blocks, job, a.plan)
     _plan_rule(stage, a.plan, plain)
+    _merged_stop(git, base, blocks, job, a.plan, plain)
     intent_path = team.intent(job)
     intent = _intent(git, commit, intent_path, job, team.roadmap)
+    reader = _reader(git, base)
+    scope = reader.scope(commit, job, branches)
+    reasons = human_lines.missing(scope, stage, a.plan, plain, deep=True)
+    if reasons:
+        n = a.plan or 1
+        if (not simple and n > 1 and len(branches) >= n and notices[:1] == [NO_BRANCH % branches[n - 1]]
+                and human_lines.UNCHECKED in reasons[0]):   # 그 계획의 브랜치가 아직 없어 기준 커밋에서 설계를 못 읽었다
+            raise Refused("%s — 계획 %d 의 브랜치 %s 가 아직 없다: %s 의 끝에서 그 브랜치를 만들거나 앞 계획을 먼저 머지한 뒤 다시 부른다"
+                          % (reasons[0], n, branches[n - 1], branches[0]))
+        raise Refused(reasons[0])
+    if not scope.gate_on:
+        notices = [human_lines.GATE_OFF] + notices
     names = git.names(commit, team.job(job))
     results = job_results.result_names(git, commit, team, job)
     if names is None or results is None:
@@ -308,9 +362,11 @@ def _job_bundle(a) -> str:
         attempt, previous = attempt_of(results, lambda name: git.blob(commit, result_path(name)), stage, number)
         if previous:
             read.append(result_path(previous))
+        if stage == team_layout.STAGES[2]:
+            _streak_stop(git, commit, team, job, scope, intent, number, attempt)
         write = team.result(job, stage, attempt, number)
         role = a.role or team_layout.default_role(stage)
-        tail = ["쓸 것: %s" % write, SYNC_LINE % (write, role, base.commit, commit)]
+        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit)]
         if stage == DESIGN:
             tail.append("쓸 자리: %s" % place_sentence(team.design(job), stage))
         elif stage == PLAN:
@@ -357,8 +413,8 @@ def _check_args(a) -> None:
     problem = team_layout.job_name_problem(a.job)
     if problem:
         raise Usage(problem)
-    if a.role == leader:
-        raise Usage("과제 묶음에는 --role %s 를 주지 않는다" % leader)
+    if a.role == leader and a.stage != DESIGN:
+        raise Usage("과제 묶음의 --role %s 는 %s 단계에서만 준다" % (leader, DESIGN))
     if a.stage == DESIGN and a.plan is not None:
         raise Usage("%s 단계에는 --plan 을 주지 않는다" % DESIGN)
     if a.stage == REVIEW and a.role is not None:

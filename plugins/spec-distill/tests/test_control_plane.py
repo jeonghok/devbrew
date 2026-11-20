@@ -1198,7 +1198,8 @@ class CodeStampClosure(unittest.TestCase):   # Q24 — 목록을 고르지 않�
     def test_every_module_the_status_computation_loads_is_stamped(self):
         need = self.closure("roadmap_status.py")
         self.assertEqual(sorted(need - set(cp.CODE_STAMP_FILES)), [])
-        for name in ("team_status.py", "job_results.py", "team_files.py", "team_check.py", "workflow_superpowers.py", "branch_tip.py"):
+        for name in ("team_status.py", "job_results.py", "team_files.py", "team_check.py", "workflow_superpowers.py", "branch_tip.py",
+                     "human_lines.py", "session_record.py"):
             self.assertIn(name, need)   # 양성 대조 — 도출이 새 모듈에 닿는다
 
 

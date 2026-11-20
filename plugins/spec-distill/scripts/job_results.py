@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import human_lines  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from check_bundle_coverage import AC_TOKEN_RE, acceptance_ids, check_impl  # noqa: E402
@@ -162,8 +163,11 @@ def _output_check(git, r, problems: list) -> str:
     return "산출물 %d개" % len(r.outputs)
 
 
-def check_result(git, tip: str, team, job: str, name: str) -> Check:
-    """tip 의 결과 파일 name 을 대조한다. 사유는 모두 모아 problems 에, 읽지 못한 것은 unknown 에 한 줄씩 둔다."""
+def check_result(git, tip: str, team, job: str, name: str, newer_ok: bool = False, extra=()) -> Check:
+    """tip 의 결과 파일 name 을 대조한다. 사유는 모두 모아 problems 에, 읽지 못한 것은 unknown 에 한 줄씩 둔다.
+
+    newer_ok 가 참이면 「더 새 시도가 있다」 사유 하나만 넣지 않는다(앞 시도의 받음을 다시 잴 때 — 다른 사유는 그대로).
+    extra 는 부르는 쪽이 정한 거절 사유(사람 줄 관문)다 — 본문 사유 뒤에 더하고 첫 줄의 건수에 센다."""
     failed_before = len(git.failures)
     problems, unknown, r, tail = [], [], None, None
     parsed = team_layout.parse_result_name(name)
@@ -177,8 +181,9 @@ def check_result(git, tip: str, team, job: str, name: str) -> Check:
                 problems.append("그 끝(%s)에 결과 파일이 없다: %s" % (_short(tip), path))
         else:
             r = team_files.parse_result(text)
-            tail = _check_body(git, tip, team, job, name, parsed, r, problems, unknown)
+            tail = _check_body(git, tip, team, job, name, parsed, r, problems, unknown, newer_ok)
     unknown += git.failures[failed_before:]
+    problems += list(extra)
     if not unknown and not problems and tail is None:   # 통과는 첫 줄의 수를 얻었을 때만이다
         unknown.append(UNFINISHED)
     if unknown:
@@ -190,7 +195,7 @@ def check_result(git, tip: str, team, job: str, name: str) -> Check:
     return Check(not unknown and not problems, first, problems, unknown, r)
 
 
-def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, problems: list, unknown: list):
+def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, problems: list, unknown: list, newer_ok: bool):
     problems += r.problems
     if _unread(r):
         return None
@@ -203,7 +208,7 @@ def _check_body(git, tip: str, team, job: str, name: str, parsed: tuple, r, prob
         problems.append("끝 줄의 커밋 %s 가 머리의 head 와 다르다(%s)" % (_short(r.end), _short(r.head)))
     problems += _commit_problems(git, r, tip)
     names = result_names(git, tip, team, job)
-    if names is not None:
+    if names is not None and not newer_ok:
         latest = newest(names, parsed[0], parsed[1])
         if latest and team_layout.parse_result_name(latest)[2] > parsed[2]:
             problems.append("같은 단계 · 같은 계획의 더 새 시도 %s 가 있다" % latest)
@@ -271,6 +276,48 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
     return RECEIVED, notes, latest
 
 
+def in_progress(r) -> bool:
+    """도는 중인 시도인가 — 읽혔고 꼴 문제가 없고 「끝」 줄이 없다. 시작 묶음이 같은 번호를 잇는 조건이다(연속 실패 세기는 쓰지 않는다)."""
+    return r is not None and not r.problems and r.end is None
+
+
+def failed_attempts(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> list:
+    """그 계획의 implement 시도 가운데 번호가 before 보다 작은 것을 큰 번호부터 보아, 「끝」 줄이 있고 산 받음 줄이 없는
+    시도의 이름들(이어지는 만큼). 머리를 읽지 못한 시도 · 「끝」 줄이 없는 시도 · 산 받음 줄이 있는 시도를 만나면 멈춘다(J12).
+    끝났으나 꼴 문제가 있는 시도는 실패로 센다. 결과 파일을 git 이 읽지 못하면 Unchecked 를 낸다.
+
+    산 받음 줄 — 그 결과 파일의 이름과 머리 head 를 가리키는 꼴 맞는 받음 줄이 있고 그 결과 파일이 「더 새 시도」 사유 없이
+    결과 대조를 지난다. 막힘 파일은 결과 파일 이름이 아니라 시도가 아니다."""
+    names = result_names(git, tip, team, job)
+    if names is None:
+        raise Unchecked("결과 폴더를 읽지 못했다: %s" % team.results(job))
+    stage = team_layout.STAGES[2]
+    mine = []
+    for name in names:
+        parsed = team_layout.parse_result_name(name)
+        if parsed and parsed[0] == stage and parsed[1] == plan and parsed[2] < before:
+            mine.append((parsed[2], name))
+    good, _broken = team_files.received(intent_text)
+    out = []
+    for _attempt, name in sorted(mine, reverse=True):
+        path = team.job(job, team_layout.RESULTS_DIR, name)
+        text = git.blob(tip, path)
+        if text is None:   # 있는데 읽지 못했다 — 이어짐을 끊지 않고 검사 불가로 낸다
+            raise Unchecked("결과 파일을 읽지 못했다: %s" % path)
+        r = team_files.parse_result(text)
+        if _unread(r) or (r.end is None and not any(x.startswith(team_files.END_EMPTY) for x in r.problems)):   # 머리를 읽지 못한 시도 · 「끝」 줄이 없는 시도(꼴 문제와 상관없이)만 끊는다
+            break
+        if any(x.name == name and x.commit == r.head for x in good) and check_result(git, tip, team, job, name, newer_ok=True).ok:
+            break
+        out.append(name)   # 끝났으나 꼴 문제가 있는 시도는 산 받음 줄을 가질 수 없는 실패다
+    return out
+
+
+def failed_streak(git, tip: str, team, job: str, intent_text: str, plan, before: int) -> int:
+    """연속 실패 수 — failed_attempts 의 길이."""
+    return len(failed_attempts(git, tip, team, job, intent_text, plan, before))
+
+
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
 
 class Usage(Exception):
@@ -305,13 +352,16 @@ def _date(value) -> str:
         raise Usage("--date 는 YYYY-MM-DD 꼴의 있는 날짜다: %r" % value)
 
 
-def _branch_of(roadmap_text: str, job: str, result: str) -> str:
+def _blocks_of(roadmap_text: str) -> list:
     from roadmap_model import FormatError, parse_roadmap
     try:
         _meta, blocks, _records, _risk, _errors = parse_roadmap(roadmap_text)
     except FormatError as exc:
-        raise Unchecked("로드맵을 읽지 못해 블록의 브랜치를 고르지 못했다 — %s" % exc)
-    block = next((b for b in blocks if b.get("id") == job and b.get("kind") != "decision"), None)
+        raise Unchecked("로드맵을 읽지 못해 블록을 고르지 못했다 — %s" % exc)
+    return blocks
+
+
+def _branch_of(block, job: str, result: str) -> str:
     if block is None:
         raise Usage("로드맵 블록이 아닌 과제(%s)는 --branch <브랜치> 가 필요하다" % job)
     branches = block.get("branches") or []
@@ -320,6 +370,20 @@ def _branch_of(roadmap_text: str, job: str, result: str) -> str:
     if n > len(branches):
         raise Usage("블록 %s 의 브랜치 칸에 계획 %d 의 브랜치가 없다(브랜치 %d개) — --branch 로 준다" % (job, n, len(branches)))
     return branches[n - 1]
+
+
+def _gate_reasons(scope, result: str, plain: bool) -> list:
+    """결과 파일의 단계로 관문 표(§3)를 본 사유들(J31) — 이름 꼴이 아니면 본문 대조가 그 사유를 낸다."""
+    parsed = team_layout.parse_result_name(result)
+    if parsed is None:
+        return []
+    stage, plan = parsed[0], parsed[1]
+    out = []
+    if scope.gate_on and not plain and plan is None and stage in team_layout.PLANNED_STAGES[1:]:   # 켜져 있으면 계획 번호 없는 이름은 계획 검토 줄을 고를 수 없어 어차피 지나지 못한다 — 사유만 또렷이. 꺼졌으면 J9(줄의 유무)
+        out.append("결과 파일 이름에 계획 번호가 없어 `%s` 관문을 볼 수 없다: %s — `%s-plan-<n>-<시도>.md` 꼴로 쓴다"
+                   % (human_lines.KIND_PLAN, result, stage))
+    return human_lines.missing(scope, stage, plan, plain, deep=True) if not out else \
+        human_lines.missing(scope, "plan", None, plain, deep=True) + out
 
 
 def _check(a) -> int:
@@ -355,15 +419,22 @@ def _check(a) -> int:
     if layout != team_layout.LAYOUT_TEAM:
         raise Usage("team 형식 로드맵이 아니다 — %s 머리말에 `%s: %s` 가 없다"
                     % (team.roadmap, team_layout.LAYOUT_KEY, team_layout.LAYOUT_TEAM))
-    branch = a.branch or _branch_of(text, a.job, a.result)
+    blocks = _blocks_of(text)
+    block = next((b for b in blocks if b.get("id") == a.job and b.get("kind") != "decision"), None)
+    branch = a.branch or _branch_of(block, a.job, a.result)
     import team_status
     tip, tip_note, split = team_status.read_tip(git, branch)
     if split:
         raise Unchecked(split)
     if tip is None:
         raise Unchecked("브랜치 %s 가 로컬에도 origin 에도 없다" % branch)
-    c = check_result(git, tip, team, a.job, a.result)
+    reader = team_status.Reader(git, main, team, lambda path: git.blob(main, path), lambda path: git.absent(main, path))
+    plain = block is None or reader.flow(block) == team_status.PLAIN_FLOW   # 흐름은 로드맵에서만 정한다(J32) — --branch 는 읽을 브랜치만 정한다
+    scope = reader.scope(tip, a.job, (block.get("branches") or []) if block is not None else [branch])
+    c = check_result(git, tip, team, a.job, a.result, extra=_gate_reasons(scope, a.result, plain))
     print(c.first)
+    if not scope.gate_on:
+        print("알림: %s" % human_lines.GATE_OFF)
     if tip_note:
         print(tip_note)
     print("브랜치: %s · 끝 %s" % (branch, tip[:8]))

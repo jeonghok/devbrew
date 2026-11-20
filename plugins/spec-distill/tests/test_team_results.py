@@ -9,11 +9,14 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "plugins" / "spec-distill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+import job_results  # noqa: E402
 import team_files as F  # noqa: E402
+import team_layout  # noqa: E402
 
 H = "a" * 40
 B = "b" * 40
@@ -228,8 +231,15 @@ class Decisions(unittest.TestCase):
             self.assertEqual(out, with_dash, (first, second))
             self.assertEqual(F.decision_lines(out), ["- 결정 · 2026-11-20 · 글"])
 
+    def test_new_kinds_are_accepted(self):
+        for line in ("- 흐름 승인 · 2026-11-18 · 「설계 없이 진행」 · INTENT.md@0123abcd · 근거 00000000-0000-4000-8000-00000000aaaa:00000000-0000-4000-8000-000000000001#1",
+                     "- 걸음 건너뜀 · 2026-11-18 · 「건너뛴다」 · 계획 검토 plan 2 · INTENT.md@0123abcd · 근거 00000000-0000-4000-8000-00000000aaaa:00000000-0000-4000-8000-000000000001#1"):
+            self.assertIsNone(F.decision_problem(line), line)
+        self.assertEqual(F.DECISION_KINDS[:7], ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정"))
+        self.assertIsNotNone(F.decision_problem("- 흐름승인 · 2026-11-18 · 「설계 없이 진행」"))
+
     def test_kinds_and_shapes(self):
-        self.assertEqual(F.DECISION_KINDS, ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정"))
+        self.assertEqual(F.DECISION_KINDS, ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정", "흐름 승인", "걸음 건너뜀"))
         ok = ["- 넘김 확인 · R1 · 0a1b2c3d · 계획에 넣었다", "- 예약 밖 변경 · 2026-11-20 · README 한 줄",
               "- 결과 받음 · 2026-11-20 · 「implement-plan-1-2.md · %s · 결과 대조: 통과 — …」" % H]
         for line in ok:
@@ -284,6 +294,108 @@ class ReceivedLines(unittest.TestCase):
         self.assertEqual(([r.commit for r in got], broken), ([H, B], []))
         self.assertEqual(got[-1].raw, "- 결과 받음 · 2026-11-21 · 「implement-1.md · %s · 글」" % B)
         self.assertEqual(F.received(INTENT), ([], []))
+
+
+class FakeGit:
+    """결과 폴더의 이름 목록과 글을 돌려주는 작은 git — 이어짐을 세는 규칙만 잰다."""
+
+    def __init__(self, files):
+        self.files = files
+
+    def names(self, tip, folder):
+        prefix = folder.rstrip("/") + "/"
+        return sorted(p[len(prefix):] for p in self.files if p.startswith(prefix))
+
+    def blob(self, tip, path):
+        return self.files.get(path)
+
+
+class FailedStreak(unittest.TestCase):
+    """job_results.failed_streak — 「끝」 줄이 있고 산 받음 줄이 없는 implement 시도가 이어지는 수(J12)."""
+
+    TEAM = team_layout.team_from_roadmap("r/", "r/tm/roadmap.md")
+
+    def build(self, attempts, received=(), blocked=False, other=(), bodies=None):
+        """attempts: [(계획, 시도, 끝 줄 있음)]. received: 받음 줄을 적을 (계획, 시도). other: 다른 단계의 (단계, 계획, 시도) 끝난 결과."""
+        files = {}
+        for plan, attempt, ended in attempts:
+            name = team_layout.result_name("implement", attempt, plan)
+            body = (bodies or {}).get((plan, attempt))
+            files[self.TEAM.job("E1", "results", name)] = result("산출물: a.md\n" + ("끝 — " + H + "\n" if ended else "") if body is None else body,
+                                                                  plan=str(plan) if plan else None, attempt=str(attempt))
+        for stage, plan, attempt in other:
+            name = team_layout.result_name(stage, attempt, plan)
+            files[self.TEAM.job("E1", "results", name)] = result("끝 — " + H + "\n", stage=stage, plan=str(plan), attempt=str(attempt))
+        if blocked:
+            files[self.TEAM.blocked("E1")] = "막힘"
+        text = INTENT
+        for plan, attempt in received:
+            text = F.append_decision(text, F.received_line("2026-11-20", team_layout.result_name("implement", attempt, plan), H, "결과 대조: 통과 — x"))
+        return FakeGit(files), text
+
+    def streak(self, attempts, before, plan=1, received=(), passes=(), commit_differs=(), **kw):
+        """passes: 대조를 통과하는 (계획, 시도). 그 밖의 시도는 대조 거절이다."""
+        git, text = self.build(attempts, received=received, **kw)
+        calls = []
+
+        def fake_check(g, tip, team, job, name, newer_ok=False):
+            calls.append((name, newer_ok))
+            ok = any(team_layout.result_name("implement", a, p) == name for p, a in passes)
+            return job_results.Check(ok, "", [] if ok else ["거절"], [], None)
+
+        if commit_differs:   # 받음 줄의 커밋이 그 파일의 head 와 다르다
+            for plan_, attempt in commit_differs:
+                name = team_layout.result_name("implement", attempt, plan_)
+                text = F.append_decision(text, F.received_line("2026-11-20", name, B, "결과 대조: 통과 — x"))
+        with mock.patch.object(job_results, "check_result", fake_check):
+            got = job_results.failed_streak(git, "tip", self.TEAM, "E1", text, plan, before)
+        for _name, newer_ok in calls:
+            self.assertTrue(newer_ok, "산 받음 줄을 다시 잴 때는 newer_ok=True 로 부른다")
+        return got
+
+    def test_table(self):
+        self.assertEqual(self.streak([], 1), 0)
+        self.assertEqual(self.streak([(1, 1, True)], 2), 1)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3), 2)
+        # 1 은 받음(대조 통과) · 2 는 받음 줄 없음 — 1 에서 멈춘다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, received=[(1, 1)], passes=[(1, 1)]), 1)
+        # 손으로 쓴 받음 줄(꼴은 맞고 대조는 거절) — 산 받음 줄이 아니다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, received=[(1, 1)]), 2)
+        # 받음 줄의 커밋이 head 와 다르다(대조는 통과)
+        self.assertEqual(self.streak([(1, 1, True)], 2, commit_differs=[(1, 1)], passes=[(1, 1)]), 1)
+        # 도는 중인 시도(끝 줄 없음)는 이어짐을 끊는다
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, False)], 3), 0)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True), (1, 3, False)], 3), 2)
+        # 계획 1 의 시도 하나 · 계획 2 의 시도 둘 — 계획 1 만 본다
+        att = [(1, 1, True), (2, 1, True), (2, 2, True)]
+        self.assertEqual(self.streak(att, 2, plan=1), 1)
+        self.assertEqual(self.streak(att, 3, plan=2), 2)
+        # 구현 시도만 센다 — design · plan 결과는 시도가 아니다
+        self.assertEqual(self.streak([(1, 1, True)], 2, other=[("plan", 1, 1), ("plan", 1, 2)]), 1)
+        # 막힘 파일은 시도가 아니다
+        self.assertEqual(self.streak([(1, 1, True)], 2, blocked=True), 1)
+        self.assertEqual(self.streak([(1, 1, True), (1, 2, True)], 3, blocked=True), 2)
+
+    def test_ended_attempt_with_format_problems_counts(self):   # 끝났으나 꼴 문제가 있는 시도는 산 받음 줄을 가질 수 없는 실패다
+        end = "끝 — " + H + "\n"
+        for label, body in (("끝 줄 둘", "산출물: a.md\n" + end + end), ("끝 줄 뒤의 기계 줄", "산출물: a.md\n" + end + "산출물: b.md\n"),
+                            ("끝 줄이 비었다", "산출물: a.md\n끝 —  \n")):
+            git, text = self.build([(1, 1, True), (1, 2, True)], bodies={(1, 2): body})
+            self.assertTrue(F.parse_result(result(body)).problems, label)
+            with mock.patch.object(job_results, "check_result", lambda *a, **k: job_results.Check(True, "", [], [], None)):
+                self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 2, label)
+
+    def test_blob_read_failure_is_unchecked(self):
+        git, text = self.build([(1, 1, True)])
+        del git.files[self.TEAM.result("E1", "implement", 1, 1)]
+        git.names = lambda tip, folder: [team_layout.result_name("implement", 1, 1)]
+        self.assertRaises(job_results.Unchecked, job_results.failed_streak, git, "tip", self.TEAM, "E1", text, 1, 2)
+
+    def test_unreadable_attempt_breaks(self):
+        git, text = self.build([(1, 1, True), (1, 2, True)])
+        path = self.TEAM.result("E1", "implement", 2, 1)
+        git.files[path] = "머리가 없는 글"
+        self.assertEqual(job_results.failed_streak(git, "tip", self.TEAM, "E1", text, 1, 3), 0)
 
 
 if __name__ == "__main__":

@@ -2135,14 +2135,28 @@ class TeamRecords(Repo):   # R1 AC16
     def test_record_goes_to_the_job_file(self):
         intent, design = team_tree(self)
         before = design.read_bytes()
-        rc, out = self.cli("record", "--spec", str(design), "--approval", "--date", "2026-11-20", "--choice", "이대로 승인 (권장)")
+        rc, out = self.cli("record", "--spec", str(design), "--line", "결정 · 2026-11-20 · 이대로 간다")
         self.assertEqual(rc, 0, out)
-        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- spec 승인 · 2026-11-20 · 「이대로 승인 (권장)」"])
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 이대로 간다"])
         self.assertEqual(design.read_bytes(), before)                    # 설계문서에는 쓰지 않는다
         self.assertIn(str(intent), out); self.assertIn("결정 기록", out)   # 쓴 자리를 낸다
         self.assertIn("적었다(커밋은 리더가)", out)
         rc, out = self.cli("record", "--spec", str(intent), "--line", "- 결정 · 2026-11-21 · 막힘을 풀었다")
         self.assertEqual((rc, len(TF.decision_lines(intent.read_text(encoding="utf-8")))), (0, 2), out)
+
+    def test_approval_by_arguments_is_refused_while_the_gate_is_on(self):   # AC3 — 사람 줄은 record --human 으로만
+        intent, design = team_tree(self)
+        before = intent.read_bytes()
+        rc, out = self.cli("record", "--spec", str(design), "--approval", "--date", "2026-11-20", "--choice", "이대로 승인 (권장)")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("record --human", out)
+        self.assertEqual(intent.read_bytes(), before)
+
+    def test_human_commands_refuse_the_old_format(self):   # 옛 형식 로드맵에서는 사용법 어긋남
+        for cmd in (("ask-head",), ("record",)):
+            rc, out = self.cli(*cmd, "--human", "spec 승인", "--roadmap", RM, "--job", "A1")
+            self.assertEqual(rc, 2, (cmd, out))
+            self.assertIn("team 형식", out)
 
     def test_same_line_again_is_not_written_twice(self):
         intent, _design = team_tree(self)

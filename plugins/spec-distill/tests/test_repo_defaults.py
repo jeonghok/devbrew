@@ -6,6 +6,7 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_r
 """
 from __future__ import annotations
 
+import ast
 import re
 import sys
 import unittest
@@ -167,7 +168,7 @@ class Layers(unittest.TestCase):
                         "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
 
     def test_repo_layer_accepts_all_keys_and_not_meta(self):
-        self.assertEqual(len(rd.KEYS), 12)
+        self.assertEqual(len(rd.KEYS), 13)
         rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
@@ -304,6 +305,46 @@ class ReadmeTable(unittest.TestCase):
         for key in rd.BUDGET_KEYS:
             row = next(l for l in text.splitlines() if l.startswith("| `%s` |" % key))
             self.assertTrue(row.rstrip().endswith("| 무시하고 경고 |"), row)
+
+
+class HumanGate(unittest.TestCase):
+    def merged(self, repo=None, roadmap=None):
+        return rd.merge_layers(roadmap, repo, "레포 설정", [])
+
+    def test_default_is_on(self):
+        out = self.merged()
+        self.assertEqual((out["values"]["human_gate"], out["sources"]["human_gate"]), ("켬", "기본값"))
+        self.assertTrue(rd.gate_on(out["values"]))
+
+    def test_off_only_by_the_exact_word(self):
+        out = self.merged(repo={"human_gate": "끔"})
+        self.assertEqual((out["values"]["human_gate"], out["errors"]), ("끔", []))
+        self.assertFalse(rd.gate_on(out["values"]))
+        self.assertTrue(rd.gate_on(self.merged(repo={"human_gate": '"켬"'})["values"]))
+
+    def test_other_words_are_errors_and_stay_on(self):
+        for word in ("off", "false", "0", "꺼짐", ""):
+            out = self.merged(repo={"human_gate": word})
+            self.assertIsNone(out["values"]["human_gate"], word)
+            self.assertEqual(len(out["errors"]), 1, word)
+            self.assertIn("human_gate", out["errors"][0])
+            self.assertTrue(rd.gate_on(out["values"]), word)
+
+    def test_roadmap_layer_does_not_take_it(self):
+        out = self.merged(roadmap={"type": "roadmap", "human_gate": "끔"})
+        self.assertTrue(any("human_gate" in e for e in out["errors"]))
+        self.assertTrue(rd.gate_on(out["values"]))
+
+    def test_gate_reading_code_does_not_look_at_the_environment(self):   # AC20 — 환경 변수로는 꺼지지 않는다
+        def reads_environment(path, name):
+            """그 파일에서 이름이 name 인 함수의 몸에 environ · getenv 가 나오는가."""
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            found = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name]
+            self.assertTrue(found, name)
+            return any(getattr(x, "attr", getattr(x, "id", "")) in ("environ", "getenv") for f in found for x in ast.walk(f))
+        self.assertFalse(reads_environment(SCRIPTS / "repo_defaults.py", "gate_on"))
+        self.assertFalse(reads_environment(SCRIPTS / "repo_defaults.py", "merge_layers"))
+        self.assertTrue(reads_environment(SCRIPTS / "state_path.py", "resolve_session_id"))   # 양성 대조 — 탐침이 환경 읽기를 본다
 
 
 if __name__ == "__main__":

@@ -433,7 +433,8 @@ def parse_blocked(text: str) -> Blocked:
 
 # ── 결정 기록 ────────────────────────────────────────────────────────────────
 
-DECISION_KINDS = ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정")
+DECISION_KINDS = ("spec 승인", "병렬 답", "계획 검토", "결과 받음", "예약 밖 변경", "넘김 확인", "결정",
+                 "흐름 승인", "걸음 건너뜀")
 _KIND_RECEIVED, _KIND_CONFIRM = DECISION_KINDS[3], DECISION_KINDS[5]
 _DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _RECEIVED_RE = re.compile(r"- 결과 받음 · (?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2}) · 「(?P<name>[^ ·」]+) · "
