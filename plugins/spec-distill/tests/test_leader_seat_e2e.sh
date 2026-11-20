@@ -428,6 +428,7 @@ g checkout -q feature/tm-e1
 assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "25 꺼진 뒤 묶음 rc 0 — $(cat "$T/b.err")"
 assert_eq "$(grep -c "^규칙 (${B2}):\$" "$T/b.txt")" "1" "25 규칙 머리는 기본 브랜치 커밋 하나(AC14)"
 assert_not_contains "$(cat "$T/b.txt")" "$L3" "25 사본의 줄을 싣지 않는다"
+assert_not_contains "$(grep '^알림: ' "$T/b.txt")" "남의 고침" "25 꺼진 설정은 남의 고침을 재지 않는다 — 「재지 못했다」 로 닫혀 기본 브랜치를 읽은 것이 아니다(변이 5 의 이빨)"
 assert_eq "$(sync_cmd | sed 's/^.* job sync //')" "--result ${E1}/results/implement-plan-1-1.md --role worker --bundle-at ${B2} --job-at $(g rev-parse feature/tm-e1)" "25 맞추는 명령이 R1 글 그대로(--rules-at 없음)"
 g checkout -q main
 assert_eq "$(pend "결정 · 2026-11-21 · 꺼진 뒤 줄")" "0" "25 꺼진 뒤 add rc 0 — $(cat "$T/led.txt")"
