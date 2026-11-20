@@ -201,6 +201,7 @@ EXEMPT_PATHS=(
   "plugins/plugin-audit/dependencies.md"
   "plugins/plugin-audit/skills/plugin-audit/SKILL.md"
   "plugins/project-init/skills/project-init/SKILL.md"
+  "plugins/spec-distill/references/team-files.md"
 )
 EXEMPT_NEEDLES=(
   "python3 -m venv .venv"
@@ -214,6 +215,7 @@ EXEMPT_NEEDLES=(
   $'\t| python | '
   'entry --plugin-root "$PA" --need python'
   'entry --plugin-root "$PI" --need python'
+  '맞추는 명령: python3 <roadmap_write.py'
 )
 EXEMPT_REASONS=(
   "차등 테스트의 venv setup 명령 — 리뷰 대상 리포의 setup 을 일부러 돌린다(R22 kill switch 가 막는다)"
@@ -227,6 +229,7 @@ EXEMPT_REASONS=(
   "같은 사유(의존 표의 「python」 행)"
   "호출이 아니라 진입 의존 확인 펜스의 --need 값(의존 이름 python)이다 — 열 진입 펜스가 모두 --plugin-root 뒤에 --need 를 둔다"
   "같은 사유(진입 의존 확인 펜스의 --need python)"
+  "호출이 아니라 start_bundle.py 가 내는 줄의 꼴을 보이는 출력 꼴 블록이다 — <…> 는 자리표시이고 실제 줄은 채워진 절대 경로로 나간다(스캐너는 python3 뒤의 < 를 stdin 리다이렉트로 읽는다)"
 )
 
 note "[분류기 — 꼴마다 하나]"
