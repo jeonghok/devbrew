@@ -1404,7 +1404,8 @@ class SettingsErrorIsZero(StateRepo):   # M25 ② · F14 — 설정 오류면 �
         return (("conductor_branch.py", ("ensure",) + common), ("conductor_status.py", ("sync",) + common),
                 ("conductor_mail.py", ("send",) + common + ("--to", BETA, "--kind", "예고", "--body", "글")),
                 ("conductor_mail.py", ("ack",) + common + ("--letter", BETA + "/2026-11-19-01.md")),
-                ("conductor_branch.py", ("rules-add",) + common + ("--line", "- 규칙 하나")))
+                ("conductor_branch.py", ("rules-add",) + common + ("--line", "- 규칙 하나")),
+                ("conductor_branch.py", ("confirm",) + common))
 
     def test_writing_commands_tell_and_end_with_zero_on_a_broken_setting(self):
         """뒤집으면 붉다 — team_of 를 availability 앞으로 되돌리면 로드맵 폴더를 정하다 설정 오류로 3 이 된다."""
@@ -1418,6 +1419,7 @@ class SettingsErrorIsZero(StateRepo):   # M25 ② · F14 — 설정 오류면 �
             rc, out = self.run_cli(script, *args)
             self.assertEqual((rc, self.refs(), machine.read_bytes() == state), (0, refs, True), (args[0], out))
             self.assertIn(CB.SETTINGS_UNREADABLE, out, args[0])
+            self.assertTrue(out.strip().splitlines()[-1].startswith("[spec-distill] " + CB.SETTINGS_UNREADABLE), (args[0], out))   # 마지막 줄이 알림이다
         refs = self.refs()
         rc, out = self.run_cli("conductor_status.py", "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID,
                                "--epic", "A1", "--kind", "머지", "--via", "턴 끝")

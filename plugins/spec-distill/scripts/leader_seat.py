@@ -583,8 +583,12 @@ def confirm(root, roadmap_rel: str, session: str, confirmed: Optional[str] = Non
     """(확인한 끝, 알림들). `confirmed` 가 없으면 읽을 끝까지의 확인되지 않은 남의 고침(규칙 · 대기 줄 두 쪽)을 커밋마다 차이와 함께
     보이고 마지막 줄 `확인할 끝: <40자>` 로 BranchError(1) — 남의 고침이 없으면 (끝, (NOTHING_TO_CONFIRM,)).
     `confirmed` 는 40자 전체만 받고(아니면 BranchError(2)) 지금 읽을 끝과 같을 때만 `확인한 끝` 을 `확인 · <그 끝>` 한 줄로 둔다 —
-    다르면 다시 센 보고로 BranchError(1). 기계 상태를 읽지 못하거나 상태 브랜치가 갈라졌으면 BranchError(3), 없으면 1."""
+    다르면 다시 센 보고로 BranchError(1). 기계 상태를 읽지 못하거나 상태 브랜치가 갈라졌으면 BranchError(3), 없으면 1.
+    쓸 수 없는 레포(꺼짐 · 규칙 거절 · 설정 오류)면 (None, (알림,)) — 표지는 그보다 먼저 본다."""
     CB._need_marker(root, roadmap_rel, session)
+    why = CB.availability(root, roadmap_rel)   # 표지(5) → 쓸 수 있는지(설정 오류면 알리고 0) → 값 차례다(M25 ②)
+    if why:
+        return None, (why,)
     if confirmed is not None and (not isinstance(confirmed, str) or not CB.OID_RE.fullmatch(confirmed)):
         raise CB.BranchError(2, "--confirmed 는 확인할 끝 40자 전체를 받는다(앞 8자는 받지 않는다)")
     team = CB.team_of(root, roadmap_rel)

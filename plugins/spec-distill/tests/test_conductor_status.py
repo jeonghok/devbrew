@@ -262,6 +262,7 @@ class Scrub(StatusRepo):
     def test_only_a_word_starting_at_a_boundary_is_a_path(self):   # M26 · S4 — 한글 낱말 사이 · `./` 의 `/` 는 경로가 아니다
         self.assertEqual(CS.scrub("리더/담당자/일꾼 · ./a/b · /Users/x/y · ~/k/l · key=/p/q · /나의/폴더", self.w),
                          "리더/담당자/일꾼 · ./a/b · <경로> · <경로> · key=<경로> · <경로>")
+        self.assertEqual(CS.scrub("x'/a/b'tail", self.w), "x'<경로>")   # 낱말 안 경계 뒤부터 낱말 끝까지 — 따옴표로 가르는 redact 만으로는 꼬리가 남는다
 
 
 class SessionNoticeAndTwoFiles(StatusRepo):
