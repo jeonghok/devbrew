@@ -232,6 +232,31 @@ once "$WRONG" "$L_wrongspec" "AC12: L(wrongspec) 한 번"
 assert_contains "$WRONG" '/spec-distill:request-framing @<기록 파일의 레포 상대경로>' "AC12: 다음 세션 첫 줄"
 assert_contains "$WRONG" '그 PR 이 머지된 뒤 친다' "AC12: 그 PR 이 머지된 뒤 친다"
 
+# 최종 리뷰 수정 — 로드맵 끝 차례(I1) · waiting clear 의 종류(M1) · 돌아왔을 때 차례(M2) · rc 2 · rc 4(M3) · 쌓인 기록 칸(M5) · 보내는 글(측정)
+L_endorder='걸음 7 의 마무리(상태 브랜치 지우기 · 자원 정리 · 표지 풀기)는 이 리뷰의 담당자가 돌아오고, 그 질문을 묻고 기록하고(답하지 않은 질문은 「답하지 않음」 으로, 결과를 가져오지 못한 리뷰는 「셀 수 없음」 으로 기록하고), 기록 브랜치를 push 하고 그 PR(로드맵을 닫는 PR)을 연 뒤에 한다.'
+L_rc2='rc 가 2 면 지휘자가 부른 꼴이 틀린 것이다 — 그 결과로는 보내지 않고 스크립트가 낸 stderr 줄을 보인 뒤, 부른 꼴을 고쳐 다시 부른다(`--pr` 은 `#` 없이 숫자만 쓴다).'
+L_rc4='rc 가 4 면 먼저 `ledger pr-refresh --roadmap <로드맵> --session <세션> --epic <에픽>` 을 돌린 뒤 스크립트를 한 번 더 부른다 — 그래도 4 면 아래 줄대로 보내지 않고 스크립트가 낸 줄을 보인다.'
+L_cells='`ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽 번호 | 로드맵 밖> · qg 리뷰 · <자리 글자> · <대상> · <사유>"` 로 쓴다 — 에픽 칸에는 에픽 번호(로드맵 리뷰는 `로드맵 밖`), 절 칸에는 `qg 리뷰`, 글 칸에는 자리 글자를 맨 앞에 두고 대상 · 사유를 잇는다.'
+L_cellsnq='칸 대응은 위 `### 보내지 못했거나 셀 수 없이 끝난 리뷰` 와 같다 — 에픽 칸 · 절 칸은 그대로이고 글 칸은 `<자리 글자> · <범위> · <결과 줄>` 이다.'
+L_skilltool='부르는 길은 Skill 도구다 — skill 은 `quality-gates:quality-pipeline`, args 는 위 호출 줄에서 skill 이름 뒤의 글 전부(`range` 부터 끝까지)다.'
+once "$SITE" "$L_endorder" "I1: 로드맵 끝 리뷰가 끝난 뒤에 걸음 7 의 마무리를 한다"
+once "$ASK" '`waiting clear --roadmap <로드맵> --session <세션> --epic "<에픽 | 로드맵 밖>" --kind "옮긴 질문"`' "M1: waiting clear 가 옮긴 질문 종류만 내린다"
+b_nofile="$(printf '%s\n' "$BACK" | grep -nF '1. 옮겨진 파일이 없으면 ' | head -1 | cut -d: -f1)"
+b_contract="$(printf '%s\n' "$BACK" | grep -nF '`contract` 가 `2` 가 아니면' | head -1 | cut -d: -f1)"
+if [ -n "$b_nofile" ] && [ -n "$b_contract" ] && [ "$b_nofile" -lt "$b_contract" ]; then
+  ok "M2: 돌아왔을 때 — 옮겨진 파일이 없는 경우를 첫째로 본다"
+else
+  no "M2: 돌아왔을 때 — 옮겨진 파일이 없는 경우가 첫째가 아니다(없음=${b_nofile:-없음} · contract=${b_contract:-없음})"
+fi
+once "$SITE" "$L_rc2" "M3: 범위 스크립트 rc 2 — 부른 꼴을 고친다"
+once "$SITE" "$L_rc4" "M3: 범위 스크립트 rc 4 — pr-refresh 뒤 한 번 더 부른다"
+once "$SITE" "$L_cells" "M5: 보내지 못한 리뷰의 쌓인 기록 줄 칸 대응"
+once "$KEEP" "$L_cellsnq" "M5: 질문 없는 리뷰의 쌓인 기록 줄 칸 대응"
+once "$DISP" "$L_skilltool" "측정: 담당자는 Skill 도구로 부른다"
+assert_contains "$(printf '%s\n' "$DISP" | awk 'index($0, "마지막 보고:")==1')" '절차에서 벗어난 것' "측정: 마지막 보고에 절차에서 벗어난 것"
+assert_eq "$(printf '%s\n' "$DISP" | grep -cF 'suite_lock.py run' | tr -d ' ')" "0" "M4: 보내는 글 틀이 늘 싣는 것의 스위트 잠금 줄을 다시 싣지 않는다"
+assert_contains "$DISP" '「늘 싣는 것」 가운데 자리 · 임시 폴더 · 금지 · 스위트 잠금 줄을 그대로 싣고' "M4 양성 짝: 늘 싣는 것의 줄은 그대로 싣는다"
+
 # 레포 전용 값
 for lit in 'origin/main' 'feature/' 'docs/superpowers'; do
   assert_not_contains "$ALL" "$lit" "레포 전용 값이 없다: ${lit}"
