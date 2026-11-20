@@ -18,6 +18,7 @@
 - **낱말 대응(설계 2 「글 속의 낱말」 — 이 계획의 범위: spec-distill 과 `shared/` 의 skill 글 · 펜스 안 · 템플릿 · README · reference · agent 정의 · 리뷰 기준).**
   - 한글 「인터뷰」 가 단계를 가리키면 그 단계 이름 — 조사 · 결과물 쪽이면 「컨텍스트 쌓기」, 분해 · 로드맵 쪽이면 「로드맵 잡기」. 「인터뷰 폴더」 → 「의도 폴더」(`intent_dir` 의 폴더만 가리킨다 — 로드맵 폴더 아래 `intent/` 는 「로드맵의 원자료 폴더」).
   - 영어 `interview brief` → `context brief`.
+  - 영어 문장 속에 홀로 쓰인 `interview`(복수 · `interviewer` 꼴 포함)가 단계를 가리키면 그 단계 이름 — 조사 · 결과물 쪽이면 `context-build`(문장에 맞게 「the context-build stage」 꼴), 분해 · 로드맵 쪽이면 `roadmap-draft`(사용자 결정 — 계획 1 검토 「단계를 가리키면 바꾼다」). 스크립트의 변수 · 함수 · 인자 이름(`--interview` 같은 옵션 이름 포함)과 아래 「그대로」 목록 · 계획 2 몫(종류 글자 · 파일 이름 끝 · 설정 키 등)은 건드리지 않는다. 단계가 아니라 「묻고 답하기」 라는 일반 명사로 쓰인 줄은 과제가 줄마다 판단해 남기고, 남긴 줄은 이유와 함께 PR 본문 재료에 적는다.
   - 커밋 제목 `docs(interview): …` → 컨텍스트 쌓기는 `docs(context): …`, 로드맵 잡기는 `docs(roadmap): …`.
   - 펜스 표지와 펜스가 내는 판결 글자: `interview-commit` → `context-commit` · `interview-pr` → `roadmap-pr` · `interview-pr-files` → `roadmap-pr-files` · `interview-pr-head` → `roadmap-pr-head` · `interview-merge` → `roadmap-merge` · `interview-merge-recheck` → `roadmap-merge-recheck` · `interview-merge-requested` → `roadmap-merge-requested`. 새 펜스 표지는 `roadmap-commit`. 옛 판결 글자를 읽는 호환은 두지 않는다.
   - 그대로: `seed` · `brief`, 「옛 인터뷰 기록」 · 「옛 인터뷰 폴더」, 옛 설정 키를 알리는 안내 속 `interview_dir`, 변경 기록과 기록 폴더(`docs/superpowers/` 아래), 쉬운 말 규칙 블록(`<!-- plain-language:begin -->` ~ `end`), `CLAUDE.md`.
@@ -192,13 +193,13 @@ git commit -m "refactor(spec-distill): 호출 이름 둘을 intent-sync · conte
 **Files:**
 - Modify: `plugins/spec-distill/agents/*.md` 가운데 옛 호출 이름이나 과제 12 의 금지 토큰이 든 것(2026-11-20: brief-readback · blind-spot-prober · doc-critic · coverage-mapper · seed-readback · steelman-builder · doc-critic-web · open-researcher · repo-researcher · saturation-judge) · `shared/docreview/agents/doc-critic.md` · `doc-critic-web.md` · `plugins/spec-distill/references/docreview-profiles/*.md` 가운데 같은 것(2026-11-20: `brief.md`)
 
-- [ ] **Step 1: 대상 목록을 다시 낸다** — `git grep -l -e pm-interview -e request-framing -e '인터뷰' -e 'interview brief' -- plugins/spec-distill/agents shared/docreview/agents plugins/spec-distill/references/docreview-profiles`.
+- [ ] **Step 1: 대상 목록을 다시 낸다** — `git grep -l -e pm-interview -e request-framing -e '인터뷰' -e 'interview brief' -- plugins/spec-distill/agents shared/docreview/agents plugins/spec-distill/references/docreview-profiles` 와, 같은 범위에서 영어 문장 속에 홀로 쓰인 `interview`(앞뒤에 `-` · `_` · `/` · `.` · 영숫자가 붙지 않은 꼴 — 과제 12 Step 1 의 정규식) 줄. 2026-11-20 의 기본 브랜치에서 홀로 쓰인 `interview` 는 agent 정의 여섯 파일(coverage-mapper · open-researcher · blind-spot-prober · repo-researcher · saturation-judge · steelman-builder)에 13곳이었다 — frontmatter `description` 과 본문 모두 든다.
 
 - [ ] **Step 2: 고치기 전 규칙 목록을 뜬다**
 
 각 파일의 frontmatter `tools:` 줄 · 「하지 않는다 / must not / never / 금지」 가 든 줄 · 수치 임계 줄을 `git show HEAD:<파일>` 에서 뽑아 무시되는 자리의 `rules-before.txt` 에 적는다.
 
-- [ ] **Step 3: 이름과 낱말을 바꾼다** — Global Constraints 의 「호출 이름」 과 「낱말 대응」 대로. 영어 문장 속 맨 낱말 `interview`(예: 「during a spec-distill interview」)는 설계 2 의 표에 없어 그대로 둔다. 문장의 뜻 · 지시 · 임계는 바꾸지 않는다. 두 사본(`plugins/spec-distill/agents/doc-critic*.md` 와 `shared/docreview/agents/doc-critic*.md`)은 같은 글로 고친다.
+- [ ] **Step 3: 이름과 낱말을 바꾼다** — Global Constraints 의 「호출 이름」 과 「낱말 대응」 대로. 영어 문장 속에 홀로 쓰인 `interview` 가 단계를 가리키면 단계 이름으로 쓴다(예: 「during a spec-distill interview」 → 「during the spec-distill context-build stage」 — frontmatter `description` 과 본문 모두). 일반 명사로 쓰인 줄은 남기고 「파일:줄 · 이유」 를 무시되는 자리의 `en-kept.txt` 에 적는다(PR 본문 재료 — 과제 12 가 같은 파일에 잇는다). 문장의 뜻 · 지시 · 임계는 바꾸지 않는다. 두 사본(`plugins/spec-distill/agents/doc-critic*.md` 와 `shared/docreview/agents/doc-critic*.md`)은 같은 글로 고친다.
 
 - [ ] **Step 4: 앞뒤 규칙을 견준다**
 
@@ -622,7 +623,8 @@ Run → Expected: FAIL.
 - 영어 `interview brief`(대소문자 구분 없이, 사이 공백 하나).
 - `docs(interview)`.
 - 펜스 표지 · 판결 글자 `interview-commit` · `interview-pr` · `interview-merge`(뒤에 `-files` · `-head` · `-recheck` · `-requested` 가 붙은 꼴 포함).
-허용(락이 건드리지 않는 것): `interview_dir` · `interview-state` · `interview-seed` · `interview-brief` · `interview-audit` · `-interview.md` 꼴 경로 · `interview_state.py` 등 파일 이름 · `docs/superpowers/interview/`(계획 2 몫) · 쉬운 말 규칙 블록 안 · `CHANGELOG.md`.
+- 영어 문장 속에 홀로 쓰인 `interview`(대소문자 · 복수 · `interviewer` · `interviewing` 꼴 포함) — 앞에 `-` · `_` · `/` · `.` · `$` · 영숫자가 붙지 않고 뒤에 `-` · `_` · `/` · `.` · 영숫자가 붙지 않은 것(그래서 `--interview` · `pm-interview` · `interview_state.py` · `interview-seed` · `docs/superpowers/interview/` 는 걸리지 않는다). 2026-11-20 의 기본 브랜치에서 과제 12 범위(agent 정의 · 리뷰 기준 제외)에 17곳 — README 6 · request-framing 본문 4 · pm-interview 본문 3 · finishing.md · reviewing-brief 본문 · audit 템플릿 둘에 1씩. skill frontmatter `description` 안의 것(예: pm-interview 의 「Runs the spec-distill problem-space interview stage」)도 든다.
+허용(락이 건드리지 않는 것): `interview_dir` · `interview-state` · `interview-seed` · `interview-brief` · `interview-audit` · `-interview.md` 꼴 경로 · `interview_state.py` 등 파일 이름 · `docs/superpowers/interview/`(계획 2 몫) · 쉬운 말 규칙 블록 안 · `CHANGELOG.md` · 면제 목록에 이유와 함께 오른 줄(Step 2).
 
 범위: 위 Files 의 Modify 글롭에 과제 3 의 파일(`plugins/spec-distill/agents/` · `shared/docreview/agents/` · `references/docreview-profiles/`)을 더한 것. `scripts/` 는 `shared/docreview/scripts/docreview_state.py` 하나만(spec-distill 의 스크립트는 계획 2 몫).
 
@@ -635,6 +637,8 @@ corpus() { git ls-files -- 'plugins/spec-distill/skills/*' 'plugins/spec-distill
 python3 - "$@" <<'PY'
 # 각 파일을 utf-8 로 읽어 plain-language:begin~end 를 떼고
 #   re.compile(r"(?<!옛 )인터뷰|interview brief|docs\(interview\)|interview-(?:commit|pr|merge)(?![A-Za-z0-9_])|interview-(?:pr|merge)-(?:files|head|recheck|requested)", re.I)
+#   re.compile(r"(?<![-_/.$A-Za-z0-9])interview(?:s|er|ers|ing)?(?![-_/.A-Za-z0-9])", re.I)   # 홀로 쓰인 영어 낱말
+# 면제 목록(파일 · 줄 글자 · 이유)에 오른 줄은 건너뛰고 그 수를 낸다
 # 맞는 줄을 "파일:줄: 글" 로 내고 하나라도 있으면 rc 1
 PY
 # 양의 짝 — 새 글자가 실제로 있다(자리마다 하나)
@@ -646,18 +650,21 @@ some_in "plugins/spec-distill/skills/context-build/references/finishing.md" 'con
 some_in "plugins/spec-distill/README.md" '컨텍스트 쌓기'
 some_in "plugins/spec-distill/README.md" '로드맵 잡기'
 some_in "plugins/spec-distill/README.md" '의도 폴더'
+some_in "plugins/spec-distill/skills/context-build/SKILL.md" 'context-build stage'   # frontmatter description 의 영어 낱말
 # 「의도 폴더」 는 로드맵 폴더 아래 intent/ 를 가리키지 않는다
 none_line_with "$(corpus)" '의도 폴더' 'roadmaps/'
 ```
 Run: `bash plugins/spec-distill/tests/test_stage_words.sh` → Expected: FAIL(금지 토큰이 남아 있다).
 
-- [ ] **Step 2: 대상 목록을 다시 낸다** — 락의 출력이 곧 대상 목록이다. 줄마다 「단계를 가리키는가 · 폴더를 가리키는가 · 옛 기록을 가리키는가」 를 보고 Global Constraints 「낱말 대응」 대로 고친다. 옛 기록을 가리키면 「옛 인터뷰 …」 로 고쳐 허용 꼴로 만든다. 스크립트(spec-distill `scripts/`)가 내는 글을 그대로 인용한 줄은 고치지 않는다(계획 2 몫 — 스크립트와 함께 바뀐다). 그런 줄은 락 안의 면제 목록에 「파일 · 줄 글자 · 이유(계획 2 — 스크립트 출력 인용 · 내는 곳 파일:함수)」 로 올리고, 락은 면제한 줄 수를 출력한다. 면제 목록은 계획 2 가 비운다.
+- [ ] **Step 2: 대상 목록을 다시 낸다** — 락의 출력이 곧 대상 목록이다. 줄마다 「단계를 가리키는가 · 폴더를 가리키는가 · 옛 기록을 가리키는가」 를 보고 Global Constraints 「낱말 대응」 대로 고친다. 옛 기록을 가리키면 「옛 인터뷰 …」 로 고쳐 허용 꼴로 만든다. 스크립트(spec-distill `scripts/`)가 내는 글을 그대로 인용한 줄은 고치지 않는다(계획 2 몫 — 스크립트와 함께 바뀐다). 그런 줄은 락 안의 면제 목록에 「파일 · 줄 글자 · 이유(계획 2 — 스크립트 출력 인용 · 내는 곳 파일:함수)」 로 올리고, 락은 면제한 줄 수를 출력한다. 면제 목록의 이 이유 줄은 계획 2 가 비운다. 홀로 쓰인 영어 `interview` 가 단계가 아니라 「묻고 답하기」 라는 일반 명사로 쓰인 줄은 남기고 같은 면제 목록에 「이유(일반 명사 — <한 구절>)」 로 올리며, 과제 3 이 시작한 `en-kept.txt` 에도 「파일:줄 · 이유」 를 잇는다(PR 본문 재료).
 
-- [ ] **Step 3: 고친다** — 펜스 표지와 판결 글자는 내는 쪽(skill 펜스)과 읽는 쪽(skill 글 · 테스트의 `fence "$X" interview-commit` 같은 뽑기 · 기대 글자)을 같은 커밋에서 바꾼다. 커밋 펜스 제목: `docs(interview): …` → `docs(context): …`. 다음 세션 줄의 `interview brief` → `context brief`. 펜스 안의 안내 글(「정해진 인터뷰 폴더 바로 아래가 아니다」 등)은 「의도 폴더」 로 — 이것을 무는 테스트 글자도 함께.
+- [ ] **Step 3: 고친다** — 펜스 표지와 판결 글자는 내는 쪽(skill 펜스)과 읽는 쪽(skill 글 · 테스트의 `fence "$X" interview-commit` 같은 뽑기 · 기대 글자)을 같은 커밋에서 바꾼다. 커밋 펜스 제목: `docs(interview): …` → `docs(context): …`. 다음 세션 줄의 `interview brief` → `context brief`. 펜스 안의 안내 글(「정해진 인터뷰 폴더 바로 아래가 아니다」 등)은 「의도 폴더」 로 — 이것을 무는 테스트 글자도 함께. 홀로 쓰인 영어 `interview` 는 「낱말 대응」 대로 단계 이름으로(조사 · 결과물 쪽 `context-build` · 분해 · 로드맵 쪽 `roadmap-draft`) — skill frontmatter `description` 안의 것도 바꾼다. 스크립트의 변수 · 함수 · 인자 이름(`--interview` 등)은 건드리지 않는다.
+
+- [ ] **Step 3.5: frontmatter `description` 을 바꾼 skill 의 호출 표면을 본다** — skill frontmatter `description` 은 호출 판정에 쓰이는 글이다. `python3 shared/entry/check_invocation_surface.py` 가 GREEN 이고 `claude plugin validate plugins/spec-distill` 가 진입 skill 셋(`intent-sync` · `context-build` · `roadmap-draft`)과 나머지 skill 을 오류 없이 받는지 본다. `description` 의 첫 문장(「사용자가 `/spec-distill:<이름> …` 로 부른다.」)은 바꾸지 않았는지 `git diff HEAD -- 'plugins/spec-distill/skills/*/SKILL.md'` 로 본다.
 
 - [ ] **Step 4: 통과를 본다** — `bash plugins/spec-distill/tests/test_stage_words.sh` · `test_finish_commit_roadmap.sh` · `test_finish_pr_merge.sh` · `test_workspace_invariance.sh` · `test_stage_split.sh` · `test_roadmap_draft_skill.sh` · `bash shared/tests/test_ask_recommendation.sh` · `bash shared/tests/test_plain_language_block.sh` · `python3 shared/entry/check_invocation_surface.py`. 그리고 `git grep -l -e 'interview-commit' -e 'interview-pr' -e 'interview-merge' -- plugins shared ':!*CHANGELOG.md'` 가 0건(테스트 포함 — 읽는 쪽을 빠뜨리지 않았다).
 
-- [ ] **Step 5: 변이로 이빨을 본다** — 커밋 뒤 범위 안 파일에: (더하기) README 에 `인터뷰 폴더` 한 줄 · (더하기 — 자리 바꿈) `shared/docreview/agents/doc-critic.md` 에 `interview brief` · (뒤집기) 허용 꼴 `옛 인터뷰` 를 `인터뷰` 로 · (꼴 바꾸기) 펜스 표지를 `Interview-Commit`(대소문자) · (지우기) 양의 짝 `<!-- context-commit:begin -->` 표지를 지운다. 각각 실패. 양성 대조: 쉬운 말 규칙 블록 안에 `인터뷰` 를 넣으면 통과한다(블록 제외가 동작한다) — 확인 뒤 되돌린다.
+- [ ] **Step 5: 변이로 이빨을 본다** — 커밋 뒤 범위 안 파일에: (더하기) README 에 `인터뷰 폴더` 한 줄 · (더하기 — 자리 바꿈) `shared/docreview/agents/doc-critic.md` 에 `interview brief` · (뒤집기) 허용 꼴 `옛 인터뷰` 를 `인터뷰` 로 · (꼴 바꾸기) 펜스 표지를 `Interview-Commit`(대소문자) · (지우기) 양의 짝 `<!-- context-commit:begin -->` 표지를 지운다 · (더하기 — 영어 낱말) context-build 본문에 「during the interview stage」 한 줄과 agent 정의 하나의 `description` 에 「interviews」 · (지우기 — 영어 양의 짝) `context-build stage` 를 지운다. 각각 실패. 양성 대조: 쉬운 말 규칙 블록 안에 `인터뷰` 를 넣으면 통과하고(블록 제외), 펜스 안에 `--interview "$X"` 와 `interview_state.py` 를 넣으면 통과한다(식별자 제외) — 확인 뒤 되돌린다.
 
 - [ ] **Step 6: 커밋** — `git commit -m "docs(spec-distill): skill 글 · 펜스 · 템플릿 · README · reference 의 단계 낱말과 표지를 새 이름으로"`.
 
@@ -712,7 +719,7 @@ Run → FAIL.
 
 - [ ] **Step 5: 미룸을 올리고 대조를 돌린다** — 판정이 미룸 · 빠짐인 AC 와 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 올리는 커밋을 한다(`docs(spec): …`). PR 을 만들기 전에 `python3 /Users/jeonghokim/.claude/plugins/cache/devbrew/spec-distill/8.14.0/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-20-front-stage-restructure-design.md <보고 파일 경로>` 를 돌려 경고를 사용자에게 보인다.
 
-- [ ] **Step 6: PR 본문 재료를 모은다** — 보안 리뷰 대상(과제 3 의 앞뒤 규칙 대조) · 경로 게이트를 넓히지 않았다는 것 · quality-gates 판을 올리지 않은 이유(주석만) · 줄 수 앞뒤 · 옆 로드맵에 알린 파일 · 「나눈다」 선택지 글자를 계획이 정했다는 것. push 와 PR 은 지휘자가 한다.
+- [ ] **Step 6: PR 본문 재료를 모은다** — 보안 리뷰 대상(과제 3 의 앞뒤 규칙 대조) · 경로 게이트를 넓히지 않았다는 것 · quality-gates 판을 올리지 않은 이유(주석만) · 줄 수 앞뒤 · 옆 로드맵에 알린 파일 · 「나눈다」 선택지 글자를 계획이 정했다는 것 · 홀로 쓰인 영어 `interview` 를 일반 명사로 보고 남긴 줄과 이유(`en-kept.txt` — 사용자 결정 「단계를 가리키면 바꾼다」 의 적용 기록). push 와 PR 은 지휘자가 한다.
 
 ## 계획 2 에 넘길 메모
 
