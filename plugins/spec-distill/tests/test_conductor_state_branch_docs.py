@@ -20,6 +20,8 @@ import conductor_status as CS  # noqa: E402
 NEW = PLUGIN / "references" / "conductor-state-branch.md"
 LOOP = PLUGIN / "references" / "conducting.md"
 POINTER = "${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md"
+POINTER_HOME = PLUGIN / "references" / "redecompose.md"   # 완전한 가리킴 하나가 사는 reference(고아 락이 읽는 꼴)
+FILE_NAME = "conductor-state-branch.md"
 
 
 def step(n: int) -> str:
@@ -61,8 +63,10 @@ class Procedure(unittest.TestCase):
 
     def test_conducting_steps_carry_the_sentences(self):
         whole = LOOP.read_text(encoding="utf-8")
-        self.assertEqual(whole.count(POINTER), 1)
-        self.assertIn(POINTER, step(1))
+        self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", whole)   # 지휘 순환은 루트 토큰을 쓰지 않는다 — 걸음에서는 파일 이름만
+        self.assertEqual(POINTER_HOME.read_text(encoding="utf-8").count(POINTER), 1)
+        for n in (1, 2, 7):
+            self.assertIn(FILE_NAME, step(n), n)
         for word in ("conductor_branch.py ensure", "conductor_status.py sync", "conductor_status.py show", "받음 줄"):
             self.assertIn(word, step(1), word)
         for word in ("conductor_status.py waiting add", "waiting clear", "질문을 걸기 직전"):

@@ -198,12 +198,7 @@ assert_eq "$(forbid "$LOOP")" "" "지휘 순환: 세션을 새로 열게 하는 
 for lit in '새 세션에서 이어 간다' '에픽마다 세션을 새로 열어' 'Push 후 PR 을 고른다'; do
   [ -n "$(forbid "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
-# 걸음 1 의 상태 브랜치 절차 문서 가리킴 하나만 면제 — 가리킴은 SKILL 락(고아 없음)이 읽는 완전한 꼴이어야 한다. 다른 루트 토큰은 그대로 잡는다
-STATE_PTR='${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md'
-LOOP_NO_PTR="${LOOP//"$STATE_PTR"/}"
-assert_not_contains "$LOOP_NO_PTR" 'CLAUDE_PLUGIN_ROOT' "지휘 순환: 플러그인 루트 토큰 없음(<SD>) — 상태 브랜치 절차 문서 가리킴 하나만 면제"
-MUT_PTR="${LOOP}"$'\n''${CLAUDE_PLUGIN_ROOT}/scripts/x.py'; MUT_PTR="${MUT_PTR//"$STATE_PTR"/}"
-case "$MUT_PTR" in *CLAUDE_PLUGIN_ROOT*) ok "양성 짝: 면제는 그 가리킴 하나뿐이다 — 다른 루트 토큰은 잡는다" ;; *) no "양성 짝: 다른 루트 토큰을 못 잡는다" ;; esac
+assert_not_contains "$LOOP" 'CLAUDE_PLUGIN_ROOT' "지휘 순환: 플러그인 루트 토큰 없음(<SD>)"
 # 지휘 순환이 부르는 `ledger <명령>` 이름은 모두 conductor_ledger.COMMANDS 의 키다(Ruling R15)
 LEDGER_KEYS="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c 'import sys
 sys.path.insert(0, sys.argv[1])
