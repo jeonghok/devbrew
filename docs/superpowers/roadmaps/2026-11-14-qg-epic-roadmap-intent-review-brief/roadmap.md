@@ -32,12 +32,12 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 ### R3 — 지휘자 경유 입구
 - 의도: 에픽 · 로드맵 이름 호출을 지휘자 경유로 모으고 이름 풀이 · 자동 호출 · 질문 옮기기 · 「잘못 골랐다」의 행선(피벗 경로 · 새 일의 씨앗)을 잇는다
 - 범위:
-  - 한다: 지휘자의 에픽 · 로드맵 이름 풀이(roadmap_status --json) · spec 승인 앞과 에픽 머지 뒤와 로드맵 끝 자동 호출 · 게이트 사이 질문 옮기기 · 새 일의 씨앗 · 로드맵 없는 PR 의 qg 직접 호출은 그대로 둔다
+  - 한다: 지휘자의 에픽 · 로드맵 이름 풀이(roadmap_status --json) · spec 승인 앞과 에픽 머지 뒤와 로드맵 끝 자동 호출 · 게이트 사이 질문 옮기기 · 새 일의 씨앗 · 범위로 부른 리뷰가 바뀐 의도 문서를 따라가게 qg 한 곳 고치기 · 머지된 PR 의 범위 확인 · 로드맵 없는 PR 의 qg 직접 호출은 그대로 둔다
   - 안 한다: 걷기 · 실행(두 박자의 걷기 전제는 뺐다) · qg 가 돌려주는 꼴 자체(R5) · 머지된 에픽 다시 열기 · 옆 세션의 팀 구조 자체
 - 의존: R1, R2, R5
 - 브랜치: feature/conductor-qg-entry
 - 묶음: R3.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/, plugins/quality-gates/scripts/setup-qg.sh
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md
 
 ### R4 — qg 리뷰 전념 — 고치기 반복을 지휘 흐름으로
 - 의도: qg 는 리뷰만 하고 스스로 고치는 반복을 걷어내 고칠 일을 지휘 흐름(구현 담당자 · 재분해)과 qg 를 부른 세션으로 넘기되 옆 세션의 지휘자 설계에 녹인다
@@ -103,6 +103,13 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 원문:
   - 「그래」
   - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-20 · R3 의 경로 예약과 범위를 넓힌다 — R3 설계가 qg 의 한 곳(범위로 부른 리뷰가 바뀐 의도 문서를 따라가게)을 고치고 머지된 PR 의 범위를 확인하기로 했다
+- 바뀜: 바뀐 에픽 R3 「이대로 다시 나눈다 (권장)」 · 「qg 를 작게 고친다 (권장)」 · 「고친다 — 머지 방식별로 범위 확인 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+  - 「qg 를 작게 고친다 (권장)」
+  - 「고친다 — 머지 방식별로 범위 확인 (권장)」
 
 ## 위험 번호표
 
