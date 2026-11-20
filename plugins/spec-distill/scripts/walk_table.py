@@ -182,7 +182,6 @@ NEXT_USAGE = "next --roadmap <로드맵> --job <과제>"
 UNKNOWN_STAGE = team_status.UNKNOWN
 WAITING = "대기"
 MERGED = "머지됨"
-PARTLY = "일부 머지"
 PR_OPEN = "열림"
 GIT_FAILED = "git 읽기 실패 — "
 NO_ANCHOR = "걸음표에 %s 걸음이 없어 %s 걸음을 가를 수 없다"
