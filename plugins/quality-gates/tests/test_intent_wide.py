@@ -19,6 +19,7 @@ MARKERS = list(io_.DEFAULT_MARKERS)
 OTHER_MAX = "DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES"
 ENV_MARKERS = "DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS"
 DIFF_SHAPE = "차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다"
+REC = "docs/rm/one/reviews/2026-11-20-roadmap-end.md"
 UNREAD_ONE = "의도 문서인지 확인 못 한 문서 1 — 추적되지 않는다"
 
 
@@ -134,6 +135,14 @@ class TestBreadth(unittest.TestCase):
         for mode, names, want in cases:
             with self.subTest(mode=mode, names=names):
                 self.assertEqual(self._b(mode, names)[0], want)
+
+    def test_range_lists_changed_intent_docs(self):
+        design = "docs/specs/a-design.md"
+        self.assertEqual(self._b("range", {"src/a.py", design}), ("range", [], 0))
+        self.assertEqual(self._b("range", {design, "CHANGELOG.md"}), ("range", [design], 0))
+        self.assertEqual(self._b("range", {"docs/guide.md", "src/a.py"}), ("range", [], 0))
+        self.assertEqual(self._b("range", {"skills/x/SKILL.md"}), ("range", [], 0))   # 모델이 읽는 파일은 읽지 않는다
+        self.assertEqual(self._b("range", None), ("narrow", [], 0))
 
     def test_untracked_doc_counted(self):
         design = "docs/specs/a-design.md"
@@ -331,7 +340,7 @@ class TestWidePrepare(unittest.TestCase):
         tic._write("## Goals\ngoal-body\n", rd, "intent.md")
         return rd
 
-    def _prep(self, mode="pr", names=("src/a.py",), base=None, rd=None):
+    def _prep(self, mode="pr", names=("src/a.py",), base=None, rd=None, origin=None):
         rd = rd or self.rd
         if names is not None:
             tic._write("".join(n + "\n" for n in names), rd, "review-i1.names")
@@ -341,6 +350,8 @@ class TestWidePrepare(unittest.TestCase):
                 "--head", "HEAD", "--review-commit", "HEAD", "--specs-json", sp]
         if base is not None:
             args.append("--base=" + base)
+        if origin is not None:
+            args.append("--origin=" + origin)
         p = tic._cli(*args)
         self.assertEqual(p.returncode, 0, p.stderr)
         return p
@@ -355,6 +366,33 @@ class TestWidePrepare(unittest.TestCase):
         p = self._prep(mode="range")
         self.assertEqual(tic._last(p), "intent-call: first-only")
         self.assertIn("breadth: range", self._plan())
+        self.assertIn("넓게 본다 — 범위 모드", p.stdout.splitlines())
+
+    def _commit_record(self):
+        tic._write(tic._fm(type="roadmap-review", roadmap="docs/rm/one/roadmap.md",
+                           source_brief="docs/brief.md") + "기록\n", self.R, *REC.split("/"))
+        _ok(self.R, "add", REC)
+        _ok(self.R, "commit", "-q", "-m", "record")
+
+    def test_range_record_follows_roadmap_and_brief(self):
+        self._commit_record()
+        p = self._prep(mode="range", names=(REC,))
+        self.assertIn("breadth: range", self._plan())
+        self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+        self.assertIn("brief-quote-token", self._f("intent-origin.md"))
+        out = p.stdout.splitlines()
+        self.assertFalse([l for l in out if l.startswith("로드맵 없음") or l.startswith("원문 없음")])
+
+    def test_range_origin_same_file_loaded_once(self):
+        self._commit_record()
+        self._prep(mode="range", names=(REC,), origin="docs/brief.md")
+        origin = self._f("intent-origin.md")
+        self.assertEqual(origin.count("brief-quote-token"), 1)
+        self.assertEqual(origin.count("<!-- origin-source: docs/brief.md · file: docs/brief.md -->"), 1)
+
+    def test_range_code_only_keeps_today(self):
+        p = self._prep(mode="range", names=("src/a.py",))
+        self.assertTrue(self._f("intent-roadmap.md").startswith("로드맵 없음 — "))
         self.assertIn("넓게 본다 — 범위 모드", p.stdout.splitlines())
 
     def test_range_without_names_falls_back(self):
