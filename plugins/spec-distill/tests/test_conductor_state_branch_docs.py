@@ -7,6 +7,7 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_c
 from __future__ import annotations
 
 import ast
+import json
 import shutil
 import subprocess
 import sys
@@ -154,7 +155,6 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
         for word in ("conductor/<로드맵 폴더 이름>", "conductor-state-branch.md", "received.md"):
             self.assertIn(word, text, word)
         self.assertNotIn("리더 상태 브랜치는 아직 없다", text)
-        self.assertIn("RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다", text)   # 계획 2 가 옮기면서 이 단언을 뒤집는다
 
     def test_readme_and_changelog(self):
         # state_branch 는 설정 표가 이미 담은 낱말이라 이 절이 더한 낱말(스크립트 이름 · 절 이름)을 단언한다
@@ -170,6 +170,41 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
             self.assertIn(word, top, word)
         self.assertIn("`delete` 는 끈 상태에서도 돈다", top)   # m1 — 꺼도 지우기는 돈다
         self.assertIn("`delete` 는 끈 상태에서도 돕니다", readme)
+
+
+class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 몫)
+    def test_step_five_and_the_skill(self):
+        for word in (FILE_NAME, "안 올린 규칙 고침", "conductor_branch.py rules-branch", "판 번호"):
+            self.assertIn(word, step(5), word)
+        self.assertNotIn("rules-branch", step(4))   # 걸음 가르기가 이웃 걸음을 잡지 않는다
+        skill = (PLUGIN / "skills" / "epic-conductor" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Read " + POINTER, skill)
+
+    def test_procedure_file_has_the_three_new_sections(self):
+        text = NEW.read_text(encoding="utf-8")
+        for head in ("## 규칙을 고칠 때", "## 남이 올린 고침을 만났을 때", "## 대기 줄"):
+            self.assertIn(head, text, head)
+        for word in ("conductor_branch.py rules-add", "rules-drop", "rules-reset", "conductor_branch.py confirm",
+                     "확인할 끝", "40자", "pending.md", "사람 줄이라 옮기지 않은 대기 줄", "확인되지 않은 남의 고침",
+                     "남의 고침을 재지 못했다"):
+            self.assertIn(word, text, word)
+        self.assertNotIn("AskUserQuestion", text)
+
+    def test_team_files_now_moved(self):
+        text = (PLUGIN / "references" / "team-files.md").read_text(encoding="utf-8")
+        self.assertNotIn("RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다", text)
+        for word in ("rules_at", "--rules-at", "pending.md", "rules-base.md", "team_status.rules_tip", "확인한 끝"):
+            self.assertIn(word, text, word)
+
+    def test_readme_and_changelog_section_of_this_version(self):
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for word in ("rules-add", "rules-branch", "confirm", "pending.md", "rules_at"):
+            self.assertIn(word, readme, word)
+        version = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
+        section = log.split("\n## [%s]" % version, 1)[1].split("\n## [", 1)[0]
+        for word in ("leader_seat.py", "rules_at", "pending.md", "확인한 끝", "confirm"):
+            self.assertIn(word, section, word)
 
 
 class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명령 출력이 바뀌지 않는다
