@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brief_body  # noqa: E402
@@ -589,7 +590,7 @@ def cmd_job_new(a, W) -> int:
 
 # ── job sync: 결과 파일 맞추기 ─────────────────────────────────────────────────
 
-SYNC_HEAD_KEYS = ("type", "stage", "plan", "attempt", "role", "head", "bundle_at", "job_at")
+SYNC_HEAD_KEYS = ("type", "stage", "plan", "attempt", "role", "head", "bundle_at", "rules_at", "job_at")
 
 
 def _commit_flag(flag: str, value, W) -> str:
@@ -633,23 +634,29 @@ def sync_result_path(top: Path, value: str, W) -> tuple:
     return path, rel_path, team, job, parsed
 
 
-def _new_head(parsed: tuple, role: str, bundle_at: str, job_at: str) -> str:
+def _new_head(parsed: tuple, role: str, bundle_at: str, job_at: str, rules_at: Optional[str] = None) -> str:
     stage, plan, attempt = parsed
     values = {"type": team_files.RESULT_TYPE, "stage": stage, "plan": plan, "attempt": attempt,
-              "role": role, "head": job_at, "bundle_at": bundle_at, "job_at": job_at}
+              "role": role, "head": job_at, "bundle_at": bundle_at, "rules_at": rules_at, "job_at": job_at}
     lines = ["%s: %s" % (k, values[k]) for k in SYNC_HEAD_KEYS if values[k] is not None]
     return "---\n" + "\n".join(lines) + "\n---\n\n"
 
 
-def _swap_head(text: str, commit: str, key: str = "head") -> str:
-    """머리의 `<key>:` 줄을 commit 으로 — 머리 밖은 건드리지 않는다."""
+def _swap_head(text: str, commit: str, key: str = "head", insert_after: Optional[str] = None) -> str:
+    """머리의 `<key>:` 줄을 commit 으로 — 머리 밖은 건드리지 않는다. 그 줄이 없고 insert_after 가 있으면
+    머리의 `<insert_after>:` 줄 바로 뒤에 새 줄로 넣는다(그 줄의 줄바꿈 꼴 그대로)."""
     lines = text.split("\n")
+    after = None
     for i in range(1, len(lines)):
         if lines[i].rstrip("\r") == "---":
             break
         if lines[i].startswith(key + ":"):
             lines[i] = "%s: %s%s" % (key, commit, "\r" if lines[i].endswith("\r") else "")
-            break
+            return "\n".join(lines)
+        if insert_after is not None and after is None and lines[i].startswith(insert_after + ":"):
+            after = i
+    if after is not None:
+        lines.insert(after + 1, "%s: %s%s" % (key, commit, "\r" if lines[after].endswith("\r") else ""))
     return "\n".join(lines)
 
 
@@ -670,9 +677,11 @@ def cmd_job_sync(a, W) -> int:
         raise W.Usage("--ledger 와 --plan-file 은 함께만 준다")
     if a.role is not None and a.role not in team_layout.ROLES:
         raise W.Usage("--role 은 %s 가운데 하나다: %r" % (" · ".join(team_layout.ROLES), a.role))
-    for flag, value in (("--bundle-at", a.bundle_at), ("--job-at", a.job_at), ("--end", a.end)):
+    for flag, value in (("--bundle-at", a.bundle_at), ("--job-at", a.job_at), ("--rules-at", a.rules_at), ("--end", a.end)):
         if value is not None:
             _commit_flag(flag, value, W)
+    if a.rules_at is not None and not (a.bundle_at and a.job_at):
+        raise W.Usage("--rules-at 은 --bundle-at · --job-at 과 함께만 준다")
     path = Path(os.path.realpath(a.result))
     top = W.git_top(path)
     path, rel_path, team, job, parsed = sync_result_path(top, a.result, W)
@@ -699,12 +708,14 @@ def cmd_job_sync(a, W) -> int:
             raise W.Refused("머리를 만들 값이 없다 — 결과 파일이 없으면 --role · --bundle-at · --job-at 이 모두 필요하다: %s"
                             % rel_path)
         old, r = None, None
-        text = _new_head(parsed, a.role, a.bundle_at, a.job_at)
+        text = _new_head(parsed, a.role, a.bundle_at, a.job_at, a.rules_at)
         done.append("머리 만듦")
     if r is not None and r.end is None and (a.bundle_at or a.job_at):   # 이어 쓰는 파일 — 머리의 묶은 커밋 둘을 새 값으로 고친다
         if not (a.bundle_at and a.job_at):
             raise W.Usage("이어 쓰는 결과 파일의 머리는 --bundle-at 과 --job-at 을 함께 줘야 고친다")
         text = _swap_head(_swap_head(text, a.bundle_at, "bundle_at"), a.job_at, "job_at")
+        if a.rules_at:
+            text = _swap_head(text, a.rules_at, "rules_at", insert_after="bundle_at")
         if text != old:
             done.append("묶은 커밋 고침")
     # 계획의 task 절 수보다 큰 번호와 task 절이 없는 계획만 거절한다.

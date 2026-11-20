@@ -19,11 +19,12 @@
   roadmap_write.py job new --roadmap <team 로드맵> --name <이름> --branch <브랜치> --paths <쉼표 목록> --goal <한 줄>
                           [--not <한 줄>]…   단순 작업(kind: task)의 과제 폴더를 만든다 — 지시 원문은 표준 입력의
                           바이트 그대로다. 브랜치를 만들거나 커밋하지 않는다
-  roadmap_write.py job sync --result <결과 파일 경로> [--role <역할> --bundle-at <커밋> --job-at <커밋>]
+  roadmap_write.py job sync --result <결과 파일 경로> [--role <역할> --bundle-at <커밋> --job-at <커밋>] [--rules-at <커밋>]
                           [--ledger <원장> --plan-file <계획>] [--end <커밋>]   결과 파일을 맞춘다 — 없으면 머리를 만들고,
                           원장의 끝난 Task · Ruling 줄 가운데 없는 것만 덧붙이고, --end 면 끝 줄을 단다.
                           끝 줄이 없는 결과 파일(이어 쓰는 파일)에 --bundle-at · --job-at 을 함께 주면 머리의 두 커밋을 고친다
-                          (둘 가운데 하나만 주면 사용법 오류). 끝 줄이 있는 파일은 고치지 않는다.
+                          (둘 가운데 하나만 주면 사용법 오류). --rules-at(팀 규칙을 읽은 상태 브랜치 커밋)은 그 둘과
+                          함께만 주고 머리의 bundle_at 바로 뒤에 적는다. 끝 줄이 있는 파일은 고치지 않는다.
                           git 은 레포 뿌리 · 레포 설정을 읽을 때만 부른다
 
 종료 코드: 0 성공 · 1 쓰지 않음(표 오류 · 덮어쓰기 거부 · 검증 실패 — 쓴 것은 모두 되돌렸다) · 2 사용법 오류 ·
@@ -624,7 +625,7 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--not", dest="nots", action="append")
     y = j.add_parser("sync")
     y.add_argument("--result", required=True)
-    for flag in ("--role", "--bundle-at", "--job-at", "--ledger", "--plan-file", "--end"):
+    for flag in ("--role", "--bundle-at", "--job-at", "--rules-at", "--ledger", "--plan-file", "--end"):
         y.add_argument(flag)
     return ap
 

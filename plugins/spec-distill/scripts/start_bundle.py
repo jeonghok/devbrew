@@ -44,14 +44,17 @@ NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 브랜치가 없다"
 ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
 SYNC_LINE = "맞추는 명령: python3 %s job sync --result %s --role %s --bundle-at %s --job-at %s"
+RULES_AT_TAIL = " --rules-at %s"
 MERGED_PLAN = "%s 는 이미 기본 브랜치에 머지됐다(%s) — 머지 뒤에 고칠 일은 새 계획이나 새 과제로 연다"
 UNMERGED_UNKNOWN = "머지 여부를 확인하지 못했다: %s"
 
 
-def sync_line(write: str, role: str, bundle_at: str, job_at: str) -> str:
-    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13)."""
+def sync_line(write: str, role: str, bundle_at: str, job_at: str, rules_at: Optional[str] = None) -> str:
+    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13). rules_at(팀 규칙을 읽은 상태 브랜치 커밋)이
+    있으면 끝에 `--rules-at <커밋>` 을 붙이고, 없으면 그 꼬리 없이 낸다."""
     words = [roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py"))]
-    return SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
+    line = SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
+    return line + (RULES_AT_TAIL % roadmap_status._sh_word(rules_at) if rules_at else "")
 
 
 class Refused(Exception):
@@ -382,7 +385,8 @@ def _job_bundle(a) -> str:
             _streak_stop(git, commit, team, job, scope, intent, number, attempt)
         write = team.result(job, stage, attempt, number)
         role = a.role or team_layout.default_role(stage)
-        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit)]
+        rules_at = base.rules_commit if base.rules_commit != base.commit else None   # 상태 브랜치에서 읽은 규칙만(H1)
+        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit, rules_at)]
         if stage == DESIGN:
             tail.append("쓸 자리: %s" % place_sentence(team.design(job), stage))
         elif stage == PLAN:

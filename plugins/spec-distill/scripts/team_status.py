@@ -316,7 +316,9 @@ class Reader:
     def stale(self, tip: str, block: dict) -> list:
         """도는 일꾼(단계 · 계획마다 가장 새 시도이고 끝 줄이 없는 결과 파일)의 묶음이 낡았는가 — 알림 줄들(AC23).
         머리 bundle_at 의 글과 지금 글이 다르면 낡았다(I4). 팀 규칙 파일은 리더가 읽는 ref 에서, 공통 규칙 파일과 그 일꾼의
-        역할 문서는 기본 브랜치에서 읽는다. 머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
+        역할 문서는 기본 브랜치에서 읽는다. 팀 규칙 파일의 그때 글은 머리 rules_at(상태 브랜치에서 읽은 묶음)에서, 없으면
+        bundle_at 에서 읽고, rules_at 커밋이 이 레포에 없으면 재지 못했다고 알린다(R3 AC15).
+        머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
         git.blob · git.commit 만 쓴다 — 알림이 종료 코드를 바꾸지 않는다."""
         team, job = self.team, block["id"]
         if self.main is None:
@@ -348,15 +350,19 @@ class Reader:
             if at is None:
                 out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
                 continue
+            rules_from = self.git.commit(result.rules_at) if result.rules_at else at
+            if rules_from is None:   # 다른 클론이 쓴, 아직 받아 오지 않은 상태 브랜치 커밋 — 지어내지 않는다
+                out.append("%s: %s — 규칙을 읽은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.rules_at[:8]))
+                continue
             if lead is None:
                 lead = self.git.commit(team_layout.leader_ref(self.main, self.lead_tip)) or ""
             if not lead:
                 out.append("%s: %s — 팀 규칙을 읽을 커밋이 없다" % (STALE_UNMEASURED, name))
                 continue
             roadmaps_dir = team.roadmaps_dir
-            checks = [(team.rules, lead), (team_layout.handbook(roadmaps_dir), self.main),
-                      (team_layout.role_doc(roadmaps_dir, result.role), self.main)]
-            changed = [path for path, rev in checks if self.git.blob(at, path) != self.git.blob(rev, path)]
+            checks = [(team.rules, rules_from, lead), (team_layout.handbook(roadmaps_dir), at, self.main),
+                      (team_layout.role_doc(roadmaps_dir, result.role), at, self.main)]
+            changed = [path for path, then, rev in checks if self.git.blob(then, path) != self.git.blob(rev, path)]
             if changed:
                 out.append("%s: %s — 묶은 커밋 %s 뒤에 바뀜: %s" % (STALE, name, at[:8], " · ".join(changed)))
         return out

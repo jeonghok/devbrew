@@ -252,6 +252,7 @@ class Result:
     role: Optional[str] = None
     head: Optional[str] = None
     bundle_at: Optional[str] = None
+    rules_at: Optional[str] = None   # 팀 규칙을 읽은 상태 브랜치 커밋 — 없으면 bundle_at 에서 읽었다
     job_at: Optional[str] = None
     tasks: list = field(default_factory=list)
     rulings: list = field(default_factory=list)
@@ -350,11 +351,13 @@ def parse_result(text: str) -> Result:
     if why:
         r.problems.append(why)
         return r
-    r.problems += dups + _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at"))
+    r.problems += dups + _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at")
+                                        + (("rules_at",) if "rules_at" in meta else ()))
     if meta.get("role") not in team_layout.ROLES:
         r.problems.append("머리 role 이 역할 이름이 아니다: %r" % meta.get("role"))
     r.stage, r.role = meta.get("stage"), meta.get("role")
     r.head, r.bundle_at, r.job_at = _commit(meta, "head"), _commit(meta, "bundle_at"), _commit(meta, "job_at")
+    r.rules_at = _commit(meta, "rules_at")
     r.attempt, r.plan = _number(meta, "attempt"), _number(meta, "plan")
     body, unclosed = _outside_fences(rest)
     if unclosed:
