@@ -641,6 +641,26 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
                          (None, [LS.FOREIGN % 1 + TS.READ_DEFAULT_RULES]))
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, tip), 1)
 
+    def test_second_remake_keeps_my_replayed_commit_written(self):   # 마지막 리뷰 C1 — 이번 부름이 다시 얹은 내 커밋은 다음 시도에서 다시 얹어도 씀
+        real, calls, theirs = CB._push, [], []
+        with mock.patch.object(CB, "_push", return_value=("failed", "시험")):
+            self.write({self.team.path("note.md"): "n1\n"})   # 올리지 못한 내 커밋 — 씀으로 적혔다
+        self.foreign_edit("o1", {self.team.status: "x\n"}, fetch=False)
+
+        def push(root, name):   # 둘째 올리기 직전에 남이 또 올린다 — 두 번 다시 만든다(남의 클론의 올리기는 세지 않는다)
+            if str(root) != str(self.w):
+                return real(root, name)
+            calls.append(name)
+            if len(calls) == 2:
+                theirs.append(self.foreign_edit("o2", {self.team.status: "y\n"}, fetch=False))
+            return real(root, name)
+        with mock.patch.object(CB, "_push", side_effect=push):
+            res = self.write({self.team.path("note.md"): "n1\nn2\n"})
+        self.assertEqual((len(calls), res.pushed), (3, True))   # 양성 대조 — 두 번 다시 만들어 올렸다
+        mine = self.g("log", "--format=%H", "%s..%s" % (theirs[0], self.tip())).split()
+        ends = [r["끝"] for r in self.rows()]
+        self.assertEqual((len(mine), [c for c in mine if c not in ends]), (2, []))
+
     def test_settle_compacts_when_clean(self):
         self.write({self.team.status: "y\n"})
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
