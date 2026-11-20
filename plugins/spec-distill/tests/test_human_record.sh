@@ -149,6 +149,18 @@ python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SID2" --question
 assert_eq "$(rec)" "1" "AC5: 이미 다른 줄의 근거인 답(세션이 달라도) — 1"
 assert_eq "$(intent_lines)" "$N11" "AC5: 이미 근거인 답 — 그대로"
 
+# 14b — 11 에서 적은 줄의 머리로 다시 물어 「수정 필요」 를 고르면 그 줄이 막힌다(K9 · AC11 미룸). 답은 SID 에 쓴다
+led takeover --roadmap "$RM" --session "$SID" > /dev/null
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "AC11: 뒤에 고른 답이 없으면 human-check 0(양성 대조)"
+answer "$HEAD1 — 다시 묻는 자리표시 질문" "수정 필요"
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "AC11: 승인 뒤 같은 머리로 다른 라벨을 고르면 human-check 1"
+assert_contains "$(out)" "어긋남" "AC11: 물러선 승인 — 어긋남"
+assert_contains "$(out)" "그 머리로 더 뒤에 고른 답이 있다" "AC11: 물러선 승인 — 사유"
+assert_eq "$(rec)" "1" "AC11: 그 뒤 다시 적으려 하면 1"
+assert_contains "$(out)" "사람이 고른 라벨: 「수정 필요」" "AC11: record --human 은 가장 뒤 답을 고른다"
+assert_eq "$(intent_lines)" "$N11" "AC11: 물러선 승인 — 그대로"
+led takeover --roadmap "$RM" --session "$SID2" > /dev/null
+
 # 15 — 본문에 커밋되지 않은 변경
 printf '# 설계\n\n본문 고침\n\n## 지휘 기록\n' > "$W/$E1/design.md"
 assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "1" "AC4: 본문이 커밋되지 않았으면 ask-head 1"
