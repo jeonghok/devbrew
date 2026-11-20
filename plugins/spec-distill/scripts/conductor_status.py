@@ -46,6 +46,11 @@ SEP = " · "
 STAMP_LINE_RE = re.compile(cs.STAMP_RE.pattern + r" · 기준 커밋 ([0-9a-f]{8}) · 지휘 세션 ([A-Za-z0-9_-]{8})")
 LOCAL_TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
 PATH_MARK, MACHINE_MARK = "<경로>", "<기계>"
+NO_FETCH = "상태 브랜치를 받아 오지 않는 설정이다"
+FETCH_HINT = "git fetch origin 'refs/heads/conductor/*:refs/remotes/origin/conductor/*' 로 받아 온다"
+NO_STATUS = "STATUS 없음 — conductor_status.py sync 를 돌린다"
+SUITE_UNREAD = "스위트 잠금을 읽지 못했다"
+LETTERS_UNREAD = "갈라진 상태 브랜치라 글을 읽지 못했다"
 
 
 class StatusError(ValueError):
@@ -478,15 +483,17 @@ def default_moves(git, main: str, mine_open: list, reserved: list, shared) -> li
     return sorted(out, key=lambda r: r["branch"])
 
 
-def suites(root, table: list, me: str) -> list:
-    """끝나지 않은 다른 로드맵 가운데 스위트 잠금을 쥐고 돌고 있는 것 — 잡은 시각은 `HH:MM` 만(J36)."""
+def suites(root, table: list, me: str, unread: Optional[list] = None) -> list:
+    """끝나지 않은 다른 로드맵 가운데 스위트 잠금을 쥐고 돌고 있는 것 — 잡은 시각은 `HH:MM` 만(J36). 잠금을 읽지 못한 로드맵은 `unread` 에 이름을 쌓는다."""
     out = []
     for road in table:
         if road.name == me or not road.unfinished:
             continue
         try:
             held = suite_lock.state(suite_lock.lock_path(cs.machine_dir(state_root(str(root)), road.path)))
-        except cs.MachineError:
+        except (cs.MachineError, OSError):
+            if unread is not None:
+                unread.append(CB.visible(road.name))
             continue
         if held["held"] and held["busy"]:
             m = HOLD_TIME_RE.fullmatch(held["taken_at"])
@@ -505,7 +512,8 @@ def cross_view(root, roadmap_rel: str, now=None) -> dict:
     main, shared = _main_commit(root), _shared_names(root)
     git = RS.Git(str(root))
     view = {"me": me, "computed": CB.stamp(now), "reserve": [], "changed": [], "versions": [], "version_unreadable": 0,
-            "moves": [], "suites": [], "unchecked_roadmaps": []}
+            "moves": [], "suites": [], "unchecked_roadmaps": [], "unavailable": None, "status_text": None, "waiting": [], "quiet": [],
+            "no_branch": [], "status_unreadable": [], "waiting_malformed": 0, "incoming": None, "counts": None, "no_fetch": False}
     mine_open = open_branches(root, mine)
     open_by = {me: mine_open}
     for road in table:
@@ -529,10 +537,187 @@ def cross_view(root, roadmap_rel: str, now=None) -> dict:
     view["versions"], view["version_unreadable"] = version_claims(root, git, main, open_by, shared)
     mine_reserved = [e for _i, _s, reserved, _d, _u in _unfinished_blocks(root, mine, main) for e in reserved]
     view["moves"] = default_moves(git, main, mine_open, mine_reserved, shared)
-    view["suites"] = suites(root, table, me)
+    suite_unread = []
+    view["suites"] = suites(root, table, me, suite_unread)
+    view["unchecked_roadmaps"] += [(name, SUITE_UNREAD) for name in suite_unread]
     if git.failures:
         view["unchecked_roadmaps"].append(("git", CB.visible(git.failures[0])))
+    why = CB.availability(root, roadmap_rel)
+    if why:
+        view["unavailable"] = CB.visible(why)   # 쓸 수 없는 레포는 git 으로 계산한 것까지만 낸다(AC14)
+        return view
+    _add_state_view(root, roadmap_rel, me, table, view)
     return view
+
+
+def fetch_covers(refspecs: list, ref: str) -> bool:
+    """`remote.origin.fetch` 의 줄들이 그 ref 를 받아 오는가(J38) — `^` 로 시작하는 줄이 맞으면 다른 줄이 받아도 거짓이다."""
+    covered = False
+    for spec in refspecs:
+        spec = spec.strip()
+        negative = spec.startswith("^")
+        pattern = spec.lstrip("+^").split(":", 1)[0]
+        head, star, tail = pattern.partition("*")
+        hit = (ref == pattern) if not star else (len(ref) >= len(head) + len(tail) and ref.startswith(head) and ref.endswith(tail))
+        if hit and negative:
+            return False
+        covered = covered or hit
+    return covered
+
+
+def _fetch_skips_state_branches(root) -> bool:
+    rc, out, _e = CB.git(root, "for-each-ref", "--format=%(refname)", CB.TRACKING_PREFIX + CB.STATE_BRANCH_PREFIX)
+    if rc != 0 or out.strip():
+        return False
+    rc, cfg, _e = CB.git(root, "config", "--get-all", "remote.origin.fetch")
+    specs = cfg.splitlines() if rc == 0 else []
+    return not fetch_covers(specs, "refs/heads/" + CB.STATE_BRANCH_PREFIX + "x")
+
+
+def _waiting_rows(status: Status) -> tuple:
+    """남이 쓴 STATUS 의 「기다리는 질문」 절 — (닫힌 꼴인 줄들, 꼴 밖이라 내지 않은 줄 수). 세 칸이 모두 닫힌 꼴일 때만 낸다."""
+    rows, bad = [], 0
+    for line in status.sections["기다리는 질문"]:
+        if line == NONE_LINE:
+            continue
+        cells = line.split(SEP)
+        if (len(cells) == 3 and (cs.ASK_EPIC_RE.fullmatch(cells[0]) or cells[0] == cs.ASK_NO_EPIC) and cells[1] in cs.ASK_KINDS
+                and CB.parse_stamp(cells[2]) is not None):
+            rows.append({"epic": cells[0], "kind": cells[1], "since": cells[2]})
+        else:
+            bad += 1
+    return rows, bad
+
+
+def _add_state_view(root, roadmap_rel: str, me: str, table: list, view: dict) -> None:
+    """상태 브랜치에서 읽는 칸들 — 내 STATUS · 모든 로드맵의 기다리는 질문 · 온 글과 수 · 받아 오는 설정. 쓰지도 받아 오지도 않는다."""
+    team = CB.team_of(root, roadmap_rel)
+    tip = CB.seen_tip(root, me)[0] or CB.local_tip(root, me)
+    view["status_text"] = CB.read(root, tip, team.status) if tip else None
+    waiting = []
+    try:
+        waiting = [{"roadmap": me, "epic": r["에픽"], "kind": r["종류"], "since": r["언제부터"], "status_computed": None}
+                   for r in L.load(root, roadmap_rel)[cs.ASKING]]
+    except L.Fail as exc:
+        view["unchecked_roadmaps"].append((me, CB.visible(str(exc))))
+    for road in table:
+        if road.name == me or not road.unfinished:
+            continue
+        label = CB.visible(road.name)
+        try:
+            other_tip, why = CB.seen_tip(root, road.name)
+            if other_tip is None:
+                view["status_unreadable" if why else "no_branch"].append(label)
+                continue
+            text = CB.read(root, other_tip, CB.team_of(root, road.path).status)
+            status = parse_status(text) if text is not None else None
+        except (CB.BranchError, StatusError):
+            status = None
+        if status is None:
+            view["status_unreadable"].append(label)
+            continue
+        rows, bad = _waiting_rows(status)
+        view["waiting_malformed"] += bad
+        waiting += [dict(r, roadmap=label, status_computed=status.computed) for r in rows]
+        if not rows and not bad:
+            view["quiet"].append((label, status.computed))
+    view["waiting"] = sorted(waiting, key=lambda w: (_asked_since({"언제부터": w["since"]}), w["roadmap"], w["epic"], w["kind"]))
+    try:
+        view["incoming"] = CM.incoming(root, me, tip)
+        view["counts"] = CM.counts(root, me, tip, table)
+    except Exception as exc:   # 글을 읽지 못해도 화면은 선다 — 읽지 못했다고 알린다
+        view["unchecked_roadmaps"].append((me, "온 글을 읽지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(str(exc).split("\n")[0]))))
+    if view["incoming"] is not None:
+        view["unchecked_roadmaps"] += [(n, LETTERS_UNREAD) for n in view["incoming"].unread if n not in view["status_unreadable"]]
+    view["no_fetch"] = _fetch_skips_state_branches(root)
+
+
+# ── show ─────────────────────────────────────────────────────────────────────
+
+def _when(stamp: str, now: datetime.datetime) -> str:
+    """읽는 기계의 시각으로 — 오늘이면 `HH:MM`, 아니면 `MM-DD HH:MM`."""
+    at = CB.parse_stamp(stamp)
+    if at is None:
+        return CB.STAMP_UNKNOWN
+    local = at.astimezone()
+    return local.strftime("%H:%M" if local.date() == now.astimezone().date() else "%m-%d %H:%M")
+
+
+def _age(stamp: str, now: datetime.datetime) -> str:
+    at = CB.parse_stamp(stamp)
+    minutes = int(max(0, (now - at).total_seconds()) // 60) if at is not None else 0
+    return "%d분" % minutes if minutes < 60 else "%d시간" % (minutes // 60)
+
+
+def _touch_lines(view: dict) -> list:
+    who = lambda name: "이 로드맵" if name == view["me"] else name  # noqa: E731
+    unchecked = lambda flag: " (PR 상태 미확인)" if flag else ""  # noqa: E731
+    out = []
+    for r in view["reserve"]:
+        out.append("- 예약 겹침: %s — %s %s(%s) · 이 로드맵 %s(%s)%s" % (r["path"], r["roadmap"], r["theirs"][0], r["theirs"][1],
+                                                                       r["mine"][0], r["mine"][1], unchecked(r["unchecked"])))
+    for r in view["changed"]:
+        out.append("- 바꾼 파일 겹침: %s — %s %s · 이 로드맵 %s%s" % (r["path"], r["roadmap"], r["theirs"], r["mine"], unchecked(r["unchecked"])))
+    for v in view["versions"]:
+        n = len(v["holders"])
+        out.append("- 판 번호: %s — 기본 브랜치 %s · %s 을 %s 잡았다(%s) — 먼저 머지되는 쪽이 그 번호, 뒤쪽은 다시 잡는다" % (
+            v["name"], v["base"], v["version"], "둘이" if n == 2 else "%d개 브랜치가" % n,
+            " · ".join("%s %s" % (who(road), branch) for road, branch in v["holders"])))
+    for m in view["moves"]:
+        out.append("- 기본 브랜치의 움직임: %s 보다 %d 커밋 앞섬 · 그 가운데 이 로드맵의 예약 경로를 바꾼 것 %d%s" % (
+            m["branch"], m["ahead"], m["touching"], "(%s)" % " · ".join(m["paths"]) if m["paths"] else ""))
+    for s in view["suites"]:
+        out.append("- 이 기계에서 도는 스위트: %s — %s부터" % (s["roadmap"], s["since"]))
+    for name, why in view["unchecked_roadmaps"]:
+        out.append("- 검사 불가: %s — %s" % (name, why))
+    if view["version_unreadable"]:
+        out.append("- 읽지 못한 판 파일 %d" % view["version_unreadable"])
+    return out or ["- 닿는 것 없음"]
+
+
+def _state_lines(view: dict, now: datetime.datetime) -> list:
+    out = ["사용자를 기다리는 질문 (오래된 순)"]
+    rows = []
+    for w in view["waiting"]:
+        age = "" if w["status_computed"] is None else "   (STATUS %s 전 계산)" % _age(w["status_computed"], now)
+        rows.append("- %s · %s · %s · %s부터%s" % ("이 로드맵" if w["roadmap"] == view["me"] else w["roadmap"], w["epic"], w["kind"],
+                                                _when(w["since"], now), age))
+    out += rows or ["- " + NONE_LINE]
+    out += ["- %s · 기다리는 질문 없음   (STATUS %s 전 계산)" % (name, _age(at, now)) for name, at in view["quiet"]]
+    out += ["- %s · %s" % (name, CB.NO_BRANCH) for name in view["no_branch"]]
+    out += ["- %s · STATUS 를 읽지 못했다" % name for name in view["status_unreadable"]]
+    if view["waiting_malformed"]:
+        out.append("읽지 못한 기다리는 질문 줄 %d" % view["waiting_malformed"])
+    inc, c = view["incoming"], view["counts"]
+    if inc is not None and c is not None:
+        out.append("온 글 %d · 아직 받지 않은 보낸 글 %d · 답 기다리는 글 %d" % (len(inc.letters), c.unreceived, c.awaiting))
+        for l in inc.letters:
+            out.append("- %s → %s · %s · %s:%s" % (CB.visible(l.sender), CB.visible(l.kind), CB.visible(l.about) or "-",
+                                                  CB.branch_of(CB.visible(l.sender)), CB.visible(l.path)))
+        if c.no_branch or c.to_finished:
+            out.append("상대 상태 브랜치 없음 %d · 끝난 로드맵에 보낸 글 %d(세지 않았다)" % (c.no_branch, c.to_finished))
+        for text, n in (("보낸 쪽이 맞지 않아 내지 않은 글", inc.wrong_from), ("꼴이 맞지 않아 내지 않은 글", inc.malformed),
+                        ("로드맵 없는 상태 브랜치", inc.stray)):
+            if n:
+                out.append("%s %d" % (text, n))
+    if view["no_fetch"]:
+        out.append("%s — %s" % (NO_FETCH, FETCH_HINT))
+    return out
+
+
+def render_view(view: dict, now=None) -> str:
+    """`show` 가 내는 글 — 계산해 둔 자료만 글로 옮긴다. 쓰지도 받아 오지도 않는다."""
+    now = now or datetime.datetime.now().astimezone()
+    if view["unavailable"]:
+        head = view["unavailable"] + "\n"
+    elif view["status_text"] is None:
+        head = NO_STATUS + "\n"
+    else:
+        head = "\n".join(CB.visible(line) for line in view["status_text"].split("\n"))   # 내 글도 화면에 낼 때는 한 번 거른다
+    out = [head, "다른 로드맵과 닿는 것 (계산 %s)" % _when(view["computed"], now)] + _touch_lines(view)
+    if not view["unavailable"]:
+        out += _state_lines(view, now)
+    return "\n".join(out) + "\n"
 
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
@@ -546,6 +731,8 @@ def main(argv=None) -> int:
     sy = sub.add_parser("sync", help="현황을 계산해 상태 브랜치에 쓴다")
     sy.add_argument("--roadmap", required=True)
     sy.add_argument("--session", required=True)
+    sh = sub.add_parser("show", help="다른 로드맵과 닿는 것 · 기다리는 질문 · 온 글을 한 화면에 낸다(읽기만 한다)")
+    sh.add_argument("--roadmap", required=True)
     wa = sub.add_parser("waiting", help="사용자에게 건 질문을 올리고 내린다")
     wsub = wa.add_subparsers(dest="wcmd", required=True)
     wadd = wsub.add_parser("add")
@@ -558,6 +745,16 @@ def main(argv=None) -> int:
     wadd.add_argument("--via", required=True)
     wclr.add_argument("--kind")
     args = ap.parse_args(argv)
+    if args.cmd == "show":
+        try:
+            sys.stdout.write(render_view(cross_view(args.root, args.roadmap)))
+        except CB.BranchError as exc:
+            print("[spec-distill] " + CB.visible(str(exc)), file=sys.stderr)
+            return exc.rc
+        except Exception as exc:   # 예상 밖 예외도 종료 코드 3 — 화면을 내지 못한 것이다
+            print("[spec-distill] 보이지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(str(exc).split("\n")[0])), file=sys.stderr)
+            return 3
+        return 0
     try:
         extra = []
         if args.cmd == "waiting" and args.wcmd == "add":
