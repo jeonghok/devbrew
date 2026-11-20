@@ -96,7 +96,7 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("conductor_branch.py", step(4))
 
 
-NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py"}
+NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py", "leader_seat.py"}   # leader_seat — R3 계획 2(S13)
 
 
 def closure(start: str, top_only: bool = False, scripts=None) -> set:
@@ -142,7 +142,7 @@ class Closure(unittest.TestCase):   # J41 — 상태 계산은 새 모듈을 가
             self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, set())   # 심기 전에는 비어 있다
             path = copy / "roadmap_status.py"
             path.write_text("import conductor_status\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
-            self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, {"conductor_status.py", "conductor_branch.py", "conductor_mail.py"})
+            self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, {"conductor_status.py", "conductor_branch.py", "conductor_mail.py", "leader_seat.py"})
 
 
 class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫

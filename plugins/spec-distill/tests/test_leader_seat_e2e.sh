@@ -2,6 +2,7 @@
 # 리더 자리의 끝에서 끝 — 상태 브랜치의 규칙 사본 → 시작 묶음의 규칙 · 맞추는 명령의 --rules-at → job sync 의 rules_at →
 # 상태 계산의 「묶음 낡음」(R3 AC15) · 남의 고침은 묶음 알림으로 닫는다(AC21) · sync 가 같아진 사본을 지우고 갈라짐을 알린다(AC17).
 # 대기 줄 — 상태 브랜치의 pending.md 에 쌓고 flush 가 확인된 줄만 옮긴다 · 사람 줄은 건너뛰어 센다(AC16 · AC21 · M15 · M16).
+# 끝에서 끝 ①–④(걸음 22–25) — 두 rules-add 사이의 묶음 낡음 · 둘째 클론의 남의 고침과 confirm · rules-branch 머지 뒤 sync · 꺼진 설정의 R1 출력(AC14 · AC20).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_leader_seat_e2e.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -322,5 +323,123 @@ BEFORE="$(cksum < "$W/$INTENT")"
 assert_eq "$(flush)" "2" "21 사람 줄이 섞인 flush 는 2 — $(cat "$T/led.txt")"
 assert_eq "$(cat "$T/led.txt")" "[spec-distill] 사람 줄(spec 승인)은 record --human 으로만 적는다 — 고른 글을 인자로 받지 않는다" "21 R1 의 멈춤 글 그대로"
 assert_eq "$(cksum < "$W/$INTENT")" "$BEFORE" "21 결정 기록은 그대로"
+
+note "# 22 — 끝에서 끝 ①: rules-add → 묶음 → job sync → rules-add → 묶음 낡음은 앞 결과에만(AC15)"
+new_repo "$T0/e" && ok "다섯째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "다섯째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
+printf '.claude/\n' >> "$W/.git/info/exclude"
+B="$(g rev-parse origin/main)"
+BASE_RULES="$(g show "$B:$RULES" 2>/dev/null)"
+g checkout -q -b feature/tm-e1 main
+put "$E1/design.md" "E1 설계 한 줄" && put "$E1/plan-1.md" "E1 계획 한 줄" && g commit -qm "E1 설계 · 계획" && push_br feature/tm-e1
+approved "spec 승인" E1 - - 2026-11-20 && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+assert_eq "$?" "0" "22 준비: 과제 브랜치에 설계 · 계획 · 관문 줄을 올렸다"
+assert_eq "$(cb ensure --roadmap "$RM" --session "$SID")" "0" "22 ensure rc 0 — $(cat "$T/cb.txt")"
+STATE="$(g for-each-ref --format='%(refname:short)' refs/heads/conductor/)"
+L1="- [사본] 끝에서 끝 첫 줄 · 조건: 역할=worker · 출처: a · 확인: b"
+L2="- [사본] 끝에서 끝 둘째 줄 · 조건: 역할=worker · 출처: a · 확인: b"
+assert_eq "$(cb rules-add --roadmap "$RM" --session "$SID" --line "$L1")" "0" "22 첫 rules-add rc 0 — $(cat "$T/cb.txt")"
+TA="$(stip)"
+assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "22 첫 묶음 rc 0 — $(cat "$T/b.err")"
+assert_eq "$(grep -c "^규칙 (${B} · 팀 규칙은 ${TA}):\$" "$T/b.txt") $(sync_cmd | awk '{print $(NF-1), $NF}')" "1 --rules-at ${TA}" "22 규칙 머리와 맞추는 명령이 첫 사본 끝"
+assert_eq "$(run_sync)" "0" "22 첫 job sync rc 0 — $(cat "$T/out.txt")"
+up "E1 결과 1"
+assert_eq "$(cb rules-add --roadmap "$RM" --session "$SID" --line "$L2")" "0" "22 둘째 rules-add rc 0 — $(cat "$T/cb.txt")"
+TB="$(stip)"
+assert_eq "$(bundle --job E1 --stage plan --plan 1)" "0" "22 둘째 묶음(계획 단계) rc 0 — $(cat "$T/b.err")"
+assert_eq "$(grep '^쓸 것: ' "$T/b.txt") $(sync_cmd | awk '{print $(NF-1), $NF}')" "쓸 것: ${E1}/results/plan-plan-1-1.md --rules-at ${TB}" "22 둘째 묶음은 둘째 사본 끝"
+assert_eq "$(run_sync)" "0" "22 둘째 job sync rc 0 — $(cat "$T/out.txt")"
+up "E1 계획 결과 1"
+g checkout -q main
+status "$T/s.json" >/dev/null
+assert_eq "$(stale_notes)" "['묶음 낡음: implement-plan-1-1.md — 묶은 커밋 ${B:0:8} 뒤에 바뀜: ${RULES}']" "22 묶음 낡음은 둘째 rules-add 앞의 결과에만(뒤에 받은 plan-plan-1-1.md 에는 없다)"
+
+note "# 23 — 끝에서 끝 ②: 둘째 클론의 규칙 사본 · pending.md 고침 → 알림 · 기본 브랜치 규칙 · flush 가 옮기지 않음 → confirm → 사본을 싣고 옮긴다(AC21)"
+O5="$T/other"
+git clone -q "file://$T/origin.git" "$O5" 2>/dev/null
+for k in "user.name other" "user.email other@example.invalid" "commit.gpgsign false"; do git -C "$O5" config $k; done
+printf '.claude/\n' >> "$O5/.git/info/exclude"
+git -C "$O5" update-ref "refs/heads/$STATE" "refs/remotes/origin/$STATE"
+assert_eq "$( (cd "$O5" && python3 "$CL" claim --roadmap "$RM" --session "$SID2") >/dev/null 2>&1; echo $?)" "0" "23 둘째 클론이 자기 표지를 쥔다"
+LF="- [남] 둘째 클론이 더한 줄 · 조건: 역할=worker · 출처: a · 확인: b"
+F1="$(copy "$O5" "$SID2" "$(printf '%s\n%s\n%s\n%s\n' "$BASE_RULES" "$L1" "$L2" "$LF")")"
+F2="$(python3 - "$S" "$O5" "$RM" "$SID2" "$PEND" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_branch as CB
+root, roadmap, session, path = sys.argv[2:6]
+line = "- E1 · 지휘 기록 · 결정 · 2026-11-21 · 둘째 클론의 결정\n"
+print(CB.write(root, roadmap, session, lambda base: {path: (base.read(path) or "") + line}, "남의 대기 줄").commit)
+PY
+)"
+g fetch -q origin
+assert_eq "$(g rev-parse "refs/remotes/origin/$STATE")" "$F2" "23 둘째 클론의 두 커밋을 받아 왔다(양성 대조)"
+assert_eq "$(g rev-list --count "$TB..$F2")" "2" "23 남의 커밋이 둘(규칙 사본 · pending.md)"
+assert_eq "$(csync)" "0" "23 sync rc 0 — $(cat "$T/cs.txt")"
+assert_eq "$(grep -c '^\[spec-distill\] 확인되지 않은 남의 고침 2 — conductor_branch.py confirm' "$T/cs.txt")" "1" "23 sync 가 두 쪽 남의 고침 2 를 알린다 — $(cat "$T/cs.txt")"
+g checkout -q feature/tm-e1
+assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "23 남의 고침 뒤 묶음 rc 0 — $(cat "$T/b.err")"
+assert_contains "$(grep '^알림: ' "$T/b.txt")" "알림: 확인되지 않은 남의 고침 1 — 규칙은 기본 브랜치의 글을 읽는다" "23 묶음은 규칙 쪽 남의 고침 1 을 알린다"
+assert_eq "$(grep -c "^규칙 (${B}):\$" "$T/b.txt")" "1" "23 규칙 머리는 기본 브랜치 커밋"
+assert_not_contains "$(cat "$T/b.txt")" "$LF" "23 남이 더한 줄을 싣지 않는다"
+assert_not_contains "$(sync_cmd)" "--rules-at" "23 맞추는 명령에 --rules-at 이 없다"
+g checkout -q main
+assert_eq "$(flush)" "0" "23 확인 전 flush rc 0 — $(cat "$T/led.txt")"
+assert_contains "$(cat "$T/led.txt")" "[spec-distill] 확인되지 않은 남의 고침이 더한 대기 줄 1 — 옮기지 않았다" "23 flush 가 남의 대기 줄을 세고 옮기지 않는다"
+assert_eq "$(decided "결정 · 2026-11-21 · 둘째 클론의 결정")" "0" "23 결정 기록에 남의 줄이 없다"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID")" "1" "23 확인 표시 없는 confirm 은 보고하고 1 — $(cat "$T/cb.txt")"
+assert_contains "$(cat "$T/cb.txt")" "${F1:0:8} · " "23 보고에 규칙 사본을 고친 남의 커밋"
+assert_contains "$(cat "$T/cb.txt")" "${F2:0:8} · " "23 보고에 pending.md 를 고친 남의 커밋"
+CTIP="$(sed -n '$s/^확인할 끝: //p' "$T/cb.txt")"
+assert_eq "$CTIP" "$(stip)" "23 마지막 줄이 확인할 끝(40자)"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID" --confirmed "$CTIP")" "0" "23 그 끝으로 확인 rc 0 — $(cat "$T/cb.txt")"
+TC="$(stip)"
+g checkout -q feature/tm-e1
+assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "23 확인 뒤 묶음 rc 0 — $(cat "$T/b.err")"
+assert_eq "$(grep -c "^규칙 (${B} · 팀 규칙은 ${TC}):\$" "$T/b.txt")" "1" "23 확인 뒤 규칙 머리는 상태 끝"
+assert_contains "$(cat "$T/b.txt")" "$LF" "23 확인 뒤 묶음이 사본(남이 더한 줄)을 싣는다"
+assert_not_contains "$(grep '^알림: ' "$T/b.txt")" "남의 고침" "23 확인 뒤 남의 고침 알림이 없다"
+assert_eq "$(sync_cmd | awk '{print $(NF-1), $NF}')" "--rules-at ${TC}" "23 확인 뒤 맞추는 명령에 --rules-at"
+g checkout -q main
+assert_eq "$(flush)" "0" "23 확인 뒤 flush rc 0 — $(cat "$T/led.txt")"
+assert_not_contains "$(cat "$T/led.txt")" "확인되지 않은 남의 고침이 더한 대기 줄" "23 확인 뒤에는 남의 줄로 세지 않는다"
+assert_eq "$(decided "결정 · 2026-11-21 · 둘째 클론의 결정")" "1" "23 확인 뒤 flush 가 남의 줄을 옮겼다"
+g checkout -q -- "$INTENT"
+
+note "# 24 — 끝에서 끝 ③: rules-branch → 기본 브랜치에 머지 → sync 가 사본을 지우고 STATUS 가 0줄(AC17)"
+assert_eq "$(cb rules-branch --roadmap "$RM" --session "$SID" --branch chore/tm-rules)" "0" "24 rules-branch rc 0 — $(cat "$T/cb.txt")"
+assert_eq "$(g show "chore/tm-rules:$RULES")" "$(g show "$(stip):$RULES")" "24 규칙 브랜치의 규칙 파일이 사본 글"
+g merge -q --no-edit chore/tm-rules && push_main
+assert_eq "$(g rev-parse "origin/main:$RULES")" "$(g rev-parse "$(stip):$RULES")" "24 기본 브랜치의 규칙이 사본과 같다(양성 대조)"
+assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "있다 있다" "24 머지 직후에는 사본이 남아 있다(양성 대조)"
+assert_eq "$(csync)" "0" "24 sync rc 0 — $(cat "$T/cs.txt")"
+assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "없다 없다" "24 머지된 사본과 rules-base.md 를 지웠다"
+assert_eq "$(gap)" "- 0줄" "24 STATUS 가 0줄"
+
+note "# 25 — 끝에서 끝 ④: state_branch 끔 — 묶음의 규칙 머리가 기본 브랜치 · 맞추는 명령이 R1 글 · add · pending · flush 가 기계 상태(AC14 · AC20)"
+L3="- [사본] 끄기 전 셋째 줄 · 조건: 역할=worker · 출처: a · 확인: b"
+assert_eq "$(cb rules-add --roadmap "$RM" --session "$SID" --line "$L3")" "0" "25 끄기 전 rules-add rc 0 — $(cat "$T/cb.txt")"
+assert_eq "$(pend "결정 · 2026-11-21 · 켜진 동안 줄")" "0" "25 끄기 전 add 는 pending.md 로 rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(seen_pend | grep -c -F -x -- "- E1 · 지휘 기록 · 결정 · 2026-11-21 · 켜진 동안 줄")" "1" "25 pending.md 에 켜진 동안 줄(양성 대조)"
+printf -- '---\nstate_branch: 끔\n---\n' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "상태 브랜치 끔" && push_main
+B2="$(g rev-parse origin/main)"
+assert_eq "$(on_tip "$RULES")" "있다" "25 상태 브랜치에 규칙 사본이 있다(양성 대조 — 꺼짐만이 사본을 읽지 않는 까닭)"
+g checkout -q feature/tm-e1
+assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "25 꺼진 뒤 묶음 rc 0 — $(cat "$T/b.err")"
+assert_eq "$(grep -c "^규칙 (${B2}):\$" "$T/b.txt")" "1" "25 규칙 머리는 기본 브랜치 커밋 하나(AC14)"
+assert_not_contains "$(cat "$T/b.txt")" "$L3" "25 사본의 줄을 싣지 않는다"
+assert_eq "$(sync_cmd | sed 's/^.* job sync //')" "--result ${E1}/results/implement-plan-1-1.md --role worker --bundle-at ${B2} --job-at $(g rev-parse feature/tm-e1)" "25 맞추는 명령이 R1 글 그대로(--rules-at 없음)"
+g checkout -q main
+assert_eq "$(pend "결정 · 2026-11-21 · 꺼진 뒤 줄")" "0" "25 꺼진 뒤 add rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(cat "$T/led.txt")" "적었다 — 쌓인 기록: E1 · 지휘 기록 · 결정 · 2026-11-21 · 꺼진 뒤 줄" "25 add 의 출력은 R1 글 그대로"
+assert_eq "$(led pending --roadmap "$RM" --epic E1)" "0" "25 꺼진 뒤 pending rc 0"
+assert_eq "$(cat "$T/led.txt")" "- 결정 · 2026-11-21 · 꺼진 뒤 줄" "25 pending 은 기계 상태의 줄만 R1 글로(pending.md 를 읽지 않는다)"
+assert_eq "$(flush)" "0" "25 꺼진 뒤 flush rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(wc -l < "$T/led.txt" | tr -d ' ') $(sed "s| — .*/${INTENT} 의 결정 기록\$||" "$T/led.txt")" "1 쌓인 기록 1줄을 옮겼고 0줄은 이미 있어 건너뛰었다(커밋은 리더가)" "25 flush 의 출력은 R1 글 한 줄(알림 없음)"
+assert_eq "$(decided "결정 · 2026-11-21 · 꺼진 뒤 줄"):$(decided "결정 · 2026-11-21 · 켜진 동안 줄")" "1:0" "25 flush 는 기계 상태의 줄만 옮겼다"
+assert_eq "$(led pending --roadmap "$RM" --epic E1; cat "$T/led.txt")" "0
+쌓인 기록 없음" "25 flush 뒤 기계 상태가 비었다(R1)"
+assert_eq "$(seen_pend | grep -c -F -x -- "- E1 · 지휘 기록 · 결정 · 2026-11-21 · 켜진 동안 줄")" "1" "25 pending.md 는 그대로"
+g checkout -q -- "$INTENT"
 
 finish
