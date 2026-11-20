@@ -243,6 +243,16 @@ class Sync(StatusRepo):
         self.assertIn("## 편지\n- 보낸 글 1 · 아직 받지 않은 보낸 글 1 · 답 기다리는 글 1 · 받은 글 0\n", self.status_text())
 
 
+class Scrub(StatusRepo):
+    def test_a_private_path_in_the_middle_of_a_word_is_covered(self):   # 낱말 앞에 글자가 붙으면 `/` 로 시작하는 낱말 규칙이 못 본다
+        for base in (str(self.w), str(self.w.resolve()), str(Path.home())):
+            out = CS.scrub("파일=%s/src/a.py 와 (%s)" % (base, base), self.w)
+            self.assertNotIn(base, out)
+            self.assertEqual(out.count("<경로>"), 2, out)
+        self.assertEqual(CS.scrub("홈 ~/notes 끝", self.w), "홈 <경로> 끝")
+        self.assertEqual(CS.scrub("줄\n바꿈\r끝\u2028x", self.w), "줄 바꿈 끝\\u2028x")
+
+
 class WindowAndFloor(StatusRepo):
     def ask(self, via, session=SID):
         def change(d):
