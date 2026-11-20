@@ -244,6 +244,7 @@ def _design_body(text: str) -> str:
         here, pos = pos, pos + len(line) + 1
         fenced = any(a <= here < b for a, b in spans)
         level = 0 if fenced else _heading_level(line)
+        # 기록 절은 수준 2 제목에서만 끝난다 — 수준 1 제목은 기록 절 안의 글로 둔다(지금 동작)
         if cut == "record" and level == 2:
             cut = None
         elif cut == "deferred" and 1 <= level <= 3:

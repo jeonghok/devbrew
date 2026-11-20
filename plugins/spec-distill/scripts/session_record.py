@@ -72,7 +72,7 @@ def locate(session, environ=None):
             if cand.is_file():
                 found.append(cand)
     except OSError:
-        found = []
+        raise Unreadable("세션 기록 폴더를 읽지 못했다: %s" % projects)
     if not found:
         raise Unreadable("세션 기록 파일을 찾지 못했다: %s.jsonl" % session)
     if len(found) > 1:
@@ -187,6 +187,7 @@ def _scan(path):
                 if TOOL not in line and "tool_result" not in line:
                     s = line.strip()
                     if s.startswith("{") and s.endswith("}"):
+                        # JSON 으로 풀지 않고 센다 — 반쯤 쓰인 줄로 「읽은 줄 없음」 이 되지 않게(지금 동작)
                         parsed += 1   # 큰 기록은 풀지 않고 JSON 줄로만 센다
                     continue
                 try:

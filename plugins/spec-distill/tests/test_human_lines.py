@@ -138,5 +138,28 @@ class Body(unittest.TestCase):
             self.assertNotEqual(H.body_of(name, base + "\n  "), H.body_of(name, base), name + " — 공백만 든 끝 줄은 빈 줄이 아니다")
 
 
+    def test_all_blank_text_trims_to_empty(self):
+        for name in ("design.md", "INTENT.md", "plan-1.md"):
+            self.assertEqual(H.body_of(name, "\n\n"), "", name)
+
+    def test_level1_heading_ends_deferred_but_not_record(self):   # K20 — 지금 동작
+        deferred = "# 설계\n\n### Deferred to plan\n\n| a |\n\n# 새 최상위\n\n새 글\n"
+        body = H.body_of("design.md", deferred)
+        self.assertIn("# 새 최상위", body)
+        self.assertIn("새 글", body)
+        self.assertNotIn("| a |", body)
+        record = "# 설계\n\n## 결정 기록\n\n- D1\n\n# 새 최상위\n\n새 글\n"
+        body = H.body_of("design.md", record)
+        self.assertNotIn("# 새 최상위", body)
+        self.assertNotIn("새 글", body)
+        self.assertNotIn("- D1", body)
+
+    def test_record_title_with_space_or_cr_is_body(self):   # K20 — 지금 동작: 제목은 글자 그대로만 기록 절이다
+        for title in ("## 결정 기록 ", "## 결정 기록\r"):
+            self.assertIn("아래 줄", H.body_of("design.md", "# 설계\n\n%s\n아래 줄\n" % title), repr(title))
+            self.assertIn("아래 줄", H.body_of("INTENT.md", "## 목표\n\n%s\n아래 줄\n" % title), repr(title))
+        self.assertNotIn("아래 줄", H.body_of("design.md", "# 설계\n\n## 결정 기록\n아래 줄\n"))   # 양성 대조
+
+
 if __name__ == "__main__":
     unittest.main()

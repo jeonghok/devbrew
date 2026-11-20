@@ -164,5 +164,44 @@ class Builder(unittest.TestCase):
                              "R2 @0123abcd — 자리표시 질문")
 
 
+class Main(unittest.TestCase):
+    SID = "00000000-0000-4000-8000-000000000a03"
+
+    def test_main_answer_prints_the_uuid(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = SF.main(["answer", "--config", d, "--session", self.SID, "--question", "q", "--label", "a"])
+            self.assertEqual(rc, 0)
+            rows = [json.loads(l) for l in SF.record_path(d, self.SID).read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(out.getvalue().splitlines(), [rows[1]["uuid"]])
+
+    def test_main_rejects_mismatched_counts(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as cm:
+                    SF.main(["answer", "--config", d, "--session", self.SID, "--question", "q1", "--question", "q2", "--label", "a"])
+            self.assertEqual(cm.exception.code, 2)
+            self.assertFalse(SF.record_path(d, self.SID).exists())
+
+    def test_unknown_who_and_drop_raise(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertRaises(ValueError, SF.add_answer, d, self.SID, [("q", "a")], who="x")
+            self.assertRaises(ValueError, SF.add_answer, d, self.SID, [("q", "a")], drop=("x",))
+
+    def test_main_lines_and_text(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = SF.record_path(d, self.SID)
+            n = len((DATA / "typed.jsonl").read_text(encoding="utf-8").splitlines())
+            SF.main(["lines", "--config", d, "--session", self.SID, "--name", "typed"])
+            self.assertEqual(len(path.read_text(encoding="utf-8").splitlines()), n)
+            SF.main(["text", "--config", d, "--session", self.SID, "--name", "typed", "--text", "글"])
+            self.assertEqual(len(path.read_text(encoding="utf-8").splitlines()), n + 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -90,6 +90,15 @@ class Version(Repo):
         self.assertEqual(H.version(self.git, c1, path), c1[:8])            # 끝마다 따로 센다
         self.assertIsNone(H.version(self.git, c5, TEAM.plan(JOB, 1)))
 
+    def test_version_stops_at_a_commit_without_the_file(self):
+        path = TEAM.design(JOB)
+        c1 = self.commit(path, DESIGN, "설계")
+        self.git_run("rm", "-q", "--", path)
+        self.git_run("commit", "-q", "-m", "설계 지움", "--", path)
+        c3 = self.commit(path, DESIGN, "같은 본문으로 다시")
+        self.assertEqual(H.version(self.git, c3, path), c3[:8])   # 파일 없는 커밋에서 멈춘다 — c1 까지 이어 세지 않는다
+        self.assertNotEqual(c3[:8], c1[:8])
+
 
 class ShapeVerdict(Repo):
     def line(self, rev, file="design.md", kind="spec 승인", label="승인 — 계획 담당자에게"):
