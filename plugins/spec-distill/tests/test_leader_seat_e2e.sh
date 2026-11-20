@@ -220,12 +220,12 @@ printf '.claude/\n' >> "$O3/.git/info/exclude"
 git -C "$O3" update-ref "refs/heads/$STATE" "refs/remotes/origin/$STATE"
 assert_eq "$( (cd "$O3" && python3 "$CL" claim --roadmap "$RM" --session "$SID2") >/dev/null 2>&1; echo $?)" "0" "17 다른 클론이 자기 표지를 쥔다"
 MAIN_RULES="$(g show "origin/main:$RULES")"
-FOREIGN_TIP="$(copy "$O3" "$SID2" "$(printf '%s\n' "$MAIN_RULES")")"
+FOREIGN_TIP="$(copy "$O3" "$SID2" "${MAIN_RULES}"$'\n')"   # 끝 줄바꿈은 $( ) 밖에서 붙인다 — 안에서 붙이면 깎인다
 g fetch -q origin
 assert_eq "$(g rev-parse "refs/remotes/origin/$STATE")" "$FOREIGN_TIP" "17 남이 사본을 기본 브랜치 글과 같게 고친 끝을 받아 왔다(양성 대조)"
 assert_eq "$(csync)" "0" "17 sync rc 0 — $(cat "$T/cs.txt")"
 assert_eq "$(g merge-base --is-ancestor "$FOREIGN_TIP" "$(stip)" && echo 위)" "위" "17 sync 가 남의 끝 위에 썼다(양성 대조)"
-assert_eq "$(g show "$(stip):$RULES")" "$MAIN_RULES" "17 사본은 기본 브랜치 글과 같다(양성 대조 — 남의 고침만이 지우지 않는 까닭)"
+assert_eq "$(g rev-parse "$(stip):$RULES")" "$(g rev-parse "origin/main:$RULES")" "17 사본은 기본 브랜치 글과 바이트까지 같다(양성 대조 — 남의 고침만이 지우지 않는 까닭)"
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "있다 있다" "17 확인되지 않은 남의 고침이면 지우지 않는다"
 
 finish
