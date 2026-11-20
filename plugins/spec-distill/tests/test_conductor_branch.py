@@ -741,16 +741,37 @@ class Publish(StateRepo):
         self.assertEqual((r.pushed, r.onto), (False, None))
         self.assertTrue(any(n.startswith("아직 안 올라옴") for n in r.notes), r.notes)
 
-    def test_three_rejections_stop_with_the_local_commit_kept(self):
+    def test_three_rejections_stop_with_the_local_commit_kept(self):   # 거절은 실제다 — 받아 올 때마다 다른 기계가 또 올린다
         from unittest import mock
         CB.ensure(self.m2, rm(ALPHA), SID)
-        before = CB.local_tip(self.w, ALPHA)
-        with mock.patch.object(CB, "push_outcome", return_value="behind") as judge:
+        CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄 0"), "받음")   # 처음 올리기의 거절 까닭
+        real_fetch, fetched, judged, other = CB.fetch_state, [], [], []
+        real_judge = CB.push_outcome
+
+        def fetch_then_the_other_machine_writes(root, name):
+            tip = real_fetch(root, name)
+            fetched.append(tip)
+            other.append(True)                                                             # 저쪽 기계의 올리기 판정은 세지 않는다
+            CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄 %d" % len(fetched)), "받음")
+            other.pop()
+            return tip
+
+        def judge(rc, text):
+            verdict = real_judge(rc, text)
+            if not other:
+                judged.append(verdict)
+            return verdict
+        with mock.patch.object(CB, "fetch_state", side_effect=fetch_then_the_other_machine_writes), \
+                mock.patch.object(CB, "push_outcome", side_effect=judge):
             with self.assertRaises(CB.BranchError) as c:
-                CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 줄"), "받음")
-        self.assertEqual((c.exception.rc, judge.call_count), (1, 4))   # 처음 한 번 + 다시 만들기 세 번
+                CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 이쪽 줄"), "받음")
+        self.assertEqual((c.exception.rc, judged), (1, ["behind"] * 4))                 # 처음 한 번 + 다시 만들기 세 번 — 모두 실제 거절
         self.assertIn("세 번 다시 만들어도 올리지 못했다", str(c.exception))
-        self.assertNotEqual(CB.local_tip(self.w, ALPHA), before)
+        local = CB.local_tip(self.w, ALPHA)
+        self.assertEqual(self.g("rev-parse", local + "^"), fetched[-1])                   # 로컬 커밋은 마지막으로 받아 온 끝 위에 남았다
+        self.assertNotEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), local)   # 올라가지 않았다
+        self.assertEqual(CB.read(self.w, local, self.received),
+                         "- 저쪽 줄 0\n- 저쪽 줄 1\n- 저쪽 줄 2\n- 이쪽 줄\n")              # 이번 쓰기의 고침은 꼭 한 번
 
     def test_single_branch_shallow_clone_fetches_by_explicit_refspec(self):   # Review Focus 2
         d = self.clone("sh", "--depth", "1", "--no-local")
@@ -820,6 +841,43 @@ class Publish(StateRepo):
         self.assertEqual(got, {"all/2026-11-19-01.md": "저쪽 1\n", "all/2026-11-19-02.md": "저쪽 2\n", BETA + "/2026-11-19-05.md": "이쪽 라\n",
                                "all/2026-11-19-06.md": "이쪽 가\n", "all/2026-11-19-07.md": "이쪽 나\n", "all/2026-11-19-08.md": "이쪽 다\n"})
 
+    def odd_commit(self, repo, committer_time):
+        """그 클론의 상태 브랜치 끝 위에 committer 때가 이상한 커밋을 손으로 만들어 올린다(git 의 날짜 검사를 지나지 않게)."""
+        tip = CB.local_tip(repo, ALPHA)
+        body = ("tree %s\nparent %s\nauthor x <x@example.invalid> 1700000000 +0000\ncommitter x <x@example.invalid> %s\n\n이상한 때\n"
+                % (self.g("rev-parse", tip + "^{tree}", repo=repo), tip, committer_time))
+        p = subprocess.run(["git", "hash-object", "-t", "commit", "-w", "--literally", "--stdin"], cwd=str(repo), env=ENV,
+                           input=body, capture_output=True, encoding="utf-8", check=True)
+        odd = p.stdout.strip()
+        self.g("update-ref", CB.ref_of(ALPHA), odd, tip, repo=repo)
+        self.g("push", "-q", "origin", "%s:%s" % (CB.ref_of(ALPHA), CB.ref_of(ALPHA)), repo=repo)
+        return odd
+
+    def test_a_remote_tip_with_an_impossible_time_does_not_stop_the_rebuild(self):   # 남의 글 — 시간대 · 때가 범위 밖
+        """뒤집으면 붉다 — 시간대 범위를 보지 않거나 바꾸기 오류를 잡지 않으면 ref 를 옮긴 뒤 올리기 전에 예외로 죽는다."""
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        for n, when in enumerate(("1700000000 +9900", "99999999999999 +0000", "1700000000 +0099")):
+            odd = self.odd_commit(self.m2, when)
+            r = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 이쪽 줄 %d" % n), "받음")
+            self.assertEqual((r.pushed, r.onto), (True, odd), when)
+            self.assertEqual(r.notes, (CB.ELSEWHERE % (odd[:8], CB.STAMP_UNKNOWN),), when)
+            self.g("fetch", "-q", "origin", "+%s:%s" % (CB.ref_of(ALPHA), CB.ref_of(ALPHA)), repo=self.m2)   # 다음 이상한 커밋을 새 끝 위에
+
+    def test_letter_names_with_other_scripts_digits_are_not_numbers(self):   # 남의 글 — `\d` 는 ٩٩ 도 받는다
+        self.assertEqual(CB.next_letter_name(["all/2026-11-19-\u0669\u0669.md", "all/2026-11-19-01.md"], "2026-11-19"), "2026-11-19-02.md")
+        self.assertEqual(CB.next_letter_name(["\uff12\uff10\uff12\uff16-11-19-05.md"], "\uff12\uff10\uff12\uff16-11-19"),
+                         "\uff12\uff10\uff12\uff16-11-19-01.md")   # 전각 숫자 날짜도 꼴 밖이다
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        inbox = self.team.inbox + "/"
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-01.md": "이쪽\n"}, "편지")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-\u0669\u0669.md": "저쪽 ٩٩\n",
+                                                        inbox + BETA + "/2026-11-19-01.md": "저쪽\n"}, "편지")
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")   # 다시 얹기가 막히지 않는다
+        self.assertTrue(r.pushed)
+        self.assertEqual(CB.read(self.w, r.commit, inbox + "all/2026-11-19-02.md"), "이쪽\n")
+
     def test_failed_push_reason_is_the_rejection_cell_not_the_error_banner(self):   # 과제 5 리뷰 M4
         hook = self.o / "hooks" / "pre-receive"
         hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
@@ -874,6 +932,30 @@ class EnsureRace(StateRepo):
             r = CB.ensure(self.w, rm(ALPHA), SID)
         self.assertEqual(CB.local_tip(self.w, ALPHA), appeared[0])                     # 그 위에 빈 커밋을 얹지 않았다
         self.assertEqual((r.commit, r.notes), (None, ("있다 — %s(%s)" % (CB.branch_of(ALPHA), appeared[0][:8]),)))
+
+
+class EnsureFetchFails(StateRepo):
+    def test_remote_branch_that_cannot_be_fetched_is_not_recreated(self):   # J6 — 원격에 있으면 둘째 뿌리를 만들지 않는다
+        """뒤집으면 붉다 — 받아 오지 못했을 때 뿌리를 만들면 「만들었다」 가 나오고 원격과 관계없는 브랜치가 생긴다."""
+        self.claim()
+        m2 = self.clone("m2")
+        self.claim(repo=m2)
+        CB.ensure(m2, rm(ALPHA), SID)                                                          # 원격에 있다
+        secret = str(self.t / "secret" / "path.git")
+        fake = lambda root, *a, **k: ((128, "", "fatal: '%s' does not appear to be a git repository\n" % secret)
+                                      if a[:1] == ("fetch",) else REAL_GIT(root, *a, **k))
+        refs = self.refs()
+        with mock.patch.object(CB, "git", side_effect=fake):
+            with self.assertRaises(CB.BranchError) as c:
+                CB.ensure(self.w, rm(ALPHA), SID)
+        self.assertEqual(c.exception.rc, 3)
+        self.assertIn("받아 오지 못했다", str(c.exception))
+        self.assertIn("<경로>", str(c.exception))
+        self.assertNotIn(secret, str(c.exception))
+        self.assertEqual((self.refs(), CB.local_tip(self.w, ALPHA)), (refs, None))               # 아무것도 만들지 않았다
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID)                # 양성 대조 — 받아 오면 받는다
+        self.assertEqual(rc, 0, out)
+        self.assertIn("원격의 것을 받아 왔다", out)
 
 
 class LetterNames(unittest.TestCase):

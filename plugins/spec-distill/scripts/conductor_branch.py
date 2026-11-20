@@ -60,7 +60,8 @@ ZERO_OID = "0" * 40
 WRITE_ATTEMPTS = 3
 REMAKE_ATTEMPTS = 3
 NET_TIMEOUT = 60   # push · fetch · ls-remote — 넘기면 올리지 못한 것으로 친다
-LETTER_RE = re.compile(r"(\d{4}-\d{2}-\d{2})-(\d{2})\.md")
+LETTER_RE = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})\.md")   # 남의 글을 읽는다 — `\d` 는 다른 문자의 숫자도 받는다
+STAMP_UNKNOWN = "때를 읽지 못함"
 LETTER_MAX = 99
 _NO_STATUS = "상태 계산 출력을 읽지 못했다(rc %d)"
 
@@ -549,26 +550,39 @@ def _push(root, name: str) -> tuple:
     return verdict, (None if verdict == "ok" else _net_reason(out, err))
 
 
+def _fetch(root, name: str) -> tuple:
+    """(원격 끝 | None, 사유 | None) — fetch_state 의 바닥. 사유는 가린 한 줄."""
+    track = TRACKING_PREFIX + branch_of(name)
+    rc, _o, err = git(root, "fetch", "--quiet", "--no-tags", "origin", "+%s:%s" % (ref_of(name), track), timeout=NET_TIMEOUT)
+    if rc != 0:
+        return None, _net_reason("", err)
+    tip = branch_tip.resolve(root, track)
+    return tip, (None if tip else "받아 온 원격 추적 ref 를 읽지 못했다")
+
+
 def fetch_state(root, name: str) -> Optional[str]:
     """origin 의 상태 브랜치를 명시 refspec 으로 원격 추적 ref 에 받아 와 그 끝을 돌려준다(받아 오기 설정에 기대지 않는다).
     로컬 브랜치 ref 는 건드리지 않는다. 실패면 None."""
-    track = TRACKING_PREFIX + branch_of(name)
-    rc, _o, _e = git(root, "fetch", "--quiet", "--no-tags", "origin", "+%s:%s" % (ref_of(name), track), timeout=NET_TIMEOUT)
-    if rc != 0:
-        return None
-    return branch_tip.resolve(root, track)
+    return _fetch(root, name)[0]
 
 
 def _commit_stamp(root, commit: str) -> str:
-    """그 커밋의 committer 때를 `stamp` 꼴로 — 그 커밋을 만든 기계의 시간대 그대로."""
+    """그 커밋의 committer 때를 `stamp` 꼴로 — 그 커밋을 만든 기계의 시간대 그대로. 남이 만든 커밋이라
+    시간대가 범위 밖이거나 때가 달력 밖이면 STAMP_UNKNOWN — 예외를 내지 않는다(이미 옮긴 ref 를 올리기 전에 죽지 않게)."""
     rc, body, _e = git(root, "cat-file", "commit", commit)
     for line in body.split("\n\n", 1)[0].splitlines() if rc == 0 else ():
-        m = re.fullmatch(r"committer .* (\d+) ([+-])(\d{2})(\d{2})", line)
+        m = re.fullmatch(r"committer .* ([0-9]{1,20}) ([+-])([0-9]{2})([0-9]{2})", line)
         if m:
-            delta = datetime.timedelta(hours=int(m.group(3)), minutes=int(m.group(4)))
-            zone = datetime.timezone(delta if m.group(2) == "+" else -delta)
-            return stamp(datetime.datetime.fromtimestamp(int(m.group(1)), zone))
-    return "때를 읽지 못함"
+            hours, minutes = int(m.group(3)), int(m.group(4))
+            if hours > 23 or minutes > 59:
+                return STAMP_UNKNOWN
+            delta = datetime.timedelta(hours=hours, minutes=minutes)
+            try:
+                zone = datetime.timezone(delta if m.group(2) == "+" else -delta)
+                return stamp(datetime.datetime.fromtimestamp(int(m.group(1)), zone))
+            except (ValueError, OverflowError, OSError):
+                return STAMP_UNKNOWN
+    return STAMP_UNKNOWN
 
 
 def next_letter_name(names, day: str) -> str:
@@ -763,11 +777,12 @@ def write(root, roadmap_rel: str, session: str, edit: Callable[[Base], Optional[
     return _write_floor(root, roadmap_rel, session, edit, what, False)
 
 
-def _adopt(root, name: str) -> Optional[Result]:
-    """origin 의 같은 브랜치를 받아 와 로컬 ref 를 그 끝에 둔다(뿌리를 새로 만들지 않는다). 받아 오지 못하면 None."""
-    remote = fetch_state(root, name)
+def _adopt(root, name: str) -> Result:
+    """origin 의 같은 브랜치를 받아 와 로컬 ref 를 그 끝에 둔다. 받아 오지 못하면 아무것도 만들지 않고 BranchError(3) —
+    원격에 있는 브랜치의 둘째 뿌리를 만들지 않는다(J6)."""
+    remote, why = _fetch(root, name)
     if remote is None:
-        return None
+        raise BranchError(3, "원격에 상태 브랜치가 있는데 받아 오지 못했다 — 만들지 않았다: %s" % why)
     rc, _o, err = git(root, "update-ref", ref_of(name), remote, ZERO_OID)
     if rc != 0:
         now = local_tip(root, name)
@@ -779,7 +794,8 @@ def _adopt(root, name: str) -> Optional[Result]:
 
 def ensure(root, roadmap_rel: str, session: str) -> Result:
     """상태 브랜치가 로컬에 없으면 — origin 에 있으면 받아 오고, 없으면 코드 없는 뿌리 커밋으로 만들어 올린다.
-    origin 에 닿지 못하면 로컬에만 만들고 「아직 안 올라옴」 을 낸다. 있으면 아무것도 바꾸지 않는다."""
+    origin 에 닿지 못하면 로컬에만 만들고 「아직 안 올라옴」 을 낸다. 원격에 있는데 받아 오지 못하면 만들지 않고 BranchError(3).
+    있으면 아무것도 바꾸지 않는다."""
     team = team_of(root, roadmap_rel)
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
@@ -794,11 +810,8 @@ def ensure(root, roadmap_rel: str, session: str) -> Result:
     if _origin_exists(root) is True:
         rc, _o, err = git(root, "ls-remote", "--exit-code", "origin", ref_of(team.name), timeout=NET_TIMEOUT)
         if rc == 0:
-            adopted = _adopt(root, team.name)
-            if adopted is not None:
-                return adopted
-            unpushed = NOT_PUSHED + " — 원격의 상태 브랜치를 받아 오지 못했다"
-        elif rc != 2:
+            return _adopt(root, team.name)
+        if rc != 2:
             unpushed = "%s — %s" % (NOT_PUSHED, _net_reason("", err))
     res = _write_floor(root, roadmap_rel, session, None, "상태 브랜치를 만든다", True, publish=unpushed is None)
     if res.commit is None:
