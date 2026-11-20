@@ -859,7 +859,12 @@ def c_drop(root, a) -> int:
         raise Fail(2, "--where 는 <칸>=<값> 모양이다: %r" % a.where)
     if key not in cs.COLUMNS.get(a.section, ()):
         raise Fail(2, "%s 절에 %r 칸이 없다" % (a.section, key))
-    gone = []
+    gone, hit = [], []
+    if a.section == PENDING:
+        _CB, LS = _seat()
+        if LS.pending_on_branch(root, a.roadmap):   # M14 — 두 자리를 함께(S8 — 남은 사람 줄을 지우는 길). 읽지 못하면 아무것도 지우지 않는다
+            rows, _unconfirmed, _bad = _ls(LS.pending_rows, root, a.roadmap)
+            hit = [r for r in rows if r[key] == value]
 
     def change(d):
         keep = [r for r in d[a.section] if r[key] != value]
@@ -867,15 +872,10 @@ def c_drop(root, a) -> int:
         d[a.section] = keep
     update(root, a.roadmap, a.session, change)
     dropped, told = len(gone), ()
-    if a.section == PENDING:
-        _CB, LS = _seat()
-        if LS.pending_on_branch(root, a.roadmap):   # M14 — 두 자리를 함께(S8 — 남은 사람 줄을 지우는 길)
-            rows, _unconfirmed, _bad = _ls(LS.pending_rows, root, a.roadmap)
-            hit = [r for r in rows if r[key] == value]
-            if hit:
-                res = _ls(LS.pending_drop, root, a.roadmap, a.session, hit)
-                dropped += len(hit) if res.commit is not None else 0
-                told = res.notes
+    if hit:
+        res = _ls(LS.pending_drop, root, a.roadmap, a.session, hit)
+        dropped += len(hit) if res.commit is not None else 0
+        told = res.notes
     print("지웠다 %d줄 — %s: %s=%s" % (dropped, a.section, key, value))
     _tell(told)
     return 0 if dropped else 1
@@ -1535,10 +1535,10 @@ def _flush_seat(root, a, intent: Path, machine: list) -> int:
         return gate and HL.is_human(_bullet(r["글"])) is not None
     skipped = len([r for r in machine + pend if human(r)])
     from_machine = [r for r in machine if not human(r)]
-    left = collections.Counter(_key(r) for r in unconfirmed)
-    from_pending, foreign = [], bad   # 꼴이 틀린 줄도 확인 안 된 쪽이다 — 옮기지 않는다
+    left = collections.Counter(_key(r) for r in unconfirmed or ())
+    from_pending, foreign = [], bad   # 확인 안 된 커밋이 더한 꼴 틀린 줄도 확인 안 된 쪽이다 — 옮기지 않는다
     for r in pend:
-        if human(r):
+        if human(r) or unconfirmed is None:   # 재지 못했으면 pending.md 줄은 하나도 옮기지 않는다(I11)
             continue
         if left[_key(r)] > 0:
             left[_key(r)] -= 1
@@ -1561,7 +1561,8 @@ def _flush_seat(root, a, intent: Path, machine: list) -> int:
     told = _ls(LS.pending_drop, root, a.roadmap, a.session, from_pending, "대기 줄 옮김").notes if from_pending else ()
     print("쌓인 기록 %d줄을 옮겼고 %d줄은 이미 있어 건너뛰었다(커밋은 리더가) — %s 의 결정 기록"
           % (moved, len(texts) - moved, intent))
-    _tell(([LS.PENDING_HUMAN % skipped] if skipped else []) + ([LS.PENDING_FOREIGN % foreign] if foreign else []))
+    _tell(([LS.PENDING_HUMAN % skipped] if skipped else []) + ([LS.FOREIGN_UNMEASURED] if unconfirmed is None else [])
+          + ([LS.PENDING_FOREIGN % foreign] if foreign else []))
     _tell(told)
     return 0
 
@@ -1569,10 +1570,11 @@ def _flush_seat(root, a, intent: Path, machine: list) -> int:
 def c_pending(root, a) -> int:
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if not a.epic or r["에픽"] == a.epic]
     lines = ["- %s · %s" % (r["에픽"], r["글"]) if not a.epic else "- " + r["글"] for r in rows]
+    told = ()
     CB, LS = _seat()
     if LS.pending_on_branch(root, a.roadmap):   # M14 — 기계 상태 줄 먼저, 그 뒤 pending.md(남의 글은 보이는 글자로)
         branch, unconfirmed, _bad = _ls(LS.pending_rows, root, a.roadmap)
-        left, flagged = collections.Counter(_key(r) for r in unconfirmed), [False] * len(branch)
+        left, flagged = collections.Counter(_key(r) for r in unconfirmed or ()), [False] * len(branch)
         for i in range(len(branch) - 1, -1, -1):   # 같은 줄이 여럿이면 뒤의 것부터 — 남의 고침은 끝에 붙는다
             if left[_key(branch[i])] > 0:
                 left[_key(branch[i])] -= 1
@@ -1582,10 +1584,13 @@ def c_pending(root, a) -> int:
                 text = CB.visible(r["글"])
                 line = "- %s · %s" % (CB.visible(r["에픽"]), text) if not a.epic else "- " + text
                 lines.append(line + (LS.PENDING_UNCONFIRMED_TAIL if mark else ""))
+        if unconfirmed is None:   # I11 — 남의 줄로 잘못 적지 않고 재지 못했다고 한 번 알린다
+            told = (LS.FOREIGN_UNMEASURED,)
     for line in lines:
         print(line)
     if not lines:
         print("쌓인 기록 없음")
+    _tell(told)
     return 0
 
 

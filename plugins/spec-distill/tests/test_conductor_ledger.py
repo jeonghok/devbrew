@@ -2410,6 +2410,7 @@ class PendingSeat(TLS.TeamRepo):   # R3 AC16 · AC21 — 대기 줄의 자리(M1
     NO_BRANCH = "상태 브랜치가 없어 기계 상태에 쌓았다 — ensure 뒤의 줄부터 상태 브랜치에 쌓는다"
     FOREIGN_LINES = "확인되지 않은 남의 고침이 더한 대기 줄 %d — 옮기지 않았다"
     TAIL = "   (확인되지 않은 남의 고침)"
+    UNMEASURED = "남의 고침을 재지 못했다"
 
     def cli(self, *args):
         buf = io.StringIO()
@@ -2568,6 +2569,14 @@ class PendingSeat(TLS.TeamRepo):   # R3 AC16 · AC21 — 대기 줄의 자리(M1
         self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 내 줄"])
         self.assertIn("[spec-distill] " + self.FOREIGN_LINES % 1, out)
         self.assertEqual(self.pending_text(), "- 칸이 하나뿐인 줄\n")
+        tip = self.tip()
+        self.assertEqual(LS.confirm(str(self.w), TLS.rm(TLS.ALPHA), TLS.SID, tip)[0], tip)   # 확인한 글의 꼴 틀린 줄은 남의 줄로 세지 않는다
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 둘째 줄")
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("쌓인 기록 1줄을 옮겼고", out)   # 양성 대조 — flush 가 돌았다
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
+        self.assertEqual(self.pending_text(), "- 칸이 하나뿐인 줄\n")   # 옮기지도 않는다
 
     def test_flush_moves_no_pending_line_when_unmeasured(self):   # I11 — 대기 줄 쪽 판정이 None 이면 pending.md 줄은 하나도 옮기지 않는다
         intent, design = self.intent()
@@ -2577,12 +2586,46 @@ class PendingSeat(TLS.TeamRepo):   # R3 AC16 · AC21 — 대기 줄의 자리(M1
             d[cs.TRUST].__setitem__(slice(None), [{"끝": "e" * 40, "까닭": cs.TRUST_WHY[0], "때": LS.CB.stamp(),
                                                     "세션": TLS.SID}])))   # 이 레포에 없는 확인 끝 — 재지 못함
         before = self.pending_text()
+        rc, out = self.cli("pending", "--roadmap", TLS.rm(TLS.ALPHA), "--epic", "A1")   # 줄은 보이되 남의 줄로 잘못 적지 않는다
+        self.assertEqual((rc, out), (0, "- 결정 · 2026-11-20 · 기계 줄\n- 결정 · 2026-11-20 · 브랜치 줄\n"
+                                        "[spec-distill] %s\n" % self.UNMEASURED))
         rc, out = self.flush(design)
         self.assertEqual(rc, 0, out)
         self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 기계 줄"])
-        self.assertIn("[spec-distill] " + self.FOREIGN_LINES % 1, out)
+        self.assertIn("[spec-distill] %s\n" % self.UNMEASURED, out)
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
         self.assertEqual(self.pending_text(), before)
         self.assertEqual(self.machine(), [])
+
+    def test_flush_moves_no_pending_line_when_a_foreign_blob_is_unreadable(self):   # 닫는 쪽 — 남의 커밋의 글을 못 읽으면 0줄 더함이 아니다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        planted = self.plant("- A1 · 지휘 기록 · 결정 · 2026-11-20 · 남의 줄")
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 뒤의 내 줄")   # 내 커밋이 남의 줄을 끝까지 실어 나른다 — 끝의 글은 읽힌다
+        blob = self.g("rev-parse", "%s:%s" % (planted, self.team.path(LS.CB.PENDING_FILE)))
+        loose = Path(self.g("rev-parse", "--git-path", "objects/%s/%s" % (blob[:2], blob[2:])))
+        loose = loose if loose.is_absolute() else self.w / loose
+        self.assertTrue(loose.is_file(), loose)   # 양성 대조 — 낱개 객체로 받아 왔다
+        loose.chmod(0o644)
+        loose.unlink()
+        self.assertNotEqual(self.rc("cat-file", "-e", blob), 0)   # 양성 대조 — 정말 못 읽는다
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), [])
+        self.assertIn("[spec-distill] %s\n" % self.UNMEASURED, out)
+        self.assertEqual(self.pending_text().count("\n"), 3)   # 하나도 빠지지 않았다
+
+    def test_drop_on_a_diverged_branch_changes_nothing(self):   # 남의 끝을 못 읽으면 기계 상태도 건드리지 않고 1
+        L.update(self.w, TLS.rm(TLS.ALPHA), TLS.SID, lambda d: d["쌓인 기록"].append({"에픽": "A1", "절": "지휘 기록", "글": "지울 줄"}))
+        self.foreign_edit("o1", {self.team.status: "x\n"})
+        local = self.g("rev-parse", "refs/heads/conductor/" + TLS.ALPHA)
+        mine = self.g("commit-tree", self.g("rev-parse", local + "^{tree}"), "-p", local, "-m", "올리지 못한 내 커밋")
+        self.g("update-ref", "refs/heads/conductor/" + TLS.ALPHA, mine, local)
+        self.assertEqual(LS.CB.seen_tip(str(self.w), TLS.ALPHA)[0], None)   # 양성 대조 — 정말 갈라졌다
+        rc, out = self.cli("drop", "--roadmap", TLS.rm(TLS.ALPHA), "--session", TLS.SID, "--section", "쌓인 기록", "--where", "글=지울 줄")
+        self.assertEqual(rc, 1, out)
+        self.assertIn(self.UNMEASURED, out)
+        self.assertEqual(self.machine(), [{"에픽": "A1", "절": "지휘 기록", "글": "지울 줄"}])
 
 
 if __name__ == "__main__":

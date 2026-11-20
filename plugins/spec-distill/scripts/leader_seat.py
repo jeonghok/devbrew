@@ -398,37 +398,52 @@ def _parse_pending(text: Optional[str]) -> tuple:
     return rows, bad
 
 
-def _added_rows(root, commit: str, path: str) -> list:
-    """커밋 하나가 첫째 부모에 견줘 `path` 에 더한 줄들(다중집합). 첫째 부모를 읽지 못하면 그 커밋의 줄 전부 — 닫는 쪽이다."""
+def _added_lines(root, commit: str, path: str) -> Optional[list]:
+    """커밋 하나가 첫째 부모에 견줘 `path` 에 더한 줄들(날 글 · 다중집합). 그 커밋의 글을 읽지 못하면 None — 남의 고침 판정이
+    이 커밋이 그 경로를 바꿨다고 했으니 「더한 줄 없음」 이 아니다(재지 못함으로 닫는다). 첫째 부모를 읽지 못하면 그 커밋의 줄 전부."""
+    after = CB.read(root, commit, path)
+    if after is None:
+        return None
     parent = _first_parent(root, commit)
     gone = collections.Counter(_bare(l) for l in _split(CB.read(root, parent, path) if parent else None))
     added = []
-    for raw in _split(CB.read(root, commit, path)):
+    for raw in _split(after):
         if gone[_bare(raw)] > 0:
             gone[_bare(raw)] -= 1
         else:
-            added.append(raw)
-    return [row for row in (_parse_line(raw) for raw in added) if row is not None]
+            added.append(_bare(raw))
+    return added
 
 
 def pending_rows(root, roadmap_rel: str) -> tuple:
-    """(줄들, 확인 안 된 줄들, 꼴이 틀린 줄 수) — 읽을 끝의 `pending.md`. 확인 안 된 줄은 확인되지 않은 남의 고침 커밋들이 더한 줄 가운데
-    지금 남은 것(다중집합)이고, 대기 줄 쪽 판정이 None(재지 못함)이면 줄 전부다. 상태 브랜치가 갈라졌거나 없으면 BranchError(1).
-    남의 글을 읽지만 예외로 죽지 않는다 — 꼴이 틀린 줄은 세기만 한다."""
+    """(줄들, 확인 안 된 줄들 | None, 확인 안 된 꼴이 틀린 줄 수) — 읽을 끝의 `pending.md`. 확인 안 된 줄은 확인되지 않은 남의 고침
+    커밋들이 더한 줄 가운데 지금 남은 것(다중집합)이다. 꼴이 틀린 줄도 같은 커밋들이 더해 지금 남은 것만 센다(확인한 글의 것은 세지 않는다).
+    대기 줄 쪽 판정이 None(재지 못함 — 남의 커밋의 글을 읽지 못한 것도)이면 둘째 값이 None 이고 셋째는 0 이다(I11 — 부르는 쪽이
+    「남의 고침을 재지 못했다」 로 닫고 pending.md 줄을 옮기지 않는다). 상태 브랜치가 갈라졌거나 없으면 BranchError(1).
+    남의 글을 읽지만 예외로 죽지 않는다."""
     team = CB.team_of(root, roadmap_rel)
     seen = _read_tip(root, team.name)
     path = team.path(CB.PENDING_FILE)
-    rows, bad = _parse_pending(CB.read(root, seen, path))
+    text = CB.read(root, seen, path)
+    rows, _bad = _parse_pending(text)
     found = foreign(root, roadmap_rel, seen, TS.pending_paths(team))
     if found is None:
-        return rows, list(rows), bad
+        return rows, None, 0
     left = collections.Counter(_row_key(r) for r in rows)
-    unconfirmed = []
+    odd = collections.Counter(_bare(raw) for raw in _split(text) if _bare(raw).strip() and _parse_line(raw) is None)
+    unconfirmed, bad = [], 0
     for commit, _paths in found:
-        for row in _added_rows(root, commit, path):
-            if left[_row_key(row)] > 0:
+        added = _added_lines(root, commit, path)
+        if added is None:
+            return rows, None, 0
+        for raw in added:
+            row = _parse_line(raw)
+            if row is not None and left[_row_key(row)] > 0:
                 left[_row_key(row)] -= 1
                 unconfirmed.append(row)
+            elif row is None and odd[raw] > 0:
+                odd[raw] -= 1
+                bad += 1
     return rows, unconfirmed, bad
 
 
