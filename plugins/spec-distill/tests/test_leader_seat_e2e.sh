@@ -229,5 +229,17 @@ assert_contains "$(cat "$T/cs.txt")" "[spec-distill] 다른 곳에서 이 브랜
 assert_eq "$(g merge-base --is-ancestor "$FOREIGN_TIP" "$(stip)" && echo 위)" "위" "17 sync 가 남의 끝 위에 썼다(양성 대조)"
 assert_eq "$(g rev-parse "$(stip):$RULES")" "$(g rev-parse "origin/main:$RULES")" "17 사본은 기본 브랜치 글과 바이트까지 같다(양성 대조 — 남의 고침만이 지우지 않는 까닭)"
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "있다 있다" "17 확인되지 않은 남의 고침이면 지우지 않는다"
+assert_eq "$(grep -c '^\[spec-distill\] 확인되지 않은 남의 고침 1 — conductor_branch.py confirm' "$T/cs.txt")" "1" "17 sync 가 확인되지 않은 남의 고침을 알린다(AC21) — $(cat "$T/cs.txt")"
+
+note "# 18 — confirm 으로 확인하면 알림이 사라지고 그 끝의 내용을 쓴다(AC21)"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID")" "1" "18 확인 표시 없는 confirm 은 보고하고 1 — $(cat "$T/cb.txt")"
+assert_contains "$(cat "$T/cb.txt")" "${FOREIGN_TIP:0:8} · " "18 보고에 남의 커밋이 있다"
+CTIP="$(sed -n '$s/^확인할 끝: //p' "$T/cb.txt")"
+assert_eq "$CTIP" "$(stip)" "18 마지막 줄이 확인할 끝(40자)"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID" --confirmed "${CTIP:0:8}")" "2" "18 앞 8자는 받지 않는다(I4)"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID" --confirmed "$CTIP")" "0" "18 그 끝으로 확인 rc 0 — $(cat "$T/cb.txt")"
+assert_eq "$(csync)" "0" "18 sync rc 0 — $(cat "$T/cs.txt")"
+assert_not_contains "$(cat "$T/cs.txt")" "확인되지 않은 남의 고침" "18 확인한 뒤에는 알리지 않는다"
+assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "없다 없다" "18 확인한 뒤에는 같아진 사본을 지운다"
 
 finish

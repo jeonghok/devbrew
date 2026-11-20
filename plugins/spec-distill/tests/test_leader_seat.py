@@ -49,15 +49,17 @@ class TeamRepo(StateRepo):
     def tip(self, repo=None):
         return CB.seen_tip(str(repo or self.w), ALPHA)[0]
 
-    def foreign_edit(self, label="other", files=None):
-        """둘째 클론이 상태 브랜치에 남의 고침을 올리고 첫 클론이 받아 온다. 부를 때마다 다른 클론 이름 · 다른 글을 준다."""
+    def foreign_edit(self, label="other", files=None, fetch=True):
+        """둘째 클론이 상태 브랜치에 남의 고침을 올리고 첫 클론이 받아 온다(`fetch=False` 면 원격에만 둔다).
+        부를 때마다 다른 클론 이름 · 다른 글을 준다."""
         other = self.clone(label)
         self.g("fetch", "-q", "origin", SPEC, repo=other)
         self.g("update-ref", "refs/heads/conductor/" + ALPHA, "refs/remotes/origin/conductor/" + ALPHA, repo=other)
         self.claim(repo=other, session=OTHER)
         files = files or {self.team.rules: TEAM_RULE + "\n- [남] %s · 조건: 역할=worker · 출처: a · 확인: b\n" % label}
         commit = self.write(files, repo=other, session=OTHER).commit
-        self.g("fetch", "-q", "origin", SPEC)
+        if fetch:
+            self.g("fetch", "-q", "origin", SPEC)
         return commit
 
     def ls(self, *args):
@@ -518,6 +520,183 @@ class RulesState(TeamRepo):   # M8 — 같아짐 · 갈라짐
             self.assertEqual((got.base, got.verdict), (None, "갈라짐"), repr(text))
         self.write({base: LS.BASE_HEAD + main + "\n"})   # 양성 대조 — 바른 줄이면 올릴 것
         self.assertEqual(self.state().verdict, "올릴 것")
+
+
+class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
+    def test_report_then_confirm_with_the_shown_tip(self):
+        self.foreign_edit()
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID)   # 명령줄 — 보고가 잘리지 않는다(B2)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("[남] other", out)
+        tip = out.strip().splitlines()[-1].rsplit(LS.CONFIRM_TIP % "", 1)[1].strip()
+        self.assertEqual(tip, self.tip())
+        self.assertEqual(self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip[:8])[0], 2)   # I4
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(tip, "확인")])
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows())[0], tip)   # 확인한 뒤에는 그 내용
+
+    def test_a_tip_that_moved_after_the_report_is_not_confirmed(self):
+        self.foreign_edit("o1")
+        stale = self.tip()
+        self.foreign_edit("o2")   # 보인 뒤에 또 들어온 남의 고침
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(str(self.w), rm(ALPHA), SID, stale)
+        self.assertEqual(cm.exception.rc, 1)
+        self.assertEqual(str(cm.exception).split("\n")[-1], LS.CONFIRM_TIP % self.tip())   # 다시 센 보고 — 새 끝
+        self.assertNotIn("확인", [r["까닭"] for r in self.rows()])
+
+    def test_rules_edit_is_refused_by_a_real_foreign_commit(self):   # I10 — 판정 함수를 흉내 내지 않는다
+        self.foreign_edit()
+        before = self.tip()
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("확인되지 않은 남의 고침 1", out)
+        self.assertEqual(self.tip(), before)
+
+    def test_reset_withdraws_a_foreign_rule_edit(self):   # M36 — H2 (가)
+        self.foreign_edit()
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNone(CB.read(str(self.w), self.tip(), self.team.rules))
+        self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)   # 다시 열린다
+
+    def test_reset_keeps_the_trust_base_when_pending_has_foreign_lines(self):   # F3 — 양성 단언: 사본은 지웠고 대기 줄 쪽 알림이 났다
+        self.foreign_edit("o1", {self.team.rules: "- [남] r\n", self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNotNone(res.commit)
+        self.assertIsNone(CB.read(str(self.w), self.tip(), self.team.rules))
+        self.assertEqual(res.notes[-1], LS.RESET_PENDING_LEFT)
+        self.assertNotIn("확인", [r["까닭"] for r in self.rows()])
+
+    def test_remade_write_does_not_launder_a_foreign_edit(self):   # Review Focus 1 · Deferred df3f1a6d
+        self.foreign_edit()
+        self.write({self.team.status: "y\n"})   # 남의 끝 위에 다시 만든 내 STATUS
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 1)
+        self.assertIsNone(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows())[0])
+
+    def test_settle_compacts_when_clean(self):
+        self.write({self.team.status: "y\n"})
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
+        self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
+
+    def test_unreadable_machine_state_is_three(self):   # I11 — confirm 이 기계 상태를 읽지 못하면
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        path.write_text(path.read_text(encoding="utf-8") + "\n## 확인한 끝\n\n| 끝 | 까닭 | 때 | 세션 |\n|---|---|---|---|\n| x | 씀 | - | - |\n", encoding="utf-8")
+        self.assertEqual(self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID)[0], 3)
+
+    # ── 계획 밖으로 더한 것 — 경합 · 남의 머지 · 보이는 글 · 명령줄 종료 코드 · settle 의 줄이기 ──
+
+    def test_foreign_edit_landing_during_rules_add_stays_unconfirmed(self):   # 과제 6 리뷰 — 검사와 올리기 사이에 원격에 든 남의 고침
+        theirs = self.foreign_edit("race", fetch=False)   # 원격에만 있다 — rules-add 의 검사는 보지 못한다
+        self.assertNotEqual(self.tip(), theirs)   # 양성 대조 — 첫 클론은 아직 받아 오지 않았다
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)   # 올리기 거절 → 받아 온 남의 끝 위에 다시 만든다
+        self.assertEqual(res.onto, theirs)
+        self.assertEqual(self.g("rev-parse", res.commit + "^"), theirs)
+        self.assertNotIn(theirs, [r["끝"] for r in self.rows()])   # 남의 커밋은 「씀」 이 아니다(B3)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 1)
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows()),
+                         (None, [LS.FOREIGN % 1 + TS.READ_DEFAULT_RULES]))
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("[남] race", out)
+        self.assertIn(theirs[:8] + " · ", out)
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", self.tip())
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows()), (self.tip(), []))
+
+    def test_foreign_merge_shows_every_commit_not_written_here(self):   # I2 — 판정이 None 이면 범위의 남의 커밋 전부 · 머지 표시
+        old = self.write({self.team.rules: "- 옛 줄\n"}).commit
+        self.write({self.team.rules: "- 새 줄\n"})
+        mine = self.write({self.team.status: "s\n"}).commit
+        other = self.clone("merger")
+        self.g("fetch", "-q", "origin", SPEC, repo=other)
+        tree = self.g("rev-parse", old + "^{tree}", repo=other)
+        b = self.g("commit-tree", tree, "-p", old, "-m", "B", repo=other)
+        m = self.g("commit-tree", tree, "-p", mine, "-p", b, "-m", "M", repo=other)
+        self.g("push", "-q", "origin", "%s:refs/heads/conductor/%s" % (m, ALPHA), repo=other)
+        self.g("fetch", "-q", "origin", SPEC)
+        self.assertIsNone(LS.foreign(str(self.w), rm(ALPHA), m, TS.rules_paths(self.team)))   # 양성 대조 — 판정은 재지 못함
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(str(self.w), rm(ALPHA), SID)
+        text = str(cm.exception)
+        self.assertEqual(cm.exception.rc, 1)
+        self.assertTrue(text.startswith(LS.FOREIGN_UNMEASURED), text)
+        self.assertIn(m[:8] + " · ", text)
+        self.assertIn(b[:8] + " · ", text)
+        self.assertIn(LS.MERGE_MARK % 2, text)
+        self.assertIn("│ +- 옛 줄", text)   # 머지가 첫째 부모(새 줄)에 견줘 규칙을 옛 글로 되돌렸다
+        self.assertEqual(text.split("\n")[-1], LS.CONFIRM_TIP % m)
+        tip, notes = LS.confirm(str(self.w), rm(ALPHA), SID, m)
+        self.assertEqual((tip, [(r["끝"], r["까닭"]) for r in self.rows()]), (m, [(m, "확인")]))
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows()), (m, []))
+
+    def test_report_of_foreign_text_is_visible_and_names_both_sides(self):   # 남의 글은 visible 을 거쳐 「│ 」 아래에 · 대기 줄 쪽도 보인다
+        self.foreign_edit("o1", {self.team.rules: "- [남] 제어\x1b글자\n", self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(str(self.w), rm(ALPHA), SID)
+        lines = str(cm.exception).split("\n")
+        self.assertEqual(lines[0], LS.FOREIGN % 1 + LS.CONFIRM_HOW)
+        self.assertIn(self.team.rules, lines[1])
+        self.assertIn(self.team.path(CB.PENDING_FILE), lines[1])
+        self.assertIn("│ +- [남] 제어\\x1b글자", lines)
+        self.assertIn("│ +- A1 · 지휘 기록 · 남", lines)
+        self.assertEqual([l for l in lines[2:-1] if not l.startswith("│ ")], [])
+        self.assertNotIn("\x1b", str(cm.exception))
+
+    def test_command_line_codes(self):   # B2 — 종료 코드와 마지막 줄
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (0, ["[spec-distill] " + LS.NOTHING_TO_CONFIRM]), out)
+        self.foreign_edit()
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", OTHER)
+        self.assertEqual(rc, 5, out)
+        for bad in ("zz", self.tip().upper(), self.tip() + "0", ""):
+            rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", bad)
+            self.assertEqual(rc, 2, (bad, out))
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", self.tip())
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (0, ["[spec-distill] " + LS.CONFIRMED % self.tip()]), out)
+        self.assertNotIn("확인", [r["까닭"] for r in self.rows() if r["끝"] != self.tip()])
+
+    def test_diverged_state_branch_is_three(self):   # 갈라진 끝은 재지 못함 — 확인하지 않는다
+        self.foreign_edit()
+        local = self.g("rev-parse", "refs/heads/conductor/" + ALPHA)
+        mine = self.g("commit-tree", self.g("rev-parse", local + "^{tree}"), "-p", local, "-m", "올리지 못한 내 커밋")
+        self.g("update-ref", "refs/heads/conductor/" + ALPHA, mine, local)
+        self.assertIsNone(CB.seen_tip(str(self.w), ALPHA)[0])   # 양성 대조 — 정말 갈라졌다
+        rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 3, out)
+        self.assertIn(LS.FOREIGN_UNMEASURED, out)
+
+    def test_settle_trims_only_abandoned_own_rows_while_foreign_edits_remain(self):   # M5 — 범위 밖 「씀」 만 지운다
+        self.foreign_edit()
+        res = self.write({self.team.status: "y\n"})   # 거절 → 다시 만든다 — 처음 만든 커밋은 버려진다
+        self.assertIsNotNone(res.onto)
+        own = [r["끝"] for r in self.rows() if r["까닭"] == "씀"]
+        self.assertEqual(len(res.made), 2)   # 양성 대조 — 버려진 커밋과 다시 만든 커밋
+        self.assertTrue(set(res.made) <= set(own))
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 1)
+        kept = [r["끝"] for r in self.rows() if r["까닭"] == "씀"]
+        self.assertNotIn(res.made[0], kept)   # 버려진 커밋 줄은 지웠다
+        self.assertIn(res.commit, kept)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 1)   # 남의 고침은 그대로 센다
+
+    def test_settle_tells_when_own_rows_pile_up(self):   # S13 — 남의 고침이 남아 「씀」 줄이 500 을 넘으면 알린다
+        mine = self.write({self.team.status: "y\n"}).commit
+        self.foreign_edit()
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+
+        def pad(total):   # 「씀」 줄을 total 개로 — 범위 안의 내 커밋 줄을 되풀이한다
+            data = cs.load(path, rm(ALPHA))
+            have = len([r for r in data[cs.TRUST] if r["까닭"] == "씀"])
+            data[cs.TRUST] += [{"끝": mine, "까닭": "씀", "때": CB.stamp(), "세션": SID}] * (total - have)
+            cs.save(path, rm(ALPHA), data, SID)
+        pad(LS.OWN_ROWS_MAX)
+        notes = []
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip(), notes), 1)
+        self.assertEqual(notes, [])   # 양성 대조 — 500 이면 알리지 않는다
+        pad(LS.OWN_ROWS_MAX + 1)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip(), notes), 1)
+        self.assertEqual(notes, [LS.LONG_FOREIGN])
 
 
 if __name__ == "__main__":

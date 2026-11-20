@@ -57,6 +57,7 @@ NO_ORIGIN = NOT_PUSHED + " — origin 원격이 없다"
 ELSEWHERE = "다른 곳에서 이 브랜치에 썼다 — %s · %s"
 ADOPTED = "원격의 것을 받아 왔다 — %s(%s)"
 REMAKE_GAVE_UP = "세 번 다시 만들어도 올리지 못했다 — 로컬 커밋은 남겼다"
+TRUST_NOT_CLEARED = "기계 상태의 확인한 끝 절을 비우지 못했다 — 다시 만든 상태 브랜치는 confirm 으로 확인받는다 — %s: %s"
 ZERO_OID = "0" * 40
 WRITE_ATTEMPTS = 3
 REMAKE_ATTEMPTS = 3
@@ -922,6 +923,22 @@ def _counted_tip_ok(counted: str, tip: str) -> bool:
     return counted == tip[:8]
 
 
+def _clear_trust(root, roadmap_rel: str, session: str) -> tuple:
+    """기계 상태 `확인한 끝` 절을 비운다(M35 — 다시 만든 브랜치에 옛 확인 끝 커밋이 없으면 판정이 영영 재지 못함이 된다).
+    알릴 줄들을 돌려준다 — 옛 `## 레포 설정` 절을 지웠으면 그 알림, 비우지 못했으면 그 사유. 예외를 내지 않는다(브랜치는 이미 지웠다)."""
+    path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    try:
+        old_settings = cs.has_old_repo_settings(path)
+        data = cs.load(path, roadmap_rel)
+        if not data[cs.TRUST]:
+            return ()
+        data[cs.TRUST] = []
+        cs.save(path, roadmap_rel, data, session)
+    except Exception as exc:
+        return (TRUST_NOT_CLEARED % (type(exc).__name__, visible(_first_line(exc))),)
+    return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
+
+
 def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
     """(지운 끝, 알릴 줄들). `confirmed` 가 없으면 수와 수를 센 끝을 알리고 BranchError(1) — 지우지 않는다. 있으면 수를 센 끝(40자 또는
     앞 8자 — 꼴이 다르면 BranchError(2))이고, 받아 온 원격 끝과 로컬 끝이 둘 다 그 끝과 같을 때만 지운다(원격이 없으면 로컬 끝만).
@@ -979,7 +996,7 @@ def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None
     if seen is not None:
         _git_delete(root, "update-ref", "-d", track, seen)
     where = "로컬과 원격" if remote_exists else "로컬(원격에는 없었다)"
-    return tip, ("지웠다 — %s 의 %s(%s)" % (where, branch_of(team.name), tip[:8]),)
+    return tip, ("지웠다 — %s 의 %s(%s)" % (where, branch_of(team.name), tip[:8]),) + _clear_trust(root, roadmap_rel, session)
 
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
@@ -1007,9 +1024,17 @@ def main(argv=None) -> int:
     rb.add_argument("--roadmap", required=True)
     rb.add_argument("--session", required=True)
     rb.add_argument("--branch", required=True)
+    co = sub.add_parser("confirm", help="남이 올린 규칙 · 대기 줄 고침을 차이와 함께 보인다 — 확인 표시가 있으면 그 끝을 확인한 끝으로 기록한다")
+    co.add_argument("--roadmap", required=True)
+    co.add_argument("--session", required=True)
+    co.add_argument("--confirmed", metavar="확인할_끝")
     args = ap.parse_args(argv)
     try:
-        if args.cmd == "delete":
+        if args.cmd == "confirm":
+            import leader_seat as LS
+            _tip, notes = LS.confirm(args.root, args.roadmap, args.session, args.confirmed)
+            res = Result(None, False, None, notes)
+        elif args.cmd == "delete":
             _tip, notes = delete(args.root, args.roadmap, args.session, args.confirmed)
             res = Result(None, False, None, notes)
         elif args.cmd in ("rules-add", "rules-drop", "rules-reset"):

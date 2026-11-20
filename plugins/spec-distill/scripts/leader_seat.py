@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 """leader_seat.py — 리더가 쓰는 자리: 상태 브랜치의 규칙 사본 · 규칙 브랜치 · 남의 고침 확인 · 대기 줄.
 
-명령줄은 `conductor_branch.py` 의 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)으로 연다 — 이 모듈은 함수만 둔다.
+명령줄은 `conductor_branch.py` 의 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch` · `confirm`)으로 연다 — 이 모듈은 함수만 둔다.
 상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다(`conductor_status.sync` 는 함수 안에서 가져온다).
 
 가져오는 모듈은 `conductor_branch` · `conductor_state` · `team_status` · `team_rules` · `roadmap_model` ·
 `roadmap_status`(`Git` 만) · `human_lines` · `repo_defaults` · `state_path` · `team_layout` 뿐이다.
 
 종료 코드(`conductor_branch.BranchError.rc`): 0 썼다 · 쓸 수 없어 알리고 넘어감 · 1 없음/아님(확인되지 않은 남의 고침 ·
-재지 못함 · 올릴 규칙 고침이 없음 · 갈라져서 만들지 않은 `rules-branch`) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 ·
+재지 못함 · 올릴 규칙 고침이 없음 · 갈라져서 만들지 않은 `rules-branch` · 확인 없이 부른 `confirm`) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 ·
 5 다른 세션의 표지.
 """
 from __future__ import annotations
@@ -50,6 +50,16 @@ BAD_BRANCH = "규칙 브랜치 이름으로 받지 않는다 — %s"
 RULE_REFUSES_BRANCH = "이 레포의 브랜치 규칙이 이 이름을 받지 않는다: %s"
 BRANCH_TAKEN = "규칙 브랜치를 만들지 못했다 — 이미 있거나 git 이 받지 않는다"
 VERDICTS = ("없음", "같음", "올릴 것", "갈라짐")
+CONFIRM_TIP = "확인할 끝: %s"
+CONFIRM_HOW = " — 차이를 보고 사용자 확인 뒤 --confirmed <확인할 끝 40자> 를 붙여 다시 부른다"
+NOTHING_TO_CONFIRM = "확인할 남의 고침이 없다"
+CONFIRMED = "확인한 끝을 기록했다 — %s"
+NOT_THE_TIP = "확인할 끝이 아니다 — 지금 끝에서 다시 셌다"
+RECOUNTED = " — 확인한 끝 없이 이력 전부에서 다시 셌다: "
+UNWRITTEN = " — 이 기계가 쓰지 않은 커밋 %d 을 모두 보인다"
+MERGE_MARK = "머지 커밋 · 부모 %d"
+OWN_ROWS_MAX = 500   # 「씀」 줄이 이보다 많으면 알린다 — 기계 상태 크기 한도(1 MiB) 앞에서(S13)
+LONG_FOREIGN = "확인되지 않은 남의 고침이 오래 남아 있다 — confirm 하거나 지운다"
 _BASE_RE = re.compile(re.escape(BASE_HEAD) + "([0-9a-f]{40})")
 _SEGMENT = r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*"
 _BRANCH_RE = re.compile(r"(?!.*\.lock(?:/|$))(?!-)" + _SEGMENT + "(?:/" + _SEGMENT + ")*")   # git 이 받는 꼴의 닫힌 부분집합
@@ -256,10 +266,14 @@ def rules_state(root, roadmap_rel: str, tip: str) -> RulesState:
     return _rules_state(root, CB.team_of(root, roadmap_rel), tip, main)
 
 
+def _diff(before: Optional[str], after: Optional[str], a: str, b: str) -> list:
+    """before → after 의 차이 — 줄마다 visible 을 거쳐 「│ 」 를 앞에 붙인다."""
+    return ["│ " + CB.visible(line) for line in difflib.unified_diff(_split(before), _split(after), a, b, lineterm="")]
+
+
 def _diff_lines(now: Optional[str], copy: Optional[str]) -> list:
-    """기본 브랜치의 지금 글 → 사본의 차이 — 줄마다 visible 을 거쳐 「│ 」 를 앞에 붙인다."""
-    diff = difflib.unified_diff(_split(now), _split(copy), "기본 브랜치", "규칙 사본", lineterm="")
-    return ["│ " + CB.visible(line) for line in diff]
+    """기본 브랜치의 지금 글 → 사본의 차이."""
+    return _diff(now, copy, "기본 브랜치", "규칙 사본")
 
 
 def _check_branch_name(root, branch) -> None:
@@ -308,3 +322,143 @@ def rules_branch(root, roadmap_rel: str, session: str, branch: str) -> str:
     if rc != 0:
         raise CB._git_fail(err, BRANCH_TAKEN)
     return commit
+
+
+# ── 남의 고침 확인 · 기준 끝 옮기기 ────────────────────────────────────────────
+
+def _watched(team) -> list:
+    """남의 고침을 재는 두 쪽 경로 — 규칙 사본 · rules-base.md · pending.md."""
+    return TS.rules_paths(team) + TS.pending_paths(team)
+
+
+def _trust_rows(root, roadmap_rel: str) -> list:
+    """기계 상태 `확인한 끝` 절의 줄들. 읽지 못하면 BranchError(3) — 남의 고침을 재지 못했다."""
+    try:
+        return cs.load(cs.machine_path(state_path.state_root(str(root)), roadmap_rel), roadmap_rel)[cs.TRUST]
+    except Exception as exc:
+        raise CB.BranchError(3, "%s — 기계 상태를 읽지 못했다 — %s: %s" % (FOREIGN_UNMEASURED, type(exc).__name__, CB.visible(CB._first_line(exc))))
+
+
+def _first_parent(root, commit: str) -> Optional[str]:
+    rc, out, _e = CB.git(root, "rev-parse", "--verify", "-q", commit + "^1")
+    out = out.strip()
+    return out if rc == 0 and CB.OID_RE.fullmatch(out) else None
+
+
+def _commit_lines(root, commit: str, paths, watched: list, parents: int = 1) -> list:
+    """커밋 하나의 보고 — `<8자> · <때> · [머지 커밋 · 부모 n · ]<경로들>` 과 지켜보는 경로마다 첫째 부모와의 차이(줄마다 `│ `)."""
+    parent = _first_parent(root, commit)
+    head = [commit[:8], CB._commit_stamp(root, commit)] + ([MERGE_MARK % parents] if parents > 1 else [])
+    out = [" · ".join(head + [", ".join(CB.visible(p) for p in paths) or "-"])]
+    for path in paths:
+        if path in watched:
+            out += _diff(CB.read(root, parent, path) if parent else None, CB.read(root, commit, path),
+                         path + " (첫째 부모)", path + " (이 커밋)")
+    return out
+
+
+def _foreign_report(root, team, tip: str, rows: list) -> tuple:
+    """(보고 줄들, 확인이 필요한가). 판정이 None 이면 확인 끝 없이 다시 세고, 그래도 None 이면 범위의 `씀` 밖 커밋 전부를 보인다 —
+    판정이 None 이었으면 보일 커밋이 없어도 확인이 필요하다(재지 못함을 빠져나가는 길이 confirm 이다)."""
+    git, watched = Git(str(root)), _watched(team)
+    trust = TS.trust_of(rows)
+    found = TS.foreign_commits(git, tip, trust, watched)
+    lead = ""
+    if found is None:
+        own = frozenset(r["끝"] for r in rows if r["까닭"] == cs.TRUST_WHY[1])
+        found = TS.foreign_commits(git, tip, (None, own), watched)
+        lead = FOREIGN_UNMEASURED + RECOUNTED
+        if found is None:
+            return _unwritten_report(root, git, watched, tip, trust, own), True
+    if not found and not lead:
+        return [], False
+    lines = [lead + FOREIGN % len(found) + CONFIRM_HOW]
+    for commit, paths in found:
+        lines += _commit_lines(root, commit, paths, watched)
+    return lines, True
+
+
+def _unwritten_report(root, git, watched: list, tip: str, trust, own) -> list:
+    """`<확인 끝>..<tip>`(확인 끝이 없거나 이 레포에 없으면 tip 의 이력 전부)에서 `씀` 에 없는 커밋 전부 — 오래된 차례."""
+    base = trust[0] if trust else None
+    if base is not None and git.commit(base) is None:
+        base = None
+    rc, out, err = git.run_err("log", "--format=%H %P", "%s..%s" % (base, tip) if base else tip)
+    if rc != 0:
+        raise CB._git_fail(err, FOREIGN_UNMEASURED + " — 커밋을 읽지 못했다")
+    picked = []
+    for line in out.splitlines():
+        words = line.split()
+        if not words or not all(CB.OID_RE.fullmatch(w) for w in words):
+            raise CB.BranchError(3, FOREIGN_UNMEASURED + " — 커밋 줄을 읽지 못했다")
+        if words[0] not in own:
+            picked.append((words[0], len(words) - 1))
+    lines = [FOREIGN_UNMEASURED + UNWRITTEN % len(picked) + CONFIRM_HOW]
+    for commit, parents in reversed(picked):
+        paths = [path for _s, path in CB._changed(root, _first_parent(root, commit), commit)]
+        lines += _commit_lines(root, commit, paths, watched, parents)
+    return lines
+
+
+def confirm(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
+    """(확인한 끝, 알림들). `confirmed` 가 없으면 읽을 끝까지의 확인되지 않은 남의 고침(규칙 · 대기 줄 두 쪽)을 커밋마다 차이와 함께
+    보이고 마지막 줄 `확인할 끝: <40자>` 로 BranchError(1) — 남의 고침이 없으면 (끝, (NOTHING_TO_CONFIRM,)).
+    `confirmed` 는 40자 전체만 받고(아니면 BranchError(2)) 지금 읽을 끝과 같을 때만 `확인한 끝` 을 `확인 · <그 끝>` 한 줄로 둔다 —
+    다르면 다시 센 보고로 BranchError(1). 기계 상태를 읽지 못하거나 상태 브랜치가 갈라졌으면 BranchError(3), 없으면 1."""
+    CB._need_marker(root, roadmap_rel, session)
+    if confirmed is not None and (not isinstance(confirmed, str) or not CB.OID_RE.fullmatch(confirmed)):
+        raise CB.BranchError(2, "--confirmed 는 확인할 끝 40자 전체를 받는다(앞 8자는 받지 않는다)")
+    team = CB.team_of(root, roadmap_rel)
+    rows = _trust_rows(root, roadmap_rel)
+    seen, split = CB.seen_tip(root, team.name)
+    if seen is None:
+        if split:
+            raise CB.BranchError(3, "%s — %s" % (FOREIGN_UNMEASURED, CB.visible(split)))
+        raise CB.BranchError(1, NO_STATE_BRANCH)
+    if confirmed == seen:
+        try:
+            told = confirm_at(root, roadmap_rel, session, seen)
+        except Exception as exc:
+            raise CB.BranchError(3, "확인한 끝을 기록하지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(CB._first_line(exc))))
+        return seen, told + (CONFIRMED % seen,)
+    lines, needed = _foreign_report(root, team, seen, rows)
+    if not needed:
+        return seen, (NOTHING_TO_CONFIRM,)
+    lead = [NOT_THE_TIP] if confirmed is not None else []
+    raise CB.BranchError(1, "\n".join(lead + lines + [CONFIRM_TIP % seen]))
+
+
+def settle(root, roadmap_rel: str, session: str, tip: str, notes: Optional[list] = None) -> Optional[int]:
+    """`tip`(쓴 뒤 읽을 끝)에서 두 쪽의 확인되지 않은 남의 고침 수(규칙 · 대기 줄 경로를 바꾼 서로 다른 커밋)를 세고 `확인한 끝` 절을 줄인다.
+    0 이면 절을 `확인 · <tip>` 한 줄로, 아니면 `씀` 줄 가운데 `<확인 끝>..<tip>` 에 없는 것(다시 만들기로 버려진 커밋)만 지운다.
+    재지 못하면 None — 절을 건드리지 않는다. `notes` 를 주면 알릴 줄을 더한다(옛 `## 레포 설정` 절을 지움 · 「씀」 줄이 500 을 넘음)."""
+    team = CB.team_of(root, roadmap_rel)
+    path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    try:
+        data = cs.load(path, roadmap_rel)
+    except Exception:
+        return None
+    rows = data[cs.TRUST]
+    trust = TS.trust_of(rows)
+    git = Git(str(root))
+    found = TS.foreign_commits(git, tip, trust, _watched(team))
+    if found is None:
+        return None
+    keep = rows
+    if not found:
+        if [(r["끝"], r["까닭"]) for r in rows] != [(tip, cs.TRUST_WHY[0])]:
+            keep = [{"끝": tip, "까닭": cs.TRUST_WHY[0], "때": CB.stamp(), "세션": session}]
+    else:
+        rc, out, _e = git.run_err("log", "--format=%H", "%s..%s" % (trust[0], tip) if trust[0] else tip)
+        if rc == 0:
+            inside = set(out.split())
+            keep = [r for r in rows if r["까닭"] == cs.TRUST_WHY[0] or r["끝"] in inside]
+    if keep != rows:
+        old_settings = cs.has_old_repo_settings(path)
+        data[cs.TRUST] = keep
+        cs.save(path, roadmap_rel, data, session)
+        if old_settings and notes is not None:
+            notes.append(cs.OLD_REPO_SETTINGS_DROPPED)
+    if notes is not None and len([r for r in keep if r["까닭"] == cs.TRUST_WHY[1]]) > OWN_ROWS_MAX:
+        notes.append(LONG_FOREIGN)
+    return len(found)

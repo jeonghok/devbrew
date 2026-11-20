@@ -16,12 +16,13 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from conductor_branch_fixture import ALPHA, BETA, ENV, SCRIPTS, SID, StateRepo, block, rm, roadmap_text  # noqa: E402
+from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, block, rm, roadmap_text  # noqa: E402
 import conductor_branch as CB  # noqa: E402
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
 import suite_lock  # noqa: E402
+import team_status as TS  # noqa: E402
 from state_path import state_root  # noqa: E402
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -415,6 +416,45 @@ class Show(CrossRepo):
         subprocess.run(["git", "init", "-q", str(bare)], env=ENV, check=True)
         self.assertFalse(CS._fetch_skips_state_branches(bare))
         self.assertTrue(CS._fetch_skips_state_branches(self.clone("single2", "--single-branch")))   # 양성 대조
+
+    def foreign_write(self, name, files):
+        """둘째 클론이 그 로드맵의 상태 브랜치에 써 올리고 첫 클론이 받아 온다 — 그 커밋을 돌려준다."""
+        other = self.clone("other-%s" % name)
+        self.claim(name, session=OTHER, repo=other)
+        team = CB.team_of(str(other), rm(name))
+        spec = "refs/heads/%s:refs/remotes/origin/%s" % (CB.branch_of(team.name), CB.branch_of(team.name))
+        self.g("fetch", "-q", "origin", spec, repo=other)
+        self.g("update-ref", CB.ref_of(team.name), "refs/remotes/origin/" + CB.branch_of(team.name), repo=other)
+        commit = CB.write(str(other), rm(name), OTHER, lambda b: files, "남").commit
+        self.g("fetch", "-q", "origin", spec)
+        return commit
+
+    def test_foreign_edit_of_my_roadmap_is_told_under_my_status(self):   # R3 AC21 — 옛 형식이어도 같은 판정
+        line = TS.FOREIGN % 1 + " — conductor_branch.py confirm"
+        out = self.text()
+        self.assertNotIn("확인되지 않은 남의 고침", out)   # 양성 대조 — 0 이면 그 줄이 없다
+        self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["foreign"], 0)
+        self.foreign_write(ALPHA, {CB.team_of(self.w, rm(ALPHA)).rules: "- [남] 남의 줄\n"})
+        out = self.text()
+        self.assertIn("\n" + line, out)
+        self.assertLess(out.index(line), out.index("다른 로드맵과 닿는 것"))   # 내 로드맵 줄 아래 · 닿는 것 위
+        self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["foreign"], 1)
+
+    def test_foreign_pending_edit_is_counted_too(self):   # 두 쪽 — 대기 줄 쪽 남의 고침도 센다
+        self.foreign_write(ALPHA, {CB.team_of(self.w, rm(ALPHA)).path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        self.assertIn("\n" + TS.FOREIGN % 1 + CS.FOREIGN_TAIL + "\n", self.text())
+
+    def test_foreign_edit_of_another_roadmap_is_not_counted(self):   # 다른 로드맵의 것은 세지 않는다
+        self.foreign_write(BETA, {CB.team_of(self.w, rm(BETA)).rules: "- [남] 남의 줄\n"})
+        self.assertNotIn("확인되지 않은 남의 고침", self.text())
+        self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["foreign"], 0)
+
+    def test_unreadable_machine_state_says_the_foreign_edits_were_not_measured(self):   # I11 — 한 뜻: 재지 못함
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        path.write_text("깨진 기계 상태\n", encoding="utf-8")
+        out = self.text()
+        self.assertIn("\n" + TS.FOREIGN_UNMEASURED + "\n", out)
+        self.assertIsNone(CS.cross_view(self.w, rm(ALPHA), now=at(20))["foreign"])
 
     def test_unreadable_suite_lock_is_named_and_does_not_stop_the_view(self):   # 과제 11 리뷰에서 넘어옴
         real = suite_lock.state

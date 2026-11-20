@@ -1057,6 +1057,21 @@ class Delete(StateRepo):
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip)
         self.assertEqual(rc, 1, out)                                                              # 이미 없다
 
+    def test_delete_empties_the_trust_section(self):   # M35 — 다시 만든 브랜치에서 옛 확인 끝이 판정을 영영 None 으로 두지 않게
+        path, beta = (cs.machine_path(state_root(str(self.w)), rm(name)) for name in (ALPHA, BETA))
+        self.assertNotEqual(cs.load(path, rm(ALPHA))[cs.TRUST], [])   # 양성 대조 — 지우기 전에는 「씀」 줄이 있다
+        kept = cs.load(beta, rm(BETA))[cs.TRUST]
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", CB.local_tip(self.w, ALPHA))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(cs.load(path, rm(ALPHA))[cs.TRUST], [])
+        self.assertEqual(cs.load(beta, rm(BETA))[cs.TRUST], kept)   # 다른 로드맵의 절은 그대로
+
+    def test_delete_that_does_not_delete_keeps_the_trust_section(self):   # 확인 없이 센 것뿐이면 비우지 않는다
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        before = cs.load(path, rm(ALPHA))[cs.TRUST]
+        self.assertEqual(cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)[0], 1)
+        self.assertEqual(cs.load(path, rm(ALPHA))[cs.TRUST], before)
+
     def test_only_the_marker_holder_deletes(self):
         tip = CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", OTHER, "--confirmed", CB.local_tip(self.w, ALPHA))
