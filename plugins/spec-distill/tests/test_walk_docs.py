@@ -40,8 +40,13 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
         for word in ("git switch --ignore-other-worktrees <브랜치>", "「브랜치 그대로 두기」(3번)", "기준 브랜치 <브랜치>",
                      "작업 방식: <작업 방식>", "실행 방식은", "check_bundle_coverage.py --plan", "가벼운 다시 확인",
                      "AC<번호>: 구현됨 | 미룸 | 빠짐", "suite_lock.py run --lock <스위트 잠금 경로>", "git stash",
-                     "TMPDIR=<이 agent 폴더>", "Spec: <설계 파일>", '"<SD>"/references/conductor-dispatch.md 의 `## 마지막 보고`'):
+                     "TMPDIR=<이 agent 폴더>", "Spec: <설계 파일>", "이 글 끝에 붙은 `## 마지막 보고`"):
             self.assertIn(word, block, word)
+        start = self.TEXT.index("### team 형식 — 계획 · 구현 담당자")
+        rest = self.TEXT[start + 1:]
+        ends = [i for i in (rest.find("\n### "), rest.find("\n## ")) if i >= 0]
+        section = rest[:min(ends)] if ends else rest
+        self.assertIn("`## 마지막 보고` 절을 펜스 뒤에 그대로 붙인다", section)
 
     def test_no_slot_for_describing_the_job(self):
         block = fence_under(self.TEXT, "### team 형식 — 계획 · 구현 담당자")
