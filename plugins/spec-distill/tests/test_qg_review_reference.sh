@@ -53,6 +53,8 @@ if [ -n "$a_n" ] && [ -n "$d_n" ] && [ "$d_n" -gt "$a_n" ] && [ $((d_n - a_n)) -
 else
   no "AC3 처분: 처분 줄이 Agent( 줄 아래 40줄 안에 없다(Agent=${a_n:-없음} · 처분=${d_n:-없음})"
 fi
+DISC="${DLINE#*disclosure=}"
+assert_contains "$(printf '%s\n' "$DISP" | grep -vF -- "$DLINE")" "$DISC" "AC3 처분: disclosure 글이 처분 줄 밖 본문에도 있다(보이는 일이 절차에 있다)"
 once "$DISP" "$L_raise" "AC3 되올림: L(raise) 한 번"
 assert_contains "$DISP" 'qg 를 다시 돌리지 않는다' "AC3 되올림: qg 를 다시 돌리지 않는다"
 
