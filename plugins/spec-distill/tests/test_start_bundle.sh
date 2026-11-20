@@ -106,7 +106,7 @@ PRC=0
 import sys
 sys.path.insert(0, sys.argv[1])
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 import start_bundle
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
@@ -125,7 +125,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import start_bundle
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
 ) || PRC=$?

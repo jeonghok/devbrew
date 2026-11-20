@@ -756,18 +756,27 @@ def pr_cache_fingerprint(machine) -> str:
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
 
+def trust_fingerprint(machine) -> str:
+    """기계 상태 `확인한 끝` 절의 줄을 차례대로 이은 글의 sha256 앞 16자. None 은 빈 절과 같다."""
+    rows = (machine or {}).get(cs.TRUST) or []
+    text = "\n".join(cs.SEP.join(str(r.get(c, "")) for c in cs.COLUMNS[cs.TRUST]) for r in rows)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
 def pr_cache_prints(targets, machine_lookup) -> str:
-    """대상마다 `<경로>=<PR 캐시 지문>` — 기계 상태를 못 읽으면 그 사유. 상태 계산이 PR 캐시로 머지됨을 판정하므로 열쇠에 든다."""
+    """대상마다 `<경로>=<PR 캐시 지문>+<확인한 끝 지문>` — 기계 상태를 못 읽으면 그 사유. 상태 계산이 PR 캐시로 머지됨을,
+    `확인한 끝` 으로 규칙을 읽을 끝을 판정하므로 둘 다 열쇠에 든다(`confirm` 은 ref 를 옮기지 않는다)."""
     out = []
     for path, _blob in targets:
         machine, why = machine_lookup(path)
-        out.append("%s=%s" % (path, pr_cache_fingerprint(machine) if machine is not None else "!" + str(why)))
+        out.append("%s=%s" % (path, "%s+%s" % (pr_cache_fingerprint(machine), trust_fingerprint(machine))
+                              if machine is not None else "!" + str(why)))
     return "\n".join(out)
 
 
 def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
     """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본 · 대상의 PR 캐시
-    지문. 인터뷰 상태 · PR 밖 기계 상태는 키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
+    지문. 인터뷰 상태 · PR 캐시와 확인한 끝 밖의 기계 상태는 키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
         return None

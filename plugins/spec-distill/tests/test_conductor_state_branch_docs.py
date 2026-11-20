@@ -231,6 +231,7 @@ class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명�
         # 붉어지는 뒤집기: leader_ref 가 받은 값 아닌 것(고정 ref 등)을 내면 붉다. 양성 대조: 서로 다른 두 값이 각각 그대로 돌아온다.
         self.assertEqual(TL.leader_ref("refs/remotes/origin/HEAD"), "refs/remotes/origin/HEAD")
         self.assertEqual(TL.leader_ref("refs/heads/other"), "refs/heads/other")
+        self.assertEqual(TL.leader_ref("refs/remotes/origin/HEAD", "b" * 40), "b" * 40)
 
 
 if __name__ == "__main__":

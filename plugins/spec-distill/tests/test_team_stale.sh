@@ -137,7 +137,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import team_layout
 if sys.argv[3] == "swap":
-    team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+    team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 import roadmap_status
 sys.exit(roadmap_status.main([sys.argv[2], "--json"]))
 PY
@@ -154,7 +154,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import roadmap_status
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 sys.exit(roadmap_status.main([sys.argv[2], "--json"]))
 PY
 ) 2> /dev/null

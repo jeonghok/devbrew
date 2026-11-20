@@ -429,7 +429,7 @@ if os.environ.get("LOCAL_DIR"):
 ARGS = {os.path.basename(a)[:-3] for a in sys.argv[1:]}
 # 상태 계산이 잠긴 파일 밖에서 이름으로만 가져오는 읽기 함수 — PR 캐시 읽기 · 적은 번호 읽기 · origin 소유자 읽기
 READERS = {"conductor_state": {"MachineError", "machine_path", "parse_machine",
-                               "EPIC_PR", "RECORDED_MISSING", "recorded_cache_row", "recorded_number"},
+                               "EPIC_PR", "RECORDED_MISSING", "recorded_cache_row", "recorded_number", "TRUST"},
            "gh_repo": {"GhStop", "origin_slug"},
            "state_path": {"state_root_for_common"}}
 

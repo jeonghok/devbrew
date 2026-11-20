@@ -22,6 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import control_plane as cp  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import roadmap_status  # noqa: E402
+import roadmap_status as RS  # noqa: E402,F401
+
+CP = cp
 
 RM = "docs/superpowers/roadmaps/rm/roadmap.md"
 
@@ -1201,6 +1204,17 @@ class CodeStampClosure(unittest.TestCase):   # Q24 — 목록을 고르지 않�
         for name in ("team_status.py", "job_results.py", "team_files.py", "team_check.py", "workflow_superpowers.py", "branch_tip.py",
                      "human_lines.py", "session_record.py"):
             self.assertIn(name, need)   # 양성 대조 — 도출이 새 모듈에 닿는다
+
+
+class TrustInCacheKey(unittest.TestCase):   # I1
+    def test_confirm_changes_the_key(self):
+        before = {"PR": [], cs.TRUST: [{"끝": "a" * 40, "까닭": "씀", "때": "2026-11-20 10:00 +0900", "세션": "s"}]}
+        after = {"PR": [], cs.TRUST: [{"끝": "a" * 40, "까닭": "확인", "때": "2026-11-20 10:05 +0900", "세션": "s"}]}
+        targets = [("r.md", "b")]
+        self.assertNotEqual(CP.pr_cache_prints(targets, lambda p: (before, None)),
+                            CP.pr_cache_prints(targets, lambda p: (after, None)))
+        self.assertEqual(CP.pr_cache_prints(targets, lambda p: (before, None)),
+                         CP.pr_cache_prints(targets, lambda p: (dict(before), None)))   # 같은 재료면 같다
 
 
 if __name__ == "__main__":

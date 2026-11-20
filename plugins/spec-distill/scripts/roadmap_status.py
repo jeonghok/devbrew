@@ -40,10 +40,11 @@ from roadmap_model import (  # noqa: E402,F401 — 테스트가 rs.parse_roadmap
     DEFAULT_REF, EXTRA_FIELDS, FormatError, NO_DEFAULT, approval_date, RECORD_HEADING, RULINGS_HEADING, brief_universe, collect_assigned, field_list, field_text,
     frontmatter, handoff_rows, id_sort_key, impl_done, parse_ids, parse_roadmap,
     section_body, section_lines, split_list, unquote)
-from repo_defaults import SHARED_FILES, SettingsError, resolve  # noqa: E402
+from repo_defaults import SHARED_FILES, SettingsError, resolve, state_branch_on  # noqa: E402
 from repo_defaults import default_branch as _default_branch  # noqa: E402
 from conductor_state import MachineError, machine_path, parse_machine  # noqa: E402 — PR 캐시 읽기만
 from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recorded_number  # noqa: E402 — 적은 번호 읽기만
+from conductor_state import TRUST  # noqa: E402 — 확인한 끝 읽기만(규칙을 읽을 끝)
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
 from state_path import state_root_for_common  # noqa: E402
 import team_layout  # noqa: E402
@@ -625,32 +626,46 @@ def merged_by_number(number: str, row, branch_rows: list, tip, default_short, re
     return None, [], warns
 
 
-def read_pr_cache(git: Git, roadmap_rel: str):
-    """(PR 캐시 줄들, 에픽 PR 줄들, 못 읽은 사유 | None) — 같은 기계 상태 파일을 한 번 읽는다. 파일이 없으면 ([], [], None)
-    — 깨졌으면 빈 캐시로 가고 사유를 낸다. 사유는 끝에 그 사유의 할 일 하나를 단다 — `--reset` 은 옛 판 줄(OldPrRows)의
-    할 일일 뿐이다."""
+def read_machine(git: Git, roadmap_rel: str):
+    """(기계 상태 | None, 못 읽은 사유 | None) — 기계 상태 파일을 한 번 읽는다. 파일이 없으면 빈 절들(PR · 에픽 PR ·
+    확인한 끝이 [])과 None. 깨졌으면 None 과 사유 — 사유는 끝에 그 사유의 할 일 하나를 단다(`--reset` 은 옛 판
+    줄(OldPrRows)의 할 일일 뿐이다)."""
     common = git.common_dir()
     if common is None:
-        return [], [], "git 공용 디렉토리를 찾지 못했다 — git 레포 안에서 다시 돌린다"
+        return None, "git 공용 디렉토리를 찾지 못했다 — git 레포 안에서 다시 돌린다"
     try:
         path = machine_path(state_root_for_common(Path(git.cwd, common).resolve()), roadmap_rel)
     except MachineError as exc:
-        return [], [], "기계 상태를 읽지 못했다 — %s — 로드맵 경로를 확인한다" % exc
+        return None, "기계 상태를 읽지 못했다 — %s — 로드맵 경로를 확인한다" % exc
     if path.is_symlink():
-        return [], [], "기계 상태 파일이 링크다: %s — 링크를 그 내용의 보통 파일로 바꾼다" % path
+        return None, "기계 상태 파일이 링크다: %s — 링크를 그 내용의 보통 파일로 바꾼다" % path
     if not path.exists():
-        return [], [], None
+        return {"PR": [], EPIC_PR: [], TRUST: []}, None
     if not path.is_file():
-        return [], [], "기계 상태 파일이 보통 파일이 아니다: %s — 그 자리에 보통 파일만 둔다" % path
+        return None, "기계 상태 파일이 보통 파일이 아니다: %s — 그 자리에 보통 파일만 둔다" % path
     try:
         data = parse_machine(path.read_text(encoding="utf-8"), roadmap_rel)
     except (OSError, UnicodeDecodeError) as exc:
-        return [], [], "기계 상태 파일을 읽지 못했다: %s (%s) — 파일 권한과 UTF-8 인코딩을 확인한다" % (
+        return None, "기계 상태 파일을 읽지 못했다: %s (%s) — 파일 권한과 UTF-8 인코딩을 확인한다" % (
             path, type(exc).__name__)
     except MachineError as exc:  # 옛 판 줄(--reset) · 판 문장(업데이트 등)은 메시지 끝이 할 일이다
-        return [], [], "기계 상태를 읽지 못했다: %s — %s%s" % (
+        return None, "기계 상태를 읽지 못했다: %s — %s%s" % (
             path, exc, "" if exc.action_in_message else " — 기계 상태 파일에서 그 자리를 고친다")
+    return data, None
+
+
+def pr_cache_of(machine: tuple):
+    """read_machine 의 값 → (PR 캐시 줄들, 에픽 PR 줄들, 못 읽은 사유 | None). 깨졌으면 빈 캐시와 사유."""
+    data, reason = machine
+    if data is None:
+        return [], [], reason
     return data["PR"], data[EPIC_PR], None
+
+
+def read_pr_cache(git: Git, roadmap_rel: str):
+    """(PR 캐시 줄들, 에픽 PR 줄들, 못 읽은 사유 | None) — 같은 기계 상태 파일을 한 번 읽는다. 파일이 없으면 ([], [], None)
+    — 깨졌으면 빈 캐시로 가고 사유를 낸다."""
+    return pr_cache_of(read_machine(git, roadmap_rel))
 
 
 def extra_branches(git: Git, main: str, rel: str, blocks: list):
@@ -1287,16 +1302,21 @@ def build(git: Git, args) -> dict:
         report["orphans"] = sorted(s_ids - union, key=id_sort_key)
         report["unknown_ids"] = sorted(union - non_s - s_ids, key=id_sort_key)
 
+    machine, machine_reason = read_machine(git, rel)
     team = None
     if layout == team_layout.LAYOUT_TEAM:   # 단계는 과제 폴더에서 센다(team_status.Reader) — 머지 판정은 옛 형식과 같은 길
         try:
-            team = team_status.Reader(git, main, team_layout.team_from_roadmap(settings["roadmaps_dir"], rel), src.read, src.absent)
+            where = team_layout.team_from_roadmap(settings["roadmaps_dir"], rel)
         except ValueError as exc:
             report["format_errors"].append("team 로드맵의 자리가 아니다 — %s" % exc)
             return report
+        # 규칙을 읽을 끝 — 알림은 상태 계산에 싣지 않는다(sync · show · 시작 묶음이 낸다)
+        lead_tip = team_status.rules_tip(git, where, state_branch_on(settings) and not resolved["errors"],
+                                         machine[TRUST] if machine is not None else None)[0]
+        team = team_status.Reader(git, main, where, src.read, src.absent, lead_tip=lead_tip)
         report["layout"] = layout
 
-    pr_rows, epic_pr_rows, pr_reason = read_pr_cache(git, rel)
+    pr_rows, epic_pr_rows, pr_reason = pr_cache_of((machine, machine_reason))
     cov_unknown = compute(git, main, blocks, records, bundles, roadmap_dir, settings, roadmap_rel=rel,
                           pr_rows=pr_rows, pr_reason=pr_reason, epic_pr_rows=epic_pr_rows,
                           default_short=main_name.split("/", 1)[1] if main_name else None, team=team)
