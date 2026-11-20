@@ -26,6 +26,7 @@ SKIP_LABEL, RETRY_LABEL = "건너뛴다", "다시 시도한다"
 PASS_LABELS = {KIND_SPEC: ("승인 — 계획 담당자에게",), KIND_PLAN: ("계획대로 구현한다",),
                KIND_FLOW: ("설계 없이 진행",), KIND_SKIP: (SKIP_LABEL, RETRY_LABEL)}
 RECOMMENDED = "(권장)"
+RECOMMENDED_TAILS = ("(권장)", "(Recommended)")
 
 PASS, NO_EVIDENCE, MISMATCH, UNCHECKED, STALE = "지남", "근거 없음", "어긋남", "확인 못 함", "낡음"
 
@@ -142,8 +143,9 @@ def render(kind, date, label, file, rev, session, key, gate=None) -> str:
 
 def clean_label(text: str) -> str:
     out = text.strip()
-    if out.endswith(RECOMMENDED):
-        out = out[:-len(RECOMMENDED)].rstrip()
+    for tail in RECOMMENDED_TAILS:
+        if out.endswith(tail):
+            return out[:-len(tail)].rstrip()
     return out
 
 

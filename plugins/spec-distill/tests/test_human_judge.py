@@ -169,6 +169,7 @@ class Match(SeededRepo):
         self.assertEqual(self.v(self.approve(self.tip, H.KIND_PLAN, 1)), H.PASS)
         self.assertEqual(self.v(self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2")), H.PASS)
         self.assertEqual(self.v(self.approve(self.tip, picked="승인 — 계획 담당자에게")), H.PASS)
+        self.assertEqual(self.v(self.approve(self.tip, picked="승인 — 계획 담당자에게 (Recommended)")), H.PASS)
 
     def test_forged_lines_do_not_pass(self):
         real = self.approve(self.tip)

@@ -35,6 +35,12 @@ class LineShape(unittest.TestCase):
         text = (REPO / "plugins/spec-distill/references/conducting.md").read_text(encoding="utf-8")
         self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED), text)
 
+    def test_both_recommend_tails_come_off_once(self):   # test_human_lines.py LineShape — K11 (가)
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (Recommended)"), "승인 — 계획 담당자에게")
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (권장)"), "승인 — 계획 담당자에게")
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (권장) (Recommended)"), "승인 — 계획 담당자에게 (권장)")   # 한 번만
+        self.assertEqual(H.clean_label("(Recommended) 승인"), "(Recommended) 승인")                                           # 끝만
+
     def test_parse_and_render_round_trip(self):
         l = H.parse(SPEC)
         self.assertEqual((l.kind, l.date, l.label, l.gate, l.file, l.rev, l.session, l.entry, l.index, l.raw, l.key, l.plan),
