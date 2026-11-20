@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.27.0] — 2026-11-20
+
+### Added
+- 지휘자의 qg 리뷰 절차 — `skills/epic-conductor/references/qg-review.md`: 자리 넷(spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝 · 이름으로 청한 리뷰)의 호출 줄 · 담당자(격리 worktree 로 보내고 결과 파일을 받음) · 돌아왔을 때의 처분 · 보관과 기록 파일 · 묻기 · 「잘못 골랐다」의 행선.
+- `scripts/merged_pr_range.py` — 머지된 PR 마다 머지 커밋의 범위(`<시작>..<끝>`)를 낸다. 범위를 확인하지 못하면 사유를 내고 0 이 아닌 종료 코드로 끝난다.
+
+### Changed
+- 지휘 순환 걸음 3 · 6 · 7 과 손으로 따르는 절차 3 · 6 · 9 에 qg 리뷰 절차를 가리키는 들어가는 문장이 한 줄씩 생겼다. 걸음 7 의 「로드맵 시작 커밋부터」 호출은 로드맵 끝 리뷰로 바뀌었고, 걸음 1 · 손 절차 1 에는 「아직 묻지 못한 질문」 자리가 생겼다.
+- 지휘자 SKILL.md 의 규모 공시 줄이 qg 담당자 수(spec 승인 앞 1 · 머지된 PR 마다 1 · 로드맵 끝 1)를 센다.
+- README 의 quality-gates 의존 줄이 자리 넷과 「품질 게이트 없이 간다」 공시를 말한다. `dependencies.md` 의 quality-gates 행 「없을 때」 칸이 자리 넷을 말하고, 판 칸을 `check_deps.py measure` 로 다시 쟀다.
+- `shared/tests/test_skill_reference_pointers.sh` 가 spec-distill 파일의 `<SD>/…` 가리킴을 인식해 그 대상이 있는지 본다.
+- `plugins/spec-distill/tests/test_conducting_reference.sh` 가 `<SD>/` 접두의 references 경로만 허용한다.
+- `shared/tests/test_dispatch_disposition.sh` 가 내장 `general-purpose` agent 의 dispatch 도 센다.
+
 ## [8.26.0] — 2026-11-20
 
 ### Added

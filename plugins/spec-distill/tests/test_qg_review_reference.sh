@@ -284,4 +284,16 @@ assert_eq "$(cnt "$(SKSEC '## 보이기')" '의도 점검 질문')" "1" "SKILL.m
 assert_contains "$(SKSEC '## 보이기')" 'references/qg-review.md' "SKILL.md 보이기: qg-review.md 를 가리킨다"
 assert_eq "$(grep -cF "$(printf 'skills/epic-conductor/references/qg-review.md\t비움\t**의도 점검 질문.**')" "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "1" "ask-sites.tsv: 의도 점검 질문 행이 한 줄"
 
+# AC18 — README Prerequisites 의 quality-gates 줄(절 본문에서 읽는다) · dependencies.md 의 없을 때 칸
+RDME="$ROOT/plugins/spec-distill/README.md"
+DEPS="$ROOT/plugins/spec-distill/dependencies.md"
+PREQ="$(awk '$0=="## Prerequisites"{f=1;next} f&&/^## /{exit} f' "$RDME")"
+QGL="$(printf '%s\n' "$PREQ" | awk 'index($0, "- **quality-gates**")==1')"
+[ -n "$QGL" ] && ok "README Prerequisites 절 본문의 quality-gates 줄을 읽었다" || no "README Prerequisites 절 본문에 quality-gates 줄이 없다 — 아래 AC18 단언이 공허하다"
+for lit in 'spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝 · 이름으로 청한 리뷰' '품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다' '리뷰할 diff 없음'; do
+  assert_contains "$QGL" "$lit" "AC18 README: quality-gates 줄에 ${lit}"
+done
+assert_not_contains "$QGL" '걸음 7 이 범위 입력을 받으면' "AC18 음성 짝: quality-gates 줄에 걸음 7 범위 입력 문구가 없다"
+assert_contains "$(awk 'index($0, "| quality-gates |")==1' "$DEPS")" '자리 넷' "AC18 dependencies.md: quality-gates 행 「없을 때」 칸에 자리 넷"
+
 finish
