@@ -1092,6 +1092,21 @@ class Delete(StateRepo):
         self.assertEqual(rc, 0, out)
         self.assertIsNone(CB.local_tip(self.w, ALPHA))
 
+    def test_local_ref_is_deleted_only_if_it_still_holds_the_tip_that_was_read(self):
+        """뒤집으면 붉다 — 옛 값 조건이 없으면 읽은 뒤 다른 쓰기가 옮긴 끝을 그대로 지운다."""
+        moved = CB.local_tip(self.w, BETA)
+        real = CB._git_delete
+
+        def racing(root, *args, **kw):
+            if args[0] == "update-ref" and args[2] == CB.ref_of(ALPHA):   # 로컬 ref 를 지우기 직전에 다른 쓰기가 끝을 옮긴다
+                subprocess.run(["git", "update-ref", CB.ref_of(ALPHA), moved], cwd=str(root), env=ENV, check=True)
+            return real(root, *args, **kw)
+        with mock.patch.object(CB, "_git_delete", racing):
+            with self.assertRaises(CB.BranchError) as c:
+                CB.delete(self.w, rm(ALPHA), SID, True)
+        self.assertEqual(c.exception.rc, 3)
+        self.assertEqual(CB.local_tip(self.w, ALPHA), moved)
+
     def test_leftovers_count_four_things_at_a_given_or_local_tip(self):
         import conductor_status as cstat
         want = {"unreceived": 1, "unanswered": 1, "pending": 2, "rules": 0}
