@@ -6,11 +6,11 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 QR="$ROOT/plugins/spec-distill/skills/epic-conductor/references/qg-review.md"
 [ -f "$QR" ] && ok "qg-review.md 가 있다" || { no "qg-review.md 가 없다"; finish; exit $?; }
-sec() { awk -v h="$1" '$0==h{f=1;next} f&&/^## /{exit} f' "$QR"; }   # 절 본문(머리 줄 제외)
+sec() { awk -v h="$1" '/^```/{q=!q} !q&&$0==h{f=1;next} f&&!q&&/^## /{exit} f' "$QR"; }   # 절 본문(머리 줄 제외) — 펜스 안의 `## ` 줄은 절 머리가 아니다
 once() { assert_eq "$(printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' ')" "1" "$3"; }
 
 ALL="$(cat "$QR")"
-for h in '## 호출 줄' '## 자리' '## 담당자' '## 돌아왔을 때'; do
+for h in '## 호출 줄' '## 자리' '## 담당자' '## 돌아왔을 때' '## 보관과 기록 파일' '## 묻기' '## 「잘못 골랐다」 의 행선'; do
   assert_eq "$(grep -cxF -- "$h" "$QR")" "1" "절 머리가 정확히 하나: ${h}"
   [ -n "$(sec "$h")" ] && ok "절 본문을 읽었다: ${h}" || no "절 본문이 비었다 — 아래 단언이 공허하다: ${h}"
 done
@@ -18,6 +18,17 @@ CALL="$(sec '## 호출 줄')"
 SITE="$(sec '## 자리')"
 DISP="$(sec '## 담당자')"
 BACK="$(sec '## 돌아왔을 때')"
+KEEP="$(sec '## 보관과 기록 파일')"
+ASK="$(sec '## 묻기')"
+WRONG="$(sec '## 「잘못 골랐다」 의 행선')"
+# 펜스 가운데 표지 글자가 든 첫 펜스의 본문(펜스 줄 제외)
+fence_with() { printf '%s\n' "$1" | awk -v m="$2" '/^```/{ if (f) { if (index(b, m)) { printf "%s", b; exit } f=0; b="" } else { f=1; b="" } next } f { b = b $0 "\n" }'; }
+# 줄 첫머리가 글자 p 인 줄의 수
+starts() { printf '%s\n' "$1" | awk -v p="$2" 'index($0, p)==1' | wc -l | tr -d ' '; }
+TPL="$(fence_with "$KEEP" 'type: roadmap-review')"
+QF="$(fence_with "$ASK" 'header: "의도 점검')"
+[ -n "$TPL" ] && ok "기록 틀 펜스를 읽었다" || no "기록 틀 펜스가 없다 — 아래 AC10 단언이 공허하다"
+[ -n "$QF" ] && ok "질문 틀 펜스를 읽었다" || no "질문 틀 펜스가 없다 — 아래 AC8 단언이 공허하다"
 
 # L(x) — 글자가 정해진 문장
 L_nodirect='지휘 세션은 qg skill 을 직접 부르지 않는다 — 자리마다 담당자 하나를 백그라운드로 보내 이 줄을 부르게 한다.'
@@ -113,6 +124,104 @@ once "$DISP" "$L_premerge" "AC24: L(premerge) 한 번"
 # Review Focus 3 · 5
 once "$SITE" "$L_alreadysent" "already-sent: L(alreadysent) 한 번"
 assert_grep "$SITE" '리뷰할 diff 없음[^.]*그 사유를 그대로 보인다' "doc-path-skip: 「리뷰할 diff 없음」 과 「그 사유를 그대로 보인다」 가 한 문장에"
+
+# Task 6 — 보관 · 기록 파일 · 묻기 · 행선
+L_noquestions='질문이 하나도 없는 리뷰는 파일을 만들지 않고 `ledger add --section "쌓인 기록"` 으로 한 줄(자리 · 범위 · 결과 줄)만 남긴다 — 로드맵 끝과 이름으로 청한 로드맵은 예외로 늘 파일이 있다.'
+L_branchspec='spec 승인 앞의 기록은 에픽 worktree 에서 에픽 브랜치에 커밋한다 — 에픽 PR 과 함께 머지된다. 그 밖(에픽 머지 뒤 · 로드맵 끝 · 이름으로 청함 — spec 승인 전 에픽 제외)의 기록은 로드맵마다 하나인 기록 브랜치에 쓴다.'
+L_remade='기록 브랜치가 이미 머지됐으면 기본 브랜치에서 다시 만든다.'
+L_pushnow='기록 브랜치에 쓴 기록은 답을 받은 직후 커밋하고 push 한다 — 다음 PR 을 기다리지 않는다.'
+L_openpr='기록 브랜치의 PR 을 여는 때는 셋이다 — 「잘못 골랐다」 가 하나라도 있으면 바로, 로드맵을 닫을 때(그 PR 이 로드맵을 닫는 PR 이다), 로드맵이 이미 닫힌 뒤 이름으로 청한 리뷰면 답을 받은 직후. 그 밖에는 push 만 해 두고 로드맵을 닫을 때 함께 연다.'
+L_prior='묻기 전에 이 로드맵의 기록 파일 전부(기본 브랜치의 `reviews/` · 에픽 브랜치의 것 · 기록 브랜치의 것)에서 정체(`id`)가 글자로 같은 질문을 찾아, 있으면 가장 최근 것의 질문 글과 답을 함께 적는다 — 「같은 질문」 이라 부르지 않고 그때의 질문 글을 보여 사용자가 판단하게 한다.'
+L_waiting='담당자가 질문을 돌려줬는데 바로 묻지 못하면 `ledger add --section "기다리는 질문"` 으로 한 줄(에픽 또는 로드맵 · 기대는 일 · 「의도 점검 질문 <k>개 — <보관 폴더 경로>」)을 적는다. spec 승인 앞이면 기대는 일은 「spec 리뷰 시작」 이다. 답을 받았거나 「답하지 않음」 으로 기록하면 그 줄을 지운다(`ledger drop`). 그 줄이 남아 있는 에픽의 spec 리뷰는 시작하지 않는다.'
+L_wrongspec='spec 승인 앞에서 하나라도 있으면 spec 리뷰를 시작하지 않는다 — 그 에픽의 설계 대화로 돌아가 그 질문과 답을 입력으로 설계를 고치고, 고친 설계문서 커밋에 qg 를 다시 보낸다.'
+FIXED='intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 아래 질문의 답은 판정을 바꾸지 않는다.'
+P4_BRANCH='| spec 승인 뒤 · 머지 전 에픽: 재분해 신호로 보인다 — 설계 대화로 돌아가지 않는다.'
+
+# AC6 보관
+assert_contains "$KEEP" 'ledger resource-dir --roadmap <로드맵> --kind report --name qg-<대상>-<자리>-<날짜>' "AC6: 보관 폴더를 resource-dir 로 만든다"
+assert_contains "$KEEP" '끝에 -2, -3 … 을 붙여 앞 사본을 덮지 않는다' "AC6: 같은 이름이면 -2, -3 을 붙여 덮지 않는다"
+assert_contains "$KEEP" '`spec` · `merged-pr<번호>` · `end` · `asked`' "AC6: 보관 폴더의 자리 글자가 기록 파일 · 쌓인 기록 줄과 같다"
+
+# AC10 기록 틀
+for k in 'type: roadmap-review' 'roadmap:' 'epic:' 'site:' 'reviewed_base:' 'reviewed_head:' 'contract: 2' \
+         '- 정체: <id>' '- 질문: <question>' '- 관찰:' '- qg 가 돌려준 상태: <state>' '- 같은 대상에 전에 물은 것:' '- 답 원문: <직접 쓴 글 그대로 | ->'; do
+  assert_eq "$(starts "$TPL" "$k")" "1" "AC10 틀: 줄 첫머리 ${k} 가 한 번"
+done
+assert_contains "$KEEP" '<로드맵 폴더>/reviews/<YYYY-MM-DD>-<대상>-<자리>.md' "AC10: 기록 파일 이름 규칙"
+once "$KEEP" "$L_noquestions" "AC10: L(noquestions) 한 번"
+# AC10 계약 칸 이름 — 틀의 칸이 계약 2판 질문 칸 이름과 같다
+SFF="$ROOT/plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md"
+QCOLS="$(grep -F -- '- 질문 칸(차례대로):' "$SFF")"
+[ -n "$QCOLS" ] && ok "계약 2판 질문 칸 줄을 읽었다" || no "계약 2판 질문 칸 줄이 없다 — 아래 칸 이름 단언이 공허하다"
+for nm in '<id>' '<question>' '<observation 의 줄 전부>' '<state>' '<target_source>' '<target_id>' '<label>' '<quote>' '<evidence>'; do
+  assert_contains "$TPL" "$nm" "AC10 계약 칸: 틀에 ${nm}"
+  f="${nm#<}"; f="${f%>}"; f="${f% 의 줄 전부}"
+  assert_contains "$QCOLS" "\`${f}\`" "AC10 계약 칸: ${f} 가 계약 2판 질문 칸에 있다"
+done
+
+# P2 (고치면)
+assert_not_contains "$TPL" 'source_brief:' "P2: 기록 틀에 source_brief: 줄이 없다"
+assert_not_contains "$ALL" '`source_brief:` 줄은 로드맵을 보는 리뷰' "P2 음성: 「그대로 두면」 쪽 L(sourcebrief) 가 없다"
+
+# AC11 기록 브랜치
+once "$KEEP" "$L_branchspec" "AC11: L(branchspec) 한 번"
+once "$KEEP" "$L_pushnow" "AC11: L(pushnow) 한 번"
+once "$KEEP" "$L_openpr" "AC11: L(openpr) 한 번"
+once "$KEEP" "$L_remade" "record-branch-remade: L(remade) 한 번"
+
+# P3 (고치면)
+assert_contains "$KEEP" '<접두>roadmap-<로드맵 폴더 이름>-reviews' "P3: 기록 브랜치 이름이 레포 접두 뒤에 roadmap-<로드맵 폴더 이름>-reviews"
+assert_contains "$(fence_with "$KEEP" 'branch_prefix')" 'repo_defaults.py" get branch_prefix)" || BP=""' "P3: 접두를 repo_defaults.py 로 얻는 펜스"
+assert_not_contains "$ALL" 'docs/roadmap-' "P3 음성: 「그대로 두면」 쪽 docs/ 접두 이름이 없다"
+
+# AC9 같은 대상에 전에 물은 것
+once "$KEEP" "$L_prior" "AC9: L(prior) 한 번"
+assert_contains "$KEEP" '글자가 같지 않으면 짝짓지 않는다' "AC9: 글자가 같지 않으면 짝짓지 않는다"
+assert_contains "$ASK" '같은 대상에 전에 물은 것이 있어도 질문은 띄운다' "AC9 양성 짝: 전에 물은 것이 있어도 질문은 띄운다"
+
+# AC8 질문 꼴
+assert_contains "$QF" 'header: "의도 점검 <n>"' "AC8: 머리 의도 점검 <n>"
+n1="$(printf '%s\n' "$QF" | grep -nF '{label: "의도다",' | head -1 | cut -d: -f1)"
+n2="$(printf '%s\n' "$QF" | grep -nF '{label: "잘못 골랐다",' | head -1 | cut -d: -f1)"
+n3="$(printf '%s\n' "$QF" | grep -nF '{label: "지금은 모르겠다",' | head -1 | cut -d: -f1)"
+if [ -n "$n1" ] && [ -n "$n2" ] && [ -n "$n3" ] && [ "$n1" -lt "$n2" ] && [ "$n2" -lt "$n3" ]; then
+  ok "AC8: 라벨 셋이 의도다 → 잘못 골랐다 → 지금은 모르겠다 차례"
+else
+  no "AC8: 라벨 셋의 차례가 qg 와 다르다(의도다=${n1:-없음} · 잘못 골랐다=${n2:-없음} · 지금은 모르겠다=${n3:-없음})"
+fi
+assert_not_contains "$QF" '(권장)' "AC8: 질문 틀에 추천 표시가 없다"
+once "$ALL" "$FIXED" "AC8: qg 의 고정 문장이 파일에 한 번"
+assert_contains "$ASK" "$FIXED" "AC8: 고정 문장이 묻기 절에"
+assert_contains "$ASK" '한 호출에 많아야 셋' "AC8: 한 호출에 많아야 셋"
+assert_contains "$ASK" '`state` 가 `묻지 않음` 인 질문' "AC8: 묻지 않음 인 질문만 묻는다"
+assert_not_contains "$ALL" '같은 질문을 다시 묻지 않는다' "AC8 음성: qg 설명의 「같은 질문을 다시 묻지 않는다」 가 없다"
+assert_not_contains "$ALL" '다음에 다시 물을 수 있다' "AC8 음성: qg 설명의 「다음에 다시 물을 수 있다」 가 없다"
+# 질문 자리 목록(ask-sites) 행이 쓰는 앵커 · 끝 글자 — 앵커는 파일에서 한 번, 범위 안에 질문 하나와 비움 문구
+ANCHOR='**의도 점검 질문.**'
+QEND='라벨 셋의 글자와 순서는 qg 와 같다.'
+assert_eq "$(printf '%s\n' "$ALL" | grep -oF -- "$ANCHOR" | wc -l | tr -d ' ')" "1" "AC8 질문 자리: 앵커가 파일에서 한 번"
+assert_eq "$(starts "$ASK" "$ANCHOR")" "1" "AC8 질문 자리: 앵커가 줄 첫머리"
+QRANGE="$(printf '%s\n' "$ALL" | awk -v a="$ANCHOR" -v e="$QEND" 'index($0, a){f=1} f{print} f&&index($0, e){exit}')"
+assert_contains "$QRANGE" "$QEND" "AC8 질문 자리: 앵커 뒤에 끝 글자가 있다"
+assert_contains "$QRANGE" '추천을 달지 않는다 — ' "AC8 질문 자리: 범위에 비움 문구"
+assert_eq "$(printf '%s\n' "$QRANGE" | grep -oF 'AskUserQuestion' | wc -l | tr -d ' ')" "1" "AC8 질문 자리: 범위에 질문 호출 하나"
+assert_eq "$(printf '%s\n' "$ALL" | grep -oF 'AskUserQuestion' | wc -l | tr -d ' ')" "1" "AC8 질문 자리: 파일 전체에 질문 호출 하나"
+
+# P4 (고치면)
+assert_contains "$QF" "$P4_BRANCH" "P4: 「잘못 골랐다」 설명에 spec 승인 뒤 · 머지 전 에픽 갈래"
+assert_eq "$(starts "$WRONG" '- **spec 승인 뒤 · 머지 전 에픽.**')" "1" "P4: 행선 절에 spec 승인 뒤 · 머지 전 에픽 불릿"
+
+# AC13 아직 묻지 못한 질문 · 다른 호출
+assert_eq "$(starts "$ASK" '**아직 묻지 못한 질문.**')" "1" "AC13: 「아직 묻지 못한 질문」 굵은 머리가 줄 첫머리에 한 번"
+WPARA="$(printf '%s\n' "$ASK" | awk 'index($0, "**아직 묻지 못한 질문.**")==1{f=1} f&&/^$/{exit} f')"
+once "$WPARA" "$L_waiting" "AC13: L(waiting) 가 「아직 묻지 못한 질문」 문단에 한 번"
+assert_contains "$ASK" '설계문서 점검의 질문과도 다른 메시지 · 다른 질문 호출' "AC13: 설계문서 점검의 질문과 다른 호출"
+assert_contains "$ASK" '「답하지 않음」 으로 남기고 다시 묻지 않는다' "AC13: 답하지 않은 질문은 「답하지 않음」 으로 남긴다"
+
+# AC12 행선
+once "$WRONG" "$L_wrongspec" "AC12: L(wrongspec) 한 번"
+assert_contains "$WRONG" '/spec-distill:request-framing @<기록 파일의 레포 상대경로>' "AC12: 다음 세션 첫 줄"
+assert_contains "$WRONG" '그 PR 이 머지된 뒤 친다' "AC12: 그 PR 이 머지된 뒤 친다"
 
 # 레포 전용 값
 for lit in 'origin/main' 'feature/' 'docs/superpowers'; do
