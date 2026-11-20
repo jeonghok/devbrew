@@ -382,6 +382,55 @@ class Inbox(MailRepo):
         self.assertEqual(rc, 0, out)
         self.assertEqual(CM.incoming(self.w, ALPHA, self.me()).letters, [])
 
+    def raw_commit(self, ref, files):
+        """ref 의 끝 위에 {경로: (모드, 글)} 을 그대로 얹은 커밋으로 ref 를 옮긴다 — 스크립트가 쓰지 않을 모드를 만든다."""
+        import os
+        import tempfile
+        tip = self.g("rev-parse", ref)
+        tmp = tempfile.mkdtemp()
+        try:
+            env = dict(ENV, GIT_INDEX_FILE=os.path.join(tmp, "index"))
+            def g(*a, data=None):
+                p = subprocess.run(["git", *a], cwd=str(self.w), env=env, input=data, capture_output=True, encoding="utf-8")
+                self.assertEqual(p.returncode, 0, p.stderr)
+                return p.stdout.strip()
+            g("read-tree", tip)
+            for path, (mode, text) in files.items():
+                g("update-index", "--add", "--cacheinfo", "%s,%s,%s" % (mode, g("hash-object", "-w", "--stdin", data=text), path))
+            commit = g("commit-tree", g("write-tree"), "-p", tip, "-m", "raw")
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.g("update-ref", ref, commit)
+
+    def test_only_regular_files_count_as_letters(self):
+        ok = CM.render_letter(BETA, ALPHA, "예고", "2026-11-19 02:40 +0900", "실행 비트")
+        team = CB.team_of(self.w, rm(BETA))
+        self.raw_commit(CB.ref_of(BETA), {team.inbox + "/" + ALPHA + "/2026-11-19-01.md": ("100755", ok),
+                                          team.inbox + "/" + ALPHA + "/2026-11-19-02.md": ("120000", ok)})
+        got = CM.incoming(self.w, ALPHA, self.me())
+        self.assertEqual((got.letters, got.malformed), ([], 2))
+
+    def test_stray_branch_letters_are_never_read(self):
+        team = CB.team_of(self.w, rm(BETA))
+        stray = "conductor/no-such-roadmap"
+        self.g("update-ref", "refs/heads/" + stray, CB.local_tip(self.w, BETA))
+        letter = CM.render_letter("no-such-roadmap", ALPHA, "예고", "2026-11-19 02:40 +0900", "떠돌이")
+        self.raw_commit("refs/heads/" + stray, {team.roadmaps_dir + "no-such-roadmap/" + CB.team_layout.INBOX_DIR + "/" + ALPHA + "/2026-11-19-01.md": ("100644", letter)})
+        got = CM.incoming(self.w, ALPHA, self.me())
+        self.assertEqual((got.letters, got.stray), ([], 1))
+
+    def test_counts_see_a_changed_letter_and_a_non_reply(self):
+        self.send(BETA, "질문", "먼저?")
+        CM.ack(self.w, rm(BETA), SID, ALPHA + "/2026-11-19-01.md", now=NOW)
+        self.send(ALPHA, "예고", "베타의 다른 글", frm=BETA)                     # 나에게 왔지만 re 가 없다 — 답이 아니다
+        now = lambda: CM.counts(self.w, ALPHA, self.me(), CB.roadmaps(self.w))   # noqa: E731
+        self.assertEqual(now()[:3], (1, 0, 1))
+        team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.inbox + "/" + BETA + "/2026-11-19-01.md":
+                 CM.render_letter(ALPHA, BETA, "질문", "2026-11-19 02:40 +0900", "바꾼 질문")}, "바꿈")
+        self.assertEqual(now()[:3], (1, 1, 1))                                  # 받은 뒤 바뀐 글은 다시 받지 않은 글이다
+
     def test_read_moves_no_ref(self):
         self.send(ALPHA, "예고", "하나", frm=BETA)
         before = self.snap()
