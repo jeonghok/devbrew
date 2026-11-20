@@ -207,6 +207,7 @@ OLD_RC=0; (cd "$W" && python3 "$RS" --roadmap-file "$OLD/roadmap.md" --json) > "
 assert_eq "${OLD_RC} · $(js "$T/old.json" "(r['format_errors'], r['unknown_reasons'], [b['stage'] for b in r['blocks']])")" "0 · ([], [], ['준비'])" \
   "Q14: 옛 형식 로드맵을 끝까지 계산했다(아래 단언의 바탕)"
 assert_eq "$(js "$T/old.json" "('jobs' in r, 'job_notes' in r, 'layout' in r)")" "(False, False, False)" "Q14: 옛 형식의 보고에는 jobs · job_notes 칸이 없다"
+assert_eq "$(js "$T/old.json" "[(b['id'], b.get('job_folder', '칸 없음')) for b in r['blocks']]")" "[('E1', '칸 없음')]" "AC20: 옛 형식 보고의 블록에는 job_folder 칸이 없다(블록 하나를 본다)"
 rm -rf "$W/$OLD"
 
 # ── 블록 없는 에픽 폴더(kind: epic) — 브랜치에서도 기본 브랜치에서도 과제가 아니다 ──
