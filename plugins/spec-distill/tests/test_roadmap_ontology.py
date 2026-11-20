@@ -17,6 +17,7 @@ SCRIPTS = PLUGIN / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from roadmap_model import FIELDS, FORBIDDEN, REQUIRED, section_body  # noqa: E402
 from roadmap_render import BUNDLE_FORMAT  # noqa: E402
+from conductor_mail import HEAD_KEYS  # noqa: E402  — 편지 머리의 칸 이름이 링크 이름이다
 from conductor_state import COLUMNS  # noqa: E402
 from repo_defaults import COUNT_KEYS, DIR_KEYS, TEXT_KEYS  # noqa: E402
 from repo_defaults import KEYS as SETTING_KEYS  # noqa: E402  — 레포 설정의 닫힌 키 집합
@@ -27,7 +28,8 @@ SOURCES = ("roadmap_model.py", "roadmap_status.py", "check_bundle_coverage.py", 
 LAYERS = ("컨트롤 플레인", "계획", "실행", "기록")
 OBJECTS = ("로드맵", "에픽", "에픽 묶음", "설계문서", "산출물", "계획", "레포 설정", "브랜치", "커밋", "PR",
            "worktree · agent", "작업", "결정 기록 줄", "재분해 이력 항목", "번호 대조 행", "미룸 · 넘김 줄",
-           "넘김 확인 줄", "판정", "구현 대조", "지휘 기록", "기계 상태", "리뷰 원장")
+           "넘김 확인 줄", "판정", "구현 대조", "지휘 기록", "기계 상태", "리뷰 원장",
+           "상태 브랜치", "STATUS", "편지", "받음 줄")
 HEAD = ["객체", "층", "식별자", "속성", "링크(칸 · 키)", "주인"]
 BACKTICK = re.compile(r"`([^`]+)`")
 # 객체 → 주인 칸이 이름 붙여야 하는 (스크립트, 그 안에 정의된 기호). 기호는 코드에 실재해야 한다.
@@ -40,6 +42,10 @@ PINS = {
     "미룸 · 넘김 줄": (("roadmap_model.py", "handoff_rows"),),
     "넘김 확인 줄": (("conductor_state.py", "confirm_line", "쓰기"), ("roadmap_model.py", "CONFIRM_RE", "읽기")),
     "기계 상태": (("conductor_state.py", "parse_machine"), ("control_plane.py", "overlay")),
+    "상태 브랜치": (("conductor_branch.py", "write"),),
+    "STATUS": (("conductor_status.py", "build_status"),),
+    "편지": (("conductor_mail.py", "parse_letter"),),
+    "받음 줄": (("conductor_mail.py", "acked"),),
 }
 ALLOW_LINK = ("#<n>", "- 넘김 확인", "받는 곳", "받듦", "Spec:", "**Spec:**")   # 코드 글에 그대로 있어야 한다
 ALLOW_SOURCE = ("PR 의 head", "문서 경로")
@@ -57,7 +63,7 @@ def frontmatter_keys() -> set:
 
 
 KEYS = (frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | set(COUNT_KEYS) | set(SETTING_KEYS)
-        | {"source_brief", "source_interview", "roadmap"})
+        | {"source_brief", "source_interview", "roadmap"} | set(HEAD_KEYS))
 
 
 def link_ok(token: str, corpus: str) -> bool:

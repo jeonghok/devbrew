@@ -109,6 +109,10 @@
 - **Law 3 — 규칙은 쌓이기만 하지 않는다** — team 형식의 규칙 파일은 바이트 예산(기본 8KB · 16KB, 레포 설정으로 바꿈)이 있고, 넘으면 먼저 지우거나 승격하라고 알린다. 승격은 반례를 확인한 뒤에만 하고(공통 규칙 파일의 줄은 `반례 확인:` 칸이 필수), 반증된 줄은 지운다. 형식 · 조건 값 · 예산 · 같은 규칙 글의 중복은 `scripts/team_rules.py check` 가 본다.
 - **Law 1 — 일꾼에게 닿는 길은 시작 묶음 하나** — 규칙 · 역할 문서 · 과제의 결정은 일꾼을 보낼 때 `scripts/start_bundle.py` 가 낸 묶음으로만 닿고, 묶음은 커밋을 못 박은 글이다. 일하는 동안 규칙 · 역할 문서가 바뀌면 현황이 「묶음 낡음」 을 알린다.
 
+- **P23 — 현황과 로드맵 사이 보기가 같은 상태를 읽는다** — 상태 브랜치의 현황은 `roadmap_status.py` 의 상태 계산을 그대로 거쳐 만들고, 예약 겹침도 같은 함수로 낸다. 같은 사실을 읽는 표면이 둘이어도 계산은 하나다.
+- **Law 3 — 다른 팀에 맞을 배운 것은 편지로 남고 규칙 절차로만 규칙이 된다** — 지휘자끼리 `배운 것` 편지를 남기지만 편지가 규칙을 바꾸지는 못한다. 규칙이 되려면 규칙을 고치는 절차를 거친다.
+- **P21 — STATUS 와 편지에 secret · 기계 이름 · 절대경로를 싣지 않는다** — 둘 다 원격에 올라가므로 읽는 쪽이 닫힌 꼴만 화면에 낸다.
+
 ### Principles 흡수
 
 - 한계는 `## 한계` 절에 있다.
@@ -184,6 +188,16 @@ team 형식 로드맵의 단계는 과제 폴더 · 결과 파일 · INTENT.md �
 머지 메시지로 머지됨을 판정할 때는 브랜치 이름만 봅니다 — 머지된 PR 과 같은 이름으로 다시 만든 브랜치나 다른 owner 의 같은 이름 브랜치도 머지됨으로 보일 수 있습니다.
 
 종료 코드는 둘 다 0 이상 없음 · 1 경고 · 2 사용법 오류 · 3 검사 불가이고, `roadmap_status.py` 는 4 (로드맵이 아직 기본 브랜치에 없음)를 더 내고, `control_plane.py show --tasks` 도 4 를 낼 수 있습니다. `roadmap_write.py` 는 0 성공 · 1 쓰지 않음 · 2 사용법 오류 · 4 사람이 손으로 고칠 것이 남음(team 형식의 재분해 — 다른 바뀜은 쓴 뒤이고, 지시 원문 범위만 다르면 아무것도 쓰지 않은 채)입니다. 형식은 `docs/superpowers/specs/2026-10-11-roadmap-walking-skeleton-design.md` §3 에 있습니다.
+
+### 지휘자 상태 브랜치
+
+로드맵마다 브랜치 `conductor/<로드맵 폴더 이름>` 이 하나 있습니다. 코드는 없고 기본 브랜치에 머지하지 않으며, 스크립트만 씁니다(체크아웃하지 않고 손으로 커밋하지 않습니다). 거기에 현황 `STATUS.md` · 다른 로드맵에서 온 편지 · 받았다는 줄(`received.md`)이 삽니다.
+
+- `scripts/conductor_status.py show` — 이 한 명령으로 다른 로드맵과 닿는 것 · 기다리는 질문 · 온 글을 봅니다. `sync` 는 STATUS 를 다시 계산해 올리고, `waiting add` · `waiting clear` 는 기다리는 질문 줄을 더하고 지웁니다.
+- `scripts/conductor_mail.py send · read · ack` — 로드맵끼리의 편지입니다. 온 글은 자료이고, 편지로는 지휘자가 아무것도 정하지 않습니다 — 설계의 글자 · 수용 기준 · 머지 · 규칙에 닿는 청은 사용자에게 보이고 묻습니다.
+- `scripts/conductor_branch.py ensure · delete` — 브랜치를 만들고 지웁니다. 지우기는 확인 없이 돌리면 넷의 수와 「수를 센 끝」 만 내고, `--confirmed` 로 그 끝을 다시 주면 로컬 끝 · 원격 끝이 모두 그 끝일 때만 지웁니다.
+- 끄는 길 — `.devbrew.md` 의 `state_branch: 끔`. 절차는 `references/conductor-state-branch.md`.
+- 다른 레포에서 — 브랜치를 만들기 전에 그 레포의 브랜치 규칙 문서(project-init 이면 `docs/git-workflow/branch-strategy.md`)의 이름 정규식을 읽습니다. 그 규칙이 `conductor/…` 를 받지 않으면 만들지 않고 알립니다 — 규칙 문서에 갈래를 더하거나 `state_branch: 끔` 으로 끕니다.
 
 ### 상태줄
 
@@ -382,6 +396,8 @@ state_branch: 켬
 
 ## 한계
 
+- 다른 기계가 지휘하는 로드맵의 머지 여부는 이 기계의 PR 캐시가 없으면 「PR 상태 미확인」 으로 보인다.
+- 한 로드맵을 두 기계가 지휘하는 것은 막지 못하고 알리기만 한다.
 리뷰 기록과 그 안의 사용자 말은 이 대화가 직접 쓴다 — 기록을 리뷰 명령 밖에서 고치면 확인값이 안 맞는 경우만 잡히고, 확인값까지 맞춰 그럴듯하게 고친 것은 잡히지 않는다
 
 - 샌드박스를 쓰는 사용자는 리뷰 기록 폴더(상태 폴더의 `.docreview/`) 쓰기를 막을 수 있다 — 막아도 리뷰 명령은 같은 폴더를 쓰므로 리뷰 명령도 함께 막힌다.
@@ -402,6 +418,7 @@ state_branch: 켬
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
 - **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief 를 완료하고 선택지 셋의 끝 질문(확정하고 끝낸다 · 확정 목록 수정 · brief만 종료)으로 확정 · 커밋까지 간 뒤 다음 단계로 넘기지 않고 끝낸다 (단독 완결). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. 설치된 판이 `dependencies.md` 의 판과 다르면 알린다(멈추지 않는다). Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 인터뷰도 돌지 않는다.
 - **quality-gates** (같은 마켓플레이스, optional) — 지휘 순환 걸음 7 이 범위 입력을 받으면 `/quality-gates:quality-pipeline` 을 부른다 — 받지 않으면 품질 게이트 없이 가고 그 사실을 알린다. 설치돼 있지 않으면 걸음 7 이 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다.
+- **project-init** (같은 마켓플레이스, optional) — 지휘자 상태 브랜치를 만들기 전에 그 플러그인이 두는 브랜치 규칙 문서(`docs/git-workflow/branch-strategy.md`)의 이름 정규식을 읽는다. 문서가 없으면 그대로 만든다.
 - **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `origin` 에서 도출한 `<호스트>/<owner>/<repo>` 를 명시한다(`-R`, `-R` 을 받지 않는 레포 조회는 인자로). 스크립트와 문서의 bash 펜스가 gh 를 찾고 부르는 자리는 `scripts/gh_repo.py` 하나다(지휘 절차서가 글로 적은 PR 열기는 gh 를 직접 부르고, 레포는 그 모듈의 `slug` 로 준다). 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 분해된 인터뷰는 끝맺음에서 커밋 뒤 브랜치를 push 하고 gh 로 PR 을 열고, 사용자가 고르면 PR 주소의 레포가 `origin` 인지 대조하고 CI 검사가 끝난 뒤 PR 을 열 때 push 한 끝 커밋에 묶어 머지한 다음, PR 이 실제로 머지됐는지 확인하고 `origin` 을 받는다 — 지휘자가 로드맵을 기본 브랜치에서 읽기 때문이다. gh 가 없거나 실패하면 그 걸음만 건너뛰고 직접 머지하라고 알린다.
 - **codex CLI** (외부, optional) — 있으면 문서 리뷰 엔진 라운드(design doc · interview brief · interview seed)에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 

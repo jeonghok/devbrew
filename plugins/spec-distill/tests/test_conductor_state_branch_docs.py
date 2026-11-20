@@ -135,6 +135,29 @@ class Closure(unittest.TestCase):   # J41 — 상태 계산은 새 모듈을 가
             self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, {"conductor_status.py", "conductor_branch.py", "conductor_mail.py"})
 
 
+class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
+    def test_team_files_no_longer_says_undecided(self):
+        text = (PLUGIN / "references" / "team-files.md").read_text(encoding="utf-8")
+        lines = [l for l in text.split("\n") if "STATUS.md" in l and "inbox/" in l]
+        self.assertGreaterEqual(len(lines), 3)
+        for l in lines:
+            self.assertNotIn("정하지 않았다", l, l)
+        for word in ("conductor/<로드맵 폴더 이름>", "conductor-state-branch.md", "received.md"):
+            self.assertIn(word, text, word)
+        self.assertNotIn("리더 상태 브랜치는 아직 없다", text)
+        self.assertIn("RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다", text)   # 계획 2 가 옮기면서 이 단언을 뒤집는다
+
+    def test_readme_and_changelog(self):
+        # state_branch 는 설정 표가 이미 담은 낱말이라 이 절이 더한 낱말(스크립트 이름 · 절 이름)을 단언한다
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for word in ("### 지휘자 상태 브랜치", "conductor/<로드맵 폴더 이름>", "STATUS.md", "conductor_status.py show",
+                     "conductor_mail.py send", "conductor_branch.py ensure", "branch-strategy.md", "수를 센 끝"):
+            self.assertIn(word, readme, word)
+        top = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## [")[1]
+        for word in ("conductor_branch.py", "conductor_status.py", "conductor_mail.py", "state_branch", "지금 묻는 질문", "conductor-state-branch.md"):
+            self.assertIn(word, top, word)
+
+
 class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명령 출력이 바뀌지 않는다
     FIXTURE = Path(__file__).resolve().parent / "fixtures" / "conductor-e2e"
     QUESTION = "미뤄 둔 질문"
