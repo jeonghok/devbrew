@@ -238,4 +238,50 @@ for lit in 'origin/main' 'feature/' 'docs/superpowers'; do
 done
 assert_contains "$ALL" 'origin/HEAD' "레포 전용 값 양성 짝: 기본 브랜치는 origin/HEAD"
 
+# ── conducting.md 의 들어가는 문장(AC2 · AC13) — 절차는 qg-review.md 에만 있다
+CD="$ROOT/plugins/spec-distill/references/conducting.md"
+QE='`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고 그 자리('
+LOOP="$(awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f' "$CD")"
+MAN="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$CD")"
+lstep() { printf '%s\n' "$LOOP" | awk -v n="$1" 'index($0, "### " n ". ")==1{f=1;next} f&&/^### /{exit} f'; }
+mstep() { printf '%s\n' "$MAN" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[1-9]\. /{exit} f'; }
+lhead() { printf '%s\n' "$LOOP" | awk 'index($0, "### 1. ")==1{exit} 1'; }
+mhead() { printf '%s\n' "$MAN" | awk 'index($0, "1. ")==1{exit} 1'; }
+cnt() { printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
+[ -n "$LOOP" ] && [ -n "$MAN" ] && ok "conducting.md 의 두 절을 읽었다" || no "conducting.md 의 두 절이 비었다 — 아래 단언이 공허하다"
+for pair in "3:spec 승인 앞" "6:에픽 머지 뒤" "7:로드맵 끝"; do
+  n="${pair%%:*}"; name="${pair#*:}"
+  assert_eq "$(cnt "$(lstep "$n")" "$QE")" "1" "지휘 순환 걸음 ${n}: 들어가는 문장 한 번"
+  assert_contains "$(lstep "$n")" "${QE}「${name}」)" "지휘 순환 걸음 ${n}: 자리 이름 ${name}"
+done
+for pair in "3:spec 승인 앞" "6:에픽 머지 뒤" "9:로드맵 끝"; do
+  n="${pair%%:*}"; name="${pair#*:}"
+  assert_eq "$(cnt "$(mstep "$n")" "$QE")" "1" "손 절차 ${n}: 들어가는 문장 한 번"
+  assert_contains "$(mstep "$n")" "${QE}「${name}」)" "손 절차 ${n}: 자리 이름 ${name}"
+done
+for w in "지휘 순환:$(lhead)" "손 절차:$(mhead)"; do
+  t="${w%%:*}"; b="${w#*:}"
+  assert_eq "$(cnt "$b" "${QE}「이름으로 청함」)")" "1" "${t} 머리: 이름으로 청함 한 번"
+  assert_eq "$(cnt "$b" "$QE")" "1" "${t} 머리: 들어가는 문장은 그 한 번뿐"
+done
+assert_eq "$(cnt "$(lstep 1)" "${QE}「아직 묻지 못한 질문」")" "1" "지휘 순환 걸음 1: 아직 묻지 못한 질문 한 번"
+assert_eq "$(cnt "$(mstep 1)" "${QE}「아직 묻지 못한 질문」")" "1" "손 절차 1: 아직 묻지 못한 질문 한 번"
+# AC2 음성 + 양성 짝 — 절차가 새지 않았다
+CDALL="$(cat "$CD")"
+assert_not_contains "$CDALL" '로드맵 시작 커밋부터' "AC2: 범위 절차(로드맵 시작 커밋부터)가 conducting.md 에 없다"
+assert_contains "$(lstep 7)" "$QE" "AC2 양성 짝: 걸음 7 은 들어가는 문장을 가진다"
+for lit in 'intent-return.md' 'merged_pr_range.py' '의도 점검 <n>' 'reviews/<YYYY-MM-DD>' 'qg-<대상>-<자리>'; do
+  assert_not_contains "$CDALL" "$lit" "절차가 새지 않았다: conducting.md 에 ${lit} 없음"
+  assert_contains "$ALL" "$lit" "양성 짝: qg-review.md 에는 ${lit} 가 있다"
+done
+assert_contains "$(lstep 7)" '품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다' "걸음 7: 설치 안 됨 공시 문장이 남아 있다"
+SK="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
+SKSEC() { awk -v h="$1" '/^```/{q=!q} !q&&$0==h{f=1;next} f&&!q&&/^## |^### /{exit} f' "$SK"; }
+for lit in 'qg 담당자(spec 승인 앞 1 · 머지된 PR 마다 1)' '로드맵 끝 qg 담당자 1'; do
+  assert_eq "$(cnt "$(SKSEC '### 4. 규모 공시')" "$lit")" "1" "SKILL.md 규모 공시: ${lit} 한 번"
+done
+assert_eq "$(cnt "$(SKSEC '## 보이기')" '의도 점검 질문')" "1" "SKILL.md 보이기: 의도 점검 질문 한 번"
+assert_contains "$(SKSEC '## 보이기')" 'references/qg-review.md' "SKILL.md 보이기: qg-review.md 를 가리킨다"
+assert_eq "$(grep -cF "$(printf 'skills/epic-conductor/references/qg-review.md\t비움\t**의도 점검 질문.**')" "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "1" "ask-sites.tsv: 의도 점검 질문 행이 한 줄"
+
 finish

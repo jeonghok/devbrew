@@ -387,8 +387,10 @@ pats = [r"origin/main", r"(?<![A-Za-z])main(?![A-Za-z])", r"(?<![A-Za-z])opus(?!
         r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md",
         r"worktree 의 spec-distill"]
 for i, line in enumerate(text.splitlines(), 1):
+    # `<SD>/…/x.md` 는 conducting.md 가 정의한 플러그인 폴더 자리표 아래 경로다 — 그 구간만 뺀다(맨몸 references/x.md 는 그대로 잡는다).
+    scan = re.sub(r"<SD>/[A-Za-z0-9_./-]+\.md", "", line)
     for p in pats:
-        if re.search(p, line):
+        if re.search(p, scan):
             print("%d: %s — %s" % (i, p, line.strip()[:80]))
 PY
 }
@@ -400,6 +402,10 @@ for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scri
   { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
+{ cat "$CD"; printf '%s\n' '`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고'; } > "$T/mut.md"
+assert_eq "$(banned "$T/mut.md")" "" "음성 대조: <SD>/ 아래 references 경로는 잡지 않는다"
+{ cat "$CD"; printf '%s\n' '`<SD>/x.md` 와 맨몸 references/qg-review.md'; } > "$T/mut.md"
+[ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 는 잡는다" || no "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 를 못 잡는다"
 
 # 가리키는 skill 은 실재한다(아직 없는 skill 을 가리키는 릴리스 금지 — 설계 §11).
 n=0
