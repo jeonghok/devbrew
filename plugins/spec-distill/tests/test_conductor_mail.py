@@ -215,6 +215,23 @@ class Closures(MailRepo):
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (0, tip), out)     # 기본 브랜치를 몰라 설정을 못 읽어도 3 이 아니라 사유 한 줄과 0
         self.assertIn("상태 브랜치를 쓰지 않는다", out)
 
+    def test_marker_is_checked_before_the_values(self):   # M25 ③ — 표지(5) → availability → 값
+        refs = self.refs()
+        rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", OTHER, "--to", BETA, "--kind", "잡담", "--body", "글")
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        rc, out = cli(self.w, "ack", "--roadmap", rm(ALPHA), "--session", OTHER, "--letter", BETA + "/2026-11-19-01.md")
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", SID, "--to", BETA, "--kind", "잡담", "--body", "글")
+        self.assertEqual((rc, self.refs()), (2, refs), out)                    # 양성 대조 — 표지를 쥔 세션이면 값 검사가 2 를 낸다
+
+    def test_about_shapes_relative_slashes_pass_and_an_absolute_path_is_refused(self):   # M26 · S4
+        for about in ("설계/계획/구현", "./a/b"):
+            rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", SID, "--to", BETA, "--kind", "예고", "--body", "글", "--about", about)
+            self.assertEqual(rc, 0, (about, out))
+        refs = self.refs()
+        rc, out = cli(self.w, "send", "--roadmap", rm(ALPHA), "--session", SID, "--to", BETA, "--kind", "예고", "--body", "글", "--about", "/tmp/a/b")
+        self.assertEqual((rc, self.refs()), (2, refs), out)
+
     def test_long_body_note_counts_the_stored_body(self):
         res, _ = self.send(BETA, "예고", "가" * 2000 + "\n")
         self.assertNotIn(CM.LONG_NOTE, res.notes)

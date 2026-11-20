@@ -127,9 +127,8 @@ def scrub(text: str, root) -> str:
     out = []
     for tok in re.split(r"(\s+)", text):
         hits = [tok.find(r) for r in roots if r in tok]
-        shape = CM.PATH_IN_TEXT_RE.search(tok)   # 앞에 글자가 붙어도 절대경로 꼴이면 잡는다 — 편지 about 과 한 정의다
-        if shape is not None:
-            hits.append(shape.start())
+        if CB.looks_absolute(tok):   # 경계(괄호 · `=` · `:` 등) 뒤의 절대경로 꼴 — 가리기 · 편지 about 과 한 정의다(M26)
+            hits.append(CB.ABSOLUTE_RE.search(tok).start())
         if hits:
             tok = tok[:min(hits)] + PATH_MARK
         out.append(tok)
@@ -332,7 +331,9 @@ def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = Tr
 # ── waiting ──────────────────────────────────────────────────────────────────
 
 def waiting_add(root, roadmap_rel: str, session: str, epic: str, kind: str, via: str, now=None) -> Synced:
-    """사용자에게 건 질문 한 줄을 기계 상태에 올리고 STATUS 에 싣는다. 같은 (에픽, 종류) 가 있으면 두고 처음 시각을 지킨다."""
+    """사용자에게 건 질문 한 줄을 기계 상태에 올리고 STATUS 에 싣는다. 같은 (에픽, 종류) 줄이 있으면 — 그 줄이 질문 창이고
+    이 세션이 건 것이면 앞 질문은 답을 받은 것이라 새 줄로 바꾸고(언제부터 지금), 그 밖(턴 끝 · 다른 세션의 줄)은 아직 기다리는
+    질문이라 언제부터를 두고 건 길 · 세션만 새 값으로 바꾼다(M24 — 턴 끝 줄을 질문 창으로 다시 물으면 다음 sync 가 내린다)."""
     now = now or datetime.datetime.now().astimezone()
     if not (cs.ASK_EPIC_RE.fullmatch(epic) or epic == cs.ASK_NO_EPIC):
         raise CB.BranchError(2, "에픽은 에픽 이름이거나 %s 다: %s" % (cs.ASK_NO_EPIC, CB.visible(repr(epic))))
@@ -341,15 +342,24 @@ def waiting_add(root, roadmap_rel: str, session: str, epic: str, kind: str, via:
     if via not in cs.ASK_VIA:
         raise CB.BranchError(2, "건 길은 %s 중 하나다: %s" % (SEP.join(cs.ASK_VIA), CB.visible(repr(via))))
 
+    fresh = {"에픽": epic, "종류": kind, "건 길": via, "언제부터": CB.stamp(now), "세션": session}
+
     def change(d):
-        if not any(r["에픽"] == epic and r["종류"] == kind for r in d[cs.ASKING]):
-            d[cs.ASKING].append({"에픽": epic, "종류": kind, "건 길": via, "언제부터": CB.stamp(now), "세션": session})
+        for i, row in enumerate(d[cs.ASKING]):
+            if row["에픽"] == epic and row["종류"] == kind:
+                answered = row["건 길"] == cs.ASK_WINDOW and row["세션"] == session
+                d[cs.ASKING][i] = fresh if answered else dict(row, **{"건 길": via, "세션": session})
+                return
+        d[cs.ASKING].append(fresh)
     L.update(root, roadmap_rel, session, change)
     return sync(root, roadmap_rel, session, now=now, lower_window=False)
 
 
 def waiting_clear(root, roadmap_rel: str, session: str, epic: str, kind: Optional[str] = None, now=None):
-    """에픽(과 종류를 줬으면 종류)이 같은 줄을 내린다. 세션 칸은 보지 않는다. (내린 줄 수, sync 결과)."""
+    """에픽(과 종류를 줬으면 종류)이 같은 줄을 내린다. 세션 칸은 보지 않는다. (내린 줄 수, sync 결과).
+    종류는 주었으면 종류 여덟 가운데 하나다 — 아니면 BranchError(2) 이고 아무것도 내리지 않는다."""
+    if kind is not None and kind not in cs.ASK_KINDS:
+        raise CB.BranchError(2, "종류는 %s 중 하나다: %s" % (SEP.join(cs.ASK_KINDS), CB.visible(repr(kind))))
     gone = []
 
     def hit(row):
@@ -566,7 +576,7 @@ def cross_view(root, roadmap_rel: str, now=None) -> dict:
     view = {"me": me, "computed": CB.stamp(now), "reserve": [], "changed": [], "versions": [], "version_unreadable": 0,
             "moves": [], "suites": [], "unchecked_roadmaps": [], "unavailable": None, "status_text": None, "waiting": [], "quiet": [], "malformed_only": [],
             "no_branch": [], "status_unreadable": [], "waiting_malformed": 0, "incoming": None, "counts": None, "no_fetch": False,
-            "foreign": 0}
+            "foreign": 0, "bad_names": CB.bad_state_names(root)}
     mine_open = open_branches(root, mine)
     open_by = {me: mine_open}
     for road in table:
@@ -744,6 +754,8 @@ def _touch_lines(view: dict) -> list:
         out.append("- 검사 불가: %s — %s" % (name, why))
     if view["version_unreadable"]:
         out.append("- 읽지 못한 판 파일 %d" % view["version_unreadable"])
+    if view["bad_names"]:
+        out.append("- 이름 꼴이 틀린 상태 브랜치 %d" % view["bad_names"])
     return out or ["- 닿는 것 없음"]
 
 

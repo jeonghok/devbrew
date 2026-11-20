@@ -57,6 +57,7 @@ NO_ORIGIN = NOT_PUSHED + " — origin 원격이 없다"
 ELSEWHERE = "다른 곳에서 이 브랜치에 썼다 — %s · %s"
 ADOPTED = "원격의 것을 받아 왔다 — %s(%s)"
 REMAKE_GAVE_UP = "세 번 다시 만들어도 올리지 못했다 — 로컬 커밋은 남겼다"
+HAND_MERGE = "손으로 만든 머지 커밋이 있다 — 상태 브랜치는 스크립트만 쓴다: %s"
 TRUST_NOT_CLEARED = "기계 상태의 확인한 끝 절을 비우지 못했다 — 다시 만든 상태 브랜치는 confirm 으로 확인받는다 — %s: %s"
 ZERO_OID = "0" * 40
 WRITE_ATTEMPTS = 3
@@ -84,6 +85,7 @@ TRACKING_PREFIX = "refs/remotes/origin/"
 
 DELETE_PUSH_RE = re.compile(r":refs/heads/conductor/([a-z0-9][a-z0-9.-]*)")                         # 지우는 push 가 닿는 ref — 상태 브랜치 하나뿐이다
 DELETE_REF_RE = re.compile(r"refs/(?:heads|remotes/origin)/conductor/([a-z0-9][a-z0-9.-]*)")        # 지우는 update-ref 가 닿는 ref — 상태 브랜치와 그 원격 추적 ref
+DELETE_LEASE_RE = re.compile(r"--force-with-lease=(refs/heads/conductor/[a-z0-9][a-z0-9.-]*):([0-9a-f]{40})")   # 지우는 push 의 조건 — 원격이 센 끝일 때만
 OID_RE = re.compile(r"[0-9a-f]{40}")
 
 
@@ -93,11 +95,15 @@ def _delete_name_ok(pattern, text) -> bool:
 
 
 def _check_delete_form(args) -> None:
-    """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain origin :<상태 브랜치 ref>` 와 `update-ref -d <ref> <옛 값>`.
-    ref 는 닫힌 꼴 전체(fullmatch)와 맞아야 한다. 그 밖의 하위 명령 · 꼴은 이 표지가 있어도 거절한다."""
+    """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain --force-with-lease=<ref>:<끝 40자> origin :<ref>`(lease 의 ref 와
+    지우는 ref 가 같은 상태 브랜치 ref) 와 `update-ref -d <ref> <옛 값>`. ref 는 닫힌 꼴 전체(fullmatch)와 맞아야 한다.
+    그 밖의 하위 명령 · 꼴(lease 없는 지우기 포함)은 이 표지가 있어도 거절한다."""
     rest = args[1:]
-    if args[0] == "push" and len(rest) == 3 and rest[0] == "--porcelain" and rest[1] == "origin" and _delete_name_ok(DELETE_PUSH_RE, rest[2]):
-        return
+    if (args[0] == "push" and len(rest) == 4 and rest[0] == "--porcelain" and rest[2] == "origin"
+            and _delete_name_ok(DELETE_PUSH_RE, rest[3])):
+        lease = DELETE_LEASE_RE.fullmatch(rest[1])
+        if lease and lease.group(1) == rest[3][1:]:
+            return
     if args[0] == "update-ref" and len(rest) == 3 and rest[0] == "-d" and _delete_name_ok(DELETE_REF_RE, rest[1]) and OID_RE.fullmatch(rest[2]):
         return
     raise RuntimeError("지우기 표지는 상태 브랜치를 지우는 꼴에만 받는다: %r" % (args,))
@@ -220,15 +226,25 @@ def visible(text: str) -> str:
     return "".join(out)
 
 
+ABSOLUTE_RE = re.compile(r"(?:^|(?<=[\s(\[{「'\"`:=,]))(?:/[^\s/]+/[^\s/]+|~/[^\s/]+)")   # 경계 바로 뒤의 `/성분/성분` · `~/성분`
+
+
+def looks_absolute(token: str) -> bool:
+    """절대경로로 보는 낱말이 들었는가 — 글 머리 · 공백 · 여는 괄호 · `「` · 따옴표 · 백틱 · `:` · `=` · `,` 바로 뒤에서 `/` 로 시작해
+    `/` 로 이은 성분(`/` · 공백이 아닌 글자 하나 이상 — 비ASCII 도)이 둘 이상이거나 `~/` 로 시작해 성분이 하나 이상인 것.
+    「리더/담당자/일꾼」 · `./a/b` 처럼 `/` 앞이 경계가 아닌 것은 경로가 아니다. 가리는 자리는 `ABSOLUTE_RE` 가 찾은 곳부터다."""
+    return isinstance(token, str) and ABSOLUTE_RE.search(token) is not None
+
+
 def redact(text: str) -> str:
-    """올리기 실패 사유에서 원격 주소(`://` 가 든 낱말 · `이름@호스트:경로`)와 절대경로(`/` 로 시작해 `/` 가 둘 이상)를 가린다."""
+    """올리기 실패 사유에서 원격 주소(`://` 가 든 낱말 · `이름@호스트:경로`)와 절대경로(`looks_absolute` — 찾은 곳부터 낱말 끝까지)를 가린다."""
     out = []
     for tok in re.split(r"""(\s+|['"])""", text):
         if tok and not tok.isspace() and tok not in ("'", '"'):
             if "://" in tok or re.fullmatch(r"[^\s@/:]+@[^\s/:]+:\S*", tok):
                 tok = "<원격>"
-            elif tok.startswith("/") and tok.count("/") >= 2:
-                tok = "<경로>"
+            elif looks_absolute(tok):
+                tok = tok[:ABSOLUTE_RE.search(tok).start()] + "<경로>"
         out.append(tok)
     return "".join(out)
 
@@ -379,17 +395,28 @@ def seen_tip(root, name: str) -> tuple:
     return tip, None
 
 
-def state_names(root) -> list:
-    """로컬이나 origin 추적 ref 에 `conductor/` 브랜치가 있는 이름들(정렬)."""
+def _state_tails(root) -> tuple:
+    """(꼴이 맞는 꼬리들, 꼴 밖이라 버린 꼬리들) — 로컬과 origin 추적 ref 의 `conductor/` 브랜치. 두 쪽의 같은 꼬리는 한 번이다."""
     rc, out, _e = git(root, "for-each-ref", "--format=%(refname)", "refs/heads/" + STATE_BRANCH_PREFIX,
                       "refs/remotes/origin/" + STATE_BRANCH_PREFIX)
-    found = set()
+    good, bad = set(), set()
     if rc == 0:
         for line in out.splitlines():
             for head in ("refs/heads/" + STATE_BRANCH_PREFIX, "refs/remotes/origin/" + STATE_BRANCH_PREFIX):
-                if line.startswith(head) and name_ok(line[len(head):]):   # 남이 올린 꼬리는 꼴 밖이면 내지 않는다
-                    found.add(line[len(head):])
-    return sorted(found)
+                if line.startswith(head):
+                    tail = line[len(head):]
+                    (good if name_ok(tail) else bad).add(tail)   # 남이 올린 꼬리는 꼴 밖이면 내지 않는다
+    return good, bad
+
+
+def state_names(root) -> list:
+    """로컬이나 origin 추적 ref 에 `conductor/` 브랜치가 있는 이름들(정렬)."""
+    return sorted(_state_tails(root)[0])
+
+
+def bad_state_names(root) -> int:
+    """`state_names` 가 꼴 밖이라 버린 꼬리의 수."""
+    return len(_state_tails(root)[1])
 
 
 def read(root, commit: str, path: str) -> Optional[str]:
@@ -489,7 +516,10 @@ def _base(root, commit: Optional[str]) -> Base:
 
 def _need_marker(root, roadmap_rel: str, session: str) -> None:
     """지휘 표지를 쥔 세션만 쓴다. 아니면 BranchError(5)."""
-    d = cs.machine_dir(state_path.state_root(str(root)), roadmap_rel)
+    try:
+        d = cs.machine_dir(state_path.state_root(str(root)), roadmap_rel)
+    except cs.MachineError as exc:   # 표지를 설정보다 먼저 본다 — 로드맵 경로 꼴이 틀린 것은 사용법 오류다
+        raise BranchError(2, str(exc))
     owner = cs.holder(d)
     if owner is None:
         raise BranchError(5, "이 로드맵의 지휘 표지를 잡지 않았다 — 지휘 세션만 상태 브랜치에 쓴다")
@@ -750,7 +780,10 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built:
         if remote is None or local is None:
             return Result(local, False, None, (NOT_PUSHED + " — 원격의 상태 브랜치를 받아 오지 못했다",))
         new, renamed = remote, {}
-        for commit in _commits_between(root, remote, local):
+        pending = _commits_between(root, remote, local)
+        for commit in pending:
+            _refuse_merge(root, commit)   # 하나라도 머지 커밋이면 하나도 다시 얹지 않는다
+        for commit in pending:
             if commit != mine:   # 이번 쓰기가 가장 최근에 만든 커밋은 다시 얹지 않고 새 끝에서 다시 만든다
                 new = _replay(root, team, commit, new, renamed, built)
         changes = edit(_base(root, new)) if edit else None
@@ -771,6 +804,15 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built:
         if verdict == "failed":
             return Result(target, False, remote, (elsewhere, "%s — %s" % (NOT_PUSHED, why)))
     raise BranchError(1, REMAKE_GAVE_UP)
+
+
+def _refuse_merge(root, commit: str) -> None:
+    """부모가 둘 이상인 커밋이면 BranchError(3) — 스크립트는 부모 하나인 커밋만 만든다. 다시 얹기는 첫 부모에 견주므로 머지를 조용히 편다."""
+    rc, body, err = git(root, "cat-file", "commit", commit)
+    if rc != 0:
+        raise _git_fail(err, "다시 얹을 커밋을 읽지 못했다")
+    if sum(1 for line in body.split("\n\n", 1)[0].splitlines() if line.startswith("parent ")) >= 2:
+        raise BranchError(3, HAND_MERGE % commit[:8])
 
 
 def _note_built(built: list, commit: Optional[str]) -> None:
@@ -799,12 +841,13 @@ def record_own(root, roadmap_rel: str, session: str, commits: list) -> tuple:
 
 
 def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating: bool, publish: bool = True) -> Result:
-    """쓰기 · 올리기의 바닥. 이 부름이 만든 커밋은 끝나는 길이 무엇이든(예외여도) 기계 상태에 `씀` 으로 한 번 적고 `Result.made` 에 싣는다."""
-    team = team_of(root, roadmap_rel)
+    """쓰기 · 올리기의 바닥. 이 부름이 만든 커밋은 끝나는 길이 무엇이든(예외여도) 기계 상태에 `씀` 으로 한 번 적고 `Result.made` 에 싣는다.
+    표지(5) → 쓸 수 있는지(설정 오류면 알리고 0) → 로드맵 폴더 차례로 본다."""
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
+    team = team_of(root, roadmap_rel)
     built, finished, told = [], False, ()
     try:
         res = _write_attempts(root, team, session, edit, what, creating, publish, built)
@@ -876,12 +919,12 @@ def _adopt(root, name: str) -> Result:
 def ensure(root, roadmap_rel: str, session: str) -> Result:
     """상태 브랜치가 로컬에 없으면 — origin 에 있으면 받아 오고, 없으면 코드 없는 뿌리 커밋으로 만들어 올린다.
     origin 에 닿지 못하면 로컬에만 만들고 「아직 안 올라옴」 을 낸다. 원격에 있는데 받아 오지 못하면 만들지 않고 BranchError(3).
-    있으면 아무것도 바꾸지 않는다."""
-    team = team_of(root, roadmap_rel)
+    있으면 아무것도 바꾸지 않는다. 표지(5) → 쓸 수 있는지 → 로드맵 폴더 차례로 본다."""
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
+    team = team_of(root, roadmap_rel)
     tip = local_tip(root, team.name)
     if tip is not None:
         return Result(None, False, None, ("있다 — %s(%s)" % (branch_of(team.name), tip[:8]),))
@@ -942,7 +985,7 @@ def _clear_trust(root, roadmap_rel: str, session: str) -> tuple:
 def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
     """(지운 끝, 알릴 줄들). `confirmed` 가 없으면 수와 수를 센 끝을 알리고 BranchError(1) — 지우지 않는다. 있으면 수를 센 끝(40자 또는
     앞 8자 — 꼴이 다르면 BranchError(2))이고, 받아 온 원격 끝과 로컬 끝이 둘 다 그 끝과 같을 때만 지운다(원격이 없으면 로컬 끝만).
-    다르면 지우지 않고 지금 끝에서 다시 센 수와 새 끝을 알린다(BranchError(1)). 원격을 먼저 지우고(못 지우면 BranchError(3), 로컬은 둔다)
+    다르면 지우지 않고 지금 끝에서 다시 센 수와 새 끝을 알린다(BranchError(1)). 원격을 먼저 지우고(센 끝에 건 지우기 — 원격이 그 끝이 아니거나 못 지우면 BranchError(3), 로컬은 둔다)
     로컬 ref 를 읽었던 끝을 옛 값으로 걸어 지운다. `availability` 는 보지 않는다 — 꺼 둔 레포에서도 남은 브랜치를 지운다."""
     import conductor_status as cstat   # 맨 위에서 가져오면 서로 가져온다
     team = team_of(root, roadmap_rel)
@@ -983,8 +1026,8 @@ def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None
             raise BranchError(1, _count_report(cstat, root, roadmap_rel, remote, "원격에 이 기계가 세지 않은 커밋이 있다 — 받아 온 끝에서 다시 셌다: "))
         if not _counted_tip_ok(confirmed, tip):   # 로컬이 받아 온 끝과 같아졌어도 수를 센 끝이 아니면 세지 않은 글이 있다
             raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))
-        rc, out, err = _git_delete(root, "push", "--porcelain", "origin", ":" + ref, timeout=NET_TIMEOUT)
-        if rc != 0:
+        rc, out, err = _git_delete(root, "push", "--porcelain", "--force-with-lease=%s:%s" % (ref, tip), "origin", ":" + ref, timeout=NET_TIMEOUT)
+        if rc != 0:   # 견준 뒤 원격이 센 끝에서 움직였으면 git 이 거절한다 — 지우지 않는다
             raise BranchError(3, "원격의 상태 브랜치를 지우지 못했다 — 로컬은 두었다: %s" % _net_reason(out, err))
     if not remote_exists and not _counted_tip_ok(confirmed, tip):
         raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))

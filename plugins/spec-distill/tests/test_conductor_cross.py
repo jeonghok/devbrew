@@ -363,6 +363,16 @@ class Show(CrossRepo):
         self.assertNotIn("덤", out)
         self.assertIn("\n읽지 못한 기다리는 질문 줄 2\n", out)
 
+    def test_state_branch_with_a_malformed_name_is_counted(self):   # M25 ④ — state_names 가 버린 꼬리를 센다
+        """뒤집으면 붉다 — 세지 않으면 꼴 틀린 브랜치가 화면에서 조용히 사라진다."""
+        self.assertNotIn("이름 꼴이 틀린 상태 브랜치", self.text())                                  # 양성 대조
+        self.g("update-ref", "refs/remotes/origin/conductor/Bad_Name", self.g("rev-parse", "trunk"))
+        rc, out = cli(self.w, "show", "--roadmap", rm(ALPHA))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("\n- 이름 꼴이 틀린 상태 브랜치 1\n", out)
+        self.assertLess(out.index("다른 로드맵과 닿는 것"), out.index("- 이름 꼴이 틀린 상태 브랜치 1"))
+        self.assertLess(out.index("- 이름 꼴이 틀린 상태 브랜치 1"), out.index("사용자를 기다리는 질문"))   # 「다른 로드맵과 닿는 것」 묶음 안
+
     def test_diverged_state_branch_is_unreadable_not_missing(self):
         real = CB.seen_tip
         with mock.patch.object(CB, "seen_tip", lambda root, name: (None, "갈라졌다") if name == BETA else real(root, name)):

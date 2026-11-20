@@ -259,6 +259,10 @@ class Scrub(StatusRepo):
             self.assertNotIn("/", CS.scrub(text, self.w).replace("<경로>", ""), text)
         self.assertEqual(CS.scrub("a/b 1/2 and/or", self.w), "a/b 1/2 and/or")   # 양성 대조 — 경로가 아닌 슬래시는 그대로다
 
+    def test_only_a_word_starting_at_a_boundary_is_a_path(self):   # M26 · S4 — 한글 낱말 사이 · `./` 의 `/` 는 경로가 아니다
+        self.assertEqual(CS.scrub("리더/담당자/일꾼 · ./a/b · /Users/x/y · ~/k/l · key=/p/q · /나의/폴더", self.w),
+                         "리더/담당자/일꾼 · ./a/b · <경로> · <경로> · key=<경로> · <경로>")
+
 
 class SessionNoticeAndTwoFiles(StatusRepo):
     def test_my_own_status_written_after_my_claim_is_not_told(self):
@@ -377,10 +381,37 @@ class Waiting(StatusRepo):
         CS.waiting_add(self.w, rm(ALPHA), SID, "로드맵 밖", "그 밖", "턴 끝", now=at(30))
         self.assertEqual([r[3] for r in self.rows()], ["2026-11-19 02:30 +0900"])
 
-    def test_same_epic_and_kind_with_another_way_keeps_the_first_row(self):   # 통제 판정 P2 — 건 길이 달라도 두 번째 줄을 더하지 않는다
+    def test_window_question_over_a_turn_end_row_keeps_the_time_and_the_next_sync_lowers_it(self):   # M24 · S9 — 원장 P2 를 고친다
+        """뒤집으면 붉다 — 건 길을 바꾸지 않으면 줄이 「턴 끝」 으로 남아 sync 가 내리지 않는다."""
         CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "머지", "턴 끝", now=at(0))
         CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "머지", "질문 창", now=at(30))
-        self.assertEqual(self.rows(), [("A1", "머지", "턴 끝", "2026-11-19 02:30 +0900", SID)])
+        self.assertEqual(self.rows(), [("A1", "머지", "질문 창", "2026-11-19 02:30 +0900", SID)])   # 아직 기다리는 질문 — 언제부터는 첫 시각
+        CS.sync(self.w, rm(ALPHA), SID, now=at(31))
+        self.assertEqual(self.rows(), [])
+
+    def test_window_question_asked_again_by_the_same_session_is_a_new_question(self):   # M24 — 같은 세션이 다시 돈다 = 앞 질문은 답을 받았다
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(60))
+        self.assertEqual(self.rows(), [("A1", "계획 검토", "질문 창", "2026-11-19 03:30 +0900", SID)])
+
+    def test_window_question_of_another_session_keeps_the_time_and_takes_the_new_session(self):   # M24 — 넘겨받은 세션
+        """뒤집으면 붉다 — 세션 대조를 지우면 언제부터가 새 시각이 되고, 세션 칸을 그대로 두면 새 세션의 sync 가 내리지 못한다."""
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "질문 창", now=at(0))
+        self.assertEqual(cs.takeover(self.mdir, OTHER), SID)
+        CS.waiting_add(self.w, rm(ALPHA), OTHER, "A1", "계획 검토", "질문 창", now=at(60))
+        self.assertEqual(self.rows(), [("A1", "계획 검토", "질문 창", "2026-11-19 02:30 +0900", OTHER)])
+        CS.sync(self.w, rm(ALPHA), OTHER, now=at(61))
+        self.assertEqual(self.rows(), [])
+
+    def test_clear_with_an_unknown_kind_is_a_usage_error_and_lowers_nothing(self):   # I14 — 옛 종류 이름
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 검토", "턴 끝", now=at(0))
+        rows = self.rows()
+        with self.assertRaises(CB.BranchError) as c:
+            CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", kind="계획 확인", now=at(1))
+        self.assertEqual((c.exception.rc, self.rows()), (2, rows))
+        rc, out = cli(self.w, "waiting", "clear", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1", "--kind", "계획 확인")
+        self.assertEqual((rc, self.rows()), (2, rows), out)
+        self.assertEqual(CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", kind="계획 검토", now=at(2))[0], 1)   # 양성 대조
 
     def test_closed_values(self):
         for epic, kind, via in (("a1", "머지", "턴 끝"), ("A1", "계획", "턴 끝"), ("A1", "계획 검토 ", "턴 끝"), ("A1", "계획 확인", "턴 끝"), ("A1", "머지", "창"), ("A1", "머지", "질문 창 ")):
