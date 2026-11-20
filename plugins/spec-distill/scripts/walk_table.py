@@ -199,7 +199,6 @@ class Trace(NamedTuple):
     now: list
     nxt: Optional[Next]
     waiting: Optional[str] = None
-    notices: tuple = ()
 
 
 def _next_args(args: list) -> tuple:
@@ -230,8 +229,8 @@ def _after_merge(n: int, m: int) -> Next:
     return _plan_step(n + 1, m) if n < m else Next("회고", "회고", None)
 
 
-def _design_trace(stage: str, reason: str, specs: list, plans: list, n: int, m: int, scope, pr) -> Trace:
-    """설계 흐름에서 브랜치 n 의 끝을 센 단계 → 자리. pr 은 (그 브랜치의 PR 이 열림인가, 캐시를 못 읽은 사유 | None)."""
+def _design_trace(stage: str, reason: str, specs: list, plans: list, n: int, m: int, scope, pr_open: bool) -> Trace:
+    """설계 흐름에서 브랜치 n 의 끝을 센 단계 → 자리. pr_open 은 그 브랜치의 PR 이 PR 캐시에 열림인가."""
     if stage == "설계 중":
         if specs:
             return Trace([("설계 검토", "설계 검토"), ("설계 승인", "설계 승인")], Next("계획", "계획", n))
@@ -245,11 +244,7 @@ def _design_trace(stage: str, reason: str, specs: list, plans: list, n: int, m: 
     if stage == "구현 중":
         return Trace([("구현", "구현")], Next("검수", "검수", n))
     if stage == "구현 끝":
-        is_open, unread = pr
-        if unread:
-            return Trace([("검수", "검수"), ("PR 전 확인", "PR 전 확인"), ("머지", "머지")], _after_merge(n, m),
-                         notices=(unread,))
-        if is_open:
+        if pr_open:
             return Trace([("머지", "머지")], _after_merge(n, m))
         return Trace([("검수", "검수"), ("PR 전 확인", "PR 전 확인")], Next("머지", "머지", None))
     raise Unchecked("%s — %s" % (stage, reason))
@@ -275,11 +270,12 @@ def _start(plain: bool, waiting: Optional[str] = None) -> Trace:
     return Trace([("방향 확인", "방향 확인")], first, waiting)
 
 
-def _pr_state(git, roadmap_rel: str, branch: str) -> tuple:
+def _pr_open(git, roadmap_rel: str, branch: str) -> bool:
+    """PR 캐시에 그 브랜치의 열림 줄이 있는가. 캐시를 읽지 못하면 열리지 않은 것으로 보지 않고 멈춘다(Unchecked)."""
     rows, _epic_rows, reason = roadmap_status.read_pr_cache(git, roadmap_rel)
     if reason:
-        return False, "PR 캐시를 읽지 못했다 — %s" % reason
-    return any(r.get("브랜치") == branch and r.get("상태") == PR_OPEN for r in rows), None
+        raise Unchecked("PR 캐시를 읽지 못했다 — %s" % reason)
+    return any(r.get("브랜치") == branch and r.get("상태") == PR_OPEN for r in rows)
 
 
 def _task_line(report: dict, job: str) -> Optional[dict]:
@@ -326,8 +322,8 @@ def _block_trace(git, base, reader, block: dict, mine: dict, roadmap_rel: str) -
     scope = reader.scope(tip, block["id"], branches)
     if plain:
         return flow, _plain_trace(got, why, (copy.get("job") or {}).get("result"), scope), n, m, tip, branches
-    pr = _pr_state(git, roadmap_rel, branches[active]) if got == "구현 끝" else (False, None)
-    return flow, _design_trace(got, why, specs, plans, n, m, scope, pr), n, m, tip, branches
+    pr_open = got == "구현 끝" and _pr_open(git, roadmap_rel, branches[active])
+    return flow, _design_trace(got, why, specs, plans, n, m, scope, pr_open), n, m, tip, branches
 
 
 def _task_trace(reader, task: dict) -> tuple:
@@ -418,7 +414,6 @@ def next_lines(cwd: str, roadmap: str, job: str) -> list:
     lines = []
     if not reader.gate_on():
         lines.append("알림: %s" % human_lines.GATE_OFF)
-    lines += ["알림: %s" % note for note in trace.notices]
     lines += ["표: %s" % source,
               "흐름: %s" % flow + (" · 계획 %d/%d" % (n, m) if m >= 2 else ""),
               "지금 걸음: %s" % now,
