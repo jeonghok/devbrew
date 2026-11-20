@@ -3,6 +3,7 @@
 """leader_seat.py — 리더가 쓰는 자리: 상태 브랜치의 규칙 사본 · 규칙 브랜치 · 남의 고침 확인 · 대기 줄.
 
 명령줄은 `conductor_branch.py` 의 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch` · `confirm`)으로 연다 — 이 모듈은 함수만 둔다.
+대기 줄(`pending.md`)은 `conductor_ledger.py` 의 `add` · `drop` · `pending` · `flush` 가 함수 안에서 가져와 부른다.
 상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다(`conductor_status.sync` 는 함수 안에서 가져온다).
 
 가져오는 모듈은 `conductor_branch` · `conductor_state` · `team_status` · `team_rules` · `roadmap_model` ·
@@ -14,6 +15,7 @@
 """
 from __future__ import annotations
 
+import collections
 import difflib
 import re
 import sys
@@ -60,6 +62,11 @@ UNWRITTEN = " — 이 기계가 쓰지 않은 커밋 %d 을 모두 보인다"
 MERGE_MARK = "머지 커밋 · 부모 %d"
 OWN_ROWS_MAX = 500   # 「씀」 줄이 이보다 많으면 알린다 — 기계 상태 크기 한도(1 MiB) 앞에서(S13)
 LONG_FOREIGN = "확인되지 않은 남의 고침이 오래 남아 있다 — confirm 하거나 지운다"
+PENDING_NO_BRANCH = "상태 브랜치가 없어 기계 상태에 쌓았다 — ensure 뒤의 줄부터 상태 브랜치에 쌓는다"
+PENDING_HUMAN = "사람 줄이라 옮기지 않은 대기 줄 %d — record --human 으로 적고 drop 으로 지운다"
+PENDING_FOREIGN = "확인되지 않은 남의 고침이 더한 대기 줄 %d — 옮기지 않았다"
+PENDING_UNCONFIRMED_TAIL = "   (확인되지 않은 남의 고침)"
+PENDING_COLUMNS = cs.COLUMNS["쌓인 기록"]   # 에픽 · 절 · 글 — 기계 상태 줄과 같은 꼴
 _BASE_RE = re.compile(re.escape(BASE_HEAD) + "([0-9a-f]{40})")
 _SEGMENT = r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*"
 _BRANCH_RE = re.compile(r"(?!.*\.lock(?:/|$))(?!-)" + _SEGMENT + "(?:/" + _SEGMENT + ")*")   # git 이 받는 꼴의 닫힌 부분집합
@@ -154,6 +161,20 @@ def _read_tip(root, name: str) -> str:
     return seen
 
 
+def _writable_tip(root, roadmap_rel: str, team, guard: Optional[list] = None) -> tuple:
+    """(읽을 끝, 앞당긴 알림) — 쓰기 앞의 걸음. 갈라졌거나 없으면 BranchError(1)(`_read_tip`). `guard` 경로를 주면 읽을 끝에서
+    그 쪽에 확인되지 않은 남의 고침이 있거나 재지 못할 때 쓰지 않는다(BranchError(1)). 그 뒤 로컬 끝을 읽을 끝으로 앞당긴다
+    (`catch_up` — 받아 온 남의 끝이 로컬보다 앞설 수 있다)."""
+    seen = _read_tip(root, team.name)
+    if guard is not None:
+        found = foreign(root, roadmap_rel, seen, guard)
+        if found is None:
+            raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
+        if found:
+            raise CB.BranchError(1, FOREIGN % len(found) + REFUSE_TAIL)
+    return seen, catch_up(root, team.name, seen)
+
+
 def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, drop: Optional[str] = None,
                reset: bool = False) -> CB.Result:
     """상태 브랜치의 규칙 사본을 줄 하나 더하거나(`add`) 빼거나(`drop`) 사본을 지운다(`reset`).
@@ -177,13 +198,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
         return _reset(root, roadmap_rel, session, team, base_path)
     line = add if add is not None else drop
     _check_line(line)
-    seen = _read_tip(root, team.name)
-    found = foreign(root, roadmap_rel, seen, TS.rules_paths(team))   # 읽을 끝에서 잰다 — 받아 온 남의 끝이 로컬보다 앞설 수 있다
-    if found is None:
-        raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
-    if found:
-        raise CB.BranchError(1, FOREIGN % len(found) + REFUSE_TAIL)
-    moved = catch_up(root, team.name, seen)
+    _seen, moved = _writable_tip(root, roadmap_rel, team, TS.rules_paths(team))   # 읽을 끝에서 잰다
 
     def edit(base):
         copy = base.read(team.rules)
@@ -208,8 +223,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
 
 
 def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Result:
-    seen = _read_tip(root, team.name)   # 갈라졌으면 지우지 않는다 — 로컬 끝만 보면 원격의 사본을 「없다」 고 넘긴다
-    moved = catch_up(root, team.name, seen)
+    _seen, moved = _writable_tip(root, roadmap_rel, team)   # 갈라졌으면 지우지 않는다 — 로컬 끝만 보면 원격의 사본을 「없다」 고 넘긴다
 
     def edit(base):
         if base.read(team.rules) is None and base.read(base_path) is None:
@@ -322,6 +336,156 @@ def rules_branch(root, roadmap_rel: str, session: str, branch: str) -> str:
     if rc != 0:
         raise CB._git_fail(err, BRANCH_TAKEN)
     return commit
+
+
+# ── 대기 줄(pending.md) ───────────────────────────────────────────────────────
+
+def _pending_team(root, roadmap_rel: str):
+    """작업 폴더의 로드맵 머리말이 team 형식이고 상태 브랜치를 쓸 수 있으면 그 Team, 아니면 None. 예외를 던지지 않는다."""
+    try:
+        text = (Path(str(root)) / roadmap_rel).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+    if not roadmap_model.is_team(roadmap_model.frontmatter(text)) or CB.availability(root, roadmap_rel) is not None:
+        return None
+    try:
+        return CB.team_of(root, roadmap_rel)
+    except CB.BranchError:
+        return None
+
+
+def pending_team(root, roadmap_rel: str) -> bool:
+    """team 형식이고 상태 브랜치가 켜져 있는가 — 브랜치가 아직 없어도 참이다(그때 대기 줄은 기계 상태에 쌓고 알린다)."""
+    return _pending_team(root, roadmap_rel) is not None
+
+
+def pending_on_branch(root, roadmap_rel: str) -> bool:
+    """대기 줄의 상태 브랜치 자리 — team 형식 · 쓸 수 있음 · 상태 브랜치 로컬 끝이 있음."""
+    team = _pending_team(root, roadmap_rel)
+    return team is not None and CB.local_tip(root, team.name) is not None
+
+
+def _pending_line(row: dict) -> str:
+    return "- " + cs.SEP.join(row[c] for c in PENDING_COLUMNS)
+
+
+def _row_key(row: dict) -> tuple:
+    return tuple(row[c] for c in PENDING_COLUMNS)
+
+
+def _parse_line(raw: str) -> Optional[dict]:
+    """`pending.md` 한 줄 → 줄(`{"에픽", "절", "글"}`), 꼴 밖이면 None. 칸은 기계 상태 줄처럼 앞뒤 공백을 벗긴다."""
+    line = _bare(raw)
+    if not line.startswith("- "):
+        return None
+    cells = [c.strip() for c in line[2:].split(cs.SEP, len(PENDING_COLUMNS) - 1)]
+    if len(cells) != len(PENDING_COLUMNS) or not all(cells):
+        return None
+    return dict(zip(PENDING_COLUMNS, cells))
+
+
+def _parse_pending(text: Optional[str]) -> tuple:
+    """(줄들, 꼴이 틀린 줄 수) — 빈 줄은 세지 않는다."""
+    rows, bad = [], 0
+    for raw in _split(text):
+        if not _bare(raw).strip():
+            continue
+        row = _parse_line(raw)
+        if row is None:
+            bad += 1
+        else:
+            rows.append(row)
+    return rows, bad
+
+
+def _added_rows(root, commit: str, path: str) -> list:
+    """커밋 하나가 첫째 부모에 견줘 `path` 에 더한 줄들(다중집합). 첫째 부모를 읽지 못하면 그 커밋의 줄 전부 — 닫는 쪽이다."""
+    parent = _first_parent(root, commit)
+    gone = collections.Counter(_bare(l) for l in _split(CB.read(root, parent, path) if parent else None))
+    added = []
+    for raw in _split(CB.read(root, commit, path)):
+        if gone[_bare(raw)] > 0:
+            gone[_bare(raw)] -= 1
+        else:
+            added.append(raw)
+    return [row for row in (_parse_line(raw) for raw in added) if row is not None]
+
+
+def pending_rows(root, roadmap_rel: str) -> tuple:
+    """(줄들, 확인 안 된 줄들, 꼴이 틀린 줄 수) — 읽을 끝의 `pending.md`. 확인 안 된 줄은 확인되지 않은 남의 고침 커밋들이 더한 줄 가운데
+    지금 남은 것(다중집합)이고, 대기 줄 쪽 판정이 None(재지 못함)이면 줄 전부다. 상태 브랜치가 갈라졌거나 없으면 BranchError(1).
+    남의 글을 읽지만 예외로 죽지 않는다 — 꼴이 틀린 줄은 세기만 한다."""
+    team = CB.team_of(root, roadmap_rel)
+    seen = _read_tip(root, team.name)
+    path = team.path(CB.PENDING_FILE)
+    rows, bad = _parse_pending(CB.read(root, seen, path))
+    found = foreign(root, roadmap_rel, seen, TS.pending_paths(team))
+    if found is None:
+        return rows, list(rows), bad
+    left = collections.Counter(_row_key(r) for r in rows)
+    unconfirmed = []
+    for commit, _paths in found:
+        for row in _added_rows(root, commit, path):
+            if left[_row_key(row)] > 0:
+                left[_row_key(row)] -= 1
+                unconfirmed.append(row)
+    return rows, unconfirmed, bad
+
+
+def _check_pending_row(row) -> None:
+    """대기 줄 하나 — 칸 셋이 비지 않고 앞뒤 공백 · 줄 가름 글자가 없으며, 에픽 · 절에는 칸 구분자가 없다. 아니면 BranchError(2)."""
+    cells = [row.get(c) for c in PENDING_COLUMNS] if isinstance(row, dict) else [None]
+    for i, cell in enumerate(cells):
+        if (not isinstance(cell, str) or not cell or cell.strip() != cell or cell.splitlines() != [cell]
+                or (i < len(PENDING_COLUMNS) - 1 and (cs.SEP in cell or cell.startswith("·") or cell.endswith("·")))):
+            raise CB.BranchError(2, "대기 줄은 칸 %d개(%s)의 한 줄이다: %s"
+                                 % (len(PENDING_COLUMNS), " · ".join(PENDING_COLUMNS), CB.visible(repr(row))))
+
+
+def pending_add(root, roadmap_rel: str, session: str, row: dict) -> CB.Result:
+    """상태 브랜치의 `pending.md` 끝에 `- <에픽> · <절> · <글>` 한 줄을 더한다 — 같은 줄이 있어도 더한다(다중집합).
+    표지가 아니면 BranchError(5) · 꼴 밖이면 2 · 상태 브랜치가 갈라졌거나 없으면 1. 쓸 수 없으면 알림만 담은 결과(commit None)."""
+    CB._need_marker(root, roadmap_rel, session)
+    _check_pending_row(row)
+    team = CB.team_of(root, roadmap_rel)
+    _seen, moved = _writable_tip(root, roadmap_rel, team)
+    path, line = team.path(CB.PENDING_FILE), _pending_line(row)
+
+    def edit(base):
+        return {path: "".join(item + "\n" for item in _split(base.read(path)) + [line])}
+
+    res = CB.write(root, roadmap_rel, session, edit, "대기 줄 더함")
+    return res._replace(notes=moved + res.notes)
+
+
+def pending_drop(root, roadmap_rel: str, session: str, rows: list, what: str = "대기 줄 지움") -> CB.Result:
+    """상태 브랜치의 `pending.md` 에서 `rows` 를 다중집합으로 뺀다 — 줄마다 칸이 같은 줄을 앞에서부터 하나씩(없으면 지나간다).
+    남의 줄도 뺀다(사람 줄을 지우는 길 — S8). 뺄 것이 없으면 커밋하지 않는다(commit None). 오류는 `pending_add` 와 같다."""
+    CB._need_marker(root, roadmap_rel, session)
+    if not all(isinstance(r, dict) and all(isinstance(r.get(c), str) for c in PENDING_COLUMNS) for r in rows):
+        raise CB.BranchError(2, "뺄 대기 줄은 칸 %s 을 가진 줄이다" % " · ".join(PENDING_COLUMNS))   # 남의 줄도 받는다 — 꼴은 읽은 대로
+    if not rows:
+        return CB.Result(None, False, None, ())
+    team = CB.team_of(root, roadmap_rel)
+    _seen, moved = _writable_tip(root, roadmap_rel, team)
+    path = team.path(CB.PENDING_FILE)
+    want = collections.Counter(_row_key(r) for r in rows)
+
+    def edit(base):
+        left, keep = want.copy(), []
+        lines = _split(base.read(path))
+        for raw in lines:
+            row = _parse_line(raw)
+            if row is not None and left[_row_key(row)] > 0:
+                left[_row_key(row)] -= 1
+            else:
+                keep.append(raw)
+        if len(keep) == len(lines):
+            return None
+        return {path: "".join(item + "\n" for item in keep)}
+
+    res = CB.write(root, roadmap_rel, session, edit, what)
+    return res._replace(notes=moved + res.notes)
 
 
 # ── 남의 고침 확인 · 기준 끝 옮기기 ────────────────────────────────────────────

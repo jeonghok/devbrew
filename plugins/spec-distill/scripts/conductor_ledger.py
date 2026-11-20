@@ -6,6 +6,8 @@
 절(`## 판정` · `## 구현 대조 — <계획>` · `## 지휘 기록`)에 쓰고, 커밋은 지휘자가 한다(이 스크립트는 커밋하지 않는다).
 team 형식(머리말 `layout: team`) 로드맵의 과제 폴더 안 문서를 `--spec` 으로 받으면 `record` · `flush` 는 그 과제
 INTENT.md 의 `## 결정 기록` 에 쓰고 `write-sections` 는 쓰지 않고 알린다 — 커밋은 리더가 한다.
+team 형식이고 상태 브랜치를 쓸 수 있으면 대기 줄(`add --section "쌓인 기록"` · `drop` · `pending` · `flush`)은 상태 브랜치의
+`pending.md` 를 다룬다(`leader_seat` — 함수 안에서 가져온다). 브랜치가 아직 없으면 기계 상태에 쌓고 알린다.
 
 명령줄(모두 `--root <레포>` 선택):
   roadmaps                                             끝나지 않은 로드맵 찾기(frontmatter `type: roadmap`)
@@ -31,6 +33,7 @@ INTENT.md 의 `## 결정 기록` 에 쓰고 `write-sections` 는 쓰지 않고 �
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime
 import json
 import os
@@ -709,6 +712,38 @@ def _append_decisions(root, intent: Path, lines: list, human_ok: bool = False) -
     return text, added
 
 
+PENDING = "쌓인 기록"
+FLUSHED = "지휘 기록"
+
+
+def _seat():
+    """(conductor_branch, leader_seat) — 함수 안에서 가져온다. 현황 화면(conductor_status)이 이 원장을 가져오지만
+    리더 자리는 끌어오지 않게."""
+    import conductor_branch as CB
+    import leader_seat as LS
+    return CB, LS
+
+
+def _ls(fn, *args):
+    """leader_seat 부름 — 그 BranchError 는 같은 종료 코드의 Fail 로 바꾼다(I7). 0 은 쓸 수 없어 알리고 넘어간 것이라
+    main 이 알림 줄로 내고 0 으로 끝난다(실패가 아니다)."""
+    CB, _LS = _seat()
+    try:
+        return fn(*args)
+    except CB.BranchError as e:
+        raise Fail(e.rc, str(e))
+
+
+def _tell(notes) -> None:
+    """쓰기 결과의 알림 — 지금 출력 뒤에 줄마다 `[spec-distill] <알림>`."""
+    for line in notes:
+        print("[spec-distill] " + line)
+
+
+def _key(row: dict) -> tuple:
+    return tuple(row[c] for c in cs.COLUMNS[PENDING])
+
+
 def _default_roadmaps(root, main: str) -> tuple:
     """(로드맵 경로들, [(검사 불가 경로, 사유)]) — 기본 브랜치의 로드맵 폴더 목록과 blob 읽기로 find_roadmaps 를 부른다."""
     folder = _roadmaps_dir(root)
@@ -794,11 +829,27 @@ def c_add(root, a) -> int:
                       "레포 설정 파일(%s)에 올리자고 알린다" % repo_defaults.SETTINGS_FILE)
     if a.section in cs.RETIRED_SECTIONS:
         raise Fail(2, "%s 절은 옛 절이라 쓰지 않는다(읽을 때 버린다)" % a.section)
+    told = ()
+    if a.section == PENDING:
+        _CB, LS = _seat()
+        if LS.pending_on_branch(root, a.roadmap):   # M14 — 상태 브랜치 자리
+            kind = HL.is_human(_bullet(row["글"]))
+            if kind and _gate_on(root):   # M15 — 사람 줄은 record --human 으로만
+                raise Fail(2, HUMAN_BY_ARGS % kind)
+            res = _ls(LS.pending_add, root, a.roadmap, a.session, row)
+            if res.commit is None:
+                raise Fail(3, "대기 줄을 상태 브랜치에 쓰지 못했다 — %s" % (" · ".join(res.notes) or "바뀐 것 없음"))
+            print("적었다 — %s: %s" % (a.section, a.cells))
+            _tell(res.notes)
+            return 0
+        if LS.pending_team(root, a.roadmap):
+            told = (LS.PENDING_NO_BRANCH,)
 
     def change(d):
         d[a.section].append(row)
     update(root, a.roadmap, a.session, change)
     print("적었다 — %s: %s" % (a.section, a.cells))
+    _tell(told)
     return 0
 
 
@@ -815,8 +866,19 @@ def c_drop(root, a) -> int:
         gone.extend(r for r in d[a.section] if r[key] == value)
         d[a.section] = keep
     update(root, a.roadmap, a.session, change)
-    print("지웠다 %d줄 — %s: %s=%s" % (len(gone), a.section, key, value))
-    return 0 if gone else 1
+    dropped, told = len(gone), ()
+    if a.section == PENDING:
+        _CB, LS = _seat()
+        if LS.pending_on_branch(root, a.roadmap):   # M14 — 두 자리를 함께(S8 — 남은 사람 줄을 지우는 길)
+            rows, _unconfirmed, _bad = _ls(LS.pending_rows, root, a.roadmap)
+            hit = [r for r in rows if r[key] == value]
+            if hit:
+                res = _ls(LS.pending_drop, root, a.roadmap, a.session, hit)
+                dropped += len(hit) if res.commit is not None else 0
+                told = res.notes
+    print("지웠다 %d줄 — %s: %s=%s" % (dropped, a.section, key, value))
+    _tell(told)
+    return 0 if dropped else 1
 
 
 def c_resources(root, a) -> int:
@@ -1430,6 +1492,8 @@ def c_flush(root, a) -> int:
         raise Fail(5, "읽기 전용 — 표지를 쥔 세션: %s" % (owner or "없음(먼저 claim)"))
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if r["에픽"] == a.epic and r["절"] == "지휘 기록"]
     intent = team_intent(root, path)
+    if intent is not None and _seat()[1].pending_on_branch(root, a.roadmap):
+        return _flush_seat(root, a, intent, rows)
     if intent is not None:
         text, moved = _append_decisions(root, intent, [r["글"] for r in rows])
         if moved:
@@ -1458,11 +1522,69 @@ def c_flush(root, a) -> int:
     return 0
 
 
+def _flush_seat(root, a, intent: Path, machine: list) -> int:
+    """M16 — 상태 브랜치 자리의 flush. 옮길 줄 = 기계 상태의 그 에픽 · 지휘 기록 줄 + `pending.md` 의 같은 줄 가운데 확인 안 된 줄을
+    뺀 것(다중집합). human_gate 가 켜져 있으면 사람 줄을 먼저 갈라 건너뛰고(M15 · F19) 남은 것에서 확인 안 된 줄을 센다.
+    INTENT.md 에 먼저 쓰고 그 뒤 옮긴 줄만 두 자리에서 뺀다 — 건너뛴 줄은 두 자리에 그대로 남는다(I6)."""
+    CB, LS = _seat()
+    rows, unconfirmed, bad = _ls(LS.pending_rows, root, a.roadmap)
+    pend = [r for r in rows if r["에픽"] == a.epic and r["절"] == FLUSHED]
+    gate = _gate_on(root)
+
+    def human(r):
+        return gate and HL.is_human(_bullet(r["글"])) is not None
+    skipped = len([r for r in machine + pend if human(r)])
+    from_machine = [r for r in machine if not human(r)]
+    left = collections.Counter(_key(r) for r in unconfirmed)
+    from_pending, foreign = [], bad   # 꼴이 틀린 줄도 확인 안 된 쪽이다 — 옮기지 않는다
+    for r in pend:
+        if human(r):
+            continue
+        if left[_key(r)] > 0:
+            left[_key(r)] -= 1
+            foreign += 1
+            continue
+        from_pending.append(r)
+    texts = [r["글"] for r in from_machine + from_pending]
+    try:
+        text, moved = _append_decisions(root, intent, texts)
+    except Fail as exc:   # 사유가 남이 쓴 줄을 담을 수 있다
+        raise Fail(exc.rc, CB.visible(str(exc)))
+    if moved:
+        write_atomic(intent, text)
+    if from_machine:
+        def change(d):
+            for r in from_machine:
+                if r in d[PENDING]:
+                    d[PENDING].remove(r)
+        update(root, a.roadmap, a.session, change)
+    told = _ls(LS.pending_drop, root, a.roadmap, a.session, from_pending, "대기 줄 옮김").notes if from_pending else ()
+    print("쌓인 기록 %d줄을 옮겼고 %d줄은 이미 있어 건너뛰었다(커밋은 리더가) — %s 의 결정 기록"
+          % (moved, len(texts) - moved, intent))
+    _tell(([LS.PENDING_HUMAN % skipped] if skipped else []) + ([LS.PENDING_FOREIGN % foreign] if foreign else []))
+    _tell(told)
+    return 0
+
+
 def c_pending(root, a) -> int:
     rows = [r for r in load(root, a.roadmap)["쌓인 기록"] if not a.epic or r["에픽"] == a.epic]
-    for r in rows:
-        print("- %s · %s" % (r["에픽"], r["글"]) if not a.epic else "- " + r["글"])
-    if not rows:
+    lines = ["- %s · %s" % (r["에픽"], r["글"]) if not a.epic else "- " + r["글"] for r in rows]
+    CB, LS = _seat()
+    if LS.pending_on_branch(root, a.roadmap):   # M14 — 기계 상태 줄 먼저, 그 뒤 pending.md(남의 글은 보이는 글자로)
+        branch, unconfirmed, _bad = _ls(LS.pending_rows, root, a.roadmap)
+        left, flagged = collections.Counter(_key(r) for r in unconfirmed), [False] * len(branch)
+        for i in range(len(branch) - 1, -1, -1):   # 같은 줄이 여럿이면 뒤의 것부터 — 남의 고침은 끝에 붙는다
+            if left[_key(branch[i])] > 0:
+                left[_key(branch[i])] -= 1
+                flagged[i] = True
+        for r, mark in zip(branch, flagged):
+            if not a.epic or r["에픽"] == a.epic:
+                text = CB.visible(r["글"])
+                line = "- %s · %s" % (CB.visible(r["에픽"]), text) if not a.epic else "- " + text
+                lines.append(line + (LS.PENDING_UNCONFIRMED_TAIL if mark else ""))
+    for line in lines:
+        print(line)
+    if not lines:
         print("쌓인 기록 없음")
     return 0
 

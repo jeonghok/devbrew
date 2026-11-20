@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 리더 자리의 끝에서 끝 — 상태 브랜치의 규칙 사본 → 시작 묶음의 규칙 · 맞추는 명령의 --rules-at → job sync 의 rules_at →
 # 상태 계산의 「묶음 낡음」(R3 AC15) · 남의 고침은 묶음 알림으로 닫는다(AC21) · sync 가 같아진 사본을 지우고 갈라짐을 알린다(AC17).
+# 대기 줄 — 상태 브랜치의 pending.md 에 쌓고 flush 가 확인된 줄만 옮긴다 · 사람 줄은 건너뛰어 센다(AC16 · AC21 · M15 · M16).
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_leader_seat_e2e.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -241,5 +242,85 @@ assert_eq "$(cb confirm --roadmap "$RM" --session "$SID" --confirmed "$CTIP")" "
 assert_eq "$(csync)" "0" "18 sync rc 0 — $(cat "$T/cs.txt")"
 assert_not_contains "$(cat "$T/cs.txt")" "확인되지 않은 남의 고침" "18 확인한 뒤에는 알리지 않는다"
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "없다 없다" "18 확인한 뒤에는 같아진 사본을 지운다"
+
+note "# 19 — 대기 줄: 상태 브랜치 자리의 같은 줄 둘 → flush 가 결정 기록에 하나 · pending.md 에서 둘 다 뺀다(AC16 · 다중집합)"
+new_repo "$T0/c" && ok "셋째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "셋째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
+printf '.claude/\n' >> "$W/.git/info/exclude"
+PEND="$TM/pending.md"; INTENT="$TM/jobs/E1/INTENT.md"
+pend() { led add --roadmap "$RM" --session "$SID" --section "쌓인 기록" --cells "E1 · 지휘 기록 · $1"; }   # pend <글> — rc 를 echo, 출력은 $T/led.txt
+flush() { led flush --roadmap "$RM" --session "$SID" --epic E1 --spec "$W/$TM/jobs/E1/design.md"; }   # 과제 폴더 안 경로 — 지금 레포의 것
+seen_pend() {  # seen_pend — 읽을 끝(로컬과 원격 추적 가운데 앞선 쪽)의 pending.md
+  local tip
+  tip="$(python3 - "$S" "$W" "$(basename "$TM")" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_branch as CB
+print(CB.seen_tip(sys.argv[2], sys.argv[3])[0])
+PY
+)"
+  g show "${tip}:${PEND}" 2>/dev/null
+}
+decided() { grep -c -F -x -- "- $1" "$W/$INTENT"; }   # decided <글> — INTENT.md 에 그 줄이 몇 번
+assert_eq "$([ -f "$W/$INTENT" ] && echo yes)" "yes" "19 준비: 과제 E1 의 INTENT.md 가 있다"
+assert_eq "$(cb ensure --roadmap "$RM" --session "$SID")" "0" "19 ensure rc 0 — $(cat "$T/cb.txt")"
+assert_eq "$(pend "결정 · 2026-11-20 · 같은 결정")" "0" "19 첫 add rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(pend "결정 · 2026-11-20 · 같은 결정")" "0" "19 같은 줄 둘째 add rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(seen_pend | grep -c -F -x -- "- E1 · 지휘 기록 · 결정 · 2026-11-20 · 같은 결정")" "2" "19 pending.md 에 같은 줄 둘(양성 대조)"
+assert_eq "$(flush)" "0" "19 flush rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(decided "결정 · 2026-11-20 · 같은 결정")" "1" "19 결정 기록에 그 줄이 하나"
+assert_eq "$(seen_pend | grep -c '^- E1 · 지휘 기록 · ')" "0" "19 pending.md 의 E1 지휘 기록 줄이 모두 빠졌다"
+
+note "# 20 — 브랜치 전 기계 상태의 사람 줄 · 보통 줄 + 남이 심은 사람 줄 · 보통 줄 → flush 는 보통 줄(기계 상태)만 옮긴다(M15 · M16 · I6)"
+new_repo "$T0/d" && ok "넷째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "넷째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
+printf '.claude/\n' >> "$W/.git/info/exclude"
+assert_eq "$(pend "spec 승인 · 2026-11-20 · 기계 사람 줄")" "0" "20 브랜치 전 사람 줄은 기계 상태로 rc 0 — $(cat "$T/led.txt")"
+assert_contains "$(cat "$T/led.txt")" "[spec-distill] 상태 브랜치가 없어 기계 상태에 쌓았다 — ensure 뒤의 줄부터 상태 브랜치에 쌓는다" "20 브랜치가 없다고 알린다"
+assert_eq "$(pend "결정 · 2026-11-20 · 기계 보통 줄")" "0" "20 브랜치 전 보통 줄 rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(cb ensure --roadmap "$RM" --session "$SID")" "0" "20 ensure rc 0 — $(cat "$T/cb.txt")"
+STATE="$(g for-each-ref --format='%(refname:short)' refs/heads/conductor/)"
+O4="$T/other"
+git clone -q "$T/origin.git" "$O4" 2>/dev/null
+for k in "user.name other" "user.email other@example.invalid" "commit.gpgsign false"; do git -C "$O4" config $k; done
+printf '.claude/\n' >> "$O4/.git/info/exclude"
+git -C "$O4" update-ref "refs/heads/$STATE" "refs/remotes/origin/$STATE"
+assert_eq "$( (cd "$O4" && python3 "$CL" claim --roadmap "$RM" --session "$SID2") >/dev/null 2>&1; echo $?)" "0" "20 다른 클론이 자기 표지를 쥔다"
+PLANTED="$(python3 - "$S" "$O4" "$RM" "$SID2" "$PEND" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import conductor_branch as CB
+root, roadmap, session, path = sys.argv[2:6]
+lines = "- E1 · 지휘 기록 · spec 승인 · 2026-11-20 · 남의 사람 줄\n- E1 · 지휘 기록 · 결정 · 2026-11-20 · 남의 보통 줄\n"
+print(CB.write(root, roadmap, session, lambda base: {path: (base.read(path) or "") + lines}, "남의 대기 줄").commit)
+PY
+)"
+g fetch -q origin
+assert_eq "$(g rev-parse "refs/remotes/origin/$STATE")" "$PLANTED" "20 남이 심은 대기 줄을 받아 왔다(양성 대조)"
+assert_eq "$(led pending --roadmap "$RM" --epic E1)" "0" "20 pending rc 0"
+assert_eq "$(cat "$T/led.txt")" "$(printf '%s\n' "- spec 승인 · 2026-11-20 · 기계 사람 줄" "- 결정 · 2026-11-20 · 기계 보통 줄" "- spec 승인 · 2026-11-20 · 남의 사람 줄   (확인되지 않은 남의 고침)" "- 결정 · 2026-11-20 · 남의 보통 줄   (확인되지 않은 남의 고침)")" "20 두 자리를 기계 상태 먼저 · 남의 줄에 표시"
+assert_eq "$(flush)" "0" "20 flush rc 0 — $(cat "$T/led.txt")"
+assert_contains "$(cat "$T/led.txt")" "[spec-distill] 사람 줄이라 옮기지 않은 대기 줄 2 — record --human 으로 적고 drop 으로 지운다" "20 사람 줄 둘을 건너뛰어 센다"
+assert_contains "$(cat "$T/led.txt")" "[spec-distill] 확인되지 않은 남의 고침이 더한 대기 줄 1 — 옮기지 않았다" "20 남의 보통 줄 하나를 세고 옮기지 않는다"
+assert_eq "$(decided "결정 · 2026-11-20 · 기계 보통 줄"):$(decided "결정 · 2026-11-20 · 남의 보통 줄"):$(grep -c '사람 줄' "$W/$INTENT")" "1:0:0" "20 결정 기록에 기계 상태의 보통 줄만"
+assert_eq "$(led pending --roadmap "$RM" --epic E1)" "0" "20 flush 뒤 pending rc 0"
+assert_eq "$(cat "$T/led.txt")" "$(printf '%s\n' "- spec 승인 · 2026-11-20 · 기계 사람 줄" "- spec 승인 · 2026-11-20 · 남의 사람 줄   (확인되지 않은 남의 고침)" "- 결정 · 2026-11-20 · 남의 보통 줄   (확인되지 않은 남의 고침)")" "20 기계 상태의 사람 줄은 남고(I6) 보통 줄만 빠졌다 · pending.md 의 사람 줄 · 남의 보통 줄이 남았다"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID")" "1" "20 확인 표시 없는 confirm 은 보고하고 1 — $(cat "$T/cb.txt")"
+CTIP="$(sed -n '$s/^확인할 끝: //p' "$T/cb.txt")"
+assert_eq "$(cb confirm --roadmap "$RM" --session "$SID" --confirmed "$CTIP")" "0" "20 그 끝으로 확인 rc 0 — $(cat "$T/cb.txt")"
+assert_eq "$(flush)" "0" "20 confirm 뒤 flush rc 0 — $(cat "$T/led.txt")"
+assert_contains "$(cat "$T/led.txt")" "쌓인 기록 1줄을 옮겼고 0줄은 이미 있어 건너뛰었다(커밋은 리더가)" "20 확인한 남의 보통 줄을 옮겼다"
+assert_not_contains "$(cat "$T/led.txt")" "확인되지 않은 남의 고침이 더한 대기 줄" "20 확인한 뒤에는 남의 줄로 세지 않는다"
+assert_eq "$(decided "결정 · 2026-11-20 · 남의 보통 줄")" "1" "20 결정 기록에 남의 보통 줄이 하나"
+assert_eq "$(seen_pend)" "- E1 · 지휘 기록 · spec 승인 · 2026-11-20 · 남의 사람 줄" "20 pending.md 에는 남의 사람 줄만 남았다"
+
+note "# 21 — 꺼진 설정: 같은 걸음은 R1 의 출력 그대로(사람 줄이 섞이면 2 로 멈춘다 · AC20)"
+printf -- '---\nstate_branch: 끔\n---\n' > "$W/.devbrew.md" && g add -- .devbrew.md && g commit -qm "상태 브랜치 끔" && push_main
+assert_eq "$(pend "결정 · 2026-11-20 · 꺼진 뒤 줄")" "0" "21 꺼진 설정의 add rc 0 — $(cat "$T/led.txt")"
+assert_eq "$(cat "$T/led.txt")" "적었다 — 쌓인 기록: E1 · 지휘 기록 · 결정 · 2026-11-20 · 꺼진 뒤 줄" "21 add 의 출력은 R1 의 글 그대로(알림 없음)"
+BEFORE="$(cksum < "$W/$INTENT")"
+assert_eq "$(flush)" "2" "21 사람 줄이 섞인 flush 는 2 — $(cat "$T/led.txt")"
+assert_eq "$(cat "$T/led.txt")" "[spec-distill] 사람 줄(spec 승인)은 record --human 으로만 적는다 — 고른 글을 인자로 받지 않는다" "21 R1 의 멈춤 글 그대로"
+assert_eq "$(cksum < "$W/$INTENT")" "$BEFORE" "21 결정 기록은 그대로"
 
 finish
