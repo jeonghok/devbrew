@@ -225,7 +225,7 @@ assert_eq "$(starts "$ASK" '**아직 묻지 못한 질문.**')" "1" "AC13: 「�
 WPARA="$(printf '%s\n' "$ASK" | awk 'index($0, "**아직 묻지 못한 질문.**")==1{f=1} f&&/^$/{exit} f')"
 once "$WPARA" "$L_waiting" "AC13: L(waiting) 가 「아직 묻지 못한 질문」 문단에 한 번"
 assert_contains "$ASK" '설계문서 점검의 질문과도 다른 메시지 · 다른 질문 호출' "AC13: 설계문서 점검의 질문과 다른 호출"
-assert_contains "$ASK" '「답하지 않음」 으로 남기고 다시 묻지 않는다' "AC13: 답하지 않은 질문은 「답하지 않음」 으로 남긴다"
+assert_contains "$ASK" '「답하지 않음」 으로 남기고 그 질문을 다시 띄우지 않는다' "AC13: 답하지 않은 질문은 「답하지 않음」 으로 남긴다"
 
 # AC12 행선
 once "$WRONG" "$L_wrongspec" "AC12: L(wrongspec) 한 번"
