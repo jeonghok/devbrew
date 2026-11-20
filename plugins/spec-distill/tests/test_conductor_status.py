@@ -320,3 +320,90 @@ class WindowAndFloor(StatusRepo):
         self.assertTrue(out.wrote)
         self.assertIn("앞의 STATUS 를 읽지 못해 새로 쓴다", out.notes)
         CS.parse_status(self.status_text())
+
+
+class Waiting(StatusRepo):
+    def rows(self):
+        return [(r["에픽"], r["종류"], r["건 길"], r["언제부터"], r["세션"]) for r in L.load(self.w, rm(ALPHA))[cs.ASKING]]
+
+    def test_add_shows_in_status_and_the_next_sync_lowers_a_window_question(self):
+        """뒤집으면 붉다 — sync 가 건 길을 보지 않고 다 내리면 아래 턴 끝 줄 단언이, 아무것도 내리지 않으면 첫 단언이 실패한다."""
+        self.machine(lambda d: d["기다리는 질문"].append({"에픽": "A2", "기대는 일": "A1 구현", "질문": "미뤄 둔 질문"}))
+        old_section = L.load(self.w, rm(ALPHA))["기다리는 질문"]
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A2", "머지", "턴 끝", now=at(1))
+        self.assertEqual(self.rows(), [("A1", "계획 확인", "질문 창", "2026-11-19 02:30 +0900", SID), ("A2", "머지", "턴 끝", "2026-11-19 02:31 +0900", SID)])
+        self.assertIn("## 기다리는 질문\n- A1 · 계획 확인 · 2026-11-19 02:30 +0900\n- A2 · 머지 · 2026-11-19 02:31 +0900\n", self.status_text())
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))                    # 그 세션이 다시 돌았다 — 질문 창 줄만 내려간다
+        self.assertEqual([r[:2] for r in self.rows()], [("A2", "머지")])
+        self.assertIn("## 기다리는 질문\n- A2 · 머지 · 2026-11-19 02:31 +0900\n", self.status_text())
+        n, _ = CS.waiting_clear(self.w, rm(ALPHA), SID, "A2", now=at(6))
+        self.assertEqual((n, self.rows()), (1, []))
+        self.assertIn("## 기다리는 질문\n- 없음\n", self.status_text())
+        self.assertEqual(L.load(self.w, rm(ALPHA))["기다리는 질문"], old_section)   # 옛 절은 바뀌지 않는다
+        self.assertNotIn("미뤄 둔 질문", self.status_text())
+
+    def test_add_does_not_lower_window_rows_of_its_own_sync(self):   # J14 — add 안의 STATUS 쓰기가 줄을 내리면 방금 올린 줄이 사라진다
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
+        self.assertEqual([r[:3] for r in self.rows()], [("A1", "계획 확인", "질문 창")])
+        CS.waiting_clear(self.w, rm(ALPHA), SID, "A9", now=at(1))     # 내릴 줄이 없는 clear 도 질문 창 줄을 내리지 않는다
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_a_window_question_of_another_session_stays(self):   # J14
+        self.machine(lambda d: d[cs.ASKING].append({"에픽": "A1", "종류": "spec 승인", "건 길": "질문 창", "언제부터": "2026-11-19 01:00 +0900", "세션": OTHER}))
+        CS.sync(self.w, rm(ALPHA), SID, now=at(0))
+        self.assertEqual([r[4] for r in self.rows()], [OTHER])
+        self.assertEqual(CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", kind="머지", now=at(1))[0], 0)   # 종류가 다르면 내리지 않는다
+        self.assertEqual(CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", kind="spec 승인", now=at(2))[0], 1)
+
+    def test_window_question_is_lowered_even_when_nothing_can_be_written(self):   # J57 · AC6
+        """뒤집으면 붉다 — 줄 내리기를 쓸 수 있는지 · 브랜치가 있는지 뒤에 두면 꺼진 레포와 브랜치 없는 로드맵에서 줄이 쌓이기만 한다."""
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "계획 확인", "질문 창", now=at(0))
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        out = CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        self.assertEqual((self.rows(), out.wrote), ([], False))                      # 꺼져 있어도 기계 상태의 줄은 내려간다
+        self.assertIn("상태 브랜치가 꺼져 있다", out.notes)
+        self.put({".devbrew.md": "---\nstate_branch: 켬\n---\n"})
+        self.claim(BETA)                                                             # 상태 브랜치를 만들지 않은 로드맵
+        L.update(self.w, rm(BETA), SID, lambda d: d[cs.ASKING].append(
+            {"에픽": "B1", "종류": "머지", "건 길": "질문 창", "언제부터": "2026-11-19 02:30 +0900", "세션": SID}))
+        with self.assertRaises(CB.BranchError) as c:
+            CS.sync(self.w, rm(BETA), SID, now=at(6))
+        self.assertEqual(c.exception.rc, 1)
+        self.assertEqual(L.load(self.w, rm(BETA))[cs.ASKING], [])                     # 브랜치가 없어 멈춰도 줄은 내려갔다
+
+    def test_same_question_twice_keeps_the_first_time(self):
+        CS.waiting_add(self.w, rm(ALPHA), SID, "로드맵 밖", "그 밖", "턴 끝", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "로드맵 밖", "그 밖", "턴 끝", now=at(30))
+        self.assertEqual([r[3] for r in self.rows()], ["2026-11-19 02:30 +0900"])
+
+    def test_same_epic_and_kind_with_another_way_keeps_the_first_row(self):   # 통제 판정 P2 — 건 길이 달라도 두 번째 줄을 더하지 않는다
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "머지", "턴 끝", now=at(0))
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "머지", "질문 창", now=at(30))
+        self.assertEqual(self.rows(), [("A1", "머지", "턴 끝", "2026-11-19 02:30 +0900", SID)])
+
+    def test_closed_values(self):
+        for epic, kind, via in (("a1", "머지", "턴 끝"), ("A1", "계획", "턴 끝"), ("A1", "계획 확인 ", "턴 끝"), ("A1", "머지", "창"), ("A1", "머지", "질문 창 ")):
+            with self.assertRaises(CB.BranchError, msg=(epic, kind, via)) as c:
+                CS.waiting_add(self.w, rm(ALPHA), SID, epic, kind, via, now=at(0))
+            self.assertEqual(c.exception.rc, 2)
+        self.assertEqual(self.rows(), [])
+
+    def test_clear_ignores_the_session_column(self):   # 표지를 쥔 세션이 남의 줄도 치운다
+        self.machine(lambda d: d[cs.ASKING].append({"에픽": "A1", "종류": "머지", "건 길": "턴 끝", "언제부터": "2026-11-19 01:00 +0900", "세션": OTHER}))
+        self.assertEqual(CS.waiting_clear(self.w, rm(ALPHA), SID, "A1", now=at(0))[0], 1)
+
+    def test_command_and_switch_off(self):
+        rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1", "--kind", "계획 확인", "--via", "질문 창")
+        self.assertEqual(rc, 0, out)
+        self.assertRegex(self.status_text(), r"## 기다리는 질문\n- A1 · 계획 확인 · [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} [+-][0-9]{4}\n")
+        rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", OTHER, "--epic", "A2", "--kind", "머지", "--via", "턴 끝")
+        self.assertEqual(rc, 5, out)
+        rc, out = cli(self.w, "waiting", "clear", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A1")
+        self.assertEqual((rc, self.rows()), (0, []), out)
+        self.assertIn("내린 줄 1", out)
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID, "--epic", "A2", "--kind", "머지", "--via", "턴 끝")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA), [r[:2] for r in self.rows()]), (0, tip, [("A2", "머지")]), out)   # 줄은 기계 상태에 올라가고 브랜치에는 쓰지 않는다
+        self.assertIn("상태 브랜치가 꺼져 있다", out)

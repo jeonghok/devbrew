@@ -267,6 +267,39 @@ def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = Tr
     return Synced(res, tuple(notes) + tuple(res.notes), res.commit is not None)
 
 
+# ── waiting ──────────────────────────────────────────────────────────────────
+
+def waiting_add(root, roadmap_rel: str, session: str, epic: str, kind: str, via: str, now=None) -> Synced:
+    """사용자에게 건 질문 한 줄을 기계 상태에 올리고 STATUS 에 싣는다. 같은 (에픽, 종류) 가 있으면 두고 처음 시각을 지킨다."""
+    now = now or datetime.datetime.now().astimezone()
+    if not (cs.ASK_EPIC_RE.fullmatch(epic) or epic == cs.ASK_NO_EPIC):
+        raise CB.BranchError(2, "에픽은 에픽 이름이거나 %s 다: %s" % (cs.ASK_NO_EPIC, CB.visible(repr(epic))))
+    if kind not in cs.ASK_KINDS:
+        raise CB.BranchError(2, "종류는 %s 중 하나다: %s" % (SEP.join(cs.ASK_KINDS), CB.visible(repr(kind))))
+    if via not in cs.ASK_VIA:
+        raise CB.BranchError(2, "건 길은 %s 중 하나다: %s" % (SEP.join(cs.ASK_VIA), CB.visible(repr(via))))
+
+    def change(d):
+        if not any(r["에픽"] == epic and r["종류"] == kind for r in d[cs.ASKING]):
+            d[cs.ASKING].append({"에픽": epic, "종류": kind, "건 길": via, "언제부터": CB.stamp(now), "세션": session})
+    L.update(root, roadmap_rel, session, change)
+    return sync(root, roadmap_rel, session, now=now, lower_window=False)
+
+
+def waiting_clear(root, roadmap_rel: str, session: str, epic: str, kind: Optional[str] = None, now=None):
+    """에픽(과 종류를 줬으면 종류)이 같은 줄을 내린다. 세션 칸은 보지 않는다. (내린 줄 수, sync 결과)."""
+    gone = []
+
+    def hit(row):
+        return row["에픽"] == epic and (kind is None or row["종류"] == kind)
+
+    def change(d):
+        gone.extend(r for r in d[cs.ASKING] if hit(r))
+        d[cs.ASKING] = [r for r in d[cs.ASKING] if not hit(r)]
+    L.update(root, roadmap_rel, session, change)
+    return len(gone), sync(root, roadmap_rel, session, now=now, lower_window=False)
+
+
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
 
 def main(argv=None) -> int:
@@ -278,16 +311,34 @@ def main(argv=None) -> int:
     sy = sub.add_parser("sync", help="현황을 계산해 상태 브랜치에 쓴다")
     sy.add_argument("--roadmap", required=True)
     sy.add_argument("--session", required=True)
+    wa = sub.add_parser("waiting", help="사용자에게 건 질문을 올리고 내린다")
+    wsub = wa.add_subparsers(dest="wcmd", required=True)
+    wadd = wsub.add_parser("add")
+    wclr = wsub.add_parser("clear")
+    for p in (wadd, wclr):
+        p.add_argument("--roadmap", required=True)
+        p.add_argument("--session", required=True)
+        p.add_argument("--epic", required=True)
+    wadd.add_argument("--kind", required=True)
+    wadd.add_argument("--via", required=True)
+    wclr.add_argument("--kind")
     args = ap.parse_args(argv)
     try:
-        out = sync(args.root, args.roadmap, args.session)
+        extra = []
+        if args.cmd == "waiting" and args.wcmd == "add":
+            out = waiting_add(args.root, args.roadmap, args.session, args.epic, args.kind, args.via)
+        elif args.cmd == "waiting":
+            n, out = waiting_clear(args.root, args.roadmap, args.session, args.epic, args.kind)
+            extra.append("내린 줄 %d" % n)
+        else:
+            out = sync(args.root, args.roadmap, args.session)
     except (CB.BranchError, L.Fail) as exc:
         print("[spec-distill] " + CB.visible(str(exc)), file=sys.stderr)
         return exc.rc
     except Exception as exc:   # 예상 밖 예외도 종료 코드 3 — 쓰지 못한 것이다
         print("[spec-distill] 현황을 쓰지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(str(exc).split("\n")[0])), file=sys.stderr)
         return 3
-    for line in out.notes:
+    for line in extra + list(out.notes):
         print("[spec-distill] " + line)
     return 0
 
