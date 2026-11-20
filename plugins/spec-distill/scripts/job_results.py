@@ -240,12 +240,14 @@ def _oid(git, rev: str, path: str):
     return out.strip() if rc == 0 and out.strip() else None
 
 
-def _same_since(git, head: str, tip: str, path: str) -> bool:
-    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 설계 파일 · 계획 파일 · INTENT.md 는 body_of 의 본문으로 견주고,
-    그 밖은 객체 번호로 견준다(바이너리 · 링크 · 줄바꿈까지 그대로). 읽지 못한 쪽이 있으면 부재를 git 에 확인해
-    양쪽 다 확인된 부재일 때만 같다 — git 이 읽지 못한 것은 다르다(낡음 쪽 — 닫는 쪽)."""
-    name = path.rsplit("/", 1)[-1]
-    if name in (team_layout.DESIGN_FILE, team_layout.INTENT_FILE) or team_layout.plan_number(name) is not None:
+def _same_since(git, head: str, tip: str, path: str, job_dir: str, design: str) -> bool:
+    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 그 과제의 설계 파일(design)과 과제 폴더(job_dir) 바로 아래
+    계획 파일만 body_of 의 본문으로 견주고, 그 밖은 — 이름이 같은 예약 경로의 파일도 — 객체 번호로 견준다(바이너리 · 링크 ·
+    줄바꿈까지 그대로). 읽지 못한 쪽이 있으면 부재를 git 에 확인해 양쪽 다 확인된 부재일 때만 같다 — git 이 읽지 못한
+    것은 다르다(낡음 쪽 — 닫는 쪽)."""
+    own_plan = path.startswith(job_dir) and team_layout.plan_number(path[len(job_dir):]) is not None
+    if path == design or own_plan:
+        name = path.rsplit("/", 1)[-1]
         before, now = git.blob(head, path), git.blob(tip, path)
         if before is not None and now is not None:
             return human_lines.body_of(name, before) == human_lines.body_of(name, now)
@@ -289,7 +291,7 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
     changed = git.touched(tip, [head, main], list(reserved) + list(outputs) + [design, job_dir])
     if changed is None:
         return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "받은 뒤의 변경을 읽지 못했다")], latest
-    left = [p for p in changed if _kept(p, job_dir, design, outputs) and not _same_since(git, head, tip, p)]
+    left = [p for p in changed if _kept(p, job_dir, design, outputs) and not _same_since(git, head, tip, p, job_dir, design)]
     if left:
         shown = " · ".join(left[:SHOWN_FILES])
         if len(left) > SHOWN_FILES:

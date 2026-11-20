@@ -101,6 +101,10 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
         self.assertNotIn("--approval", self.TEAM)
         self.assertNotIn("--choice", self.TEAM)
 
+    def test_stage_and_plan_come_from_the_next_step_name(self):   # 걸음 보기의 다음 걸음 줄에는 단계 · 계획 번호 칸이 없다
+        for word in ("계획 → plan", "(계획 n)"):
+            self.assertIn(word, self.TEAM, word)
+
     def test_section_sits_before_the_manual_steps(self):   # test_conducting_loop.sh:11 과 같은 사실을 여기서도
         heads = [l for l in self.TEXT.splitlines() if l.startswith("## ")]
         self.assertEqual(heads[-2:], ["## team 형식 로드맵", "## 손으로 따르는 절차"])

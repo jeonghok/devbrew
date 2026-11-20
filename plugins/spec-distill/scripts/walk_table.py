@@ -181,7 +181,6 @@ DONE = " (끝남)"
 NEXT_USAGE = "next --roadmap <로드맵> --job <과제>"
 UNKNOWN_STAGE = team_status.UNKNOWN
 WAITING = "대기"
-MERGED = "머지됨"
 PR_OPEN = "열림"
 GIT_FAILED = "git 읽기 실패 — "
 NO_ANCHOR = "걸음표에 %s 걸음이 없어 %s 걸음을 가를 수 없다"
@@ -306,10 +305,12 @@ def _block_trace(git, base, reader, block: dict, mine: dict, roadmap_rel: str) -
         raise Unchecked(reason)
     active = next((i for i, st in enumerate(states) if not st.get("merged") and st.get("tip")), None)
     merged = [i for i, st in enumerate(states) if st.get("merged")]
+    # 블록이 머지됨이면 남은 브랜치 끝을 세지 않는다 — 결정 기록의 머지 줄은 브랜치가 남아 있어도 블록을 머지됨으로 둔다
+    if stage == team_status.MERGED:
+        n = active + 1 if active is not None else (merged[-1] + 1 if merged else 1)
+        return flow, Trace([("결과 확인", "결과 확인")] if plain else [("회고", "회고")], None), n, m, None, branches
     if active is None:
         n = merged[-1] + 1 if merged else 1
-        if stage == MERGED:
-            return flow, Trace([("결과 확인", "결과 확인")] if plain else [("회고", "회고")], None), n, m, None, branches
         if not merged:
             return flow, _start(plain, reason if stage == WAITING else None), n, m, None, branches
         if plain:

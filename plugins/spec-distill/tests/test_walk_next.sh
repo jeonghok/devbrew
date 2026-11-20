@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # walk_table.py next — 걸음 보기가 자취로 지금 걸음을 고르고 다음 걸음의 칸 · 막는 것을 낸다. AC2 · AC9 · AC17.
-# 줄 묶음 A 는 레포 하나를 세워 차례로 걷고(앞 행의 상태 위에서 다음 행), 줄 묶음 B 는 새 레포에서 막지 않는 쪽과 그 양성 대조를 잰다.
+# 줄 묶음 A 는 레포 하나를 세워 차례로 걷고(앞 행의 상태 위에서 다음 행), 줄 묶음 B 는 새 레포에서 막지 않는 쪽과 그 양성 대조를 잰다. 줄 묶음 C 는 모두 머지된 블록의 끝 걸음을 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_walk_next.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -221,5 +221,23 @@ g checkout -q main
 assert_eq "$(wn --job fix-typo)" "0" "b10: 로드맵 밖 과제는 0 $(cat "$T/w.err")"
 assert_eq "$(line 흐름)" "설계 없는 흐름" "b10: 설계 없는 흐름"
 assert_eq "$(line '지금 걸음')" "방향 확인" "b10: 흐름 승인 줄이 없으면 방향 확인"
+
+# ── 줄 묶음 C — 모두 머지: 로드맵 결정 기록의 머지 줄이 블록을 머지됨으로 두면 브랜치 끝이 남아 있어도 끝 걸음이다 ──
+new_repo "$T0/c" && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+for br in feature/tm-e3 feature/tm-e2; do
+  g checkout -q -b "$br" main && g commit -q --allow-empty -m "$br 시작" && push_br "$br"
+done
+g checkout -q main
+assert_eq "$(wn --job E3) · $(line '지금 걸음')" "0 · 설계 대화" "c1: 양성 대조 — 머지 줄이 없으면 남은 브랜치 끝으로 걷는다"
+python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); h="\n## 결정 기록\n"; assert s.count(h) == 1, "결정 기록 절이 하나가 아니다"; open(p, "w", encoding="utf-8", newline="").write(s.replace(h, h + "\n- E3 · 머지 · 2026-11-22 · 「squash 로 머지했다」\n- E2 · 머지 · 2026-11-22 · 「squash 로 머지했다」\n"))' "$W/$RM" \
+  && g add -- "$RM" && g commit -qm "머지 줄 둘" && push_main && ok "c1: 준비 — 로드맵 결정 기록에 머지 줄 둘" || no "c1: 준비 — 머지 줄"
+status "$T/s.json" > /dev/null
+assert_eq "$(js "$T/s.json" "' · '.join(b['stage'] + ('/있음' if [s for s in b['branch_states'] if s.get('tip')] else '/없음') for b in r['blocks'] if b['id'] in ('E2', 'E3'))")" \
+  "머지됨/있음 · 머지됨/있음" "c1: 전제 — 상태 보고가 E2 · E3 을 머지됨으로 세고 브랜치 끝은 남아 있다"
+assert_eq "$(wn --job E3)" "0" "c1: 0"
+assert_eq "$(line '지금 걸음') · $(line '다음 걸음')" "회고 · 없음" "c1: 설계 흐름의 모두 머지 — 회고 → 없음(남은 브랜치 끝을 세지 않는다)"
+assert_eq "$(line '막는 것')" "없음" "c1: 막는 것 없음"
+assert_eq "$(wn --job E2)" "0" "c2: 0"
+assert_eq "$(line '지금 걸음') · $(line '다음 걸음')" "결과 확인 · 없음" "c2: 설계 없는 흐름의 모두 머지 — 결과 확인 → 없음"
 
 finish
