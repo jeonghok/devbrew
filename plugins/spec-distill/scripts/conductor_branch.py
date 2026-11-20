@@ -777,12 +777,14 @@ def _note_built(built: list, commit: Optional[str]) -> None:
         built.append(commit)
 
 
-def record_own(root, roadmap_rel: str, session: str, commits: list) -> None:
+def record_own(root, roadmap_rel: str, session: str, commits: list) -> tuple:
     """기계 상태 `확인한 끝` 절에 이 기계가 만든 커밋을 `씀` 줄로 더한다(차례대로 · 이미 `씀` 으로 적힌 끝은 건너뛴다).
-    표지 확인은 부르는 쪽이 이미 했다. 빈 목록이면 아무것도 하지 않는다."""
+    표지 확인은 부르는 쪽이 이미 했다. 빈 목록이면 아무것도 하지 않는다. 알릴 줄들을 돌려준다 — 다시 쓰며 옛 `## 레포 설정`
+    절을 지웠으면 `cs.OLD_REPO_SETTINGS_DROPPED`(원장 쓰기와 같은 알림 · 부르는 쪽이 사람에게 낸다)."""
     if not commits:
-        return
+        return ()
     path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    old_settings = cs.has_old_repo_settings(path)   # 다시 쓰면 옛 절이 사라진다 — 조용히 버리지 않는다
     data = cs.load(path, roadmap_rel)
     have = [r["끝"] for r in data[cs.TRUST] if r["까닭"] == cs.TRUST_WHY[1]]
     when = stamp()
@@ -791,6 +793,7 @@ def record_own(root, roadmap_rel: str, session: str, commits: list) -> None:
             data[cs.TRUST].append({"끝": commit, "까닭": cs.TRUST_WHY[1], "때": when, "세션": session})
             have.append(commit)
     cs.save(path, roadmap_rel, data, session)
+    return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
 
 
 def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating: bool, publish: bool = True) -> Result:
@@ -800,17 +803,20 @@ def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
-    built, finished = [], False
+    built, finished, told = [], False, ()
     try:
         res = _write_attempts(root, team, session, edit, what, creating, publish, built)
         finished = True
     finally:
         try:
-            record_own(root, roadmap_rel, session, built)
+            told = record_own(root, roadmap_rel, session, built)
         except Exception as exc:
             if finished:   # 도는 예외가 있으면 그것이 이긴다 — 기록 실패로 가리지 않는다
                 raise BranchError(3, "만든 커밋을 기계 상태에 적지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))))
-    return res._replace(made=tuple(built))
+        if not finished:   # 예외가 결과를 대신한다 — 알림은 여기서 낸다
+            for line in told:
+                print("[spec-distill] " + line, file=sys.stderr)
+    return res._replace(notes=res.notes + told, made=tuple(built))
 
 
 def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str, creating: bool, publish: bool, built: list) -> Result:
@@ -889,7 +895,7 @@ def ensure(root, roadmap_rel: str, session: str) -> Result:
     res = _write_floor(root, roadmap_rel, session, None, "상태 브랜치를 만든다", True, publish=unpushed is None)
     if res.commit is None:
         return res
-    tail = (unpushed,) if unpushed else res.notes
+    tail = (unpushed,) + res.notes if unpushed else res.notes   # 올리지 않은 쓰기의 notes 는 기록 알림뿐이다
     if res.onto:   # 만드는 사이 다른 곳이 먼저 올렸다 — 그 끝을 받아 왔다
         return res._replace(notes=(ADOPTED % (branch_of(team.name), res.commit[:8]),) + tail)
     return res._replace(notes=("만들었다 — %s(%s)" % (branch_of(team.name), res.commit[:8]),) + tail)

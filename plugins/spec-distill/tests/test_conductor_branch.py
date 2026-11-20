@@ -1319,6 +1319,31 @@ class OwnCommits(StateRepo):   # R3 AC21 · Review Focus 1 · B3
         self.assertNotIn(their_root, self.own())
 
 
+class OldRepoSettingsNotDroppedSilently(StateRepo):   # 과제 2 리뷰 — 「씀」 기록이 옛 `## 레포 설정` 절을 지우면 원장 쓰기와 같은 알림을 낸다
+    def plant(self):
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        text = cs.render_machine(rm(ALPHA), cs.load(path, rm(ALPHA))) + "\n## 레포 설정\n\n- test_command · make test\n"
+        path.write_text(text, encoding="utf-8")
+        self.assertTrue(cs.has_old_repo_settings(path))
+        return path
+
+    def test_recording_own_commits_surfaces_the_dropped_notice(self):
+        self.claim()
+        path = self.plant()
+        made = CB.ensure(str(self.w), rm(ALPHA), SID)                            # 만들기 길
+        self.assertIn(cs.OLD_REPO_SETTINGS_DROPPED, made.notes)
+        self.assertFalse(cs.has_old_repo_settings(path))                         # 실제로 지워졌다 — 알림은 그 사실이다
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        self.assertNotIn(cs.OLD_REPO_SETTINGS_DROPPED,
+                         CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "x\n"}, "STATUS").notes)   # 양성 대조 — 옛 절이 없으면 알리지 않는다
+        self.plant()
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "y\n"}, "STATUS")   # 쓰기 길
+        self.assertIn(cs.OLD_REPO_SETTINGS_DROPPED, res.notes)
+        own = [r["끝"] for r in cs.load(path, rm(ALPHA))[cs.TRUST] if r["까닭"] == "씀"]
+        self.assertIn(made.commit, own)                                          # 기록은 건너뛰지 않는다
+        self.assertIn(res.commit, own)
+
+
 class CommandLineIdentity(StateRepo):   # B2 — 함수 안에서 가져온 모듈이 던진 BranchError 도 그 종료 코드로 끝난다
     def test_branch_error_raised_from_a_late_import_keeps_its_code(self):
         p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(self.w),
