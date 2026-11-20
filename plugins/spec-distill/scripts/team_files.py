@@ -16,6 +16,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import team_layout  # noqa: E402
 import section6  # noqa: E402
+import workflow_superpowers  # noqa: E402
 from roadmap_model import CONFIRM_RE, FormatError, field_text, frontmatter, section_body, unquote  # noqa: E402,F401
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates" / "team"
@@ -237,7 +238,7 @@ _END_PREFIX = "끝 — "
 END_EMPTY = "「끝」 줄에 커밋 글이 없다"   # 이 사유가 있으면 「끝」 줄은 있되 읽을 커밋이 없다(job_results 가 「끝 줄이 없다」 를 덧내지 않는다)
 END_PREFIX = _END_PREFIX
 _TASK_BLOCKED = "막힘"
-_MACHINE_PREFIXES = ("Ruling:", "규칙 반증:", "산출물:")
+_MACHINE_PREFIXES = (workflow_superpowers.RULING_MARK, "규칙 반증:", "산출물:")
 NO_HEAD = "머리(첫 줄 `---`)가 없다"
 OPEN_HEAD = "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)"
 TASK_SHAPE = "Task 줄 꼴이 아니다(Task <n>/<전체>: 끝|막힘 — <커밋>)"
@@ -384,7 +385,7 @@ def parse_result(text: str) -> Result:
                 r.tasks.append((int(m.group(1)), int(m.group(2)), m.group(3), m.group(4)))
             else:
                 r.problems.append("%s: %s" % (TASK_SHAPE, line))
-        elif line.startswith("Ruling:"):
+        elif line.startswith(workflow_superpowers.RULING_MARK):
             r.rulings.append(line)
         elif line.startswith("규칙 반증:"):
             r.refutes.append(line)

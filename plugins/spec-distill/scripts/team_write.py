@@ -747,7 +747,7 @@ def cmd_job_sync(a, W) -> int:
     have = set(line.rstrip("\r") for line in (r.machine_text.split("\n") if r else []))   # 펜스 밖 · 머리 아래의 줄만
     new_lines = [line for line in new_lines if line not in have]
     text = _appended(text, new_lines)
-    for label, prefix in (("Task", "Task "), ("Ruling", "Ruling:")):
+    for label, prefix in (("Task", "Task "), ("Ruling", workflow_superpowers.RULING_MARK)):
         n = sum(1 for line in new_lines if line.startswith(prefix))
         if n:
             done.append("%s 줄 +%d" % (label, n))

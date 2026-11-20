@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
+import workflow_superpowers  # noqa: E402
 from ledger_marker import _atomic_write, _read_line  # noqa: E402 — 리뷰 원장 표지와 같은 방식
 from roadmap_model import (  # noqa: E402,F401 — 옮긴 이름의 옛 자리
     CONFIRM_RE, EPIC_RE, FormatError, IMPL_PREFIX, ISSUE_RE, RECEIVED, RECORD_HEADING, RULINGS_HEADING, _headings,
@@ -419,7 +420,7 @@ def save(path: Path, roadmap_rel: str, data: dict, session: str) -> None:
 
 def ledger_rulings(text: str) -> list:
     """실행 방식 원장의 판정 줄 — `Ruling:` 이 든 줄."""
-    return [l.strip() for l in text.splitlines() if "Ruling:" in l]
+    return [l.strip() for l in text.splitlines() if workflow_superpowers.ruling_said(l) is not None]
 
 
 # ── 넘김 ─────────────────────────────────────────────────────────────────────
