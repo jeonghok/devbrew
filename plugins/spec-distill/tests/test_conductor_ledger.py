@@ -2578,6 +2578,18 @@ class PendingSeat(TLS.TeamRepo):   # R3 AC16 · AC21 — 대기 줄의 자리(M1
         self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
         self.assertEqual(self.pending_text(), "- 칸이 하나뿐인 줄\n")   # 옮기지도 않는다
 
+    def test_flush_does_not_count_a_malformed_line_that_is_gone(self):   # 남이 더했다가 남이 뺀 꼴 틀린 줄은 지금 없다 — 세지 않는다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        mine = self.pending_text()
+        self.plant("- 칸이 하나뿐인 줄", label="o1")
+        self.assertEqual(self.pending_text(), mine + "- 칸이 하나뿐인 줄\n")   # 양성 대조 — 심었다
+        self.foreign_edit("o2", {self.team.path(LS.CB.PENDING_FILE): mine})
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 내 줄"])
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
+
     def test_flush_moves_no_pending_line_when_unmeasured(self):   # I11 — 대기 줄 쪽 판정이 None 이면 pending.md 줄은 하나도 옮기지 않는다
         intent, design = self.intent()
         self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 브랜치 줄")
