@@ -103,6 +103,9 @@ assert_contains "$STATUS" "- 보낸 글 1 · 아직 받지 않은 보낸 글 0 �
 
 note "# 8 — 표지 없는 세션의 sync"
 run "$CA" conductor_status.py sync --roadmap "$RA" --session "$SB"; rcis 5 "8 표지 없는 세션은 5"
+# 붉어지는 뒤집기: conductor_branch._need_marker 를 건너뛰면 아래 둘이 붉다(sync 는 원장이 먼저 거절하므로 위 줄만으로는 안 붉다). 양성 대조: 위 · 아래가 표지를 쥔 SA 로는 앞 걸음에서 rc 0.
+run "$CA" conductor_branch.py ensure --roadmap "$RA" --session "$SB"; rcis 5 "8 표지 없는 세션의 ensure 는 5"
+run "$CA" conductor_mail.py send --roadmap "$RA" --session "$SB" --to "$BE" --kind 질문 --body "표지 없이"; rcis 5 "8 표지 없는 세션의 send 는 5"
 
 note "# 9 — 작업 폴더 · 코드 없는 브랜치"
 for pair in "$CA:$AL" "$CB_:$BE"; do
