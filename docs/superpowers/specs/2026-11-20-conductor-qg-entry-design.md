@@ -491,6 +491,7 @@ AskUserQuestion({ questions: [ <묻는 질문마다 — 많아야 3> {
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-conductor-qg-entry-design-9089de231e32c76c r1: advice_new=5 · advice_repeat=1 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-conductor-qg-entry-design-9089de231e32c76c r2: advice_new=10 · advice_repeat=3 · mc_preexisting_new=1
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-conductor-qg-entry-design-9089de231e32c76c r3: advice_new=4 · advice_repeat=4 · mc_preexisting_new=0
+- 재분해 · 2026-11-20 · R3 의 경로 예약에 `plugins/quality-gates/scripts/intent_origin.py` · `plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md` 를 더하고 범위의 「한다」 에 「범위로 부른 리뷰가 바뀐 의도 문서를 따라가게 qg 한 곳 고치기 · 머지된 PR 의 범위 확인」 을 더했다(로드맵 수정 PR #308) — 「이대로 다시 나눈다 (권장)」
 
 ## 번호 대조
 
@@ -589,6 +590,8 @@ R1 · R2 · R5 설계문서의 `## 미룸` 에서 받는 곳이 R3 인 24행. �
 - 2026-11-20 · 설계문서 리뷰 2라운드 — 탐지 리뷰어 하나 · codex(실제 호출 2회째) · 재비판이 모두 정상으로 돌았다. 지적 열셋에 기각은 없고 재비판이 둘을 더했다. 리뷰 엔진이 질문으로 올린 것은 허가 없이 바뀐 절 다섯의 확인뿐이고 사용자가 다섯 다 「현재 변경 유지」 를 골랐다. 실질 지적은 모두 참고로 분류됐고 결정을 뒤집는 것은 없었다 — 1라운드의 수정이 남긴 틈과 어긋난 문장이다. 지휘자가 한 번에 받아 고쳤다: 로드맵 끝 리뷰 앞에 기록 브랜치에 기본 브랜치 끝을 합친다 · 다시 보내는 때를 둘로 맞춘다 · 머지 전 자리의 판정과 코드 리뷰 지적은 보이기만 하고 지휘 기록에 적는다 · spec 승인 앞에서 창을 닫으면 「답하지 않음」 으로 적고 spec 리뷰로 간다 · 문서만 바뀐 범위의 측정을 더한다 · `source_brief:` 줄을 로드맵을 보는 기록에만 둔다 · 보관 폴더 이름이 겹치지 않게 한다 · 맥락 절의 수 · 번호 대조 두 행 · 기각된 대안 한 줄 · 고칠 파일의 조건부 괄호를 본문에 맞춘다. 멈출 조건을 사용자에게 알렸다 — 3라운드가 끝이고, 그 뒤의 참고 지적은 문서를 더 고치지 않고 계획으로 미룬 목록에 실은 채 승인 질문으로 간다.
 - 2026-11-20 · 로드맵 수정이 필요하다 — R3 블록의 경로 예약에 `plugins/quality-gates/scripts/intent_origin.py` · `plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md` · `plugins/spec-distill/scripts/` 의 범위 확인 스크립트를 더한다. 계획 담당자를 보내기 전에 재분해 절차로 한다.
 - 2026-11-20 · 옆 로드맵에 알릴 것 — 절차서를 쪼개는 에픽(E2)이 `conducting.md` 의 들어가는 문장과 `skills/epic-conductor/references/qg-review.md` 를 함께 옮겨야 한다. 다른 로드맵의 에픽이라 `## 미룸` 에 받는 곳으로 적지 못했다. 사용자에게 알린다.
+- 2026-11-20 · 설계문서 리뷰 3라운드와 닫기 — 탐지 리뷰어 하나 · codex(실제 호출 3회째) · 재비판이 모두 정상으로 돌았다. 지적 아홉에 기각은 없고 재비판이 하나를 더했다. 리뷰 엔진이 질문으로 올린 것은 허가 없이 바뀐 절 열셋의 확인뿐이다. 절차와 다르게 한 것 둘 — 같은 꼴의 확인 열셋을 질문 하나로 묶어 물었고(「하나씩 답한다」 를 선택지에 두었다) 사용자가 「13개 모두 현재 변경 유지 (권장)」 를 골랐다 · 참고 목록의 접힌 줄을 펼칠지는 묻지 않고 승인 질문 앞 글에 열아홉 건을 요약해 보였다. 추가 라운드는 사용자가 「열지 않음 (권장)」 을 골랐다. 3라운드의 참고 지적은 본문에 반영하지 않았다 — 리뷰 엔진이 넷만 `### Deferred to plan` 표에 싣고 나머지를 앞 라운드의 같은 자리 · 같은 종류 행에 묶어, 빠진 다섯은 지휘자가 표 아래에 적었다(리뷰가 닫힌 뒤 더한 글이라 리뷰어가 보지 않았다).
+- 2026-11-20 · 재분해 — 사용자 「이대로 다시 나눈다 (권장)」. 로드맵 수정 PR #308(브랜치 `feature/roadmap-r3-path-reservation`)이 R3 의 경로 예약에 qg 파일 둘을 더하고 범위에 두 구절을 더한다. 범위 확인 스크립트는 예약에 넣지 않았다 — 새 파일이라 다른 에픽과 겹칠 수 없고 이름은 계획이 정한다(Constraints 의 「그만큼 넓힌다」 와 다른 점). 계획 담당자는 그 PR 의 머지를 기다리지 않고 보냈다 — 더한 두 파일을 고치는 열린 에픽이 없다.
 - spec 승인 · 2026-11-20 · 「1, 이거는 왜 보여주는거지? 로드맵속 위치 이거 어디에서 보여주라고 적혀있는거야 — 첫 선택지 「승인 — 계획 담당자에게 (권장)」 으로 읽었다」
 
 ## Metadata
