@@ -178,6 +178,15 @@ assert_not_contains "$ALL" 'docs/roadmap-' "P3 음성: 「그대로 두면」 �
 once "$KEEP" "$L_prior" "AC9: L(prior) 한 번"
 assert_contains "$KEEP" '글자가 같지 않으면 짝짓지 않는다' "AC9: 글자가 같지 않으면 짝짓지 않는다"
 assert_contains "$ASK" '같은 대상에 전에 물은 것이 있어도 질문은 띄운다' "AC9 양성 짝: 전에 물은 것이 있어도 질문은 띄운다"
+# AC9 찾는 명령 — 돌아가는 꼴(git grep 에는 -x 가 없다)과 찾는 자리(에픽 브랜치는 로컬 ref)
+assert_contains "$KEEP" '`git grep -l -F -e "- 정체: <id>" <ref> -- "<로드맵 폴더>/reviews/"`' "AC9 찾기: 후보 파일을 git grep -l -F -e 로"
+assert_contains "$KEEP" '`git show "<ref>:<경로>" | grep -n -x -F -e "- 정체: <id>"`' "AC9 찾기: 줄 전체 일치는 git show | grep -x 로"
+assert_not_grep "$ALL" 'git grep[^`]* -[A-Za-wyz]*x' "AC9 찾기 음성: git grep 에 -x 를 넘기지 않는다(git grep 은 unknown switch 로 끝난다)"
+assert_contains "$KEEP" '열린 에픽 브랜치마다 로컬 `<에픽 브랜치>`' "AC9 찾기: 에픽 브랜치는 로컬 ref 로 찾는다"
+assert_not_contains "$ALL" 'origin/<에픽 브랜치>' "AC9 찾기 음성: push 되지 않은 에픽 브랜치 기록을 origin 으로 찾지 않는다"
+for ref in '`origin/HEAD`(기본 브랜치)' '`origin/<기록 브랜치>`'; do
+  assert_contains "$KEEP" "$ref" "AC9 찾기: 찾는 자리 ${ref}"
+done
 
 # AC8 질문 꼴
 assert_contains "$QF" 'header: "의도 점검 <n>"' "AC8: 머리 의도 점검 <n>"
