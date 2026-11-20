@@ -183,7 +183,7 @@ next_phase: superpowers:writing-plans
   - **폴더 경계**(사용자 결정 — 리뷰 4라운드 「quality-gates 와 shared 까지」). `plugins/spec-distill/` · `plugins/quality-gates/` · `shared/` 아래의 추적 파일이다. 위 종류 목록에 이름이 없는 파일도 이 폴더 아래면 든다(예: 끄는 변수 표의 「인터뷰와 brief 리뷰의 웹 조사」 줄). 빼는 것은 아래 「그대로 두는 것」 뿐이다. 조사가 찾은 spec-distill 밖의 자리 — quality-gates 의 `scripts/other_teams.py`(안내 글) · `agents/intent-critic.md` · `README.md`, `shared/docreview/` 의 `agents/doc-critic.md` · `scripts/docreview_state.py`(주석). 전수 목록은 계획의 첫 과제가 낸다.
   - **한글.** 단계를 가리키는 「인터뷰」 는 그 단계의 이름으로, 「인터뷰 폴더」 는 「의도 폴더」 로 쓴다.
   - **두 `intent` 자리**(사용자 결정 — 리뷰 4라운드 「고친다 — 글자는 두고 관계를 적는다」). `docs/superpowers/intent/`(설정 키 `intent_dir` — 글에서 「의도 폴더」)는 로드맵이 생기기 전부터 앞단이 쓰는 기록(seed · framing 기록 · 결과물 · audit · 상태 파일)의 집이다. 로드맵 폴더 아래 `intent/`(`team_layout.py` 의 `INTENT_DIR` — 글에서 「로드맵의 원자료 폴더」)는 그 로드맵의 원자료 집이다. 이 설계는 앞의 것만 이름 붙이고, 살아 있는 글에서 「의도 폴더」 는 앞의 것만 가리킨다. 묶음의 공통 목표 「앞단이 처음부터 의도 폴더에 써서 사본이 없다」 는 뒤의 것 이야기이고 이 설계로 이뤄지지 않는다 — 옆 로드맵 몫이다(§미룸). 옆 로드맵이 결과물 · audit 를 로드맵의 `intent/` 에 바로 쓰게 되면 `intent_dir` 가 가리키는 자리는 그쪽 설계가 다시 정한다.
-  - **영어.** 문장 속의 `interview brief` 는 `context brief` 로, 커밋 제목과 판결 글자 · 펜스 표지의 `interview` 는 위 표대로 그 글자를 내는 단계의 앞 낱말로 바꾼다. 내는 쪽(펜스 · 스크립트)과 읽는 쪽(skill 글 · 테스트)을 같은 판에서 함께 바꾸고, 옛 판결 글자를 읽는 호환은 두지 않는다.
+  - **영어.** 문장 속의 `interview brief` 는 `context brief` 로, 커밋 제목과 판결 글자 · 펜스 표지의 `interview` 는 위 표대로 그 글자를 내는 단계의 앞 낱말로 바꾼다. 영어 문장 속에 홀로 쓰인 `interview` 도 단계를 가리키면 그 단계의 이름(`context-build` · `roadmap-draft`)으로 쓴다 — 스크립트의 변수 · 함수 · 인자 이름은 그대로다(사용자 결정 — 계획 1 검토 「단계를 가리키면 바꾼다」). 내는 쪽(펜스 · 스크립트)과 읽는 쪽(skill 글 · 테스트)을 같은 판에서 함께 바꾸고, 옛 판결 글자를 읽는 호환은 두지 않는다.
   - **그대로 두는 것.** `seed` · `brief` 낱말, 옛 이름으로 쓰인 기록을 가리키는 말(「옛 인터뷰 기록」 · 「옛 인터뷰 폴더」), 옛 설정 키를 알리는 안내 속의 `interview_dir`, 변경 기록과 기록 폴더, 옛 글자 대응표 모듈과 그 테스트.
   - **어느 계획.** spec-distill 과 `shared/` 의 skill 글 · 펜스 안 · 템플릿 · README · reference · agent 정의 · 리뷰 기준은 호출 이름을 바꾸는 계획 1 이, 스크립트가 내는 안내 · 상태줄 칸 이름 · 스크립트가 내는 판결 글자(`interview-state:` 등)와 quality-gates 의 글은 계획 2 가 고친다(quality-gates 의 판을 올리는 계획이다). `shared/` 파일을 바꾸면 그 파일을 싣는 플러그인의 판을 레포 규칙대로 올린다 — 어느 플러그인이 싣는지는 계획의 첫 과제가 확인한다. 전수 목록은 계획의 첫 과제가 낸다.
 - **호출 이름.** skill 폴더를 옮기고(`skills/request-framing` → `skills/intent-sync`, `skills/pm-interview` → `skills/context-build`) `skills/roadmap-draft` 를 새로 둔다. 진입 skill 은 열이 된다. 호출 표면 검사의 등록 목록 둘(본체와 시험)을 고치고, 옛 이름 둘을 옛 이름 금지 목록에 더한다 — 살아 있는 표면에 옛 호출 이름이 다시 들어오면 검사가 실패한다(변경 기록과 기록 폴더는 지금처럼 제외). 진입 skill 수를 묻는 락 · 값 표 · 질문 자리 목록 · 의존 표를 같은 커밋에서 맞춘다. 옛 이름 금지 검사는 철학 문서도 훑으므로, 철학 문서의 코드 앵커 한 줄(skill 경로)은 계획 1 이 옆 로드맵 R2 에 알리고 고친다 — 철학 문서의 나머지 훑기는 계획 3 이다(지휘자 판단 — 설계문서 점검의 물음).
@@ -374,7 +374,7 @@ next_phase: superpowers:writing-plans
 - **AC36** 리뷰어 프로필이나 agent 정의를 고치는 계획(1 · 2 · 4)마다 그 편집이 한 커밋에 묶여 있고 규칙을 지우거나 느슨하게 하지 않는다 — 그 계획의 PR 본문이 보안 리뷰 대상임을 밝힌다.
 - **AC37** 가른 뒤 각 단계가 읽는 글의 줄 수가 가르기 전에 읽던 양보다 늘지 않는다. 앞뒤를 같은 묶음으로 잰다 — 가르기 전은 「request-framing 본문」 과 「인터뷰 본문 + 끝맺음 절차」(인터뷰의 다른 reference 는 앞뒤 모두 세지 않는다), 가른 뒤는 「의도 싱크 본문」 과, 컨텍스트 쌓기 · 로드맵 잡기 저마다의 「본문 + 끝맺음 절차에서 온 글이 든 파일」. 기준 줄 수는 계획 1 의 첫 과제가 그때의 기본 브랜치에서 재고, 계획 1 · 3 · 4 의 끝에서 견준다.
 - **AC39** `context-build` 는 「나눈다」 를 고른 결과물의 위험 줄 번호(빠짐 · 겹침)를 커밋 전에 스크립트로 재고, 걸리면 그 자리에서 고친 뒤 커밋한다(계획 1).
-- **AC40** 설계 2 의 「글 속의 낱말」 범위 — `plugins/spec-distill/` · `plugins/quality-gates/` · `shared/` 아래의 skill 글 · 템플릿 · README · 공용 reference · agent 정의 · 리뷰 기준 · 스크립트가 내는 안내와 그 폴더 아래의 그 밖의 추적 파일 — 에서 단계를 가리키는 「인터뷰」 와 「인터뷰 폴더」, 영어 `interview brief`, 커밋 제목과 판결 글자 · 펜스 표지의 `interview` 가 설계 2 의 표대로 새 글자다. 그대로 두는 것(설계 2 의 목록 — `seed` · `brief` · 옛 기록을 가리키는 말 · 옛 설정 키를 알리는 안내 · 변경 기록 · 기록 폴더 · 대응표 모듈과 그 테스트)과 `CLAUDE.md` 는 제외한다. spec-distill 과 `shared/` 의 skill 글 · 펜스 · 템플릿 · README · reference · agent 정의 · 리뷰 기준은 계획 1 의 끝에서, 스크립트가 내는 안내 · 판결 글자와 quality-gates 의 글은 계획 2 의 끝에서 부재 락과 양의 짝으로 잰다. 살아 있는 글의 「의도 폴더」 는 `intent_dir` 의 폴더만 가리킨다.
+- **AC40** 설계 2 의 「글 속의 낱말」 범위 — `plugins/spec-distill/` · `plugins/quality-gates/` · `shared/` 아래의 skill 글 · 템플릿 · README · 공용 reference · agent 정의 · 리뷰 기준 · 스크립트가 내는 안내와 그 폴더 아래의 그 밖의 추적 파일 — 에서 단계를 가리키는 「인터뷰」 와 「인터뷰 폴더」, 영어 `interview brief`, 커밋 제목과 판결 글자 · 펜스 표지의 `interview` 가 설계 2 의 표대로 새 글자다. 영어 문장 속에 홀로 쓰인 `interview` 도 단계를 가리키면 그 단계의 이름이다(스크립트의 식별자는 제외). 그대로 두는 것(설계 2 의 목록 — `seed` · `brief` · 옛 기록을 가리키는 말 · 옛 설정 키를 알리는 안내 · 변경 기록 · 기록 폴더 · 대응표 모듈과 그 테스트)과 `CLAUDE.md` 는 제외한다. spec-distill 과 `shared/` 의 skill 글 · 펜스 · 템플릿 · README · reference · agent 정의 · 리뷰 기준은 계획 1 의 끝에서, 스크립트가 내는 안내 · 판결 글자와 quality-gates 의 글은 계획 2 의 끝에서 부재 락과 양의 짝으로 잰다. 살아 있는 글의 「의도 폴더」 는 `intent_dir` 의 폴더만 가리킨다.
 
 ## Files to Modify
 
@@ -563,6 +563,7 @@ next_phase: superpowers:writing-plans
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-front-stage-restructure-desig-36e3140828528623 r2: advice_new=5 · advice_repeat=7 · mc_preexisting_new=1
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-front-stage-restructure-desig-36e3140828528623 r3: advice_new=3 · advice_repeat=7 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-front-stage-restructure-desig-36e3140828528623 r4: advice_new=1 · advice_repeat=6 · mc_preexisting_new=0
+- 2026-11-20 · 결정 · 물음 「영어 문장 속에 홀로 쓰인 낱말 interview 를 어떻게 할까요?」(계획 1 검토 — 지휘자가 만든 질문. 「단계를 가리키면 바꾼다」 — 지휘자 권장 · 「그대로 둔다」) — 「단계를 가리키면 바꾼다 (권장)」
 
 ## 지휘 기록
 
@@ -596,3 +597,6 @@ next_phase: superpowers:writing-plans
 위 표는 리뷰 엔진이 네 라운드의 참고 지적을 그때의 글자대로 적은 것이다. 지휘자가 본문과 견줬고(2026-11-20) 열넷 모두 본문에 이미 반영돼 있다 — 계획은 이 표의 「고치면」 을 다시 하지 않고 본문을 따른다. 본문과 이 표가 다르면 본문이 맞다.
 - spec 리뷰 · 2026-11-20 · 네 라운드를 돌았다(재리뷰 둘과 사용자가 연 추가 라운드 하나). 지적은 17 · 16 · 10 · 8 로 줄었고 막는 지적은 사용자 답으로 닫혔다. 4라운드는 codex 가 사용 한도로 돌지 못했다. 폴더 이름 건(D4.15)은 고쳤지만 다음 라운드가 없어 엔진이 확인하지 못한 채 열린 지적 1개로 남았고, 사용자가 그것을 두고 진행하기로 했다. 참고 14건은 본문에 반영돼 있다
 - spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게 (권장)」
+- 옆 로드맵 알림 · 2026-11-20 · 설계 승인 뒤 옆 지휘 세션 하나(devbrew-e6)에 새 이름 · 넘긴 일 · 겹치는 파일을 글로 보냈고 답을 받았다(정보 — 승인이 아니다). 그쪽 기본 브랜치가 7177a5bb(spec-distill 8.26.0)로 옮겨 갔고, 그쪽 PR 둘(목표 판 8.27.0 · 8.28.0)이 열릴 예정이며, 넘긴 일은 아직 그쪽 에픽 칸에 실리지 않았다. 다른 세션 둘은 어느 로드맵을 맡는지 몰라 보내지 않았다
+- 머지 순서 · 2026-11-20 · 옆 로드맵의 PR 둘을 먼저 머지하고 이 에픽 첫 계획의 구현은 그 뒤의 기본 브랜치에서 시작하기로 사용자가 정했다(「옆 로드맵 PR 둘 먼저 (권장)」). 로드맵의 F5 칸 경로 예약을 맞추는 PR 309 를 따로 열었다
+- 계획 검토 · 2026-11-20 · 계획 1(과제 14)을 지휘자가 읽었다. 수용 기준이나 의도를 바꾸는 결정은 없었고, 영어 문장 속 맨 낱말을 그대로 두는 것 하나를 사용자에게 물어 뒤집었다(결정 기록). 실행 방식은 사용자가 Subagent-driven 을 골랐다
