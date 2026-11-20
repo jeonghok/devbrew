@@ -127,5 +127,28 @@ class ReviewProfile(unittest.TestCase):   # R2 AC18 · K19
             self.assertIn(word, scope, word)
 
 
+NEW_P8 = ("정석 흐름(brainstorming → 계획 → 구현)의 걸음 안은 모델이 판단한다. 사람이 정하는 자리(설계 승인 · 계획 확인)를 건너뛰지 못하게 "
+          "하는 것은 정확성 게이트라 스크립트가 지키고, 사람이 승인하면 건너뛰거나 바꾼다. 게이트가 재는 것은 모델이 적은 줄이 아니라 사람이 한 것이다.")
+OLD_P8 = "정석 흐름(brainstorming → 계획 → 구현)의 의도는 지키되 순서를 강제하는 결정론은 두지 않는다."
+NEW_CLAUDE = "결정론은 보안 · 정확성 게이트에만 — 사람이 정하는 자리를 지키는 관문이 그 게이트다(철학 P8)."
+OLD_CLAUDE = "결정론은 보안 · 정확성 게이트에만(철학 P8)."
+
+
+class Philosophy(unittest.TestCase):   # R2 AC19 — §7 의 문장 그대로
+    def test_p8_flow_line(self):
+        text = (REPO / "docs/philosophy/devbrew-harness-philosophy.md").read_text(encoding="utf-8")
+        flow = [l for l in text.splitlines() if l.startswith("- (흐름) ")]
+        self.assertEqual(len(flow), 1)
+        self.assertIn(NEW_P8, flow[0])
+        self.assertNotIn(OLD_P8, text)
+        self.assertNotIn("순서를 강제하는 결정론", text)   # 뜻으로 — 옛 문장의 가운데 말
+
+    def test_claude_md_bullet(self):
+        text = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
+        line = next(l for l in text.splitlines() if l.startswith("- **기본값과 판단.**"))
+        self.assertIn(NEW_CLAUDE, line)
+        self.assertNotIn(OLD_CLAUDE, text)
+
+
 if __name__ == "__main__":
     unittest.main()
