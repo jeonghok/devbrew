@@ -9,6 +9,7 @@
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
 가져오는 모듈은 `conductor_state` · `repo_defaults` · `state_path` · `team_layout` · `branch_tip` · `roadmap_model` 뿐이다.
+규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset`)은 `main` 안에서 `leader_seat` 를 가져온다.
 """
 from __future__ import annotations
 
@@ -994,11 +995,25 @@ def main(argv=None) -> int:
     de.add_argument("--roadmap", required=True)
     de.add_argument("--session", required=True)
     de.add_argument("--confirmed", metavar="수를_센_끝")
+    for cmd, what in (("rules-add", "규칙 사본에 줄 하나를 더한다"), ("rules-drop", "규칙 사본에서 줄 하나를 뺀다")):
+        ru = sub.add_parser(cmd, help=what + " — 사본이 없으면 기본 브랜치의 규칙 글에서 만든다")
+        ru.add_argument("--roadmap", required=True)
+        ru.add_argument("--session", required=True)
+        ru.add_argument("--line", required=True)
+    rr = sub.add_parser("rules-reset", help="규칙 사본을 지운다 — 규칙은 기본 브랜치의 글로 돌아간다")
+    rr.add_argument("--roadmap", required=True)
+    rr.add_argument("--session", required=True)
     args = ap.parse_args(argv)
     try:
         if args.cmd == "delete":
             _tip, notes = delete(args.root, args.roadmap, args.session, args.confirmed)
             res = Result(None, False, None, notes)
+        elif args.cmd in ("rules-add", "rules-drop", "rules-reset"):
+            import leader_seat as LS   # 함수 안에서 가져온다 — 상태 계산이 가져오는 이 모듈이 리더 자리를 끌어오지 않게
+            res = LS.rules_edit(args.root, args.roadmap, args.session,
+                                add=args.line if args.cmd == "rules-add" else None,
+                                drop=args.line if args.cmd == "rules-drop" else None,
+                                reset=args.cmd == "rules-reset")
         else:
             res = ensure(args.root, args.roadmap, args.session)
     except BranchError as exc:

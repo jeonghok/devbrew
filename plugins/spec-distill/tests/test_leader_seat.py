@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, OTHER, ROADMAPS, SCRIPTS, SID, StateRepo, rm, roadmap_text  # noqa: E402
 import conductor_branch as CB  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import leader_seat as LS  # noqa: E402
 import roadmap_status as RS  # noqa: E402
 import team_layout as TL  # noqa: E402
 import team_status as TS  # noqa: E402
@@ -147,6 +148,140 @@ class Foreign(TeamRepo):
     def test_columns_match_the_machine_state(self):   # M30 — 붉어지는 변이: 한쪽 글자를 바꾼다
         self.assertEqual((TS.TRUST_WHY, TS.TRUST_COLUMNS), (cs.TRUST_WHY, cs.COLUMNS[cs.TRUST]))
         self.assertEqual(TS.pending_paths(self.team), [self.team.path(CB.PENDING_FILE)])
+
+
+NEW = "- [둘] 새 줄 · 조건: 역할=worker · 출처: a · 확인: b"
+
+
+class RulesEdit(TeamRepo):   # R3 AC17 · AC21
+    def copy(self):
+        return CB.read(str(self.w), self.tip(), self.team.rules)
+
+    def base_line(self):
+        return CB.read(str(self.w), self.tip(), self.team.path(LS.RULES_BASE_FILE))
+
+    def test_first_edit_makes_the_copy_from_the_default_branch_and_records_the_base(self):
+        main = self.g("rev-parse", "origin/trunk")
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual(self.copy(), TEAM_RULE + "\n" + NEW + "\n")
+        self.assertEqual(self.base_line(), LS.BASE_HEAD + main + "\n")
+
+    def test_drop_then_reset(self):
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, drop=TEAM_RULE)
+        self.assertEqual(self.copy(), NEW + "\n")
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNone(self.copy())
+        self.assertIsNone(self.base_line())
+
+    def test_refuses_bad_or_pointless_lines(self):   # 2 — 아무것도 쓰지 않는다
+        before = self.tip()
+        for kw in ({"add": "- 태그 없는 줄"}, {"add": TEAM_RULE}, {"drop": NEW}):
+            with self.assertRaises(CB.BranchError) as cm:
+                LS.rules_edit(str(self.w), rm(ALPHA), SID, **kw)
+            self.assertEqual(cm.exception.rc, 2, kw)
+        self.assertEqual(self.tip(), before)
+
+    def test_command_line_keeps_the_codes(self):   # B2 — 명령줄의 종료 코드와 마지막 줄
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", "- 태그 없는 줄")
+        self.assertEqual(rc, 2, out)
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", OTHER, "--line", NEW)
+        self.assertEqual(rc, 5, out)
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual(rc, 0, out)
+
+    def test_refuses_a_line_that_would_split(self):   # 2 — 줄 하나는 한 줄이다(줄바꿈 · 제어 글자를 받지 않는다)
+        before = self.tip()
+        for line in (NEW + "\n" + TEAM_RULE, NEW + "\r", NEW + " x"):
+            with self.assertRaises(CB.BranchError) as cm:
+                LS.rules_edit(str(self.w), rm(ALPHA), SID, add=line)
+            self.assertEqual(cm.exception.rc, 2, repr(line))
+        self.assertEqual(self.tip(), before)
+
+    def test_reset_without_a_copy_writes_nothing(self):
+        before = self.tip()
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertEqual((res.commit, res.notes[-1:]), (None, (LS.NO_COPY,)))
+        self.assertEqual(self.tip(), before)
+
+    def test_command_line_drop_and_reset(self):   # B2 — 하위 명령마다 종료 코드와 마지막 줄
+        rc, out = self.ls("rules-drop", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual(rc, 2, out)
+        rc, out = self.ls("rules-reset", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (0, ["[spec-distill] " + LS.NO_COPY]), out)
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual(rc, 0, out)
+        rc, out = self.ls("rules-drop", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual((rc, self.copy()), (0, TEAM_RULE + "\n"), out)
+        rc, out = self.ls("rules-reset", "--roadmap", rm(ALPHA), "--session", OTHER)
+        self.assertEqual(rc, 5, out)
+        rc, out = self.ls("rules-reset", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual((rc, self.copy()), (0, None), out)
+
+
+class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을 끝에서 재고, 쓰기는 받아 온 끝 위에서 한다
+    def copy(self):
+        return CB.read(str(self.w), self.tip(), self.team.rules)
+
+    def local(self):
+        return self.g("rev-parse", "refs/heads/conductor/" + ALPHA)
+
+    def test_foreign_rules_edit_refuses_add_and_drop(self):   # 붉어지는 변이: 검사가 로컬 끝을 읽는다
+        self.foreign_edit()
+        before, text = self.tip(), self.copy()
+        self.assertNotEqual(self.local(), before)   # 양성 대조 — 남의 끝은 받아 오기만 했다(로컬 ref 는 뒤다)
+        for kw in ({"add": NEW}, {"drop": TEAM_RULE}):
+            with self.assertRaises(CB.BranchError) as cm:
+                LS.rules_edit(str(self.w), rm(ALPHA), SID, **kw)
+            self.assertEqual((cm.exception.rc, str(cm.exception)), (1, LS.FOREIGN % 1 + LS.REFUSE_TAIL), kw)
+        self.assertEqual((self.tip(), self.copy()), (before, text))
+        rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (1, ["[spec-distill] " + LS.FOREIGN % 1 + LS.REFUSE_TAIL]), out)
+
+    def test_unmeasured_refuses_add(self):   # I11 — 기계 상태를 읽지 못하면 재지 못했다로 닫는다
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        keep = path.with_name("kept.md")
+        os.replace(str(path), str(keep))
+        os.symlink(str(keep), str(path))   # 링크인 기계 상태는 읽지 않는다
+        before = self.tip()
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual((cm.exception.rc, str(cm.exception)), (1, LS.FOREIGN_UNMEASURED + LS.REFUSE_TAIL))
+        self.assertEqual(self.tip(), before)
+
+    def test_add_builds_on_the_fetched_tip(self):   # F3 — 받아 온 끝(남이 STATUS 만 고침) 위에서 쓴다 · 붉어지는 변이: 앞당기기를 뺀다
+        self.foreign_edit("o1", {self.team.status: "x\n"})
+        seen = self.tip()
+        self.assertNotEqual(self.local(), seen)   # 양성 대조 — 로컬 ref 는 뒤다
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual((res.pushed, res.onto), (True, None))   # 다시 만들지 않았다
+        self.assertEqual(self.g("rev-parse", res.commit + "^"), seen)
+        self.assertEqual(res.made, (res.commit,))
+
+    def test_reset_after_fetch_drops_the_foreign_copy_and_confirms(self):   # M36 (가) · F3 — 붉어지는 변이: 앞당기기를 뺀다
+        self.foreign_edit()   # 남이 사본을 만들었다 — 받아 오기만 했다
+        self.assertIsNotNone(self.copy())
+        self.assertIsNone(CB.read(str(self.w), self.local(), self.team.rules))   # 양성 대조 — 로컬 끝에는 사본이 없다
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNotNone(res.commit)
+        self.assertEqual((self.tip(), self.copy()), (res.commit, None))
+        self.assertEqual(res.notes[-1], LS.RESET_DONE)
+        self.assertEqual(TS.trust_of(self.rows()), (res.commit, frozenset()))
+        self.assertEqual([r["까닭"] for r in self.rows()], [cs.TRUST_WHY[0]])   # 한 줄로 둔다
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows()), (None, []))
+
+    def test_reset_keeps_the_confirmed_end_while_pending_has_foreign_edits(self):   # 붉어지는 변이: 대기 줄 쪽을 보지 않는다
+        self.foreign_edit("o1")
+        self.foreign_edit("o2", {self.team.path(CB.PENDING_FILE): "- 남의 대기 줄\n"})
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNotNone(res.commit)
+        self.assertIsNone(self.copy())
+        self.assertEqual(res.notes[-1], LS.RESET_PENDING_LEFT)
+        self.assertIsNone(TS.trust_of(self.rows())[0])
+        self.assertNotIn(cs.TRUST_WHY[0], [r["까닭"] for r in self.rows()])
+
+    def test_glyphs_are_the_read_side_constants(self):   # F9 — 다시 치지 않는다
+        self.assertEqual((LS.FOREIGN, LS.FOREIGN_UNMEASURED, LS.RULES_BASE_FILE), (TS.FOREIGN, TS.FOREIGN_UNMEASURED, TS.RULES_BASE_FILE))
 
 
 if __name__ == "__main__":

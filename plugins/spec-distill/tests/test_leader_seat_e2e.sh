@@ -15,7 +15,7 @@ new_repo "$T0/a" && ok "팀 레포를 세우고 지휘 표지를 쥐었다(${TM}
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done   # 상태 브랜치 쓰기는 스크립트가 커밋한다
 printf '.claude/\n' >> "$W/.git/info/exclude"
 cb() { (cd "$W" && python3 "$S/conductor_branch.py" --root "$W" "$@") > "$T/cb.txt" 2>&1; echo $?; }
-copy() {  # copy <레포> <세션> <규칙 사본 글> — 상태 브랜치에 규칙 사본을 쓰고 그 커밋을 낸다(과제 6 이 cb rules-add 로 바꾼다)
+copy() {  # copy <레포> <세션> <규칙 사본 글> — 상태 브랜치에 규칙 사본 글을 통째로 쓰고 그 커밋을 낸다(걸음 6 · 10 — 10 은 다른 클론의 남의 고침이라 rules-add 가 거절한다)
   python3 - "$S" "$1" "$RM" "$2" "$RULES" "$3" <<'PY'
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -58,8 +58,10 @@ assert_eq "$(sync_cmd | awk '{print $NF}')" "$(g rev-parse feature/tm-e1)" "2 �
 
 note "# 3 — 상태 브랜치에 규칙 사본"
 NEW1="- [사본] 사본에서 더한 첫 줄 · 조건: 역할=worker · 출처: a · 확인: b"
-TIP1="$(copy "$W" "$SID" "$(printf '%s\n%s\n' "$BASE_RULES" "$NEW1")")"
-assert_eq "$([ -n "$TIP1" ] && echo yes):$TIP1" "yes:$(g rev-parse "$STATE")" "3 사본 커밋이 상태 브랜치 끝이다"
+assert_eq "$(cb rules-add --roadmap "$RM" --session "$SID" --line "$NEW1")" "0" "3 rules-add rc 0 — $(cat "$T/cb.txt")"
+TIP1="$(g rev-parse "$STATE")"
+assert_eq "$(g show "$TIP1:$RULES")" "$(printf '%s\n%s' "$BASE_RULES" "$NEW1")" "3 사본은 기본 브랜치의 규칙 글 뒤에 새 줄"
+assert_eq "$(g show "$TIP1:$TM/rules-base.md")" "기본 브랜치 커밋: ${B}" "3 사본이 출발한 기본 브랜치 커밋을 적었다"
 
 note "# 4 — 다시 묶음: 규칙은 사본의 끝 · 맞추는 명령 끝에 --rules-at <상태 끝>"
 assert_eq "$(bundle --job E1 --stage implement --plan 1)" "0" "4 묶음 rc 0 — $(cat "$T/b.err")"
