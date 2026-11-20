@@ -40,6 +40,8 @@ next_phase: superpowers:writing-plans
 - [미룸](#미룸)
 - [지휘 기록](#지휘-기록)
 - [Metadata](#metadata)
+- [판정](#판정)
+- [구현 대조](#구현-대조--docssuperpowersplans2026-11-20-conductor-qg-entrymd)
 
 ## Context / Why
 
@@ -603,6 +605,11 @@ R1 · R2 · R5 설계문서의 `## 미룸` 에서 받는 곳이 R3 인 24행. �
 - 2026-11-20 · 재분해 — 사용자 「이대로 다시 나눈다 (권장)」. 로드맵 수정 PR #308(브랜치 `feature/roadmap-r3-path-reservation`)이 R3 의 경로 예약에 qg 파일 둘을 더하고 범위에 두 구절을 더한다. 범위 확인 스크립트는 예약에 넣지 않았다 — 새 파일이라 다른 에픽과 겹칠 수 없고 이름은 계획이 정한다(Constraints 의 「그만큼 넓힌다」 와 다른 점). 계획 담당자는 그 PR 의 머지를 기다리지 않고 보냈다 — 더한 두 파일을 고치는 열린 에픽이 없다.
 - 2026-11-20 · 계획 검토 — 계획 담당자 하나(모델 opus — 수용 기준 스물넷을 두 플러그인에 걸친 과제로 나누는 설계 판단이 필요했다)가 계획(`docs/superpowers/plans/2026-11-20-conductor-qg-entry.md`, 과제 아홉)을 쓰고 설계에 없던 결정 다섯(P1–P5 — 리뷰 3라운드가 계획으로 넘긴 지적 가운데 수용 기준이나 보이는 동작을 바꾸는 것)을 돌려보냈다. 지휘자가 계획을 읽고 하나(P6 — 설계의 고칠 파일 목록에 없던 레포 공유 처분 검사를 넓힌다)를 더 갈랐다 — 새 절차 파일이 그 검사가 읽는 폴더 안에 있어 처분 줄을 달면 지금 검사가 실패한다. 사용자가 여섯 다 권한 쪽을 골랐다(`## 결정 기록` 끝의 「계획 검토」 줄). 지휘자가 그 답대로 AC10 · AC13 · AC21 의 문장을 고쳤고 본문 §1 · §3 · §4 · §5 는 고치지 않았다 — 결정 줄이 앞선다고 적었다. 리뷰가 닫힌 뒤의 수정이라 리뷰어가 보지 않았다. 계획이 스스로 정한 것 가운데 묻지 않은 것 — 범위 확인 스크립트의 이름과 인자 · 기록 브랜치 전용 worktree · 이름으로 청한 리뷰와 남은 질문을 위한 들어가는 문장 둘 · 이미 보낸 리뷰를 보관 폴더 이름으로 가리기(수용 기준을 바꾸지 않는다). 실행 방식은 계획 담당자가 권한 Subagent-driven 이다(미리 받은 답 — 사용자에게 글로 알렸다).
 - spec 승인 · 2026-11-20 · 「1, 이거는 왜 보여주는거지? 로드맵속 위치 이거 어디에서 보여주라고 적혀있는거야 — 첫 선택지 「승인 — 계획 담당자에게 (권장)」 으로 읽었다」
+- 2026-11-21 구현 중간 보고 — 구현 담당자(모델 opus, Subagent-driven)가 계획 순서(측정 뒤 구현)를 바꿔 측정 결과에 기대지 않는 과제 3–8 을 먼저 했다. 지휘자의 PR #308 스위트 대조가 스위트 잠금을 22:34–00:52 동안 쥐고 있었기 때문이다. 측정이 기대와 다르면 과제 3 과 5 를 다시 손본다. 통합 리뷰에 따로 물을 것 — 있던 검사 둘(test_skill_reference_pointers.sh, test_conducting_reference.sh)에 <SD>/ 경로 예외를 낸 수정, 이름으로 청한 리뷰는 이미 보낸 것이 있어도 보낸다는 도출 문장, AC13 의 「다시 묻지 않는다」 를 「그 질문을 다시 띄우지 않는다」 로 쓴 것. 머지 전에 정할 것 — CHANGELOG 날짜와 판 번호, 과제 8 커밋의 공동 저자 줄(Haiku). 에픽이 끝나면 relay 폴더의 relay-1.md 를 옮김 대조에 보낸다. 사용자에게 전한 것 — 옆 로드맵 E2 가 지휘 절차를 나눌 때 들어가는 문장과 qg-review.md 를 함께 옮긴다
+- 2026-11-21 로드맵 수정 PR #308 — 스위트 대조 새 실패 없음(기본 브랜치 7177a5bb 기준). 대조 뒤 기본 브랜치가 문서 12개로만 움직여(2cd2d744) 다시 돌리지 않았다. 통합 리뷰는 하지 않았다(로드맵 문서 문구만). 머지 명령을 냈고 01:10 에 아직 열려 있었다
+- 2026-11-21 01:27 로그인이 풀려 구현 담당자와 측정 나 담당자가 끊겼다 — 사용자가 「재개하자」 라고 한 뒤 01:31 에 구현 담당자(a00b004a8cbdd3009)를 SendMessage 로 다시 불렀다. 브랜치 끝 6fe97e02(밀지 않음, 원격 d52ef120). 측정 나 는 결과 파일 없이 끊겨 다시 돌린다
+- 2026-11-21 바로 위 줄의 다시 부른 시각 정정 — 01:31 이 아니라 01:28(담당자 기록의 수신 시각). 01:29 에 구현 담당자가 측정 나 를 새 담당자(모델 sonnet, 격리 worktree)로 다시 띄웠다. 끊긴 측정 담당자의 worktree(agent-a0b3d14a6329df7d1)는 남아 있어 에픽 끝 정리 대상이다
+- 2026-11-21 03:05 구현 돌아옴 — 브랜치 끝 21c46fd8. 수용 기준 24개 모두 구현됨, 전체 스위트에서 이 브랜치에만 있는 실패 0개(구현 담당자 보고). 측정 둘 모두 「된다」, 실제 codex 호출 2회(한 번은 용량 부족으로 돌지 못함, 끊긴 측정 첫 시도의 호출 여부는 모름). 하위 agent 31. 판정은 18개 — 판정 모으기 스크립트는 29개로 셌는데 같은 판정이 원장(영어)과 보고(한국어)로 두 번 들어가고 원장의 셋이 줄 꼴(Ruling 뒤 괄호) 때문에 빠져서, 지휘자가 원장 사본의 판정 줄 전부로 판정 파일을 다시 만들었다(괄호 셋은 Ruling: 뒤로 옮김). 구현 대조 경고 3개 — 받는 곳 없는 미룸 셋(최종 리뷰 M6 PR 묶기, 범위 확인 스크립트 비교, 구현 리뷰 잔손질)
 
 ## Metadata
 
@@ -663,3 +670,31 @@ R1 · R2 · R5 설계문서의 `## 미룸` 에서 받는 곳이 R3 인 24행. �
 - 질문 틀의 「잘못 골랐다」 설명이 두 갈래뿐이다 — spec 승인 뒤 · 머지 전 에픽을 이름으로 청한 리뷰의 실제 행선(재분해 신호로 보인다)과 다르다. 고치면: 셋째 갈래의 설명을 더하고 §5 의 행선 목록에도 그 갈래를 적는다.
 - spec 승인 앞에서 spec 리뷰로 넘어가는 조건이 질문이 돌아온 경우만 적혀 있다. 고치면: 「담당자가 돌아와 결과를 보인 뒤」 로 적고, 질문이 없거나 리뷰가 돌지 않았거나 결과를 가져오지 못한 경우도 그 사실을 보이고 기록한 뒤 간다고 나열한다.
 - 지휘자가 기록 브랜치에 커밋 · push 할 자리(어느 worktree)와 그 자리를 기계 상태 자원에 적는 법이 없다. 고치면: 계획이 정한다.
+
+## 판정
+
+### docs/superpowers/plans/2026-11-20-conductor-qg-entry.md
+
+- Ruling: `git switch --ignore-other-worktrees` refused by harness → used plain `git switch feature/conductor-qg-entry` (instruction's fallback) — branch tip was 126d4926 = origin — none.
+- Ruling: Task 1 merge used `origin/main` (= origin/HEAD symbolic, checked with rev-parse --abbrev-ref) because the harness classifier denied the compound command — same commit — none.
+- Ruling: Task 1 (merge + read-only greps) and Task 2 (measurement dispatch) are run by the controller directly, not via implementer+reviewer — no code to review; Task 2 is itself a dispatch of measurement agents per plan text — if wrong, a reviewer would have had nothing to review.
+- Ruling: suite lock held >1h by conductor merge_check (since 22:34) → start Task 4 (range script, independent of the qg measurement outcome) while waiting; Task 2 still runs before Tasks 3/5+ — Task 4 needs no suite and no qg — if measurement fails and design changes, Task 4 commit may need rework.
+- Ruling: lock still held (merge_check since 22:34) → also start Task 3 (qg range-mode follow) before measurement — its behavior is fixed by spec AC21 (user P1 「고치면」), not by the measurement; the measurement uses the installed qg — if measurement forces a design change, Task 3 may need rework.
+- Ruling: lock still held at 23:53 → write Task 5 now with the plan's measurement prompt as the 보내는 글 template; after Task 2 runs, apply its 「고칠 점」 to `### 보내는 글` as a small follow-up commit with a scoped review — waiting buys nothing for the other 95% of the section — cost if wrong: one extra small commit.
+- Ruling: accept the 「이름으로 청하면 이미 보냈어도 보낸다」 sentence — derived from spec §1 「사용자가 이름으로 청하면 그때 다시 시도한다」 (line 179); reviewer (opus) agrees; not new behavior — flag in pr-notes as 도출한 결정 — if wrong, one sentence to drop.
+- Ruling: (I-1, plan-mandated) fix — L(failed)'s 쌓인 기록 line must carry the 자리 글자 (`spec` · `merged-pr<번호>` · `end` · `asked`, same as record file name) so L(alreadysent) recognises a failed send after compaction (spec AC23 「지휘자가 스스로 다시 보내지 않는다」 binds over the plan's unspecified line shape) — cost: one clause + lock.
+- Ruling: (I-2, plan-mandated) fix — lock counts `/quality-gates:quality-pipeline` = 1 in the whole file (plan's `quality-pipeline range` count let other call forms pass; AC1 「한 꼴」 binds) — cost: one assertion.
+- Ruling: (plan defect, T7) keep the plan's literal (`<SD>` is conducting.md's defined plugin-folder placeholder, already used for every `<SD>/scripts/…`; a resolvable path is what the conductor needs). Widen narrowly: (1) test_skill_reference_pointers recognises `<SD>/…` as plugin-root form for files under plugins/spec-distill/ and verifies the target exists (stricter than today's reject); (2) test_conducting_reference's `references/*.md` ban exempts only `<SD>/`-prefixed paths, bare `references/x.md` still caught; (3) qg-review.md's two pointers go back to `<SD>/references/…` (coherent with its own 「conducting.md 의 정의를 쓴다」 line) so no root token → axis 3 clean without a Read line. — the spec sets none of these locks; cost if wrong: two test edits to revert and a different literal.
+- Task 8 committed a5271f5c (haiku; trailer says Haiku 5.5 instead of Opus line — Ruling: leave, no history rewrite — cosmetic). check_deps measure also refreshed 잰 날짜/claude-code 판 (pr-notes). Review (sonnet) running.
+- Escaped defect: plugins/spec-distill/tests/test_stale_terms.sh V8 bans '다시 묻지 않는다' in production; qg-review.md:249 (Task 6, spec AC13 wording) trips it. Ruling: rephrase to 「그 질문을 다시 띄우지 않는다」 (same behavior) + update Task 6 lock; do not edit the old authority-grammar lock — cost: wording differs from spec letter by one verb. → Task 6 fix round 2 (resumed).
+- Ruling: re-run measure B as a fresh agent (sonnet, new isolated worktree) rather than resume — the cut qg run's reviewers died mid-flight and qg forbids a second call into the same session; a fresh worktree gets its own qg session dir — cost if wrong: one extra qg run.
+- Ruling: run the final whole-branch review (opus) in parallel with measure B on 6fe97e02; measurement fixes (if any) join the single final fix wave — the 보내는 글 fix is small and local; waiting serially costs an hour — cost if wrong: the fix wave's scoped re-review covers it.
+- Ruling: single fix wave = I1 (order sentence + lock) + M1 + M2 + M3 + M4 + M5 + measurement fixes (Skill tool+args; report 「절차에서 벗어난 것」). M6 NOT done — merging two PRs changes user-visible step-7 flow beyond the spec → deferred to conductor/미룸 — cost if wrong: one more PR at roadmap end.
+- Ruling: I1's order sentence (step-7 cleanup waits for the roadmap-end qg agent to return, questions asked/recorded, record branch pushed and its PR opened) is not new behavior — it is the only order under which the spec's 「로드맵을 닫을 때 그 PR 이 로드맵을 닫는 PR」 and the record steps can run — cost if wrong: one sentence.
+- Ruling: AC20 judged 구현됨 from suite + base-clone comparison; test_epic_conductor_skill's wrapper failure inferred pre-existing (it only wraps test_invocation_surface, which fails on base) — cost if wrong: one wrapper failure misattributed.
+- Ruling: left those three 받는 곳 as stated (not an epic id / PR#) rather than assigning R4 without consent — the warning goes to the conductor/user as the plan says — cost if wrong: conductor fills a receiver.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-20-conductor-qg-entry.md
+
+- 구현 대조: 구현 대조: 경고 3개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 3개 · 받는 곳 검사 불가 0개 · 빠짐 0개
+- 보고: AC 24개 중 구현됨 24 · 미룸 0 · 빠짐 0
