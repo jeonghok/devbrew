@@ -168,6 +168,14 @@ assert_not_contains "$(err)" "구현 시도 3번" "22: 막힘 파일이 수를 �
 assert_contains "$(err)" "다시 시도 plan 1 시도 3" "22: 푸는 관문 이름은 시도 3"
 check 0 "23: 계획 단계에는 이 멈춤이 없다" --job E1 --stage plan --plan 1
 check 0 "23: 설계 단계에도 없다" --job E1 --stage design
+assert_eq "$(human "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 3" 2026-11-22)" "0" "23b: 준비 — 다시 시도 줄을 적었다"
+FORGED_INTENT="$W/$E1/INTENT.md"
+sed -E '/다시 시도 plan 1 시도 3/ s/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#1/00000000-0000-4000-8000-00000000dead#1/' "$FORGED_INTENT" > "$T/forged.md" && cp "$T/forged.md" "$FORGED_INTENT"
+assert_contains "$(grep '다시 시도 plan 1 시도 3' "$FORGED_INTENT")" "00000000-0000-4000-8000-00000000dead#1" "23b: 준비 — 근거의 항목을 지어낸 것으로 바꿨다(꼴은 그대로)"
+g add -- "$E1/INTENT.md" && g commit -qm "근거를 지어낸 다시 시도 줄" && push_br feature/tm-e1
+check 1 "23b: 꼴만 맞고 근거를 지어낸 다시 시도 줄은 멈춤을 풀지 못한다(AC13 — 실제 확인이 있어야 푼다)" "${D_IMPL[@]}"
+assert_contains "$(err)" "구현 시도 2번이 이어서 받아지지 않았다" "23b: 사유는 그대로 이어진 실패 둘"
+assert_contains "$(err)" "다시 시도 plan 1 시도 3" "23b: 푸는 관문은 여전히 시도 3"
 approved "걸음 건너뜀" E1 - "다시 시도 plan 1 시도 3" 2026-11-23 && push_br feature/tm-e1
 check 0 "24: 다시 시도 줄이 시도 3 을 푼다" "${D_IMPL[@]}"
 assert_eq "$(write_line)" "$E1/results/implement-plan-1-3.md" "24: 쓸 것은 시도 3"

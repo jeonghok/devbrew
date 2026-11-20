@@ -495,6 +495,10 @@ class Gates(SeededRepo):
         plain = self.approve(self.tip, H.KIND_SKIP, gate="다시 시도 구현 시도 3")
         self.assertTrue(H.retry_open(self.scope(self.tip, (plain,)), None, 3, True))
         self.assertTrue(self.miss([retry], "plan", 1)[0].startswith("`spec 승인` 줄이 없다"))   # 다시 시도 줄은 다른 관문을 열지 않는다
+        forged = retry.replace(H.parse(retry).entry, "00000000-0000-4000-8000-00000000dead")   # 꼴은 맞고 근거의 항목을 지어낸 줄
+        fsc = self.scope(self.tip, (forged,))
+        self.assertFalse(H.retry_open(fsc, 1, 3, True))              # 연속 실패 멈춤은 근거까지 대조한 줄로만 풀린다
+        self.assertTrue(H.retry_open(fsc, 1, 3, False))              # 양성 대조 — 꼴만 보면 같은 줄이 지난다
 
     def test_gate_off_looks_only_for_lines(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/nonexistent/claude"}):

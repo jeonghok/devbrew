@@ -123,6 +123,14 @@ class Body(unittest.TestCase):
         self.assertEqual(H.body_of("INTENT.md", intent + "\n- 결정 · 2026-11-18 · 「글」\n"), body)
         self.assertNotEqual(H.body_of("INTENT.md", intent.replace("목표 글", "다른 목표")), body)
 
+    def test_body_comparison_is_exact_except_the_blank_tail(self):   # J4
+        base = "# 계획\n\n본문 하나\n본문 둘"
+        for name in ("plan-1.md", "design.md", "INTENT.md"):
+            self.assertEqual(H.body_of(name, base + "\n\n\n"), H.body_of(name, base), name + " — 끝의 빈 줄만 떼어 낸다")
+            self.assertNotEqual(H.body_of(name, base.replace("본문 하나", "본문 하나 ")), H.body_of(name, base), name + " — 줄 안의 줄 끝 공백은 다른 본문이다")
+            self.assertNotEqual(H.body_of(name, "\n" + base), H.body_of(name, base), name + " — 앞 빈 줄은 다른 본문이다")
+            self.assertNotEqual(H.body_of(name, base + "\n  "), H.body_of(name, base), name + " — 공백만 든 끝 줄은 빈 줄이 아니다")
+
 
 if __name__ == "__main__":
     unittest.main()
