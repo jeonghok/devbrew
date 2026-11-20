@@ -43,7 +43,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R1
 - 브랜치: feature/conductor-stage-table, feature/conductor-walk-table
 - 묶음: R2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/references/walk-table.md, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, docs/philosophy/devbrew-harness-philosophy.md, CLAUDE.md, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/references/walk-table.md, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, docs/superpowers/roadmaps/worker/, plugins/spec-distill/scripts/control_plane.py
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: R1 형식 위에서 단계가 돈다
@@ -89,9 +89,9 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의도: 기계를 넘는 지휘자 소통 자리를 세운다
 - 범위: 한다: 지휘자 상태 브랜치(코드 없음 · main 에 머지 안 함), 편지함 한 글 한 파일, STATUS.md 계산 · 커밋, 지휘자끼리의 대화 계약(로드맵 사이), 브랜치 규칙 문서 예외 / 안 한다: 감시 · 표시
 - 의존: R1
-- 브랜치: feature/conductor-state-branch
+- 브랜치: feature/conductor-state-branch, feature/conductor-leader-seat
 - 묶음: R3.md
-- 경로 예약: plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, docs/git-workflow/branch-strategy.md, plugins/project-init/hooks/post-tool-use.py
+- 경로 예약: plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/scripts/state_path.py, docs/git-workflow/branch-strategy.md, plugins/project-init/hooks/post-tool-use.py, plugins/spec-distill/scripts/conductor_branch.py, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/scripts/conductor_mail.py, plugins/spec-distill/references/conductor-state-branch.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/workflow_superpowers.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/references/team-files.md, plugins/project-init/.claude-plugin/plugin.json, plugins/project-init/CHANGELOG.md
 - 크기: 중간
 - 병렬: R2 와 병렬 가능
 - 순서 이유: 감시 mod 가 이 편지함을 본다
@@ -185,6 +185,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「이대로 다시 나눈다 (권장)」
   - 「PR #302에 함께 (권장)」
+
+### 2026-11-19 · R3 설계 승인 뒤 브랜치와 경로 예약을 맞춘다 — R3 에 계획 2 의 브랜치를 더하고 승인된 설계가 고치는 파일 열일곱을 경로 예약에 더한다. R2 의 경로 예약에 상태 보기 캐시 목록 한 줄을 고치는 control_plane.py 를 더한다. 범위 · 의존 · 묶음은 그대로
+- 바뀜: 바뀐 에픽 R2 · R3 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
 
