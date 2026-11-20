@@ -321,6 +321,24 @@ class Show(CrossRepo):
         rc, out = cli(self.w, "show", "--roadmap", rm(ALPHA))               # 양성 대조 — 다 받는 설정에서는 알리지 않는다
         self.assertNotIn("상태 브랜치를 받아 오지 않는 설정이다", out)
 
+    def test_oldest_first_compares_instants_not_the_written_text(self):
+        """뒤집으면 붉다 — 글자로 견주면 시간대가 다른 두 줄의 순서가 뒤집힌다."""
+        utc = datetime.timezone.utc
+        CS.waiting_add(self.w, rm(BETA), SID, "B1", "머지", "턴 끝", now=datetime.datetime(2026, 11, 18, 20, 0, tzinfo=utc))   # 글자는 앞서지만 05:05 뒤 — 나중
+        CS.waiting_add(self.w, rm(ALPHA), SID, "A1", "머지", "턴 끝", now=datetime.datetime(2026, 11, 19, 2, 5, tzinfo=KST))   # 17:05 UTC — 먼저
+        out = CS.render_view(CS.cross_view(self.w, rm(ALPHA), now=T0), now=T0)
+        self.assertLess(out.index("- 이 로드맵 · A1 · 머지"), out.index("- %s · B1 · 머지" % BETA))
+
+    def test_render_cleans_the_text_of_others_even_if_the_reader_let_it_through(self):
+        """뒤집으면 붉다 — 렌더가 남의 글자를 거르지 않으면 제어 글자가 화면에 실린다. 읽는 쪽을 거치지 않은 자료로 렌더만 흔든다."""
+        letter = CM.Letter("x" + BETA, ALPHA, "2026-11-19-01.md", "예고", "src\x1b[2K", "", "2026-11-19 02:40 +0900", "글", "c" * 40,
+                           "docs/a\x1b/inbox/b.md")
+        view = CS.cross_view(self.w, rm(ALPHA), now=T0)
+        view.update(incoming=CM.Incoming([letter], 0, 0, 0, ()), counts=CM.Counts(0, 0, 0, 0, 0, 0))
+        out = CS.render_view(view, now=T0)
+        self.assertNotIn("\x1b", out)
+        self.assertIn("src\\x1b[2K", out)
+
     def test_unreadable_suite_lock_is_named_and_does_not_stop_the_view(self):   # 과제 11 리뷰에서 넘어옴
         real = suite_lock.state
 
