@@ -512,7 +512,7 @@ def cross_view(root, roadmap_rel: str, now=None) -> dict:
     main, shared = _main_commit(root), _shared_names(root)
     git = RS.Git(str(root))
     view = {"me": me, "computed": CB.stamp(now), "reserve": [], "changed": [], "versions": [], "version_unreadable": 0,
-            "moves": [], "suites": [], "unchecked_roadmaps": [], "unavailable": None, "status_text": None, "waiting": [], "quiet": [],
+            "moves": [], "suites": [], "unchecked_roadmaps": [], "unavailable": None, "status_text": None, "waiting": [], "quiet": [], "malformed_only": [],
             "no_branch": [], "status_unreadable": [], "waiting_malformed": 0, "incoming": None, "counts": None, "no_fetch": False}
     mine_open = open_branches(root, mine)
     open_by = {me: mine_open}
@@ -566,6 +566,9 @@ def fetch_covers(refspecs: list, ref: str) -> bool:
 
 
 def _fetch_skips_state_branches(root) -> bool:
+    rc, url, _e = CB.git(root, "config", "--get", "remote.origin.url")
+    if rc != 0 or not url.strip():
+        return False   # origin 이 없는 레포는 받아 올 곳이 없다 — 설정 탓이 아니다
     rc, out, _e = CB.git(root, "for-each-ref", "--format=%(refname)", CB.TRACKING_PREFIX + CB.STATE_BRANCH_PREFIX)
     if rc != 0 or out.strip():
         return False
@@ -592,8 +595,9 @@ def _waiting_rows(status: Status) -> tuple:
 def _add_state_view(root, roadmap_rel: str, me: str, table: list, view: dict) -> None:
     """상태 브랜치에서 읽는 칸들 — 내 STATUS · 모든 로드맵의 기다리는 질문 · 온 글과 수 · 받아 오는 설정. 쓰지도 받아 오지도 않는다."""
     team = CB.team_of(root, roadmap_rel)
-    tip = CB.seen_tip(root, me)[0] or CB.local_tip(root, me)
-    view["status_text"] = CB.read(root, tip, team.status) if tip else None
+    local = CB.local_tip(root, me)
+    tip = CB.seen_tip(root, me)[0] or local
+    view["status_text"] = CB.read(root, local, team.status) if local else None   # 내 현황은 내 로컬 끝에서 읽는다(J37)
     waiting = []
     try:
         waiting = [{"roadmap": me, "epic": r["에픽"], "kind": r["종류"], "since": r["언제부터"], "status_computed": None}
@@ -619,8 +623,8 @@ def _add_state_view(root, roadmap_rel: str, me: str, table: list, view: dict) ->
         rows, bad = _waiting_rows(status)
         view["waiting_malformed"] += bad
         waiting += [dict(r, roadmap=label, status_computed=status.computed) for r in rows]
-        if not rows and not bad:
-            view["quiet"].append((label, status.computed))
+        if not rows:
+            (view["malformed_only"] if bad else view["quiet"]).append((label, status.computed, bad) if bad else (label, status.computed))
     view["waiting"] = sorted(waiting, key=lambda w: (_asked_since({"언제부터": w["since"]}), w["roadmap"], w["epic"], w["kind"]))
     try:
         view["incoming"] = CM.incoming(root, me, tip)
@@ -684,6 +688,7 @@ def _state_lines(view: dict, now: datetime.datetime) -> list:
                                                 _when(w["since"], now), age))
     out += rows or ["- " + NONE_LINE]
     out += ["- %s · 기다리는 질문 없음   (STATUS %s 전 계산)" % (name, _age(at, now)) for name, at in view["quiet"]]
+    out += ["- %s · 읽지 못한 기다리는 질문 줄 %d   (STATUS %s 전 계산)" % (name, n, _age(at, now)) for name, at, n in view["malformed_only"]]
     out += ["- %s · %s" % (name, CB.NO_BRANCH) for name in view["no_branch"]]
     out += ["- %s · STATUS 를 읽지 못했다" % name for name in view["status_unreadable"]]
     if view["waiting_malformed"]:

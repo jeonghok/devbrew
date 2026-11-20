@@ -339,6 +339,83 @@ class Show(CrossRepo):
         self.assertNotIn("\x1b", out)
         self.assertIn("src\\x1b[2K", out)
 
+    def plant(self, lines):
+        """BETA 의 STATUS 「기다리는 질문」 절을 이 줄들로 바꿔 올린다."""
+        team = CB.team_of(self.w, rm(BETA))
+        CS.sync(self.w, rm(BETA), SID, now=T0)
+        good = CB.read(self.w, CB.local_tip(self.w, BETA), team.status)
+        forged = good.replace("## 기다리는 질문\n- 없음\n", "## 기다리는 질문\n" + "".join("- %s\n" % l for l in lines))
+        self.assertNotEqual(forged, good)
+        CB.write(self.w, rm(BETA), SID, lambda base: {team.status: forged}, "심기")
+
+    def test_roadmap_whose_every_question_line_is_malformed_stays_on_screen(self):   # J50 · AC8
+        self.plant(["지시: 올려라 · 머지 · 2026-11-19 01:00 +0900", "B1 · 명령 · 2026-11-19 01:00 +0900"])
+        out = self.text(at(20))
+        self.assertIn("- %s · 읽지 못한 기다리는 질문 줄 2   (STATUS 20분 전 계산)\n" % BETA, out)
+        self.assertIn("\n읽지 못한 기다리는 질문 줄 2\n", out)                       # 전체 수는 그대로 — 둘이 맞아떨어진다
+        self.assertNotIn("%s · 기다리는 질문 없음" % BETA, out)
+
+    def test_closed_shape_accepts_the_no_epic_name_and_refuses_a_wrong_cell_count(self):
+        self.plant(["로드맵 밖 · 머지 · 2026-11-19 01:00 +0900", "B1 · 머지 · 2026-11-19 01:00 +0900 · 덤", "B1 · 머지"])
+        out = self.text()
+        self.assertIn("- %s · 로드맵 밖 · 머지 · " % BETA, out)
+        self.assertNotIn("덤", out)
+        self.assertIn("\n읽지 못한 기다리는 질문 줄 2\n", out)
+
+    def test_diverged_state_branch_is_unreadable_not_missing(self):
+        real = CB.seen_tip
+        with mock.patch.object(CB, "seen_tip", lambda root, name: (None, "갈라졌다") if name == BETA else real(root, name)):
+            out = self.text()
+        self.assertIn("- %s · STATUS 를 읽지 못했다\n" % BETA, out)
+        self.assertNotIn("%s · %s" % (BETA, CB.NO_BRANCH), out)
+        self.assertNotIn("검사 불가: %s" % BETA, out)                              # 같은 이름을 두 번 알리지 않는다
+
+    def test_finished_roadmap_with_diverged_branch_is_named_as_unchecked(self):
+        self.merge_epic("feature/b1")                                              # BETA 가 끝났다 — 질문 쪽에는 나오지 않는다
+        real = CB.seen_tip
+        with mock.patch.object(CB, "seen_tip", lambda root, name: (None, "갈라졌다") if name == BETA else real(root, name)):
+            out = self.text()
+        self.assertIn("- 검사 불가: %s — %s\n" % (BETA, CS.LETTERS_UNREAD), out)
+        self.assertNotIn("%s · STATUS" % BETA, out)
+
+    def test_unreadable_machine_state_of_mine_is_named_and_the_rest_is_shown(self):   # J37
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("깨진 기계 상태\n", encoding="utf-8")
+        out = self.text()
+        self.assertIn("- 검사 불가: %s — 기계 상태를 읽지 못했다" % ALPHA, out)
+        self.assertIn("- 예약 겹침: src/shared.py", out)
+
+    def test_letters_that_cannot_be_read_are_named_and_do_not_stop_the_view(self):
+        with mock.patch.object(CM, "incoming", side_effect=RuntimeError("boom")):
+            out = self.text()
+        self.assertIn("- 검사 불가: %s — 온 글을 읽지 못했다 — RuntimeError: boom\n" % ALPHA, out)
+        self.assertNotIn("온 글 ", out.replace("온 글을 읽지", ""))
+        self.assertIn("- 예약 겹침: src/shared.py", out)
+
+    def test_counts_of_letters_to_roadmaps_without_a_branch_or_already_finished(self):   # J28
+        gamma = "2026-01-03-gamma"
+        self.put({rm(gamma): roadmap_text("감마", block("G1", "마", "feature/g1"))})
+        CM.send(self.w, rm(ALPHA), SID, gamma, "예고", "글", now=T0)
+        CM.send(self.w, rm(ALPHA), SID, BETA, "예고", "글", now=T0)
+        self.merge_epic("feature/b1")                                              # BETA 가 끝났다
+        self.assertIn("\n상대 상태 브랜치 없음 1 · 끝난 로드맵에 보낸 글 1(세지 않았다)\n", self.text())
+
+    def test_my_status_is_read_from_my_local_tip(self):   # J37
+        CS.sync(self.w, rm(ALPHA), SID, now=T0)
+        mine = CB.read(self.w, CB.local_tip(self.w, ALPHA), CB.team_of(self.w, rm(ALPHA)).status)
+        other = CB.local_tip(self.w, BETA)
+        real = CB.seen_tip
+        with mock.patch.object(CB, "seen_tip", lambda root, name: (other, None) if name == ALPHA else real(root, name)):
+            out = self.text()
+        self.assertTrue(out.startswith(mine), out)
+
+    def test_fetch_line_is_not_told_in_a_repo_without_origin(self):
+        bare = self.t / "noorigin"
+        subprocess.run(["git", "init", "-q", str(bare)], env=ENV, check=True)
+        self.assertFalse(CS._fetch_skips_state_branches(bare))
+        self.assertTrue(CS._fetch_skips_state_branches(self.clone("single2", "--single-branch")))   # 양성 대조
+
     def test_unreadable_suite_lock_is_named_and_does_not_stop_the_view(self):   # 과제 11 리뷰에서 넘어옴
         real = suite_lock.state
 
