@@ -1425,6 +1425,19 @@ class SettingsErrorIsZero(StateRepo):   # M25 ② · F14 — 설정 오류면 �
         self.assertIn(CB.SETTINGS_UNREADABLE, out)
         self.assertEqual([(r["에픽"], r["종류"]) for r in cs.load(machine, rm(ALPHA))[cs.ASKING]], [("A1", "머지")])   # 줄은 기계 상태에 쌓인다(AC6)
 
+    def test_the_write_floor_itself_tells_before_reading_the_roadmap_folder(self):   # 바닥을 바로 부르는 쓰기도 같은 차례다
+        """뒤집으면 붉다 — 바닥에서 team_of 를 availability 앞으로 되돌리면 BranchError(3) 이 난다(부르는 쪽 검사에 기대지 않는다)."""
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.put({".devbrew.md": "---\nno_such_key: 1\n---\n"})
+        refs, team = self.refs(), CB.team_layout.Team("docs/superpowers/roadmaps", ALPHA)
+        res = CB.write(self.w, rm(ALPHA), SID, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual((res.commit, self.refs()), (None, refs))
+        self.assertTrue(res.notes[0].startswith(CB.SETTINGS_UNREADABLE), res.notes)
+        with self.assertRaises(CB.BranchError) as c:
+            CB.write(self.w, rm(ALPHA), OTHER, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual((c.exception.rc, self.refs()), (5, refs))
+
     def test_a_session_without_the_marker_still_gets_five_on_a_broken_setting(self):
         """뒤집으면 붉다 — 표지보다 설정을 먼저 보면 표지 없는 세션이 0(알림)이나 3 으로 끝난다."""
         self.claim()
