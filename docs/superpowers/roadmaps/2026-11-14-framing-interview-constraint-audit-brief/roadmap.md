@@ -79,7 +79,7 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 - 의존: F1, F3, F4, F6
 - 브랜치: feature/front-stage-restructure
 - 묶음: F5.md
-- 경로 예약: plugins/spec-distill/skills/request-framing/SKILL.md, plugins/spec-distill/skills/pm-interview/SKILL.md, plugins/spec-distill/skills/pm-interview/references/finishing.md, shared/tests/test_invocation_surface.sh, docs/plugin-authoring.md, docs/philosophy/devbrew-harness-philosophy.md
+- 경로 예약: plugins/spec-distill/skills/, plugins/spec-distill/references/, plugins/spec-distill/templates/, plugins/spec-distill/agents/, plugins/spec-distill/scripts/, plugins/spec-distill/tests/, plugins/spec-distill/switches.md, plugins/spec-distill/README.md, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/entry/check_invocation_surface.py, shared/docreview/, shared/tests/, tools/, docs/plugin-authoring.md, docs/philosophy/devbrew-harness-philosophy.md
 - 크기: 큼
 - 순서 이유: 동작을 바꾸는 에픽이 끝난 뒤에 글 줄이기 · 나누기 · 이름 바꾸기를 한다 — 락이 의도한 변경과 회귀를 가르게
 - 근거: S2 · S8 · S17 · 조사 10
@@ -143,6 +143,11 @@ source_brief: docs/superpowers/interview/2026-11-14-framing-interview-constraint
 
 ### 2026-11-18 · F7 의 칸을 승인된 설계에 맞춘다 — 범위를 좁히고(통째 끄기만 공식으로, 끄기 변수 일곱만 남김, 작업 사본 둘만 옮김) 브랜치를 둘로, 경로 예약을 실제로 고칠 파일로
 - 바뀜: 바뀐 에픽 F7 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-20 · F5 설계 승인 뒤 경로 예약을 맞춘다 — 승인된 설계가 고치는 폴더와 파일 스물넷으로 넓힌다(옛 호출 이름과 낱말이 든 파일이 두 플러그인과 shared 에 걸쳐 있다). 범위 · 의존 · 번호는 그대로 — 옆 로드맵으로 넘긴 일은 그쪽 에픽 칸에 실린 뒤에 범위에서 뺀다
+- 바뀜: 바뀐 에픽 F5 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「이대로 다시 나눈다 (권장)」
 
