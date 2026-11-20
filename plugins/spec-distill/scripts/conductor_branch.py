@@ -304,7 +304,7 @@ def branch_rule(root) -> tuple:
         if origin is False:
             return "없음", None   # 올릴 곳이 없어 로컬에만 쓴다
         return "읽지 못함", "기본 브랜치(origin/HEAD)를 모른다 — git remote set-head origin --auto"
-    rc, out, _e = _run(root, "ls-tree", "-z", commit, "--", repo_defaults.BRANCH_RULE_FILE)
+    rc, out, _e = _run(root, "ls-tree", "--full-tree", "-z", commit, "--", repo_defaults.BRANCH_RULE_FILE)
     entry = out.split(b"\0")[0].decode("utf-8", "replace")
     if rc != 0:
         return "읽지 못함", "기본 브랜치의 %s 목록을 읽지 못했다" % repo_defaults.BRANCH_RULE_FILE
@@ -426,7 +426,7 @@ def read(root, commit: str, path: str) -> Optional[str]:
 
 def names(root, commit: str, prefix: str) -> list:
     """[(mode, 경로)] — 그 폴더 아래 전부. 폴더가 없으면 빈 목록."""
-    rc, out, _e = git(root, "ls-tree", "-r", "-z", commit, "--", prefix)
+    rc, out, _e = git(root, "ls-tree", "--full-tree", "-r", "-z", commit, "--", prefix)
     if rc != 0:
         return []
     found = []
@@ -444,7 +444,7 @@ def roadmap_paths(root) -> dict:
         origin = _origin_exists(root)
         raise BranchError(3, roadmap_model.NO_ORIGIN if origin is False else roadmap_model.NO_DEFAULT)
     folder = _roadmaps_dir(root)
-    rc, out, err = _run(root, "ls-tree", "-r", "-z", commit, "--", folder)
+    rc, out, err = _run(root, "ls-tree", "--full-tree", "-r", "-z", commit, "--", folder)
     if rc != 0:
         raise BranchError(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % _first_line(err.decode("utf-8", "replace")))
     entries = roadmap_model.tree_entries(out, folder)
@@ -540,18 +540,29 @@ def _git_fail(err: str, what: str) -> BranchError:
     return BranchError(3, "%s: %s" % (what, visible(_first_line(err))))
 
 
+def _toplevel(root) -> str:
+    """레포(작업 트리) 뿌리 — cwd 기준으로 경로를 읽는 git 호출(`update-index --force-remove`)을 뿌리에서 부르려고."""
+    rc, out, err = git(root, "rev-parse", "--show-toplevel")
+    top = out.rstrip("\n")
+    if rc != 0 or not top:
+        raise _git_fail(err, "레포 뿌리를 찾지 못했다")
+    return top
+
+
 def _build_commit(root, tip: Optional[str], changes: dict, message: str, force: bool) -> Optional[str]:
-    """임시 index 위에서 커밋 하나를 만든다. 트리가 끝의 트리와 같으면(force 가 아닐 때) None."""
+    """임시 index 위에서 커밋 하나를 만든다. 트리가 끝의 트리와 같으면(force 가 아닐 때) None.
+    경로는 레포 뿌리 기준이다 — `--root` 가 하위 폴더여도 지우기는 뿌리에서 부른다(`--cacheinfo` 는 cwd 를 타지 않는다)."""
     tmp = tempfile.mkdtemp(prefix="conductor-index-")
     try:
         env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        top = _toplevel(root) if any(text is None for text in changes.values()) else None
         if tip:
             rc, _o, err = git(root, "read-tree", tip, env=env)
             if rc:
                 raise _git_fail(err, "상태 브랜치의 트리를 읽지 못했다")
         for path, text in sorted(changes.items()):
             if text is None:
-                rc, _o, err = git(root, "update-index", "--force-remove", "--", path, env=env)
+                rc, _o, err = git(top, "update-index", "--force-remove", "--", path, env=env)
             else:
                 rc, blob, err = git(root, "hash-object", "-w", "--stdin", env=env, data=text)
                 if rc == 0:
@@ -709,10 +720,11 @@ def _first_parent(body: str) -> Optional[str]:
     return None
 
 
-def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict, built: list) -> str:
+def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict, built: list, own: frozenset) -> str:
     """올리지 못한 로컬 커밋 하나를 onto 위에 다시 얹는다(J4). 새 끝을 돌려준다 — 바뀐 것이 없으면 onto.
     `renamed` 는 이 다시 만들기에서 이름을 바꾼 편지의 {원래 경로: 새 경로} — 뒤 커밋의 고침 · 지움도 새 경로에 간다.
-    새 커밋을 만들면 `built` 에 더한다."""
+    새 커밋은 원본이 내 것(`own` — 쓰기 시작 때의 `씀` · 또는 이번 부름의 `built`)일 때만 `built` 에 더한다 — 로컬에 든
+    남의 커밋을 다시 얹은 커밋은 적지 않아 남의 고침으로 남는다(B3)."""
     rc, body, err = git(root, "cat-file", "commit", commit)
     if rc != 0:
         raise _git_fail(err, "다시 얹을 커밋을 읽지 못했다")
@@ -758,14 +770,17 @@ def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict,
         return onto
     _check_paths(team, changes)
     new = _build_commit(root, onto, changes, message, False)
-    _note_built(built, new)
+    if commit in own or commit in built:
+        _note_built(built, new)
     return new or onto
 
 
-def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built: list) -> Result:
+def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built: list, own: frozenset,
+             before: Optional[str]) -> Result:
     """방금 로컬에 쓴 커밋(mine)을 올린다. 원격이 앞섰으면 받아 와 원격 끝 위에 올리지 못한 앞 커밋들을 다시 얹고
     이번 쓰기를 그 새 끝에서 다시 만들어 올린다 — 세 번까지. 올라간 커밋은 고치지 않고 덮어 올리지 않는다.
-    새로 만든 커밋만 `built` 에 더한다 — 원격 끝 · 다시 얹기가 바뀐 것 없이 돌려준 끝은 더하지 않는다."""
+    새로 만든 커밋만 `built` 에 더한다 — 원격 끝 · 다시 얹기가 바뀐 것 없이 돌려준 끝은 더하지 않는다.
+    다시 만드는 `edit` 가 던지면 로컬 ref 를 쓰기 전 끝(`before`)으로 되돌리고 `built` 를 비운 뒤 다시 던진다 — 아무것도 쓰지 않았다."""
     name = team.name
     if _origin_exists(root) is not True:
         return Result(mine, False, None, (NO_ORIGIN,))
@@ -785,8 +800,12 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built:
             _refuse_merge(root, commit)   # 하나라도 머지 커밋이면 하나도 다시 얹지 않는다
         for commit in pending:
             if commit != mine:   # 이번 쓰기가 가장 최근에 만든 커밋은 다시 얹지 않고 새 끝에서 다시 만든다
-                new = _replay(root, team, commit, new, renamed, built)
-        changes = edit(_base(root, new)) if edit else None
+                new = _replay(root, team, commit, new, renamed, built, own)
+        try:
+            changes = edit(_base(root, new)) if edit else None
+        except Exception:
+            _undo_write(root, name, before, local, built)
+            raise
         made = None
         if changes:
             _check_paths(team, changes)
@@ -804,6 +823,16 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built:
         if verdict == "failed":
             return Result(target, False, remote, (elsewhere, "%s — %s" % (NOT_PUSHED, why)))
     raise BranchError(1, REMAKE_GAVE_UP)
+
+
+def _undo_write(root, name: str, before: Optional[str], local: str, built: list) -> None:
+    """이번 쓰기가 옮긴 로컬 ref 를 쓰기 전 끝으로 되돌린다(그 사이 바뀌었으면 건드리지 않는다). 되돌렸으면 `built` 를 비운다 —
+    이번 부름이 만든 커밋은 모두 어느 ref 에도 없다(올라간 것은 없다 — 올라갔으면 이미 돌아갔다)."""
+    if before is None:
+        return
+    rc, _o, _e = git(root, "update-ref", ref_of(name), before, local)
+    if rc == 0:
+        del built[:]
 
 
 def _refuse_merge(root, commit: str) -> None:
@@ -848,9 +877,10 @@ def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating
     if why:
         return Result(None, False, None, (why,))
     team = team_of(root, roadmap_rel)
+    own = _own_commits(root, roadmap_rel)
     built, finished, told = [], False, ()
     try:
-        res = _write_attempts(root, team, session, edit, what, creating, publish, built)
+        res = _write_attempts(root, team, session, edit, what, creating, publish, built, own)
         finished = True
     finally:
         try:
@@ -864,7 +894,17 @@ def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating
     return res._replace(notes=res.notes + told, made=tuple(built))
 
 
-def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str, creating: bool, publish: bool, built: list) -> Result:
+def _own_commits(root, roadmap_rel: str) -> frozenset:
+    """기계 상태 `확인한 끝` 절의 `씀` 끝들. 읽지 못하면 빈 집합 — 닫는 쪽(다시 얹은 커밋을 내 것으로 적지 않는다)."""
+    try:
+        data = cs.load(cs.machine_path(state_path.state_root(str(root)), roadmap_rel), roadmap_rel)
+        return frozenset(r["끝"] for r in data[cs.TRUST] if r["까닭"] == cs.TRUST_WHY[1])
+    except Exception:
+        return frozenset()
+
+
+def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str, creating: bool, publish: bool, built: list,
+                    own: frozenset) -> Result:
     name = team.name
     tip = local_tip(root, name)
     if tip is None and not creating:
@@ -883,7 +923,7 @@ def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str,
         if rc == 0:
             if not publish:
                 return Result(commit, False, None, ())
-            return _publish(root, team, None if creating else edit, message, commit, built)
+            return _publish(root, team, None if creating else edit, message, commit, built, own, tip)
         now = local_tip(root, name)
         if now == tip:   # 끝은 그대로인데 실패했다 — 이름 충돌 같은 일이다
             raise _git_fail(err, "상태 브랜치 ref 를 옮기지 못했다")

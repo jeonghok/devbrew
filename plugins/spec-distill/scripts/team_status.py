@@ -93,7 +93,8 @@ def trust_of(rows):
 
 def foreign_commits(git, tip: str, trust, paths: list):
     """`<확인 끝>..<tip>`(확인 끝이 없으면 tip 의 이력 전부)에서 `paths` 를 바꾼 커밋 가운데 `씀` 에 없는 것 —
-    [(커밋 40자, (바꾼 경로…)), …] 오래된 차례. 재지 못하면 None: trust 가 None · 확인 끝이 이 레포에 없음 · git 실패 ·
+    [(커밋 40자, (바꾼 경로…)), …] 오래된 차례. 재지 못하면 None: trust 가 None · 확인 끝이 이 레포에 없음 ·
+    tip 이 확인 끝을 품지 않음(원격 이력이 다시 쓰여 확인 끝의 조상 · 곁가지로 갔다 — 빈 범위가 「없음」 으로 읽히지 않게) · git 실패 ·
     남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다).
     `씀` 에 든 커밋이 범위에 없어도(버려진 커밋) 그냥 범위 밖이다."""
     if trust is None or not isinstance(tip, str) or not _OID_RE.fullmatch(tip):
@@ -101,6 +102,10 @@ def foreign_commits(git, tip: str, trust, paths: list):
     base, own = trust
     if base is not None and git.commit(base) is None:
         return None
+    if base is not None:
+        rc, out, _err = git.run_err("log", "--format=%H", "-1", "%s..%s" % (tip, base))
+        if rc != 0 or out.strip():
+            return None
     rng = "%s..%s" % (base, tip) if base is not None else tip
     rc, out, _err = git.run_err("log", "--format=%H %P", rng)
     if rc != 0:
@@ -441,7 +446,7 @@ class Reader:
             lost = team_files.lost_lines(result) if result is not None else []
             # 받음 줄의 대조(receipt)가 이 파일의 같은 사유를 이미 알렸으면 한 번만 낸다(Q13 — 한 사실에 알림 하나)
             if result is not None and result.problems and \
-                    not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes if not n.startswith(STALE_UNMEASURED)):
+                    not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes):
                 block["notes"].append(job_results.file_note(RESULT_UNREAD, latest, result.problems[0]))
             if state == job_results.NOT_RECEIVED:
                 block["notes"].append("%s: %s(%s)" % (

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, OTHER, ROADMAPS, SCRIPTS, SID, StateRepo, rm, roadmap_text  # noqa: E402
 import conductor_branch as CB  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import conductor_status as CST  # noqa: E402
 import leader_seat as LS  # noqa: E402
 import repo_defaults  # noqa: E402
 import roadmap_status as RS  # noqa: E402
@@ -62,10 +63,10 @@ class TeamRepo(StateRepo):
             self.g("fetch", "-q", "origin", SPEC)
         return commit
 
-    def ls(self, *args):
-        """명령줄로 conductor_branch.py 를 부른다 — (종료 코드, 표준 출력 + 표준 오류)."""
-        p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(self.w), *args],
-                           capture_output=True, encoding="utf-8")
+    def ls(self, *args, root=None):
+        """명령줄로 conductor_branch.py 를 부른다 — (종료 코드, 표준 출력 + 표준 오류). `root` 를 주면 그 폴더를 `--root` 와 cwd 로 준다."""
+        p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(root or self.w), *args],
+                           capture_output=True, encoding="utf-8", cwd=str(root) if root else None)
         return p.returncode, p.stdout + p.stderr
 
 
@@ -101,6 +102,16 @@ class RulesTip(TeamRepo):   # R3 AC15 · AC21 · AC14
         with mock.patch.dict(os.environ, {"GIT_LITERAL_PATHSPECS": "1"}):
             got = TS.rules_tip(RS.Git(str(self.w / ROADMAPS)), self.team, True, self.rows())
         self.assertEqual(got, (None, ["확인되지 않은 남의 고침 1 — 규칙은 기본 브랜치의 글을 읽는다"]))
+
+    def test_tip_rolled_back_behind_the_confirmed_end_is_unmeasured(self):   # 마지막 리뷰 I1 — 확인 끝의 조상으로 되돌아간 끝을 믿지 않는다
+        fa = self.foreign_edit("a")   # 남이 줄을 더한다
+        fb = self.foreign_edit("b", {self.team.rules: TEAM_RULE + "\n"})   # 남이 그 줄을 뺀다 — 끝 상태는 깨끗하다
+        LS.confirm(str(self.w), rm(ALPHA), SID, fb)
+        self.assertEqual(self.tip_of(), (fb, []))   # 양성 대조 — 확인한 끝은 읽는다
+        self.g("push", "-q", "--force", "origin", "%s:refs/heads/conductor/%s" % (fa, ALPHA), repo=self.t / "a")
+        self.g("fetch", "-q", "origin", "+" + SPEC)
+        self.assertEqual(self.tip(), fa)   # 양성 대조 — 읽을 끝이 확인 끝의 조상으로 갔다(로컬 ref 는 더 뒤다)
+        self.assertEqual(self.tip_of(), (None, [LS.FOREIGN_UNMEASURED + TS.READ_DEFAULT_RULES]))
 
     def test_unreadable_machine_state_closes(self):   # I11 — 한 뜻: 재지 못함
         self.write({self.team.rules: "- 사본\n"})
@@ -223,6 +234,14 @@ class RulesEdit(TeamRepo):   # R3 AC17 · AC21
         self.assertEqual((rc, self.copy()), (0, None), out)
 
 
+    def test_command_line_reset_from_a_subfolder_drops_the_copy(self):   # 마지막 리뷰 I3 — --root 가 하위 폴더여도 경로는 레포 뿌리 기준
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertIsNotNone(self.copy())   # 양성 대조
+        rc, out = self.ls("rules-reset", "--roadmap", rm(ALPHA), "--session", SID, root=self.w / "docs")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn(LS.NO_COPY, out)
+        self.assertEqual((self.copy(), self.base_line()), (None, None))
+
     def test_crlf_default_rules_compare_without_the_cr(self):   # 기본 브랜치 규칙이 CRLF 여도 줄 대조는 같다 — 다른 줄은 바이트 그대로 둔다
         self.put({self.team.rules: TEAM_RULE + "\r\n"})
         with self.assertRaises(CB.BranchError) as cm:
@@ -266,6 +285,18 @@ class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을
         self.assertEqual((self.tip(), self.copy()), (before, text))
         rc, out = self.ls("rules-add", "--roadmap", rm(ALPHA), "--session", SID, "--line", NEW)
         self.assertEqual((rc, out.strip().splitlines()[-1:]), (1, ["[spec-distill] " + LS.FOREIGN % 1 + LS.REFUSE_TAIL]), out)
+
+    def test_refused_remake_writes_nothing(self):   # 마지막 리뷰 I2 — 다시 만들 때의 2 도 아무것도 쓰지 않는다 · 다음 sync 가 사본을 두 배로 만들지 않는다
+        copy = TEAM_RULE + "\n" + NEW + "\n"
+        theirs = self.foreign_edit("race", {self.team.rules: copy}, fetch=False)   # 원격에만 있다 — 첫 쓰기는 보지 못한다
+        before, rows = self.local(), self.rows()
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual(cm.exception.rc, 2)
+        self.assertEqual(self.g("rev-parse", "refs/remotes/origin/conductor/" + ALPHA), theirs)   # 양성 대조 — 다시 만들기까지 갔다
+        self.assertEqual((self.local(), self.rows()), (before, rows))
+        CST.sync(str(self.w), rm(ALPHA), SID)
+        self.assertEqual(self.copy(), copy)
 
     def test_unmeasured_refuses_add(self):   # I11 — 기계 상태를 읽지 못하면 재지 못했다로 닫는다
         path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
@@ -451,6 +482,17 @@ class RulesBranch(TeamRepo):   # R3 AC17
         commit = LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")   # 앞이 맞으면 받는다(fullmatch 가 아니다)
         self.assertEqual(self.g("rev-parse", "refs/heads/chore/alpha-rules"), commit)
 
+    def test_command_line_from_a_subfolder_reads_the_repo_branch_rule(self):   # 마지막 리뷰 I3 — --root 가 하위 폴더여도 규칙 문서는 레포 뿌리 기준
+        self.put({RULE_DOC: "```regex\n^(chore|conductor)/[a-z0-9-]+\n```\n"})
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        sub = self.w / "docs"
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "fix/alpha-rules", root=sub)
+        self.assertEqual(rc, 2, out)
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/fix/alpha-rules"), 1)
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules", root=sub)
+        self.assertEqual(rc, 0, out)   # 양성 대조 — 규칙이 받는 이름은 하위 폴더에서도 만든다
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 0)
+
     def test_foreign_rules_edit_refuses(self):   # 규칙 쪽 남의 고침 — 1 · 만들지 않는다
         LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
         self.foreign_edit()
@@ -574,6 +616,30 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.write({self.team.status: "y\n"})   # 남의 끝 위에 다시 만든 내 STATUS
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 1)
         self.assertIsNone(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows())[0])
+
+    def test_rewritten_remote_does_not_launder_a_held_foreign_commit(self):   # 마지막 리뷰 C1 — 로컬에 든 남의 커밋이 원격에서 사라진 뒤의 다시 얹기
+        evil = self.foreign_edit("evil")
+        self.write({self.team.status: "s1\n", self.team.path("note.md"): "n1\n"})   # 남의 끝 위에 다시 만든다 — 로컬이 남의 커밋을 품는다
+        # (note.md — STATUS 는 다시 얹지 않으므로 다시 얹은 내 커밋이 생기게 한다)
+        local = "refs/heads/conductor/" + ALPHA
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", evil, local), 0)   # 양성 대조
+        other = self.t / "evil"
+        parent = self.g("rev-parse", evil + "^", repo=other)
+        harmless = self.g("commit-tree", self.g("rev-parse", parent + "^{tree}", repo=other), "-p", parent, "-m", "무해", repo=other)
+        self.g("push", "-q", "--force", "origin", "%s:%s" % (harmless, local), repo=other)   # 남의 커밋을 원격에서 뺀다
+        res = self.write({self.team.status: "s2\n"})   # 거절 → 받아 와 올리지 못한 커밋들을 다시 얹는다
+        tip = self.tip()
+        remade = self.g("log", "--format=%H", "%s..%s" % (harmless, tip), "--", self.team.rules).split()
+        self.assertEqual(len(remade), 1)   # 양성 대조 — 남의 고침이 다시 얹혔다
+        self.assertIn("[남] evil", CB.read(str(self.w), tip, self.team.rules))
+        ends = [r["끝"] for r in self.rows()]
+        self.assertNotIn(remade[0], ends)
+        self.assertNotIn(remade[0], res.made)
+        mine = [c for c in self.g("log", "--format=%H", "%s..%s" % (harmless, tip)).split() if c != remade[0]]
+        self.assertEqual((len(mine), [c for c in mine if c not in ends]), (2, []))   # 양성 대조 — 다시 얹은 내 커밋 · 이번 쓰기는 적는다
+        self.assertEqual(TS.rules_tip(RS.Git(str(self.w)), self.team, True, self.rows()),
+                         (None, [LS.FOREIGN % 1 + TS.READ_DEFAULT_RULES]))
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, tip), 1)
 
     def test_settle_compacts_when_clean(self):
         self.write({self.team.status: "y\n"})
