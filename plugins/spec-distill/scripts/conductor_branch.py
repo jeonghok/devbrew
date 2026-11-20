@@ -9,7 +9,7 @@
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
 가져오는 모듈은 `conductor_state` · `repo_defaults` · `state_path` · `team_layout` · `branch_tip` · `roadmap_model` 뿐이다.
-규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset`)은 `main` 안에서 `leader_seat` 를 가져온다.
+규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)은 `main` 안에서 `leader_seat` 를 가져온다.
 """
 from __future__ import annotations
 
@@ -1003,6 +1003,10 @@ def main(argv=None) -> int:
     rr = sub.add_parser("rules-reset", help="규칙 사본을 지운다 — 규칙은 기본 브랜치의 글로 돌아간다")
     rr.add_argument("--roadmap", required=True)
     rr.add_argument("--session", required=True)
+    rb = sub.add_parser("rules-branch", help="기본 브랜치에서 딴 로컬 브랜치에 규칙 파일만 사본 글로 바꾼 커밋 하나를 만든다 — 올리지 않는다")
+    rb.add_argument("--roadmap", required=True)
+    rb.add_argument("--session", required=True)
+    rb.add_argument("--branch", required=True)
     args = ap.parse_args(argv)
     try:
         if args.cmd == "delete":
@@ -1014,10 +1018,14 @@ def main(argv=None) -> int:
                                 add=args.line if args.cmd == "rules-add" else None,
                                 drop=args.line if args.cmd == "rules-drop" else None,
                                 reset=args.cmd == "rules-reset")
+        elif args.cmd == "rules-branch":
+            import leader_seat as LS
+            commit = LS.rules_branch(args.root, args.roadmap, args.session, args.branch)
+            res = Result(commit, False, None, (LS.BRANCH_MADE % (args.branch, commit),))
         else:
             res = ensure(args.root, args.roadmap, args.session)
-    except BranchError as exc:
-        print("[spec-distill] " + str(exc), file=sys.stderr)
+    except BranchError as exc:   # 0 이면 쓸 수 없어 알리고 넘어간 것이다 — 알림은 표준 출력에
+        print("[spec-distill] " + str(exc), file=sys.stderr if exc.rc else sys.stdout)
         return exc.rc
     except Exception as exc:   # 예상 밖 예외도 종료 코드 3 — 쓰지 못한 것이다
         print("[spec-distill] 상태 브랜치를 쓰지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))), file=sys.stderr)

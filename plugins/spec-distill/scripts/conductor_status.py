@@ -8,6 +8,7 @@ STATUS 는 이 스크립트가 계산해 상태 브랜치에 쓴다. 손으로 �
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
 가져오는 모듈은 `conductor_branch` · `conductor_mail` · `conductor_ledger` · `conductor_state` · `repo_defaults` 다.
+`sync` 는 함수 안에서 `leader_seat` · `team_status` 를 가져온다(규칙 사본의 같아짐 · 갈라짐 · 남의 고침).
 """
 from __future__ import annotations
 
@@ -251,6 +252,10 @@ def _without_stamp(text: str) -> list:
 
 
 def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = True) -> Synced:
+    """STATUS 를 계산해 상태 브랜치에 쓴다. 규칙 사본이 기본 브랜치의 지금 글과 같고 규칙 쪽에 확인되지 않은 남의 고침이 없으면
+    같은 커밋에서 사본과 `rules-base.md` 를 지운다(STATUS 가 같아도 쓴다). 사본이 갈라졌으면 알린다."""
+    import leader_seat as LS   # 함수 안에서 가져온다 — 현황 화면(show)이 리더 자리를 끌어오지 않게
+    import team_status as TS
     now = now or datetime.datetime.now().astimezone()
     L.need_holder(root, roadmap_rel, session)
     if lower_window:
@@ -280,13 +285,28 @@ def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = Tr
         claimed, at = _claimed_at(root, roadmap_rel), CB.parse_stamp(old.computed)
         if old.session != session[:8] and claimed is not None and at is not None and at > claimed:
             notes.append("%s — 세션 %s · %s" % (OTHER_SESSION, old.session, old.computed))
+    if LS.rules_state(root, roadmap_rel, tip).verdict == LS.VERDICTS[3]:
+        notes.append(LS.DIVERGED + " — conductor_branch.py rules-branch 는 만들지 않는다")
+
+    def droppable(commit):   # 머지된 사본 — 지금 글과 같고 규칙 쪽 남의 고침이 0 일 때만(재지 못함도 남긴다)
+        return (commit is not None and LS.rules_state(root, roadmap_rel, commit).verdict == LS.VERDICTS[1]
+                and LS.foreign(root, roadmap_rel, commit, TS.rules_paths(team)) == [])
+
     fresh = render_status(build_status(root, roadmap_rel, session, tip, now))
-    if old is not None and _without_stamp(fresh) == _without_stamp(old_text):
+    if old is not None and not droppable(tip) and _without_stamp(fresh) == _without_stamp(old_text):   # 지울 사본이 있으면 바뀐 것이다
         age = (now - CB.parse_stamp(old.computed)).total_seconds()
         if age <= STALE_AFTER:
             return Synced(None, tuple(notes) + (UNCHANGED,), False)
-    res = CB.write(root, roadmap_rel, session,
-                   lambda base: {team.status: render_status(build_status(root, roadmap_rel, session, base.commit, now))}, "STATUS")
+    if split is None:   # 받아 온 끝 위에서 쓴다 — 로컬 끝에서 고침을 셈하면 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다
+        LS.catch_up(root, team.name, tip)
+
+    def edit(base):   # 사본이 같아 지우면 STATUS 의 줄 수도 0 이다 — 같은 글이라 남은 줄이 없다
+        changes = {team.status: render_status(build_status(root, roadmap_rel, session, base.commit, now))}
+        if droppable(base.commit):
+            changes.update({team.rules: None, team.path(LS.RULES_BASE_FILE): None})
+        return changes
+
+    res = CB.write(root, roadmap_rel, session, edit, "STATUS")
     return Synced(res, tuple(notes) + tuple(res.notes), res.commit is not None)
 
 

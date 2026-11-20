@@ -2,20 +2,23 @@
 # -*- coding: utf-8 -*-
 """leader_seat.py — 리더가 쓰는 자리: 상태 브랜치의 규칙 사본 · 규칙 브랜치 · 남의 고침 확인 · 대기 줄.
 
-명령줄은 `conductor_branch.py` 의 하위 명령(`rules-add` · `rules-drop` · `rules-reset`)으로 연다 — 이 모듈은 함수만 둔다.
-상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다.
+명령줄은 `conductor_branch.py` 의 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)으로 연다 — 이 모듈은 함수만 둔다.
+상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다(`conductor_status.sync` 는 함수 안에서 가져온다).
 
 가져오는 모듈은 `conductor_branch` · `conductor_state` · `team_status` · `team_rules` · `roadmap_model` ·
 `roadmap_status`(`Git` 만) · `human_lines` · `repo_defaults` · `state_path` · `team_layout` 뿐이다.
 
 종료 코드(`conductor_branch.BranchError.rc`): 0 썼다 · 쓸 수 없어 알리고 넘어감 · 1 없음/아님(확인되지 않은 남의 고침 ·
-재지 못함) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 · 5 다른 세션의 표지.
+재지 못함 · 올릴 규칙 고침이 없음 · 갈라져서 만들지 않은 `rules-branch`) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 ·
+5 다른 세션의 표지.
 """
 from __future__ import annotations
 
+import difflib
+import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -40,6 +43,23 @@ RESET_PENDING_LEFT = "대기 줄의 남의 고침은 남아 있다 — confirm �
 RESET_PENDING_UNMEASURED = FOREIGN_UNMEASURED + "(대기 줄) — 확인한 끝은 옮기지 않았다 — confirm 으로 확인받는다"
 NOT_TEAM = "team 형식 로드맵이 아니다 — 규칙 사본은 머리말 %s: %s 인 로드맵만 둔다: %s"
 NO_STATE_BRANCH = "상태 브랜치가 없다 — 먼저 ensure 를 돌린다"
+DIVERGED = "규칙 사본이 기본 브랜치와 갈라졌다"
+NOTHING = "올릴 규칙 고침이 없다"
+BRANCH_MADE = "규칙 고침 브랜치를 만들었다(올리지 않았다) — %s · %s"
+BAD_BRANCH = "규칙 브랜치 이름으로 받지 않는다 — %s"
+RULE_REFUSES_BRANCH = "이 레포의 브랜치 규칙이 이 이름을 받지 않는다: %s"
+BRANCH_TAKEN = "규칙 브랜치를 만들지 못했다 — 이미 있거나 git 이 받지 않는다"
+VERDICTS = ("없음", "같음", "올릴 것", "갈라짐")
+_BASE_RE = re.compile(re.escape(BASE_HEAD) + "([0-9a-f]{40})")
+_SEGMENT = r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*"
+_BRANCH_RE = re.compile(r"(?!.*\.lock(?:/|$))(?!-)" + _SEGMENT + "(?:/" + _SEGMENT + ")*")   # git 이 받는 꼴의 닫힌 부분집합
+
+
+class RulesState(NamedTuple):
+    copy: Optional[str]   # 상태 브랜치의 규칙 사본 글 — 없으면 None
+    base: Optional[str]   # rules-base.md 가 적은 기본 브랜치 커밋(40자) — 꼴 밖 · 없음 · 이 레포에 없으면 None
+    now: Optional[str]    # 기본 브랜치의 지금 규칙 글 — 없거나 읽지 못하면 None
+    verdict: str          # VERDICTS 가운데 하나
 
 
 def foreign(root, roadmap_rel: str, tip: str, paths: list) -> Optional[list]:
@@ -61,7 +81,7 @@ def confirm_at(root, roadmap_rel: str, session: str, tip: str) -> tuple:
     return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
 
 
-def _catch_up(root, name: str, seen: Optional[str]) -> None:
+def catch_up(root, name: str, seen: Optional[str]) -> None:
     """로컬 상태 브랜치가 읽을 끝의 조상이면 읽을 끝으로 앞당긴다 — 쓰기(`CB.write`)는 로컬 끝에서 고침을 셈한다.
     받아 오기는 원격 추적 ref 만 옮기므로, 앞당기지 않으면 고침이 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다."""
     local = CB.local_tip(root, name)
@@ -151,7 +171,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
         raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
     if found:
         raise CB.BranchError(1, FOREIGN % len(found) + REFUSE_TAIL)
-    _catch_up(root, team.name, seen)
+    catch_up(root, team.name, seen)
 
     def edit(base):
         copy = base.read(team.rules)
@@ -176,7 +196,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
 
 def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Result:
     seen = _read_tip(root, team.name)   # 갈라졌으면 지우지 않는다 — 로컬 끝만 보면 원격의 사본을 「없다」 고 넘긴다
-    _catch_up(root, team.name, seen)
+    catch_up(root, team.name, seen)
 
     def edit(base):
         if base.read(team.rules) is None and base.read(base_path) is None:
@@ -197,3 +217,90 @@ def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Res
         return res._replace(notes=res.notes + (RESET_PENDING_LEFT,))
     told = confirm_at(root, roadmap_rel, session, res.commit)
     return res._replace(notes=res.notes + told + (RESET_DONE,))
+
+
+def _base_commit(root, text: Optional[str]) -> Optional[str]:
+    """`rules-base.md` 의 글 → 그 커밋(40자). 한 줄이 `BASE_HEAD + 40자` 와 맞고 그 커밋이 이 레포에 있을 때만 — 아니면 None."""
+    lines = _split(text)
+    if len(lines) != 1:
+        return None
+    m = _BASE_RE.fullmatch(lines[0])
+    if m is None:
+        return None
+    rc, _o, _e = CB.git(root, "cat-file", "-e", m.group(1) + "^{commit}")
+    return m.group(1) if rc == 0 else None
+
+
+def _rules_state(root, team, tip: str, main: Optional[str]) -> RulesState:
+    copy = CB.read(root, tip, team.rules) if tip else None
+    now = CB.read(root, main, team.rules) if main else None
+    if copy is None:
+        return RulesState(None, None, now, VERDICTS[0])
+    base = _base_commit(root, CB.read(root, tip, team.path(RULES_BASE_FILE)))
+    if now is not None and now == copy:
+        return RulesState(copy, base, now, VERDICTS[1])
+    if base is None or now is None or now != CB.read(root, base, team.rules):   # 출발한 글을 모르면 갈라짐으로 닫는다
+        return RulesState(copy, base, now, VERDICTS[3])
+    return RulesState(copy, base, now, VERDICTS[2])
+
+
+def rules_state(root, roadmap_rel: str, tip: str) -> RulesState:
+    """`tip` 의 규칙 사본과 기본 브랜치의 지금 글. 판정: 사본 없음 「없음」 · 지금 글 == 사본 「같음」 ·
+    지금 글 == `rules-base.md` 가 적은 커밋의 글 「올릴 것」 · 그 밖(`rules-base.md` 가 없거나 꼴 밖이거나 그 커밋을 모름) 「갈라짐」.
+    남의 글을 읽지만 예외로 죽지 않는다 — 읽지 못한 것은 None 으로 두고 닫는 쪽으로 판정한다."""
+    main = repo_defaults.default_branch(str(root))[0]
+    return _rules_state(root, CB.team_of(root, roadmap_rel), tip, main)
+
+
+def _diff_lines(now: Optional[str], copy: Optional[str]) -> list:
+    """기본 브랜치의 지금 글 → 사본의 차이 — 줄마다 visible 을 거쳐 「│ 」 를 앞에 붙인다."""
+    diff = difflib.unified_diff(_split(now), _split(copy), "기본 브랜치", "규칙 사본", lineterm="")
+    return ["│ " + CB.visible(line) for line in diff]
+
+
+def _check_branch_name(root, branch) -> None:
+    """규칙 브랜치 이름 — 상태 브랜치 접두로 시작하지 않고, git 이 받는 꼴의 닫힌 부분집합이고, 레포 규칙 문서가 있으면
+    그 정규식이 받아야 한다(`availability` · project-init 훅과 같은 `match` 읽기). 아니면 BranchError(2), 규칙을 읽지 못하면 3."""
+    if not isinstance(branch, str) or branch.startswith(team_layout.STATE_BRANCH_PREFIX):
+        raise CB.BranchError(2, BAD_BRANCH % CB.visible(str(branch)) + " — %s… 는 상태 브랜치의 자리다" % team_layout.STATE_BRANCH_PREFIX)
+    if branch == "HEAD" or _BRANCH_RE.fullmatch(branch) is None:
+        raise CB.BranchError(2, BAD_BRANCH % CB.visible(branch))
+    kind, value = CB.branch_rule(root)
+    if kind == CB.RULE_VERDICTS[2]:
+        raise CB.BranchError(3, "%s — %s" % (CB.RULE_UNREADABLE, value))
+    if kind == CB.RULE_VERDICTS[1] and not value.match(branch):
+        raise CB.BranchError(2, RULE_REFUSES_BRANCH % CB.visible(branch))
+
+
+def rules_branch(root, roadmap_rel: str, session: str, branch: str) -> str:
+    """기본 브랜치 끝 위에 규칙 파일만 상태 브랜치의 사본 글로 바꾼 커밋 하나를 만들어 로컬 브랜치 `branch` 로 둔다.
+    올리지 않는다. 만든 커밋(40자)을 돌려준다. 쓸 수 없으면 BranchError(0, 알림). 규칙 쪽에 확인되지 않은 남의 고침이 있거나
+    재지 못하면 · 올릴 규칙 고침이 없으면 · 갈라졌으면(둘의 차이를 싣는다) BranchError(1). 이름이 맞지 않으면 2 · 이미 있으면 3."""
+    CB._need_marker(root, roadmap_rel, session)
+    why = CB.availability(root, roadmap_rel)
+    if why:
+        raise CB.BranchError(0, why)
+    team = CB.team_of(root, roadmap_rel)
+    _check_branch_name(root, branch)
+    seen = _read_tip(root, team.name)
+    found = foreign(root, roadmap_rel, seen, TS.rules_paths(team))
+    if found is None:
+        raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
+    if found:
+        raise CB.BranchError(1, FOREIGN % len(found) + REFUSE_TAIL)
+    main, _short, missing = repo_defaults.default_branch(str(root))
+    if main is None:
+        raise CB.BranchError(3, missing)
+    state = _rules_state(root, team, seen, main)
+    if state.verdict in VERDICTS[:2]:
+        raise CB.BranchError(1, NOTHING)
+    if state.verdict == VERDICTS[3]:
+        raise CB.BranchError(1, "\n".join([DIVERGED] + _diff_lines(state.now, state.copy)))
+    commit = CB._build_commit(root, main, {team.rules: state.copy},
+                              "chore(conductor): 규칙 고침을 올린다 · 세션 %s" % session[:8], False)
+    if commit is None:
+        raise CB.BranchError(1, NOTHING)
+    rc, _o, err = CB.git(root, "update-ref", "refs/heads/" + branch, commit, CB.ZERO_OID)
+    if rc != 0:
+        raise CB._git_fail(err, BRANCH_TAKEN)
+    return commit

@@ -18,11 +18,13 @@ from conductor_branch_fixture import ALPHA, OTHER, ROADMAPS, SCRIPTS, SID, State
 import conductor_branch as CB  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import leader_seat as LS  # noqa: E402
+import repo_defaults  # noqa: E402
 import roadmap_status as RS  # noqa: E402
 import team_layout as TL  # noqa: E402
 import team_status as TS  # noqa: E402
 from state_path import state_root  # noqa: E402
 
+RULE_DOC = repo_defaults.BRANCH_RULE_FILE   # 레포 브랜치 규칙 문서
 TEAM_RULE = "- [하나] 고친 곳엔 테스트 먼저 · 조건: 역할=worker · 출처: a · 확인: b"
 SPEC = "refs/heads/conductor/%s:refs/remotes/origin/conductor/%s" % (ALPHA, ALPHA)
 
@@ -341,6 +343,135 @@ class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을
 
     def test_glyphs_are_the_read_side_constants(self):   # F9 — 다시 치지 않는다
         self.assertEqual((LS.FOREIGN, LS.FOREIGN_UNMEASURED, LS.RULES_BASE_FILE), (TS.FOREIGN, TS.FOREIGN_UNMEASURED, TS.RULES_BASE_FILE))
+
+
+class RulesBranch(TeamRepo):   # R3 AC17
+    def test_one_commit_one_file_from_the_default_branch(self):
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        main = self.g("rev-parse", "origin/trunk")
+        before = self.snap()
+        commit = LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")
+        self.assertEqual(self.g("rev-parse", "refs/heads/chore/alpha-rules"), commit)
+        self.assertEqual(self.g("rev-parse", commit + "^"), main)
+        self.assertEqual(self.g("diff-tree", "--no-commit-id", "--name-only", "-r", commit), self.team.rules)
+        self.assertEqual(self.g("show", "%s:%s" % (commit, self.team.rules)), TEAM_RULE + "\n" + NEW)
+        self.assertEqual(self.snap(), before)   # 작업 폴더를 건드리지 않는다
+
+    def test_diverged_default_refuses_with_the_difference(self):   # 1 · 브랜치를 만들지 않는다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.put({self.team.rules: "- [다른] 다른 손 · 조건: 역할=worker · 출처: a · 확인: b\n"})
+        self.assertEqual(LS.rules_state(str(self.w), rm(ALPHA), self.tip()).verdict, "갈라짐")
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules")
+        self.assertEqual(rc, 1, out)
+        self.assertIn(LS.DIVERGED, out)
+        self.assertIn("다른 손", out)
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
+
+    def test_nothing_to_raise(self):
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")
+        self.assertEqual((cm.exception.rc, LS.NOTHING in str(cm.exception)), (1, True))
+
+    def test_refuses_state_prefix_and_existing_branch(self):
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "conductor/x")
+        self.assertEqual(cm.exception.rc, 2)
+        self.g("branch", "chore/taken", "trunk")
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/taken")
+        self.assertEqual(cm.exception.rc, 3)
+
+    def test_diverged_difference_lines_are_marked_and_visible(self):   # 남의 글은 visible 을 거쳐 줄마다 「│ 」 아래에 실린다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.put({self.team.rules: "- [다른] 제어\x1b글자 · 조건: 역할=worker · 출처: a · 확인: b\n"})
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")
+        lines = str(cm.exception).split("\n")
+        self.assertEqual((cm.exception.rc, lines[0]), (1, LS.DIVERGED))
+        self.assertGreater(len(lines), 1)
+        self.assertEqual([l for l in lines[1:] if not l.startswith("│ ")], [])
+        self.assertIn("│ +" + NEW, lines)
+        self.assertIn("│ -- [다른] 제어\\x1b글자 · 조건: 역할=worker · 출처: a · 확인: b", lines)
+        self.assertNotIn("\x1b", str(cm.exception))
+
+    def test_command_line_codes(self):   # B2 — 하위 명령의 종료 코드와 마지막 줄 · 올리지 않는다
+        args = ("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules")
+        rc, out = self.ls(*args)
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (1, ["[spec-distill] " + LS.NOTHING]), out)
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", OTHER, "--branch", "chore/alpha-rules")
+        self.assertEqual(rc, 5, out)
+        rc, out = self.ls(*args)
+        commit = self.g("rev-parse", "refs/heads/chore/alpha-rules")
+        self.assertEqual((rc, out.strip().splitlines()[-1:]),
+                         (0, ["[spec-distill] " + LS.BRANCH_MADE % ("chore/alpha-rules", commit)]), out)
+        self.assertEqual(self.g("ls-remote", str(self.o), "refs/heads/chore/alpha-rules"), "")   # 올리지 않는다
+        rc, out = self.ls(*args)
+        self.assertEqual(rc, 3, out)   # 이미 있다
+        self.assertEqual(self.g("rev-parse", "refs/heads/chore/alpha-rules"), commit)
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertEqual(rc, 2, out)   # --branch 가 없다
+
+    def test_refuses_a_name_git_would_not_take(self):   # 2 — 받지 않는 값 · 붉어지는 변이: 꼴 검사를 뺀다(3 이 된다)
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        before = self.refs()
+        for name in ("", "-x", "a..b", "a b", "a.lock", "a/", "a//b", ".a", "HEAD", "a@{b", "a\x1bb"):
+            with self.assertRaises(CB.BranchError) as cm:
+                LS.rules_branch(str(self.w), rm(ALPHA), SID, name)
+            self.assertEqual(cm.exception.rc, 2, repr(name))
+        self.assertEqual(self.refs(), before)
+
+    def test_repo_branch_rule_is_read_with_match(self):   # F10 — availability · project-init 훅과 같은 `match` 읽기
+        self.put({RULE_DOC: "```regex\n^(chore|conductor)/[a-z0-9]+\n```\n"})
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "fix/alpha-rules")
+        self.assertEqual(cm.exception.rc, 2)
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/fix/alpha-rules"), 1)
+        commit = LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")   # 앞이 맞으면 받는다(fullmatch 가 아니다)
+        self.assertEqual(self.g("rev-parse", "refs/heads/chore/alpha-rules"), commit)
+
+    def test_foreign_rules_edit_refuses(self):   # 규칙 쪽 남의 고침 — 1 · 만들지 않는다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.foreign_edit()
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_branch(str(self.w), rm(ALPHA), SID, "chore/alpha-rules")
+        self.assertEqual((cm.exception.rc, str(cm.exception)), (1, LS.FOREIGN % 1 + LS.REFUSE_TAIL))
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
+
+    def test_off_switch_tells_and_makes_nothing(self):   # 0 — 쓸 수 없어 알리고 넘어간다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        rc, out = self.ls("rules-branch", "--roadmap", rm(ALPHA), "--session", SID, "--branch", "chore/alpha-rules")
+        self.assertEqual((rc, out.strip().splitlines()[-1:]), (0, ["[spec-distill] " + CB.OFF_NOTE]), out)
+        self.assertEqual(self.rc("rev-parse", "--verify", "-q", "refs/heads/chore/alpha-rules"), 1)
+
+
+class RulesState(TeamRepo):   # M8 — 같아짐 · 갈라짐
+    def state(self):
+        return LS.rules_state(str(self.w), rm(ALPHA), self.tip())
+
+    def test_verdicts(self):
+        self.assertEqual(self.state(), LS.RulesState(None, None, TEAM_RULE + "\n", "없음"))
+        main = self.g("rev-parse", "origin/trunk")
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        copy = TEAM_RULE + "\n" + NEW + "\n"
+        self.assertEqual(self.state(), LS.RulesState(copy, main, TEAM_RULE + "\n", "올릴 것"))
+        self.put({self.team.rules: copy})   # 머지 흉내
+        self.assertEqual(self.state(), LS.RulesState(copy, main, copy, "같음"))
+
+    def test_unreadable_base_line_is_diverged(self):   # 닫는 쪽 — rules-base.md 가 없거나 꼴 밖이거나 커밋이 이 레포에 없다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        main = self.g("rev-parse", "origin/trunk")
+        base = self.team.path(LS.RULES_BASE_FILE)
+        for text in (None, LS.BASE_HEAD + main[:8] + "\n", LS.BASE_HEAD + main + "\n" + LS.BASE_HEAD + main + "\n",
+                     LS.BASE_HEAD + main.upper() + "\n", LS.BASE_HEAD + "f" * 40 + "\n", " " + LS.BASE_HEAD + main + "\n"):
+            self.write({base: text})
+            got = self.state()
+            self.assertEqual((got.base, got.verdict), (None, "갈라짐"), repr(text))
+        self.write({base: LS.BASE_HEAD + main + "\n"})   # 양성 대조 — 바른 줄이면 올릴 것
+        self.assertEqual(self.state().verdict, "올릴 것")
 
 
 if __name__ == "__main__":
