@@ -37,6 +37,7 @@ REFUSE_TAIL = " — confirm 으로 확인받거나 rules-reset 으로 물린다"
 NO_COPY = "되돌릴 사본이 없다"
 RESET_DONE = "남의 규칙 고침을 물렸다 — 규칙은 기본 브랜치의 글로 돌아갔다"
 RESET_PENDING_LEFT = "대기 줄의 남의 고침은 남아 있다 — confirm 하거나 지운다"
+RESET_PENDING_UNMEASURED = FOREIGN_UNMEASURED + "(대기 줄) — 확인한 끝은 옮기지 않았다 — confirm 으로 확인받는다"
 NOT_TEAM = "team 형식 로드맵이 아니다 — 규칙 사본은 머리말 %s: %s 인 로드맵만 둔다: %s"
 NO_STATE_BRANCH = "상태 브랜치가 없다 — 먼저 ensure 를 돌린다"
 
@@ -96,7 +97,8 @@ def _check_line(line) -> None:
 
 
 def _split(text: Optional[str]) -> list:
-    """줄 파일의 줄들 — `\\n` 으로만 가른다(다른 줄 가름 글자는 줄 안의 글자로 둔다)."""
+    """줄 파일의 줄들 — `\\n` 으로만 가른다(다른 줄 가름 글자는 줄 안의 글자로 둔다). 줄 끝의 `\\r` 는 줄에 남긴다 —
+    고쳐 쓸 때 다른 줄을 바이트 그대로 두려고. 대조는 `_bare` 로 한다."""
     if not text:
         return []
     lines = text.split("\n")
@@ -105,11 +107,27 @@ def _split(text: Optional[str]) -> list:
     return lines
 
 
+def _bare(line: str) -> str:
+    """대조할 줄 — 줄 끝의 `\\r` 하나를 벗긴다(CRLF 파일의 줄도 같은 줄로 본다)."""
+    return line[:-1] if line.endswith("\r") else line
+
+
+def _read_tip(root, name: str) -> str:
+    """읽을 끝. 상태 브랜치가 갈라졌으면 BranchError(1) 「남의 고침을 재지 못했다 — <사유>」, 없으면 BranchError(1)."""
+    seen, split = CB.seen_tip(root, name)
+    if seen is None:
+        if split:
+            raise CB.BranchError(1, "%s — %s" % (FOREIGN_UNMEASURED, CB.visible(split)))
+        raise CB.BranchError(1, NO_STATE_BRANCH)
+    return seen
+
+
 def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, drop: Optional[str] = None,
                reset: bool = False) -> CB.Result:
     """상태 브랜치의 규칙 사본을 줄 하나 더하거나(`add`) 빼거나(`drop`) 사본을 지운다(`reset`).
     사본이 없으면 기본 브랜치 끝의 규칙 글에서 만들고 `rules-base.md` 에 그 커밋을 적는다. `add` · `drop` 은 읽을 끝에서
-    규칙 쪽에 확인되지 않은 남의 고침이 있거나 재지 못하면 쓰지 않는다(BranchError(1)). `reset` 은 그 검사 없이 지우고,
+    규칙 쪽에 확인되지 않은 남의 고침이 있거나 재지 못하면 쓰지 않는다(BranchError(1)). `reset` 은 그 검사 없이 지우고
+    (상태 브랜치가 갈라졌으면 셋 모두 쓰지 않는다 — BranchError(1)),
     규칙 쪽에 남의 고침이 있었으면 대기 줄 쪽이 깨끗할 때만 `확인한 끝` 을 새 끝으로 둔다."""
     CB._need_marker(root, roadmap_rel, session)
     why = CB.availability(root, roadmap_rel)
@@ -127,11 +145,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
         return _reset(root, roadmap_rel, session, team, base_path)
     line = add if add is not None else drop
     _check_line(line)
-    seen, split = CB.seen_tip(root, team.name)
-    if seen is None:
-        if split:
-            raise CB.BranchError(1, "%s — %s" % (FOREIGN_UNMEASURED, CB.visible(split)))
-        raise CB.BranchError(1, NO_STATE_BRANCH)
+    seen = _read_tip(root, team.name)
     found = foreign(root, roadmap_rel, seen, TS.rules_paths(team))   # 읽을 끝에서 잰다 — 받아 온 남의 끝이 로컬보다 앞설 수 있다
     if found is None:
         raise CB.BranchError(1, FOREIGN_UNMEASURED + REFUSE_TAIL)
@@ -142,14 +156,16 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
     def edit(base):
         copy = base.read(team.rules)
         lines = _split(copy if copy is not None else CB.read(root, main, team.rules))
+        bare = [_bare(item) for item in lines]
         if add is not None:
-            if add in lines:
+            if add in bare:
                 raise CB.BranchError(2, "더할 줄이 이미 규칙에 있다: %s" % CB.visible(add))
-            lines.append(add)
+            crlf = bool(lines) and len(bare) == len([item for item in lines if item.endswith("\r")])
+            lines.append(add + "\r" if crlf else add)   # 줄마다 CRLF 인 파일이면 새 줄도 CRLF
         else:
-            if drop not in lines:
+            if drop not in bare:
                 raise CB.BranchError(2, "뺄 줄이 규칙에 없다: %s" % CB.visible(drop))
-            lines.remove(drop)
+            del lines[bare.index(drop)]
         changes = {team.rules: "".join(item + "\n" for item in lines)}
         if copy is None:
             changes[base_path] = BASE_HEAD + main + "\n"
@@ -159,7 +175,7 @@ def rules_edit(root, roadmap_rel: str, session: str, add: Optional[str] = None, 
 
 
 def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Result:
-    seen, _split_why = CB.seen_tip(root, team.name)
+    seen = _read_tip(root, team.name)   # 갈라졌으면 지우지 않는다 — 로컬 끝만 보면 원격의 사본을 「없다」 고 넘긴다
     _catch_up(root, team.name, seen)
 
     def edit(base):
@@ -174,7 +190,10 @@ def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Res
         return res   # 새 끝에 사본이 남았다 — 그 끝을 확인하지 않는다
     if foreign(root, roadmap_rel, res.commit, TS.rules_paths(team)) == []:
         return res
-    if foreign(root, roadmap_rel, res.commit, TS.pending_paths(team)) != []:
+    pending = foreign(root, roadmap_rel, res.commit, TS.pending_paths(team))
+    if pending is None:
+        return res._replace(notes=res.notes + (RESET_PENDING_UNMEASURED,))
+    if pending:
         return res._replace(notes=res.notes + (RESET_PENDING_LEFT,))
     told = confirm_at(root, roadmap_rel, session, res.commit)
     return res._replace(notes=res.notes + told + (RESET_DONE,))

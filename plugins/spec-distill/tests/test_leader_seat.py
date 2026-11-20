@@ -219,6 +219,16 @@ class RulesEdit(TeamRepo):   # R3 AC17 · AC21
         self.assertEqual((rc, self.copy()), (0, None), out)
 
 
+    def test_crlf_default_rules_compare_without_the_cr(self):   # 기본 브랜치 규칙이 CRLF 여도 줄 대조는 같다 — 다른 줄은 바이트 그대로 둔다
+        self.put({self.team.rules: TEAM_RULE + "\r\n"})
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_edit(str(self.w), rm(ALPHA), SID, add=TEAM_RULE)
+        self.assertEqual(cm.exception.rc, 2)   # 이미 있는 줄
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        self.assertEqual(self.copy(), TEAM_RULE + "\r\n" + NEW + "\r\n")
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, drop=TEAM_RULE)
+        self.assertEqual(self.copy(), NEW + "\r\n")
+
     def test_marker_comes_before_the_off_switch(self):   # F14 — 표지(5) → 쓸 수 있는지 → 팀 차례 · 붉어지는 변이: 꺼짐을 먼저 본다
         self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
         with self.assertRaises(CB.BranchError) as cm:
@@ -293,6 +303,40 @@ class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을
         self.assertIsNone(self.copy())
         self.assertEqual(res.notes[-1], LS.RESET_PENDING_LEFT)
         self.assertIsNone(TS.trust_of(self.rows())[0])
+        self.assertNotIn(cs.TRUST_WHY[0], [r["까닭"] for r in self.rows()])
+
+    def test_diverged_reset_refuses_without_writing(self):   # 갈라진 상태 브랜치 — 사본이 원격에만 있어도 「없다」 고 넘어가지 않는다
+        self.foreign_edit()   # 남의 사본을 받아 왔다
+        local = self.local()
+        mine = self.g("commit-tree", self.g("rev-parse", local + "^{tree}"), "-p", local, "-m", "올리지 못한 내 커밋")
+        self.g("update-ref", "refs/heads/conductor/" + ALPHA, mine, local)
+        seen, split = CB.seen_tip(str(self.w), ALPHA)
+        self.assertEqual((seen, bool(split)), (None, True))   # 양성 대조 — 정말 갈라졌다
+        remote = self.g("rev-parse", "refs/remotes/origin/conductor/" + ALPHA)
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertEqual((cm.exception.rc, str(cm.exception)), (1, "%s — %s" % (LS.FOREIGN_UNMEASURED, CB.visible(split))))
+        self.assertEqual((self.local(), self.g("rev-parse", "refs/remotes/origin/conductor/" + ALPHA)), (mine, remote))
+        self.assertIsNotNone(CB.read(str(self.w), remote, self.team.rules))
+        self.assertEqual(self.g("ls-remote", str(self.o), "refs/heads/conductor/" + ALPHA).split()[0], remote)
+
+    def test_reset_with_an_unmeasured_pending_side_says_unmeasured(self):   # I11 — 재지 못함은 「남아 있다」 가 아니다
+        old = self.write({self.team.rules: "- 옛 줄\n"}).commit
+        mine = self.write({self.team.status: "s\n"}).commit
+        other = self.clone("merger")   # 남의 머지 커밋 — 남의 고침 판정이 두 쪽 모두 None 이 된다
+        self.g("fetch", "-q", "origin", SPEC, repo=other)
+        tree = self.g("rev-parse", old + "^{tree}", repo=other)
+        b = self.g("commit-tree", tree, "-p", old, "-m", "B", repo=other)
+        m = self.g("commit-tree", tree, "-p", mine, "-p", b, "-m", "M", repo=other)
+        self.g("push", "-q", "origin", "%s:refs/heads/conductor/%s" % (m, ALPHA), repo=other)
+        self.g("fetch", "-q", "origin", SPEC)
+        self.assertIsNone(LS.foreign(str(self.w), rm(ALPHA), m, TS.pending_paths(self.team)))   # 양성 대조
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNotNone(res.commit)
+        self.assertIsNone(self.copy())
+        self.assertEqual(res.notes[-1], LS.RESET_PENDING_UNMEASURED)
+        self.assertTrue(res.notes[-1].startswith(LS.FOREIGN_UNMEASURED))
+        self.assertNotIn(LS.RESET_PENDING_LEFT, res.notes)
         self.assertNotIn(cs.TRUST_WHY[0], [r["까닭"] for r in self.rows()])
 
     def test_glyphs_are_the_read_side_constants(self):   # F9 — 다시 치지 않는다
