@@ -1107,6 +1107,34 @@ class Delete(StateRepo):
         self.assertEqual(c.exception.rc, 3)
         self.assertEqual(CB.local_tip(self.w, ALPHA), moved)
 
+    def test_a_remote_that_refuses_the_delete_keeps_the_local_branch(self):
+        """뒤집으면 붉다 — 원격 지우기의 rc 를 안 보면 원격에 남은 브랜치를 두고 로컬만 지우고 0 으로 끝난다."""
+        self.g("config", "receive.denyDeletes", "true", repo=self.o)
+        tip = CB.local_tip(self.w, ALPHA)
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed")
+        self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (3, tip), out)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), tip)
+        self.assertNotIn("지웠다", out)
+
+    def test_an_origin_that_cannot_be_known_stops_the_delete(self):
+        tip = CB.local_tip(self.w, ALPHA)
+        with mock.patch.object(CB, "_origin_exists", return_value=None):
+            with self.assertRaises(CB.BranchError) as c:
+                CB.delete(self.w, rm(ALPHA), SID, True)
+        self.assertEqual(c.exception.rc, 3)
+        self.assertEqual(CB.local_tip(self.w, ALPHA), tip)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), tip)
+
+    def test_unpushed_rules_edits_are_counted_exactly(self):
+        import conductor_status as cstat
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.put({team.rules: "- 규칙 하나\n- 규칙 둘\n"})
+        self.g("push", "origin", "trunk")
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {team.rules: "- 규칙 하나\n- 규칙 셋\n- 규칙 넷\n"}, "규칙")
+        self.assertEqual(cstat.leftovers(self.w, rm(ALPHA))["rules"], 3)                           # 뺀 줄 1 + 더한 줄 2
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)
+        self.assertIn("안 올린 규칙 고침 3줄", out)
+
     def test_leftovers_count_four_things_at_a_given_or_local_tip(self):
         import conductor_status as cstat
         want = {"unreceived": 1, "unanswered": 1, "pending": 2, "rules": 0}
@@ -1126,7 +1154,11 @@ class DeleteGateGuards(StateRepo):
                      ("push", "--porcelain", "origin", ":" + ref, ":" + CB.ref_of(BETA)), ("push", "--porcelain", "origin", ref + ":" + ref),
                      ("update-ref", "-d", "refs/heads/trunk", oid), ("update-ref", "-d", ref), ("update-ref", "-d", ref, "main"),
                      ("update-ref", "--no-deref", "-d", ref, oid), ("fetch", "--quiet", "origin", "+%s:refs/remotes/origin/x" % ref),
-                     ("ls-remote", "origin", ref), ("rev-parse", "HEAD")):
+                     ("ls-remote", "origin", ref), ("rev-parse", "HEAD"),
+                     ("push", "--porcelain", "origin", ":" + ref + "*"), ("push", "--porcelain", "origin", ":" + ref + "/x"), ("push", "--porcelain", "origin", ":" + ref + "\n"),
+                     ("push", "--porcelain", "origin", ":refs/heads/conductor/*"), ("push", "--porcelain", "origin", ":refs/heads/conductor/../trunk"),
+                     ("update-ref", "-d", ref + "/x", oid), ("update-ref", "-d", "refs/heads/conductor/*", oid), ("update-ref", "-d", ref, oid + "0"),
+                     ("update-ref", "-d", ref, oid + "\n")):
             with self.assertRaises(RuntimeError, msg=form):
                 CB.git(self.w, *form, delete=True)                                                 # 표지가 있어도 그 두 꼴 밖은 막힌다
         self.assertEqual(CB.git(self.w, "update-ref", "-d", "refs/remotes/origin/conductor/" + ALPHA, oid, delete=True)[0] in (0, 1), True)   # 양성 대조 — 문을 지난다(없는 ref 라 git 이 거절해도 RuntimeError 는 아니다)

@@ -80,17 +80,23 @@ LS_REMOTE_FORMS = ("--exit-code",)
 TRACKING_PREFIX = "refs/remotes/origin/"
 
 
-DELETABLE_PREFIXES = ("refs/heads/conductor/", TRACKING_PREFIX + "conductor/")   # 지우는 꼴이 닿는 ref — 상태 브랜치와 그 원격 추적 ref 뿐이다
+DELETE_PUSH_RE = re.compile(r":refs/heads/conductor/([a-z0-9][a-z0-9.-]*)")                         # 지우는 push 가 닿는 ref — 상태 브랜치 하나뿐이다
+DELETE_REF_RE = re.compile(r"refs/(?:heads|remotes/origin)/conductor/([a-z0-9][a-z0-9.-]*)")        # 지우는 update-ref 가 닿는 ref — 상태 브랜치와 그 원격 추적 ref
 OID_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def _delete_name_ok(pattern, text) -> bool:
+    m = pattern.fullmatch(text)
+    return bool(m) and name_ok(m.group(1))
 
 
 def _check_delete_form(args) -> None:
     """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain origin :<상태 브랜치 ref>` 와 `update-ref -d <ref> <옛 값>`.
-    그 밖의 하위 명령 · 꼴은 이 표지가 있어도 거절한다."""
+    ref 는 닫힌 꼴 전체(fullmatch)와 맞아야 한다. 그 밖의 하위 명령 · 꼴은 이 표지가 있어도 거절한다."""
     rest = args[1:]
-    if args[0] == "push" and len(rest) == 3 and rest[0] == "--porcelain" and rest[1] == "origin" and rest[2].startswith(":" + DELETABLE_PREFIXES[0]):
+    if args[0] == "push" and len(rest) == 3 and rest[0] == "--porcelain" and rest[1] == "origin" and _delete_name_ok(DELETE_PUSH_RE, rest[2]):
         return
-    if args[0] == "update-ref" and len(rest) == 3 and rest[0] == "-d" and rest[1].startswith(DELETABLE_PREFIXES) and OID_RE.fullmatch(rest[2]):
+    if args[0] == "update-ref" and len(rest) == 3 and rest[0] == "-d" and _delete_name_ok(DELETE_REF_RE, rest[1]) and OID_RE.fullmatch(rest[2]):
         return
     raise RuntimeError("지우기 표지는 상태 브랜치를 지우는 꼴에만 받는다: %r" % (args,))
 
@@ -866,7 +872,10 @@ def delete(root, roadmap_rel: str, session: str, confirmed: bool = False) -> tup
         raise BranchError(1, "%s — 지우려면 사용자 확인 뒤 --confirmed 를 붙여 다시 부른다" % _counts_line(cstat.leftovers(root, roadmap_rel, tip)))
     ref = ref_of(team.name)
     remote_exists = False
-    if _origin_exists(root) is True:
+    has_origin = _origin_exists(root)
+    if has_origin is None:   # 알 수 없으면 지우지 않는다 — 원격이 있는데 없다고 보면 원격 브랜치만 남는다
+        raise BranchError(3, "origin 원격이 있는지 알 수 없어 지우지 않았다")
+    if has_origin:
         rc, _o, err = git(root, "ls-remote", "--exit-code", "origin", ref, timeout=NET_TIMEOUT)
         if rc == 0:
             remote_exists = True
