@@ -34,6 +34,7 @@ L_p5='담당자가 돌아와 그 결과를 보인 뒤에 spec 리뷰를 시작�
 # AC1 호출 줄 · 자리 표
 once "$CALL" '/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로>' "AC1: 호출 줄이 호출 줄 절에 한 번"
 assert_eq "$(printf '%s\n' "$ALL" | grep -oF 'quality-pipeline range' | wc -l | tr -d ' ')" "1" "AC1: quality-pipeline 을 부르는 꼴이 파일 전체에서 한 줄뿐"
+assert_eq "$(printf '%s\n' "$ALL" | grep -oF '/quality-gates:quality-pipeline' | wc -l | tr -d ' ')" "1" "AC1: /quality-gates:quality-pipeline 호출이 파일 전체에서 한 번뿐(다른 꼴 --pr · 맨 호출 없음)"
 once "$SITE" '| 자리 | 언제 | 시작 | 끝 | 원문 | 「잘못 골랐다」 | 기록이 실리는 곳 |' "AC1: 자리 표 머리 줄이 한 번"
 rows="$(printf '%s\n' "$SITE" | awk -F'|' '/^\|/{c=$2; gsub(/^ +| +$/,"",c); if (c!="자리" && c !~ /^-+$/) print c}' | tr '\n' ',')"
 assert_eq "$rows" "spec 승인 앞,에픽 머지 뒤,로드맵 끝,이름으로 청함," "AC1: 자리 표의 첫 칸이 차례로 자리 넷"
@@ -104,6 +105,7 @@ assert_contains "$SITE" 'PR 마다 한 번씩 보낸다' "AC22: 머지된 PR 이
 once "$SITE" "$L_failed" "AC23: L(failed) 한 번"
 assert_contains "$SITE" '지휘자가 스스로 다시 보내지 않는다' "AC23 양성: 지휘자가 스스로 다시 보내지 않는다"
 assert_not_contains "$ALL" '스스로 다시 보낸다' "AC23 음성: 「스스로 다시 보낸다」 가 없다"
+once "$SITE" '그 줄의 자리 칸은 기록 파일 이름과 같은 자리 글자(`spec` · `merged-pr<번호>` · `end` · `asked`)로 적는다' "AC23: 보내지 못한 리뷰의 쌓인 기록 줄이 이미 보낸 것 확인과 같은 자리 글자를 쓴다"
 
 # AC24
 once "$DISP" "$L_premerge" "AC24: L(premerge) 한 번"
