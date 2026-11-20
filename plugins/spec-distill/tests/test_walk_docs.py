@@ -1,6 +1,7 @@
 """걸음표 · 걸음 보기 · 보내는 글 틀 · 지휘 절차의 team 절 문서 검사."""
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -10,6 +11,10 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent / "scripts"))
 sys.path.insert(0, str(_HERE))
+import human_lines as H
+import walk_table as W
+from test_team_docs import changelog_entries, version_tuple
+
 PLUGIN = _HERE.parent
 REF = PLUGIN / "references"
 REPO = PLUGIN.parents[1]
@@ -148,6 +153,26 @@ class Philosophy(unittest.TestCase):   # R2 AC19 — §7 의 문장 그대로
         line = next(l for l in text.splitlines() if l.startswith("- **기본값과 판단.**"))
         self.assertIn(NEW_CLAUDE, line)
         self.assertNotIn(OLD_CLAUDE, text)
+
+
+class Docs(unittest.TestCase):   # R2 AC22 — 계획 2 몫
+    def test_team_files_documents_the_walk_table(self):
+        text = (REF / "team-files.md").read_text(encoding="utf-8")
+        for word in ("### 걸음표", "references/walk-table.md", "walk_table", "walk_table.py next --roadmap <로드맵> --job <과제>",
+                     "walk_table.py check", "관문은 이 표로 바뀌지 않는다", "기본 표로 넘어가지 않는다", "계획 n/m",
+                     H.LATER_ANSWER, H.NOT_TOUCHED, "(끝남)", "다음 걸음의 칸으로") + W.COLUMNS:
+            self.assertIn(word, text, word)
+
+    def test_readme_and_changelog(self):
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for word in ("walk_table", "walk_table.py next", "걸음표"):
+            self.assertIn(word, readme, word)
+        version = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
+        sections = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8"))
+                    if ver == version_tuple(version)]
+        self.assertEqual(len(sections), 1, version)   # 판 번호로 고른다 — 리터럴 판을 박지 않는다
+        for word in ("walk_table", "walk_table.py", "걸음표", "conductor-dispatch.md", "P8"):
+            self.assertIn(word, sections[0], word)
 
 
 if __name__ == "__main__":
