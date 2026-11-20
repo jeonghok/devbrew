@@ -6,11 +6,12 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_l
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
-from unittest import mock  # noqa: F401
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, OTHER, ROADMAPS, SCRIPTS, SID, StateRepo, rm, roadmap_text  # noqa: E402
@@ -84,6 +85,17 @@ class RulesTip(TeamRepo):   # R3 AC15 · AC21 · AC14
         tip, notes = self.tip_of()
         self.assertIsNone(tip)
         self.assertEqual(notes, ["확인되지 않은 남의 고침 1 — 규칙은 기본 브랜치의 글을 읽는다"])
+
+    def test_foreign_copy_is_counted_from_a_subfolder(self):   # 경로 인자는 레포 뿌리 기준이다 — cwd 가 하위 폴더여도 같다
+        self.foreign_edit()
+        got = TS.rules_tip(RS.Git(str(self.w / ROADMAPS)), self.team, True, self.rows())
+        self.assertEqual(got, (None, ["확인되지 않은 남의 고침 1 — 규칙은 기본 브랜치의 글을 읽는다"]))
+
+    def test_literal_pathspec_env_does_not_hide_the_foreign_copy(self):   # GIT_LITERAL_PATHSPECS 가 `:(top,literal)` 을 글자로 읽게 하지 않는다
+        self.foreign_edit()
+        with mock.patch.dict(os.environ, {"GIT_LITERAL_PATHSPECS": "1"}):
+            got = TS.rules_tip(RS.Git(str(self.w / ROADMAPS)), self.team, True, self.rows())
+        self.assertEqual(got, (None, ["확인되지 않은 남의 고침 1 — 규칙은 기본 브랜치의 글을 읽는다"]))
 
     def test_unreadable_machine_state_closes(self):   # I11 — 한 뜻: 재지 못함
         self.write({self.team.rules: "- 사본\n"})

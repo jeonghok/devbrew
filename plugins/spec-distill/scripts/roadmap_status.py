@@ -93,6 +93,11 @@ PATH_NOT_IN_TREE_RE = re.compile(r"^fatal: path '.*' (?:does not exist in|exists
 
 # ── git (읽기 전용) ──────────────────────────────────────────────────────────
 
+def _top_literal(paths: list) -> list:
+    """레포 뿌리 기준 · 글자 그대로의 경로 인자 — Git.pathspec_env 와 함께 넘긴다."""
+    return [":(top,literal)" + p for p in paths]
+
+
 class Git:
     def __init__(self, cwd: str):
         self.cwd = cwd
@@ -253,14 +258,24 @@ class Git:
         이 호출의 환경에서만 LITERAL_PATHSPEC_OFF 를 뺀다(다른 git 호출의 환경은 그대로)."""
         if not paths:
             return []
-        env = {k: v for k, v in self.env.items() if k not in LITERAL_PATHSPEC_OFF}
         rc, out, err = self.run_err("log", "--no-merges", "--full-history", "--no-renames", "--format=", "--name-only", "-z",
-                                    tip, *["^" + e for e in excludes if e], "--", *[":(top,literal)" + p for p in paths],
-                                    env=env)
+                                    tip, *["^" + e for e in excludes if e], "--", *_top_literal(paths),
+                                    env=self.pathspec_env())
         if rc != 0:
             self.fail("log", rc, err)
             return None
         return sorted({p.lstrip("\n") for p in out.split("\0") if p.lstrip("\n")})
+
+    def pathspec_env(self) -> dict:
+        """`:(top,literal)` 경로 인자를 그대로 읽게 하는 환경 — LITERAL_PATHSPEC_OFF 를 뺀다(그 호출에만 넘긴다)."""
+        return {k: v for k, v in self.env.items() if k not in LITERAL_PATHSPEC_OFF}
+
+    def changed_by(self, rng: str, paths: list) -> tuple:
+        """(rc, 출력) — `rng` 의 커밋 가운데 paths 를 바꾼 것을 「해시 줄, 빈 줄, 경로 줄들」 차례로(새 것부터).
+        paths 는 레포 뿌리 기준 · 글자 그대로다(cwd 와 무관하다). 실패를 failures 에 남기지 않는다 — 부르는 쪽이 닫는다."""
+        rc, out, _err = self.run_err("log", "--no-renames", "--format=%H", "--name-only", rng, "--", *_top_literal(paths),
+                                     env=self.pathspec_env())
+        return rc, out
 
     def grep_files(self, tree: str, fixed: str, pathspec: str):
         rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)

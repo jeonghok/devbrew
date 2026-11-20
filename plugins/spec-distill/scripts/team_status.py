@@ -111,7 +111,7 @@ def foreign_commits(git, tip: str, trust, paths: list):
             return None
         if len(words) > 2 and words[0] not in own:
             return None
-    rc, out, _err = git.run_err("log", "--no-renames", "--format=%H", "--name-only", rng, "--", *paths)
+    rc, out = git.changed_by(rng, paths)   # 경로는 레포 뿌리 기준(cwd 가 하위 폴더여도 같다)
     if rc != 0:
         return None
     found = []
