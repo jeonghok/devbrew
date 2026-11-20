@@ -100,7 +100,7 @@ class Cases(unittest.TestCase):
         c3 = self.r.commit("a.txt", "x = 2\n" + BASE_A + "tail\n")
         git(self.R, "checkout", "-q", "trunk-x")
         for c in (c1, c2, c3):
-            git(self.R, "cherry-pick", c)
+            git(self.R, "-c", "user.name=picker", "cherry-pick", c)  # 다른 커미터라 원본과 같은 커밋이 되지 않는다
         merge = git(self.R, "rev-parse", "HEAD")
         parent_of_merge = git(self.R, "rev-parse", "HEAD~1")
         got, why = mpr.confirm(self.R, merge, c3, "3")
