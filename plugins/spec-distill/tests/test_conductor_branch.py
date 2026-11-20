@@ -510,11 +510,13 @@ class WriteFloorGuards(StateRepo):
         d = self.clone("sh2", "--depth", "1", "--no-local")
         self.claim(repo=d)
         remote_before = self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o)
-        CB.ensure(d, rm(ALPHA), SID)                                       # 관계없는 뿌리를 만들고 — 올리기는 거절돼야 한다
+        root = self.g("commit-tree", EMPTY_TREE, "-m", "관계없는 뿌리", repo=d)   # 과제 6 의 ensure 는 받아 온다 — 관계없는 뿌리는 손으로 둔다
+        self.g("update-ref", CB.ref_of(ALPHA), root, repo=d)
         res = CB.write(d, rm(ALPHA), SID, lambda base: {self.team.status: "덮으려 한다\n"}, "STATUS")
-        self.assertFalse(res.pushed)
-        self.assertTrue(res.notes and res.notes[0].startswith(CB.NOT_PUSHED), res.notes)
-        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), remote_before)   # 원격 끝이 덮이지 않았다
+        self.assertEqual((res.pushed, res.onto), (True, remote_before))                       # 거절된 뒤 원격 끝 위에 다시 만들었다
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), res.commit)
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", remote_before, res.commit, repo=d), 0)   # 원격 끝이 덮이지 않았다
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", root, res.commit, repo=d), 1)          # 관계없는 뿌리는 이력에 들지 않는다
 
 
 class MainCatchesEverything(StateRepo):
@@ -567,3 +569,314 @@ class WriteBoundary(unittest.TestCase):
         self.assertEqual(CB.NOT_PUSHED, "아직 안 올라옴")
         self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes"))
         self.assertEqual(CB.Base._fields, ("commit", "read", "names"))
+
+
+class Publish(StateRepo):
+    def setUp(self):
+        super().setUp()
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.team = CB.team_of(self.w, rm(ALPHA))
+        self.received = self.team.path(CB.RECEIVED_FILE)
+        self.m2 = self.clone("m2")                     # 같은 로드맵을 쓰는 다른 기계
+        self.claim(repo=self.m2)
+
+    @staticmethod
+    def add_line(path, line):
+        return lambda base: {path: (base.read(path) or "") + line + "\n"}
+
+    def test_push_outcome_table(self):
+        ref = "refs/heads/conductor/x:refs/heads/conductor/x"
+        for rc, text, want in ((0, "To o\n*\t%s\t[new branch]\nDone\n" % ref, "ok"), (0, "To o\n \t%s\tabc..def\nDone\n" % ref, "ok"),
+                               (1, "To o\n!\t%s\t[rejected] (fetch first)\nDone\n" % ref, "behind"),
+                               (1, "To o\n!\t%s\t[rejected] (non-fast-forward)\nDone\n" % ref, "behind"),
+                               (1, "To o\n!\t%s\t[remote rejected] (pre-receive hook declined)\nDone\n" % ref, "failed"),
+                               (128, "", "failed"), (1, "!\t%s\t[rejected-ish]\n" % ref, "failed"), (1, "x [rejected] y\n", "failed")):
+            self.assertEqual(CB.push_outcome(rc, text), want, text)
+
+    def test_ensure_adopts_the_branch_another_machine_made(self):
+        tip = CB.local_tip(self.w, ALPHA)
+        r = CB.ensure(self.m2, rm(ALPHA), SID)
+        self.assertEqual(CB.local_tip(self.m2, ALPHA), tip)       # 뿌리를 또 만들지 않는다
+        self.assertIn("원격의 것을 받아 왔다", r.notes[0])
+        self.assertEqual(self.g("rev-list", "--count", CB.ref_of(ALPHA), repo=self.o), "1")
+
+    def test_rejected_push_is_remade_on_the_remote_tip_without_force(self):
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        theirs = CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        calls = []
+
+        def status(base):
+            calls.append(base.commit)
+            return {self.team.status: "내 STATUS\n"}
+        r = CB.write(self.w, rm(ALPHA), SID, status, "STATUS")
+        self.assertEqual((r.onto, r.pushed, calls[-1]), (theirs.commit, True, theirs.commit))
+        self.assertEqual(self.g("rev-parse", r.commit + "^"), theirs.commit)                  # 올라간 커밋 위에 얹었다 — 고치지 않았다
+        self.assertTrue(any(n.startswith("다른 곳에서 이 브랜치에 썼다 — %s · " % theirs.commit[:8]) for n in r.notes), r.notes)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), r.commit)
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄\n")
+        self.assertEqual(CB.read(self.w, r.commit, self.team.status), "내 STATUS\n")
+
+    def test_line_file_gets_the_same_edit_not_an_overwrite(self):
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        r = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 이쪽 줄"), "받음")
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄\n- 이쪽 줄\n")
+
+    def test_no_origin_keeps_the_local_commit_and_the_next_write_carries_it(self):
+        url = self.g("remote", "get-url", "origin")
+        self.g("remote", "set-url", "origin", "file://" + str(self.t / "gone.git"))
+        r1 = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 하나"), "받음")
+        self.assertEqual((r1.pushed, CB.local_tip(self.w, ALPHA)), (False, r1.commit))
+        self.assertTrue(any(n.startswith("아직 안 올라옴") for n in r1.notes), r1.notes)
+        self.g("remote", "set-url", "origin", url)
+        r2 = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 둘"), "받음")
+        self.assertTrue(r2.pushed)
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), r2.commit)
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", r1.commit, r2.commit), 0)
+        self.assertFalse(any(str(self.t) in n or "file://" in n for n in r1.notes), r1.notes)   # 사유에 원격 주소 · 절대경로가 실리지 않는다(J55)
+
+    def test_no_origin_at_all_exits_zero_from_the_command(self):   # AC3 — origin 이 없으면 로컬에만 쓰고 0
+        self.g("remote", "remove", "origin")
+        self.claim(BETA)
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(BETA), "--session", SID)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("아직 안 올라옴", out)
+        self.assertIsNotNone(CB.local_tip(self.w, BETA))
+
+    def test_unpushed_earlier_commits_survive_a_later_rejection(self):   # J4
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        letter = self.team.inbox + "/" + BETA + "/2026-11-19-01.md"
+        url = self.g("remote", "get-url", "origin")
+        self.g("remote", "set-url", "origin", "file://" + str(self.t / "gone.git"))
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: "이쪽 글\n"}, "편지")
+        CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 이쪽 줄"), "받음")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {letter: "저쪽 글\n"}, "편지")
+        theirs = CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "내 STATUS\n"}, "STATUS")
+        self.assertEqual((r.onto, r.pushed), (theirs.commit, True))
+        self.assertEqual(self.rc("merge-base", "--is-ancestor", theirs.commit, r.commit), 0)
+        self.assertEqual(CB.read(self.w, r.commit, letter), "저쪽 글\n")                                   # 올라간 글은 그대로
+        self.assertEqual(CB.read(self.w, r.commit, letter.replace("-01.md", "-02.md")), "이쪽 글\n")       # 내 글은 다음 번호로
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄\n- 이쪽 줄\n")
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), r.commit)
+
+    def offline(self):
+        """origin 에 닿지 못하게 한다. 되돌릴 주소를 돌려준다."""
+        url = self.g("remote", "get-url", "origin")
+        self.g("remote", "set-url", "origin", "file://" + str(self.t / "gone.git"))
+        return url
+
+    def test_replayed_letter_names_stay_unique_across_the_whole_inbox(self):   # J4 · J23 — 경로가 아니라 이름을 inbox 전체에서 본다
+        """뒤집으면 붉다 — 이름 겹침을 경로로만 보면 all/…-01 이 그대로 더해져 같은 이름의 글이 둘 생기고,
+        같은 폴더에서만 다음 번호를 찾으면 …-03 이 둘 생긴다. 읽는 쪽은 그런 글을 둘 다 내지 않는다(J24)."""
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        inbox = self.team.inbox + "/"
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-01.md": "이쪽 모두에게\n"}, "편지")        # 폴더는 다르고 이름이 같다
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {inbox + BETA + "/2026-11-19-02.md": "이쪽 베타에게\n"}, "편지")   # 경로가 같고 글이 다르다
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {inbox + BETA + "/2026-11-19-01.md": "저쪽 1\n"}, "편지")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {inbox + BETA + "/2026-11-19-02.md": "저쪽 2\n"}, "편지")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {inbox + "all/2026-11-19-03.md": "저쪽 3\n"}, "편지")            # 다음 번호가 다른 폴더에 이미 있다
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        got = {p[len(inbox):]: CB.read(self.w, r.commit, p) for _m, p in CB.names(self.w, r.commit, inbox)}
+        self.assertEqual(got, {BETA + "/2026-11-19-01.md": "저쪽 1\n", BETA + "/2026-11-19-02.md": "저쪽 2\n", "all/2026-11-19-03.md": "저쪽 3\n",
+                               "all/2026-11-19-04.md": "이쪽 모두에게\n", BETA + "/2026-11-19-05.md": "이쪽 베타에게\n"})
+        names = [p.rsplit("/", 1)[1] for p in got]
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_same_letter_on_both_sides_is_not_doubled(self):
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        path = self.team.inbox + "/all/2026-11-19-01.md"
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {path: "같은 글\n"}, "편지")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {path: "같은 글\n"}, "편지")          # 같은 경로 · 같은 글
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        self.assertEqual([p for _m, p in CB.names(self.w, r.commit, self.team.inbox + "/")], [path])
+
+    def test_line_file_replay_counts_lines_as_a_multiset(self):   # J52
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {self.received: "- 같은 줄\n- 같은 줄\n- 지울 줄\n"}, "받음")      # 같은 줄 둘을 더한다
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {self.received: "- 같은 줄\n- 같은 줄\n"}, "받음")                 # 한 줄을 뺀다
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {self.received: "- 같은 줄\n- 지울 줄\n- 지울 줄\n"}, "받음")     # 저쪽에도 같은 글자의 줄이 있다
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        # 저쪽 셋 + 더한 셋(이미 있어도 더한다) − 뺀 하나(앞에서부터 하나만)
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 같은 줄\n- 지울 줄\n- 같은 줄\n- 같은 줄\n- 지울 줄\n")
+
+    def test_two_rejections_in_a_row_run_the_edit_once_per_attempt_and_leave_one_copy(self):   # J4 — 이번 쓰기는 다시 얹지 않는다
+        """뒤집으면 붉다 — 둘째 거절에서 앞 시도의 「이번 쓰기」 커밋까지 다시 얹으면 번호를 다시 센 같은 글이 둘 실린다."""
+        from unittest import mock
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄 1"), "받음")       # 첫 거절의 까닭
+        real_fetch, sneaked, bases = CB.fetch_state, [], []
+
+        def fetch_then_the_other_machine_writes_again(root, name):
+            tip = real_fetch(root, name)
+            if not sneaked:                                                                         # 받아 온 직후 다른 기계가 한 번 더 쓴다 — 둘째 거절의 까닭
+                sneaked.append(CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄 2"), "받음").commit)
+            return tip
+
+        def numbered(base):                                                                         # send 처럼 새 끝에서 번호를 다시 센다
+            bases.append(base.commit)
+            taken = base.names(self.team.inbox + "/")
+            return {self.team.inbox + "/all/2026-11-19-%02d.md" % (len(taken) + 1): "내 글\n"}
+        with mock.patch.object(CB, "fetch_state", side_effect=fetch_then_the_other_machine_writes_again):
+            r = CB.write(self.w, rm(ALPHA), SID, numbered, "편지")
+        self.assertEqual((len(bases), len(set(bases))), (3, 3))                                     # 처음 한 번 + 거절마다 새 끝에서 한 번
+        self.assertEqual((r.pushed, r.onto), (True, sneaked[0]))
+        self.assertEqual([p for _m, p in CB.names(self.w, r.commit, self.team.inbox + "/")],
+                         [self.team.inbox + "/all/2026-11-19-01.md"])                               # 같은 글이 두 번 실리지 않는다
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 저쪽 줄 1\n- 저쪽 줄 2\n")
+
+    def test_remote_that_refuses_is_not_retried(self):
+        hook = self.o / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        r = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 줄"), "받음")
+        self.assertEqual((r.pushed, r.onto), (False, None))
+        self.assertTrue(any(n.startswith("아직 안 올라옴") for n in r.notes), r.notes)
+
+    def test_three_rejections_stop_with_the_local_commit_kept(self):
+        from unittest import mock
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        before = CB.local_tip(self.w, ALPHA)
+        with mock.patch.object(CB, "push_outcome", return_value="behind") as judge:
+            with self.assertRaises(CB.BranchError) as c:
+                CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 줄"), "받음")
+        self.assertEqual((c.exception.rc, judge.call_count), (1, 4))   # 처음 한 번 + 다시 만들기 세 번
+        self.assertIn("세 번 다시 만들어도 올리지 못했다", str(c.exception))
+        self.assertNotEqual(CB.local_tip(self.w, ALPHA), before)
+
+    def test_single_branch_shallow_clone_fetches_by_explicit_refspec(self):   # Review Focus 2
+        d = self.clone("sh", "--depth", "1", "--no-local")
+        self.assertEqual(self.g("config", "--get-all", "remote.origin.fetch", repo=d), "+refs/heads/trunk:refs/remotes/origin/trunk")
+        self.claim(repo=d)
+        CB.ensure(d, rm(ALPHA), SID)
+        theirs = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        r = CB.write(d, rm(ALPHA), SID, self.add_line(self.received, "- 얕은 쪽 줄"), "받음")
+        self.assertEqual((r.onto, r.pushed), (theirs.commit, True))
+        self.assertEqual(CB.read(d, r.commit, self.received), "- 저쪽 줄\n- 얕은 쪽 줄\n")
+
+    def test_elsewhere_names_the_remote_tip_and_its_own_time(self):
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        theirs = CB.write(self.m2, rm(ALPHA), SID, self.add_line(self.received, "- 저쪽 줄"), "받음")
+        when = self.g("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M %z", theirs.commit, repo=self.m2)   # 그 커밋의 시간대 그대로
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        self.assertEqual(r.notes, (CB.ELSEWHERE % (theirs.commit[:8], when),))
+        self.assertRegex(when, r"^\d{4}-\d\d-\d\d \d\d:\d\d [+-]\d{4}$")
+
+    def test_a_race_between_ls_remote_and_the_first_push_adopts_instead_of_claiming_creation(self):
+        tip = CB.local_tip(self.w, ALPHA)
+        with mock.patch.object(CB, "git", side_effect=lambda root, *a, **k: (2, "", "") if a[:1] == ("ls-remote",) else REAL_GIT(root, *a, **k)):
+            r = CB.ensure(self.m2, rm(ALPHA), SID)                                         # 원격에 없다고 본 뒤 만든 뿌리는 거절된다
+        self.assertEqual((r.pushed, r.onto, CB.local_tip(self.m2, ALPHA)), (True, tip, tip))
+        self.assertTrue(r.notes[0].startswith("원격의 것을 받아 왔다 — "), r.notes)
+        self.assertEqual(self.g("rev-list", "--count", CB.ref_of(ALPHA), repo=self.o), "1")
+
+    def test_failed_push_reason_is_the_rejection_cell_not_the_error_banner(self):   # 과제 5 리뷰 M4
+        hook = self.o / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        r = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 줄"), "받음")
+        self.assertEqual(r.notes, (CB.NOT_PUSHED + " — [remote rejected] (pre-receive hook declined)",))
+        self.assertEqual(CB.local_tip(self.w, ALPHA), r.commit)                       # 로컬 커밋은 남는다
+
+    def test_a_renamed_letter_deleted_later_in_the_chain_does_not_delete_the_remote_letter(self):   # J4 — 이름을 바꾼 편지의 뒤 고침은 바꾼 이름에
+        """뒤집으면 붉다 — 지움을 원래 경로에 그대로 적용하면 저쪽 기계가 쓴 같은 이름의 편지가 지워지고 바꾼 이름의 사본이 남는다."""
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        letter = self.team.inbox + "/" + BETA + "/2026-11-19-01.md"
+        url = self.offline()
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: "이쪽 글\n"}, "편지")
+        CB.write(self.w, rm(ALPHA), SID, lambda base: {letter: None}, "지움")
+        CB.write(self.m2, rm(ALPHA), SID, lambda base: {letter: "저쪽 글\n"}, "편지")
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.team.status: "s\n"}, "STATUS")
+        self.assertEqual([p for _m, p in CB.names(self.w, r.commit, self.team.inbox + "/")], [letter])
+        self.assertEqual(CB.read(self.w, r.commit, letter), "저쪽 글\n")
+
+    def test_replayed_commit_keeps_its_message_and_status_is_not_replayed(self):   # J4 — 계산물은 다시 얹지 않는다
+        CB.ensure(self.m2, rm(ALPHA), SID)
+        url = self.offline()
+        early = CB.write(self.w, rm(ALPHA), SID, lambda base: {self.received: "- 이쪽 줄\n", self.team.status: "옛 STATUS\n"}, "받음과 STATUS")
+        theirs = CB.write(self.m2, rm(ALPHA), SID, lambda base: {self.team.status: "저쪽 STATUS\n"}, "STATUS")
+        self.g("remote", "set-url", "origin", url)
+        r = CB.write(self.w, rm(ALPHA), SID, self.add_line(self.received, "- 둘"), "받음")
+        replayed = self.g("rev-parse", r.commit + "^")
+        self.assertEqual(self.g("rev-parse", replayed + "^"), theirs.commit)
+        self.assertEqual(self.g("log", "-1", "--format=%B", replayed), self.g("log", "-1", "--format=%B", early.commit))
+        self.assertEqual(CB.read(self.w, r.commit, self.team.status), "저쪽 STATUS\n")   # 옛 계산물로 덮지 않는다
+        self.assertEqual(CB.read(self.w, r.commit, self.received), "- 이쪽 줄\n- 둘\n")
+
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+REAL_GIT = CB.git
+
+
+class EnsureRace(StateRepo):
+    def test_a_tip_that_appears_mid_creation_is_reported_not_built_on(self):   # 과제 5 리뷰 M1 · AC1 — 있으면 아무것도 바꾸지 않는다
+        self.claim()
+        real, appeared = CB._build_commit, []
+
+        def build_then_another_writer_creates(root, tip, changes, message, force):
+            commit = real(root, tip, changes, message, force)
+            if not appeared:
+                appeared.append(self.g("commit-tree", EMPTY_TREE, "-m", "다른 쓰기"))
+                self.g("update-ref", CB.ref_of(ALPHA), appeared[0])
+            return commit
+        with mock.patch.object(CB, "_build_commit", side_effect=build_then_another_writer_creates):
+            r = CB.ensure(self.w, rm(ALPHA), SID)
+        self.assertEqual(CB.local_tip(self.w, ALPHA), appeared[0])                     # 그 위에 빈 커밋을 얹지 않았다
+        self.assertEqual((r.commit, r.notes), (None, ("있다 — %s(%s)" % (CB.branch_of(ALPHA), appeared[0][:8]),)))
+
+
+class LetterNames(unittest.TestCase):
+    def test_next_number_is_one_past_the_largest_of_that_day_across_the_whole_inbox(self):   # 판정 P3 · J23
+        N = CB.next_letter_name
+        self.assertEqual(N([], "2026-11-19"), "2026-11-19-01.md")
+        self.assertEqual(N(["a/2026-11-19-01.md", "b/2026-11-19-03.md"], "2026-11-19"), "2026-11-19-04.md")   # 구멍(02)을 다시 쓰지 않는다
+        self.assertEqual(N(["2026-11-18-07.md", "c/2026-11-19-02.md", "c/2026-11-19-05.md.bak", "note.md", "2026-11-19-5.md"],
+                           "2026-11-19"), "2026-11-19-03.md")                                                # 다른 날 · 꼴 밖 이름은 세지 않는다
+        self.assertEqual(N(["2026-11-19-98.md"], "2026-11-19"), "2026-11-19-99.md")                          # 경계 양성 대조
+        with self.assertRaises(CB.BranchError) as c:
+            N(["x/2026-11-19-99.md"], "2026-11-19")
+        self.assertEqual(c.exception.rc, 3)
+
+
+class PublishGateGuards(StateRepo):
+    def test_fetch_and_ls_remote_take_only_the_safe_forms(self):
+        for form in (("fetch", "origin", "+refs/heads/trunk:refs/heads/trunk"), ("fetch", "origin", "refs/heads/x"), ("fetch", "origin"),
+                     ("fetch", "--upload-pack=touch x", "origin", "+refs/heads/a:refs/remotes/origin/a"),
+                     ("fetch", "other", "+refs/heads/a:refs/remotes/origin/a"), ("ls-remote", "--upload-pack=touch x", "origin"),
+                     ("remote", "add", "x", "y")):
+            with self.assertRaises(RuntimeError, msg=form):
+                CB.git(self.w, *form)
+        self.assertIsNone(CB.fetch_state(self.w, ALPHA))                                       # 원격에 없다 — 실패는 None
+        self.assertEqual(CB.git(self.w, "fetch", "origin", "+refs/heads/trunk:refs/remotes/origin/trunk")[0], 0)   # 양성 대조
+        self.assertEqual(CB.git(self.w, "ls-remote", "--exit-code", "origin", "refs/heads/trunk")[0], 0)
+
+
+class PublishBoundary(unittest.TestCase):
+    """경계 락 — 올리기 · 다시 만들기가 쓰는 git 명령의 꼴을 파일 본문으로 읽는다."""
+    SRC = (SCRIPTS / "conductor_branch.py").read_text(encoding="utf-8")
+
+    def test_new_commands_are_allowed_and_remote_is_not(self):
+        for word in ("fetch", "ls-remote", "rev-list", "diff-tree"):
+            self.assertIn(word, CB.GIT_ALLOWED, word)
+        self.assertNotIn("remote", CB.GIT_ALLOWED)                     # remote 는 쓰는 꼴(add · set-url · remove)을 가진다
+
+    def test_every_update_ref_call_carries_ref_new_and_old(self):
+        sites = re.findall(r'git\(root, "update-ref"[^\n]*', self.SRC)
+        full = [s for s in sites if re.match(r'git\(root, "update-ref", [^,()]+(?:\([^()]*\))?, [^,]+, [^,)]+\)', s)]
+        self.assertGreaterEqual(len(sites), 3, sites)                   # 처음 쓰기 · 다시 만들기 · 받아 온 끝 두기
+        self.assertEqual(full, sites)
+
+    def test_fetch_lands_in_the_remote_tracking_ref_only(self):
+        sites = re.findall(r'git\(root, "fetch"[^\n]*', self.SRC)
+        self.assertEqual(len(sites), 1, sites)
+        self.assertIn('"refs/remotes/origin/"', self.SRC)
+        self.assertEqual(CB.NET_TIMEOUT, 60)
