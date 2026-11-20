@@ -258,9 +258,10 @@ class Inbox(MailRepo):
         forged = GOOD.replace("from: 2026-01-01-alpha", "from: 2026-01-03-gamma").replace("to: 2026-01-02-beta", "to: 2026-01-01-alpha")
         self.plant(BETA, ALPHA + "/2026-11-19-01.md", forged)
         self.plant(BETA, ALPHA + "/2026-11-19-02.md", forged.replace("from: 2026-01-03-gamma", "from: 2026-01-02"))   # 브랜치 이름의 앞머리 — `==` 를 `in` 으로 바꾸면 지나간다
+        self.plant(BETA, ALPHA + "/2026-11-19-03.md", forged.replace("from: 2026-01-03-gamma", "from: " + BETA + "x"))   # 브랜치 이름을 앞머리로 품은 이름 — 반대쪽 `in` 이 지나간다
         self.send(ALPHA, "예고", "진짜", frm=BETA)                       # 양성 대조 — 같은 브랜치의 맞는 글은 나온다
         got = CM.incoming(self.w, ALPHA, self.me())
-        self.assertEqual(([l.body for l in got.letters], got.wrong_from, got.malformed), (["진짜\n"], 2, 0))
+        self.assertEqual(([l.body for l in got.letters], got.wrong_from, got.malformed), (["진짜\n"], 3, 0))
 
     def test_malformed_letters_are_counted_not_shown(self):
         ok = GOOD.replace("from: 2026-01-01-alpha", "from: 2026-01-02-beta").replace("to: 2026-01-02-beta", "to: 2026-01-01-alpha")
@@ -272,8 +273,9 @@ class Inbox(MailRepo):
         self.plant(BETA, "2026-01-03-gamma/2026-11-19-06.md", ok.replace("to: 2026-01-01-alpha", "to: 2026-01-03-gamma"))   # 남에게 간 글
         self.plant(BETA, ALPHA + "/2026-11-19-07.md.bak", ok)                                         # 이름의 앞머리만 꼴에 맞는다 — fullmatch 를 match 로 바꾸면 지나간다
         self.plant(BETA, ALPHA + "/2026-11-19-08.md", ok.replace("to: 2026-01-01-alpha", "to: 2026-01-01"))   # to 가 폴더 이름의 앞머리다
+        self.plant(BETA, ALPHA + "/2026-11-19-09.md", ok.replace("to: 2026-01-01-alpha", "to: 2026-01-01-alphax"))   # to 가 폴더 이름을 앞머리로 품는다 — 반대쪽 `in` 이 지나간다
         got = CM.incoming(self.w, ALPHA, self.me())
-        self.assertEqual((got.letters, got.malformed, got.wrong_from), ([], 7, 0))
+        self.assertEqual((got.letters, got.malformed, got.wrong_from), ([], 8, 0))
 
     def test_letter_changed_after_ack_comes_back(self):   # J26
         self.send(ALPHA, "예고", "처음", frm=BETA)

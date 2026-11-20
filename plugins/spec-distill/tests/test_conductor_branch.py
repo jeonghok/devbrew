@@ -332,6 +332,20 @@ class Ensure(StateRepo):
         rc, _ = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", OTHER)   # 양성 대조
         self.assertEqual(rc, 0)
 
+    def test_marker_owner_is_compared_whole_in_both_directions(self):
+        # 붉어지는 뒤집기: `owner != session` 을 앞머리 견줌(`owner.startswith(session)` · `session.startswith(owner)`)으로 바꾸면 붉다.
+        # 양성 대조: 각 로드맵에서 표지를 쥔 이름 그대로는 0 으로 만든다.
+        self.claim(ALPHA, session=SID)
+        self.claim(BETA, session=SID + "x")
+        refs = self.refs()
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(ALPHA), "--session", SID + "x")   # 부르는 이름이 표지 주인 이름의 뒤로 더 길다
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        rc, out = cli(self.w, "ensure", "--roadmap", rm(BETA), "--session", SID)          # 표지 주인 이름이 부르는 이름의 뒤로 더 길다
+        self.assertEqual((rc, self.refs()), (5, refs), out)
+        for road, who in ((ALPHA, SID), (BETA, SID + "x")):
+            rc, out = cli(self.w, "ensure", "--roadmap", rm(road), "--session", who)
+            self.assertEqual(rc, 0, out)
+
     def test_rule_refusal_and_off_do_not_create(self):
         self.claim()
         self.put({RULE_DOC: RULE_NO})
