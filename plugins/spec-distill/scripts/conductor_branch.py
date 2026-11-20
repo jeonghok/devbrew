@@ -9,7 +9,7 @@
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
 가져오는 모듈은 `conductor_state` · `repo_defaults` · `state_path` · `team_layout` · `branch_tip` · `roadmap_model` 뿐이다.
-규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)은 `main` 안에서 `leader_seat` 를 가져온다.
+규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)과 `confirm` 은 `main()` 안에서 `leader_seat` 를 가져온다.
 """
 from __future__ import annotations
 

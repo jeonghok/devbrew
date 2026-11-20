@@ -7,8 +7,9 @@ STATUS 는 이 스크립트가 계산해 상태 브랜치에 쓴다. 손으로 �
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
-가져오는 모듈은 `conductor_branch` · `conductor_mail` · `conductor_ledger` · `conductor_state` · `repo_defaults` 다.
-`sync` 는 함수 안에서 `leader_seat` · `team_status` 를 가져온다(규칙 사본의 같아짐 · 갈라짐 · 남의 고침).
+가져오는 모듈은 `conductor_branch` · `conductor_mail` · `conductor_ledger` · `conductor_state` · `repo_defaults` · `roadmap_model` ·
+`roadmap_status` · `suite_lock` · `state_path` · `team_status`(남의 고침을 세는 읽기 함수) 다.
+`sync` 는 함수 안에서 `leader_seat` 를 가져온다(규칙 사본의 같아짐 · 갈라짐 · 남의 고침 · 확인한 끝 줄이기) — `show` 는 가져오지 않는다.
 """
 from __future__ import annotations
 

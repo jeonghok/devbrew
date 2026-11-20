@@ -655,7 +655,7 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
             self.assertEqual(rc, 2, (bad, out))
         rc, out = self.ls("confirm", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", self.tip())
         self.assertEqual((rc, out.strip().splitlines()[-1:]), (0, ["[spec-distill] " + LS.CONFIRMED % self.tip()]), out)
-        self.assertNotIn("확인", [r["까닭"] for r in self.rows() if r["끝"] != self.tip()])
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(self.tip(), "확인")])   # 절이 확인 한 줄뿐이다
 
     def test_diverged_state_branch_is_three(self):   # 갈라진 끝은 재지 못함 — 확인하지 않는다
         self.foreign_edit()
