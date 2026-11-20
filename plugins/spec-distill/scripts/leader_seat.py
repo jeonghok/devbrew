@@ -7,7 +7,7 @@
 상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다(`conductor_status.sync` 는 함수 안에서 가져온다).
 
 가져오는 모듈은 `conductor_branch` · `conductor_state` · `team_status` · `team_rules` · `roadmap_model` ·
-`roadmap_status`(`Git` 만) · `human_lines` · `repo_defaults` · `state_path` · `team_layout` 뿐이다.
+`roadmap_status`(`Git` 만) · `repo_defaults` · `state_path` · `team_layout` 뿐이다.
 
 종료 코드(`conductor_branch.BranchError.rc`): 0 썼다 · 쓸 수 없어 알리고 넘어감 · 1 없음/아님(확인되지 않은 남의 고침 ·
 재지 못함 · 올릴 규칙 고침이 없음 · 갈라져서 만들지 않은 `rules-branch` · 확인 없이 부른 `confirm`) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 ·

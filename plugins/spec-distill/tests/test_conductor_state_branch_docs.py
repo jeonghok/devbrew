@@ -262,7 +262,7 @@ class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명�
         self.assertTrue(CB.local_tip(self.w, CB.roadmap_name(rm(ALPHA))))   # 양성 대조 — 상태 브랜치가 실제로 섰다
         self.assertEqual(self.outputs(), before)
 
-    def test_leader_ref_still_answers_with_what_it_was_given(self):   # AC14 — 이 계획은 team_layout 을 고치지 않는다
+    def test_leader_ref_still_answers_with_what_it_was_given(self):   # AC14 — leader_ref 는 고르기만 한다(상태 끝이 있으면 그것, 없으면 받은 값)
         # 붉어지는 뒤집기: leader_ref 가 받은 값 아닌 것(고정 ref 등)을 내면 붉다. 양성 대조: 서로 다른 두 값이 각각 그대로 돌아온다.
         self.assertEqual(TL.leader_ref("refs/remotes/origin/HEAD"), "refs/remotes/origin/HEAD")
         self.assertEqual(TL.leader_ref("refs/heads/other"), "refs/heads/other")
