@@ -308,7 +308,7 @@ class Reader:
                 raise FormatError("%s 를 읽지 못했다" % path)
             result = team_files.parse_result(text)
             lost, notes = team_files.lost_lines(result), block.setdefault("notes", [])
-            if lost and not any(job_results.same_fact(n, name, lost[0]) for n in notes):
+            if lost and not any(job_results.same_fact(n, name, lost[0]) for n in notes if not n.startswith(STALE_UNMEASURED)):
                 notes.append(job_results.file_note(RULINGS_UNREAD, name, lost[0]))
             out += ["- " + line for line in result.rulings]
         return out
@@ -336,6 +336,8 @@ class Reader:
             text = self.git.blob(tip, team.result(job, stage, attempt, plan))
             result = team_files.parse_result(text) if text is not None else None
             if result is None:
+                if stage != "implement":   # implement 는 받음 · 읽지 못함 알림이 따로 있다(Q13)
+                    out.append("%s: %s — 글을 읽지 못했다" % (STALE_UNMEASURED, name))
                 continue
             if result.bundle_at is None:   # 머리 값이 없거나 꼴이 아니다 — 잴 묶음이 없다
                 if not result.end:
@@ -345,7 +347,9 @@ class Reader:
                     out.append("%s: %s — %s" % (STALE_UNMEASURED, name, why))
                 continue
             if result.problems or team_files.lost_lines(result) or result.end:
-                continue   # 다른 사유로 읽지 못한 파일은 받음 · 읽지 못함 알림(Q13)이 알린다 — 한 사실에 알림 하나
+                if stage != "implement" and not result.end:   # implement 는 받음 · 읽지 못함 알림이 따로 있다 — 한 사실에 알림 하나(Q13)
+                    out.append("%s: %s — %s" % (STALE_UNMEASURED, name, (result.problems + team_files.lost_lines(result))[0]))
+                continue
             at = self.git.commit(result.bundle_at)
             if at is None:
                 out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
@@ -437,7 +441,7 @@ class Reader:
             lost = team_files.lost_lines(result) if result is not None else []
             # 받음 줄의 대조(receipt)가 이 파일의 같은 사유를 이미 알렸으면 한 번만 낸다(Q13 — 한 사실에 알림 하나)
             if result is not None and result.problems and \
-                    not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes):
+                    not any(job_results.same_fact(n, latest, result.problems[0]) for n in notes if not n.startswith(STALE_UNMEASURED)):
                 block["notes"].append(job_results.file_note(RESULT_UNREAD, latest, result.problems[0]))
             if state == job_results.NOT_RECEIVED:
                 block["notes"].append("%s: %s(%s)" % (
