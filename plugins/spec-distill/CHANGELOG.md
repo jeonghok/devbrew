@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.26.0] — 2026-11-20
+
+### Added
+- 지휘자 상태 브랜치 — 로드맵마다 `conductor/<로드맵 폴더 이름>` 브랜치에 현황(`STATUS.md`)과 로드맵끼리 주고받는 편지를 올린다(코드 없음 · 기본 브랜치에 머지하지 않음). 스크립트 셋: `scripts/conductor_branch.py`(`ensure` · `delete` — 지우기는 확인 없이 돌리면 넷의 수와 「수를 센 끝」 을 내고 `--confirmed <40자|앞 8자>` 로 로컬 끝 · 원격 끝이 모두 그 끝일 때만 지운다) · `scripts/conductor_status.py`(`sync` · `waiting add` · `waiting clear` · `show`) · `scripts/conductor_mail.py`(`send` · `read` · `ack` — 편지 번호는 그 날짜 편지함 전체의 최댓값 다음).
+- 레포 설정 `state_branch`(`켬` · `끔`, 기본 켬) — 끄면 `ensure` · `sync` · `waiting` · `send` · `ack` 는 쓰지 않고 「상태 브랜치가 꺼져 있다」 를 내며 0 으로 끝난다. `show` 는 계산되는 줄만 낸다. `delete` 는 끈 상태에서도 돈다(남은 브랜치를 치우는 길 — 표지와 `--confirmed <수를 센 끝>` 이 있어야 지운다).
+- 기계 상태의 「지금 묻는 질문」 절 — 기다리는 질문을 STATUS 에 싣는다. 종류는 여덟이고 사람 줄의 종류 넷(`spec 승인` · `계획 검토` · `흐름 승인` · `걸음 건너뜀`)은 사람 줄과 같은 이름이다.
+- `references/conductor-state-branch.md` — 현황 · 편지 · 지우기 절차와 종료 코드를 받았을 때의 표. 지휘 순환 걸음 1 · 2 · 7 의 문장이 이 절차를 가리킨다.
+- 객체 지도(`references/roadmap-ontology.md`)에 새 줄 넷 — 상태 브랜치 · STATUS · 편지 · 받음 줄.
+
+### Changed
+- 설정 키가 하나 늘었다(`state_branch`). 옛 형식 로드맵의 지휘 명령 출력은 달라지지 않는다.
+- `references/team-files.md` 의 `STATUS.md` · `inbox/` 가 「정하지 않았다」 에서 상태 브랜치의 내용으로 바뀌었다. 리더 상태 브랜치에는 지금 STATUS.md 와 편지만 산다 — RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다.
+- 이 판이 기계 상태를 한 번이라도 쓰면(지휘자가 표지를 잡을 때 쓴다) 이 판 앞의 설치본은 그 파일을 「더 새 판이 썼다」 로 읽지 않고 업데이트하라고 멈춘다 — 새 절이 있어서가 아니라 쓴 판 줄 때문이다(지금까지의 판 올림과 같다).
+
 ## [8.25.0] — 2026-11-20
 
 ### Added
