@@ -20,6 +20,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, rm  # noqa: E402
 import conductor_branch as CB  # noqa: E402
+import conductor_state as cs  # noqa: E402
+from state_path import state_root  # noqa: E402
 
 
 class Fixture(StateRepo):
@@ -581,7 +583,8 @@ class WriteBoundary(unittest.TestCase):
 
     def test_not_pushed_label_and_result_shape(self):
         self.assertEqual(CB.NOT_PUSHED, "아직 안 올라옴")
-        self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes"))
+        self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes", "made"))
+        self.assertEqual(CB.Result(None, False, None, ()).made, ())   # 넷째 칸까지만 주는 옛 호출도 그대로 돈다
         self.assertEqual(CB.Base._fields, ("commit", "read", "names"))
 
 
@@ -1258,3 +1261,68 @@ class DeleteBoundary(unittest.TestCase):
         self.assertNotIn("availability(", body)
         self.assertIn("import conductor_status", body)
         self.assertNotRegex(self.SRC.split("def delete(", 1)[0], r"(?m)^import conductor_status|^from conductor_status")
+
+
+class OwnCommits(StateRepo):   # R3 AC21 · Review Focus 1 · B3
+    def own(self):
+        return [r["끝"] for r in cs.load(cs.machine_path(state_root(str(self.w)), rm(ALPHA)), rm(ALPHA))[cs.TRUST]
+                if r["까닭"] == "씀"]
+
+    def other_writes(self, files):
+        """둘째 클론이 같은 상태 브랜치에 써 올린다 — 그 커밋을 돌려준다."""
+        other = self.clone("other%d" % len(list(self.t.iterdir())))
+        self.claim(repo=other, session=OTHER)
+        team = CB.team_of(str(other), rm(ALPHA))
+        CB._fetch(str(other), team.name)
+        self.g("update-ref", CB.ref_of(team.name), "refs/remotes/origin/" + CB.branch_of(team.name), repo=other)
+        return CB.write(str(other), rm(ALPHA), OTHER, lambda b: files, "남").commit
+
+    def test_every_made_commit_is_recorded(self):
+        self.claim()
+        made = CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "x\n"}, "STATUS")
+        self.assertEqual(self.own(), [made.commit, res.commit])
+        self.assertEqual(res.made, (res.commit,))
+
+    def test_remade_on_foreign_tip_records_only_mine(self):   # 남의 커밋은 「씀」 이 아니다
+        self.claim()
+        CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        theirs = self.other_writes({team.rules: "- [남] 남의 줄\n"})
+        mine = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "y\n"}, "STATUS")   # 거절 → 받아 와 다시 만든다
+        self.assertEqual(mine.onto, theirs)
+        self.assertNotIn(theirs, self.own())
+        self.assertIn(mine.commit, self.own())
+
+    def test_unchanged_remake_moves_ref_to_foreign_tip_without_recording_it(self):   # B3 — made 가 None 인 갈래
+        self.claim()
+        CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        theirs = self.other_writes({team.status: "같은 글\n"})
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "같은 글\n"}, "STATUS")   # 원격 끝에서는 바뀐 것이 없다
+        self.assertEqual(CB.local_tip(str(self.w), team.name), theirs)   # ref 는 남의 끝으로 옮겨 갔다
+        self.assertNotIn(theirs, self.own())                             # 그래도 「씀」 이 아니다
+        self.assertNotIn(theirs, res.made)
+
+    def test_creating_race_does_not_record_the_adopted_root(self):   # B3 — ensure 가 만드는 사이 남이 먼저 올렸다
+        other = self.clone("first")
+        self.claim(repo=other, session=OTHER)
+        their_root = CB.ensure(str(other), rm(ALPHA), OTHER).commit
+        self.claim()
+        real = CB.git   # 바꿔 끼우기 전에 잡는다 — 안에서 잡으면 자기 자신을 부른다
+
+        def fake(root, *a, **k):   # ls-remote 가 「없다」(2)고 답한 것처럼 — 만드는 쪽으로 보낸다
+            return (2, "", "") if a[:1] == ("ls-remote",) else real(root, *a, **k)
+        with mock.patch.object(CB, "git", side_effect=fake):
+            CB.ensure(str(self.w), rm(ALPHA), SID)
+        self.assertNotIn(their_root, self.own())
+
+
+class CommandLineIdentity(StateRepo):   # B2 — 함수 안에서 가져온 모듈이 던진 BranchError 도 그 종료 코드로 끝난다
+    def test_branch_error_raised_from_a_late_import_keeps_its_code(self):
+        p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(self.w),
+                            "ensure", "--roadmap", rm(ALPHA), "--session", SID], capture_output=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 5)   # 표지 없음 — 지금도 5(양성 대조: 같은 모듈 안의 오류)
+        src = (SCRIPTS / "conductor_branch.py").read_text(encoding="utf-8")
+        self.assertIn('if __name__ == "__main__":\n    import conductor_branch as _self\n    sys.exit(_self.main())', src)

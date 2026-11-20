@@ -514,5 +514,33 @@ class AskingNow(unittest.TestCase):   # R3 AC6
         self.assertIsNone(cs.ASK_EPIC_RE.fullmatch("R2 지시: 무엇을 하라"))
 
 
+class TrustSection(unittest.TestCase):   # R3 AC21 — 확인한 끝
+    ROW = {"끝": "a" * 40, "까닭": "확인", "때": "2026-11-20 10:00 +0900", "세션": "aaaa1111-session"}
+
+    def text(self, row):
+        data = cs.empty()
+        data[cs.TRUST].append(row)
+        return cs.render_machine("docs/r/x/roadmap.md", data)
+
+    def bad_text(self, key, bad):
+        """좋은 줄로 쓴 글에서 그 줄만 나쁜 칸의 줄로 바꾼다 — render_machine 도 줄을 검사하므로 읽기 길을 재려면 글을 바꾼다."""
+        line = lambda row: "- " + cs.SEP.join(row[c] for c in cs.COLUMNS[cs.TRUST])
+        good = self.text(self.ROW)
+        self.assertEqual(good.count(line(self.ROW)), 1)
+        return good.replace(line(self.ROW), line(dict(self.ROW, **{key: bad})))
+
+    def test_round_trip(self):
+        data = cs.parse_machine(self.text(self.ROW), "docs/r/x/roadmap.md")
+        self.assertEqual(data[cs.TRUST], [self.ROW])
+
+    def test_closed_cells(self):   # 붉어지는 변이: 끝의 fullmatch 를 match 로 · 까닭 목록에 다른 글 · 때 검사 지움
+        for key, bad in (("끝", "a" * 39), ("끝", "a" * 40 + "x"), ("끝", "A" * 40), ("까닭", "확인함"), ("때", "2026-11-20 10:00")):
+            with self.assertRaises(cs.MachineError, msg=(key, bad)):
+                cs.parse_machine(self.bad_text(key, bad), "docs/r/x/roadmap.md")
+
+    def test_empty_section_writes_no_head(self):   # 옛 기계 상태 글을 바이트로 견주는 테스트를 그대로 둔다
+        self.assertNotIn("## " + cs.TRUST, cs.render_machine("docs/r/x/roadmap.md", cs.empty()))
+
+
 if __name__ == "__main__":
     unittest.main()

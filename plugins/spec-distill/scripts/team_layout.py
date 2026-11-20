@@ -36,6 +36,7 @@ DESIGN_FILE = "design.md"
 RESULTS_DIR = "results"
 KEEP_FILE = ".gitkeep"
 BLOCKED_FILE = "BLOCKED.md"
+STATE_BRANCH_PREFIX = "conductor/"   # 지휘자 상태 브랜치 이름의 접두
 
 STAGES = ("design", "plan", "implement", "review")
 PLANNED_STAGES = ("plan", "implement", "review")

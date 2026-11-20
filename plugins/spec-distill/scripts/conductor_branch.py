@@ -36,7 +36,7 @@ import roadmap_model  # noqa: E402
 import state_path  # noqa: E402
 import team_layout  # noqa: E402
 
-STATE_BRANCH_PREFIX = "conductor/"
+STATE_BRANCH_PREFIX = team_layout.STATE_BRANCH_PREFIX
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9.-]*")
 RECEIVED_FILE = "received.md"
 PENDING_FILE = "pending.md"
@@ -476,6 +476,7 @@ class Result(NamedTuple):
     pushed: bool
     onto: Optional[str]
     notes: tuple
+    made: tuple = ()   # 이 부름 안에서 `_build_commit` 이 만든 커밋(차례대로) — 받아 온 남의 끝은 담지 않는다
 
 
 def _base(root, commit: Optional[str]) -> Base:
@@ -676,9 +677,10 @@ def _first_parent(body: str) -> Optional[str]:
     return None
 
 
-def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict) -> str:
+def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict, built: list) -> str:
     """올리지 못한 로컬 커밋 하나를 onto 위에 다시 얹는다(J4). 새 끝을 돌려준다 — 바뀐 것이 없으면 onto.
-    `renamed` 는 이 다시 만들기에서 이름을 바꾼 편지의 {원래 경로: 새 경로} — 뒤 커밋의 고침 · 지움도 새 경로에 간다."""
+    `renamed` 는 이 다시 만들기에서 이름을 바꾼 편지의 {원래 경로: 새 경로} — 뒤 커밋의 고침 · 지움도 새 경로에 간다.
+    새 커밋을 만들면 `built` 에 더한다."""
     rc, body, err = git(root, "cat-file", "commit", commit)
     if rc != 0:
         raise _git_fail(err, "다시 얹을 커밋을 읽지 못했다")
@@ -723,12 +725,15 @@ def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict)
     if not changes:
         return onto
     _check_paths(team, changes)
-    return _build_commit(root, onto, changes, message, False) or onto
+    new = _build_commit(root, onto, changes, message, False)
+    _note_built(built, new)
+    return new or onto
 
 
-def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Result:
+def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built: list) -> Result:
     """방금 로컬에 쓴 커밋(mine)을 올린다. 원격이 앞섰으면 받아 와 원격 끝 위에 올리지 못한 앞 커밋들을 다시 얹고
-    이번 쓰기를 그 새 끝에서 다시 만들어 올린다 — 세 번까지. 올라간 커밋은 고치지 않고 덮어 올리지 않는다."""
+    이번 쓰기를 그 새 끝에서 다시 만들어 올린다 — 세 번까지. 올라간 커밋은 고치지 않고 덮어 올리지 않는다.
+    새로 만든 커밋만 `built` 에 더한다 — 원격 끝 · 다시 얹기가 바뀐 것 없이 돌려준 끝은 더하지 않는다."""
     name = team.name
     if _origin_exists(root) is not True:
         return Result(mine, False, None, (NO_ORIGIN,))
@@ -745,12 +750,13 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Res
         new, renamed = remote, {}
         for commit in _commits_between(root, remote, local):
             if commit != mine:   # 이번 쓰기가 가장 최근에 만든 커밋은 다시 얹지 않고 새 끝에서 다시 만든다
-                new = _replay(root, team, commit, new, renamed)
+                new = _replay(root, team, commit, new, renamed, built)
         changes = edit(_base(root, new)) if edit else None
         made = None
         if changes:
             _check_paths(team, changes)
             made = _build_commit(root, new, changes, message, False)
+            _note_built(built, made)
         target = made or new
         rc, _o, _e = git(root, "update-ref", ref_of(name), target, local)
         if rc != 0:
@@ -765,12 +771,49 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Res
     raise BranchError(1, REMAKE_GAVE_UP)
 
 
+def _note_built(built: list, commit: Optional[str]) -> None:
+    """`_build_commit` 이 낸 커밋을 차례대로 적는다 — None(바뀐 것 없음)과 이미 적은 커밋은 적지 않는다."""
+    if commit is not None and commit not in built:
+        built.append(commit)
+
+
+def record_own(root, roadmap_rel: str, session: str, commits: list) -> None:
+    """기계 상태 `확인한 끝` 절에 이 기계가 만든 커밋을 `씀` 줄로 더한다(차례대로 · 이미 `씀` 으로 적힌 끝은 건너뛴다).
+    표지 확인은 부르는 쪽이 이미 했다. 빈 목록이면 아무것도 하지 않는다."""
+    if not commits:
+        return
+    path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    data = cs.load(path, roadmap_rel)
+    have = [r["끝"] for r in data[cs.TRUST] if r["까닭"] == cs.TRUST_WHY[1]]
+    when = stamp()
+    for commit in commits:
+        if commit not in have:
+            data[cs.TRUST].append({"끝": commit, "까닭": cs.TRUST_WHY[1], "때": when, "세션": session})
+            have.append(commit)
+    cs.save(path, roadmap_rel, data, session)
+
+
 def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating: bool, publish: bool = True) -> Result:
+    """쓰기 · 올리기의 바닥. 이 부름이 만든 커밋은 끝나는 길이 무엇이든(예외여도) 기계 상태에 `씀` 으로 한 번 적고 `Result.made` 에 싣는다."""
     team = team_of(root, roadmap_rel)
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
+    built, finished = [], False
+    try:
+        res = _write_attempts(root, team, session, edit, what, creating, publish, built)
+        finished = True
+    finally:
+        try:
+            record_own(root, roadmap_rel, session, built)
+        except Exception as exc:
+            if finished:   # 도는 예외가 있으면 그것이 이긴다 — 기록 실패로 가리지 않는다
+                raise BranchError(3, "만든 커밋을 기계 상태에 적지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))))
+    return res._replace(made=tuple(built))
+
+
+def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str, creating: bool, publish: bool, built: list) -> Result:
     name = team.name
     tip = local_tip(root, name)
     if tip is None and not creating:
@@ -784,11 +827,12 @@ def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating
         commit = _build_commit(root, tip, changes, message, creating)
         if commit is None:
             return Result(None, False, None, ())
+        _note_built(built, commit)
         rc, _o, err = git(root, "update-ref", ref_of(name), commit, tip or ZERO_OID)
         if rc == 0:
             if not publish:
                 return Result(commit, False, None, ())
-            return _publish(root, team, None if creating else edit, message, commit)
+            return _publish(root, team, None if creating else edit, message, commit, built)
         now = local_tip(root, name)
         if now == tip:   # 끝은 그대로인데 실패했다 — 이름 충돌 같은 일이다
             raise _git_fail(err, "상태 브랜치 ref 를 옮기지 못했다")
@@ -963,4 +1007,5 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import conductor_branch as _self
+    sys.exit(_self.main())
