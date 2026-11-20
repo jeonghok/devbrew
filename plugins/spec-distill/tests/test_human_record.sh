@@ -350,4 +350,27 @@ case "$(out)" in *"human_gate: 끔 으로 연다") ok "AC6: ask-head 3 — 글�
 g checkout -q main && g revert --no-edit HEAD > /dev/null && push_main && g checkout -q feature/tm-e1
 assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "AC6: 설정을 되돌리면 ask-head 0(양성 대조)"
 
+# h1–h3 — 계획 번호 없는 사람 줄은 머지되지 않은 브랜치 끝 모두에서 판정한다(K12 · AC23 미룸). 14b 의 답이 새지 않게 새 레포에서
+T0="$T"
+new_repo "$T0/h" && ok "h: 새 팀 레포를 세웠다" || { no "h: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+hdesign() { put "$E1/design.md" "$(printf '# 설계\n\n## Goals\n\n%s\n\n## 미룸\n\n- %s\n' "$1" "$2")"; }
+stale_why() { sed -n '/^낡음 — - spec 승인/{n;p;}' "$T/led.txt"; }
+g checkout -q -b feature/tm-e1 main
+hdesign "본문 하나" "미룬 것 하나" && g commit -qm "E1 설계" && push_br feature/tm-e1
+approved "spec 승인" E1 && push_br feature/tm-e1 || no "h1: 준비 — spec 승인 줄을 적지 못했다"
+g checkout -q -b feature/tm-e1b feature/tm-e1 && push_br feature/tm-e1b
+# h1 — 두 브랜치 끝이 같다
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "K12: 두 브랜치 끝이 같고 본문 그대로면 human-check 0(양성 대조)"
+assert_eq "$(grep -c '^지남 — - spec 승인' "$T/led.txt")" "1" "K12: 끝이 같은 브랜치는 한 번만 판정한다 — 지남 줄이 정확히 한 번"
+# h2 — 둘째 브랜치에서 승인 뒤 본문을 고쳤다
+hdesign "본문 고침" "미룬 것 하나" && g commit -qm "E1 설계 본문 고침(둘째 브랜치)" && push_br feature/tm-e1b
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "K12: 둘째 브랜치 끝에서 본문이 바뀌면 human-check 1"
+assert_contains "$(out)" "낡음 — - spec 승인" "K12: 둘째 브랜치 끝의 본문 고침 — 낡음"
+case "$(stale_why)" in "    사유: feature/tm-e1b 끝에서: "*) ok "K12: 사유 앞에 그 브랜치 끝 이름" ;; *) no "K12: 사유 앞에 그 브랜치 끝 이름이 없다 — $(stale_why)" ;; esac
+# h3 — 되돌리고 미룸 절만 고쳤다
+g revert --no-edit HEAD > /dev/null && push_br feature/tm-e1b
+hdesign "본문 하나" "미룬 것 둘" && g commit -qm "E1 설계 미룸 고침(둘째 브랜치)" && push_br feature/tm-e1b
+assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "K12: 둘째 브랜치 끝에서 미룸 절만 고치면 human-check 0"
+use_repo "$T0"
+
 finish
