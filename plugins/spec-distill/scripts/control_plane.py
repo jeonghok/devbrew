@@ -26,6 +26,7 @@ import errno
 import hashlib
 import json
 import os
+import posixpath
 import re
 import select
 import signal
@@ -42,6 +43,7 @@ from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
+import team_layout  # noqa: E402
 from roadmap_model import (BLOCK_ID_RE, DEFAULT_REF, NO_DEFAULT, FormatError, blob_reader,  # noqa: E402
                            find_roadmaps, tree_entries)
 from state_path import state_root_for_common  # noqa: E402
@@ -282,6 +284,7 @@ def machine_error_line(why) -> str:
 
 OUTSIDE = "로드맵 밖"
 WORK_DONE = cs.WORK_DONE
+NO_JOB_FOLDER = "과제 폴더 없음"   # team 보고에서 과제 폴더가 드러나지 않는 끝나지 않은 작업 줄의 꼬리
 
 
 def recommended(report: dict):
@@ -301,6 +304,26 @@ def running(machine: dict) -> int:
     return len(names)
 
 
+def no_job_folder(report: dict, w: dict) -> bool:
+    """team 보고의 끝나지 않은 작업 줄 w 에 과제 폴더가 없다고 볼 때 참. 에픽 칸이 보고의 블록 번호(결정 블록 빼고)면 그 블록의
+    job_folder 가 False 일 때만(None 은 알리지 않는다), 「로드맵 밖」 이면 보고 jobs 의 과제 이름이 이름 칸의 낱말과 같지도
+    근거 칸의 경로가 그 과제 폴더 아래이지도 않을 때, 보고에 없는 에픽 번호면 늘 참."""
+    if w["에픽"] == OUTSIDE:
+        team_dir = posixpath.dirname(str(report.get("roadmap") or ""))
+        words = w["이름"].split()
+        for j in report.get("jobs") or []:
+            name = j.get("id")
+            if not name:
+                continue
+            if name in words or (team_dir and w["근거"].startswith(team_dir + "/" + team_layout.job_rel(name) + "/")):
+                return False
+        return True
+    blocks = dict((b.get("id"), b) for b in report.get("blocks") or [] if b.get("kind") != "decision")
+    if w["에픽"] in blocks:
+        return blocks[w["에픽"]].get("job_folder") is False
+    return True
+
+
 def works_lines(report: dict) -> list:
     """기계 상태의 「작업」 표(로드맵 밖 일 포함) · 돌고 있는 큰 작업 수와 권장 수 · 공유 스위트 잠금. 기계 상태 사본이다 —
     지휘자는 사용자에게 말하기 전에 하니스 agent 목록으로 맞춘다."""
@@ -314,8 +337,12 @@ def works_lines(report: dict) -> list:
         lines.append(clean("돌고 있는 큰 작업 %d(기계 상태 사본) · %s" % (running(machine), rec_text)))
         rows = machine.get("작업") or []
         lines.append("작업:" if rows else "작업: 없음(로드맵 밖 일 포함)")
+        team = report.get("layout") == team_layout.LAYOUT_TEAM
         for w in rows:
-            lines.append(clean("    %s %s — %s · %s · 담당 %s · %s" % (w["종류"], w["이름"], w["에픽"], w["단계"], w["담당"], w["근거"])))
+            line = "    %s %s — %s · %s · 담당 %s · %s" % (w["종류"], w["이름"], w["에픽"], w["단계"], w["담당"], w["근거"])
+            if team and w["단계"] not in WORK_DONE and no_job_folder(report, w):
+                line += " · " + NO_JOB_FOLDER
+            lines.append(clean(line))
     if busy or (lock and lines):
         lines.append(clean(lock))
     return lines
@@ -349,6 +376,13 @@ def job_lines(report: dict) -> list:
         lines.append(clean("    %s — %s · %s" % (name, stage_text(j), j.get("reason"))))
         lines += [clean("        정보: %s" % n) for n in j.get("notes") or []]
     return lines + [clean("    정보: %s" % n) for n in notes]
+
+
+def no_ruling(report: dict, ledger_failed: bool) -> str:
+    """판정 줄이 없을 때 「셀 수 없음 — 」 뒤의 글 — team 형식의 보관 판정은 결과 파일의 `Ruling:` 줄이다."""
+    if report.get("layout") == team_layout.LAYOUT_TEAM:
+        return "실행 원장을 읽지 못했고 결과 파일의 `Ruling:` 줄도 없다" if ledger_failed else "실행 원장도 결과 파일의 `Ruling:` 줄도 없다"
+    return "실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다" if ledger_failed else "실행 원장도 설계문서 `## 판정` 도 없다"
 
 
 def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
@@ -402,11 +436,11 @@ def show_text(items, interview, notes, first_line_fn, select_error=None) -> str:
             rows = []
             for b in ruled:
                 if b["rulings"] is None and b.get("ledger_failures"):
-                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다" % b.get("id")))
+                    rows.append(clean("    %s: 셀 수 없음 — %s" % (b.get("id"), no_ruling(report, True))))
                 elif b["rulings"] is None and report.get("machine_error"):
                     rows.append(clean("    %s: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다" % b.get("id")))
                 elif b["rulings"] is None:
-                    rows.append(clean("    %s: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다" % b.get("id")))
+                    rows.append(clean("    %s: 셀 수 없음 — %s" % (b.get("id"), no_ruling(report, False))))
                 else:
                     rows += [clean("    %s: %s" % (b.get("id"), r)) for r in b["rulings"]]
             lines += rows or ["    없음"]
@@ -1329,9 +1363,9 @@ def epic_view(path: str, report: dict, epic: str):
         if report.get("machine_error"):
             out.append("  판정 줄: 셀 수 없음 — 기계 상태를 읽지 못해 원장을 모른다")
         elif b.get("ledger_failures"):
-            out.append("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다")
+            out.append("  판정 줄: 셀 수 없음 — " + no_ruling(report, True))
         else:
-            out.append("  판정 줄: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다")
+            out.append("  판정 줄: 셀 수 없음 — " + no_ruling(report, False))
     else:
         out.append(clean("  판정 줄: %d개(%s)" % (len(b["rulings"]), b.get("rulings_source"))))
         out += [clean("    %s" % r) for r in b["rulings"]]

@@ -188,6 +188,14 @@ g checkout -q -b fix/overlap main && printf '에픽 자리 하나를 같이 고�
   && g add -- "$TM/jobs/overlap" && g commit -qm "과제 폴더 overlap" && bump src/e3/own.txt "E3 도 예약한 자리" "겹친 자리 고침" || failed "fix/overlap — $(cat "$T/out.txt")"
 assert_eq "$(jget overlap fix/overlap notes)" "[]" "AC11: 머리 paths 가 다른 에픽의 예약과 겹친 자리를 바꾸면 경로 예약 위반이 아니다(자기 고칠 자리)"
 g checkout -q main && g branch -q -D fix/overlap && g push -q origin --delete fix/overlap && again || failed "fix/overlap 지움"
+# 예약 밖 변경 줄임(R3 Q2) — 단순 작업도 블록과 같은 글: 다섯이면 다섯 그대로, 넘으면 이름 순 앞 다섯과 「외 n개」
+newjob wide fix/wide && put docs/w-a.md a && put docs/w-b.md b && put docs/w-c.md c && put docs/w-d.md d && put docs/w-e.md e \
+  && g commit -qm "예약 밖 다섯" && g push -q origin fix/wide && again || failed "fix/wide 다섯"
+assert_eq "$(jget wide fix/wide notes)" "['예약 밖 변경: docs/w-a.md · docs/w-b.md · docs/w-c.md · docs/w-d.md · docs/w-e.md']" "Q2: 단순 작업의 예약 밖 파일이 다섯이면 다섯 그대로"
+put docs/w-0.md 0 && bump docs/w-z.md z "예약 밖 일곱" || failed "fix/wide 일곱"
+assert_eq "$(jget wide fix/wide notes)" "['예약 밖 변경: docs/w-0.md · docs/w-a.md · docs/w-b.md · docs/w-c.md · docs/w-d.md 외 2개']" \
+  "Q2: 단순 작업의 예약 밖 파일이 일곱이면 이름 순 앞 다섯과 「외 2개」"
+g checkout -q main && g branch -q -D fix/wide && g push -q origin --delete fix/wide && again || failed "fix/wide 지움"
 
 # ── 옛 형식 로드맵의 보고에는 jobs · job_notes 가 없다(Q14 · AC13) — 과제 브랜치가 여럿 있는 지금 잰다 ──
 OLD="${RD}old-shape"
@@ -485,5 +493,45 @@ assert_not_contains "$(cat "$T/prr.txt")" "브랜치 없음" "pr-refresh: 세지
 g checkout -q main
 assert_eq "$(g status --porcelain --untracked-files=all)" "" "끝 상태: 작업 트리가 깨끗하다"
 assert_eq "$(g symbolic-ref -q refs/remotes/origin/HEAD)" "refs/remotes/origin/main" "끝 상태: origin/HEAD 는 main"
+
+# ── 글 출력의 로드맵 밖 과제(R3 M21) · 과제 폴더 없는 작업(R3 AC18 · M22) — 과제가 하나뿐인 새 팀 레포에서 잰다 ──
+T0="$T"
+new_repo "$T0/fresh" && ok "새 팀 레포를 세웠다" || { no "새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+newjob solo fix/solo && put docs/solo-extra.md "예약 밖 파일" && g commit -qm "solo 예약 밖" && g push -q origin fix/solo && g checkout -q main && again \
+  || failed "fix/solo"
+TXT_RC=0; (cd "$W" && python3 "$RS" "$RM") > "$T/solo.txt" 2>&1 || TXT_RC=$?
+assert_eq "$(jobs) · $(js "$T/s.json" "r['job_notes']")" "[('solo', '진행 중', 'fix/solo')] · []" "M21: 로드맵 밖 과제가 하나다(아래 단언의 바탕)"
+assert_eq "$TXT_RC" "$RC" "M21: 글 출력과 --json 의 종료 코드가 같다"
+SOLO_LINE="    solo solo 을 맡아 끝낸다 — 진행 중 · $(jget solo fix/solo reason)"
+assert_eq "$(sed -n '/^로드맵 밖 과제: /,/^경로 예약 겹침(정보): /p' "$T/solo.txt")" \
+  "$(printf '로드맵 밖 과제: 1개\n%s\n        정보: 예약 밖 변경: docs/solo-extra.md\n경로 예약 겹침(정보): 0개' "$SOLO_LINE")" \
+  "M21: team 로드맵의 글 출력에 「로드맵 밖 과제: 1개」 · 그 과제 줄 · 그 알림의 「정보:」 줄이 경로 예약 겹침 줄 앞에 있다"
+assert_eq "$(js "$T/s.json" "[(b['id'], b.get('job_folder', '칸 없음')) for b in r['blocks']]")" "[('P1', '칸 없음'), ('E1', True), ('E2', True), ('E3', True)]" \
+  "AC18: 과제 폴더가 기본 브랜치에 있는 블록은 job_folder 가 true · 결정 블록에는 칸이 없다"
+# 과제 폴더를 통째로 지우면 번호 파일(sources.md)이 없어 로드맵 형식 깨짐(3)이다 — 과제 폴더가 있다는 표지 INTENT.md 만 지운다
+g rm -q -- "$TM/jobs/E2/INTENT.md" && g commit -qm "E2 의 INTENT.md 를 지운다" && g push -q origin main && again || failed "E2 INTENT.md 지움"
+assert_eq "$(js "$T/s.json" "[(b['id'], b.get('job_folder', '칸 없음')) for b in r['blocks']]")" "[('P1', '칸 없음'), ('E1', True), ('E2', False), ('E3', True)]" \
+  "AC18: 기본 브랜치에서 과제의 INTENT.md 를 지운 블록은 job_folder 가 false"
+python3 - "$S" "$W" "$RM" <<'PY' || no "기계 상태에 작업 줄을 쓰지 못했다"
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import conductor_state as cs
+import roadmap_status
+from state_path import state_root_for_common
+root, rm = sys.argv[2:4]
+path = cs.machine_path(state_root_for_common(Path(root, roadmap_status.Git(root).common_dir()).resolve()), rm)
+path.parent.mkdir(parents=True, exist_ok=True)
+data = cs.load(path, rm)
+row = lambda kind, name, epic, stage="진행": {"종류": kind, "이름": name, "에픽": epic, "단계": stage, "담당": "없음", "근거": "-"}
+data["작업"] += [row("구현", "E1 계획 1", "E1"), row("구현", "E2 계획 1", "E2"), row("구현", "E2 계획 0", "E2", stage="끝"),
+                 row("수리", "solo 마무리", "로드맵 밖"), row("수리", "지휘자 수리", "로드맵 밖")]
+path.write_text(cs.render_machine(rm, data), encoding="utf-8")
+PY
+(cd "$W" && python3 "$S/control_plane.py" show "$RM") > "$T/fresh-show.txt" 2>&1
+assert_eq "$(grep -F " · 과제 폴더 없음" "$T/fresh-show.txt" | sed 's/ — .*//')" "$(printf '    구현 E2 계획 1\n    수리 지휘자 수리')" \
+  "AC18: 상태 보기가 과제 폴더를 지운 블록의 작업 줄과 어디에도 과제가 없는 로드맵 밖 작업 줄만 「과제 폴더 없음」 으로 알린다"
+assert_contains "$(cat "$T/fresh-show.txt")" "    구현 E1 계획 1 — E1 · 진행 · 담당 없음 · -" "AC18: 과제 폴더가 있는 블록의 작업 줄은 그대로(양의 짝 — 작업 줄이 화면에 있다)"
+use_repo "$T0"
 
 finish

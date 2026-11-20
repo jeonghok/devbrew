@@ -1217,5 +1217,114 @@ class TrustInCacheKey(unittest.TestCase):   # I1
                          CP.pr_cache_prints(targets, lambda p: (dict(before), None)))   # 같은 재료면 같다
 
 
+class StageTableLock(unittest.TestCase):   # R3 AC18 — BUCKETS 와 TASK_STATUS(이빨은 과제 19 의 변이 13)
+    def test_every_stage_has_one_place(self):
+        bucketed = {s for _name, stages in CP.BUCKETS for s in stages}
+        self.assertEqual(bucketed | set(CP.UNCOUNTED), set(RS.TASK_STATUS) | {"알 수 없음"})
+        self.assertEqual(bucketed & set(CP.UNCOUNTED), set())   # 같은 단계가 묶음과 「세지 않음」 에 함께 있지 않다
+
+
+class TeamRulingWording(unittest.TestCase):   # R3 AC18 — team 은 결과 파일
+    def b(self, **extra):
+        out = {"id": "E1", "title": "가", "stage": "구현 중", "reason": "-", "rulings": None, "warnings": [], "notes": []}
+        out.update(extra)
+        return out
+
+    def test_epic_view(self):
+        team = {"layout": "team", "blocks": [self.b()]}
+        old = {"blocks": [self.b()]}
+        self.assertIn("결과 파일의 `Ruling:` 줄도 없다", "\n".join(CP.epic_view("r.md", team, "E1")[0]))
+        self.assertIn("설계문서 `## 판정` 도 없다", "\n".join(CP.epic_view("r.md", old, "E1")[0]))
+        self.assertNotIn("설계문서 `## 판정`", "\n".join(CP.epic_view("r.md", team, "E1")[0]))
+
+    def test_epic_view_ledger_failed(self):
+        failed = [{"path": "l.md", "reason": "없다"}]
+        team = {"layout": "team", "blocks": [self.b(ledger_failures=failed)]}
+        old = {"blocks": [self.b(ledger_failures=failed)]}
+        self.assertIn("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 결과 파일의 `Ruling:` 줄도 없다", CP.epic_view("r.md", team, "E1")[0])
+        self.assertIn("  판정 줄: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다", CP.epic_view("r.md", old, "E1")[0])
+
+    def test_show_text(self):
+        for extra, team_line, old_line in (
+                ({}, "    E1: 셀 수 없음 — 실행 원장도 결과 파일의 `Ruling:` 줄도 없다",
+                 "    E1: 셀 수 없음 — 실행 원장도 설계문서 `## 판정` 도 없다"),
+                ({"ledger_failures": [{"path": "l.md", "reason": "없다"}]},
+                 "    E1: 셀 수 없음 — 실행 원장을 읽지 못했고 결과 파일의 `Ruling:` 줄도 없다",
+                 "    E1: 셀 수 없음 — 실행 원장을 읽지 못했고 설계문서 `## 판정` 도 없다")):
+            team = cp.show_text([(RM, report([self.b(**extra)], layout="team"))], None, [], cp.first_line).split("\n")
+            old = cp.show_text([(RM, report([self.b(**extra)]))], None, [], cp.first_line).split("\n")
+            self.assertIn(team_line, team)
+            self.assertIn(old_line, old)
+            self.assertFalse([l for l in team if "설계문서 `## 판정`" in l], team)
+
+
+class NoJobFolder(unittest.TestCase):   # R3 AC18 — 과제 폴더 없는 작업(M22 = 라)
+    def report(self, layout):
+        row = lambda kind, name, epic, stage="진행", basis="-": {"종류": kind, "이름": name, "에픽": epic, "단계": stage, "담당": "없음", "근거": basis}
+        r = {"blocks": [{"id": "E1", "kind": "epic", "job_folder": True}, {"id": "E2", "kind": "epic", "job_folder": False},
+                        {"id": "E3", "kind": "epic", "job_folder": None}],
+             "jobs": [{"id": "fix-x"}, {"id": "tidy"}],
+             "machine": {"살아 있는 agent": [], "작업": [
+                 row("구현", "E1 계획 1", "E1"), row("구현", "E2 계획 1", "E2"), row("구현", "E3 계획 1", "E3"),
+                 row("구현", "E9 계획 1", "E9"),                                            # 로드맵에 없는 에픽
+                 row("수리", "fix-x 마무리", "로드맵 밖"),                                 # 이름 칸의 낱말
+                 row("정리", "정리 일", "로드맵 밖", basis="docs/r/a/jobs/tidy/INTENT.md"),   # 근거 칸의 경로
+                 row("수리", "지휘자 수리", "로드맵 밖"),                                   # 어디에도 과제가 없다
+                 row("수리", "끝난 일", "로드맵 밖", stage="끝")]}}
+        if layout:
+            r["layout"] = layout
+            r["roadmap"] = "docs/r/a/roadmap.md"
+        return r
+
+    def test_team_marks_only_rows_without_a_job(self):
+        text = "\n".join(CP.works_lines(self.report("team")))
+        marked = [l for l in text.splitlines() if l.endswith(" · " + CP.NO_JOB_FOLDER)]
+        self.assertEqual([l.split(" — ")[0].strip() for l in marked], ["구현 E2 계획 1", "구현 E9 계획 1", "수리 지휘자 수리"])
+
+    def test_old_format_is_unchanged(self):   # AC20
+        self.assertNotIn(CP.NO_JOB_FOLDER, "\n".join(CP.works_lines(self.report(None))))
+
+    def test_word_and_path_must_match_exactly(self):   # 낱말은 글자 그대로 · 경로는 그 과제 폴더 아래
+        r = self.report("team")
+        r["machine"]["작업"] = [
+            {"종류": "수리", "이름": "fix-xy 마무리", "에픽": "로드맵 밖", "단계": "진행", "담당": "없음", "근거": "-"},
+            {"종류": "정리", "이름": "정리", "에픽": "로드맵 밖", "단계": "진행", "담당": "없음", "근거": "docs/r/a/jobs/tidyup/INTENT.md"},
+            {"종류": "정리", "이름": "정리", "에픽": "로드맵 밖", "단계": "진행", "담당": "없음", "근거": "docs/r/b/jobs/tidy/INTENT.md"}]
+        marked = [l for l in CP.works_lines(r) if l.endswith(" · " + CP.NO_JOB_FOLDER)]
+        self.assertEqual(len(marked), 3, marked)
+
+
+class RenderOutsideJobs(unittest.TestCase):   # R3 M21 · AC20 — 글 출력의 로드맵 밖 과제(team 보고에만)
+    def rep(self, **kw):
+        r = report([blk("E1", "구현 중", "in_progress", notes=["블록 알림"])], overlaps=[{"blocks": ["E1", "E2"], "paths": ["a.md"]}],
+                   source="origin/main", read_tree="기본 브랜치")
+        r.update(kw)
+        return r
+
+    def test_team_text_has_jobs_before_overlaps(self):
+        job = {"id": "fix-x", "title": "엑스 고치기", "stage": "진행 중", "reason": "브랜치 있음", "notes": ["예약 밖 변경: a.md"]}
+        lines = RS.render(self.rep(layout="team", jobs=[job], job_notes=["로드맵 밖 과제 w 을 세지 않았다"])).split("\n")
+        at = lines.index("로드맵 밖 과제: 1개")
+        self.assertEqual(lines[at:at + 5], ["로드맵 밖 과제: 1개", "    fix-x 엑스 고치기 — 진행 중 · 브랜치 있음",
+                                            "        정보: 예약 밖 변경: a.md", "    정보: 로드맵 밖 과제 w 을 세지 않았다",
+                                            "경로 예약 겹침(정보): 1개"])
+
+    def test_old_text_is_byte_identical(self):   # AC20 — jobs 칸이 없으면 M21 줄만 빠진 같은 글
+        old = RS.render(self.rep())
+        self.assertNotIn("로드맵 밖 과제", old)
+        team = RS.render(self.rep(jobs=[], job_notes=[])).split("\n")
+        self.assertIn("로드맵 밖 과제: 0개", team)
+        self.assertEqual("\n".join(l for l in team if l != "로드맵 밖 과제: 0개"), old)
+
+
+class OutsideLine(unittest.TestCase):   # R3 Q2 — 다섯에서 줄인다(이름 순)
+    def test_cut(self):
+        self.assertEqual(RS.RESERVE_OUTSIDE_MAX, 5)
+        five = ["e.md", "a.md", "c.md", "b.md", "d.md"]
+        self.assertEqual(RS.outside_line(five), "e.md · a.md · c.md · b.md · d.md")
+        seven = ["g.md", "f.md"] + five
+        self.assertEqual(RS.outside_line(seven), "a.md · b.md · c.md · d.md · e.md 외 2개")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -80,6 +80,7 @@ READ_DEFAULT, READ_TIP, READ_WORKSPACE = "기본 브랜치", "에픽 끝", "이 
 PAST_PLAN = ("계획", "구현 중", "구현 끝", "PR", "머지됨")
 SKIP_BUNDLE = "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음이라 배정 번호 %d개를 대조하지 않았다"
 RESERVE_VIOLATION, RESERVE_OUTSIDE = "경로 예약 위반: %s 은 %s 만 예약했다", "예약 밖 변경: %s"
+RESERVE_OUTSIDE_MAX = 5   # 「예약 밖 변경」 에 이름을 다 싣는 경로 수 — 넘으면 이름 순 앞 그 수와 「외 n개」
 PARTIAL_UNCOUNTED = "일부 머지 뒤 지금 브랜치를 세지 못했다"   # team — 「일부 머지」 가 덮은 지금 브랜치의 「알 수 없음」(검사 불가)
 
 MERGE_MSG_RE = re.compile(r"Merge pull request #\d+ from ([^/\s]+)/(\S+)")
@@ -1122,6 +1123,13 @@ def compute(git: Git, main, blocks: list, records: list, bundles: dict, roadmap_
     return cov_unknown
 
 
+def outside_line(paths: list) -> str:
+    """「예약 밖 변경」 의 경로 글 — RESERVE_OUTSIDE_MAX 이하면 받은 차례 그대로, 넘으면 이름 순 앞 그 수와 「외 n개」."""
+    if len(paths) <= RESERVE_OUTSIDE_MAX:
+        return " · ".join(paths)
+    return " · ".join(sorted(paths)[:RESERVE_OUTSIDE_MAX]) + " 외 %d개" % (len(paths) - RESERVE_OUTSIDE_MAX)
+
+
 def reserve_notes(git, main, b, blocks, names, team) -> list:
     """b 의 끝(b["tip"])이 기본 브랜치에서 갈라져 바꾼 파일의 「경로 예약 위반」 · 「예약 밖 변경」 알림 줄들 — 정보라 종료 코드를
     바꾸지 않는다. 블록과 team 의 로드맵 밖 과제(b 가 blocks 에 없고 b["reserved"] 가 머리 paths)가 함께 쓴다."""
@@ -1137,7 +1145,7 @@ def reserve_notes(git, main, b, blocks, names, team) -> list:
     if team:   # 아무 블록도 예약하지 않은 파일(Q13)
         outside = team_status.outside(team.team, b, blocks, changed, lambda p: _shared(p, names), _reserves)
         if outside:
-            out.append(RESERVE_OUTSIDE % " · ".join(outside))
+            out.append(RESERVE_OUTSIDE % outside_line(outside))
     return out
 
 
@@ -1366,6 +1374,7 @@ def build(git: Git, args) -> dict:
         if h["receiver"] in bad_records and h["state"] in ("열림", "처리됨", "확인됨"):
             h.update(state="셀 수 없음", basis="%s %s 읽기 불가" % (h["receiver"], record_label or "지휘 기록"))
     parallel = parallel_with(blocks, report["overlaps"])
+    told_failures = len(git.failures)   # 아래 과제 폴더 읽기(job_folder) · 과제 훑기의 git 실패 — 끝에서 함께 검사 불가 사유로
     for b in blocks:
         ids = b["assigned"]
         report["blocks"].append({
@@ -1382,19 +1391,25 @@ def build(git: Git, args) -> dict:
             "ids": sorted(ids, key=id_sort_key), "warnings": b["warnings"], "notes": b["notes"]})
         if team and b["kind"] != "decision":   # team 칸은 team 로드맵의 보고에만(Q14)
             report["blocks"][-1].update(progress=b.get("progress"), job=b.get("job") or {
-                "intent": team.team.intent(b["id"]), "plan": None, "result": None})
+                "intent": team.team.intent(b["id"]), "plan": None, "result": None}, job_folder=job_folder(src, team.team.intent(b["id"])))
     if team:   # 로드맵 밖 과제는 따로 된 목록이다 — 과제의 사정은 알림(job_notes) · 읽지 못함은 검사 불가
-        told_failures = len(git.failures)
         names = settings.get("shared_files") or SHARED_BASENAMES
         report["jobs"], report["job_notes"] = team_status.task_jobs(
             team, blocks, scan=lambda job: reserve_notes(git, main, job, blocks, names, team))
         for j in report["jobs"]:
             j["task_status"] = task_status(j["stage"])
-        for f in git.failures[told_failures:]:   # 과제 훑기의 git 읽기 실패 — 블록의 것과 같은 길 · 같은 줄은 한 번
+        for f in git.failures[told_failures:]:   # 과제 폴더 읽기 · 과제 훑기의 git 읽기 실패 — 블록의 것과 같은 길 · 같은 줄은 한 번
             line = "git 읽기 실패 — %s" % f
             if line not in report["unknown_reasons"]:
                 report["unknown_reasons"].append(line)
     return report
+
+
+def job_folder(src, intent: str):
+    """그 과제의 INTENT.md 가 로드맵을 읽은 사본에 있으면 True, 없다고 확인되면 False, 확인하지 못하면 None."""
+    if src.read(intent) is not None:
+        return True
+    return False if src.absent(intent) else None
 
 
 def exit_code(report: dict) -> int:
@@ -1434,6 +1449,13 @@ def render(report: dict) -> str:
                                  else "%d개%s" % (len(vals), " — " + " · ".join(vals) if vals else "")))
     if report["unknown_ids"]:
         lines.append("brief 에 없는 번호: %s" % " · ".join(report["unknown_ids"]))
+    if "jobs" in report:   # team 로드맵의 로드맵 밖 과제 — 옛 형식의 글은 그대로
+        lines.append("로드맵 밖 과제: %d개" % len(report["jobs"]))
+        for j in report["jobs"]:
+            name = " ".join(str(v) for v in (j.get("id"), j.get("title")) if v)   # 목표 칸을 못 찾은 과제는 제목이 None
+            lines.append("    %s — %s · %s" % (name, j["stage"], j["reason"]))
+            lines += ["        정보: %s" % n for n in j.get("notes", [])]
+        lines += ["    정보: %s" % n for n in report.get("job_notes", [])]
     lines.append("경로 예약 겹침(정보): %d개" % len(report["overlaps"]))
     lines += ["    %s ↔ %s: %s" % (o["blocks"][0], o["blocks"][1], " · ".join(o["paths"]))
               for o in report["overlaps"]]
