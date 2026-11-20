@@ -219,6 +219,21 @@ class RulesEdit(TeamRepo):   # R3 AC17 · AC21
         self.assertEqual((rc, self.copy()), (0, None), out)
 
 
+    def test_marker_comes_before_the_off_switch(self):   # F14 — 표지(5) → 쓸 수 있는지 → 팀 차례 · 붉어지는 변이: 꺼짐을 먼저 본다
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.rules_edit(str(self.w), rm(ALPHA), OTHER, add=NEW)
+        self.assertEqual(cm.exception.rc, 5)
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)   # 양성 대조 — 표지를 쥔 세션은 꺼짐을 알리고 넘어간다
+        self.assertEqual((res.commit, res.notes), (None, (CB.OFF_NOTE,)))
+
+    def test_reset_of_an_own_copy_does_not_confirm(self):   # 남의 규칙 고침이 없으면 확인한 끝을 옮기지 않는다
+        LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNotNone(res.commit)
+        self.assertNotIn(LS.RESET_DONE, res.notes)
+        self.assertNotIn(cs.TRUST_WHY[0], [r["까닭"] for r in self.rows()])
+
 class RulesEditForeign(TeamRepo):   # R3 AC21 · M36 — 남의 고침은 읽을 끝에서 재고, 쓰기는 받아 온 끝 위에서 한다
     def copy(self):
         return CB.read(str(self.w), self.tip(), self.team.rules)
