@@ -12,6 +12,7 @@ team_repo && ok "과제 찾기 픽스처 레포를 세웠다(${TM})" || { no "�
 JRC="$S/job_results.py"
 # create 가 roadmaps_dir 바로 아래에 깐 역할 문서 · HANDBOOK 은 픽스처가 올리지 않았다 — 기본 브랜치에 먼저 올린다
 g add -A -- "$RD" && g commit -qm "역할 문서를 올린다" && g push -q origin main
+claim || { no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"; finish; }   # 결과 대조가 사람 줄(흐름 승인)을 본다(과제 11)
 
 jobs() { js "$T/s.json" "[(j['id'], j['stage'], j['branch']) for j in r['jobs']]"; }
 jnotes() { js "$T/s.json" "' | '.join(r['job_notes'])"; }
@@ -138,6 +139,7 @@ assert_eq "$(sync fix-typo implement-1.md --end "$CODE")" "0" "결과: job sync 
 g add -- "$TM/jobs/fix-typo" && g commit -qm "결과 파일" && g push -q origin fix/typo && again || failed "결과 파일"
 assert_eq "$(jget fix-typo fix/typo stage)" "진행 중" "결과: 받음 줄 전에는 진행 중"
 assert_contains "$(jget fix-typo fix/typo notes)" "결과 있음 · 받음 없음: implement-1.md(대조를 기다린다)" "결과: 과제에도 받음 없음 알림(블록과 같은 함수)"
+approved "흐름 승인" fix-typo - - 2026-11-26 && g push -q origin fix/typo && again || failed "fix-typo 흐름 승인"
 LINE="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job fix-typo --result implement-1.md --branch fix/typo --date 2026-11-27 | grep '^- 결과 받음 · ')"
 assert_contains "$LINE" "- 결과 받음 · 2026-11-27 · 「implement-1.md · $CODE · 결과 대조: 통과 — " "결과: 대조가 과제의 받음 줄을 낸다"
 decide fix-typo "$LINE" && g add -- "$TM/jobs/fix-typo" && g commit -qm "받음 줄" && g push -q origin fix/typo && again || failed "받음 줄"
@@ -389,6 +391,8 @@ assert_eq "$(sync e2e-job implement-1.md --role worker --bundle-at "$(g rev-pars
   "0 · [spec-distill] 결과 파일을 맞췄다: $E2E/results/implement-1.md — 머리 만듦" "끝에서 끝: job sync 가 결과 파일의 머리를 만든다"
 g add -- "$E2E" && g commit -qm "결과 파일 열기" && g push -q origin fix/e2e && again || failed "결과 파일 열기"
 assert_contains "$(jget e2e-job fix/e2e notes)" "결과 있음 · 받음 없음: implement-1.md(도는 중 — 끝 줄 없음)" "끝에서 끝: 끝 줄 전에는 「도는 중」 받음 없음 알림"
+approved "흐름 승인" e2e-job - - 2026-11-27 && g push -q origin fix/e2e || failed "e2e 흐름 승인"
+rm -rf "$W/.claude"   # 위 claim 이 이 테스트의 준비로 남긴 지휘 표지 자리 — 아래 「git 이 모르는 파일이 없다」 단언은 상태 계산이 남긴 파일만 잰다
 # 끝 줄 전의 대조 — 1(거절): 받음 줄을 내지 않으므로 리더가 record 에 넘길 줄이 없다
 assert_eq "$(e2e_check fix/e2e)" "1" "끝에서 끝: 끝 줄 전의 대조는 거절(1)"
 assert_eq "$(head -1 "$T/check.txt")" "결과 대조: 거절 2건 — implement-1.md" "끝에서 끝: 거절의 첫 줄(사유 둘)"

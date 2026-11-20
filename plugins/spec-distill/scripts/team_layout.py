@@ -41,8 +41,8 @@ STAGES = ("design", "plan", "implement", "review")
 PLANNED_STAGES = ("plan", "implement", "review")
 PLAIN_FLOW_STAGES = ("진행 중", "결과 받음")   # 설계 없는 흐름의 단계 글자(설계 §10) — 브랜치 있음 · 받음 줄 있음
 
-# 단계의 기본 역할 — STAGES 의 차례와 같다. review 는 None(역할 문서를 주지 않는다, 설계 §6).
-_DEFAULT_ROLES = dict(zip(STAGES, (ROLES[1], ROLES[1], ROLES[3], None)))
+# 단계의 기본 역할 — STAGES 의 차례와 같다. design 은 leader, plan · implement 는 worker, review 는 None(역할 문서를 주지 않는다, 설계 §6).
+_DEFAULT_ROLES = dict(zip(STAGES, (ROLES[0], ROLES[3], ROLES[3], None)))
 
 _JOB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _PLAN_FILE_RE = re.compile(r"plan-([1-9][0-9]*)\.md")

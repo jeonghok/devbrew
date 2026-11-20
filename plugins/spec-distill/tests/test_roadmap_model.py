@@ -422,6 +422,11 @@ class TeamRoadmap(unittest.TestCase):   # R1 AC3 · P7
         doc = "# 문서\n\n## 지휘 기록\n\n" + "\n".join(lines) + "\n"
         self.assertEqual(M.approval_date(doc), M.approval_in(lines))
 
+    def test_approval_reader_takes_the_version_and_evidence_cells(self):
+        line = "- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」 · design.md@51f1b64d · 근거 00000000-0000-4000-8000-00000000aaaa:00000000-0000-4000-8000-000000000001#1"
+        self.assertEqual(M.approval_in([line]), "2026-11-18")
+        self.assertEqual(M.approval_in(["- spec 승인 · 2026-10-20 · 「승인」", line]), "2026-11-18")
+
 
 if __name__ == "__main__":
     unittest.main()

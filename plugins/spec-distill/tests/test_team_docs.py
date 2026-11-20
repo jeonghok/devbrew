@@ -21,9 +21,11 @@ import team_status as TS  # noqa: E402
 import team_rules as TR  # noqa: E402
 import repo_defaults  # noqa: E402
 import start_bundle as SB  # noqa: E402
+import human_lines as HL  # noqa: E402
 
 DOC = PLUGIN / "references" / "team-files.md"
 README = PLUGIN / "README.md"
+REF = PLUGIN / "references"
 REPO = PLUGIN.parents[1]
 
 
@@ -328,6 +330,44 @@ class FinalReviewRulings(unittest.TestCase):   # 마지막 리뷰의 수정 — 
         self.assertEqual(RS.RESERVE_OUTSIDE % "b", "예약 밖 변경: b")
         self.assertEqual(RS.SKIP_BUNDLE % 2, "번호 대조 건너뜀(셀 수 없음) — 설계문서 없는 묶음이라 배정 번호 2개를 대조하지 않았다")
         self.assertEqual(L.PLAIN_FLOW_STAGES, ("진행 중", "결과 받음"))
+
+
+class HumanLines(unittest.TestCase):   # R2 AC22 — 계획 1 몫
+    def test_team_files_documents_human_lines_and_gates(self):
+        text = (REF / "team-files.md").read_text(encoding="utf-8")
+        for kind in HL.KINDS:
+            for label in HL.PASS_LABELS[kind]:
+                self.assertIn("「%s」" % label, text, label)
+        for word in (HL.PASS, HL.NO_EVIDENCE, HL.MISMATCH, HL.UNCHECKED, HL.STALE, HL.GATE_OFF, "human_gate", "record --human", "ask-head", "human-check",
+                     "· 근거 <세션>:<항목>", "계획 검토 plan <n>", "다시 시도 plan <n> 시도 <k>", "다시 시도 구현 시도 <k>",
+                     "<과제 번호> plan <n> @<판>", "줄 없음", "상태 보기는 이 브랜치를 머지로 세지 못한다"):
+            self.assertIn(word, text, word)
+        self.assertNotIn("`design` · `plan` 은 designer", text)
+        self.assertNotIn("종류는 일곱", text)
+        self.assertNotIn("다시 시도 시도 <k>", text)
+        self.assertIn("날짜는 인자로 받지 않는다", text)
+
+    def test_carried_rulings(self):   # 계획 1 을 도는 동안 정해진 것 — 글자는 코드(start_bundle · human_lines)에서 읽는다
+        text = (REF / "team-files.md").read_text(encoding="utf-8")
+        for word in ("질문 하나는 관문 이름 하나만 담는다", "기록 절은 제목이 정확히", HL.RECORD_HEADS[0], HL.DEFERRED_HEAD,
+                     "## 구현 대조 — <계획 파일 경로>", "작은따옴표로 감싼다",
+                     "그 브랜치를 만들거나 앞 계획을 먼저 머지한 뒤 다시 부른다", "기록 절 안에 설계 글을 적는 것"):
+            self.assertIn(word, text, word)
+        self.assertEqual(SB.sync_line("a b", "worker", "x", "y"), "맞추는 명령: python3 %s job sync --result 'a b' --role worker --bundle-at x --job-at y"
+                      % SB.roadmap_status._sh_word(str(Path(SB.__file__).resolve().parent / "roadmap_write.py")))
+        self.assertIn("위 꼴의 따옴표는 자리표시의 표기이고", text)
+
+    def test_readme_changelog_and_dependencies(self):
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for word in ("human_gate", "record --human", "사람 줄"):
+            self.assertIn(word, readme, word)
+        deps = (PLUGIN / "dependencies.md").read_text(encoding="utf-8")
+        for word in ("세션 기록", "AskUserQuestion", "toolUseResult", "permissionDecision", "entrypoint", "sourceToolAssistantUUID", "isSidechain", "2.1.296", "2.1.327", "sdk-cli", "hook"):
+            self.assertIn(word, deps, word)
+        sections = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")) if ver == (8, 25, 0)]
+        self.assertEqual(len(sections), 1, "CHANGELOG 에 8.25.0 절이 하나가 아니다")   # 맨 위 절이 아니라 이름으로 고른다 — 뒤의 판 올림이 새 절을 더해도 맞는다
+        for word in ("record --human", "human_gate", "worker"):
+            self.assertIn(word, sections[0], word)
 
 
 FLOOR = (8, 21, 0)
