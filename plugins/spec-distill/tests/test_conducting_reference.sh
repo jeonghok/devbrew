@@ -401,7 +401,8 @@ for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scri
            'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x' \
            'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh' \
            '줄 안의 플러그인 루트 변수는 그 에픽 worktree 의 spec-distill 플러그인 폴더로' \
-           '`<SD>/main.md`' '`<SD>/feature/x.md`' '`<SD>/../../docs/superpowers/specs/x.md`' '`<SD>/.superpowers/sdd/x.md`'; do
+           '`<SD>/main.md`' '`<SD>/feature/x.md`' '`<SD>/../../docs/superpowers/specs/x.md`' '`<SD>/.superpowers/sdd/x.md`' \
+           '`<SD>/../x/references/y.md`'; do
   { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
