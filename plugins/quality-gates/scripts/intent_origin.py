@@ -493,21 +493,8 @@ def is_intent_doc(text: str, markers: List[str]) -> bool:
     return False
 
 
-def review_breadth(mode: str, names: Optional[set], read_doc, markers: List[str]) -> tuple:
-    """(넓이, 의도 문서 경로 목록, 읽지 못한 문서 수).
-
-    넓이: `range`(범위 모드 · 바뀐 파일 있음) · `intent-docs`(PR 의 바뀐 파일이 모두 문서 파일이고
-    의도 문서가 하나 이상) · `narrow`(그 밖). `read_doc(rel)` 이 None 인 문서는 의도 문서로 세지
-    않고 읽지 못한 수에 더한다.
-    """
-    if mode == "range":
-        return ("range" if names else "narrow", [], 0)
-    if mode != "pr" or not names:
-        return ("narrow", [], 0)
-    ordered = sorted(names)
-    for rel in ordered:
-        if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
-            return ("narrow", [], 0)
+def _intent_docs(ordered: List[str], read_doc, markers: List[str]) -> tuple:
+    """(의도 문서 경로 목록, 읽지 못한 문서 수) — `read_doc(rel)` 이 None 이면 읽지 못한 것."""
     intent_docs: List[str] = []
     unread = 0
     for rel in ordered:
@@ -516,6 +503,26 @@ def review_breadth(mode: str, names: Optional[set], read_doc, markers: List[str]
             unread += 1
         elif is_intent_doc(text, markers):
             intent_docs.append(rel)
+    return intent_docs, unread
+
+
+def review_breadth(mode: str, names: Optional[set], read_doc, markers: List[str]) -> tuple:
+    """(넓이, 의도 문서 경로 목록, 읽지 못한 문서 수).
+
+    넓이: `range`(범위 모드 · 바뀐 파일 있음) · `intent-docs`(PR 의 바뀐 파일이 모두 문서 파일이고
+    의도 문서가 하나 이상) · `narrow`(그 밖). `read_doc(rel)` 이 None 인 문서는 의도 문서로 세지
+    않고 읽지 못한 수에 더한다. 범위 모드도 바뀐 파일이 모두 문서 파일이고 모델이 읽는 파일이
+    없을 때만 바뀐 의도 문서 목록을 낸다.
+    """
+    if mode not in ("range", "pr") or not names:
+        return ("narrow", [], 0)
+    ordered = sorted(names)
+    for rel in ordered:
+        if not doc_paths.is_doc_file(rel) or doc_paths.is_model_read(rel):
+            return ("range", [], 0) if mode == "range" else ("narrow", [], 0)
+    intent_docs, unread = _intent_docs(ordered, read_doc, markers)
+    if mode == "range":
+        return ("range", intent_docs, unread)
     return ("intent-docs" if intent_docs else "narrow", intent_docs, unread)
 
 

@@ -136,6 +136,7 @@ ARGUMENTS:
 OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
   --origin <path>      Caller's origin file for the intent critic (tracked file in this repo)
+                       If that file has no roadmap: line, the other-teams map reports 「로드맵 없음」.
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message

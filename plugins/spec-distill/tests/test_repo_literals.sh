@@ -18,7 +18,7 @@ SD="$ROOT/plugins/spec-distill"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
-TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md skills/request-framing/SKILL.md skills/pm-interview/SKILL.md skills/pm-interview/references/finishing.md skills/pm-interview/references/state-file.md skills/spec-review/SKILL.md references/redecompose.md scripts/control_plane.py scripts/state_path.py scripts/roadmap_status.py scripts/walk_table.py scripts/conductor_branch.py scripts/conductor_mail.py scripts/conductor_status.py scripts/leader_seat.py references/conductor-state-branch.md"
+TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md skills/request-framing/SKILL.md skills/pm-interview/SKILL.md skills/pm-interview/references/finishing.md skills/pm-interview/references/state-file.md skills/spec-review/SKILL.md references/redecompose.md scripts/control_plane.py scripts/state_path.py scripts/roadmap_status.py scripts/walk_table.py scripts/conductor_branch.py scripts/conductor_mail.py scripts/conductor_status.py scripts/leader_seat.py references/conductor-state-branch.md skills/epic-conductor/references/qg-review.md scripts/merged_pr_range.py"
 scan() {  # scan <파일...> — 걸린 줄을 `<파일>:<줄>: <종류>` 로
   SCAN_DEPS="$SD/scripts" PYTHONIOENCODING=utf-8 python3 -I - "${SCAN_DEFS:-$SD/scripts}" "$@" <<'PY'
 import os, re, sys

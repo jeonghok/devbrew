@@ -39,6 +39,9 @@
 #      〔2026-08-21 실측〕 이 갈래는 오늘 **살아 있는 인스턴스가 0** 이다 — 분기로만 존재하며
 #      합성 케이스로 검증했다. 코퍼스가 아니라 리졸버의 갈래이므로 vacuity FAIL 대상이 아니다.
 #   ③ `(../)*references/…`(맨몸 포함) → 그 SKILL.md 자신의 디렉터리 (쓰인 그대로)
+#   ⑤ `<SD>/…`                     → `plugins/spec-distill/` — 출처 파일이 `plugins/spec-distill/`
+#      아래일 때만(그 플러그인의 conducting.md 가 `<SD>` 를 플러그인 폴더로 정의한다).
+#      그 밖의 출처에서는 ④ 로 거부한다. 대상 존재 검사는 ① 과 같다.
 #   ④ 그 밖의 모든 접두사           → **거부(loud FAIL)**. 재해석하지 않는다.
 #
 # **"skill 밑을 먼저 보고 없으면 플러그인 루트를 본다" 식의 폴백은 쓰지 않는다.**
@@ -112,7 +115,7 @@ cd "$ROOT" || exit 1
 # 앞의 넷은 마크다운/코드 문맥의 자연 경계이고, `*` 는 `**path**` 볼드 표기가 인식
 # 불가 토큰으로 오인되는 것을 막는다(실측: 그 표기도 맨몸 형태로 정상 추출된다).
 _Q="'"
-REF_RE="[^[:space:]\`()<>\"${_Q}*;,]*references/[A-Za-z0-9_./-]+\\.md"
+REF_RE="(<SD>)?[^[:space:]\`()<>\"${_Q}*;,]*references/[A-Za-z0-9_./-]+\\.md"
 
 # `a/b/../c` → `a/c`. 존재하지 않는 경로도 접어야 하므로 `realpath`/`pwd -P` 를
 # 쓰지 않는다. 선두의 `..` 는 접지 않고 남긴다(리포 밖을 가리키는 포인터는 그대로
@@ -194,6 +197,32 @@ RESOLVED=""
 # 그대로 되쓴다 — 접미사 비교가 아니라 쓰인 그대로의 해석 결과를 본다(F5).
 RESOLVED_PAIRS=""
 
+# 포인터 해석기 — 접두사 → 해석 루트는 1:1. 폴백 없음. 알아보지 못하면 빈 값(거부).
+resolve_target() {  # resolve_target <출처 파일> <ref>
+  local skill_md="$1" ref="$2" skill_dir plugin_root _rest
+  skill_dir="$(dirname -- "$skill_md")"
+  plugin_root="${skill_md#plugins/}"
+  plugin_root="plugins/${plugin_root%%/*}"
+  case "$ref" in
+    '${CLAUDE_PLUGIN_ROOT'*'}/'*) printf '%s\n' "$plugin_root/${ref#*\}/}" ;;
+    '<SD>/'*)
+      case "$skill_md" in
+        plugins/spec-distill/*) printf '%s\n' "plugins/spec-distill/${ref#'<SD>/'}" ;;
+      esac ;;
+    plugins/*)                    printf '%s\n' "$ref" ;;
+    references/*)                 printf '%s\n' "$skill_dir/$ref" ;;
+    *)
+      # `(../)+references/…` 만 상대 형태로 인정한다.
+      _rest="$ref"
+      while [ "${_rest#../}" != "$_rest" ]; do _rest="${_rest#../}"; done
+      case "$_rest" in
+        references/*) printf '%s\n' "$skill_dir/$ref" ;;
+      esac
+      ;;
+  esac
+}
+
+
 while IFS= read -r skill_md; do
   [ -n "$skill_md" ] || continue
   skill_dir="$(dirname -- "$skill_md")"
@@ -206,26 +235,12 @@ while IFS= read -r skill_md; do
     [ -n "$ref" ] || continue
     checked=$((checked + 1))
     # 접두사 → 해석 루트는 1:1. 폴백 없음. 알아보지 못하면 **거부**한다(절단 금지).
-    target=""
-    case "$ref" in
-      '${CLAUDE_PLUGIN_ROOT'*'}/'*) target="$plugin_root/${ref#*\}/}" ;;
-      plugins/*)                    target="$ref" ;;
-      references/*)                 target="$skill_dir/$ref" ;;
-      *)
-        # `(../)+references/…` 만 상대 형태로 인정한다. `case` 로는 `+` 를 못 쓰므로
-        # 선두 `../` 를 벗겨 나머지가 `references/` 로 시작하는지 본다.
-        _rest="$ref"
-        while [ "${_rest#../}" != "$_rest" ]; do _rest="${_rest#../}"; done
-        case "$_rest" in
-          references/*) target="$skill_dir/$ref" ;;
-        esac
-        ;;
-    esac
+    target="$(resolve_target "$skill_md" "$ref")"
     if [ -z "$target" ]; then
       # 예: 중괄호 없는 `$CLAUDE_PLUGIN_ROOT/references/x.md` · `docs/…/references/y.md`.
       # 조용히 스킬 디렉터리 상대로 재해석하지 않는다 — 그것이 이 락이 없다고 주장하는
       # 폴백이다. 표기를 인식 가능한 세 형태 중 하나로 고쳐야 한다.
-      no "pointer: $skill_md → '$ref' 의 접두사를 알아볼 수 없다 — 인식 형태는 \`\${CLAUDE_PLUGIN_ROOT…}/…\` · \`plugins/<p>/…\` · \`(../)*references/…\` 뿐이다 (조용히 재해석하지 않는다)"
+      no "pointer: $skill_md → '$ref' 의 접두사를 알아볼 수 없다 — 인식 형태는 \`\${CLAUDE_PLUGIN_ROOT…}/…\` · \`plugins/<p>/…\` · \`(../)*references/…\` · (spec-distill 출처에서만) \`<SD>/…\` 뿐이다 (조용히 재해석하지 않는다)"
       unknown_form=$((unknown_form + 1))
     elif [ "$(norm_path "$target")" = "$(norm_path "$skill_md")" ]; then
       # 자기 보증 금지: 출처가 참조 파일까지 넓어지면서 "자기 자신을 가리키는 포인터"가
@@ -253,6 +268,14 @@ else
   assert_eq "$unknown_form" "0" "pointer: 인식 못 하는 접두사 ${unknown_form}건 (절단-재해석 대신 거부)"
   assert_eq "$selfref" "0" "pointer: 자기 자신을 가리키는 포인터 ${selfref}건 (자기 보증 금지)"
 fi
+
+# ── 합성 대조(<SD> 갈래의 이빨) ──────────────────────────────────────────
+_t="$(resolve_target "plugins/spec-distill/references/conducting.md" '<SD>/skills/epic-conductor/references/qg-review.md')"
+assert_eq "$_t" "plugins/spec-distill/skills/epic-conductor/references/qg-review.md" "대조: spec-distill 출처의 <SD>/ 는 플러그인 루트로 해석된다"
+[ -f "$_t" ] && ok "대조: 그 해석 대상이 실재한다" || no "대조: <SD>/ 해석 대상이 없다 ($_t)"
+_t="$(resolve_target "plugins/spec-distill/references/conducting.md" '<SD>/skills/epic-conductor/references/no-such-file.md')"
+[ -n "$_t" ] && [ ! -f "$_t" ] && ok "대조: 없는 <SD>/ 대상은 해석되지만 존재 검사에서 떨어진다" || no "대조: 없는 <SD>/ 대상이 통과한다 ($_t)"
+assert_eq "$(resolve_target "plugins/quality-gates/skills/quality-pipeline/SKILL.md" '<SD>/references/conducting.md')" "" "대조: spec-distill 밖 출처의 <SD>/ 는 거부(빈 값)"
 
 # ── 역방향(F6): SKILL.md 가 안 가리키는 references/*.md — 고아 ────────────
 #
