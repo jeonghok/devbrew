@@ -62,7 +62,10 @@ timing_mark() {
 if [ -n "$TIMING" ]; then
   s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
-  { printf 'start\t%s\t%s\t%s\n' "$now" "$n" "$TOP" >> "$TIMING"; } 2>/dev/null || true
+  if ! { printf 'start\t%s\t%s\t%s\n' "$now" "$n" "$TOP" >> "$TIMING"; } 2>/dev/null; then
+    TIMING_WARNED=1
+    echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
+  fi
   T_PREV="$now"
   [ "$T_PREV" = "?" ] && T_PREV=""
 fi
