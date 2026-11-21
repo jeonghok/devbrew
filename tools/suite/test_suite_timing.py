@@ -318,5 +318,227 @@ class UnittestDirTimingTests(unittest.TestCase):
         self.assertEqual(keys, ["pkg/tests/test_broken.py"])
 
 
+PASS_PY = "import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
+BASE = {
+    "shared/tests/test_pass.sh": 'echo "  ✓ ok"\n',
+    "plugins/p/tests/test_fail.sh": 'echo "  ✗ broke"; exit 1\n',
+    "plugins/p/tests/test_u.py": PASS_PY,
+    "tools/x/test_t.py": PASS_PY,
+}
+BASE_WITHOUT_FAIL = {k: v for k, v in BASE.items() if k != "plugins/p/tests/test_fail.sh"}
+NODE_TEST = 'import test from "node:test";\ntest("ok", () => {});\n'
+BASH = "/bin/bash" if os.path.exists("/bin/bash") else shutil.which("bash")
+SUITE_FILES = ("run-all.sh", "run_unittest_dir.py", "suite_peers.py")
+NODE = 1 if shutil.which("node") else 0
+FAIL_OUT = "FAILED plugins/p/tests/test_fail.sh: broke\n"
+
+
+class RunAllTimingTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-runall-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.count = 0
+
+    def make_repo(self, files, node=False):
+        self.count += 1
+        repo = os.path.join(self.tmp, "repo%d" % self.count)
+        os.makedirs(os.path.join(repo, "tools", "suite"))
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        for name in SUITE_FILES:
+            shutil.copy(os.path.join(HERE, name), os.path.join(repo, "tools", "suite", name))
+        files = dict(files)
+        if node and NODE:
+            files["plugins/p/tests/n.test.mjs"] = NODE_TEST
+        for rel, body in files.items():
+            path = os.path.join(repo, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(body)
+            if rel.endswith(".sh"):
+                os.chmod(path, 0o755)
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        return os.path.realpath(repo)
+
+    def run_all(self, repo, extra_env=None):
+        env = clean_env(TMPDIR=self.tmp)
+        env.update(extra_env or {})
+        proc = subprocess.run([BASH, "tools/suite/run-all.sh"], cwd=repo, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=180)
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def ps_file(self, text):
+        path = os.path.join(self.tmp, "ps-%d.txt" % len(os.listdir(self.tmp)))
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return path
+
+    def out_file(self, name="timing.tsv"):
+        return os.path.join(self.tmp, name)
+
+    def lines(self, path):
+        with open(path, encoding="utf-8") as fh:
+            return [l for l in fh.read().split("\n") if l]
+
+    def target_lines(self, lines):
+        return [l for l in lines if l.split("\t")[1] in ("sh", "py", "node")]
+
+    def test_ac1_without_var_fail_and_pass(self):
+        rc, out, err = self.run_all(self.make_repo(BASE))
+        self.assertEqual((rc, out, err), (1, FAIL_OUT, ""))
+        rc, out, err = self.run_all(self.make_repo(BASE_WITHOUT_FAIL))
+        self.assertEqual((rc, out, err), (0, "", ""))
+
+    def test_ac2_lines_and_same_stdout(self):
+        repo = self.make_repo(BASE, node=True)
+        without = self.run_all(repo)
+        path = self.out_file()
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        self.assertEqual((rc, out, err), without)
+        lines = self.lines(path)
+        firsts = [l.split("\t")[0] for l in lines]
+        self.assertEqual(firsts[0], "start")
+        self.assertEqual(firsts.count("start"), 1)
+        self.assertEqual(firsts.count("end"), 1)
+        self.assertEqual(lines[-1].split("\t")[0], "end")
+        targets = self.target_lines(lines)
+        self.assertEqual(len(targets), 2 + 3 + NODE)
+        self.assertEqual(sorted(l.split("\t")[1] for l in targets),
+                         sorted(["sh"] * 2 + ["py"] * 3 + ["node"] * NODE))
+        for l in targets:
+            cols = l.split("\t")
+            self.assertEqual(len(cols), 4)
+            self.assertRegex(cols[0], r"^\d+\.\d{3}$")
+        self.assertRegex(lines[0], r"^start\t\d+\.\d{3}\t[0-9?]+\t")
+        self.assertRegex(lines[-1], r"^end\t\d+\.\d{3}\t[0-9?]+$")
+        self.assertTrue(any(l.split("\t")[1] == "pymod" for l in lines))
+
+    def test_ac3_start_count_from_fake_ps(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        path = self.out_file("a.tsv")
+        self.run_all(repo, {"SUITE_TIMING_FILE": path, "SUITE_PEERS_PS_FILE": self.ps_file("")})
+        lines = self.lines(path)
+        self.assertEqual(lines[0].split("\t")[2], "0")
+        self.assertEqual(lines[-1].split("\t")[2], "0")
+        path = self.out_file("b.tsv")
+        ps = self.ps_file("100 1 bash /o/tools/suite/run-all.sh\n")
+        self.run_all(repo, {"SUITE_TIMING_FILE": path, "SUITE_PEERS_PS_FILE": ps})
+        self.assertEqual(self.lines(path)[0].split("\t")[2], "1")
+
+    def test_ac3_peer_appearing_mid_round(self):
+        ps = os.path.join(self.tmp, "mid-ps.txt")
+        with open(ps, "w", encoding="utf-8") as fh:
+            fh.write("")
+        files = dict(BASE_WITHOUT_FAIL)
+        files["plugins/p/tests/test_1_up.sh"] = \
+            "printf '100 1 bash /o/tools/suite/run-all.sh\\n' > '%s'\n" % ps
+        files["plugins/p/tests/test_2_down.sh"] = ": > '%s'\n" % ps
+        repo = self.make_repo(files)
+        path = self.out_file()
+        self.run_all(repo, {"SUITE_TIMING_FILE": path, "SUITE_PEERS_PS_FILE": ps})
+        lines = self.lines(path)
+        by_target = {l.split("\t")[2]: l.split("\t")[3] for l in self.target_lines(lines)}
+        self.assertEqual(lines[0].split("\t")[2], "0")
+        self.assertGreaterEqual(int(by_target["plugins/p/tests/test_1_up.sh"]), 1)
+        self.assertEqual(by_target["plugins/p/tests/test_2_down.sh"], "0")
+        self.assertEqual(lines[-1].split("\t")[2], "0")
+
+    def test_ac3_toplevel_in_start_line(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        path = self.out_file()
+        self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        self.assertEqual(self.lines(path)[0].split("\t")[3], repo)
+
+    def test_ac4_unwritable_file(self):
+        repo = self.make_repo(BASE)
+        plain = os.path.join(self.tmp, "plain")
+        with open(plain, "w", encoding="utf-8") as fh:
+            fh.write("x")
+        bad = os.path.join(plain, "x.tsv")
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": bad})
+        self.assertEqual(err, "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s\n" % bad)
+        self.assertEqual((rc, out), (1, FAIL_OUT))
+
+    def test_ac27_nested_runner_single_start(self):
+        inner = self.make_repo({"shared/tests/test_in.sh": 'echo "  ✓ ok"\n'})
+        files = dict(BASE)
+        files["plugins/p/tests/test_nested.sh"] = "(cd '%s' && bash tools/suite/run-all.sh)\n" % inner
+        files["tools/x/test_nested.py"] = (
+            "import subprocess, unittest\n\nclass N(unittest.TestCase):\n    def test_n(self):\n"
+            "        subprocess.run(['bash', 'tools/suite/run-all.sh'], cwd=%r, check=True)\n" % inner)
+        repo = self.make_repo(files)
+        path = self.out_file()
+        self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        lines = self.lines(path)
+        firsts = [l.split("\t")[0] for l in lines]
+        self.assertEqual((firsts.count("start"), firsts.count("end")), (1, 1))
+        self.assertFalse([l for l in lines if inner in l])
+        self.assertFalse([l for l in lines if "test_in.sh" in l])
+
+    def test_ac27_relative_path(self):
+        repo = self.make_repo(BASE)
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": "rel.tsv"})
+        self.assertEqual(err.strip().split("\n"),
+                         ["run-all: SUITE_TIMING_FILE 은 절대 경로여야 한다 — 기록하지 않는다: rel.tsv"])
+        self.assertFalse(os.path.exists(os.path.join(repo, "rel.tsv")))
+        self.assertFalse(os.path.exists(os.path.join(os.getcwd(), "rel.tsv")))
+        self.assertEqual((rc, out), (1, FAIL_OUT))
+
+    def test_unknown_peer_count_written_as_question_mark(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        path = self.out_file()
+        self.run_all(repo, {"SUITE_TIMING_FILE": path,
+                            "SUITE_PEERS_PS_FILE": os.path.join(self.tmp, "no-such-ps.txt")})
+        counts = []
+        for l in self.lines(path):
+            cols = l.split("\t")
+            if cols[0] in ("start", "end"):
+                counts.append(cols[2])
+            elif cols[1] != "pymod":
+                counts.append(cols[3])
+        self.assertTrue(counts)
+        self.assertEqual(set(counts), {"?"})
+
+    def test_killed_round_keeps_lines_without_end(self):
+        files = dict(BASE)
+        files["shared/tests/test_zzz_slow.sh"] = "sleep 30\n"
+        repo = self.make_repo(files)
+        path = self.out_file()
+        env = clean_env(TMPDIR=self.tmp, SUITE_TIMING_FILE=path)
+        proc = subprocess.Popen([BASH, "tools/suite/run-all.sh"], cwd=repo, env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                start_new_session=True)
+        try:
+            end = time.monotonic() + 60
+            while time.monotonic() < end:
+                if os.path.exists(path) and len([l for l in self.lines(path)
+                                                  if l.split("\t")[1] == "sh"]) >= 2:
+                    break
+                time.sleep(0.05)
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait(timeout=30)
+        lines = self.lines(path)
+        firsts = [l.split("\t")[0] for l in lines]
+        self.assertEqual(firsts.count("start"), 1)
+        self.assertGreaterEqual(len([l for l in lines if l.split("\t")[1] == "sh"]), 2)
+        self.assertEqual(firsts.count("end"), 0)
+
+    def test_two_rounds_in_one_file_are_told_apart(self):
+        a = self.make_repo(BASE_WITHOUT_FAIL)
+        b = self.make_repo(BASE_WITHOUT_FAIL)
+        path = self.out_file()
+        self.run_all(a, {"SUITE_TIMING_FILE": path})
+        self.run_all(b, {"SUITE_TIMING_FILE": path})
+        lines = self.lines(path)
+        starts = [l.split("\t") for l in lines if l.startswith("start\t")]
+        ends = [l for l in lines if l.startswith("end\t")]
+        self.assertEqual([s[3] for s in starts], [a, b])
+        self.assertEqual(len(ends), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
