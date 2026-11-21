@@ -413,7 +413,7 @@ team_layout.py check --roadmap <roadmaps_dir><팀>/roadmap.md [--base <ref>]
 
 한 줄이어야 한다. 맨 앞 `- ` 가 없으면 붙여 받는다. 같은 줄이 이미 있으면 쓰지 않고 0, 받을 수 없는 줄이면 아무것도 쓰지 않고 2, 결정 기록 칸을 읽지 못하면 3 이다. `--approval --date <날짜> --choice <고른 말>` 은 `- spec 승인 · <날짜> · 「<고른 말>」` 을 쓴다. `--spec` 이 `layout: team` 로드맵의 과제 폴더 안 파일이면(그 폴더의 어느 파일이든) 줄은 그 과제의 INTENT.md 로 간다 — 경로에 과제 폴더 성분(`jobs`)이 있는데 레포 설정을 읽지 못하거나 로드맵 머리말의 `layout` 이 모르는 값이면 3 이다. `flush` 는 쌓인 기록의 줄(상태 브랜치가 켜져 있으면 상태 브랜치 `pending.md` 의 줄도 — 「리더가 쓰는 자리」)을 같은 규칙으로 그 INTENT.md 에 옮기고, `write-sections` 는 쓰지 않고 판정은 결과 파일의 `Ruling:` 줄이, 구현 대조는 결과 파일의 AC 줄과 받음 줄이 대신한다고 알린다(종료 코드 0). 커밋은 리더가 한다.
 
-**사람 줄을 쓰는 길.** `human_gate` 가 켜져 있으면(기본) `--approval` · `--line` · `flush` 는 team 형식에서 사람 줄 종류 넷(`spec 승인` · `계획 검토` · `흐름 승인` · `걸음 건너뜀`)을 받지 않고 아무것도 쓰지 않고 2 로 끝난다 — 사람 줄은 아래 `record --human` 으로만 적는다.
+**사람 줄을 쓰는 길.** `human_gate` 가 켜져 있으면(기본) `--approval` · `--line` · `flush` 는 team 형식에서 사람 줄 종류 넷(`spec 승인` · `계획 검토` · `흐름 승인` · `걸음 건너뜀`)을 받지 않고 아무것도 쓰지 않고 2 로 끝난다 — 사람 줄은 아래 `record --human` 으로만 적는다. 상태 브랜치 자리(「리더가 쓰는 자리」)의 `flush` 는 멈추지 않는다 — 대기 줄의 사람 줄을 건너뛰어 세고 나머지를 옮긴다(0).
 
 ```
 conductor_ledger.py ask-head --human <종류> --roadmap <로드맵> --job <과제> [--plan <n>]
