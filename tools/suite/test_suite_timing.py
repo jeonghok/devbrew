@@ -590,6 +590,25 @@ class RunAllTimingTests(unittest.TestCase):
         self.check_stamp_unavailable("")
 
 
+    def test_only_end_line_write_fails_still_notes_once(self):
+        path = self.out_file()
+        counter = self.out_file("stamp-count")
+        fake = (
+            "import os, sys\n"
+            "n = 1\n"
+            "if os.path.exists(%r):\n"
+            "    n = int(open(%r).read()) + 1\n"
+            "open(%r, 'w').write(str(n))\n"
+            "print('%%d.000 0' %% n)\n"
+            "if n == 6:\n"
+            "    os.remove(%r)\n"
+            "    os.mkdir(%r)\n" % (counter, counter, counter, path, path))
+        repo = self.stamp_fails_repo(fake)
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s\n" % path
+        self.assertEqual((rc, out, err), (0, "", notice))
+
+
 
 if __name__ == "__main__":
     unittest.main()
