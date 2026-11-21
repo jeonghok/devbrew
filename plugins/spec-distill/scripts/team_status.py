@@ -7,6 +7,7 @@ git 은 받은 `roadmap_status.Git` 으로 읽고, 브랜치 끝 고르기만 `b
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -32,6 +33,14 @@ NO_RECEIPT, UNREAD_END = "결과 있음 · 받음 없음", "읽지 못함 — �
 UNCOUNTED_SHAPE = "세지 않은 결과 파일"
 STALE = "묶음 낡음"
 STALE_UNMEASURED = STALE + "을 재지 못했다"
+FOREIGN = "확인되지 않은 남의 고침 %d"
+FOREIGN_UNMEASURED = "남의 고침을 재지 못했다"
+TRUST_WHY = ("확인", "씀")   # 기계 상태 `확인한 끝` 절의 까닭 · 칸 — conductor_state 의 것과 같아야 한다(M30)
+TRUST_COLUMNS = ("끝", "까닭", "때", "세션")
+RULES_BASE_FILE = "rules-base.md"   # 규칙 사본이 출발한 기본 브랜치 커밋을 적는 파일(상태 브랜치의 로드맵 폴더)
+PENDING_FILE = "pending.md"   # 상태 브랜치의 대기 줄 파일 — conductor_branch.PENDING_FILE 과 같다
+READ_DEFAULT_RULES = " — 규칙은 기본 브랜치의 글을 읽는다"
+_OID_RE = re.compile(r"[0-9a-f]{40}")
 
 
 def read_tip(git, branch: str) -> tuple:
@@ -51,6 +60,97 @@ def read_tip(git, branch: str) -> tuple:
     return commit, None, None
 
 
+def rules_paths(team) -> list:
+    """규칙 쪽 남의 고침을 재는 경로 — 규칙 사본과 그 사본이 출발한 커밋 파일(남이 갈라짐 판정을 뒤집지 못하게)."""
+    return [team.rules, team.path(RULES_BASE_FILE)]
+
+
+def pending_paths(team) -> list:
+    """대기 줄 쪽 남의 고침을 재는 경로."""
+    return [team.path(PENDING_FILE)]
+
+
+def trust_of(rows):
+    """기계 상태 `확인한 끝` 절의 줄들 → (확인 끝 | None, 씀 커밋들의 frozenset).
+    기계 상태를 읽지 못함(None) · `확인` 줄이 둘 이상 · 꼴 밖의 줄이면 None(재지 못함)."""
+    if rows is None:
+        return None
+    confirmed, own = [], set()
+    for row in rows:
+        end, why = row.get(TRUST_COLUMNS[0]), row.get(TRUST_COLUMNS[1])
+        if not isinstance(end, str) or not _OID_RE.fullmatch(end):
+            return None
+        if why == TRUST_WHY[0]:
+            confirmed.append(end)
+        elif why == TRUST_WHY[1]:
+            own.add(end)
+        else:
+            return None
+    if len(confirmed) > 1:
+        return None
+    return (confirmed[0] if confirmed else None), frozenset(own)
+
+
+def foreign_commits(git, tip: str, trust, paths: list):
+    """`<확인 끝>..<tip>`(확인 끝이 없으면 tip 의 이력 전부)에서 `paths` 를 바꾼 커밋 가운데 `씀` 에 없는 것 —
+    [(커밋 40자, (바꾼 경로…)), …] 오래된 차례. 재지 못하면 None: trust 가 None · 확인 끝이 이 레포에 없음 ·
+    tip 이 확인 끝을 품지 않음(원격 이력이 다시 쓰여 확인 끝의 조상 · 곁가지로 갔다 — 빈 범위가 「없음」 으로 읽히지 않게) · git 실패 ·
+    남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다).
+    `씀` 에 든 커밋이 범위에 없어도(버려진 커밋) 그냥 범위 밖이다."""
+    if trust is None or not isinstance(tip, str) or not _OID_RE.fullmatch(tip):
+        return None
+    base, own = trust
+    if base is not None and git.commit(base) is None:
+        return None
+    if base is not None:
+        rc, out, _err = git.run_err("log", "--format=%H", "-1", "%s..%s" % (tip, base))
+        if rc != 0 or out.strip():
+            return None
+    rng = "%s..%s" % (base, tip) if base is not None else tip
+    rc, out, _err = git.run_err("log", "--format=%H %P", rng)
+    if rc != 0:
+        return None
+    for line in out.splitlines():
+        words = line.split()
+        if not words or not _OID_RE.fullmatch(words[0]):
+            return None
+        if len(words) > 2 and words[0] not in own:
+            return None
+    rc, out = git.changed_by(rng, paths)   # 경로는 레포 뿌리 기준(cwd 가 하위 폴더여도 같다)
+    if rc != 0:
+        return None
+    found = []
+    for line in out.splitlines():
+        if _OID_RE.fullmatch(line):
+            found.append((line, []))
+        elif not line:
+            continue
+        elif found:
+            found[-1][1].append(line)
+        else:
+            return None
+    return [(commit, tuple(changed)) for commit, changed in reversed(found) if commit not in own]
+
+
+def rules_tip(git, team, on: bool, rows) -> tuple:
+    """(규칙을 읽을 상태 브랜치 끝 | None, 알림들). 꺼짐 · 상태 브랜치 없음 · 사본 없음이면 (None, []).
+    갈라졌거나 확인되지 않은 남의 고침이 있거나 재지 못하면 끝 없이 알림 한 줄 — 규칙은 기본 브랜치의 글을 읽는다."""
+    if not on:
+        return None, []
+    try:
+        tip, _note = branch_tip.tip(git.cwd, team_layout.STATE_BRANCH_PREFIX + team.name)
+    except branch_tip.TipError as exc:
+        return None, ["상태 브랜치가 갈라져 규칙은 기본 브랜치의 글을 읽는다 — %s" % exc]
+    if tip is None or git.blob(tip, team.rules) is None:
+        return None, []
+    found = foreign_commits(git, tip, trust_of(rows), rules_paths(team))
+    if found is None:
+        return None, [FOREIGN_UNMEASURED + READ_DEFAULT_RULES]
+    if found:
+        return None, [FOREIGN % len(found) + READ_DEFAULT_RULES]
+    return tip, []
+
+
 def outside(team, block: dict, blocks: list, changed: list, shared, reserves) -> list:
     """「예약 밖 변경」 파일들(정렬) — changed 가운데 공유 파일 · 그 과제 폴더 아래 · 어느 블록(그 블록 포함)이 예약한 파일을
     뺀 것(Q13). shared(경로) · reserves(예약, 경로)는 부르는 쪽의 규칙을 받는다 — 같은 규칙을 여기 두 번 쓰지 않는다."""
@@ -66,9 +166,10 @@ class Reader:
     absent_default(경로) 는 그 사본에 그 경로가 없다고 확인됐는가(git 실패는 거짓) — 주지 않으면 사본에서의 없음을
     확인하지 못한 것으로 본다."""
 
-    def __init__(self, git, main, team, read_default, absent_default=None):
+    def __init__(self, git, main, team, read_default, absent_default=None, lead_tip=None):
         self.git, self.main, self.team, self.read_default = git, main, team, read_default
         self.absent_default = absent_default
+        self.lead_tip = lead_tip   # 규칙을 읽을 상태 브랜치 끝(rules_tip 이 준 것) — None 이면 기본 브랜치
         self._shallow = []
         self._gate = []
 
@@ -212,7 +313,7 @@ class Reader:
                 raise FormatError("%s 를 읽지 못했다" % path)
             result = team_files.parse_result(text)
             lost, notes = team_files.lost_lines(result), block.setdefault("notes", [])
-            if lost and not any(job_results.same_fact(n, name, lost[0]) for n in notes):
+            if lost and not any(job_results.same_fact(n, name, lost[0]) for n in notes if not n.startswith(STALE_UNMEASURED)):
                 notes.append(job_results.file_note(RULINGS_UNREAD, name, lost[0]))
             out += ["- " + line for line in result.rulings]
         return out
@@ -220,7 +321,9 @@ class Reader:
     def stale(self, tip: str, block: dict) -> list:
         """도는 일꾼(단계 · 계획마다 가장 새 시도이고 끝 줄이 없는 결과 파일)의 묶음이 낡았는가 — 알림 줄들(AC23).
         머리 bundle_at 의 글과 지금 글이 다르면 낡았다(I4). 팀 규칙 파일은 리더가 읽는 ref 에서, 공통 규칙 파일과 그 일꾼의
-        역할 문서는 기본 브랜치에서 읽는다. 머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
+        역할 문서는 기본 브랜치에서 읽는다. 팀 규칙 파일의 그때 글은 머리 rules_at(상태 브랜치에서 읽은 묶음)에서, 없으면
+        bundle_at 에서 읽고, rules_at 커밋이 이 레포에 없으면 재지 못했다고 알린다(R3 AC15).
+        머리 bundle_at 이 없거나 꼴이 아니면 재지 못했다고 알리고, 다른 사유로 읽지 못한 파일은 재지 않는다(받음 · 읽지 못함 알림이 따로 있다 — Q13).
         git.blob · git.commit 만 쓴다 — 알림이 종료 코드를 바꾸지 않는다."""
         team, job = self.team, block["id"]
         if self.main is None:
@@ -238,6 +341,8 @@ class Reader:
             text = self.git.blob(tip, team.result(job, stage, attempt, plan))
             result = team_files.parse_result(text) if text is not None else None
             if result is None:
+                if stage != "implement":   # implement 는 받음 · 읽지 못함 알림이 따로 있다(Q13)
+                    out.append("%s: %s — 글을 읽지 못했다" % (STALE_UNMEASURED, name))
                 continue
             if result.bundle_at is None:   # 머리 값이 없거나 꼴이 아니다 — 잴 묶음이 없다
                 if not result.end:
@@ -247,20 +352,26 @@ class Reader:
                     out.append("%s: %s — %s" % (STALE_UNMEASURED, name, why))
                 continue
             if result.problems or team_files.lost_lines(result) or result.end:
-                continue   # 다른 사유로 읽지 못한 파일은 받음 · 읽지 못함 알림(Q13)이 알린다 — 한 사실에 알림 하나
+                if stage != "implement" and not result.end:   # implement 는 받음 · 읽지 못함 알림이 따로 있다 — 한 사실에 알림 하나(Q13)
+                    out.append("%s: %s — %s" % (STALE_UNMEASURED, name, (result.problems + team_files.lost_lines(result))[0]))
+                continue
             at = self.git.commit(result.bundle_at)
             if at is None:
                 out.append("%s: %s — 묶은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.bundle_at[:8]))
                 continue
+            rules_from = self.git.commit(result.rules_at) if result.rules_at else at
+            if rules_from is None:   # 다른 클론이 쓴, 아직 받아 오지 않은 상태 브랜치 커밋 — 지어내지 않는다
+                out.append("%s: %s — 규칙을 읽은 커밋 %s 가 이 레포에 없다" % (STALE_UNMEASURED, name, result.rules_at[:8]))
+                continue
             if lead is None:
-                lead = self.git.commit(team_layout.leader_ref(self.main)) or ""
+                lead = self.git.commit(team_layout.leader_ref(self.main, self.lead_tip)) or ""
             if not lead:
                 out.append("%s: %s — 팀 규칙을 읽을 커밋이 없다" % (STALE_UNMEASURED, name))
                 continue
             roadmaps_dir = team.roadmaps_dir
-            checks = [(team.rules, lead), (team_layout.handbook(roadmaps_dir), self.main),
-                      (team_layout.role_doc(roadmaps_dir, result.role), self.main)]
-            changed = [path for path, rev in checks if self.git.blob(at, path) != self.git.blob(rev, path)]
+            checks = [(team.rules, rules_from, lead), (team_layout.handbook(roadmaps_dir), at, self.main),
+                      (team_layout.role_doc(roadmaps_dir, result.role), at, self.main)]
+            changed = [path for path, then, rev in checks if self.git.blob(then, path) != self.git.blob(rev, path)]
             if changed:
                 out.append("%s: %s — 묶은 커밋 %s 뒤에 바뀜: %s" % (STALE, name, at[:8], " · ".join(changed)))
         return out

@@ -16,15 +16,20 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # team 형식 · 상태 브랜치 픽스처(test_leader_seat.TeamRepo)
 import conductor_ledger as L  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 import team_files as TF  # noqa: E402
 import team_layout as TL  # noqa: E402
+import test_leader_seat as TLS  # noqa: E402
+from conductor_branch_fixture import BETA  # noqa: E402
+import leader_seat as LS  # noqa: E402
 
 SID, OTHER = "session-aaaa1111", "session-bbbb2222"
 RM = "plan/rm/roadmap.md"
@@ -2152,6 +2157,64 @@ class TeamRecords(Repo):   # R1 AC16
         self.assertIn("record --human", out)
         self.assertEqual(intent.read_bytes(), before)
 
+    def test_old_args_open_while_the_gate_is_off(self):   # 계획 1 이 재지 못한 변이 — 옛 인자 막기가 관문이 꺼져도 늘 적용되는 경우
+        intent, _design = team_tree(self)
+        (self.w / ".devbrew.md").write_text("---\nhuman_gate: 끔\n---\n", encoding="utf-8")
+        sh(self.w, "add", ".devbrew.md")
+        sh(self.w, "commit", "-qm", "관문 끔")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        sh(self.w, "fetch", "-q", "origin")
+        self.assertFalse(L._gate_on(self.w))   # 양성 대조 — 기본 브랜치의 설정을 읽었다
+        rc, out = self.cli("record", "--spec", str(intent), "--approval", "--date", "2026-11-20", "--choice", "승인 — 계획 담당자에게")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("- spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」", intent.read_text(encoding="utf-8"))
+
+    def _human_state(self):
+        """record --human 이 쓸 답을 찾는 상태 — 아래 협력자들은 막고 쓰기 전 자가 검사(HL.match)만 바꿔 본다."""
+        from unittest import mock
+        intent, _design = team_tree(self)
+        rd = repo_defaults.resolve(str(self.w))["values"]["roadmaps_dir"]
+        team = TL.team_from_roadmap(rd, rd + "tq/" + TL.ROADMAP_FILE)
+        rev = "abc12345"
+        target = L.Target(team, "E1", L.HL.KIND_SPEC, None, team.design("E1"), L.HL.head("E1", rev), None, rev, "t" * 40, (), None)
+        ans = L.session_record.Answer(SID, "00000000-0000-4000-8000-000000000001", 1, L.HL.head("E1", rev) + " — 질문",
+                                      "승인 — 계획 담당자에게", L.session_record.HUMAN, "", "2026-11-20T12:00:00.000Z")
+        for patch in (mock.patch.object(L, "_human_target", return_value=target),
+                      mock.patch.object(L.cs, "holder", return_value=SID),
+                      mock.patch.object(L.session_record, "locate", return_value=Path("x")),
+                      mock.patch.object(L.session_record, "answers", return_value=[ans]),
+                      mock.patch.object(L, "_job_lines", return_value=([], []))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return intent, ["record", "--human", "spec 승인", "--roadmap", team.roadmap, "--job", "E1"]
+
+    def test_record_human_checks_itself_before_writing(self):   # 쓰기 전에 쓰려는 줄을 대조 판정에 한 번 더 건다(설계 §2)
+        from unittest import mock
+        intent, args = self._human_state()
+        before = intent.read_bytes()
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.MISMATCH, "x", None, "")):
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 1, out)
+        self.assertIn(L.HL.MISMATCH, out)
+        self.assertEqual(intent.read_bytes(), before)
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.UNCHECKED, "x", None, "")):
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 3, out)
+        self.assertEqual(intent.read_bytes(), before)
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.PASS, "x", None, "")):   # 양성 대조
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 0, out)
+        self.assertNotEqual(intent.read_bytes(), before)
+
+    def test_plan_and_retry_names_round_trip(self):   # 걸음 건너뜀의 관문 이름 ↔ 묶음 차례
+        self.assertEqual(L._retry_of(L.HL.retry_name(2, 3)), (2, 3))
+        self.assertEqual(L._retry_of(L.HL.retry_name(None, 3)), (None, 3))
+        raw = L.HL.render(L.HL.KIND_PLAN, "2026-11-20", "계획대로 구현한다", "plan-12.md", "abc12345", SID,
+                          "00000000-0000-4000-8000-000000000001#1")
+        parsed = L.HL.parse(raw)
+        self.assertIsNotNone(parsed, raw)
+        self.assertEqual(parsed.plan, 12)
+
     def test_human_commands_refuse_the_old_format(self):   # 옛 형식 로드맵에서는 사용법 어긋남
         for cmd in (("ask-head",), ("record",)):
             rc, out = self.cli(*cmd, "--human", "spec 승인", "--roadmap", RM, "--job", "A1")
@@ -2399,6 +2462,240 @@ class UncountedBlock(Repo):   # Q18 — 「브랜치 없음」 과 「브랜치�
         sh(self.w, "commit", "-qam", "team layout")
         sh(self.w, "push", "-q", "origin", "trunk")
         self.assertEqual([b["id"] for b in L._roadmap_blocks(self.w, RM)], ["A1", "A2"])
+
+
+class PendingSeat(TLS.TeamRepo):   # R3 AC16 · AC21 — 대기 줄의 자리(M14 · M15 · M16). 상태 브랜치는 TeamRepo 가 세운다
+    NO_BRANCH = "상태 브랜치가 없어 기계 상태에 쌓았다 — ensure 뒤의 줄부터 상태 브랜치에 쌓는다"
+    FOREIGN_LINES = "확인되지 않은 남의 고침이 더한 대기 줄 %d — 옮기지 않았다"
+    TAIL = "   (확인되지 않은 남의 고침)"
+    UNMEASURED = "남의 고침을 재지 못했다"
+
+    def cli(self, *args):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = L.main(["--root", str(self.w), *args])
+        return rc, buf.getvalue()
+
+    def add(self, cells, session=TLS.SID, name=TLS.ALPHA):
+        return self.cli("add", "--roadmap", TLS.rm(name), "--session", session, "--section", "쌓인 기록", "--cells", cells)
+
+    def pending_text(self):
+        tip = self.tip()
+        return LS.CB.read(str(self.w), tip, self.team.path(LS.CB.PENDING_FILE)) if tip else None
+
+    def machine(self, name=TLS.ALPHA):
+        return cs.load(cs.machine_path(TLS.state_root(str(self.w)), TLS.rm(name)), TLS.rm(name))["쌓인 기록"]
+
+    def no_branch(self):
+        """상태 브랜치를 만들기 전의 team 로드맵 흉내 — 로컬 · 원격 추적 ref 를 지운다(F13 · TeamRepo 는 그대로)."""
+        for ref in ("refs/heads/conductor/", "refs/remotes/origin/conductor/"):
+            self.g("update-ref", "-d", ref + TLS.ALPHA)
+        self.assertIsNone(self.tip())   # 양성 대조 — 읽을 끝이 없다
+
+    def plant(self, *lines, label="other"):
+        """둘째 클론이 지금 대기 줄 뒤에 줄들을 붙여 올리고 첫 클론이 받아 온다 — 남의 고침."""
+        text = (self.pending_text() or "") + "".join(line + "\n" for line in lines)
+        return self.foreign_edit(label, {self.team.path(LS.CB.PENDING_FILE): text})
+
+    def intent(self):
+        """A1 과제의 INTENT.md(틀을 채운 것)와 설계문서 경로 — flush 가 받는 과제 폴더."""
+        (self.w / self.team.job("A1")).mkdir(parents=True, exist_ok=True)
+        tmpl = (TF.TEMPLATES / TL.INTENT_FILE).read_text(encoding="utf-8")
+        intent = self.w / self.team.intent("A1")
+        intent.write_text(TF.render_intent(tmpl, "A1", TF.KIND_EPIC, self.team.roadmap, "목표 한 줄", "원문 한 줄", "- 없음"),
+                          encoding="utf-8")
+        design = self.w / self.team.design("A1")
+        design.write_text("", encoding="utf-8")
+        return intent, design
+
+    def flush(self, design):
+        return self.cli("flush", "--roadmap", TLS.rm(TLS.ALPHA), "--session", TLS.SID, "--epic", "A1", "--spec", str(design))
+
+    def test_add_goes_to_the_state_branch(self):   # 붉어지는 변이: c_add 의 갈래를 지운다
+        rc, out = self.add("A1 · 지휘 기록 · 가")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 가\n")
+        self.assertEqual(self.machine(), [])
+
+    def test_no_branch_yet_goes_to_the_machine_state_and_says_so(self):   # 붉어지는 변이: 알림을 지운다
+        self.no_branch()
+        rc, out = self.add("A1 · 지휘 기록 · 가")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.machine(), [{"에픽": "A1", "절": "지휘 기록", "글": "가"}])
+        self.assertEqual(out, "적었다 — 쌓인 기록: A1 · 지휘 기록 · 가\n[spec-distill] %s\n" % self.NO_BRANCH)
+
+    def test_off_goes_to_the_machine_state_without_a_notice(self):   # AC20 — 붉어지는 변이: availability 검사를 지운다
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        rc, out = self.add("A1 · 지휘 기록 · 가")
+        self.assertEqual((rc, out), (0, "적었다 — 쌓인 기록: A1 · 지휘 기록 · 가\n"))
+        self.assertEqual(self.machine(), [{"에픽": "A1", "절": "지휘 기록", "글": "가"}])
+        self.assertIsNone(self.pending_text())
+
+    def test_old_format_goes_to_the_machine_state_without_a_notice(self):   # AC20 — 붉어지는 변이: 형식 검사를 지운다
+        self.claim(BETA)
+        rc, out = self.add("B1 · 지휘 기록 · 가", name=BETA)
+        self.assertEqual((rc, out), (0, "적었다 — 쌓인 기록: B1 · 지휘 기록 · 가\n"))
+        self.assertEqual(self.machine(BETA), [{"에픽": "B1", "절": "지휘 기록", "글": "가"}])
+
+    def test_human_line_is_refused_on_the_branch(self):   # M15 — 붉어지는 변이: is_human 검사를 지운다
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 먼저")
+        before = self.pending_text()
+        rc, out = self.add("A1 · 지휘 기록 · spec 승인 · 2026-11-20 · 이대로 승인")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("record --human", out)
+        self.assertEqual(self.pending_text(), before)
+        self.assertEqual(self.machine(), [])
+
+    def test_human_line_is_taken_when_the_gate_is_off(self):   # F19 — 관문이 꺼져 있으면 다른 줄과 같다
+        self.put({".devbrew.md": "---\nhuman_gate: 끔\n---\n"})
+        rc, out = self.add("A1 · 지휘 기록 · spec 승인 · 2026-11-20 · 이대로 승인")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · spec 승인 · 2026-11-20 · 이대로 승인\n")
+
+    def test_other_session_is_five(self):   # I7 — 붉어지는 변이: BranchError → Fail 바꾸기를 지운다(3 이 된다)
+        rc, out = self.add("A1 · 지휘 기록 · 가", session=TLS.OTHER)
+        self.assertEqual(rc, 5, out)
+        self.assertIsNone(self.pending_text())
+
+    def test_notice_with_rc_zero_is_not_a_failure(self):   # I7 — leader_seat 의 BranchError(0) 은 알리고 0
+        with mock.patch.object(LS, "pending_add", side_effect=LS.CB.BranchError(0, "쓸 수 없어 알린다")):
+            rc, out = self.add("A1 · 지휘 기록 · 가")
+        self.assertEqual((rc, out), (0, "[spec-distill] 쓸 수 없어 알린다\n"))
+
+    def test_both_seats_are_shown_machine_first(self):   # M14 — 붉어지는 변이: 한 자리만 읽는다
+        self.no_branch()
+        self.assertEqual(self.add("A1 · 지휘 기록 · 먼저")[0], 0)
+        LS.CB.ensure(str(self.w), TLS.rm(TLS.ALPHA), TLS.SID)
+        self.assertEqual(self.add("A2 · 지휘 기록 · 나중")[0], 0)
+        self.assertEqual(self.pending_text(), "- A2 · 지휘 기록 · 나중\n")   # 양성 대조 — 둘째 줄은 상태 브랜치에
+        rc, out = self.cli("pending", "--roadmap", TLS.rm(TLS.ALPHA))
+        self.assertEqual((rc, out), (0, "- A1 · 먼저\n- A2 · 나중\n"))
+        rc, out = self.cli("pending", "--roadmap", TLS.rm(TLS.ALPHA), "--epic", "A2")
+        self.assertEqual((rc, out), (0, "- 나중\n"))
+
+    def test_foreign_line_is_shown_visibly_and_marked(self):   # S7 — 붉어지는 변이: visible 을 뗀다
+        self.add("A1 · 지휘 기록 · 내 줄")
+        self.plant("- A1 · 지휘 기록 · 빨강\x1b[31m글")
+        rc, out = self.cli("pending", "--roadmap", TLS.rm(TLS.ALPHA))
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("\x1b", out)
+        self.assertEqual(out, "- A1 · 내 줄\n- A1 · 빨강\\x1b[31m글%s\n" % self.TAIL)
+
+    def test_same_line_twice_stays_twice(self):   # 다중집합 — 붉어지는 변이: 이미 있는 줄을 거른다
+        for _ in range(2):
+            self.assertEqual(self.add("A1 · 지휘 기록 · 같은 줄")[0], 0)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 같은 줄\n" * 2)
+
+    def test_drop_removes_a_foreign_human_line(self):   # S8 — 붉어지는 변이: c_drop 의 갈래를 지운다
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 남길 줄")
+        self.plant("- A1 · 지휘 기록 · spec 승인 · 2026-11-20 · 남이 넣음")
+        rc, out = self.cli("drop", "--roadmap", TLS.rm(TLS.ALPHA), "--session", TLS.SID, "--section", "쌓인 기록",
+                           "--where", "글=spec 승인 · 2026-11-20 · 남이 넣음")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("지웠다 1줄 — 쌓인 기록: 글=spec 승인 · 2026-11-20 · 남이 넣음\n"), out)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 결정 · 2026-11-20 · 남길 줄\n")
+
+    def test_flush_moves_own_duplicates_once_each_and_leaves_the_foreign_line(self):   # AC21 · Review Focus 4
+        intent, design = self.intent()
+        for _ in range(2):
+            self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        self.plant("- A1 · 지휘 기록 · 결정 · 2026-11-20 · 남의 줄")
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 내 줄"])
+        self.assertIn("쌓인 기록 1줄을 옮겼고 1줄은 이미 있어 건너뛰었다(커밋은 리더가)", out)
+        self.assertIn("[spec-distill] " + self.FOREIGN_LINES % 1, out)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 결정 · 2026-11-20 · 남의 줄\n")   # 내 줄 둘이 하나씩 빠졌다
+
+    def test_flush_leaves_the_foreign_copy_of_an_own_line(self):   # 다중집합 — 남이 내 줄과 같은 줄을 더하면 그 하나는 남는다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 같은 줄")
+        self.plant("- A1 · 지휘 기록 · 결정 · 2026-11-20 · 같은 줄")
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 결정 · 2026-11-20 · 같은 줄\n" * 2)   # 양성 대조
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 같은 줄"])
+        self.assertIn("[spec-distill] " + self.FOREIGN_LINES % 1, out)
+        self.assertEqual(self.pending_text(), "- A1 · 지휘 기록 · 결정 · 2026-11-20 · 같은 줄\n")   # 하나만 옮기고 하나만 뺐다
+
+    def test_flush_counts_a_malformed_line_as_unconfirmed(self):   # 꼴이 틀린 남의 줄 — 세어 확인 안 된 쪽에 두고 옮기지 않는다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        self.plant("- 칸이 하나뿐인 줄")
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 내 줄"])
+        self.assertIn("[spec-distill] " + self.FOREIGN_LINES % 1, out)
+        self.assertEqual(self.pending_text(), "- 칸이 하나뿐인 줄\n")
+        tip = self.tip()
+        self.assertEqual(LS.confirm(str(self.w), TLS.rm(TLS.ALPHA), TLS.SID, tip)[0], tip)   # 확인한 글의 꼴 틀린 줄은 남의 줄로 세지 않는다
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 둘째 줄")
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("쌓인 기록 1줄을 옮겼고", out)   # 양성 대조 — flush 가 돌았다
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
+        self.assertEqual(self.pending_text(), "- 칸이 하나뿐인 줄\n")   # 옮기지도 않는다
+
+    def test_flush_does_not_count_a_malformed_line_that_is_gone(self):   # 남이 더했다가 남이 뺀 꼴 틀린 줄은 지금 없다 — 세지 않는다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        mine = self.pending_text()
+        self.plant("- 칸이 하나뿐인 줄", label="o1")
+        self.assertEqual(self.pending_text(), mine + "- 칸이 하나뿐인 줄\n")   # 양성 대조 — 심었다
+        self.foreign_edit("o2", {self.team.path(LS.CB.PENDING_FILE): mine})
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 내 줄"])
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
+
+    def test_flush_moves_no_pending_line_when_unmeasured(self):   # I11 — 대기 줄 쪽 판정이 None 이면 pending.md 줄은 하나도 옮기지 않는다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 브랜치 줄")
+        L.update(self.w, TLS.rm(TLS.ALPHA), TLS.SID, lambda d: (
+            d["쌓인 기록"].append({"에픽": "A1", "절": "지휘 기록", "글": "결정 · 2026-11-20 · 기계 줄"}),
+            d[cs.TRUST].__setitem__(slice(None), [{"끝": "e" * 40, "까닭": cs.TRUST_WHY[0], "때": LS.CB.stamp(),
+                                                    "세션": TLS.SID}])))   # 이 레포에 없는 확인 끝 — 재지 못함
+        before = self.pending_text()
+        rc, out = self.cli("pending", "--roadmap", TLS.rm(TLS.ALPHA), "--epic", "A1")   # 줄은 보이되 남의 줄로 잘못 적지 않는다
+        self.assertEqual((rc, out), (0, "- 결정 · 2026-11-20 · 기계 줄\n- 결정 · 2026-11-20 · 브랜치 줄\n"
+                                        "[spec-distill] %s\n" % self.UNMEASURED))
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), ["- 결정 · 2026-11-20 · 기계 줄"])
+        self.assertIn("[spec-distill] %s\n" % self.UNMEASURED, out)
+        self.assertNotIn("확인되지 않은 남의 고침이 더한", out)
+        self.assertEqual(self.pending_text(), before)
+        self.assertEqual(self.machine(), [])
+
+    def test_flush_moves_no_pending_line_when_a_foreign_blob_is_unreadable(self):   # 닫는 쪽 — 남의 커밋의 글을 못 읽으면 0줄 더함이 아니다
+        intent, design = self.intent()
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 내 줄")
+        planted = self.plant("- A1 · 지휘 기록 · 결정 · 2026-11-20 · 남의 줄")
+        self.add("A1 · 지휘 기록 · 결정 · 2026-11-20 · 뒤의 내 줄")   # 내 커밋이 남의 줄을 끝까지 실어 나른다 — 끝의 글은 읽힌다
+        blob = self.g("rev-parse", "%s:%s" % (planted, self.team.path(LS.CB.PENDING_FILE)))
+        loose = Path(self.g("rev-parse", "--git-path", "objects/%s/%s" % (blob[:2], blob[2:])))
+        loose = loose if loose.is_absolute() else self.w / loose
+        self.assertTrue(loose.is_file(), loose)   # 양성 대조 — 낱개 객체로 받아 왔다
+        loose.chmod(0o644)
+        loose.unlink()
+        self.assertNotEqual(self.rc("cat-file", "-e", blob), 0)   # 양성 대조 — 정말 못 읽는다
+        rc, out = self.flush(design)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(TF.decision_lines(intent.read_text(encoding="utf-8")), [])
+        self.assertIn("[spec-distill] %s\n" % self.UNMEASURED, out)
+        self.assertEqual(self.pending_text().count("\n"), 3)   # 하나도 빠지지 않았다
+
+    def test_drop_on_a_diverged_branch_changes_nothing(self):   # 남의 끝을 못 읽으면 기계 상태도 건드리지 않고 1
+        L.update(self.w, TLS.rm(TLS.ALPHA), TLS.SID, lambda d: d["쌓인 기록"].append({"에픽": "A1", "절": "지휘 기록", "글": "지울 줄"}))
+        self.foreign_edit("o1", {self.team.status: "x\n"})
+        local = self.g("rev-parse", "refs/heads/conductor/" + TLS.ALPHA)
+        mine = self.g("commit-tree", self.g("rev-parse", local + "^{tree}"), "-p", local, "-m", "올리지 못한 내 커밋")
+        self.g("update-ref", "refs/heads/conductor/" + TLS.ALPHA, mine, local)
+        self.assertEqual(LS.CB.seen_tip(str(self.w), TLS.ALPHA)[0], None)   # 양성 대조 — 정말 갈라졌다
+        rc, out = self.cli("drop", "--roadmap", TLS.rm(TLS.ALPHA), "--session", TLS.SID, "--section", "쌓인 기록", "--where", "글=지울 줄")
+        self.assertEqual(rc, 1, out)
+        self.assertIn(self.UNMEASURED, out)
+        self.assertEqual(self.machine(), [{"에픽": "A1", "절": "지휘 기록", "글": "지울 줄"}])
 
 
 if __name__ == "__main__":

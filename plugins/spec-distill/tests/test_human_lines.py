@@ -31,9 +31,23 @@ class LineShape(unittest.TestCase):
         for kind in H.KINDS:
             self.assertIn(kind, F.DECISION_KINDS)
 
-    def test_spec_label_is_the_one_the_approval_question_offers(self):   # J20 — 계획 2 가 나머지 라벨을 더한다
-        text = (REPO / "plugins/spec-distill/references/conducting.md").read_text(encoding="utf-8")
-        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED), text)
+    def test_pass_labels_are_the_ones_the_questions_offer(self):   # 계획 1 J20 · 미룸(통과 라벨 락에 spec-review)
+        ref = REPO / "plugins/spec-distill"
+        text = (ref / "references/conducting.md").read_text(encoding="utf-8")
+        team = text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0]
+        spec = "「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED)
+        for path in ("references/conducting.md", "references/proceed-gate.md", "skills/spec-review/SKILL.md"):
+            self.assertIn(spec, (ref / path).read_text(encoding="utf-8"), path)
+        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_PLAN][0], H.RECOMMENDED), team)
+        self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_FLOW][0], H.RECOMMENDED), team)
+        for label in H.PASS_LABELS[H.KIND_SKIP]:
+            self.assertIn("「%s」" % label, team)
+
+    def test_both_recommend_tails_come_off_once(self):   # test_human_lines.py LineShape — K11 (가)
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (Recommended)"), "승인 — 계획 담당자에게")
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (권장)"), "승인 — 계획 담당자에게")
+        self.assertEqual(H.clean_label("승인 — 계획 담당자에게 (권장) (Recommended)"), "승인 — 계획 담당자에게 (권장)")   # 한 번만
+        self.assertEqual(H.clean_label("(Recommended) 승인"), "(Recommended) 승인")                                           # 끝만
 
     def test_parse_and_render_round_trip(self):
         l = H.parse(SPEC)
@@ -130,6 +144,29 @@ class Body(unittest.TestCase):
             self.assertNotEqual(H.body_of(name, base.replace("본문 하나", "본문 하나 ")), H.body_of(name, base), name + " — 줄 안의 줄 끝 공백은 다른 본문이다")
             self.assertNotEqual(H.body_of(name, "\n" + base), H.body_of(name, base), name + " — 앞 빈 줄은 다른 본문이다")
             self.assertNotEqual(H.body_of(name, base + "\n  "), H.body_of(name, base), name + " — 공백만 든 끝 줄은 빈 줄이 아니다")
+
+
+    def test_all_blank_text_trims_to_empty(self):
+        for name in ("design.md", "INTENT.md", "plan-1.md"):
+            self.assertEqual(H.body_of(name, "\n\n"), "", name)
+
+    def test_level1_heading_ends_deferred_but_not_record(self):   # K20 — 지금 동작
+        deferred = "# 설계\n\n### Deferred to plan\n\n| a |\n\n# 새 최상위\n\n새 글\n"
+        body = H.body_of("design.md", deferred)
+        self.assertIn("# 새 최상위", body)
+        self.assertIn("새 글", body)
+        self.assertNotIn("| a |", body)
+        record = "# 설계\n\n## 결정 기록\n\n- D1\n\n# 새 최상위\n\n새 글\n"
+        body = H.body_of("design.md", record)
+        self.assertNotIn("# 새 최상위", body)
+        self.assertNotIn("새 글", body)
+        self.assertNotIn("- D1", body)
+
+    def test_record_title_with_space_or_cr_is_body(self):   # K20 — 지금 동작: 제목은 글자 그대로만 기록 절이다
+        for title in ("## 결정 기록 ", "## 결정 기록\r"):
+            self.assertIn("아래 줄", H.body_of("design.md", "# 설계\n\n%s\n아래 줄\n" % title), repr(title))
+            self.assertIn("아래 줄", H.body_of("INTENT.md", "## 목표\n\n%s\n아래 줄\n" % title), repr(title))
+        self.assertNotIn("아래 줄", H.body_of("design.md", "# 설계\n\n## 결정 기록\n아래 줄\n"))   # 양성 대조
 
 
 if __name__ == "__main__":

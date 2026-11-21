@@ -132,6 +132,15 @@ class Parse(unittest.TestCase):
         b = F.parse_blocked(BlockedFile.TEXT.replace("attempt: 2\n", "attempt: 2\nattempt: 3\n") % H)
         self.assertEqual(b.problems, ["머리 키 attempt 가 두 번 나온다"])
 
+    def test_rules_at_is_optional_but_closed(self):   # R3 AC15
+        R = "c" * 40
+        self.assertIsNone(F.parse_result(result()).rules_at)
+        r = F.parse_result(result().replace("job_at:", "rules_at: %s\njob_at:" % R, 1))
+        self.assertEqual((r.rules_at, r.problems), (R, []))
+        bad = F.parse_result(result().replace("job_at:", "rules_at: zz\njob_at:", 1))
+        self.assertIsNone(bad.rules_at)
+        self.assertIn("머리 rules_at 가 커밋 번호 꼴이 아니다: 'zz'", bad.problems)
+
     def test_task_numbers_with_leading_zero_are_not_task_lines(self):
         for line in ("Task 01/3: 끝 — a", "Task 1/03: 끝 — a", "Task 00/3: 끝 — a"):
             r = F.parse_result(result(line + "\n"))

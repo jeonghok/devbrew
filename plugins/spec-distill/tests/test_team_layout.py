@@ -130,9 +130,10 @@ class RolesAndRefs(unittest.TestCase):   # 계획 3 — 기본 역할(§9) · �
         self.assertRaises(ValueError, L.default_role, "deploy")
         self.assertEqual(L.LEADER_ROLE, "leader")
 
-    def test_leader_ref_is_the_default_branch_in_this_epic(self):
+    def test_leader_ref_is_the_state_tip_or_the_given_ref(self):
         self.assertEqual(L.leader_ref("refs/remotes/origin/HEAD"), "refs/remotes/origin/HEAD")
         self.assertEqual(L.leader_ref("0" * 40), "0" * 40)   # 커밋을 줘도 그대로
+        self.assertEqual(L.leader_ref("refs/remotes/origin/HEAD", "b" * 40), "b" * 40)
 
 
 if __name__ == "__main__":

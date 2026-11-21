@@ -9,6 +9,7 @@
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
 가져오는 모듈은 `conductor_state` · `repo_defaults` · `state_path` · `team_layout` · `branch_tip` · `roadmap_model` 뿐이다.
+규칙 사본 하위 명령(`rules-add` · `rules-drop` · `rules-reset` · `rules-branch`)과 `confirm` 은 `main()` 안에서 `leader_seat` 를 가져온다.
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ import roadmap_model  # noqa: E402
 import state_path  # noqa: E402
 import team_layout  # noqa: E402
 
-STATE_BRANCH_PREFIX = "conductor/"
+STATE_BRANCH_PREFIX = team_layout.STATE_BRANCH_PREFIX
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9.-]*")
 RECEIVED_FILE = "received.md"
 PENDING_FILE = "pending.md"
@@ -56,6 +57,8 @@ NO_ORIGIN = NOT_PUSHED + " — origin 원격이 없다"
 ELSEWHERE = "다른 곳에서 이 브랜치에 썼다 — %s · %s"
 ADOPTED = "원격의 것을 받아 왔다 — %s(%s)"
 REMAKE_GAVE_UP = "세 번 다시 만들어도 올리지 못했다 — 로컬 커밋은 남겼다"
+HAND_MERGE = "손으로 만든 머지 커밋이 있다 — 상태 브랜치는 스크립트만 쓴다: %s"
+TRUST_NOT_CLEARED = "기계 상태의 확인한 끝 절을 비우지 못했다 — 다시 만든 상태 브랜치는 confirm 으로 확인받는다 — %s: %s"
 ZERO_OID = "0" * 40
 WRITE_ATTEMPTS = 3
 REMAKE_ATTEMPTS = 3
@@ -82,6 +85,7 @@ TRACKING_PREFIX = "refs/remotes/origin/"
 
 DELETE_PUSH_RE = re.compile(r":refs/heads/conductor/([a-z0-9][a-z0-9.-]*)")                         # 지우는 push 가 닿는 ref — 상태 브랜치 하나뿐이다
 DELETE_REF_RE = re.compile(r"refs/(?:heads|remotes/origin)/conductor/([a-z0-9][a-z0-9.-]*)")        # 지우는 update-ref 가 닿는 ref — 상태 브랜치와 그 원격 추적 ref
+DELETE_LEASE_RE = re.compile(r"--force-with-lease=(refs/heads/conductor/[a-z0-9][a-z0-9.-]*):([0-9a-f]{40})")   # 지우는 push 의 조건 — 원격이 센 끝일 때만
 OID_RE = re.compile(r"[0-9a-f]{40}")
 
 
@@ -91,11 +95,15 @@ def _delete_name_ok(pattern, text) -> bool:
 
 
 def _check_delete_form(args) -> None:
-    """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain origin :<상태 브랜치 ref>` 와 `update-ref -d <ref> <옛 값>`.
-    ref 는 닫힌 꼴 전체(fullmatch)와 맞아야 한다. 그 밖의 하위 명령 · 꼴은 이 표지가 있어도 거절한다."""
+    """`delete=True` 로만 받는 지우는 꼴 둘 — `push --porcelain --force-with-lease=<ref>:<끝 40자> origin :<ref>`(lease 의 ref 와
+    지우는 ref 가 같은 상태 브랜치 ref) 와 `update-ref -d <ref> <옛 값>`. ref 는 닫힌 꼴 전체(fullmatch)와 맞아야 한다.
+    그 밖의 하위 명령 · 꼴(lease 없는 지우기 포함)은 이 표지가 있어도 거절한다."""
     rest = args[1:]
-    if args[0] == "push" and len(rest) == 3 and rest[0] == "--porcelain" and rest[1] == "origin" and _delete_name_ok(DELETE_PUSH_RE, rest[2]):
-        return
+    if (args[0] == "push" and len(rest) == 4 and rest[0] == "--porcelain" and rest[2] == "origin"
+            and _delete_name_ok(DELETE_PUSH_RE, rest[3])):
+        lease = DELETE_LEASE_RE.fullmatch(rest[1])
+        if lease and lease.group(1) == rest[3][1:]:
+            return
     if args[0] == "update-ref" and len(rest) == 3 and rest[0] == "-d" and _delete_name_ok(DELETE_REF_RE, rest[1]) and OID_RE.fullmatch(rest[2]):
         return
     raise RuntimeError("지우기 표지는 상태 브랜치를 지우는 꼴에만 받는다: %r" % (args,))
@@ -218,15 +226,25 @@ def visible(text: str) -> str:
     return "".join(out)
 
 
+ABSOLUTE_RE = re.compile(r"(?:^|(?<=[\s(\[{「'\"`:=,]))(?:/[^\s/]+/[^\s/]+|~/[^\s/]+)")   # 경계 바로 뒤의 `/성분/성분` · `~/성분`
+
+
+def looks_absolute(token: str) -> bool:
+    """절대경로로 보는 낱말이 들었는가 — 글 머리 · 공백 · 여는 괄호 · `「` · 따옴표 · 백틱 · `:` · `=` · `,` 바로 뒤에서 `/` 로 시작해
+    `/` 로 이은 성분(`/` · 공백이 아닌 글자 하나 이상 — 비ASCII 도)이 둘 이상이거나 `~/` 로 시작해 성분이 하나 이상인 것.
+    「리더/담당자/일꾼」 · `./a/b` 처럼 `/` 앞이 경계가 아닌 것은 경로가 아니다. 가리는 자리는 `ABSOLUTE_RE` 가 찾은 곳부터다."""
+    return isinstance(token, str) and ABSOLUTE_RE.search(token) is not None
+
+
 def redact(text: str) -> str:
-    """올리기 실패 사유에서 원격 주소(`://` 가 든 낱말 · `이름@호스트:경로`)와 절대경로(`/` 로 시작해 `/` 가 둘 이상)를 가린다."""
+    """올리기 실패 사유에서 원격 주소(`://` 가 든 낱말 · `이름@호스트:경로`)와 절대경로(`looks_absolute` — 찾은 곳부터 낱말 끝까지)를 가린다."""
     out = []
     for tok in re.split(r"""(\s+|['"])""", text):
         if tok and not tok.isspace() and tok not in ("'", '"'):
             if "://" in tok or re.fullmatch(r"[^\s@/:]+@[^\s/:]+:\S*", tok):
                 tok = "<원격>"
-            elif tok.startswith("/") and tok.count("/") >= 2:
-                tok = "<경로>"
+            elif looks_absolute(tok):
+                tok = tok[:ABSOLUTE_RE.search(tok).start()] + "<경로>"
         out.append(tok)
     return "".join(out)
 
@@ -286,7 +304,7 @@ def branch_rule(root) -> tuple:
         if origin is False:
             return "없음", None   # 올릴 곳이 없어 로컬에만 쓴다
         return "읽지 못함", "기본 브랜치(origin/HEAD)를 모른다 — git remote set-head origin --auto"
-    rc, out, _e = _run(root, "ls-tree", "-z", commit, "--", repo_defaults.BRANCH_RULE_FILE)
+    rc, out, _e = _run(root, "ls-tree", "--full-tree", "-z", commit, "--", repo_defaults.BRANCH_RULE_FILE)
     entry = out.split(b"\0")[0].decode("utf-8", "replace")
     if rc != 0:
         return "읽지 못함", "기본 브랜치의 %s 목록을 읽지 못했다" % repo_defaults.BRANCH_RULE_FILE
@@ -377,17 +395,28 @@ def seen_tip(root, name: str) -> tuple:
     return tip, None
 
 
-def state_names(root) -> list:
-    """로컬이나 origin 추적 ref 에 `conductor/` 브랜치가 있는 이름들(정렬)."""
+def _state_tails(root) -> tuple:
+    """(꼴이 맞는 꼬리들, 꼴 밖이라 버린 꼬리들) — 로컬과 origin 추적 ref 의 `conductor/` 브랜치. 두 쪽의 같은 꼬리는 한 번이다."""
     rc, out, _e = git(root, "for-each-ref", "--format=%(refname)", "refs/heads/" + STATE_BRANCH_PREFIX,
                       "refs/remotes/origin/" + STATE_BRANCH_PREFIX)
-    found = set()
+    good, bad = set(), set()
     if rc == 0:
         for line in out.splitlines():
             for head in ("refs/heads/" + STATE_BRANCH_PREFIX, "refs/remotes/origin/" + STATE_BRANCH_PREFIX):
-                if line.startswith(head) and name_ok(line[len(head):]):   # 남이 올린 꼬리는 꼴 밖이면 내지 않는다
-                    found.add(line[len(head):])
-    return sorted(found)
+                if line.startswith(head):
+                    tail = line[len(head):]
+                    (good if name_ok(tail) else bad).add(tail)   # 남이 올린 꼬리는 꼴 밖이면 내지 않는다
+    return good, bad
+
+
+def state_names(root) -> list:
+    """로컬이나 origin 추적 ref 에 `conductor/` 브랜치가 있는 이름들(정렬)."""
+    return sorted(_state_tails(root)[0])
+
+
+def bad_state_names(root) -> int:
+    """`state_names` 가 꼴 밖이라 버린 꼬리의 수."""
+    return len(_state_tails(root)[1])
 
 
 def read(root, commit: str, path: str) -> Optional[str]:
@@ -397,7 +426,7 @@ def read(root, commit: str, path: str) -> Optional[str]:
 
 def names(root, commit: str, prefix: str) -> list:
     """[(mode, 경로)] — 그 폴더 아래 전부. 폴더가 없으면 빈 목록."""
-    rc, out, _e = git(root, "ls-tree", "-r", "-z", commit, "--", prefix)
+    rc, out, _e = git(root, "ls-tree", "--full-tree", "-r", "-z", commit, "--", prefix)
     if rc != 0:
         return []
     found = []
@@ -415,7 +444,7 @@ def roadmap_paths(root) -> dict:
         origin = _origin_exists(root)
         raise BranchError(3, roadmap_model.NO_ORIGIN if origin is False else roadmap_model.NO_DEFAULT)
     folder = _roadmaps_dir(root)
-    rc, out, err = _run(root, "ls-tree", "-r", "-z", commit, "--", folder)
+    rc, out, err = _run(root, "ls-tree", "--full-tree", "-r", "-z", commit, "--", folder)
     if rc != 0:
         raise BranchError(3, "기본 브랜치의 로드맵 목록을 읽지 못했다: %s" % _first_line(err.decode("utf-8", "replace")))
     entries = roadmap_model.tree_entries(out, folder)
@@ -476,6 +505,7 @@ class Result(NamedTuple):
     pushed: bool
     onto: Optional[str]
     notes: tuple
+    made: tuple = ()   # 이 부름 안에서 `_build_commit` 이 만든 커밋(차례대로) — 받아 온 남의 끝은 담지 않는다
 
 
 def _base(root, commit: Optional[str]) -> Base:
@@ -486,7 +516,10 @@ def _base(root, commit: Optional[str]) -> Base:
 
 def _need_marker(root, roadmap_rel: str, session: str) -> None:
     """지휘 표지를 쥔 세션만 쓴다. 아니면 BranchError(5)."""
-    d = cs.machine_dir(state_path.state_root(str(root)), roadmap_rel)
+    try:
+        d = cs.machine_dir(state_path.state_root(str(root)), roadmap_rel)
+    except cs.MachineError as exc:   # 표지를 설정보다 먼저 본다 — 로드맵 경로 꼴이 틀린 것은 사용법 오류다
+        raise BranchError(2, str(exc))
     owner = cs.holder(d)
     if owner is None:
         raise BranchError(5, "이 로드맵의 지휘 표지를 잡지 않았다 — 지휘 세션만 상태 브랜치에 쓴다")
@@ -507,18 +540,29 @@ def _git_fail(err: str, what: str) -> BranchError:
     return BranchError(3, "%s: %s" % (what, visible(_first_line(err))))
 
 
+def _toplevel(root) -> str:
+    """레포(작업 트리) 뿌리 — cwd 기준으로 경로를 읽는 git 호출(`update-index --force-remove`)을 뿌리에서 부르려고."""
+    rc, out, err = git(root, "rev-parse", "--show-toplevel")
+    top = out.rstrip("\n")
+    if rc != 0 or not top:
+        raise _git_fail(err, "레포 뿌리를 찾지 못했다")
+    return top
+
+
 def _build_commit(root, tip: Optional[str], changes: dict, message: str, force: bool) -> Optional[str]:
-    """임시 index 위에서 커밋 하나를 만든다. 트리가 끝의 트리와 같으면(force 가 아닐 때) None."""
+    """임시 index 위에서 커밋 하나를 만든다. 트리가 끝의 트리와 같으면(force 가 아닐 때) None.
+    경로는 레포 뿌리 기준이다 — `--root` 가 하위 폴더여도 지우기는 뿌리에서 부른다(`--cacheinfo` 는 cwd 를 타지 않는다)."""
     tmp = tempfile.mkdtemp(prefix="conductor-index-")
     try:
         env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        top = _toplevel(root) if any(text is None for text in changes.values()) else None
         if tip:
             rc, _o, err = git(root, "read-tree", tip, env=env)
             if rc:
                 raise _git_fail(err, "상태 브랜치의 트리를 읽지 못했다")
         for path, text in sorted(changes.items()):
             if text is None:
-                rc, _o, err = git(root, "update-index", "--force-remove", "--", path, env=env)
+                rc, _o, err = git(top, "update-index", "--force-remove", "--", path, env=env)
             else:
                 rc, blob, err = git(root, "hash-object", "-w", "--stdin", env=env, data=text)
                 if rc == 0:
@@ -676,9 +720,11 @@ def _first_parent(body: str) -> Optional[str]:
     return None
 
 
-def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict) -> str:
+def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict, built: list, own: frozenset) -> str:
     """올리지 못한 로컬 커밋 하나를 onto 위에 다시 얹는다(J4). 새 끝을 돌려준다 — 바뀐 것이 없으면 onto.
-    `renamed` 는 이 다시 만들기에서 이름을 바꾼 편지의 {원래 경로: 새 경로} — 뒤 커밋의 고침 · 지움도 새 경로에 간다."""
+    `renamed` 는 이 다시 만들기에서 이름을 바꾼 편지의 {원래 경로: 새 경로} — 뒤 커밋의 고침 · 지움도 새 경로에 간다.
+    새 커밋은 원본이 내 것(`own` — 쓰기 시작 때의 `씀` · 또는 이번 부름의 `built`)일 때만 `built` 에 더한다 — 로컬에 든
+    남의 커밋을 다시 얹은 커밋은 적지 않아 남의 고침으로 남는다(B3)."""
     rc, body, err = git(root, "cat-file", "commit", commit)
     if rc != 0:
         raise _git_fail(err, "다시 얹을 커밋을 읽지 못했다")
@@ -723,12 +769,18 @@ def _replay(root, team: team_layout.Team, commit: str, onto: str, renamed: dict)
     if not changes:
         return onto
     _check_paths(team, changes)
-    return _build_commit(root, onto, changes, message, False) or onto
+    new = _build_commit(root, onto, changes, message, False)
+    if commit in own or commit in built:
+        _note_built(built, new)
+    return new or onto
 
 
-def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Result:
+def _publish(root, team: team_layout.Team, edit, message: str, mine: str, built: list, own: frozenset,
+             before: Optional[str]) -> Result:
     """방금 로컬에 쓴 커밋(mine)을 올린다. 원격이 앞섰으면 받아 와 원격 끝 위에 올리지 못한 앞 커밋들을 다시 얹고
-    이번 쓰기를 그 새 끝에서 다시 만들어 올린다 — 세 번까지. 올라간 커밋은 고치지 않고 덮어 올리지 않는다."""
+    이번 쓰기를 그 새 끝에서 다시 만들어 올린다 — 세 번까지. 올라간 커밋은 고치지 않고 덮어 올리지 않는다.
+    새로 만든 커밋만 `built` 에 더한다 — 원격 끝 · 다시 얹기가 바뀐 것 없이 돌려준 끝은 더하지 않는다.
+    다시 만드는 `edit` 가 던지면 로컬 ref 를 쓰기 전 끝(`before`)으로 되돌리고 `built` 를 비운 뒤 다시 던진다 — 아무것도 쓰지 않았다."""
     name = team.name
     if _origin_exists(root) is not True:
         return Result(mine, False, None, (NO_ORIGIN,))
@@ -743,14 +795,22 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Res
         if remote is None or local is None:
             return Result(local, False, None, (NOT_PUSHED + " — 원격의 상태 브랜치를 받아 오지 못했다",))
         new, renamed = remote, {}
-        for commit in _commits_between(root, remote, local):
+        pending = _commits_between(root, remote, local)
+        for commit in pending:
+            _refuse_merge(root, commit)   # 하나라도 머지 커밋이면 하나도 다시 얹지 않는다
+        for commit in pending:
             if commit != mine:   # 이번 쓰기가 가장 최근에 만든 커밋은 다시 얹지 않고 새 끝에서 다시 만든다
-                new = _replay(root, team, commit, new, renamed)
-        changes = edit(_base(root, new)) if edit else None
+                new = _replay(root, team, commit, new, renamed, built, own)
+        try:
+            changes = edit(_base(root, new)) if edit else None
+        except Exception:
+            _undo_write(root, name, before, local, built)
+            raise
         made = None
         if changes:
             _check_paths(team, changes)
             made = _build_commit(root, new, changes, message, False)
+            _note_built(built, made)
         target = made or new
         rc, _o, _e = git(root, "update-ref", ref_of(name), target, local)
         if rc != 0:
@@ -765,12 +825,86 @@ def _publish(root, team: team_layout.Team, edit, message: str, mine: str) -> Res
     raise BranchError(1, REMAKE_GAVE_UP)
 
 
+def _undo_write(root, name: str, before: Optional[str], local: str, built: list) -> None:
+    """이번 쓰기가 옮긴 로컬 ref 를 쓰기 전 끝으로 되돌린다(그 사이 바뀌었으면 건드리지 않는다). 되돌렸으면 `built` 를 비운다 —
+    이번 부름이 만든 커밋은 모두 어느 ref 에도 없다(올라간 것은 없다 — 올라갔으면 이미 돌아갔다)."""
+    if before is None:
+        return
+    rc, _o, _e = git(root, "update-ref", ref_of(name), before, local)
+    if rc == 0:
+        del built[:]
+
+
+def _refuse_merge(root, commit: str) -> None:
+    """부모가 둘 이상인 커밋이면 BranchError(3) — 스크립트는 부모 하나인 커밋만 만든다. 다시 얹기는 첫 부모에 견주므로 머지를 조용히 편다."""
+    rc, body, err = git(root, "cat-file", "commit", commit)
+    if rc != 0:
+        raise _git_fail(err, "다시 얹을 커밋을 읽지 못했다")
+    if sum(1 for line in body.split("\n\n", 1)[0].splitlines() if line.startswith("parent ")) >= 2:
+        raise BranchError(3, HAND_MERGE % commit[:8])
+
+
+def _note_built(built: list, commit: Optional[str]) -> None:
+    """`_build_commit` 이 낸 커밋을 차례대로 적는다 — None(바뀐 것 없음)과 이미 적은 커밋은 적지 않는다."""
+    if commit is not None and commit not in built:
+        built.append(commit)
+
+
+def record_own(root, roadmap_rel: str, session: str, commits: list) -> tuple:
+    """기계 상태 `확인한 끝` 절에 이 기계가 만든 커밋을 `씀` 줄로 더한다(차례대로 · 이미 `씀` 으로 적힌 끝은 건너뛴다).
+    표지 확인은 부르는 쪽이 이미 했다. 빈 목록이면 아무것도 하지 않는다. 알릴 줄들을 돌려준다 — 다시 쓰며 옛 `## 레포 설정`
+    절을 지웠으면 `cs.OLD_REPO_SETTINGS_DROPPED`(원장 쓰기와 같은 알림 · 부르는 쪽이 사람에게 낸다)."""
+    if not commits:
+        return ()
+    path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    old_settings = cs.has_old_repo_settings(path)   # 다시 쓰면 옛 절이 사라진다 — 조용히 버리지 않는다
+    data = cs.load(path, roadmap_rel)
+    have = [r["끝"] for r in data[cs.TRUST] if r["까닭"] == cs.TRUST_WHY[1]]
+    when = stamp()
+    for commit in commits:
+        if commit not in have:
+            data[cs.TRUST].append({"끝": commit, "까닭": cs.TRUST_WHY[1], "때": when, "세션": session})
+            have.append(commit)
+    cs.save(path, roadmap_rel, data, session)
+    return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
+
+
 def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating: bool, publish: bool = True) -> Result:
-    team = team_of(root, roadmap_rel)
+    """쓰기 · 올리기의 바닥. 이 부름이 만든 커밋은 끝나는 길이 무엇이든(예외여도) 기계 상태에 `씀` 으로 한 번 적고 `Result.made` 에 싣는다.
+    표지(5) → 쓸 수 있는지(설정 오류면 알리고 0) → 로드맵 폴더 차례로 본다."""
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
+    team = team_of(root, roadmap_rel)
+    own = _own_commits(root, roadmap_rel)
+    built, finished, told = [], False, ()
+    try:
+        res = _write_attempts(root, team, session, edit, what, creating, publish, built, own)
+        finished = True
+    finally:
+        try:
+            told = record_own(root, roadmap_rel, session, built)
+        except Exception as exc:
+            if finished:   # 도는 예외가 있으면 그것이 이긴다 — 기록 실패로 가리지 않는다
+                raise BranchError(3, "만든 커밋을 기계 상태에 적지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))))
+        if not finished:   # 예외가 결과를 대신한다 — 알림은 여기서 낸다
+            for line in told:
+                print("[spec-distill] " + line, file=sys.stderr)
+    return res._replace(notes=res.notes + told, made=tuple(built))
+
+
+def _own_commits(root, roadmap_rel: str) -> frozenset:
+    """기계 상태 `확인한 끝` 절의 `씀` 끝들. 읽지 못하면 빈 집합 — 닫는 쪽(다시 얹은 커밋을 내 것으로 적지 않는다)."""
+    try:
+        data = cs.load(cs.machine_path(state_path.state_root(str(root)), roadmap_rel), roadmap_rel)
+        return frozenset(r["끝"] for r in data[cs.TRUST] if r["까닭"] == cs.TRUST_WHY[1])
+    except Exception:
+        return frozenset()
+
+
+def _write_attempts(root, team: team_layout.Team, session: str, edit, what: str, creating: bool, publish: bool, built: list,
+                    own: frozenset) -> Result:
     name = team.name
     tip = local_tip(root, name)
     if tip is None and not creating:
@@ -784,11 +918,12 @@ def _write_floor(root, roadmap_rel: str, session: str, edit, what: str, creating
         commit = _build_commit(root, tip, changes, message, creating)
         if commit is None:
             return Result(None, False, None, ())
+        _note_built(built, commit)
         rc, _o, err = git(root, "update-ref", ref_of(name), commit, tip or ZERO_OID)
         if rc == 0:
             if not publish:
                 return Result(commit, False, None, ())
-            return _publish(root, team, None if creating else edit, message, commit)
+            return _publish(root, team, None if creating else edit, message, commit, built, own, tip)
         now = local_tip(root, name)
         if now == tip:   # 끝은 그대로인데 실패했다 — 이름 충돌 같은 일이다
             raise _git_fail(err, "상태 브랜치 ref 를 옮기지 못했다")
@@ -824,12 +959,12 @@ def _adopt(root, name: str) -> Result:
 def ensure(root, roadmap_rel: str, session: str) -> Result:
     """상태 브랜치가 로컬에 없으면 — origin 에 있으면 받아 오고, 없으면 코드 없는 뿌리 커밋으로 만들어 올린다.
     origin 에 닿지 못하면 로컬에만 만들고 「아직 안 올라옴」 을 낸다. 원격에 있는데 받아 오지 못하면 만들지 않고 BranchError(3).
-    있으면 아무것도 바꾸지 않는다."""
-    team = team_of(root, roadmap_rel)
+    있으면 아무것도 바꾸지 않는다. 표지(5) → 쓸 수 있는지 → 로드맵 폴더 차례로 본다."""
     _need_marker(root, roadmap_rel, session)
     why = availability(root, roadmap_rel)
     if why:
         return Result(None, False, None, (why,))
+    team = team_of(root, roadmap_rel)
     tip = local_tip(root, team.name)
     if tip is not None:
         return Result(None, False, None, ("있다 — %s(%s)" % (branch_of(team.name), tip[:8]),))
@@ -845,7 +980,7 @@ def ensure(root, roadmap_rel: str, session: str) -> Result:
     res = _write_floor(root, roadmap_rel, session, None, "상태 브랜치를 만든다", True, publish=unpushed is None)
     if res.commit is None:
         return res
-    tail = (unpushed,) if unpushed else res.notes
+    tail = (unpushed,) + res.notes if unpushed else res.notes   # 올리지 않은 쓰기의 notes 는 기록 알림뿐이다
     if res.onto:   # 만드는 사이 다른 곳이 먼저 올렸다 — 그 끝을 받아 왔다
         return res._replace(notes=(ADOPTED % (branch_of(team.name), res.commit[:8]),) + tail)
     return res._replace(notes=("만들었다 — %s(%s)" % (branch_of(team.name), res.commit[:8]),) + tail)
@@ -871,10 +1006,26 @@ def _counted_tip_ok(counted: str, tip: str) -> bool:
     return counted == tip[:8]
 
 
+def _clear_trust(root, roadmap_rel: str, session: str) -> tuple:
+    """기계 상태 `확인한 끝` 절을 비운다(M35 — 다시 만든 브랜치에 옛 확인 끝 커밋이 없으면 판정이 영영 재지 못함이 된다).
+    알릴 줄들을 돌려준다 — 옛 `## 레포 설정` 절을 지웠으면 그 알림, 비우지 못했으면 그 사유. 예외를 내지 않는다(브랜치는 이미 지웠다)."""
+    path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
+    try:
+        old_settings = cs.has_old_repo_settings(path)
+        data = cs.load(path, roadmap_rel)
+        if not data[cs.TRUST]:
+            return ()
+        data[cs.TRUST] = []
+        cs.save(path, roadmap_rel, data, session)
+    except Exception as exc:
+        return (TRUST_NOT_CLEARED % (type(exc).__name__, visible(_first_line(exc))),)
+    return (cs.OLD_REPO_SETTINGS_DROPPED,) if old_settings else ()
+
+
 def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
     """(지운 끝, 알릴 줄들). `confirmed` 가 없으면 수와 수를 센 끝을 알리고 BranchError(1) — 지우지 않는다. 있으면 수를 센 끝(40자 또는
     앞 8자 — 꼴이 다르면 BranchError(2))이고, 받아 온 원격 끝과 로컬 끝이 둘 다 그 끝과 같을 때만 지운다(원격이 없으면 로컬 끝만).
-    다르면 지우지 않고 지금 끝에서 다시 센 수와 새 끝을 알린다(BranchError(1)). 원격을 먼저 지우고(못 지우면 BranchError(3), 로컬은 둔다)
+    다르면 지우지 않고 지금 끝에서 다시 센 수와 새 끝을 알린다(BranchError(1)). 원격을 먼저 지우고(센 끝에 건 지우기 — 원격이 그 끝이 아니거나 못 지우면 BranchError(3), 로컬은 둔다)
     로컬 ref 를 읽었던 끝을 옛 값으로 걸어 지운다. `availability` 는 보지 않는다 — 꺼 둔 레포에서도 남은 브랜치를 지운다."""
     import conductor_status as cstat   # 맨 위에서 가져오면 서로 가져온다
     team = team_of(root, roadmap_rel)
@@ -915,8 +1066,8 @@ def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None
             raise BranchError(1, _count_report(cstat, root, roadmap_rel, remote, "원격에 이 기계가 세지 않은 커밋이 있다 — 받아 온 끝에서 다시 셌다: "))
         if not _counted_tip_ok(confirmed, tip):   # 로컬이 받아 온 끝과 같아졌어도 수를 센 끝이 아니면 세지 않은 글이 있다
             raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))
-        rc, out, err = _git_delete(root, "push", "--porcelain", "origin", ":" + ref, timeout=NET_TIMEOUT)
-        if rc != 0:
+        rc, out, err = _git_delete(root, "push", "--porcelain", "--force-with-lease=%s:%s" % (ref, tip), "origin", ":" + ref, timeout=NET_TIMEOUT)
+        if rc != 0:   # 견준 뒤 원격이 센 끝에서 움직였으면 git 이 거절한다 — 지우지 않는다
             raise BranchError(3, "원격의 상태 브랜치를 지우지 못했다 — 로컬은 두었다: %s" % _net_reason(out, err))
     if not remote_exists and not _counted_tip_ok(confirmed, tip):
         raise BranchError(1, _count_report(cstat, root, roadmap_rel, tip, "수를 센 끝이 아니다 — 지금 끝에서 다시 셌다: "))
@@ -928,7 +1079,7 @@ def delete(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None
     if seen is not None:
         _git_delete(root, "update-ref", "-d", track, seen)
     where = "로컬과 원격" if remote_exists else "로컬(원격에는 없었다)"
-    return tip, ("지웠다 — %s 의 %s(%s)" % (where, branch_of(team.name), tip[:8]),)
+    return tip, ("지웠다 — %s 의 %s(%s)" % (where, branch_of(team.name), tip[:8]),) + _clear_trust(root, roadmap_rel, session)
 
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
@@ -944,15 +1095,45 @@ def main(argv=None) -> int:
     de.add_argument("--roadmap", required=True)
     de.add_argument("--session", required=True)
     de.add_argument("--confirmed", metavar="수를_센_끝")
+    for cmd, what in (("rules-add", "규칙 사본에 줄 하나를 더한다"), ("rules-drop", "규칙 사본에서 줄 하나를 뺀다")):
+        ru = sub.add_parser(cmd, help=what + " — 사본이 없으면 기본 브랜치의 규칙 글에서 만든다")
+        ru.add_argument("--roadmap", required=True)
+        ru.add_argument("--session", required=True)
+        ru.add_argument("--line", required=True)
+    rr = sub.add_parser("rules-reset", help="규칙 사본을 지운다 — 규칙은 기본 브랜치의 글로 돌아간다")
+    rr.add_argument("--roadmap", required=True)
+    rr.add_argument("--session", required=True)
+    rb = sub.add_parser("rules-branch", help="기본 브랜치에서 딴 로컬 브랜치에 규칙 파일만 사본 글로 바꾼 커밋 하나를 만든다 — 올리지 않는다")
+    rb.add_argument("--roadmap", required=True)
+    rb.add_argument("--session", required=True)
+    rb.add_argument("--branch", required=True)
+    co = sub.add_parser("confirm", help="남이 올린 규칙 · 대기 줄 고침을 차이와 함께 보인다 — 확인 표시가 있으면 그 끝을 확인한 끝으로 기록한다")
+    co.add_argument("--roadmap", required=True)
+    co.add_argument("--session", required=True)
+    co.add_argument("--confirmed", metavar="확인할_끝")
     args = ap.parse_args(argv)
     try:
-        if args.cmd == "delete":
+        if args.cmd == "confirm":
+            import leader_seat as LS
+            _tip, notes = LS.confirm(args.root, args.roadmap, args.session, args.confirmed)
+            res = Result(None, False, None, notes)
+        elif args.cmd == "delete":
             _tip, notes = delete(args.root, args.roadmap, args.session, args.confirmed)
             res = Result(None, False, None, notes)
+        elif args.cmd in ("rules-add", "rules-drop", "rules-reset"):
+            import leader_seat as LS   # 함수 안에서 가져온다 — 상태 계산이 가져오는 이 모듈이 리더 자리를 끌어오지 않게
+            res = LS.rules_edit(args.root, args.roadmap, args.session,
+                                add=args.line if args.cmd == "rules-add" else None,
+                                drop=args.line if args.cmd == "rules-drop" else None,
+                                reset=args.cmd == "rules-reset")
+        elif args.cmd == "rules-branch":
+            import leader_seat as LS
+            commit = LS.rules_branch(args.root, args.roadmap, args.session, args.branch)
+            res = Result(commit, False, None, (LS.BRANCH_MADE % (args.branch, commit),))
         else:
             res = ensure(args.root, args.roadmap, args.session)
-    except BranchError as exc:
-        print("[spec-distill] " + str(exc), file=sys.stderr)
+    except BranchError as exc:   # 0 이면 쓸 수 없어 알리고 넘어간 것이다 — 알림은 표준 출력에
+        print("[spec-distill] " + str(exc), file=sys.stderr if exc.rc else sys.stdout)
         return exc.rc
     except Exception as exc:   # 예상 밖 예외도 종료 코드 3 — 쓰지 못한 것이다
         print("[spec-distill] 상태 브랜치를 쓰지 못했다 — %s: %s" % (type(exc).__name__, visible(_first_line(exc))), file=sys.stderr)
@@ -963,4 +1144,5 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import conductor_branch as _self
+    sys.exit(_self.main())

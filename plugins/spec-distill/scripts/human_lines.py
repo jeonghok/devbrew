@@ -26,6 +26,7 @@ SKIP_LABEL, RETRY_LABEL = "건너뛴다", "다시 시도한다"
 PASS_LABELS = {KIND_SPEC: ("승인 — 계획 담당자에게",), KIND_PLAN: ("계획대로 구현한다",),
                KIND_FLOW: ("설계 없이 진행",), KIND_SKIP: (SKIP_LABEL, RETRY_LABEL)}
 RECOMMENDED = "(권장)"
+RECOMMENDED_TAILS = ("(권장)", "(Recommended)")
 
 PASS, NO_EVIDENCE, MISMATCH, UNCHECKED, STALE = "지남", "근거 없음", "어긋남", "확인 못 함", "낡음"
 
@@ -37,6 +38,8 @@ NO_LINE = "줄이 없다"
 _HAD, _GOT = "%s 가 있다", "%s 의 받음 줄이 있다"
 _AGAIN = "질문 창으로 다시 승인받는다"
 _OPEN = "기록의 꼴이 바뀐 것이면 레포 설정 human_gate: 끔 으로 연다"
+LATER_ANSWER = "그 머리로 더 뒤에 고른 답이 있다"
+NOT_TOUCHED = "은 그 파일을 고친 커밋이 아니다"
 
 RECORD_HEADS = ("## 결정 기록", "## 지휘 기록", "## 미룸", "## 판정", "## 구현 대조")
 DEFERRED_HEAD = "### Deferred to plan"
@@ -140,8 +143,9 @@ def render(kind, date, label, file, rev, session, key, gate=None) -> str:
 
 def clean_label(text: str) -> str:
     out = text.strip()
-    if out.endswith(RECOMMENDED):
-        out = out[:-len(RECOMMENDED)].rstrip()
+    for tail in RECOMMENDED_TAILS:
+        if out.endswith(tail):
+            return out[:-len(tail)].rstrip()
     return out
 
 
@@ -240,6 +244,7 @@ def _design_body(text: str) -> str:
         here, pos = pos, pos + len(line) + 1
         fenced = any(a <= here < b for a, b in spans)
         level = 0 if fenced else _heading_level(line)
+        # 기록 절은 수준 2 제목에서만 끝난다 — 수준 1 제목은 기록 절 안의 글로 둔다(지금 동작)
         if cut == "record" and level == 2:
             cut = None
         elif cut == "deferred" and 1 <= level <= 3:
@@ -338,19 +343,61 @@ def _no_answer(path, line: Line, raw: str) -> Verdict:
     return Verdict(MISMATCH, "근거가 가리키는 질문 창 답이 세션 기록에 없다", line, raw)
 
 
+def _touched(scope: Scope, line: Line, raw: str) -> Optional[Verdict]:
+    """줄의 판 커밋이 그 파일을 고친 커밋인가(K10). 아니면 어긋남, git 이 읽지 못하면 확인 못 함, 맞으면 None."""
+    path = _path_of(scope, line)
+    commit = scope.git.commit(line.rev)
+    rc, out, _err = scope.git.run_err("log", "-1", "--format=%H", commit, "--", ":(top,literal)" + path) \
+        if commit else (1, "", "")
+    if rc != 0:
+        return _unchecked(line, raw, "줄의 판 %s 이 %s 을 고쳤는지 git 이 읽지 못했다" % (line.rev, line.file))
+    if out.strip() != commit:
+        return Verdict(MISMATCH, "줄의 판 %s %s" % (line.rev, NOT_TOUCHED), line, raw)
+    return None
+
+
+def _same_question(ans, job: str, line: Line, plan: Optional[int]) -> bool:
+    """줄이 가리키는 답과 같은 물음의 답인가(K9). spec 승인 · 계획 검토 줄은 관문 이름으로 거르지 않고 건너뜀 라벨인 답만 뺀다."""
+    if not starts_with_head(ans.question, job, line.rev, plan):
+        return False
+    if line.kind == KIND_SKIP:
+        return names_gate(ans.question, line.gate)
+    if line.kind == KIND_FLOW:
+        return gate_names_in(ans.question) == []
+    return clean_label(ans.label) not in PASS_LABELS[KIND_SKIP]
+
+
+def _later(scope: Scope, line: Line, raw: str, after: list, plan: Optional[int]) -> Optional[Verdict]:
+    """근거보다 뒤에 같은 물음의 사람 답이 라벨을 바꿨으면 어긋남, 사람인지 모르면 확인 못 함, 아니면 None(K9)."""
+    for ans in after:
+        if ans.who == session_record.NOT_HUMAN or not _same_question(ans, scope.job, line, plan):
+            continue
+        if ans.who == session_record.UNKNOWN:
+            return _unchecked(line, raw, ans.why, True)
+        picked = clean_label(ans.label)
+        if picked != line.label:
+            return Verdict(MISMATCH, "%s(「%s」) — 다시 묻고 가장 뒤 답으로 적는다" % (LATER_ANSWER, picked), line, raw)
+    return None
+
+
 def match(scope: Scope, raw: str) -> Verdict:
     """대조 판정 — 꼴 판정을 지난 줄을 근거 칸이 가리키는 질문 창 답과 견준다. 날짜는 견주지 않는다(J28)."""
     first = shape(scope, raw)
     if first.verdict != PASS:
         return first
     line = first.line
+    touched = _touched(scope, line, raw)
+    if touched is not None:
+        return touched
     try:
         path = session_record.locate(line.session)
-        ans = session_record.find(path, line.key)
+        found = session_record.answers(path)
     except session_record.Unreadable as exc:
         return _unchecked(line, raw, str(exc))
-    if ans is None:
+    at = next((i for i, a in enumerate(found) if a.key == line.key), None)
+    if at is None:
         return _no_answer(path, line, raw)
+    ans = found[at]
     if ans.who == session_record.UNKNOWN:
         return _unchecked(line, raw, ans.why, True)
     if ans.who != session_record.HUMAN:
@@ -366,6 +413,9 @@ def match(scope: Scope, raw: str) -> Verdict:
     named = gate_names_in(ans.question) if line.kind == KIND_SKIP else []
     if len(named) > 1:   # 질문 하나가 관문 하나만 가리킨다 — 한 번의 답으로 묻지 않은 관문의 줄을 지어내지 못하게
         return Verdict(MISMATCH, "그 질문에 관문 이름이 둘 이상 있다(%s) — 관문마다 따로 묻는다" % " · ".join(named), line, raw)
+    later = _later(scope, line, raw, found[at + 1:], plan)
+    if later is not None:
+        return later
     for other in scope.lines:
         twin = parse(other) if other != raw else None
         if twin is not None and twin.key == line.key:   # 세션이 달라도 같은 답이다(J3)

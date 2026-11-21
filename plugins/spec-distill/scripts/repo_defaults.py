@@ -44,7 +44,7 @@ STATE_BRANCH_OFF = "끔"
 HUMAN_GATE_ON = "켬"
 HUMAN_GATE_OFF = "끔"
 KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
-        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("human_gate", "state_branch")
+        "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("walk_table", "human_gate", "state_branch")
 ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
 _FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
@@ -52,7 +52,7 @@ _DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROA
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
              "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET,
-             "human_gate": HUMAN_GATE_ON, "state_branch": STATE_BRANCH_ON}
+             "walk_table": None, "human_gate": HUMAN_GATE_ON, "state_branch": STATE_BRANCH_ON}
 
 
 def gate_on(values: dict) -> bool:
@@ -88,15 +88,14 @@ def _shared_files(raw: str):
     return tuple(names), None
 
 
-def _folder(key: str, raw: str):
-    """(폴더, 사유). 레포 상대 폴더만 받고 끝에 `/` 를 붙인다."""
-    value = _unquote(raw)
+def _relative_parts(key: str, value: str, trailing_ok: bool):
+    """(조각 목록, 사유). 폴더 · 파일 경로 키가 같이 쓰는 거절 — 레포 상대 · 빈 조각 · `.` · `..` · `.git` · 글롭 · pathspec 글자."""
     if not value:
         return None, "%s 값이 비었다" % key
     if value.startswith("/") or value.startswith("~"):
         return None, "%s 는 레포 상대경로여야 한다: %r" % (key, value)
     parts = value.split("/")
-    if parts[-1] == "":
+    if parts[-1] == "" and trailing_ok:
         parts = parts[:-1]
     if not parts or any(p in ("", ".", "..") for p in parts):
         return None, "%s 에 빈 조각 · . · .. 를 쓰지 않는다(레포 루트도 안 된다): %r" % (key, value)
@@ -109,7 +108,19 @@ def _folder(key: str, raw: str):
     if found:
         return None, ("%s 에 글롭 · pathspec 특수 글자(%s)를 쓰지 않는다 — git 이 경로를 글자 그대로 읽지 않는다: %r"
                       % (key, " · ".join(found), value))
-    return "/".join(parts) + "/", None
+    return parts, None
+
+
+def _folder(key: str, raw: str):
+    """(폴더, 사유). 레포 상대 폴더만 받고 끝에 `/` 를 붙인다."""
+    parts, why = _relative_parts(key, _unquote(raw), True)
+    return (None, why) if why else ("/".join(parts) + "/", None)
+
+
+def file_path(key: str, raw: str):
+    """(레포 상대 파일 경로, 사유). 폴더와 같은 거절에 끝 `/` 거절을 더하고 끝 `/` 를 붙이지 않는다."""
+    parts, why = _relative_parts(key, _unquote(raw), False)
+    return (None, why) if why else ("/".join(parts), None)
 
 
 class SettingsError(ValueError):
@@ -254,6 +265,11 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                     out["sources"][key] = "기본값(머리말 값이 깨졌다)"
                     out["warnings"].append("%s: 바이트 예산은 1 이상의 정수다(%s: %r) — 기본 %d 으로 센다"
                                            % (at, key, value, _DEFAULTS[key]))
+            elif key == "walk_table":
+                path, why = file_path(key, raw)
+                out["values"][key] = path
+                if why:
+                    out["errors"].append("%s: %s" % (at, why))
             elif key == "human_gate":
                 value = _unquote(raw)
                 if value in (HUMAN_GATE_ON, HUMAN_GATE_OFF):
