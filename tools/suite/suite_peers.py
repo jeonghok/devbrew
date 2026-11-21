@@ -73,7 +73,8 @@ def read_rows():
         proc = subprocess.run(PS_CMD, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30)
         if proc.returncode != 0:
             return None
-        return parse_ps(proc.stdout.decode("utf-8", errors="replace"))
+        rows = parse_ps(proc.stdout.decode("utf-8", errors="replace"))
+        return rows or None  # ps 는 자기 자신을 늘 싣는다 — 빈 표는 읽지 못한 것
     except (OSError, subprocess.SubprocessError):
         return None
 

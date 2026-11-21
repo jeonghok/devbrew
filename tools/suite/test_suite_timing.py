@@ -47,11 +47,23 @@ def read_pid(path):
         return int(fh.read().strip())
 
 
-def kill_quiet(pid):
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
+def kill_tree_if_ours(pid, marker):
+    """pid 가 아직 살아 있고 명령줄에 marker 가 있을 때만, 그 자손부터 죽인다(PID 재사용 방지)."""
+    out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL, universal_newlines=True).stdout
+    if marker not in out:
+        return
+    rows = suite_peers.read_rows() or []
+    tree, frontier = [], {pid}
+    while frontier:
+        nxt = {p for p, pp, _ in rows if pp in frontier and p not in tree and p != pid}
+        tree.extend(sorted(nxt))
+        frontier = nxt
+    for p in tree[::-1] + [pid]:
+        try:
+            os.kill(p, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
 class PeerCountTests(unittest.TestCase):
@@ -94,6 +106,32 @@ class PeerCountTests(unittest.TestCase):
         rows = [(1, 0, "launchd"),
                 (300, 1, "python3 suite_lock.py run -- bash -c bash tools/suite/run-all.sh"), (301, 300, R)]
         self.assertEqual(suite_peers.peer_pids(rows, 50), [301])
+
+    def test_peer_pids_self_and_descendants_excluded(self):
+        R = "bash /w/tools/suite/run-all.sh"
+        # 자기가 최상위 러너(조상에 러너 없음) -> 자기 자신과 하위 셸은 세지 않는다
+        rows = [(1, 0, "launchd"), (50, 1, R), (51, 50, R)]
+        self.assertEqual(suite_peers.peer_pids(rows, 50), [])
+        # 자기는 러너가 아닌 셸이고 러너 자식을 둔다 -> 자손 제외
+        rows = [(1, 0, "launchd"), (50, 1, "zsh -l"), (51, 50, R), (52, 51, R)]
+        self.assertEqual(suite_peers.peer_pids(rows, 50), [])
+        # 대조: 자기와 무관한 다른 러너는 센다
+        rows += [(60, 1, R)]
+        self.assertEqual(suite_peers.peer_pids(rows, 50), [60])
+
+    def test_real_ps_empty_rows_is_unreadable(self):
+        class Done(object):
+            returncode = 0
+            stdout = b""
+        orig = suite_peers.subprocess.run
+        saved = os.environ.pop("SUITE_PEERS_PS_FILE", None)
+        suite_peers.subprocess.run = lambda *a, **k: Done()
+        try:
+            self.assertIsNone(suite_peers.read_rows())
+        finally:
+            suite_peers.subprocess.run = orig
+            if saved is not None:
+                os.environ["SUITE_PEERS_PS_FILE"] = saved
 
     def test_parse_ps_skips_bad_lines(self):
         rows = suite_peers.parse_ps("  10   1 bash /a/run-all.sh\nnot a row\n 11 x foo\n 12 1\n 13 1 cmd with  spaces\n")
@@ -153,18 +191,20 @@ class PeerCountTests(unittest.TestCase):
             self.assertIn(pids[0], listed)
             self.assertNotIn(pids[1], listed)
         finally:
-            for p in pids:
-                kill_quiet(p)
+            if pids:
+                kill_tree_if_ours(pids[0], self.tmp)
 
     @unittest.skipUnless(shutil.which("ps"), "ps 없음")
     def test_real_ps_self_ancestor_child_excluded(self):
         for sub in ("a", "b"):
             os.makedirs(os.path.join(self.tmp, sub))
         out = os.path.join(self.tmp, "out")
+        out_a = os.path.join(self.tmp, "out_a")
         a = os.path.join(self.tmp, "a", "run-all.sh")
         b = os.path.join(self.tmp, "b", "run-all.sh")
         with open(a, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/a.pid\nbash %s\n" % (self.tmp, b))
+            fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\n"
+                     % (self.tmp, b, sys.executable, PEERS, out_a))
         with open(b, "w", encoding="utf-8") as fh:
             fh.write("echo $$ > %s/b.pid\n( sleep 3; : ) & echo $! > %s/b.child\n"
                      "%s %s --pid $$ --list > %s\nwait\n"
@@ -175,18 +215,19 @@ class PeerCountTests(unittest.TestCase):
         try:
             proc.wait(timeout=30)
             self.assertTrue(wait_for_files(files), "가짜 러너 파일이 없다")
-            self.assertTrue(os.path.exists(out))
-            with open(out, encoding="utf-8") as fh:
-                listed = fh.read().split()
-            for f in files:
-                self.assertNotIn(str(read_pid(f)), listed, f)
+            for o in (out, out_a):
+                self.assertTrue(os.path.exists(o), o)
+                with open(o, encoding="utf-8") as fh:
+                    listed = fh.read().split()
+                for f in files:
+                    self.assertNotIn(str(read_pid(f)), listed, (o, f))
         finally:
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()
             for f in files:
                 if os.path.exists(f) and os.path.getsize(f) > 0:
-                    kill_quiet(read_pid(f))
+                    kill_tree_if_ours(read_pid(f), self.tmp)
 
 
 if __name__ == "__main__":
