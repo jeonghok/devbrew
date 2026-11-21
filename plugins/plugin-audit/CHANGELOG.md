@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.1] — 2026-11-22
+
+### Removed
+- `scripts/check_deps.py` 의 `superpowers` 하위 명령(정본 `shared/deps/check_deps.py` — spec-distill 의 superpowers 판 알림이 쓰던 것). 이 플러그인은 그 하위 명령을 부르지 않았다.
+
 ## [1.10.0] — 2026-11-18
 
 ### Added

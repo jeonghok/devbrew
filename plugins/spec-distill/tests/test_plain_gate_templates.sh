@@ -142,7 +142,6 @@ done
 CD="$SD/references/conducting.md"
 assert_eq "$(grep -oE '그 위에 더|엔진 K \+ 그 밖의 M|경고 N개 — 위에 적었다|「경고 N개」에 (더|넣)' "$CD" | wc -l | tr -d ' ')" "0" "M3: conducting.md 에 「경고 N개」에 더하라는 옛 문장이 없다"
 assert_eq "$(grep -cF '검사 불가는 막지 않고 승인 질문의 경고 줄에 번호 대조의 짧은 줄로 이어진다' "$CD")" "1" "M3 양의 짝: conducting.md 의 번호 대조 경고가 승인 질문의 경고 줄로 간다"
-assert_eq "$(cnt "$F_FIN" '이 줄은 경고가 아니다 — 질문의 경고 줄에 잇지 않고')" "1" "M3 양의 짝: finishing B-1 의 판 확인 줄은 질문의 경고 줄에 잇지 않는다"
 
 # ⑫ 「이상 없음」·「경고 없음」 구분과 그 조건(「…때만」) — 파일마다 실제 글자. reviewing-document.md 에는 이 구분 문장이 없다.
 assert_eq "$(cnt "$F_RS" '셋 다 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는')" "1" "구분: spec-review 승인 게이트의 「셋 다 비었을 때만」 구분"
@@ -167,8 +166,8 @@ assert_eq "$(cnt "$F_FIN" '모든 degrade record 는 **게이트 앞 글**(위 �
   "finishing: degrade record 는 앞 글에 쓰고 질문 본문은 정본의 규칙을 따른다"
 assert_eq "$(cnt "$F_FIN" '옵션 description 에 싣지 않습니다')" "0" "finishing: 옵션 description 에 경고를 싣지 않는다는 옛 문장이 없다(설명은 얻음 · 내줌 꼴)"
 
-# ⑭b finishing — 인터뷰 끝 게이트의 짧은 줄 출처(brief 원장 · 구조 검사 참고 · superpowers 판).
-for ph in '`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"`' '「구조 검사 참고 N개」' '「superpowers 판 다름」'; do
+# ⑭b finishing — 인터뷰 끝 게이트의 짧은 줄 출처(brief 원장 · 구조 검사 참고).
+for ph in '`brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"`' '「구조 검사 참고 N개」'; do
   assert_eq "$(cnt "$F_FIN" "$ph")" "1" "finishing: 짧은 줄 출처 ${ph}"
 done
 
