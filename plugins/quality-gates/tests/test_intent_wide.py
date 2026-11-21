@@ -368,11 +368,26 @@ class TestWidePrepare(unittest.TestCase):
         self.assertIn("breadth: range", self._plan())
         self.assertIn("넓게 본다 — 범위 모드", p.stdout.splitlines())
 
-    def _commit_record(self):
-        tic._write(tic._fm(type="roadmap-review", roadmap="docs/rm/one/roadmap.md",
-                           source_brief="docs/brief.md") + "기록\n", self.R, *REC.split("/"))
+    def _commit_record(self, brief=True):
+        # brief=True 픽스처는 AC21 의 일반 동작(바뀐 문서의 source_brief: 를 따라가기 · --origin 과 같은 파일이면
+        # 한 번만 싣기)을 잰다. 지휘자의 실제 기록 틀은 source_brief: 없이 roadmap: 만 싣는다(계획 검토 P2) —
+        # 그 꼴은 brief=False 와 test_range_roadmap_only_record_with_origin 이 잰다.
+        fm = dict(type="roadmap-review", roadmap="docs/rm/one/roadmap.md")
+        if brief:
+            fm["source_brief"] = "docs/brief.md"
+        tic._write(tic._fm(**fm) + "기록\n", self.R, *REC.split("/"))
         _ok(self.R, "add", REC)
         _ok(self.R, "commit", "-q", "-m", "record")
+
+    def test_range_roadmap_only_record_with_origin(self):
+        self._commit_record(brief=False)
+        p = self._prep(mode="range", names=(REC,), origin="docs/brief.md")
+        self.assertIn("breadth: range", self._plan())
+        self.assertIn("one-intent-token", self._f("intent-roadmap.md"))
+        origin = self._f("intent-origin.md")
+        self.assertEqual(origin.count("brief-quote-token"), 1)
+        out = p.stdout.splitlines()
+        self.assertFalse([l for l in out if l.startswith("로드맵 없음") or l.startswith("원문 없음")])
 
     def test_range_record_follows_roadmap_and_brief(self):
         self._commit_record()
