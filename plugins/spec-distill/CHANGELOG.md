@@ -1,5 +1,23 @@
 # Changelog
 
+## [8.29.0] — 2026-11-21
+
+### Added
+- 지휘자의 qg 리뷰 절차 — `skills/epic-conductor/references/qg-review.md`: 자리 넷(spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝 · 이름으로 청한 리뷰)의 호출 줄 · 담당자(격리 worktree 로 보내고 결과 파일을 받음) · 돌아왔을 때의 처분 · 보관과 기록 파일 · 묻기 · 「잘못 골랐다」의 행선.
+- `scripts/merged_pr_range.py` — 머지된 PR 마다 머지 커밋의 범위(`<시작>..<끝>`)를 낸다. 범위를 확인하지 못하면 사유를 내고 0 이 아닌 종료 코드로 끝난다.
+
+### Changed
+- 지휘 순환 걸음 3 · 6 · 7 과 손으로 따르는 절차 3 · 6 · 9 에 qg 리뷰 절차를 가리키는 들어가는 문장이 한 줄씩 생겼다. 걸음 7 의 「로드맵 시작 커밋부터」 호출은 로드맵 끝 리뷰로 바뀌었고, 걸음 1 · 손 절차 1 에는 「아직 묻지 못한 질문」 자리가 생겼다.
+- 지휘자 SKILL.md 의 규모 공시 줄이 qg 담당자 수(spec 승인 앞 1 · 머지된 PR 마다 1 · 로드맵 끝 1)를 센다.
+- README 의 quality-gates 의존 줄이 자리 넷과 「품질 게이트 없이 간다」 공시를 말한다. `dependencies.md` 의 quality-gates 행 「없을 때」 칸이 자리 넷을 말하고, 판 칸을 `check_deps.py measure` 로 다시 쟀다.
+- `shared/tests/test_skill_reference_pointers.sh` 가 spec-distill 파일의 `<SD>/…` 가리킴을 인식해 그 대상이 있는지 본다.
+- `plugins/spec-distill/tests/test_conducting_reference.sh` 가 `<SD>/` 접두의 references 경로만 허용한다.
+- `shared/tests/test_dispatch_disposition.sh` 가 내장 `general-purpose` agent 의 dispatch 도 센다.
+- 로드맵 끝 품질 게이트 리뷰가 돌았으면 걸음 7 의 쌓인 기록 · 끝에서 끝 결과를 그 리뷰의 로드맵을 닫는 PR 본문에 싣는다 — 기록만 담은 로드맵 수정 PR 을 따로 열지 않는다(리뷰가 돌지 않았으면 그 PR 은 그대로다). 쌓인 기록의 `qg 리뷰` 줄은 로드맵을 닫는 PR 만 싣고 뺀다(conducting.md 걸음 6 · 7 에 한 구절씩).
+- qg 리뷰 절차가 자동으로 보내는 자리 셋(spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝)에서 이미 보냈는지 먼저 본다 — 보관 폴더마다 끝난 리뷰(그 폴더를 담은 쌓인 기록 줄 · 기록 파일의 「보관 사본:」) → 도는 중 → 묻는 중 → 결과가 왔다 → 돌아오지 못한 리뷰(「셀 수 없음」) 차례로 보고, 끝난 리뷰는 다시 잇지 않는다. spec 승인 앞은 설계 대화로 돌아갈 때 적는 `spec-resend` 표지 줄로 다시 보내도 되는 횟수를 센다. 이름으로 먼저 청한 리뷰와 범위가 같은 머지된 PR 은 다시 보내지 않는다. 기록 파일 머리의 없음 표지는 `"-"` 로 따옴표에 싼다(qg 가 YAML 로 읽는다).
+- qg 리뷰 절차의 빈 곳을 메웠다 — 범위 스크립트 · 로드맵 끝 합치기 앞의 `git fetch origin`, 비었거나 주인이 끝난 스위트 잠금이면 보내기, 사람 자리에서 멈춰 돌아온 담당자를 이어 부르기, 결과 파일이 보낸 범위의 것인지 보기, 판을 읽지 못한 결과도 「셀 수 없음」 으로 기록하기, 질문을 띄우기 전에 기다리는 질문 줄을 먼저 적기, 걸러진 질문 목록과 qg 공시 줄을 보이기.
+- `test_qg_review_reference.sh` 가 미리 받은 답의 라벨 · 계약 판 · 계약 머리 칸 이름 · 걸러진 질문 목록 머리를 quality-gates 파일에서 읽어 견준다. `test_conducting_reference.sh` 의 `<SD>/` 예외 가드에 양성 대조가 하나 늘었다.
+
 ## [8.28.0] — 2026-11-21
 
 ### Added

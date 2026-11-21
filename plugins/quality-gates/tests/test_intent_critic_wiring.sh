@@ -75,6 +75,7 @@ assert_eq "$(count "$LAW2" "you edit files only for the fixes the user approved 
 
 note "[절차 문서]"
 PF="$(cat "$PROC")"
+assert_eq "$(count "$PF" '범위 모드에서도 바뀐 파일 가운데 의도 문서')" 1 "절차 문서: 범위 모드도 바뀐 의도 문서의 머리 줄을 따라간다(AC18)"
 assert_eq "$(count "$PF" 'qg-verdict-args')" 0 "절차 문서: qg-verdict-args 0"
 assert_eq "$(count "$PF" 'findings.yaml')" 0 "절차 문서: findings.yaml 0"
 assert_eq "$(printf '%s\n' "$PF" | grep -c -E '(>|tee[[:space:]]+(-a[[:space:]]+)?)[[:space:]]*"?[^[:space:]"]*/comment')" 0 "절차 문서: comment* 파일에 쓰는 줄 0"

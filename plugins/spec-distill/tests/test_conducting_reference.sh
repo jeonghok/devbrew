@@ -387,8 +387,12 @@ pats = [r"origin/main", r"(?<![A-Za-z])main(?![A-Za-z])", r"(?<![A-Za-z])opus(?!
         r"plugins/", r"shared/tests", r"\.superpowers/", r"DEVBREW_", r"\$\{CLAUDE_PLUGIN_ROOT\}", r"references/[A-Za-z0-9_.-]+\.md",
         r"worktree 의 spec-distill"]
 for i, line in enumerate(text.splitlines(), 1):
+    # `<SD>/…/x.md`(`..` 성분 없음)는 conducting.md 가 정의한 플러그인 폴더 자리표 아래 경로다 — references/ 금지에서만 그 구간을 뺀다.
+    # 나머지 금지 패턴은 줄 원문 그대로 본다. 맨몸 references/x.md 는 그대로 잡는다.
+    scan = re.sub(r"<SD>/(?:(?!\.\.)[A-Za-z0-9_.-]+/)*(?!\.\.)[A-Za-z0-9_.-]+\.md", "", line)
     for p in pats:
-        if re.search(p, line):
+        target = scan if p == r"references/[A-Za-z0-9_.-]+\.md" else line
+        if re.search(p, target):
             print("%d: %s — %s" % (i, p, line.strip()[:80]))
 PY
 }
@@ -396,10 +400,16 @@ assert_eq "$(banned "$CD")" "" "레포 전용 값 · 루트 토큰 · references
 for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scripts/x.py' '${CLAUDE_PLUGIN_ROOT}/scripts' \
            'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x' \
            'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh' \
-           '줄 안의 플러그인 루트 변수는 그 에픽 worktree 의 spec-distill 플러그인 폴더로'; do
+           '줄 안의 플러그인 루트 변수는 그 에픽 worktree 의 spec-distill 플러그인 폴더로' \
+           '`<SD>/main.md`' '`<SD>/feature/x.md`' '`<SD>/../../docs/superpowers/specs/x.md`' '`<SD>/.superpowers/sdd/x.md`' \
+           '`<SD>/../x/references/y.md`'; do
   { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
+{ cat "$CD"; printf '%s\n' '`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고'; } > "$T/mut.md"
+assert_eq "$(banned "$T/mut.md")" "" "음성 대조: <SD>/ 아래 references 경로는 잡지 않는다"
+{ cat "$CD"; printf '%s\n' '`<SD>/x.md` 와 맨몸 references/qg-review.md'; } > "$T/mut.md"
+[ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 는 잡는다" || no "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 를 못 잡는다"
 
 # 가리키는 skill 은 실재한다(아직 없는 skill 을 가리키는 릴리스 금지 — 설계 §11).
 n=0
