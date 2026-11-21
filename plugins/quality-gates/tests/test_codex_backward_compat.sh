@@ -142,6 +142,11 @@ else
       fi
     fi
   done 3< "$LEDGER"
+  # 양의 짝 — 파서와 따로 grep 으로 센 등재 줄 수와 파서가 읽은 수가 같아야 한다(파서가 전부 건너뛰면 「등재 0건」 으로 통과하지 못하게).
+  ledger_lines="$(grep -vcE '^[[:space:]]*(#|$)' "$LEDGER" || true)"
+  if [[ "$ledger_lines" != "$listed_count" ]]; then
+    c3_add "원장 등재 줄 수 불일치(grep ${ledger_lines} ≠ 파서 ${listed_count})"
+  fi
 fi
 
 if [[ -z "$c3_fail" ]]; then
