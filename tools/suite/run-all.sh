@@ -50,7 +50,7 @@ timing_mark() {
     secs="$(awk -v a="$now" -v b="$T_PREV" 'BEGIN{printf "%.3f", a-b}' 2>/dev/null)"
     [ -n "$secs" ] || secs="?"
   fi
-  if ! printf '%s\t%s\t%s\t%s\n' "$secs" "$1" "$2" "$n" >> "$TIMING" 2>/dev/null; then
+  if ! { printf '%s\t%s\t%s\t%s\n' "$secs" "$1" "$2" "$n" >> "$TIMING"; } 2>/dev/null; then
     if [ "$TIMING_WARNED" -eq 0 ]; then
       TIMING_WARNED=1
       echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
@@ -62,7 +62,7 @@ timing_mark() {
 if [ -n "$TIMING" ]; then
   s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
-  printf 'start\t%s\t%s\t%s\n' "$now" "$n" "$TOP" >> "$TIMING" 2>/dev/null || true
+  { printf 'start\t%s\t%s\t%s\n' "$now" "$n" "$TOP" >> "$TIMING"; } 2>/dev/null || true
   T_PREV="$now"
   [ "$T_PREV" = "?" ] && T_PREV=""
 fi
@@ -95,7 +95,9 @@ fi
 if [ -n "$TIMING" ]; then
   s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
-  printf 'end\t%s\t%s\n' "$now" "$n" >> "$TIMING" 2>/dev/null || true
+  if ! { printf 'end\t%s\t%s\n' "$now" "$n" >> "$TIMING"; } 2>/dev/null; then
+    echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
+  fi
 fi
 cat "$LIST"
 [ -s "$LIST" ] && exit 1 || exit 0

@@ -517,10 +517,17 @@ class RunAllTimingTests(unittest.TestCase):
                 time.sleep(0.05)
         finally:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
+                os.killpg(proc.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            proc.wait(timeout=30)
+            try:
+                proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait(timeout=30)
         lines = self.lines(path)
         firsts = [l.split("\t")[0] for l in lines]
         self.assertEqual(firsts.count("start"), 1)
@@ -538,6 +545,50 @@ class RunAllTimingTests(unittest.TestCase):
         ends = [l for l in lines if l.startswith("end\t")]
         self.assertEqual([s[3] for s in starts], [a, b])
         self.assertEqual(len(ends), 2)
+
+    def test_mid_round_write_failure_notes_without_bash_errors(self):
+        tdir = os.path.join(self.tmp, "tdir")
+        os.makedirs(tdir)
+        path = os.path.join(tdir, "t.tsv")
+        files = dict(BASE)
+        files["plugins/p/tests/test_rm.sh"] = "rm -rf '%s'\n" % tdir
+        repo = self.make_repo(files)
+        without = self.run_all(repo)
+        os.makedirs(tdir)
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s" % path
+        err_lines = [l for l in err.split("\n") if l]
+        self.assertTrue(1 <= len(err_lines) <= 2, err)
+        self.assertEqual(set(err_lines), {notice}, err)
+        self.assertNotIn("No such file", err)
+        self.assertEqual((rc, out), without[:2])
+
+    def stamp_fails_repo(self, body):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        with open(os.path.join(repo, "tools", "suite", "suite_peers.py"), "w", encoding="utf-8") as fh:
+            fh.write(body)
+        return repo
+
+    def check_stamp_unavailable(self, body):
+        repo = self.stamp_fails_repo(body)
+        path = self.out_file()
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        self.assertEqual((rc, out, err), (0, "", ""))
+        lines = self.lines(path)
+        self.assertEqual(lines[0], "start\t?\t?\t" + repo)
+        self.assertEqual(lines[-1], "end\t?\t?")
+        targets = self.target_lines(lines)
+        self.assertEqual(len(targets), 2 + 2)
+        for l in targets:
+            cols = l.split("\t")
+            self.assertEqual((cols[0], cols[3]), ("?", "?"), l)
+
+    def test_stamp_call_fails_nonzero_exit_writes_question_marks(self):
+        self.check_stamp_unavailable("import sys\nsys.exit(1)\n")
+
+    def test_stamp_call_prints_nothing_writes_question_marks(self):
+        self.check_stamp_unavailable("")
+
 
 
 if __name__ == "__main__":
