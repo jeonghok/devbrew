@@ -7,7 +7,9 @@ STATUS 는 이 스크립트가 계산해 상태 브랜치에 쓴다. 손으로 �
 
 종료 코드: 0 · 1(없음/아님) · 2 사용법 · 3 읽기 불가 · 5 다른 세션의 표지.
 
-가져오는 모듈은 `conductor_branch` · `conductor_mail` · `conductor_ledger` · `conductor_state` · `repo_defaults` 다.
+가져오는 모듈은 `conductor_branch` · `conductor_mail` · `conductor_ledger` · `conductor_state` · `repo_defaults` · `roadmap_model` ·
+`roadmap_status` · `suite_lock` · `state_path` · `team_status`(남의 고침을 세는 읽기 함수) 다.
+`sync` 는 함수 안에서 `leader_seat` 를 가져온다(규칙 사본의 같아짐 · 갈라짐 · 남의 고침 · 확인한 끝 줄이기) — `show` 는 가져오지 않는다.
 """
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ import repo_defaults  # noqa: E402
 import roadmap_model  # noqa: E402
 import roadmap_status as RS  # noqa: E402
 import suite_lock  # noqa: E402
+import team_status as TS  # noqa: E402
 from state_path import state_root  # noqa: E402
 
 STATUS_SECTIONS = ("에픽", "열린 PR", "기다리는 질문", "작업", "편지", "안 올린 규칙 고침")
@@ -47,10 +50,11 @@ STAMP_LINE_RE = re.compile(cs.STAMP_RE.pattern + r" · 기준 커밋 ([0-9a-f]{8
 LOCAL_TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}")
 PATH_MARK, MACHINE_MARK = "<경로>", "<기계>"
 NO_FETCH = "상태 브랜치를 받아 오지 않는 설정이다"
-FETCH_HINT = "git fetch origin 'refs/heads/conductor/*:refs/remotes/origin/conductor/*' 로 받아 온다"
+FETCH_HINT = "git fetch origin 'refs/heads/%s*:refs/remotes/origin/%s*' 로 받아 온다" % (CB.STATE_BRANCH_PREFIX, CB.STATE_BRANCH_PREFIX)
 NO_STATUS = "STATUS 없음 — conductor_status.py sync 를 돌린다"
 SUITE_UNREAD = "스위트 잠금을 읽지 못했다"
 LETTERS_UNREAD = "갈라진 상태 브랜치라 글을 읽지 못했다"
+FOREIGN_TAIL = " — conductor_branch.py confirm 으로 차이를 보고 사용자 확인 뒤 기록한다"
 
 
 class StatusError(ValueError):
@@ -123,9 +127,8 @@ def scrub(text: str, root) -> str:
     out = []
     for tok in re.split(r"(\s+)", text):
         hits = [tok.find(r) for r in roots if r in tok]
-        shape = CM.PATH_IN_TEXT_RE.search(tok)   # 앞에 글자가 붙어도 절대경로 꼴이면 잡는다 — 편지 about 과 한 정의다
-        if shape is not None:
-            hits.append(shape.start())
+        if CB.looks_absolute(tok):   # 경계(괄호 · `=` · `:` 등) 뒤의 절대경로 꼴 — 가리기 · 편지 about 과 한 정의다(M26)
+            hits.append(CB.ABSOLUTE_RE.search(tok).start())
         if hits:
             tok = tok[:min(hits)] + PATH_MARK
         out.append(tok)
@@ -250,7 +253,27 @@ def _without_stamp(text: str) -> list:
     return [line for i, line in enumerate(text.split("\n")) if i != STAMP_LINE]
 
 
+def foreign_line(n: Optional[int]) -> Optional[str]:
+    """확인되지 않은 남의 고침 수 → 알릴 한 줄(0 이면 None · 재지 못함이면 「남의 고침을 재지 못했다」)."""
+    if n is None:
+        return TS.FOREIGN_UNMEASURED
+    return TS.FOREIGN % n + FOREIGN_TAIL if n else None
+
+
+def _settled(LS, root, roadmap_rel: str, session: str, name: str) -> tuple:
+    """쓴 뒤 읽을 끝에서 두 쪽 남의 고침을 세고 `확인한 끝` 절을 줄인다 — 알릴 줄들."""
+    seen, _split = CB.seen_tip(root, name)
+    told = []
+    n = LS.settle(root, roadmap_rel, session, seen, told) if seen is not None else None
+    line = foreign_line(n)
+    return tuple(told) + ((line,) if line else ())
+
+
 def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = True) -> Synced:
+    """STATUS 를 계산해 상태 브랜치에 쓴다. 규칙 사본이 기본 브랜치의 지금 글과 같고 규칙 쪽에 확인되지 않은 남의 고침이 없으면
+    같은 커밋에서 사본과 `rules-base.md` 를 지운다(STATUS 가 같아도 쓴다). 사본이 갈라졌으면 알린다.
+    쓰든 안 쓰든 끝에 읽을 끝의 확인되지 않은 남의 고침(규칙 · 대기 줄)을 세어 알리고 `확인한 끝` 절을 줄인다(M5)."""
+    import leader_seat as LS   # 함수 안에서 가져온다 — 현황 화면(show)이 리더 자리를 끌어오지 않게
     now = now or datetime.datetime.now().astimezone()
     L.need_holder(root, roadmap_rel, session)
     if lower_window:
@@ -280,20 +303,37 @@ def sync(root, roadmap_rel: str, session: str, now=None, lower_window: bool = Tr
         claimed, at = _claimed_at(root, roadmap_rel), CB.parse_stamp(old.computed)
         if old.session != session[:8] and claimed is not None and at is not None and at > claimed:
             notes.append("%s — 세션 %s · %s" % (OTHER_SESSION, old.session, old.computed))
+    if LS.rules_state(root, roadmap_rel, tip).verdict == LS.VERDICTS[3]:
+        notes.append(LS.DIVERGED + " — conductor_branch.py rules-branch 는 만들지 않는다")
+
+    def droppable(commit):   # 머지된 사본 — 지금 글과 같고 규칙 쪽 남의 고침이 0 일 때만(재지 못함도 남긴다)
+        return (commit is not None and LS.rules_state(root, roadmap_rel, commit).verdict == LS.VERDICTS[1]
+                and LS.foreign(root, roadmap_rel, commit, TS.rules_paths(team)) == [])
+
     fresh = render_status(build_status(root, roadmap_rel, session, tip, now))
-    if old is not None and _without_stamp(fresh) == _without_stamp(old_text):
+    if old is not None and not droppable(tip) and _without_stamp(fresh) == _without_stamp(old_text):   # 지울 사본이 있으면 바뀐 것이다
         age = (now - CB.parse_stamp(old.computed)).total_seconds()
         if age <= STALE_AFTER:
-            return Synced(None, tuple(notes) + (UNCHANGED,), False)
-    res = CB.write(root, roadmap_rel, session,
-                   lambda base: {team.status: render_status(build_status(root, roadmap_rel, session, base.commit, now))}, "STATUS")
-    return Synced(res, tuple(notes) + tuple(res.notes), res.commit is not None)
+            return Synced(None, tuple(notes) + (UNCHANGED,) + _settled(LS, root, roadmap_rel, session, team.name), False)
+    if split is None:   # 받아 온 끝 위에서 쓴다 — 로컬 끝에서 고침을 셈하면 남의 끝을 못 보고 「바뀐 것 없음」 으로 끝날 수 있다
+        notes.extend(LS.catch_up(root, team.name, tip))   # 앞당겼으면 「다른 곳에서 이 브랜치에 썼다」 — 다시 만들 때와 같은 알림
+
+    def edit(base):   # 사본이 같아 지우면 STATUS 의 줄 수도 0 이다 — 같은 글이라 남은 줄이 없다
+        changes = {team.status: render_status(build_status(root, roadmap_rel, session, base.commit, now))}
+        if droppable(base.commit):
+            changes.update({team.rules: None, team.path(LS.RULES_BASE_FILE): None})
+        return changes
+
+    res = CB.write(root, roadmap_rel, session, edit, "STATUS")
+    return Synced(res, tuple(notes) + tuple(res.notes) + _settled(LS, root, roadmap_rel, session, team.name), res.commit is not None)
 
 
 # ── waiting ──────────────────────────────────────────────────────────────────
 
 def waiting_add(root, roadmap_rel: str, session: str, epic: str, kind: str, via: str, now=None) -> Synced:
-    """사용자에게 건 질문 한 줄을 기계 상태에 올리고 STATUS 에 싣는다. 같은 (에픽, 종류) 가 있으면 두고 처음 시각을 지킨다."""
+    """사용자에게 건 질문 한 줄을 기계 상태에 올리고 STATUS 에 싣는다. 같은 (에픽, 종류) 줄이 있으면 — 그 줄이 질문 창이고
+    이 세션이 건 것이면 앞 질문은 답을 받은 것이라 새 줄로 바꾸고(언제부터 지금), 그 밖(턴 끝 · 다른 세션의 줄)은 아직 기다리는
+    질문이라 언제부터를 두고 건 길 · 세션만 새 값으로 바꾼다(M24 — 턴 끝 줄을 질문 창으로 다시 물으면 다음 sync 가 내린다)."""
     now = now or datetime.datetime.now().astimezone()
     if not (cs.ASK_EPIC_RE.fullmatch(epic) or epic == cs.ASK_NO_EPIC):
         raise CB.BranchError(2, "에픽은 에픽 이름이거나 %s 다: %s" % (cs.ASK_NO_EPIC, CB.visible(repr(epic))))
@@ -302,15 +342,24 @@ def waiting_add(root, roadmap_rel: str, session: str, epic: str, kind: str, via:
     if via not in cs.ASK_VIA:
         raise CB.BranchError(2, "건 길은 %s 중 하나다: %s" % (SEP.join(cs.ASK_VIA), CB.visible(repr(via))))
 
+    fresh = {"에픽": epic, "종류": kind, "건 길": via, "언제부터": CB.stamp(now), "세션": session}
+
     def change(d):
-        if not any(r["에픽"] == epic and r["종류"] == kind for r in d[cs.ASKING]):
-            d[cs.ASKING].append({"에픽": epic, "종류": kind, "건 길": via, "언제부터": CB.stamp(now), "세션": session})
+        for i, row in enumerate(d[cs.ASKING]):
+            if row["에픽"] == epic and row["종류"] == kind:
+                answered = row["건 길"] == cs.ASK_WINDOW and row["세션"] == session
+                d[cs.ASKING][i] = fresh if answered else dict(row, **{"건 길": via, "세션": session})
+                return
+        d[cs.ASKING].append(fresh)
     L.update(root, roadmap_rel, session, change)
     return sync(root, roadmap_rel, session, now=now, lower_window=False)
 
 
 def waiting_clear(root, roadmap_rel: str, session: str, epic: str, kind: Optional[str] = None, now=None):
-    """에픽(과 종류를 줬으면 종류)이 같은 줄을 내린다. 세션 칸은 보지 않는다. (내린 줄 수, sync 결과)."""
+    """에픽(과 종류를 줬으면 종류)이 같은 줄을 내린다. 세션 칸은 보지 않는다. (내린 줄 수, sync 결과).
+    종류는 주었으면 종류 여덟 가운데 하나다 — 아니면 BranchError(2) 이고 아무것도 내리지 않는다."""
+    if kind is not None and kind not in cs.ASK_KINDS:
+        raise CB.BranchError(2, "종류는 %s 중 하나다: %s" % (SEP.join(cs.ASK_KINDS), CB.visible(repr(kind))))
     gone = []
 
     def hit(row):
@@ -526,7 +575,8 @@ def cross_view(root, roadmap_rel: str, now=None) -> dict:
     git = RS.Git(str(root))
     view = {"me": me, "computed": CB.stamp(now), "reserve": [], "changed": [], "versions": [], "version_unreadable": 0,
             "moves": [], "suites": [], "unchecked_roadmaps": [], "unavailable": None, "status_text": None, "waiting": [], "quiet": [], "malformed_only": [],
-            "no_branch": [], "status_unreadable": [], "waiting_malformed": 0, "incoming": None, "counts": None, "no_fetch": False}
+            "no_branch": [], "status_unreadable": [], "waiting_malformed": 0, "incoming": None, "counts": None, "no_fetch": False,
+            "foreign": 0, "bad_names": CB.bad_state_names(root)}
     mine_open = open_branches(root, mine)
     open_by = {me: mine_open}
     for road in table:
@@ -609,8 +659,10 @@ def _add_state_view(root, roadmap_rel: str, me: str, table: list, view: dict) ->
     """상태 브랜치에서 읽는 칸들 — 내 STATUS · 모든 로드맵의 기다리는 질문 · 온 글과 수 · 받아 오는 설정. 쓰지도 받아 오지도 않는다."""
     team = CB.team_of(root, roadmap_rel)
     local = CB.local_tip(root, me)
-    tip = CB.seen_tip(root, me)[0] or local
+    seen, split = CB.seen_tip(root, me)
+    tip = seen or local
     view["status_text"] = CB.read(root, local, team.status) if local else None   # 내 현황은 내 로컬 끝에서 읽는다(J37)
+    view["foreign"] = _foreign_count(root, roadmap_rel, team, seen) if seen or split else 0   # 상태 브랜치가 없으면 셀 것이 없다
     waiting = []
     try:
         waiting = [{"roadmap": me, "epic": r["에픽"], "kind": r["종류"], "since": r["언제부터"], "status_computed": None}
@@ -647,6 +699,19 @@ def _add_state_view(root, roadmap_rel: str, me: str, table: list, view: dict) ->
     if view["incoming"] is not None:
         view["unchecked_roadmaps"] += [(n, LETTERS_UNREAD) for n in view["incoming"].unread if n not in view["status_unreadable"]]
     view["no_fetch"] = _fetch_skips_state_branches(root)
+
+
+def _foreign_count(root, roadmap_rel: str, team, seen: Optional[str]) -> Optional[int]:
+    """내 로드맵의 읽을 끝까지 확인되지 않은 남의 고침 수(규칙 · 대기 줄 경로를 바꾼 커밋) — 재지 못하면 None.
+    닫힘 안의 읽기 함수(`team_status`)로만 센다 — 리더 자리 모듈을 가져오지 않는다."""
+    if seen is None:
+        return None
+    try:
+        rows = cs.load(cs.machine_path(state_root(str(root)), roadmap_rel), roadmap_rel)[cs.TRUST]
+    except Exception:   # 기계 상태를 읽지 못함 — 재지 못함(I11)
+        rows = None
+    found = TS.foreign_commits(RS.Git(str(root)), seen, TS.trust_of(rows), TS.rules_paths(team) + TS.pending_paths(team))
+    return None if found is None else len(found)
 
 
 # ── show ─────────────────────────────────────────────────────────────────────
@@ -689,6 +754,8 @@ def _touch_lines(view: dict) -> list:
         out.append("- 검사 불가: %s — %s" % (name, why))
     if view["version_unreadable"]:
         out.append("- 읽지 못한 판 파일 %d" % view["version_unreadable"])
+    if view["bad_names"]:
+        out.append("- 이름 꼴이 틀린 상태 브랜치 %d" % view["bad_names"])
     return out or ["- 닿는 것 없음"]
 
 
@@ -732,7 +799,8 @@ def render_view(view: dict, now=None) -> str:
         head = NO_STATUS + "\n"
     else:
         head = "\n".join(CB.visible(line) for line in view["status_text"].split("\n"))   # 내 글도 화면에 낼 때는 한 번 거른다
-    out = [head, "다른 로드맵과 닿는 것 (계산 %s)" % _when(view["computed"], now)] + _touch_lines(view)
+    line = None if view["unavailable"] else foreign_line(view["foreign"])
+    out = [head] + ([line] if line else []) + ["다른 로드맵과 닿는 것 (계산 %s)" % _when(view["computed"], now)] + _touch_lines(view)
     if not view["unavailable"]:
         out += _state_lines(view, now)
     return "\n".join(out) + "\n"

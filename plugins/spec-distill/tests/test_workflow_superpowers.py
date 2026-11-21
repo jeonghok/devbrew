@@ -9,11 +9,13 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO / "plugins" / "spec-distill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import check_bundle_coverage as cbc  # noqa: E402
+import conductor_state as cs  # noqa: E402
 import team_files as F  # noqa: E402
 import workflow_superpowers as WS  # noqa: E402
 
@@ -75,6 +77,33 @@ class OnePlaceForTheTaskShape(unittest.TestCase):   # AC17 — 변환기 밖에 
         self.assertFalse(hasattr(cbc, "plan_task_text"))
         spec = "## Acceptance Criteria\n\n- AC1: 가\n- AC2: 나\n- AC3: 다\n- AC4: 라\n"
         self.assertEqual(cbc.check_plan(spec, PLAN)["missing"], ["AC1", "AC4"])
+
+
+
+class OneRulingRule(unittest.TestCase):   # R3 AC18 — 판정 줄 규칙 하나(Q1 = 가)
+    CASES = (("- Ruling: 가", "가"), ("Ruling: 나", "나"), ("Task 3: Ruling: 다", "다"),
+             ("- **Ruling: 라**", "라**"), ("- parked — x — Ruling: 마", "마"),
+             ("원장의 `Ruling:` 줄을 읽는다", "` 줄을 읽는다"), ("판정 없음", None), ("Ruling:", None))
+
+    def test_the_rule(self):
+        for line, said in self.CASES:
+            self.assertEqual(WS.ruling_said(line), said, line)
+
+    def test_every_ledger_reader_uses_the_rule(self):   # 붉어지는 변이: 둘 가운데 하나가 자기 규칙으로 돌아간다
+        text = "\n".join(line for line, _said in self.CASES)
+        picked = [l for l, s in self.CASES if s is not None]
+        self.assertEqual(cs.ledger_rulings(text), [l.strip() for l in picked])
+        self.assertEqual(WS.ledger_lines(text, 3), ["Ruling: " + s for _l, s in self.CASES if s is not None])
+        with mock.patch.object(WS, "ruling_said", return_value=None):   # 함수를 바꾸면 둘의 답이 함께 바뀐다
+            self.assertEqual((cs.ledger_rulings(text), WS.ledger_lines(text, 3)), ([], []))
+
+    def test_result_file_grammar_is_unchanged(self):   # 결과 파일 기계 줄은 줄 머리 — 형식 정본의 계약 · 빈 판정 줄도 지금처럼 판정
+        r = F.parse_result("---\ntype: job-result\nstage: plan\nattempt: 1\nrole: worker\nhead: %s\nbundle_at: %s\njob_at: %s\n---\n\nRuling: 가\nRuling:\n메모 — Ruling: 나\n" % (("a" * 40,) * 3))
+        self.assertEqual(r.rulings, ["Ruling: 가", "Ruling:"])
+
+    def test_the_mark_lives_in_one_place(self):   # S1 — 「한 곳」 락. 붉어지는 변이: 다른 스크립트에 "Ruling:" 글자를 둔다
+        hits = sorted(p.name for p in SCRIPTS.glob("*.py") if '"Ruling:"' in p.read_text(encoding="utf-8"))
+        self.assertEqual(hits, ["workflow_superpowers.py"])
 
 
 if __name__ == "__main__":

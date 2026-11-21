@@ -106,7 +106,7 @@ PRC=0
 import sys
 sys.path.insert(0, sys.argv[1])
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 import start_bundle
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
@@ -125,7 +125,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import start_bundle
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
 ) || PRC=$?
@@ -411,6 +411,8 @@ assert_eq "$(job --job fix-typo --stage implement)" "0" "멈춤 픽스처를 치
 SYNC_Q="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import start_bundle as B; print(B.sync_line("my dir/it'"'"'s.md", "worker", "abc", "def"))' "$S")"
 assert_contains "$SYNC_Q" "--result 'my dir/it'\\''s.md' --role worker --bundle-at abc --job-at def" "AC16: 쓸 것의 경로가 낱말 하나로 감싸인다"
 assert_eq "$(bash -c "set -- ${SYNC_Q#*job sync }; echo \$#:\$2")" "8:my dir/it's.md" "AC16: 줄을 셸에 붙이면 낱말 여덟이고 경로는 한 낱말이다"
+SYNC_R="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import start_bundle as B; print(B.sync_line("my dir/it'"'"'s.md", "worker", "abc", "def", "ghi"))' "$S")"
+assert_eq "$(bash -c "set -- ${SYNC_R#*job sync }; echo \$#:\$2:\${9}:\${10}")" "10:my dir/it's.md:--rules-at:ghi" "R3 AC15: 규칙 커밋을 주면 낱말 열이고 끝 두 낱말이 --rules-at 과 그 커밋이다"
 
 # ── 끝에서 끝 — 새 레포: create --layout team → 공통 문서 → job new → 시작 묶음 → 맞추는 명령 → 끝 줄 → 결과 대조 → 받음 줄 → 결과 받음.
 #    걸음마다 앞 걸음의 출력을 다음 걸음이 받는다 ──

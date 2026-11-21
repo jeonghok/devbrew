@@ -355,6 +355,8 @@ class HumanLines(unittest.TestCase):   # R2 AC22 — 계획 1 몫
             self.assertIn(word, text, word)
         self.assertEqual(SB.sync_line("a b", "worker", "x", "y"), "맞추는 명령: python3 %s job sync --result 'a b' --role worker --bundle-at x --job-at y"
                       % SB.roadmap_status._sh_word(str(Path(SB.__file__).resolve().parent / "roadmap_write.py")))
+        self.assertEqual(SB.sync_line("a b", "worker", "x", "y", "z"),
+                         SB.sync_line("a b", "worker", "x", "y") + " --rules-at z")   # B1 — 넷인 부름은 그대로 · 다섯째는 끝에만
         self.assertIn("위 꼴의 `<…>` 는 자리표시다", text)
         self.assertNotIn("위 꼴의 따옴표는 자리표시의 표기이고", text)
         self.assertNotIn('맞추는 명령: python3 "<roadmap_write.py', text)   # 출력 꼴 블록의 경로 둘레에 따옴표를 두지 않는다

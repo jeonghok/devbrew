@@ -296,6 +296,7 @@ assert_not_contains "$(warns "$OUT" A1)" "PR 상태 미확인" "캐시 없음: �
 assert_contains "$txt" "경로 예약 겹침과 다른 에픽이 예약한 파일의 편집은 경고가 아니라 정보다" "공시: 겹침 · 위반은 정보"
 assert_contains "$txt" "경로 예약 겹침(정보): 1개" "사람용 글: 겹침은 정보 머리 아래"
 assert_contains "$txt" "    정보: 경로 예약 위반: src/j.txt 은 J1 만 예약했다" "사람용 글: 위반은 「정보:」 줄"
+assert_not_contains "$txt" "로드맵 밖 과제" "AC20: 옛 형식 로드맵의 글 출력에는 「로드맵 밖 과제」 줄이 없다(R3 M21 — team 보고에만)"
 
 # ── 1b. 정보만 있는 로드맵은 rc 0 — 같은 로드맵에 진짜 경고 하나를 더하면 rc 1(양성 짝) ──
 mkdir -p "$W/docs/rm5" "$W/docs/rm6"
@@ -429,7 +430,7 @@ if os.environ.get("LOCAL_DIR"):
 ARGS = {os.path.basename(a)[:-3] for a in sys.argv[1:]}
 # 상태 계산이 잠긴 파일 밖에서 이름으로만 가져오는 읽기 함수 — PR 캐시 읽기 · 적은 번호 읽기 · origin 소유자 읽기
 READERS = {"conductor_state": {"MachineError", "machine_path", "parse_machine",
-                               "EPIC_PR", "RECORDED_MISSING", "recorded_cache_row", "recorded_number"},
+                               "EPIC_PR", "RECORDED_MISSING", "recorded_cache_row", "recorded_number", "TRUST"},
            "gh_repo": {"GhStop", "origin_slug"},
            "state_path": {"state_root_for_common"}}
 

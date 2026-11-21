@@ -523,6 +523,14 @@ assert_eq "$(rc) · $(st E1)" "${before_rc} · 구현 끝" "AC11: 종료 코드�
 decide E1 "예약 밖 변경 · 2026-11-26 · 「docs/free.md 를 함께 고쳤다」" && step "예약 밖 변경 결정 줄" || fail_step "예약 밖 변경 결정 줄"
 assert_contains "$(notes E1)" "예약 밖 변경: docs/free.md · $TM/RULES.md" "Q13: 결정 기록의 예약 밖 변경 줄은 알림을 끄지 않는다"
 back "$RECEIVED_AT"
+# 예약 밖 변경 줄임(R3 Q2) — 다섯이면 다섯 그대로, 넘으면 이름 순 앞 다섯과 「외 n개」
+outline() { js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E1' for n in b['notes'] if n.startswith('예약 밖 변경: ')]"; }
+put docs/out-a.md a && put docs/out-b.md b && put docs/out-c.md c && put docs/out-d.md d && put docs/out-e.md e && step "예약 밖 다섯" || fail_step "예약 밖 다섯"
+assert_eq "$(outline)" "['예약 밖 변경: docs/out-a.md · docs/out-b.md · docs/out-c.md · docs/out-d.md · docs/out-e.md']" "Q2: 예약 밖 파일이 다섯이면 다섯 그대로"
+put docs/out-0.md 0 && put docs/out-z.md z && step "예약 밖 일곱" || fail_step "예약 밖 일곱"
+assert_eq "$(outline)" "['예약 밖 변경: docs/out-0.md · docs/out-a.md · docs/out-b.md · docs/out-c.md · docs/out-d.md 외 2개']" \
+  "Q2: 예약 밖 파일이 일곱이면 이름 순 앞 다섯과 「외 2개」"
+back "$RECEIVED_AT"
 # 어긋남(AC28) — 작업 폴더의 INTENT.md 칸 하나씩
 sub "$J1/INTENT.md" "첫 읽기를 만든다" "첫 읽기를 만든다." && step "목표 칸 고침" || fail_step "목표 칸 고침"
 assert_contains "$(notes E1)" "INTENT.md 가 로드맵 블록과 다르다: E1 — 목표 칸이 로드맵의 의도 · 범위와 다르다" "AC28: 목표 칸이 로드맵 블록과 다르면 알린다"

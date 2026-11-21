@@ -164,9 +164,10 @@ cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<로드맵>"
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md
 Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md
 ```
 
-두 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+세 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 `conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 부르지 않고 진행할 때의 것이다 — 이 skill 안에서는 따르지 않는다.
 

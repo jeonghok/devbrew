@@ -3,7 +3,8 @@
 """start_bundle.py — 일꾼이 시작할 때 받는 묶음. 읽기만 하고 표준 출력으로만 낸다.
 
 모든 글은 기본 브랜치의 커밋에서 읽는다(작업 폴더의 사본은 읽지 않는다). 팀 규칙 파일만
-`team_layout.leader_ref` 가 말하는 커밋에서 읽는다(리더가 쓰는 파일).
+`team_layout.leader_ref` 가 말하는 커밋에서 읽는다(리더가 쓰는 파일) — 상태 브랜치가 켜져 있고 남의 고침 없는
+규칙 사본이 있으면 그 끝, 아니면 기본 브랜치(`team_status.rules_tip`).
 
 과제 폴더(INTENT.md · 설계 · 계획 · 결과 파일)는 과제 브랜치의 끝에서 읽는다 — 끝은 `team_status.read_tip` 이 고르고,
 브랜치가 아직 없으면 기준 커밋에서 읽고 알린다.
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import conductor_state  # noqa: E402
 import human_lines  # noqa: E402
 import job_results  # noqa: E402
 import repo_defaults  # noqa: E402
@@ -30,6 +32,7 @@ import team_layout  # noqa: E402
 import team_rules  # noqa: E402
 import team_status  # noqa: E402
 from roadmap_model import DEFAULT_REF, FormatError, parse_roadmap  # noqa: E402
+from state_path import state_root  # noqa: E402
 from workflow_superpowers import place_sentence  # noqa: E402
 
 PREFIX = "[spec-distill] "
@@ -41,14 +44,17 @@ NO_BRANCH_FIELD = "블록 %s 의 브랜치 칸에 브랜치가 없다"
 ALREADY_MERGED = "%s 는 이미 기본 브랜치에 머지됐다"
 PLAIN_NO_PLAN = "설계 없는 흐름의 결과 파일에는 계획 번호가 붙지 않는다"
 SYNC_LINE = "맞추는 명령: python3 %s job sync --result %s --role %s --bundle-at %s --job-at %s"
+RULES_AT_TAIL = " --rules-at %s"
 MERGED_PLAN = "%s 는 이미 기본 브랜치에 머지됐다(%s) — 머지 뒤에 고칠 일은 새 계획이나 새 과제로 연다"
 UNMERGED_UNKNOWN = "머지 여부를 확인하지 못했다: %s"
 
 
-def sync_line(write: str, role: str, bundle_at: str, job_at: str) -> str:
-    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13)."""
+def sync_line(write: str, role: str, bundle_at: str, job_at: str, rules_at: Optional[str] = None) -> str:
+    """`맞추는 명령` 줄 — 낱말마다 셸에 그대로 붙여도 되게 감싼다(J13). rules_at(팀 규칙을 읽은 상태 브랜치 커밋)이
+    있으면 끝에 `--rules-at <커밋>` 을 붙이고, 없으면 그 꼬리 없이 낸다."""
     words = [roadmap_status._sh_word(str(Path(__file__).resolve().parent / "roadmap_write.py"))]
-    return SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
+    line = SYNC_LINE % tuple(words + [roadmap_status._sh_word(w) for w in (write, role, bundle_at, job_at)])
+    return line + (RULES_AT_TAIL % roadmap_status._sh_word(rules_at) if rules_at else "")
 
 
 class Refused(Exception):
@@ -61,19 +67,32 @@ class Base(NamedTuple):
     roadmaps_dir: str
     team: object
     settings: dict
+    notices: tuple = ()   # 규칙을 읽을 끝의 알림(갈라짐 · 남의 고침) — 묶음의 `알림:` 줄
 
 
 def _opened(base: Base, rev: str, git) -> team_rules.Opened:
     return team_rules.Opened(git, "", base.settings, base.team, rev, rev)
 
 
+def _trust_rows(opened: team_rules.Opened):
+    """기계 상태 `확인한 끝` 절의 줄들. 읽지 못하면 None(남의 고침을 재지 못함)."""
+    roadmap = opened.team.roadmap
+    try:
+        path = conductor_state.machine_path(state_root(opened.top), roadmap)
+        return conductor_state.load(path, roadmap)[conductor_state.TRUST]
+    except (conductor_state.MachineError, OSError):
+        return None
+
+
 def open_base(git, roadmap_rel: str) -> Base:
-    """레포 · 설정 · 기본 브랜치 · 로드맵(team 형식)을 확인하고 읽을 커밋을 정한다."""
+    """레포 · 설정 · 기본 브랜치 · 로드맵(team 형식)을 확인하고 읽을 커밋을 정한다. 설정 오류는 open_team 이 이미 멈춘다."""
     opened = team_rules.open_team(roadmap_rel, default_branch=True)
-    rules_commit = git.commit(team_layout.leader_ref(DEFAULT_REF))
+    on = repo_defaults.state_branch_on(opened.values)
+    tip, notes = team_status.rules_tip(git, opened.team, on, _trust_rows(opened) if on else None)
+    rules_commit = git.commit(team_layout.leader_ref(DEFAULT_REF, tip))
     if rules_commit is None:
         raise Unchecked("리더가 쓰는 파일을 읽을 커밋을 풀지 못했다")
-    return Base(opened.rev, rules_commit, opened.values["roadmaps_dir"], opened.team, opened.values)
+    return Base(opened.rev, rules_commit, opened.values["roadmaps_dir"], opened.team, opened.values, tuple(notes))
 
 
 def role_block(git, base: Base, role: str) -> list:
@@ -116,7 +135,7 @@ def _leader_bundle(roadmap: str) -> str:
     base = open_base(git, roadmap)
     role = role_block(git, base, team_layout.LEADER_ROLE)
     rules, notices = rules_block(git, base)
-    return emit("기준 커밋: %s" % base.commit, notices, role + rules)
+    return emit("기준 커밋: %s" % base.commit, list(base.notices) + notices, role + rules)
 
 
 # ── 과제 묶음 ────────────────────────────────────────────────────────────────
@@ -367,7 +386,8 @@ def _job_bundle(a) -> str:
             _streak_stop(git, commit, team, job, scope, intent, number, attempt)
         write = team.result(job, stage, attempt, number)
         role = a.role or team_layout.default_role(stage)
-        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit)]
+        rules_at = base.rules_commit if base.rules_commit != base.commit else None   # 상태 브랜치에서 읽은 규칙만(H1)
+        tail = ["쓸 것: %s" % write, sync_line(write, role, base.commit, commit, rules_at)]
         if stage == DESIGN:
             tail.append("쓸 자리: %s" % place_sentence(team.design(job), stage))
         elif stage == PLAN:
@@ -381,7 +401,7 @@ def _job_bundle(a) -> str:
     body += rules
     if stage == REVIEW:
         body += _review_block(git, base)
-    return emit("기준 커밋: %s · 과제 브랜치 %s" % (base.commit, commit), notices + rule_notices, body)
+    return emit("기준 커밋: %s · 과제 브랜치 %s" % (base.commit, commit), notices + list(base.notices) + rule_notices, body)
 
 
 def _positive(value: str) -> int:
