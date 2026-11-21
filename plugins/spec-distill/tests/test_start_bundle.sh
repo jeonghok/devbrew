@@ -301,6 +301,17 @@ g checkout -q feature/tm-e1 && g revert --no-edit HEAD >/dev/null && jpush
 g checkout -q main
 assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "과제: 머리 job 을 되돌리면 다시 0(양성 대조)"
 
+# INTENT.md 머리말이 닫히지 않았다 — 로드맵 블록의 과제는 1(멈춤)이다(K22. 로드맵 밖 과제는 위 「깨진 머리」 가 3 으로 잰다 — 짝)
+g checkout -q feature/tm-e1 && put "$E1/INTENT.md" "$(printf -- '---\ntype: job\nkind: epic')" && g commit -qm "머리말을 닫지 않음" && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage design)" "1" "과제: 로드맵 블록 과제의 INTENT.md 머리말이 닫히지 않았으면 1(멈춤)"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 닫히지 않은 머리 — 표준 출력이 비었다"
+assert_contains "$(cat "$T/job.err")" "멈춤 — " "과제: 닫히지 않은 머리 — 멈춤 머리"
+assert_contains "$(cat "$T/job.err")" "머리를 읽지 못했다" "과제: 닫히지 않은 머리 — 사유"
+g checkout -q feature/tm-e1 && g revert --no-edit HEAD >/dev/null && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage design)" "0" "과제: 머리말을 되돌리면 다시 0(양성 대조)"
+
 # 로컬이 앞선 과제 브랜치 · 갈라진 과제 브랜치
 g checkout -q feature/tm-e1 && put "$E1/local.md" "올리지 않은 고침" && g commit -qm "올리지 않음"
 LOCAL="$(g rev-parse feature/tm-e1)"

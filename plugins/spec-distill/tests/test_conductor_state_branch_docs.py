@@ -7,7 +7,6 @@ Run (리포 루트에서): python3 -m unittest plugins/spec-distill/tests/test_c
 from __future__ import annotations
 
 import ast
-import json
 import shutil
 import subprocess
 import sys
@@ -196,13 +195,14 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
         for word in ("rules_at", "--rules-at", "pending.md", "rules-base.md", "team_status.rules_tip", "확인한 끝"):
             self.assertIn(word, text, word)
 
-    def test_readme_and_changelog_section_of_this_version(self):
+    def test_readme_and_changelog_section_of_8_28_0(self):
         readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
         for word in ("rules-add", "rules-branch", "confirm", "pending.md", "rules_at"):
             self.assertIn(word, readme, word)
-        version = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
-        log = (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")
-        section = log.split("\n## [%s]" % version, 1)[1].split("\n## [", 1)[0]
+        heads = ("\n" + (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")).split("\n## [")[1:]
+        mine = [body for body in heads if body.startswith("8.28.0] — ")]
+        self.assertEqual(len(mine), 1, "CHANGELOG 에 8.28.0 절이 하나가 아니다")   # 판 글자로 고른다 — plugin.json 의 지금 판으로 고르면 다음 판 올림에 다른 절을 본다
+        section = mine[0]
         for word in ("leader_seat.py", "rules_at", "pending.md", "확인한 끝", "confirm"):
             self.assertIn(word, section, word)
 

@@ -2157,6 +2157,64 @@ class TeamRecords(Repo):   # R1 AC16
         self.assertIn("record --human", out)
         self.assertEqual(intent.read_bytes(), before)
 
+    def test_old_args_open_while_the_gate_is_off(self):   # 계획 1 이 재지 못한 변이 — 옛 인자 막기가 관문이 꺼져도 늘 적용되는 경우
+        intent, _design = team_tree(self)
+        (self.w / ".devbrew.md").write_text("---\nhuman_gate: 끔\n---\n", encoding="utf-8")
+        sh(self.w, "add", ".devbrew.md")
+        sh(self.w, "commit", "-qm", "관문 끔")
+        sh(self.w, "push", "-q", "origin", "trunk")
+        sh(self.w, "fetch", "-q", "origin")
+        self.assertFalse(L._gate_on(self.w))   # 양성 대조 — 기본 브랜치의 설정을 읽었다
+        rc, out = self.cli("record", "--spec", str(intent), "--approval", "--date", "2026-11-20", "--choice", "승인 — 계획 담당자에게")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("- spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」", intent.read_text(encoding="utf-8"))
+
+    def _human_state(self):
+        """record --human 이 쓸 답을 찾는 상태 — 아래 협력자들은 막고 쓰기 전 자가 검사(HL.match)만 바꿔 본다."""
+        from unittest import mock
+        intent, _design = team_tree(self)
+        rd = repo_defaults.resolve(str(self.w))["values"]["roadmaps_dir"]
+        team = TL.team_from_roadmap(rd, rd + "tq/" + TL.ROADMAP_FILE)
+        rev = "abc12345"
+        target = L.Target(team, "E1", L.HL.KIND_SPEC, None, team.design("E1"), L.HL.head("E1", rev), None, rev, "t" * 40, (), None)
+        ans = L.session_record.Answer(SID, "00000000-0000-4000-8000-000000000001", 1, L.HL.head("E1", rev) + " — 질문",
+                                      "승인 — 계획 담당자에게", L.session_record.HUMAN, "", "2026-11-20T12:00:00.000Z")
+        for patch in (mock.patch.object(L, "_human_target", return_value=target),
+                      mock.patch.object(L.cs, "holder", return_value=SID),
+                      mock.patch.object(L.session_record, "locate", return_value=Path("x")),
+                      mock.patch.object(L.session_record, "answers", return_value=[ans]),
+                      mock.patch.object(L, "_job_lines", return_value=([], []))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return intent, ["record", "--human", "spec 승인", "--roadmap", team.roadmap, "--job", "E1"]
+
+    def test_record_human_checks_itself_before_writing(self):   # 쓰기 전에 쓰려는 줄을 대조 판정에 한 번 더 건다(설계 §2)
+        from unittest import mock
+        intent, args = self._human_state()
+        before = intent.read_bytes()
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.MISMATCH, "x", None, "")):
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 1, out)
+        self.assertIn(L.HL.MISMATCH, out)
+        self.assertEqual(intent.read_bytes(), before)
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.UNCHECKED, "x", None, "")):
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 3, out)
+        self.assertEqual(intent.read_bytes(), before)
+        with mock.patch.object(L.HL, "match", return_value=L.HL.Verdict(L.HL.PASS, "x", None, "")):   # 양성 대조
+            rc, out = self.cli(*args)
+        self.assertEqual(rc, 0, out)
+        self.assertNotEqual(intent.read_bytes(), before)
+
+    def test_plan_and_retry_names_round_trip(self):   # 걸음 건너뜀의 관문 이름 ↔ 묶음 차례
+        self.assertEqual(L._retry_of(L.HL.retry_name(2, 3)), (2, 3))
+        self.assertEqual(L._retry_of(L.HL.retry_name(None, 3)), (None, 3))
+        raw = L.HL.render(L.HL.KIND_PLAN, "2026-11-20", "계획대로 구현한다", "plan-12.md", "abc12345", SID,
+                          "00000000-0000-4000-8000-000000000001#1")
+        parsed = L.HL.parse(raw)
+        self.assertIsNotNone(parsed, raw)
+        self.assertEqual(parsed.plan, 12)
+
     def test_human_commands_refuse_the_old_format(self):   # 옛 형식 로드맵에서는 사용법 어긋남
         for cmd in (("ask-head",), ("record",)):
             rc, out = self.cli(*cmd, "--human", "spec 승인", "--roadmap", RM, "--job", "A1")

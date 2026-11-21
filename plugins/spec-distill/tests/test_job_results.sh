@@ -323,8 +323,12 @@ assert_eq "$(GIT_ICASE_PATHSPECS=1 pyq 'git.touched("v/code-after", ["feature/tm
 assert_eq "$(pyq 'git.touched("v/code-after", ["feature/tm-e1", "main"], ["src/e1/"])')" "['src/e1/b.txt']" "Git.touched: 양성 대조 — 변수 없이 같은 호출이 그 파일을 본다"
 assert_eq "$(GIT_LITERAL_PATHSPECS=1 pyq 'git.env.get("GIT_LITERAL_PATHSPECS")')" "1" "Git.touched 의 환경만 끈다 — Git.env 에는 그 변수가 그대로다"
 assert_eq "$(NOMAIN=1 rcpt v/code-after "$LINE_GOOD")" "세지 않음|받음 줄을 세지 않았다: implement-plan-1-1.md — 기본 브랜치를 몰라 받은 뒤의 변경을 가르지 못했다|implement-plan-1-1.md" "받음: 기본 브랜치를 모르면 받은 뒤의 변경을 세지 않고 세지 않음"
-design_more() { printf '\n받은 뒤 설계에 더한 문단\n' >> "$W/$TM/jobs/E1/design.md"; }
+design_more() { python3 -c 'import sys; p = sys.argv[1]; t = open(p, encoding="utf-8").read(); i = t.index("\n# ") + 1; j = t.index("\n", i) + 1; open(p, "w", encoding="utf-8").write(t[:j] + "\n받은 뒤 설계 본문에 더한 문단\n" + t[j:])' "$W/$TM/jobs/E1/design.md"; }   # 제목 줄 바로 아래 = 본문(미룸 절이 아니다 — K13)
 variant "$GOOD" design-after design_more || no "변이 브랜치 design-after 를 만들지 못했다"
+STUBG='type("G", (), {"blob": lambda s, r, p: None, "absent": lambda s, r, p: ABS, "run": lambda s, *a: (128, "")})()'
+assert_eq "$(pyq "JR._same_since($(printf '%s' "$STUBG" | sed 's/ABS/False/'), 'h', 't', 'src/e1/x.txt', '$TM/jobs/E1/', '$TM/jobs/E1/design.md')")" "False" "_same_since: 양쪽을 다 읽지 못하고 부재도 확인되지 않으면 다르다(낡음)"
+assert_eq "$(pyq "JR._same_since($(printf '%s' "$STUBG" | sed 's/ABS/False/'), 'h', 't', '$TM/jobs/E1/design.md', '$TM/jobs/E1/', '$TM/jobs/E1/design.md')")" "False" "_same_since: 본문 파일도 양쪽을 읽지 못하고 부재가 확인되지 않으면 다르다"
+assert_eq "$(pyq "JR._same_since($(printf '%s' "$STUBG" | sed 's/ABS/True/'), 'h', 't', 'src/e1/x.txt', '$TM/jobs/E1/', '$TM/jobs/E1/design.md')")" "True" "_same_since: 양성 대조 — 양쪽 다 부재가 확인되면 같다"
 assert_eq "$(rcpt v/design-after "$LINE_GOOD" | cut -d'|' -f1,2)" "낡음|받은 뒤 바뀜: implement-plan-1-1.md — $TM/jobs/E1/design.md" "받음: design.md 변경 — 낡음"
 plan_more() { printf '\n받은 뒤 계획에 더한 문단\n' >> "$W/$TM/jobs/E1/plan-1.md"; }
 variant "$GOOD" plan-after plan_more || no "변이 브랜치 plan-after 를 만들지 못했다"

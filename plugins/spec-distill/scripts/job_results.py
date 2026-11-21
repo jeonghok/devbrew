@@ -234,6 +234,30 @@ def _kept(path: str, job_dir: str, design: str, outputs: list) -> bool:
     return any(path == o or path.startswith(o.rstrip("/") + "/") for o in outputs)
 
 
+def _oid(git, rev: str, path: str):
+    """그 판의 그 경로가 가리키는 객체 번호 — 읽히지 않으면 None(없음과 읽지 못함을 가르지 않는다)."""
+    rc, out = git.run("rev-parse", "--verify", "%s:%s" % (rev, path))
+    return out.strip() if rc == 0 and out.strip() else None
+
+
+def _same_since(git, head: str, tip: str, path: str, job_dir: str, design: str) -> bool:
+    """그 경로의 글이 받은 head 와 지금 끝에서 같은가(K13). 그 과제의 설계 파일(design)과 과제 폴더(job_dir) 바로 아래
+    계획 파일만 body_of 의 본문으로 견주고, 그 밖은 — 이름이 같은 예약 경로의 파일도 — 객체 번호로 견준다(바이너리 · 링크 ·
+    줄바꿈까지 그대로). 읽지 못한 쪽이 있으면 부재를 git 에 확인해 양쪽 다 확인된 부재일 때만 같다 — git 이 읽지 못한
+    것은 다르다(낡음 쪽 — 닫는 쪽)."""
+    own_plan = path.startswith(job_dir) and team_layout.plan_number(path[len(job_dir):]) is not None
+    if path == design or own_plan:
+        name = path.rsplit("/", 1)[-1]
+        before, now = git.blob(head, path), git.blob(tip, path)
+        if before is not None and now is not None:
+            return human_lines.body_of(name, before) == human_lines.body_of(name, now)
+    else:
+        before, now = _oid(git, head, path), _oid(git, tip, path)
+        if before is not None and now is not None:
+            return before == now
+    return git.absent(head, path) and git.absent(tip, path)
+
+
 def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: str, plan,
             reserved: list, outputs: list) -> tuple:
     """(상태, 알림 줄 목록, 가장 새 결과 파일 이름 | None). 결정 기록의 받음 줄을 그 결과 파일로 다시 잰다.
@@ -267,7 +291,7 @@ def receipt(git, main: str, tip: str, team, job: str, intent_text: str, stage: s
     changed = git.touched(tip, [head, main], list(reserved) + list(outputs) + [design, job_dir])
     if changed is None:
         return NOT_COUNTED, notes + [file_note(NOT_COUNTED_HEAD, last.name, "받은 뒤의 변경을 읽지 못했다")], latest
-    left = [p for p in changed if _kept(p, job_dir, design, outputs)]
+    left = [p for p in changed if _kept(p, job_dir, design, outputs) and not _same_since(git, head, tip, p, job_dir, design)]
     if left:
         shown = " · ".join(left[:SHOWN_FILES])
         if len(left) > SHOWN_FILES:

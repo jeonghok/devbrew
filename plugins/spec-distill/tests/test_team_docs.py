@@ -357,7 +357,10 @@ class HumanLines(unittest.TestCase):   # R2 AC22 — 계획 1 몫
                       % SB.roadmap_status._sh_word(str(Path(SB.__file__).resolve().parent / "roadmap_write.py")))
         self.assertEqual(SB.sync_line("a b", "worker", "x", "y", "z"),
                          SB.sync_line("a b", "worker", "x", "y") + " --rules-at z")   # B1 — 넷인 부름은 그대로 · 다섯째는 끝에만
-        self.assertIn("위 꼴의 따옴표는 자리표시의 표기이고", text)
+        self.assertIn("위 꼴의 `<…>` 는 자리표시다", text)
+        self.assertNotIn("위 꼴의 따옴표는 자리표시의 표기이고", text)
+        self.assertNotIn('맞추는 명령: python3 "<roadmap_write.py', text)   # 출력 꼴 블록의 경로 둘레에 따옴표를 두지 않는다
+        self.assertIn("INTENT.md 머리를 읽지 못하면 로드맵 블록의 과제는 1(멈춤)이고, 로드맵 밖 과제는 과제로 세지 못해 3(검사 불가)이다.", text)   # 종료 코드 1 · 3 의 경계(K22)
 
     def test_readme_changelog_and_dependencies(self):
         readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
