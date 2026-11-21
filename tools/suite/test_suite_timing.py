@@ -230,5 +230,93 @@ class PeerCountTests(unittest.TestCase):
                     kill_tree_if_ours(read_pid(f), self.tmp)
 
 
+class UnittestDirTimingTests(unittest.TestCase):
+    RUNNER = os.path.join(HERE, "run_unittest_dir.py")
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-pymod-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        os.makedirs(os.path.join(self.tmp, "pkg", "tests"))
+
+    def write(self, name, body):
+        with open(os.path.join(self.tmp, "pkg", "tests", name), "w", encoding="utf-8") as fh:
+            fh.write(body)
+
+    def run_runner(self, timing=None):
+        env = clean_env()
+        if timing is not None:
+            env["SUITE_TIMING_FILE"] = timing
+        proc = subprocess.run([sys.executable, self.RUNNER, "pkg/tests"], cwd=self.tmp, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=120)
+        return proc.returncode, re.sub(r"in \d+\.\d+s", "in Xs", proc.stdout), proc.stderr
+
+    def timing_lines(self, path):
+        with open(path, encoding="utf-8") as fh:
+            return [l for l in fh.read().split("\n") if l]
+
+    def test_pymod_lines_per_module(self):
+        self.write("test_a.py", "import unittest\n\nclass A(unittest.TestCase):\n"
+                   "    def test_1(self): pass\n    def test_2(self): pass\n")
+        self.write("test_b.py", "import time\nimport unittest\n\nclass B(unittest.TestCase):\n"
+                   "    def test_1(self): time.sleep(0.2)\n")
+        out = os.path.join(self.tmp, "timing.tsv")
+        rc, _, err = self.run_runner(out)
+        self.assertEqual(rc, 0, err)
+        lines = self.timing_lines(out)
+        self.assertEqual([l.split("\t")[2] for l in lines], ["pkg/tests/test_a.py", "pkg/tests/test_b.py"])
+        self.assertTrue(all(l.split("\t")[1] == "pymod" for l in lines))
+        self.assertTrue(all(re.fullmatch(r"\d+\.\d{3}", l.split("\t")[0]) for l in lines))
+        b_line = [l for l in lines if l.endswith("test_b.py")][0]
+        self.assertGreaterEqual(float(b_line.split("\t")[0]), 0.2)
+
+    def test_stdout_and_rc_same_with_and_without_var(self):
+        self.write("test_mix.py", "import unittest\n\nclass M(unittest.TestCase):\n"
+                   "    def test_ok(self): pass\n    def test_bad(self): self.fail('boom')\n")
+        out = os.path.join(self.tmp, "timing.tsv")
+        without = self.run_runner()
+        empty = self.run_runner("")
+        with_var = self.run_runner(out)
+        self.assertEqual(without[0], 1)
+        self.assertIn("FAIL: test_bad", without[1])
+        self.assertEqual(with_var[:2], without[:2])
+        self.assertEqual(empty, without)
+        self.assertTrue(os.path.exists(out))
+
+    def test_var_not_inherited_by_tests(self):
+        self.write("test_env.py", "import os\nimport unittest\n\nclass E(unittest.TestCase):\n"
+                   "    def test_env(self):\n"
+                   "        self.assertNotIn('SUITE_TIMING_FILE', os.environ)\n")
+        out = os.path.join(self.tmp, "timing.tsv")
+        rc, stdout, err = self.run_runner(out)
+        self.assertEqual(rc, 0, stdout + err)
+
+    def test_relative_path_refused(self):
+        self.write("test_a.py", "import unittest\n\nclass A(unittest.TestCase):\n    def test_1(self): pass\n")
+        without = self.run_runner()
+        rc, stdout, err = self.run_runner("rel.tsv")
+        self.assertEqual(err.strip().split("\n"),
+                         ["run_unittest_dir: SUITE_TIMING_FILE 은 절대 경로여야 한다 — 기록하지 않는다: rel.tsv"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "rel.tsv")))
+        self.assertEqual((rc, stdout), without[:2])
+
+    def test_unwritable_path_noted_once(self):
+        self.write("test_a.py", "import unittest\n\nclass A(unittest.TestCase):\n    def test_1(self): pass\n")
+        bad = os.path.join(self.tmp, "no-such-dir", "t.tsv")
+        without = self.run_runner()
+        rc, stdout, err = self.run_runner(bad)
+        self.assertEqual(err.strip().split("\n"),
+                         ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + bad])
+        self.assertEqual((rc, stdout), without[:2])
+
+    def test_import_failure_module_keyed_by_file(self):
+        self.write("test_broken.py", "raise ImportError('x')\n")
+        out = os.path.join(self.tmp, "timing.tsv")
+        rc, _, _ = self.run_runner(out)
+        self.assertEqual(rc, 1)
+        keys = [l.split("\t")[2] for l in self.timing_lines(out)]
+        self.assertEqual(keys, ["pkg/tests/test_broken.py"])
+
+
 if __name__ == "__main__":
     unittest.main()
