@@ -132,7 +132,7 @@ L_remade='기록 브랜치가 이미 머지됐으면 기본 브랜치에서 다�
 L_pushnow='기록 브랜치에 쓴 기록은 답을 받은 직후 커밋하고 push 한다 — 다음 PR 을 기다리지 않는다.'
 L_openpr='기록 브랜치의 PR 을 여는 때는 셋이다 — 「잘못 골랐다」 가 하나라도 있으면 바로, 로드맵을 닫을 때(그 PR 이 로드맵을 닫는 PR 이다), 로드맵이 이미 닫힌 뒤 이름으로 청한 리뷰면 답을 받은 직후. 그 밖에는 push 만 해 두고 로드맵을 닫을 때 함께 연다.'
 L_prior='묻기 전에 이 로드맵의 기록 파일 전부(기본 브랜치의 `reviews/` · 에픽 브랜치의 것 · 기록 브랜치의 것)에서 정체(`id`)가 글자로 같은 질문을 찾아, 있으면 가장 최근 것의 질문 글과 답을 함께 적는다 — 「같은 질문」 이라 부르지 않고 그때의 질문 글을 보여 사용자가 판단하게 한다.'
-L_waiting='담당자가 질문을 돌려주면 묻기 전에 — 바로 묻더라도 — `ledger add --section "기다리는 질문"` 으로 한 줄(에픽 번호 또는 `로드맵 밖` · 기대는 일 · 「의도 점검 질문 <k>개 — <보관 폴더 경로>」)을 적는다. spec 승인 앞이면 기대는 일은 「spec 리뷰 시작」 이다. 답을 받았거나 「답하지 않음」 으로 기록 파일에 적은 뒤 그 줄을 지운다(`ledger drop`) — 질문을 띄운 뒤 기록 전에 끊겨도 그 줄이 남는다. 그 줄이 남아 있는 에픽의 spec 리뷰는 시작하지 않는다.'
+L_waiting='담당자가 질문을 돌려주면 묻기 전에 — 바로 묻더라도 — `ledger add --section "기다리는 질문"` 으로 한 줄(에픽 번호 또는 `로드맵 밖` · 기대는 일 · 「의도 점검 질문 <k>개 — <보관 폴더 경로>」)을 적는다. 기대는 일은 spec 승인 앞이면 「spec 리뷰 시작」, 로드맵 끝이면 「로드맵을 닫는 PR」, 그 밖이면 「기록 파일 쓰기」 다. 답을 받았거나 「답하지 않음」 으로 기록 파일에 적은 뒤 그 줄을 지운다(`ledger drop`) — 질문을 띄운 뒤 기록 전에 끊겨도 그 줄이 남는다. 그 줄이 남아 있는 에픽의 spec 리뷰는 시작하지 않는다.'
 L_wrongspec='spec 승인 앞에서 하나라도 있으면 spec 리뷰를 시작하지 않는다 — 그 에픽의 설계 대화로 돌아가 그 질문과 답을 입력으로 설계를 고치고, 고친 설계문서 커밋에 qg 를 다시 보낸다.'
 FIXED='intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 아래 질문의 답은 판정을 바꾸지 않는다.'
 P4_BRANCH='| spec 승인 뒤 · 머지 전 에픽: 재분해 신호로 보인다 — 설계 대화로 돌아가지 않는다.'
@@ -237,7 +237,7 @@ L_endorder='걸음 7 의 마무리(상태 브랜치 지우기 · 자원 정리 �
 L_rc2='rc 가 2 면 지휘자가 부른 꼴이 틀린 것이다 — 그 결과로는 보내지 않고 스크립트가 낸 stderr 줄을 보인 뒤, 부른 꼴을 고쳐 다시 부른다(`--pr` 은 `#` 없이 숫자만 쓴다).'
 L_rc4='rc 가 4 면 먼저 `ledger pr-refresh --roadmap <로드맵> --session <세션> --epic <에픽>` 을 돌린 뒤 스크립트를 한 번 더 부른다 — 그래도 4 면 아래 줄대로 보내지 않고 스크립트가 낸 줄을 보인다.'
 L_cells='`ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽 번호 | 로드맵 밖> · qg 리뷰 · <자리 글자> · <대상> · <사유>"` 로 쓴다 — 에픽 칸에는 에픽 번호(로드맵 리뷰는 `로드맵 밖`), 절 칸에는 `qg 리뷰`, 글 칸에는 자리 글자를 맨 앞에 두고 대상 · 사유를 잇는다.'
-L_cellsnq='칸 대응은 위 `### 보내지 못했거나 셀 수 없이 끝난 리뷰` 와 같다 — 에픽 칸 · 절 칸은 그대로이고 글 칸은 `<자리 글자> · <범위> · <결과 줄>` 이다.'
+L_cellsnq='칸 대응은 위 `### 보내지 못했거나 셀 수 없이 끝난 리뷰` 와 같다 — 에픽 칸 · 절 칸은 그대로이고 글 칸은 `<자리 글자> · <범위> · <결과 줄> · <보관 폴더 경로>` 이다.'
 L_skilltool='부르는 길은 Skill 도구다 — skill 은 `quality-gates:quality-pipeline`, args 는 위 호출 줄에서 skill 이름 뒤의 글 전부(`range` 부터 끝까지)다.'
 once "$SITE" "$L_endorder" "I1: 로드맵 끝 리뷰가 끝난 뒤에 걸음 7 의 마무리를 한다"
 once "$ASK" '`waiting clear --roadmap <로드맵> --session <세션> --epic "<에픽 | 로드맵 밖>" --kind "옮긴 질문"`' "M1: waiting clear 가 옮긴 질문 종류만 내린다"
@@ -274,23 +274,23 @@ for v in "$SENT" "$MERGED" "$FAILED" "$END_" "$LOCK" "$STORE" "$RECF" "$RBR" "$B
 done
 L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸음이다 — 손으로 따르는 절차로 들어왔으면 걸음 5 는 손 절차 8(머지 전 확인), 걸음 7 은 손 절차 9(끝)로 읽고, 걸음 1 · 2 · 3 · 6 은 번호가 같다.'
 L_order='보내는 차례는 아래 `### 이미 보낸 것` 의 확인 → 규모 줄 → `### 스위트 잠금` 의 확인 → 보관 폴더 만들기와 `## 자원` 에 적기(`## 보관과 기록 파일` 의 `### 보관`) → 보내기 → 살아 있는 agent 줄 적기다.'
-L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<보관 폴더 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
-L_livename='이름 칸에는 보관 폴더 이름(`qg-<대상>-<자리>-<날짜>`)을 써서 그 줄이 어느 자리의 담당자인지 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문 · 작업 표와 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
+L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<하니스가 준 agent 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
+L_livename='이름 칸 · 담당 칸은 다른 담당자처럼 하니스가 준 agent 이름이고, 그 담당자가 어느 자리의 것인지는 작업 표 줄의 근거 칸(보관 폴더 경로)으로 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문과 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
 L_sent0='자동으로 보내는 자리 셋(spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝)은 보내기 전에 그 자리를 이미 보냈는지 본다 — 압축이나 새 세션 뒤 들어가는 문장이 다시 불려도 한 번 더 보내지 않는다.'
-L_sent1='- 그 자리의 살아 있는 agent 줄(이름 칸이 `qg-<대상>-<자리>-` 로 시작하는 줄)이 있으면 보내지 않고 그 담당자를 기다린다.'
-L_sent2='- `ledger resources --roadmap <로드맵>` 에 그 자리의 보관 폴더가 있고 그 안에 `intent-return.md` 가 있으면 이미 보낸 것이다 — 다시 보내지 않고 그 파일로 `## 돌아왔을 때` 를 잇는다.'
-L_sent3='- `## 쌓인 기록` 에 그 자리의 `qg 리뷰` 줄(글 칸이 그 자리 글자로 시작하는 줄)이 있거나 `## 기다리는 질문` 에 그 자리의 보관 폴더를 가리키는 줄이 있으면 이미 보낸 것이다 — 다시 보내지 않는다.'
-L_sent4='그 폴더 경로를 사유에 담은 쌓인 기록 줄이 아직 없으면 다시 보내지 않고 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고, 사유에 그 폴더 경로를 담아 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
-L_sentempty='그 줄이 이미 있으면 그 폴더는 더 보지 않는다 — 빈 보관 폴더만으로는 이미 보낸 것으로 치지 않는다.'
+L_sent1='먼저 그 자리의 보관 폴더(`ledger resources --roadmap <로드맵>` 의 경로 칸)마다 아래를 차례로 보고 처음 맞는 줄대로 한다 — 끝난 리뷰는 다시 잇지 않는다.'
+L_sent2='1. 끝난 리뷰 — 그 폴더 경로를 글 칸에 담은 쌓인 기록 `qg 리뷰` 줄이 있거나, 그 폴더를 「보관 사본:」 으로 가리키는 기록 파일(아래 `### 같은 대상에 전에 물은 것` 의 찾는 자리 셋)이 있으면 아무것도 하지 않는다.'
+L_sent3='2. 도는 중 — `ledger live-agent --roadmap <로드맵> --epic <에픽 번호 | 로드맵 밖> --work "qg 리뷰"` 가 낸 이름 가운데 근거 칸이 그 폴더인 `## 작업` 줄의 담당이 있으면 보내지 않고 그 담당자를 기다린다.'
+L_sent4='3. 묻는 중 — `## 기다리는 질문` 에 그 폴더를 가리키는 줄이 있으면 `## 묻기` 대로 묻는다.'
+L_sentempty='4. 결과가 왔다 — 그 폴더 안에 `intent-return.md` 가 있으면 그 파일로 `## 돌아왔을 때` 를 잇는다.'
 L_sentasked='범위를 얻은 뒤에는 `qg-<에픽>-asked-` 로 시작하는 보관 폴더도 본다 — 그 안 `intent-return.md` 의 `reviewed_base` · `reviewed_head` 가 이 PR 의 `start:` · `end:` 와 같으면 사용자가 이름으로 먼저 청해 같은 범위를 이미 본 것이라 다시 보내지 않는다.'
-L_sentspec='보관 폴더 · 쌓인 기록 줄 · 기다리는 질문 줄은 지금 보낼 끝 커밋(에픽 브랜치 끝)과 같은 범위의 것만 센다'
-L_sentend='- 로드맵 끝 — 자리 글자는 `end` 이다. 로드맵마다 한 번이라 자리 글자만으로 가린다. 기록 파일 머리만 기록 브랜치에 커밋돼 있고 보관 폴더가 없으면 아직 보내지 않은 것이다 — 머리를 다시 커밋하지 않고 그 머리로 보낸다.'
+L_sentspec='- spec 승인 앞 — 자리 글자는 `spec` 이다. 보낸 횟수(`qg-<에픽>-spec-` 로 시작하는 보관 폴더 수)가 보내도 되는 횟수(1 + 글 칸이 `spec-resend` 로 시작하는 그 에픽의 쌓인 기록 줄 수)보다 적을 때만 보낸다. 줄의 차례나 커밋 해시로 가리지 않는다.'
+L_sentend='- 로드맵 끝 — 자리 글자는 `end` 다. 로드맵마다 한 번이라 `qg-roadmap-end-` 로 시작하는 보관 폴더도, 글 칸이 `end` 로 시작하는 쌓인 기록 줄도 없을 때만 보낸다. 기록 파일 머리만 기록 브랜치에 커밋돼 있고 보관 폴더가 없으면 머리를 다시 커밋하지 않고 그 머리로 보낸다.'
 L_sentasks='이름으로 청한 리뷰에는 이 확인을 쓰지 않는다 — 사용자가 청했으므로 이미 보낸 리뷰가 있어도 보낸다.'
 L_fetchrange='범위 스크립트를 부르기 전에 `git fetch origin` 을 돌린다 — 걸음 1 의 받아오기 뒤에 머지된 PR 이면 머지 커밋이 아직 이 레포에 없다.'
-L_specline='spec 승인 앞의 줄은 대상 뒤에 보낸 범위(돌아오지 못한 담당자면 지금 보낼 범위)를 넣는다 — `spec · <에픽> · <시작 8자>..<끝 8자> · <사유>`.'
+L_specline='보관 폴더가 있는 리뷰의 줄은 글 칸 끝에 그 폴더 경로를 덧붙인다 — 위 `### 이미 보낸 것` 이 그 폴더를 끝난 리뷰로 보고 돌 때마다 다시 기록하지 않는다.'
 L_qgdrop='절이 `qg 리뷰` 인 쌓인 기록 줄은 로드맵을 닫는 PR(기록 브랜치의 PR 이 없으면 걸음 7 의 기록만 담은 로드맵 수정 PR)만 본문에 싣고 뺀다 — 걸음 6 의 로드맵 수정 PR 과 로드맵 중간의 기록 브랜치 PR 은 이 줄을 싣지도 빼지도 않는다.'
 L_qgpending='`ledger pending` 은 절 칸을 보이지 않으니 글 칸 첫머리의 자리 글자로 가린다.'
-L_endheads='머리를 커밋할 때 `reviewed_base` · `reviewed_head` 는 `-` 로 두고, 담당자가 돌아오면 결과 파일의 값으로 채워 질문과 함께 커밋한다 — 보내기 전에는 결과 파일이 없다.'
+L_endheads='머리를 커밋할 때 `reviewed_base` · `reviewed_head` 는 `"-"` 로 두고, 담당자가 돌아오면 결과 파일의 값으로 채워 질문과 함께 커밋한다 — 보내기 전에는 결과 파일이 없다.'
 L_endpath='보낼 때 사용자에게 알린다 — 「모든 에픽이 머지돼 경로 없이 지휘자를 부르면 『끝나지 않은 로드맵이 없다』 로 멈춘다. 로드맵을 닫을 때까지 다시 부를 때는 `/spec-distill:epic-conductor <로드맵>` 처럼 로드맵 경로를 붙인다.」'
 L_onepr='걸음 7 이 로드맵 수정 PR 본문 `## 지휘 기록` 에 싣는 것(쌓인 기록 · 끝에서 끝으로 걸어 본 결과)은 그 PR(로드맵을 닫는 PR) 본문에 싣는다 — 기록만 담은 로드맵 수정 PR 을 따로 열지 않는다.'
 L_onefile='지휘 기록은 PR 본문에만 싣고 기록 브랜치에 파일로 커밋하지 않는다.'
@@ -301,8 +301,8 @@ L_lockorder='걸음 6 에서 다음 PR 의 스위트 대조와 qg 담당자 보�
 L_filtered='result.md 의 `## intent-critic` 에 `이미 답한 질문이라 거른 질문:` · `이미 「잘못 골랐다」 답이 있어 거른 질문:` 목록이 있으면 그 목록을 글자 그대로'
 L_innertests='전체 스위트를 따로 돌리지 않는다 — qg 안의 테스트 실행은 그대로 둔다.'
 L_shownotice='담당자가 보고한 qg 공시 줄(「원문 없음」 · 「로드맵 없음」 · 거른 수 등)과 거른 질문 목록도 그 자리 이름과 함께 보인다.'
-L_relay='담당자가 미리 받은 답 밖의 질문에서 멈춰 (a) 쉬운 요약 (b) 질문 원문을 돌려보냈으면 아래 차례를 보지 않는다 — `<SD>/references/conductor-dispatch.md` 의 `## 사람 자리` 대로 사용자에게 옮기고, 답을 같은 담당자에게 이어 불러(`SendMessage`) 돌려준다. 「셀 수 없음」 으로 닫지 않는다.'
-L_relayname='그 relay 파일의 폴더는 `ledger resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이고, 로드맵 리뷰의 담당자면 `--name roadmap` 이다. 그 담당자의 worktree 가 이미 지워졌으면 이어 부를 수 없으니 아래 1 로 간다.'
+L_relay='담당자가 미리 받은 답 밖의 질문에서 멈춰 (a) 쉬운 요약 (b) 질문 원문을 돌려보냈으면 아래 차례를 보지 않는다 — 먼저 그 담당자의 worktree 가 아직 있는지 본다 — 지워졌으면 이어 부를 수 없으니 사용자에게 옮기지 않고 아래 1 로 간다.'
+L_relayname='있으면 `<SD>/references/conductor-dispatch.md` 의 `## 사람 자리` 대로 사용자에게 옮기고, 답을 같은 담당자에게 이어 불러(`SendMessage`) 돌려준다. 「셀 수 없음」 으로 닫지 않는다. 그 relay 파일의 폴더는 `ledger resource-dir --roadmap <로드맵> --kind relay --name <에픽>` 이고, 로드맵 리뷰의 담당자면 `--name roadmap` 이다.'
 L_contractrec='「결과 파일의 판(<값>)을 읽지 못한다」 를 보이고, 그 자리의 리뷰를 1 과 같이 「셀 수 없음」 으로 기록한다.'
 L_dashline='`status` 가 `ran` 이 아니면 `reason_text` 를 보이고 끝낸다 — `reason_text` 가 `-` 면 `result_line` 을 함께 보인다.'
 L_samerange='4. `status` 가 `ran` 이면 `reviewed_base` · `reviewed_head` 가 호출 줄에 쓴 시작 · 끝 커밋과 같은지 앞 8자로 견준다. 다르면(`-` 포함) 질문을 옮기지 않고 「결과 파일이 보낸 범위의 것이 아니다(<reviewed_base 앞 8자>..<reviewed_head 앞 8자>)」 를 보이고, 그 자리의 리뷰를 1 과 같이 「셀 수 없음」 으로 기록한다.'
@@ -315,7 +315,7 @@ L_nogain='- 이 질문의 선택지 설명은 얻음 · 내줌 꼴을 쓰지 않
 L_fill='- `target_source` 가 `diff` 면 의심하는 것의 앞부분을 「바뀐 파일 `target_id`」 로 쓴다. `evidence` 가 `-` 면 「(<근거의 종류>)」 괄호를 빼고 「근거로 본 것: <관찰 첫 줄>」 로 잇는다.'
 once "$HEAD_" "$L_stepmap" "나 G: 걸음 번호는 지휘 순환의 것 — 파일 머리에 한 번"
 once "$BEAT" "$L_order" "가 · 나: 보내는 차례(이미 보낸 것 → 규모 → 잠금 → 폴더와 자원 → 보내기 → agent 줄)가 한 박자에 한 번"
-once "$BEAT" "$L_liverow" "나 A: 살아 있는 agent 줄의 칸 — 이름 칸은 보관 폴더 이름 · 에픽 칸은 로드맵 밖"
+once "$BEAT" "$L_liverow" "재리뷰 지적 4: 살아 있는 agent 줄의 칸 — 이름 칸은 하니스가 준 이름 · 에픽 칸은 로드맵 밖"
 once "$BEAT" "$L_livename" "나 A: 이름 칸 · 에픽 칸의 글자"
 assert_not_contains "$ALL" '<이름> · <대상> · qg 리뷰' "나 A 음성: 살아 있는 agent 줄의 에픽 칸에 <대상>(roadmap) 이 없다(양성 짝: L(liverow))"
 for v in L_sent0 L_sent1 L_sent2 L_sent3 L_sent4 L_sentempty L_sentasked L_sentspec L_sentend L_sentasks; do
@@ -328,7 +328,7 @@ once "$MERGED" "$L_fetchrange" "나 D: 범위 스크립트 앞에 fetch"
 f_n="$(printf '%s\n' "$MERGED" | grep -nF -- "$L_fetchrange" | head -1 | cut -d: -f1)"
 r_n="$(printf '%s\n' "$MERGED" | grep -nF -- '- 범위는 `python3 "<SD>"/scripts/merged_pr_range.py' | head -1 | cut -d: -f1)"
 if [ -n "$f_n" ] && [ -n "$r_n" ] && [ "$f_n" -lt "$r_n" ]; then ok "나 D: fetch 줄이 범위 스크립트 줄보다 앞"; else no "나 D: fetch 줄이 범위 스크립트 줄보다 앞이 아니다(fetch=${f_n:-없음} · 스크립트=${r_n:-없음})"; fi
-once "$FAILED" "$L_specline" "나 C: spec 승인 앞의 셀 수 없음 줄은 범위를 싣는다"
+once "$FAILED" "$L_specline" "재리뷰 지적 3: 보관 폴더가 있는 리뷰의 쌓인 기록 줄은 폴더 경로를 싣는다"
 once "$FAILED" "$L_qgdrop" "나 B · M6: qg 리뷰 줄은 로드맵을 닫는 PR 에서만 뺀다"
 once "$FAILED" "$L_qgpending" "나 B: pending 출력에서 qg 리뷰 줄을 가리는 길"
 once "$END_" "$L_endheads" "가 범위 밖: 로드맵 끝 기록 머리의 reviewed_base · reviewed_head"
@@ -344,8 +344,8 @@ once "$LOCK" "$L_lockorder" "나 H(2): 다음 PR 의 스위트 대조가 먼저(
 once "$DISP" "$L_filtered" "나 J: 마지막 보고에 거른 질문 목록 둘"
 once "$DISP" "$L_innertests" "나 H(3): qg 안의 테스트 실행은 그대로 둔다"
 once "$DISP" "$L_shownotice" "나 J: 지휘자가 보일 목록에 qg 공시 줄 · 거른 질문 목록"
-once "$BACK" "$L_relay" "나 E: 사람 자리에서 멈춰 돌아온 담당자 — 사람 자리대로 옮기고 이어 부른다"
-once "$BACK" "$L_relayname" "나 E: 로드맵 리뷰 담당자의 relay 폴더 이름"
+once "$BACK" "$L_relay" "나 E · 재리뷰: 옮기기 전에 담당자 worktree 가 있는지 본다"
+once "$BACK" "$L_relayname" "나 E: 사람 자리대로 옮기고 이어 부른다 · 로드맵 리뷰 담당자의 relay 폴더 이름"
 b_first="$(printf '%s\n' "$BACK" | grep -v '^$' | head -1)"
 assert_eq "$(starts "$b_first" "$L_relay")" "1" "나 E: 사람 자리 갈래가 돌아왔을 때 절의 맨 앞(첫 비지 않은 줄)"
 once "$BACK" "$L_contractrec" "가 넷째: contract 가 2 가 아니어도 셀 수 없음으로 기록"
@@ -360,6 +360,67 @@ once "$WPARA" "$L_waitread" "나 A: 기다리는 질문 절을 읽는 길이 「
 assert_not_contains "$ALL" '돌려줬는데 바로 묻지 못하면' "나 C 음성: 바로 묻지 못할 때만 기다리는 질문 줄을 적던 옛 문장이 없다(양성 짝: L(waiting))"
 once "$ASK" "$L_nogain" "나 O: 질문 설명의 꼴 예외"
 once "$ASK" "$L_fill" "가 계약 2판 독자: diff 표기 · evidence - 괄호 빼기"
+# 좁은 재리뷰 1차 뒤 — 끝난 리뷰 · 차례 · spec 다시 보내기 표지 · 작업 줄 · 없음 표지 YAML
+L_sentlost='5. 돌아오지 못한 리뷰 — 그 밖(빈 폴더 — 세션이 끊긴 경우 등)이면 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
+L_sentmerged='`qg-<에픽>-merged-pr<번호>-` 로 시작하는 보관 폴더도, 글 칸이 `merged-pr<번호>` 로 시작하는 쌓인 기록 줄도 없을 때만 보낸다.'
+L_workrow='`## 작업` 표에 `ledger add --roadmap <로드맵> --session <세션> --section "작업" --cells "qg 리뷰 · <자리 글자> · <에픽 번호 | 로드맵 밖> · 리뷰 중 · <같은 agent 이름> · <보관 폴더 경로>"` 로 한 줄을 적는다.'
+L_resendmark='- 그 두 사건으로 설계 대화에 돌아갈 때 `ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽> · qg 리뷰 · spec-resend · <사건>"` 로 표지 한 줄을 적는다 — 위 `### 이미 보낸 것` 이 이 줄로 다시 보내도 되는 횟수를 센다.'
+L_none='- 머리 칸의 없음 표지는 따옴표에 싸서 `"-"` 로 적는다 — 따옴표 없는 `-` 가 하나라도 있으면 qg 가 머리 전체를 YAML 로 읽지 못해 이 파일의 `roadmap:` 을 따라가지 못한다. 결과 파일의 값이 `-` 여도 같다.'
+once "$SENT" "$L_sentlost" "재리뷰 지적 3: 근거 다섯째 — 돌아오지 못한 리뷰"
+once "$SENT" "$L_sentmerged" "재리뷰 지적 3: 에픽 머지 뒤는 폴더도 쌓인 기록 줄도 없을 때만 보낸다"
+once "$BEAT" "$L_workrow" "재리뷰 지적 4: 작업 표 줄 — 담당은 같은 agent 이름 · 근거는 보관 폴더"
+SPECSEC="$(ssec '### spec 승인 앞')"
+once "$SPECSEC" "$L_resendmark" "재리뷰 지적 2: 설계 대화로 돌아갈 때 spec-resend 표지를 적는다"
+once "$RECF" "$L_none" "재리뷰 지적 1: 머리 칸의 없음 표지는 따옴표에 싼다"
+ev="$(printf '%s\n' "$SENT" | grep -oE '^[1-9]\. (끝난 리뷰|도는 중|묻는 중|결과가 왔다|돌아오지 못한 리뷰) —' | tr '\n' ',')"
+assert_eq "$ev" "1. 끝난 리뷰 —,2. 도는 중 —,3. 묻는 중 —,4. 결과가 왔다 —,5. 돌아오지 못한 리뷰 —," "재리뷰 지적 3: 근거 다섯의 차례(끝난 리뷰가 먼저)"
+assert_not_contains "$ALL" '지금 보낼 끝 커밋' "재리뷰 지적 2 음성: spec 승인 앞을 끝 커밋으로 가르던 문장이 없다(양성 짝: L(sentspec))"
+assert_not_contains "$ALL" '보관 폴더 이름(`qg-<대상>-<자리>-<날짜>`)을 써서' "재리뷰 지적 4 음성: 이름 칸을 보관 폴더 이름으로 쓰던 문장이 없다(양성 짝: L(livename))"
+for k in 'epic: <에픽 번호 | "-">' 'reviewed_base: <결과 파일의 값 | "-">' 'reviewed_head: <결과 파일의 값 | "-">'; do
+  assert_eq "$(starts "$TPL" "$k")" "1" "재리뷰 지적 1: 기록 틀 머리 ${k}"
+done
+# 틀 머리의 자리표를 채운 글(첫 갈래 · 없음 표지 갈래)이 YAML 로 읽히고 roadmap 키가 남는지 — PyYAML 이 없으면 실패로 드러낸다
+YT="$(mktemp -d)" || YT=""
+[ -n "$YT" ] && [ -d "$YT" ] || { no "재리뷰 지적 1: 임시 폴더를 만들지 못했다"; finish; exit 1; }
+trap 'rm -rf "$YT"' EXIT
+cat > "$YT/tpl_yaml.py" <<'QG_TPL_YAML'
+import re, sys
+try:
+    import yaml
+except ImportError:
+    print("PYYAML_MISSING"); sys.exit(0)
+lines = sys.stdin.read().split("\n")
+i = lines.index("---"); j = lines.index("---", i + 1)
+head = lines[i + 1:j]
+PH = re.compile(r"<([^<>]*)>")
+def fill(none):
+    out, keys = [], []
+    for ln in head:
+        def sub(m):
+            alts = [a.strip() for a in m.group(1).split(" | ")]
+            nn = [a for a in alts if a in ("-", '"-"')]
+            if none and nn:
+                keys.append(ln.split(":", 1)[0])
+                return nn[0]
+            return alts[0]
+        out.append(PH.sub(sub, ln))
+    return "\n".join(out) + "\n", keys
+for none in (False, True):
+    text, keys = fill(none)
+    try:
+        d = yaml.safe_load(text)
+    except Exception as e:
+        print("YAML_FAIL %s %s" % (none, type(e).__name__)); continue
+    if not isinstance(d, dict) or "roadmap" not in d:
+        print("NO_ROADMAP %s" % none); continue
+    bad = [k for k in keys if d.get(k) != "-"]
+    print("OK %s %d %s" % (none, len(keys), ",".join(bad) or "-"))
+QG_TPL_YAML
+yaml_out="$(printf '%s\n' "$TPL" | PYTHONDONTWRITEBYTECODE=1 python3 "$YT/tpl_yaml.py")"
+assert_not_contains "$yaml_out" 'PYYAML_MISSING' "재리뷰 지적 1: PyYAML 이 있어 틀 머리를 YAML 로 읽어 본다(없으면 이 락이 재지 못한다)"
+assert_contains "$yaml_out" 'OK False 0 -' "재리뷰 지적 1: 첫 갈래로 채운 틀 머리가 YAML 로 읽히고 roadmap 키가 남는다"
+assert_contains "$yaml_out" 'OK True 3 -' "재리뷰 지적 1: 없음 표지 갈래(셋)로 채운 틀 머리가 YAML 로 읽히고 그 칸들이 - 로 읽힌다"
+
 # 가 다섯째 · 나 K — qg 글자를 qg 파일에서 읽어 견준다(R4 가 바꾸면 빨개진다)
 SKQ="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 ENDLBL="$(awk 'index($0, "범위 모드는 이미 있는 커밋을 본다"){f=1} f&&index($0, "{label: \""){sub(/^[^{]*\{label: "/, ""); sub(/".*/, ""); print; exit}' "$SKQ")"
@@ -429,10 +490,10 @@ for lit in 'intent-return.md' 'merged_pr_range.py' '의도 점검 <n>' 'reviews/
 done
 assert_contains "$(lstep 7)" '품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다' "걸음 7: 설치 안 됨 공시 문장이 남아 있다"
 # conducting.md 걸음 6 · 7 — 한 구절씩
-L_cd6='아직 설계문서로 옮길(`ledger flush`) 줄과 절이 `qg 리뷰` 인 줄(로드맵을 닫는 PR 이 싣고 뺀다)은 두고.'
-L_cd7='기록만 담은 로드맵 수정 PR(로드맵 끝 품질 게이트 리뷰가 돌았으면 그 리뷰의 로드맵을 닫는 PR)로 싣고'
-assert_eq "$(cnt "$(lstep 6)" "$L_cd6")" "1" "나 B: conducting.md 걸음 6 기록 칸 — qg 리뷰 줄은 두고"
-assert_eq "$(cnt "$(lstep 7)" "$L_cd7")" "1" "M6: conducting.md 걸음 7 — 로드맵 끝 리뷰가 돌았으면 닫는 PR 로 싣는다"
+L_cd6='아직 설계문서로 옮길(`ledger flush`) 줄은 두고, 절이 `qg 리뷰` 인 줄은 싣지 않고 둔다(로드맵을 닫는 PR 이 싣고 뺀다).'
+L_cd7='기록만 담은 로드맵 수정 PR(로드맵을 닫는 기록 브랜치 PR 이 있으면 그 PR)로 싣고'
+assert_eq "$(cnt "$(lstep 6)" "$L_cd6")" "1" "재리뷰 지적 6: conducting.md 걸음 6 기록 칸 — qg 리뷰 줄은 싣지 않고 둔다"
+assert_eq "$(cnt "$(lstep 7)" "$L_cd7")" "1" "재리뷰 지적 5: conducting.md 걸음 7 — 닫는 기록 브랜치 PR 이 있으면 그 PR"
 assert_not_contains "$(lstep 6)" '아직 설계문서로 옮길(`ledger flush`) 줄은 두고.' "나 B 음성: 걸음 6 의 옛 구절이 없다(양성 짝: L(cd6))"
 
 SK="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
