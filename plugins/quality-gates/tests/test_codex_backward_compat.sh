@@ -93,7 +93,7 @@ fingerprint() {   # $1 = 테스트 경로 → 정규화된 실패 지문
     *.py) runner="python3" ;;
     *)    runner="bash" ;;
   esac
-  { "$runner" "$1" 2>&1 || true; } \
+  { "$runner" "$1" 2>&1 </dev/null || true; } \
     | grep -E 'FAIL|✗' \
     | sed -e "s|$PLUGIN_ROOT|<REPO>|g" \
           -e 's|/[Vv]ar/folders/[^ ]*|<TMP>|g' \
@@ -106,43 +106,45 @@ fingerprint() {   # $1 = 테스트 경로 → 정규화된 실패 지문
 # 등재된 테스트: 등재된 테스트가 다른 이유로 실패하면(해시 불일치) RED, 등재됐는데
 # GREEN 이면 RED. 목록은 줄어들기만 한다 — 새 red를 등재하는 것은 검토를 마쳤다는 선언이다.
 echo "Checking blessed-red ledger..."
-c3_fail=""
+c3_fail=""   # 사유마다 한 줄(개행으로 잇는다)
 listed_count=0
+c3_add() { c3_fail="${c3_fail}$1"$'\n'; }
 if [[ ! -f "$LEDGER" ]]; then
-  c3_fail="$c3_fail 원장 없음:$LEDGER"
+  c3_add "원장 없음:$LEDGER"
 else
-  while read -r b listed _rest || [[ -n "$b" ]]; do
+  # 원장은 별도 fd(3)로 읽는다 — 다시 돌리는 테스트가 표준 입력을 읽어도 남은 등재 줄을 먹지 못하게.
+  while read -r b listed _rest <&3 || [[ -n "$b" ]]; do
     case "$b" in ''|'#'*) continue ;; esac
     listed_count=$((listed_count + 1))
     t="$PLUGIN_ROOT/tests/$b"
     if [[ "$b" = "$SELF" ]]; then
-      c3_fail="$c3_fail $b(자기 등재)"   # 자기를 다시 돌리면 재귀한다
+      c3_add "$b(자기 등재)"   # 자기를 다시 돌리면 재귀한다
       continue
     fi
     if [[ ! -f "$t" ]]; then
-      c3_fail="$c3_fail $b(등재된 파일 없음)"
+      c3_add "$b(등재된 파일 없음)"
       continue
     fi
     case "$t" in
-      *.py) rc=0; python3 "$t" > /dev/null 2>&1 || rc=1 ;;
-      *)    rc=0; bash "$t" > /dev/null 2>&1 || rc=1 ;;
+      *.py) rc=0; python3 "$t" > /dev/null 2>&1 </dev/null || rc=1 ;;
+      *)    rc=0; bash "$t" > /dev/null 2>&1 </dev/null || rc=1 ;;
     esac
     if [[ "$rc" -eq 0 ]]; then
       # 등재됐는데 GREEN → stale 등재. 지워야 한다.
-      c3_fail="$c3_fail $b(stale 등재)"
+      c3_add "$b(stale 등재)"
     else
       actual="$(fingerprint "$t")"
       # 빈 지문은 유효한 원장 값으로 받아들이지 않는다 — 우연히 listed와 같아도 매치가 아니다.
       if [[ "$actual" == "$EMPTY_DIGEST_SHA256" ]]; then
-        c3_fail="$c3_fail $b(빈지문:FAIL/✗ 줄을 하나도 못 찾음 — fingerprint dispatch 확인)"
+        c3_add "$b(빈지문:FAIL/✗ 줄을 하나도 못 찾음 — fingerprint dispatch 확인)"
       elif [[ "$actual" != "$listed" ]]; then
-        c3_fail="$c3_fail $b(해시불일치:$actual)"
+        c3_add "$b(해시불일치:$actual)"
       fi
     fi
-  done < "$LEDGER"
+  done 3< "$LEDGER"
 fi
 
-if [[ -z "${c3_fail// /}" ]]; then
+if [[ -z "$c3_fail" ]]; then
   if [[ "$listed_count" -eq 0 ]]; then
     echo "  PASS: 등재 0건 — 다시 돌린 테스트 0개"
   else
@@ -150,7 +152,9 @@ if [[ -z "${c3_fail// /}" ]]; then
   fi
   pass=$((pass + 1))
 else
-  echo "  FAIL: 원장 판정 →$c3_fail"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && echo "  FAIL: $line"
+  done <<< "$c3_fail"
   fail=$((fail + 1))
 fi
 
