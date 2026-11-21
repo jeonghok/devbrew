@@ -95,7 +95,7 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("conductor_branch.py", step(4))
 
 
-NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py"}
+NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py", "leader_seat.py"}   # leader_seat — R3 계획 2(S13)
 
 
 def closure(start: str, top_only: bool = False, scripts=None) -> set:
@@ -141,7 +141,7 @@ class Closure(unittest.TestCase):   # J41 — 상태 계산은 새 모듈을 가
             self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, set())   # 심기 전에는 비어 있다
             path = copy / "roadmap_status.py"
             path.write_text("import conductor_status\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
-            self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, {"conductor_status.py", "conductor_branch.py", "conductor_mail.py"})
+            self.assertEqual(closure("roadmap_status.py", scripts=copy) & NEW_MODULES, {"conductor_status.py", "conductor_branch.py", "conductor_mail.py", "leader_seat.py"})
 
 
 class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
@@ -154,7 +154,6 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
         for word in ("conductor/<로드맵 폴더 이름>", "conductor-state-branch.md", "received.md"):
             self.assertIn(word, text, word)
         self.assertNotIn("리더 상태 브랜치는 아직 없다", text)
-        self.assertIn("RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다", text)   # 계획 2 가 옮기면서 이 단언을 뒤집는다
 
     def test_readme_and_changelog(self):
         # state_branch 는 설정 표가 이미 담은 낱말이라 이 절이 더한 낱말(스크립트 이름 · 절 이름)을 단언한다
@@ -170,6 +169,42 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
             self.assertIn(word, top, word)
         self.assertIn("`delete` 는 끈 상태에서도 돈다", top)   # m1 — 꺼도 지우기는 돈다
         self.assertIn("`delete` 는 끈 상태에서도 돕니다", readme)
+
+
+class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 몫)
+    def test_step_five_and_the_skill(self):
+        for word in (FILE_NAME, "안 올린 규칙 고침", "conductor_branch.py rules-branch", "판 번호"):
+            self.assertIn(word, step(5), word)
+        self.assertNotIn("rules-branch", step(4))   # 걸음 가르기가 이웃 걸음을 잡지 않는다
+        skill = (PLUGIN / "skills" / "epic-conductor" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Read " + POINTER, skill)
+
+    def test_procedure_file_has_the_three_new_sections(self):
+        text = NEW.read_text(encoding="utf-8")
+        for head in ("## 규칙을 고칠 때", "## 남이 올린 고침을 만났을 때", "## 대기 줄"):
+            self.assertIn(head, text, head)
+        for word in ("conductor_branch.py rules-add", "rules-drop", "rules-reset", "conductor_branch.py confirm",
+                     "확인할 끝", "40자", "pending.md", "사람 줄이라 옮기지 않은 대기 줄", "확인되지 않은 남의 고침",
+                     "남의 고침을 재지 못했다"):
+            self.assertIn(word, text, word)
+        self.assertNotIn("AskUserQuestion", text)
+
+    def test_team_files_now_moved(self):
+        text = (PLUGIN / "references" / "team-files.md").read_text(encoding="utf-8")
+        self.assertNotIn("RULES.md 의 고침과 대기 줄은 아직 옮기지 않았다", text)
+        for word in ("rules_at", "--rules-at", "pending.md", "rules-base.md", "team_status.rules_tip", "확인한 끝"):
+            self.assertIn(word, text, word)
+
+    def test_readme_and_changelog_section_of_8_28_0(self):
+        readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for word in ("rules-add", "rules-branch", "confirm", "pending.md", "rules_at"):
+            self.assertIn(word, readme, word)
+        heads = ("\n" + (PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")).split("\n## [")[1:]
+        mine = [body for body in heads if body.startswith("8.28.0] — ")]
+        self.assertEqual(len(mine), 1, "CHANGELOG 에 8.28.0 절이 하나가 아니다")   # 판 글자로 고른다 — plugin.json 의 지금 판으로 고르면 다음 판 올림에 다른 절을 본다
+        section = mine[0]
+        for word in ("leader_seat.py", "rules_at", "pending.md", "확인한 끝", "confirm"):
+            self.assertIn(word, section, word)
 
 
 class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명령 출력이 바뀌지 않는다
@@ -227,10 +262,11 @@ class OldBehaviour(StateRepo):   # AC20 — 옛 형식 로드맵의 지휘 명�
         self.assertTrue(CB.local_tip(self.w, CB.roadmap_name(rm(ALPHA))))   # 양성 대조 — 상태 브랜치가 실제로 섰다
         self.assertEqual(self.outputs(), before)
 
-    def test_leader_ref_still_answers_with_what_it_was_given(self):   # AC14 — 이 계획은 team_layout 을 고치지 않는다
+    def test_leader_ref_still_answers_with_what_it_was_given(self):   # AC14 — leader_ref 는 고르기만 한다(상태 끝이 있으면 그것, 없으면 받은 값)
         # 붉어지는 뒤집기: leader_ref 가 받은 값 아닌 것(고정 ref 등)을 내면 붉다. 양성 대조: 서로 다른 두 값이 각각 그대로 돌아온다.
         self.assertEqual(TL.leader_ref("refs/remotes/origin/HEAD"), "refs/remotes/origin/HEAD")
         self.assertEqual(TL.leader_ref("refs/heads/other"), "refs/heads/other")
+        self.assertEqual(TL.leader_ref("refs/remotes/origin/HEAD", "b" * 40), "b" * 40)
 
 
 if __name__ == "__main__":

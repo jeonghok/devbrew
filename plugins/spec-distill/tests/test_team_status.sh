@@ -214,8 +214,8 @@ sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
 |---|---|---|" "| 항목 | 이유 | 받는 곳 |
 |---|---|---|
 | 알림 글 | 나중에 정한다 | plan-1.md |" && step "받은 뒤 설계문서" || fail_step "받은 뒤 설계문서"
-assert_eq "$(st E1)" "구현 중" "받음: 받은 뒤 design.md 가 바뀌면 구현 중"
-assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "받음: 받은 뒤 바뀜 — design.md"
+assert_eq "$(st E1)" "구현 끝" "받음: 받은 뒤 design.md 의 미룸 절만 바뀌면 구현 끝 그대로(K13 — 본문으로 견준다)"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "받음: 미룸 절만 바뀐 design.md 는 받은 뒤 바뀜이 아니다(본문 견줌 — 아래 r2 와 같은 규칙)"
 back "$RECEIVED_AT"
 sub "$J1/design.md" "과제 폴더를 읽는다." "과제 폴더를 다시 읽는다." && step "받은 뒤 설계문서 본문" || fail_step "받은 뒤 설계문서 본문"
 assert_eq "$(st E1)" "설계 중" "AC8: 받은 뒤 design.md 본문을 고치면 승인이 낡아 구현 단계에서도 설계 중"
@@ -523,6 +523,14 @@ assert_eq "$(rc) · $(st E1)" "${before_rc} · 구현 끝" "AC11: 종료 코드�
 decide E1 "예약 밖 변경 · 2026-11-26 · 「docs/free.md 를 함께 고쳤다」" && step "예약 밖 변경 결정 줄" || fail_step "예약 밖 변경 결정 줄"
 assert_contains "$(notes E1)" "예약 밖 변경: docs/free.md · $TM/RULES.md" "Q13: 결정 기록의 예약 밖 변경 줄은 알림을 끄지 않는다"
 back "$RECEIVED_AT"
+# 예약 밖 변경 줄임(R3 Q2) — 다섯이면 다섯 그대로, 넘으면 이름 순 앞 다섯과 「외 n개」
+outline() { js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E1' for n in b['notes'] if n.startswith('예약 밖 변경: ')]"; }
+put docs/out-a.md a && put docs/out-b.md b && put docs/out-c.md c && put docs/out-d.md d && put docs/out-e.md e && step "예약 밖 다섯" || fail_step "예약 밖 다섯"
+assert_eq "$(outline)" "['예약 밖 변경: docs/out-a.md · docs/out-b.md · docs/out-c.md · docs/out-d.md · docs/out-e.md']" "Q2: 예약 밖 파일이 다섯이면 다섯 그대로"
+put docs/out-0.md 0 && put docs/out-z.md z && step "예약 밖 일곱" || fail_step "예약 밖 일곱"
+assert_eq "$(outline)" "['예약 밖 변경: docs/out-0.md · docs/out-a.md · docs/out-b.md · docs/out-c.md · docs/out-d.md 외 2개']" \
+  "Q2: 예약 밖 파일이 일곱이면 이름 순 앞 다섯과 「외 2개」"
+back "$RECEIVED_AT"
 # 어긋남(AC28) — 작업 폴더의 INTENT.md 칸 하나씩
 sub "$J1/INTENT.md" "첫 읽기를 만든다" "첫 읽기를 만든다." && step "목표 칸 고침" || fail_step "목표 칸 고침"
 assert_contains "$(notes E1)" "INTENT.md 가 로드맵 블록과 다르다: E1 — 목표 칸이 로드맵의 의도 · 범위와 다르다" "AC28: 목표 칸이 로드맵 블록과 다르면 알린다"
@@ -791,4 +799,71 @@ assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\n---')")" "False" "J19 �
 assert_eq "$(gate_of 'frontmatter 가 없는 설정')" "True" "J19: 설정을 읽지 못하면(SettingsError) 관문은 켜진 채"
 assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\nno_such_key: 1\n---')")" "True" "J19: 설정에 오류가 있으면 끔 이 적혀 있어도 관문은 켜진 채"
 T="$T0"
+
+# ── 받음 줄의 낡음 — 받은 head 와 지금 끝의 글을 견준다(K13 · 새 레포) ─────────────────────────────
+new_repo "$T0/rcpt" && ok "받음 낡음: 팀 레포를 세웠다(${TM})" || { no "받음 낡음: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+J1="$TM/jobs/E1"
+R1="$J1/results/implement-plan-1-1.md"
+RDESIGN="$(printf -- '---\ntype: design\njob: E1\n---\n\n# 받음 낡음 픽스처 설계\n\n## Goals\n\n- 받은 뒤의 변경을 센다.\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## Acceptance Criteria\n\n- AC1: 받은 뒤 바뀐 글을 센다\n- AC2: 되돌린 글은 세지 않는다\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|')"
+RPLAN="$(printf '# 받음 낡음 픽스처 계획 1\n\n### Task 1: 견주기\n\nAC1 · AC2 를 만든다.')"
+g checkout -q -b feature/tm-e1 main && put src/e1/a.txt a && step "받음 낡음: 코드 하나" || fail_step "받음 낡음: 코드 하나"
+# 예약 경로 안의 이름만 같은 파일(design.md · INTENT.md) — 그 과제의 설계 · 계획 파일이 아니니 객체 번호로 견준다(r9 · r10)
+put src/e1/design.md "$(printf '# 예약 경로의 설계 이름 파일\n\n본문 한 줄\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|')" && step "받음 낡음: 예약 경로 design.md" || fail_step "받음 낡음: 예약 경로 design.md"
+put src/e1/INTENT.md "$(printf '# 예약 경로의 의도 이름 파일\n\n본문 한 줄\n\n## 결정 기록\n\n- 첫 줄')" && step "받음 낡음: 예약 경로 INTENT.md" || fail_step "받음 낡음: 예약 경로 INTENT.md"
+put "$J1/design.md" "$RDESIGN" && step "받음 낡음: 설계문서" || fail_step "받음 낡음: 설계문서"
+approved "spec 승인" E1 - - 2026-11-20 && g push -q origin HEAD || fail_step "받음 낡음: 승인"
+put "$J1/plan-1.md" "$RPLAN" && step "받음 낡음: 계획 파일" || fail_step "받음 낡음: 계획 파일"
+approved "계획 검토" E1 1 - 2026-11-21 && g push -q origin HEAD || fail_step "받음 낡음: 계획 검토"
+sync E1 implement-plan-1-1.md --role worker --bundle-at "$(g rev-parse origin/main)" --job-at "$(g rev-parse HEAD)" >/dev/null && step "받음 낡음: 결과 시작" || fail_step "받음 낡음: 결과 시작"
+put src/e1/a.txt "끝난 코드" && g commit -qm "받음 낡음: 코드" && RCODE="$(g rev-parse HEAD)"
+printf 'AC1: 구현됨 — src/e1/a.txt\nAC2: 구현됨 — src/e1/a.txt\n' >> "$W/$R1"
+sync E1 implement-plan-1-1.md --end "$RCODE" >/dev/null && step "받음 낡음: 결과 끝" || fail_step "받음 낡음: 결과 끝"
+RLINE="$(cd "$W" && python3 "$JRC" check --roadmap "$RM" --job E1 --result implement-plan-1-1.md --date 2026-11-22 | grep '^- 결과 받음 · ')"
+decide E1 "$RLINE" && step "받음 낡음: 받음 줄" || fail_step "받음 낡음: 받음 줄"
+RAT="$(g rev-parse HEAD)"
+
+assert_eq "$(st E1)" "구현 끝" "r1: 받은 뒤 고침이 없으면 구현 끝(양성 대조)"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r1: 받은 뒤 바뀜 알림이 없다"
+sub "$J1/design.md" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|" "| 항목 | 이유 | 받는 곳 |
+|---|---|---|
+| 알림 글 | 나중에 정한다 | plan-1.md |" && step "r2 미룸 절" || fail_step "r2 미룸 절"
+assert_eq "$(st E1)" "구현 끝" "r2: 설계 파일의 미룸 절에 한 줄만 더하면 구현 끝 그대로"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r2: 미룸 절만 고친 설계 파일은 받은 뒤 바뀜이 아니다"
+back "$RAT"
+put src/e1/a.txt "받은 뒤 고친 코드" && step "r3 고침" || fail_step "r3 고침"
+put src/e1/a.txt "끝난 코드" && step "r3 되돌림" || fail_step "r3 되돌림"
+assert_eq "$(st E1)" "구현 끝" "r3: 예약 경로 파일을 고쳤다 되돌리면 구현 끝 그대로"
+assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "r3: 되돌린 파일은 받은 뒤 바뀜이 아니다"
+back "$RAT"
+sub "$J1/design.md" "- 받은 뒤의 변경을 센다." "- 받은 뒤의 변경을 다시 센다." && step "r4 설계 본문" || fail_step "r4 설계 본문"
+assert_eq "$(st E1)" "설계 중" "r4: 설계 본문을 고치면 승인이 낡아 설계 중(AC8) — 받음 줄의 낡음은 아래 알림이 잰다"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — $J1/design.md" "r4: 알림에 받은 뒤 바뀜과 설계 파일 경로"
+back "$RAT"
+put src/e1/a.txt "받은 뒤 고친 코드" && step "r5 고침" || fail_step "r5 고침"
+assert_eq "$(st E1)" "구현 중" "r5: 예약 경로 파일을 고치고 되돌리지 않으면 구현 중"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/a.txt" "r5: 알림에 그 경로"
+back "$RAT"
+printf '끝난 코드\r\n' > "$W/src/e1/a.txt" && step "r6 줄바꿈만" || fail_step "r6 줄바꿈만"
+assert_eq "$(st E1)" "구현 중" "r6: 줄바꿈만 바꾼 예약 경로 파일도 받은 뒤 바뀜이다(객체 번호로 견준다)"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/a.txt" "r6: 알림에 그 경로"
+back "$RAT"
+printf '\377\n' > "$W/src/e1/a.txt" && g add -- src/e1/a.txt && g commit -qm "r7 바이트 하나" && printf '\376\n' > "$W/src/e1/a.txt" && step "r7 다른 바이트" || fail_step "r7 다른 바이트"
+assert_eq "$(st E1)" "구현 중" "r7: 읽을 수 없는 바이트로 바뀐 예약 경로 파일(디코드하면 같아 보인다)도 받은 뒤 바뀜이다"
+back "$RAT"
+sub "$J1/INTENT.md" "## 결정 기록" "## 결정 기록 아님" && step "r8 결정 기록 칸 깨짐" || fail_step "r8 결정 기록 칸 깨짐"
+assert_eq "$(st E1)" "설계 중" "r8: 설계 흐름 — 구현 결과 파일이 있어도 결정 기록 칸을 읽지 못하면 설계 중"
+assert_contains "$(why E1)" "결정 기록 읽기 불가 — " "r8: 결정 기록 읽기 불가를 근거로 낸다"
+back "$RAT"
+sub src/e1/design.md "|---|---|---|" "|---|---|---|
+| 받은 뒤 더한 줄 | 미룸 절만 | 다음 |" && step "r9 예약 경로 design.md 미룸 절" || fail_step "r9 예약 경로 design.md 미룸 절"
+assert_eq "$(st E1)" "구현 중" "r9: 예약 경로의 design.md 는 미룸 절만 고쳐도 받은 뒤 바뀜이다(그 과제의 설계 파일만 본문으로 견준다)"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/design.md" "r9: 알림에 그 경로"
+back "$RAT"
+sub src/e1/INTENT.md "- 첫 줄" "- 첫 줄
+- 받은 뒤 더한 줄" && step "r10 예약 경로 INTENT.md 결정 기록" || fail_step "r10 예약 경로 INTENT.md 결정 기록"
+assert_eq "$(st E1)" "구현 중" "r10: 예약 경로의 INTENT.md 는 결정 기록 절만 고쳐도 받은 뒤 바뀜이다(객체 번호로 견준다)"
+assert_contains "$(notes E1)" "받은 뒤 바뀜: implement-plan-1-1.md — src/e1/INTENT.md" "r10: 알림에 그 경로"
+back "$RAT"
+use_repo "$T0"
 finish

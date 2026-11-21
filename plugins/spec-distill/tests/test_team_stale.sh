@@ -109,6 +109,21 @@ put "$E3/results/plan-plan-3-1.md" "머리 없는 결과 파일"
 g commit -qm "E3 머리 없는 결과 파일" && g push -q origin feature/tm-e3 && g checkout -q main
 assert_eq "$(status "$T/s.json")" "$RC0" "C6: 머리 없는 결과 파일 — 종료 코드는 그대로다"
 assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if 'plan-plan-3-1.md' in n and n.startswith('묶음 낡음')]")" "['묶음 낡음을 재지 못했다: plan-plan-3-1.md — 머리를 읽지 못했다']" "C6: 머리 없는 결과 파일의 사유는 머리를 읽지 못했다는 것이다(자세한 사유는 다른 알림이 한 번 낸다 — Q13)"
+# 묶음 낡음의 빈 곳 — 기계 줄이 깨진(끝 줄 없는) 결과 파일은 재지 못했다로 알린다. implement 는 받음 쪽 알림이 따로 있고 검수 결과는 재지 않는다
+g checkout -q feature/tm-e3
+for nm in plan-plan-5-1.md:designer implement-plan-5-1.md:worker review-plan-5-1.md:designer plan-plan-6-1.md:designer; do
+  assert_eq "$(sync E3 "${nm%%:*}" --role "${nm##*:}" --bundle-at "$B" --job-at "$(g rev-parse HEAD)")" "0" "준비: 깨진 Task 줄을 얹을 ${nm%%:*}"
+  [ "${nm%%:*}" = plan-plan-6-1.md ] && assert_eq "$(sync E3 plan-plan-6-1.md --end "$(g rev-parse HEAD)")" "0" "준비: plan-plan-6-1.md 에 끝 줄(깨진 줄은 그 뒤에 얹는다)"
+  printf 'Task 03/3: 끝 — z\n' >> "$W/$E3/results/${nm%%:*}"
+done
+g add -- "$E3/results" && g commit -qm "E3 깨진 Task 줄" && g push -q origin feature/tm-e3 && g checkout -q main
+status "$T/s.json" > /dev/null
+unmeasured() { js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다: $1')]"; }
+assert_eq "$(js "$T/s.json" "len([n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if n.startswith('묶음 낡음을 재지 못했다: plan-plan-5-1.md — Task 줄 꼴이 아니다')])")" "1" "기계 줄이 깨진 plan 결과: 재지 못했다 줄이 하나다"
+assert_eq "$(unmeasured implement-plan-5-1.md)" "[]" "implement 는 두 번 내지 않는다: 재지 못했다 줄이 없다"
+assert_contains "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E3' for n in b['notes'] if 'implement-plan-5-1.md' in n]")" "implement-plan-5-1.md" "implement 는 두 번 내지 않는다: 받음 쪽 알림은 있다(양성 대조)"
+assert_eq "$(unmeasured plan-plan-6-1.md)" "[]" "끝난 파일은 재지 않는다"
+assert_eq "$(unmeasured review-plan-5-1.md)" "[]" "검수 결과는 재지 않는다"
 # ⑨ 로드맵 밖 과제
 g checkout -q -b chore/tm-fix main
 printf '로드맵에 없는 일 하나\n' > "$T/said.txt"
@@ -137,7 +152,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import team_layout
 if sys.argv[3] == "swap":
-    team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+    team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 import roadmap_status
 sys.exit(roadmap_status.main([sys.argv[2], "--json"]))
 PY
@@ -154,7 +169,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import roadmap_status
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 sys.exit(roadmap_status.main([sys.argv[2], "--json"]))
 PY
 ) 2> /dev/null

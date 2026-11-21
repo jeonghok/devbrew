@@ -20,6 +20,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conductor_branch_fixture import ALPHA, BETA, ENV, OTHER, SCRIPTS, SID, StateRepo, rm  # noqa: E402
 import conductor_branch as CB  # noqa: E402
+import conductor_state as cs  # noqa: E402
+from state_path import state_root  # noqa: E402
 
 
 class Fixture(StateRepo):
@@ -288,11 +290,14 @@ class OthersTextCannotBuildPaths(StateRepo):
 
     def test_state_names_keeps_only_well_formed_tails_on_both_sides(self):
         trunk = self.g("rev-parse", "trunk")
+        self.assertEqual(CB.bad_state_names(self.w), 0)                                       # 양성 대조 — 꼴 틀린 꼬리가 없으면 0
         for tail in ("-x", "Ev\u202eil", "a/b", BETA):
             self.g("update-ref", "refs/remotes/origin/conductor/" + tail, trunk)
         self.g("update-ref", "refs/heads/conductor/-y", trunk)
+        self.g("update-ref", "refs/heads/conductor/-x", trunk)                                # 두 쪽에 같은 꼬리 — 한 번 센다
         self.g("update-ref", "refs/heads/conductor/" + ALPHA, trunk)
         self.assertEqual(CB.state_names(self.w), sorted([ALPHA, BETA]))
+        self.assertEqual(CB.bad_state_names(self.w), 4)                                       # M25 ④ — state_names 가 버린 꼬리의 수
 
 
 def cli(repo, *args, env=None):
@@ -581,7 +586,8 @@ class WriteBoundary(unittest.TestCase):
 
     def test_not_pushed_label_and_result_shape(self):
         self.assertEqual(CB.NOT_PUSHED, "아직 안 올라옴")
-        self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes"))
+        self.assertEqual(CB.Result._fields, ("commit", "pushed", "onto", "notes", "made"))
+        self.assertEqual(CB.Result(None, False, None, ()).made, ())   # 넷째 칸까지만 주는 옛 호출도 그대로 돈다
         self.assertEqual(CB.Base._fields, ("commit", "read", "names"))
 
 
@@ -1032,7 +1038,7 @@ class Delete(StateRepo):
         team = CB.team_of(self.w, rm(ALPHA))
         CB.write(self.w, rm(ALPHA), SID, lambda base: {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 줄 하나\n- A1 · 결정 기록 · 줄 둘\n"}, "대기 줄")
 
-    def test_without_confirmation_it_counts_and_keeps_the_branch(self):
+    def test_without_confirmation_it_counts_and_keeps_the_branch(self):  # R3 AC23
         tip = CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (1, tip), out)
@@ -1042,7 +1048,7 @@ class Delete(StateRepo):
         self.assertIn("수를 센 끝: " + tip, out)
         self.assertEqual(len([ln for ln in out.splitlines() if ln.startswith("[spec-distill] ") or ln.startswith("수를 센 끝")]), 2)
 
-    def test_confirmed_deletes_local_and_remote_and_nothing_else(self):
+    def test_confirmed_deletes_local_and_remote_and_nothing_else(self):  # R3 AC23
         before, beta, tip = self.snap(), CB.local_tip(self.w, BETA), CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip)
         self.assertEqual(rc, 0, out)
@@ -1054,12 +1060,27 @@ class Delete(StateRepo):
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", tip)
         self.assertEqual(rc, 1, out)                                                              # 이미 없다
 
-    def test_only_the_marker_holder_deletes(self):
+    def test_delete_empties_the_trust_section(self):   # M35 — 다시 만든 브랜치에서 옛 확인 끝이 판정을 영영 None 으로 두지 않게
+        path, beta = (cs.machine_path(state_root(str(self.w)), rm(name)) for name in (ALPHA, BETA))
+        self.assertNotEqual(cs.load(path, rm(ALPHA))[cs.TRUST], [])   # 양성 대조 — 지우기 전에는 「씀」 줄이 있다
+        kept = cs.load(beta, rm(BETA))[cs.TRUST]
+        rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", CB.local_tip(self.w, ALPHA))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(cs.load(path, rm(ALPHA))[cs.TRUST], [])
+        self.assertEqual(cs.load(beta, rm(BETA))[cs.TRUST], kept)   # 다른 로드맵의 절은 그대로
+
+    def test_delete_that_does_not_delete_keeps_the_trust_section(self):   # 확인 없이 센 것뿐이면 비우지 않는다
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        before = cs.load(path, rm(ALPHA))[cs.TRUST]
+        self.assertEqual(cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID)[0], 1)
+        self.assertEqual(cs.load(path, rm(ALPHA))[cs.TRUST], before)
+
+    def test_only_the_marker_holder_deletes(self):  # R3 AC23
         tip = CB.local_tip(self.w, ALPHA)
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", OTHER, "--confirmed", CB.local_tip(self.w, ALPHA))
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (5, tip), out)
 
-    def test_remote_that_moved_is_not_deleted_and_the_count_is_taken_again(self):   # J39 — 다른 기계가 올린 글을 세지 않고 지우지 않는다
+    def test_remote_that_moved_is_not_deleted_and_the_count_is_taken_again(self):   # J39 — 다른 기계가 올린 글을 세지 않고 지우지 않는다  # R3 AC23
         """뒤집으면 붉다 — 받아 와 견주지 않고 지우면 첫 --confirmed 가 0 으로 끝나고 다른 기계의 글이 원격에서 사라진다."""
         import conductor_mail as CM
         m2 = self.clone("m2")
@@ -1103,7 +1124,7 @@ class Delete(StateRepo):
         self.assertIsNone(CB.local_tip(self.w, ALPHA))
         self.assertIn("원격에는 없었다", out)
 
-    def test_a_repo_with_the_branch_switched_off_can_still_delete_what_is_left(self):
+    def test_a_repo_with_the_branch_switched_off_can_still_delete_what_is_left(self):  # R3 AC23
         self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
         rc, out = cli(self.w, "delete", "--roadmap", rm(ALPHA), "--session", SID, "--confirmed", CB.local_tip(self.w, ALPHA) or "0" * 40)
         self.assertEqual(rc, 0, out)
@@ -1132,6 +1153,26 @@ class Delete(StateRepo):
         self.assertEqual((rc, CB.local_tip(self.w, ALPHA)), (3, tip), out)
         self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), tip)
         self.assertNotIn("지웠다", out)
+
+    def test_a_remote_moved_between_the_comparison_and_the_delete_is_not_deleted(self):   # M25 ④ — 센 끝에 건 지우기(lease)
+        """뒤집으면 붉다 — lease 를 떼면 견준 뒤 다른 클론이 올린 커밋째 원격 브랜치가 지워진다."""
+        tip = CB.local_tip(self.w, ALPHA)
+        m2 = self.clone("m2")
+        self.assertEqual(self.g("rev-parse", CB.TRACKING_PREFIX + CB.branch_of(ALPHA), repo=m2), tip)
+        theirs = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-m", "다른 클론의 쓰기", repo=m2)
+        real, pushed = CB._git_delete, []
+
+        def interleave(root, *args, **kw):
+            if args[0] == "push" and not pushed:   # 받아 와 견준 뒤 · 원격을 지우기 직전에 다른 클론이 실제로 올린다
+                self.g("push", "-q", "origin", "%s:%s" % (theirs, CB.ref_of(ALPHA)), repo=m2)
+                pushed.append(theirs)
+            return real(root, *args, **kw)
+        with mock.patch.object(CB, "_git_delete", interleave):
+            with self.assertRaises(CB.BranchError) as c:
+                CB.delete(self.w, rm(ALPHA), SID, tip)
+        self.assertEqual((c.exception.rc, pushed), (3, [theirs]))
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), theirs)              # 원격 브랜치가 남았고 다른 클론의 커밋이 끝이다
+        self.assertEqual(CB.local_tip(self.w, ALPHA), tip)                                         # 로컬도 두었다
 
     def test_an_origin_that_cannot_be_known_stops_the_delete(self):
         tip = tip0 = CB.local_tip(self.w, ALPHA)
@@ -1222,10 +1263,20 @@ class Delete(StateRepo):
 class DeleteGateGuards(StateRepo):
     def test_delete_forms_are_refused_unless_the_delete_mark_is_given_for_that_exact_form(self):
         ref, oid = CB.ref_of(ALPHA), "a" * 40
-        for form in (("push", "--porcelain", "origin", ":" + ref), ("update-ref", "-d", ref, oid)):
+        lease = "--force-with-lease=%s:%s" % (ref, oid)
+        for form in (("push", "--porcelain", lease, "origin", ":" + ref), ("update-ref", "-d", ref, oid)):
             with self.assertRaises(RuntimeError, msg=form):
                 CB.git(self.w, *form)                                                              # 표지 없이는 지우는 꼴이 문에서 막힌다
-        for form in (("push", "--porcelain", "origin", ":refs/heads/trunk"), ("push", "--porcelain", "origin", ":refs/heads/feature/a1"),
+        for form in (("push", "--porcelain", "origin", ":" + ref),                                                     # lease 없는 옛 꼴(I8)
+                     ("push", "--porcelain", "--force-with-lease=%s:%s" % (CB.ref_of(BETA), oid), "origin", ":" + ref),   # lease 의 ref 와 지우는 ref 가 다르다
+                     ("push", "--porcelain", "--force-with-lease=refs/heads/trunk:%s" % oid, "origin", ":refs/heads/trunk"),
+                     ("push", "--porcelain", "--force-with-lease=%s:%s" % (ref, oid[:8]), "origin", ":" + ref),    # 끝은 40자 전체만
+                     ("push", "--porcelain", "--force-with-lease=%s:%s" % (ref, oid + "\n"), "origin", ":" + ref),
+                     ("push", "--porcelain", "--force-with-lease=%s" % ref, "origin", ":" + ref), ("push", "--porcelain", "--force-with-lease", "origin", ":" + ref),
+                     ("push", "--porcelain", "origin", lease, ":" + ref), ("push", lease, "--porcelain", "origin", ":" + ref),
+                     ("push", "--porcelain", lease, "--force", "origin", ":" + ref), ("push", "--porcelain", lease, "origin", ":" + ref, ":" + CB.ref_of(BETA)),
+                     ("push", "--porcelain", lease, "origin", "+" + ref + ":" + ref), ("push", "--porcelain", lease, "origin", ref + ":" + ref),
+                     ("push", "--porcelain", "origin", ":refs/heads/trunk"), ("push", "--porcelain", "origin", ":refs/heads/feature/a1"),
                      ("push", "--force", "origin", ":" + ref), ("push", "--delete", "origin", ref), ("push", "--porcelain", "origin", "+" + ref + ":" + ref),
                      ("push", "--porcelain", "origin", ":" + ref, ":" + CB.ref_of(BETA)), ("push", "--porcelain", "origin", ref + ":" + ref),
                      ("update-ref", "-d", "refs/heads/trunk", oid), ("update-ref", "-d", ref), ("update-ref", "-d", ref, "main"),
@@ -1238,6 +1289,7 @@ class DeleteGateGuards(StateRepo):
             with self.assertRaises(RuntimeError, msg=form):
                 CB.git(self.w, *form, delete=True)                                                 # 표지가 있어도 그 두 꼴 밖은 막힌다
         self.assertEqual(CB.git(self.w, "update-ref", "-d", "refs/remotes/origin/conductor/" + ALPHA, oid, delete=True)[0] in (0, 1), True)   # 양성 대조 — 문을 지난다(없는 ref 라 git 이 거절해도 RuntimeError 는 아니다)
+        self.assertIn(CB.git(self.w, "push", "--porcelain", lease, "origin", ":" + ref, delete=True)[0], (0, 1))   # 양성 대조 — lease 꼴은 문을 지난다(원격에 없는 ref 라 git 이 거절한다)
 
 
 class DeleteBoundary(unittest.TestCase):
@@ -1254,7 +1306,207 @@ class DeleteBoundary(unittest.TestCase):
     def test_remote_is_deleted_before_local_and_confirmation_gates_everything(self):
         body = self.SRC.split("def delete(", 1)[1].split("# ── 명령줄", 1)[0]
         self.assertLess(body.index("confirmed is None"), body.index('"ls-remote"'))                      # 확인 없이 원격을 보지도 않는다
-        self.assertLess(body.index('"push", "--porcelain", "origin", ":"'), body.index('"update-ref", "-d", ref, tip'))
+        self.assertLess(body.index('"push", "--porcelain", "--force-with-lease=%s:%s" % (ref, tip), "origin", ":" + ref'), body.index('"update-ref", "-d", ref, tip'))
         self.assertNotIn("availability(", body)
         self.assertIn("import conductor_status", body)
         self.assertNotRegex(self.SRC.split("def delete(", 1)[0], r"(?m)^import conductor_status|^from conductor_status")
+
+
+class OwnCommits(StateRepo):   # R3 AC21 · Review Focus 1 · B3
+    def own(self):
+        return [r["끝"] for r in cs.load(cs.machine_path(state_root(str(self.w)), rm(ALPHA)), rm(ALPHA))[cs.TRUST]
+                if r["까닭"] == "씀"]
+
+    def other_writes(self, files):
+        """둘째 클론이 같은 상태 브랜치에 써 올린다 — 그 커밋을 돌려준다."""
+        other = self.clone("other%d" % len(list(self.t.iterdir())))
+        self.claim(repo=other, session=OTHER)
+        team = CB.team_of(str(other), rm(ALPHA))
+        CB._fetch(str(other), team.name)
+        self.g("update-ref", CB.ref_of(team.name), "refs/remotes/origin/" + CB.branch_of(team.name), repo=other)
+        return CB.write(str(other), rm(ALPHA), OTHER, lambda b: files, "남").commit
+
+    def test_every_made_commit_is_recorded(self):
+        self.claim()
+        made = CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "x\n"}, "STATUS")
+        self.assertEqual(self.own(), [made.commit, res.commit])
+        self.assertEqual(res.made, (res.commit,))
+
+    def test_remade_on_foreign_tip_records_only_mine(self):   # 남의 커밋은 「씀」 이 아니다
+        self.claim()
+        CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        theirs = self.other_writes({team.rules: "- [남] 남의 줄\n"})
+        mine = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "y\n"}, "STATUS")   # 거절 → 받아 와 다시 만든다
+        self.assertEqual(mine.onto, theirs)
+        self.assertNotIn(theirs, self.own())
+        self.assertIn(mine.commit, self.own())
+
+    def test_unchanged_remake_moves_ref_to_foreign_tip_without_recording_it(self):   # B3 — made 가 None 인 갈래
+        self.claim()
+        CB.ensure(str(self.w), rm(ALPHA), SID)
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        theirs = self.other_writes({team.status: "같은 글\n"})
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "같은 글\n"}, "STATUS")   # 원격 끝에서는 바뀐 것이 없다
+        self.assertEqual(CB.local_tip(str(self.w), team.name), theirs)   # ref 는 남의 끝으로 옮겨 갔다
+        self.assertNotIn(theirs, self.own())                             # 그래도 「씀」 이 아니다
+        self.assertNotIn(theirs, res.made)
+
+    def test_creating_race_does_not_record_the_adopted_root(self):   # B3 — ensure 가 만드는 사이 남이 먼저 올렸다
+        other = self.clone("first")
+        self.claim(repo=other, session=OTHER)
+        their_root = CB.ensure(str(other), rm(ALPHA), OTHER).commit
+        self.claim()
+        real = CB.git   # 바꿔 끼우기 전에 잡는다 — 안에서 잡으면 자기 자신을 부른다
+
+        def fake(root, *a, **k):   # ls-remote 가 「없다」(2)고 답한 것처럼 — 만드는 쪽으로 보낸다
+            return (2, "", "") if a[:1] == ("ls-remote",) else real(root, *a, **k)
+        with mock.patch.object(CB, "git", side_effect=fake):
+            CB.ensure(str(self.w), rm(ALPHA), SID)
+        self.assertNotIn(their_root, self.own())
+
+
+class OldRepoSettingsNotDroppedSilently(StateRepo):   # 과제 2 리뷰 — 「씀」 기록이 옛 `## 레포 설정` 절을 지우면 원장 쓰기와 같은 알림을 낸다
+    def plant(self):
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        text = cs.render_machine(rm(ALPHA), cs.load(path, rm(ALPHA))) + "\n## 레포 설정\n\n- test_command · make test\n"
+        path.write_text(text, encoding="utf-8")
+        self.assertTrue(cs.has_old_repo_settings(path))
+        return path
+
+    def test_recording_own_commits_surfaces_the_dropped_notice(self):
+        self.claim()
+        path = self.plant()
+        made = CB.ensure(str(self.w), rm(ALPHA), SID)                            # 만들기 길
+        self.assertIn(cs.OLD_REPO_SETTINGS_DROPPED, made.notes)
+        self.assertFalse(cs.has_old_repo_settings(path))                         # 실제로 지워졌다 — 알림은 그 사실이다
+        team = CB.team_of(str(self.w), rm(ALPHA))
+        self.assertNotIn(cs.OLD_REPO_SETTINGS_DROPPED,
+                         CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "x\n"}, "STATUS").notes)   # 양성 대조 — 옛 절이 없으면 알리지 않는다
+        self.plant()
+        res = CB.write(str(self.w), rm(ALPHA), SID, lambda b: {team.status: "y\n"}, "STATUS")   # 쓰기 길
+        self.assertIn(cs.OLD_REPO_SETTINGS_DROPPED, res.notes)
+        own = [r["끝"] for r in cs.load(path, rm(ALPHA))[cs.TRUST] if r["까닭"] == "씀"]
+        self.assertIn(made.commit, own)                                          # 기록은 건너뛰지 않는다
+        self.assertIn(res.commit, own)
+
+
+class SettingsErrorIsZero(StateRepo):   # M25 ② · F14 — 설정 오류면 쓰는 명령이 3 이 아니라 알리고 0 · 표지가 먼저다
+    def run_cli(self, script, *args):
+        p = subprocess.run([sys.executable, str(SCRIPTS / script), "--root", str(self.w), *args],
+                           cwd=str(self.w), env=ENV, capture_output=True, encoding="utf-8")
+        return p.returncode, p.stdout + p.stderr
+
+    def commands(self, session):
+        common = ("--roadmap", rm(ALPHA), "--session", session)
+        return (("conductor_branch.py", ("ensure",) + common), ("conductor_status.py", ("sync",) + common),
+                ("conductor_mail.py", ("send",) + common + ("--to", BETA, "--kind", "예고", "--body", "글")),
+                ("conductor_mail.py", ("ack",) + common + ("--letter", BETA + "/2026-11-19-01.md")),
+                ("conductor_branch.py", ("rules-add",) + common + ("--line", "- 규칙 하나")),
+                ("conductor_branch.py", ("confirm",) + common))
+
+    def test_writing_commands_tell_and_end_with_zero_on_a_broken_setting(self):
+        """뒤집으면 붉다 — team_of 를 availability 앞으로 되돌리면 로드맵 폴더를 정하다 설정 오류로 3 이 된다."""
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        machine = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        self.assertTrue(machine.is_file())
+        self.put({".devbrew.md": "---\nno_such_key: 1\n---\n"})
+        for script, args in self.commands(SID):
+            refs, state = self.refs(), machine.read_bytes()
+            rc, out = self.run_cli(script, *args)
+            self.assertEqual((rc, self.refs(), machine.read_bytes() == state), (0, refs, True), (args[0], out))
+            self.assertIn(CB.SETTINGS_UNREADABLE, out, args[0])
+            self.assertTrue(out.strip().splitlines()[-1].startswith("[spec-distill] " + CB.SETTINGS_UNREADABLE), (args[0], out))   # 마지막 줄이 알림이다
+        refs = self.refs()
+        rc, out = self.run_cli("conductor_status.py", "waiting", "add", "--roadmap", rm(ALPHA), "--session", SID,
+                               "--epic", "A1", "--kind", "머지", "--via", "턴 끝")
+        self.assertEqual((rc, self.refs()), (0, refs), out)
+        self.assertIn(CB.SETTINGS_UNREADABLE, out)
+        self.assertEqual([(r["에픽"], r["종류"]) for r in cs.load(machine, rm(ALPHA))[cs.ASKING]], [("A1", "머지")])   # 줄은 기계 상태에 쌓인다(AC6)
+
+    def test_the_write_floor_itself_tells_before_reading_the_roadmap_folder(self):   # 바닥을 바로 부르는 쓰기도 같은 차례다
+        """뒤집으면 붉다 — 바닥에서 team_of 를 availability 앞으로 되돌리면 BranchError(3) 이 난다(부르는 쪽 검사에 기대지 않는다)."""
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.put({".devbrew.md": "---\nno_such_key: 1\n---\n"})
+        refs, team = self.refs(), CB.team_layout.Team("docs/superpowers/roadmaps", ALPHA)
+        res = CB.write(self.w, rm(ALPHA), SID, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual((res.commit, self.refs()), (None, refs))
+        self.assertTrue(res.notes[0].startswith(CB.SETTINGS_UNREADABLE), res.notes)
+        with self.assertRaises(CB.BranchError) as c:
+            CB.write(self.w, rm(ALPHA), OTHER, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual((c.exception.rc, self.refs()), (5, refs))
+
+    def test_a_session_without_the_marker_still_gets_five_on_a_broken_setting(self):
+        """뒤집으면 붉다 — 표지보다 설정을 먼저 보면 표지 없는 세션이 0(알림)이나 3 으로 끝난다."""
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        self.put({".devbrew.md": "---\nno_such_key: 1\n---\n"})
+        refs = self.refs()
+        for script, args in self.commands(OTHER) + (("conductor_status.py", ("waiting", "add", "--roadmap", rm(ALPHA), "--session", OTHER,
+                                                                             "--epic", "A1", "--kind", "머지", "--via", "턴 끝")),):
+            rc, out = self.run_cli(script, *args)
+            self.assertEqual((rc, self.refs()), (5, refs), (args[0], out))
+
+
+class HandMadeMerge(StateRepo):   # M25 ④ — 다시 얹을 커밋에 부모 둘 이상인 것이 있으면 다시 얹지 않는다
+    def test_a_rejected_write_over_a_hand_made_merge_commit_stops_with_three(self):
+        """뒤집으면 붉다 — 검사를 지우면 머지 커밋을 첫 부모에 견줘 다시 얹고 올려 끝난다(원격이 바뀐다)."""
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        team = CB.team_of(self.w, rm(ALPHA))
+        tip = CB.local_tip(self.w, ALPHA)
+        side = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-m", "곁")
+        merge = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-p", side, "-m", "손으로 만든 머지")
+        self.g("update-ref", CB.ref_of(ALPHA), merge, tip)
+        m2 = self.clone("m2")
+        theirs = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-m", "다른 클론의 쓰기", repo=m2)
+        self.g("push", "-q", "origin", "%s:%s" % (theirs, CB.ref_of(ALPHA)), repo=m2)            # 이 기계의 올리기가 거절된다
+        with self.assertRaises(CB.BranchError) as c:
+            CB.write(self.w, rm(ALPHA), SID, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual(c.exception.rc, 3)
+        self.assertIn("손으로 만든 머지 커밋이 있다 — 상태 브랜치는 스크립트만 쓴다: " + merge[:8], str(c.exception))
+        self.assertEqual(self.g("rev-parse", CB.ref_of(ALPHA), repo=self.o), theirs)              # 원격 그대로
+
+    def test_a_single_parent_chain_is_still_replayed(self):   # 양성 대조 — 같은 거절이 부모 하나인 커밋 위에서는 다시 얹혀 올라간다
+        self.claim()
+        CB.ensure(self.w, rm(ALPHA), SID)
+        team = CB.team_of(self.w, rm(ALPHA))
+        tip = CB.local_tip(self.w, ALPHA)
+        side = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-m", "곁")
+        self.g("update-ref", CB.ref_of(ALPHA), side, tip)
+        m2 = self.clone("m2")
+        theirs = self.g("commit-tree", tip + "^{tree}", "-p", tip, "-m", "다른 클론의 쓰기", repo=m2)
+        self.g("push", "-q", "origin", "%s:%s" % (theirs, CB.ref_of(ALPHA)), repo=m2)
+        res = CB.write(self.w, rm(ALPHA), SID, lambda base: {team.status: "x\n"}, "쓰기")
+        self.assertEqual((res.pushed, res.onto), (True, theirs))
+
+
+class PathShape(unittest.TestCase):   # M26 · S4 — 경계 바로 뒤의 `/` · `~/` 로 시작하는 낱말만 절대경로다
+    def test_boundaries_and_components(self):
+        for tok in ("/a/b", "(/a/b)", "[/a/b]", "{/a/b}", "\u300c/a/b\u300d", "'/a/b'", '"/a/b"', "`/a/b`", "x:/a/b", "k=/a/b", "a,/a/b",
+                    "x /a/b", "x\t/a/b", "~/k", "(~/k/l)", "key=~/k", "/나의/폴더", "~/나의", "/Users/x/y"):
+            self.assertTrue(CB.looks_absolute(tok), tok)
+        for tok in ("/a", "/a/", "~/", "~k/l", "a/b/c", "리더/담당자/일꾼", "설계/계획/구현", "./a/b", "x/a/b", "x~/k", "1/2/3", "", "//a", "-/a/b", "./~/k"):
+            self.assertFalse(CB.looks_absolute(tok), tok)
+
+    def test_redact_cuts_from_where_the_path_starts(self):
+        self.assertEqual(CB.redact("fatal: key=/p/q 리더/담당자/일꾼 (/나의/폴더)"), "fatal: key=<경로> 리더/담당자/일꾼 (<경로>")
+
+
+class DoneStages(unittest.TestCase):   # M27 — 글자로 복제한 목록이 상태 계산의 것과 같다
+    def test_done_stages_are_the_status_computations_done(self):
+        import roadmap_status as RS
+        self.assertEqual(CB.DONE_STAGES, RS.DONE)
+
+
+class CommandLineIdentity(StateRepo):   # B2 — 함수 안에서 가져온 모듈이 던진 BranchError 도 그 종료 코드로 끝난다
+    def test_branch_error_raised_from_a_late_import_keeps_its_code(self):
+        p = subprocess.run([sys.executable, str(SCRIPTS / "conductor_branch.py"), "--root", str(self.w),
+                            "ensure", "--roadmap", rm(ALPHA), "--session", SID], capture_output=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 5)   # 표지 없음 — 지금도 5(양성 대조: 같은 모듈 안의 오류)
+        src = (SCRIPTS / "conductor_branch.py").read_text(encoding="utf-8")
+        self.assertIn('if __name__ == "__main__":\n    import conductor_branch as _self\n    sys.exit(_self.main())', src)

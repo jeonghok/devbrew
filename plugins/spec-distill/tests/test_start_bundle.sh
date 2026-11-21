@@ -106,7 +106,7 @@ PRC=0
 import sys
 sys.path.insert(0, sys.argv[1])
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 import start_bundle
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
@@ -125,7 +125,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import start_bundle
 import team_layout
-team_layout.leader_ref = lambda ref: "refs/heads/leader-state"
+team_layout.leader_ref = lambda ref, tip=None: "refs/heads/leader-state"
 sys.exit(start_bundle.main(["--roadmap", sys.argv[2], "--role", "leader"]))
 PY
 ) || PRC=$?
@@ -301,6 +301,17 @@ g checkout -q feature/tm-e1 && g revert --no-edit HEAD >/dev/null && jpush
 g checkout -q main
 assert_eq "$(job --job E1 --stage implement --plan 1)" "0" "과제: 머리 job 을 되돌리면 다시 0(양성 대조)"
 
+# INTENT.md 머리말이 닫히지 않았다 — 로드맵 블록의 과제는 1(멈춤)이다(K22. 로드맵 밖 과제는 위 「깨진 머리」 가 3 으로 잰다 — 짝)
+g checkout -q feature/tm-e1 && put "$E1/INTENT.md" "$(printf -- '---\ntype: job\nkind: epic')" && g commit -qm "머리말을 닫지 않음" && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage design)" "1" "과제: 로드맵 블록 과제의 INTENT.md 머리말이 닫히지 않았으면 1(멈춤)"
+assert_eq "$(wc -c < "$T/job.txt" | tr -d ' ')" "0" "과제: 닫히지 않은 머리 — 표준 출력이 비었다"
+assert_contains "$(cat "$T/job.err")" "멈춤 — " "과제: 닫히지 않은 머리 — 멈춤 머리"
+assert_contains "$(cat "$T/job.err")" "머리를 읽지 못했다" "과제: 닫히지 않은 머리 — 사유"
+g checkout -q feature/tm-e1 && g revert --no-edit HEAD >/dev/null && jpush
+g checkout -q main
+assert_eq "$(job --job E1 --stage design)" "0" "과제: 머리말을 되돌리면 다시 0(양성 대조)"
+
 # 로컬이 앞선 과제 브랜치 · 갈라진 과제 브랜치
 g checkout -q feature/tm-e1 && put "$E1/local.md" "올리지 않은 고침" && g commit -qm "올리지 않음"
 LOCAL="$(g rev-parse feature/tm-e1)"
@@ -400,6 +411,8 @@ assert_eq "$(job --job fix-typo --stage implement)" "0" "멈춤 픽스처를 치
 SYNC_Q="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import start_bundle as B; print(B.sync_line("my dir/it'"'"'s.md", "worker", "abc", "def"))' "$S")"
 assert_contains "$SYNC_Q" "--result 'my dir/it'\\''s.md' --role worker --bundle-at abc --job-at def" "AC16: 쓸 것의 경로가 낱말 하나로 감싸인다"
 assert_eq "$(bash -c "set -- ${SYNC_Q#*job sync }; echo \$#:\$2")" "8:my dir/it's.md" "AC16: 줄을 셸에 붙이면 낱말 여덟이고 경로는 한 낱말이다"
+SYNC_R="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import start_bundle as B; print(B.sync_line("my dir/it'"'"'s.md", "worker", "abc", "def", "ghi"))' "$S")"
+assert_eq "$(bash -c "set -- ${SYNC_R#*job sync }; echo \$#:\$2:\${9}:\${10}")" "10:my dir/it's.md:--rules-at:ghi" "R3 AC15: 규칙 커밋을 주면 낱말 열이고 끝 두 낱말이 --rules-at 과 그 커밋이다"
 
 # ── 끝에서 끝 — 새 레포: create --layout team → 공통 문서 → job new → 시작 묶음 → 맞추는 명령 → 끝 줄 → 결과 대조 → 받음 줄 → 결과 받음.
 #    걸음마다 앞 걸음의 출력을 다음 걸음이 받는다 ──

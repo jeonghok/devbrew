@@ -78,6 +78,7 @@ put "$E1/plan-2.md" "E1 계획 둘" && g commit -qm "E1 계획 2" && push_br fea
 check 0 "12: 승인 줄이 다른 브랜치 끝에만 있어도 모아 읽는다(AC9)" --job E1 --stage plan --plan 2
 check 1 "13: 계획 1 의 확인 줄은 계획 2 를 열지 않는다" --job E1 --stage implement --plan 2
 assert_contains "$(err)" "계획 2" "13: 어느 계획인지"
+assert_not_contains "$(err)" "가 아직 없다" "13: 계획 2 의 브랜치가 있으면 브랜치 없음 힌트를 붙이지 않는다(K20)"
 
 approved "걸음 건너뜀" E1 - "계획 검토 plan 2" 2026-11-22 && push_br feature/tm-e1b
 check 0 "14: 계획 2 의 건너뜀 줄이 그 관문을 푼다(AC12)" --job E1 --stage implement --plan 2
@@ -142,6 +143,11 @@ check 0 "C2: 계획 1 이 머지돼 기준 커밋에 설계가 있으면 브랜�
 B="$(g rev-parse origin/main)"
 assert_eq "$(sed -n 1p "$T/b.txt")" "기준 커밋: ${B} · 과제 브랜치 ${B}" "C2: 첫 줄은 기준 커밋 둘"
 assert_eq "$(sed -n 2p "$T/b.txt")" "알림: 과제 브랜치 feature/tm-e1b 가 아직 없다 — 과제 폴더를 기준 커밋에서 읽었다" "C2: 둘째 브랜치 없음 알림"
+# C3 — 브랜치가 없는 건 그대로인데 「확인 못 함」 이 다른 사유(세션 기록을 읽지 못함)로 난다 — 힌트는 설계를 못 읽은 사유일 때만이다(K20)
+mkdir -p "$T/empty-config"
+CLAUDE_CONFIG_DIR="$T/empty-config" check 1 "C3: 설계는 기준 커밋에 있고 다른 사유로 확인 못 함이면 멈춘다" --job E1 --stage plan --plan 2
+assert_contains "$(err)" "확인 못 함" "C3: 사유는 확인 못 함이다"
+assert_not_contains "$(err)" "가 아직 없다" "C3: 설계를 못 읽은 사유가 아니면 브랜치 없음 힌트를 붙이지 않는다(K20)"
 
 # ── 묶음 D — 연속 실패 멈춤 · 머지된 계획(AC13 · AC14). 이 묶음의 E1 은 새 레포에서 설계 · 계획 · 승인을 갖춘다 ──
 new_repo "$T0/d" && ok "D: 팀 레포를 세웠다" || { no "D: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
