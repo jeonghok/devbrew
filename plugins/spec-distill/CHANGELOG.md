@@ -2,13 +2,13 @@
 
 ## [8.30.0] — 2026-11-22
 
+### Changed
+- `tests/test_superpowers_presence.sh` 가 판 확인 펜스 대신 skill · reference · agent · README · 의존 목록이 부르는 `check_deps.py` 하위 명령이 `entry` · `measure` 둘인지 본다. `test_review_handoff_order.sh` · `test_plain_gate_templates.sh` · `test_finishing_block_scope.py` · `shared/tests/test_check_deps.sh` 에서 판 확인 단언을 뺐다.
+
 ### Removed
 - superpowers 판 알림 — 지휘자 · 손으로 따르는 지휘 절차 · 인터뷰 끝(B-1) · brief 넘김 지시가 superpowers skill 을 불러온 뒤 설치된 판을 의존 목록의 판과 견주어 「다르다」 · 「확인하지 못했다」 를 알리던 확인을 걷었다. 본 사람이 할 수 있는 일이 없는 알림이었다. superpowers 가 없으면 멈추는 확인과 인터뷰의 「없으면 brief 까지」 흐름은 그대로다. README Prerequisites 와 `dependencies.md` superpowers 행의 「없을 때」 칸에서도 판 알림 문장을 뺐다.
 - 진행 게이트 정본(`references/proceed-gate.md`)의 «그 세션이 해당 skill 을 불러오지 않았으면 읽지 않는 채널» 예외 — 그 예외를 쓰던 채널은 superpowers 판 채널 하나뿐이었다.
 - `scripts/check_deps.py` 의 `superpowers` 하위 명령(정본 `shared/deps/check_deps.py`). `measure` 의 `--superpowers-base` 는 그대로다.
-
-### Changed
-- `tests/test_superpowers_presence.sh` 가 판 확인 펜스 대신 skill · reference · README · 의존 목록이 부르는 `check_deps.py` 하위 명령이 `entry` · `measure` 둘인지 본다. `test_review_handoff_order.sh` · `test_plain_gate_templates.sh` · `test_finishing_block_scope.py` · `shared/tests/test_check_deps.sh` 에서 판 확인 단언을 뺐다.
 
 ## [8.29.0] — 2026-11-21
 

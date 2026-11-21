@@ -122,10 +122,11 @@ assert_contains "$sprow" "진입에서 멈춘다" "dependencies.md: superpowers 
 
 # ── 6. check_deps.py 하위 명령은 entry · measure 만 부른다(음) · entry 호출(양) ──
 CORPUS="$TMP/corpus.txt"
-{ find "$SD/skills" "$SD/references" -name '*.md' -type f; printf '%s\n' "$README" "$SD/dependencies.md"; } | sort > "$CORPUS"
+{ find "$SD/skills" "$SD/references" "$SD/agents" -name '*.md' -type f; printf '%s\n' "$README" "$SD/dependencies.md"; } | sort > "$CORPUS"
 assert_contains "$(cat "$CORPUS")" "$EC" "코퍼스가 epic-conductor SKILL.md 를 담는다"
+assert_contains "$(cat "$CORPUS")" "$SD/agents/" "코퍼스가 agent 문서를 담는다"
 calls="$(while IFS= read -r f; do grep -ohE 'check_deps\.py"? [a-z-]+' "$f"; done < "$CORPUS" | sed -E 's/^check_deps\.py"? //' | sort -u | tr '\n' ' ')"
-assert_eq "$calls" "entry measure " "skill · reference · README · 의존 목록이 부르는 check_deps.py 하위 명령은 entry · measure 둘이다"
+assert_eq "$calls" "entry measure " "skill · reference · agent · README · 의존 목록이 부르는 check_deps.py 하위 명령은 entry · measure 둘이다"
 assert_contains "$(grep -F 'check_deps.py" entry' "$EC")" '--need python,git,gh' "epic-conductor 1.5: entry 호출이 있다(양의 짝)"
 
 
