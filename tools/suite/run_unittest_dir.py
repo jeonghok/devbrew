@@ -12,19 +12,23 @@ import time
 import unittest
 
 
-def module_key(test, start):
-    """모듈 파일의 현재 폴더 기준 상대 경로. 임포트에서 죽은 모듈은 `<폴더>/<이름>.py`."""
-    if isinstance(test, unittest.loader._FailedTest):
-        return os.path.join(start, test._testMethodName + ".py")
-    mod = sys.modules.get(type(test).__module__)
-    path = getattr(mod, "__file__", None)
-    if not path:
+def module_key(test, start, base):
+    """모듈 파일의 시작 폴더(base) 기준 상대 경로. 임포트에서 죽은 모듈은 `<폴더>/<이름>.py`. 죽지 않는다."""
+    try:
+        if isinstance(test, unittest.loader._FailedTest):
+            return os.path.join(start, test._testMethodName + ".py")
+        mod = sys.modules.get(type(test).__module__)
+        path = getattr(mod, "__file__", None)
+        if not path:
+            return type(test).__module__
+        return os.path.relpath(path, base)
+    except Exception:
         return type(test).__module__
-    return os.path.relpath(path, os.getcwd())
 
 
 class _TimedResult(unittest.TextTestResult):
     start_dir = "."
+    base_dir = ""
 
     def startTestRun(self):
         super().startTestRun()
@@ -33,7 +37,7 @@ class _TimedResult(unittest.TextTestResult):
 
     def stopTest(self, test):
         now = time.monotonic()
-        key = module_key(test, self.start_dir)
+        key = module_key(test, self.start_dir, self.base_dir)
         self.module_secs[key] = self.module_secs.get(key, 0.0) + (now - self._last)
         self._last = now
         super().stopTest(test)
@@ -44,7 +48,7 @@ def write_timing(path, module_secs):
         with open(path, "a", encoding="utf-8") as fh:
             for key in sorted(module_secs):
                 fh.write("%.3f\tpymod\t%s\n" % (module_secs[key], key))
-    except OSError:
+    except (OSError, UnicodeError):
         print("run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s" % path, file=sys.stderr)
 
 
@@ -60,10 +64,16 @@ def main(argv):
     start = argv[1]
     pattern = argv[2] if len(argv) > 2 else "test_*.py"
     suite = unittest.defaultTestLoader.discover(start, pattern=pattern)
+    if not timing:
+        result = unittest.TextTestRunner(stream=sys.stdout, verbosity=1).run(suite)
+        return 0 if result.wasSuccessful() else 1
     _TimedResult.start_dir = start
+    try:
+        _TimedResult.base_dir = os.getcwd()
+    except OSError:
+        _TimedResult.base_dir = ""
     result = unittest.TextTestRunner(stream=sys.stdout, verbosity=1, resultclass=_TimedResult).run(suite)
-    if timing:
-        write_timing(timing, result.module_secs)
+    write_timing(timing, result.module_secs)
     return 0 if result.wasSuccessful() else 1
 
 
