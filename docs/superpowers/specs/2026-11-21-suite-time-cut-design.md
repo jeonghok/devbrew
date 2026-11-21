@@ -267,7 +267,7 @@ next_phase: superpowers:writing-plans
 - AC6. `test_codex_backward_compat.sh` 는 원장에 등재된 테스트만 다시 돌린다 — 등재 0건이면 다른 테스트 파일을 하나도 띄우지 않는다. 통과하는 테스트를 등재한 사본에서는 실패하고, 등재한 실패 테스트의 지문이 다르면 실패하고, 같으면 통과한다.
 - AC7. 그 파일에서 걷어 낸 것(제외 목록 · 크기 핀 · 알람 · 실행 수 바닥 · 「등재되지 않은 실패를 이 테스트가 낸다」 는 설명)을 지금의 동작으로 설명하는 주석과 안내가 추적 파일에 남지 않는다 — 대상은 테스트 · 스크립트 · 원장 머리말이다. 날짜가 박힌 지난 기록(인터뷰 · 계획 · 설계문서 · 변경 이력)은 고치지 않는다.
 - AC8. `test_copy_of_contract.sh` 의 단언 수와 축별 계측이 고치기 전과 같다. 모듈마다의 소비자 집합이 고치기 전 방식의 결과와 같다는 대조를 한 번 해 보고에 싣는다. 임포트 술어의 한 갈래를 빼는 변이를 넣으면 실패한다.
-- AC9. `test_docreview_mutations.sh` 의 변이 수 · 잡힌 변이 수 · 측정 불가 수 · 단언 수가 고치기 전과 같다. 깨끗한 사본의 대조 실행은 케이스마다 한 번이다. 깨끗한 사본에서 빨간 케이스를 겨냥한 변이는 지금처럼 「측정 불가」 로 나온다.
+- AC9. `test_docreview_mutations.sh` 의 변이 수 · 잡힌 변이 수 · 측정 불가 수 · 단언 수가 고치기 전과 같다. 깨끗한 사본의 대조 실행은 케이스마다 한 번이다. 깨끗한 사본에서 빨간 케이스를 겨냥한 변이는 지금처럼 「계측기 고장 — 양성 대조 실패」 로 나온다(코드의 `instrument_broken` — 「측정 불가」 는 변이 실행이 traceback 을 낸 다른 경우의 이름이다).
 - AC10. 바이트코드 캐시 변경은 세 테스트의 합계가 같은 조건의 앞뒤 실행에서 10% 이상 줄 때만 들어간다 — 잰 두 숫자가 보고에 있다. 들어갔으면 세 테스트를 돌린 뒤 레포 안에 새 `__pycache__` 가 없고 단언 수가 같다. 변이 매트릭스의 설정은 그대로다.
 - AC11. `test_finish_pr_merge.sh` 와 `test_control_plane.sh` 는 한 글자도 바뀌지 않는다.
 - AC12. 「앞」 · 「뒤」 바퀴의 합계 · 종류별 합 · 가장 느린 스물 · 시작과 끝의 다른 스위트 수 · 겹친 대상 줄의 초 합이 구현 담당자의 마지막 보고에 실린다.
@@ -441,6 +441,7 @@ next_phase: superpowers:writing-plans
 - docreview 계수 — spec-distill-59ec298a/2026-11-21-suite-time-cut-design-a8f044b422a79d8f r1: advice_new=2 · advice_repeat=1 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-21-suite-time-cut-design-a8f044b422a79d8f r2: advice_new=7 · advice_repeat=1 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-21-suite-time-cut-design-a8f044b422a79d8f r3: advice_new=2 · advice_repeat=3 · mc_preexisting_new=2
+- B1 · 결정 · 2026-11-21 · 수용 기준 9번의 낱말을 코드의 이름(「계측기 고장 — 양성 대조 실패」)으로 바로잡는다 — 계획 담당자가 찾은 낱말 어긋남 — 「코드의 이름으로 바로잡는다 (권장)」
 
 ### Deferred to plan
 
