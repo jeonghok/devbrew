@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import shutil
@@ -317,6 +318,43 @@ class UnittestDirTimingTests(unittest.TestCase):
         keys = [l.split("\t")[2] for l in self.timing_lines(out)]
         self.assertEqual(keys, ["pkg/tests/test_broken.py"])
 
+    OLD_RUNNER = (
+        "import sys, unittest\n"
+        "suite = unittest.defaultTestLoader.discover(sys.argv[1], pattern='test_*.py')\n"
+        "result = unittest.TextTestRunner(stream=sys.stdout, verbosity=1).run(suite)\n"
+        "sys.exit(0 if result.wasSuccessful() else 1)\n")
+    CWD_GONE = ("import os\nimport shutil\nimport tempfile\nimport unittest\n\n"
+                "class G(unittest.TestCase):\n    def test_gone(self):\n"
+                "        d = tempfile.mkdtemp()\n        os.chdir(d)\n        shutil.rmtree(d)\n")
+
+    def test_deleted_cwd_same_as_old_runner(self):
+        self.write("test_gone.py", self.CWD_GONE)
+        old = os.path.join(self.tmp, "old_runner.py")
+        with open(old, "w", encoding="utf-8") as fh:
+            fh.write(self.OLD_RUNNER)
+        proc = subprocess.run([sys.executable, old, "pkg/tests"], cwd=self.tmp, env=clean_env(),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=120)
+        base = (proc.returncode, re.sub(r"in \d+\.\d+s", "in Xs", proc.stdout), proc.stderr)
+        self.assertEqual(base[0], 0, base)
+        self.assertEqual(self.run_runner(), base)
+        self.assertEqual(self.run_runner(""), base)
+        out = os.path.join(self.tmp, "timing.tsv")
+        timed = self.run_runner(out)
+        self.assertEqual(timed[:2], base[:2], timed)
+        self.assertEqual(timed[2], "", timed)
+        self.assertEqual([l.split("\t")[2] for l in self.timing_lines(out)], ["pkg/tests/test_gone.py"])
+
+    def test_unencodable_key_notes_once_and_does_not_raise(self):
+        import contextlib
+        import run_unittest_dir
+        path = os.path.join(self.tmp, "t.tsv")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run_unittest_dir.write_timing(path, {"\udcff": 1.0})
+        self.assertEqual(buf.getvalue().strip().split("\n"),
+                         ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + path])
+
 
 PASS_PY = "import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
 BASE = {
@@ -603,6 +641,26 @@ class RunAllTimingTests(unittest.TestCase):
             "if n == 6:\n"
             "    os.remove(%r)\n"
             "    os.mkdir(%r)\n" % (counter, counter, counter, path, path))
+        repo = self.stamp_fails_repo(fake)
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
+        notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s\n" % path
+        self.assertEqual((rc, out, err), (0, "", notice))
+
+    def test_only_start_line_write_fails_notes_once(self):
+        path = self.out_file()
+        counter = self.out_file("stamp-count")
+        fake = (
+            "import os, sys\n"
+            "n = 1\n"
+            "if os.path.exists(%r):\n"
+            "    n = int(open(%r).read()) + 1\n"
+            "open(%r, 'w').write(str(n))\n"
+            "print('%%d.000 0' %% n)\n"
+            "if n == 1:\n"
+            "    os.remove(%r)\n"
+            "    os.mkdir(%r)\n"
+            "if n == 2:\n"
+            "    os.rmdir(%r)\n" % (counter, counter, counter, path, path, path))
         repo = self.stamp_fails_repo(fake)
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
         notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s\n" % path
