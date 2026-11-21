@@ -1221,8 +1221,8 @@ def c_record_human(root, a) -> int:
 
 
 def _check_tips(rs, branches: list, merged: list, main: str) -> tuple:
-    """(줄의 계획 번호 → 끝 고르기, 알림들). 끝은 계획 번호가 있는 줄은 그 계획의 브랜치 끝, 그 밖은 아직 머지되지 않은 가장 앞 브랜치 끝,
-    끝이 없으면 기본 브랜치다(J17)."""
+    """(줄의 계획 번호 → 끝 고르기, 머지되지 않은 (브랜치, 끝)들, 알림들). 끝은 계획 번호가 있는 줄은 그 계획의 브랜치 끝, 그 밖은 아직
+    머지되지 않은 가장 앞 브랜치 끝, 끝이 없으면 기본 브랜치다(J17). 머지되지 않은 끝들은 브랜치 차례이고 끝이 같으면 한 번이다(K12)."""
     import team_status
     tips, notes = [], []
     for br in branches:
@@ -1230,13 +1230,31 @@ def _check_tips(rs, branches: list, merged: list, main: str) -> tuple:
         if split:
             notes.append("%s 의 줄을 읽지 않았다 — %s" % (br, split))
         tips.append(tip)
-    front = next((t for t, done in zip(tips, merged) if t and not done), None) or main
+    open_tips = []
+    for br, tip, done in zip(branches, tips, merged):
+        if tip and not done and all(tip != t for _b, t in open_tips):
+            open_tips.append((br, tip))
+    front = open_tips[0][1] if open_tips else main
 
     def pick(plan):
         if plan is not None and 1 <= plan <= len(tips) and tips[plan - 1]:
             return tips[plan - 1]
         return front if plan is None else main
-    return pick, notes
+    return pick, open_tips, notes
+
+
+def _match_unplanned(scope_at, open_tips: list, fallback: str, raw: str):
+    """계획 번호 없는 줄의 대조 판정(K12) — 머지되지 않은 끝마다 판정해 브랜치 차례로 첫 지남 아닌 것을 낸다. 사유 앞에 그 브랜치 끝을 적는다.
+    머지되지 않은 끝이 없으면 fallback(기본 브랜치) 하나에서 판정한다."""
+    if not open_tips:
+        return HL.match(scope_at(fallback), raw)
+    first = None
+    for br, tip in open_tips:
+        got = HL.match(scope_at(tip), raw)
+        if got.verdict != HL.PASS:
+            return got._replace(why="%s 끝에서: %s" % (br, got.why))
+        first = first or got
+    return first
 
 
 def _check_job(root, a) -> tuple:
@@ -1342,7 +1360,7 @@ def c_human_check(root, a) -> int:
     """human-check — 그 과제의 사람 줄마다 대조 판정을 보이고, 관문 표로 있어야 하는데 줄이 하나도 없는 자리를 드러낸다(J24).
     아무것도 쓰지 않는다. 0 모두 지남 · 1 지나지 못한 줄이나 없는 줄 · 2 사용법 · 3 읽지 못함."""
     team, rs, reader, main, branches, merged, plain = _check_job(root, a)
-    pick, notes = _check_tips(rs, branches, merged, main)
+    pick, open_tips, notes = _check_tips(rs, branches, merged, main)
     every = reader.job_tips(branches)
     lines, more = HL.collect(rs, team, a.job, every)
     gate_on = reader.gate_on()
@@ -1368,7 +1386,10 @@ def c_human_check(root, a) -> int:
                 ok = False
             continue
         parsed = HL.parse(raw)
-        got = HL.match(scope_at(pick(parsed.plan if parsed is not None else None)), raw)
+        if parsed is not None and parsed.plan is None:
+            got = _match_unplanned(scope_at, open_tips, main, raw)
+        else:   # 계획 번호가 있는 줄 · 꼴을 못 읽은 줄(끝과 상관없이 근거 없음)은 고른 끝 하나에서 본다
+            got = HL.match(scope_at(pick(parsed.plan if parsed is not None else None)), raw)
         out.append("%s — %s" % (got.verdict, raw))
         if got.verdict != HL.PASS:
             out.append("    사유: %s" % got.why)

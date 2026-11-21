@@ -47,6 +47,20 @@ class Locate(Base):
         SF.add_answer(d, SID, [("q", "a")], project="other")
         self.assertRaises(R.Unreadable, R.locate, SID, env)                 # 둘
 
+    def test_unlistable_projects_dir(self):
+        (Path(self.d) / "projects").write_text("자리표시", encoding="utf-8")   # 폴더가 아닌 보통 파일
+        with self.assertRaises(R.Unreadable) as cm:
+            R.locate(SID, self.env)
+        self.assertIn("폴더를 읽지 못했다", str(cm.exception))
+
+    def test_session_name_must_fullmatch(self):
+        d, env = self.d, self.env
+        OTHER, OTHER2 = "00000000-0000-4000-8000-00000000bbb1", "00000000-0000-4000-8000-00000000bbb2"
+        SF.add_answer(d, OTHER, [("q", "a")], subagent=True)   # projects/fixture/OTHER/ 폴더
+        SF.add_answer(d, OTHER2, [("q", "a")])
+        self.assertEqual(R.locate(OTHER2, env), SF.record_path(d, OTHER2))   # 양성 대조
+        self.assertRaises(R.Unreadable, R.locate, OTHER + "/../" + OTHER2, env)
+
     def test_a_trailing_newline_is_not_a_session_name(self):
         d, env = self.d, self.env
         SF.add_answer(d, SID, [("q", "a")])
@@ -207,6 +221,12 @@ class Answers(Base):
         empty.write_text("not json\n", encoding="utf-8")
         self.assertRaises(R.Unreadable, R.answers, empty)
         self.assertRaises(R.Unreadable, R.answers, Path(d) / "no-such.jsonl")
+
+    def test_brace_looking_line_counts_as_json(self):   # K20 — 지금 동작: 중괄호로 싸인 줄은 풀지 않고 센다
+        d = self.d
+        path = SF.record_path(d, SID); path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{x}\n", encoding="utf-8")
+        self.assertEqual(R.answers(path), [])
 
     def test_large_record(self):
         d = self.d

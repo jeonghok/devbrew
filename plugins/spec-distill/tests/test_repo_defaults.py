@@ -168,7 +168,7 @@ class Layers(unittest.TestCase):
                         "test_failure_pattern": "f", "review_model": "m", "parallel_default": "2"}, "roadmap")
 
     def test_repo_layer_accepts_all_keys_and_not_meta(self):
-        self.assertEqual(len(rd.KEYS), 14)
+        self.assertEqual(len(rd.KEYS), 15)
         rd.check_layer({k: "x" for k in rd.KEYS}, "repo")
         with self.assertRaises(rd.SettingsError):
             rd.check_layer({"type": "roadmap"}, "repo")
@@ -305,6 +305,32 @@ class ReadmeTable(unittest.TestCase):
         for key in rd.BUDGET_KEYS:
             row = next(l for l in text.splitlines() if l.startswith("| `%s` |" % key))
             self.assertTrue(row.rstrip().endswith("| 무시하고 경고 |"), row)
+
+
+class WalkTable(unittest.TestCase):   # R2 AC20 — 계획 2 몫
+    def merged(self, repo=None, roadmap=None):
+        return rd.merge_layers(roadmap, repo, "레포 설정", [])
+
+    def test_default_is_none_and_place_is_before_human_gate(self):
+        out = self.merged()
+        self.assertEqual((out["values"]["walk_table"], out["sources"]["walk_table"]), (None, "기본값"))
+        self.assertEqual(rd.KEYS[rd.KEYS.index("walk_table") + 1], "human_gate")
+
+    def test_repo_relative_file_path(self):
+        out = self.merged(repo={"walk_table": "docs/walk.md"})
+        self.assertEqual((out["values"]["walk_table"], out["errors"]), ("docs/walk.md", []))
+        self.assertEqual(self.merged(repo={"walk_table": '"docs/a #1.md"'})["values"]["walk_table"], "docs/a #1.md")
+
+    def test_bad_paths_are_errors(self):
+        for raw in ("/abs/walk.md", "~/walk.md", "docs/", "a/../walk.md", "./walk.md", ".git/walk.md", "docs/*.md", ":walk.md", ""):
+            out = self.merged(repo={"walk_table": raw})
+            self.assertIsNone(out["values"]["walk_table"], raw)
+            self.assertTrue(out["errors"] and "walk_table" in out["errors"][0], raw)
+
+    def test_roadmap_layer_does_not_take_it(self):
+        out = self.merged(roadmap={"type": "roadmap", "walk_table": "docs/walk.md"})
+        self.assertTrue(any("walk_table" in e for e in out["errors"]))
+        self.assertIsNone(out["values"]["walk_table"])
 
 
 class StateBranchKey(unittest.TestCase):   # R3 AC14

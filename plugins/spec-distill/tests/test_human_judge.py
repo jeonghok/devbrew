@@ -90,6 +90,15 @@ class Version(Repo):
         self.assertEqual(H.version(self.git, c1, path), c1[:8])            # 끝마다 따로 센다
         self.assertIsNone(H.version(self.git, c5, TEAM.plan(JOB, 1)))
 
+    def test_version_stops_at_a_commit_without_the_file(self):
+        path = TEAM.design(JOB)
+        c1 = self.commit(path, DESIGN, "설계")
+        self.git_run("rm", "-q", "--", path)
+        self.git_run("commit", "-q", "-m", "설계 지움", "--", path)
+        c3 = self.commit(path, DESIGN, "같은 본문으로 다시")
+        self.assertEqual(H.version(self.git, c3, path), c3[:8])   # 파일 없는 커밋에서 멈춘다 — c1 까지 이어 세지 않는다
+        self.assertNotEqual(c3[:8], c1[:8])
+
 
 class ShapeVerdict(Repo):
     def line(self, rev, file="design.md", kind="spec 승인", label="승인 — 계획 담당자에게"):
@@ -169,6 +178,7 @@ class Match(SeededRepo):
         self.assertEqual(self.v(self.approve(self.tip, H.KIND_PLAN, 1)), H.PASS)
         self.assertEqual(self.v(self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2")), H.PASS)
         self.assertEqual(self.v(self.approve(self.tip, picked="승인 — 계획 담당자에게")), H.PASS)
+        self.assertEqual(self.v(self.approve(self.tip, picked="승인 — 계획 담당자에게 (Recommended)")), H.PASS)
 
     def test_forged_lines_do_not_pass(self):
         real = self.approve(self.tip)
@@ -306,6 +316,62 @@ class Match(SeededRepo):
         self.assertEqual(self.v(empty), H.MISMATCH)
         self.break_last_call()                                             # 질문까지 읽지 못하면 빈 답인지 가를 수 없다 — 닫힌 쪽(확인 못 함)
         self.assertEqual(self.v(empty), H.UNCHECKED)
+
+    def test_a_later_answer_with_another_label_stops_the_line(self):   # K9 — 미룸(AC11) · 승인 뒤 「수정 필요」
+        real = self.approve(self.tip)
+        l = H.parse(real)
+        self.assertEqual(self.v(real), H.PASS)                                         # 양성 대조
+        SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — 다시 묻는 자리표시 질문", "수정 필요")])
+        got = H.match(self.scope(self.tip, (real,)), real)
+        self.assertEqual(got.verdict, H.MISMATCH)
+        self.assertIn(H.LATER_ANSWER, got.why)
+        self.assertIn("수정 필요", got.why)
+
+    def test_same_label_again_or_other_questions_do_not_stop_it(self):   # Review Focus 5 — 양성 대조
+        real = self.approve(self.tip)
+        l = H.parse(real)
+        SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — 다시 승인", "승인 — 계획 담당자에게 (권장)")])
+        SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — spec 승인 건너뛸까요", "건너뛴다")])   # 건너뜀 라벨인 답은 다른 물음이다
+        SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — 훅", "수정 필요")], who="hook")     # 사람 아님은 세지 않는다
+        SF.add_answer(self.conf, S, [(H.head(JOB, "0" * 8) + " — 다른 판", "수정 필요")])
+        self.assertEqual(self.v(real), H.PASS)
+
+    def test_a_gate_word_in_the_requestion_does_not_hide_it(self):   # 검수 지적 — 「spec 승인」 낱말을 넣어 다시 물은 「수정 필요」
+        real = self.approve(self.tip)
+        SF.add_answer(self.conf, S, [(H.head(JOB, H.parse(real).rev) + " — spec 승인 다시 확인", "수정 필요")])
+        self.assertEqual(self.v(real), H.MISMATCH)
+        plan = self.approve(self.tip, H.KIND_PLAN, 1)
+        SF.add_answer(self.conf, S, [(H.head(JOB, H.parse(plan).rev, 1) + " — 계획 검토 plan 1 다시", "계획 고침")])
+        self.assertEqual(self.v(plan), H.MISMATCH)
+
+    def test_flow_lines_skip_gate_named_questions(self):   # 흐름 승인 — INTENT.md 판 머리를 건너뛰기 질문과 함께 쓴다
+        real = self.approve(self.tip, H.KIND_FLOW)
+        rev = H.parse(real).rev
+        SF.add_answer(self.conf, S, [(H.head(JOB, rev) + " — 계획 검토 plan 1 건너뛸까요", "멈춤")])
+        self.assertEqual(self.v(real), H.PASS)
+        SF.add_answer(self.conf, S, [(H.head(JOB, rev) + " — 설계 없이 가도 될까요", "설계하고 간다")])
+        self.assertEqual(self.v(real), H.MISMATCH)
+
+    def test_a_later_unknown_answer_is_unchecked(self):
+        real = self.approve(self.tip)
+        SF.add_answer(self.conf, S, [(H.head(JOB, H.parse(real).rev) + " — 다시", "수정 필요")], who="unknown")
+        self.assertEqual(self.v(real), H.UNCHECKED)
+
+    def test_skip_lines_compare_only_the_same_gate(self):
+        real = self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2")
+        rev = H.parse(real).rev
+        SF.add_answer(self.conf, S, [(H.head(JOB, rev) + " — 계획 검토 plan 1 건너뛸까요", "멈춤")])
+        self.assertEqual(self.v(real), H.PASS)
+        SF.add_answer(self.conf, S, [(H.head(JOB, rev) + " — 계획 검토 plan 2 건너뛸까요", "멈춤")])
+        self.assertEqual(self.v(real), H.MISMATCH)
+
+    def test_the_line_rev_must_have_changed_the_file(self):   # K10 — 미룸(AC11)
+        # c2 는 plan-1.md 만 고친 커밋이다 — 설계 본문은 c1 과 같아 꼴 판정은 지나지만 그 판으로 물은 답은 근거가 아니다
+        line = self.approve(self.tip, rev=self.c2[:8])
+        self.assertEqual(H.shape(self.scope(self.tip, (line,)), line).verdict, H.PASS)
+        got = H.match(self.scope(self.tip, (line,)), line)
+        self.assertEqual(got.verdict, H.MISMATCH)
+        self.assertIn(H.NOT_TOUCHED, got.why)
 
 
 class Gates(SeededRepo):
