@@ -55,7 +55,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R1, R2
 - 브랜치: feature/session-workers
 - 묶음: E1.md
-- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/worker/, plugins/spec-distill/skills/roadmap-draft/
+- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/worker/, plugins/spec-distill/skills/roadmap-draft/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 관문이 선 뒤에 세션을 띄워야 설계 없이 개발하지 않는다
@@ -67,7 +67,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R2, E1
 - 브랜치: feature/conductor-step-guides
 - 묶음: E2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 걸음과 세션 담당자가 선 뒤에 리더의 일을 덜 수 있다
@@ -79,7 +79,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: E1
 - 브랜치: feature/remote-session-spawn
 - 묶음: E3.md
-- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 이 기계에서 세션 담당자가 돈 뒤에 다른 서버로 넓힌다
@@ -103,7 +103,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R1, R2, R3, E1, E2, E3
 - 브랜치: feature/conductor-migration
 - 묶음: R5.md
-- 경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, plugins/spec-distill/CHANGELOG.md, docs/plugin-authoring.md
+- 경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, plugins/spec-distill/CHANGELOG.md, docs/plugin-authoring.md, plugins/spec-distill/scripts/conductor_branch.py, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/scripts/conductor_mail.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/references/conductor-state-branch.md, CLAUDE.md, plugins/spec-distill/dependencies.md, shared/deps/check_deps.py
 - 크기: 중간
 - 순서 이유: 모든 새 장치가 선 뒤에 옮긴다
 - 근거: S20 · S30 · 사용자 말 2026-11-21 「싣자」
@@ -190,6 +190,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 바뀜: 바뀐 에픽 E1 · R5 「싣자」 · 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「싣자」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · E1 · E2 · E3 · R5 경로 예약에 R2 · R3 설계가 미룬 일이 닿는 파일을 더한다 — 에픽 경계 · 범위 · 의존 · 브랜치는 그대로
+- 바뀜: 바뀐 에픽 E1 · E2 · E3 · R5 「이대로 다시 나눈다 (권장)」
+- 원문:
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
