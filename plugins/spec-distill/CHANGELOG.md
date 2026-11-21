@@ -13,6 +13,10 @@
 - `shared/tests/test_skill_reference_pointers.sh` 가 spec-distill 파일의 `<SD>/…` 가리킴을 인식해 그 대상이 있는지 본다.
 - `plugins/spec-distill/tests/test_conducting_reference.sh` 가 `<SD>/` 접두의 references 경로만 허용한다.
 - `shared/tests/test_dispatch_disposition.sh` 가 내장 `general-purpose` agent 의 dispatch 도 센다.
+- 로드맵 끝 품질 게이트 리뷰가 돌았으면 걸음 7 의 쌓인 기록 · 끝에서 끝 결과를 그 리뷰의 로드맵을 닫는 PR 본문에 싣는다 — 기록만 담은 로드맵 수정 PR 을 따로 열지 않는다(리뷰가 돌지 않았으면 그 PR 은 그대로다). 쌓인 기록의 `qg 리뷰` 줄은 로드맵을 닫는 PR 만 싣고 뺀다(conducting.md 걸음 6 · 7 에 한 구절씩).
+- qg 리뷰 절차가 자동으로 보내는 자리 셋(spec 승인 앞 · 에픽 머지 뒤 · 로드맵 끝)에서 이미 보냈는지 먼저 본다 — 결과 파일 · 살아 있는 agent 줄 · 쌓인 기록 줄 · 기다리는 질문 줄로 가리고, 빈 보관 폴더는 「돌아오지 못한 리뷰」 로 「셀 수 없음」 을 남긴다. 이름으로 먼저 청한 리뷰와 범위가 같은 머지된 PR 은 다시 보내지 않는다.
+- qg 리뷰 절차의 빈 곳을 메웠다 — 범위 스크립트 · 로드맵 끝 합치기 앞의 `git fetch origin`, 비었거나 주인이 끝난 스위트 잠금이면 보내기, 사람 자리에서 멈춰 돌아온 담당자를 이어 부르기, 결과 파일이 보낸 범위의 것인지 보기, 판을 읽지 못한 결과도 「셀 수 없음」 으로 기록하기, 질문을 띄우기 전에 기다리는 질문 줄을 먼저 적기, 걸러진 질문 목록과 qg 공시 줄을 보이기.
+- `test_qg_review_reference.sh` 가 미리 받은 답의 라벨 · 계약 판 · 계약 머리 칸 이름 · 걸러진 질문 목록 머리를 quality-gates 파일에서 읽어 견준다. `test_conducting_reference.sh` 의 `<SD>/` 예외 가드에 양성 대조가 하나 늘었다.
 
 ## [8.26.0] — 2026-11-20
 
