@@ -371,10 +371,13 @@ class TestWidePrepare(unittest.TestCase):
     def _commit_record(self, brief=True):
         # brief=True 픽스처는 AC21 의 일반 동작(바뀐 문서의 source_brief: 를 따라가기 · --origin 과 같은 파일이면
         # 한 번만 싣기)을 잰다. 지휘자의 실제 기록 틀은 source_brief: 없이 roadmap: 만 싣는다(계획 검토 P2) —
-        # 그 꼴은 brief=False 와 test_range_roadmap_only_record_with_origin 이 잰다.
-        fm = dict(type="roadmap-review", roadmap="docs/rm/one/roadmap.md")
+        # 그 꼴은 brief=False 와 test_range_roadmap_only_record_with_origin 이 잰다 — 로드맵 끝에서 머리만 커밋한
+        # 틀 그대로(없음 표지 셋은 따옴표에 싼 "-" — 따옴표 없는 - 는 YAML 이 머리 전체를 읽지 못한다).
         if brief:
-            fm["source_brief"] = "docs/brief.md"
+            fm = dict(type="roadmap-review", roadmap="docs/rm/one/roadmap.md", source_brief="docs/brief.md")
+        else:
+            fm = dict(type="roadmap-review", roadmap="docs/rm/one/roadmap.md", epic='"-"', site="end",
+                      reviewed_base='"-"', reviewed_head='"-"', contract="2")
         tic._write(tic._fm(**fm) + "기록\n", self.R, *REC.split("/"))
         _ok(self.R, "add", REC)
         _ok(self.R, "commit", "-q", "-m", "record")
