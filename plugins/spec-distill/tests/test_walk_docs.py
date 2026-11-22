@@ -99,6 +99,7 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
                      "ledger human-check --roadmap <로드맵> --job <과제>", "그대로 보인다", "계획이 나올 때마다", "목록으로 보이고",
                      "실행 방식은 그 칸으로 답한다"):
             self.assertIn(word, self.TEAM, word)
+        self.assertIn("본 테스트 실패 이름과 쓴 미리 받은 답이 결과 파일의 글(기계가 읽지 않는 줄)에 있어", self.TEAM)
         self.assertNotIn("--approval", self.TEAM)
         self.assertNotIn("--choice", self.TEAM)
 
