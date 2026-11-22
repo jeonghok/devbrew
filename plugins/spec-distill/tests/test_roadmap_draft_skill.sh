@@ -209,4 +209,15 @@ c="$(mk othername "분해됨 — $RREL/plan.md")"; generated "$c"; mv -- "$c/$RR
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 로드맵 폴더와 상태 파일이 한 커밋에"
 
+# AC19 — 판 · 변경 기록 · README
+ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
+if [ "${ver%%.*}" = "9" ] && [ "$ver" = "9.0.0" ]; then ok "AC19: 판이 9.0.0 이다"; else no "AC19: 판이 9.0.0 이 아니다: $ver"; fi
+OLD1="request-""framing"; OLD2="pm-""interview"
+sec=$(awk '/^## \[9\.0\.0\]/{f=1;print;next} f&&/^## \[/{exit} f' "$SD/CHANGELOG.md")
+if printf '%s' "$sec" | grep -qF "$OLD1" && printf '%s' "$sec" | grep -qF "$OLD2"; then ok "AC19: 9.0.0 절이 두 옛 이름을 싣는다"; else no "AC19: 9.0.0 절에 옛 이름이 없다"; fi
+if printf '%s' "$sec" | grep -qF '옛 명령 줄'; then ok "AC19: 옛 명령 줄이 돌지 않음을 적는다"; else no "AC19: 옛 명령 줄이 돌지 않음을 적지 않았다"; fi
+has "$SD/README.md" '9.0.0 에서 호출 이름이 바뀌었다'
+has "$SD/README.md" 'CHANGELOG.md'
+has "$SD/README.md" '/spec-distill:roadmap-draft'
+
 finish

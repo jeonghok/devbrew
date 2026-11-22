@@ -1,5 +1,27 @@
 # Changelog
 
+## [9.0.0] — 2026-11-22
+
+### Removed
+- 호출 이름 둘을 별칭 없이 바꿨다 — `request-framing` → `intent-sync`, `pm-interview` → `context-build`. 옛 명령 줄 `/spec-distill:request-framing …` · `/spec-distill:pm-interview …` 은 이 판부터 돌지 않는다. 업그레이드 전에 만든 seed 의 안내 줄(옛 이름)도 돌지 않으니, 새 이름으로 부르면 그 seed 는 그대로 읽힌다.
+
+### Added
+- 진입 skill `roadmap-draft` — `/spec-distill:roadmap-draft @<결과물 경로>`. 확정 · 커밋한 brief 를 에픽 표 · 승인 · 로드맵 생성 · 커밋 · PR · 머지 · 지휘자 줄로 잇는다. skill 안 reference `skills/roadmap-draft/references/pr-merge.md` 가 PR 과 머지 펜스를 맡는다.
+- `scripts/roadmap_write.py check` — 에픽 수 · 위험을 읽기만 하고 세는 확인.
+- `scripts/roadmap_draft_entry.py` — roadmap-draft 진입 확인.
+
+### Changed
+- 인터뷰를 두 단계로 갈랐다 — `context-build`(확정 · 커밋까지, 끝에 roadmap-draft 줄을 낸다)와 `roadmap-draft`(표 · 승인 · 생성 · 커밋 · PR · 머지 · 지휘자 줄).
+- 커밋 범위 — context-build 는 결과물 · audit · 상태 파일을, roadmap-draft 는 로드맵 폴더와 상태 파일을 커밋한다.
+- PR 은 roadmap-draft 가 로드맵을 커밋했을 때만 묻는다. 머지가 확인되면 지휘자 줄을 늘 보이고 턴을 끝낸다.
+- 「나눈다」 선택지 글자는 `나눈다 — 확정 뒤 로드맵 잡기로` 이다. 단계 낱말도 새 이름으로 맞췄다.
+- 펜스 표지와 판결 글자 — `context-commit` · `roadmap-pr*` · `roadmap-merge*` 와 새 `roadmap-commit`. 옛 판결 글자를 읽는 호환은 없다.
+
+### Fixed
+- 커밋 펜스의 거절 갈래가 framing 기록 · seed 를 손 목록에 싣는다.
+- seed 경로를 상태 파일에서 읽는다.
+- 원자료 싣기 펜스가 상태 파일이 없으면 멈춘다.
+
 ## [8.30.0] — 2026-11-22
 
 ### Changed
