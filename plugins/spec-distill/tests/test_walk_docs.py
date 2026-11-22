@@ -44,13 +44,15 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
         for word in ("git switch --ignore-other-worktrees <브랜치>", "「브랜치 그대로 두기」(3번)", "기준 브랜치 <브랜치>",
                      "작업 방식: <작업 방식>", "실행 방식은", "check_bundle_coverage.py --plan", "가벼운 다시 확인",
                      "AC<번호>: 구현됨 | 미룸 | 빠짐", "suite_lock.py run --lock <스위트 잠금 경로>", "git stash",
-                     "TMPDIR=<이 agent 폴더>", "Spec: <설계 파일>", "이 글 끝에 붙은 `## 마지막 보고`"):
+                     "TMPDIR=<이 agent 폴더>", "Spec: <설계 파일>"):
             self.assertIn(word, block, word)
         start = self.TEXT.index("### team 형식 — 계획 · 구현 담당자")
         rest = self.TEXT[start + 1:]
         ends = [i for i in (rest.find("\n### "), rest.find("\n## ")) if i >= 0]
         section = rest[:min(ends)] if ends else rest
-        self.assertIn("`## 마지막 보고` 절을 펜스 뒤에 그대로 붙인다", section)
+        self.assertNotIn("## 마지막 보고", block)
+        self.assertNotIn("`## 마지막 보고` 절을 펜스 뒤에 그대로 붙인다", section)
+        self.assertIn("펜스 뒤에 `## 마지막 보고` 절을 붙이지 않는다 — 보고는 과제 폴더 `results/` 의 결과 파일 줄이다(세션 길 · 하위 agent 길 모두).", section)
 
     def test_no_slot_for_describing_the_job(self):
         block = fence_under(self.TEXT, "### team 형식 — 계획 · 구현 담당자")
@@ -97,8 +99,14 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
                      "ledger human-check --roadmap <로드맵> --job <과제>", "그대로 보인다", "계획이 나올 때마다", "목록으로 보이고",
                      "실행 방식은 그 칸으로 답한다"):
             self.assertIn(word, self.TEAM, word)
+        self.assertIn("본 테스트 실패 이름과 쓴 미리 받은 답이 결과 파일의 글(기계가 읽지 않는 줄)에 있어", self.TEAM)
         self.assertNotIn("--approval", self.TEAM)
         self.assertNotIn("--choice", self.TEAM)
+
+    def test_team_send_does_not_attach_last_report(self):
+        self.assertNotIn("`## 마지막 보고` 절을 그대로 붙인다", self.TEAM)
+        for word in ("`## 마지막 보고` 절을 붙이지 않는다", "멈춤 파일", "`## 세션 담당자`"):
+            self.assertIn(word, self.TEAM, word)
 
     def test_stage_and_plan_come_from_the_next_step_name(self):   # 걸음 보기의 다음 걸음 줄에는 단계 · 계획 번호 칸이 없다
         for word in ("계획 → plan", "(계획 n)"):

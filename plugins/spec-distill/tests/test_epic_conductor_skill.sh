@@ -238,4 +238,8 @@ for lit in '질문 문장 앞머리에 에픽 이름을 쓴다' 'brainstorming �
 done
 assert_contains "$SHOW" '같은 턴에 원천(하니스 agent 목록 · 상태 계산 · 실행 원장)을 다시 조회하고 「HH:MM 기준」 을 붙인다' "보이기: 진행 상황은 원천에서 다시 세고 기준 시각을 붙인다(지휘자 수리 2)"
 assert_not_contains "$SHOW" '질문마다 첫 줄에 에픽 이름' "보이기: 에픽 이름을 따로 된 첫 줄로 쓰던 옛 문장이 없다(양성 짝: 질문 문장 앞머리)"
+SKILL="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
+assert_contains "$(sed -n '1,8p' "$SKILL")" '따로 띄운 담당자 세션(herdr-core 가 없으면 하위 agent)' "설명: 계획 · 구현은 담당자 세션으로"
+assert_not_contains "$(sed -n '1,8p' "$SKILL")" '계획 · 구현 · 머지 전 확인은 하위 agent 와 스크립트로' "설명: 옛 줄 없음"
+assert_contains "$SHOW" 'hc 로 띄운 담당자 세션이 있으면 `hc ls` 의 내 자식도 원천으로 함께 센다' "보이기: 세션 담당자의 원천"
 finish
