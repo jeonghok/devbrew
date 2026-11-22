@@ -220,22 +220,28 @@ def run_command(cmd: str, tree: Path, tmp: Path, only_failed=None):
     return p.returncode, p.stdout + "\n" + p.stderr
 
 
-def _not_runnable(cmd: str, base_run: str) -> Stop:
-    """rc 127 의 Stop — 멈추기 전까지 기준 사본을 어떻게 돌렸는지(base_run)를 싣는다. 머리 줄의 꼬리가 그것을 쓴다."""
-    stop = Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    stop.base_run = base_run
-    return stop
-
-
 def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sources=None) -> dict:
+    """테스트 명령 경로의 대조. 어느 예외로 멈춰도 그때까지 기준 사본을 어떻게 돌렸는지(`base_run`)를 예외에 싣는다 —
+    머리 줄의 꼬리가 그것을 쓴다."""
     sources = sources or {}
     res = {"new": [], "fixed": [], "both": [], "unit_only": [], "fixed_unmeasured": None, "base_run": "skipped",
            "notes": ["무엇을 돌렸나: test_command(`%s`)%s" % (cmd, sources.get("test_command", ""))]}
     if pattern:
         res["notes"].append("실패 이름 정규식: test_failure_pattern(`%s`)%s" % (pattern, sources.get("test_failure_pattern", "")))
+    try:
+        return _compare_command(cmd, pattern, base, merged, work, res)
+    except BaseException as exc:
+        try:
+            exc.base_run = res["base_run"]
+        except Exception:   # 속성을 받지 않는 예외 — 꼬리는 「돌리지 않았다」 로 접힌다
+            pass
+        raise
+
+
+def _compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, res: dict) -> dict:
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
     if m_rc == 127:
-        raise _not_runnable(cmd, res["base_run"])
+        raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
     m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
     if m_rc == 0 and not m_names:
         res["notes"].append("기준 사본은 돌리지 않았다 — 합친 사본이 종료 코드 0 이고 실패 이름이 없다")
@@ -254,7 +260,7 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
         res["base_run"] = "full"
     b_rc, b_out = run_command(cmd, base, work / "tmp-base", only)
     if b_rc == 127:
-        raise _not_runnable(cmd, res["base_run"])
+        raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
     b_names, _s = side_names(b_out, base, work / "tmp-base", pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
@@ -503,11 +509,11 @@ def run(root: Path, a) -> int:
         base, merged, base_sha, tip, merged_sha = make_copies(root, work, a.branch)
         head = ("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)"
                 % (a.branch, tip[:8], ref_name, base_sha[:8], merged_sha[:8]))
-        if test_command:   # 머리 줄은 기준 사본을 어떻게 돌렸는지 안 뒤에 낸다 — 멈춰도 낸다
+        if test_command:   # 머리 줄은 기준 사본을 어떻게 돌렸는지 안 뒤에 낸다 — 어느 예외로 멈춰도 낸다
             try:
                 res = compare_command(test_command, pattern, base, merged, work, sources)
-            except Stop as stop:
-                print(head + HEAD_TAILS[getattr(stop, "base_run", "skipped")])
+            except BaseException as exc:
+                print(head + HEAD_TAILS.get(getattr(exc, "base_run", None), HEAD_TAILS["skipped"]))
                 raise
             print(head + HEAD_TAILS[res["base_run"]])
         else:

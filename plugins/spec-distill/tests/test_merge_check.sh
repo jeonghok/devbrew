@@ -388,7 +388,8 @@ logcol2() {  # logcol2 <로그> <base|merged> — 그 사본 줄들의 둘째 �
   awk -F'\t' -v s="/$2" '{ if (substr($1, length($1) - length(s) + 1) == s) print $2 }' "$1"
 }
 with_runner() { mkdir -p "$W/tools/suite"; cp "$ROOT"/tools/suite/{run-all.sh,run_unittest_dir.py,suite_peers.py} "$W/tools/suite/"; }
-printf 'shared/tests/test_old.sh: old\n' > "$T/stale-list"
+# 호출한 쪽의 낡은 목록 — 합친 사본의 실패에 없는 대상(test_seen.sh)을 가리킨다. 기준 사본에 새면 /base 가 한 줄 생긴다
+printf 'shared/tests/test_seen.sh: x\n' > "$T/stale-list"
 
 # 12 — AC14: 합친 사본이 깨끗하면 기준 사본을 돌지 않는다
 mkrepo cl 'test_command: bash run.sh\n'
@@ -427,6 +428,15 @@ assert_eq "$rc" "1" "목록을 모르는 명령: 새 실패 → rc 1"
 assert_contains "$out" "이 브랜치에만 있는 실패 1개: b.sh: new" "목록을 모르는 명령: 새 실패 이름"
 assert_contains "$out" "양쪽 다 있는 실패 1개: a.sh: old" "목록을 모르는 명령: 원래 실패는 양쪽 다 있는 실패다"
 assert_eq "$(logcol2 "$T/nl.log" base | grep -c .)" "1" "목록을 모르는 명령: 기준 사본은 목록을 받고 돌았다"
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/nl2.log" mc --branch feature/nl)"; rc=$?
+assert_eq "$(logcol2 "$T/nl2.log" base | grep -c '/only-failed\.txt$')" "1" "목록을 모르는 명령: 호출한 쪽 목록이 있어도 기준 사본은 대조가 만든 목록(only-failed.txt)을 받았다"
+# 14b — 합친 사본 뒤 Stop 아닌 예외(목록 파일을 쓰지 못함)에도 머리 줄을 그때까지의 꼴로 낸다
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+m.ONLY_FAILED_FILE = "base"   # 실행 폴더의 기준 사본 폴더 — write_text 가 IsADirectoryError 로 실패한다
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/nl"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+assert_eq "$rc" "3" "목록 파일을 쓰지 못함 → 내부 오류 rc 3"
+assert_contains "$out" "내부 오류: IsADirectoryError" "목록 파일을 쓰지 못함: 내부 오류 줄"
+assert_eq "$(headline "$out" feature/nl "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "목록 파일을 쓰지 못함: 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
 
 # 15 — AC17 · AC30: 합친 사본이 이름 없이 실패 → 기준 사본을 목록 변수 없이 전부 돈다
 mkrepo nf 'test_command: bash run.sh\n'
