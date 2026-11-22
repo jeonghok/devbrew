@@ -339,7 +339,7 @@ case_review_axis_synthesis_precedes_the_differential_test() {
 
 case_differential_line_producers() {
   local d5 fake out
-  d5=$(section "$REF" '## D5 짝짓기 — 매 iteration' | fence_with 'diff-test-results.py')
+  d5=$(section "$REF" '## D5 짝짓기' | fence_with 'diff-test-results.py')
   assert_contains "$d5" 'python3 "$QG/scripts/verdict.py" --emit-args --differential "$RD/differential.yaml"' "D5: 사본이 있으면 그 사본으로 차등 결과 줄"
   assert_contains "$d5" 'python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis' "D5: 사본이 없으면 error-axis 차등 결과 줄"
   # D5 펜스를 실제로 돌린다 — 짝짓기 스크립트는 정해진 출력과 rc 를 내는 대역, verdict.py 는 진짜다.

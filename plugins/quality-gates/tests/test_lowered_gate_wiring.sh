@@ -200,12 +200,18 @@ case_state_format() {
   note "state-file-format — ## 낮춘 지적"
   local fmt a b c
   fmt="$(awk '/^```markdown$/{on=1;next} on&&/^```$/{exit} on{print}' "$SF")"
-  a=$(line_of "$fmt" '## 지적'); b=$(line_of "$fmt" '## 낮춘 지적'); c=$(line_of "$fmt" '## 제외 패치')
+  a=$(line_of "$fmt" '## 지적'); b=$(line_of "$fmt" '## 낮춘 지적'); c=$(line_of "$fmt" '## 고칠 목록')
   if [ "$a" -gt 0 ] && [ "$b" -gt "$a" ] && [ "$c" -gt "$b" ]; then
-    ok "형식: ## 낮춘 지적 이 ## 지적 다음 · ## 제외 패치 앞 ($a < $b < $c)"
+    ok "형식: ## 낮춘 지적 이 ## 지적 다음 · ## 고칠 목록 앞 ($a < $b < $c)"
   else
-    no "형식: ## 낮춘 지적 자리가 틀렸다 (지적 $a · 낮춘 지적 $b · 제외 패치 $c)"
+    no "형식: ## 낮춘 지적 자리가 틀렸다 (지적 $a · 낮춘 지적 $b · 고칠 목록 $c)"
   fi
+  # 한 번 지나는 실행 — 반복 · 다시 돌기 · 제외 패치 낱말이 없고(부재), 고칠 목록 절이 형식 블록에 한 번 선다(양의 짝).
+  local tok n
+  for tok in 'iteration' 'Retry' 'excluded.md' 'extra-iterations.md' '제외 패치' '추가 반복'; do
+    n=$(grep -cF -- "$tok" "$SF"); assert_eq "$n" "0" "state-file-format 에 '$tok' 이 없다"
+  done
+  assert_eq "$(printf '%s\n' "$fmt" | grep -cxF '## 고칠 목록')" "1" "형식 블록에 '## 고칠 목록' 이 한 번 선다"
   assert_contains "$fmt" '사용자가 되올린 행은 이유 칸 머리에 (사용자가 되올림)' "형식: 되올린 행 표시"
   assert_file_grep "$SF" '`## 낮춘 지적` 은 마지막 합성 출력에 「낮춘 지적」 표가 있을 때만 쓴다\.' "생명주기: 있을 때만 쓴다"
 }

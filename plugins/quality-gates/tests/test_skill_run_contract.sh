@@ -28,7 +28,7 @@ for f in differential.yaml differential-not-counted.md verdict.out intent.md top
 done
 
 # 실행 단위 파일은 SKILL 이 \$RD 아래에 쓰는 것에서 도출한다 — 새 파일이 생기면 P2 도 지워야 한다.
-written="$(grep -oE '"\$RD/[A-Za-z0-9_.-]+"' "$SKILL" | sort -u | grep -v '"\$RD/result.md"')"
+written="$(grep -oE '"\$RD/[A-Za-z0-9_.-]+"' "$SKILL" | sort -u | grep -v '"\$RD/result.md"' | grep -v '"\$RD/review-i[0-9]*\.')"   # review-i* 는 아래 (b2) 의 find 가 지운다
 for w in $written; do
   printf '%s\n' "$FENCE" | grep -E '^rm -f ' | grep -qF "$w" \
     && ok "SKILL 이 쓰는 $w 를 P2 가 지운다" || no "SKILL 이 쓰는 $w 를 P2 가 지우지 않는다"

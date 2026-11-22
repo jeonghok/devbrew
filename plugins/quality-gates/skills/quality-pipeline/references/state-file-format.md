@@ -1,7 +1,7 @@
 # 로컬 결과 `result.md`
 
 `.claude/quality-gates/<session-id>/result.md` 는 한 번의 `/quality-gates:quality-pipeline` 이 남기는 로컬 결과다. 게시
-코멘트에 실리지 않는 것 — 지적 전부(SUGGESTION 포함) · 제외 패치 · 차등 요약 — 이 여기 남는다.
+코멘트에 실리지 않는 것 — 지적 전부(SUGGESTION 포함) · 고칠 목록 · 차등 요약 — 이 여기 남는다.
 
 `<session-id>` 는 `$CLAUDE_CODE_SESSION_ID` 이고 `[A-Za-z0-9_-]{8,}` 를 통과해야 한다. 형제 폴더는
 다른 세션의 것이다 — 건드리지 않는다.
@@ -26,7 +26,7 @@ started_at: "<ISO-8601 UTC>"
 
 ## 문서 경로
 
-<마지막 iteration 의 `review-i<N>.doc-paths` 요약 줄 — doc_paths_source · doc_paths · bad_patterns · excluded · kept_model —
+<`review-i1.doc-paths` 요약 줄 — doc_paths_source · doc_paths · bad_patterns · excluded · kept_model —
  과 `self_state: <건너뛴 qg 상태 파일 수>`. 경로 목록(exclude · kept 줄)은 싣지 않는다>
 
 ## 지적
@@ -37,13 +37,9 @@ started_at: "<ISO-8601 UTC>"
 
 <합성기 「낮춘 지적」 표 원문 — 번호 · 위치 · 원래 심각도 · 내용 · 낮춘 이유. 사용자가 되올린 행은 이유 칸 머리에 (사용자가 되올림) — 재비판이 낮춘 지적이 있을 때만>
 
-## 제외 패치
+## 고칠 목록
 
-<- iter <N> · #<k> · <file> · <사유> 줄들, 없으면 (없음)>
-
-## 추가 반복
-
-<- iter <N> 뒤 · 반복 하나 더 · <label|typed> · <원문> 줄들 — 반복 상한에서 사용자가 반복을 더 열었을 때만>
+<Step 4.5 의 고칠 목록 — `### 막는 지적` · `### 제안` · `### 차등 회귀` 세 절, 빈 절은 (없음)>
 
 ## 차등 테스트
 
@@ -94,19 +90,18 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 1. **만든다** — `scripts/setup-qg.sh` 가 매 실행 세션 폴더를 새로 만들고 frontmatter 와 `# qg result`
    제목만 쓴다.
 2. **덧붙인다** — 파이프라인이 Final verdict 에서 위 순서로 절을 `>>` 로 덧붙인다. frontmatter 는
-   고치지 않는다. `## 범위` 는 세션 폴더에 `range-scope.txt` 가 있을 때(범위 모드)만 쓴다. `## 문서 경로` 는 마지막 반복의 `review-i<N>.doc-paths` 가 비어 있지 않을 때만 쓴다(trivia 로 Step 1c 전에 끝난 실행 · 기준선을 풀지 못한 실행에는 없다). `## 낮춘 지적` 은 마지막 합성 출력에 「낮춘 지적」 표가 있을 때만 쓴다. `## 추가 반복` 은 `extra-iterations.md` 가 비어 있지 않을 때만 쓴다. `## e2e` · `## 뒤집기` 는 `## e2e` 절이 세션 폴더의 `e2e-record.md` · `e2e-flip.md` 에
+   고치지 않는다. `## 범위` 는 세션 폴더에 `range-scope.txt` 가 있을 때(범위 모드)만 쓴다. `## 문서 경로` 는 `review-i1.doc-paths` 가 비어 있지 않을 때만 쓴다(trivia 로 Step 1c 전에 끝난 실행 · 기준선을 풀지 못한 실행에는 없다). `## 낮춘 지적` 은 마지막 합성 출력에 「낮춘 지적」 표가 있을 때만 쓴다. `## e2e` · `## 뒤집기` 는 `## e2e` 절이 세션 폴더의 `e2e-record.md` · `e2e-flip.md` 에
    쌓아 둔 것을 옮기고, 비었으면 절을 쓰지 않는다. 그 뒤 `## Publish` 의 게시 펜스가 끝에 `## 게시` 를 덧붙인다. `## 게시` 는 하나뿐이다 —
    이미 있으면 펜스는 덧붙이지 않고 `게시 안 함 — 이 실행은 이미 게시 단계를 돌았다` 만 출력한다. 그 뒤 intent-critic 단계가 끝에 `## intent-critic` 을 덧붙인다(하나뿐 — 이미 있으면 덧붙이지 않는다).
    이미 덧붙였는지는 세션 폴더의 `intent-rendered.txt` 로 정하고, 그때는 `intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다` 만 출력한다.
    단계를 건너뛴 실행(kill switch · 멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다 — 건너뜀 줄은 출력과 `intent-return.md` 에만 있다.
 3. **지운다** — 세션 폴더는 같은 세션의 다음 qg 시작에 지워진다(`scripts/setup-qg.sh`). 그 세션이 qg 를 다시 부르지 않으면, 폴더가 정리 기한(기본 24시간)보다 오래된 뒤 어느 세션이든 qg 를 시작할 때 지워진다(`scripts/qg-gc.py`). `result.md` 가 세션 폴더의 표지다.
 
-같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) · `excluded.md`(제외 패치 누적) ·
-`extra-iterations.md`(Max-iter decision 에서 사용자가 연 반복 — 승인 출처(label · typed)와 원문, 줄 수가 상한을 늘린다) ·
-`differential.yaml`(마지막 iteration 의 차등 출력 사본) · `differential-not-counted.md`(커버리지로 세지 않은 테스트) ·
+같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) ·
+`differential.yaml`(차등 출력 사본) · `differential-not-counted.md`(커버리지로 세지 않은 테스트) ·
 `verdict.out` · `topic-scope.txt` · `range-scope.txt`(P2b 가 얼린 범위 — 범위 모드일 때만) · `review-tree.txt`(범위 모드에서 리뷰어가 읽는 끝 커밋 임시 트리의 경로 — 범위 모드일 때만, 실행 끝에 트리와 함께 지운다) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`(게시) · `e2e-record.md` · `e2e-flip.md` ·
 `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt` · `e2e-app.pgid` · `e2e-app.log`(e2e) ·
-`review-i<N>.names` · `review-i<N>.full.diff` · `review-i<N>.diff` · `review-i<N>.doc-paths` · `review-i<N>.self-state` · `review-i<N>.mode`(Review Step 1c 의 리뷰 diff 와 그 실행이 쓴 범위 모드 — iteration 마다) ·
+`review-i1.names` · `review-i1.full.diff` · `review-i1.diff` · `review-i1.doc-paths` · `review-i1.self-state` · `review-i1.mode`(Review Step 1c 의 리뷰 diff 와 그 실행이 쓴 범위 모드) ·
 `other-teams.md`(intent-critic 단계의 다른 팀 기록 — 팀 지도 · 진행 중인 의도 문서 · 겹치는 diff · 확인 못 함) —
 도 같은 생명주기를 따른다.
 

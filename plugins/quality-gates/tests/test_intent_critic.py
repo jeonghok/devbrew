@@ -3210,12 +3210,12 @@ class TestProcedureDoc(unittest.TestCase):
         fence = [l for l in i5.split("\n") if "intent_critic.py\" filter " in l]
         self.assertEqual(fence, ['python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" '
                                  '--review-mode ' + slot])
-        self.assertEqual(i5.count("마지막 iteration Step 1c 출력의 `mode:` 값"), 1)
+        self.assertEqual(i5.count("Step 1c 출력의 `mode:` 값"), 1)
 
     def test_filter_doc_says_the_mode_file_wins(self):
-        """I5 가 --review-mode 는 대체값일 뿐이라고 밝힌다 — 세션 폴더의 review-i<N>.mode 가 이긴다."""
+        """I5 가 --review-mode 는 대체값일 뿐이라고 밝힌다 — 세션 폴더의 review-i1.mode 가 이긴다."""
         i5 = self._section("I5 거르기 · 묻기 · 답 기록")
-        self.assertEqual(i5.count("`--review-mode` 는 세션 폴더에 마지막 iteration 의 `review-i<N>.mode` "
+        self.assertEqual(i5.count("`--review-mode` 는 세션 폴더에 `review-i1.mode` "
                                   "가 없을 때에만 쓰인다 — 있으면 `filter` 가 그 파일의 값을 쓴다."), 1)
 
     def test_cost_line_discloses_wide_review(self):

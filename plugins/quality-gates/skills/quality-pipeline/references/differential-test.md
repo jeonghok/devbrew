@@ -34,23 +34,23 @@
 R2~R5 · R7 · R9~R11 · R14 · R15 · R17 · R19~R21 은 `run-test-selection.sh` 와 `diff-test-results.py` 가
 코드로 지킨다. 아래 절차는 그 스크립트들을 빠짐없이 부르는 순서다.
 
-## D0 실행 시작 — 첫 iteration 에서 한 번
+## D0 실행 시작
 
 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 이 절차 전체를 건너뛰고 판정 입력은
 `--reason kill-switch` 다(R22). 차등 결과 줄은 SKILL 의 kill switch 문단 펜스가 낸다. 러너도 같은 스위치를 보고 저장소 코드를 돌리지 않는다.
 
-실행 안 메모를 만든다. 경로를 기억해 두고 실행이 끝날 때까지 모든 iteration 이 같은 메모를 쓴다(R6):
+실행 안 메모를 만든다. 경로를 기억해 두고 실행이 끝날 때까지 같은 메모를 쓴다(R6):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 "$QG/scripts/qg-worktree.sh" memo-init "<project_dir>"
 ```
 
-exit 2 면 stderr 를 그대로 보이고 이 실행에서는 차등 테스트를 하지 않는다 — 이 iteration 과 이후 모든 iteration 의
-판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다). 차등 결과 줄은 iteration 마다 D7 의 펜스로 낸다.
+exit 2 면 stderr 를 그대로 보이고 이 실행에서는 차등 테스트를 하지 않는다 —
+판정 입력은 `--reason error-axis` 다(D1~D6 을 돌지 않는다). 차등 결과 줄은 D7 의 펜스로 낸다.
 
 기준선을 정한다. 기준선 커밋은 실행마다 하나로 고정된다 — 기준선 행 파일(`<memo>/baseline-<runner>.tsv`)이 한
-커밋에 묶여 iteration 사이에 재사용되기 때문이다. 첫 iteration 의 스코프 파일로 정한다. 범위 모드(세션 폴더에
+커밋에 묶여 있기 때문이다. 이 실행의 스코프 파일로 정한다. 범위 모드(세션 폴더에
 `range-scope.txt` 가 있다)면 아래 `resolve-baseline.sh` 펜스를 돌리지 않는다 — 기준선은 그다음 판별 펜스가 찍는 시작 커밋이고,
 지금 체크아웃의 merge_base 는 범위와 무관하다:
 
@@ -72,16 +72,15 @@ elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then printf 'sco
 - `scope0=session` 이면 기준선 커밋은 `merge_base:` 다. `degraded: yes` 면 기준선 커밋은 `-` 이다 — 기준선 축을
   돌리지 못한다. `degraded_reason:` 값과 stderr 의 `[resolve-baseline]` 줄(있으면)을 그대로 사용자에게 보인다. session 스코프에서는 D2 가 같은 기준선을 풀다가 exit 4 로 멈추므로 판정 입력은 error-axis 가 된다.
 
-`scope0` 와 기준선 커밋을 기억해 둔다 — D1 이 매 iteration 대조한다. 뒤 iteration 에서 스코프가 session ↔ topic 으로
-바뀌거나 경계가 달라지면 그 iteration 은 기준선이 어긋나 판정하지 않는다(error-axis, D1). 한 줄로 알린다:
+`scope0` 와 기준선 커밋을 기억해 둔다 — D1 이 대조한다. 스코프가 session ↔ topic 으로
+바뀌거나 경계가 달라지면 기준선이 어긋나 판정하지 않는다(error-axis, D1). 한 줄로 알린다:
 `> [quality-gates] baseline: <base 또는 topic 키> @ <기준선 커밋 앞 12자> (<ahead>커밋 앞섬)`.
-범위면 키 칸은 `range` 이고 앞섬 칸은 범위 파일의 `commits:` 값이다. 범위 모드는 iteration 1 에서 끝나므로 기준선이
-어긋날 뒤 iteration 이 없다.
+범위면 키 칸은 `range` 이고 앞섬 칸은 범위 파일의 `commits:` 값이다.
 
-## D1 HEAD 축 트리 — 매 iteration
+## D1 HEAD 축 트리
 
-이 iteration 의 스코프 파일(Step 1a 가 이번 iteration 에 쓴 것)을 읽어 HEAD 축 트리를 만든다(R11 · R12). 먼저 앞
-iteration 이 세션 폴더에 남긴 차등 출력 사본을 지운다 — 이 iteration 이 D5 에 닿지 못하면 사본이 없어야 한다.
+이 실행의 스코프 파일(Step 1a 가 쓴 것)을 읽어 HEAD 축 트리를 만든다(R11 · R12). 먼저
+세션 폴더에 남은 차등 출력 사본을 지운다 — D5 에 닿지 못하면 사본이 없어야 한다.
 범위 스코프면 봉인하지 않고 범위 파일의 끝 커밋으로 `create-head --range` 를 부른다(얼린 범위 파일과 다시 대조한다 —
 시작 커밋이나 움직인 ref 로는 만들지 않는다). 토픽 스코프면 봉인하지 않고 그 파일의 `head_commit:` 으로 `create-head --topic` 을 부르고(합친 트리를 다시 도출해
 대조한다), 아니면 작업트리 전체를 봉인한 커밋으로 부른다. `<D0 의 스코프: topic | session | range>` 와 `<D0 의 기준선 커밋>` 은
@@ -101,7 +100,7 @@ elif [ -f "$S" ] && [ "$(sed -n 's/^status: //p' "$S")" = ok ]; then
   hc=$(sed -n 's/^head_commit: //p' "$S"); tree=$(sed -n 's/^tree: //p' "$S")
 fi
 if [ "$scope" != "$SCOPE0" ] || [ "$base" != "$BASE0" ]; then
-  echo "[quality-gates] 이번 반복의 비교 기준(${scope} @ ${base:--})이 처음 반복의 기준(${SCOPE0} @ ${BASE0})과 달라서, 이번 반복의 테스트 비교는 판정에 쓰지 않는다(error-axis). 기준을 바꾸려면 /quality-gates:quality-pipeline 을 처음부터 다시 돌린다." >&2
+  echo "[quality-gates] 지금의 비교 기준(${scope} @ ${base:--})이 처음 정한 기준(${SCOPE0} @ ${BASE0})과 달라서, 테스트 비교는 판정에 쓰지 않는다(error-axis). 기준을 바꾸려면 /quality-gates:quality-pipeline 을 처음부터 다시 돌린다." >&2
   echo "axis=mismatch"; exit 0
 fi
 head_tree=""; cand=""
@@ -117,14 +116,14 @@ head_commit="-"; [ -n "$head_tree" ] && head_commit="$cand"
 printf 'axis=ok\nscope=%s\nboundary=%s\ntree=%s\nhead_commit=%s\nhead_tree=%s\n' "$scope" "$base" "${tree:--}" "$head_commit" "$head_tree"
 ```
 
-- `axis=mismatch` 면 stderr 를 그대로 보이고 D2~D5 를 건너뛴다. D5 전에 끝났으므로 이 iteration 의 판정 입력은
+- `axis=mismatch` 면 stderr 를 그대로 보이고 D2~D5 를 건너뛴다. D5 전에 끝났으므로 판정 입력은
   `--reason error-axis` 다(D7).
-- `head_commit=` 이 이 iteration 의 HEAD 커밋이다. 트리를 못 만들었으면 `-` 이고 `head_tree=` 는 비었다 — D3 이
+- `head_commit=` 이 이 실행의 HEAD 커밋이다. 트리를 못 만들었으면 `-` 이고 `head_tree=` 는 비었다 — D3 이
   HEAD 축을 관측 없음으로 채우고 D5 에도 `-` 를 넘긴다.
 
-## D2 후보와 배정 — 매 iteration
+## D2 후보와 배정
 
-후보의 바닥을 받는다. 토픽 · 범위 스코프면 `--topic <boundary> <tree>` 를 붙인다 — 두 값은 D1 이 이 iteration 의 스코프
+후보의 바닥을 받는다. 토픽 · 범위 스코프면 `--topic <boundary> <tree>` 를 붙인다 — 두 값은 D1 이 이 실행의 스코프
 파일에서 읽어 찍은 `boundary=` · `tree=` 다. 범위면 그것이 `--topic <start> <end>`(범위 파일의 시작 · 끝 커밋)다.
 펜스가 같은 스코프 파일에서 두 값을 직접 읽는다 — 옮겨 적지 않는다:
 
@@ -147,7 +146,7 @@ else
 fi
 ```
 
-`candidates rc` · `total rc` 의 exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 이 iteration 의 판정 입력은 `--reason error-axis` 다.
+`candidates rc` · `total rc` 의 exit 4 는 「후보 없음」이 아니다(R17). stderr 를 그대로 보이고 판정 입력은 `--reason error-axis` 다.
 
 후보는 바닥이다. 오케스트레이터는 diff 와 의도 출처를 보고 영향 테스트를 **더할** 수만 있고 뺄 수는 없다. 낡았거나
 (이번 변경과 무관한 옛 동작을 검사) 골라 담은(변경을 피해 가는) 테스트로 판단한 것은 그대로 돌리되 커버리지로 세지
@@ -156,7 +155,7 @@ fi
 이 목록을 싣는다:
 
 ```bash
-cat > "<memo>/not-counted-i<N>.md" <<'QG_NOT_COUNTED'
+cat > "<memo>/not-counted-i1.md" <<'QG_NOT_COUNTED'
 <- <테스트 경로> — <이유 한 줄> 줄들, 없으면 (없음)>
 QG_NOT_COUNTED
 ```
@@ -167,7 +166,7 @@ D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<스캔 트리>" "<memo>/assign-i<N>.tsv"
+printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<스캔 트리>" "<memo>/assign-i1.tsv"
 ```
 
 스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 범위 스코프에서 이 대체는 어느 러너가 맡을지 정하는 데만 쓰인다 —
@@ -181,15 +180,15 @@ printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<
 
 `granularity: bulk` 러너가 하나라도 있으면 같은 줄 뒤에 `커버리지 미보장(러너가 선택을 무시함)` 을 붙인다.
 
-## D3 HEAD 축 실행 — 매 iteration
+## D3 HEAD 축 실행
 
 배정 파일의 러너마다(unclaimed 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
 per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i<N>.tsv" <unit>...
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i<N>.tsv" <fail·error 인 unit>...
+"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i1.tsv" <unit>...
+"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i1.tsv" <fail·error 인 unit>...
 ```
 
 D1 의 `head_tree` 가 비었으면(봉인이나 트리 생성 실패 — `head_commit=-`) stderr 를 그대로 보이고, 지금 작업 트리로 대신 돌리지 않는다. 대신 그
@@ -197,10 +196,10 @@ D1 의 `head_tree` 가 비었으면(봉인이나 트리 생성 실패 — `head_
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" unrun "<memo>/head-<runner>-i<N>.tsv" "<runner>" - <unit>...
+"$QG/scripts/run-test-selection.sh" unrun "<memo>/head-<runner>-i1.tsv" "<runner>" - <unit>...
 ```
 
-## D4 기준선 축 — 매 iteration, 아직 돌지 않은 unit 만
+## D4 기준선 축 — 아직 돌지 않은 unit 만
 
 같은 실행 안에서 기준선 커밋은 바뀌지 않는다 — 아래 `<기준선 커밋>` 은 D0 이 정한 값이다. 메모에 관측된 행이 없는
 unit 만 돌린다:
@@ -233,27 +232,26 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 "$QG/scripts/run-test-selection.sh" unrun "<memo>/baseline-<runner>.tsv" "<runner>" "<기준선 커밋>" <pending unit>...
 ```
 
-## D5 짝짓기 — 매 iteration
+## D5 짝짓기
 
 리포 루트에서 부른다(펜스가 그리로 옮긴다). `<기준선 커밋>` 은 D0 의 값, `<HEAD 커밋>` 은 D1 이 찍은 `head_commit=`
 값(`-` 포함)이다. 같은 펜스가 출력 파일과 D2 의 커버리지 제외 목록을 세션 폴더에 사본으로 덮어쓰고, 그 사본
-`$RD/differential.yaml` 이 이 iteration 의 판정 입력이다 — Step 4 의 합성기와 실행 끝의 `result.md` 가 메모가 아니라 이 사본
-(마지막 iteration 의 것)을 읽는다. 펜스 끝에서 `verdict.py --emit-args` 가 같은 사본으로 차등 결과 줄을 낸다:
+`$RD/differential.yaml` 이 판정 입력이다 — Step 4 의 합성기와 실행 끝의 `result.md` 가 메모가 아니라 이 사본을 읽는다. 펜스 끝에서 `verdict.py --emit-args` 가 같은 사본으로 차등 결과 줄을 낸다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 cd "$TOP" || exit 1
-"$QG/scripts/diff-test-results.py" --assign "<memo>/assign-i<N>.tsv" --rows "<memo>" --iter <N> \
-  --baseline-commit "<기준선 커밋>" --head-commit "<HEAD 커밋>" > "<memo>/diff-i<N>.yaml"
+"$QG/scripts/diff-test-results.py" --assign "<memo>/assign-i1.tsv" --rows "<memo>" --iter 1 \
+  --baseline-commit "<기준선 커밋>" --head-commit "<HEAD 커밋>" > "<memo>/diff-i1.yaml"
 diff_rc=$?
-if [ "$diff_rc" -eq 0 ] && [ -s "<memo>/diff-i<N>.yaml" ]; then
-  cp "<memo>/diff-i<N>.yaml" "$RD/differential.yaml" || { diff_rc=4; rm -f "$RD/differential.yaml"; }
+if [ "$diff_rc" -eq 0 ] && [ -s "<memo>/diff-i1.yaml" ]; then
+  cp "<memo>/diff-i1.yaml" "$RD/differential.yaml" || { diff_rc=4; rm -f "$RD/differential.yaml"; }
 else
   rm -f "$RD/differential.yaml"
 fi
-if [ -f "<memo>/not-counted-i<N>.md" ]; then cp "<memo>/not-counted-i<N>.md" "$RD/differential-not-counted.md"; else rm -f "$RD/differential-not-counted.md"; fi
+if [ -f "<memo>/not-counted-i1.md" ]; then cp "<memo>/not-counted-i1.md" "$RD/differential-not-counted.md"; else rm -f "$RD/differential-not-counted.md"; fi
 echo "diff_rc=$diff_rc"
 if [ "$diff_rc" -eq 0 ] && [ -f "$RD/differential.yaml" ]; then
   python3 "$QG/scripts/verdict.py" --emit-args --differential "$RD/differential.yaml"
@@ -262,20 +260,20 @@ else
 fi
 ```
 
-펜스의 마지막 줄(`qg-verdict-args: --new-failures K …`)이 이 iteration 의 차등 결과 줄이다 — 글자 그대로 들고 있다가 SKILL 의
+펜스의 마지막 줄(`qg-verdict-args: --new-failures K …`)이 차등 결과 줄이다 — 글자 그대로 들고 있다가 SKILL 의
 `## Final verdict` 판정 펜스에 붙인다. 그 줄이 없으면(`verdict.py` 가 0 이 아닌 값으로 끝났다) stderr 를 그대로 보이고 멈춘다 — 판정 없음.
 
 `per_adapter` 의 `attributions` 에 `NEW_REGRESSION` 인 unit 이 있으면 그 unit 만 HEAD 축 트리에서 한 번 다시 돌리고
-(flaky 재실행) 이 펜스를 다시 부른다. 마지막 호출의 결과가 이 iteration 의 결과다(R15):
+(flaky 재실행) 이 펜스를 다시 부른다. 마지막 호출의 결과가 이 실행의 결과다(R15):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i<N>.tsv" <NEW_REGRESSION unit>...
+"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i1.tsv" <NEW_REGRESSION unit>...
 ```
 
 ## D6 트리 정리 — 모든 종료 경로
 
-이 iteration 에서 만든 트리는 결과가 어떻든 지운다(R23). 지울 트리가 없으면 건너뛴다:
+이 실행에서 만든 트리는 결과가 어떻든 지운다(R23). 지울 트리가 없으면 건너뛴다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -294,15 +292,15 @@ Step 4 의 합성기에 싣는 판정 입력은 아래 표가 정한다. 실행 
 | `diff_rc=0` 이고 `$RD/differential.yaml` 이 있다 | `--differential "$RD/differential.yaml"` |
 | `diff_rc` 가 0 이 아니다 · 파일이 없다 · D5 전에 절차가 끝났다(D0 메모 실패 · D2 exit 4 포함) | `--reason error-axis` (R18) |
 
-D5 전에 끝난 경우에는 D1 의 `axis=mismatch` 와, D0 의 메모 만들기가 실패한 실행의 이후 모든 iteration 이 함께 든다.
-D5 에 닿지 못한 iteration 은 이 펜스로 차등 결과 줄을 낸다(D5 의 두 행은 D5 펜스가, kill switch 행은 SKILL 의 kill switch 문단 펜스가 낸다):
+D5 전에 끝난 경우에는 D1 의 `axis=mismatch` 와 D0 의 메모 만들기 실패가 함께 든다.
+D5 에 닿지 못한 실행은 이 펜스로 차등 결과 줄을 낸다(D5 의 두 행은 D5 펜스가, kill switch 행은 SKILL 의 kill switch 문단 펜스가 낸다):
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
 ```
 
-판정 줄의 「차등 새 실패」 칸은 마지막 iteration 의 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
+판정 줄의 「차등 새 실패」 칸은 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
 그 사본의 `new_failures:` 에서 낸다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
 커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 양측 빨강을 공시하는
 `resolution_disclosure:` 줄이 있으면 판정 줄 옆에도 그대로 보인다(R10). bulk 러너가 양측 red 면 이 문장을 그대로 쓴다:
