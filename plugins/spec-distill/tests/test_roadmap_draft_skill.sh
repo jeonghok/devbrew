@@ -188,4 +188,25 @@ assert_eq "$(tail -n 1 "$T/outside-rm/roadmap.md")" "밖" "보안: 링크 너머
 c="$(mk dangling "$DEC")"; stated "$c"; mkdir -p "$c/docs/superpowers/roadmaps"; ln -s "$T/no-such-dir" "$c/$RREL"
 o="$(runc "$c")"; refused_rd "$c" "$o" "보안: 끊긴 링크" "$RREL"
 
+# 끝내기 커밋에서 옮겨 온 도출 칸 — §7 절대경로 · §7 밖의 분해됨 줄 · 다른 cwd 레포 · 다른 이름의 로드맵
+RD3="$STEM.state.md $RREL/R1.md $RREL/roadmap.md "
+c="$(mk dec-abs "분해됨 — $T/dec-abs/$RREL/roadmap.md")"; generated "$c"
+o="$(runc "$c")"
+assert_eq "$(files_of_head "$c")" "$RD3" "커밋(§7 절대경로): 로드맵 폴더와 상태 파일이 한 커밋에 든다"
+c="$(mk outside7 "다음 단계로 간다.")"; generated "$c"
+printf -- '---\ntype: interview-brief\n---\n## 2. 제약\n\n%s\n\n## 7. Next Action\n\n다음 단계로 간다.\n' "$DEC" > "$c/$STEM.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "2" "§7 밖의 분해됨 줄: 분해 신호가 아니다 — 커밋하지 않는다"
+assert_contains "$o" "커밋하지 않았다 — 결과물 §7 에 분해됨 줄이 없다" "§7 밖의 분해됨 줄: 사유를 보인다"
+# cwd 가 다른 레포(다른 interview_dir · 기본 브랜치 모름)여도 결과물 레포에 커밋하고 cwd 레포에는 커밋하지 않는다
+c="$(mk elsewhere "$DEC")"; generated "$c"
+x="$(mk cwdrepo "다음 단계로 간다." 'interview_dir: notes/')"; git -C "$x" remote set-head origin -d >/dev/null 2>&1
+o="$( cd "$x" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$c/$STEM.md}" 2>&1 )"
+assert_eq "$(files_of_head "$c")" "$RD3" "다른 레포에서 돌림: 결과물 레포의 설정으로 로드맵 폴더와 상태 파일이 한 커밋에"
+assert_eq "$(nhead "$x")" "2" "다른 레포에서 돌림: cwd 레포에는 커밋하지 않는다"
+# 양의 짝 — 이름이 roadmap.md 가 아니어도 머리말 type: roadmap 이면 로드맵이다(끝내기 커밋에서 옮긴 칸 그대로 — roadmap-check 의 결함을 지켜본다)
+c="$(mk othername "분해됨 — $RREL/plan.md")"; generated "$c"; mv -- "$c/$RREL/roadmap.md" "$c/$RREL/plan.md"
+o="$(runc "$c")"
+assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 로드맵 폴더와 상태 파일이 한 커밋에"
+
 finish
