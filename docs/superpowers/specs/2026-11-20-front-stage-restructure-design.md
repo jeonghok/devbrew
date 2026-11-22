@@ -38,6 +38,8 @@ next_phase: superpowers:writing-plans
 - [Metadata](#metadata)
 - [결정 기록](#결정-기록)
 - [지휘 기록](#지휘-기록)
+- [판정](#판정)
+- [구현 대조 — 계획 1](#구현-대조--docssuperpowersplans2026-11-20-front-stage-restructure-plan1md)
 
 ## Context / Why
 
@@ -603,3 +605,74 @@ next_phase: superpowers:writing-plans
 - 옆 로드맵 알림 · 2026-11-20 · 설계 승인 뒤 옆 지휘 세션 하나(devbrew-e6)에 새 이름 · 넘긴 일 · 겹치는 파일을 글로 보냈고 답을 받았다(정보 — 승인이 아니다). 그쪽 기본 브랜치가 7177a5bb(spec-distill 8.26.0)로 옮겨 갔고, 그쪽 PR 둘(목표 판 8.27.0 · 8.28.0)이 열릴 예정이며, 넘긴 일은 아직 그쪽 에픽 칸에 실리지 않았다. 다른 세션 둘은 어느 로드맵을 맡는지 몰라 보내지 않았다
 - 머지 순서 · 2026-11-20 · 옆 로드맵의 PR 둘을 먼저 머지하고 이 에픽 첫 계획의 구현은 그 뒤의 기본 브랜치에서 시작하기로 사용자가 정했다(「옆 로드맵 PR 둘 먼저 (권장)」). 로드맵의 F5 칸 경로 예약을 맞추는 PR 309 를 따로 열었다
 - 계획 검토 · 2026-11-20 · 계획 1(과제 14)을 지휘자가 읽었다. 수용 기준이나 의도를 바꾸는 결정은 없었고, 영어 문장 속 맨 낱말을 그대로 두는 것 하나를 사용자에게 물어 뒤집었다(결정 기록). 실행 방식은 사용자가 Subagent-driven 을 골랐다
+- 지휘 넘겨받음, 2026-11-22, 앞 지휘 세션(730115bc)의 표지를 사용자가 「넘겨받기」 로 이 세션(47dfa5f5)에 넘겼다. 넘겨받을 때 살아 있는 agent 와 기다리는 질문은 없었다
+- 구현 시작, 2026-11-22, 옆 로드맵의 PR 둘(312, 314)이 2026-11-21 에 머지된 것을 확인하고 기본 브랜치 f153a43b(spec-distill 8.30.0)를 이 브랜치에 합쳤다(bfbb1402, 충돌 없음). 이 에픽에 닿는 병렬 답은 없어 기본대로 계획 1 의 구현 담당자(f5-impl1, opus, 과제 14개의 리뷰를 가르는 판단 자리라 세션 모델보다 한 단계 아래)를 보냈다. 지휘 세션이 쓰는 spec-distill 은 8.25.0 이다
+- 구현 담당자 끊김과 이어 부름, 2026-11-22 13:43, 구현 담당자(f5-impl1)가 과제 7 도중 로그인 오류(authentication_failed)로 끊겼다. 과제 1–6 은 커밋돼 있었고 과제 7 의 변경(파일 13개)은 커밋되지 않은 채 worktree 에 남아 있었다. 안전 사본을 임시 폴더에 두고 같은 담당자를 이어 불렀다
+- 계획 1 구현 돌아옴, 2026-11-22 19:40, 구현 담당자(f5-impl1)가 과제 14개를 마치고 돌아왔다(마지막 커밋 bbf2f1fe). 그 사이 기본 브랜치가 df016db6(다른 로드맵의 문서만 바뀐 PR 320)으로 옮겨 가 이 브랜치에 합쳤다(ca4df487, 충돌 없음)
+- 설계에 없던 결정 가름, 2026-11-22, 판정 27줄을 지휘 세션이 읽었고 승인된 수용 기준이나 의도를 바꾸는 판정은 없다고 갈랐다. 진입의 멈춤 둘(기본 브랜치를 확인하지 못했다, 결과물이나 audit 을 읽지 못했다)은 AC6 이 보는 조건을 알 수 없을 때 막는 쪽으로 읽은 것이고, 표 아래 에픽마다의 근거 줄과 로드맵 목록 명령(control_plane.py show)은 설계 「나누기 전 확인」 의 글 안이다. 사람에게 묻는 것은 하나다, spec-review 후속 질문의 「컨텍스트 쌓기 다시 열기」 라벨이 로드맵 에픽에서는 재분해로 간다(옛 이름 때도 같은 꼴이었다)
+- quality-gates 판, 2026-11-22, 구현 담당자가 물을 거리로 남긴 quality-gates 판 올림을 레포 규칙(플러그인을 건드리는 PR 마다 올린다)대로 지휘 세션이 15.3.2 로 올렸다(bddfc631). 바뀐 것은 테스트 셋과 함께 싣는 docreview_state.py 의 설명 글 한 줄이다
+
+## 판정
+
+### docs/superpowers/plans/2026-11-20-front-stage-restructure-plan1.md
+
+- Ruling: Task 12 rewrites old-form fence tokens in test_stage_split.sh (and any other test) as concatenated strings (e.g. "interview-""pr:begin") so the Task 12 Step 4 git grep is 0 while keeping both-form teeth — plan Task 12 Step 4 says tests included; Task 9 note says both forms are for teeth before/after 12 — costs: none if wrong (string equality unchanged).
+- Ruling: plan-embedded `…/spec-distill/8.14.0/scripts/…` paths read as 8.25.0; suite lock wait 7200 — conductor instruction.
+- Ruling: Task 1 Step 1 merge already done by conductor (bfbb1402); origin/main == f153a43b is ancestor → no new merge commit needed — conductor instruction.
+- Ruling: Task 1 has no diff → controller verified recheck.md sections (예약 · 설계가 정하지 않은 층 · 제3자 · 기준 줄 수 · 근거 대조) instead of a diff review — no code to gate — costs: a wrong count surfaces in Task 2/12 locks.
+- Ruling: reservation table differed (R4 gone, E4 new) → committed plan table fix 535a78d7. E4 branch feature/team-layout-default does not exist on origin; side branches team-file-* all merged; only open PR #319 overlaps 0 modified files → proceed without stopping; report reserved files touched in final report — conductor instruction.
+- Ruling: qg tests (test_governance_no_capability_caps.sh RF path · test_codex_gate_observation.sh case label · tests/lib/reconstruct-skill.sh comment) and tools/plain-language/test_measure_questions.py old names → Task 2 renames them (plan Task 2 pathspec includes plugins/quality-gates/tests and tools; Global Constraint "old names only in CHANGELOG/2 check files/fixtures"). "quality-gates 의 글" non-goal = qg prose, not test paths. No qg version bump (tests/comments only — same precedent as plan Task 1 Step 5); note in PR body — costs: one qg patch bump later if a lock demands it.
+- Ruling: public repo + README install guide ≠ marketplace public registration; no third-party authors → no-alias rename exception stands (design already decided on same facts) — costs: alias policy revisit if conductor disagrees.
+- Ruling: ask-sites.tsv path column renamed in Task 2 despite fixtures exclusion — it is a live registry keyed by skill path (plan Task 7 also edits it) — costs: none.
+- Task 2: review Approved, spec ✅. Plan-mandated RED: test_invocation_surface.sh i_pm until Task 4 (plan Step 4 "all pass" self-contradiction) — Ruling: accept; Task 4 flips it next.
+- Ruling: from Task 4 on, implementers use their own harness attribution line (conductor: "끝줄 attribution 은 그때 하니스가 안내하는 대로"); Tasks 2-3 commits carry the Opus line — costs: cosmetic.
+- Ruling: Important #2 fix = STOP `기본 브랜치를 확인하지 못했다: <사유>` — same AC6 condition under uncertainty, fail-closed like the commit fence's 「기본 브랜치 판정 실패」 rejection; not a new behavior beyond AC6 — costs: one extra STOP string the skill shows verbatim.
+- Ruling: roadmap list via `control_plane.py show` (roadmap_status.py needs a path) — same command as /spec-distill:roadmap-status — costs: none.
+- Ruling: approval-question descriptions dropping 「brief 작성으로」 accepted — the brief already exists in the split flow, old text would be false (consequence of spec 설계 1 split, not new behavior) — costs: reviewer may disagree.
+- Ruling: dependencies.md has no entry-skill row (per-tool rows) → unchanged.
+- Ruling: AC13 fix = keep locked sentence + one sentence "경로 예약 칸에는 경로만; 근거는 표 아래 에픽마다 한 줄" — placement detail that keeps AC13 true and parser intact, no spec wording change — costs: one extra line per epic under the table shown to the user.
+- Ruling: Important 1 → Task 9 (its Step 4 rewires B-1/B-2/B-3 tails for split jobs; plan-scheduled) — costs: finishing.md has dangling pointers between Task 8 and Task 9 commits.
+- Ruling: Task 8 Important 2 — seed-from-record mutation is equivalent by construction (raw_source._chain: audit = seed[:-3]+".audit.md"; any FOUND case has equal stems) → accept; add source-level absence lock (no `${RAW_A%.audit.md}` in PR fence) + positive `has` reads state seed: — costs: behavioural lock impossible; textual only.
+- Ruling: Important 1 fix = B-1 split-job path points to B-3 「로드맵 잡기 줄 — 나눈 일」 paragraph (plan Step 4 + AC5 text), no new option — follows spec, not new behavior — costs: if conductor reads it as a visible change, revisit.
+- Ruling: Important 2 — port the four cases to roadmap-commit; 「다른 이름의 로드맵」 ported unchanged as a witness of the live roadmap-check defect (may stay failing, as it did pre-plan) — costs: one known RED stays in suite.
+- Ruling: run the final whole-branch review and its single fix wave BEFORE the locked full suite (plan lists suite first) so the one suite run covers the final tree — conductor: "전체 스위트는 잠금 아래 끝에 한 번" — costs: suite feedback arrives later.
+- Ruling: keep this plan's SDD workspace (not rm -rf) — conductor asked the final report to list working folder + mirror paths; mirror at ~/.claude/sdd-mirror/f5-plan1/ — costs: git-ignored folder lingers.
+- Ruling: fix wave = Critical 1 + Important 2 (+ X1 ## 7 lead-in) + Minors 2 (unreadable not risk STOP), 3 (default-branch stderr hint), 4 (--out = §7 folder), 6 (README run-on/register) — Minor 5 (entry early check-path) not done: new STOP behaviour → 미룸 row; Minor 1 (spec step numbers vs headings) → 미룸 row for E1, existing spec row untouched — costs: E1 must read the note.
+- Ruling: quality-gates not bumped (tests + a docstring in shared docreview_state.py) — surfaced to conductor as open item (CLAUDE.md says bump; plan precedent says no) — costs: one qg patch bump if conductor decides.
+- Ruling: 「an context brief」 (brief-readback.md:4) deferred to next agent-edit security bundle (plan 2/4) → 미룸 row.
+- Ruling: fix-wave item 3 changes the reason text of an existing STOP (unreadable input already stopped; old text gave the wrong remedy) — not a new stop condition — costs: one STOP string differs from Task 6's list.
+- Task 14: fix wave (1f757485 · fc234fa7 · 97ab7ce9 · ad7882a8) re-review Approved; parked — roadmap-draft SKILL.md entry-table STOP row run-on 「보인다사유가」 — Ruling: no second fix wave (SDD); cosmetic, model-read prose — costs: one missing '. '.
+- Ruling: finishing-a-development-branch — pre-answered option 3 (keep branch, no PR); full suite not re-run after the 3 test-only suite fixes (targeted locks green; remaining failures classified pre-existing against an origin/main extract) — conductor runs the locked suite comparison — costs: a second-order break from the fixes would surface there.
+- ## 판정 전체 (원장 순서, 줄마다 Ruling:)
+- 1. Ruling: 과제 12 에서 test_stage_split.sh 의 옛 꼴 펜스 토큰은 이어 붙인 문자열로 쓴다. 그래야 과제 12 Step 4 의 git grep 이 0건이면서 두 꼴 모두에서 이빨이 선다 — 틀려도 비용 없음.
+- 2. Ruling: 계획에 박힌 8.14.0 경로는 8.25.0 으로 읽고, 스위트 잠금 wait 는 7200 으로 둔다 — 지휘자 지시.
+- 3. Ruling: 과제 1 Step 1 의 합치기는 지휘자가 이미 했다(bfbb1402). 새 합치기 커밋은 만들지 않았다 — 지휘자 지시.
+- 4. Ruling: 과제 1 은 diff 가 없어서 리뷰 대신 내가 recheck.md 의 각 절을 확인했다 — 틀리면 수가 과제 2 · 12 의 락에서 드러난다.
+- 5. Ruling: 예약 표가 달라서(R4 가 빠지고 E4 가 생김) 계획 표를 고쳐 커밋했다(535a78d7). E4 브랜치는 origin 에 없고, team-file-* 셋은 머지됐고, 열린 PR #319 와 겹치는 고칠 파일은 0개라 멈추지 않았다.
+- 6. Ruling: quality-gates 테스트 셋과 tools/plain-language/test_measure_questions.py 의 옛 이름은 과제 2 에서 바꿨다. 「quality-gates 의 글」 은 글(prose)이지 테스트 경로가 아니다. quality-gates 판은 올리지 않았다 — 판 올림이 요구되면 patch 하나.
+- 7. Ruling: 공개 레포의 README 설치 안내는 마켓플레이스 공개 등록이 아니고, 레포 주인 밖의 작성자도 없다. 그래서 별칭 없이 바로 바꾸는 예외는 산다 — 지휘자가 다르게 보면 별칭 정책을 다시 정해야 한다.
+- 8. Ruling: ask-sites.tsv 는 픽스처 폴더에 있지만 skill 경로를 키로 쓰는 살아 있는 목록이라 과제 2 에서 경로 칸을 고쳤다 — 비용 없음.
+- 9. Ruling: test_invocation_surface.sh 의 i_pm RED 는 과제 4 전까지 계획이 만든 것이라 받아들였고, 과제 4 에서 뒤집었다.
+- 10. Ruling: 과제 4 부터 커밋 attribution 줄은 각 agent 의 하니스 안내를 따른다. 과제 2 · 3 커밋에는 Opus 줄이 붙어 있다 — 겉모양뿐.
+- 11. Ruling: 과제 6 의 기본 브랜치 확인 실패는 `roadmap-entry: STOP 기본 브랜치를 확인하지 못했다: <사유>` 로 막는다. AC6 의 같은 조건을 모를 때 막는 쪽(fail-closed)으로 읽었고, 커밋 펜스의 「기본 브랜치 판정 실패」 거절과 같은 꼴이다 — STOP 글자가 하나 는다.
+- 12. Ruling: 로드맵 목록은 `control_plane.py show` 로 낸다(roadmap_status.py 는 경로를 요구한다). /spec-distill:roadmap-status 와 같은 명령이다 — 비용 없음.
+- 13. Ruling: 승인 질문 설명에서 「brief 작성으로」 를 뺀 것을 받아들였다. 가른 흐름에서는 brief 가 이미 있어 옛 글이 거짓이 된다 — 리뷰어가 다르게 볼 수 있다.
+- 14. Ruling: dependencies.md 는 행이 도구마다라 진입 skill 행이 없다. 그래서 바꾸지 않았다.
+- 15. Ruling: AC13 은 잠근 문장을 그대로 두고 한 문장을 더해 고쳤다 — 「경로 예약 칸에는 경로만; 근거는 표 아래 에픽마다 한 줄」. 스크립트가 그 칸을 경로 목록으로 읽기 때문이다 — 사용자에게 보이는 표 아래에 에픽마다 한 줄이 는다.
+- 16. Ruling: 과제 8 의 finishing.md 가 옮긴 절을 가리키던 문장 고침은 과제 9 로 넘겼다(과제 9 Step 4 가 B-1/B-2/B-3 꼬리를 고친다) — 두 커밋 사이 잠깐 끊긴 지시가 있었다.
+- 17. Ruling: 「seed 를 기록 경로에서 지음」 변이는 구조상 같은 값을 낸다. raw_source._chain 이 기록 경로를 seed 경로에서 짓기 때문이다. 그래서 동작 락 대신 글자 락(부재 + 「상태 파일 seed: 를 읽는다」 양의 짝)으로 문다 — 다른 철자로 지으면 못 잡는다. 과제 10 의 seed_from_state 도 같은 판정이다.
+- 18. Ruling: 과제 9 의 B-1 「여기서 계속」 은 나눈 일이면 B-3 「로드맵 잡기 줄 — 나눈 일」 문단을 따르게 했다. 계획 Step 4 와 AC5 의 글이고, 새 선택지는 없다 — 지휘자가 보이는 변경으로 읽으면 다시 본다.
+- 19. Ruling: 빠졌던 커밋 펜스 동작 시험 넷을 roadmap-commit 펜스로 옮겼다. 그중 「다른 이름의 로드맵」 의 옛 실패는 locale sort 탓으로 밝혀졌고, 옮긴 시험은 통과한다.
+- 20. Ruling: 마지막 전체 리뷰와 그 고침을 잠긴 전체 스위트보다 먼저 했다. 「끝에 한 번」 이 마지막 트리를 덮게 하려고 계획 순서와 바꿨다.
+- 21. Ruling: 이 계획의 SDD 작업 폴더는 지우지 않는다(지휘자 보고용, 거울도 있다).
+- 22. Ruling: 고침 물결의 범위 = Critical 1 + Important 2 + Minor 2 · 3 · 4 · 6. Minor 5(진입에서 결과물이 의도 폴더 바로 아래인지 일찍 보기)는 새 STOP 동작이라 하지 않고 미룸 행으로 올렸다. Minor 1(설계 걸음 번호 ↔ skill 머리 번호)도 E1 에게 줄 미룸 행으로 올렸다. 설계의 기존 행은 고치지 않았다.
+- 23. Ruling: quality-gates 판을 올리지 않았다(테스트와 shared docreview_state.py 의 docstring 뿐). CLAUDE.md 는 올리라고 하고 계획 선례는 올리지 않는다 — 지휘자 판단 거리.
+- 24. Ruling: 「an context brief」(brief-readback.md:4)는 다음 agent 편집 묶음(계획 2 또는 4)으로 미뤘다 → 미룸 행.
+- 25. Ruling: 고침 물결 3번은 이미 있던 STOP 의 사유 글자만 바꾼다(못 읽은 입력은 원래도 멈췄고, 옛 글은 틀린 처방을 줬다). 새 멈춤 조건이 아니다.
+- 26. Ruling: roadmap-draft SKILL.md 진입 표 STOP 행의 「보인다사유가」 붙은 글은 두 번째 고침 물결을 돌지 않아 남겼다 — 마침표 하나가 빠져 있다.
+- 27. Ruling: finishing 은 미리 받은 답 3번(브랜치 그대로)을 썼다. 스위트 고침 셋(테스트만) 뒤에 전체 스위트를 다시 돌리지 않았다. 고친 락은 녹색이고, 남은 실패는 origin/main 추출본과 대조해 이미 있던 것으로 갈랐다 — 2차 깨짐이 있으면 지휘자 대조에서 드러난다.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-20-front-stage-restructure-plan1.md
+
+- 구현 대조: 경고 7개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 7개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 17개)
+- 보고: AC 23개 중 구현됨 23 · 미룸 0 · 빠짐 0
