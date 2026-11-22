@@ -543,6 +543,11 @@ next_phase: superpowers:writing-plans
 - 의도 점검 · 2026-11-22 15:25 · qg 의 의도 점검 질문 셋(S27 방향 · C17 모호한 말 굳힘 · C17 앞 결정 뒤집힘)을 물었다 — 사용자 답 셋 다 「의도다」. 상한을 넘어 남긴 넷은 묻지 않았다. 기록 파일 docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/reviews/2026-11-22-E1-asked.md(기록 브랜치 feature/roadmap-2026-11-20-test-method-rework-brief-reviews)
 - 막는 지적 · 2026-11-22 15:25 · qg 의 막는 지적(run_unittest_dir.py:38 — 모듈별 시간의 정리 시간 귀속 · AC5)을 언제 고칠지 물었다 — 사용자 답 「계획 2의 첫 과제로 (권장)」. 제안 15개도 계획 2 의 고칠 목록에 올린다. 지휘자가 코드를 읽어 지적이 실재함을 확인했다 — 폴더 단위 합계와 한 바퀴 합계는 맞고, 클래스 · 모듈 단위 정리를 쓰는 테스트 파일은 5개다
 - 머지 · 2026-11-22 15:32 · PR #319 를 사용자 말 「머지하자」 로 지휘자가 머지했다(머지 커밋 932e754b) — 직전에 대조한 끝(0b9f0e39 · main f153a43b)이 그대로임을 다시 확인했다
+- 계획 검토 · 2026-11-22 16:00 · 계획 2(docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md · 43293bb0)의 판단 24곳을 지휘자가 읽고 갈랐다 — 계획 담당자가 「설계에 없던 결정」 으로 돌려보낸 셋(L7 읽지 못한 표에서 기다림을 바로 끝냄 · L10 세지 못한 까닭 알림 · L19 대조의 임시 폴더 자리)은 설계문서 「계획 2 에 더한 일」 의 고침을 푸는 방법이라 받아들였고, L19 에는 후보를 realpath 로 풀기와 임시 폴더를 실행 폴더 안에 둔 까닭을 기록에서 찾기를 더했다. L24(대조 사본에서 늘 실패하는 테스트 · 부분 실행의 무게)는 과제 1 의 관측이 온 뒤 사용자에게 보인다. 실행 방식은 writing-plans 가 권한 Subagent-driven 을 미리 받은 답으로 구현 담당자에게 싣는다
+- 사용자 결정 · 2026-11-22 18:52 · 기본 브랜치에서 늘 실패하는 테스트 열 개(계획 2 과제 1 의 관측 — 부분 실행 956초 · 한 바퀴의 22.3%)는 「계획 2 머지 뒤 수리 PR」 로 고친다(지휘자가 만든 질문 · 선택지 넷 가운데 권장안). 계획 2 의 PR 은 그 테스트를 고치지 않는다. 수리 PR 의 대조가 새 한 바퀴 대조의 첫 실측이 된다
+- 지휘자 판단 · 2026-11-22 18:52 · 과제 6 구현자의 걱정 1 — 대조 출력 첫 줄이 기준 사본을 돌지 않았을 때도 「기본 브랜치 사본을 돌렸다」 고 낸다 — 를 이 PR 에서 고치게 했다(커밋 자리 셋은 그대로 · 꼬리만 실제 한 일대로 세 갈래 · 테스트로 잠금). 설계가 글자를 정했으면 설계대로
+- 사용자 결정 · 2026-11-22 20:06 · 머지 순서 — 계획 2 의 PR 을 다른 로드맵의 열린 PR 둘(#322 세션 담당자 · 판 8.31.0 / #323 앞단 다시 짜기 · 판 9.0.0)보다 먼저 머지한다(지휘자가 만든 질문 · 선택지 넷 가운데 권장안). 계획 2 와 #322 가 같은 판 8.31.0 이라 뒤에 머지되는 쪽이 다시 올린다
+- 사용자 결정 · 2026-11-22 20:06 · 계획 2 의 대조가 도는 동안 수리 브랜치(늘 실패하는 테스트 열 개)를 미리 준비한다. PR 은 계획 2 머지 뒤에 연다. 고칠 파일 가운데 셋(test_finish_commit_roadmap.sh · test_invocation_surface.sh · test_epic_conductor_skill.sh)은 #322 · #323 도 고친다
 
 ## 판정
 
@@ -565,7 +570,27 @@ next_phase: superpowers:writing-plans
 - Ruling: 마지막 리뷰의 M3(원장 수를 따로 세기)와 M4(시작 줄 쓰기 실패 알림)를 한 번의 고침 물결에 넣는다 — 리뷰어가 권했고 둘 다 싸며 같은 파일이다 — 비용 작음.
 - Ruling: 고침 물결 뒤에 세 번째 전체 바퀴는 돌지 않는다 — 계획은 두 바퀴만 정했고, 이 고침은 변수 없을 때의 견고함만 건드려 집중 테스트가 덮는다. 지휘자의 잠긴 대조가 스위트를 돈다 — 틀리면 스위트 전체 사이의 상호작용 하나를 놓친 값.
 
+### docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md
+
+- Ruling: Task 1 is run by the controller (greps + scripted observation under the shared lock), no implementer/reviewer dispatch — it changes no files, so a review package would be empty — cost if wrong: one less independent read of the observation (the conductor reads the CHECKPOINT itself).
+- Ruling: Task 1 Step 3's two runs (TMPDIR in-git / out-of-git) execute back-to-back under ONE lock acquisition (obs-both.sh) — fewer lock hand-offs with the conductor's comparison; same two runs — cost if wrong: none to the observation.
+- Ruling: helper scripts live in <worktree>/.claude/tmp/e1-impl2/ (git-ignored, Write-able); outputs go to the shared TMPDIR via shell — the isolation guard refused a heredoc+exec compound line — cost if wrong: none.
+- Ruling: fix Minor 1 (restore b.pid/b.child absence vs listed_a) and Minor 3 (nan interval) in one fix round — repo rule forbids losing assertions in edited tests; cheap — cost if wrong: one extra small commit. Minors 2/4/5 noted for final review (10s cap is plan value; kill_tree cleanup-only; pathological spaces path).
+- Ruling: Task 1 Step 3 observation uses a frozen copy of tools/suite/run_unittest_dir.py at d4852a2f (.claude/tmp/e1-impl2/frozen/) — the lock is acquired after Tasks 2–5 have changed tools/suite in this worktree; the frozen copy keeps 'Task-1-time code = main' for the runner; target test files are untouched by Tasks 2–5 — cost if wrong: an implementer's uncommitted tools/suite edit could still be visible to a target test reading the tree (low; noted in CHECKPOINT).
+- Ruling: run Task 8 (independent files, no interface with 6/7) while Task 1 Step 3 waits for the lock and Task 6 waits for the conductor's answer — continuous execution; order change only — cost if wrong: none (no shared files).
+- Ruling: fix Minor 2 (scene 13 stale-list teeth — AC30/flow axis) and Minor 1 (header lost on non-Stop exception) in one round; park Minor 3 (base-copy rc127 tail unlocked) for final review — cost if wrong: one small commit.
+- Ruling: fix Minor 1 (unused root — conductor said remove if no reason), Minor 2 (detection-path tmp unlocked — L19 line), Minor 3 (format) in one round; Minor 4 (aux absence assertion) left — cost if wrong: one small commit.
+- Ruling: run the final review in parallel with Task 10 — Task 10 changes no tracked file (lock sweep + PR body draft), so the reviewed range is final — cost if wrong: if Task 10 finds a branch-made failure and a fix lands, the final review must re-check that fix range.
+- Ruling: fix wave = final-review Minors 2 (select drops SUITE_ONLY_FAILED_FILE + 18b logs it), 4 (scene: only base copy rc127 → tail listed), 5 (18b logs [ -d TMPDIR ]), 9 (CHANGELOG clause: header line now after comparison), 12a (PASS_PY spacing · unused import) — cheap, no user-visible text change; Minors 3 · 7 (user-visible text) → 미룸 table for conductor/user; 6 · 10 · 11 · 13 → 미룸; 8 → PR body 알림; 14 → PR body note — cost if wrong: one more small commit / a deferred item the user might have wanted now.
+- Ruling: finishing-a-development-branch applied with the pre-given answer (option 3 — keep the branch; conductor opens PR) without re-presenting the menu — answer given in the dispatch — cost if wrong: none (no merge/PR action taken).
+- Ruling: keep this plan's SDD workspace instead of deleting it after the clean final review — the conductor reads the reports/ledger and the relay backup mirrors it; deleting is a destructive step the conductor did not ask for — cost if wrong: an untracked folder stays in the worktree.
+
 ## 구현 대조 — docs/superpowers/plans/2026-11-21-suite-time-cut-plan1.md
 
 - 구현 대조: 경고 1개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 1개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 14개)
 - 보고: AC 16개 중 구현됨 16개 · 미룸 0개 · 빠짐 0개
+
+## 구현 대조 — docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md
+
+- 구현 대조: 구현 대조: 경고 없음 (AC 10개 · 구현됨 10개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 20개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)
+- 보고: AC 10개 중 구현됨 10개 · 미룸 0개 · 빠짐 0개
