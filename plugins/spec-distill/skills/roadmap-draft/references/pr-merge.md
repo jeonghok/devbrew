@@ -2,14 +2,14 @@
 
 **머지 뒤.** 머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다 — 마지막 줄이 `roadmap-merge: MERGED` 인 턴이다(다시 확인 펜스의 `MERGED` 도 같다). 같은 턴에 지휘자를 부르지 않는다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 그 줄을 함께 보인다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `roadmap-pr: NONE` · `roadmap-merge: NONE` · 「직접 머지」)에는 PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
-1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더는 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더의 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 결과물 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더는 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더의 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- roadmap-pr:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+BRIEF="<결과물 절대경로>"
 none() { echo "[spec-distill] PR 을 열지 않았다 — $1. 브랜치를 push 하고 PR 을 직접 열어 머지한 뒤 지휘자를 부른다."; echo "roadmap-pr: NONE"; exit 0; }
-case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)" ;; esac
+case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다(결과물 절대경로로 바꿔 다시 돌려라)" ;; esac
 cwd_l="$(pwd -L)"
 case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
 top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
@@ -95,7 +95,7 @@ echo "roadmap-pr: OPEN $url"
 <!-- roadmap-merge:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+BRIEF="<결과물 절대경로>"
 URL="<roadmap-pr 이 낸 PR 주소>"
 HEAD_SHA="<roadmap-pr 이 낸 끝 커밋>"
 none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "roadmap-merge: NONE"; exit 0; }
@@ -177,7 +177,7 @@ none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · �
 <!-- roadmap-merge-recheck:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
+BRIEF="<결과물 절대경로>"
 URL="<roadmap-pr 이 낸 PR 주소>"
 none() { echo "[spec-distill] 머지됐는지 다시 확인하지 못했다 — $1. 머지 요청은 나갔을 수 있다 — PR 에서 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"; echo "roadmap-merge: NONE"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac

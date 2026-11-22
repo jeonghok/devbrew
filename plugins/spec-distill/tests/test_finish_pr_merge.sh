@@ -24,7 +24,7 @@ last() { printf '%s\n' "$1" | tail -n 1; }
 FIN="$SD/skills/context-build/references/finishing.md"
 PR="$SD/skills/roadmap-draft/references/pr-merge.md"   # PR 과 머지 글이 사는 곳(로드맵 잡기의 skill 안 reference)
 RDS="$SD/skills/roadmap-draft/SKILL.md"   # 커밋 펜스가 사는 곳
-PH='<Step A.5 의 PAYLOAD 절대경로>'
+PH='<결과물 절대경로>'
 UPH='<roadmap-pr 이 낸 PR 주소>'
 HPH='<roadmap-pr 이 낸 끝 커밋>'
 pf="$(fence "$PR" roadmap-pr)"

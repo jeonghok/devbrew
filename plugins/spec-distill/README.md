@@ -12,7 +12,7 @@
 
 - `/intent-sync` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
 - `/context-build` — 요청을 질문과 조사로 다듬고 싶을 때(컨텍스트 쌓기). 그 결과를 정리한 문서(context brief)가 나옵니다.
-- `/roadmap-draft` — 나누기로 정한 brief 를 에픽 표와 로드맵으로 만들고 싶을 때. 로드맵 폴더가 나옵니다 완전명은 `/spec-distill:roadmap-draft @<결과물 경로>` 입니다.
+- `/roadmap-draft` — 나누기로 정한 brief 를 에픽 표와 로드맵으로 만들고 싶을 때. 로드맵 폴더가 나옵니다. 완전명은 `/spec-distill:roadmap-draft @<결과물 경로>` 입니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
 - `/roadmap-status` — 로드맵의 에픽 지도(단계 · 기다리는 에픽 · 경고 · 진행 중 컨텍스트 쌓기의 조사 수)를 보고 싶을 때. 읽기만 합니다.
 - `/spec-distill:epic-conductor [<로드맵 경로>]` — 승인된 로드맵의 에픽을 이 세션에서 끝까지 지휘합니다(cost_class high — 시작할 때 규모를 한 줄로 알리고 진행합니다 · 지출 승인을 묻지 않습니다).
