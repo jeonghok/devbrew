@@ -79,15 +79,17 @@ assert_eq "$rc" "1" "unittest: 새 실패 → rc 1"
 assert_contains "$out" "test_a" "unittest: 새 실패 이름"
 assert_eq "$(headline "$out" feature/ut "과 기본 브랜치 사본을 돌렸다")" "1" "탐지 경로: 머리 줄 꼬리는 두 사본을 돌렸다 그대로다"
 
-# 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조
+# 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조 · 탐지 경로는 고쳐짐도 이름으로 보인다
 mkrepo sh
-put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\nexit 1'; chmod +x "$W/tests/t.sh"
+put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\necho "  ✗ 셋"\nexit 1'; chmod +x "$W/tests/t.sh"
 push_base
 put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\necho "  ✗ 둘"\nexit 1'; chmod +x "$W/tests/t.sh"
 branch_with feature/sh
 out="$(mc --branch feature/sh)"; rc=$?
 assert_eq "$rc" "1" "셸: 양쪽 빨간 단위 안의 새 실패 → rc 1"
 assert_contains "$out" "둘" "셸: 새 실패 이름(✗ 줄)"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 1개: tests/t.sh: 셋" "셸: 탐지 경로는 기본 브랜치에만 있는 실패(고쳐짐)를 이름으로 보인다"
+assert_contains "$out" "양쪽 다 있는 실패 1개: tests/t.sh: 하나" "셸: 원래 있던 실패는 양쪽 다 있는 실패다"
 assert_eq "$(cat "$W/.claude/spec-distill/.gitignore" 2>/dev/null)" "*" "상태 루트: 스위트 대조가 상태 루트를 보장한다(.gitignore)"
 assert_eq "$(git -C "$W" status --porcelain)" "" "상태 루트: 스위트 대조 뒤 git status 가 비었다"
 mkrepo trk; put README.md r; push_base; put x.txt x; branch_with feature/trk
@@ -113,7 +115,7 @@ assert_eq "$rc" "1" "셸: ERROR: 진단 줄이 있어도 양쪽 빨간 단위 �
 assert_contains "$out" "tests/t.sh: b" "셸: 새 실패 이름 b"
 assert_not_contains "$out" "could not reach cache" "셸: ERROR: 진단 줄은 실패 이름이 아니다"
 
-# 4 — test_command(node --test tap) · 고쳐짐도 보인다
+# 4 — test_command(node --test tap) · 목록을 건넨 대조는 고쳐짐을 재지 않았다고 말한다(이름 붙은 고쳐짐은 3 이 잰다)
 mkrepo nd 'test_command: node --test --test-reporter=tap tests/a.test.js\n'
 put tests/a.test.js $'const t = require("node:test"); const a = require("node:assert");\nt("one", () => a.equal(1, 2));\nt("two", () => a.equal(1, 1));'
 push_base
