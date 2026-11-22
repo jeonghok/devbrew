@@ -48,7 +48,8 @@ for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-c
   assert_contains "$(step 5)" "$lit" "걸음 5: $lit"
 done
 for lit in '직접 merge 하지 않는다' '다음 task 경계에서 merge 하라고' '그 에픽만 멈추고 알린다' '`redecompose.md`' '브랜치는 지우지 않는다' 'ledger pending' '맡을 에픽을 제안하고' '이슈를 새로 만드는 것은 그때마다 묻는다'; do once 6 "$lit"; done
-for lit in '끝에서 끝 확인' 'qg-review.md` 를 읽고 그 자리(「로드맵 끝」)' '알리고 진행한다' 'ledger release'; do once 7 "$lit"; done
+for lit in '끝에서 끝 확인' 'qg-review.md` 를 읽고 그 자리(「로드맵 끝」)' '`qg-review.md` 의 `## 호출 줄` 대로 한다' 'ledger release'; do once 7 "$lit"; done
+for lit in 'qg-review.md` 를 읽고 그 자리(「머지 앞」)' '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조'; do once 5 "$lit"; done
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
 PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"

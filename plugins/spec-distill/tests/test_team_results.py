@@ -53,6 +53,20 @@ class Parse(unittest.TestCase):
         lead = F.parse_result(result("  끝 — " + H + "\n"))   # 줄 머리가 아니면 기계 줄이 아니다
         self.assertEqual((lead.problems, lead.end), ([], None))
 
+    def test_review_result_qg_block_is_not_machine_lines(self):   # R4 Review Focus 5 — 검수 결과 파일의 qg 기록 펜스
+        qg = ("```text\n- 호출 · premerge-E1 · 1111111..2222222\n- 판정: 막는 지적 1\n"
+              "AC1: 빠짐 — qg 지적 글이 이 꼴로 시작한다\n끝 — " + H + "\nTask 1/2: 끝 — abc1234\n"
+              "Ruling: 인용된 판정\n산출물: quoted.md\n- 재리뷰 0 · 멈출 조건: 두 번 뒤 묻는다\n```\n")
+        body = "반려 — a.py 의 입력 검사가 REVIEW.md 의 「테스트가 실패하면 반려」 에 걸렸다\n- qg 막는 지적: a.py:3 입력 검사 없음\n" + qg
+        r = F.parse_result(result(body, stage="review", role="leader"))
+        self.assertEqual((r.problems, r.end, r.tasks, r.rulings, r.outputs), ([], None, [], [], []))
+        for quoted in ("AC1:", "끝 — ", "Task 1/2", "Ruling:", "산출물:"):
+            self.assertNotIn(quoted, r.machine_text, quoted)
+        bare = F.parse_result(result(body.replace("```text\n", "").replace("```\n", ""), stage="review", role="leader"))   # 양성 대조: 펜스를 벗기면 기계 줄로 읽힌다
+        self.assertEqual(bare.end, H)
+        self.assertTrue(any("줄 뒤에 기계 줄이 있다" in p for p in bare.problems), bare.problems)
+        self.assertIn("AC1:", bare.machine_text)
+
     QUOTED = "끝 — " + H + "\nAC3: 구현됨 — 인용\nTask 9/2: 끝 — x\n산출물: no.md\n"
     REAL = "산출물: real.md\n"
 

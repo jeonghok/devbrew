@@ -656,6 +656,23 @@ once "$SENT" '보관 폴더 없이 끝난 리뷰의 쌓인 기록 줄(글 칸의
 once "$FAILED" '위 「이미 보낸 것」 확인이 이 줄을 보낸 횟수에 세어 다시 보내지 않는다' "(e) 보내지 못한 리뷰 줄을 이미 보낸 것이 보낸 횟수에 센다"
 once "$SENT" '- 머지 앞의 좁은 재리뷰 — 자리 글자는 `recheck-pr<번호>` 다.' "(e) 이미 보낸 것에 좁은 재리뷰 줄"
 once "$SENT" '앞쪽 경계도 같다 — 보관 폴더 이름에서는 `qg-<에픽>-` 바로 뒤에서 시작하는 글자만 자리 글자로 견주고' "(f) 통째 견줌의 앞쪽 경계"
+# R4 Task 11 — 행 27 · 재리뷰 호출 줄 앞의 고친 커밋 확인 · team 형식 한 단락
+L_row27='로드맵을 닫는 PR 이 머지된 로드맵(기본 브랜치에 그 로드맵의 `reviews/<날짜>-roadmap-end.md` 가 커밋돼 있다)에서는 자동 자리 셋을 보내지 않는다'
+once "$ALL" "$L_row27" "행 27: 닫힌 로드맵에서는 자동 자리 셋을 보내지 않는다 — 파일에서 한 번"
+once "$SENT" "$L_row27" "행 27: 그 문장이 이미 보낸 것에"
+once "$END_" '로드맵을 닫는 PR 이 이미 머지된 로드맵이면 보내지 않는다(위 `### 이미 보낸 것`)' "행 27: 로드맵 끝이 이미 보낸 것의 그 문장을 가리킨다"
+once "$SENT" 'git ls-tree --name-only origin/HEAD' "행 27: 판정은 기본 브랜치의 reviews/ 이름으로"
+once "$BEAT" '좁은 재리뷰는 그 줄을 적기 전에 범위를 정하고 그 범위에 구현 담당자의 고친 커밋이 있는지 본다' "이월 (c): 재리뷰는 호출 줄을 적기 전에 고친 커밋을 본다"
+once "$BEAT" '없으면 줄을 적지 않고 보내지도 않는다' "이월 (c): 고친 커밋이 없으면 줄을 적지 않는다"
+once "$RC" '범위 정하기(merge 커밋이 끼면 처음부터) → 고친 커밋 확인 → 호출 줄 적기 → `### 이미 보낸 것` 의 확인' "이월 (c): 좁은 재리뷰의 보내기 전 차례"
+bq="$(printf '%s\n' "$BEAT" | grep -nF '좁은 재리뷰는 그 줄을 적기 전에' | head -1 | cut -d: -f1)"
+bw="$(printf '%s\n' "$BEAT" | grep -nF '그 차례 맨 앞, `### 이미 보낸 것` 의 확인보다 먼저 호출 줄을' | head -1 | cut -d: -f1)"
+[ -n "$bq" ] && [ "$bq" = "$bw" ] && ok "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 함께" || no "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 없다(확인=${bq:-없음} · 적기=${bw:-없음})"
+TEAMQ="$(line_of "$RET" '**team 형식 로드맵.**')"
+[ -n "$TEAMQ" ] && ok "team 형식: 되돌리기 절에 team 형식 단락이 있다" || no "team 형식: 되돌리기 절에 team 형식 단락이 없다 — 아래 단언이 공허하다"
+for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>` · `recheck-<과제>` · `premerge-resend-<과제>`' 'PR 이 열린 뒤에도 그 과제의 자리 글자는 바꾸지 않는다'; do
+  once "$TEAMQ" "$lit" "team 형식 단락: ${lit}"
+done
 
 # 레포 전용 값
 for lit in 'origin/main' 'feature/' 'docs/superpowers'; do
@@ -673,13 +690,14 @@ mstep() { printf '%s\n' "$MAN" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;n
 lhead() { printf '%s\n' "$LOOP" | awk 'index($0, "### 1. ")==1{exit} 1'; }
 mhead() { printf '%s\n' "$MAN" | awk 'index($0, "1. ")==1{exit} 1'; }
 cnt() { printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
+CDALL0="$(cat "$CD")"
 [ -n "$LOOP" ] && [ -n "$MAN" ] && ok "conducting.md 의 두 절을 읽었다" || no "conducting.md 의 두 절이 비었다 — 아래 단언이 공허하다"
-for pair in "3:spec 승인 앞" "6:에픽 머지 뒤" "7:로드맵 끝"; do
+for pair in "3:spec 승인 앞" "5:머지 앞" "7:로드맵 끝"; do
   n="${pair%%:*}"; name="${pair#*:}"
   assert_eq "$(cnt "$(lstep "$n")" "$QE")" "1" "지휘 순환 걸음 ${n}: 들어가는 문장 한 번"
   assert_contains "$(lstep "$n")" "${QE}「${name}」)" "지휘 순환 걸음 ${n}: 자리 이름 ${name}"
 done
-for pair in "3:spec 승인 앞" "6:에픽 머지 뒤" "9:로드맵 끝"; do
+for pair in "3:spec 승인 앞" "8:머지 앞" "9:로드맵 끝"; do
   n="${pair%%:*}"; name="${pair#*:}"
   assert_eq "$(cnt "$(mstep "$n")" "$QE")" "1" "손 절차 ${n}: 들어가는 문장 한 번"
   assert_contains "$(mstep "$n")" "${QE}「${name}」)" "손 절차 ${n}: 자리 이름 ${name}"
@@ -691,6 +709,40 @@ for w in "지휘 순환:$(lhead)" "손 절차:$(mhead)"; do
 done
 assert_eq "$(cnt "$(lstep 1)" "${QE}「아직 묻지 못한 질문」")" "1" "지휘 순환 걸음 1: 아직 묻지 못한 질문 한 번"
 assert_eq "$(cnt "$(mstep 1)" "${QE}「아직 묻지 못한 질문」")" "1" "손 절차 1: 아직 묻지 못한 질문 한 번"
+# R4 Task 11 — 걸음 5 의 머지 앞 · 걸음 6 의 머지 뒤 qg 빼기 · 합치기 미루기(AC9 · AC11)
+for n in 6; do
+  assert_eq "$(cnt "$(lstep "$n")" 'qg-review.md')" "0" "AC9 음성: 지휘 순환 걸음 ${n} 에 qg 담당자를 보내는 문장이 없다(양성 짝: 걸음 5 의 머지 앞)"
+  assert_eq "$(cnt "$(mstep "$n")" 'qg-review.md')" "0" "AC9 음성: 손 절차 ${n} 에 qg 담당자를 보내는 문장이 없다(양성 짝: 손 절차 8 의 머지 앞)"
+  assert_eq "$(cnt "$(lstep "$n")" '머지 앞 리뷰를 보낸 뒤 그 PR 의 되돌리기가 끝나지 않은 브랜치는 끝난 뒤로 미룬다')" "1" "AC11: 지휘 순환 걸음 ${n} — 되돌리기가 끝나지 않은 브랜치는 합치기를 미룬다"
+  assert_eq "$(cnt "$(mstep "$n")" '머지 앞 리뷰를 보낸 뒤 그 PR 의 되돌리기가 끝나지 않은 브랜치는 끝난 뒤로 미룬다')" "1" "AC11: 손 절차 ${n} — 되돌리기가 끝나지 않은 브랜치는 합치기를 미룬다"
+done
+assert_eq "$(cnt "$CDALL0" '에픽 머지 뒤')" "0" "AC9 음성: conducting.md 에 「에픽 머지 뒤」 자리 이름이 없다(양성 짝: 머지 앞 들어가는 문장)"
+assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조 → 통합 리뷰 → 리뷰 뒤 반영 → 완료 전 확인')" "1" "AC9: 걸음 5 기본값의 차례 — 머지 앞 qg 리뷰가 스위트 대조 앞"
+assert_not_contains "$(lstep 5)" '새로 채운 뒤 스위트 대조 → 통합 리뷰' "AC9 음성: qg 없이 스위트 대조부터 하던 옛 차례가 없다(양성 짝: 새 차례)"
+assert_eq "$(cnt "$(lstep 4)" '구현 담당자가 처음 돌아온 때(머지 앞 리뷰를 보내기 전)에만')" "1" "AC11: 걸음 4 — 기본 브랜치 합치기는 구현 담당자가 처음 돌아온 때에만"
+assert_eq "$(cnt "$(lstep 4)" '되돌리기를 고치고 돌아온 때에는 합치지 않는다')" "1" "AC11: 걸음 4 — 되돌리기를 고치고 돌아온 때에는 합치지 않는다"
+M8="$(mstep 8)"
+m8q="$(printf '%s\n' "$M8" | grep -nF -- '- **머지 앞 qg 리뷰.**' | head -1 | cut -d: -f1)"
+m8s="$(printf '%s\n' "$M8" | grep -nF -- '- **스위트 대조.**' | head -1 | cut -d: -f1)"
+[ -n "$m8q" ] && [ -n "$m8s" ] && [ "$m8q" -lt "$m8s" ] && ok "AC9: 손 절차 8 — 머지 앞 qg 리뷰 불릿이 스위트 대조 앞" || no "AC9: 손 절차 8 — 머지 앞 qg 리뷰 불릿이 스위트 대조 앞에 없다(qg=${m8q:-없음} · 스위트=${m8s:-없음})"
+assert_contains "$(printf '%s\n' "$M8" | grep -F -- '- **머지 앞 qg 리뷰.**')" "${QE}「머지 앞」)" "AC9: 손 절차 8 의 머지 앞 qg 리뷰 불릿이 들어가는 문장을 가진다"
+# 걸음 1 행 22 · 걸음 7 행 21 · 23 (AC16)
+assert_eq "$(cnt "$(lstep 1)" '(에픽 줄은 `control_plane.py show <로드맵> <에픽>` 의 `기다리는 질문:` 칸, 로드맵 단위 줄은 기계 상태 파일 `machine.md` 의 `## 기다리는 질문` 절)')" "1" "행 22: 걸음 1 이 기다리는 질문 줄을 읽는 길을 가리킨다"
+assert_eq "$(cnt "$(lstep 7)" '품질 게이트가 설치돼 있지 않을 때는 `qg-review.md` 의 `## 호출 줄` 대로 한다')" "1" "행 21: 걸음 7 의 설치 안 됨은 qg-review.md 의 호출 줄을 가리킨다"
+assert_eq "$(cnt "$CDALL0" '설치돼 있지 않다')" "0" "행 21 음성: 「설치돼 있지 않다」 규칙이 conducting.md 에 없다(양성 짝: qg-review.md 호출 줄에 한 번)"
+assert_eq "$(cnt "$CALL" '설치돼 있지 않다')" "1" "행 21 양성 짝: 「설치돼 있지 않다」 규칙이 qg-review.md 의 호출 줄에 한 번"
+assert_eq "$(cnt "$(lstep 7)" 'ledger resource-dir --roadmap <로드맵> --kind relay --name roadmap')" "1" "행 23: 걸음 7 이 로드맵 담당자의 relay 폴더로 옮김 대조를 부른다"
+# team 형식 절의 검수 걸음 qg(AC10 · AC11 · AC13 · AC19)
+team_sec="$(awk '$0=="## team 형식 로드맵"{f=1;next} f&&/^## /{exit} f' "$CD")"
+TQ="$(printf '%s\n' "$team_sec" | awk 'index($0, "- **검수 걸음의 qg.**")==1')"
+assert_eq "$(starts "$team_sec" '- **검수 걸음의 qg.**')" "1" "team 형식: 「검수 걸음의 qg」 불릿이 줄 첫머리에 한 번"
+for lit in '`quality-gates:quality-pipeline`' '다음 시도의 구현 결과 파일' '과제 결정 기록의 한 줄' '연속 실패 멈춤을 상한으로 쓰지 않는다' \
+           '지적 목록 아래 펜스 하나 안에' 'PR 이 열리면 그 내용을 본문 `## qg 리뷰` 로 옮긴다'; do
+  once "$team_sec" "$lit" "team 형식: ${lit}"
+  assert_contains "$TQ" "$lit" "team 형식: 「검수 걸음의 qg」 불릿 안에 ${lit}"
+done
+assert_contains "$TQ" "${QE}「머지 앞」)" "team 형식: 검수 걸음의 qg 는 머지 앞 자리를 가리킨다"
+assert_not_contains "$team_sec" '과제 결정 기록의 줄로 적고 거기서 센다' "team 형식 음성(P3 그대로 두면): 기록을 결정 기록 줄로 세는 다른 갈래가 없다(양성 짝: 지적 목록 아래 펜스)"
 # AC2 음성 + 양성 짝 — 절차가 새지 않았다
 CDALL="$(cat "$CD")"
 assert_not_contains "$CDALL" '로드맵 시작 커밋부터' "AC2: 범위 절차(로드맵 시작 커밋부터)가 conducting.md 에 없다"
@@ -699,7 +751,7 @@ for lit in 'intent-return.md' 'merged_pr_range.py' '의도 점검 <n>' 'reviews/
   assert_not_contains "$CDALL" "$lit" "절차가 새지 않았다: conducting.md 에 ${lit} 없음"
   assert_contains "$ALL" "$lit" "양성 짝: qg-review.md 에는 ${lit} 가 있다"
 done
-assert_contains "$(lstep 7)" '품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다' "걸음 7: 설치 안 됨 공시 문장이 남아 있다"
+assert_not_contains "$(lstep 7)" 'skill 목록에 `quality-gates:quality-pipeline` 이 없으면' "행 21 음성: 걸음 7 이 설치 안 됨 규칙을 따로 두지 않는다(양성 짝: 호출 줄을 가리키는 문장)"
 # conducting.md 걸음 6 · 7 — 한 구절씩
 L_cd6='아직 설계문서로 옮길(`ledger flush`) 줄은 두고, 절이 `qg 리뷰` 인 줄은 싣지 않고 둔다(로드맵을 닫는 PR 이 싣고 뺀다).'
 L_cd7='기록만 담은 로드맵 수정 PR(로드맵을 닫는 기록 브랜치 PR 이 있으면 그 PR)로 싣고'
@@ -709,9 +761,10 @@ assert_not_contains "$(lstep 6)" '아직 설계문서로 옮길(`ledger flush`) 
 
 SK="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
 SKSEC() { awk -v h="$1" '/^```/{q=!q} !q&&$0==h{f=1;next} f&&!q&&/^## |^### /{exit} f' "$SK"; }
-for lit in 'qg 담당자(spec 승인 앞 1 · 머지된 PR 마다 1)' '로드맵 끝 qg 담당자 1'; do
+for lit in 'qg 담당자(spec 승인 앞 1 · 에픽 PR 마다 머지 앞 1 · 좁은 재리뷰 PR 마다 많아야 2)' '로드맵 끝 qg 담당자 1'; do
   assert_eq "$(cnt "$(SKSEC '### 4. 규모 공시')" "$lit")" "1" "SKILL.md 규모 공시: ${lit} 한 번"
 done
+assert_not_contains "$(cat "$SK")" '머지된 PR 마다 1' "SKILL.md 규모 공시 음성: 머지 뒤 qg 담당자를 세던 옛 글이 없다(양성 짝: 에픽 PR 마다 머지 앞 1)"
 assert_eq "$(cnt "$(SKSEC '## 보이기')" '의도 점검 질문')" "1" "SKILL.md 보이기: 의도 점검 질문 한 번"
 assert_contains "$(SKSEC '## 보이기')" 'references/qg-review.md' "SKILL.md 보이기: qg-review.md 를 가리킨다"
 assert_eq "$(grep -cF "$(printf 'skills/epic-conductor/references/qg-review.md\t비움\t**의도 점검 질문.**')" "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "1" "ask-sites.tsv: 의도 점검 질문 행이 한 줄"
