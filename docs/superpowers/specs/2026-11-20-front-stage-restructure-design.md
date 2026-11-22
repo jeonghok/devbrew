@@ -569,6 +569,7 @@ next_phase: superpowers:writing-plans
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-front-stage-restructure-desig-36e3140828528623 r3: advice_new=3 · advice_repeat=7 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-20-front-stage-restructure-desig-36e3140828528623 r4: advice_new=1 · advice_repeat=6 · mc_preexisting_new=0
 - 2026-11-20 · 결정 · 물음 「영어 문장 속에 홀로 쓰인 낱말 interview 를 어떻게 할까요?」(계획 1 검토 — 지휘자가 만든 질문. 「단계를 가리키면 바꾼다」 — 지휘자 권장 · 「그대로 둔다」) — 「단계를 가리키면 바꾼다 (권장)」
+- 2026-11-22 · 결정 · 물음 「설계문서 리뷰의 선택지 「컨텍스트 쌓기 다시 열기」는 로드맵 에픽에서는 컨텍스트 쌓기가 아니라 로드맵을 다시 나누는 절차로 갑니다. 이 선택지 이름을 어떻게 둘까요?」(계획 1 구현 뒤 — 구현 담당자가 남긴 물을 거리를 지휘자가 선택지로 만든 질문. 「에픽에서는 이름을 바꾼다」 — 지휘자 권장 · 「그대로 둔다」) — 「에픽에서는 이름을 바꾼다 (권장)」. 로드맵 에픽의 설계문서에서는 그 선택지를 「로드맵 다시 잡기」 로 보인다(로드맵 밖 설계문서에서는 그대로). 계획 1 의 PR 은 고치지 않고 뒤 계획이 받는다
 
 ## 지휘 기록
 

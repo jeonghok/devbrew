@@ -730,3 +730,4 @@ Run → FAIL.
 - (구현 뒤 더함) 낱말 락의 면제 한 줄(`reviewing-brief/SKILL.md` 가 인용하는 `check_verbatim_coverage.py` 의 「인터뷰를 닫은 답」)은 계획 2 가 그 스크립트 출력을 바꾸면 비운다 — 안 쓰는 면제는 락이 실패로 알린다.
 - (구현 뒤 더함) `raw_source.py` 의 `_chain` 은 기록 경로를 seed 경로에서 짓는다(`seed[:-3] + ".audit.md"`) — 그래서 커밋 펜스 · PR 본문 펜스의 「seed 를 기록 경로에서 거꾸로 짓지 않는다」 는 글자 락(부재 + 양의 짝)으로만 문다. 대응표가 새 꼴 이름을 받게 되면 이 둘이 갈릴 수 있으니 그때 동작 시험을 더한다.
 - (구현 뒤 더함) `templates/roadmap-template.md` 의 낱말을 바꾸면 `test_roadmap_write.sh` 의 「R1 AC3 옛 형식 create 나무」 기준 해시를 다시 잰다(계획 1 이 한 번 갱신했다 — 옆 로드맵 R1 의 시험이다).
+- (구현 뒤 더함 — 사용자 결정 2026-11-22) spec-review 게이트 ③ 후속 질문의 「컨텍스트 쌓기 다시 열기」 는 로드맵 에픽의 설계문서에서는 재분해로 간다. 사용자가 그 경우의 라벨을 「로드맵 다시 잡기」 로 바꾸기로 정했다(설계문서 결정 기록). 고칠 자리: `skills/spec-review/SKILL.md` 의 ③ 갈래 글 · `references/redecompose.md` 의 1 과 「그만둔다」 줄 · `README.md` 의 재분해 줄과 그 라벨을 무는 락 · 질문 자리 목록. `skills/spec-review/SKILL.md` 는 옆 로드맵 E4 가 예약한 파일이라 고치기 전에 그쪽에 알린다.
