@@ -19,7 +19,7 @@ import roadmap_model as M  # noqa: E402
 
 
 class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을 설명하는 문장이 없다
-    COMMON = ["- 받은 명령으로 시작 묶음을 첫 걸음에 돌리고, 첫 줄의 두 커밋을 결과 파일 머리에 옮긴다.",
+    COMMON = ["- 받은 명령으로 시작 묶음을 첫 걸음에 돌리고, 묶음이 낸 맞추는 명령을 그대로 돌려 첫 줄의 두 커밋과 규칙을 읽은 커밋을 결과 파일 머리에 옮긴다.",
               "- 받은 규칙은 쓰기 전에 지금도 맞는지 확인한다.",
               "- 시작 묶음의 `<커밋>:<경로>` 는 작업 폴더의 파일이 아니라 `git show <커밋>:<경로>` 로 읽는다."]
 
@@ -53,6 +53,30 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
         for other in ("leader", "designer", "writer"):
             self.assertNotIn("계획 걸음", todo[other], other)
         self.assertNotIn("원자료", F.role_template("designer").read_text(encoding="utf-8"))
+
+    WORKER_AC = "- 구현을 끝낼 때 수용 기준마다 `AC<번호>: 구현됨 | 미룸 | 빠짐 — 근거` 줄을 결과 파일에 쓴다."
+    WORKER_PROSE = "- 본 테스트 실패 이름과 쓴 미리 받은 답은 결과 파일에 기계가 읽지 않는 글로 적는다."
+
+    def test_worker_writes_ac_lines_and_prose(self):
+        for role in L.ROLES:
+            todo = F.role_template(role).read_text(encoding="utf-8").split("## 하지 않을 일")[0]
+            for line in (self.WORKER_AC, self.WORKER_PROSE):
+                if role == "worker":
+                    self.assertIn(line + "\n", todo, role)
+                else:
+                    self.assertNotIn(line, todo, role)
+
+    def test_format_doc_and_readme_quote_the_new_first_line(self):
+        doc = (REPO / "plugins/spec-distill/references/team-files.md").read_text(encoding="utf-8")
+        readme = (REPO / "plugins/spec-distill/README.md").read_text(encoding="utf-8")
+        self.assertIn("첫 줄의 두 커밋과 규칙을 읽은 커밋", doc)
+        self.assertNotIn("첫 줄의 두 커밋을 결과 파일 머리에 옮긴다", doc)
+        self.assertIn("첫 줄의 두 커밋과 규칙을 읽은 커밋", readme)
+        self.assertNotIn("첫 줄의 두 커밋을 일꾼이 결과 파일 머리에 옮깁니다", readme)
+        line = [l for l in doc.splitlines() if "다른 세션이나 프로그램이 리더의 터미널에 키를 넣어 질문 창에 답하는 것" in l]
+        self.assertEqual(len(line), 1)
+        for word in ("`hc keys`", "억지로 보내기", "2026-11-22"):
+            self.assertIn(word, line[0], word)
 
     def test_repo_copies_are_the_templates(self):   # 이 레포의 사본 — AC15 「틀과 이 레포의 사본에서」
         for role in L.ROLES:
