@@ -27,52 +27,52 @@ BRIEF = """---
 type: interview-brief
 user_sourced_items:
   - id: C1
-    statement: "첫 확정"
+    statement: "검사 첫 확정"
   - id: D2
-    statement: "둘째 확정"
+    statement: "검사 둘째 확정"
   - id: C3
-    statement: "셋째 확정"
+    statement: "검사 셋째 확정"
 ---
 
-# 픽스처 brief
+# 검사용 brief
 
 ## 0. 한눈에
 
 **결정 목록**
 
-- OQ1 [열림] — 열린 하나
-- OQ2 [해결 ⟨S2⟩] — 닫힌 하나
+- OQ1 [열림] — 검사 열린 하나
+- OQ2 [해결 ⟨S2⟩] — 검사 닫힌 하나
 
 ## 1. Goal · Non-goal
 
-- Goal: 픽스처 목표.
-- Non-goal: 픽스처 비목표.
+- Goal: 검사 목표.
+- Non-goal: 검사 비목표.
 
 ## 2. 제약
 
-- 🗣 confirmed **C1** — 첫 확정 ⟨S1⟩
-- ☑ confirmed **D2** — 둘째 확정 ⟨S2⟩
-- 🗣 confirmed **C3** — 셋째 확정 ⟨S1⟩
+- 🗣 confirmed **C1** — 검사 첫 확정 ⟨S1⟩
+- ☑ confirmed **D2** — 검사 둘째 확정 ⟨S2⟩
+- 🗣 confirmed **C3** — 검사 셋째 확정 ⟨S1⟩
 
 ## 3. Open Questions
 
-- OQ1: 열린 하나
+- OQ1: 검사 열린 하나
 
 ## 4. External Landscape
 
-- 바깥 하나 «ext-a» — [취함] [→ OQ1]
-- 바깥 둘 «ext-b» — [중립] [→ 없음]
+- 검사 바깥 하나 «ext-a» — [취함] [→ OQ1]
+- 검사 바깥 둘 «ext-b» — [중립] [→ 없음]
 
 ## 5. 기각 · Blind Spots
 
-- 기각 — 다른 길 — verdict: kept — ST1 — 부착 2/2
+- 기각 — 검사 다른 길 — verdict: kept — ST1 — 부착 2/2
 {RISKS}
-- 위험 — 사실 | 사실 하나 — RC1 (a/b.py) [RC1 → OQ1]
+- 위험 — 사실 | 검사 사실 하나 — RC1 (a/b.py) [RC1 → OQ1]
 
 ## 6. 사용자 원문
 
 - **S1** 🗣 최초 요청:
-  > 처음 말
+  > 검사 처음 말
 
 ## 7. Next Action
 
@@ -87,9 +87,9 @@ AUDIT = """# audit
 ## 6. 사용자 원문
 
 - **S2** 🗣 발화 (round 1):
-  > 둘째 말
+  > 검사 둘째 말
 - **S3** ☑ 선택 (round 2):
-  > 셋째 말
+  > 검사 셋째 말
 
 ## 7. 기타
 
@@ -98,10 +98,10 @@ AUDIT = """# audit
 
 HEAD = "| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |"
 SEP = "|---|---|---|---|---|---|---|---|---|---|---|"
-P1 = "| P1 | 결정 하나 | 결정 | 무엇을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 | 없음 | S3 · OQ2 | 없음 | 없음 |"
-E1 = ("| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | P1 | feature/e1 | a/x.py | "
+P1 = "| P1 | 검사 결정 | 결정 | 검사가 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 | 없음 | S3 · OQ2 | 없음 | 없음 |"
+E1 = ("| E1 | 검사 첫 에픽 | 묶음 | 검사 첫 의도 | 한다 가 / 안 한다 나 | P1 | feature/e1 | a/x.py | "
       "C1 · D2 · OQ1 · RC1 · K1 · «ext-a» · S1 · S2 | 없음 | E2 에 x |")
-E2 = ("| E2 | 둘째 에픽 | 묶음 | 둘째 의도 | 한다 다 / 안 한다 라 | E1 | feature/e2 | 없음 | "
+E2 = ("| E2 | 검사 둘째 에픽 | 묶음 | 검사 둘째 의도 | 한다 다 / 안 한다 라 | E1 | feature/e2 | 없음 | "
       "C3 · ST1 · K2 · «ext-b» · S1 | E1 의 x | 없음 |")
 
 
