@@ -37,7 +37,7 @@ next_phase: superpowers:writing-plans
 
 ## Constraints
 
-- 기존 종료 코드와 알림 글자는 그대로 둔다. 새로 생기는 것은 어긋남 줄 둘과 `show` 의 줄 하나다.
+- 기존 종료 코드와 알림 글자는 그대로 둔다. 새로 생기는 것은 어긋남 줄 하나와 `show` 의 줄 하나다.
 - 보내는 글 틀과 그 사본은 바이트로 같아야 한다(있는 락).
 - 다른 열린 PR(#323 · #324)이 `references/conducting.md` 를 고치고 있다 — 고치는 문장을 한 자리로 좁힌다.
 
@@ -55,10 +55,10 @@ next_phase: superpowers:writing-plans
 
 ### 1. 출처 검사
 
-`check_tree` 의 구간 대조 앞에 두 가지를 더한다. 둘 다 어긋남(종료 코드 1)이다.
+`check_tree` 의 구간 대조 앞에 두 가지를 더한다.
 
-- 출처 경로는 셋 가운데 하나여야 한다 — 로드맵 머리말 `source_brief` 가 가리키는 인터뷰 결과물, 그 결과물의 audit(이름의 `.md` 를 `.audit.md` 로 바꾼 파일), framing audit(출처 커밋에서 읽은 그 파일의 머리 `type` 이 `interview-seed-audit`). 사본을 만드는 쪽의 규칙과 같고, 같은 상수와 함수를 쓴다.
-- 출처 커밋은 기준(`--base`, 없으면 기본 브랜치)이나 지금 HEAD 의 조상이어야 한다. *(작성자 제안 — HEAD 의 조상도 받는 것)*
+- 출처 경로는 셋 가운데 하나여야 한다 — 로드맵 머리말 `source_brief` 가 가리키는 인터뷰 결과물, 그 결과물의 audit(이름의 `.md` 를 `.audit.md` 로 바꾼 파일), framing audit(출처 커밋에서 읽은 그 파일의 머리 `type` 이 `interview-seed-audit`). 아니면 어긋남(종료 코드 1)이다. 사본을 만드는 쪽의 규칙과 같고, 같은 상수와 함수를 쓴다. 원자료 사본은 로드맵의 `source_brief` 하나에서만 옮긴다 — 로드맵이 있는 폴더에서 다른 인터뷰 결과물로 `original` 을 부르면 쓰기 전 검사에서 거절되고 사유가 나온다. 형식 정본 문서 §3 에 그 문장을 적는다(사용자 2026-11-22).
+- 출처 커밋이 기준(`--base`, 없으면 기본 브랜치)과 지금 HEAD 어느 쪽의 조상도 아니면 그 구간을 출처 커밋으로 통과시키지 않는다 — 출처 커밋을 읽지 못한 때와 같이 기준의 같은 파일 · 같은 줄과 견주는 대체 대조로 보낸다. 같으면 알림이고, 다르거나 기준에 그 파일이 없으면 검사 불가(종료 코드 3)다(사용자 2026-11-22). squash 머지 뒤에도 기계마다 판정이 같다.
 
 출처 커밋을 읽지 못했을 때 기준의 같은 줄과 견주는 대체 대조는 그대로 둔다.
 
@@ -71,15 +71,15 @@ next_phase: superpowers:writing-plans
 ### 3. 자기 승인 드러내기
 
 - 보내는 글의 「금지」 줄과 틀의 금지 줄에 「기계 상태의 `확인한 끝` 절과 상태 브랜치를 쓰지 않는다」 를 더한다.
-- `conductor_branch.py show` 가 확인한 끝 뒤의 `씀` 커밋 가운데 규칙 사본 · `rules-base.md` · `pending.md` 를 바꾼 것을 「이 기계가 쓴 것으로 적힌 고침 n」 과 커밋마다 한 줄(앞 8자 · 바꾼 경로)로 낸다. 없으면 줄을 내지 않는다. *(작성자 제안 — `show` 에 두는 것)*
+- `conductor_status.py show` 가 「확인되지 않은 남의 고침 n」 줄 바로 뒤에, 확인한 끝 뒤의 `씀` 커밋 가운데 규칙 사본 · `rules-base.md` · `pending.md` 를 바꾼 것을 「이 기계가 쓴 것으로 적힌 고침 n」 과 커밋마다 한 줄(앞 8자 · 바꾼 경로)로 낸다. 없으면 줄을 내지 않는다. *(작성자 제안 — 있는 `show` 에 두는 것)*
 - 지휘 절차의 「승인 기록 다시 보이기」 에 한 문장을 더한다 — team 형식이면 그 목록을 함께 싣고, 리더가 쓰지 않은 고침이 있으면 머지 명령 줄을 내지 않고 알린다.
 - 상태 브랜치 문서의 「남이 올린 고침을 만났을 때」 에 한계를 적는다 — `씀` 줄은 이 기계의 누구나 쓸 수 있고, 막지 않고 드러낸다.
 
 ## Acceptance Criteria
 
 - AC1. 출처 경로가 셋 가운데 하나가 아닌 구간이 있으면 `team_layout.py check` 가 1 로 끝나고 그 구간의 자리와 출처를 적은 줄을 낸다.
-- AC2. 출처 커밋이 기준과 HEAD 어느 쪽의 조상도 아니면 1 로 끝난다.
-- AC3. 사본을 만드는 명령(`original`)이 만든 사본은 지금처럼 통과한다 — framing audit 가 있는 경우와 없는 경우 둘 다.
+- AC2. 출처 커밋이 기준과 HEAD 어느 쪽의 조상도 아니면 그 구간을 출처 커밋으로 통과시키지 않는다(기준과 견주는 대체 대조로 간다) — 기준의 같은 줄과 같으면 알림, 다르거나 기준에 그 파일이 없으면 3 으로 끝난다.
+- AC3. 로드맵의 `source_brief` 로 사본을 만드는 명령(`original`)이 만든 사본은 지금처럼 통과한다 — framing audit 가 있는 경우와 없는 경우 둘 다.
 - AC4. 픽스처 사본의 `answers` 밖 사전에 한글 글 · 경로 · 메일 주소 꼴의 열쇠를 심으면 잠금이 실패한다. 지금 픽스처는 통과한다.
 - AC5. `씀` 커밋이 규칙 사본이나 `pending.md` 를 바꿨으면 `show` 가 수와 커밋 줄을 내고, 없으면 그 줄이 없다.
 - AC6. 보내는 글 문서 · 지휘 절차 · 상태 브랜치 문서에 위 세 문장이 있고 틀과 사본이 바이트로 같다.
@@ -89,7 +89,7 @@ next_phase: superpowers:writing-plans
 
 - `plugins/spec-distill/scripts/team_check.py` · `tests/` 의 그 테스트
 - `plugins/spec-distill/tests/test_session_fixture.py`
-- `plugins/spec-distill/scripts/conductor_branch.py`(또는 `leader_seat.py`) · 그 테스트
+- `plugins/spec-distill/scripts/conductor_status.py` · 그 테스트
 - `plugins/spec-distill/references/conductor-dispatch.md` · `conducting.md` · `conductor-state-branch.md` · `team-files.md`
 - `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md`(patch — 번호는 머지 직전에 정한다)
 
@@ -108,8 +108,11 @@ next_phase: superpowers:writing-plans
 
 - 2026-11-22 사용자(지휘자가 만든 질문 — 막는 지적을 언제 고칠까): 「보안 넷 먼저 (권장)」
 - 2026-11-22 사용자(지휘자가 만든 질문 — 자기 승인 구멍을 어느 길로 고칠까): 「드러내기 (권장)」
+- 2026-11-22 사용자(계획 담당자의 물음 — 원자료 사본에 든 다른 brief 의 구간, 출처로 받는 것을 무엇으로 정할까 · brief 를 머리 type 으로 가리는 길과 견주어): 「로드맵 `source_brief` 와 그 audit · framing audit 만 (권장)」
+- 2026-11-22 사용자(계획 담당자의 물음 — 출처 커밋이 기준 · HEAD 의 조상이 아닐 때 · 설계 글자대로 1 로 끝내는 길과 견주어): 「출처 커밋을 읽지 못한 때와 같이 다룬다 (권장)」
+- 2026-11-22 리더(계획 담당자의 물음 — 고침 목록을 낼 자리): `conductor_branch.py` 에는 `show` 가 없다 — 설계의 오기다. 「확인되지 않은 남의 고침 n」 을 이미 내는 `conductor_status.py show` 로 바로잡았다. 승인받을 때 사용자에게 말한 「있는 `show` 명령의 줄로」 와 같은 뜻이라 사용자에게 묻지 않았다.
 
-작성자 제안(사용자가 줄마다 확인하지 않은 것): HEAD 의 조상인 출처 커밋도 받는 것 · 열쇠에 영문 식별자 꼴을 받는 것 · 목록을 `show` 에 두는 것 · patch 판 올림.
+작성자 제안(사용자가 줄마다 확인하지 않은 것): 열쇠에 영문 식별자 꼴을 받는 것 · 목록을 있는 `show` 에 두는 것 · patch 판 올림. (「HEAD 의 조상인 출처 커밋도 받는 것」 은 위 사용자 답으로 바뀌었다 — 조상이 아니면 대체 대조로 간다.)
 
 ## 지휘 기록
 
