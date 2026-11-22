@@ -57,7 +57,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 의존: 없음
 - 브랜치: feature/test-value-audit
 - 묶음: E5.md
-- 경로 예약: docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md
+- 경로 예약: docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md, docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit/
 - 흐름: 조사 — 표의 칸과 글을 지키는 테스트의 「지키는 것」 단위를 대화로 정하고, 가장 비싼 것부터 테스트 묶음별로 읽어 표를 채운 뒤, 다른 리뷰어의 표본 재독과 문서 비평을 거친다
 - 산출물: docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md
 
