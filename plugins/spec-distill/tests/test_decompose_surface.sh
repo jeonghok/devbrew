@@ -33,7 +33,7 @@ RDT="$(win "$RD" '## 3. 분해안 표' '## 5.')"
 if [ -n "$RDT" ]; then ok "roadmap-draft: 분해안 표 · 고치기 · 승인 절을 떴다"; else no "roadmap-draft: 분해안 표 절 창이 비었다 — 앵커 파손"; fi
 for lit in '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
            '「묶음」' '「브랜치 <설계문서 경로>」' '「결정」' '걷는 뼈대' \
-           '미배정 번호 <n> · 고아 발화 <m>' '「승인」' '「고치기」' '「spec 하나로」' '계속 고칠까요' \
+           '`roadmap-table:` 줄과 그 아래 목록을 고치지 않고 표 아래에 보인다' '「승인」' '「고치기」' '「spec 하나로」' '계속 고칠까요' \
            '자동으로 끝내지 않는다' '## 분해안' '분해됨 — <로드맵 경로>'; do
   has "$RDT" "$lit" "분해안 표: $lit"
 done
@@ -46,13 +46,14 @@ assert_file_absent "$FIN" '이상이면 나눈다' "finishing: 「이상이면 �
 STEPA="$(win "$RD" '## 5. 생성' '## ')"
 has "$STEPA" 'roadmap_write.py" create' "Step A: 생성기 create 를 부른다"
 has "$STEPA" '--plan-table' "Step A: 분해안 표를 넘긴다"
-has "$STEPA" '분해 판단 3' "Step A: 실패하면 분해안 표로 돌아간다"
+has "$STEPA" '`## 3.` · `## 4.`(표 고치기 · 승인)로 그 번호를 배정한 뒤' "생성: 실패하면 분해안 표로 돌아간다"
 REGEN="$(win "$RD" '## 5. 생성' '## ')"
-if [ -n "$REGEN" ]; then ok "Step B: 다시 생성 절이 있다"; else no "Step B: B-R 창이 비었다"; fi
-for lit in 'brief 를 마지막으로 쓴 직후' '언제나 한 번' '항목이 바뀌었는지와 상관없다' '## 생성 기록' \
-           '커밋 전에 도는 단계'; do
-  has "$REGEN" "$lit" "B-R: $lit"
+if [ -n "$REGEN" ]; then ok "roadmap-draft: 생성 절이 있다"; else no "roadmap-draft: 생성 절 창이 비었다"; fi
+# AC9 — 다시 생성 걸음은 없다. 실패 뒤 다시 도는 것과 이어 가며 도는 것은 같은 생성 기록 위에서 기록의 파일만 덮어쓴다.
+for lit in '## 생성 기록' '실패해 표를 고친 뒤 다시 도는 것과 끊긴 뒤 이어 가며 도는 것은 같은 생성 기록 위에서 그 기록의 파일만 덮어쓴다'; do
+  has "$REGEN" "$lit" "생성: $lit"
 done
+RDALL="$(cat "$RD")"
 # R7 이음매 — 분해안 표 · 생성 기록은 docs 상태 파일(<줄기>.state.md)에 산다. 세션 폴더의 옛 이름을 넘기지 않는다.
 has "$STEPA" '--plan-table "${BRIEF_REL%.md}.state.md"' "Step A 8: --plan-table 은 brief 줄기의 docs 상태 파일"
 has "$STEPA" '--audit "${BRIEF_REL%.md}.audit.md"' "Step A 8: --audit 도 같은 줄기에서"
@@ -89,17 +90,16 @@ n_unq="$(printf '%s\n' "$CF" | grep -cE '"\$STATE_F" "\$RDIR"' || true)"
 assert_eq "$n_unq" "0" "커밋 펜스: 로드맵 폴더를 조건 없이 넣는 경로 지정이 없다"
 assert_file_absent "$FIN" '함께 커밋하라 —' "finishing: 손 커밋 안내 줄(「…함께 커밋하라 — <경로들>」)이 없다"
 assert_file_absent "$FIN" 'git 이 무시하는 자리' "finishing: 상태 파일이 git 무시 자리일 수 있다는 줄이 없다"
-has "$REGEN" 'brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "B-R: 커밋 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
-has "$REGEN" '로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>' "B-R: 멈춤에 「커밋하지 않았다」 줄(네 경로)"
-has "$REGEN" 'rc 2 는 사용법 오류다' "B-R: rc 2 의 처리"
+has "$RDALL" '커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "roadmap-draft 커밋: 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
+has "$REGEN" '승인된 표는 상태 파일 `## 분해안` 절에 남아, 사유를 고친 뒤 다시 부르면 그 표에서 이어 갈 수 있다(커밋 펜스는 돌리지 않는다)' "생성: 고칠 수 없는 사유의 멈춤은 커밋하지 않고 다시 부를 길을 남긴다"
+has "$REGEN" 'rc 2 는 사용법 오류다' "생성: rc 2 의 처리"
 assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 「빼고 커밋한다」 대신 「빼고 진행한다」"
 B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
 has "$B1" '분해된 일이어도 「PR 과 머지」 로 가지 않는다' "B-1: 분해된 일이어도 끝 질문의 확정은 PR 을 열지 않는다"
 has "$B1" '분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다' "B-1: 분해된 일의 끝 안내가 머지 뒤 지휘 세션을 말한다"
-# 리뷰 보강(I1) — B-A 가 더한 번호로 rc 1: 생성만 다시 돌고 A.5 · 게이트는 다시 없다
-for lit in 'Step A 8 의 명령**만** 다시 돌린 뒤' 'Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다' \
-           '`## 생성 기록` 에 적힌 파일' '`분해됨 — <로드맵 경로>` 줄을 뺀 뒤' '표로 고칠 수 없는 사유'; do
-  has "$REGEN" "$lit" "B-R(I1): $lit"
+# AC11 — 「spec 하나로」 의 되돌아가는 길: 생성 기록의 파일 지우기 · §7 분해됨 줄 지우기. 표로 고칠 수 없는 사유는 멈춘다.
+for lit in '`## 생성 기록` 에 적힌 파일을 지운다' '결과물 §7 의 `분해됨 — <로드맵 경로>` 줄을 지운다' '표로 고칠 수 없는 사유'; do
+  has "$RDALL" "$lit" "roadmap-draft 되돌아가기: $lit"
 done
 assert_file_absent "$FIN" '항목이 바뀌면 확정 직후' "옛 「항목이 바뀌면」 재생성 조건이 없다"
 

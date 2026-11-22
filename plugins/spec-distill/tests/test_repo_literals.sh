@@ -250,4 +250,7 @@ shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR=""$r7/' "git add 경로 \$RDIR 를 
 shape_mut "$FIN_T" "s/^    RDIR=\"\"\$/    RDIR=''\"\$r7\"/" "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 홑따옴표에 값을 덧붙임"
 shape_mut "$FIN_T" 's/^    RDIR=""$/    : "${RDIR:=$r7}"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 기본값 대입(:=)"
 shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR+="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 덧붙임 대입(+=)"
+RD_T=skills/roadmap-draft/SKILL.md
+shape_mut "$RD_T" '/repo_defaults\.py" roadmap-check "\$r7"/d' "함께 부르지 않는다" "로드맵 잡기 커밋 펜스의 roadmap-check 지움"
+shape_mut "$RD_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$STATE_F 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 결과물 폴더 판정 지움"
 finish

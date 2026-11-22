@@ -138,7 +138,7 @@ for lit in '`- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> �
   assert_contains "$RISKP" "$lit" "AC25: Step A 「위험 번호」 «${lit}»"
 done
 assert_not_contains "$RISKP" '이 brief 의 가장 큰 K 다음 수' "AC25: Step A 「위험 번호」 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
-assert_contains "$RDJ" '위험 K 는 Step A 가 brief §5 위험 줄에 박을 번호다' "AC25: 분해 표 배정 번호 불릿"
+assert_contains "$RDJ" '위험 K 는 결과물 §5 위험 줄에 박힌 번호다.' "AC25: 분해 표 배정 번호 불릿(번호는 앞 단계가 결과물에 박았다)"
 RMT="$SD/templates/roadmap-template.md"
 for f in "$FIN" "$RMT"; do
   grep -qF '번호 없는 위험 줄' "$f" && no "AC25: 옛 「번호 없는 위험 줄」 잔존(${f##*/})" || ok "AC25: 옛 「번호 없는 위험 줄」 없음(${f##*/}, 양성 짝: 위 · 아래 단언)"
@@ -159,8 +159,7 @@ for lit in '사유가 `unassigned` · `orphans` · `unknown_ids` 이거나 `brie
            '`unknown_ids` 는 표가 brief 에 없는 번호(지운 위험의 K 등)를 배정한 것이다 — 표에서 그 번호를 뺀다.' \
            '`brief 에서 줄을 찾지 못한 번호` 면 그 번호를 brief 에서 찾아 가른다 — brief 에 없으면 `unknown_ids` 와 같이 표에서 뺀다.' \
            'brief 에 있으면 생성기가 그 줄을 읽지 못한 것이다(생성기의 빈틈) — 표를 고치지 않고 그 번호와 사유를 그대로 보이고 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다.' \
-           '면 표가 아니라 brief 를 고친다 — 번호 없는 줄에는 메시지가 말한 번호부터 박고(로드맵 `## 위험 번호표` 에 더 큰 K 가 있으면 그다음 수부터), 겹친 번호는 한 줄을 Step A 「위험 번호」 의 다음 수로 바꾼다.' \
-           '그다음 Step A 8 의 명령을 한 번만 다시 돌리고 위 갈래대로 가른다 — 또 같은 사유면 아래 「표로 고칠 수 없는 사유」 처럼 멈춘다.'; do
+           '면 표가 아니라 결과물 쪽 결함이다 — 결과물을 고치지 않고 `## 되돌아가는 길` 의 둘째 갈래로 간다.'; do
   assert_contains "$BR" "$lit" "AC25: B-R «${lit}»"
 done
 assert_not_contains "$BR" '`unknown_ids` · `brief 에서 줄을 찾지 못한 번호` 는 표가' "AC25: B-R 이 두 사유를 한데 묶어 표에서 빼지 않는다(양성 짝: 위 단언)"
@@ -243,9 +242,8 @@ B0="$(win "$FIN" '^#### B-0' '^#### ')"; B4="$(win "$FIN" '^#### B-4' '^#### ')"
 assert_contains "$B0" '얻음: 지금 확정 후보를 확정으로 바꾸고 왔던 끝 질문으로 돌아가 끝낼 길을 고른다' "F4: 재제시 상한 질문의 「지금 목록으로 확정」 설명이 왔던 끝 질문으로 돌아간다고 말한다"
 assert_contains "$B3" '왔던 끝 질문(B-2 게이트 — superpowers 가 없어 B-1 의 끝 질문에서 왔으면 그 끝 질문)을 다시 띄우며' "F4: 「지금 목록으로 확정」 이 돌아갈 자리"
 assert_not_contains "$B0$B3" 'B-2 게이트를 다시 띄운다 — 다음 단계는 그 게이트에서 고른다' "F4: 옛 「B-2 게이트를 다시 띄운다」 가 없다(양성 짝: 위 두 단언)"
-assert_contains "$BR" 'B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 — 「지금 목록으로 확정」은 왔던 끝 질문으로 돌아가 그 질문의 갈래에서 한 번 돈다' "F4 AC10: B-R 의 갈래 목록에 끝 질문의 두 갈래"
-assert_contains "$BR" '(B-1 끝 질문의 「확정하고 끝낸다」 · 「brief만 종료」 도 같은 펜스로 커밋한다)' "F4 AC10: 끝 질문의 두 갈래도 커밋한다"
-assert_not_contains "$BR" 'B-1 은 커밋하지 않고' "F4 AC10: 옛 「B-1 은 커밋하지 않고」 가 없다(양성 짝: 위 단언)"
+# AC9 — 생성은 표 승인 뒤 한 번 돈다: roadmap-draft 의 생성 절은 앞 단계의 끝 질문 갈래를 말하지 않는다(양성 짝: 위 사유 갈래 단언)
+assert_not_contains "$BR" 'B-1 끝 질문' "AC9: 생성 절에 앞 단계 끝 질문의 갈래가 없다"
 assert_contains "$B4" '(b) superpowers 가 없을 때의 B-1 끝 질문 (선택지 셋)을 거친다 — 질문 없는 **silent 종료 금지**.' "F4 AC10: Step B 를 끝내는 경로는 proceed 게이트와 B-1 끝 질문 둘이다"
 assert_not_contains "$B4" '게이트를 거치지 않는 예외' "F4 AC10: 옛 「게이트를 거치지 않는 예외」 가 없다(양성 짝: 위 단언)"
 assert_contains "$B2" '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' "F4 AC10: B-2 게이트의 선택지 넷 문장은 그대로다"
