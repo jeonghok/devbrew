@@ -21,7 +21,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
 }
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }
 last() { printf '%s\n' "$1" | tail -n 1; }
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 UPH='<interview-pr 이 낸 PR 주소>'
 HPH='<interview-pr 이 낸 끝 커밋>'

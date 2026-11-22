@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 export PYTHONDONTWRITEBYTECODE=1
 SD="$ROOT/plugins/spec-distill"
 EC="$SD/skills/epic-conductor/SKILL.md"
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 CD="$SD/references/conducting.md"
 README="$SD/README.md"
 

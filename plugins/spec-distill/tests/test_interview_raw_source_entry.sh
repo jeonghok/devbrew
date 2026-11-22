@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/skills/pm-interview/references/state-file.md plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/agents/coverage-mapper.md plugins/spec-distill/agents/blind-spot-prober.md plugins/spec-distill/skills/request-framing/SKILL.md
+# guards: plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/skills/context-build/references/state-file.md plugins/spec-distill/skills/context-build/references/seed-input.md plugins/spec-distill/skills/context-build/references/steelman.md plugins/spec-distill/agents/coverage-mapper.md plugins/spec-distill/agents/blind-spot-prober.md plugins/spec-distill/skills/intent-sync/SKILL.md
 #
 # 인터뷰 진입이 원자료를 찾아 읽고, seed 를 사용자의 말이 아니라 모델이 줄인 글로 부른다(원자료 정본 사슬 AC7 · AC12 · AC22).
 #   - 인터뷰 본문: audit 경로는 raw_source.py 판결 줄에서 받는다 · 한 답의 라벨과 적은 말은 S 둘 · coverage-mapper 첫 입력에
 #     원자료 경로 · 자기 줄 수는 SKILL_LINE_CAP 미만.
 #   - 네 파일(본문 · 두 agent · steelman)에서 seed 를 S1 · 사용자 원문으로 부르는 옛 낱말이 사라지고 새 낱말이 선다.
 #   - state-file.md 「원자료 — 판결 뒤」 절: 다섯 자리 표 · 펜스 · 출력 줄 · 막지 않음. 펜스는 임시 레포에서 실제로 돈다.
-#   - seed-input.md 의 S1 항목 · request-framing 의 문장.
+#   - seed-input.md 의 S1 항목 · intent-sync 의 문장.
 #   변이 — 한 자리씩 깬 사본 묶음을 같은 판정에 먹여 그 이름이 실패로 나오는지 본다.
 set -u
-REL_FILES="skills/pm-interview/SKILL.md skills/pm-interview/references/state-file.md skills/pm-interview/references/seed-input.md skills/pm-interview/references/steelman.md agents/coverage-mapper.md agents/blind-spot-prober.md skills/request-framing/SKILL.md"
+REL_FILES="skills/context-build/SKILL.md skills/context-build/references/state-file.md skills/context-build/references/seed-input.md skills/context-build/references/steelman.md agents/coverage-mapper.md agents/blind-spot-prober.md skills/intent-sync/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
   for r in $REL_FILES; do printf 'plugins/spec-distill/%s\n' "$r"; done
   exit 0
@@ -79,7 +79,7 @@ fence_fails() {
 entry_fails() {
   local root="$1" cap own
   cap="$(grep -E '^SKILL_LINE_CAP=[0-9]+$' "$CAPF" | head -n 1 | cut -d= -f2)"
-  own="$(awk '/^<!-- plain-language:begin -->$/{s=1} s==0{n++} s==2{s=0; if ($0 != "") n++; next} /^<!-- plain-language:end -->$/{s=2} END{print n+0}' "$root/skills/pm-interview/SKILL.md")"
+  own="$(awk '/^<!-- plain-language:begin -->$/{s=1} s==0{n++} s==2{s=0; if ($0 != "") n++; next} /^<!-- plain-language:end -->$/{s=2} END{print n+0}' "$root/skills/context-build/SKILL.md")"
   { [ -n "$cap" ] && [ "$own" -lt "$cap" ]; } || echo skill_lines
   python3 -I -B - "$root" <<'ENTRY_WORDS_PY' || echo words_checker_crashed
 import os
@@ -108,7 +108,7 @@ def want(name, cond):
         bad.append(name)
 
 
-skill = flat("skills/pm-interview/SKILL.md")
+skill = flat("skills/context-build/SKILL.md")
 want("skill_module", "`scripts/raw_source.py` 가 낸 판결 줄에서 받는다" in skill
      and "읽은 파일의 절대경로에서 audit 경로를 도출한다" not in skill)
 want("skill_no_verdict", "판결이 찾음이 아니면 `audit=없음(<판결 줄의 사유>)` 로 낸다" in skill)
@@ -118,13 +118,13 @@ want("skill_first_input", "원자료의 경로(진입 단계의 원자료 판결
 
 old_words = ("seed 전문(S1)", "S1 이 될 값", "seed S1", "사용자 원문(S1 과 문제를 서술한 발화)",
              "사용자 원문 — S1 과 문제를 서술한 발화")
-for rel in ("skills/pm-interview/SKILL.md", "agents/coverage-mapper.md", "agents/blind-spot-prober.md",
-            "skills/pm-interview/references/steelman.md"):
+for rel in ("skills/context-build/SKILL.md", "agents/coverage-mapper.md", "agents/blind-spot-prober.md",
+            "skills/context-build/references/steelman.md"):
     t = flat(rel)
     want("no_seed_as_s1:" + rel,
          bool(t) and not any(w in t for w in old_words) and ("모델이 줄인 글" in t or "원자료" in t))
 
-st_raw = raw("skills/pm-interview/references/state-file.md")
+st_raw = raw("skills/context-build/references/state-file.md")
 head = "\n### 원자료 — 판결 뒤\n"
 i = st_raw.find(head)
 j = st_raw.find("\n#", i + len(head)) if i >= 0 else -1
@@ -158,14 +158,14 @@ want("state_sentences",
      and "이어 갈 때 「풀린 입력」 이 여기서 나온다(끝맺음의 비밀값 확인이" in stf
      and "이어 갈 때 `S1` 이 여기서 나온다" not in stf)
 
-si = flat("skills/pm-interview/references/seed-input.md")
+si = flat("skills/context-build/references/seed-input.md")
 want("seed_input_s1", "**§6 `S1` 은 seed 가 아니라 원자료다**" in si
      and "「풀린 입력」 원문 그대로다" not in si
      and "원자료: 찾지 못함 — 붙여 넣은 seed" in si)
 want("seed_input_paths", "그 dispatch 에는 원자료의 경로도 함께 준다" in si
      and "audit 경로는 `raw_source.py` 의 판결 줄에서 받은 것이다" in si)
 
-rf = flat("skills/request-framing/SKILL.md")
+rf = flat("skills/intent-sync/SKILL.md")
 want("framing_sentence",
      "**인터뷰가 seed 로 시작한 줄 몰라 원자료(framing 기록의 원문 절과 질문 전체 절)가 brief §6 의 첫 칸에 실리지 않습니다.**" in rf
      and "방금 확정한 요청" not in rf)
@@ -173,7 +173,7 @@ want("framing_sentence",
 for name in bad:
     print(name)
 ENTRY_WORDS_PY
-  fence_fails "$root/skills/pm-interview/references/state-file.md"
+  fence_fails "$root/skills/context-build/references/state-file.md"
 }
 
 EF="$(entry_fails "$SDP")"
@@ -215,34 +215,34 @@ bites() { # <기대 이름> <사본 폴더> <변이 설명>
 }
 
 B="$(bundle)"
-break_at "$B/skills/pm-interview/SKILL.md" '한 답에 고른 것과 적은 말이 섞였으면 S 둘로 적는다' '' \
+break_at "$B/skills/context-build/SKILL.md" '한 답에 고른 것과 적은 말이 섞였으면 S 둘로 적는다' '' \
   && bites skill_two_s "$B" "S 둘 문장 삭제" || no "변이 준비 실패: skill_two_s"
 B="$(bundle)"
 break_at "$B/agents/coverage-mapper.md" 'seed 전문(모델이 줄인 글)과' 'seed 전문(S1)과' \
   && bites no_seed_as_s1:agents/coverage-mapper.md "$B" "coverage-mapper 옛 낱말" || no "변이 준비 실패: coverage-mapper"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '| `RESUME`(`LEGACY` 를 옮긴 뒤 포함) |' --drop-line \
+break_at "$B/skills/context-build/references/state-file.md" '| `RESUME`(`LEGACY` 를 옮긴 뒤 포함) |' --drop-line \
   && bites state_section "$B" "RESUME 행 삭제" || no "변이 준비 실패: state_section"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '진입 인자가 seed 경로였으면(`ASK` 의 「이어 감」 등) `SEED_ABS` 도 채운다' '' \
+break_at "$B/skills/context-build/references/state-file.md" '진입 인자가 seed 경로였으면(`ASK` 의 「이어 감」 등) `SEED_ABS` 도 채운다' '' \
   && bites state_resume_seed "$B" "RESUME 행의 SEED_ABS 구절 삭제" || no "변이 준비 실패: state_resume_seed"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '[ -f "$STATE" ]' --drop-line \
+break_at "$B/skills/context-build/references/state-file.md" '[ -f "$STATE" ]' --drop-line \
   && bites fence_no_state:bash "$B" "펜스의 상태 파일 확인 줄 삭제" || no "변이 준비 실패: fence_no_state"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/seed-input.md" '**§6 `S1` 은 seed 가 아니라 원자료다**' '**§6 `S1` 은 「풀린 입력」 원문 그대로다**' \
+break_at "$B/skills/context-build/references/seed-input.md" '**§6 `S1` 은 seed 가 아니라 원자료다**' '**§6 `S1` 은 「풀린 입력」 원문 그대로다**' \
   && bites seed_input_s1 "$B" "seed-input 옛 S1 문장" || no "변이 준비 실패: seed_input_s1"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '--interview "$STATE" --absolute' '--interview "$STATE"' \
+break_at "$B/skills/context-build/references/state-file.md" '--interview "$STATE" --absolute' '--interview "$STATE"' \
   && bites fence_both:bash "$B" "펜스의 --absolute 삭제" || no "변이 준비 실패: fence_both"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '아래 「판결 줄이 없다」 갈래대로 간다' '아래 「판결 줄이 없다」 갈래대로 멈춘다' \
+break_at "$B/skills/context-build/references/state-file.md" '아래 「판결 줄이 없다」 갈래대로 간다' '아래 「판결 줄이 없다」 갈래대로 멈춘다' \
   && bites fence_no_verdict:bash "$B" "종료 코드 2 줄을 멈춘다로" || no "변이 준비 실패: fence_no_verdict"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '`NEW-SEED` 또는 `ASK` 의 「새로 시작」 — ' '`NEW-SEED` — ' \
+break_at "$B/skills/context-build/references/state-file.md" '`NEW-SEED` 또는 `ASK` 의 「새로 시작」 — ' '`NEW-SEED` — ' \
   && bites state_section "$B" "ASK 새로 시작 갈래 삭제" || no "변이 준비 실패: state_section(ASK)"
 B="$(bundle)"
-break_at "$B/skills/pm-interview/references/state-file.md" '(종료 코드 <n>: <[raw_source] 줄>)' '(종료 코드 <n>)' \
+break_at "$B/skills/context-build/references/state-file.md" '(종료 코드 <n>: <[raw_source] 줄>)' '(종료 코드 <n>)' \
   && bites state_no_verdict "$B" "판결 없음 줄의 사유 삭제" || no "변이 준비 실패: state_no_verdict"
 
 finish

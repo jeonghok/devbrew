@@ -15,7 +15,7 @@ plugin: spec-distill
 | `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
 | `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
 | `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
-| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | request-framing 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | intent-sync 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
 | `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
 | `DEVBREW_QUALITY_GATES_DISABLE_WEB` | brief 리뷰가 codex 에 여는 웹 검색 | 은퇴 예정 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |

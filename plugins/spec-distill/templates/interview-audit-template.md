@@ -3,7 +3,7 @@ type: interview-audit
 payload: <YYYY-MM-DD>-<kebab-topic>-interview.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill pm-interview
+source: spec-distill context-build
 ---
 
 # <Topic> — Interview Audit
@@ -47,7 +47,7 @@ source: spec-distill pm-interview
 (포화 판정 줄 — 게이트는 아래 불릿 중 `포화 판정 <k>:` 또는 `사용자 종료(@S<n>)` 로 시작하는 **마지막** 줄을 본다.
 판정자 `포화` · 사용자 종료 · 사용자 판단 포화(advisory)면 통과, 마지막이 `아직` · `판정 불가 — 조사 계속` 이면 red 다.
 판정 줄이 하나도 없으면 `포화 판정` 건너뜀 줄(아래)이 있을 때만 통과하고, 없으면 red 다 — 판정 줄이 있으면 건너뜀 줄은
-판정을 바꾸지 않는다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 pm-interview 의 포화 판정 reference 다.
+판정을 바꾸지 않는다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 context-build 의 포화 판정 reference 다.
 `<k>` 는 실제 차례로 치환한다 — 채우지 않은 자리표는 게이트 red 다.)
 
 (건너뜀 줄 — 모델이 작은 일이라 판단해 건너뛴 자리마다 불릿 한 줄을 덧붙인다. 꼴은 「모델 판단으로 건너뜀 — 자리: 이유」 이고,

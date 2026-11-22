@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/brief-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
+# guards: plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/references/brief-handoff.md plugins/spec-distill/references/trivia-escape.md plugins/spec-distill/agents/steelman-builder.md plugins/spec-distill/skills/context-build/references/steelman.md plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/scripts/roadmap_render.py plugins/spec-distill/scripts/roadmap_model.py plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md
 #
 # R10 계획 2 — 끝 게이트: 정본의 둘째 질문(선택) · 인터뷰 끝 ①② 이름 표 · 다른 다음 단계의 줄.
 # 정적 락이다 — 모델이 이 문면을 실제로 따르는지는 재지 못한다.
@@ -8,15 +8,15 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/proceed-gate.md"
-  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/context-build/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"
-  echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
+  echo "plugins/spec-distill/skills/context-build/SKILL.md"
   echo "plugins/spec-distill/references/epic-handoff.md"
   echo "plugins/spec-distill/references/brief-handoff.md"
   echo "plugins/spec-distill/references/trivia-escape.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
-  echo "plugins/spec-distill/skills/pm-interview/references/steelman.md"
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/context-build/references/steelman.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   echo "plugins/spec-distill/scripts/roadmap_render.py"
   echo "plugins/spec-distill/scripts/roadmap_model.py"
   echo "plugins/spec-distill/CHANGELOG.md"
@@ -26,7 +26,7 @@ fi
 . "$ROOT/shared/tests/assert.sh"
 flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 win() { awk -v a="$2" -v b="$3" '$0 ~ a {f=1; print; next} f && $0 ~ b {f=0} f' "$1" | tr '\n' ' ' | tr -s ' '; }
-PG="$SD/references/proceed-gate.md"; FIN="$SD/skills/pm-interview/references/finishing.md"
+PG="$SD/references/proceed-gate.md"; FIN="$SD/skills/context-build/references/finishing.md"
 # AC17(정본) — Step B 안에 있다(다음 세션 명령 절 앞)
 STEPB="$(win "$PG" '^## Step B' '^## ')"
 [ -n "$STEPB" ] && ok "AC17(양성 대조): 정본 Step B 를 떴다" || no "AC17: 정본 Step B 부재"
@@ -73,7 +73,7 @@ for lit in 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, �
   assert_not_contains "$NEWP" "$lit" "F4 AC3: 「다른 다음 단계의 줄」 문단에는 글자로 없다 «${lit}»"
 done
 assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.' "AC23: 같은 턴 금지가 지휘자 · 고른 skill 모두에 선다"
-EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/pm-interview/SKILL.md"
+EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/context-build/SKILL.md"
 nsl() { awk -v m="$2" '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
 BL="$(nsl "$FIN" '**다음 세션 줄 — ①/② 공통**')"; EL="$(nsl "$EH" '**에픽 넘김 줄**')"
 SHARED='설계문서에 ## 있는 것 검토 절(맞는 있는 것이 있으면 그 위에서 만드는 것이 기본이다 — 찾아본 후보를 이름으로 먼저 적고, 직접 만들려면 그 후보에 대한 구체 이유를 적어 사용자 승인을 받는다. 레포 밖 것은 후보와 차이를 보여 사용자가 승인한 뒤에만 쓴다. 적는 법은 ${CLAUDE_PLUGIN_ROOT}/references/existing-first.md 를 읽어 따른다)과 ## 상류 · 하류 연계 절(이 일이 받는 곳 · 넘기는 곳 · 되돌아오는 길 · 같은 상태를 읽는 다른 표면)을 두고, 경로 · 테스트 명령 · 기본 브랜치 · 브랜치 이름 · 모델 같은 레포 전용 값은 박지 말고 도출하거나 레포 설정에서 읽게 설계한다.'
@@ -94,7 +94,7 @@ assert_contains "$(flat "$FIN")" '`next_phase: superpowers:brainstorming`(기본
 assert_contains "$(flat "$SKI")" 'interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)' "AC18: SKILL 정의 문장"
 grep -qF 'brainstorming용 meta-prompt' "$SKI" && no "AC18: 옛 「brainstorming용」 정의 잔존" || ok "AC18: 옛 정의 없음(양성 짝: 위 단언)"
 # AC19 · AC20
-TE="$SD/references/trivia-escape.md"; SB="$SD/agents/steelman-builder.md"; SM="$SD/skills/pm-interview/references/steelman.md"
+TE="$SD/references/trivia-escape.md"; SB="$SD/agents/steelman-builder.md"; SM="$SD/skills/context-build/references/steelman.md"
 TEF="$(flat "$TE")"
 grep -qxF '# Trivia Escape — 한 문장 기준' "$TE" && ok "AC19: 머리가 한 문장 기준" || no "AC19: 머리가 다르다"
 for lit in '한 문장으로 설명 가능한 사소한 변경이면' '아래 다섯은 그 기준에 드는 흔한 예시다' \
@@ -105,7 +105,7 @@ done
 for old in '<10 토큰' '다섯 중 하나에 해당하면' '맞은 패턴'; do
   grep -qF "$old" "$TE" && no "AC19: 옛 문구 «${old}» 잔존" || ok "AC19: 옛 문구 «${old}» 없음(양성 짝: 위 단언)"
 done
-for f in "$SD/skills/pm-interview/SKILL.md" "$SD/skills/request-framing/SKILL.md"; do
+for f in "$SD/skills/context-build/SKILL.md" "$SD/skills/intent-sync/SKILL.md"; do
   assert_contains "$(flat "$f")" '그 파일의 기준과 예시로 판정한다' "AC19: ${f##*/skills/} 진입이 기준으로 판정"
   grep -qF '다섯 패턴' "$f" && no "AC19: ${f##*/skills/} 에 「다섯 패턴」 잔존" || ok "AC19: ${f##*/skills/} 「다섯 패턴」 없음"
 done

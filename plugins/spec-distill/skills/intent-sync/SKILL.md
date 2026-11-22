@@ -1,17 +1,17 @@
 ---
-name: request-framing
+name: intent-sync
 description: >
-  Phase 0 회의 skill. 사용자가 `/spec-distill:request-framing` 으로 부른다. 확산(원문 보존 → 레포
-  읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:pm-interview @<seed 경로>` 가
+  Phase 0 회의 skill. 사용자가 `/spec-distill:intent-sync` 으로 부른다. 확산(원문 보존 → 레포
+  읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:context-build @<seed 경로>` 가
   가리키는 `interview-seed` 파일을 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
 metadata:
   cost_class: variable
 argument-hint: "[raw request / 생각 / 대화 / 자료]"
 allowed-tools:
-  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill request-framing)
+  - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill intent-sync)
 ---
 
-# request-framing — Phase 0
+# intent-sync — Phase 0
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -29,10 +29,10 @@ allowed-tools:
 <!-- plain-language:end -->
 
 당신은 파이프라인 맨 앞의 **회의**를 진행 중입니다. 산출물은 문서가 아니라 **새 세션의 첫
-턴 `/spec-distill:pm-interview @<seed 경로>` 가 가리키는 파일**입니다. 그 첫 턴이 어떤 모양인지는 `## 확정 — proceed 게이트`
+턴 `/spec-distill:context-build @<seed 경로>` 가 가리키는 파일**입니다. 그 첫 턴이 어떤 모양인지는 `## 확정 — proceed 게이트`
 의 「호출 모양」 절 한 곳이 정합니다 — 다른 절은 그것을 다시 정하지 않고 가리킵니다.
 
-!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill request-framing`
+!`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill intent-sync`
 
 ## 진입 단계
 
@@ -44,9 +44,9 @@ allowed-tools:
 |---|---|
 | `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 상태를 만들지 않는다 |
-| `[devbrew-entry] error …` | `[spec-distill] request-framing 사전 검사 실패 — <reason= 값>. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
-| `[shell command execution disabled by policy]` | `[spec-distill] request-framing 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
-| 감시줄 없음 · 그 밖 | `[spec-distill] request-framing 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] intent-sync 사전 검사 실패 — <reason= 값>. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] intent-sync 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] intent-sync 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 
@@ -63,7 +63,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 |---|---|
 | rc 0 (`[devbrew-deps] ok …`) | 2 로 간다 |
 | rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 회의를 시작하지 않는다 |
-| 그 밖 | `[spec-distill] request-framing 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 회의를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
+| 그 밖 | `[spec-distill] intent-sync 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 회의를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
 ### 2. `@경로` 풀기
 
@@ -71,7 +71,7 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 
 ### 3. trivia 판정
 
-`${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:request-framing` 으로 채워 띄운다 — 「그대로」면 그 파일의 안내 문면을 내고 진행하지 않고, 「전체 과정으로」면 4 로 간다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+`${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:intent-sync` 으로 채워 띄운다 — 「그대로」면 그 파일의 안내 문면을 내고 진행하지 않고, 「전체 과정으로」면 4 로 간다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 ### 4. 회의로
 
@@ -201,7 +201,7 @@ AskUserQuestion({ questions: [{
 3. audit·seed 를 그 워크트리 안의 인터뷰 폴더(`interview_dir`)에 쓴다(`## 상태` 의 경로 그대로).
 4. proceed 게이트에서 ①/② 를 고르면 **handoff 직전** 커밋 1회(`## 확정 — proceed 게이트` 의 절차).
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
-   열 때 그 디렉토리에서 열어야 `/spec-distill:pm-interview @<seed 경로>` 가 그 파일을 찾는다.
+   열 때 그 디렉토리에서 열어야 `/spec-distill:context-build @<seed 경로>` 가 그 파일을 찾는다.
 
 거절·도구 부재·스위치 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재|
 DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
@@ -365,7 +365,7 @@ premortem · coverage-mapper · `open-researcher` 다섯이 거기 있는 장치
 audit 의 `### 이름 조회` 줄은 긴 초안의 항목이 아니다 — 압축 · 덜어 낸 것 표 · 되살림의 대상이 아니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
 하면 다음 단계로 넘깁니다. 같은 주제도 이 기준으로 갈립니다.
 
-이 경계는 소비자 쪽(`pm-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
+이 경계는 소비자 쪽(`context-build` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
 있습니다. 두 곳에 있는 이유는 중복이 아니라 **제약당하는 쪽이 그 제약을 받은 적이 있어야**
 하기 때문입니다 — 한 skill 이 다른 skill 에 대해서만 적어 두면, 제약당하는 쪽을 고치는
 사람은 그것을 읽지 않습니다.
@@ -400,7 +400,7 @@ fi
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
 디스크에서 읽고, proceed 게이트 공통 계약의 Step A 도 대상 문서가 working-tree 에 없으면
 게이트를 **띄우지 않습니다**. 승인 이후에 일어나는 것은 파일 쓰기가 아니라 **handoff**
-입니다 — 다음 세션의 첫 턴이 `/spec-distill:pm-interview @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
+입니다 — 다음 세션의 첫 턴이 `/spec-distill:context-build @<seed 경로>` 로 seed 파일을 가리키는 것이고, 그 턴의 모양은
 `## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
 **만들지 않는 것: 세션 폴더와 그 안의 파일.** `.claude/spec-distill/` 에는 리뷰 원장(`.docreview/`)과 그 폴더를 git 이 무시하게 하는 `.gitignore`(`*` 한 줄)만 생긴다.
@@ -1175,7 +1175,7 @@ codex 부재 · 재비판 부재는 이 표에 없습니다 — 엔진이 `advis
 **기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 앞 글에서 둘을 구별해 씁니다 — 원장이
 없는 세션에 「이상 없음」·「경고 없음」이라고 쓰지 않습니다.
 
-**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 상태 파일이 없습니다 — 그래서
+**남은 갭 — `no-state-in-phase-0`.** `intent-sync` 은 인터뷰 이전이라 상태 파일이 없습니다 — 그래서
 degrade 원장은 구조적으로 부재하고 게이트 앞 글만 남습니다. 그 갭을 이 이름으로 부르고 게이트 앞 글이 그
 사실을 말합니다.
 
@@ -1208,24 +1208,24 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 ### 호출 모양 — 이 파이프라인에서 여기가 정본이다
 
-**다음 세션의 첫 턴은 `/spec-distill:pm-interview @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
+**다음 세션의 첫 턴은 `/spec-distill:context-build @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
 (인터뷰 폴더(`interview_dir`) 아래 `<날짜>-<topic>-interview.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
 치환하지 않은 자리표가 나가면 사용자가 깨진 명령을 실행하고, 그것을 잡는 자리가 없습니다.
 
 **다음 세션 줄 — ①/② 공통**
 
-> `/spec-distill:pm-interview @<seed 경로>`
+> `/spec-distill:context-build @<seed 경로>`
 
-`@경로` 는 서식 취향이 아닙니다 — **소비자 쪽 계약이 전부 `pm-interview` 의 「풀린 입력」에 키잉돼 있습니다.**
+`@경로` 는 서식 취향이 아닙니다 — **소비자 쪽 계약이 전부 `context-build` 의 「풀린 입력」에 키잉돼 있습니다.**
 명령 인자로 넘긴 `@경로` 는 헤드리스 실측(2026-09-10, 옛 interview 명령)에서 파일로 풀리지 않았고 대화형은 재지 않았습니다 —
-어느 쪽이든 `pm-interview` 의 `## 진입 단계` 2 가 그 파일을 읽어 전문으로 풉니다. 넘긴 값이 비거나 경로 문자열로 남으면
+어느 쪽이든 `context-build` 의 `## 진입 단계` 2 가 그 파일을 읽어 전문으로 풉니다. 넘긴 값이 비거나 경로 문자열로 남으면
 셋이 함께 조용히 실패합니다:
 
-- `pm-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
+- `context-build` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
   **인터뷰가 seed 로 시작한 줄 몰라 원자료(framing 기록의 원문 절과 질문 전체 절)가 brief §6 의 첫 칸에 실리지 않습니다.**
-- `pm-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
+- `context-build` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
   받습니다.
-- `pm-interview` 가 방금 Phase 0 을 거친 사용자에게 「`/spec-distill:request-framing` 을 먼저 거치면…」
+- `context-build` 가 방금 Phase 0 을 거친 사용자에게 「`/spec-distill:intent-sync` 을 먼저 거치면…」
   조언을 내고, 인터뷰가 「어떤 것을 만들고 싶으신가요?」로 시작합니다.
 
 **frontmatter 를 떼지 않는 이유**: `type: interview-seed` 줄이 소비자가 seed 를 알아보는
@@ -1237,8 +1237,8 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 | # | 이 skill 의 옵션 | 설명 |
 |---|---|---|
-| ① | `/compact` 후 `/spec-distill:pm-interview @<seed 경로>` (권장) — 커밋 후, 두 줄 명령을 노출하고 **턴 종료** | 얻음: 맥락을 비우고 인터뷰를 넓게 시작한다 · 내줌: 이 대화의 세부는 seed 와 audit 에 적힌 것만 넘어간다 |
-| ② | `/new` 후 `/spec-distill:pm-interview @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** | 얻음: 빈 맥락에서 인터뷰를 시작한다 · 내줌: 요약도 없어 seed 와 audit 에 없는 맥락은 사라진다 |
+| ① | `/compact` 후 `/spec-distill:context-build @<seed 경로>` (권장) — 커밋 후, 두 줄 명령을 노출하고 **턴 종료** | 얻음: 맥락을 비우고 인터뷰를 넓게 시작한다 · 내줌: 이 대화의 세부는 seed 와 audit 에 적힌 것만 넘어간다 |
+| ② | `/new` 후 `/spec-distill:context-build @<seed 경로>` (커밋 후) — 두 줄 명령을 노출하고 **턴 종료** | 얻음: 빈 맥락에서 인터뷰를 시작한다 · 내줌: 요약도 없어 seed 와 audit 에 없는 맥락은 사라진다 |
 | ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다. 리뷰 라운드를 다시 열면 그 전에 원장 열기(`ledger-open`)를 먼저 다시 돕니다(계수 기록 펜스가 표지를 풀었다) | 얻음: 넘기기 전에 압축을 다시 깎는다 · 내줌: 리뷰 라운드를 다시 열면 인터뷰 시작이 늦어진다 |
 | ④ | 멈춤 — seed 와 audit 을 남기고 종료 | 얻음: seed 와 audit 을 남긴 채 지금 상태를 그대로 둔다 · 내줌: 인터뷰가 시작되지 않아 다시 불러야 이어진다 |
 
@@ -1255,7 +1255,7 @@ python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || echo "[spec-dis
 
 ```
 /compact
-/spec-distill:pm-interview @<인터뷰 폴더><날짜>-<topic>-interview.md
+/spec-distill:context-build @<인터뷰 폴더><날짜>-<topic>-interview.md
 ```
 
 `/compact` 뒤 같은 줄에 붙인 텍스트는 요약 지시로, `/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.

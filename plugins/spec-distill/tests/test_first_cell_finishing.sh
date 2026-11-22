@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md
+# guards: plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/templates/interview-brief-template.md
 #
 # 끝맺음의 첫 칸 규약과 비밀값 멈춤(원자료 정본 사슬 AC8 · AC23).
 #   finishing.md Step A 절(줄 이음한 글) — seed 로 시작한 인터뷰의 S1 은 seed 가 아니라 원자료이고,
@@ -11,14 +11,14 @@
 #   변이 — 각 단언을 하나씩 깨 그 이름이 실패로 나오는지 본다(변이 자리가 없으면 그것도 실패다).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/context-build/references/finishing.md"
   echo "plugins/spec-distill/templates/interview-brief-template.md"; exit 0
 fi
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 . "$REPO_ROOT/shared/tests/assert.sh"
 export PYTHONDONTWRITEBYTECODE=1
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 TPL="$SD/templates/interview-brief-template.md"
 W="$(mktemp -d)"; [ -n "$W" ] && [ -d "$W" ] || { echo "mktemp 실패"; exit 1; }
 trap 'rm -rf "$W"' EXIT

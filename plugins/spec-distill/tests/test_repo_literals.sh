@@ -18,7 +18,7 @@ SD="$ROOT/plugins/spec-distill"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
-TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md skills/request-framing/SKILL.md skills/pm-interview/SKILL.md skills/pm-interview/references/finishing.md skills/pm-interview/references/state-file.md skills/spec-review/SKILL.md references/redecompose.md scripts/control_plane.py scripts/state_path.py scripts/roadmap_status.py scripts/walk_table.py scripts/conductor_branch.py scripts/conductor_mail.py scripts/conductor_status.py scripts/leader_seat.py references/conductor-state-branch.md skills/epic-conductor/references/qg-review.md scripts/merged_pr_range.py"
+TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md skills/intent-sync/SKILL.md skills/context-build/SKILL.md skills/context-build/references/finishing.md skills/context-build/references/state-file.md skills/spec-review/SKILL.md references/redecompose.md scripts/control_plane.py scripts/state_path.py scripts/roadmap_status.py scripts/walk_table.py scripts/conductor_branch.py scripts/conductor_mail.py scripts/conductor_status.py scripts/leader_seat.py references/conductor-state-branch.md skills/epic-conductor/references/qg-review.md scripts/merged_pr_range.py"
 scan() {  # scan <파일...> — 걸린 줄을 `<파일>:<줄>: <종류>` 로
   SCAN_DEPS="$SD/scripts" PYTHONIOENCODING=utf-8 python3 -I - "${SCAN_DEFS:-$SD/scripts}" "$@" <<'PY'
 import os, re, sys
@@ -216,7 +216,7 @@ shape_mut() {  # shape_mut <대상> <sed 식> <기대 사유> <라벨> [nocheck]
   if [ "${5:-}" != nocheck ] && cmp -s "$SD/$1" "$c"; then no "변이(${4}): 사본이 그대로다 — 판정이 공허하다"; return; fi
   case "$(shape "$c")" in *"$3"*) ok "변이(${4}): 잡는다" ;; *) no "변이(${4}): 못 잡는다" ;; esac
 }
-RF_T=skills/request-framing/SKILL.md
+RF_T=skills/intent-sync/SKILL.md
 shape_mut "$RF_T" 's/ || IDIR=""$//' "rc 확인 꼴이 아니다" "rc 확인 지움"
 shape_mut "$RF_T" '/^\[ -n "\$IDIR" \]/d' "빈 값을 확인하지 않는다" "빈 값 확인 지움"
 shape_mut "$RF_T" 's/^\[ -n "\$IDIR" \] || .*$/[ -n "$IDIR" ] || true/' "비면 셸을 멈추지 않는다" "빈 값 확인을 || true 로"
@@ -235,7 +235,7 @@ else
   case "$(shape "$rf_pre")" in *"다시 대입한다"*|*"판정하지 않는다"*) no "음성 대조(판정 앞 대입): 판정 앞의 대입을 잘못 잡는다" ;;
     *) ok "음성 대조(판정 앞 대입): 판정 앞의 대입은 잡지 않는다" ;; esac
 fi
-FIN_T=skills/pm-interview/references/finishing.md
+FIN_T=skills/context-build/references/finishing.md
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d;/repo_defaults\.py" roadmap-check /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir "\$RDIR"/d' "함께 부르지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정 지움"

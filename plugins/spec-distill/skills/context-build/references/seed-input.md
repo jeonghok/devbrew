@@ -1,8 +1,8 @@
 ## seed 를 입력으로 받았을 때
 
-「풀린 입력」이 `type: interview-seed` frontmatter 를 가진 문서면, 그것은 **다음 세션의 첫 턴에 넘기는, 모델이 줄인 글**이다. 사용자의 말은 seed 옆 기록 파일(audit)의 원자료다. Phase 0 은 사용자에게 `/spec-distill:pm-interview @<seed 경로>` 를 치게 하고,
+「풀린 입력」이 `type: interview-seed` frontmatter 를 가진 문서면, 그것은 **다음 세션의 첫 턴에 넘기는, 모델이 줄인 글**이다. 사용자의 말은 seed 옆 기록 파일(audit)의 원자료다. Phase 0 은 사용자에게 `/spec-distill:context-build @<seed 경로>` 를 치게 하고,
 이 skill 의 `## 진입 단계` 2 가 그 파일을 전문(frontmatter 포함)으로 풀어 「풀린 입력」으로 삼는다(그 호출 모양의
-정본은 `request-framing` 의 「호출 모양」 절이다). 그 frontmatter 줄이 seed 를 알아보는 유일한 표지다 —
+정본은 `intent-sync` 의 「호출 모양」 절이다). 그 frontmatter 줄이 seed 를 알아보는 유일한 표지다 —
 본문만 오면 seed 로 인식되지 않아 아래 규약이 발동하지 않는다.
 
 - **§6 `S1` 은 seed 가 아니라 원자료다** — 원자료를 찾았으면 끝맺음이 framing 기록의 원문 절과 질문 전체 절을 첫 칸에 글자 그대로 싣고, 찾지 못했거나 그대로 싣지 못할 때만 seed 전문(「풀린 입력」)을 싣고 앵커 라벨로 밝힌다(`finishing.md` 의 S1 규약). 인터뷰를 도는 동안에도 사용자의 말로 읽는 것은 원자료다(`state-file.md` 의 「원자료 — 판결 뒤」).

@@ -11,8 +11,8 @@ has()   { assert_contains "$(flat "$1")" "$2" "$3"; }
 hasnt() { assert_not_contains "$(flat "$1")" "$2" "$3"; }
 fm_line() { awk -v k="$2" 'NR==1&&/^---$/{f=1;next} f&&/^---$/{exit} f&&index($0,k)==1{print;exit}' "$1"; }
 
-# ── Task 2 — 압축 규약 · request-framing · seed 템플릿 · seed 프로필 ──
-C="$SD/references/compression.md"; RF="$SD/skills/request-framing/SKILL.md"
+# ── Task 2 — 압축 규약 · intent-sync · seed 템플릿 · seed 프로필 ──
+C="$SD/references/compression.md"; RF="$SD/skills/intent-sync/SKILL.md"
 ST="$SD/templates/interview-seed-template.md"; SP="$SD/references/docreview-profiles/seed.md"
 # AC2 — 세 물음은 「빼면 표에 남긴다」, 고정점 문면은 그대로
 has   "$C" '빼면 표에 남긴다' "AC2: 압축 규약의 세 물음이 「빼면 표에 남긴다」를 말한다"
@@ -25,7 +25,7 @@ has   "$C" '## 상한을 두지 않는다' "AC2(고정점): 「상한을 두지 
 has   "$C" '확인은 저자가 다시 쓸 수 없는 고정점이다' "AC2(고정점): 확정 표시 고정점 문장이 그대로다"
 has   "$C" '링크를 근거로 세우지 말라' "AC2(고정점): URL 비권위화 문장이 그대로다"
 has   "$C" '## seed 에서 덜어 낸 것' "§1-1: 압축 규약이 덜어 낸 것 표 자리를 이름으로 댄다"
-# AC1 · AC4 — request-framing 게이트 앞 공시와 되살리기
+# AC1 · AC4 — intent-sync 게이트 앞 공시와 되살리기
 has   "$RF" 'seed 에서 덜어 낸 것 <N>개 — <번호 · 한 줄 이유>' "AC1: seed 게이트 앞에 덜어 낸 것 공시 줄이 있다"
 has   "$RF" '「되살리기」' "AC1: 되살리기 선택이 있다"
 has   "$RF" '「되살림」 칸' "AC1: 되살린 항목이 표의 「되살림」 칸에 표시된다"
@@ -50,7 +50,7 @@ has   "$SP" '- `omission` —' "§2-4: seed 프로필 본문에 omission 범주 
 has   "$SP" '덜어 낸 것 표' "§2-4: seed 층 1 머리 · 판정 관계가 덜어 낸 것 표를 대조 자리로 댄다"
 
 # ── Task 3 — trivia 우회 앞 질문 (N11 · AC16a) ──
-TE="$SD/references/trivia-escape.md"; SI="$SD/skills/pm-interview/SKILL.md"
+TE="$SD/references/trivia-escape.md"; SI="$SD/skills/context-build/SKILL.md"
 has   "$TE" '사소한 일로 보고 게이트를 건너뛴다 — 그대로 / 전체 과정으로' "AC16a: 우회 전에 「그대로 / 전체 과정으로」 질문이 있다"
 has   "$TE" '판정 근거: <판정 근거>' "AC16a: 질문에 판정 근거가 보인다"
 has   "$TE" 'label: "전체 과정으로"' "AC16a: 「전체 과정으로」 선택지가 있다"
@@ -60,10 +60,10 @@ hasnt "$TE" '해당하면 다음 메시지를 출력하고 진행하지 않는�
 for f in "$RF" "$SI"; do
   has "$f" '「전체 과정으로」' "N11: $(basename "$(dirname "$f")") 의 trivia 단계가 「전체 과정으로」 분기를 말한다"
 done
-has   "$SI" '「전체 과정으로」면 3.5 로 갑니다' "ledger3: pm-interview 의 「전체 과정으로」는 3.5(seed 아닌 입력 조언)를 거친다"
+has   "$SI" '「전체 과정으로」면 3.5 로 갑니다' "ledger3: context-build 의 「전체 과정으로」는 3.5(seed 아닌 입력 조언)를 거친다"
 hasnt "$SI" '「전체 과정으로」면 4 로 갑니다' "ledger3(부재): 3.5 를 건너뛰고 4 로 가는 문면이 없다"
-has   "$TE" '진입 skill 이 정한 다음 단계(request-framing `### 4.` · pm-interview `### 3.5`)로 간다' "ledger3: trivia-escape 의 「전체 과정으로」는 진입 skill 별 다음 단계를 댄다"
-hasnt "$TE" '(`### 4.`)로 간다' "ledger3(부재): trivia-escape 가 pm-interview 의 3.5 를 건너뛰는 단일 `### 4.` 를 말하지 않는다"
+has   "$TE" '진입 skill 이 정한 다음 단계(intent-sync `### 4.` · context-build `### 3.5`)로 간다' "ledger3: trivia-escape 의 「전체 과정으로」는 진입 skill 별 다음 단계를 댄다"
+hasnt "$TE" '(`### 4.`)로 간다' "ledger3(부재): trivia-escape 가 context-build 의 3.5 를 건너뛰는 단일 `### 4.` 를 말하지 않는다"
 
 # ── Task 4 — 리뷰 프로필 (AC5 · AC6 · AC7 · AC16b) ──
 BP="$SD/references/docreview-profiles/brief.md"; DP="$SD/references/docreview-profiles/design-doc.md"
@@ -99,7 +99,7 @@ has   "$DP" '사용자 원문(frontmatter `source_interview` 가 가리키는 �
 hasnt "$DP" '`source_interview` 가 가리키는 brief 의 §6' "AC5 통합(부재): 원문 대조가 brief 의 §6 만 가리키는 옛 문면이 없다"
 
 # ── Task 5 — payload §6 전량 · 추가만 (AC11) ──
-RB="$SD/skills/reviewing-brief/SKILL.md"; BT="$SD/templates/interview-brief-template.md"; FN="$SD/skills/pm-interview/references/finishing.md"
+RB="$SD/skills/reviewing-brief/SKILL.md"; BT="$SD/templates/interview-brief-template.md"; FN="$SD/skills/context-build/references/finishing.md"
 hasnt "$RB" '**불변** — 어떤 처분도 닿지 못한다' "AC11(부재): 수정 권한 표에 payload §6 「불변」이 없다"
 has   "$RB" '**추가만** — 이미 있는 원문 글자는 어떤 처분도 고치지 못한다' "AC11: 수정 권한 표에 payload §6 「추가만」이 있다"
 has   "$RB" '결정 발화를 새 `S<N>` 으로 payload §6 끝 · audit §6 · state `user_statements` 에 **같은 write** 로 **추가**한다' "AC11: 결정 발화를 payload §6 · audit §6 · state 에 같은 write 로 더한다"
@@ -111,7 +111,7 @@ hasnt "$C"  '§6 은 `S1` 만(N1b)' "N7(부재): 압축 규약의 「§6 은 S1 
 has   "$C"  'S1~Sn 전부(N1b)' "N7: 압축 규약이 §6 은 S1~Sn 전부라고 말한다"
 
 # ── Task 7 — 인터뷰 끝내기 (AC8 · AC10 · AC12 · AC16c · AC16d) ──
-SIN="$SD/skills/pm-interview/references/seed-input.md"
+SIN="$SD/skills/context-build/references/seed-input.md"
 has   "$FN" '확정으로 올리지 않은 발화 <N>개 — S<n> · <한 줄 이유>' "AC10: B-0 에 안 올린 발화 줄이 있다"
 has   "$FN" '위험으로 보낸 참고 <N>개 — <id> · <이유>' "AC10: B-0 에 위험으로 보낸 참고 줄이 있다"
 has   "$FN" '§1 의 줄마다 출처' "AC16d(N21): B-0 이 §1 을 출처와 함께 보인다"

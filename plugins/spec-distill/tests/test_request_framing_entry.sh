@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/compression.md plugins/spec-distill/templates/interview-seed-template.md
+# guards: plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/references/compression.md plugins/spec-distill/templates/interview-seed-template.md
 #
-# `request-framing` skill 의 `## 진입 단계` 가 자기 책임을 실제로 담고 있는가 — kill switch ·
-# trivia escape 포인터(+ `<command>` 완전명) · `/request-framing` 명령 파일의 부재.
+# `intent-sync` skill 의 `## 진입 단계` 가 자기 책임을 실제로 담고 있는가 — kill switch ·
+# trivia escape 포인터(+ `<command>` 완전명) · `/intent-sync` 명령 파일의 부재.
 #
 # **포인터로 재는 이유**: trivia 5패턴을 이 파일에 그대로 쓰면 다른 진입 skill 과
 # 20줄 이상 동일 구간이 생겨 `shared/tests/test_no_new_duplication.sh` 가 RED 를 낸다.
@@ -22,11 +22,11 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-CMD="$SD/skills/request-framing/SKILL.md"
+CMD="$SD/skills/intent-sync/SKILL.md"
 . "$ROOT/shared/tests/assert.sh"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   echo "plugins/spec-distill/references/compression.md"
   echo "plugins/spec-distill/templates/interview-seed-template.md"
   exit 0
@@ -43,10 +43,10 @@ assert_contains "$ENTRY" '[devbrew-entry] disabled' "kill switch: 진입 단계�
 assert_contains "$ENTRY" 'DEVBREW_SPEC_DISTILL_DISABLE=1' "kill switch: 진입 단계가 스위치 이름을 밝힌다"
 
 assert_contains "$ENTRY" 'references/trivia-escape.md' "trivia escape 정본 포인터가 진입 단계에 있다"
-assert_contains "$ENTRY" '`spec-distill:request-framing`' "trivia 안내의 <command> = 완전명"
+assert_contains "$ENTRY" '`spec-distill:intent-sync`' "trivia 안내의 <command> = 완전명"
 
 [ ! -e "$SD/commands/request""-framing.md" ] \
-  && ok "\`/request-framing\` 명령 파일이 없다 (skill 이 진입점)" \
+  && ok "\`/intent-sync\` 명령 파일이 없다 (skill 이 진입점)" \
   || no "\`commands/request""-framing.md\` 가 남아 있다 — 명령과 skill 이 같은 이름으로 겹친다"
 
 # 5패턴을 여기 «복제하지» 않았는가 — 정본이 있는데 사본이 있으면 둘이 갈라진다.
@@ -56,7 +56,7 @@ pc="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|짧�
   || no "5패턴 본문이 이 파일에 복제돼 있다 (${pc}줄) — 정본과 갈라진다"
 
 # --- v0.57.0 AC11: seed 산문 규약 (블록 스코프) -------------------------------------------
-SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/intent-sync/SKILL.md"
 CMP="$ROOT/plugins/spec-distill/references/compression.md"
 TPL="$ROOT/plugins/spec-distill/templates/interview-seed-template.md"
 conv_block="$(awk '/^### 확정 표시와 «다시 검증할 것»/{f=1;print;next} /^##/{f=0} f' "$SK")"
@@ -73,7 +73,7 @@ grep -qF '확정 표시는 «(사용자 확인)» 하나' <<<"$conv_block" && ok
 # 오지 않으므로 이 리터럴을 만족시키지 못한다.
 grep -qF '다시 검증할 것 —»로 시작' <<<"$conv_block" && ok "AC11: 마지막 문단 «다시 검증할 것 —»로 시작 규칙" || no "AC11: 재검증 문단 규약 부재"
 grep -qE '그 밖[^.]{0,30}미확인|나머지[^.]{0,30}미확인' <<<"$conv_flat" && ok "AC11: 무표시 = 미확인" || no "AC11: 무표시=미확인 문장 부재"
-# Phase 1 이 이 문단을 어디에 쓰는가 — pm-interview references/seed-input.md 와 같은 자리여야
+# Phase 1 이 이 문단을 어디에 쓰는가 — context-build references/seed-input.md 와 같은 자리여야
 # 한다(두 문서가 갈라지면 Phase 0 은 없는 블록을 겨냥해 문단을 쓴다).
 grep -qF 'Phase 1 은 이 문단을 R1 의 «지금 이해»·질문의 재료와 coverage-mapper 첫 dispatch 의 입력으로 씁니다' <<<"$conv_flat" \
   && ok "AC4: 재검증 문단의 소비 자리 = R1 «지금 이해»·질문 + coverage-mapper 첫 dispatch" \
