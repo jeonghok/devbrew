@@ -25,6 +25,8 @@ assert_eq "$(printf '%s\n' "$HEADS" | grep -B1 -x '## Publish' | head -n 1)" "##
 SEC="$(awk '/^```/{inf=!inf} !inf && /^## /{f=($0=="## Publish")} f' "$SKILL")"
 assert_eq "$(printf '%s\n' "$SEC" | grep -cx '<!-- publish-fence:begin -->')" "1" "게시 펜스 시작 표지가 ## Publish 안에 하나"
 assert_eq "$(grep -cx '<!-- publish-fence:begin -->' "$SKILL")" "1" "게시 펜스 시작 표지가 파일 전체에 하나"
+assert_eq "$(printf '%s\n' "$SEC" | grep -cxF '판정이 무엇이든(막는 지적이나 차등 결함으로 끝난 `defect` 도) 그 판정을 그대로 게시한다.')" "1" \
+  "Review Focus 4: ## Publish 본문이 defect 판정도 그대로 게시한다고 줄 전체로 한 번 말한다"
 FENCE="$(awk '/^<!-- publish-fence:begin -->$/{f=1;next} /^<!-- publish-fence:end -->$/{f=0} f' "$SKILL" | sed -e '1{/^```bash$/d;}' -e '${/^```$/d;}')"
 [ -n "$FENCE" ] && ok "게시 펜스 본문을 잘라냈다($(printf '%s\n' "$FENCE" | wc -l | tr -d ' ')줄)" || no "게시 펜스 본문이 비었다 — 표지가 죽었다"
 printf '%s\n' "$FENCE" | grep -q 'scripts/publish-comment.sh' \

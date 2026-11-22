@@ -397,7 +397,7 @@ case_one_pass_routing_has_no_cap() {
   got=$(python3 - "$SKILL" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-lead = re.search(r'^그다음: 판정이 무엇이든 \[e2e\]\(#e2e\) 로 간다\. 막는 지적 · 차등 defect 가 있으면 먼저 아래 「고칠 목록」 을 남긴다 — 묻지 않는다\.$', text, re.M)
+lead = re.search(r'^그다음: 판정이 무엇이든 \[e2e\]\(#e2e\) 로 간다\. 그 앞에 아래 「고칠 목록」 을 늘 남긴다 — 막는 지적 · 차등 defect 가 있어도 묻지 않는다\.$', text, re.M)
 print(f"LEAD_ONE_PASS:{1 if lead else 0}")
 # 옛 고정 상한 글자(N=5 · N = 5 · N < 5 · N <5 · N <= 5 · N ≤ 5)와 상한 라우팅 글자가 남지 않는다 — 위 LEAD 가 짝이다.
 old_n5 = re.findall(r'(?<![A-Za-z_])N\s*(?:=|<=|<|≤)\s*5(?![0-9])', text)

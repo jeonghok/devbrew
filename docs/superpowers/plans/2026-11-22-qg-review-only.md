@@ -166,7 +166,7 @@
 - [ ] **Step 1: 실패하는 락을 쓴다.** `test_intent_critic.py` 에 `test_question_field_is_one_sentence` — 리뷰어 정의에 위 지시 글이 한 번, `한두 문장` 0 번. `test_one_pipeline_surface.sh` `case_one_pass_flow` 의 부재 목록에 `iteration: <iteration>` 을 더한다(본문에 0 번 — AC7 「dispatch 줄이 qg 본문에 없다」). `test_code_recritic_frontmatter.sh` L61 의 「앞 iteration」 단언을 고친 낱말(「앞 실행」)로.
 - [ ] **Step 2: 실패를 본다.**
 - [ ] **Step 3: 세 파일을 고친다.** 위 범위 밖 글자는 건드리지 않는다.
-- [ ] **Step 4: 통과와 diff 범위를 본다.** 위 테스트 + `bash shared/tests/test_agent_input_slots.sh` PASS. `git diff HEAD~1 -- plugins/quality-gates/agents/` 가 security-reviewer 의 세 줄 삭제 · code-recritic 의 낱말 둘 · intent-critic 의 지시 문단뿐인지 눈으로 보고, 그 diff 를 마지막 보고에 싣는다(AC7 · AC20 의 「diff 가 그 지시에 그친다」 증거).
+- [ ] **Step 4: 통과와 diff 범위를 본다.** 위 테스트 + `bash shared/tests/test_agent_input_slots.sh` PASS. `git diff HEAD~1 -- plugins/quality-gates/agents/` 가 security-reviewer 의 세 줄 삭제 · code-recritic 의 낱말 둘 · intent-critic 의 지시 문단과 예시 `question:` 줄들(R12)뿐인지 눈으로 보고, 그 diff 를 마지막 보고에 싣는다(AC7 · AC20 의 「diff 가 그 지시에 그친다」 증거).
 - [ ] **Step 5: 커밋.** `feat(qg): 리뷰어 정의에서 반복 입력 칸을 빼고 질문 글을 한 문장으로`.
 
 ---

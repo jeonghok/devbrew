@@ -222,4 +222,24 @@ mutated="$(printf '%s\n' "$WHOLE" | sed 's/conductor_ledger.py worktree-path/con
 assert_eq "$(unknown_ledger_cmds "$mutated")" "nosuch-cmd" "변이: worktree-path 이름을 바꾸면 잡는다"
 assert_contains "$LEDGER_KEYS" "claim" "COMMANDS 키를 읽었다"
 assert_eq "$(unknown_ledger_cmds 'ledger nosuchcmd')" "nosuchcmd" "양성 대조: 없는 ledger 명령을 잡는다"
+once 1 '돌고 있는 담당자의 원천은 둘이다 — 하니스 agent 목록과 hc 의 내 자식(`hc ls` 에서 `parent` 가 내 주소인 것)'
+once 1 '끝난 세션은 스스로 닫히지 않고 「살아 있음 · 끝남」 으로 남는다'
+once 1 '내 자식인데 표에 없는 터미널은 무엇인지 보고 닫거나 표에 올린다'
+once 3 'hc 가 있으면 계획 · 구현 담당자는 따로 띄운 세션으로 보낸다 — `conductor-dispatch.md` 의 `## 세션 담당자`'
+once 4 '결과 파일을 읽는다 → 지금 걸음 4 의 처리(판정 · 수용 기준 보고 거두기)를 그 파일로 한다 → 사용자 말 파일을 읽고 아직 옮기지 않은 글을 결정 줄로 옮긴다 → 세션을 닫는다(`hc kill` → `hc rm`) → 표에서 그 줄을 뺀다 → 내가 띄운 살아 있는 터미널 가운데 표에 없는 것이 0 인지 본다'
+once 4 '띄운 직후의 기다리기(`hc wait`)는 첫 턴이 시작되기 전에 `idle` 로 돌아올 수 있으니 끝으로 읽지 않는다'
+once 4 '남의 세션은 건드리지 않는다 — `parent` 가 내 주소인 것만 닫는다'
+once 4 'hc wait --children any --timeout <초>'
+once 4 '질문 창에서 사용자 답을 받은 직후에도 한 번 본다'
+once 4 '같은 걸음에서 담당자가 두 번 이어 막히면 세 번째로 보내지 않고 사용자에게 간다'
+once 4 '「담당자 세션에서 들음 · <세션 이름>」'
+once 4 '승인 줄로는 적지 않는다'
+once 4 '리더는 담당자의 질문 창 · 권한 창에 답하지 않고 어느 세션이 무엇을 묻고 있는지 사용자에게 알린다'
+once 4 '권한 물음으로 거듭 멈추면 사용자에게 알리고 그 일을 하위 agent 길로 돌릴지 묻는다'
+once 4 '답과 방향 고침 · 받은 고침 확인 · 「중간」 알림은 `conductor-dispatch.md` 의 `### 리더 쪽` 을 따른다'
+once 5 '머지 명령 줄을 내기 전에 그 에픽에서 받은 승인과 담당자 세션에서 들은 사용자 말을 모아 사용자에게 다시 보인다'
+once 5 '「담당자 세션에서 들음」 표시를 붙여 둔 줄 전부'
+once 5 '하신 적 없는 승인이나 말이 있으면 머지하지 말고 알려 달라'
+once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다'
+assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
 finish

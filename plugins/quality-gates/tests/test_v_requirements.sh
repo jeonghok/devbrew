@@ -111,8 +111,8 @@ case_v9_one_pass_no_code_edits() {
   assert_eq "$(printf '%s\n' "$idx" | grep -cxF '| V9 한 실행은 한 번 지나고 저장소의 코드를 고치지 않는다 | Flow · Step 4.5 고칠 목록 · Law 2 |')" "1" \
     "V9 — Requirement index 에 V9 행이 줄 전체로 한 번 있다"
   r1="$(awk '/^\*\*R1 \(Law 2\):\*\*/{f=1} f&&/^\*\*R2 /{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
-  assert_eq "$(printf '%s\n' "$r1" | grep -o 'the only repository write is the intent-critic answer commit' | grep -c .)" "1" \
-    "V9 — R1 이 저장소 쓰기는 intent-critic 답 커밋 하나뿐이라고 한 번 말한다"
+  assert_eq "$(printf '%s\n' "$r1" | grep -oF 'You do not edit working-tree files in this run — the only repository write is the intent-critic answer commit.' | grep -c .)" "1" \
+    "V9 — R1 이 이 실행은 작업 트리를 고치지 않고 저장소 쓰기는 intent-critic 답 커밋 하나뿐이라고 문장째 한 번 말한다"
   assert_not_contains "$r1" 'Fix-loop' "V9 — R1 이 고치기 반복의 관문을 부르지 않는다(위 양성 짝)"
   # 고칠 목록 — Final verdict 기록 펜스가 Step 4.5 의 목록을 `## 고칠 목록` 절로 옮긴다(차등 테스트 앞).
   local d rd fv sid=v9fixlist01 lf ld

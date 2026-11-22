@@ -3200,10 +3200,10 @@ class TestProcedureDoc(unittest.TestCase):
             self.assertIn(fact, line)
 
     def test_direct_ask_question_is_one_sentence(self):
-        """직접 묻는 틀은 질문 창에 질문 글의 첫 줄만 둔다 — 나머지는 창 앞의 따로 된 글."""
+        """직접 묻는 틀은 질문 창에 질문 글의 첫 문장만 둔다 — 나머지는 창 앞의 따로 된 글."""
         text = REFERENCE.read_text(encoding="utf-8")
         i5 = self._section("I5 거르기 · 묻기 · 답 기록")
-        self.assertEqual(i5.count('  question: "<질문 글의 첫 줄>",'), 1)
+        self.assertEqual(i5.count('  question: "<질문 글의 첫 문장>",'), 1)
         qlines = [l for l in i5.split("\n") if l.lstrip().startswith("question:")]
         self.assertEqual(len(qlines), 1, qlines)
         self.assertNotIn("근거로 본 것(<근거의 종류>)", qlines[0])
@@ -3212,10 +3212,23 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(len(outside), 1, outside)
         self.assertTrue(outside[0].startswith("질문 창엔 "), outside[0])
         self.assertIn("`질문 <n>`", outside[0])
-        self.assertTrue(outside[0].startswith("질문 창엔 질문 글의 첫 줄(질문 한 문장)만 둔다."), outside[0])
+        self.assertTrue(outside[0].startswith("질문 창엔 질문 글의 첫 문장(질문 한 문장)만 둔다."), outside[0])
         self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
         # 양의 짝: 근거의 종류 · 근거 줄 자리 채우기 규칙은 남아 있다.
         self.assertEqual(i5.count("근거의 종류 — `evidence_kinds`"), 1)
+
+    def test_direct_ask_splits_at_marker_not_line(self):
+        """질문 글은 고정 표지에서 나눈다 — 줄바꿈은 YAML 에서 접힐 수 있어 나누는 데 쓰지 않는다(R18)."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        split = ("- 질문 글 — `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — "
+                 "표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장으로 질문 창의 `question:` 값이고, "
+                 "표지부터 끝까지가 질문 글의 나머지로 앞의 따로 된 글에 둔다. "
+                 "표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다")
+        lines = [l for l in i5.split("\n") if l.startswith(split)]
+        self.assertEqual(len(lines), 1, "표지에서 나누는 규칙 줄이 I5 본문에 한 번")
+        # 음: 줄로 나누던 옛 규칙이 없다 — 양의 짝은 위 규칙 줄.
+        self.assertNotIn("둘째 줄부터", i5)
+        self.assertNotIn("`question` 의 첫 줄", i5)
 
     def test_end_guidance_covers_filtered_wrong_choice(self):
         """이미 「잘못 골랐다」 답이 있어 거른 질문도 이어 고칠 일에 든다."""
