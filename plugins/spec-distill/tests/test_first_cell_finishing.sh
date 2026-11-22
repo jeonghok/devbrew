@@ -186,9 +186,18 @@ print("\n".join(body))
 LOCATE_PY
 }
 # verdict_says <finishing.md> <셸> <종료 코드> → 펜스의 stderr 중 [spec-distill] 줄
+# 펜스의 payload 자리표는 $W/p.md 로 바꾼다 — 상태 파일 $W/p.state.md 가 있어야 판결로 간다(AC17).
 verdict_says() {
-  local body; body="$(locate_fence "$1")"
+  local body; body="$(locate_fence "$1")"; body="${body//'<Step A 2 의 payload 경로>'/$W/p.md}"
+  : > "$W/p.state.md"
   ( cd "$W" && CLAUDE_PLUGIN_ROOT="$STUB" RS_STUB_RC="$3" "$2" -c "$body" 2>&1 >/dev/null ) | grep -F '[spec-distill]'
+}
+# no_state_run <finishing.md> <셸> → 상태 파일이 없는 payload 로 돌린 펜스의 「stdout|stderr|rc」
+no_state_run() {
+  local body out err rc; body="$(locate_fence "$1")"; body="${body//'<Step A 2 의 payload 경로>'/$W/nostate.md}"
+  rm -f "$W/nostate.state.md"
+  out="$( cd "$W" && CLAUDE_PLUGIN_ROOT="$STUB" RS_STUB_RC=0 "$2" -c "$body" 2>"$W/ns.err" )"; rc=$?
+  printf '%s|%s|%s' "$out" "$(grep -F '[spec-distill]' "$W/ns.err")" "$rc"
 }
 RC2_LINE='[spec-distill] 원자료 판결 종료 코드 2 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다'
 RC3_LINE='[spec-distill] 원자료 판결 종료 코드 3 — 위 판결 줄대로 간다(멈추지 않는다)'
@@ -200,6 +209,26 @@ for sh in $SHELLS; do
   assert_eq "$o3" "$RC3_LINE" "locate 펜스(${sh}) — 종료 코드 3(LOST)은 판결 줄대로 간다"
   assert_eq "$o0" "" "locate 펜스(${sh}) — 종료 코드 0 은 말이 없다"
 done
+# AC17 — 상태 파일이 없으면 싣기 전에 멈춘다: 판결 줄(stdout)이 없고, 사유 줄 하나, rc 2. 상태 파일이 있으면(위 칸들) 판결로 간다.
+NOSTATE_LINE="[spec-distill] 원자료를 싣지 않았다 — 상태 파일이 없다: $W/nostate.state.md"
+for sh in $SHELLS; do
+  assert_eq "$(no_state_run "$FIN" "$sh")" "|${NOSTATE_LINE}|2" "locate 펜스(${sh}) — 상태 파일이 없으면 판결 없이 사유 줄을 내고 rc 2 로 멈춘다(AC17)"
+done
+# 변이 — 확인을 뒤집으면(있으면 멈춤) 상태 파일이 있는 칸이 깨지고, 확인을 지우면 없는 칸이 깨진다
+cp "$FIN" "$W/fin-inv.md"; cp "$FIN" "$W/fin-del.md"
+python3 -I -B - "$W/fin-inv.md" "$W/fin-del.md" <<'AC17_MUT_PY'
+import sys
+chk = '[ -e "$STATE_P" ] || {'
+for path, new in ((sys.argv[1], '[ ! -e "$STATE_P" ] || {'), (sys.argv[2], 'true || {')):
+    s = open(path, encoding="utf-8").read()
+    if s.count(chk) != 1:
+        sys.exit("변이 자리 없음")
+    open(path, "w", encoding="utf-8").write(s.replace(chk, new))
+AC17_MUT_PY
+m_inv="$(verdict_says "$W/fin-inv.md" bash 3)"
+[ "$m_inv" != "$RC3_LINE" ] && ok "변이(상태 파일 확인 뒤집기)가 상태 파일이 있는 칸을 깬다" || no "변이(상태 파일 확인 뒤집기)가 상태 파일이 있는 칸을 깨지 못했다"
+m_del="$(no_state_run "$W/fin-del.md" bash)"
+[ "$m_del" != "|${NOSTATE_LINE}|2" ] && ok "변이(상태 파일 확인 지우기)가 상태 파일이 없는 칸을 깬다" || no "변이(상태 파일 확인 지우기)가 상태 파일이 없는 칸을 깨지 못했다"
 # 변이 — 옛 꼴(종료 코드와 상관없이 「멈추지 않는다」)로 되돌리면 종료 코드 2 칸이 실패한다
 cp "$FIN" "$W/fin-old.md"
 python3 -I -B - "$W/fin-old.md" <<'OLD_ECHO_PY'

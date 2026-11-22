@@ -145,6 +145,71 @@ o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$THREE" "오프라인: 세 파일을 커밋한다"
 assert_contains "$o" "원격과 대조하지 못했다" "오프라인: 대조하지 못했다는 알림을 보인다"
 
+# 6. AC16 — 원자료를 찾은 끝내기: 거절 갈래의 손 목록에도 framing 기록 · seed 가 있다(알 수 있을 때), seed 경로는 상태 파일의 seed: 값이다
+SEEDREL=docs/superpowers/interview/2026-10-15-t-seed-interview.md
+RECREL=docs/superpowers/interview/2026-10-15-t-seed-interview.audit.md
+rawfx() {   # rawfx <클론> [yes 면 커밋까지] → 상태 파일의 seed: 가 가리키는 seed 와 그 옆 framing 기록(원자료가 FOUND 가 되는 꼴)
+  printf -- '---\ntype: interview-seed\n---\n# seed\n' > "$1/$SEEDREL"
+  printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\nx\n' > "$1/$RECREL"
+  printf -- '---\ntype: interview-state\nseed: %s\n---\nx\n' "$SEEDREL" > "$1/$STEM.state.md"
+  if [ "${2:-}" = yes ]; then git -C "$1" add -- "$SEEDREL" "$RECREL" "$STEM.state.md"; git -C "$1" commit -q -m raw; fi
+}
+hand_of() {   # hand_of <출력> → 「커밋하지 않았다」 줄의 손 목록(「 · 」 로 이은 경로들)을 정렬해 한 줄씩
+  printf '%s\n' "$1" | grep '커밋하지 않았다' | sed 's/.*커밋하라: //' | sed 's/ · /\
+/g' | LC_ALL=C sort
+}
+want_of() {   # want_of <클론> <경로들…> → 정렬한 절대경로 목록
+  local c="$1" r; shift; for r in "$@"; do printf '%s\n' "$c/$r"; done | LC_ALL=C sort
+}
+FIVE_REL="$STEM.md $STEM.audit.md $STEM.state.md $SEEDREL $RECREL"
+THREE_REL="$STEM.md $STEM.audit.md $STEM.state.md"
+five_hand() {   # five_hand <클론> <출력> <라벨> — 손 목록이 다섯 파일 전부이고 하나도 커밋되지 않았다
+  assert_eq "$(nhead "$1")" "1" "$3: 커밋하지 않는다"
+  assert_eq "$(hand_of "$2")" "$(want_of "$1" $FIVE_REL)" "$3: 손 목록은 결과물 · audit · 상태 파일 · framing 기록 · seed 다섯"
+}
+c="$(mk raw-main)"; git -C "$c" switch -q main; rawfx "$c"; o="$(runc "$c")"
+five_hand "$c" "$o" "기본 브랜치 위(5)"
+# 거절 다섯 — framing 기록을 알 수 있는 곳마다
+c="$(mk raw-iv 'interview_dir: notes/')"; rawfx "$c"; o="$(runc "$c")"
+five_hand "$c" "$o" "인터뷰 폴더 밖(1)"
+c="$(mk raw-tree)"; rawfx "$c"; mkdir -p "$T/raw-tree-out"; printf 'x\n' > "$T/raw-tree-out/s.md"
+rm -f "$c/$STEM.audit.md"; ln -s "$T/raw-tree-out/s.md" "$c/$STEM.audit.md"; o="$(runc "$c")"
+five_hand "$c" "$o" "작업 트리 밖(2)"
+c="$(mk raw-nohead)"; git -C "$c" remote set-head origin -d >/dev/null 2>&1; rawfx "$c"; o="$(runc "$c")"
+five_hand "$c" "$o" "기본 브랜치 판정 실패(3)"
+c="$(mk raw-detached)"; git -C "$c" switch -q --detach; rawfx "$c"; o="$(runc "$c")"
+five_hand "$c" "$o" "detached HEAD(4)"
+# 모르면 넣지 않는다 — 원자료가 없는 끝내기(상태 파일 seed: 없음) · 이미 커밋돼 변경이 없는 원자료 · 기록 파일을 잃은 원자료
+c="$(mk raw-none)"; git -C "$c" switch -q main; printf -- '---\ntype: interview-state\nseed: 없음\n---\nx\n' > "$c/$STEM.state.md"; o="$(runc "$c")"
+assert_eq "$(hand_of "$o")" "$(want_of "$c" $THREE_REL)" "원자료 없음: 손 목록은 세 파일"
+c="$(mk raw-clean)"; rawfx "$c" yes; git -C "$c" switch -q main; o="$(runc "$c")"
+assert_eq "$(hand_of "$o")" "$(want_of "$c" $THREE_REL)" "원자료가 이미 커밋됨: 손 목록은 세 파일(바뀐 것만 든다)"
+c="$(mk raw-lost)"; git -C "$c" switch -q main; rawfx "$c"; rm -f "$c/$RECREL"; o="$(runc "$c")"
+assert_eq "$(hand_of "$o")" "$(want_of "$c" $THREE_REL)" "기록 파일을 잃음: 찾지 못했으니 손 목록은 세 파일"
+# 한 쪽만 바뀐 경우 — seed 만 커밋돼 있고 framing 기록이 바뀐 것 · 그 반대
+c="$(mk raw-halfA)"; rawfx "$c"; git -C "$c" add -- "$SEEDREL"; git -C "$c" commit -q -m seedonly; git -C "$c" remote set-head origin -d >/dev/null 2>&1; o="$(runc "$c")"
+assert_eq "$(hand_of "$o")" "$(want_of "$c" $THREE_REL $RECREL)" "seed 만 커밋됨: 손 목록에 framing 기록만 더한다"
+c="$(mk raw-halfB)"; rawfx "$c"; git -C "$c" add -- "$RECREL"; git -C "$c" commit -q -m recordonly; git -C "$c" remote set-head origin -d >/dev/null 2>&1; o="$(runc "$c")"
+assert_eq "$(hand_of "$o")" "$(want_of "$c" $THREE_REL $SEEDREL)" "framing 기록만 커밋됨: 손 목록에 seed 만 더한다"
+# 성공 길(기능 브랜치) — 같은 커밋에 다섯
+c="$(mk raw-ok)"; rawfx "$c"; o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "2" "원자료 있음 · 기능 브랜치: 커밋이 하나 생긴다"
+assert_eq "$(git -C "$c" show --name-only --pretty=format: HEAD | sed '/^$/d' | LC_ALL=C sort)" "$(for r in $FIVE_REL; do printf '%s\n' "$r"; done | LC_ALL=C sort)" "원자료 있음 · 기능 브랜치: 다섯 파일이 한 커밋에 든다"
+# seed 경로의 출처 — 기록 경로에서 거꾸로 짓지 않고 상태 파일의 seed: 값에서 읽는다.
+# raw_source.py locate 가 FOUND 를 낼 때 기록 경로는 seed 이름에서 짓기 때문에(_chain) 두 줄기가 다른 상태는 locate 를 거쳐서는 만들 수 없다 —
+# 행동으로는 위 손 목록의 seed 가 상태 파일의 seed: 값(레포 상대 → git 뿌리에 붙임)과 같은 것만 잰다. 출처는 글자 락으로 문다.
+case "$cf" in *'RAW_S="${RAW_A%.audit.md}.md"'*) no "AC16(부재): 커밋 펜스가 seed 경로를 기록 경로에서 짓는다" ;; *) ok "AC16(부재): 커밋 펜스가 seed 경로를 기록 경로에서 짓지 않는다" ;; esac
+case "$cf" in *'/^seed:/'*'"$STATE_F"'*'RAW_S="${top}/${sv}"'*) ok "AC16(양성 짝): 커밋 펜스가 상태 파일의 seed: 값에서 seed 경로를 얻어 git 뿌리에 붙인다" ;; *) no "AC16(양성 짝): 커밋 펜스가 상태 파일의 seed: 를 읽지 않는다" ;; esac
+# 순서 — 첫 거절보다 앞에서 알아 둔다
+p_loc="${cf%%raw_source.py\" locate*}"; p_rej="${cf%%check-path interview_dir \"\$BRIEF\"*}"
+[ "${#p_loc}" -lt "${#p_rej}" ] && ok "AC16: raw_source.py locate 가 첫 거절(brief 폴더 검사)보다 앞에 있다" || no "AC16: raw_source.py locate 가 첫 거절보다 뒤에 있다"
+
+# 펜스 밖 안내 — README 의 「세 경로를 보입니다」 와 roadmap-draft 의 손 목록 줄이 원자료가 있을 때 framing 기록 · seed 를 댄다
+README="$SD/README.md"; RDS="$SD/skills/roadmap-draft/SKILL.md"
+assert_contains "$(cat "$README")" "세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다" "펜스 밖(AC16): README 가 framing 기록 · seed 를 댄다"
+assert_contains "$(cat "$RDS")" "아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다" "펜스 밖(AC16): roadmap-draft 의 손 목록 줄이 framing 기록 · seed 를 댄다"
+assert_contains "$(cat "$SD/skills/context-build/references/state-file.md")" "원자료를 찾은 인터뷰면 framing 기록 · seed 도 커밋되지 않은 변경이 있을 때 같은 커밋에 든다" "펜스 밖(AC16): 상태 파일 reference 의 끝낼 때가 framing 기록 · seed 를 댄다"
+
 # 7. 재분해 표 — 세션 상태 폴더가 아니라 펜스의 임시 파일에 쓰이고, 생성기 rc 를 넘기며, 끝나면 지워진다
 rf="$(awk '/^## 5\. 적용/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RED")"
 [ -n "$rf" ] && ok "재분해: 적용 펜스를 뽑았다" || no "재분해: 적용 펜스가 비었다 — 아래 칸이 공허하다"

@@ -4,7 +4,7 @@
 
 ## 이 플러그인이 하는 일
 
-흐릿한 요청을 한국어 인터뷰로 다듬어 brainstorming 에 넘길 문서(interview brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 인터뷰는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 인터뷰 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 인터뷰가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다).
+흐릿한 요청을 한국어 인터뷰로 다듬어 brainstorming 에 넘길 문서(interview brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 인터뷰는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 인터뷰 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 인터뷰가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
 
 ## 쓰는 법
 

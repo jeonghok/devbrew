@@ -92,7 +92,10 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.** 「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다. payload §6 맨 앞에 앵커 줄 `- **S1** 🗣 최초 요청:` 한 줄만 두고(본문 없이) payload · audit · 상태 파일을 쓴 뒤 아래 순서로 간다. audit §6 에는 `S1` 을 두지 않는다.
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-   rc=0; python3 "$SD/scripts/raw_source.py" locate --interview "<Step A 2 의 payload 경로>" --absolute || rc=$?
+   PAYLOAD_P="<Step A 2 의 payload 경로>"
+   STATE_P="${PAYLOAD_P%.md}.state.md"
+   [ -e "$STATE_P" ] || { printf '%s\n' "[spec-distill] 원자료를 싣지 않았다 — 상태 파일이 없다: ${STATE_P}" >&2; exit 2; }
+   rc=0; python3 "$SD/scripts/raw_source.py" locate --interview "$PAYLOAD_P" --absolute || rc=$?
    if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 원자료 판결 종료 코드 2 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다" >&2
    elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 원자료 판결 종료 코드 ${rc} — 위 판결 줄대로 간다(멈추지 않는다)" >&2; fi
    ```
@@ -100,6 +103,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    - `place` 의 마지막 줄이 `raw-source: UNLOADABLE <n>줄 — 첫 줄 …` 이면 그 글은 결과물 문법이 받지 않아 그대로 싣지 못한다. 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 그대로 싣지 못함 — 모델이 줄인 글. 원자료는 framing 기록의 원문 절과 질문 전체 절):` 로 쓰고 본문에 seed 전문(「풀린 입력」)을 지금 규칙대로 싣는다(P21 치환 · 열 0 펜스). 사용자에게 `원자료를 그대로 싣지 못했다 — 결과물 문법이 받지 않는 줄 <n>개(첫 줄: <판결 줄의 절 이름과 줄 번호>). 첫 칸에는 seed 전문(모델이 줄인 글)을 실었다` 한 줄을 보인다. 원문의 글자를 고쳐 싣지 않는다. 한 절만 싣지도 않는다.
    - `raw-source: LOST <사유>` — 앵커 줄을 `- **S1** 🗣 최초 요청(원자료를 찾지 못함 — 모델이 줄인 글):` 로 쓰고 본문에 seed 전문을 지금 규칙대로 싣는다.
    - `raw-source: NO-FRAMING` — 위의 「풀린 입력」 규칙 그대로다.
+   - `[spec-distill] 원자료를 싣지 않았다 — 상태 파일이 없다: <경로>` 줄이 나오면 판결을 내지 않은 것이다 — 끝맺음을 멈추고 그 줄을 그대로 보인다(상태 파일을 만든 뒤 다시 부른다). `raw-source:` 판결 줄을 지어 내지 않는다.
    - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.
    **비밀값 확인 — 싣기 전에, 갈래를 가르기 전에.** 판결이 FOUND 면 `place` 를 돌리기 전에 그 기록 파일의 `## 1. 원문` 절과 `## 2. 질문 전체` 절을 읽는다. token · key · credential 로 보이는 값이 있으면 **싣지 않고 멈춘다** — 그대로 싣지 못하는 갈래로 갈 글이어도 이 확인이 먼저다. 값 자체는 보이지 않고 `첫 칸에 실을 글에 비밀값으로 보이는 값이 있다 — <원문 절 | 질문 전체 절> <k>째 줄, <무엇으로 보이는지>` 를 값마다 한 줄을 보인 뒤 `AskUserQuestion` 하나로 묻는다 — 「기록부터 가린다 (권장)」(얻음: framing 기록 파일의 그 값을 가림 표시로 바꾼 뒤 가린 글을 첫 칸에 싣는다 · 내줌: 이미 쓴 기록 파일을 고쳐 쓰고, 커밋돼 있었다면 그 값은 git 이력에 남는다) · 「비밀값이 아니다 — 그대로 싣는다」(얻음: 잘못 본 값을 건드리지 않고 원문 글자 그대로 싣는다 · 내줌: 정말 비밀값이면 결과물과 그 사본에 그대로 커밋된다) · 「멈춘다」(얻음: 아무것도 싣지 않고 끝맺음을 멈춘다 · 내줌: 결과물이 완성되지 않아 값을 처리한 뒤 다시 끝맺어야 한다).
    「기록부터 가린다」 면 framing 기록 파일의 그 값을 먼저 `<REDACTED>` 나 `<REDACTED:라벨>` 로 바꾸고(SKILL 의 「Secret 기록 금지」 집합), 같은 값이 seed 파일이나 상태 파일의 `## 풀린 입력` 블록에 있으면 같은 표시로 함께 가린 뒤 `가린 자리 <N>곳 — <파일 · 절 · 줄>` 을 보인다. 그 뒤에 `place` 를 돌린다 — 기록이 먼저라 첫 칸과 기록의 글자가 같다. 첫 칸에서만 가리는 길은 없다. 바꾸는 것은 사용자가 고른 그 값뿐이다. 가린 파일은 B-3 의 커밋 펜스가 결과물과 같은 커밋에 넣는다. 그 기록 파일이 이미 커밋돼 있었으면(`git log -1 --format=%h -- <경로>` 가 비지 않는다) `이 값은 git 이력의 옛 커밋에 남아 있다 — 값을 폐기하고 바꾸는 것이 먼저다` 한 줄을 보인다.
@@ -612,7 +616,7 @@ AskUserQuestion({
 넣는 것은 brief · audit · 상태 파일 셋(과 아래 framing 기록 · seed)뿐이다 — 나눈 일이어도 로드맵 폴더는 넣지 않는다(로드맵은 로드맵 잡기가 만들어 커밋한다).
 brief 가 레포 설정의 인터뷰 폴더(`interview_dir`) 바로 아래가 아니거나, 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있으면 커밋하지 않는다.
 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치가 없거나 원격과 다르면 커밋하지 않고, 원격과 대조하지 못하면 그 알림을 보이고 커밋한다. 어느 갈래도 진행은 막지 않는다.
-원자료를 찾은 인터뷰에서 framing 기록 파일이나 seed 파일에 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있으면 같은 커밋에 넣고 그 사실을 한 줄로 알린다.
+원자료를 찾은 인터뷰에서 framing 기록 파일이나 seed 파일에 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있으면 같은 커밋에 넣고 그 사실을 한 줄로 알린다. 펜스는 이 둘을 첫 거절보다 앞에서 알아 두므로, 커밋하지 않는 어느 갈래(git 저장소가 아님은 뺀다)의 손으로 커밋할 목록에도 알 수 있는 만큼 그 둘이 든다. seed 경로는 상태 파일의 `seed:` 값이다.
 
 <!-- interview-commit:begin -->
 ```bash
@@ -628,21 +632,25 @@ STATE_F="${stem}.state.md"
 FILES="${BRIEF} · ${AUDIT_F} · ${STATE_F}"
 top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
 [ -n "$top" ] || { echo "[spec-distill] 커밋하지 않았다 — git 저장소가 아니다. 파일은 docs 에 있다: ${FILES}"; exit 0; }
-echo "[spec-distill] 읽은 트리: 이 작업공간"
-python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
-python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" || { echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
-# 원자료를 찾은 인터뷰의 framing 기록 파일 · seed 파일 — 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있는 것만 같은 커밋에 넣는다.
+# 원자료를 찾은 인터뷰의 framing 기록 파일 · seed 파일 — 첫 거절보다 앞에서 알아 둔다(거절 갈래의 손 목록에도 들어간다). 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있는 것만 넣는다. seed 경로는 상태 파일의 seed 값(레포 상대)이고 기록 경로에서 짓지 않는다.
 RAW_A=""
 RAW_S=""
 rv="$(python3 "$SD/scripts/raw_source.py" locate --interview "$BRIEF" --absolute 2>/dev/null)" || rv=""
-case "$rv" in "raw-source: FOUND "*) RAW_A="${rv#raw-source: FOUND }"; RAW_S="${RAW_A%.audit.md}.md" ;; esac
+case "$rv" in "raw-source: FOUND "*)
+  RAW_A="${rv#raw-source: FOUND }"
+  sv="$(awk 'NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit} /^seed:/{sub(/^seed:[ \t]*/,""); print; exit}' "$STATE_F" 2>/dev/null | tr -d "\"'")" || sv=""
+  case "$sv" in ""|"없음") ;; *) RAW_S="${top}/${sv}" ;; esac ;;
+esac
 [ -z "$RAW_A" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_A" 2>/dev/null)" ] || RAW_A=""
 [ -z "$RAW_S" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_S" 2>/dev/null)" ] || RAW_S=""
+FILES="${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"
+echo "[spec-distill] 읽은 트리: 이 작업공간"
+python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" || { echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 if [ -n "${RAW_A}${RAW_S}" ]; then
-  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
-  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
-  python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"; exit 0; }
-  FILES="${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"
+  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+  python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 fi
 d_rc=0
 def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --root "$top")" || d_rc=$?
