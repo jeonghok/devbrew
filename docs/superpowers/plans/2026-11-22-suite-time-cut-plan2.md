@@ -75,10 +75,10 @@
 | L4 | 기록 쓰기 | 줄 전체를 먼저 만들고 utf-8 로 바꾼 뒤 한 번에 덧붙인다 — 바꾸기가 실패하면 한 줄도 쓰지 않고 「기록하지 않는다」 | `:46` — 알림이 사실과 같다 | 줄마다 쓰고 알림 글을 바꾼다 |
 | L5 | 결과 객체 설정 | `timed_result_class(start_abs, base) -> type` 이 설정을 닫아 넣은 하위 클래스를 돌려준다. `module_secs` 는 `__init__` 에서 만든다 | `:70` — 프로세스 전역 상태가 없고 `suite.run(result)` 로도 쓴다 | 클래스 속성 |
 | L6 | 러너 판별(`:42`) | 플래그 뒤 첫 토큰이 마지막 토큰이 아닌데 `.sh` 로 끝나면 그 토큰이 실행되는 스크립트다 — 러너가 아니다. 그 밖은 지금처럼 나머지 전체의 마지막 경로 성분이 `run-all.sh` 인지 본다(빈칸 경로는 여전히 센다) | 러너는 인자를 받지 않는다. 빈칸 경로와 「다른 스크립트의 인자」 를 명령줄 글자만으로 가르는 가장 작은 규칙이다 | 파일이 있는지 본다(프로세스의 현재 폴더를 모른다) |
-| L7 ✎ | `--wait` 와 읽지 못한 표(`:116`) | 표를 읽지 못하면 기다리지 않고 바로 `waited=<초>\tpeers=?` 와 종료 코드 3 | 기다려도 표는 읽히지 않는다. 계획 1 의 K7(「`?` 는 기다림을 잇는다」)을 바꾼다 — 설계 §2 「0 이 될 때까지 기다린다」 의 대상이 아니던 경우라 사람에게 보이는 종료 코드가 하나 는다 | 상한까지 기다린다 |
+| L7 ✎ | `--wait` 와 읽지 못한 표(`:116`) | 표를 읽지 못하면 기다리지 않고 바로 `waited=<초>\tpeers=?` 와 종료 코드 3 | 기다려도 표는 읽히지 않는다. 계획 1 의 K7(「`?` 는 기다림을 잇는다」)을 바꾼다 — 설계 §2 「0 이 될 때까지 기다린다」 의 대상이 아니던 경우라 사람에게 보이는 종료 코드가 하나 는다. **지휘자 판정 2026-11-22: 받아들인다** — 설계문서 「계획 2 에 더한 일」 2번(`suite_peers.py:116`)의 고침이고, 「재지 못한 것을 0 으로 읽지 않는다」 는 그대로 지켜진다(종료 코드 0 만 빈 때다) | 상한까지 기다린다 |
 | L8 | `--interval` | 0 이하면 argparse 오류(종료 코드 2) | 미룬 것 — 0 이면 바쁜 반복 | 0 을 15 로 바꾼다 |
 | L9 | 실제 표 시험의 노출(`:177` · `:199`) | 가짜 러너는 고정 `sleep` 대신 「풀어 줌 파일이 생길 때까지(상한 10초)」 기다리고, 테스트는 목록을 읽자마자 그 파일을 만든다. 자기 · 조상 · 자식 시험에 「다른 가짜 러너 하나는 목록에 있다」 양성 대조와 `--list` 종료 코드 0 을 더한다 | 다른 작업 폴더의 기록에 스치는 시간이 목록 한 번 읽는 동안으로 준다. 빈 목록으로도 통과하던 시험에 이빨이 생긴다 | 가짜 러너 이름을 바꾸는 변수 |
-| L10 ✎ | 다른 스위트 수를 세지 못한 까닭(`run-all.sh:44`) | 기록 변수가 있고 세기가 실패하면 바퀴마다 한 번 표준 오류에 `run-all: 다른 스위트 수를 세지 못했다 — <까닭>` 한 줄. 까닭은 `suite_peers.py --stamp` 가 표준 오류에 낸 첫 줄, 없으면 `종료 코드 <n>` · `출력이 없다`. `suite_peers.py` 는 표를 읽지 못하면 표준 오류에 `suite_peers: 프로세스 표를 읽지 못했다 — <까닭>` 을 낸다 | 기록에 `?` 만 남고 터미널에는 까닭이 없었다. 기록 변수가 있을 때만이라 AC1 은 그대로다. 계획 1 의 시험 둘(`check_stamp_unavailable`)의 기대 표준 오류가 빈 글에서 이 한 줄로 바뀐다 | 알리지 않는다 |
+| L10 ✎ | 다른 스위트 수를 세지 못한 까닭(`run-all.sh:44`) | 기록 변수가 있고 세기가 실패하면 바퀴마다 한 번 표준 오류에 `run-all: 다른 스위트 수를 세지 못했다 — <까닭>` 한 줄. 까닭은 `suite_peers.py --stamp` 가 표준 오류에 낸 첫 줄, 없으면 `종료 코드 <n>` · `출력이 없다`. `suite_peers.py` 는 표를 읽지 못하면 표준 오류에 `suite_peers: 프로세스 표를 읽지 못했다 — <까닭>` 을 낸다 | 기록에 `?` 만 남고 터미널에는 까닭이 없었다. 기록 변수가 있을 때만이라 AC1 은 그대로다. 계획 1 의 시험 둘(`check_stamp_unavailable`)의 기대 표준 오류가 빈 글에서 이 한 줄로 바뀐다. **지휘자 판정 2026-11-22: 받아들인다** — 같은 절 2번(`run-all.sh:44`)의 고침이고 기록 변수가 있을 때만이라 AC1 이 그대로다 | 알리지 않는다 |
 | L11 | python 러너의 알림(`:82`) | 기록 변수가 있을 때, python 러너 출력에서 `run_unittest_dir: ` 로 시작하는 줄을 표준 오류로 옮긴다 | 지금은 `FAIL:` · `ERROR:` 만 남기고 버린다. 변수가 없을 때는 옮기지 않아 AC1 이 그대로다 | 러너의 표준 오류를 따로 받는다(출력 차례가 바뀐다) |
 | L12 | 쓰기 실패 알림은 한 번(`:94` · `:101`) | 「이미 알렸다」 를 `$LIST.warned` 파일로 둔다(`{ … } \| sort` 하위 셸을 넘는다). trap 이 함께 지운다. 시험은 「정확히 한 줄」 로 조인다 | AC4 「알림 한 줄」 | 하위 셸을 없앤다(찾기 줄 · 출력 정렬이 바뀐다) |
 | L13 | 목록 읽기(§4 · AC19 · AC24) | 빈 값은 없는 것과 같다. 절대 경로가 아니거나 · 읽지 못하거나 · 읽을 줄(빈 줄 뺀)이 0개거나 · `<대상>: ` 앞부분이 아래 꼴이 아닌 줄이 하나라도 있으면 목록을 버리고 전부 돈다. 꼴: 셸 `shared/tests/…test_*.sh` · `plugins/<p>/tests/…test_*.sh`, python `shared/tests` · `plugins/<p>/tests` · `tools/<d>`, node `plugins/<p>/tests/…*.test.mjs`(`<p>` · `<d>` 에 `/` 없음, `…` 에는 있어도 된다). 꼴은 맞는데 이 사본에 없는 대상은 그 줄만 건너뛴다. 같은 대상은 한 번 | 「한 줄이라도 읽지 못하면 버린다」 의 「읽는다」 를 러너가 내는 대상 꼴로 정했다. 빈 목록 · 상대 경로를 전부 도는 쪽으로 떨어뜨린 것은 판정이 지금과 같은 쪽이다 | 빈 목록이면 아무것도 돌지 않는다 |
@@ -87,12 +87,12 @@
 | L16 | 「고쳐짐」 줄(AC18) | 기준 사본을 돌지 않았거나 **목록을 건네 돌았으면** `기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다(<사유>)`. 이름을 뽑지 못해 기준 사본을 전부 돈 경우(AC17)만 지금처럼 센다 | 목록을 모르는 명령은 실제로 전부 돌지만, 대조는 러너의 말을 읽지 않고는 그것을 알 수 없다 — 「0 개」 를 거짓으로 내지 않는 쪽이다. 판정과 종료 코드는 그 줄을 쓰지 않는다(지금도) | 러너의 「일부만 돌았다」 줄을 읽어 가른다(러너 글에 묶인다) |
 | L17 | 대조의 알림 줄 | `기준 사본은 돌리지 않았다 — 합친 사본이 종료 코드 0 이고 실패 이름이 없다` · `기준 사본은 합친 사본의 실패 이름 <n>개를 목록(SUITE_ONLY_FAILED_FILE)으로 건네 돌렸다 — 목록을 아는 명령은 그 대상만 돈다` · `기준 사본은 전부 돌렸다 — 합친 사본이 실패했으나 이름을 뽑지 못했다` | AC14 의 「기준 사본은 돌리지 않았다」 와 나머지 두 길을 사람이 가른다 | — |
 | L18 | 목록 파일 | 실행 폴더의 `only-failed.txt` — 합친 쪽 이름(경로 자리표시를 바꾼 뒤)을 정렬해 한 줄에 하나, utf-8 | 실행 폴더는 대조가 끝나면 지워진다 | 임시 폴더 |
-| L19 ✎ | 대조의 임시 폴더(더한 일 3) | 후보 `tempfile.gettempdir()` · `/tmp` · `/var/tmp` 차례로, 있는 폴더이고 쓸 수 있고 `git -C <후보> rev-parse --is-inside-work-tree` 가 `true` 가 아닌(`GIT_DIR` · `GIT_WORK_TREE` 를 뺀 환경) 첫 후보 아래에 사본마다 `tempfile.mkdtemp(prefix="merge-check-<base|merged>-")`. 대조가 끝나면 지운다. 후보가 없으면 지금 자리(실행 폴더 안)를 쓰고 `[spec-distill] git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다 — 임시 폴더가 git 밖이라고 가정한 테스트가 다르게 돌 수 있다` 를 알린다. 탐지 경로의 단위 실행에도 같은 자리를 준다 | 지휘자의 TMPDIR 도 git 안이라 호출한 쪽 값만으로는 모자란다. 멈추지 않고 알리는 것이 graceful degradation 이다. §4 의 「탐지 경로는 건드리지 않는다」 는 한 바퀴 구조에 대한 말로 읽었다 — 임시 폴더는 두 경로가 같은 뜻이다 | 못 찾으면 검사 불가(rc 3) · 테스트 명령 경로에만 |
+| L19 ✎ | 대조의 임시 폴더(더한 일 3) | 후보 `tempfile.gettempdir()` · `/tmp` · `/var/tmp` 차례로, 있는 폴더이고 쓸 수 있고 `git -C <후보> rev-parse --is-inside-work-tree` 가 `true` 가 아닌(`GIT_DIR` · `GIT_WORK_TREE` 를 뺀 환경) 첫 후보 아래에 사본마다 `tempfile.mkdtemp(prefix="merge-check-<base|merged>-")`. 대조가 끝나면 지운다. 후보가 없으면 지금 자리(실행 폴더 안)를 쓰고 `[spec-distill] git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다 — 임시 폴더가 git 밖이라고 가정한 테스트가 다르게 돌 수 있다` 를 알린다. 탐지 경로의 단위 실행에도 같은 자리를 준다 | 지휘자의 TMPDIR 도 git 안이라 호출한 쪽 값만으로는 모자란다. 멈추지 않고 알리는 것이 graceful degradation 이다. §4 의 「탐지 경로는 건드리지 않는다」 는 한 바퀴 구조에 대한 말로 읽었다 — 임시 폴더는 두 경로가 같은 뜻이다. **지휘자 판정 2026-11-22: 받아들이되 둘을 더한다** — (a) 후보 폴더는 `os.path.realpath` 로 푼 경로를 쓴다(macOS 의 `/tmp` → `/private/tmp` · `/var/…` → `/private/var/…` 링크 때문에 TMPDIR 글자와 풀린 경로를 견주는 테스트가 무관하게 실패한 적이 있다) — 장면 18 에 「대조가 준 TMPDIR 이 자기 realpath 와 같다」 단언 (b) 과제 7 의 첫 걸음으로 임시 폴더를 실행 폴더 안에 둔 까닭을 기록에서 찾고, 적힌 성질이 새 자리에서도 서는지 확인에 넣는다 — 새 자리로 지킬 수 없는 까닭이면 멈춰 보고 | 못 찾으면 검사 불가(rc 3) · 테스트 명령 경로에만 |
 | L20 | 다시 돌리는 갈래 시험(`:108`) | `test_codex_backward_compat.sh` 에 넷째 확인을 둔다 — 임시 사본에 그 파일 자신과 가짜 테스트 · 가짜 원장을 두고 `CODEX_COMPAT_INNER=1` 로 셋째 확인만 돌려, 지문 일치(등재 둘 · 표준 입력을 먹는 테스트 포함) PASS · 지문 불일치 FAIL · 통과하는 등재 FAIL 을 본다. 안쪽 실행은 넷째 확인을 돌지 않는다. 단언 수는 셋에서 넷 | 원장이 0건이라 그 갈래가 스위트 어디에서도 돌지 않았다. 고칠 수 있는 테스트 파일이 이것 하나다(그 폴더의 다른 자리는 E4 예약) | 하지 않고 이유를 적는다 |
 | L21 | 임포트 색인의 실패(`:861`) | 0 아닌 모든 종료 코드에서 그 자리 파싱으로 간다. 색인 만들기가 실패하면 색인을 비워 모든 후보가 그 자리 파싱으로 가게 한다 | 락이 조용히 약해지지 않는다 — 느려질 뿐이다 | 실패하면 락이 FAIL |
 | L22 | 판 · 예약 | spec-distill minor. 로드맵 E1 예약 줄 편집은 로드맵 수정 PR #320 이 기본 브랜치에 머지된 뒤 기본 브랜치를 합치고 한다 — 아직이면 편집하지 않고 보고한다 | #320 이 같은 줄을 고친다 — 먼저 고치면 충돌한다 | 지금 고친다 |
 | L23 | 확인 범위 | 구현 담당자는 전체 스위트를 돌지 않는다. 과제 10 이 바꾼 파일의 이름을 읽는 테스트를 도출해 하나씩 돈다 | 지휘자의 잠긴 대조가 전체를 판정한다(conductor-dispatch). 대조가 공유 잠금을 쥐고 있다 | 잠금 아래 전체 한 바퀴 |
-| L24 ✎ | 설계 전제와 어긋날 수 있는 사실(보고만) | 계획 1 대조 1회차에서 plugin-audit 의 `test_default_helper_is_the_sibling_script_not_cwd` 는 기준 사본의 전체 바퀴에서 통과했는데, 같은 폴더를 혼자 돌린 두 번(옛 러너 · 새 러너, 합친 사본)은 모두 실패했다. 부분 실행이었다면 그 실패는 「새 실패」 가 아니라 「양쪽 다」 로 갈렸을 것이다 — §4 의 「부분이든 전부든 판정이 같다」 가 그 테스트에서는 서지 않았을 수 있다. 또 대조 두 번 모두 「양쪽 다 있는 실패」 가 9–10개라 합친 쪽이 깨끗한 때가 없고, 그중 둘이 python 폴더(특히 `plugins/spec-distill/tests` — 한 번 146–646초)라 기준 사본의 부분 실행이 생각보다 무겁다. 과제 1 이 다시 관측하고, 과제 7(임시 폴더를 git 밖으로)이 첫째의 알려진 원인을 없앤다 | 계획이 설계를 바꾸지 않는다 — 지휘자가 사용자에게 보일지 정한다 | — |
+| L24 ✎ | 설계 전제와 어긋날 수 있는 사실(보고만) | 계획 1 대조 1회차에서 plugin-audit 의 `test_default_helper_is_the_sibling_script_not_cwd` 는 기준 사본의 전체 바퀴에서 통과했는데, 같은 폴더를 혼자 돌린 두 번(옛 러너 · 새 러너, 합친 사본)은 모두 실패했다. 부분 실행이었다면 그 실패는 「새 실패」 가 아니라 「양쪽 다」 로 갈렸을 것이다 — §4 의 「부분이든 전부든 판정이 같다」 가 그 테스트에서는 서지 않았을 수 있다. 또 대조 두 번 모두 「양쪽 다 있는 실패」 가 9–10개라 합친 쪽이 깨끗한 때가 없고, 그중 둘이 python 폴더(특히 `plugins/spec-distill/tests` — 한 번 146–646초)라 기준 사본의 부분 실행이 생각보다 무겁다. 과제 1 이 다시 관측하고, 과제 7(임시 폴더를 git 밖으로)이 첫째의 알려진 원인을 없앤다 | 계획이 설계를 바꾸지 않는다 — 지휘자가 사용자에게 보일지 정한다. **지휘자 판정 2026-11-22: 설계는 바꾸지 않는다** — 과제 1 의 보고에 늘 실패하는 테스트를 이름마다 한 줄(알 수 있는 데까지의 원인 · 어느 에픽의 예약 파일인지)로 싣고, 합친 쪽이 깨끗한 때가 없다는 것과 기준 사본 부분 실행의 무게(대상별 초)도 싣는다 — 지휘자가 그 목록을 사용자에게 보인다 | — |
 
 ---
 
@@ -118,6 +118,8 @@
 ### Task 1: 다시 확인과 두 관측
 
 설계문서가 근거로 든 자리가 지금 코드에서도 그런지 보고(달라졌으면 **멈추고** 지휘자에게 보고한다 — 어느 줄 · 무엇이 · 어느 과제가 닿나), 설계가 이 과제에 맡긴 두 관측을 한다. 고치지 않는다.
+
+**차례(지휘자 판정 2026-11-22).** Step 3 의 잠금 아래 실행은 공유 스위트 잠금이 빌 때까지 줄을 서도 된다(지휘자의 대조가 쥐고 있을 수 있다). 그 사이 Step 1 · Step 2 와 과제 2–5 를 먼저 해도 된다. 다만 Step 3 은 **과제 6 을 시작하기 전에 끝나 있어야 하고**, Step 3 이 멈출 조건에 걸리면 과제 6 · 7 을 시작하지 않고 보고한다.
 
 **Files:** 없음(읽기 · 실행만)
 
@@ -164,6 +166,8 @@ print(len(a), len(b), len(a & b)); print("\n".join(sorted(a & b)))' "$D/mc-1.out
 ```
 
 Expected(계획을 쓸 때): `9 10 9` 와 이름 아홉 — 늘 실패하는 테스트가 있다. 그러면 합친 쪽이 깨끗한 때가 없어 대조는 늘 기준 사본을 (부분으로) 다시 돈다. 그 사실과 대상 일곱(`plugins/plugin-audit/tests` · `plugins/quality-gates/tests/test_findings_parser.sh` · `plugins/spec-distill/tests/test_detect_codex.sh` · `test_epic_conductor_skill.sh` · `test_finish_commit_roadmap.sh` · `plugins/spec-distill/tests` · `shared/tests/test_invocation_surface.sh`)을 보고에 싣는다.
+
+보고에는 늘 실패하는 테스트를 **이름마다 한 줄**로 싣는다 — `<대상>: <이름> · 원인(알 수 있는 데까지 — 실패 출력 · 테스트 본문에서 읽은 것, 모르면 「확인하지 못했다」) · 예약(그 테스트 파일을 경로 예약에 둔 로드맵 · 에픽 — `git grep -n -F <테스트 파일 경로> -- 'docs/superpowers/roadmaps/*/roadmap.md'` 와 폴더 예약(`plugins/<p>/tests/` 따위)까지 본다, 없으면 「예약 없음」)`. 이어서 「합친 쪽이 깨끗한 때가 없다 — 대조는 늘 기준 사본을 부분으로 다시 돈다」 한 줄과, 기준 사본 부분 실행의 무게로 그 대상들의 걸린 초(계획 1 의 겹치지 않은 바퀴 기록 `$D/timing-mc-2.tsv` 의 대상 줄에서 — 대상마다 한 줄과 합)를 싣는다. 지휘자가 이 목록을 사용자에게 보인다(계획의 판단 L24).
 
 - [ ] **Step 3: 관측 (2) — 실패하는 대상을 혼자 돌린 결과와 전체 속 결과**
 
@@ -561,15 +565,21 @@ git commit -m "feat(spec-distill): 머지 전 대조가 합친 사본을 먼저 
 - Consumes: 과제 6 의 `run_command` · `compare_command`
 - Produces: `tmp_candidates() -> list`(시험이 갈아 끼운다) · `side_tmps(root: Path, work: Path) -> (dict, note | None)`(`{"base": Path, "merged": Path}`) · `compare_command(..., tmps)` · `compare_detected(..., tmps)` · `run_side(..., tmp)` 가 그 폴더를 쓴다. `run()` 이 만들고 `finally` 에서 지운다(`--keep-merged` 여도 지운다).
 
-- [ ] **Step 1: 실패하는 장면 18 을 쓴다**
+- [ ] **Step 1: 실행 폴더 안에 둔 까닭을 기록에서 찾는다(지휘자 판정 2026-11-22 — L19 (b))**
+
+Run: `git log -S"tmp-base" --format='%h %s%n%b' -- plugins/spec-distill/scripts/merge_check.py` — 계획을 쓸 때 커밋 둘(3892f86d · b2d5ca11)이 나왔다. 두 커밋의 메시지 · 그 커밋이 고친 설계문서(`git show --stat <커밋>` 의 `docs/superpowers/specs/` · `plans/`)와 spec-distill CHANGELOG 의 그 판 항목을 읽어, 임시 폴더를 실행 폴더 안에 둔 까닭으로 적힌 것을 모두 보고에 옮긴다(예: 사본마다 따로 · 대조가 끝나면 함께 지움 · 경로 자리표시 `<tmp>`). 적힌 성질마다 새 자리에서 그 성질을 보이는 단언을 Step 2 의 장면 18 에 더한다(사본마다 따로 → 두 사본의 TMPDIR 이 다르다 · 함께 지움 → 끝난 뒤 남지 않는다 · 자리표시 → 장면 7b · 10c 가 그대로 통과). **새 자리로는 지킬 수 없는 까닭**(예: 실행 폴더 밖에 쓰면 안 되는 이유)이 나오면 멈추고 보고한다. 적힌 까닭이 없으면 「기록에 까닭이 없다」 로 적고 간다.
+
+- [ ] **Step 2: 실패하는 장면 18 을 쓴다**
 
 ```bash
-# 18 — 임시 폴더는 git 밖(호출한 쪽 TMPDIR 이 git 안이어도)
+# 18 — 임시 폴더는 git 밖(호출한 쪽 TMPDIR 이 git 안이어도) · 풀린 경로
 #   mkrepo tg 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n' · push_base · put b.txt b · branch_with feature/tg
-#   run.sh: if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "FAILED tmp: inside-git"; exit 1; fi; echo ok
+#   run.sh: printf '%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$(cd "$TMPDIR" && pwd -P)" >> "$MC_LOG"
+#           if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "FAILED tmp: inside-git"; exit 1; fi; echo ok
 mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
-out="$(TMPDIR="$W/tmpin" mc --branch feature/tg)"; rc=$?
+out="$(MC_LOG="$T/tg.log" TMPDIR="$W/tmpin" mc --branch feature/tg)"; rc=$?
 assert_eq "$rc" "0" "호출한 쪽 TMPDIR 이 git 안이어도 대조가 주는 임시 폴더는 git 밖이다"
+assert_eq "$(awk -F'\t' '$2 != $3' "$T/tg.log" | wc -l | tr -d ' ')" "0" "대조가 준 TMPDIR 이 자기 realpath 와 같다(/tmp → /private/tmp 링크를 푼 경로)"
 CT="$(mktemp -d /tmp/mc-ct.XXXXXX)"   # trap 이 함께 지운다. git 안이면 no 로 알린다(전제)
 out="$(TMPDIR="$CT" mc --branch feature/tg)"; rc=$?
 assert_eq "$rc" "0"; assert_eq "$(ls -A "$CT")" "" "대조가 끝나면 만든 임시 폴더를 지운다"
@@ -581,19 +591,19 @@ assert_contains "$out" "git 작업 트리 밖 임시 폴더를 찾지 못해 실
 assert_contains "$out" "tmp: inside-git"
 ```
 
-- [ ] **Step 2: 실패를 본다**
+- [ ] **Step 3: 실패를 본다**
 
 Run: `bash plugins/spec-distill/tests/test_merge_check.sh 2>&1 | tail -10`
 Expected: FAIL — 장면 18 첫 단언 rc 1(지금 임시 폴더는 실행 폴더 안 · 그 레포의 git 안) · `tmp_candidates` 없음
 
-- [ ] **Step 3: 고친다** — L19. `neutral` 은 사본마다 그 사본의 임시 폴더를 받는다(지금처럼 자리표시 `<tmp>`). 장면 9 의 「실행 폴더에는 합친 사본만 남는다」 가 그대로 서야 한다.
+- [ ] **Step 4: 고친다** — L19. 후보는 `os.path.realpath` 로 푼 경로로 견주고, `mkdtemp` 가 돌려준 폴더도 `realpath` 로 풀어 TMPDIR 로 준다. `neutral` 은 사본마다 그 사본의 임시 폴더를 받는다(지금처럼 자리표시 `<tmp>` — 글자 · 풀린 경로 둘 다 바꾼다). 장면 9 의 「실행 폴더에는 합친 사본만 남는다」 가 그대로 서야 한다.
 
-- [ ] **Step 4: 통과를 본다**
+- [ ] **Step 5: 통과를 본다**
 
 Run: `bash plugins/spec-distill/tests/test_merge_check.sh 2>&1 | tail -5 && bash plugins/spec-distill/tests/test_conductor_e2e.sh 2>&1 | tail -3`
-Expected: 실패 0
+Expected: 실패 0 — Step 1 이 더한 성질 단언 포함
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
 git add plugins/spec-distill/scripts/merge_check.py plugins/spec-distill/tests/test_merge_check.sh
