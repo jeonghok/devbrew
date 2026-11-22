@@ -337,7 +337,7 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_contains "$w" '- fail 로 둔다 · 무효로 남긴다 · kill switch(exit 3) — 남은 시나리오를 걷지 않고 끝낸다.' "§5: fail 로 둔다 · 무효로 남긴다면 남은 시나리오를 걷지 않고 끝낸다"
   assert_contains "$w" '- 다시 걷기 — 같은 시나리오를 다시 걷는다.' "§5: 다시 걷기는 같은 시나리오를 다시 걷는다"
   assert_file_grep "$REF" 'fail` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
-  assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `미확인` > `pass`.' \
+  assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `무효` > `미확인` > `pass`.' \
     "§6: 가장 나쁜 결과 문장이 §6 안에 통째로 있다"
   assert_contains "$g" '뒤집은 걷기를 뒤집기 전 판정안으로 되돌려 다시 합쳤을 때 칸이 달라지면' "§6: 「사람이 뒤집음」은 뒤집기가 칸을 바꿨을 때다"
   assert_contains "$w" '뒤집기(`fail 로 뒤집기` · `pass 로 뒤집기` · 산출물 확인)는 사람에게 한 줄 사유를 받는다.' "§5: 뒤집기는 한 줄 사유를 받는다(양성 짝)"
@@ -368,7 +368,7 @@ case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
   # 고침 1 — 뒤 시나리오가 exit 3 이면 앞 걷기의 fail · 미확인을 지우지 않는다(꺼짐은 verdict.py 에서 defect 도 사유도 아니다 — fail-open).
   local g s
   g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸"); s=$(section "$SKILL" "## e2e")
-  assert_contains "$g" '`fail` > `미확인` > `꺼짐(kill switch)` > `pass` 로 합친다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이고, 아니면 `꺼짐(kill switch)` 이다.' \
+  assert_contains "$g" '`fail` > `무효` > `미확인` > `꺼짐(kill switch)` > `pass` 로 합친다 — 이 차례에 이미 걸은 걷기가 `fail` · `무효` · `미확인` 이면 칸은 그것이고, 아니면 `꺼짐(kill switch)` 이다.' \
     "§6: kill switch 로 끝나도 이 차례의 앞 걷기 fail · 미확인이 칸이다"
   assert_not_contains "$g" 'kill switch 로 끝났으면 칸은 `꺼짐(kill switch)` 이다.' "§6: 앞 걷기를 지우는 옛 kill switch 문장이 없다"
   assert_contains "$s" 'E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).' \
@@ -412,6 +412,8 @@ case_gate_rows_one_pass() {
   assert_eq "$(printf '%s\n' "$g" | grep -cxF -- '| 무효로 남긴다 | `무효` | 아니오 |')" "1" "§6: 무효로 남긴다 행"
   assert_contains "$s" '- **fail 로 둔다** (fail 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. e2e 칸은 `fail` 이다.' "SKILL E4: fail 로 둔다 불릿"
   assert_contains "$s" '- **무효로 남긴다** (무효 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. e2e 칸은 `무효` 이다.' "SKILL E4: 무효로 남긴다 불릿"
+  assert_contains "$g" '걷는 사이 코드가 바뀐 걷기가 하나라도 있으면 칸은 `무효` 다(`fail` 이 있으면 `fail`).' "§6: 무효 걷기가 있으면 합친 칸은 무효다(fail 이 이긴다)"
+  assert_not_contains "$g" '`무효` 와 괄호 사유가 붙은' "§6: 무효를 미확인으로 접던 옛 문장이 없다(위 양성 짝)"
   for tok in '고치고 다시 돌기' '리뷰·테스트부터 다시' '한 번 더 돌기' '멈추기' 'Fix-loop' 'Retry' 'iteration' 'aborted' 'skipped: aborted'; do
     assert_eq "$(printf '%s\n' "$s" | grep -cF -- "$tok")" "0" "SKILL ## e2e 에 '$tok' 이 없다"
     assert_eq "$(grep -cF -- "$tok" "$REF")" "0" "e2e.md 에 '$tok' 이 없다"
