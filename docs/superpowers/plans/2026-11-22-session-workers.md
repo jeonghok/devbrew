@@ -300,7 +300,7 @@ git commit -m "feat(spec-distill): 지휘 절차서에 세션 담당자 거두�
 
 ### Task 4: README · 의존 표 파일 · 판 올림
 
-AC14 · AC16(판 · CHANGELOG · 새 스크립트 없음).
+AC14 · AC16(판 · CHANGELOG · 새 스크립트 없음). AC15(걸어 보기)는 이 과제의 일이 아니다 — 구현 담당자가 돌아온 뒤 PR 을 열기 전에 리더가 이 브랜치의 새 글만 읽고 담당자 세션 하나로 걷고 PR 본문에 적는다. 구현 담당자는 세션을 띄우지 않는다. 이 과제가 끝나면 걸어 보기가 읽을 새 글(Task 1–4)이 모두 이 브랜치에 커밋돼 있어야 한다.
 
 **Files:**
 - Modify: `plugins/spec-distill/README.md` — `## Prerequisites` 에 herdr-core 불릿 · 「로드맵 · 에픽 묶음」 근처(지휘자 설명이 있는 자리)에 세션 담당자 한 문단
