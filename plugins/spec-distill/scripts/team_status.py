@@ -95,7 +95,8 @@ def edits_since(git, tip: str, trust, paths: list):
     """`<확인 끝>..<tip>`(확인 끝이 없으면 tip 의 이력 전부)에서 `paths` 를 바꾼 커밋(`씀` 이든 아니든) —
     [(커밋 40자, (바꾼 경로…)), …] 오래된 차례. 재지 못하면 None: trust 가 None · 확인 끝이 이 레포에 없음 ·
     tip 이 확인 끝을 품지 않음(원격 이력이 다시 쓰여 확인 끝의 조상 · 곁가지로 갔다 — 빈 범위가 「없음」 으로 읽히지 않게) · git 실패 ·
-    남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다)."""
+    남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다).
+    `씀` 에 든 병합은 부모마다 `diff` 로 견줘 경로를 낸다(경로 한정 log 는 그 병합을 숨기거나 경로를 내지 않는다)."""
     if trust is None or not isinstance(tip, str) or not _OID_RE.fullmatch(tip):
         return None
     base, own = trust
@@ -109,26 +110,42 @@ def edits_since(git, tip: str, trust, paths: list):
     rc, out, _err = git.run_err("log", "--format=%H %P", rng)
     if rc != 0:
         return None
+    order, merges = [], {}   # order: 범위의 커밋(새 것부터) · merges: `씀` 병합 → 부모들
     for line in out.splitlines():
         words = line.split()
         if not words or not _OID_RE.fullmatch(words[0]):
             return None
-        if len(words) > 2 and words[0] not in own:
-            return None
+        order.append(words[0])
+        if len(words) > 2:
+            if words[0] not in own:
+                return None
+            merges[words[0]] = words[1:]
     rc, out = git.changed_by(rng, paths)   # 경로는 레포 뿌리 기준(cwd 가 하위 폴더여도 같다)
     if rc != 0:
         return None
-    found = []
+    found = {}
+    last = None
     for line in out.splitlines():
         if _OID_RE.fullmatch(line):
-            found.append((line, []))
+            last = found.setdefault(line, [])
         elif not line:
             continue
-        elif found:
-            found[-1][1].append(line)
+        elif last is not None:
+            last.append(line)
         else:
             return None
-    return [(commit, tuple(changed)) for commit, changed in reversed(found)]
+    for commit, parents in merges.items():   # `씀` 병합 — 경로 한정 log 가 숨기거나 경로를 못 내므로 부모마다 따로 견준다
+        changed = set()
+        for parent in parents:
+            rc, names = git.diff_names(parent, commit, paths)
+            if rc != 0:
+                return None
+            changed.update(names)
+        if changed:
+            found[commit] = sorted(changed)
+        else:
+            found.pop(commit, None)
+    return [(commit, tuple(found[commit])) for commit in reversed(order) if commit in found]
 
 
 def foreign_commits(git, tip: str, trust, paths: list):

@@ -458,6 +458,60 @@ class Show(CrossRepo):
         self.assertNotIn("확인되지 않은 남의 고침", out)
         self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), out)
 
+    def tree_of(self, base, files):
+        """base 커밋의 트리에 files 를 얹은 트리 — 임시 인덱스로 만든다."""
+        idx = str(self.t / "merge-index")
+        env = dict(ENV, GIT_INDEX_FILE=idx)
+        run = lambda *a, **kw: subprocess.run(["git", "-C", str(self.w)] + list(a), env=env, check=True, capture_output=True, text=True, **kw).stdout.strip()
+        run("read-tree", base)
+        for path, text in files.items():
+            run("update-index", "--add", "--cacheinfo", "100644,%s,%s" % (run("hash-object", "-w", "--stdin", input=text), path))
+        out = run("write-tree")
+        os.remove(idx)
+        return out
+
+    def planted_merge(self, shape):
+        """내 상태 브랜치 끝을 병합 M 으로 옮긴다 — shape: "same-as-parent"(한 부모와 감시 경로가 같다) ·
+        "differs-from-both" · "unchanged"(감시 경로를 안 바꾼다). M 은 아직 `씀` 이 아니다."""
+        team = CB.team_of(self.w, rm(ALPHA))
+        p1 = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- 옛 줄\n"}, "하나").commit
+        p2 = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- 새 줄\n"}, "둘").commit
+        commit = lambda tree, *parents: self.g("commit-tree", tree, *sum((["-p", q] for q in parents), []), "-m", "M")
+        if shape == "unchanged":
+            tree = self.g("rev-parse", p2 + "^{tree}")
+            b = commit(tree, p1)
+            m = commit(tree, p2, b)
+        elif shape == "same-as-parent":
+            tree = self.g("rev-parse", p1 + "^{tree}")
+            m = commit(tree, p2, commit(tree, p1))
+        else:
+            b = commit(self.g("rev-parse", p1 + "^{tree}"), p1)
+            m = commit(self.tree_of(p2, {team.rules: "- 셋째 줄\n"}), p2, b)
+        self.g("update-ref", CB.ref_of(team.name), m)
+        return team, m
+
+    def check_planted_merge_is_listed(self, shape):   # 리뷰 I1 — `씀` 병합이 두 목록에서 빠지거나 빈 경로 줄을 낸다
+        team, m = self.planted_merge(shape)
+        self.assertIn(TS.FOREIGN_UNMEASURED, self.text())                          # 양성 대조 — 심기 전에는 남의 병합이라 재지 못한다
+        CB.record_own(self.w, rm(ALPHA), SID, [m])
+        out = self.text()
+        self.assertIn("\n  %s · %s\n" % (m[:8], team.rules), out)
+        self.assertNotIn(" · \n", out)
+        self.assertNotIn(TS.FOREIGN_UNMEASURED, out)
+
+    def test_a_planted_own_merge_same_as_a_parent_is_listed(self):
+        self.check_planted_merge_is_listed("same-as-parent")
+
+    def test_a_planted_own_merge_differing_from_both_parents_is_listed(self):
+        self.check_planted_merge_is_listed("differs-from-both")
+
+    def test_a_planted_own_merge_that_leaves_the_watched_paths_alone_is_not_listed(self):
+        _team, m = self.planted_merge("unchanged")
+        CB.record_own(self.w, rm(ALPHA), SID, [m])
+        out = self.text()
+        self.assertNotIn(m[:8], out)
+        self.assertIn(CS.OWN_EDITS % 2, out)                                       # 양성 대조 — 병합 앞의 두 규칙 고침은 나온다
+
     def test_foreign_edit_of_my_roadmap_is_told_under_my_status(self):   # R3 AC21 — 옛 형식이어도 같은 판정
         line = TS.FOREIGN % 1 + " — conductor_branch.py confirm"
         out = self.text()
