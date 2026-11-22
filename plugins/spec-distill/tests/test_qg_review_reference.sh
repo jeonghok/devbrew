@@ -184,15 +184,20 @@ once "$KEEP" "$L_prior" "AC9: L(prior) 한 번"
 assert_contains "$KEEP" '글자가 같지 않으면 짝짓지 않는다' "AC9: 글자가 같지 않으면 짝짓지 않는다"
 assert_contains "$ASK" '같은 대상에 전에 물은 것이 있어도 질문은 띄운다' "AC9 양성 짝: 전에 물은 것이 있어도 질문은 띄운다"
 # AC9 찾는 명령 — 돌아가는 꼴(git grep 에는 -x 가 없다)과 찾는 자리(에픽 브랜치는 로컬 ref)
-once "$KEEP" '`git grep -l -F -f "$TMPDIR/qg-ident" <ref> -- "<로드맵 폴더>/reviews/"`' "AC9 찾기 · R3 지적(1): 후보 파일을 정체 파일로 git grep -l -F -f 로"
-once "$KEEP" '`git show "<ref>:<경로>" | grep -n -x -F -f "$TMPDIR/qg-ident"`' "AC9 찾기 · R3 지적(1): 줄 전체 일치는 정체 파일로 git show | grep -n -x -F -f 로"
+once "$KEEP" '`git grep -l -F -f "$qg_ident" <ref> -- "<로드맵 폴더>/reviews/"`' "AC9 찾기 · R3 지적(1): 후보 파일을 정체 파일로 git grep -l -F -f 로"
+once "$KEEP" '`git show "<ref>:<경로>" | grep -n -x -F -f "$qg_ident"`' "AC9 찾기 · R3 지적(1): 줄 전체 일치는 정체 파일로 git show | grep -n -x -F -f 로"
 assert_eq "$(printf '%s\n' "$KEEP" | grep -oF 'git grep -l -F -f' | wc -l | tr -d ' ')" "1" "R3 지적(1): git grep -l -F -f 가 KEEP 에 한 번"
 assert_eq "$(printf '%s\n' "$KEEP" | grep -oF 'grep -n -x -F -f' | wc -l | tr -d ' ')" "1" "R3 지적(1): grep -n -x -F -f 가 KEEP 에 한 번"
 assert_not_contains "$ALL" '-e "- 정체: <id>"' "R3 지적(1) 음성: 정체를 셸 따옴표 안의 -e 인자로 넘기던 옛 꼴이 없다(양성 짝: -f 정체 파일 두 줄)"
 once "$KEEP" '정체는 리뷰 대상의 글에서 온 값이라 셸 따옴표 안에 넣지 않는다' "R3 지적(1): 정체를 셸 따옴표 안에 넣지 않는 이유 한 번"
 IDF="$(fence_with "$KEEP" 'qg-ident')"
-assert_contains "$IDF" "cat > \"\$TMPDIR/qg-ident\" <<'QG_IDENT'" "R3 지적(1): 정체 파일은 따옴표 친 heredoc 으로 쓴다(셸이 풀어 읽지 않는다)"
+assert_eq "$(starts "$IDF" 'qg_ident="$(mktemp "${TMPDIR:-/tmp}/qg-ident.XXXXXX")" || {')" "1" "Minor 6: 정체 파일은 mktemp 로 만든다 — TMPDIR 이 비어도 /tmp 아래, 이름이 겹치지 않는다"
+assert_not_contains "$ALL" '$TMPDIR/qg-ident' "Minor 6 음성: TMPDIR 이 비면 /qg-ident 가 되던 고정 경로가 없다(양성 짝: 위 mktemp 줄)"
+assert_contains "$IDF" "cat > \"\$qg_ident\" <<'QG_IDENT'" "R3 지적(1): 정체 파일은 따옴표 친 heredoc 으로 쓴다(셸이 풀어 읽지 않는다)"
 assert_eq "$(starts "$IDF" '- 정체: <id>')" "1" "R3 지적(1): heredoc 본문이 정체 줄 하나"
+# heredoc 몸 전체가 정체 줄 하나다 — 빈 줄이 끼면 빈 -f 패턴이 모든 줄에 맞는다.
+IDB="$(printf '%s\n' "$IDF" | awk 'index($0, "cat > \"$qg_ident\" <<")==1{f=1;next} f&&$0=="QG_IDENT"{exit} f{print "[" $0 "]"}')"
+assert_eq "$IDB" "[- 정체: <id>]" "Minor 6: heredoc 몸이 정체 줄 하나뿐이다(빈 줄 · 다른 줄이 끼지 않는다)"
 assert_not_grep "$IDF" '"[^"]*<id>' "R3 지적(1) 음성: 정체 파일 펜스에서 <id> 가 큰따옴표 안에 없다(양성 짝: heredoc 본문 줄)"
 assert_not_grep "$ALL" 'git grep[^`]* -[A-Za-wyz]*x' "AC9 찾기 음성: git grep 에 -x 를 넘기지 않는다(git grep 은 unknown switch 로 끝난다)"
 assert_contains "$KEEP" '열린 에픽 브랜치마다 로컬 `<에픽 브랜치>`' "AC9 찾기: 에픽 브랜치는 로컬 ref 로 찾는다"
@@ -289,7 +294,7 @@ L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸
 L_order='보내는 차례는 아래 `### 이미 보낸 것` 의 확인 → 규모 줄 → `### 스위트 잠금` 의 확인 → 보관 폴더 만들기와 `## 자원` 에 적기(`## 보관과 기록 파일` 의 `### 보관`) → 보내기 → 살아 있는 agent 줄 적기다.'
 L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<하니스가 준 agent 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
 L_livename='이름 칸 · 담당 칸은 다른 담당자처럼 하니스가 준 agent 이름이고, 그 담당자가 어느 자리의 것인지는 작업 표 줄의 근거 칸(보관 폴더 경로)으로 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문과 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
-L_sent0='자동으로 보내는 자리 셋(spec 승인 앞 · 머지 앞 · 로드맵 끝)은 보내기 전에 그 자리를 이미 보냈는지 본다 — 압축이나 새 세션 뒤 들어가는 문장이 다시 불려도 한 번 더 보내지 않는다.'
+L_sent0='자동으로 보내는 자리 셋(spec 승인 앞 · 머지 앞과 그 좁은 재리뷰 · 로드맵 끝)은 보내기 전에 그 자리를 이미 보냈는지 본다 — 압축이나 새 세션 뒤 들어가는 문장이 다시 불려도 한 번 더 보내지 않는다.'
 L_sent1='먼저 그 자리의 보관 폴더(`ledger resources --roadmap <로드맵>` 의 경로 칸)마다 아래를 차례로 보고 처음 맞는 줄대로 한다 — 끝난 리뷰는 다시 잇지 않는다.'
 L_sent2='1. 끝난 리뷰 — 그 폴더 이름을 글 칸 끝에 담은 쌓인 기록 `qg 리뷰` 줄이 있거나, 그 폴더 이름을 「보관 사본:」 으로 가리키는 기록 파일(아래 `### 같은 대상에 전에 물은 것` 의 찾는 자리 셋)이 있으면 다시 보내지도 잇지도 않는다.'
 L_sent3='`ledger live-agent --roadmap <로드맵> --epic <에픽 번호 | 로드맵 밖> --work "qg 리뷰"` 가 낸 이름 가운데 근거 칸이 그 폴더인 `## 작업` 줄의 담당이 있으면 보내지 않고 그 담당자를 기다린다.'
@@ -621,7 +626,7 @@ once "$QF" '머지 앞: 머지를 멈추고 이 에픽 안에서 고친다.' "wr
 # ask-one-sentence (AC20)
 QL="$(printf '%s\n' "$QF" | grep -F 'question:')"
 assert_eq "$(printf '%s\n' "$QL" | grep -c . | tr -d ' ')" "1" "ask-one-sentence: 질문 틀에 question: 줄이 하나"
-once "$QF" 'question: "<에픽 이름 | 로드맵> — <질문 글의 첫 줄>",' "ask-one-sentence: 질문 문장은 대상 이름과 질문 글의 첫 줄뿐"
+once "$QF" 'question: "<에픽 이름 | 로드맵> — <질문 글의 첫 문장>",' "ask-one-sentence: 질문 문장은 대상 이름과 질문 글의 첫 문장뿐"
 assert_not_contains "$QL" '근거로 본 것' "ask-one-sentence 음성: question 줄에 근거가 없다"
 assert_not_contains "$QL" '이유를 남기려면' "ask-one-sentence 음성: question 줄에 이유 남기는 안내가 없다"
 assert_not_contains "$QL" '같은 대상에 전에 물은 것' "ask-one-sentence 음성: question 줄에 전에 물은 것이 없다"
@@ -631,9 +636,14 @@ once "$ASK" '이유를 남기려면 직접 입력 칸에' "ask-one-sentence: 이
 assert_contains "$FRONT" '`질문 <n>` 번호' "ask-one-sentence: 앞 글의 질문 몫에 질문 번호"
 FF="$(fence_with "$ASK" '- 근거로 본 것(')"
 assert_eq "$(starts "$FF" '질문 <n>')" "1" "ask-one-sentence: 앞 글 틀이 질문 <n> 으로 시작"
-for lit in '- 의심하는 것: <의심하는 것>' '- 근거로 본 것(<근거의 종류>): <관찰의 줄 전부>' '- <질문 글의 둘째 줄부터' '- 같은 대상에 전에 물은 것: <날짜> <자리> 리뷰의 「<그때의 질문 글>」 에 「<답>」'; do
+for lit in '- 의심하는 것: <의심하는 것>' '- 근거로 본 것(<근거의 종류>): <관찰의 줄 전부>' '- <질문 글의 나머지' '- 같은 대상에 전에 물은 것: <날짜> <자리> 리뷰의 「<그때의 질문 글>」 에 「<답>」'; do
   assert_eq "$(starts "$FF" "$lit")" "1" "ask-one-sentence: 앞 글 틀 줄 ${lit}"
 done
+# ask-marker-split (R18) — 질문 글은 고정 표지에서 나눈다. 결과 파일은 줄바꿈을 빈칸으로 접는다.
+L_split='- `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — 표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장이고, 표지부터 끝까지가 질문 글의 나머지다. 표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다'
+assert_eq "$(starts "$ASK" "$L_split")" "1" "ask-marker-split: 표지에서 나누는 규칙이 묻기 절 본문 줄 첫머리에 한 번"
+assert_not_contains "$ASK" '둘째 줄부터' "ask-marker-split 음성: 줄로 나누던 옛 규칙이 없다(양성 짝: 위 규칙 줄)"
+assert_not_contains "$ASK" '`question` 의 첫 줄' "ask-marker-split 음성: question 의 첫 줄을 질문 창에 싣던 옛 꼴이 없다"
 # spec-resend-identity (행 28 · AC16)
 once "$SPECSEC" 'spec-resend · <사건의 정체' "spec-resend-identity: 표지에 사건의 정체"
 once "$SPECSEC" '한 번만 센다' "spec-resend-identity: 같은 정체의 표지는 한 번만 센다"
@@ -734,6 +744,10 @@ m8q="$(printf '%s\n' "$M8" | grep -nF -- '- **머지 앞 qg 리뷰.**' | head -1
 m8s="$(printf '%s\n' "$M8" | grep -nF -- '- **스위트 대조.**' | head -1 | cut -d: -f1)"
 [ -n "$m8q" ] && [ -n "$m8s" ] && [ "$m8q" -lt "$m8s" ] && ok "AC9: 손 절차 8 — 머지 앞 qg 리뷰 불릿이 스위트 대조 앞" || no "AC9: 손 절차 8 — 머지 앞 qg 리뷰 불릿이 스위트 대조 앞에 없다(qg=${m8q:-없음} · 스위트=${m8s:-없음})"
 assert_contains "$(printf '%s\n' "$M8" | grep -F -- '- **머지 앞 qg 리뷰.**')" "${QE}「머지 앞」)" "AC9: 손 절차 8 의 머지 앞 qg 리뷰 불릿이 들어가는 문장을 가진다"
+assert_eq "$(cnt "$(printf '%s\n' "$M8" | grep -F -- '- **머지 앞 qg 리뷰.**')" '에픽 PR 이면 스위트 대조 앞에 품질 게이트 리뷰는')" "1" "AC9: 손 절차 8 의 머지 앞 qg 리뷰 불릿이 「스위트 대조 앞에」 를 낱말로 말한다"
+assert_eq "$(cnt "$(printf '%s\n' "$M8" | head -1)" 'PR 마다 아래 스위트 대조 · 통합 리뷰 · 리뷰 뒤 반영 셋을 한다')" "1" "손 절차 8 머리: 「아래 셋」 이 어느 셋인지 이름으로 말한다(qg 불릿은 그 앞에 따로)"
+assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰 → PR 본문 `## qg 리뷰`')" "1" "AC9: 걸음 5 기록 줄이 머지 앞 qg 리뷰를 PR 본문 \`## qg 리뷰\` 에 적는다"
+assert_contains "$RET" '`## qg 리뷰`' "AC9 결합: qg-review.md 되돌리기가 같은 PR 본문 절 이름 \`## qg 리뷰\` 을 쓴다"
 # 걸음 1 행 22 · 걸음 7 행 21 · 23 (AC16)
 assert_eq "$(cnt "$(lstep 1)" '(에픽 줄은 `control_plane.py show <로드맵> <에픽>` 의 `기다리는 질문:` 칸, 로드맵 단위 줄은 기계 상태 파일 `machine.md` 의 `## 기다리는 질문` 절)')" "1" "행 22: 걸음 1 이 기다리는 질문 줄을 읽는 길을 가리킨다"
 assert_eq "$(cnt "$(lstep 7)" '품질 게이트가 설치돼 있지 않을 때는 `qg-review.md` 의 `## 호출 줄` 대로 한다')" "1" "행 21: 걸음 7 의 설치 안 됨은 qg-review.md 의 호출 줄을 가리킨다"
@@ -769,7 +783,7 @@ assert_not_contains "$(lstep 6)" '아직 설계문서로 옮길(`ledger flush`) 
 
 SK="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
 SKSEC() { awk -v h="$1" '/^```/{q=!q} !q&&$0==h{f=1;next} f&&!q&&/^## |^### /{exit} f' "$SK"; }
-for lit in 'qg 담당자(spec 승인 앞 1 · 에픽 PR 마다 머지 앞 1 · 좁은 재리뷰 PR 마다 많아야 2)' '로드맵 끝 qg 담당자 1'; do
+for lit in 'qg 담당자(spec 승인 앞 1 · 에픽 PR 마다 머지 앞 1 · 좁은 재리뷰 PR 마다 기본 2 — 사용자가 더 열 수 있다)' '로드맵 끝 qg 담당자 1'; do
   assert_eq "$(cnt "$(SKSEC '### 4. 규모 공시')" "$lit")" "1" "SKILL.md 규모 공시: ${lit} 한 번"
 done
 assert_not_contains "$(cat "$SK")" '머지된 PR 마다 1' "SKILL.md 규모 공시 음성: 머지 뒤 qg 담당자를 세던 옛 글이 없다(양성 짝: 에픽 PR 마다 머지 앞 1)"
