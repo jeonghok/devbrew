@@ -336,7 +336,7 @@ case_AC28_e2e_scenarios_are_multi_select() {
     "§5: 번호 순 · 시나리오마다 E1~E5 · 걷기마다 게이트"
   assert_contains "$w" '- fail 로 둔다 · 무효로 남긴다 · kill switch(exit 3) — 남은 시나리오를 걷지 않고 끝낸다.' "§5: fail 로 둔다 · 무효로 남긴다면 남은 시나리오를 걷지 않고 끝낸다"
   assert_contains "$w" '- 다시 걷기 — 같은 시나리오를 다시 걷는다.' "§5: 다시 걷기는 같은 시나리오를 다시 걷는다"
-  assert_file_grep "$REF" 'fail` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
+  assert_file_grep "$REF" 'fail` > `무효` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
   assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `무효` > `미확인` > `pass`.' \
     "§6: 가장 나쁜 결과 문장이 §6 안에 통째로 있다"
   assert_contains "$g" '뒤집은 걷기를 뒤집기 전 판정안으로 되돌려 다시 합쳤을 때 칸이 달라지면' "§6: 「사람이 뒤집음」은 뒤집기가 칸을 바꿨을 때다"
