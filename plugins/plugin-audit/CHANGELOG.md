@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.2] — 2026-11-22
+
+### Fixed
+- `audit-sandbox.sh` 가 앞 사본을 지우기 전에 등록된 worktree 목록(`git worktree list`)을 읽지 못하면 「등록 안 됨」 으로 보고 지우던 것을, 지우지 않고 `등록된 worktree 목록을 읽지 못했다` 사유와 함께 rc 2 로 멈춘다.
+
 ## [1.10.1] — 2026-11-22
 
 ### Removed
