@@ -15,7 +15,7 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 printf 'verdict: clean\n' >"$T/clean"
 printf 'verdict: defect\n' >"$T/defect"
 printf 'verdict: not-certified\nreason: scope-empty\nreasons: [scope-empty]\n' >"$T/nc"
-LINE=(--line --blocking 0 --optional 2 --new-failures 0 --excluded 1 --iter 3 --sha abc1234)
+LINE=(--line --blocking 0 --optional 2 --new-failures 0 --sha abc1234)
 
 axis_args() {   # 앞 판정 파일 → 그 판정을 내는 리뷰 · 차등 축 인자(결과 줄이 싣는 꼴)
   case "$1" in
@@ -74,8 +74,8 @@ case_override_suffix() {
 
 case_line_order_and_shape() {
   local out; out=$(final "$T/clean" pass | tail -n 1)
-  assert_eq "$out" "qg: clean · 막는 지적 0 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 1 · iter 3 · abc1234" \
-    "e2e 칸은 차등 새 실패 뒤, 제외 패치 앞이다(색인 K-3)"
+  assert_eq "$out" "qg: clean · 막는 지적 0 · 선택 2 · 차등 새 실패 0 · e2e pass · abc1234" \
+    "e2e 칸은 차등 새 실패 뒤, sha 앞이다(색인 K-3)"
 }
 
 case_bad_calls_are_usage_errors() {

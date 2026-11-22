@@ -1230,7 +1230,7 @@ case_degraded_blocks_certification() {
   # 그 입력은 Step 3.9 의 리뷰 결과 줄(qg-verdict-args: --blocking 0 --optional 0 --reason error-axis)로 판정 펜스에 닿는다.
   # shellcheck disable=SC2086
   local line; line=$(python3 "$V" --line --blocking 0 --optional 0 $args --new-failures 0 \
-    --excluded 0 --iter 1 --sha abc1234 --e2e '안 함' | tail -n 1)
+    --sha abc1234 --e2e '안 함' | tail -n 1)
   assert_not_contains "$line" "qg: clean" "판정 줄이 clean 이 아니다"
   assert_contains "$line" "not-certified (error-axis)" "판정 줄이 not-certified (error-axis)"
 }

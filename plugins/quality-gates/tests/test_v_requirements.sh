@@ -28,12 +28,12 @@ case_v1_verdict_vocabulary_is_closed() {
   python3 "$S/verdict.py" --reason no-such-reason >/dev/null 2>&1
   assert_eq "$?" "4" "V1 — 열거 밖 사유는 exit 4"
   local out rc
-  out=$(python3 "$S/verdict.py" --line --blocking x --optional 0 --new-failures 0 --excluded 0 --iter 1 --sha abc1234 2>/dev/null)
+  out=$(python3 "$S/verdict.py" --line --blocking x --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)
   rc=$?
   assert_eq "$rc" "4" "V1 — 비정수 개수는 exit 4 (_count 경로)"
   assert_eq "$out" "" "V1 — 비정수 개수는 stdout 을 비운다"
-  out=$(python3 "$S/verdict.py" --line --blocking 1 --optional 0 --new-failures 0 --excluded 0 --iter 1 --sha abc1234 2>/dev/null)
-  assert_grep "$out" '^qg: clean · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · abc1234$' \
+  out=$(python3 "$S/verdict.py" --line --blocking 1 --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)
+  assert_grep "$out" '^qg: clean · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · abc1234$' \
     "V1 — 정수 개수는 판정 줄이 된다(양성 짝)"
   assert_contains "$(flat '### Step 4.5 — Surface the verdict')" 'You do not choose or edit it (V1)' \
     "V1 — SKILL 은 판정 줄을 고르거나 고치지 말라고 한다"

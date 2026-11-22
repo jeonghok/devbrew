@@ -39,7 +39,8 @@ REASONS = (
 )
 
 # 판정 줄의 e2e 칸 — 닫힌 열거(색인 K-3).
-E2E_STATES = ("pass", "fail", "미확인", "안 함", "걸을 것 없음", "걸을 도구 없음", "꺼짐(kill switch)")
+E2E_STATES = ("pass", "fail", "미확인", "안 함", "걸을 것 없음", "걸을 도구 없음", "꺼짐(kill switch)",
+              "무효")
 # e2e 가 판정에 더하는 것은 이 둘뿐이다. 나머지 상태는 다른 축이 정한 판정을 바꾸지 않는다(AC3).
 E2E_TO_REASON = {"미확인": "e2e-unconfirmed"}
 E2E_DEFECT = ("fail",)
@@ -222,13 +223,12 @@ def render(decision):
 _SHA = re.compile(r"[0-9a-f]{7,40}")
 
 
-def render_line(decision, *, blocking, optional, new_failures, excluded, iteration, sha,
+def render_line(decision, *, blocking, optional, new_failures, sha,
                 e2e=None, e2e_overridden=False):
     if decision["verdict"] not in VALUES:
         fail4(f"열거 밖 판정값 '{decision['verdict']}' — 어휘는 닫혀 있다")
     for name, n in (("blocking", blocking), ("optional", optional),
-                    ("new-failures", new_failures), ("excluded", excluded),
-                    ("iter", iteration)):
+                    ("new-failures", new_failures)):
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             fail4(f"판정 줄의 {name} 값이 0 이상의 정수가 아니다: {n!r}")
     if not isinstance(sha, str) or not _SHA.fullmatch(sha):
@@ -242,7 +242,7 @@ def render_line(decision, *, blocking, optional, new_failures, excluded, iterati
             fail4(f"열거 밖 e2e 상태 '{e2e}'")
         e2e_part = f" · e2e {e2e}" + (" (사람이 뒤집음)" if e2e_overridden else "")
     return (f"{head} · 막는 지적 {blocking} · 선택 {optional} · 차등 새 실패 {new_failures}{e2e_part}"
-            f" · 제외 패치 {excluded} · iter {iteration} · {sha}\n")
+            f" · {sha}\n")
 
 
 def render_args(*, blocking=None, optional=None, defect=False, review_blocked=False,
@@ -290,20 +290,31 @@ def main():
     ap.add_argument("--review-blocked", action="store_true")
     ap.add_argument("--angle-absent", action="store_true")
     ap.add_argument("--reason", action="append", default=[])
-    # 판정 줄(K-3). `--line` 이 있으면 아래 여섯이 전부 필요하다.
+    # 판정 줄(K-3). `--line` 이 있으면 아래 넷이 전부 필요하다.
     ap.add_argument("--line", action="store_true")
     ap.add_argument("--blocking", type=_count, default=None)
     ap.add_argument("--optional", type=_count, default=None)
     ap.add_argument("--new-failures", type=_count, default=None)
-    ap.add_argument("--excluded", type=_count, default=None)
-    ap.add_argument("--iter", type=_count, default=None)
     ap.add_argument("--sha", default=None)
     ap.add_argument("--prior", default=None)
     ap.add_argument("--e2e", default=None, choices=E2E_STATES)
     ap.add_argument("--e2e-overridden", action="store_true")
     # 판정 줄 대신 차등 축 인자 줄만 낸다 — `--differential` · `--reason` 만 받는다.
     ap.add_argument("--emit-args", action="store_true")
-    args = ap.parse_args()
+    args, rest = ap.parse_known_args()
+    # 판정 줄에서 빠진 두 칸의 인자는 argparse 의 일반 사유로 떨어지지 않고 이름을 짚어 거절한다.
+    for tok in rest:
+        name = tok.split("=", 1)[0]
+        if name == "--excluded":
+            print("verdict.py: --excluded 는 받지 않는다 — 판정 줄에 제외 패치 칸이 없다",
+                  file=sys.stderr)
+            return 2
+        if name == "--iter":
+            print("verdict.py: --iter 는 받지 않는다 — 판정 줄에 반복 번호 칸이 없다",
+                  file=sys.stderr)
+            return 2
+    if rest:
+        ap.error("unrecognized arguments: " + " ".join(rest))
     if args.emit_args and (args.line or args.prior is not None or args.e2e is not None
                            or args.e2e_overridden or args.defect or args.review_blocked
                            or args.angle_absent):
@@ -311,11 +322,10 @@ def main():
               "(--line · --prior · --e2e · --defect · --review-blocked · --angle-absent 와 함께 쓰지 않는다)",
               file=sys.stderr)
         return 2
-    line_vals = (args.blocking, args.optional, args.new_failures, args.excluded,
-                 args.iter, args.sha)
+    line_vals = (args.blocking, args.optional, args.new_failures, args.sha)
     if args.line and any(v is None for v in line_vals):
-        print("verdict.py: --line 은 --blocking --optional --new-failures --excluded "
-              "--iter --sha 를 모두 받는다", file=sys.stderr)
+        print("verdict.py: --line 은 --blocking --optional --new-failures "
+              "--sha 를 모두 받는다", file=sys.stderr)
         return 2
     if not args.line and any(v is not None for v in line_vals):
         print("verdict.py: 판정 줄 값은 --line 없이는 의미가 없다", file=sys.stderr)
@@ -371,8 +381,7 @@ def main():
     out = render(decision)
     if args.line:
         out += render_line(decision, blocking=args.blocking, optional=args.optional,
-                           new_failures=args.new_failures, excluded=args.excluded,
-                           iteration=args.iter, sha=args.sha,
+                           new_failures=args.new_failures, sha=args.sha,
                            e2e=args.e2e, e2e_overridden=args.e2e_overridden)
     sys.stdout.write(out)
     return 0
