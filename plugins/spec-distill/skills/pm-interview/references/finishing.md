@@ -490,7 +490,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
 #### B-1 — superpowers 가용성 분기
 
 - **superpowers 부재 시**: 다음 단계로 넘길 대상이 없어 B-2 의 proceed 게이트 대신 **선택지 셋의 따로 된 끝 질문**을 띄운다 — 공통 계약(`proceed-gate.md` Step B)의 질문이 아니다. crash·spec-mode fallback **금지**(단독 완결, graceful degrade).
-  질문 앞에 B-0 의 확정 후보와 B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다. superpowers 판 채널은 읽지 않는다(확인할 판이 없다). 질문의 상태 줄도 B-2 와 같은 꼴이다 — 경고 줄과 「전문」 줄은 B-2 의 본문 규칙대로 싣는다.
+  질문 앞에 B-0 의 확정 후보와 B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다. 질문의 상태 줄도 B-2 와 같은 꼴이다 — 경고 줄과 「전문」 줄은 B-2 의 본문 규칙대로 싣는다.
 
   ```javascript
   AskUserQuestion({
@@ -513,16 +513,7 @@ python3 "$SD/scripts/check_brief.py" gate "$PAYLOAD"
   - **brief만 종료** — B-3 의 ④ 와 같다.
   - 기타 칸에 「여기서 계속」 이 적히면 `[spec-distill] superpowers 가 없어 이어 갈 다음 단계가 없다.` 한 줄을 보이고 같은 질문을 다시 띄운다. 건너뛴 것을 하라는 말이면 B-S 로 간다.
 
-- **superpowers 가용 시**: 판을 확인한 뒤 B-2 proceed 게이트 제시. 이 세션에서 superpowers skill 을 불러왔으면 아래 판 확인 펜스를 한 번 돌린다 — `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다. 불러오지 않았으면 펜스를 돌리지 않고(스크립트를 부르지 않는다) B-2 게이트 앞 글(목록 4)에 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 한 줄을 쓴다. 이 줄은 경고가 아니다 — 질문의 경고 줄에 잇지 않고 「이상 없음」 · 「경고 없음」을 막지 않는다.
-
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-SP_BASE="<기준 폴더>"
-[ -n "$SP_BASE" ] || { echo "알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)"; exit 0; }
-python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "$SP_BASE"
-```
-
-첫 줄이 「검증한 판과 같다」면 쓰지 않는다. 「다르다」 줄, 「확인하지 못했다」 줄, rc 0 이 아닌 끝(`[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.`)은 B-2 게이트 앞 글의 경고(목록 4)에 한 줄로 쓴다 — 「확인하지 못했다」 뒤의 `  이유: <이유>` 줄은 따로 쓰지 않고 `[devbrew-deps] superpowers 판을 확인하지 못했다 — <이유>` 로 한 줄에 접는다. 판 확인 결과로는 멈추지 않는다 — B-2 로 간다.
+- **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
 #### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC2)
 
@@ -558,14 +549,12 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 **이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
 `reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
-state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄 ·
-B-1 의 superpowers 판 확인 한 줄(펜스를 돌렸고 「같다」가 아닐 때 — 펜스를 돌리지 않은 「알 수 없음」 줄은 경고가 아니다).
+state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄.
 `advisory[]` 원문은 하나하나가 `gate --render` 첫 줄의 경고 줄 중 하나에 대응하므로, 경고(목록 4)에는 그 첫 줄의
 경고 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않습니다. 질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.
 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 그 줄들을 따로 쓴다.
-질문의 경고 줄에 잇는 짧은 줄은 채널마다 이렇게 얻는다 — 엔진은 `reviewing-brief` 가 Step B 로 돌아가기 직전에 돈 질문 재료 펜스(B-A 가 표지를 풀기 전의 마지막 출력)의 「상태」 줄, brief 경고 원장과 두 번째 채널 파일은 `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄(`$STATE` · `$DEGRADE_FALLBACK_FILE` 은 `reviewing-brief` 의 상태 블록이 정한 값), 구조 검사의 참고 줄(`check_brief.py gate` 의 `advisories` — `건너뜀 — ` 으로 시작하는 줄은 빼고)은 「구조 검사 참고 N개」, 그 `건너뜀 — ` 줄은 「건너뛴 것 N개」(목록 5), superpowers 판 확인은 그 줄이 「같다」가 아닐 때만 「superpowers 판 다름」이다. 「알 수 없음」 줄은 경고 수에 넣지 않고 지금처럼 따로 싣는다. 스크립트가 낸 줄은 글자를 바꾸지 않는다.
+질문의 경고 줄에 잇는 짧은 줄은 채널마다 이렇게 얻는다 — 엔진은 `reviewing-brief` 가 Step B 로 돌아가기 직전에 돈 질문 재료 펜스(B-A 가 표지를 풀기 전의 마지막 출력)의 「상태」 줄, brief 경고 원장과 두 번째 채널 파일은 `brief_review_state.py short "$STATE" --fallback-file "$DEGRADE_FALLBACK_FILE"` 이 낸 줄(`$STATE` · `$DEGRADE_FALLBACK_FILE` 은 `reviewing-brief` 의 상태 블록이 정한 값), 구조 검사의 참고 줄(`check_brief.py gate` 의 `advisories` — `건너뜀 — ` 으로 시작하는 줄은 빼고)은 「구조 검사 참고 N개」, 그 `건너뜀 — ` 줄은 「건너뛴 것 N개」(목록 5)다. 「알 수 없음」 줄은 경고 수에 넣지 않고 지금처럼 따로 싣는다. 스크립트가 낸 줄은 글자를 바꾸지 않는다.
 「이상 없음」·「경고 없음」은 **그 채널들을 실제로 읽었다는 주장**이므로, 조회하지 않은 채 쓰지 않습니다.
-superpowers 판 채널만 예외다(정본 `proceed-gate.md` 의 «불러오지 않았으면 읽지 않는 채널») — 이 세션이 superpowers skill 을 불러오지 않았으면 읽지 않고 「알 수 없음 — 이 세션은 superpowers skill 을 불러오지 않았다(판은 다음 세션에서)」 줄을 그대로 따로 보이며, 그 줄은 경고 수에 들지 않지만 확인했다는 뜻이 아니다 — 없는 것과 확인 못 한 것은 다르다.
 
 모든 degrade record 는 **게이트 앞 글**(위 목록 4)에 한 줄씩 씁니다. 질문 본문에는 결정 하나와 경고 줄 · 「전문」 줄을 정본(`proceed-gate.md`)의 본문 규칙대로 싣습니다. 「전문」 줄은 그 마지막 질문 재료 출력의 「전문:」 줄 그대로입니다 — B-A 참고 목록 펜스의 머리 줄 안의 글이 아닙니다. B-A 가 표지를 푼 뒤에는 질문 재료 펜스를 돌리지 않고 그 때문에 원장 열기를 다시 돌리지도 않습니다 — 앞서 받은 두 줄을 씁니다. 리뷰가 돌지 않았으면(skip · 예외 경로) 「전문」 줄은 없습니다.
 
@@ -630,7 +619,7 @@ AskUserQuestion({
 한 줄과, 그 아래에 다음 세션 줄에서 `@` 토큰을 뗀 나머지 문장을 그대로 보인 뒤 멈춘다(정본 `## 다음 세션 명령` 규칙 5). 사람이 이 줄의 유일한 운반자다 — 자동으로 이어지지 않는다.
 로드맵 에픽의 설계를 여는 줄은 이 줄이 아니라 `${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md` 의 에픽 넘김 줄이다 — 지휘 세션이 쓴다.
 
-**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.** ①/② 의 둘째 줄은 위 brief 줄 대신 정본 `## 다음 세션 명령` 규칙 3 대로 고른 skill 의 모양으로 짓고 `@<brief-path>` 를 원소로 삼는다. 줄에는 공통 지시를 글자로 싣지 않고 이 문장을 싣는다 — 「시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.」 판 확인도 그 절의 끝 문장이 맡는다(부른 skill 이 `superpowers:` 로 시작할 때). 자리표 치환 · 거부 · 위치 공시는 위 brief 줄과 같다. 이 줄은 표지 블록 밖이라 인용 줄로 두지 않는다. 확정 반영 write 에서 brief frontmatter `next_phase:` 를 고른 skill 의 완전명으로 바꾼다.
+**다른 다음 단계의 줄 — 둘째 질문에서 제안을 골랐을 때.** ①/② 의 둘째 줄은 위 brief 줄 대신 정본 `## 다음 세션 명령` 규칙 3 대로 고른 skill 의 모양으로 짓고 `@<brief-path>` 를 원소로 삼는다. 줄에는 공통 지시를 글자로 싣지 않고 이 문장을 싣는다 — 「시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.」 자리표 치환 · 거부 · 위치 공시는 위 brief 줄과 같다. 이 줄은 표지 블록 밖이라 인용 줄로 두지 않는다. 확정 반영 write 에서 brief frontmatter `next_phase:` 를 고른 skill 의 완전명으로 바꾼다.
 
 **이름이 바뀌어도 절차는 같다.** 아래 ①② 는 B-2 이름 표의 어느 이름으로 골랐든 같은 절차이고 둘째 줄만 다르다 — 분해된 일이면 아래 「다음 세션 줄 — 분해된 일 ①/② 공통」, 둘째 질문에서 제안을 골랐으면 위 「다른 다음 단계의 줄」, 그 밖에는 위 brief 줄이다. 「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.
 
