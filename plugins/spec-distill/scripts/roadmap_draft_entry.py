@@ -47,9 +47,9 @@ def _split_path(path: str) -> "tuple[str, str]":
 
 
 def commit_state(path: str) -> str:
-    """'never' 커밋된 적이 없다(추적되지 않는다) · 'dirty' 커밋하지 않은 변경 · 'clean'."""
+    """'never' HEAD 에 없다(스테이지만 했거나 추적되지 않는다) · 'dirty' 커밋하지 않은 변경 · 'clean'."""
     folder, name = _split_path(path)
-    rc, _ = _git(folder, "ls-files", "--error-unmatch", "--", name)
+    rc, _ = _git(folder, "cat-file", "-e", "HEAD:./" + name)
     if rc != 0:
         return "never"
     rc, out = _git(folder, "status", "--porcelain", "--", name)
@@ -60,6 +60,7 @@ def commit_state(path: str) -> str:
 
 def sections(text: str) -> "list[tuple[str, list[str]]]":
     """(제목 줄, 본문 줄들) — 첫 절 앞은 제목 줄이 빈 글자인 한 칸이다. 제목은 `## ` 로 시작하는 줄."""
+    # 코드 펜스를 알지 못한다 — 끝내기 커밋 펜스의 awk 판독(줄 머리 `## `)과 같은 규칙이다.
     out: "list[tuple[str, list[str]]]" = [("", [])]
     for ln in text.split("\n"):
         if ln.startswith("## "):
@@ -176,13 +177,14 @@ def run(brief: str) -> int:
     check(audit, "audit 이", "audit 에")
     state_status = check(state, "상태 파일이", None)  # 커밋 뒤 변경은 아래에서 두 절 안 · 밖으로 가른다
     state_text = _read(state) if os.path.isfile(state) else ""
-    if state_status in ("dirty", "clean") and os.path.isfile(state):
+    if state_status != "never" and os.path.isfile(state):
         sfolder, sname = _split_path(state)
         hrc, head_text = _git(sfolder, "show", "HEAD:./" + sname)
-        if hrc == 0:
-            names = outside_two_sections(head_text, state_text)
-            if names:
-                stops.append("상태 파일의 커밋 뒤 변경이 두 절 밖에 있다: %s" % " · ".join(names))
+        if hrc != 0:
+            raise InternalError("HEAD 의 상태 파일을 읽지 못했다: %s" % state)
+        names = outside_two_sections(head_text, state_text)
+        if names:
+            stops.append("상태 파일의 커밋 뒤 변경이 두 절 밖에 있다: %s" % " · ".join(names))
 
     if raw_line.startswith("raw-source: FOUND "):
         raw_audit = raw_line[len("raw-source: FOUND "):]
@@ -202,12 +204,15 @@ def run(brief: str) -> int:
             drc, dout = _run([sys.executable, str(HERE / "repo_defaults.py"), "default-branch", "--root", top])
             default = dout.strip().split("\n")[0] if drc == 0 else ""
             if not default:
-                print("[roadmap_draft_entry] 기본 브랜치를 찾지 못해 로드맵이 기본 브랜치에 있는지 확인하지 못했다",
-                      file=sys.stderr)
+                stops.append("기본 브랜치를 확인하지 못했다: 기본 브랜치 판정이 실패했다(repo_defaults.py default-branch rc %d)" % drc)
             else:
-                crc, _ = _git(top, "cat-file", "-e", "origin/%s:%s" % (default, rel))
-                if crc == 0:
-                    stops.append("이 결과물의 로드맵이 이미 기본 브랜치에 있다: %s — 고치려면 재분해 절차다" % rel)
+                vrc, _ = _git(top, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/%s" % default)
+                if vrc != 0:
+                    stops.append("기본 브랜치를 확인하지 못했다: origin/%s 참조가 없다" % default)
+                else:
+                    crc, _ = _git(top, "cat-file", "-e", "origin/%s:%s" % (default, rel))
+                    if crc == 0:
+                        stops.append("이 결과물의 로드맵이 이미 기본 브랜치에 있다: %s — 고치려면 재분해 절차다" % rel)
 
     rc, out = _run([sys.executable, str(HERE / "roadmap_write.py"), "check", "--brief", brief, "--audit", audit])
     risk = _first_line(out, "brief-risk: ")

@@ -62,6 +62,13 @@ class Base(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", "fixture 2")
         self.brief, self.audit, self.state = r["brief"], r["audit"], r["state"]
 
+    def drop_from_head(self, path, staged=False):
+        """HEAD 에서 파일을 뺀 커밋을 하나 더해 «커밋된 적 없는» 파일로 만든다(작업 트리엔 남는다). staged 면 다시 스테이지한다."""
+        git(self.repo, "rm", "-q", "--cached", path)
+        git(self.repo, "commit", "-q", "-m", "drop")
+        if staged:
+            git(self.repo, "add", path)
+
     def run_entry(self, brief=None, cwd=None):
         p = subprocess.run([sys.executable, str(SCRIPT), "--brief", brief or self.brief],
                            cwd=str(cwd or self.repo), capture_output=True, text=True, encoding="utf-8")
@@ -92,17 +99,32 @@ class TestEntry(Base):
 
     def test_never_committed_audit_stops(self):
         self.build()
-        git(self.repo, "rm", "-q", "--cached", self.audit)
+        self.drop_from_head(self.audit)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP audit 이 커밋된 적이 없다: ", out)
+
+    def test_staged_never_committed_audit_stops(self):
+        self.build()
+        self.drop_from_head(self.audit, staged=True)
         rc, out, _ = self.run_entry()
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP audit 이 커밋된 적이 없다: ", out)
 
     def test_state_never_committed_stops(self):
         self.build()
-        git(self.repo, "rm", "-q", "--cached", self.state)
+        self.drop_from_head(self.state)
         rc, out, _ = self.run_entry()
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 상태 파일이 커밋된 적이 없다: ", out)
+
+    def test_staged_never_committed_state_stops(self):
+        self.build()
+        self.drop_from_head(self.state, staged=True)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 상태 파일이 커밋된 적이 없다: ", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
 
     def test_state_changed_outside_two_sections_stops(self):
         self.build()
@@ -143,7 +165,7 @@ class TestEntry(Base):
 
     def test_raw_source_never_committed_stops(self):
         self.build(mode="recorded")
-        git(self.repo, "rm", "-q", "--cached", self.p["seed"])
+        self.drop_from_head(self.p["seed"], staged=True)
         rc, out, _ = self.run_entry()
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 원자료가 커밋된 적이 없다: ", out)
@@ -175,6 +197,21 @@ class TestEntry(Base):
         rc, out, _ = self.run_entry()
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 이 결과물의 로드맵이 이미 기본 브랜치에 있다: " + ROADMAP_REL, out)
+
+    def test_no_origin_head_stops(self):
+        self.build()
+        git(self.repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 기본 브랜치를 확인하지 못했다: ", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_origin_head_dangling_stops(self):
+        self.build()
+        git(self.repo, "update-ref", "-d", "refs/remotes/origin/main")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 기본 브랜치를 확인하지 못했다: ", out)
 
     def test_roadmap_only_on_branch_is_ok(self):
         self.build()
