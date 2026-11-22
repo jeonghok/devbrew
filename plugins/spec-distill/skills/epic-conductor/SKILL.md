@@ -65,21 +65,6 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git,
 
 superpowers 확인 — skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 `[spec-distill] epic-conductor 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 내고 멈춘다. 지휘하지 않는다.
 
-superpowers 판 알림 — 이 세션에서 superpowers skill 을 처음 불러온 직후 아래 펜스를 한 번 돌린다. `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다.
-
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "<기준 폴더>"
-```
-
-| 결과 | 동작 |
-|---|---|
-| rc 0 · `[devbrew-deps] superpowers <판> — 검증한 판과 같다` | 보이지 않고 간다 |
-| rc 0 · 「다르다」 · 「확인하지 못했다」 줄 | 그 줄(「확인하지 못했다」면 뒤의 이유 줄까지)을 그대로 보이고 간다 |
-| 그 밖 | `[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.` 를 내고 간다 |
-
-판 확인 결과로는 멈추지 않는다.
-
 ### 2. 로드맵 정하기
 
 받은 인자(`$ARGUMENTS`)를 본다. 토큰이 하나면 로드맵 경로다 — 앞의 `@` 하나는 뗀다(첨부 꼴로 받은 경우). 뗀 뒤 영문자 · 숫자 · `.` `_` `/` `@` `+` `-` 로만 되어 있고 `-` 로 시작하지 않아야 한다(아니면 셸에 넘기지 않고 `[spec-distill] epic-conductor 인자는 로드맵 경로 하나다 — 받은 것: <인자>.` 를 내고 멈춘다). 절대경로면 아래 펜스의 `git worktree list --porcelain` 이 낸 worktree 루트들 가운데 그 경로를 품는 worktree(가장 깊은 것)를 찾아 그 루트 기준 상대경로로 바꿔 쓴다 — 로드맵의 레포 상대경로는 어느 worktree 에서나 같다(메인 체크아웃 · 에픽 worktree 모두). 어느 worktree 아래도 아니면 `[spec-distill] epic-conductor 로드맵이 이 레포의 어느 worktree 안에도 없다 — 받은 것: <인자>.` 를 내고 멈춘다.
