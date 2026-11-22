@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/tests/lib/recritic_fixture.sh
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/tests/lib/recritic_fixture.sh plugins/quality-gates/scripts/diff-test-results.py
 # test_pipeline_verdict_wiring.sh — 판정 상시 배선 (설계 §6.1 ⑤ · §6.3.5 · §6.4.3, AC2 · AC8–AC12).
 #
 # 합성기 쪽 총 함수는 test_verdict_vocabulary.sh · test_angle_coverage.sh 가 잰다. 이 락은
@@ -14,7 +14,8 @@ set -u
   plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
   plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py \
   plugins/quality-gates/scripts/angles.py \
-  plugins/quality-gates/tests/lib/recritic_fixture.sh; exit 0; }
+  plugins/quality-gates/tests/lib/recritic_fixture.sh \
+  plugins/quality-gates/scripts/diff-test-results.py; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
@@ -309,7 +310,7 @@ PY
   assert_grep "$got" '^IDX_ROWS:1$'    "kill-switch 색인에도 같은 정확한 철자의 행이 하나 있다"
 }
 
-case_differential_defect_zero_kept_goes_to_fix_list() {
+case_differential_defect_goes_to_fix_list() {
   # 최종 리뷰 I1(1차) → 2차 re-review 지적(section-window 는 같은-줄이 아니다) — 옛 버전은
   # Step 4.5–Fix-loop decision 사이 거대한 창 «전체» 에서 네 토큰의 존재만 봤다. 그러면
   # I1-C(라우팅 문장은 그대로 두고 실제 목적지만 Final Summary 로 바꿔치기 — "Fix-loop
@@ -319,9 +320,10 @@ case_differential_defect_zero_kept_goes_to_fix_list() {
   # 사실을 **그 사실이 실제로 적힌 좁은 구간**(정규식으로 앵커 사이만 자르고 공백을
   # 접어 한 "논리 줄"로 만든 것)에서 잰다 — 다른 구간이 대신 만족시킬 수 없다.
   local got
-  got=$(python3 - "$SKILL" <<'PY'
+  got=$(python3 - "$SKILL" "$PLUGIN_ROOT/scripts/diff-test-results.py" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
+dtr = open(sys.argv[2], encoding="utf-8").read()
 
 def norm(s):
     return re.sub(r'\s+', ' ', s)
@@ -347,10 +349,18 @@ print(f"ATTR_NEGATED:{1 if attr_negated else 0}")
 print(f"ATTR_EXAMPLE:{1 if (a and 'NEW_REGRESSION' in a) else 0}")
 print(f"ATTR_FLIPPED_TO_ONLY_GREEN:{1 if (a and re.search(r'STILL_GREEN[^가-힣]{0,6}(만|인 것만)', a)) else 0}")
 
-# --- I1-C: blocking 0 차등 기원 결함 — 고칠 목록의 `### 차등 회귀` 불릿 한 구간에서 잰다.
-#     조건(차등 · confirmed_product_defect: true) · 고를 unit(STILL_GREEN 이 아닌 것) · 고칠 방법을
-#     오케스트레이터가 쓴다는 것이 같은 구간에 있다. 묻는 길(결정 도구)로 새지 않는다.
-r = seg(r'- `### 차등 회귀` — `verdict: defect` 이고 `blocking: 0`.*?한 줄로 쓴다\.')
+# --- I1-C: 차등 결함 — 고칠 목록의 `### 차등 회귀` 불릿 한 구간에서 잰다.
+#     조건(차등 · confirmed_product_defect: true) · 고를 unit(차등 판정기의 결함 집합 DEFECTS 와 같은 값만) ·
+#     고칠 방법을 오케스트레이터가 쓴다는 것이 같은 구간에 있다. 막는 지적이 있어도 싣는다(blocking 조건 없음).
+r = seg(r'- `### 차등 회귀` — .*?한 줄로 쓴다\.')
+dm = re.search(r'^DEFECTS = \{(.*?)\}', dtr, re.M)
+defects = sorted(re.findall(r'"([A-Z_]+)"', dm.group(1))) if dm else []
+print(f"DEFECTS_READ:{len(defects)}")
+bq = chr(96)
+pick = bq + "verdict:" + bq + " 가 " + " 이나 ".join(bq + d + bq for d in defects) + " 인 unit 마다 한 줄"
+print(f"ROUTE_PICKS_DEFECTS_ONLY:{1 if (r and defects and pick in r) else 0}")
+print(f"ROUTE_NOT_NON_GREEN:{1 if (r and ('STILL_GREEN' + bq + ' 이 아닌') not in r) else 0}")
+print(f"ROUTE_NO_BLOCKING_GATE:{1 if (r and 'blocking: 0' not in r and '막는 지적이 함께 있어도 싣는다' in r) else 0}")
 print(f"ROUTE_FOUND:{1 if r is not None else 0}")
 print(f"ROUTE_HAS_DIFFERENTIAL:{1 if (r and '차등' in r) else 0}")
 print(f"ROUTE_HAS_DEFECT_FLAG:{1 if (r and 'confirmed_product_defect: true' in r) else 0}")
@@ -364,11 +374,20 @@ PY
   assert_grep "$got" '^ATTR_NEGATED:1$'        "STILL_GREEN 바로 뒤에 「아닌」 부정이 있다(I1-E 가 「인 것만」으로 뒤집으면 RED)"
   assert_grep "$got" '^ATTR_EXAMPLE:1$'        "non-green 예시로 NEW_REGRESSION 이 같은 구간에 있다"
   assert_grep "$got" '^ATTR_FLIPPED_TO_ONLY_GREEN:0$' "「STILL_GREEN 만/인 것만」(선택 반전)이 없다"
-  assert_grep "$got" '^ROUTE_FOUND:1$'                "blocking 0 차등 기원 결함의 고칠 목록 구간을 찾았다"
+  assert_grep "$got" '^ROUTE_FOUND:1$'                "차등 결함의 고칠 목록 구간을 찾았다"
+  assert_grep "$got" '^DEFECTS_READ:2$'               "전제: 차등 판정기의 결함 집합(DEFECTS)을 읽었다"
+  assert_grep "$got" '^ROUTE_PICKS_DEFECTS_ONLY:1$'   "그 구간이 결함 집합(NEW_REGRESSION · NEW_TEST_RED)의 unit 만 싣는다"
+  assert_grep "$got" '^ROUTE_NOT_NON_GREEN:1$'        "그 구간이 STILL_GREEN 이 아닌 unit 전부를 싣지 않는다(FIXED · NEW_TEST_GREEN 등은 결함이 아니다 — 위 양성 짝)"
+  assert_grep "$got" '^ROUTE_NO_BLOCKING_GATE:1$'     "그 구간이 막는 지적이 있어도 차등 결함을 싣는다(blocking: 0 조건 없음)"
   assert_grep "$got" '^ROUTE_HAS_DIFFERENTIAL:1$'     "그 구간이 차등 테스트 기원임을 말한다"
   assert_grep "$got" '^ROUTE_HAS_DEFECT_FLAG:1$'      "그 구간이 confirmed_product_defect: true 를 싣는다"
   assert_grep "$got" '^ROUTE_HAS_FIX_LINE:1$'         "그 구간이 회귀 unit 마다 오케스트레이터가 고칠 방법 한 줄을 쓰라고 한다"
   assert_grep "$got" '^ROUTE_NO_ASK:1$'               "그 구간이 결정 도구로 새지 않는다"
+  # 끝 한 줄은 막는 지적 · 차등 결함이 있을 때만 — 두 절이 비면(clean · 제안만) 내지 않는다
+  local fv endc
+  fv="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL" | tr '\n' ' ')"
+  endc='막는 지적이나 차등 defect 가 있으면(고칠 목록의 `### 막는 지적` · `### 차등 회귀` 에 줄이 하나라도 있으면) 그 뒤에 이 한 줄을 낸다 — 묻지 않는다. 두 절이 모두 `(없음)` 이면(clean 실행 · 제안만 남은 실행 포함) 내지 않는다:'
+  assert_contains "$fv" "$endc" "끝 한 줄은 막는 지적 · 차등 결함이 있을 때만 내고, 두 절이 비면 내지 않는다"
 }
 
 case_one_pass_routing_has_no_cap() {
@@ -411,7 +430,7 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_security_switch_is_not_certified_even_with_zero_findings \
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
-         case_differential_defect_zero_kept_goes_to_fix_list \
+         case_differential_defect_goes_to_fix_list \
          case_one_pass_routing_has_no_cap \
          case_recritic_findings_stamp_agent_and_drop_confidence \
 ; do
