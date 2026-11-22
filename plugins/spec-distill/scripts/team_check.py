@@ -180,6 +180,8 @@ def check_tree(top: Path, team, base=None) -> tuple:
             errors.append("%s: 머리말 %s 이 %s 가 아니다" % (team.roadmap, L.LAYOUT_KEY, L.LAYOUT_TEAM))
         _m, blocks, _r, _k, problems = M.parse_roadmap(text)
         errors.extend("%s: %s" % (team.roadmap, p) for p in problems)
+        if brief_rel is None and M.SOURCE_BRIEF_MISSING not in problems:  # 따옴표 친 빈 값 — 출처 검사가 꺼지지 않게
+            errors.append("%s: %s" % (team.roadmap, M.SOURCE_BRIEF_MISSING))
 
     # 2. 규칙 파일 · 원자료 사본
     if not (top / team.rules).is_file():

@@ -1586,6 +1586,17 @@ assert_contains "$(cat "$T/chk.txt")" "(출처 docs/x/forged.audit.md · 사용�
 assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 위조 출처: 사유를 낸다"
 cp "$T/src.o" "$SRCO"
 assert_eq "$(srccheck)" "0" "AC1 위조 출처: 되돌린 사본은 rc 0(양성 짝)"
+# 빈 source_brief — 따옴표 친 빈 값이어도 출처 검사가 조용히 꺼지지 않는다
+plant "$SRC" "$SRCO" docs/x/forged.audit.md "$(gx "$SRC" rev-parse HEAD)" "$FL" "$FL"
+RM="$SRC/${RD}src/roadmap.md"; cp "$RM" "$T/src.rm"
+for q in '""' "''"; do
+  sed "s|^source_brief: .*|source_brief: ${q}|" "$T/src.rm" > "$RM"
+  assert_eq "$(srccheck)" "1" "AC1 빈 source_brief: ${q} 이면 rc 1"
+  assert_contains "$(cat "$T/chk.txt")" "frontmatter source_brief 가 없다" "AC1 빈 source_brief: ${q} 이면 오류 줄이 있다"
+  assert_eq "$(grep -c 'frontmatter source_brief 가 없다' "$T/chk.txt")" "1" "AC1 빈 source_brief: ${q} 오류 줄은 한 번"
+done
+cp "$T/src.rm" "$RM"; cp "$T/src.o" "$SRCO"
+assert_eq "$(srccheck)" "0" "AC1 빈 source_brief: 값을 되돌린 사본은 rc 0(양성 짝)"
 # 다른 brief — 같은 레포의 다른 인터뷰 결과물
 UL="$(grep -n '^  > 팀 폴더를 만들어 달라$' "$SRC/docs/iv/u-brief-interview.md" | cut -d: -f1)"
 [ -n "$UL" ] && ok "픽스처: 다른 brief 에 그 줄이 있다(${UL}행)" || no "픽스처: 다른 brief 에 그 줄이 없다"
