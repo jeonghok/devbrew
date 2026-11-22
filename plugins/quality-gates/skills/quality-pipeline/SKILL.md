@@ -856,7 +856,7 @@ E2E_CMD
 - `ready: …` 줄 (`boot rc=0`) — E2 로 간다.
 - `boot-failed: …` 줄 (`boot rc=4`) — 걷지 않는다. 판정안은 `미확인(부팅 실패)` 이고 증거는 펜스가 보인 부팅 출력
   끝부분이다. E3 의 `stop` 과 지문 비교는 건너뛰고 E4 로 간다.
-- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- 두 줄이 없고 `boot rc=3` — kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `무효` · `미확인` 이 남는다.
 - 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다. 띄운 앱이 남았을 수 있다. 펜스 출력과
   `stop-failed:` 줄(있으면)을 그대로 공시하고, 남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).
   판정안은 `미확인(부팅 실패)` 이고 E3 를 건너뛰고 E4 로 간다.
@@ -878,7 +878,7 @@ rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 ```
 
 - `before rc=0` — E2 로 간다.
-- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `무효` · `미확인` 이 남는다.
 - `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.
 
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
@@ -905,7 +905,7 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 ```
 
 - `stop rc=5` — 띄운 프로세스가 남았거나 그 기록을 읽지 못했다. `stop-failed:` 줄이나 stderr 사유를 그대로 공시하고 E5 의 걷기 기록에 적는다.
-- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록하고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.
+- `after rc=3` — 걷는 사이 kill switch 가 켜졌다. e2e 칸을 `꺼짐(kill switch)` 로 두고 E5 로 기록하고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `무효` · `미확인` 이 남는다.
 - E1 의 `sha256:` 값이 없으면 `compare` 줄을 빼고 돌리고 판정안은 `미확인(걷기 뒤 지문 실패)` 이다.
 - 그 밖의 판정안은 이 순서로 정한다: `compare` 의 마지막 줄이 `changed: <N>` 이면 `무효(코드 변경)` · `after rc` 가 0 이
   아니거나 `compare rc` 가 0 · 1 밖이거나 `compare rc=1` 인데 마지막 줄이 `changed: <N>` 가 아니면 `미확인(걷기 뒤 지문 실패)` · `propose rc=4` 면 증거표를 고쳐 `propose` 만 다시
@@ -921,7 +921,7 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
 - **무효로 남긴다** (무효 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. e2e 칸은 `무효` 이다.
 - **여러 시나리오** — 게이트 결과마다 레퍼런스 5 절 첫머리의 규칙으로 다음 시나리오 · 끝을 정한다: 「fail 로 둔다」 · 「무효로 남긴다」면
   남은 시나리오를 걷지 않고 끝낸다. 「다시 걷기」면 같은 시나리오를 다시 걷는다. 그 밖이면 다음 시나리오의 E1 펜스로 간다. e2e 칸과 「사람이 뒤집음」은 레퍼런스 6 절 끝(가장 나쁜 결과)이 정한다.
-  E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).
+  E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `무효` · `미확인` 이면 칸은 그것이다(6 절 끝).
   게이트에서 고른 선택지는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
 
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지

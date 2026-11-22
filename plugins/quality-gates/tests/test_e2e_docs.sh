@@ -62,7 +62,7 @@ case_I1_cli_direct_walk_is_gated_by_the_fingerprint_rc() {
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '"$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt"; echo "before rc=$?"')" "1" \
     "I1: CLI 직접 실행 경로가 지문을 재고 그 rc 를 낸다"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=0` — E2 로 간다.')" "1" "I1: 걷기는 before rc=0 에서만 간다"
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.')" "1" \
+  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc=3` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 `꺼짐(kill switch)` 로 두고 E6 을 돈 뒤 `## Final verdict` 로 간다. 여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `무효` · `미확인` 이 남는다.')" "1" \
     "I1: before rc=3 이면 CLI 명령을 실행하지 않고 꺼짐(kill switch)"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `before rc` 가 그 밖의 0 아닌 값 — 걷지 않는다. stderr 사유를 공시하고 판정안 `미확인(지문 실패)` 로 E3 를 건너뛰고 E4 로 간다.')" "1" \
     "I1: 그 밖의 rc 면 걷지 않고 미확인(지문 실패)"
@@ -371,10 +371,10 @@ case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
   assert_contains "$g" '`fail` > `무효` > `미확인` > `꺼짐(kill switch)` > `pass` 로 합친다 — 이 차례에 이미 걸은 걷기가 `fail` · `무효` · `미확인` 이면 칸은 그것이고, 아니면 `꺼짐(kill switch)` 이다.' \
     "§6: kill switch 로 끝나도 이 차례의 앞 걷기 fail · 미확인이 칸이다"
   assert_not_contains "$g" 'kill switch 로 끝났으면 칸은 `꺼짐(kill switch)` 이다.' "§6: 앞 걷기를 지우는 옛 kill switch 문장이 없다"
-  assert_contains "$s" 'E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `미확인` 이면 칸은 그것이다(6 절 끝).' \
+  assert_contains "$s" 'E1 · E3 의 kill switch 갈래(exit 3)도 이때는 칸을 바로 `꺼짐(kill switch)` 로 두지 않는다 — 이 차례에 이미 걸은 걷기가 `fail` · `무효` · `미확인` 이면 칸은 그것이다(6 절 끝).' \
     "SKILL E4: 여러 시나리오에서 E1 · E3 의 exit 3 갈래가 앞 걷기를 지우지 않는다"
   # final-review T11b — kill switch 갈래 줄 셋(E1 부팅 · E1 CLI · E3)이 각자 그 규칙을 가리킨다(줄 전체)
-  local ptr='여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `미확인` 이 남는다.'
+  local ptr='여러 시나리오면 E4 의 「여러 시나리오」 규칙대로 앞 걷기의 `fail` · `무효` · `미확인` 이 남는다.'
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- 두 줄이 없고 \`boot rc=3\` — kill switch 가 켜졌다. e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
     "SKILL E1 부팅: kill switch 줄이 여러 시나리오 규칙을 가리킨다"
   assert_eq "$(printf '%s\n' "$s" | grep -cxF -- "- \`before rc=3\` — kill switch 다. CLI 명령을 하나도 실행하지 않고 e2e 칸을 \`꺼짐(kill switch)\` 로 두고 E6 을 돈 뒤 \`## Final verdict\` 로 간다. $ptr")" "1" \
