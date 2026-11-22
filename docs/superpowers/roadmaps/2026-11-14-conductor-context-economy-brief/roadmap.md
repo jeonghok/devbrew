@@ -51,15 +51,15 @@ test_failure_pattern: "^FAILED (.+)$"
 
 ### E1 — 세션 담당자와 위아래 소통
 - 의도: 계획부터의 담당자를 세션으로 띄우고 거두며 지휘자 – 담당자 – 하위 사이 소통 창구를 하나로 정한다
-- 범위: 한다: 담당자를 세션으로 띄우기(herdr 권장 · 없으면 하위 agent), 결과 파일을 쓰고 닫기 · 띄운 세션 거두기 확인, 위아래 소통 계약(창구 하나 · 받았음과 답했음 · 글이 왔음을 아는 길 · 보낸 쪽 확인 — 양식으로 모델을 묶지 않는다), 도는 담당자에게 닿는 답 · 방향 고침, 사용자가 담당자에게 직접 한 말을 과제 파일로, 담당자끼리는 지휘자가 푼다, 새 형식을 기본으로 · 마지막 보고를 결과 파일로, 모델 고르기 지침, 스크립트 · 다른 모델 한곳으로, 앞단 로드맵(framing-interview-constraint-audit)이 넘긴 셋 — 나누지 않는 일을 리더로 넘기기(리더가 일을 받는 길과 보내는 쪽의 끝) · 「로드맵 잡기」 글에서 새 형식을 켜기와 켰을 때의 일 셋(나누기 전에 원자료 파일 만들기 · 승인 화면에 지시 원문 범위 보이기 · 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 — 켤 자리 넷) · 넘김 지시 파일을 읽으라는 문장 대신 첨부로 넘길지 / 안 한다: 다른 서버에서 띄우기, 로드맵 사이 소통, 단계와 교대 사이
+- 범위: 한다: 담당자를 세션으로 띄우기(herdr 권장 · 없으면 하위 agent), 결과 파일을 쓰고 닫기 · 띄운 세션 거두기 확인, 위아래 소통 계약(창구 하나 · 받았음과 답했음 · 글이 왔음을 아는 길 · 보낸 쪽 확인 — 양식으로 모델을 묶지 않는다), 도는 담당자에게 닿는 답 · 방향 고침, 사용자가 담당자에게 직접 한 말을 과제 파일로, 담당자끼리는 지휘자가 푼다, 마지막 보고를 결과 파일로, 모델 고르기 지침, 스크립트 · 다른 모델 한곳으로 / 안 한다: 다른 서버에서 띄우기, 로드맵 사이 소통, 단계와 교대 사이, 새 형식을 기본으로 켜기와 앞단 로드맵이 넘긴 셋(E4)
 - 의존: R1, R2
 - 브랜치: feature/session-workers
 - 묶음: E1.md
-- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/worker/, plugins/spec-distill/skills/roadmap-draft/
+- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/references/team-files.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/templates/team/, docs/superpowers/roadmaps/leader/, docs/superpowers/roadmaps/worker/, docs/superpowers/roadmaps/designer/, docs/superpowers/roadmaps/writer/, plugins/spec-distill/references/conducting.md, plugins/spec-distill/skills/epic-conductor/SKILL.md
 - 크기: 큼
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 관문이 선 뒤에 세션을 띄워야 설계 없이 개발하지 않는다
-- 근거: S4 · 사용자 말 2026-11-17 · 2026-11-18 · 2026-11-21 「싣자」
+- 근거: S4 · 사용자 말 2026-11-17 · 2026-11-18 · 2026-11-22 「좋아 나누자」
 
 ### E2 — 리더 덜기와 다시 띄우기
 - 의도: 지휘 절차서를 걸음별 지시서로 쪼개 그 걸음에서만 읽고 손 일을 담당 세션으로 넘기며 리더 세션을 끊고 다시 띄울 수 있게 한다
@@ -67,7 +67,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R2, E1
 - 브랜치: feature/conductor-step-guides
 - 묶음: E2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 걸음과 세션 담당자가 선 뒤에 리더의 일을 덜 수 있다
@@ -79,11 +79,23 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: E1
 - 브랜치: feature/remote-session-spawn
 - 묶음: E3.md
-- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_status.py
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 이 기계에서 세션 담당자가 돈 뒤에 다른 서버로 넓힌다
 - 근거: 사용자 말 2026-11-17
+
+### E4 — 새 형식 켜기와 앞단 넘김
+- 의도: 새 형식을 로드맵 만들기의 기본으로 켜고 앞단 로드맵이 넘긴 일을 받는다
+- 범위: 한다: 새 형식을 기본으로 켜기(생성기 기본값 · 「로드맵 잡기」 글이 새 형식 표를 내게 · 옛 형식으로 만들 길), 앞단 로드맵(framing-interview-constraint-audit)이 넘긴 셋 — 나누지 않는 일을 리더로 넘기기(리더가 일을 받는 길과 보내는 쪽의 끝) · 「로드맵 잡기」 글에서 새 형식을 켜기와 켰을 때의 일 셋(나누기 전에 원자료 파일 만들기 · 승인 화면에 지시 원문 범위 보이기 · 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 — 켤 자리 넷) · 넘김 지시 파일을 읽으라는 문장 대신 첨부로 넘길지, 새 형식을 켜기 전에 볼 수리(R2 · R3 이 넘긴 것 가운데 세션 담당자와 따로 갈 수 있는 것), 규칙 줄을 조건으로 골라 싣기와 묶음 예산 / 안 한다: 담당자를 세션으로 띄우기 · 위아래 소통(E1), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
+- 의존: E1
+- 브랜치: feature/team-layout-default
+- 묶음: E4.md
+- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/skills/roadmap-draft/, plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/skills/spec-review/SKILL.md
+- 크기: 중간
+- 병렬: E2 · E3 와 병렬 가능
+- 순서 이유: 앞단 로드맵의 「앞단 다시 짜기」 가 「로드맵 잡기」 글을 지어 머지한 뒤에야 켤 자리가 생긴다
+- 근거: 사용자 말 2026-11-21 「싣자」 · 2026-11-22 「좋아 나누자」
 
 ### R3 — 지휘자 상태 브랜치 · 편지함
 - 의도: 기계를 넘는 지휘자 소통 자리를 세운다
@@ -100,10 +112,10 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R5 — 이전 · 재측정
 - 의도: 기존 기록 · 도는 로드맵을 새 구조로 옮기고 옛 장치를 걷어낸 뒤 기준선과 다시 잰다
 - 범위: 한다: 설계문서 지휘 기록 · 에픽 묶음 이전, 도는 로드맵 이전, 옛 장치 정리, 재측정 비교, 앞단 로드맵이 넘긴 저술 가이드(docs/plugin-authoring.md)를 팀 구조에 맞추기 / 안 한다: 새 기능 · 현황 · 감시 mod(만들지 않는다 — 사용자 2026-11-20 「R4는 일단 빼자」. 그 에픽의 번호는 이 에픽이 「하지 않기로 한 것」 으로 적는다)
-- 의존: R1, R2, R3, E1, E2, E3
+- 의존: R1, R2, R3, E1, E2, E3, E4
 - 브랜치: feature/conductor-migration
 - 묶음: R5.md
-- 경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, plugins/spec-distill/CHANGELOG.md, docs/plugin-authoring.md
+- 경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, plugins/spec-distill/CHANGELOG.md, docs/plugin-authoring.md, plugins/spec-distill/scripts/conductor_branch.py, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/scripts/conductor_mail.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/references/conductor-state-branch.md, CLAUDE.md, plugins/spec-distill/dependencies.md, shared/deps/check_deps.py
 - 크기: 중간
 - 순서 이유: 모든 새 장치가 선 뒤에 옮긴다
 - 근거: S20 · S30 · 사용자 말 2026-11-21 「싣자」
@@ -190,6 +202,17 @@ test_failure_pattern: "^FAILED (.+)$"
 - 바뀜: 바뀐 에픽 E1 · R5 「싣자」 · 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「싣자」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · E1 · E2 · E3 · R5 경로 예약에 R2 · R3 설계가 미룬 일이 닿는 파일을 더한다 — 에픽 경계 · 범위 · 의존 · 브랜치는 그대로
+- 바뀜: 바뀐 에픽 E1 · E2 · E3 · R5 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · E1 에서 새 형식을 기본으로 켜기와 앞단 로드맵이 넘긴 셋을 새 에픽 E4 로 가른다 — 그 일은 앞단 로드맵이 아직 짓지 않은 「로드맵 잡기」 글 위에 서고, E1 에 두면 E2 · E3 이 함께 기다린다
+- 바뀜: 바뀐 에픽 E1 · R5 · 새 에픽 E4 「좋아 나누자」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「좋아 나누자」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
