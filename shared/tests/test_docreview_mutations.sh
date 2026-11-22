@@ -79,8 +79,18 @@ _split3() { _f="${1%% *}"; _r="${1#* }"; _p="${_r%% *}"; _tb="${_r#* }"; }
 
 # 계측기 양성 대조 — 변이 없는 사본에서 케이스가 GREEN(그리고 traceback 없음).
 CLEAN="$BASE_MUT/clean"; mkclone "$CLEAN"
+mkdir -p "$BASE_MUT/.clean-results"
+# 깨끗한 사본의 결과는 케이스마다 한 번 재고 다시 쓴다 — 「깨끗한 사본에서 초록이어야 잰 것으로 친다」 는 판정은 그대로다.
+# 빈 출력도 캐시된 값이다(classify_result 의 형태 검사가 「계측기 고장」 을 그대로 낸다).
+clean_result() {   # clean_result <case-fn> → run_case 의 한 줄
+  if [ -f "$BASE_MUT/.clean-results/$1" ]; then
+    cat "$BASE_MUT/.clean-results/$1"
+  else
+    run_case "$CLEAN" "$1" | tee "$BASE_MUT/.clean-results/$1"
+  fi
+}
 for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T06_reject case_T11_permit_keeps_disposition case_T08_defer_disallowed case_T37_cap_and_extra case_AC6_fix_contract; do
-  _split3 "$(run_case "$CLEAN" "$c")"
+  _split3 "$(clean_result "$c")"
   if [ "$_tb" = "1" ]; then
     no "양성대조 실패: $c 가 clean 사본 실행 중 traceback — 계측기 고장(귀속 불가)"
   elif [ "$_f" = "0" ]; then
@@ -184,7 +194,7 @@ mut_expect() {
     return
   fi
   local bfail bpass btb afail apass atb verdict desc
-  _split3 "$(run_case "$CLEAN" "$case")"; bfail="$_f"; bpass="$_p"; btb="$_tb"
+  _split3 "$(clean_result "$case")"; bfail="$_f"; bpass="$_p"; btb="$_tb"
   _split3 "$(run_case "$d" "$case")";     afail="$_f"; apass="$_p"; atb="$_tb"
   verdict="$(classify_result "$bfail" "$bpass" "$btb" "$afail" "$apass" "$atb")"
   case "$verdict" in
