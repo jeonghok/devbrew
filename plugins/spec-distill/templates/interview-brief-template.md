@@ -127,4 +127,4 @@ user_sourced_items:
  → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 설계문서 점검과 그 질문을 마친 뒤 문서를 승인받는 자리) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
 
-(분해된 일이면 첫 줄은 `분해됨 — <로드맵 경로>` 이다 — 다음 단계는 brainstorming 하나가 아니라 그 로드맵의 지휘 절차다.)
+(분해된 일이면 첫 줄은 `분해됨 — <로드맵 경로>` 이다 — 다음 단계는 brainstorming 하나가 아니라 로드맵 잡기(`/spec-distill:roadmap-draft`)이고, 그 경로의 로드맵은 로드맵 잡기가 만든다.)

@@ -118,7 +118,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-file.md
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
 앞단, 상보적·비중복). 매 라운드를 «지금 이해 · 다음 결정 · 질문 하나»로 묻되, 종료는
 **커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이 **모두 `closed`**이고
-포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
+포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
 산출물은 `spec.md`가 아니라 **context brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
