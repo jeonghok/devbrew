@@ -60,7 +60,7 @@ t = open(sys.argv[1], encoding="utf-8").read()
 secs = [s for s in re.split(r"(?m)^(?=## \[)", t) if s.startswith("## [")]
 heads = [re.match(r"## \[(\d+)\.(\d+)\.(\d+)\]", s) for s in secs]
 old = "/spec-distill:spec-" + "interview"
-row = re.compile(r"(?m)^\|\s*`" + re.escape(old) + r"`\s*\|\s*`/spec-distill:context-build`\s*\|")
+row = re.compile(r"(?m)^\|\s*`" + re.escape(old) + r"`\s*\|\s*`/spec-distill:pm-" + r"interview`\s*\|")
 blk_re = re.compile(r"(?ms)^### Removed[^\n]*\n(.*?)(?=^### |\Z)")
 hit = [i for i, s in enumerate(secs) if (b := blk_re.search(s)) and row.search(b.group(1))]
 assert len(hit) == 1, hit
