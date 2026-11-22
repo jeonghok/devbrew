@@ -570,7 +570,15 @@ once "$RC" '재리뷰 한 번으로 센다' "recheck-merge-commit-full: 처음�
 assert_contains "$RC" '그 PR 을 처음부터 다시 보며' "recheck-merge-commit-full: 그 PR 을 처음부터 다시 본다"
 once "$RC" '범위에 구현 담당자의 고친 커밋이 하나도 없으면 보내지 않는다' "recheck: 고친 커밋이 없으면 보내지 않는다"
 assert_contains "$RC" '자리 글자는 `recheck-pr<번호>`' "recheck: 자리 글자 recheck-pr"
-assert_contains "$RC" '보내기 직전에 그 호출 줄을 PR 본문 `## qg 리뷰` 에 적는다' "recheck: 보내기 직전에 호출 줄을 PR 본문에(이미 보낸 것의 보내도 되는 횟수)"
+assert_contains "$RC" '그 호출 줄은 `### 이미 보낸 것` 의 확인보다 먼저 PR 본문 `## qg 리뷰` 에 적는다' "recheck(fix I1): 호출 줄을 이미 보낸 것 확인보다 먼저 PR 본문에"
+# fix I1 — 머지 앞 호출 줄은 확인보다 먼저 · 같은 범위면 다시 적지 않는다 · 재리뷰는 서로 다른 범위를 센다
+once "$BEAT" '머지 앞 자리(첫 리뷰와 좁은 재리뷰)는 그 차례 맨 앞, `### 이미 보낸 것` 의 확인보다 먼저 호출 줄을 PR 본문 `## qg 리뷰` 에 `- 호출 · <자리 글자> · <시작 커밋>..<끝 커밋>` 한 줄로 적는다' "fix I1: 머지 앞 호출 줄은 이미 보낸 것 확인보다 먼저 PR 본문에"
+once "$BEAT" '같은 자리 글자 · 같은 범위의 줄이 이미 있으면 다시 적지 않는다' "fix I1: 같은 범위의 호출 줄은 다시 적지 않는다"
+once "$SENT" '`- 호출 · recheck-pr<번호> · ` 줄이 적은 서로 다른 범위의 수 — 지휘자는 이 확인보다 먼저 그 줄을 적는다' "fix I1: 재리뷰의 보내도 되는 횟수는 서로 다른 범위 수 · 줄은 확인보다 먼저"
+once "$RC" '그 PR 의 `- 호출 · ` 줄 가운데 마지막 줄의 끝 커밋' "fix I1: 지난 리뷰의 끝은 마지막 호출 줄의 끝 커밋"
+assert_contains "$(line_of "$RET" '- **PR 본문.**')" '첫 리뷰의 호출 줄(보내기 전, 위 `### 한 박자` 대로 적는다)' "fix I1: 첫 리뷰의 호출 줄도 보내기 전에"
+assert_not_contains "$ALL" '보내기 직전에 그' "fix I1 음성: 호출 줄을 확인 뒤 보내기 직전에 적던 옛 문장이 없다(양성 짝: 확인보다 먼저 적는 두 줄)"
+assert_not_contains "$ALL" '첫 리뷰의 호출 줄(보낼 때 적는다)' "fix I1 음성: 첫 리뷰 호출 줄을 보낼 때 적던 옛 괄호가 없다(양성 짝: 보내기 전)"
 # recheck-cap-two (AC11)
 once "$CAP" 'PR 하나에 두 번까지' "recheck-cap-two: PR 하나에 두 번"
 once "$CAP" '따로 센다' "recheck-cap-two: 통합 리뷰의 재리뷰 횟수와 따로 센다"
@@ -632,6 +640,10 @@ once "$SPECSEC" '한 번만 센다' "spec-resend-identity: 같은 정체의 표�
 once "$SPECSEC" '돌아가기 전에' "spec-resend-identity: 표지는 설계 대화로 돌아가기 전에 적는다"
 assert_not_contains "$ALL" 'spec-resend · <사건>"' "spec-resend-identity 음성: 정체 없는 옛 표지 꼴이 없다(양성 짝: 사건의 정체 표지)"
 once "$SENT" '그 에픽의 쌓인 기록 줄의 서로 다른 사건 정체 수' "spec-resend-identity: spec 승인 앞도 서로 다른 사건 정체 수로 센다"
+# fix I2 — 질문의 정체는 id 에 그 리뷰의 보관 폴더 이름을 붙인다(다른 리뷰의 같은 id 가 한 사건으로 세이지 않게)
+once "$SPECSEC" '질문의 정체는 `<결과 파일의 그 질문 id> @ <그 질문을 낸 리뷰의 보관 폴더 이름>` 이다' "fix I2: spec-resend 의 질문 정체 = id @ 보관 폴더 이름"
+once "$PM" '정체는 `### spec 승인 앞` 과 같은 `<질문 id> @ <이 머지 앞 리뷰의 보관 폴더 이름>` 이고' "fix I2: premerge-resend 의 정체 = id @ 이 머지 앞 리뷰의 보관 폴더 이름"
+assert_not_contains "$ALL" '질문의 정체는 결과 파일의 그 질문 `id` 이고' "fix I2 음성: id 만으로 정체를 삼던 옛 문장이 없다(양성 짝: id @ 보관 폴더 이름)"
 # Task 9 리뷰 이월 (a)–(f)
 once "$MERGED" '이름으로 청한 spec 승인 뒤 · 머지 전 에픽은 구현 담당자가 아직 일하는 중이면 이 줄대로(재분해 신호 · 기록 브랜치), 구현이 끝난 뒤(구현 담당자가 돌아와 PR 을 연 뒤)면 위 자리 표의 「머지 앞」 줄대로 한다' "(a) 이름으로 청한 머지 전 에픽 — 구현 중 · 구현 뒤 갈래(설계 §2)"
 assert_not_contains "$ALL" '머지 전 자리(spec 승인 앞 · 이름으로 청한 머지 전 에픽)' "(a) 음성: 이름으로 청한 머지 전 에픽을 통째로 막지 않는다던 옛 문장이 없다(양성 짝: L(premerge))"
