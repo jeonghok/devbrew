@@ -547,6 +547,7 @@ BASE = {
     "plugins/p/tests/test_u.py": PASS_PY,
     "tools/x/test_t.py": PASS_PY,
 }
+SLOW_SH = {"shared/tests/test_slow.sh": "sleep 0.4\n"}
 BASE_WITHOUT_FAIL = {k: v for k, v in BASE.items() if k != "plugins/p/tests/test_fail.sh"}
 NODE_TEST = 'import test from "node:test";\ntest("ok", () => {});\n'
 BASH = "/bin/bash" if os.path.exists("/bin/bash") else shutil.which("bash")
@@ -612,7 +613,9 @@ class RunAllTimingTests(unittest.TestCase):
         self.assertEqual((rc, out, err), (0, "", ""))
 
     def test_ac2_lines_and_same_stdout(self):
-        repo = self.make_repo(BASE, node=True)
+        files = dict(BASE)
+        files.update(SLOW_SH)
+        repo = self.make_repo(files, node=True)
         without = self.run_all(repo)
         path = self.out_file()
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
@@ -624,9 +627,15 @@ class RunAllTimingTests(unittest.TestCase):
         self.assertEqual(firsts.count("end"), 1)
         self.assertEqual(lines[-1].split("\t")[0], "end")
         targets = self.target_lines(lines)
-        self.assertEqual(len(targets), 2 + 3 + NODE)
+        self.assertEqual(len(targets), 3 + 3 + NODE)
         self.assertEqual(sorted(l.split("\t")[1] for l in targets),
-                         sorted(["sh"] * 2 + ["py"] * 3 + ["node"] * NODE))
+                         sorted(["sh"] * 3 + ["py"] * 3 + ["node"] * NODE))
+        for l in targets:
+            cols = l.split("\t")
+            if cols[1] == "sh" and cols[2] == "shared/tests/test_slow.sh":
+                self.assertGreaterEqual(float(cols[0]), 0.4, l)
+            elif cols[1] == "sh":
+                self.assertLess(float(cols[0]), 0.4, l)
         for l in targets:
             cols = l.split("\t")
             self.assertEqual(len(cols), 4)
@@ -779,9 +788,9 @@ class RunAllTimingTests(unittest.TestCase):
         os.makedirs(tdir)
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
         notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s" % path
-        err_lines = [l for l in err.split("\n") if l]
-        self.assertTrue(1 <= len(err_lines) <= 2, err)
-        self.assertEqual(set(err_lines), {notice}, err)
+        err_lines = [l for l in err.split("\n") if l.startswith("run-all: ")]
+        self.assertEqual(err_lines, [notice], err)
+        self.assertEqual([l for l in err.split("\n") if l and not l.startswith(("run-all: ", "run_unittest_dir: "))], [])
         self.assertNotIn("No such file", err)
         self.assertEqual((rc, out), without[:2])
 
@@ -791,11 +800,12 @@ class RunAllTimingTests(unittest.TestCase):
             fh.write(body)
         return repo
 
-    def check_stamp_unavailable(self, body):
+    def check_stamp_unavailable(self, body, reason):
         repo = self.stamp_fails_repo(body)
         path = self.out_file()
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
-        self.assertEqual((rc, out, err), (0, "", ""))
+        self.assertEqual((rc, out, err),
+                         (0, "", "run-all: 다른 스위트 수를 세지 못했다 — %s\n" % reason))
         lines = self.lines(path)
         self.assertEqual(lines[0], "start\t?\t?\t" + repo)
         self.assertEqual(lines[-1], "end\t?\t?")
@@ -806,11 +816,33 @@ class RunAllTimingTests(unittest.TestCase):
             self.assertEqual((cols[0], cols[3]), ("?", "?"), l)
 
     def test_stamp_call_fails_nonzero_exit_writes_question_marks(self):
-        self.check_stamp_unavailable("import sys\nsys.exit(1)\n")
+        self.check_stamp_unavailable("import sys\nsys.exit(1)\n", "종료 코드 1")
 
     def test_stamp_call_prints_nothing_writes_question_marks(self):
-        self.check_stamp_unavailable("")
+        self.check_stamp_unavailable("", "출력이 없다")
 
+
+    def test_unreadable_ps_reason_once(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        missing = os.path.join(self.tmp, "no-such-ps.txt")
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": self.out_file(),
+                                           "SUITE_PEERS_PS_FILE": missing})
+        self.assertEqual((rc, out), (0, ""))
+        self.assertEqual(err, "run-all: 다른 스위트 수를 세지 못했다 — suite_peers: 프로세스 표를 "
+                              "읽지 못했다 — 표 파일을 열지 못했다: %s\n" % missing)
+
+    def test_python_runner_notice_surfaced(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        line = "run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: X"
+        with open(os.path.join(repo, "tools", "suite", "run_unittest_dir.py"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("import sys\nprint(%r, file=sys.stderr)\n" % line)
+        without = self.run_all(repo)
+        self.assertEqual(without[2], "")
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": self.out_file()})
+        self.assertEqual((rc, out), without[:2])
+        self.assertEqual([l for l in err.split("\n") if l.startswith("run_unittest_dir:")],
+                         [line] * 3)
 
     def test_only_end_line_write_fails_still_notes_once(self):
         path = self.out_file()

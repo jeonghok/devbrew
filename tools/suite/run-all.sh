@@ -12,7 +12,6 @@ PEERS="tools/suite/suite_peers.py"
 TIMING="${SUITE_TIMING_FILE:-}"
 unset SUITE_TIMING_FILE
 T_PREV=""
-TIMING_WARNED=0
 if [ -n "$TIMING" ]; then
   case "$TIMING" in
     /*) { : >> "$TIMING"; } 2>/dev/null || {
@@ -25,7 +24,44 @@ if [ -n "$TIMING" ]; then
 fi
 RUNNER="tools/suite/run_unittest_dir.py"
 LIST="$(mktemp "${TMPDIR:-/tmp}/run-all.XXXXXX")" || exit 2
-trap 'rm -f -- "$LIST"' EXIT
+trap 'rm -f -- "$LIST" "$LIST.warned" "$LIST.peers-warned" "$LIST.stamp-err"' EXIT
+
+# write_note — 기록 파일 쓰기 실패 알림. 바퀴마다 한 번(하위 셸을 넘도록 파일로 기억한다).
+write_note() {
+  [ -e "$LIST.warned" ] && return 0
+  : > "$LIST.warned"
+  echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
+}
+
+# peers_note <stamp 종료 코드> — 다른 스위트 수를 못 센 까닭을 바퀴마다 한 번 알린다.
+peers_note() {
+  [ -e "$LIST.peers-warned" ] && return 0
+  : > "$LIST.peers-warned"
+  local why
+  why="$(head -n 1 "$LIST.stamp-err" 2>/dev/null)"
+  if [ -z "$why" ]; then
+    if [ "$1" -ne 0 ]; then why="종료 코드 $1"; else why="출력이 없다"; fi
+  fi
+  echo "run-all: 다른 스위트 수를 세지 못했다 — $why" >&2
+}
+
+# stamp_read — 결과를 s 에 둔다. 세지 못했으면(`?` · 빈 출력 · 실패) 까닭을 알린다.
+stamp_read() {
+  local prc
+  s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>"$LIST.stamp-err")"; prc=$?
+  case "$s" in
+    *" "*) [ "${s#* }" = "?" ] && peers_note "$prc" ;;
+    *) peers_note "$prc" ;;
+  esac
+  return 0
+}
+
+# py_notes <출력> — 기록 변수가 있을 때 python 러너 알림 줄을 표준 오류로 옮긴다.
+py_notes() {
+  [ -n "$TIMING" ] || return 0
+  printf '%s\n' "$1" | grep '^run_unittest_dir: ' >&2
+  return 0
+}
 
 # emit <대상> <rc> <출력> <이름을 뽑는 sed -E 식>  — 이름 줄을 FAILED 로 내고, 없는데 rc≠0 이면 rc 줄을 낸다.
 emit() {
@@ -42,7 +78,7 @@ emit() {
 timing_mark() {
   [ -n "$TIMING" ] || return 0
   local s now n secs
-  s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
+  stamp_read
   now="${s%% *}"; n="${s#* }"
   case "$s" in *" "*) ;; *) now=""; n="?" ;; esac
   secs="?"
@@ -51,20 +87,16 @@ timing_mark() {
     [ -n "$secs" ] || secs="?"
   fi
   if ! { printf '%s\t%s\t%s\t%s\n' "$secs" "$1" "$2" "$n" >> "$TIMING"; } 2>/dev/null; then
-    if [ "$TIMING_WARNED" -eq 0 ]; then
-      TIMING_WARNED=1
-      echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
-    fi
+    write_note
   fi
   T_PREV="$now"
 }
 
 if [ -n "$TIMING" ]; then
-  s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
+  stamp_read
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
   if ! { printf 'start\t%s\t%s\t%s\n' "$now" "$n" "$TOP" >> "$TIMING"; } 2>/dev/null; then
-    TIMING_WARNED=1
-    echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
+    write_note
   fi
   T_PREV="$now"
   [ "$T_PREV" = "?" ] && T_PREV=""
@@ -79,6 +111,7 @@ fi
   for d in plugins/*/tests shared/tests; do
     [ -d "$d" ] || continue
     out="$(SUITE_TIMING_FILE="$TIMING" python3 "$RUNNER" "$d" 2>&1)"; rc=$?
+    py_notes "$out"
     emit "$d" "$rc" "$out" '/^(FAIL|ERROR): /p'
     timing_mark py "$d"
   done
@@ -86,6 +119,7 @@ fi
     d="${d%/}"
     ls "$d"/test_*.py >/dev/null 2>&1 || continue
     out="$(SUITE_TIMING_FILE="$TIMING" python3 "$RUNNER" "$d" 2>&1)"; rc=$?
+    py_notes "$out"
     emit "$d" "$rc" "$out" '/^(FAIL|ERROR): /p'
     timing_mark py "$d"
   done
@@ -96,10 +130,10 @@ fi
   done
 } | LC_ALL=C sort > "$LIST"
 if [ -n "$TIMING" ]; then
-  s="$(python3 "$PEERS" --pid "$SELF_PID" --stamp 2>/dev/null)"
+  stamp_read
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
   if ! { printf 'end\t%s\t%s\n' "$now" "$n" >> "$TIMING"; } 2>/dev/null; then
-    echo "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: $TIMING" >&2
+    write_note
   fi
 fi
 cat "$LIST"
