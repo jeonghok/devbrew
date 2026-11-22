@@ -67,7 +67,7 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 의존: R4
 - 브랜치: feature/qg-readable-review
 - 묶음: R6.md
-- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
 
 ### R7 — qg 경계 굳히기 — 심은 글 · 공유 스위트 잠금
 - 의도: 리뷰 대상에 심은 글이 qg 의 리뷰어 입력과 게시 확인을 속이지 못하게 하고 qg 의 테스트 실행이 공유 스위트 잠금을 지키게 한다
@@ -155,6 +155,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
   - 「지휘가 길다보니까 에픽 단위로 리뷰를 해줘서 문제가 뒤로 가며 커지지 않았음 좋겠어 그러니 지휘쪽에 이거를 녹이려 하는거지 수동으로 접근도 하겠지만 지휘에서 할일 중 하나가 될거야」
   - 「둘로 나누자」
   - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · R6 의 경로 예약에 qg 의 인자 읽는 스크립트(setup-qg.sh)와 상태 파일 형식 문서(state-file-format.md)를 더한다 — 지휘자가 지난 답을 qg 에 넘기는 인자를 받으려면 고쳐야 하는 파일이다(설계문서 점검의 지적)
+- 바뀜: 바뀐 에픽 R6 「둘을 더한다 (권장)」
+- 원문:
+  - 「둘을 더한다 (권장)」
 
 ## 위험 번호표
 
