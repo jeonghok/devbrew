@@ -25,6 +25,7 @@ from pathlib import Path
 
 FIN = (Path(__file__).resolve().parent.parent / "skills" / "context-build"
        / "references" / "finishing.md")
+RD = Path(__file__).resolve().parent.parent / "skills" / "roadmap-draft" / "SKILL.md"
 
 # 펜스 밖에서 오는 값. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다 — 모델이 SKILL.md 가 보여 준 절대 경로로
 # 바꿔 넣고, 빠뜨리면 펜스의 가드가 빈 값에서 멈춘다(`shared/tests/test_plugin_root_no_cwd_fallback.sh` 축 2).
@@ -116,6 +117,13 @@ class FinishingBlockScope(unittest.TestCase):
         text = red.read_text(encoding="utf-8")
         self.assertTrue(any("roadmap_write.py\" update" in "\n".join(b) for _, _, b in bash_fences(text)),
                         "redecompose.md 에서 적용 펜스를 못 찾았다 — 아래 단언이 공허해진다")
+        self.assertEqual(unbound_per_fence(text), [])
+
+    def test_roadmap_draft_fences_same_rule(self):
+        """끝맺음에서 옮겨 간 생성 펜스(`IFS= read -r` + heredoc · `${TMPDIR:-/tmp}`)도 같은 규칙으로 잰다."""
+        text = RD.read_text(encoding="utf-8")
+        self.assertTrue(any("roadmap_write.py\" create" in "\n".join(b) for _, _, b in bash_fences(text)),
+                        "roadmap-draft 에서 생성 펜스를 못 찾았다 — 아래 단언이 공허해진다")
         self.assertEqual(unbound_per_fence(text), [])
 
 

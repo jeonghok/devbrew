@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
 FIN="$SD/skills/context-build/references/finishing.md"
 SKILL="$SD/skills/context-build/SKILL.md"
+RD="$SD/skills/roadmap-draft/SKILL.md"
 TPL="$SD/templates/interview-brief-template.md"
 
 win() {  # win <파일> <시작 줄 리터럴> <끝 줄 접두> — 시작 줄 다음부터 끝 줄 앞까지
@@ -24,24 +25,29 @@ DEC="$(win "$FIN" '### 분해 판단 — Step A 직전' '### Step A')"
 if [ -n "$DEC" ]; then ok "분해 판단 절이 Step A 앞에 있다"; else no "분해 판단 절 창이 비었다 — 앵커 파손"; fi
 for lit in '따로 승인할 수 있는 덩어리 수' '파일 영역 수' '사용자 원문 갈래 수' '근거 번호' \
            '컷오프는 두지 않는다' '하나로 충분해 보인다' '나누는 게 좋아 보인다' \
-           '"spec 하나로"' '"나눈다 — 분해안 보기"' \
-           '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
+           '"spec 하나로"' '"나눈다 — 분해안 보기"' '「spec 하나로」'; do
+  has "$DEC" "$lit" "분해 판단: $lit"
+done
+# 분해안 표 · 고치기 · 승인 · 기록은 roadmap-draft 의 `## 3.` · `## 4.` 절에 있다.
+RDT="$(win "$RD" '## 3. 분해안 표' '## 5.')"
+if [ -n "$RDT" ]; then ok "roadmap-draft: 분해안 표 · 고치기 · 승인 절을 떴다"; else no "roadmap-draft: 분해안 표 절 창이 비었다 — 앵커 파손"; fi
+for lit in '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
            '「묶음」' '「브랜치 <설계문서 경로>」' '「결정」' '걷는 뼈대' \
            '미배정 번호 <n> · 고아 발화 <m>' '「승인」' '「고치기」' '「spec 하나로」' '계속 고칠까요' \
            '자동으로 끝내지 않는다' '## 분해안' '분해됨 — <로드맵 경로>'; do
-  has "$DEC" "$lit" "분해 판단: $lit"
+  has "$RDT" "$lit" "분해안 표: $lit"
 done
 # 부재 · 존재 짝 — 숫자 컷오프 문면이 없다(존재 짝은 위 「컷오프는 두지 않는다」).
-cut="$(printf '%s\n' "$DEC" | grep -nE '[0-9]+ ?(개|곳|갈래|영역|덩어리)( 이상| 넘| 초과|보다 많)' || true)"
+cut="$(printf '%s\n' "$DEC$RDT" | grep -nE '[0-9]+ ?(개|곳|갈래|영역|덩어리)( 이상| 넘| 초과|보다 많)' || true)"
 assert_eq "$cut" "" "분해 판단: 숫자 컷오프 문면이 없다"
 assert_file_absent "$FIN" '이상이면 나눈다' "finishing: 「이상이면 나눈다」 문면이 없다"
 
 # ── AC3 · AC4 — 생성 · 재생성 ───────────────────────────────────────────────
-STEPA="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5')"
+STEPA="$(win "$RD" '## 5. 생성' '## ')"
 has "$STEPA" 'roadmap_write.py" create' "Step A: 생성기 create 를 부른다"
 has "$STEPA" '--plan-table' "Step A: 분해안 표를 넘긴다"
 has "$STEPA" '분해 판단 3' "Step A: 실패하면 분해안 표로 돌아간다"
-REGEN="$(win "$FIN" '#### B-R — 로드맵 다시 생성 (분해된 일만)' '#### ')"
+REGEN="$(win "$RD" '## 5. 생성' '## ')"
 if [ -n "$REGEN" ]; then ok "Step B: 다시 생성 절이 있다"; else no "Step B: B-R 창이 비었다"; fi
 for lit in 'brief 를 마지막으로 쓴 직후' '언제나 한 번' '항목이 바뀌었는지와 상관없다' '## 생성 기록' \
            '커밋 전에 도는 단계'; do
@@ -192,7 +198,7 @@ has "$P23" '분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecom
 has "$P23" '보고 후 재결정 허용' "proceed-gate: 확정 항목 단위 규약은 그대로"
 
 # ── AC11 e2e — Step A 8 펜스를 잘라 셸 메타문자가 든 제목 · 승인 원문으로 돈다 ──────
-FENCE="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5' \
+FENCE="$(win "$RD" '## 5. 생성' '## ' \
   | awk 'index($0,"```bash"){b=""; f=1; next} index($0,"```")&&f{f=0; if(index(b,"roadmap_write.py\" create")){print b; exit}; next} f{b=b $0 "\n"}')"
 if [ -n "$FENCE" ]; then ok "Step A 8 펜스를 잘랐다"; else no "Step A 8 펜스를 자르지 못했다"; fi
 # heredoc 여는 줄마다 같은 구분자만 든 닫는 줄이 펜스에 있다 — 앞에 칸이 붙은 닫는 줄은 heredoc 을 닫지 못한다.

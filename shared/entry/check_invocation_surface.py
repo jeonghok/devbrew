@@ -20,6 +20,7 @@ SELF_FILES = frozenset({"shared/entry/check_invocation_surface.py", "shared/test
 ENTRY_SKILLS = (
     ("spec-distill", "intent-sync"),
     ("spec-distill", "context-build"),
+    ("spec-distill", "roadmap-draft"),
     ("spec-distill", "spec-review"),
     ("spec-distill", "roadmap-status"),
     ("spec-distill", "epic-conductor"),

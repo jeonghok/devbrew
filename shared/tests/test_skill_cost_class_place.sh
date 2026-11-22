@@ -92,6 +92,7 @@ plugins/quality-gates/skills/artifact-critique/SKILL.md variable
 plugins/quality-gates/skills/quality-pipeline/SKILL.md variable
 plugins/spec-distill/skills/epic-conductor/SKILL.md high
 plugins/spec-distill/skills/context-build/SKILL.md variable
+plugins/spec-distill/skills/roadmap-draft/SKILL.md medium
 plugins/spec-distill/skills/intent-sync/SKILL.md variable
 plugins/spec-distill/skills/reviewing-brief/SKILL.md medium
 plugins/spec-distill/skills/roadmap-status/SKILL.md low
