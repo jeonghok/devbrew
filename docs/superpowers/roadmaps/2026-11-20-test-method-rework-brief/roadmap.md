@@ -23,9 +23,9 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 의도: 전체 스위트와 머지 전 대조가 도는 시간을 줄인다
 - 범위: 한다: 겹치지 않은 한 바퀴의 기준선 다시 재기(셸 · python · node), 어느 에픽도 쥐지 않은 느린 테스트 여덟 손보기, 스위트 안의 스위트 고치기, 머지 전 대조의 두 바퀴 구조 고치기(「이 레포만」 범위의 예외 — 플러그인 스크립트를 고치고 판을 올리며 새 실패와 원래 실패를 가르는 결과는 지킨다)와 지휘 로드맵에 알리기, 시간 숫자 목표 제안, 지휘 에픽 둘째 계획이 머지된 뒤 나머지 느린 넷 / 안 한다: 함께 돌리기와 닿는 테스트만 돌리기를 먼저 하기(겹치지 않은 한 바퀴를 다시 잰 뒤 시간 목표에 못 미치면 다시 정한다), 문구 테스트 정리
 - 의존: 없음
-- 브랜치: feature/suite-time-cut
+- 브랜치: feature/suite-time-cut, feature/suite-check-one-round
 - 묶음: E1.md
-- 경로 예약: tools/suite/, plugins/spec-distill/scripts/merge_check.py, plugins/quality-gates/tests/test_codex_backward_compat.sh, plugins/quality-gates/tests/codex-blessed-red.txt, plugins/quality-gates/tests/test_runtime_contract_invariance.sh, shared/tests/test_docreview_mutations.sh, shared/tests/test_docreview_state.sh, shared/tests/test_docreview_route.sh, shared/tests/test_docreview_advice.sh, shared/tests/test_copy_of_contract.sh, plugins/spec-distill/tests/test_finish_pr_merge.sh, plugins/spec-distill/tests/test_control_plane.sh
+- 경로 예약: tools/suite/, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/.claude-plugin/plugin.json, plugins/spec-distill/CHANGELOG.md, plugins/quality-gates/tests/test_codex_backward_compat.sh, plugins/quality-gates/tests/codex-blessed-red.txt, plugins/quality-gates/tests/test_runtime_contract_invariance.sh, shared/tests/test_docreview_mutations.sh, shared/tests/test_docreview_state.sh, shared/tests/test_docreview_route.sh, shared/tests/test_docreview_advice.sh, shared/tests/test_copy_of_contract.sh, plugins/spec-distill/tests/test_finish_pr_merge.sh, plugins/spec-distill/tests/test_control_plane.sh
 
 ### E2 — 테스트 기준과 규칙 문서
 - 의도: 맷 포콕 tdd skill 본문의 기준을 이 레포 문서에 옮겨 적고 안 맞는 항목을 고쳐 적어, 새 테스트가 지금 꼴로 쌓이는 길을 바꾼다
@@ -45,7 +45,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 
 ### E4 — 있는 테스트 정리
 - 의도: 새 기준으로 있는 테스트를 가르고 지우거나 합치거나 바꿔 테스트 양과 문구 수정 때의 깨짐, 값에 견줘 비싼 테스트가 쓰는 시간을 줄인다
-- 범위: 한다: 교차 참조까지 본 판정, 묶음(갈래 · 플러그인별) 단위 승인, 지운 것 기록, 네 갈래 밖 테스트를 같은 기준으로, 판정 뒤 이력 주석 덜기, 지우는 테스트를 이름으로 부르는 규칙 문서 고치기, 앞단 에픽과의 앞뒤 정하기, 값 대비 비용과 필요성 판정에 따라 줄이기 · 합치기, 테스트 쪽 구조 고치기(준비 함께 쓰기 · 나누기 · 더 싼 확인으로 내리기) / 안 한다: 보안 갈래의 글자 확인 지우기, 머지 전 대조의 구조(E1 의 일)
+- 범위: 한다: 교차 참조까지 본 판정, 묶음(갈래 · 플러그인별) 단위 승인, 지운 것 기록, 네 갈래 밖 테스트를 같은 기준으로, 판정 뒤 이력 주석 덜기, 지우는 테스트를 이름으로 부르는 규칙 문서 고치기, 앞단 에픽과의 앞뒤 정하기, 값 대비 비용과 필요성 판정에 따라 줄이기 · 합치기, 테스트 쪽 구조 고치기(준비 함께 쓰기 · 나누기 · 더 싼 확인으로 내리기), E1 이 넘긴 느린 넷 · python 테스트 묶음 · 문서 리뷰 엔진 케이스를 준비물 단위로 고치기 / 안 한다: 보안 갈래의 글자 확인 지우기, 머지 전 대조의 구조(E1 의 일)
 - 의존: E2, E3
 - 브랜치: feature/test-prune
 - 묶음: E4.md
@@ -88,6 +88,14 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
   - 「값 대비 비용이 제일 거슬려 그리고 꼭 필요한 테스트인지 테스트쪽 리팩토링하면 더 좋아질지 등도」
   - 「진단 에픽을 지금 열고 E2·E4도 넓힌다 (권장)」
   - 「이거도 방법론이 있는지 탐색 시켜보고」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · E4 가 E1 이 넘긴 느린 넷 · python 테스트 묶음 · 문서 리뷰 엔진 케이스를 준비물 단위로 받는다 — 겹치지 않은 한 바퀴가 71.5분으로 나와 목표 1시간 30분을 넘었고, E1 은 계획 2(머지 전 대조를 한 바퀴로)의 둘째 브랜치를 연다
+- 바뀜: 바뀐 에픽 E4 「1시간 30분 그대로 (권장)」 · 「E4에서 준비물 단위로 (권장)」 · 「테스트 구조 고치기를 E4로 (권장)」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「1시간 30분 그대로 (권장)」
+  - 「E4에서 준비물 단위로 (권장)」
+  - 「테스트 구조 고치기를 E4로 (권장)」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
