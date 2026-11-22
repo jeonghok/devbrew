@@ -213,6 +213,16 @@ class TestEntry(Base):
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 기본 브랜치를 확인하지 못했다: ", out)
 
+    def test_default_branch_failure_carries_stderr_hint(self):
+        self.build()
+        git(self.repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        rc, out, _ = self.run_entry()
+        stop = [ln for ln in out.split("\n") if ln.startswith("roadmap-entry: STOP 기본 브랜치를 확인하지 못했다: ")]
+        self.assertEqual(len(stop), 1, out)
+        # repo_defaults.py 가 stderr 첫 줄에 싣는 사유가 STOP 줄에 함께 실린다
+        self.assertIn(" — ", stop[0], stop[0])
+        self.assertGreater(len(stop[0].split(" — ", 1)[1].strip()), 5, stop[0])
+
     def test_roadmap_only_on_branch_is_ok(self):
         self.build()
         road = self.repo / ROADMAP_REL
@@ -235,6 +245,14 @@ class TestEntry(Base):
         rc, out, _ = self.run_entry()
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 결과물의 위험 줄 번호가 생성기 검사에 걸린다: brief §5", out)
+
+    def test_unreadable_audit_states_read_failure(self):
+        self.build()
+        Path(self.audit).unlink()
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("roadmap-entry: STOP 결과물이나 audit 을 읽지 못했다: ", out)
+        self.assertNotIn("위험 줄 번호", out)
 
     def test_all_reasons_listed(self):
         self.build(split=False)

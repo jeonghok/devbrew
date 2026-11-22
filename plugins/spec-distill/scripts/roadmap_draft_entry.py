@@ -128,6 +128,15 @@ def _run(cmd: "list[str]") -> "tuple[int, str]":
     return p.returncode, p.stdout.decode("utf-8", "replace")
 
 
+def _run_err(cmd: "list[str]") -> "tuple[int, str, str]":
+    """_run 과 같되 stderr 도 돌려준다 — 하위 스크립트가 stderr 에 싣는 사유 · 해결 안내를 STOP 사유에 옮길 때 쓴다."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise InternalError("하위 프로세스를 부르지 못했다: %s" % exc)
+    return p.returncode, p.stdout.decode("utf-8", "replace"), p.stderr.decode("utf-8", "replace")
+
+
 def _first_line(out: str, prefix: str) -> "str | None":
     for ln in out.split("\n"):
         if ln.startswith(prefix):
@@ -201,10 +210,12 @@ def run(brief: str) -> int:
         if rel:
             if os.path.isabs(rel):
                 rel = os.path.relpath(os.path.realpath(rel), os.path.realpath(top))
-            drc, dout = _run([sys.executable, str(HERE / "repo_defaults.py"), "default-branch", "--root", top])
+            drc, dout, derr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "default-branch", "--root", top])
             default = dout.strip().split("\n")[0] if drc == 0 else ""
             if not default:
-                stops.append("기본 브랜치를 확인하지 못했다: 기본 브랜치 판정이 실패했다(repo_defaults.py default-branch rc %d)" % drc)
+                why = next((ln.strip() for ln in derr.split("\n") if ln.strip()), "")
+                stops.append("기본 브랜치를 확인하지 못했다: 기본 브랜치 판정이 실패했다(repo_defaults.py default-branch rc %d)%s"
+                             % (drc, " — " + why if why else ""))
             else:
                 vrc, _ = _git(top, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/%s" % default)
                 if vrc != 0:
@@ -218,7 +229,9 @@ def run(brief: str) -> int:
     risk = _first_line(out, "brief-risk: ")
     if risk is None:
         raise InternalError("roadmap_write.py check 가 brief-risk 줄을 내지 않았다 (rc %d)" % rc)
-    if risk.startswith("brief-risk: FAIL"):
+    if risk.startswith("brief-risk: FAIL 못 읽었다"):
+        stops.append("결과물이나 audit 을 읽지 못했다: %s" % risk[len("brief-risk: FAIL 못 읽었다"):].lstrip(": ").strip())
+    elif risk.startswith("brief-risk: FAIL"):
         stops.append("결과물의 위험 줄 번호가 생성기 검사에 걸린다: %s" % risk[len("brief-risk: FAIL"):].strip())
 
     for reason in stops:
