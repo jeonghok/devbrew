@@ -38,21 +38,21 @@
 
 옆 로드맵(`docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/roadmap.md`)의 경로 예약과 겹친다. 과제 1 이 그때의 예약을 다시 읽어 이 목록을 고친다. 고치는 과제가 시작하기 전에 지휘자에게 파일과 고칠 줄(grep 글자)을 보고하고, 먼저 머지된 쪽 위에서 쓴다.
 
-| 파일 | 예약한 에픽(2026-11-20 기본 브랜치 7177a5bb 기준) | 이 계획이 고치는 것 | 과제 |
+| 파일 | 예약한 에픽(2026-11-22 기본 브랜치 f153a43b 기준 — 과제 1 이 다시 읽음. R4 는 로드맵에서 빠지고 E4 가 생겼다) | 이 계획이 고치는 것 | 과제 |
 |---|---|---|---|
 | `docs/philosophy/devbrew-harness-philosophy.md` | R2 | 코드 앵커 한 줄의 skill 경로(`skills/pm-interview/SKILL.md`) | 2 |
 | `plugins/spec-distill/references/proceed-gate.md` | R2 | 옛 호출 이름 · 「인터뷰」 낱말 | 2 · 12 |
-| `plugins/spec-distill/references/conducting.md` | R2 · R3 · E2 | 「인터뷰」 낱말 | 12 |
-| `plugins/spec-distill/references/team-files.md` | R1 · R2 · R3 · E1 | 「인터뷰」 낱말 | 12 |
+| `plugins/spec-distill/references/conducting.md` | R2 · R3 · E1 · E2 | 「인터뷰」 낱말 | 12 |
+| `plugins/spec-distill/references/team-files.md` | R1 · R2 · R3 · E1 · E4 | 「인터뷰」 낱말 | 12 |
 | `plugins/spec-distill/references/roadmap-ontology.md` | R1 | 「인터뷰」 낱말 | 12 |
-| `plugins/spec-distill/references/epic-handoff.md` | R1 | 「인터뷰」 낱말 | 12 |
-| `plugins/spec-distill/skills/spec-review/SKILL.md` | (옆 PR 이 고친다 — 지휘자 알림) | 옛 호출 이름 · 「인터뷰」 낱말 | 2 · 12 |
-| `plugins/spec-distill/scripts/roadmap_write.py` | R1 | 새 하위 명령 `check` | 5 |
-| `plugins/spec-distill/dependencies.md` | R2 · E3 · R4 | 진입 skill 행 · 「인터뷰」 낱말 | 7 · 12 |
-| `plugins/spec-distill/README.md` | R4 · E3 | 호출 이름 · 진입 skill 수 · 낱말 · 9.0.0 줄 | 2 · 7 · 12 · 13 |
+| `plugins/spec-distill/references/epic-handoff.md` | R1 · E4 | 옛 호출 이름 · 「인터뷰」 낱말 | 2 · 12 |
+| `plugins/spec-distill/skills/spec-review/SKILL.md` | E4 | 옛 호출 이름 · 「인터뷰」 낱말 | 2 · 12 |
+| `plugins/spec-distill/scripts/roadmap_write.py` | R1 · E4 | 새 하위 명령 `check` | 5 |
+| `plugins/spec-distill/dependencies.md` | R2 · E3 · R5 | 진입 skill 행 · 「인터뷰」 낱말 | 7 · 12 |
+| `plugins/spec-distill/README.md` | (예약한 에픽 없음) | 호출 이름 · 진입 skill 수 · 낱말 · 9.0.0 줄 | 2 · 7 · 12 · 13 |
 | `plugins/spec-distill/CHANGELOG.md` | R5 | 9.0.0 절 | 13 |
 | `plugins/spec-distill/.claude-plugin/plugin.json` | (모든 PR) | 판 | 13 |
-| `plugins/spec-distill/skills/roadmap-draft/` (새 폴더) | — (E1 이 새 형식을 켜는 자리로 받는다 — 그쪽 예약에 더할 것을 알린다) | 새 skill | 7 · 8 |
+| `plugins/spec-distill/skills/roadmap-draft/` (새 폴더) | E4(이미 예약 목록에 `skills/roadmap-draft/` 가 있다 — 새 형식을 켜는 자리로 받는다) | 새 skill | 7 · 8 |
 
 ## Review Focus
 
