@@ -58,6 +58,8 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 브랜치: feature/test-value-audit
 - 묶음: E5.md
 - 경로 예약: docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md
+- 흐름: 조사 — 표의 칸과 글을 지키는 테스트의 「지키는 것」 단위를 대화로 정하고, 가장 비싼 것부터 테스트 묶음별로 읽어 표를 채운 뒤, 다른 리뷰어의 표본 재독과 문서 비평을 거친다
+- 산출물: docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md
 
 ## 지휘 절차
 
@@ -70,6 +72,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 ## 결정 기록
 
 줄 형식은 `- <블록> · <결정|머지> · <YYYY-MM-DD> · 「원문」` 이다. 인터뷰 뒤의 사용자 말은 새 S 번호 없이 원문 그대로 인용한다. 「머지」 줄은 PR 없이 로컬에서 머지한 에픽에만 적는다 — PR 로 머지한 에픽은 지휘자가 채운 PR 상태로 머지됨이 된다(squash · rebase 포함).
+- E5 · 결정 · 2026-11-22 · 「조사 흐름으로 (권장)」
 
 ## 재분해 이력
 
