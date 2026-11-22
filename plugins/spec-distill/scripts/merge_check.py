@@ -17,6 +17,8 @@
 인자(사용자 답)」 이고 설정 값보다 앞서며, 레포 설정 파일에 올리자고 알린다. 값이 없으면 이
 폴더의 공유본 링크로 러너 탐지 · 배정 · 단위 실행 · 귀속을 하고, 양쪽 다 빨간 단위는 그 단위의 러너 출력에서 그
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
+테스트 명령은 한 바퀴다 — 합친 사본을 먼저 돌고, 깨끗하면(종료 코드 0 · 실패 이름 없음) 기준 사본을 돌지 않는다. 실패 이름이
+있으면 그 목록(`SUITE_ONLY_FAILED_FILE`)을 건네 기준 사본을 돌고, 이름을 뽑지 못했으면 기준 사본을 전부 돈다.
 
 종료 코드: 0 새 실패 없음 · 1 새 실패 있음 · 3 검사 불가 · 4 새 실패는 없으나 이름 대조 불가 단위가 있다 ·
 5 다른 스위트가 도는 중(공유 잠금) · 6 테스트 명령을 모른다(사용자에게 묻는다) · 7 스위트 대조 없음(테스트 없음).
@@ -60,6 +62,9 @@ RUNNER_SHAPES = {
 }
 NEW, FIXED = ("NEW_REGRESSION", "NEW_TEST_RED"), ("FIXED",)
 ARG_LABEL = "이 호출의 인자(사용자 답)"
+# 기준 사본의 부분 실행에만 건네는 실패 목록 — 실행 폴더의 파일, 합친 쪽 이름을 정렬해 한 줄에 하나(utf-8)
+ONLY_FAILED_ENV = "SUITE_ONLY_FAILED_FILE"
+ONLY_FAILED_FILE = "only-failed.txt"
 
 
 class Stop(Exception):
@@ -196,25 +201,45 @@ def drop_leftovers(work: Path, keep: Path) -> None:
 
 # ── 테스트 명령 ──────────────────────────────────────────────────────────────
 
-def run_command(cmd: str, tree: Path, tmp: Path):
+def run_command(cmd: str, tree: Path, tmp: Path, only_failed=None):
+    """(종료 코드, 출력). 호출한 쪽의 목록 변수는 빼고, only_failed(목록 파일)가 있을 때만 그 경로를 넣는다."""
     tmp.mkdir(parents=True, exist_ok=True)
-    p = subprocess.run(["bash", "-c", cmd], cwd=str(tree), env=dict(os.environ, TMPDIR=str(tmp)),
+    env = dict(os.environ, TMPDIR=str(tmp))
+    env.pop(ONLY_FAILED_ENV, None)
+    if only_failed is not None:
+        env[ONLY_FAILED_ENV] = str(only_failed)
+    p = subprocess.run(["bash", "-c", cmd], cwd=str(tree), env=env,
                        capture_output=True, encoding="utf-8", errors="replace")
     return p.returncode, p.stdout + "\n" + p.stderr
 
 
 def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sources=None) -> dict:
     sources = sources or {}
-    res = {"new": [], "fixed": [], "both": [], "unit_only": [],
+    res = {"new": [], "fixed": [], "both": [], "unit_only": [], "fixed_unmeasured": None,
            "notes": ["무엇을 돌렸나: test_command(`%s`)%s" % (cmd, sources.get("test_command", ""))]}
     if pattern:
         res["notes"].append("실패 이름 정규식: test_failure_pattern(`%s`)%s" % (pattern, sources.get("test_failure_pattern", "")))
-    b_rc, b_out = run_command(cmd, base, work / "tmp-base")
     m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
-    if 127 in (b_rc, m_rc):
+    if m_rc == 127:
+        raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
+    m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
+    if m_rc == 0 and not m_names:
+        res["notes"].append("기준 사본은 돌리지 않았다 — 합친 사본이 종료 코드 0 이고 실패 이름이 없다")
+        res["fixed_unmeasured"] = "기준 사본을 돌지 않았다"
+        return res
+    only = None
+    if m_names:
+        only = work / ONLY_FAILED_FILE
+        only.write_text("".join(n + "\n" for n in sorted(m_names)), encoding="utf-8")
+        res["notes"].append("기준 사본은 합친 사본의 실패 이름 %d개를 목록(%s)으로 건네 돌렸다 — "
+                            "목록을 아는 명령은 그 대상만 돈다" % (len(m_names), ONLY_FAILED_ENV))
+        res["fixed_unmeasured"] = "기준 사본을 실패 목록으로만 돌렸다"
+    else:
+        res["notes"].append("기준 사본은 전부 돌렸다 — 합친 사본이 실패했으나 이름을 뽑지 못했다")
+    b_rc, b_out = run_command(cmd, base, work / "tmp-base", only)
+    if b_rc == 127:
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
     b_names, _s = side_names(b_out, base, work / "tmp-base", pattern)
-    m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
         res["new"] = sorted(m_names - b_names)
@@ -363,6 +388,9 @@ def report(res: dict) -> int:
         print("- " + note)
     for label, key in (("이 브랜치에만 있는 실패", "new"), ("기본 브랜치에만 있는 실패(고쳐짐)", "fixed"),
                        ("양쪽 다 있는 실패", "both")):
+        if key == "fixed" and res.get("fixed_unmeasured"):   # 기준 사본을 돌지 않았거나 목록으로만 돌았다
+            print("- %s — 재지 않았다(%s)" % (label, res["fixed_unmeasured"]))
+            continue
         print("- %s %d개%s" % (label, len(res[key]), (": " + " · ".join(res[key])) if res[key] else ""))
     if res["unit_only"]:
         print("- 이름 대조 불가 — 단위 수준만 %d개: %s" % (len(res["unit_only"]), " · ".join(res["unit_only"])))

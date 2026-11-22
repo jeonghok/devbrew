@@ -116,7 +116,7 @@ branch_with feature/nd
 out="$(mc --branch feature/nd)"; rc=$?
 assert_eq "$rc" "1" "test_command: 새 실패 → rc 1"
 assert_contains "$out" "two" "test_command: 새 실패 이름(tap not ok)"
-assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 1개: one" "test_command: 기본 브랜치에만 있는 실패(고쳐짐)를 이름으로 보인다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다" "test_command: 목록을 건넨 대조는 고쳐짐을 재지 않았다고 말한다"
 
 # 5 — 이름을 못 뽑는 명령: 양쪽 다 빨강이면 빈 집합끼리 같다고 하지 않는다
 mkrepo nn 'test_command: bash -c "exit 1"\n'; put a.txt a; push_base; put b.txt b; branch_with feature/nn
@@ -371,5 +371,88 @@ try:
 except ValueError as e:
     print(e)' "$ROOT/plugins/spec-distill/scripts" "$W")"
 assert_contains "$GA" "허용하지 않는 git 명령: fetch" "branch_tip._git 은 GIT_ALLOWED 밖의 명령(fetch)을 부르지 않고 거절한다"
+
+# 12–17 — 대조는 한 바퀴: 합친 사본을 먼저 돌고, 깨끗하면 기준 사본을 돌지 않고, 실패 이름은 목록으로 건네 기준 사본에서 다시 돈다.
+# 테스트 명령은 어느 사본에서 무엇을 받고 돌았는지 MC_LOG 에 한 줄 남긴다(첫 칸 끝 /base · /merged 로 사본을 가른다).
+LOGLINE='printf '"'"'%s\t%s\n'"'"' "$PWD" "${SUITE_ONLY_FAILED_FILE:-}" >> "$MC_LOG"'
+logn() {  # logn <로그> <base|merged> — 그 사본의 줄 수
+  [ -f "$1" ] || { echo 0; return; }
+  awk -F'\t' -v s="/$2" '{ if (substr($1, length($1) - length(s) + 1) == s) c++ } END { print c + 0 }' "$1"
+}
+logcol2() {  # logcol2 <로그> <base|merged> — 그 사본 줄들의 둘째 칸
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v s="/$2" '{ if (substr($1, length($1) - length(s) + 1) == s) print $2 }' "$1"
+}
+with_runner() { mkdir -p "$W/tools/suite"; cp "$ROOT"/tools/suite/{run-all.sh,run_unittest_dir.py,suite_peers.py} "$W/tools/suite/"; }
+printf 'shared/tests/test_old.sh: old\n' > "$T/stale-list"
+
+# 12 — AC14: 합친 사본이 깨끗하면 기준 사본을 돌지 않는다
+mkrepo cl 'test_command: bash run.sh\n'
+put run.sh "$LOGLINE"$'\necho "  ✓ fine"'; push_base; put x.txt x; branch_with feature/cl
+out="$(MC_LOG="$T/cl.log" mc --branch feature/cl)"; rc=$?
+assert_eq "$rc" "0" "깨끗한 합친 사본 → rc 0"
+assert_contains "$out" "판정: 새 실패 없음" "깨끗한 합친 사본: 새 실패 없음"
+assert_contains "$out" "기준 사본은 돌리지 않았다" "깨끗한 합친 사본: 기준 사본을 돌리지 않았다고 알린다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다" "깨끗한 합친 사본: 고쳐짐은 재지 않았다"
+assert_eq "$(logn "$T/cl.log" base)" "0" "깨끗한 합친 사본: 기준 사본에서 테스트 명령을 돌리지 않았다"
+assert_eq "$(logn "$T/cl.log" merged)" "1" "깨끗한 합친 사본: 합친 사본에서 한 번 돌았다"
+
+# 13 — AC15 · AC19 · AC24(없는 대상) · AC30: 실제 러너 · 원래 실패 하나 + 새 실패 하나 · 호출한 쪽에 살아 있는 목록
+mkrepo ra 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+with_runner
+put shared/tests/test_old.sh $'echo "  ✗ old"\nexit 1'
+put shared/tests/test_seen.sh "$LOGLINE"
+push_base
+put shared/tests/test_new.sh $'echo "  ✗ new"\nexit 1'; branch_with feature/ra
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/ra.log" mc --branch feature/ra)"; rc=$?
+assert_eq "$rc" "1" "실제 러너: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: shared/tests/test_new.sh: new" "실제 러너: 새 실패는 기준 사본에 없는 대상의 것"
+assert_contains "$out" "양쪽 다 있는 실패 1개: shared/tests/test_old.sh: old" "실제 러너: 원래 실패는 양쪽 다 있는 실패다"
+assert_contains "$out" "목록(SUITE_ONLY_FAILED_FILE)으로 건네 돌렸다" "실제 러너: 기준 사본에 목록을 건넸다고 알린다"
+assert_eq "$(logn "$T/ra.log" merged)" "1" "실제 러너: 합친 사본은 호출한 쪽 목록을 무시하고 전부 돌았다"
+assert_eq "$(logn "$T/ra.log" base)" "0" "실제 러너: 기준 사본은 목록의 대상(test_old.sh)만 돌았다"
+
+# 14 — AC16: 목록을 모르는 명령 — 기준 사본은 목록을 받고도 전부 돈다
+mkrepo nl 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+put run.sh "$LOGLINE"$'\necho "FAILED a.sh: old"\nexit 1'; push_base
+put run.sh "$LOGLINE"$'\necho "FAILED a.sh: old"\necho "FAILED b.sh: new"\nexit 1'; branch_with feature/nl
+out="$(MC_LOG="$T/nl.log" mc --branch feature/nl)"; rc=$?
+assert_eq "$rc" "1" "목록을 모르는 명령: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: b.sh: new" "목록을 모르는 명령: 새 실패 이름"
+assert_contains "$out" "양쪽 다 있는 실패 1개: a.sh: old" "목록을 모르는 명령: 원래 실패는 양쪽 다 있는 실패다"
+assert_eq "$(logcol2 "$T/nl.log" base | grep -c .)" "1" "목록을 모르는 명령: 기준 사본은 목록을 받고 돌았다"
+
+# 15 — AC17 · AC30: 합친 사본이 이름 없이 실패 → 기준 사본을 목록 변수 없이 전부 돈다
+mkrepo nf 'test_command: bash run.sh\n'
+put run.sh "$LOGLINE"; push_base
+put run.sh "$LOGLINE"$'\nexit 1'; branch_with feature/nf
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/nf.log" mc --branch feature/nf)"; rc=$?
+assert_eq "$rc" "1" "이름 없는 실패: rc 1"
+assert_contains "$out" "(test_command) 전체 — 이름 대조 불가 — 단위 수준만" "이름 없는 실패: 단위 수준 새 실패"
+assert_contains "$out" "기준 사본은 전부 돌렸다" "이름 없는 실패: 기준 사본을 전부 돌렸다고 알린다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 0개" "이름 없는 실패: 전부 돈 기준 사본으로 고쳐짐을 센다"
+assert_eq "$(logn "$T/nf.log" base)" "1" "이름 없는 실패: 기준 사본에서 한 번 돌았다"
+assert_eq "$(logn "$T/nf.log" merged)" "1" "이름 없는 실패: 합친 사본에서 한 번 돌았다"
+assert_eq "$(logcol2 "$T/nf.log" base)" "" "이름 없는 실패: 기준 사본을 전부 돌 때도 호출한 쪽 목록 변수를 빼고 돈다"
+assert_eq "$(logcol2 "$T/nf.log" merged)" "" "이름 없는 실패: 합친 사본도 호출한 쪽 목록 변수를 빼고 돈다"
+
+# 16 — AC24: 대상 경로를 뺀 이름 — 러너가 목록을 버리고 기준 사본을 전부 돈다
+mkrepo rb 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED [^:]+: (.+)$"\n'
+with_runner
+put shared/tests/test_old.sh $'echo "  ✗ old"\nexit 1'
+put shared/tests/test_seen.sh "$LOGLINE"
+push_base
+put shared/tests/test_new.sh $'echo "  ✗ new"\nexit 1'; branch_with feature/rb
+out="$(MC_LOG="$T/rb.log" mc --branch feature/rb)"; rc=$?
+assert_eq "$rc" "1" "대상 없는 이름: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: new" "대상 없는 이름: 새 실패 이름"
+assert_contains "$out" "양쪽 다 있는 실패 1개: old" "대상 없는 이름: 원래 실패는 양쪽 다 있는 실패다"
+assert_eq "$(logn "$T/rb.log" base)" "1" "대상 없는 이름: 러너가 목록을 버리고 기준 사본을 전부 돌았다"
+
+# 17 — 합친 사본에서 테스트 명령을 실행하지 못하면 검사 불가
+mkrepo nc 'test_command: no-such-cmd-e1p2\n'; put a.txt a; push_base; put b.txt b; branch_with feature/nc
+out="$(mc --branch feature/nc)"; rc=$?
+assert_eq "$rc" "3" "실행하지 못한 테스트 명령 → rc 3"
+assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "실행하지 못한 테스트 명령 사유"
 
 finish
