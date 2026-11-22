@@ -1,0 +1,431 @@
+start	1795295794.810	1	/Users/jeonghokim/Downloads/devbrew/.claude/spec-distill/conductor/2026-11-20-test-method-rework-brief/merge-check/run-20261122050412-81170/merged
+8.152	sh	plugins/plugin-audit/tests/test_audit_sandbox_create.sh	1
+19.839	sh	plugins/plugin-audit/tests/test_audit_sandbox_mutation_guard.sh	1
+0.074	sh	plugins/plugin-audit/tests/test_axis3_reachability_question.sh	1
+0.583	sh	plugins/plugin-audit/tests/test_run_own_tests_accumulate.sh	1
+0.071	sh	plugins/project-init/tests/test_branch_strategy_rebase_clause.sh	1
+0.086	sh	plugins/project-init/tests/test_no_write_matcher_hooks.sh	1
+19.100	sh	plugins/project-init/tests/test_post_tool_use_branch.sh	1
+0.232	sh	plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh	1
+0.090	sh	plugins/quality-gates/tests/test_agent_color.sh	1
+0.948	sh	plugins/quality-gates/tests/test_agent_frontmatter_keys.sh	1
+6.549	sh	plugins/quality-gates/tests/test_agent_model_mutation.sh	1
+0.116	sh	plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh	1
+3.936	sh	plugins/quality-gates/tests/test_agent_tools_lock_differential.sh	1
+6.237	sh	plugins/quality-gates/tests/test_agent_tools_lock_mutation.sh	1
+5.103	sh	plugins/quality-gates/tests/test_angle_coverage.sh	1
+0.078	sh	plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh	1
+0.206	sh	plugins/quality-gates/tests/test_artifact_bounds.sh	1
+0.631	sh	plugins/quality-gates/tests/test_artifact_branch_guard.sh	1
+0.709	sh	plugins/quality-gates/tests/test_artifact_codex_reviewer.sh	1
+0.527	sh	plugins/quality-gates/tests/test_artifact_commit.sh	1
+0.075	sh	plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh	1
+0.122	sh	plugins/quality-gates/tests/test_artifact_critique_truths.sh	1
+0.073	sh	plugins/quality-gates/tests/test_artifact_metadata.sh	1
+0.138	sh	plugins/quality-gates/tests/test_artifact_path_auth.sh	1
+0.182	sh	plugins/quality-gates/tests/test_build_codex_prompt.sh	1
+2.355	sh	plugins/quality-gates/tests/test_check_review_scope.sh	1
+0.268	sh	plugins/quality-gates/tests/test_classify_artifact_target.sh	1
+0.226	sh	plugins/quality-gates/tests/test_code_recritic_frontmatter.sh	1
+0.078	sh	plugins/quality-gates/tests/test_codex_backward_compat.sh	1
+2.613	sh	plugins/quality-gates/tests/test_codex_copies_agree.sh	1
+0.112	sh	plugins/quality-gates/tests/test_codex_dispatch_invariant.sh	1
+1.409	sh	plugins/quality-gates/tests/test_codex_exit_meta.sh	1
+0.230	sh	plugins/quality-gates/tests/test_codex_extractor_positive_marker.sh	1
+2.929	sh	plugins/quality-gates/tests/test_codex_gate_observation.sh	1
+1.658	sh	plugins/quality-gates/tests/test_codex_invocation_contract.sh	1
+2.817	sh	plugins/quality-gates/tests/test_codex_prompt_untrusted_clause.sh	1
+0.104	sh	plugins/quality-gates/tests/test_codex_result_banner.sh	1
+0.060	sh	plugins/quality-gates/tests/test_codex_reviewer_frontmatter.sh	1
+12.747	sh	plugins/quality-gates/tests/test_codex_runner_degrade_contract.sh	1
+0.738	sh	plugins/quality-gates/tests/test_codex_runner_no_effort_pin.sh	1
+2.921	sh	plugins/quality-gates/tests/test_compute_test_scope_candidates.sh	1
+0.082	sh	plugins/quality-gates/tests/test_cost_consent.sh	1
+0.386	sh	plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh	1
+0.232	sh	plugins/quality-gates/tests/test_detect_codex.sh	1
+0.938	sh	plugins/quality-gates/tests/test_differential_procedure.sh	1
+1.865	sh	plugins/quality-gates/tests/test_differential_trees.sh	1
+12.052	sh	plugins/quality-gates/tests/test_discover_spec.sh	1
+0.397	sh	plugins/quality-gates/tests/test_discover_spec_keys.sh	1
+0.528	sh	plugins/quality-gates/tests/test_e2e_docs.sh	1
+1.836	sh	plugins/quality-gates/tests/test_e2e_fixture_app.sh	1
+14.279	sh	plugins/quality-gates/tests/test_e2e_state.sh	1
+1.062	sh	plugins/quality-gates/tests/test_e2e_verdict.sh	1
+6.480	sh	plugins/quality-gates/tests/test_entry_safety_e1_e6.sh	1
+0.155	sh	plugins/quality-gates/tests/test_extract_codex_invocations.sh	1
+0.241	sh	plugins/quality-gates/tests/test_failure_injection.sh	1
+0.675	sh	plugins/quality-gates/tests/test_findings_parser.sh	1
+0.135	sh	plugins/quality-gates/tests/test_gate_era_prose_absent.sh	1
+1.942	sh	plugins/quality-gates/tests/test_gh_repo.sh	1
+0.079	sh	plugins/quality-gates/tests/test_git_derived_scope.sh	1
+0.332	sh	plugins/quality-gates/tests/test_governance_no_capability_caps.sh	1
+3.921	sh	plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh	1
+2.333	sh	plugins/quality-gates/tests/test_guards_declaration_mapping.sh	1
+0.139	sh	plugins/quality-gates/tests/test_impact_runtime_docs.sh	1
+10.836	sh	plugins/quality-gates/tests/test_intent_critic_wiring.sh	1
+1.869	sh	plugins/quality-gates/tests/test_isolation.sh	1
+0.246	sh	plugins/quality-gates/tests/test_law2_prose.sh	1
+0.759	sh	plugins/quality-gates/tests/test_lowered_gate_wiring.sh	1
+0.087	sh	plugins/quality-gates/tests/test_no_write_matcher_hooks.sh	1
+0.303	sh	plugins/quality-gates/tests/test_one_pipeline_surface.sh	1
+1.053	sh	plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh	1
+2.646	sh	plugins/quality-gates/tests/test_plain_field_path.sh	1
+0.474	sh	plugins/quality-gates/tests/test_plain_qg_templates.sh	1
+0.087	sh	plugins/quality-gates/tests/test_plain_readme.sh	1
+1.676	sh	plugins/quality-gates/tests/test_plain_synth_output.sh	1
+0.100	sh	plugins/quality-gates/tests/test_precheck_retired.sh	1
+12.619	sh	plugins/quality-gates/tests/test_publish_comment_sink.sh	1
+0.177	sh	plugins/quality-gates/tests/test_publish_gh_two_files.sh	1
+4.663	sh	plugins/quality-gates/tests/test_publish_pipeline_wiring.sh	1
+1.428	sh	plugins/quality-gates/tests/test_publish_surface_removed.sh	1
+0.190	sh	plugins/quality-gates/tests/test_qg_critique_routing.sh	1
+0.832	sh	plugins/quality-gates/tests/test_qg_false_clean_floor.sh	1
+2.662	sh	plugins/quality-gates/tests/test_qg_objects_unreachable.sh	1
+4.314	sh	plugins/quality-gates/tests/test_qg_worktree_helper.sh	1
+5.545	sh	plugins/quality-gates/tests/test_range_wiring.sh	1
+0.098	sh	plugins/quality-gates/tests/test_readme_scope_reconcile.sh	1
+0.099	sh	plugins/quality-gates/tests/test_readme_state_diagram_complete.sh	1
+0.179	sh	plugins/quality-gates/tests/test_recritic_code_profile.sh	1
+0.131	sh	plugins/quality-gates/tests/test_removed_plan_arg.sh	1
+0.116	sh	plugins/quality-gates/tests/test_render_terminal.sh	1
+4.075	sh	plugins/quality-gates/tests/test_resolve_baseline.sh	1
+3.967	sh	plugins/quality-gates/tests/test_resolve_range.sh	1
+53.518	sh	plugins/quality-gates/tests/test_review_diff.sh	1
+1.053	sh	plugins/quality-gates/tests/test_review_scope_composition.sh	1
+7.027	sh	plugins/quality-gates/tests/test_run_test_selection.sh	1
+7.775	sh	plugins/quality-gates/tests/test_runner_adapters.sh	1
+1.736	sh	plugins/quality-gates/tests/test_runtime_contract_invariance.sh	1
+1.888	sh	plugins/quality-gates/tests/test_sandbox_enforced.sh	1
+1.884	sh	plugins/quality-gates/tests/test_scope_tuple.sh	1
+2.102	sh	plugins/quality-gates/tests/test_seal_no_side_effects.sh	1
+0.121	sh	plugins/quality-gates/tests/test_security_reviewer_kill_switch.sh	1
+0.249	sh	plugins/quality-gates/tests/test_security_reviewer_persona.sh	1
+4.913	sh	plugins/quality-gates/tests/test_setup_qg.sh	1
+0.065	sh	plugins/quality-gates/tests/test_skill_bash_allowlist_narrow.sh	1
+0.079	sh	plugins/quality-gates/tests/test_skill_codex_skip_prose.sh	1
+0.344	sh	plugins/quality-gates/tests/test_skill_drop_notice_consumed.sh	1
+0.081	sh	plugins/quality-gates/tests/test_skill_orchestration.sh	1
+1.592	sh	plugins/quality-gates/tests/test_skill_run_contract.sh	1
+1.858	sh	plugins/quality-gates/tests/test_synthesize_artifact_findings.sh	1
+1.867	sh	plugins/quality-gates/tests/test_synthesize_ask_line.sh	1
+0.871	sh	plugins/quality-gates/tests/test_synthesize_disposition.sh	1
+1.989	sh	plugins/quality-gates/tests/test_synthesize_findings.sh	1
+0.791	sh	plugins/quality-gates/tests/test_synthesize_promoted_findings.sh	1
+8.133	sh	plugins/quality-gates/tests/test_synthesize_recritic.sh	1
+20.436	sh	plugins/quality-gates/tests/test_topic_boundary.sh	1
+24.041	sh	plugins/quality-gates/tests/test_topic_head.sh	1
+0.280	sh	plugins/quality-gates/tests/test_topic_scope_wiring.sh	1
+1.453	sh	plugins/quality-gates/tests/test_v1_verdict_line.sh	1
+1.045	sh	plugins/quality-gates/tests/test_v_requirements.sh	1
+7.484	sh	plugins/quality-gates/tests/test_verdict_no_reread.sh	1
+2.049	sh	plugins/quality-gates/tests/test_verdict_vocabulary.sh	1
+0.499	sh	plugins/quality-gates/tests/test_worktree.sh	1
+4.160	sh	plugins/spec-distill/tests/test_ask_material_wiring.sh	1
+3.612	sh	plugins/spec-distill/tests/test_begin_round_snapshot.sh	1
+0.148	sh	plugins/spec-distill/tests/test_blind_spot_prober_frontmatter.sh	1
+0.498	sh	plugins/spec-distill/tests/test_brief_agents.sh	1
+4.811	sh	plugins/spec-distill/tests/test_brief_bundle.sh	1
+0.133	sh	plugins/spec-distill/tests/test_brief_codex_axes.sh	1
+12.037	sh	plugins/spec-distill/tests/test_brief_form_r2.sh	1
+0.390	sh	plugins/spec-distill/tests/test_brief_inline_blob.sh	1
+0.183	sh	plugins/spec-distill/tests/test_brief_no_length_cap.sh	1
+0.166	sh	plugins/spec-distill/tests/test_brief_no_statement_cap.sh	1
+0.199	sh	plugins/spec-distill/tests/test_brief_review_entry.sh	1
+0.205	sh	plugins/spec-distill/tests/test_brief_review_meta.sh	1
+0.830	sh	plugins/spec-distill/tests/test_brief_review_ng3.sh	1
+0.753	sh	plugins/spec-distill/tests/test_brief_review_no_external_precondition.sh	1
+0.428	sh	plugins/spec-distill/tests/test_brief_review_short.sh	1
+1.314	sh	plugins/spec-distill/tests/test_brief_verbatim_full.sh	1
+5.421	sh	plugins/spec-distill/tests/test_bundle_coverage.sh	1
+0.458	sh	plugins/spec-distill/tests/test_bundle_short_line.sh	1
+50.720	sh	plugins/spec-distill/tests/test_check_brief.sh	1
+0.323	sh	plugins/spec-distill/tests/test_check_seed.sh	1
+16.662	sh	plugins/spec-distill/tests/test_check_verbatim_coverage.sh	1
+0.108	sh	plugins/spec-distill/tests/test_compression_adopters.sh	1
+2.077	sh	plugins/spec-distill/tests/test_conducting_interview_stage.sh	1
+13.200	sh	plugins/spec-distill/tests/test_conducting_loop.sh	1
+6.305	sh	plugins/spec-distill/tests/test_conducting_reference.sh	1
+0.300	sh	plugins/spec-distill/tests/test_conductor_dispatch_reference.sh	1
+9.438	sh	plugins/spec-distill/tests/test_conductor_e2e.sh	1
+23.622	sh	plugins/spec-distill/tests/test_conductor_state_branch_e2e.sh	1
+67.284	sh	plugins/spec-distill/tests/test_control_plane.sh	1
+0.144	sh	plugins/spec-distill/tests/test_coverage_mapper_frontmatter.sh	1
+2.414	sh	plugins/spec-distill/tests/test_decompose_surface.sh	1
+13.531	sh	plugins/spec-distill/tests/test_default_branch.sh	1
+0.073	sh	plugins/spec-distill/tests/test_design_profile_source.sh	1
+1.150	sh	plugins/spec-distill/tests/test_detect_codex.sh	1
+21.973	sh	plugins/spec-distill/tests/test_dispatch_profile_inline.sh	1
+1.011	sh	plugins/spec-distill/tests/test_distortion_devices.sh	1
+0.407	sh	plugins/spec-distill/tests/test_end_gates.sh	1
+0.160	sh	plugins/spec-distill/tests/test_entry_guidance.sh	1
+28.279	sh	plugins/spec-distill/tests/test_epic_conductor_skill.sh	1
+0.463	sh	plugins/spec-distill/tests/test_epic_handoff.sh	1
+11.709	sh	plugins/spec-distill/tests/test_finish_commit_roadmap.sh	1
+71.305	sh	plugins/spec-distill/tests/test_finish_pr_merge.sh	1
+2.907	sh	plugins/spec-distill/tests/test_first_cell_finishing.sh	1
+25.552	sh	plugins/spec-distill/tests/test_framing_raw_source.sh	1
+15.103	sh	plugins/spec-distill/tests/test_framing_review_contract.sh	1
+0.126	sh	plugins/spec-distill/tests/test_fresh_evidence.sh	1
+4.500	sh	plugins/spec-distill/tests/test_gh_repo.sh	1
+1.298	sh	plugins/spec-distill/tests/test_gh_single_door.sh	1
+1.261	sh	plugins/spec-distill/tests/test_grammar_vs_markdown_it.sh	1
+0.072	sh	plugins/spec-distill/tests/test_handoff_context_empty_subsections.sh	1
+0.078	sh	plugins/spec-distill/tests/test_handoff_context_section_required.sh	1
+0.070	sh	plugins/spec-distill/tests/test_handoff_conversation_reference.sh	1
+0.088	sh	plugins/spec-distill/tests/test_handoff_design_mode.sh	1
+0.081	sh	plugins/spec-distill/tests/test_handoff_kill_switch.sh	1
+0.067	sh	plugins/spec-distill/tests/test_hooks.sh	1
+148.229	sh	plugins/spec-distill/tests/test_human_gate.sh	1
+139.027	sh	plugins/spec-distill/tests/test_human_gate_e2e.sh	1
+61.598	sh	plugins/spec-distill/tests/test_human_record.sh	1
+13.558	sh	plugins/spec-distill/tests/test_interview_raw_source_entry.sh	1
+13.032	sh	plugins/spec-distill/tests/test_interview_state_flow.sh	1
+33.088	sh	plugins/spec-distill/tests/test_job_results.sh	1
+0.884	sh	plugins/spec-distill/tests/test_kill_switches_v060.sh	1
+75.918	sh	plugins/spec-distill/tests/test_leader_seat_e2e.sh	1
+5.272	sh	plugins/spec-distill/tests/test_ledger_root.sh	1
+36.167	sh	plugins/spec-distill/tests/test_ledger_wiring.sh	1
+28.456	sh	plugins/spec-distill/tests/test_merge_check.sh	1
+0.116	sh	plugins/spec-distill/tests/test_next_session_command.sh	1
+0.223	sh	plugins/spec-distill/tests/test_no_wall_clock.sh	1
+0.115	sh	plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh	1
+0.170	sh	plugins/spec-distill/tests/test_open_research.sh	1
+0.295	sh	plugins/spec-distill/tests/test_overdesign_rubric.sh	1
+0.595	sh	plugins/spec-distill/tests/test_parallel_recommend_docs.sh	1
+0.627	sh	plugins/spec-distill/tests/test_plain_gate_templates.sh	1
+0.137	sh	plugins/spec-distill/tests/test_pm_interview_entry.sh	1
+0.244	sh	plugins/spec-distill/tests/test_probe_sweep_residue.sh	1
+0.170	sh	plugins/spec-distill/tests/test_proceed_gate_adopters.sh	1
+0.814	sh	plugins/spec-distill/tests/test_qg_review_reference.sh	1
+3.310	sh	plugins/spec-distill/tests/test_raw_source_downstream.sh	1
+1.650	sh	plugins/spec-distill/tests/test_raw_source_profiles.sh	1
+0.318	sh	plugins/spec-distill/tests/test_readme_sync.sh	1
+6.227	sh	plugins/spec-distill/tests/test_repo_defaults_git.sh	1
+11.841	sh	plugins/spec-distill/tests/test_repo_literals.sh	1
+0.933	sh	plugins/spec-distill/tests/test_request_framing_entry.sh	1
+0.751	sh	plugins/spec-distill/tests/test_request_framing_open.sh	1
+0.169	sh	plugins/spec-distill/tests/test_rereview_cap_consistency.sh	1
+0.463	sh	plugins/spec-distill/tests/test_research_agents_frontmatter.sh	1
+0.221	sh	plugins/spec-distill/tests/test_research_claims_contract.sh	1
+0.330	sh	plugins/spec-distill/tests/test_resume_candidate_names.sh	1
+0.571	sh	plugins/spec-distill/tests/test_review_handoff_order.sh	1
+14.101	sh	plugins/spec-distill/tests/test_reviewing_brief_critic_select.sh	1
+47.860	sh	plugins/spec-distill/tests/test_reviewing_brief_residue.sh	1
+1.109	sh	plugins/spec-distill/tests/test_reviewing_brief_skill.sh	1
+0.104	sh	plugins/spec-distill/tests/test_reviewing_spec_design_only.sh	1
+0.096	sh	plugins/spec-distill/tests/test_reviewing_spec_disclosure.sh	1
+8.455	sh	plugins/spec-distill/tests/test_reviewing_spec_entry_fence.sh	1
+14.112	sh	plugins/spec-distill/tests/test_reviewing_spec_residue.sh	1
+0.101	sh	plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh	1
+92.215	sh	plugins/spec-distill/tests/test_roadmap_status.sh	1
+17.519	sh	plugins/spec-distill/tests/test_roadmap_write.sh	1
+0.395	sh	plugins/spec-distill/tests/test_saturation_reference.sh	1
+0.103	sh	plugins/spec-distill/tests/test_seed_agents.sh	1
+0.252	sh	plugins/spec-distill/tests/test_seed_at_path_handoff.sh	1
+0.136	sh	plugins/spec-distill/tests/test_seed_codex_axes.sh	1
+0.712	sh	plugins/spec-distill/tests/test_seed_cut_table.sh	1
+2.164	sh	plugins/spec-distill/tests/test_seed_edit_diff.sh	1
+18.502	sh	plugins/spec-distill/tests/test_seed_edit_screen.sh	1
+29.761	sh	plugins/spec-distill/tests/test_seed_gate_wiring.sh	1
+1.651	sh	plugins/spec-distill/tests/test_seed_inline_blob.sh	1
+0.202	sh	plugins/spec-distill/tests/test_seed_input_provenance.sh	1
+0.171	sh	plugins/spec-distill/tests/test_seed_one_sentence.sh	1
+1.986	sh	plugins/spec-distill/tests/test_seed_provenance.sh	1
+2.848	sh	plugins/spec-distill/tests/test_seed_review_log.sh	1
+0.645	sh	plugins/spec-distill/tests/test_seed_review_profile.sh	1
+14.804	sh	plugins/spec-distill/tests/test_seed_trust_boundary.sh	1
+1.417	sh	plugins/spec-distill/tests/test_session_id_resolution.sh	1
+0.105	sh	plugins/spec-distill/tests/test_skepticism_module.sh	1
+6.760	sh	plugins/spec-distill/tests/test_spec_review_bundle.sh	1
+1.505	sh	plugins/spec-distill/tests/test_stale_terms.sh	1
+64.689	sh	plugins/spec-distill/tests/test_start_bundle.sh	1
+11.731	sh	plugins/spec-distill/tests/test_state_dir_writes.sh	1
+1.900	sh	plugins/spec-distill/tests/test_state_path.sh	1
+3.383	sh	plugins/spec-distill/tests/test_state_root.sh	1
+4.691	sh	plugins/spec-distill/tests/test_state_storage_e2e.sh	1
+0.187	sh	plugins/spec-distill/tests/test_steelman_builder_scope.sh	1
+0.686	sh	plugins/spec-distill/tests/test_superpowers_presence.sh	1
+10.042	sh	plugins/spec-distill/tests/test_team_coverage.sh	1
+5.823	sh	plugins/spec-distill/tests/test_team_review_entry.sh	1
+3.362	sh	plugins/spec-distill/tests/test_team_rules.sh	1
+24.223	sh	plugins/spec-distill/tests/test_team_stale.sh	1
+134.292	sh	plugins/spec-distill/tests/test_team_status.sh	1
+1.685	sh	plugins/spec-distill/tests/test_team_status_stub.sh	1
+7.765	sh	plugins/spec-distill/tests/test_team_sync.sh	1
+64.819	sh	plugins/spec-distill/tests/test_team_tasks.sh	1
+58.538	sh	plugins/spec-distill/tests/test_team_write.sh	1
+46.624	sh	plugins/spec-distill/tests/test_walk_next.sh	1
+4.002	sh	plugins/spec-distill/tests/test_web_kill_switch.sh	1
+20.156	sh	plugins/spec-distill/tests/test_workspace_invariance.sh	1
+0.491	sh	shared/tests/test_adjudication_behavior.sh	1
+0.273	sh	shared/tests/test_adjudication_consumed.sh	1
+2.595	sh	shared/tests/test_adjudication_wiring.sh	1
+0.197	sh	shared/tests/test_agent_input_slots.sh	1
+0.293	sh	shared/tests/test_ask_recommendation.sh	1
+0.830	sh	shared/tests/test_assert_behavior.sh	1
+7.121	sh	shared/tests/test_changelog_integrity.sh	1
+0.250	sh	shared/tests/test_charter_citations.sh	1
+3.292	sh	shared/tests/test_check_deps.sh	1
+1.967	sh	shared/tests/test_codex_project_doc_off.sh	1
+0.216	sh	shared/tests/test_codex_runner_scratch_trap_order.sh	1
+40.776	sh	shared/tests/test_copy_of_contract.sh	1
+0.652	sh	shared/tests/test_cost_disclosure.sh	1
+0.191	sh	shared/tests/test_dispatch_disposition.sh	1
+0.807	sh	shared/tests/test_dispatch_name_defined.sh	1
+72.712	sh	shared/tests/test_docreview_advice.sh	1
+0.283	sh	shared/tests/test_docreview_advice_procedure.sh	1
+0.667	sh	shared/tests/test_docreview_agent_fields.sh	1
+0.507	sh	shared/tests/test_docreview_agents.sh	1
+1.350	sh	shared/tests/test_docreview_anchor.sh	1
+14.886	sh	shared/tests/test_docreview_ask.sh	1
+19.430	sh	shared/tests/test_docreview_codex.sh	1
+0.589	sh	shared/tests/test_docreview_copy_set.sh	1
+11.902	sh	shared/tests/test_docreview_gate_plain.sh	1
+5.598	sh	shared/tests/test_docreview_gate_visibility.sh	1
+5.008	sh	shared/tests/test_docreview_golden.sh	1
+7.454	sh	shared/tests/test_docreview_intent.sh	1
+0.120	sh	shared/tests/test_docreview_layer1_wiring.sh	1
+233.036	sh	shared/tests/test_docreview_mutations.sh	1
+0.397	sh	shared/tests/test_docreview_procedure_paths.sh	1
+1.718	sh	shared/tests/test_docreview_profile_schema.sh	1
+2.539	sh	shared/tests/test_docreview_profiles.sh	1
+0.158	sh	shared/tests/test_docreview_round_gate_split.sh	1
+76.068	sh	shared/tests/test_docreview_route.sh	1
+134.416	sh	shared/tests/test_docreview_state.sh	1
+1.508	sh	shared/tests/test_entry_dep_needs.sh	1
+2.721	sh	shared/tests/test_entry_preflight.sh	1
+4.598	sh	shared/tests/test_inline_python_isolated.sh	1
+20.753	sh	shared/tests/test_invocation_surface.sh	1
+0.998	sh	shared/tests/test_no_new_duplication.sh	1
+6.628	sh	shared/tests/test_nofollow_write.sh	1
+0.154	sh	shared/tests/test_plain_language_block.sh	1
+0.218	sh	shared/tests/test_plugin_description_parity.sh	1
+0.828	sh	shared/tests/test_plugin_root_no_cwd_fallback.sh	1
+2.585	sh	shared/tests/test_presence_corpus_behavior.sh	1
+3.836	sh	shared/tests/test_python_floor.sh	1
+0.417	sh	shared/tests/test_runner_disposition.sh	1
+2.029	sh	shared/tests/test_shell_tests_executable.sh	1
+0.213	sh	shared/tests/test_skill_body_no_positional_tokens.sh	1
+1.408	sh	shared/tests/test_skill_cost_class_place.sh	1
+1.078	sh	shared/tests/test_skill_reference_pointers.sh	1
+0.643	sh	shared/tests/test_switch_tables.sh	1
+0.868	sh	shared/tests/test_test_selection_bundle.sh	1
+2.181	sh	shared/tests/test_variant_of_contract.sh	1
+0.687	sh	shared/tests/test_window_phrases.sh	1
+1.498	sh	shared/tests/test_writer_trust_notice.sh	1
+0.029	pymod	plugins/plugin-audit/tests/test_ac6_regression.py
+0.001	pymod	plugins/plugin-audit/tests/test_agents_generic.py
+0.648	pymod	plugins/plugin-audit/tests/test_assemble_audit_data.py
+0.005	pymod	plugins/plugin-audit/tests/test_check_grounding.py
+1.028	pymod	plugins/plugin-audit/tests/test_check_integrity.py
+0.152	pymod	plugins/plugin-audit/tests/test_check_law2.py
+0.216	pymod	plugins/plugin-audit/tests/test_check_no_verdict_injection.py
+2.825	pymod	plugins/plugin-audit/tests/test_check_plugin_structure.py
+0.777	pymod	plugins/plugin-audit/tests/test_check_shape_completeness.py
+2.641	pymod	plugins/plugin-audit/tests/test_check_staleness.py
+0.384	pymod	plugins/plugin-audit/tests/test_codex_audit_to_json.py
+0.132	pymod	plugins/plugin-audit/tests/test_detect_codex.py
+0.096	pymod	plugins/plugin-audit/tests/test_parse_seed.py
+0.507	pymod	plugins/plugin-audit/tests/test_plain_audit_text.py
+0.026	pymod	plugins/plugin-audit/tests/test_preamble_schema_parity.py
+0.369	pymod	plugins/plugin-audit/tests/test_prepare_run_dir.py
+1.034	pymod	plugins/plugin-audit/tests/test_render_audit_report.py
+0.606	pymod	plugins/plugin-audit/tests/test_run_audit_codex_reviewer.py
+0.168	pymod	plugins/plugin-audit/tests/test_run_dir_pipeline.py
+12.716	pymod	plugins/plugin-audit/tests/test_run_own_tests.py
+0.001	pymod	plugins/plugin-audit/tests/test_severity_mapping.py
+0.001	pymod	plugins/plugin-audit/tests/test_skill_codex_gate.py
+0.001	pymod	plugins/plugin-audit/tests/test_skill_orchestration.py
+0.000	pymod	plugins/plugin-audit/tests/test_untrusted_data_clause.py
+1.863	pymod	plugins/plugin-audit/tests/test_validate_audit_data.py
+26.354	py	plugins/plugin-audit/tests	1
+0.801	pymod	plugins/project-init/tests/test_branch_prefix_templates.py
+0.014	pymod	plugins/project-init/tests/test_command_contract.py
+0.001	pymod	plugins/project-init/tests/test_plain_init_text.py
+5.318	pymod	plugins/project-init/tests/test_post_tool_use.py
+6.239	py	plugins/project-init/tests	1
+1.906	pymod	plugins/quality-gates/tests/test_a20_tool_agnostic_scope.py
+0.001	pymod	plugins/quality-gates/tests/test_agent_stub_harness.py
+3.627	pymod	plugins/quality-gates/tests/test_diff_test_results.py
+0.178	pymod	plugins/quality-gates/tests/test_doc_paths.py
+31.730	pymod	plugins/quality-gates/tests/test_intent_critic.py
+7.552	pymod	plugins/quality-gates/tests/test_intent_return.py
+20.048	pymod	plugins/quality-gates/tests/test_intent_wide.py
+0.008	pymod	plugins/quality-gates/tests/test_no_secret_prompts.py
+40.991	pymod	plugins/quality-gates/tests/test_other_teams.py
+1.863	pymod	plugins/quality-gates/tests/test_qg_gc.py
+0.176	pymod	plugins/quality-gates/tests/test_secret_scan.py
+0.091	pymod	plugins/quality-gates/tests/test_secret_scan_fp.py
+0.002	pymod	plugins/quality-gates/tests/test_security_reviewer_behavior.py
+0.005	pymod	plugins/quality-gates/tests/test_synthesize_artifact_adjudication.py
+0.007	pymod	plugins/quality-gates/tests/test_synthesize_findings_adjudication.py
+0.048	pymod	plugins/quality-gates/tests/test_synthesize_lowered.py
+0.170	pymod	plugins/quality-gates/tests/test_utf8_explicit.py
+108.598	py	plugins/quality-gates/tests	1
+0.003	pymod	plugins/spec-distill/tests/test_audit_template_gate_shape.py
+0.573	pymod	plugins/spec-distill/tests/test_brief_body.py
+1.366	pymod	plugins/spec-distill/tests/test_brief_review_state.py
+0.000	pymod	plugins/spec-distill/tests/test_check_brief_frontmatter.py
+1.201	pymod	plugins/spec-distill/tests/test_codex_findings_to_yaml.py
+150.017	pymod	plugins/spec-distill/tests/test_conductor_branch.py
+141.541	pymod	plugins/spec-distill/tests/test_conductor_cross.py
+87.608	pymod	plugins/spec-distill/tests/test_conductor_ledger.py
+111.729	pymod	plugins/spec-distill/tests/test_conductor_mail.py
+0.016	pymod	plugins/spec-distill/tests/test_conductor_state.py
+6.553	pymod	plugins/spec-distill/tests/test_conductor_state_branch_docs.py
+126.345	pymod	plugins/spec-distill/tests/test_conductor_status.py
+0.325	pymod	plugins/spec-distill/tests/test_control_plane.py
+0.412	pymod	plugins/spec-distill/tests/test_coverage_scope.py
+0.003	pymod	plugins/spec-distill/tests/test_finishing_block_scope.py
+5.292	pymod	plugins/spec-distill/tests/test_first_cell_check.py
+0.001	pymod	plugins/spec-distill/tests/test_gh_repo.py
+0.008	pymod	plugins/spec-distill/tests/test_hook_output_schema.py
+11.726	pymod	plugins/spec-distill/tests/test_human_judge.py
+0.003	pymod	plugins/spec-distill/tests/test_human_lines.py
+4.352	pymod	plugins/spec-distill/tests/test_interview_state.py
+92.192	pymod	plugins/spec-distill/tests/test_leader_seat.py
+1.731	pymod	plugins/spec-distill/tests/test_ledger_marker.py
+4.145	pymod	plugins/spec-distill/tests/test_ledger_sweep.py
+0.002	pymod	plugins/spec-distill/tests/test_merged_by_pr.py
+2.712	pymod	plugins/spec-distill/tests/test_merged_pr_range.py
+29.862	pymod	plugins/spec-distill/tests/test_parallel_recommend.py
+1.831	pymod	plugins/spec-distill/tests/test_r2_bypass_residue.py
+1.894	pymod	plugins/spec-distill/tests/test_raw_source.py
+4.247	pymod	plugins/spec-distill/tests/test_raw_source_text.py
+0.069	pymod	plugins/spec-distill/tests/test_repo_defaults.py
+0.704	pymod	plugins/spec-distill/tests/test_review_entry.py
+4.225	pymod	plugins/spec-distill/tests/test_review_hook_removed.py
+0.001	pymod	plugins/spec-distill/tests/test_roadmap_approval.py
+0.113	pymod	plugins/spec-distill/tests/test_roadmap_migrate.py
+0.038	pymod	plugins/spec-distill/tests/test_roadmap_model.py
+0.070	pymod	plugins/spec-distill/tests/test_roadmap_ontology.py
+0.321	pymod	plugins/spec-distill/tests/test_roadmap_render.py
+0.013	pymod	plugins/spec-distill/tests/test_roadmap_render_r2.py
+0.000	pymod	plugins/spec-distill/tests/test_roadmap_status_merge_base.py
+0.004	pymod	plugins/spec-distill/tests/test_roadmap_write.py
+0.002	pymod	plugins/spec-distill/tests/test_roadmap_write_atomic.py
+0.002	pymod	plugins/spec-distill/tests/test_seed_body_placeholder.py
+4.106	pymod	plugins/spec-distill/tests/test_seed_grammar_crosscheck.py
+0.011	pymod	plugins/spec-distill/tests/test_session_fixture.py
+0.129	pymod	plugins/spec-distill/tests/test_session_record.py
+2.522	pymod	plugins/spec-distill/tests/test_suite_lock.py
+0.066	pymod	plugins/spec-distill/tests/test_team_docs.py
+0.003	pymod	plugins/spec-distill/tests/test_team_files.py
+0.112	pymod	plugins/spec-distill/tests/test_team_layout.py
+0.004	pymod	plugins/spec-distill/tests/test_team_results.py
+0.012	pymod	plugins/spec-distill/tests/test_team_rules.py
+0.015	pymod	plugins/spec-distill/tests/test_walk_docs.py
+1.200	pymod	plugins/spec-distill/tests/test_walk_table.py
+0.010	pymod	plugins/spec-distill/tests/test_workflow_superpowers.py
+0.023	pymod	plugins/spec-distill/tests/test_yaml_scalar_single_definition.py
+801.848	py	plugins/spec-distill/tests	1
+0.022	pymod	shared/tests/test_check_deps.py
+0.119	py	shared/tests	1
+0.006	pymod	tools/plain-language/test_measure_output.py
+0.005	pymod	tools/plain-language/test_measure_questions.py
+0.114	py	tools/plain-language	1
+11.678	pymod	tools/suite/test_suite_timing.py
+11.772	py	tools/suite	1
+0.215	node	plugins/plugin-audit/tests/audit-workflow.test.mjs	1
+0.184	node	plugins/plugin-audit/tests/smoke-workflow.test.mjs	1
+end	1795299592.126	1
