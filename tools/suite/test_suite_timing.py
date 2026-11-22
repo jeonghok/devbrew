@@ -21,6 +21,7 @@ def clean_env(**extra):
     env = dict(os.environ)
     env.pop("SUITE_TIMING_FILE", None)
     env.pop("SUITE_PEERS_PS_FILE", None)
+    env.pop("SUITE_ONLY_FAILED_FILE", None)
     env.update(extra)
     return env
 
@@ -556,11 +557,8 @@ NODE = 1 if shutil.which("node") else 0
 FAIL_OUT = "FAILED plugins/p/tests/test_fail.sh: broke\n"
 
 
-class RunAllTimingTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-runall-"))
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.count = 0
+class RepoMixin(object):
+    """임시 레포 도우미. TestCase 가 아니다 — 섞는 클래스의 setUp 이 self.tmp · self.count 를 둔다."""
 
     def make_repo(self, files, node=False):
         self.count += 1
@@ -605,6 +603,13 @@ class RunAllTimingTests(unittest.TestCase):
 
     def target_lines(self, lines):
         return [l for l in lines if l.split("\t")[1] in ("sh", "py", "node")]
+
+
+class RunAllTimingTests(RepoMixin, unittest.TestCase):
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-runall-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.count = 0
 
     def test_ac1_without_var_fail_and_pass(self):
         rc, out, err = self.run_all(self.make_repo(BASE))

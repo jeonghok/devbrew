@@ -4,6 +4,7 @@
 # 실패 표시 줄 없이 rc≠0 인 파일 · 디렉토리는 `FAILED <대상>: rc <n>(실패 표시 줄 없음)`.
 # 로드맵 frontmatter test_command 가 이것을 부른다(spec-distill merge_check). 스위트 둘을 같은 시각에 돌리지 않는다.
 # SUITE_TIMING_FILE=<절대 경로> 가 있으면 시작 · 대상마다 · 끝에 걸린 시간과 다른 스위트 수 줄을 덧붙인다(없으면 아무것도 쓰지 않는다).
+# SUITE_ONLY_FAILED_FILE=<절대 경로> 가 있으면 그 목록(`<대상>: <이름>` 줄)의 대상만 돈다 — 목록을 읽지 못하면 알리고 전부 돈다. 두 변수는 테스트에게 물려주지 않는다.
 set -u
 cd "$(git rev-parse --show-toplevel)" || exit 2
 TOP="$(pwd)"
@@ -11,6 +12,9 @@ SELF_PID=$$
 PEERS="tools/suite/suite_peers.py"
 TIMING="${SUITE_TIMING_FILE:-}"
 unset SUITE_TIMING_FILE
+ONLY="${SUITE_ONLY_FAILED_FILE:-}"
+unset SUITE_ONLY_FAILED_FILE
+ONLY_ON=""
 T_PREV=""
 if [ -n "$TIMING" ]; then
   case "$TIMING" in
@@ -24,7 +28,7 @@ if [ -n "$TIMING" ]; then
 fi
 RUNNER="tools/suite/run_unittest_dir.py"
 LIST="$(mktemp "${TMPDIR:-/tmp}/run-all.XXXXXX")" || exit 2
-trap 'rm -f -- "$LIST" "$LIST.warned" "$LIST.peers-warned" "$LIST.stamp-err"' EXIT
+trap 'rm -f -- "$LIST" "$LIST.warned" "$LIST.peers-warned" "$LIST.stamp-err" "$LIST.only"' EXIT
 
 # write_note — 기록 파일 쓰기 실패 알림. 바퀴마다 한 번(하위 셸을 넘도록 파일로 기억한다).
 write_note() {
@@ -92,6 +96,88 @@ timing_mark() {
   T_PREV="$now"
 }
 
+# only_kind <대상> — 러너가 내는 대상 꼴이면 그 종류(sh · py · node)를 내고, 아니면 아무것도 내지 않는다.
+# 셸 shared/tests/…test_*.sh · plugins/<p>/tests/…test_*.sh, python shared/tests · plugins/<p>/tests · tools/<d>,
+# node plugins/<p>/tests/…*.test.mjs. case 의 * 는 / 도 맞으므로 <p> · <d> 에 / 가 없는지 따로 본다.
+only_kind() {
+  local t="$1" p rest
+  case "$t" in
+    shared/tests) echo py; return 0 ;;
+    shared/tests/*) rest="${t#shared/tests/}" ;;
+    tools/*)
+      p="${t#tools/}"
+      case "$p" in ""|*/*) ;; *) echo py ;; esac
+      return 0 ;;
+    plugins/*/tests|plugins/*/tests/*)
+      rest="${t#plugins/}"; p="${rest%%/*}"; rest="${rest#*/}"
+      [ -n "$p" ] || return 0
+      [ "$rest" = tests ] && { echo py; return 0; }
+      [ "${rest#tests/}" != "$rest" ] || return 0
+      rest="${rest#tests/}" ;;
+    *) return 0 ;;
+  esac
+  case "${rest##*/}" in
+    test_*.sh) echo sh ;;
+    *.test.mjs) [ "${t#plugins/}" = "$t" ] || echo node ;;
+  esac
+  return 0
+}
+
+# only_present <종류> <대상> — 이 사본에서 반복문이 실제로 도는 대상인가.
+only_present() {
+  case "$2" in */./*|*/../*|*//*|plugins/.*|tools/.*) return 1 ;; esac
+  case "$1" in
+    sh) case "$2" in */spike/*|*/fixtures/*) return 1 ;; esac
+        [ -e "$2" ] ;;
+    py) case "$2" in
+          tools/*) ls "$2"/test_*.py >/dev/null 2>&1 ;;
+          *) [ -d "$2" ] ;;
+        esac ;;
+    node) git ls-files 'plugins/*/tests/*.test.mjs' | grep -qxF -- "$2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# only_drop <까닭> <값> — 목록을 버리고 전부 돈다고 알린다.
+only_drop() {
+  printf 'run-all: 실패 목록을 읽지 못해 전부 돈다 — %s: %s\n' "$1" "$2" >&2
+}
+
+if [ -n "$ONLY" ]; then
+  case "$ONLY" in
+    /*)
+      if ! o_raw="$(cat -- "$ONLY" 2>/dev/null)"; then
+        only_drop "파일을 읽지 못했다" "$ONLY"
+      else
+        : > "$LIST.only"
+        o_lines=0; o_sel=0; o_bad=""
+        while IFS= read -r o_line; do
+          [ -n "$o_line" ] || continue
+          o_lines=$((o_lines+1))
+          case "$o_line" in
+            *": "*) o_t="${o_line%%: *}" ;;
+            *) o_bad="$o_line"; break ;;
+          esac
+          o_kind="$(only_kind "$o_t")"
+          [ -n "$o_kind" ] || { o_bad="$o_line"; break; }
+          only_present "$o_kind" "$o_t" || continue
+          grep -qxF -- "$o_t" "$LIST.only" && continue
+          printf '%s\n' "$o_t" >> "$LIST.only"
+          o_sel=$((o_sel+1))
+        done <<< "$o_raw"
+        if [ -n "$o_bad" ]; then
+          only_drop "대상 경로 꼴이 아닌 줄이 있다" "$o_bad"
+        elif [ "$o_lines" -eq 0 ]; then
+          only_drop "읽을 줄이 없다" "$ONLY"
+        else
+          ONLY_ON=1
+          echo "run-all: 일부만 돌았다 — 대상 ${o_sel}개(SUITE_ONLY_FAILED_FILE)" >&2
+        fi
+      fi ;;
+    *) only_drop "절대 경로가 아니다" "$ONLY" ;;
+  esac
+fi
+
 if [ -n "$TIMING" ]; then
   stamp_read
   case "$s" in *" "*) now="${s%% *}"; n="${s#* }" ;; *) now="?"; n="?" ;; esac
@@ -104,11 +190,13 @@ fi
 
 {
   while IFS= read -r f; do
+    [ -z "$ONLY_ON" ] || grep -qxF -- "$f" "$LIST.only" || continue
     out="$(bash "$f" 2>&1 < /dev/null)"; rc=$?
     emit "$f" "$rc" "$out" 's/^ *(✗|FAIL:) //p'
     timing_mark sh "$f"
   done < <(find shared/tests plugins/*/tests -name 'test_*.sh' -not -path '*/spike/*' -not -path '*/fixtures/*' | LC_ALL=C sort)
   for d in plugins/*/tests shared/tests; do
+    [ -z "$ONLY_ON" ] || grep -qxF -- "$d" "$LIST.only" || continue
     [ -d "$d" ] || continue
     out="$(SUITE_TIMING_FILE="$TIMING" python3 "$RUNNER" "$d" 2>&1)"; rc=$?
     py_notes "$out"
@@ -117,6 +205,7 @@ fi
   done
   for d in tools/*/; do
     d="${d%/}"
+    [ -z "$ONLY_ON" ] || grep -qxF -- "$d" "$LIST.only" || continue
     ls "$d"/test_*.py >/dev/null 2>&1 || continue
     out="$(SUITE_TIMING_FILE="$TIMING" python3 "$RUNNER" "$d" 2>&1)"; rc=$?
     py_notes "$out"
@@ -124,6 +213,7 @@ fi
     timing_mark py "$d"
   done
   for f in $(git ls-files 'plugins/*/tests/*.test.mjs'); do
+    [ -z "$ONLY_ON" ] || grep -qxF -- "$f" "$LIST.only" || continue
     out="$(node --test --test-reporter=tap "$f" 2>&1)"; rc=$?
     emit "$f" "$rc" "$out" 's/^[[:space:]]*not ok( [0-9]+)?( - )?//p'
     timing_mark node "$f"

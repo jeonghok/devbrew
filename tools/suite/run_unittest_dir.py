@@ -6,6 +6,7 @@
 환경 변수 SUITE_TIMING_FILE(절대 경로)이 있으면 끝에 `<초>\tpymod\t<폴더>/<모듈 파일>` 줄을 덧붙인다 —
 테스트에는 물려주지 않는다. 빈 값은 없는 것과 같다.
 한 모듈의 초 = 그 모듈 테스트들의 몸통 + 그 모듈의 클래스 · 모듈 준비와 정리.
+SUITE_ONLY_FAILED_FILE(run-all.sh 의 실패 목록)은 읽지 않고 테스트에게 물려주지 않는다.
 """
 import os
 import sys
@@ -120,6 +121,7 @@ def write_timing(path, module_secs):
 
 
 def main(argv):
+    os.environ.pop("SUITE_ONLY_FAILED_FILE", None)
     timing = os.environ.pop("SUITE_TIMING_FILE", "")
     if timing and not os.path.isabs(timing):
         print("run_unittest_dir: SUITE_TIMING_FILE 은 절대 경로여야 한다 — 기록하지 않는다: %s" % timing,
