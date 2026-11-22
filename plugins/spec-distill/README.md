@@ -326,7 +326,7 @@ state_branch: 켬
 
 - 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다. gh 를 쓰는 진입은 `origin` URL 에서 호스트 · owner · repo 를 뽑지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다.
 - devbrew 는 `origin` 의 기본 브랜치(`origin/HEAD`)와 `origin` 의 PR 만 본다. fork 의 부모 레포로 PR 을 내는 흐름과 원격 없는 로컬 레포는 지원하지 않는다. `upstream` 원격이 있어도 보지 않는다.
-- 기본 브랜치를 `main` · `master` 로 짐작하지 않는다. `origin/HEAD` 가 없으면 기본 브랜치가 필요한 자리(브랜치 만들기 · 컨텍스트 쌓기 끝 커밋 · 지휘자 · 스위트 대조 · 상태 계산)에서 멈추고(컨텍스트 쌓기 끝은 커밋만 하지 않는다) 고치는 법을 보인다 — `git remote set-head origin --auto`(`origin` 원격이 없으면 먼저 `git remote add origin <URL>`). `git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다.
+- 기본 브랜치를 `main` · `master` 로 짐작하지 않는다. `origin/HEAD` 가 없으면 기본 브랜치가 필요한 자리(브랜치 만들기 · 컨텍스트 쌓기 끝 커밋 · 로드맵 잡기 진입 · 지휘자 · 스위트 대조 · 상태 계산)에서 멈추고(컨텍스트 쌓기 끝은 커밋만 하지 않는다) 고치는 법을 보인다 — `git remote set-head origin --auto`(`origin` 원격이 없으면 먼저 `git remote add origin <URL>`). `git fetch` 로는 이미 있는 옛 값이 고쳐지지 않는다.
 - 지휘자 진입 · `merge_check.py run` · 컨텍스트 쌓기 끝 커밋 직전에는 원격의 기본 브랜치(`git ls-remote --symref origin HEAD`)와 로컬 값을 대조해 다르면 멈춘다(컨텍스트 쌓기 끝은 커밋만 하지 않는다). 대조하지 못하면(오프라인 · 10초 넘김) 멈추지 않고 로컬 값으로 가며 그 사실을 알린다.
 
 ### devbrew 밖 레포
