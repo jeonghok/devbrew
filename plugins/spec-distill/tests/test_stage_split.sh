@@ -7,6 +7,10 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
+if [ "${1:-}" = "--emit-scanned" ]; then   # 읽는 파일: 컨텍스트 쌓기 · 로드맵 잡기 추적 파일 전부
+  git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/context-build/*' 'plugins/spec-distill/skills/roadmap-draft/*'
+  exit 0
+fi
 . "$ROOT/shared/tests/assert.sh"
 FIN="$SD/skills/context-build/references/finishing.md"
 CB_SKILL="$SD/skills/context-build/SKILL.md"

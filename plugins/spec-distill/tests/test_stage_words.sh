@@ -8,6 +8,13 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
+if [ "${1:-}" = "--emit-scanned" ]; then   # 읽는 파일: 아래 corpus() 와 같은 묶음
+  git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/*' 'plugins/spec-distill/references/*' \
+    'plugins/spec-distill/templates/*' 'plugins/spec-distill/agents/*' 'plugins/spec-distill/README.md' \
+    'plugins/spec-distill/switches.md' 'plugins/spec-distill/dependencies.md' \
+    'shared/docreview/agents/*' 'shared/docreview/references/*' 'shared/docreview/scripts/docreview_state.py'
+  exit 0
+fi
 . "$ROOT/shared/tests/assert.sh"
 
 corpus() { git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/*' 'plugins/spec-distill/references/*' \

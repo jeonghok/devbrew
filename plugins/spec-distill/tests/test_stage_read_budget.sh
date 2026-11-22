@@ -7,6 +7,11 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
+if [ "${1:-}" = "--emit-scanned" ]; then   # 읽는 파일: 두 단계의 본문 + 끝맺음 절차 + 로드맵 잡기 추적 파일 전부
+  printf '%s\n' plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/skills/context-build/references/finishing.md
+  git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/roadmap-draft/*'
+  exit 0
+fi
 . "$ROOT/shared/tests/assert.sh"
 BASE_INTENT=1523
 BASE_INTERVIEW=1587
