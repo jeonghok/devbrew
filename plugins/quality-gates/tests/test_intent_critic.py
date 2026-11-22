@@ -2962,6 +2962,18 @@ class TestPersona(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertNotIn(bad, rest)
 
+    def test_question_field_is_one_sentence(self):
+        """question 칸 지시는 한 문장 + 직접 확인 줄이다 — 한두 문장 옛 글이 본문에 없다."""
+        _fm, body = self._split()
+        want = (
+            "- `question` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, "
+            "번호는 괄호 안에만 둔다.\n"
+            "  직접 확인해 볼 자리가 있으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 "
+            "한 줄을 단다 — 따로 된 칸은 없고 `question` 글의 일부다."
+        )
+        self.assertEqual(body.count(want), 1)
+        self.assertEqual(body.count("한두 문장"), 0)
+
     def test_frontmatter_is_read_only_and_unpinned(self):
         fm, _body = self._split()
         lines = fm.split("\n")

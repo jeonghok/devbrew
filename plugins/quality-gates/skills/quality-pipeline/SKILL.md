@@ -427,13 +427,12 @@ codex 의 kill switch 와 달리 이것은 loud 다 — codex 는 다른 전제 
 Agent({
   subagent_type: "quality-gates:security-reviewer",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-closed
-  description: "Security review (qg iter N)",
+  description: "Security review (qg)",
   prompt: "Run code-level security review on the current diff.
     project_dir: <project_dir>${PROJECT_DIR}</project_dir>
     diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (topic / session / branch / paths / range — the scope from Step 1)
     intent: <intent>${INTENT}</intent>
     criteria: <criteria>${CRITERIA}</criteria>
-    iteration: <iteration>${ITERATION}</iteration>
     filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (Step 1c 의 리뷰 diff — 문서 경로를 뺀 것)"
 })
 ```

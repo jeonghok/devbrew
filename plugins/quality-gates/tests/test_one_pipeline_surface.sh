@@ -115,7 +115,7 @@ case_one_pass_flow() {
   body=$(cat "$SKILL")
   assert_contains "$body" '## Final verdict' "전제: 부재 코퍼스가 e2e 뒤 절까지 담는다"
   for tok in 'Fix-loop' 'Max-iter' 'excluded.md' 'extra-iterations.md' 'classification.md' 'accepted with findings' \
-             'aborted iter' 'skipped: aborted' '멈추기' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
+             'aborted iter' 'iteration: <iteration>' 'skipped: aborted' '멈추기' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
     n=$(printf '%s\n' "$body" | grep -cF -- "$tok")
     assert_eq "$n" "0" "본문에 '$tok' 이 없다"
   done
