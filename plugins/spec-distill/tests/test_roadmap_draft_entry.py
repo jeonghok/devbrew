@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""roadmap_draft_entry.py — 로드맵 잡기 진입 검사(F5 AC6 · AC7 · AC11).
+
+Run (리포 루트에서): python3 plugins/spec-distill/tests/test_roadmap_draft_entry.py
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+SCRIPT = REPO / "plugins" / "spec-distill" / "scripts" / "roadmap_draft_entry.py"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import raw_source_fixture as F  # noqa: E402
+
+ROADMAP_REL = "docs/superpowers/roadmaps/2026-11-20-x/roadmap.md"
+SPLIT_LINE = "분해됨 — " + ROADMAP_REL
+PLAN_TABLE = ("## 분해안\n\n| 번호 | 이름 |\n|---|---|\n| E1 | 첫 에픽 |\n\n"
+              "승인: 「이대로」\n")
+
+
+def git(repo, *args):
+    p = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false",
+                        "-c", "core.hooksPath=/dev/null"] + list(args),
+                       cwd=str(repo), capture_output=True, text=True, encoding="utf-8")
+    if p.returncode != 0:
+        raise AssertionError("git %s: %s" % (args, p.stderr))
+    return p.stdout
+
+
+def digest(root: Path) -> dict:
+    return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(root.rglob("*")) if p.is_file() and ".git" not in p.relative_to(root).parts}
+
+
+class Base(unittest.TestCase):
+    def build(self, mode="no-framing", split=True, state_extra="\n## R1\n\n본문\n"):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        r = F.make_repo(Path(self.tmp.name) / "repo", mode=mode)
+        self.repo = Path(r["repo"])
+        self.p = r
+        git(self.repo, "branch", "-M", "main")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        git(self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        git(self.repo, "checkout", "-q", "-b", "feature/x")
+        brief = Path(r["brief"])
+        text = brief.read_text(encoding="utf-8")
+        if split:
+            assert text.count("## 7. Next Action\n") == 1
+            text = text.replace("## 7. Next Action\n", "## 7. Next Action\n\n- `%s`\n" % SPLIT_LINE)
+            brief.write_text(text, encoding="utf-8")
+        state = Path(r["state"])
+        state.write_text(state.read_text(encoding="utf-8").rstrip("\n") + "\n" + state_extra, encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "fixture 2")
+        self.brief, self.audit, self.state = r["brief"], r["audit"], r["state"]
+
+    def run_entry(self, brief=None, cwd=None):
+        p = subprocess.run([sys.executable, str(SCRIPT), "--brief", brief or self.brief],
+                           cwd=str(cwd or self.repo), capture_output=True, text=True, encoding="utf-8")
+        return p.returncode, p.stdout, p.stderr
+
+    def append(self, path, text):
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(text)
+
+
+class TestEntry(Base):
+    def test_clean_split_brief_ok(self):
+        self.build()
+        rc, out, err = self.run_entry()
+        lines = out.strip().split("\n")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(lines[0], "raw-source: NO-FRAMING")
+        self.assertEqual(lines[-1], "roadmap-entry: OK")
+        self.assertEqual(len(lines), 2, out)
+
+    def test_uncommitted_brief_stops(self):
+        self.build()
+        self.append(self.brief, "\n덧붙임\n")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 결과물에 커밋하지 않은 변경이 있다: ", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_never_committed_audit_stops(self):
+        self.build()
+        git(self.repo, "rm", "-q", "--cached", self.audit)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP audit 이 커밋된 적이 없다: ", out)
+
+    def test_state_never_committed_stops(self):
+        self.build()
+        git(self.repo, "rm", "-q", "--cached", self.state)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 상태 파일이 커밋된 적이 없다: ", out)
+
+    def test_state_changed_outside_two_sections_stops(self):
+        self.build()
+        self.append(self.state, "R1 에 덧붙인 줄\n")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 상태 파일의 커밋 뒤 변경이 두 절 밖에 있다: ## R1\n", out)
+
+    def test_state_changed_inside_two_sections_ok(self):
+        self.build()
+        self.append(self.state, "\n" + PLAN_TABLE + "\n## 생성 기록\n\n- 생성된 파일: a.md\n")
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertNotIn("STOP", out)
+        self.assertIn("roadmap-entry: RESUME 분해안 표 · 생성 기록\n", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: RESUME")
+
+    def test_resume_on_approved_table(self):
+        self.build(state_extra="\n" + PLAN_TABLE)
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: RESUME")
+        self.assertIn("분해안 표", out)
+
+    def test_emptied_two_sections_are_not_resume(self):
+        self.build(state_extra="\n## 분해안\n\n## 생성 기록\n\n")
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: OK")
+
+    def test_raw_source_uncommitted_stops(self):
+        self.build(mode="recorded")
+        self.append(self.p["framing"], "\n덧붙임\n")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertTrue(out.startswith("raw-source: FOUND "), out)
+        self.assertIn("roadmap-entry: STOP 원자료에 커밋하지 않은 변경이 있다: ", out)
+
+    def test_raw_source_never_committed_stops(self):
+        self.build(mode="recorded")
+        git(self.repo, "rm", "-q", "--cached", self.p["seed"])
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 원자료가 커밋된 적이 없다: ", out)
+
+    def test_raw_source_lost_does_not_stop(self):
+        self.build(mode="lost")
+        # LOST 일 때 남아 있는 seed 에 변경이 있어도 원자료 사유는 더하지 않는다.
+        self.append(self.p["seed"], "\n덧붙임\n")
+        rc, out, err = self.run_entry()
+        self.assertEqual(out.split("\n")[0].split(" ")[:2], ["raw-source:", "LOST"], out)
+        self.assertNotIn("원자료", out)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: OK")
+
+    def test_no_split_line_stops(self):
+        self.build(split=False)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 결과물 §7 에 분해됨 줄이 없다 — 나눌지는 컨텍스트 쌓기에서 정한다\n", out)
+
+    def test_roadmap_on_default_branch_stops(self):
+        self.build()
+        road = self.repo / ROADMAP_REL
+        road.parent.mkdir(parents=True)
+        road.write_text("# 로드맵\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "roadmap")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 이 결과물의 로드맵이 이미 기본 브랜치에 있다: " + ROADMAP_REL, out)
+
+    def test_roadmap_only_on_branch_is_ok(self):
+        self.build()
+        road = self.repo / ROADMAP_REL
+        road.parent.mkdir(parents=True)
+        road.write_text("# 로드맵\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "roadmap")
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+
+    def test_brief_risk_defect_stops(self):
+        self.build()
+        brief = Path(self.brief)
+        text = brief.read_text(encoding="utf-8")
+        old = "- 위험 — 숨은 가정 |"
+        self.assertEqual(text.count(old), 1)
+        brief.write_text(text.replace(old, "- 위험 K1 — 숨은 가정 |"), encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "risk")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 결과물의 위험 줄 번호가 생성기 검사에 걸린다: brief §5", out)
+
+    def test_all_reasons_listed(self):
+        self.build(split=False)
+        self.append(self.brief, "\n덧붙임\n")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        stops = [ln for ln in out.split("\n") if ln.startswith("roadmap-entry: STOP ")]
+        self.assertEqual(len(stops), 2, out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+        self.assertEqual(out.split("\n")[0], "raw-source: NO-FRAMING")
+
+    def test_relative_brief_path_from_subdir(self):
+        self.build()
+        base = self.run_entry()
+        sub = self.repo / "docs"
+        rel = os.path.relpath(self.brief, sub)
+        self.assertEqual(self.run_entry(brief=rel, cwd=sub), base)
+        self.assertEqual(self.run_entry(cwd=Path(self.tmp.name)), base)
+
+    def test_writes_nothing(self):
+        self.build(mode="recorded")
+        self.append(self.state, "R1 에 덧붙인 줄\n")
+        self.append(self.brief, "\n덧붙임\n")
+        before = (git(self.repo, "status", "--porcelain"), digest(self.repo))
+        self.run_entry()
+        after = (git(self.repo, "status", "--porcelain"), digest(self.repo))
+        self.assertEqual(before, after)
+
+    def test_bad_args_rc2(self):
+        p = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2)
+        p = subprocess.run([sys.executable, str(SCRIPT), "--brief", "/nonexistent/x.md"], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
