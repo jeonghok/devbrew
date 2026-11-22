@@ -440,8 +440,9 @@ class Show(CrossRepo):
         return commit
 
     def test_own_rules_edit_is_listed_after_the_foreign_line(self):   # AC5
-        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())          # 처음에는 없다 — STATUS 쓰기만 한 `씀` 은 세지 않는다(Review Focus 5)
         team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.status: "s\n"}, "현황")   # STATUS 쓰기도 `씀` 이다 — 규칙 · 대기 줄 경로가 아니라 세지 않는다
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())          # 처음에는 없다(Review Focus 5)
         commit = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
         out = self.text()
         self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
