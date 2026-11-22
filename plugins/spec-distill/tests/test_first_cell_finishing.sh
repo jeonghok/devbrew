@@ -92,7 +92,7 @@ checks.append(("secret_order", in_order(A, 0, "framing 기록 파일의 그 값�
                                         "그 뒤에 `place` 를 돌린다")))
 checks.append(("secret_same_commit", has("결과물과 같은 커밋에 넣는다")
                and line_has('git -C "$top" add', "RAW_A") and line_has("commit -q --only", "RAW_A")))
-checks.append(("no_verdict_stop", has("판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다",
+checks.append(("no_verdict_stop", has("판결 줄 없이 끝나면(종료 코드 2 의 `[raw_source] …` 줄, 또는 스크립트가 예외로 죽어 0 · 3 이 아닌 종료 코드) 끝맺음을 멈추고 펜스 출력을 그대로 보인다",
                                       "빈 앵커 줄로 나아가지 않는다")))
 checks.append(("secret_history", has("이 값은 git 이력의 옛 커밋에 남아 있다 — 값을 폐기하고 바꾸는 것이 먼저다")))
 checks.append(("no_first_cell_only", has("첫 칸에서만 가리는 길은 없다") and "첫 칸에서만 가린다" not in A))
@@ -147,7 +147,8 @@ breaks secret_same_commit fin 'add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$
 breaks labels fin '원자료를 찾지 못함 — 모델이 줄인 글' '원자료를 찾지 못함 — 사용자 원문'
 breaks old_rule_gone fin '그대로다(첫 입력이 곧 원자료다):' '그대로다. 그때도 같은 규칙이 그대로 적용됩니다:'
 breaks no_first_cell_only fin '첫 칸에서만 가리는 길은 없다' '첫 칸에서만 가린다'
-breaks no_verdict_stop fin '   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2) 끝맺음을 멈추고 그 줄을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.' ''
+breaks no_verdict_stop fin '   - 판결 줄 없이 끝나면(종료 코드 2 의 `[raw_source] …` 줄, 또는 스크립트가 예외로 죽어 0 · 3 이 아닌 종료 코드) 끝맺음을 멈추고 펜스 출력을 그대로 보인다 — 빈 앵커 줄로 나아가지 않는다.' ''
+breaks no_verdict_stop fin '또는 스크립트가 예외로 죽어 0 · 3 이 아닌 종료 코드' '또는 그 밖의 종료 코드면 판결 줄대로 간다'
 breaks no_verdict_stop fin '빈 앵커 줄로 나아가지 않는다' '빈 앵커 줄로 나아간다'
 breaks template tpl '앵커 라벨로 밝힌다' '라벨로 적는다'
 breaks review_stop_exception fin '`reviewing-brief` 가 진입 게이트에서 `first_cell` · `source_mismatch` 로 멈추면 그 skill 의 `vc_rc` 표 그 행대로 간다 — 이 끝맺음 안(커밋 전)에서만 첫 칸은 Step A 3 의 갈래를 다시 타고 표시는 상태 파일의 `source` 에 맞춘다. 세션을 넘겨 따로 부른 리뷰는 끝난 결과물이라 고치지 않는다.' ''
@@ -163,8 +164,10 @@ import sys
 code = int(os.environ["RS_STUB_RC"])
 if code == 2:
     sys.stderr.write("[raw_source] 가짜 — 판결 줄 없음\n")
-else:
+elif code in (0, 3):
     print("raw-source: LOST 가짜" if code == 3 else "raw-source: NO-FRAMING")
+else:   # 예외로 죽은 실행 — 판결 줄도 [raw_source] 줄도 없다
+    sys.stderr.write("Traceback (most recent call last):\nPermissionError: [Errno 13] 가짜\n")
 sys.exit(code)
 STUB_PY
 locate_fence() {   # locate_fence <finishing.md> → Step A 「seed 로 시작한」 문단 다음 첫 bash 펜스 본문(세 칸 들여쓰기를 뗀다)
@@ -201,6 +204,7 @@ no_state_run() {
 }
 RC2_LINE='[spec-distill] 원자료 판결 종료 코드 2 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다'
 RC3_LINE='[spec-distill] 원자료 판결 종료 코드 3 — 위 판결 줄대로 간다(멈추지 않는다)'
+RC1_LINE='[spec-distill] 원자료 판결 종료 코드 1 — 판결 줄이 없다. 아래 마지막 갈래대로 멈춘다'
 SHELLS="bash"; [ -x /bin/zsh ] && SHELLS="bash /bin/zsh"
 for sh in $SHELLS; do
   o2="$(verdict_says "$FIN" "$sh" 2)"; o3="$(verdict_says "$FIN" "$sh" 3)"; o0="$(verdict_says "$FIN" "$sh" 0)"
@@ -208,6 +212,9 @@ for sh in $SHELLS; do
   assert_not_contains "$o2" "멈추지 않는다" "locate 펜스(${sh}) — 종료 코드 2 에 「멈추지 않는다」 가 없다"
   assert_eq "$o3" "$RC3_LINE" "locate 펜스(${sh}) — 종료 코드 3(LOST)은 판결 줄대로 간다"
   assert_eq "$o0" "" "locate 펜스(${sh}) — 종료 코드 0 은 말이 없다"
+  o1="$(verdict_says "$FIN" "$sh" 1)"
+  assert_eq "$o1" "$RC1_LINE" "locate 펜스(${sh}) — 스크립트가 예외로 죽어 판결 줄 없이 끝나면(종료 코드 1) 멈춘다고 말한다"
+  assert_not_contains "$o1" "멈추지 않는다" "locate 펜스(${sh}) — 종료 코드 1 에 「멈추지 않는다」 가 없다"
 done
 # AC17 — 상태 파일이 없으면 싣기 전에 멈춘다: 판결 줄(stdout)이 없고, 사유 줄 하나, rc 2. 상태 파일이 있으면(위 칸들) 판결로 간다.
 NOSTATE_LINE="[spec-distill] 원자료를 싣지 않았다 — 상태 파일이 없다: $W/nostate.state.md"

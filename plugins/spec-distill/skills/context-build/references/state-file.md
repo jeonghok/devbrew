@@ -79,15 +79,15 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 if [ -n "${SEED_ABS:-}" ]; then
   echo "[spec-distill] seed 옆 기록 파일(분류기용):"
   rc=0; python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || rc=$?
-  if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 2 — 판결 줄이 없다. 「seed 원문 대조」 줄은 audit=없음(<위 [raw_source] 줄>) 로 낸다" >&2
-  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 위 판결 줄로 「seed 원문 대조」 줄을 낸다(멈추지 않는다)" >&2; fi
+  if [ "${rc}" -eq 3 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 3 — 위 판결 줄로 「seed 원문 대조」 줄을 낸다(멈추지 않는다)" >&2
+  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 판결 줄이 없다. 「seed 원문 대조」 줄은 audit=없음(<위 [raw_source] 줄 — 없으면 오류 출력의 마지막 줄>) 로 낸다" >&2; fi
 fi
 if [ -n "${STATE:-}" ]; then
   [ -f "$STATE" ] || { echo "[spec-distill] 상태 파일이 없다(${STATE}) — 원자료 판결은 상태 파일이 생긴 뒤에 받는다. 상태 파일을 만든 뒤 다시 돌린다" >&2; exit 1; }
   echo "[spec-distill] 이 컨텍스트 쌓기의 원자료:"
   rc=0; python3 "$SD/scripts/raw_source.py" locate --interview "$STATE" --absolute || rc=$?
-  if [ "${rc}" -eq 2 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 2 — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다" >&2
-  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 위 판결 줄대로 간다(멈추지 않는다)" >&2; fi
+  if [ "${rc}" -eq 3 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 3 — 위 판결 줄대로 간다(멈추지 않는다)" >&2
+  elif [ "${rc}" -ne 0 ]; then printf '%s\n' "[spec-distill] 판결 종료 코드 ${rc} — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다" >&2; fi
 fi
 ```
 
@@ -96,7 +96,7 @@ fi
   - `raw-source: FOUND <절대경로>` — 그 파일의 세 절(`## 1. 원문` · `## 2. 질문 전체` · `## 6. 리뷰 결정`)을 Read 로 읽고 `[spec-distill] 원자료: 읽음 — <절대경로>` 를 낸다.
   - `raw-source: LOST <사유>` — `[spec-distill] 원자료: 찾지 못함 — <사유>` 를 낸다.
   - `raw-source: NO-FRAMING` — `[spec-distill] 원자료: 없음 — framing 없는 컨텍스트 쌓기` 를 낸다.
-  - 판결 줄이 없다 — 펜스 출력을 그대로 보이고 `[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>: <[raw_source] 줄>)` 를 낸다. 컨텍스트 쌓기는 seed 로 간다 — 끝맺음은 같은 판결 없이는 멈추므로(`finishing.md` Step A 3) 그 사유를 첫 라운드에 함께 밝힌다.
+  - 판결 줄이 없다 — 펜스 출력을 그대로 보이고 `[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>: <[raw_source] 줄 — 없으면 오류 출력의 마지막 줄>)` 를 낸다. 컨텍스트 쌓기는 seed 로 간다 — 끝맺음은 같은 판결 없이는 멈추므로(`finishing.md` Step A 3) 그 사유를 첫 라운드에 함께 밝힌다.
 - 원자료를 찾지 못한 컨텍스트 쌓기는 막지 않고 지금처럼 간다. 첫 라운드의 «지금 이해» 에 `원자료를 찾지 못했다(<사유>) — seed 만 읽는다` 한 줄을 밝힌다. 끝맺음의 첫 칸과 결과물 리뷰는 같은 판결을 상태 파일에서 다시 받는다(`finishing.md` Step A 3).
 
 ### 옛 자리의 진행 기록
