@@ -23,7 +23,7 @@ FENCE="$(printf '%s\n' "$P2" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
 assert_grep "$FENCE" '^"\$QG/scripts/setup-qg\.sh" --ensure \$ARGUMENTS' "P2 는 setup 을 --ensure 로 부른다 (D-6)"
 assert_grep "$FENCE" "grep -q '\^## 판정\\$' \"\\\$RD/result\.md\".*then \"\\\$QG/scripts/setup-qg\.sh\" \\\$ARGUMENTS" \
   "끝난 앞 실행(## 판정)이면 setup 을 --ensure 없이 다시 부른다"
-for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   assert_grep "$FENCE" "^rm -f .*\"\\\$RD/$f\"" "P2 가 실행 단위 파일 $f 를 지운다"
 done
 
@@ -47,7 +47,7 @@ seed_prev() {   # <with_verdict: 1|0>
   mkdir -p "$RDIR"
   printf -- '---\nsession_id: "%s"\nstarted_at: "2000-01-01T00:00:00Z"\n---\n\n# qg result\n' "$SID" > "$RDIR/result.md"
   [ "$1" = 1 ] && printf '\n## 판정\n\nqg: clean\n\n## 지적\n\n(없음)\n' >> "$RDIR/result.md"
-  for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do echo old > "$RDIR/$f"; done
+  for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do echo old > "$RDIR/$f"; done
 }
 
 # (a) 끝난 앞 실행 — 폴더를 다시 만든다
@@ -56,7 +56,7 @@ seed_prev 1
 assert_eq "$rc" "0" "(a) P2 펜스가 끝난 앞 실행 위에서 0 으로 끝난다"
 assert_eq "$(grep -c '^## 판정$' "$RDIR/result.md" 2>/dev/null)" "0" "(a) 새 result.md 에 앞 실행의 ## 판정 이 없다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && no "(a) result.md 가 앞 실행의 것 그대로다" || ok "(a) result.md 가 새로 만들어졌다"
-for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   [ -e "$RDIR/$f" ] && no "(a) 앞 실행의 $f 가 남았다" || ok "(a) 앞 실행의 $f 가 없다"
 done
 
@@ -65,7 +65,7 @@ seed_prev 0
 ( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "0" "(b) P2 펜스가 새 폴더 위에서 0 으로 끝난다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && ok "(b) 판정 없는 result.md 는 --ensure 가 그대로 둔다" || no "(b) 판정 없는 result.md 가 다시 만들어졌다(setup 이중 실행)"
-for f in excluded.md differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
   [ -e "$RDIR/$f" ] && no "(b) $f 가 남았다" || ok "(b) $f 가 없다"
 done
 
@@ -137,8 +137,8 @@ FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL")"
 [ -n "$FV" ] && ok "Final verdict 창을 찾았다" || no "Final verdict 창이 없다"
 FVF="$(awk '$0 == "<!-- final-verdict:begin -->" {on=1; next} $0 == "<!-- final-verdict:end -->" {exit} on' "$SKILL" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
 [ -n "$FVF" ] && ok "Final verdict 펜스를 표지로 뽑았다" || no "Final verdict 펜스가 없다"
-assert_contains "$FVF" 'python3 "$QG/scripts/verdict.py" --line "${R_ARGS[@]}" "${D_ARGS[@]}" "${X_ARGS[@]}" "${S_ARGS[@]}" "${E_ARGS[@]}" --iter <N> > "$RD/verdict.out"' \
-  "F: verdict.py 에 다섯 결과 줄의 배열을 넘긴다"
+assert_contains "$FVF" 'python3 "$QG/scripts/verdict.py" --line "${R_ARGS[@]}" "${D_ARGS[@]}" "${S_ARGS[@]}" "${E_ARGS[@]}" > "$RD/verdict.out"' \
+  "F: verdict.py 에 네 결과 줄의 배열을 넘긴다(제외 · 반복 번호 자리 없음)"
 assert_not_grep "$FV" '--(blocking|optional|new-failures|excluded)[ =]+"?<' "F: 판정 줄 숫자 자리에 자리표시(<N>)가 없다 — 숫자는 결과 줄에서 온다(R24)"
 assert_not_grep "$FV" ':-0\}' "F: 결측을 0 으로 채우는 셸 기본값이 없다 (V8 · 최종 리뷰 I3)"
 assert_not_contains "$FVF" 'N_BLOCK=' "F: 합성 출력에서 숫자를 다시 뽑던 옛 줄이 없다"
@@ -154,7 +154,7 @@ import os, sys
 out, sid = sys.argv[1], sys.argv[2]
 lines = os.environ["FVF_SRC"].split("\n")
 fill = {"QG_ARGS_R": os.environ["R_IN"], "QG_ARGS_RR": "되올림 없음", "QG_ARGS_D": os.environ["D_IN"],
-        "QG_ARGS_X": "", "QG_ARGS_S": "", "QG_ARGS_E": "qg-verdict-args: --e2e pass"}
+        "QG_ARGS_S": "", "QG_ARGS_E": "qg-verdict-args: --e2e pass"}
 res, skip = [], None
 for l in lines:
     if skip is not None:
@@ -183,7 +183,7 @@ PY
 }
 GOOD_R='qg-verdict-args: --blocking 1 --optional 2 --defect'
 GOOD_D='qg-verdict-args: --new-failures 0'
-final_case "정상(양성 짝)"     "$GOOD_R" "$GOOD_D" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 1 · '
+final_case "정상(양성 짝)"     "$GOOD_R" "$GOOD_D" 0 'qg: defect · 막는 지적 1 · 선택 2 · 차등 새 실패 0 · e2e pass · '
 final_case "리뷰 줄 없음"      ""        "$GOOD_D" 4 '리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다'
 final_case "차등 줄 없음"      "$GOOD_R" ""        4 '리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다'
 final_case "합성기 본문 줄"    'blocking: 1' "$GOOD_D" 4 '리뷰 결과 줄이 정해진 모양'

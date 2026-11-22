@@ -43,7 +43,7 @@ case_v2_synth_failure_is_not_clean() {
   local out; out=$(python3 "$S/synthesize_findings.py" --findings "$T/none.yaml" --emit-verdict 2>/dev/null)
   assert_not_grep "$out" '^verdict: clean$' "V2 — 못 읽는 findings 는 clean 이 아니다"
   assert_grep "$(flat '### Step 4 — synthesis (after the differential test)')" \
-    '\*\*rc 를 소비하라\.\*\* rc 가 0 이 아니거나 `\$RV/synth\.out` 이 비어 있으면 이 iteration 은 \*\*clean 이 아니다\*\*' \
+    '\*\*rc 를 소비하라\.\*\* rc 가 0 이 아니거나 `\$RV/synth\.out` 이 비어 있으면 이 실행은 \*\*clean 이 아니다\*\*' \
     "V2 — SKILL 이 합성기 rc·빈 stdout 을 clean 으로 읽지 말라고 한다"
 }
 
@@ -91,7 +91,7 @@ case_v6_codex_output_cleared_and_degrade_disclosed() {
 case_v7_scope_count_is_independent() {
   assert_grep "$(sec '### Step 4 — synthesis (after the differential test)')" \
     'resolved_scope_file_count == 0.*changes_exist == yes.*scope-empty' "V7 — 빈 범위 floor 행"
-  assert_grep "$(sec '### Step 1b — changes-exist signal (N = 1 only)')" \
+  assert_grep "$(sec '### Step 1b — changes-exist signal')" \
     'It is \*\*never\*\* copied from `check-review-scope.sh`' "V7 — 개수는 독립 신호에서 베끼지 않는다"
 }
 
@@ -104,10 +104,44 @@ case_v8_missing_severity_is_not_optimistic() {
   assert_grep "$out" '^verdict: defect$' "V8 — severity 결측은 막는 지적으로 남는다"
 }
 
-case_v9_retry_paths_are_confined() {
-  local b; b="$(sec '### Retry: file-write safety')"
-  assert_contains "$b" 'os.path.commonpath([root, candidate]) != root' "V9 — Retry 경로를 project_dir 안에 가둔다"
-  assert_contains "$(sec '### Retry: error handling')" '<file> 수정에 실패했다' "V9 — Edit 실패는 묻는다"
+case_v9_one_pass_no_code_edits() {
+  # V9 — 한 실행은 한 번 지나고 저장소의 코드를 고치지 않는다. 색인 행 · R1 문장 · 고칠 목록 기록을 잰다.
+  local idx r1
+  idx="$(sec '## Requirement index')"
+  assert_eq "$(printf '%s\n' "$idx" | grep -cxF '| V9 한 실행은 한 번 지나고 저장소의 코드를 고치지 않는다 | Flow · Step 4.5 고칠 목록 · Law 2 |')" "1" \
+    "V9 — Requirement index 에 V9 행이 줄 전체로 한 번 있다"
+  r1="$(awk '/^\*\*R1 \(Law 2\):\*\*/{f=1} f&&/^\*\*R2 /{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+  assert_eq "$(printf '%s\n' "$r1" | grep -o 'the only repository write is the intent-critic answer commit' | grep -c .)" "1" \
+    "V9 — R1 이 저장소 쓰기는 intent-critic 답 커밋 하나뿐이라고 한 번 말한다"
+  assert_not_contains "$r1" 'Fix-loop' "V9 — R1 이 고치기 반복의 관문을 부르지 않는다(위 양성 짝)"
+  # 고칠 목록 — Final verdict 기록 펜스가 Step 4.5 의 목록을 `## 고칠 목록` 절로 옮긴다(차등 테스트 앞).
+  local d rd fv sid=v9fixlist01 lf ld
+  d="$T/v9"; mkdir -p "$d"
+  git -C "$d" init -q -b trunk \
+    && git -C "$d" -c core.hooksPath=/dev/null -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
+  rd="$(git -C "$d" rev-parse --show-toplevel)/.claude/quality-gates/$sid"; mkdir -p "$rd"
+  fv="$(sec '## Final verdict' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /## 판정/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}')"
+  assert_contains "$fv" "cat <<'QG_FIX_LIST'" "V9 — Final verdict 기록 펜스가 고칠 목록을 따옴표 here-doc 으로 받는다"
+  cat > "$T/v9-fill.py" <<'PY'
+import sys
+f = sys.stdin.read().split("\n")
+i = next(k for k, l in enumerate(f) if l.endswith("<<'QG_FIX_LIST'"))
+j = f.index("QG_FIX_LIST", i + 1)
+body = ["### 막는 지적", "", "- IMPORTANT src/a.py:41 — 키를 검증하지 않는다 · 고칠 방법: $(touch PWNED)", "",
+        "### 제안", "", "(없음)", "", "### 차등 회귀", "", "(없음)"]
+print("\n".join(f[:i + 1] + body + f[j:]).replace("<session-id>", sys.argv[1]).replace("<N>", "1"))
+PY
+  printf '%s\n' "$fv" | python3 -I "$T/v9-fill.py" "$sid" > "$T/v9-fv.sh"
+  printf 'verdict: defect\nqg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · abc1234\n' > "$rd/verdict.out"
+  printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$rd/result.md"
+  (cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/v9-fv.sh") >/dev/null 2>&1
+  lf=$(grep -n '^## 고칠 목록$' "$rd/result.md" | cut -d: -f1); ld=$(grep -n '^## 차등 테스트$' "$rd/result.md" | cut -d: -f1)
+  if [ -n "$lf" ] && [ -n "$ld" ] && [ "$lf" -lt "$ld" ]; then ok "V9 — result.md 의 ## 고칠 목록 이 ## 차등 테스트 앞에 있다"
+  else no "V9 — result.md 절 순서 (고칠 목록=$lf 차등=$ld)"; fi
+  assert_eq "$(grep -c '^## 고칠 목록$' "$rd/result.md")" "1" "V9 — ## 고칠 목록 절은 하나다"
+  assert_contains "$(cat "$rd/result.md")" '- IMPORTANT src/a.py:41 — 키를 검증하지 않는다 · 고칠 방법: $(touch PWNED)' "V9 — 고칠 목록의 줄이 글자 그대로 옮겨진다"
+  assert_eq "$(ls "$d" | grep -c PWNED)" "0" "V9 — 고칠 목록 안의 명령 치환이 실행되지 않는다(따옴표 here-doc)"
+  assert_file_absent "$rd/result.md" '^## (제외 패치|추가 반복)$' "V9 — 고치기 반복의 기록 절이 없다(위 양성 짝)"
 }
 
 case_v10_backstop_called_directly() {
@@ -145,118 +179,12 @@ case_p21_intent_never_lowers_or_skips() {
     "P21 — 의도 텍스트는 지적을 낮추거나 건너뛰게 하지 못한다"
 }
 
-case_ac7_fix_loop_override_and_excluded_log() {
-  local w; w="$(flat '### Fix-loop decision')"
-  assert_grep "$w" 'Each number typed there flips that item \(적용 ↔ 제외\)\. A user.s change overrides your classification, in either direction' \
-    "AC7 — 사용자가 적용/제외를 뒤집을 수 있고 그 변경이 분류를 이긴다"
-  assert_grep "$w" 'For every 제외 item append one line to `\$RD/excluded\.md`: `- iter <N> · #<k> · <file> · <사유>`' \
-    "AC7 — 제외 항목은 excluded.md 에 한 줄씩 남는다"
-}
-
-case_max_iter_cap_is_five() {
-  # AC25 — 상한은 사라지지 않는다: 기본 5 가 남고, 넘는 길은 사용자가 한 번에 하나씩 연 반복뿐이다.
-  local w; w="$(flat '### Max-iter decision')"
-  assert_grep "$w" '기본 상한은 5 다\(P18\)\. 지금 상한은 `CAP = 5 \+ <\$RD/extra-iterations\.md 의 줄 수>` 이다' \
-    "P18 — Max-iter 절이 기본 상한 5 와 지금 상한(CAP)의 계산을 말한다"
-  assert_grep "$w" 'question: "qg 가 반복 상한\(<CAP>번 — 기본 5번\)에 닿았다\.' \
-    "P18 — Max-iter 질문이 기본 상한 5 를 말한다"
-}
-
-case_ac25_extra_iteration_record_runs() {
-  # AC25 — 상한에서 연 반복의 기록 펜스를 실제로 돌린다: 원문은 펼쳐지지 않고 그대로 남고(신뢰하지 않는 데이터),
-  # 여러 줄이어도 한 줄로 접혀 상한을 부풀리지 않으며, 줄 하나가 상한을 하나 늘린다. Final verdict 기록 펜스가 그 파일이
-  # 있을 때만 `## 추가 반복` 을 `## 제외 패치` 다음에 남긴다.
-  local d top rd fx fv out sid=ac25record01
-  d="$T/ac25"; mkdir -p "$d"
-  git -C "$d" init -q -b trunk \
-    && git -C "$d" -c core.hooksPath=/dev/null -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
-  top="$(git -C "$d" rev-parse --show-toplevel)"; rd="$top/.claude/quality-gates/$sid"; mkdir -p "$rd"
-  fx="$(sec '### Max-iter decision' | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
-  assert_contains "$fx" 'F="$RD/extra-iterations.md"' "AC25 — Max-iter 절에서 기록 펜스를 뽑았다(양성 짝)"
-  # 사람 원문(여러 줄) — 작은따옴표 · 명령 치환 · 백틱 · 형식 지시자 · 역슬래시 · CR · 「- 」로 시작하는 줄 ·
-  # 앞에 글이 붙은 옛 끝 줄 이름 · 옛 고정 끝 줄 이름(QG_EXTRA_RAW)만 있는 줄과 그 뒤 셸 명령 줄 둘
-  # (끝 줄 이름이 고정이면 거기서 here-doc 이 끝나 MARKER · AFTERFILE 이 생긴다). 원문은 손대지 않는다.
-  local raw=$'it\'s $(touch PWNED) `touch PWNED2` %s %d \\n end\n- x\r\nfoo QG_EXTRA_RAW\nQG_EXTRA_RAW\ntouch MARKER\necho AFTER > AFTERFILE'
-  # 자리표시를 채우는 도우미 — 모델이 하는 일(원문은 받은 그대로, 끝 줄 이름의 <8 hex> 는 실행마다 새 16진수 8자)을 그대로 한다.
-  # QG_MODE=zero|two 는 쓰기가 기록 줄을 0 개 · 2 개 더하는 경우를 흉내 낸다(쓰기 뒤 검사가 멈추는지 잰다).
-  cat > "$T/ac25-fill.py" <<'PY'
-import os, secrets
-f = os.environ["QG_F"]
-out, n = [], 0
-for line in f.split("\n"):
-    if line.startswith("<고른 선택지 이름"):
-        out.append(os.environ["QG_R"])
-        n += 1
-    else:
-        out.append(line)
-f = "\n".join(out)
-Q = chr(39)
-f = f.replace("<8 hex>", secrets.token_hex(4))
-f = f.replace("<session-id>", os.environ["QG_S"])
-f = f.replace(Q + "<N>" + Q, Q + os.environ["QG_N"] + Q)
-f = f.replace(Q + "<label 또는 typed>" + Q, Q + os.environ["QG_P"] + Q)
-mode = os.environ.get("QG_MODE", "")
-w = "{ printf -- " + Q + "- iter %s"
-if mode == "zero":
-    f = f.replace(" >> " + chr(34) + "$F" + chr(34) + "\n", " > /dev/null\n", 1)
-elif mode == "two":
-    f = f.replace(w, "{ printf -- " + Q + "- iter 0 뒤 · 반복 하나 더 · x · y" + chr(92) + "n" + Q + "; printf -- " + Q + "- iter %s", 1)
-print(f if n == 1 else "echo placeholder-missing; exit 9")
-PY
-  fill() {  # <fence> <N> <출처> <원문> [세션] [모드] → 채운 펜스(stdout)
-    QG_F="$1" QG_N="$2" QG_P="$3" QG_R="$4" QG_S="${5:-$sid}" QG_MODE="${6:-}" python3 "$T/ac25-fill.py"
-  }
-  fill "$fx" 5 typed "$raw" > "$T/ac25-r1.sh"
-  out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-r1.sh" 2>&1)"
-  assert_eq "$out" "cap: 6" "AC25 — 첫 승인 뒤 상한은 6 이다(기본 5 + 줄 하나 — 원문의 「- 」 줄이 상한을 부풀리지 않는다)"
-  assert_eq "$(grep -c . "$rd/extra-iterations.md")" "1" "AC25 — 여러 줄 원문이 기록 한 줄로 접힌다"
-  assert_eq "$(cat "$rd/extra-iterations.md" 2>/dev/null)" \
-    $'- iter 5 뒤 · 반복 하나 더 · typed · it\'s $(touch PWNED) `touch PWNED2` %s %d \\n end - x foo QG_EXTRA_RAW QG_EXTRA_RAW touch MARKER echo AFTER > AFTERFILE' \
-    "AC25 — 기타 칸 원문이 손대지 않은 채(옛 끝 줄 이름 줄 포함) 펼쳐지지 않고 글자 그대로(줄바꿈 · CR 만 접혀) 출처 typed 와 함께 남는다"
-  assert_eq "$(ls "$d" | grep -c 'PWNED\|MARKER\|AFTERFILE')" "0" "AC25 — 원문 안의 명령 치환 · 백틱 · 옛 끝 줄 이름 뒤 명령이 실행되지 않았다"
-  fill "$fx" 6 label '한 번 더 돌기' > "$T/ac25-r2.sh"
-  out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-r2.sh" 2>&1)"
-  assert_eq "$out" "cap: 7" "AC25 — 승인 하나에 상한이 하나씩 늘어난다(한 번에 하나)"
-  assert_eq "$(sed -n 2p "$rd/extra-iterations.md")" '- iter 6 뒤 · 반복 하나 더 · label · 한 번 더 돌기' "AC25 — 선택지 승인은 출처 label 과 선택지 이름으로 남는다"
-  # 쓰기 뒤 검사 — 기록 줄이 0 개 · 2 개 늘면 멈춤 줄 · rc 5 · cap 없음(반복을 열지 않는다). 다른 세션 폴더에서 돈다.
-  local mode grc gout
-  for mode in zero two; do
-    fill "$fx" 7 label '한 번 더 돌기' ac25guard-$mode "$mode" > "$T/ac25-g-$mode.sh"
-    mkdir -p "$top/.claude/quality-gates/ac25guard-$mode"
-    gout="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-g-$mode.sh" 2>&1)"; grc=$?
-    assert_eq "$grc" "5" "AC25 — 쓰기가 기록 줄을 ${mode} 만큼 더하면 펜스가 rc 5 로 멈춘다"
-    assert_contains "$gout" '추가 반복 기록이 한 줄 늘지 않았다' "AC25 — ${mode}: 멈춤 줄을 낸다"
-    assert_not_contains "$gout" 'cap:' "AC25 — ${mode}: 상한을 내지 않는다(반복을 열지 않는다)"
-  done
-  # Final verdict 기록 펜스
-  fv="$(sec '## Final verdict' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /## 판정/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}')"
-  assert_contains "$fv" 'printf '"'"'\n## 추가 반복\n\n'"'"'' "AC25 — Final verdict 기록 펜스를 뽑았다(양성 짝)"
-  printf '%s\n' "$fv" | sed "s/<session-id>/$sid/g; s/<N>/6/g" > "$T/ac25-fv.sh"
-  printf 'qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 6 · abc1234\n' > "$rd/verdict.out"
-  printf -- '- iter 1 · #2 · a.py · SUGGESTION\n' > "$rd/excluded.md"
-  printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$rd/result.md"
-  (cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-fv.sh") >/dev/null 2>&1
-  local lx la ld
-  lx=$(grep -n '^## 제외 패치$' "$rd/result.md" | cut -d: -f1); la=$(grep -n '^## 추가 반복$' "$rd/result.md" | cut -d: -f1)
-  ld=$(grep -n '^## 차등 테스트$' "$rd/result.md" | cut -d: -f1)
-  if [ -n "$lx" ] && [ -n "$la" ] && [ -n "$ld" ] && [ "$lx" -lt "$la" ] && [ "$la" -lt "$ld" ]; then
-    ok "AC25 — result.md 의 ## 추가 반복 이 ## 제외 패치 다음 · ## 차등 테스트 앞이다"
-  else no "AC25 — result.md 절 순서 (제외=$lx 추가=$la 차등=$ld)"; fi
-  assert_contains "$(cat "$rd/result.md")" '- iter 6 뒤 · 반복 하나 더 · label · 한 번 더 돌기' "AC25 — result.md 가 승인 줄을 옮긴다"
-  rm -f "$rd/extra-iterations.md"
-  printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$rd/result.md"
-  (cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/ac25-fv.sh") >/dev/null 2>&1
-  assert_file_grep "$rd/result.md" '^## 제외 패치$' "AC25 — 승인이 없을 때도 기록 펜스가 돌았다(양성 짝)"
-  assert_file_absent "$rd/result.md" '^## 추가 반복$' "AC25 — 승인이 없으면 ## 추가 반복 절을 쓰지 않는다"
-}
-
 for c in case_v1_verdict_vocabulary_is_closed case_v2_synth_failure_is_not_clean case_v3_malformed_finding_blocks \
          case_v4_missing_recritic_is_not_clean case_v5_security_absent_is_not_certified \
          case_v6_codex_output_cleared_and_degrade_disclosed case_v7_scope_count_is_independent \
-         case_v8_missing_severity_is_not_optimistic case_v9_retry_paths_are_confined \
+         case_v8_missing_severity_is_not_optimistic case_v9_one_pass_no_code_edits \
          case_v10_backstop_called_directly case_v11_identity_grammar_fullmatch case_v12_dispatches_carry_project_dir \
-         case_ac9_intent_line_printed_once case_p21_intent_never_lowers_or_skips \
-         case_ac7_fix_loop_override_and_excluded_log case_max_iter_cap_is_five case_ac25_extra_iteration_record_runs; do
+         case_ac9_intent_line_printed_once case_p21_intent_never_lowers_or_skips; do
   "$c"
 done
 finish

@@ -25,13 +25,13 @@ nline_in() {  # nline_in <text> <고정 문자열> — 그 문자열이 처음 �
   printf '%s\n' "$1" | grep -n -F -- "$2" | head -n 1 | cut -d: -f1
 }
 
-case_K8_e2e_section_sits_between_fixloop_and_final() {
+case_K8_e2e_section_sits_between_differential_and_final() {
   local f e v
-  f=$(line_of "## Fix-loop" "$SKILL"); e=$(line_of "## e2e" "$SKILL"); v=$(line_of "## Final verdict" "$SKILL")
+  f=$(line_of "## Differential test" "$SKILL"); e=$(line_of "## e2e" "$SKILL"); v=$(line_of "## Final verdict" "$SKILL")
   if [ -n "$f" ] && [ -n "$e" ] && [ -n "$v" ] && [ "$f" -lt "$e" ] && [ "$e" -lt "$v" ]; then
-    ok "K-8: ## e2e 가 ## Fix-loop 와 ## Final verdict 사이에 있다"
+    ok "K-8: ## e2e 가 ## Differential test 와 ## Final verdict 사이에 있다"
   else
-    no "K-8: 절 순서가 틀렸다 (Fix-loop=$f e2e=$e Final verdict=$v)"
+    no "K-8: 절 순서가 틀렸다 (Differential test=$f e2e=$e Final verdict=$v)"
   fi
 }
 
@@ -106,7 +106,7 @@ case_M9_preflight_stops_a_leftover_app_before_clearing() {
   local p st rm
   p=$(awk '/^\*\*P2 — setup\.\*\*/{w=1} /^\*\*P3 /{w=0} w' "$SKILL")
   st=$(printf '%s\n' "$p" | grep -nxF -- 'bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"' | head -n 1 | cut -d: -f1)
-  rm=$(nline_in "$p" 'rm -f "$RD/excluded.md"')
+  rm=$(nline_in "$p" 'rm -f "$RD/differential.yaml"')
   if [ -n "$st" ] && [ -n "$rm" ] && [ "$st" -lt "$rm" ]; then ok "M9: P2 가 지우기 전에 남은 앱을 내린다(rc 는 막지 않는다)"; else no "M9: P2 의 stop 줄 위치 (stop=$st rm=$rm)"; fi
 }
 
@@ -142,15 +142,16 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
     f=$(marked "$m")
     [ -n "$f" ] && ok "R24: 판정 펜스 $m 을 표지로 찾았다(아래 부재 단언이 공허하지 않다)" || no "R24: 판정 펜스 $m 이 없다"
     assert_contains "$s" "<!-- $m:begin -->" "R24: $m 표지가 ## Final verdict 안에 있다"
-    for ax in R D X S E; do
+    for ax in R D S E; do
       assert_contains "$f" "<<'QG_ARGS_$ax'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
     done
-    for ax in R D X S; do
+    assert_not_contains "$f" "QG_ARGS_X" "R24($m): 제외 결과 줄 자리가 없다(한 실행은 고치지 않는다 — 위 양성 짝)"
+    for ax in R D S; do
       assert_contains "$f" "\"\${${ax}_ARGS[@]}\"" "R24($m): $ax 결과 줄은 배열 \"\${${ax}_ARGS[@]}\" 로 넘긴다"
     done
     assert_contains "$f" '"${E_ARGS[@]}"' "R24($m): e2e 결과 줄은 배열로 넘긴다"
     assert_contains "$f" "grep -Eqx 'qg-verdict-args:( --[a-z][a-z-]*( [0-9a-z][0-9a-z-]*)?)+'" "R24($m): 결과 줄의 모양을 검사한다"
-    assert_contains "$f" 'pass|fail|미확인|"안 함"|"걸을 것 없음"|"걸을 도구 없음"|"꺼짐(kill switch)") ;;' "R24($m): e2e 칸은 닫힌 열거로 검사한다"
+    assert_contains "$f" 'pass|fail|미확인|무효|"안 함"|"걸을 것 없음"|"걸을 도구 없음"|"꺼짐(kill switch)") ;;' "R24($m): e2e 칸은 닫힌 열거로 검사한다(verdict.py 의 칸 값과 같다 — 무효 포함)"
     assert_contains "$f" 'python3 "$QG/scripts/verdict.py" ' "R24($m): 판정은 verdict.py 가 낸다(양성 짝)"
     for ax in synth.out synth-review.out differential.yaml excluded.md range-scope.txt --prior 'sed -n' eval; do
       assert_not_contains "$f" "$ax" "R24($m): 판정 펜스가 '$ax' 를 쓰지 않는다(세션 폴더를 다시 읽지 않는다)"

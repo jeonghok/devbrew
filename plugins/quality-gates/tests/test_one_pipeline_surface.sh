@@ -62,8 +62,8 @@ case_new_skeleton_present() {
   assert_file_grep "$SKILL" '^## Differential test$'                "SKILL 에 차등 테스트 포인터 절이 있다"
   assert_file_grep "$SKILL" 'references/differential-test\.md'      "포인터가 새 레퍼런스를 가리킨다"
   assert_eq "$(grep -E '^## ' "$SKILL" | tr '\n' '|')" \
-    "## 진입 단계|## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## Fix-loop|## e2e|## Final verdict|## Publish|## kill switch|## Rules|## Requirement index|" \
-    "K-8 — SKILL 의 ## 절이 이 순서다(③ 은 Publish, ④ 는 e2e 를 끼우며 이 핀을 고친다)"
+    "## 진입 단계|## 사람에게 쓰는 글|## Preflight|## Flow|## Review|## Differential test|## e2e|## Final verdict|## Publish|## kill switch|## Rules|## Requirement index|" \
+    "K-8 — SKILL 의 ## 절이 이 순서다(고치기 반복 절이 없다 — 한 번 지난다)"
   assert_file_grep "$REF"   'scripts/seal-worktree\.sh" seal'       "HEAD 축은 봉인에서 선다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-head'  "HEAD 축 트리를 만든다"
   assert_file_grep "$REF"   'scripts/qg-worktree\.sh" create-baseline' "기준선 축 트리를 만든다"
@@ -97,12 +97,35 @@ case_no_gate_scope_question() {
   local headers
   headers=$(grep -oE 'header: "[^"]*"' "$SKILL" "$REF" | sed 's/.*header: //' | LC_ALL=C sort -u | tr '\n' ' ')
   assert_not_grep "$headers" 'Gate scope|Runtime scope|Runtime resolve' "게이트 · 런타임 범위 질문이 없다"
-  assert_grep     "$headers" 'qg 반복 N'                              "fix-loop 결정 도구는 남아 있다(양의 짝)"
+  assert_eq "$(grep -cF 'header: "낮춘 지적",' "$SKILL")" "1" "결정 도구는 낮춘 지적 게이트 하나가 남아 있다(양의 짝)"
+}
+
+case_one_pass_flow() {
+  # AC1 · AC2 — 한 실행은 한 번 지난다. 막는 지적 · 차등 defect 가 있어도 묻지 않고 고칠 목록을 남긴다.
+  # 양의 짝: 흐름 펜스의 새 줄 · Step 4.5 의 고칠 목록 문단 · 끝 한 줄. 부재: 고치기 반복 장치의 낱말.
+  local flow s45 body tok n
+  flow=$(awk '/^## Flow$/{f=1;next} f&&/^## /{exit} f' "$SKILL" | awk '/^```$/{if(on){exit}; on=1; next} on')
+  assert_eq "$(printf '%s\n' "$flow" | grep -cxF ' │   막는 지적 · 차등 defect 가 있어도 묻지 않는다 — 고칠 목록을 result.md 에 남기고 e2e 질문으로 간다')" "1" \
+    "Flow 펜스: 막는 지적 · 차등 defect 가 있어도 묻지 않고 고칠 목록을 남기고 e2e 로 간다(줄 전체 한 번)"
+  s45=$(awk '$0 == "### Step 4.5 — Surface the verdict" {f=1; next} f && /^#{2,3} /{exit} f' "$SKILL")
+  assert_eq "$(printf '%s\n' "$s45" | grep -c '^\*\*고칠 목록\.\*\*')" "1" "Step 4.5 본문에 고칠 목록 문단이 한 번 있다"
+  assert_eq "$(grep -cxF '> [quality-gates] 고칠 목록은 result.md 의 「## 고칠 목록」 에 있다 — 고친 뒤 qg 를 다시 부른다.' "$SKILL")" "1" \
+    "끝 한 줄이 본문에 한 번 있다"
+  # 부재 — 본문 전체에서 `## e2e` 절만 뺀다(그 절의 걷기 직후 게이트는 다음 과제가 다시 쓰고 그 절 안의 부재를 따로 잰다).
+  body=$(awk '/^## e2e$/{e=1; next} e && /^## /{e=0} !e' "$SKILL")
+  assert_contains "$body" '## Final verdict' "전제: 부재 코퍼스가 e2e 뒤 절까지 담는다"
+  for tok in 'Fix-loop' 'Max-iter' 'excluded.md' 'extra-iterations.md' 'classification.md' 'accepted with findings' \
+             'aborted iter' 'skipped: aborted' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
+    n=$(printf '%s\n' "$body" | grep -cF -- "$tok")
+    assert_eq "$n" "0" "본문(e2e 절 밖)에 '$tok' 이 없다"
+  done
+  n=$(printf '%s\n' "$body" | grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)')
+  assert_eq "$n" "0" "본문(e2e 절 밖)에 'CAP' 이 없다"
 }
 
 
 for c in case_old_surface_absent case_new_skeleton_present \
-         case_pipeline_order case_no_gate_scope_question \
+         case_pipeline_order case_no_gate_scope_question case_one_pass_flow \
 ; do
   "$c"
 done
