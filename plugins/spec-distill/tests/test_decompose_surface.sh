@@ -105,7 +105,7 @@ assert_file_absent "$FIN" '항목이 바뀌면 확정 직후' "옛 「항목이 
 
 # ── AC7 — 분해된 일의 다음 세션 줄 ──────────────────────────────────────────
 MARK='**다음 세션 줄 — 분해된 일 ①/② 공통**'
-DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
+DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$RD")"
 case "$DLINE" in
   '`/spec-distill:epic-conductor <roadmap-path>`') ok "분해된 일: 다음 세션 줄이 지휘자 호출" ;;
   *) no "분해된 일: 다음 세션 줄이 다르다: $DLINE" ;;

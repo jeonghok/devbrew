@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 분해된 인터뷰 끝맺음의 PR 펜스(interview-pr) · 머지 펜스(interview-merge) · 다시 확인 펜스(interview-merge-recheck)
-# — finishing.md 에서 뽑아 그대로 돌린다. 「값의 출처」 줄의 짝으로 끝내기 커밋 펜스(interview-commit)도 뽑아 돌린다.
+# — roadmap-draft SKILL.md(끝내기 커밋 펜스만 finishing.md)에서 뽑아 그대로 돌린다. 「값의 출처」 줄의 짝으로 끝내기 커밋 펜스(interview-commit)도 뽑아 돌린다.
 # 펜스는 Bash 도구의 셸에서 돌므로 bash 와 zsh 둘 다에서 잰다(zsh 가 없으면 그 사실을 알리고 bash 만).
 # 픽스처: 임시 레포(origin 은 git@github.com:<owner>/r.git — 가짜 ssh 가 로컬 bare 레포로 잇는다) + PATH 앞의
 # 가짜 gh · 가짜 sleep. 실제 gh · 네트워크로 나가지 않는다.
@@ -22,16 +22,17 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }
 last() { printf '%s\n' "$1" | tail -n 1; }
 FIN="$SD/skills/context-build/references/finishing.md"
+PR="$SD/skills/roadmap-draft/SKILL.md"   # PR 과 머지 글이 사는 곳(로드맵 잡기)
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 UPH='<interview-pr 이 낸 PR 주소>'
 HPH='<interview-pr 이 낸 끝 커밋>'
-pf="$(fence "$FIN" interview-pr)"
-mf="$(fence "$FIN" interview-merge)"
-rf="$(fence "$FIN" interview-merge-recheck)"
+pf="$(fence "$PR" interview-pr)"
+mf="$(fence "$PR" interview-merge)"
+rf="$(fence "$PR" interview-merge-recheck)"
 cf="$(fence "$FIN" interview-commit)"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 # 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
-ASK="$(grep -F '2. **머지 묻기.**' "$FIN")"
+ASK="$(grep -F '2. **머지 묻기.**' "$PR")"
 assert_contains "$ASK" '「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다' "본문: 권장 꼬리는 ONLY 일 때만"
 assert_contains "$ASK" '`MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고' "본문: MIXED · UNKNOWN 이면 꼬리를 뗀다"
 case "$mf" in *"URL=\"$UPH\""*"HEAD_SHA=\"$HPH\""*'gh_repo.py" pr-number '*'gh_repo.py" pr-merge '*) ok "전제: 머지 펜스에 URL · 끝 커밋 자리표와 gh_repo.py 호출" ;; *) no "전제: 머지 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
@@ -45,15 +46,15 @@ for g in "$mf" "$rf" "$cf"; do
   assert_eq "$(printf '%s\n' "$g" | head -n 1)" "$g1" "펜스 첫 줄의 플러그인 루트 가드가 PR 펜스와 글자 그대로 같다"
 done
 # 판결 줄 없는 출력을 읽는 법은 본문이 정한다 — 표시 줄이 있으면 다시 확인, 없으면 NONE
-HEADP="$(grep -F '**PR 과 머지 — 분해된 일 ①/② 만.**' "$FIN")"
+HEADP="$(grep -F '**PR 과 머지 — 분해된 일 ①/② 만.**' "$PR")"
 assert_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다.' "본문(절 머리): 표시 줄이 있으면 NONE 으로 읽지 않고 다시 확인"
 assert_not_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다. ' "본문(절 머리): 옛 문장(예외 없는 NONE)이 남지 않았다"
 assert_contains "$HEADP" '이 절의 펜스는 gh 를 직접 찾거나 부르지 않고' "본문(절 머리): 펜스가 셋이라 「이 절의 펜스는 gh 를 …」 이다"
 assert_not_contains "$HEADP" '두 펜스는 gh 를' "본문(절 머리): 옛 「두 펜스는 gh 를 …」 가 남지 않았다"
-STEP3="$(grep -F '3. **머지.**' "$FIN")"
+STEP3="$(grep -F '3. **머지.**' "$PR")"
 assert_contains "$STEP3" '판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `interview-merge: NONE` 으로 읽어 잇는다.' "본문(3 걸음): 그만둔 출력에 표시 줄이 있으면 다시 확인, 없으면 NONE"
 assert_not_contains "$STEP3" '판결 줄이 이미 있으면 그 판결대로, 없으면 `interview-merge: NONE` 으로 읽어 잇는다' "본문(3 걸음): 옛 문장(표시 줄을 보지 않는 NONE)이 남지 않았다"
-RECP="$(grep -F '**다시 확인 — ' "$FIN")"
+RECP="$(grep -F '**다시 확인 — ' "$PR")"
 assert_contains "$RECP" '**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `interview-merge-requested:` 표시 줄이 있을 때만.**' "본문(다시 확인): 도는 조건"
 assert_contains "$RECP" '(5초 간격 네 번까지)' "본문(다시 확인): 읽는 간격 · 횟수"
 

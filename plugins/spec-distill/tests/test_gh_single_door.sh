@@ -192,7 +192,7 @@ EOF
   || no "spec-distill 문서의 bash 펜스를 못 읽었다(문서 ${md_files:-0}/${#MDS[@]}개 · 펜스 ${md_fences:-0}개) — 아래 검사가 공허하다"
 HITS="$(printf '%s\n' "$OUT" | grep -v '^CHECKED ' | grep -v '^VIA ' | sed "s#^$ROOT/##" || true)"
 assert_eq "$HITS" "" "문서의 bash 펜스에 gh 를 직접 찾거나 부르는 줄이 없다"
-FIN_MD="plugins/spec-distill/skills/context-build/references/finishing.md"
+FIN_MD="plugins/spec-distill/skills/roadmap-draft/SKILL.md"
 via="$(printf '%s\n' "$OUT" | grep -c "^VIA $ROOT/$FIN_MD:" || true)"
 [ "$via" -ge 6 ] && ok "양의 짝: 인터뷰 끝맺음 펜스는 gh_repo.py 하위 명령으로 gh 에 닿는다(${via}줄)" \
   || no "양의 짝: 인터뷰 끝맺음 펜스의 gh_repo.py 하위 명령 호출을 못 찾았다(${via}줄) — 펜스가 gh 를 다른 길로 부르는지 본다"

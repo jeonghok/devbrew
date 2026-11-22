@@ -27,7 +27,7 @@ plugins/spec-distill/skills/context-build/references/finishing.md	언급	#### B-
 plugins/spec-distill/skills/context-build/references/finishing.md	언급	`AskUserQuestion` 게이트 자체는 아님)	
 plugins/spec-distill/skills/context-build/references/finishing.md	꼬리	brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:	**①② 이름 — 일의 모양에 따라.**	2	4
 plugins/spec-distill/skills/context-build/references/finishing.md	꼬리	**둘째 질문 — 다른 다음 단계.**			2
-plugins/spec-distill/skills/context-build/references/finishing.md	꼬리	2. **머지 묻기.** `AskUserQuestion` 하나		1	2
+plugins/spec-distill/skills/roadmap-draft/SKILL.md	꼬리	2. **머지 묻기.** `AskUserQuestion` 하나		1	2
 plugins/spec-distill/skills/context-build/references/saturation.md	꼬리	그리고 `AskUserQuestion` 1회로 셋 중 하나를 받는다	내줌: 포화 판정 없이 끝나 모자란 조사가 brief 에 그대로 남는다	1	3
 plugins/spec-distill/skills/context-build/references/saturation.md	떼기	셋 중 하나를 받는다	- 「인터뷰 종료」 — SKILL 의
 plugins/spec-distill/skills/context-build/references/saturation.md	지시	같은 빈 곳이 하나라도 있으면 혼자 다시 돌리지 않고	고른 줄은 대기 줄 블록에 덧붙인다.	1
