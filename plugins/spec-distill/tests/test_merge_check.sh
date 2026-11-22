@@ -32,6 +32,9 @@ branch_with() {  # branch_with <브랜치> — 지금 작업 트리 변경을 �
   g checkout -q -b "$1" && g add -A && g commit -qm "$1" && g checkout -q trunk
 }
 mc() { (cd "$W" && python3 "$MC" run --roadmap "$RM" --no-fetch "$@" 2>&1); }
+headline() {  # headline <출력> <브랜치> <꼬리 정규식> — 세 칸(브랜치 · 기본 브랜치 · 합친 사본 커밋)이 그대로이고 꼬리가 그것인 머리 줄 수
+  printf '%s\n' "$1" | grep -cE "^\[spec-distill\] 스위트 대조 — $2\([0-9a-f]{8}\) 를 기본 브랜치 trunk\([0-9a-f]{8}\) 에 합친 사본\([0-9a-f]{8}\)$3\$"
+}
 
 # 1 — pytest: 양쪽 다 빨간 파일 안의 새 실패를 이름으로 가른다
 if python3 -m pytest --version >/dev/null 2>&1; then
@@ -72,6 +75,7 @@ branch_with feature/ut
 out="$(mc --branch feature/ut)"; rc=$?
 assert_eq "$rc" "1" "unittest: 새 실패 → rc 1"
 assert_contains "$out" "test_a" "unittest: 새 실패 이름"
+assert_eq "$(headline "$out" feature/ut "과 기본 브랜치 사본을 돌렸다")" "1" "탐지 경로: 머리 줄 꼬리는 두 사본을 돌렸다 그대로다"
 
 # 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조
 mkrepo sh
@@ -396,6 +400,7 @@ assert_contains "$out" "기준 사본은 돌리지 않았다" "깨끗한 합친 
 assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다" "깨끗한 합친 사본: 고쳐짐은 재지 않았다"
 assert_eq "$(logn "$T/cl.log" base)" "0" "깨끗한 합친 사본: 기준 사본에서 테스트 명령을 돌리지 않았다"
 assert_eq "$(logn "$T/cl.log" merged)" "1" "깨끗한 합친 사본: 합친 사본에서 한 번 돌았다"
+assert_eq "$(headline "$out" feature/cl "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "깨끗한 합친 사본: 머리 줄이 기본 브랜치 사본을 돌리지 않았다고 말한다"
 
 # 13 — AC15 · AC19 · AC24(없는 대상) · AC30: 실제 러너 · 원래 실패 하나 + 새 실패 하나 · 호출한 쪽에 살아 있는 목록
 mkrepo ra 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
@@ -411,6 +416,7 @@ assert_contains "$out" "양쪽 다 있는 실패 1개: shared/tests/test_old.sh:
 assert_contains "$out" "목록(SUITE_ONLY_FAILED_FILE)으로 건네 돌렸다" "실제 러너: 기준 사본에 목록을 건넸다고 알린다"
 assert_eq "$(logn "$T/ra.log" merged)" "1" "실제 러너: 합친 사본은 호출한 쪽 목록을 무시하고 전부 돌았다"
 assert_eq "$(logn "$T/ra.log" base)" "0" "실제 러너: 기준 사본은 목록의 대상(test_old.sh)만 돌았다"
+assert_eq "$(headline "$out" feature/ra "을 돌렸고 기본 브랜치 사본은 합친 사본의 실패 목록\(SUITE_ONLY_FAILED_FILE\)을 건네 돌렸다")" "1" "실제 러너: 머리 줄이 기본 브랜치 사본에 실패 목록을 건넸다고 말한다"
 
 # 14 — AC16: 목록을 모르는 명령 — 기준 사본은 목록을 받고도 전부 돈다
 mkrepo nl 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
@@ -435,6 +441,7 @@ assert_eq "$(logn "$T/nf.log" base)" "1" "이름 없는 실패: 기준 사본에
 assert_eq "$(logn "$T/nf.log" merged)" "1" "이름 없는 실패: 합친 사본에서 한 번 돌았다"
 assert_eq "$(logcol2 "$T/nf.log" base)" "" "이름 없는 실패: 기준 사본을 전부 돌 때도 호출한 쪽 목록 변수를 빼고 돈다"
 assert_eq "$(logcol2 "$T/nf.log" merged)" "" "이름 없는 실패: 합친 사본도 호출한 쪽 목록 변수를 빼고 돈다"
+assert_eq "$(headline "$out" feature/nf "과 기본 브랜치 사본을 돌렸다 — 기본 브랜치 사본은 목록 없이 전부 돌렸다")" "1" "이름 없는 실패: 머리 줄이 기본 브랜치 사본을 전부 돌렸다고 말한다"
 
 # 16 — AC24: 대상 경로를 뺀 이름 — 러너가 목록을 버리고 기준 사본을 전부 돈다
 mkrepo rb 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED [^:]+: (.+)$"\n'
@@ -454,5 +461,6 @@ mkrepo nc 'test_command: no-such-cmd-e1p2\n'; put a.txt a; push_base; put b.txt 
 out="$(mc --branch feature/nc)"; rc=$?
 assert_eq "$rc" "3" "실행하지 못한 테스트 명령 → rc 3"
 assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "실행하지 못한 테스트 명령 사유"
+assert_eq "$(headline "$out" feature/nc "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "합친 사본에서 멈춰도 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
 
 finish
