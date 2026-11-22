@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 끝내기 커밋(interview-commit 펜스)의 범위와 재분해 표의 자리.
+# 끝내기 커밋(context-commit 펜스)의 범위와 재분해 표의 자리.
 # AC5 — 나눈 일이어도 끝내기 커밋은 결과물 · audit · 상태 파일만 넣는다. 로드맵 폴더는 로드맵 잡기의 커밋 펜스(roadmap-commit)가
 # 넣고, 그 판정(도출 · roadmaps_dir · roadmap-check · 폴더 · 링크)은 test_roadmap_draft_skill.sh 가 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_finish_commit_roadmap.sh
@@ -20,7 +20,7 @@ nob() { no "$1"; printf '      출력: %s\n' "$2"; }
 FIN="$SD/skills/context-build/references/finishing.md"
 RED="$SD/references/redecompose.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
-cf="$(fence "$FIN" interview-commit)"
+cf="$(fence "$FIN" context-commit)"
 case "$cf" in *"BRIEF=\"$PH\""*) ok "전제: 커밋 펜스에 BRIEF 자리표" ;; *) no "전제: BRIEF 자리표가 없다 — 아래 칸이 공허하다" ;; esac
 
 STEM=docs/superpowers/interview/2026-10-15-t-interview
@@ -113,7 +113,7 @@ refused() {   # refused <클론> <출력> <라벨> <사유 조각>
 }
 # 4a. 레포 설정 interview_dir — brief 가 그 폴더 바로 아래가 아니면 멈춘다
 c="$(mk cfg-iv 'interview_dir: notes/')"; brief7 "$c" "superpowers:brainstorming 으로 간다."
-o="$(runc "$c")"; refused "$c" "$o" "설정 interview_dir · 다른 자리" "정해진 인터뷰 폴더 바로 아래가 아니다"
+o="$(runc "$c")"; refused "$c" "$o" "설정 interview_dir · 다른 자리" "정해진 의도 폴더 바로 아래가 아니다"
 
 # 5. 기본 브랜치 — 나눈 일이어도 「커밋하지 않았다」 줄의 손 목록은 세 파일이다(로드맵 폴더는 로드맵 잡기가 커밋한다)
 c="$(mk onmain)"; git -C "$c" switch -q main; roadmap "$c"; brief7 "$c" "$DEC"
@@ -208,7 +208,7 @@ p_loc="${cf%%raw_source.py\" locate*}"; p_rej="${cf%%check-path interview_dir \"
 README="$SD/README.md"; RDS="$SD/skills/roadmap-draft/SKILL.md"
 assert_contains "$(cat "$README")" "세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다" "펜스 밖(AC16): README 가 framing 기록 · seed 를 댄다"
 assert_contains "$(cat "$RDS")" "아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다" "펜스 밖(AC16): roadmap-draft 의 손 목록 줄이 framing 기록 · seed 를 댄다"
-assert_contains "$(cat "$SD/skills/context-build/references/state-file.md")" "원자료를 찾은 인터뷰면 framing 기록 · seed 도 커밋되지 않은 변경이 있을 때 같은 커밋에 든다" "펜스 밖(AC16): 상태 파일 reference 의 끝낼 때가 framing 기록 · seed 를 댄다"
+assert_contains "$(cat "$SD/skills/context-build/references/state-file.md")" "원자료를 찾은 컨텍스트 쌓기면 framing 기록 · seed 도 커밋되지 않은 변경이 있을 때 같은 커밋에 든다" "펜스 밖(AC16): 상태 파일 reference 의 끝낼 때가 framing 기록 · seed 를 댄다"
 
 # 7. 재분해 표 — 세션 상태 폴더가 아니라 펜스의 임시 파일에 쓰이고, 생성기 rc 를 넘기며, 끝나면 지워진다
 rf="$(awk '/^## 5\. 적용/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RED")"

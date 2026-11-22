@@ -6,7 +6,7 @@ session_id: <uuid>
 source: spec-distill intent-sync
 ---
 
-# <Topic> — Interview Seed Audit
+# <Topic> — Intent Seed Audit
 
 > 순수 텔레메트리 — 다음 세션의 첫 턴 `/spec-distill:context-build @<seed 경로>` 가 가리키는 것은 payload(seed)
 > 파일이고, 여기에는 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다. payload 의 `audit_file`

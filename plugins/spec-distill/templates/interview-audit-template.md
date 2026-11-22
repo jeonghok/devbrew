@@ -6,9 +6,9 @@ session_id: <uuid>
 source: spec-distill context-build
 ---
 
-# <Topic> — Interview Audit
+# <Topic> — Context Audit
 
-> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 인터뷰가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
+> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 컨텍스트 쌓기가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
 > payload frontmatter의 `audit_file`이 이 파일을 가리키며, 게이트는 두 파일을 함께 검사한다.
 
 ## 1. Coverage Ledger
@@ -34,7 +34,7 @@ source: spec-distill context-build
 
 ## 2. Budget
 
-(한 줄. 이 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 인터뷰의 subagent
+(한 줄. 이 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 컨텍스트 쌓기의 subagent
  dispatch **총계**이고, `coverage-mapper <k>` 는 그중 coverage-mapper **하나만**의 횟수라
  언제나 `<k> ≤ <n>` 이다. 게이트가 보는 것은 후자뿐이며 k≥1이면 통과한다 — dispatch 를 못
  했으면 `coverage-mapper 0 (unavailable: <사유>)`처럼 사유를 붙인다(advisory) — 괄호 안 사유가

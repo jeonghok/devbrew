@@ -144,7 +144,7 @@ python3 "$SD/scripts/roadmap_write.py" check --brief "$BRIEF" --audit "${BRIEF%.
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
-[ -n "$IDIR" ] || { echo "[spec-distill] 인터뷰 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+[ -n "$IDIR" ] || { echo "[spec-distill] 의도 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 RMDIR="$(python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir)" || RMDIR=""
 [ -n "$RMDIR" ] || { echo "[spec-distill] 로드맵 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 BRIEF_REL="${IDIR}<file>"
@@ -222,17 +222,17 @@ fi
 
 ## 7. PR 과 머지 · 지휘자 줄
 
-**PR 과 머지.** 지휘자는 로드맵을 기본 브랜치에서 읽는다 — 브랜치에만 있는 로드맵은 상태를 셀 수 없고, 에픽 worktree 도 기본 브랜치에서 갈라져 묶음 파일이 없다. 그래서 이 단계가 커밋 뒤 PR 을 열고 머지를 묻는다. PR 을 열지 묻는 조건은 이 단계가 로드맵을 커밋했는가 하나다 — `## 6. 커밋` 의 커밋 펜스가 「로드맵 폴더 · 상태 파일을 커밋했다」 줄을 냈을 때만 돈다. 그 줄이 아니면(커밋하지 않음 · 실패) 이 절을 건너뛰고 아래 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다. PR 에는 앞 단계(컨텍스트 쌓기)가 커밋한 결과물 · audit 과 이 단계가 커밋한 로드맵 폴더 · 상태 파일이 함께 실린다. 펜스는 모두 마지막 줄이 판결이고, 판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 이 절의 펜스는 gh 를 직접 찾거나 부르지 않고 `gh_repo.py` 의 하위 명령으로만 부른다 — 그 모듈이 gh 를 찾고 origin 레포를 명시한다.
+**PR 과 머지.** 지휘자는 로드맵을 기본 브랜치에서 읽는다 — 브랜치에만 있는 로드맵은 상태를 셀 수 없고, 에픽 worktree 도 기본 브랜치에서 갈라져 묶음 파일이 없다. 그래서 이 단계가 커밋 뒤 PR 을 열고 머지를 묻는다. PR 을 열지 묻는 조건은 이 단계가 로드맵을 커밋했는가 하나다 — `## 6. 커밋` 의 커밋 펜스가 「로드맵 폴더 · 상태 파일을 커밋했다」 줄을 냈을 때만 돈다. 그 줄이 아니면(커밋하지 않음 · 실패) 이 절을 건너뛰고 아래 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다. PR 에는 앞 단계(컨텍스트 쌓기)가 커밋한 결과물 · audit 과 이 단계가 커밋한 로드맵 폴더 · 상태 파일이 함께 실린다. 펜스는 모두 마지막 줄이 판결이고, 판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `roadmap-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 이 절의 펜스는 gh 를 직접 찾거나 부르지 않고 `gh_repo.py` 의 하위 명령으로만 부른다 — 그 모듈이 gh 를 찾고 origin 레포를 명시한다.
 
-**머지 뒤.** 머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다 — 마지막 줄이 `interview-merge: MERGED` 인 턴이다(다시 확인 펜스의 `MERGED` 도 같다). 같은 턴에 지휘자를 부르지 않는다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 그 줄을 함께 보인다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `interview-pr: NONE` · `interview-merge: NONE` · 「직접 머지」)에는 PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
+**머지 뒤.** 머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다 — 마지막 줄이 `roadmap-merge: MERGED` 인 턴이다(다시 확인 펜스의 `MERGED` 도 같다). 같은 턴에 지휘자를 부르지 않는다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 그 줄을 함께 보인다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `roadmap-pr: NONE` · `roadmap-merge: NONE` · 「직접 머지」)에는 PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
-1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `interview-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더는 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더의 파일은 밖의 파일로 센다. push 한 끝 커밋은 `interview-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `interview-pr: OPEN <PR 주소>` 면 2 로, `interview-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더는 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더의 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
-<!-- interview-pr:begin -->
+<!-- roadmap-pr:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
-none() { echo "[spec-distill] PR 을 열지 않았다 — $1. 브랜치를 push 하고 PR 을 직접 열어 머지한 뒤 지휘자를 부른다."; echo "interview-pr: NONE"; exit 0; }
+none() { echo "[spec-distill] PR 을 열지 않았다 — $1. 브랜치를 push 하고 PR 을 직접 열어 머지한 뒤 지휘자를 부른다."; echo "roadmap-pr: NONE"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다(Step A.5 의 PAYLOAD 절대경로로 바꿔 다시 돌려라)" ;; esac
 cwd_l="$(pwd -L)"
 case "$BRIEF" in "$cwd_l"/*) BRIEF="$(pwd -P)/${BRIEF#"$cwd_l"/}" ;; esac
@@ -269,7 +269,7 @@ if [ -z "$url" ]; then
 else
   echo "[spec-distill] 이 브랜치의 열린 PR 을 쓴다 — $url"
 fi
-# 이 PR 이 바꾸는 파일 가운데 인터뷰 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것. 두 폴더는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
+# 이 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것. 두 폴더는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
 # 끝내기 커밋 펜스가 같은 키로 이미 보인 「값의 출처」 줄만 뺀다 — 그 호출의 사유 · 알림 · 경고 줄과 종료 코드는 그대로다.
 nosrc() {
   nf="$(mktemp)" || nf=""
@@ -284,7 +284,7 @@ idir=""
 if nosrc python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
   idir="$(dirname -- "$BRIEF")"
 else
-  echo "[spec-distill] brief 가 정해진 인터뷰 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
+  echo "[spec-distill] brief 가 정해진 의도 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
 fi
 r7="$(awk -v p='분해됨 — ' 'index($0,"## 7.")==1{f=1;next} f&&/^## /{exit} f{l=$0; sub(/^[ \t]*(- )?`?/,"",l); if(index(l,p)==1){l=substr(l,length(p)+1); sub(/`.*$/,"",l); sub(/[ \t]+$/,"",l); print l; exit}}' "$BRIEF" 2>/dev/null)" || r7=""
 rdir=""
@@ -298,32 +298,32 @@ x_rc=0
 extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
 if [ "$x_rc" -ne 0 ]; then
   echo "[spec-distill] 이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다."
-  echo "interview-pr-files: UNKNOWN"
+  echo "roadmap-pr-files: UNKNOWN"
 elif [ -z "$extra" ]; then
-  echo "[spec-distill] 이 PR 은 인터뷰 폴더와 로드맵 폴더의 파일만 담는다."
-  echo "interview-pr-files: ONLY"
+  echo "[spec-distill] 이 PR 은 의도 폴더와 로드맵 폴더의 파일만 담는다."
+  echo "roadmap-pr-files: ONLY"
 else
   x_n="$(printf '%s\n' "$extra" | wc -l | tr -d ' ')"
-  echo "[spec-distill] 이 PR 은 인터뷰 폴더 · 로드맵 폴더 밖의 파일 ${x_n}개도 담는다(스무 개까지 보인다):"
+  echo "[spec-distill] 이 PR 은 의도 폴더 · 로드맵 폴더 밖의 파일 ${x_n}개도 담는다(스무 개까지 보인다):"
   printf '%s\n' "$extra" | head -n 20 | sed 's/^/  - /'
-  echo "interview-pr-files: MIXED"
+  echo "roadmap-pr-files: MIXED"
 fi
-echo "interview-pr-head: $head_sha"
-echo "interview-pr: OPEN $url"
+echo "roadmap-pr-head: $head_sha"
+echo "roadmap-pr: OPEN $url"
 ```
-<!-- interview-pr:end -->
+<!-- roadmap-pr:end -->
 
-2. **머지 묻기.** `AskUserQuestion` 하나 — 질문 「<주제> — 지휘자는 로드맵을 기본 브랜치에서 읽어, 이 PR(<PR 주소>)이 머지돼야 에픽을 시작할 수 있다. 지금 머지할까?」, 선택지 「머지 (권장)」(얻음: CI 검사 뒤 PR 을 기본 브랜치에 합치고 지휘자 줄을 바로 보인다 · 내줌: 합친 뒤에는 되돌리기 번거롭고 CI 를 기다리는 동안 턴이 끝난 채 멈춰 있다) · 「직접 머지」(얻음: 머지 시점과 방식을 내가 정한다 · 내줌: 머지한 뒤 지휘자 줄을 직접 입력해야 해서 한 단계가 사람 몫으로 남는다). 「(권장)」 꼬리는 1 의 펜스가 `interview-pr-files: ONLY` 를 냈을 때만 단다 — 그 두 폴더(인터뷰 폴더 바로 아래 · 로드맵 폴더)의 파일만 바꾸는 PR 이라 머지를 권한다. `MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고, 질문 앞 글에 1 의 펜스가 보인 파일 목록(세지 못했으면 그 줄)을 다시 보인다 — 무엇이 함께 머지되는지 보고 고르게 한다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
-3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로, `HEAD_SHA` 자리표를 1 의 `interview-pr-head:` 값으로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 지휘자 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 사용자가 그만두라고 하면 그 백그라운드 작업을 끝낸다(작업을 끝내면 펜스가 기다리던 gh 도 함께 끝나 머지로 가지 않는다) — 끝낸 출력에 판결 줄이 이미 있으면 그 판결대로 잇는다. 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `interview-merge: NONE` 으로 읽어 잇는다. 이 기다림은 polite stop 이 아니다 — 지휘자 줄을 보이고 턴을 끝내는 완료 동작은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 이며 끝 커밋이 1 에서 push 한 커밋 그대로인지 먼저 확인한다. 그 PR 이 이미 머지돼 있으면(상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR) 검사를 기다리지도 머지를 요청하지도 않고 머지됨으로 읽는다 — origin 을 받고 판결은 `MERGED` 다. 머지도 그 커밋에 묶어 요청한다 — 묻고 난 뒤(CI 를 기다리는 사이 포함) PR 에 다른 커밋이 올라오면 머지하지 않는다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. 방식마다 요청을 보내기 직전에 표시 줄 `interview-merge-requested: <PR 번호>` 를 낸다. gh 의 머지 명령이 실패로 끝났어도 다시 읽은 PR 이 머지돼 있으면 다음 방식을 시도하지 않고 머지됨으로 읽는다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `interview-merge: MERGED` 면 지휘자 줄을 보이고 턴을 끝내며(머지 안내 없이), `interview-merge: NONE` 이거나 「직접 머지」면 지휘자 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+2. **머지 묻기.** `AskUserQuestion` 하나 — 질문 「<주제> — 지휘자는 로드맵을 기본 브랜치에서 읽어, 이 PR(<PR 주소>)이 머지돼야 에픽을 시작할 수 있다. 지금 머지할까?」, 선택지 「머지 (권장)」(얻음: CI 검사 뒤 PR 을 기본 브랜치에 합치고 지휘자 줄을 바로 보인다 · 내줌: 합친 뒤에는 되돌리기 번거롭고 CI 를 기다리는 동안 턴이 끝난 채 멈춰 있다) · 「직접 머지」(얻음: 머지 시점과 방식을 내가 정한다 · 내줌: 머지한 뒤 지휘자 줄을 직접 입력해야 해서 한 단계가 사람 몫으로 남는다). 「(권장)」 꼬리는 1 의 펜스가 `roadmap-pr-files: ONLY` 를 냈을 때만 단다 — 그 두 폴더(의도 폴더 바로 아래 · 로드맵 폴더)의 파일만 바꾸는 PR 이라 머지를 권한다. `MIXED` 나 `UNKNOWN` 이면 꼬리를 떼어 「머지」 로 내고, 질문 앞 글에 1 의 펜스가 보인 파일 목록(세지 못했으면 그 줄)을 다시 보인다 — 무엇이 함께 머지되는지 보고 고르게 한다. 답은 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
+3. **머지.** 「머지」면 아래 펜스의 `BRIEF` 자리표를 1 과 같은 값으로, `URL` 자리표를 1 의 PR 주소로, `HEAD_SHA` 자리표를 1 의 `roadmap-pr-head:` 값으로 바꿔 Bash 도구의 백그라운드 실행으로 돌린다(CI 를 기다리는 동안 도구 시간 상한에 걸리지 않게 — 끝나면 알림이 온다). 띄운 턴에는 `[spec-distill] PR 머지를 기다린다 — CI 검사가 끝나면 머지하고 이어 간다(검사는 30분까지 기다린다): <PR 주소>` 한 줄을 보이고 턴을 끝낸다 — 지휘자 줄은 아직 보이지 않는다. 알림이 온 턴에 출력의 `[spec-distill]` 줄을 그대로 보이고 판결대로 잇는다. 알림보다 먼저 사용자가 말을 걸면 그 턴에 백그라운드 출력을 읽어, 판결 줄이 있으면 판결대로 잇고 없으면 아직 기다리는 중이라고 답한다. 사용자가 그만두라고 하면 그 백그라운드 작업을 끝낸다(작업을 끝내면 펜스가 기다리던 gh 도 함께 끝나 머지로 가지 않는다) — 끝낸 출력에 판결 줄이 이미 있으면 그 판결대로 잇는다. 판결 줄이 없고 `roadmap-merge-requested:` 표시 줄이 있으면 머지 요청이 이미 나갔을 수 있다 — `NONE` 으로 읽지 않고 머지 펜스 아래의 다시 확인 펜스를 돌려 그 판결대로 잇는다. 표시 줄도 없으면 `roadmap-merge: NONE` 으로 읽어 잇는다. 이 기다림은 polite stop 이 아니다 — 지휘자 줄을 보이고 턴을 끝내는 완료 동작은 판결을 받은 턴에 한다. 펜스는 PR 주소의 레포가 origin 인지 대조하고, 그 PR 이 열려 있고 이 레포 안의 지금 브랜치에서 기본 브랜치로 가는 PR 이며 끝 커밋이 1 에서 push 한 커밋 그대로인지 먼저 확인한다. 그 PR 이 이미 머지돼 있으면(상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR) 검사를 기다리지도 머지를 요청하지도 않고 머지됨으로 읽는다 — origin 을 받고 판결은 `MERGED` 다. 머지도 그 커밋에 묶어 요청한다 — 묻고 난 뒤(CI 를 기다리는 사이 포함) PR 에 다른 커밋이 올라오면 머지하지 않는다. 막 연 PR 은 CI 가 아직 붙지 않았을 수 있어 「검사 없음」을 1분 동안 다시 본 뒤에야 받아들이고, 검사가 있으면 끝나길 30분까지 기다린다 — 실패한 검사가 있거나 30분을 넘기면 머지하지 않는다. 머지 방식은 그 레포가 허용하는 것 가운데 merge commit → squash → rebase 순서로 시도하고, 하나가 거절되면(보호 규칙 등) 다음 것을 시도한다. 방식마다 요청을 보내기 직전에 표시 줄 `roadmap-merge-requested: <PR 번호>` 를 낸다. gh 의 머지 명령이 실패로 끝났어도 다시 읽은 PR 이 머지돼 있으면 다음 방식을 시도하지 않고 머지됨으로 읽는다. gh 가 머지를 받아들이면 PR 상태를 다시 읽는다 — 머지 대기열이나 자동 머지를 쓰는 레포에서는 gh 가 요청만 걸어 두고 성공으로 끝나므로, 상태가 `MERGED` 가 아니면 판결은 `NONE` 이다. `MERGED` 면 origin 을 받아 지휘자가 읽는 로컬의 기본 브랜치 ref 를 맞춘다 — 받지 못하면 그 사실을 알리고 판결은 `MERGED` 그대로다. 마지막 줄이 `roadmap-merge: MERGED` 면 지휘자 줄을 보이고 턴을 끝내며(머지 안내 없이), `roadmap-merge: NONE` 이거나 「직접 머지」면 지휘자 줄 앞에 PR 주소와 함께 지휘 세션을 이 PR 이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
-<!-- interview-merge:begin -->
+<!-- roadmap-merge:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
-URL="<interview-pr 이 낸 PR 주소>"
-HEAD_SHA="<interview-pr 이 낸 끝 커밋>"
-none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
-merged() { git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."; echo "interview-merge: MERGED"; exit 0; }
+URL="<roadmap-pr 이 낸 PR 주소>"
+HEAD_SHA="<roadmap-pr 이 낸 끝 커밋>"
+none() { echo "[spec-distill] 머지하지 않았다 — $1. 직접 머지한 뒤 지휘자를 부른다: ${URL}"; echo "roadmap-merge: NONE"; exit 0; }
+merged() { git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."; echo "roadmap-merge: MERGED"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
 case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
 case "$HEAD_SHA" in ""|*[!0-9a-f]*) none "끝 커밋이 비었거나 자리표 그대로다" ;; esac
@@ -367,7 +367,7 @@ how=""
 for how in --merge --squash --rebase; do
   case " $ways " in *" $how "*) ;; *) continue ;; esac
   # 요청을 보내기 직전의 표시 줄 — 판결 줄 없이 끝난 출력에 이 줄이 있으면 다시 확인 펜스가 돈다.
-  echo "interview-merge-requested: $num"
+  echo "roadmap-merge-requested: $num"
   if python3 "$SD/scripts/gh_repo.py" pr-merge "$num" "$how" --match-head-commit "$HEAD_SHA" --root "$top"; then
     # gh 가 받아들였어도 머지 대기열 · 자동 머지면 아직 머지 전이다 — 상태를 다시 읽는다(15초까지).
     st=""
@@ -381,7 +381,7 @@ for how in --merge --squash --rebase; do
     done
     if [ "$st" != "MERGED" ]; then
       echo "[spec-distill] gh 는 머지 요청을 받았지만 PR 이 아직 머지되지 않았다(읽은 상태: ${st:-읽지 못함}) — 머지 대기열이나 자동 머지를 쓰는 레포면 조건이 채워진 뒤 머지된다. 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"
-      echo "interview-merge: NONE"
+      echo "roadmap-merge: NONE"
       exit 0
     fi
     echo "[spec-distill] PR 을 머지했다(${how#--}) — ${URL}"
@@ -394,16 +394,16 @@ for how in --merge --squash --rebase; do
 done
 none "허용된 머지 방식이 모두 거절됐다(위 사유 — 충돌 · 보호 규칙 · 권한)"
 ```
-<!-- interview-merge:end -->
+<!-- roadmap-merge:end -->
 
-**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `interview-merge-requested:` 표시 줄이 있을 때만.** 아래 펜스의 `BRIEF` · `URL` 자리표를 3 과 같은 값으로 바꿔 돌리고(백그라운드로 띄우지 않는다 — 기다림은 15초까지다) 나온 `[spec-distill]` 줄을 그대로 보인 뒤 그 판결대로 잇는다. 펜스는 읽기만 한다 — 머지를 요청하지도 CI 검사를 기다리지도 않는다. PR 주소의 레포가 origin 인지 대조하고, PR 상태를 머지 펜스의 머지 뒤 상태 읽기와 같은 간격 · 횟수(5초 간격 네 번까지)로 읽는다. 상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR 이면 origin 을 받고 `interview-merge: MERGED`, 끝까지 아니면 머지 요청이 나갔다는 사실과 PR 주소를 알리고 `interview-merge: NONE` 이다 — PR 상태를 끝까지 읽지 못했을 때(gh 인증 · 네트워크)도 머지됨으로 읽지 않고, 읽지 못했다는 사실을 따로 알린다.
+**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `roadmap-merge-requested:` 표시 줄이 있을 때만.** 아래 펜스의 `BRIEF` · `URL` 자리표를 3 과 같은 값으로 바꿔 돌리고(백그라운드로 띄우지 않는다 — 기다림은 15초까지다) 나온 `[spec-distill]` 줄을 그대로 보인 뒤 그 판결대로 잇는다. 펜스는 읽기만 한다 — 머지를 요청하지도 CI 검사를 기다리지도 않는다. PR 주소의 레포가 origin 인지 대조하고, PR 상태를 머지 펜스의 머지 뒤 상태 읽기와 같은 간격 · 횟수(5초 간격 네 번까지)로 읽는다. 상태가 머지됨이고 이 레포 안의 지금 브랜치에서 기본 브랜치로 간 PR 이면 origin 을 받고 `roadmap-merge: MERGED`, 끝까지 아니면 머지 요청이 나갔다는 사실과 PR 주소를 알리고 `roadmap-merge: NONE` 이다 — PR 상태를 끝까지 읽지 못했을 때(gh 인증 · 네트워크)도 머지됨으로 읽지 않고, 읽지 못했다는 사실을 따로 알린다.
 
-<!-- interview-merge-recheck:begin -->
+<!-- roadmap-merge-recheck:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 BRIEF="<Step A.5 의 PAYLOAD 절대경로>"
-URL="<interview-pr 이 낸 PR 주소>"
-none() { echo "[spec-distill] 머지됐는지 다시 확인하지 못했다 — $1. 머지 요청은 나갔을 수 있다 — PR 에서 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"; echo "interview-merge: NONE"; exit 0; }
+URL="<roadmap-pr 이 낸 PR 주소>"
+none() { echo "[spec-distill] 머지됐는지 다시 확인하지 못했다 — $1. 머지 요청은 나갔을 수 있다 — PR 에서 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"; echo "roadmap-merge: NONE"; exit 0; }
 case "$BRIEF" in ""|*"<"*) none "BRIEF 가 비었거나 자리표 그대로다" ;; esac
 case "$URL" in https://*/pull/[0-9]*) ;; *) none "PR 주소가 비었거나 자리표 그대로다" ;; esac
 top="$(git -C "$(dirname -- "$BRIEF")" rev-parse --show-toplevel 2>/dev/null)" || top=""
@@ -426,20 +426,20 @@ case "$pr" in
   "MERGED $def $cur false "*)
     echo "[spec-distill] 다시 확인하니 PR 이 머지돼 있다 — ${URL}"
     git -C "$top" fetch -q origin || echo "[spec-distill] 머지 뒤 origin 을 받지 못했다(위 사유) — 지휘자를 부르기 전에 git fetch origin 을 돌린다. 받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다."
-    echo "interview-merge: MERGED" ;;
+    echo "roadmap-merge: MERGED" ;;
   "MERGED "*)
     echo "[spec-distill] 머지 요청은 나갔지만 읽은 PR 이 이 레포의 ${cur} → ${def} PR 이 아니다(읽은 것: ${pr}) — PR 에서 직접 확인한 뒤 지휘자를 부른다: ${URL}"
-    echo "interview-merge: NONE" ;;
+    echo "roadmap-merge: NONE" ;;
   "")
     echo "[spec-distill] 머지 요청은 나갔지만 PR 상태를 읽지 못했다(위 사유) — 머지됐는지 확인한 뒤 지휘자를 부른다: ${URL}"
-    echo "interview-merge: NONE" ;;
+    echo "roadmap-merge: NONE" ;;
   *)
     st="${pr%% *}"
     echo "[spec-distill] 머지 요청은 나갔지만 PR 이 아직 머지되지 않았다(읽은 상태: ${st}) — 머지 대기열이나 자동 머지를 쓰는 레포면 조건이 채워진 뒤 머지된다. 머지된 것을 확인한 뒤 지휘자를 부른다: ${URL}"
-    echo "interview-merge: NONE" ;;
+    echo "roadmap-merge: NONE" ;;
 esac
 ```
-<!-- interview-merge-recheck:end -->
+<!-- roadmap-merge-recheck:end -->
 
 **다음 세션 줄 — 분해된 일 ①/② 공통**
 
@@ -464,7 +464,7 @@ esac
   4. 한 커밋에 넣는다 — 결과물과, 바뀌었으면 상태 파일과 지운 파일(커밋돼 있던 것). 로드맵을 커밋한 뒤의 취소면 생성 기록의 파일 지우기 · 상태 파일의 두 절 비우기 · `분해됨` 줄 지우기를 한 커밋에 넣는다. 제목은 `docs(roadmap): <로드맵 폴더 이름> 나누지 않기로` 다. 경로를 정해 `git add -- <경로들>` 과 `git commit -q --only -m "<제목>" -- <같은 경로들>` 로 커밋한다 — 이미 stage 된 다른 파일을 끌어들이지 않는다. 지금 기본 브랜치 위거나 detached HEAD 면 커밋하지 않고 「커밋하지 않았다 — <사유>. 확인한 뒤 직접 커밋하라: <경로들>」 을 보인다.
   5. 나누지 않은 일의 다음 세션 줄을 낸다 — 컨텍스트 쌓기가 나누지 않은 일에 내는 줄과 같은 글이다:
 
-     > `@<brief-path> 이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. 시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.`
+     > `@<brief-path> 이 context brief 로 Skill superpowers:brainstorming 을 시작하라. 시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.`
 
      `@<brief-path>` 는 결과물 절대경로로, 줄 안의 `${CLAUDE_PLUGIN_ROOT}` 는 이 플러그인의 절대경로로 바꿔 보인다. 바꾸지 못한 자리표가 남거나 경로에 공백이 있으면 그 줄을 보이지 않고 사유와 결과물 경로를 보인 뒤 멈춘다. 새 세션(`/compact` 또는 `/new` 뒤)에서 그 줄을 입력하라고 알리고 턴을 끝낸다 — 같은 턴에서 brainstorming 을 부르지 않는다.
 - **결과물에서 모자란 것을 보거나**(조사가 더 필요하다 등) **생성기가 결과물 쪽 결함으로 실패하면**(진입 검사의 위험 줄 번호 멈춤 · `## 3.` 의 `brief-risk: FAIL` · `## 5.` 의 위험 줄 사유 — 커밋 전 검사를 거치지 않은 옛 결과물 등): 결과물을 고치지 않고 그 사실을 보이고 멈춘다. 끝난 컨텍스트 쌓기는 다시 이을 수 없다. 사용자가 고를 길은 둘이다 — 「spec 하나로」 · 그 결과물을 입력으로 새 `/spec-distill:context-build` 를 시작한다(`/spec-distill:context-build @<결과물 절대경로>`). 사용자가 「spec 하나로」 를 말하면 위 첫 갈래로 간다.

@@ -53,7 +53,7 @@ assert_contains "$s2" '`@` 를 뗀 경로를 감시줄 `root=` 기준으로 풀�
 assert_contains "$s2" '같은 문자열을 `root=` 기준 상대경로로 보고 한 번 더 시도한다' "§3: 절대경로 Read 실패 → root= 기준 상대경로로 한 번 더"
 assert_contains "$s2" '줄번호·탭 접두를 뗀 **파일 원문 전체(frontmatter 포함)**' "AC5: 풀린 입력 = frontmatter 포함 파일 전문"
 assert_contains "$s2" '「풀린 입력」의 출처는 이 Read 결과다' "§3: 첨부가 따로 와도 출처는 Read 결과"
-assert_contains "$s2" '(<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.' "AC5: 부재 문구"
+assert_contains "$s2" '(<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 컨텍스트 쌓기를 시작하지 않는다.' "AC5: 부재 문구"
 assert_contains "$s2" '시도한 절대경로를 모두 담아 아래 문구를 내고 멈춘다' "AC5: 정지 지시"
 assert_contains "$s2" '시도: ' "@ 실패 문구가 시도한 절대경로를 싣는다"
 assert_contains "$s2" '공백 없는 경로 한 토큰으로 다시 불러라' "@ 경로의 공백을 알리고 멈춘다"
@@ -110,7 +110,7 @@ gb="$(block '^### 두 가드' '^##' "$SK")"
 stop="$(printf '%s\n' "$gb" | awk '/^- \*\*cross-compact 조기 진행 금지\*\*/{f=1; print; next} f && /^- /{f=0} f' | flat)"
 pol="$(printf '%s\n' "$gb" | awk '/^- \*\*polite stop 금지/{f=1; print; next} f && /^- /{f=0} f' | flat)"
 [ -n "$stop" ] && ok "AC3(양성): 정지 가드 불릿을 읽었다" || no "AC3(양성): 정지 가드 불릿이 없다 — 아래 단언이 공허하다"
-for n in '①/② 어느 쪽이든' '턴 종료(STOP)' '같은 턴에서 인터뷰를 시작하지 않습니다' '**다음 턴**' '사용자 트리거로만'; do
+for n in '①/② 어느 쪽이든' '턴 종료(STOP)' '같은 턴에서 컨텍스트 쌓기를 시작하지 않습니다' '**다음 턴**' '사용자 트리거로만'; do
   assert_contains "$stop" "$n" "AC3: 정지 가드 한 불릿 안에 $n"
 done
 [ -n "$pol" ] && ok "§1(양성): polite stop 불릿을 읽었다" || no "§1(양성): polite stop 불릿이 없다 — 아래 단언이 공허하다"

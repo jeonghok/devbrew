@@ -102,12 +102,12 @@ brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.
 사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.
 WANT
 ONE="$(nsl "$FIN")"
-n1="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
+n1="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 context brief 로' "$FIN" || true)"
 if nonempty "다음 세션 줄" "$ONE"; then
   assert_eq "$n1" "1" "다음 세션 줄 모양의 인용 줄이 finishing.md 에 정확히 하나 (①·② 가 따로 정의하지 않는다)"
   assert_eq "$(split_line "$ONE" first)" "@<brief-path>" "다음 세션 줄의 첫 토큰은 @<brief-path> (주 산출물)"
   # F4 AC1 — 줄은 brief 첨부 · 시작 문장 · 지시 파일을 가리키는 문장뿐이다(등호 — 문장 하나가 더 붙어도 실패한다)
-  assert_eq "$(split_line "$ONE" rest)" "이 interview brief 로 Skill superpowers:brainstorming 을 시작하라. ${POINT_BS}" "F4 AC1: 다음 세션 줄은 시작 문장과 지시 파일을 가리키는 문장뿐이다"
+  assert_eq "$(split_line "$ONE" rest)" "이 context brief 로 Skill superpowers:brainstorming 을 시작하라. ${POINT_BS}" "F4 AC1: 다음 세션 줄은 시작 문장과 지시 파일을 가리키는 문장뿐이다"
   assert_eq "$(lead_only "$ONE")" "ok" "다음 세션 줄 안의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름뿐이다"
   assert_eq "$(lead_only '@<a> x <a> y')" "ok" "꺾쇠 규칙: 줄 앞 토큰의 이름은 줄 안에 다시 쓸 수 있다"
   assert_eq "$(lead_only '@<a> x <b> y')" "no" "꺾쇠 규칙 양성 대조: 줄 앞 토큰에 없는 이름은 거부한다"
@@ -209,7 +209,7 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   assert_contains "$r3" '로드맵 에픽이면 이 에픽 다시 설계도' "AC33: spec-review ③ 행이 로드맵 에픽의 넷째 갈래를 말한다"
   BR="$(printf '%s\n' "$GATE" | awk '/^\*\*③ 의 갈래와 로드맵 에픽\.\*\*/{f=1} f&&/^- \*\*①\/② 의 정지 요건\*\*/{exit} f')"
   if [ -n "$BR" ]; then ok "spec-review: ③ 로드맵 분기 문단 창"; else no "spec-review: ③ 로드맵 분기 문단이 없다"; fi
-  for n in '「지적대로 고치기」' '「인터뷰 다시 열기」' '「직접 편집」' 'frontmatter 에 `roadmap:` 줄이 있으면' \
+  for n in '「지적대로 고치기」' '「컨텍스트 쌓기 다시 열기」' '「직접 편집」' 'frontmatter 에 `roadmap:` 줄이 있으면' \
            'references/redecompose.md' '지금 그대로다'; do
     assert_contains "$BR" "$n" "spec-review ③ 로드맵 분기: $n"
   done
@@ -220,7 +220,7 @@ if nonempty "spec-review 게이트 절" "$GATE"; then
   done
   for n in '**기타 칸 — 기각 번호 되돌리기.**' '「반영」으로 되돌린다' '`## 번호 대조` 표의 그 행' \
            '- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림' '그 문서 `## 결정 기록` 의 다음 B 번호' \
-           '먼저 원장 열기를 다시 돈다' '기각 목록에 없으면 그 사실을 보이고 다시 묻는다' '인터뷰 다시 열기」(재분해) 갈래를 권한다' '「지적대로 고치기」 와 같은 길' '로드맵 에픽이 아니어도 같다'; do
+           '먼저 원장 열기를 다시 돈다' '기각 목록에 없으면 그 사실을 보이고 다시 묻는다' '컨텍스트 쌓기 다시 열기」(재분해) 갈래를 권한다' '「지적대로 고치기」 와 같은 길' '로드맵 에픽이 아니어도 같다'; do
     assert_contains "$BR" "$n" "AC34: ③ 기타 칸의 기각 번호 되돌리기 — $n"
   done
   for n in '표 행을 고치기 전에' '`docreview_state.py declare-related --state-dir D --decision <D#> --anchors' '채택한 결정이 없으면' \

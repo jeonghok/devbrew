@@ -90,18 +90,18 @@ python3 -I - "$FIN" <<'PY' && ok "AC5: 커밋 펜스 자리(문면 순서)" || n
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 a, a5, b3 = t.find("### Step A —"), t.find("### Step A.5"), t.find("#### B-3")
-c = t.find("<!-- interview-commit:begin -->")
+c = t.find("<!-- context-commit:begin -->")
 gate = t.find("`check_brief.py gate` 재실행(통과 확인)", b3)
 three = t.find("- **③ 확정 목록 수정**", b3); four = t.find("- **④ brief만 종료**", b3)
-nocommit = lambda s: "git commit" not in s and "interview-commit" not in s and "커밋 펜스" not in s
+nocommit = lambda s: "git commit" not in s and "context-commit" not in s and "커밋 펜스" not in s
 b1, b2 = t.find("#### B-1"), t.find("#### B-2")
 # Step A 의 비밀값 가림 문단은 B-3 의 펜스를 가리키기만 한다(그 자리에서 커밋하지 않는다) — 그 한 문장만 뺀다.
 ptr = "가린 파일은 B-3 의 커밋 펜스가 결과물과 같은 커밋에 넣는다."
 ok = (0 <= a < a5 < b1 < b2 < b3 < gate < c) and t[a:b1].count(ptr) == 1 and nocommit(t[a:b1].replace(ptr, ""))
 ok = ok and nocommit(t[b2:b3]) and nocommit(t[three:four])
 # B-1 의 끝 질문은 커밋 펜스를 한 번 부른다(「확정하고 끝낸다」) — 펜스 자체는 B-3 에만 있다
-ok = ok and t[b1:b2].count("interview-commit") == 1 and "git commit" not in t[b1:b2]
-ok = ok and "interview-commit" in t[four:t.find("#### B-4")]
+ok = ok and t[b1:b2].count("context-commit") == 1 and "git commit" not in t[b1:b2]
+ok = ok and "context-commit" in t[four:t.find("#### B-4")]
 sys.exit(0 if ok else 1)
 PY
 SF_END="$(awk '/^### 끝낼 때/{f=1;next} /^### /{f=0} f' "$SF")"
@@ -109,8 +109,8 @@ assert_contains "$SF_END" 'B-1 끝 질문의 「확정하고 끝낸다」 는 �
 assert_contains "$SF_END" 'B-1 의 「brief만 종료」 는 종료 안내 직전' "AC5: state-file.md 「끝낼 때」 가 B-1 「brief만 종료」 의 커밋 때를 말한다"
 case "$SF_END" in *'(①/② 의 확정 반영'*) no "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 남았다";; *) ok "AC5: state-file.md 「끝낼 때」 에 ①/② 만 적는 옛 구절이 없다";; esac
 
-cf="$(fence "$FIN" interview-commit)"
-[ -n "$cf" ] && ok "AC5: 커밋 펜스(interview-commit)가 있다" || no "AC5: 커밋 펜스가 없다"
+cf="$(fence "$FIN" context-commit)"
+[ -n "$cf" ] && ok "AC5: 커밋 펜스(context-commit)가 있다" || no "AC5: 커밋 펜스가 없다"
 mk() {   # mk <이름> → origin 을 가진 클론, docs 에 세 파일
   local o="$T/$1-origin.git" c="$T/$1"
   git init -q --bare -b main "$o"; git clone -q "$o" "$c" 2>/dev/null
@@ -138,7 +138,7 @@ o="$(runc "$c2")"
 assert_eq "$(git -C "$c2" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' ')" \
   "docs/superpowers/interview/2026-10-15-t-interview.audit.md docs/superpowers/interview/2026-10-15-t-interview.md docs/superpowers/interview/2026-10-15-t-interview.state.md " \
   "AC5: 기능 브랜치 — 세 경로만 한 커밋으로"
-assert_eq "$(git -C "$c2" log -1 --pretty=%s)" "docs(interview): 2026-10-15-t-interview brief · audit · 상태 기록" "R-h: 끝내기 커밋 메시지 꼴"
+assert_eq "$(git -C "$c2" log -1 --pretty=%s)" "docs(context): 2026-10-15-t-interview brief · audit · 상태 기록" "R-h: 끝내기 커밋 메시지 꼴"
 printf '%s\n' "$o" | grep -qF 'brief · audit · 상태 파일을 커밋했다' && ok "AC5: 커밋한 사실을 보인다" || no "AC5: 커밋 출력: $o"
 git -C "$c2" diff --cached --name-only | grep -qx other.txt && ok "Review Focus: staged_other_stays_staged" || no "staged 다른 파일이 사라졌다"
 c3="$(mk no-head)"; git -C "$c3" switch -q -c feature/y; git -C "$c3" remote set-head origin -d >/dev/null 2>&1
@@ -219,7 +219,7 @@ printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-intervi
 o="$(runc "$r4")"
 assert_eq "$(git -C "$r4" rev-list --count HEAD)" "1" "B9 ④: 인터뷰 폴더 밖의 framing 기록 · seed 면 커밋하지 않는다"
 assert_eq "$(git -C "$r4" diff --cached --name-only)" "" "B9 ④: 그때 아무것도 stage 하지 않는다"
-assert_contains "$o" "커밋하지 않았다 — framing 기록 파일이 정해진 인터뷰 폴더 바로 아래가 아니다" "B9 ④: 그 사유를 보인다"
+assert_contains "$o" "커밋하지 않았다 — framing 기록 파일이 정해진 의도 폴더 바로 아래가 아니다" "B9 ④: 그 사유를 보인다"
 assert_contains "$o" "$r4/docs/elsewhere/2026-10-15-s-interview.audit.md" "B9 ④: 사유 줄에 기록 파일 경로가 있다"
 # ⑤ 같은 폴더 밖에서 기록은 깨끗하고 seed 만 고쳤다 → seed 쪽 판정이 커밋을 막는다
 r5="$(mkraw raw-elsewhere-seed fresh)"; mkdir -p "$r5/docs/elsewhere"
@@ -229,7 +229,7 @@ printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-intervi
 printf -- '---\ntype: interview-seed\n---\n<REDACTED>\n' > "$r5/docs/elsewhere/2026-10-15-s-interview.md"
 o="$(runc "$r5")"
 assert_eq "$(git -C "$r5" rev-list --count HEAD)" "2" "B9 ⑤: 인터뷰 폴더 밖의 seed 만 고쳤어도 커밋하지 않는다"
-assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 인터뷰 폴더 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
+assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 의도 폴더 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
 # ⑥ 기본 브랜치 위에서 기록 · seed 가 커밋된 적 없다 → 커밋하지 않고, 넣는다는 알림 없이 「브랜치에서 커밋하라」 목록에 두 파일이 든다
 r6="$(mkraw raw-main fresh)"; git -C "$r6" switch -q main
 o="$(runc "$r6")"

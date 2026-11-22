@@ -140,7 +140,7 @@ want("state_section", placed
      and 'locate --interview "$STATE" --absolute' in sec
      and 'locate --seed "$SEED_ABS"' in sec
      and "원자료: 읽음 — " in sec and "원자료: 찾지 못함 — " in sec
-     and "원자료: 없음 — framing 없는 인터뷰" in sec
+     and "원자료: 없음 — framing 없는 컨텍스트 쌓기" in sec
      and "원자료를 찾지 못했다(<사유>) — seed 만 읽는다" in sec
      and "막지 않고" in sec)
 want("state_resume", "이어 가는 세션은 앞 세션이 읽은 글을 갖고 있지 않다" in sec)
@@ -154,7 +154,7 @@ want("state_no_verdict",
      and "끝맺음은 같은 판결 없이는 멈추므로(`finishing.md` Step A 3) 그 사유를 첫 라운드에 함께 밝힌다" in sec)
 stf = re.sub(r"\n[ \t]*", " ", st_raw)
 want("state_sentences",
-     "원자료를 찾아 실은 인터뷰의 `S1` 에는 이 블록이 아니라 원자료가 실린다" in stf
+     "원자료를 찾아 실은 컨텍스트 쌓기의 `S1` 에는 이 블록이 아니라 원자료가 실린다" in stf
      and "이어 갈 때 「풀린 입력」 이 여기서 나온다(끝맺음의 비밀값 확인이" in stf
      and "이어 갈 때 `S1` 이 여기서 나온다" not in stf)
 
@@ -167,7 +167,7 @@ want("seed_input_paths", "그 dispatch 에는 원자료의 경로도 함께 준�
 
 rf = flat("skills/intent-sync/SKILL.md")
 want("framing_sentence",
-     "**인터뷰가 seed 로 시작한 줄 몰라 원자료(framing 기록의 원문 절과 질문 전체 절)가 brief §6 의 첫 칸에 실리지 않습니다.**" in rf
+     "**컨텍스트 쌓기가 seed 로 시작한 줄 몰라 원자료(framing 기록의 원문 절과 질문 전체 절)가 brief §6 의 첫 칸에 실리지 않습니다.**" in rf
      and "방금 확정한 요청" not in rf)
 
 for name in bad:

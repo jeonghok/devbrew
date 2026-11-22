@@ -111,7 +111,7 @@ assert_contains "$CANON_FLAT" '## 판정 전에 구현을 읽는다 > 인덱스�
   "AC5: 인덱스만 읽기 금지 + 구현을 읽으라는 지시"
 assert_contains "$CANON_FLAT" 'docs/archive/interview/2026-07-12-project-init-audit-interview.md' \
   "AC5: 출처 인용 경로"
-assert_contains "$CANON_FLAT" 'subagent 가 낸 `id` 는 **임시값**이다 — orchestrator 가 V1 에서 인터뷰 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.' \
+assert_contains "$CANON_FLAT" 'subagent 가 낸 `id` 는 **임시값**이다 — orchestrator 가 V1 에서 컨텍스트 쌓기 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.' \
   "규칙 4: RC id 의 발급 주체는 orchestrator(V1) — subagent 의 id 는 임시값"
 assert_contains "$CANON_FLAT" '레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`, 웹 `[→ OQ<n>]` · `[→ 없음]`' \
   "F: 정본이 결정 연결 형식 넷(레포 둘 · 웹 둘)을 댄다"

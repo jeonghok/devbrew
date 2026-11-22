@@ -93,7 +93,7 @@ grep -qxF 'next_phase: superpowers:brainstorming   # 기본 다음 단계 — �
 assert_contains "$(flat "$TPL")" '§7 대로 기본 다음 단계(brainstorming 해답공간)로' "AC18: 템플릿 정의 문장"
 assert_contains "$(win "$TPL" '^## 7[.]' '^## ')" '(기본 다음 단계 — superpowers 있으면:' "AC18: §7 이 기본 다음 단계를 말한다"
 assert_contains "$(flat "$FIN")" '`next_phase: superpowers:brainstorming`(기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 B-3 이 그 skill 의 완전명으로 바꾼다)' "AC18: Step A 의 next_phase"
-assert_contains "$(flat "$SKI")" 'interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)' "AC18: SKILL 정의 문장"
+assert_contains "$(flat "$SKI")" 'context brief**(기본 다음 단계가 brainstorming 인 meta-prompt)' "AC18: SKILL 정의 문장"
 grep -qF 'brainstorming용 meta-prompt' "$SKI" && no "AC18: 옛 「brainstorming용」 정의 잔존" || ok "AC18: 옛 정의 없음(양성 짝: 위 단언)"
 # AC19 · AC20
 TE="$SD/references/trivia-escape.md"; SB="$SD/agents/steelman-builder.md"; SM="$SD/skills/context-build/references/steelman.md"
@@ -263,7 +263,7 @@ assert_contains "$(flat "$CL")" '- 로드맵을 다시 만드는 단계가 「br
 for old in '인터뷰 끝 게이트의 정본에 선택 질문' 'B-R 이 묶음 에픽의'; do
   grep -qF "$old" "$CL" && no "CHANGELOG: 옛 «${old}» 잔존" || ok "CHANGELOG: 옛 «${old}» 없음(양성 짝: 위 단언)"
 done
-assert_contains "$(flat "$RD")" '인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고' "README: 「하나짜리 brief 에서」"
+assert_contains "$(flat "$RD")" '컨텍스트 쌓기 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고' "README: 「하나짜리 brief 에서」"
 grep -qF '하나짜리 brief 에서도' "$RD" && no "README: 옛 「에서도」 잔존" || ok "README: 옛 「에서도」 없음(양성 짝: 위 단언)"
 # 과제 9 — 컨텍스트 쌓기는 확정 · 커밋까지(AC5 · AC15 · AC39). 나눈 일의 끝 줄은 로드맵 잡기 줄이다.
 CB_SKILL="$SKI"
@@ -280,7 +280,7 @@ assert_contains "$(cat "$CB_SKILL")" '모델 판단으로 건너뜀' "AC15: SKIL
 # AC39 — 위험 번호 검사는 Step A 안(구조 게이트 뒤)이고, 커밋 펜스보다 앞이다
 AC39_N="$(grep -nF 'python3 "$SD/scripts/roadmap_write.py" check --brief' "$FIN" | head -n 1 | cut -d: -f1)"
 GATE_N="$(grep -nF 'python3 "$SD/scripts/check_brief.py" gate "<Step A 2 의 payload 경로>"' "$FIN" | head -n 1 | cut -d: -f1)"
-CF_N="$(grep -nF '<!-- interview-commit:begin -->' "$FIN" | head -n 1 | cut -d: -f1)"
+CF_N="$(grep -nF '<!-- context-commit:begin -->' "$FIN" | head -n 1 | cut -d: -f1)"
 [ -z "$CF_N" ] && CF_N="$(grep -nF '<!-- context-commit:begin -->' "$FIN" | head -n 1 | cut -d: -f1)"
 if [ -n "$AC39_N" ] && [ -n "$GATE_N" ] && [ -n "$CF_N" ] && [ "$GATE_N" -lt "$AC39_N" ] && [ "$AC39_N" -lt "$CF_N" ]; then
   ok "AC39: 위험 번호 검사(${AC39_N})가 구조 게이트(${GATE_N}) 뒤 · 커밋 펜스(${CF_N}) 앞"

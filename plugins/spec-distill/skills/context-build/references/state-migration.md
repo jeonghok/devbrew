@@ -12,7 +12,7 @@
 - `coverage.floor` 의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) —
   차원 자체가 없으면 `{status: open, evidence: "", reopened: 0, reopen_log: []}` 로 seed.
   **차원은 있는데 `reopened`/`reopen_log` 만 없으면 그 둘만 `0`/`[]` 로 추가**하고
-  `status`·`evidence` 는 그대로 둔다 — 진행 중인 인터뷰의 닫힘 판정을 되돌리지 않는다.
+  `status`·`evidence` 는 그대로 둔다 — 진행 중인 컨텍스트 쌓기의 닫힘 판정을 되돌리지 않는다.
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
 - `orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`
   — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다. `<시작값>` 은

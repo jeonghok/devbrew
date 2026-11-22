@@ -241,7 +241,7 @@ assert_eq "$rc" "0" "trunk merge_check: rc 0(원격과 대조하고 스위트 �
 assert_contains "$out" "스위트 대조 — feature/r1($(g "$TW" rev-parse --short=8 feature/r1)) 를 기본 브랜치 trunk(" "trunk merge_check: 에픽 끝을 기본 브랜치 trunk 에 합쳐 대조했다"
 assert_contains "$out" "판정: 새 실패 없음" "trunk merge_check: 판정 줄"
 assert_not_contains "$out" "다르다" "trunk merge_check: 원격과 다르다고 하지 않는다"
-CF="$(fence "$SD/skills/context-build/references/finishing.md" interview-commit)"
+CF="$(fence "$SD/skills/context-build/references/finishing.md" context-commit)"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 case "$CF" in *"BRIEF=\"$PH\""*) ok "전제: 끝내기 커밋 펜스에 BRIEF 자리표" ;; *) no "전제: 끝내기 커밋 펜스에 BRIEF 자리표가 없다 — 아래 칸이 공허하다" ;; esac
 icommit() {  # icommit <클론> <brief 레포 상대 경로(.md)> → 끝내기 커밋 펜스 출력
@@ -280,7 +280,7 @@ out="$(cd "$PW" && python3 "$RD" get interview_dir 2>/dev/null)"
 assert_eq "$out" "plan/interview/" "plan/: get interview_dir"
 n0="$(g "$PW" rev-list --count HEAD)"
 out="$(icommit "$PW" docs/superpowers/interview/2026-10-22-t-interview.md)"
-assert_contains "$out" "커밋하지 않았다 — brief 가 정해진 인터뷰 폴더 바로 아래가 아니다" "plan/: 기본 인터뷰 폴더의 brief 는 커밋하지 않는다"
+assert_contains "$out" "커밋하지 않았다 — brief 가 정해진 의도 폴더 바로 아래가 아니다" "plan/: 기본 인터뷰 폴더의 brief 는 커밋하지 않는다"
 assert_eq "$(g "$PW" rev-list --count HEAD)" "$n0" "plan/: 거부하면 커밋이 없다"
 out="$(icommit "$PW" plan/interview/2026-10-22-t-interview.md)"
 assert_contains "$out" "brief · audit · 상태 파일을 커밋했다" "plan/: 설정 인터뷰 폴더의 brief 는 커밋한다"

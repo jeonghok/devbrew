@@ -29,14 +29,14 @@ plugins/spec-distill/skills/context-build/references/finishing.md	꼬리	brief �
 plugins/spec-distill/skills/context-build/references/finishing.md	꼬리	**둘째 질문 — 다른 다음 단계.**			2
 plugins/spec-distill/skills/roadmap-draft/SKILL.md	꼬리	2. **머지 묻기.** `AskUserQuestion` 하나		1	2
 plugins/spec-distill/skills/context-build/references/saturation.md	꼬리	그리고 `AskUserQuestion` 1회로 셋 중 하나를 받는다	내줌: 포화 판정 없이 끝나 모자란 조사가 brief 에 그대로 남는다	1	3
-plugins/spec-distill/skills/context-build/references/saturation.md	떼기	셋 중 하나를 받는다	- 「인터뷰 종료」 — SKILL 의
+plugins/spec-distill/skills/context-build/references/saturation.md	떼기	셋 중 하나를 받는다	- 「컨텍스트 쌓기 종료」 — SKILL 의
 plugins/spec-distill/skills/context-build/references/saturation.md	지시	같은 빈 곳이 하나라도 있으면 혼자 다시 돌리지 않고	고른 줄은 대기 줄 블록에 덧붙인다.	1
-plugins/spec-distill/skills/context-build/references/saturation.md	떼기	「한 번 더 조사」 · 「포화로 보고 종료」 · 「인터뷰 종료」 중 하나를 받는다	- 「인터뷰 종료」 →
+plugins/spec-distill/skills/context-build/references/saturation.md	떼기	「한 번 더 조사」 · 「포화로 보고 종료」 · 「컨텍스트 쌓기 종료」 중 하나를 받는다	- 「컨텍스트 쌓기 종료」 →
 plugins/spec-distill/skills/context-build/references/saturation.md	지시	그리고 `AskUserQuestion` 1회로 「포화로 보고 종료」 · 「조사 계속」 중 하나를 받는다.	고른 줄은 대기 줄 블록에 덧붙인다.	1
 plugins/spec-distill/skills/context-build/references/saturation.md	떼기	공시는 포화 판정 불가 공시 + 사용자 선택 이다.	- 「조사 계속」 →
-plugins/spec-distill/skills/context-build/references/saturation.md	지시	`AskUserQuestion` 1회로 「같은 크기만큼 연장」 · 「포화로 보고 종료」 · 「인터뷰 종료」 중 하나를 받고	### audit §2 줄	1
+plugins/spec-distill/skills/context-build/references/saturation.md	지시	`AskUserQuestion` 1회로 「같은 크기만큼 연장」 · 「포화로 보고 종료」 · 「컨텍스트 쌓기 종료」 중 하나를 받고	### audit §2 줄	1
 plugins/spec-distill/skills/context-build/references/saturation.md	떼기	중 하나를 받고	### audit §2 줄
-plugins/spec-distill/skills/context-build/references/state-file.md	꼬리	- `interview-state: ASK` — 앞 줄의	내줌: 앞서 모은 라운드 답과 조사가 이 인터뷰에 이어지지 않는다	1	2
+plugins/spec-distill/skills/context-build/references/state-file.md	꼬리	- `interview-state: ASK` — 앞 줄의	내줌: 앞서 모은 라운드 답과 조사가 이 컨텍스트 쌓기에 이어지지 않는다	1	2
 plugins/spec-distill/skills/context-build/references/steelman.md	출처꼬리	- **질문**: `AskUserQuestion` 선택지 **고정 순서**	builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.	1	4
 plugins/spec-distill/skills/context-build/references/steelman.md	언급	`AskUserQuestion` 1회(자유 텍스트)로 취함/버림을 받아	
 plugins/spec-distill/references/trivia-escape.md	꼬리	해당하면 진행하기 전에 `AskUserQuestion` 한 번으로	}]})	2	2
@@ -95,7 +95,7 @@ plugins/spec-distill/skills/intent-sync/SKILL.md	떼기	질문은 「적용 / �
 plugins/spec-distill/skills/intent-sync/SKILL.md	꼬리	- 덩어리가 있으면 **처분을 한 묶음으로 묻는다**	확정 게이트 직전 화면에는 권장이 없다.		0
 plugins/spec-distill/skills/intent-sync/SKILL.md	떼기	고른 덩어리는 「그대로 둔다」 로,	
 plugins/spec-distill/skills/intent-sync/SKILL.md	비움	- 기준 사본이 없으면(rc 3 — 원장이 정리됐다)	처분을 받은 뒤 순서가 계약입니다
-plugins/spec-distill/skills/intent-sync/SKILL.md	꼬리	게이트의 네 옵션은 이 모양을 그대로 씁니다	인터뷰가 시작되지 않아 다시 불러야 이어진다 |		4
+plugins/spec-distill/skills/intent-sync/SKILL.md	꼬리	게이트의 네 옵션은 이 모양을 그대로 씁니다	컨텍스트 쌓기가 시작되지 않아 다시 불러야 이어진다 |		4
 plugins/spec-distill/skills/intent-sync/SKILL.md	꼬리	**다른 다음 단계(둘째 질문).**			2
 plugins/spec-distill/skills/intent-sync/SKILL.md	비움	덜어 낸 것이 1개 이상이면 `AskUserQuestion` 한 번으로 묻습니다	되살린 항목은 seed 에	1
 

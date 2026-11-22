@@ -21,7 +21,7 @@ SK="$SD/skills/context-build/SKILL.md"; FIN="$SD/skills/context-build/references
 RB="$SD/skills/reviewing-brief/SKILL.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 
-ENTRY="$(fence "$SK" interview-state-entry)"; COMMIT="$(fence "$FIN" interview-commit)"; BA="$(fence "$FIN" advice-ba)"
+ENTRY="$(fence "$SK" interview-state-entry)"; COMMIT="$(fence "$FIN" context-commit)"; BA="$(fence "$FIN" advice-ba)"
 RB_OPEN="$(fence "$RB" ledger-open)"; RB_TAKE="$(fence "$RB" ledger-takeover)"; RB_GUARD="$(fence "$RB" ledger-guard)"
 RB_HEAD="$(bash_with "$RB" 'init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE"')"
 RB_PROF="$(awk '/^## 프로필/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RB")"
@@ -46,7 +46,7 @@ mk() {   # mk <이름> → origin(bare) 을 가진 클론, 기능 브랜치 feat
   printf -- '---\ntype: interview-seed\n---\n\n## 요청\n\n상태 저장을 끝에서 끝으로 잰다.\n' > "$c/docs/superpowers/interview/2026-10-15-e2e-interview.md"
   printf -- '---\ntype: interview-seed-audit\nsession_id: sess-e2eseed0\n---\n\n## 1. 원문\n\n원문.\n' > "$c/docs/superpowers/interview/2026-10-15-e2e-interview.audit.md"
   git -C "$c" add -- docs/superpowers/interview
-  git -C "$c" commit -q -m "docs(interview): seed"
+  git -C "$c" commit -q -m "docs(intent): seed"
   printf '%s' "$c"
 }
 
@@ -86,7 +86,7 @@ assert_eq "$(git -C "$R" show --name-only --pretty=format: HEAD | sed '/^$/d' | 
   "docs/superpowers/interview/2026-10-15-e2e-brief-interview.audit.md docs/superpowers/interview/2026-10-15-e2e-brief-interview.md docs/superpowers/interview/2026-10-15-e2e-brief-interview.state.md " \
   "4: 그 커밋은 세 경로뿐"
 assert_eq "$(git -C "$R" branch --show-current)" "feature/e2e" "4: 커밋은 기능 브랜치 위"
-assert_eq "$(git -C "$R" log -1 --pretty=%s)" "docs(interview): 2026-10-15-e2e-brief-interview brief · audit · 상태 기록" "4: 끝내기 커밋 메시지 꼴(R-h)"
+assert_eq "$(git -C "$R" log -1 --pretty=%s)" "docs(context): 2026-10-15-e2e-brief-interview brief · audit · 상태 기록" "4: 끝내기 커밋 메시지 꼴(R-h)"
 assert_eq "$(git -C "$R" status --porcelain -- other.txt)" "?? other.txt" "4: 이웃 파일은 커밋되지 않았다"
 
 # ── 5. 두 세션이 같은 brief 를 리뷰 — 표지 · 넘겨받기 · 쓰기 전 확인 · 끝맺음 ────────

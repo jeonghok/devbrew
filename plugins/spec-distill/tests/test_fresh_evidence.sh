@@ -52,7 +52,7 @@ assert_not_contains "$FE_FLAT" '아래 칸은 선택' "원칙 7: 이 파일에 �
 # AC10 · AC11
 assert_contains "$FE_FLAT" '다음 «지금 이해»에 바로잡은 사실을 명시하고 audit 에 앞 믿음을 「대체됨」으로 남긴다' "AC10: 낡은 지식 바로잡기"
 REPLACED_LINE='`- 대체됨: <앞 믿음> → <바로잡은 사실> (조사 <n>)`'
-assert_contains "$FE_FLAT" "인터뷰 중에는 audit 파일이 없으므로 그 라운드의 state 본문 \`## R<n>\` «지금 이해» 아래에 ${REPLACED_LINE} 한 줄로 적는다" "AC10: 인터뷰 중 「대체됨」 줄의 자리(state 라운드 기록)"
+assert_contains "$FE_FLAT" "컨텍스트 쌓기 중에는 audit 파일이 없으므로 그 라운드의 state 본문 \`## R<n>\` «지금 이해» 아래에 ${REPLACED_LINE} 한 줄로 적는다" "AC10: 인터뷰 중 「대체됨」 줄의 자리(state 라운드 기록)"
 assert_contains "$FE_FLAT" '그 줄들을 audit `## 5. 프로세스 로그` 로 글자 그대로 옮긴다' "AC10: 종료 때 audit 프로세스 로그로 옮긴다"
 FIN="$SD/skills/context-build/references/finishing.md"; AUD_T="$SD/templates/interview-audit-template.md"
 [ -f "$FIN" ] && [ -f "$AUD_T" ] && ok "AC10(양성대조): finishing.md · audit 템플릿이 있다" || no "AC10: finishing.md 또는 audit 템플릿 부재"

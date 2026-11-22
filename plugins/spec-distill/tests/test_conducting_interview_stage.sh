@@ -150,7 +150,7 @@ grep -qF 'brief만 종료' <<<"$b2_block" \
 # 다음 세션 줄 — B-3 표지 블록의 한 줄. 줄의 개수 · 모양은 test_next_session_command.sh 가 잰다.
 nsl_iv="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
 [[ -n "$nsl_iv" ]] && ok "AC20: B-3 의 다음 세션 줄을 읽었다" || no "AC20: B-3 의 다음 세션 줄 표지 블록이 없다"
-grep -qF '이 interview brief 로 Skill superpowers:brainstorming 을 시작하라' <<<"$nsl_iv" \
+grep -qF '이 context brief 로 Skill superpowers:brainstorming 을 시작하라' <<<"$nsl_iv" \
   && ok "AC20: 다음 세션 줄이 brainstorming 을 부른다" \
   || no "AC20: 다음 세션 줄이 brainstorming 을 부르지 않는다"
 grep -qF '/compact interview brief at' "${CI_ALL[@]}" \
@@ -495,24 +495,24 @@ nd_line="$(awk '/^### 다음 결정$/{getline; print; exit}' <<<"$round_block")"
   && ok "AC13: 라운드 규약 «다음 결정» 템플릿 줄이 OQ<n>: 으로 시작한다 (발급 자리)" \
   || no "AC13: «다음 결정» 템플릿 줄에 OQ<n> 자리가 없다 — open_decisions 가 비고 조사 축이 조용히 공허해진다: «${nd_line}»"
 # 발급 규칙이 템플릿과 모순하지 않는다 — 새 결정은 새 번호, 이어가는 결정은 기존 번호.
-tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호' \
+tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 컨텍스트 쌓기 안에서만 유일 — 이어가는 결정이면 기존 번호' \
   && ok "AC13: OQ<n> 발급 — 새 결정은 새 번호 · 이어가는 결정은 기존 번호" \
   || no "AC13: OQ<n> 발급 규칙이 없거나 뒤집혔다 — 이어가는 결정에 새 번호를 주면 같은 결정이 둘로 갈린다"
 grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat" \
   && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
 grep -qF '질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
-grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+grep -qF '컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
   && ok "AC3: description = 얻음 · 내줌 한 줄" || no "AC3: description 규칙 부재"
 case "$nd_line" in *트레이드오프*) no "AC12: «다음 결정» 줄에 트레이드오프 조각이 남아 있다" ;; *) ok "AC12: «다음 결정» 줄에 트레이드오프 조각이 없다" ;; esac
-grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+grep -qF '컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
   && ok "AC12: 추천이 없는 라운드에도 얻음 · 내줌 꼴" || no "AC12: 설명 규칙이 없다"
 grep -qF '<선택지마다 한 줄 — 「<라벨>」 — 얻음: … · 내줌: …>' <<<"$round_block" \
   && ok "AC12: 상태 파일 기록에 선택지와 설명이 남는다" || no "AC12: 양식에 선택지 줄이 없다"
 grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면' <<<"$round_flat" \
   && ok "C1: 되묻기 발동 조건 넷(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)" \
   || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
-grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
+grep -qF '이유·사례·실패 조건 중 하나를 되묻고 모델의 추측을 첫 선택지로' <<<"$round_flat" \
   && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
 grep -qF '최대 2회' <<<"$round_flat" && no "R1/G: 되묻기 «최대 2회» 상한 잔존" || ok "R1/G: 되묻기 상한 문구 없음"
 grep -qF '다음 질문의 선택지에 「이 주제를 더 파기」를 둔다' <<<"$round_flat" \
@@ -1431,7 +1431,7 @@ step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 #
 # 다른 절반 — 「막지 않는다」는 3.5 가 조용하다는 것만으로는 성립하지 않는다. 진입 단계 4
 # (본 절차로 넘기는 소절)가 **실재해야** 흐름이 실제로 이어진다(부재 검사만으로는 이 절반을 못 잡는다).
-step2_stop_phrase='인터뷰를 시작하지 않습니다'
+step2_stop_phrase='컨텍스트 쌓기를 시작하지 않습니다'
 grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
   && ok "v0.41.0: Step 2 의 정지 문구가 Step 2 블록에 실재한다 (아래 가드의 리터럴이 살아있음)" \
   || no "v0.41.0: Step 2 블록에서 정지 문구를 찾지 못했다 — 아래 Step 2.5 가드가 죽은 키를 겨눈다"

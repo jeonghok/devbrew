@@ -10,7 +10,7 @@ plugin: spec-distill
 | 이름 | 끄는 것 | 상태 | 대신할 길 |
 |---|---|---|---|
 | `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` | codex 리뷰 | 남음 | — |
-| `DEVBREW_SPEC_DISTILL_DISABLE_WEB` | 인터뷰와 brief 리뷰의 웹 조사 | 남음 | — |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WEB` | 컨텍스트 쌓기와 brief 리뷰의 웹 조사 | 남음 | — |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 지휘자의 스위트 대조가 저장소 테스트를 돌리기 | 남음 | — |
 | `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
 | `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |

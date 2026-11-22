@@ -68,7 +68,7 @@ grep -qF 'reviewing-brief' <<<"$DIAGRAM" \
   || no "C4: 다이어그램에 리뷰 단계가 없다 — brief가 Step B로 직행하는 옛 경로를 그리고 있다"
 # 순서: brief 산출 → 리뷰 → Step B 게이트. 존재만 잠그면 리뷰 단계를 게이트 **뒤**로
 # 옮겨도 통과한다(리뷰는 게이트 전에 끝나야 산출물 4종이 게이트에 실린다).
-i_brief="$(grep -nF 'interview brief' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
+i_brief="$(grep -nF 'context brief' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
 i_rev="$(grep -nF 'reviewing-brief' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
 i_gate="$(grep -nF 'Step B proceed 게이트' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
 if [[ -n "$i_brief" && -n "$i_rev" && -n "$i_gate" ]] \

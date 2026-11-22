@@ -70,8 +70,8 @@ for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
   case "$STEPA" in *"$lit"*) no "Step A 8(AC11): 옛 인자 꼴이 남아 있다: $lit" ;; *) ok "Step A 8(AC11): 옛 인자 꼴 없음: $lit" ;; esac
 done
 assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
-# AC5 — 끝내기 커밋 펜스(interview-commit)는 결과물 · audit · 상태 파일(과 B9 의 두 파일)만 넣는다. 로드맵 폴더는 넣지 않는다.
-CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
+# AC5 — 끝내기 커밋 펜스(context-commit)는 결과물 · audit · 상태 파일(과 B9 의 두 파일)만 넣는다. 로드맵 폴더는 넣지 않는다.
+CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- context-commit:end -->"){f=0} f' "$FIN")"
 [ -n "$CF" ] || CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- context-commit:end -->"){f=0} f' "$FIN")"
 [ -n "$CF" ] && ok "커밋 펜스를 떴다(양성 짝)" || no "커밋 펜스 창이 비었다 — 아래 부재 단언이 공허하다"
 for tok in 'r7=' 'RDIR' 'roadmaps_dir' 'roadmap-check' '로드맵 폴더가 없어 빼고 진행한다' '로드맵 폴더에 커밋할 파일이 없어' '로드맵 폴더를 커밋했다'; do
@@ -101,7 +101,7 @@ has "$REGEN" '승인된 표는 상태 파일 `## 분해안` 절에 남아, 사�
 has "$REGEN" 'rc 2 는 사용법 오류다' "생성: rc 2 의 처리"
 assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 무엇을 빼고 커밋한다는 옛 문장이 없다"
 B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
-has "$B1" '커밋 펜스(`interview-commit`) → 여기서 멈춘다.' "B-1: 끝 질문의 확정은 커밋하고 멈춘다(PR 을 열지 않는다)"
+has "$B1" '커밋 펜스(`context-commit`) → 여기서 멈춘다.' "B-1: 끝 질문의 확정은 커밋하고 멈춘다(PR 을 열지 않는다)"
 has "$B1" '나눈 일은 B-3 의 「로드맵 잡기 줄 — 나눈 일」 대로 끝낸다.' "B-1(AC5): 나눈 일의 끝 안내는 로드맵 잡기 줄"
 assert_not_contains "$B1" '지휘 세션' "B-1: 나눈 일의 끝 안내가 지휘 세션을 말하지 않는다(양성 짝: 위 단언)"
 assert_not_contains "$B1" 'PR 과 머지' "B-1: 「PR 과 머지」 를 가리키지 않는다(그 절은 로드맵 잡기에 있다)"
@@ -118,7 +118,7 @@ case "$DLINE" in
   '`/spec-distill:epic-conductor <roadmap-path>`') ok "분해된 일: 다음 세션 줄이 지휘자 호출" ;;
   *) no "분해된 일: 다음 세션 줄이 다르다: $DLINE" ;;
 esac
-n_brief="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
+n_brief="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 context brief 로' "$FIN" || true)"
 assert_eq "$n_brief" "1" "나누지 않은 일의 brief 줄은 그대로 하나"
 
 # ── SKILL · 템플릿 ──────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ assert_file_has "$TPL" "분해됨 — <로드맵 경로>" "brief 템플릿 §7: 
 RED="$SD/references/redecompose.md"
 if [ -f "$RED" ]; then ok "redecompose.md 실재"; else no "redecompose.md 없음"; fi
 RTXT="$(cat "$RED" 2>/dev/null)"
-for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「인터뷰 다시 열기」' '지휘 세션' \
+for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「컨텍스트 쌓기 다시 열기」' '지휘 세션' \
            'roadmap_write.py" extract' '`## 분해안`' \
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다 (권장)"' '"고치기"' '"그만둔다"' \
@@ -192,7 +192,7 @@ for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸�
 done
 case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
 FIN7="$(win "$RED" '## 7. 끝내기' '## ')"
-has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「인터뷰 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「컨텍스트 쌓기 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
 case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
 assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
 UP="$(win "$RED" '## 6. 올리기' '## ')"

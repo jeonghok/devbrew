@@ -43,8 +43,8 @@ tpl = open(tpl_path, encoding="utf-8").read()
 a0 = fin.find("### Step A — brief 작성")
 a1 = fin.find("### Step A.5", a0 + 1)
 A = joined(fin[a0:a1]) if 0 <= a0 < a1 else ""
-c0 = fin.find("<!-- interview-commit:begin -->")
-c1 = fin.find("<!-- interview-commit:end -->", c0 + 1)
+c0 = fin.find("<!-- context-commit:begin -->")
+c1 = fin.find("<!-- context-commit:end -->", c0 + 1)
 fence_lines = fin[c0:c1].split("\n") if 0 <= c0 < c1 else []
 t0 = tpl.find("\n## 6.")
 t1 = tpl.find("\n## ", t0 + 1)
@@ -73,7 +73,7 @@ def line_has(marker, token):
 
 
 checks = []
-checks.append(("s1_not_seed", has("**seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.**",
+checks.append(("s1_not_seed", has("**seed 로 시작한 컨텍스트 쌓기의 `S1` 은 seed 가 아니라 원자료다.**",
                                   "본문을 손으로 옮겨 치지 않는다")))
 checks.append(("labels", has(rs.anchor_line(rs.LABEL_UNLOADABLE), rs.anchor_line(rs.LABEL_LOST),
                              "「" + rs.LABEL_RAW + "」")))
@@ -171,7 +171,7 @@ locate_fence() {   # locate_fence <finishing.md> → Step A 「seed 로 시작�
   python3 -I -B - "$1" <<'LOCATE_PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
-i = t.find("**seed 로 시작한 인터뷰의 `S1` 은 seed 가 아니라 원자료다.**")
+i = t.find("**seed 로 시작한 컨텍스트 쌓기의 `S1` 은 seed 가 아니라 원자료다.**")
 lines = t[i:].split("\n") if i >= 0 else []
 body, inside = [], False
 for ln in lines:

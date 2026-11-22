@@ -2,8 +2,8 @@
 name: context-build
 description: >
   사용자가 `/spec-distill:context-build @<seed 경로>` 로 부른다.
-  Runs the spec-distill problem-space interview stage and produces a terminal
-  interview-brief in the interview folder (`interview_dir`). 종료는 커버리지 원장의 floor
+  Runs the spec-distill problem-space context-build stage and produces a terminal
+  interview-brief in the intent folder (`interview_dir`). 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
   closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
@@ -44,9 +44,9 @@ allowed-tools:
 |---|---|
 | `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
 | `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). state 를 만들지 않는다 |
-| `[devbrew-entry] error …` | `[spec-distill] context-build 사전 검사 실패 — <reason= 값>. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
-| `[shell command execution disabled by policy]` | `[spec-distill] context-build 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
-| 감시줄 없음 · 그 밖 | `[spec-distill] context-build 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] context-build 사전 검사 실패 — <reason= 값>. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
+| `[shell command execution disabled by policy]` | `[spec-distill] context-build 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
+| 감시줄 없음 · 그 밖 | `[spec-distill] context-build 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
 
 이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 
@@ -62,20 +62,20 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 | 결과 | 동작 |
 |---|---|
 | rc 0 (`[devbrew-deps] ok …`) | 2 로 간다 |
-| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 인터뷰를 시작하지 않는다 |
-| 그 밖 | `[spec-distill] context-build 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 인터뷰를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
+| rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다. 컨텍스트 쌓기를 시작하지 않는다 |
+| 그 밖 | `[spec-distill] context-build 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>). 컨텍스트 쌓기를 시작하지 않는다.` 와 펜스 출력을 내고 멈춘다 |
 
 ### 2. `@경로` 풀기
 
-받은 인자의 앞뒤 공백을 걷은 값이 `@` 로 시작하는 **공백 없는 한 토큰**일 때만 이 단계가 발동한다. 문장 중간에 `@` 가 섞인 입력은 건드리지 않는다. `@` 로 시작하는데 공백이 섞였으면 풀지 않고, `[spec-distill] '@…' 에 공백이 있다 — 공백 없는 경로 한 토큰으로 다시 불러라. 인터뷰를 시작하지 않는다.` 를 내고 멈춘다.
+받은 인자의 앞뒤 공백을 걷은 값이 `@` 로 시작하는 **공백 없는 한 토큰**일 때만 이 단계가 발동한다. 문장 중간에 `@` 가 섞인 입력은 건드리지 않는다. `@` 로 시작하는데 공백이 섞였으면 풀지 않고, `[spec-distill] '@…' 에 공백이 있다 — 공백 없는 경로 한 토큰으로 다시 불러라. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다.
 
 발동하면 `@` 를 뗀 경로를 감시줄 `root=` 기준으로 풀어 **절대경로로** Read 도구에 넘긴다. 절대경로가 왔는데 Read 가 실패하면, 같은 문자열을 `root=` 기준 상대경로로 보고 한 번 더 시도한다. Read 출력에서 줄번호·탭 접두를 뗀 **파일 원문 전체(frontmatter 포함)** 가 「풀린 입력」이다. 대화형에서 같은 파일이 따로 첨부되더라도 「풀린 입력」의 출처는 이 Read 결과다.
 
 Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 등), 시도한 절대경로를 모두 담아 아래 문구를 내고 멈춘다.
 
-> `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 인터뷰를 시작하지 않는다.`
+> `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 컨텍스트 쌓기를 시작하지 않는다.`
 
-**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 인터뷰에 들어가기 전에 아래 한 줄을 그대로 낸다:
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 컨텍스트 쌓기에 들어가기 전에 아래 한 줄을 그대로 낸다:
 
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
 
@@ -85,7 +85,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 인터뷰를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
+「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 컨텍스트 쌓기를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
@@ -114,20 +114,20 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-file.md
 
 아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지 · 3.6 판결이 RESUME 이면 그 상태 파일의 `## 풀린 입력` 블록 — `state-file.md`). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
-당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
+당신은 spec-distill의 컨텍스트 쌓기 stage를 진행 중입니다. 이 stage는 *받아적는* 문답이
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
 앞단, 상보적·비중복). 매 라운드를 «지금 이해 · 다음 결정 · 질문 하나»로 묻되, 종료는
 **커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이 **모두 `closed`**이고
 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
-산출물은 `spec.md`가 아니라 **interview brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
+산출물은 `spec.md`가 아니라 **context brief**(기본 다음 단계가 brainstorming 인 meta-prompt)이며, 이
 brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 기본으로 brainstorming으로
 넘기고(optional — 일의 모양이 다르면 끝 게이트의 둘째 질문으로 다른 다음 단계를 고른다), 없으면 brief 자체로 완료합니다.
 
 ## State location
 
-인터뷰 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
+의도 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
 State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 정한다)
 
 ```yaml
@@ -164,7 +164,7 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조사 산출 원문(`### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim — 포화 판정자의 입력이라 요약으로 바꾸지 않는다) + `## audit §2 대기 줄`(게이트가 읽는 사건 줄 — `references/saturation.md` 가 정한다).
 
 **`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
-`OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호).
+`OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 컨텍스트 쌓기 안에서만 유일 — 이어가는 결정이면 기존 번호).
 `status: open → resolved` 는 사용자 발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다** — 조사가 결정을 해결하는 데 기여했으면 그것이
 성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. 종료 시
 `status: open` 인 것이 payload §3 Open Questions 로, **전량**이 §0 결정 목록으로 직렬화된다 — §0 이
@@ -204,9 +204,9 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
   질문을 여럿 묶을 수 있다(질문 도구가 받는 수까지) — 묶으면 «다음 결정»에 그 OQ 를 모두 적고 답마다
   `S<m>` 을 하나씩 기록한다. 질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다 —
   steelman 절차의 질문만 예외다(아래).
-- question 본문은 무엇을 정하는지·용어·기술 사실을 푼다. 인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다 — 같은 대가를 질문 앞 글과 질문에 두 번 싣지 않는다. 상태 파일의 `### 질문` 아래에는 본문과 함께 선택지와 그 설명을 적는다(무엇을 보이고 물었는지가 기록에 남는다). 기계 검사는 없다.
+- question 본문은 무엇을 정하는지·용어·기술 사실을 푼다. 컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다 — 같은 대가를 질문 앞 글과 질문에 두 번 싣지 않는다. 상태 파일의 `### 질문` 아래에는 본문과 함께 선택지와 그 설명을 적는다(무엇을 보이고 물었는지가 기록에 남는다). 기계 검사는 없다.
 - **되묻기** — 직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면,
-  그 라운드의 질문은 이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로 두고 「(권장)」을 단다.
+  그 라운드의 질문은 이유·사례·실패 조건 중 하나를 되묻고 모델의 추측을 첫 선택지로 두고 「(권장)」을 단다.
   같은 주제를 연속 두 번 되물은 뒤에도 약한 답이면 답을 그대로 기록하고(보류는 «사용자 발화
   기록» 표대로 §3 Open Questions 로도 이월) 다음 질문의 선택지에 「이 주제를 더 파기」를 둔다 — 더 팔지는 사용자가 연다. 그 차원을 자동으로 닫지 않는다.
 - **한 라운드에 겹치면** 되묻기 → 외부 근거 처분(landscape·premortem 출력을 받아들일지) → 새 결정 순서로
@@ -249,7 +249,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
 `${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
 프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
 그 stdout 전문을 각 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
-dispatch 하지 않는다** — 인터뷰는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
+dispatch 하지 않는다** — 컨텍스트 쌓기는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
 audit §2 unavailable 사유 다.
 
 <!-- claims-contract:begin -->
@@ -260,7 +260,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 CLAIMS="${CLAUDE_PLUGIN_ROOT}/references/research-claims.md"
 claims_rc=0; CLAIMS_CONTRACT="$(cat "$CLAIMS")" || claims_rc=$?
 if [ "$claims_rc" -ne 0 ] || [ -z "$CLAIMS_CONTRACT" ]; then
-  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 인터뷰는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher · open-researcher 자리면 본체가 직접 조사한다." >&2
+  echo "[spec-distill] 조사 주장 계약을 읽지 못했다(cat rc $claims_rc): $CLAIMS — 이 장치를 dispatch 하지 않는다. 컨텍스트 쌓기는 계속하고, 그 차원을 자동으로 닫지 않는다. coverage-mapper 자리면 audit §2 Budget 에 coverage-mapper 0 (unavailable: 계약 배달 실패) 를 적고, blind-spot-prober 자리면 inline premortem 으로 강등하고, repo-researcher · open-researcher 자리면 본체가 직접 조사한다." >&2
   exit 1
 fi
 printf '%s\n' "$CLAIMS_CONTRACT"
@@ -400,13 +400,13 @@ dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory
 `- 모델 판단으로 건너뜀 — <자리>: <이유>` 한 줄을 덧붙인다(줄 모양은 아래 `Read` 줄의 파일 `### 건너뜀`). 나누기로 하면 건너뛴 조사를 그때 돌린다 —
 나눈 일은 구조 게이트가 건너뜀 줄을 받지 않는다. 건너뛴 것은 끝 질문 앞에서 사용자에게 보이고, 사용자가 하라고 하면 그때 돌린다.
 state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파일에서 `### 상한 값` 만 한 번 읽어 그 fence 로 `research_limit` · `saturation_limit` 를 정한다(양의 정수가 아니면 60 · 5 와 한 줄 알림).
-인터뷰의 첫 조사 agent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
+컨텍스트 쌓기의 첫 조사 agent dispatch 직전에 아래 한 줄을 그대로 내고, 승인은 묻지 않는다:
 
-> `[spec-distill] 이 인터뷰는 조사 agent 를 최대 <limit>번까지 부른다(agent 안의 검색 · 출처 수는 세지 않는다 · 멈춤은 포화 판정이 정하고 이 수는 비상 끝 · 승인 없이 진행 · 닿으면 연장을 묻는다).`
+> `[spec-distill] 이 컨텍스트 쌓기는 조사 agent 를 최대 <limit>번까지 부른다(agent 안의 검색 · 출처 수는 세지 않는다 · 멈춤은 포화 판정이 정하고 이 수는 비상 끝 · 승인 없이 진행 · 닿으면 연장을 묻는다).`
 
 dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 한다 — 한 메시지에서 여럿을 띄우면 띄운 수만큼, 끝난 agent 를 `SendMessage` 로 이어 부르면 새 조사라 1 이다. agent 안의 검색 횟수 · 출처 수는 세지 않는다.
 산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim 으로 남기고(dispatch 가 실패 · 거부돼도 그 오류 원문을 같은 블록 꼴로 남긴다 — 포화 판정자가 실패한 조사를 가른다), «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다.
-`<b>` 는 인터뷰 안 1부터 순증하는 묶음 번호다 — 한 메시지에서 함께 띄운 조사는 같은 `<b>` 이고, 하나만 띄운 조사와 본체 직접 조사 블록은 각자 한 묶음이다. `research_log` 항목의 `batch` 도 같은 값이다. 본체의 직접 조사(경로 (a)
+`<b>` 는 컨텍스트 쌓기 안 1부터 순증하는 묶음 번호다 — 한 메시지에서 함께 띄운 조사는 같은 `<b>` 이고, 하나만 띄운 조사와 본체 직접 조사 블록은 각자 한 묶음이다. `research_log` 항목의 `batch` 도 같은 값이다. 본체의 직접 조사(경로 (a)
 확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되(`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과
 웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때,
 한 메시지에서 띄우려는 묶음이 남은 호출 수(`research_limit` − 합)보다 클 때(띄우기 전에), floor 다섯이 모두 `closed` 가 될 때 아래 파일을 Read 로 읽어 그대로 따른다.
@@ -463,7 +463,7 @@ orchestrator가 원장에 admit할지 판정한다. `neglect_flag: true`면 다�
 라운드 규약의 V1 을 탄다.
 
 **계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
-인터뷰는 계속하고, 그 차원을 자동으로 닫지 않으며, 공시는 loud advisory + audit §2 unavailable 사유
+컨텍스트 쌓기는 계속하고, 그 차원을 자동으로 닫지 않으며, 공시는 loud advisory + audit §2 unavailable 사유
 다: audit §2 Budget 의 불릿 줄에 `coverage-mapper 0 (unavailable: 계약 배달 실패)` 를 적는다 —
 게이트가 advisory 로 통과시키고 Step B 가 사람에게 보인다.
 
@@ -503,14 +503,14 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 // **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
-출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록한다 — 인터뷰 중에는 그 재료(위험 줄)를 상태 파일의 `## 위험 줄 대기` 절에 적고, Step A 가 그 절에서
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록한다 — 컨텍스트 쌓기 중에는 그 재료(위험 줄)를 상태 파일의 `## 위험 줄 대기` 절에 적고, Step A 가 그 절에서
 결과물 §5 `## 5. 기각 · Blind Spots` 로 옮긴다(`references/state-file.md` 「상태 파일 본문의 절」). 그리고 다음 라운드의
 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다.
 라운드 중에는 번호 없이 적고, brief 를 쓸 때 Step A 가 줄마다 `위험` 바로 뒤에 번호를 박는다(`- 위험 K<n> — …`, `references/finishing.md` 「위험 번호」). web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
 
 **계약 배달 실패 시** — `## 조사 주장 계약` 펜스의 rc 가 0 이 아니면 이 dispatch 를 하지 않는다.
-공시는 loud advisory + inline premortem 강등 이고, web 비활성 경로와 같은 곳으로 간다. 인터뷰는
+공시는 loud advisory + inline premortem 강등 이고, web 비활성 경로와 같은 곳으로 간다. 컨텍스트 쌓기는
 계속하고 그 차원을 자동으로 닫지 않는다.
 
 **강등된 inline premortem 도 같은 계약을 쓴다** — orchestrator 가 자기 `Read`/`Grep` 으로 레포
@@ -533,7 +533,7 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 ### R2 — 웹 Landscape
 
 **탐색 경계** — `intent-sync` 은 **레포는 읽되 웹은 기본으로 보지 않는다** — 레포로 설명이 안 되는 이름만 짧게 조회해
-그 audit 에 남기고 seed 에는 싣지 않는다. framing 의 공백은 사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(interview)의
+그 audit 에 남기고 seed 에는 싣지 않는다. framing 의 공백은 사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(context-build)의
 R&R 이다 — landscape · steelman · blind-spot premortem · coverage-mapper · `open-researcher` 다섯이 전부 그 장치다.
 
 **질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 interview.
@@ -571,7 +571,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/seed-input.md
 ## 종료 — brief 작성 + optional handoff
 
 **종료 절차 전문은 `references/finishing.md` 에 있다.** floor 5차원이 전부 `closed` 가 되고 포화 판정이
-끝나(`## 조사 상한 · 포화 판정`) — 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다) — brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
+끝나(`## 조사 상한 · 포화 판정`) — 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다) — brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 컨텍스트 쌓기가 아직 진행 중일 때는
 읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
 
 종료가 정해지면 brief 를 쓰기 전에 그 파일의 「분해 판단」 단계부터 돈다 — 이 일을 spec 하나로 할지 나눌지 사용자가 정하고, 나누면 결과물을 확정 · 커밋한 뒤 로드맵 잡기 줄을 낸다.

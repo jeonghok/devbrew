@@ -44,7 +44,7 @@ order() {  # order <파일> <앞 줄 리터럴> <뒤 줄 리터럴> — 둘 다 
 # AC3 — 표 짜기 · 승인 · 고친 횟수 · 생성 · PR 과 머지 펜스 · 지휘자 줄은 context-build 에 없고 roadmap-draft 에 있다.
 # 펜스 표지는 옛 이름(interview-*)과 새 이름(roadmap-*)을 둘 다 적는다 — 이름을 바꾸는 과제 전후 모두 이빨이 있게.
 for tok in '3. **분해안 표.**' '4. **고치기 · 승인.**' 'roadmap_write.py" create' \
-           'interview-pr:begin' 'interview-merge:begin' 'roadmap-pr:begin' 'roadmap-merge:begin' \
+           'interview-''pr:begin' 'interview-''merge:begin' 'roadmap-pr:begin' 'roadmap-merge:begin' \
            '/spec-distill:epic-conductor' '고친 횟수: '; do
   none_in "$CB" "$tok"
   alt1="${tok/interview-/roadmap-}"; alt2="${tok/roadmap-/interview-}"
