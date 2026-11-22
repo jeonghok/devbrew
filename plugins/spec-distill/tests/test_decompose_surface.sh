@@ -25,7 +25,7 @@ DEC="$(win "$FIN" '### 분해 판단 — Step A 직전' '### Step A')"
 if [ -n "$DEC" ]; then ok "분해 판단 절이 Step A 앞에 있다"; else no "분해 판단 절 창이 비었다 — 앵커 파손"; fi
 for lit in '따로 승인할 수 있는 덩어리 수' '파일 영역 수' '사용자 원문 갈래 수' '근거 번호' \
            '컷오프는 두지 않는다' '하나로 충분해 보인다' '나누는 게 좋아 보인다' \
-           '"spec 하나로"' '"나눈다 — 분해안 보기"' '「spec 하나로」'; do
+           '"spec 하나로"' '"나눈다 — 확정 뒤 로드맵 잡기로"' '「spec 하나로」'; do
   has "$DEC" "$lit" "분해 판단: $lit"
 done
 # 분해안 표 · 고치기 · 승인 · 기록은 roadmap-draft 의 `## 3.` · `## 4.` 절에 있다.
@@ -70,24 +70,30 @@ for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
   case "$STEPA" in *"$lit"*) no "Step A 8(AC11): 옛 인자 꼴이 남아 있다: $lit" ;; *) ok "Step A 8(AC11): 옛 인자 꼴 없음: $lit" ;; esac
 done
 assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
-# R7 이음매 — 로드맵 폴더는 끝내기 커밋 펜스(interview-commit)의 경로 지정에 «있을 때만» 든다. 손 커밋 안내 줄은 없다.
+# AC5 — 끝내기 커밋 펜스(interview-commit)는 결과물 · audit · 상태 파일(과 B9 의 두 파일)만 넣는다. 로드맵 폴더는 넣지 않는다.
 CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
-# 로드맵 폴더는 모델이 채우는 자리표가 아니라 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 펜스가 도출한다.
-case "$CF" in *'RDIR="<'*) no "커밋 펜스: 로드맵 폴더가 모델이 채우는 자리표다" ;; *) ok "커밋 펜스: 로드맵 폴더 자리표가 없다(도출)" ;; esac
-has "$CF" "r7=\"\$(awk -v p='분해됨 — ' 'index(\$0,\"## 7.\")==1{f=1;next} f&&/^## /{exit}" "커밋 펜스: brief §7 의 분해됨 줄에서 도출"
-has "$CF" 'repo_defaults.py" check-path roadmaps_dir "$RDIR" --root "$top" || {' "커밋 펜스: 로드맵 폴더의 부모는 해결자의 roadmaps_dir(check-path)"
-has "$CF" 'repo_defaults.py" roadmap-check "$r7" --root "$top" || {' "커밋 펜스: §7 의 파일은 roadmap-check 로 잰다"
+[ -n "$CF" ] || CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- context-commit:end -->"){f=0} f' "$FIN")"
+[ -n "$CF" ] && ok "커밋 펜스를 떴다(양성 짝)" || no "커밋 펜스 창이 비었다 — 아래 부재 단언이 공허하다"
+for tok in 'r7=' 'RDIR' 'roadmaps_dir' 'roadmap-check' '로드맵 폴더가 없어 빼고 진행한다' '로드맵 폴더에 커밋할 파일이 없어' '로드맵 폴더를 커밋했다'; do
+  assert_not_contains "$CF" "$tok" "커밋 펜스(AC5): 로드맵 폴더 갈래 「${tok}」 가 없다"
+done
 has "$CF" 'repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 interview_dir 바로 아래(check-path)"
 has "$CF" 'repo_defaults.py" default-branch --check-remote --root "$top")" || d_rc=$?' "커밋 펜스: 기본 브랜치는 해결자가 원격과 대조해 준다"
-assert_not_contains "$CF" 'roadmap.md)' "커밋 펜스: §7 파일 이름 roadmap.md 를 요구하지 않는다(양의 짝: 위 roadmap-check)"
 assert_not_contains "$CF" 'symbolic-ref' "커밋 펜스: 기본 브랜치를 symbolic-ref 로 직접 벗기지 않는다(양의 짝: 위 default-branch)"
-has "$CF" '[ -d "$RDIR" ] || {' "커밋 펜스: 로드맵 폴더 자리는 폴더다"
-has "$CF" 'if [ -e "$RDIR" ] || [ -L "$RDIR" ]; then' "커밋 펜스: 없는 로드맵 폴더는 빼고 진행한다"
-has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스: add 경로 지정에 로드맵 폴더(있을 때만)"
-has "$CF" '상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스: commit 경로 지정에 로드맵 폴더(있을 때만)"
-has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || {' "커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
-n_unq="$(printf '%s\n' "$CF" | grep -cE '"\$STATE_F" "\$RDIR"' || true)"
-assert_eq "$n_unq" "0" "커밋 펜스: 로드맵 폴더를 조건 없이 넣는 경로 지정이 없다"
+has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): add 경로는 세 파일과 B9 의 두 파일(있을 때만)"
+has "$CF" '상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): commit 경로도 같다"
+has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" || {' "커밋 펜스: 세 파일을 path-inside 로 잰다"
+assert_eq "$(printf '%s\n' "$CF" | grep -c '을 커밋했다 — ')" "1" "커밋 펜스(AC5): 성공 줄은 하나뿐이다"
+has "$CF" '[spec-distill] brief · audit · 상태 파일을 커밋했다 — ' "커밋 펜스(AC5): 성공 줄은 「brief · audit · 상태 파일을 커밋했다」"
+# 로드맵 폴더의 판정(도출 · roadmaps_dir · roadmap-check · 폴더 · 링크)은 로드맵 잡기의 커밋 펜스(roadmap-commit)에 있다.
+RDCF="$(awk 'index($0,"<!-- roadmap-commit:begin -->"){f=1;next} index($0,"<!-- roadmap-commit:end -->"){f=0} f' "$RD")"
+case "$RDCF" in *'RDIR="<'*) no "로드맵 잡기 커밋 펜스: 로드맵 폴더가 모델이 채우는 자리표다" ;; *) ok "로드맵 잡기 커밋 펜스: 로드맵 폴더 자리표가 없다(도출)" ;; esac
+has "$RDCF" 'r7="$(sed -n' "로드맵 잡기 커밋 펜스: 결과물 §7 의 분해됨 줄에서 도출"
+has "$RDCF" 'repo_defaults.py" check-path roadmaps_dir "$RDIR" --root "$top" || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더의 부모는 해결자의 roadmaps_dir(check-path)"
+has "$RDCF" 'repo_defaults.py" roadmap-check "$r7" --root "$top" || {' "로드맵 잡기 커밋 펜스: §7 의 파일은 roadmap-check 로 잰다"
+has "$RDCF" '[ -d "$RDIR" ] || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더 자리는 폴더다"
+has "$RDCF" 'path-inside --root "$top" "$BRIEF" "$STATE_F" "$RDIR" || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
+assert_not_contains "$RDCF" 'roadmap.md)' "로드맵 잡기 커밋 펜스: §7 파일 이름 roadmap.md 를 요구하지 않는다(양의 짝: 위 roadmap-check)"
 assert_file_absent "$FIN" '함께 커밋하라 —' "finishing: 손 커밋 안내 줄(「…함께 커밋하라 — <경로들>」)이 없다"
 assert_file_absent "$FIN" 'git 이 무시하는 자리' "finishing: 상태 파일이 git 무시 자리일 수 있다는 줄이 없다"
 has "$RDALL" '커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "roadmap-draft 커밋: 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
@@ -95,8 +101,10 @@ has "$REGEN" '승인된 표는 상태 파일 `## 분해안` 절에 남아, 사�
 has "$REGEN" 'rc 2 는 사용법 오류다' "생성: rc 2 의 처리"
 assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 「빼고 커밋한다」 대신 「빼고 진행한다」"
 B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
-has "$B1" '분해된 일이어도 「PR 과 머지」 로 가지 않는다' "B-1: 분해된 일이어도 끝 질문의 확정은 PR 을 열지 않는다"
-has "$B1" '분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다' "B-1: 분해된 일의 끝 안내가 머지 뒤 지휘 세션을 말한다"
+has "$B1" '커밋 펜스(`interview-commit`) → 여기서 멈춘다.' "B-1: 끝 질문의 확정은 커밋하고 멈춘다(PR 을 열지 않는다)"
+has "$B1" '나눈 일은 B-3 의 「로드맵 잡기 줄 — 나눈 일」 대로 끝낸다.' "B-1(AC5): 나눈 일의 끝 안내는 로드맵 잡기 줄"
+assert_not_contains "$B1" '지휘 세션' "B-1: 나눈 일의 끝 안내가 지휘 세션을 말하지 않는다(양성 짝: 위 단언)"
+assert_not_contains "$B1" 'PR 과 머지' "B-1: 「PR 과 머지」 를 가리키지 않는다(그 절은 로드맵 잡기에 있다)"
 # AC11 — 「spec 하나로」 의 되돌아가는 길: 생성 기록의 파일 지우기 · §7 분해됨 줄 지우기. 표로 고칠 수 없는 사유는 멈춘다.
 for lit in '`## 생성 기록` 에 적힌 파일을 지운다' '결과물 §7 의 `분해됨 — <로드맵 경로>` 줄을 지운다' '표로 고칠 수 없는 사유'; do
   has "$RDALL" "$lit" "roadmap-draft 되돌아가기: $lit"

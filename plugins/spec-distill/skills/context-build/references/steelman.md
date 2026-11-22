@@ -109,6 +109,7 @@ payload §5 항목은 **사용자가 고른 verdict 별로** 형식이 정해지
 audit §3 `#### ST<N> — <요지>` 블록 순서: dispatch 입력(goal S-id · 전제 목록 · 제약 S-id 범위) → builder 출력 verbatim
 → 게이트-전 확인 → 사용자 선택 S<N>. payload §5 와 audit §3 은 `ST<N>` id 로 맞물린다(bijection A). frontmatter 에는
 별도 필드를 두지 않는다.
+인터뷰 중에는 그 재료(넘긴 입력 · 확인한 것 · 사용자 선택)를 상태 파일의 `## 반대 논거 기록 대기` 절에 위 순서의 `#### ST<N> — <요지>` 블록으로 적고, Step A 가 그 절에서 audit §3 으로 옮긴다(`state-file.md` 「상태 파일 본문의 절」).
 
 #### Step 5 — steelman 0건으로 skepticism 을 닫을 때
 

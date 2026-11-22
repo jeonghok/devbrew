@@ -236,21 +236,29 @@ else
     *) ok "음성 대조(판정 앞 대입): 판정 앞의 대입은 잡지 않는다" ;; esac
 fi
 FIN_T=skills/context-build/references/finishing.md
-shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d;/repo_defaults\.py" roadmap-check /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
-shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir "\$RDIR"/d' "함께 부르지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정 지움"
-shape_mut "$FIN_T" '/repo_defaults\.py" roadmap-check "\$r7"/d' "함께 부르지 않는다" "끝내기 커밋 펜스의 roadmap-check 지움"
-shape_mut "$FIN_T" '/repo_defaults\.py" check-path roadmaps_dir /d;/repo_defaults\.py" roadmap-check /d' "경로 \$RDIR 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 로드맵 판정 둘 다 지움"
-shape_mut "$FIN_T" 's/^\( *python3 .*repo_defaults\.py" check-path roadmaps_dir "\$RDIR".*\) || {.*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "끝내기 커밋 펜스의 로드맵 폴더 판정을 || true 로"
 shape_mut "$FIN_T" 's/^AUDIT_F="\${stem}\.audit\.md"$/AUDIT_F="$(printf %s "${stem}").audit.md"/' "경로 \$AUDIT_F 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 audit 경로를 명령 치환으로"
 shape_mut "$FIN_T" '/check-path interview_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
-# 판정 뒤 `RDIR=""`(범위를 좁힘)는 지금 문서에 있고 위 펜스 꼴 단언이 통과시킨다 — 같은 자리에 빈 값이 아닌 값을 넣으면 잡는다
-shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 값 대입을 다른 경로로"
-shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR=""$r7/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 따옴표에 값을 덧붙임"
-shape_mut "$FIN_T" "s/^    RDIR=\"\"\$/    RDIR=''\"\$r7\"/" "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 빈 홑따옴표에 값을 덧붙임"
-shape_mut "$FIN_T" 's/^    RDIR=""$/    : "${RDIR:=$r7}"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 기본값 대입(:=)"
-shape_mut "$FIN_T" 's/^    RDIR=""$/    RDIR+="$r7"/' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "끝내기 커밋 펜스의 판정 뒤 덧붙임 대입(+=)"
 RD_T=skills/roadmap-draft/SKILL.md
 shape_mut "$RD_T" '/repo_defaults\.py" roadmap-check "\$r7"/d' "함께 부르지 않는다" "로드맵 잡기 커밋 펜스의 roadmap-check 지움"
 shape_mut "$RD_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$STATE_F 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 결과물 폴더 판정 지움"
+# 로드맵 폴더 판정은 로드맵 잡기의 커밋 펜스에만 있다(끝내기 커밋 펜스에서 옮겨 온 변이 자리)
+shape_mut "$RD_T" '/repo_defaults\.py" check-path roadmaps_dir "\$RDIR"/d' "함께 부르지 않는다" "로드맵 잡기 커밋 펜스의 로드맵 폴더 판정 지움"
+shape_mut "$RD_T" '/repo_defaults\.py" check-path roadmaps_dir /d;/repo_defaults\.py" roadmap-check /d' "경로 \$RDIR 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 로드맵 판정 둘 다 지움"
+shape_mut "$RD_T" 's/^\(python3 .*repo_defaults\.py" check-path roadmaps_dir "\$RDIR".*\) || {.*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "로드맵 잡기 커밋 펜스의 로드맵 폴더 판정을 || true 로"
+# 판정과 add 사이에 빈 값이 아닌 값을 넣으면 잡는다 — 대입 꼴 다섯(=, 빈 따옴표 덧붙임 둘, :=, +=)
+shape_mut "$RD_T" '/^git -C "\$top" add -- "\$RDIR"/{h;s/.*/RDIR="$r7"/;G;}' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "로드맵 잡기 커밋 펜스의 판정 뒤 다른 경로 대입"
+shape_mut "$RD_T" '/^git -C "\$top" add -- "\$RDIR"/{h;s/.*/RDIR=""$r7/;G;}' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "로드맵 잡기 커밋 펜스의 판정 뒤 빈 따옴표에 값을 덧붙임"
+shape_mut "$RD_T" "/^git -C \"\\\$top\" add -- \"\\\$RDIR\"/{h;s/.*/RDIR=''\"\$r7\"/;G;}" "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "로드맵 잡기 커밋 펜스의 판정 뒤 빈 홑따옴표에 값을 덧붙임"
+shape_mut "$RD_T" '/^git -C "\$top" add -- "\$RDIR"/{h;s/.*/: "${RDIR:=$r7}"/;G;}' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "로드맵 잡기 커밋 펜스의 판정 뒤 기본값 대입(:=)"
+shape_mut "$RD_T" '/^git -C "\$top" add -- "\$RDIR"/{h;s/.*/RDIR+="$r7"/;G;}' "git add 경로 \$RDIR 를 판정 뒤 다시 대입한다" "로드맵 잡기 커밋 펜스의 판정 뒤 덧붙임 대입(+=)"
+# 음성 대조 — 판정 뒤 `RDIR=""`(범위를 좁힘)는 다시 대입이 아니다
+rd_empty="$T/shape-empty-$(basename "$RD_T")"
+sed '/^git -C "\$top" add -- "\$RDIR"/{h;s/.*/RDIR=""/;G;}' "$SD/$RD_T" > "$rd_empty"
+if cmp -s "$SD/$RD_T" "$rd_empty"; then no "음성 대조(빈 값 대입): 사본이 그대로다 — 판정이 공허하다"
+else
+  case "$(shape "$rd_empty")" in *"다시 대입한다"*) no "음성 대조(빈 값 대입): 범위를 좁히는 빈 값 대입을 잘못 잡는다" ;;
+    *) ok "음성 대조(빈 값 대입): 범위를 좁히는 빈 값 대입은 잡지 않는다" ;; esac
+fi
 finish

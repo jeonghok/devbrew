@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# R4 × R7 이음매 — 분해된 일의 끝내기 커밋(interview-commit 펜스)과 재분해 표의 자리.
-# 로드맵 폴더는 펜스가 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 도출한다.
+# 끝내기 커밋(interview-commit 펜스)의 범위와 재분해 표의 자리.
+# AC5 — 나눈 일이어도 끝내기 커밋은 결과물 · audit · 상태 파일만 넣는다. 로드맵 폴더는 로드맵 잡기의 커밋 펜스(roadmap-commit)가
+# 넣고, 그 판정(도출 · roadmaps_dir · roadmap-check · 폴더 · 링크)은 test_roadmap_draft_skill.sh 가 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_finish_commit_roadmap.sh
 set -u
 ROOT_REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -49,124 +50,83 @@ runc() {   # runc <클론> → BRIEF 자리표를 그 클론의 brief 절대경�
 files_of_head() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' '; }
 nhead() { git -C "$1" rev-list --count HEAD; }
 THREE="$STEM.audit.md $STEM.md $STEM.state.md "
-FIVE="${THREE}$RREL/R1.md $RREL/roadmap.md "
 DEC="분해됨 — $RREL/roadmap.md"
+only_three() {   # only_three <클론> <출력> <라벨> — 세 파일만 한 커밋에, 성공 줄 하나, 로드맵 폴더는 커밋 밖
+  assert_eq "$(nhead "$1")" "2" "$3: 커밋이 하나 생겼다"
+  assert_eq "$(files_of_head "$1")" "$THREE" "$3: 결과물 · audit · 상태 파일만 커밋된다"
+  assert_contains "$2" "[spec-distill] brief · audit · 상태 파일을 커밋했다 — " "$3: 성공 줄은 「brief · audit · 상태 파일을 커밋했다」"
+  assert_not_contains "$2" "로드맵 폴더" "$3: 로드맵 폴더를 말하지 않는다(커밋하지도 빼지도 않는다)"
+}
 
-# 1. 분해된 일 — 세 파일 + 로드맵 폴더가 한 커밋
+# 0. 펜스 글 — 로드맵 폴더 갈래가 없다(AC5)
+for tok in 'roadmap-check' 'roadmaps_dir' '로드맵 폴더를 커밋했다' 'RDIR' 'r7='; do
+  assert_not_contains "$cf" "$tok" "펜스 글(AC5): 「${tok}」 가 없다"
+done
+assert_eq "$(printf '%s\n' "$cf" | grep -c '을 커밋했다 — ')" "1" "펜스 글(AC5): 성공 줄은 하나뿐이다"
+
+# 1. 나눈 일 — §7 에 분해됨 줄과 로드맵 폴더가 있어도 세 파일만 커밋한다. 로드맵 폴더는 커밋되지 않은 채 남는다.
 c="$(mk dec)"; roadmap "$c"; brief7 "$c" "$DEC"
 printf 'y\n' > "$c/other.txt"; git -C "$c" add other.txt
 o="$(runc "$c")"
-assert_eq "$(nhead "$c")" "2" "분해: 커밋이 하나 생겼다"
-assert_eq "$(files_of_head "$c")" "$FIVE" "분해: 세 파일과 로드맵 폴더가 한 커밋에"
-assert_contains "$o" "brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다" "분해: 로드맵 폴더까지 커밋한 사실을 보인다"
-git -C "$c" diff --cached --name-only | grep -qx other.txt && ok "분해: 이미 stage 된 다른 파일은 stage 된 채로" || nob "분해: stage 된 다른 파일이 사라졌다" "$o"
+only_three "$c" "$o" "나눈 일"
+assert_eq "$(git -C "$c" status --porcelain -- "$RREL" | sed '/^$/d' | wc -l | tr -d ' ')" "1" "나눈 일: 로드맵 폴더는 커밋 밖에 남는다"
+git -C "$c" diff --cached --name-only | grep -qx other.txt && ok "나눈 일: 이미 stage 된 다른 파일은 stage 된 채로" || nob "나눈 일: stage 된 다른 파일이 사라졌다" "$o"
 # §7 경로가 절대경로여도 · 목록 · 코드 꼴이어도 같다
 c="$(mk dec-abs)"; roadmap "$c"; brief7 "$c" "분해됨 — $c/$RREL/roadmap.md"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$FIVE" "분해(§7 절대경로): 세 파일과 로드맵 폴더가 한 커밋에"
+o="$(runc "$c")"; only_three "$c" "$o" "나눈 일(§7 절대경로)"
 c="$(mk dec-code)"; roadmap "$c"; brief7 "$c" "- \`$DEC\`"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$FIVE" "분해(§7 목록 · 코드 꼴): 세 파일과 로드맵 폴더가 한 커밋에"
+o="$(runc "$c")"; only_three "$c" "$o" "나눈 일(§7 목록 · 코드 꼴)"
 
-# 1b. cwd 가 다른 레포(다른 interview_dir · 기본 브랜치 모름)여도 brief 레포에 세 파일과 로드맵 폴더를 커밋하고 cwd 레포에는 커밋하지 않는다
+# 1b. cwd 가 다른 레포(다른 interview_dir · 기본 브랜치 모름)여도 brief 레포에 세 파일을 커밋하고 cwd 레포에는 커밋하지 않는다
 c="$(mk elsewhere)"; roadmap "$c"; brief7 "$c" "$DEC"
 x="$(mk cwdrepo 'interview_dir: notes/')"; git -C "$x" remote set-head origin -d >/dev/null 2>&1   # cwd 레포는 기본 브랜치도 모른다
 o="$( cd "$x" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$c/$STEM.md}" 2>&1 )"
-assert_eq "$(files_of_head "$c")" "$FIVE" "다른 레포에서 돌림: brief 레포의 설정으로 세 파일과 로드맵 폴더가 한 커밋에"
+only_three "$c" "$o" "다른 레포에서 돌림"
 assert_eq "$(nhead "$x")" "1" "다른 레포에서 돌림: cwd 레포에는 커밋하지 않는다"
-# 2. 나누지 않은 일 — §7 에 분해됨 줄이 없으면 로드맵 폴더가 있어도 세 파일만
+# 2. 나누지 않은 일 — 세 파일만
 c="$(mk nodec)"; roadmap "$c"; brief7 "$c" "superpowers:brainstorming 으로 간다."
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$THREE" "나누지 않음: 세 파일만 커밋"
-assert_contains "$o" "brief · audit · 상태 파일을 커밋했다" "나누지 않음: 세 파일 커밋 줄"
+o="$(runc "$c")"; only_three "$c" "$o" "나누지 않음"
 assert_eq "$(git -C "$c" status --porcelain -- "$RREL" | sed '/^$/d' | wc -l | tr -d ' ')" "1" "나누지 않음: 로드맵 폴더는 커밋되지 않고 남는다"
-# §7 밖의 분해됨 줄은 세지 않는다
-c="$(mk outside7)"; roadmap "$c"
-printf -- '---\ntype: interview-brief\n---\n## 2. 제약\n\n%s\n\n## 7. Next Action\n\nbrainstorming.\n' "$DEC" > "$c/$STEM.md"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$THREE" "§7 밖의 분해됨 줄은 분해 신호가 아니다"
 
-# 3. 분해됐지만 로드맵 폴더가 없다 — 알리고 세 파일은 커밋한다
+# 3. 로드맵 폴더가 없거나 · 비었거나 · 로드맵 꼴이 아니거나 · 정해진 폴더 밖이거나 · 폴더가 아니어도 끝내기 커밋은 판정하지 않고 세 파일을 커밋한다
 c="$(mk gone)"; brief7 "$c" "$DEC"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$THREE" "폴더 없음: 세 파일은 커밋된다"
-assert_contains "$o" "로드맵 폴더가 없어 빼고 진행한다: $c/$RREL" "폴더 없음: 뺀 사실과 폴더를 보인다"
-
-# 4. 빈 로드맵 폴더 — add 는 받아도 commit 경로 지정이 실패하므로 뺀다
+o="$(runc "$c")"; only_three "$c" "$o" "로드맵 폴더 없음"
 c="$(mk empty)"; mkdir -p "$c/$RREL"; brief7 "$c" "$DEC"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$THREE" "빈 폴더: 세 파일은 커밋된다"
-assert_contains "$o" "로드맵 폴더에 커밋할 파일이 없어 빼고 진행한다" "빈 폴더: 뺀 사실을 보인다"
-# 4b. 작업 트리에는 파일이 있어도 git 이 무시하는 파일뿐이면 커밋할 파일이 없다(.DS_Store 꼴)
-c="$(mk ignored)"; mkdir -p "$c/$RREL"; printf 'junk\n' > "$c/$RREL/.DS_Store"; printf '.DS_Store\n' >> "$c/.git/info/exclude"; brief7 "$c" "$DEC"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "$THREE" "무시 파일뿐인 폴더: 세 파일은 커밋된다"
-assert_contains "$o" "로드맵 폴더에 커밋할 파일이 없어 빼고 진행한다" "무시 파일뿐인 폴더: 뺀 사실을 보인다"
+o="$(runc "$c")"; only_three "$c" "$o" "빈 로드맵 폴더"
+c="$(mk notrm)"; roadmap "$c"; brief7 "$c" "분해됨 — $RREL/R1.md"
+o="$(runc "$c")"; only_three "$c" "$o" "§7 의 파일이 로드맵 꼴이 아님"
+c="$(mk wide)"; mkdir -p "$c/docs/x"; printf 'r\n' > "$c/docs/x/roadmap.md"; brief7 "$c" "분해됨 — docs/x/roadmap.md"
+o="$(runc "$c")"; only_three "$c" "$o" "§7 의 폴더가 정해진 로드맵 폴더 밖"
+c="$(mk notdir)"; mkdir -p "$c/docs/superpowers/roadmaps"; printf 'f\n' > "$c/$RREL"; brief7 "$c" "$DEC"
+o="$(runc "$c")"; only_three "$c" "$o" "로드맵 폴더 자리가 파일"
+# 보안 — 로드맵 폴더가 밖의 폴더로 가는 링크여도 링크 너머는 건드리지 않는다(커밋에도 없다)
+c="$(mk link)"; mkdir -p "$T/outside-rm" "$c/docs/superpowers/roadmaps"; printf '밖\n' > "$T/outside-rm/roadmap.md"
+ln -s "$T/outside-rm" "$c/$RREL"; brief7 "$c" "$DEC"
+o="$(runc "$c")"; only_three "$c" "$o" "보안: 로드맵 폴더가 링크"
+assert_eq "$(cat "$T/outside-rm/roadmap.md")" "밖" "보안: 링크 너머 파일은 그대로"
 
-# 5. 거부 — 커밋 · stage 0, 사유 한 줄에 경로들
+# 4. 거부 — 커밋 · stage 0, 사유 한 줄에 경로들
 refused() {   # refused <클론> <출력> <라벨> <사유 조각>
   assert_eq "$(nhead "$1")" "1" "$3: 커밋하지 않는다"
   assert_eq "$(git -C "$1" diff --cached --name-only)" "" "$3: 아무것도 stage 하지 않는다"
   case "$2" in *"커밋하지 않았다"*"$4"*"$STEM.state.md"*) ok "$3: 사유와 경로를 보인다" ;; *) nob "$3: 사유 · 경로가 없다" "$2" ;; esac
 }
-# 5a. 부모가 docs 다(너무 넓은 폴더)
-c="$(mk wide)"; mkdir -p "$c/docs/x"; printf 'r\n' > "$c/docs/x/roadmap.md"; printf 'u\n' > "$c/docs/stray.md"
-brief7 "$c" "분해됨 — docs/x/roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "부모가 docs" "정해진 로드맵 폴더 바로 아래가 아니다"
-assert_contains "$o" "부모 폴더가 다르다" "부모가 docs: 해결자의 사유를 그대로 보인다"
-# 5b. roadmaps 자체(roadmaps/roadmap.md)
-c="$(mk wide2)"; roadmap "$c"; brief7 "$c" "분해됨 — docs/superpowers/roadmaps/roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "roadmaps 폴더 자체" "정해진 로드맵 폴더 바로 아래가 아니다"
-# 5c. 이름이 . 인 폴더(= roadmaps 전체)
-c="$(mk dot)"; roadmap "$c"; brief7 "$c" "분해됨 — docs/superpowers/roadmaps/./roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "폴더 이름 ." "정해진 로드맵 폴더 바로 아래가 아니다"
-# 5d. §7 경로의 파일이 로드맵이 아니다(머리말 type: roadmap 없음) — roadmap-check 가 거부한다
-c="$(mk notrm)"; roadmap "$c"; brief7 "$c" "분해됨 — $RREL/R1.md"
-o="$(runc "$c")"; refused "$c" "$o" "로드맵 아님" "로드맵 꼴이 아니다"
-assert_contains "$o" "로드맵이 아니다" "로드맵 아님: 해결자의 사유를 그대로 보인다"
-# 양의 짝 — 이름이 roadmap.md 가 아니어도 머리말 type: roadmap 이면 로드맵이다
-c="$(mk othername)"; roadmap "$c"; mv -- "$c/$RREL/roadmap.md" "$c/$RREL/plan.md"
-brief7 "$c" "분해됨 — $RREL/plan.md"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "${THREE}$RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 세 파일과 로드맵 폴더가 한 커밋에"
-# 5g. 대소문자만 다른 경로 — 부모 · 폴더 어느 쪽이든 멈춘다
-c="$(mk case1)"; roadmap "$c"; brief7 "$c" "분해됨 — docs/superpowers/Roadmaps/2026-10-15-t/roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "대소문자(부모)" "정해진 로드맵 폴더 바로 아래가 아니다"
-assert_contains "$o" "대소문자만 다른 경로" "대소문자(부모): 해결자의 사유를 보인다"
-c="$(mk case2)"; roadmap "$c"; brief7 "$c" "분해됨 — docs/superpowers/roadmaps/2026-10-15-T/roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "대소문자(폴더)" "정해진 로드맵 폴더 바로 아래가 아니다"
-assert_contains "$o" "대소문자만 다른 경로" "대소문자(폴더): 해결자의 사유를 보인다"
-# 5h. 레포 설정 roadmaps_dir — 설정의 폴더가 기준이다
-c="$(mk cfg-ok 'roadmaps_dir: plan/roadmaps/')"; roadmap "$c" plan/roadmaps/x; brief7 "$c" "분해됨 — plan/roadmaps/x/roadmap.md"
-o="$(runc "$c")"
-assert_eq "$(files_of_head "$c")" "${THREE}plan/roadmaps/x/R1.md plan/roadmaps/x/roadmap.md " "설정 roadmaps_dir: 설정 폴더 아래 로드맵 폴더가 한 커밋에"
-c="$(mk cfg-def 'roadmaps_dir: plan/roadmaps/')"; roadmap "$c" docs/superpowers/roadmaps/x; brief7 "$c" "분해됨 — docs/superpowers/roadmaps/x/roadmap.md"
-o="$(runc "$c")"; refused "$c" "$o" "설정 roadmaps_dir · 기본 자리" "정해진 로드맵 폴더 바로 아래가 아니다"
-# 5i. 레포 설정 interview_dir — brief 가 그 폴더 바로 아래가 아니면 멈춘다
+# 4a. 레포 설정 interview_dir — brief 가 그 폴더 바로 아래가 아니면 멈춘다
 c="$(mk cfg-iv 'interview_dir: notes/')"; brief7 "$c" "superpowers:brainstorming 으로 간다."
 o="$(runc "$c")"; refused "$c" "$o" "설정 interview_dir · 다른 자리" "정해진 인터뷰 폴더 바로 아래가 아니다"
-# 5e. 폴더 자리가 파일이다
-c="$(mk notdir)"; mkdir -p "$c/docs/superpowers/roadmaps"; printf 'f\n' > "$c/$RREL"; brief7 "$c" "$DEC"
-o="$(runc "$c")"; refused "$c" "$o" "폴더 아님" "폴더가 아니다"
-# 5f. 보안 — 로드맵 폴더가 밖의 폴더로 가는 링크 · 끊긴 링크
-c="$(mk link)"; mkdir -p "$T/outside-rm" "$c/docs/superpowers/roadmaps"; printf '밖\n' > "$T/outside-rm/roadmap.md"
-ln -s "$T/outside-rm" "$c/$RREL"; brief7 "$c" "$DEC"
-o="$(runc "$c")"; refused "$c" "$o" "보안: 링크" "링크"
-assert_eq "$(cat "$T/outside-rm/roadmap.md")" "밖" "보안: 링크 너머 파일은 그대로"
-c="$(mk dangling)"; mkdir -p "$c/docs/superpowers/roadmaps"; ln -s "$T/no-such-dir" "$c/$RREL"; brief7 "$c" "$DEC"
-o="$(runc "$c")"; refused "$c" "$o" "보안: 끊긴 링크" "$RREL"
 
-# 6. 기본 브랜치 — 분해된 일이면 「커밋하지 않았다」 줄에 로드맵 폴더도 적는다
+# 5. 기본 브랜치 — 나눈 일이어도 「커밋하지 않았다」 줄의 손 목록은 세 파일이다(로드맵 폴더는 로드맵 잡기가 커밋한다)
 c="$(mk onmain)"; git -C "$c" switch -q main; roadmap "$c"; brief7 "$c" "$DEC"
 o="$(runc "$c")"
 assert_eq "$(nhead "$c")" "1" "기본 브랜치: 커밋하지 않는다"
-case "$o" in *"커밋하지 않았다"*"$c/$RREL"*) ok "기본 브랜치: 미커밋 줄에 로드맵 폴더" ;; *) nob "기본 브랜치: 미커밋 줄에 로드맵 폴더가 없다" "$o" ;; esac
-# 6b. AC11 — 로컬 브랜치 origin/main 이 있어도 기본 브랜치 검사가 켜져 있다
+case "$o" in *"커밋하지 않았다 — 지금 기본 브랜치(main)에 있다. 브랜치에서 커밋하라: $c/$STEM.md · $c/$STEM.audit.md · $c/$STEM.state.md"*) ok "기본 브랜치: 미커밋 줄의 손 목록은 세 파일" ;; *) nob "기본 브랜치: 미커밋 줄의 손 목록이 세 파일이 아니다" "$o" ;; esac
+assert_not_contains "$o" "$c/$RREL" "기본 브랜치: 미커밋 줄에 로드맵 폴더가 없다(양성 짝: 위 단언)"
+# 5b. AC11 — 로컬 브랜치 origin/main 이 있어도 기본 브랜치 검사가 켜져 있다
 c="$(mk shadow)"; git -C "$c" branch origin/main main; git -C "$c" switch -q main; brief7 "$c" "superpowers:brainstorming 으로 간다."
 o="$(runc "$c")"
 assert_eq "$(nhead "$c")" "1" "로컬 브랜치 origin/main: 기본 브랜치 위 커밋을 거부한다"
 assert_contains "$o" "지금 기본 브랜치(main)에 있다" "로컬 브랜치 origin/main: 기본 브랜치 이름을 보인다"
-# 6c. AC10 — 원격의 기본 브랜치가 바뀌었는데 로컬 origin/HEAD 가 옛 이름이면 멈춘다
+# 5c. AC10 — 원격의 기본 브랜치가 바뀌었는데 로컬 origin/HEAD 가 옛 이름이면 멈춘다
 c="$(mk renamed)"; git -C "$T/renamed-origin.git" branch trunk main; git -C "$T/renamed-origin.git" symbolic-ref HEAD refs/heads/trunk
 brief7 "$c" "superpowers:brainstorming 으로 간다."
 o="$(runc "$c")"
@@ -174,12 +134,12 @@ assert_eq "$(nhead "$c")" "1" "기본 브랜치 개명: 커밋하지 않는다"
 assert_eq "$(git -C "$c" diff --cached --name-only)" "" "기본 브랜치 개명: 아무것도 stage 하지 않는다"
 assert_contains "$o" "원격 기본 브랜치(trunk)가 로컬 기본 브랜치(main)와 다르다" "기본 브랜치 개명: 해결자의 사유를 그대로 보인다"
 assert_contains "$o" "기본 브랜치를 판정하지 못했다" "기본 브랜치 개명: 미커밋 줄"
-# 6d. AC9 — origin/HEAD 가 없으면 멈추고 고치는 법을 보인다(main/master 대체 없음)
+# 5d. AC9 — origin/HEAD 가 없으면 멈추고 고치는 법을 보인다(main/master 대체 없음)
 c="$(mk nohead)"; git -C "$c" remote set-head origin -d >/dev/null 2>&1; brief7 "$c" "superpowers:brainstorming 으로 간다."
 o="$(runc "$c")"
 assert_eq "$(nhead "$c")" "1" "origin/HEAD 없음: 커밋하지 않는다"
 assert_contains "$o" "git remote set-head origin --auto" "origin/HEAD 없음: 고치는 법을 보인다"
-# 6e. 원격과 대조하지 못하면(오프라인) 알리고 커밋한다
+# 5e. 원격과 대조하지 못하면(오프라인) 알리고 커밋한다
 c="$(mk offline)"; git -C "$c" remote set-url origin "$T/no-such-origin.git"; brief7 "$c" "superpowers:brainstorming 으로 간다."
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$THREE" "오프라인: 세 파일을 커밋한다"

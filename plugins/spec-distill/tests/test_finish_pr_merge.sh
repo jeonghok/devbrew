@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 분해된 인터뷰 끝맺음의 PR 펜스(interview-pr) · 머지 펜스(interview-merge) · 다시 확인 펜스(interview-merge-recheck)
-# — roadmap-draft SKILL.md(끝내기 커밋 펜스만 finishing.md)에서 뽑아 그대로 돌린다. 「값의 출처」 줄의 짝으로 끝내기 커밋 펜스(interview-commit)도 뽑아 돌린다.
+# — roadmap-draft SKILL.md 에서 뽑아 그대로 돌린다. 「값의 출처」 줄의 짝으로 로드맵 잡기의 커밋 펜스(roadmap-commit — 두 키를 판정하는 커밋 펜스)도 뽑아 돌린다.
 # 펜스는 Bash 도구의 셸에서 돌므로 bash 와 zsh 둘 다에서 잰다(zsh 가 없으면 그 사실을 알리고 bash 만).
 # 픽스처: 임시 레포(origin 은 git@github.com:<owner>/r.git — 가짜 ssh 가 로컬 bare 레포로 잇는다) + PATH 앞의
 # 가짜 gh · 가짜 sleep. 실제 gh · 네트워크로 나가지 않는다.
@@ -29,7 +29,8 @@ HPH='<interview-pr 이 낸 끝 커밋>'
 pf="$(fence "$PR" interview-pr)"
 mf="$(fence "$PR" interview-merge)"
 rf="$(fence "$PR" interview-merge-recheck)"
-cf="$(fence "$FIN" interview-commit)"
+# 두 키(interview_dir · roadmaps_dir)를 판정하는 커밋 펜스는 로드맵 잡기의 것이다 — 끝내기 커밋 펜스는 로드맵 폴더를 넣지 않는다(AC5).
+cf="$(fence "$PR" roadmap-commit)"; cf="${cf//<결과물 절대경로>/$PH}"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 # 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
 ASK="$(grep -F '2. **머지 묻기.**' "$PR")"
@@ -600,13 +601,13 @@ $mf" "$URL" "$H" 2>/dev/null)"
   assert_eq "$(last "$o")" "interview-merge: MERGED" "다시 확인(대조의 짝): 같은 픽스처에서 브랜치 · 바탕 · 레포가 같으면 MERGED"
 
   note "=== ${sh_name}: 「값의 출처」 줄 ==="
-  # 14b. 끝내기 커밋 펜스는 두 키의 「값의 출처」 줄을 보이고, 이어 도는 PR 펜스는 그 줄을 다시 보이지 않는다
+  # 14b. 로드맵 잡기의 커밋 펜스는 두 키의 「값의 출처」 줄을 보이고, 이어 도는 PR 펜스는 그 줄을 다시 보이지 않는다
   n="${P}src"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
   printf 'y\n' >> "$c/$STEM.state.md"
   o="$(run "$n" "$cf")"
-  assert_contains "$o" "brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다" "값의 출처: 끝내기 커밋 펜스가 커밋했다(PR 단계가 도는 조건)"
-  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(interview_dir)\$")" "1" "값의 출처: 끝내기 커밋 펜스는 interview_dir 의 줄을 보인다"
-  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(roadmaps_dir)\$")" "1" "값의 출처: 끝내기 커밋 펜스는 roadmaps_dir 의 줄을 보인다"
+  assert_contains "$o" "로드맵 폴더 · 상태 파일을 커밋했다" "값의 출처: 로드맵 잡기의 커밋 펜스가 커밋했다(PR 단계가 도는 조건)"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(interview_dir)\$")" "1" "값의 출처: 커밋 펜스는 interview_dir 의 줄을 보인다"
+  assert_eq "$(printf '%s\n' "$o" | grep -c "^\[spec-distill\] ${SRC}: .*(roadmaps_dir)\$")" "1" "값의 출처: 커밋 펜스는 roadmaps_dir 의 줄을 보인다"
   o="$(run "$n" "$pf")"
   made=0; left=""
   while IFS= read -r f; do made=$((made + 1)); [ ! -e "$f" ] || left="${left} ${f}"; done < "$T/gh-$n/mktemps"

@@ -77,10 +77,11 @@ cf="$(fence "$SK" roadmap-commit)"
 case "$cf" in *"BRIEF=\"$PH\""*) ok "전제: 커밋 펜스에 BRIEF 자리표" ;; *) no "전제: 커밋 펜스를 못 뽑았거나 BRIEF 자리표가 없다 — 아래 칸이 공허하다" ;; esac
 STEM=docs/superpowers/interview/2026-10-15-t-interview
 RREL=docs/superpowers/roadmaps/2026-10-15-t
-mk() {   # mk <이름> <§7 첫 줄> → origin 을 가진 클론 · 기능 브랜치 · 커밋된 결과물 · audit · 상태 파일
+mk() {   # mk <이름> <§7 첫 줄> [레포 설정 머리말 줄] → origin 을 가진 클론 · 기능 브랜치 · 커밋된 결과물 · audit · 상태 파일
   local o="$T/$1-origin.git" c="$T/$1"
   git init -q --bare -b main "$o"; git clone -q "$o" "$c" 2>/dev/null
   git -C "$c" config user.email t@t.t; git -C "$c" config user.name t; git -C "$c" config commit.gpgsign false
+  if [ -n "${3:-}" ]; then printf -- '---\n%s\n---\n' "$3" > "$c/.devbrew.md"; git -C "$c" add -- .devbrew.md; fi
   git -C "$c" commit -q --allow-empty -m init; git -C "$c" push -q origin main 2>/dev/null
   git -C "$c" remote set-head origin main >/dev/null 2>&1
   git -C "$c" switch -q -c feature/x
@@ -141,5 +142,50 @@ c="$(mk wide "분해됨 — docs/x/roadmap.md")"; generated "$c"; mkdir -p "$c/d
 o="$(runc "$c")"
 assert_eq "$(nhead "$c")" "2" "폴더 밖: 커밋하지 않는다"
 assert_contains "$o" "정해진 로드맵 폴더 바로 아래가 아니다" "폴더 밖: 사유를 보인다"
+
+# 6. 끝내기 커밋에서 옮겨 온 로드맵 폴더 판정 — 이 판정은 이제 로드맵 잡기의 커밋 펜스에만 있다(AC5)
+stated() {   # stated <클론> → 상태 파일에 두 절을 더해 커밋할 변경을 만든다(로드맵 폴더는 만들지 않는다)
+  printf '\n## 분해안\n\n| 번호 |\n\n고친 횟수: 0\n' >> "$1/$STEM.state.md"
+}
+rmdir_at() {   # rmdir_at <클론> <레포 상대 폴더> → 그 자리에 로드맵 꼴 폴더
+  mkdir -p "$1/$2"; printf -- '---\ntype: roadmap\n---\n# 로드맵\n' > "$1/$2/roadmap.md"; printf '# R1\n' > "$1/$2/R1.md"
+}
+refused_rd() {   # refused_rd <클론> <출력> <라벨> <사유 조각>
+  assert_eq "$(nhead "$1")" "2" "$3: 커밋하지 않는다"
+  assert_eq "$(git -C "$1" diff --cached --name-only)" "" "$3: 아무것도 stage 하지 않는다"
+  case "$2" in *"커밋하지 않았다"*"$4"*"$STEM.state.md"*) ok "$3: 사유와 손 목록을 보인다" ;; *) nob "$3: 사유 · 손 목록이 없다" "$2" ;; esac
+}
+c="$(mk wide2 "분해됨 — docs/superpowers/roadmaps/roadmap.md")"; stated "$c"; rmdir_at "$c" docs/superpowers/roadmaps
+o="$(runc "$c")"; refused_rd "$c" "$o" "roadmaps 폴더 자체" "정해진 로드맵 폴더 바로 아래가 아니다"
+c="$(mk dot "분해됨 — docs/superpowers/roadmaps/./roadmap.md")"; stated "$c"; rmdir_at "$c" "$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "폴더 이름 ." "정해진 로드맵 폴더 바로 아래가 아니다"
+c="$(mk case1 "분해됨 — docs/superpowers/Roadmaps/2026-10-15-t/roadmap.md")"; stated "$c"; rmdir_at "$c" "$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "대소문자(부모)" "정해진 로드맵 폴더 바로 아래가 아니다"
+assert_contains "$o" "대소문자만 다른 경로" "대소문자(부모): 해결자의 사유를 보인다"
+c="$(mk case2 "분해됨 — docs/superpowers/roadmaps/2026-10-15-T/roadmap.md")"; stated "$c"; rmdir_at "$c" "$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "대소문자(폴더)" "정해진 로드맵 폴더 바로 아래가 아니다"
+assert_contains "$o" "대소문자만 다른 경로" "대소문자(폴더): 해결자의 사유를 보인다"
+# 레포 설정 roadmaps_dir — 설정의 폴더가 기준이다
+c="$(mk cfg-ok "분해됨 — plan/roadmaps/x/roadmap.md" 'roadmaps_dir: plan/roadmaps/')"; stated "$c"; rmdir_at "$c" plan/roadmaps/x
+o="$(runc "$c")"
+assert_eq "$(files_of_head "$c")" "$STEM.state.md plan/roadmaps/x/R1.md plan/roadmaps/x/roadmap.md " "설정 roadmaps_dir: 설정 폴더 아래 로드맵 폴더와 상태 파일이 한 커밋에"
+c="$(mk cfg-def "$DEC" 'roadmaps_dir: plan/roadmaps/')"; stated "$c"; rmdir_at "$c" "$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "설정 roadmaps_dir · 기본 자리" "정해진 로드맵 폴더 바로 아래가 아니다"
+# 폴더가 없다 · 폴더가 아니다 · 비었다 · git 이 무시하는 파일뿐이다
+c="$(mk gone "$DEC")"; stated "$c"
+o="$(runc "$c")"; refused_rd "$c" "$o" "폴더 없음" "로드맵 폴더가 없거나 폴더가 아니다"
+c="$(mk notdir "$DEC")"; stated "$c"; mkdir -p "$c/docs/superpowers/roadmaps"; printf 'f\n' > "$c/$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "폴더 아님" "로드맵 폴더가 없거나 폴더가 아니다"
+c="$(mk empty "$DEC")"; stated "$c"; mkdir -p "$c/$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "빈 폴더" "로드맵 폴더에 커밋할 파일이 없다"
+c="$(mk ignored "$DEC")"; stated "$c"; mkdir -p "$c/$RREL"; printf 'junk\n' > "$c/$RREL/.DS_Store"; printf '.DS_Store\n' >> "$c/.git/info/exclude"
+o="$(runc "$c")"; refused_rd "$c" "$o" "무시 파일뿐인 폴더" "로드맵 폴더에 커밋할 파일이 없다"
+# 보안 — 로드맵 폴더가 밖의 폴더로 가는 링크 · 끊긴 링크
+c="$(mk link "$DEC")"; stated "$c"; mkdir -p "$T/outside-rm" "$c/docs/superpowers/roadmaps"; printf -- '---\ntype: roadmap\n---\n밖\n' > "$T/outside-rm/roadmap.md"
+ln -s "$T/outside-rm" "$c/$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "보안: 링크" "링크"
+assert_eq "$(tail -n 1 "$T/outside-rm/roadmap.md")" "밖" "보안: 링크 너머 파일은 그대로"
+c="$(mk dangling "$DEC")"; stated "$c"; mkdir -p "$c/docs/superpowers/roadmaps"; ln -s "$T/no-such-dir" "$c/$RREL"
+o="$(runc "$c")"; refused_rd "$c" "$o" "보안: 끊긴 링크" "$RREL"
 
 finish

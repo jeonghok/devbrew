@@ -5,7 +5,7 @@ description: >
   Runs the spec-distill problem-space interview stage and produces a terminal
   interview-brief in the interview folder (`interview_dir`). 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
-  closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때이며,
+  closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
   Optionally hands the brief to superpowers:brainstorming.
 metadata:
@@ -503,8 +503,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 // **처분** — consumer=orchestrator · fail-closed · disclosure=loud advisory + inline premortem 강등
 ```
 
-출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
-**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 **`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록한다 — 인터뷰 중에는 그 재료(위험 줄)를 상태 파일의 `## 위험 줄 대기` 절에 적고, Step A 가 그 절에서
+결과물 §5 `## 5. 기각 · Blind Spots` 로 옮긴다(`references/state-file.md` 「상태 파일 본문의 절」). 그리고 다음 라운드의
 «지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다.
 라운드 중에는 번호 없이 적고, brief 를 쓸 때 Step A 가 줄마다 `위험` 바로 뒤에 번호를 박는다(`- 위험 K<n> — …`, `references/finishing.md` 「위험 번호」). web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
@@ -571,10 +571,10 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/seed-input.md
 ## 종료 — brief 작성 + optional handoff
 
 **종료 절차 전문은 `references/finishing.md` 에 있다.** floor 5차원이 전부 `closed` 가 되고 포화 판정이
-끝나(`## 조사 상한 · 포화 판정`) brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
+끝나(`## 조사 상한 · 포화 판정`) — 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다) — brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
 읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
 
-종료가 정해지면 brief 를 쓰기 전에 그 파일의 「분해 판단」 단계부터 돈다 — 이 일을 spec 하나로 할지 나눌지 사용자가 정하고, 나누면 승인된 분해안 표로 로드맵과 에픽 묶음을 만든다.
+종료가 정해지면 brief 를 쓰기 전에 그 파일의 「분해 판단」 단계부터 돈다 — 이 일을 spec 하나로 할지 나눌지 사용자가 정하고, 나누면 결과물을 확정 · 커밋한 뒤 로드맵 잡기 줄을 낸다.
 
 ### 나가는 문은 floor 뒤에만 있지 않다
 
@@ -592,13 +592,11 @@ state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/finishing.md
-Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 Read ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md
 ```
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
-둘째 줄(`epic-handoff.md`)은 로드맵 에픽의 설계를 여는 줄을 써야 할 때만 읽는다.
-셋째 줄(`brief-handoff.md`)은 끝 질문의 기타 칸에서 「여기서 계속」 을 받아 이 세션이 다음 세션 줄의 지시를 따를 때만 읽는다 — 그 밖에는 다음 세션이 읽는다.
+둘째 줄(`brief-handoff.md`)은 끝 질문의 기타 칸에서 「여기서 계속」 을 받아 이 세션이 다음 세션 줄의 지시를 따를 때만 읽는다 — 그 밖에는 다음 세션이 읽는다.
 
 ## In-flight state migration
 

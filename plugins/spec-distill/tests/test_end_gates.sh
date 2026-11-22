@@ -40,8 +40,9 @@ B2="$(win "$FIN" '^#### B-2' '^#### ')"; B3="$(win "$FIN" '^#### B-3' '^#### ')"
 [ -n "$B2" ] && [ -n "$B3" ] && ok "양성 대조: B-2 · B-3 를 떴다" || no "B-2 · B-3 부재"
 # AC21 — 분해된 일의 이름 · 하나짜리 이름 그대로 · /compact 가 ①(권장)
 assert_contains "$B2" '| 하나짜리 brief · 둘째 질문 없음 | 확정하고 /compact 후 brainstorming (권장) | 확정하고 /new 후 brainstorming |' "AC21: 하나짜리 brief 이름 그대로"
-assert_contains "$B2" '| 분해된 일 | 확정하고 /compact 후 지휘자로 (권장) | 확정하고 /new 후 지휘자로 |' "AC21: 분해된 일은 지휘자로"
-assert_contains "$B2" '이 세션에서 로드맵의 에픽들을 끝까지 이끈다' "AC21: 분해된 일의 설명이 지휘자를 말한다"
+assert_contains "$B2" '| 분해된 일 | 확정하고 /compact 후 로드맵 잡기로 (권장) | 확정하고 /new 후 로드맵 잡기로 |' "AC21 · AC5: 분해된 일은 로드맵 잡기로"
+assert_contains "$B2" '| 로드맵 잡기 — 결과물을 읽어 에픽 표를 짜고 로드맵을 만든다 |' "AC5: 분해된 일의 다음 단계 칸이 로드맵 잡기를 말한다"
+assert_not_contains "$B2" '후 지휘자로' "AC5: 이름 표에 옛 「지휘자로」 이름이 없다(양성 짝: 위 단언)"
 # AC23 — 둘째 질문이 있으면 단계 안 가리키는 이름 · 정본을 가리킴 · 제안 없으면 없음 · 분해된 일엔 없음
 assert_contains "$B2" '| 하나짜리 brief · 둘째 질문 있음 | 확정하고 /compact 후 다음 단계로 (권장) | 확정하고 /new 후 다음 단계로 |' "AC23: 둘째 질문이 있으면 단계를 가리키지 않는 이름"
 for lit in '선택지 넷의 개수 · 순서 · `(권장)` 은 어느 경우든 그대로' \
@@ -73,7 +74,7 @@ for lit in 'confirmed 항목은 근거 있으면 보고 후 재결정 가능, �
   assert_contains "$CMS" "$lit" "F4 AC3: 공통 지시 절 «${lit}»"
   assert_not_contains "$NEWP" "$lit" "F4 AC3: 「다른 다음 단계의 줄」 문단에는 글자로 없다 «${lit}»"
 done
-assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(지휘자 · 고른 skill) 모두에 선다.' "AC23: 같은 턴 금지가 지휘자 · 고른 skill 모두에 선다"
+assert_contains "$SAMEP" '「같은 턴에서 호출하지 말 것」은 그 줄이 부르는 skill(로드맵 잡기 · 고른 skill) 모두에 선다.' "AC23: 같은 턴 금지가 로드맵 잡기 · 고른 skill 모두에 선다"
 EH="$SD/references/epic-handoff.md"; TPL="$SD/templates/interview-brief-template.md"; SKI="$SD/skills/context-build/SKILL.md"
 nsl() { awk -v m="$2" '$0==m{f=1;next} f&&NF{print;exit}' "$1"; }
 BL="$(nsl "$FIN" '**다음 세션 줄 — ①/② 공통**')"; EL="$(nsl "$EH" '**에픽 넘김 줄**')"
@@ -134,7 +135,7 @@ RISKP="$(parab "$FIN" '   **위험 번호.**')"
 assert_contains "$SA" ' **위험 번호.** payload §5 의 위험 줄마다' "AC25: 「위험 번호」 문단이 Step A 안에 있다"
 for lit in '`- 위험 K<n> — <숨은 가정 | 실패 양식 | 리뷰 참고> …`' '숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터 매긴다' \
            '다른 줄의 번호를 고치지 않는다.' \
-           '지운 위험의 번호는 다시 쓰지 않는다 — 새로 더하는 위험 줄은 지금까지 나온 가장 큰 K(이 brief 의 §5, 로드맵이 있으면 그 `## 위험 번호표` 와 분해 표의 배정 번호까지)의 다음 수를 받는다.'; do
+           '지운 위험의 번호는 다시 쓰지 않는다 — 새로 더하는 위험 줄은 지금까지 나온 가장 큰 K(이 brief 의 §5, 로드맵이 있으면 그 `## 위험 번호표` 까지)의 다음 수를 받는다.'; do
   assert_contains "$RISKP" "$lit" "AC25: Step A 「위험 번호」 «${lit}»"
 done
 assert_not_contains "$RISKP" '이 brief 의 가장 큰 K 다음 수' "AC25: Step A 「위험 번호」 에 옛 「이 brief 의 가장 큰 K」 없음(양성 짝: 위 단언)"
@@ -254,7 +255,7 @@ assert_not_contains "$B0" '확정-후-진행 옵션(①/②)을 고를 때만 �
 assert_not_contains "$(cat "$FIN")" 'B-1 부재 advisory와 같은 톤' "F4 AC10: ④ 에 끊긴 「B-1 부재 advisory」 가리킴이 없다"
 assert_contains "$B3" 'brief terminal advisory를 내고 종료. handoff 안 함.' "F4 AC10: ④ 의 남은 글은 그대로다(양성 짝: 위 부재 단언)"
 assert_contains "$B3" '게이트(①/②)나 B-1 끝 질문의 「확정하고 끝낸다」 를 통해서만 바뀐다' "F4 AC10: ③ 의 status 변경 경로에 B-1 끝 질문이 든다"
-assert_contains "$B3" '**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · B-R 다시 생성 뒤 두 줄 노출 전, B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 · 나눈 일이면 B-R 다시 생성 뒤 끝 안내 전, ④ 와 B-1 의 「brief만 종료」 는 종료 안내 직전, 한 번.**' "F4 AC10: 끝내기 커밋 문장이 B-1 의 때를 말한다"
+assert_contains "$B3" '**끝내기 커밋 — ①/② 는 게이트 재실행 통과 · 나눈 일이면 위험 번호 검사 통과 뒤 두 줄 노출 전, B-1 끝 질문의 「확정하고 끝낸다」 는 확정 반영 · 게이트 재실행 통과 · 나눈 일이면 위험 번호 검사 통과 뒤 끝 안내 전, ④ 와 B-1 의 「brief만 종료」 는 (나눈 일이면 위험 번호 검사 통과 뒤) 종료 안내 직전, 한 번.**' "F4 AC10 · AC39: 끝내기 커밋 문장이 B-1 의 때와 커밋 전 위험 번호 검사를 말한다"
 # CHANGELOG · README — 사람에게 보이는 글은 내부 단계 이름 대신 쉬운 말로
 CL="$SD/CHANGELOG.md"; RD="$SD/README.md"
 assert_contains "$(flat "$CL")" '- 같이 쓰는 진행 게이트의 정본(`references/proceed-gate.md`)의 둘째 질문 문단에, 지휘자 아래 승인 질문에는 둘째 질문이 없다는 문장을 더했다.' "CHANGELOG: 둘째 질문은 같이 쓰는 진행 게이트의 정본에"
@@ -264,4 +265,27 @@ for old in '인터뷰 끝 게이트의 정본에 선택 질문' 'B-R 이 묶음 
 done
 assert_contains "$(flat "$RD")" '인터뷰 끝 게이트는 하나짜리 brief 에서 둘째 질문으로 다른 다음 단계를 고를 수 있고' "README: 「하나짜리 brief 에서」"
 grep -qF '하나짜리 brief 에서도' "$RD" && no "README: 옛 「에서도」 잔존" || ok "README: 옛 「에서도」 없음(양성 짝: 위 단언)"
+# 과제 9 — 컨텍스트 쌓기는 확정 · 커밋까지(AC5 · AC15 · AC39). 나눈 일의 끝 줄은 로드맵 잡기 줄이다.
+CB_SKILL="$SKI"
+FINT="$(cat "$FIN")"
+for lit in '/spec-distill:roadmap-draft @<결과물 절대경로>' \
+           '끝 질문의 어느 갈래로 끝나든 커밋했으면 로드맵 잡기 줄을 낸다' \
+           '손으로 커밋할 파일 목록과 함께 로드맵 잡기 줄을 내고 「커밋한 뒤 입력하라」 고 알린다' \
+           'python3 "$SD/scripts/roadmap_write.py" check --brief' \
+           '숨은 가정 · 실패 양식 · 리뷰 참고 순으로 K1 부터 매긴다'; do
+  assert_contains "$FINT" "$lit" "과제 9: finishing «${lit}»"
+done
+assert_not_contains "$FINT" '분해 판단 표가 이 순서로 미리 배정했다' "AC25: 위험 번호 문단에 「분해 판단 표가 미리 배정했다」 가 없다(양성 짝: 위 「K1 부터 매긴다」)"
+assert_contains "$(cat "$CB_SKILL")" '모델 판단으로 건너뜀' "AC15: SKILL 에 모델 판단 건너뜀"
+# AC39 — 위험 번호 검사는 Step A 안(구조 게이트 뒤)이고, 커밋 펜스보다 앞이다
+AC39_N="$(grep -nF 'python3 "$SD/scripts/roadmap_write.py" check --brief' "$FIN" | head -n 1 | cut -d: -f1)"
+GATE_N="$(grep -nF 'python3 "$SD/scripts/check_brief.py" gate "<Step A 2 의 payload 경로>"' "$FIN" | head -n 1 | cut -d: -f1)"
+CF_N="$(grep -nF '<!-- interview-commit:begin -->' "$FIN" | head -n 1 | cut -d: -f1)"
+[ -z "$CF_N" ] && CF_N="$(grep -nF '<!-- context-commit:begin -->' "$FIN" | head -n 1 | cut -d: -f1)"
+if [ -n "$AC39_N" ] && [ -n "$GATE_N" ] && [ -n "$CF_N" ] && [ "$GATE_N" -lt "$AC39_N" ] && [ "$AC39_N" -lt "$CF_N" ]; then
+  ok "AC39: 위험 번호 검사(${AC39_N})가 구조 게이트(${GATE_N}) 뒤 · 커밋 펜스(${CF_N}) 앞"
+else no "AC39: 위험 번호 검사의 자리가 틀렸다(게이트 ${GATE_N:-없음} · 검사 ${AC39_N:-없음} · 커밋 펜스 ${CF_N:-없음})"; fi
+assert_contains "$SA" '8. **위험 번호 검사 — 「나눈다」 를 고른 결과물만, 커밋 전에.**' "AC39: 위험 번호 검사는 Step A 의 걸음 8"
+assert_contains "$(flat "$FIN")" '그다음 Step A 의 3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로 돌아간다(8 은 「나눈다」 를 고른 결과물만)' "AC39: 되묻기 갈래가 위험 번호 검사도 다시 돈다"
+assert_not_contains "$FINT" '8 은 로드맵이 있을 때만' "AC39: 옛 「8 은 로드맵이 있을 때만」 이 없다(양성 짝: 위 단언)"
 finish
