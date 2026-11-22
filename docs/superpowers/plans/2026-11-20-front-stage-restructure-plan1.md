@@ -726,3 +726,7 @@ Run → FAIL.
 - 설정 키는 지금 열넷이고(옆 PR 이 머지되면 열다섯) 키 수와 키 목록을 세는 글자가 `plugins/spec-distill/README.md` · `references/roadmap-ontology.md` · `tests/test_parallel_recommend_docs.sh` · `tests/test_repo_defaults.py` · `tests/test_workspace_invariance.sh` 에 있다 — `interview_dir` → `intent_dir` 를 바꿀 때 함께 본다.
 - 이 계획의 낱말 락(`test_stage_words.sh`)은 `interview-state` · 종류 글자 · `-interview.md` 경로 · `interview_dir` 를 허용한다. 계획 2 가 그 층을 바꾼 뒤 락의 허용 목록을 줄인다.
 - `roadmap_draft_entry.py` 와 커밋 펜스의 로드맵 경로 도출(결과물 이름에서 `-interview.md` 를 뗀다)은 옛 꼴만 안다 — 계획 2 의 대응표 모듈로 `-context.md` 를 함께 받게 한다.
+- (구현 뒤 더함) `roadmap_draft_entry.py` 는 audit · 상태 파일 경로를 결과물 경로에서 `.md` 를 떼고 `.audit.md` · `.state.md` 를 붙여 짓는다(도우미가 없었다) — 대응표 모듈이 생기면 그것을 쓰게 바꾼다.
+- (구현 뒤 더함) 낱말 락의 면제 한 줄(`reviewing-brief/SKILL.md` 가 인용하는 `check_verbatim_coverage.py` 의 「인터뷰를 닫은 답」)은 계획 2 가 그 스크립트 출력을 바꾸면 비운다 — 안 쓰는 면제는 락이 실패로 알린다.
+- (구현 뒤 더함) `raw_source.py` 의 `_chain` 은 기록 경로를 seed 경로에서 짓는다(`seed[:-3] + ".audit.md"`) — 그래서 커밋 펜스 · PR 본문 펜스의 「seed 를 기록 경로에서 거꾸로 짓지 않는다」 는 글자 락(부재 + 양의 짝)으로만 문다. 대응표가 새 꼴 이름을 받게 되면 이 둘이 갈릴 수 있으니 그때 동작 시험을 더한다.
+- (구현 뒤 더함) `templates/roadmap-template.md` 의 낱말을 바꾸면 `test_roadmap_write.sh` 의 「R1 AC3 옛 형식 create 나무」 기준 해시를 다시 잰다(계획 1 이 한 번 갱신했다 — 옆 로드맵 R1 의 시험이다).
