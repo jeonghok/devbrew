@@ -240,14 +240,16 @@ class UnittestDirTimingTests(unittest.TestCase):
         os.makedirs(os.path.join(self.tmp, "pkg", "tests"))
 
     def write(self, name, body):
-        with open(os.path.join(self.tmp, "pkg", "tests", name), "w", encoding="utf-8") as fh:
+        path = os.path.join(self.tmp, "pkg", "tests", name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(body)
 
-    def run_runner(self, timing=None):
+    def run_runner(self, timing=None, start="pkg/tests"):
         env = clean_env()
         if timing is not None:
             env["SUITE_TIMING_FILE"] = timing
-        proc = subprocess.run([sys.executable, self.RUNNER, "pkg/tests"], cwd=self.tmp, env=env,
+        proc = subprocess.run([sys.executable, self.RUNNER, start], cwd=self.tmp, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               universal_newlines=True, timeout=120)
         return proc.returncode, re.sub(r"in \d+\.\d+s", "in Xs", proc.stdout), proc.stderr
@@ -255,6 +257,19 @@ class UnittestDirTimingTests(unittest.TestCase):
     def timing_lines(self, path):
         with open(path, encoding="utf-8") as fh:
             return [l for l in fh.read().split("\n") if l]
+
+    def run_timed(self, start="pkg/tests"):
+        """기록 변수 없이 한 번 · 있이 한 번 돌려 표준 출력 · 오류 · 종료 코드가 같은지 보고 (rc, 출력, secs)."""
+        out = os.path.join(self.tmp, "timing.tsv")
+        plain = self.run_runner(start=start)
+        timed = self.run_runner(out, start=start)
+        self.assertEqual(timed, plain)
+        secs = {}
+        for line in self.timing_lines(out):
+            sec, kind, key = line.split("\t")
+            self.assertEqual(kind, "pymod")
+            secs[key] = float(sec)
+        return timed[0], timed[1], secs
 
     def test_pymod_lines_per_module(self):
         self.write("test_a.py", "import unittest\n\nclass A(unittest.TestCase):\n"
@@ -355,8 +370,84 @@ class UnittestDirTimingTests(unittest.TestCase):
         self.assertEqual(buf.getvalue().strip().split("\n"),
                          ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + path])
 
+    def test_teardown_time_charged_to_own_module(self):
+        self.write("test_a.py", "import time\nimport unittest\n\n"
+                   "def tearDownModule():\n    time.sleep(0.2)\n\n"
+                   "class A(unittest.TestCase):\n"
+                   "    @classmethod\n    def tearDownClass(cls):\n        time.sleep(0.3)\n\n"
+                   "    def test_1(self): pass\n")
+        self.write("test_b.py", PASS_PY)
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertGreaterEqual(secs["pkg/tests/test_a.py"], 0.5)
+        self.assertLess(secs["pkg/tests/test_b.py"], 0.25)
 
-PASS_PY = "import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
+    def test_last_module_teardown_kept(self):
+        self.write("test_a.py", PASS_PY)
+        self.write("test_z.py", "import time\nimport unittest\n\n"
+                   "def tearDownModule():\n    time.sleep(0.3)\n\n"
+                   "class Z(unittest.TestCase):\n    def test_1(self): pass\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertGreaterEqual(secs["pkg/tests/test_z.py"], 0.3)
+        self.assertLess(secs["pkg/tests/test_a.py"], 0.25)
+
+    def test_setupclass_failure_module_has_line(self):
+        self.write("test_c.py", "import time\nimport unittest\n\nclass C(unittest.TestCase):\n"
+                   "    @classmethod\n    def setUpClass(cls):\n        time.sleep(0.2)\n"
+                   "        raise RuntimeError('boom')\n\n    def test_1(self): pass\n")
+        rc, stdout, secs = self.run_timed()
+        self.assertEqual(rc, 1)
+        self.assertIn("ERROR: setUpClass (test_c.C)", stdout)
+        self.assertGreaterEqual(secs["pkg/tests/test_c.py"], 0.2)
+
+    def test_nested_package_import_failure_key(self):
+        self.write("sub/__init__.py", "")
+        self.write("sub/test_bad.py", "raise ImportError('x')\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 1)
+        self.assertIn("pkg/tests/sub/test_bad.py", secs)
+
+    def test_dot_slash_start_same_keys(self):
+        self.write("test_a.py", PASS_PY)
+        self.write("test_broken.py", "raise ImportError('x')\n")
+        rc, _, secs = self.run_timed(start="./pkg/tests")
+        self.assertEqual(rc, 1)
+        self.assertEqual(sorted(secs), ["pkg/tests/test_a.py", "pkg/tests/test_broken.py"])
+
+    def test_module_without_file_key(self):
+        self.write("test_nofile.py", "del __file__\nimport unittest\n\n"
+                   "class N(unittest.TestCase):\n    def test_1(self): pass\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertIn("pkg/tests/test_nofile.py", secs)
+
+    def test_write_timing_encoding_failure_writes_nothing(self):
+        import contextlib
+        import run_unittest_dir
+        path = os.path.join(self.tmp, "t.tsv")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run_unittest_dir.write_timing(path, {"a.py": 1.0, "\udcff": 1.0})
+        self.assertEqual(buf.getvalue().strip().split("\n"),
+                         ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + path])
+        self.assertTrue(not os.path.exists(path) or os.path.getsize(path) == 0)
+
+    def test_result_class_usable_without_runner(self):
+        import run_unittest_dir
+
+        class P(unittest.TestCase):
+            def test_1(self):
+                pass
+
+        cls = run_unittest_dir.timed_result_class(self.tmp, self.tmp)
+        r = cls(io.StringIO(), True, 1)
+        unittest.TestSuite([P("test_1")]).run(r)
+        self.assertTrue(r.wasSuccessful())
+        self.assertEqual(len(r.module_secs), 1)
+
+
+PASS_PY ="import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
 BASE = {
     "shared/tests/test_pass.sh": 'echo "  ✓ ok"\n',
     "plugins/p/tests/test_fail.sh": 'echo "  ✗ broke"; exit 1\n',
