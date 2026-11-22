@@ -8,7 +8,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MC="$ROOT/plugins/spec-distill/scripts/merge_check.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
-trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
+CT=""   # 장면 18 이 /tmp 아래에 만드는 호출한 쪽 임시 폴더 — trap 이 함께 지운다
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"; [ -n "$CT" ] && rm -rf "$CT"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 RM="plan/rm/roadmap.md"
 
@@ -472,5 +473,57 @@ out="$(mc --branch feature/nc)"; rc=$?
 assert_eq "$rc" "3" "실행하지 못한 테스트 명령 → rc 3"
 assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "실행하지 못한 테스트 명령 사유"
 assert_eq "$(headline "$out" feature/nc "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "합친 사본에서 멈춰도 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
+
+# 18 — 대조가 테스트에 주는 임시 폴더는 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도) · 링크를 푼 경로다.
+#   실행 폴더 안에 두던 때의 성질(3892f86d · b2d5ca11 — 사본마다 따로 · 대조가 끝나면 지움 · 경로 자리표시 <tmp>)을 새 자리에서 잰다.
+#   자리표시는 7b · 10c 가 잰다. 테스트 명령은 받은 TMPDIR · 그 풀린 경로를 MC_LOG 에 남기고, TMPDIR 이 git 안이면 실패 이름을 낸다.
+mkrepo tg 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+cat > "$W/run.sh" <<'EOF'
+printf '%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$(cd "$TMPDIR" && pwd -P)" >> "${MC_LOG:-/dev/null}"
+if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "FAILED tmp: inside-git"; exit 1; fi
+if [ -f fail.txt ]; then echo "FAILED x: only-branch"; exit 1; fi
+echo ok
+EOF
+push_base
+put b.txt b; branch_with feature/tg
+put fail.txt f; branch_with feature/tg2   # 합친 사본에만 실패 — 기준 사본도 돌아 두 사본의 TMPDIR 을 견준다
+mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
+out="$(MC_LOG="$T/tg.log" TMPDIR="$W/tmpin" mc --branch feature/tg)"; rc=$?
+assert_eq "$rc" "0" "호출한 쪽 TMPDIR 이 git 안이어도 대조가 주는 임시 폴더는 git 밖이다"
+assert_not_contains "$out" "inside-git" "호출한 쪽 TMPDIR 이 git 안이어도 테스트가 받은 TMPDIR 은 git 밖이다(실패 이름이 없다)"
+out="$(MC_LOG="$T/tg2.log" TMPDIR="$W/tmpin" mc --branch feature/tg2)"; rc=$?
+assert_eq "$rc" "1" "두 사본을 다 도는 대조: 합친 사본에만 있는 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: x: only-branch" "두 사본을 다 도는 대조: 새 실패는 브랜치의 것 하나뿐이다"
+assert_not_contains "$out" "inside-git" "두 사본 모두 git 밖 임시 폴더를 받았다"
+assert_eq "$(logn "$T/tg2.log" base) $(logn "$T/tg2.log" merged)" "1 1" "두 사본을 한 번씩 돌았다(전제)"
+assert_eq "$(awk -F'\t' '$2 != $3' "$T/tg.log" "$T/tg2.log" | wc -l | tr -d ' ')" "0" "대조가 준 TMPDIR 이 자기 realpath 와 같다(/tmp → /private/tmp 링크를 푼 경로)"
+assert_eq "$(cut -f2 "$T/tg2.log" | sort -u | wc -l | tr -d ' ')" "2" "사본마다 따로 — 두 사본의 TMPDIR 이 다르다"
+assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/tg2.log")" "0" "사본마다 따로 — 각 사본의 TMPDIR 은 그 사본 이름의 merge-check-<사본>- 폴더다"
+CT="$(mktemp -d /tmp/mc-ct.XXXXXX)" || CT=""
+if [ -n "$CT" ] && ! git -C "$CT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  CTR="$(cd "$CT" && pwd -P)"
+  out="$(MC_LOG="$T/ct.log" TMPDIR="$CT" mc --branch feature/tg2)"; rc=$?
+  assert_eq "$rc" "1" "호출한 쪽 TMPDIR 이 git 밖이면 그 아래에서 대조가 돈다 → rc 1"
+  assert_eq "$(ls -A "$CT")" "" "대조가 끝나면 만든 임시 폴더를 지운다"
+  out="$(MC_LOG="$T/ct.log" TMPDIR="$CT" mc --branch feature/tg2 --keep-merged)"; rc=$?
+  assert_contains "$out" "남긴 사본: " "--keep-merged: 합친 사본을 남겼다(전제)"
+  assert_eq "$(ls -A "$CT")" "" "--keep-merged 여도 임시 폴더는 지운다"
+  out="$(cd "$W" && MC_LOG="$T/ct.log" TMPDIR="$CT" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+def boom(*a, **k): raise ValueError("after-compare")
+m.report = boom
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/tg2"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+  assert_eq "$rc" "3" "대조 뒤 예외 → 내부 오류 rc 3(전제)"
+  assert_eq "$(ls -A "$CT")" "" "예외로 멈춰도 임시 폴더는 지운다"
+  assert_eq "$(cut -f2 "$T/ct.log" | grep -c "^${CTR}/merge-check-")" "6" "세 번 · 두 사본 모두 호출한 쪽 TMPDIR(풀린 경로) 아래에 만든 폴더를 받았다(양성 짝 — 지울 것이 있었다)"
+else
+  no "전제: /tmp 아래에 git 작업 트리 밖 폴더를 만들지 못했다 — 장면 18 의 지움 단언을 돌리지 못했다"
+fi
+# 대체 길: 후보를 git 안 하나로 갈아 끼우면 알리고 실행 폴더 안을 쓴다 — 그때 run.sh 가 git 안을 잡는다(양성 짝)
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+m.tmp_candidates = lambda: [sys.argv[3]]
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/tg"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" "$W" 2>&1)"; rc=$?
+assert_contains "$out" "git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다" "후보가 모두 git 안이면 알리고 실행 폴더 안을 쓴다"
+assert_contains "$out" "tmp: inside-git" "대체 길: 실행 폴더 안 TMPDIR 은 git 안이다(양성 짝 — run.sh 의 검사가 이를 잡는다)"
+assert_eq "$(ls -A "$W/tmpin")" "" "호출한 쪽 TMPDIR(git 안)에는 아무것도 남기지 않는다"
 
 finish

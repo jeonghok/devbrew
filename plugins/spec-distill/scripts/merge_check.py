@@ -19,6 +19,8 @@
 러너의 실패 모양으로만 이름을 뽑아 대조한다(모양을 모르는 러너는 단위 수준만).
 테스트 명령은 한 바퀴다 — 합친 사본을 먼저 돌고, 깨끗하면(종료 코드 0 · 실패 이름 없음) 기준 사본을 돌지 않는다. 실패 이름이
 있으면 그 목록(`SUITE_ONLY_FAILED_FILE`)을 건네 기준 사본을 돌고, 이름을 뽑지 못했으면 기준 사본을 전부 돈다.
+테스트에 주는 TMPDIR 은 git 작업 트리 밖에 사본마다 하나씩 만들고(링크를 푼 경로) 대조가 끝나면 지운다 — 그런 자리가
+없으면 알리고 실행 폴더 안을 쓴다.
 
 종료 코드: 0 새 실패 없음 · 1 새 실패 있음 · 3 검사 불가 · 4 새 실패는 없으나 이름 대조 불가 단위가 있다 ·
 5 다른 스위트가 도는 중(공유 잠금) · 6 테스트 명령을 모른다(사용자에게 묻는다) · 7 스위트 대조 없음(테스트 없음).
@@ -33,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -72,6 +75,9 @@ HEAD_TAILS = {
     "listed": "을 돌렸고 기본 브랜치 사본은 합친 사본의 실패 목록(%s)을 건네 돌렸다" % ONLY_FAILED_ENV,
     "full": "과 기본 브랜치 사본을 돌렸다 — 기본 브랜치 사본은 목록 없이 전부 돌렸다",
 }
+SIDES = ("base", "merged")
+TMP_FALLBACK_NOTE = ("[spec-distill] git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다 — "
+                     "임시 폴더가 git 밖이라고 가정한 테스트가 다르게 돌 수 있다")
 
 
 class Stop(Exception):
@@ -206,6 +212,61 @@ def drop_leftovers(work: Path, keep: Path) -> None:
                   % (type(exc).__name__, child))
 
 
+# ── 테스트 임시 폴더 ─────────────────────────────────────────────────────────
+
+def tmp_candidates() -> list:
+    """테스트에 줄 임시 폴더를 만들 자리 후보 — 차례대로 본다."""
+    return [tempfile.gettempdir(), "/tmp", "/var/tmp"]
+
+
+def outside_git(path: str) -> bool:
+    """git 작업 트리 밖이면 True. 호출한 쪽의 GIT_DIR · GIT_WORK_TREE 는 빼고 잰다(있으면 어디서나 「안」 이라 답한다)."""
+    env = dict(os.environ)
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    p = subprocess.run(["git", "-C", path, "rev-parse", "--is-inside-work-tree"], env=env,
+                       capture_output=True, encoding="utf-8", errors="replace")
+    return p.stdout.strip() != "true"
+
+
+def side_tmps(root: Path, work: Path):
+    """({"base": 폴더, "merged": 폴더}, 알림 또는 None). 후보를 링크를 푼 경로로 견주어 있는 폴더 · 쓸 수 있음 · git
+    작업 트리 밖인 첫 자리 아래에 사본마다 하나씩 만든다(돌려주는 폴더도 링크를 푼 경로). 후보가 없으면 실행 폴더 안
+    (work/tmp-<사본>)을 쓰고 알림을 돌려준다. 지우는 것은 `drop_tmps`."""
+    seen = []
+    for cand in tmp_candidates():
+        real = os.path.realpath(str(cand))
+        if real in seen:
+            continue
+        seen.append(real)
+        if not (os.path.isdir(real) and os.access(real, os.W_OK | os.X_OK)) or not outside_git(real):
+            continue
+        made = {}
+        try:
+            for side in SIDES:
+                made[side] = Path(os.path.realpath(tempfile.mkdtemp(prefix="merge-check-%s-" % side, dir=real)))
+        except OSError:
+            drop_tmps(made)
+            continue
+        return made, None
+    tmps = dict((side, work / ("tmp-" + side)) for side in SIDES)
+    for d in tmps.values():
+        d.mkdir(parents=True, exist_ok=True)
+    return tmps, TMP_FALLBACK_NOTE
+
+
+def drop_tmps(tmps: dict) -> None:
+    """`side_tmps` 가 만든 폴더만 지운다 — 못 지운 것은 알린다."""
+    for d in tmps.values():
+        if not d.exists():
+            continue
+        try:
+            shutil.rmtree(str(d))
+        except OSError as exc:
+            print("[spec-distill] 스위트 대조의 임시 폴더를 지우지 못했다(%s: %s) — 남은 것은 사용자가 정리한다"
+                  % (type(exc).__name__, d))
+
+
 # ── 테스트 명령 ──────────────────────────────────────────────────────────────
 
 def run_command(cmd: str, tree: Path, tmp: Path, only_failed=None):
@@ -220,16 +281,16 @@ def run_command(cmd: str, tree: Path, tmp: Path, only_failed=None):
     return p.returncode, p.stdout + "\n" + p.stderr
 
 
-def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sources=None) -> dict:
-    """테스트 명령 경로의 대조. 어느 예외로 멈춰도 그때까지 기준 사본을 어떻게 돌렸는지(`base_run`)를 예외에 싣는다 —
-    머리 줄의 꼬리가 그것을 쓴다."""
+def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, tmps: dict, sources=None) -> dict:
+    """테스트 명령 경로의 대조. tmps 는 `side_tmps` 의 사본별 임시 폴더. 어느 예외로 멈춰도 그때까지 기준 사본을 어떻게
+    돌렸는지(`base_run`)를 예외에 싣는다 — 머리 줄의 꼬리가 그것을 쓴다."""
     sources = sources or {}
     res = {"new": [], "fixed": [], "both": [], "unit_only": [], "fixed_unmeasured": None, "base_run": "skipped",
            "notes": ["무엇을 돌렸나: test_command(`%s`)%s" % (cmd, sources.get("test_command", ""))]}
     if pattern:
         res["notes"].append("실패 이름 정규식: test_failure_pattern(`%s`)%s" % (pattern, sources.get("test_failure_pattern", "")))
     try:
-        return _compare_command(cmd, pattern, base, merged, work, res)
+        return _compare_command(cmd, pattern, base, merged, work, tmps, res)
     except BaseException as exc:
         try:
             exc.base_run = res["base_run"]
@@ -238,11 +299,11 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, sou
         raise
 
 
-def _compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, res: dict) -> dict:
-    m_rc, m_out = run_command(cmd, merged, work / "tmp-merged")
+def _compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, tmps: dict, res: dict) -> dict:
+    m_rc, m_out = run_command(cmd, merged, tmps["merged"])
     if m_rc == 127:
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    m_names, shape = side_names(m_out, merged, work / "tmp-merged", pattern)
+    m_names, shape = side_names(m_out, merged, tmps["merged"], pattern)
     if m_rc == 0 and not m_names:
         res["notes"].append("기준 사본은 돌리지 않았다 — 합친 사본이 종료 코드 0 이고 실패 이름이 없다")
         res["fixed_unmeasured"] = "기준 사본을 돌지 않았다"
@@ -258,10 +319,10 @@ def _compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, re
     else:
         res["notes"].append("기준 사본은 전부 돌렸다 — 합친 사본이 실패했으나 이름을 뽑지 못했다")
         res["base_run"] = "full"
-    b_rc, b_out = run_command(cmd, base, work / "tmp-base", only)
+    b_rc, b_out = run_command(cmd, base, tmps["base"], only)
     if b_rc == 127:
         raise Stop(3, "테스트 명령을 실행하지 못했다(rc 127): %s" % cmd)
-    b_names, _s = side_names(b_out, base, work / "tmp-base", pattern)
+    b_names, _s = side_names(b_out, base, tmps["base"], pattern)
     named = (b_rc == 0 or b_names) and (m_rc == 0 or m_names)
     if named:
         res["new"] = sorted(m_names - b_names)
@@ -320,8 +381,8 @@ def assignment(tree: Path, work: Path):
     return final, [r for r in _assign_rows(final) if r[1] != "unclaimed"]
 
 
-def run_side(tree: Path, side: str, rows: list, work: Path) -> dict:
-    """{(러너, 단위): 그 실행의 표준 오류}. 행 파일은 공유본이 쓴다."""
+def run_side(tree: Path, side: str, rows: list, work: Path, tmp: Path) -> dict:
+    """{(러너, 단위): 그 실행의 표준 오류}. 행 파일은 공유본이 쓴다. tmp 는 그 사본의 임시 폴더(TMPDIR)."""
     logs, rows_dir = {}, work / "rows"
     rows_dir.mkdir(exist_ok=True)
     for runner in sorted({r for _u, r, _g in rows}):
@@ -330,7 +391,7 @@ def run_side(tree: Path, side: str, rows: list, work: Path) -> dict:
         target = rows_dir / (("baseline-%s.tsv" % runner) if side == "base" else ("head-%s-i1.tsv" % runner))
         groups, mode = ([["BULK"]], "bulk") if gran == "bulk" else ([[u] for u in units], "per-unit")
         for grp in groups:
-            rc, _o, err = select("run", str(tree), runner, mode, str(target), *grp, tmp=work / ("tmp-" + side))
+            rc, _o, err = select("run", str(tree), runner, mode, str(target), *grp, tmp=tmp)
             if rc == 2:
                 raise Stop(3, "단위 실행이 실패했다(%s %s): %s" % (runner, grp[0], err.strip()[-300:]))
             logs[(runner, grp[0])] = err
@@ -351,7 +412,7 @@ def parse_attributions(text: str) -> list:
     return out
 
 
-def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, work: Path) -> dict:
+def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, work: Path, tmps: dict) -> dict:
     rc, out, err = select("detect", str(merged))
     if rc:
         raise Stop(3, "러너 탐지가 실패했다: %s" % err.strip()[-300:])
@@ -372,8 +433,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
     if count is not None and len(files) < count and not any(g == "bulk" for _u, _r, g in rows):
         res["notes"].append("테스트로 보이는 파일 %d개 중 %d개만 러너가 맡았다 — 나머지까지 돌리려면 "
                             "`test_command` 를 정한다(지휘자가 한 번 묻는다)" % (count, len(files)))
-    b_logs = run_side(base, "base", rows, work)
-    m_logs = run_side(merged, "merged", rows, work)
+    b_logs = run_side(base, "base", rows, work, tmps["base"])
+    m_logs = run_side(merged, "merged", rows, work, tmps["merged"])
     p = subprocess.run([sys.executable, str(DIFF), "--assign", str(final), "--rows", str(work / "rows"),
                         "--iter", "1", "--baseline-commit", base_sha, "--head-commit", merged_sha],
                        cwd=str(merged), capture_output=True, encoding="utf-8", errors="replace")
@@ -384,8 +445,8 @@ def compare_detected(base: Path, merged: Path, base_sha: str, merged_sha: str, w
             res["notes"].append("귀속 강등: %s" % line[len("degrade_causes: "):])
     for runner, unit, verdict in parse_attributions(p.stdout):
         shapes = RUNNER_SHAPES.get(runner, ())
-        b_names, _s = side_names(b_logs.get((runner, unit), ""), base, work / "tmp-base", shapes=shapes)
-        m_names, _s = side_names(m_logs.get((runner, unit), ""), merged, work / "tmp-merged", shapes=shapes)
+        b_names, _s = side_names(b_logs.get((runner, unit), ""), base, tmps["base"], shapes=shapes)
+        m_names, _s = side_names(m_logs.get((runner, unit), ""), merged, tmps["merged"], shapes=shapes)
         if verdict in NEW:
             fresh = sorted(m_names - b_names)
             res["new"] += ["%s: %s" % (unit, n) for n in fresh] or ["%s — 이름 대조 불가 — 단위 수준만" % unit]
@@ -503,22 +564,25 @@ def run(root: Path, a) -> int:
     lock = suite_lock.lock_path(mroot)
     take_lock(lock, a.branch, a.wait)
     work = mdir / ("run-%s-%d" % (datetime.datetime.now().strftime("%Y%m%d%H%M%S"), os.getpid()))
-    keep = None
+    keep, tmps = None, {}
     try:
         work.mkdir(parents=True)
         base, merged, base_sha, tip, merged_sha = make_copies(root, work, a.branch)
-        head = ("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)"
+        tmps, note = side_tmps(root, work)
+        if note:
+            print(note)
+        head =("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)"
                 % (a.branch, tip[:8], ref_name, base_sha[:8], merged_sha[:8]))
         if test_command:   # 머리 줄은 기준 사본을 어떻게 돌렸는지 안 뒤에 낸다 — 어느 예외로 멈춰도 낸다
             try:
-                res = compare_command(test_command, pattern, base, merged, work, sources)
+                res = compare_command(test_command, pattern, base, merged, work, tmps, sources)
             except BaseException as exc:
                 print(head + HEAD_TAILS.get(getattr(exc, "base_run", None), HEAD_TAILS["skipped"]))
                 raise
             print(head + HEAD_TAILS[res["base_run"]])
         else:
             print(head + HEAD_TAILS["detected"])
-            res = compare_detected(base, merged, base_sha, merged_sha, work)
+            res = compare_detected(base, merged, base_sha, merged_sha, work, tmps)
         if a.keep_merged:
             keep = merged
         rc = report(res)
@@ -527,6 +591,7 @@ def run(root: Path, a) -> int:
         return rc
     finally:
         try:
+            drop_tmps(tmps)   # --keep-merged 여도 · 예외로 멈춰도 지운다
             for d in (work / "base", work / "merged"):
                 if d != keep:
                     drop_copy(root, d, work)
