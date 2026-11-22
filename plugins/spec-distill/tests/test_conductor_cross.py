@@ -439,6 +439,24 @@ class Show(CrossRepo):
         self.g("fetch", "-q", "origin", spec)
         return commit
 
+    def test_own_rules_edit_is_listed_after_the_foreign_line(self):   # AC5
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())          # 처음에는 없다 — STATUS 쓰기만 한 `씀` 은 세지 않는다(Review Focus 5)
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertLess(out.index(CS.OWN_EDITS % 1), out.index("다른 로드맵과 닿는 것"))
+        self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["own"], [(commit, (team.rules,))])
+
+    def test_a_planted_own_row_moves_a_foreign_edit_into_the_own_list(self):   # G3 — 일꾼이 남의 고침을 `씀` 으로 적는다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        self.assertIn(TS.FOREIGN % 1 + CS.FOREIGN_TAIL, self.text())             # 양성 대조 — 심기 전에는 남의 고침이다
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        out = self.text()
+        self.assertNotIn("확인되지 않은 남의 고침", out)
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), out)
+
     def test_foreign_edit_of_my_roadmap_is_told_under_my_status(self):   # R3 AC21 — 옛 형식이어도 같은 판정
         line = TS.FOREIGN % 1 + " — conductor_branch.py confirm"
         out = self.text()

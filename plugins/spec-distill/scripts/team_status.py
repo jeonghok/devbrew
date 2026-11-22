@@ -91,12 +91,11 @@ def trust_of(rows):
     return (confirmed[0] if confirmed else None), frozenset(own)
 
 
-def foreign_commits(git, tip: str, trust, paths: list):
-    """`<확인 끝>..<tip>`(확인 끝이 없으면 tip 의 이력 전부)에서 `paths` 를 바꾼 커밋 가운데 `씀` 에 없는 것 —
+def edits_since(git, tip: str, trust, paths: list):
+    """`<확인 끝>..<tip>`(확인 끝이 없으면 tip 의 이력 전부)에서 `paths` 를 바꾼 커밋(`씀` 이든 아니든) —
     [(커밋 40자, (바꾼 경로…)), …] 오래된 차례. 재지 못하면 None: trust 가 None · 확인 끝이 이 레포에 없음 ·
     tip 이 확인 끝을 품지 않음(원격 이력이 다시 쓰여 확인 끝의 조상 · 곁가지로 갔다 — 빈 범위가 「없음」 으로 읽히지 않게) · git 실패 ·
-    남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다).
-    `씀` 에 든 커밋이 범위에 없어도(버려진 커밋) 그냥 범위 밖이다."""
+    남의 머지 커밋(경로 한정 log 의 이력 단순화가 그 머지를 숨길 수 있다 — 스크립트는 머지를 만들지 않는다)."""
     if trust is None or not isinstance(tip, str) or not _OID_RE.fullmatch(tip):
         return None
     base, own = trust
@@ -129,7 +128,20 @@ def foreign_commits(git, tip: str, trust, paths: list):
             found[-1][1].append(line)
         else:
             return None
-    return [(commit, tuple(changed)) for commit, changed in reversed(found) if commit not in own]
+    return [(commit, tuple(changed)) for commit, changed in reversed(found)]
+
+
+def foreign_commits(git, tip: str, trust, paths: list):
+    """`edits_since` 가운데 `씀` 에 없는 것 — 확인되지 않은 남의 고침. 재지 못하면 None.
+    `씀` 에 든 커밋이 범위에 없어도(버려진 커밋) 그냥 범위 밖이다."""
+    found = edits_since(git, tip, trust, paths)
+    return None if found is None else [e for e in found if e[0] not in trust[1]]
+
+
+def own_commits(git, tip: str, trust, paths: list):
+    """`edits_since` 가운데 `씀` 에 있는 것 — 이 기계가 쓴 것으로 적힌 고침. 재지 못하면 None."""
+    found = edits_since(git, tip, trust, paths)
+    return None if found is None else [e for e in found if e[0] in trust[1]]
 
 
 def rules_tip(git, team, on: bool, rows) -> tuple:

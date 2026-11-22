@@ -137,6 +137,18 @@ class Foreign(TeamRepo):
         mine = self.write({self.team.rules: "- 내 줄\n"}).commit
         self.assertEqual(TS.foreign_commits(RS.Git(str(self.w)), mine, self.trust(), TS.rules_paths(self.team)), [])
 
+    def test_own_and_foreign_partition_the_edits_since(self):   # AC5 — 둘은 겹치지 않고 합치면 `edits_since`
+        git, paths = RS.Git(str(self.w)), TS.rules_paths(self.team)
+        mine = self.write({self.team.rules: "- 내 줄\n"}).commit
+        theirs = self.foreign_edit("o3", {self.team.rules: "- 남의 줄\n"})
+        all_ = TS.edits_since(git, self.tip(), self.trust(), paths)
+        own, foreign = TS.own_commits(git, self.tip(), self.trust(), paths), TS.foreign_commits(git, self.tip(), self.trust(), paths)
+        self.assertEqual([c for c, _p in all_], [mine, theirs])   # 양성 대조 — 둘 다 있다
+        self.assertEqual([c for c, _p in own], [mine])
+        self.assertEqual([c for c, _p in foreign], [theirs])
+        self.assertEqual(sorted(own + foreign), sorted(all_))
+        self.assertIsNone(TS.own_commits(git, "f" * 40, self.trust(), paths))
+
     def test_git_failure_or_missing_base_is_none_not_empty(self):
         git = RS.Git(str(self.w))
         self.assertIsNone(TS.foreign_commits(git, "f" * 40, self.trust(), TS.rules_paths(self.team)))
