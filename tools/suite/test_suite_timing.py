@@ -541,7 +541,7 @@ class UnittestDirTimingTests(unittest.TestCase):
         self.assertEqual(len(r.module_secs), 1)
 
 
-PASS_PY ="import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
+PASS_PY = "import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
 BASE = {
     "shared/tests/test_pass.sh": 'echo "  ✓ ok"\n',
     "plugins/p/tests/test_fail.sh": 'echo "  ✗ broke"; exit 1\n',

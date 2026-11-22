@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from test_suite_timing import (  # noqa: E402
-    RepoMixin, BASE, BASE_WITHOUT_FAIL, NODE, NODE_TEST, FAIL_OUT, PASS_PY, clean_env)
+    RepoMixin, BASE, BASE_WITHOUT_FAIL, NODE, NODE_TEST, FAIL_OUT, clean_env)
 
 NODE_PATH = "plugins/p/tests/n.test.mjs"
 ALL_TARGETS = 2 + 3   # BASE 의 셸 둘 · python 셋(node 없는 레포)

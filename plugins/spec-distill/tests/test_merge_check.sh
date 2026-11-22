@@ -474,6 +474,14 @@ assert_eq "$rc" "3" "실행하지 못한 테스트 명령 → rc 3"
 assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "실행하지 못한 테스트 명령 사유"
 assert_eq "$(headline "$out" feature/nc "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "합친 사본에서 멈춰도 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
 
+# 17b — 기준 사본만 테스트 명령을 실행하지 못한다(rc 127, 명령 스크립트가 브랜치에만 있다) → rc 3 · 머리 줄은 목록을 건네 돌렸다고 말한다
+mkrepo nb 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'; put a.txt a; push_base
+put run.sh $'echo "FAILED x: only-branch"\nexit 1'; branch_with feature/nb
+out="$(mc --branch feature/nb)"; rc=$?
+assert_eq "$rc" "3" "기준 사본만 명령을 실행하지 못함(rc 127) → rc 3"
+assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "기준 사본만 명령을 실행하지 못함: 사유"
+assert_eq "$(headline "$out" feature/nb "을 돌렸고 기본 브랜치 사본은 합친 사본의 실패 목록\(SUITE_ONLY_FAILED_FILE\)을 건네 돌렸다")" "1" "기준 사본에서 멈춰도 머리 줄은 목록을 건네 돌렸다고 말한다"
+
 # 18 — 대조가 테스트에 주는 임시 폴더는 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도) · 링크를 푼 경로다.
 #   실행 폴더 안에 두던 때의 성질(3892f86d · b2d5ca11 — 사본마다 따로 · 대조가 끝나면 지움 · 경로 자리표시 <tmp>)을 새 자리에서 잰다.
 #   자리표시는 7b · 10c 가 잰다. 테스트 명령은 받은 TMPDIR · 그 풀린 경로를 MC_LOG 에 남기고, TMPDIR 이 git 안이면 실패 이름을 낸다.
@@ -530,16 +538,19 @@ mkrepo td; mkdir -p "$W/tests"
 cat > "$W/tests/t.sh" <<'EOF'
 #!/usr/bin/env bash
 if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then w=in; else w=out; fi
-printf '%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$w" >> "${MC_LOG:-/dev/null}"
+if [ -d "$TMPDIR" ]; then e=yes; else e=no; fi
+printf '%s\t%s\t%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$w" "$e" "${SUITE_ONLY_FAILED_FILE:-}" >> "${MC_LOG:-/dev/null}"
 exit 0
 EOF
 chmod +x "$W/tests/t.sh"; push_base; put x.txt x; branch_with feature/td
 mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
-out="$(MC_LOG="$T/td.log" TMPDIR="$W/tmpin" mc --branch feature/td)"; rc=$?
+out="$(MC_LOG="$T/td.log" TMPDIR="$W/tmpin" SUITE_ONLY_FAILED_FILE="$T/stale-list" mc --branch feature/td)"; rc=$?
 assert_eq "$rc" "0" "탐지 경로: 깨끗한 셸 단위 → rc 0(전제)"
 assert_contains "$out" "무엇을 돌렸나: 탐지한 러너 shell" "탐지 경로가 돌았다(전제)"
 assert_eq "$(logn "$T/td.log" base) $(logn "$T/td.log" merged)" "1 1" "탐지 경로: 두 사본의 단위를 한 번씩 돌았다(전제)"
 assert_eq "$(awk -F'\t' '$3 != "out"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 은 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도)"
+assert_eq "$(awk -F'\t' '$4 != "yes"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 폴더가 실제로 있었다(git 밖 단언이 공허하지 않다)"
+assert_eq "$(awk -F'\t' '$5 != ""' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 호출한 쪽 목록 변수를 단위에 건네지 않는다"
 assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/td.log")" "0" "탐지 경로: 각 사본의 단위는 그 사본의 merge-check-<사본>- 폴더를 TMPDIR 로 받는다"
 
 finish

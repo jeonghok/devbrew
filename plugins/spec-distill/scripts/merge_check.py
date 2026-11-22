@@ -344,7 +344,10 @@ def _compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, tm
 # ── 탐지 경로(공유본) ────────────────────────────────────────────────────────
 
 def select(*args, stdin=None, tmp=None):
-    env = dict(os.environ, TMPDIR=str(tmp)) if tmp else None
+    env = dict(os.environ)
+    env.pop(ONLY_FAILED_ENV, None)   # 호출한 쪽의 목록 변수는 탐지 경로의 러너에 건네지 않는다
+    if tmp:
+        env["TMPDIR"] = str(tmp)
     p = subprocess.run(["bash", str(SELECT), *args], input=stdin, capture_output=True, encoding="utf-8",
                        errors="replace", env=env)
     return p.returncode, p.stdout, p.stderr
