@@ -109,7 +109,7 @@ for lit in '쓰기 권한 없는 리뷰어(통합 리뷰어 · 옮김 대조)' '
 done
 assert_eq "$(printf '%s\n' "$RUN" | grep -ciE 'opus|sonnet|haiku|fable|claude-[a-z]+-[0-9]' || true)" "0" "AC1: 모델 이름이 없다"
 SES="$(sec '## 세션 담당자')"
-for lit in '보낸 글 파일' 'resource-dir --roadmap <로드맵> --kind relay --name <에픽>' 'hc run --bg --json --name <이름>' \
+for lit in '보낸 글 파일 — team 형식의 과제 파일과 다른 파일이다' 'resource-dir --roadmap <로드맵> --kind relay --name <에픽>' 'hc run --bg --json --name <이름>' \
            '문법은 매번 `hc --skill` 에서 읽는다' '막는 옵션을 붙이지 않는다' \
            '대화형 세션으로 띄운다 — 한 번 돌고 끝나는 헤드리스(`claude -p`)로 띄우지 않는다' \
            '자리: <에픽 worktree 절대경로> — 이 세션이 시작한 폴더이고 <브랜치> 에 서 있다(브랜치를 옮기지 않는다).' \
