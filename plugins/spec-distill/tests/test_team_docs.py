@@ -268,6 +268,28 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
             self.assertIn(words, source, words)
             self.assertIn(words, s3, words)
 
+    def test_source_problem(self):   # AC1 · AC3 — 출처 규칙 하나
+        import team_check as TC
+        brief = "docs/iv/b.md"
+        seed = b"---\ntype: interview-seed-audit\n---\n"
+        self.assertEqual(TC.audit_of(brief), "docs/iv/b.audit.md")
+        self.assertIsNone(TC.audit_of("docs/iv/b.txt"))
+        self.assertIsNone(TC.source_problem(brief, brief, b"x"))
+        self.assertIsNone(TC.source_problem("docs/iv/b.audit.md", brief, b"x"))
+        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, seed))
+        self.assertEqual(TC.source_problem("docs/x/forged.audit.md", brief, b"---\ntype: interview-audit\n---\n"),
+                         TC.SOURCE_NOT_ALLOWED % brief)
+        self.assertEqual(TC.source_problem("docs/iv/other.md", brief, b"no head"), TC.SOURCE_NOT_ALLOWED % brief)
+        self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", None, b"x"))     # Review Focus 3
+        self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", brief, None))    # 견줄 파일 없음 — 대조가 3 으로 끝낸다
+
+    def test_one_source_rule(self):   # 규칙을 두 군데에 따로 적지 않는다
+        tw = (SCRIPTS / "team_write.py").read_text(encoding="utf-8")
+        tc = (SCRIPTS / "team_check.py").read_text(encoding="utf-8")
+        for lit in ('".audit.md"', '"interview-seed-audit"'):
+            self.assertNotIn(lit, tw, lit)
+            self.assertEqual(tc.count(lit), 1, lit)
+
     def test_origin_table_and_review_entry(self):   # 원문 대조 표의 규칙 · spec-review 진입
         import check_bundle_coverage as cbc
         import spec_review_bundle as srb

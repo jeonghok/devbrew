@@ -1222,6 +1222,7 @@ for kind in none empty nokey nostate; do
   assert_contains "$(cat "$T/out.txt")" "팀 폴더를 만들었다" "framing 없이(${kind}) · create --layout team: 만들었다는 줄도 그대로 낸다"
   assert_eq "$(fn_marked "o-$kind")" "2" "framing 없이(${kind}) · create --layout team: brief 쪽 두 구간의 출처 줄 끝에 표지"
 done
+assert_eq "$( (cd "$FA" && python3 "$S/team_layout.py" check --roadmap "${RD}fa-o-none/roadmap.md") > "$T/chk.txt" 2>&1; echo $?)" "0" "AC3 framing 없음: brief · audit 구간만 든 사본은 출처 검사를 지난다(rc 0)"
 # 음의 짝 — framing audit 를 찾은 인터뷰와, 붙일 것이 없는 다시 부르기에는 그 줄이 없다
 assert_eq "$(fa_orig n-found)" "0" "framing 을 찾았다 · original: rc 0"
 assert_eq "$(fn_said)" "0" "framing 을 찾았다 · original: 그 줄이 없다"
@@ -1544,5 +1545,61 @@ assert_eq "$(nhupdate "$T/nh-range.md")" "1" "단계를 셀 수 없다 · 범위
 assert_contains "$(cat "$T/out.txt")" "로드맵을 쓰지 않았다 — 머지 여부를 알 수 없다" "단계를 셀 수 없다 · 범위만 바꾼 표: 머지 여부를 알 수 없다고 멈춘다"
 assert_not_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "단계를 셀 수 없다 · 범위만 바꾼 표: 고칠 글을 내지 않는다"
 [ "$(snap "$NH")" = "$b_nh" ] && ok "단계를 셀 수 없다 · 범위만 바꾼 표: 나무 그대로" || no "단계를 셀 수 없다 · 범위만 바꾼 표: 나무가 바뀌었다"
+
+# ── 원자료 사본의 출처 경로 (보안 지적 AC1 · AC3) ───────────────────────────────
+# 출처는 로드맵 source_brief · 그 audit · framing audit(견주는 파일의 머리 type 이 interview-seed-audit) 가운데 하나다.
+fresh src
+SRC="$T/src"
+assert_eq "$(ttc "$SRC" "$T/src.md" "${RD}src")" "0" "출처 픽스처: create --layout team rc 0"
+gx "$SRC" add -- "${RD}src" && gx "$SRC" commit -qm src-team && gx "$SRC" push -q origin main
+SRCO="$SRC/${RD}src/intent/original.md"
+cp "$SRCO" "$T/src.o"
+srccheck() { (cd "$T/src" && python3 "$S/team_layout.py" check --roadmap "${RD}src/roadmap.md" "$@") > "$T/chk.txt" 2>&1; echo $?; }
+cat > "$T/plant.py" <<'PY'
+import subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import team_files
+repo, path, source, commit, first, last = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], int(sys.argv[6]), int(sys.argv[7])
+blob = subprocess.run(["git", "-C", repo, "cat-file", "blob", "%s:%s" % (commit, source)], stdout=subprocess.PIPE, check=True).stdout
+lines = team_files.byte_lines(blob)[first - 1:last]
+data = open(path, "rb").read()
+new, _notes = team_files.extend_original(data, [(source, commit, "사용자 원문", first, lines, "")])
+open(path, "wb").write(new)
+PY
+plant() {  # plant <레포> <원자료 사본> <출처> <커밋> <첫 줄> <끝 줄> — 그 커밋의 그 줄들을 사본 끝에 구간 하나로 붙인다
+  local before; before="$(markers "$2")"
+  python3 "$T/plant.py" "$S" "$@"
+  assert_eq "$(markers "$2")" "$((before + 1))" "plant: 구간 하나를 붙였다(${3} ${5}–${6}행)"
+}
+assert_eq "$(srccheck)" "0" "AC3 framing 있음: 만든 그대로의 사본(framing 원문 · 질문 전체 · brief · audit)은 rc 0"
+assert_grep "$(marker_heads "$SRCO" | head -n 1)" '^<!-- 출처: docs/iv/t-seed-interview\.audit\.md · 원문 -->$' "AC3 framing 있음: 첫 구간이 framing audit 에서 왔다(양성 대조의 전제)"
+# 위조 출처 — audit 를 베껴 §6 한 줄만 바꾼 새 파일
+mkdir -p "$SRC/docs/x"
+sed 's/^  > 둘째 말$/  > 위조한 말/' "$SRC/docs/iv/t-brief-interview.audit.md" > "$SRC/docs/x/forged.audit.md"
+gx "$SRC" add -- docs/x && gx "$SRC" commit -qm forged
+FL="$(grep -n '^  > 위조한 말$' "$SRC/docs/x/forged.audit.md" | cut -d: -f1)"
+[ -n "$FL" ] && ok "픽스처: 위조 파일에 바꾼 줄이 있다(${FL}행)" || no "픽스처: 위조 파일에 바꾼 줄이 없다"
+plant "$SRC" "$SRCO" docs/x/forged.audit.md "$(gx "$SRC" rev-parse HEAD)" "$FL" "$FL"
+assert_eq "$(srccheck)" "1" "AC1 위조 출처: rc 1"
+assert_contains "$(cat "$T/chk.txt")" "(출처 docs/x/forged.audit.md · 사용자 원문 " "AC1 위조 출처: 그 구간의 자리를 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 위조 출처: 사유를 낸다"
+cp "$T/src.o" "$SRCO"
+assert_eq "$(srccheck)" "0" "AC1 위조 출처: 되돌린 사본은 rc 0(양성 짝)"
+# 다른 brief — 같은 레포의 다른 인터뷰 결과물
+UL="$(grep -n '^  > 팀 폴더를 만들어 달라$' "$SRC/docs/iv/u-brief-interview.md" | cut -d: -f1)"
+plant "$SRC" "$SRCO" docs/iv/u-brief-interview.md "$(gx "$SRC" rev-parse HEAD)" "$UL" "$UL"
+assert_eq "$(srccheck)" "1" "AC1 다른 brief: 다른 인터뷰 결과물의 §6 줄을 붙인 사본은 rc 1"
+assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/u-brief-interview.md · 사용자 원문 " "AC1 다른 brief: 그 구간의 자리를 짚는다"
+cp "$T/src.o" "$SRCO"
+b_src="$(snap "$SRC")"
+assert_eq "$( (cd "$SRC" && python3 "$RW" original --brief docs/iv/u-brief-interview.md --out "${RD}src") > "$T/out.txt" 2>&1; echo $?)" "1" "AC1 다른 brief · original: rc 1"
+assert_contains "$(cat "$T/out.txt")" "검사 실패" "AC1 다른 brief · original: 쓰기 전 검사에서 거절한다"
+[ "$(snap "$SRC")" = "$b_src" ] && ok "AC1 다른 brief · original: 나무 그대로" || no "AC1 다른 brief · original: 나무가 바뀌었다"
+# 남는 것 — framing audit 꼴(머리 type interview-seed-audit)을 갖춘 새 파일은 지나간다(설계가 공시하는 경계 · framing 길의 양성 대조)
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n> 꾸민 framing 말\n' > "$SRC/docs/x/fake-seed.audit.md"
+gx "$SRC" add -- docs/x && gx "$SRC" commit -qm fake-seed
+plant "$SRC" "$SRCO" docs/x/fake-seed.audit.md "$(gx "$SRC" rev-parse HEAD)" 7 7
+assert_eq "$(srccheck)" "0" "남는 것(framing 꼴): 머리 type 이 interview-seed-audit 인 새 파일의 줄은 rc 0"
+cp "$T/src.o" "$SRCO"
 
 finish

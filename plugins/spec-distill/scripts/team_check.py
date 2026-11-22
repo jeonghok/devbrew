@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
@@ -65,6 +66,34 @@ def _span(data: bytes, s) -> bytes:
 _SRC_UNREAD = ("를 읽지 못해", "의 파일을 읽지 못했고", "의 파일을 읽지 못했다")              # 커밋을 읽지 못함
 _SRC_ABSENT = ("에 그 파일이 없어", "에 그 파일이 없고", "에 그 파일이 없다")                # 커밋은 있고 경로가 없음
 _SRC_BROKEN = ("에서 그 파일을 읽지 못해", "에서 그 파일을 읽지 못했고", "에서 그 파일을 읽지 못했다")  # 경로는 있고 읽지 못함
+
+# 원자료 사본 구간의 출처가 될 수 있는 파일 — 로드맵 source_brief · 그 audit · framing audit(머리 type 이 FRAMING_TYPE)
+FRAMING_TYPE = "interview-seed-audit"
+SOURCE_NOT_ALLOWED = "출처가 로드맵 source_brief(%s) · 그 audit · framing audit 가운데 하나가 아니다"
+
+
+def audit_of(brief_rel: str) -> Optional[str]:
+    """인터뷰 결과물의 audit 경로 — 이름의 `.md` 를 `.audit.md` 로 바꾼 것. `.md` 로 끝나지 않으면 None."""
+    return brief_rel[:-3] + ".audit.md" if brief_rel.endswith(".md") else None
+
+
+def head_type(data: bytes) -> str:
+    """머리말 type 값(따옴표 벗김). UTF-8 로 읽지 못하면 ""."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return ""
+    return _meta(text).get("type", "")
+
+
+def source_problem(source: str, brief_rel: Optional[str], blob: Optional[bytes]) -> Optional[str]:
+    """구간 출처 경로의 문제 줄, 없으면 None. brief_rel 이 없으면 로드맵 검사가 따로 알린다. blob(출처 커밋의 그 파일)이 없으면
+    이어지는 대체 대조가 판정한다."""
+    if brief_rel is None or source in (brief_rel, audit_of(brief_rel)) or blob is None:
+        return None
+    if head_type(blob) == FRAMING_TYPE:
+        return None
+    return SOURCE_NOT_ALLOWED % brief_rel
 
 
 # ── 읽기 ─────────────────────────────────────────────────────────────────────
@@ -125,12 +154,13 @@ def check_tree(top: Path, team, base=None) -> tuple:
     errors, unknown, notes = [], [], []
 
     # 1. 로드맵
-    blocks = []
+    blocks, brief_rel = [], None
     text = _text(top / team.roadmap)
     if text is None:
         errors.append("%s: 로드맵 파일이 없거나 UTF-8 로 읽지 못했다" % team.roadmap)
     else:
         meta = _meta(text)
+        brief_rel = meta.get("source_brief") or None
         if meta.get("type") != "roadmap":
             errors.append("%s: 머리말 type 이 roadmap 이 아니다" % team.roadmap)
         try:
@@ -236,6 +266,10 @@ def check_tree(top: Path, team, base=None) -> tuple:
         where = "%s %d–%d행(출처 %s · %s %d–%d행)" % (team.original, s.start, s.start + s.last - s.first,
                                                    s.source, s.label, s.first, s.last)
         blob = show(top, s.commit, s.source)
+        problem = source_problem(s.source, brief_rel, blob)
+        if problem:
+            errors.append("%s: %s" % (where, problem))
+            continue
         if blob is not None:
             if _span(blob, s) != s.body:
                 errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
