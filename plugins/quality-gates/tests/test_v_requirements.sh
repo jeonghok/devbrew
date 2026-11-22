@@ -125,7 +125,8 @@ case_v9_one_pass_no_code_edits() {
   cat > "$T/v9-fill.py" <<'PY'
 import sys
 f = sys.stdin.read().split("\n")
-i = next(k for k, l in enumerate(f) if l.endswith("<<'QG_FIX_LIST'"))
+# 여는 줄의 따옴표 꼴은 가리지 않는다 — 따옴표가 빠진 펜스도 채워 돌려야 아래 명령 치환 단언이 그 결함을 잰다.
+i = next(k for k, l in enumerate(f) if l.endswith(("<<'QG_FIX_LIST'", '<<"QG_FIX_LIST"', "<<QG_FIX_LIST")))
 j = f.index("QG_FIX_LIST", i + 1)
 body = ["### 막는 지적", "", "- IMPORTANT src/a.py:41 — 키를 검증하지 않는다 · 고칠 방법: $(touch PWNED)", "",
         "### 제안", "", "(없음)", "", "### 차등 회귀", "", "(없음)"]
