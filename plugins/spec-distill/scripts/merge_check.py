@@ -229,7 +229,7 @@ def outside_git(path: str) -> bool:
     return p.stdout.strip() != "true"
 
 
-def side_tmps(root: Path, work: Path):
+def side_tmps(work: Path):
     """({"base": 폴더, "merged": 폴더}, 알림 또는 None). 후보를 링크를 푼 경로로 견주어 있는 폴더 · 쓸 수 있음 · git
     작업 트리 밖인 첫 자리 아래에 사본마다 하나씩 만든다(돌려주는 폴더도 링크를 푼 경로). 후보가 없으면 실행 폴더 안
     (work/tmp-<사본>)을 쓰고 알림을 돌려준다. 지우는 것은 `drop_tmps`."""
@@ -568,10 +568,10 @@ def run(root: Path, a) -> int:
     try:
         work.mkdir(parents=True)
         base, merged, base_sha, tip, merged_sha = make_copies(root, work, a.branch)
-        tmps, note = side_tmps(root, work)
+        tmps, note = side_tmps(work)
         if note:
             print(note)
-        head =("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)"
+        head = ("[spec-distill] 스위트 대조 — %s(%s) 를 기본 브랜치 %s(%s) 에 합친 사본(%s)"
                 % (a.branch, tip[:8], ref_name, base_sha[:8], merged_sha[:8]))
         if test_command:   # 머리 줄은 기준 사본을 어떻게 돌렸는지 안 뒤에 낸다 — 어느 예외로 멈춰도 낸다
             try:

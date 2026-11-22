@@ -525,5 +525,21 @@ sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "fea
 assert_contains "$out" "git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다" "후보가 모두 git 안이면 알리고 실행 폴더 안을 쓴다"
 assert_contains "$out" "tmp: inside-git" "대체 길: 실행 폴더 안 TMPDIR 은 git 안이다(양성 짝 — run.sh 의 검사가 이를 잡는다)"
 assert_eq "$(ls -A "$W/tmpin")" "" "호출한 쪽 TMPDIR(git 안)에는 아무것도 남기지 않는다"
+# 18b — 탐지 경로(test_command 없음)의 단위 실행도 같은 자리를 받는다: 실행 비트 셸 단위가 받은 TMPDIR 을 남긴다
+mkrepo td; mkdir -p "$W/tests"
+cat > "$W/tests/t.sh" <<'EOF'
+#!/usr/bin/env bash
+if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then w=in; else w=out; fi
+printf '%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$w" >> "${MC_LOG:-/dev/null}"
+exit 0
+EOF
+chmod +x "$W/tests/t.sh"; push_base; put x.txt x; branch_with feature/td
+mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
+out="$(MC_LOG="$T/td.log" TMPDIR="$W/tmpin" mc --branch feature/td)"; rc=$?
+assert_eq "$rc" "0" "탐지 경로: 깨끗한 셸 단위 → rc 0(전제)"
+assert_contains "$out" "무엇을 돌렸나: 탐지한 러너 shell" "탐지 경로가 돌았다(전제)"
+assert_eq "$(logn "$T/td.log" base) $(logn "$T/td.log" merged)" "1 1" "탐지 경로: 두 사본의 단위를 한 번씩 돌았다(전제)"
+assert_eq "$(awk -F'\t' '$3 != "out"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 은 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도)"
+assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/td.log")" "0" "탐지 경로: 각 사본의 단위는 그 사본의 merge-check-<사본>- 폴더를 TMPDIR 로 받는다"
 
 finish
