@@ -36,8 +36,9 @@ STAGE = re.compile(
     r"|interview-(?:pr|merge)-(?:files|head|recheck|requested)",
     re.I,
 )
-# 홀로 쓰인 영어 낱말 — 앞뒤에 식별자 글자가 붙은 꼴(--interview · interview_state.py · interview-seed …)은 걸리지 않는다
-BARE = re.compile(r"(?<![-_/.$A-Za-z0-9])interview(?:s|er|ers|ing)?(?![-_/.A-Za-z0-9])", re.I)
+# 홀로 쓰인 영어 낱말 — 앞뒤에 식별자 글자가 붙은 꼴(--interview · interview_state.py · interview-seed …)은 걸리지 않는다.
+# 뒤의 `.` 은 확장자처럼 영숫자가 이어질 때만 식별자로 본다 — 문장 끝 마침표(「… interviews.」)는 걸린다.
+BARE = re.compile(r"(?<![-_/.$A-Za-z0-9])interview(?:s|er|ers|ing)?(?![-_/A-Za-z0-9]|\.[A-Za-z0-9])", re.I)
 # 면제 목록 — (파일, 줄에 든 글자, 이유). 계획 2 이유의 줄은 계획 2 가 비운다.
 EXEMPT = [
     ("plugins/spec-distill/skills/reviewing-brief/SKILL.md", "`advisories` 의 「인터뷰를 닫은 답 …」 줄",

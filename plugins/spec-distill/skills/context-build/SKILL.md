@@ -536,7 +536,7 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 그 audit 에 남기고 seed 에는 싣지 않는다. framing 의 공백은 사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(context-build)의
 R&R 이다 — landscape · steelman · blind-spot premortem · coverage-mapper · `open-researcher` 다섯이 전부 그 장치다.
 
-**질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 interview.
+**질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 context-build.
 같은 주제도 이 기준으로 갈린다.
 
 토픽이 잡히면, 그리고 결정에 닿을 때마다 landscape sweep을 수행합니다(의례 R2 의 «≥1회» 는 하한이고, 사용자가 고른 「외부 선례 무관」 닫힘이 그 하한을 대신한다). 각 web 검색 *직전에* kill switch를
