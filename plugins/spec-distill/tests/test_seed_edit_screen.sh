@@ -529,6 +529,12 @@ mkn q5 5; scr q5
 assert_eq "$(qs q5)" "[(True, [1, 2, 3]), (True, [4, 5])]" "AC7: 다섯이면 3+2"
 mkn q9 9; scr q9
 assert_eq "$(qs q9)" "[(True, [1, 2, 3, 4]), (True, [5, 6, 7]), (True, [8, 9])]" "AC7: 아홉이면 4+3+2"
+MQ='그대로 둘 곳을 고르세요. 고르지 않은 곳은 되돌립니다. 전부 되돌리려면 기타 칸에 적어 주세요.'
+assert_eq "$(j q9 '[q["question"] for q in d["questions"]]')" \
+  "['편집 1–4 가운데 ${MQ}', '편집 5–7 가운데 ${MQ}', '편집 8–9 가운데 ${MQ}']" \
+  "AC7: 질문이 여럿으로 나뉘면 질문 글마다 맡은 덩어리 범위가 앞에 붙어 서로 다르다(한 호출에 같은 질문 글이 겹치지 않는다)"
+assert_eq "$(j q5 'len({q["question"] for q in d["questions"]}) == len(d["questions"])')" "True" \
+  "AC7: 다섯(3+2)도 나뉜 질문 글이 서로 다르다"
 assert_eq "$(shown q9)" "ok" "AC1 · AC2 화면 글: 덩어리 아홉이 모두 실린다 — q9"
 why q5 "3\t$FA" "5\t$DA"; scr q5
 assert_eq "$(j q5 '[[o["label"] for o in q["options"]] for q in d["questions"]]')" \
