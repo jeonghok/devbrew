@@ -48,13 +48,26 @@ def read_pid(path):
         return int(fh.read().strip())
 
 
+def hold_until(release):
+    """가짜 러너 셸 조각 — 풀어 줌 파일이 생길 때까지(상한 10초) 기다린다."""
+    return "i=0; while [ ! -e %s ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done" % release
+
+
 def kill_tree_if_ours(pid, marker):
     """pid 가 아직 살아 있고 명령줄에 marker 가 있을 때만, 그 자손부터 죽인다(PID 재사용 방지)."""
-    out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, universal_newlines=True).stdout
+    try:
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, universal_newlines=True, timeout=10).stdout
+    except subprocess.TimeoutExpired:
+        return
     if marker not in out:
         return
-    rows = suite_peers.read_rows() or []
+    saved = os.environ.pop("SUITE_PEERS_PS_FILE", None)  # 가짜 표로 정리하지 않는다
+    try:
+        rows = suite_peers.read_rows() or []
+    finally:
+        if saved is not None:
+            os.environ["SUITE_PEERS_PS_FILE"] = saved
     tree, frontier = [], {pid}
     while frontier:
         nxt = {p for p, pp, _ in rows if pp in frontier and p not in tree and p != pid}
@@ -85,6 +98,7 @@ class PeerCountTests(unittest.TestCase):
         no = ["bash -c bash tools/suite/run-all.sh",
               "python3 suite_lock.py run --lock L --owner o -- bash -c bash tools/suite/run-all.sh",
               "bash shared/tests/test_x.sh", "vim tools/suite/run-all.sh", "bash tools/suite/run-all.sh.bak", ""]
+        no += ["bash some_test.sh tools/suite/run-all.sh", "bash /x/foo.sh /y/run-all.sh"]
         for c in yes:
             self.assertTrue(suite_peers.is_runner(c), c)
         for c in no:
@@ -173,13 +187,69 @@ class PeerCountTests(unittest.TestCase):
         self.assertTrue(r.stdout.strip().endswith("\tpeers=1"), r.stdout)
         self.assertRegex(r.stdout.strip(), r"^waited=\d+\tpeers=1$")
 
+    def test_wait_unreadable_rows_returns_at_once(self):
+        missing = os.path.join(self.tmp, "nope.txt")
+        r = run_peers(["--pid", "50", "--wait", "30", "--interval", "0.2"], missing)
+        self.assertEqual(r.returncode, 3)
+        self.assertRegex(r.stdout.strip(), r"^waited=0\tpeers=\?$")
+        self.assertIn("suite_peers: 프로세스 표를 읽지 못했다 — 표 파일을 열지 못했다: " + missing, r.stderr)
+
+    def test_interval_not_positive_refused(self):
+        for v in ("0", "-1"):
+            r = run_peers(["--wait", "1", "--interval", v], self.ps_file(""))
+            self.assertEqual(r.returncode, 2, v)
+
+    def test_read_rows_why_names_reason(self):
+        missing = os.path.join(self.tmp, "nope.txt")
+        saved = os.environ.get("SUITE_PEERS_PS_FILE")
+        os.environ["SUITE_PEERS_PS_FILE"] = missing
+        try:
+            rows, why = suite_peers.read_rows_why()
+            self.assertIsNone(rows)
+            self.assertEqual(why, "표 파일을 열지 못했다: " + missing)
+            self.assertIsNone(suite_peers.read_rows())
+            os.environ["SUITE_PEERS_PS_FILE"] = self.ps_file(" 1 0 launchd\n")
+            rows, why = suite_peers.read_rows_why()
+            self.assertEqual((rows, why), ([(1, 0, "launchd")], None))
+        finally:
+            if saved is None:
+                os.environ.pop("SUITE_PEERS_PS_FILE", None)
+            else:
+                os.environ["SUITE_PEERS_PS_FILE"] = saved
+
+    def test_read_rows_why_ps_failures(self):
+        class Bad(object):
+            returncode = 7
+            stdout = b""
+
+        class Empty(object):
+            returncode = 0
+            stdout = b""
+
+        def boom(*a, **k):
+            raise FileNotFoundError("ps")
+        orig = suite_peers.subprocess.run
+        saved = os.environ.pop("SUITE_PEERS_PS_FILE", None)
+        try:
+            for fake, why in ((lambda *a, **k: Bad(), "ps 종료 코드 7"),
+                              (boom, "ps 를 실행하지 못했다: FileNotFoundError"),
+                              (lambda *a, **k: Empty(), "빈 표")):
+                suite_peers.subprocess.run = fake
+                self.assertEqual(suite_peers.read_rows_why(), (None, why))
+        finally:
+            suite_peers.subprocess.run = orig
+            if saved is not None:
+                os.environ["SUITE_PEERS_PS_FILE"] = saved
+
     @unittest.skipUnless(shutil.which("ps"), "ps 없음")
     def test_real_ps_detached_runner_counted_once(self):
         d = os.path.join(self.tmp, "f")
         os.makedirs(d)
         script = os.path.join(d, "run-all.sh")
+        release = os.path.join(self.tmp, "release")
         with open(script, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/pid\n( sleep 5; : ) & echo $! > %s/child\nwait\n" % (d, d))
+            fh.write("echo $$ > %s/pid\n( %s ) & echo $! > %s/child\nwait\n"
+                     % (d, hold_until(release), d))
         pidf, childf = os.path.join(d, "pid"), os.path.join(d, "child")
         pids = []
         try:
@@ -188,45 +258,65 @@ class PeerCountTests(unittest.TestCase):
             self.assertTrue(wait_for_files([pidf, childf]), "가짜 러너가 뜨지 않았다")
             pids = [read_pid(pidf), read_pid(childf)]
             r = run_peers(["--pid", str(os.getpid()), "--list"])
+            self.assertEqual(r.returncode, 0, r.stderr)
             listed = [int(x) for x in r.stdout.split()]
             self.assertIn(pids[0], listed)
             self.assertNotIn(pids[1], listed)
         finally:
+            open(release, "w").close()
             if pids:
                 kill_tree_if_ours(pids[0], self.tmp)
 
     @unittest.skipUnless(shutil.which("ps"), "ps 없음")
     def test_real_ps_self_ancestor_child_excluded(self):
-        for sub in ("a", "b"):
+        for sub in ("a", "b", "c"):
             os.makedirs(os.path.join(self.tmp, sub))
+        release = os.path.join(self.tmp, "release")
         out = os.path.join(self.tmp, "out")
         out_a = os.path.join(self.tmp, "out_a")
         a = os.path.join(self.tmp, "a", "run-all.sh")
         b = os.path.join(self.tmp, "b", "run-all.sh")
+        c = os.path.join(self.tmp, "c", "run-all.sh")
+        with open(c, "w", encoding="utf-8") as fh:
+            fh.write("echo $$ > %s/c.pid\n%s\n" % (self.tmp, hold_until(release)))
         with open(a, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\n"
-                     % (self.tmp, b, sys.executable, PEERS, out_a))
+            fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\necho $? > %s.rc\n"
+                     % (self.tmp, b, sys.executable, PEERS, out_a, out_a))
         with open(b, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/b.pid\n( sleep 3; : ) & echo $! > %s/b.child\n"
-                     "%s %s --pid $$ --list > %s\nwait\n"
-                     % (self.tmp, self.tmp, sys.executable, PEERS, out))
+            fh.write("echo $$ > %s/b.pid\n( %s ) & echo $! > %s/b.child\n"
+                     "%s %s --pid $$ --list > %s\necho $? > %s.rc\nwait\n"
+                     % (self.tmp, hold_until(release), self.tmp, sys.executable, PEERS, out, out))
         files = [os.path.join(self.tmp, n) for n in ("a.pid", "b.pid", "b.child")]
-        proc = subprocess.Popen(["bash", a], env=clean_env(),
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cpid = os.path.join(self.tmp, "c.pid")
+        proc = None
         try:
+            # 다른 자리의 가짜 러너 c — 두 번 갈라 띄워 이 시험의 조상 사슬 밖에 둔다
+            subprocess.run(["bash", "-c", "bash %s >/dev/null 2>&1 &" % c], env=clean_env(), timeout=30)
+            self.assertTrue(wait_for_files([cpid]), "다른 가짜 러너 c 가 뜨지 않았다")
+            proc = subprocess.Popen(["bash", a], env=clean_env(),
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.assertTrue(wait_for_files(files + [out, out + ".rc"]), "가짜 러너 파일이 없다")
+            with open(out, encoding="utf-8") as fh:
+                listed = fh.read().split()
+            open(release, "w").close()   # 목록을 읽었으니 b 의 자식 · c 를 풀어 준다
             proc.wait(timeout=30)
-            self.assertTrue(wait_for_files(files), "가짜 러너 파일이 없다")
-            for o in (out, out_a):
-                self.assertTrue(os.path.exists(o), o)
-                with open(o, encoding="utf-8") as fh:
-                    listed = fh.read().split()
-                for f in files:
-                    self.assertNotIn(str(read_pid(f)), listed, (o, f))
+            self.assertTrue(wait_for_files([out_a, out_a + ".rc"]), "a 의 목록이 없다")
+            with open(out_a, encoding="utf-8") as fh:
+                listed_a = fh.read().split()
+            for rc in (out + ".rc", out_a + ".rc"):
+                with open(rc, encoding="utf-8") as fh:
+                    self.assertEqual(fh.read().strip(), "0", rc)
+            # 양성 대조: 다른 자리의 러너는 목록에 있다
+            self.assertIn(str(read_pid(cpid)), listed)
+            for f in files:
+                self.assertNotIn(str(read_pid(f)), listed, (out, f))
+            self.assertNotIn(str(read_pid(files[0])), listed_a)
         finally:
-            if proc.poll() is None:
+            open(release, "w").close()
+            if proc is not None and proc.poll() is None:
                 proc.kill()
                 proc.wait()
-            for f in files:
+            for f in files + [cpid]:
                 if os.path.exists(f) and os.path.getsize(f) > 0:
                     kill_tree_if_ours(read_pid(f), self.tmp)
 
