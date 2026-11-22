@@ -632,4 +632,26 @@ else
   no "전제: /tmp 아래에 git 작업 트리 밖 폴더를 만들지 못했다 — 장면 19 를 돌리지 못했다"
 fi
 
+# 19b — 멈춘 예외에 기준 사본 실행 꼴을 싣지 못하면 그 사실을 표준 오류에 한 줄로 남기고 원래 예외를 그대로 올린다
+cat > "$T/sticky.py" <<'EOF'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import merge_check as m
+class Sticky(Exception):
+    def __setattr__(self, key, value):
+        raise AttributeError("read-only")
+def stub(cmd, pattern, base, merged, work, tmps, res):
+    res["base_run"] = "listed"
+    raise Sticky("x")
+m._compare_command = stub
+try:
+    m.compare_command("true", None, Path("."), Path("."), Path("."), {})
+except Sticky:
+    print("reraised Sticky")
+EOF
+o="$(python3 "$T/sticky.py" "$ROOT/plugins/spec-distill/scripts" 2>&1)"
+assert_contains "$o" "reraised Sticky" "실행 꼴을 싣지 못해도 원래 예외를 그대로 올린다"
+assert_contains "$o" "[spec-distill] 멈춘 예외(Sticky)에 기준 사본을 어떻게 돌렸는지(listed)를 싣지 못했다(AttributeError) — 머리 줄 꼬리가 실제와 다를 수 있다" "실행 꼴을 싣지 못하면 표준 오류에 한 줄로 알린다"
+
 finish

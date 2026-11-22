@@ -325,8 +325,9 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, tmp
     except BaseException as exc:
         try:
             exc.base_run = res["base_run"]
-        except Exception:   # 속성을 받지 않는 예외 — 꼬리는 「돌리지 않았다」 로 접힌다
-            pass
+        except Exception as why:   # 속성을 받지 않는 예외 — 꼬리는 「돌리지 않았다」 로 접힌다
+            print("[spec-distill] 멈춘 예외(%s)에 기준 사본을 어떻게 돌렸는지(%s)를 싣지 못했다(%s) — 머리 줄 꼬리가 "
+                  "실제와 다를 수 있다" % (type(exc).__name__, res["base_run"], type(why).__name__), file=sys.stderr)
         raise
 
 
