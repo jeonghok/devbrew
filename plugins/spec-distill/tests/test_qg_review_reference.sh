@@ -670,9 +670,12 @@ bw="$(printf '%s\n' "$BEAT" | grep -nF '그 차례 맨 앞, `### 이미 보낸 �
 [ -n "$bq" ] && [ "$bq" = "$bw" ] && ok "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 함께" || no "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 없다(확인=${bq:-없음} · 적기=${bw:-없음})"
 TEAMQ="$(line_of "$RET" '**team 형식 로드맵.**')"
 [ -n "$TEAMQ" ] && ok "team 형식: 되돌리기 절에 team 형식 단락이 있다" || no "team 형식: 되돌리기 절에 team 형식 단락이 없다 — 아래 단언이 공허하다"
-for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>` · `recheck-<과제>` · `premerge-resend-<과제>`' 'PR 이 열린 뒤에도 그 과제의 자리 글자는 바꾸지 않는다'; do
+for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` · `premerge-resend-<과제>-plan<n>`' 'PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다'; do
   once "$TEAMQ" "$lit" "team 형식 단락: ${lit}"
 done
+# fix 1 — 계획마다 PR 이 따로라 team 자리 글자에 계획 번호가 든다(둘째 계획의 리뷰가 첫 계획 폴더에 막히지 않게)
+once "$TEAMQ" '계획마다 브랜치와 PR 이 따로라' "fix 1: team 자리 글자에 계획 번호를 넣는 까닭"
+assert_eq "$(printf '%s\n' "$TEAMQ" | grep -oE '`(premerge|recheck|premerge-resend)-<과제>`' | wc -l | tr -d ' ')" "0" "fix 1 음성: 계획 번호 없는 team 자리 글자가 없다(양성 짝: -plan<n> 자리 글자 셋)"
 
 # 레포 전용 값
 for lit in 'origin/main' 'feature/' 'docs/superpowers'; do
@@ -719,6 +722,11 @@ done
 assert_eq "$(cnt "$CDALL0" '에픽 머지 뒤')" "0" "AC9 음성: conducting.md 에 「에픽 머지 뒤」 자리 이름이 없다(양성 짝: 머지 앞 들어가는 문장)"
 assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조 → 통합 리뷰 → 리뷰 뒤 반영 → 완료 전 확인')" "1" "AC9: 걸음 5 기본값의 차례 — 머지 앞 qg 리뷰가 스위트 대조 앞"
 assert_not_contains "$(lstep 5)" '새로 채운 뒤 스위트 대조 → 통합 리뷰' "AC9 음성: qg 없이 스위트 대조부터 하던 옛 차례가 없다(양성 짝: 새 차례)"
+S6J="$(lstep 6 | awk 'index($0, "- 판단:")==1')"
+assert_eq "$(cnt "$S6J" '되돌리기가 끝나지 않은 브랜치에는 전하지 않는다')" "1" "fix 2: 걸음 6 판단 — 되돌리기 중인 브랜치에는 task 경계 merge 를 전하지 않는다"
+assert_eq "$(cnt "$S6J" '다음 task 경계에서 merge 하라고 그 agent 에 전한다')" "1" "fix 2 양성 짝: 걸음 6 판단의 task 경계 merge 길은 남아 있다"
+s6t="$(awk -v l="$S6J" 'BEGIN{a=index(l, "다음 task 경계에서 merge 하라고"); b=index(l, "되돌리기가 끝나지 않은 브랜치에는 전하지 않는다"); print (a>0 && b>a) ? 1 : 0}')"
+assert_eq "$s6t" "1" "fix 2: 예외가 task 경계 merge 문장 뒤에 붙는다"
 assert_eq "$(cnt "$(lstep 4)" '구현 담당자가 처음 돌아온 때(머지 앞 리뷰를 보내기 전)에만')" "1" "AC11: 걸음 4 — 기본 브랜치 합치기는 구현 담당자가 처음 돌아온 때에만"
 assert_eq "$(cnt "$(lstep 4)" '되돌리기를 고치고 돌아온 때에는 합치지 않는다')" "1" "AC11: 걸음 4 — 되돌리기를 고치고 돌아온 때에는 합치지 않는다"
 M8="$(mstep 8)"
