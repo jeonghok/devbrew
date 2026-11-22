@@ -212,6 +212,8 @@ case_state_format() {
     n=$(grep -cF -- "$tok" "$SF"); assert_eq "$n" "0" "state-file-format 에 '$tok' 이 없다"
   done
   assert_eq "$(printf '%s\n' "$fmt" | grep -cxF '## 고칠 목록')" "1" "형식 블록에 '## 고칠 목록' 이 한 번 선다"
+  assert_eq "$(printf '%s\n' "$fmt" | grep -cxF '<Step 4.5 의 고칠 목록 — `### 막는 지적` · `### 제안` · `### 차등 회귀` 세 절, 빈 절은 (없음)>')" "1" \
+    "형식 블록의 고칠 목록 자리가 SKILL Step 4.5 의 세 절 이름을 줄 전체로 한 번 싣는다"
   assert_contains "$fmt" '사용자가 되올린 행은 이유 칸 머리에 (사용자가 되올림)' "형식: 되올린 행 표시"
   assert_file_grep "$SF" '`## 낮춘 지적` 은 마지막 합성 출력에 「낮춘 지적」 표가 있을 때만 쓴다\.' "생명주기: 있을 때만 쓴다"
 }

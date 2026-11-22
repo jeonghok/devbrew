@@ -108,19 +108,26 @@ case_one_pass_flow() {
   assert_eq "$(printf '%s\n' "$flow" | grep -cxF ' │   막는 지적 · 차등 defect 가 있어도 묻지 않는다 — 고칠 목록을 result.md 에 남기고 e2e 질문으로 간다')" "1" \
     "Flow 펜스: 막는 지적 · 차등 defect 가 있어도 묻지 않고 고칠 목록을 남기고 e2e 로 간다(줄 전체 한 번)"
   s45=$(awk '$0 == "### Step 4.5 — Surface the verdict" {f=1; next} f && /^#{2,3} /{exit} f' "$SKILL")
-  assert_eq "$(printf '%s\n' "$s45" | grep -c '^\*\*고칠 목록\.\*\*')" "1" "Step 4.5 본문에 고칠 목록 문단이 한 번 있다"
+  assert_eq "$(printf '%s\n' "$s45" | grep -c '^\*\*고칠 목록\.\*\* 이 실행은 코드를 고치지 않는다 — 고칠 것은 목록으로 남기고, 사용자는 고친 뒤 qg 를 다시 부른다\. 목록은 세 절이다\.$')" "1" \
+    "Step 4.5 본문에 고칠 목록 문단이 「이 실행은 코드를 고치지 않는다」 문장째 줄 전체로 한 번 있다"
   assert_eq "$(grep -cxF '> [quality-gates] 고칠 목록은 result.md 의 「## 고칠 목록」 에 있다 — 고친 뒤 qg 를 다시 부른다.' "$SKILL")" "1" \
     "끝 한 줄이 본문에 한 번 있다"
   # 부재 — 본문 전체(`## e2e` 절 포함)에서 잰다.
   body=$(cat "$SKILL")
   assert_contains "$body" '## Final verdict' "전제: 부재 코퍼스가 e2e 뒤 절까지 담는다"
   for tok in 'Fix-loop' 'Max-iter' 'excluded.md' 'extra-iterations.md' 'classification.md' 'accepted with findings' \
-             'aborted iter' 'iteration: <iteration>' 'skipped: aborted' '멈추기' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
+             'aborted iter' '<iteration>' 'skipped: aborted' '멈추기' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
     n=$(printf '%s\n' "$body" | grep -cF -- "$tok")
     assert_eq "$n" "0" "본문에 '$tok' 이 없다"
   done
   n=$(printf '%s\n' "$body" | grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)')
   assert_eq "$n" "0" "본문에 'CAP' 이 없다"
+  # X3 — 걷다 본 버그는 증거표 · `## e2e` 절에 남고 고칠 목록에 들지 않는다(고칠 목록은 Step 4.5 가 지적 · 차등 회귀로 만든다).
+  local x3
+  x3=$(awk '/^## Rules$/{f=1;next} f&&/^## /{exit} f' "$SKILL" | grep '^\*\*e2e 걷기 (X3):\*\*')
+  assert_contains "$x3" '걷다 본 버그는 고치지 않고 증거표에 관측으로 적는다. 그 관측은 result.md 의 `## e2e` 절에 남고, 고칠 목록(Step 4.5 가 지적과 차등 회귀로 만든다)에는 들지 않는다.' \
+    "X3 — Rules 의 e2e 걷기 줄이 걷다 본 버그의 자리(증거표 · ## e2e)와 고칠 목록에 들지 않음을 말한다"
+  assert_not_contains "$x3" '고칠 목록에 남는다' "X3 음성 — 걷다 본 버그가 고칠 목록에 남는다는 옛 문장이 없다(양성 짝: 위 줄)"
 }
 
 

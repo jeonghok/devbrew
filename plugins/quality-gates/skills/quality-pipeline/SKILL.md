@@ -736,7 +736,7 @@ done
 if [ -n "$BAD" ]; then echo "lowered-pick: bad${BAD} (표의 번호: ${KNOWN% })"; else echo "lowered-pick: ok"; fi
 ```
 
-그다음: 판정이 무엇이든 [e2e](#e2e) 로 간다. 막는 지적 · 차등 defect 가 있으면 먼저 아래 「고칠 목록」 을 남긴다 — 묻지 않는다.
+그다음: 판정이 무엇이든 [e2e](#e2e) 로 간다. 그 앞에 아래 「고칠 목록」 을 늘 남긴다 — 막는 지적 · 차등 defect 가 있어도 묻지 않는다.
 
 **고칠 목록.** 이 실행은 코드를 고치지 않는다 — 고칠 것은 목록으로 남기고, 사용자는 고친 뒤 qg 를 다시 부른다. 목록은 세 절이다.
 
@@ -1400,7 +1400,7 @@ arguments replace them (E3). Use named variables.
 
 **gh 는 세 스크립트만:** 오케스트레이터는 gh 를 직접 부르지 않는다. PR 본문 읽기는 `scripts/discover-spec.sh`, 코멘트 게시는 `scripts/publish-comment.sh`, 열린 PR 목록 읽기는 `scripts/other_teams.py` 가 한다(AC15 — 뒤 하나는 읽기 전용 한 번). 세 스크립트는 gh 를 찾고 `-R` 에 넣을 origin 을 `scripts/gh-repo.sh` 로 정한다. intent-critic 답 커밋은 `scripts/intent_critic.py record` 하나가 한다 — 답 파일만 경로 지정으로, push 없이.
 
-**e2e 걷기 (X3):** `## e2e` 의 E1~E3 동안 리포 파일을 Edit · Write 하지 않고 git 으로 상태를 바꾸지 않는다. 걷다 본 버그는 증거표에 적는다 — 고치지 않는다 — 고칠 목록에 남는다. 승인되지 않은 명령은 실행하지 않는다.
+**e2e 걷기 (X3):** `## e2e` 의 E1~E3 동안 리포 파일을 Edit · Write 하지 않고 git 으로 상태를 바꾸지 않는다. 걷다 본 버그는 고치지 않고 증거표에 관측으로 적는다. 그 관측은 result.md 의 `## e2e` 절에 남고, 고칠 목록(Step 4.5 가 지적과 차등 회귀로 만든다)에는 들지 않는다. 승인되지 않은 명령은 실행하지 않는다.
 
 ## Requirement index
 
