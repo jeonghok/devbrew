@@ -63,7 +63,11 @@ for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
         if ex:
             exempted += 1
             used.update(ex)
-            continue
+            rest = line
+            for i in ex:
+                rest = rest.replace(EXEMPT[i][1], "")
+            if not (STAGE.search(rest) or BARE.search(rest)):
+                continue
         hits.append(f"{rel}:{no}: {line.strip()}")
 stale = [f"{EXEMPT[i][0]} 「{EXEMPT[i][1]}」" for i in range(len(EXEMPT)) if i not in used]
 print(f"EXEMPTED {exempted}")
