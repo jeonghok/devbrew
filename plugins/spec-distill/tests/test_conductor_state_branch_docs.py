@@ -93,6 +93,7 @@ class Procedure(unittest.TestCase):
             self.assertIn(word, step(7), word)
         self.assertNotIn("conductor_status.py", step(3))   # 양성 대조 — 걸음을 가르는 손이 걸음마다 다른 글을 낸다
         self.assertNotIn("conductor_branch.py", step(4))
+        self.assertIn(CS.OWN_EDITS.split(" %d")[0], whole)   # 코드 상수의 앞부분 — 걸음 1 의 문장이 show 가 내는 글자와 묶인다
 
 
 NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py", "leader_seat.py"}   # leader_seat — R3 계획 2(S13)

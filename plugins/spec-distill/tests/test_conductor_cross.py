@@ -449,6 +449,16 @@ class Show(CrossRepo):
         self.assertLess(out.index(CS.OWN_EDITS % 1), out.index("다른 로드맵과 닿는 것"))
         self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["own"], [(commit, (team.rules,))])
 
+    def test_own_list_follows_the_foreign_line_right_after_it(self):   # AC5 — 「바로 뒤」 차례
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내")
+        lines = self.text().split("\n")
+        foreign = [i for i, l in enumerate(lines) if l.startswith(TS.FOREIGN % 1)]
+        own = [i for i, l in enumerate(lines) if l == CS.OWN_EDITS % 1]
+        self.assertEqual((len(foreign), len(own)), (1, 1), lines)
+        self.assertEqual(own[0], foreign[0] + 1, lines)
+
     def test_a_planted_own_row_moves_a_foreign_edit_into_the_own_list(self):   # G3 — 일꾼이 남의 고침을 `씀` 으로 적는다
         team = CB.team_of(self.w, rm(ALPHA))
         commit = self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})

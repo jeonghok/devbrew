@@ -68,7 +68,7 @@ class Privacy(unittest.TestCase):
     def test_every_string_is_a_placeholder_or_a_fixed_word(self):
         for path in sorted(DATA.glob("*.jsonl")):
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                self.assertEqual(list(unsafe(json.loads(line))), [], "%s:%d" % (path.name, n))
+                self.assertEqual([s[:12] for s in unsafe(json.loads(line))], [], "%s:%d" % (path.name, n))
 
     def test_keys_outside_answers_are_checked(self):   # AC4 — PR #305 리뷰
         _use, res = entries("answer")
@@ -84,7 +84,7 @@ class Privacy(unittest.TestCase):
         self.assertEqual(list(unsafe({"advisorModel": "자리표시", "is_error": True})), [])
         for path in sorted(DATA.glob("*.jsonl")):
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                self.assertEqual(list(unsafe(json.loads(line))), [], "%s:%d" % (path.name, n))
+                self.assertEqual([s[:12] for s in unsafe(json.loads(line))], [], "%s:%d" % (path.name, n))
 
     def test_the_lock_bites(self):   # 양성 대조 — 경로 · 이메일 · 한글 문장은 걸린다
         for bad in ("/Users/someone/x", "a@b.example", "설계를 승인할까요?", "0123abcd-0000-4000-8000-000000000001",
