@@ -26,6 +26,7 @@ from pathlib import Path
 FIN = (Path(__file__).resolve().parent.parent / "skills" / "context-build"
        / "references" / "finishing.md")
 RD = Path(__file__).resolve().parent.parent / "skills" / "roadmap-draft" / "SKILL.md"
+RD_PR_MERGE = Path(__file__).resolve().parent.parent / "skills" / "roadmap-draft" / "references" / "pr-merge.md"
 
 # 펜스 밖에서 오는 값. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다 — 모델이 SKILL.md 가 보여 준 절대 경로로
 # 바꿔 넣고, 빠뜨리면 펜스의 가드가 빈 값에서 멈춘다(`shared/tests/test_plugin_root_no_cwd_fallback.sh` 축 2).
@@ -128,7 +129,7 @@ class FinishingBlockScope(unittest.TestCase):
 
     def test_roadmap_draft_pr_merge_fences_same_rule(self):
         """옮겨 온 PR · 머지 펜스(gh_repo.py 하위 명령)도 같은 규칙으로 잰다 — 양성 대조로 대상이 실재함을 못 박는다."""
-        text = RD.read_text(encoding="utf-8")
+        text = RD_PR_MERGE.read_text(encoding="utf-8")
         joined = "\n".join("\n".join(b) for _, _, b in bash_fences(text))
         for needle in ("gh_repo.py\" pr-open", "gh_repo.py\" pr-merge", "gh_repo.py\" pr-identity"):
             self.assertIn(needle, joined, "roadmap-draft 에서 %s 를 부르는 펜스를 못 찾았다 — 락이 공허해진다" % needle)

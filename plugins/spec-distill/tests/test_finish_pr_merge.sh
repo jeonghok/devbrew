@@ -22,7 +22,8 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
 nob() { no "$1"; printf '      출력: %s\n' "$2"; }
 last() { printf '%s\n' "$1" | tail -n 1; }
 FIN="$SD/skills/context-build/references/finishing.md"
-PR="$SD/skills/roadmap-draft/SKILL.md"   # PR 과 머지 글이 사는 곳(로드맵 잡기)
+PR="$SD/skills/roadmap-draft/references/pr-merge.md"   # PR 과 머지 글이 사는 곳(로드맵 잡기의 skill 안 reference)
+RDS="$SD/skills/roadmap-draft/SKILL.md"   # 커밋 펜스가 사는 곳
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 UPH='<roadmap-pr 이 낸 PR 주소>'
 HPH='<roadmap-pr 이 낸 끝 커밋>'
@@ -30,7 +31,7 @@ pf="$(fence "$PR" roadmap-pr)"
 mf="$(fence "$PR" roadmap-merge)"
 rf="$(fence "$PR" roadmap-merge-recheck)"
 # 두 키(interview_dir · roadmaps_dir)를 판정하는 커밋 펜스는 로드맵 잡기의 것이다 — 끝내기 커밋 펜스는 로드맵 폴더를 넣지 않는다(AC5).
-cf="$(fence "$PR" roadmap-commit)"; cf="${cf//<결과물 절대경로>/$PH}"
+cf="$(fence "$RDS" roadmap-commit)"; cf="${cf//<결과물 절대경로>/$PH}"
 case "$pf" in *"BRIEF=\"$PH\""*'gh_repo.py" pr-open '*'gh_repo.py" pr-create '*) ok "전제: PR 펜스에 BRIEF 자리표와 gh_repo.py 호출 둘" ;; *) no "전제: PR 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
 # 권장 꼬리의 조건은 본문이 정한다 — ONLY 일 때만 달고 MIXED · UNKNOWN 이면 뗀다
 ASK="$(grep -F '2. **머지 묻기.**' "$PR")"
@@ -66,7 +67,7 @@ has 'PR 을 열지 묻는 조건은 이 단계가 로드맵을 커밋했는가 �
 lacks '분해된 일 ①/② 만'                    # 앞 단계의 끝 질문 답을 읽지 않는다
 lacks '여기서 계속'                          # 같은 턴에 지휘자를 부르는 갈래가 없다
 has '머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다'
-has '/spec-distill:epic-conductor <roadmap-path>'
+assert_file_grep "$RDS" '/spec-distill:epic-conductor <roadmap-path>' "AC10: /spec-distill:epic-conductor <roadmap-path>(지휘자 줄은 SKILL.md 에 남는다)"
 # AC16 — PR 본문 펜스는 seed 경로를 상태 파일의 seed 값에서 읽고, framing 기록 경로에서 거꾸로 짓지 않는다.
 # (기록은 seed 이름에서 도출되므로 동작 픽스처로는 두 값을 가를 수 없다 — 펜스 글로 문다.)
 case "$pf" in *'RAW_A%.audit.md'*) no "AC16(부재): PR 펜스가 seed 경로를 기록 경로에서 짓는다" ;; *) ok "AC16(부재): PR 펜스가 seed 경로를 기록 경로에서 짓지 않는다" ;; esac
