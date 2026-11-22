@@ -76,9 +76,8 @@ bh_sec() { awk -v h="## $2" '$0==h{f=1;next} f&&/^## /{exit} f' "$1"; }   # bh_s
 bh_items() { bh_sec "$1" "$2" | sed -n 's/^- //p'; }                        # 그 절의 불릿 문장(불릿을 뗀 글)
 POINT_BS='시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.'
 POINT_CM='시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## 공통 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.'
-# 옛 다음 세션 줄의 지시 문장 열여섯 — 그 순서 그 글자(「사용자 선호:」 라벨만 뗐다). 있는 것 검토 괄호와 마지막 전체 리뷰의 묻는 구절은 에픽 넘김 줄과 같은 글자다(test_end_gates.sh).
+# 옛 다음 세션 줄의 지시 문장 열다섯 — 그 순서 그 글자(「사용자 선호:」 라벨만 뗐다). 있는 것 검토 괄호와 마지막 전체 리뷰의 묻는 구절은 에픽 넘김 줄과 같은 글자다(test_end_gates.sh).
 cat > "$TMP/want_bs.txt" <<'WANT'
-brainstorming 을 불러온 직후 첫 메시지 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_deps.py superpowers --plugin-root ${CLAUDE_PLUGIN_ROOT} --base 에 그 skill 을 불러올 때 보인 기준 폴더 경로를 넘겨 한 번 돌리고, 첫 줄이 「검증한 판과 같다」 가 아니면 그 줄을 첫 메시지에 한 줄로 보인다 — 판 확인 결과로는 멈추지 않는다.
 confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.
 brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 설계의 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다.
 설계문서에 ## 번호 대조 표(칸: 번호 · 반영/기각 · 자리 또는 이유)를 두어 brief 의 모든 번호와 brief frontmatter audit_file(같은 폴더) §6 의 S 번호를 싣고, 설계문서 frontmatter source_interview 에 이 brief 의 레포 루트 기준 상대경로를 적는다.
@@ -95,13 +94,12 @@ writing-plans 가 계획을 쓴 뒤 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_
 미룸 · 빠짐과 리뷰 후속으로 미룬 것은 설계문서 ## 미룸 표(항목 · 이유 · 받는 곳)에 올리고, PR 을 만들기 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_bundle_coverage.py --impl 에 설계문서와 보고 파일 경로를 넘겨 돌려 경고를 사용자에게 보인다.
 사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지키고, 메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.
 WANT
-# 「다른 다음 단계의 줄」 이 글자로 싣던 네 문장 + 판 확인 한 문장.
+# 「다른 다음 단계의 줄」 이 글자로 싣던 네 문장.
 cat > "$TMP/want_cm.txt" <<'WANT'
 confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.
 brief 의 §2 확정 항목뿐 아니라 §3 열린 질문 · §4 조사 · §5 위험을 번호째 입력으로 읽는다 — /compact 요약에 기대지 말고 첨부한 brief 를 다시 읽는다.
 brief 의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.
 사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지킨다.
-부른 skill 이 `superpowers:` 로 시작하면 그 skill 을 불러온 직후 첫 메시지 전에 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_deps.py superpowers --plugin-root ${CLAUDE_PLUGIN_ROOT} --base 에 그 skill 을 불러올 때 보인 기준 폴더 경로를 넘겨 한 번 돌리고, 첫 줄이 「검증한 판과 같다」 가 아니면 그 줄을 첫 메시지에 한 줄로 보인다 — 판 확인 결과로는 멈추지 않는다.
 WANT
 ONE="$(nsl "$FIN")"
 n1="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
@@ -116,7 +114,7 @@ if nonempty "다음 세션 줄" "$ONE"; then
   # F4 AC2 — 지시 파일의 brainstorming 절이 옛 줄의 지시 문장을 그 순서 그 글자로 싣는다(등호 — 빠짐 · 순서 바뀜 · 더해짐 모두 실패)
   [ -f "$BH" ] && ok "지시 파일이 있다: references/brief-handoff.md" || no "지시 파일이 없다: references/brief-handoff.md"
   GOT_BS="$(bh_items "$BH" 'brainstorming 지시')"
-  assert_eq "$(printf '%s\n' "$GOT_BS" | grep -c .)" "16" "F4 AC2(양성 대조): brainstorming 지시 절에서 문장 열여섯을 읽었다"
+  assert_eq "$(printf '%s\n' "$GOT_BS" | grep -c .)" "15" "F4 AC2(양성 대조): brainstorming 지시 절에서 문장 열다섯을 읽었다"
   assert_eq "$GOT_BS" "$(cat "$TMP/want_bs.txt")" "F4 AC2: brainstorming 지시 절이 옛 줄의 지시 문장을 순서대로 모두 싣는다"
   assert_not_contains "$(bh_sec "$BH" 'brainstorming 지시')" '사용자 선호:' "F4 AC2: 「사용자 선호:」 라벨이 없다(양성 짝: 라벨 뗀 그 문장은 위 등호가 본다)"
   # F4 AC1 — 옛 지시 문장은 줄에 하나도 없다(양성 짝: 같은 문장이 지시 파일에 있다 — 위 등호)
@@ -125,10 +123,9 @@ if nonempty "다음 세션 줄" "$ONE"; then
     k=$((k + 1))
     assert_not_contains "$ONE" "$s" "F4 AC1: 옛 지시 문장 ${k} 이 다음 세션 줄에 없다"
   done < "$TMP/want_bs.txt"
-  assert_eq "$k" "16" "F4 AC1(양성 대조): 옛 지시 문장 열여섯을 줄과 대조했다"
+  assert_eq "$k" "15" "F4 AC1(양성 대조): 옛 지시 문장 열다섯을 줄과 대조했다"
   # AC8 · AC16 — 순서는 지시 절 안에서 잰다
   INS="$(printf '%s\n' "$GOT_BS" | tr '\n' ' ')"
-  order "brainstorming 지시 절" "$INS" "check_deps.py" "spec-distill:spec-review"
   order "brainstorming 지시 절" "$INS" "spec-distill:spec-review" "writing-plans"
   order "brainstorming 지시 절" "$INS" "--plan" "--impl"
   order "brainstorming 지시 절" "$INS" "이 brief 의 설계는 설계문서를 쓰는 크기다" "spec-distill:spec-review"
@@ -142,15 +139,14 @@ if nonempty "다음 세션 줄" "$ONE"; then
   if nonempty "다른 다음 단계의 줄" "$OTHER"; then
     assert_contains "$OTHER" "「${POINT_CM}」" "F4 AC3: 다른 다음 단계의 줄이 공통 지시 절을 가리키는 문장을 싣는다"
     assert_contains "$OTHER" '줄에는 공통 지시를 글자로 싣지 않고' "F4 AC3: 공통 지시를 글자로 싣지 않는다고 적는다"
-    assert_contains "$OTHER" '판 확인도 그 절의 끝 문장이 맡는다' "F4 AC3: 판 확인은 그 절의 끝 문장이 맡는다"
     GOT_CM="$(bh_items "$BH" '공통 지시')"
-    assert_eq "$GOT_CM" "$(cat "$TMP/want_cm.txt")" "F4 AC3: 공통 지시 절이 네 문장과 판 확인 문장을 싣는다"
+    assert_eq "$GOT_CM" "$(cat "$TMP/want_cm.txt")" "F4 AC3: 공통 지시 절이 네 문장을 싣는다"
     k=0
     while IFS= read -r s; do
       k=$((k + 1))
       assert_not_contains "$OTHER" "$s" "F4 AC3: 공통 지시 문장 ${k} 이 문단에 글자로 없다"
     done < "$TMP/want_cm.txt"
-    assert_eq "$k" "5" "F4 AC3(양성 대조): 공통 지시 문장 다섯을 문단과 대조했다"
+    assert_eq "$k" "4" "F4 AC3(양성 대조): 공통 지시 문장 넷을 문단과 대조했다"
   fi
   sed 's/Skill superpowers:brainstorming 을 시작하라\./Skill superpowers:brainstorming 을 시작하라. brainstorming 의 「다음은 writing-plans 뿐」 지시보다 이 순서가 우선한다./' "$FIN" > "$TMP/fin_mut.md"
   case "$(nsl "$TMP/fin_mut.md")" in
