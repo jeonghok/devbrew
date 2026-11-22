@@ -3200,6 +3200,7 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(len(outside), 1, outside)
         self.assertTrue(outside[0].startswith("질문 창엔 "), outside[0])
         self.assertIn("`질문 <n>`", outside[0])
+        self.assertTrue(outside[0].startswith("질문 창엔 질문 글의 첫 줄(질문 한 문장)만 둔다."), outside[0])
         self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
         # 양의 짝: 근거의 종류 · 근거 줄 자리 채우기 규칙은 남아 있다.
         self.assertEqual(i5.count("근거의 종류 — `evidence_kinds`"), 1)
