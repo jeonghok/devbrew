@@ -1,0 +1,423 @@
+경로	초	첫 판정	재독	바로잡은 판정	재독 근거
+shared/tests/test_docreview_mutations.sh	233.0	구조를 고침	재독 — 선다	구조를 고침	되풀이 209회와 서브셸 준비는 실제로 있다. 다만 행이 맨 앞에 둔 고치기(행동 락 결과로 갈음)는 양성 대조를 잃는다
+plugins/spec-distill/tests/test_conductor_branch.py	150.0	구조를 고침	재독 — 선다	구조를 고침	지키는 것은 실제 git 동작이고, 초는 케이스마다 다시 짓는 준비에서 나온다
+plugins/spec-distill/tests/test_human_gate.sh	148.2	구조를 고침	재독 — 선다	구조를 고침	준비 복사는 맞다. 「단위로 내리기」 는 대상(human_lines)이 틀렸고 22–27 가운데 26 · 27은 내리면 잃는다
+plugins/spec-distill/tests/test_conductor_cross.py	141.5	구조를 고침	재독 — 선다	구조를 고침	
+plugins/spec-distill/tests/test_human_gate_e2e.sh	139.0	줄임	재독 — 선다	줄임	trio 줄이기는 선다. 13–16 덜기는 겹침이 일부뿐이라 서지 않는다
+shared/tests/test_docreview_state.sh	134.4	구조를 고침	재독 — 선다	구조를 고침	비용이 큰 곳은 맞다. 다만 첫 고치기(복제)는 문서 경로를 다시 매어야만 안전하다
+plugins/spec-distill/tests/test_team_status.sh	134.3	구조를 고침	재독 — 선다	구조를 고침	
+plugins/spec-distill/tests/test_conductor_status.py	126.3	구조를 고침	재독 — 선다	구조를 고침	
+plugins/spec-distill/tests/test_conductor_mail.py	111.7	구조를 고침	재독 — 선다	구조를 고침	지키는 것은 그대로 두고 상태 브랜치 둘이 선 레포를 한 번 지어 복사할 수 있다. Closures.test_reader_closes_about_too(:193–197)는 parse_letter 만 부르는데 MailRepo 를 물려받는다
+plugins/spec-distill/tests/test_leader_seat.py	92.2	구조를 고침	재독 — 선다	구조를 고침	67번의 레포 세우기가 시간 대부분이고, 준비를 한 번 지어 복사하면 같은 확인이 싸진다
+plugins/spec-distill/tests/test_roadmap_status.sh	92.2	구조를 고침	재독 — 선다	구조를 고침	js 287번을 보고서마다 한 번으로 묶는 것과 static_check 변이를 메모리 안에서 하는 것은 잃는 것이 없다. 나누기는 공통 이력(:132–230)을 픽스처 함수로 빼야 한다
+plugins/spec-distill/tests/test_conductor_ledger.py	87.6	구조를 고침	재독 — 선다	구조를 고침	다만 판정 근거가 setUp 만 든다. roadmap_status.py 하위 프로세스 약 80–100번(행의 ②)도 비슷한 몫으로 보이는데 구조 고치기 여지에 그 몫이 없다(같은 케이스 안 반복 호출: test_mismatch_head_drops_only_that_row 의 refresh 두 번, RecordThenStatus 의 reason() 반복)
+shared/tests/test_docreview_route.sh	76.1	구조를 고침	재독 — 선다	구조를 고침	준비 공유는 위 셋을 지키는 꼴로만 서고, 단언 묶기는 그대로 선다
+plugins/spec-distill/tests/test_leader_seat_e2e.sh	75.9	줄임	재독 — 서지 않는다	구조를 고침	「22·23 은 같은 이음매를 다시 돈다 · c·d 는 앞 레포에 이어도 같다」 는 근거가 23 의 고유 확인과 d 의 「상태 브랜치 전」 전제를 놓쳤다
+shared/tests/test_docreview_advice.sh	72.7	구조를 고침	재독 — 선다	구조를 고침	읽기만 하는 케이스에 한해, 경로·mtime 을 맞춘 복사로 서고 단언 묶기는 그대로 선다
+plugins/spec-distill/tests/test_finish_pr_merge.sh	71.3	구조를 고침	재독 — 선다	구조를 고침	「구조를 고침」 자체는 mk 템플릿 복사로 선다. 행이 든 셋 가운데 zsh 축소와 단위로 내리기는 지키는 것을 잃는다
+plugins/spec-distill/tests/test_control_plane.sh	67.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_team_tasks.sh	64.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_start_bundle.sh	64.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_human_record.sh	61.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_write.sh	58.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_review_diff.sh	53.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_check_brief.sh	50.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_reviewing_brief_residue.sh	47.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_walk_next.sh	46.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_other_teams.py	41.0	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_copy_of_contract.sh	40.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_ledger_wiring.sh	36.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_job_results.sh	33.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_intent_critic.py	31.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_parallel_recommend.py	29.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_gate_wiring.sh	29.8	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_merge_check.sh	28.5	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_epic_conductor_skill.sh	28.3	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_framing_raw_source.sh	25.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_team_stale.sh	24.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_topic_head.sh	24.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_conductor_state_branch_e2e.sh	23.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_dispatch_profile_inline.sh	22.0	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_invocation_surface.sh	20.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_topic_boundary.sh	20.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_workspace_invariance.sh	20.2	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_intent_wide.py	20.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/test_audit_sandbox_mutation_guard.sh	19.8	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_docreview_codex.sh	19.4	둠	재독 안 함	둠	
+plugins/project-init/tests/test_post_tool_use_branch.sh	19.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_edit_screen.sh	18.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_roadmap_write.sh	17.5	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_check_verbatim_coverage.sh	16.7	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_framing_review_contract.sh	15.1	둠	재독 안 함	둠	
+shared/tests/test_docreview_ask.sh	14.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_trust_boundary.sh	14.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_e2e_state.sh	14.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_reviewing_brief_critic_select.sh	14.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_reviewing_spec_residue.sh	14.1	합침	재독 — 서지 않는다	구조를 고침	행의 처방(한 하니스에 SKILL 을 매개로 넘겨 두 펜스를 돈다)은 지키는 것을 보존하지만, 그것은 준비를 함께 쓰는 「구조를 고침」이다. 「합침」으로 적으면 brief 쪽이 이미 덮는다고 읽힐 수 있다
+plugins/spec-distill/tests/test_interview_raw_source_entry.sh	13.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_default_branch.sh	13.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_conducting_loop.sh	13.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_interview_state_flow.sh	13.0	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_run_own_tests.py	12.7	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_codex_runner_degrade_contract.sh	12.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_publish_comment_sink.sh	12.6	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_discover_spec.sh	12.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_brief_form_r2.sh	12.0	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_docreview_gate_plain.sh	11.9	합침	재독 — 선다	합침	10행은 한 번 지은 원장으로 두 성질을 함께 잴 수 있다. 다만 「준비가 절반으로 준다」는 과장이다 — 가장 비싼 cap_* · stagnation(next_round 두 번)과 detector · unverified 는 이 파일에만 있어 그대로 남는다
+plugins/spec-distill/tests/test_repo_literals.sh	11.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_finish_commit_roadmap.sh	11.7	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_human_judge.py	11.7	둠	재독 — 서지 않는다	구조를 고침	행은 「테스트마다 레포를 새로 두는 것은 커밋을 쌓는 테스트라 필요하다」 를 비용의 근거로 댔다. 그런데 SeededRepo 를 쓰는 약 37개 테스트 가운데 setUp 뒤에 커밋하는 것은 다섯쯤뿐이다(:170 뒤 commit 호출 7줄 — :223·:243·:463-466·:519·:526). 나머지는 SF.add_answer 로 테스트마다 있는 conf
+plugins/spec-distill/tests/test_state_dir_writes.sh	11.7	둠	재독 안 함	둠	
+tools/suite/test_suite_timing.py	11.7	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_intent_critic_wiring.sh	10.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_team_coverage.sh	10.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_conductor_e2e.sh	9.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_reviewing_spec_entry_fence.sh	8.5	둠	재독 — 선다	둠	
+plugins/plugin-audit/tests/test_audit_sandbox_create.sh	8.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_synthesize_recritic.sh	8.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_runner_adapters.sh	7.8	둠	재독 — 선다	둠	비용의 큰 몫이 진짜 venv(:106-115)라는 행의 말도 코드와 맞다
+plugins/spec-distill/tests/test_team_sync.sh	7.8	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_intent_return.py	7.6	합침	재독 — 선다	합침	남기는 쪽이 이 파일이고 덜어 내는 쪽이 test_intent_critic.py 라서 스위치 · 접기 확인을 잃지 않는다. 다만 test_kill_switch_first 의 result.md 부재 단언은 이쪽으로 옮겨야 한다.
+plugins/quality-gates/tests/test_verdict_no_reread.sh	7.5	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_docreview_intent.sh	7.5	둠	재독 안 함	둠	
+shared/tests/test_changelog_integrity.sh	7.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_run_test_selection.sh	7.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_spec_review_bundle.sh	6.8	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_conductor_state_branch_docs.py	6.6	줄임	재독 안 함	줄임	
+shared/tests/test_nofollow_write.sh	6.6	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_agent_model_mutation.sh	6.5	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_entry_safety_e1_e6.sh	6.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_conducting_reference.sh	6.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_agent_tools_lock_mutation.sh	6.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_repo_defaults_git.sh	6.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_team_review_entry.sh	5.8	구조를 고침	재독 — 서지 않는다	둠	행은 「시간은 대부분 team_repo 세우기」 라 추정했다(픽스처는 읽지 않았다고 밝혔다). 그런데 이 파일은 team_repo 를 한 번만 부르고(:13), 픽스처의 세우기는 python 약 6번과 git 약 10번이다(fixtures/team_repo.sh:204-235). 반면 본문은 spec_review_bundle 을 약 16번 띄우고, 브랜치 
+shared/tests/test_docreview_gate_visibility.sh	5.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_range_wiring.sh	5.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_bundle_coverage.sh	5.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/project-init/tests/test_post_tool_use.py	5.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_first_cell_check.py	5.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_ledger_root.sh	5.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_angle_coverage.sh	5.1	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_docreview_golden.sh	5.0	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_setup_qg.sh	4.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_brief_bundle.sh	4.8	구조를 고침	재독 — 선다	구조를 고침	rs_make 와 make_repo 는 약 23번이다(python 1번 + git 3번씩, raw_source_fixture.py:112-137). 다만 케이스마다 심는 내용이 달라 레포를 「함께 쓰기」 는 어렵다. 한 python 프로세스에서 여러 레포를 한꺼번에 짓는 쪽이 현실적이다. build_brief_bundle 호출은 행이 쓴 「약 60번」 이 
+plugins/quality-gates/tests/test_publish_pipeline_wiring.sh	4.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_state_storage_e2e.sh	4.7	둠	재독 안 함	둠	
+shared/tests/test_inline_python_isolated.sh	4.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_gh_repo.sh	4.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_interview_state.py	4.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_qg_worktree_helper.sh	4.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_ask_material_wiring.sh	4.2	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_raw_source_text.py	4.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_review_hook_removed.py	4.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_resolve_baseline.sh	4.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_ledger_sweep.py	4.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_grammar_crosscheck.py	4.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_resolve_range.sh	4.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_web_kill_switch.sh	4.0	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_agent_tools_lock_differential.sh	3.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh	3.9	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_python_floor.sh	3.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_diff_test_results.py	3.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_begin_round_snapshot.sh	3.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_state_root.sh	3.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_team_rules.sh	3.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_raw_source_downstream.sh	3.3	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_check_deps.sh	3.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_codex_gate_observation.sh	2.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_compute_test_scope_candidates.sh	2.9	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_first_cell_finishing.sh	2.9	구조를 고침	재독 — 선다	구조를 고침	변이 15건이 건마다 cp 와 python 두 번이다(:125-139). 한 프로세스에서 문자열 사본으로 돌리면 python 기동 약 28번을 아낀다
+plugins/plugin-audit/tests/test_check_plugin_structure.py	2.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_codex_prompt_untrusted_clause.sh	2.8	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_seed_review_log.sh	2.8	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_qg_objects_unreachable.sh	2.7	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_merged_pr_range.py	2.7	둠	재독 안 함	둠	
+shared/tests/test_entry_preflight.sh	2.7	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_check_staleness.py	2.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_codex_copies_agree.sh	2.6	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_plain_field_path.sh	2.6	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_adjudication_wiring.sh	2.6	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_presence_corpus_behavior.sh	2.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_suite_lock.py	2.5	둠	재독 안 함	둠	
+shared/tests/test_docreview_profiles.sh	2.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_check_review_scope.sh	2.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_decompose_surface.sh	2.4	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_guards_declaration_mapping.sh	2.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_edit_diff.sh	2.2	둠	재독 안 함	둠	
+shared/tests/test_variant_of_contract.sh	2.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_seal_no_side_effects.sh	2.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_conducting_interview_stage.sh	2.1	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_synthesize_findings.sh	2.0	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_verdict_vocabulary.sh	2.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_provenance.sh	2.0	둠	재독 안 함	둠	
+shared/tests/test_codex_project_doc_off.sh	2.0	둠	재독 안 함	둠	
+shared/tests/test_shell_tests_executable.sh	2.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/test_validate_audit_data.py	1.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_a20_tool_agnostic_scope.py	1.9	둠	재독 — 선다	둠	
+plugins/quality-gates/tests/test_differential_trees.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_gh_repo.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_isolation.sh	1.9	합침	재독 — 선다	합침	다만 받는 곳은 test_setup_qg.sh 보다 같은 make_repo_with_worktree 헬퍼를 가진 test_worktree.sh(:19-40)가 맞다. T6 은 지워도 되고 T3·T5 는 재는 것이 없다
+plugins/quality-gates/tests/test_qg_gc.py	1.9	둠	재독 — 선다	둠	
+plugins/quality-gates/tests/test_sandbox_enforced.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_scope_tuple.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_synthesize_artifact_findings.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_synthesize_ask_line.sh	1.9	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_raw_source.py	1.9	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_state_path.sh	1.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_e2e_fixture_app.sh	1.8	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_r2_bypass_residue.py	1.8	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_codex_invocation_contract.sh	1.7	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_plain_synth_output.sh	1.7	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_runtime_contract_invariance.sh	1.7	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_ledger_marker.py	1.7	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_seed_inline_blob.sh	1.7	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_status_stub.sh	1.7	둠	재독 안 함	둠	
+shared/tests/test_docreview_profile_schema.sh	1.7	합침	재독 — 선다	합침	③ 만 한쪽으로 모으고 변이 거절과 사상 검사는 둔다
+plugins/quality-gates/tests/test_skill_run_contract.sh	1.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_raw_source_profiles.sh	1.6	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_v1_verdict_line.sh	1.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_stale_terms.sh	1.5	줄임	재독 안 함	줄임	
+shared/tests/test_entry_dep_needs.sh	1.5	둠	재독 안 함	둠	
+shared/tests/test_writer_trust_notice.sh	1.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_codex_exit_meta.sh	1.4	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_publish_surface_removed.sh	1.4	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_brief_review_state.py	1.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_session_id_resolution.sh	1.4	구조를 고침	재독 안 함	구조를 고침	
+shared/tests/test_docreview_anchor.sh	1.4	둠	재독 안 함	둠	
+shared/tests/test_skill_cost_class_place.sh	1.4	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_brief_verbatim_full.sh	1.3	둠	재독 — 선다	둠	1.3초다. 겹치는 케이스는 두셋이다
+plugins/spec-distill/tests/test_gh_single_door.sh	1.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_grammar_vs_markdown_it.sh	1.3	둠	재독 — 선다	둠	
+plugins/spec-distill/tests/test_codex_findings_to_yaml.py	1.2	둠	재독 — 선다	둠	겹치지 않는 케이스가 더 많다
+plugins/spec-distill/tests/test_walk_table.py	1.2	둠	재독 — 선다	둠	
+plugins/quality-gates/tests/test_e2e_verdict.sh	1.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_pipeline_verdict_wiring.sh	1.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_review_scope_composition.sh	1.1	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_detect_codex.sh	1.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_reviewing_brief_skill.sh	1.1	줄임	재독 안 함	줄임	
+shared/tests/test_skill_reference_pointers.sh	1.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/test_check_integrity.py	1.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/test_render_audit_report.py	1.0	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_v_requirements.sh	1.0	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_distortion_devices.sh	1.0	줄임	재독 — 서지 않는다	둠	「문장 리터럴 대다수를 덜어도 지키는 것이 같다」 는 근거가 없다. 덜면 그 모델 지시 문장들을 지키는 락이 하나도 남지 않는다. 문장 핀의 비용(26번 고침)이 그 가치보다 큰지는 다른 질문이고, 사람이 정할 일이다
+shared/tests/test_no_new_duplication.sh	1.0	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_agent_frontmatter_keys.sh	0.9	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_differential_procedure.sh	0.9	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_synthesize_disposition.sh	0.9	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_kill_switches_v060.sh	0.9	합침	재독 — 서지 않는다	합침	적힌 근거대로 「TTL 두 케이스만 옮기면」 끄는 스위치의 쉼표 목록·다른 플러그인 토큰 두 케이스를 잃는다
+plugins/spec-distill/tests/test_request_framing_entry.sh	0.9	줄임	재독 안 함	줄임	
+shared/tests/test_test_selection_bundle.sh	0.9	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_check_shape_completeness.py	0.8	줄임	재독 안 함	줄임	
+plugins/project-init/tests/test_branch_prefix_templates.py	0.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_lowered_gate_wiring.sh	0.8	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_qg_false_clean_floor.sh	0.8	지움	재독 — 선다	지움	남는 확인은 모두 더 싼 쪽에 이미 있다. floor 판정은 모델 문면이라 이 사본은 자기 자신을 잰다.
+plugins/quality-gates/tests/test_synthesize_promoted_findings.sh	0.8	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_brief_review_ng3.sh	0.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_brief_review_no_external_precondition.sh	0.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_qg_review_reference.sh	0.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_request_framing_open.sh	0.8	둠	재독 안 함	둠	
+shared/tests/test_assert_behavior.sh	0.8	둠	재독 안 함	둠	
+shared/tests/test_dispatch_name_defined.sh	0.8	둠	재독 안 함	둠	
+shared/tests/test_plugin_root_no_cwd_fallback.sh	0.8	구조를 고침	재독 안 함	구조를 고침	
+plugins/quality-gates/tests/test_artifact_codex_reviewer.sh	0.7	둠	재독 — 선다	둠	
+plugins/quality-gates/tests/test_codex_runner_no_effort_pin.sh	0.7	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_findings_parser.sh	0.7	둠	재독 — 선다	둠	이 파일만의 케이스가 다수다
+plugins/spec-distill/tests/test_review_entry.py	0.7	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_seed_cut_table.sh	0.7	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_superpowers_presence.sh	0.7	줄임	재독 안 함	줄임	
+shared/tests/test_cost_disclosure.sh	0.7	둠	재독 안 함	둠	
+shared/tests/test_docreview_agent_fields.sh	0.7	구조를 고침	재독 — 서지 않는다	둠	근거로 든 「frontmatter 를 케이스마다 python 으로 새로 파싱」 도 사실과 다르다. python 약 24번 가운데 frontmatter 파싱은 6번(:112)이고, 나머지는 절 추출(:27-42)이다. 0.7초라 합쳐서 얻는 것은 0.5초 미만이다. 종류도 「구조 70」 이 아니라 거의 글자다
+shared/tests/test_window_phrases.sh	0.7	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_assemble_audit_data.py	0.6	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_run_audit_codex_reviewer.py	0.6	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_run_own_tests_accumulate.sh	0.6	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_artifact_branch_guard.sh	0.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_brief_body.py	0.6	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_parallel_recommend_docs.sh	0.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_plain_gate_templates.sh	0.6	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_review_handoff_order.sh	0.6	합침	재독 — 서지 않는다	줄임	266줄 파일을 통째로 「합침」으로 적을 만큼 겹치지 않는다. 이중 핀은 문장 여섯뿐이다
+plugins/spec-distill/tests/test_seed_review_profile.sh	0.6	둠	재독 — 선다	둠	0.6초에 동작 확인 둘과 양성 대조를 함께 한다
+shared/tests/test_docreview_copy_set.sh	0.6	둠	재독 안 함	둠	
+shared/tests/test_switch_tables.sh	0.6	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_plain_audit_text.py	0.5	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_artifact_commit.sh	0.5	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_e2e_docs.sh	0.5	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_plain_qg_templates.sh	0.5	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_worktree.sh	0.5	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_brief_agents.sh	0.5	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_bundle_short_line.sh	0.5	둠	재독 — 선다	둠	0.5초다
+plugins/spec-distill/tests/test_epic_handoff.sh	0.5	합침	재독 — 서지 않는다	둠	행은 「문구 핀을 모으고 자리표 집합·순서만 남긴다」고 했지만 나머지 리터럴 대부분과 team 줄 바이트 등호는 다른 어디에도 없다
+plugins/spec-distill/tests/test_research_agents_frontmatter.sh	0.5	둠	재독 안 함	둠	
+shared/tests/test_adjudication_behavior.sh	0.5	둠	재독 안 함	둠	
+shared/tests/test_docreview_agents.sh	0.5	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/test_codex_audit_to_json.py	0.4	둠	재독 — 선다	둠	
+plugins/plugin-audit/tests/test_prepare_run_dir.py	0.4	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_critiquing_artifacts_skill.sh	0.4	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_discover_spec_keys.sh	0.4	합침	재독 — 선다	합침	test_discover_spec.sh 의 기존 케이스 출력에 키 집합 단언 두 줄을 더하면 임시 레포 준비가 하나 준다.
+plugins/spec-distill/tests/test_brief_inline_blob.sh	0.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_brief_review_short.sh	0.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_coverage_scope.py	0.4	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_end_gates.sh	0.4	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_saturation_reference.sh	0.4	줄임	재독 안 함	줄임	
+shared/tests/test_docreview_procedure_paths.sh	0.4	줄임	재독 안 함	줄임	
+shared/tests/test_runner_disposition.sh	0.4	합침	재독 — 서지 않는다	둠	규칙은 같아도 지키는 파일이 겹치지 않는다. 합치면 도출기를 공유하는 구조 고치기가 되고 「같은 것을 지킨다」는 성립하지 않는다
+plugins/quality-gates/tests/test_classify_artifact_target.sh	0.3	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_governance_no_capability_caps.sh	0.3	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_one_pipeline_surface.sh	0.3	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_skill_drop_notice_consumed.sh	0.3	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_topic_scope_wiring.sh	0.3	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_check_seed.sh	0.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_conductor_dispatch_reference.sh	0.3	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_control_plane.py	0.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_overdesign_rubric.sh	0.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_readme_sync.sh	0.3	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_resume_candidate_names.sh	0.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_render.py	0.3	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_seed_at_path_handoff.sh	0.3	줄임	재독 — 서지 않는다	둠	덜어 내자고 한 정본 단락 핀은 대부분 그 게이트 문장을 지키는 유일한 락이다. 덜면 지키는 것이 함께 사라진다
+shared/tests/test_adjudication_consumed.sh	0.3	둠	재독 안 함	둠	
+shared/tests/test_ask_recommendation.sh	0.3	둠	재독 안 함	둠	
+shared/tests/test_docreview_advice_procedure.sh	0.3	구조를 고침	재독 안 함	구조를 고침	
+plugins/plugin-audit/tests/audit-workflow.test.mjs	0.2	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/smoke-workflow.test.mjs	0.2	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_check_law2.py	0.2	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_check_no_verdict_injection.py	0.2	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_run_dir_pipeline.py	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh	0.2	줄임	재독 — 서지 않는다	줄임	덜 대상으로 든 「SKILL 문구·줄 순서」 안에 이 파일만 재는 것이 들어 있다. code-recritic dispatch 의 `<diff>${DIFF}</diff>` 슬롯(:332-341 — 주석에 「test_agent_input_slots.sh cannot see this」), 처분 줄의 fail-closed(:343-351 — 「the only pl
+plugins/quality-gates/tests/test_artifact_bounds.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_build_codex_prompt.sh	0.2	둠	재독 — 선다	둠	
+plugins/quality-gates/tests/test_code_recritic_frontmatter.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_codex_extractor_positive_marker.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_detect_codex.sh	0.2	둠	재독 — 서지 않는다	합침	플러그인마다 달라지는 것은 conf(스위치 변수 이름) 하나뿐이다. 그와 무관한 케이스(미설치·샌드박스·인증·판·하한·판독 불가·timeout grep)는 세 파일이 겹친다
+plugins/quality-gates/tests/test_doc_paths.py	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_extract_codex_invocations.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_failure_injection.sh	0.2	합침	재독 — 선다	합침	옮길 것은 exit-1 한 모양뿐이다. 펜스 없는 JSON 은 Fixture 2 가 이미 잰다. 행은 둘을 옮기자고 적었다.
+plugins/quality-gates/tests/test_law2_prose.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_publish_gh_two_files.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_qg_critique_routing.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_recritic_code_profile.sh	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_secret_scan.py	0.2	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_security_reviewer_persona.sh	0.2	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_utf8_explicit.py	0.2	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_brief_no_length_cap.sh	0.2	합침	재독 — 서지 않는다	둠	「걷어낸 상한」이라는 주제만 같고 지키는 것이 겹치지 않는다
+plugins/spec-distill/tests/test_brief_no_statement_cap.sh	0.2	합침	재독 — 서지 않는다	둠	겹침이 없고, 행이 「덜어도 된다」고 한 C1 주석 등호(:63-72)는 파일 주석(:49-58)이 밝힌 대로 다른 말로 재도입된 상한을 잡는 유일한 장치다. 덜면 그 축을 잃는다
+plugins/spec-distill/tests/test_brief_review_entry.sh	0.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_brief_review_meta.sh	0.2	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_entry_guidance.sh	0.2	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_no_wall_clock.sh	0.2	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_open_research.sh	0.2	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_probe_sweep_residue.sh	0.2	지움	재독 — 선다	지움	한 번 끝난 스윕의 부재 락이다. 산문으로 되살아나는 것은 못 잡는다고 헤더가 스스로 밝힌다. 식별자 이름이 동작을 정하지는 않는다. 다만 걷은 것이 사용자가 정한 능력 억제 제거였다는 점은 승인하는 사람이 알아야 한다.
+plugins/spec-distill/tests/test_proceed_gate_adopters.sh	0.2	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_rereview_cap_consistency.sh	0.2	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_research_claims_contract.sh	0.2	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_seed_input_provenance.sh	0.2	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_seed_one_sentence.sh	0.2	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_steelman_builder_scope.sh	0.2	줄임	재독 안 함	줄임	
+shared/tests/test_agent_input_slots.sh	0.2	둠	재독 — 선다	둠	0.2초다
+shared/tests/test_charter_citations.sh	0.2	둠	재독 안 함	둠	
+shared/tests/test_codex_runner_scratch_trap_order.sh	0.2	둠	재독 안 함	둠	
+shared/tests/test_dispatch_disposition.sh	0.2	둠	재독 — 선다	둠	
+shared/tests/test_docreview_round_gate_split.sh	0.2	줄임	재독 안 함	줄임	
+shared/tests/test_plain_language_block.sh	0.2	줄임	재독 안 함	줄임	
+shared/tests/test_plugin_description_parity.sh	0.2	둠	재독 안 함	둠	
+shared/tests/test_skill_body_no_positional_tokens.sh	0.2	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_axis3_reachability_question.sh	0.1	지움	재독 — 서지 않는다	합침	감사 질문에서 「지시가 받는 채널에 닿는가 · 값이 도착했는지 확인하는가」 두 물음이 빠지는 것을 막는 테스트는 이것뿐이다. 그 질문을 빼면 감사가 그 축을 보지 않는다.
+plugins/plugin-audit/tests/test_detect_codex.py	0.1	합침	재독 — 선다	합침	같은 스크립트를 세 번 잰다. 공유 테스트 하나와 플러그인별 conf 줄로 모을 수 있다.
+plugins/plugin-audit/tests/test_parse_seed.py	0.1	둠	재독 안 함	둠	
+plugins/project-init/tests/test_branch_strategy_rebase_clause.sh	0.1	지움	재독 — 서지 않는다	둠	사용자 리포에 까는 규칙이 무조건 rebase 금지로 되돌아가는 것(능력 억제 스윕이 걷은 조항), 그리고 리포 루트에 적힌 사용자 선호(C3)를 덮는 것을 막는 테스트는 이것뿐이다. 0.1초짜리다.
+plugins/project-init/tests/test_no_write_matcher_hooks.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_agent_color.sh	0.1	합침	재독 — 선다	합침	
+plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh	0.1	합침	재독 — 선다	합침	실제로는 이 파일은 그대로 두고, 개별 파일의 model 단언을 덜어 내는 방향이다.
+plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh	0.1	합침	재독 — 선다	합침	critic 짝과 한 표로 모으는 것은 된다. 행이 말한 「tools 확인은 걷는다」는 adversarial 한정으로만 안전하다(truths 가 받친다).
+plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh	0.1	합침	재독 — 선다	합침	adversarial 과 한 표로 모으는 것은 된다. 다만 모은 표에서 정확 일치 줄을 걷으면 안 된다.
+plugins/quality-gates/tests/test_artifact_critique_truths.sh	0.1	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_artifact_metadata.sh	0.1	지움	재독 — 선다	지움	남는 것은 지난 판의 기록과 README 낱말뿐이다. 동작을 정하지 않는다.
+plugins/quality-gates/tests/test_artifact_path_auth.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_codex_backward_compat.sh	0.1	합침	재독 — 선다	합침	행 계획대로 모으면 된다. 다만 2c 를 dispatch_invariant 로 함께 옮겨야 한다.
+plugins/quality-gates/tests/test_codex_dispatch_invariant.sh	0.1	합침	재독 — 선다	합침	
+plugins/quality-gates/tests/test_codex_result_banner.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_codex_reviewer_frontmatter.sh	0.1	합침	재독 — 선다	합침	모으는 것은 되지만, kill switch 줄만 옮기면 실행 비트 · agent 부재 확인을 잃는다. 이 둘도 함께 옮겨야 한다.
+plugins/quality-gates/tests/test_cost_consent.sh	0.1	지움	재독 — 선다	지움	없는 장치의 흉내라 지키는 것이 없다. 실행하면 사용자 홈의 `~/.claude/quality-gates/codex-cost-consent.md` 를 옮기는 위험만 있다(:16).
+plugins/quality-gates/tests/test_gate_era_prose_absent.sh	0.1	합침	재독 — 선다	합침	모으는 것은 된다. 다만 행이 덧붙인 「남는 동의 게이트 주장 없음 핀은 동작을 정하지 않는다」를 따라 그 줄을 버리면 이 테스트만 지키는 확인을 잃는다.
+plugins/quality-gates/tests/test_git_derived_scope.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_impact_runtime_docs.sh	0.1	지움	재독 — 선다	지움	실행 비트는 이미 다른 곳이 잰다. 남는 README · CHANGELOG 글자는 동작을 정하지 않는다. 행의 「실행 비트만 남기고 싶으면 옮긴다」는 할 필요가 없다.
+plugins/quality-gates/tests/test_no_write_matcher_hooks.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_plain_readme.sh	0.1	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_precheck_retired.sh	0.1	합침	재독 — 서지 않는다	둠	합침은 「같은 것을 지킨다」인데 같은 모양의 스윕일 뿐 지키는 대상이 겹치지 않는다. 한 파일로 옮기는 것은 짜임 정리이고 0.1초라 이득도 없다
+plugins/quality-gates/tests/test_readme_scope_reconcile.sh	0.1	지움	재독 — 서지 않는다	합침	CLAUDE.md 규칙 두 가지를 이 테스트만 지킨다. 하나는 「다른 플러그인 agent 를 dispatch 하면 README prerequisites 에 그 플러그인을 적는다」, 다른 하나는 「막지 않는 것을 막는다고 믿게 하는 선언 금지」다. 행이 근거로 든 composition 은 SKILL 쪽을 잰다.
+plugins/quality-gates/tests/test_readme_state_diagram_complete.sh	0.1	지움	재독 — 선다	지움	근거는 행과 다르다. 「다른 테스트가 이미 잰다」가 아니라 「README 도식은 사람이 읽는 문서라 동작을 정하지 않는다」여야 한다.
+plugins/quality-gates/tests/test_removed_plan_arg.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_render_terminal.sh	0.1	합침	재독 — 서지 않는다	둠	행의 근거 「table 동작 확인은 같은 확인과 겹친다」가 틀렸다. 정렬 확인은 이 파일에만 있다
+plugins/quality-gates/tests/test_secret_scan_fp.py	0.1	합침	재독 — 선다	합침	같은 스크립트·같은 헬퍼라 한 파일로 모으면 되고, 옮길 때 이 파일에만 있는 세 확인을 가져가면 된다
+plugins/quality-gates/tests/test_security_reviewer_kill_switch.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_skill_bash_allowlist_narrow.sh	0.1	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_skill_codex_skip_prose.sh	0.1	지움	재독 — 서지 않는다	둠	codex 가 안 돌 때 사용자에게 무엇을 고치라고 보일지(loud degrade)를 정하는 모델 지시이고, 지키는 곳이 여기뿐이다.
+plugins/quality-gates/tests/test_skill_orchestration.sh	0.1	합침	재독 — 선다	합침	유일성 두 단언을 harness 쪽 같은 줄 확인 옆으로 옮기고, 선택지 이름 grep 은 plain_qg_templates 가 덮으므로 덜어도 된다
+plugins/spec-distill/tests/test_blind_spot_prober_frontmatter.sh	0.1	합침	재독 — 서지 않는다	줄임	같은 것을 지키는 상대로 적힌 파일이 이 agent 를 재지 않는다. 겹치는 것은 Law 2 도구 부재·model·denylist 줄뿐이고, 정확한 tools 줄(웹 도구 보유)·출력 스키마·AC22·계약 객체는 이 파일에만 있다
+plugins/spec-distill/tests/test_brief_codex_axes.sh	0.1	합침	재독 — 선다	합침	양의 짝 대부분은 다른 락이 덮고, 부재 확인은 옮길 몫으로 남기면 된다(행은 부재를 「글자만」이라 했지만 지우라고는 하지 않았다)
+plugins/spec-distill/tests/test_compression_adopters.sh	0.1	지움	재독 — 서지 않는다	줄임	헤더가 실측으로 밝힌 대로(:22-31), brief 단계(finishing.md)가 압축 규약 포인터를 잃는 일(2→1)을 잡는 곳은 이 하한뿐이다.
+plugins/spec-distill/tests/test_coverage_mapper_frontmatter.sh	0.1	합침	재독 — 서지 않는다	줄임	공용 루프에 넣는 것은 짜임 바꾸기(구조를 고침)이고 지금은 상대가 같은 것을 지키지 않는다
+plugins/spec-distill/tests/test_design_profile_source.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_fresh_evidence.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_handoff_context_empty_subsections.sh	0.1	합침	재독 — 선다	합침	같은 프로필 한 줄을 넷이 같은 awk 로 자르므로 한 파일로 모으면 되고, defer_target 확인은 함께 옮긴다
+plugins/spec-distill/tests/test_handoff_context_section_required.sh	0.1	합침	재독 — 선다	합침	
+plugins/spec-distill/tests/test_handoff_conversation_reference.sh	0.1	합침	재독 — 선다	합침	행의 「문구 확인은 한 곳에서 한 번이면 된다」는 같은 문구를 두 번 잰다는 뜻으로 읽히지만 실은 이 파일만 잰다. 모을 때 이 단언을 옮겨야 한다
+plugins/spec-distill/tests/test_handoff_design_mode.sh	0.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_handoff_kill_switch.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_hooks.sh	0.1	합침	재독 — 선다	합침	한 「부재」 파일로 모을 수 있고 이 파일 고유의 셋을 옮기면 된다
+plugins/spec-distill/tests/test_next_session_command.sh	0.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_no_write_matcher_hooks_repo.sh	0.1	합침	재독 — 선다	합침	행은 「확인 전」이라 했으나 열어 보니 project-init 쪽이 이쪽에 포함된다. 저쪽을 이쪽으로 모으고 docs-lint.py 부재 한 줄만 옮기면 된다
+plugins/spec-distill/tests/test_pm_interview_entry.sh	0.1	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_repo_defaults.py	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_reviewing_spec_design_only.sh	0.1	합침	재독 — 서지 않는다	줄임	행은 「프로필 도출 확인만 남기고」라 했는데, 그대로 하면 이 파일에만 있는 부재 락 넷을 잃는다
+plugins/spec-distill/tests/test_reviewing_spec_disclosure.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh	0.1	구조를 고침	재독 안 함	구조를 고침	
+plugins/spec-distill/tests/test_roadmap_migrate.py	0.1	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_roadmap_ontology.py	0.1	둠	재독 — 선다	둠	0.1초다. 26개 이름을 차례까지 핀하는 것(:29-32)은 거짓 실패를 부르지만, 문서와 코드를 잇는 유일한 락이다
+plugins/spec-distill/tests/test_seed_agents.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_seed_codex_axes.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_session_record.py	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_skepticism_module.sh	0.1	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_docs.py	0.1	줄임	재독 안 함	줄임	
+shared/tests/test_docreview_layer1_wiring.sh	0.1	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_ac6_regression.py	0.0	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_agents_generic.py	0.0	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_check_grounding.py	0.0	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_preamble_schema_parity.py	0.0	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_severity_mapping.py	0.0	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_skill_codex_gate.py	0.0	둠	재독 안 함	둠	
+plugins/plugin-audit/tests/test_skill_orchestration.py	0.0	줄임	재독 안 함	줄임	
+plugins/plugin-audit/tests/test_untrusted_data_clause.py	0.0	둠	재독 안 함	둠	
+plugins/project-init/tests/test_command_contract.py	0.0	줄임	재독 안 함	줄임	
+plugins/project-init/tests/test_plain_init_text.py	0.0	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_agent_stub_harness.py	0.0	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_no_secret_prompts.py	0.0	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_security_reviewer_behavior.py	0.0	줄임	재독 안 함	줄임	
+plugins/quality-gates/tests/test_synthesize_artifact_adjudication.py	0.0	합침	재독 — 선다	합침	셋 모두 다른 테스트가 덮는다(지움 후보로도 선다)
+plugins/quality-gates/tests/test_synthesize_findings_adjudication.py	0.0	둠	재독 안 함	둠	
+plugins/quality-gates/tests/test_synthesize_lowered.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_audit_template_gate_shape.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_check_brief_frontmatter.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_conductor_state.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_finishing_block_scope.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_gh_repo.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_hook_output_schema.py	0.0	지움	재독 — 선다	지움	지키는 것이 없고, 오히려 설계와 반대되는 기대를 담고 있다.
+plugins/spec-distill/tests/test_human_lines.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_merged_by_pr.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_approval.py	0.0	둠	재독 — 선다	둠	
+plugins/spec-distill/tests/test_roadmap_model.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_render_r2.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_status_merge_base.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_write.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_roadmap_write_atomic.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_seed_body_placeholder.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_session_fixture.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_files.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_layout.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_results.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_team_rules.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_walk_docs.py	0.0	줄임	재독 안 함	줄임	
+plugins/spec-distill/tests/test_workflow_superpowers.py	0.0	둠	재독 안 함	둠	
+plugins/spec-distill/tests/test_yaml_scalar_single_definition.py	0.0	둠	재독 — 선다	둠	
+shared/tests/test_check_deps.py	0.0	둠	재독 안 함	둠	
+tools/plain-language/test_measure_output.py	0.0	둠	재독 안 함	둠	
+tools/plain-language/test_measure_questions.py	0.0	둠	재독 안 함	둠	
