@@ -56,6 +56,7 @@ framing_fails() {
     has "$s1" '그 밖의 줄은 전부 받은 글자 그대로다' &&
     has "$s1" '`### ` 로 시작하는 줄은 저자가 쓴 구분 줄이라 읽되 사용자의 말이 아니다'
   } || echo tpl_separator
+  has "$s1" '구분 줄과 받은 글 사이에는 빈 줄 하나를 둔다' || echo tpl_separator_blank
   # 템플릿의 구분 줄 머리(`### 받은 글 — ` 까지)가 호스트가 아는 패턴에 맞는가 — 패턴은 모듈에서 가져온다.
   local head
   head="$(printf '%s\n' "$s1" | grep -F '`### 받은 글 — <갈래>' | head -1 | sed 's/.*`\(### 받은 글 — \)<갈래>.*/\1/')"
@@ -134,6 +135,7 @@ sys.exit(0 if ok else 1)
     has "$ex1" '설명 문장을 따로 두지 않고' &&
     has "$ex1" '그 밖의 줄은 전부 받은 글자 그대로다'
   } || echo separator_rule
+  has "$ex1" '구분 줄과 받은 글 사이에는 빈 줄 하나를 둔다' || echo separator_blank
   {
     has "$ex1" '「audit 템플릿 절 제목이 중복되면」 의 물음과 같은 물음' &&
     has "$ex1" '앞 공백을 뗀 머리가 `### ` 인 줄'
@@ -187,6 +189,7 @@ expect_fail() { # <항목> <at> <st> <si> <pr>
 }
 mutate "$AT" "$T/at1.md" '쓰기 전에 가림 표시' '쓴 뒤 가림 표시' && expect_fail tpl_redaction "$T/at1.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_redaction"
 mutate "$AT" "$T/at2.md" '### 받은 글 — ' '### 받은글 — ' && expect_fail tpl_separator "$T/at2.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_separator"
+mutate "$AT" "$T/at6.md" '구분 줄과 받은 글 사이에는 빈 줄 하나를 둔다' '구분 줄 바로 다음 줄에 받은 글을 쓴다' && expect_fail tpl_separator_blank "$T/at6.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_separator_blank"
 mutate "$AT" "$T/at3.md" '`(라벨 · 적음)`' '' && expect_fail tpl_answer_mark "$T/at3.md" "$ST" "$SI" "$PR" || no "변이 준비 실패: tpl_answer_mark"
 mutate "$SI" "$T/si1.md" '다음 세션의 첫 턴에 넘기는, 모델이 줄인 글' '**Phase 0 에서 사용자가 확정한 메시지' && expect_fail seed_role "$AT" "$ST" "$T/si1.md" "$PR" || no "변이 준비 실패: seed_role"
 mutate "$PR" "$T/pr1.md" '라벨의 낱말 하나하나는 사용자가 쓴 글이 아니다.' '' && expect_fail profile_label "$AT" "$ST" "$SI" "$T/pr1.md" || no "변이 준비 실패: profile_label"
@@ -200,6 +203,7 @@ expect_fail_sk() { # <항목> <SKILL 사본>
   out="$(framing_fails "$2" "$AT" "$ST" "$SI" "$PR")"
   if printf '%s\n' "$out" | grep -qxF "$want"; then ok "변이 → $want 로 실패"; else no "변이가 $want 로 실패하지 않았다(출력: $(printf '%s' "$out" | tr '\n' ' '))"; fi
 }
+mutate "$SK" "$T/sk1b.md" '구분 줄과 받은 글 사이에는 빈 줄 하나를 둔다' '구분 줄 바로 다음 줄에 받은 글을 쓴다' && expect_fail_sk separator_blank "$T/sk1b.md" || no "변이 준비 실패: separator_blank"
 mutate "$SK" "$T/sk1.md" '사용자 문구는 쓰기 전에 `### 비밀값 가리기` 대로 가린다' '사용자 문구는' && expect_fail_sk 'secret_pointer:셸 인자' "$T/sk1.md" || no "변이 준비 실패: secret_pointer:셸 인자"
 mutate "$SK" "$T/sk2.md" '`<KEY:...>`' '`<KEYS:...>`' && expect_fail_sk secret_tokens "$T/sk2.md" || no "변이 준비 실패: secret_tokens"
 mutate "$SK" "$T/sk3.md" '- 제목 줄 겹침 물음의 선택과 문구 — `## 5. degrade` 한 줄' '- 제목 줄 겹침 물음의 선택과 문구' && expect_fail_sk 'secret_path:`## 5. degrade`' "$T/sk3.md" || no "변이 준비 실패: secret_path"
