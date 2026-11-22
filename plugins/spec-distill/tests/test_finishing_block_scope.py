@@ -126,6 +126,14 @@ class FinishingBlockScope(unittest.TestCase):
                         "roadmap-draft 에서 생성 펜스를 못 찾았다 — 아래 단언이 공허해진다")
         self.assertEqual(unbound_per_fence(text), [])
 
+    def test_roadmap_draft_pr_merge_fences_same_rule(self):
+        """옮겨 온 PR · 머지 펜스(gh_repo.py 하위 명령)도 같은 규칙으로 잰다 — 양성 대조로 대상이 실재함을 못 박는다."""
+        text = RD.read_text(encoding="utf-8")
+        joined = "\n".join("\n".join(b) for _, _, b in bash_fences(text))
+        for needle in ("gh_repo.py\" pr-open", "gh_repo.py\" pr-merge", "gh_repo.py\" pr-identity"):
+            self.assertIn(needle, joined, "roadmap-draft 에서 %s 를 부르는 펜스를 못 찾았다 — 락이 공허해진다" % needle)
+        self.assertEqual(unbound_per_fence(text), [])
+
 
 class RecognizerProbes(unittest.TestCase):
     """정의 인식기의 양 · 음 짝 — 인식이 넓어져 진짜 미정의를 덮거나 좁아져 정상 펜스를 막지 않게."""

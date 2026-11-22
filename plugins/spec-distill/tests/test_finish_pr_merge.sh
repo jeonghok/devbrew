@@ -46,7 +46,7 @@ for g in "$mf" "$rf" "$cf"; do
   assert_eq "$(printf '%s\n' "$g" | head -n 1)" "$g1" "펜스 첫 줄의 플러그인 루트 가드가 PR 펜스와 글자 그대로 같다"
 done
 # 판결 줄 없는 출력을 읽는 법은 본문이 정한다 — 표시 줄이 있으면 다시 확인, 없으면 NONE
-HEADP="$(grep -F '**PR 과 머지 — 분해된 일 ①/② 만.**' "$PR")"
+HEADP="$(grep -F '**PR 과 머지.**' "$PR")"
 assert_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다 — 하나만 다르다: 머지 펜스의 출력에 판결 줄이 없고 `interview-merge-requested:` 표시 줄이 있으면 `NONE` 으로 읽지 않고 3 의 다시 확인 펜스를 돌려 그 판결대로 잇는다.' "본문(절 머리): 표시 줄이 있으면 NONE 으로 읽지 않고 다시 확인"
 assert_not_contains "$HEADP" '판결 줄 없이 끝나면(시간 초과 · 끊김 포함) `NONE` 으로 읽는다. ' "본문(절 머리): 옛 문장(예외 없는 NONE)이 남지 않았다"
 assert_contains "$HEADP" '이 절의 펜스는 gh 를 직접 찾거나 부르지 않고' "본문(절 머리): 펜스가 셋이라 「이 절의 펜스는 gh 를 …」 이다"
@@ -57,6 +57,15 @@ assert_not_contains "$STEP3" '판결 줄이 이미 있으면 그 판결대로, �
 RECP="$(grep -F '**다시 확인 — ' "$PR")"
 assert_contains "$RECP" '**다시 확인 — 판결 줄 없이 끝난 머지 펜스의 출력에 `interview-merge-requested:` 표시 줄이 있을 때만.**' "본문(다시 확인): 도는 조건"
 assert_contains "$RECP" '(5초 간격 네 번까지)' "본문(다시 확인): 읽는 간격 · 횟수"
+
+# AC10 — PR 을 묻는 조건은 로드맵을 커밋했는가 하나, 머지가 확인되면 언제나 지휘자 줄을 보이고 턴을 끝낸다
+has() { assert_file_grep "$PR" "$1" "AC10: $1"; }
+lacks() { assert_file_absent "$PR" "$1" "AC10(부재): $1"; }
+has 'PR 을 열지 묻는 조건은 이 단계가 로드맵을 커밋했는가 하나다'
+lacks '분해된 일 ①/② 만'                    # 앞 단계의 끝 질문 답을 읽지 않는다
+lacks '여기서 계속'                          # 같은 턴에 지휘자를 부르는 갈래가 없다
+has '머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다'
+has '/spec-distill:epic-conductor <roadmap-path>'
 
 mkdir -p "$T/bin" "$T/remotes" || exit 1
 cat > "$T/bin/gh" <<'FAKE'
@@ -69,6 +78,7 @@ case "$1 $2" in
     [ -z "${FAKE_AUTH:-}" ] || { echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4; }
     printf '%s\n' "$FAKE_PR_LIST" ;;
   "pr create")
+    p=""; for a in "$@"; do [ "$p" != --body-file ] || cp "$a" "$FAKE_GH_DIR/body"; p="$a"; done
     [ "${FAKE_CREATE:-ok}" = ok ] || { echo 'pull request create failed: GraphQL: boom (createPullRequest)' >&2; exit 1; }
     echo "Creating pull request for feature/x into main in $FAKE_OWNER/r" >&2
     echo "https://github.com/$FAKE_OWNER/r/pull/7" ;;
@@ -200,6 +210,28 @@ for sh_name in bash zsh; do
     assert_eq "$d_rc" "0" "값의 출처(짝 1): 같은 픽스처에서 check-path ${kp%% *} 를 직접 부르면 통과한다"
     assert_grep "$d" "^\[spec-distill\] ${SRC}: .+\(${kp%% *}\)\$" "값의 출처(짝 1): 그때 그 줄이 나온다 — 펜스가 걸러서 없는 것이다"
   done
+
+  # 1b. AC16 — PR 본문이 올리는 파일 목록: 결과물 · audit · 상태 파일 · 로드맵 폴더, 알 때는 framing 기록 · seed 도(seed 경로는 상태 파일의 seed 값에서 온다 — 기록 경로에서 짓지 않는다)
+  n="${P}body"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  SEEDREL="$IDIR/2026-10-15-t-framing-seed.md"
+  printf 'seed\n' > "$c/$SEEDREL"
+  printf -- '---\ntype: interview-seed-audit\n---\n' > "$c/$IDIR/2026-10-15-t-framing-seed.audit.md"
+  printf -- '---\ntype: interview-state\nseed: %s\n---\n' "$SEEDREL" > "$c/$STEM.state.md"
+  git -C "$c" add -- "$IDIR"; git -C "$c" commit -q -m "docs: framing"
+  rm -f "$T/gh-$n/body"; o="$(run "$n" "$pf")"
+  assert_eq "$(last "$o")" "interview-pr: OPEN https://github.com/$n/r/pull/7" "PR 본문(원자료 있음): 판결 OPEN"
+  B="$(cat "$T/gh-$n/body" 2>/dev/null)"
+  assert_contains "$B" "$STEM.md" "PR 본문(원자료 있음): 결과물을 댄다"
+  assert_contains "$B" "로드맵 폴더" "PR 본문(원자료 있음): 로드맵 폴더를 댄다"
+  assert_contains "$B" "$IDIR/2026-10-15-t-framing-seed.audit.md" "PR 본문(원자료 있음): framing 기록을 댄다"
+  assert_contains "$B" "$SEEDREL" "PR 본문(원자료 있음): seed 를 댄다"
+  # 원자료를 모르면(상태 파일에 seed 가 없다) 두 줄을 대지 않는다 — 기록 경로에서 seed 를 지어내지도 않는다
+  n="${P}nobody"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  rm -f "$T/gh-$n/body"; o="$(run "$n" "$pf")"
+  B="$(cat "$T/gh-$n/body" 2>/dev/null)"
+  assert_contains "$B" "$STEM.md" "PR 본문(원자료 모름): 결과물은 댄다"
+  assert_not_contains "$B" "framing 기록" "PR 본문(원자료 모름): framing 기록을 대지 않는다"
+  assert_not_contains "$B" "seed" "PR 본문(원자료 모름): seed 를 대지 않는다"
 
   # 2. 이 레포 안 브랜치의 열린 PR 이 있으면 그것을 쓴다 — 다른 레포의 브랜치에서 온 PR 은 세지 않는다
   n="${P}reuse"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
