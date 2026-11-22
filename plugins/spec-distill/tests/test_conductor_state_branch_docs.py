@@ -185,8 +185,9 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
             self.assertIn(head, text, head)
         for word in ("conductor_branch.py rules-add", "rules-drop", "rules-reset", "conductor_branch.py confirm",
                      "확인할 끝", "40자", "pending.md", "사람 줄이라 옮기지 않은 대기 줄", "확인되지 않은 남의 고침",
-                     "남의 고침을 재지 못했다"):
+                     "남의 고침을 재지 못했다", "이 기계에서 도는 누구나", "이 기계가 쓴 것으로 적힌 고침 n"):
             self.assertIn(word, text, word)
+        self.assertIn(CS.OWN_EDITS.replace("%d", "n"), text)
         self.assertNotIn("AskUserQuestion", text)
 
     def test_team_files_now_moved(self):
