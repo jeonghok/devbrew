@@ -3246,6 +3246,12 @@ class TestProcedureDoc(unittest.TestCase):
         head = "\n### intent-critic 답 파일\n"
         self.assertEqual(text.count(head), 1)
         section = text.split(head, 1)[1].split("\n### ", 1)[0]
+        # 답 파일 머리는 답 파일만 이끈다 — 조언자를 부르는 규칙은 새 머리 아래에 있다(양의 짝 포함).
+        rule_head = "\n### intent-critic 을 부르는 규칙\n"
+        self.assertEqual(text.count(rule_head), 1)
+        rules = text.split(rule_head, 1)[1].split("\n### ", 1)[0]
+        self.assertIn("리뷰어를 부르는 조건은 리뷰의 넓이로 갈린다.", rules)
+        self.assertNotIn("리뷰어를 부르는 조건은", section)
         bullets = [l for l in section.split("\n") if l.startswith("- 답 커밋은 push 하지 않는다")]
         self.assertEqual(len(bullets), 1, section)
         for fact in ("push 해야 답 파일이 PR 과 함께 머지된다",

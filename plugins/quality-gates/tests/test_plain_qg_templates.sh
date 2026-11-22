@@ -66,13 +66,15 @@ assert_file_grep "$S" '바뀐 파일이 0개인지 보는 검사를 건너뛰었
 assert_file_absent "$S" 'empty-scope detection skipped' "AC6: 옛 영어 범위 경고 꼬리가 없다"
 
 # ⑥ README 의 범위 절이 부르는 라벨
-assert_eq "$(grep -cF '`고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`' "$RM")" "1" "AC6: README 가 새 라벨을 한 자리에서 부른다"
+assert_eq "$(grep -cF '`고치고 다시 돌기` / `지금 판정으로 끝내기` / `멈추기`' "$RM")" "0" "AC6: README 에 고치기 라벨 나열이 없다(한 번 보고 끝난다)"
+assert_contains "$(flat "$RM")" '막는 지적이 남아도 묻지 않고 고칠 목록을 result.md 에 남긴다' "AC6(양의 짝): README 가 묻지 않고 고칠 목록을 남긴다고 말한다"
 assert_file_absent "$RM" '`Retry` / `Accept and finish` / `Stop`' "AC6: README 범위 절에 옛 라벨 나열이 없다"
-assert_contains "$(flat "$RM")" '「고치고 다시 돌기」는 「적용」 항목만 고친다.' "AC6: README 가 고치는 범위를 새 라벨로 말한다"
+assert_not_contains "$(flat "$RM")" '「고치고 다시 돌기」는 「적용」 항목만 고친다.' "AC6: README 에 고치기 라벨 문장이 없다"
 assert_not_contains "$(flat "$RM")" 'Retry 는 「적용」 항목만 고친다' "AC6: README 에 옛 라벨 문장이 없다"
 
 # ⑦ README 상태도가 같은 라벨을 부른다(질문 앵커 표지는 test_readme_state_diagram_complete.sh 가 잰다)
-assert_file_grep "$RM" '분류표\(항목마다 적용 / 제외 \+ 사유\) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기$' "AC6: README 상태도가 새 라벨을 부른다"
+assert_file_absent "$RM" '분류표\(항목마다 적용 / 제외' "AC6: README 상태도에 분류표 줄이 없다"
+assert_file_grep "$RM" '막는 지적 · 차등 defect → 묻지 않는다 — `## 고칠 목록` 을 result.md 에 남기고 e2e 로 간다$' "AC6(양의 짝): README 상태도가 묻지 않고 고칠 목록을 남긴다"
 assert_file_absent "$RM" 'Retry / Accept and finish / Stop' "AC6: README 상태도에 옛 라벨 나열이 없다"
 
 # ⑧ e2e 걷기 직후 게이트 — 선택지 넷 · 6 절 칸 행의 글자는 test_e2e_docs.sh 의 case_gate_rows_one_pass 가 잰다.
