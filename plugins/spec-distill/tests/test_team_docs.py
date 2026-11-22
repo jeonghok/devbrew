@@ -442,6 +442,36 @@ class Version(unittest.TestCase):
         self.assertIn("보다 낮다", below[0])
 
 
+class SessionWorkerDocs(unittest.TestCase):
+    def test_readme_prerequisites_recommend_herdr_core(self):
+        text = README.read_text(encoding="utf-8")
+        sec = text.split("\n## Prerequisites", 1)[1].split("\n## ", 1)[0]
+        for word in ("**herdr-core**", "권장", "없으면 계획 · 구현 담당자는 하위 agent 로 돈다", "`hc --skill`"):
+            self.assertIn(word, sec, word)
+
+    def test_readme_points_to_session_section(self):
+        self.assertIn("`references/conductor-dispatch.md` 의 `## 세션 담당자`", README.read_text(encoding="utf-8"))
+
+    def test_dependencies_text_section(self):
+        text = (PLUGIN / "dependencies.md").read_text(encoding="utf-8")
+        lines = text.split("\n")
+        self.assertIn("## 권장 도구", lines)
+        sec = text.split("\n## 권장 도구", 1)[1].split("\n## ", 1)[0]
+        for word in ("herdr-core", "판을 재지 않는다", "하위 agent 길", "hc 0.1.21"):
+            self.assertIn(word, sec, word)
+        self.assertFalse([l for l in sec.split("\n") if l.startswith("|")])
+        sys.path.insert(0, str(REPO / "shared" / "deps"))
+        import check_deps  # noqa: E402
+        names = {r["name"] for r in check_deps.read_table(PLUGIN / "dependencies.md")}
+        self.assertEqual(names, {"python", "git", "gh", "superpowers", "quality-gates", "claude-code"})
+
+    def test_changelog_has_session_workers_entry(self):
+        entries = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")) if ver == (8, 31, 0)]
+        self.assertEqual(len(entries), 1)
+        for word in ("세션 담당자", "herdr-core", "conductor-dispatch.md"):
+            self.assertIn(word, entries[0], word)
+
+
 READ_WORDS = ("job_results.py", "job sync", "workflow_superpowers.py", "결과 받음", "로드맵 밖 과제")
 
 
