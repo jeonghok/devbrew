@@ -381,6 +381,8 @@ class UnittestDirTimingTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertGreaterEqual(secs["pkg/tests/test_a.py"], 0.5)
         self.assertLess(secs["pkg/tests/test_b.py"], 0.25)
+        # 준비 몫에서 안에 든 모듈 정리를 빼지 않으면 그 0.2 초가 두 번 세어진다
+        self.assertLess(sum(secs.values()), 0.65)
 
     def test_last_module_teardown_kept(self):
         self.write("test_a.py", PASS_PY)
