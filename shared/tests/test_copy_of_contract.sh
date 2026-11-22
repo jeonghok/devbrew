@@ -800,36 +800,69 @@ axis_tally "$((n_copies+n_cand))"
 IMPSCAN="$(mktemp -t copyof-impscan-XXXXXX)" || exit 1
 lock_tmp_add "$IMPSCAN"
 cat > "$IMPSCAN" <<'IMPEOF'
-# argv: <모듈명>. stdin 으로 후보 `.py` 경로(줄 단위), stdout 으로 그 모듈을 import 하는 것.
+# argv: `--index` 또는 <모듈명>. stdin 으로 후보 `.py` 경로(줄 단위).
+#   --index   : stdout 으로 `<경로>\t<임포트한 최상위 이름들(공백 구분)>` — 파일마다 한 번만 파싱.
+#   <모듈명>  : stdout 으로 그 모듈을 import 하는 것.
 import ast, sys
-mod = sys.argv[1]
 
-def imports(path):
+def imported_names(path):
+    """파일이 임포트로 묶는 이름의 집합. 파싱이 안 되면 None(소비하지 않는 것으로 친다)."""
     try:
         with open(path, "rb") as fh:
             tree = ast.parse(fh.read(), filename=path)
     except (OSError, SyntaxError, ValueError):
-        return False
+        return None
+    names = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             # `import a.b` 는 최상위 이름 `a` 를 묶는다 — 형제 사본의 이름은 첫 성분이다.
-            if any(a.name.split(".")[0] == mod for a in node.names):
-                return True
+            for a in node.names:
+                names.add(a.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom):
             # `from <mod> import x` · `from .<mod> import x` · `from <mod>.sub import x`
-            if node.module is not None and node.module.split(".")[0] == mod:
-                return True
+            if node.module is not None:
+                names.add(node.module.split(".")[0])
             # `from . import <mod>` — 모듈명이 names 쪽에 온다
-            if node.level and node.module is None and any(a.name == mod for a in node.names):
-                return True
-    return False
+            elif node.level:
+                for a in node.names:
+                    names.add(a.name)
+    return names
 
-for line in sys.stdin.read().splitlines():
-    if line and imports(line):
-        sys.stdout.write(line + "\n")
+if sys.argv[1] == "--index":
+    for line in sys.stdin.read().splitlines():
+        if line:
+            got = imported_names(line)
+            sys.stdout.write(line + "\t" + " ".join(sorted(got or ())) + "\n")
+else:
+    mod = sys.argv[1]
+    for line in sys.stdin.read().splitlines():
+        if line:
+            got = imported_names(line)
+            if got is not None and mod in got:
+                sys.stdout.write(line + "\n")
 IMPEOF
+# 색인은 추적 python 파일을 한 번만 파싱한다 — 색인에 없는 후보는 그 자리에서 같은 술어로.
+IMPINDEX="$(mktemp -t copyof-impindex-XXXXXX)" || exit 1
+lock_tmp_add "$IMPINDEX"
+git ls-files -- '*.py' | python3 "$IMPSCAN" --index > "$IMPINDEX"
 impscan() {   # impscan <모듈명> — stdin: 후보 `.py` 경로 / stdout: 그 모듈을 import 하는 것
-  python3 "$IMPSCAN" "$1"
+  local cand out rc
+  cand="$(cat)"
+  # 색인에 있는 후보는 이름 집합에 모듈이 있을 때만 입력 차례대로 낸다. 색인에 없는 후보가
+  # 하나라도 있으면(awk rc 9) 차례를 지키려고 입력 전체를 같은 술어로 직접 읽는다.
+  out="$(printf '%s\n' "$cand" | awk -F'\t' -v mod="$1" -v idx="$IMPINDEX" '
+    BEGIN { while ((getline l < idx) > 0) { t = index(l, "\t"); k = substr(l, 1, t - 1)
+              has[k] = 1; n = split(substr(l, t + 1), a, " "); for (i = 1; i <= n; i++) if (a[i] == mod) hit[k] = 1 } }
+    $0 == "" { next }
+    ($0 in has) { if ($0 in hit) print; next }
+    { miss = 1 }
+    END { exit (miss ? 9 : 0) }')"
+  rc=$?
+  if [ "$rc" -eq 9 ]; then
+    printf '%s\n' "$cand" | python3 "$IMPSCAN" "$1"
+  else
+    [ -z "$out" ] || printf '%s\n' "$out"
+  fi
 }
 
 # 분류기 **앞**의 집합 — `shared/*.py` 중 리포의 추적되는 `.py` 어딘가가 import 로
@@ -1121,7 +1154,7 @@ $consumers
 EOF
   rm -rf "$SIM"
 done
-rm -f "$SIMPROBE" "$IMPSCAN" "$PROBEOUT" "$PROBEERR"
+rm -f "$SIMPROBE" "$IMPSCAN" "$IMPINDEX" "$PROBEOUT" "$PROBEERR"
 axis_tally "$n_cons_all"
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
