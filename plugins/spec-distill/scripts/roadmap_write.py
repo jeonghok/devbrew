@@ -56,7 +56,8 @@ import team_check  # noqa: E402
 import team_layout  # noqa: E402
 import team_write  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    DATE_RE, FormatError, frontmatter, id_sort_key, parse_roadmap, quotes, section_body, strip_quotes, unquote)
+    DATE_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, frontmatter, id_sort_key, parse_roadmap,
+    quotes, section_body, strip_quotes, unquote)
 
 RS = Path(__file__).resolve().parent / "roadmap_status.py"
 EXIT_TODO = 4   # 사람이 손으로 고칠 것이 남았다 — 쓴 뒤일 수도, 아무것도 쓰지 않았을 수도 있다
@@ -596,6 +597,50 @@ def cmd_migrate(a) -> int:
     return 0
 
 
+def check_counts(brief: str, audit: str, table_text: str) -> dict:
+    """분해안 표의 미배정 · 고아 · 모르는 번호(정렬된 목록). 셈은 roadmap_status 와 같다. 셀 수 없으면 FormatError ·
+    TableError."""
+    non_s, s_ids, _k = brief_universe(brief, audit)
+    union = {i for row in R.parse_table(table_text) for i in row.ids}
+    return {"unassigned": sorted(non_s - union, key=id_sort_key),
+            "orphans": sorted(s_ids - union, key=id_sort_key),
+            "unknown_ids": sorted(union - non_s - s_ids, key=id_sort_key)}
+
+
+def cmd_check(a) -> int:
+    """파일을 쓰지 않는다 — brief 위험 줄 번호와(`--plan-table` 이 있으면) 표의 번호 셈만 줄로 낸다."""
+    try:
+        brief, audit = read(a.brief), read(a.audit)
+    except Refused as exc:
+        print("brief-risk: FAIL %s" % exc)
+        return 1
+    ok = True
+    try:
+        brief_risk_numbers(brief_section(brief, "5"))
+        print("brief-risk: OK")
+    except FormatError as exc:
+        ok = False
+        print("brief-risk: FAIL %s" % exc)
+    if a.plan_table:
+        try:
+            counts = check_counts(brief, audit, read(a.plan_table))
+        except (Refused, R.TableError, FormatError) as exc:
+            ok = False
+            print("roadmap-table: UNKNOWN %s" % exc)
+        else:
+            names = (("unassigned", "미배정"), ("orphans", "고아"), ("unknown_ids", "모르는 번호"))
+            tally = " · ".join("%s %d" % (label, len(counts[key])) for key, label in names)
+            if any(counts[key] for key, _ in names):
+                ok = False
+                print("roadmap-table: FAIL %s" % tally)
+                for key, label in names:
+                    if counts[key]:
+                        print("  %s: %s" % (label, " · ".join(counts[key])))
+            else:
+                print("roadmap-table: OK %s" % tally)
+    return 0 if ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="roadmap_write.py",
                                  description="분해안 표로 로드맵 · 에픽 묶음을 쓰고 검증한다.")
@@ -606,6 +651,10 @@ def build_parser() -> argparse.ArgumentParser:
         c.add_argument(flag, required=True)
     c.add_argument("--approval", action="append", required=True)
     c.add_argument("--layout", choices=team_layout.LAYOUTS)
+    k = sub.add_parser("check")
+    for flag in ("--brief", "--audit"):
+        k.add_argument(flag, required=True)
+    k.add_argument("--plan-table")
     e = sub.add_parser("extract")
     e.add_argument("--roadmap", required=True)
     m = sub.add_parser("migrate")
@@ -639,7 +688,7 @@ def cmd_job(a) -> int:
     return {"new": team_write.cmd_job_new, "sync": team_write.cmd_job_sync}[a.job_cmd](a, sys.modules[__name__])
 
 
-COMMANDS = {"create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
+COMMANDS = {"check": cmd_check, "create": cmd_create, "update": cmd_update, "extract": cmd_extract, "migrate": cmd_migrate,
             "original": cmd_original, "job": cmd_job}
 
 
