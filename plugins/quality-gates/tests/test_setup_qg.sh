@@ -198,6 +198,7 @@ for combo in "branch range x" "--paths a/* range x" "range x branch"; do
 done
 h="$("$SCRIPT" --help)"
 assert "--help 가 range 를 안내한다" "printf '%s' \"\$h\" | grep -qF 'range <시작>[..<끝>]'"
+assert "--help: --origin 줄 다음 줄이 roadmap: 과 로드맵 없음 을 담는다(AC17)" "printf '%s' \"\$h\" | grep -A1 -F -e '--origin <path>' | tail -1 | grep -qF 'roadmap:' && printf '%s' \"\$h\" | grep -A1 -F -e '--origin <path>' | tail -1 | grep -qF '로드맵 없음'"
 assert "--help 가 critique 를 없어진 인자로 안내한다" "printf '%s' \"\$h\" | grep -qF 'critique (→ /quality-gates:artifact-critique)'"
 out="$("$SCRIPT" --session-id "test-range-$$" range abc..def 2>&1)"; rc=$?
 assert "range a..b: rc 0" "[ $rc = 0 ]"

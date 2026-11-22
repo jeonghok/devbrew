@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.6.1] — 2026-11-22
+
+### Removed
+- `scripts/check_deps.py` 의 `superpowers` 하위 명령(정본 `shared/deps/check_deps.py` — spec-distill 의 superpowers 판 알림이 쓰던 것). 이 플러그인은 그 하위 명령을 부르지 않았다.
+
 ## [5.6.0] — 2026-11-18
 
 ### Added

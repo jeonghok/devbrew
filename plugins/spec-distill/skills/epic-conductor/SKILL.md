@@ -65,21 +65,6 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git,
 
 superpowers 확인 — skill 목록에 `superpowers:` 로 시작하는 skill 이 하나도 없으면 `[spec-distill] epic-conductor 멈춤 — superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다` 를 내고 멈춘다. 지휘하지 않는다.
 
-superpowers 판 알림 — 이 세션에서 superpowers skill 을 처음 불러온 직후 아래 펜스를 한 번 돌린다. `<기준 폴더>` 는 그 skill 을 불러올 때 보인 기준 폴더(base directory) 경로다.
-
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-python3 "$SD/scripts/check_deps.py" superpowers --plugin-root "$SD" --base "<기준 폴더>"
-```
-
-| 결과 | 동작 |
-|---|---|
-| rc 0 · `[devbrew-deps] superpowers <판> — 검증한 판과 같다` | 보이지 않고 간다 |
-| rc 0 · 「다르다」 · 「확인하지 못했다」 줄 | 그 줄(「확인하지 못했다」면 뒤의 이유 줄까지)을 그대로 보이고 간다 |
-| 그 밖 | `[spec-distill] superpowers 판 확인 실패(rc <값>) — 판을 확인하지 못한 채 간다.` 를 내고 간다 |
-
-판 확인 결과로는 멈추지 않는다.
-
 ### 2. 로드맵 정하기
 
 받은 인자(`$ARGUMENTS`)를 본다. 토큰이 하나면 로드맵 경로다 — 앞의 `@` 하나는 뗀다(첨부 꼴로 받은 경우). 뗀 뒤 영문자 · 숫자 · `.` `_` `/` `@` `+` `-` 로만 되어 있고 `-` 로 시작하지 않아야 한다(아니면 셸에 넘기지 않고 `[spec-distill] epic-conductor 인자는 로드맵 경로 하나다 — 받은 것: <인자>.` 를 내고 멈춘다). 절대경로면 아래 펜스의 `git worktree list --porcelain` 이 낸 worktree 루트들 가운데 그 경로를 품는 worktree(가장 깊은 것)를 찾아 그 루트 기준 상대경로로 바꿔 쓴다 — 로드맵의 레포 상대경로는 어느 worktree 에서나 같다(메인 체크아웃 · 에픽 worktree 모두). 어느 worktree 아래도 아니면 `[spec-distill] epic-conductor 로드맵이 이 레포의 어느 worktree 안에도 없다 — 받은 것: <인자>.` 를 내고 멈춘다.
@@ -155,7 +140,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<로드맵>"
 ```
 
-그 출력으로 규모 줄 하나를 만든다 — `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …> · spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · 구현 안 agent 수는 task 수에 따라 — 상한 없음`. agent 수는 에픽마다 계획 1 · 구현 1(실행 방식 안의 agent 는 task 수에 따라 더) · 통합 리뷰 1 이상에, 이 세션의 spec 리뷰가 라운드마다 부르는 리뷰어 agent(탐지 · 재비판 둘 이상, 라운드 상한까지)를 더한 대략이다. 같은 상태에서는 같은 줄이 나오게 이 꼴 그대로 쓴다.
+그 출력으로 규모 줄 하나를 만든다 — `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …> · spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · 구현 안 agent 수는 task 수에 따라 — 상한 없음`. agent 수는 에픽마다 계획 1 · 구현 1(실행 방식 안의 agent 는 task 수에 따라 더) · 통합 리뷰 1 이상 · qg 담당자(spec 승인 앞 1 · 머지된 PR 마다 1)에, 로드맵 끝 qg 담당자 1 과, 이 세션의 spec 리뷰가 라운드마다 부르는 리뷰어 agent(탐지 · 재비판 둘 이상, 라운드 상한까지)를 더한 대략이다. 같은 상태에서는 같은 줄이 나오게 이 꼴 그대로 쓴다.
 
 규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다. 그 뒤의 dispatch 도 띄우기 전에 규모만 알리고 간다.
 
@@ -164,9 +149,10 @@ cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<로드맵>"
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md
 Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
+Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md
 ```
 
-두 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+세 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
 `conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 부르지 않고 진행할 때의 것이다 — 이 skill 안에서는 따르지 않는다.
 
@@ -205,4 +191,4 @@ Agent(
 
 ## 보이기
 
-사람에게 쓰는 글은 위 쉬운 말 규칙을 따른다. 지휘자가 정할 질문(흐름 승인 · 감사 · 계획 검토 · 옮긴 질문 · spec 승인)은 `AskUserQuestion` 으로 묻고 질문 문장 앞머리에 에픽 이름을 쓴다(따로 된 첫 줄로 쓰지 않는다). brainstorming 대화는 brainstorming 이 정한 메시지 모양(첫 메시지 · 열린 문장 질문 하나 · 되비춤)을 따른다 — 위 규칙의 순서(첫 줄 상태 · 끝 할 일)를 붙이지 않고 낱말 규칙만 지키며, 지휘 소식(상태 · 목록 · 다른 에픽 소식)은 그 메시지에 얹지 않고 따로 된 메시지로 보인다. 사람에게 보이는 글에서 하위 agent 는 단계대로 「계획 담당자」 · 「구현 담당자」 라고 부른다. 하위가 돌려보낸 사람 자리는 `conductor-dispatch.md` 의 `## 사람 자리` 대로 배경을 먼저 쉬운 말로 쓴 뒤 선택지를 원문 그대로(꼬리를 더하는 길은 그 절의 둘뿐) 묻는다. 진행 상황 · 돌고 있는 일의 수를 말할 때는 `conducting.md` 걸음 1 의 맞추기 순서대로 같은 턴에 원천(하니스 agent 목록 · 상태 계산 · 실행 원장)을 다시 조회하고 「HH:MM 기준」 을 붙인다 — 조회하지 않은 숫자는 말하지 않는다.
+사람에게 쓰는 글은 위 쉬운 말 규칙을 따른다. 지휘자가 정할 질문(흐름 승인 · 감사 · 계획 검토 · 옮긴 질문 · spec 승인)은 `AskUserQuestion` 으로 묻고 질문 문장 앞머리에 에픽 이름을 쓴다(따로 된 첫 줄로 쓰지 않는다). brainstorming 대화는 brainstorming 이 정한 메시지 모양(첫 메시지 · 열린 문장 질문 하나 · 되비춤)을 따른다 — 위 규칙의 순서(첫 줄 상태 · 끝 할 일)를 붙이지 않고 낱말 규칙만 지키며, 지휘 소식(상태 · 목록 · 다른 에픽 소식)은 그 메시지에 얹지 않고 따로 된 메시지로 보인다. 사람에게 보이는 글에서 하위 agent 는 단계대로 「계획 담당자」 · 「구현 담당자」 라고 부른다. 하위가 돌려보낸 사람 자리는 `conductor-dispatch.md` 의 `## 사람 자리` 대로 배경을 먼저 쉬운 말로 쓴 뒤 선택지를 원문 그대로(꼬리를 더하는 길은 그 절의 둘뿐) 묻는다. 진행 상황 · 돌고 있는 일의 수를 말할 때는 `conducting.md` 걸음 1 의 맞추기 순서대로 같은 턴에 원천(하니스 agent 목록 · 상태 계산 · 실행 원장)을 다시 조회하고 「HH:MM 기준」 을 붙인다 — 조회하지 않은 숫자는 말하지 않는다. qg 담당자가 돌려준 의도 점검 질문은 `references/qg-review.md` 의 `## 묻기` 대로 따로 된 앞 글 뒤에 묻고, 질문 문장 앞머리에 에픽 이름(로드맵 리뷰면 「로드맵」)을 쓴다. team 형식 로드맵에서 사람 줄이 될 질문은 `ledger ask-head` 의 머리로 시작한다 — 절차는 지휘 절차의 `## team 형식 로드맵` 절이다.

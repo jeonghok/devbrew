@@ -82,11 +82,12 @@ assert_eq "$(status "$T/s.json")" "0" "13: 상태 계산 종료 코드 0"
 assert_eq "$(stage_of E1)" "설계 중" "13: 상태는 설계 중으로 돌아간다"
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "13: human-check 1"
 assert_eq "$(grep -c '^낡음 — - spec 승인' "$T/led.txt")" "1" "13: spec 승인 줄이 낡음이다"
+assert_contains "$(js "$T/s.json" "[b['notes'] for b in r['blocks'] if b['id']=='E1']")" "받은 뒤 바뀜: implement-plan-1-1.md — $E1/design.md" "13: 본문을 실제로 고치면 받은 뒤 바뀜이고 design.md 를 짚는다(K13 의 낡음 쪽)"
 g revert --no-edit HEAD >/dev/null && push_br feature/tm-e1
 check 0 "13: 되돌리면 구현 묶음이 다시 나간다(양성 대조)" --job E1 --stage implement --plan 1
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "13: 되돌리면 human-check 0"
-assert_eq "$(status "$T/s.json") $(stage_of E1)" "0 구현 중" "13: 되돌려도 상태는 구현 중이다 — 받은 뒤 design.md 를 건드린 커밋이 있으면 본문이 같아도 「받은 뒤 바뀜」(구현 묶음과 human-check 는 본문으로 가르니 열린다)"
-assert_contains "$(js "$T/s.json" "[b['notes'] for b in r['blocks'] if b['id']=='E1']")" "받은 뒤 바뀜: implement-plan-1-1.md — $E1/design.md" "13: 그 사유는 받은 뒤 바뀜이고 design.md 를 짚는다"
+assert_eq "$(status "$T/s.json") $(stage_of E1)" "0 구현 끝" "13: 되돌리면 본문이 받은 head 와 같아 받음 줄이 그대로 서서 상태는 구현 끝이다(K13 — 받은 뒤 design.md 를 건드린 커밋이 있어도 본문이 같으면 낡음이 아니다)"
+assert_eq "$(js "$T/s.json" "[n for b in r['blocks'] if b['id']=='E1' for n in b['notes'] if '받은 뒤 바뀜' in n]")" "[]" "13: 본문이 같으면 「받은 뒤 바뀜」 알림이 없다(K13)"
 
 python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); assert "미룬 것 하나" in s; open(p, "w", encoding="utf-8", newline="").write(s.replace("미룬 것 하나", "미룬 것 둘", 1))' "$W/$E1/design.md"
 g add -- "$E1/design.md" && g commit -qm "E1 설계 미룸 고침" && push_br feature/tm-e1

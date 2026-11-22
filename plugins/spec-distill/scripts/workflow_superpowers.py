@@ -14,6 +14,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
@@ -64,6 +65,17 @@ def _unbullet(line: str) -> str:
     return line
 
 
+RULING_MARK = "Ruling:"
+
+
+def ruling_said(line: str) -> Optional[str]:
+    """판정 줄 규칙 하나 — 줄 어디든 `RULING_MARK` 가 있으면 첫 그것 뒤의 글(앞뒤 공백 뺀). 비면 판정이 아니다."""
+    if RULING_MARK not in line:
+        return None
+    said = line.split(RULING_MARK, 1)[1].strip()
+    return said or None
+
+
 def ledger_lines(ledger_text: str, total: int) -> list:
     """구현 원장에서 결과 파일에 실을 줄들(원장의 차례) — 끝난 Task 줄과 Ruling 줄. 그 밖의 줄은 내지 않는다."""
     out, done = [], set()
@@ -77,10 +89,10 @@ def ledger_lines(ledger_text: str, total: int) -> list:
             done.add(n)
             c = _COMMITS_RE.search(line)
             out.append("Task %d/%d: 끝 — %s" % (n, total, c.group(1) if c else NO_COMMIT))
-        elif "Ruling:" in line:
-            said = line.split("Ruling:", 1)[1].strip()
-            item = "Ruling: " + said
-            if said and item not in out:
+        else:
+            said = ruling_said(line)
+            item = RULING_MARK + " " + (said or "")
+            if said is not None and item not in out:
                 out.append(item)
     return out
 

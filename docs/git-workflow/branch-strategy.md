@@ -9,10 +9,10 @@
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix|docs|chore)/[a-z0-9][a-z0-9.-]*$
+^(feature|fix|docs|chore)/[a-z0-9][a-z0-9.-]*$|^conductor/[a-z0-9][a-z0-9.-]*$
 ```
 
-소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다).
+소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다). 둘째 갈래 `conductor/…` 는 지휘자 상태 브랜치만 쓴다(아래 `Conductor State Branch`).
 
 ## Branch Prefixes
 
@@ -22,10 +22,21 @@
 | `fix/<name>` | 버그 수정 | `fix/login-redirect` |
 | `docs/<name>` | 문서만 바꾸는 일 | `docs/branch-rules` |
 | `chore/<name>` | 설정 · 잡일 | `chore/ci-cache` |
+| `conductor/<로드맵 이름>` | 지휘자 상태 브랜치 — 사람이 만들지 않는다 | `conductor/2026-11-14-roadmap-name` |
 
 - 설명에는 **kebab-case** 사용
 - 간결하게: 2–4 단어
 - 전체 50자 이하
+
+## Conductor State Branch
+
+- 코드가 없다 — 로드맵의 현황과 편지만 담는다
+- PR 로 머지하지 않는다
+- 스크립트만 쓴다 — 손으로 커밋하지 않는다
+- 이 브랜치로 체크아웃하지 않는다
+- 위 「2–4 단어 · 50자 이하」 를 받지 않는다 — 이름이 로드맵 폴더에서 나온다
+- 로드맵이 끝나면 지운다
+- rebase 와 force-push 금지는 다른 브랜치와 같다
 
 ## Branch Lifecycle
 
@@ -73,7 +84,7 @@ git worktree remove ../<폴더>
 
 - **변경 작업(파일 편집 · 커밋)을 시작하기 전** 현재 브랜치 확인: `git branch --show-current` — 읽기만 하는 작업에는 확인하지 않는다
 - **NEVER** `main`에 직접 commit
-- **ALWAYS** 브랜치 이름은 위 `Branch Naming Pattern` 의 접두 중 하나로 시작
+- **ALWAYS** 브랜치 이름은 위 `Branch Naming Pattern` 의 접두 중 하나로 시작(`conductor/` 는 스크립트만 쓴다 — 작업 브랜치에 쓰지 않는다)
 - "X 작업 시작해" 요청 시 — 먼저 적절히 명명된 브랜치 생성
 - `main`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성
 - 기존 feature 브랜치로 전환 시 — main에서 sync 필요한지 확인

@@ -736,6 +736,45 @@ class ThisRepoBranchStrategyTest(_RepoTestCase):
         p = self._rule(changed)
         self.assertFalse(p.match("docs/x"))
 
+    STATE_BRANCH = "conductor/2026-11-14-conductor-context-economy-brief"
+
+    def test_this_repo_rule_accepts_the_conductor_state_branch_as_a_second_alternative(self):
+        p = self._rule(self.DOC.read_text(encoding="utf-8"))
+        self.assertIsNone(_hook.check_branch_name(self.STATE_BRANCH, p))
+        for bad in ("conductor/", "conductor/Upper", "conductor/a_b", "conductor", "xconductor/a", "conductor/a/b"):
+            self.assertIsNotNone(_hook.check_branch_name(bad, p), bad)
+        self.assertEqual(_hook.derive_prefixes(p), ["feature", "fix", "docs", "chore"])   # 맨 앞 그룹의 접두 넷은 그대로다
+        human, model = _hook.check_branch_name("misc/x", p)
+        # 사람용 글의 「기대하는 형식:」 줄은 정규식을 통째로 실어 conductor 가 늘 있다 — 권하는 줄(허용 접두어)과 모델용 글만 본다
+        self.assertEqual(self._hint(human), "허용 접두어: feature, fix, docs, chore")
+        self.assertNotIn("conductor", model)
+
+    @staticmethod
+    def _hint(human: str) -> str:
+        lines = [l for l in human.split("\n") if l.startswith("허용 접두어:")]
+        assert len(lines) == 1, human
+        return lines[0]
+
+    def test_rule_with_conductor_in_the_first_group_would_suggest_it(self):   # 양성 대조 — 맨 앞 그룹에 넣으면 권하게 된다
+        text = self.DOC.read_text(encoding="utf-8")
+        changed = text.replace("(feature|fix|docs|chore)", "(feature|fix|docs|chore|conductor)")
+        self.assertNotEqual(changed, text)
+        human, model = _hook.check_branch_name("misc/x", self._rule(changed))
+        self.assertEqual(self._hint(human), "허용 접두어: feature, fix, docs, chore, conductor")
+        self.assertIn("conductor", model)
+
+    def test_hook_is_silent_when_the_state_branch_appears(self):
+        work = self.repo(self.DOC.read_text(encoding="utf-8"))
+        self.assertEqual(self.observe_after_branch(work, self.STATE_BRANCH), [])
+        self.assertEqual(len(self.observe_after_branch(work, "misc/x")), 1)   # 양성 대조 — 규칙 밖 이름에는 알린다
+
+    def test_document_has_the_prefix_row_and_the_exception_section(self):
+        text = self.DOC.read_text(encoding="utf-8")
+        self.assertIn("| `conductor/<로드맵 이름>` | 지휘자 상태 브랜치", text)
+        section = text.split("## Conductor State Branch", 1)[1].split("\n## ", 1)[0]
+        for phrase in ("코드가 없다", "PR 로 머지하지 않는다", "스크립트만 쓴다", "체크아웃하지 않는다", "2–4 단어", "로드맵이 끝나면 지운다", "force-push"):
+            self.assertIn(phrase, section, phrase)
+
 
 if __name__ == "__main__":
     unittest.main()

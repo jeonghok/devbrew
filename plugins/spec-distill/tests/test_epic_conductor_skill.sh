@@ -33,7 +33,7 @@ for lit in 'worktree 안에서 시작했다' '여기서도 지휘한다' 'state_
   assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" "$lit" "자리 · 세션 · 표지: $lit"
 done
 APP="$(sec '### 4. 규모 공시')"
-for lit in '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' \
+for lit in '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' 'qg 담당자' \
            'spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다)' \
            '구현 안 agent 수는 task 수에 따라 — 상한 없음' \
            '규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다.'; do

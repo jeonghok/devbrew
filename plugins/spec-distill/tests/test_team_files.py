@@ -34,6 +34,31 @@ class Templates(unittest.TestCase):   # AC18 — 두 칸뿐, 문서의 성격을
             for word in ("알림", "도구 권한", "집행", "이 문서"):
                 self.assertNotIn(word, "\n".join(lines), (role, word))
 
+    BUNDLE_FAILED = "- 시작 묶음 명령이 0 이 아닌 종료 코드로 끝나면 일하지 않고 그 사유를 돌려보낸다."
+    DESIGN_STEP = ("- 설계 걸음에서는 원자료(`intent/original.md`) 전체를 읽고 설계문서의 원문 대조 표부터 채운다.",
+                   "- 원자료와 다르게 바꾼 것은 근거를 적거나 「작성자 제안」으로 표시한다.")
+    PLAN_STEP = "- 계획 걸음에서는 승인된 설계로 계획을 쓰고, 설계에 없던 결정은 표시해 리더에게 돌려보낸다."
+
+    def test_fourth_common_line_is_what_to_do_when_the_bundle_fails(self):   # R2 §5 · K14
+        for role in L.ROLES:
+            self.assertEqual(F.role_template(role).read_text(encoding="utf-8").splitlines()[5], self.BUNDLE_FAILED, role)
+
+    def test_design_step_is_leaders_and_plan_step_is_workers(self):   # R2 AC15
+        todo = {r: F.role_template(r).read_text(encoding="utf-8").split("## 하지 않을 일")[0] for r in L.ROLES}
+        for line in self.DESIGN_STEP:
+            self.assertIn(line + "\n", todo["leader"])
+            for other in ("designer", "writer", "worker"):
+                self.assertNotIn(line, todo[other], other)
+        self.assertIn(self.PLAN_STEP + "\n", todo["worker"])
+        for other in ("leader", "designer", "writer"):
+            self.assertNotIn("계획 걸음", todo[other], other)
+        self.assertNotIn("원자료", F.role_template("designer").read_text(encoding="utf-8"))
+
+    def test_repo_copies_are_the_templates(self):   # 이 레포의 사본 — AC15 「틀과 이 레포의 사본에서」
+        for role in L.ROLES:
+            self.assertEqual((REPO / "docs/superpowers/roadmaps" / role / "CLAUDE.md").read_bytes(),
+                             F.role_template(role).read_bytes(), role)
+
     def test_worker_lines_are_the_users_words(self):
         text = F.role_template("worker").read_text(encoding="utf-8")
         for line in ("- 과제마다 INTENT.md 부터", "- 설계안 승인 뒤에 코드", "- 실서비스 배포", "- 다른 폴더 파일 고치기", "- 승인 전 코딩"):

@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_defaults  # noqa: E402
+import workflow_superpowers  # noqa: E402
 from ledger_marker import _atomic_write, _read_line  # noqa: E402 — 리뷰 원장 표지와 같은 방식
 from roadmap_model import (  # noqa: E402,F401 — 옮긴 이름의 옛 자리
     CONFIRM_RE, EPIC_RE, FormatError, IMPL_PREFIX, ISSUE_RE, RECEIVED, RECORD_HEADING, RULINGS_HEADING, _headings,
@@ -33,6 +34,8 @@ MARKER = "conducting-by"
 TYPE = "conductor-machine"
 WRITER = "spec-distill"
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
+TRUST = "확인한 끝"   # 상태 브랜치에서 남의 고침을 재는 기준 끝 — `확인` 은 사람이 받아들인 끝, `씀` 은 이 기계가 만든 커밋
+TRUST_WHY = ("확인", "씀")
 SECTIONS = (
     ("PR", ("브랜치", "번호", "상태", "확인한 때", "headRefOid", "교차 레포", "baseRefName", "mergeCommit", "쓴 세션")),
     ("에픽 PR", ("에픽", "브랜치", "번호", "적은 때", "쓴 세션")),
@@ -41,13 +44,23 @@ SECTIONS = (
     ("살아 있는 agent", ("이름", "에픽", "일", "worktree", "보낸 때")),
     ("작업", ("종류", "이름", "에픽", "단계", "담당", "근거")),
     ("기다리는 질문", ("에픽", "기대는 일", "질문")),
+    ("지금 묻는 질문", ("에픽", "종류", "건 길", "언제부터", "세션")),
     ("쌓인 기록", ("에픽", "절", "글")),
+    (TRUST, ("끝", "까닭", "때", "세션")),
     ("레포 설정", ("키", "값")),
     ("시작 승인", ("세션", "때", "규모")),
 )
 COLUMNS = dict(SECTIONS)
 EPIC_PR = "에픽 PR"
-OPTIONAL_SECTIONS = ("작업", EPIC_PR)
+ASKING = "지금 묻는 질문"
+ASK_KINDS = ("설계 대화", "spec 승인", "계획 검토", "흐름 승인", "걸음 건너뜀", "옮긴 질문", "머지", "그 밖")   # 둘째–다섯째는 사람 줄의 종류 이름과 글자가 같다 — 문서 테스트가 human_lines.KINDS 와 견준다
+ASK_VIA = ("질문 창", "턴 끝")
+ASK_WINDOW = ASK_VIA[0]
+ASK_NO_EPIC = "로드맵 밖"
+# 시각 꼴 하나 — `\d` 를 쓰지 않는다(다른 문자 체계의 숫자가 지나간다). 꼴만 본다: 달력 검사는 parse_stamp 몫이다.
+STAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} [+-][0-9]{4}")
+ASK_EPIC_RE = re.compile(r"[A-Z][0-9]+[a-z]?")
+OPTIONAL_SECTIONS = ("작업", EPIC_PR, ASKING, TRUST)
 RETIRED_SECTIONS = ("레포 설정", "시작 승인")  # 읽기에서 줄 검사 없이 버리고 쓰기에서 머리를 쓰지 않는 옛 절
 RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"
 WORK_DONE = ("끝", "끝남", "머지됨")  # 「작업」 단계 칸에서 끝으로 세는 낱말 — 지휘 절차(conducting.md 걸음 1)가 같은 낱말을 밝힌다
@@ -171,6 +184,26 @@ def _check_row(section: str, row: dict, where: str):
             raise MachineError("%s: 에픽 이름 꼴이 아니다: %r" % (where, row["에픽"]))
         if not PR_NUMBER_RE.fullmatch(row["번호"]):
             raise MachineError("%s: PR 번호는 `#<숫자>` 다: %r" % (where, row["번호"]))
+    if section == ASKING:
+        if not ASK_EPIC_RE.fullmatch(row["에픽"]) and row["에픽"] != ASK_NO_EPIC:
+            raise MachineError("%s: 에픽은 에픽 이름이거나 %s 다: %r" % (where, ASK_NO_EPIC, row["에픽"]))
+        if row["종류"] not in ASK_KINDS:
+            raise MachineError("%s: 종류는 %s 중 하나다: %r" % (where, " · ".join(ASK_KINDS), row["종류"]))
+        if row["건 길"] not in ASK_VIA:
+            raise MachineError("%s: 건 길은 %s 중 하나다: %r" % (where, " · ".join(ASK_VIA), row["건 길"]))
+        if not STAMP_RE.fullmatch(row["언제부터"]):
+            raise MachineError("%s: 언제부터는 `YYYY-MM-DD HH:MM ±HHMM` 꼴이다: %r" % (where, row["언제부터"]))
+        if not SESSION_PATTERN.fullmatch(row["세션"]):
+            raise MachineError("%s: 세션은 session id 꼴이다: %r" % (where, row["세션"]))
+    if section == TRUST:
+        if not OID_RE.fullmatch(row["끝"]):
+            raise MachineError("%s: 끝은 40자 16진이다: %r" % (where, row["끝"]))
+        if row["까닭"] not in TRUST_WHY:
+            raise MachineError("%s: 까닭은 %s 중 하나다: %r" % (where, " · ".join(TRUST_WHY), row["까닭"]))
+        if not STAMP_RE.fullmatch(row["때"]):
+            raise MachineError("%s: 때는 `YYYY-MM-DD HH:MM ±HHMM` 꼴이다: %r" % (where, row["때"]))
+        if not SESSION_PATTERN.fullmatch(row["세션"]):
+            raise MachineError("%s: 세션은 session id 꼴이다: %r" % (where, row["세션"]))
     if section == "실행 원장" and not re.fullmatch(r"[0-9]+", row["읽은 줄"]):
         raise MachineError("%s: 읽은 줄은 숫자다: %r" % (where, row["읽은 줄"]))
 
@@ -387,7 +420,7 @@ def save(path: Path, roadmap_rel: str, data: dict, session: str) -> None:
 
 def ledger_rulings(text: str) -> list:
     """실행 방식 원장의 판정 줄 — `Ruling:` 이 든 줄."""
-    return [l.strip() for l in text.splitlines() if "Ruling:" in l]
+    return [l.strip() for l in text.splitlines() if workflow_superpowers.ruling_said(l) is not None]
 
 
 # ── 넘김 ─────────────────────────────────────────────────────────────────────

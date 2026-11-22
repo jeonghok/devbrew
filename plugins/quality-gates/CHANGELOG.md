@@ -3,6 +3,17 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [15.3.1] — 2026-11-22
+
+### Removed
+- `scripts/check_deps.py` 의 `superpowers` 하위 명령(정본 `shared/deps/check_deps.py` — spec-distill 의 superpowers 판 알림이 쓰던 것). 이 플러그인은 그 하위 명령을 부르지 않았다.
+
+## [15.3.0] — 2026-11-21
+
+### Changed
+- 범위(`range`)로 부른 리뷰가 바뀐 의도 문서의 머리 줄(`source_interview:` · `source_brief:` · `roadmap:`)을 따라가 원문 · 로드맵을 싣는다(바뀐 파일이 모두 문서 파일이고 모델이 읽는 파일이 없을 때). `--origin` 으로 넘긴 원문과 같은 파일이면 한 번만 싣는다.
+- `setup-qg.sh --help` 의 `--origin` 아래에 로드맵 줄이 없을 때 다른 팀 지도가 「로드맵 없음」 을 낸다는 한 줄.
+
 ## [15.2.0] — 2026-11-18
 
 ### Added

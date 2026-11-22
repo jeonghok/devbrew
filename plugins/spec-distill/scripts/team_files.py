@@ -16,6 +16,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import team_layout  # noqa: E402
 import section6  # noqa: E402
+import workflow_superpowers  # noqa: E402
 from roadmap_model import CONFIRM_RE, FormatError, field_text, frontmatter, section_body, unquote  # noqa: E402,F401
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates" / "team"
@@ -237,7 +238,7 @@ _END_PREFIX = "끝 — "
 END_EMPTY = "「끝」 줄에 커밋 글이 없다"   # 이 사유가 있으면 「끝」 줄은 있되 읽을 커밋이 없다(job_results 가 「끝 줄이 없다」 를 덧내지 않는다)
 END_PREFIX = _END_PREFIX
 _TASK_BLOCKED = "막힘"
-_MACHINE_PREFIXES = ("Ruling:", "규칙 반증:", "산출물:")
+_MACHINE_PREFIXES = (workflow_superpowers.RULING_MARK, "규칙 반증:", "산출물:")
 NO_HEAD = "머리(첫 줄 `---`)가 없다"
 OPEN_HEAD = "머리가 닫히지 않았다(`---` 줄이 하나뿐이다)"
 TASK_SHAPE = "Task 줄 꼴이 아니다(Task <n>/<전체>: 끝|막힘 — <커밋>)"
@@ -252,6 +253,7 @@ class Result:
     role: Optional[str] = None
     head: Optional[str] = None
     bundle_at: Optional[str] = None
+    rules_at: Optional[str] = None   # 팀 규칙을 읽은 상태 브랜치 커밋 — 없으면 bundle_at 에서 읽었다
     job_at: Optional[str] = None
     tasks: list = field(default_factory=list)
     rulings: list = field(default_factory=list)
@@ -350,11 +352,13 @@ def parse_result(text: str) -> Result:
     if why:
         r.problems.append(why)
         return r
-    r.problems += dups + _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at"))
+    r.problems += dups + _head_problems(meta, RESULT_TYPE, ("head", "bundle_at", "job_at")
+                                        + (("rules_at",) if "rules_at" in meta else ()))
     if meta.get("role") not in team_layout.ROLES:
         r.problems.append("머리 role 이 역할 이름이 아니다: %r" % meta.get("role"))
     r.stage, r.role = meta.get("stage"), meta.get("role")
     r.head, r.bundle_at, r.job_at = _commit(meta, "head"), _commit(meta, "bundle_at"), _commit(meta, "job_at")
+    r.rules_at = _commit(meta, "rules_at")
     r.attempt, r.plan = _number(meta, "attempt"), _number(meta, "plan")
     body, unclosed = _outside_fences(rest)
     if unclosed:
@@ -381,7 +385,7 @@ def parse_result(text: str) -> Result:
                 r.tasks.append((int(m.group(1)), int(m.group(2)), m.group(3), m.group(4)))
             else:
                 r.problems.append("%s: %s" % (TASK_SHAPE, line))
-        elif line.startswith("Ruling:"):
+        elif line.startswith(workflow_superpowers.RULING_MARK):
             r.rulings.append(line)
         elif line.startswith("규칙 반증:"):
             r.refutes.append(line)

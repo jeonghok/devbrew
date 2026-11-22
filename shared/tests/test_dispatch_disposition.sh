@@ -74,6 +74,8 @@ for p in sorted(REPO.glob("plugins/*/agents/*.md")):
     m = re.search(r'^name:\s*(\S+)\s*$', p.read_text(encoding="utf-8"), re.M)
     if m:
         agents[m.group(1)] = str(p.relative_to(REPO))
+# Claude Code 내장 일반 agent 도 정의 파일이 없을 뿐 dispatch 대상이다 — 그 자리도 처분을 밝힌다.
+agents.setdefault("general-purpose", "(Claude Code 내장 agent)")
 
 # ── 2) 코퍼스는 **구조 규칙**이다. `.py` 는 Agent 도구를 호출할 수 없으므로
 #       코퍼스 밖 — 이름 열거가 아니라 성질이다.
