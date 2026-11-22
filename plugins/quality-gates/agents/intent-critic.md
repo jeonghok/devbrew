@@ -178,7 +178,7 @@ questions:
     weight: 동작
     quote: "except OSError: return None"
     label: 없음
-    question: "실패를 알리지 않는 동작이 의도인가?"
+    question: "디스크가 가득 차 내보내기가 실패해도 아무 말 없이 끝나는 동작이 의도인가?"
     evidence_lines: [12]
     same_as: "diff#src/export.py#조용한 실패"
     observation_changed:
@@ -190,7 +190,7 @@ questions:
     weight: 방향
     quote: "- D4 · 내보내기 파일 이름은 날짜로 짓는다"
     label: 없음
-    question: "이 설계가 날짜로 정한 것(D4)이 그쪽과 갈라져도 되는가?"
+    question: "내보내기 파일 이름을 날짜로 정한 이 설계(D4)가 사용자 이름으로 짓는 다른 팀 설계와 갈라져도 되는가?"
     evidence_lines: [17]
     read_quotes:
       - path: docs/superpowers/specs/2026-11-10-export-design.md
