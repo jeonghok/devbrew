@@ -330,8 +330,8 @@
 
 ### plugins/spec-distill/tests/test_hooks.sh
 - 원래 판정: 합침
-- 지키는 것: 맞음 — hooks.json 의 SessionStart 부재 · session-anchor.sh 부재 · hooks/ 부재 · spec-distill-gc.py 부재 · fire_and_forget_gc 부재 · _yaml_scalar 존재(:19-41)
-- 겹침: 일부만 — test_review_hook_removed.py 는 base c7b4f580 의 hook_common 에서 빠진 이름(fire_and_forget_gc 포함, base :58)을 레포 전체에서 금지하므로(:379-398) :38-39 를 덮는다. hooks/ · spec-distill-gc.py 부재와 _yaml_scalar 존재는 그쪽이 재지 않으며, 그쪽 docstring(:305-308)이 hooks/ 부재를 이 파일에 맡긴다고 적었다
+- 지키는 것: 맞음 — hooks.json 의 SessionStart 부재 · session-anchor.sh 부재 · hooks/ 부재 · spec-distill-gc.py 부재 · hook_common 의 옛 정리 함수 이름 부재 · _yaml_scalar 존재(:19-41)
+- 겹침: 일부만 — test_review_hook_removed.py 는 base c7b4f580 의 hook_common 에서 빠진 이름(그 옛 정리 함수 이름 포함, base :58)을 레포 전체에서 금지하므로(:379-398) :38-39 를 덮는다. hooks/ · spec-distill-gc.py 부재와 _yaml_scalar 존재는 그쪽이 재지 않으며, 그쪽 docstring(:305-308)이 hooks/ 부재를 이 파일에 맡긴다고 적었다
 - 판정: 선다 — 한 「부재」 파일로 모을 수 있고 이 파일 고유의 셋을 옮기면 된다
 - 보안 갈래: 맞음
 - 권하는 판정: 합침
@@ -409,7 +409,7 @@
 #### 확인하지 못한 것 — a2
 
 - test_reviewing_brief_residue.sh(889줄)는 머리말 · 블록 추출 · P/S 절만 읽고 H · K · Q 절 본문은 끝까지 읽지 않았다. spec_residue 의 겹침 판정은 머리말의 축 목록과 spec 펜스를 쓰는 자리(:85-86, :405)로만 냈다.
-- test_review_hook_removed.py 는 도출 함수 본문(:81-300)을 읽지 않았다. S2 에 fire_and_forget_gc 가 드는지는 base 커밋의 hook_common 에 그 이름이 있다는 사실(git show)과 docstring 의 S2 정의로 추론했다.
+- test_review_hook_removed.py 는 도출 함수 본문(:81-300)을 읽지 않았다. S2 에 hook_common 의 옛 정리 함수 이름(test_hooks.sh 가 부재를 재는 것)이 드는지는 base 커밋의 hook_common 에 그 이름이 있다는 사실(git show)과 docstring 의 S2 정의로 추론했다.
 - test_docreview_gate_visibility.sh 와 test_end_gates.sh 는 겹침에 닿는 부분만 읽었다.
 
 ## 표본 b1 — 가장 비싼 여덟
