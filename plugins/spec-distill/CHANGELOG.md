@@ -1,5 +1,20 @@
 # Changelog
 
+## [8.31.0] — 2026-11-22
+
+### Changed
+- qg 가 자동으로 도는 자리 「에픽 머지 뒤」 가 「머지 앞」 으로 바뀌었다 — 자리 넷은 spec 승인 앞 · 머지 앞 · 로드맵 끝 · 이름으로 청한 리뷰다. 걸음 5 에 머지 앞 qg 가 들어가고 걸음 6 의 머지 뒤 qg 는 빠졌다.
+- 되돌리기(`qg-review.md` 의 `## 되돌리기`) — 머지 앞 qg 의 막는 지적을 묻지 않고 구현 길로 돌려보내고, 고친 커밋만 좁은 재리뷰로 다시 본다. 고치지 않은 막는 지적과 두 번째 재리뷰 뒤에도 남는 지적은 질문 하나로 묻는다(선택지 셋 · 얻음 · 내줌 · 권하는 쪽은 첫 자리와 「(권장)」). 머지 앞 「잘못 골랐다」 의 행선도 이 길을 따른다.
+- 되돌리기가 끝날 때까지 지휘자는 그 PR 의 머지를 멈춘다(머지 얼림).
+- team 형식 로드맵의 자리 글자에 계획 번호가 들어간다 — `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` · `premerge-resend-<과제>-plan<n>`. 되돌리기 중인 브랜치에는 task 경계 merge 를 전하지 않는다.
+- 「잘못 골랐다」 의 질문 정체가 `<id> @ <보관 폴더 이름>` 으로 보관 폴더를 함께 싣는다.
+- 의도 점검 질문 창에 한 문장이 늘었다. 걸음표 검수 행에 qg 가 들어갔다. 넘겨받은 행 21–23 · 27–31 과 R3 리뷰 지적 둘을 반영했다.
+- README 의 quality-gates 의존 줄과 `dependencies.md` 의 quality-gates 행이 자리 넷을 새 이름으로 말한다. 판 칸은 `check_deps.py measure` 로 다시 쟀다(quality-gates 16.0.0).
+- `shared/tests/test_dispatch_disposition.sh` 의 vacuity 하한이 내장 `general-purpose` 를 뺀 플러그인 agent 정의 수에 걸린다. `shared/tests/fixtures/ask-sites.tsv` 에 되돌리기의 두 질문 행이 늘었다.
+
+### Removed
+- 담당자 틀의 범위 모드 끝내기 질문 답.
+
 ## [8.30.0] — 2026-11-22
 
 ### Changed
