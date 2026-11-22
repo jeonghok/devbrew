@@ -192,6 +192,28 @@ SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
 (cd "$REPO" && git worktree list | grep -q 'feat-x') && ok "feat-x 등록 유지" || no "feat-x 등록이 풀렸다"
 rm -rf "$REPO"
 
+# 목록을 읽지 못하는 git — `worktree list` 만 실패하고 나머지는 진짜 git 으로 넘긴다.
+mk_list_fail_git() {   # → 그 git 이 든 폴더 경로
+  local d real; d=$(mktemp -d); real=$(command -v git)
+  [ -n "$d" ] && [ -d "$d" ] && [ -n "$real" ] || { echo "가짜 git 을 만들지 못했다" >&2; exit 1; }
+  printf '#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = list ]; then echo "fatal: 가짜 — 목록을 읽지 못함" >&2; exit 128; fi\nexec "%s" "$@"\n' "$real" > "$d/git"
+  chmod +x "$d/git"
+  printf '%s' "$d"
+}
+echo "[사본 자리: 등록된 worktree 목록을 읽지 못하면 지우지 않고 멈춘다]"
+mk_repo_checked
+(cd "$REPO" && git branch audit-rt-wtlst012 && git worktree add -q "$REPO/.claude/worktrees/audit-rt-wtlst012" audit-rt-wtlst012 >/dev/null 2>&1)
+printf 'mine\n' > "$REPO/.claude/worktrees/audit-rt-wtlst012/mine.txt"
+SHIM_DIR=$(mk_list_fail_git)
+err=$(cd "$REPO" && PATH="$SHIM_DIR:$PATH" "$WT" create-sandbox "wtlst0123456789" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "목록을 읽지 못하면 create-sandbox 는 앞 사본을 지우지 않고 rc 2"
+assert_contains "$err" "등록된 worktree 목록을 읽지 못했다" "create-sandbox 가 목록을 읽지 못한 사유를 알린다"
+err=$(cd "$REPO" && PATH="$SHIM_DIR:$PATH" "$WT" remove "$REPO/.claude/worktrees/audit-rt-wtlst012" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "목록을 읽지 못하면 remove 도 지우지 않고 rc 2"
+assert_contains "$err" "등록된 worktree 목록을 읽지 못했다" "remove 가 목록을 읽지 못한 사유를 알린다"
+[ -f "$REPO/.claude/worktrees/audit-rt-wtlst012/mine.txt" ] && ok "목록을 읽지 못했을 때 그 worktree 가 그대로다" || no "목록을 읽지 못했는데 worktree 를 지웠다"
+rm -rf "$REPO" "$SHIM_DIR"
+
 echo "[사본 자리: 같은 이름 브랜치 worktree 면 멈춘다 · 등록 풀린 폴더는 다시 만든다]"
 mk_repo_checked
 (cd "$REPO" && git branch audit-rt-brnch012 && git worktree add -q "$REPO/.claude/worktrees/audit-rt-brnch012" audit-rt-brnch012 >/dev/null 2>&1)
