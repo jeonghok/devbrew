@@ -41,8 +41,8 @@ REASONS = (
 # 판정 줄의 e2e 칸 — 닫힌 열거(색인 K-3).
 E2E_STATES = ("pass", "fail", "미확인", "안 함", "걸을 것 없음", "걸을 도구 없음", "꺼짐(kill switch)",
               "무효")
-# e2e 가 판정에 더하는 것은 이 둘뿐이다. 나머지 상태는 다른 축이 정한 판정을 바꾸지 않는다(AC3).
-E2E_TO_REASON = {"미확인": "e2e-unconfirmed"}
+# e2e 가 판정에 더하는 것은 이 둘뿐이다(사유 쪽은 미확인 · 무효 둘이 같은 사유). 나머지 상태는 다른 축이 정한 판정을 바꾸지 않는다(AC3).
+E2E_TO_REASON = {"미확인": "e2e-unconfirmed", "무효": "e2e-unconfirmed"}
 E2E_DEFECT = ("fail",)
 
 # `diff-test-results.py` 의 `degrade_causes` → 이 어휘.

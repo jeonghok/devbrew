@@ -164,7 +164,7 @@ case_removed_args_are_usage_errors
 # e2e 칸의 `무효` — 닫힌 열거 안의 값이라 판정 줄에 그대로 실린다.
 out="$(python3 "$V" --line --blocking 0 --optional 0 --new-failures 0 --sha abc1234 --e2e '무효')"; rc=$?
 assert_eq "$rc" "0" "--e2e 무효 는 exit 0"
-assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "qg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e 무효 · abc1234" \
+assert_eq "$(printf '%s\n' "$out" | tail -n 1)" "qg: not-certified (e2e-unconfirmed) · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e 무효 · abc1234" \
   "e2e 무효 는 e2e 칸에 실린다"
 
 finish

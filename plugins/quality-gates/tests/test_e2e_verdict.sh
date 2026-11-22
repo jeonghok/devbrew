@@ -55,6 +55,16 @@ case_AC2_unconfirmed_keeps_defect_and_earlier_reason() {
   assert_grep "$out" '^reasons: \[scope-empty, e2e-unconfirmed\]$' "AC2: e2e-unconfirmed 는 사유 맨 뒤"
 }
 
+case_invalid_composes_like_unconfirmed() {
+  local p a b
+  for p in clean defect nc; do
+    a=$(final "$T/$p" 미확인 | sed 's/e2e 미확인/e2e X/')
+    b=$(final "$T/$p" 무효 | sed 's/e2e 무효/e2e X/')
+    assert_eq "$b" "$a" "무효: 앞 판정($p)과의 합성이 미확인과 같다(판정 · 사유 · 판정 줄)"
+  done
+  assert_grep "$(final "$T/clean" 무효)" '^reason: e2e-unconfirmed$' "무효: clean 위에서 사유 e2e-unconfirmed(양성 짝)"
+}
+
 case_AC3_no_walk_states_do_not_change_verdict() {
   local s p out want
   for p in clean defect nc; do
