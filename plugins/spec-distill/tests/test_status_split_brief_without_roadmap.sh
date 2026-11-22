@@ -14,6 +14,7 @@ unset DEVBREW_SPEC_DISTILL_DISABLE DEVBREW_SKIP_HOOKS CLAUDE_CONFIG_DIR
 SD="$ROOT/plugins/spec-distill/scripts"
 RS="${RS_SCRIPT:-$SD/roadmap_status.py}"
 CP="$SD/control_plane.py"
+FX="$ROOT/plugins/spec-distill/tests/fixtures"   # 결과물이 가리키는 brief · audit 본문
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
@@ -31,70 +32,8 @@ printf 'phase: 분해됨\n' > "$W/docs/superpowers/interviews/split/interview-st
   printf '## 지휘 절차\n\n1. fetch\n\n## 결정 기록\n\n쉬운 말 PR 은 이미 머지됐다 — 블록 없음.\n\n## 재분해 이력\n\n- 없음\n\n## 위험 번호표\n\n- K1 — 위험 — 숨은 가정: 가정 하나 — 근거 없음\n- K2 — 위험 — 실패 양식: 실패 하나 — 근거 없음\n'
 } > "$W/docs/superpowers/roadmaps/rm/roadmap.md"
 mkdir -p "$W/docs/br"
-cat > "$W/docs/br/b.md" <<'MD'
----
-type: interview-brief
-user_sourced_items:
-  - id: C1
-    statement: "가"
-  - id: D2
-    statement: "나"
----
-
-# brief
-
-## 0. 한눈에
-
-**결정 목록**
-
-- OQ1 [열림] — 하나
-
-## 1. Goal · Non-goal
-
-- Goal: 목표 문장.
-- Non-goal: 아닌 것.
-
-## 2. 제약
-
-- 🗣 confirmed **C1** — 가 ⟨S1⟩
-- ☑ confirmed **D2** — 나 ⟨S2⟩
-
-## 3. Open Questions
-
-- OQ1: 하나
-
-## 4. External Landscape
-
-- 바깥 사례 «k1» — [취함] [→ OQ1]
-
-## 5. 기각 · Blind Spots
-
-- 기각 — 다른 길 — verdict: refined — ST1 — 부착 1/1
-- 위험 — 숨은 가정: 가정 하나 — 근거 없음
-- 위험 — 실패 양식: 실패 하나 — 근거 없음
-- 위험 — 장치 | 장치 — RC1 (x.md) [RC1 → OQ1]
-
-## 6. 사용자 원문
-
-- **S1** 🗣 최초 요청:
-  > 처음 요청
-
-## 7. Next Action
-
-다음.
-MD
-cat > "$W/docs/br/b.audit.md" <<'MD'
-# audit
-
-## 6. 사용자 원문
-
-- **S2** 🗣 발화 (round 0):
-  > 둘째 말
-
-## 7. 확산 원자료
-
-- 없음
-MD
+cp "$FX/status-split-brief.md" "$W/docs/br/b.md"
+cp "$FX/status-split-brief.audit.md" "$W/docs/br/b.audit.md"
 g add -A -- docs && g commit -qm "split brief without roadmap" && g push -q origin main
 g remote set-head origin main
 [ ! -e "$W/$(dirname "$MISSING")" ] && ok "fixture: 결과물이 가리키는 로드맵 폴더가 없다" || no "fixture: 로드맵 폴더가 있다"
