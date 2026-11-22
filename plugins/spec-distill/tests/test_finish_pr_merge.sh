@@ -66,6 +66,10 @@ lacks '분해된 일 ①/② 만'                    # 앞 단계의 끝 질문 
 lacks '여기서 계속'                          # 같은 턴에 지휘자를 부르는 갈래가 없다
 has '머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다'
 has '/spec-distill:epic-conductor <roadmap-path>'
+# AC16 — PR 본문 펜스는 seed 경로를 상태 파일의 seed 값에서 읽고, framing 기록 경로에서 거꾸로 짓지 않는다.
+# (기록은 seed 이름에서 도출되므로 동작 픽스처로는 두 값을 가를 수 없다 — 펜스 글로 문다.)
+case "$pf" in *'RAW_A%.audit.md'*) no "AC16(부재): PR 펜스가 seed 경로를 기록 경로에서 짓는다" ;; *) ok "AC16(부재): PR 펜스가 seed 경로를 기록 경로에서 짓지 않는다" ;; esac
+case "$pf" in *'/^seed:/'*'.state.md'*) ok "AC16: PR 펜스가 상태 파일의 seed 값을 읽는다" ;; *) no "AC16: PR 펜스가 상태 파일의 seed 값을 읽지 않는다" ;; esac
 
 mkdir -p "$T/bin" "$T/remotes" || exit 1
 cat > "$T/bin/gh" <<'FAKE'
