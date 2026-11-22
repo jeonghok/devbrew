@@ -59,25 +59,35 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 묶음: R5.md
 - 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/
 
-### R6 — qg 답 기록 · 다른 팀 읽기 뒤처리
-- 의도: 앞 에픽들이 미룬 qg 안쪽 가장자리 가운데 intent-critic 의 답 기록과 다른 팀 읽기에 닿는 것을 닫는다
+### R6 — 읽히는 리뷰 글 · 답 이어지기
+- 의도: 지휘 중 에픽마다 도는 qg 리뷰의 결과와 질문을 사용자가 한눈에 읽게 하고 한 번 한 답이 다음 리뷰로 이어지게 한다
 - 범위:
-  - 한다: 답 자리를 옆 세션 과제 폴더에 맞추기 · 에픽 · 로드맵 리뷰의 답을 qg 가 알게 하는 입구 · 정체가 틀린 머리 아래 직접 쓴 답 · 답 커밋 뒤 질문 기록 실패의 표시 · 옆 로드맵 과제 파일(INTENT.md) 읽기 · 올리지 않은 로컬 브랜치의 인용 · 기록 브랜치의 기록 파일이 다른 팀 근거로 섞이는 것 · 시간 한도와 브랜치 목록 실패의 사유 문구
-  - 안 한다: qg 본문 흐름과 지휘 절차(R4) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · 쓴소리 리뷰어 본체
+  - 한다: 리뷰 결과 글과 질문 앞 글의 꼴(맥락 머리 · 질문 먼저 · 왜 묻나 한 줄 · 근거는 파일로)을 지휘자의 묻기와 qg 가 직접 묻는 틀에 맞추기 · 리뷰어의 「왜 묻나」 칸과 돌려주는 꼴 · 지휘자를 거친 답을 qg 에 입력으로 넘겨 근거가 같으면 다시 묻지 않기 · 지휘자의 리뷰 기록 파일이 다른 팀 근거로 섞이지 않게 하기
+  - 안 한다: 답 자리 · 직접 쓴 답 · 읽기 실패 문구 같은 남은 뒤처리와 리뷰가 낸 막는 지적(R8) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · qg 가 직접 내는 결과 보고의 꼴 · qg 본문 흐름(R4)
 - 의존: R4
-- 브랜치: feature/qg-answer-record-edges
+- 브랜치: feature/qg-readable-review
 - 묶음: R6.md
-- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md
+- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
 
 ### R7 — qg 경계 굳히기 — 심은 글 · 공유 스위트 잠금
 - 의도: 리뷰 대상에 심은 글이 qg 의 리뷰어 입력과 게시 확인을 속이지 못하게 하고 qg 의 테스트 실행이 공유 스위트 잠금을 지키게 한다
 - 범위:
   - 한다: 리뷰 대상 글이 리뷰어 입력의 칸 표지를 닫는 흉내 막기(판정에 드는 리뷰어를 포함한 모든 리뷰어의 칸) · 게시 한 번 검사가 심은 줄에 속지 않게 하기 · qg 의 테스트 실행이 다른 하위 agent 의 전체 스위트와 겹치지 않게 공유 스위트 잠금 지키기
-  - 안 한다: qg 본문 흐름과 지휘 절차(R4) · 답 기록과 다른 팀 읽기(R6) · 실행 격리
-- 의존: R4
+  - 안 한다: qg 본문 흐름과 지휘 절차(R4) · 리뷰 글의 꼴과 답 이어지기(R6) · 답 기록과 다른 팀 읽기 뒤처리(R8) · 실행 격리
+- 의존: R4, R6
 - 브랜치: feature/qg-planted-text-suite-lock
 - 묶음: R7.md
 - 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/agents/
+
+### R8 — qg 답 기록 · 다른 팀 읽기 뒤처리와 리뷰가 낸 막는 지적
+- 의도: 앞 에픽들이 미룬 qg 안쪽 가장자리 가운데 intent-critic 의 답 기록과 다른 팀 읽기에 닿는 것과 이 로드맵의 리뷰가 낸 막는 지적을 닫는다
+- 범위:
+  - 한다: 답 자리를 옆 세션 과제 폴더에 맞추기 · 정체가 틀린 머리 아래 직접 쓴 답 · 답 커밋 뒤 질문 기록 실패의 표시 · 옆 로드맵 과제 파일(INTENT.md) 읽기 · 올리지 않은 로컬 브랜치의 인용 · 시간 한도와 브랜치 목록 실패의 사유 문구 · R1 과 R2 리뷰가 낸 막는 지적(답 파일 라벨 칸 무력화 · 답 파일 읽기 상한 · 직접 쓴 답의 라벨 읽기 · 표지 없는 옛 원문 공시 · 머리를 못 읽은 문서 세기 · 다른 팀 문서 거부 사유 공시) · 테스트 품질 리뷰가 낸 테스트 틈
+  - 안 한다: 리뷰 글의 꼴과 답 이어지기(R6) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · qg 본문 흐름과 지휘 절차(R4) · 쓴소리 리뷰어 본체
+- 의존: R6
+- 브랜치: feature/qg-answer-record-edges
+- 묶음: R8.md
+- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/tests/, plugins/quality-gates/README.md
 
 ## 지휘 절차
 
@@ -136,6 +146,14 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 원문:
   - 「머지 앞으로 당겨」
   - 「머지 멈추고 그 에픽 안에서 고쳐」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-22 · R6 을 읽히는 리뷰 글 · 답 이어지기로 다시 잡고 원래 R6 의 남은 뒤처리 여섯과 리뷰가 낸 막는 지적 · 테스트 틈을 새 에픽 R8 로 뗀다 — R7 은 R6 과 같은 파일을 고쳐 R6 뒤로 묶는다
+- 바뀜: 바뀐 에픽 R6 · R7 · 새 에픽 R8 「리뷰 결과에대해서랑 ask question이라던가 내용을 내가 더 명확하게 읽을 수 있음 좋겠고」 · 「지휘가 길다보니까 에픽 단위로 리뷰를 해줘서 문제가 뒤로 가며 커지지 않았음 좋겠어 그러니 지휘쪽에 이거를 녹이려 하는거지 수동으로 접근도 하겠지만 지휘에서 할일 중 하나가 될거야」 · 「둘로 나누자」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「리뷰 결과에대해서랑 ask question이라던가 내용을 내가 더 명확하게 읽을 수 있음 좋겠고」
+  - 「지휘가 길다보니까 에픽 단위로 리뷰를 해줘서 문제가 뒤로 가며 커지지 않았음 좋겠어 그러니 지휘쪽에 이거를 녹이려 하는거지 수동으로 접근도 하겠지만 지휘에서 할일 중 하나가 될거야」
+  - 「둘로 나누자」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
