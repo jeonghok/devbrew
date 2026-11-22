@@ -963,7 +963,8 @@ sqmoved "$T/sq2" "$T/sq2-moved.md"
 # 양의 짝 — 출처 커밋이 남은 sq(같은 나무)에서는 같은 명령이 검사 불가를 내지 않는다
 assert_eq "$(sqcheck "$T/sq")" "0" "양의 짝(sq): check rc 0"
 assert_not_contains "$(cat "$T/chk.txt")" "검사 불가" "양의 짝(sq): check 에 「검사 불가」 가 없다"
-assert_not_contains "$(cat "$T/chk.txt")" "를 읽지 못해 기준" "대체 대조: 읽히는 출처 커밋(sq)에는 대체 대조가 돌지 않는다"
+assert_not_contains "$(cat "$T/chk.txt")" "를 읽지 못해 기준" "대체 대조: 출처 커밋이 읽혀도 기준 · HEAD 의 조상이 아니면(squash 뒤) 「읽지 못해」 라 하지 않는다"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${stamp:0:12} 가 기준 · HEAD 의 조상이 아니어서 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다" "대체 대조(sq): squash 뒤 남은 출처 커밋도 기준과 견준다 — 새 clone(sq2)과 판정이 같다"
 assert_eq "$(sqorig "$T/sq")" "0" "양의 짝(sq): original rc 0"
 assert_not_contains "$(cat "$T/out.txt")" "검사 불가" "양의 짝(sq): original 에 「검사 불가」 가 없다"
 assert_eq "$(ttc "$T/sq" "$T/sq.md" "${RD}sq")" "0" "양의 짝(sq): create 다시 rc 0"
@@ -1587,19 +1588,80 @@ cp "$T/src.o" "$SRCO"
 assert_eq "$(srccheck)" "0" "AC1 위조 출처: 되돌린 사본은 rc 0(양성 짝)"
 # 다른 brief — 같은 레포의 다른 인터뷰 결과물
 UL="$(grep -n '^  > 팀 폴더를 만들어 달라$' "$SRC/docs/iv/u-brief-interview.md" | cut -d: -f1)"
+[ -n "$UL" ] && ok "픽스처: 다른 brief 에 그 줄이 있다(${UL}행)" || no "픽스처: 다른 brief 에 그 줄이 없다"
 plant "$SRC" "$SRCO" docs/iv/u-brief-interview.md "$(gx "$SRC" rev-parse HEAD)" "$UL" "$UL"
 assert_eq "$(srccheck)" "1" "AC1 다른 brief: 다른 인터뷰 결과물의 §6 줄을 붙인 사본은 rc 1"
 assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/u-brief-interview.md · 사용자 원문 " "AC1 다른 brief: 그 구간의 자리를 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 다른 brief: 사유를 낸다"
 cp "$T/src.o" "$SRCO"
 b_src="$(snap "$SRC")"
 assert_eq "$( (cd "$SRC" && python3 "$RW" original --brief docs/iv/u-brief-interview.md --out "${RD}src") > "$T/out.txt" 2>&1; echo $?)" "1" "AC1 다른 brief · original: rc 1"
 assert_contains "$(cat "$T/out.txt")" "검사 실패" "AC1 다른 brief · original: 쓰기 전 검사에서 거절한다"
+assert_contains "$(cat "$T/out.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 다른 brief · original: 사유를 낸다"
 [ "$(snap "$SRC")" = "$b_src" ] && ok "AC1 다른 brief · original: 나무 그대로" || no "AC1 다른 brief · original: 나무가 바뀌었다"
+# 읽지 못한 커밋 — 없는 커밋을 출처로 적으면 대체 대조가 기준의 같은 파일과 견준다. 그 파일에도 출처 규칙이 걸린다
+NOSHA=0123456789abcdef0123456789abcdef01234567
+gx "$SRC" cat-file -e "${NOSHA}^{commit}" 2>/dev/null && no "픽스처: 없는 커밋이 있다" || ok "픽스처: ${NOSHA:0:12} 는 없는 커밋이다"
+plant_nosha() {  # plant_nosha <출처> <줄> — HEAD 의 그 줄을 붙인 뒤 그 구간의 출처 커밋을 없는 커밋으로 바꾼다
+  local h; h="$(gx "$SRC" rev-parse HEAD)"
+  plant "$SRC" "$SRCO" "$1" "$h" "$2" "$2"
+  sed "s/@${h} /@${NOSHA} /" "$SRCO" > "$T/src.nosha" && cp "$T/src.nosha" "$SRCO"
+  assert_eq "$(grep -c "@${NOSHA} " "$SRCO")" "1" "픽스처: 붙인 구간 하나의 출처 커밋을 없는 커밋으로 바꿨다(${1})"
+}
+plant_nosha docs/iv/u-brief-interview.md "$UL"
+assert_eq "$(srccheck)" "1" "AC1 읽지 못한 커밋 · 다른 brief: 기준에 있는 다른 인터뷰 결과물의 줄은 rc 1"
+assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 읽지 못한 커밋 · 다른 brief: 사유를 낸다"
+assert_not_contains "$(cat "$T/chk.txt")" " — 같다" "AC1 읽지 못한 커밋 · 다른 brief: 「같다」 알림이 없다"
+cp "$T/src.o" "$SRCO"
+TL="$(grep -n '^  > 팀 폴더를 만들어 달라$' "$SRC/docs/iv/t-brief-interview.md" | cut -d: -f1)"
+[ -n "$TL" ] && ok "픽스처: source_brief 에 그 줄이 있다(${TL}행)" || no "픽스처: source_brief 에 그 줄이 없다"
+plant_nosha docs/iv/t-brief-interview.md "$TL"
+assert_eq "$(srccheck)" "0" "AC1 읽지 못한 커밋 · source_brief: 기준의 같은 줄과 같으면 rc 0(양성 짝)"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${NOSHA:0:12} 를 읽지 못해 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다" "AC1 읽지 못한 커밋 · source_brief: 기준과 견줬다는 알림"
+cp "$T/src.o" "$SRCO"
 # 남는 것 — framing audit 꼴(머리 type interview-seed-audit)을 갖춘 새 파일은 지나간다(설계가 공시하는 경계 · framing 길의 양성 대조)
 printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n> 꾸민 framing 말\n' > "$SRC/docs/x/fake-seed.audit.md"
 gx "$SRC" add -- docs/x && gx "$SRC" commit -qm fake-seed
 plant "$SRC" "$SRCO" docs/x/fake-seed.audit.md "$(gx "$SRC" rev-parse HEAD)" 7 7
 assert_eq "$(srccheck)" "0" "남는 것(framing 꼴): 머리 type 이 interview-seed-audit 인 새 파일의 줄은 rc 0"
+cp "$T/src.o" "$SRCO"
+
+# ── 기준 · HEAD 의 조상이 아닌 출처 커밋 (보안 지적 AC2) ──────────────────────────────
+# 커밋이 읽혀도 기준 · 지금 HEAD 어느 쪽의 조상도 아니면 기준의 같은 파일 · 같은 줄과 견준다(출처 커밋을 읽지 못한 때와 같다).
+TB=docs/iv/t-brief-interview.md
+# 다른 ref 의 위조 — side 브랜치에서 source_brief 의 §6 한 줄을 바꿔 커밋한다. 브랜치는 남긴다(커밋이 읽힌다)
+gx "$SRC" checkout -qb side
+sed 's/^  > 팀 폴더를 만들어 달라$/  > 다른 ref 에 심은 말/' "$SRC/$TB" > "$T/side.md" && cp "$T/side.md" "$SRC/$TB"
+gx "$SRC" commit -qm side -- "$TB"
+side_commit="$(gx "$SRC" rev-parse HEAD)"
+gx "$SRC" checkout -q main
+KL="$(grep -n '^  > 다른 ref 에 심은 말$' "$T/side.md" | cut -d: -f1)"
+[ -n "$KL" ] && ok "픽스처: side 의 source_brief 에 바꾼 줄이 있다(${KL}행)" || no "픽스처: side 의 source_brief 에 바꾼 줄이 없다"
+gx "$SRC" cat-file -e "${side_commit}^{commit}" 2>/dev/null && ok "픽스처: side 커밋은 읽힌다" || no "픽스처: side 커밋이 없다"
+plant "$SRC" "$SRCO" "$TB" "$side_commit" "$KL" "$KL"
+assert_eq "$(python3 "$T/sections_match.py" "$SRCO" "$T/src")" "ok" "AC2 다른 ref 의 위조: 구간이 출처 커밋의 그 줄과 바이트가 같다(옛 검사라면 지나갈 사본)"
+assert_eq "$(srccheck)" "3" "AC2 다른 ref 의 위조: rc 3"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${side_commit:0:12} 가 기준 · HEAD 의 조상이 아니고 기준 refs/remotes/origin/HEAD 의 같은 줄과도 다르다" "AC2 다른 ref 의 위조: 기준과 견줘 다르다고 적는다"
+cp "$T/src.o" "$SRCO"
+# 다른 ref · 같은 바이트 — side2 에서 §6 밖의 줄만 바꾼다. 바뀌지 않은 §6 줄은 기준과 같아 지나간다
+gx "$SRC" checkout -qb side2
+sed 's/^- Goal: 팀 폴더를 세운다\.$/- Goal: 다른 ref 의 목표./' "$SRC/$TB" > "$T/side2.md" && cp "$T/side2.md" "$SRC/$TB"
+assert_eq "$(diff "$T/src/$TB" <(gx "$SRC" show "main:$TB") | grep -c '^<')" "1" "픽스처: side2 는 §6 밖의 한 줄만 바꿨다"
+gx "$SRC" commit -qm side2 -- "$TB"
+side2_commit="$(gx "$SRC" rev-parse HEAD)"
+gx "$SRC" checkout -q main
+plant "$SRC" "$SRCO" "$TB" "$side2_commit" "$TL" "$TL"
+assert_eq "$(srccheck)" "0" "AC2 다른 ref · 같은 바이트: rc 0"
+assert_contains "$(cat "$T/chk.txt")" "출처 커밋 ${side2_commit:0:12} 가 기준 · HEAD 의 조상이 아니어서 기준 refs/remotes/origin/HEAD 의 같은 줄과 견줬다 — 같다" "AC2 다른 ref · 같은 바이트: 기준과 견줘 같다는 알림"
+cp "$T/src.o" "$SRCO"
+# HEAD 의 조상 — 지금 브랜치에서 push 하지 않은 커밋으로 §6 한 줄을 바꾼다. 출처 커밋의 바이트로 견주고 대체 대조는 돌지 않는다
+sed 's/^  > 팀 폴더를 만들어 달라$/  > 아직 push 하지 않은 말/' "$SRC/$TB" > "$T/local.md" && cp "$T/local.md" "$SRC/$TB"
+gx "$SRC" commit -qm local -- "$TB"
+local_commit="$(gx "$SRC" rev-parse HEAD)"
+gx "$SRC" merge-base --is-ancestor "$local_commit" refs/remotes/origin/HEAD && no "픽스처: 그 커밋이 기준에 들었다" || ok "픽스처: 그 커밋은 기준의 조상이 아니다(push 하지 않았다)"
+plant "$SRC" "$SRCO" "$TB" "$local_commit" "$TL" "$TL"
+assert_eq "$(srccheck)" "0" "AC2 HEAD 의 조상: rc 0"
+assert_not_contains "$(cat "$T/chk.txt")" "의 같은 줄과 견줬다" "AC2 HEAD 의 조상: 대체 대조가 돌지 않는다"
 cp "$T/src.o" "$SRCO"
 
 finish

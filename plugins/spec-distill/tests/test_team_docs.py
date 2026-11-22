@@ -260,7 +260,7 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
                       "이미 옮긴 audit 를 ② 로 받아(링크로 같은 파일을 가리켜도) framing 구간이 건너뛰어진 사본처럼 이 brief 의 첫 구간 "
                       "바로 앞에 짝이 없으면 — 다시 부를 때마다 같은 ② 를 준다. 이 판정은 틀려도 멈추는 쪽으로만 틀린다.", s3)
         # 대체 대조의 사유 글 — 출처 쪽 말머리는 코드의 상수, 기준 쪽 글은 코드에 있는 글과 같은지 함께 본다
-        for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN):
+        for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN, TC._SRC_FOREIGN):
             self.assertIn("`%s`" % say[0], s3, say)
         source = (SCRIPTS / "team_check.py").read_text(encoding="utf-8")
         for words in ("의 같은 줄과 견줬다 — 같다", "의 같은 줄과도 다르다", "에도 그 파일이 없다", "의 그 파일도 읽지 못했다",

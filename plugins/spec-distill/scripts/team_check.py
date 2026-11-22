@@ -22,7 +22,7 @@ import roadmap_model as M  # noqa: E402
 import team_files as F  # noqa: E402
 import team_layout as L  # noqa: E402
 
-GIT_ALLOWED = frozenset({"cat-file", "log", "rev-parse"})
+GIT_ALLOWED = frozenset({"cat-file", "log", "merge-base", "rev-parse"})
 PREFIX = "[spec-distill] "
 
 
@@ -51,6 +51,14 @@ def _commit_of(top, ref: str):
     return sha if rc == 0 and re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", sha) else None
 
 
+def is_ancestor(top, commit: str, of: Optional[str]) -> bool:
+    """commit 이 of 의 조상(같은 커밋 포함)이다. of 가 None 이면 False."""
+    if of is None:
+        return False
+    rc, _out = git_bytes(top, "merge-base", "--is-ancestor", commit, of)
+    return rc == 0
+
+
 def _has_path(top, commit: str, rel: str) -> bool:
     """그 커밋의 트리에 그 경로의 항목이 있다(파일 바이트는 읽지 않는다)."""
     rc, _out = git_bytes(top, "rev-parse", "--verify", "--quiet", "%s:%s" % (commit, rel))
@@ -66,6 +74,7 @@ def _span(data: bytes, s) -> bytes:
 _SRC_UNREAD = ("를 읽지 못해", "의 파일을 읽지 못했고", "의 파일을 읽지 못했다")              # 커밋을 읽지 못함
 _SRC_ABSENT = ("에 그 파일이 없어", "에 그 파일이 없고", "에 그 파일이 없다")                # 커밋은 있고 경로가 없음
 _SRC_BROKEN = ("에서 그 파일을 읽지 못해", "에서 그 파일을 읽지 못했고", "에서 그 파일을 읽지 못했다")  # 경로는 있고 읽지 못함
+_SRC_FOREIGN = ("가 기준 · HEAD 의 조상이 아니어서", "가 기준 · HEAD 의 조상이 아니고", "가 기준 · HEAD 의 조상이 아니다")  # 읽히나 기준 · HEAD 밖
 
 # 원자료 사본 구간의 출처가 될 수 있는 파일 — 로드맵 source_brief · 그 audit · framing audit(머리 type 이 FRAMING_TYPE)
 FRAMING_TYPE = "interview-seed-audit"
@@ -87,8 +96,8 @@ def head_type(data: bytes) -> str:
 
 
 def source_problem(source: str, brief_rel: Optional[str], blob: Optional[bytes]) -> Optional[str]:
-    """구간 출처 경로의 문제 줄, 없으면 None. brief_rel 이 없으면 로드맵 검사가 따로 알린다. blob(출처 커밋의 그 파일)이 없으면
-    이어지는 대체 대조가 판정한다."""
+    """구간 출처 경로의 문제 줄, 없으면 None. brief_rel 이 없으면 로드맵 검사가 따로 알린다. blob 은 견주는 쪽 파일(출처 커밋 ·
+    대체 대조면 기준의 그 파일)이다 — 없으면 이어지는 대조가 판정한다."""
     if brief_rel is None or source in (brief_rel, audit_of(brief_rel)) or blob is None:
         return None
     if head_type(blob) == FRAMING_TYPE:
@@ -260,22 +269,26 @@ def check_tree(top: Path, team, base=None) -> tuple:
     # 8 · 9 가 같은 기준을 본다 — base 가 있으면 그것, 없으면 기본 브랜치
     ref = base or M.DEFAULT_REF
     commit = _commit_of(top, ref)
+    head = _commit_of(top, "HEAD")
 
-    # 8. 옮긴 구간이 출처와 바이트가 같다 — 출처 커밋의 파일을 읽지 못하면 기준의 같은 파일 · 같은 줄과 견준다
+    # 8. 옮긴 구간이 출처와 바이트가 같다 — 출처 커밋의 파일을 읽지 못하거나 그 커밋이 기준 · HEAD 의 조상이 아니면
+    #    기준의 같은 파일 · 같은 줄과 견준다
     for s in sections:
         where = "%s %d–%d행(출처 %s · %s %d–%d행)" % (team.original, s.start, s.start + s.last - s.first,
                                                    s.source, s.label, s.first, s.last)
         blob = show(top, s.commit, s.source)
-        problem = source_problem(s.source, brief_rel, blob)
-        if problem:
-            errors.append("%s: %s" % (where, problem))
-            continue
-        if blob is not None:
-            if _span(blob, s) != s.body:
+        reached = blob is not None and (is_ancestor(top, s.commit, commit) or is_ancestor(top, s.commit, head))
+        if reached:
+            problem = source_problem(s.source, brief_rel, blob)
+            if problem:
+                errors.append("%s: %s" % (where, problem))
+            elif _span(blob, s) != s.body:
                 errors.append("%s: 출처의 그 줄들과 바이트가 다르다" % where)
             continue
         lead = "%s: 출처 커밋 %s" % (where, s.commit[:12])
-        if _commit_of(top, s.commit) is None:
+        if blob is not None:
+            say = _SRC_FOREIGN
+        elif _commit_of(top, s.commit) is None:
             say = _SRC_UNREAD
         elif not _has_path(top, s.commit, s.source):
             say = _SRC_ABSENT
@@ -285,6 +298,10 @@ def check_tree(top: Path, team, base=None) -> tuple:
             unknown.append("%s %s — 기준(%s)을 몰라 같은 줄과 견주지 못했다" % (lead, say[2], ref))
             continue
         at_base = show(top, commit, s.source)
+        problem = source_problem(s.source, brief_rel, at_base)
+        if problem:
+            errors.append("%s: %s" % (where, problem))
+            continue
         if at_base is None and not _has_path(top, commit, s.source):
             unknown.append("%s %s 기준 %s 에도 그 파일이 없다" % (lead, say[1], ref))
         elif at_base is None:
