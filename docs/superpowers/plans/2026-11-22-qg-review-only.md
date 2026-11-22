@@ -14,7 +14,7 @@
 
 - 한 PR · 한 브랜치(`feature/qg-review-only`). qg 쪽 과제(Task 2–8)를 지휘 쪽(Task 9–12)보다 먼저 커밋한다(D12).
 - 새 스크립트 · 새 agent · 새 skill · qg 호출 줄의 새 인자 · `intent-return.md` 판 올림 없음(D13 · Non-goals). `contract` 는 2 그대로.
-- 리뷰어 정의는 보안 민감 파일이다 — `security-reviewer.md` 는 frontmatter `input_slots` 의 `iteration` 칸 선언만 지운다 · `code-recritic.md` 는 반복을 가리키는 낱말만 · `intent-critic.md` 는 `question` 칸 지시만. 규칙 · 임계치 · 처방 · 근거 규칙 · 상한 · 주입 경계 문장은 diff 0.
+- 리뷰어 정의는 보안 민감 파일이다 — `security-reviewer.md` 는 frontmatter `input_slots` 의 `iteration` 칸 선언만 지운다 · `code-recritic.md` 는 반복을 가리키는 낱말만 · `intent-critic.md` 는 `question` 칸 지시와 출력 예시의 `question` 줄. 규칙 · 임계치 · 처방 · 근거 규칙 · 상한 · 주입 경계 문장은 diff 0.
 - 고치기 반복은 사용자가 명시 결정한 제거라 deprecation 창 없이 지우고 quality-gates `CHANGELOG.md` Removed 에 적는다 — quality-gates major. spec-distill minor. 번호는 **구현을 시작할 때의 origin/main 판 위**로 적고(지금 기준 quality-gates 15.3.1 → 16.0.0 · spec-distill 8.30.0 → 8.31.0) 머지 직전에 지휘자가 다시 정한다.
 - 은퇴하는 kill switch 없음(Task 1 이 다시 확인).
 - 플러그인 경계: spec-distill 은 quality-gates 를 skill 호출로만 부른다. quality-gates 가 없으면 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」 로 알리고 진행한다.
@@ -157,7 +157,7 @@
 **AC:** AC7 · AC20(리뷰어 정의 몫).
 
 **Files:**
-- Modify: `plugins/quality-gates/agents/security-reviewer.md`(frontmatter L19-21 만) · `plugins/quality-gates/agents/code-recritic.md`(L11 · L46 의 「iteration」 낱말만) · `plugins/quality-gates/agents/intent-critic.md`(L154-156 `question` 칸 지시만) · `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(Step 3 보안 리뷰어 dispatch 의 `iteration: <iteration>${ITERATION}</iteration>` 줄과 `description: "Security review (qg iter N)"` 의 `iter N`)
+- Modify: `plugins/quality-gates/agents/security-reviewer.md`(frontmatter L19-21 만) · `plugins/quality-gates/agents/code-recritic.md`(L11 · L46 의 「iteration」 낱말만) · `plugins/quality-gates/agents/intent-critic.md`(L154-156 `question` 칸 지시와 출력 예시의 `question` 줄 셋) · `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(Step 3 보안 리뷰어 dispatch 의 `iteration: <iteration>${ITERATION}</iteration>` 줄과 `description: "Security review (qg iter N)"` 의 `iter N`)
 - Test: `shared/tests/test_agent_input_slots.sh`(그대로 돌림) · `plugins/quality-gates/tests/test_code_recritic_frontmatter.sh`(L51 · L61) · `plugins/quality-gates/tests/test_intent_critic.py`(리뷰어 정의 문장 단언이 있으면)
 
 **Interfaces:**

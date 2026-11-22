@@ -2974,6 +2974,18 @@ class TestPersona(unittest.TestCase):
         self.assertEqual(body.count(want), 1)
         self.assertEqual(body.count("한두 문장"), 0)
 
+    def test_output_example_questions_are_one_sentence(self):
+        """출력 예시의 question 값은 모두 질문 한 문장이다 — 예시는 정확히 셋(공허 통과 방지)."""
+        import re
+        _fm, body = self._split()
+        values = re.findall(r'^\s+question: "([^"\n]*)"\s*$', body, re.M)
+        self.assertEqual(len(values), 3, values)
+        for value in values:
+            with self.subTest(question=value):
+                self.assertEqual(value.count("?"), 1)
+                self.assertTrue(value.endswith("?"), value)
+                self.assertNotIn(".", value)
+
     def test_frontmatter_is_read_only_and_unpinned(self):
         fm, _body = self._split()
         lines = fm.split("\n")
