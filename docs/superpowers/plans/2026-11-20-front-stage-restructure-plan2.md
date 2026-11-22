@@ -24,7 +24,7 @@
 - **하위 명령 이름.** `state_path.py interview-state` 하위 명령은 `context-state` 로 바꾼다 — 하위 명령 글자가 옛 종류 글자와 같아 AC23 의 예외(템플릿 · 스크립트 파일 이름)에 들지 않는다. 부르는 skill 글과 테스트를 같은 커밋에서 바꾸고 옛 이름은 받지 않는다.
 - **낱말(AC40 의 계획 2 몫).** 계획 1 의 「낱말 대응」 그대로 — 단계를 가리키는 「인터뷰」 는 그 단계 이름(조사 · 결과물 쪽 「컨텍스트 쌓기」, 분해 · 로드맵 쪽 「로드맵 잡기」), 「인터뷰 폴더」 는 「의도 폴더」, 홀로 쓰인 영어 `interview` 가 단계를 가리키면 `context-build` · `roadmap-draft`. 범위는 spec-distill 의 `scripts/`(문자열 · 주석 — 식별자 제외)와 quality-gates 의 추적 파일(`tests/` · `CHANGELOG.md` 제외)이다. 테스트와 픽스처는 락의 범위 밖이다 — 바뀐 출력 글자를 무는 테스트만 그 글자를 따라 고친다.
 - **보안 리뷰 묶음.** 리뷰어 프로필(`references/docreview-profiles/*.md`)과 agent 정의(`plugins/*/agents/*.md` · `shared/docreview/agents/*.md`)의 편집은 이 계획 안에서 한 커밋(과제 7)에만 있다 — 두 플러그인의 것을 함께 묶는다. 규칙을 지우거나 느슨하게 하지 않는다. PR 본문이 보안 리뷰 대상임을 밝힌다(AC36).
-- **경로 게이트.** 경로 검사(`repo_defaults.py check-path` · 커밋 펜스 · PR 파일 세기 · 상태 자리 계산)는 설계 3 이 정한 하나만 넓힌다 — 옛 폴더 바로 아래의 옛 꼴 이름(대응표의 옛 파일 이름 끝). 링크 · 작업 트리 밖 거절은 두 폴더에 같다. PR 본문에 「경로 게이트를 넓히는 편집」 으로 밝힌다. 그 밖에는 넓히지 않는다.
+- **경로 게이트.** 경로 검사(`repo_defaults.py check-path` · 커밋 펜스 · PR 파일 세기 · 상태 자리 계산)는 설계 3 이 정한 하나만 넓힌다 — 옛 폴더 바로 아래의 옛 꼴 이름(대응표의 옛 파일 이름 끝). 사용자 결정 2026-11-22(설계문서 결정 기록 끝 줄 — 「이름 꼴로 가른다」, 설계 3 「경로 검사」 의 ① 과 AC25 끝 문장을 다시 정했다): 진행 중인지는 가리지 않는다 — 끝난 옛 기록의 옛 꼴 파일도 통과한다. 링크 · 작업 트리 밖 거절은 두 폴더에 같다. PR 본문에 「경로 게이트를 넓히는 편집」 으로 밝힌다. 그 밖에는 넓히지 않는다.
 - **편집 자리 찾기.** 기본 브랜치와 에픽 브랜치는 이 계획을 쓴 뒤에도 움직인다(계획 1 의 통합 리뷰 · 옆 로드맵 E1 의 머지). 과제의 편집 자리는 줄 번호가 아니라 그때 grep 해서 찾는 글자로 적었다. 과제마다 고치기 직전에 대상 목록을 다시 낸다.
 - **셸.** 새 셸 테스트와 펜스는 macOS `/bin/bash` 3.2 에서 돈다 — `$var` 바로 뒤에 한글이 오면 `${var}` 로 쓴다. heredoc 을 `$( )` 안에 두지 않는다. 새 셸 테스트는 `chmod +x` 하고 `git ls-files -s` 로 100755 를 본다. Python 은 `encoding="utf-8"` 를 명시하고 `python3` 리터럴로 부른다. 변이 시험 전에는 커밋하고, 복원은 `git checkout HEAD -- <파일>` 뒤 `git diff HEAD --stat` 이 빈지 본다. Python 변이는 `PYTHONDONTWRITEBYTECODE=1` 로 돌린다. Bash 도구의 셸은 zsh 다 — 파이프의 rc 가 필요하면 `bash -c` 안에서 잡는다.
 - **전체 스위트**는 이 줄로만 돌린다(공유 잠금 — 못 잡으면 주인 · 잡은 시각을 보고한다):
@@ -84,7 +84,7 @@
 - Modify: (합치기 커밋 · 예약 표가 달라졌을 때의 이 계획 표만)
 
 **Interfaces:**
-- Produces: `recheck.md` 의 절 — `## 근거 대조` · `## 옛 글자를 쥔 스크립트` · `## 옛 글자를 쥔 글` · `## 옛 폴더를 읽는 자리` · `## 결과물 경로를 짓는 펜스` · `## 판결 글자를 읽는 곳` · `## 옛 글자를 무는 테스트` · `## 옆 로드맵 예약` · `## AC22 기준점`. 과제 2–12 가 읽는다.
+- Produces: `recheck.md` 의 절 — `## 근거 대조` · `## 옛 글자를 쥔 스크립트` · `## 옛 글자를 쥔 글` · `## 옛 폴더를 읽는 자리` · `## 결과물 경로를 짓는 펜스` · `## 판결 글자를 읽는 곳` · `## 옛 글자를 무는 테스트` · `## 옆 로드맵 예약` · `## AC22 기준점` · `## 닿는 선택 지적`. 과제 2–12 가 읽는다.
 
 - [ ] **Step 1: 기본 브랜치를 합친다** — `git fetch origin` 뒤 `git merge --no-ff origin/<기본 브랜치>`(이름은 `python3 plugins/spec-distill/scripts/repo_defaults.py default-branch --root .`). 이 계획을 에픽 브랜치(`feature/front-stage-restructure`)가 아닌 브랜치에서 시작했으면 `origin/feature/front-stage-restructure` 도 합친다(계획 1 의 통합 리뷰 고침이 거기 있다). 충돌이 나면 `git merge --abort` 하고 멈춰 보고한다. 합친 뒤 계획 1 의 산출물이 있는지 본다 — `plugins/spec-distill/skills/context-build/SKILL.md` · `skills/roadmap-draft/SKILL.md` · `scripts/roadmap_draft_entry.py` · `tests/test_stage_words.sh` 가 없으면 멈춘다. 커밋 메시지: `chore(merge): 기본 브랜치를 F5 브랜치에 합친다` + 끝 줄들.
 
@@ -107,6 +107,8 @@
 - [ ] **Step 4: 옆 로드맵 예약을 다시 읽는다** — 그때의 기본 브랜치의 옆 로드맵을 읽어 남은 에픽의 `경로 예약:` 과 이 계획이 고치는 파일의 교집합을 낸다(`python3 plugins/spec-distill/scripts/roadmap_status.py docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/roadmap.md` 로 머지된 에픽을 가른다). 위 「옆 로드맵이 예약한 파일」 표와 다르면 표를 고치는 커밋(`docs(plan): …`)을 하고 지휘자에게 보고한다. E1 이 그 사이 머지됐으면 `team_write.py` · `control_plane.py` 의 grep 글자가 그대로인지 본다.
 
 - [ ] **Step 5: AC22 기준점을 적는다** — `git rev-parse HEAD`(합친 뒤, 과제 2 전)를 `## AC22 기준점` 에 적는다. 과제 12 가 이 커밋의 스크립트와 그때의 스크립트로 같은 입력을 돌려 견준다.
+
+- [ ] **Step 6: 닿는 선택 지적을 뽑는다** — 지휘 세션의 대조표 `/Users/jeonghokim/Downloads/devbrew/.claude/spec-distill/conductor/2026-11-14-framing-interview-constraint-audit-brief/files/tmp/qg-fix-triage/triage.md`(품질 리뷰가 낸 선택 지적을 기준 나무에 대조한 표)에서, 이 계획이 고치는 파일(과제 2–11 의 Files)에 걸리고 판정이 `남아 있음` 인 **선택 지적** 행을 `## 닿는 선택 지적` 에 번호 · 파일 · 자리 · 한 줄 요지로 옮긴다. 막는 지적 · 낮춘 지적 행은 옮기지 않는다 — 따로 도는 브랜치 `fix/qg-review-findings` 가 고친다. 파일이 없으면 이 걸음을 건너뛰고 그 사실을 그 절에 적는다. 뒤 과제는 이 절에서 **자기가 고치는 줄이나 바로 그 함수 · 문단에 걸린 것만** 함께 고친다 — 일부러 찾아가 고치지 않는다(사용자 결정 「막는 지적 · 낮춘 지적만 고치고 선택 지적은 닿는 것만」). 고친 번호는 그 과제의 커밋 본문에 적는다.
 
 ---
 
@@ -213,8 +215,9 @@ Run: `python3 plugins/spec-distill/tests/test_legacy_names.py` → Expected: FAI
   - 옛 키는 레포 층에서만 받는다: `check_layer("repo")` 가 `OLD_SETTING_KEY` 를 모르는 키로 막지 않는다. 로드맵 층에서는 지금처럼 `layer_key` 오류다.
   - `merge_layers` 결과에 `values["intent_dir"]`(레포 층의 `intent_dir`, 없으면 레포 층의 `interview_dir`, 없으면 `DEFAULT_DIR`) · 새 최상위 키 `"old_intent_dir"`(레포 층의 `interview_dir`, 없으면 `OLD_DEFAULT_DIR` — 폴더 규칙 `_folder` 로 검사, 깨지면 None 과 `errors` 한 줄) · 옛 키가 있으면 `notices` 에 `setting_notice(...)` 한 줄. `sources["intent_dir"]` 은 옛 키에서 읽었으면 「레포 설정(옛 키 interview_dir)」.
   - 함수 `intent_dirs(result: dict) -> tuple[str | None, str | None]` — (새 폴더, 옛 폴더). 두 값이 같을 수 있다.
-  - `check-path` 의 키 선택지는 `("roadmaps_dir", "intent_dir")` — `interview_dir` 인자는 받지 않는다(argparse 오류 rc 2). `intent_dir` 판정: 부모 폴더가 새 폴더면 지금처럼 받는다. 아니고 부모 폴더가 옛 폴더이고 `is_old_name(basename)` 이면 받고 stderr 에 `[spec-distill] 옛 의도 폴더의 옛 꼴 파일이라 받았다: <레포 상대 경로>` 한 줄. 그 밖에는 지금의 거절 사유 줄에 ` — 옛 의도 폴더(<옛 폴더>)는 옛 꼴 이름(…-interview.md · .state.md · .audit.md)만 받는다` 를 붙여 rc 3. 대소문자 · 레포 밖 · 링크 규칙은 두 폴더에 같다(`judge_path` 를 두 번 부른다).
+  - `check-path` 의 키 선택지는 `("roadmaps_dir", "intent_dir")` — `interview_dir` 인자는 받지 않는다(argparse 오류 rc 2). `intent_dir` 판정: 부모 폴더가 새 폴더면 지금처럼 받는다. 아니고 부모 폴더가 옛 폴더이고 `is_old_name(basename)` 이면 알림 없이 받는다(본 사람이 할 일이 없는 줄이라 내지 않는다 — 이 넓힘은 PR 본문에 밝힌다). 그 밖에는 지금의 거절 사유 줄에 ` — 옛 의도 폴더(<옛 폴더>)는 옛 꼴 이름(…-interview.md · .state.md · .audit.md)만 받는다` 를 붙여 rc 3. 대소문자 · 레포 밖 · 링크 규칙은 두 폴더에 같다(`judge_path` 를 두 번 부른다).
   - `get intent_dir` 은 새 폴더를 낸다. `get` 선택지에 `interview_dir` 는 없다.
+  - 사용자 결정 2026-11-22(설계문서 결정 기록 끝 줄): 진행 중인지는 가리지 않는다 — 끝난 옛 기록의 옛 꼴 파일도 통과한다(설계 3 「경로 검사」 의 ① 과 AC25 끝 문장을 다시 정한 결정 — 판정은 위의 「옛 폴더 바로 아래 + 옛 꼴 이름」 그대로).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다(계획이 적은 코드 — `test_repo_defaults.py` 의 임시 레포 도우미를 쓴다)**
 
@@ -227,7 +230,7 @@ def test_old_key_in_roadmap_layer_is_layer_key(self): ...    # 로드맵 머리�
 def test_broken_old_key_is_error(self): ...                  # interview_dir: /abs → errors 한 줄 · old_intent_dir None
 def test_keys_count_unchanged(self): ...                     # len(KEYS) == 15 · "intent_dir" in KEYS · "interview_dir" not in KEYS
 def test_check_path_new_folder_any_name(self): ...           # docs/superpowers/intent/notes.md → rc 0
-def test_check_path_old_folder_old_name(self): ...           # docs/superpowers/interview/2026-01-01-x-interview.state.md → rc 0 · stderr "옛 꼴 파일이라 받았다"
+def test_check_path_old_folder_old_name(self): ...           # docs/superpowers/interview/2026-01-01-x-interview.state.md → rc 0 · stderr 에 받았다는 알림 줄이 없다("값의 출처" 줄 밖은 빔)
 def test_old_folder_rejects_new_form_and_other(self): ...    # 두 폴더가 다를 때 옛 폴더의 x-context.md · notes.md → rc 3 · 사유에 두 폴더 이름
 def test_old_key_only_same_folder_accepts_both(self): ...    # interview_dir: docs/a/ → docs/a/x-context.md · docs/a/x-interview.md 둘 다 rc 0
 def test_check_path_rejects_old_key_argument(self): ...      # check-path interview_dir … → rc 2
@@ -242,7 +245,7 @@ Run: `python3 plugins/spec-distill/tests/test_repo_defaults.py` → Expected: �
 
 - [ ] **Step 4: 통과를 본다** — `python3 plugins/spec-distill/tests/test_repo_defaults.py` · `bash plugins/spec-distill/tests/test_repo_defaults_git.sh` · `bash plugins/spec-distill/tests/test_parallel_recommend_docs.sh` · `bash plugins/spec-distill/tests/test_workspace_invariance.sh`. Expected: 통과(이 과제 뒤 `get interview_dir` 를 부르는 skill 펜스는 과제 6 까지 깨진 채다 — 펜스를 뽑아 돌리는 테스트 가운데 그 줄을 지나는 것이 과제 6 전에 실패하면 「과제 6 이 뒤집는다」 고 기록하고 넘어간다).
 
-- [ ] **Step 5: 변이로 이빨을 본다** — 커밋 뒤: (뒤집기) 둘 다 있을 때 옛 키가 이기게 · (지우기) 옛 폴더 받기 갈래 · (더하기) 옛 폴더에서 `is_old_name` 없이 모두 받기 · (꼴 바꾸기) 알림을 `warnings` 로 옮기기. 각각 시험 실패.
+- [ ] **Step 5: 변이로 이빨을 본다** — 커밋 뒤: (뒤집기) 둘 다 있을 때 옛 키가 이기게 · (지우기) 옛 폴더 받기 갈래 · (더하기) 옛 폴더에서 `is_old_name` 없이 모두 받기 · (꼴 바꾸기) 설정 키 알림(`setting_notice`)을 `warnings` 로 옮기기 · (더하기) 옛 폴더의 옛 꼴 파일을 받을 때 stderr 에 한 줄을 내기. 각각 시험 실패.
 
 - [ ] **Step 6: 커밋** — `git commit -m "feat(spec-distill): 설정 키를 intent_dir 로 바꾸고 옛 키를 읽으며 경로 검사가 옛 폴더의 옛 꼴 파일을 받는다"`. 커밋 본문에 「경로 게이트를 넓히는 편집 — 옛 의도 폴더의 옛 꼴 이름만」 을 적는다.
 
@@ -747,10 +750,10 @@ Run: `TMPDIR=<무시되는 자리> bash <무시되는 자리>/ac22_compare.sh "$
 
 - [ ] **Step 3: 기본 브랜치를 다시 합친다** — 과제 1 뒤 기본 브랜치가 움직였으면 `git merge --no-ff origin/<기본 브랜치>`(충돌이면 멈춰 보고). 합친 뒤 두 플러그인의 판을 다시 견준다(Global Constraints 「판」). 옆 로드맵 E1 이 머지됐으면 `team_write.py` · `control_plane.py` 의 이 계획 편집이 살아 있는지 본다.
 
-- [ ] **Step 4: 마지막 전체 리뷰에 AC 목록을 싣는다** — 고른 실행 방식의 마지막 전체 리뷰(SDD 의 최종 리뷰 또는 Native 의 한 번 리뷰)에 설계문서 `## Acceptance Criteria` 의 이 계획 몫(AC20–AC27 · AC36 · AC40)을 글자 그대로 싣고, 리뷰가 AC 마다 한 줄씩 `AC20: 구현됨 — <근거>` 꼴(판정은 구현됨 · 미룸 · 빠짐 가운데 하나)로 보고하게 한다. AC36 · AC40 은 이 계획 몫만 판정한다(계획 1 · 3 · 4 몫은 「다른 계획」). 리뷰에 끝에서 끝 흐름을 따로 물어라 — ① 옛 seed(옛 폴더)로 새 컨텍스트 쌓기 → 상태 파일 · 결과물 새 폴더 새 꼴 → 커밋 펜스가 다섯 파일 → 로드맵 잡기 진입(이른 경로 확인 포함) → PR 파일 세기 ② 옛 꼴 상태 파일로 이어 감 → 결과물이 옛 폴더 옛 줄기 · 새 `type:` → 리뷰 넘김 펜스의 PAYLOAD · reviewing-brief 의 `STATE` → 커밋. 과제 사이 이음매(과제 3 의 `check-path intent_dir` 와 과제 6 의 펜스 · 과제 4 의 판결 글자와 skill 글 · 과제 10 의 락과 과제 7 · 8 의 글)를 따로 물어라. 계획이 적은 테스트 · 락 코드(과제 2 · 5 · 10 · 12)는 「계획이 적은 코드」 라고 리뷰어에게 알린다. 보고를 git 이 추적하지 않는 파일에 적는다.
+- [ ] **Step 4: 마지막 전체 리뷰에 AC 목록을 싣는다** — 고른 실행 방식의 마지막 전체 리뷰(SDD 의 최종 리뷰 또는 Native 의 한 번 리뷰)에 설계문서 `## Acceptance Criteria` 의 이 계획 몫(AC20–AC27 · AC36 · AC40)을 글자 그대로 싣고, 리뷰가 AC 마다 한 줄씩 `AC20: 구현됨 — <근거>` 꼴(판정은 구현됨 · 미룸 · 빠짐 가운데 하나)로 보고하게 한다. AC36 · AC40 은 이 계획 몫만 판정한다(계획 1 · 3 · 4 몫은 「다른 계획」). AC25 는 사용자 결정 2026-11-22(설계문서 결정 기록 끝 줄 — 「이름 꼴로 가른다」: 진행 중인지는 가리지 않고 끝난 옛 기록의 옛 꼴 파일도 통과한다)에 대어 판정하게 한다 — 그 결정이 AC25 끝 문장을 다시 정했다. 리뷰에 끝에서 끝 흐름을 따로 물어라 — ① 옛 seed(옛 폴더)로 새 컨텍스트 쌓기 → 상태 파일 · 결과물 새 폴더 새 꼴 → 커밋 펜스가 다섯 파일 → 로드맵 잡기 진입(이른 경로 확인 포함) → PR 파일 세기 ② 옛 꼴 상태 파일로 이어 감 → 결과물이 옛 폴더 옛 줄기 · 새 `type:` → 리뷰 넘김 펜스의 PAYLOAD · reviewing-brief 의 `STATE` → 커밋. 과제 사이 이음매(과제 3 의 `check-path intent_dir` 와 과제 6 의 펜스 · 과제 4 의 판결 글자와 skill 글 · 과제 10 의 락과 과제 7 · 8 의 글)를 따로 물어라. 계획이 적은 테스트 · 락 코드(과제 2 · 5 · 10 · 12)는 「계획이 적은 코드」 라고 리뷰어에게 알린다. 보고를 git 이 추적하지 않는 파일에 적는다.
 
 - [ ] **Step 5: 전체 스위트를 돈다** — Global Constraints 의 잠금 줄로, 마지막 리뷰와 그 고침 뒤에 한 번. 기본 브랜치와의 대조는 지휘자가 한다 — 실패 목록을 그대로 보고한다.
 
 - [ ] **Step 6: 미룸을 올리고 대조를 돌린다** — 판정이 미룸 · 빠짐인 AC 와 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표(항목 · 이유 · 받는 곳)에 올리는 커밋을 한다(`docs(spec): …`). 설계 미룸 표의 「an context brief」 행과 「로드맵 잡기 진입이 … 일찍 보지 않는다」 행은 과제 7 · 6 이 처리했으니 그 행의 받는 곳 칸을 「계획 2 — 처리함(<커밋>)」 으로 고친다. PR 을 만들기 전에 `python3 /Users/jeonghokim/.claude/plugins/cache/devbrew/spec-distill/8.25.0/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-20-front-stage-restructure-design.md <보고 파일 경로>` 를 돌려 경고를 사용자에게 보인다.
 
-- [ ] **Step 7: PR 본문 재료를 모은다** — 보안 리뷰 대상(과제 7 의 앞뒤 규칙 대조 — 두 플러그인) · 경로 게이트를 넓힌 편집(과제 3 — 옛 의도 폴더의 옛 꼴 이름만) · AC22 대조 결과 · AC27 빈 diff · 옆 로드맵에 알린 파일과 줄 · 계획이 정한 것(하위 명령 이름 · 두 폴더의 이어 가기 후보 · 상태줄 칸 이름 · 이른 진입 확인 · 「로드맵 다시 잡기」 라벨). push 와 PR 은 지휘자가 한다.
+- [ ] **Step 7: PR 본문 재료를 모은다** — 보안 리뷰 대상(과제 7 의 앞뒤 규칙 대조 — 두 플러그인) · 경로 게이트를 넓힌 편집(과제 3 — 옛 의도 폴더의 옛 꼴 이름만) · AC22 대조 결과 · AC27 빈 diff · 옆 로드맵에 알린 파일과 줄 · 계획이 정한 것(하위 명령 이름 · 두 폴더의 이어 가기 후보 · 상태줄 칸 이름 · 이른 진입 확인 · 「로드맵 다시 잡기」 라벨) · 닿는 선택 지적(과제 1 `## 닿는 선택 지적` 가운데 고친 번호와, 닿았지만 고치지 않은 번호와 그 이유 — 마지막 보고에도 같은 목록을 싣는다). push 와 PR 은 지휘자가 한다.
