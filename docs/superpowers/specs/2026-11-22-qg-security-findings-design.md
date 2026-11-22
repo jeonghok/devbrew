@@ -111,6 +111,10 @@ next_phase: superpowers:writing-plans
 
 작성자 제안(사용자가 줄마다 확인하지 않은 것): HEAD 의 조상인 출처 커밋도 받는 것 · 열쇠에 영문 식별자 꼴을 받는 것 · 목록을 `show` 에 두는 것 · patch 판 올림.
 
+## 지휘 기록
+
+- spec 승인 · 2026-11-22 · 「승인 — 계획 담당자에게 (권장)」 — 가벼운 꼴이라 설계 리뷰 라운드와 spec 승인 앞 품질 게이트는 돌지 않았다. 머지 전 스위트 대조와 품질 게이트 리뷰가 본다.
+
 ## Metadata
 
 - 로드맵의 에픽이 아니다 — 「지휘 맥락 경제」 로드맵(`docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/roadmap.md`)의 머지된 PR 에 건 리뷰의 후속 고침이라 머리말에 `source_interview` · `roadmap` 을 두지 않는다.
