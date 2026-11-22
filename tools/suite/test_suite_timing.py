@@ -195,7 +195,7 @@ class PeerCountTests(unittest.TestCase):
         self.assertIn("suite_peers: 프로세스 표를 읽지 못했다 — 표 파일을 열지 못했다: " + missing, r.stderr)
 
     def test_interval_not_positive_refused(self):
-        for v in ("0", "-1"):
+        for v in ("0", "-1", "nan"):
             r = run_peers(["--wait", "1", "--interval", v], self.ps_file(""))
             self.assertEqual(r.returncode, 2, v)
 
@@ -310,7 +310,8 @@ class PeerCountTests(unittest.TestCase):
             self.assertIn(str(read_pid(cpid)), listed)
             for f in files:
                 self.assertNotIn(str(read_pid(f)), listed, (out, f))
-            self.assertNotIn(str(read_pid(files[0])), listed_a)
+            for f in files:
+                self.assertNotIn(str(read_pid(f)), listed_a, (out_a, f))
         finally:
             open(release, "w").close()
             if proc is not None and proc.poll() is None:

@@ -112,7 +112,7 @@ def main(argv=None):
     mode.add_argument("--wait", type=float, metavar="S")
     ap.add_argument("--interval", type=float, default=15.0)
     a = ap.parse_args(argv)
-    if a.interval <= 0:
+    if not (a.interval > 0):  # nan 도 거른다
         ap.error("--interval 은 0 보다 커야 한다")
 
     if a.stamp:
