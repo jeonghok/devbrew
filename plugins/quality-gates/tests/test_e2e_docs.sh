@@ -98,7 +98,7 @@ case_M3_M5_M8_e1_e4_wording() {
   assert_contains "$s" '- 두 줄이 없고 `boot rc=5` — 부팅이 실패한 뒤 boot 자신의 정리(stop)도 실패했다.' "M3: boot rc=5 갈래가 있다"
   assert_contains "$s" '남은 앱은 사람이 직접 내려야 한다고 알린다(기록 `e2e-app.pgid` 는 남는다).' "M3: rc=5 는 남은 앱을 사람에게 알린다"
   assert_contains "$s" '호출의 timeout 은 부팅 상한보다 길게 준다: 기본이면 150000 ms, `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 이 있으면' "M5: E1 의 Bash 호출 timeout 이 부팅 상한보다 길다"
-  assert_contains "$s" '- **다시 걷기** — iteration 을 쓰지 않는다. 시나리오가 쓴 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터' \
+  assert_contains "$s" '- **다시 걷기** (pass · fail · 미확인 행) — 시나리오가 쓴 E1 펜스(부팅 펜스, CLI 직접 실행이면 E1 (CLI 직접 실행) 펜스)부터' \
     "M8: 다시 걷기가 CLI 직접 실행 펜스도 이름으로 가리킨다"
 }
 
@@ -334,20 +334,19 @@ case_AC28_e2e_scenarios_are_multi_select() {
   assert_contains "$q" '고르지 않은 시나리오의 명령' "§2: 고르지 않은 시나리오의 명령은 실행하지 않는다"
   assert_contains "$w" '고른 시나리오를 번호 순으로 하나씩 걷는다 — 시나리오마다 SKILL 의 E1~E5 를 돌고 걷기마다 게이트를 띄운다.' \
     "§5: 번호 순 · 시나리오마다 E1~E5 · 걷기마다 게이트"
-  assert_contains "$w" '루프가 돌아온 뒤 고른 시나리오 전부를 1번부터 다시 걷는다' "§5: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다"
-  assert_contains "$w" '남은 시나리오를 걷지 않고 끝낸다' "§5: 지금 판정으로 끝내기 · 멈추기면 남은 시나리오를 걷지 않는다"
+  assert_contains "$w" '- fail 로 둔다 · 무효로 남긴다 · kill switch(exit 3) — 남은 시나리오를 걷지 않고 끝낸다.' "§5: fail 로 둔다 · 무효로 남긴다면 남은 시나리오를 걷지 않고 끝낸다"
+  assert_contains "$w" '- 다시 걷기 — 같은 시나리오를 다시 걷는다.' "§5: 다시 걷기는 같은 시나리오를 다시 걷는다"
   assert_file_grep "$REF" 'fail` > `미확인` > `pass`' "여러 시나리오의 e2e 칸은 가장 나쁜 결과"
   assert_contains "$g" '여러 시나리오를 걸었으면 판정 줄의 e2e 칸은 가장 나쁜 결과다 — `fail` > `미확인` > `pass`.' \
     "§6: 가장 나쁜 결과 문장이 §6 안에 통째로 있다"
   assert_contains "$g" '뒤집은 걷기를 뒤집기 전 판정안으로 되돌려 다시 합쳤을 때 칸이 달라지면' "§6: 「사람이 뒤집음」은 뒤집기가 칸을 바꿨을 때다"
-  # Task 8 의 상한 규칙이 여러 시나리오 문면 옆에 그대로 남았다(양성 짝).
-  assert_contains "$w" '「기타」 칸 글이 뒤집기 사유면 뒤집기이고 반복을 열지 않는다' "§5: 상한의 「기타」 칸 가르기가 남았다"
+  assert_contains "$w" '뒤집기(`fail 로 뒤집기` · `pass 로 뒤집기` · 산출물 확인)는 사람에게 한 줄 사유를 받는다.' "§5: 뒤집기는 한 줄 사유를 받는다(양성 짝)"
   s=$(section "$SKILL" "## e2e")
   assert_contains "$s" '- `e2e-gate rc=0` — 레퍼런스 1 · 2 절대로 시나리오를 만들고 질문(여러 선택)을 띄운다. 시나리오를 하나 이상 골랐으면 고른 시나리오를 번호 순으로 하나씩' \
     "SKILL E0: rc=0 이 여러 선택 질문과 번호 순 걷기를 가리킨다"
   assert_contains "$s" '- **여러 시나리오** — ' "SKILL E4: 여러 시나리오 갈래가 있다"
-  assert_not_contains "$s" '질문을 생략하고 같은 시나리오 · 같은 명령으로' "SKILL E4: 루프에서 돌아와 한 시나리오만 다시 걷는 옛 문장이 없다"
-  assert_contains "$s" '질문을 생략하고 고른 시나리오 전부를 같은 명령으로 번호 순으로 E1 펜스' "SKILL E4: 루프에서 돌아오면 고른 시나리오 전부를 다시 걷는다(옛 문장 부재의 양성 짝)"
+  assert_contains "$s" '「다시 걷기」면 같은 시나리오를 다시 걷는다.' "SKILL E4: 다시 걷기는 같은 시나리오를 다시 걷는다"
+  assert_not_contains "$s" '질문을 생략하고' "SKILL E4: 루프에서 돌아와 질문 없이 다시 걷는 옛 문장이 없다(위 양성 짝)"
   # e2e 칸과 「사람이 뒤집음」은 `## e2e` 의 E6(e2e 결과 줄)이 정해 낸다 — Final verdict 는 그 줄을 받는다.
   local e6; e6=$(printf '%s\n' "$s" | awk '/^\*\*E6 — /{f=1} f')
   [ -n "$e6" ] && ok "SKILL: E6 e2e 결과 줄 문단이 있다" || no "SKILL: E6 문단이 없다"
@@ -388,7 +387,7 @@ case_AC28_fix1_kill_switch_does_not_erase_an_earlier_walk() {
 case_AC28_fix2_last_walk_per_scenario_and_choice_rules() {
   local g q
   g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸"); q=$(section "$REF" "## 2. 질문")
-  assert_contains "$g" '그 차례에서 시나리오마다 자기 마지막 걷기 하나만 센다 — 「다시 걷기」로 끝난 걷기는 칸을 내지 않는다.' \
+  assert_contains "$g" '시나리오마다 자기 마지막 걷기 하나만 센다 — 「다시 걷기」로 끝난 걷기는 칸을 내지 않는다.' \
     "§6: 시나리오마다 마지막 차례의 마지막 걷기만 센다"
   assert_contains "$q" '「안 한다」와 「걸을 것 없음」을 둘 다 골랐으면 `안 한다` 로 닫는다.' "§2: 둘 다 고르면 안 한다로 닫는다"
   # final-review T11 — 줄 전체로 잰다: 뒤에 예외(「단, …」)를 붙이면 줄이 달라져 실패한다
@@ -398,6 +397,27 @@ case_AC28_fix2_last_walk_per_scenario_and_choice_rules() {
   assert_contains "$q" '- 시나리오를 고르지 않고 「기타」 칸에만 글이 있으면 시나리오 수정으로 읽는다.' "§2: 시나리오 없이 「기타」만이면 수정으로 읽는다"
   assert_contains "$q" '두 번째에도 시나리오 없이 「기타」 면 `안 한다` 로 닫는다.' "§2: 두 번째 「기타」 닫기는 시나리오가 없을 때만"
   assert_not_contains "$q" '「기타」 로 받은 답은 시나리오 수정으로 읽는다.' "§2: 고른 시나리오가 있어도 「기타」를 수정으로 읽던 옛 문장이 없다"
+}
+
+case_gate_rows_one_pass() {
+  # AC4 — 걷기 직후 게이트는 한 번 지나고 끝난다: 5 절 표의 네 행 · 6 절의 fail · 무효 행이 글자 그대로 한 번씩 있고,
+  # 고치기 반복 장치의 낱말이 `## e2e` 와 e2e.md 전체에 없다(부재 락은 양성 짝이 있어야 의미가 있다).
+  local w g s tok n
+  w=$(section "$REF" "## 5. 걷기 직후 게이트"); g=$(section "$REF" "## 6. 게이트 결과 → e2e 칸"); s=$(section "$SKILL" "## e2e")
+  assert_eq "$(printf '%s\n' "$w" | grep -cxF -- '| pass | 승인 / fail 로 뒤집기 / 다시 걷기 |')" "1" "§5: pass 행"
+  assert_eq "$(printf '%s\n' "$w" | grep -cxF -- '| fail | fail 로 둔다 / pass 로 뒤집기 / 다시 걷기 |')" "1" "§5: fail 행"
+  assert_eq "$(printf '%s\n' "$w" | grep -cxF -- '| 미확인(괄호 안 사유 포함) | 다시 걷기 / fail 로 뒤집기 / 그대로 둠 |')" "1" "§5: 미확인 행"
+  assert_eq "$(printf '%s\n' "$w" | grep -cxF -- '| 무효(코드 변경) | 무효로 남긴다 / 바뀐 경로가 앱 실행 산출물임을 확인하고 판정안 유지 |')" "1" "§5: 무효 행"
+  assert_eq "$(printf '%s\n' "$g" | grep -cxF -- '| fail 로 둔다 | `fail` | 아니오 |')" "1" "§6: fail 로 둔다 행"
+  assert_eq "$(printf '%s\n' "$g" | grep -cxF -- '| 무효로 남긴다 | `무효` | 아니오 |')" "1" "§6: 무효로 남긴다 행"
+  assert_contains "$s" '- **fail 로 둔다** (fail 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. e2e 칸은 `fail` 이다.' "SKILL E4: fail 로 둔다 불릿"
+  assert_contains "$s" '- **무효로 남긴다** (무효 행) — E6 을 돈 뒤 `## Final verdict` 로 간다. e2e 칸은 `무효` 이다.' "SKILL E4: 무효로 남긴다 불릿"
+  for tok in '고치고 다시 돌기' '리뷰·테스트부터 다시' '한 번 더 돌기' '멈추기' 'Fix-loop' 'Retry' 'iteration' 'aborted' 'skipped: aborted'; do
+    assert_eq "$(printf '%s\n' "$s" | grep -cF -- "$tok")" "0" "SKILL ## e2e 에 '$tok' 이 없다"
+    assert_eq "$(grep -cF -- "$tok" "$REF")" "0" "e2e.md 에 '$tok' 이 없다"
+  done
+  assert_eq "$(printf '%s\n' "$s" | grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)')" "0" "SKILL ## e2e 에 'CAP' 이 없다"
+  assert_eq "$(grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)' "$REF")" "0" "e2e.md 에 'CAP' 이 없다"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do

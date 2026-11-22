@@ -384,8 +384,8 @@ case_scope_e2e_producers() {
   assert_contains "$LINE" ' · e2e 꺼짐(kill switch) (사람이 뒤집음) · ' "E6 이 낸 줄을 최종 판정 펜스가 받는다"
   local e2e
   e2e=$(section "$SKILL" '## e2e')
-  assert_eq "$(printf '%s\n' "$e2e" | grep -c '건너뛰고 e2e 칸을 `안 함` 으로 둔 채 E6 만 돈다')" "2" "e2e: 멈추기 · 범위 모드도 걷기 없이 E6 을 돈다"
-  assert_contains "$e2e" '걷기를 건너뛰었든(Fix-loop · Max-iter 의 「멈추기」 · 범위 모드 — 칸은 `안 함`)' "E6: 어느 길로 판정에 가든 돈다"
+  assert_eq "$(printf '%s\n' "$e2e" | grep -c '건너뛰고 e2e 칸을 `안 함` 으로 둔 채 E6 만 돈다')" "2" "e2e: trivia · 빈 diff · 범위 모드는 걷기 없이 E6 을 돈다"
+  assert_contains "$e2e" '걷기를 건너뛰었든(범위 모드 — 칸은 `안 함`)' "E6: 어느 길로 판정에 가든 돈다"
   assert_contains "$e2e" '시나리오가 여럿이면 `${CLAUDE_PLUGIN_ROOT}/references/e2e.md` §6 이 e2e 칸을 정한 걷기를 정하고,' "E6: 여러 시나리오의 「사람이 뒤집음」은 e2e.md §6 이 정한다"
 }
 

@@ -111,16 +111,16 @@ case_one_pass_flow() {
   assert_eq "$(printf '%s\n' "$s45" | grep -c '^\*\*고칠 목록\.\*\*')" "1" "Step 4.5 본문에 고칠 목록 문단이 한 번 있다"
   assert_eq "$(grep -cxF '> [quality-gates] 고칠 목록은 result.md 의 「## 고칠 목록」 에 있다 — 고친 뒤 qg 를 다시 부른다.' "$SKILL")" "1" \
     "끝 한 줄이 본문에 한 번 있다"
-  # 부재 — 본문 전체에서 `## e2e` 절만 뺀다(그 절의 걷기 직후 게이트는 다음 과제가 다시 쓰고 그 절 안의 부재를 따로 잰다).
-  body=$(awk '/^## e2e$/{e=1; next} e && /^## /{e=0} !e' "$SKILL")
+  # 부재 — 본문 전체(`## e2e` 절 포함)에서 잰다.
+  body=$(cat "$SKILL")
   assert_contains "$body" '## Final verdict' "전제: 부재 코퍼스가 e2e 뒤 절까지 담는다"
   for tok in 'Fix-loop' 'Max-iter' 'excluded.md' 'extra-iterations.md' 'classification.md' 'accepted with findings' \
-             'aborted iter' 'skipped: aborted' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
+             'aborted iter' 'skipped: aborted' '멈추기' '고치고 다시 돌기' '한 번 더 돌기' '지금 판정으로 끝내기'; do
     n=$(printf '%s\n' "$body" | grep -cF -- "$tok")
-    assert_eq "$n" "0" "본문(e2e 절 밖)에 '$tok' 이 없다"
+    assert_eq "$n" "0" "본문에 '$tok' 이 없다"
   done
   n=$(printf '%s\n' "$body" | grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)')
-  assert_eq "$n" "0" "본문(e2e 절 밖)에 'CAP' 이 없다"
+  assert_eq "$n" "0" "본문에 'CAP' 이 없다"
 }
 
 

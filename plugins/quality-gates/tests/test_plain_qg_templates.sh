@@ -75,41 +75,16 @@ assert_not_contains "$(flat "$RM")" 'Retry 는 「적용」 항목만 고친다'
 assert_file_grep "$RM" '분류표\(항목마다 적용 / 제외 \+ 사유\) · 고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기$' "AC6: README 상태도가 새 라벨을 부른다"
 assert_file_absent "$RM" 'Retry / Accept and finish / Stop' "AC6: README 상태도에 옛 라벨 나열이 없다"
 
-# ⑧ e2e 걷기 직후 게이트(④) — 선택지를 부르는 자리는 Fix-loop 와 같은 새 라벨이다.
-# 반복 동작 이름으로서의 Retry(「고침은 Retry 로만」 등)는 지시문이라 그대로 둔다 — 여기서는 선택지 자리만 잰다.
+# ⑧ e2e 걷기 직후 게이트 — 선택지 넷 · 6 절 칸 행의 글자는 test_e2e_docs.sh 의 case_gate_rows_one_pass 가 잰다.
+# 여기서는 옛 영어 라벨이 e2e 절 · 레퍼런스에 없는지만 잰다(양성 짝: 게이트 불릿 · 표 행).
 E2S="$(awk '/^## e2e$/{f=1;next} f&&/^## /{exit} f' "$S")"
-E2SF="$(printf '%s\n' "$E2S" | tr '\n' ' ' | tr -s ' ')"
 assert_grep "$E2S" '^\*\*E4 — 걷기 직후 게이트\.\*\*' "e2e 절을 잘랐다(양성 짝 — 창이 비면 아래 부재 단언이 공허하다)"
-for l in '고치고 다시 돌기' '지금 판정으로 끝내기' '멈추기'; do
-  assert_grep "$E2S" "^- \\*\\*${l}\\*\\* \\(fail 행\\) — " "AC6: e2e 게이트 fail 행 불릿 「${l}」"
-done
-assert_not_grep "$E2S" '^- \*\*(Retry|Accept|Accept and finish|Stop)\*\* \(fail 행\)' "AC6: e2e 게이트에 옛 라벨 불릿이 없다"
-assert_contains "$E2SF" '`## Fix-loop` 의 「고치고 다시 돌기」와 같다:' "AC6: e2e 「고치고 다시 돌기」가 Fix-loop 의 같은 선택지를 부른다"
-assert_contains "$E2SF" '`## Fix-loop` 의 「멈추기」와 같다:' "AC6: e2e 「멈추기」가 Fix-loop 의 같은 선택지를 부른다"
-assert_contains "$E2SF" '다시 돈 뒤, 「고치고 다시 돌기」와 같은 경로로 이 절에 돌아와' "AC6: 무효 행이 새 라벨의 경로를 부른다"
-assert_contains "$E2SF" 'CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신, 무효 행에 「리뷰·테스트부터 다시」 대신 「한 번 더 돌기」를 넣고, 고르면 위와 같이 기록한다' "AC25: 상한의 e2e fail · 무효 행이 한 번 더 돌기를 내고 기록한다"
-assert_contains "$E2SF" '무효 행은 한 번 더 돌기 / 산출물 확인 / 그대로 둠 이다.' "AC25: 상한의 e2e 무효 행 선택지에 한 번 더 돌기가 있다"
-assert_contains "$E2SF" '무효 행이면 위 「리뷰·테스트부터 다시」와 같은 경로로 간다' "AC25: 무효 행의 한 번 더 돌기는 리뷰·테스트부터 다시 경로다"
-assert_contains "$E2SF" '뒤집기 사유면 뒤집기이고 반복을 열지 않는다. 반복을 더 여는 뜻이 분명할 때만 출처 `typed` 와 그 원문으로 기록하고 연다. 어느 쪽인지 모르겠으면 아무것도 열지 않고 게이트를 한 번 더 띄운다.' "AC25: e2e 게이트의 기타 칸 글 — 뒤집기 사유와 여는 뜻을 가르고, 모르면 열지 않는다"
-assert_contains "$E2SF" '그때 fail 행은 한 번 더 돌기 / 지금 판정으로 끝내기 / 멈추기 / pass 로 뒤집기,' "AC6 · AC25: 상한의 e2e 선택지가 새 라벨이다"
-assert_not_contains "$E2SF" 'iteration 5 를 다 썼으면' "AC25: e2e 가 상한을 고정 5 로 말하지 않는다"
-assert_contains "$E2SF" '리뷰·테스트 루프가 「멈추기」 없이 끝나면 최종 판정 전에 이 절을 한 번 돈다. 루프가 「멈추기」로 끝났으면(aborted)' "AC6: e2e 절 첫 문장이 새 라벨을 부른다"
-assert_contains "$E2SF" '루프가 다시 「멈추기」 없이 끝나면 이 절로 돌아오고' "AC6: 재걷기 조건이 새 라벨을 부른다"
-assert_contains "$E2SF" '(고치고 다시 돌기 · 리뷰·테스트부터 다시 · 다시 걷기 · 남은 시나리오가 있으면 위 E4 의 경로로)' "AC6: e2e 절 끝 문장이 새 라벨을 부른다"
-assert_not_grep "$E2S" 'Accept|Stop|\*\*Retry\*\*|Retry 와 같|Retry ·' "AC6: e2e 절이 옛 선택지 이름(Accept · Stop · 선택지로서의 Retry)을 부르지 않는다"
-assert_file_grep "$E2R" '^\| fail \| Fix-loop 게이트\(고치고 다시 돌기 / 지금 판정으로 끝내기 / 멈추기\) \+ pass 로 뒤집기 \|$' "AC6: e2e 레퍼런스 게이트 표의 fail 행이 새 라벨이다"
-assert_file_grep "$E2R" '^\| fail 에서 지금 판정으로 끝내기 \| `fail` \| 아니오 \|$' "AC6: e2e 결과 표 「지금 판정으로 끝내기」 행"
-assert_file_grep "$E2R" '^\| fail 에서 멈추기 \| `fail` \| 아니오 \|$' "AC6: e2e 결과 표 「멈추기」 행"
-assert_file_grep "$E2R" '^\| 루프가 「멈추기」\(aborted\)로 끝나 e2e 를 건너뜀 \|' "AC6: e2e 결과 표의 건너뜀 행이 새 라벨을 부른다"
+assert_grep "$E2S" '^- \*\*fail 로 둔다\*\* \(fail 행\) — ' "AC4: e2e 게이트 fail 행 불릿 「fail 로 둔다」"
+assert_not_grep "$E2S" '^- \*\*(Retry|Accept|Accept and finish|Stop)\*\*' "AC4: e2e 게이트에 옛 영어 라벨 불릿이 없다"
+assert_file_grep "$E2R" '^\| fail \| fail 로 둔다 / pass 로 뒤집기 / 다시 걷기 \|$' "AC4: e2e 레퍼런스 게이트 표의 fail 행이 새 라벨이다(양성 짝)"
+assert_file_absent "$E2R" 'Accept and finish|Retry|Abort retry' "AC4: e2e 레퍼런스에 옛 영어 라벨이 없다"
 E2RF="$(flat "$E2R")"
-assert_contains "$E2RF" 'CAP 에 닿았으면 fail 행에 「고치고 다시 돌기」 대신 「한 번 더 돌기」를 넣고, 고르면' "AC6 · AC25: e2e 레퍼런스가 상한에서 바꿔 넣는 선택지를 새 라벨로 부른다"
-assert_contains "$E2RF" '`리뷰·테스트부터 다시` 는 iteration 하나를 쓴다. CAP 에 닿았으면 그 자리에 「한 번 더 돌기」를 넣는다' "AC25: e2e 레퍼런스의 무효 행도 상한에서 한 번 더 돌기를 낸다"
-assert_contains "$E2RF" '「기타」 칸 글이 뒤집기 사유면 뒤집기이고 반복을 열지 않는다' "AC25: e2e 레퍼런스가 기타 칸 글의 뒤집기 사유와 여는 뜻을 가른다"
-assert_contains "$E2RF" '`extra-iterations.md`' "AC25: e2e 레퍼런스가 승인 기록 자리를 부른다"
-assert_not_contains "$E2RF" '남은 iteration 이 없' "AC25: e2e 레퍼런스에 상한을 닫힌 끝으로 말하는 옛 문장이 없다"
-assert_contains "$E2RF" 'fail 에서 「멈추기」를 고르면 실행은 aborted' "AC6: e2e 레퍼런스의 aborted 문장이 새 라벨을 부른다"
 assert_contains "$E2RF" '증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다. 질문 본문에는 판정안 한 줄, 충족하지 못한 기대 상태를 한 줄씩(없으면 「충족하지 못한 기대 상태 없음」), 「증거표: <세션 폴더의 `e2e-evidence.tsv` 경로>」 한 줄을 싣는다 — 질문 창만 보고 고를 수 있게.' "AC10: e2e 판정 질문의 본문이 판정안 · 못 채운 기대 상태 · 증거표 자리를 싣는다"
-assert_contains "$E2RF" '- `fail` 행은 Fix-loop 게이트와 같은 질문이다. 질문 본문은 이 절의 것(판정안 · 충족하지 못한 기대 상태 · 증거표 자리)이고, 선택지와 분류 질문은 Fix-loop 게이트의 것이다. 분류 질문을 띄우기 전에 SKILL.md 의 Step 5 를 먼저 한다 — 표를 출력하고 같은 글을 마지막 iteration 의 `$RV/classification.md` 에 쓴다(분류 질문의 `표:` 줄이 그 경로다).' "AC10: e2e fail 행도 분류 질문 전에 Step 5(표 · classification.md)를 거친다"
 assert_file_absent "$E2R" 'Accept|Stop|Retry /|Retry 를 넣지' "AC6: e2e 레퍼런스에 옛 선택지 이름이 없다"
 
 # ⑨ 비평 최종 보고
