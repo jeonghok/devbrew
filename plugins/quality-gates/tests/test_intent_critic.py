@@ -3169,16 +3169,64 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertIn("「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", wrong[0])
         self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
-    def test_answer_commit_needs_a_push_todo(self):
-        """답 커밋이 생긴 실행은 할 일에 push 를 싣는다 — 게시된 판정은 답 커밋 앞 커밋의 것이다."""
+    def test_push_line_only_when_published(self):
+        """답 커밋 push 줄은 갈래가 둘이다 — 「게시된 판정」 은 게시된 갈래에만 있다."""
         i7 = self._section("I7 돌려주기")
-        todo = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
-        self.assertEqual(i7.count(todo), 1)
-        line = [l for l in i7.split("\n") if todo in l][0]
-        self.assertTrue(line.startswith("  - `commit:` 이 커밋 해시면"), line)
+        posted = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
+        unposted = "게시하지 않은 실행이면 — 「답 커밋 <해시> 를 push 한다」."
+        self.assertEqual(i7.count(posted), 1)
+        self.assertEqual(i7.count(unposted), 1)
+        line = [l for l in i7.split("\n") if posted in l][0]
+        self.assertTrue(line.startswith(
+            "  - `commit:` 이 커밋 해시이고 result.md `## 게시` 줄이 `posted:` 로 시작하면 — "), line)
+        self.assertLess(line.index(posted), line.index(unposted))
+        self.assertEqual(line.count("게시된 판정"), 1)
+        tail = line[line.index(unposted):]
+        self.assertNotIn("게시된 판정", tail.split(" push ", 1)[0])
         for fact in ("push 해야 답 파일이 PR 과 함께 머지되고",
                      "push 전에 qg 를 다시 돌리면 게시가 `skipped: pr-mismatch` 로 빠진다"):
             self.assertIn(fact, line)
+
+    def test_direct_ask_question_is_one_sentence(self):
+        """직접 묻는 틀은 질문 창에 질문 글의 첫 줄만 둔다 — 나머지는 창 앞의 따로 된 글."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(i5.count('  question: "<질문 글의 첫 줄>",'), 1)
+        qlines = [l for l in i5.split("\n") if l.lstrip().startswith("question:")]
+        self.assertEqual(len(qlines), 1, qlines)
+        self.assertNotIn("근거로 본 것(<근거의 종류>)", qlines[0])
+        self.assertNotIn("이유를 남기려면", qlines[0])
+        outside = [l for l in i5.split("\n") if "이유를 남기려면 직접 입력 칸에" in l]
+        self.assertEqual(len(outside), 1, outside)
+        self.assertTrue(outside[0].startswith("질문 창엔 "), outside[0])
+        self.assertIn("`질문 <n>`", outside[0])
+        self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
+        # 양의 짝: 근거의 종류 · 근거 줄 자리 채우기 규칙은 남아 있다.
+        self.assertEqual(i5.count("근거의 종류 — `evidence_kinds`"), 1)
+
+    def test_end_guidance_covers_filtered_wrong_choice(self):
+        """이미 「잘못 골랐다」 답이 있어 거른 질문도 이어 고칠 일에 든다."""
+        i7 = self._section("I7 돌려주기")
+        rule = ("`wrong_choice: true` 인 질문이 있거나, result.md 의 `이미 「잘못 골랐다」 답이 있어 거른 질문:` "
+                "목록이 비어 있지 않으면")
+        self.assertEqual(i7.count(rule), 1)
+        line = [l for l in i7.split("\n") if rule in l][0]
+        self.assertIn("「같은 브랜치에서 이어 고친다」(그 질문들을 함께 적는다)", line)
+
+    def test_path_table_has_no_aborted_row(self):
+        """`--path` 표에 aborted 가 없고(본문만), 남은 행 셋은 있다 · 게시 줄 목록에도 없다."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        head = "| 이 실행이 지나온 길 | `--path` |"
+        self.assertEqual(text.count(head), 1)
+        table = text.split(head, 1)[1].split("\n\n", 1)[0]
+        self.assertNotIn("aborted", table)
+        for row in ("`trivia`", "`scope-empty`", "`final`"):
+            self.assertEqual(table.count("| %s |" % row), 1, row)
+        state = (REFERENCE.parent / "state-file-format.md").read_text(encoding="utf-8")
+        pub = state.split("\n## 게시\n", 1)[1].split("\n## ", 1)[0]
+        self.assertNotIn("skipped: aborted", pub)
+        for kept in ("`posted: <url>`", "`skipped: <사유>`", "`게시 안 함 — …`"):
+            self.assertIn(kept, pub)
 
     def test_readme_states_the_answer_commit_is_not_pushed(self):
         text = (PLUGIN / "README.md").read_text(encoding="utf-8")

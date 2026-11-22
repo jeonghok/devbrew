@@ -56,7 +56,7 @@ started_at: "<ISO-8601 UTC>"
 
 ## 게시
 
-<게시 펜스가 낸 줄 하나 — `posted: <url>` · `skipped: <사유>` · `skipped: aborted` · `게시 안 함 — …` ·
+<게시 펜스가 낸 줄 하나 — `posted: <url>` · `skipped: <사유>` · `게시 안 함 — …` ·
  `게시 결과 불명 — sink 출력 계약 위반(rc N)`. `게시 안 함 — …` 에는
  `게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /quality-gates:quality-pipeline)` 와
  범위 모드의 `게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)` 가 든다>
