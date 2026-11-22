@@ -1,7 +1,7 @@
 ---
 name: brief-readback
 description: >
-  Use this agent to read an interview brief cold and say back, in plain prose,
+  Use this agent to read an context brief cold and say back, in plain prose,
   what it understood — what the document is trying to do, what is settled, what is
   still open, and what happens next. A readability measurement, not a review: it is
   given no criteria and no output schema on purpose. Read-only by design (Law 2

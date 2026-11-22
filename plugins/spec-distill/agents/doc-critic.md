@@ -2,7 +2,7 @@
 # copy-of: shared/docreview/agents/doc-critic.md
 name: doc-critic
 description: >
-  Use this agent to review a document (design doc · interview brief · seed · generic doc)
+  Use this agent to review a document (design doc · context brief · seed · generic doc)
   in two layers — big-picture coherence first, then detail completeness — attaching a
   disposition (decide · ask · fix · defer · drop) and an edit scope to every finding.
   Reads the document and its profile only; never edits files (Law 2 frontmatter scoping).

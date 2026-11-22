@@ -26,13 +26,13 @@ input_slots:
     var: OPEN_DECISIONS
     kind: task
 description: >
-  Use this agent during a spec-distill interview when a direction is suspect
+  Use this agent during a spec-distill context-build stage when a direction is suspect
   (landscape contradiction / known anti-pattern / conflict with a stated user
   constraint) to build the strongest case for BOTH the alternative and the
   current direction against the same criterion — the user's goal — judge whether
   any evidence refutes a stated core premise, and recommend kept / refined /
   switched. Independent analyst, read-only by design (Law 2 frontmatter scoping).
-  Output is consumed verbatim by pm-interview.
+  Output is consumed verbatim by context-build.
 
   <example>Context: User wants a custom auth system; landscape shows mature OSS.
   user: "이 방향 의심돼 — 양쪽 케이스 세워줘"
@@ -78,7 +78,7 @@ direction, for writing files, or for advocating one side.
    실패 사례. 필요한 만큼 찾는다.
 2. 리포 주장을 하려면 Read/Grep 으로 그 자리를 확인하고 경로와 앵커를 적는다.
 
-## Output 형식 (이 형식을 정확히 준수 — pm-interview 가 verbatim 사용)
+## Output 형식 (이 형식을 정확히 준수 — context-build 가 verbatim 사용)
 
 순서가 계약이다: 대안 → 원안 → 전제 반증 판정 → 추천 → 근거.
 
@@ -102,7 +102,7 @@ evidence:
     touches: [P1]            # 빈 배열 = 어느 전제에도 닿지 않음
     decides: [OQ1]           # 닿는 «열린 결정». 빈 배열 허용 — 거짓 연결보다 낫다
 repo_claims:
-  - id: RC3                  # payload · audit 을 잇는 id (한 인터뷰 안에서 유일)
+  - id: RC3                  # payload · audit 을 잇는 id (한 컨텍스트 쌓기 안에서 유일)
     path: "<repo 상대경로>"
     anchor: "<심볼 | 헤딩 | 원문 인용>"
     line: 123                # 선택 — 보조 정보
@@ -116,7 +116,7 @@ repo_claims:
 1. **read-only**: 어떤 파일도 Write/Edit/MultiEdit/NotebookEdit 하지 않습니다(frontmatter 강제).
 2. **인용 필수**: 모든 외부 주장은 `evidence[].url` 을 가져야 합니다. URL 없는 주장은 출력하지
    마십시오.
-3. **verbatim 계약**: 출력 전체를 pm-interview 가 **그대로**(약화·편집 없이) audit 에
+3. **verbatim 계약**: 출력 전체를 context-build 가 **그대로**(약화·편집 없이) audit 에
    기록합니다. 스스로 hedge 하지 말고 두 케이스 모두 가장 강한 형태로 쓰십시오.
 4. `premise_refutation.hits` 가 비어 있지 않으면 `why` 는 hit 마다 근거 → 전제 문장 지목을 갖습니다.
    지목할 수 없는 hit 은 내지 않습니다.
