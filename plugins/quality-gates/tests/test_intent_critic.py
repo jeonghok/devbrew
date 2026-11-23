@@ -2881,7 +2881,7 @@ PERSONA_RULES = (
     # 이미 답한 질문 (§5)
     "`<answered>` 를 보고 후보를 스스로 빼지 않는다.",
     "거르는 곳은 스크립트 한 곳이다.",
-    "`same_as` 칸에 그 정체를 글자 그대로 적는다",
+    "`same_as` 칸에 그 줄의 첫 칸(열쇠 또는 정체)을 글자 그대로 적는다",
     "관찰이 지금 달라졌다고 볼 때만 `observation_changed` 를 단다",
     "둘 중 하나라도 빠지면 다시 묻지 않는다.",
     # 출력 계약
@@ -2995,6 +2995,50 @@ class TestPersona(unittest.TestCase):
                 self.assertEqual(value.count("?"), 1)
                 self.assertTrue(value.endswith("?"), value)
                 self.assertNotIn(".", value)
+
+    def test_why_field_instruction(self):
+        """why 칸 지시 — 정확히 한 번, question 줄 뒤에 있다."""
+        _fm, body = self._split()
+        want = ("- `why` — 이 질문의 답에 따라 무엇이 달라지는지를 처음 보는 사람이 읽을 쉬운 말 "
+                "한 문장으로. 번호는 괄호 안에만 둔다.")
+        self.assertEqual(body.count(want), 1)
+        q = body.index("- `question` —")
+        self.assertGreater(body.index(want), q)
+
+    def test_examples_carry_one_sentence_why(self):
+        """출력 예시 항목마다 why 가 하나, 한 문장(「다.」 로 끝나고 한 번뿐). 질문 없는 예시엔 없다."""
+        import re
+        _fm, body = self._split()
+        blocks = re.findall(r"```qg-intent-critic\n(.*?)```", body, re.S)
+        self.assertEqual(len(blocks), 2, len(blocks))
+        total = 0
+        for block in blocks:
+            data = yaml.safe_load(block)
+            if not data["questions"]:
+                self.assertNotIn("why:", block)
+                continue
+            self.assertEqual(len(data["questions"]), 3)
+            self.assertEqual(block.count("\n    why:"), 3)
+            for item in data["questions"]:
+                total += 1
+                why = item.get("why")
+                with self.subTest(why=why):
+                    self.assertIsInstance(why, str)
+                    self.assertNotIn("\n", why)
+                    self.assertTrue(why.endswith("다."), why)
+                    self.assertEqual(why.count("다."), 1, why)
+        self.assertEqual(total, 3)
+
+    def test_answered_slot_and_same_as_first_cell(self):
+        """same_as 는 줄의 첫 칸(열쇠 또는 정체)을 적는다 — 옛 문구는 없고 <answered> 줄은 새 꼴을 말한다."""
+        _fm, body = self._split()
+        new = "그 줄의 첫 칸(열쇠 또는 정체)을 글자 그대로 적는다"
+        self.assertEqual(body.count(new), 1)
+        self.assertEqual(body.count("그 정체를 글자 그대로 적는다"), 0)
+        lines = [l for l in body.split("\n") if l.startswith("- `<answered>` —")]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("첫 칸이 열쇠", lines[0])
+        self.assertIn("그때의 질문 글", lines[0])
 
     def test_frontmatter_is_read_only_and_unpinned(self):
         fm, _body = self._split()
