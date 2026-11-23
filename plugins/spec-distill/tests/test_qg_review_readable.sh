@@ -261,12 +261,24 @@ SHOW="$(awk '$0 == "## 보이기" { on = 1; next } on && /^## / { exit } on' "$S
 one "$SHOW" 'qg 담당자가 돌려준 리뷰 결과와 의도 점검 질문은 `references/qg-review.md` 의 `### 결과 글` · `## 묻기` 틀대로 맥락 머리로 시작하는 글로 보인 뒤 묻고, 질문 문장 앞머리에 에픽 이름(로드맵 리뷰면 「로드맵」)을 쓴다.' "skill-show-line: 보이기의 qg 문장이 맥락 머리로 시작하는 틀을 가리킨다"
 zero "$SHOW" '따로 된 앞 글 뒤에 묻고' "skill-show-line 음성: 옛 앞 글 문장이 없다(양성 짝: 맥락 머리 문장)"
 
-# deps-min-qg (AC8) — 의존 표의 quality-gates 최소 판이 quality-gates plugin.json 의 판이다(파일에서 읽어 견준다)
+# deps-min-qg (AC8) — 의존 표의 quality-gates 최소 판이 17.0.0(`--answered` · 판 3 이 처음 나온 판) 이상이고
+# 지금 quality-gates plugin.json 의 판 이하다(파일에서 읽어 수로 견준다 — quality-gates 만 올리는 PR 이 이 락을 깨지 않는다)
 QGV="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$ROOT/plugins/quality-gates/.claude-plugin/plugin.json" | head -1)"
 QGROW="$(grep -F '| quality-gates | ' "$ROOT/plugins/spec-distill/dependencies.md" | head -1)"
 QGMIN="$(printf '%s\n' "$QGROW" | awk -F'|' '{ gsub(/^ +| +$/, "", $3); print $3 }')"
 [ -n "$QGV" ] && [ -n "$QGROW" ] && ok "deps-min-qg: 두 값을 읽었다" || no "deps-min-qg: 판 또는 표 행을 읽지 못했다 — 아래 단언이 공허하다"
-assert_eq "$QGMIN" "$QGV" "deps-min-qg: dependencies.md 의 quality-gates 행 둘째 칸이 quality-gates plugin.json 의 판"
+# ver_cmp <a> <b> — a<b 면 -1, 같으면 0, a>b 면 1. 둘 중 하나라도 <수>.<수>.<수> 꼴이 아니면 bad
+ver_cmp() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    if (a !~ /^[0-9]+\.[0-9]+\.[0-9]+$/ || b !~ /^[0-9]+\.[0-9]+\.[0-9]+$/) { print "bad"; exit }
+    split(a, x, "."); split(b, y, ".")
+    for (i = 1; i <= 3; i++) { if (x[i] + 0 < y[i] + 0) { print -1; exit } if (x[i] + 0 > y[i] + 0) { print 1; exit } }
+    print 0 }'
+}
+LOW="$(ver_cmp "$QGMIN" 17.0.0)"
+HIGH="$(ver_cmp "$QGMIN" "$QGV")"
+case "$LOW" in 0|1) ok "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상" ;; *) no "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상 (${LOW})" ;; esac
+case "$HIGH" in -1|0) ok "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
 
 # readme-new-words (AC20) — spec-distill README 가 새 동작의 이름을 쓴다
 RD="$(cat "$ROOT/plugins/spec-distill/README.md")"

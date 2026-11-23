@@ -148,7 +148,13 @@ assert_contains "$RMF" '`type: roadmap-review` 문서는 다른 팀 기록에 �
 assert_contains "$RMF" '넘겨받은 답을 읽지 못함 — <사유>' "README: 읽지 못함 알림"
 CHG="$(flat < "$PLUGIN_ROOT/CHANGELOG.md")"
 assert_contains "$CHG" '## [17.0.0] — 2026-11-24' "CHANGELOG: 17.0.0 절"
-assert_eq "$(grep -c -F '"version": "17.0.0"' "$PLUGIN_ROOT/.claude-plugin/plugin.json")" 1 "plugin.json 판 17.0.0"
+# 판은 major 의 바닥만 본다 — 돌려주는 꼴 3판이 17 에서 나왔고 그 아래로 돌아가지 않았다. 판 글자를 박으면 다음 bump 마다 RED 다.
+QG_VER="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1)"
+QG_MAJOR="${QG_VER%%.*}"
+case "$QG_MAJOR" in
+  ''|*[!0-9]*) no "plugin.json 판을 읽지 못했다(${QG_VER})" ;;
+  *) if [ "$QG_MAJOR" -ge 17 ]; then ok "plugin.json 판의 major 가 17 이상(${QG_VER})"; else no "plugin.json 판의 major 가 17 이상(${QG_VER})"; fi ;;
+esac
 
 note "[옛 이름 부재]"
 for f in "$S" "$PROC" "$SFF" "$RM" "$SCRIPTS/setup-qg.sh" "$PLUGIN_ROOT/agents/intent-critic.md" \
