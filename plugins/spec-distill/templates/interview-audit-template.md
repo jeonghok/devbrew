@@ -3,12 +3,12 @@ type: interview-audit
 payload: <YYYY-MM-DD>-<kebab-topic>-interview.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill pm-interview
+source: spec-distill context-build
 ---
 
-# <Topic> — Interview Audit
+# <Topic> — Context Audit
 
-> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 인터뷰가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
+> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 컨텍스트 쌓기가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
 > payload frontmatter의 `audit_file`이 이 파일을 가리키며, 게이트는 두 파일을 함께 검사한다.
 
 ## 1. Coverage Ledger
@@ -34,7 +34,7 @@ source: spec-distill pm-interview
 
 ## 2. Budget
 
-(한 줄. 이 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 인터뷰의 subagent
+(한 줄. 이 줄의 두 계수는 **다른 것을 센다**: `agent dispatch: <n>` 은 이 컨텍스트 쌓기의 subagent
  dispatch **총계**이고, `coverage-mapper <k>` 는 그중 coverage-mapper **하나만**의 횟수라
  언제나 `<k> ≤ <n>` 이다. 게이트가 보는 것은 후자뿐이며 k≥1이면 통과한다 — dispatch 를 못
  했으면 `coverage-mapper 0 (unavailable: <사유>)`처럼 사유를 붙인다(advisory) — 괄호 안 사유가
@@ -47,7 +47,7 @@ source: spec-distill pm-interview
 (포화 판정 줄 — 게이트는 아래 불릿 중 `포화 판정 <k>:` 또는 `사용자 종료(@S<n>)` 로 시작하는 **마지막** 줄을 본다.
 판정자 `포화` · 사용자 종료 · 사용자 판단 포화(advisory)면 통과, 마지막이 `아직` · `판정 불가 — 조사 계속` 이면 red 다.
 판정 줄이 하나도 없으면 `포화 판정` 건너뜀 줄(아래)이 있을 때만 통과하고, 없으면 red 다 — 판정 줄이 있으면 건너뜀 줄은
-판정을 바꾸지 않는다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 pm-interview 의 포화 판정 reference 다.
+판정을 바꾸지 않는다. 판정마다 한 줄, 사용자 선택마다 한 줄을 시간 순으로 덧붙인다 — 형식의 정본은 context-build 의 포화 판정 reference 다.
 `<k>` 는 실제 차례로 치환한다 — 채우지 않은 자리표는 게이트 red 다.)
 
 (건너뜀 줄 — 모델이 작은 일이라 판단해 건너뛴 자리마다 불릿 한 줄을 덧붙인다. 꼴은 「모델 판단으로 건너뜀 — 자리: 이유」 이고,

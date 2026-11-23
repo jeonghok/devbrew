@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/pm-interview/SKILL.md
+# guards: plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md plugins/spec-distill/skills/context-build/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/context-build/SKILL.md
 #
 # 원문이 받은 글자 그대로 남는 규약(raw-source canon)의 문면 락 — 기록 파일(audit) 템플릿의 `## 1` ·
 # `## 2` 설명, seed 템플릿 · seed 입력 규약의 «seed 는 모델이 줄인 글» 문장, seed 리뷰 프로필의 읽는 법.
@@ -7,16 +7,16 @@
 # 같은 함수에 항목을 더한다. 변이 검사는 임시 사본을 같은 함수에 먹여 그 이름으로 실패하는지 본다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/intent-sync/SKILL.md"
 AT="$ROOT/plugins/spec-distill/templates/interview-seed-audit-template.md"
 ST="$ROOT/plugins/spec-distill/templates/interview-seed-template.md"
-SI="$ROOT/plugins/spec-distill/skills/pm-interview/references/seed-input.md"
+SI="$ROOT/plugins/spec-distill/skills/context-build/references/seed-input.md"
 PR="$ROOT/plugins/spec-distill/references/docreview-profiles/seed.md"
 SCRIPTS="$ROOT/plugins/spec-distill/scripts"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md \
-           plugins/spec-distill/skills/pm-interview/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md \
-           plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/pm-interview/SKILL.md; do
+  for f in plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/templates/interview-seed-template.md \
+           plugins/spec-distill/skills/context-build/references/seed-input.md plugins/spec-distill/references/docreview-profiles/seed.md \
+           plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/skills/context-build/SKILL.md; do
     echo "$f"
   done
   exit 0
@@ -81,7 +81,7 @@ sys.exit(0 if m.RECEIVED_SEPARATOR_RE.match(sys.argv[2] + "직접 친 글") else
   has "$body" '고른 사실과 그 뜻은 정답이지만, 라벨의 낱말 하나하나는 사용자가 쓴 글이 아니다.' || echo profile_label
   has "$body" '「라벨 · 적음」 이 붙은 답에서는 고른 라벨이 모델 문장이고 그 뒤의 적은 말은 사용자의 글이다' || echo profile_mixed
 
-  # --- request-framing SKILL (Task 6) ---
+  # --- intent-sync SKILL (Task 6) ---
   local sk sec_s sj p ex1 rec ext shl pin_s ptr
   sk="$(join < "$skill")"
   sec_s="$(subsec "$skill" '### 비밀값 가리기 — 사용자의 말을 쓰기 전에')"
@@ -98,7 +98,7 @@ sys.exit(0 if m.RECEIVED_SEPARATOR_RE.match(sys.argv[2] + "직접 친 글") else
   { has "$sj" '`비밀값으로 보여 가린 곳 <N>개 — <라벨들>`' && has "$sj" '가린 것이 없으면 그 줄을 내지 않는다'; } || echo secret_report_line
   # 토큰 모양 집합 — 새 절 == 인터뷰 본문 「Secret 기록 금지」 문단, 각 토큰이 호스트의 P21 정규식에 맞는다.
   printf '%s\n' "$sec_s" > "$T0/sec.txt"
-  para "$ROOT/plugins/spec-distill/skills/pm-interview/SKILL.md" '**Secret 기록 금지**' > "$T0/iv.txt"
+  para "$ROOT/plugins/spec-distill/skills/context-build/SKILL.md" '**Secret 기록 금지**' > "$T0/iv.txt"
   python3 -I -c '
 import re, sys
 sys.path.insert(0, sys.argv[1])

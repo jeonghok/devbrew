@@ -100,11 +100,11 @@ rc="$(rc_of "$tmpb" "$tmps" "$FX/brief-verbatim-placeholder.audit.md")"
 rm -f "$tmps" "$tmpb"
 
 # --- C2 : producer와 checker의 P21 토큰 집합이 실제로 같다 ------------------
-# pm-interview SKILL.md(producer)가 문서로 약속한 토큰 **전부**를
+# context-build SKILL.md(producer)가 문서로 약속한 토큰 **전부**를
 # check_verbatim_coverage.py(checker)의 정규식에 그대로 먹여본다. 문서에서 토큰을
 # 긁어오므로 어느 쪽을 바꿔도 이 락이 발화한다(한쪽만 고치는 drift 방지). 리터럴을
 # 테스트에 박아두면 producer가 바뀌어도 조용히 통과한다.
-CI_SKILL="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/SKILL.md"
+CI_SKILL="$REPO_ROOT/plugins/spec-distill/skills/context-build/SKILL.md"
 P21_LINES="$(grep -n 'REDACTED' "$CI_SKILL" | head -1 | cut -d: -f1)"
 if [[ -n "$P21_LINES" ]]; then
   # P21 문단(해당 줄부터 4줄)에서 `<TOKEN>` / `<TOKEN:라벨>` 모양을 전부 뽑는다.
@@ -127,7 +127,7 @@ PY
     && ok "C2: producer가 약속한 토큰을 checker가 전부 인식 (한국어 라벨 포함)" \
     || no "C2: checker가 인식 못 하는 producer 토큰:${unmatched} — 정당한 치환이 red로 잡힌다"
 else
-  no "C2: pm-interview SKILL.md에서 P21 줄을 찾지 못했다"
+  no "C2: context-build SKILL.md에서 P21 줄을 찾지 못했다"
 fi
 # 경계는 넓히지 않았다 — 공백이 든 라벨(산문 위장)은 여전히 토큰이 아니다.
 TOK='<REDACTED:이건 라벨이 아니라 문장이다>' python3 - "$SCRIPT" <<'PY' \
@@ -782,7 +782,7 @@ grep -qF '원문이 빠졌어도 통과하고 닫은 답의 출처 대조도 건
   && ok "RB 진입 게이트: 「검사 없이 계속」 설명이 닫은 답의 출처 대조를 포함한다고 말한다" || no "RB 진입 게이트: 「검사 없이 계속」 설명에 닫은 답의 출처 대조가 없다"
 grep -qF '1) echo "[spec-distill] §6 원문 완전성 위반이나 닫은 답의 출처 위반' <<<"$W_GATE_CL" \
   && ok "RB 펜스: rc 1 문장이 원문 완전성 위반과 닫은 답의 출처 위반을 함께 말한다" || no "RB 펜스: rc 1 문장에 닫은 답의 출처 위반이 없다"
-FIN="$SD_DIR/skills/pm-interview/references/finishing.md"
+FIN="$SD_DIR/skills/context-build/references/finishing.md"
 A5="$(awk '/^### Step A\.5/{f=1;next} f && /^### /{exit} f' "$FIN")"
 for ph in '닫는 선택지' '「조사 계속」' '대기 줄 블록 한 곳에만' 'brief §4 그 줄의 `@S` 만' '3 · 4 · 7 · 8 을 다시 돈 뒤 Step A.5 로' '세션을 넘겨' '마지막 포화 판정 번호 다음 수'; do
   grep -qF -- "$ph" <<<"$A5" && ok "finishing Step A.5 되묻기 갈래: 「${ph}」" || no "finishing Step A.5 되묻기 갈래에 「${ph}」 가 없다"

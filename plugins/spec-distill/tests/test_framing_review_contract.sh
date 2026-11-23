@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py plugins/spec-distill/scripts/seed_edit_screen.py shared/tests/fixtures/ask-sites.tsv
+# guards: plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py plugins/spec-distill/scripts/seed_edit_screen.py shared/tests/fixtures/ask-sites.tsv
 #
-# request-framing SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
+# intent-sync SKILL 의 **계약** 락 — 설계 2026-09-16-framing-intent-drift 의 AC 중 SKILL 문면과
 # 배선으로 재는 것(AC1 · AC3b · AC3d · AC4 · AC6 · AC12 · AC13 배선).
 #
 # 판정 방식 — 절(`## `) · 하위절(`### `) 창은 코드 펜스를 인식한다(펜스 안 `#` 줄이 창을 자르지
@@ -9,9 +9,9 @@
 # 부재 단언마다 같은 자리의 양의 짝을 둔다 — 절이 통째로 사라지면 부재는 공허하게 참이다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SK="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
+SK="$ROOT/plugins/spec-distill/skills/intent-sync/SKILL.md"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  for f in plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
+  for f in plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/templates/interview-seed-audit-template.md \
            plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/seed_review_log.py \
            shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_route.py shared/docreview/scripts/docreview_anchor.py \
            plugins/spec-distill/scripts/seed_edit_screen.py shared/tests/fixtures/ask-sites.tsv; do
@@ -633,13 +633,13 @@ assert_contains "$outS2" "accept_rc=0" "처분 (j) 양의 짝: 그 화면의 JSO
 assert_contains "$outS2" '{"added": ["FID_S"], "skipped": null}' "처분 (j) 양의 짝: 그 화면의 이유 파일이 댄 지적을 목록에 더하고 보인다"
 
 # ── AC11 — 추천 전수 검사가 이 자리의 새 규칙을 잰다(지우면 실패) ────────────────────
-RFREL="plugins/spec-distill/skills/request-framing/SKILL.md"
-mkdir -p "$T/ar/plugins/spec-distill/skills/request-framing"
+RFREL="plugins/spec-distill/skills/intent-sync/SKILL.md"
+mkdir -p "$T/ar/plugins/spec-distill/skills/intent-sync"
 grep -F "$RFREL" "$ROOT/shared/tests/fixtures/ask-sites.tsv" > "$T/ar/sites.tsv"
 printf '%s\n' "$RFREL" > "$T/ar/list.txt"
 ar_no() { python3 "$ROOT/shared/tests/ask_recommendation.py" "$T/ar" "$T/ar/list.txt" "$T/ar/sites.tsv" | grep '^no ' || true; }
 cp "$SK" "$T/ar/$RFREL"
-assert_eq "$(ar_no)" "" "AC11 양성 대조: request-framing 의 질문 자리 행이 전부 통과한다"
+assert_eq "$(ar_no)" "" "AC11 양성 대조: intent-sync 의 질문 자리 행이 전부 통과한다"
 assert_eq "$(grep -c '처분을 한 묶음으로 묻는다' "$T/ar/sites.tsv" || true)" "1" "AC11 전제: 목록에 덩어리 질문 행이 있다"
 OLD='번 그대로 둔다 (권장)」 이 된다' NEW='번 그대로 둔다」 이 된다' python3 -c '
 import os, sys

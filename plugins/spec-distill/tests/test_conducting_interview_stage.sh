@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — pm-interview problem-space stage contract.
+# AC3/AC7/AC8/AC13 + R1-R5 + PN1/PN3 — context-build problem-space stage contract.
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILL="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/SKILL.md"
+SKILL="$REPO_ROOT/plugins/spec-distill/skills/context-build/SKILL.md"
 # 규칙 블록(표시 줄 포함)과 그 바로 뒤 빈 줄 하나를 뺀 줄 수 — 블록은 모든 SKILL.md · 명령 파일 공통이라 이 래칫이 재는
 # 「이 skill 자신의 분량」이 아니다(쉬운 말 출력 PR 1, 계획 P5). 블록이 없으면 wc -l 과 같다.
 skill_own_lines() {
   awk '/^<!-- plain-language:begin -->$/{s=1} s==0{n++} s==2{s=0; if ($0 != "") n++; next} /^<!-- plain-language:end -->$/{s=2} END{print n+0}' "$1"
 }
-CMD="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/SKILL.md"
+CMD="$REPO_ROOT/plugins/spec-distill/skills/context-build/SKILL.md"
 # Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
 # 줄어도 RED 가 되지 않고 **조용히 약해진다**(Task 31 이 정확히 이 방식으로 P21 스캔을 잃었다).
 # 그래서 스킬의 표면을 **열거가 아니라 도출**해 한 덩어리로 다룬다: 새 참조 파일이 생겨도
 # 자동으로 대상이 된다. 섹션 윈도우(B-0…B-3·종료)는 그 섹션이 실제로 사는 $FIN 에서 뜬다.
-FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/pm-interview/references"
+FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/context-build/references"
 FIN="$FIN_DIR/finishing.md"
 # Task 11b(무게 감축 재시도): 같은 이유로 `## seed 를 입력으로 받았을 때`와
 # `## In-flight state migration`도 references/로 분리됐다(둘 다 finishing.md보다 조건성이
@@ -49,7 +49,7 @@ ci_cat_all() { cat "${CI_ALL[@]}"; }
 # vacuity: 도출이 SKILL.md 하나만 남기면 이 스위트의 부재 락은 분할 이전 범위로 조용히
 # 되돌아가면서 GREEN 을 찍는다. '참조 파일 0건'을 '문제 없음'으로 읽지 않는다.
 [[ "${#CI_FILES[@]}" -ge 2 ]] \
-  && ok "코퍼스: pm-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  && ok "코퍼스: context-build 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 전-파일 검사 범위가 조용히 좁아졌다"
 [[ -f "$FIN" ]] && ok "코퍼스: references/finishing.md 실재" || no "코퍼스: references/finishing.md 부재"
 
@@ -150,7 +150,7 @@ grep -qF 'brief만 종료' <<<"$b2_block" \
 # 다음 세션 줄 — B-3 표지 블록의 한 줄. 줄의 개수 · 모양은 test_next_session_command.sh 가 잰다.
 nsl_iv="$(awk -v m='**다음 세션 줄 — ①/② 공통**' '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
 [[ -n "$nsl_iv" ]] && ok "AC20: B-3 의 다음 세션 줄을 읽었다" || no "AC20: B-3 의 다음 세션 줄 표지 블록이 없다"
-grep -qF '이 interview brief 로 Skill superpowers:brainstorming 을 시작하라' <<<"$nsl_iv" \
+grep -qF '이 context brief 로 Skill superpowers:brainstorming 을 시작하라' <<<"$nsl_iv" \
   && ok "AC20: 다음 세션 줄이 brainstorming 을 부른다" \
   || no "AC20: 다음 세션 줄이 brainstorming 을 부르지 않는다"
 grep -qF '/compact interview brief at' "${CI_ALL[@]}" \
@@ -495,24 +495,24 @@ nd_line="$(awk '/^### 다음 결정$/{getline; print; exit}' <<<"$round_block")"
   && ok "AC13: 라운드 규약 «다음 결정» 템플릿 줄이 OQ<n>: 으로 시작한다 (발급 자리)" \
   || no "AC13: «다음 결정» 템플릿 줄에 OQ<n> 자리가 없다 — open_decisions 가 비고 조사 축이 조용히 공허해진다: «${nd_line}»"
 # 발급 규칙이 템플릿과 모순하지 않는다 — 새 결정은 새 번호, 이어가는 결정은 기존 번호.
-tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 인터뷰 안에서만 유일 — 이어가는 결정이면 기존 번호' \
+tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -qF '새 결정이면 새 번호 — 순증, 컨텍스트 쌓기 안에서만 유일 — 이어가는 결정이면 기존 번호' \
   && ok "AC13: OQ<n> 발급 — 새 결정은 새 번호 · 이어가는 결정은 기존 번호" \
   || no "AC13: OQ<n> 발급 규칙이 없거나 뒤집혔다 — 이어가는 결정에 새 번호를 주면 같은 결정이 둘로 갈린다"
 grep -qF 'AskUserQuestion 1회다. 기본은 질문 1개이고' <<<"$round_flat" \
   && ok "AC3: 라운드마다 AskUserQuestion 1회 · 기본 질문 1개" || no "AC3: 질문 1개 규칙 부재"
 grep -qF '질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다' <<<"$round_flat" \
   && ok "AC3: 첫 선택지가 추천 (권장)" || no "AC3: 추천 첫 선택지 규칙 부재"
-grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+grep -qF '컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
   && ok "AC3: description = 얻음 · 내줌 한 줄" || no "AC3: description 규칙 부재"
 case "$nd_line" in *트레이드오프*) no "AC12: «다음 결정» 줄에 트레이드오프 조각이 남아 있다" ;; *) ok "AC12: «다음 결정» 줄에 트레이드오프 조각이 없다" ;; esac
-grep -qF '인터뷰 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
+grep -qF '컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다' <<<"$round_flat" \
   && ok "AC12: 추천이 없는 라운드에도 얻음 · 내줌 꼴" || no "AC12: 설명 규칙이 없다"
 grep -qF '<선택지마다 한 줄 — 「<라벨>」 — 얻음: … · 내줌: …>' <<<"$round_block" \
   && ok "AC12: 상태 파일 기록에 선택지와 설명이 남는다" || no "AC12: 양식에 선택지 줄이 없다"
 grep -qF '직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면' <<<"$round_flat" \
   && ok "C1: 되묻기 발동 조건 넷(보류 · 한 단어 · 이유 없는 추천 수락 · 근거 없는 단정)" \
   || no "C1: 되묻기 발동 조건 부재 또는 조건이 빠졌다"
-grep -qF '이유·사례·실패 조건 중 하나를 되묻고 인터뷰어의 추측을 첫 선택지로' <<<"$round_flat" \
+grep -qF '이유·사례·실패 조건 중 하나를 되묻고 모델의 추측을 첫 선택지로' <<<"$round_flat" \
   && ok "C1: 되묻기 세 축(이유·사례·실패 조건) + 추측이 첫 선택지" || no "C1: 되묻기 규칙 부재"
 grep -qF '최대 2회' <<<"$round_flat" && no "R1/G: 되묻기 «최대 2회» 상한 잔존" || ok "R1/G: 되묻기 상한 문구 없음"
 grep -qF '다음 질문의 선택지에 「이 주제를 더 파기」를 둔다' <<<"$round_flat" \
@@ -525,7 +525,7 @@ grep -qF '나머지는 다음 라운드의 «다음 결정»으로 넘어간다'
   && ok "AC3: 겹침에서 밀린 것은 다음 라운드의 «다음 결정»으로 이월" || no "AC3: 겹침 이월 조항 부재"
 grep -qF '`references/steelman.md` 가 사용자에게 묻는 질문은 전부 그 파일의 규약' <<<"$round_flat" \
   && ok "AC3: steelman 절차 질문의 예외 (그 파일이 묻는 질문 — 도출 규칙)" || no "AC3: steelman 예외 도출 규칙 부재"
-grep -qE '인자 없이 `/spec-distill:pm-interview` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
+grep -qE '인자 없이 `/spec-distill:context-build` 를 부른 경로의 R1\*\* 은[^.]{0,60}«아직 없음»' <<<"$round_flat" \
   && ok "AC3: 인자 없는 R1 — «지금 이해» 는 «아직 없음»" || no "AC3: 인자 없는 R1 모양 부재"
 # 부재 — 새 규약 절 안에 옛 형식이 남았는지를 잰다. `Q1`·`Q2` 는 `OQ1`·`OQ2` 표기와 겹칠 수 있어
 # 전-파일로 재지 않고 이 절로 좁힌다. production 전체의 제거 어휘 부재는 test_stale_terms.sh V13 이 잰다.
@@ -1291,7 +1291,7 @@ grep -qF '사용자 문제 서술은 다시 쓰지 않는다' <<<"$round_block" 
 # 경계 — framing 의 탐색은 사용자에게 물어서 메우고, 바깥을 보는 것은 interview 의 R&R
 # 이다. 이 문장이 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
 #
-# 이 단언이 묶는 것은 **한 문장 안의 관계**다 — `request-framing` 이라는 주어와 `웹`
+# 이 단언이 묶는 것은 **한 문장 안의 관계**다 — `intent-sync` 이라는 주어와 `웹`
 # 부정이 **같은 문장**에 함께 있어야 한다. `framing` 존재와 `웹...보지 않` 존재를 절
 # 전체에서 각각 독립으로만 요구하면, 경계 문단이 통째로 지워지고 절 안의 무관한 다른
 # 문장이 `framing`과 `웹...보지 않`을 따로 공급해도 만족된다 — `### R2` 는 interview
@@ -1301,17 +1301,17 @@ grep -qF '사용자 문제 서술은 다시 쓰지 않는다' <<<"$round_block" 
 #
 # 관계를 세우려면 셋이 함께 있어야 한다. ① 절 스코프(위). ② 개행을 공백으로 접어 rewrap
 # 에 관대하다 — grep 은 줄 단위 매칭이라 rewrap 된 상태에서 물리 줄 경계가 관계를 가를 수
-# 있다. ③ `request-framing` 에서 부정 어간 `보지 않`까지 이어지는 두 홉을 **모두**
+# 있다. ③ `intent-sync` 에서 부정 어간 `보지 않`까지 이어지는 두 홉을 **모두**
 # `[^.]`(마침표 제외)로 묶는다 — `.` 는 마침표도 매치하므로 한쪽 홉이라도 `.`를 쓰면 그
 # 홉이 문장 경계를 넘어 다른 문장의 토큰과 결합할 수 있다. 어미 변화(보지 않는다/보지
 # 않고/보지 않으며)는 어간 매치로 흡수한다.
 r2_block="$(awk '/^### R2 — 웹 Landscape/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
 r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
-grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
-  && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
-  || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
+grep -qE 'intent-sync[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
+  && ok "R2(v0.41.0): 탐색 경계 명시 (intent-sync…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
+  || no "R2(v0.41.0): 탐색 경계 명시 (intent-sync…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
 grep -qF '레포로 설명이 안 되는 이름만 짧게 조회해' <<<"$r2_flat" \
-  && ok "R2(양의 짝): request-framing 의 이름 조회 예외가 소비자 쪽에도 있다" \
+  && ok "R2(양의 짝): intent-sync 의 이름 조회 예외가 소비자 쪽에도 있다" \
   || no "R2(양의 짝): R2 탐색 경계에 이름 조회 예외 문장 부재"
 grep -qF 'round 1–2' "$SKILL" && no "R1/D: landscape 시점 강제 «round 1–2» 잔존" || ok "R1/D: landscape 시점 강제 없음"
 grep -qF '토픽이 잡히면, 그리고 결정에 닿을 때마다' <<<"$r2_flat" \
@@ -1381,16 +1381,16 @@ grep -qE '차단.{0,4}않는다|막지 않는다' <<<"$seed_flat" \
   && ok "v0.41.0: seed 아닌 입력도 받되 차단하지 않음 명시 (SKILL 쪽)" \
   || no "v0.41.0: seed 아닌 입력 비차단 명시가 없다 (SKILL 쪽)"
 
-# --- v0.41.0: pm-interview `## 진입 단계` — trivia 포인터 + 3.5 비차단 조언 ---
+# --- v0.41.0: context-build `## 진입 단계` — trivia 포인터 + 3.5 비차단 조언 ---
 grep -qE 'references/trivia-escape\.md' "$CMD" \
-  && ok "v0.41.0: pm-interview 진입 단계가 trivia-escape.md 정본을 가리킨다" \
-  || no "v0.41.0: pm-interview 진입 단계에 trivia-escape.md 포인터가 없다"
-# 정본과의 분기 방지 — request-framing 진입 단계의 동형 검사(test_request_framing_entry.sh)와
+  && ok "v0.41.0: context-build 진입 단계가 trivia-escape.md 정본을 가리킨다" \
+  || no "v0.41.0: context-build 진입 단계에 trivia-escape.md 포인터가 없다"
+# 정본과의 분기 방지 — intent-sync 진입 단계의 동형 검사(test_request_framing_entry.sh)와
 # 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
 cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|짧은 요청)' "$CMD")"
 [[ "$cmd_pattern_dup" -eq 0 ]] \
-  && ok "v0.41.0: pm-interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
-  || no "v0.41.0: pm-interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
+  && ok "v0.41.0: context-build 에 5패턴 본문이 복제되지 않았다 (정본만)" \
+  || no "v0.41.0: context-build 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
 # force 탈출구 — trivia 판정이 진입 skill 안에서 돌므로 「force」를 첫 토큰으로 다시 부르는 길이
 # 정본에 규칙으로 있어야 한다. 양성 짝: 정본을 실제로 읽었는가(5패턴 헤더) · 새 안내 문면.
 # 부재: 옛 문면(재호출하면 trivia 가 다시 막는 막다른 안내).
@@ -1408,8 +1408,8 @@ grep -qF '"force <command>"' "$TRIVIA_ESC" \
   && no "force: 옛 안내 문면(\"force <command>\")이 남아 있다" \
   || ok "force: 옛 안내 문면이 없다"
 grep -qF '3 에서 `force` 를 뗐으면 그 나머지' <<<"$(awk 'index($0,"### 4. ")==1{f=1;next} f&&/^##+ /{exit} f' "$CMD")" \
-  && ok "force: pm-interview 진입 단계 4 의 「풀린 입력」이 force 를 뗀 나머지를 포함한다" \
-  || no "force: pm-interview 진입 단계 4 가 force 를 뗀 나머지를 말하지 않는다"
+  && ok "force: context-build 진입 단계 4 의 「풀린 입력」이 force 를 뗀 나머지를 포함한다" \
+  || no "force: context-build 진입 단계 4 가 force 를 뗀 나머지를 말하지 않는다"
 sub() { awk -v h="$2" 'index($0,h)==1{f=1;next} f&&/^##+ /{exit} f' "$1"; }   # sub <file> <소절 제목 접두>
 step2_block="$(sub "$CMD" '### 3. ')"
 step2_flat="$(tr '\n' ' ' <<<"$step2_block" | tr -s ' ')"
@@ -1431,7 +1431,7 @@ step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 #
 # 다른 절반 — 「막지 않는다」는 3.5 가 조용하다는 것만으로는 성립하지 않는다. 진입 단계 4
 # (본 절차로 넘기는 소절)가 **실재해야** 흐름이 실제로 이어진다(부재 검사만으로는 이 절반을 못 잡는다).
-step2_stop_phrase='인터뷰를 시작하지 않습니다'
+step2_stop_phrase='컨텍스트 쌓기를 시작하지 않습니다'
 grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
   && ok "v0.41.0: Step 2 의 정지 문구가 Step 2 블록에 실재한다 (아래 가드의 리터럴이 살아있음)" \
   || no "v0.41.0: Step 2 블록에서 정지 문구를 찾지 못했다 — 아래 Step 2.5 가드가 죽은 키를 겨눈다"
@@ -1441,9 +1441,9 @@ grep -qF "$step2_stop_phrase" <<<"$step25_flat" \
 grep -qF '아래 절들을 진행한다' <<<"$(sub "$CMD" '### 4. ')" \
   && ok "v0.41.0: 진입 단계 4 가 본 절차로 넘긴다 (흐름이 실제로 이어짐)" \
   || no "v0.41.0: 진입 단계 4 의 본 절차 진입이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
-grep -qF 'spec-distill:request-framing' <<<"$step25_flat" \
-  && ok "v0.41.0: Step 2.5 가 /request-framing 을 안내" \
-  || no "v0.41.0: Step 2.5 안내문에 /request-framing 언급이 없다"
+grep -qF 'spec-distill:intent-sync' <<<"$step25_flat" \
+  && ok "v0.41.0: Step 2.5 가 /intent-sync 을 안내" \
+  || no "v0.41.0: Step 2.5 안내문에 /intent-sync 언급이 없다"
 
 # --- U2-T6: 원문 거처 (finishing.md) ---------------------------------------
 # 이 규칙에는 §N 도 절 제목도 개명 식별자도 없어 도출 ①–④ 가 못 잡는다.

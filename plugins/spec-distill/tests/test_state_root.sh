@@ -151,7 +151,7 @@ assert_eq "$RC|$(cat "$T/out3")" "3|x" "link_refused: .gitignore 가 링크면 r
 assert_contains "$ERR" ".gitignore 가 링크다" "link_refused: .gitignore 링크 사유"
 
 note "== rf_state_block"
-rf_block() { awk '/^## 상태$/{s=1} s&&/^```bash$/{b=1;next} b&&/^```$/{exit} b' "$SD/skills/request-framing/SKILL.md"; }
+rf_block() { awk '/^## 상태$/{s=1} s&&/^```bash$/{b=1;next} b&&/^```$/{exit} b' "$SD/skills/intent-sync/SKILL.md"; }
 rf_block > "$T/rf-state.sh"
 grep -q 'state-root --ensure' "$T/rf-state.sh" && bash -n "$T/rf-state.sh" && ok "rf_state_block: 전제 — 「## 상태」 블록을 잘라 냈다" || no "rf_state_block: 블록을 잘라 내지 못했다 — 아래 칸이 공허하다"
 RT="$T/RT"; mkrepo "$RT"; mktracked "$RT"

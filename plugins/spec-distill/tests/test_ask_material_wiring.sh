@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/pm-interview/references/finishing.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_ask.py shared/docreview/scripts/nofollow_write.py plugins/spec-distill/scripts/ledger_marker.py
+# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/intent-sync/SKILL.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/skills/context-build/references/finishing.md shared/docreview/scripts/docreview_state.py shared/docreview/scripts/docreview_ask.py shared/docreview/scripts/nofollow_write.py plugins/spec-distill/scripts/ledger_marker.py
 #
 # 리뷰 결정 질문이 엔진의 질문 재료를 싣는다(present-tradeoffs AC7 · AC3 · AC8).
 #   정적 — 진입 skill 셋에 질문 재료 펜스가 있고, 표지 확인이 전문 파일 쓰기보다 앞이며, 8단계 재진술이
@@ -12,10 +12,10 @@ set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   echo "shared/docreview/references/reviewing-document.md"
   echo "plugins/spec-distill/references/proceed-gate.md"
-  echo "plugins/spec-distill/skills/pm-interview/references/finishing.md"
+  echo "plugins/spec-distill/skills/context-build/references/finishing.md"
   echo "shared/docreview/scripts/docreview_state.py"
   echo "shared/docreview/scripts/docreview_ask.py"
   echo "shared/docreview/scripts/nofollow_write.py"
@@ -29,7 +29,7 @@ unset DEVBREW_SPEC_DISTILL_DISABLE DEVBREW_SKIP_HOOKS DEVBREW_SPEC_DISTILL_TTL_H
 T="$(mktemp -d)"; [ -n "$T" ] && [ -d "$T" ] || { echo "mktemp 실패"; exit 1; }
 T="$(cd "$T" && pwd -P)"; trap 'rm -rf "$T"' EXIT
 
-SR="$SD/skills/spec-review/SKILL.md"; RB="$SD/skills/reviewing-brief/SKILL.md"; RF="$SD/skills/request-framing/SKILL.md"
+SR="$SD/skills/spec-review/SKILL.md"; RB="$SD/skills/reviewing-brief/SKILL.md"; RF="$SD/skills/intent-sync/SKILL.md"
 PROC="$REPO_ROOT/shared/docreview/references/reviewing-document.md"
 am_body() {   # am_body <파일> → 질문 재료 펜스의 bash 본문(여는 ```bash 줄과 닫는 ``` 줄을 뺀다)
   awk '/<!-- ask-material:begin -->/{f=1;next} /<!-- ask-material:end -->/{f=0} f' "$1" | sed -e '1d' -e '$d'
@@ -50,7 +50,7 @@ for f in "$SR" "$RB" "$RF"; do
   assert_eq "$(grep -cF '질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고' "$f")" "1" "$name: 8단계 재진술이 새 문장이다"
   assert_eq "$(grep -cF '<!-- ask-material:begin -->' "$f")" "1" "$name: 질문 재료 펜스는 하나다"
 done
-assert_contains "$(awk '/<!-- ask-material:begin -->/{f=1} /<!-- ask-material:end -->/{f=0} f' "$RF")" '--fix-rows --ask-rows' "request-framing 은 수정 행과 질문 행의 묶음도 받는다"
+assert_contains "$(awk '/<!-- ask-material:begin -->/{f=1} /<!-- ask-material:end -->/{f=0} f' "$RF")" '--fix-rows --ask-rows' "intent-sync 은 수정 행과 질문 행의 묶음도 받는다"
 assert_not_contains "$(am_body "$SR")$(am_body "$RB")" '--fix-rows' "spec-review · reviewing-brief 는 수정 행 묶음을 받지 않는다(양의 짝)"
 for lit in '질문마다 엔진의 질문 재료(`docreview_state.py ask-material`) 한 묶음을 쓴다' '**선택지 설명** — 「고친다」의 설명은 고치면 무엇이 바뀌는지' \
            '**줄일 때의 규칙 넷** — 「스크립트·subagent 가 낸 원문은 고치지 않는다」의 예외는 이 자리의 두 칸' '리뷰어가 낸 길이 아니다' \
@@ -60,13 +60,13 @@ done
 [ -L "$REPO_ROOT/plugins/spec-distill/references/reviewing-document.md" ] && ok "절차서의 플러그인 쪽은 정본을 가리키는 링크다" || no "절차서의 플러그인 쪽이 링크가 아니다"
 
 # 다음 단계 질문의 두 줄 — 표지를 푸는 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서(AC8 · §4-3)
-PG="$SD/references/proceed-gate.md"; FIN="$SD/skills/pm-interview/references/finishing.md"
+PG="$SD/references/proceed-gate.md"; FIN="$SD/skills/context-build/references/finishing.md"
 assert_eq "$(grep -cF '엔진의 「상태」 줄과 「전문」 줄은 표지를 푸는 펜스(참고 목록 · 계수 기록)보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$PG")" "1" "정본: 두 줄의 출처와 순서"
 assert_eq "$(grep -cF '경고 줄과 「전문」 줄은 표지를 푸는 펜스(아래 참고 목록 펜스)보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$SR")" "1" "spec-review: 2단계 · 승인 질문 하나의 두 줄 출처"
 assert_eq "$(grep -cF '참고 목록 펜스 뒤에는 질문 재료 펜스를 돌리지 않는다' "$SR")" "1" "spec-review: 표지를 푼 뒤에는 그 펜스를 돌리지 않는다"
 assert_eq "$(grep -cF 'Step B 로 돌아가기 직전에 `## 게이트` 의 질문 재료 펜스를 한 번 더 돈다' "$RB")" "1" "reviewing-brief: 돌아가기 직전의 마지막 질문 재료 펜스"
 assert_eq "$(grep -cF '마지막 질문 재료 펜스에 `channel_lines` 로 넣는다' "$RB")" "1" "reviewing-brief: 원장 줄 전체가 그 한 번에 실린다"
-assert_eq "$(grep -cF '경고 줄과 「전문」 줄은 표지를 푸는 이 계수 기록 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$RF")" "1" "request-framing: 확정 게이트의 두 줄 출처"
+assert_eq "$(grep -cF '경고 줄과 「전문」 줄은 표지를 푸는 이 계수 기록 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$RF")" "1" "intent-sync: 확정 게이트의 두 줄 출처"
 assert_eq "$(grep -cF '돈 질문 재료 펜스(B-A 가 표지를 풀기 전의 마지막 출력)의 「상태」 줄' "$FIN")" "1" "인터뷰 끝 B-2: 엔진 줄의 출처"
 assert_eq "$(grep -cF '「전문」 줄은 그 마지막 질문 재료 출력의 「전문:」 줄 그대로입니다' "$FIN")" "1" "인터뷰 끝 B-2: 전문 줄의 출처"
 assert_eq "$(grep -cF '2단계 질문의 「상태」 · 「전문」 줄은 표지를 푸는 펜스보다 먼저 돈 질문 재료 펜스의 마지막 출력에서 받는다' "$PROC")" "1" "절차서 8단계: 두 줄의 출처"

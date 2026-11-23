@@ -3,14 +3,14 @@ name: <kebab-topic>
 type: interview-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
-source: spec-distill pm-interview
+source: spec-distill context-build
 next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2
 audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같은 디렉토리)
 # user_sourced_items — **사용자 출처 항목만**. `source: inferred`는 여기 들어갈 수 없다(게이트 fail).
 # 모델 추론은 본문 프로즈에 ✎ 표기로만 산다.
-# status는 인터뷰 종료 직전 사용자 일괄 확인으로만 confirmed가 된다 — 라운드 중에는 전부 provisional.
+# status는 컨텍스트 쌓기 종료 직전 사용자 일괄 확인으로만 confirmed가 된다 — 라운드 중에는 전부 provisional.
 # 그래서 brief를 처음 쓰는 시점(Step A)에는 confirmed가 0건이고, 아래 블록 첫 줄의 sentinel이
 # 반드시 있어야 게이트를 통과한다. 확정 반영(proceed 게이트 ①/②) 시 그 줄을 같은 write에서 지운다.
 # 각 항목의 값 뒤 `# ...`는 YAML 인라인 주석이며 게이트가 값에서 떼어낸다(값의 일부가 아니다).
@@ -28,7 +28,7 @@ user_sourced_items:
     evidence: S1              # payload §6 의 S<N> — §6 이 원문 전량이다
 ---
 
-# <Topic> — Interview Brief
+# <Topic> — Context Brief
 
 > 이 brief는 단독 완결 산출물이다. superpowers가 있으면
 > §7 대로 기본 다음 단계(brainstorming 해답공간)로 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
@@ -110,11 +110,11 @@ user_sourced_items:
 
 ## 6. 사용자 원문
 
-(사용자 원문 **S1~Sn 전부**가 여기 있다 — S1 최초 요청, S2 이상 인터뷰 발화. audit `## 6. 사용자 원문` 도
+(사용자 원문 **S1~Sn 전부**가 여기 있다 — S1 최초 요청, S2 이상 컨텍스트 쌓기 발화. audit `## 6. 사용자 원문` 도
  S2 이상을 같은 글자로 가진다. **추가만 허용** — 이미 있는 원문 글자는 어떤 처분으로도 고치지 않고, brief
  리뷰 중 사용자 결정 발화는 새 `S<N>` 으로 이 절 끝 · audit §6 · state `user_statements` 에 같은 write 로
  더한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑·열 0 펜스 래핑(백틱 · 코드 펜스 · 문자
- 참조 · HTML 이 든 발화 — pm-interview `references/finishing.md`)뿐이며 요약·재서술·발췌는 금지. seed 로 시작한 인터뷰의 `S1` 은 손으로 옮겨 치지 않는다 — `raw_source.py place` 가 framing 기록의 원문 절과 질문 전체 절을 글자 그대로 싣고, 그 칸의 질문 문구 · 선택지 · 풀이 줄 · `### ` 구분 줄은 모델이나 저자가 쓴 줄이다. 원자료를 찾지 못했거나 그대로 싣지 못할 때만 seed 전문을 싣고 앵커 라벨로 밝힌다(pm-interview `references/finishing.md`).)
+ 참조 · HTML 이 든 발화 — context-build `references/finishing.md`)뿐이며 요약·재서술·발췌는 금지. seed 로 시작한 컨텍스트 쌓기의 `S1` 은 손으로 옮겨 치지 않는다 — `raw_source.py place` 가 framing 기록의 원문 절과 질문 전체 절을 글자 그대로 싣고, 그 칸의 질문 문구 · 선택지 · 풀이 줄 · `### ` 구분 줄은 모델이나 저자가 쓴 줄이다. 원자료를 찾지 못했거나 그대로 싣지 못할 때만 seed 전문을 싣고 앵커 라벨로 밝힌다(context-build `references/finishing.md`).)
 
 - **S1** 🗣 최초 요청:
   > "..."
@@ -127,4 +127,4 @@ user_sourced_items:
  → 그 설계문서 경로로 `spec-distill:spec-review`(brainstorming 의 설계문서 점검과 그 질문을 마친 뒤 문서를 승인받는 자리) → 승인
  게이트에서 진행을 고른 뒤 `superpowers:writing-plans`. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
 
-(분해된 일이면 첫 줄은 `분해됨 — <로드맵 경로>` 이다 — 다음 단계는 brainstorming 하나가 아니라 그 로드맵의 지휘 절차다.)
+(분해된 일이면 첫 줄은 `분해됨 — <로드맵 경로>` 이다 — 다음 단계는 brainstorming 하나가 아니라 로드맵 잡기(`/spec-distill:roadmap-draft`)이고, 그 경로의 로드맵은 로드맵 잡기가 만든다.)

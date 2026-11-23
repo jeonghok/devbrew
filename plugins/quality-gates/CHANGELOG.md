@@ -3,11 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [15.3.2] — 2026-11-22
+## [15.3.3] — 2026-11-23
 
 ### Fixed
 - codex 결과 파서(`scripts/codex_findings_to_yaml.py`, 정본 `shared/codex/`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
 - 문서 비평의 codex 결과 추출기(`scripts/extract_codex_artifact_yaml.py`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 성공 갈래 · 실패 갈래 모두 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 강등(`codex_failed: true`)을 알린다.
+
+## [15.3.2] — 2026-11-22
+
+### Changed
+- spec-distill 9.0.0 이 진입 skill 둘의 이름을 바꾼 데 맞춰, 이 플러그인의 테스트 셋과 함께 싣는 문서 리뷰 엔진(`docreview_state.py`)의 설명 글이 새 이름을 쓴다. 동작은 그대로다.
 
 ## [15.3.1] — 2026-11-22
 
