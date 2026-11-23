@@ -129,7 +129,7 @@ assert_file_has "$TPL" "분해됨 — <로드맵 경로>" "brief 템플릿 §7: 
 RED="$SD/references/redecompose.md"
 if [ -f "$RED" ]; then ok "redecompose.md 실재"; else no "redecompose.md 없음"; fi
 RTXT="$(cat "$RED" 2>/dev/null)"
-for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「컨텍스트 쌓기 다시 열기」' '지휘 세션' \
+for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「로드맵 다시 잡기」' '지휘 세션' \
            'roadmap_write.py" extract' '`## 분해안`' \
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다 (권장)"' '"고치기"' '"그만둔다"' \
@@ -192,7 +192,14 @@ for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸�
 done
 case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
 FIN7="$(win "$RED" '## 7. 끝내기' '## ')"
-has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「컨텍스트 쌓기 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「로드맵 다시 잡기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+SRV="$SD/skills/spec-review/SKILL.md"
+SRTXT="$(cat "$SRV" 2>/dev/null)"
+has "$SRTXT" '로드맵 에픽이면 이 갈래의 라벨은 「로드맵 다시 잡기」 다' "로드맵 다시 잡기: spec-review 불릿이 로드맵 에픽의 라벨을 정한다"
+has "$SRTXT" '「로드맵 다시 잡기」: 얻음: ' "로드맵 다시 잡기: 갈래 설명이 새 라벨로 시작한다"
+has "$SRTXT" '「컨텍스트 쌓기 다시 열기」(`context-build` 재진입)' "로드맵 다시 잡기: 로드맵 밖 설계문서의 라벨은 그대로(양성 짝)"
+has "$RTXT" '「로드맵 다시 잡기」 갈래를 골랐을 때' "로드맵 다시 잡기: 재분해 1 이 새 라벨을 문다"
+has "$(cat "$SD/README.md" 2>/dev/null)" '재분해(「로드맵 다시 잡기」)' "로드맵 다시 잡기: README 가 새 라벨을 쓴다"
 case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
 assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
 UP="$(win "$RED" '## 6. 올리기' '## ')"
