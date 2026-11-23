@@ -15,6 +15,7 @@
 - 의도 점검 질문 창에는 질문 한 문장만 싣고, 근거와 직접 확인할 곳은 질문 앞 글로 옮겼다. 걸음표 검수 행에 qg 가 들어갔다. 넘겨받은 행 21–23 · 27–31 과 R3 리뷰 지적 둘을 반영했다.
 - README 의 quality-gates 의존 줄과 `dependencies.md` 의 quality-gates 행이 자리 넷을 새 이름으로 말한다. 판 칸은 `check_deps.py measure` 로 다시 쟀다(quality-gates 16.0.0).
 - `shared/tests/test_dispatch_disposition.sh` 의 vacuity 하한이 내장 `general-purpose` 를 뺀 플러그인 agent 정의 수에 걸린다. `shared/tests/fixtures/ask-sites.tsv` 에 되돌리기의 두 질문 행이 늘었다.
+- `tests/test_roadmap_draft_skill.sh` 의 판 단언(앞 단계 재편 AC19)이 `9.0.0` 과 글자로 견주던 것을 9.0.0 이상(하한)으로 바꿨다 — 판은 PR 마다 오른다. 9.0.0 절과 README 를 보는 나머지 단언은 그대로다.
 
 ### Removed
 - 담당자 틀의 범위 모드 끝내기 질문 답.
