@@ -73,6 +73,10 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 
 줄 형식은 `- <블록> · <결정|머지> · <YYYY-MM-DD> · 「원문」` 이다. 인터뷰 뒤의 사용자 말은 새 S 번호 없이 원문 그대로 인용한다. 「머지」 줄은 PR 없이 로컬에서 머지한 에픽에만 적는다 — PR 로 머지한 에픽은 지휘자가 채운 PR 상태로 머지됨이 된다(squash · rebase 포함).
 
+- E0 · 결정 · 2026-11-23 · 「E0(규칙 문서를 쥔 두 에픽의 머지 확인): 지휘 로드맵 R2(#305 · #312)와 앞단 로드맵 F5(#323)가 모두 머지됐습니다. E0를 닫고 E2(테스트 기준과 규칙 문서) 설계를 열까요?」 → 「닫는다 (권장)」
+  - 확인한 것(2026-11-23 · 기본 브랜치 607ac54e · PR 기록으로 판정): 지휘 로드맵(2026-11-14-conductor-context-economy-brief) R2 의 브랜치 둘이 PR #305(2026-11-20) · #312(2026-11-21)로 머지됐다(`CLAUDE.md` · `docs/superpowers/roadmaps/worker/`). 앞단 로드맵(2026-11-14-framing-interview-constraint-audit-brief) F5 가 PR #323(2026-11-23)으로 머지됐다(`docs/plugin-authoring.md`).
+  - E2 가 알릴 상대(경로 예약을 다시 셈): 앞단 로드맵 F7 의 둘째 계획(`feature/switch-retirement` — 브랜치 전 · `CLAUDE.md` · `docs/plugin-authoring.md`) · 지휘 로드맵 R5(`feature/conductor-migration` — 브랜치 전 · `CLAUDE.md` · `docs/plugin-authoring.md`). 지휘 로드맵 E1(세션 담당자)은 PR #322 로 머지돼 알릴 상대에서 빠진다.
+
 ## 재분해 이력
 
 ### 2026-11-20 · 처음 로드맵
