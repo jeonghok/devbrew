@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
+# guards: plugins/spec-distill/.claude-plugin/plugin.json plugins/quality-gates/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
 # 다섯 층 재편의 판 · 변경 기록 · README 락 — 현재 판의 변경 기록 절이 새 글자와 옛 기록 읽기를 적는다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_intent_layers_release.sh
 set -u
