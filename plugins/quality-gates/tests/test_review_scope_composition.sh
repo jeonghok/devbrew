@@ -29,9 +29,10 @@ assert_contains "$S3" '선택: <리뷰어>(근거: <신호>)' "시작 줄의 선
 assert_not_grep "$S3" 'at most 8|최대 8' "Step 3: 리뷰어 상한 8 이 없다(AC24 — 비용 장치 제거)"
 assert_not_grep "$(cat "$SKILL")" 'Do not re-dispatch the same reviewer|같은 리뷰어를 다시 부르지' "같은 반복 재호출 금지가 없다(AC24)"
 assert_contains "$S3" '시작 구성' "구성표는 시작 구성이다"
-assert_contains "$S3" '> [quality-gates] iter N — 리뷰어 <계획한 수>명을 부른다(구성표 <a>명 · 근거를 적어 더한 <b>명)' "시작 줄 꼴"
+assert_contains "$S3" '> [quality-gates] 리뷰어 <계획한 수>명을 부른다(구성표 <a>명 · 근거를 적어 더한 <b>명)' "시작 줄 꼴"
+assert_not_contains "$S3" 'iter N —' "시작 · 끝 줄에 반복 번호 앞머리가 없다(한 실행은 한 번 지난다)"
 assert_contains "$S3" '/ 더함: <리뷰어>(근거: <한 줄>)' "시작 줄의 더함 자리"
-assert_contains "$S3" '> [quality-gates] iter N — 다시 부른 리뷰어 <r>명(일시 실패 재시도 <x> · 나눠 돌림 <y>)' "끝 줄 꼴"
+assert_contains "$S3" '> [quality-gates] 다시 부른 리뷰어 <r>명(일시 실패 재시도 <x> · 나눠 돌림 <y>)' "끝 줄 꼴"
 start_ln=$(printf '%s\n' "$S3" | grep -n '리뷰어 <계획한 수>명을 부른다' | head -1 | cut -d: -f1)
 end_ln=$(printf '%s\n' "$S3" | grep -n '다시 부른 리뷰어 <r>명' | head -1 | cut -d: -f1)
 agent_ln=$(printf '%s\n' "$S3" | grep -n 'subagent_type: "quality-gates:security-reviewer"' | head -1 | cut -d: -f1)
@@ -43,7 +44,7 @@ assert_contains "$S3" '나눠 돌림' "큰 diff 는 파일 묶음으로 나눠 �
 # final-review T7 — 보안 리뷰를 나눠 돌리면 묶음마다 fail-closed 다. 문단 줄 전체로 잰다(뒤에 예외를 붙이거나
 # 「한 묶음이라도」를 약하게 바꾸면 줄이 달라진다). 시작 낱말로 그 줄이 하나뿐임을 따로 잰다(양성 짝).
 assert_eq "$(printf '%s\n' "$S3" | grep -c '^\*\*fail-closed 의 뜻\*\* — ')" "1" "보안 fail-closed 문단 줄이 하나다(양성 짝)"
-assert_eq "$(printf '%s\n' "$S3" | grep -cxF -- '**fail-closed 의 뜻** — 한 번 다시 부른(일시 실패 재시도) 두 번째 시도도 실패했거나 출력을 읽을 수 없으면 그 iteration 의 각도 파일에 `security: absent(source-failed)` 를 쓴다. 판정은 `not-certified (angle-absent)` 다. 다른 리뷰어의 finding 이 있다고 보안 각도가 채워진 것이 아니다. 보안 리뷰를 나눠 돌렸다면 묶음마다 따로 fail-closed 다 — 한 묶음이라도 두 번 실패하면 보안은 source-failed 다.')" "1" \
+assert_eq "$(printf '%s\n' "$S3" | grep -cxF -- '**fail-closed 의 뜻** — 한 번 다시 부른(일시 실패 재시도) 두 번째 시도도 실패했거나 출력을 읽을 수 없으면 이 실행의 각도 파일에 `security: absent(source-failed)` 를 쓴다. 판정은 `not-certified (angle-absent)` 다. 다른 리뷰어의 finding 이 있다고 보안 각도가 채워진 것이 아니다. 보안 리뷰를 나눠 돌렸다면 묶음마다 따로 fail-closed 다 — 한 묶음이라도 두 번 실패하면 보안은 source-failed 다.')" "1" \
   "보안 리뷰를 나눠 돌리면 묶음마다 fail-closed — 한 묶음이라도 두 번 실패하면 source-failed (줄 전체)"
 assert_not_grep "$(cat "$QG/README.md")" '최대 8|≤ 8|max fan-out' "README 에 리뷰어 상한 8 · 선언된 max fan-out 이 없다(AC24)"
 assert_contains "$(cat "$QG/README.md")" '위 표는 시작 구성이다' "README 구성표는 시작 구성(양성 짝)"
@@ -58,11 +59,11 @@ assert_not_grep "$S1" 'exclude-standard    # \(c\)' "Step 1: 모델이 세 집�
 assert_contains "$S1" '`files:`' "Step 1: \$resolved_scope_file_count 는 review-diff 의 files: 값"
 assert_contains "$S1" '문서 경로' "Step 1: 문서 경로 공시 줄을 정한다(양성 짝)"
 assert_contains "$S1" '`self_state:`' "Step 1c: review-diff 의 self_state: 를 읽는다"
-assert_grep "$S1" '`> \[quality-gates\] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <[^>]+>개: <review-i<N>\.self-state 의 경로들>`' \
+assert_grep "$S1" '`> \[quality-gates\] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <[^>]+>개: <review-i1\.self-state 의 경로들>`' \
   "Step 1c: 건너뛴 qg 상태 경로를 공시한다(조용히 넘기지 않는다)"
-# AC22 — review-diff 의 stderr 줄은 매 iteration 하나도 빼지 않고 사용자에게 옮긴다(rc 0 이어도, 목록에 없는 꼴도).
-assert_contains "$S1" 'rc 가 0 이어도 stderr 의 `review-diff: ` 로 시작하는 줄은 매 iteration 하나도 빼지 않고 사용자에게 옮긴다' \
-  "Step 1c: review-diff: 줄을 매 iteration 모두 옮긴다"
+# AC22 — review-diff 의 stderr 줄은 하나도 빼지 않고 사용자에게 옮긴다(rc 0 이어도, 목록에 없는 꼴도).
+assert_contains "$S1" 'rc 가 0 이어도 stderr 의 `review-diff: ` 로 시작하는 줄은 하나도 빼지 않고 사용자에게 옮긴다' \
+  "Step 1c: review-diff: 줄을 모두 옮긴다"
 assert_contains "$S1" '줄마다 앞의 `review-diff: ` 를 `> [quality-gates] ` 로 바꾸고 나머지 글은 그대로 둔다' \
   "Step 1c: 옮길 때 머리만 바꾸고 글은 그대로 둔다"
 assert_contains "$S1" '아래에 없는 꼴의 줄도 그대로 옮긴다' "Step 1c: 목록에 없는 꼴의 줄도 옮긴다"
@@ -93,8 +94,8 @@ for row in '   | session | `--mode session` |' \
 done
 
 # 1c 규칙 — 각 규칙은 그 규칙만의 줄에서 잰다(헤더 · 다른 줄이 대신 만족시키지 못하게).
-DOCL="$(printf '%s\n' "$S1" | grep -F '매 iteration 공시 한 줄' | grep -F '`> [quality-gates] 문서 경로 <doc_paths>(출처: <기본 | 환경 변수 | 기본 — 이 변경이 설정을 바꿨다>) — 리뷰에서 뺀 경로 <excluded>개.`')"
-assert_eq "$(printf '%s\n' "$DOCL" | grep -c .)" "1" "1c: 매 iteration 문서 경로 공시 줄(리터럴 그대로)"
+DOCL="$(printf '%s\n' "$S1" | grep -F -- '- 공시 한 줄 — `<doc_paths>`' | grep -F '`> [quality-gates] 문서 경로 <doc_paths>(출처: <기본 | 환경 변수 | 기본 — 이 변경이 설정을 바꿨다>) — 리뷰에서 뺀 경로 <excluded>개.`')"
+assert_eq "$(printf '%s\n' "$DOCL" | grep -c .)" "1" "1c: 문서 경로 공시 줄(리터럴 그대로)"
 assert_contains "$DOCL" '`default` 면 「기본」, `env` 면 「환경 변수」, `default-settings-changed` 면 「기본 — 이 변경이 설정을 바꿨다」' \
   "1c: 그 공시 줄의 출처 매핑 셋"
 EMP="$(printf '%s\n' "$S1" | grep -F '`files:` 가 0 보다 크고 `filtered_files: 0` 이면 ')"
@@ -114,19 +115,18 @@ assert_contains "$DEG" '차등 테스트의 D2 가 같은 기준선을 풀지 �
 
 # Step 3.5 — 재비판 diff 사본을 못 만들면 펜스가 멈춘다(빈 사본으로 재비판하지 않는다).
 S35="$(awk '/^### Step 3\.5/{f=1;next} f&&/^### Step 4/{exit} f' "$SKILL")"
-assert_grep "$S35" '^[[:space:]]*cp "\$RD/review-i<N>\.diff" "\$RV/recritic\.diff" \|\| \{ echo "\[quality-gates\] [^"]+" >&2; exit 1; \}$' \
+assert_grep "$S35" '^[[:space:]]*cp "\$RD/review-i1\.diff" "\$RV/recritic\.diff" \|\| \{ echo "\[quality-gates\] [^"]+" >&2; exit 1; \}$' \
   "Step 3.5: 재비판 diff 사본 cp 가 실패하면 이유를 stderr 에 내고 exit 1"
 S3X="$(awk '/^### Step 3 — reviewers$/{f=1;next} f&&/^### Step 3\.5/{exit} f' "$SKILL")"
 [ -n "$S3X" ] && ok "Step 3 창(Step 3.5 앞까지)을 찾았다" || no "Step 3 창(Step 3.5 앞까지)이 없다"
-assert_contains "$S3X" 'review-i<N>.diff' "Step 3: FILTERED_DIFF 와 codex diff 는 review-i<N>.diff"
+assert_contains "$S3X" 'review-i1.diff' "Step 3: FILTERED_DIFF 와 codex diff 는 review-i1.diff"
 FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SKILL")"
 [ -n "$FV" ] && ok "Final verdict 창을 찾았다" || no "Final verdict 창이 없다"
 assert_contains "$FV" '--reason scope-empty' "걸러진 diff 가 빈 실행은 scope-empty 판정 펜스로 끝난다"
 assert_contains "$FV" '걸러진 diff 가 빈 실행(Step 1c 에서 `files:` 가 0 보다 크고 `filtered_files: 0`)' \
   "Final verdict 의 받는 자리가 1c 와 같은 이름 · 같은 조건이다"
 assert_contains "$FV" '`--new-failures 0` 은 차등 테스트를 돌지 않았기 때문이다' "scope-empty 펜스의 차등 새 실패 0 은 차등을 돌지 않아서임을 밝힌다"
-# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 iteration 번호와 제외 결과 줄의
-# 제외 패치 수를 싣는다(N>1 이면 앞 반복의 제외 결과 줄이 있다). 판정 펜스는 excluded.md 를 다시 세지 않는다.
+# 그 펜스를 실제로 돌린다 — 판정 줄이 not-certified (scope-empty) 이고 e2e 는 안 함이다(제외 · 반복 번호 칸이 없다).
 SEF="$(awk '$0 == "<!-- scope-empty-verdict:begin -->" {on=1; next} $0 == "<!-- scope-empty-verdict:end -->" {exit} on' "$SKILL")"
 RMF="$(printf '%s\n' "$FV" | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{if(b ~ /rm -f "\$RD\/differential\.yaml"/) printf "%s", b; f=0; next} f{b=b $0 "\n"}')"
 if [ -z "$SEF" ] || ! printf '%s\n' "$SEF" | grep -q -- '--reason scope-empty'; then
@@ -136,24 +136,13 @@ else
   git -C "$SET" init -q -b trunk \
     && git -C "$SET" -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
   mkdir -p "$SET/.claude/quality-gates/scopeempty01"
-  sef_fill() {   # sef_fill <출력> <제외 결과 줄>
-    python3 -I "$QG/tests/lib/verdict_fence.py" "$SKILL" scope-empty-verdict "$1" "<session-id>=scopeempty01" "<N>=2" \
-      "QG_ARGS_R=" "QG_ARGS_D=" "QG_ARGS_X=$2" "QG_ARGS_S=" "QG_ARGS_E="
-  }
-  sef_fill "$SET/run.sh" ""; sef_fill "$SET/run2.sh" "qg-verdict-args: --excluded 2"
+  python3 -I "$QG/tests/lib/verdict_fence.py" "$SKILL" scope-empty-verdict "$SET/run.sh" "<session-id>=scopeempty01" \
+    "QG_ARGS_R=" "QG_ARGS_D=" "QG_ARGS_S=" "QG_ARGS_E="
   seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다(제외 결과 줄 없음)"
+  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 verdict.py 를 rc 0 으로 끝낸다"
   assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
-    '^qg: not-certified \(scope-empty\) · .* · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 2 · [0-9a-f]+$' \
-    "scope-empty 펜스의 판정 줄 — not-certified (scope-empty) · e2e 안 함 · 제외 0 · 그 iteration 번호"
-  printf -- '- #1 a.py — 사유 x\n- #2 b.py — 사유 y\n' > "$SET/.claude/quality-gates/scopeempty01/excluded.md"
-  seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run.sh" 2>&1)"
-  assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
-    ' · 제외 패치 0 · iter 2 · ' "scope-empty 펜스는 excluded.md 를 다시 세지 않는다(제외 결과 줄이 없으면 0)"
-  seo="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/run2.sh" 2>&1)"
-  assert_contains "$seo" 'verdict rc=0' "scope-empty 펜스가 제외 결과 줄이 있어도 rc 0"
-  assert_grep "$(tail -n 1 "$SET/.claude/quality-gates/scopeempty01/verdict.out" 2>/dev/null)" \
-    ' · 제외 패치 2 · iter 2 · ' "scope-empty 펜스가 앞 반복의 제외 결과 줄의 수를 싣는다"
+    '^qg: not-certified \(scope-empty\) · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · [0-9a-f]+$' \
+    "scope-empty 펜스의 판정 줄 — not-certified (scope-empty) · e2e 안 함 · 커밋(제외 · 반복 번호 칸 없음)"
 
   # final-review M3 — N>1 의 빈 diff 반복은 차등 테스트를 돌지 않는다. 앞 반복의 차등 사본이 남아
   # 이번 판정의 「## 차등 테스트」로 기록되지 않게 판정 펜스 앞의 펜스가 지운다. 기록 펜스까지 실제로 돌린다.
@@ -176,9 +165,9 @@ else
   else
     printf -- '---\nsession_id: "scopeempty01"\n---\n\n# qg result\n' > "$SED/result.md"
     # final-review M4 — 마지막 반복의 문서 경로 요약 줄을 result.md 에 남긴다(파일 목록은 싣지 않는다)
-    printf 'doc_paths_source: env\ndoc_paths: README*,docs/human/**\nbad_patterns: [x\nexcluded: 2\nkept_model: 1\nexclude\tREADME.md\nexclude\tdocs/human/a.md\nkept\tdocs/human/SKILL.md\n' > "$SED/review-i2.doc-paths"
-    printf '.claude/quality-gates/scopeempty01/a\n.claude/quality-gates/scopeempty01/b\n' > "$SED/review-i2.self-state"
-    printf '%s\n' "$REC" | sed -e 's/<session-id>/scopeempty01/g' -e 's/<N>/2/g' -e 's|^SYN=.*$|SYN=""|' > "$SET/rec.sh"
+    printf 'doc_paths_source: env\ndoc_paths: README*,docs/human/**\nbad_patterns: [x\nexcluded: 2\nkept_model: 1\nexclude\tREADME.md\nexclude\tdocs/human/a.md\nkept\tdocs/human/SKILL.md\n' > "$SED/review-i1.doc-paths"
+    printf '.claude/quality-gates/scopeempty01/a\n.claude/quality-gates/scopeempty01/b\n' > "$SED/review-i1.self-state"
+    printf '%s\n' "$REC" | sed -e 's/<session-id>/scopeempty01/g' -e 's|^SYN=.*$|SYN=""|' > "$SET/rec.sh"
     rco="$(cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rec.sh" 2>&1)"; rcr=$?
     assert_eq "$rcr" "0" "기록 펜스 rc 0 (빈 diff 실행)"
     res="$(cat "$SED/result.md")"
@@ -192,7 +181,7 @@ else
     assert_not_grep "$DPS" '^(exclude|kept)'"$(printf '\t')" "## 문서 경로: 경로 목록 줄(exclude · kept)은 싣지 않는다"
     # 위조 방어 — 커밋된 파일 이름에 개행이 있으면 경로 줄 뒤에 요약처럼 보이는 줄이 생긴다. 머리 줄만 읽는다.
     printf -- '---\nsession_id: "scopeempty01"\n---\n\n# qg result\n' > "$SED/result.md"
-    printf 'doc_paths_source: default\ndoc_paths: README*\nbad_patterns: -\nexcluded: 1\nkept_model: 0\nexclude\tREADME\nexcluded: 0\ndoc_paths_source: env\nkept_model: 9\n' > "$SED/review-i2.doc-paths"
+    printf 'doc_paths_source: default\ndoc_paths: README*\nbad_patterns: -\nexcluded: 1\nkept_model: 0\nexclude\tREADME\nexcluded: 0\ndoc_paths_source: env\nkept_model: 9\n' > "$SED/review-i1.doc-paths"
     (cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rec.sh" >/dev/null 2>&1)
     FDP="$(awk '/^## 문서 경로$/{f=1;next} f&&/^## /{exit} f' "$SED/result.md")"
     assert_eq "$(printf '%s\n' "$FDP" | grep -c '^excluded: ')" "1" "위조: ## 문서 경로 의 excluded 줄은 하나"
@@ -208,7 +197,7 @@ else
       ok "## 문서 경로 는 ## 판정 뒤 · ## 지적 앞이다 ($a < $b < $c)"
     else no "## 문서 경로 자리가 틀렸다 (판정 ${a:-0} · 문서 경로 ${b:-0} · 지적 ${c:-0})"; fi
     # 문서 경로 파일이 없는 실행(trivia 등)은 절을 쓰지 않는다(양의 짝: 기록은 돈다)
-    rm -f "$SED/review-i2.doc-paths" "$SED/review-i2.self-state"
+    rm -f "$SED/review-i1.doc-paths" "$SED/review-i1.self-state"
     printf -- '---\nsession_id: "scopeempty01"\n---\n\n# qg result\n' > "$SED/result.md"
     (cd "$SET" && CLAUDE_PLUGIN_ROOT="$QG" bash "$SET/rec.sh" >/dev/null 2>&1)
     assert_contains "$(cat "$SED/result.md")" '## 지적' "양의 짝: 문서 경로 파일이 없어도 기록은 돈다"
@@ -224,7 +213,7 @@ c=$(printf '%s\n' "$SFM" | grep -nx '## 지적' | head -1 | cut -d: -f1)
 if [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ]; then
   ok "state-file-format: ## 문서 경로 는 ## 범위 뒤 · ## 지적 앞이다"
 else no "state-file-format: ## 문서 경로 자리가 틀렸다 (범위 ${a:-0} · 문서 경로 ${b:-0} · 지적 ${c:-0})"; fi
-assert_file_grep "$SFF" '`## 문서 경로` 는 마지막 반복의 `review-i<N>\.doc-paths` 가 비어 있지 않을 때만 쓴다' "state-file-format: 문서 경로 절의 생명주기"
+assert_file_grep "$SFF" '`## 문서 경로` 는 `review-i1\.doc-paths` 가 비어 있지 않을 때만 쓴다' "state-file-format: 문서 경로 절의 생명주기"
 
 # AC11 — 옛 구성의 부재(플러그인 표면 전체). 양의 짝은 위 표 행이다.
 hits="$(grep -rlE 'scout\.py|feature-dev:code-architect' "$QG/skills" "$QG/commands" "$QG/agents" "$QG/scripts" "$QG/references" 2>/dev/null)"

@@ -124,17 +124,8 @@ plugins/spec-distill/references/conducting.md	지시	두 번째 재리뷰 뒤 �
 plugins/spec-distill/references/conducting.md	지시	지우기 전에 수정 · 추적 안 된 파일이 있으면	끊긴 곳은 사용자에게 보이고
 
 # quality-gates (Task 7)
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	decisions surface via AskUserQuestion.	
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	Decision points are `AskUserQuestion`	
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).**	- 모든 묶음에서 지적을 하나도 고르지 않았다	1
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	**범위 모드 갈래.**	범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다.	1	2
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	질문이 없고, Step 5 의 분류표도 만들지 않는다	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	그 밖의 실행은 이 질문을 띄운다:	내줌: 이번 실행의 판정이 PR 코멘트로 남지 않는다"}	1	3
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	question: "분류표의 적용/제외를 바꿀까요?	Branch on answer:
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	첫 질문에서 고른 선택지는	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	### Max-iter decision	내줌: 이번 실행의 판정이 PR 코멘트로 남지 않는다"}	1	3
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	이 질문에서 고른 선택지는	뗀 이름으로 읽는다.
-plugins/quality-gates/skills/quality-pipeline/SKILL.md	지시	If `Edit` fails (`old_string not unique`	A skipped file's items are appended to	1	2
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	**낮춘 지적 게이트 (표면화 뒤 · 고칠 목록 앞).**	- 모든 묶음에서 지적을 하나도 고르지 않았다	1
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	떼기	- **여러 시나리오** — 게이트 결과마다	뗀 이름으로 읽는다.
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	- `classification: ambiguous` → E3 *이전에* `AskUserQuestion`으로 확인	모드를 정한다 — 모드는 실행 전체에 하나다.	1
 plugins/quality-gates/skills/artifact-critique/SKILL.md	떼기	"아니오"면 그 대상을 뺀다	
@@ -144,8 +135,8 @@ plugins/quality-gates/skills/artifact-critique/SKILL.md	꼬리	(2) 비평자 수
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	kept-empty를 수렴으로 읽지 **않는다** → **NEEDS_RESOLUTION**	**4b. 지적만 받기면 여기서 끝**	1
 plugins/quality-gates/skills/artifact-critique/SKILL.md	지시	**9. N+1로 반복**	기타 칸의 글이 더 여는 뜻이면	1	2
 plugins/quality-gates/references/e2e.md	비움	`AskUserQuestion` 질문 하나, 여러 선택(`multiSelect: true`)이다.	## 3. 걷기 규칙	1
-plugins/quality-gates/references/e2e.md	지시	증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다.	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.	1
-plugins/quality-gates/references/e2e.md	떼기	| 판정안 | 선택지 |	- `fail` 행은 Fix-loop 게이트와 같은 질문이다.
+plugins/quality-gates/references/e2e.md	지시	증거표와 판정안을 보인 뒤 `AskUserQuestion` 하나를 띄운다.	- 게이트는 걷기마다 띄운다.	1
+plugins/quality-gates/references/e2e.md	떼기	| 판정안 | 선택지 |	- 게이트는 걷기마다 띄운다.
 plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md	비움	**질문 (PR 범위 · k ≥ 1).**	그 자체가 라벨 유도다.	1
 
 # project-init · plugin-audit (Task 8)
@@ -177,3 +168,5 @@ plugins/plugin-audit/skills/plugin-audit/SKILL.md	비움	「축 1~3 중 쓸 것�
 plugins/plugin-audit/skills/plugin-audit/SKILL.md	비움	「축 4~6 중 쓸 것」(4 외부 대비·정체성	)
 plugins/plugin-audit/skills/plugin-audit/SKILL.md	꼬리	하나도 안 고르면	내줌: 감사가 이뤄지지 않아 갭이 하나도 나오지 않는다		2
 plugins/spec-distill/skills/epic-conductor/references/qg-review.md	비움	**의도 점검 질문.**	라벨 셋의 글자와 순서는 qg 와 같다.	1	
+plugins/spec-distill/skills/epic-conductor/references/qg-review.md	지시	**고치지 않은 막는 지적.**		0	3
+plugins/spec-distill/skills/epic-conductor/references/qg-review.md	지시	**두 번까지.**		0	3

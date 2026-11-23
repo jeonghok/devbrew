@@ -95,7 +95,7 @@ fi
 # Coverage (spec §5.6.9):
 #   - Review gate → Runtime gate dispatch line order monotonic
 #   - All 4 reviewer agents present in Review/Runtime gate fan-out (consistency w/ C1)
-#   - Review gate iter cap within proximity of AskUserQuestion section
+#   - Lowered-findings gate AskUserQuestion within proximity of the Step 4.5 head
 #   - DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS within 100 lines of Runtime gate dispatch
 #   - Retry-path AskUserQuestion block lies between Review gate and Runtime gate
 
@@ -186,17 +186,14 @@ for agent in code-recritic security-reviewer; do
   fi
 done
 
-# Fix-loop iter cap proximity to the fix-loop AskUserQuestion.
-# v10(K-8): 차등 테스트 절이 Review 와 Fix-loop 사이에 접히므로 「재비판 dispatch 뒤 첫
-# AskUserQuestion」 은 레퍼런스 R3 산문에 떨어진다 — 앵커를 Fix-loop decision 절의 호출
-# 리터럴로 옮기고, 상한은 그 결정 도구가 스스로 밝히는 N<CAP / N=CAP → Max-iter 문장으로 잰다
-# (AC25 전에는 고정 상한 5 의 같은 문장).
-# 160 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는 것이다.
-fixloop_line=$(first_line '^### Fix-loop decision')
-assert_line "Fix-loop decision 절 앵커" "$fixloop_line"
-askuser_review_line=$(first_line_after 'AskUserQuestion[(][{]' "$fixloop_line")
-itercap_line=$(first_line 'N < CAP only — N = CAP always goes to Max-iter decision')
-assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
+# 대상 소멸 (R4 — 한 실행은 한 번 지난다): 고치기 반복의 결정 도구와 그 상한(N < CAP → Max-iter)
+# 문장이 SKILL.md 에서 사라졌다. 이 자리의 근접성 락(「iter cap near Review gate AskUserQuestion」)은
+# 남은 결정 도구 — Step 4.5 의 낮춘 지적 게이트 — 가 그 절 머리 가까이에 있는지로 옮긴다.
+# 60 을 올리지 않는다: 상한을 올리는 것은 이 근접성 sanity 를 무디게 하는 것이다.
+surface_head_line=$(first_line '^### Step 4\.5 — Surface the verdict$')
+assert_line "Step 4.5 절 앵커" "$surface_head_line"
+askuser_review_line=$(first_line_after 'AskUserQuestion[(][{]' "$surface_head_line")
+assert_proximity "lowered gate AskUserQuestion near Step 4.5 head" "$surface_head_line" "$askuser_review_line" 60
 
 # 대상 소멸 (Task 7 — runtime-verifier · Decision 1/2 · Upfront Execution Plan ·
 # block_policy · DISABLE_RUNTIME_SANDBOX · Runtime gate 그 자체가 SKILL.md 에서
@@ -374,16 +371,16 @@ else
 fi
 
 # --- v2.3.0 R4: Review-gate findings surfaced before the decision tool ---
-# The Surface-findings step (Step 4.5) must precede the iter-boundary
-# decision's `qg 반복 N: <ask-line>` question. Anchor on the surface-step TEXT,
+# The Surface-findings step (Step 4.5) must precede the remaining decision
+# tool's question (the lowered-findings gate). Anchor on the surface-step TEXT,
 # NOT the `## Review` section heading — a heading always precedes its
 # body, so a heading anchor is a tautological PASS (the V7-class defect this
 # file was created to avoid). Existence grep alone cannot catch mis-placement.
 surface_line=$(first_line 'Surface findings|Step 4\.5')
-question_line=$(first_line 'question: "qg 반복 N: <ask-line>')
+question_line=$(first_line 'question: "재비판이 심각도를 낮춘 지적')
 assert_line "Surface-findings step present" "$surface_line"
-assert_line "iter-boundary decision question present" "$question_line"
-assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
+assert_line "lowered-findings decision question present" "$question_line"
+assert_order "Surface findings precedes lowered-findings decision" "$surface_line" "$question_line"
 
 # 대상 소멸 (Task 7, AC1) — v2.4.0 Decision 1(gate-scope question, 'both gates'
 # anchor) · Dispatch Loop 참조(Decision 1 / short-circuit) · F1(단일-게이트

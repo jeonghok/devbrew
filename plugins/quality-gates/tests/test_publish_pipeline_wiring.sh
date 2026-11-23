@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_publish_pipeline_wiring.sh — 파이프라인 SKILL.md 의 `## Publish` 절(K-8)과 그 게시 펜스의 행동(AC13 aborted · K-2 `## 게시` · K-3 판정 줄 전사 금지).
+# test_publish_pipeline_wiring.sh — 파이프라인 SKILL.md 의 `## Publish` 절(K-8)과 그 게시 펜스의 행동(defect 판정도 게시 · K-2 `## 게시` · K-3 판정 줄 전사 금지).
 #
 # 게시 펜스는 `<!-- publish-fence:begin -->` · `<!-- publish-fence:end -->` 사이의 bash 펜스다. 그 펜스를 그대로
 # 잘라, 플러그인 루트 토큰 · `OUTCOME=` 줄 · `<session-id>` 자리표시를 sed 로 채우고 bash 와 zsh(있으면) 양쪽에서 돌린다 —
@@ -25,6 +25,8 @@ assert_eq "$(printf '%s\n' "$HEADS" | grep -B1 -x '## Publish' | head -n 1)" "##
 SEC="$(awk '/^```/{inf=!inf} !inf && /^## /{f=($0=="## Publish")} f' "$SKILL")"
 assert_eq "$(printf '%s\n' "$SEC" | grep -cx '<!-- publish-fence:begin -->')" "1" "게시 펜스 시작 표지가 ## Publish 안에 하나"
 assert_eq "$(grep -cx '<!-- publish-fence:begin -->' "$SKILL")" "1" "게시 펜스 시작 표지가 파일 전체에 하나"
+assert_eq "$(printf '%s\n' "$SEC" | grep -cxF '판정이 무엇이든(막는 지적이나 차등 결함으로 끝난 `defect` 도) 그 판정을 그대로 게시한다.')" "1" \
+  "Review Focus 4: ## Publish 본문이 defect 판정도 그대로 게시한다고 줄 전체로 한 번 말한다"
 FENCE="$(awk '/^<!-- publish-fence:begin -->$/{f=1;next} /^<!-- publish-fence:end -->$/{f=0} f' "$SKILL" | sed -e '1{/^```bash$/d;}' -e '${/^```$/d;}')"
 [ -n "$FENCE" ] && ok "게시 펜스 본문을 잘라냈다($(printf '%s\n' "$FENCE" | wc -l | tr -d ' ')줄)" || no "게시 펜스 본문이 비었다 — 표지가 죽었다"
 printf '%s\n' "$FENCE" | grep -q 'scripts/publish-comment.sh' \
@@ -76,9 +78,9 @@ session_id: "testsession-0001"
 ## 판정
 
 verdict: defect
-qg: defect · 막는 지적 2 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · aaaaaaa
+qg: defect · 막는 지적 2 · 선택 0 · 차등 새 실패 0 · aaaaaaa
 verdict: clean
-qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · 제외 패치 1 · iter 2 · bbbbbbb
+qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · e2e pass · bbbbbbb
 
 ## 지적
 
@@ -96,15 +98,29 @@ mkdir -p "$T/gshim"
 printf '#!/usr/bin/env bash\n[ "${1:-}" = "status" ] && { echo "fatal: shim" >&2; exit 128; }\nexec "%s" "$@"\n' "$(type -P git)" > "$T/gshim/git"
 chmod +x "$T/gshim/git"
 
+# case_defect_run_publishes <shell> — 막는 지적 · 차등 결함으로 끝난 실행도 묻지 않고 그 판정을 그대로 게시한다
+# (Review Focus 4). OUTCOME 은 finished 하나이고, 열린 PR 의 가짜 sink 가 한 번 불려 defect 판정 줄을 싣는다.
+case_defect_run_publishes() {
+  local sh="$1" dline="qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 2 · e2e 안 함 · ddddddd"
+  fresh_proj
+  printf -- '---\n---\n\n# qg result\n\n## 판정\n\nverdict: defect\n%s\n\n## 고칠 목록\n\n### 막는 지적\n\n- IMPORTANT a.py:1 — x · 고칠 방법: y\n' "$dline" > "$R"
+  SINK_LAST="posted: https://github.com/o/r/pull/7#issuecomment-11" run_fence "$sh" "finished"
+  assert_eq "$RC" "0" "defect 게시($sh): rc 0"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "defect 게시($sh): 막는 지적으로 끝난 실행도 sink 를 정확히 한 번 부른다"
+  assert_eq "$(tail -n 1 "$SINK_BODY_COPY" 2>/dev/null)" "$dline" "defect 게시($sh): 코멘트 마지막 줄이 defect 판정 줄 원문이다"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-11" "defect 게시($sh): sink 의 posted 줄을 그대로 낸다"
+  # 옛 결과 토큰(aborted)은 받지 않는다 — 게시를 피하던 길이 없다(위 양성 짝)
+  fresh_proj
+  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 2"
+  assert_eq "$LAST" "게시 안 함 — OUTCOME 이 형식 밖이다" "defect 게시($sh): 옛 aborted 결과는 형식 밖이다(skipped: aborted 갈래가 없다)"
+  assert_eq "$(cat "$SINK_LOG")" "" "defect 게시($sh): 형식 밖 결과면 sink 를 부르지 않는다"
+}
+
 SHELLS="bash"
 command -v zsh >/dev/null 2>&1 && SHELLS="bash zsh"
 for sh in $SHELLS; do
   note "-- shell: $sh"
-  fresh_proj
-  SINK_LAST="posted: https://github.com/o/r/pull/7#issuecomment-9" run_fence "$sh" "aborted iter 2"
-  assert_eq "$LAST" "skipped: aborted" "AC13($sh): aborted 는 skipped: aborted 한 줄"
-  assert_eq "$(cat "$SINK_LOG")" "" "AC13($sh): aborted 면 sink 를 부르지 않는다"
-  assert_eq "$(tail -n 1 "$R")" "skipped: aborted" "K-2($sh): aborted 줄이 result.md ## 게시 에 남는다"
+  case_defect_run_publishes "$sh"
 
   fresh_proj
   SINK_LAST="posted: https://github.com/o/r/pull/7#issuecomment-9" run_fence "$sh" "finished"
@@ -113,7 +129,7 @@ for sh in $SHELLS; do
   assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "정상($sh): sink 를 정확히 한 번 부른다"
   assert_eq "$(cat "$SINK_LOG")" "--body-file $TOP/.claude/quality-gates/$SID/comment.md" "정상($sh): sink 인자는 --body-file <리포 루트>/.claude/quality-gates/<sid>/comment.md 하나(하위 디렉토리에서 돌아도)"
   assert_eq "$(cat "$T/sink.cwd")" "$TOP" "정상($sh): sink 는 리포 루트에서 돈다"
-  assert_eq "$(tail -n 1 "$SINK_BODY_COPY")" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · 제외 패치 1 · iter 2 · bbbbbbb" \
+  assert_eq "$(tail -n 1 "$SINK_BODY_COPY")" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · e2e pass · bbbbbbb" \
     "K-3($sh): 코멘트 마지막 줄은 result.md ## 판정 의 마지막 판정 줄 원문(절 밖 decoy 아님)"
   assert_eq "$(tail -n 2 "$SINK_BODY_COPY" | head -n 1)" "---" "spec §5($sh): 판정 줄 앞에 구분선"
   assert_eq "$(tail -n 3 "$SINK_BODY_COPY" | head -n 1)" "" "M4($sh): 구분선 앞은 빈 줄"
@@ -136,9 +152,9 @@ for sh in $SHELLS; do
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "범위($sh): 두 번 돌아도 ## 게시 는 하나"
   fresh_proj
   : > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
-  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 1"
-  assert_eq "$LAST" "$RANGE_LINE" "범위($sh): aborted 여도 범위 공시 줄(상태를 보지 않는다 — 파일이 있으면 거절)"
-  assert_eq "$(cat "$SINK_LOG")" "" "범위($sh): aborted + 범위도 sink 를 부르지 않는다"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST" "$RANGE_LINE" "범위($sh): 빈 범위 파일이어도 범위 공시 줄(내용을 보지 않는다 — 파일이 있으면 거절)"
+  assert_eq "$(cat "$SINK_LOG")" "" "범위($sh): 빈 범위 파일도 sink 를 부르지 않는다"
   fresh_proj
   : > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
   echo dirty >> "$T/proj/app.txt"
@@ -146,7 +162,7 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "$RANGE_LINE" "범위($sh): OUTCOME 형식 · 작업 트리 검사보다 범위 거절이 먼저"
 
   fresh_proj
-  SINK_LAST="skipped: no-pr" run_fence "$sh" "accepted with findings iter 3"
+  SINK_LAST="skipped: no-pr" run_fence "$sh" "finished"
   assert_eq "$LAST" "skipped: no-pr" "정상($sh): skipped 줄도 그대로 낸다"
 
   fresh_proj
@@ -203,24 +219,20 @@ for sh in $SHELLS; do
   SINK_LAST="posted: y" run_fence "$sh" "finished"
   assert_eq "$LAST" "posted: y" "I1($sh): untracked 파일은 거절 사유가 아니다(--untracked-files=no)"
   fresh_proj
-  echo dirty >> "$T/proj/app.txt"
-  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 1"
-  assert_eq "$LAST" "skipped: aborted" "I1($sh): aborted 는 작업 트리와 무관하게 skipped: aborted"
-  fresh_proj
   PATH="$T/gshim:$PATH" SINK_LAST="posted: x" run_fence "$sh" "finished"
   assert_eq "$LAST" "$STATUS_FAIL" "I1($sh): git status 가 실패하면 거절(fail-closed)"
   assert_eq "$(cat "$SINK_LOG")" "" "I1($sh): git status 실패면 sink 를 부르지 않는다"
 
   # ── ④ M2 — 판정 줄은 첫 ## 판정 절에서만 읽는다(뒤의 e2e 기록에 든 ## 판정 · qg: 줄이 대신하지 않는다) ──
   fresh_proj
-  printf '\n## e2e\n\n### 걷기 1\n\n## 판정\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e pass · 제외 패치 0 · iter 9 · zzzzzzz\n' >> "$R"
+  printf '\n## e2e\n\n### 걷기 1\n\n## 판정\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e pass · zzzzzzz\n' >> "$R"
   SINK_LAST="posted: x" run_fence "$sh" "finished"
-  assert_eq "$(tail -n 1 "$SINK_BODY_COPY" 2>/dev/null)" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · 제외 패치 1 · iter 2 · bbbbbbb" \
+  assert_eq "$(tail -n 1 "$SINK_BODY_COPY" 2>/dev/null)" "qg: clean · 막는 지적 0 · 선택 1 · 차등 새 실패 0 · e2e pass · bbbbbbb" \
     "M2($sh): e2e 기록 안의 ## 판정 · qg: 줄이 게시 판정 줄을 대신하지 않는다"
 
   # ── M1 — 이해글에 판정 줄 모양이 있으면 게시하지 않는다 ──
   fresh_proj
-  printf '## 한 줄\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · ccccccc\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"
+  printf '## 한 줄\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · ccccccc\n' > "$T/proj/.claude/quality-gates/$SID/comment-head.md"
   SINK_LAST="posted: x" run_fence "$sh" "finished"
   assert_eq "$LAST" "$HEAD_VLINE" "M1($sh): 이해글의 qg: 줄을 거절"
   assert_eq "$(cat "$SINK_LOG")" "" "M1($sh): sink 를 부르지 않는다"
@@ -235,11 +247,6 @@ for sh in $SHELLS; do
   assert_eq "$RC" "0" "M2($sh): 두 번째 실행 rc 0"
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "M2($sh): ## 게시 절은 여전히 하나"
   assert_eq "$(tail -n 1 "$R")" "posted: x" "M2($sh): 첫 게시 결과가 그대로 남는다"
-  fresh_proj
-  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 2"
-  SINK_LAST="posted: x" run_fence "$sh" "aborted iter 2"
-  assert_eq "$LAST" "$AGAIN" "M2($sh): aborted 두 번째 실행도 거절 줄"
-  assert_eq "$(grep -cx '## 게시' "$R")" "1" "M2($sh): aborted 두 번이어도 ## 게시 절은 하나"
 
   for bad in "<session-id>" "" "../../../x" "short"; do
     fresh_proj

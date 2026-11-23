@@ -3014,6 +3014,40 @@ class TestPersona(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertNotIn(bad, rest)
 
+    def test_question_field_is_one_sentence(self):
+        """question 칸 지시는 한 문장 + 직접 확인 줄이다 — 한두 문장 옛 글이 본문에 없다."""
+        _fm, body = self._split()
+        want = (
+            "- `question` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, "
+            "번호는 괄호 안에만 둔다.\n"
+            "  읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 "
+            "「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 —\n"
+            "  사람이 직접 열어 보거나 써 볼 자리와 방법이다. "
+            "따로 된 칸은 없고 `question` 글의 일부다."
+        )
+        self.assertEqual(body.count(want), 1)
+        self.assertEqual(body.count("한두 문장"), 0)
+
+    def test_direct_check_line_keeps_the_old_condition(self):
+        """직접 확인 줄을 다는 조건은 옛 조건(읽은 근거뿐이라 확신이 없을 때)이다 — 「자리가 있으면」 조건은 본문에 없다."""
+        _fm, body = self._split()
+        restored = "읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요"
+        self.assertEqual(body.count(restored), 1)
+        self.assertEqual(body.count("직접 확인해 볼 자리가 있으면"), 0)
+        self.assertEqual(body.count("여기는 직접 확인해 보세요"), 1)
+
+    def test_output_example_questions_are_one_sentence(self):
+        """출력 예시의 question 값은 모두 질문 한 문장이다 — 예시는 정확히 셋(공허 통과 방지)."""
+        import re
+        _fm, body = self._split()
+        values = re.findall(r'^\s+question: "([^"\n]*)"\s*$', body, re.M)
+        self.assertEqual(len(values), 3, values)
+        for value in values:
+            with self.subTest(question=value):
+                self.assertEqual(value.count("?"), 1)
+                self.assertTrue(value.endswith("?"), value)
+                self.assertNotIn(".", value)
+
     def test_frontmatter_is_read_only_and_unpinned(self):
         fm, _body = self._split()
         lines = fm.split("\n")
@@ -3209,22 +3243,90 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertIn("「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", wrong[0])
         self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
-    def test_answer_commit_needs_a_push_todo(self):
-        """답 커밋이 생긴 실행은 할 일에 push 를 싣는다 — 게시된 판정은 답 커밋 앞 커밋의 것이다."""
+    def test_push_line_only_when_published(self):
+        """답 커밋 push 줄은 갈래가 둘이다 — 「게시된 판정」 은 게시된 갈래에만 있다."""
         i7 = self._section("I7 돌려주기")
-        todo = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
-        self.assertEqual(i7.count(todo), 1)
-        line = [l for l in i7.split("\n") if todo in l][0]
-        self.assertTrue(line.startswith("  - `commit:` 이 커밋 해시면"), line)
+        posted = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
+        unposted = "게시하지 않은 실행이면 — 「답 커밋 <해시> 를 push 한다」."
+        self.assertEqual(i7.count(posted), 1)
+        self.assertEqual(i7.count(unposted), 1)
+        line = [l for l in i7.split("\n") if posted in l][0]
+        self.assertTrue(line.startswith(
+            "  - `commit:` 이 커밋 해시이고 result.md `## 게시` 줄이 `posted:` 로 시작하면 — "), line)
+        self.assertLess(line.index(posted), line.index(unposted))
+        self.assertEqual(line.count("게시된 판정"), 1)
+        tail = line[line.index(unposted):]
+        self.assertNotIn("게시된 판정", tail.split(" push ", 1)[0])
         for fact in ("push 해야 답 파일이 PR 과 함께 머지되고",
                      "push 전에 qg 를 다시 돌리면 게시가 `skipped: pr-mismatch` 로 빠진다"):
             self.assertIn(fact, line)
+
+    def test_direct_ask_question_is_one_sentence(self):
+        """직접 묻는 틀은 질문 창에 질문 글의 첫 문장만 둔다 — 나머지는 창 앞의 따로 된 글."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        self.assertEqual(i5.count('  question: "<질문 글의 첫 문장>",'), 1)
+        qlines = [l for l in i5.split("\n") if l.lstrip().startswith("question:")]
+        self.assertEqual(len(qlines), 1, qlines)
+        self.assertNotIn("근거로 본 것(<근거의 종류>)", qlines[0])
+        self.assertNotIn("이유를 남기려면", qlines[0])
+        outside = [l for l in i5.split("\n") if "이유를 남기려면 직접 입력 칸에" in l]
+        self.assertEqual(len(outside), 1, outside)
+        self.assertTrue(outside[0].startswith("질문 창엔 "), outside[0])
+        self.assertIn("`질문 <n>`", outside[0])
+        self.assertTrue(outside[0].startswith("질문 창엔 질문 글의 첫 문장(질문 한 문장)만 둔다."), outside[0])
+        self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
+        # 양의 짝: 근거의 종류 · 근거 줄 자리 채우기 규칙은 남아 있다.
+        self.assertEqual(i5.count("근거의 종류 — `evidence_kinds`"), 1)
+
+    def test_direct_ask_splits_at_marker_not_line(self):
+        """질문 글은 고정 표지에서 나눈다 — 줄바꿈은 YAML 에서 접힐 수 있어 나누는 데 쓰지 않는다(R18)."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        split = ("- 질문 글 — `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — "
+                 "표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장으로 질문 창의 `question:` 값이고, "
+                 "표지부터 끝까지가 질문 글의 나머지로 앞의 따로 된 글에 둔다. "
+                 "표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다")
+        lines = [l for l in i5.split("\n") if l.startswith(split)]
+        self.assertEqual(len(lines), 1, "표지에서 나누는 규칙 줄이 I5 본문에 한 번")
+        # 음: 줄로 나누던 옛 규칙이 없다 — 양의 짝은 위 규칙 줄.
+        self.assertNotIn("둘째 줄부터", i5)
+        self.assertNotIn("`question` 의 첫 줄", i5)
+
+    def test_end_guidance_covers_filtered_wrong_choice(self):
+        """이미 「잘못 골랐다」 답이 있어 거른 질문도 이어 고칠 일에 든다."""
+        i7 = self._section("I7 돌려주기")
+        rule = ("`wrong_choice: true` 인 질문이 있거나, result.md 의 `이미 「잘못 골랐다」 답이 있어 거른 질문:` "
+                "목록이 비어 있지 않으면")
+        self.assertEqual(i7.count(rule), 1)
+        line = [l for l in i7.split("\n") if rule in l][0]
+        self.assertIn("「같은 브랜치에서 이어 고친다」(그 질문들을 함께 적는다)", line)
+
+    def test_path_table_has_no_aborted_row(self):
+        """`--path` 표에 aborted 가 없고(본문만), 남은 행 셋은 있다 · 게시 줄 목록에도 없다."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        head = "| 이 실행이 지나온 길 | `--path` |"
+        self.assertEqual(text.count(head), 1)
+        table = text.split(head, 1)[1].split("\n\n", 1)[0]
+        self.assertNotIn("aborted", table)
+        for row in ("`trivia`", "`scope-empty`", "`final`"):
+            self.assertEqual(table.count("| %s |" % row), 1, row)
+        state = (REFERENCE.parent / "state-file-format.md").read_text(encoding="utf-8")
+        pub = state.split("\n## 게시\n", 1)[1].split("\n## ", 1)[0]
+        self.assertNotIn("skipped: aborted", pub)
+        for kept in ("`posted: <url>`", "`skipped: <사유>`", "`게시 안 함 — …`"):
+            self.assertIn(kept, pub)
 
     def test_readme_states_the_answer_commit_is_not_pushed(self):
         text = (PLUGIN / "README.md").read_text(encoding="utf-8")
         head = "\n### intent-critic 답 파일\n"
         self.assertEqual(text.count(head), 1)
         section = text.split(head, 1)[1].split("\n### ", 1)[0]
+        # 답 파일 머리는 답 파일만 이끈다 — 조언자를 부르는 규칙은 새 머리 아래에 있다(양의 짝 포함).
+        rule_head = "\n### intent-critic 을 부르는 규칙\n"
+        self.assertEqual(text.count(rule_head), 1)
+        rules = text.split(rule_head, 1)[1].split("\n### ", 1)[0]
+        self.assertIn("리뷰어를 부르는 조건은 리뷰의 넓이로 갈린다.", rules)
+        self.assertNotIn("리뷰어를 부르는 조건은", section)
         bullets = [l for l in section.split("\n") if l.startswith("- 답 커밋은 push 하지 않는다")]
         self.assertEqual(len(bullets), 1, section)
         for fact in ("push 해야 답 파일이 PR 과 함께 머지된다",
@@ -3250,12 +3352,12 @@ class TestProcedureDoc(unittest.TestCase):
         fence = [l for l in i5.split("\n") if "intent_critic.py\" filter " in l]
         self.assertEqual(fence, ['python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" '
                                  '--review-mode ' + slot])
-        self.assertEqual(i5.count("마지막 iteration Step 1c 출력의 `mode:` 값"), 1)
+        self.assertEqual(i5.count("Step 1c 출력의 `mode:` 값"), 1)
 
     def test_filter_doc_says_the_mode_file_wins(self):
-        """I5 가 --review-mode 는 대체값일 뿐이라고 밝힌다 — 세션 폴더의 review-i<N>.mode 가 이긴다."""
+        """I5 가 --review-mode 는 대체값일 뿐이라고 밝힌다 — 세션 폴더의 review-i1.mode 가 이긴다."""
         i5 = self._section("I5 거르기 · 묻기 · 답 기록")
-        self.assertEqual(i5.count("`--review-mode` 는 세션 폴더에 마지막 iteration 의 `review-i<N>.mode` "
+        self.assertEqual(i5.count("`--review-mode` 는 세션 폴더에 `review-i1.mode` "
                                   "가 없을 때에만 쓰인다 — 있으면 `filter` 가 그 파일의 값을 쓴다."), 1)
 
     def test_cost_line_discloses_wide_review(self):

@@ -117,8 +117,8 @@ case_text_locks() {
     "P2b 리뷰 트리 펜스: 끝 커밋으로 create-head --range 를 부른다"
   assert_contains "$P2B" '- `review_tree: <경로>` 의 그 경로가 이 실행의 `project_dir` 이다' "P2b: 임시 트리 경로가 project_dir 가 된다(규칙 줄)"
   assert_contains "$P2B" '지금 체크아웃으로 대신하지 않는다' "P2b: 트리를 못 만들면 체크아웃으로 대신하지 않는다(규칙 줄)"
-  assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '범위 모드만 예외가 하나다 — P2b 의 리뷰 트리 펜스가 낸 `review_tree: <경로>`(끝 커밋의 임시 트리)가 이 실행의 `project_dir` 이다' \
-    "P0: 범위 모드의 project_dir 예외"
+  assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '예외는 둘이다 — 범위 모드는 P2b 의 리뷰 트리 펜스가 낸 `review_tree: <경로>` 가 이 실행의 `project_dir` 이고(실행에 한 번 정하고, 그 뒤로 다시 도출하지 않는다), intent-critic 단계는 PR 범위에서도 리뷰 트리를 `project_dir` 로 쓴다(references/intent-critic.md I1).' \
+    "P0: 범위 모드와 intent-critic 단계의 project_dir 예외 둘"
   local S3W; S3W="$(awk '/^### Step 3 — reviewers$/{f=1;next} f&&/^### Step 3\.5/{exit} f' "$SK")"
   assert_contains "$S3W" '- `PROJECT_DIR` = P0 의 `project_dir` — 범위 모드에서 P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 냈으면 그 경로다.' \
     "Step 3: 모든 dispatch 의 PROJECT_DIR 는 범위 모드의 리뷰 트리 경로"
@@ -150,22 +150,17 @@ case_text_locks() {
   assert_grep "$S1" '^ *\| range \| `--mode range --scope-file "\$RD/range-scope\.txt"` \|$' "Step 1c 표: range 행이 범위 파일을 넘긴다"
   assert_contains "$S1" '범위 모드는 1a 를 돌리지 않는다' "Step 1: 범위 모드는 override — 1a 를 돌리지 않는다"
   assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '범위 모드는 `check-review-scope.sh` 를 돌리지 않는다' "Step 1b: 범위 모드는 건너뛴다"
-  # final-review M1 — 반복 상한은 5 고정이 아니다(CAP) — 캐시를 다시 쓰는 반복을 숫자로 묶지 않는다
-  assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '`$degraded` for the turn — later iterations (up to CAP) reuse them.' "Step 1b: 뒤 반복(CAP 까지)이 캐시를 다시 쓴다"
-  assert_not_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" 'iterations 2–5' "Step 1b: 반복 2–5 로 묶던 옛 문구가 없다"
+  # 한 실행은 한 번 지난다 — 캐시는 이 실행 동안만 쓰고, 뒤 반복이 다시 쓴다는 문구가 없다
+  assert_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" '`$degraded_reason`, `$degraded` for the turn.' "Step 1b: 캐시는 이 실행(턴) 동안 쓴다"
+  assert_not_contains "$(awk '/^### Step 1b /{f=1;next} f&&/^### Step 3 /{exit} f' "$SK")" 'later iterations' "Step 1b: 뒤 반복이 캐시를 다시 쓴다는 옛 문구가 없다(위 양성 짝)"
   assert_contains "$(awk '/^\*\*다른 전제 각도 — codex/{f=1} f&&/^\*\*Capture the runner/{exit} f' "$SK")" '<산출물 경로> --range "$(sed -n '"'s/^start: //p'"' "$RD/range-scope.txt")" "$(sed -n '"'s/^end: //p'"' "$RD/range-scope.txt")"' "Step 3: codex 러너에 범위 파일의 두 커밋을 sed 로 넘긴다"
   assert_contains "$(awk '/^### Step 4\.5 /{f=1;next} f&&/^---$/{exit} f' "$SK")" '`$RD/range-scope.txt` 를 그대로' "Step 4.5: 범위 모드면 범위 파일을 판정 꼬리 뒤에 보인다"
 
-  local FL; FL="$(awk '/^### Fix-loop decision$/{f=1;next} f&&/^### Max-iter/{exit} f' "$SK")"
-  assert_contains "$FL" '범위 모드' "Fix-loop: 범위 모드 갈래가 있다(양성 짝)"
-  assert_contains "$FL" '범위 모드는 반복 1 에서 끝나므로 Max-iter 에 닿지 않는다' "Fix-loop: 범위 모드는 Max-iter 에 닿지 않는다"
-  # 범위 모드 질문의 선택지 줄들에 「고치고 다시 돌기」가 없다 — 범위 갈래 블록(그 질문을 담은 펜스)을 잘라 잰다
-  local RB; RB="$(printf '%s\n' "$FL" | awk '/^\*\*범위 모드 갈래/{f=1} f' | awk '/^```$/{n++; if(n==1){f=1;next} if(n==2){exit}} f')"
-  assert_contains "$RB" '범위 모드는 이미 있는 커밋을 본다 — 고칠 것은 새 브랜치에서 고친다. 어떻게 끝낼까?' "범위 갈래: 질문 문구(양성 짝)"
-  assert_contains "$RB" 'label: "지금 판정으로 끝내기"' "범위 갈래: 「지금 판정으로 끝내기」 선택지"
-  assert_contains "$RB" 'label: "멈추기"' "범위 갈래: 「멈추기」 선택지"
-  assert_not_contains "$RB" '고치고 다시 돌기' "범위 갈래: 「고치고 다시 돌기」 선택지가 없다"
-  assert_not_contains "$RB" 'header: "분류"' "범위 갈래: 분류 질문이 없다"
+  # 범위 모드도 한 번 지나고 묻지 않는다 — 끝내기 질문(범위 모드 갈래)이 없고, 고칠 목록은 다른 실행과 같다
+  assert_contains "$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")" '그래서 범위 모드는 앱을 걷지 않고([e2e](#e2e)), PR 코멘트를 달지 않는다([Publish](#publish)).' \
+    "P2b: 범위 모드가 다른 실행과 다른 것은 걷기와 게시 둘이다(양성 짝)"
+  assert_not_contains "$(cat "$SK")" '범위 모드 갈래' "범위 모드의 끝내기 질문 갈래가 없다"
+  assert_not_contains "$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")" '고치고 다시 돌지 않고' "P2b: 고치고 다시 돌지 않는다는 옛 갈래 안내가 없다"
 
   local E2; E2="$(awk '/^## e2e$/{f=1;next} f&&/^\*\*E0/{exit} f' "$SK")"
   assert_contains "$E2" '범위 모드' "e2e: 범위 모드는 걷지 않는다"
@@ -183,7 +178,7 @@ case_text_locks() {
 
   local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
   assert_contains "$PB" '게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다' "게시: 범위 모드는 달지 않고 공시한다"
-  # 범위 거절은 게시 펜스 하나 안에 있다 — 「한 번만」 검사 뒤, OUTCOME 갈래 앞(aborted 여도 범위 공시 · sink 에 닿지 않음)
+  # 범위 거절은 게시 펜스 하나 안에 있다 — 「한 번만」 검사 뒤, OUTCOME 갈래 앞(범위 공시 · sink 에 닿지 않음)
   local pf; pf="$(printf '%s\n' "$PB" | fence_with 'scripts/publish-comment.sh')"
   local l_once l_rng l_case
   l_once="$(printf '%s\n' "$pf" | grep -n "^if grep -qx '## 게시' \"\$RESULT\"" | head -n 1 | cut -d: -f1)"
@@ -398,9 +393,9 @@ case_fences_agree() {
   printf '#!/bin/sh\necho called >> "%s"\necho "posted: x"\n' "$ROOT/sink.log" > "$ROOT/fakeplug/scripts/publish-comment.sh"
   chmod +x "$ROOT/fakeplug/scripts/publish-comment.sh"; : > "$ROOT/sink.log"
   body="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK" | fence_with 'scripts/publish-comment.sh' \
-    | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s|\${CLAUDE_PLUGIN_ROOT}|$ROOT/fakeplug|" -e 's/^OUTCOME=".*"$/OUTCOME="aborted iter 1"/')"
+    | LC_ALL=C sed -e "s/<session-id>/$sid/g" -e "s|\${CLAUDE_PLUGIN_ROOT}|$ROOT/fakeplug|" -e 's/^OUTCOME=".*"$/OUTCOME="finished"/')"
   run_fence "$body"
-  assert_eq "$out" "게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)" "게시 펜스: 범위 모드면 aborted 여도 범위 공시 줄"
+  assert_eq "$out" "게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)" "게시 펜스: 범위 모드면 결과가 finished 여도 범위 공시 줄"
   assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "게시 펜스: ## 게시 절을 남긴다"
   assert_eq "$(cat "$ROOT/sink.log")" "" "게시 펜스: 범위 모드면 sink 를 부르지 않는다"
   run_fence "$body"

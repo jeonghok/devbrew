@@ -74,6 +74,7 @@ for p in sorted(REPO.glob("plugins/*/agents/*.md")):
     m = re.search(r'^name:\s*(\S+)\s*$', p.read_text(encoding="utf-8"), re.M)
     if m:
         agents[m.group(1)] = str(p.relative_to(REPO))
+n_plugin_agents = len(agents)  # 내장 agent 를 더하기 전 — vacuity 하한은 이 수에 건다
 # Claude Code 내장 일반 agent 도 정의 파일이 없을 뿐 dispatch 대상이다 — 그 자리도 처분을 밝힌다.
 agents.setdefault("general-purpose", "(Claude Code 내장 agent)")
 
@@ -134,6 +135,7 @@ per_agent = {a: 0 for a in agents}
 for (_r, _l, a) in dispatch:
     per_agent[a] += 1
 
+print("PRINT_1_plugin_agents %d" % n_plugin_agents)
 print("PRINT_1_agents %d" % len(agents))
 print("PRINT_2_dispatch %d" % len(dispatch))
 print("PRINT_3_anchors %d" % len(anchors))
@@ -280,6 +282,7 @@ OUT="$(cat "$TMPD/out.txt")"
 assert_eq "$rc" "0" "도출 스크립트가 정상 종료한다"
 
 n_agents="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_1_agents //p')"
+n_plugin_agents="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_1_plugin_agents //p')"
 n_disp="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_2_dispatch //p')"
 n_anch="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_3_anchors //p')"
 zero="$(printf '%s\n' "$OUT" | sed -n 's/^ZERO_AGENTS //p')"
@@ -287,8 +290,8 @@ zero="$(printf '%s\n' "$OUT" | sed -n 's/^ZERO_AGENTS //p')"
 # ── vacuity 하한 — 도출이 깨진 것을 「위반 없음」으로 읽지 않는다.
 #    누산기를 «루프 밖에서» 0 으로 두고 최소치를 단언하므로, 루프를 통째로
 #    지워도 0 이 남아 RED 가 된다 (test_copy_of_contract.sh:916-919 의 형태).
-if [ "${n_agents:-0}" -lt 1 ]; then
-  no "에이전트 도출이 0 — 도출이 깨졌다 (vacuity 하한)"
+if [ "${n_plugin_agents:-0}" -lt 1 ]; then
+  no "에이전트 도출이 0 — 도출이 깨졌다 (vacuity 하한 — 내장 agent 이름을 뺀 수)"
 else
   ok "에이전트 ${n_agents}개 도출"
 fi
@@ -307,6 +310,7 @@ assert_eq "$zero" "" "dispatch 0건인 에이전트가 없다 (있으면 죽은 
 # ── 인쇄 단언 — 여섯 인쇄값이 «실제로 나오는지». 인쇄되지 않는 수치를
 #    관측 근거로 적는 것은 관측하지 않는 것과 같다. 인쇄값마다 계측기가 따로 있다.
 assert_grep "$OUT" '^PRINT_1_agents [0-9]+$'   "인쇄 ① 에이전트 수"
+assert_grep "$OUT" '^PRINT_1_plugin_agents [0-9]+$' "인쇄 ①' 플러그인 agent 정의 수(내장 제외)"
 assert_grep "$OUT" '^PRINT_2_dispatch [0-9]+$' "인쇄 ② dispatch 줄 수"
 assert_grep "$OUT" '^PRINT_3_anchors [0-9]+$'  "인쇄 ③ 앵커 수"
 assert_grep "$OUT" '^PRINT_4_per_agent \S+ [0-9]+$' "인쇄 ④ 에이전트별 dispatch 수"

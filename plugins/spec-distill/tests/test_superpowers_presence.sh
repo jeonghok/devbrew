@@ -25,6 +25,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 STOP='superpowers 가 필요하다 — Claude Code 의 /plugin 에서 superpowers 를 설치한 뒤 다시 부른다'
 QG_ABSENT='품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다'
+QG_POINT='품질 게이트가 설치돼 있지 않을 때는 `qg-review.md` 의 `## 호출 줄` 대로 한다'
 EC_STOP_LINE="[spec-distill] epic-conductor 멈춤 — $STOP"
 MAN_STOP_LINE="[spec-distill] 지휘 절차 멈춤 — $STOP"
 # stop_literal <글> — 멈춤 문장을 담은 백틱 안 줄 하나(백틱 뺌)
@@ -93,10 +94,16 @@ assert_contains "$mline" "멈춘다" "conducting.md 손 절차 머리: 그 문�
 assert_eq "$(stop_literal "$mline")" "$MAN_STOP_LINE" "conducting.md 손 절차 머리: 멈춤 줄 전체가 모델 줄 꼴이다(스크립트 머리 아님)"
 S7="$(section "$CD" '^### 7\. 끝$' '^##+ ')"
 [ -n "$S7" ] && ok "conducting.md: 걸음 7 을 읽었다" || no "conducting.md: 걸음 7 이 없다"
-qline="$(printf '%s\n' "$S7" | grep -F -- "$QG_ABSENT" | head -1)"
-assert_contains "$qline" "$QG_ABSENT" "conducting.md 걸음 7: quality-gates 가 없을 때 알릴 문장"
-assert_contains "$qline" "진행한다" "conducting.md 걸음 7: 알리고 진행한다"
-assert_not_contains "$qline" "멈춘다" "conducting.md 걸음 7: quality-gates 가 없다고 멈추지 않는다"
+qline="$(printf '%s\n' "$S7" | grep -F -- "$QG_POINT" | head -1)"
+assert_contains "$qline" "$QG_POINT" "conducting.md 걸음 7: quality-gates 가 없을 때는 qg-review.md 의 호출 줄을 가리킨다"
+assert_not_contains "$(cat "$CD")" "$QG_ABSENT" "conducting.md 음성: 설치 안 됨 규칙을 따로 두지 않는다(양성 짝: 호출 줄 가리킴 · qg-review.md 의 그 문장)"
+QR="$SD/skills/epic-conductor/references/qg-review.md"
+QCALL="$(section "$QR" '^## 호출 줄$' '^## 자리$')"
+[ -n "$QCALL" ] && ok "qg-review.md: 호출 줄 절을 읽었다" || no "qg-review.md: 호출 줄 절이 없다 — 아래 단언이 공허하다"
+rline="$(printf '%s\n' "$QCALL" | grep -F -- "$QG_ABSENT" | head -1)"
+assert_contains "$rline" "$QG_ABSENT" "qg-review.md 호출 줄: quality-gates 가 없을 때 알릴 문장"
+assert_contains "$rline" "건너뛴다" "qg-review.md 호출 줄: 알리고 건너뛴다"
+assert_not_contains "$rline" "멈춘다" "qg-review.md 호출 줄: quality-gates 가 없다고 멈추지 않는다"
 
 # ── 4. README Prerequisites ─────────────────────────────────────────────────
 PRE="$(section "$README" '^## Prerequisites$' '^## ')"
