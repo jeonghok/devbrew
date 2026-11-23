@@ -410,8 +410,7 @@ class ProducerToVerdict(unittest.TestCase):
         line = a.stdout.rstrip("\n")
         self.assertTrue(line.startswith("qg-verdict-args: --new-failures 1 --defect"), line)
         f = subprocess.run([sys.executable, str(VERDICT), "--line", "--blocking", "0", "--optional", "0",
-                            *line[len("qg-verdict-args: "):].split(), "--excluded", "0", "--iter", "1",
-                            "--sha", "abc1234"], capture_output=True, text=True)
+                            *line[len("qg-verdict-args: "):].split(), "--sha", "abc1234"], capture_output=True, text=True)
         self.assertEqual(f.returncode, 0, f.stderr)
         self.assertEqual(f.stdout.splitlines()[0], "verdict: defect")
         self.assertIn(" · 차등 새 실패 1 · ", f.stdout.splitlines()[-1])

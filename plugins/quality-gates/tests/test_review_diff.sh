@@ -507,18 +507,19 @@ case_self_state_grammar() {
   echo 'r' > "$Q/short/result.md"           # 세션 id 가 8자 미만
   echo '---' > "$S/result.md"; echo 'i' > "$S/intent.md"; : > "$S/review-i3.full.diff"
   : > "$S/review-i12.self-state"; : > "$S/e2e-app.pgid"; : > "$S/result.md.tmp.4242"
-  : > "$S/range-scope.txt"; : > "$S/extra-iterations.md"
+  : > "$S/range-scope.txt"
+  echo x > "$S/excluded.md"; echo x > "$S/extra-iterations.md"   # 없앤 이름 — 이제 모르는 이름이라 리뷰한다
   local wt; wt=$(cd "$R" && bash "$PLUGIN_DIR/scripts/qg-worktree.sh" create-baseline "$C0" sess12345 2>/dev/null)
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
   local p
-  for p in sess12345/evil.py sess12345/notes.md evil.sh worktrees/result.md short/result.md; do
+  for p in sess12345/evil.py sess12345/notes.md sess12345/excluded.md sess12345/extra-iterations.md evil.sh worktrees/result.md short/result.md; do
     assert_file_grep "$S/review-i1.names" "^\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — names: $p"
     assert_file_grep "$S/review-i1.diff" "^\\+\\+\\+ b/\\.claude/quality-gates/${p//./\\.}\$" "리뷰한다 — 걸러진 diff: $p"
     assert_file_absent "$S/review-i1.self-state" "^\\.claude/quality-gates/${p//./\\.}\$" "self_state 에 없다: $p"
   done
   for p in result.md intent.md review-i3.full.diff review-i12.self-state e2e-app.pgid result.md.tmp.4242 \
-           range-scope.txt extra-iterations.md; do
+           range-scope.txt; do
     assert_file_grep "$S/review-i1.self-state" "^\\.claude/quality-gates/sess12345/${p//./\\.}\$" "건너뛴다: $p"
   done
   if [ -n "$wt" ] && [ -d "$wt" ]; then
@@ -527,8 +528,8 @@ case_self_state_grammar() {
   else
     no "qg-worktree.sh create-baseline 이 트리를 만들지 못했다"
   fi
-  assert_eq "$(field self_state "$OUT")" 9 "self_state: 9 (산출물 8 + 트리 1)"
-  assert_eq "$(field files "$OUT")" 5 "files: 5 (리뷰할 것 5)"
+  assert_eq "$(field self_state "$OUT")" 8 "self_state: 8 (산출물 7 + 트리 1)"
+  assert_eq "$(field files "$OUT")" 7 "files: 7 (리뷰할 것 7 — 없앤 이름 둘 포함)"
 }
 
 # 락 — state-file-format.md 「같은 폴더의 다른 파일」 목록과 result.md 를 문법이 전부 받는다.
@@ -543,7 +544,7 @@ case_grammar_covers_state_file_format() {
   local S="$R/.claude/quality-gates/sess12345" name f expect=0
   mkdir -p "$S"
   for name in result.md $listed; do
-    for f in "${name//<N>/7}" "${name//<N>/12}"; do
+    for f in "${name//review-i1./review-i7.}" "${name//review-i1./review-i12.}"; do
       [ -e "$S/$f" ] && continue
       : > "$S/$f"; expect=$((expect + 1))
     done
@@ -1230,7 +1231,7 @@ case_degraded_blocks_certification() {
   # 그 입력은 Step 3.9 의 리뷰 결과 줄(qg-verdict-args: --blocking 0 --optional 0 --reason error-axis)로 판정 펜스에 닿는다.
   # shellcheck disable=SC2086
   local line; line=$(python3 "$V" --line --blocking 0 --optional 0 $args --new-failures 0 \
-    --excluded 0 --iter 1 --sha abc1234 --e2e '안 함' | tail -n 1)
+    --sha abc1234 --e2e '안 함' | tail -n 1)
   assert_not_contains "$line" "qg: clean" "판정 줄이 clean 이 아니다"
   assert_contains "$line" "not-certified (error-axis)" "판정 줄이 not-certified (error-axis)"
 }
