@@ -2,7 +2,7 @@
 
 **머지 뒤.** 머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다 — 마지막 줄이 `roadmap-merge: MERGED` 인 턴이다(다시 확인 펜스의 `MERGED` 도 같다). 같은 턴에 지휘자를 부르지 않는다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 그 줄을 함께 보인다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `roadmap-pr: NONE` · `roadmap-merge: NONE` · 「직접 머지」)에는 PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
-1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 결과물 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 원자료(framing 기록 · seed — 옛 의도 폴더에 있어도)도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더와 원자료 두 파일은 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더 · 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 결과물 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래(결과물이 옛 의도 폴더에 있으면 그 결과물 · audit · 상태 파일만 — 옛 폴더는 통째로 빼지 않는다)도 brief §7 의 로드맵 폴더도 원자료(framing 기록 · seed — 옛 의도 폴더에 있어도)도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더와 원자료 두 파일은 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더 · 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- roadmap-pr:begin -->
 ```bash
@@ -57,8 +57,14 @@ nosrc() {
   return "$n_rc"
 }
 idir=""
+ob=""
 if nosrc python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$BRIEF" --root "$top"; then
-  idir="$(dirname -- "$BRIEF")"
+  # 그 폴더가 새 꼴 이름도 받는 정해진 의도 폴더면 폴더째 뺀다. 옛 꼴 이름만 받는 옛 의도 폴더면 결과물 짝 세 파일만 하나씩 뺀다.
+  if python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$(dirname -- "$BRIEF")/probe-context.md" --root "$top" 2>/dev/null; then
+    idir="$(dirname -- "$BRIEF")"
+  else
+    ob="${BRIEF%.md}"
+  fi
 else
   echo "[spec-distill] brief 가 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
 fi
@@ -76,7 +82,7 @@ if [ -n "$r7" ]; then
   nosrc python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
 fi
 x_rc=0
-extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"} ${xa:+":(exclude,literal)${xa}"} ${xs:+":(exclude,literal)${xs}"})" || x_rc=$?
+extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${ob:+":(exclude,literal)${ob}.md"} ${ob:+":(exclude,literal)${ob}.audit.md"} ${ob:+":(exclude,literal)${ob}.state.md"} ${rdir:+":(exclude)${rdir}"} ${xa:+":(exclude,literal)${xa}"} ${xs:+":(exclude,literal)${xs}"})" || x_rc=$?
 if [ "$x_rc" -ne 0 ]; then
   echo "[spec-distill] 이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다."
   echo "roadmap-pr-files: UNKNOWN"

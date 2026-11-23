@@ -149,7 +149,7 @@ export FAKE_WAYS='{"mergeCommitAllowed":true,"squashMergeAllowed":true,"rebaseMe
 IDIR=docs/superpowers/interview
 STEM="$IDIR/2026-10-15-t-interview"
 RREL=docs/superpowers/roadmaps/2026-10-15-t
-mk() {   # mk <owner> → 클론 경로. origin 은 git@github.com:<owner>/r.git, 기능 브랜치에 seed 커밋 + 인터뷰 커밋(세 파일 · 로드맵 폴더)
+mk() {   # mk <owner> → 클론 경로. origin 은 git@github.com:<owner>/r.git, 기능 브랜치에 옛 의도 폴더의 옛 꼴 결과물 묶음(세 파일) · 로드맵 폴더 커밋
   local o="$T/remotes/$1/r.git" c="$T/$1"
   mkdir -p "$T/remotes/$1" "$T/gh-$1" && git init -q --bare -b main "$o" || return 1
   git clone -q "git@github.com:$1/r.git" "$c" 2>/dev/null || return 1
@@ -159,8 +159,6 @@ mk() {   # mk <owner> → 클론 경로. origin 은 git@github.com:<owner>/r.git
   git -C "$c" remote set-head origin main >/dev/null 2>&1
   git -C "$c" switch -q -c feature/x
   mkdir -p "$c/$IDIR" "$c/$RREL"
-  printf 'seed\n' > "$c/$IDIR/2026-10-15-t-interview-seed.md"
-  git -C "$c" add -- "$IDIR"; git -C "$c" commit -q -m "docs(intent): seed"
   for s in .audit.md .state.md; do printf 'x\n' > "$c/$STEM$s"; done
   printf -- '---\ntype: interview-brief\n---\n## 7. Next Action\n\n분해됨 — %s/roadmap.md\n' "$RREL" > "$c/$STEM.md"
   printf -- '---\ntype: roadmap\n---\n# 로드맵\n' > "$c/$RREL/roadmap.md"; printf '# R1\n' > "$c/$RREL/R1.md"
@@ -217,7 +215,7 @@ for sh_name in bash zsh; do
   P="${sh_name}-"
   note "=== ${sh_name}: PR 펜스 ==="
 
-  # 1. 새 PR — 열린 PR 찾기 → push → 만들기. 인터뷰 폴더(seed 포함) · 로드맵 폴더의 파일뿐이면 ONLY
+  # 1. 새 PR — 열린 PR 찾기 → push → 만들기. 결과물 묶음 세 파일 · 로드맵 폴더의 파일뿐이면 ONLY
   n="${P}new"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
   o="$(run "$n" "$pf")"
   assert_eq "$(last "$o")" "roadmap-pr: OPEN https://github.com/$n/r/pull/7" "새 PR: 마지막 줄이 판결(OPEN 과 주소)"
@@ -225,7 +223,7 @@ for sh_name in bash zsh; do
   assert_eq "$(remote_ref "$n" feature/x)" "$(git -C "$c" rev-parse HEAD)" "새 PR: 브랜치를 push 했다"
   assert_contains "$(ghlog "$n")" "pr list --state open --head feature/x --base main --json url,isCrossRepository --limit 20 -R github.com/$n/r" "새 PR: 열린 PR 찾기가 -R origin 으로 간다"
   assert_grep "$(ghlog "$n")" "^pr create --base main --head feature/x --title docs\(context\): .* --body-file [^ ]+ -R github\.com/$n/r\$" "새 PR: 만들기가 -R origin 으로 간다"
-  assert_contains "$o" "roadmap-pr-files: ONLY" "새 PR: seed · 세 파일 · 로드맵 폴더뿐이면 ONLY"
+  assert_contains "$o" "roadmap-pr-files: ONLY" "새 PR: 세 파일 · 로드맵 폴더뿐이면 ONLY"
   assert_contains "$o" "이 PR 은 의도 폴더와 로드맵 폴더의 파일만 담는다." "새 PR: ONLY 의 사람 줄"
   assert_eq "$(printf '%s\n' "$o" | tail -n 2 | head -n 1)" "roadmap-pr-head: $(git -C "$c" rev-parse HEAD)" "새 PR: 판결 바로 앞 줄이 push 한 끝 커밋"
   # 14a. 「값의 출처」 — 끝내기 커밋 펜스가 보인 키의 줄을 PR 펜스는 다시 보이지 않는다
@@ -328,6 +326,16 @@ $pf")"; e="$(cat "$T/gh-$n/stderr")"
   assert_eq "$(printf '%s\n' "$o" | grep '^roadmap-pr-files: ')" "roadmap-pr-files: UNKNOWN" "세지 못함: 파일 줄은 UNKNOWN 하나뿐이다"
   assert_contains "$o" "이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다." "세지 못함: 사람 줄"
   assert_contains "$o" "no merge base" "세지 못함: git 의 사유가 위에 보인다"
+  # 3f. 옛 의도 폴더의 결과물(옛 꼴 줄기로 이어 온 일) — 옛 폴더는 통째로 빼지 않는다: 결과물 짝 세 파일만 빼고, 같은 폴더의 다른 파일은
+  #     옛 꼴 이름이어도 · 아니어도 밖의 파일로 센다(경로 게이트는 옛 폴더에서 옛 꼴 이름만 넓힌다)
+  n="${P}oldfolder"; c="$(mk "$n")" || { no "픽스처 $n"; continue; }
+  printf 'seed\n' > "$c/$IDIR/2026-10-15-t-interview-seed.md"; printf 'x\n' > "$c/$IDIR/2026-10-14-other-interview.md"
+  git -C "$c" add -- "$IDIR"; git -C "$c" commit -q -m "docs: old folder neighbours"
+  o="$(run "$n" "$pf")"
+  assert_contains "$o" "roadmap-pr-files: MIXED" "옛 폴더 결과물: 옛 폴더의 다른 파일이 있으면 MIXED"
+  assert_contains "$o" "  - $IDIR/2026-10-15-t-interview-seed.md" "옛 폴더 결과물: 옛 꼴이 아닌 이웃 파일을 목록에 보인다"
+  assert_contains "$o" "  - $IDIR/2026-10-14-other-interview.md" "옛 폴더 결과물: 옛 꼴이어도 결과물 짝이 아닌 파일은 목록에 보인다"
+  assert_not_contains "$o" "  - $STEM." "옛 폴더 결과물: 결과물 짝 세 파일은 목록에 없다"
   # 3e. old_seed_pr_files_only — 옛 의도 폴더의 옛 seed 로 새로 시작한 일: 원자료 두 파일은 옛 폴더에 있어도 빼고 센다(AC25)
   n="${P}oldseed"; c="$(mknew "$n")" || { no "픽스처 $n"; continue; }
   NB=docs/superpowers/intent/2026-10-15-t-context.md
