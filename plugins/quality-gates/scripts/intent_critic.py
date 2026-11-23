@@ -944,11 +944,17 @@ def _identity(item: dict, plan: dict) -> Optional[str]:
 
 def _observation_changed(value, observation: str, evidence: dict, wide: bool,
                          tree_root: str) -> bool:
-    """앞 답의 관찰이 바뀌었나 — 지금의 근거 줄이 맞거나, 넓은 리뷰에서 지금의 읽은 인용이 확인될 때."""
+    """앞 답의 관찰이 바뀌었나 — 지금의 근거 줄이 맞거나, 넓은 리뷰에서 지금의 읽은 인용이 확인될 때.
+
+    `previous` 는 원래 관찰에 있거나, 접은 꼴(`<answered>` 칸이 보이는 꼴)로 접은 관찰에 있으면 맞다.
+    """
     if not isinstance(value, dict):
         return False
     previous = value.get("previous")
-    if not isinstance(previous, str) or not previous.strip() or previous not in observation:
+    if not isinstance(previous, str) or not previous.strip():
+        return False
+    folded = _one_line(previous)
+    if previous not in observation and not (folded and folded in _one_line(observation)):
         return False
     if _cited(value.get("now_lines"), evidence):
         return True

@@ -441,6 +441,46 @@ class TestFilterHanded(unittest.TestCase):
                              "의도다 · %s · %s · 근거가 달라짐" % (tic.AT1, tic.ID1))
             self.assertEqual(rec["changed_observation"][0], "[e2e] 관찰 2")
 
+    def test_previous_copied_from_printed_cell(self):
+        """`previous` 가 intent-answered.md 가 보인 관찰 칸 그대로(번호 포함)여도 — 답 폴더의 답이든
+        넘겨받은 항목이든 — 근거가 달라졌으면 다시 묻고, 달라졌다는 근거가 없거나 다른 관찰이면 거른다."""
+        id2 = _ident("D2")
+        hand = _entry(KB, id=_ident("D9"), observation=tic.OBS1 + "\n둘째 관찰",
+                      answered_at=AT_H, record="road/reviews/r-b.md")
+        with tempfile.TemporaryDirectory() as rd:
+            tic._filter_rd(rd, answers=[(id2, "의도다", tic.OBS1)])
+            answered = ia.read_answered_under(os.path.join(rd, "tree"), tic.ANS_DIR)[0]
+            printed = tic.ic._answered_lines(answered, [hand]).splitlines()
+        self.assertEqual(len(printed), 2, printed)
+        cells = []
+        for line in printed:
+            cells.append(line.rsplit(" · 관찰: ", 1)[1])
+        self.assertEqual(cells, ["1 [e2e] 관찰 1", "1 [e2e] 관찰 1"])
+        folder, handed = cells
+        cases = [({"previous": folder, "now_lines": [3]}, {"previous": handed, "now_lines": [3]},
+                  "ask"),
+                 ({"previous": folder, "now_lines": []}, {"previous": handed, "now_lines": []},
+                  "answered-filtered"),
+                 ({"previous": "1 [e2e] 관찰 2", "now_lines": [3]},
+                  {"previous": "1 [e2e] 관찰 2", "now_lines": [3]}, "answered-filtered")]
+        for f_changed, h_changed, want in cases:
+            with self.subTest(previous=f_changed["previous"], want=want), \
+                    tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                cands = [tic._q("D2", same_as=id2, observation_changed=f_changed),
+                         tic._q("D9", same_as=KB, observation_changed=h_changed)]
+                self._run([hand], cands, answers=[(id2, "의도다", tic.OBS1)])
+                recs = self._by_tid()
+                self.assertEqual(recs["D2"]["state"], want)
+                self.assertEqual(recs["D9"]["state"], want)
+                if want == "ask":
+                    self.assertEqual(recs["D2"]["asked_before"],
+                                     "의도다 · %s · %s · 근거가 달라짐" % (tic.AT1, id2))
+                    self.assertEqual(recs["D9"]["asked_before"],
+                                     "의도다 · %s · %s · 근거가 달라짐" % (AT_H, KB))
+                    self.assertEqual(recs["D2"]["changed_observation"][1],
+                                     "이전 관찰: 1 [e2e] 관찰 1")
+
     def test_snippet_cut_at_80(self):
         tic._filter_rd(self.rd)
         walk = "관찰 1\n관찰 2\n" + "가" * 94 + "\n"
