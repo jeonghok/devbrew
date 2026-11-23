@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import yaml  # noqa: E402
 
 import intent_answers as ia  # noqa: E402
+import intent_origin as io_  # noqa: E402
 import test_intent_critic as tic  # noqa: E402
 
 KEY1 = "2026-11-22-R4-spec.md#2"
@@ -256,6 +257,318 @@ class TestPrepareHanded(unittest.TestCase):
                          "- %s · 의도다 · 질문: Q? · 관찰: 3 근거\n" % tic.IDENT)
         self.assertNotIn("넘겨받은", p.stdout)
         self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")))
+
+
+PREV = "[e2e] 관찰 1"
+AT_H = "2026-11-22 21:25"
+KA, KB, KC, KD = "r-a.md#1", "r-b.md#1", "r-c.md#1", "r-d.md#1"
+KE, KF1, KF2, KG = "r-e.md#1", "r-f1.md#1", "r-f2.md#1", "r-g.md#1"
+WHY_B = "답에 따라 이 기능을 둘지가 갈린다(D2)"
+WHY_H = "답에 따라 범위가 달라진다"
+
+
+def _ident(tid):
+    return tic.SRC + "#%s#방향" % tid
+
+
+def _changed(n):
+    return {"previous": PREV, "now_lines": [n]}
+
+
+def _hand(key, answer="의도다", route="-", tid="D1"):
+    return _entry(key, answer, route, id=_ident(tid), observation=PREV + "\n둘째 관찰",
+                  answered_at=AT_H, record="road/reviews/" + key.split("#")[0])
+
+
+def _eight():
+    """질문 여덟(a–h)과 넘겨받은 항목들 — TestFilterHanded 의 표 한 벌."""
+    entries = [_hand(KA, tid="D1"), _hand(KB, tid="D2"),
+               _hand(KC, "잘못 골랐다", "이 에픽 안에서 고친다", "D3"),
+               _hand(KD, "잘못 골랐다", "새 일의 씨앗", "D4"),
+               _hand(KE, "잘못 골랐다", "재분해 신호", "D5"),
+               _hand(KF1, "잘못 골랐다", "이 에픽 안에서 고친다", "D6"),
+               _hand(KF2, tid="D6"), _hand(KG, tid="D99")]
+    cands = [tic._q("D1", same_as=KA),
+             tic._q("D2", same_as=KB, observation_changed=_changed(3), why=WHY_B),
+             tic._q("D3", same_as=KC),
+             tic._q("D4", same_as=KD),
+             tic._q("D5", same_as=KE, observation_changed=_changed(4), why="줄\n바꿈"),
+             tic._q("D6", same_as=KF2),
+             tic._q("D7", same_as=KG),
+             tic._q("D8", same_as="r-none.md#1", why="   ")]
+    return entries, cands
+
+
+class TestFilterHanded(unittest.TestCase):
+    """넘겨받은 열쇠로 거르기 — 가르는 표(AC10 · AC12)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, entries, cands, answers=(), names=None, handed_text=None):
+        tic._filter_rd(self.rd, answers=answers)
+        for n, text in (names or {}).items():
+            tic._write(text, self.rd, "review-i%d.names" % n)
+        if handed_text is not None:
+            tic._write(handed_text, self.rd, "intent-handed.yaml")
+        elif entries is not None:
+            tic._write(yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False),
+                       self.rd, "intent-handed.yaml")
+        tic._write(tic._out(cands), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _render(self):
+        tic._write("## 판정\nv\n## 게시\np\n", self.rd, "result.md")
+        r = tic._cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return tic._read(self.rd, "result.md").split("## intent-critic", 1)[1]
+
+    def _by_tid(self):
+        out = {}
+        for rec in tic._questions(self.rd)["questions"]:
+            out[rec["target_id"]] = rec
+        return out
+
+    def test_one_run_covers_every_branch(self):
+        entries, cands = _eight()
+        p = self._run(entries, cands)
+        lines = p.stdout.splitlines()
+        self.assertIn("이미 답한 질문이라 거름 4", lines)
+        self.assertNotIn(tic.NAMES_GONE, lines)  # 넘겨받은 항목엔 범위 표시가 없다
+        self.assertEqual(tic._questions(self.rd)["counts"]["answered"], 4)
+        recs = self._by_tid()
+        states = {}
+        for tid, rec in recs.items():
+            states[tid] = rec["state"]
+        self.assertEqual(states["D1"], "answered-filtered")
+        self.assertEqual(states["D4"], "deferred-filtered")
+        self.assertEqual(states["D6"], "answered-filtered")
+        self.assertEqual(states["D7"], "answered-filtered")
+        for tid in ("D2", "D3", "D5", "D8"):
+            self.assertIn(states[tid], ("ask", "over-cap"), tid)
+        self.assertEqual(recs["D2"]["asked_before"], "의도다 · %s · %s · 근거가 달라짐" % (AT_H, KB))
+        self.assertEqual(recs["D5"]["asked_before"],
+                         "잘못 골랐다 · %s · %s · 근거가 달라짐" % (AT_H, KE))
+        self.assertEqual(recs["D3"]["asked_before"],
+                         "잘못 골랐다 · %s · %s · 고친 뒤에도 보임" % (AT_H, KC))
+        self.assertEqual(recs["D3"]["changed_observation"], "-")
+        self.assertEqual(recs["D8"]["asked_before"], "-")
+        self.assertEqual(recs["D8"]["changed_observation"], "-")
+        self.assertEqual(recs["D2"]["changed_observation"],
+                         ["[e2e] 관찰 3", "이전 관찰: " + PREV, "   3\t[e2e] 관찰 3"])
+        self.assertEqual(recs["D5"]["changed_observation"][0], "[e2e] 관찰 4")
+        # 걸러진 넘겨받은 항목의 칸.
+        self.assertEqual(recs["D6"]["answer_file"], "road/reviews/r-f2.md")
+        self.assertEqual(recs["D6"]["previous_answer"], "의도다")
+        self.assertIs(recs["D6"]["handed"], True)
+        self.assertIs(recs["D6"]["deferred"], False)
+        self.assertNotIn("identity_then", recs["D6"])
+        self.assertIs(recs["D4"]["deferred"], True)
+        self.assertEqual(recs["D7"]["identity_then"], _ident("D99"))
+        for tid in ("D1", "D4", "D6", "D7"):
+            self.assertEqual(recs[tid]["asked_before"], "-", tid)
+            self.assertNotIn("range_mark", recs[tid], tid)
+
+    def test_unidentified_question_still_reads_handed_key(self):
+        q = tic._q("D1", kind="모르는", same_as=KA, question="모르는 종류")
+        p = self._run([_hand(KA, tid="D1")], [q])
+        self.assertIn("이미 답한 질문이라 거름 1", p.stdout.splitlines())
+        rec = tic._questions(self.rd)["questions"][0]
+        self.assertEqual(rec["state"], "answered-filtered")
+        self.assertEqual(rec["identity_then"], _ident("D1"))
+
+    def test_handed_key_with_other_identity_filters_and_marks(self):
+        entries, cands = _eight()
+        self._run(entries, cands)
+        section = self._render()
+        head = "이미 답한 질문이라 거른 질문:"
+        self.assertIn(head, section)
+        listed = []
+        for line in section.split(head, 1)[1].lstrip("\n").splitlines():
+            if not line.startswith("- "):
+                break
+            listed.append(line)
+        self.assertEqual(len(listed), 4, listed)
+        g = "- %s · 의도다 · road/reviews/r-g.md · 넘겨받은 답 · 정체가 다름 — %s → %s — %s" % (
+            _ident("D7"), _ident("D99"), _ident("D7"), cands[6]["question"])
+        d = "- %s · 잘못 골랐다 · road/reviews/r-d.md · 넘겨받은 답 · 미뤄 둔 의심 — %s" % (
+            _ident("D4"), cands[3]["question"])
+        f = "- %s · 의도다 · road/reviews/r-f2.md · 넘겨받은 답 — %s" % (
+            _ident("D6"), cands[5]["question"])
+        self.assertIn(g, listed)
+        self.assertIn(d, listed)
+        self.assertIn(f, listed)
+        for line in listed:
+            self.assertNotIn("이 범위가 더한 답 파일", line)
+            self.assertNotIn("범위 변경 여부를 확인하지 못함", line)
+        self.assertNotIn("이미 「잘못 골랐다」 답이 있어 거른 질문:", section)
+
+    def test_folder_answers_unchanged_and_asked_before(self):
+        id2 = _ident("D2")
+        names = {1: "%s/%s\n%s/%s\n" % (tic.ANS_DIR, tic._wf(0), tic.ANS_DIR, tic._wf(1))}
+        answers = [(tic.ID1, "의도다", tic.OBS1), (id2, "잘못 골랐다", tic.OBS1)]
+        cands = [tic._q("D1", same_as=tic.ID1), tic._q("D2", same_as=id2, question="폴더의 잘못"),
+                 tic._q("D4", same_as=KD, question="미뤄 둔 그 질문")]
+        p = self._run([_hand(KD, "잘못 골랐다", "새 일의 씨앗", "D4")], cands, answers=answers,
+                      names=names)
+        self.assertIn("이미 답한 질문이라 거름 3", p.stdout.splitlines())
+        recs = self._by_tid()
+        self.assertEqual(recs["D1"]["state"], "answered-filtered")
+        self.assertEqual(recs["D2"]["state"], "wrong-choice-filtered")
+        self.assertEqual(recs["D4"]["state"], "deferred-filtered")
+        self.assertNotIn("handed", recs["D1"])
+        section = self._render()
+        listed = section.split("이미 답한 질문이라 거른 질문:", 1)[1]
+        self.assertIn("- %s · 의도다 · %s/%s · 이 범위가 더한 답 파일 — " % (
+            tic.ID1, tic.ANS_DIR, tic._wf(0)), listed)
+        wrong = section.split("이미 「잘못 골랐다」 답이 있어 거른 질문:", 1)[1]
+        self.assertIn("폴더의 잘못", wrong)
+        self.assertNotIn("미뤄 둔 그 질문", wrong)
+        # 관찰이 달라졌으면 묻고 asked_before 를 채운다.
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            self._run(None, [tic._q("D1", same_as=tic.ID1, observation_changed=_changed(2))],
+                      answers=[(tic.ID1, "의도다", tic.OBS1)])
+            rec = tic._questions(rd)["questions"][0]
+            self.assertEqual(rec["state"], "ask")
+            self.assertEqual(rec["asked_before"],
+                             "의도다 · %s · %s · 근거가 달라짐" % (tic.AT1, tic.ID1))
+            self.assertEqual(rec["changed_observation"][0], "[e2e] 관찰 2")
+
+    def test_snippet_cut_at_80(self):
+        tic._filter_rd(self.rd)
+        walk = "관찰 1\n관찰 2\n" + "가" * 94 + "\n"
+        tic._write(io_.build_evidence(walk, None)[0], self.rd, "intent-evidence.txt")
+        tic._write(yaml.safe_dump({"entries": [_hand(KB, tid="D2")]}, allow_unicode=True),
+                   self.rd, "intent-handed.yaml")
+        tic._write(tic._out([tic._q("D2", same_as=KB, observation_changed=_changed(3))]),
+                   self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        line = tic._read(self.rd, "intent-evidence.txt").split("\n")[2]
+        stripped = line.split("\t", 1)[1]
+        self.assertEqual(len(stripped), 100)
+        snippet = tic._questions(self.rd)["questions"][0]["changed_observation"][0]
+        self.assertEqual(snippet, stripped[:80] + "…")
+        self.assertEqual(len(snippet), 81)
+
+    def test_snippet_from_quote_when_no_lines(self):
+        old = "[읽음] a.txt:1 old"
+        tree = os.path.join(self.rd, "tree")
+        os.makedirs(tree)
+        tic._git_repo(tree)
+        tic._filter_rd(self.rd)
+        with open(os.path.join(self.rd, "intent-plan.txt"), "a", encoding="utf-8") as fh:
+            fh.write("breadth: range\n")
+        entry = _entry(KB, observation=old, record="road/reviews/r-b.md")
+        tic._write(yaml.safe_dump({"entries": [entry]}, allow_unicode=True), self.rd,
+                   "intent-handed.yaml")
+        rq = {"path": "a.txt", "line": 1, "text": "x"}
+        q = tic._q("D2", same_as=KB, observation_changed={"previous": old, "now_quotes": [rq]})
+        tic._write(tic._out([q]), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        rec = tic._questions(self.rd)["questions"][0]
+        self.assertEqual(rec["state"], "ask")
+        quote = io_.quote_line(rq)
+        self.assertEqual(rec["changed_observation"], [quote, "이전 관찰: " + old, quote])
+
+    def test_unreadable_session_copy_is_disclosed_and_not_used(self):
+        bad = _entry("a#1")
+        texts = ("entries: 5\n", "- 1\n", "entries: [unclosed\n",
+                 yaml.safe_dump({"entries": [bad]}, allow_unicode=True))
+        for text in texts:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as rd:
+                self.rd = rd
+                p = self._run(None, [tic._q("D1", same_as=KA)], handed_text=text)
+                lines = p.stdout.splitlines()
+                self.assertEqual(lines.count("넘겨받은 답을 읽지 못함 — 꼴이 맞지 않음"), 1, text)
+                self.assertEqual(tic._last(p), "intent-ask: 1")
+        with tempfile.TemporaryDirectory() as rd:
+            self.rd = rd
+            p = self._run(None, [tic._q("D1", same_as=KA)])
+            self.assertNotIn("넘겨받은", p.stdout)
+            self.assertEqual(tic._last(p), "intent-ask: 1")
+
+
+class TestReturnThree(unittest.TestCase):
+    """돌려주는 꼴 3판 — `answered_filtered` · `why` · `asked_before` · `changed_observation`(AC6 · AC7)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _filter_render(self, entries, cands):
+        tic._filter_rd(self.rd)
+        tic._write(yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False),
+                   self.rd, "intent-handed.yaml")
+        tic._write(tic._out(cands), self.rd, "intent-critic-1.txt")
+        p = tic._cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        r = tic._cli("render", "--rd", self.rd, "--mode", "pr")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return tic._return_block(self.rd)
+
+    def test_contract_three_and_new_cells(self):
+        entries, cands = _eight()
+        text, block = self._filter_render(entries, cands)
+        self.assertIn("\ncontract: 3\n", text)
+        self.assertEqual(block["contract"], 3)
+        self.assertEqual(block["answered_filtered"], 4)
+        self.assertIn("\nanswered_filtered: 4\nquestions:\n", text)
+        keys = []
+        for line in text.split("\n"):
+            if line.startswith("  - "):
+                keys = [line[4:].split(":", 1)[0]]
+            elif line.startswith("    ") and not line.startswith("     "):
+                keys.append(line.strip().split(":", 1)[0])
+        self.assertEqual(keys[-3:], ["why", "asked_before", "changed_observation"])
+        rows = {}
+        for row in block["questions"]:
+            rows[row["target_id"]] = row
+        self.assertEqual(sorted(rows), ["D2", "D3", "D5", "D8"])
+        self.assertEqual(rows["D2"]["why"], WHY_B)
+        for tid in ("D3", "D5", "D8"):  # 없음 · 줄바꿈 · 빈칸뿐 — 질문은 남는다
+            self.assertEqual(rows[tid]["why"], "-", tid)
+        self.assertEqual(rows["D2"]["asked_before"], "의도다 · %s · %s · 근거가 달라짐" % (AT_H, KB))
+        self.assertEqual(rows["D2"]["changed_observation"],
+                         ["[e2e] 관찰 3", "이전 관찰: " + PREV, "3 [e2e] 관찰 3"])
+        self.assertEqual(rows["D3"]["changed_observation"], "-")
+        self.assertEqual(rows["D8"]["asked_before"], "-")
+        recs = {}
+        for rec in tic._questions(self.rd)["questions"]:
+            recs[rec["target_id"]] = rec
+        self.assertEqual(recs["D2"]["why"], WHY_B)
+        self.assertEqual(recs["D5"]["why"], "-")
+
+    def test_all_filtered_still_counts(self):
+        entries, cands = _eight()
+        _text, block = self._filter_render(entries, [cands[0], cands[3]])
+        self.assertEqual(block["status"], "ran")
+        self.assertEqual(block["outcome"], "none")
+        self.assertEqual(block["answered_filtered"], 2)
+        self.assertEqual(block["questions"], [])
+
+    def test_answered_filtered_dash_when_skipped(self):
+        p = tic._cli("gate", "--rd", self.rd, "--path", "trivia", "--mode", "pr")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        _t, block = tic._return_block(self.rd)
+        self.assertEqual(block["answered_filtered"], "-")
+        with tempfile.TemporaryDirectory() as rd:
+            tic._filter_rd(rd, call="none")
+            r = tic._cli("render", "--rd", rd, "--mode", "pr")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            _t, block = tic._return_block(rd)
+            self.assertEqual(block["answered_filtered"], "-")
 
 
 if __name__ == "__main__":

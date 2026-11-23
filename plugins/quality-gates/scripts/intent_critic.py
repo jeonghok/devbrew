@@ -141,15 +141,24 @@ GATE_SKIPS = {
 KILL_LINE = "intent-critic 꺼짐(kill switch)"
 GLOBAL_KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE"
 
-# 돌려주는 꼴 2판 — 닫힌 어휘와 칸 차례.
-CONTRACT = 2
+# 돌려주는 꼴 3판 — 닫힌 어휘와 칸 차례.
+CONTRACT = 3
 RETURN_KEYS = ("contract", "status", "reason", "reason_text", "outcome", "result_line",
                "none_reason", "mode", "reviewed_head", "reviewed_base", "session_dir",
                "answers_dir", "answers_dir_source", "commit", "breadth", "other_teams",
-               "overlaps")
+               "overlaps", "answered_filtered")
 QUESTION_KEYS = ("n", "id", "state", "answer", "answer_text", "wrong_choice", "failure", "file",
                  "evidence", "question", "target_source", "target_id", "label", "quote",
-                 "observation")
+                 "observation", "why", "asked_before", "changed_observation")
+# 이미 답해 거른 상태 — 넘겨받은 「잘못 골랐다」 가 이 에픽 밖으로 미뤄 둔 의심이면 deferred-filtered.
+FILTERED_STATES = ("answered-filtered", "wrong-choice-filtered", "deferred-filtered")
+DEFERRED_ROUTES = ("새 일의 씨앗", "재분해 신호")
+REASK_CHANGED = "근거가 달라짐"
+REASK_FIXED = "고친 뒤에도 보임"
+PREVIOUS_OBSERVATION = "이전 관찰: "
+HANDED_MARK = "넘겨받은 답"
+DEFERRED_MARK = "미뤄 둔 의심"
+IDENTITY_DIFFERS = "정체가 다름 — %s → %s"
 RETURN_STATUSES = ("ran", "uncountable", "skipped", "failed")
 SKIP_REASONS = ("kill-switch", "halted", "trivia", "empty-diff", "no-evidence")
 FAIL_REASONS = ("tree-failed",)
@@ -340,7 +349,8 @@ def _text_cell(value) -> str:
 
 
 def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
-    """돌려주는 꼴 2판. `head` 에 없는 칸은 `-`. `overlaps` 는 겹침 수(정수 — 날 수로) 또는 모름 `-`."""
+    """돌려주는 꼴 3판. `head` 에 없는 칸은 `-`. `overlaps` 는 겹침 수(정수 — 날 수로) 또는 모름 `-`,
+    `answered_filtered` 는 이미 답해 거른 수(정수) 또는 건너뜀 · 셀 수 없음 `-`."""
     cfg = _read_config(rd) or {}
     values = dict(head)
     values["contract"] = CONTRACT
@@ -352,7 +362,7 @@ def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
         value = values.get(key)
         if key in ("reason_text", "result_line", "none_reason", "session_dir"):
             lines.append("%s: %s" % (key, _text_cell(value if value else "-")))
-        elif key == "contract" or (key == "overlaps" and type(value) is int):
+        elif key == "contract" or (key in ("overlaps", "answered_filtered") and type(value) is int):
             lines.append("%s: %d" % (key, value))
         else:
             lines.append("%s: %s" % (key, _scalar(value if value else "-")))
@@ -368,7 +378,7 @@ def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
                 lines.append("    state: " + _scalar(value))
             elif key == "wrong_choice":
                 lines.append("    wrong_choice: " + ("true" if value else "false"))
-            elif key in ("answer_text", "observation"):
+            elif key in ("answer_text", "observation", "changed_observation"):
                 if not isinstance(value, list) or not value:
                     lines.append("    %s: %s" % (key, "[]" if key == "observation" else _text_cell("-")))
                 else:
@@ -945,19 +955,78 @@ def _observation_changed(value, observation: str, evidence: dict, wide: bool,
     return wide and bool(io_.verify_quotes(tree_root, value.get("now_quotes"))[0])
 
 
-def _answered_state(item: dict, ident: str, answered: dict, evidence: dict, wide: bool,
-                    tree_root: str) -> Optional[str]:
-    """이미 답한 질문으로 거를 때의 상태. 거르지 않으면 None."""
+def _changed_observation(value: dict, evidence: dict, wide: bool, tree_root: str) -> list:
+    """다시 묻는 까닭이 「근거가 달라짐」 인 질문의 「달라진 관찰」 — 화면의 한 구절, 이전 관찰, 확인된 지금의
+    근거 줄 · 읽은 인용. 한 구절은 확인된 첫 근거 줄(앞의 `<번호>\\t` 를 뗀 글), 없으면 확인된 첫 인용이다."""
+    lines = list(value["now_lines"]) if _cited(value.get("now_lines"), evidence) else []
+    quotes = io_.verify_quotes(tree_root, value.get("now_quotes"))[0] if wide else []
+    now = []
+    for n in lines:
+        now.append(evidence[n])
+    for quote in quotes:
+        now.append(io_.quote_line(quote))
+    if lines:
+        first = evidence[lines[0]].split("\t", 1)[-1]
+    else:
+        first = now[0]
+    return [_one_line(first, SNIPPET), PREVIOUS_OBSERVATION + _one_line(value["previous"])] + now
+
+
+def _asked_before(answer: str, at: str, key: str, why: str) -> str:
+    return KIND_SEP.join((_one_line(answer), _one_line(at), _one_line(key), why))
+
+
+def _prior(item: dict, ident: Optional[str], answered: dict, handed: dict, evidence: dict,
+           wide: bool, tree_root: str) -> Optional[dict]:
+    """`same_as` 가 가리킨 지난 답 — {state: 거른 상태 | None, asked_before: 글 | "-",
+    changed: 목록 | "-", handed: 넘겨받은 항목 | None}. 가리킨 답이 없으면 None(거르지 않는다).
+
+    넘겨받은 열쇠를 먼저 본다(정체는 견주지 않는다). 답 폴더는 `same_as` 가 지금 정체일 때만 본다 —
+    열쇠(`#` 하나)와 정체(`#` 둘)는 겹치지 않는다.
+    """
     same = item.get("same_as")
-    if not isinstance(same, str) or same != ident:
+    if not isinstance(same, str):
+        return None
+    value = item.get("observation_changed")
+    entry = handed.get(same)
+    if entry is not None:
+        out = {"state": None, "asked_before": "-", "changed": "-", "handed": entry}
+        if entry["answer"] == "잘못 골랐다" and entry["route"] not in DEFERRED_ROUTES:
+            # 이 에픽 안에서 고치기로 한 의심 — 관찰과 무관하게 다시 묻는다.
+            out["asked_before"] = _asked_before(entry["answer"], entry["answered_at"], same,
+                                                REASK_FIXED)
+        elif _observation_changed(value, entry["observation"], evidence, wide, tree_root):
+            out["asked_before"] = _asked_before(entry["answer"], entry["answered_at"], same,
+                                                REASK_CHANGED)
+            out["changed"] = _changed_observation(value, evidence, wide, tree_root)
+        elif entry["answer"] == "잘못 골랐다":
+            out["state"] = "deferred-filtered"
+        else:
+            out["state"] = "answered-filtered"
+        return out
+    if ident is None or same != ident:
         return None
     prev = answered.get(ident)
     if prev is None or prev["answer"] not in FILTER_ANSWERS:
         return None
-    if _observation_changed(item.get("observation_changed"), prev["observation"], evidence,
-                            wide, tree_root):
-        return None
-    return "wrong-choice-filtered" if prev["answer"] == "잘못 골랐다" else "answered-filtered"
+    out = {"state": None, "asked_before": "-", "changed": "-", "handed": None}
+    if _observation_changed(value, prev["observation"], evidence, wide, tree_root):
+        out["asked_before"] = _asked_before(prev["answer"], prev["answered_at"], ident,
+                                            REASK_CHANGED)
+        out["changed"] = _changed_observation(value, evidence, wide, tree_root)
+    elif prev["answer"] == "잘못 골랐다":
+        out["state"] = "wrong-choice-filtered"
+    else:
+        out["state"] = "answered-filtered"
+    return out
+
+
+def _why(item: dict) -> str:
+    """리뷰어의 `why` — 줄바꿈 없는 빈 글 아닌 글이면 한 줄로 접은 글, 아니면 `-`."""
+    raw = item.get("why")
+    if not isinstance(raw, str) or "\n" in raw or not _one_line(raw):
+        return "-"
+    return _one_line(raw)
 
 
 def _unidentified_id(question: str) -> str:
@@ -982,7 +1051,8 @@ def _question_record(item: dict, ident: str, identified: bool, evidence: dict, l
             "weight": _text(item.get("weight")), "quote": _text(item.get("quote")),
             "label": _text(item.get("label")), "question": _text(item.get("question")).strip(),
             "evidence_lines": list(lines), "observation": observation,
-            "read_quotes": list(quotes), "evidence_kinds": io_.ordered_kinds(found)}
+            "read_quotes": list(quotes), "evidence_kinds": io_.ordered_kinds(found),
+            "why": _why(item), "asked_before": "-", "changed_observation": "-"}
 
 
 def _pick_rank(record: dict) -> tuple:
@@ -1132,12 +1202,38 @@ def _load_answered(plan: dict, rd: str, notices: List[str]) -> dict:
     return answered
 
 
+def _load_handed(rd: str, notices: List[str]) -> dict:
+    """prepare 가 둔 넘겨받은 답의 복사본 → {열쇠: 항목}. 없으면 {}, 읽지 못하면 {} 와 공시 한 줄."""
+    path = _path(rd, HANDED)
+    if not os.path.lexists(path):
+        return {}
+    text = _read(path)
+    try:
+        data = yaml.safe_load(text) if text is not None else None
+    except Exception:  # noqa: BLE001 — YAMLError 말고도 낸다. 어떤 실패든 읽지 못한 복사본이다
+        data = None
+    raw = data.get("entries") if isinstance(data, dict) else None
+    handed: dict = {}
+    ok = isinstance(raw, list)
+    for item in raw if ok else []:
+        # 항목의 꼴은 넘겨받은 파일을 읽을 때와 같은 검사로 본다(복사본엔 판 칸이 없다).
+        entry = ia._handed_entry(item)
+        if entry is None or entry["key"] in handed:
+            ok = False
+        else:
+            handed[entry["key"]] = entry
+    if not ok:
+        notices.append(HANDED_UNREAD + ia.HANDED_BAD_SHAPE)
+        return {}
+    return handed
+
+
 def _answer_rel(answers_dir: str, path: str) -> str:
     return answers_dir.rstrip("/") + "/" + os.path.basename(path)
 
 
 def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answered: dict,
-           ids: Optional[set], whole: bool) -> list:
+           handed: dict, ids: Optional[set], whole: bool) -> list:
     evidence = _evidence_lines(rd)
     answers_dir = (_read_config(rd) or {}).get("answers_dir", "")
     wide = plan["breadth"] != "narrow"
@@ -1186,16 +1282,33 @@ def _judge(cands: list, plan: dict, rd: str, ledger: Ledger, counts: dict, answe
             if number == 1:
                 first_ids.add(ident)
             record = _question_record(item, ident, True, evidence, lines, quotes)
-            state = _answered_state(item, ident, answered, evidence, wide, plan["tree_root"])
-            if state is not None:
-                ledger.suppressed(label, "이미 답한 질문")
-                counts["answered"] += 1
-                record["state"] = state
-                record["previous_answer"] = answered[ident]["answer"]
-                record["answer_file"] = _answer_rel(answers_dir, answered[ident]["path"])
-                record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
-                decided.append(record)
-                continue
+        # 넘겨받은 열쇠는 정체를 가르지 못한 질문에도 본다 — 답 폴더는 정체가 있을 때만.
+        prior = _prior(item, ident, answered, handed, evidence, wide, plan["tree_root"])
+        if prior is not None:
+            record["asked_before"] = prior["asked_before"]
+            record["changed_observation"] = prior["changed"]
+        if prior is not None and prior["state"] is not None and prior["handed"] is not None:
+            ledger.suppressed(label, "이미 답한 질문")
+            counts["answered"] += 1
+            entry = prior["handed"]
+            record["state"] = prior["state"]
+            record["previous_answer"] = entry["answer"]
+            record["answer_file"] = entry["record"]
+            record["handed"] = True
+            record["deferred"] = prior["state"] == "deferred-filtered"
+            if entry["id"] != record["id"]:
+                record["identity_then"] = entry["id"]
+            decided.append(record)
+            continue
+        if prior is not None and prior["state"] is not None:
+            ledger.suppressed(label, "이미 답한 질문")
+            counts["answered"] += 1
+            record["state"] = prior["state"]
+            record["previous_answer"] = answered[ident]["answer"]
+            record["answer_file"] = _answer_rel(answers_dir, answered[ident]["path"])
+            record["range_mark"] = _range_mark(answered[ident]["path"], ids, whole)
+            decided.append(record)
+            continue
         counts["cites_dropped"] += dropped
         record["label_in_run"] = label
         remaining.append(record)
@@ -1240,11 +1353,17 @@ def cmd_filter(args) -> int:
         else:
             status = "ran"
             answered = _load_answered(plan, rd, notices)
+            handed = _load_handed(rd, notices)
             ids = _range_identities(rd, plan["tree_root"])
             # review-diff.sh 가 남긴 모드가 이긴다 — 인자는 그 파일이 없을 때의 대체값이다.
             whole = (_review_mode(rd) or args.review_mode) in WHOLE_SCOPE_MODES
-            questions = _judge(cands, plan, rd, ledger, counts, answered, ids, whole)
-            if counts["answered"] and ids is None:
+            questions = _judge(cands, plan, rd, ledger, counts, answered, handed, ids, whole)
+            # 범위 표시는 답 폴더의 답으로 거른 것에만 단다 — 넘겨받은 항목엔 없다.
+            from_folder = 0
+            for record in questions:
+                if record.get("state") in FILTERED_STATES and not record.get("handed"):
+                    from_folder += 1
+            if from_folder and ids is None:
                 notices.append(NAMES_MISSING)
             elif not whole:
                 partial = False
@@ -1718,6 +1837,7 @@ def _row(record: dict, state: str, mode: str) -> dict:
     evidence = KIND_SEP.join(map(_text, kinds)) if isinstance(kinds, list) and kinds else "-"
     lines = record.get("answer_text")
     observation = record.get("observation")
+    changed = record.get("changed_observation")
     return {"n": record.get("n"), "id": _text(record.get("id")), "state": state,
             "answer": answer, "answer_text": lines if isinstance(lines, list) and lines else "-",
             "wrong_choice": answer == "잘못 골랐다",
@@ -1727,7 +1847,10 @@ def _row(record: dict, state: str, mode: str) -> dict:
             "target_source": record.get("target_source", ""),
             "target_id": record.get("target_id", ""), "label": record.get("label", ""),
             "quote": record.get("quote", ""),
-            "observation": observation if isinstance(observation, list) else []}
+            "observation": observation if isinstance(observation, list) else [],
+            # R5 꼴의 레코드(이 칸들이 없다)는 `-`.
+            "why": record.get("why") or "-", "asked_before": record.get("asked_before") or "-",
+            "changed_observation": changed if isinstance(changed, list) and changed else "-"}
 
 
 def _teams_record(rd: str) -> tuple:
@@ -1745,6 +1868,20 @@ def _teams_record(rd: str) -> tuple:
     else:
         count = len(overlap) - overlap.count(ot.NO_OVERLAP)
     return OTHER_TEAMS, overlap or [TEAMS_UNREAD], unverified or [TEAMS_UNREAD], count
+
+
+def _filtered_mark(record: dict) -> str:
+    """걸러진 목록 줄의 표시 — 넘겨받은 항목은 「넘겨받은 답」[ · 미뤄 둔 의심][ · 정체가 다름 — …](범위 표시
+    없음), 답 폴더의 답은 범위 표시."""
+    if not record.get("handed"):
+        return RANGE_MARKS.get(record.get("range_mark"), "")
+    mark = KIND_SEP + HANDED_MARK
+    if record.get("deferred"):
+        mark += KIND_SEP + DEFERRED_MARK
+    if record.get("identity_then"):
+        mark += KIND_SEP + IDENTITY_DIFFERS % (_cell(record["identity_then"]),
+                                               _cell(record.get("id")))
+    return mark
 
 
 def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dict],
@@ -1773,13 +1910,13 @@ def _section(line: str, notices: List[str], data: Optional[dict], rows: List[dic
         item = "- %s — %s" % (_text(record.get("id")), _cell(record.get("question")))
         if record.get("state") == "over-cap":
             over.append(item)
-        elif record.get("state") == "wrong-choice-filtered":
+        elif record.get("state") == "wrong-choice-filtered" and not record.get("handed"):
             wrong.append(item)
-        if record.get("state") in ("answered-filtered", "wrong-choice-filtered"):
-            mark = RANGE_MARKS.get(record.get("range_mark"), "")
+        if record.get("state") in FILTERED_STATES:
             filtered.append("- %s · %s · %s%s — %s" % (
                 _cell(record.get("id")), _cell(record.get("previous_answer")),
-                _cell(record.get("answer_file")), mark, _cell(record.get("question"))))
+                _cell(record.get("answer_file")), _filtered_mark(record),
+                _cell(record.get("question"))))
     out += ["", "상한 넘어 남김:"] + (over or ["- 없음"])
     if filtered:
         out += ["", "이미 답한 질문이라 거른 질문:"] + filtered
@@ -1816,13 +1953,16 @@ def cmd_render(args) -> int:
     _append(result_path, lead + _section(line, shown, data, rows, (overlap, unverified)))
     commit = "-" if args.mode == "range" else _text((data or {}).get("commit") or "-")
     breadth = "-" if plan is None else plan["breadth"]
+    # 이미 답해 거른 수 — 거르기가 돈 실행에서만 센다. 건너뜀 · 셀 수 없음은 `-`.
+    answered_filtered = ((data.get("counts") or {}).get("answered")
+                         if outcome["status"] == "ran" and data is not None else None)
     head = {"status": outcome["status"], "reason": outcome["reason"],
             "reason_text": outcome["reason_text"], "outcome": outcome["outcome"],
             "result_line": line, "none_reason": (data or {}).get("none_reason") or "-",
             "mode": args.mode, "reviewed_head": "-" if plan is None else plan["reviewed_head"],
             "reviewed_base": "-" if plan is None else plan["reviewed_base"],
             "commit": commit, "breadth": breadth, "other_teams": other_teams,
-            "overlaps": overlaps}
+            "overlaps": overlaps, "answered_filtered": answered_filtered}
     _write_return(rd, head, rows)
     _write(marker, line + "\n")
     _emit(notices)

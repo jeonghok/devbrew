@@ -1,4 +1,4 @@
-"""돌려주는 꼴 2판 — 머리 칸 · 닫힌 어휘 · 결과 줄 · 리뷰 커밋 · 스위치(gate · prepare).
+"""돌려주는 꼴 3판 — 머리 칸 · 닫힌 어휘 · 결과 줄 · 리뷰 커밋 · 스위치(gate · prepare).
 
 `test_intent_critic.py` 의 헬퍼(`_cli` · `_env` · `_write` · `_read` · `_git_repo` · `_filter_rd` ·
 `_out` · `_q` · `_last` · `_return_block`)만 빌린다.
@@ -26,7 +26,7 @@ HEX40 = set("0123456789abcdef")
 
 def _check_vocab(case, block):
     """어느 갈래든 닫힌 어휘 안이다."""
-    case.assertEqual(block["contract"], 2)
+    case.assertEqual(block["contract"], 3)
     case.assertIn(block["status"], ic.RETURN_STATUSES)
     if block["status"] == "skipped":
         case.assertIn(block["reason"], ic.SKIP_REASONS)
@@ -254,7 +254,7 @@ class TestReturnHead(unittest.TestCase):
         tic._filter_rd(self.rd, call="none")
         self._render()
         _t, b = self._head()
-        self.assertEqual(b["contract"], 2)
+        self.assertEqual(b["contract"], 3)
         self.assertTrue(os.path.isabs(b["session_dir"]))
 
     def test_header_key_order(self):
@@ -267,8 +267,9 @@ class TestReturnHead(unittest.TestCase):
             if line and not line.startswith((" ", "`")):
                 keys.append(line.split(":", 1)[0])
         self.assertEqual(keys, list(ic.RETURN_KEYS) + ["questions"])
-        self.assertEqual(len(ic.RETURN_KEYS), 17)
-        self.assertEqual(len(ic.QUESTION_KEYS), 15)
+        self.assertEqual(len(ic.RETURN_KEYS), 18)
+        self.assertEqual(ic.RETURN_KEYS[-1], "answered_filtered")
+        self.assertEqual(len(ic.QUESTION_KEYS), 18)
 
     # ---- 리뷰 커밋
 
@@ -330,7 +331,7 @@ SIX = (
 )
 QUESTION_ORDER = ["n", "id", "state", "answer", "answer_text", "wrong_choice", "failure", "file",
                   "evidence", "question", "target_source", "target_id", "label", "quote",
-                  "observation"]
+                  "observation", "why", "asked_before", "changed_observation"]
 
 
 class TestQuestionRows(unittest.TestCase):
