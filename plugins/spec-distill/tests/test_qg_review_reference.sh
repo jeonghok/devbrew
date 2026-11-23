@@ -128,7 +128,7 @@ once "$DISP" "$L_premerge" "AC24: L(premerge) 한 번"
 assert_grep "$SITE" '리뷰할 diff 없음[^.]*그 사유를 그대로 보인다' "doc-path-skip: 「리뷰할 diff 없음」 과 「그 사유를 그대로 보인다」 가 한 문장에"
 
 # Task 6 — 보관 · 기록 파일 · 묻기 · 행선
-L_noquestions='질문이 하나도 없는 리뷰는 파일을 만들지 않고 `ledger add --section "쌓인 기록"` 으로 한 줄(자리 · 범위 · 결과 줄)만 남긴다 — 로드맵 끝과 이름으로 청한 로드맵은 예외로 늘 파일이 있다.'
+L_noquestions='질문이 하나도 없는 리뷰는 파일을 만들지 않고 `ledger add --section "쌓인 기록"` 으로 한 줄(자리 · 범위 · intent-critic 결과 줄)만 남긴다 — 로드맵 끝과 이름으로 청한 로드맵은 예외로 늘 파일이 있다.'
 L_branchspec='spec 승인 앞 · 머지 앞(좁은 재리뷰 `recheck-pr<번호>` 포함)의 기록은 에픽 worktree 에서 에픽 브랜치에 커밋한다 — 에픽 PR 과 함께 머지된다. 그 밖(로드맵 끝 · 이름으로 청함 — spec 승인 전 에픽과 구현이 끝난 머지 전 에픽 제외)의 기록은 로드맵마다 하나인 기록 브랜치에 쓴다.'
 L_remade='기록 브랜치가 이미 머지됐으면 기본 브랜치에서 다시 만든다.'
 L_pushnow='기록 브랜치에 쓴 기록은 답을 받은 직후 커밋하고 push 한다 — 다음 PR 을 기다리지 않는다.'
@@ -248,7 +248,7 @@ L_endorder='걸음 7 의 마무리(상태 브랜치 지우기 · 자원 정리 �
 L_rc2='rc 가 2 면 지휘자가 부른 꼴이 틀린 것이다 — 그 결과로는 보내지 않고 스크립트가 낸 stderr 줄을 보인 뒤, 부른 꼴을 고쳐 다시 부른다(`--pr` 은 `#` 없이 숫자만 쓴다).'
 L_rc4='rc 가 4 면 먼저 `ledger pr-refresh --roadmap <로드맵> --session <세션> --epic <에픽>` 을 돌린 뒤 스크립트를 한 번 더 부른다 — 그래도 4 면 아래 줄대로 보내지 않고 스크립트가 낸 줄을 보인다.'
 L_cells='`ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽 번호 | 로드맵 밖> · qg 리뷰 · <자리 글자> · <대상> · <사유>"` 로 쓴다 — 에픽 칸에는 에픽 번호(로드맵 리뷰는 `로드맵 밖`), 절 칸에는 `qg 리뷰`, 글 칸에는 자리 글자를 맨 앞에 두고 대상 · 사유를 잇는다.'
-L_cellsnq='칸 대응은 위 `### 보내지 못했거나 셀 수 없이 끝난 리뷰` 와 같다 — 에픽 칸 · 절 칸은 그대로이고 글 칸은 `<자리 글자> · <범위> · <결과 줄> · <보관 폴더 이름>` 이다.'
+L_cellsnq='칸 대응은 위 `### 보내지 못했거나 셀 수 없이 끝난 리뷰` 와 같다 — 에픽 칸 · 절 칸은 그대로이고 글 칸은 `<자리 글자> · <범위> · <intent-critic 결과 줄(result_line)> · <보관 폴더 이름>` 이다.'
 L_skilltool='부르는 길은 Skill 도구다 — skill 은 `quality-gates:quality-pipeline`, args 는 위 호출 줄에서 skill 이름 뒤의 글 전부(`range` 부터 끝까지)다.'
 once "$SITE" "$L_endorder" "I1: 로드맵 끝 리뷰가 끝난 뒤에 걸음 7 의 마무리를 한다"
 once "$ASK" '`waiting clear --roadmap <로드맵> --session <세션> --epic "<에픽 | 로드맵 밖>" --kind "옮긴 질문"`' "M1: waiting clear 가 옮긴 질문 종류만 내린다"
@@ -262,7 +262,9 @@ fi
 once "$SITE" "$L_rc2" "M3: 범위 스크립트 rc 2 — 부른 꼴을 고친다"
 once "$SITE" "$L_rc4" "M3: 범위 스크립트 rc 4 — pr-refresh 뒤 한 번 더 부른다"
 once "$SITE" "$L_cells" "M5: 보내지 못한 리뷰의 쌓인 기록 줄 칸 대응"
-once "$KEEP" "$L_cellsnq" "M5: 질문 없는 리뷰의 쌓인 기록 줄 칸 대응"
+once "$KEEP" "$L_cellsnq" "M5 · 통합 리뷰 F6: 질문 없는 리뷰의 쌓인 기록 줄 칸 대응(intent-critic 결과 줄)"
+assert_not_contains "$ALL" '<범위> · <결과 줄> · ' "통합 리뷰 F6 음성: 쌓인 기록 글 칸을 맨 「결과 줄」 로 적던 옛 칸이 없다(양성 짝: L(cellsnq))"
+assert_not_contains "$ALL" '(자리 · 범위 · 결과 줄)' "통합 리뷰 F6 음성: 쌓인 기록 줄을 맨 「결과 줄」 로 적던 옛 괄호가 없다(양성 짝: L(noquestions))"
 once "$DISP" "$L_skilltool" "측정: 담당자는 Skill 도구로 부른다"
 assert_contains "$(printf '%s\n' "$DISP" | awk 'index($0, "마지막 보고:")==1')" '절차에서 벗어난 것' "측정: 마지막 보고에 절차에서 벗어난 것"
 assert_eq "$(printf '%s\n' "$DISP" | grep -cF 'suite_lock.py run' | tr -d ' ')" "0" "M4: 보내는 글 틀이 늘 싣는 것의 스위트 잠금 줄을 다시 싣지 않는다"
@@ -327,7 +329,7 @@ L_relayname='있으면 `<SD>/references/conductor-dispatch.md` 의 `## 사람 �
 L_contractrec='「결과 파일의 판(<값>)을 읽지 못한다」 를 보이고, 그 자리의 리뷰를 1 과 같이 「셀 수 없음」 으로 기록한다.'
 L_dashline='`status` 가 `ran` 이 아니면 `reason_text` 를 보이고 끝낸다 — `reason_text` 가 `-` 면 `result_line` 을 함께 보인다.'
 L_samerange='4. `status` 가 `ran` 이면 `reviewed_base` · `reviewed_head` 가 호출 줄에 쓴 시작 · 끝 커밋과 같은지 앞 8자로 견준다. 다르면(`-` 포함) 질문을 옮기지 않고 「결과 파일이 보낸 범위의 것이 아니다(<reviewed_base 앞 8자>..<reviewed_head 앞 8자>)」 를 보이고, 그 자리의 리뷰를 1 과 같이 「셀 수 없음」 으로 기록한다.'
-L_storewhen='폴더는 스위트 잠금을 확인한 뒤 보내기 바로 전에 만들고, 만들면 바로 `ledger add --roadmap <로드맵> --session <세션> --section "자원"` 으로 `## 자원` 에 적는다'
+L_storewhen='폴더는 스위트 잠금을 확인한 뒤 「이미 답한 것」 파일을 만들기 바로 전에 만들고(그 파일을 이 폴더에 둔다 — 아래 `### 이미 답한 것`), 만들면 바로 `ledger add --roadmap <로드맵> --session <세션> --section "자원"` 으로 `## 자원` 에 적는다'
 L_range8='범위는 `<시작 8자>..<끝 8자>` 로 적는다.'
 L_rbrsuite='- 지휘자가 여는 이 PR 들도 머지 전에 걸음 5 의 스위트 대조를 거친다 — 걸음 6 의 로드맵 수정 PR 과 같다.'
 L_rbrmid='- 「잘못 골랐다」 로 로드맵 중간에 여는 기록 브랜치 PR 은 쌓인 기록을 싣지도 빼지도 않는다.'
@@ -392,7 +394,8 @@ assert_eq "$(starts "$b_first" "$L_relay")" "1" "나 E: 사람 자리 갈래가 
 once "$BACK" "$L_contractrec" "가 넷째: contract 가 2 가 아니어도 셀 수 없음으로 기록"
 once "$BACK" "$L_dashline" "가 계약 2판 독자: reason_text 가 - 면 result_line 을 함께"
 once "$BACK" "$L_samerange" "가 둘째: 결과 파일이 보낸 범위의 것인지"
-once "$STORE" "$L_storewhen" "M8 · 나: 보관 폴더는 잠금 확인 뒤 보내기 직전에 만들고 바로 자원에 적는다"
+once "$STORE" "$L_storewhen" "M8 · 나 · 통합 리뷰 F6: 보관 폴더는 잠금 확인 뒤 「이미 답한 것」 파일 바로 앞에 만들고 바로 자원에 적는다"
+assert_not_contains "$ALL" '확인한 뒤 보내기 바로 전에 만들고' "통합 리뷰 F6 음성: 폴더를 보내기 바로 전에 만든다던 옛 차례가 없다(양성 짝: L(storewhen))"
 once "$RECF" "$L_range8" "나 C: 쌓인 기록 줄의 범위 꼴"
 once "$RBR" "$L_rbrsuite" "나 F: 지휘자가 여는 PR 의 걸음 5 확인은 스위트 대조(걸음 6 과 같음)"
 assert_not_contains "$ALL" '걸음 5 의 확인을 거친다' "나 F 음성: 에픽 없는 PR 에 「걸음 5 의 확인」 을 쓰던 옛 문장이 없다(양성 짝: L(rbrsuite))"
@@ -403,11 +406,12 @@ once "$ASK" "$L_nogain" "나 O: 질문 설명의 꼴 예외"
 assert_not_contains "$ALL" "$L_fill" "R6: 가 계약 2판 독자 음성: 화면에서 빠진 의심하는 것 · 근거 줄을 채우던 규칙이 없다(양성 짝: 질문 블록의 화면에 싣지 않는 것 불릿)"
 assert_contains "$ASK" '- 화면에 싣지 않는 것 — 의심하는 인용 · 근거 줄 · 근거의 종류 · 정체 · 전에 물은 것의 질문 글.' "R6: 가 계약 2판 독자 양성 짝: 화면에 싣지 않는 것 불릿"
 # 좁은 재리뷰 1차 뒤 — 끝난 리뷰 · 차례 · spec 다시 보내기 표지 · 작업 줄 · 없음 표지 YAML
-L_sentlost='5. 돌아오지 못한 리뷰 — 그 밖(빈 폴더 — 세션이 끊긴 경우 등)이면 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
+L_sentlost='5. 돌아오지 못한 리뷰 — 그 밖(`intent-return.md` 가 없는 폴더 — 세션이 끊긴 경우 등)이면 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
 L_workrow='`## 작업` 표에 `ledger add --roadmap <로드맵> --session <세션> --section "작업" --cells "qg 리뷰 · <자리 글자> · <에픽 번호 | 로드맵 밖> · 리뷰 중 · <같은 agent 이름> · <보관 폴더 경로>"` 로 한 줄을 적는다.'
 L_resendmark='- 그 두 사건으로 설계 대화에 돌아갈 때 `ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽> · qg 리뷰 · spec-resend · <사건의 정체 — 돌아가게 한 질문의 정체 | spec 리뷰 라운드>"` 로 표지 한 줄을 적는다 — 위 `### 이미 보낸 것` 이 이 줄로 다시 보내도 되는 횟수를 센다.'
 L_none='- 머리 칸의 없음 표지는 따옴표에 싸서 `"-"` 로 적는다 — 따옴표 없는 `-` 가 하나라도 있으면 qg 가 머리 전체를 YAML 로 읽지 못해 이 파일의 `roadmap:` 을 따라가지 못한다. 결과 파일의 값이 `-` 여도 같다.'
-once "$SENT" "$L_sentlost" "재리뷰 지적 3: 근거 다섯째 — 돌아오지 못한 리뷰"
+once "$SENT" "$L_sentlost" "재리뷰 지적 3 · 통합 리뷰 F6: 근거 다섯째 — 돌아오지 못한 리뷰(intent-return.md 가 없는 폴더)"
+assert_not_contains "$ALL" '그 밖(빈 폴더 — ' "통합 리뷰 F6 음성: 보관 폴더를 빈 폴더로 부르던 옛 말이 없다(양성 짝: L(sentlost))"
 once "$BEAT" "$L_workrow" "재리뷰 지적 4: 작업 표 줄 — 담당은 같은 agent 이름 · 근거는 보관 폴더"
 SPECSEC="$(ssec '### spec 승인 앞')"
 once "$SPECSEC" "$L_resendmark" "재리뷰 지적 2: 설계 대화로 돌아갈 때 spec-resend 표지를 적는다"

@@ -254,6 +254,7 @@ one "$LIST" 'qg 가 끝까지 돌지 못해 지적 목록을 싣지 못하면 �
 
 # filtered-count-and-notices (AC16)
 one "$RES" '돌려주는 꼴의 `answered_filtered` 에서 오고 0 이면 붙지 않는다' "filtered-count-and-notices: 전에 답해 묻지 않은 것은 answered_filtered 에서"
+one "$RES" '0 이면 붙지 않는다 — `-`(의도 점검을 건너뛰었거나 셀 수 없음)여도 붙지 않는다' "filtered-count-and-notices(통합 리뷰 F6): answered_filtered 가 - 여도 붙지 않는다"
 one "$RES" '`qg-answered-notices.txt` 의 줄을 맥락 머리 바로 아래에 글자 그대로' "filtered-count-and-notices: 알림 파일의 줄을 맥락 머리 아래에"
 one "$RES" '빠지거나 줄어든 채 돌았다고 알리는 줄도 같은 자리에' "filtered-count-and-notices: 빠진 채 돈 알림 줄도 같은 자리에"
 
@@ -280,6 +281,37 @@ one "$REC" '다섯 값 밖이면 `qg_answered.py` 가 그 질문을 넘기지 �
 one "$RES" '열쇠가 같은데 내용이 다른 기록 · 답이 틀의 값 밖이라 넘기지 않은 질문)이다' "answer-label-only: 결과 글이 보이는 알림에 틀 밖의 답이 든다"
 one "$ANS" '열쇠가 같은데 내용이 다른 기록 · 답이 틀의 값 밖이라 넘기지 않은 질문)은 알림 파일에' "answer-label-only: 이미 답한 것의 알림 목록에 틀 밖의 답이 든다"
 zero "$WHOLE" '열쇠가 같은데 내용이 다른 기록)' "answer-label-only 음성: 알림을 둘로만 적던 옛 괄호가 없다(양성 짝: 위 두 줄)"
+
+# reenter-without-report (통합 리뷰 F1 · D33) — 보고 없이 다시 들어오면 보관 폴더의 합쳐지기 전 목록에서 다시 싣는다
+RE4="$(lead "$SENT" '4. 결과가 왔다 — ')"
+[ -n "$RE4" ] && ok "reenter-without-report: 이미 보낸 것의 4 를 읽었다" || no "reenter-without-report: 이미 보낸 것의 4 가 없다 — 아래 단언이 공허하다"
+for lit in '담당자 마지막 보고가 대화에 없으면(압축 · 새 세션 뒤) 맥락 머리 결과 줄(`### 결과 글`)의 개수와 지적 목록(막는 지적은 원문까지)을 그 폴더의 `findings-pre-merge.yaml` 에서 보내는 글의 `지적 목록:` 규칙과 같은 꼴로 다시 싣는다' \
+           '새로 깨진 테스트는 그 폴더의 `result.md` 의 `### 차등 회귀` 에서 싣는다' \
+           '그 파일이 없으면 그 폴더의 `result.md` 의 고칠 목록에서 싣고 「합쳐지기 전 목록 없이 실었다 — 같은 줄의 지적이 하나로 합쳐졌을 수 있다」 를 보인다' \
+           '둘 다 없으면 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다 — 지적 목록 없이 「막는 지적 없음」 으로 쓰지 않는다' \
+           '머지 앞 자리에서 PR 본문 `## qg 리뷰` 에 아직 막는 지적 목록이 없으면 이때 그 파일에서 막는 지적의 원문을 적는다'; do
+  one "$RE4" "$lit" "reenter-without-report: 4 의 줄에 ${lit}"
+done
+in_order "$RE4" "reenter-without-report: 합쳐지기 전 목록 → result.md → 셀 수 없음 차례" \
+  '그 폴더의 `findings-pre-merge.yaml` 에서' '그 파일이 없으면 그 폴더의 `result.md`' '둘 다 없으면 결과 줄 전체를'
+one "$BACK" '예외는 둘이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 4)와 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`)는 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md`)을 읽는다' "reenter-without-report: 돌아왔을 때가 보관 파일을 읽는 예외 둘을 적는다"
+zero "$WHOLE" 'qg 본문을 읽지 않는다. 아래를 차례로 본다.' "reenter-without-report 음성: 예외 없이 intent-return.md 만 읽던 옛 문장이 없다(양성 짝: 예외는 둘이다)"
+# carry-original (통합 리뷰 F1 · D33) — 고른 제안 · 되올린 낮춘 지적은 보관 폴더의 원문을 싣는다
+RRE="$(lead "$RET" '- **돌아온 즉시 목록을 적는다.**')"
+RSG="$(lead "$RET" '- **제안은 보이기만 한다.**')"
+RLW="$(lead "$RET" '- **낮춘 지적은 결과 글의')"
+for pair in "돌아온 즉시:$RRE" "제안:$RSG" "낮춘 지적:$RLW"; do
+  [ -n "${pair#*:}" ] && ok "carry-original: 되돌리기 불릿을 읽었다: ${pair%%:*}" || no "carry-original: 되돌리기 불릿이 없다 — 아래 단언이 공허하다: ${pair%%:*}"
+done
+one "$RRE" '보관한 결과 파일에서 읽지 않는다 — 담당자 마지막 보고 없이 다시 들어와 이 절에 목록이 아직 없을 때만 `### 이미 보낸 것` 의 4 대로 보관 폴더의 파일에서 적는다' "carry-original: 돌아온 즉시 목록의 예외는 보고 없이 다시 들어온 때뿐"
+zero "$WHOLE" '보관한 결과 파일에서 읽지 않는다.' "carry-original 음성: 예외 없이 끝나던 옛 문장이 없다(양성 짝: 위 줄)"
+one "$RSG" '넣는 글은 그 항목의 원문(파일 · 줄 · 심각도 · `summary` · `proposed_fix`)을 보관 폴더의 `findings-pre-merge.yaml` 에서 읽어 글자 그대로 싣는다 — 그 파일이 없으면 보관한 `result.md` 의 그 줄이다' "carry-original: 고른 제안은 보관 폴더의 원문을 글자 그대로"
+one "$RLW" '넣는 글은 제안과 같이 그 항목의 원문을 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md` 의 그 줄)에서 읽어 글자 그대로 싣는다' "carry-original: 되올린 낮춘 지적도 보관 폴더의 원문을 글자 그대로"
+# words-in-qr (통합 리뷰 F6) — 정체를 견주던 말 · 새로 깨진 테스트로 맞춘 말
+one "$ASK" '다음 리뷰가 그 의심을 다시 내면 그때 다시 간다' "words-in-qr: 답하지 않은 질문은 다음 리뷰가 그 의심을 다시 내면 다시 간다"
+zero "$WHOLE" '같은 정체의 질문을 내면' "words-in-qr 음성: 정체로 잇던 옛 문장이 없다(양성 짝: 그 의심을 다시 내면)"
+one "$RET" '같은 리뷰가 막는 지적 · 새로 깨진 테스트와 의도 점검 질문을 함께 돌려주면' "words-in-qr: 질문부터 묻는 불릿이 새로 깨진 테스트로 쓴다"
+zero "$WHOLE" '막는 지적 · 차등 결함과 의도 점검 질문' "words-in-qr 음성: 질문부터 묻는 불릿의 옛 「차등 결함」 이 없다(양성 짝: 새로 깨진 테스트와 의도 점검 질문)"
 
 # skill-show-line — SKILL.md ## 보이기 의 qg 문장
 SKD="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
