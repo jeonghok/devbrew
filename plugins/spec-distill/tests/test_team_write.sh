@@ -1636,6 +1636,43 @@ gx "$SRC" add -- docs/x && gx "$SRC" commit -qm fake-seed
 plant "$SRC" "$SRCO" docs/x/fake-seed.audit.md "$(gx "$SRC" rev-parse HEAD)" 7 7
 assert_eq "$(srccheck)" "0" "남는 것(framing 꼴): 머리 type 이 interview-seed-audit 인 새 파일의 줄은 rc 0"
 cp "$T/src.o" "$SRCO"
+# 남는 것 — 그 꼴의 파일을 커밋했다 같은 브랜치에서 지워도 지나가고, 기준과 견준 바뀐 파일 목록에는 나오지 않는다(형식 정본이 공시하는 경계)
+printf -- '---\ntype: interview-seed-audit\n---\n\n## 1. 원문\n\n> 지울 framing 말\n' > "$SRC/docs/x/gone-seed.audit.md"
+gx "$SRC" add -- docs/x && gx "$SRC" commit -qm gone-seed
+gone_commit="$(gx "$SRC" rev-parse HEAD)"
+gx "$SRC" rm -q -- docs/x/gone-seed.audit.md && gx "$SRC" commit -qm gone-seed-removed
+[ ! -e "$SRC/docs/x/gone-seed.audit.md" ] && ok "픽스처: 지운 framing 꼴 파일이 HEAD 에 없다" || no "픽스처: 지운 framing 꼴 파일이 남았다"
+plant "$SRC" "$SRCO" docs/x/gone-seed.audit.md "$gone_commit" 7 7
+assert_eq "$(srccheck)" "0" "남는 것(지운 framing 꼴): 커밋했다 지운 파일의 줄은 rc 0"
+changed="$(gx "$SRC" diff --name-only refs/remotes/origin/HEAD HEAD)"
+assert_contains "$changed" "docs/x/fake-seed.audit.md" "남는 것(지운 framing 꼴): 지우지 않은 파일은 바뀐 파일 목록에 나온다(양성 대조)"
+assert_not_contains "$changed" "gone-seed" "남는 것(지운 framing 꼴): 지운 파일은 바뀐 파일 목록에 나오지 않는다"
+cp "$T/src.o" "$SRCO"
+# source_brief 를 다른 brief 로 바꾼다 — 기준에 사본이 있으면 옛 brief 의 구간이 어긋남으로 남는다(사본은 덧붙이기만 받는다)
+RM="$SRC/${RD}src/roadmap.md"; cp "$RM" "$T/src.rm"
+sed "s|^source_brief: .*|source_brief: docs/iv/u-brief-interview.md|" "$T/src.rm" > "$RM"
+assert_eq "$(grep -c '^source_brief: docs/iv/u-brief-interview\.md$' "$RM")" "1" "픽스처: source_brief 를 다른 brief 로 바꿨다"
+plant "$SRC" "$SRCO" docs/iv/u-brief-interview.md "$(gx "$SRC" rev-parse HEAD)" "$UL" "$UL"
+assert_eq "$(srccheck)" "1" "바꾼 source_brief · 기준에 사본 있음: rc 1"
+assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/t-brief-interview.md · 사용자 원문 " "바꾼 source_brief · 기준에 사본 있음: 옛 brief 의 구간을 짚는다"
+assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/u-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "바꾼 source_brief · 기준에 사본 있음: 사유를 낸다"
+cp "$T/src.rm" "$RM"; cp "$T/src.o" "$SRCO"
+assert_eq "$(srccheck)" "0" "바꾼 source_brief · 기준에 사본 있음: 되돌린 로드맵은 rc 0(양성 짝)"
+# 남는 것 — 기준에 그 팀 폴더가 없는 브랜치에서는 source_brief 를 바꾸고 사본을 그 brief 로 다시 만들어도 지나간다(형식 정본이 공시하는 경계)
+fresh nb
+NB="$T/nb"
+assert_eq "$(ttc "$NB" "$T/nb.md" "${RD}nb")" "0" "기준에 없는 팀 폴더 픽스처: create --layout team rc 0"
+gx "$NB" add -- "${RD}nb" && gx "$NB" commit -qm nb-team
+gx "$NB" cat-file -e "refs/remotes/origin/HEAD:${RD}nb/roadmap.md" 2>/dev/null && no "픽스처: 그 팀 폴더가 기준에 있다" || ok "픽스처: 그 팀 폴더는 기준에 없다(push 하지 않았다)"
+nbcheck() { (cd "$NB" && python3 "$S/team_layout.py" check --roadmap "${RD}nb/roadmap.md") > "$T/chk.txt" 2>&1; echo $?; }
+assert_eq "$(nbcheck)" "0" "기준에 없는 팀 폴더: 만든 그대로는 rc 0"
+sed "s|^source_brief: .*|source_brief: docs/iv/u-brief-interview.md|" "$NB/${RD}nb/roadmap.md" > "$T/nb.rm" && cp "$T/nb.rm" "$NB/${RD}nb/roadmap.md"
+assert_eq "$(nbcheck)" "1" "기준에 없는 팀 폴더 · 바꾼 source_brief: 사본을 그대로 두면 rc 1"
+rm "$NB/${RD}nb/intent/original.md"
+assert_eq "$( (cd "$NB" && python3 "$RW" original --brief docs/iv/u-brief-interview.md --out "${RD}nb") > "$T/out.txt" 2>&1; echo $?)" "0" "기준에 없는 팀 폴더 · 바꾼 source_brief: 사본을 그 brief 로 다시 만든다(rc 0)"
+assert_grep "$(marker_heads "$NB/${RD}nb/intent/original.md" | head -n 1)" '^<!-- 출처: docs/iv/u-brief-interview\.md · 사용자 원문' "픽스처: 다시 만든 사본의 첫 구간이 다른 brief 에서 왔다"
+gx "$NB" add -A && gx "$NB" commit -qm nb-swapped
+assert_eq "$(nbcheck)" "0" "남는 것(기준에 없는 팀 폴더): source_brief 와 사본을 함께 바꾼 브랜치는 rc 0"
 
 # ── 기준 · HEAD 의 조상이 아닌 출처 커밋 (보안 지적 AC2) ──────────────────────────────
 # 커밋이 읽혀도 기준 · 지금 HEAD 어느 쪽의 조상도 아니면 기준의 같은 파일 · 같은 줄과 견준다(출처 커밋을 읽지 못한 때와 같다).

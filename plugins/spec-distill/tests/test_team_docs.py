@@ -263,6 +263,13 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
         self.assertIn("\n  - 같은 브랜치에서 brief 를 고쳤다 되돌린 커밋도 이 검사를 지나간다 — 고친 커밋을 출처로 만든 사본은 지금 HEAD 의 조상인 출처 커밋을 받기 때문이다. "
                       "그 고침은 PR 의 바뀐 파일 목록에는 나오지 않고 커밋별 보기에서만 보인다. squash 머지면 머지 뒤 기준과 견줘 검사 불가로 드러나고, "
                       "머지 커밋으로 머지하면 계속 지나간다.\n", s3)
+        # 남는 것 첫째의 뒤 문장 — 커밋했다 지운 framing audit 꼴 파일(PR #330 품질 게이트 리뷰)
+        self.assertIn("같은 브랜치에 framing audit 꼴을 갖춘 파일을 새로 커밋하면 이 검사를 지나간다 — 그 파일은 PR 에 새 파일로 보인다. "
+                      "그 파일을 같은 브랜치에서 다시 지워도 지나간다 — 그때는 PR 의 바뀐 파일 목록에 나오지 않고 커밋별 보기에서만 보인다.\n", s3)
+        # 남는 것 셋째 — 기준에 팀 폴더가 없는 브랜치에서 바꾼 source_brief(PR #330 품질 게이트 리뷰)
+        self.assertIn("\n  - 기준에 그 팀 폴더가 아직 없는 브랜치에서는 로드맵의 `source_brief` 를 다른 brief 로 바꾸고 사본을 그 brief 로 다시 만들어도 "
+                      "이 검사를 지나간다 — 견줄 기준의 사본이 없기 때문이다. PR 에는 새 로드맵 파일의 `source_brief` 값으로 보인다. "
+                      "기준에 사본이 있으면 `source_brief` 를 바꿔도 옛 brief 의 구간이 어긋남으로 남는다.\n", s3)
         # 대체 대조의 사유 글 — 출처 쪽 말머리는 코드의 상수, 기준 쪽 글은 코드에 있는 글과 같은지 함께 본다
         for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN, TC._SRC_FOREIGN):
             self.assertIn("`%s`" % say[0], s3, say)
