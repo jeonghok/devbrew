@@ -26,6 +26,9 @@ GIT_TIMEOUT = 30
 CONTRACT_OUT = 1
 RECORD_CONTRACTS = (2, 3)
 ANSWERS = ("의도다", "잘못 골랐다")
+QUIET_ANSWERS = ("지금은 모르겠다", "답하지 않음", "묻지 않음(상한 넘어 남김)")
+NO_PRIOR = ("없음", "-", "")
+NO_TIME = "-"
 ROUTES = ("이 에픽 안에서 고친다", "새 일의 씨앗", "재분해 신호")
 SITE_ROUTES = {
     "spec": "이 에픽 안에서 고친다",
@@ -133,8 +136,8 @@ def _parse_sections(body):
 
 def _prior_key(value):
     """`<답> · <답한 때> · <열쇠 또는 정체> · <까닭>` 의 셋째 칸 — 앞 두 칸은 왼쪽에서, 끝 칸은 오른쪽에서
-    떼고 가운데를 열쇠로 본다(정체에 ` · ` 가 들어도 읽는다)."""
-    if value == "없음":
+    떼고 가운데를 열쇠로 본다(정체에 ` · ` 가 들어도 읽는다). 「없음」 · `-` · 빈 값은 앞 답이 없다."""
+    if value in NO_PRIOR:
         return None
     head = value.split(" · ", 2)
     if len(head) != 3:
@@ -146,7 +149,7 @@ def _prior_key(value):
 
 
 def parse_record(text, name, record_path):
-    """(항목들, 앞 답의 열쇠들) — 읽지 못하면 Unreadable."""
+    """(항목들, 앞 답의 열쇠들, 틀 밖의 답 [(번호, 값)]) — 읽지 못하면 Unreadable."""
     if _has_control(text):
         raise Unreadable()
     head, body = _split_head(text)
@@ -157,6 +160,7 @@ def parse_record(text, name, record_path):
     site = head.get("site")
     entries = []
     superseded = []
+    odd = []
     for num, fields in _parse_sections(body):
         if "전에 한 답" in fields:
             prior = _prior_key(fields["전에 한 답"])
@@ -164,6 +168,8 @@ def parse_record(text, name, record_path):
                 superseded.append(prior)
         answer = fields.get("답")
         if answer not in ANSWERS:
+            if answer is not None and answer not in QUIET_ANSWERS:
+                odd.append((num, answer))
             continue
         if answer == "의도다":
             route = "-"
@@ -181,11 +187,11 @@ def parse_record(text, name, record_path):
             "answer": answer,
             "question": fields.get("질문", ""),
             "observation": "\n".join(fields.get("관찰", [])),
-            "answered_at": fields.get("답한 때", ""),
+            "answered_at": fields.get("답한 때", "") or NO_TIME,
             "route": route,
             "record": record_path,
         })
-    return entries, superseded
+    return entries, superseded, odd
 
 
 def _is_ctl(ch):
@@ -236,6 +242,7 @@ def collect(repo, roadmap, refs):
     folder = roadmap.rsplit("/", 1)[0] + "/reviews" if "/" in roadmap else "reviews"
     unreadable = []
     per_file = []
+    odd_answers = []
     for ref in refs:
         found, bad_place = read_ref(repo, ref, folder)
         if bad_place is not None:
@@ -245,9 +252,13 @@ def collect(repo, roadmap, refs):
                 unreadable.append(shown)
                 continue
             try:
-                per_file.append(parse_record(text, name, path))
+                entries, prior, odd = parse_record(text, name, path)
             except Unreadable:
                 unreadable.append(shown)
+                continue
+            per_file.append((entries, prior))
+            for num, value in odd:
+                odd_answers.append("%s 질문 %s 「%s」" % (shown, num, _esc(value)))
     superseded = set()
     for _entries, prior in per_file:
         superseded.update(prior)
@@ -264,7 +275,7 @@ def collect(repo, roadmap, refs):
                 order.append(entry["key"])
             elif any(first[k] != entry[k] for k in CONTENT_KEYS):
                 conflicts += 1
-    return [kept[k] for k in order], unreadable, conflicts
+    return [kept[k] for k in order], unreadable, conflicts, odd_answers
 
 
 def _atomic_write(path, text):
@@ -294,12 +305,15 @@ def main(argv=None):
         print("[qg_answered] 사용법: --ref 는 하나 이상, --roadmap 은 .. 없는 레포 상대경로",
               file=sys.stderr)
         return 2
-    entries, unreadable, conflicts = collect(args.repo, road, args.ref)
+    entries, unreadable, conflicts, odd_answers = collect(args.repo, road, args.ref)
     notices = []
     if unreadable:
         notices.append("읽지 못한 기록 %d개: %s" % (len(unreadable), " · ".join(unreadable)))
     if conflicts:
         notices.append("열쇠가 같은데 내용이 다른 기록 %d개" % conflicts)
+    if odd_answers:
+        notices.append("답이 틀의 값 밖이라 넘기지 않은 질문 %d개: %s"
+                       % (len(odd_answers), " · ".join(odd_answers)))
     doc = yaml.safe_dump({"contract": CONTRACT_OUT, "entries": entries},
                          allow_unicode=True, sort_keys=False, width=1000000)
     try:

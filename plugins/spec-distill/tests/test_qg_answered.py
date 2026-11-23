@@ -30,7 +30,9 @@ def section(n, ident="diff#a.md#갈라짐", question="질문 글", obs=("[읽음
     lines.append("- 답: %s" % ans)
     if route is not None:
         lines.append("- 행선: %s" % route)
-    lines += ["- 답한 때: %s" % at, ""]
+    if at is not None:
+        lines.append("- 답한 때: %s" % at)
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -184,6 +186,63 @@ class TestQgAnswered(unittest.TestCase):
         p = e.run(["main"])
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual([x["key"] for x in e.entries()], [NAME2 + "#1", NAME2 + "#2", odd + "#3"])
+        self.assertEqual(e.notice_text(), "")
+
+    def test_answer_outside_template_is_noticed_not_dropped(self):
+        # 틀의 다섯 값 밖인 `- 답:` 은 그 절만 넘기지 않고 알림 한 줄(기록 · 질문 번호 · 값)을 남긴다.
+        # 틀 안의 넘기지 않는 값 셋은 알림 없이 건너뛰고, 같은 파일의 다른 답은 그대로 싣는다
+        e = Env(self)
+        typed = "의도다 — 이유를 직접 썼다"
+        rec = record(3, [section(1, ans=typed), section(2, ans="의도다"),
+                         section(3, ans="지금은 모르겠다"), section(4, ans="답하지 않음"),
+                         section(5, ans="묻지 않음(상한 넘어 남김)"), section(6, ans="")])
+        commit_files(e.repo, {rpath(NAME): rec})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()], [NAME + "#2"])
+        lines = e.notice_text().splitlines()
+        want = ("답이 틀의 값 밖이라 넘기지 않은 질문 2개: main:%s 질문 1 「%s」 · main:%s 질문 6 「」"
+                % (rpath(NAME), typed, rpath(NAME)))
+        self.assertEqual(lines, [want])
+        self.assertEqual(p.stderr.splitlines(), [want])
+        self.assertNotIn("읽지 못한 기록", e.notice_text())
+
+    def test_prior_dash_or_empty_reads_as_none(self):
+        # `- 전에 한 답:` 이 `-` 나 빈 값이어도 「없음」 과 같다 — 기록 파일 전체를 읽지 못한 기록으로 세지 않는다
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): self.two_record(),
+                              rpath(NAME2): record(3, [section(1, prior="-"),
+                                                       section(2, prior="")])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()],
+                         [NAME + "#1", NAME + "#3", NAME2 + "#1", NAME2 + "#2"])
+        self.assertEqual(e.notice_text(), "")
+
+    def test_empty_answered_at_round_trip(self):
+        # `- 답한 때:` 가 없는 답은 `-` 로 싣는다 — qg 가 그 답을 다시 물어 낸 asked_before 를 옮긴 새 기록이
+        # 칸 수가 맞아 읽히고, 그 열쇠의 앞 항목을 뺀다(빈칸이 접혀 칸이 사라지지 않는다)
+        sys.path.insert(0, os.path.abspath(QG_SCRIPTS))
+        try:
+            import intent_answers
+            import intent_critic
+        finally:
+            sys.path.pop(0)
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): record(3, [section(1, ans="의도다", at=None)])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        handed, why = intent_answers.read_handed(e.out)
+        self.assertIsNone(why)
+        self.assertEqual(handed[0]["answered_at"], "-")
+        cell = intent_critic._text_cell(intent_critic._asked_before(
+            handed[0]["answer"], handed[0]["answered_at"], handed[0]["key"], "근거가 달라짐"))
+        prior = yaml.safe_load(cell)
+        self.assertEqual(prior, "의도다 · - · %s#1 · 근거가 달라짐" % NAME)
+        commit_files(e.repo, {rpath(NAME2): record(3, [section(1, prior=prior)])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()], [NAME2 + "#1"])
         self.assertEqual(e.notice_text(), "")
 
     def test_unreadable_record_counted_not_dropped(self):

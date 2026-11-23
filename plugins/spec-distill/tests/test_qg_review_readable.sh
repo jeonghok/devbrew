@@ -274,6 +274,12 @@ one "$REC" '`- 달라진 관찰:` 줄과 그 아래 두 칸 들여 쓴 줄은 �
 one "$REC" '「잘못 골랐다」 인 질문에는 반드시 적는다 — 값은 「이 에픽 안에서 고친다」 · 「새 일의 씨앗」 · 「재분해 신호」 가운데 하나를 글자 그대로 쓰고, 없거나 다른 값이면 `qg_answered.py` 가 그 기록 파일 전체를 읽지 못한 기록으로 센다' "record-route-required: 잘못 골랐다의 행선 줄은 반드시 · 값은 셋 가운데 하나 · 없으면 그 기록 파일 전체를 읽지 못한다"
 one "$REC" '`- 질문:` · `- 답:` · `- 답 원문:` 줄의 이름과 자리 글자는 바꾸지 않는다' "record-template-3: 걸음 5 가 읽는 줄 이름은 그대로"
 one "$REC" '2판 기록 파일(이 줄들이 없는 지난 기록)은 고치지 않는다 — `qg_answered.py` 가 그대로 읽는다' "record-template-3: 지난 2판 기록은 고치지 않고 qg_answered.py 가 읽는다"
+# answer-label-only (통합 리뷰 F2) — 직접 쓴 답은 `- 답:` 에 라벨만 · 다섯 값 밖이면 알림
+one "$REC" '사용자가 직접 입력 칸에 쓴 답은 `- 답:` 에 그 라벨만 쓰고 쓴 글 전부는 `- 답 원문:` 에 적는다' "answer-label-only: 직접 쓴 답은 답 줄에 라벨만 · 쓴 글은 답 원문 줄에"
+one "$REC" '다섯 값 밖이면 `qg_answered.py` 가 그 질문을 넘기지 않고 알림 한 줄을 남긴다' "answer-label-only: 다섯 값 밖인 답은 넘기지 않고 알림 한 줄"
+one "$RES" '열쇠가 같은데 내용이 다른 기록 · 답이 틀의 값 밖이라 넘기지 않은 질문)이다' "answer-label-only: 결과 글이 보이는 알림에 틀 밖의 답이 든다"
+one "$ANS" '열쇠가 같은데 내용이 다른 기록 · 답이 틀의 값 밖이라 넘기지 않은 질문)은 알림 파일에' "answer-label-only: 이미 답한 것의 알림 목록에 틀 밖의 답이 든다"
+zero "$WHOLE" '열쇠가 같은데 내용이 다른 기록)' "answer-label-only 음성: 알림을 둘로만 적던 옛 괄호가 없다(양성 짝: 위 두 줄)"
 
 # skill-show-line — SKILL.md ## 보이기 의 qg 문장
 SKD="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
