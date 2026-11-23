@@ -15,6 +15,9 @@
 - 돌려주는 꼴의 `answered_filtered`(머리) · `why` · `asked_before` · `changed_observation`(질문 칸).
 - `synthesize_findings.py --pre-merge-out` — 합치기 전 지적 목록을 세션 폴더의 `findings-pre-merge.yaml` 에 쓴다.
 
+### Fixed
+- README 를 동작에 맞췄다 — 근거의 종류는 질문 화면에 싣지 않고 결과 절 표 · 돌려주는 꼴에 남으며, `asked_before` 의 넷째 칸은 다시 묻는 까닭(`근거가 달라짐` · `고친 뒤에도 보임`)이다.
+
 ## [16.0.0] — 2026-11-22
 
 ### Removed

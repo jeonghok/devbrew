@@ -146,6 +146,11 @@ assert_contains "$RMF" '직접 묻는 틀은 질문 문장을 먼저 보이고 �
 assert_contains "$RMF" '`findings-pre-merge.yaml` 은 재비판 처분을 반영한 뒤 · 같은 지적을 합치기 전의 목록이다' "README: 합치기 전 목록 파일"
 assert_contains "$RMF" '`type: roadmap-review` 문서는 다른 팀 기록에 싣지 않는다' "README: roadmap-review 제외"
 assert_contains "$RMF" '넘겨받은 답을 읽지 못함 — <사유>' "README: 읽지 못함 알림"
+# R6 통합 리뷰 F5 — README 가 화면 틀 · asked_before 값과 맞는다
+assert_contains "$RMF" '를 결과 절 표의 `근거` 칸 · 돌려주는 꼴에 남긴다 — 질문 화면에는 싣지 않고 `자세히` 줄의 파일에 있다' "README(F5 가): 근거의 종류는 질문 화면에 싣지 않는다"
+assert_not_contains "$RMF" '질문 앞 글 · 결과 절 표의 `근거` 칸' "README(F5 가) 음성: 근거의 종류를 질문 앞 글에 보인다던 옛 문장이 없다(양성 짝: 질문 화면에는 싣지 않고)"
+assert_contains "$RMF" '열쇠 또는 정체 · 다시 묻는 까닭 — `근거가 달라짐` 또는 `고친 뒤에도 보임`)' "README(F5 다): asked_before 넷째 칸은 다시 묻는 까닭 두 값"
+assert_not_contains "$RMF" '열쇠 또는 정체 · 근거가 달라졌는지' "README(F5 다) 음성: 넷째 칸을 「근거가 달라졌는지」 로 적던 옛 글이 없다(양성 짝: 다시 묻는 까닭 두 값)"
 CHG="$(flat < "$PLUGIN_ROOT/CHANGELOG.md")"
 assert_contains "$CHG" '## [17.0.0] — 2026-11-24' "CHANGELOG: 17.0.0 절"
 # 판은 major 의 바닥만 본다 — 돌려주는 꼴 3판이 17 에서 나왔고 그 아래로 돌아가지 않았다. 판 글자를 박으면 다음 bump 마다 RED 다.

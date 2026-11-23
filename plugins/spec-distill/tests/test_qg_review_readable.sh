@@ -344,5 +344,10 @@ RD="$(cat "$ROOT/plugins/spec-distill/README.md")"
 assert_contains "$RD" 'qg_answered.py' "readme-new-words: qg_answered.py"
 assert_contains "$RD" '맥락 머리' "readme-new-words: 맥락 머리"
 assert_contains "$RD" 'quality-pipeline range <시작>..<끝> --origin <원문> --answered <절대경로>' "readme-new-words: README 의 qg 호출 줄이 --answered 를 붙인 꼴"
+# readme-matches-behavior (통합 리뷰 F5 나) — qg_answered.py 는 그 로드맵의 기록 전부를 대상 구분 없이 싣고, 전에 한 답은 다시 묻는 질문에만
+assert_contains "$RD" '`--answered` 파일은 그 로드맵의 지난 리뷰 기록에 적힌 답(「의도다」 · 「잘못 골랐다」)을 대상을 가리지 않고 모아' "readme-matches-behavior: 답은 그 로드맵의 기록 전부에서 대상을 가리지 않고"
+assert_contains "$RD" '질문마다 왜 묻는지를, 다시 묻는 질문에는 전에 한 답도 함께 보여 묻는다' "readme-matches-behavior: 전에 한 답은 다시 묻는 질문에만"
+assert_not_contains "$RD" '같은 대상에 전에 한 답을 지난 리뷰 기록에서 모아' "readme-matches-behavior 음성: 같은 대상의 답만 모은다던 옛 문장이 없다(양성 짝: 대상을 가리지 않고)"
+assert_not_contains "$RD" '왜 묻는지와 전에 한 답을 함께 보여' "readme-matches-behavior 음성: 질문마다 전에 한 답을 보인다던 옛 문장이 없다(양성 짝: 다시 묻는 질문에는)"
 
 finish
