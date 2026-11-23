@@ -82,7 +82,7 @@ SOURCE_NOT_ALLOWED = "출처가 로드맵 source_brief(%s) · 그 audit · frami
 
 
 def audit_of(brief_rel: str) -> Optional[str]:
-    """인터뷰 결과물의 audit 경로 — 이름의 `.md` 를 `.audit.md` 로 바꾼 것. `.md` 로 끝나지 않으면 None."""
+    """brief 의 audit 경로 — 이름의 `.md` 를 `.audit.md` 로 바꾼 것. `.md` 로 끝나지 않으면 None."""
     return brief_rel[:-3] + ".audit.md" if brief_rel.endswith(".md") else None
 
 

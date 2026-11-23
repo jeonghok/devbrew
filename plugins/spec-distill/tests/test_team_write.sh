@@ -1597,11 +1597,11 @@ for q in '""' "''"; do
 done
 cp "$T/src.rm" "$RM"; cp "$T/src.o" "$SRCO"
 assert_eq "$(srccheck)" "0" "AC1 빈 source_brief: 값을 되돌린 사본은 rc 0(양성 짝)"
-# 다른 brief — 같은 레포의 다른 인터뷰 결과물
+# 다른 brief — 같은 레포의 다른 컨텍스트 쌓기가 낸 brief
 UL="$(grep -n '^  > 팀 폴더를 만들어 달라$' "$SRC/docs/iv/u-brief-interview.md" | cut -d: -f1)"
 [ -n "$UL" ] && ok "픽스처: 다른 brief 에 그 줄이 있다(${UL}행)" || no "픽스처: 다른 brief 에 그 줄이 없다"
 plant "$SRC" "$SRCO" docs/iv/u-brief-interview.md "$(gx "$SRC" rev-parse HEAD)" "$UL" "$UL"
-assert_eq "$(srccheck)" "1" "AC1 다른 brief: 다른 인터뷰 결과물의 §6 줄을 붙인 사본은 rc 1"
+assert_eq "$(srccheck)" "1" "AC1 다른 brief: 다른 brief 의 §6 줄을 붙인 사본은 rc 1"
 assert_contains "$(cat "$T/chk.txt")" "(출처 docs/iv/u-brief-interview.md · 사용자 원문 " "AC1 다른 brief: 그 구간의 자리를 짚는다"
 assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 다른 brief: 사유를 낸다"
 cp "$T/src.o" "$SRCO"
@@ -1620,7 +1620,7 @@ plant_nosha() {  # plant_nosha <출처> <줄> — HEAD 의 그 줄을 붙인 뒤
   assert_eq "$(grep -c "@${NOSHA} " "$SRCO")" "1" "픽스처: 붙인 구간 하나의 출처 커밋을 없는 커밋으로 바꿨다(${1})"
 }
 plant_nosha docs/iv/u-brief-interview.md "$UL"
-assert_eq "$(srccheck)" "1" "AC1 읽지 못한 커밋 · 다른 brief: 기준에 있는 다른 인터뷰 결과물의 줄은 rc 1"
+assert_eq "$(srccheck)" "1" "AC1 읽지 못한 커밋 · 다른 brief: 기준에 있는 다른 brief 의 줄은 rc 1"
 assert_contains "$(cat "$T/chk.txt")" "출처가 로드맵 source_brief(docs/iv/t-brief-interview.md) · 그 audit · framing audit 가운데 하나가 아니다" "AC1 읽지 못한 커밋 · 다른 brief: 사유를 낸다"
 assert_not_contains "$(cat "$T/chk.txt")" " — 같다" "AC1 읽지 못한 커밋 · 다른 brief: 「같다」 알림이 없다"
 cp "$T/src.o" "$SRCO"
