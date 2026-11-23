@@ -27,7 +27,10 @@ GIT_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")
 
 
 def _git(*args: str, cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    p = subprocess.run(["git", "-c", "user.email=t@t.t", "-c", "user.name=t", "-c", "commit.gpgsign=false", *args],
+                       cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
+    if p.returncode:
+        raise AssertionError("git %s 가 rc %d 로 실패했다: %s" % (" ".join(args), p.returncode, p.stderr.strip()))
 
 
 class TestCrossResolverAdvisory(unittest.TestCase):
@@ -40,11 +43,12 @@ class TestCrossResolverAdvisory(unittest.TestCase):
         self.main = base / "main"
         self.wt = base / "wt"
         self.main.mkdir()
+        # 사용자의 전역 · 시스템 git 설정(서명 · 훅 경로 등)에서 떼어 낸다 — 시험이 만드는 git 호출 모두에 걸린다
         self.env = {k: v for k, v in os.environ.items() if k not in GIT_ENV}
+        self.env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
         with mock.patch.dict(os.environ, self.env, clear=True):
             _git("init", "-q", cwd=self.main)
-            _git("-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init",
-                 cwd=self.main)
+            _git("commit", "-q", "--allow-empty", "-m", "init", cwd=self.main)
             _git("worktree", "add", "-q", "--detach", str(self.wt), "HEAD", cwd=self.main)
         (self.wt / "docs").mkdir()
         self.doc = self.wt / "docs" / "d.md"
