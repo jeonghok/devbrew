@@ -43,6 +43,7 @@ REFUSE_TAIL = " — confirm 으로 확인받거나 rules-reset 으로 물린다"
 NO_COPY = "되돌릴 사본이 없다"
 RESET_DONE = "남의 규칙 고침을 물렸다 — 규칙은 기본 브랜치의 글로 돌아갔다"
 RESET_PENDING_LEFT = "대기 줄의 남의 고침은 남아 있다 — confirm 하거나 지운다"
+RESET_OWN_LEFT = "이 기계가 쓴 것으로 적힌 고침이 남아 있다 — 보인 뒤 confirm 한다"
 RESET_PENDING_UNMEASURED = FOREIGN_UNMEASURED + "(대기 줄) — 확인한 끝은 옮기지 않았다 — confirm 으로 확인받는다"
 NOT_TEAM = "team 형식 로드맵이 아니다 — 규칙 사본은 머리말 %s: %s 인 로드맵만 둔다: %s"
 NO_STATE_BRANCH = "상태 브랜치가 없다 — 먼저 ensure 를 돌린다"
@@ -80,13 +81,20 @@ class RulesState(NamedTuple):
     verdict: str          # VERDICTS 가운데 하나
 
 
-def foreign(root, roadmap_rel: str, tip: str, paths: list) -> Optional[list]:
-    """`tip` 까지 `paths` 를 바꾼 확인되지 않은 남의 커밋 [(커밋, (경로…)), …]. 기계 상태를 읽지 못하면 None(재지 못함)."""
+def split(root, roadmap_rel: str, tip: str, paths: list) -> Optional[tuple]:
+    """`tip` 까지 `paths` 를 바꾼 커밋을 한 번 재서 가른 (확인되지 않은 남의 커밋, 이 기계가 쓴 것으로 적힌 커밋) —
+    [(커밋, (경로…)), …] 둘. 기계 상태를 읽지 못하거나 재지 못하면 None."""
     try:
         rows = cs.load(cs.machine_path(state_path.state_root(str(root)), roadmap_rel), roadmap_rel)[cs.TRUST]
     except Exception:
         return None
-    return TS.foreign_commits(Git(str(root)), tip, TS.trust_of(rows), paths)
+    return TS.split_edits(Git(str(root)), tip, TS.trust_of(rows), paths)
+
+
+def foreign(root, roadmap_rel: str, tip: str, paths: list) -> Optional[list]:
+    """`tip` 까지 `paths` 를 바꾼 확인되지 않은 남의 커밋 [(커밋, (경로…)), …]. 기계 상태를 읽지 못하면 None(재지 못함)."""
+    got = split(root, roadmap_rel, tip, paths)
+    return None if got is None else got[0]
 
 
 def confirm_at(root, roadmap_rel: str, session: str, tip: str) -> tuple:
@@ -239,11 +247,14 @@ def _reset(root, roadmap_rel: str, session: str, team, base_path: str) -> CB.Res
         return res   # 새 끝에 사본이 남았다 — 그 끝을 확인하지 않는다
     if foreign(root, roadmap_rel, res.commit, TS.rules_paths(team)) == []:
         return res
-    pending = foreign(root, roadmap_rel, res.commit, TS.pending_paths(team))
+    # 대기 줄 쪽만 잰다 — 규칙 사본 · rules-base.md 의 `씀` 고침은 이 커밋이 그 파일을 지우며 되돌렸다(이 커밋도 그런 `씀` 이다)
+    pending = split(root, roadmap_rel, res.commit, TS.pending_paths(team))
     if pending is None:
         return res._replace(notes=res.notes + (RESET_PENDING_UNMEASURED,))
-    if pending:
+    if pending[0]:
         return res._replace(notes=res.notes + (RESET_PENDING_LEFT,))
+    if pending[1]:   # 이 기계가 쓴 것으로 적힌 대기 줄 고침 — 보이기 전에는 접지 않는다(settle 과 같은 술어, 경로만 대기 줄)
+        return res._replace(notes=res.notes + (RESET_OWN_LEFT,))
     told = confirm_at(root, roadmap_rel, session, res.commit)
     return res._replace(notes=res.notes + told + (RESET_DONE,))
 
@@ -543,9 +554,8 @@ def _foreign_report(root, team, tip: str, rows: list) -> tuple:
     (재지 못함을 빠져나가는 길이 confirm 이다). 셋째 값은 처음 판정에서만 가른다(재지 못했으면 빈 목록) — `edits_since` 를 한 번 잰다."""
     git, watched = Git(str(root)), _watched(team)
     trust = TS.trust_of(rows)
-    edits = TS.edits_since(git, tip, trust, watched)
-    found = None if edits is None else [e for e in edits if e[0] not in trust[1]]
-    listed = [] if edits is None else [e for e in edits if e[0] in trust[1]]
+    got = TS.split_edits(git, tip, trust, watched)
+    found, listed = got if got is not None else (None, [])
     lead = ""
     if found is None:
         own = frozenset(r["끝"] for r in rows if r["까닭"] == cs.TRUST_WHY[1])
@@ -636,12 +646,12 @@ def settle(root, roadmap_rel: str, session: str, tip: str, notes: Optional[list]
     rows = data[cs.TRUST]
     trust = TS.trust_of(rows)
     git = Git(str(root))
-    edits = TS.edits_since(git, tip, trust, _watched(team))   # 한 번 재고 `씀` 으로 가른다
-    if edits is None:
+    got = TS.split_edits(git, tip, trust, _watched(team))   # 한 번 재고 `씀` 으로 가른다
+    if got is None:
         return None
-    found = [e for e in edits if e[0] not in trust[1]]
+    found, listed = got
     keep = rows
-    if not edits:   # 남의 고침도 이 기계가 쓴 것으로 적힌 고침도 없다 — 그때만 접는다
+    if not found and not listed:   # 남의 고침도 이 기계가 쓴 것으로 적힌 고침도 없다 — 그때만 접는다
         if [(r["끝"], r["까닭"]) for r in rows] != [(tip, cs.TRUST_WHY[0])]:
             keep = [{"끝": tip, "까닭": cs.TRUST_WHY[0], "때": CB.stamp(), "세션": session}]
     else:

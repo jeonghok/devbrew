@@ -26,6 +26,7 @@ from conductor_branch_fixture import ALPHA, ENV, ROADMAPS, SID, StateRepo, rm, r
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
+import leader_seat as LS  # noqa: E402
 
 NEW = PLUGIN / "references" / "conductor-state-branch.md"
 LOOP = PLUGIN / "references" / "conducting.md"
@@ -172,6 +173,9 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
         self.assertIn("`delete` 는 끈 상태에서도 돕니다", readme)
 
 
+RESET_NOTE = "「%s」" % LS.RESET_OWN_LEFT   # 코드의 알림 글자와 묶는다
+
+
 class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 몫)
     def test_step_five_and_the_skill(self):
         for word in (FILE_NAME, "안 올린 규칙 고침", "conductor_branch.py rules-branch", "판 번호"):
@@ -193,7 +197,7 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
         # AC5 · 마지막 리뷰 C1 · I2 — 접기를 미룬다 · 한계는 `확인한 끝` 절의 줄 전체
         for words in ("- `확인한 끝` 절의 줄(`씀` · `확인`)은 기계 상태 파일에 있어 이 기계에서 도는 누구나",
                       "그런 `씀` 커밋이 확인한 끝 뒤에 있으면 `sync` 는 `확인한 끝` 절을 한 줄로 접지 않고(버려진 `씀` 줄만 지운다), "
-                      "목록을 사용자에게 보인 뒤 `confirm --confirmed <확인할 끝>` 으로만 접는다.",
+                      "목록을 사용자에게 보인 뒤 `confirm --confirmed <확인할 끝>` 으로만 접는다 — ",
                       "직접 심은 `확인` 줄은 드러나지도 않는다 — 그 끝까지의 고침은 판정에도 목록에도 나오지 않는다. 아직 막는 장치는 없다.",
                       "「이 기계가 쓴 것으로 적힌 고침」 이 있으면 그 뒤에 `show` 와 같은 목록 줄과 `확인할 끝: <40자>` 도 낸다. "
                       "남의 고침이 있을 때도 그 목록 줄을 `확인할 끝` 앞에 싣는다",
@@ -203,6 +207,12 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
                       "쓰지 않은 것이 있으면 머지 전에 사용자에게 알린다 · 보인 뒤 사용자가 머지를 정하면 `confirm --confirmed <확인할 끝>` 으로 접는다 |"):
             self.assertIn(words, text, words)
         self.assertNotIn("\n- `씀` 줄은 기계 상태 파일에 있어", text)   # 한계가 `씀` 줄만 말하던 옛 문장
+        for words in ("확인한 끝 뒤에 대기 줄(`pending.md`)을 바꾼 `씀` 커밋이 있어도 확인한 끝을 옮기지 않고 " + RESET_NOTE + " 를 낸다 — "
+                      "규칙 사본 · `rules-base.md` 쪽의 `씀` 고침은 이 명령이 그 파일을 지우며 함께 되돌리므로 세지 않는다.",
+                      "`confirm --confirmed <확인할 끝>` 으로만 접는다 — 예외는 `rules-reset` 하나다: "
+                      "대기 줄을 바꾼 `씀` 커밋이 없을 때만 접는다(규칙 쪽 `씀` 고침은 그 명령이 사본을 지우며 되돌린다).",
+                      "| " + RESET_NOTE + "(`rules-reset`) | 0 |"):
+            self.assertIn(words, text, words)
         self.assertNotIn("E3", text)   # 배포되는 문서에 이 레포의 에픽 번호를 두지 않는다
         self.assertNotIn("「확인할 남의 고침이 없다」(0) 이다.\n", text)   # 낡은 끝 + 목록을 0 으로 읽게 하던 옛 걸음 3 끝
 

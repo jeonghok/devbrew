@@ -721,10 +721,10 @@ def _edits(root, roadmap_rel: str, team, seen: Optional[str]) -> tuple:
     except Exception:   # 기계 상태를 읽지 못함 — 재지 못함(I11)
         rows = None
     git, trust, paths = RS.Git(str(root)), TS.trust_of(rows), TS.rules_paths(team) + TS.pending_paths(team)
-    edits = TS.edits_since(git, seen, trust, paths)   # 한 번만 재고 `씀` 으로 가른다 — 둘째 호출만 실패해 목록이 사라지는 길이 없다
-    if edits is None:
+    got = TS.split_edits(git, seen, trust, paths)   # 한 번만 재고 `씀` 으로 가른다 — 둘째 호출만 실패해 목록이 사라지는 길이 없다
+    if got is None:
         return None, None
-    return sum(1 for e in edits if e[0] not in trust[1]), [e for e in edits if e[0] in trust[1]]
+    return len(got[0]), got[1]
 
 
 # ── show ─────────────────────────────────────────────────────────────────────

@@ -148,17 +148,25 @@ def edits_since(git, tip: str, trust, paths: list):
     return [(commit, tuple(found[commit])) for commit in reversed(order) if commit in found]
 
 
-def foreign_commits(git, tip: str, trust, paths: list):
-    """`edits_since` 가운데 `씀` 에 없는 것 — 확인되지 않은 남의 고침. 재지 못하면 None.
+def split_edits(git, tip: str, trust, paths: list):
+    """`edits_since` 를 한 번 재서 `씀` 으로 가른 (남의 고침, 이 기계가 쓴 것으로 적힌 고침). 재지 못하면 None.
     `씀` 에 든 커밋이 범위에 없어도(버려진 커밋) 그냥 범위 밖이다."""
     found = edits_since(git, tip, trust, paths)
-    return None if found is None else [e for e in found if e[0] not in trust[1]]
+    if found is None:
+        return None
+    return [e for e in found if e[0] not in trust[1]], [e for e in found if e[0] in trust[1]]
+
+
+def foreign_commits(git, tip: str, trust, paths: list):
+    """`split_edits` 의 앞쪽 — 확인되지 않은 남의 고침. 재지 못하면 None."""
+    got = split_edits(git, tip, trust, paths)
+    return None if got is None else got[0]
 
 
 def own_commits(git, tip: str, trust, paths: list):
-    """`edits_since` 가운데 `씀` 에 있는 것 — 이 기계가 쓴 것으로 적힌 고침. 재지 못하면 None."""
-    found = edits_since(git, tip, trust, paths)
-    return None if found is None else [e for e in found if e[0] in trust[1]]
+    """`split_edits` 의 뒤쪽 — 이 기계가 쓴 것으로 적힌 고침. 재지 못하면 None."""
+    got = split_edits(git, tip, trust, paths)
+    return None if got is None else got[1]
 
 
 def rules_tip(git, team, on: bool, rows) -> tuple:

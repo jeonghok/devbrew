@@ -615,6 +615,30 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
         LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)   # 다시 열린다
 
+    def listed(self):   # show 가 재는 함수 그대로 — 이 기계가 쓴 것으로 적힌 고침 목록
+        return CST._edits(str(self.w), rm(ALPHA), self.team, self.tip())[1]
+
+    def test_reset_keeps_the_trust_base_while_an_own_pending_edit_is_unshown(self):   # AC5 — 대기 줄 `씀` 을 심음 → rules-reset
+        self.foreign_edit()
+        planted = self.foreign_edit("o2", {self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
+        CB.record_own(str(self.w), rm(ALPHA), SID, [planted])
+        self.assertEqual(LS.foreign(str(self.w), rm(ALPHA), self.tip(), TS.pending_paths(self.team)), [])   # 양성 대조 — 남의 고침으로는 안 센다
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNone(CB.read(str(self.w), self.tip(), self.team.rules))   # 사본은 지웠다
+        self.assertEqual(res.notes[-1], LS.RESET_OWN_LEFT)
+        self.assertNotIn(LS.RESET_DONE, res.notes)
+        self.assertNotIn("확인", [r["까닭"] for r in self.rows()])
+        self.assertIn("  %s · %s" % (planted[:8], self.team.path(CB.PENDING_FILE)), CST.own_lines(self.listed()))
+
+    def test_reset_still_folds_over_own_rules_side_edits(self):   # 양성 대조 — 규칙 쪽 `씀` 은 reset 이 사본과 함께 되돌린다
+        self.foreign_edit()
+        planted = self.foreign_edit("o2")
+        CB.record_own(str(self.w), rm(ALPHA), SID, [planted])
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertEqual(res.notes[-1], LS.RESET_DONE)
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(self.tip(), "확인")])
+        # `씀` 이 없으면 지금처럼 접는다 — test_reset_withdraws_a_foreign_rule_edit 가 잰다
+
     def test_reset_keeps_the_trust_base_when_pending_has_foreign_lines(self):   # F3 — 양성 단언: 사본은 지웠고 대기 줄 쪽 알림이 났다
         self.foreign_edit("o1", {self.team.rules: "- [남] r\n", self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
         res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
