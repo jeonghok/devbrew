@@ -13,7 +13,7 @@ description: >
   on the current branch (no push).
 metadata:
   cost_class: variable
-argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>]"
+argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>] [--answered <경로>]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)
 ---
@@ -124,7 +124,7 @@ way P2 does (`TOP` from `git rev-parse --show-toplevel`, stop when that fails, t
 `RD="${TOP}/.claude/quality-gates/<session-id>"`). Outside a git repository P2 stops the run.
 
 Arguments: `branch` · `--paths <glob>...` · `range <시작>[..<끝>]` override the review scope (Review Step 1). `range` 의 끝을 생략하면 `origin/HEAD` 다.
-`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다. 쓰는 곳은 intent-critic 단계 I2 다.
+`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다. `--answered <경로>` 는 부른 쪽(지휘자)이 넘기는 「이미 답한 것」 파일의 절대 경로이고 범위 인자가 아니다. 쓰는 곳은 intent-critic 단계 I2 다.
 
 **P2b — 범위 (range 인자일 때만 · 실행에 한 번).** 인자에 `range` 가 없으면 건너뛴다(앞 실행의 범위 파일은 P2 가 지웠다). 돌려도 해는 없다 — 그때 스크립트는 범위 파일을 지우고 `range: none` 만 낸다:
 

@@ -68,10 +68,11 @@ fi
 
 ## I2 설정 · 준비
 
-`config` 는 docs 답 자리 · 리뷰어 입력 상한 · 다른 팀 기록의 바이트 상한 · 의도 문서를 가리는 표시를 정하고, `prepare` 는 리뷰의 넓이를 정해 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문 · 리뷰어의 `<scope>` 칸(`intent-scope.md`)을 세션 폴더의 `intent-*` 파일로 조립하고 다른 팀 기록(`other-teams.md`)을 쓴다. 펜스의 자리 셋을 채운다:
+`config` 는 docs 답 자리 · 리뷰어 입력 상한 · 다른 팀 기록의 바이트 상한 · 의도 문서를 가리는 표시를 정하고, `prepare` 는 리뷰의 넓이를 정해 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문 · 리뷰어의 `<scope>` 칸(`intent-scope.md`)을 세션 폴더의 `intent-*` 파일로 조립하고 다른 팀 기록(`other-teams.md`)을 쓴다. 펜스의 자리 넷을 채운다:
 
 - `QG_INTENT_JSON` — P3 이 낸 JSON 한 줄을 글자 그대로. P3 이 JSON 을 남기지 못했으면 빈 줄로 둔다(`prepare` 가 공시한다).
 - `QG_INTENT_ORIGIN` — 인자에 `--origin <경로>` 가 있었으면 그 경로를 글자 그대로, 없으면 빈 줄.
+- `QG_INTENT_ANSWERED` — 인자에 `--answered <경로>` 가 있었으면 그 경로를 글자 그대로, 없으면 빈 줄.
 - `BASE` — PR 범위면 Step 1c 출력의 `base:` 값, 모르면 `-`. 범위 모드는 펜스가 범위 파일의 `start:` 를 읽으므로 비워 둔다. `prepare` 는 이 값으로 `<scope>` 칸의 커밋 제목(기준 커밋부터 리뷰한 커밋까지)을 읽는다.
 
 리뷰 트리 루트는 PR 범위면 리포 루트(`git rev-parse --show-toplevel`), 범위 모드면 I1 의 트리다 — `config` 는 그곳의 설정을, `prepare` 는 그곳의 docs 답 자리를 읽고 그 루트를 계획 파일에 적는다. 리뷰한 커밋은 PR 범위면 `HEAD`, 범위 모드면 끝 커밋이다.
@@ -86,6 +87,9 @@ QG_INTENT_JSON
 IFS= read -r ORIGIN_ARG <<'QG_INTENT_ORIGIN'
 <인자의 --origin 경로 — 없으면 빈 줄>
 QG_INTENT_ORIGIN
+IFS= read -r ANSWERED_ARG <<'QG_INTENT_ANSWERED'
+<인자의 --answered 경로 — 없으면 빈 줄>
+QG_INTENT_ANSWERED
 if [ -f "$RD/range-scope.txt" ]; then
   MODE=range; RS="$RD/range-scope.txt"
   BASE="$(sed -n 's/^start: //p' "$RS")"; REVIEW="$(sed -n 's/^end: //p' "$RS")"; TREE="$(cat "$RD/intent-review-tree.txt")"
@@ -95,8 +99,9 @@ fi
 case "$BASE" in ''|*[!0-9a-f]*) BASE=- ;; esac
 [ -n "$TREE" ] && [ -d "$TREE" ] || { echo "[quality-gates] intent-critic 단계의 리뷰 트리가 없다(${TREE:-빈 값}) — 준비하지 않는다" >&2; exit 5; }
 O_ARGS=(); [ -z "$ORIGIN_ARG" ] || O_ARGS=(--origin "$ORIGIN_ARG")
+A_ARGS=(); [ -z "$ANSWERED_ARG" ] || A_ARGS=(--answered "$ANSWERED_ARG")
 python3 "$QG/scripts/intent_critic.py" config --rd "$RD" --repo "$TOP" --base "$BASE" --project-dir "$TREE" || exit
-python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" --base "$BASE" "${O_ARGS[@]}"
+python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" --base "$BASE" "${O_ARGS[@]}" "${A_ARGS[@]}"
 echo "prepare rc=$?"
 ```
 
@@ -104,7 +109,7 @@ echo "prepare rc=$?"
 
 **다른 팀 읽기.** `prepare` 는 어느 넓이에서나 다른 팀 기록을 모아 `$RD/other-teams.md` 에 쓴다(기록이 비면 그 파일을 지운다). 「팀」 은 로드맵 하나다. 읽는 것은 이번 로드맵(리뷰 트리)과 나란한 다른 로드맵(기본 브랜치 끝)의 에픽 블록 · 결정 기록, 기본 브랜치에서도 리뷰한 커밋에서도 닿지 않는 커밋이 있는 브랜치(로컬 · 원격)의 바뀐 의도 문서, 이번 변경과 겹치는 파일의 그쪽 diff, 열린 PR 목록(번호 · 제목 · 브랜치 이름 · 포크 여부 — 조회 한 번)이다. 정해진 git 읽기 명령만 쓰고 리포를 바꾸지 않는다 — 원격을 새로 받지 않는다. 못 보는 것(다른 worktree 의 커밋 안 된 작업 · 이 리포에 브랜치가 없는 PR · 확인하지 못한 열린 PR 목록(`열린 PR 확인 못 함 — <사유>`) · 다른 컴퓨터와 올리지 않은 작업 · 새로 받지 않은 원격(`원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다`) · 표시가 설정에 없는 인터뷰 단계의 팀 · 읽지 못한 브랜치 목록이나 기본 브랜치 · 읽지 못한 브랜치(`브랜치 <이름> 를 읽지 못함 — <예외 이름>`) · 머리를 읽지 못한 문서)은 기록의 「확인 못 함」 절에 한 줄씩 남는다. 기록은 리뷰어를 부를 때 근거 파일에 `[다른 팀]` 줄로 실린다. `intent-call: none` 이어도 기록은 남고, 겹치는 곳 · 확인 못 함 목록은 [I6](#i6-렌더) 의 결과 절에 보인다.
 
-`config` 의 여덟 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` · `넓게 본다 — 범위 모드` · `넓게 본다 — 의도 문서가 바뀐 변경` · `바뀐 파일 목록이 없어 넓게 보지 않는다` · `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` · `다른 팀 읽기 실패 — <예외 이름>` · `입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` · `차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다` 등)은 그대로 보인다.
+`config` 의 여덟 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` · `넘겨받은 답을 읽지 못함 — <사유>` · `넓게 본다 — 범위 모드` · `넓게 본다 — 의도 문서가 바뀐 변경` · `바뀐 파일 목록이 없어 넓게 보지 않는다` · `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` · `다른 팀 읽기 실패 — <예외 이름>` · `입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` · `차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다` 등)은 그대로 보인다.
 
 | `prepare` 의 마지막 줄 | 그다음 |
 |---|---|
