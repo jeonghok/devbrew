@@ -75,7 +75,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 > `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 컨텍스트 쌓기를 시작하지 않는다.`
 
-**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 컨텍스트 쌓기에 들어가기 전에 아래 한 줄을 그대로 낸다:
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: intent-seed`(옛 기록은 `interview-seed`)가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 컨텍스트 쌓기에 들어가기 전에 아래 한 줄을 그대로 낸다:
 
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
 
@@ -127,7 +127,7 @@ brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으
 
 ## State location
 
-의도 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
+의도 폴더(`intent_dir`)의 `<날짜>-<주제>-context.state.md` — 옛 꼴 상태 파일로 이어 온 일은 그 파일의 폴더 · 줄기 그대로. 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
 State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 정한다)
 
 ```yaml
@@ -559,7 +559,7 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 
 ## seed 를 입력으로 받았을 때
 
-**이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: interview-seed` frontmatter
+**이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: intent-seed`(옛 기록은 `interview-seed`) frontmatter
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```

@@ -1358,9 +1358,9 @@ grep -qF '<reverify>' <<<"$mapper_fence" \
 grep -qF '<seed>' <<<"$mapper_fence" \
   && ok "AC11: coverage-mapper dispatch 가 seed 원문을 실제로 싣는다" \
   || no "AC11: dispatch 가 seed 를 안 싣는다 — 주제 없이 주제-도출 차원을 요구한다"
-grep -qF 'type: interview-seed' <<<"$seed_flat" \
-  && ok "v0.41.0: seed frontmatter 태그(type: interview-seed) 인식" \
-  || no "v0.41.0: type: interview-seed 인식 규약이 없다"
+grep -qF 'type: intent-seed' <<<"$seed_flat" \
+  && ok "v0.41.0: seed frontmatter 태그(type: intent-seed) 인식" \
+  || no "v0.41.0: type: intent-seed 인식 규약이 없다"
 grep -qE '새 발화가 *이긴다' <<<"$seed_flat" \
   && ok "v0.41.0: seed 확정을 뒤집는 새 발화가 우선 (P23)" \
   || no "v0.41.0: 새 발화 우선 규칙이 없다"

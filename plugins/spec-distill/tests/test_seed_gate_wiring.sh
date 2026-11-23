@@ -67,7 +67,7 @@ grep -q '^TOPIC="probe-topic"$' "$W/state.sh" && ok "추출: 자리표를 픽스
 
 # ── 가짜 플러그인 루트 ────────────────────────────────────────────────────────
 PR="$W/plugin"; mkdir -p "$PR/scripts"
-for f in state_path.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py nofollow_write.py \
+for f in state_path.py legacy_names.py detect_codex.sh codex-killswitch.conf docreview_state.py docreview_config.py nofollow_write.py \
          repo_defaults.py roadmap_model.py team_layout.py section6.py brief_body.py; do
   cp "$ROOT/plugins/spec-distill/scripts/$f" "$PR/scripts/"
 done
