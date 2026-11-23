@@ -24,8 +24,8 @@ locate 의 판결 줄 — stdout 마지막 줄이다(다른 줄은 stdout 에 �
 찾는 길: seed 이름 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. 받은 글자에서 도출하고 링크를 풀지 않으며, seed 머리의
 `audit_file:` 은 읽지 않는다. `--interview` 는 상태 파일 `seed:` 값(작업 트리 루트 기준 상대 경로)에서 같은 길로 간다.
 
-옆 생성기(`team_write._framing_from_state`)와 다른 한 갈래: `seed:` 가 `없음` 인데 `## 풀린 입력` 이 seed 인 인터뷰를
-옆 생성기는 framing 없는 인터뷰로 읽고 이 모듈은 찾지 못함으로 읽는다 — 그쪽은 옮겨 적을 기록 파일이 없다는 것만 알면
+옆 생성기(`team_write._framing_from_state`)와 다른 한 갈래: `seed:` 가 `없음` 인데 `## 풀린 입력` 이 seed 인 컨텍스트 쌓기를
+옆 생성기는 framing 없는 컨텍스트 쌓기로 읽고 이 모듈은 찾지 못함으로 읽는다 — 그쪽은 옮겨 적을 기록 파일이 없다는 것만 알면
 되고, 이쪽은 첫 입력이 모델이 줄인 글이라는 것까지 알아야 한다.
 
 기록 파일은 `seed_review_log.read_audit_text` 로 읽는다(`\\r\\n` 만 `\\n` 으로). 두 절(원문 절 · 질문 전체 절)의 줄에
@@ -126,7 +126,7 @@ def locate_from_seed(seed: str) -> Verdict:
 
 
 def _solved_input_is_seed(text: str) -> bool:
-    """frontmatter 뒤 첫 `## 풀린 입력` 줄 다음 첫 비지 않은 줄이 물결표 펜스이고, 그 안 첫 줄이 `---` 인 머리가 type: intent-seed(옛 기록은 interview-seed)."""
+    """frontmatter 뒤 첫 `## 풀린 입력` 줄 다음 첫 비지 않은 줄이 물결표 펜스이고, 그 안 첫 줄이 `---` 인 머리가 type: intent-seed(옛 기록은 옛 종류 글자)."""
     lines = text.split("\n")
     i = 0
     if lines and lines[0] == "---":

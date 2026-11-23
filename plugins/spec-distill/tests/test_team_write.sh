@@ -1193,7 +1193,7 @@ assert_eq "$(fa_heads ke)" "$(fa_want ke-seed.audit.md)" "푸는 길: seed 파�
 # ── framing 구간 없이 옮길 때의 화면 줄 (PR #283 좁은 재리뷰) ────────────────────────
 # 표지 「framing audit 없음」 을 적는 갈래 넷 — seed 가 「없음」 · seed 값이 비었다 · seed 키가 없다 · 상태 파일이 없다 — 에서
 # original · create --layout team 이 화면에 한 줄을 낸다(rc 는 0 그대로). 그 뒤 original --framing-audit 로 framing 구간을 덧붙일 수 있다.
-FN_LINE='[spec-distill] framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `framing audit 없음` 을 적었다. framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 덧붙인다'
+FN_LINE='[spec-distill] framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `framing audit 없음` 을 적었다. framing 을 거친 컨텍스트 쌓기라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 덧붙인다'
 fn_fix() {  # fn_fix <줄기> <none|empty|nokey|nostate|found> — docs/fa/<줄기>-brief.* 짝과 그 갈래의 상태 파일
   local st="$FA/docs/fa/$1-brief.state.md"
   cp "$FA/docs/iv/t-brief-interview.md" "$FA/docs/fa/$1-brief.md"

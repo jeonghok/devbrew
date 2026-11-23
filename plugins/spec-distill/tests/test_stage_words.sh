@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/* plugins/spec-distill/references/* plugins/spec-distill/templates/* plugins/spec-distill/agents/* plugins/spec-distill/README.md plugins/spec-distill/switches.md plugins/spec-distill/dependencies.md shared/docreview/agents/* shared/docreview/references/* shared/docreview/scripts/docreview_state.py
+# guards: plugins/spec-distill/skills/* plugins/spec-distill/references/* plugins/spec-distill/templates/* plugins/spec-distill/agents/* plugins/spec-distill/README.md plugins/spec-distill/switches.md plugins/spec-distill/dependencies.md shared/docreview/agents/* shared/docreview/references/* shared/docreview/scripts/docreview_state.py plugins/spec-distill/scripts/* plugins/quality-gates/*
 # 글 속 낱말(AC40 의 계획 1 몫) — skill 글 · 펜스 · 템플릿 · README · reference · agent 정의 · 리뷰 기준에
 # 단계를 가리키는 옛 낱말(「인터뷰」 · interview brief · docs(interview) · 옛 펜스 표지 · 홀로 쓰인 영어 interview)이 없고,
 # 새 글자가 자리마다 실제로 있다(양의 짝). 쉬운 말 규칙 블록과 면제 목록의 줄은 건너뛴다.
@@ -12,7 +12,9 @@ if [ "${1:-}" = "--emit-scanned" ]; then   # 읽는 파일: 아래 corpus() 와 
   git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/*' 'plugins/spec-distill/references/*' \
     'plugins/spec-distill/templates/*' 'plugins/spec-distill/agents/*' 'plugins/spec-distill/README.md' \
     'plugins/spec-distill/switches.md' 'plugins/spec-distill/dependencies.md' \
-    'shared/docreview/agents/*' 'shared/docreview/references/*' 'shared/docreview/scripts/docreview_state.py'
+    'shared/docreview/agents/*' 'shared/docreview/references/*' 'shared/docreview/scripts/docreview_state.py' \
+    'plugins/spec-distill/scripts/*'
+  git -C "$ROOT" ls-files -- plugins/quality-gates ':!plugins/quality-gates/tests' ':!plugins/quality-gates/CHANGELOG.md'
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -20,7 +22,9 @@ fi
 corpus() { git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/*' 'plugins/spec-distill/references/*' \
   'plugins/spec-distill/templates/*' 'plugins/spec-distill/agents/*' 'plugins/spec-distill/README.md' \
   'plugins/spec-distill/switches.md' 'plugins/spec-distill/dependencies.md' \
-  'shared/docreview/agents/*' 'shared/docreview/references/*' 'shared/docreview/scripts/docreview_state.py'; }
+  'shared/docreview/agents/*' 'shared/docreview/references/*' 'shared/docreview/scripts/docreview_state.py' \
+  'plugins/spec-distill/scripts/*'
+  git -C "$ROOT" ls-files -- plugins/quality-gates ':!plugins/quality-gates/tests' ':!plugins/quality-gates/CHANGELOG.md'; }
 
 CORPUS="$(corpus)"
 n_files="$(printf '%s\n' "$CORPUS" | grep -c .)"
@@ -32,8 +36,10 @@ SCAN_OUT="$(mktemp)"; LIST="$(mktemp)"
 trap 'rm -f "$SCAN_OUT" "$LIST"' EXIT
 printf '%s\n' "$CORPUS" > "$LIST"
 python3 - "$ROOT" "$LIST" > "$SCAN_OUT" <<'PY'
+import io
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 root = Path(sys.argv[1])
@@ -46,16 +52,27 @@ STAGE = re.compile(
 # 홀로 쓰인 영어 낱말 — 앞뒤에 식별자 글자가 붙은 꼴(--interview · interview_state.py · interview-seed …)은 걸리지 않는다.
 # 뒤의 `.` 은 확장자처럼 영숫자가 이어질 때만 식별자로 본다 — 문장 끝 마침표(「… interviews.」)는 걸린다.
 BARE = re.compile(r"(?<![-_/.$A-Za-z0-9])interview(?:s|er|ers|ing)?(?![-_/A-Za-z0-9]|\.[A-Za-z0-9])", re.I)
-# 면제 목록 — (파일, 줄에 든 글자, 이유). 계획 2 이유의 줄은 계획 2 가 비운다.
-EXEMPT = [
-    ("plugins/spec-distill/skills/reviewing-brief/SKILL.md", "`advisories` 의 「인터뷰를 닫은 답 …」 줄",
-     "계획 2 — 스크립트 출력 인용 · scripts/check_verbatim_coverage.py:run(L3 advisories)"),
-]
-hits = []
-exempted = 0
-used = set()
-for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
-    text = (root / rel).read_text(encoding="utf-8")
+# 옛 층 글자 — 스크립트 밖 글에서는 같은 줄에 「옛 」 이 있을 때만 받는다(옛 기록을 가리키는 말).
+LAYER = re.compile(
+    r"interview_dir|source_interview|docs/superpowers/interview/"
+    r"|interview-(?:seed-audit|seed|state|brief|audit)(?![-A-Za-z0-9_])"
+    r"|-interview\.(?:state\.|audit\.)?md"
+)
+IDENT_STRING = re.compile(r"[rbuRBU]{0,2}[\"'][A-Za-z_][A-Za-z0-9_]*[\"']")   # "interview" 같은 사전 키 — 식별자로 본다
+
+
+def pieces(rel, text):
+    """(줄 번호, 글) — .py 는 문자열 · 주석 토큰만(식별자 같은 문자열 하나는 뺀다), 그 밖은 쉬운 말 규칙 블록을 뺀 줄."""
+    if rel.endswith(".py"):
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            name = tokenize.tok_name.get(tok.type, "")
+            if name not in ("STRING", "COMMENT", "FSTRING_MIDDLE"):
+                continue
+            if name == "STRING" and IDENT_STRING.fullmatch(tok.string):
+                continue
+            for i, line in enumerate(tok.string.splitlines()):
+                yield tok.start[0] + i, line
+        return
     inside = False
     for no, line in enumerate(text.splitlines(), 1):
         if "<!-- plain-language:begin -->" in line:
@@ -64,7 +81,24 @@ for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
             if "<!-- plain-language:end -->" in line:
                 inside = False
             continue
-        if not (STAGE.search(line) or BARE.search(line)):
+        yield no, line
+
+
+def layer_hit(rel, line):
+    return not rel.endswith(".py") and bool(LAYER.search(line)) and "옛 " not in line
+
+# 면제 목록 — (파일, 줄에 든 글자, 이유).
+EXEMPT = [
+    ("plugins/quality-gates/README.md", "`source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle`",
+     "기본 표지 목록 리터럴(447 줄 설정 표 · 500 줄 설명) — 설정 기본값이라 같은 줄에 「옛 」 을 둘 수 없다(옛 머리 키를 읽는 표지)"),
+]
+hits = []
+exempted = 0
+used = set()
+for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
+    text = (root / rel).read_text(encoding="utf-8")
+    for no, line in pieces(rel, text):
+        if not (STAGE.search(line) or BARE.search(line) or layer_hit(rel, line)):
             continue
         ex = [i for i, (f, frag, _r) in enumerate(EXEMPT) if f == rel and frag in line]
         if ex:
@@ -73,7 +107,7 @@ for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
             rest = line
             for i in ex:
                 rest = rest.replace(EXEMPT[i][1], "")
-            if not (STAGE.search(rest) or BARE.search(rest)):
+            if not (STAGE.search(rest) or BARE.search(rest) or layer_hit(rel, rest)):
                 continue
         hits.append(f"{rel}:{no}: {line.strip()}")
 stale = [f"{EXEMPT[i][0]} 「{EXEMPT[i][1]}」" for i in range(len(EXEMPT)) if i not in used]
@@ -118,6 +152,14 @@ some_in "plugins/spec-distill/README.md" '컨텍스트 쌓기'
 some_in "plugins/spec-distill/README.md" '로드맵 잡기'
 some_in "plugins/spec-distill/README.md" '의도 폴더'
 some_in "plugins/spec-distill/skills/context-build/SKILL.md" 'context-build stage'
+some_in "plugins/spec-distill/scripts/interview_state.py" 'context-state: '
+some_in "plugins/spec-distill/scripts/control_plane.py" '컨텍스트 쌓기 조사'
+some_in "plugins/spec-distill/skills/context-build/SKILL.md" '<!-- context-state-entry:begin -->'
+some_in "plugins/spec-distill/skills/context-build/references/state-file.md" 'context-state: RESUME'
+some_in "plugins/spec-distill/README.md" 'intent_dir'
+some_in "plugins/spec-distill/references/docreview-profiles/design-doc.md" 'source_intent'
+some_in "plugins/quality-gates/scripts/other_teams.py" '컨텍스트 쌓기 단계의 팀'
+some_in "plugins/quality-gates/scripts/intent_origin.py" '"source_intent"'
 # 「의도 폴더」 는 로드맵 폴더 아래 intent/ 를 가리키지 않는다
 none_line_with "$CORPUS" '의도 폴더' 'roadmaps/'
 finish

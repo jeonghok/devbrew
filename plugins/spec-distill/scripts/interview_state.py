@@ -140,7 +140,7 @@ def cmd_entry(a) -> int:
             print("context-state: REJECT {0} (type: {1})".format(arg, have or "없음"))
             return 2
         if os.path.exists(abs_arg[:-len(".state.md")] + ".md"):
-            print("context-state: REJECT {0} (이미 끝난 인터뷰다 — brief 가 있다)".format(arg))
+            print("context-state: REJECT {0} (이미 끝난 컨텍스트 쌓기다 — brief 가 있다)".format(arg))
             return 2
         print("context-state: RESUME {0}".format(abs_arg))
         return 0

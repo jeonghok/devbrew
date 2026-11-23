@@ -79,7 +79,7 @@ put_type "$D/2026-10-15-t-context.audit.md" context-audit
 sum_before="$(cat "$D"/2026-10-15-t-context* | cksum)"
 out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>"$WORK/err"); rc=$?
 assert_eq "$rc:$out" "0:$D/2026-10-15-t-0930-context.state.md" "AC27: 끝난 인터뷰 자리면 <주제>-<HHMM> 자리를 낸다"
-assert_contains "$(cat "$WORK/err")" "같은 날 같은 주제의 인터뷰가 이미 끝났다" "AC27: 그 사실을 한 줄 알린다"
+assert_contains "$(cat "$WORK/err")" "같은 날 같은 주제의 컨텍스트 쌓기가 이미 끝났다" "AC27: 그 사실을 한 줄 알린다"
 assert_eq "$(cat "$D"/2026-10-15-t-context* | cksum)" "$sum_before" "AC27: 끝난 인터뷰의 파일은 바뀌지 않는다"
 # 양의 짝 — 끝나지 않은 상태 파일만 있으면 같은 자리(이어 가기 판단은 진입 단계 몫)
 rm -f "$D/2026-10-15-t-context.md" "$D/2026-10-15-t-context.audit.md"
@@ -90,7 +90,7 @@ put_type "$D/2026-10-15-t-context.md" context-brief
 put_type "$D/2026-10-15-t-0930-context.md" context-brief
 err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리도 끝난 인터뷰면 exit 2"
-assert_contains "$err" "에도 끝난 인터뷰가 있다" "AC27: 새 자리가 끝난 인터뷰면 그 사유를 낸다"
+assert_contains "$err" "에도 끝난 컨텍스트 쌓기가 있다" "AC27: 새 자리가 끝난 컨텍스트 쌓기면 그 사유를 낸다"
 for tm in 2360 2400 930 09a0; do
   err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time "$tm" --cwd "$IV" 2>&1 >/dev/null); rc=$?
   assert_eq "$rc" "2" "AC27: --time '${tm}' 은 exit 2"

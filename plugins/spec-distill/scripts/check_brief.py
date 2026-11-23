@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""spec-distill — interview brief structural gate.
+"""spec-distill — context brief structural gate.
 
 집행하는 AC (2026-07-25-spec-distill-brief-format-producer-design.md §6):
 AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec의 §6 표**를
@@ -258,7 +258,7 @@ def frontmatter_value(key: str, text: str):
        **다음 줄 토큰을 값으로 포획한다** — payload와 audit이 둘 다 `session_id:`를 비우면 양쪽이
        똑같이 아래 `source:`로 읽혀 페어링이 상수로 붕괴했다(실행 실증: exit 0).
     3. **값은 라인 끝까지 읽고 주석만 뗀다.** 첫 공백에서 끊으면 `shared payload`와 `shared audit`이
-       둘 다 `shared`로 읽혀 서로 다른 인터뷰가 동일 비교로 통과한다.
+       둘 다 `shared`로 읽혀 서로 다른 컨텍스트 쌓기가 동일 비교로 통과한다.
     4. **공백이 남은 값은 거부한다.** 이 키들은 전부 단일 토큰이다. 모호한 입력에서 값을 하나
        골라주지 않는 것이 이 함수의 존재 이유다.
     """
@@ -288,9 +288,9 @@ def resolve_audit(payload: Path, fm: str):
     이름은 **payload 파일명에서 유도**된다 (`<payload stem>.audit.md`). 신뢰하지 않는 값을
     *검증*하는 대신 아예 *받지 않는* 것이다 — audit §1 Coverage Ledger가 Law 1 종료 판정의
     근거이므로, payload가 어떤 audit을 자기 것이라 부를지 스스로 고르게 두면 끝나지 않은
-    인터뷰가 남의 완료된 원장을 상속한다(실행 실증: `audit_file:` 한 줄 편집으로 exit 1 → 0).
+    컨텍스트 쌓기가 남의 완료된 원장을 상속한다(실행 실증: `audit_file:` 한 줄 편집으로 exit 1 → 0).
     `session_id` 동등성 검사만으로는 부족했다 — SKILL이 세션 id 재사용을 규정해 한 세션의 두
-    인터뷰가 같은 id를 갖기 때문이다. 유도는 그 구멍까지 닫는다: 한 payload가 가리킬 수 있는
+    컨텍스트 쌓기가 같은 id를 갖기 때문이다. 유도는 그 구멍까지 닫는다: 한 payload가 가리킬 수 있는
     audit은 정의상 하나뿐이다. `session_id`/`type` 검사는 그대로 남는다 — 파일이 옮겨지거나
     이름이 바뀌는 경우의 2차 방어다.
 
@@ -306,7 +306,7 @@ def resolve_audit(payload: Path, fm: str):
     if name != expected:
         return None, (
             f"audit_file {name!r} is not this payload's sidecar (expected {expected!r} — "
-            "다른 인터뷰의 audit 채택 금지)"
+            "다른 컨텍스트 쌓기의 audit 채택 금지)"
         )
     p = payload.parent / name
     if not p.exists():
@@ -318,19 +318,19 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
     """audit이 *이 payload의* sidecar인지 확인한다 (fail-closed).
 
     `resolve_audit`은 basename이 같은 디렉토리에 존재하기만 하면 받아들이므로, payload가
-    **다른 인터뷰의 audit**을 가리켜도 통과했다. audit §1 Coverage Ledger는 Law 1 종료 판정
-    (floor 5 전부 closed)의 근거이므로, 끝나지 않은 인터뷰가 남의 원장을 상속해 green이 된다 —
+    **다른 컨텍스트 쌓기의 audit**을 가리켜도 통과했다. audit §1 Coverage Ledger는 Law 1 종료 판정
+    (floor 5 전부 closed)의 근거이므로, 끝나지 않은 컨텍스트 쌓기가 남의 원장을 상속해 green이 된다 —
     리뷰가 실행으로 실증했다: 같은 payload가 `audit_file: mine.audit.md`(floor 5 전부 open)에는
     exit 1, `audit_file: <남의 것>`(전부 closed)에는 exit 0. 한 줄 편집이 실패를 통과로 바꿨다.
-    `bijection_a_errors`(skepticism.py)는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
-    인터뷰 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
+    `bijection_a_errors`(skepticism.py)는 백스톱이 못 된다 — `ST<N>`은 컨텍스트 쌓기마다 1부터 매겨져 steelman 1건짜리
+    컨텍스트 쌓기 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
 
     부재는 불일치와 똑같이 red다 — 못 읽은 값을 "일치로 간주"하면 이 검사 자체가 fail-open이 되고,
     그건 이 함수가 막으려는 바로 그 실패 모드다.
 
     **알려진 한계 — 이 검사는 세션 경계까지만 막는다 (interview-level 미봉쇄).**
     결합 키는 `session_id`인데 `SKILL.md`가 payload에 **기존 spec-distill 세션 id 재사용**을
-    규정하므로, 한 세션에서 진행한 두 인터뷰는 payload 2개와 audit 2개가 전부 같은 id를 갖는다.
+    규정하므로, 한 세션에서 진행한 두 컨텍스트 쌓기는 payload 2개와 audit 2개가 전부 같은 id를 갖는다.
     그 사이의 차용은 이 검사가 구분하지 못한다 — 실행으로 확인됨: `interview-brief-floor-open.md`의
     `audit_file:` 한 줄을 `interview-brief-valid.audit.md`로 바꾸면 exit 1 → **exit 0**.
     즉 위 문단이 서술한 공격은 *교차 세션*에서만 닫혔고, 정작 흔한 *동일 세션* 경우는 열려 있다.
@@ -371,14 +371,14 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
     if apay is not None and apay != payload_name:
         errs.append(
             f"audit payload {apay!r} != {payload_name!r} "
-            "(다른 인터뷰의 audit 내용 — Coverage Ledger 차용)"
+            "(다른 컨텍스트 쌓기의 audit 내용 — Coverage Ledger 차용)"
         )
     psid = _one("session_id", payload_fm, "payload frontmatter에 session_id")
     asid = _one("session_id", afm, "audit frontmatter에 session_id")
     if psid is not None and asid is not None and psid != asid:
         errs.append(
             f"audit session_id {asid!r} != payload {psid!r} "
-            "(다른 인터뷰의 audit — Coverage Ledger 차용)"
+            "(다른 컨텍스트 쌓기의 audit — Coverage Ledger 차용)"
         )
     return errs
 
@@ -1184,7 +1184,7 @@ def _leading_oq(line: str):
     `OQ\\d+` 로 시작할 때만 그 id, 아니면 None.
 
     §0 은 `OQ1 [열림] — …`, §3 은 `OQ1: …` 또는 `**OQ1**: …`/`**OQ1 — 제목**` 로 쓴다(레포 실측 —
-    `docs/archive/interview/2026-07-26-qg-impact-driven-qa-runtime-interview.md:155`) — 그 줄이
+    `docs/archive/` 의 옛 인터뷰 기록 2026-07-26-qg-impact-driven-qa-runtime 의 155째 줄) — 그 줄이
     **선언하는** 결정은 선두의 것 하나다. 강조 마커를 건너뛰지 않으면 `**OQ1**: …` 이 선두가 아닌
     것으로 읽혀 ③ 의 역참조 검사가 그 줄을 순회에서 놓치고(회귀 실측: `→ 근거 RC3` 를 지워도
     green), 반대로 §0·§3 이 둘 다 강조돼 있으면 ② 가 「결정 목록에 없다」는 거짓 red 를 낸다.
@@ -1524,7 +1524,7 @@ def research_confirm_missing(payload_text: str, audit_text: str) -> list[str]:
 
 
 # 설계 2026-10-12-interview-persistent-explore §4·§5 — audit §2 의 포화 판정 줄. 판정은 «마지막» 줄로
-# 한다: 판정과 사용자 선택이 시간 순으로 쌓이고, 그 끝이 인터뷰가 어떻게 끝났는지다. 불릿 어휘는
+# 한다: 판정과 사용자 선택이 시간 순으로 쌓이고, 그 끝이 컨텍스트 쌓기가 어떻게 끝났는지다. 불릿 어휘는
 # 형제(`MAPPER_RE` · `ENTRY_BULLET_RE`)와 같은 `[-*]` 다 — `_entry_lines` 가 이미 그 어휘로 거른다.
 SAT_LINE_RE = re.compile(r"^(?:포화 판정 \d+:|사용자 종료\(@S\d+\))")
 SAT_PASS_RE = re.compile(r"^포화 판정 \d+: 포화 — \S")
@@ -1730,7 +1730,7 @@ def skip_conflict_failures(audit_text: str) -> list[str]:
 
 
 def closing_answer_anchors(payload_text: str, audit_text: str) -> list[tuple[str, str]]:
-    """인터뷰를 사용자가 고른 답으로 닫은 자리의 `S<n>` — `(S, "irrelevant")` 는 §4 의 「외부 선례 무관(@S<n>)」 줄마다
+    """컨텍스트 쌓기를 사용자가 고른 답으로 닫은 자리의 `S<n>` — `(S, "irrelevant")` 는 §4 의 「외부 선례 무관(@S<n>)」 줄마다
     (같은 S 는 한 번), `(S, "saturation")` 은 audit §2 의 **마지막** 포화 판정 줄이 「사용자 판단 포화(@S<n>)」 일 때만.
     「사용자 종료(@S<n>)」 는 넣지 않는다 — 자유 글로 끝낼 수 있다. 줄 문법은 위 두 검사와 같은 도우미다."""
     out = [(s, "irrelevant") for s in dict.fromkeys(_irrelevant_sids(payload_text))]
@@ -1843,7 +1843,7 @@ def gate(path: Path) -> int:
             amiss = find_missing_sections(audit_text, AUDIT_SECTIONS)
             if amiss:
                 failures.append(f"missing audit sections: {amiss}")
-            # 섹션 형태 검사보다 **먼저** 이 쌍이 같은 인터뷰인지 묻는다 — 형태가 완벽한 남의
+            # 섹션 형태 검사보다 **먼저** 이 쌍이 같은 컨텍스트 쌓기인지 묻는다 — 형태가 완벽한 남의
             # audit이야말로 이 검사가 잡으려는 대상이다.
             pair = audit_pairing_errors(fm, audit_text, path.name)
             if pair:
@@ -2057,7 +2057,7 @@ def main(argv: list[str]) -> int:
         except (OSError, UnicodeDecodeError) as exc:
             print(json.dumps({"failures": [f"audit unreadable: {exc}"]}, ensure_ascii=False))
             return 1
-        # 원장을 읽기 **전에** 이 쌍이 같은 인터뷰인지 묻는다 — `gate`는 거부하는 쌍을
+        # 원장을 읽기 **전에** 이 쌍이 같은 컨텍스트 쌓기인지 묻는다 — `gate`는 거부하는 쌍을
         # `coverage`는 `{"failures": []}`로 답하고 있었다(codex 적발, 실행 실증). 같은 질문에
         # 두 진입점이 다른 답을 내면 둘 중 하나는 거짓이고, 여기선 느슨한 쪽이 거짓이다:
         # 남의 audit에서 읽은 원장은 이 payload에 대해 아무것도 말해주지 않는다.

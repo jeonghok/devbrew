@@ -29,10 +29,10 @@ from roadmap_model import BLOCK_ID_RE, frontmatter, parse_roadmap, unquote  # no
 PREFIX = "[spec-distill] "
 NO_FRAMING = "framing audit 없음"
 NO_FRAMING_SAID = ("framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `%s` 을 적었다. "
-                   "framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
+                   "framing 을 거친 컨텍스트 쌓기라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
                    "덧붙인다" % NO_FRAMING)
 FRAMING_TYPE = legacy_names.INTENT_SEED_AUDIT
-SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 인터뷰
+SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 컨텍스트 쌓기
 FRAMING_LOST = ("상태 파일 %s 의 seed 는 %s 인데 framing audit 를 찾지 못했다 — %s. "
                 "framing 원문 · 질문 전체 없이는 원자료 사본을 만들지 않는다. framing audit 의 경로를 "
                 "`original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 주어 원자료 사본을 먼저 만든다"
@@ -117,7 +117,7 @@ def _decoded(rel: str, data: bytes, W) -> str:
 
 def _framing_from_state(top: Path, state_rel: str, W) -> tuple:
     """(framing audit 의 레포 상대 경로, 못 찾은 사유) — 많아야 하나만 값이다. 상태 파일이 없거나 seed 가 비었거나 「없음」 이면
-    framing 을 거치지 않은 인터뷰라 (None, None) 이다. 찾는 자리는 인터뷰가 읽는 자리와 같다 — seed 와 같은 폴더에서
+    framing 을 거치지 않은 컨텍스트 쌓기라 (None, None) 이다. 찾는 자리는 컨텍스트 쌓기가 읽는 자리와 같다 — seed 와 같은 폴더에서
     seed 파일 이름의 `.md` 를 `.audit.md` 로 바꾼 파일. seed 머리의 audit_file 은 읽지 않는다."""
     state = top / state_rel
     if not state.is_file():
@@ -202,10 +202,10 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
     found, lost = _framing_from_state(top, stem + ".state.md", W)
     given = W.rel(top, framing_audit) if framing_audit else None
     if found and given and found != given:
-        raise W.Usage("--framing-audit(%s) 이 인터뷰 상태 파일이 가리키는 framing audit(%s) 와 다르다 — 하나만 쓴다"
+        raise W.Usage("--framing-audit(%s) 이 컨텍스트 쌓기 상태 파일이 가리키는 framing audit(%s) 와 다르다 — 하나만 쓴다"
                       % (given, found))
     paired = framing_pair(existing, brief_rel)
-    if lost and not given and not paired:   # framing 을 거친 인터뷰다 — 그 원문 없이 조용히 가지 않는다
+    if lost and not given and not paired:   # framing 을 거친 컨텍스트 쌓기다 — 그 원문 없이 조용히 가지 않는다
         raise W.Refused(lost)
     framing = found or given
     out, note = [], ""

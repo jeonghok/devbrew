@@ -62,7 +62,7 @@ printf '%s\n' "$S36" | grep -qF '마지막 줄이 `context-state:` 판결이 아
 D2="$iv/docs/superpowers/interview"; OUTSIDE="$T/outside"; mkdir -p "$OUTSIDE"; printf '원본\n' > "$OUTSIDE/keys"
 printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-f-interview.state.md"
 printf -- '---\ntype: interview-brief\n---\n' > "$D2/2026-10-15-f-interview.md"
-assert_eq "$(ent "$D2/2026-10-15-f-interview.state.md")" "context-state: REJECT $D2/2026-10-15-f-interview.state.md (이미 끝난 인터뷰다 — brief 가 있다)" "AC3: 끝난 인터뷰의 상태 파일은 REJECT"
+assert_eq "$(ent "$D2/2026-10-15-f-interview.state.md")" "context-state: REJECT $D2/2026-10-15-f-interview.state.md (이미 끝난 컨텍스트 쌓기다 — brief 가 있다)" "AC3: 끝난 컨텍스트 쌓기의 상태 파일은 REJECT"
 printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-l-interview.state.md"
 ln -s "$OUTSIDE/keys" "$D2/2026-10-15-l-interview.audit.md"
 case "$(ent "$D2/2026-10-15-l-interview.state.md")" in

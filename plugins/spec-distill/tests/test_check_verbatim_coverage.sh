@@ -771,8 +771,8 @@ assert_eq "$(tool sat_last "$A")" "$sat_before" "rebuild_irrelevant_keeps_last_s
 # 문장 단언 — RB rc 표 · 펜스 · finishing · README
 W_GATE_CL="$(awk '/^## 진입 게이트/{f=1;next} f && /^## /{exit} f' "$RB_SKILL")"
 row="$(grep -F '| `1`(`not_chosen`) |' <<<"$W_GATE_CL" || true)"
-{ [[ -n "$row" ]] && [[ "$row" == *'`advisories` 의 「인터뷰를 닫은 답 …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다'* ]] && [[ "$row" == *'건너뛰지 않는다'* ]]; } \
-  && ok "RB rc 표: \`1\`(\`not_chosen\`) 행이 advisories 의 「인터뷰를 닫은 답 …」 줄을 그대로 보이라고 한다 · 건너뛰지 않는다" || no "RB rc 표: not_chosen 행이 없거나 문면이 다르다"
+{ [[ -n "$row" ]] && [[ "$row" == *'`advisories` 의 「컨텍스트 쌓기를 닫은 답 …」 줄을 고쳐 쓰지 않고 그대로 사용자에게 보인다'* ]] && [[ "$row" == *'건너뛰지 않는다'* ]]; } \
+  && ok "RB rc 표: \`1\`(\`not_chosen\`) 행이 advisories 의 「컨텍스트 쌓기를 닫은 답 …」 줄을 그대로 보이라고 한다 · 건너뛰지 않는다" || no "RB rc 표: not_chosen 행이 없거나 문면이 다르다"
 # 행이 제 문장을 따로 지어 보이지 않는다(그 문장은 advisory 에 산다 — 위 advisory 단언이 「그 질문을 선택지로 다시 묻는다」 를 본다) · 계획 얘기를 싣지 않는다
 [[ "$row" == *'다시 묻는다」를 보인다'* ]] && no "RB rc 표: not_chosen 행이 advisory 대신 제 문장을 보이라고 한다" || ok "RB rc 표: not_chosen 행이 제 문장을 따로 짓지 않는다"
 grep -qF '계획이 실측한다' "$RB_SKILL" && no "RB SKILL: 계획 얘기(「계획이 실측한다」)가 실렸다" || ok "RB SKILL: 「계획이 실측한다」 없음"

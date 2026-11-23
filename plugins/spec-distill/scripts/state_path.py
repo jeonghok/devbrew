@@ -325,7 +325,7 @@ def _slot_problem(d: Path, stem: str) -> str | None:
         have = None if fm is None else fm.get("type")
         if not kind_matches(have, kind):
             return ("[spec-distill] 계산한 자리에 다른 종류의 파일이 있다 — {0} (type: {1}). "
-                    "남의 파일 위에 인터뷰를 시작하지 않는다.".format(p, have or "없음"))
+                    "남의 파일 위에 컨텍스트 쌓기를 시작하지 않는다.".format(p, have or "없음"))
     return None
 
 
@@ -376,11 +376,11 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
             msgs.append(why)
             return None, msgs
         if (d / (stem2 + ".md")).exists():
-            msgs.append("[spec-distill] 새 자리 {0} 에도 끝난 인터뷰가 있다 — "
+            msgs.append("[spec-distill] 새 자리 {0} 에도 끝난 컨텍스트 쌓기가 있다 — "
                         "잠시 뒤 다시 부르거나 다른 주제 이름을 쓴다".format(new_state))
             return None, msgs
-        msgs.append("[spec-distill] 같은 날 같은 주제의 인터뷰가 이미 끝났다({0}) — "
-                    "새 인터뷰는 {1} 에서 시작한다. 끝난 인터뷰의 파일은 건드리지 않는다.".format(done, new_state))
+        msgs.append("[spec-distill] 같은 날 같은 주제의 컨텍스트 쌓기가 이미 끝났다({0}) — "
+                    "새 컨텍스트 쌓기는 {1} 에서 시작한다. 끝난 컨텍스트 쌓기의 파일은 건드리지 않는다.".format(done, new_state))
         return new_state, msgs
     return d / (stem + ".state.md"), msgs
 
@@ -463,9 +463,9 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "session-id":
         # env-only resolve (no hook payload on the CLI path). Skills use this sid as the
-        # owner of a ledger's review marker (`ledger_marker.py --session`) and as the interview
+        # owner of a ledger's review marker (`ledger_marker.py --session`) and as the context-build
         # session (`interview_state.py --session` — it also finds the previous version's
-        # per-session interview record to migrate).
+        # per-session context-build record to migrate).
         # 계약: 풀리지 않으면 exit 1, stdout 은 비어 있다.
         # 규칙: 호출자는 빈 sid 로 표지를 잡거나 확인하지 않는다. 호출자는 여기 적지 않고
         # `git grep -n 'state_path.py" session-id'` 로 센다.

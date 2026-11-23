@@ -141,7 +141,7 @@ class EntryTest(Base):
         st = self.put("2026-10-15-t-brief-interview.state.md", "interview-state", "seed: 없음\n")
         self.put("2026-10-15-t-brief-interview.md", "interview-brief")
         rc, out, _ = run("entry", "--arg", str(st), "--session", SID, cwd=self.tmp)
-        self.assertEqual((rc, last(out)), (2, "context-state: REJECT %s (이미 끝난 인터뷰다 — brief 가 있다)" % st))
+        self.assertEqual((rc, last(out)), (2, "context-state: REJECT %s (이미 끝난 컨텍스트 쌓기다 — brief 가 있다)" % st))
 
     def _candidate_with_sibling_link(self, name, target):
         seed = self.put("2026-10-15-t-interview.md", "interview-seed")

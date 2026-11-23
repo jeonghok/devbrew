@@ -9,7 +9,7 @@
 
 entry 의 마지막 줄은 `bundle-entry: PROCEED <정답 출처 절대경로 또는 ->` 이거나 `bundle-entry: REFUSE` 다.
 `--bundle` 이 있으면 PROCEED 바로 앞 줄이 `번호 대조 경고 <N>개` 다. `--bundle` 은 리뷰어에게 가지 않는다 —
-그 값이 설계문서 frontmatter `source_intent`(옛 기록은 `source_interview`) 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
+그 값이 설계문서 frontmatter `source_intent`(옛 기록은 옛 머리 키) 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
 team 형식(AC16): 과제 파일(머리 `type: job`)을 받으면 진입 번호 대조는 같은 폴더의 번호 파일로 하고
 (번호 파일이 없는 단순 작업은 건너뜀 한 줄), 경고 수 앞에 리뷰어의 정답 출처 알림(TEAM_NOTICE) 한 줄을 낸다.
 neighbors 는 정답 출처가 에픽 묶음 · 과제 파일이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.

@@ -137,7 +137,7 @@ class Repo:
         return False
 
     def specs_for(self, source: str, specs_dir: str) -> list:
-        """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_intent`(옛 기록은 `source_interview`) 가 source 인 (경로, 글)."""
+        """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_intent`(옛 기록은 옛 머리 키) 가 source 인 (경로, 글)."""
         d = specs_dir.rstrip("/")
         if d not in self._specs:
             found, unread = [], []
