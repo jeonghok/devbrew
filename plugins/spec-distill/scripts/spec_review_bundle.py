@@ -9,7 +9,7 @@
 
 entry 의 마지막 줄은 `bundle-entry: PROCEED <정답 출처 절대경로 또는 ->` 이거나 `bundle-entry: REFUSE` 다.
 `--bundle` 이 있으면 PROCEED 바로 앞 줄이 `번호 대조 경고 <N>개` 다. `--bundle` 은 리뷰어에게 가지 않는다 —
-그 값이 설계문서 frontmatter `source_interview` 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
+그 값이 설계문서 frontmatter `source_intent`(옛 기록은 `source_interview`) 와 같은 파일인지 확인하고 진입 대조 · 로드맵 위치의 입력이 된다.
 team 형식(AC16): 과제 파일(머리 `type: job`)을 받으면 진입 번호 대조는 같은 폴더의 번호 파일로 하고
 (번호 파일이 없는 단순 작업은 건너뜀 한 줄), 경고 수 앞에 리뷰어의 정답 출처 알림(TEAM_NOTICE) 한 줄을 낸다.
 neighbors 는 정답 출처가 에픽 묶음 · 과제 파일이 아니거나 그 에픽이 로드맵에 없으면 아무것도 내지 않는다.
@@ -29,12 +29,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_bundle_coverage as cbc  # noqa: E402
+import legacy_names  # noqa: E402
 import roadmap_status as rs  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from roadmap_model import FormatError, frontmatter, section_body, unquote  # noqa: E402
 
-KINDS = ("epic-bundle", "interview-brief")
+KINDS = ("epic-bundle",) + legacy_names.kinds(legacy_names.CONTEXT_BRIEF)
 JOB_KIND = "job"
 TEAM_NOTICE = ("[spec-distill] team 형식 — 리뷰어가 번호 항목(%s)과 원자료(%s)를 정답으로 읽지 못한다. "
                "리뷰어에게 가는 정답 출처는 %s 하나다."
@@ -77,16 +78,16 @@ def entry(spec: str, bundle: str, root: str) -> list:
     bmeta = frontmatter(btext)
     kind = unquote(bmeta.get("type", ""))
     if kind not in KINDS and kind != JOB_KIND:
-        return refuse("frontmatter type 이 epic-bundle · interview-brief 가 아니다(%s)" % (kind or "없음"))
+        return refuse("frontmatter type 이 epic-bundle · %s 가 아니다(%s)" % (legacy_names.CONTEXT_BRIEF, kind or "없음"))
     spath = _resolve(spec, root)
     stext = _read(spath)
     if stext is None:
         return refuse("설계문서를 읽지 못했다: %s" % spec)
-    src = unquote(frontmatter(stext).get("source_interview", ""))
+    src = unquote(legacy_names.source_of(frontmatter(stext)))
     if not src:
-        return refuse("설계문서 frontmatter 에 source_interview 가 없다")
+        return refuse("설계문서 frontmatter 에 %s 가 없다" % legacy_names.HEAD_KEY)
     if _resolve(src, root) != bpath:
-        return refuse("설계문서 source_interview(%s) 와 다른 파일이다" % src)
+        return refuse("설계문서 %s(%s) 와 다른 파일이다" % (legacy_names.HEAD_KEY, src))
     if kind == JOB_KIND:
         text, warnings, ask = _job_coverage(bpath, unquote(bmeta.get("kind", "")), spath)
         return [text] + (["질문 줄: " + ask] if ask else []) + [

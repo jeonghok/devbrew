@@ -233,7 +233,7 @@ assert_eq "$(orig --framing-audit docs/iv/t-seed-interview.audit.md)" "0" "frami
 # --framing-audit 이 type: interview-seed-audit 이 아니면 쓰지 않는다(세 절이 다 있어도)
 assert_grep "$(cat "$W/docs/iv/typed-seed-interview.audit.md")" '^type: interview-brief$' "픽스처: type 만 다른 framing 꼴 파일"
 assert_eq "$(orig_b docs/iv/u-brief-interview.md t5 --framing-audit docs/iv/typed-seed-interview.audit.md)" "1" "framing 의 type 이 다르다: rc 1"
-assert_contains "$(cat "$T/out.txt")" "interview-seed-audit" "framing 의 type 이 다르다: 기대한 type 을 말한다"
+assert_contains "$(cat "$T/out.txt")" "intent-seed-audit" "framing 의 type 이 다르다: 기대한 type 을 말한다"
 [ ! -e "$W/${RD}t5" ] && ok "framing 의 type 이 다르다: 팀 폴더를 만들지 않았다" || no "framing 의 type 이 다른데 팀 폴더가 생겼다"
 
 # ── 줄바꿈 꼴 (Review Focus 3) ─────────────────────────────────────────────

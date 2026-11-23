@@ -297,7 +297,7 @@ rm -f "$tmps"
 MUTD="$(mktemp -d)" || exit 1
 tmpm="$MUTD/check_verbatim_coverage.py"
 # 첫 칸 검사(L4)가 쓰는 `raw_source.py` 와 그것이 쓰는 형제(`state_path` · `seed_review_log` · `docreview_advice` · `docreview_config`)도 옮긴다.
-for sib in section6 brief_body check_brief skepticism raw_source state_path seed_review_log docreview_advice docreview_config; do
+for sib in section6 brief_body check_brief skepticism raw_source legacy_names state_path seed_review_log docreview_advice docreview_config; do
   cp "$(dirname "$SCRIPT")/$sib.py" "$MUTD/"
 done
 MUT_PY="$(mktemp)" || exit 1

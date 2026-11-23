@@ -69,6 +69,7 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
 import brief_body  # noqa: E402
+import legacy_names  # noqa: E402
 from skepticism import (  # noqa: E402
     URL_RE, strip_bullet as _strip_bullet, bijection_a_errors as _bijection_a,
     skepticism_malformed as _skepticism_malformed, review_record_malformed,
@@ -359,8 +360,8 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
         return None
 
     atype = _one("type", afm, "audit frontmatter에 type")
-    if atype is not None and atype != "interview-audit":
-        errs.append(f"audit type {atype!r} != 'interview-audit'")
+    if atype is not None and not legacy_names.kind_matches(atype, legacy_names.CONTEXT_AUDIT):
+        errs.append(f"audit type {atype!r} != '{legacy_names.CONTEXT_AUDIT}'")
     # audit이 **어느 payload의 것이라고 스스로 선언하는지**를 읽는다. 이름 유도는 "어느 파일을
     # 읽을지"를 고정하지만 그 파일의 *내용*까지 묶지는 못한다 — 남의 audit을 유도 경로에 복사해
     # 넣으면 그대로 통과했다(실행 실증: floor가 열린 payload의 sidecar 자리에 완료된 audit을
@@ -1746,8 +1747,9 @@ def frontmatter_errors(text: str) -> list[str]:
         return ["frontmatter absent"]
     fm = m.group(1)
     errs: list[str] = []
-    if not re.search(r"^type:\s*interview-brief\s*$", fm, re.MULTILINE):
-        errs.append("type != interview-brief")
+    if not any(re.search(rf"^type:\s*{re.escape(k)}\s*$", fm, re.MULTILINE)
+               for k in legacy_names.kinds(legacy_names.CONTEXT_BRIEF)):
+        errs.append(f"type != {legacy_names.CONTEXT_BRIEF}")
     # 실제 오류를 그대로 싣는다 — 어떤 오류든 "key absent"로 뭉개면 중복 키가 부재로 보고돼
     # 원인과 증상이 어긋난다(중복 2건인데 "없다"고 말하면 사용자는 키를 하나 더 추가한다).
     _af_err = frontmatter_value("audit_file", fm)[1]

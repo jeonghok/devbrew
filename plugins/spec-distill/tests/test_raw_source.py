@@ -13,6 +13,7 @@ sys.path.insert(0, str(_SCRIPTS))
 RAW = str(_SCRIPTS / "raw_source.py")
 
 import raw_source as RS  # noqa: E402
+import legacy_names  # noqa: E402
 import team_write  # noqa: E402
 
 SEED = "---\ntype: interview-seed\naudit_file: other.audit.md\n---\n\n문장 하나.\n"
@@ -245,7 +246,7 @@ def theirs(top, state_rel):
     found, lost = team_write._framing_from_state(Path(top), state_rel, _W)
     if found is not None:
         fm = RS.frontmatter_scalars(Path(top) / found) or {}
-        return ("FOUND", found) if fm.get("type") == team_write.FRAMING_TYPE else ("LOST", None)
+        return ("FOUND", found) if legacy_names.kind_matches(fm.get("type"), team_write.FRAMING_TYPE) else ("LOST", None)
     if lost is not None:
         return ("LOST", None)
     return ("NO-FRAMING", None)

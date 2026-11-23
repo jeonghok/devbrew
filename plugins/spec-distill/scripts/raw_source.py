@@ -46,18 +46,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import frontmatter_scalars, worktree_root  # noqa: E402
 import brief_body  # noqa: E402
+import legacy_names  # noqa: E402
 import section6  # noqa: E402
 import seed_review_log as srl  # noqa: E402
 
-AUDIT_TYPE = "interview-seed-audit"
-SEED_TYPE = "interview-seed"
+AUDIT_TYPE = legacy_names.INTENT_SEED_AUDIT
+SEED_TYPE = legacy_names.INTENT_SEED
 SEED_NONE = "없음"
 INPUT_HEADING = "## 풀린 입력"
 
 R_SEED_MISSING = "seed 파일이 없다 — {seed}"
 R_SEED_NOT_MD = "seed 파일 이름이 .md 로 끝나지 않아 framing 기록 파일의 자리를 정하지 못한다 — {seed}"
 R_AUDIT_MISSING = "seed 옆에 framing 기록 파일이 없다 — {audit}"
-R_AUDIT_TYPE = "framing 기록 파일 머리의 type 이 interview-seed-audit 이 아니다 — {audit} (type: {kind})"
+R_AUDIT_TYPE = "framing 기록 파일 머리의 type 이 intent-seed-audit 이 아니다 — {audit} (type: {kind})"
 R_SEED_UNRECORDED = ("seed 로 시작했는데 상태 파일에 seed 경로가 기록되지 않았다 — 붙여 넣은 seed 이거나 링크 · "
                      "작업 트리 밖 · 이름 꼴이 다른 seed 다")
 
@@ -115,7 +116,7 @@ def _chain(seed: str, base: "Path | None") -> Verdict:
         return _lost(R_AUDIT_MISSING.format(audit=audit))
     fm = frontmatter_scalars(at(audit))
     kind = "읽지 못함" if fm is None else fm.get("type") or "없음"
-    if kind != AUDIT_TYPE:
+    if not legacy_names.kind_matches(kind, AUDIT_TYPE):
         return _lost(R_AUDIT_TYPE.format(audit=audit, kind=kind))
     return _found(audit)
 
@@ -125,7 +126,7 @@ def locate_from_seed(seed: str) -> Verdict:
 
 
 def _solved_input_is_seed(text: str) -> bool:
-    """frontmatter 뒤 첫 `## 풀린 입력` 줄 다음 첫 비지 않은 줄이 물결표 펜스이고, 그 안 첫 줄이 `---` 인 머리가 type: interview-seed."""
+    """frontmatter 뒤 첫 `## 풀린 입력` 줄 다음 첫 비지 않은 줄이 물결표 펜스이고, 그 안 첫 줄이 `---` 인 머리가 type: intent-seed(옛 기록은 interview-seed)."""
     lines = text.split("\n")
     i = 0
     if lines and lines[0] == "---":
@@ -149,7 +150,7 @@ def _solved_input_is_seed(text: str) -> bool:
         if ":" in line and not line.startswith((" ", "\t", "#", "-")):
             key, val = line.split(":", 1)
             if key.strip() == "type":
-                return val.strip().strip('"').strip("'") == SEED_TYPE
+                return legacy_names.kind_matches(val.strip().strip('"').strip("'"), SEED_TYPE)
     return False
 
 

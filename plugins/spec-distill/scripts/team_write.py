@@ -15,6 +15,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brief_body  # noqa: E402
+import legacy_names  # noqa: E402
 import repo_defaults  # noqa: E402
 import roadmap_render as R  # noqa: E402
 import section6  # noqa: E402
@@ -30,7 +31,7 @@ NO_FRAMING = "framing audit 없음"
 NO_FRAMING_SAID = ("framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `%s` 을 적었다. "
                    "framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
                    "덧붙인다" % NO_FRAMING)
-FRAMING_TYPE = "interview-seed-audit"
+FRAMING_TYPE = legacy_names.INTENT_SEED_AUDIT
 SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 인터뷰
 FRAMING_LOST = ("상태 파일 %s 의 seed 는 %s 인데 framing audit 를 찾지 못했다 — %s. "
                 "framing 원문 · 질문 전체 없이는 원자료 사본을 만들지 않는다. framing audit 의 경로를 "
@@ -211,7 +212,7 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
     if framing:
         commit, data = _committed(top, framing, W)
         kind = unquote(frontmatter(_decoded(framing, data, W)).get("type", ""))
-        if kind != FRAMING_TYPE:
+        if not legacy_names.kind_matches(kind, FRAMING_TYPE):
             raise W.Refused("%s 는 framing audit 이 아니다 — 머리 type 이 %s 가 아니다(%s)" % (framing, FRAMING_TYPE, kind or "없음"))
         out += [(framing, commit, label, first, lines, "") for label, first, lines in _framing_parts(framing, data, W)]
     elif not paired:

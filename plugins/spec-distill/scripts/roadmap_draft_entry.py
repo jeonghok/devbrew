@@ -22,6 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from check_brief import SPLIT_LINE_PREFIX, payload_is_split  # noqa: E402
+import legacy_names  # noqa: E402
 
 PLAN_HEADING = "## 분해안"
 LOG_HEADING = "## 생성 기록"
@@ -163,8 +164,7 @@ def run(brief: str) -> int:
     if rc != 0 or not top:
         print("[roadmap_draft_entry] git 저장소가 아니다: %s" % folder, file=sys.stderr)
         return 2
-    stem = brief[:-3]
-    audit, state = stem + ".audit.md", stem + ".state.md"
+    audit, state = legacy_names.siblings(brief)
 
     rc, out = _run([sys.executable, str(HERE / "raw_source.py"), "locate", "--interview", brief, "--absolute"])
     raw_line = _first_line(out, "raw-source: ")

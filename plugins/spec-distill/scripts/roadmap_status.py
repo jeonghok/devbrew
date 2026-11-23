@@ -47,6 +47,7 @@ from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recor
 from conductor_state import TRUST  # noqa: E402 — 확인한 끝 읽기만(규칙을 읽을 끝)
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
 from state_path import state_root_for_common  # noqa: E402
+import legacy_names  # noqa: E402
 import team_layout  # noqa: E402
 import team_status  # noqa: E402
 
@@ -389,7 +390,7 @@ def find_specs(git: Git, tree: str, block: dict, bundle_path, specs_dir: str):
     found = []
     for path in git.grep_files(tree, bundle_path, specs_dir):
         text = git.blob(tree, path)
-        if text and unquote(frontmatter(text).get("source_interview", "")) == bundle_path:
+        if text and unquote(legacy_names.source_of(frontmatter(text))) == bundle_path:
             found.append(path)
     return sorted(found)
 
@@ -751,7 +752,7 @@ class _GitTreeRepo:
             if text is None:   # 이 묶음을 가리키는 글이 있는데 못 읽었다 — 그 묶음이 무엇을 기각했는지 모른다
                 unread.append(path)
                 continue
-            if text and unquote(frontmatter(text).get("source_interview", "")) == source:
+            if text and unquote(legacy_names.source_of(frontmatter(text))) == source:
                 out.append((path, text))
         self._memo[key] = sorted(out)
         self._unread[key] = unread   # 그 묶음의 grep 이 찾은 것만 — 다른 묶음의 판정에 번지지 않는다
