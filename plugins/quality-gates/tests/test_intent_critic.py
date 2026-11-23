@@ -628,6 +628,58 @@ class TestReadTracked(unittest.TestCase):
         self.assertIsNone(io_.frontmatter_value("---\nn: [\n---\n", "n"))
 
 
+class TestHeadKeys(unittest.TestCase):
+    """설계문서 · 바뀐 의도 문서의 머리 키 — 새 `source_intent` 와 옛 `source_interview` 를 함께 읽는다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = cls.R = cls.tmp.name
+        _git_repo(root)
+        files = {
+            "docs/A.md": _fm(type="epic-bundle") + "## 6. 사용자 원문\nA-quote-token\n",
+            "docs/B.md": _fm(type="epic-bundle") + "## 6. 사용자 원문\nB-quote-token\n",
+            "docs/spec_new.md": _fm(source_intent="docs/A.md"),
+            "docs/spec_old.md": _fm(source_interview="docs/A.md"),
+            "docs/spec_both.md": _fm(source_intent="docs/A.md", source_interview="docs/B.md"),
+            "docs/changed_new.md": _fm(source_intent="docs/A.md"),
+            "docs/changed_old.md": _fm(source_interview="docs/A.md"),
+        }
+        for rel, text in files.items():
+            Path(root, rel).parent.mkdir(parents=True, exist_ok=True)
+            Path(root, rel).write_text(text, encoding="utf-8")
+        _git(root, "add", "docs")
+        _git(root, "commit", "-q", "-m", "fixture")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _o(self, specs=(), changed=()):
+        return io_.build_origin(self.R, "HEAD", "HEAD", None, list(specs), changed_docs=list(changed))
+
+    def test_default_markers_have_both_head_keys(self):
+        self.assertIn("source_intent", io_.DEFAULT_MARKERS)
+        self.assertIn("source_interview", io_.DEFAULT_MARKERS)
+
+    def test_origin_follows_source_intent(self):
+        self.assertIn("A-quote-token", self._o(["docs/spec_new.md"])["origin"])
+
+    def test_origin_follows_source_interview(self):
+        self.assertIn("A-quote-token", self._o(["docs/spec_old.md"])["origin"])
+
+    def test_origin_prefers_new_key(self):
+        o = self._o(["docs/spec_both.md"])
+        self.assertIn("A-quote-token", o["origin"])
+        self.assertNotIn("B-quote-token", o["origin"])
+
+    def test_changed_doc_follows_source_intent(self):
+        self.assertIn("A-quote-token", self._o(changed=["docs/changed_new.md"])["origin"])
+
+    def test_changed_doc_follows_source_interview(self):
+        self.assertIn("A-quote-token", self._o(changed=["docs/changed_old.md"])["origin"])
+
+
 class TestOriginLink(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1164,8 +1216,8 @@ class TestConfig(unittest.TestCase):
                              "max_bytes": "120000", "max_bytes_source": "default",
                              "other_teams_max_bytes": "80000",
                              "other_teams_max_bytes_source": "default",
-                             "intent_doc_markers": "source_interview,roadmap,source_brief,"
-                                                   "type=roadmap,type=epic-bundle",
+                             "intent_doc_markers": "source_intent,source_interview,roadmap,"
+                                                   "source_brief,type=roadmap,type=epic-bundle",
                              "intent_doc_markers_source": "default"})
         env = _env(**{ENV_DIR: "notes/answers", ENV_MAX: "5000"})
         c = self._config(env)

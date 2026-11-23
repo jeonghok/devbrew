@@ -34,7 +34,7 @@ REASON_LINK = "심볼릭 링크"
 REGULAR_MODES = ("100644", "100755")
 LINK_MODE = "120000"
 # 의도 문서를 가리는 머리 표시 — `<키>` 는 그 줄이 있음, `<키>=<값>` 은 그 줄의 값이 같음.
-DEFAULT_MARKERS = ("source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")
+DEFAULT_MARKERS = ("source_intent", "source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")
 
 _INTENT_DOUBT_WORDS = ("위험", "기각", "열린 질문", "risk", "rejected", "open question")
 _ROADMAP_DOUBT_WORDS = ("위험", "열린 질문", "risk", "open question")
@@ -780,13 +780,13 @@ def _reader(repo: str, commit: str, tree_root: Optional[str] = None):
 
 
 def _follow_changed(read, rel: str, st: dict) -> None:
-    """바뀐 의도 문서 — `source_interview:` · `source_brief:` 를 원문으로 따라가고, 로드맵 자체면 로드맵 칸에 싣는다."""
+    """바뀐 의도 문서 — `source_intent:` · 옛 `source_interview:` · `source_brief:` 를 원문으로 따라가고, 로드맵 자체면 로드맵 칸에 싣는다."""
     text = _open_doc(read, rel, st, "원문 링크 거부")
     if text is None:
         return
     if frontmatter_value(text, "type") == "roadmap":
         st["own_roadmaps"].append(rel)
-    for key in ("source_interview", "source_brief"):
+    for key in ("source_intent", "source_interview", "source_brief"):
         link = frontmatter_value(text, key)
         if link is None:
             continue
@@ -814,7 +814,9 @@ def build_origin(repo: str, head_commit: str, review_commit: str,
             spec_text = _open_doc(review, spec, st, "원문 링크 거부")
             if spec_text is None:
                 continue
-            link = frontmatter_value(spec_text, "source_interview")
+            link = frontmatter_value(spec_text, "source_intent")
+            if link is None:
+                link = frontmatter_value(spec_text, "source_interview")
             if link is None:
                 continue
             text = _open_doc(review, link, st, "원문 링크 거부")

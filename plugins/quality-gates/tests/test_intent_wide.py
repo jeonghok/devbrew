@@ -276,7 +276,7 @@ class TestWideConfig(unittest.TestCase):
         c = self._config()
         self.assertEqual(c["other_teams_max_bytes"], "80000")
         self.assertEqual(c["intent_doc_markers"],
-                         "source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle")
+                         "source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle")
         self.assertEqual(c["other_teams_max_bytes_source"], "default")
         self.assertEqual(c["intent_doc_markers_source"], "default")
 

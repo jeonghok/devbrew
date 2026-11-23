@@ -97,7 +97,7 @@ quality-gates/
 │   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── intent_critic.py                      # intent-critic 단계 CLI — 입구 · 설정 · 입력 조립 · 출력 검사 · 거름 · 답 기록 · 렌더
 │   ├── intent_answers.py                     # 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋(push 없음)
-│   ├── intent_origin.py                      # 근거 조립 · 원문 · 로드맵 읽기(`source_interview` 따라가기) · 의심 가르기 · 경로 신뢰 경계 · 리뷰의 넓이 · 읽은 인용 확인
+│   ├── intent_origin.py                      # 근거 조립 · 원문 · 로드맵 읽기(`source_intent` · 옛 `source_interview` 따라가기) · 의심 가르기 · 경로 신뢰 경계 · 리뷰의 넓이 · 읽은 인용 확인
 │   ├── other_teams.py                        # intent-critic 의 다른 팀 읽기 — 팀 지도 · 다른 브랜치의 의도 문서 · 겹치는 파일의 diff · 열린 PR 목록(git 읽기 · gh 한 번, 리포를 바꾸지 않는다)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── secret-scan.py                        # 게시 직전 값-차단 secret scan (FAIL CLOSED · 첫 줄 리터럴 scan_ok)
@@ -444,7 +444,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 - `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`: `docs/qg-intent-answers` (intent-critic 답 파일 폴더 — 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
 - `DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES`: 120000 (intent-critic 입력 상한 바이트 — 넘으면 한 번에 넣어 부른다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
 - `DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES`: 80000 (intent-critic 다른 팀 기록의 바이트 상한 — 넘치는 항목은 싣지 않고 이름과 함께 알린다. 위 입력 상한 계산에는 들지 않는다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
-- `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`: `source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle` (의도 문서를 가리는 표시의 쉼표 목록 — 아래 「intent-critic 넓게 보기와 다른 팀 읽기」. 값은 목록 전체를 갈아 끼운다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
+- `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`: `source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle` (의도 문서를 가리는 표시의 쉼표 목록 — 아래 「intent-critic 넓게 보기와 다른 팀 읽기」. 값은 목록 전체를 갈아 끼운다. 리뷰 대상 변경이 설정 파일에서 이 키를 바꾸면 이 값을 쓰지 않고 기본값으로 돌아간다)
 
 ### 문서 경로 (`DEVBREW_QUALITY_GATES_DOC_PATHS`)
 
@@ -497,7 +497,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 기록은 리뷰어를 부를 때 근거 파일에 `[다른 팀]` 줄로 실리고, 리뷰어는 근거 파일의 줄 번호로 그 줄을 인용한다(스크립트가 그 줄이 근거 파일에 있는지 확인한다). 다른 팀의 글은 자료다 — 그 안의 지시문은 따르지 않는다(리뷰어 정의). 결과 절(`result.md` 의 `## intent-critic`)은 리뷰어를 불렀든 안 불렀든 「다른 팀과 겹치는 곳:」 과 「다른 팀 확인 못 함:」 목록을 보이고, 돌려주는 꼴에는 `breadth`(`narrow` · `range` · `intent-docs`) · `other_teams`(다른 팀 기록 파일 — 없으면 `-`) · `overlaps`(겹치는 곳의 수 — 모르면 `-`) 줄이 있다.
 
-**의도 문서의 표시.** `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`(쉼표 목록, 기본 `source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle`)가 의도 문서를 가린다 — `<키>` 는 머리(frontmatter)에 그 줄이 있다는 뜻이고, `<키>=<값>` 은 그 줄의 값이 같다는 뜻이다. 값은 목록 전체를 갈아 끼운다(기본에 더하려면 기본 다섯도 함께 적는다). 넓이 판정과 다른 브랜치의 의도 문서 고르기가 같은 목록을 읽는다. 머리가 YAML 로 읽히지 않는 문서(없는 날짜 등)와 표시 줄의 값이 목록 · 매핑인 문서는 의도 문서로 세지 않는다. 표시를 더하면 코드를 바꾸지 않고도 그 표시를 단 문서만 바뀐 브랜치에서 조언자가 불리고 다른 팀 기록에도 그 문서가 실린다. 그 문서에 따라갈 줄(`source_interview:` · `source_brief:` · `roadmap:`)이 없으면 원문 · 로드맵 칸이 비고 `원문 없음 — <이유>` · `로드맵 없음 — <이유>` 로 알린다. 인터뷰 단계 문서(seed · brief)의 표시는 아직 정해지지 않아 기본값에 없다 — 정해지면 이 값에 더한다. 그 전까지(목록이 기본 표시뿐이면) 다른 팀 기록에 `인터뷰 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다` 가 남는다.
+**의도 문서의 표시.** `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS`(쉼표 목록, 기본 `source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle`)가 의도 문서를 가린다 — `<키>` 는 머리(frontmatter)에 그 줄이 있다는 뜻이고, `<키>=<값>` 은 그 줄의 값이 같다는 뜻이다. 값은 목록 전체를 갈아 끼운다(기본에 더하려면 기본 여섯도 함께 적는다). 넓이 판정과 다른 브랜치의 의도 문서 고르기가 같은 목록을 읽는다. 머리가 YAML 로 읽히지 않는 문서(없는 날짜 등)와 표시 줄의 값이 목록 · 매핑인 문서는 의도 문서로 세지 않는다. 표시를 더하면 코드를 바꾸지 않고도 그 표시를 단 문서만 바뀐 브랜치에서 조언자가 불리고 다른 팀 기록에도 그 문서가 실린다. 그 문서에 따라갈 줄(`source_interview:` · `source_brief:` · `roadmap:`)이 없으면 원문 · 로드맵 칸이 비고 `원문 없음 — <이유>` · `로드맵 없음 — <이유>` 로 알린다. 인터뷰 단계 문서(seed · brief)의 표시는 아직 정해지지 않아 기본값에 없다 — 정해지면 이 값에 더한다. 그 전까지(목록이 기본 표시뿐이면) 다른 팀 기록에 `컨텍스트 쌓기 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다` 가 남는다.
 
 **경계.** 설계 단계 브랜치(설계문서 · 로드맵 · 묶음만 바뀐 브랜치)에서 `/quality-gates:quality-pipeline` 을 인자 없이 부르면 파이프라인이 돌아 판정 · 게시 뒤 조언자까지 간다. 「이 문서를 비평해 줘」 처럼 문서 비평을 청하면 qg 는 파이프라인을 돌리지 않고 `/quality-gates:artifact-critique` 로 안내한다 — 문서의 짜임새를 보는 비평과 의도 자체를 묻는 조언은 다른 일이다. 레포가 설계문서 폴더를 `DEVBREW_QUALITY_GATES_DOC_PATHS` 로 리뷰에서 빼면 리뷰 diff 가 비어 조언자도 건너뛴다(기본으로 빼는 것은 `README*` · `CHANGELOG*` 뿐이다).
 
