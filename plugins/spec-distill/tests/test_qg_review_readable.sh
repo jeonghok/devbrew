@@ -251,6 +251,8 @@ case "$(next_line "$TPL" '- 달라진 관찰:')" in '  <changed_observation'*) o
 case "$(next_line "$TPL" '- 답:')" in '- 행선:'*) ok "record-template-3: 행선 줄이 답 줄 바로 다음" ;; *) no "record-template-3: 답 줄 다음이 행선 줄이 아니다" ;; esac
 zero "$WHOLE" '- 같은 대상에 전에 물은 것:' "record-template-3 음성: 옛 「같은 대상에 전에 물은 것」 줄이 없다(양성 짝: 전에 한 답 줄)"
 one "$REC" '`- 달라진 관찰:` 줄과 그 아래 두 칸 들여 쓴 줄은 근거가 달라져 다시 물은 질문' "record-template-3(Q5): 달라진 관찰은 근거가 달라져 다시 물은 질문에만"
+# record-route-required — 「잘못 골랐다」 의 행선 줄은 반드시 적고 값은 셋 가운데 하나(없으면 기록 파일 전체를 읽지 못한다)
+one "$REC" '「잘못 골랐다」 인 질문에는 반드시 적는다 — 값은 「이 에픽 안에서 고친다」 · 「새 일의 씨앗」 · 「재분해 신호」 가운데 하나를 글자 그대로 쓰고, 없거나 다른 값이면 `qg_answered.py` 가 그 기록 파일 전체를 읽지 못한 기록으로 센다' "record-route-required: 잘못 골랐다의 행선 줄은 반드시 · 값은 셋 가운데 하나 · 없으면 그 기록 파일 전체를 읽지 못한다"
 one "$REC" '`- 질문:` · `- 답:` · `- 답 원문:` 줄의 이름과 자리 글자는 바꾸지 않는다' "record-template-3: 걸음 5 가 읽는 줄 이름은 그대로"
 one "$REC" '2판 기록 파일(이 줄들이 없는 지난 기록)은 고치지 않는다 — `qg_answered.py` 가 그대로 읽는다' "record-template-3: 지난 2판 기록은 고치지 않고 qg_answered.py 가 읽는다"
 
