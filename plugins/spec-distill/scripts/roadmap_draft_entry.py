@@ -190,7 +190,9 @@ def run(brief: str) -> int:
     check(audit, "audit 이", "audit 에")
     state_status = check(state, "상태 파일이", None)  # 커밋 뒤 변경은 아래에서 두 절 안 · 밖으로 가른다
     state_text = _read(state) if os.path.isfile(state) else ""
-    if state_status != "never" and os.path.isfile(state):
+    if state_status != "never" and not os.path.isfile(state):
+        stops.append("상태 파일이 커밋된 뒤 작업 트리에서 지워졌다: %s" % state)
+    elif state_status != "never":
         sfolder, sname = _split_path(state)
         hrc, head_text = _git(sfolder, "show", "HEAD:./" + sname)
         if hrc != 0:

@@ -178,6 +178,14 @@ class TestEntry(Base):
         self.assertEqual(rc, 1)
         self.assertIn("roadmap-entry: STOP 상태 파일의 커밋 뒤 변경이 두 절 밖에 있다: ## R1\n", out)
 
+    def test_committed_state_deleted_from_worktree_stops(self):
+        self.build()
+        os.remove(self.state)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("roadmap-entry: STOP 상태 파일이 커밋된 뒤 작업 트리에서 지워졌다: ", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
     def test_resume_on_approved_table(self):
         self.build(state_extra="\n" + PLAN_TABLE)
         rc, out, err = self.run_entry()
