@@ -260,4 +260,17 @@ SHOW="$(awk '$0 == "## 보이기" { on = 1; next } on && /^## / { exit } on' "$S
 one "$SHOW" 'qg 담당자가 돌려준 리뷰 결과와 의도 점검 질문은 `references/qg-review.md` 의 `### 결과 글` · `## 묻기` 틀대로 맥락 머리로 시작하는 글로 보인 뒤 묻고, 질문 문장 앞머리에 에픽 이름(로드맵 리뷰면 「로드맵」)을 쓴다.' "skill-show-line: 보이기의 qg 문장이 맥락 머리로 시작하는 틀을 가리킨다"
 zero "$SHOW" '따로 된 앞 글 뒤에 묻고' "skill-show-line 음성: 옛 앞 글 문장이 없다(양성 짝: 맥락 머리 문장)"
 
+# deps-min-qg (AC8) — 의존 표의 quality-gates 최소 판이 quality-gates plugin.json 의 판이다(파일에서 읽어 견준다)
+QGV="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$ROOT/plugins/quality-gates/.claude-plugin/plugin.json" | head -1)"
+QGROW="$(grep -F '| quality-gates | ' "$ROOT/plugins/spec-distill/dependencies.md" | head -1)"
+QGMIN="$(printf '%s\n' "$QGROW" | awk -F'|' '{ gsub(/^ +| +$/, "", $3); print $3 }')"
+[ -n "$QGV" ] && [ -n "$QGROW" ] && ok "deps-min-qg: 두 값을 읽었다" || no "deps-min-qg: 판 또는 표 행을 읽지 못했다 — 아래 단언이 공허하다"
+assert_eq "$QGMIN" "$QGV" "deps-min-qg: dependencies.md 의 quality-gates 행 둘째 칸이 quality-gates plugin.json 의 판"
+
+# readme-new-words (AC20) — spec-distill README 가 새 동작의 이름을 쓴다
+RD="$(cat "$ROOT/plugins/spec-distill/README.md")"
+assert_contains "$RD" 'qg_answered.py' "readme-new-words: qg_answered.py"
+assert_contains "$RD" '맥락 머리' "readme-new-words: 맥락 머리"
+assert_contains "$RD" 'quality-pipeline range <시작>..<끝> --origin <원문> --answered <절대경로>' "readme-new-words: README 의 qg 호출 줄이 --answered 를 붙인 꼴"
+
 finish
