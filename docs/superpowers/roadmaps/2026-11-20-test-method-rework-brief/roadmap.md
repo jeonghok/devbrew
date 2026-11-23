@@ -25,7 +25,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 의존: 없음
 - 브랜치: feature/suite-time-cut, feature/suite-check-one-round
 - 묶음: E1.md
-- 경로 예약: tools/suite/, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/.claude-plugin/plugin.json, plugins/spec-distill/CHANGELOG.md, plugins/quality-gates/tests/test_codex_backward_compat.sh, plugins/quality-gates/tests/codex-blessed-red.txt, plugins/quality-gates/tests/test_runtime_contract_invariance.sh, shared/tests/test_docreview_mutations.sh, shared/tests/test_docreview_state.sh, shared/tests/test_docreview_route.sh, shared/tests/test_docreview_advice.sh, shared/tests/test_copy_of_contract.sh, plugins/spec-distill/tests/test_finish_pr_merge.sh, plugins/spec-distill/tests/test_control_plane.sh
+- 경로 예약: tools/suite/, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/test_merge_check.sh, plugins/spec-distill/.claude-plugin/plugin.json, plugins/spec-distill/CHANGELOG.md, plugins/quality-gates/tests/test_codex_backward_compat.sh, plugins/quality-gates/tests/codex-blessed-red.txt, plugins/quality-gates/tests/test_runtime_contract_invariance.sh, shared/tests/test_docreview_mutations.sh, shared/tests/test_docreview_state.sh, shared/tests/test_docreview_route.sh, shared/tests/test_docreview_advice.sh, shared/tests/test_copy_of_contract.sh, plugins/spec-distill/tests/test_finish_pr_merge.sh, plugins/spec-distill/tests/test_control_plane.sh, plugins/spec-distill/references/conducting.md
 
 ### E2 — 테스트 기준과 규칙 문서
 - 의도: 맷 포콕 tdd skill 본문의 기준을 이 레포 문서에 옮겨 적고 안 맞는 항목을 고쳐 적어, 새 테스트가 지금 꼴로 쌓이는 길을 바꾼다

@@ -2968,11 +2968,21 @@ class TestPersona(unittest.TestCase):
         want = (
             "- `question` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, "
             "번호는 괄호 안에만 둔다.\n"
-            "  직접 확인해 볼 자리가 있으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 "
-            "한 줄을 단다 — 따로 된 칸은 없고 `question` 글의 일부다."
+            "  읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 "
+            "「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 —\n"
+            "  사람이 직접 열어 보거나 써 볼 자리와 방법이다. "
+            "따로 된 칸은 없고 `question` 글의 일부다."
         )
         self.assertEqual(body.count(want), 1)
         self.assertEqual(body.count("한두 문장"), 0)
+
+    def test_direct_check_line_keeps_the_old_condition(self):
+        """직접 확인 줄을 다는 조건은 옛 조건(읽은 근거뿐이라 확신이 없을 때)이다 — 「자리가 있으면」 조건은 본문에 없다."""
+        _fm, body = self._split()
+        restored = "읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요"
+        self.assertEqual(body.count(restored), 1)
+        self.assertEqual(body.count("직접 확인해 볼 자리가 있으면"), 0)
+        self.assertEqual(body.count("여기는 직접 확인해 보세요"), 1)
 
     def test_output_example_questions_are_one_sentence(self):
         """출력 예시의 question 값은 모두 질문 한 문장이다 — 예시는 정확히 셋(공허 통과 방지)."""

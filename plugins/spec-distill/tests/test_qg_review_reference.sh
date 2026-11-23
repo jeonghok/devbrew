@@ -290,7 +290,7 @@ BEAT="$(ssec '### 한 박자')"
 for v in "$SENT" "$MERGED" "$FAILED" "$END_" "$LOCK" "$STORE" "$RECF" "$RBR" "$BEAT" "$HEAD_"; do
   [ -n "$v" ] && ok "### 절 본문을 읽었다(${#v}자)" || no "### 절 본문이 비었다 — 아래 단언이 공허하다"
 done
-L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸음이다 — 손으로 따르는 절차로 들어왔으면 걸음 5 는 손 절차 8(머지 전 확인), 걸음 7 은 손 절차 9(끝)로 읽고, 걸음 1 · 2 · 3 · 6 은 번호가 같다.'
+L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸음이다 — 손으로 따르는 절차로 들어왔으면 걸음 4 는 손 절차 5(계획 · 구현), 걸음 5 는 손 절차 8(머지 전 확인), 걸음 7 은 손 절차 9(끝)로 읽고, 걸음 1 · 2 · 3 · 6 은 번호가 같다.'
 L_order='보내는 차례는 아래 `### 이미 보낸 것` 의 확인 → 규모 줄 → `### 스위트 잠금` 의 확인 → 보관 폴더 만들기와 `## 자원` 에 적기(`## 보관과 기록 파일` 의 `### 보관`) → 보내기 → 살아 있는 agent 줄 적기다.'
 L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<하니스가 준 agent 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
 L_livename='이름 칸 · 담당 칸은 다른 담당자처럼 하니스가 준 agent 이름이고, 그 담당자가 어느 자리의 것인지는 작업 표 줄의 근거 칸(보관 폴더 경로)으로 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문과 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
@@ -802,5 +802,18 @@ for lit in 'spec 승인 앞 · 머지 앞 · 로드맵 끝 · 이름으로 청�
 done
 assert_not_contains "$QGL" '걸음 7 이 범위 입력을 받으면' "AC18 음성 짝: quality-gates 줄에 걸음 7 범위 입력 문구가 없다"
 assert_contains "$(awk 'index($0, "| quality-gates |")==1' "$DEPS")" '자리 넷' "AC18 dependencies.md: quality-gates 행 「없을 때」 칸에 자리 넷"
+
+# 통합 리뷰 지적 넷 — 세션 담당자 되돌리기 · 걸음 4 대응 · P18 실례 (승인 기록의 qg 답은 test_conducting_loop.sh)
+RETX="$(sec '## 되돌리기')"
+once "$RETX" '구현 담당자가 세션 담당자였으면 그 세션은 돌아왔을 때 이미 거둬 닫혔으니 이어 부를 수 없다' "IR1: 되돌리기에 세션 담당자였던 구현 담당자는 이어 부를 수 없다"
+once "$RETX" '`<SD>/references/conductor-dispatch.md` 의 `## 세션 담당자` 대로 새 세션을 같은 브랜치로 보내고, 지적마다의 처리는 그 세션의 결과 파일에서 읽는다' "IR1: 새 세션을 보내고 처리는 결과 파일에서 읽는다"
+assert_contains "$(sed -n 7p "$QR")" '걸음 4 는 손 절차 5(계획 · 구현)' "IR4: 대응 줄(본문 7행)에 걸음 4 → 손 절차 5"
+CDOC="$ROOT/plugins/spec-distill/references/conducting.md"
+assert_eq "$(awk '/^### 4\. 돌아오기/{f=1;next} f&&/^### /{exit} f' "$CDOC" | grep -c '세션 담당자 거두기' | tr -d ' ')" "1" "IR4 짝: 걸음 4 는 돌아오기(세션 담당자 거두기가 든 걸음)"
+assert_contains "$(grep -E '^5\. \*\*계획 · 구현' "$CDOC")" '돌아오면 AC 보고' "IR4 짝: 손 절차 5 는 계획 · 구현이고 돌아옴을 다룬다"
+PH="$(grep -F '코드: `shared/docreview/references/reviewing-document.md`' "$ROOT/docs/philosophy/devbrew-harness-philosophy.md")"
+assert_contains "$PH" '「두 번까지」 상한(`plugins/spec-distill/skills/epic-conductor/references/qg-review.md` 의 `## 되돌리기`)' "IR3: P18 코드 지도가 살아 있는 상한(되돌리기 「두 번까지」)을 인용한다"
+assert_not_contains "$PH" 'qg fix-loop 의 반복 상한' "IR3 음성 짝: 사라진 qg fix-loop 상한을 인용하지 않는다"
+once "$RETX" '- **두 번까지.**' "IR3 짝: 인용하는 「두 번까지」 가 되돌리기에 실재한다"
 
 finish
