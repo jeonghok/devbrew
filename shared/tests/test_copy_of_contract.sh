@@ -844,12 +844,13 @@ IMPEOF
 # 색인은 추적 python 파일을 한 번만 파싱한다 — 색인에 없는 후보는 그 자리에서 같은 술어로.
 IMPINDEX="$(mktemp -t copyof-impindex-XXXXXX)" || exit 1
 lock_tmp_add "$IMPINDEX"
-git ls-files -- '*.py' | python3 "$IMPSCAN" --index > "$IMPINDEX"
+git ls-files -- '*.py' | python3 "$IMPSCAN" --index > "$IMPINDEX" || : > "$IMPINDEX"
 impscan() {   # impscan <모듈명> — stdin: 후보 `.py` 경로 / stdout: 그 모듈을 import 하는 것
   local cand out rc
   cand="$(cat)"
   # 색인에 있는 후보는 이름 집합에 모듈이 있을 때만 입력 차례대로 낸다. 색인에 없는 후보가
-  # 하나라도 있으면(awk rc 9) 차례를 지키려고 입력 전체를 같은 술어로 직접 읽는다.
+  # 있거나 색인 읽기가 실패하면(0 아닌 모든 종료 코드) 차례를 지키려고 입력 전체를 같은 술어로
+  # 직접 읽는다.
   out="$(printf '%s\n' "$cand" | awk -F'\t' -v mod="$1" -v idx="$IMPINDEX" '
     BEGIN { while ((getline l < idx) > 0) { t = index(l, "\t"); k = substr(l, 1, t - 1)
               has[k] = 1; n = split(substr(l, t + 1), a, " "); for (i = 1; i <= n; i++) if (a[i] == mod) hit[k] = 1 } }
@@ -858,7 +859,7 @@ impscan() {   # impscan <모듈명> — stdin: 후보 `.py` 경로 / stdout: 그
     { miss = 1 }
     END { exit (miss ? 9 : 0) }')"
   rc=$?
-  if [ "$rc" -eq 9 ]; then
+  if [ "$rc" -ne 0 ]; then
     printf '%s\n' "$cand" | python3 "$IMPSCAN" "$1"
   else
     [ -z "$out" ] || printf '%s\n' "$out"

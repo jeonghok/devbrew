@@ -15,6 +15,7 @@ next_phase: superpowers:writing-plans
 
 - [Context / Why](#context--why) · [Goals](#goals) · [Non-goals](#non-goals) · [Anti-goals](#anti-goals) · [Constraints](#constraints) · [Approaches](#approaches)
 - [설계](#설계) — §1 시간 기록 · §2 기준선과 판단 규칙 · §3 느린 테스트 · §4 대조를 한 바퀴로(조건부) · §5 알림 · §6 느린 넷(조건부)
+- [기준선](#기준선) · [계획 2 에 더한 일](#계획-2-에-더한-일)
 - [인터뷰와 달라진 것](#인터뷰와-달라진-것) · [있는 것 검토](#있는-것-검토) · [상류 · 하류 연계](#상류--하류-연계)
 - [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan) · [Rejected Alternatives](#rejected-alternatives)
 - [미룸](#미룸) · [번호 대조](#번호-대조) · [Metadata](#metadata) · [Handoff Context](#handoff-context) · [결정 기록](#결정-기록)
@@ -216,6 +217,8 @@ next_phase: superpowers:writing-plans
 
 ### §6 느린 넷 — 조건부(계획 3)
 
+> 재결정(2026-11-22 · 결정 기록 B4): 계획 3 은 열지 않는다 — 넷은 E4 가 준비물 단위로 고친다. 아래는 그 전의 설계다.
+
 묶음은 지휘 로드맵의 계획이 머지된 뒤 나머지 느린 넷(`test_human_gate.sh` · `test_human_gate_e2e.sh` · `test_team_status.sh` · `test_roadmap_status.sh`)을 이 에픽에 맡겼다. 지금은 그 계획이 넷을 고치는 중이라 손대지 않고, 아래 조건으로 연다.
 
 - **여는 조건.** 지휘 로드맵(`2026-11-14-conductor-context-economy-brief`)의 구현 중 에픽 둘째 계획(RC47)이 기본 브랜치에 머지됐다.
@@ -225,6 +228,52 @@ next_phase: superpowers:writing-plans
 - **손볼 때.** 계획 3 을 연다 — 로드맵 블록에 셋째 브랜치와 그 테스트 파일의 경로 예약을 더하는 로드맵 수정을 재분해 절차로 올린다. 고치는 원칙은 §3 과 같다: 같은 일을 되풀이하는 것만 덜고, 각 테스트가 지키던 것은 그대로 두며, 고치기 전에 잡던 것을 고친 뒤에도 잡는지 보인다. 함께 돌리기와 시간 문턱을 약하게 하는 것은 하지 않는다. 테스트마다 무엇을 덜지는 그 계획의 첫 과제가 머지 뒤의 파일을 읽고 정한다 — 지금 읽은 글은 머지 뒤와 다르다.
 - 테스트 폴더만 고치므로 플러그인 판을 올리지 않는다.
 - 이 에픽은 이 조건이 판정될 때까지 — 「손보지 않는다」 를 적거나 계획 3 이 머지될 때까지 — 열려 있다.
+
+## 기준선
+
+계획 1(PR #319 · 머지 커밋 932e754b)에서 잰 것이다. PR 본문에 먼저 적었고 계획 2 의 브랜치에서 여기로 옮겼다(§2 의 적는 자리).
+
+판단에 쓴 한 바퀴 N 은 4293초(71.5분)다 — 머지 전 대조 2회차의 합친 사본 바퀴이고, 겹치지 않은 바퀴는 이것 하나다.
+
+| 바퀴 | 커밋 | 합계(끝 − 시작) | 시작 · 끝의 다른 스위트 수 | 겹친 대상 줄의 초 합 | 겹치지 않은 바퀴인가 |
+|---|---|---|---|---|---|
+| 「앞」 — 시간 기록만 | e559f84d | 4458초(74.3분) | 0 · 2 | 3428초(76.9%) | 아니다 |
+| 「뒤」 — 구현 끝 | 7d15bc18 | 3736초(62.3분) | 2 · 1 | 3736초(100%) | 아니다 |
+| 대조 1회차의 합친 사본 | 355f18b6 | 3797초(63.3분) | 1 · 1 | 3797초(100%) | 아니다 |
+| 대조 2회차의 합친 사본 | 339f63df | 4293초(71.5분) | 0 · 0 | 0초(0%) | 그렇다 |
+
+- 「뒤」 바퀴는 30분을 기다리고도 겹친 채 돌았다. 대조 2회차는 다른 스위트가 0 인 때에 시작해(기다림 0초) 끝까지 겹치지 않았다.
+- 대조의 기준 사본 바퀴는 기본 브랜치의 옛 러너라 기록이 없다 — 대조 전체에서 합친 바퀴를 뺀 값으로 1회차 약 4344초 · 2회차 약 4790초다.
+- 대조를 돈 횟수는 2번이다(1회차 전체 8142초 · 2회차 전체 9083초).
+- 겹치지 않은 바퀴가 겹친 바퀴보다 느렸다 — 같은 대상 323개에서 2회차 합이 1회차 합의 1.13배이고, 5초 이상 대상 88개의 비는 중앙값 1.09(사분위 1.05~1.19)다. 원인은 확인하지 못했다. N 을 1회차의 3797초로 바꿔 넣어도 아래 판단은 같다.
+
+| 기준 | 계산 | 값 | 목표(90분)와 견줌 |
+|---|---|---|---|
+| 대조 한 번 기준 | 3 × N | 12879초(214.6분) | 넘는다 |
+| 계획 2 뒤의 꼴 | 2 × N | 8586초(143.1분) | 넘는다 — N 이 45분보다 크다 |
+| 실제로 돈 횟수 기준 | 「뒤」 3736 + 대조 1회차 8142 + 대조 2회차 9083 | 20961초(349.4분) | 넘는다 |
+
+**첫 판단(2026-11-22).** 사용자가 목표를 1시간 30분으로 그대로 두었다. 표의 둘째 · 셋째 줄이 맞았다 — 계획 2 를 열고, 미뤄 둔 길을 함께 물었다. 답은 결정 기록 B2–B6 에 있다.
+
+**느린 넷(AC25).** 여는 조건(지휘 로드맵의 그 계획 머지)은 계획 1 을 보내기 전에 이미 맞았다. 겹치지 않은 바퀴에서 넷은 모두 가장 느린 스물 안이다 — `test_human_gate_e2e.sh` 201.3초(3위) · `test_human_gate.sh` 196.2초(4위) · `test_team_status.sh` 155.0초(5위) · `test_roadmap_status.sh` 100.5초(9위), 합 653.0초. §6 대로면 계획 3 을 열지만 사용자가 E4 에서 준비물 단위로 고치기로 다시 정했다(B4) — 계획 3 은 열지 않는다.
+
+**고친 셋(겹치지 않은 바퀴).** `test_codex_backward_compat.sh` 0.09초 · `test_copy_of_contract.sh` 53.0초 · `test_docreview_mutations.sh` 242.2초. 가장 느린 스물이 한 바퀴의 67%(2886초)다.
+
+## 계획 2 에 더한 일
+
+§4 와 AC14–AC20 · AC24 · AC28 · AC30 에 더해 계획 2 가 함께 하는 일이다. 2026-11-22 에 더했고 출처를 함께 적는다.
+
+1. **python 모듈별 시간의 정리 시간 귀속 — 첫 과제.** `tools/suite/run_unittest_dir.py` 의 `_TimedResult` 가 한 모듈의 클래스 · 모듈 단위 정리 시간을 다음 모듈에 얹고, 마지막 모듈의 정리 시간은 버리며, 클래스 준비가 실패한 모듈은 `pymod` 줄을 남기지 않는다. §1 의 「그 모듈 테스트들의 합」 · AC5 에 맞게 고치고, 시간이 걸리는 정리를 가진 테스트와 클래스 준비가 실패하는 테스트를 더한다. 출처: 품질 게이트의 막는 지적 · 사용자 답 「계획 2의 첫 과제로 (권장)」(B7).
+2. **품질 게이트의 제안.** 계획이 과제로 나누고, 하지 않기로 한 것은 이유와 함께 보고한다. 출처: 같은 리뷰(범위 f153a43b..0b9f0e39).
+   - `plugins/quality-gates/tests/test_codex_backward_compat.sh:108` — 원장이 0건이라 셋째 확인의 다시 돌리는 갈래가 스위트 어디에서도 돌지 않는다.
+   - `shared/tests/test_copy_of_contract.sh:861` — 색인 만들기가 종료 코드 9 일 때만 옛 길로 간다. 다른 0 아닌 코드는 빈 결과가 되어 락이 조용히 약해진다.
+   - `tools/suite/run-all.sh:44` — 다른 스위트 수를 세지 못한 까닭을 버린다. `:82` — python 러너의 알림이 출력에 묻힌다. `:94` · `:101` — 쓰기 실패 알림이 두 번 나올 수 있다.
+   - `tools/suite/run_unittest_dir.py:18` — 임포트에서 죽은 모듈의 키 꼴이 정상 모듈과 다르다. `:46` — 인코딩 실패 때 일부 줄은 이미 썼는데 「기록하지 않는다」 고 알린다. `:70` — 설정을 클래스 속성으로 넘긴다.
+   - `tools/suite/suite_peers.py:42` — `run-all.sh` 를 인자로만 받은 셸도 러너로 센다. `:116` — 프로세스 목록을 못 읽어도 기다림이 상한까지 간다.
+   - `tools/suite/test_suite_timing.py:177` — 떼어 낸 가짜 러너가 5초쯤 다른 바퀴의 겹침 수에 잡힌다. `:199` — 부정 단언만 있어 빈 출력이어도 통과한다. `:430` — 대상별 초를 꼴만 보고 값은 보지 않는다.
+3. **대조의 임시 폴더 자리.** `merge_check.py` 가 테스트에 주는 임시 폴더가 메인 레포 안이라, 임시 폴더가 git 밖이라고 가정한 테스트(`plugins/plugin-audit/tests/test_run_own_tests.py` 의 `test_default_helper_is_the_sibling_script_not_cwd`)가 메인 레포에 worktree 를 만들고 설정을 건다. 대조가 주는 임시 폴더를 git 작업 트리 밖에 둔다. 그 테스트 파일은 고치지 않는다(E4 의 예약이다). 출처: 계획 1 의 통합 리뷰 · 지휘 판단(지휘 기록).
+4. **구현 담당자가 미룬 것.** `suite_peers.py` 의 작은 손질(`--interval` 0 이하 거절 · 테스트 정리에서 `SUITE_PEERS_PS_FILE` 빼기 · `ps -p` 시간 상한 · 실제 표 시험의 `--list` 종료 코드)과 python 모듈 줄의 가장자리(중첩 패키지의 임포트 실패 키 · `__file__` 없는 모듈). 출처: 계획 1 의 마지막 보고.
+5. **지휘 절차서의 예약.** AC20 이 고치라는 `plugins/spec-distill/references/conducting.md` 의 대조 설명 한 자리는 로드맵의 이 에픽 경로 예약에 아직 없다. 계획 2 의 PR 이 그 예약을 함께 싣고(계획 1 이 예약 두 파일을 실은 것과 같다), PR 본문 `## 지휘 로드맵에 알림` 절에 그 한 자리와 바뀐 구조를 적는다(§5).
 
 ## 인터뷰와 달라진 것
 
@@ -309,8 +358,9 @@ next_phase: superpowers:writing-plans
 - `plugins/spec-distill/scripts/merge_check.py` · `plugins/spec-distill/tests/test_merge_check.sh` · `plugins/spec-distill/.claude-plugin/plugin.json` · `plugins/spec-distill/CHANGELOG.md`.
 - `tools/suite/run-all.sh` 와 그 테스트 — 실패 목록 읽기.
 - `plugins/spec-distill/references/conducting.md` 의 대조 설명 한 자리 — 지휘 로드맵과 예약을 맞춘 뒤.
+- [계획 2 에 더한 일](#계획-2-에-더한-일)이 닿는 파일 — `tools/suite/run_unittest_dir.py` · `tools/suite/suite_peers.py` · `tools/suite/test_suite_timing.py` · `shared/tests/test_copy_of_contract.sh` · `plugins/quality-gates/tests/test_codex_backward_compat.sh`. 모두 이 에픽의 경로 예약 안이다.
 
-**계획 3** (§6 의 조건이 맞고 손볼 것이 있을 때 — 로드맵 수정이 셋째 브랜치와 예약을 더한다)
+**계획 3** (§6 의 조건이 맞고 손볼 것이 있을 때 — 로드맵 수정이 셋째 브랜치와 예약을 더한다) — 열지 않는다(결정 기록 B4)
 
 - 느린 넷 가운데 §6 의 기준에 든 테스트 파일 — `plugins/spec-distill/tests/` 의 `test_human_gate.sh` · `test_human_gate_e2e.sh` · `test_team_status.sh` · `test_roadmap_status.sh` 가운데.
 
@@ -337,12 +387,19 @@ next_phase: superpowers:writing-plans
 
 | 항목 | 이유 | 받는 곳 |
 |---|---|---|
-| 느린 넷(`test_human_gate.sh` · `test_human_gate_e2e.sh` · `test_team_status.sh` · `test_roadmap_status.sh`) 손보기 | 지휘 로드맵의 진행 중 계획이 고치고 있다 — 그 계획이 머지된 뒤 다시 재서 여전히 느린 것만 조건부 셋째 일로 연다(§6 · AC25 · AC26 · RC47) | E1 |
-| python 테스트 묶음 줄이기 | 이번에는 재기만 한다. 폴더를 앞단 로드맵의 진행 중 에픽이 쥐고 있다 — 그 에픽이 머지된 것만으로는 열지 않는다. 판단(§2)에서 미뤄 둔 길을 사용자에게 물을 때 「앞」 바퀴가 잰 묶음의 시간과 함께 묻고, 사용자가 고를 때만 연다 | E1 |
-| `test_finish_pr_merge.sh` · `test_control_plane.sh` · 변이 매트릭스의 함께 돌리기, 스위트의 함께 돌리기 · 닿는 테스트만 돌리기 | 다시 잰 뒤 목표에 못 미칠 때 사용자에게 묻는다(S27 · §2) | E1 |
-| 문서 리뷰 엔진 케이스의 값 읽기 묶기 | 얻는 것보다 테스트를 잘못 고칠 위험이 크다 — 목표에 못 미칠 때 다시 본다 | E1 |
-| 로드맵마다 따로인 스위트 잠금을 하나로 | 스위트가 겹쳐 도는 원인이지만 지휘 로드맵의 스크립트다 — 계획 1 의 PR 이 잰 겹침과 함께 지휘 로드맵에 알린다(§5 · AC22). 맡을 곳은 그 알림을 받은 쪽이 정한다 | 없음 |
+| 느린 넷(`test_human_gate.sh` · `test_human_gate_e2e.sh` · `test_team_status.sh` · `test_roadmap_status.sh`) 손보기 | 지휘 로드맵의 진행 중 계획이 고치고 있다 — 그 계획이 머지된 뒤 다시 재서 여전히 느린 것만 조건부 셋째 일로 연다(§6 · AC25 · AC26 · RC47). 재분해 · 2026-11-22 — 넷 모두 여전히 느렸고 사용자가 E4 에서 준비물 단위로 고치기로 정했다(B4) | E4 |
+| python 테스트 묶음 줄이기 | 이번에는 재기만 한다. 폴더를 앞단 로드맵의 진행 중 에픽이 쥐고 있다 — 그 에픽이 머지된 것만으로는 열지 않는다. 판단(§2)에서 미뤄 둔 길을 사용자에게 물을 때 「앞」 바퀴가 잰 묶음의 시간과 함께 묻고, 사용자가 고를 때만 연다. 재분해 · 2026-11-22 — 사용자가 테스트 구조 고치기를 E4 로 넘겼다(B3) | E4 |
+| `test_finish_pr_merge.sh` · `test_control_plane.sh` · 변이 매트릭스의 함께 돌리기, 스위트의 함께 돌리기 · 닿는 테스트만 돌리기 | 다시 잰 뒤 목표에 못 미칠 때 사용자에게 묻는다(S27 · §2). 2026-11-22 첫 판단에서 물었고 사용자가 고르지 않았다(B3) — 둘째 판단에서 목표를 넘으면 그 답을 따른다 | E1 |
+| 문서 리뷰 엔진 케이스의 값 읽기 묶기 | 얻는 것보다 테스트를 잘못 고칠 위험이 크다 — 목표에 못 미칠 때 다시 본다. 재분해 · 2026-11-22 — 사용자가 테스트 구조 고치기를 E4 로 넘겼다(B3) | E4 |
+| 로드맵마다 따로인 스위트 잠금을 하나로 | 스위트가 겹쳐 도는 원인이지만 지휘 로드맵의 스크립트다 — 계획 1 의 PR 이 잰 겹침과 함께 지휘 로드맵에 알린다(§5 · AC22). 맡을 곳은 그 알림을 받은 쪽이 정한다. 2026-11-22 — 사용자가 지휘 로드맵에 넘기기로 정했고 이슈로 넘겼다(B5) | #321 |
 | 스위트가 돌린 테스트 수를 세기 · 지운 테스트와 고친 테스트 가르기(RC38 · RC39) | 지운 것 기록의 자리와 꼴은 E2 가 정한다 | E2 |
+| 기본 브랜치에서 늘 실패하는 테스트 열 개 고치기 | 계획 2 의 과제 1 이 관측했다(대조가 기준 사본을 늘 부분으로 다시 돈다 — 956초 · 한 바퀴의 22.3%). 2026-11-22 — 사용자가 계획 2 머지 뒤의 수리 PR 로 정했다. 열째는 계획 2 의 과제 7 이 고쳤다. 수리 PR 은 이 PR 의 본문 「미룬 것」 에서 이어진다 | #324 |
+| 이름을 뽑지 못해 기준 사본을 전부 돈 대조의 「고쳐짐 0개」 를 「재지 않았다」 로 낼지 | 그 길에서는 구조상 늘 0 이다. 계획의 판단 L16 이 「지금처럼」 으로 정했고, 보이는 글이라 사람이 정한다. 계획 2 의 PR 본문 「지휘 로드맵에 알림」 으로 넘겼다 | #324 |
+| 죽은 대조가 git 밖에 남긴 `merge-check-<사본>-*` 임시 폴더 치우기 | 실행 폴더 밖이라 원장 정리(`ledger cleanup`)가 모른다. 원장 정리를 쥔 지휘 로드맵의 일이다. 계획 2 의 PR 본문 「지휘 로드맵에 알림」 으로 넘겼다 | #324 |
+| `conducting.md` 142행의 문장 — 앞 구절이 두 사본을 다 돈다고 읽히고 탐지 경로를 가르지 않는다 | 계획이 정한 글을 그대로 넣었다. 그 파일은 지휘 로드맵의 것이다. 계획 2 의 PR 본문 「지휘 로드맵에 알림」 으로 넘겼다 | #324 |
+| 러너의 버림 알림이 목록 줄(합친 쪽 실패 이름)을 그대로 싣는다 | 줄 머리에 묶이지 않은 실패 줄 패턴이면 기준 쪽 이름으로 읽힌다. 지금 설정에서는 닿지 않는다. 고치면 계획의 판단 L14 의 보이는 글이 바뀐다 | E4 |
+| `tools/suite` 시험의 시간 문턱 · 건너뛴 모듈의 키 시험 · 바퀴 도중 쓰기 실패 때 python 러너 알림의 개수 · `test_suite_only_failed.py` 의 기록 파일 이름 짓기 | 지금은 통과한다. 흔들리면 합친 쪽에서만 새 실패로 뜬다 | E4 |
+| `test_codex_backward_compat.sh` — 표준 입력을 먹는 가짜가 fd 3 을 가르지 못한다 · 안쪽 실행 표지가 새면 세 확인이 조용히 빠진다 | 보호가 두 겹이고, 그 변수를 거는 곳은 안쪽 실행 하나다 | E4 |
 
 ## 번호 대조
 
@@ -409,7 +466,8 @@ next_phase: superpowers:writing-plans
 1. 계획 1 을 쓰고 구현한다(계획 담당자 · 구현 담당자). 시간 기록 → 「앞」 바퀴 → 느린 테스트 고치기 → 「뒤」 바퀴 순서다(§2 · §3).
 2. 지휘자가 머지 전 대조를 기록 변수(절대 경로 — 지휘 자원 폴더의 파일)를 준 채 돌리고, 숫자를 그 PR 본문의 `## 기준선` 절에 적고 첫 판단을 한다(§2 · AC21). 대조 앞에서 다른 스위트가 없는지 보고 빈 때를 30분까지 기다린다. 숫자를 보일 때 목표를 그대로 둘지 한 번 묻고(사용자가 받아들인 「기준선을 잰 뒤 한 번 다시 맞춘다」), 그 목표로 표를 적용한다. 계획 2 를 열지는 표가 정한다 — 사용자에게 다시 묻지 않는다. 묻는 것은 여섯뿐이다: 목표 다시 맞추기(늘 한 번) · 30분을 기다려도 겹칠 때 · 두 바퀴가 모두 겹쳐 넷째 줄로 가기 전 · 대조 한 번 기준과 실제 횟수 기준이 목표의 다른 쪽에 떨어질 때 · 표의 셋째 줄(N 이 목표의 절반을 넘는다) · 둘째 판단에서 목표를 넘을 때.
 3. 계획 2 를 열 때는 지휘자가 로드맵 수정(둘째 브랜치 · 지휘 절차서 한 자리의 예약 맞추기)을 재분해 절차로 올린 뒤 계획 담당자에게 보낸다(§4 · §5). 둘째 판단은 계획 2 의 PR 이 아니라, 머지되고 설치본이 새 판이 된 뒤 처음 도는 대조에서 한다(§2 · AC23).
-4. 지휘자는 지휘 로드맵(`2026-11-14-conductor-context-economy-brief`)의 구현 중 에픽 둘째 계획의 PR 이 머지되는지를 맞추기 걸음마다 보고, 머지되면 느린 넷을 다시 재서 계획 3 을 열지 정한다(§6 · AC25).
+4. 지휘자는 지휘 로드맵(`2026-11-14-conductor-context-economy-brief`)의 구현 중 에픽 둘째 계획의 PR 이 머지되는지를 맞추기 걸음마다 보고, 머지되면 느린 넷을 다시 재서 계획 3 을 열지 정한다(§6 · AC25). — 2026-11-22 에 끝났다: 계획 3 은 열지 않는다([기준선](#기준선) · B4).
+5. 계획 2 는 [계획 2 에 더한 일](#계획-2-에-더한-일)의 다섯도 함께 한다. 첫 과제는 그 1번이다.
 
 **사용자 말과 그 앞의 물음(2026-11-21 설계 대화).** 본문이 조각으로 인용한 말의 앞뒤다.
 
@@ -442,6 +500,12 @@ next_phase: superpowers:writing-plans
 - docreview 계수 — spec-distill-59ec298a/2026-11-21-suite-time-cut-design-a8f044b422a79d8f r2: advice_new=7 · advice_repeat=1 · mc_preexisting_new=0
 - docreview 계수 — spec-distill-59ec298a/2026-11-21-suite-time-cut-design-a8f044b422a79d8f r3: advice_new=2 · advice_repeat=3 · mc_preexisting_new=2
 - B1 · 결정 · 2026-11-21 · 수용 기준 9번의 낱말을 코드의 이름(「계측기 고장 — 양성 대조 실패」)으로 바로잡는다 — 계획 담당자가 찾은 낱말 어긋남 — 「코드의 이름으로 바로잡는다 (권장)」
+- B2 · 결정 · 2026-11-22 · 목표를 1시간 30분으로 그대로 둔다 — 겹치지 않은 한 바퀴 71.5분 · 3 × N 214.6분을 보이고 물었다([기준선](#기준선)). 첫 판단 표대로 계획 2 를 연다 — 「1시간 30분 그대로 (권장)」
+- B3 · 결정 · 2026-11-22 · 미뤄 둔 길 가운데 테스트 구조 고치기(python 테스트 묶음 줄이기 · 문서 리뷰 엔진 케이스의 값 읽기 묶기)를 E4 로 넘긴다. 함께 돌리기 · 닿는 테스트만 돌리기는 열지 않는다 — 계획 2 만으로는 2 × N 이 143.1분이라 물었다 — 「테스트 구조 고치기를 E4로 (권장)」
+- B4 · 결정 · 2026-11-22 · 느린 넷 — 원래: 다시 잰 바퀴의 가장 느린 스물 안에 든 것만 이 에픽이 조건부 계획 3 으로 손본다(§6 · D1.3 · D2.8) / 재결정: 계획 3 을 열지 않고 넷을 E4 가 준비물 단위로 고친다 / 근거: 로드맵의 진단(E5 · `docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/test-value-audit.md`)이 넷 가운데 셋이 팀 레포 준비물을 쓰고 그 준비물을 다른 테스트 12개도 쓴다고 냈다 — 「E4에서 준비물 단위로 (권장)」
+- B5 · 결정 · 2026-11-22 · 로드맵마다 따로인 스위트 잠금을 하나로 하는 일을 지휘 로드맵에 넘기고 받는 곳으로 이슈 #321 을 만든다 — 「지휘 로드맵에 넘긴다 (권장)」 · 「만든다 (권장)」
+- B6 · 결정 · 2026-11-22 · 재분해 — 로드맵 E1 블록에 계획 2 의 둘째 브랜치를 더하고 E4 가 느린 넷 · python 테스트 묶음 · 문서 리뷰 엔진 케이스를 받는다 — 「이대로 다시 나눈다 (권장)」
+- B7 · 결정 · 2026-11-22 · 품질 게이트의 막는 지적(python 모듈별 시간의 정리 시간 귀속 · AC5)을 계획 1 의 PR 에서 고치지 않고 계획 2 의 첫 과제로 고친다([계획 2 에 더한 일](#계획-2-에-더한-일)) — 「계획 2의 첫 과제로 (권장)」
 
 ### Deferred to plan
 
@@ -472,6 +536,25 @@ next_phase: superpowers:writing-plans
 - 실행 방식 · 2026-11-21 23:34 · writing-plans 가 권한 Subagent-driven 을 미리 받은 답으로 구현 담당자에게 싣는다
 - 판정 보관 · 2026-11-22 04:10 · 구현 담당자의 보고(한국어 16줄)와 실행 방식 원장(영어 16줄)의 판정은 같은 열여섯이다 — 지휘자가 차례대로 견줘 확인했고 보고 쪽만 보관했다
 - 스위트 대조 1회차 · 2026-11-22 06:10 · 새 실패 1개(plugin-audit 의 test_default_helper_is_the_sibling_script_not_cwd) — 이 브랜치가 만든 것이 아니다: 그 테스트는 임시 폴더가 git 레포 밖이라고 가정하는데 대조는 임시 폴더를 메인 레포 안에 두고, 기본 브랜치의 러너와 이 브랜치의 러너로 같은 조건에서 폴더 전체를 두 번씩 돌려 넷 다 같은 실패가 났다(이 브랜치는 plugin-audit 를 바꾸지 않는다). 기본 브랜치 쪽 바퀴에서 통과한 까닭은 확인하지 못했다. 합친 사본 바퀴 3797초 · 시작과 끝의 다른 스위트 수 1 · 1 — 겹친 바퀴
+- 스위트 대조 2회차 · 2026-11-22 14:14 · 새 실패 없음(이 브랜치에만 0 · 고쳐짐 0 · 양쪽 다 10) — 합친 사본 339f63df(0b9f0e39 + main f153a43b). 합친 바퀴 4293초(71.5분) · 시작과 끝의 다른 스위트 수 0 · 0 · 겹친 대상 줄 0초 — 처음 얻은 겹치지 않은 바퀴. 1회차에서 새 실패로 뜬 plugin-audit 테스트는 이번에 양쪽 다 실패했다. 겹치지 않은 바퀴가 겹친 1회차(3797초)보다 1.13배 느렸고 원인은 확인하지 못했다
+- 지휘 판단 · 2026-11-22 12:00 · 통합 리뷰를 대조 2회차가 도는 동안 함께 돌렸다(기본은 대조 뒤) — 합친 사본의 내용은 대조가 시작할 때 정해지고 리뷰어는 읽기만 한다. 결과: 이 PR 이 고칠 이음매 결함 없음 · 뒤 에픽이 고칠 것 1개(대조의 임시 폴더가 메인 레포 안이라 plugin-audit 의 test_default_helper_is_the_sibling_script_not_cwd 가 메인 레포에 손을 댄다)
+- 지휘 판단 · 2026-11-22 14:20 · 통합 리뷰가 찾은 것의 받는 곳 — 계획 2(대조의 임시 폴더 자리), 계획 2 가 열리지 않으면 E4
+- 품질 게이트 · 2026-11-22 · 사용자 말 「그러면 나는 qg를 이 로드맵에서 안건거를 대상으로 걸고 싶고, 앞으로 단위마다 qg를 하고싶어 리뷰가 없어서」 — 이 로드맵의 PR 마다 머지 명령 앞에서 품질 게이트를 건다(단위를 PR 로 읽은 것은 지휘자의 해석). E1 계획 1 은 대조 2회차가 끝난 14:16 에 범위 f153a43b..0b9f0e39 로 보냈다
+- 목표 다시 맞추기 · 2026-11-22 14:21 · 겹치지 않은 한 바퀴 N 4293초(71.5분) · 3 × N 214.6분 · 2 × N 143.1분 · 실제로 돈 횟수 기준 349.4분을 보이고 물었다 — 사용자 답 「1시간 30분 그대로 (권장)」. 첫 판단: 3 × N 이 목표를 넘어 계획 2 를 연다 · N 이 목표의 절반을 넘어 미뤄 둔 길을 함께 물었다
+- 미뤄 둔 길 · 2026-11-22 14:25 · 사용자 답 「테스트 구조 고치기를 E4로 (권장)」 — python 테스트 묶음 줄이기와 문서 리뷰 엔진 케이스의 값 읽기 묶기는 E4 가 진단(E5)의 준비물 단위로 받는다. 함께 돌리기 · 닿는 테스트만 돌리기는 고르지 않았다
+- 느린 넷 · 2026-11-22 14:21 · 넷 모두 겹치지 않은 바퀴의 가장 느린 스물 안(3 · 4 · 5 · 9위 · 합 653.0초)이라 §6 대로면 계획 3 을 연다. 진단(E5)이 넷 가운데 셋이 팀 레포 준비물을 쓰고 다른 테스트 12개도 그것을 쓴다고 해 물었다 — 사용자 답 「E4에서 준비물 단위로 (권장)」. 계획 3 은 열지 않고 넷은 E4 가 받는다(§6 의 재결정)
+- 스위트 잠금 · 2026-11-22 14:21 · 받는 곳 없는 미룸 「로드맵마다 따로인 스위트 잠금을 하나로」 — 사용자 답 「지휘 로드맵에 넘긴다 (권장)」
+- 재분해 · 2026-11-22 14:28 · 영향 표(E1 에 계획 2 의 둘째 브랜치와 경로 예약 · 범위에서 느린 넷 빼기 / E4 가 느린 넷 · python 묶음 · 문서 리뷰 엔진 케이스를 받는다)를 보이고 물었다 — 사용자 답 「이대로 다시 나눈다 (권장)」. PR #319 가 머지된 뒤 로드맵 수정 PR #320 에 얹는다
+- 스위트 잠금 · 2026-11-22 14:29 · 이슈를 만들지 물었다 — 사용자 답 「만든다 (권장)」. 받는 곳 #321(지휘 로드맵이 맡을 에픽을 정한다)
+- 품질 게이트 결과 · 2026-11-22 15:20 · 범위 f153a43b..0b9f0e39 · 판정 「qg: defect · 막는 지적 1 · 선택 15 · 차등 새 실패 0 · e2e 안 함 · 제외 패치 0 · iter 1 · 0b9f0e39」(reasons: silent-drop — 차등 후보에 든 데이터 파일 codex-blessed-red.txt 를 어느 러너도 맡지 않았다) · 막는 지적: tools/suite/run_unittest_dir.py:38 의 모듈별 시간이 클래스 · 모듈 단위 정리 시간을 다음 모듈에 얹고 마지막 모듈의 것은 버리며 setUpClass 가 실패한 모듈은 줄이 없다(설계 §1 「그 모듈 테스트들의 합」 · AC5) · codex 는 한도로 돌지 못했다 · 보관 /Users/jeonghokim/Downloads/devbrew/.claude/spec-distill/conductor/2026-11-20-test-method-rework-brief/files/report/qg-E1-asked-2026-11-22
+- 의도 점검 · 2026-11-22 15:25 · qg 의 의도 점검 질문 셋(S27 방향 · C17 모호한 말 굳힘 · C17 앞 결정 뒤집힘)을 물었다 — 사용자 답 셋 다 「의도다」. 상한을 넘어 남긴 넷은 묻지 않았다. 기록 파일 docs/superpowers/roadmaps/2026-11-20-test-method-rework-brief/reviews/2026-11-22-E1-asked.md(기록 브랜치 feature/roadmap-2026-11-20-test-method-rework-brief-reviews)
+- 막는 지적 · 2026-11-22 15:25 · qg 의 막는 지적(run_unittest_dir.py:38 — 모듈별 시간의 정리 시간 귀속 · AC5)을 언제 고칠지 물었다 — 사용자 답 「계획 2의 첫 과제로 (권장)」. 제안 15개도 계획 2 의 고칠 목록에 올린다. 지휘자가 코드를 읽어 지적이 실재함을 확인했다 — 폴더 단위 합계와 한 바퀴 합계는 맞고, 클래스 · 모듈 단위 정리를 쓰는 테스트 파일은 5개다
+- 머지 · 2026-11-22 15:32 · PR #319 를 사용자 말 「머지하자」 로 지휘자가 머지했다(머지 커밋 932e754b) — 직전에 대조한 끝(0b9f0e39 · main f153a43b)이 그대로임을 다시 확인했다
+- 계획 검토 · 2026-11-22 16:00 · 계획 2(docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md · 43293bb0)의 판단 24곳을 지휘자가 읽고 갈랐다 — 계획 담당자가 「설계에 없던 결정」 으로 돌려보낸 셋(L7 읽지 못한 표에서 기다림을 바로 끝냄 · L10 세지 못한 까닭 알림 · L19 대조의 임시 폴더 자리)은 설계문서 「계획 2 에 더한 일」 의 고침을 푸는 방법이라 받아들였고, L19 에는 후보를 realpath 로 풀기와 임시 폴더를 실행 폴더 안에 둔 까닭을 기록에서 찾기를 더했다. L24(대조 사본에서 늘 실패하는 테스트 · 부분 실행의 무게)는 과제 1 의 관측이 온 뒤 사용자에게 보인다. 실행 방식은 writing-plans 가 권한 Subagent-driven 을 미리 받은 답으로 구현 담당자에게 싣는다
+- 사용자 결정 · 2026-11-22 18:52 · 기본 브랜치에서 늘 실패하는 테스트 열 개(계획 2 과제 1 의 관측 — 부분 실행 956초 · 한 바퀴의 22.3%)는 「계획 2 머지 뒤 수리 PR」 로 고친다(지휘자가 만든 질문 · 선택지 넷 가운데 권장안). 계획 2 의 PR 은 그 테스트를 고치지 않는다. 수리 PR 의 대조가 새 한 바퀴 대조의 첫 실측이 된다
+- 지휘자 판단 · 2026-11-22 18:52 · 과제 6 구현자의 걱정 1 — 대조 출력 첫 줄이 기준 사본을 돌지 않았을 때도 「기본 브랜치 사본을 돌렸다」 고 낸다 — 를 이 PR 에서 고치게 했다(커밋 자리 셋은 그대로 · 꼬리만 실제 한 일대로 세 갈래 · 테스트로 잠금). 설계가 글자를 정했으면 설계대로
+- 사용자 결정 · 2026-11-22 20:06 · 머지 순서 — 계획 2 의 PR 을 다른 로드맵의 열린 PR 둘(#322 세션 담당자 · 판 8.31.0 / #323 앞단 다시 짜기 · 판 9.0.0)보다 먼저 머지한다(지휘자가 만든 질문 · 선택지 넷 가운데 권장안). 계획 2 와 #322 가 같은 판 8.31.0 이라 뒤에 머지되는 쪽이 다시 올린다
+- 사용자 결정 · 2026-11-22 20:06 · 계획 2 의 대조가 도는 동안 수리 브랜치(늘 실패하는 테스트 열 개)를 미리 준비한다. PR 은 계획 2 머지 뒤에 연다. 고칠 파일 가운데 셋(test_finish_commit_roadmap.sh · test_invocation_surface.sh · test_epic_conductor_skill.sh)은 #322 · #323 도 고친다
 
 ## 판정
 
@@ -494,7 +577,27 @@ next_phase: superpowers:writing-plans
 - Ruling: 마지막 리뷰의 M3(원장 수를 따로 세기)와 M4(시작 줄 쓰기 실패 알림)를 한 번의 고침 물결에 넣는다 — 리뷰어가 권했고 둘 다 싸며 같은 파일이다 — 비용 작음.
 - Ruling: 고침 물결 뒤에 세 번째 전체 바퀴는 돌지 않는다 — 계획은 두 바퀴만 정했고, 이 고침은 변수 없을 때의 견고함만 건드려 집중 테스트가 덮는다. 지휘자의 잠긴 대조가 스위트를 돈다 — 틀리면 스위트 전체 사이의 상호작용 하나를 놓친 값.
 
+### docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md
+
+- Ruling: Task 1 is run by the controller (greps + scripted observation under the shared lock), no implementer/reviewer dispatch — it changes no files, so a review package would be empty — cost if wrong: one less independent read of the observation (the conductor reads the CHECKPOINT itself).
+- Ruling: Task 1 Step 3's two runs (TMPDIR in-git / out-of-git) execute back-to-back under ONE lock acquisition (obs-both.sh) — fewer lock hand-offs with the conductor's comparison; same two runs — cost if wrong: none to the observation.
+- Ruling: helper scripts live in <worktree>/.claude/tmp/e1-impl2/ (git-ignored, Write-able); outputs go to the shared TMPDIR via shell — the isolation guard refused a heredoc+exec compound line — cost if wrong: none.
+- Ruling: fix Minor 1 (restore b.pid/b.child absence vs listed_a) and Minor 3 (nan interval) in one fix round — repo rule forbids losing assertions in edited tests; cheap — cost if wrong: one extra small commit. Minors 2/4/5 noted for final review (10s cap is plan value; kill_tree cleanup-only; pathological spaces path).
+- Ruling: Task 1 Step 3 observation uses a frozen copy of tools/suite/run_unittest_dir.py at d4852a2f (.claude/tmp/e1-impl2/frozen/) — the lock is acquired after Tasks 2–5 have changed tools/suite in this worktree; the frozen copy keeps 'Task-1-time code = main' for the runner; target test files are untouched by Tasks 2–5 — cost if wrong: an implementer's uncommitted tools/suite edit could still be visible to a target test reading the tree (low; noted in CHECKPOINT).
+- Ruling: run Task 8 (independent files, no interface with 6/7) while Task 1 Step 3 waits for the lock and Task 6 waits for the conductor's answer — continuous execution; order change only — cost if wrong: none (no shared files).
+- Ruling: fix Minor 2 (scene 13 stale-list teeth — AC30/flow axis) and Minor 1 (header lost on non-Stop exception) in one round; park Minor 3 (base-copy rc127 tail unlocked) for final review — cost if wrong: one small commit.
+- Ruling: fix Minor 1 (unused root — conductor said remove if no reason), Minor 2 (detection-path tmp unlocked — L19 line), Minor 3 (format) in one round; Minor 4 (aux absence assertion) left — cost if wrong: one small commit.
+- Ruling: run the final review in parallel with Task 10 — Task 10 changes no tracked file (lock sweep + PR body draft), so the reviewed range is final — cost if wrong: if Task 10 finds a branch-made failure and a fix lands, the final review must re-check that fix range.
+- Ruling: fix wave = final-review Minors 2 (select drops SUITE_ONLY_FAILED_FILE + 18b logs it), 4 (scene: only base copy rc127 → tail listed), 5 (18b logs [ -d TMPDIR ]), 9 (CHANGELOG clause: header line now after comparison), 12a (PASS_PY spacing · unused import) — cheap, no user-visible text change; Minors 3 · 7 (user-visible text) → 미룸 table for conductor/user; 6 · 10 · 11 · 13 → 미룸; 8 → PR body 알림; 14 → PR body note — cost if wrong: one more small commit / a deferred item the user might have wanted now.
+- Ruling: finishing-a-development-branch applied with the pre-given answer (option 3 — keep the branch; conductor opens PR) without re-presenting the menu — answer given in the dispatch — cost if wrong: none (no merge/PR action taken).
+- Ruling: keep this plan's SDD workspace instead of deleting it after the clean final review — the conductor reads the reports/ledger and the relay backup mirrors it; deleting is a destructive step the conductor did not ask for — cost if wrong: an untracked folder stays in the worktree.
+
 ## 구현 대조 — docs/superpowers/plans/2026-11-21-suite-time-cut-plan1.md
 
 - 구현 대조: 경고 1개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 1개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 14개)
 - 보고: AC 16개 중 구현됨 16개 · 미룸 0개 · 빠짐 0개
+
+## 구현 대조 — docs/superpowers/plans/2026-11-22-suite-time-cut-plan2.md
+
+- 구현 대조: 구현 대조: 경고 없음 (AC 10개 · 구현됨 10개 · 미룸 0개 · --acs 로 고른 것 · 뺀 AC 20개) (받는 곳 규칙: 로드맵의 에픽 또는 PR 번호(#숫자) — 작업 트리의 로드맵으로 쟀다)
+- 보고: AC 10개 중 구현됨 10개 · 미룸 0개 · 빠짐 0개
