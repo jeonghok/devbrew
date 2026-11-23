@@ -586,13 +586,14 @@ if case.startswith("gettempdir"):
 if case == "gettempdir-why":   # 기본 자리의 까닭만 남기고 나머지 후보는 쓸 수 없는 것으로 바꾼다
     m.tmp_candidates = lambda: [c for c in real_cands() if not isinstance(c, str)] + [str(ng / "file")]
 elif case != "gettempdir":
-    cands = {"mkdtemp": [ng / "a", ng / "b"], "dotgit": [Path(repo) / ".git", ng / "b"],
-             "gitenv": [ng / "b"], "unknown": [ng / "b"],
+    cands = {"mkdtemp": [ng / "a", ng / "b"], "half": [ng / "a", ng / "b"], "dotgit": [Path(repo) / ".git", ng / "b"],
+             "dotgit-why": [Path(repo) / ".git"], "gitenv": [ng / "b"], "unknown": [ng / "b"],
              "boundary": [ng / "b"], "hint": [ng / "b"], "why": [ng / "file", Path(repo), ng / "a"]}[case]
     m.tmp_candidates = lambda: [str(c) for c in cands]
-if case in ("mkdtemp", "why"):   # 후보 a 에서만 폴더 만들기가 실패한다
+if case in ("mkdtemp", "why", "half"):   # 후보 a 에서만 폴더 만들기가 실패한다(half 는 둘째 사본 폴더에서만)
     def flaky(*a, **k):
-        if os.path.realpath(str(k.get("dir", ""))) == str(ng / "a"):
+        if os.path.realpath(str(k.get("dir", ""))) == str(ng / "a") and (
+                case != "half" or k.get("prefix", "").startswith("merge-check-%s-" % m.SIDES[-1])):
             raise PermissionError(13, "Permission denied")
         return real_mkdtemp(*a, **k)
     m.tempfile.mkdtemp = flaky
@@ -626,6 +627,11 @@ EOF
   assert_eq "$(ls -A "$NG/a")" "" "폴더를 만들지 못한 후보에는 아무것도 남기지 않는다"
   o="$(side dotgit)"
   assert_contains "$o" "dotgit merged=$NG/b/merge-check-merged-" "레포의 .git 폴더 안(git 이 「작업 트리 안 아님」 이라 답한다)은 git 밖으로 치지 않는다"
+  o="$(side dotgit-why)"
+  assert_contains "$o" "$WR/.git: git 작업 트리 안이다" "레포의 .git 폴더 안은 「안」 으로 판정한다(가리지 못함이 아니다)"
+  o="$(side half)"
+  assert_contains "$o" "half merged=$NG/b/merge-check-merged-" "한 사본 폴더를 만든 뒤 다른 사본 폴더에서 실패하면 다음 후보로 간다"
+  assert_eq "$(ls -A "$NG/a")" "" "반쯤 만든 후보에서 앞서 만든 사본 폴더를 되돌려 아무것도 남기지 않는다"
   o="$(side gitenv)"
   assert_contains "$o" "gitenv note=-" "호출한 쪽 GIT_DIR · GIT_WORK_TREE 가 있어도 git 밖 후보를 git 밖으로 잰다(알림 없음)"
   assert_contains "$o" "gitenv merged=$NG/b/merge-check-merged-" "호출한 쪽 GIT_DIR · GIT_WORK_TREE 를 빼고 재어 git 밖 후보를 쓴다"
@@ -647,7 +653,8 @@ else
   no "전제: /tmp 아래에 git 작업 트리 밖 폴더를 만들지 못했다 — 장면 19 를 돌리지 못했다"
 fi
 
-# 19b — 멈춘 예외에 기준 사본 실행 꼴을 싣지 못하면 그 사실을 표준 오류에 한 줄로 남기고 원래 예외를 그대로 올린다
+# 19b — 멈춘 예외에 기준 사본 실행 꼴을 싣지 못하면 그 사실을 다른 [spec-distill] 알림과 같은 표준 출력에 한 줄로 남기고
+#   원래 예외를 그대로 올린다
 cat > "$T/sticky.py" <<'EOF'
 import sys
 from pathlib import Path
@@ -665,8 +672,8 @@ try:
 except Sticky:
     print("reraised Sticky")
 EOF
-o="$(python3 "$T/sticky.py" "$ROOT/plugins/spec-distill/scripts" 2>&1)"
+o="$(python3 "$T/sticky.py" "$ROOT/plugins/spec-distill/scripts" 2>/dev/null)"
 assert_contains "$o" "reraised Sticky" "실행 꼴을 싣지 못해도 원래 예외를 그대로 올린다"
-assert_contains "$o" "[spec-distill] 멈춘 예외(Sticky)에 기준 사본을 어떻게 돌렸는지(listed)를 싣지 못했다(AttributeError) — 머리 줄 꼬리가 실제와 다를 수 있다" "실행 꼴을 싣지 못하면 표준 오류에 한 줄로 알린다"
+assert_contains "$o" "[spec-distill] 멈춘 예외(Sticky)에 기준 사본을 어떻게 돌렸는지(listed)를 싣지 못했다(AttributeError) — 머리 줄 꼬리가 실제와 다를 수 있다" "실행 꼴을 싣지 못하면 표준 출력에 한 줄로 알린다"
 
 finish
