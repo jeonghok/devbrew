@@ -161,7 +161,7 @@
 - Test: `shared/tests/test_agent_input_slots.sh`(그대로 돌림) · `plugins/quality-gates/tests/test_code_recritic_frontmatter.sh`(L51 · L61) · `plugins/quality-gates/tests/test_intent_critic.py`(리뷰어 정의 문장 단언이 있으면)
 
 **Interfaces:**
-- Produces: `question` 칸 지시 글 — `- \`question\` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, 번호는 괄호 안에만 둔다. 직접 확인해 볼 자리가 있으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 — 따로 된 칸은 없고 \`question\` 글의 일부다.` Task 7 · 10 의 묻는 틀이 이 글의 첫 줄(질문 한 문장)만 질문 창에 싣는다.
+- Produces: `question` 칸 지시 글 — `- \`question\` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, 번호는 괄호 안에만 둔다. 읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 — 사람이 직접 열어 보거나 써 볼 자리와 방법이다. 따로 된 칸은 없고 \`question\` 글의 일부다.` Task 7 · 10 의 묻는 틀이 이 글의 첫 줄(질문 한 문장)만 질문 창에 싣는다.
 
 - [ ] **Step 1: 실패하는 락을 쓴다.** `test_intent_critic.py` 에 `test_question_field_is_one_sentence` — 리뷰어 정의에 위 지시 글이 한 번, `한두 문장` 0 번. `test_one_pipeline_surface.sh` `case_one_pass_flow` 의 부재 목록에 `iteration: <iteration>` 을 더한다(본문에 0 번 — AC7 「dispatch 줄이 qg 본문에 없다」). `test_code_recritic_frontmatter.sh` L61 의 「앞 iteration」 단언을 고친 낱말(「앞 실행」)로.
 - [ ] **Step 2: 실패를 본다.**
