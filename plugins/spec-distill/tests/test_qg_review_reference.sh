@@ -145,24 +145,30 @@ assert_contains "$KEEP" '`spec` · `premerge-pr<번호>` · `recheck-pr<번호>`
 assert_contains "$KEEP" '자리: spec | premerge-pr<번호> | recheck-pr<번호> | end | asked' "AC6(R4): 기록 파일 이름의 자리 글자에 premerge-pr · recheck-pr"
 
 # AC10 기록 틀
-for k in 'type: roadmap-review' 'roadmap:' 'epic:' 'site:' 'reviewed_base:' 'reviewed_head:' 'contract: 2' \
-         '- 정체: <id>' '- 질문: <question>' '- 관찰:' '- qg 가 돌려준 상태: <state>' '- 같은 대상에 전에 물은 것:' '- 답 원문: <직접 쓴 글 그대로 | ->'; do
+for k in 'type: roadmap-review' 'roadmap:' 'epic:' 'site:' 'reviewed_base:' 'reviewed_head:' \
+         '- 정체: <id>' '- 질문: <question>' '- 관찰:' '- qg 가 돌려준 상태: <state>' '- 답 원문: <직접 쓴 글 그대로 | ->'; do
   assert_eq "$(starts "$TPL" "$k")" "1" "AC10 틀: 줄 첫머리 ${k} 가 한 번"
 done
+for k in 'contract: 3' '- 전에 한 답: <asked_before 그대로 | 없음>'; do
+  assert_eq "$(starts "$TPL" "$k")" "1" "R6: AC10 틀(3판): 줄 첫머리 ${k} 가 한 번(옛 contract: 2 · 같은 대상에 전에 물은 것)"
+done
+assert_eq "$(starts "$TPL" '- 같은 대상에 전에 물은 것:')" "0" "R6: AC10 틀 음성: 옛 「같은 대상에 전에 물은 것」 줄이 없다(양성 짝: 전에 한 답 줄)"
 assert_contains "$KEEP" '<로드맵 폴더>/reviews/<YYYY-MM-DD>-<대상>-<자리>.md' "AC10: 기록 파일 이름 규칙"
 assert_eq "$(starts "$TPL" 'site: <spec | premerge | recheck | end | asked>')" "1" "AC10(R4): 기록 틀 머리 site 값에 premerge · recheck"
 assert_eq "$(starts "$TPL" '- 보관 사본: <보관 폴더 이름(마지막 경로 성분)')" "1" "행 31: 기록 틀의 보관 사본은 보관 폴더 이름"
 assert_not_contains "$TPL" '<자원 폴더 경로' "행 31 음성: 기록 틀의 보관 사본에 폴더 경로가 없다(양성 짝: 보관 폴더 이름 줄)"
 once "$KEEP" "$L_noquestions" "AC10: L(noquestions) 한 번"
-# AC10 계약 칸 이름 — 틀의 칸이 계약 2판 질문 칸 이름과 같다
+# AC10 계약 칸 이름 — 틀의 칸이 계약 3판 질문 칸 이름과 같다
 SFF="$ROOT/plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md"
 QCOLS="$(grep -F -- '- 질문 칸(차례대로):' "$SFF")"
-[ -n "$QCOLS" ] && ok "계약 2판 질문 칸 줄을 읽었다" || no "계약 2판 질문 칸 줄이 없다 — 아래 칸 이름 단언이 공허하다"
-for nm in '<id>' '<question>' '<observation 의 줄 전부>' '<state>' '<target_source>' '<target_id>' '<label>' '<quote>' '<evidence>'; do
-  assert_contains "$TPL" "$nm" "AC10 계약 칸: 틀에 ${nm}"
+[ -n "$QCOLS" ] && ok "R6: 계약 3판 질문 칸 줄을 읽었다" || no "R6: 계약 3판 질문 칸 줄이 없다 — 아래 칸 이름 단언이 공허하다"
+for nm in '<id>' '<question>' '<observation 의 줄 전부>' '<state>' '<target_source>' '<target_id>' '<label>' '<quote>' '<evidence>' '<why>' '<changed_observation 의 줄 전부>'; do
+  assert_contains "$TPL" "$nm" "R6: AC10 계약 칸: 틀에 ${nm}"
   f="${nm#<}"; f="${f%>}"; f="${f% 의 줄 전부}"
-  assert_contains "$QCOLS" "\`${f}\`" "AC10 계약 칸: ${f} 가 계약 2판 질문 칸에 있다"
+  assert_contains "$QCOLS" "\`${f}\`" "R6: AC10 계약 칸: ${f} 가 계약 3판 질문 칸에 있다"
 done
+assert_contains "$TPL" '<asked_before 그대로' "R6: AC10 계약 칸: 틀에 asked_before"
+assert_contains "$QCOLS" '`asked_before`' "R6: AC10 계약 칸: asked_before 가 계약 3판 질문 칸에 있다"
 
 # P2 (고치면)
 assert_not_contains "$TPL" 'source_brief:' "P2: 기록 틀에 source_brief: 줄이 없다"
@@ -204,8 +210,8 @@ else
   no "AC8: 라벨 셋의 차례가 qg 와 다르다(의도다=${n1:-없음} · 잘못 골랐다=${n2:-없음} · 지금은 모르겠다=${n3:-없음})"
 fi
 assert_not_contains "$QF" '(권장)' "AC8: 질문 틀에 추천 표시가 없다"
-once "$ALL" "$FIXED" "AC8: qg 의 고정 문장이 파일에 한 번"
-assert_contains "$ASK" "$FIXED" "AC8: 고정 문장이 묻기 절에"
+assert_eq "$(printf '%s\n' "$ALL" | grep -oF -- "$FIXED" | wc -l | tr -d ' ')" "0" "R6: AC8 → AC2 음성: 옛 고정 문장이 파일에 없다(새 락 test_qg_review_readable.sh question-block · 양성 짝: 아래 끝 줄)"
+assert_contains "$ASK" '답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.' "R6: AC8 → AC2: 고정 문장 대신 질문 블록 끝 줄이 묻기 절에"
 assert_contains "$ASK" '한 호출에 많아야 셋' "AC8: 한 호출에 많아야 셋"
 assert_contains "$ASK" '`state` 가 `묻지 않음` 인 질문' "AC8: 묻지 않음 인 질문만 묻는다"
 assert_not_contains "$ALL" '같은 질문을 다시 묻지 않는다' "AC8 음성: qg 설명의 「같은 질문을 다시 묻지 않는다」 가 없다"
@@ -394,7 +400,8 @@ once "$RBR" "$L_rbrmid" "M6: 로드맵 중간의 기록 PR 은 쌓인 기록을 
 once "$WPARA" "$L_waitread" "나 A: 기다리는 질문 절을 읽는 길이 「아직 묻지 못한 질문」 문단에"
 assert_not_contains "$ALL" '돌려줬는데 바로 묻지 못하면' "나 C 음성: 바로 묻지 못할 때만 기다리는 질문 줄을 적던 옛 문장이 없다(양성 짝: L(waiting))"
 once "$ASK" "$L_nogain" "나 O: 질문 설명의 꼴 예외"
-once "$ASK" "$L_fill" "가 계약 2판 독자: diff 표기 · evidence - 괄호 빼기"
+assert_not_contains "$ALL" "$L_fill" "R6: 가 계약 2판 독자 음성: 화면에서 빠진 의심하는 것 · 근거 줄을 채우던 규칙이 없다(양성 짝: 질문 블록의 화면에 싣지 않는 것 불릿)"
+assert_contains "$ASK" '- 화면에 싣지 않는 것 — 의심하는 인용 · 근거 줄 · 근거의 종류 · 정체 · 전에 물은 것의 질문 글.' "R6: 가 계약 2판 독자 양성 짝: 화면에 싣지 않는 것 불릿"
 # 좁은 재리뷰 1차 뒤 — 끝난 리뷰 · 차례 · spec 다시 보내기 표지 · 작업 줄 · 없음 표지 YAML
 L_sentlost='5. 돌아오지 못한 리뷰 — 그 밖(빈 폴더 — 세션이 끊긴 경우 등)이면 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
 L_workrow='`## 작업` 표에 `ledger add --roadmap <로드맵> --session <세션> --section "작업" --cells "qg 리뷰 · <자리 글자> · <에픽 번호 | 로드맵 밖> · 리뷰 중 · <같은 agent 이름> · <보관 폴더 경로>"` 로 한 줄을 적는다.'
@@ -624,14 +631,13 @@ once "$QF" 'question: "<에픽 이름 | 로드맵> — <질문 글의 첫 문장
 assert_not_contains "$QL" '근거로 본 것' "ask-one-sentence 음성: question 줄에 근거가 없다"
 assert_not_contains "$QL" '이유를 남기려면' "ask-one-sentence 음성: question 줄에 이유 남기는 안내가 없다"
 assert_not_contains "$QL" '같은 대상에 전에 물은 것' "ask-one-sentence 음성: question 줄에 전에 물은 것이 없다"
-FRONT="$(para "$ASK" '앞 글에는 이어서 묻는 질문마다')"
-once "$FRONT" '이유를 남기려면 직접 입력 칸에' "ask-one-sentence: 이유 남기는 안내가 앞 글 문단에 한 번"
+QB="$(fence_with "$ASK" '  왜 묻나: <why>')"
+[ -n "$QB" ] && ok "R6: ask-one-sentence: 질문 블록 펜스를 읽었다(옛 앞 글 펜스 대신)" || no "R6: ask-one-sentence: 질문 블록 펜스가 없다 — 아래 단언이 공허하다"
+once "$QB" '이유를 남기려면 직접 입력 칸에' "R6: ask-one-sentence: 이유 남기는 안내가 질문 블록 끝 줄에 한 번(옛 앞 글 문단)"
 once "$ASK" '이유를 남기려면 직접 입력 칸에' "ask-one-sentence: 이유 남기는 안내가 묻기 절에 한 번"
-assert_contains "$FRONT" '`질문 <n>` 번호' "ask-one-sentence: 앞 글의 질문 몫에 질문 번호"
-FF="$(fence_with "$ASK" '- 근거로 본 것(')"
-assert_eq "$(starts "$FF" '질문 <n>')" "1" "ask-one-sentence: 앞 글 틀이 질문 <n> 으로 시작"
-for lit in '- 의심하는 것: <의심하는 것>' '- 근거로 본 것(<근거의 종류>): <관찰의 줄 전부>' '- <질문 글의 나머지' '- 같은 대상에 전에 물은 것: <날짜> <자리> 리뷰의 「<그때의 질문 글>」 에 「<답>」'; do
-  assert_eq "$(starts "$FF" "$lit")" "1" "ask-one-sentence: 앞 글 틀 줄 ${lit}"
+assert_eq "$(starts "$QB" '질문 <n> — <질문 문장>')" "1" "R6: ask-one-sentence: 질문 블록이 「질문 <n> — <질문 문장>」 으로 시작(옛 앞 글 틀의 질문 <n>)"
+for lit in '- 의심하는 것: <의심하는 것>' '- 근거로 본 것(<근거의 종류>): <관찰의 줄 전부>' '- <질문 글의 나머지' '- 같은 대상에 전에 물은 것: <날짜>'; do
+  assert_not_contains "$ALL" "$lit" "R6: ask-one-sentence 음성: 옛 앞 글 틀 줄 ${lit} 가 없다(양성 짝: 질문 블록 펜스)"
 done
 # ask-marker-split (R18) — 질문 글은 고정 표지에서 나눈다. 결과 파일은 줄바꿈을 빈칸으로 접는다.
 L_split='- `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — 표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장이고, 표지부터 끝까지가 질문 글의 나머지다. 표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다'

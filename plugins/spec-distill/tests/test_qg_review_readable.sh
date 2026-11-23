@@ -135,4 +135,129 @@ one "$RI" '호출 줄은 첫 리뷰와 같은 꼴이라(`--answered` 포함)' "r
 one "$RI" '근거가 같으면 다시 묻지 않는다' "recheck-intent-answered: 같은 의심 · 의도다 · 근거가 같으면 다시 묻지 않는다"
 zero "$WHOLE" '호출 줄에 인자를 더하지 않으므로' "recheck-intent-answered 음성: 인자를 더하지 않는다던 옛 문장이 없다(양성 짝: --answered 포함)"
 
+# 화면의 틀(Task 13) — 맥락 머리 · 질문 블록 · 결과 글 · 기록 틀 3판
+RES="$(part '### 결과 글')"
+ASK="$(part '## 묻기')"
+REC="$(part '### 기록 파일')"
+for pair in "결과 글:$RES" "묻기:$ASK" "기록 파일:$REC"; do
+  [ -n "${pair#*:}" ] && ok "절 본문을 읽었다: ${pair%%:*}" || no "절 본문이 비었다 — 아래 단언이 공허하다: ${pair%%:*}"
+done
+# next_line <글> <머리> — 줄 첫머리가 머리인 첫 줄의 바로 다음 줄(빈칸을 떼지 않는다)
+next_line() { printf '%s\n' "$1" | awk -v p="$2" 'hit { print; exit } index($0, p) == 1 { hit = 1 }'; }
+# heads <글> <머리> — 줄 첫머리가 머리인 줄의 수
+heads() { printf '%s\n' "$1" | awk -v p="$2" 'index($0, p) == 1 { c++ } END { print c + 0 }'; }
+
+# context-head (AC1)
+HEAD4='<대상 이름> — <자리의 쉬운 이름> 리뷰
+이 에픽이 하기로 한 것: <로드맵 에픽 블록의 의도 줄 그대로>
+결과: <막는 지적 n개 · 제안 n개 · 낮춘 지적 n개 | 막는 지적 없음 · …>
+물을 것: <n개 | 없음>[ · 전에 답해 묻지 않은 것 <m>개]'
+CH="$(fenced "$RES" '<자리의 쉬운 이름> 리뷰')"
+assert_eq "$CH" "$HEAD4" "context-head: 결과 글의 맥락 머리 펜스가 네 줄 그대로"
+for i in 2 3 4; do
+  case $i in 2) want='이 에픽이 하기로 한 것:' ;; 3) want='결과:' ;; 4) want='물을 것:' ;; esac
+  got="$(printf '%s\n' "$CH" | awk -v n="$i" 'NR == n')"
+  case "$got" in "$want"*) ok "context-head: ${i}째 줄이 ${want} 로 시작" ;; *) no "context-head: ${i}째 줄이 ${want} 로 시작하지 않는다(${got:-없음})" ;; esac
+done
+one "$WHOLE" '<대상 이름> — <자리의 쉬운 이름> 리뷰' "context-head: 맥락 머리 펜스가 파일에 한 번"
+one "$ASK" '`### 결과 글` 의 맥락 머리 아래에' "context-head: 묻기의 질문 블록이 결과 글의 맥락 머리를 가리킨다"
+one "$WHOLE" '로드맵 에픽 블록의 `- 의도:` 줄을 글자 그대로 옮긴다' "context-head: 의도 줄을 글자 그대로 옮긴다"
+EASY="$(lead "$RES" '- **자리의 쉬운 이름**')"
+in_order "$EASY" "context-head: 자리의 쉬운 이름 다섯이 한 불릿에" \
+  '`spec` 은 「설계 승인 앞」' '`premerge` 는 「머지 앞」' '`recheck` 는 「머지 앞 — 고친 부분만」' '`end` 는 「로드맵 끝」' '`asked` 는 「이름으로 청함」'
+one "$RES" '로드맵 리뷰면 머리 낱말을 「이 로드맵이 하기로 한 것」 으로 바꾸고' "context-head: 로드맵 리뷰의 머리 낱말"
+one "$RES" '판정 줄의 수는 같은 줄의 지적을 합친 뒤의 수라 쓰지 않는다' "context-head: 결과 개수는 판정 줄 수가 아니다"
+one "$RES" '「막는 지적 n개(새로 깨진 테스트 k개 포함)」' "context-head: 새로 깨진 테스트를 막는 지적 수에 넣는 꼴"
+
+# question-block (AC2)
+QBLOCK='질문 <n> — <질문 문장>
+  왜 묻나: <why>
+  <「여기는 직접 확인해 보세요 — …」 줄 — 질문 글에 그 표지가 있을 때만>
+
+자세히: <기록 파일 또는 보관 파일의 경로>
+답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.'
+assert_eq "$(fenced "$ASK" '왜 묻나: <why>')" "$QBLOCK" "question-block: 묻기의 질문 블록 펜스가 그대로"
+one "$WHOLE" '질문 <n> — <질문 문장>' "question-block: 질문 블록 펜스가 파일에 한 번"
+for rule in '- 왜 묻나 — 그 항목의 `why` 를 그대로 쓴다. `why` 가 `-` 면 `왜 묻나: 리뷰어가 적지 않았다` 로 쓴다 — 줄을 빼지 않는다.' \
+            '`asked_before` 의 넷째 칸이 `근거가 달라짐` 일 때 `전에 「<답>」 라고 답하셨는데(<날짜>) 이번에는 <새로 보인 것> 가 보였다. ` 를,' \
+            '`고친 뒤에도 보임` 일 때 `전에 「잘못 골랐다」 라고 답하셨다(<날짜>) — 고친 뒤에도 같은 의심이 보인다. ` 를 붙인다.'; do
+  one "$ASK" "$rule" "question-block: 왜 묻나 규칙 — ${rule}"
+done
+one "$ASK" '`<답>` 은 `asked_before` 의 첫째 칸, `<날짜>` 는 둘째 칸을 있는 그대로 쓴다.' "question-block: 날짜는 asked_before 둘째 칸 그대로"
+one "$ASK" '`<새로 보인 것>` 은 `changed_observation` 의 첫 항목이다 — 스크립트가 옮긴 글이고 짓거나 줄이지 않는다.' "question-block: 새로 보인 것은 changed_observation 첫 항목"
+HIDE="$(lead "$ASK" '- 화면에 싣지 않는 것')"
+in_order "$HIDE" "question-block: 화면에 싣지 않는 것 다섯이 한 불릿에" '의심하는 인용' '근거 줄' '근거의 종류' '정체' '전에 물은 것의 질문 글'
+zero "$WHOLE" 'intent-critic 은 의도대로 만들었는지가 아니라' "question-block 음성: 옛 고정 문장 첫째가 없다(양성 짝: 질문 블록 끝 줄)"
+one "$WHOLE" '이유를 남기려면 직접 입력 칸에' "question-block: 이유 남기는 안내가 파일에 한 번"
+assert_eq "$(heads "$WHOLE" '이유를 남기려면')" "0" "question-block 음성: 이유 남기는 안내가 홀로 선 줄로 없다(양성 짝: 끝 줄)"
+assert_eq "$(heads "$WHOLE" '답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.')" "1" "question-block: 그 안내는 끝 줄 안에만"
+one "$ASK" '`자세히` 줄의 경로는 기록 파일에 그 리뷰의 `## 질문` 절이 이미 있으면' "question-block: 자세히 경로는 기록 파일에 그 리뷰의 질문 절이 있을 때만 기록 파일"
+one "$ASK" '머리만 먼저 커밋된 기록 파일은 이미 있는 기록 파일로 치지 않는다' "question-block: 머리만 커밋된 기록 파일은 치지 않는다"
+zero "$WHOLE" '- 근거로 본 것(' "question-block 음성: 옛 앞 글 틀의 근거 줄이 없다(양성 짝: 질문 블록 펜스)"
+
+# result-text (AC3)
+RTEXT='<맥락 머리 네 줄>
+다음: <지금 일어나는 일 한 문장>
+
+막는 지적
+1. <그 지적의 쉬운 한 문장> (<파일>)
+   고치는 법: <고치는 법의 첫 문장>
+제안
+3. <그 지적의 쉬운 한 문장> (<파일>)
+낮춘 지적
+6. <그 지적의 쉬운 한 문장> (<파일>) — 원래 <심각도>, 낮춘 이유: <한 구절>
+자세히: <보관 폴더의 result.md 경로>'
+assert_eq "$(fenced "$RES" '다음: <지금 일어나는 일 한 문장>')" "$RTEXT" "result-text: 결과 글 펜스가 그대로"
+one "$WHOLE" '다음: <지금 일어나는 일 한 문장>' "result-text: 결과 글 펜스가 파일에 한 번"
+for lit in '번호는 세 묶음을 이어서 매긴다' '`plain` 칸이고, 그 칸이 없는 지적은 `summary` 칸이다' '「새로 깨진 테스트: <테스트 이름>」' \
+           '낮춘 이유 한 구절은 `lowered_reason` 의 첫 문장' \
+           '「막는 지적을 구현 담당자에게 돌려보냈다 — 고친 부분만 다시 본다」, 「막는 지적이 없어 머지 전 확인으로 간다」, 「아래 질문 2개를 먼저 묻는다」' \
+           '낮춘 지적은 낮춘 지적 묶음에만 한 번 싣고 제안 묶음과 제안 수에는 세지 않는다' \
+           '고칠 목록의 `### 제안` 에 든 `(lowered)` 줄도 제안으로 세지 않는다' \
+           '지적도 질문도 없으면 맥락 머리 네 줄 · 「다음」 줄과 끝의 `자세히: <보관 폴더의 result.md 경로>` 한 줄이다' \
+           '지적이 없고 질문만 있는 리뷰는 맥락 머리 뒤에 바로 `## 묻기` 의 질문 블록이 온다' \
+           '한 메시지에 결과 글을 먼저, 질문 블록을 뒤에 싣는다 — 맥락 머리는 한 번만 쓴다'; do
+  one "$RES" "$lit" "result-text: ${lit}"
+done
+one "$LIST" '그때 `### 제안` 의 `(lowered)` 줄은 제안 묶음에 싣지 않는다' "result-text(Q3): 고칠 목록에서 실을 때도 낮춘 줄을 제안 묶음에 싣지 않는다"
+zero "$WHOLE" '낮춘 대로 뒀다 — 되올릴 것이 있으면 말한다' "result-text 음성: 옛 「낮춘 대로 뒀다」 문장이 없다(양성 짝: 번호는 세 묶음을 이어서 매긴다)"
+zero "$WHOLE" '「낮춘 지적」 표를 빠짐없이' "result-text 음성: 옛 낮춘 지적 표가 없다(양성 짝: 결과 글 펜스)"
+one "$RET" '- **낮춘 지적은 결과 글의 낮춘 지적 묶음에 보이고**(위 `### 결과 글`)' "result-text: 되돌리기가 결과 글의 낮춘 지적 묶음을 가리킨다"
+one "$(part '### 보내기')" '화면의 꼴은 아래 `### 결과 글` 이다.' "result-text: 돌아오면 보이는 문단이 결과 글을 가리킨다"
+
+# result-line-cases (AC4 · Q1)
+one "$RES" '결과 줄 끝에 「 · 인증 못 함(<그 사유 글자 그대로>)」 를 붙인다' "result-line-cases: not-certified 면 인증 못 함"
+one "$RES" '결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다' "result-line-cases(Q1): 의도 점검만 읽지 못하면 개수 뒤에 붙인다"
+one "$RES" '결과 파일을 옮기지 못함 · 판을 읽지 못함 · 보낸 범위의 것이 아님' "result-line-cases(Q1): 의도 점검만 읽지 못한 세 경우"
+one "$RES" '결과 줄 전체를 「셀 수 없음 — <그 자리에서 지휘자가 보이는 사유 문장 그대로>」 로 쓰는 것은 담당자가 돌아오지 않은 리뷰' "result-line-cases(Q1): 결과 줄 전체 셀 수 없음은 담당자가 돌아오지 않은 리뷰뿐"
+one "$RES" '두 경우 모두 「물을 것」 줄은 싣지 않는다' "result-line-cases: 두 경우 모두 물을 것 줄이 없다"
+
+# filtered-count-and-notices (AC16)
+one "$RES" '돌려주는 꼴의 `answered_filtered` 에서 오고 0 이면 붙지 않는다' "filtered-count-and-notices: 전에 답해 묻지 않은 것은 answered_filtered 에서"
+one "$RES" '`qg-answered-notices.txt` 의 줄을 맥락 머리 바로 아래에 글자 그대로' "filtered-count-and-notices: 알림 파일의 줄을 맥락 머리 아래에"
+one "$RES" '빠지거나 줄어든 채 돌았다고 알리는 줄도 같은 자리에' "filtered-count-and-notices: 빠진 채 돈 알림 줄도 같은 자리에"
+
+# record-template-3 (AC17 · Q5)
+TPL="$(fenced "$REC" 'type: roadmap-review')"
+[ -n "$TPL" ] && ok "record-template-3: 기록 틀 펜스를 읽었다" || no "record-template-3: 기록 틀 펜스가 없다 — 아래 단언이 공허하다"
+for k in 'contract: 3' '- 왜 묻나: <why>' '- 전에 한 답: <asked_before 그대로 | 없음>' '- 행선: <이 에픽 안에서 고친다 | 새 일의 씨앗 | 재분해 신호' \
+         '- 달라진 관찰:' '- 질문: <question>' '- 답: <의도다 |' '- 답 원문: <직접 쓴 글 그대로 | ->'; do
+  assert_eq "$(heads "$TPL" "$k")" "1" "record-template-3: 줄 첫머리 ${k} 가 한 번"
+done
+case "$(next_line "$TPL" '- 질문:')" in '- 왜 묻나:'*) ok "record-template-3: 왜 묻나 줄이 질문 줄 바로 다음" ;; *) no "record-template-3: 질문 줄 다음이 왜 묻나 줄이 아니다" ;; esac
+case "$(next_line "$TPL" '- 전에 한 답:')" in '- 달라진 관찰:'*) ok "record-template-3(Q5): 달라진 관찰 줄이 전에 한 답 줄 바로 다음" ;; *) no "record-template-3(Q5): 전에 한 답 줄 다음이 달라진 관찰 줄이 아니다" ;; esac
+case "$(next_line "$TPL" '- 달라진 관찰:')" in '  <changed_observation'*) ok "record-template-3(Q5): 달라진 관찰 아래 두 칸 들여 쓴 changed_observation 줄" ;; *) no "record-template-3(Q5): 달라진 관찰 아래에 두 칸 들여 쓴 changed_observation 줄이 없다" ;; esac
+case "$(next_line "$TPL" '- 답:')" in '- 행선:'*) ok "record-template-3: 행선 줄이 답 줄 바로 다음" ;; *) no "record-template-3: 답 줄 다음이 행선 줄이 아니다" ;; esac
+zero "$WHOLE" '- 같은 대상에 전에 물은 것:' "record-template-3 음성: 옛 「같은 대상에 전에 물은 것」 줄이 없다(양성 짝: 전에 한 답 줄)"
+one "$REC" '`- 달라진 관찰:` 줄과 그 아래 두 칸 들여 쓴 줄은 근거가 달라져 다시 물은 질문' "record-template-3(Q5): 달라진 관찰은 근거가 달라져 다시 물은 질문에만"
+one "$REC" '`- 질문:` · `- 답:` · `- 답 원문:` 줄의 이름과 자리 글자는 바꾸지 않는다' "record-template-3: 걸음 5 가 읽는 줄 이름은 그대로"
+one "$REC" '2판 기록 파일(이 줄들이 없는 지난 기록)은 고치지 않는다 — `qg_answered.py` 가 그대로 읽는다' "record-template-3: 지난 2판 기록은 고치지 않고 qg_answered.py 가 읽는다"
+
+# skill-show-line — SKILL.md ## 보이기 의 qg 문장
+SKD="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
+SHOW="$(awk '$0 == "## 보이기" { on = 1; next } on && /^## / { exit } on' "$SKD")"
+[ -n "$SHOW" ] && ok "skill-show-line: SKILL.md 보이기 절을 읽었다" || no "skill-show-line: SKILL.md 보이기 절이 없다 — 아래 단언이 공허하다"
+one "$SHOW" 'qg 담당자가 돌려준 리뷰 결과와 의도 점검 질문은 `references/qg-review.md` 의 `### 결과 글` · `## 묻기` 틀대로 맥락 머리로 시작하는 글로 보인 뒤 묻고, 질문 문장 앞머리에 에픽 이름(로드맵 리뷰면 「로드맵」)을 쓴다.' "skill-show-line: 보이기의 qg 문장이 맥락 머리로 시작하는 틀을 가리킨다"
+zero "$SHOW" '따로 된 앞 글 뒤에 묻고' "skill-show-line 음성: 옛 앞 글 문장이 없다(양성 짝: 맥락 머리 문장)"
+
 finish
