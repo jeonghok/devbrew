@@ -343,5 +343,19 @@ class MixedRepo(unittest.TestCase):
         self.assertEqual(results["new"][0], 0)
 
 
+class SpecsFor(unittest.TestCase):
+    def test_specs_for_counts_old_and_new_head_key_together(self):
+        sys.path.insert(0, str(SCRIPTS))
+        import check_bundle_coverage as cbc
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td) / "specs"
+            d.mkdir()
+            (d / "a-design.md").write_text("---\nsource_interview: docs/rm/B.md\n---\n\n# a\n", encoding="utf-8")
+            (d / "b-design.md").write_text("---\nsource_intent: docs/rm/B.md\n---\n\n# b\n", encoding="utf-8")
+            (d / "c-design.md").write_text("---\nsource_intent: docs/rm/OTHER.md\n---\n\n# c\n", encoding="utf-8")
+            got = sorted(rel for rel, _ in cbc.Repo(td).specs_for("docs/rm/B.md", "specs"))
+        self.assertEqual(got, ["specs/a-design.md", "specs/b-design.md"])
+
+
 if __name__ == "__main__":
     unittest.main()
