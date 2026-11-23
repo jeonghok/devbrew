@@ -40,7 +40,7 @@ class DefaultTable(unittest.TestCase):   # AC1
         self.assertEqual(rows["설계 승인"].gate, "spec 승인")
         self.assertEqual(rows["계획 확인"].gate, "계획 검토")
         self.assertEqual(rows["구현"].method, "superpowers:subagent-driven-development")
-        self.assertEqual(rows["검수"].tool, "spec-distill:integration-reviewer")
+        self.assertEqual(rows["검수"].tool, "spec-distill:integration-reviewer · quality-gates:quality-pipeline")
         self.assertEqual(rows["회고"].tool, "spec-distill:relay-checker")
         self.assertEqual(t[W.team_status.PLAIN_FLOW][0].gate, "흐름 승인")
         self.assertEqual(W.ANCHORS[W.team_status.DESIGN_FLOW], tuple(s.name for s in t[W.team_status.DESIGN_FLOW]))

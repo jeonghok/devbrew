@@ -37,8 +37,8 @@
 # 다른 바뀐 경로의 폴더 이름(x 와 x/…)인 문서 경로는 빼지 않고 리뷰한다(stderr 한 줄 · excluded 에 세지 않는다).
 #
 # qg 자기 산출물(이 실행의 --dir 바로 아래에서 아래 「qg 산출물 문법」 하나에 맞는 경로와 이 리포에
-# 등록된 이 세션의 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(앞 반복의 산출물이 다음
-# 반복의 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 다른 세션 폴더의 파일, 문법에 맞지 않는
+# 등록된 이 세션의 qg 일회용 worktree)은 session · paths 의 untracked 목록에서만 건너뛰고(이 실행의 앞 단계 산출물이
+# 변경으로 세어지지 않게) 그 수와 경로를 공시한다. 다른 세션 폴더의 파일, 문법에 맞지 않는
 # untracked 파일, 추적되는 변경, 커밋된 변경은 그 폴더 아래여도 리뷰한다 — 그 자리에 둔 코드가 리뷰를
 # 피하지 못하게. --dir 가 리포 밖이면 아무것도 건너뛰지 않는다(self_state: 0 — stderr 에 그 이유).
 # diff 는 사용자 git 설정(외부 diff · textconv · 접두 · rename · pathspec 환경 변수)에 기대지 않는다.
@@ -217,13 +217,13 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 # ── qg 산출물 문법 (허용 목록 하나 — 여기만 고친다) ──────────────────────────────
 # untracked 경로가 이 실행의 세션 폴더(--dir, 리포 기준 상대 경로 DIR_REL) 바로 아래의 이 이름일 때만
 # qg 자기 상태로 보고 건너뛴다(self_state 로 공시). 대상 리포가 `.claude/quality-gates` 를 무시하지
-# 않아도 앞 반복의 산출물이 다음 반복의 변경으로 세어지지 않게. 다른 세션 폴더의 같은 이름, 폴더 바로
+# 않아도 이 실행의 앞 단계 산출물이 변경으로 세어지지 않게. 다른 세션 폴더의 같은 이름, 폴더 바로
 # 아래 파일, 세션 폴더의 모르는 이름, 코드 파일은 모두 리뷰한다 — qg 소비자는 이 실행의 --dir 만
 # 읽으므로 다른 폴더에 둔 「산출물 이름」 파일은 상태가 아니라 리뷰를 피하려는 파일일 수 있다.
 # --dir 가 리포 밖이면(DIR_REL 없음) 아무것도 건너뛰지 않는다 — self_state: 0, stderr 에 이유 한 줄.
 # 출처:
 #   이름      references/state-file-format.md 「같은 폴더의 다른 파일」 + result.md,
-#             SKILL.md 의 $RD/ 쓰기(range-scope.txt · review-tree.txt · extra-iterations.md), 이 스크립트의 review-i<N>.*,
+#             SKILL.md 의 $RD/ 쓰기(range-scope.txt · review-tree.txt), 이 스크립트의 review-i<N>.*,
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
 #   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/worktrees/qg-(base|head)-<sid 앞 8자>(옛 자리
@@ -234,8 +234,8 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             실행이 남긴 트리로 알린다(say_stale_wt · degraded: yes). 등록되지 않은 같은 이름 폴더(안에 든
 #             다른 레포)는 중첩 레포로 크게 알린다.
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
-QG_NAMES='result\.md|intent\.md|excluded\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
-QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt|extra-iterations\.md'
+QG_NAMES='result\.md|intent\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
+QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt'
 QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
 QG_NAMES="$QG_NAMES"'|other-teams\.md'
 QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'

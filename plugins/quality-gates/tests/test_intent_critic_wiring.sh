@@ -23,11 +23,11 @@ SENT_PUBLISH="Then run [Publish](#publish), then the intent-critic stage ([\`ref
 SENT_NEXT="After the intent-critic result line and the return block, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together"
 PUB_NEXT="그다음 intent-critic 단계를 돈다 — 판정 밖이라 판정 줄 · 게시 본문에 들지 않는다."
 P2_CLEAN="( cd \"\$RD\" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )"
-KILL_BULLET='- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — intent-critic 단계만 끈다(「intent-critic 꺼짐(kill switch)」 한 줄). 판정 밖 단계라 판정에 닿지 않는다. 집행은 `scripts/intent_critic.py gate` 다.'
+KILL_BULLET='- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — intent-critic 단계만 끈다(「intent-critic 꺼짐(kill switch)」 한 줄). 판정 밖 단계라 판정에 닿지 않는다. 집행은 `scripts/intent_critic.py gate` 이고, 준비 걸음(`prepare`)도 이 스위치를 스스로 읽어 다른 팀 읽기 · PR 조회가 함께 꺼진다.'
 ALREADY="intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 DESC_END="The run ends with the intent-critic stage (outside the verdict), which may ask about the user's own choices and commits the answers as answer files on the current branch (no push)."
 LAW2_READERS='`security-reviewer` · `code-recritic` · `intent-critic` are read-only (`tools: Read, Grep, Glob`).'
-LAW2_WRITES="you write to the repository in two places only: the fixes the user approved at the Fix-loop gate, and the intent-critic answer files with their commit (\`scripts/intent_critic.py record\`)."
+LAW2_WRITES="you write to the repository in one place only: the intent-critic answer files with their commit (\`scripts/intent_critic.py record\`). The session state folder and the throwaway worktrees are not repository writes."
 # 옛 이름은 이 파일에 이어 쓰지 않는다 — 이 파일도 아래 부재 검사의 대상이다.
 OLD="쓴""소리"
 
@@ -54,7 +54,8 @@ fi
 KS="$(section "$S" '## kill switch')"
 assert_eq "$(printf '%s\n' "$KS" | grep -c -F -x -- "$KILL_BULLET")" 1 "## kill switch: intent-critic bullet 한 줄"
 assert_eq "$(count "$KS" "$KILL")" 1 "## kill switch: ${KILL} 가 한 번"
-assert_grep "$(section "$S" '## Requirement index')" '^\| I1 intent-critic 은 판정 밖 — `findings\.yaml` · `qg-verdict-args:` · 게시 본문에 들지 않는다 · 답 커밋은 답 파일만 \|' "Requirement index: I1 intent-critic 은 판정 밖"
+assert_grep "$(section "$S" '## Requirement index')" '^\| IC1 intent-critic 은 판정 밖 — `findings\.yaml` · `qg-verdict-args:` · 게시 본문에 들지 않는다 · 답 커밋은 답 파일만 \|' "Requirement index: IC1 intent-critic 은 판정 밖(절차 문서의 걸음 I1 과 번호가 겹치지 않는다)"
+assert_not_grep "$(section "$S" '## Requirement index')" '^\| I1 ' "Requirement index: 옛 번호 I1 행이 없다(위 양성 짝)"
 P2F="$(awk '/^\*\*P2 — setup\.\*\*/{p=1} p&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$S")"
 P2_LINE="$(printf '%s\n' "$P2F" | grep -F -- "-name 'intent-*'")"
 assert_eq "$P2_LINE" "$P2_CLEAN" "P2 펜스: intent-* 정리 줄"
@@ -70,7 +71,8 @@ assert_eq "$(count "$FM" "ends by posting one new PR comment")" 0 "description: 
 assert_eq "$(count "$FM" "posts one new PR comment (understanding text + verdict line) through the publish sink.")" 1 "description: 게시 문장은 남는다(양성 짝)"
 LAW2="$(awk '/^\*\*Law 2 \(Writer ≠ Reviewer\):\*\*/{f=1} f&&/^$/{exit} f' "$S" | flat)"
 assert_eq "$(count "$LAW2" "$LAW2_READERS")" 1 "Law 2: 읽기 전용 리뷰어 셋(intent-critic 포함)"
-assert_eq "$(count "$LAW2" "$LAW2_WRITES")" 1 "Law 2: 오케스트레이터가 쓰는 것에 답 파일 · 답 커밋"
+assert_eq "$(count "$LAW2" "$LAW2_WRITES")" 1 "Law 2: 저장소에 쓰는 자리는 답 파일 · 답 커밋 하나다(세션 폴더 · 일회용 worktree 는 저장소 쓰기가 아니다)"
+assert_eq "$(count "$LAW2" "the fixes the user approved at the Fix-loop gate")" 0 "Law 2: 고치기 반복의 고침을 쓰던 옛 문장 0(위 양성 짝)"
 assert_eq "$(count "$LAW2" "you edit files only for the fixes the user approved at the Fix-loop gate.")" 0 "Law 2: 옛 문장(고침만 쓴다) 0"
 
 note "[절차 문서]"
@@ -108,7 +110,7 @@ assert_contains "$SFFF" '답 파일은 세션 폴더가 아니라 docs 답 자�
 assert_contains "$SFFF" '`intent-*`' "다른 파일: intent-* 실행 파일"
 
 note "[새 세션 파일 — 세 곳]"
-P2_RM="$(printf '%s\n' "$P2F" | grep -F -- 'rm -f "$RD/excluded.md"')"
+P2_RM="$(printf '%s\n' "$P2F" | grep -F -- 'rm -f "$RD/differential.yaml"')"
 assert_contains "$P2_RM" '"$RD/other-teams.md"' "P2 펜스: other-teams.md 를 지운다"
 assert_eq "$(grep -c -F -- "|other-teams\\.md'" "$SCRIPTS/review-diff.sh")" 1 "QG_NAMES: other-teams.md"
 assert_contains "$(awk '/^같은 폴더의 다른 파일/{on=1} on{print} on&&/같은 생명주기를 따른다/{exit}' "$SFF")" '`other-teams.md`' "상태 문서: 다른 파일 목록에 other-teams.md"

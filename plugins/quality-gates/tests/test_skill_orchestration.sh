@@ -2,7 +2,7 @@
 # v1.32.1 SKILL.md orchestration verification (static grep approach).
 #
 # Wraps spec verification steps:
-#   V2b: context anchors + option labels
+#   V2b: decision-question anchors + option labels (one pass — lowered-findings gate only)
 #
 # V2a (Review gate → Runtime gate first-mention line order) was REMOVED in
 # PR4b: 한 파이프라인에는 별도 dispatch 지점으로서의 "Runtime gate" 가 없다 —
@@ -31,27 +31,22 @@ fi
 
 # ============== V2b: Context anchors + option labels (AC6/7) ==============
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
-# Fix-loop iter context
-assert_file_grep "$S" 'qg 반복 N: <ask-line>' "Fix-loop iter anchor"
-# AC6 anchor uniqueness (Medium): `qg 반복 N: <ask-line>` must appear in EXACTLY
-# ONE AskUserQuestion question template per run mode, so the routing is unambiguous.
-# 범위 모드(AC21)는 같은 앵커로 시작하는 자기 질문 하나를 따로 가진다 — 그 줄은 「범위 모드」로
-# 갈린다. 그래서 앵커는 범위 모드가 아닌 질문 줄에 정확히 하나, 범위 모드 질문 줄에 정확히 하나다.
-# 앵커는 글자 그대로 찾는다(index) — `<ask-line>` 의 꺾쇠를 정규식으로 읽지 않는다.
+# 한 실행은 한 번 지난다 — 고치기 반복의 결정 질문(`qg 반복 N: <ask-line>`)은 없고, 남은 결정 질문은
+# 낮춘 지적 게이트 하나다. 앵커는 글자 그대로 찾는다(index) — 꺾쇠를 정규식으로 읽지 않는다.
 # Prose mentions and meta-comments outside `question:` lines are allowed.
-question_findings=$(awk '/^[[:space:]]*question:/ && index($0, "qg 반복 N: <ask-line>") && !/범위 모드/ { c++ } END { print c+0 }' "$S")
-if [[ "$question_findings" -ne 1 ]]; then
-  echo "FAIL V2b uniqueness: 'qg 반복 N: <ask-line>' appears in $question_findings non-range question: lines (expected 1)"
+lowered_q=$(awk '/^[[:space:]]*question:/ && index($0, "재비판이 심각도를 낮춘 지적 <n>개 가운데") { c++ } END { print c+0 }' "$S")
+if [[ "$lowered_q" -ne 1 ]]; then
+  echo "FAIL V2b uniqueness: lowered-findings question appears in $lowered_q question: lines (expected 1)"
   exit 1
 fi
-range_findings=$(awk '/^[[:space:]]*question:/ && index($0, "qg 반복 N: <ask-line>") && /범위 모드/ { c++ } END { print c+0 }' "$S")
-if [[ "$range_findings" -ne 1 ]]; then
-  echo "FAIL V2b uniqueness: 'qg 반복 N: <ask-line>' appears in $range_findings range-mode question: lines (expected 1)"
+iter_q=$(awk '/^[[:space:]]*question:/ && index($0, "qg 반복 N: <ask-line>") { c++ } END { print c+0 }' "$S")
+if [[ "$iter_q" -ne 0 ]]; then
+  echo "FAIL V2b: iteration-gate question 'qg 반복 N: <ask-line>' still appears in $iter_q question: lines (expected 0)"
   exit 1
 fi
-echo "PASS V2b (anchor uniqueness: 1 question line per mode)"
-assert_file_grep "$S" '고치고 다시 돌기' "Fix-loop iter option"
-assert_file_grep "$S" '지금 판정으로 끝내기' "Fix-loop iter option"
+echo "PASS V2b (lowered-findings question: 1 · iteration-gate question: 0)"
+assert_file_grep "$S" 'label: "그대로 둔다"' "lowered gate option"
+assert_file_absent "$S" 'label: "(고치고 다시 돌기|지금 판정으로 끝내기|한 번 더 돌기)"' "iteration-gate options are gone (위 양성 짝)"
 
 # V7 removed in v1.32.1 (see header). Runtime NEEDS_RESOLUTION decision
 # context (P21 / 'Runtime verifier needs') was removed in PR4b along with

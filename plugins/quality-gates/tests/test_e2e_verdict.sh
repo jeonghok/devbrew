@@ -15,7 +15,7 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 printf 'verdict: clean\n' >"$T/clean"
 printf 'verdict: defect\n' >"$T/defect"
 printf 'verdict: not-certified\nreason: scope-empty\nreasons: [scope-empty]\n' >"$T/nc"
-LINE=(--line --blocking 0 --optional 2 --new-failures 0 --excluded 1 --iter 3 --sha abc1234)
+LINE=(--line --blocking 0 --optional 2 --new-failures 0 --sha abc1234)
 
 axis_args() {   # 앞 판정 파일 → 그 판정을 내는 리뷰 · 차등 축 인자(결과 줄이 싣는 꼴)
   case "$1" in
@@ -55,6 +55,16 @@ case_AC2_unconfirmed_keeps_defect_and_earlier_reason() {
   assert_grep "$out" '^reasons: \[scope-empty, e2e-unconfirmed\]$' "AC2: e2e-unconfirmed 는 사유 맨 뒤"
 }
 
+case_invalid_composes_like_unconfirmed() {
+  local p a b
+  for p in clean defect nc; do
+    a=$(final "$T/$p" 미확인 | sed 's/e2e 미확인/e2e X/')
+    b=$(final "$T/$p" 무효 | sed 's/e2e 무효/e2e X/')
+    assert_eq "$b" "$a" "무효: 앞 판정($p)과의 합성이 미확인과 같다(판정 · 사유 · 판정 줄)"
+  done
+  assert_grep "$(final "$T/clean" 무효)" '^reason: e2e-unconfirmed$' "무효: clean 위에서 사유 e2e-unconfirmed(양성 짝)"
+}
+
 case_AC3_no_walk_states_do_not_change_verdict() {
   local s p out want
   for p in clean defect nc; do
@@ -74,8 +84,8 @@ case_override_suffix() {
 
 case_line_order_and_shape() {
   local out; out=$(final "$T/clean" pass | tail -n 1)
-  assert_eq "$out" "qg: clean · 막는 지적 0 · 선택 2 · 차등 새 실패 0 · e2e pass · 제외 패치 1 · iter 3 · abc1234" \
-    "e2e 칸은 차등 새 실패 뒤, 제외 패치 앞이다(색인 K-3)"
+  assert_eq "$out" "qg: clean · 막는 지적 0 · 선택 2 · 차등 새 실패 0 · e2e pass · abc1234" \
+    "e2e 칸은 차등 새 실패 뒤, sha 앞이다(색인 K-3)"
 }
 
 case_bad_calls_are_usage_errors() {
