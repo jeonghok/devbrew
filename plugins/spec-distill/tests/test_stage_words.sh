@@ -90,14 +90,17 @@ def layer_hit(rel, line):
 # 면제 목록 — (파일, 줄에 든 글자, 이유).
 EXEMPT = [
     ("plugins/quality-gates/README.md", "`source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle`",
-     "기본 표지 목록 리터럴(447 줄 설정 표 · 500 줄 설명) — 설정 기본값이라 같은 줄에 「옛 」 을 둘 수 없다(옛 머리 키를 읽는 표지)"),
+     "기본 표지 목록 리터럴(설정 표의 `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS` 줄) — 설정 기본값이라 같은 줄에 「옛 」 을 둘 수 없다(옛 머리 키를 읽는 표지)"),
 ]
 hits = []
 exempted = 0
+accepted_old = 0
 used = set()
 for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
     text = (root / rel).read_text(encoding="utf-8")
     for no, line in pieces(rel, text):
+        if not rel.endswith(".py") and LAYER.search(line) and "옛 " in line:
+            accepted_old += 1
         if not (STAGE.search(line) or BARE.search(line) or layer_hit(rel, line)):
             continue
         ex = [i for i, (f, frag, _r) in enumerate(EXEMPT) if f == rel and frag in line]
@@ -112,6 +115,7 @@ for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
         hits.append(f"{rel}:{no}: {line.strip()}")
 stale = [f"{EXEMPT[i][0]} 「{EXEMPT[i][1]}」" for i in range(len(EXEMPT)) if i not in used]
 print(f"EXEMPTED {exempted}")
+print(f"OLDOK {accepted_old}")
 for s in stale:
     print(f"STALE {s}")
 for h in hits:
@@ -120,6 +124,7 @@ PY
 rc_py=$?
 OUT="$(cat "$SCAN_OUT")"
 [ "$rc_py" -eq 0 ] && ok "부재 스캐너가 돌았다" || no "부재 스캐너 rc=${rc_py}"
+printf '%s\n' "$OUT" | grep '^OLDOK ' | sed 's/^OLDOK /「옛 」 규칙으로 받은 줄 수: /'
 printf '%s\n' "$OUT" | grep '^EXEMPTED ' | sed 's/^EXEMPTED /면제한 줄 수: /'
 n_hit="$(printf '%s\n' "$OUT" | grep -c '^HIT ')"
 if [ "$n_hit" -eq 0 ]; then ok "단계를 가리키는 옛 낱말 · 표지가 범위에 없다"

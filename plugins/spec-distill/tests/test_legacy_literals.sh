@@ -31,6 +31,7 @@ OLD = [
     re.compile(r"docs/superpowers/interview/"),
 ]
 STEM = re.compile(r"(?<!-)-interview(?=[\"'])")   # 줄기를 짓는 문자열 조각 — 문자열 토큰에만
+STEM_F = re.compile(r"(?<!-)-interview$")          # 3.12+ 의 f-string 조각(FSTRING_MIDDLE) — 따옴표가 토큰 밖이라 끝에서 본다
 KINDS = ("STRING", "COMMENT", "FSTRING_MIDDLE")
 hits = []
 for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
@@ -49,6 +50,8 @@ for rel in Path(sys.argv[2]).read_text(encoding="utf-8").split():
         bad = [p.pattern for p in OLD if p.search(s)]
         if name == "STRING" and STEM.search(s):
             bad.append(STEM.pattern)
+        if name == "FSTRING_MIDDLE" and STEM_F.search(s):
+            bad.append(STEM_F.pattern)
         if bad:
             hits.append("%s:%d: %s" % (rel, no, s.strip().splitlines()[0][:120]))
 for h in hits:
