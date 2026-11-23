@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import legacy_names  # noqa: E402
 import roadmap_model as _rm  # noqa: E402
 import team_layout  # noqa: E402
 
@@ -35,7 +36,7 @@ RULES_BUDGET = 8192                    # 팀 규칙 파일의 바이트 예산(U
 HANDBOOK_BUDGET = 16384                # 팀 간 공유 규칙 파일의 바이트 예산(UTF-8)
 BUDGET_KEYS = ("rules_budget", "handbook_budget")
 ROADMAPS_DIR = "docs/superpowers/roadmaps/"
-INTERVIEW_DIR = "docs/superpowers/interview/"
+INTERVIEW_DIR = legacy_names.DEFAULT_DIR   # state_path · control_plane 이 아직 읽는 이름 — 뜻은 새 의도 폴더
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
 BRANCH_RULE_FILE = "docs/git-workflow/branch-strategy.md"   # 브랜치 규칙 문서의 자리
@@ -43,12 +44,13 @@ STATE_BRANCH_ON = "켬"
 STATE_BRANCH_OFF = "끔"
 HUMAN_GATE_ON = "켬"
 HUMAN_GATE_OFF = "끔"
-KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir", "test_command", "test_failure_pattern",
+KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", legacy_names.SETTING_KEY, "test_command", "test_failure_pattern",
         "review_model", "parallel_default", "branch_prefix", "shared_files") + BUDGET_KEYS + ("walk_table", "human_gate", "state_branch")
 ROADMAP_META_KEYS = ("type", "source_brief", team_layout.LAYOUT_KEY)
 ROADMAP_LAYER_KEYS = ("specs_dir", "plans_dir", "test_command", "test_failure_pattern", "review_model", "parallel_default")
-_FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir")
-_DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR, "interview_dir": INTERVIEW_DIR,
+_FOLDER_KEYS = ("specs_dir", "plans_dir", "roadmaps_dir", legacy_names.SETTING_KEY)
+_DEFAULTS = {"specs_dir": SPECS_DIR, "plans_dir": PLANS_DIR, "roadmaps_dir": ROADMAPS_DIR,
+             legacy_names.SETTING_KEY: legacy_names.DEFAULT_DIR,
              "test_command": None, "test_failure_pattern": None, "review_model": None,
              "parallel_default": PARALLEL_DEFAULT, "branch_prefix": BRANCH_PREFIX,
              "shared_files": SHARED_FILES, "rules_budget": RULES_BUDGET, "handbook_budget": HANDBOOK_BUDGET,
@@ -194,14 +196,14 @@ def check_layer(meta: dict, layer: str, path: str | None = None) -> None:
     if layer == "roadmap":
         allowed = ROADMAP_META_KEYS + ROADMAP_LAYER_KEYS
     elif layer == "repo":
-        allowed = KEYS
+        allowed = KEYS + (legacy_names.OLD_SETTING_KEY,)   # 옛 키는 레포 층에서만 읽는다
     else:
         raise ValueError("알 수 없는 층: %r" % layer)
     at = _place(layer, path)
     for key in meta:
         if key in allowed:
             continue
-        if key in KEYS:
+        if key in KEYS or key == legacy_names.OLD_SETTING_KEY:
             raise SettingsError("layer_key", layer, "%s 은 이 설정을 받지 않는다(%s) — 레포 설정 파일(%s)로 옮긴다"
                                 % (at, key, SETTINGS_FILE))
         raise SettingsError("unknown_key", layer, "%s 에 모르는 키가 있다(%s) — 키 이름을 고친다" % (at, key))
@@ -224,6 +226,7 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
     out = {"values": {}, "sources": {}, "errors": [], "warnings": [], "notices": list(notices)}
     out["warnings"].extend(warned)
     usable = []
+    repo_meta = None
     for label, layer, meta in layers:
         if meta is None:
             continue
@@ -234,16 +237,22 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
             out["errors"].append(str(exc))
             continue
         usable.append((label, _place(layer, path), meta))
+        if layer == "repo":
+            repo_meta = meta
     for key in KEYS:
         out["values"][key] = _DEFAULTS[key]
         out["sources"][key] = default_label
         for label, at, meta in usable:
+            read_key = key
             if key not in meta:
-                continue
-            raw = meta[key]
-            out["sources"][key] = label
+                if key == legacy_names.SETTING_KEY and legacy_names.OLD_SETTING_KEY in meta:
+                    read_key = legacy_names.OLD_SETTING_KEY   # 옛 키는 새 키가 없을 때만 새 키의 값이 된다
+                else:
+                    continue
+            raw = meta[read_key]
+            out["sources"][key] = label if read_key == key else "%s(옛 키 %s)" % (label, read_key)
             if key in _FOLDER_KEYS:
-                folder, why = _folder(key, raw)
+                folder, why = _folder(read_key, raw)
                 out["values"][key] = folder
                 if why:
                     out["errors"].append("%s: %s" % (at, why))
@@ -302,7 +311,31 @@ def merge_layers(roadmap, repo, repo_label, notices: list, default_label: str = 
                     out["values"][key] = None
                     out["errors"].append("%s 의 값이 비었다(%s) — 값을 채우거나 키를 지운다" % (at, key))
             break
+    _old_intent_dir(out, repo_meta)
     return out
+
+
+def _old_intent_dir(out: dict, repo_meta) -> None:
+    """옛 의도 폴더(`old_intent_dir`) — 레포 층의 옛 키 값, 없으면 옛 기본 폴더. 옛 키가 있으면 알림 한 줄."""
+    old_key, new_key = legacy_names.OLD_SETTING_KEY, legacy_names.SETTING_KEY
+    if repo_meta is None or old_key not in repo_meta:
+        out["old_intent_dir"] = legacy_names.OLD_DEFAULT_DIR
+        return
+    old_raw = repo_meta[old_key]
+    new_raw = repo_meta.get(new_key)
+    out["notices"].append(legacy_names.setting_notice(_unquote(old_raw), None if new_raw is None else _unquote(new_raw)))
+    if new_raw is None:
+        out["old_intent_dir"] = out["values"][new_key]   # 같은 값 — 깨진 줄은 위에서 이미 냈다
+        return
+    folder, why = _folder(old_key, old_raw)
+    out["old_intent_dir"] = folder
+    if why:
+        out["errors"].append("%s: %s" % (_place("repo"), why))
+
+
+def intent_dirs(result: dict) -> tuple:
+    """(새 의도 폴더, 옛 의도 폴더). 두 값이 같을 수 있고, 깨진 쪽은 None 이다."""
+    return result["values"][legacy_names.SETTING_KEY], result["old_intent_dir"]
 
 
 _no_ref_label = "기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
@@ -538,6 +571,16 @@ def judge_path(key: str, folder: str, path: str, base: str) -> str | None:
     return None
 
 
+def _old_folder_verdict(result: dict, key: str, path: str, base: str, why: str) -> str | None:
+    """새 폴더가 거절한 경로를 옛 의도 폴더 바로 아래의 옛 꼴 이름이면 받는다(None). 아니면 거절 사유에 옛 폴더 규칙을 붙인다."""
+    new, old = intent_dirs(result)
+    if old is None or old == new:
+        return why
+    if judge_path(key, old, path, base) is None and legacy_names.is_old_name(os.path.basename(path)):
+        return None
+    return "%s — 옛 의도 폴더(%s)는 옛 꼴 이름(…%s.md · .state.md · .audit.md)만 받는다" % (why, old, legacy_names.OLD_TAIL)
+
+
 def _say(line: str) -> None:
     print("[spec-distill] " + line, file=sys.stderr)
 
@@ -607,7 +650,7 @@ def main(argv=None) -> int:
     p_get.add_argument("--roadmap")
     p_get.add_argument("--root")
     p_chk = sub.add_parser("check-path")
-    p_chk.add_argument("key", choices=("roadmaps_dir", "interview_dir"))
+    p_chk.add_argument("key", choices=("roadmaps_dir", legacy_names.SETTING_KEY))
     p_chk.add_argument("path")
     p_chk.add_argument("--root")
     p_def = sub.add_parser("default-branch")
@@ -651,6 +694,8 @@ def main(argv=None) -> int:
         value = result["values"][args.key]
         if args.cmd == "check-path":
             why = judge_path(args.key, value, args.path, base)
+            if why and args.key == legacy_names.SETTING_KEY:
+                why = _old_folder_verdict(result, args.key, args.path, base, why)
             if why:
                 _say(why)
                 return 3

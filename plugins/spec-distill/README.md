@@ -127,7 +127,7 @@
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/context-build` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
-- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`interview_dir`, 기본 `docs/superpowers/interview/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
+- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`intent_dir`, 기본 `docs/superpowers/intent/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **P17 (User sovereignty)** — 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
@@ -283,7 +283,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 specs_dir: docs/superpowers/specs/
 plans_dir: docs/superpowers/plans/
 roadmaps_dir: docs/superpowers/roadmaps/
-interview_dir: docs/superpowers/interview/
+intent_dir: docs/superpowers/intent/
 parallel_default: 3
 branch_prefix: feature/
 shared_files: plugin.json, CHANGELOG.md, README.md
@@ -302,7 +302,7 @@ state_branch: 켬
 | `specs_dir` | 설계문서 폴더 | `docs/superpowers/specs/` | 받는다 |
 | `plans_dir` | 계획 폴더 | `docs/superpowers/plans/` | 받는다 |
 | `roadmaps_dir` | 로드맵 폴더 | `docs/superpowers/roadmaps/` | 오류 |
-| `interview_dir` | 의도 폴더 | `docs/superpowers/interview/` | 오류 |
+| `intent_dir` | 의도 폴더 | `docs/superpowers/intent/` | 오류 |
 | `test_command` | 스위트 대조가 도는 명령 | 없음(러너를 찾는다) | 받는다 |
 | `test_failure_pattern` | 실패 이름을 뽑는 정규식 | 없음(알려진 모양) | 받는다 |
 | `review_model` | 통합 리뷰어 · 옮김 대조의 모델 | 없음(세션 모델) | 받는다 |
@@ -314,6 +314,8 @@ state_branch: 켬
 | `walk_table` | 걸음 보기(`walk_table.py next`)가 읽는 레포의 걸음표 파일(레포 상대경로 — 관문은 이 표로 바뀌지 않는다) | 없음(플러그인 기본 표 `references/walk-table.md`) | 오류 |
 | `human_gate` | 사람 줄 관문(`켬` · `끔` 둘뿐, 환경 변수로는 끄지 않는다) | `켬` | 오류 |
 | `state_branch` | 지휘자 상태 브랜치(현황 · 편지)를 쓸지 — `켬` · `끔` | 켬 | 오류 |
+
+옛 키 `interview_dir` 가 있으면 그 값을 읽고 한 줄로 알린다 — 그 폴더는 옛 기록을 읽는 옛 의도 폴더로도 쓴다.
 
 - **기본 브랜치에 머지된 판만 읽는다**(`origin/HEAD` 가 가리키는 커밋의 `.devbrew.md`). 작업 브랜치에서 고친 값은 그 PR 이 머지된 뒤에 적용된다 — 작업 브랜치가 자기 검사 범위를 바꾸지 못하고, 어느 worktree 에서 불러도 같은 값이 나온다. 작업 트리에만 있으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다. 기본 브랜치를 모르면 기본값을 쓰고 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 낸다.
 - **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기본값` 으로 보인다. 기계 상태 파일은 설정 층이 아니다 — 검사받는 하위 agent 도 쓸 수 있다. 스위트 대조(`merge_check.py run`)가 테스트 명령을 몰라 멈추면(종료 코드 6) 지휘자가 사용자에게 물은 답을 그 호출의 인자(`--test-command` · `--test-failure-pattern`)로만 넘긴다 — 출처 「이 호출의 인자(사용자 답)」, 레포 설정 파일에 올리자고 알린다.
