@@ -58,11 +58,11 @@ class MeasureQuestions(unittest.TestCase):
 
     def test_skill_is_the_one_called_just_before(self):
         write(self.f(), [
-            skill("spec-distill:pm-interview"), ask(("질문 A", [("가", "x"), ("나", "y")])),
+            skill("spec-distill:context-build"), ask(("질문 A", [("가", "x"), ("나", "y")])),
             skill("spec-distill:spec-review"), ask(("질문 B", [("가", "x"), ("나", "y")])),
         ])
         qs = mq.scan([self.dir])
-        self.assertEqual([q.skill for q in qs], ["spec-distill:pm-interview", "spec-distill:spec-review"])
+        self.assertEqual([q.skill for q in qs], ["spec-distill:context-build", "spec-distill:spec-review"])
 
     def test_no_skill_before(self):
         write(self.f(), [ask(("질문", [("가", "x"), ("나", "y")]))])

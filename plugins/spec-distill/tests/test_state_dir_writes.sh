@@ -3,7 +3,7 @@
 #   · seed_edit_diff.py — 기준 사본 · .shown · .reverted
 #   · seed_edit_screen.py — 쓴 지적 목록(링크면 읽지 않고 멈춘다)
 #   · docreview_state.py — 원장(링크면 거절 · 제자리 덮어쓰기는 유지) · 시대 표지
-# 세 skill(request-framing · reviewing-brief · spec-review)의 bash 펜스 쓰기는 도출 락(scan_writes)과
+# 세 skill(intent-sync · reviewing-brief · spec-review)의 bash 펜스 쓰기는 도출 락(scan_writes)과
 # 펜스를 잘라 실제로 돌리는 끝에서 끝 칸으로 잰다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -533,7 +533,7 @@ PY
 }
 
 note "== 펜스 쓰기 락 — 세 skill 폴더"
-SKILL_MDS="$(cd "$ROOT" && git ls-files -- 'plugins/spec-distill/skills/request-framing/*' \
+SKILL_MDS="$(cd "$ROOT" && git ls-files -- 'plugins/spec-distill/skills/intent-sync/*' \
   'plugins/spec-distill/skills/reviewing-brief/*' 'plugins/spec-distill/skills/spec-review/*' | grep '\.md$')"
 n_md="$(printf '%s\n' "$SKILL_MDS" | grep -c .)"
 [ "$n_md" -ge 3 ] && ok "대상: 세 skill 폴더의 .md ${n_md}개" || no "대상: 세 skill 폴더의 .md 가 ${n_md}개 — 도출이 비었다"
@@ -607,7 +607,7 @@ probe_md '자리표 펜스(양성)' 0 - "$(printf '```text\n<document>${DOCUMENT
 # ── 끝에서 끝 — 펜스를 잘라 임시 레포에서 돌리고 심어 둔 링크의 너머를 잰다 ──────────
 note "== 펜스 끝에서 끝"
 SDROOT="$ROOT/plugins/spec-distill"
-RF_MD="$SDROOT/skills/request-framing/SKILL.md"; RB_MD="$SDROOT/skills/reviewing-brief/SKILL.md"
+RF_MD="$SDROOT/skills/intent-sync/SKILL.md"; RB_MD="$SDROOT/skills/reviewing-brief/SKILL.md"
 TR="$(cd "$T" && pwd -P)"; R="$TR/repo"; OUT="$TR/outside"
 YAMLDIR="$(python3 -c 'import os, yaml; print(os.path.dirname(os.path.dirname(yaml.__file__)))' 2>/dev/null)"   # HOME 을 바꿔도 엔진이 pyyaml 을 찾게
 mkdir -p "$R/docs" "$OUT" "$TR/home" "$TR/tmp" && git -C "$R" init -q
@@ -674,7 +674,7 @@ assert_contains "$(cat "$TR/last.err")" "번들 조립 실패(rc 73)" "rb_bundle
 # RF 번들 펜스 — 변수를 앞에 대입해 돈다
 RFS="$R/.claude/spec-distill/.docreview/rf-seed"; mkdir -p "$RFS"
 SEEDF="$R/docs/rf-seed.md"; AUDF="$R/docs/rf-seed.audit.md"
-printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:pm-interview\naudit_file: rf-seed.audit.md\n---\n\nRF_SEED_BODY 로그인이 가끔 실패한다.\n' > "$SEEDF"
+printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:context-build\naudit_file: rf-seed.audit.md\n---\n\nRF_SEED_BODY 로그인이 가끔 실패한다.\n' > "$SEEDF"
 printf -- '---\ntype: interview-seed-audit\npayload: rf-seed.md\n---\n\n# T\n\n## 1. 원문\n\n사용자가 한 말.\n\n## 2. 질문 전체\n\n없음\n\n## 6. 리뷰 결정\n\n없음\n' > "$AUDF"
 printf '# CLAUDE.md\n규칙.\n' > "$R/CLAUDE.md"
 rf_vars() { printf 'SD="%s"\nSTATE_DIR="%s"\nBUNDLE="%s"\nBUNDLE_RC="%s"\nSEED_ABS="%s"\nAUDIT_ABS="%s"\nSEED_BASE="%s"\n' \

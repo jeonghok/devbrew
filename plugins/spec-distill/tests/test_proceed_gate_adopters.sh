@@ -9,7 +9,7 @@
 # grep 이 잰다"* 고 주장하고, `spec-review/SKILL.md` 의 AC19 불릿은 한 걸음 더 나가
 # *"기계적 검증 앵커가 거기 산다"* 고 적는다. **둘 다 거짓이었다** 〔실측〕: `턴 종료|다음 턴`
 # 을 재는 단언은 리포 전체에 둘뿐이고(`test_conducting_interview_stage.sh` 의 `ci_cat`,
-# `test_brief_review_entry.sh` 의 `CI_FILES`) 둘 다 pm-interview 표면만 본다.
+# `test_brief_review_entry.sh` 의 `CI_FILES`) 둘 다 context-build 표면만 본다.
 # `spec-review` 의 정지 어휘는 **아무도 재지 않았다** — 계약을 통일해 놓고 그 계약의
 # 이행 검증은 한쪽에만 있었던 셈이다.
 #
@@ -55,7 +55,7 @@ emit_only=0
 
 # ── 채택자 도출 ─────────────────────────────────────────────────────────────
 # "정본을 가리키는 포인터가 그 skill 표면 어딘가에 있는가." spec-review 은 SKILL.md 에서,
-# pm-interview 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
+# context-build 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
 #
 # 도출 로직 자체는 `shared/tests/adopter_derivation.sh` 정본으로 옮겼다 —
 # `test_compression_adopters.sh` 가 같은 골격을 두 번째로 쓰게 되면서 인라인 버전이 그
@@ -127,7 +127,7 @@ ok "채택자 도출 ${n_adopt}개 (열거 아님 — 정본 포인터에서 도
 #
 # 1. **정본이 이름을 대지 않는 skill 은 여전히 자기 포인터에만 걸려 있다.** 합집합의
 #    두 번째 방향은 정본 본문이 정하므로, 정본이 한 번도 이름을 대지 않은 채택자는
-#    포인터를 지우는 것만으로 대상에서 빠진다. 오늘 그런 채택자는 `request-framing`
+#    포인터를 지우는 것만으로 대상에서 빠진다. 오늘 그런 채택자는 `intent-sync`
 #    였는데, 이 wave 에서 정본이 그것을 이름 대게 고쳐 셋 다 두 방향에 걸린다 — 즉
 #    **이 갭은 오늘 비어 있고, 넷째 채택자가 생기면 다시 열린다.** 넷째를 정본이 이름
 #    대게 하는 것이 그때의 수정이다.

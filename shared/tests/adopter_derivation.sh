@@ -19,7 +19,7 @@
 # 계약이 정확히 이 시점에 필요하다(derive 만 하고 emit 을 caller 에 미루면 caller 마다
 # 다시 같은 4줄을 복제해야 한다).
 #
-# ── 왜 공용인가 (Task 10, request-framing phase0) ───────────────────────────
+# ── 왜 공용인가 (Task 10, intent-sync phase0) ───────────────────────────
 # `test_proceed_gate_adopters.sh`(정본 proceed-gate.md)와 `test_compression_adopters.sh`
 # (정본 compression.md)가 이 도출 로직을 각자 인라인으로 가졌더니 28줄 블록이 두 파일에
 # 바이트 동일로 복제됐다 — `shared/tests/test_no_new_duplication.sh` 가 커밋 직전에

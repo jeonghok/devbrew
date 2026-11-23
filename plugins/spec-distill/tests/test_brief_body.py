@@ -56,7 +56,7 @@ class AnchorGrammar(unittest.TestCase):
 
     def test_finishing_names_the_fence_remedy(self):
         # 인터뷰가 brief 를 쓸 때 읽는 지시 — 원문을 고치지 않고 열 0 펜스에 싣는 길과 그 예외
-        fin = (Path(__file__).resolve().parent.parent / "skills" / "pm-interview" / "references" / "finishing.md")
+        fin = (Path(__file__).resolve().parent.parent / "skills" / "context-build" / "references" / "finishing.md")
         text = " ".join(fin.read_text(encoding="utf-8").split())
         self.assertIn("앵커 줄 바로 아래 **열 0 펜스**에 그대로 싣습니다", text)
         self.assertIn("무엇이 거부되는지와 그때 할 일은 게이트의 거부 말이 정하니 그 말을 따른다", text)

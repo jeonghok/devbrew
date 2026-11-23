@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/clear_critic_outputs.sh
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/references/docreview-profiles/design-doc.md plugins/spec-distill/scripts/brief_review_state.py plugins/spec-distill/scripts/state_path.py plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/references/docreview-profiles/seed.md plugins/spec-distill/scripts/clear_critic_outputs.sh
 #
 # 두 엔진 자리(`reviewing-brief` · `spec-review`)의 탐지 · 재비판 dispatch 가 `<profile>` 슬롯에 프로필
 # **경로가 아니라 내용**을 싣는가. 설치본에서 프로필은 플러그인 캐시(사용자 cwd 밖)에 있어 리뷰어의 Read 가
@@ -14,7 +14,7 @@
 #      실패 분기는 미리 채워 둔 `$STATE_DIR/critic.txt`(직전 라운드 critic 출력)를 비우고, 성공 경로는 건드리지
 #      않는다(PR 3 qg iter 1). brief 는 실패를 degrade 원장(없으면 두 번째 채널)에 남긴다.
 #   S  (설계 2026-09-27-review-stopping-criterion AC16) 세 진입 skill(reviewing-brief · spec-review ·
-#      request-framing)의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
+#      intent-sync)의 profile-content 펜스 출력에 `must_catch:` 줄이 없고, 그 줄을 뺀 나머지는 프로필 파일과
 #      바이트 동일하다 — 막는 축을 아는 리뷰어는 category 라벨로 차단 여부를 조종할 수 있다.
 # 실제 agent · codex 는 부르지 않는다.
 set -u
@@ -28,7 +28,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/docreview-profiles/design-doc.md"
   echo "plugins/spec-distill/scripts/brief_review_state.py"
   echo "plugins/spec-distill/scripts/state_path.py"
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   echo "plugins/spec-distill/references/docreview-profiles/seed.md"
   echo "plugins/spec-distill/scripts/clear_critic_outputs.sh"
   exit 0
@@ -202,7 +202,7 @@ for spec in "reviewing-brief:brief.md:3" "spec-review:design-doc.md:2"; do
   fi
 done
 
-# S — request-framing. 이 펜스는 `$PROFILE` 을 앞 블록(「## 상태」)에서 받으므로 그 값만 env 로 준다.
+# S — intent-sync. 이 펜스는 `$PROFILE` 을 앞 블록(「## 상태」)에서 받으므로 그 값만 env 로 준다.
 # Z — 실패 분기의 비움을 bash 와 zsh 로, 직전 출력 모양 셋으로 돌린다: (only) critic.txt 만 · (both) critic.txt +
 # critic-2.txt · (none) 아무것도 없음. zsh 는 맞는 파일이 없는 글롭에서 멈추므로 bash 만으로는 (only)·(none) 이 안 보인다.
 ZSH_BIN="$(command -v zsh 2>/dev/null || true)"
@@ -386,21 +386,21 @@ for sk in reviewing-brief spec-review; do
   assert_not_contains "$(cat "$SCRATCH/$cell.err")" "을 비웠다" "$sk W(스크립트 없음): 비우지 않은 파일을 비웠다고 말하지 않는다"
 done
 
-FR_FENCE="$SCRATCH/request-framing.fence.sh"; cut_marked "$SD/skills/request-framing/SKILL.md" > "$FR_FENCE"
+FR_FENCE="$SCRATCH/intent-sync.fence.sh"; cut_marked "$SD/skills/intent-sync/SKILL.md" > "$FR_FENCE"
 n_fr="$(grep -c . "$FR_FENCE" || true)"
 if [ "${n_fr:-0}" -ge 4 ] && bash -n "$FR_FENCE" 2>/dev/null; then
-  ok "request-framing S: profile-content 마커 펜스 ${n_fr}줄 · bash -n 통과"
+  ok "intent-sync S: profile-content 마커 펜스 ${n_fr}줄 · bash -n 통과"
 else
-  no "request-framing S: profile-content 마커 펜스가 없거나 깨졌다 (${n_fr:-0}줄)"
+  no "intent-sync S: profile-content 마커 펜스가 없거나 깨졌다 (${n_fr:-0}줄)"
 fi
 SEED_PROF="$SD/references/docreview-profiles/seed.md"
 ( cd "$SCRATCH" && env -i PATH="$BASE" HOME="$SCRATCH" PROFILE="$SEED_PROF" bash "$FR_FENCE" ) \
   > "$SCRATCH/fr.out" 2>"$SCRATCH/fr.err"; fr_rc=$?
-assert_eq "$fr_rc" "0" "request-framing S: 펜스 rc 0"
-assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "request-framing S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
-assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "request-framing S: 펜스 출력에 must_catch 줄이 없다"
-assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "request-framing S 전제: seed 프로필에는 must_catch 줄이 있다"
-# Z — request-framing 실패 분기(프로필 없음)의 비움도 bash 와 zsh 로, 모양 다섯으로(링크 둘은 W 와 같은 기대).
+assert_eq "$fr_rc" "0" "intent-sync S: 펜스 rc 0"
+assert_eq "$(cat "$SCRATCH/fr.out")" "$(expect_stripped "$SEED_PROF")" "intent-sync S: stdout 이 seed 프로필에서 must_catch 줄만 뺀 것과 같다"
+assert_eq "$(grep -c '^must_catch:' "$SCRATCH/fr.out" || true)" "0" "intent-sync S: 펜스 출력에 must_catch 줄이 없다"
+assert_eq "$(grep -c '^must_catch:' "$SEED_PROF" || true)" "1" "intent-sync S 전제: seed 프로필에는 must_catch 줄이 있다"
+# Z — intent-sync 실패 분기(프로필 없음)의 비움도 bash 와 zsh 로, 모양 다섯으로(링크 둘은 W 와 같은 기대).
 # 펜스는 플러그인 루트(CLAUDE_PLUGIN_ROOT)의 비움 스크립트를 부른다. `fr_run <셀> <셸> <상태 폴더> <루트|"">`.
 fr_run() {
   local rootvar=(CLAUDE_PLUGIN_ROOT="$4"); [ -n "$4" ] || rootvar=()
@@ -411,7 +411,7 @@ fr_run() {
 for zsh_name in bash zsh; do
   z_sh=bash; [ "$zsh_name" = zsh ] && { [ -n "$ZSH_BIN" ] || continue; z_sh="$ZSH_BIN"; }
   for shape in only both none linked hardlinked; do
-    zl="request-framing Z(${zsh_name}·$shape)"; cell="frz-$zsh_name-$shape"
+    zl="intent-sync Z(${zsh_name}·$shape)"; cell="frz-$zsh_name-$shape"
     zdir="$SCRATCH/$cell/state"; mkdir -p "$zdir"; zout="$SCRATCH/frz-outside-$zsh_name"
     case "$shape" in
       linked|hardlinked) link_shape_seed "$zdir" "$zout" "$shape" ;;
@@ -438,10 +438,10 @@ for case_name in noclr noroot nostate nodir; do
   cell="frw-$case_name"; zdir="$SCRATCH/$cell/state"; mkdir -p "$zdir"
   printf '%s\n' "$CRITIC_SEED" > "$zdir/critic.txt"; printf '%s\n' "$CRITIC_SEED" > "$zdir/critic-2.txt"
   case "$case_name" in
-    noclr) fr_run "$cell" bash "$zdir" "$PR_NOCLR"; want="비우는 스크립트가 돌지 않았다"; zl="request-framing W(스크립트 없음)" ;;
-    noroot) fr_run "$cell" bash "$zdir" ""; want="critic 출력 파일을 비우지 않았다"; zl="request-framing W(루트 모름)" ;;
-    nostate) fr_run "$cell" bash "" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더 빈 값)" ;;
-    nodir) fr_run "$cell" bash "$zdir/critic.txt" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="request-framing W(상태 폴더가 파일)" ;;
+    noclr) fr_run "$cell" bash "$zdir" "$PR_NOCLR"; want="비우는 스크립트가 돌지 않았다"; zl="intent-sync W(스크립트 없음)" ;;
+    noroot) fr_run "$cell" bash "$zdir" ""; want="critic 출력 파일을 비우지 않았다"; zl="intent-sync W(루트 모름)" ;;
+    nostate) fr_run "$cell" bash "" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="intent-sync W(상태 폴더 빈 값)" ;;
+    nodir) fr_run "$cell" bash "$zdir/critic.txt" "$SD"; want="critic 출력 파일을 비우지 않았다 — STATE_DIR 도출 실패"; zl="intent-sync W(상태 폴더가 파일)" ;;
   esac
   zerr="$(cat "$SCRATCH/$cell.err")"
   assert_eq "$(cat "$SCRATCH/$cell.rc")" "1" "$zl: rc 1 (dispatch 하지 않는다)"
@@ -453,10 +453,10 @@ done
 # 부재 · 존재 락 — 펜스 본문(주석 줄을 뺀 것)에 제자리 자르기 `: > "$STATE_DIR/` 와 자체 번호 글롭이 없고, 공유 비움
 # 스크립트를 `$STATE_DIR` 로 부르는 줄이 있다. echo 문구가 스크립트 이름을 말해도 호출 꼴은 만족시키지 못한다.
 FR_BODY="$(grep -v '^[[:space:]]*#' "$FR_FENCE")"
-assert_not_contains "$FR_BODY" ': > "$STATE_DIR/' "request-framing 부재: 펜스 본문이 critic 출력을 제자리에서 자르지 않는다 (: > \"\$STATE_DIR/…\")"
-assert_not_contains "$FR_BODY" 'critic-[0-9]*.txt' "request-framing 부재: 펜스 본문이 번호 붙은 critic 이름을 스스로 맞추지 않는다"
+assert_not_contains "$FR_BODY" ': > "$STATE_DIR/' "intent-sync 부재: 펜스 본문이 critic 출력을 제자리에서 자르지 않는다 (: > \"\$STATE_DIR/…\")"
+assert_not_contains "$FR_BODY" 'critic-[0-9]*.txt' "intent-sync 부재: 펜스 본문이 번호 붙은 critic 이름을 스스로 맞추지 않는다"
 assert_grep "$FR_BODY" 'bash "[^"]*/scripts/clear_critic_outputs\.sh" "\$STATE_DIR"' \
-  "request-framing 존재: 펜스 본문이 공유 비움 스크립트(scripts/clear_critic_outputs.sh)를 \$STATE_DIR 로 부른다"
+  "intent-sync 존재: 펜스 본문이 공유 비움 스크립트(scripts/clear_critic_outputs.sh)를 \$STATE_DIR 로 부른다"
 
 # brief 는 실패를 degrade 원장에 남긴다(Step B 로 가는 채널). 원장이 못 쓰이면 두 번째 채널.
 # 원장 = 그 셀의 상태 파일, 두 번째 채널 = 그 셀의 원장 자리(.docreview/<키>) 안.

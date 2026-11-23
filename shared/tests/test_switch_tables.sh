@@ -221,8 +221,8 @@ entries = []
 for f in sorted(glob.glob(os.path.join(root, "plugins", "*", "skills", "*", "SKILL.md"))):
     with open(f, "rb") as fh: txt = fh.read().decode("utf-8")
     if any(ln.startswith(PRE_LINE) for ln in txt.split("\n")): entries.append((f, txt))
-if len(entries) == 9: ok("사전 검사 줄이 있는 진입 skill 이 아홉이다")
-else: no("사전 검사 줄이 있는 진입 skill 이 %d 개다(기대 9)" % len(entries))
+if len(entries) == 10: ok("사전 검사 줄이 있는 진입 skill 이 열이다")
+else: no("사전 검사 줄이 있는 진입 skill 이 %d 개다(기대 10)" % len(entries))
 for f, txt in entries:
     name = os.path.relpath(f, root)
     lines = txt.split("\n")

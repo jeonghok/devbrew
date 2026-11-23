@@ -247,7 +247,7 @@ assert_contains "$ASK" '「답하지 않음」 으로 남기고 그 질문을 �
 
 # AC12 행선
 once "$WRONG" "$L_wrongspec" "AC12: L(wrongspec) 한 번"
-assert_contains "$WRONG" '/spec-distill:request-framing @<기록 파일의 레포 상대경로>' "AC12: 다음 세션 첫 줄"
+assert_contains "$WRONG" '/spec-distill:intent-sync @<기록 파일의 레포 상대경로>' "AC12: 다음 세션 첫 줄"
 assert_contains "$WRONG" '그 PR 이 머지된 뒤 친다' "AC12: 그 PR 이 머지된 뒤 친다"
 
 # 최종 리뷰 수정 — 로드맵 끝 차례(I1) · waiting clear 의 종류(M1) · 돌아왔을 때 차례(M2) · rc 2 · rc 4(M3) · 쌓인 기록 칸(M5) · 보내는 글(측정)
