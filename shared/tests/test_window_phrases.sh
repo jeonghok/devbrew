@@ -52,7 +52,7 @@ has() {   # has <파일> <글자>
 }
 LEFT='제안 선택지의 설명은 「얻음: <제안 이유> · 내줌:'
 BODY='질문 본문은 엔진의 질문 재료가 낸 「본문」 · 「상태」 · 「덧줄」 · 「전문」 줄을 그대로 싣고'
-FIN=plugins/spec-distill/skills/pm-interview/references/finishing.md
+FIN=plugins/spec-distill/skills/context-build/references/finishing.md
 has shared/style/plain-language.md '추천이 있는 질문은 질문 창만 보고 고를 수 있게 쓴다 — 질문 위 글은 안 보일 수 있다.'
 has shared/docreview/references/reviewing-document.md '질문마다 엔진의 질문 재료(`docreview_state.py ask-material`) 한 묶음을 쓴다.'
 has plugins/spec-distill/references/proceed-gate.md '질문 본문에는 결정 하나, 경고 줄 하나, 「전문: <경로>」 한 줄을 둔다.'
@@ -60,13 +60,13 @@ has plugins/spec-distill/references/proceed-gate.md "$LEFT"
 has "$FIN" '"신호 셋 — 덩어리 <n> · 파일 영역 <n> · 원문 갈래 <n>. 이 일을 어떻게 진행할까?"'
 has "$FIN" '정본(`proceed-gate.md`)의 본문 규칙대로'
 has "$FIN" "$LEFT"
-has plugins/spec-distill/skills/pm-interview/references/saturation.md '권하는 이유는 그 선택지의 얻음에 담는다'
+has plugins/spec-distill/skills/context-build/references/saturation.md '권하는 이유는 그 선택지의 얻음에 담는다'
 has plugins/spec-distill/references/redecompose.md '"다시 나눌 표의 신호 셋 — 덩어리 <n> · 파일 영역 <n> · 원문 갈래 <n>. 어떻게 할까?"'
 has plugins/spec-distill/skills/spec-review/SKILL.md '그 이유는 그 선택지의 얻음에 담는다'
 has plugins/spec-distill/skills/spec-review/SKILL.md "$BODY"
 has plugins/spec-distill/skills/reviewing-brief/SKILL.md "$BODY"
-has plugins/spec-distill/skills/request-framing/SKILL.md "$BODY"
-has plugins/spec-distill/skills/request-framing/SKILL.md "$LEFT"
+has plugins/spec-distill/skills/intent-sync/SKILL.md "$BODY"
+has plugins/spec-distill/skills/intent-sync/SKILL.md "$LEFT"
 has plugins/quality-gates/skills/quality-pipeline/SKILL.md '전부 되올리려면 기타 칸에 「전부」'
 has plugins/quality-gates/skills/quality-pipeline/SKILL.md '전문: <$RV/synth.out 의 경로>'
 has plugins/quality-gates/skills/artifact-critique/SKILL.md '권하는 이유는 「실행」의 얻음에 담는다.'

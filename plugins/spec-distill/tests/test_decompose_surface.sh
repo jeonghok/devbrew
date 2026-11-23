@@ -5,8 +5,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SD="$ROOT/plugins/spec-distill"
-FIN="$SD/skills/pm-interview/references/finishing.md"
-SKILL="$SD/skills/pm-interview/SKILL.md"
+FIN="$SD/skills/context-build/references/finishing.md"
+SKILL="$SD/skills/context-build/SKILL.md"
+RD="$SD/skills/roadmap-draft/SKILL.md"
 TPL="$SD/templates/interview-brief-template.md"
 
 win() {  # win <파일> <시작 줄 리터럴> <끝 줄 접두> — 시작 줄 다음부터 끝 줄 앞까지
@@ -24,29 +25,35 @@ DEC="$(win "$FIN" '### 분해 판단 — Step A 직전' '### Step A')"
 if [ -n "$DEC" ]; then ok "분해 판단 절이 Step A 앞에 있다"; else no "분해 판단 절 창이 비었다 — 앵커 파손"; fi
 for lit in '따로 승인할 수 있는 덩어리 수' '파일 영역 수' '사용자 원문 갈래 수' '근거 번호' \
            '컷오프는 두지 않는다' '하나로 충분해 보인다' '나누는 게 좋아 보인다' \
-           '"spec 하나로"' '"나눈다 — 분해안 보기"' \
-           '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
-           '「묶음」' '「브랜치 <설계문서 경로>」' '「결정」' '걷는 뼈대' \
-           '미배정 번호 <n> · 고아 발화 <m>' '「승인」' '「고치기」' '「spec 하나로」' '계속 고칠까요' \
-           '자동으로 끝내지 않는다' '## 분해안' '분해됨 — <로드맵 경로>'; do
+           '"spec 하나로"' '"나눈다 — 확정 뒤 로드맵 잡기로"' '「spec 하나로」'; do
   has "$DEC" "$lit" "분해 판단: $lit"
 done
+# 분해안 표 · 고치기 · 승인 · 기록은 roadmap-draft 의 `## 3.` · `## 4.` 절에 있다.
+RDT="$(win "$RD" '## 3. 분해안 표' '## 5.')"
+if [ -n "$RDT" ]; then ok "roadmap-draft: 분해안 표 · 고치기 · 승인 절을 떴다"; else no "roadmap-draft: 분해안 표 절 창이 비었다 — 앵커 파손"; fi
+for lit in '| 번호 | 이름 | 종류 | 의도 | 범위 | 의존 | 브랜치 | 경로 예약 | 배정 번호 | 받는 것 | 넘기는 것 |' \
+           '「묶음」' '「브랜치 <설계문서 경로>」' '「결정」' '걷는 뼈대' \
+           '`roadmap-table:` 줄과 그 아래 목록을 고치지 않고 표 아래에 보인다' '「승인」' '「고치기」' '「spec 하나로」' '계속 고칠까요' \
+           '자동으로 끝내지 않는다' '## 분해안' '분해됨 — <로드맵 경로>'; do
+  has "$RDT" "$lit" "분해안 표: $lit"
+done
 # 부재 · 존재 짝 — 숫자 컷오프 문면이 없다(존재 짝은 위 「컷오프는 두지 않는다」).
-cut="$(printf '%s\n' "$DEC" | grep -nE '[0-9]+ ?(개|곳|갈래|영역|덩어리)( 이상| 넘| 초과|보다 많)' || true)"
+cut="$(printf '%s\n' "$DEC$RDT" | grep -nE '[0-9]+ ?(개|곳|갈래|영역|덩어리)( 이상| 넘| 초과|보다 많)' || true)"
 assert_eq "$cut" "" "분해 판단: 숫자 컷오프 문면이 없다"
 assert_file_absent "$FIN" '이상이면 나눈다' "finishing: 「이상이면 나눈다」 문면이 없다"
 
 # ── AC3 · AC4 — 생성 · 재생성 ───────────────────────────────────────────────
-STEPA="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5')"
+STEPA="$(win "$RD" '## 5. 생성' '## ')"
 has "$STEPA" 'roadmap_write.py" create' "Step A: 생성기 create 를 부른다"
 has "$STEPA" '--plan-table' "Step A: 분해안 표를 넘긴다"
-has "$STEPA" '분해 판단 3' "Step A: 실패하면 분해안 표로 돌아간다"
-REGEN="$(win "$FIN" '#### B-R — 로드맵 다시 생성 (분해된 일만)' '#### ')"
-if [ -n "$REGEN" ]; then ok "Step B: 다시 생성 절이 있다"; else no "Step B: B-R 창이 비었다"; fi
-for lit in 'brief 를 마지막으로 쓴 직후' '언제나 한 번' '항목이 바뀌었는지와 상관없다' '## 생성 기록' \
-           '커밋 전에 도는 단계'; do
-  has "$REGEN" "$lit" "B-R: $lit"
+has "$STEPA" '`## 3.` · `## 4.`(표 고치기 · 승인)로 그 번호를 배정한 뒤' "생성: 실패하면 분해안 표로 돌아간다"
+REGEN="$(win "$RD" '## 5. 생성' '## ')"
+if [ -n "$REGEN" ]; then ok "roadmap-draft: 생성 절이 있다"; else no "roadmap-draft: 생성 절 창이 비었다"; fi
+# AC9 — 다시 생성 걸음은 없다. 실패 뒤 다시 도는 것과 이어 가며 도는 것은 같은 생성 기록 위에서 기록의 파일만 덮어쓴다.
+for lit in '## 생성 기록' '실패해 표를 고친 뒤 다시 도는 것과 끊긴 뒤 이어 가며 도는 것은 같은 생성 기록 위에서 그 기록의 파일만 덮어쓴다'; do
+  has "$REGEN" "$lit" "생성: $lit"
 done
+RDALL="$(cat "$RD")"
 # R7 이음매 — 분해안 표 · 생성 기록은 docs 상태 파일(<줄기>.state.md)에 산다. 세션 폴더의 옛 이름을 넘기지 않는다.
 has "$STEPA" '--plan-table "${BRIEF_REL%.md}.state.md"' "Step A 8: --plan-table 은 brief 줄기의 docs 상태 파일"
 has "$STEPA" '--audit "${BRIEF_REL%.md}.audit.md"' "Step A 8: --audit 도 같은 줄기에서"
@@ -63,48 +70,55 @@ for lit in '--title "<주제 한 줄>"' '--approval "<승인 원문>"'; do
   case "$STEPA" in *"$lit"*) no "Step A 8(AC11): 옛 인자 꼴이 남아 있다: $lit" ;; *) ok "Step A 8(AC11): 옛 인자 꼴 없음: $lit" ;; esac
 done
 assert_file_absent "$FIN" 'session-id>/state\.local\.md' "finishing: 세션 폴더의 옛 상태 파일 경로가 없다"
-# R7 이음매 — 로드맵 폴더는 끝내기 커밋 펜스(interview-commit)의 경로 지정에 «있을 때만» 든다. 손 커밋 안내 줄은 없다.
-CF="$(awk 'index($0,"<!-- interview-commit:begin -->"){f=1;next} index($0,"<!-- interview-commit:end -->"){f=0} f' "$FIN")"
-# 로드맵 폴더는 모델이 채우는 자리표가 아니라 brief §7 의 첫 `분해됨 — <로드맵 경로>` 줄에서 펜스가 도출한다.
-case "$CF" in *'RDIR="<'*) no "커밋 펜스: 로드맵 폴더가 모델이 채우는 자리표다" ;; *) ok "커밋 펜스: 로드맵 폴더 자리표가 없다(도출)" ;; esac
-has "$CF" "r7=\"\$(awk -v p='분해됨 — ' 'index(\$0,\"## 7.\")==1{f=1;next} f&&/^## /{exit}" "커밋 펜스: brief §7 의 분해됨 줄에서 도출"
-has "$CF" 'repo_defaults.py" check-path roadmaps_dir "$RDIR" --root "$top" || {' "커밋 펜스: 로드맵 폴더의 부모는 해결자의 roadmaps_dir(check-path)"
-has "$CF" 'repo_defaults.py" roadmap-check "$r7" --root "$top" || {' "커밋 펜스: §7 의 파일은 roadmap-check 로 잰다"
+# AC5 — 끝내기 커밋 펜스(context-commit)는 결과물 · audit · 상태 파일(과 B9 의 두 파일)만 넣는다. 로드맵 폴더는 넣지 않는다.
+CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- context-commit:end -->"){f=0} f' "$FIN")"
+[ -n "$CF" ] || CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- context-commit:end -->"){f=0} f' "$FIN")"
+[ -n "$CF" ] && ok "커밋 펜스를 떴다(양성 짝)" || no "커밋 펜스 창이 비었다 — 아래 부재 단언이 공허하다"
+for tok in 'r7=' 'RDIR' 'roadmaps_dir' 'roadmap-check' '로드맵 폴더가 없어 빼고 진행한다' '로드맵 폴더에 커밋할 파일이 없어' '로드맵 폴더를 커밋했다'; do
+  assert_not_contains "$CF" "$tok" "커밋 펜스(AC5): 로드맵 폴더 갈래 「${tok}」 가 없다"
+done
 has "$CF" 'repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 interview_dir 바로 아래(check-path)"
 has "$CF" 'repo_defaults.py" default-branch --check-remote --root "$top")" || d_rc=$?' "커밋 펜스: 기본 브랜치는 해결자가 원격과 대조해 준다"
-assert_not_contains "$CF" 'roadmap.md)' "커밋 펜스: §7 파일 이름 roadmap.md 를 요구하지 않는다(양의 짝: 위 roadmap-check)"
 assert_not_contains "$CF" 'symbolic-ref' "커밋 펜스: 기본 브랜치를 symbolic-ref 로 직접 벗기지 않는다(양의 짝: 위 default-branch)"
-has "$CF" '[ -d "$RDIR" ] || {' "커밋 펜스: 로드맵 폴더 자리는 폴더다"
-has "$CF" 'if [ -e "$RDIR" ] || [ -L "$RDIR" ]; then' "커밋 펜스: 없는 로드맵 폴더는 빼고 진행한다"
-has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스: add 경로 지정에 로드맵 폴더(있을 때만)"
-has "$CF" '상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스: commit 경로 지정에 로드맵 폴더(있을 때만)"
-has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" ${RDIR:+"$RDIR"} || {' "커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
-n_unq="$(printf '%s\n' "$CF" | grep -cE '"\$STATE_F" "\$RDIR"' || true)"
-assert_eq "$n_unq" "0" "커밋 펜스: 로드맵 폴더를 조건 없이 넣는 경로 지정이 없다"
+has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): add 경로는 세 파일과 B9 의 두 파일(있을 때만)"
+has "$CF" '상태 기록" -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): commit 경로도 같다"
+has "$CF" 'path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" || {' "커밋 펜스: 세 파일을 path-inside 로 잰다"
+assert_eq "$(printf '%s\n' "$CF" | grep -c '을 커밋했다 — ')" "1" "커밋 펜스(AC5): 성공 줄은 하나뿐이다"
+has "$CF" '[spec-distill] brief · audit · 상태 파일을 커밋했다 — ' "커밋 펜스(AC5): 성공 줄은 「brief · audit · 상태 파일을 커밋했다」"
+# 로드맵 폴더의 판정(도출 · roadmaps_dir · roadmap-check · 폴더 · 링크)은 로드맵 잡기의 커밋 펜스(roadmap-commit)에 있다.
+RDCF="$(awk 'index($0,"<!-- roadmap-commit:begin -->"){f=1;next} index($0,"<!-- roadmap-commit:end -->"){f=0} f' "$RD")"
+case "$RDCF" in *'RDIR="<'*) no "로드맵 잡기 커밋 펜스: 로드맵 폴더가 모델이 채우는 자리표다" ;; *) ok "로드맵 잡기 커밋 펜스: 로드맵 폴더 자리표가 없다(도출)" ;; esac
+has "$RDCF" 'r7="$(sed -n' "로드맵 잡기 커밋 펜스: 결과물 §7 의 분해됨 줄에서 도출"
+has "$RDCF" 'repo_defaults.py" check-path roadmaps_dir "$RDIR" --root "$top" || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더의 부모는 해결자의 roadmaps_dir(check-path)"
+has "$RDCF" 'repo_defaults.py" roadmap-check "$r7" --root "$top" || {' "로드맵 잡기 커밋 펜스: §7 의 파일은 roadmap-check 로 잰다"
+has "$RDCF" '[ -d "$RDIR" ] || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더 자리는 폴더다"
+has "$RDCF" 'path-inside --root "$top" "$BRIEF" "$STATE_F" "$RDIR" || {' "로드맵 잡기 커밋 펜스: 로드맵 폴더도 path-inside 로 잰다"
+assert_not_contains "$RDCF" 'roadmap.md)' "로드맵 잡기 커밋 펜스: §7 파일 이름 roadmap.md 를 요구하지 않는다(양의 짝: 위 roadmap-check)"
 assert_file_absent "$FIN" '함께 커밋하라 —' "finishing: 손 커밋 안내 줄(「…함께 커밋하라 — <경로들>」)이 없다"
 assert_file_absent "$FIN" 'git 이 무시하는 자리' "finishing: 상태 파일이 git 무시 자리일 수 있다는 줄이 없다"
-has "$REGEN" 'brief §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "B-R: 커밋 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
-has "$REGEN" '로드맵 다시 생성이 멈췄다. 고친 뒤 직접 커밋하라: <brief 경로> · <audit 경로> · <상태 파일 경로> · <로드맵 폴더>' "B-R: 멈춤에 「커밋하지 않았다」 줄(네 경로)"
-has "$REGEN" 'rc 2 는 사용법 오류다' "B-R: rc 2 의 처리"
-assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 「빼고 커밋한다」 대신 「빼고 진행한다」"
+has "$RDALL" '커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해' "roadmap-draft 커밋: 펜스가 §7 에서 로드맵 폴더를 도출한다고 가리킨다"
+has "$REGEN" '승인된 표는 상태 파일 `## 분해안` 절에 남아, 사유를 고친 뒤 다시 부르면 그 표에서 이어 갈 수 있다(커밋 펜스는 돌리지 않는다)' "생성: 고칠 수 없는 사유의 멈춤은 커밋하지 않고 다시 부를 길을 남긴다"
+has "$REGEN" 'rc 2 는 사용법 오류다' "생성: rc 2 의 처리"
+assert_file_absent "$FIN" '빼고 커밋한다' "finishing: 무엇을 빼고 커밋한다는 옛 문장이 없다"
 B1="$(win "$FIN" '#### B-1 — superpowers 가용성 분기' '#### ')"
-has "$B1" '분해된 일이어도 「PR 과 머지」 로 가지 않는다' "B-1: 분해된 일이어도 끝 질문의 확정은 PR 을 열지 않는다"
-has "$B1" '분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다' "B-1: 분해된 일의 끝 안내가 머지 뒤 지휘 세션을 말한다"
-# 리뷰 보강(I1) — B-A 가 더한 번호로 rc 1: 생성만 다시 돌고 A.5 · 게이트는 다시 없다
-for lit in 'Step A 8 의 명령**만** 다시 돌린 뒤' 'Step A.5 리뷰를 다시 돌리지 않고 Step B 게이트도 다시 띄우지 않는다' \
-           '`## 생성 기록` 에 적힌 파일' '`분해됨 — <로드맵 경로>` 줄을 뺀 뒤' '표로 고칠 수 없는 사유'; do
-  has "$REGEN" "$lit" "B-R(I1): $lit"
+has "$B1" '커밋 펜스(`context-commit`) → 여기서 멈춘다.' "B-1: 끝 질문의 확정은 커밋하고 멈춘다(PR 을 열지 않는다)"
+has "$B1" '나눈 일은 B-3 의 「로드맵 잡기 줄 — 나눈 일」 대로 끝낸다.' "B-1(AC5): 나눈 일의 끝 안내는 로드맵 잡기 줄"
+assert_not_contains "$B1" '지휘 세션' "B-1: 나눈 일의 끝 안내가 지휘 세션을 말하지 않는다(양성 짝: 위 단언)"
+assert_not_contains "$B1" 'PR 과 머지' "B-1: 「PR 과 머지」 를 가리키지 않는다(그 절은 로드맵 잡기에 있다)"
+# AC11 — 「spec 하나로」 의 되돌아가는 길: 생성 기록의 파일 지우기 · §7 분해됨 줄 지우기. 표로 고칠 수 없는 사유는 멈춘다.
+for lit in '`## 생성 기록` 에 적힌 파일을 지운다' '결과물 §7 의 `분해됨 — <로드맵 경로>` 줄을 지운다' '표로 고칠 수 없는 사유'; do
+  has "$RDALL" "$lit" "roadmap-draft 되돌아가기: $lit"
 done
 assert_file_absent "$FIN" '항목이 바뀌면 확정 직후' "옛 「항목이 바뀌면」 재생성 조건이 없다"
 
 # ── AC7 — 분해된 일의 다음 세션 줄 ──────────────────────────────────────────
 MARK='**다음 세션 줄 — 분해된 일 ①/② 공통**'
-DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$FIN")"
+DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$RD")"
 case "$DLINE" in
   '`/spec-distill:epic-conductor <roadmap-path>`') ok "분해된 일: 다음 세션 줄이 지휘자 호출" ;;
   *) no "분해된 일: 다음 세션 줄이 다르다: $DLINE" ;;
 esac
-n_brief="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 interview brief 로' "$FIN" || true)"
+n_brief="$(grep -cE '^[[:space:]]*> `(@<[^<>]+> )+이 context brief 로' "$FIN" || true)"
 assert_eq "$n_brief" "1" "나누지 않은 일의 brief 줄은 그대로 하나"
 
 # ── SKILL · 템플릿 ──────────────────────────────────────────────────────────
@@ -115,7 +129,7 @@ assert_file_has "$TPL" "분해됨 — <로드맵 경로>" "brief 템플릿 §7: 
 RED="$SD/references/redecompose.md"
 if [ -f "$RED" ]; then ok "redecompose.md 실재"; else no "redecompose.md 없음"; fi
 RTXT="$(cat "$RED" 2>/dev/null)"
-for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「인터뷰 다시 열기」' '지휘 세션' \
+for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「컨텍스트 쌓기 다시 열기」' '지휘 세션' \
            'roadmap_write.py" extract' '`## 분해안`' \
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다 (권장)"' '"고치기"' '"그만둔다"' \
@@ -178,7 +192,7 @@ for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸�
 done
 case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
 FIN7="$(win "$RED" '## 7. 끝내기' '## ')"
-has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「인터뷰 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「컨텍스트 쌓기 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
 case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
 assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
 UP="$(win "$RED" '## 6. 올리기' '## ')"
@@ -192,7 +206,7 @@ has "$P23" '분해 단위의 변경은 `${CLAUDE_PLUGIN_ROOT}/references/redecom
 has "$P23" '보고 후 재결정 허용' "proceed-gate: 확정 항목 단위 규약은 그대로"
 
 # ── AC11 e2e — Step A 8 펜스를 잘라 셸 메타문자가 든 제목 · 승인 원문으로 돈다 ──────
-FENCE="$(win "$FIN" '### Step A — brief 작성 (terminal 산출물, 2파일)' '### Step A.5' \
+FENCE="$(win "$RD" '## 5. 생성' '## ' \
   | awk 'index($0,"```bash"){b=""; f=1; next} index($0,"```")&&f{f=0; if(index(b,"roadmap_write.py\" create")){print b; exit}; next} f{b=b $0 "\n"}')"
 if [ -n "$FENCE" ]; then ok "Step A 8 펜스를 잘랐다"; else no "Step A 8 펜스를 자르지 못했다"; fi
 # heredoc 여는 줄마다 같은 구분자만 든 닫는 줄이 펜스에 있다 — 앞에 칸이 붙은 닫는 줄은 heredoc 을 닫지 못한다.

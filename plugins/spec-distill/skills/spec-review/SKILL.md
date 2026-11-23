@@ -4,13 +4,13 @@ description: >
   Use right after superpowers:brainstorming writes and commits a design doc
   (`...-design.md` in the design-doc folder `specs_dir`), before superpowers:writing-plans — this review takes the
   place where brainstorming, after its builder check and that check's questions, hands the document
-  over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or interview brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
+  over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or context brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
-  proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
+  proceed gate. Design-mode only — the context brief has its own reviewers (reviewing-brief).
 metadata:
   cost_class: medium
-argument-hint: <설계문서 경로> [--bundle <에픽 묶음|interview brief>]
+argument-hint: <설계문서 경로> [--bundle <에픽 묶음|context brief>]
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill spec-review)
 ---
@@ -156,7 +156,7 @@ DEVBREW_PATH_EOF
 ```
 <!-- path-assign:end -->
 
-인자에 `--bundle <에픽 묶음|interview brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path` · `bundle_arg` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
+인자에 `--bundle <에픽 묶음|context brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path` · `bundle_arg` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
 
 <!-- bundle-entry:begin -->
 ```bash
@@ -452,7 +452,7 @@ fi
 if [[ "$codex_avail" == "true" ]]; then
   runner_rc=0
   bash "$SD/scripts/run_docreview_codex_reviewer.sh" "$PROFILE" "$spec_path" "$(pwd)" "$CODEX_YAML" || runner_rc=$?
-  # 껍데기 정리 — 형제 `request-framing` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
+  # 껍데기 정리 — 형제 `intent-sync` 와 같은 `-eq 3` 이다. `-ne 0` 은 틀리다: EXIT 트랩은
   # «자기 rc 를 갖는 종료 지점»이 아니라 모든 종료에 얹혀 **원래 실패의 rc 를 그대로 두고**
   # 이번 라운드의 정직한 기록을 남긴다 — 실측: 트랩 무장 뒤 SIGTERM 이면 `rc 143` +
   # `reason: aborted_before_completion` 인 기록이 함께 나온다. `-ne 0` 은 바로 그 기록을 지운다.
@@ -720,15 +720,15 @@ fi
 |---|---|---|
 | ① | 미커밋 확인 → `/compact` 후 다음 세션 줄 (권장) — 두 줄을 노출하고 **턴 종료** | 얻음: 맥락을 비우고 계획 작성을 넓게 시작한다 · 내줌: 이 대화의 세부는 요약과 설계문서에 적힌 것만 넘어간다 |
 | ② | 미커밋 확인 → `/new` 후 같은 다음 세션 줄 — 두 줄을 노출하고 **턴 종료** | 얻음: 빈 맥락에서 계획 작성을 시작한다 · 내줌: 요약도 없어 설계문서에 없는 맥락은 사라진다 |
-| ③ | 수정 필요 — 후속 질문으로 revise per findings / `pm-interview` 재진입 / 사용자 직접 편집 분기(로드맵 에픽이면 이 에픽 다시 설계도). 수정 · `check-intent` · 다음 라운드 전에 원장 열기(`ledger-open`)를 먼저 다시 돈다(끝맺음 펜스가 표지를 풀었다) | 얻음: 넘기기 전에 지적대로 설계를 고칠 길이 열린다 · 내줌: 리뷰를 다시 돌아 계획 시작이 늦어진다 |
+| ③ | 수정 필요 — 후속 질문으로 revise per findings / `context-build` 재진입 / 사용자 직접 편집 분기(로드맵 에픽이면 이 에픽 다시 설계도). 수정 · `check-intent` · 다음 라운드 전에 원장 열기(`ledger-open`)를 먼저 다시 돈다(끝맺음 펜스가 표지를 풀었다) | 얻음: 넘기기 전에 지적대로 설계를 고칠 길이 열린다 · 내줌: 리뷰를 다시 돌아 계획 시작이 늦어진다 |
 | ④ | 멈춤 — 상태 보존하고 종료 | 얻음: 리뷰 상태를 그대로 두고 끝낸다 · 내줌: 계획이 시작되지 않아 다시 불러야 이어진다 |
 
 설명 칸은 선택지의 `description` 값이다. 지휘 세션 없이 부른 로드맵 에픽의 리뷰면 위 표의 설명에서 「계획 작성」 · 「계획 시작」 · 「계획이 시작」은 「지휘자 호출」 쪽 말로 바꿔 쓴다 — 지휘 세션이 돌린 리뷰의 승인 질문 하나는 아래 문단의 설명 그대로다.
 
-**③ 의 갈래와 로드맵 에픽.** ③ 을 고르면 후속 질문 하나로 갈래를 묻는다 — 「지적대로 고치기」(revise per findings) · 「인터뷰 다시 열기」(`pm-interview` 재진입) · 「직접 편집」(사용자 직접 편집). 설명은 이렇게 쓴다 — 「지적대로 고치기」: 얻음: 지적한 자리만 고치고 다음 라운드로 확인한다 · 내줌: 방향 자체가 틀렸다면 문장만 고쳐 근본 원인이 남는다 / 「인터뷰 다시 열기」: 얻음: 요구나 에픽 경계가 틀렸다면 앞 단계에서 다시 나눈다 · 내줌: 설계와 리뷰를 처음부터 다시 거치고 다른 에픽에 닿을 수 있다 / 「직접 편집」: 얻음: 원하는 문장을 사용자가 바로 고친다 · 내줌: 지적과 맞춰 보지 않은 수정이라 다음 리뷰 라운드에서야 검사받는다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 고른 갈래는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다. 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 그 문서는 로드맵 에픽이고, 갈래가 넷이다:
+**③ 의 갈래와 로드맵 에픽.** ③ 을 고르면 후속 질문 하나로 갈래를 묻는다 — 「지적대로 고치기」(revise per findings) · 「컨텍스트 쌓기 다시 열기」(`context-build` 재진입) · 「직접 편집」(사용자 직접 편집). 설명은 이렇게 쓴다 — 「지적대로 고치기」: 얻음: 지적한 자리만 고치고 다음 라운드로 확인한다 · 내줌: 방향 자체가 틀렸다면 문장만 고쳐 근본 원인이 남는다 / 「컨텍스트 쌓기 다시 열기」: 얻음: 요구나 에픽 경계가 틀렸다면 앞 단계에서 다시 나눈다 · 내줌: 설계와 리뷰를 처음부터 다시 거치고 다른 에픽에 닿을 수 있다 / 「직접 편집」: 얻음: 원하는 문장을 사용자가 바로 고친다 · 내줌: 지적과 맞춰 보지 않은 수정이라 다음 리뷰 라운드에서야 검사받는다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 고른 갈래는 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다. 설계문서 frontmatter 에 `roadmap:` 줄이 있으면 그 문서는 로드맵 에픽이고, 갈래가 넷이다:
 
 - 「이 에픽 다시 설계」 를 더한다 — 지적이 이 에픽의 묶음 안에서 끝날 때(다른 에픽의 범위 · 의존 · 경로 예약을 바꾸지 않을 때)의 길이다. 이 skill 을 여기서 끝내고, 같은 세션에서 같은 묶음(`--bundle` 값) · 지금 설계문서 · 이번 라운드의 지적을 입력으로 Skill superpowers:brainstorming 을 다시 시작한다. 설계문서는 같은 경로에 고쳐 쓰고 커밋한 뒤 그 경로 뒤에 `--bundle <묶음>` 을 붙여 이 skill 을 다시 부른다 — 새 경로에 쓰면 번호 대조가 같은 묶음의 설계문서 둘(「여러 spec」)로 경고한다. 묶음 · 로드맵은 고치지 않는다. 설명은 「얻음: 같은 묶음 안에서 설계문서를 새로 고쳐 쓴다 · 내줌: 묶음과 로드맵은 못 고쳐 다른 에픽 경계의 문제는 안 풀린다」다.
-- 「인터뷰 다시 열기」 갈래는 인터뷰를 다시 열지 않고 같은 로드맵 위의 재분해 절차로 간다 — 지적이 다른 에픽의 경계에 닿을 때(범위가 다른 에픽으로 옮겨 가거나 새 에픽이 필요할 때)의 길이다.
+- 「컨텍스트 쌓기 다시 열기」 갈래는 컨텍스트 쌓기를 다시 열지 않고 같은 로드맵 위의 재분해 절차로 간다 — 지적이 다른 에픽의 경계에 닿을 때(범위가 다른 에픽으로 옮겨 가거나 새 에픽이 필요할 때)의 길이다.
 
 두 갈래 중 이번 지적에 맞는 쪽 라벨에 「(권장)」을 달고 그 이유는 그 선택지의 얻음에 담는다 — 고르는 것은 사용자다. 재분해 절차는 아래 파일이다:
 
@@ -738,7 +738,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/redecompose.md
 
 그 파일의 플러그인 루트 변수(`CLAUDE_PLUGIN_ROOT`)는 치환되지 않은 채로 온다 — 읽거나 실행할 때 `${CLAUDE_PLUGIN_ROOT}` 로 바꿔 넣는다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 표 행을 고치기 전에 — 이 라운드 게이트에서 이 되돌림의 근거가 된 채택 결정이 있으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors '<번호 대조 절 앵커>' '<내용을 더한 절 앵커>'` 로 이 되돌림이 고칠 절을 모두 결정에 묶는다(원장 쓰기 — 진입 skill 의 표지 확인 줄 다음에만, 같은 Bash 호출에서). 내용을 더한 절은 아래 「자리가 없으면 그 내용을 설계에 더한다」 의 절이다 — 더할 절이 없으면 번호 대조 절만 묶고, 새 절을 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다. `declare-related` 가 rc 0 이 아니면(묶지 못했다) 엔진이 낸 사유를 그대로 보이고, 채택한 결정이 없을 때와 같이 사용자에게 먼저 알린다. 채택한 결정이 없으면 고친 행과 내용을 더한 절은 다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다 — 그 사실을 사용자에게 먼저 알리고, 그 게이트에서 「고친 대로 둠」으로 닫는다. 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「인터뷰 다시 열기」(재분해) 갈래를 권한다.
+**기타 칸 — 기각 번호 되돌리기.** 후속 질문의 기타 칸에 사용자가 게이트 앞 글의 기각 번호(N18)를 적으면 그 번호를 「반영」으로 되돌린다 — 먼저 원장 열기를 다시 돈다(어느 편집보다 앞). 표 행을 고치기 전에 — 이 라운드 게이트에서 이 되돌림의 근거가 된 채택 결정이 있으면 `docreview_state.py declare-related --state-dir D --decision <D#> --anchors '<번호 대조 절 앵커>' '<내용을 더한 절 앵커>'` 로 이 되돌림이 고칠 절을 모두 결정에 묶는다(원장 쓰기 — 진입 skill 의 표지 확인 줄 다음에만, 같은 Bash 호출에서). 내용을 더한 절은 아래 「자리가 없으면 그 내용을 설계에 더한다」 의 절이다 — 더할 절이 없으면 번호 대조 절만 묶고, 새 절을 만들면 그 자리를 `insert-after:<그 앞 절 앵커>` 로 묶는다. `declare-related` 가 rc 0 이 아니면(묶지 못했다) 엔진이 낸 사유를 그대로 보이고, 채택한 결정이 없을 때와 같이 사용자에게 먼저 알린다. 채택한 결정이 없으면 고친 행과 내용을 더한 절은 다음 게이트에 「허가 없이 바뀜」 결정으로 다시 온다 — 그 사실을 사용자에게 먼저 알리고, 그 게이트에서 「고친 대로 둠」으로 닫는다. 그다음 `## 번호 대조` 표의 그 행을 「반영」 과 설계문서의 자리로 고치고(자리가 없으면 그 내용을 설계에 더한다), `## 결정 기록` 에 `- B<n> · 결정 · <YYYY-MM-DD> · 기각 되돌림 <번호> — 「<사용자가 적은 글 그대로>」` 한 줄을 남긴다(`B<n>` 은 그 문서 `## 결정 기록` 의 다음 B 번호). 이 줄은 손으로 쓰지 않고 아래 결정 줄 펜스로 쓴다 — 손으로 쓴 줄은 다음 라운드에 「허가 없이 바뀜」 질문으로 돌아온다. 그 뒤 「지적대로 고치기」 와 같은 길로 다음 라운드를 돈다. 로드맵 에픽이 아니어도 같다. 적은 번호가 기각 목록에 없으면 그 사실을 보이고 다시 묻는다. 기각 사유가 다른 에픽을 가리키는 번호는 되돌리면 그 에픽의 경계에 닿으니 재분해 신호로 보고, 바로 되돌리지 말고 「컨텍스트 쌓기 다시 열기」(재분해) 갈래를 권한다.
 
 **결정 줄 펜스.** 사람이 내린 결정 한 줄(기각 되돌림 · 재결정 · 재분해)을 설계문서 `## 결정 기록` 끝에 엔진이 쓴다 — 엔진이 쓴 줄이라 다음 라운드의 얼림 검사를 지난다. 원장 열기 다음에 돈다. 펜스는 그 문서가 사는 레포의 원장으로 쓰고, 지금 작업 폴더가 다른 레포면 그 사실을 알린다(같은 레포의 다른 worktree 는 원장이 같아 알리지 않는다). 문서가 git 작업 트리 밖이면 지금 작업 폴더 레포의 원장에 쓴다 — 원장 열기와 같은 원장이고, 쓸 때마다 git 밖이라는 줄이 난다. 펜스 앞에 `spec_path` 의 경로 대입 줄을 붙이고, 두 heredoc 자리에 글을 그대로 넣는다 — `<결정 줄>` 자리에는 줄(앞의 「- 」 와 끝의 「 — 「…」」 를 뺀 것), `<사용자가 적은 글 그대로>` 자리에는 사용자가 적은 글. 줄도 말도 따옴표 안에 넣지 않는다(heredoc 이 글자 그대로 넘긴다). 넣는 글에 구분 줄(`DEVBREW_DECISION_LINE_EOF` · `DEVBREW_DECISION_QUOTE_EOF`)과 똑같은 줄이 있으면 그 자리의 여는 줄과 닫는 줄의 구분자를 글에 없는 다른 낱말로 함께 바꾼다. 엔진이 `- <줄> — 「<사용자 말>」` 한 줄을 쓴다. 결과는 셋이다.
 
@@ -805,7 +805,7 @@ python3 "$SD/scripts/docreview_state.py" log-decision --state-dir "$STATE_DIR" -
   거치지 않는 예외 경로(`### 대상 부재` — `## 입력` 의 상태 리졸버·session id 출구는 그 하위 경우다 ·
   `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
   게이트-less silent 종료는 금지다.
-- **재결정 규약 (P23)** — `decide` 처분이 인터뷰가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
+- **재결정 규약 (P23)** — `decide` 처분이 컨텍스트 쌓기가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
   않는다. 설계문서 `## 결정 기록` 에 *원래 / 재결정 후보 / 근거* 한 줄을 결정 줄 펜스로 적어(사용자 말은 그
   결정을 고른 답) 다음 라운드로 들고 가고,
   확정이 실제로 뒤집히는 자리는 이 승인 게이트 하나다 — 사용자가 판정한다. 하류의 반증은 보고의

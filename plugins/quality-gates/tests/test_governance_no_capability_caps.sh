@@ -339,8 +339,8 @@ for p in plugins/spec-distill/agents/doc-recritic.md plugins/plugin-audit/agents
          plugins/plugin-audit/skills/plugin-audit/SKILL.md; do
   [ -f "$p" ] && ok "F6 AC13: 예시 이름 실재 — $p" || no "F6 AC13: 예시 이름이 없다 — $p"
 done
-RF="plugins/spec-distill/skills/request-framing/SKILL.md"
-assert_not_contains "$(cat "$RF")" '도구를 막을 수단이 없' "F6 AC18: request-framing 에 옛 믿음 문장이 없다"
+RF="plugins/spec-distill/skills/intent-sync/SKILL.md"
+assert_not_contains "$(cat "$RF")" '도구를 막을 수단이 없' "F6 AC18: intent-sync 에 옛 믿음 문장이 없다"
 assert_contains "$(cat "$RF")" '(does not — cannot 이 아닙니다. `allowed-tools` 는 제한이 아니고, 이 skill 은 도구를 빼는 키를 쓰지 않습니다.' "F6 AC18: 그 자리에 새 문장(양)"
 CC="docs/git-workflow/commit-conventions.md"
 assert_not_contains "$(cat "$CC")" 'release-please' "F6 AC17: 자동 릴리스 도구가 판을 올린다는 문장이 없다"
