@@ -2,7 +2,7 @@
 # AC7 (revised) — structural verification that codex-disabled paths
 # behave identically to pre-feature state.
 #
-# Three checks:
+# Four checks:
 #   1. Probe with kill switch returns false (uses AC1 test's logic)
 #   2. SKILL.md documents codex as a Tier B availability-floor (dispatched on
 #      every non-trivia iteration when detected, regardless of scope/depth) with
@@ -10,6 +10,8 @@
 #      standard/deep-only gate + v1.10.x byte-equivalent fallback).
 #   3. 원장(codex-blessed-red.txt)에 등재된 red 만 다시 돌려 지문을 대조한다 —
 #      등재되지 않은 실패는 전체 러너가 그 테스트를 직접 돌려 자기 `FAILED` 줄로 낸다.
+#   4. 임시 사본에 이 파일 자신과 가짜 테스트 · 가짜 원장을 두고 셋째 확인만 돌려
+#      지문 일치 · 불일치 · stale 갈래를 본다(`CODEX_COMPAT_INNER=1` 안쪽 실행은 셋째만 돈다).
 
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +19,11 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 pass=0; fail=0
 
+# 안쪽 실행(CODEX_COMPAT_INNER=1)은 셋째 확인만 돈다.
+INNER="${CODEX_COMPAT_INNER:-}"
+
 # Check 1: kill switch produces skip
+if [[ -z "$INNER" ]]; then
 out="$(DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 bash "$PLUGIN_ROOT/scripts/detect_codex.sh")"
 if echo "$out" | grep -q 'skip_reason: kill_switch'; then
   echo "  PASS: kill switch -> codex_available: false"
@@ -26,6 +32,7 @@ else
   echo "  FAIL: kill switch did not produce skip"
   echo "$out" | sed 's/^/    /'
   fail=$((fail + 1))
+fi
 fi
 
 # Check 2 (v2.13.0 availability-floor contract): SKILL.md documents codex as a
@@ -36,6 +43,7 @@ fi
 # Three sub-checks; all must pass. Anchors are body-unique (mutation-tested).
 SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 c2_fail=0
+if [[ -z "$INNER" ]]; then
 
 # 2a: SKILL.md documents codex as the 다른 전제 각도 (different-premise angle)
 if grep -qE '다른 전제 각도 — codex \(사용 가능하면 부른다' "$SKILL_MD"; then
@@ -67,6 +75,7 @@ if [[ $c2_fail -eq 0 ]]; then
   pass=$((pass + 1))
 else
   fail=$((fail + 1))
+fi
 fi
 
 # Check 3: 원장(codex-blessed-red.txt)에 등재된 red 만 다시 돌려 지문을 대조한다 —
@@ -161,6 +170,50 @@ else
     [[ -n "$line" ]] && echo "  FAIL: $line"
   done <<< "$c3_fail"
   fail=$((fail + 1))
+fi
+
+# Check 4: 다시 돌리는 갈래(셋째 확인)를 가짜 원장으로 돌린다 — 실제 원장이 0건이면 그 갈래가
+# 스위트 어디에서도 돌지 않는다. 임시 사본에 이 파일 자신과 가짜 테스트 · 가짜 원장을 두고
+# CODEX_COMPAT_INNER=1 로 안쪽을 돌려 안쪽의 종료 코드와 출력을 본다. 안쪽은 넷째 확인을 돌지 않는다.
+if [[ -z "$INNER" ]]; then
+  C4_TMP="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$C4_TMP"' EXIT
+  mkdir -p "$C4_TMP/tests"
+  cp "${BASH_SOURCE[0]}" "$C4_TMP/tests/$SELF"
+  printf '%s\n' 'cat >/dev/null; echo "  ✗ red-a"; exit 1' > "$C4_TMP/tests/test_fake_red.sh"
+  printf '%s\n' 'echo "  ✗ red-b"; exit 1' > "$C4_TMP/tests/test_fake_red2.sh"
+  printf '%s\n' 'exit 0' > "$C4_TMP/tests/test_fake_green.sh"
+  # 지문은 안쪽이 잴 때와 같은 경로 치환을 받도록 이 파일의 fingerprint 로, 같은 임시 사본 경로에서 잰다.
+  c4_inner() {   # 안쪽 원장 내용(표준 입력) → 출력 + 마지막 줄 `rc=<n>`
+    cat > "$C4_TMP/tests/codex-blessed-red.txt"
+    CODEX_COMPAT_INNER=1 bash "$C4_TMP/tests/$SELF" 2>&1 </dev/null
+    echo "rc=$?"
+  }
+  fp_red="$(PLUGIN_ROOT="$C4_TMP" fingerprint "$C4_TMP/tests/test_fake_red.sh")"
+  fp_red2="$(PLUGIN_ROOT="$C4_TMP" fingerprint "$C4_TMP/tests/test_fake_red2.sh")"
+  c4_fail=""
+  out_a="$(printf '%s\n' "test_fake_red.sh $fp_red" "test_fake_red2.sh $fp_red2" | c4_inner)"
+  case "$out_a" in
+    *"PASS: 등재 2건"*"rc=0") : ;;
+    *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 맞는 지문 둘이 통과하지 않았다"$'\n' ;;
+  esac
+  out_b="$(printf '%s\n' "test_fake_red.sh ${fp_red2}" | c4_inner)"
+  case "$out_b" in
+    *"해시불일치"*"rc=1") : ;;
+    *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 틀린 지문이 해시불일치로 실패하지 않았다"$'\n' ;;
+  esac
+  out_c="$(printf '%s\n' "test_fake_green.sh $fp_red" | c4_inner)"
+  case "$out_c" in
+    *"stale 등재"*"rc=1") : ;;
+    *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 통과하는 등재가 stale 등재로 실패하지 않았다"$'\n' ;;
+  esac
+  if [[ -z "$c4_fail" ]]; then
+    echo "  PASS: 다시 돌리는 갈래 — 지문 일치 · 불일치 · stale 을 가짜 원장으로 확인"
+    pass=$((pass + 1))
+  else
+    printf '%s' "$c4_fail"
+    fail=$((fail + 1))
+  fi
 fi
 
 echo ""

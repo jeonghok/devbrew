@@ -56,7 +56,7 @@ mkdir -p "$W/docs/iv"
 cat > "$W/docs/iv/t-seed-interview.md" <<'MD'
 ---
 type: interview-seed
-next_phase: spec-distill:pm-interview
+next_phase: spec-distill:context-build
 audit_file: t-seed-interview.audit.md
 ---
 

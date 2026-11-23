@@ -4,7 +4,7 @@
 name: doc-critic-web
 description: >
   Use this agent to review a document whose profile allows web evidence (`web: true` —
-  today the interview brief) in two layers — big-picture coherence first, then detail
+  today the context brief) in two layers — big-picture coherence first, then detail
   completeness — attaching a disposition (decide · ask · fix · defer · drop) and an edit scope
   to every finding. May search the web (WebSearch · WebFetch) for external evidence on layer 1
   (direction) only, citing URLs. Reads the document and its profile; never edits files (Law 2

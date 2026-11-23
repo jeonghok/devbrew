@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/request-framing/SKILL.md
+# guards: shared/docreview/references/reviewing-document.md plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/intent-sync/SKILL.md
 #
 # 라운드 게이트 항목(`decide` 묶음 + 차단 `ask`)이 한 `AskUserQuestion` 호출에 다 안
 # 들어가면 질문 최대 4개씩 연속 호출로 나눈다는 규칙(Task 2d · Park P4 · 사용자 결정)이
@@ -37,7 +37,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/skills/reviewing-brief/SKILL.md"
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   exit 0
 fi
 
@@ -120,7 +120,7 @@ assert_eq "$(printf '%s\n' "$REF_BODY" | grep -cF -- '권하는 쪽이 있으면
 # 쉬운 말 출력 PR 2 (계획 Q2) — 렌더 첫 줄은 첫 호출 앞 글에 한 번, 질문엔 결정 하나와 경고 개수 한 줄.
 NEWRULE='렌더 첫 줄(상태와 경고)은 첫 호출 **앞 글**에 한 번 쓴다'
 OLDRULE='매 호출 첫 질문의 첫 줄은 렌더'
-for f in "$REF" "$SKILL" "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" "$REPO_ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"; do
+for f in "$REF" "$SKILL" "$REPO_ROOT/plugins/spec-distill/skills/reviewing-brief/SKILL.md" "$REPO_ROOT/plugins/spec-distill/skills/intent-sync/SKILL.md"; do
   assert_eq "$(grep -cF -- "$NEWRULE" "$f" || true)" "1" "Q2: $f 가 렌더 첫 줄을 앞 글에 한 번 쓴다고 적는다"
   assert_eq "$(tr '\n' ' ' < "$f" | grep -cF -- "$OLDRULE" || true)" "0" "Q2: $f 에 옛 규칙(매 호출 첫 줄 = 렌더 첫 줄)이 없다"
   assert_eq "$(grep -cF -- '다른 결정의 답에 따라 달라지는 결정은 다음 호출로 미룬다' "$f" || true)" "1" "Q2: $f 가 「무관한 결정」의 뜻을 적는다"

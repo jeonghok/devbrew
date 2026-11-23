@@ -103,7 +103,7 @@ class SeedFrontmatterGrammar(Tmp):
         self.assertNotIn("x.y", out)
 
     def test_positive_control_normal_frontmatter_passes(self):
-        fm = ["type: interview-seed", "date: 2026-09-01", "next_phase: spec-distill:pm-interview",
+        fm = ["type: interview-seed", "date: 2026-09-01", "next_phase: spec-distill:context-build",
               "audit_file: docs/superpowers/interview/a.audit.md", "name:", "audit_file: <basename>.audit.md"]
         self.assertEqual(self.parse(fm).rejected, [])
         seed = self.write("s.md", self.FM % "\n".join(fm))
@@ -410,8 +410,8 @@ class Section2MultiLineAnswerWriterContract(Tmp):
 
     def test_template_and_skill_carry_the_one_line_contract(self):
         tpl = (HERE.parent / "templates" / "interview-seed-audit-template.md").read_text(encoding="utf-8")
-        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
-        for name, text, lead in (("템플릿", tpl, "두 칸의 값은"), ("request-framing SKILL", skill, "«당신이 답한 것» 값과 «사용자가 적은 말» 값은")):
+        skill = (HERE.parent / "skills" / "intent-sync" / "SKILL.md").read_text(encoding="utf-8")
+        for name, text, lead in (("템플릿", tpl, "두 칸의 값은"), ("intent-sync SKILL", skill, "«당신이 답한 것» 값과 «사용자가 적은 말» 값은")):
             with self.subTest(name):
                 i = text.find(lead)
                 self.assertGreaterEqual(i, 0, "한 줄 계약 문장이 없다")
@@ -421,7 +421,7 @@ class Section2MultiLineAnswerWriterContract(Tmp):
                 self.assertIn("한 줄", near)
 
     def fence(self, kind):
-        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (HERE.parent / "skills" / "intent-sync" / "SKILL.md").read_text(encoding="utf-8")
         i = skill.index("# audit `## 2` 답 " + kind)
         start = skill.rfind("```bash\n", 0, i) + len("```bash\n")
         return skill[start:skill.index("\n```", i)].replace("<n>", "1")
@@ -473,7 +473,7 @@ class Section2MultiLineAnswerWriterContract(Tmp):
                 self.assertIn("플러그인 루트가 비었다", r.stderr)
 
     def test_state_table_lists_the_answer_file_for_question_rounds(self):
-        skill = (HERE.parent / "skills" / "request-framing" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (HERE.parent / "skills" / "intent-sync" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("said-r<n>.txt` — 질문 라운드마다", skill)
 
     def test_one_line_collapses_every_line_break(self):

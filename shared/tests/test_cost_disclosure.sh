@@ -60,7 +60,7 @@ hits="$(scan "$ROOT" "$TMP/all.lst")"
 assert_eq "$hits" "" "(가) SKILL.md · CLAUDE.md · 철학 문서에 지출 승인 문구가 없다"
 
 # 양성 — 상한을 여는 질문은 걸리지 않는다(훑은 목록에 들었고 문구가 있고 scan 이 내지 않는다).
-for pair in 'plugins/spec-distill/skills/pm-interview/SKILL.md|닿으면 연장을 묻는다' \
+for pair in 'plugins/spec-distill/skills/context-build/SKILL.md|닿으면 연장을 묻는다' \
             'plugins/spec-distill/skills/reviewing-brief/SKILL.md|「추가 라운드 1회 열기」'; do
   f="${pair%%|*}"; lit="${pair#*|}"
   assert_eq "$(grep -cxF -- "$f" "$TMP/find.lst")" "1" "(가) 양성: ${f} 가 훑은 목록에 든다"

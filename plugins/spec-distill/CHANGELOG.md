@@ -1,11 +1,44 @@
 # Changelog
 
-## [8.31.1] — 2026-11-22
+## [9.0.1] — 2026-11-24
 
 ### Security
 - `team_layout.py check` 가 원자료 사본의 출처를 로드맵 `source_brief` · 그 audit · framing audit 로 좁힌다. 기준 · HEAD 의 조상이 아닌 출처 커밋은 기준과 견준다. 다른 brief 로 부른 `original` 은 로드맵이 있는 폴더에서 거절된다(PR #283 리뷰). 브랜치에서 결과물을 고쳤다 되돌린 커밋은 지나간다(형식 정본에 공시). 이미 깐 레포가 할 일: 원자료 사본에 다른 brief 구간이 든 팀 폴더는 검사가 1 로 끝난다.
 - 세션 기록 픽스처의 개인정보 잠금이 모든 사전 열쇠를 본다(PR #305 리뷰).
 - `conductor_status.py show` 가 「이 기계가 쓴 것으로 적힌 고침 n」 을 낸다(`씀` 으로 적힌 병합도 목록에 든다). 감시 경로를 바꾼 `씀` 커밋이 있으면 `sync` 가 확인 기록을 접지 않고 `confirm --confirmed` 로만 접는다 — `rules-reset` 은 대기 줄을 바꾼 `씀` 커밋이 없을 때만 접고, 있으면 「이 기계가 쓴 것으로 적힌 고침이 남아 있다 — 보인 뒤 confirm 한다」 를 낸다(규칙 쪽 `씀` 고침은 그 명령이 사본을 지우며 되돌린다). 표시 없는 `confirm` 은 그 목록이 있으면 `show` 와 같은 목록 줄과 「확인할 끝」 을 함께 내고, 낡은 끝으로 부른 `confirm --confirmed` 는 그 목록이 있으면 1 로 끝나며 기록하지 않는다. 보내는 글 · 틀의 금지 줄 · 머지 전 승인 기록 다시 보이기 · 상태 브랜치 문서가 그 목록과 한계를 적는다 — `확인` 줄을 직접 심는 길은 드러나지 않고 아직 막는 장치는 없다(PR #314 리뷰).
+
+## [9.0.0] — 2026-11-22
+
+### Removed
+- 호출 이름 둘을 별칭 없이 바꿨다 — `request-framing` → `intent-sync`, `pm-interview` → `context-build`. 옛 명령 줄 `/spec-distill:request-framing …` · `/spec-distill:pm-interview …` 은 이 판부터 돌지 않는다. 업그레이드 전에 만든 seed 의 안내 줄(옛 이름)도 돌지 않으니, 새 이름으로 부르면 그 seed 는 그대로 읽힌다.
+
+### Added
+- 진입 skill `roadmap-draft` — `/spec-distill:roadmap-draft @<결과물 경로>`. 확정 · 커밋한 brief 를 에픽 표 · 승인 · 로드맵 생성 · 커밋 · PR · 머지 · 지휘자 줄로 잇는다. skill 안 reference `skills/roadmap-draft/references/pr-merge.md` 가 PR 과 머지 펜스를 맡는다.
+- `scripts/roadmap_write.py check` — 에픽 수 · 위험을 읽기만 하고 세는 확인.
+- `scripts/roadmap_draft_entry.py` — roadmap-draft 진입 확인.
+
+### Changed
+- 인터뷰를 두 단계로 갈랐다 — `context-build`(확정 · 커밋까지, 끝에 roadmap-draft 줄을 낸다)와 `roadmap-draft`(표 · 승인 · 생성 · 커밋 · PR · 머지 · 지휘자 줄).
+- 커밋 범위 — context-build 는 결과물 · audit · 상태 파일을, roadmap-draft 는 로드맵 폴더와 상태 파일을 커밋한다.
+- PR 은 roadmap-draft 가 로드맵을 커밋했을 때만 묻는다. 머지가 확인되면 지휘자 줄을 늘 보이고 턴을 끝낸다.
+- 「나눈다」 선택지 글자는 `나눈다 — 확정 뒤 로드맵 잡기로` 이다. 단계 낱말도 새 이름으로 맞췄다.
+- 펜스 표지와 판결 글자 — `context-commit` · `roadmap-pr*` · `roadmap-merge*` 와 새 `roadmap-commit`. 옛 판결 글자를 읽는 호환은 없다.
+
+### Fixed
+- 커밋 펜스의 거절 갈래가 framing 기록 · seed 를 손 목록에 싣는다.
+- seed 경로를 상태 파일에서 읽는다.
+- 원자료 싣기 펜스가 상태 파일이 없으면 멈춘다.
+- 소개 문구 · 본문 첫 문단 · `## 종료` 의 종료 조건 문장이 모델 판단 건너뜀을 함께 말한다.
+- 다음 세션 명령 정본(`references/proceed-gate.md`)의 받는 쪽 표에 로드맵 잡기 행이 생겼고, 결과물 경로에 공백이 있을 때의 안내가 로드맵 잡기가 받는 꼴(루트 기준 상대경로)을 말한다.
+
+## [8.32.0] — 2026-11-22
+
+### Changed
+- 머지 전 대조(`merge_check.py`, 테스트 명령 경로)가 합친 사본을 먼저 돈다. 합친 사본이 깨끗하면 기준 사본을 돌지 않고, 실패 이름이 있으면 그 목록을 환경 변수 `SUITE_ONLY_FAILED_FILE` 로 건네 기준 사본을 돈다(목록을 아는 러너는 그 대상만, 모르는 명령은 전부). 이름을 뽑지 못하면 지금처럼 전부 돈다. 기준 사본을 전부 돌지 않은 대조는 「기본 브랜치에만 있는 실패(고쳐짐)」 를 「재지 않았다」 로 낸다. 판정과 종료 코드는 같다. 합친 사본 · 기준 사본을 전부 돌 때는 호출한 쪽의 그 변수를 빼고 돈다. 머리 줄의 꼬리는 기준 사본을 어떻게 돌렸는지(돌리지 않았다 · 합친 사본의 실패 목록을 건네 돌렸다 · 목록 없이 전부 돌렸다) 그대로 말한다(그래서 테스트 명령 경로의 머리 줄은 대조가 끝난 뒤에 나온다).
+- 지휘 절차서(`references/conducting.md`)의 스위트 대조 설명.
+
+### Fixed
+- 대조가 테스트에 주는 임시 폴더를 git 작업 트리 밖에 만든다(못 찾으면 알리고 실행 폴더 안).
 
 ## [8.31.0] — 2026-11-22
 

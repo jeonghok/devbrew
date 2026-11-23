@@ -37,9 +37,9 @@ fi
 
 새 근거 또는 바뀐 전제가 있으면 같은 방향도 다시 부르고, 입력이 같으면 부르지 않는다 — 사용자가 받아들인 `premise_list_challenge` 도 바뀐 전제다. 횟수가 아니라 입력의 반복으로 멈춘다(AP16).
 
-두 슬롯은 `pm-interview/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
+두 슬롯은 `context-build/SKILL.md` 의 `## 조사 주장 계약` 펜스와 `orchestration.open_decisions[]`
 에서 온다. 계약 펜스의 rc 가 0 이 아니면 **dispatch 하지 않는다** — `fail-closed` 가 막는 것은 «그
-dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
+dispatch» 이고 컨텍스트 쌓기가 아니다. 그때 공시는 loud advisory + 수동 의심 게이트 전환 이고, 아래
 「Web 부재 시 graceful degradation」 과 같은 경로로 간다(§5 항목은 사용자 판단을 근거로 기록하고
 계약 배달 실패 사유를 명시한다).
 
@@ -59,7 +59,7 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
 - **리포 주장(`repo_claims[]`)에는 확인 줄도 함께 남긴다** — 그 라운드의 state `## R<n>` «지금 이해» 아래에도 함께 남긴다:
   `- 확인 RC<n> — {확인|반증|미확인} — <경로>#<앵커> — <사유>`.
   확인 «행위» 는 한 번이고(이 Step 2 가 V1 의 특수 경우다) 기록이 두 자리다: audit §3 은 이
-  steelman 블록의 문맥을, 확인 줄은 인터뷰 전체의 무조건 원장을 갖는다(종료 때 finishing 이 audit §5 로
+  steelman 블록의 문맥을, 확인 줄은 컨텍스트 쌓기 전체의 무조건 원장을 갖는다(종료 때 finishing 이 audit §5 로
   옮긴다). 옮기지 않으면 구조 게이트의 확인-줄 ∀ 술어가 그 `RC<n>` 을 이름으로 대며 막는다 — 그 술어는 주장이 steelman 에서
   왔는지 보지 않는다.
 - 반증된 항목은 4-block 에서 빼지 않고 `[반증됨]` 라벨을 단다 — 4-block 의 반증 라벨은 이 하나뿐이고,
@@ -89,9 +89,9 @@ dispatch» 이고 인터뷰가 아니다. 그때 공시는 loud advisory + 수�
   아래에 `case_for_alternative` 와 `case_for_current` 를 verbatim 으로. evidence 는 항목마다 `[부착 P<n>]` 또는 `[비부착]`
   라벨, 반증된 것은 `[반증됨]` 추가. `repo_claims` 도 항목마다 `[확인]` / `[반증됨]` / `[미확인]` 라벨과 함께 보인다.
   마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
-- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. 설명은 이렇게 쓴다 — 「유지」: 얻음: 의심한 방향을 그대로 두고 인터뷰를 잇는다 · 내줌: 대안이 더 맞았다면 대안을 기각한 채 원안이 굳는다 / 「보완」: 얻음: 방향은 두고 반박된 전제만 버려 고친다 · 내줌: 뿌리가 틀렸다면 덧댄 방향이 그대로 남는다 / 「전환」: 얻음: 대안 쪽으로 방향을 바꿔 인터뷰를 잇는다 · 내줌: 원안을 기각하게 돼, 원안이 맞았다면 그쪽 근거가 버려진다 / 「보류」: 얻음: 아무것도 버리지 않고 대안을 열린 질문으로 남긴다 · 내줌: 방향이 정해지지 않아 뒤 라운드에서 다시 물어야 한다. 보완을 고른 뒤 버릴 것을 되묻는 질문은 내줌에 담지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
+- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. 설명은 이렇게 쓴다 — 「유지」: 얻음: 의심한 방향을 그대로 두고 컨텍스트 쌓기를 잇는다 · 내줌: 대안이 더 맞았다면 대안을 기각한 채 원안이 굳는다 / 「보완」: 얻음: 방향은 두고 반박된 전제만 버려 고친다 · 내줌: 뿌리가 틀렸다면 덧댄 방향이 그대로 남는다 / 「전환」: 얻음: 대안 쪽으로 방향을 바꿔 컨텍스트 쌓기를 잇는다 · 내줌: 원안을 기각하게 돼, 원안이 맞았다면 그쪽 근거가 버려진다 / 「보류」: 얻음: 아무것도 버리지 않고 대안을 열린 질문으로 남긴다 · 내줌: 방향이 정해지지 않아 뒤 라운드에서 다시 물어야 한다. 보완을 고른 뒤 버릴 것을 되묻는 질문은 내줌에 담지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 
-pm-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
+context-build 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
 #### Step 4 — 기록
 
@@ -109,10 +109,11 @@ payload §5 항목은 **사용자가 고른 verdict 별로** 형식이 정해지
 audit §3 `#### ST<N> — <요지>` 블록 순서: dispatch 입력(goal S-id · 전제 목록 · 제약 S-id 범위) → builder 출력 verbatim
 → 게이트-전 확인 → 사용자 선택 S<N>. payload §5 와 audit §3 은 `ST<N>` id 로 맞물린다(bijection A). frontmatter 에는
 별도 필드를 두지 않는다.
+컨텍스트 쌓기 중에는 그 재료(넘긴 입력 · 확인한 것 · 사용자 선택)를 상태 파일의 `## 반대 논거 기록 대기` 절에 위 순서의 `#### ST<N> — <요지>` 블록으로 적고, Step A 가 그 절에서 audit §3 으로 옮긴다(`state-file.md` 「상태 파일 본문의 절」).
 
 #### Step 5 — steelman 0건으로 skepticism 을 닫을 때
 
-의심 trigger 가 한 번도 발화하지 않은 인터뷰는 payload §5 에 `검토 —` 접두 항목 하나로 skepticism 을 닫는다:
+의심 trigger 가 한 번도 발화하지 않은 컨텍스트 쌓기는 payload §5 에 `검토 —` 접두 항목 하나로 skepticism 을 닫는다:
 
 `- 검토 — steelman 0건: 검토한 방향 <N>개 · 전제 <P1..Pn> · trigger 후보 <무엇을 봤는가> → 기각 이유 <왜 trigger 가 아닌가>`
 

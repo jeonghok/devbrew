@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 export PYTHONDONTWRITEBYTECODE=1
 SD="$ROOT/plugins/spec-distill"
 EC="$SD/skills/epic-conductor/SKILL.md"
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 CD="$SD/references/conducting.md"
 README="$SD/README.md"
 
@@ -71,11 +71,12 @@ for lit in '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확
            'B-2 의 게이트 앞 글 목록(리뷰 게이트 결과 · 읽어 보기 · 남은 항목 · 경고 · 건너뛴 것)을 같은 순서 · 같은 규칙으로 보인다.' \
            '질문의 상태 줄도 B-2 와 같은 꼴이다 — 경고 줄과 「전문」 줄은 B-2 의 본문 규칙대로 싣는다.' \
            '<경고 줄 — 채널마다의 짧은 줄을 「 · 」로 이은 것 | 경고 없음 | 이상 없음>. 전문: <경로>. superpowers 가 없어 다음 단계로 넘기지 않는다.' \
-           '커밋 펜스(`interview-commit`) → 여기서 멈춘다. 분해된 일이어도 「PR 과 머지」 로 가지 않는다.' \
+           '커밋 펜스(`context-commit`) → 여기서 멈춘다. 하나짜리 일은 끝에' \
            '`[spec-distill] superpowers 가 없어 다음 단계를 열지 못했다 — 설치한 뒤 새 세션에서 아래 줄로 잇는다.`' \
-           '분해된 일이고 커밋 펜스가 「brief · audit · 상태 파일 · 로드맵 폴더를 커밋했다」 줄을 냈으면 그 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.' \
+           '나눈 일은 B-3 의 「로드맵 잡기 줄 — 나눈 일」 대로 끝낸다.' \
            '고친 뒤에는 B-2 가 아니라 이 끝 질문을 다시 띄운다' \
-           '`[spec-distill] superpowers 가 없어 이어 갈 다음 단계가 없다.` 한 줄을 보이고 같은 질문을 다시 띄운다.' \
+           '기타 칸에 「여기서 계속」 이 적히면 하나짜리 일은 `[spec-distill] superpowers 가 없어 이어 갈 다음 단계가 없다.` 한 줄을 보이고 같은 질문을 다시 띄운다.' \
+           '나눈 일은 「확정하고 끝낸다」 의 절차를 커밋 펜스까지(Step A 8 포함) 돈 뒤 B-3 의 「로드맵 잡기 줄 — 나눈 일」 문단을 그대로 따른다.' \
            '건너뛴 것을 하라는 말이면 B-S 로 간다.'; do
   assert_contains "$B1" "$lit" "F4 AC10: B-1 «${lit}»"
 done

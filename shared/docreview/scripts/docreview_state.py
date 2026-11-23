@@ -4,7 +4,7 @@
 state 디렉토리는 **인자**(`--state-dir`)다. 호스트의 `state_path.py` 를 import 하지 않는다 —
 두 호스트의 시그니처가 다르다(spec-distill: resolve_session_id+state_root(cwd) / quality-gates:
 state_root(hook_input, hook_name)). 파일은 `<state-dir>/docreview-state.md` 하나이고
-frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건 로그다. 인터뷰 상태 파일은
+frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건 로그다. 컨텍스트 쌓기 상태 파일은
 건드리지 않는다 — 그 파일은 brief 파이프라인의 줄 파서가 소유한다.
 
 서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
