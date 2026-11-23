@@ -126,7 +126,7 @@ class Pair(unittest.TestCase):
         return out["new"]
 
     def test_check_brief_gate_same(self):
-        rc, text = self.pair("check_brief.py", lambda w: ["gate", w["brief"]])
+        rc, text = self.pair("check_brief.py", lambda w: ["gate", w["brief"]], rc_expect=0)
         self.assertNotIn("type !=", text)
 
     def test_kind_cross_rejected(self):
@@ -144,21 +144,21 @@ class Pair(unittest.TestCase):
             self.assertIn("!= 'context-audit'", self.raw[name])
 
     def test_check_verbatim_same(self):
-        self.pair("check_verbatim_coverage.py", lambda w: [w["brief"], w["state"], w["audit"]])
+        self.pair("check_verbatim_coverage.py", lambda w: [w["brief"], w["state"], w["audit"]], rc_expect=0)
 
     def test_raw_source_locate_same(self):
         rc, text = self.pair("raw_source.py", lambda w: ["locate", "--interview", w["brief"], "--absolute"], rc_expect=0)
         self.assertIn("raw-source: FOUND", text)
 
     def test_build_brief_bundle_same(self):
-        self.pair("build_brief_bundle.py", lambda w: [w["brief"], w["audit"], "--raw-audit", w["framing"]])
+        self.pair("build_brief_bundle.py", lambda w: [w["brief"], w["audit"], "--raw-audit", w["framing"]], rc_expect=0)
 
     def test_team_write_framing_same(self):
         # team_write 가 framing 기록 종류를 견주는 길 — 맞는 종류는 받고 틀린 종류는 같은 말로 거절
         def args(w):
             return ["original", "--brief", w["brief"], "--out", "docs/superpowers/roadmaps/t1",
                     "--framing-audit", w["framing"]]
-        self.pair("roadmap_write.py", args)
+        self.pair("roadmap_write.py", args, rc_expect=0)
         for name, w in self.world.items():
             p = Path(w["repo"]) / w["framing"]
             p.write_text(p.read_text(encoding="utf-8").replace("type: " + FORMS[name]["k_framing"],
