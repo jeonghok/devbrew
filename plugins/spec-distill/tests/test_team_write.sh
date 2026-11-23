@@ -1673,6 +1673,23 @@ assert_eq "$( (cd "$NB" && python3 "$RW" original --brief docs/iv/u-brief-interv
 assert_grep "$(marker_heads "$NB/${RD}nb/intent/original.md" | head -n 1)" '^<!-- 출처: docs/iv/u-brief-interview\.md · 사용자 원문' "픽스처: 다시 만든 사본의 첫 구간이 다른 brief 에서 왔다"
 gx "$NB" add -A && gx "$NB" commit -qm nb-swapped
 assert_eq "$(nbcheck)" "0" "남는 것(기준에 없는 팀 폴더): source_brief 와 사본을 함께 바꾼 브랜치는 rc 0"
+# 기준에 사본이 있는 로드맵 — 사본을 다른 brief 로 다시 만들면 덧붙이기 검사가 거절한다. 기본 기준을 모르면 그 검사를 건너뛰어 지나간다(형식 정본이 공시하는 경계)
+fresh ub
+UB="$T/ub"
+assert_eq "$(ttc "$UB" "$T/ub.md" "${RD}ub")" "0" "기준을 모르는 픽스처: create --layout team rc 0"
+gx "$UB" add -- "${RD}ub" && gx "$UB" commit -qm ub-team && gx "$UB" push -q origin main
+gx "$UB" cat-file -e "refs/remotes/origin/HEAD:${RD}ub/intent/original.md" 2>/dev/null && ok "픽스처: 기준에 그 사본이 있다" || no "픽스처: 기준에 그 사본이 없다"
+ubcheck() { (cd "$UB" && python3 "$S/team_layout.py" check --roadmap "${RD}ub/roadmap.md") > "$T/chk.txt" 2>&1; echo $?; }
+uboriginal() { (cd "$UB" && python3 "$RW" original --brief docs/iv/u-brief-interview.md --out "${RD}ub") > "$T/out.txt" 2>&1; echo $?; }
+sed "s|^source_brief: .*|source_brief: docs/iv/u-brief-interview.md|" "$UB/${RD}ub/roadmap.md" > "$T/ub.rm" && cp "$T/ub.rm" "$UB/${RD}ub/roadmap.md"
+rm "$UB/${RD}ub/intent/original.md"
+assert_eq "$(uboriginal)" "1" "바꾼 source_brief · 기준에 사본 있음 · 사본 다시 만들기: rc 1"
+assert_contains "$(cat "$T/out.txt")" "기준 refs/remotes/origin/HEAD 의 사본에서 앞 줄을 바꾸거나 지웠다 — 원자료 사본은 덧붙이기만 받는다" "바꾼 source_brief · 기준에 사본 있음 · 사본 다시 만들기: 덧붙이기 검사가 거절한다"
+gx "$UB" remote set-head origin -d
+gx "$UB" rev-parse -q --verify refs/remotes/origin/HEAD > /dev/null && no "픽스처: origin/HEAD 가 남았다" || ok "픽스처: origin/HEAD 가 없다(기본 기준을 모른다)"
+assert_eq "$(uboriginal)" "0" "기본 기준을 모름 · 바꾼 source_brief: 사본을 그 brief 로 다시 만든다(rc 0)"
+assert_eq "$(ubcheck)" "0" "남는 것(기본 기준을 모름): source_brief 와 사본을 함께 바꿔도 rc 0"
+assert_contains "$(cat "$T/chk.txt")" "기본 브랜치(refs/remotes/origin/HEAD)를 몰라 덧붙이기 검사를 건너뛰었다" "남는 것(기본 기준을 모름): 건너뛴 알림 줄이 나온다"
 
 # ── 기준 · HEAD 의 조상이 아닌 출처 커밋 (보안 지적 AC2) ──────────────────────────────
 # 커밋이 읽혀도 기준 · 지금 HEAD 어느 쪽의 조상도 아니면 기준의 같은 파일 · 같은 줄과 견준다(출처 커밋을 읽지 못한 때와 같다).
