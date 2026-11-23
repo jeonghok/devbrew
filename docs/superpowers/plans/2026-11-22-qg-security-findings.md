@@ -462,7 +462,7 @@ Task 8 리뷰의 Important 셋에 대한 답(2026-11-23 · 설계문서 커밋 4
 - Test: `plugins/spec-distill/tests/test_leader_seat.py` · `test_conductor_cross.py` · `test_conductor_state_branch_docs.py`(「E3」 락 문자열 포함)
 
 **Interfaces:**
-- `_reset`: 확인 기록을 접기 전(`confirm_at` 앞) — 있는 `RESET_PENDING_LEFT` 가 나오는 자리와 같은 자리에서 — `settle` 과 같은 술어(확인한 끝 뒤에 규칙 사본 · `rules-base.md` · `pending.md` 를 바꾼 `씀` 커밋이 있는가 — `TS.edits_since` 를 같은 범위 · 같은 감시 경로로 재서 `씀` 으로 가른 것)가 참이면 접지 않고 새 알림 `RESET_OWN_LEFT = "이 기계가 쓴 것으로 적힌 고침이 남아 있다 — 보인 뒤 confirm 한다"`(설계 글자 그대로) 를 더한다. 잴 수 없으면 접지 않는다. 그런 커밋이 없으면 지금처럼 접는다. 술어는 `settle` 과 한 자리에서 나눠 쓴다(같은 규칙을 두 번 적지 않는다).
+- `_reset`(바로잡음 2026-11-23 — 구현 물음 3 의 답: 아래의 「`settle` 과 같은 술어(세 경로)」 가 아니라 `pending.md` 를 바꾼 `씀` 커밋만 본다. 설계 §3 이 정본이다): 확인 기록을 접기 전(`confirm_at` 앞) — 있는 `RESET_PENDING_LEFT` 가 나오는 자리와 같은 자리에서 — `settle` 과 같은 술어(확인한 끝 뒤에 규칙 사본 · `rules-base.md` · `pending.md` 를 바꾼 `씀` 커밋이 있는가 — `TS.edits_since` 를 같은 범위 · 같은 감시 경로로 재서 `씀` 으로 가른 것)가 참이면 접지 않고 새 알림 `RESET_OWN_LEFT = "이 기계가 쓴 것으로 적힌 고침이 남아 있다 — 보인 뒤 confirm 한다"`(설계 글자 그대로) 를 더한다. 잴 수 없으면 접지 않는다. 그런 커밋이 없으면 지금처럼 접는다. 술어는 `settle` 과 한 자리에서 나눠 쓴다(같은 규칙을 두 번 적지 않는다).
 - `confirm`(표시 없이): 남의 고침이 없고 내 고침 목록이 있으면 `NOTHING_TO_CONFIRM` 뒤에 그 목록 줄(`show` 가 내는 것과 같은 글자 — `conductor_status.own_lines` 나 같은 상수를 쓴다, 글자를 두 자리에 적지 않는다)과 `CONFIRM_TIP % seen` 을 낸다. 종료 코드 0. 남의 고침이 있을 때 내 고침 목록도 있으면 그 목록 줄도 같은 출력에 싣는다(설계 「목록 줄과 확인할 끝을 한 출력에」).
 - `confirm --confirmed <끝>`: 끝이 읽을 끝과 같으면 지금 그대로 기록한다. 다르고 내 고침 목록이 있으면 남의 고침 때처럼 `NOT_THE_TIP` · 목록 줄 · `CONFIRM_TIP % seen` 을 내고 BranchError(1) — 확인 기록을 바꾸지 않는다. 다르고 남의 고침도 내 고침 목록도 없으면 지금 그대로(0 · 「확인할 남의 고침이 없다」).
 - `sync` 출력 글자 · 다른 종료 코드는 그대로.
