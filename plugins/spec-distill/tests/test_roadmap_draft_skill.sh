@@ -209,7 +209,7 @@ c="$(mk othername "분해됨 — $RREL/plan.md")"; generated "$c"; mv -- "$c/$RR
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 로드맵 폴더와 상태 파일이 한 커밋에"
 
-# AC19 — 판 · 변경 기록 · README. 판은 major 가 9 이상인지만 본다 — 다음 PR 의 판 올림(9.0.1 · 9.1.0 · 10.0.0)에도 맞아야 한다
+# AC19 — 판 · 변경 기록 · README
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
 if python3 -I -c 'import sys; sys.exit(0 if tuple(int(x) for x in sys.argv[1].split(".")) >= (9, 0, 0) else 1)' "$ver" 2>/dev/null; then ok "AC19: 판이 9.0.0 이상이다(판 번호는 묶지 않는다 — 9.0.0 의 내용은 CHANGELOG 9.0.0 절이 지킨다)"; else no "AC19: 판이 9.0.0 보다 낮다: ${ver}"; fi
 OLD1="request-""framing"; OLD2="pm-""interview"
