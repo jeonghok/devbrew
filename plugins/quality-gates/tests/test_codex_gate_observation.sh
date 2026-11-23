@@ -313,7 +313,7 @@ for i in "${!GATED_RUNNER[@]}"; do
       # "이 사이클 범위 밖"이라고 적어 뒀다 — 즉 이 목록은 언젠가 반드시 자란다.)
       case "$label" in
         # 라벨 = skill 디렉토리 이름(위 label= 도출). spec-distill 5.0.0 · plugin-audit 1.0.0 개명을 따른다.
-        plugin-audit|spec-review|reviewing-brief|request-framing)
+        plugin-audit|spec-review|reviewing-brief|intent-sync)
           if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
             ok "$label: 감지기 부재 → codex 0회 + stderr에 detector_not_runnable (loud-failure 확인)"
           else

@@ -18,8 +18,9 @@ import sys
 SELF_FILES = frozenset({"shared/entry/check_invocation_surface.py", "shared/tests/test_invocation_surface.sh"})
 
 ENTRY_SKILLS = (
-    ("spec-distill", "request-framing"),
-    ("spec-distill", "pm-interview"),
+    ("spec-distill", "intent-sync"),
+    ("spec-distill", "context-build"),
+    ("spec-distill", "roadmap-draft"),
     ("spec-distill", "spec-review"),
     ("spec-distill", "roadmap-status"),
     ("spec-distill", "epic-conductor"),
@@ -69,7 +70,8 @@ FULL_CALL_RE = re.compile(_LEAD + r"/([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)" 
 OLD_NAME_RE = re.compile(
     r"conducting-interview|framing-requests|reviewing-spec|auditing-plugins|critiquing-artifacts"
     r"|commands/(?:interview|request-framing|plugin-audit|project-init|qg)\.md"
-    r"|spec-interview|spec-distill:interview(?![-A-Za-z0-9_])")
+    r"|spec-interview|spec-distill:interview(?![-A-Za-z0-9_])"
+    r"|(?<![-A-Za-z0-9_])(?:request-framing|pm-interview)(?![-A-Za-z0-9_])")
 # 옛 호출은 뒤에 이름 글자 · 경로 글자 · 확장자(`/qg.md`)가 이어지지 않으면 잡는다(조사 · 구두점 · 문장 끝 마침표가 붙은 꼴 포함) — _TRAIL 은 G 축과 함께 쓰므로 넓히지 않는다
 _OLD_TRAIL = r"(?![-A-Za-z0-9_/]|\.[A-Za-z0-9])"
 OLD_CALL_RE = re.compile(_LEAD + r"/(?:interview|qg)" + _OLD_TRAIL)

@@ -13,7 +13,7 @@ trap 'rm -rf "$TMP"' EXIT
 seed() { cat > "$TMP/s.md" <<'EOF'
 ---
 type: interview-seed
-next_phase: spec-distill:pm-interview
+next_phase: spec-distill:context-build
 audit_file: a.audit.md
 ---
 

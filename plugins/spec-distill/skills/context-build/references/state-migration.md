@@ -12,11 +12,11 @@
 - `coverage.floor` 의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) —
   차원 자체가 없으면 `{status: open, evidence: "", reopened: 0, reopen_log: []}` 로 seed.
   **차원은 있는데 `reopened`/`reopen_log` 만 없으면 그 둘만 `0`/`[]` 로 추가**하고
-  `status`·`evidence` 는 그대로 둔다 — 진행 중인 인터뷰의 닫힘 판정을 되돌리지 않는다.
+  `status`·`evidence` 는 그대로 둔다 — 진행 중인 컨텍스트 쌓기의 닫힘 판정을 되돌리지 않는다.
 - `coverage.derived` — 없으면 `[]`. 있으면 각 항목에 `reopened`/`reopen_log` 를 같은 규칙으로 보충.
 - `orchestration`: `{focused_dimension: null, research_dispatches: {coverage_mapper: 0, blind_spot_prober: 0, steelman_builder: 0, repo_researcher: 0, open_researcher: 0}, research_limit: <시작값>, saturation_limit: <시작값>, research_log: [], saturation_log: [], open_decisions: []}`
   — 절이 없으면 이 값 그대로 seed. **있으면 부재 키만** 그 기본값으로 추가한다. `<시작값>` 은
-  `${CLAUDE_PLUGIN_ROOT}/skills/pm-interview/references/saturation.md` 의 `### 상한 값` 펜스가 정한다 — 같은 검사로
+  `${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/saturation.md` 의 `### 상한 값` 펜스가 정한다 — 같은 검사로
   `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT`(기본 60) · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT`(기본 5)를 읽는다.
 
 **옛 카운터는 「부재 키만 채운다」로 안 된다.** 이미 조사를 부른 세션이 새 키의 기본값 `0` 을 받으면

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/pm-interview/SKILL.md plugins/spec-distill/skills/pm-interview/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
+# guards: plugins/spec-distill/references/research-claims.md plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/skills/context-build/references/steelman.md plugins/spec-distill/agents/steelman-builder.md
 #
 # 조사 주장 계약이 **경로가 아니라 내용으로** 네 dispatch 에 배달되는가, 그리고 정본과 사본이
 # 갈라지지 않는가. 설치본에서 계약 파일은 플러그인 캐시(사용자 cwd 밖)에 있어 subagent 의 Read 가
@@ -25,15 +25,15 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-SKILL="$SD/skills/pm-interview/SKILL.md"
-STEEL="$SD/skills/pm-interview/references/steelman.md"
+SKILL="$SD/skills/context-build/SKILL.md"
+STEEL="$SD/skills/context-build/references/steelman.md"
 CANON="$SD/references/research-claims.md"
 COPY="$SD/agents/steelman-builder.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/research-claims.md"
-  echo "plugins/spec-distill/skills/pm-interview/SKILL.md"
-  echo "plugins/spec-distill/skills/pm-interview/references/steelman.md"
+  echo "plugins/spec-distill/skills/context-build/SKILL.md"
+  echo "plugins/spec-distill/skills/context-build/references/steelman.md"
   echo "plugins/spec-distill/agents/steelman-builder.md"
   exit 0
 fi
@@ -111,7 +111,7 @@ assert_contains "$CANON_FLAT" '## 판정 전에 구현을 읽는다 > 인덱스�
   "AC5: 인덱스만 읽기 금지 + 구현을 읽으라는 지시"
 assert_contains "$CANON_FLAT" 'docs/archive/interview/2026-07-12-project-init-audit-interview.md' \
   "AC5: 출처 인용 경로"
-assert_contains "$CANON_FLAT" 'subagent 가 낸 `id` 는 **임시값**이다 — orchestrator 가 V1 에서 인터뷰 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.' \
+assert_contains "$CANON_FLAT" 'subagent 가 낸 `id` 는 **임시값**이다 — orchestrator 가 V1 에서 컨텍스트 쌓기 전역 순번으로 다시 붙이고, 그 번호만 payload · audit 에 실린다.' \
   "규칙 4: RC id 의 발급 주체는 orchestrator(V1) — subagent 의 id 는 임시값"
 assert_contains "$CANON_FLAT" '레포 `[RC<n> → OQ<n>]` · `[RC<n> → 없음]`, 웹 `[→ OQ<n>]` · `[→ 없음]`' \
   "F: 정본이 결정 연결 형식 넷(레포 둘 · 웹 둘)을 댄다"
