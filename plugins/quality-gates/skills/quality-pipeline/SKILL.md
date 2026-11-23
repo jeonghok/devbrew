@@ -45,7 +45,7 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git,
 | rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다 |
 | 그 밖 | `[quality-gates] quality-pipeline 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>).` 와 펜스 출력을 내고 멈춘다 |
 
-# Quality Gates — In-Turn Orchestrator (v16.0.0)
+# Quality Gates — In-Turn Orchestrator (v17.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
