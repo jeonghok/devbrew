@@ -21,6 +21,7 @@ def clean_env(**extra):
     env = dict(os.environ)
     env.pop("SUITE_TIMING_FILE", None)
     env.pop("SUITE_PEERS_PS_FILE", None)
+    env.pop("SUITE_ONLY_FAILED_FILE", None)
     env.update(extra)
     return env
 
@@ -48,13 +49,26 @@ def read_pid(path):
         return int(fh.read().strip())
 
 
+def hold_until(release):
+    """가짜 러너 셸 조각 — 풀어 줌 파일이 생길 때까지(상한 10초) 기다린다."""
+    return "i=0; while [ ! -e %s ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done" % release
+
+
 def kill_tree_if_ours(pid, marker):
     """pid 가 아직 살아 있고 명령줄에 marker 가 있을 때만, 그 자손부터 죽인다(PID 재사용 방지)."""
-    out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, universal_newlines=True).stdout
+    try:
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, universal_newlines=True, timeout=10).stdout
+    except subprocess.TimeoutExpired:
+        return
     if marker not in out:
         return
-    rows = suite_peers.read_rows() or []
+    saved = os.environ.pop("SUITE_PEERS_PS_FILE", None)  # 가짜 표로 정리하지 않는다
+    try:
+        rows = suite_peers.read_rows() or []
+    finally:
+        if saved is not None:
+            os.environ["SUITE_PEERS_PS_FILE"] = saved
     tree, frontier = [], {pid}
     while frontier:
         nxt = {p for p, pp, _ in rows if pp in frontier and p not in tree and p != pid}
@@ -85,6 +99,7 @@ class PeerCountTests(unittest.TestCase):
         no = ["bash -c bash tools/suite/run-all.sh",
               "python3 suite_lock.py run --lock L --owner o -- bash -c bash tools/suite/run-all.sh",
               "bash shared/tests/test_x.sh", "vim tools/suite/run-all.sh", "bash tools/suite/run-all.sh.bak", ""]
+        no += ["bash some_test.sh tools/suite/run-all.sh", "bash /x/foo.sh /y/run-all.sh"]
         for c in yes:
             self.assertTrue(suite_peers.is_runner(c), c)
         for c in no:
@@ -173,13 +188,69 @@ class PeerCountTests(unittest.TestCase):
         self.assertTrue(r.stdout.strip().endswith("\tpeers=1"), r.stdout)
         self.assertRegex(r.stdout.strip(), r"^waited=\d+\tpeers=1$")
 
+    def test_wait_unreadable_rows_returns_at_once(self):
+        missing = os.path.join(self.tmp, "nope.txt")
+        r = run_peers(["--pid", "50", "--wait", "30", "--interval", "0.2"], missing)
+        self.assertEqual(r.returncode, 3)
+        self.assertRegex(r.stdout.strip(), r"^waited=0\tpeers=\?$")
+        self.assertIn("suite_peers: 프로세스 표를 읽지 못했다 — 표 파일을 열지 못했다: " + missing, r.stderr)
+
+    def test_interval_not_positive_refused(self):
+        for v in ("0", "-1", "nan"):
+            r = run_peers(["--wait", "1", "--interval", v], self.ps_file(""))
+            self.assertEqual(r.returncode, 2, v)
+
+    def test_read_rows_why_names_reason(self):
+        missing = os.path.join(self.tmp, "nope.txt")
+        saved = os.environ.get("SUITE_PEERS_PS_FILE")
+        os.environ["SUITE_PEERS_PS_FILE"] = missing
+        try:
+            rows, why = suite_peers.read_rows_why()
+            self.assertIsNone(rows)
+            self.assertEqual(why, "표 파일을 열지 못했다: " + missing)
+            self.assertIsNone(suite_peers.read_rows())
+            os.environ["SUITE_PEERS_PS_FILE"] = self.ps_file(" 1 0 launchd\n")
+            rows, why = suite_peers.read_rows_why()
+            self.assertEqual((rows, why), ([(1, 0, "launchd")], None))
+        finally:
+            if saved is None:
+                os.environ.pop("SUITE_PEERS_PS_FILE", None)
+            else:
+                os.environ["SUITE_PEERS_PS_FILE"] = saved
+
+    def test_read_rows_why_ps_failures(self):
+        class Bad(object):
+            returncode = 7
+            stdout = b""
+
+        class Empty(object):
+            returncode = 0
+            stdout = b""
+
+        def boom(*a, **k):
+            raise FileNotFoundError("ps")
+        orig = suite_peers.subprocess.run
+        saved = os.environ.pop("SUITE_PEERS_PS_FILE", None)
+        try:
+            for fake, why in ((lambda *a, **k: Bad(), "ps 종료 코드 7"),
+                              (boom, "ps 를 실행하지 못했다: FileNotFoundError"),
+                              (lambda *a, **k: Empty(), "빈 표")):
+                suite_peers.subprocess.run = fake
+                self.assertEqual(suite_peers.read_rows_why(), (None, why))
+        finally:
+            suite_peers.subprocess.run = orig
+            if saved is not None:
+                os.environ["SUITE_PEERS_PS_FILE"] = saved
+
     @unittest.skipUnless(shutil.which("ps"), "ps 없음")
     def test_real_ps_detached_runner_counted_once(self):
         d = os.path.join(self.tmp, "f")
         os.makedirs(d)
         script = os.path.join(d, "run-all.sh")
+        release = os.path.join(self.tmp, "release")
         with open(script, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/pid\n( sleep 5; : ) & echo $! > %s/child\nwait\n" % (d, d))
+            fh.write("echo $$ > %s/pid\n( %s ) & echo $! > %s/child\nwait\n"
+                     % (d, hold_until(release), d))
         pidf, childf = os.path.join(d, "pid"), os.path.join(d, "child")
         pids = []
         try:
@@ -188,45 +259,66 @@ class PeerCountTests(unittest.TestCase):
             self.assertTrue(wait_for_files([pidf, childf]), "가짜 러너가 뜨지 않았다")
             pids = [read_pid(pidf), read_pid(childf)]
             r = run_peers(["--pid", str(os.getpid()), "--list"])
+            self.assertEqual(r.returncode, 0, r.stderr)
             listed = [int(x) for x in r.stdout.split()]
             self.assertIn(pids[0], listed)
             self.assertNotIn(pids[1], listed)
         finally:
+            open(release, "w").close()
             if pids:
                 kill_tree_if_ours(pids[0], self.tmp)
 
     @unittest.skipUnless(shutil.which("ps"), "ps 없음")
     def test_real_ps_self_ancestor_child_excluded(self):
-        for sub in ("a", "b"):
+        for sub in ("a", "b", "c"):
             os.makedirs(os.path.join(self.tmp, sub))
+        release = os.path.join(self.tmp, "release")
         out = os.path.join(self.tmp, "out")
         out_a = os.path.join(self.tmp, "out_a")
         a = os.path.join(self.tmp, "a", "run-all.sh")
         b = os.path.join(self.tmp, "b", "run-all.sh")
+        c = os.path.join(self.tmp, "c", "run-all.sh")
+        with open(c, "w", encoding="utf-8") as fh:
+            fh.write("echo $$ > %s/c.pid\n%s\n" % (self.tmp, hold_until(release)))
         with open(a, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\n"
-                     % (self.tmp, b, sys.executable, PEERS, out_a))
+            fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\necho $? > %s.rc\n"
+                     % (self.tmp, b, sys.executable, PEERS, out_a, out_a))
         with open(b, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/b.pid\n( sleep 3; : ) & echo $! > %s/b.child\n"
-                     "%s %s --pid $$ --list > %s\nwait\n"
-                     % (self.tmp, self.tmp, sys.executable, PEERS, out))
+            fh.write("echo $$ > %s/b.pid\n( %s ) & echo $! > %s/b.child\n"
+                     "%s %s --pid $$ --list > %s\necho $? > %s.rc\nwait\n"
+                     % (self.tmp, hold_until(release), self.tmp, sys.executable, PEERS, out, out))
         files = [os.path.join(self.tmp, n) for n in ("a.pid", "b.pid", "b.child")]
-        proc = subprocess.Popen(["bash", a], env=clean_env(),
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cpid = os.path.join(self.tmp, "c.pid")
+        proc = None
         try:
+            # 다른 자리의 가짜 러너 c — 두 번 갈라 띄워 이 시험의 조상 사슬 밖에 둔다
+            subprocess.run(["bash", "-c", "bash %s >/dev/null 2>&1 &" % c], env=clean_env(), timeout=30)
+            self.assertTrue(wait_for_files([cpid]), "다른 가짜 러너 c 가 뜨지 않았다")
+            proc = subprocess.Popen(["bash", a], env=clean_env(),
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.assertTrue(wait_for_files(files + [out, out + ".rc"]), "가짜 러너 파일이 없다")
+            with open(out, encoding="utf-8") as fh:
+                listed = fh.read().split()
+            open(release, "w").close()   # 목록을 읽었으니 b 의 자식 · c 를 풀어 준다
             proc.wait(timeout=30)
-            self.assertTrue(wait_for_files(files), "가짜 러너 파일이 없다")
-            for o in (out, out_a):
-                self.assertTrue(os.path.exists(o), o)
-                with open(o, encoding="utf-8") as fh:
-                    listed = fh.read().split()
-                for f in files:
-                    self.assertNotIn(str(read_pid(f)), listed, (o, f))
+            self.assertTrue(wait_for_files([out_a, out_a + ".rc"]), "a 의 목록이 없다")
+            with open(out_a, encoding="utf-8") as fh:
+                listed_a = fh.read().split()
+            for rc in (out + ".rc", out_a + ".rc"):
+                with open(rc, encoding="utf-8") as fh:
+                    self.assertEqual(fh.read().strip(), "0", rc)
+            # 양성 대조: 다른 자리의 러너는 목록에 있다
+            self.assertIn(str(read_pid(cpid)), listed)
+            for f in files:
+                self.assertNotIn(str(read_pid(f)), listed, (out, f))
+            for f in files:
+                self.assertNotIn(str(read_pid(f)), listed_a, (out_a, f))
         finally:
-            if proc.poll() is None:
+            open(release, "w").close()
+            if proc is not None and proc.poll() is None:
                 proc.kill()
                 proc.wait()
-            for f in files:
+            for f in files + [cpid]:
                 if os.path.exists(f) and os.path.getsize(f) > 0:
                     kill_tree_if_ours(read_pid(f), self.tmp)
 
@@ -240,14 +332,16 @@ class UnittestDirTimingTests(unittest.TestCase):
         os.makedirs(os.path.join(self.tmp, "pkg", "tests"))
 
     def write(self, name, body):
-        with open(os.path.join(self.tmp, "pkg", "tests", name), "w", encoding="utf-8") as fh:
+        path = os.path.join(self.tmp, "pkg", "tests", name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(body)
 
-    def run_runner(self, timing=None):
+    def run_runner(self, timing=None, start="pkg/tests"):
         env = clean_env()
         if timing is not None:
             env["SUITE_TIMING_FILE"] = timing
-        proc = subprocess.run([sys.executable, self.RUNNER, "pkg/tests"], cwd=self.tmp, env=env,
+        proc = subprocess.run([sys.executable, self.RUNNER, start], cwd=self.tmp, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               universal_newlines=True, timeout=120)
         return proc.returncode, re.sub(r"in \d+\.\d+s", "in Xs", proc.stdout), proc.stderr
@@ -255,6 +349,19 @@ class UnittestDirTimingTests(unittest.TestCase):
     def timing_lines(self, path):
         with open(path, encoding="utf-8") as fh:
             return [l for l in fh.read().split("\n") if l]
+
+    def run_timed(self, start="pkg/tests"):
+        """기록 변수 없이 한 번 · 있이 한 번 돌려 표준 출력 · 오류 · 종료 코드가 같은지 보고 (rc, 출력, secs)."""
+        out = os.path.join(self.tmp, "timing.tsv")
+        plain = self.run_runner(start=start)
+        timed = self.run_runner(out, start=start)
+        self.assertEqual(timed, plain)
+        secs = {}
+        for line in self.timing_lines(out):
+            sec, kind, key = line.split("\t")
+            self.assertEqual(kind, "pymod")
+            secs[key] = float(sec)
+        return timed[0], timed[1], secs
 
     def test_pymod_lines_per_module(self):
         self.write("test_a.py", "import unittest\n\nclass A(unittest.TestCase):\n"
@@ -355,6 +462,84 @@ class UnittestDirTimingTests(unittest.TestCase):
         self.assertEqual(buf.getvalue().strip().split("\n"),
                          ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + path])
 
+    def test_teardown_time_charged_to_own_module(self):
+        self.write("test_a.py", "import time\nimport unittest\n\n"
+                   "def tearDownModule():\n    time.sleep(0.2)\n\n"
+                   "class A(unittest.TestCase):\n"
+                   "    @classmethod\n    def tearDownClass(cls):\n        time.sleep(0.3)\n\n"
+                   "    def test_1(self): pass\n")
+        self.write("test_b.py", PASS_PY)
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertGreaterEqual(secs["pkg/tests/test_a.py"], 0.5)
+        self.assertLess(secs["pkg/tests/test_b.py"], 0.25)
+        # 준비 몫에서 안에 든 모듈 정리를 빼지 않으면 그 0.2 초가 두 번 세어진다
+        self.assertLess(sum(secs.values()), 0.65)
+
+    def test_last_module_teardown_kept(self):
+        self.write("test_a.py", PASS_PY)
+        self.write("test_z.py", "import time\nimport unittest\n\n"
+                   "def tearDownModule():\n    time.sleep(0.3)\n\n"
+                   "class Z(unittest.TestCase):\n    def test_1(self): pass\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertGreaterEqual(secs["pkg/tests/test_z.py"], 0.3)
+        self.assertLess(secs["pkg/tests/test_a.py"], 0.25)
+
+    def test_setupclass_failure_module_has_line(self):
+        self.write("test_c.py", "import time\nimport unittest\n\nclass C(unittest.TestCase):\n"
+                   "    @classmethod\n    def setUpClass(cls):\n        time.sleep(0.2)\n"
+                   "        raise RuntimeError('boom')\n\n    def test_1(self): pass\n")
+        rc, stdout, secs = self.run_timed()
+        self.assertEqual(rc, 1)
+        self.assertIn("ERROR: setUpClass (test_c.C)", stdout)
+        self.assertGreaterEqual(secs["pkg/tests/test_c.py"], 0.2)
+
+    def test_nested_package_import_failure_key(self):
+        self.write("sub/__init__.py", "")
+        self.write("sub/test_bad.py", "raise ImportError('x')\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 1)
+        self.assertIn("pkg/tests/sub/test_bad.py", secs)
+
+    def test_dot_slash_start_same_keys(self):
+        self.write("test_a.py", PASS_PY)
+        self.write("test_broken.py", "raise ImportError('x')\n")
+        rc, _, secs = self.run_timed(start="./pkg/tests")
+        self.assertEqual(rc, 1)
+        self.assertEqual(sorted(secs), ["pkg/tests/test_a.py", "pkg/tests/test_broken.py"])
+
+    def test_module_without_file_key(self):
+        self.write("test_nofile.py", "del __file__\nimport unittest\n\n"
+                   "class N(unittest.TestCase):\n    def test_1(self): pass\n")
+        rc, _, secs = self.run_timed()
+        self.assertEqual(rc, 0)
+        self.assertIn("pkg/tests/test_nofile.py", secs)
+
+    def test_write_timing_encoding_failure_writes_nothing(self):
+        import contextlib
+        import run_unittest_dir
+        path = os.path.join(self.tmp, "t.tsv")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run_unittest_dir.write_timing(path, {"a.py": 1.0, "\udcff": 1.0})
+        self.assertEqual(buf.getvalue().strip().split("\n"),
+                         ["run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: " + path])
+        self.assertTrue(not os.path.exists(path) or os.path.getsize(path) == 0)
+
+    def test_result_class_usable_without_runner(self):
+        import run_unittest_dir
+
+        class P(unittest.TestCase):
+            def test_1(self):
+                pass
+
+        cls = run_unittest_dir.timed_result_class(self.tmp, self.tmp)
+        r = cls(io.StringIO(), True, 1)
+        unittest.TestSuite([P("test_1")]).run(r)
+        self.assertTrue(r.wasSuccessful())
+        self.assertEqual(len(r.module_secs), 1)
+
 
 PASS_PY = "import unittest\n\nclass T(unittest.TestCase):\n    def test_1(self): pass\n"
 BASE = {
@@ -363,6 +548,7 @@ BASE = {
     "plugins/p/tests/test_u.py": PASS_PY,
     "tools/x/test_t.py": PASS_PY,
 }
+SLOW_SH = {"shared/tests/test_slow.sh": "sleep 0.4\n"}
 BASE_WITHOUT_FAIL = {k: v for k, v in BASE.items() if k != "plugins/p/tests/test_fail.sh"}
 NODE_TEST = 'import test from "node:test";\ntest("ok", () => {});\n'
 BASH = "/bin/bash" if os.path.exists("/bin/bash") else shutil.which("bash")
@@ -371,11 +557,8 @@ NODE = 1 if shutil.which("node") else 0
 FAIL_OUT = "FAILED plugins/p/tests/test_fail.sh: broke\n"
 
 
-class RunAllTimingTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-runall-"))
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.count = 0
+class RepoMixin(object):
+    """임시 레포 도우미. TestCase 가 아니다 — 섞는 클래스의 setUp 이 self.tmp · self.count 를 둔다."""
 
     def make_repo(self, files, node=False):
         self.count += 1
@@ -421,6 +604,13 @@ class RunAllTimingTests(unittest.TestCase):
     def target_lines(self, lines):
         return [l for l in lines if l.split("\t")[1] in ("sh", "py", "node")]
 
+
+class RunAllTimingTests(RepoMixin, unittest.TestCase):
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="suite-runall-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.count = 0
+
     def test_ac1_without_var_fail_and_pass(self):
         rc, out, err = self.run_all(self.make_repo(BASE))
         self.assertEqual((rc, out, err), (1, FAIL_OUT, ""))
@@ -428,7 +618,9 @@ class RunAllTimingTests(unittest.TestCase):
         self.assertEqual((rc, out, err), (0, "", ""))
 
     def test_ac2_lines_and_same_stdout(self):
-        repo = self.make_repo(BASE, node=True)
+        files = dict(BASE)
+        files.update(SLOW_SH)
+        repo = self.make_repo(files, node=True)
         without = self.run_all(repo)
         path = self.out_file()
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
@@ -440,9 +632,15 @@ class RunAllTimingTests(unittest.TestCase):
         self.assertEqual(firsts.count("end"), 1)
         self.assertEqual(lines[-1].split("\t")[0], "end")
         targets = self.target_lines(lines)
-        self.assertEqual(len(targets), 2 + 3 + NODE)
+        self.assertEqual(len(targets), 3 + 3 + NODE)
         self.assertEqual(sorted(l.split("\t")[1] for l in targets),
-                         sorted(["sh"] * 2 + ["py"] * 3 + ["node"] * NODE))
+                         sorted(["sh"] * 3 + ["py"] * 3 + ["node"] * NODE))
+        for l in targets:
+            cols = l.split("\t")
+            if cols[1] == "sh" and cols[2] == "shared/tests/test_slow.sh":
+                self.assertGreaterEqual(float(cols[0]), 0.4, l)
+            elif cols[1] == "sh":
+                self.assertLess(float(cols[0]), 0.4, l)
         for l in targets:
             cols = l.split("\t")
             self.assertEqual(len(cols), 4)
@@ -595,9 +793,9 @@ class RunAllTimingTests(unittest.TestCase):
         os.makedirs(tdir)
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
         notice = "run-all: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: %s" % path
-        err_lines = [l for l in err.split("\n") if l]
-        self.assertTrue(1 <= len(err_lines) <= 2, err)
-        self.assertEqual(set(err_lines), {notice}, err)
+        err_lines = [l for l in err.split("\n") if l.startswith("run-all: ")]
+        self.assertEqual(err_lines, [notice], err)
+        self.assertEqual([l for l in err.split("\n") if l and not l.startswith(("run-all: ", "run_unittest_dir: "))], [])
         self.assertNotIn("No such file", err)
         self.assertEqual((rc, out), without[:2])
 
@@ -607,11 +805,12 @@ class RunAllTimingTests(unittest.TestCase):
             fh.write(body)
         return repo
 
-    def check_stamp_unavailable(self, body):
+    def check_stamp_unavailable(self, body, reason):
         repo = self.stamp_fails_repo(body)
         path = self.out_file()
         rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": path})
-        self.assertEqual((rc, out, err), (0, "", ""))
+        self.assertEqual((rc, out, err),
+                         (0, "", "run-all: 다른 스위트 수를 세지 못했다 — %s\n" % reason))
         lines = self.lines(path)
         self.assertEqual(lines[0], "start\t?\t?\t" + repo)
         self.assertEqual(lines[-1], "end\t?\t?")
@@ -622,11 +821,33 @@ class RunAllTimingTests(unittest.TestCase):
             self.assertEqual((cols[0], cols[3]), ("?", "?"), l)
 
     def test_stamp_call_fails_nonzero_exit_writes_question_marks(self):
-        self.check_stamp_unavailable("import sys\nsys.exit(1)\n")
+        self.check_stamp_unavailable("import sys\nsys.exit(1)\n", "종료 코드 1")
 
     def test_stamp_call_prints_nothing_writes_question_marks(self):
-        self.check_stamp_unavailable("")
+        self.check_stamp_unavailable("", "출력이 없다")
 
+
+    def test_unreadable_ps_reason_once(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        missing = os.path.join(self.tmp, "no-such-ps.txt")
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": self.out_file(),
+                                           "SUITE_PEERS_PS_FILE": missing})
+        self.assertEqual((rc, out), (0, ""))
+        self.assertEqual(err, "run-all: 다른 스위트 수를 세지 못했다 — suite_peers: 프로세스 표를 "
+                              "읽지 못했다 — 표 파일을 열지 못했다: %s\n" % missing)
+
+    def test_python_runner_notice_surfaced(self):
+        repo = self.make_repo(BASE_WITHOUT_FAIL)
+        line = "run_unittest_dir: 시간 기록 파일에 쓸 수 없다 — 기록하지 않는다: X"
+        with open(os.path.join(repo, "tools", "suite", "run_unittest_dir.py"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("import sys\nprint(%r, file=sys.stderr)\n" % line)
+        without = self.run_all(repo)
+        self.assertEqual(without[2], "")
+        rc, out, err = self.run_all(repo, {"SUITE_TIMING_FILE": self.out_file()})
+        self.assertEqual((rc, out), without[:2])
+        self.assertEqual([l for l in err.split("\n") if l.startswith("run_unittest_dir:")],
+                         [line] * 3)
 
     def test_only_end_line_write_fails_still_notes_once(self):
         path = self.out_file()
