@@ -209,9 +209,11 @@ c="$(mk othername "분해됨 — $RREL/plan.md")"; generated "$c"; mv -- "$c/$RR
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 로드맵 폴더와 상태 파일이 한 커밋에"
 
-# AC19 — 판 · 변경 기록 · README
+# AC19 — 판 · 변경 기록 · README. 판은 major 가 9 이상인지만 본다 — 다음 PR 의 판 올림(9.0.1 · 9.1.0 · 10.0.0)에도 맞아야 한다
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
-if [ "${ver%%.*}" = "9" ] && [ "$ver" = "9.0.0" ]; then ok "AC19: 판이 9.0.0 이다"; else no "AC19: 판이 9.0.0 이 아니다: $ver"; fi
+major="${ver%%.*}"
+case "$major" in ""|*[!0-9]*) major_ok=0 ;; *) if [ "$major" -ge 9 ]; then major_ok=1; else major_ok=0; fi ;; esac
+if [ "$major_ok" = 1 ]; then ok "AC19: 판의 major 가 9 이상이다(${ver})"; else no "AC19: 판의 major 가 9 미만이거나 읽지 못했다: ${ver}"; fi
 OLD1="request-""framing"; OLD2="pm-""interview"
 sec=$(awk '/^## \[9\.0\.0\]/{f=1;print;next} f&&/^## \[/{exit} f' "$SD/CHANGELOG.md")
 if printf '%s' "$sec" | grep -qF "$OLD1" && printf '%s' "$sec" | grep -qF "$OLD2"; then ok "AC19: 9.0.0 절이 두 옛 이름을 싣는다"; else no "AC19: 9.0.0 절에 옛 이름이 없다"; fi
