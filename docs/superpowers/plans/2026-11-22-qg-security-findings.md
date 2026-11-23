@@ -448,3 +448,41 @@ AC 마다 `AC<번호>: 구현됨 | 미룸 | 빠짐 — 근거` 한 줄로 보고
 - [ ] **Step 5: 커밋한다** — pathspec · 트레일러 두 줄(`Spec: …` · `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`). 전체 스위트는 돌리지 않는다.
 
 끝나면 마지막 전체 리뷰를 새로 고친 범위(앞 리뷰 뒤의 커밋 — ff2230ca 뒤)만 좁게 한 번 다시 받는다 — AC5 와 「고친 검사를 여전히 지나가는 길이 있는가」 를 다시 묻는다.
+
+---
+
+### Task 9: `rules-reset` 도 접지 않고 `confirm` 이 목록과 끝을 묶는다 (AC5 · 구현 물음 2 의 답)
+
+Task 8 리뷰의 Important 셋에 대한 답(2026-11-23 · 설계문서 커밋 4cd8d398 에 반영)을 구현한다. 정본은 설계 §3 의 새 항목 둘(`rules-reset` · `confirm` 의 목록과 끝 묶기), Constraints 의 새 문장, AC5 의 새 문장이다. 답 원문: 지휘 상태 폴더의 `relay/qg-sec/impl-answer-2.md`.
+
+**Files:**
+- Modify: `plugins/spec-distill/scripts/leader_seat.py`(`_reset` 239행 근처 · `confirm` 582행 근처 · 알림 상수 한 줄)
+- Modify: `plugins/spec-distill/references/conductor-state-branch.md`(확인 걸음 3 · 한계 문장 · 줄마다 할 일 표 — 500 줄 알림 행)
+- Modify: `plugins/spec-distill/README.md`(`confirm` 설명 — 짧게) · `plugins/spec-distill/CHANGELOG.md`(8.31.1 Security ③ — 머리 줄 · 날짜 · 판 그대로)
+- Test: `plugins/spec-distill/tests/test_leader_seat.py` · `test_conductor_cross.py` · `test_conductor_state_branch_docs.py`(「E3」 락 문자열 포함)
+
+**Interfaces:**
+- `_reset`: 확인 기록을 접기 전(`confirm_at` 앞) — 있는 `RESET_PENDING_LEFT` 가 나오는 자리와 같은 자리에서 — `settle` 과 같은 술어(확인한 끝 뒤에 규칙 사본 · `rules-base.md` · `pending.md` 를 바꾼 `씀` 커밋이 있는가 — `TS.edits_since` 를 같은 범위 · 같은 감시 경로로 재서 `씀` 으로 가른 것)가 참이면 접지 않고 새 알림 `RESET_OWN_LEFT = "이 기계가 쓴 것으로 적힌 고침이 남아 있다 — 보인 뒤 confirm 한다"`(설계 글자 그대로) 를 더한다. 잴 수 없으면 접지 않는다. 그런 커밋이 없으면 지금처럼 접는다. 술어는 `settle` 과 한 자리에서 나눠 쓴다(같은 규칙을 두 번 적지 않는다).
+- `confirm`(표시 없이): 남의 고침이 없고 내 고침 목록이 있으면 `NOTHING_TO_CONFIRM` 뒤에 그 목록 줄(`show` 가 내는 것과 같은 글자 — `conductor_status.own_lines` 나 같은 상수를 쓴다, 글자를 두 자리에 적지 않는다)과 `CONFIRM_TIP % seen` 을 낸다. 종료 코드 0. 남의 고침이 있을 때 내 고침 목록도 있으면 그 목록 줄도 같은 출력에 싣는다(설계 「목록 줄과 확인할 끝을 한 출력에」).
+- `confirm --confirmed <끝>`: 끝이 읽을 끝과 같으면 지금 그대로 기록한다. 다르고 내 고침 목록이 있으면 남의 고침 때처럼 `NOT_THE_TIP` · 목록 줄 · `CONFIRM_TIP % seen` 을 내고 BranchError(1) — 확인 기록을 바꾸지 않는다. 다르고 남의 고침도 내 고침 목록도 없으면 지금 그대로(0 · 「확인할 남의 고침이 없다」).
+- `sync` 출력 글자 · 다른 종료 코드는 그대로.
+
+넣을 글(뜻 — 글자는 구현자가 짓고 부재 락의 금지 글자를 쓰지 않는다):
+- 상태 브랜치 문서 한계 문장: 「`confirm --confirmed <확인할 끝>` 으로만 접는다」 를 참으로 두고, `rules-reset` 도 그런 `씀` 커밋이 있으면 접지 않고 알림을 낸다는 것을 잇는다. 「막는 장치는 E3 가 정한다」 → 「아직 막는 장치는 없다」(리더 결정). 확인 걸음 3: 표시 없는 `confirm` 이 목록과 끝을 함께 내고, 낡은 끝이면 1 로 끝나 기록하지 않는다 — 새로 낸 끝으로 사용자 확인을 다시 받는다.
+- 줄마다 할 일 표: 「씀」 줄이 500 을 넘을 때의 있는 알림 행에 「내 고침 목록이 남아 있어도 나온다 — 그때 할 일은 목록을 보인 뒤 `confirm --confirmed`」 를 잇는다(알림 글자는 그대로 · Task 8 리뷰 Minor 1).
+- README 의 `confirm` 설명에 한 구절: 이 기계가 쓴 것으로 적힌 고침 목록이 있으면 그 목록과 확인할 끝도 낸다.
+- CHANGELOG 8.31.1 Security ③: 「E3」 를 빼고, `rules-reset` 도 접지 않는다 · 표시 없는 `confirm` 이 목록과 끝을 함께 낸다 · 낡은 끝은 1 을 잇는다.
+
+- [ ] **Step 1: 실패하는 테스트를 쓴다** — 단언 다섯(AC5 새 문장마다 하나 이상):
+  - `씀 심음 → rules-reset:` `씀` 으로 심은 대기 줄 고침이 있을 때 `rules-reset` 뒤 `show` 에 그 커밋 줄이 남고 알림에 `LS.RESET_OWN_LEFT` 가 있다.
+  - `rules-reset 양성 대조:` 그런 `씀` 이 없으면 `rules-reset` 이 지금처럼 접는다(있는 `RESET_DONE` 단언이 이미 재면 그것을 가리킨다).
+  - `confirm 이 목록과 끝을 함께:` 내 고침 목록이 있을 때 표시 없는 `confirm` 의 알림에 `CS.OWN_EDITS % n` · 커밋 줄 · `LS.CONFIRM_TIP % seen` 이 모두 있다.
+  - `낡은 끝은 1:` 낡은 끝으로 부른 `confirm(…, confirmed=<옛 끝>)` 이 BranchError(1) 이고 메시지에 `NOT_THE_TIP` · 목록 줄 · 새 끝이 있으며, 그 뒤 `show` 에 그 커밋 줄이 남는다.
+  - `새 끝이면 접힌다:` 이어서 새 끝으로 부르면 기록되고 `show` 에 줄이 없다.
+  - 판정 변이: `_reset` 의 새 갈래를 빼면 첫 단언이, 낡은 끝 갈래를 빼면 넷째 단언이 빨개진다.
+- [ ] **Step 2: 실패를 확인한다.**
+- [ ] **Step 3: 구현한다** — Interfaces 대로. 문서 넷을 고치고, 그 문장을 재는 락(「E3」 락 문자열 포함)에 본문 고유 단언을 맞춘다.
+- [ ] **Step 4: 통과를 확인한다** — Task 8 Step 4 의 명령들과 바꾼 파일(leader_seat.py · conductor-state-branch.md · README.md · CHANGELOG.md · 바꾼 테스트)을 코퍼스로 읽는 락. 있는 테스트의 기대가 바뀌는 자리는 고치고 보고한다.
+- [ ] **Step 5: 커밋한다** — pathspec · 트레일러 두 줄. 판 · CHANGELOG 머리 줄은 그대로. 전체 스위트는 돌리지 않는다.
+
+끝나면 마지막 리뷰를 좁게 한 번 받는다 — 「접는 길이 `confirm --confirmed` 말고 또 있는가」 와 「보이지 않은 채 접히는 길이 남았는가」 를 묻는다.
