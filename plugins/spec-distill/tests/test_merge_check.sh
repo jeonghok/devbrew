@@ -562,8 +562,13 @@ NG="$(mktemp -d /tmp/mc-ng.XXXXXX)" || NG=""
 if [ -n "$NG" ] && ! git -C "$NG" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   NG="$(cd "$NG" && pwd -P)"
   mkrepo st; put a.txt a; push_base; WR="$(cd "$W" && pwd -P)"   # git 안 후보
-  mkdir -p "$NG/a" "$NG/b" "$NG/fakegit"; : > "$NG/file"
-  printf '#!/bin/sh\necho "fatal: boom-e1r" >&2\nexit 1\n' > "$NG/fakegit/git"; chmod +x "$NG/fakegit/git"
+  mkdir -p "$NG/a" "$NG/b" "$NG/fakegit" "$NG/fakegit-boundary" "$NG/fakegit-hint"; : > "$NG/file"
+  printf '#!/bin/sh\necho "fatal: boom-e1r" >&2\nexit 1\n' > "$NG/fakegit/git"
+  # 파일시스템 경계의 「레포 아님」 — git 이 두 줄을 내고 끝 줄에는 그 글자가 없다(git 2.54.0 · LC_ALL=C · cwd /dev 실측 글)
+  printf '#!/bin/sh\necho "fatal: not a git repository (or any parent up to mount point /)" >&2\necho "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)." >&2\nexit 128\n' > "$NG/fakegit-boundary/git"
+  # 다른 까닭의 실패 뒤에 힌트 줄이 붙는다
+  printf '#!/bin/sh\necho "fatal: boom-hint" >&2\necho "hint: try something else" >&2\nexit 128\n' > "$NG/fakegit-hint/git"
+  chmod +x "$NG/fakegit/git" "$NG/fakegit-boundary/git" "$NG/fakegit-hint/git"
   cat > "$T/side.py" <<'EOF'
 import os
 import sys
@@ -582,7 +587,8 @@ if case == "gettempdir-why":   # 기본 자리의 까닭만 남기고 나머지 
     m.tmp_candidates = lambda: [c for c in real_cands() if not isinstance(c, str)] + [str(ng / "file")]
 elif case != "gettempdir":
     cands = {"mkdtemp": [ng / "a", ng / "b"], "dotgit": [Path(repo) / ".git", ng / "b"],
-             "gitenv": [ng / "b"], "unknown": [ng / "b"], "why": [ng / "file", Path(repo), ng / "a"]}[case]
+             "gitenv": [ng / "b"], "unknown": [ng / "b"],
+             "boundary": [ng / "b"], "hint": [ng / "b"], "why": [ng / "file", Path(repo), ng / "a"]}[case]
     m.tmp_candidates = lambda: [str(c) for c in cands]
 if case in ("mkdtemp", "why"):   # 후보 a 에서만 폴더 만들기가 실패한다
     def flaky(*a, **k):
@@ -593,8 +599,9 @@ if case in ("mkdtemp", "why"):   # 후보 a 에서만 폴더 만들기가 실패
 if case == "gitenv":   # 호출한 쪽이 다른 레포의 GIT_DIR · GIT_WORK_TREE 를 물려준다
     os.environ["GIT_DIR"] = str(Path(repo) / ".git")
     os.environ["GIT_WORK_TREE"] = repo
-if case == "unknown":   # git 이 「레포 아님」 이 아닌 까닭으로 실패한다
-    os.environ["PATH"] = str(ng / "fakegit") + os.pathsep + os.environ["PATH"]
+FAKE = {"unknown": "fakegit", "boundary": "fakegit-boundary", "hint": "fakegit-hint"}
+if case in FAKE:   # git 이 가짜다 — 「레포 아님」 이 아닌 까닭 · 경계에서 두 줄 · 힌트 줄이 붙은 실패
+    os.environ["PATH"] = str(ng / FAKE[case]) + os.pathsep + os.environ["PATH"]
 try:
     tmps, note = m.side_tmps(work)
 except BaseException as exc:
@@ -625,6 +632,12 @@ EOF
   o="$(side unknown)"
   assert_contains "$o" "unknown merged=$NG/work-unknown/tmp-merged" "git 이 다른 까닭으로 실패하면 git 밖으로 치지 않고 대체 길로 간다"
   assert_contains "$o" "$NG/b: git 밖인지 가리지 못했다(fatal: boom-e1r)" "git 밖인지 가리지 못한 까닭을 알림에 싣는다"
+  o="$(side boundary)"
+  assert_contains "$o" "boundary note=-" "파일시스템 경계의 「레포 아님」(두 줄 · 끝 줄에 그 글자 없음)도 git 밖이다(알림 없음)"
+  assert_contains "$o" "boundary merged=$NG/b/merge-check-merged-" "파일시스템 경계의 「레포 아님」 후보를 git 밖으로 쓴다"
+  o="$(side hint)"
+  assert_contains "$o" "hint merged=$NG/work-hint/tmp-merged" "힌트 줄이 붙은 다른 까닭의 실패는 git 밖으로 치지 않는다(전제)"
+  assert_contains "$o" "$NG/b: git 밖인지 가리지 못했다(fatal: boom-hint)" "까닭 글은 힌트 줄이 아니라 fatal: 줄이다"
   o="$(side why)"
   assert_contains "$o" "why merged=$NG/work-why/tmp-merged" "후보가 모두 떨어지면 실행 폴더 안을 쓴다(전제)"
   assert_contains "$o" "$NG/file: 쓸 수 있는 폴더가 아니다" "대체 길 알림: 폴더가 아닌 후보의 까닭"

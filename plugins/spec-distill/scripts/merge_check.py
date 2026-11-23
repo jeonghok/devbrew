@@ -242,10 +242,11 @@ def outside_git(path: str):
         return None, _why(exc)
     if p.returncode == 0:
         return False, ""
-    err = (p.stderr.strip().splitlines() or [""])[-1]
-    if "not a git repository" in err:
+    if "not a git repository" in p.stderr:   # 파일시스템 경계에서는 끝 줄이 다른 안내다 — 전체에서 찾는다
         return True, ""
-    return None, err or "git rc %d" % p.returncode
+    lines = [l.strip() for l in p.stderr.splitlines() if l.strip()]
+    fatal = [l for l in lines if l.startswith("fatal:")]
+    return None, (fatal or lines[-1:] or ["git rc %d" % p.returncode])[0]
 
 
 def side_tmps(work: Path):
