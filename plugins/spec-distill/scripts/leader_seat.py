@@ -537,24 +537,27 @@ def _commit_lines(root, commit: str, paths, watched: list, parents: int = 1) -> 
 
 
 def _foreign_report(root, team, tip: str, rows: list) -> tuple:
-    """(보고 줄들, 확인이 필요한가). 판정이 None 이면 확인 끝 없이 다시 세고, 그래도 None 이면 범위의 `씀` 밖 커밋 전부를 보인다 —
-    판정이 None 이었으면 보일 커밋이 없어도 확인이 필요하다(재지 못함을 빠져나가는 길이 confirm 이다)."""
+    """(보고 줄들, 확인이 필요한가, 이 기계가 쓴 것으로 적힌 고침이 있는가). 판정이 None 이면 확인 끝 없이 다시 세고,
+    그래도 None 이면 범위의 `씀` 밖 커밋 전부를 보인다 — 판정이 None 이었으면 보일 커밋이 없어도 확인이 필요하다
+    (재지 못함을 빠져나가는 길이 confirm 이다). 셋째 값은 처음 판정에서만 가른다 — `edits_since` 를 한 번 잰다."""
     git, watched = Git(str(root)), _watched(team)
     trust = TS.trust_of(rows)
-    found = TS.foreign_commits(git, tip, trust, watched)
+    edits = TS.edits_since(git, tip, trust, watched)
+    found = None if edits is None else [e for e in edits if e[0] not in trust[1]]
+    listed = edits is not None and len(found) < len(edits)
     lead = ""
     if found is None:
         own = frozenset(r["끝"] for r in rows if r["까닭"] == cs.TRUST_WHY[1])
         found = TS.foreign_commits(git, tip, (None, own), watched)
         lead = FOREIGN_UNMEASURED + RECOUNTED
         if found is None:
-            return _unwritten_report(root, git, watched, tip, trust, own), True
+            return _unwritten_report(root, git, watched, tip, trust, own), True, listed
     if not found and not lead:
-        return [], False
+        return [], False, listed
     lines = [lead + FOREIGN % len(found) + CONFIRM_HOW]
     for commit, paths in found:
         lines += _commit_lines(root, commit, paths, watched)
-    return lines, True
+    return lines, True, listed
 
 
 def _unwritten_report(root, git, watched: list, tip: str, trust, own) -> list:
@@ -604,16 +607,18 @@ def confirm(root, roadmap_rel: str, session: str, confirmed: Optional[str] = Non
         except Exception as exc:
             raise CB.BranchError(3, "확인한 끝을 기록하지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(CB._first_line(exc))))
         return seen, told + (CONFIRMED % seen,)
-    lines, needed = _foreign_report(root, team, seen, rows)
-    if not needed:
-        return seen, (NOTHING_TO_CONFIRM,)
+    lines, needed, listed = _foreign_report(root, team, seen, rows)
+    if not needed:   # 이 기계가 쓴 것으로 적힌 고침이 있으면 그 목록을 접을 끝도 낸다 — sync 는 그 목록을 접지 않는다
+        return seen, (NOTHING_TO_CONFIRM,) + ((CONFIRM_TIP % seen,) if listed else ())
     lead = [NOT_THE_TIP] if confirmed is not None else []
     raise CB.BranchError(1, "\n".join(lead + lines + [CONFIRM_TIP % seen]))
 
 
 def settle(root, roadmap_rel: str, session: str, tip: str, notes: Optional[list] = None) -> Optional[int]:
     """`tip`(쓴 뒤 읽을 끝)에서 두 쪽의 확인되지 않은 남의 고침 수(규칙 · 대기 줄 경로를 바꾼 서로 다른 커밋)를 세고 `확인한 끝` 절을 줄인다.
-    0 이면 절을 `확인 · <tip>` 한 줄로, 아니면 `씀` 줄 가운데 `<확인 끝>..<tip>` 에 없는 것(다시 만들기로 버려진 커밋)만 지운다.
+    0 이고 같은 범위에 그 경로를 바꾼 `씀` 커밋(이 기계가 쓴 것으로 적힌 고침)도 없으면 절을 `확인 · <tip>` 한 줄로,
+    아니면 `씀` 줄 가운데 `<확인 끝>..<tip>` 에 없는 것(다시 만들기로 버려진 커밋)만 지운다 — 그 목록은 사용자에게 보인 뒤
+    `confirm --confirmed <끝>` 으로만 접는다.
     재지 못하면 None — 절을 건드리지 않는다. `notes` 를 주면 알릴 줄을 더한다(옛 `## 레포 설정` 절을 지움 · 「씀」 줄이 500 을 넘음)."""
     team = CB.team_of(root, roadmap_rel)
     path = cs.machine_path(state_path.state_root(str(root)), roadmap_rel)
@@ -624,11 +629,12 @@ def settle(root, roadmap_rel: str, session: str, tip: str, notes: Optional[list]
     rows = data[cs.TRUST]
     trust = TS.trust_of(rows)
     git = Git(str(root))
-    found = TS.foreign_commits(git, tip, trust, _watched(team))
-    if found is None:
+    edits = TS.edits_since(git, tip, trust, _watched(team))   # 한 번 재고 `씀` 으로 가른다
+    if edits is None:
         return None
+    found = [e for e in edits if e[0] not in trust[1]]
     keep = rows
-    if not found:
+    if not edits:   # 남의 고침도 이 기계가 쓴 것으로 적힌 고침도 없다 — 그때만 접는다
         if [(r["끝"], r["까닭"]) for r in rows] != [(tip, cs.TRUST_WHY[0])]:
             keep = [{"끝": tip, "까닭": cs.TRUST_WHY[0], "때": CB.stamp(), "세션": session}]
     else:

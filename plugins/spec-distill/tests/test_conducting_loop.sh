@@ -240,6 +240,7 @@ once 5 '머지 명령 줄을 내기 전에 그 에픽에서 받은 승인과 담
 once 5 '「담당자 세션에서 들음」 표시를 붙여 둔 줄 전부'
 once 5 '하신 적 없는 승인이나 말이 있으면 머지하지 말고 알려 달라'
 once 5 '목록도 함께 싣는다 — 그 가운데 리더가 쓰지 않은 고침이 있으면 머지 명령 줄을 내지 않고 사용자에게 알린다'
+once 5 '보인 뒤 사용자가 머지를 정하면 `conductor_branch.py confirm` 이 낸 「확인할 끝」 으로 `conductor_branch.py confirm --confirmed <확인할 끝>` 을 불러 확인한 끝을 기록한다 — 그 전에는 `sync` 가 그 목록을 접지 않는다'
 once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다'
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
 finish

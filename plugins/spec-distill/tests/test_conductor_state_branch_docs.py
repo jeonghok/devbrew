@@ -190,6 +190,15 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
             self.assertIn(word, text, word)
         self.assertIn(CS.OWN_EDITS.replace("%d", "n"), text)
         self.assertNotIn("AskUserQuestion", text)
+        # AC5 · 마지막 리뷰 C1 · I2 — 접기를 미룬다 · 한계는 `확인한 끝` 절의 줄 전체
+        for words in ("- `확인한 끝` 절의 줄(`씀` · `확인`)은 기계 상태 파일에 있어 이 기계에서 도는 누구나",
+                      "그런 `씀` 커밋이 확인한 끝 뒤에 있으면 `sync` 는 `확인한 끝` 절을 한 줄로 접지 않고(버려진 `씀` 줄만 지운다), "
+                      "목록을 사용자에게 보인 뒤 `confirm --confirmed <확인할 끝>` 으로만 접는다.",
+                      "직접 심은 `확인` 줄은 드러나지도 않는다 — 그 끝까지의 고침은 판정에도 목록에도 나오지 않는다. 막는 장치는 E3 가 정한다.",
+                      "「이 기계가 쓴 것으로 적힌 고침」 이 있으면 그 뒤에 `확인할 끝: <40자>` 도 낸다",
+                      "쓰지 않은 것이 있으면 머지 전에 사용자에게 알린다 · 보인 뒤 사용자가 머지를 정하면 `confirm --confirmed <확인할 끝>` 으로 접는다 |"):
+            self.assertIn(words, text, words)
+        self.assertNotIn("\n- `씀` 줄은 기계 상태 파일에 있어", text)   # 한계가 `씀` 줄만 말하던 옛 문장
 
     def test_team_files_now_moved(self):
         text = (PLUGIN / "references" / "team-files.md").read_text(encoding="utf-8")

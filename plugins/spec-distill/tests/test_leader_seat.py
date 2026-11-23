@@ -678,6 +678,24 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
         self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
 
+    def test_settle_keeps_own_watched_edits_and_trims_only_abandoned_rows(self):   # AC5 · 마지막 리뷰 C1 — 접기를 미룬다
+        mine = self.write({self.team.rules: TEAM_RULE + "\n- [나] 내 줄\n"}).commit
+        abandoned = self.g("rev-parse", "origin/trunk")   # 범위 밖 커밋 — 다시 만들기로 버려진 `씀` 줄 흉내
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        data = cs.load(path, rm(ALPHA))
+        data[cs.TRUST] += [{"끝": abandoned, "까닭": "씀", "때": CB.stamp(), "세션": SID}]
+        cs.save(path, rm(ALPHA), data, SID)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)   # 반환값은 그대로 남의 고침 수다
+        ends = [(r["끝"], r["까닭"]) for r in self.rows()]
+        self.assertIn((mine, "씀"), ends)
+        self.assertNotIn((abandoned, "씀"), ends)
+        self.assertNotIn("확인", [w for _e, w in ends])
+        tip, notes = LS.confirm(str(self.w), rm(ALPHA), SID)
+        self.assertEqual(notes, (LS.NOTHING_TO_CONFIRM, LS.CONFIRM_TIP % tip))
+        LS.confirm(str(self.w), rm(ALPHA), SID, tip)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(tip, "확인")])   # 확인 뒤에는 접힌다
+
     def test_unreadable_machine_state_is_three(self):   # I11 — confirm 이 기계 상태를 읽지 못하면
         path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
         path.write_text(path.read_text(encoding="utf-8") + "\n## 확인한 끝\n\n| 끝 | 까닭 | 때 | 세션 |\n|---|---|---|---|\n| x | 씀 | - | - |\n", encoding="utf-8")

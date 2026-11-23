@@ -21,6 +21,7 @@ import conductor_branch as CB  # noqa: E402
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
+import leader_seat as LS  # noqa: E402
 import suite_lock  # noqa: E402
 import team_status as TS  # noqa: E402
 from state_path import state_root  # noqa: E402
@@ -467,6 +468,46 @@ class Show(CrossRepo):
         out = self.text()
         self.assertNotIn("확인되지 않은 남의 고침", out)
         self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), out)
+
+    def trust_rows(self):
+        return [(r["끝"], r["까닭"]) for r in cs.load(cs.machine_path(state_root(str(self.w)), rm(ALPHA)), rm(ALPHA))[cs.TRUST]]
+
+    def test_a_planted_own_edit_stays_listed_after_sync_until_confirmed(self):   # AC5 · 마지막 리뷰 C1 — 씀 을 심음 → sync → show
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.rules: "- [남] 심은 줄\n"})
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertNotIn("확인되지 않은 남의 고침", out)
+        # confirm --confirmed 뒤에는 없다 — 표시 없이 부르면 남의 고침은 없어도 확인할 끝을 낸다
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        tip, notes = LS.confirm(self.w, rm(ALPHA), SID)
+        self.assertEqual((tip, notes), (seen, (LS.NOTHING_TO_CONFIRM, LS.CONFIRM_TIP % seen)))
+        LS.confirm(self.w, rm(ALPHA), SID, confirmed=seen)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(6))
+        out = self.text()
+        self.assertNotIn(commit[:8], out)
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", out)
+        after, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(self.trust_rows(), [(after, "확인")])                    # 확인한 끝 절이 한 줄로 접혔다
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID), (after, (LS.NOTHING_TO_CONFIRM,)))   # 양성 대조 — 목록이 없으면 끝을 내지 않는다
+
+    def test_a_leaders_own_rules_edit_stays_listed_after_sync(self):   # AC5 — 리더의 바른 규칙 고침도 확인받을 때까지 남는다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertIn((commit, "씀"), self.trust_rows())                          # 접지 않았다 — 그 커밋의 `씀` 줄이 남았다
+
+    def test_status_only_own_rows_still_compact_on_sync(self):   # 감시 경로 밖 `씀` 만이면 지금처럼 접힌다
+        team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.status: "s\n"}, "현황")
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(self.trust_rows(), [(seen, "확인")])
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())
 
     def tree_of(self, base, files):
         """base 커밋의 트리에 files 를 얹은 트리 — 임시 인덱스로 만든다."""
