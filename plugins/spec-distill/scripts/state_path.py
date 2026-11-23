@@ -11,8 +11,8 @@ CLI:
                                                 creates the root with a `*` .gitignore; tracked files under it → exit 3,
                                                 stdout empty, the fix on stderr. Unknown or extra arguments → exit 2
   python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
-  python3 state_path.py interview-state --topic <kebab> [--date YYYY-MM-DD] [--time HHMM] [--cwd <dir>]
-                                              → prints interview state file path (exit 2 on refusal)
+  python3 state_path.py context-state --topic <kebab> [--date YYYY-MM-DD] [--time HHMM] [--cwd <dir>]
+                                              → prints context-build state file path (exit 2 on refusal)
   python3 state_path.py path-inside --root <R> <PATH>...
                                               → exit 0 if every PATH is inside R without links, else 2
                                                 (a logical cwd prefix of R and PATH is read as the physical cwd —
@@ -38,6 +38,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from legacy_names import (  # noqa: E402
+    CONTEXT_AUDIT, CONTEXT_BRIEF, CONTEXT_STATE, CONTEXT_TAIL, DEFAULT_DIR, OLD_DEFAULT_DIR, kind_matches,
+)
 
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 
@@ -209,8 +215,8 @@ def _check_state_root(root: Path, cwd: str) -> None:
 
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# 한 인터뷰의 세 자리와 각 자리가 받아들이는 frontmatter `type:`.
-_SLOTS = ((".state.md", "interview-state"), (".md", "interview-brief"), (".audit.md", "interview-audit"))
+# 한 컨텍스트 쌓기의 세 자리와 각 자리가 받아들이는 frontmatter `type:`(새 글자 — 견줄 때 옛 글자도 받는다).
+_SLOTS = ((".state.md", CONTEXT_STATE), (".md", CONTEXT_BRIEF), (".audit.md", CONTEXT_AUDIT))
 _HHMM = re.compile(r"^([01]\d|2[0-3])[0-5]\d$")
 
 
@@ -229,23 +235,30 @@ def worktree_root(cwd: str | None = None) -> tuple[Path, bool]:
     return Path(cwd).resolve(), False
 
 
-def interview_dir(root: Path, is_git: bool) -> tuple[Path | None, str | None]:
-    """(인터뷰 폴더, 사유). git 레포면 해결자가 기본 브랜치의 레포 설정으로 정한 `interview_dir`, 아니면 기본값.
-    레포 설정이 깨졌으면 (None, 사유). 해결자는 여기서만 불러온다 — 상태 루트만 쓰는 호출은 그 모듈을 읽지 않는다."""
-    here = str(Path(__file__).resolve().parent)
-    if here not in sys.path:
-        sys.path.insert(0, here)
-    import repo_defaults as rd
-    rel = rd.INTERVIEW_DIR
+def intent_dirs(root: Path, is_git: bool) -> tuple[Path | None, Path | None, str | None]:
+    """(새 의도 폴더, 옛 의도 폴더, 사유). git 레포면 해결자가 기본 브랜치의 레포 설정으로 정한 `intent_dir` 와
+    옛 키의 폴더(둘이 같을 수 있다), 아니면 두 기본값. 레포 설정이 깨졌으면 (None, None, 사유).
+    해결자는 여기서만 불러온다 — 상태 루트만 쓰는 호출은 그 모듈을 읽지 않는다."""
+    new_rel, old_rel = DEFAULT_DIR, OLD_DEFAULT_DIR
     if is_git:
+        import repo_defaults as rd
         try:
             result = rd.resolve(str(root))
         except rd.SettingsError as exc:
-            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(exc)
+            return None, None, "[spec-distill] 레포 설정을 읽지 못해 의도 폴더를 정하지 못했다 — {0}".format(exc)
         if result["errors"]:
-            return None, "[spec-distill] 레포 설정을 읽지 못해 인터뷰 폴더를 정하지 못했다 — {0}".format(result["errors"][0])
-        rel = result["values"]["interview_dir"]
-    return root.joinpath(*rel.strip("/").split("/")), None
+            return None, None, "[spec-distill] 레포 설정을 읽지 못해 의도 폴더를 정하지 못했다 — {0}".format(
+                result["errors"][0])
+        new_rel, old_rel = rd.intent_dirs(result)
+    def under(rel):
+        return None if rel is None else root.joinpath(*rel.strip("/").split("/"))
+    return under(new_rel), under(old_rel), None
+
+
+def interview_dir(root: Path, is_git: bool) -> tuple[Path | None, str | None]:
+    """(새 의도 폴더, 사유) — `intent_dirs` 의 새 폴더만. 이름은 부르는 쪽이 둘이라 그대로 둔다."""
+    new, _old, why = intent_dirs(root, is_git)
+    return new, why
 
 
 def inside_root(path, root) -> str | None:
@@ -303,14 +316,14 @@ def frontmatter_scalars(path) -> dict | None:
 
 
 def _slot_problem(d: Path, stem: str) -> str | None:
-    """세 자리 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면 짧은 사유, 아니면 None."""
+    """세 자리 중 이미 있는 파일의 `type:` 이 그 자리의 종류(옛 글자 포함)와 다르면 짧은 사유, 아니면 None."""
     for suffix, kind in _SLOTS:
         p = d / (stem + suffix)
         if not (p.exists() or p.is_symlink()):
             continue
         fm = frontmatter_scalars(p)
         have = None if fm is None else fm.get("type")
-        if have != kind:
+        if not kind_matches(have, kind):
             return ("[spec-distill] 계산한 자리에 다른 종류의 파일이 있다 — {0} (type: {1}). "
                     "남의 파일 위에 인터뷰를 시작하지 않는다.".format(p, have or "없음"))
     return None
@@ -326,11 +339,11 @@ def _path_problem(d: Path, root: Path, stem: str) -> str | None:
 
 def interview_state_path(topic: str, date: str | None = None, cwd: str | None = None,
                          hhmm: str | None = None) -> tuple[Path | None, list[str]]:
-    """`<작업 트리 루트>/<인터뷰 폴더>/<날짜>-<topic>-interview.state.md` — 인터뷰 폴더는 `interview_dir()`.
+    """`<작업 트리 루트>/<의도 폴더>/<날짜>-<topic>-context.state.md` — 의도 폴더는 `interview_dir()`(새 폴더).
 
-    계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류와 다르면
-    경로를 내지 않는다 — seed(`interview-seed`) · seed audit(`interview-seed-audit`) 위에 인터뷰를 시작하지 않는다.
-    brief 자리에 `interview-brief` 가 있으면(끝난 인터뷰) `<topic>-<HHMM>` 자리를 대신 낸다.
+    계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류(옛 글자 포함)와 다르면
+    경로를 내지 않는다 — seed(`intent-seed`) · seed audit(`intent-seed-audit`) 위에 컨텍스트 쌓기를 시작하지 않는다.
+    brief 자리에 `context-brief`(옛 꼴 종류 글자도 같다)가 있으면(끝난 일) `<topic>-<HHMM>` 자리를 대신 낸다.
     """
     msgs: list[str] = []
     if not topic or not KEBAB.fullmatch(topic):
@@ -347,16 +360,16 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
     if d is None:
         msgs.append(why)
         return None, msgs
-    stem = "{0}-{1}-interview".format(date, topic)
+    stem = "{0}-{1}{2}".format(date, topic, CONTEXT_TAIL)
     why = _path_problem(d, root, stem) or _slot_problem(d, stem)
     if why:
         msgs.append(why)
         return None, msgs
     if (d / (stem + ".md")).exists():
-        # 위 검사를 지났으니 brief 자리의 type 은 interview-brief 다 — 끝난 인터뷰.
+        # 위 검사를 지났으니 brief 자리의 type 은 context-brief(옛 꼴 종류 글자 포함)다 — 끝난 일.
         done = d / (stem + ".md")
         hhmm = hhmm or datetime.datetime.now().strftime("%H%M")
-        stem2 = "{0}-{1}-{2}-interview".format(date, topic, hhmm)
+        stem2 = "{0}-{1}-{2}{3}".format(date, topic, hhmm, CONTEXT_TAIL)
         new_state = d / (stem2 + ".state.md")
         why = _path_problem(d, root, stem2) or _slot_problem(d, stem2)
         if why:
@@ -414,7 +427,7 @@ def _root_for_doc(doc: str) -> tuple[str | None, Path | None]:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: state_path.py {state-root|session-id|interview-state} …", file=sys.stderr)
+        print("usage: state_path.py {state-root|session-id|context-state} …", file=sys.stderr)
         return 2
     sub = argv[1]
     if sub in ("state-root", "state-root-for"):
@@ -461,7 +474,7 @@ def main(argv: list[str]) -> int:
             return 1
         print(sid)
         return 0
-    if sub == "interview-state":
+    if sub == "context-state":
         def opt(name):
             if name in argv:
                 i = argv.index(name)

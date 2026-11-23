@@ -34,9 +34,9 @@ D="$iv/docs/superpowers/interview"
 printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D/2026-10-15-t-interview.state.md"
 ent() { ( cd "$iv" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-iv000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-iv000001 \
           bash -c "ARG_PATH='$1'
-$(fence "$SK" interview-state-entry)" 2>/dev/null | tail -n 1 ); }
-[ -n "$(fence "$SK" interview-state-entry)" ] && ok "AC3: SKILL 에 진입 펜스(interview-state-entry)가 있다" || no "AC3: 진입 펜스가 없다"
-assert_eq "$(ent "$D/2026-10-15-t-interview.state.md")" "interview-state: RESUME $D/2026-10-15-t-interview.state.md" "AC3: @<…>.state.md 는 이어 가는 분기"
+$(fence "$SK" context-state-entry)" 2>/dev/null | tail -n 1 ); }
+[ -n "$(fence "$SK" context-state-entry)" ] && ok "AC3: SKILL 에 진입 펜스(context-state-entry)가 있다" || no "AC3: 진입 펜스가 없다"
+assert_eq "$(ent "$D/2026-10-15-t-interview.state.md")" "context-state: RESUME $D/2026-10-15-t-interview.state.md" "AC3: @<…>.state.md 는 이어 가는 분기"
 # 판결 표는 SKILL 줄 상한(test_conducting_interview_stage.sh SKILL_LINE_CAP) 때문에 state-file.md 「### 진입 판결」 에 산다.
 # REJECT 는 SKILL 이 멈추는 판결이라 SKILL 에 남는다. SKILL 은 판결마다의 동작이 state-file.md 에 있다는 줄을 갖는다.
 SF_VERDICT="$(python3 -I -c '
@@ -44,11 +44,11 @@ import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 i = t.find("### 진입 판결")
 print(t[i:t.find("\n### ", i + 1)] if i >= 0 else "")' "$SF")"
-printf '%s\n' "$SF_VERDICT" | grep -qF '`interview-state: RESUME <경로>`' && ok "AC3: state-file.md 판결 표에 RESUME 행" || no "AC3: state-file.md 판결 표에 RESUME 행이 없다"
-for v in 'interview-state: ASK`' 'interview-state: LEGACY <경로>`' 'interview-state: NEW-SEED <주제> seed=<경로>`' 'interview-state: NEW`'; do
+printf '%s\n' "$SF_VERDICT" | grep -qF '`context-state: RESUME <경로>`' && ok "AC3: state-file.md 판결 표에 RESUME 행" || no "AC3: state-file.md 판결 표에 RESUME 행이 없다"
+for v in 'context-state: ASK`' 'context-state: LEGACY <경로>`' 'context-state: NEW-SEED <주제> seed=<경로>`' 'context-state: NEW`'; do
   printf '%s\n' "$SF_VERDICT" | grep -qF -- "$v" && ok "AC3: state-file.md 판결 표에 「${v}」" || no "AC3: state-file.md 판결 표에 「${v}」 이 없다"
 done
-grep -qF 'interview-state: REJECT …' "$SK" && ok "AC3: SKILL 이 REJECT 에서 멈춘다" || no "AC3: SKILL 에 REJECT 판결이 없다"
+grep -qF 'context-state: REJECT …' "$SK" && ok "AC3: SKILL 이 REJECT 에서 멈춘다" || no "AC3: SKILL 에 REJECT 판결이 없다"
 grep -qF '마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다' "$SK" && ok "AC3: SKILL 이 판결 표를 state-file.md 로 가리킨다" || no "AC3: SKILL 에 판결 표 가리킴이 없다"
 # 진입 스크립트가 죽으면(마지막 줄이 판결이 아니다) 판결 표의 어느 행에도 들지 않는다 — 3.6 본문이 멈춤을 정한다.
 S36="$(python3 -I -c '
@@ -56,17 +56,17 @@ import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 i = t.find("### 3.6")
 print(t[i:t.find("\n### ", i + 1)] if i >= 0 else "")' "$SK")"
-printf '%s\n' "$S36" | grep -qF '마지막 줄이 `interview-state:` 판결이 아니면 그 출력을 보이고 멈춘다' \
+printf '%s\n' "$S36" | grep -qF '마지막 줄이 `context-state:` 판결이 아니면 그 출력을 보이고 멈춘다' \
   && ok "AC3: 3.6 — 판결 줄이 아니면 출력을 보이고 멈춘다" || no "AC3: 3.6 에 판결 아닌 마지막 줄의 행이 없다"
 # 끝난 인터뷰(짝 brief 가 있다)와 짝 brief · audit 의 링크는 진입 펜스에서 REJECT 다
 D2="$iv/docs/superpowers/interview"; OUTSIDE="$T/outside"; mkdir -p "$OUTSIDE"; printf '원본\n' > "$OUTSIDE/keys"
 printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-f-interview.state.md"
 printf -- '---\ntype: interview-brief\n---\n' > "$D2/2026-10-15-f-interview.md"
-assert_eq "$(ent "$D2/2026-10-15-f-interview.state.md")" "interview-state: REJECT $D2/2026-10-15-f-interview.state.md (이미 끝난 인터뷰다 — brief 가 있다)" "AC3: 끝난 인터뷰의 상태 파일은 REJECT"
+assert_eq "$(ent "$D2/2026-10-15-f-interview.state.md")" "context-state: REJECT $D2/2026-10-15-f-interview.state.md (이미 끝난 인터뷰다 — brief 가 있다)" "AC3: 끝난 인터뷰의 상태 파일은 REJECT"
 printf -- '---\ntype: interview-state\nseed: 없음\n---\n## R1\n' > "$D2/2026-10-15-l-interview.state.md"
 ln -s "$OUTSIDE/keys" "$D2/2026-10-15-l-interview.audit.md"
 case "$(ent "$D2/2026-10-15-l-interview.state.md")" in
-  "interview-state: REJECT $D2/2026-10-15-l-interview.state.md (2026-10-15-l-interview.audit.md: 링크를 거친다"*) ok "AC3: 짝 audit 가 링크면 REJECT" ;;
+  "context-state: REJECT $D2/2026-10-15-l-interview.state.md (2026-10-15-l-interview.audit.md: 링크를 거친다"*) ok "AC3: 짝 audit 가 링크면 REJECT" ;;
   *) no "AC3: 짝 audit 링크를 이어 가기가 받아들였다" ;;
 esac
 assert_eq "$(cat "$OUTSIDE/keys")" "원본" "AC3: 링크 너머 파일은 그대로"
@@ -74,11 +74,11 @@ rm -f "$D2/2026-10-15-l-interview.audit.md" "$D2/2026-10-15-l-interview.state.md
 printf -- '---\ntype: interview-seed\n---\n' > "$D/2026-10-15-s-interview.md"
 printf -- '---\ntype: interview-seed-audit\n---\n' > "$D/2026-10-15-s-interview.audit.md"
 v="$(ent "$D/2026-10-15-s-interview.md")"
-assert_eq "$v" "interview-state: NEW-SEED s-brief seed=docs/superpowers/interview/2026-10-15-s-interview.md" "AC3: seed 로 시작하면 주제에 -brief 꼬리"
-p="$(cd "$iv" && python3 "$SD/scripts/state_path.py" interview-state --topic s-brief --date 2026-10-15)"
-case "$p" in "$D/2026-10-15-s-brief-interview.state.md") ok "AC3: 같은 날 seed 와 겹치지 않는 경로";; *) no "AC3: 경로 $p";; esac
-grep -qF 'type: interview-state' "$SF" && grep -qF 'seed: <' "$SF" && ok "AC3: state-file.md 가 첫 두 키를 정한다" || no "AC3: 첫 두 키 문면"
-grep -qF 'state_path.py" interview-state --topic' "$SF" && grep -qF '그 출력 경로에만' "$SF" \
+assert_eq "$v" "context-state: NEW-SEED s-brief seed=docs/superpowers/interview/2026-10-15-s-interview.md" "AC3: seed 로 시작하면 주제에 -brief 꼬리"
+p="$(cd "$iv" && python3 "$SD/scripts/state_path.py" context-state --topic s-brief --date 2026-10-15)"
+case "$p" in "$iv/docs/superpowers/intent/2026-10-15-s-brief-context.state.md") ok "AC3: 옛 seed 로 시작해도 새 폴더 · 새 꼴 경로(seed 와 겹치지 않는다)";; *) no "AC3: 경로 $p";; esac
+grep -qF 'type: context-state' "$SF" && grep -qF 'seed: <' "$SF" && ok "AC3: state-file.md 가 첫 두 키를 정한다" || no "AC3: 첫 두 키 문면"
+grep -qF 'state_path.py" context-state --topic' "$SF" && grep -qF '그 출력 경로에만' "$SF" \
   && ok "AC3: 상태 파일은 스크립트가 낸 경로에만 만든다(문면)" || no "AC3: 상태 파일 자리를 스크립트 출력으로 묶지 않았다"
 
 # AC4 — 이어 감/새로 시작 질문 문면 · 새로 시작은 지우지 않는다
@@ -247,12 +247,12 @@ grep -qxF "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(mai
 grep -qF '{label: "확정하고 끝낸다 (권장)", description: "얻음: 확정을 저장하고 커밋해 brief 를 다음 작업의 입력으로 남긴다 · ' "$FIN" && grep -qF '「확정하고 끝낸다」 는 PR 을 열지 않는다.' "$FIN" && ok "B-1: superpowers 가 없는 끝 질문의 「확정하고 끝낸다」 가 커밋한다고 말한다" || no "B-1: 끝 질문의 커밋 설명이 없다"
 grep -qF '브랜치에서 직접 커밋하라' "$FIN" && no "B-1: 옛 미커밋 안내가 남았다" || ok "B-1: 옛 미커밋 안내가 없다(양성 짝: 위 단언)"
 # 이어 갈 때의 「풀린 입력」 — 상태 파일 전문이 아니라 그 안의 블록
-python3 -I - "$SK" <<'PY' && ok "fix1: SKILL 3 · 3.5 가 interview-state 도 건너뛴다" || no "fix1: SKILL 3 · 3.5 가 interview-state 를 모른다"
+python3 -I - "$SK" <<'PY' && ok "fix1: SKILL 3 · 3.5 가 context-state 도 건너뛴다" || no "fix1: SKILL 3 · 3.5 가 context-state 를 모른다"
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 s3 = t[t.index("### 3. trivia"):t.index("### 3.5")]
 s35 = t[t.index("### 3.5"):t.index("### 3.6")]
-sys.exit(0 if "type: interview-state" in s3 and "type: interview-state" in s35 else 1)
+sys.exit(0 if "type: context-state" in s3 and "type: context-state" in s35 else 1)
 PY
 grep -qF '본문 맨 앞에는 `## 풀린 입력` 블록을 두고' "$SF" && grep -qF 'NEW 면 받은 요청' "$SF" \
   && ok "fix1: 만들 때 「풀린 입력」을 블록에 남긴다(문면)" || no "fix1: 풀린 입력 블록 문면 없음"
@@ -272,9 +272,9 @@ grep -qF '상태 파일 전문이 아니다' "$SF" && grep -qF '`S1` 없음' "$S
 # AC12 — 옛 state.local.md 이월(펜스 + 스크립트)
 mkdir -p "$iv/.claude/spec-distill/sess-iv000001"
 printf -- '---\nsession_id: x\n---\n## R1\n' > "$iv/.claude/spec-distill/sess-iv000001/state.local.md"
-assert_eq "$(ent "")" "interview-state: LEGACY $iv/.claude/spec-distill/sess-iv000001/state.local.md" "AC12: 옛 진행 기록이 있으면 LEGACY"
+assert_eq "$(ent "")" "context-state: LEGACY $iv/.claude/spec-distill/sess-iv000001/state.local.md" "AC12: 옛 진행 기록이 있으면 LEGACY"
 o="$(cd "$iv" && CLAUDE_CODE_SESSION_ID=sess-iv000001 python3 "$SD/scripts/interview_state.py" migrate-legacy --session sess-iv000001 --topic old --date 2026-10-15)"
-printf '%s\n' "$o" | grep -qF "옛 위치의 진행 기록을 docs 로 옮겼다 — $D/2026-10-15-old-interview.state.md" \
+printf '%s\n' "$o" | grep -qF "옛 위치의 진행 기록을 docs 로 옮겼다 — $iv/docs/superpowers/intent/2026-10-15-old-context.state.md" \
   && ok "AC12: 옮기고 그 사실을 보인다" || no "AC12: $o"
 grep -qF 'interview_state.py" migrate-legacy' "$SF" && ok "AC12: state-file.md 가 LEGACY 에서 이월을 부른다" || no "AC12: 이월 호출 문면 없음"
 

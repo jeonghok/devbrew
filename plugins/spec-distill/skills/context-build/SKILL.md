@@ -85,24 +85,24 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 컨텍스트 쌓기를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
+「풀린 입력」의 frontmatter 에 `type: intent-seed`(옛 기록은 `interview-seed`)가 있으면 이 단계를 건너뛴다(`type: context-state`, 옛 `interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 컨텍스트 쌓기를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` · `type: interview-state` 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
+「풀린 입력」의 frontmatter 에 `type: intent-seed` · `type: context-state`(옛 기록은 `interview-seed` · `interview-state`) 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
 
 > 💡 `/spec-distill:intent-sync` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로 진행해도 됩니다.
 
 ### 3.6 상태 파일
 
-펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 그 경로에 작은따옴표 · 줄바꿈 · 제어 글자가 있으면 셸에 붙이지 말고 그 사유를 보이고 멈춘다 — 작은따옴표 리터럴을 깨는 글자는 이것뿐이다(값은 펜스 안에서 큰따옴표로만 쓰인다). 그 글자를 뺀 이름으로 바꾸라고 알린다. 「이어 감」 의 후보 경로도 같은 확인을 거친다. 마지막 줄이 판결이다 — `interview-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄이 `interview-state:` 판결이 아니면 그 출력을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
+펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 그 경로에 작은따옴표 · 줄바꿈 · 제어 글자가 있으면 셸에 붙이지 말고 그 사유를 보이고 멈춘다 — 작은따옴표 리터럴을 깨는 글자는 이것뿐이다(값은 펜스 안에서 큰따옴표로만 쓰인다). 그 글자를 뺀 이름으로 바꾸라고 알린다. 「이어 감」 의 후보 경로도 같은 확인을 거친다. 마지막 줄이 판결이다 — `context-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄이 `context-state:` 판결이 아니면 그 출력을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
 
-<!-- interview-state-entry:begin -->
+<!-- context-state-entry:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 python3 "$SD/scripts/interview_state.py" entry --arg "${ARG_PATH:-}" --session "$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ```
-<!-- interview-state-entry:end -->
+<!-- context-state-entry:end -->
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-file.md

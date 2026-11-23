@@ -36,7 +36,7 @@ plugins/spec-distill/skills/context-build/references/saturation.md	지시	그리
 plugins/spec-distill/skills/context-build/references/saturation.md	떼기	공시는 포화 판정 불가 공시 + 사용자 선택 이다.	- 「조사 계속」 →
 plugins/spec-distill/skills/context-build/references/saturation.md	지시	`AskUserQuestion` 1회로 「같은 크기만큼 연장」 · 「포화로 보고 종료」 · 「컨텍스트 쌓기 종료」 중 하나를 받고	### audit §2 줄	1
 plugins/spec-distill/skills/context-build/references/saturation.md	떼기	중 하나를 받고	### audit §2 줄
-plugins/spec-distill/skills/context-build/references/state-file.md	꼬리	- `interview-state: ASK` — 앞 줄의	내줌: 앞서 모은 라운드 답과 조사가 이 컨텍스트 쌓기에 이어지지 않는다	1	2
+plugins/spec-distill/skills/context-build/references/state-file.md	꼬리	- `context-state: ASK` — 앞 줄의	내줌: 앞서 모은 라운드 답과 조사가 이 컨텍스트 쌓기에 이어지지 않는다	1	2
 plugins/spec-distill/skills/context-build/references/steelman.md	출처꼬리	- **질문**: `AskUserQuestion` 선택지 **고정 순서**	builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.	1	4
 plugins/spec-distill/skills/context-build/references/steelman.md	언급	`AskUserQuestion` 1회(자유 텍스트)로 취함/버림을 받아	
 plugins/spec-distill/references/trivia-escape.md	꼬리	해당하면 진행하기 전에 `AskUserQuestion` 한 번으로	}]})	2	2

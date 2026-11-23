@@ -36,7 +36,6 @@ RULES_BUDGET = 8192                    # 팀 규칙 파일의 바이트 예산(U
 HANDBOOK_BUDGET = 16384                # 팀 간 공유 규칙 파일의 바이트 예산(UTF-8)
 BUDGET_KEYS = ("rules_budget", "handbook_budget")
 ROADMAPS_DIR = "docs/superpowers/roadmaps/"
-INTERVIEW_DIR = legacy_names.DEFAULT_DIR   # state_path · control_plane 이 아직 읽는 이름 — 뜻은 새 의도 폴더
 BRANCH_PREFIX = "feature/"
 SETTINGS_FILE = ".devbrew.md"
 BRANCH_RULE_FILE = "docs/git-workflow/branch-strategy.md"   # 브랜치 규칙 문서의 자리

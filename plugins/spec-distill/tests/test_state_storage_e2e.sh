@@ -21,7 +21,7 @@ SK="$SD/skills/context-build/SKILL.md"; FIN="$SD/skills/context-build/references
 RB="$SD/skills/reviewing-brief/SKILL.md"
 PH='<Step A.5 의 PAYLOAD 절대경로>'
 
-ENTRY="$(fence "$SK" interview-state-entry)"; COMMIT="$(fence "$FIN" context-commit)"; BA="$(fence "$FIN" advice-ba)"
+ENTRY="$(fence "$SK" context-state-entry)"; COMMIT="$(fence "$FIN" context-commit)"; BA="$(fence "$FIN" advice-ba)"
 RB_OPEN="$(fence "$RB" ledger-open)"; RB_TAKE="$(fence "$RB" ledger-takeover)"; RB_GUARD="$(fence "$RB" ledger-guard)"
 RB_HEAD="$(bash_with "$RB" 'init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE"')"
 RB_PROF="$(awk '/^## 프로필/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RB")"
@@ -51,42 +51,44 @@ mk() {   # mk <이름> → origin(bare) 을 가진 클론, 기능 브랜치 feat
 }
 
 # ── 1. 픽스처 ─────────────────────────────────────────────────────────────────
-R="$(mk repo)"; D="$R/docs/superpowers/interview"; SEED="$D/2026-10-15-e2e-interview.md"
+R="$(mk repo)"; D="$R/docs/superpowers/interview"; ND="$R/docs/superpowers/intent";   # seed 는 옛 폴더의 옛 꼴 — 새로 시작한 일은 새 폴더 · 새 꼴
+ SEED="$D/2026-10-15-e2e-interview.md"
 assert_eq "$(git -C "$R" branch --show-current) $(git -C "$R" symbolic-ref --short refs/remotes/origin/HEAD)" "feature/e2e origin/main" "1: 픽스처 — 기능 브랜치 위 · origin/HEAD 가 main"
 
 # ── 2. 세션 A — seed 로 진입해 상태 파일을 만든다 ────────────────────────────
 o="$(in_sess "$R" "$A" "ARG_PATH='$SEED'
 $ENTRY")"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: NEW-SEED e2e-brief seed=docs/superpowers/interview/2026-10-15-e2e-interview.md" "2: 세션 A — seed 진입은 NEW-SEED <주제>-brief"
-SP="$(cd "$R" && python3 "$SD/scripts/state_path.py" interview-state --topic e2e-brief --date 2026-10-15)"; rc=$?
-assert_eq "$rc:$SP" "0:$D/2026-10-15-e2e-brief-interview.state.md" "2: 상태 파일 경로는 스크립트가 낸다(seed 와 겹치지 않는 줄기)"
-printf -- '---\ntype: interview-state\nseed: docs/superpowers/interview/2026-10-15-e2e-interview.md\n---\n## 풀린 입력\n\n~~~~\n## 요청\n\n상태 저장을 끝에서 끝으로 잰다.\n~~~~\n\n## R1\n\n- 첫 라운드 기록.\n' > "$SP"
-assert_eq "$(sed -n '2,3p' "$SP" | tr '\n' '|')" "type: interview-state|seed: docs/superpowers/interview/2026-10-15-e2e-interview.md|" "2: 상태 파일 첫 두 키"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "context-state: NEW-SEED e2e-brief seed=docs/superpowers/interview/2026-10-15-e2e-interview.md" "2: 세션 A — seed 진입은 NEW-SEED <주제>-brief"
+SP="$(cd "$R" && python3 "$SD/scripts/state_path.py" context-state --topic e2e-brief --date 2026-10-15)"; rc=$?
+assert_eq "$rc:$SP" "0:$ND/2026-10-15-e2e-brief-context.state.md" "2: 상태 파일 경로는 스크립트가 낸다(새 폴더 · 새 꼴 줄기)"
+mkdir -p "$ND"
+printf -- '---\ntype: context-state\nseed: docs/superpowers/interview/2026-10-15-e2e-interview.md\n---\n## 풀린 입력\n\n~~~~\n## 요청\n\n상태 저장을 끝에서 끝으로 잰다.\n~~~~\n\n## R1\n\n- 첫 라운드 기록.\n' > "$SP"
+assert_eq "$(sed -n '2,3p' "$SP" | tr '\n' '|')" "type: context-state|seed: docs/superpowers/interview/2026-10-15-e2e-interview.md|" "2: 상태 파일 첫 두 키"
 
 # ── 3. 세션 B — 같은 seed 로 진입하면 묻고, 고른 후보로 다시 돌면 이어 간다 ─────────
 o="$(in_sess "$R" "$B" "ARG_PATH='$SEED'
 $ENTRY")"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: ASK" "3: 세션 B — 같은 seed 의 끝나지 않은 상태 파일이 있으면 ASK"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "context-state: ASK" "3: 세션 B — 같은 seed 의 끝나지 않은 상태 파일이 있으면 ASK"
 cand="$(printf '%s\n' "$o" | sed -n 's/^candidate: //p')"
 assert_eq "$cand" "$SP" "3: ASK 의 후보는 세션 A 의 상태 파일 하나"
 o="$(in_sess "$R" "$B" "ARG_PATH='$cand'
 $ENTRY")"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: RESUME $SP" "3: 고른 후보로 진입 펜스를 다시 돌면 RESUME <절대경로>"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "context-state: RESUME $SP" "3: 고른 후보로 진입 펜스를 다시 돌면 RESUME <절대경로>"
 
 # ── 4. 끝내기 커밋 — 같은 줄기의 brief · audit · 상태 파일 셋만 한 커밋 ──────────
 STEM="${SP%.state.md}"; BRIEF="$STEM.md"; AUD="$STEM.audit.md"
-printf -- '---\ntype: interview-brief\n---\n# e2e brief\n' > "$BRIEF"
-printf -- '---\ntype: interview-audit\n---\n# e2e audit\n' > "$AUD"
+printf -- '---\ntype: context-brief\n---\n# e2e brief\n' > "$BRIEF"
+printf -- '---\ntype: context-audit\n---\n# e2e audit\n' > "$AUD"
 printf 'y\n' > "$R/other.txt"   # 커밋에 끼면 안 되는 이웃 파일
 before_n="$(git -C "$R" rev-list --count HEAD)"
 o="$(in_sess "$R" "$B" "${COMMIT//"$PH"/$BRIEF}")"
 assert_eq "$(git -C "$R" rev-list --count HEAD)" "$((before_n + 1))" "4: 끝내기 커밋이 한 번 생겼다"
 assert_contains "$o" "brief · audit · 상태 파일을 커밋했다" "4: 커밋한 사실을 보인다"
 assert_eq "$(git -C "$R" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' ')" \
-  "docs/superpowers/interview/2026-10-15-e2e-brief-interview.audit.md docs/superpowers/interview/2026-10-15-e2e-brief-interview.md docs/superpowers/interview/2026-10-15-e2e-brief-interview.state.md " \
+  "docs/superpowers/intent/2026-10-15-e2e-brief-context.audit.md docs/superpowers/intent/2026-10-15-e2e-brief-context.md docs/superpowers/intent/2026-10-15-e2e-brief-context.state.md " \
   "4: 그 커밋은 세 경로뿐"
 assert_eq "$(git -C "$R" branch --show-current)" "feature/e2e" "4: 커밋은 기능 브랜치 위"
-assert_eq "$(git -C "$R" log -1 --pretty=%s)" "docs(context): 2026-10-15-e2e-brief-interview brief · audit · 상태 기록" "4: 끝내기 커밋 메시지 꼴(R-h)"
+assert_eq "$(git -C "$R" log -1 --pretty=%s)" "docs(context): 2026-10-15-e2e-brief-context brief · audit · 상태 기록" "4: 끝내기 커밋 메시지 꼴(R-h)"
 assert_eq "$(git -C "$R" status --porcelain -- other.txt)" "?? other.txt" "4: 이웃 파일은 커밋되지 않았다"
 
 # ── 5. 두 세션이 같은 brief 를 리뷰 — 표지 · 넘겨받기 · 쓰기 전 확인 · 끝맺음 ────────
@@ -162,11 +164,11 @@ printf -- '---\ntype: interview-brief\n---\n# l\n' > "$LB"; printf -- '---\ntype
 lsum="$(cksum < "$LFILE")"
 o="$(in_sess "$L" "$A" "ARG_PATH='$LD/2026-10-15-e2e-brief-interview.state.md'
 $ENTRY")"
-case "$(printf '%s\n' "$o" | tail -n 1)" in "interview-state: REJECT "*) ok "7: 링크인 상태 파일로는 이어 가지 않는다(REJECT)" ;; *) nob "7: 링크인 상태 파일로 이어 갔다(REJECT 아님)" "$o" ;; esac
+case "$(printf '%s\n' "$o" | tail -n 1)" in "context-state: REJECT "*) ok "7: 링크인 상태 파일로는 이어 가지 않는다(REJECT)" ;; *) nob "7: 링크인 상태 파일로 이어 갔다(REJECT 아님)" "$o" ;; esac
 rm -f "$LB"   # 끝나지 않은 인터뷰로 보이게 — 링크인 후보도 ASK 에 오르지 않는다
 o="$(in_sess "$L" "$A" "ARG_PATH='$LSEED'
 $ENTRY")"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: NEW-SEED e2e-brief seed=docs/superpowers/interview/2026-10-15-e2e-interview.md" "7: 링크인 상태 파일은 이어 갈 후보가 아니다"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "context-state: NEW-SEED e2e-brief seed=docs/superpowers/interview/2026-10-15-e2e-interview.md" "7: 링크인 상태 파일은 이어 갈 후보가 아니다"
 printf -- '---\ntype: interview-brief\n---\n# l\n' > "$LB"
 ln0="$(git -C "$L" rev-list --count HEAD)"
 o="$(in_sess "$L" "$A" "${COMMIT//"$PH"/$LB}")"

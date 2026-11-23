@@ -43,82 +43,91 @@ got=$(cd "$WORK/non-git" && python3 "$HELPER" state-root 2>/dev/null)
   && ok "non-git → cwd fallback + loud stderr" \
   || no "got='$got' stderr='$out'"
 
-# ── interview-state (R7 §1-2 · AC1) ─────────────────────────────────────────
+# ── context-state (R7 §1-2 · AC1) ─────────────────────────────────────────
 IV="$WORK/iv-repo"; mkdir -p "$IV" && git -C "$IV" init -q
-mkdir -p "$IV/docs/superpowers/interview"
-got=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" 2>/dev/null); rc=$?
-assert_eq "$got" "$IV/docs/superpowers/interview/2026-10-15-t-interview.state.md" "AC1: interview-state 가 작업 트리 루트 아래 상태 경로를 낸다"
+mkdir -p "$IV/docs/superpowers/intent"
+got=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$got" "$IV/docs/superpowers/intent/2026-10-15-t-context.state.md" "AC1: context-state 가 작업 트리 루트 아래 상태 경로를 낸다"
 assert_eq "$rc" "0" "AC1: rc 0"
 for bad in T t_x 한글 "t x" "-t" "t-" ""; do
-  python3 "$HELPER" interview-state --topic "$bad" --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
+  python3 "$HELPER" context-state --topic "$bad" --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
   assert_eq "$rc" "2" "AC1: kebab 아닌 topic '${bad}' 은 exit 2"
 done
-python3 "$HELPER" interview-state --topic t --date 2026-1-5 --cwd "$IV" >/dev/null 2>&1; rc=$?
+python3 "$HELPER" context-state --topic t --date 2026-1-5 --cwd "$IV" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "AC1: 날짜 꼴이 아니면 exit 2"
 # 같은 날 seed · seed audit 와의 겹침 — 세 자리 각각
 put_type() { printf -- '---\ntype: %s\n---\nbody\n' "$2" > "$1"; }
-D="$IV/docs/superpowers/interview"
-put_type "$D/2026-10-15-t-interview.md" interview-seed
-out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" 2>&1 >/dev/null); rc=$?
+D="$IV/docs/superpowers/intent"
+put_type "$D/2026-10-15-t-context.md" intent-seed
+out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC1: brief 자리에 seed 가 있으면 exit 2"
-assert_contains "$out" "type: interview-seed" "AC1: 거부 사유가 그 파일의 type 을 댄다"
-got=$(python3 "$HELPER" interview-state --topic t-brief --date 2026-10-15 --cwd "$IV" 2>/dev/null); rc=$?
-assert_eq "$got" "$D/2026-10-15-t-brief-interview.state.md" "AC1: --topic t-brief 는 seed 와 겹치지 않는 경로를 낸다"
-rm -f "$D/2026-10-15-t-interview.md"
-put_type "$D/2026-10-15-t-interview.audit.md" interview-seed-audit
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
+assert_contains "$out" "type: intent-seed" "AC1: 거부 사유가 그 파일의 type 을 댄다"
+got=$(python3 "$HELPER" context-state --topic t-brief --date 2026-10-15 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$got" "$D/2026-10-15-t-brief-context.state.md" "AC1: --topic t-brief 는 seed 와 겹치지 않는 경로를 낸다"
+rm -f "$D/2026-10-15-t-context.md"
+put_type "$D/2026-10-15-t-context.audit.md" intent-seed-audit
+python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "AC1: audit 자리에 seed audit 가 있으면 exit 2"
-rm -f "$D/2026-10-15-t-interview.audit.md"
-printf 'no frontmatter\n' > "$D/2026-10-15-t-interview.state.md"
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
+rm -f "$D/2026-10-15-t-context.audit.md"
+printf 'no frontmatter\n' > "$D/2026-10-15-t-context.state.md"
+python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "AC1: 상태 자리에 type 없는 파일이 있으면 exit 2"
-# AC27 — 같은 날 같은 주제의 끝난 인터뷰(brief 자리에 interview-brief) → <주제>-<HHMM> 자리 + 알림, 끝난 파일은 그대로
-put_type "$D/2026-10-15-t-interview.state.md" interview-state
-put_type "$D/2026-10-15-t-interview.md" interview-brief
-put_type "$D/2026-10-15-t-interview.audit.md" interview-audit
-sum_before="$(cat "$D"/2026-10-15-t-interview* | cksum)"
-out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>"$WORK/err"); rc=$?
-assert_eq "$rc:$out" "0:$D/2026-10-15-t-0930-interview.state.md" "AC27: 끝난 인터뷰 자리면 <주제>-<HHMM> 자리를 낸다"
+# AC27 — 같은 날 같은 주제의 끝난 인터뷰(brief 자리에 context-brief) → <주제>-<HHMM> 자리 + 알림, 끝난 파일은 그대로
+put_type "$D/2026-10-15-t-context.state.md" context-state
+put_type "$D/2026-10-15-t-context.md" context-brief
+put_type "$D/2026-10-15-t-context.audit.md" context-audit
+sum_before="$(cat "$D"/2026-10-15-t-context* | cksum)"
+out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>"$WORK/err"); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-0930-context.state.md" "AC27: 끝난 인터뷰 자리면 <주제>-<HHMM> 자리를 낸다"
 assert_contains "$(cat "$WORK/err")" "같은 날 같은 주제의 인터뷰가 이미 끝났다" "AC27: 그 사실을 한 줄 알린다"
-assert_eq "$(cat "$D"/2026-10-15-t-interview* | cksum)" "$sum_before" "AC27: 끝난 인터뷰의 파일은 바뀌지 않는다"
+assert_eq "$(cat "$D"/2026-10-15-t-context* | cksum)" "$sum_before" "AC27: 끝난 인터뷰의 파일은 바뀌지 않는다"
 # 양의 짝 — 끝나지 않은 상태 파일만 있으면 같은 자리(이어 가기 판단은 진입 단계 몫)
-rm -f "$D/2026-10-15-t-interview.md" "$D/2026-10-15-t-interview.audit.md"
-out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>/dev/null); rc=$?
-assert_eq "$rc:$out" "0:$D/2026-10-15-t-interview.state.md" "AC27 양의 짝: 끝나지 않은 상태 파일이면 같은 자리"
+rm -f "$D/2026-10-15-t-context.md" "$D/2026-10-15-t-context.audit.md"
+out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-context.state.md" "AC27 양의 짝: 끝나지 않은 상태 파일이면 같은 자리"
 # 같은 분에 또 끝난 인터뷰 → 멈춘다
-put_type "$D/2026-10-15-t-interview.md" interview-brief
-put_type "$D/2026-10-15-t-0930-interview.md" interview-brief
-err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
+put_type "$D/2026-10-15-t-context.md" context-brief
+put_type "$D/2026-10-15-t-0930-context.md" context-brief
+err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리도 끝난 인터뷰면 exit 2"
 assert_contains "$err" "에도 끝난 인터뷰가 있다" "AC27: 새 자리가 끝난 인터뷰면 그 사유를 낸다"
 for tm in 2360 2400 930 09a0; do
-  err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time "$tm" --cwd "$IV" 2>&1 >/dev/null); rc=$?
+  err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time "$tm" --cwd "$IV" 2>&1 >/dev/null); rc=$?
   assert_eq "$rc" "2" "AC27: --time '${tm}' 은 exit 2"
   assert_contains "$err" "HHMM 이 아니다" "AC27: --time '${tm}' 의 사유를 낸다"
 done
-rm -f "$D/2026-10-15-t-0930-interview.md"
-out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 2359 --cwd "$IV" 2>/dev/null); rc=$?
-assert_eq "$rc:$out" "0:$D/2026-10-15-t-2359-interview.state.md" "AC27: --time 2359 는 통과한다(양성 대조)"
+rm -f "$D/2026-10-15-t-0930-context.md"
+out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 2359 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-15-t-2359-context.state.md" "AC27: --time 2359 는 통과한다(양성 대조)"
 # 새 자리에 남의 파일(seed audit)이 있어도 멈춘다
-put_type "$D/2026-10-15-t-0930-interview.audit.md" interview-seed-audit
-err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
+put_type "$D/2026-10-15-t-0930-context.audit.md" intent-seed-audit
+err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리에 남의 파일이 있으면 exit 2"
 assert_contains "$err" "다른 종류의 파일이 있다" "AC27: 새 자리의 남의 파일 사유를 낸다"
-rm -f "$D/2026-10-15-t-0930-interview.audit.md"
+rm -f "$D/2026-10-15-t-0930-context.audit.md"
 # 새 자리가 작업 트리 밖으로 가는 링크이면(유효한 type 이어도) 멈춘다
-put_type "$WORK/ac27-out.md" interview-state
-ln -s "$WORK/ac27-out.md" "$D/2026-10-15-t-0930-interview.state.md"
-err=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
+put_type "$WORK/ac27-out.md" context-state
+ln -s "$WORK/ac27-out.md" "$D/2026-10-15-t-0930-context.state.md"
+err=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --time 0930 --cwd "$IV" 2>&1 >/dev/null); rc=$?
 assert_eq "$rc" "2" "AC27: 새 자리가 링크이면 exit 2"
 assert_contains "$err" "링크를 거친다" "AC27: 새 자리 링크의 사유를 낸다"
-rm -f "$D/2026-10-15-t-0930-interview.state.md"
+rm -f "$D/2026-10-15-t-0930-context.state.md"
 rm -f "$D"/2026-10-15-t-*interview*
 # git 이 아니면 --cwd 기준 + stderr 한 줄
 NG="$WORK/iv-nogit"; mkdir -p "$NG"
-out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$NG" 2>&1 >/dev/null)
-got=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$NG" 2>/dev/null)
-assert_eq "$got" "$NG/docs/superpowers/interview/2026-10-15-t-interview.state.md" "§1-2: git 이 아니면 --cwd 기준 경로"
+out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$NG" 2>&1 >/dev/null)
+got=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$NG" 2>/dev/null)
+assert_eq "$got" "$NG/docs/superpowers/intent/2026-10-15-t-context.state.md" "§1-2: git 이 아니면 --cwd 기준 경로"
 assert_contains "$out" "git 저장소가 아니다" "§1-2: git 이 아니면 그 사실을 stderr 로 낸다"
+# 옛 종류 글자는 새 줄기 자리에서도 그 자리의 종류다 — 끝난 일로 보고 남의 파일로 막지 않는다
+put_type "$D/2026-10-16-o-context.md" interview-brief
+out=$(python3 "$HELPER" context-state --topic o --date 2026-10-16 --time 0930 --cwd "$IV" 2>/dev/null); rc=$?
+assert_eq "$rc:$out" "0:$D/2026-10-16-o-0930-context.state.md" "옛 type: interview-brief 도 끝난 일로 본다(새 줄기)"
+rm -f "$D/2026-10-16-o-context.md"
+# 하위 명령 이름 — 옛 이름은 받지 않는다
+python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "옛 하위 명령 interview-state 는 rc 2"
+python3 "$HELPER" 2>&1 | grep -q 'interview-state' && no "usage 줄에 옛 하위 명령이 남았다" || ok "usage 줄에 옛 하위 명령이 없다"
 # ── path-inside · 링크 거부 ───────────────────────────────────────────────
 OUTD="$WORK/outside"; mkdir -p "$OUTD"
 PI="$WORK/pi-repo"; mkdir -p "$PI/docs/real" && echo x > "$PI/docs/real/f.md"
@@ -168,7 +177,7 @@ assert_eq "$rc:$got" "0:$PNG" "payload-root: 저장소가 아니면 payload 의 
 python3 "$HELPER" payload-root >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "2" "payload-root: 인자가 없으면 rc 2"
 LV="$WORK/iv-link"; mkdir -p "$LV/docs/superpowers" && git -C "$LV" init -q
-ln -s "$OUTD" "$LV/docs/superpowers/interview"
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "2" "interview-state: 링크된 interview 디렉토리는 rc 2"
+ln -s "$OUTD" "$LV/docs/superpowers/intent"
+python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$LV" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "context-state: 링크된 의도 폴더는 rc 2"
 finish
