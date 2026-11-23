@@ -17,9 +17,6 @@ input_slots:
   - tag: criteria
     var: CRITERIA
     kind: repo_context
-  - tag: iteration
-    var: ITERATION
-    kind: task
   - tag: filtered_diff
     var: FILTERED_DIFF
     kind: artifact

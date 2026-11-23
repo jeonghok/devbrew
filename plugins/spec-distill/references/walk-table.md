@@ -11,7 +11,7 @@
 | 계획 | worker | plan | — | superpowers:writing-plans | — | — |
 | 계획 확인 | 사람 · leader | — | 계획 검토 | — | — | — |
 | 구현 | worker | implement | — | superpowers:subagent-driven-development | 작업 방식의 고침 루프를 따른다 | — |
-| 검수 | leader | review | — | — | — | spec-distill:integration-reviewer |
+| 검수 | leader | review | — | — | — | spec-distill:integration-reviewer · quality-gates:quality-pipeline |
 | PR 전 확인 | 사람 · leader | — | — | — | — | — |
 | 머지 | 사람 | — | — | — | — | — |
 | 회고 | leader | — | — | — | — | spec-distill:relay-checker |

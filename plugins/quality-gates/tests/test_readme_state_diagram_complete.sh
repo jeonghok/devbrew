@@ -31,12 +31,12 @@ EXPECTED_MARKERS=(
   "setup-qg.sh"
   "SKILL preflight"
   "trivia escape"
-  "qg iter loop"
+  "① 리뷰"
   "① review"
   "② differential test"
   "③ synthesize → verdict"
   "AskUserQuestion"
-  "AskUserQuestion (질문 줄: 지적 수 · 가장 무거운 지적 하나 · 전문 자리)"
+  "AskUserQuestion (낮춘 지적 — 표면화 뒤 · 고칠 목록 앞)"
   "Final verdict"
 )
 missing=()

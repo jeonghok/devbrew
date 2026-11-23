@@ -169,19 +169,26 @@ class QuestionValues(unittest.TestCase):
     def test_live_qg_question_templates_count_as_status(self):
         # 픽스처를 손으로 쓰지 않는다 — 지금 SKILL 이 묻는 qg 질문 틀(`question: "qg …"`)을 읽어 자리표를 채운다.
         # SKILL 문구가 바뀌면 이 시험이 새 문구로 재고, 측정 도구가 그 문구를 못 세면 빨개진다.
+        # 한 번 지나는 qg(16.0.0)는 반복 질문 틀을 지웠다 — 지금 SKILL 에 `question: "qg …"` 틀은 0 개일 수 있다.
+        # 그래도 도출과 측정은 돈다: 틀이 0 개면 아래 측정이 「상태 줄 0 · 문항 1(대조 질문)」 을 낸다.
+        # 지난 틀(반복 상한 · 영어 틀)은 test_qg_question_templates_count_as_status_in_both_forms 가 그대로 잰다.
         skill = Path(__file__).resolve().parents[2] / "plugins/quality-gates/skills/quality-pipeline/SKILL.md"
-        tmpl = re.findall(r'^\s*question: "(qg [^"\n]*)"', skill.read_text(encoding="utf-8"), re.M)
-        self.assertGreaterEqual(len(tmpl), 3, "SKILL 의 qg 질문 틀을 찾지 못했다 — 도출이 깨졌다")
-        self.assertTrue(any("반복 상한" in t for t in tmpl), "반복 상한 질문 틀이 도출에 없다")
-        self.assertTrue(all("<ask-line>" in t for t in tmpl), "qg 질문 틀이 질문 줄(<ask-line>)을 싣지 않는다")
+        text = skill.read_text(encoding="utf-8")
+        tmpl = re.findall(r'^\s*question: "(qg [^"\n]*)"', text, re.M)
+        # 양의 짝: 같은 꼴의 질문 틀 줄은 읽힌다 — qg 틀이 0 개인 것은 도출이 깨져서가 아니다.
+        any_q = re.findall(r'^\s*question: "([^"\n]*)"', text, re.M)
+        self.assertGreaterEqual(len(any_q), 1, "SKILL 의 질문 틀 줄을 하나도 읽지 못했다 — 도출이 깨졌다")
+        for t in tmpl:
+            self.assertIn("<ask-line>", t, "qg 질문 틀이 질문 줄(<ask-line>)을 싣지 않는다")
         # 틀의 `\n` 은 질문 본문의 줄바꿈이다 — 첫 줄(상태 줄)이 무엇인지는 실제 줄바꿈으로 잰다.
         filled = [t.replace("<CAP>", "5").replace("<ask-line>", "막는 지적 1개 · 제안 0개 — 가장 무거운 것: a.py:1 — x")
                   .replace("반복 N:", "반복 2:").replace("\\n", "\n") for t in tmpl]
+        control = "이 절을 고칠까?"   # 상태 줄이 아닌 대조 질문 — 틀이 0 개여도 측정이 돌았음을 보인다
         with tempfile.TemporaryDirectory() as tmp:
             c = Corpus(tmp)
-            c.file("a.jsonl", [human("q"), asst(auq(*filled))])
+            c.file("a.jsonl", [human("q"), asst(auq(*filled, control))])
             all_, _, _ = c.measure()
-        self.assertEqual(all_["v2_status_first_line"][:2], [len(filled), len(filled)], filled)
+        self.assertEqual(all_["v2_status_first_line"][:2], [len(filled), len(filled) + 1], filled)
 
     def test_status_multi_tokens_and_unparsed(self):
         raw = json.dumps({"questions": [{"question": "평범한 질문"}, {"question": "또 하나"}]})

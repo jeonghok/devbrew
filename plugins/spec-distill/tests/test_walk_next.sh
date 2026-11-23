@@ -75,7 +75,7 @@ back_conf
 finish_attempt 1 "AC1: 구현됨 — 자리표시" && ok "w6b: 준비 — 시도 1 을 끝냈다(받음 줄 없음)" || no "w6b: 준비 — 시도 1"
 assert_eq "$(wn --job E1)" "0" "w6b: 0"
 assert_eq "$(line '지금 걸음')" "구현" "w6b: 구현 중"
-assert_eq "$(line '다음 걸음')" "검수 — 누가 leader · 작업 방식 — · 상한 — · 도구 spec-distill:integration-reviewer" "w6b: 다음 걸음은 검수"
+assert_eq "$(line '다음 걸음')" "검수 — 누가 leader · 작업 방식 — · 상한 — · 도구 spec-distill:integration-reviewer · quality-gates:quality-pipeline" "w6b: 다음 걸음은 검수"
 
 assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "0" "w7: 준비 — 결과 대조가 통과한다 $(cat "$T/c.txt")"
 RLINE="$(grep '^- 결과 받음 · ' "$T/c.txt")"

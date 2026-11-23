@@ -76,7 +76,7 @@ g checkout -q -b feat
 echo change > "$REPO/b.txt"; g add b.txt; g commit -q -m 'feat: change'
 
 BODY="$T/body.md"
-printf '## 이 변경을 한 줄로\n무엇이 바뀌나.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · abc1234\n' > "$BODY"
+printf '## 이 변경을 한 줄로\n무엇이 바뀌나.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · abc1234\n' > "$BODY"
 
 # run_sink <PATH> [sink args…] — 결과는 RC · OUT · LAST · GHCALLS 에 둔다. 매번 로그를 비운다.
 run_sink() {
@@ -519,7 +519,7 @@ case_I2_images_and_html_refused() {
 case_M4_session_dir_not_in_corpus() {
   local tok="Rb5nX9vC3mZ7qL1kT4wY8uH2jG6dS0pF" sd="$REPO/.claude/quality-gates/sess-m4-0001"
   mkdir -p "$sd"
-  printf '## 한 줄\n값 %s 이 바뀐다.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 제외 패치 0 · iter 1 · abc1234\n' "$tok" > "$sd/comment.md"
+  printf '## 한 줄\n값 %s 이 바뀐다.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · abc1234\n' "$tok" > "$sd/comment.md"
   printf 'intent %s\n' "$tok" > "$sd/intent.md"
   git -C "$REPO" check-ignore -q "$sd/comment.md" && no "전제: 픽스처 리포가 세션 폴더를 무시한다" || ok "전제: 세션 폴더는 무시되지 않는 untracked 다"
   GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$sd/comment.md"

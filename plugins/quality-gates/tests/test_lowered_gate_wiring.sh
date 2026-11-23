@@ -50,8 +50,9 @@ case_step45_gate() {
   note "Step 4.5 — 낮춘 지적 게이트"
   assert_contains "$S45" 'You do not choose or edit it (V1).' "전제: Step 4.5 창이 비지 않았다"
   assert_contains "$S45" '`$RV/synth.out` 의 `lowered:` 값 n 이 1 이상이면' "게이트: lowered: 를 읽는다"
-  assert_contains "$S45" '반복마다, 판정이 clean 이어도, 범위 모드에서도' "게이트: 반복마다 · clean 이어도 · 범위 모드에서도"
-  assert_contains "$S45" '`lowered: 0` 이면 게이트 없이 라우팅으로 간다' "게이트: 0 이면 묻지 않는다"
+  assert_contains "$S45" '판정이 clean 이어도, 범위 모드에서도(코드를 고치지 않고 판정만 바꾼다)' "게이트: clean 이어도 · 범위 모드에서도"
+  assert_not_contains "$S45" '반복마다' "게이트: 반복마다 뜬다는 옛 문구가 없다(한 실행은 한 번 지난다 — 위 양성 짝)"
+  assert_contains "$S45" '`lowered: 0` 이면 게이트 없이 「그다음」 으로 간다' "게이트: 0 이면 묻지 않는다"
   assert_contains "$S45" 'header: "낮춘 지적",' "게이트: header"
   # 묶음(셋씩)마다 지적을 여러 개 고른다 — 「전부」는 선택지가 아니라 기타 칸의 글이다.
   assert_contains "$S45" 'multiSelect: true }] })' "게이트: 묶음마다 여러 개를 고를 수 있다"
@@ -67,7 +68,7 @@ case_step45_gate() {
   assert_contains "$S45" 'question: "재비판이 심각도를 낮춘 지적 <n>개 가운데 <이 묶음의 번호들 — 예: L1 · L2 · L3>.' "게이트: 질문 본문이 이 묶음의 번호를 싣는다"
   assert_not_contains "$S45" '(위 「낮춘 지적」 절)' "게이트: 질문 창 밖의 절을 가리키지 않는다(위 양성 짝)"
   assert_contains "$S45" '문제 요약과 낮춘 이유는 「낮춘 지적」 표의 「내용」 · 「낮춘 이유」 칸에서 온다.' "게이트: 설명의 출처가 표의 칸이다"
-  assert_contains "$S45" '모든 묶음에서 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 라우팅으로 간다' "게이트: 아무것도 고르지 않으면 라우팅"
+  assert_contains "$S45" '모든 묶음에서 지적을 하나도 고르지 않았다(「그대로 둔다」만 · 빈 답) → 다시 합성하지 않고 아래 「그다음」 으로 간다' "게이트: 아무것도 고르지 않으면 「그다음」"
   assert_contains "$S45" '기타 칸의 「전부」(같은 뜻의 말 포함) → 어느 묶음에 써도 낮춘 지적 전체다. `all` 로 되올리고 아직 띄우지 않은 호출은 건너뛴다' "게이트: 「전부」는 낮춘 지적 전체다"
   assert_contains "$S45" '어느 쪽도 적용하지 않고 질문 하나로 다시 묻는다' "게이트: 「전부」와 다른 답이 부딪히면 다시 묻는다"
   assert_contains "$S45" '「전부 되올린다」 · 「고른 것만 되올린다」 · 「그대로 둔다」 셋이고 추천을 달지 않는다' "게이트: 다시 묻는 질문의 선택지 셋"
@@ -82,15 +83,16 @@ case_step45_gate() {
   assert_contains "$S45" "PICK='<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>'" "펜스: PICK 자리 설명도 같은 뜻의 말을 all 로 넣으라고 한다(불릿과 같은 규칙)"
   assert_contains "$S45" '두 번째도 표에 없는 번호면 지금처럼 되올리지 않고 알린다' "게이트: 두 번째도 틀리면 되올리지 않는다(M2)"
   assert_contains "$S45" '`> [quality-gates] 표에 없는 번호라 되올리지 않았다(<번호들>) — 낮춘 대로 둔다.`' "게이트: 되올리지 않았다고 알리는 줄이 남는다"
-  # 순서 — 표면화(차등 요약) 뒤 · 라우팅 앞
-  local diffsum gate route
+  # 순서 — 표면화(차등 요약) 뒤 · 「그다음」 앞 · 고칠 목록 앞
+  local diffsum gate route fix
   diffsum=$(line_of "$S45" '**차등 요약 (판정 줄 옆).**')
-  gate=$(line_of "$S45" '**낮춘 지적 게이트 (표면화 뒤 · 라우팅 앞).**')
-  route=$(line_of "$S45" '그다음(N < CAP')
-  if [ "$diffsum" -gt 0 ] && [ "$gate" -gt "$diffsum" ] && [ "$route" -gt "$gate" ]; then
-    ok "게이트: 표면화 뒤 · 라우팅 앞에 있다 ($diffsum < $gate < $route)"
+  gate=$(line_of "$S45" '**낮춘 지적 게이트 (표면화 뒤 · 고칠 목록 앞).**')
+  route=$(line_of "$S45" '그다음: 판정이 무엇이든')
+  fix=$(line_of "$S45" '**고칠 목록.**')
+  if [ "$diffsum" -gt 0 ] && [ "$gate" -gt "$diffsum" ] && [ "$route" -gt "$gate" ] && [ "$fix" -gt "$route" ]; then
+    ok "게이트: 표면화 뒤 · 「그다음」 · 고칠 목록 앞에 있다 ($diffsum < $gate < $route < $fix)"
   else
-    no "게이트: 표면화 뒤 · 라우팅 앞이 아니다 (차등 요약 $diffsum · 게이트 $gate · 라우팅 $route)"
+    no "게이트: 표면화 뒤 · 「그다음」 · 고칠 목록 앞이 아니다 (차등 요약 $diffsum · 게이트 $gate · 그다음 $route · 고칠 목록 $fix)"
   fi
   # 음의 락과 양의 짝 — 게이트는 한 자리뿐이다(Fix-loop 쪽에 겹쳐 생기지 않는다)
   assert_eq "$(grep -cF 'header: "낮춘 지적",' "$SK")" "1" "게이트: SKILL 전체에서 한 자리뿐이다"
@@ -137,11 +139,11 @@ case_record_fence() {
   assert_contains "$out" '## 낮춘 지적' "기록: 낮춘 지적이 있으면 절이 생긴다"
   assert_contains "$out" '| L1 | src/a.py:41 | IMPORTANT | 캐시 키를 검증하지 않는다 | 의도 출처는 캐시 무효화만 요구한다 |' "기록: 표 행을 그대로 옮긴다"
   local a b c
-  a=$(line_of "$out" '## 지적'); b=$(line_of "$out" '## 낮춘 지적'); c=$(line_of "$out" '## 제외 패치')
+  a=$(line_of "$out" '## 지적'); b=$(line_of "$out" '## 낮춘 지적'); c=$(line_of "$out" '## 고칠 목록')
   if [ "$a" -gt 0 ] && [ "$b" -gt "$a" ] && [ "$c" -gt "$b" ]; then
-    ok "기록: ## 지적 다음 · ## 제외 패치 앞 ($a < $b < $c)"
+    ok "기록: ## 지적 다음 · ## 고칠 목록 앞 ($a < $b < $c)"
   else
-    no "기록: 절 순서가 틀렸다 (지적 $a · 낮춘 지적 $b · 제외 패치 $c)"
+    no "기록: 절 순서가 틀렸다 (지적 $a · 낮춘 지적 $b · 고칠 목록 $c)"
   fi
   assert_not_contains "$(printf '%s\n' "$out" | sed -n '/^## 지적$/,/^## 낮춘 지적$/p')" '| L1 |' "기록: ## 지적 절이 낮춘 지적 표를 끌고 오지 않는다"
 
@@ -198,12 +200,20 @@ case_state_format() {
   note "state-file-format — ## 낮춘 지적"
   local fmt a b c
   fmt="$(awk '/^```markdown$/{on=1;next} on&&/^```$/{exit} on{print}' "$SF")"
-  a=$(line_of "$fmt" '## 지적'); b=$(line_of "$fmt" '## 낮춘 지적'); c=$(line_of "$fmt" '## 제외 패치')
+  a=$(line_of "$fmt" '## 지적'); b=$(line_of "$fmt" '## 낮춘 지적'); c=$(line_of "$fmt" '## 고칠 목록')
   if [ "$a" -gt 0 ] && [ "$b" -gt "$a" ] && [ "$c" -gt "$b" ]; then
-    ok "형식: ## 낮춘 지적 이 ## 지적 다음 · ## 제외 패치 앞 ($a < $b < $c)"
+    ok "형식: ## 낮춘 지적 이 ## 지적 다음 · ## 고칠 목록 앞 ($a < $b < $c)"
   else
-    no "형식: ## 낮춘 지적 자리가 틀렸다 (지적 $a · 낮춘 지적 $b · 제외 패치 $c)"
+    no "형식: ## 낮춘 지적 자리가 틀렸다 (지적 $a · 낮춘 지적 $b · 고칠 목록 $c)"
   fi
+  # 한 번 지나는 실행 — 반복 · 다시 돌기 · 제외 패치 낱말이 없고(부재), 고칠 목록 절이 형식 블록에 한 번 선다(양의 짝).
+  local tok n
+  for tok in 'iteration' 'Retry' 'excluded.md' 'extra-iterations.md' '제외 패치' '추가 반복'; do
+    n=$(grep -cF -- "$tok" "$SF"); assert_eq "$n" "0" "state-file-format 에 '$tok' 이 없다"
+  done
+  assert_eq "$(printf '%s\n' "$fmt" | grep -cxF '## 고칠 목록')" "1" "형식 블록에 '## 고칠 목록' 이 한 번 선다"
+  assert_eq "$(printf '%s\n' "$fmt" | grep -cxF '<Step 4.5 의 고칠 목록 — `### 막는 지적` · `### 제안` · `### 차등 회귀` 세 절, 빈 절은 (없음)>')" "1" \
+    "형식 블록의 고칠 목록 자리가 SKILL Step 4.5 의 세 절 이름을 줄 전체로 한 번 싣는다"
   assert_contains "$fmt" '사용자가 되올린 행은 이유 칸 머리에 (사용자가 되올림)' "형식: 되올린 행 표시"
   assert_file_grep "$SF" '`## 낮춘 지적` 은 마지막 합성 출력에 「낮춘 지적」 표가 있을 때만 쓴다\.' "생명주기: 있을 때만 쓴다"
 }

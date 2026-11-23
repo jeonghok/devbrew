@@ -151,8 +151,8 @@ input_slots:
   근거가 있는 후보는 줄이지 말고 모두 낸다 — 상한을 넘은 후보도 스크립트가 세어 목록으로 남긴다.
 - `quote` — 의심하는 구절을 원문에서 글자 그대로. 원문이 없으면 diff 의 줄.
 - `label` — 그 구절의 종류: `직접 쓴 말` · `고른 라벨` · `확정` · `없음`.
-- `question` — 사용자에게 묻는 말 한두 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, 번호는 괄호 안에만 둔다.
-  읽어서 본 근거뿐이라 확신이 서지 않으면 끝에 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 —
+- `question` — 사용자에게 묻는 질문 한 문장. 처음 보는 사람이 읽을 쉬운 말로 쓰고, 번호는 괄호 안에만 둔다.
+  읽어서 본 근거뿐이라 확신이 서지 않으면 그 뒤에 줄을 바꿔 「여기는 직접 확인해 보세요 — <어디 · 어떻게>」 한 줄을 단다 —
   사람이 직접 열어 보거나 써 볼 자리와 방법이다. 따로 된 칸은 없고 `question` 글의 일부다.
 - `evidence_lines` — 인용한 `<evidence>` 줄 번호(정수 목록). 읽은 인용만 달면 `[]`.
 - `read_quotes` — 읽은 인용 목록. 항목마다 `path`(리포 상대 경로) · `line`(줄 번호, 정수) · `text`(그 줄의 글).
@@ -171,7 +171,7 @@ questions:
     weight: 기능
     quote: "내보내기는 CSV 하나로 충분하다"
     label: 고른 라벨
-    question: "걷기에서 사용자가 엑셀로 열다 글자가 깨졌다. CSV 하나로 줄인 선택(D19)이 정말 의도인가?"
+    question: "CSV 하나로 줄인 선택(D19)이 정말 의도인가?"
     evidence_lines: [4, 9]
   - target_source: diff
     target_id: src/export.py
@@ -179,7 +179,7 @@ questions:
     weight: 동작
     quote: "except OSError: return None"
     label: 없음
-    question: "디스크가 가득 찬 차등 테스트에서 내보내기가 아무 말 없이 끝났다. 실패를 알리지 않는 동작이 의도인가?"
+    question: "디스크가 가득 차 내보내기가 실패해도 아무 말 없이 끝나는 동작이 의도인가?"
     evidence_lines: [12]
     same_as: "diff#src/export.py#조용한 실패"
     observation_changed:
@@ -191,7 +191,7 @@ questions:
     weight: 방향
     quote: "- D4 · 내보내기 파일 이름은 날짜로 짓는다"
     label: 없음
-    question: "다른 팀의 설계는 같은 내보내기 파일의 이름을 사용자 이름으로 짓기로 했다. 이 설계가 날짜로 정한 것(D4)이 그쪽과 갈라져도 되는가?"
+    question: "내보내기 파일 이름을 날짜로 정한 이 설계(D4)가 사용자 이름으로 짓는 다른 팀 설계와 갈라져도 되는가?"
     evidence_lines: [17]
     read_quotes:
       - path: docs/superpowers/specs/2026-11-10-export-design.md
