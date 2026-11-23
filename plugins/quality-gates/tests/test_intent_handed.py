@@ -216,12 +216,44 @@ class TestPrepareHanded(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")), why)
             self.assertEqual(tic._read(self.rd, "intent-answered.md"), "답한 질문 없음\n", why)
 
+    def test_cells_fold_and_empty_cells_become_dash(self):
+        e = _entry(KEY1, question="앞\r가짜 줄\t탭|파이프 끝", answer="의도다",
+                   observation="")
+        h = self._handed_file(_doc(_yaml_entry(e)))
+        self._prep(h)
+        lines = tic._read(self.rd, "intent-answered.md").splitlines()
+        self.assertEqual(lines, ["- %s · %s · 의도다 · 질문: 앞 가짜 줄 탭|파이프 끝 · 관찰: -"
+                                 % (KEY1, e["id"])])
+        e2 = _entry(KEY2, question="")
+        self._prep(self._handed_file(_doc(_yaml_entry(e2))))
+        self.assertIn("질문: - · 관찰: 관찰 하나", tic._read(self.rd, "intent-answered.md"))
+
+    def test_stale_copy_removed_without_evidence_and_on_kill_switch(self):
+        h = self._handed_file(_doc(_yaml_entry(_entry())))
+        copy = os.path.join(self.rd, "intent-handed.yaml")
+        self._prep(h)
+        self.assertTrue(os.path.exists(copy))
+        os.remove(os.path.join(self.rd, "e2e-record.md"))
+        p = self._prep(h)
+        self.assertEqual(tic._last(p), "intent-call: none")
+        self.assertFalse(os.path.exists(copy))
+        tic._write("관찰\n", self.rd, "e2e-record.md")
+        self._prep(h)
+        self.assertTrue(os.path.exists(copy))
+        sp = os.path.join(self.rd, "intent-specs.json")
+        p = tic._cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
+                     "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                     "--specs-json", sp, "--answered", h,
+                     env=tic._env(**{tic.KILL: "1"}))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertFalse(os.path.exists(copy))
+
     def test_no_answered_arg_unchanged(self):
         with tempfile.TemporaryDirectory() as tree:
             tic._write(tic._answer_text(), tree, tic.ANS_DIR, tic._wf(1))
             p = self._prep(tree_root=tree)
         self.assertEqual(tic._read(self.rd, "intent-answered.md"),
-                         "- %s · 의도다 · 질문: Q? · 관찰: 3\t근거\n" % tic.IDENT)
+                         "- %s · 의도다 · 질문: Q? · 관찰: 3 근거\n" % tic.IDENT)
         self.assertNotIn("넘겨받은", p.stdout)
         self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")))
 

@@ -549,7 +549,7 @@ def _parse_specs(text: str, notices: List[str]) -> List[str]:
     return out
 
 
-def _cell(value) -> str:
+def _answered_cell(value) -> str:
     return _one_line(value) or "-"
 
 
@@ -559,12 +559,12 @@ def _answered_lines(answered: dict, handed: List[dict]) -> str:
         entry = answered[ident]
         first = (entry["observation"].strip().splitlines() or ["-"])[0]
         lines.append("- %s · %s · 질문: %s · 관찰: %s" % (
-            _cell(ident), _cell(entry["answer"]), _cell(entry.get("question", "")), _cell(first)))
+            _answered_cell(ident), _answered_cell(entry["answer"]), _answered_cell(entry.get("question", "")), _answered_cell(first)))
     for entry in handed:
         first = (entry["observation"].strip().splitlines() or ["-"])[0]
         lines.append("- %s · %s · %s · 질문: %s · 관찰: %s" % (
-            _cell(entry["key"]), _cell(entry["id"]), _cell(entry["answer"]),
-            _cell(entry["question"]), _cell(first)))
+            _answered_cell(entry["key"]), _answered_cell(entry["id"]), _answered_cell(entry["answer"]),
+            _answered_cell(entry["question"]), _answered_cell(first)))
     if not lines:
         return "답한 질문 없음\n"
     return "\n".join(lines) + "\n"
