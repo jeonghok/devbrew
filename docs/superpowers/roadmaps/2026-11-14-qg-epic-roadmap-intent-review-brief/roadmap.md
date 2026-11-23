@@ -43,7 +43,7 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 의도: qg 는 리뷰만 하고 스스로 고치는 반복을 걷어내 고칠 일을 지휘 흐름(구현 담당자 · 재분해)과 qg 를 부른 세션으로 넘기고, 지휘 중 qg 가 코드를 보는 때를 머지 앞으로 당겨 옆 세션의 지휘자 설계에 녹인다
 - 범위:
   - 한다: qg 고치기 반복 걷어내기 · 고칠 지적을 부른 쪽에 돌려주는 꼴 · 지휘 중 qg 리뷰를 머지 앞으로 당기기 · 막는 지적과 「잘못 골랐다」 를 그 에픽 안에서 고치게 구현 · 설계 길로 되돌리기 · 그 일로 다시 쓰는 지휘 절차 문서의 남은 가장자리 · qg 본문과 README 문장 다듬기 · 옆 세션 설계에 맞추기
-  - 안 한다: 쓴소리 리뷰어 본체 · 옆 세션의 팀 구조 자체 · qg 의 답 기록과 다른 팀 읽기(R6) · 심은 글에 속지 않기와 공유 스위트 잠금(R7)
+  - 안 한다: 쓴소리 리뷰어 본체 · 옆 세션의 팀 구조 자체 · 리뷰 글의 꼴과 답 이어지기(R6) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · qg 의 답 기록과 다른 팀 읽기 뒤처리(R8)
 - 의존: R1, R3
 - 브랜치: feature/qg-review-only
 - 묶음: R4.md
@@ -62,12 +62,12 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 ### R6 — 읽히는 리뷰 글 · 답 이어지기
 - 의도: 지휘 중 에픽마다 도는 qg 리뷰의 결과와 질문을 사용자가 한눈에 읽게 하고 한 번 한 답이 다음 리뷰로 이어지게 한다
 - 범위:
-  - 한다: 리뷰 결과 글과 질문 앞 글의 꼴(맥락 머리 · 질문 먼저 · 왜 묻나 한 줄 · 근거는 파일로)을 지휘자의 묻기와 qg 가 직접 묻는 틀에 맞추기 · 리뷰어의 「왜 묻나」 칸과 돌려주는 꼴 · 지휘자를 거친 답을 qg 에 입력으로 넘겨 근거가 같으면 다시 묻지 않기 · 지휘자의 리뷰 기록 파일이 다른 팀 근거로 섞이지 않게 하기
+  - 한다: 리뷰 결과 글과 질문 앞 글의 꼴(맥락 머리 · 질문 먼저 · 왜 묻나 한 줄 · 근거는 파일로)을 지휘자의 묻기와 qg 가 직접 묻는 틀에 맞추기 · 리뷰어의 「왜 묻나」 칸과 돌려주는 꼴 · 지휘자를 거친 답을 qg 에 입력으로 넘겨 근거가 같으면 다시 묻지 않기 · 지휘자의 리뷰 기록 파일이 다른 팀 근거로 섞이지 않게 하기 · R4 가 구현 뒤 넘긴 둘(합쳐지기 전 지적 목록을 qg 가 파일로 남기기 · 이름으로 청한 리뷰 뒤의 좁은 재리뷰 세기)
   - 안 한다: 답 자리 · 직접 쓴 답 · 읽기 실패 문구 같은 남은 뒤처리와 리뷰가 낸 막는 지적(R8) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · qg 가 직접 내는 결과 보고의 꼴 · qg 본문 흐름(R4)
 - 의존: R4
 - 브랜치: feature/qg-readable-review
 - 묶음: R6.md
-- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/intent_answers.py, plugins/quality-gates/scripts/other_teams.py, plugins/quality-gates/agents/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md, plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/spec-distill/skills/epic-conductor/, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
 
 ### R7 — qg 경계 굳히기 — 심은 글 · 공유 스위트 잠금
 - 의도: 리뷰 대상에 심은 글이 qg 의 리뷰어 입력과 게시 확인을 속이지 못하게 하고 qg 의 테스트 실행이 공유 스위트 잠금을 지키게 한다
@@ -160,6 +160,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 바뀜: 바뀐 에픽 R6 「둘을 더한다 (권장)」
 - 원문:
   - 「둘을 더한다 (권장)」
+
+### 2026-11-23 · R6 범위에 R4 가 구현 뒤 넘긴 둘을 적고 경로 예약에 합성 스크립트를 더한다 — R4 블록의 옛 이름도 고친다
+- 바뀜: 바뀐 에픽 R4 · R6 「고친다 — 이 에픽이 받는다고 적는다 (권장)」
+- 원문:
+  - 「고친다 — 이 에픽이 받는다고 적는다 (권장)」
 
 ## 위험 번호표
 
