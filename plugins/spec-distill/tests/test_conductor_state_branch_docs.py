@@ -174,6 +174,8 @@ class Documents(unittest.TestCase):   # R3 AC19 — 계획 1 몫
 
 
 RESET_NOTE = "「%s」" % LS.RESET_OWN_LEFT   # 코드의 알림 글자와 묶는다
+ROW_DO = ("표시 없는 `confirm` 이 낸 「이 기계가 쓴 것으로 적힌 고침」 목록과 확인할 끝을 보이고, "
+          "사용자가 받아들이면 그 끝으로 `confirm --confirmed` — 1 이면 새로 낸 목록과 끝으로 다시 묻는다")   # 접기 전 목록은 confirm 의 것
 
 
 class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 몫)
@@ -204,14 +206,15 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
                       "그 목록이 남아 있으면 남의 고침 때처럼 「확인할 끝이 아니다 — 지금 끝에서 다시 셌다」 · 목록 줄 · 새 `확인할 끝` 으로 1 이고 "
                       "확인 기록을 바꾸지 않는다 — 새로 낸 목록과 끝을 보이고 사용자 확인을 다시 받는다.",
                       "「이 기계가 쓴 것으로 적힌 고침」 목록이 남아 있어도 나온다 — 그때 할 일은 목록을 보인 뒤 `confirm --confirmed <확인할 끝>` |",
-                      "쓰지 않은 것이 있으면 머지 전에 사용자에게 알린다 · 보인 뒤 사용자가 머지를 정하면 `confirm --confirmed <확인할 끝>` 으로 접는다 |"):
+                      "쓰지 않은 것이 있으면 머지 전에 사용자에게 알린다 · 접기 전에 보이는 목록은 표시 없는 `confirm` 의 것이다(`show` 는 그때그때 보는 것) — "
+                      "사용자가 머지를 정하면 " + ROW_DO + " |"):
             self.assertIn(words, text, words)
         self.assertNotIn("\n- `씀` 줄은 기계 상태 파일에 있어", text)   # 한계가 `씀` 줄만 말하던 옛 문장
         for words in ("확인한 끝 뒤에 대기 줄(`pending.md`)을 바꾼 `씀` 커밋이 있어도 확인한 끝을 옮기지 않고 " + RESET_NOTE + " 를 낸다 — "
                       "규칙 사본 · `rules-base.md` 쪽의 `씀` 고침은 이 명령이 그 파일을 지우며 함께 되돌리므로 세지 않는다.",
                       "`confirm --confirmed <확인할 끝>` 으로만 접는다 — 예외는 `rules-reset` 하나다: "
                       "대기 줄을 바꾼 `씀` 커밋이 없을 때만 접는다(규칙 쪽 `씀` 고침은 그 명령이 사본을 지우며 되돌린다).",
-                      "| " + RESET_NOTE + "(`rules-reset`) | 0 |"):
+                      "| " + RESET_NOTE + "(`rules-reset`) | 0 | " + ROW_DO + " |"):
             self.assertIn(words, text, words)
         self.assertNotIn("E3", text)   # 배포되는 문서에 이 레포의 에픽 번호를 두지 않는다
         self.assertNotIn("「확인할 남의 고침이 없다」(0) 이다.\n", text)   # 낡은 끝 + 목록을 0 으로 읽게 하던 옛 걸음 3 끝
