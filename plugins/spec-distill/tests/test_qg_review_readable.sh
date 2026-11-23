@@ -337,6 +337,8 @@ ver_cmp() {
 LOW="$(ver_cmp "$QGMIN" 17.0.0)"
 HIGH="$(ver_cmp "$QGMIN" "$QGV")"
 case "$LOW" in 0|1) ok "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상" ;; *) no "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상 (${LOW})" ;; esac
+# deps-low-qg (통합 리뷰 F7) — 「없을 때」 칸이 깔린 판이 낮을 때의 동작과 푸는 길도 적는다(판 칸은 check_deps.py 몫)
+assert_contains "$QGROW" '깔린 판이 17.0.0(`--answered` 와 돌려주는 꼴 3판이 처음 나온 판)보다 낮으면 리뷰는 답 이어지기 없이 돌고 의도 점검 결과는 「셀 수 없음」 이 된다 — quality-gates 를 17.0.0 이상으로 올리면 풀린다' "deps-low-qg: 낮은 판의 동작과 푸는 길이 quality-gates 행에"
 case "$HIGH" in -1|0) ok "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
 
 # readme-new-words (AC20) — spec-distill README 가 새 동작의 이름을 쓴다
