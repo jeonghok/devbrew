@@ -960,6 +960,25 @@ class TestReturnDoc(unittest.TestCase):
                 bad = _doc_mismatches(self.state, _code_lists(**{kw: mutated}))
                 self.assertEqual(len(bad), 1, (kw, mutated))
 
+    def test_contract_three_in_both_docs(self):
+        """상태 문서의 판 줄 · 제목 · 새 칸의 뜻 줄과 I7 의 3판 문장이 코드의 판과 같다(AC7 문서 쪽)."""
+        self.assertEqual(ic.CONTRACT, 3)
+        self.assertEqual(self.state.count("- `contract` — 꼴의 판(`3`)."), 1)
+        self.assertEqual(self.state.count("## 돌려주는 꼴 — `intent-return.md` (3판)"), 1)
+        for meaning in ("- `answered_filtered` — 이미 답해 거른 질문의 수(정수).",
+                        "- `why` — 리뷰어가 쓴 「왜 묻나」 한 줄 그대로",
+                        "- `asked_before` — ",
+                        "- `changed_observation` — "):
+            self.assertEqual(self.state.count(meaning), 1, meaning)
+        self.assertIn("`<전 답> · <답한 때> · <열쇠 또는 정체> · <근거가 달라짐 | 고친 뒤에도 보임>`", self.state)
+        self.assertIn("넘겨받은 답[ · 미뤄 둔 의심][ · 정체가 다름 — <그때> → <지금>]", self.state)
+        i7 = self._section("I7 돌려주기")
+        self.assertEqual(i7.count("`$RD/intent-return.md`(3판) 를 Read 로 읽어"), 1)
+        self.assertNotIn("(2판)", i7)
+        for cell in ("`answered_filtered`", "`why`", "`asked_before`", "`changed_observation`"):
+            self.assertIn(cell, i7)
+        self.assertIn("넘겨받은 답 · 미뤄 둔 의심 · 정체가 다름 표시 포함", i7)
+
     def test_lifetime_sentence_in_both_docs(self):
         first = "세션 폴더는 같은 세션의 다음 qg 시작에 지워진다"
         second = ("그 세션이 qg 를 다시 부르지 않으면, 폴더가 정리 기한(기본 24시간)보다 오래된 뒤 "
