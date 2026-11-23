@@ -211,7 +211,7 @@ assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "�
 
 # AC19 — 판 · 변경 기록 · README
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
-if [ "${ver%%.*}" = "9" ] && [ "$ver" = "9.0.0" ]; then ok "AC19: 판이 9.0.0 이다"; else no "AC19: 판이 9.0.0 이 아니다: $ver"; fi
+if python3 -I -c 'import sys; sys.exit(0 if tuple(int(x) for x in sys.argv[1].split(".")) >= (9, 0, 0) else 1)' "$ver" 2>/dev/null; then ok "AC19: 판이 9.0.0 이상이다(판 번호는 묶지 않는다 — 9.0.0 의 내용은 CHANGELOG 9.0.0 절이 지킨다)"; else no "AC19: 판이 9.0.0 보다 낮다: ${ver}"; fi
 OLD1="request-""framing"; OLD2="pm-""interview"
 sec=$(awk '/^## \[9\.0\.0\]/{f=1;print;next} f&&/^## \[/{exit} f' "$SD/CHANGELOG.md")
 if printf '%s' "$sec" | grep -qF "$OLD1" && printf '%s' "$sec" | grep -qF "$OLD2"; then ok "AC19: 9.0.0 절이 두 옛 이름을 싣는다"; else no "AC19: 9.0.0 절에 옛 이름이 없다"; fi

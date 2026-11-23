@@ -48,7 +48,8 @@ for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-c
   assert_contains "$(step 5)" "$lit" "걸음 5: $lit"
 done
 for lit in '직접 merge 하지 않는다' '다음 task 경계에서 merge 하라고' '그 에픽만 멈추고 알린다' '`redecompose.md`' '브랜치는 지우지 않는다' 'ledger pending' '맡을 에픽을 제안하고' '이슈를 새로 만드는 것은 그때마다 묻는다'; do once 6 "$lit"; done
-for lit in '끝에서 끝 확인' 'qg-review.md` 를 읽고 그 자리(「로드맵 끝」)' '알리고 진행한다' 'ledger release'; do once 7 "$lit"; done
+for lit in '끝에서 끝 확인' 'qg-review.md` 를 읽고 그 자리(「로드맵 끝」)' '`qg-review.md` 의 `## 호출 줄` 대로 한다' 'ledger release'; do once 7 "$lit"; done
+for lit in 'qg-review.md` 를 읽고 그 자리(「머지 앞」)' '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조'; do once 5 "$lit"; done
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
 PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"
@@ -240,5 +241,9 @@ once 5 '머지 명령 줄을 내기 전에 그 에픽에서 받은 승인과 담
 once 5 '「담당자 세션에서 들음」 표시를 붙여 둔 줄 전부'
 once 5 '하신 적 없는 승인이나 말이 있으면 머지하지 말고 알려 달라'
 once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다'
+once 5 '두 형식 모두 머지 앞 qg 의 사용자 답도 싣는다 — PR 본문 `## qg 리뷰` 의 사용자 답(team 형식은 PR 이 열릴 때 검수 결과 파일의 펜스 내용을 그 절로 옮겨 두었다)'
+once 5 '그 PR 의 머지 앞 리뷰 기록 파일(자리 글자 `premerge-pr<번호>` · `recheck-pr<번호>`, team 형식은 `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`)의 `- 답:` 줄'
+assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
+assert_contains "$(sed -n '/^- \*\*PR 전 확인.\*\*/p' "$CD")" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
 finish

@@ -96,7 +96,7 @@ fi
 # 쌍둥이였던 spec-distill 의 design-doc 러너(0.24.14, 그 뒤 문서 리뷰 엔진의
 # `run_docreview_codex_reviewer.sh` 로 흡수)가 받은 봉쇄를 여기에도
 # 넣는다. 백포트가 빠져 있던 동안 이 러너는 SIGTERM/`set -u` abort/OOM/Bash-tool
-# timeout 어느 경로로 죽어도 **이전 iteration의 YAML을 그대로 남겼고**, 오케스트레이터는
+# timeout 어느 경로로 죽어도 **이전 실행의 YAML을 그대로 남겼고**, 오케스트레이터는
 # 그것을 이번 라운드의 codex 판정으로 읽었다 (2026-08-05 재현, exit 143). stale이
 # clean이었으면 진짜 결함이 clean 인증을 받고, 발견을 담고 있었으면 사용자가 이미
 # 고친 결함을 다시 쫓는다. 둘 다 조용하다.
