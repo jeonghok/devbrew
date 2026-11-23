@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [16.1.0] — 2026-11-24
+
+### Changed
+- 의도 문서 표시의 기본 목록이 여섯 항목으로 `source_intent` 를 더했고, 원문 따라가기가 `source_intent` 와 옛 `source_interview` 두 머리 키를 읽는다.
+- intent-critic 의 단계 낱말과 README 의 단계 낱말을 새 이름으로 맞췄다. 다른 팀 기록의 「확인 못 함」 줄 글도 고쳤다.
+
 ## [16.0.0] — 2026-11-22
 
 ### Removed

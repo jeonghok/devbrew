@@ -1,5 +1,24 @@
 # Changelog
 
+## [9.2.0] — 2026-11-24
+
+### Added
+- `scripts/legacy_names.py` — 옛 글자와 새 글자의 대응표 한 곳. 옛 글자 리터럴은 이 모듈에만 있다.
+- 설정 키 `intent_dir`(기본 `docs/superpowers/intent/`). 옛 키 `interview_dir` 는 그대로 읽고 그 폴더를 옛 의도 폴더로도 쓴다.
+- 경로 검사가 옛 의도 폴더의 옛 꼴 파일을 받는다 — 업그레이드 전에 시작한 컨텍스트 쌓기를 새 판으로 이어 갈 수 있다.
+- 로드맵 잡기 진입의 이른 경로 확인 — 거절하면 `[spec-distill] ` 로 시작하는 마지막 stderr 줄을 사유로 보이고 멈춘다.
+
+### Changed
+- 기본 폴더가 `docs/superpowers/intent/` 이다. 새로 쓰는 기록의 종류 글자 다섯 · 파일 이름 끝 · 머리 키 `source_intent` 가 새 이름이다(리뷰 기준 · agent 정의 · 단계 낱말 포함).
+- 스크립트가 내는 판결 글자 `interview-state:` 가 `context-state:` 로, 펜스 표지가 `context-state-entry:` 로 바뀌었다. 옛 판결 글자를 읽는 호환은 없다.
+- 하위 명령 `state_path.py context-state` · 상태줄 칸 이름 · 스크립트 안내 낱말을 새 이름으로 맞췄다.
+- PR 파일 세기가 옛 의도 폴더를 통째로 빼지 않고 결과물 짝 세 파일만 뺀다.
+- 로드맵 에픽에서 spec-review 의 기타 문장과 기각 되돌리기 권고가 「로드맵 다시 잡기」 라벨을 함께 댄다.
+- 옛 기록(옛 폴더 · 옛 글자 · 옛 머리 키 · 옛 설정 키)은 옮기지 않고 그대로 읽는다.
+
+### Fixed
+- 안내 글의 「an context brief」 문법.
+
 ## [9.1.0] — 2026-11-23
 
 ### Changed
