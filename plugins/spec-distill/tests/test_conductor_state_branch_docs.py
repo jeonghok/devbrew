@@ -213,7 +213,9 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
         for words in ("확인한 끝 뒤에 대기 줄(`pending.md`)을 바꾼 `씀` 커밋이 있어도 확인한 끝을 옮기지 않고 " + RESET_NOTE + " 를 낸다 — "
                       "규칙 사본 · `rules-base.md` 쪽의 `씀` 고침은 이 명령이 그 파일을 지우며 함께 되돌리므로 세지 않는다.",
                       "`confirm --confirmed <확인할 끝>` 으로만 접는다 — 예외는 `rules-reset` 하나다: "
-                      "대기 줄을 바꾼 `씀` 커밋이 없을 때만 접는다(규칙 쪽 `씀` 고침은 그 명령이 사본을 지우며 되돌린다).",
+                      "대기 줄을 바꾼 `씀` 커밋이 없을 때만 접는다(규칙 쪽 `씀` 고침은 그 명령이 사본을 지우며 되돌린다). "
+                      "남의 고침을 재지 못하는 동안에는 이 목록도 나오지 않고, `confirm` 이 다시 센 보고에도 `씀` 커밋은 실리지 않는다 — "
+                      "그때는 「남의 고침을 재지 못했다」 가 나온다. 직접 심은 `확인` 줄은 드러나지도 않는다",
                       "| " + RESET_NOTE + "(`rules-reset`) | 0 | " + ROW_DO + " |"):
             self.assertIn(words, text, words)
         self.assertNotIn("E3", text)   # 배포되는 문서에 이 레포의 에픽 번호를 두지 않는다
