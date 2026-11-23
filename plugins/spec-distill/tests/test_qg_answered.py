@@ -207,6 +207,7 @@ class TestQgAnswered(unittest.TestCase):
         bad = {
             "type.md": record(2, [section(1)], rtype="other"),
             "prior.md": record(3, [section(1, prior="의도다 · 한 칸")]),
+            "prior3.md": record(3, [section(1, prior="의도다 · 2026-11-22 21:25 · 까닭 없는 열쇠")]),
             "num.md": record(2, [section(1).replace("## 질문 1", "## 질문 １")]),
             "ctl.md": record(2, [section(1, question="a\x07b")]),
             "route.md": record(3, [section(1, ans="잘못 골랐다", route="아무 곳")]),
@@ -224,7 +225,7 @@ class TestQgAnswered(unittest.TestCase):
         p = e.run(["main"])
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
-        self.assertIn("읽지 못한 기록 7개: ", e.notice_text())
+        self.assertIn("읽지 못한 기록 8개: ", e.notice_text())
 
     def test_control_chars_in_record_file_name(self):
         e = Env(self)
