@@ -1370,7 +1370,7 @@ class TestPrepare(unittest.TestCase):
             _write("broken\n", tree, ANS_DIR, "2.md")
             p = self._prep([], tree_root=tree)
             self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
-            self.assertIn("- %s · 의도다 · 관찰: 3\t근거" % IDENT,
+            self.assertIn("- %s · 의도다 · 질문: Q? · 관찰: 3\t근거" % IDENT,
                           self._f("intent-answered.md").splitlines())
 
     def test_missing_config_is_rc4(self):

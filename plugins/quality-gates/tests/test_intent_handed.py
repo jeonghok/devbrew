@@ -6,7 +6,10 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 
+import yaml  # noqa: E402
+
 import intent_answers as ia  # noqa: E402
+import test_intent_critic as tic  # noqa: E402
 
 KEY1 = "2026-11-22-R4-spec.md#2"
 KEY2 = "2026-11-22-R4-spec.md#3"
@@ -129,6 +132,98 @@ class TestAnswerFileQuestion(unittest.TestCase):
         self.assertEqual(p["observation"], "관찰")
         no_q = t.replace("## 질문", "## 다른 절")
         self.assertEqual(ia.parse_answer_file(no_q)["question"], "")
+
+
+class TestPrepareHanded(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.R = tic._origin_repo(os.path.join(cls.tmp.name))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.rd = tempfile.mkdtemp(dir=self.tmp.name)
+        tic._write(tic._config_text(), self.rd, "intent-config.txt")
+        tic._write("## Goals\ngoal-body\n", self.rd, "intent.md")
+        tic._write("관찰\n", self.rd, "e2e-record.md")
+
+    def _prep(self, handed=None, tree_root=None):
+        sp = os.path.join(self.rd, "intent-specs.json")
+        tic._write('{"intent_source": "spec-trailer", "specs": []}', sp)
+        args = ["prepare", "--rd", self.rd, "--repo", self.R,
+                "--tree-root", tree_root or self.R, "--mode", "pr", "--head", "HEAD",
+                "--review-commit", "HEAD", "--specs-json", sp]
+        if handed:
+            args += ["--answered", handed]
+        p = tic._cli(*args)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p
+
+    def _handed_file(self, text):
+        path = os.path.join(self.rd, "handed-in.yaml")
+        tic._write(text, path)
+        return path
+
+    def test_handed_lines_one_per_entry_with_question(self):
+        e1 = _entry(KEY1, question="첫째\n질문")
+        e2 = _entry(KEY2, answer="잘못 골랐다", route="새 일의 씨앗", question="둘째 질문")
+        h = self._handed_file(_doc(_yaml_entry(e1) + "\n" + _yaml_entry(e2)))
+        with tempfile.TemporaryDirectory() as tree:
+            tic._write(tic._answer_text(), tree, tic.ANS_DIR, tic._wf(1))
+            p = self._prep(h, tree_root=tree)
+        self.assertEqual(tic._last(p), "intent-call: first-only")
+        lines = tic._read(self.rd, "intent-answered.md").splitlines()
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(lines[0].startswith("- %s · 의도다 · 질문: Q? · " % tic.IDENT), lines[0])
+        self.assertTrue(lines[1].startswith("- %s · %s · 의도다 · " % (KEY1, e1["id"])), lines[1])
+        self.assertIn("질문: 첫째 질문 · 관찰: 관찰 하나", lines[1])
+        self.assertTrue(lines[2].startswith("- %s · %s · 잘못 골랐다 · " % (KEY2, e2["id"])), lines[2])
+        self.assertIn("질문: 둘째 질문", lines[2])
+
+    def test_handed_copy_written_and_removed(self):
+        e1, e2 = _entry(KEY1), _entry(KEY2, answer="잘못 골랐다", route="재분해 신호")
+        h = self._handed_file(_doc(_yaml_entry(e1) + "\n" + _yaml_entry(e2)))
+        self._prep(h)
+        copy = yaml.safe_load(tic._read(self.rd, "intent-handed.yaml"))
+        self.assertEqual(copy["entries"], [e1, e2])
+        self._prep()
+        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")))
+
+    def test_unreadable_handed_file_runs_on_with_notice(self):
+        base = self._handed_file(_doc(_yaml_entry(_entry())))
+        link = os.path.join(self.rd, "link.yaml")
+        os.symlink(base, link)
+        big = os.path.join(self.rd, "big.yaml")
+        with open(big, "wb") as fh:
+            fh.write(b"a" * (ia.HANDED_MAX_BYTES + 1))
+        bad_shape = os.path.join(self.rd, "shape.yaml")
+        tic._write("contract: 1\nentries: 5\n", bad_shape)
+        bad_ver = os.path.join(self.rd, "ver.yaml")
+        tic._write("contract: 2\nentries: []\n", bad_ver)
+        cases = [(os.path.join(self.rd, "none.yaml"), ia.HANDED_MISSING),
+                 (self.rd, ia.HANDED_NOT_FILE), (link, ia.HANDED_NOT_FILE),
+                 (big, ia.HANDED_TOO_BIG), (bad_shape, ia.HANDED_BAD_SHAPE),
+                 (bad_ver, ia.HANDED_BAD_VERSION)]
+        for path, why in cases:
+            self._prep(base)  # 앞 실행이 남긴 복사본
+            self.assertTrue(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")))
+            p = self._prep(path)
+            self.assertTrue(tic._last(p).startswith("intent-call: "), p.stdout)
+            self.assertEqual(p.stdout.splitlines().count("넘겨받은 답을 읽지 못함 — " + why), 1, why)
+            self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")), why)
+            self.assertEqual(tic._read(self.rd, "intent-answered.md"), "답한 질문 없음\n", why)
+
+    def test_no_answered_arg_unchanged(self):
+        with tempfile.TemporaryDirectory() as tree:
+            tic._write(tic._answer_text(), tree, tic.ANS_DIR, tic._wf(1))
+            p = self._prep(tree_root=tree)
+        self.assertEqual(tic._read(self.rd, "intent-answered.md"),
+                         "- %s · 의도다 · 질문: Q? · 관찰: 3\t근거\n" % tic.IDENT)
+        self.assertNotIn("넘겨받은", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-handed.yaml")))
 
 
 if __name__ == "__main__":

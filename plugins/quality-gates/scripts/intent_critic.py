@@ -58,6 +58,8 @@ ROADMAP = "intent-roadmap.md"
 INTENT = "intent-intent.md"
 DOUBTS = "intent-doubts.md"
 ANSWERED = "intent-answered.md"
+HANDED = "intent-handed.yaml"
+HANDED_UNREAD = "넘겨받은 답을 읽지 못함 — "
 PLAN = "intent-plan.txt"
 PREPARE_NOTICES = "intent-prepare-notices.txt"
 SCOPE = "intent-scope.md"
@@ -547,12 +549,22 @@ def _parse_specs(text: str, notices: List[str]) -> List[str]:
     return out
 
 
-def _answered_lines(answered: dict) -> str:
+def _cell(value) -> str:
+    return _one_line(value) or "-"
+
+
+def _answered_lines(answered: dict, handed: List[dict]) -> str:
     lines = []
     for ident in sorted(answered):
         entry = answered[ident]
-        first = (entry["observation"].strip().splitlines() or ["-"])[0].strip()
-        lines.append("- %s · %s · 관찰: %s" % (ident, entry["answer"], first or "-"))
+        first = (entry["observation"].strip().splitlines() or ["-"])[0]
+        lines.append("- %s · %s · 질문: %s · 관찰: %s" % (
+            _cell(ident), _cell(entry["answer"]), _cell(entry.get("question", "")), _cell(first)))
+    for entry in handed:
+        first = (entry["observation"].strip().splitlines() or ["-"])[0]
+        lines.append("- %s · %s · %s · 질문: %s · 관찰: %s" % (
+            _cell(entry["key"]), _cell(entry["id"]), _cell(entry["answer"]),
+            _cell(entry["question"]), _cell(first)))
     if not lines:
         return "답한 질문 없음\n"
     return "\n".join(lines) + "\n"
@@ -710,6 +722,7 @@ def _prepare(args, notices: List[str]) -> str:
             if line in notices:
                 notices.remove(line)
         _add_notice(notices, NO_EVIDENCE)
+        _remove(_path(rd, HANDED))  # 리뷰어를 부르지 않는 실행 — 앞 실행의 복사본을 남기지 않는다
         _write_plan(rd, "none", args.mode, tree_root, answers_root, [], {}, notices,
                     breadth=breadth, reviewed=reviewed)
         return "none"
@@ -757,7 +770,19 @@ def _prepare(args, notices: List[str]) -> str:
     _write(_path(rd, ROADMAP), built["roadmap"])
     _write(_path(rd, INTENT), intent_kept)
     _write(_path(rd, DOUBTS), doubts)
-    _write(_path(rd, ANSWERED), _answered_lines(answered))
+    handed: List[dict] = []
+    if args.answered:
+        entries, handed_why = ia.read_handed(args.answered)
+        if entries is None:
+            _add_notice(notices, HANDED_UNREAD + str(handed_why))
+        else:
+            handed = entries
+    if handed:
+        _write(_path(rd, HANDED), yaml.safe_dump({"entries": handed}, allow_unicode=True,
+                                                 sort_keys=False))
+    else:
+        _remove(_path(rd, HANDED))
+    _write(_path(rd, ANSWERED), _answered_lines(answered, handed))
     _write_plan(rd, call, args.mode, tree_root, answers_root, built["sources"],
                 built["aliases"], notices, breadth=breadth, reviewed=reviewed)
     return call
@@ -782,7 +807,7 @@ def _prepare_notices(rd: str) -> List[str]:
 
 def cmd_prepare(args) -> int:
     # gate 를 거치지 않고 불려도 스위치가 넓이 판정 · 다른 팀 읽기 · gh 조회를 끈다 — 앞 실행의 두 파일도 지운다.
-    if _killed(args.rd, args.mode, stale=(OTHER_TEAMS, SCOPE)):
+    if _killed(args.rd, args.mode, stale=(OTHER_TEAMS, SCOPE, HANDED)):
         return 0
     notices: List[str] = []
     try:
@@ -1857,6 +1882,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--base", default="-",
                    help="리뷰 범위의 기준 rev — intent-scope.md 의 커밋 제목(base..review-commit)을 "
                         "읽는다. 모르면 -")
+    p.add_argument("--answered", default=None,
+                   help="지휘자가 넘긴 「이미 답한 것」 파일(절대 경로) — intent-critic 단계에만 쓴다")
     p.set_defaults(func=cmd_prepare)
 
     p = sub.add_parser("check-output", help="리뷰어 응답을 읽을 수 있나 본다",
