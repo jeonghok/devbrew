@@ -241,7 +241,9 @@ once 5 '머지 명령 줄을 내기 전에 그 에픽에서 받은 승인과 담
 once 5 '「담당자 세션에서 들음」 표시를 붙여 둔 줄 전부'
 once 5 '하신 적 없는 승인이나 말이 있으면 머지하지 말고 알려 달라'
 once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다'
-once 5 'PR 본문 `## qg 리뷰` 의 사용자 답(team 형식은 검수 결과 파일의 펜스 안)'
-once 5 '옮김 기록의 질문과 답, PR 본문'
+once 5 '두 형식 모두 머지 앞 qg 의 사용자 답도 싣는다 — PR 본문 `## qg 리뷰` 의 사용자 답(team 형식은 PR 이 열릴 때 검수 결과 파일의 펜스 내용을 그 절로 옮겨 두었다)'
+once 5 '그 PR 의 머지 앞 리뷰 기록 파일(자리 글자 `premerge-pr<번호>` · `recheck-pr<번호>`, team 형식은 `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`)의 `- 답:` 줄'
+assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
+assert_contains "$(sed -n '/^- \*\*PR 전 확인.\*\*/p' "$CD")" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
 finish
