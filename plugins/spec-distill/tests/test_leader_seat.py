@@ -691,7 +691,7 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.assertNotIn((abandoned, "씀"), ends)
         self.assertNotIn("확인", [w for _e, w in ends])
         tip, notes = LS.confirm(str(self.w), rm(ALPHA), SID)
-        self.assertEqual(notes, (LS.NOTHING_TO_CONFIRM, LS.CONFIRM_TIP % tip))
+        self.assertEqual(notes, (LS.NOTHING_TO_CONFIRM, CST.OWN_EDITS % 1, "  %s · %s" % (mine[:8], self.team.rules), LS.CONFIRM_TIP % tip))
         LS.confirm(str(self.w), rm(ALPHA), SID, tip)
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
         self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(tip, "확인")])   # 확인 뒤에는 접힌다

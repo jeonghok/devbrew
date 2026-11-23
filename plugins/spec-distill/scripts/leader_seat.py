@@ -7,7 +7,8 @@
 상태 계산 · 현황 화면은 이 모듈을 가져오지 않는다(`conductor_status.sync` 는 함수 안에서 가져온다).
 
 가져오는 모듈은 `conductor_branch` · `conductor_state` · `team_status` · `team_rules` · `roadmap_model` ·
-`roadmap_status`(`Git` 만) · `repo_defaults` · `state_path` · `team_layout` 뿐이다.
+`roadmap_status`(`Git` 만) · `repo_defaults` · `state_path` · `team_layout` 뿐이다 — `confirm` 만 함수 안에서
+`conductor_status`(`show` 와 같은 목록 줄)를 가져온다.
 
 종료 코드(`conductor_branch.BranchError.rc`): 0 썼다 · 쓸 수 없어 알리고 넘어감 · 1 없음/아님(확인되지 않은 남의 고침 ·
 재지 못함 · 올릴 규칙 고침이 없음 · 갈라져서 만들지 않은 `rules-branch` · 확인 없이 부른 `confirm`) · 2 사용법 · 받지 않는 값 · 3 읽기 불가 · git 실패 ·
@@ -537,14 +538,14 @@ def _commit_lines(root, commit: str, paths, watched: list, parents: int = 1) -> 
 
 
 def _foreign_report(root, team, tip: str, rows: list) -> tuple:
-    """(보고 줄들, 확인이 필요한가, 이 기계가 쓴 것으로 적힌 고침이 있는가). 판정이 None 이면 확인 끝 없이 다시 세고,
+    """(보고 줄들, 확인이 필요한가, 이 기계가 쓴 것으로 적힌 고침 목록). 판정이 None 이면 확인 끝 없이 다시 세고,
     그래도 None 이면 범위의 `씀` 밖 커밋 전부를 보인다 — 판정이 None 이었으면 보일 커밋이 없어도 확인이 필요하다
-    (재지 못함을 빠져나가는 길이 confirm 이다). 셋째 값은 처음 판정에서만 가른다 — `edits_since` 를 한 번 잰다."""
+    (재지 못함을 빠져나가는 길이 confirm 이다). 셋째 값은 처음 판정에서만 가른다(재지 못했으면 빈 목록) — `edits_since` 를 한 번 잰다."""
     git, watched = Git(str(root)), _watched(team)
     trust = TS.trust_of(rows)
     edits = TS.edits_since(git, tip, trust, watched)
     found = None if edits is None else [e for e in edits if e[0] not in trust[1]]
-    listed = edits is not None and len(found) < len(edits)
+    listed = [] if edits is None else [e for e in edits if e[0] in trust[1]]
     lead = ""
     if found is None:
         own = frozenset(r["끝"] for r in rows if r["까닭"] == cs.TRUST_WHY[1])
@@ -585,8 +586,9 @@ def _unwritten_report(root, git, watched: list, tip: str, trust, own) -> list:
 def confirm(root, roadmap_rel: str, session: str, confirmed: Optional[str] = None) -> tuple:
     """(확인한 끝, 알림들). `confirmed` 가 없으면 읽을 끝까지의 확인되지 않은 남의 고침(규칙 · 대기 줄 두 쪽)을 커밋마다 차이와 함께
     보이고 마지막 줄 `확인할 끝: <40자>` 로 BranchError(1) — 남의 고침이 없으면 (끝, (NOTHING_TO_CONFIRM,)).
+    이 기계가 쓴 것으로 적힌 고침 목록이 있으면 `show` 와 같은 목록 줄을 `확인할 끝` 앞에 함께 싣는다(남의 고침이 없으면 0 으로).
     `confirmed` 는 40자 전체만 받고(아니면 BranchError(2)) 지금 읽을 끝과 같을 때만 `확인한 끝` 을 `확인 · <그 끝>` 한 줄로 둔다 —
-    다르면 다시 센 보고로 BranchError(1). 기계 상태를 읽지 못하거나 상태 브랜치가 갈라졌으면 BranchError(3), 없으면 1.
+    다르면 다시 센 보고(남의 고침 · 목록)로 BranchError(1), 둘 다 없으면 (끝, (NOTHING_TO_CONFIRM,)). 기계 상태를 읽지 못하거나 상태 브랜치가 갈라졌으면 BranchError(3), 없으면 1.
     쓸 수 없는 레포(꺼짐 · 규칙 거절 · 설정 오류)면 (None, (알림,)) — 표지는 그보다 먼저 본다."""
     CB._need_marker(root, roadmap_rel, session)
     why = CB.availability(root, roadmap_rel)   # 표지(5) → 쓸 수 있는지(설정 오류면 알리고 0) → 값 차례다(M25 ②)
@@ -608,10 +610,15 @@ def confirm(root, roadmap_rel: str, session: str, confirmed: Optional[str] = Non
             raise CB.BranchError(3, "확인한 끝을 기록하지 못했다 — %s: %s" % (type(exc).__name__, CB.visible(CB._first_line(exc))))
         return seen, told + (CONFIRMED % seen,)
     lines, needed, listed = _foreign_report(root, team, seen, rows)
-    if not needed:   # 이 기계가 쓴 것으로 적힌 고침이 있으면 그 목록을 접을 끝도 낸다 — sync 는 그 목록을 접지 않는다
-        return seen, (NOTHING_TO_CONFIRM,) + ((CONFIRM_TIP % seen,) if listed else ())
+    import conductor_status as CST   # 목록 줄은 show 와 같은 함수로 낸다 — confirm 만 쓰니 함수 안에서 가져온다
+    own = CST.own_lines(listed)   # 이 기계가 쓴 것으로 적힌 고침 — sync 는 이 목록을 접지 않으니 목록과 끝을 한 출력에 묶는다
     lead = [NOT_THE_TIP] if confirmed is not None else []
-    raise CB.BranchError(1, "\n".join(lead + lines + [CONFIRM_TIP % seen]))
+    if not needed:
+        if not own:
+            return seen, (NOTHING_TO_CONFIRM,)
+        if not lead:
+            return seen, (NOTHING_TO_CONFIRM,) + tuple(own) + (CONFIRM_TIP % seen,)
+    raise CB.BranchError(1, "\n".join(lead + lines + own + [CONFIRM_TIP % seen]))
 
 
 def settle(root, roadmap_rel: str, session: str, tip: str, notes: Optional[list] = None) -> Optional[int]:

@@ -480,10 +480,11 @@ class Show(CrossRepo):
         out = self.text()
         self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
         self.assertNotIn("확인되지 않은 남의 고침", out)
-        # confirm --confirmed 뒤에는 없다 — 표시 없이 부르면 남의 고침은 없어도 확인할 끝을 낸다
+        # confirm --confirmed 뒤에는 없다 — 표시 없이 부르면 남의 고침은 없어도 목록 줄과 확인할 끝을 한 출력에 낸다
         seen, _split = CB.seen_tip(self.w, ALPHA)
         tip, notes = LS.confirm(self.w, rm(ALPHA), SID)
-        self.assertEqual((tip, notes), (seen, (LS.NOTHING_TO_CONFIRM, LS.CONFIRM_TIP % seen)))
+        self.assertEqual((tip, notes), (seen, (LS.NOTHING_TO_CONFIRM, CS.OWN_EDITS % 1, "  %s · %s" % (commit[:8], team.rules),
+                                               LS.CONFIRM_TIP % seen)))
         LS.confirm(self.w, rm(ALPHA), SID, confirmed=seen)
         CS.sync(self.w, rm(ALPHA), SID, now=at(6))
         out = self.text()
@@ -492,6 +493,41 @@ class Show(CrossRepo):
         after, _split = CB.seen_tip(self.w, ALPHA)
         self.assertEqual(self.trust_rows(), [(after, "확인")])                    # 확인한 끝 절이 한 줄로 접혔다
         self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID), (after, (LS.NOTHING_TO_CONFIRM,)))   # 양성 대조 — 목록이 없으면 끝을 내지 않는다
+
+    def test_a_stale_tip_with_an_own_list_is_one_and_records_nothing(self):   # AC5 — 낡은 끝은 1 · 새 끝이면 접힌다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        old, notes = LS.confirm(self.w, rm(ALPHA), SID)
+        self.assertEqual(notes[-1], LS.CONFIRM_TIP % old)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))   # 사용자에게 묻는 사이에 끝이 옮겨 갔다(STATUS 커밋)
+        new, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertNotEqual(new, old)                                              # 양성 대조 — 정말 낡은 끝이다
+        rows = self.trust_rows()
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(self.w, rm(ALPHA), SID, confirmed=old)
+        self.assertEqual(cm.exception.rc, 1)
+        self.assertEqual(str(cm.exception).split("\n"), [LS.NOT_THE_TIP, CS.OWN_EDITS % 1,
+                                                         "  %s · %s" % (commit[:8], team.path(CB.PENDING_FILE)), LS.CONFIRM_TIP % new])
+        self.assertEqual(self.trust_rows(), rows)                                  # 기록을 바꾸지 않았다
+        self.assertIn("\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), self.text())
+        # 새 끝이면 접힌다
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID, confirmed=new)[0], new)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(6))
+        self.assertNotIn(commit[:8], self.text())
+        latest, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID, confirmed=old), (latest, (LS.NOTHING_TO_CONFIRM,)))   # 목록 · 남의 고침 없음 — 지금 그대로 0
+
+    def test_confirm_carries_the_own_list_with_foreign_edits(self):   # 남의 고침이 있을 때도 목록 줄을 같은 출력에
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        mine = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(self.w, rm(ALPHA), SID)
+        lines = str(cm.exception).split("\n")
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertTrue(lines[0].startswith(TS.FOREIGN % 1), lines)
+        self.assertEqual(lines[-3:], [CS.OWN_EDITS % 1, "  %s · %s" % (mine[:8], team.rules), LS.CONFIRM_TIP % seen])
 
     def test_a_leaders_own_rules_edit_stays_listed_after_sync(self):   # AC5 — 리더의 바른 규칙 고침도 확인받을 때까지 남는다
         team = CB.team_of(self.w, rm(ALPHA))
