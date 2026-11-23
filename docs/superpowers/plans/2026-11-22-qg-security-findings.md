@@ -408,3 +408,43 @@ Expected: 새 실패 0. worktree 에서만 나는 기존 실패(`TestCrossResolv
 | AC7 | Task 7 | 전체 스위트 · 위 「AC7 보고」 두 자리 |
 
 AC 마다 `AC<번호>: 구현됨 | 미룸 | 빠짐 — 근거` 한 줄로 보고한다.
+
+---
+
+### Task 8: 내 고침 목록이 보일 때까지 접기를 미룬다 (AC5 · 구현 물음 1 의 답)
+
+마지막 전체 리뷰의 C1 · I2 · I3 에 대한 사용자 답(2026-11-23 · 설계문서 커밋 4cb47acc 에 반영)을 구현한다. 정본은 설계 §3 의 새 항목(「목록은 사용자에게 보일 때까지 남는다 …」)과 AC5 의 새 문장이다. 답 원문: 지휘 상태 폴더의 `relay/qg-sec/impl-answer-1.md`.
+
+**Files:**
+- Modify: `plugins/spec-distill/scripts/leader_seat.py`(`settle` 614행 근처 · `confirm` 582행 근처)
+- Modify: `plugins/spec-distill/references/conducting.md`(74행 — 이미 넣은 줄에 문장을 잇는다, 줄 수는 그대로)
+- Modify: `plugins/spec-distill/references/conductor-state-branch.md`(67행 한계 문장 · 줄마다 할 일 표의 새 행)
+- Modify: `plugins/spec-distill/references/team-files.md`(235행 근처 「남는 것」 공시 — 둘째 줄 더하기)
+- Modify: `plugins/spec-distill/CHANGELOG.md`(8.31.1 의 Security 줄 ③ · ①)
+- Test: `plugins/spec-distill/tests/test_leader_seat.py` · `test_conductor_cross.py` · 문서 락(`test_conducting_loop.sh` · `test_conductor_state_branch_docs.py` · `test_team_docs.py` 가운데 그 문장을 재는 곳)
+
+**Interfaces:**
+- Consumes: Task 5 의 `TS.edits_since` · `TS.own_commits` · `TS.foreign_commits`(같은 범위 · 같은 감시 경로 `_watched(team)`) · `CS.OWN_EDITS`.
+- `settle`: 지금 「남의 고침 0 이면 `확인한 끝` 절을 `확인 · <tip>` 한 줄로」 접는다. 이제 남의 고침이 0 이어도 확인한 끝 뒤에 감시 경로(규칙 사본 · `rules-base.md` · `pending.md`)를 바꾼 `씀` 커밋(내 고침 목록 — `씀` 병합 포함)이 있으면 접지 않고, 남의 고침이 남았을 때와 같이 범위(`<확인 끝>..<tip>`) 밖의 버려진 `씀` 줄만 지운다. 그런 커밋이 없으면 지금처럼 접는다. 반환값(남의 고침 수 | None)과 알림 글자는 그대로다. 기계 상태를 한 번 읽고 `edits_since` 를 한 번 재서 가른다. 내 고침을 재지 못하면(None) 접지 않는다(재지 못하면 건드리지 않는다는 지금 뜻과 같게).
+- `confirm`(표시 없이): 남의 고침이 없고 내 고침 목록이 있으면 지금의 `NOTHING_TO_CONFIRM` 뒤에 있는 글자 `CONFIRM_TIP % seen`(「확인할 끝: <40자>」) 줄을 함께 낸다 — 종료 코드는 지금처럼 0. 새 글자를 만들지 않는다. 남의 고침이 있으면 지금 그대로(목록 + 「확인할 끝」, rc 1).
+- `confirm --confirmed <끝>`: 지금 그대로 — 끝이 읽을 끝과 같으면 `확인 · <끝>` 한 줄로 기록한다(그 뒤에는 범위가 비어 내 고침 목록도 없다).
+- `sync` 의 출력 글자는 바꾸지 않는다.
+
+넣을 글(설계 §3 의 새 글을 따른다 — 글자는 구현자가 아래 뜻으로 짓고, 부재 락의 금지 글자를 쓰지 않는다):
+- conducting.md 74행 끝에 잇는다: 보인 뒤 사용자가 머지를 정하면 `conductor_branch.py confirm --confirmed <확인할 끝>` 으로 확인한 끝을 기록한다 — 그 전에는 `sync` 가 그 목록을 접지 않는다. (`<SD>` 꼴의 경로 접두는 그 파일의 이웃 줄과 같게.)
+- conductor-state-branch.md 67행: 한계를 `확인한 끝` 절의 줄 전체(`씀` · `확인`)로 넓힌다 — `씀` 줄은 막지 않고 드러내고, 직접 심은 `확인` 줄은 드러나지도 않는다 — 막는 장치는 E3. 그리고 감시 경로를 바꾼 `씀` 커밋이 있으면 `sync` 가 접지 않고 `confirm --confirmed <끝>` 으로만 접는다는 문장. 줄마다 할 일 표의 「이 기계가 쓴 것으로 적힌 고침 n」 행의 할 일에 「보인 뒤 `confirm --confirmed <확인할 끝>`」 을 잇는다.
+- team-files.md 「남는 것」 공시 바로 뒤에 둘째 공시 한 줄: 같은 브랜치에서 인터뷰 결과물을 고쳤다 되돌린 커밋도 지나간다(HEAD 의 조상인 출처 커밋을 받기 때문) — PR 의 바뀐 파일 목록에는 나오지 않고 커밋별 보기에서만 보인다. squash 머지면 머지 뒤 기준과 견줘 검사 불가로 드러나고, 머지 커밋으로 머지하면 계속 지나간다.
+- CHANGELOG 8.31.1 Security ③ 에 「감시 경로를 바꾼 `씀` 커밋이 있으면 `sync` 가 확인 기록을 접지 않고 `confirm --confirmed` 로만 접는다 · `확인` 줄을 직접 심는 길은 드러나지 않는다(E3)」 를, ① 에 「브랜치에서 결과물을 고쳤다 되돌린 커밋은 지나간다(공시)」 를 잇는다. 날짜 · 판은 그대로.
+
+- [ ] **Step 1: 실패하는 테스트를 쓴다** (`test_conductor_cross.py` 의 `Show` 또는 `test_leader_seat.py` 의 settle 이웃)
+  - `씀 을 심음 → sync → show:` 남의 규칙 고침 F 를 만들고 `CB.record_own(…, [F])` 로 심은 뒤 `CS.sync` 를 한 번 돌리면 `show` 에 `CS.OWN_EDITS % 1` 과 `F[:8] · <경로>` 줄이 남는다(지금은 사라진다 — 마지막 리뷰 실험 `exp_sync.py` 꼴).
+  - `confirm --confirmed 뒤에는 없다:` 이어서 `LS.confirm(…)`(표시 없이)의 알림에 `LS.CONFIRM_TIP % seen` 이 있고, 그 끝으로 `LS.confirm(…, confirmed=seen)` 을 부른 뒤 `sync` → `show` 에 그 줄이 없고 `확인한 끝` 절이 한 줄이다.
+  - `감시 경로 밖 씀 만이면 지금처럼 접힌다:` STATUS 만 쓴 `씀` 만 있을 때 `sync` 뒤 `확인한 끝` 절이 `확인 · <tip>` 한 줄이다(있는 `test_settle_compacts_when_clean` 이 이미 재면 그것을 가리키고 새로 더하지 않아도 된다).
+  - `리더의 바른 규칙 고침도 남는다:` `CB.write(…)` 로 리더가 규칙 사본을 고친 뒤 `sync` → `show` 에 그 커밋 줄이 남는다.
+  - 판정 변이: settle 의 새 갈래를 빼면 첫 단언과 넷째 단언이 빨개진다.
+- [ ] **Step 2: 실패를 확인한다.**
+- [ ] **Step 3: 구현한다** — Interfaces 대로. 그다음 넣을 글을 넣고, 그 문장을 재는 락에 본문 고유 단언을 더한다(conducting.md 74행의 새 구절 · conductor-state-branch.md 의 `확인` 줄 한계 · team-files.md 의 둘째 공시).
+- [ ] **Step 4: 통과를 확인한다** — `python3 -m unittest plugins/spec-distill/tests/test_leader_seat.py plugins/spec-distill/tests/test_conductor_cross.py plugins/spec-distill/tests/test_conductor_status.py plugins/spec-distill/tests/test_conductor_state_branch_docs.py plugins/spec-distill/tests/test_team_docs.py plugins/spec-distill/tests/test_walk_docs.py` · `bash plugins/spec-distill/tests/test_leader_seat_e2e.sh` · `test_conducting_loop.sh` · `test_conductor_state_branch_e2e.sh` · `test_team_status.sh` 와 바꾼 파일을 코퍼스로 읽는 락. 있는 테스트의 기대가 바뀌는 자리(「`sync` 뒤 확인한 끝이 한 줄」 을 재던 단언이 감시 경로를 바꾼 `씀` 을 쓰는 픽스처였던 곳)는 고치고 그 자리를 보고한다.
+- [ ] **Step 5: 커밋한다** — pathspec · 트레일러 두 줄(`Spec: …` · `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`). 전체 스위트는 돌리지 않는다.
+
+끝나면 마지막 전체 리뷰를 새로 고친 범위(앞 리뷰 뒤의 커밋 — ff2230ca 뒤)만 좁게 한 번 다시 받는다 — AC5 와 「고친 검사를 여전히 지나가는 길이 있는가」 를 다시 묻는다.
