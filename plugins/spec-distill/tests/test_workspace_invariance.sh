@@ -279,7 +279,7 @@ assert_not_contains "$line" "rm · " "plan/ 상태줄: 기본 폴더의 미끼�
 out="$(cd "$PW" && python3 "$RD" get intent_dir 2>/dev/null)"
 assert_eq "$out" "plan/interview/" "plan/: get intent_dir"
 n0="$(g "$PW" rev-list --count HEAD)"
-out="$(icommit "$PW" docs/superpowers/interview/2026-10-22-t-interview.md)"
+out="$(icommit "$PW" docs/superpowers/interview/2026-10-22-t-context.md)"
 assert_contains "$out" "커밋하지 않았다 — brief 가 정해진 의도 폴더 바로 아래가 아니다" "plan/: 기본 인터뷰 폴더의 brief 는 커밋하지 않는다"
 assert_eq "$(g "$PW" rev-list --count HEAD)" "$n0" "plan/: 거부하면 커밋이 없다"
 out="$(icommit "$PW" plan/interview/2026-10-22-t-interview.md)"
