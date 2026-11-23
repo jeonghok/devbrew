@@ -71,12 +71,16 @@ def sections(text: str) -> "list[tuple[str, list[str]]]":
 
 
 def outside_two_sections(head_text: str, work_text: str) -> "list[str]":
-    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록."""
+    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록.
+    줄바꿈 꼴(CRLF · LF)과 절 끝의 빈 줄은 견주지 않는다 — 작업 트리는 줄바꿈을 접어 읽고, 마지막 절 뒤에
+    새 절을 빈 줄 없이 붙이면 끝 줄바꿈 뒤의 빈 칸이 새 절로 옮겨 갈 뿐 앞 절의 글자는 그대로다."""
     def kept(text: str) -> "dict[str, str]":
         bodies: "dict[str, str]" = {}
-        for title, body in sections(text):
+        for title, body in sections(text.replace("\r\n", "\n")):
             if title in (PLAN_HEADING, LOG_HEADING):
                 continue
+            while body and body[-1] == "":
+                body = body[:-1]
             bodies[title] = bodies.get(title, "") + "\n".join(body) + "\x00"
         return bodies
 

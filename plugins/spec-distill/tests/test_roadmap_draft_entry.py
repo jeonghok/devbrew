@@ -142,6 +142,42 @@ class TestEntry(Base):
         self.assertIn("roadmap-entry: RESUME 분해안 표 · 생성 기록\n", out)
         self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: RESUME")
 
+    def test_plan_appended_without_blank_line_is_resume(self):
+        # 마지막 절의 끝 줄바꿈 뒤에 `## 분해안` 을 빈 줄 없이 붙여도 앞 절은 한 글자도 바뀌지 않았다.
+        self.build()
+        self.append(self.state, PLAN_TABLE)
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertNotIn("STOP", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: RESUME")
+
+    def test_crlf_committed_state_with_plan_is_resume(self):
+        # CRLF 로 커밋된 상태 파일 — 작업 트리는 줄바꿈을 접어 읽으므로 HEAD 쪽과 꼴만 다르다.
+        self.build()
+        st = Path(self.state)
+        st.write_bytes(st.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "crlf")
+        with open(self.state, "ab") as fh:
+            fh.write(("\r\n" + PLAN_TABLE).replace("\n", "\r\n").replace("\r\r\n", "\r\n").encode("utf-8"))
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertNotIn("STOP", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: RESUME")
+
+    def test_crlf_committed_state_changed_outside_still_stops(self):
+        # 양의 짝 — 줄바꿈 꼴을 접어도 두 절 밖의 실제 변경은 그대로 멈춘다.
+        self.build()
+        st = Path(self.state)
+        st.write_bytes(st.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "crlf")
+        with open(self.state, "ab") as fh:
+            fh.write("R1 에 덧붙인 줄\r\n".encode("utf-8"))
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 상태 파일의 커밋 뒤 변경이 두 절 밖에 있다: ## R1\n", out)
+
     def test_resume_on_approved_table(self):
         self.build(state_extra="\n" + PLAN_TABLE)
         rc, out, err = self.run_entry()
