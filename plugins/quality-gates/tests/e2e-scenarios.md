@@ -1,6 +1,6 @@
 # Quality-Gates v1.5.0 — E2E Verification Scenarios
 
-> **제거된 표면(v11.0.0).** `scout` · depth(quick/standard/deep) · Phase 1/2 · 게이트 번호 · `max_gate2_iterations` 는 없다. 아래 B–F · I 의 scout 서술은 역사 기록이다 — 오늘의 리뷰어 구성은 기본 셋 + 조건부 넷 + `code-recritic` 이고 합성기·Fix-loop 는 `skills/quality-pipeline/SKILL.md` 가 정본이다.
+> **제거된 표면(v11.0.0).** `scout` · depth(quick/standard/deep) · Phase 1/2 · 게이트 번호 · `max_gate2_iterations` 는 없다. 아래 B–F · I 의 scout 서술은 역사 기록이다 — 오늘의 리뷰어 구성은 기본 셋 + 조건부 넷 + `code-recritic` 이고 합성기는 `skills/quality-pipeline/SKILL.md` 가 정본이다.
 >
 > **Historical (v2.2.x snapshot).** Model lines below predate the 2026-09-06 «no `model` key» convention; scenario H's "Task 1 model-override experiment" measured dispatch-time override of `inherit`, which gate agents no longer receive.
 

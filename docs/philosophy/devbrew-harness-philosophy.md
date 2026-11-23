@@ -20,7 +20,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P2 — The Ambiguity Gate
 **Law 1 집행.** 명세는 명확도 임계를 통과했거나 아직 못 했거나 둘 중 하나이고, 게이트는 visible·declared·refusable해야 한다. Load-bearing: 게이트가 silent pass-through를 허용하는 순간 Law 1이 prose로 전락한다 — 수치 스코어링은 scorer=generator라 brittle하므로 구조적 baseline이 default이고 adversarial self-review가 enhancement다.
-코드: `plugins/spec-distill/scripts/check_brief.py` (5-ritual gate) · `plugins/spec-distill/skills/pm-interview/SKILL.md`
+코드: `plugins/spec-distill/scripts/check_brief.py` (5-ritual gate) · `plugins/spec-distill/skills/context-build/SKILL.md`
 
 ### P3 — Writer/Reviewer Isolation via Tool Scoping
 **Law 2 집행.** 역할 경계를 프롬프트가 아니라 frontmatter로 만든다 — 리뷰어 agent에는 `Write`/`Edit`이 없고 플래너에는 mutation-Bash가 없다. Load-bearing: "프롬프트를 믿자"에서 "도구가 존재조차 하지 않는다"로 바꾼다 — default-everything(전체 tool 접근) agent는 P3 위반이다.
@@ -53,7 +53,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 
 ### P18 — Stagnation Is a Failure Mode
 **Cross-cutting (L1·L2·L3) 집행.** 같은 것을 계속 재시도하는 루프는 진전이 아니라 멈춘 것 — max-iteration cap + repeat 감지 + escape hatch와 함께 shipping. Load-bearing: 정체 시 재시도 대신 *다른* 접근(fresh subagent·다른 리뷰어·human prompt)을 invoke해야 하고, 카운트가 없는 루프는 토큰을 태우며 신뢰를 깎는다.
-코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · qg fix-loop 의 반복 상한(`plugins/quality-gates/skills/quality-pipeline/SKILL.md`)
+코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · 지휘자 qg 좁은 재리뷰의 「두 번까지」 상한(`plugins/spec-distill/skills/epic-conductor/references/qg-review.md` 의 `## 되돌리기`)
 
 ### P21 — Security & Supply Chain
 **Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.

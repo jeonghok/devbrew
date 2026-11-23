@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
 #
 # 쉬운 말 출력 설계 §4 · AC7 — 모든 게이트 질문은 결정 하나와 상태 한 줄만 담고, 경고 목록은 앞 글에 쓴다.
 # 「채널을 읽은 뒤에만 없음을 쓴다」 계약은 그대로 남는다.
@@ -7,16 +7,16 @@ set -u
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   git -C "$REPO_ROOT" ls-files -- 'plugins/spec-distill/skills/*/SKILL.md' \
-    plugins/spec-distill/skills/pm-interview/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
+    plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
     shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
   exit 0
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
 SD="$REPO_ROOT/plugins/spec-distill"
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 RS="$SD/skills/spec-review/SKILL.md"
 RB="$SD/skills/reviewing-brief/SKILL.md"
-FR="$SD/skills/request-framing/SKILL.md"
+FR="$SD/skills/intent-sync/SKILL.md"
 PG="$SD/references/proceed-gate.md"
 
 # ① 머리글 「Proceed」가 없다(spec-distill 어디에도).
@@ -80,9 +80,9 @@ names = set(re.findall(r"@<([^<>]+)>", m.group(1))) if m else set()
 rest = re.findall(r"<([^<>]+)>", l[m.end():]) if m else ["x"]
 print("ok" if m and all(x in names for x in rest) else "no")')" "ok" "Review Focus 4: spec-review 다음 세션 줄의 꺾쇠 자리표는 줄 앞 @<…> 토큰의 이름만 쓴다"
 
-# ⑦ request-framing 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
+# ⑦ intent-sync 의 옛 채널 이름이 남지 않는다(처분 앵커 포함).
 FR_FLAT="$(tr '\n' ' ' < "$FR" | tr -s ' ')"
-assert_eq "$(printf '%s' "$FR_FLAT" | grep -oE '게이트 질문 텍스트|게이트 텍스트' | wc -l | tr -d ' ')" "0" "Q3: request-framing 에 옛 채널 이름(「게이트 질문 텍스트」·「게이트 텍스트」)이 줄바꿈을 접어도 없다"
+assert_eq "$(printf '%s' "$FR_FLAT" | grep -oE '게이트 질문 텍스트|게이트 텍스트' | wc -l | tr -d ' ')" "0" "Q3: intent-sync 에 옛 채널 이름(「게이트 질문 텍스트」·「게이트 텍스트」)이 줄바꿈을 접어도 없다"
 assert_file_grep "$FR" 'disclosure=proceed 게이트 앞 글' "Q3 양의 짝: 처분 앵커가 새 이름을 댄다"
 
 # ⑧ 질문에 그대로 남는 예외가 명시돼 있다(Q4).
@@ -123,7 +123,7 @@ assert_eq "$(cnt "$F_PG" "선택지 넷의 설명은 위 표의 얻음 · 내줌
 assert_eq "$(cnt "$F_RS" "읽지 않은 채 쓰지 않는다. ${S1}")" "0" "I1: spec-review 승인 게이트 문단에 라운드 게이트 문장이 들어가지 않는다"
 assert_eq "$(cnt "$F_RS" "승인 게이트 질문의 본문은 ${PGREF} 싣는다.")" "1" "I1: spec-review 승인 게이트 문단이 정본의 본문 규칙을 가리킨다"
 assert_eq "$(cnt "$F_RB" "$PGREF")" "1" "I1: reviewing-brief Step B 문단이 정본의 본문 규칙을 가리킨다"
-assert_eq "$(cnt "$F_FR" "$PGREF")" "1" "I1: request-framing 확정 게이트 문단이 정본의 본문 규칙을 가리킨다"
+assert_eq "$(cnt "$F_FR" "$PGREF")" "1" "I1: intent-sync 확정 게이트 문단이 정본의 본문 규칙을 가리킨다"
 assert_eq "$(cnt "$F_FIN" "$PGREF")" "1" "I1: finishing B-2 가 정본의 본문 규칙을 가리킨다"
 
 # ⑪ 질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다(최종 리뷰 I2).
@@ -131,7 +131,7 @@ S2='렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)�
 S3='질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.'
 assert_eq "$(cnt "$F_FIN" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: finishing 이 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
 assert_eq "$(cnt "$F_RB" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: reviewing-brief 가 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
-assert_eq "$(cnt "$F_FR" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: request-framing 이 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
+assert_eq "$(cnt "$F_FR" "$S3 ${S2} 다른 채널에 경고가 있으면")" "1" "I2: intent-sync 이 이은 줄 문장 바로 뒤에 엔진 몫 문장을 둔다"
 assert_eq "$(cnt "$F_RS" "$S3")" "1" "I2: spec-review 가 이은 줄 문장을 한 번 둔다"
 for v in F_FIN F_RB F_FR F_RS; do
   t="${!v}"
@@ -149,7 +149,7 @@ assert_eq "$(cnt "$F_RS" '남은 것은 있고 경고가 없으면 「경고 없
 assert_eq "$(cnt "$F_RB" '전부 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는')" "1" "구분: reviewing-brief 의 「전부 비었을 때만」 구분"
 assert_eq "$(cnt "$F_FIN" '남은 항목(위 3)도 없을 때만 「이상 없음」, 남은 항목이 있으면 「경고 없음」 한 줄이다.')" "1" "구분: finishing 목록 4 의 「없을 때만」 구분"
 assert_eq "$(cnt "$F_PG" '채널을 다 읽었는데 경고가 없으면, 남은 항목도 없으면 「이상 없음」, 남은 항목이 있으면 「경고 없음」 한 줄이다 — 침묵과')" "1" "구분: 정본의 이상 없음/경고 없음 구분"
-assert_eq "$(cnt "$F_FR" '경고가 없을 때의 두 문구는 **채널을 실제로 읽었다는 주장**이라 읽지 않은 채 쓰지 않습니다.')" "1" "구분: request-framing 이 경고 없을 때의 두 문구를 읽은 뒤에만 쓴다"
+assert_eq "$(cnt "$F_FR" '경고가 없을 때의 두 문구는 **채널을 실제로 읽었다는 주장**이라 읽지 않은 채 쓰지 않습니다.')" "1" "구분: intent-sync 이 경고 없을 때의 두 문구를 읽은 뒤에만 쓴다"
 
 # ⑬ 질문 본문의 규칙 — 라운드 게이트는 STEP8, 승인 게이트는 정본 한 곳과 그것을 가리키는 자리들(M5 · M7).
 assert_eq "$(cnt "$F_RD" "$STEP8")" "1" "질문 본문: F_RD 의 라운드 게이트 질문 규칙"

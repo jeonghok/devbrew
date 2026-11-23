@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/tests/lib/recritic_fixture.sh
+# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py plugins/quality-gates/scripts/angles.py plugins/quality-gates/tests/lib/recritic_fixture.sh plugins/quality-gates/scripts/diff-test-results.py
 # test_pipeline_verdict_wiring.sh — 판정 상시 배선 (설계 §6.1 ⑤ · §6.3.5 · §6.4.3, AC2 · AC8–AC12).
 #
 # 합성기 쪽 총 함수는 test_verdict_vocabulary.sh · test_angle_coverage.sh 가 잰다. 이 락은
@@ -14,7 +14,8 @@ set -u
   plugins/quality-gates/skills/quality-pipeline/references/differential-test.md \
   plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/scripts/verdict.py \
   plugins/quality-gates/scripts/angles.py \
-  plugins/quality-gates/tests/lib/recritic_fixture.sh; exit 0; }
+  plugins/quality-gates/tests/lib/recritic_fixture.sh \
+  plugins/quality-gates/scripts/diff-test-results.py; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
@@ -178,17 +179,18 @@ PY
   assert_grep "$got" '^PARSED$' "견본이 angles.parse 를 통과한다(세 각도 · 문법 안)"
 }
 
-case_differential_runs_inside_every_iteration() {
-  # Review Focus 3 · R-AC — ② 는 iteration 루프 «안»이다.
-  local body it d fin
+case_differential_runs_once_before_verdict() {
+  # Review Focus 3 · R-AC — ② 는 한 실행에 한 번, ① 리뷰 뒤 · Final verdict 앞에서 돈다(반복 고리가 없다).
+  local body r d fin
   body=$(awk '/^## Flow$/{f=1;next} f&&/^## /{exit} f' "$SKILL")
-  it=$(printf '%s\n' "$body" | grep -n 'iteration N = 1\.\.CAP (CAP = 5 + ' | head -1 | cut -d: -f1)
-  d=$(printf '%s\n' "$body" | grep -n '②' | head -1 | cut -d: -f1)
+  r=$(printf '%s\n' "$body" | grep -n '① 리뷰 ' | head -1 | cut -d: -f1)
+  d=$(printf '%s\n' "$body" | grep -n '② 차등 테스트' | head -1 | cut -d: -f1)
   fin=$(printf '%s\n' "$body" | grep -n 'Final verdict' | head -1 | cut -d: -f1)
   local inside=0
-  if [ -n "$it" ] && [ -n "$d" ] && [ -n "$fin" ] && [ "$it" -lt "$d" ] && [ "$d" -lt "$fin" ]; then inside=1; fi
-  assert_eq "$inside" "1" "② 가 iteration 항목과 Final verdict 사이(루프 안)에 있다"
-  assert_grep "$body" '매 iteration 돈다' "② 가 매 iteration 돈다고 적혀 있다"
+  if [ -n "$r" ] && [ -n "$d" ] && [ -n "$fin" ] && [ "$r" -lt "$d" ] && [ "$d" -lt "$fin" ]; then inside=1; fi
+  assert_eq "$inside" "1" "② 가 ① 리뷰와 Final verdict 사이에 있다"
+  assert_eq "$(printf '%s\n' "$body" | grep -c '② 차등 테스트')" "1" "Flow 에 ② 줄은 하나다"
+  assert_not_grep "$body" 'iteration' "Flow 에 반복 고리(iteration)가 없다(위 양성 짝)"
 }
 
 case_security_switch_is_not_certified_even_with_zero_findings() {
@@ -308,7 +310,7 @@ PY
   assert_grep "$got" '^IDX_ROWS:1$'    "kill-switch 색인에도 같은 정확한 철자의 행이 하나 있다"
 }
 
-case_differential_defect_zero_kept_routes_to_fixloop() {
+case_differential_defect_goes_to_fix_list() {
   # 최종 리뷰 I1(1차) → 2차 re-review 지적(section-window 는 같은-줄이 아니다) — 옛 버전은
   # Step 4.5–Fix-loop decision 사이 거대한 창 «전체» 에서 네 토큰의 존재만 봤다. 그러면
   # I1-C(라우팅 문장은 그대로 두고 실제 목적지만 Final Summary 로 바꿔치기 — "Fix-loop
@@ -318,9 +320,10 @@ case_differential_defect_zero_kept_routes_to_fixloop() {
   # 사실을 **그 사실이 실제로 적힌 좁은 구간**(정규식으로 앵커 사이만 자르고 공백을
   # 접어 한 "논리 줄"로 만든 것)에서 잰다 — 다른 구간이 대신 만족시킬 수 없다.
   local got
-  got=$(python3 - "$SKILL" <<'PY'
+  got=$(python3 - "$SKILL" "$PLUGIN_ROOT/scripts/diff-test-results.py" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
+dtr = open(sys.argv[2], encoding="utf-8").read()
 
 def norm(s):
     return re.sub(r'\s+', ' ', s)
@@ -346,20 +349,23 @@ print(f"ATTR_NEGATED:{1 if attr_negated else 0}")
 print(f"ATTR_EXAMPLE:{1 if (a and 'NEW_REGRESSION' in a) else 0}")
 print(f"ATTR_FLIPPED_TO_ONLY_GREEN:{1 if (a and re.search(r'STILL_GREEN[^가-힣]{0,6}(만|인 것만)', a)) else 0}")
 
-# --- I1-C: kept=0 차등 기원 라우팅 — 조건 언급부터 실제 호출 동사(「그대로 부르되」)
-#     까지를 한 구간으로 자른다. 그 구간 안의 Final Summary 언급은 정확히 «부정문
-#     하나» 여야 한다 — 부정문을 지우고도 Final Summary 가 남으면 실제 목적지가
-#     바뀐 것이다(단어만 살려 둔 I1-C 변이).
-r = seg(r'`verdict: defect` 이고 `blocking: 0`.*?그대로 부르되')
+# --- I1-C: 차등 결함 — 고칠 목록의 `### 차등 회귀` 불릿 한 구간에서 잰다.
+#     조건(차등 · confirmed_product_defect: true) · 고를 unit(차등 판정기의 결함 집합 DEFECTS 와 같은 값만) ·
+#     고칠 방법을 오케스트레이터가 쓴다는 것이 같은 구간에 있다. 막는 지적이 있어도 싣는다(blocking 조건 없음).
+r = seg(r'- `### 차등 회귀` — .*?한 줄로 쓴다\.')
+dm = re.search(r'^DEFECTS = \{(.*?)\}', dtr, re.M)
+defects = sorted(re.findall(r'"([A-Z_]+)"', dm.group(1))) if dm else []
+print(f"DEFECTS_READ:{len(defects)}")
+bq = chr(96)
+pick = bq + "verdict:" + bq + " 가 " + " 이나 ".join(bq + d + bq for d in defects) + " 인 unit 마다 한 줄"
+print(f"ROUTE_PICKS_DEFECTS_ONLY:{1 if (r and defects and pick in r) else 0}")
+print(f"ROUTE_NOT_NON_GREEN:{1 if (r and ('STILL_GREEN' + bq + ' 이 아닌') not in r) else 0}")
+print(f"ROUTE_NO_BLOCKING_GATE:{1 if (r and 'blocking: 0' not in r and '막는 지적이 함께 있어도 싣는다' in r) else 0}")
 print(f"ROUTE_FOUND:{1 if r is not None else 0}")
 print(f"ROUTE_HAS_DIFFERENTIAL:{1 if (r and '차등' in r) else 0}")
 print(f"ROUTE_HAS_DEFECT_FLAG:{1 if (r and 'confirmed_product_defect: true' in r) else 0}")
-print(f"ROUTE_HAS_INVOKE:{1 if (r and '그대로 부르되' in r) else 0}")
-route_no_leak = 0
-if r is not None:
-    stripped = r.replace('Final verdict 로 직행하지 않는다', '')
-    route_no_leak = 1 if 'Final verdict' not in stripped else 0
-print(f"ROUTE_NO_FINAL_SUMMARY_LEAK:{route_no_leak}")
+print(f"ROUTE_HAS_FIX_LINE:{1 if (r and '고칠 방법은 네가 그 unit 범위 안에서 한 줄로 쓴다' in r) else 0}")
+print(f"ROUTE_NO_ASK:{1 if (r and 'AskUserQuestion' not in r and 'decision' not in r) else 0}")
 PY
 )
   assert_grep "$got" '^DISCLOSURE_FOUND:1$'    "resolution_disclosure 앵커를 찾았다"
@@ -368,82 +374,41 @@ PY
   assert_grep "$got" '^ATTR_NEGATED:1$'        "STILL_GREEN 바로 뒤에 「아닌」 부정이 있다(I1-E 가 「인 것만」으로 뒤집으면 RED)"
   assert_grep "$got" '^ATTR_EXAMPLE:1$'        "non-green 예시로 NEW_REGRESSION 이 같은 구간에 있다"
   assert_grep "$got" '^ATTR_FLIPPED_TO_ONLY_GREEN:0$' "「STILL_GREEN 만/인 것만」(선택 반전)이 없다"
-  assert_grep "$got" '^ROUTE_FOUND:1$'                "blocking 0 차등 기원 라우팅 구간을 찾았다"
+  assert_grep "$got" '^ROUTE_FOUND:1$'                "차등 결함의 고칠 목록 구간을 찾았다"
+  assert_grep "$got" '^DEFECTS_READ:2$'               "전제: 차등 판정기의 결함 집합(DEFECTS)을 읽었다"
+  assert_grep "$got" '^ROUTE_PICKS_DEFECTS_ONLY:1$'   "그 구간이 결함 집합(NEW_REGRESSION · NEW_TEST_RED)의 unit 만 싣는다"
+  assert_grep "$got" '^ROUTE_NOT_NON_GREEN:1$'        "그 구간이 STILL_GREEN 이 아닌 unit 전부를 싣지 않는다(FIXED · NEW_TEST_GREEN 등은 결함이 아니다 — 위 양성 짝)"
+  assert_grep "$got" '^ROUTE_NO_BLOCKING_GATE:1$'     "그 구간이 막는 지적이 있어도 차등 결함을 싣는다(blocking: 0 조건 없음)"
   assert_grep "$got" '^ROUTE_HAS_DIFFERENTIAL:1$'     "그 구간이 차등 테스트 기원임을 말한다"
   assert_grep "$got" '^ROUTE_HAS_DEFECT_FLAG:1$'      "그 구간이 confirmed_product_defect: true 를 싣는다"
-  assert_grep "$got" '^ROUTE_HAS_INVOKE:1$'           "그 구간이 Fix-loop decision 을 «그대로 부르되」로 실제 호출한다"
-  assert_grep "$got" '^ROUTE_NO_FINAL_SUMMARY_LEAK:1$' "그 구간의 Final verdict 언급은 부정문 하나뿐이다(I1-C 가 실제 목적지를 바꾸면 RED)"
+  assert_grep "$got" '^ROUTE_HAS_FIX_LINE:1$'         "그 구간이 회귀 unit 마다 오케스트레이터가 고칠 방법 한 줄을 쓰라고 한다"
+  assert_grep "$got" '^ROUTE_NO_ASK:1$'               "그 구간이 결정 도구로 새지 않는다"
+  # 끝 한 줄은 막는 지적 · 차등 결함이 있을 때만 — 두 절이 비면(clean · 제안만) 내지 않는다
+  local fv endc
+  fv="$(awk '/^## Final verdict$/{f=1;next} f&&/^## /{exit} f' "$SKILL" | tr '\n' ' ')"
+  endc='막는 지적이나 차등 defect 가 있으면(고칠 목록의 `### 막는 지적` · `### 차등 회귀` 에 줄이 하나라도 있으면) 그 뒤에 이 한 줄을 낸다 — 묻지 않는다. 두 절이 모두 `(없음)` 이면(clean 실행 · 제안만 남은 실행 포함) 내지 않는다:'
+  assert_contains "$fv" "$endc" "끝 한 줄은 막는 지적 · 차등 결함이 있을 때만 내고, 두 절이 비면 내지 않는다"
 }
 
-case_n5_and_retry_cover_differential_origin() {
-  # 최종 리뷰 (2차) 항목 1–2 — 상한 CAP(P18 — 기본 5, 사용자가 연 반복만큼 늘어난다)과 Retry
-  # 옵션 문구가 kept=0 차등 기원 defect 를 커버하는지 잰다. 「상한 확장을 지우는」 변이(옛
-  # 「kept > 0」 전용 문구로 되돌리기)와 Retry 문장이 빠지는 변이를 각각 잡는다.
-  # AC25 전에는 같은 뜻을 「N=5 에서 도달하면」 문단 · 「N < 5」 머리에서 쟀다 — 상한이 CAP 가 된 뒤에도
-  # 차등 기원 포함 · Max-iter 를 부른다 · Fix-loop 언급은 부정에 묶임을 같은 자리에서 잰다.
+case_one_pass_routing_has_no_cap() {
+  # AC1 · AC2 — Step 4.5 의 「그다음」 은 판정이 무엇이든 e2e 로 가고 묻지 않는다. 상한(CAP) · 고정 상한 글자 ·
+  # 결정 도구로 가는 라우팅이 없다.
   local got
   got=$(python3 - "$SKILL" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-
-def norm(s):
-    return re.sub(r'\s+', ' ', s)
-
-def seg(pattern):
-    m = re.search(pattern, text, re.S)
-    return norm(m.group(0)) if m else None
-
-cap = seg(r'\*\*상한.CAP.에서 도달하면\.\*\*.*?(?=\n\n---)')
-print(f"CAP_FOUND:{1 if cap is not None else 0}")
-print(f"CAP_HAS_DIFFERENTIAL:{1 if (cap and '차등' in cap and 'blocking: 0' in cap) else 0}")
-print(f"CAP_HAS_MAXITER:{1 if (cap and 'Max-iter decision' in cap) else 0}")
-
-# X6 — 상한 문단 안의 Fix-loop decision 언급은 전부 부정(「가 아니라」 · 「새지 않는다」)에 묶인다.
-#      토큰(차등 · kept = 0 · Max-iter decision)을 남긴 채 목적지를 Fix-loop 로 되돌리는 변이를 잡는다.
-fl_all = len(re.findall(r'Fix-loop decision', cap)) if cap else 0
-fl_neg = len(re.findall(r'Fix-loop decision[^.]{0,60}?(?:가 아니라|새지 않는다)', cap)) if cap else 0
-print(f"CAP_FIXLOOP_ALL_NEGATED:{1 if (fl_all >= 1 and fl_all == fl_neg) else 0}")
-# 목적지 양의 단언 — Max-iter decision 링크 뒤가 「을 부른다」. 괄호 · # 를 정규식에 쓰지 않는다
-# (이 본문은 $( ) 안 heredoc 이다 — bash 3.2 가 짝 없는 괄호로 치환 경계를 잘못 잡는다).
-cap_maxiter = bool(cap and re.search(r'\[Max-iter decision\].{1,24} 을 부른다', cap))
-print(f"CAP_MAXITER_INVOKED:{1 if cap_maxiter else 0}")
-# 상한을 넘는 길은 사용자 승인 하나뿐이라고 말한다(P18 — 상한이 남는다)
-print(f"CAP_ONLY_USER_OPENS:{1 if (cap and '넘는 길은 Max-iter decision 의 사용자 승인 하나뿐이다' in cap) else 0}")
-# X7 — Step 4.5 라우팅의 머리가 N < CAP 로 한정된다(같은 줄)
-lead = re.search(r'^\s*그다음.N < CAP — N = CAP 는 [^\n]*「상한.CAP.에서 도달하면」', text, re.M)
-print(f"LEAD_N_LT_CAP:{1 if lead else 0}")
-# X8 — Step 5 결정 도구의 머리가 N < CAP 전용이고 N = CAP 는 Max-iter 로 간다(같은 줄)
-dtool = re.search(r'^\s*\*\*Decision tool .N < CAP only — N = CAP always goes to Max-iter decision instead', text, re.M)
-print(f"DECISION_TOOL_N_LT_CAP:{1 if dtool else 0}")
-# 옛 고정 상한 글자(N=5 · N = 5 · N < 5 · N <5 · N <= 5 · N ≤ 5)가 남지 않는다 — 위 양성(LEAD · DECISION_TOOL)이 짝이다.
-# 비교 기호 앞뒤 공백은 몇 개든, 5 뒤에 숫자가 붙으면(N = 50) 다른 값이라 세지 않는다.
+lead = re.search(r'^그다음: 판정이 무엇이든 \[e2e\]\(#e2e\) 로 간다\. 그 앞에 아래 「고칠 목록」 을 늘 남긴다 — 막는 지적 · 차등 defect 가 있어도 묻지 않는다\.$', text, re.M)
+print(f"LEAD_ONE_PASS:{1 if lead else 0}")
+# 옛 고정 상한 글자(N=5 · N = 5 · N < 5 · N <5 · N <= 5 · N ≤ 5)와 상한 라우팅 글자가 남지 않는다 — 위 LEAD 가 짝이다.
 old_n5 = re.findall(r'(?<![A-Za-z_])N\s*(?:=|<=|<|≤)\s*5(?![0-9])', text)
 print(f"OLD_N5_LITERAL:{len(old_n5)}")
-
-note = seg(r'\*\*「고치고 다시 돌기」 옵션 문구.*?(?=\n\nBranch on answer:)')
-print(f"RETRY_NOTE_FOUND:{1 if note is not None else 0}")
-print(f"RETRY_NOTE_HAS_DIFFERENTIAL:{1 if (note and '차등 테스트 기원' in note) else 0}")
-
-bullet = seg(r'- \*\*고치고 다시 돌기\*\* →.*?(?=\n- \*\*지금 판정으로 끝내기)')
-print(f"RETRY_BULLET_FOUND:{1 if bullet is not None else 0}")
-print(f"RETRY_BULLET_HAS_DIFFERENTIAL:{1 if (bullet and '차등 테스트 기원' in bullet) else 0}")
-print(f"RETRY_BULLET_HAS_FIX_MEANING:{1 if (bullet and ('회귀' in bullet or 'NEW_REGRESSION' in bullet)) else 0}")
+cap_route = re.findall(r'N\s*(?:<|=)\s*CAP', text)
+print(f"CAP_ROUTE:{len(cap_route)}")
 PY
 )
-  assert_grep "$got" '^CAP_FOUND:1$'                   "「상한(CAP)에서 도달하면」 문단을 찾았다"
-  assert_grep "$got" '^CAP_HAS_DIFFERENTIAL:1$'        "그 문단이 kept=0 차등 기원 defect 도 포함한다고 말한다(상한 확장 삭제 변이 → RED)"
-  assert_grep "$got" '^CAP_HAS_MAXITER:1$'             "그 문단이 Max-iter decision 을 부른다고 말한다"
-  assert_grep "$got" '^CAP_FIXLOOP_ALL_NEGATED:1$' "상한 문단의 Fix-loop decision 언급은 전부 부정에 묶인다(X6 — 토큰을 남긴 목적지 반전 → RED)"
-  assert_grep "$got" '^CAP_MAXITER_INVOKED:1$'     "상한 문단이 Max-iter decision 을 «부른다»(목적지 양의 단언)"
-  assert_grep "$got" '^CAP_ONLY_USER_OPENS:1$'     "상한을 넘는 길은 Max-iter decision 의 사용자 승인 하나뿐이다(P18 — AC25)"
-  assert_grep "$got" '^LEAD_N_LT_CAP:1$'           "Step 4.5 라우팅 머리가 N < CAP 로 한정된다(X7)"
-  assert_grep "$got" '^DECISION_TOOL_N_LT_CAP:1$'  "Step 5 결정 도구가 N < CAP 전용이다(X8)"
-  assert_grep "$got" '^OLD_N5_LITERAL:0$'          "고정 상한 글자(N=5 · N < 5)가 SKILL 에 남지 않는다(AC25)"
-  assert_grep "$got" '^RETRY_NOTE_FOUND:1$'            "Retry 옵션 문구 안내를 찾았다"
-  assert_grep "$got" '^RETRY_NOTE_HAS_DIFFERENTIAL:1$' "그 안내가 차등 테스트 기원 kept=0 을 지목한다"
-  assert_grep "$got" '^RETRY_BULLET_FOUND:1$'          "Branch on answer 의 Retry 불릿을 찾았다"
-  assert_grep "$got" '^RETRY_BULLET_HAS_DIFFERENTIAL:1$' "그 불릿이 차등 테스트 기원 경우를 갈라 말한다"
-  assert_grep "$got" '^RETRY_BULLET_HAS_FIX_MEANING:1$'  "그 불릿이 회귀 unit 을 고치는 의미로 Retry 를 재정의한다(suggested patches 없음을 인정)"
+  assert_grep "$got" '^LEAD_ONE_PASS:1$'  "Step 4.5 의 「그다음」 이 판정이 무엇이든 e2e 로 가고 묻지 않는다(줄 전체)"
+  assert_grep "$got" '^OLD_N5_LITERAL:0$' "고정 상한 글자(N=5 · N < 5)가 SKILL 에 남지 않는다"
+  assert_grep "$got" '^CAP_ROUTE:0$'      "상한 라우팅 글자(N < CAP · N = CAP)가 SKILL 에 남지 않는다"
 }
 
 
@@ -461,12 +426,12 @@ case_recritic_findings_stamp_agent_and_drop_confidence() {
 
 for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_dispatches_are_fail_closed \
          case_reason_literals_are_closed_and_pinned case_angle_template_is_total \
-         case_differential_runs_inside_every_iteration \
+         case_differential_runs_once_before_verdict \
          case_security_switch_is_not_certified_even_with_zero_findings \
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
          case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
-         case_differential_defect_zero_kept_routes_to_fixloop \
-         case_n5_and_retry_cover_differential_origin \
+         case_differential_defect_goes_to_fix_list \
+         case_one_pass_routing_has_no_cap \
          case_recritic_findings_stamp_agent_and_drop_confidence \
 ; do
   "$c"

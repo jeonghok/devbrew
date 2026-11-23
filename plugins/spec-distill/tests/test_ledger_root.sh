@@ -70,7 +70,7 @@ assert_eq "$pr_rc" "2" "양성 대조: payload-root 도 rc 2"
 # ── 펜스 — RB · SR · finishing.md 의 상태 루트 호출은 모두 문서 변수를 넘기는 state-root-for (AC9) ──
 SD="$REPO_ROOT/plugins/spec-distill"
 SR="$SD/skills/spec-review/SKILL.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
-FIN="$SD/skills/pm-interview/references/finishing.md"; RF="$SD/skills/request-framing/SKILL.md"
+FIN="$SD/skills/context-build/references/finishing.md"; RF="$SD/skills/intent-sync/SKILL.md"
 
 note "== root_lock"
 # root_lock <RB> <SR> <FIN> <RF> → stdout 위반 줄(없으면 빈 값)

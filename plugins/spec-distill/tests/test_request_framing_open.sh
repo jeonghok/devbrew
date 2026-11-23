@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/request-framing/SKILL.md plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
+# guards: plugins/spec-distill/skills/intent-sync/SKILL.md plugins/spec-distill/scripts/raw_source.py plugins/spec-distill/references/proceed-gate.md plugins/spec-distill/templates/interview-seed-audit-template.md
 #
-# request-framing 의 이름 조회(AC16)와 다음 단계 둘째 질문(AC17).
+# intent-sync 의 이름 조회(AC16)와 다음 단계 둘째 질문(AC17).
 # AC16 — 레포로 설명이 안 되는 이름만 짧게 조회해 audit `### 이름 조회` 에 남기고 seed 에는 싣지 않는다.
 #        조회 직전마다 웹 펜스로 스위치를 본다 — 펜스는 문구가 아니라 차가운 셸(bash · zsh)에서 실행해 잰다.
 #        정확히 "1" 만 끈다(`yes` · `0` · 빈 값 · `01` 은 끄지 않는다).
-# AC17 — 둘째 질문의 모양은 proceed-gate.md 정본 한 곳에 있고, request-framing 의 `### 호출 모양` 이 그것을 읽는다.
+# AC17 — 둘째 질문의 모양은 proceed-gate.md 정본 한 곳에 있고, intent-sync 의 `### 호출 모양` 이 그것을 읽는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$ROOT/plugins/spec-distill"
-RF="$SD/skills/request-framing/SKILL.md"; PG="$SD/references/proceed-gate.md"
+RF="$SD/skills/intent-sync/SKILL.md"; PG="$SD/references/proceed-gate.md"
 AT="$SD/templates/interview-seed-audit-template.md"
 
 if [ "${1:-}" = "--emit-scanned" ]; then
-  echo "plugins/spec-distill/skills/request-framing/SKILL.md"
+  echo "plugins/spec-distill/skills/intent-sync/SKILL.md"
   echo "plugins/spec-distill/references/proceed-gate.md"
   echo "plugins/spec-distill/templates/interview-seed-audit-template.md"
   echo "plugins/spec-distill/scripts/raw_source.py"
@@ -89,7 +89,7 @@ grep -qF '### 이름 조회' "$NA" && grep -qF 'https://backstage.io' "$NA" \
 python3 -I "$CHECK" gate "$FIX/seed-one-sentence.md" "$NA" >/dev/null 2>"$SCRATCH/cs.err"
 assert_eq "$?" "0" "AC16: 이름 조회 URL 줄이 있는 audit 으로 check_seed gate 통과"
 
-# ── AC17 — 정본 문단과 request-framing 의 읽는 쪽
+# ── AC17 — 정본 문단과 intent-sync 의 읽는 쪽
 PGF="$(tr '\n' ' ' < "$PG" | tr -s ' ')"
 for lit in '**둘째 질문(선택) — 다음 단계 갈래.**' '머리글은 「다음 단계 갈래」' '첫 질문의 네 선택지 · 순서 · `(권장)` 은 그대로' \
            '①/② 의 이름과 설명은 특정 단계를 가리키지 않는다' '제안이 없으면 둘째 질문도 없다' '`## 다음 세션 명령` 규칙 3 대로'; do
@@ -102,7 +102,7 @@ case "$STEPB" in *'**둘째 질문(선택) — 다음 단계 갈래.**'*'**기�
 assert_contains "$STEPB" '선택지는 모델의 제안 `(권장)` 이 첫 자리, 그 skill 의 기본 다음 단계가 둘째다.' "AC17(정본): 둘째 질문 순서 — 모델의 제안이 첫 자리"
 assert_not_contains "$STEPB" '기본 다음 단계 `(권장)` 과 모델의 제안 둘이다' "AC17(정본): 옛 둘째 질문 순서가 남지 않았다"
 CALL="$(awk '/^### 호출 모양/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$RF" | tr '\n' ' ' | tr -s ' ')"
-for lit in '「<모델의 제안> (권장)」 · 「인터뷰」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 선택지의 설명은 「얻음: <제안 이유> · 내줌: <그 제안이 틀렸을 때 원인이 될 것 하나>」로 쓴다' \
+for lit in '「<모델의 제안> (권장)」 · 「컨텍스트 쌓기」' '`proceed-gate.md` 의 「둘째 질문(선택)」' '제안 선택지의 설명은 「얻음: <제안 이유> · 내줌: <그 제안이 틀렸을 때 원인이 될 것 하나>」로 쓴다' \
            '규칙 3 대로' \
            '둘째 질문이 뜨면 ①/② 이름은 정본 예시처럼 단계를 가리키지 않는다' 'slash 줄이면 운반 문장 없이 seed 경로만'; do
   assert_contains "$CALL" "$lit" "AC17: «${lit}»"

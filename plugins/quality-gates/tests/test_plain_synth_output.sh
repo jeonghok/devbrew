@@ -134,8 +134,8 @@ assert_eq "${sedpat}" "${anchor}" "SKILL 의 sed 범위 시작이 grep 앵커와
 rng="$(printf '%s\n' "$out" | sed -n "/${anchor}/,/^\$/p")"
 assert_grep "$rng" '^\| CRITICAL \| app\.py:3 \| SQL 을 문자열로 만든다 \| security-reviewer \|$' "그 앵커로 자른 범위에 지적 행이 든다(result.md 의 「지적」 절이 비지 않는다)"
 assert_not_contains "$(sed -n "/grep -q '^| /p" "$SKILL")" "Sev |" "SKILL 에 옛 영어 표 앵커가 없다"
-fixes="$(sed -n 's/.*the `\(\*\*[^`]*\*\*\)` list carries the same `#k`.*/\1/p' "$SKILL")"
-assert_eq "${fixes}" "**고칠 방법:**" "SKILL Step 5 가 고칠 방법 목록을 합성기와 같은 글자로 부른다"
+fixes="$(sed -n 's/.*<\(\*\*[^*]*\*\*\) 목록의 같은 #k 줄의 글>.*/\1/p' "$SKILL")"
+assert_eq "${fixes}" "**고칠 방법:**" "SKILL Step 4.5 고칠 목록이 고칠 방법 목록을 합성기와 같은 글자로 부른다"
 assert_grep "$out" "^$(printf '%s' "$fixes" | sed 's/\*/\\*/g')\$" "합성기가 SKILL 이 부르는 그 글자를 낸다"
 
 # ⑦ 시작 배너 — 첫 줄이 상태 문장이고 과정 나열이 없다

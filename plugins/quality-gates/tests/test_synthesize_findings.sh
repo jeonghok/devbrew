@@ -174,12 +174,12 @@ d_line="$(python3 "$VERDICT" --emit-args --differential "$VT/diff.yaml")" || tru
 read -r -a R_ARGS <<< "${r_line#qg-verdict-args: }"
 read -r -a D_ARGS <<< "${d_line#qg-verdict-args: }"
 joined="$(python3 "$VERDICT" ${R_ARGS[@]+"${R_ARGS[@]}"} ${D_ARGS[@]+"${D_ARGS[@]}"} \
-  --line --excluded 0 --iter 1 --sha abc1234)" || true
+  --line --sha abc1234)" || true
 check "리뷰 줄 + 차등 줄로 다시 낸 판정이 합성기의 판정과 같다" \
   "$(printf '%s\n' "$joined" | grep -E '^(verdict|reason|reasons): ' || true)" \
   "$(printf '%s\n' "$out" | grep -E '^(verdict|reason|reasons): ' || true)"
 check "그 판정 줄이 리뷰 축 수와 차등 새 실패를 싣는다" "$(printf '%s\n' "$joined" | tail -n 1)" \
-  "qg: defect · 막는 지적 0 · 선택 1 · 차등 새 실패 1 · 제외 패치 0 · iter 1 · abc1234"
+  "qg: defect · 막는 지적 0 · 선택 1 · 차등 새 실패 1 · abc1234"
 rm -rf "$VT"
 
 va_prep '- "CRITICAL: bare string"' 'verdicts: []'

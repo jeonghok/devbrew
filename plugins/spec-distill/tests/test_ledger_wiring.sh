@@ -20,7 +20,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
 SR="$SD/skills/spec-review/SKILL.md"; RB="$SD/skills/reviewing-brief/SKILL.md"
-FIN="$SD/skills/pm-interview/references/finishing.md"
+FIN="$SD/skills/context-build/references/finishing.md"
 
 repo="$T/repo"; mkdir -p "$repo/docs" && git -C "$repo" init -q
 doc="$repo/docs/a-design.md"; printf '# A\n' > "$doc"
@@ -260,7 +260,7 @@ assert_eq "$DERIVE_RC" "0" "AC12: 대상 도출이 읽지 못한 파일 · 레�
 n_guarded="$(printf '%s\n' "$GUARDED" | grep -c .)"
 [ "$n_guarded" -gt 0 ] && ok "AC12: 대상이 도출된다 — ${n_guarded}개" || no "AC12: 도출된 대상이 0개다"
 case "$GUARDED" in *"$RD_CANON"*) ok "AC12: 도출에 reviewing-document.md 가 든다";; *) no "AC12: 도출에 reviewing-document.md 가 없다";; esac
-for need in "$SR" "$RB" "$FIN" "$SD/skills/request-framing/SKILL.md"; do
+for need in "$SR" "$RB" "$FIN" "$SD/skills/intent-sync/SKILL.md"; do
   printf '%s\n' "$GUARDED" | grep -qxF "$need" && ok "AC12: 도출에 옛 목록 ${need#$SD/} 가 든다" || no "AC12: 도출에 옛 목록 ${need#$SD/} 가 없다"
 done
 # AC12 — 펜스 밖 산문 문단. 원장 쓰기 명령(declare-related · log-decision)을 `docreview_state.py` 꼴로 적은 문단은
@@ -359,7 +359,7 @@ assert_eq "$n_engine_marker" "0" "AC12: 엔진 스크립트는 표지 이름(rev
 grep -q 'reviewing-by' "$SD/scripts/ledger_marker.py" && ok "AC12(양성 짝): 표지 이름은 ledger_marker.py 에 있다" || no "AC12(양성 짝): ledger_marker.py 에 표지 이름이 없다"
 # AC8 — 진입 skill 셋의 「원장 쓰기 전 확인」 문단이 적는 `docreview_state.py` 쓰기 명령 = 엔진 하위 명령 − 읽기 전용(도출).
 # 새 쓰기 명령(log-decision 등)을 문단에 적지 않으면 RED — 표지 확인 줄 다음에만 부른다는 규칙이 그 명령에 닿지 않는다.
-for f in "$SR" "$RB" "$SD/skills/request-framing/SKILL.md"; do
+for f in "$SR" "$RB" "$SD/skills/intent-sync/SKILL.md"; do
   python3 -I - "$SD/scripts" "$f" "$AC8_READ_ONLY" > "$T/ac8-writes.txt" 2>&1 <<'PY'
 import argparse, re, sys
 sys.path.insert(0, sys.argv[1])
@@ -489,7 +489,7 @@ printf '%s\n' "$finb" | tail -n 3 | grep -qF 'ledger_marker.py" release' && ok "
 grep -qF 'ledger_marker.py" release' "$RB" && no "AC8: reviewing-brief 가 스스로 표지를 푼다(B-A 가 푼다)" || ok "AC8: reviewing-brief 는 표지를 풀지 않는다"
 
 # AC10 양의 짝 — 리뷰 진입 셋이 ledger_sweep.py 를 부른다.
-SWEEPERS="$SR $RB $SD/skills/request-framing/SKILL.md"
+SWEEPERS="$SR $RB $SD/skills/intent-sync/SKILL.md"
 for f in $SWEEPERS; do
   fence "$f" ledger-open | grep -qF 'ledger_sweep.py" --root "$ROOT"' && ok "AC10: $(basename "$(dirname "$f")") 원장 열기가 정리를 부른다" || no "AC10: $f 정리 호출 없음"
 done
@@ -712,12 +712,12 @@ for f in "$SR" "$RB"; do
   assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:(알 수 없는 표지)" "fix1(4): $(basename "$(dirname "$f")") — 두 줄 표지는 OTHER:(알 수 없는 표지)"
 done
 
-# ── Task 8 — request-framing: 이름 파일 없이 audit 의 session_id 로 이름을 되찾고, 원장 배선은 위와 같다 ──────
-RF="$SD/skills/request-framing/SKILL.md"
-grep -qF 'interview-basename' "$RF" && no "AC11: request-framing 에 interview-basename 이 남았다" || ok "AC11: interview-basename 이 없다"
+# ── Task 8 — intent-sync: 이름 파일 없이 audit 의 session_id 로 이름을 되찾고, 원장 배선은 위와 같다 ──────
+RF="$SD/skills/intent-sync/SKILL.md"
+grep -qF 'interview-basename' "$RF" && no "AC11: intent-sync 에 interview-basename 이 남았다" || ok "AC11: interview-basename 이 없다"
 grep -qF 'interview_state.py" seed-audit-for-session --session "$sid"' "$RF" \
   && ok "AC11 양의 짝: audit session_id 로 이름을 되찾는다" || no "AC11: 이름 되찾기 호출이 없다"
-grep -qE '^STATE="\$ROOT/\$sid/state\.local\.md"' "$RF" && no "§1-6: request-framing 의 세션 STATE 줄이 남았다" || ok "§1-6: 세션 STATE 줄이 없다"
+grep -qE '^STATE="\$ROOT/\$sid/state\.local\.md"' "$RF" && no "§1-6: intent-sync 의 세션 STATE 줄이 남았다" || ok "§1-6: 세션 STATE 줄이 없다"
 # 상태 블록 실행 — 같은 세션 seed audit 둘이면 이름을 만들지 않는다
 blk="$(awk '/^## 상태/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RF")"
 rfr="$T/rf"; mkdir -p "$rfr/docs/superpowers/interview" && git -C "$rfr" init -q
@@ -761,7 +761,7 @@ assert_eq "$(ls -A "$rfr/.claude/spec-distill" 2>&1)" ".gitignore" "§2-5: 상�
 blkT="$(printf '%s\n' "$blk" | sed 's/^TOPIC="<kebab-topic>"$/TOPIC="rfx"/')"
 printf '%s\n' "$blkT" | grep -qx 'TOPIC="rfx"' && ok "전제: 상태 블록의 TOPIC 자리표를 픽스처 주제로 바꿨다" || no "전제: TOPIC 줄 모양이 바뀌었다 — 아래 칸이 공허하다"
 RFO="$(fence "$RF" ledger-open)"
-[ -n "$RFO" ] && ok "전제: request-framing 원장 열기 펜스가 있다" || no "전제: request-framing 원장 열기 펜스가 없다 — 아래 칸이 공허하다"
+[ -n "$RFO" ] && ok "전제: intent-sync 원장 열기 펜스가 있다" || no "전제: intent-sync 원장 열기 펜스가 없다 — 아래 칸이 공허하다"
 rf_run() {   # rf_run <repo> <sid> <이어 붙일 스크립트> → 출력(rc 는 호출의 rc)
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID="$2" DEVBREW_SPEC_DISTILL_SESSION_ID="$2" bash -c "$blkT
 $3" 2>&1 )
@@ -778,12 +778,12 @@ bash_with() {   # bash_with <파일> <고정 문자열> → 그 문자열을 담
 rf1="$T/rf1"; sd1="$(rf_repo "$rf1")"
 RS1="$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$rf1/.claude/spec-distill" --doc "$sd1")"
 o="$(rf_run "$rf1" sess-rfaa0001 "$RFO")"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8: request-framing 원장 열기가 빈 원장에서 표지를 잡는다"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: HELD" "T8: intent-sync 원장 열기가 빈 원장에서 표지를 잡는다"
 assert_eq "$(cat "$RS1/reviewing-by" 2>/dev/null)" "sess-rfaa0001" "T8: 표지가 seed 의 원장 폴더에 선다"
 o="$(rf_run "$rf1" sess-rfbb0002 "$RFO")"
 assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: OTHER:sess-rfaa0001" "T8: 다른 세션 — OTHER 로 멈춘다"
 grep -qF '「그만둠 (권장)」' "$RF" && grep -qF '「이어 씀 — 표지를 내 것으로 바꾼다」' "$RF" \
-  && ok "T8: OTHER 판결이 그만둠/이어 씀 질문으로 간다(문면)" || no "T8: request-framing 표지 질문 문면이 없다"
+  && ok "T8: OTHER 판결이 그만둠/이어 씀 질문으로 간다(문면)" || no "T8: intent-sync 표지 질문 문면이 없다"
 grep -qF '`OTHER:(알 수 없는 표지)`' "$RF" && ok "T8: 판결 표에 OTHER:(알 수 없는 표지) 가 있다" || no "T8: 판결 표에 알 수 없는 표지 칸이 없다"
 o="$(cd "$rf1" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "unset CLAUDE_CODE_SESSION_ID DEVBREW_SPEC_DISTILL_SESSION_ID
 $blkT
@@ -794,7 +794,7 @@ ledger "$RS1/docreview-state.md" "$sd1" 1
 printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rfaa0001\n---\n\n## 6. 리뷰 결정\n' > "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md"
 RG="$(fence "$RF" ledger-guard)"
 printf '%s\n' "$RG" | grep -qF 'ledger_marker.py" check --dir "$STATE_DIR" --session "$sid"' \
-  && ok "T8: request-framing 쓰기 전 확인이 \$sid 로 잰다" || no "T8: request-framing 쓰기 전 확인 펜스 꼴: $RG"
+  && ok "T8: intent-sync 쓰기 전 확인이 \$sid 로 잰다" || no "T8: intent-sync 쓰기 전 확인 펜스 꼴: $RG"
 rs1b="$(cksum < "$RS1/docreview-state.md")"
 out="$(bash -c "SD='$SD'; STATE_DIR='$RS1'; sid=sess-rfbb0002
 $RG
@@ -917,13 +917,13 @@ lk_setup() {   # lk_setup <repo> <밖 폴더> [link] → seed · audit · brief 
 }
 lkr="$T/lk"; lko="$T/lk-outside"; lk_setup "$lkr" "$lko" link
 [ -L "$lkr/.claude/spec-distill/.docreview" ] && ok "전제(T8 관문): .docreview 가 밖을 가리키는 링크다" || no "전제(T8 관문): 링크가 아니다"
-# (a) request-framing — 상태 블록 + 확정 직전 검사 1 · 2 · 3, 각각 한 호출
+# (a) intent-sync — 상태 블록 + 확정 직전 검사 1 · 2 · 3, 각각 한 호출
 for i in 1 2 3; do
   eval "body=\"\$C$i\""
   o="$(cd "$lkr" && lk_env sess-lk000001 "$blkT
 $body")"
   eval "LKA$i=\"\$o\""
-  assert_eq "$(crashy "$o")" "" "T8 관문(a): request-framing 검사 $i 가 링크 아래에서 죽지 않는다"
+  assert_eq "$(crashy "$o")" "" "T8 관문(a): intent-sync 검사 $i 가 링크 아래에서 죽지 않는다"
   assert_contains "$o" "원장 자리가 레포 밖으로 풀리거나 링크를 지난다" "T8 관문(a): 검사 $i — 리뷰 산출물을 건너뛴다는 한 줄을 낸다"
 done
 assert_contains "$LKA1" "marks_rc=" "T8 관문(a): 검사 1 이 판정 줄을 낸다"

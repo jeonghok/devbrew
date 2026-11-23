@@ -133,7 +133,7 @@ class AuditTemplateGateShape(unittest.TestCase):
             head = text.split("\n---\n", 2)[0] if text.startswith("---") else ""
             vals = [ln.split(":", 1)[1].strip() for ln in head.splitlines()
                     if ln.startswith("source:")]
-            self.assertEqual(vals, ["spec-distill pm-interview"], name)
+            self.assertEqual(vals, ["spec-distill context-build"], name)
             self.assertIsNone(re.search(r"v\d", vals[0]), name)
 
 

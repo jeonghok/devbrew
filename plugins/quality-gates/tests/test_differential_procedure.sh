@@ -39,7 +39,7 @@ case_R24_differential_line_comes_from_the_machine() {
   # 옛 두 문장은 따옴표를 끊어 둔다 — 금지 문장 grep 이 이 락 자신을 세지 않는다(런타임 값은 이어진 문장이다).
   assert_file_absent "$REF" '판정은 기계 출력을 직접'' 읽고' "R24: 옛 R24 문장(판정이 기계 출력을 읽는다는 뜻)이 없다"
   assert_file_absent "$REF" '사본을 직접'' 읽어 정한다' "R24: 옛 D7 문장(verdict.py 가 사본을 읽어 판정한다는 뜻)이 없다"
-  local d5; d5=$(section "$REF" '## D5 짝짓기 — 매 iteration')
+  local d5; d5=$(section "$REF" '## D5 짝짓기')
   assert_contains "$d5" $'echo "diff_rc=$diff_rc"\nif [ "$diff_rc" -eq 0 ] && [ -f "$RD/differential.yaml" ]; then\n  python3 "$QG/scripts/verdict.py" --emit-args --differential "$RD/differential.yaml"\nelse\n  python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis\nfi' \
     "R24: D5 펜스 끝이 그 사본으로 차등 결과 줄을 내고, 사본이 없으면 error-axis 줄을 낸다"
   assert_contains "$(section "$REF" '## D7 판정 입력')" 'python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis' "R24: D7 이 D5 에 닿지 못한 반복의 차등 결과 줄을 낸다"
@@ -59,14 +59,14 @@ case_R24_differential_line_comes_from_the_machine() {
 # R24 · K-3 — 실행 끝의 판정 줄은 차등 결과 줄을 받고 세션 폴더를 다시 읽지 않는다. 기록 펜스는 D5 가 세션 폴더에
 # 남긴 사본을 그대로 붙인다(기록이지 판정 입력이 아니다). SKILL 펜스에 메모 경로 자리표시가 없다.
 case_R24_final_verdict_takes_the_differential_line() {
-  local d5; d5=$(section "$REF" '## D5 짝짓기 — 매 iteration')
-  assert_contains "$d5" 'cp "<memo>/diff-i<N>.yaml" "$RD/differential.yaml"' "D5 가 이 iteration 의 출력을 세션 폴더 사본으로 덮어쓴다"
-  assert_contains "$d5" $'else\n  rm -f "$RD/differential.yaml"\nfi' "D5: 출력이 없거나 실패면 사본을 지운다(앞 iteration 값이 남지 않는다)"
+  local d5; d5=$(section "$REF" '## D5 짝짓기')
+  assert_contains "$d5" 'cp "<memo>/diff-i1.yaml" "$RD/differential.yaml"' "D5 가 이 실행의 출력을 세션 폴더 사본으로 덮어쓴다"
+  assert_contains "$d5" $'else\n  rm -f "$RD/differential.yaml"\nfi' "D5: 출력이 없거나 실패면 사본을 지운다(남은 값이 없다)"
   assert_contains "$d5" '|| { diff_rc=4; rm -f "$RD/differential.yaml"; }' "D5: 사본 복사가 실패하면 error-axis 로 가고 반쪽 사본을 지운다"
-  assert_contains "$d5" 'cp "<memo>/not-counted-i<N>.md" "$RD/differential-not-counted.md"' "D5 가 커버리지 제외 목록도 사본으로 둔다"
-  assert_contains "$(section "$REF" '## D1 HEAD 축 트리 — 매 iteration')" \
-    'rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"' "D1: iteration 시작에 앞 iteration 사본을 지운다"
-  assert_contains "$(section "$REF" '## D2 후보와 배정 — 매 iteration')" '"<memo>/not-counted-i<N>.md"' \
+  assert_contains "$d5" 'cp "<memo>/not-counted-i1.md" "$RD/differential-not-counted.md"' "D5 가 커버리지 제외 목록도 사본으로 둔다"
+  assert_contains "$(section "$REF" '## D1 HEAD 축 트리')" \
+    'rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"' "D1: 시작에 세션 폴더에 남은 사본을 지운다"
+  assert_contains "$(section "$REF" '## D2 후보와 배정')" '"<memo>/not-counted-i1.md"' \
     "D2: 커버리지로 세지 않는 목록을 메모 파일에 쓴다"
   local fv; fv=$(section "$SKILL" '## Final verdict')
   local final; final=$(awk '$0 == "<!-- final-verdict:begin -->" {on=1; next} $0 == "<!-- final-verdict:end -->" {exit} on' "$SKILL")
@@ -109,17 +109,17 @@ case_skill_section_wires_the_reference() {
 case_reference_steps_are_d0_to_d8() {
   local got; got=$(grep -oE '^## D[0-9]+ ' "$REF" | tr -d '# ' | tr '\n' ' ')
   assert_eq "$got" "D0 D1 D2 D3 D4 D5 D6 D7 D8 " "절차 단계 D0~D8 이 순서대로 하나씩"
-  assert_eq "$(grep -c '§' "$REF")" "0" "모델이 매 iteration 읽는 절차는 설계 문서의 절(§)을 가리키지 않는다 — 지킬 규칙은 절차 안에 있다"
+  assert_eq "$(grep -c '§' "$REF")" "0" "모델이 읽는 절차는 설계 문서의 절(§)을 가리키지 않는다 — 지킬 규칙은 절차 안에 있다"
   assert_not_grep "$(cat "$REF")" '^\*\*Step R|갭 게이트|baseline-cache|test-scope-validator' "옛 단계 · 지운 장치가 절차에 없다"
   assert_contains "$(cat "$REF")" '이 호출 결과가 authoritative 다' "호출 주체 불변식: 스크립트 호출 결과가 판정 입력의 유일한 출처다"
 }
 # 토픽 스코프 경로: 기준선은 경계, HEAD 축은 합친 커밋, 후보와 분모는 그 트리에서 센다.
-# 토픽 값(head_commit · tree)은 매 iteration 의 topic-scope.txt 에서 읽는다 — Retry 뒤 Step 1a 가 새로 쓴 값이다.
+# 토픽 값(head_commit · tree)은 topic-scope.txt 에서 읽는다.
 case_topic_path_wiring() {
   local d0 d1
-  d0=$(section "$REF" '## D0 실행 시작 — 첫 iteration 에서 한 번'); d1=$(section "$REF" '## D1 HEAD 축 트리 — 매 iteration')
-  assert_contains "$d1" 'S="$RD/topic-scope.txt"' "토픽: D1 이 이 iteration 의 스코프 파일을 읽는다"
-  assert_contains "$d1" "hc=\$(sed -n 's/^head_commit: //p' \"\$S\")" "토픽: HEAD 축 커밋은 이 iteration 파일의 head_commit: 이다"
+  d0=$(section "$REF" '## D0 실행 시작'); d1=$(section "$REF" '## D1 HEAD 축 트리')
+  assert_contains "$d1" 'S="$RD/topic-scope.txt"' "토픽: D1 이 이 실행의 스코프 파일을 읽는다"
+  assert_contains "$d1" "hc=\$(sed -n 's/^head_commit: //p' \"\$S\")" "토픽: HEAD 축 커밋은 그 파일의 head_commit: 이다"
   assert_contains "$d1" 'create-head "$hc" "<session-id>" --topic "$key"' "토픽: HEAD 축 트리는 --topic 으로 다시 도출해 대조한다"
   assert_not_grep "$d0" 'create-head|head_commit' "토픽: D0(한 번)은 HEAD 축 값을 정하지 않는다"
   assert_contains "$d0" '기준선 커밋은 실행마다 하나로 고정된다' "기준선 고정과 그 공시가 D0 에 있다"
@@ -128,8 +128,8 @@ case_topic_path_wiring() {
 }
 
 # D1 펜스를 실제로 돌린다 — 플러그인 루트는 호출을 기록하는 대역이다.
-d1_fence() { awk '$0 == "## D1 HEAD 축 트리 — 매 iteration" {on=1; next} on && /^## /{exit} on && /^```bash$/{f=1; next} f && /^```$/{exit} f' "$REF"; }
-case_topic_axis_is_read_every_iteration() {
+d1_fence() { awk '$0 == "## D1 HEAD 축 트리" {on=1; next} on && /^## /{exit} on && /^```bash$/{f=1; next} f && /^```$/{exit} f' "$REF"; }
+case_topic_axis_is_read_from_scope_file() {
   local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
   git init -q "$T/r" && git -C "$T/r" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   local SID=sidd1run01 RDX="$T/r/.claude/quality-gates/sidd1run01"; mkdir -p "$RDX" "$T/stub/scripts"
@@ -146,18 +146,14 @@ case_topic_axis_is_read_every_iteration() {
   local out n
   : > "$T/log"
   ts B1 H1 T1; out=$(run_d1 topic B1)
-  assert_grep "$out" '^head_commit=H1$' "iteration 1: HEAD 축은 그 iteration 파일의 head_commit"
-  assert_eq "$(tail -1 "$T/log")" "create-head H1 $SID --topic k1" "iteration 1: create-head --topic 에 그 값"
-  ts B1 H2 T2; out=$(run_d1 topic B1)
-  assert_grep "$out" '^head_commit=H2$' "R11: Retry 뒤 iteration 2 는 새로 쓴 head_commit 을 쓴다(첫 iteration 값이 아니다)"
-  assert_grep "$out" '^tree=T2$' "Retry 뒤 iteration 2 의 후보 · 분모 트리도 새 값이다"
-  assert_eq "$(tail -1 "$T/log")" "create-head H2 $SID --topic k1" "iteration 2: create-head 가 새 head_commit 을 받는다"
+  assert_grep "$out" '^head_commit=H1$' "HEAD 축은 스코프 파일의 head_commit"
+  assert_eq "$(tail -1 "$T/log")" "create-head H1 $SID --topic k1" "create-head --topic 에 그 값"
   out=$(run_d1 topic B1 1)
   assert_grep "$out" '^head_commit=-$' "트리를 못 만들면 HEAD 커밋은 - 다(찍어 둔 sha 를 넘기지 않는다)"
   assert_grep "$out" '^head_tree=$' "트리를 못 만들면 head_tree 는 비었다"
   n=$(wc -l < "$T/log")
   ts B2 H3 T3; out=$(run_d1 topic B1)
-  assert_grep "$out" '^axis=mismatch$' "경계가 실행 시작과 다르면 이 iteration 은 축 불일치(error-axis)"
+  assert_grep "$out" '^axis=mismatch$' "경계가 실행 시작과 다르면 축 불일치(error-axis)"
   rm -f "$RDX/topic-scope.txt"; out=$(run_d1 topic B1)
   assert_grep "$out" '^axis=mismatch$' "topic → session 으로 바뀌면 축 불일치"
   assert_eq "$(wc -l < "$T/log")" "$n" "축 불일치면 트리를 만들지 않는다"
@@ -168,7 +164,7 @@ case_topic_axis_is_read_every_iteration() {
   assert_grep "$out" '^axis=mismatch$' "session → topic 으로 바뀌면 축 불일치"
   echo stale > "$RDX/differential.yaml"; echo stale > "$RDX/differential-not-counted.md"; run_d1 session M1 >/dev/null
   [ ! -e "$RDX/differential.yaml" ] && [ ! -e "$RDX/differential-not-counted.md" ] \
-    && ok "D1 은 축 불일치여도 앞 iteration 사본을 먼저 지운다" || no "D1 이 앞 iteration 사본을 남겼다"
+    && ok "D1 은 축 불일치여도 남은 사본을 먼저 지운다" || no "D1 이 남은 사본을 남겼다"
   rm -rf "$T"
 }
 
@@ -192,11 +188,22 @@ case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict() {
     "SKILL 의 kill switch 문단(스위치가 켜진 실행이 읽는 자리)이 조사용 실행도 막는다 — 바로 뒤가 1a 문장이라 끝에 덧붙인 예외를 잡는다"
 }
 
+# 한 실행은 한 번 지난다 — 절차 reference 에 반복 · 다시 돌기 낱말이 없고(부재), 절 머리가 반복 표지 없이 선다(양의 짝).
+case_one_pass_vocabulary() {
+  local tok n
+  for tok in 'iteration' 'Retry' 'excluded.md' 'extra-iterations.md' '제외 패치' '추가 반복'; do
+    n=$(grep -cF -- "$tok" "$REF"); assert_eq "$n" "0" "절차 reference 에 '$tok' 이 없다"
+  done
+  for tok in '## D0 실행 시작' '## D1 HEAD 축 트리' '## D2 후보와 배정' '## D5 짝짓기'; do
+    n=$(grep -cxF -- "$tok" "$REF"); assert_eq "$n" "1" "절 머리 '$tok' 가 한 번 선다(반복 표지 없이)"
+  done
+}
+
 for c in case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict \
          case_R18_failed_pairing_routes_to_error_axis case_R22_orchestrator_honors_kill_switch \
          case_R24_differential_line_comes_from_the_machine case_R24_final_verdict_takes_the_differential_line \
          case_R6_memo_drop_after_record_before_publish case_skill_section_wires_the_reference \
-         case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_every_iteration; do
+         case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_from_scope_file case_one_pass_vocabulary; do
   echo "== $c"; $c
 done
 finish

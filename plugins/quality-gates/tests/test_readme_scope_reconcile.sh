@@ -41,7 +41,7 @@ echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standa
 # Teeth boundary (cf. AC11): the negatives pin the known old phrasings; a fresh
 # paraphrase that re-contradicts would slip the grep — the dynamic codex review
 # is the backstop for that residue.
-presentE "codex cost = availability-floor, every iteration (body-unique)" 'every non-trivia pipeline iteration when detected'
+presentE "codex cost = availability-floor, every run (body-unique)" 'every non-trivia pipeline run when detected'
 goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. (Review gate|pipeline) dispatch'
 goneE    "Deep 비용행 codex depth-귀속 제거"                          '(Tier C 전문가|추가 리뷰어) 다수 \+ codex'
 

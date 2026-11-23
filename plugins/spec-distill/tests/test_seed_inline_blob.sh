@@ -2,7 +2,7 @@
 # guards: plugins/spec-distill/scripts/build_seed_inline_blob.py plugins/spec-distill/scripts/seed_review_log.py
 #
 # build_seed_inline_blob.py 를 실행으로 잰다. 이 조립기가 seed 리뷰 번들의 유일한 산출자다 —
-# 소비자는 request-framing/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
+# 소비자는 intent-sync/SKILL.md 의 「### 번들」 블록이고, 그 블록이 만든 두 번들을 탐지
 # 리뷰어 · codex 러너(detect)와 재비판자(recritic)가 나눠 읽는다.
 #
 # 재는 것: 재료 여섯의 실림과 순서 · seed frontmatter 제거 · 재료별 부재 exit 2 · 절 부재의
@@ -27,7 +27,7 @@ export PYTHONDONTWRITEBYTECODE=1
 TMP="$(mktemp -d -t sd-seed-blob-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:pm-interview\naudit_file: seed.audit.md\n---\n\nSEED_BODY_MARKER 로그인이 가끔 실패한다.\n' > "$TMP/seed.md"
+printf -- '---\ntype: interview-seed\nnext_phase: spec-distill:context-build\naudit_file: seed.audit.md\n---\n\nSEED_BODY_MARKER 로그인이 가끔 실패한다.\n' > "$TMP/seed.md"
 cat > "$TMP/seed.audit.md" <<'EOF'
 ---
 type: interview-seed-audit
@@ -77,7 +77,7 @@ done
 [ "$order_ok" = 1 ] && ok "detect: 초안 → 원문 → 질문 전체 → 리뷰 결정 → CLAUDE.md 순서" || no "detect: 재료 순서가 어긋났다"
 assert_contains "$out" "ANSWER_MARKER" "detect: ## 2 의 «당신이 답한 것» 줄이 실린다"
 assert_not_contains "$out" "DRAFT_MARKER" "detect: ## 3 긴 초안은 싣지 않는다(재료 여섯 밖)"
-assert_not_contains "$out" "next_phase: spec-distill:pm-interview" "detect: seed frontmatter 는 벗겨진다"
+assert_not_contains "$out" "next_phase: spec-distill:context-build" "detect: seed frontmatter 는 벗겨진다"
 
 # ── recritic — 판정 이력 0건, 사용자 문구는 남는다(AC11) ───────────────────────
 rout="$(run --for recritic)"; rc=$?
@@ -200,7 +200,7 @@ open(sys.argv[2], "w", encoding="utf-8").write(t.replace(needle, "return text", 
 print("MUTATED" if needle in t else "UNCHANGED")
 PY
 mout2="$(python3 "$TMP/mut2.py" "$TMP/seed.md" "$TMP/seed.audit.md" "$TMP/CLAUDE.md" 2>/dev/null)"
-grep -qF 'next_phase: spec-distill:pm-interview' <<<"$mout2" \
+grep -qF 'next_phase: spec-distill:context-build' <<<"$mout2" \
   && ok "변이: frontmatter 제거를 지우면 frontmatter 가 샌다(이빨 있음)" \
   || no "변이: 제거를 지워도 안 샌다 — 이 단언은 다른 이유로 통과한다"
 
@@ -349,7 +349,7 @@ assert_eq "$rc" "0" "연속줄: exit 0(경고일 뿐 막지 않는다)"
 assert_contains "$(cat "$TMP/cerr.txt")" '## 2. 질문 전체' "연속줄: ### 라운드 <n> 이 아닌 heading-모양 줄은 ## 2. 질문 전체 를 이름으로 경고한다"
 # ── 한 라운드에 「CLAUDE.md 없음」 경고는 한 번 — SKILL 번들 펜스의 두 호출 줄(탐지 · 재비판)을 그대로 떠서
 # CLAUDE.md 가 없는 폴더에서 돌리고 stderr 의 경고 줄을 센다. 0 도 2 도 실패다(삼키지도 되풀이하지도 않는다).
-SKB="$ROOT/plugins/spec-distill/skills/request-framing/SKILL.md"
+SKB="$ROOT/plugins/spec-distill/skills/intent-sync/SKILL.md"
 warn_count() { # <SKILL> <SD 루트> → 경고 줄 수 · 호출 줄이 둘이 아니면 CALLS · 조립이 실패하면 BUILD
   local sk="$1" sdr="$2" d; d="$(mktemp -d "$TMP/wc-XXXXXX")"
   grep -F 'build_seed_inline_blob.py" "$SEED_ABS" "$AUDIT_ABS" CLAUDE.md' "$sk" | sed 's/^ *//' > "$d/calls.sh"

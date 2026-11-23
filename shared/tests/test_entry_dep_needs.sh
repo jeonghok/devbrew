@@ -18,10 +18,11 @@ trap 'rm -rf "$TMP"' EXIT
 expected_need() {   # expected_need <플러그인/skill> → --need 값 (빈 값 = 표에 없는 skill)
   case "$1" in
     spec-distill/epic-conductor)    echo "python,git,gh" ;;
-    spec-distill/request-framing)   echo "python,git" ;;
+    spec-distill/intent-sync)   echo "python,git" ;;
     spec-distill/reviewing-brief)   echo "python,git" ;;
     spec-distill/roadmap-status)    echo "python,git" ;;
-    spec-distill/pm-interview)      echo "python,git" ;;
+    spec-distill/context-build)      echo "python,git" ;;
+    spec-distill/roadmap-draft)      echo "python,git" ;;
     spec-distill/spec-review)       echo "python,git" ;;
     quality-gates/quality-pipeline) echo "python,git,gh" ;;
     quality-gates/artifact-critique) echo "python,git" ;;
@@ -32,7 +33,7 @@ expected_need() {   # expected_need <플러그인/skill> → --need 값 (빈 값
 }
 shape() {   # shape <플러그인/skill> → numbered | table | gate
   case "$1" in
-    spec-distill/epic-conductor|spec-distill/pm-interview|spec-distill/request-framing|spec-distill/roadmap-status) echo numbered ;;
+    spec-distill/epic-conductor|spec-distill/context-build|spec-distill/roadmap-draft|spec-distill/intent-sync|spec-distill/roadmap-status) echo numbered ;;
     spec-distill/reviewing-brief) echo gate ;;
     *) echo table ;;
   esac
@@ -40,7 +41,7 @@ shape() {   # shape <플러그인/skill> → numbered | table | gate
 
 SKILLS="$(cd "$ROOT" && git ls-files -- 'plugins/*/skills/*/SKILL.md')"
 n_skill="$(printf '%s\n' "$SKILLS" | grep -c .)"
-assert_eq "$n_skill" "10" "대상: 추적된 SKILL.md 가 열 개다(도출)"
+assert_eq "$n_skill" "11" "대상: 추적된 SKILL.md 가 열한 개다(도출)"
 
 # fence_info <SKILL.md> → 의존 확인 펜스마다 한 줄: `<여는 줄> <루트 변수> <루트 변수 대입 줄 수> <--plugin-root 값> <--need 값>`
 fence_info() {
@@ -144,8 +145,8 @@ for f in $SKILLS; do
 done
 
 # 표의 모든 skill 이 실제로 있었다(표가 사라진 skill 을 가리키지 않는다)
-for key in spec-distill/epic-conductor spec-distill/request-framing spec-distill/reviewing-brief spec-distill/roadmap-status \
-           spec-distill/pm-interview spec-distill/spec-review quality-gates/quality-pipeline quality-gates/artifact-critique \
+for key in spec-distill/epic-conductor spec-distill/intent-sync spec-distill/reviewing-brief spec-distill/roadmap-status \
+           spec-distill/context-build spec-distill/roadmap-draft spec-distill/spec-review quality-gates/quality-pipeline quality-gates/artifact-critique \
            project-init/project-init plugin-audit/plugin-audit; do
   case " $seen " in *" $key "*) ok "표의 $key 가 추적된 skill 이다" ;; *) no "표의 $key 가 추적된 skill 이 아니다" ;; esac
 done
