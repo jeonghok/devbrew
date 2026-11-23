@@ -161,6 +161,31 @@ class TestQgAnswered(unittest.TestCase):
         self.assertEqual(e2.notice_text(), "")
         self.assertEqual(p.stderr, "")
 
+    def test_repo_subdirectory_still_finds_records(self):
+        # --repo 가 리포 루트 아래 폴더여도 기록 폴더는 루트 기준으로 찾는다(빈 목록 · 알림 없음이 되지 않는다)
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): self.two_record(), "docs/sub/x.txt": "x\n"})
+        e.repo = os.path.join(e.repo, "docs", "sub")
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
+        self.assertEqual(e.notice_text(), "")
+
+    def test_prior_cell_identity_with_separator(self):
+        # 전에 한 답의 셋째 칸(열쇠 또는 정체)에 ` · ` 가 있어도 기록을 읽는다 — 앞 두 칸은 왼쪽에서,
+        # 끝 칸은 오른쪽에서 떼고 가운데가 열쇠다
+        e = Env(self)
+        odd = "a · b.md"
+        commit_files(e.repo, {rpath(odd): self.two_record()})
+        ident_prior = "의도다 · 2026-11-22 21:25 · diff#a · b.md#갈라짐#방향 · 근거가 달라짐"
+        key_prior = "의도다 · 2026-11-22 21:25 · %s#1 · 근거가 달라짐" % odd
+        commit_files(e.repo, {rpath(NAME2): record(3, [section(1, prior=ident_prior),
+                                                       section(2, prior=key_prior)])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()], [NAME2 + "#1", NAME2 + "#2", odd + "#3"])
+        self.assertEqual(e.notice_text(), "")
+
     def test_unreadable_record_counted_not_dropped(self):
         e = Env(self)
         broken = "---\ntype: [roadmap-review\ncontract: 2\n---\n\n" + section(1)

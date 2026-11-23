@@ -132,12 +132,17 @@ def _parse_sections(body):
 
 
 def _prior_key(value):
+    """`<답> · <답한 때> · <열쇠 또는 정체> · <까닭>` 의 셋째 칸 — 앞 두 칸은 왼쪽에서, 끝 칸은 오른쪽에서
+    떼고 가운데를 열쇠로 본다(정체에 ` · ` 가 들어도 읽는다)."""
     if value == "없음":
         return None
-    cells = value.split(" · ")
-    if len(cells) != 4:
+    head = value.split(" · ", 2)
+    if len(head) != 3:
         raise Unreadable()
-    return cells[2]
+    rest = head[2].rsplit(" · ", 1)
+    if len(rest) != 2:
+        raise Unreadable()
+    return rest[0]
 
 
 def parse_record(text, name, record_path):
@@ -206,7 +211,7 @@ def read_ref(repo, ref, folder):
     sha = out.decode("utf-8", "replace").strip()
     if rc != 0 or not sha:
         return [], place
-    rc, out = _git(repo, "ls-tree", "-z", "--name-only", sha, "--", folder + "/")
+    rc, out = _git(repo, "ls-tree", "-z", "--full-tree", "--name-only", sha, "--", folder + "/")
     if rc != 0:
         return [], place
     found = []
