@@ -92,6 +92,7 @@ def _field(line):
 def _parse_sections(body):
     """절들을 [(번호, {칸 이름: 값})] 로. 관찰은 들여쓴 줄을 모은 목록."""
     sections = []
+    seen_nums = set()
     cur = None
     in_obs = False
     for line in body:
@@ -99,6 +100,9 @@ def _parse_sections(body):
             num = line[len(HEADING) + 1:]
             if not (num.isascii() and num.isdigit()):
                 raise Unreadable()
+            if num in seen_nums:
+                raise Unreadable()
+            seen_nums.add(num)
             cur = (num, {})
             sections.append(cur)
             in_obs = False
@@ -118,7 +122,7 @@ def _parse_sections(body):
             continue
         name, value = parsed
         if name in cur[1]:
-            continue
+            raise Unreadable()
         if name == "관찰":
             cur[1]["관찰"] = [value] if value else []
             in_obs = True
@@ -179,13 +183,23 @@ def parse_record(text, name, record_path):
     return entries, superseded
 
 
+def _is_ctl(ch):
+    return ord(ch) < 32 or ord(ch) == 127
+
+
 def _name_ok(name):
-    return name.endswith(".md") and len(name) > 3 and "/" not in name and "#" not in name
+    return (name.endswith(".md") and len(name) > 3 and "/" not in name and "#" not in name
+            and not any(_is_ctl(c) for c in name))
+
+
+def _esc(text):
+    """알림 한 줄에 싣는 경로의 제어 글자를 \\xNN 으로 바꾼다."""
+    return "".join("\\x%02x" % ord(c) if _is_ctl(c) else c for c in text)
 
 
 def read_ref(repo, ref, folder):
     """한 자리의 기록들 [(표시, 이름, 경로, 글 | None)] 와 읽지 못한 자리 표시(없으면 None)."""
-    place = "%s:%s/" % (ref, folder)
+    place = _esc("%s:%s/" % (ref, folder))
     if not ref or ref.startswith("-"):
         return [], place
     rc, out = _git(repo, "rev-parse", "--verify", "--quiet", ref + "^{commit}")
@@ -201,7 +215,7 @@ def read_ref(repo, ref, folder):
         name = path.rsplit("/", 1)[-1]
         if not name.endswith(".md"):
             continue
-        shown = "%s:%s" % (ref, path)
+        shown = _esc("%s:%s" % (ref, path))
         rc, blob = _git(repo, "show", "%s:%s" % (sha, path))
         text = None
         if rc == 0:

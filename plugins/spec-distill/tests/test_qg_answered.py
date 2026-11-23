@@ -201,6 +201,37 @@ class TestQgAnswered(unittest.TestCase):
         self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
         self.assertIn("읽지 못한 기록 7개: ", e.notice_text())
 
+    def test_control_chars_in_record_file_name(self):
+        e = Env(self)
+        files = {rpath(NAME): self.two_record(),
+                 rpath("bad\nname.md"): self.two_record(),
+                 rpath("bel\x07.md"): self.two_record()}
+        commit_files(e.repo, files)
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
+        lines = e.notice_text().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("읽지 못한 기록 2개: "), lines[0])
+        self.assertEqual(len(p.stderr.splitlines()), 1)
+        sys.path.insert(0, os.path.abspath(QG_SCRIPTS))
+        try:
+            import intent_answers
+        finally:
+            sys.path.pop(0)
+        self.assertIsNone(intent_answers.read_handed(e.out)[1])
+
+    def test_duplicate_field_or_section_is_unreadable(self):
+        dup_ans = section(1, ans="지금은 모르겠다").replace(
+            "- 질문: 질문 글", "- 질문: 질문 글\n- 답: 의도다")
+        e = Env(self)
+        commit_files(e.repo, {rpath("dup_field.md"): record(2, [dup_ans]),
+                              rpath("dup_num.md"): record(2, [section(1), section(1)])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(e.entries(), [])
+        self.assertTrue(e.notice_text().startswith("읽지 못한 기록 2개: "))
+
     def test_no_answers_writes_empty_list(self):
         e = Env(self)
         commit_files(e.repo, {"README.md": "x\n"})
