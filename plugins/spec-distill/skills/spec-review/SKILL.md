@@ -4,7 +4,7 @@ description: >
   Use right after superpowers:brainstorming writes and commits a design doc
   (`...-design.md` in the design-doc folder `specs_dir`), before superpowers:writing-plans — this review takes the
   place where brainstorming, after its builder check and that check's questions, hands the document
-  over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or context brief>` — it must be the file the design doc's `source_interview` names. Runs the shared
+  over for approval. Pass the design doc path as the argument. Optionally pass `--bundle <epic bundle or context brief>` — it must be the file the design doc's `source_intent` names. Runs the shared
   document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
   re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
   proceed gate. Design-mode only — the context brief has its own reviewers (reviewing-brief).
@@ -156,7 +156,7 @@ DEVBREW_PATH_EOF
 ```
 <!-- path-assign:end -->
 
-인자에 `--bundle <에픽 묶음|context brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path` · `bundle_arg` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_interview` 로 정답 출처에 닿고, 이 펜스는 그 값이 `source_interview` 와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
+인자에 `--bundle <에픽 묶음|context brief>` 가 붙으면 그 값을 `bundle_arg` 로 뗀다 — 설계문서 경로는 첫 인자다. 상태 디렉토리 블록 다음, 엔진 라운드 전에 아래 펜스를 한 번 돌린다. 펜스 앞에 `spec_path` · `bundle_arg` · `repo_root` 의 경로 대입 줄을 붙여 같은 Bash 호출로 돌린다. `--bundle` 은 리뷰어에게 가지 않는다 — 리뷰어는 설계문서 frontmatter `source_intent`(옛 문서는 `source_interview`) 로 정답 출처에 닿고, 이 펜스는 그 값이 그 머리 키와 같은 파일인지 확인해 진입 대조와 승인 때 로드맵 위치의 입력으로 쓴다.
 
 <!-- bundle-entry:begin -->
 ```bash

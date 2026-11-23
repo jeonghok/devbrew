@@ -219,7 +219,7 @@ printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-intervi
 o="$(runc "$r4")"
 assert_eq "$(git -C "$r4" rev-list --count HEAD)" "1" "B9 ④: 인터뷰 폴더 밖의 framing 기록 · seed 면 커밋하지 않는다"
 assert_eq "$(git -C "$r4" diff --cached --name-only)" "" "B9 ④: 그때 아무것도 stage 하지 않는다"
-assert_contains "$o" "커밋하지 않았다 — framing 기록 파일이 정해진 의도 폴더 바로 아래가 아니다" "B9 ④: 그 사유를 보인다"
+assert_contains "$o" "커밋하지 않았다 — framing 기록 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다" "B9 ④: 그 사유를 보인다"
 assert_contains "$o" "$r4/docs/elsewhere/2026-10-15-s-interview.audit.md" "B9 ④: 사유 줄에 기록 파일 경로가 있다"
 # ⑤ 같은 폴더 밖에서 기록은 깨끗하고 seed 만 고쳤다 → seed 쪽 판정이 커밋을 막는다
 r5="$(mkraw raw-elsewhere-seed fresh)"; mkdir -p "$r5/docs/elsewhere"
@@ -229,7 +229,7 @@ printf -- '---\ntype: interview-state\nseed: docs/elsewhere/2026-10-15-s-intervi
 printf -- '---\ntype: interview-seed\n---\n<REDACTED>\n' > "$r5/docs/elsewhere/2026-10-15-s-interview.md"
 o="$(runc "$r5")"
 assert_eq "$(git -C "$r5" rev-list --count HEAD)" "2" "B9 ⑤: 인터뷰 폴더 밖의 seed 만 고쳤어도 커밋하지 않는다"
-assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 의도 폴더 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
+assert_contains "$o" "커밋하지 않았다 — seed 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다" "B9 ⑤: seed 쪽 사유를 보인다"
 # ⑥ 기본 브랜치 위에서 기록 · seed 가 커밋된 적 없다 → 커밋하지 않고, 넣는다는 알림 없이 「브랜치에서 커밋하라」 목록에 두 파일이 든다
 r6="$(mkraw raw-main fresh)"; git -C "$r6" switch -q main
 o="$(runc "$r6")"
@@ -296,7 +296,7 @@ for b in re.findall(r"```bash\n(.*?)\n```", t, re.S):
 print(n)
 PY
 n_heads="$(ls "$T/rbh" 2>/dev/null | wc -l | tr -d ' ')"
-n_state="$(grep -c '^STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"' "$RB")"
+n_state="$(grep -c '^STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"' "$RB")"
 [ "$n_heads" -ge 1 ] && [ "$n_heads" = "$n_state" ] && ok "§1-6: 머리 ${n_heads}개가 모두 STATE 를 상태 파일로 도출한다" || no "§1-6: 머리 ${n_heads}개 · 상태 파일 STATE ${n_state}줄"
 grep -qF 'brief_review_state.py" degrade-append "$STATE"' "$RB" && ok "§1-6 양의 짝: degrade 기록이 \$STATE 로 간다" || no "§1-6: degrade-append 호출이 없다"
 rbr="$T/rb"; mkdir -p "$rbr/docs/superpowers/interview" && git -C "$rbr" init -q

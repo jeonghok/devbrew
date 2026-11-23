@@ -116,13 +116,13 @@ RAW_PROBE 사용자가 한 말.
 EOF
 
 home() {   # home <sid> [이름] → 차가운 셸의 cwd 를 만든다(seed · session_id 를 단 audit · CLAUDE.md)
-  local sid="$1" name="${2:-probe-$1-interview}" h="$W/$1"
-  mkdir -p "$h/docs/superpowers/interview"
+  local sid="$1" name="${2:-probe-$1-intent}" h="$W/$1"
+  mkdir -p "$h/docs/superpowers/intent"
   # 한 세션의 seed audit 은 하나다 — 같은 세션에 다른 이름을 주면 앞의 audit 을 치운다(둘이면 블록이 이름을 고르지 않는다)
-  find "$h/docs/superpowers/interview" -name '*.audit.md' -exec rm -f {} + 2>/dev/null || true
-  printf -- '---\ntype: interview-seed\n---\n\nSEED_%s 로그인이 가끔 실패한다.\n' "$sid" > "$h/docs/superpowers/interview/$name.md"
+  find "$h/docs/superpowers/intent" -name '*.audit.md' -exec rm -f {} + 2>/dev/null || true
+  printf -- '---\ntype: interview-seed\n---\n\nSEED_%s 로그인이 가끔 실패한다.\n' "$sid" > "$h/docs/superpowers/intent/$name.md"
   sed "s/^type: interview-seed-audit\$/type: interview-seed-audit\\
-session_id: $sid/" "$W/audit.fixture.md" > "$h/docs/superpowers/interview/$name.audit.md"
+session_id: $sid/" "$W/audit.fixture.md" > "$h/docs/superpowers/intent/$name.audit.md"
   printf '# CLAUDE.md\n규칙.\n' > "$h/CLAUDE.md"
 }
 run_in() {   # run_in <sid> <스크립트> [env…]
@@ -131,9 +131,9 @@ run_in() {   # run_in <sid> <스크립트> [env…]
       CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" "$@" "${RUN_SHELL:-bash}" "$script" ) >"$W/$sid.out" 2>"$W/$sid.err"
 }
 place() {   # place <sid> [이름] → 그 seed 의 엔진 자리(엔진 state-dir-for 가 낸 것)
-  local sid="$1" name="${2:-probe-$1-interview}"
+  local sid="$1" name="${2:-probe-$1-intent}"
   python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$W/$sid/.claude/spec-distill" \
-      --doc "$W/$sid/docs/superpowers/interview/$name.md" 2>/dev/null
+      --doc "$W/$sid/docs/superpowers/intent/$name.md" 2>/dev/null
 }
 real() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
@@ -146,7 +146,7 @@ run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s1
 [ -n "$s1" ] && [ "$s1" = "$s1b" ] && ok "P: 같은 seed 는 셸이 바뀌어도 같은 엔진 자리" || no "P: 같은 seed 의 자리가 비었거나 갈렸다 ('$s1' · '$s1b')"
 [ -n "$s1" ] && [ "$(real "$s1")" = "$(real "$(place fg01same)")" ] && ok "P: 그 자리는 엔진 state-dir-for 가 낸 것과 같다" \
   || no "P: 블록이 엔진과 다른 자리를 냈다"
-home fg01same probe-other-interview; run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s2="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
+home fg01same probe-other-intent; run_in fg01same "$W/state-print.sh"; cat "$W/fg01same.err" >> "$W/p-all.err"; s2="$(sed -n 's/^STATE_DIR=//p' "$W/fg01same.out")"
 [ -n "$s2" ] && [ "$s2" != "$s1" ] && ok "P: 같은 세션의 다른 seed 는 다른 자리" || no "P: 다른 seed 가 같은 자리를 받았다 — 원장이 섞인다"
 grep -q 'unbound variable' "$W/p-all.err" && no "P: 상태 블록이 set -u 에서 미할당 변수로 죽었다" || ok "P: 상태 블록이 차가운 셸 · set -u 에서 죽지 않는다"
 
@@ -165,7 +165,7 @@ grep -qF 'HIST_QUOTE_MARKER' "$pl/seed-bundle-recritic.md" && ok "B: 재비판 �
 [ ! -e "$pl/critic.txt" ] && [ ! -e "$pl/critic-1.txt" ] && [ ! -e "$pl/critic-2.txt" ] && [ ! -e "$pl/recritic.txt" ] && ok "B: 직전 라운드의 리뷰어 산출물을 치웠다" \
   || no "B: 직전 라운드 critic/recritic 이 남았다 — audit ## 4 에 이번 라운드 것으로 옮겨진다"
 # audit 을 지우면 이름을 되찾지 못해 다른 자리를 보게 된다 — 이름이 서는 frontmatter 만 남기고 원문 절을 없앤다
-printf -- '---\ntype: interview-seed-audit\nsession_id: fg10bndl\n---\n' > "$W/fg10bndl/docs/superpowers/interview/probe-fg10bndl-interview.audit.md"
+printf -- '---\ntype: interview-seed-audit\nsession_id: fg10bndl\n---\n' > "$W/fg10bndl/docs/superpowers/intent/probe-fg10bndl-intent.audit.md"
 run_in fg10bndl "$W/state-print.sh"; sx="$(sed -n 's/^STATE_DIR=//p' "$W/fg10bndl.out")"
 [ -n "$sx" ] && [ "$(real "$sx")" = "$(real "$pl")" ] && ok "전제: 실패 라운드도 같은 엔진 자리를 본다" \
   || no "전제: 실패 라운드가 다른 자리('$sx')를 봤다 — 아래 칸이 공허하다"
@@ -196,7 +196,7 @@ done
 # ── K — 산출물 기록: 탐지 리뷰어마다 따로 옮긴다(critic-<i>.txt), 하나도 없을 때만 critic.txt ──────────────
 { cat "$W/state.sh"; cat "$W/record.sh"; } > "$W/record-run.sh"
 add_sec4() {   # add_sec4 <sid> — 픽스처 audit 에 `## 4` 절을 `## 6` 앞에 둔다(옮길 자리)
-  local au; au="$(ls "$W/$1/docs/superpowers/interview/"*.audit.md)"
+  local au; au="$(ls "$W/$1/docs/superpowers/intent/"*.audit.md)"
   awk '/^## 6\. 리뷰 결정/ && !d { print "## 4. 비평과 냉독\n"; d = 1 } { print }' "$au" > "$au.new" && mv "$au.new" "$au"
   printf '%s\n' "$au"
 }
@@ -329,7 +329,7 @@ grep -q 'unbound variable' "$W"/fg2*.err && no "E: 어느 실행이 미할당 �
 # sid · ROOT 만 넘긴다. 원장은 문서 단위라 세션을 넘어 공유되고(`.docreview/`), 다른 seed 의 codex 산출물은
 # 다른 리뷰의 것이다 — 지우지 않는다. 그 자리는 잠근다(파일 444 · 디렉토리 555): 쓸기 분기가 되살아나면
 # 지우지 못해 「지우지도 비우지도 못했다」 공시를 낸다.
-home fg30unkn; pl="$(place fg30unkn probe-other-interview)"; mkdir -p "$pl"; stale "$pl/docreview-codex.yaml"
+home fg30unkn; pl="$(place fg30unkn probe-other-intent)"; mkdir -p "$pl"; stale "$pl/docreview-codex.yaml"
 cp "$pl/docreview-codex.yaml" "$W/fg30unkn.golden"; chmod 444 "$pl/docreview-codex.yaml"; chmod 555 "$pl"
 run_in fg30unkn "$W/gate.sh" sid=fg30unkn ROOT="$W/fg30unkn/.claude/spec-distill" ARGV_LOG="$W/fg30unkn.argv" WRITE=fresh RC=0
 chmod 755 "$pl"; chmod 644 "$pl/docreview-codex.yaml"

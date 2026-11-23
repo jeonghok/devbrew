@@ -2,7 +2,7 @@
 
 **머지 뒤.** 머지가 확인되면 언제나 지휘자를 부르는 명령 줄을 보이고 턴을 끝낸다 — 마지막 줄이 `roadmap-merge: MERGED` 인 턴이다(다시 확인 펜스의 `MERGED` 도 같다). 같은 턴에 지휘자를 부르지 않는다. `MERGED` 여도 출력에 「머지 뒤 origin 을 받지 못했다」 줄이 있으면 그 줄을 함께 보인다(받기 전에는 지휘자가 이 로드맵을 기본 브랜치에서 찾지 못한다). 그 밖(이 절을 건너뜀 · `roadmap-pr: NONE` · `roadmap-merge: NONE` · 「직접 머지」)에는 PR 주소(있으면)와 아래 지휘자 줄을 보이고, 그 커밋이 기본 브랜치에 머지된 뒤 그 줄을 입력하라고 알린 뒤 턴을 끝낸다. 머지 전의 로드맵으로는 지휘자가 에픽을 세지 못한다.
 
-1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 결과물 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더는 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더의 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
+1. **PR 열기.** 아래 펜스의 `BRIEF` 자리표를 결과물 절대경로로 바꿔 돌리고 나온 `[spec-distill]` 줄을(그 아래 파일 줄까지) 그대로 보인다. 펜스는 그 브랜치에서 기본 브랜치로 가는 이 레포 안 브랜치의 열린 PR 을 찾고, 브랜치를 push 한 뒤, 찾은 PR 이 있으면 그것을, 없으면 새 PR 을 연다. 이어서 그 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 원자료(framing 기록 · seed — 옛 의도 폴더에 있어도)도 아닌 것을 세어 `roadmap-pr-files:` 줄로 낸다 — `ONLY`(그런 파일이 없다) · `MIXED`(있다 — 목록을 보인다) · `UNKNOWN`(세지 못했다). 두 폴더와 원자료 두 파일은 커밋 펜스와 같은 판정(`check-path`)을 통과한 것만 빼고 센다 — 통과하지 못한 폴더 · 파일은 밖의 파일로 센다. push 한 끝 커밋은 `roadmap-pr-head: <커밋>` 줄로 낸다 — 3 의 머지가 이 커밋에 묶인다. `roadmap-pr: OPEN <PR 주소>` 면 2 로, `roadmap-pr: NONE` 이면 지휘자 줄 앞에 지휘 세션을 이 커밋이 기본 브랜치에 머지된 뒤 열라고 한 줄로 알린다.
 
 <!-- roadmap-pr:begin -->
 ```bash
@@ -21,19 +21,19 @@ url="$(python3 "$SD/scripts/gh_repo.py" pr-open --head "$cur" --base "$def" --ro
 head_sha="$(git -C "$top" rev-parse --verify -q "refs/heads/${cur}^{commit}")" || head_sha=""
 [ -n "$head_sha" ] || none "지금 브랜치의 끝 커밋을 읽지 못했다"
 git -C "$top" push -q -u origin "$cur" || none "push 가 실패했다(위 사유)"
+# 원자료를 알 때만 framing 기록 · seed 를 댄다(PR 본문 · 파일 세기) — seed 경로는 상태 파일의 seed 값(레포 상대)이고 기록 경로에서 짓지 않는다.
+RAW_A=""
+RAW_S=""
+rv="$(python3 "$SD/scripts/raw_source.py" locate --interview "$BRIEF" --absolute 2>/dev/null)" || rv=""
+case "$rv" in "raw-source: FOUND "*)
+  RAW_A="${rv#raw-source: FOUND }"
+  sv="$(awk 'NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit} /^seed:/{sub(/^seed:[ \t]*/,""); print; exit}' "${BRIEF%.md}.state.md" 2>/dev/null | tr -d "\"'")" || sv=""
+  case "$sv" in ""|"없음") ;; *) RAW_S="${top}/${sv}" ;; esac ;;
+esac
 if [ -z "$url" ]; then
   bf="$(mktemp)" || none "PR 본문 임시 파일을 만들지 못했다"
   rel="${BRIEF#"$top"/}"
   case "$rel" in /*) rel="$(basename -- "$BRIEF")" ;; esac
-  # 원자료를 알 때만 framing 기록 · seed 를 댄다 — seed 경로는 상태 파일의 seed 값(레포 상대)이고 기록 경로에서 짓지 않는다.
-  RAW_A=""
-  RAW_S=""
-  rv="$(python3 "$SD/scripts/raw_source.py" locate --interview "$BRIEF" --absolute 2>/dev/null)" || rv=""
-  case "$rv" in "raw-source: FOUND "*)
-    RAW_A="${rv#raw-source: FOUND }"
-    sv="$(awk 'NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit} /^seed:/{sub(/^seed:[ \t]*/,""); print; exit}' "${BRIEF%.md}.state.md" 2>/dev/null | tr -d "\"'")" || sv=""
-    case "$sv" in ""|"없음") ;; *) RAW_S="${top}/${sv}" ;; esac ;;
-  esac
   more=""
   [ -z "$RAW_A" ] || more="${more} · framing 기록 \`${RAW_A#"$top"/}\`"
   [ -z "$RAW_S" ] || more="${more} · seed \`${RAW_S#"$top"/}\`"
@@ -45,7 +45,7 @@ if [ -z "$url" ]; then
 else
   echo "[spec-distill] 이 브랜치의 열린 PR 을 쓴다 — $url"
 fi
-# 이 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 아닌 것. 두 폴더는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
+# 이 PR 이 바꾸는 파일 가운데 의도 폴더 바로 아래도 brief §7 의 로드맵 폴더도 원자료 두 파일도 아닌 것. 두 폴더와 원자료는 커밋 펜스와 같은 판정을 통과한 것만 뺀다.
 # 끝내기 커밋 펜스가 같은 키로 이미 보인 「값의 출처」 줄만 뺀다 — 그 호출의 사유 · 알림 · 경고 줄과 종료 코드는 그대로다.
 nosrc() {
   nf="$(mktemp)" || nf=""
@@ -57,11 +57,16 @@ nosrc() {
   return "$n_rc"
 }
 idir=""
-if nosrc python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top"; then
+if nosrc python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$BRIEF" --root "$top"; then
   idir="$(dirname -- "$BRIEF")"
 else
-  echo "[spec-distill] brief 가 정해진 의도 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
+  echo "[spec-distill] brief 가 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다."
 fi
+# 원자료(framing 기록 · seed)는 판정을 통과한 파일만 하나씩 뺀다 — 옛 의도 폴더의 옛 꼴 seed 로 새로 시작한 일도 그 둘을 받는다. 이미 뺀 brief 폴더 안의 것은 다시 재지 않는다.
+xa=""
+xs=""
+if [ -n "$RAW_A" ] && [ "$(dirname -- "$RAW_A")" != "$idir" ]; then nosrc python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$RAW_A" --root "$top" && xa="$RAW_A" || echo "[spec-distill] framing 기록 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유) — 그 파일도 밖의 파일로 센다."; fi
+if [ -n "$RAW_S" ] && [ "$(dirname -- "$RAW_S")" != "$idir" ]; then nosrc python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$RAW_S" --root "$top" && xs="$RAW_S" || echo "[spec-distill] seed 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유) — 그 파일도 밖의 파일로 센다."; fi
 r7="$(awk -v p='분해됨 — ' 'index($0,"## 7.")==1{f=1;next} f&&/^## /{exit} f{l=$0; sub(/^[ \t]*(- )?`?/,"",l); if(index(l,p)==1){l=substr(l,length(p)+1); sub(/`.*$/,"",l); sub(/[ \t]+$/,"",l); print l; exit}}' "$BRIEF" 2>/dev/null)" || r7=""
 rdir=""
 if [ -n "$r7" ]; then
@@ -71,7 +76,7 @@ if [ -n "$r7" ]; then
   nosrc python3 "$SD/scripts/repo_defaults.py" check-path roadmaps_dir "$rdir" --root "$top" || { echo "[spec-distill] brief §7 의 로드맵 폴더가 정해진 로드맵 폴더 바로 아래가 아니다(위 사유) — 그 폴더의 파일도 밖의 파일로 센다: ${rdir}"; rdir=""; }
 fi
 x_rc=0
-extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"})" || x_rc=$?
+extra="$(git -C "$top" -c core.quotePath=false diff --name-only "refs/remotes/origin/${def}...${head_sha}" -- . ${idir:+":(exclude,glob)${idir}/*"} ${rdir:+":(exclude)${rdir}"} ${xa:+":(exclude,literal)${xa}"} ${xs:+":(exclude,literal)${xs}"})" || x_rc=$?
 if [ "$x_rc" -ne 0 ]; then
   echo "[spec-distill] 이 PR 에 담긴 파일을 세지 못했다(위 사유) — 머지하기 전에 PR 에서 직접 확인한다."
   echo "roadmap-pr-files: UNKNOWN"

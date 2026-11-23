@@ -1,13 +1,13 @@
 ---
 name: <kebab-topic>
-type: interview-brief
+type: context-brief
 created_at: YYYY-MM-DD
 session_id: <uuid>
 source: spec-distill context-build
 next_phase: superpowers:brainstorming   # 기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 그 skill 의 완전명
 # contract: v2 — 조사 축 술어 다섯의 옵트인 스위치. 빼면 전부 미발동 + advisory
 contract: v2
-audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같은 디렉토리)
+audit_file: <YYYY-MM-DD>-<kebab-topic>-context.audit.md   # basename만 (같은 디렉토리)
 # user_sourced_items — **사용자 출처 항목만**. `source: inferred`는 여기 들어갈 수 없다(게이트 fail).
 # 모델 추론은 본문 프로즈에 ✎ 표기로만 산다.
 # status는 컨텍스트 쌓기 종료 직전 사용자 일괄 확인으로만 confirmed가 된다 — 라운드 중에는 전부 provisional.

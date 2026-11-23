@@ -443,7 +443,7 @@ fi
 [ -n "$r1_dir" ] && [ "$r1_dir" = "$r2_dir" ] \
   && ok "P5: 상대경로 payload 가 절대경로와 같은 자리를 받는다 (엔진은 상대 --doc 을 거부한다 — 자리가 cwd 의 함수가 되지 않는다)" \
   || no "P5: 상대경로 payload 의 자리($r1_dir)가 절대경로의 자리($r2_dir)와 다르다"
-[ -n "$b_state" ] && [ "$b_state" = "${DOC_B%-interview.md}-interview.state.md" ] && [ -n "$b_dir" ] && [ "${b_dir%/*}" = "${s_dir%/*}" ] && [ "${b_dir%/*/*}/.docreview" = "${b_dir%/*}" ] \
+[ -n "$b_state" ] && [ "$b_state" = "${DOC_B%.md}.state.md" ] && [ -n "$b_dir" ] && [ "${b_dir%/*}" = "${s_dir%/*}" ] && [ "${b_dir%/*/*}/.docreview" = "${b_dir%/*}" ] \
   && ok "P6: degrade 원장(\$STATE)은 payload 이름에서 도출한 그 인터뷰의 상태 파일이고 두 자리의 문서별 디렉토리는 같은 상태 루트 아래 .docreview/ 에 앉는다 (세션 칸 없음)" \
   || no "P6: degrade 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $b_state · $b_dir · $s_dir)"
 

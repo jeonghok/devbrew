@@ -50,7 +50,8 @@ has "$SK" '같은 세션에서 이어 왔어도 대화가 아니라 이 읽기�
 has "$SK" '에픽마다 고칠 자리를 코드에서 열어 확인하고, 경로 예약에 그 근거를 함께 적는다'
 has "$SK" '표의 경로 예약 칸에는 경로만 쓴다 — 스크립트가 그 칸을 경로 목록으로 읽는다'   # 근거를 칸에 넣으면 겹침 · 예약 밖 판정이 깨진다
 has "$SK" '근거는 표 아래에 에픽마다 한 줄로'
-has "$SK" '`<file>` 자리에는 `<결과물 절대경로>` 의 마지막 경로 성분(결과물 파일 이름)만 넣는다'
+has "$SK" '펜스의 `<결과물 절대경로>` 자리에는 진입 단계 2 에서 푼 절대경로를 넣는다 — 생성기에 넘기는 레포 상대경로는 펜스가 git 에서 얻는다'
+lacks "$SK" '`<file>`'
 has "$SK" '다른 로드맵의 경로 예약과 겹치는지 본다 — 겹침은 막지 않고 표 아래에 보인다'
 # ── 분해안 표 · 고치기(AC8) ────────────────────────────────────────────────────
 has "$SK" 'python3 "$SD/scripts/roadmap_write.py" check --brief'
@@ -208,6 +209,36 @@ assert_eq "$(nhead "$x")" "2" "다른 레포에서 돌림: cwd 레포에는 커�
 c="$(mk othername "분해됨 — $RREL/plan.md")"; generated "$c"; mv -- "$c/$RREL/roadmap.md" "$c/$RREL/plan.md"
 o="$(runc "$c")"
 assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "다른 이름의 로드맵: 로드맵 폴더와 상태 파일이 한 커밋에"
+
+# brief_rel_from_git — 생성 펜스(## 5.)의 BRIEF_REL 은 결과물의 레포 상대 경로를 git 에서 얻는다(의도 폴더 + 파일 이름으로 짓지 않는다).
+# 생성기 · 해결자는 받은 인자를 적는 가짜로 바꾼다 — 재는 것은 펜스가 넘기는 --brief 하나다.
+gf="$(awk '/^## 5\. 생성/{f=1;next} f&&/^## /{exit} f&&/^```bash$/{c=1;b="";next}
+  f&&c&&/^```$/{c=0; if (index(b, "roadmap_write.py\" create")) {printf "%s", b; exit}; next} f&&c{b=b $0 "\n"}' "$SK")"
+case "$gf" in *'BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" ls-files --full-name -- "<결과물 절대경로>")"'*) ok "brief_rel_from_git: 전제 — 생성 펜스를 뽑았고 BRIEF_REL 을 git 에서 얻는다" ;;
+  *) no "brief_rel_from_git: 생성 펜스를 못 뽑았거나 BRIEF_REL 을 git 에서 얻지 않는다 — 아래 칸이 공허하다" ;; esac
+assert_not_contains "$gf" 'IDIR' "brief_rel_from_git: 생성 펜스에 의도 폴더 변수(IDIR)가 없다"
+GSTUB="$T/gen-stub"; mkdir -p "$GSTUB/scripts"
+printf '%s\n' 'import sys' 'print("docs/superpowers/roadmaps/")' > "$GSTUB/scripts/repo_defaults.py"
+printf '%s\n' 'import os, sys' 'a = sys.argv[1:]' 'open(os.environ["GEN_OUT"], "w", encoding="utf-8").write(a[a.index("--brief") + 1] + "\n" + a[a.index("--audit") + 1] + "\n")' > "$GSTUB/scripts/roadmap_write.py"
+gen_brief() {   # gen_brief <클론> <결과물 절대경로> → 「rc|생성기가 받은 --brief|--audit」
+  local s="$gf" rc=0
+  s="${s//<결과물 절대경로>/$2}"; s="${s//<주제 한 줄>/제목}"; s="${s//<승인 원문>/승인}"
+  s="${s//<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//2026-10-15-t/}"; s="${s//<YYYY-MM-DD>/2026-10-15}"
+  rm -f "$T/gen.out"
+  ( cd "$1" && GEN_OUT="$T/gen.out" CLAUDE_PLUGIN_ROOT="$GSTUB" bash -c "$s" ) >"$T/gen.log" 2>&1 || rc=$?
+  printf '%s|%s' "$rc" "$(tr '\n' '|' < "$T/gen.out" 2>/dev/null)"
+}
+c="$(mk genold "$DEC")"
+assert_eq "$(gen_brief "$c" "$c/$STEM.md")" "0|$STEM.md|$STEM.audit.md|" "brief_rel_from_git: 옛 폴더의 옛 꼴 결과물 — 레포 상대 경로 그대로"
+NSTEM=docs/superpowers/intent/2026-11-24-t-context
+mkdir -p "$c/docs/superpowers/intent"; for s in .md .audit.md .state.md; do cp "$c/$STEM$s" "$c/$NSTEM$s"; done
+git -C "$c" add -- docs; git -C "$c" commit -q -m new-form
+assert_eq "$(gen_brief "$c" "$c/$NSTEM.md")" "0|$NSTEM.md|$NSTEM.audit.md|" "brief_rel_from_git: 새 폴더의 새 꼴 결과물 — 레포 상대 경로 그대로"
+assert_eq "$(gen_brief "$c/docs" "$c/$NSTEM.md")" "0|$NSTEM.md|$NSTEM.audit.md|" "brief_rel_from_git: cwd 가 하위 폴더여도 레포 루트 기준 경로"
+printf 'x\n' > "$c/docs/superpowers/intent/untracked-context.md"
+r="$(gen_brief "$c" "$c/docs/superpowers/intent/untracked-context.md")"
+assert_eq "$r" "1|" "brief_rel_from_git: 추적되지 않는 결과물이면 생성기를 부르지 않고 멈춘다"
+assert_contains "$(cat "$T/gen.log")" "결과물의 레포 상대경로를 git 에서 얻지 못했다" "brief_rel_from_git: 그 사유를 보인다"
 
 # AC19 — 판 · 변경 기록 · README
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")

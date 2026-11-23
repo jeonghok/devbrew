@@ -89,7 +89,7 @@ has 'steelman.*생략|web 비활성.*steelman' "F8: R3 web-absent loud degradati
 has 'steelman-builder' "steelman-builder dispatch"
 has 'verbatim|약화.*금지|편집.*금지' "steelman verbatim pass-through (AC5)"
 
-has 'repo_defaults\.py" get interview_dir' "brief written under the interview folder from repo settings (C8)"
+has 'PAYLOAD="\$\{STATE_F%\.state\.md\}\.md"' "brief written on the state file's stem — the state path resolver places it under the intent folder from repo settings (C8)"
 has 'interview-brief-template' "uses brief template"
 
 has 'optional|선택' "brainstorming invoke is optional"

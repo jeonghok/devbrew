@@ -3,7 +3,7 @@ name: context-build
 description: >
   사용자가 `/spec-distill:context-build @<seed 경로>` 로 부른다.
   Runs the spec-distill problem-space context-build stage and produces a terminal
-  interview-brief in the intent folder (`interview_dir`). 종료는 커버리지 원장의 floor
+  context-brief in the intent folder (`intent_dir`). 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
   closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).

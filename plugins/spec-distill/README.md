@@ -4,13 +4,13 @@
 
 ## 이 플러그인이 하는 일
 
-흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
+흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/intent/YYYY-MM-DD-<topic>-context.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-context.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-context.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
 
 ## 쓰는 법
 
 사용자가 부르는 진입 skill 은 여섯입니다.
 
-- `/intent-sync` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
+- `/intent-sync` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`intent-seed`)이 나옵니다.
 - `/context-build` — 요청을 질문과 조사로 다듬고 싶을 때(컨텍스트 쌓기). 그 결과를 정리한 문서(context brief)가 나옵니다.
 - `/roadmap-draft` — 나누기로 정한 brief 를 에픽 표와 로드맵으로 만들고 싶을 때. 로드맵 폴더가 나옵니다. 완전명은 `/spec-distill:roadmap-draft @<결과물 경로>` 입니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
@@ -41,13 +41,13 @@
                                                 · 처분은 사용자가 — 처분 전 편집 금지 · 저자 편집 diff 공시 · 문구 없는 drop 차단
                                                 · 냉독 축(seed-readback)
                                        ▼ [확정 — proceed 게이트] ①/compact 후 /context-build @경로 · ②/new 후 /context-build @경로 · ③수정 필요 · ④멈춤
-                                   interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
+                                   intent-seed → docs/superpowers/intent/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
                                        ▼ 다음 세션 첫 턴 = `/context-build @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 컨텍스트 쌓기에 넘김)
 /context-build ─→ [0] Trivia escape ─→ [1] Context build (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 사용자 말 그대로 / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
-                                   context brief (payload + audit) → docs/superpowers/interview/   ← terminal 산출물
+                                   context brief (payload + audit) → docs/superpowers/intent/   ← terminal 산출물
                                        ▼ [Step A.5]  ※ 구조 게이트를 통과했을 뿐 아직 분리 리뷰 전
                                    [2] reviewing-brief → 문서 리뷰 엔진 (Law 2 분리 리뷰, brief 프로필, cost_class: medium)
                                        │  라운드마다 먼저: 진입 게이트 둘(check_brief.py · check_verbatim_coverage.py) → payload+audit 번들
@@ -127,14 +127,14 @@
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/context-build` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
-- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`intent_dir`, 기본 `docs/superpowers/intent/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
+- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`intent_dir`, 기본 `docs/superpowers/intent/`)의 `<날짜>-<주제>-context.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **P17 (User sovereignty)** — 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — 컨텍스트 쌓기 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)과 framing 기록 파일(seed 의 audit — 원문 절 · 질문 답 · 사용자가 적은 말 · 리뷰 결정의 사용자 문구 등 사용자의 말을 적는 모든 길)의 token/key/credential placeholder 치환. seed 본문은 줄 안의 가림 표시를 받는다. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부). 끝맺음은 첫 칸에 실을 원자료에서 비밀값으로 보이는 값을 보면 싣지 않고 멈춰 묻고, 가릴 때는 framing 기록 파일부터 가린다.
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (context-build: variable / roadmap-draft: medium / intent-sync: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — 어느 skill 도 지출 승인을 묻지 않고(epic-conductor 의 high 는 시작할 때 규모 줄을 공시한다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
-- **P23 (Decisions Stay Refutable)** — `intent-sync`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `context-build`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 컨텍스트 쌓기 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
+- **P23 (Decisions Stay Refutable)** — `intent-sync`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `context-build`도 하류에서 같은 원칙을 잇는다 — `type: intent-seed`(옛 seed 는 `interview-seed`) 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 컨텍스트 쌓기 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 
 ### Roadmap absorption (C-numbers)
 

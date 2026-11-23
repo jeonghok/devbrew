@@ -56,7 +56,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -75,8 +75,8 @@ init_rc=0; python3 "$PR/scripts/brief_review_state.py" init "$STATE" || init_rc=
 `state_doc_mismatch` 같은 거부를 넘어 진행하면 다른 문서의 원장 위에서 라운드가 돈다. 그때는
 record(`pipeline` / `all` / `unavailable`, reason = `init` 이 낸 사유)를 남기고 Step B 로 돌아간다.
 
-degrade 원장 `$STATE` 는 엔진 원장과 다른 파일이다 — 그 컨텍스트 쌓기의 상태 파일(payload 이름의 `-interview.md` 를
-`-interview.state.md` 로 바꾼 것)이고, 두 번째 채널 `$DEGRADE_FALLBACK_FILE` 은 원장 자리(`$STATE_DIR`) 안이다(자리가 비었거나 원장 열기
+degrade 원장 `$STATE` 는 엔진 원장과 다른 파일이다 — 그 컨텍스트 쌓기의 상태 파일(payload 이름의 `.md` 를
+`.state.md` 로 바꾼 것)이고, 두 번째 채널 `$DEGRADE_FALLBACK_FILE` 은 원장 자리(`$STATE_DIR`) 안이다(자리가 비었거나 원장 열기
 전이라 아직 없으면 임시 폴더 — 머리는 원장 자리를 만들지 않는다). `init_rc != 0` 이면 그 자리에서 loud
 advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) — 이 리뷰의 record 는 두 번째
 채널로만 Step B 에 간다`)를 내고 계속한다 — 기록이 없는 것과 degrade 가 없는 것은 다른 사실이다.
@@ -106,7 +106,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -236,7 +236,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -311,7 +311,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -504,7 +504,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -545,7 +545,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }
@@ -729,7 +729,7 @@ PR="${CLAUDE_PLUGIN_ROOT}"; [ -n "$PR" ] || { echo "[spec-distill] 플러그인 
 case "${PAYLOAD:-}" in ""|/*) ;; *) PAYLOAD="$(pwd)/$PAYLOAD" ;; esac
 case "${AUDIT:-}" in ""|/*) ;; *) AUDIT="$(pwd)/$AUDIT" ;; esac
 harness_sid="$(python3 "$PR/scripts/state_path.py" session-id || true)"; ROOT="$(python3 "$PR/scripts/state_path.py" state-root-for "${PAYLOAD:-}" || true)"
-STATE="${PAYLOAD:+${PAYLOAD%-interview.md}-interview.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
+STATE="${PAYLOAD:+${PAYLOAD%.md}.state.md}"   # degrade 원장 — 그 컨텍스트 쌓기의 상태 파일
 STATE_DIR="$(python3 "$PR/scripts/docreview_state.py" state-dir-for --root "$ROOT" --doc "${PAYLOAD:-}" || true)"   # 엔진 상태 — 이 payload 만의 디렉토리
 [ -z "${STATE_DIR:-}" ] || python3 "$PR/scripts/state_path.py" path-inside --root "${ROOT%/.claude/spec-distill}" "$STATE_DIR" || STATE_DIR=""
 [ -z "${PAYLOAD:-}" ] || { rb_top="$(python3 "$PR/scripts/state_path.py" payload-root "$PAYLOAD")" && python3 "$PR/scripts/state_path.py" path-inside --root "$rb_top" "$PAYLOAD" ${AUDIT:+"$AUDIT"} "$STATE"; } || { echo "[spec-distill] brief · audit · 상태 파일 중 링크를 거치거나 작업 트리 밖인 경로가 있다(위 사유 · PAYLOAD='${PAYLOAD}') — 그 경로들에 쓰지 않고 멈춘다. record 를 남기지 않고 이 사유를 Step B 게이트 앞 글에 싣는다." >&2; exit 1; }

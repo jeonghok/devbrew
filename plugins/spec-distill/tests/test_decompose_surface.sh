@@ -77,7 +77,7 @@ CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- co
 for tok in 'r7=' 'RDIR' 'roadmaps_dir' 'roadmap-check' '로드맵 폴더가 없어 빼고 진행한다' '로드맵 폴더에 커밋할 파일이 없어' '로드맵 폴더를 커밋했다'; do
   assert_not_contains "$CF" "$tok" "커밋 펜스(AC5): 로드맵 폴더 갈래 「${tok}」 가 없다"
 done
-has "$CF" 'repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 interview_dir 바로 아래(check-path)"
+has "$CF" 'repo_defaults.py" check-path intent_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 intent_dir 바로 아래(check-path)"
 has "$CF" 'repo_defaults.py" default-branch --check-remote --root "$top")" || d_rc=$?' "커밋 펜스: 기본 브랜치는 해결자가 원격과 대조해 준다"
 assert_not_contains "$CF" 'symbolic-ref' "커밋 펜스: 기본 브랜치를 symbolic-ref 로 직접 벗기지 않는다(양의 짝: 위 default-branch)"
 has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): add 경로는 세 파일과 B9 의 두 파일(있을 때만)"
@@ -220,7 +220,7 @@ e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdou
   body="$FENCE"
   body="${body//<주제 한 줄>/$title}"
   body="${body//<승인 원문>/$appr}"
-  body="${body//<file>/brief.md}"
+  body="${body//<결과물 절대경로>/$E/repo/docs/iv/brief.md}"
   body="${body//<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//$outn/}"
   body="${body//<YYYY-MM-DD>/2026-10-21}"
   printf '%s\n' "$body" > "$E/fence.sh"
@@ -282,7 +282,7 @@ printf '# state\n\n## 분해안\n\n%s\n%s\n%s\n' \
   '|---|---|---|---|---|---|---|---|---|---|---|' \
   '| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | a/x.py | C1 · OQ1 · K1 · «ext-a» · S1 · S2 | 없음 | 없음 |' \
   > "$E/repo/docs/iv/brief.state.md"
-printf -- '---\ninterview_dir: docs/iv/\nroadmaps_dir: docs/\n---\n' > "$E/repo/.devbrew.md"
+printf -- '---\nintent_dir: docs/iv/\nroadmaps_dir: docs/\n---\n' > "$E/repo/.devbrew.md"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare -b main "$E/remote.git"
 git init -q -b main "$E/repo"
@@ -292,7 +292,7 @@ git -C "$E/repo" remote add origin "$E/remote.git"
 git -C "$E/repo" push -q origin main
 git -C "$E/repo" remote set-head origin --auto >/dev/null
 # 양성 대조 — 펜스가 얻는 두 폴더가 기본값이 아니라 기본 브랜치의 레포 설정 값이다.
-iv_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get interview_dir 2>/dev/null)"
+iv_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get intent_dir 2>/dev/null)"
 rm_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir 2>/dev/null)"
 assert_eq "${iv_got}|${rm_got}" "docs/iv/|docs/" "stepa8_e2e: 픽스처 레포 설정이 인터뷰 · 로드맵 폴더를 정한다"
 HOSTILE_TITLE='-제목 $HOME `id` "q" '"'a'"
