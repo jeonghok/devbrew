@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [17.0.0] — 2026-11-24
+
+### Changed
+- 돌려주는 꼴(`intent-return.md`)의 판이 3으로 올랐다(`contract: 3`). 2판까지만 읽는 쪽은 이 파일을 읽지 못한다.
+- 직접 묻는 틀은 질문 문장을 먼저 보이고 「왜 묻나」 한 줄을 그 아래에 단다.
+- 다른 팀 읽기가 `type: roadmap-review` 문서를 싣지 않는다.
+
+### Added
+- `--answered <경로>` — 지휘하는 쪽이 넘기는 「이미 답한 것」 파일을 받는다(`intent_critic.py prepare` · `setup-qg.sh`). 읽지 못하면 `넘겨받은 답을 읽지 못함 — <사유>` 를 알리고 이어 간다.
+- 돌려주는 꼴의 `answered_filtered`(머리) · `why` · `asked_before` · `changed_observation`(질문 칸).
+- `synthesize_findings.py --pre-merge-out` — 합치기 전 지적 목록을 세션 폴더의 `findings-pre-merge.yaml` 에 쓴다.
+
 ## [16.0.0] — 2026-11-22
 
 ### Removed

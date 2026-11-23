@@ -135,6 +135,21 @@ else no "README kill switch 표에 ${KILL} 가 없다"; fi
 note "[README 뜻 문장 — AC17 자리 4]"
 assert_contains "$(flat < "$RM")" "intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다." "README: intent-critic 뜻 문장"
 
+note "[README 17.0.0 — --answered · 돌려주는 꼴 3판 · 직접 묻는 틀 · 합치기 전 목록]"
+RMF="$(flat < "$RM")"
+assert_contains "$RMF" '`--answered <경로>` 는 지휘하는 쪽이 이미 사용자에게 물어 답을 받은 것을 담은 파일을 qg 에 넘기는 인자다' "README: --answered 뜻 문장"
+assert_contains "$RMF" '돌려주는 꼴은 3판이다 — `contract: 3`' "README: 돌려주는 꼴 3판"
+for k in why asked_before changed_observation answered_filtered; do
+  assert_contains "$RMF" "새 칸 \`$k\`" "README: 새 칸 $k"
+done
+assert_contains "$RMF" '직접 묻는 틀은 질문 문장을 먼저 보이고 「왜 묻나」 한 줄을 그 아래에 단다' "README: 직접 묻는 틀 문장"
+assert_contains "$RMF" '`findings-pre-merge.yaml` 은 재비판 처분을 반영한 뒤 · 같은 지적을 합치기 전의 목록이다' "README: 합치기 전 목록 파일"
+assert_contains "$RMF" '`type: roadmap-review` 문서는 다른 팀 기록에 싣지 않는다' "README: roadmap-review 제외"
+assert_contains "$RMF" '넘겨받은 답을 읽지 못함 — <사유>' "README: 읽지 못함 알림"
+CHG="$(flat < "$PLUGIN_ROOT/CHANGELOG.md")"
+assert_contains "$CHG" '## [17.0.0] — 2026-11-24' "CHANGELOG: 17.0.0 절"
+assert_eq "$(grep -c -F '"version": "17.0.0"' "$PLUGIN_ROOT/.claude-plugin/plugin.json")" 1 "plugin.json 판 17.0.0"
+
 note "[옛 이름 부재]"
 for f in "$S" "$PROC" "$SFF" "$RM" "$SCRIPTS/setup-qg.sh" "$PLUGIN_ROOT/agents/intent-critic.md" \
          "$PLUGIN_ROOT/tests/test_plain_qg_templates.sh" "$PLUGIN_ROOT/tests/test_setup_qg.sh" "$0"; do
