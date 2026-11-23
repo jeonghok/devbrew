@@ -8,7 +8,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MC="$ROOT/plugins/spec-distill/scripts/merge_check.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
-trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
+CT=""   # 장면 18 이 /tmp 아래에 만드는 호출한 쪽 임시 폴더 — trap 이 함께 지운다
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"; [ -n "$CT" ] && rm -rf "$CT"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 RM="plan/rm/roadmap.md"
 
@@ -32,6 +33,9 @@ branch_with() {  # branch_with <브랜치> — 지금 작업 트리 변경을 �
   g checkout -q -b "$1" && g add -A && g commit -qm "$1" && g checkout -q trunk
 }
 mc() { (cd "$W" && python3 "$MC" run --roadmap "$RM" --no-fetch "$@" 2>&1); }
+headline() {  # headline <출력> <브랜치> <꼬리 정규식> — 세 칸(브랜치 · 기본 브랜치 · 합친 사본 커밋)이 그대로이고 꼬리가 그것인 머리 줄 수
+  printf '%s\n' "$1" | grep -cE "^\[spec-distill\] 스위트 대조 — $2\([0-9a-f]{8}\) 를 기본 브랜치 trunk\([0-9a-f]{8}\) 에 합친 사본\([0-9a-f]{8}\)$3\$"
+}
 
 # 1 — pytest: 양쪽 다 빨간 파일 안의 새 실패를 이름으로 가른다
 if python3 -m pytest --version >/dev/null 2>&1; then
@@ -72,6 +76,7 @@ branch_with feature/ut
 out="$(mc --branch feature/ut)"; rc=$?
 assert_eq "$rc" "1" "unittest: 새 실패 → rc 1"
 assert_contains "$out" "test_a" "unittest: 새 실패 이름"
+assert_eq "$(headline "$out" feature/ut "과 기본 브랜치 사본을 돌렸다")" "1" "탐지 경로: 머리 줄 꼬리는 두 사본을 돌렸다 그대로다"
 
 # 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조
 mkrepo sh
@@ -116,7 +121,7 @@ branch_with feature/nd
 out="$(mc --branch feature/nd)"; rc=$?
 assert_eq "$rc" "1" "test_command: 새 실패 → rc 1"
 assert_contains "$out" "two" "test_command: 새 실패 이름(tap not ok)"
-assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 1개: one" "test_command: 기본 브랜치에만 있는 실패(고쳐짐)를 이름으로 보인다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다" "test_command: 목록을 건넨 대조는 고쳐짐을 재지 않았다고 말한다"
 
 # 5 — 이름을 못 뽑는 명령: 양쪽 다 빨강이면 빈 집합끼리 같다고 하지 않는다
 mkrepo nn 'test_command: bash -c "exit 1"\n'; put a.txt a; push_base; put b.txt b; branch_with feature/nn
@@ -371,5 +376,181 @@ try:
 except ValueError as e:
     print(e)' "$ROOT/plugins/spec-distill/scripts" "$W")"
 assert_contains "$GA" "허용하지 않는 git 명령: fetch" "branch_tip._git 은 GIT_ALLOWED 밖의 명령(fetch)을 부르지 않고 거절한다"
+
+# 12–17 — 대조는 한 바퀴: 합친 사본을 먼저 돌고, 깨끗하면 기준 사본을 돌지 않고, 실패 이름은 목록으로 건네 기준 사본에서 다시 돈다.
+# 테스트 명령은 어느 사본에서 무엇을 받고 돌았는지 MC_LOG 에 한 줄 남긴다(첫 칸 끝 /base · /merged 로 사본을 가른다).
+LOGLINE='printf '"'"'%s\t%s\n'"'"' "$PWD" "${SUITE_ONLY_FAILED_FILE:-}" >> "$MC_LOG"'
+logn() {  # logn <로그> <base|merged> — 그 사본의 줄 수
+  [ -f "$1" ] || { echo 0; return; }
+  awk -F'\t' -v s="/$2" '{ if (substr($1, length($1) - length(s) + 1) == s) c++ } END { print c + 0 }' "$1"
+}
+logcol2() {  # logcol2 <로그> <base|merged> — 그 사본 줄들의 둘째 칸
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v s="/$2" '{ if (substr($1, length($1) - length(s) + 1) == s) print $2 }' "$1"
+}
+with_runner() { mkdir -p "$W/tools/suite"; cp "$ROOT"/tools/suite/{run-all.sh,run_unittest_dir.py,suite_peers.py} "$W/tools/suite/"; }
+# 호출한 쪽의 낡은 목록 — 합친 사본의 실패에 없는 대상(test_seen.sh)을 가리킨다. 기준 사본에 새면 /base 가 한 줄 생긴다
+printf 'shared/tests/test_seen.sh: x\n' > "$T/stale-list"
+
+# 12 — AC14: 합친 사본이 깨끗하면 기준 사본을 돌지 않는다
+mkrepo cl 'test_command: bash run.sh\n'
+put run.sh "$LOGLINE"$'\necho "  ✓ fine"'; push_base; put x.txt x; branch_with feature/cl
+out="$(MC_LOG="$T/cl.log" mc --branch feature/cl)"; rc=$?
+assert_eq "$rc" "0" "깨끗한 합친 사본 → rc 0"
+assert_contains "$out" "판정: 새 실패 없음" "깨끗한 합친 사본: 새 실패 없음"
+assert_contains "$out" "기준 사본은 돌리지 않았다" "깨끗한 합친 사본: 기준 사본을 돌리지 않았다고 알린다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) — 재지 않았다" "깨끗한 합친 사본: 고쳐짐은 재지 않았다"
+assert_eq "$(logn "$T/cl.log" base)" "0" "깨끗한 합친 사본: 기준 사본에서 테스트 명령을 돌리지 않았다"
+assert_eq "$(logn "$T/cl.log" merged)" "1" "깨끗한 합친 사본: 합친 사본에서 한 번 돌았다"
+assert_eq "$(headline "$out" feature/cl "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "깨끗한 합친 사본: 머리 줄이 기본 브랜치 사본을 돌리지 않았다고 말한다"
+
+# 13 — AC15 · AC19 · AC24(없는 대상) · AC30: 실제 러너 · 원래 실패 하나 + 새 실패 하나 · 호출한 쪽에 살아 있는 목록
+mkrepo ra 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+with_runner
+put shared/tests/test_old.sh $'echo "  ✗ old"\nexit 1'
+put shared/tests/test_seen.sh "$LOGLINE"
+push_base
+put shared/tests/test_new.sh $'echo "  ✗ new"\nexit 1'; branch_with feature/ra
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/ra.log" mc --branch feature/ra)"; rc=$?
+assert_eq "$rc" "1" "실제 러너: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: shared/tests/test_new.sh: new" "실제 러너: 새 실패는 기준 사본에 없는 대상의 것"
+assert_contains "$out" "양쪽 다 있는 실패 1개: shared/tests/test_old.sh: old" "실제 러너: 원래 실패는 양쪽 다 있는 실패다"
+assert_contains "$out" "목록(SUITE_ONLY_FAILED_FILE)으로 건네 돌렸다" "실제 러너: 기준 사본에 목록을 건넸다고 알린다"
+assert_eq "$(logn "$T/ra.log" merged)" "1" "실제 러너: 합친 사본은 호출한 쪽 목록을 무시하고 전부 돌았다"
+assert_eq "$(logn "$T/ra.log" base)" "0" "실제 러너: 기준 사본은 목록의 대상(test_old.sh)만 돌았다"
+assert_eq "$(headline "$out" feature/ra "을 돌렸고 기본 브랜치 사본은 합친 사본의 실패 목록\(SUITE_ONLY_FAILED_FILE\)을 건네 돌렸다")" "1" "실제 러너: 머리 줄이 기본 브랜치 사본에 실패 목록을 건넸다고 말한다"
+
+# 14 — AC16: 목록을 모르는 명령 — 기준 사본은 목록을 받고도 전부 돈다
+mkrepo nl 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+put run.sh "$LOGLINE"$'\necho "FAILED a.sh: old"\nexit 1'; push_base
+put run.sh "$LOGLINE"$'\necho "FAILED a.sh: old"\necho "FAILED b.sh: new"\nexit 1'; branch_with feature/nl
+out="$(MC_LOG="$T/nl.log" mc --branch feature/nl)"; rc=$?
+assert_eq "$rc" "1" "목록을 모르는 명령: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: b.sh: new" "목록을 모르는 명령: 새 실패 이름"
+assert_contains "$out" "양쪽 다 있는 실패 1개: a.sh: old" "목록을 모르는 명령: 원래 실패는 양쪽 다 있는 실패다"
+assert_eq "$(logcol2 "$T/nl.log" base | grep -c .)" "1" "목록을 모르는 명령: 기준 사본은 목록을 받고 돌았다"
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/nl2.log" mc --branch feature/nl)"; rc=$?
+assert_eq "$(logcol2 "$T/nl2.log" base | grep -c '/only-failed\.txt$')" "1" "목록을 모르는 명령: 호출한 쪽 목록이 있어도 기준 사본은 대조가 만든 목록(only-failed.txt)을 받았다"
+# 14b — 합친 사본 뒤 Stop 아닌 예외(목록 파일을 쓰지 못함)에도 머리 줄을 그때까지의 꼴로 낸다
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+m.ONLY_FAILED_FILE = "base"   # 실행 폴더의 기준 사본 폴더 — write_text 가 IsADirectoryError 로 실패한다
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/nl"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+assert_eq "$rc" "3" "목록 파일을 쓰지 못함 → 내부 오류 rc 3"
+assert_contains "$out" "내부 오류: IsADirectoryError" "목록 파일을 쓰지 못함: 내부 오류 줄"
+assert_eq "$(headline "$out" feature/nl "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "목록 파일을 쓰지 못함: 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
+
+# 15 — AC17 · AC30: 합친 사본이 이름 없이 실패 → 기준 사본을 목록 변수 없이 전부 돈다
+mkrepo nf 'test_command: bash run.sh\n'
+put run.sh "$LOGLINE"; push_base
+put run.sh "$LOGLINE"$'\nexit 1'; branch_with feature/nf
+out="$(SUITE_ONLY_FAILED_FILE="$T/stale-list" MC_LOG="$T/nf.log" mc --branch feature/nf)"; rc=$?
+assert_eq "$rc" "1" "이름 없는 실패: rc 1"
+assert_contains "$out" "(test_command) 전체 — 이름 대조 불가 — 단위 수준만" "이름 없는 실패: 단위 수준 새 실패"
+assert_contains "$out" "기준 사본은 전부 돌렸다" "이름 없는 실패: 기준 사본을 전부 돌렸다고 알린다"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 0개" "이름 없는 실패: 전부 돈 기준 사본으로 고쳐짐을 센다"
+assert_eq "$(logn "$T/nf.log" base)" "1" "이름 없는 실패: 기준 사본에서 한 번 돌았다"
+assert_eq "$(logn "$T/nf.log" merged)" "1" "이름 없는 실패: 합친 사본에서 한 번 돌았다"
+assert_eq "$(logcol2 "$T/nf.log" base)" "" "이름 없는 실패: 기준 사본을 전부 돌 때도 호출한 쪽 목록 변수를 빼고 돈다"
+assert_eq "$(logcol2 "$T/nf.log" merged)" "" "이름 없는 실패: 합친 사본도 호출한 쪽 목록 변수를 빼고 돈다"
+assert_eq "$(headline "$out" feature/nf "과 기본 브랜치 사본을 돌렸다 — 기본 브랜치 사본은 목록 없이 전부 돌렸다")" "1" "이름 없는 실패: 머리 줄이 기본 브랜치 사본을 전부 돌렸다고 말한다"
+
+# 16 — AC24: 대상 경로를 뺀 이름 — 러너가 목록을 버리고 기준 사본을 전부 돈다
+mkrepo rb 'test_command: bash tools/suite/run-all.sh\ntest_failure_pattern: "^FAILED [^:]+: (.+)$"\n'
+with_runner
+put shared/tests/test_old.sh $'echo "  ✗ old"\nexit 1'
+put shared/tests/test_seen.sh "$LOGLINE"
+push_base
+put shared/tests/test_new.sh $'echo "  ✗ new"\nexit 1'; branch_with feature/rb
+out="$(MC_LOG="$T/rb.log" mc --branch feature/rb)"; rc=$?
+assert_eq "$rc" "1" "대상 없는 이름: 새 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: new" "대상 없는 이름: 새 실패 이름"
+assert_contains "$out" "양쪽 다 있는 실패 1개: old" "대상 없는 이름: 원래 실패는 양쪽 다 있는 실패다"
+assert_eq "$(logn "$T/rb.log" base)" "1" "대상 없는 이름: 러너가 목록을 버리고 기준 사본을 전부 돌았다"
+
+# 17 — 합친 사본에서 테스트 명령을 실행하지 못하면 검사 불가
+mkrepo nc 'test_command: no-such-cmd-e1p2\n'; put a.txt a; push_base; put b.txt b; branch_with feature/nc
+out="$(mc --branch feature/nc)"; rc=$?
+assert_eq "$rc" "3" "실행하지 못한 테스트 명령 → rc 3"
+assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "실행하지 못한 테스트 명령 사유"
+assert_eq "$(headline "$out" feature/nc "을 돌렸다 — 기본 브랜치 사본은 돌리지 않았다")" "1" "합친 사본에서 멈춰도 머리 줄을 내고 기본 브랜치 사본은 돌리지 않았다고 말한다"
+
+# 17b — 기준 사본만 테스트 명령을 실행하지 못한다(rc 127, 명령 스크립트가 브랜치에만 있다) → rc 3 · 머리 줄은 목록을 건네 돌렸다고 말한다
+mkrepo nb 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'; put a.txt a; push_base
+put run.sh $'echo "FAILED x: only-branch"\nexit 1'; branch_with feature/nb
+out="$(mc --branch feature/nb)"; rc=$?
+assert_eq "$rc" "3" "기준 사본만 명령을 실행하지 못함(rc 127) → rc 3"
+assert_contains "$out" "테스트 명령을 실행하지 못했다(rc 127)" "기준 사본만 명령을 실행하지 못함: 사유"
+assert_eq "$(headline "$out" feature/nb "을 돌렸고 기본 브랜치 사본은 합친 사본의 실패 목록\(SUITE_ONLY_FAILED_FILE\)을 건네 돌렸다")" "1" "기준 사본에서 멈춰도 머리 줄은 목록을 건네 돌렸다고 말한다"
+
+# 18 — 대조가 테스트에 주는 임시 폴더는 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도) · 링크를 푼 경로다.
+#   실행 폴더 안에 두던 때의 성질(3892f86d · b2d5ca11 — 사본마다 따로 · 대조가 끝나면 지움 · 경로 자리표시 <tmp>)을 새 자리에서 잰다.
+#   자리표시는 7b · 10c 가 잰다. 테스트 명령은 받은 TMPDIR · 그 풀린 경로를 MC_LOG 에 남기고, TMPDIR 이 git 안이면 실패 이름을 낸다.
+mkrepo tg 'test_command: bash run.sh\ntest_failure_pattern: "^FAILED (.+)$"\n'
+cat > "$W/run.sh" <<'EOF'
+printf '%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$(cd "$TMPDIR" && pwd -P)" >> "${MC_LOG:-/dev/null}"
+if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "FAILED tmp: inside-git"; exit 1; fi
+if [ -f fail.txt ]; then echo "FAILED x: only-branch"; exit 1; fi
+echo ok
+EOF
+push_base
+put b.txt b; branch_with feature/tg
+put fail.txt f; branch_with feature/tg2   # 합친 사본에만 실패 — 기준 사본도 돌아 두 사본의 TMPDIR 을 견준다
+mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
+out="$(MC_LOG="$T/tg.log" TMPDIR="$W/tmpin" mc --branch feature/tg)"; rc=$?
+assert_eq "$rc" "0" "호출한 쪽 TMPDIR 이 git 안이어도 대조가 주는 임시 폴더는 git 밖이다"
+assert_not_contains "$out" "inside-git" "호출한 쪽 TMPDIR 이 git 안이어도 테스트가 받은 TMPDIR 은 git 밖이다(실패 이름이 없다)"
+out="$(MC_LOG="$T/tg2.log" TMPDIR="$W/tmpin" mc --branch feature/tg2)"; rc=$?
+assert_eq "$rc" "1" "두 사본을 다 도는 대조: 합친 사본에만 있는 실패 → rc 1"
+assert_contains "$out" "이 브랜치에만 있는 실패 1개: x: only-branch" "두 사본을 다 도는 대조: 새 실패는 브랜치의 것 하나뿐이다"
+assert_not_contains "$out" "inside-git" "두 사본 모두 git 밖 임시 폴더를 받았다"
+assert_eq "$(logn "$T/tg2.log" base) $(logn "$T/tg2.log" merged)" "1 1" "두 사본을 한 번씩 돌았다(전제)"
+assert_eq "$(awk -F'\t' '$2 != $3' "$T/tg.log" "$T/tg2.log" | wc -l | tr -d ' ')" "0" "대조가 준 TMPDIR 이 자기 realpath 와 같다(/tmp → /private/tmp 링크를 푼 경로)"
+assert_eq "$(cut -f2 "$T/tg2.log" | sort -u | wc -l | tr -d ' ')" "2" "사본마다 따로 — 두 사본의 TMPDIR 이 다르다"
+assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/tg2.log")" "0" "사본마다 따로 — 각 사본의 TMPDIR 은 그 사본 이름의 merge-check-<사본>- 폴더다"
+CT="$(mktemp -d /tmp/mc-ct.XXXXXX)" || CT=""
+if [ -n "$CT" ] && ! git -C "$CT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  CTR="$(cd "$CT" && pwd -P)"
+  out="$(MC_LOG="$T/ct.log" TMPDIR="$CT" mc --branch feature/tg2)"; rc=$?
+  assert_eq "$rc" "1" "호출한 쪽 TMPDIR 이 git 밖이면 그 아래에서 대조가 돈다 → rc 1"
+  assert_eq "$(ls -A "$CT")" "" "대조가 끝나면 만든 임시 폴더를 지운다"
+  out="$(MC_LOG="$T/ct.log" TMPDIR="$CT" mc --branch feature/tg2 --keep-merged)"; rc=$?
+  assert_contains "$out" "남긴 사본: " "--keep-merged: 합친 사본을 남겼다(전제)"
+  assert_eq "$(ls -A "$CT")" "" "--keep-merged 여도 임시 폴더는 지운다"
+  out="$(cd "$W" && MC_LOG="$T/ct.log" TMPDIR="$CT" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+def boom(*a, **k): raise ValueError("after-compare")
+m.report = boom
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/tg2"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" 2>&1)"; rc=$?
+  assert_eq "$rc" "3" "대조 뒤 예외 → 내부 오류 rc 3(전제)"
+  assert_eq "$(ls -A "$CT")" "" "예외로 멈춰도 임시 폴더는 지운다"
+  assert_eq "$(cut -f2 "$T/ct.log" | grep -c "^${CTR}/merge-check-")" "6" "세 번 · 두 사본 모두 호출한 쪽 TMPDIR(풀린 경로) 아래에 만든 폴더를 받았다(양성 짝 — 지울 것이 있었다)"
+else
+  no "전제: /tmp 아래에 git 작업 트리 밖 폴더를 만들지 못했다 — 장면 18 의 지움 단언을 돌리지 못했다"
+fi
+# 대체 길: 후보를 git 안 하나로 갈아 끼우면 알리고 실행 폴더 안을 쓴다 — 그때 run.sh 가 git 안을 잡는다(양성 짝)
+out="$(cd "$W" && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import merge_check as m
+m.tmp_candidates = lambda: [sys.argv[3]]
+sys.exit(m.main(["run", "--roadmap", sys.argv[2], "--no-fetch", "--branch", "feature/tg"]))' "$ROOT/plugins/spec-distill/scripts" "$RM" "$W" 2>&1)"; rc=$?
+assert_contains "$out" "git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다" "후보가 모두 git 안이면 알리고 실행 폴더 안을 쓴다"
+assert_contains "$out" "tmp: inside-git" "대체 길: 실행 폴더 안 TMPDIR 은 git 안이다(양성 짝 — run.sh 의 검사가 이를 잡는다)"
+assert_eq "$(ls -A "$W/tmpin")" "" "호출한 쪽 TMPDIR(git 안)에는 아무것도 남기지 않는다"
+# 18b — 탐지 경로(test_command 없음)의 단위 실행도 같은 자리를 받는다: 실행 비트 셸 단위가 받은 TMPDIR 을 남긴다
+mkrepo td; mkdir -p "$W/tests"
+cat > "$W/tests/t.sh" <<'EOF'
+#!/usr/bin/env bash
+if git -C "$TMPDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then w=in; else w=out; fi
+if [ -d "$TMPDIR" ]; then e=yes; else e=no; fi
+printf '%s\t%s\t%s\t%s\t%s\n' "$PWD" "$TMPDIR" "$w" "$e" "${SUITE_ONLY_FAILED_FILE:-}" >> "${MC_LOG:-/dev/null}"
+exit 0
+EOF
+chmod +x "$W/tests/t.sh"; push_base; put x.txt x; branch_with feature/td
+mkdir -p "$W/tmpin"; echo tmpin >> "$W/.git/info/exclude"
+out="$(MC_LOG="$T/td.log" TMPDIR="$W/tmpin" SUITE_ONLY_FAILED_FILE="$T/stale-list" mc --branch feature/td)"; rc=$?
+assert_eq "$rc" "0" "탐지 경로: 깨끗한 셸 단위 → rc 0(전제)"
+assert_contains "$out" "무엇을 돌렸나: 탐지한 러너 shell" "탐지 경로가 돌았다(전제)"
+assert_eq "$(logn "$T/td.log" base) $(logn "$T/td.log" merged)" "1 1" "탐지 경로: 두 사본의 단위를 한 번씩 돌았다(전제)"
+assert_eq "$(awk -F'\t' '$3 != "out"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 은 git 작업 트리 밖이다(호출한 쪽 TMPDIR 이 git 안이어도)"
+assert_eq "$(awk -F'\t' '$4 != "yes"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 폴더가 실제로 있었다(git 밖 단언이 공허하지 않다)"
+assert_eq "$(awk -F'\t' '$5 != ""' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 호출한 쪽 목록 변수를 단위에 건네지 않는다"
+assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/td.log")" "0" "탐지 경로: 각 사본의 단위는 그 사본의 merge-check-<사본>- 폴더를 TMPDIR 로 받는다"
 
 finish
