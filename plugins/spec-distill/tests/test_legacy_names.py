@@ -41,6 +41,8 @@ class LegacyNames(unittest.TestCase):
         self.assertTrue(L.is_old_name("2026-01-01-x-interview.audit.md"))
         self.assertFalse(L.is_old_name("2026-01-01-x-context.md"))
         self.assertFalse(L.is_old_name("notes.md"))
+        self.assertFalse(L.is_old_name("2026-01-01-x-interview-notes.md"))
+        self.assertFalse(L.is_old_name("2026-01-01-x-interview.txt"))
         self.assertEqual(L.seed_topic("2026-01-01-ab-cd-intent.md"), "ab-cd")
         self.assertEqual(L.seed_topic("2026-01-01-ab-cd-interview.md"), "ab-cd")
         self.assertIsNone(L.seed_topic("2026-01-01-ab-cd-context.md"))
