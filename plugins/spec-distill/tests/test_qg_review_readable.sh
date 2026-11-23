@@ -132,7 +132,8 @@ one "$RET" '구현이 끝난 머지 전 에픽을 이름으로 청해 본 리뷰
 RI="$(lead "$RET" '- **좁은 재리뷰의 의도 점검.**')"
 [ -n "$RI" ] && ok "좁은 재리뷰의 의도 점검 불릿을 읽었다" || no "좁은 재리뷰의 의도 점검 불릿이 없다 — 아래 단언이 공허하다"
 one "$RI" '호출 줄은 첫 리뷰와 같은 꼴이라(`--answered` 포함)' "recheck-intent-answered: 좁은 재리뷰도 --answered 를 붙인 같은 꼴"
-one "$RI" '근거가 같으면 다시 묻지 않는다' "recheck-intent-answered: 같은 의심 · 의도다 · 근거가 같으면 다시 묻지 않는다"
+one "$RI" '근거가 같으면 그 질문은 돌아오지 않는다' "recheck-intent-answered: 같은 의심 · 의도다 · 근거가 같으면 그 질문은 돌아오지 않는다"
+zero "$WHOLE" '다시 묻지 않는다' "recheck-intent-answered 음성: 금지 낱말이 없다(양성 짝: 위 줄)"
 zero "$WHOLE" '호출 줄에 인자를 더하지 않으므로' "recheck-intent-answered 음성: 인자를 더하지 않는다던 옛 문장이 없다(양성 짝: --answered 포함)"
 
 # 화면의 틀(Task 13) — 맥락 머리 · 질문 블록 · 결과 글 · 기록 틀 3판
