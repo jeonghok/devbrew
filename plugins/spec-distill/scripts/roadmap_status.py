@@ -279,6 +279,12 @@ class Git:
                                      env=self.pathspec_env())
         return rc, out
 
+    def diff_names(self, old: str, new: str, paths: list):
+        """(rc, 경로들) — `old` 와 `new` 사이에서 paths 가 다른 파일(읽기만). paths 는 레포 뿌리 기준 · 글자 그대로다."""
+        rc, out, _err = self.run_err("diff", "--no-renames", "--name-only", "-z", old, new, "--", *_top_literal(paths),
+                                     env=self.pathspec_env())
+        return rc, [p for p in out.split("\0") if p]
+
     def grep_files(self, tree: str, fixed: str, pathspec: str):
         rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
         if rc == 1 and not err.strip():  # 일치 없음 — git grep 은 이때 rc 1 과 빈 표준 오류다
