@@ -213,7 +213,7 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
         commit, data = _committed(top, framing, W)
         _decoded(framing, data, W)   # UTF-8 로 읽지 못하면 그 사유로 거절한다
         kind = team_check.head_type(data)
-        if kind != team_check.FRAMING_TYPE:
+        if not legacy_names.kind_matches(kind, legacy_names.INTENT_SEED_AUDIT):
             raise W.Refused("%s 는 framing audit 이 아니다 — 머리 type 이 %s 가 아니다(%s)" % (framing, team_check.FRAMING_TYPE, kind or "없음"))
         out += [(framing, commit, label, first, lines, "") for label, first, lines in _framing_parts(framing, data, W)]
     elif not paired:

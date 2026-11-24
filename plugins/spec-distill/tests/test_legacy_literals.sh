@@ -68,7 +68,7 @@ for lit in 'interview-seed-audit' 'interview-brief' '-interview' 'source_intervi
   grep -qF -- "$lit" "$M" && ok "모듈: 「${lit}」" || no "모듈에 「${lit}」 가 없다"
 done
 for s in state_path interview_state check_brief check_bundle_coverage spec_review_bundle roadmap_status raw_source \
-         control_plane repo_defaults team_write roadmap_draft_entry; do
+         control_plane repo_defaults team_write team_check roadmap_draft_entry; do
   grep -qE '^(import legacy_names|from legacy_names import|import legacy_names as)' "$ROOT/plugins/spec-distill/scripts/$s.py" \
     && ok "${s}.py 가 대응표 모듈을 쓴다" || no "${s}.py 가 대응표 모듈을 쓰지 않는다"
 done

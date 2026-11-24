@@ -1548,7 +1548,7 @@ assert_not_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "단계를 셀 
 [ "$(snap "$NH")" = "$b_nh" ] && ok "단계를 셀 수 없다 · 범위만 바꾼 표: 나무 그대로" || no "단계를 셀 수 없다 · 범위만 바꾼 표: 나무가 바뀌었다"
 
 # ── 원자료 사본의 출처 경로 (보안 지적 AC1 · AC3) ───────────────────────────────
-# 출처는 로드맵 source_brief · 그 audit · framing audit(견주는 파일의 머리 type 이 interview-seed-audit) 가운데 하나다.
+# 출처는 로드맵 source_brief · 그 audit · framing audit(견주는 파일의 머리 type 이 intent-seed-audit — 옛 기록은 interview-seed-audit) 가운데 하나다.
 fresh src
 SRC="$T/src"
 assert_eq "$(ttc "$SRC" "$T/src.md" "${RD}src")" "0" "출처 픽스처: create --layout team rc 0"
@@ -1648,6 +1648,15 @@ changed="$(gx "$SRC" diff --name-only refs/remotes/origin/HEAD HEAD)"
 assert_contains "$changed" "docs/x/fake-seed.audit.md" "남는 것(지운 framing 꼴): 지우지 않은 파일은 바뀐 파일 목록에 나온다(양성 대조)"
 assert_not_contains "$changed" "gone-seed" "남는 것(지운 framing 꼴): 지운 파일은 바뀐 파일 목록에 나오지 않는다"
 cp "$T/src.o" "$SRCO"
+# 옛 기록 읽기 — framing audit 의 머리 type 은 새 글자 · 옛 글자 둘 다 출처로 받고, framing 이 아닌 종류(context-audit)는 받지 않는다
+for k in intent-seed-audit interview-seed-audit context-audit; do
+  printf -- '---\ntype: %s\n---\n\n## 1. 원문\n\n> %s framing 말\n' "$k" "$k" > "$SRC/docs/x/kind-${k}.audit.md"
+  gx "$SRC" add -- docs/x && gx "$SRC" commit -qm "kind-${k}"
+  plant "$SRC" "$SRCO" "docs/x/kind-${k}.audit.md" "$(gx "$SRC" rev-parse HEAD)" 7 7
+  case "$k" in context-audit) want=1 ;; *) want=0 ;; esac
+  assert_eq "$(srccheck)" "$want" "옛 기록 읽기(framing 종류): 머리 type 이 ${k} 인 파일의 줄은 rc ${want}"
+  cp "$T/src.o" "$SRCO"
+done
 # source_brief 를 다른 brief 로 바꾼다 — 기준에 사본이 있으면 옛 brief 의 구간이 어긋남으로 남는다(사본은 덧붙이기만 받는다)
 RM="$SRC/${RD}src/roadmap.md"; cp "$RM" "$T/src.rm"
 sed "s|^source_brief: .*|source_brief: docs/iv/u-brief-interview.md|" "$T/src.rm" > "$RM"
