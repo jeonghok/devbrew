@@ -1,4 +1,4 @@
-"""seed_body.py — interview-seed 본문의 문법. seed 본문을 읽는 곳(`check_seed.py` 게이트 ·
+"""seed_body.py — intent-seed 본문의 문법. seed 본문을 읽는 곳(`check_seed.py` 게이트 ·
 `seed_provenance.py` marks/classify)은 모두 이 파일의 `parse_seed` 하나로 읽는다 — 게이트와 출처
 판정이 seed 에 무엇이 들었는지를 두고 어긋날 수 없게.
 

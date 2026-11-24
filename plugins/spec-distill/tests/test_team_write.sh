@@ -233,7 +233,7 @@ assert_eq "$(orig --framing-audit docs/iv/t-seed-interview.audit.md)" "0" "frami
 # --framing-audit 이 type: interview-seed-audit 이 아니면 쓰지 않는다(세 절이 다 있어도)
 assert_grep "$(cat "$W/docs/iv/typed-seed-interview.audit.md")" '^type: interview-brief$' "픽스처: type 만 다른 framing 꼴 파일"
 assert_eq "$(orig_b docs/iv/u-brief-interview.md t5 --framing-audit docs/iv/typed-seed-interview.audit.md)" "1" "framing 의 type 이 다르다: rc 1"
-assert_contains "$(cat "$T/out.txt")" "interview-seed-audit" "framing 의 type 이 다르다: 기대한 type 을 말한다"
+assert_contains "$(cat "$T/out.txt")" "intent-seed-audit" "framing 의 type 이 다르다: 기대한 type 을 말한다"
 [ ! -e "$W/${RD}t5" ] && ok "framing 의 type 이 다르다: 팀 폴더를 만들지 않았다" || no "framing 의 type 이 다른데 팀 폴더가 생겼다"
 
 # ── 줄바꿈 꼴 (Review Focus 3) ─────────────────────────────────────────────
@@ -1194,7 +1194,7 @@ assert_eq "$(fa_heads ke)" "$(fa_want ke-seed.audit.md)" "푸는 길: seed 파�
 # ── framing 구간 없이 옮길 때의 화면 줄 (PR #283 좁은 재리뷰) ────────────────────────
 # 표지 「framing audit 없음」 을 적는 갈래 넷 — seed 가 「없음」 · seed 값이 비었다 · seed 키가 없다 · 상태 파일이 없다 — 에서
 # original · create --layout team 이 화면에 한 줄을 낸다(rc 는 0 그대로). 그 뒤 original --framing-audit 로 framing 구간을 덧붙일 수 있다.
-FN_LINE='[spec-distill] framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `framing audit 없음` 을 적었다. framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 덧붙인다'
+FN_LINE='[spec-distill] framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `framing audit 없음` 을 적었다. framing 을 거친 컨텍스트 쌓기라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 덧붙인다'
 fn_fix() {  # fn_fix <줄기> <none|empty|nokey|nostate|found> — docs/fa/<줄기>-brief.* 짝과 그 갈래의 상태 파일
   local st="$FA/docs/fa/$1-brief.state.md"
   cp "$FA/docs/iv/t-brief-interview.md" "$FA/docs/fa/$1-brief.md"
@@ -1548,7 +1548,7 @@ assert_not_contains "$(cat "$T/out.txt")" "손으로 고칠 것" "단계를 셀 
 [ "$(snap "$NH")" = "$b_nh" ] && ok "단계를 셀 수 없다 · 범위만 바꾼 표: 나무 그대로" || no "단계를 셀 수 없다 · 범위만 바꾼 표: 나무가 바뀌었다"
 
 # ── 원자료 사본의 출처 경로 (보안 지적 AC1 · AC3) ───────────────────────────────
-# 출처는 로드맵 source_brief · 그 audit · framing audit(견주는 파일의 머리 type 이 interview-seed-audit) 가운데 하나다.
+# 출처는 로드맵 source_brief · 그 audit · framing audit(견주는 파일의 머리 type 이 intent-seed-audit — 옛 기록은 interview-seed-audit) 가운데 하나다.
 fresh src
 SRC="$T/src"
 assert_eq "$(ttc "$SRC" "$T/src.md" "${RD}src")" "0" "출처 픽스처: create --layout team rc 0"
@@ -1648,6 +1648,15 @@ changed="$(gx "$SRC" diff --name-only refs/remotes/origin/HEAD HEAD)"
 assert_contains "$changed" "docs/x/fake-seed.audit.md" "남는 것(지운 framing 꼴): 지우지 않은 파일은 바뀐 파일 목록에 나온다(양성 대조)"
 assert_not_contains "$changed" "gone-seed" "남는 것(지운 framing 꼴): 지운 파일은 바뀐 파일 목록에 나오지 않는다"
 cp "$T/src.o" "$SRCO"
+# 옛 기록 읽기 — framing audit 의 머리 type 은 새 글자 · 옛 글자 둘 다 출처로 받고, framing 이 아닌 종류(context-audit)는 받지 않는다
+for k in intent-seed-audit interview-seed-audit context-audit; do
+  printf -- '---\ntype: %s\n---\n\n## 1. 원문\n\n> %s framing 말\n' "$k" "$k" > "$SRC/docs/x/kind-${k}.audit.md"
+  gx "$SRC" add -- docs/x && gx "$SRC" commit -qm "kind-${k}"
+  plant "$SRC" "$SRCO" "docs/x/kind-${k}.audit.md" "$(gx "$SRC" rev-parse HEAD)" 7 7
+  case "$k" in context-audit) want=1 ;; *) want=0 ;; esac
+  assert_eq "$(srccheck)" "$want" "옛 기록 읽기(framing 종류): 머리 type 이 ${k} 인 파일의 줄은 rc ${want}"
+  cp "$T/src.o" "$SRCO"
+done
 # source_brief 를 다른 brief 로 바꾼다 — 기준에 사본이 있으면 옛 brief 의 구간이 어긋남으로 남는다(사본은 덧붙이기만 받는다)
 RM="$SRC/${RD}src/roadmap.md"; cp "$RM" "$T/src.rm"
 sed "s|^source_brief: .*|source_brief: docs/iv/u-brief-interview.md|" "$T/src.rm" > "$RM"

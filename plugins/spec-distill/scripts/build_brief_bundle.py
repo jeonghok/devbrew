@@ -30,7 +30,7 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 "§6을 보라"는 지시가 먼저 나오는 쪽(payload §6)에 걸린다.
 
 exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음 · 상태 파일을 읽지 못함 · 원자료를 찾았는데
-`--raw-audit` 없음 · `--raw-audit` 가 이 인터뷰의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 ·
+`--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 ·
 framing 기록 파일을 읽지 못함 · payload · audit §6 사본 · 원자료 블록의 한 줄(줄 끝 공백을 뗀 글)이 번들 표지와 같음 —
 다 지은 번들에서 표지마다 제자리 한 번이 아님(무디스패치) /
 3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
@@ -59,7 +59,7 @@ REDACT_KEYS = ("audit_file", "name", "created_at")
 
 def own_audit_re(audit_name: str):
     """이 brief 자신의 audit 파일명(앞에 이름 조각이 붙지 않은 것). 위생이 가리는 것은 자기 audit 이다 — 다른
-    인터뷰의 audit 을 §5 근거로 인용하는 것은 정상이고, 그것까지 막으면 인용마다 degrade 가 켜진다."""
+    컨텍스트 쌓기의 audit 을 §5 근거로 인용하는 것은 정상이고, 그것까지 막으면 인용마다 degrade 가 켜진다."""
     return re.compile(r"(?<![\w.-])" + re.escape(audit_name) + r"\b")
 
 
@@ -203,7 +203,7 @@ def raw_source_block(payload_path: pathlib.Path, payload_text: str, raw_audit):
         return "", (f"원자료를 찾았는데 --raw-audit 를 받지 못했다 — {own}. "
                     "사용자 문구 없이 충실도를 물으면 「왜곡 없음」 이 나온다.")
     if pathlib.Path(raw_audit).resolve() != own.resolve():
-        return "", f"원자료 신원 불일치: 넘겨받은 {raw_audit} vs 이 인터뷰의 framing 기록 {own}"
+        return "", f"원자료 신원 불일치: 넘겨받은 {raw_audit} vs 이 컨텍스트 쌓기의 framing 기록 {own}"
     try:
         text = seed_review_log.read_audit_text(own)
     except (OSError, UnicodeDecodeError) as exc:

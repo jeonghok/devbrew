@@ -3,7 +3,7 @@ name: context-build
 description: >
   사용자가 `/spec-distill:context-build @<seed 경로>` 로 부른다.
   Runs the spec-distill problem-space context-build stage and produces a terminal
-  interview-brief in the intent folder (`interview_dir`). 종료는 커버리지 원장의 floor
+  context-brief in the intent folder (`intent_dir`). 종료는 커버리지 원장의 floor
   5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
   closed이고 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)이며,
   check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
@@ -75,7 +75,7 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 > `[spec-distill] '@<경로>' 를 읽지 못했다 — 시도: <절대경로들> (<관측한 사유>). seed 를 만든 워크트리 디렉토리에서 세션을 열었는지 확인하라. 컨텍스트 쌓기를 시작하지 않는다.`
 
-**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 컨텍스트 쌓기에 들어가기 전에 아래 한 줄을 그대로 낸다:
+**seed 면 원문 기록의 경로를 한 줄로 낸다.** 「풀린 입력」의 frontmatter 에 `type: intent-seed`(옛 기록은 `interview-seed`)가 있으면, audit 경로는 글자를 직접 짓지 않고 `scripts/raw_source.py` 가 낸 판결 줄에서 받는다 — 3.6 의 판결을 처리한 뒤 `state-file.md` 의 「원자료 — 판결 뒤」 펜스가 낸다(모듈이 같은 디렉토리에서 파일명 끝의 `.md` 를 `.audit.md` 로 바꾼 자리를 찾고, seed frontmatter 의 `audit_file:` 은 따라가지 않는다). 그 판결로 컨텍스트 쌓기에 들어가기 전에 아래 한 줄을 그대로 낸다:
 
 > `[spec-distill] seed 원문 대조: seed=<seed 절대경로> · audit=<audit 절대경로>`
 
@@ -85,24 +85,24 @@ Read 가 끝내 실패하면(파일 부재 · 경로가 디렉토리 · 권한 �
 
 ### 3. trivia 판정
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다(`type: interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 컨텍스트 쌓기를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
+「풀린 입력」의 frontmatter 에 `type: intent-seed`(옛 기록은 `interview-seed`)가 있으면 이 단계를 건너뛴다(`type: context-state`, 옛 `interview-state` 도 같다). 아니면 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 를 읽고, 「풀린 입력」을 그 파일의 기준과 예시로 판정한다. 해당하면 그 파일의 질문을 `<command>` = `spec-distill:context-build` 로 채워 띄웁니다 — 「그대로」면(라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다) 안내 문면을 내고 컨텍스트 쌓기를 시작하지 않습니다. 「전체 과정으로」면 3.5 로 갑니다.
 
 ### 3.5 seed 아닌 입력에 대한 조언
 
-「풀린 입력」의 frontmatter 에 `type: interview-seed` · `type: interview-state` 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
+「풀린 입력」의 frontmatter 에 `type: intent-seed` · `type: context-state`(옛 기록은 `interview-seed` · `interview-state`) 둘 다 없으면 한 줄 안내를 낸다. **막지 않는다.**
 
 > 💡 `/spec-distill:intent-sync` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로 진행해도 됩니다.
 
 ### 3.6 상태 파일
 
-펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 그 경로에 작은따옴표 · 줄바꿈 · 제어 글자가 있으면 셸에 붙이지 말고 그 사유를 보이고 멈춘다 — 작은따옴표 리터럴을 깨는 글자는 이것뿐이다(값은 펜스 안에서 큰따옴표로만 쓰인다). 그 글자를 뺀 이름으로 바꾸라고 알린다. 「이어 감」 의 후보 경로도 같은 확인을 거친다. 마지막 줄이 판결이다 — `interview-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄이 `interview-state:` 판결이 아니면 그 출력을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
+펜스 앞에 `ARG_PATH='<2 에서 Read 한 절대경로 — @ 가 발동하지 않았으면 빈 값>'` 한 줄을 붙여 같은 Bash 호출로 돌린다. 그 경로에 작은따옴표 · 줄바꿈 · 제어 글자가 있으면 셸에 붙이지 말고 그 사유를 보이고 멈춘다 — 작은따옴표 리터럴을 깨는 글자는 이것뿐이다(값은 펜스 안에서 큰따옴표로만 쓰인다). 그 글자를 뺀 이름으로 바꾸라고 알린다. 「이어 감」 의 후보 경로도 같은 확인을 거친다. 마지막 줄이 판결이다 — `context-state: REJECT …` 면 그 줄을 보이고 멈춘다. 마지막 줄이 `context-state:` 판결이 아니면 그 출력을 보이고 멈춘다. 마지막 줄의 판결마다 동작은 아래 `Read` 줄의 state-file.md 에 있다.
 
-<!-- interview-state-entry:begin -->
+<!-- context-state-entry:begin -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 python3 "$SD/scripts/interview_state.py" entry --arg "${ARG_PATH:-}" --session "$(python3 "$SD/scripts/state_path.py" session-id || true)"
 ```
-<!-- interview-state-entry:end -->
+<!-- context-state-entry:end -->
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-file.md
@@ -127,7 +127,7 @@ brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으
 
 ## State location
 
-의도 폴더(`interview_dir`)의 `<날짜>-<주제>-interview.state.md` — 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
+의도 폴더(`intent_dir`)의 `<날짜>-<주제>-context.state.md` — 옛 꼴 상태 파일로 이어 온 일은 그 파일의 폴더 · 줄기 그대로. 작업 트리의 추적 파일(`### 3.6`). 끝날 때 brief · audit 와 함께 커밋한다.
 State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 정한다)
 
 ```yaml
@@ -559,7 +559,7 @@ builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §
 
 ## seed 를 입력으로 받았을 때
 
-**이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: interview-seed` frontmatter
+**이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: intent-seed`(옛 기록은 `interview-seed`) frontmatter
 를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
 
 ```

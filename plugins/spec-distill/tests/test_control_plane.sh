@@ -15,7 +15,7 @@ trap 'rm -rf "$T"' EXIT
 W="$T/work"; U="$T/up"; S="$T/scripts"; LOG="$S/calls.log"; CACHE="$W/.git/devbrew/control-plane.json"
 RM="docs/superpowers/roadmaps/rm/roadmap.md"
 sp_off() {  # 인터뷰 상태 파일 지원이 꺼진 state_path.py — 진짜 모듈에서 지원 표지만 지운다
-  sed 's/interview-state/interview_state/g' "$REAL/state_path.py" > "$1"
+  sed 's/context-state/context_state/g' "$REAL/state_path.py" > "$1"
 }
 g() { git -C "$W" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
 u() { git -C "$U" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
@@ -38,7 +38,7 @@ push_file "$RM" "$(rmtext 로드맵)"
 mkdir -p "$S"
 cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/team_layout.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" \
-  "$REAL/workflow_superpowers.py" "$S/"
+  "$REAL/workflow_superpowers.py" "$REAL/legacy_names.py" "$S/"
 # 기계 상태 읽기는 scripts/ 의 형제 .claude-plugin/plugin.json 에서 자기 판을 읽는다 — 사본(S · m-*)의 부모에도 둔다
 mkdir -p "$T/.claude-plugin" && cp "$ROOT/plugins/spec-distill/.claude-plugin/plugin.json" "$T/.claude-plugin/"
 sp_off "$S/state_path.py"
@@ -83,10 +83,10 @@ cat > "$S/report.json" <<'JSON'
   {"id": "R3", "title": "셋", "kind": "bundle", "stage": "준비", "reason": "의존 완료", "task_status": "pending", "deps": [], "warnings": [], "notes": []}]}
 JSON
 LINE="rm · 설계 1 · 구현 1 · 준비 1 · 경고 2 · 기본 브랜치 main · 받은 지 0분(어느 원격 · 브랜치든) · PR 캐시 없음"
-STATE_DIR="$W/docs/superpowers/interview"
+STATE_DIR="$W/docs/superpowers/intent"
 write_state() {  # write_state <폴더> <파일 이름> <조사 수 하나> — 진행 중 인터뷰 상태 파일
   mkdir -p "$1"
-  printf -- '---\ntype: interview-state\nseed: none\norchestration:\n  research_dispatches: {coverage_mapper: %s, blind_spot_prober: 1, steelman_builder: 1, repo_researcher: 0}\n  research_limit: 20\n---\n\n## audit §2 대기 줄\n\n- 포화 판정 1: 아직 — 빈 곳 1개\n' "$3" > "$1/$2"
+  printf -- '---\ntype: context-state\nseed: none\norchestration:\n  research_dispatches: {coverage_mapper: %s, blind_spot_prober: 1, steelman_builder: 1, repo_researcher: 0}\n  research_limit: 20\n---\n\n## audit §2 대기 줄\n\n- 포화 판정 1: 아직 — 빈 곳 1개\n' "$3" > "$1/$2"
 }
 
 echo "=== 상태줄 · 캐시(AC1 · AC4) ==="
@@ -104,34 +104,34 @@ push_file "$RM" "$(rmtext '로드맵 바뀜')"
 sl >/dev/null; assert_eq "$(calls)" "4" "키 요소 — 대상 로드맵 사본이 바뀌면 다시 계산"
 cp "$REAL/state_path.py" "$S/state_path.py"
 sl >/dev/null; assert_eq "$(calls)" "4" "인터뷰 상태 파일 지원이 켜져도 키가 아니므로 다시 계산하지 않는다"
-write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1
-assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "진행 중 인터뷰 조각"
-assert_eq "$(calls)" "4" "진행 중 인터뷰 상태 파일이 생겨도 상태 계산은 다시 부르지 않는다(인터뷰는 캐시 밖)"
-age "$STATE_DIR/2026-10-15-t-interview.state.md" 3000
-assert_eq "$(sl)" "$LINE · 인터뷰 조사 3/20" "인터뷰 상태 파일 수정 시각이 바뀌어도 줄은 맞고"
+write_state "$STATE_DIR" 2026-10-15-t-context.state.md 1
+assert_eq "$(sl)" "$LINE · 컨텍스트 쌓기 조사 3/20" "진행 중 인터뷰 조각"
+assert_eq "$(calls)" "4" "진행 중 컨텍스트 쌓기 상태 파일이 생겨도 상태 계산은 다시 부르지 않는다(인터뷰는 캐시 밖)"
+age "$STATE_DIR/2026-10-15-t-context.state.md" 3000
+assert_eq "$(sl)" "$LINE · 컨텍스트 쌓기 조사 3/20" "인터뷰 상태 파일 수정 시각이 바뀌어도 줄은 맞고"
 assert_eq "$(calls)" "4" "상태 계산은 다시 부르지 않는다"
 # R10 — 장치 칸 다섯(open_researcher 포함) · 기본 60. 마지막 칸이 0 이 아니어야 «마지막 칸 빠뜨림»이 보인다.
-printf -- '---\ntype: interview-state\nseed: none\norchestration:\n  research_dispatches: {coverage_mapper: 1, blind_spot_prober: 1, steelman_builder: 1, repo_researcher: 1, open_researcher: 2}\n  research_limit: 60\n---\n' \
-  > "$STATE_DIR/2026-10-19-o-interview.state.md"
-assert_eq "$(sl)" "$LINE · 인터뷰 조사 6/60 외 1" "장치 칸 다섯을 모두 더한다(open_researcher 2 포함)"
-rm -f "$STATE_DIR/2026-10-19-o-interview.state.md"
+printf -- '---\ntype: context-state\nseed: none\norchestration:\n  research_dispatches: {coverage_mapper: 1, blind_spot_prober: 1, steelman_builder: 1, repo_researcher: 1, open_researcher: 2}\n  research_limit: 60\n---\n' \
+  > "$STATE_DIR/2026-10-19-o-context.state.md"
+assert_eq "$(sl)" "$LINE · 컨텍스트 쌓기 조사 6/60 외 1" "장치 칸 다섯을 모두 더한다(open_researcher 2 포함)"
+rm -f "$STATE_DIR/2026-10-19-o-context.state.md"
 git -C "$W" worktree add -q --detach "$T/wt2" HEAD
 sl2() { (cd "$T/wt2" && python3 "$S/control_plane.py" statusline </dev/null); }
 sl >/dev/null; sl2 >/dev/null; base="$(calls)"
 sl >/dev/null; sl2 >/dev/null; sl >/dev/null; sl2 >/dev/null
 assert_eq "$(calls)" "$base" "worktree 둘이 번갈아 불러도 둘 다 캐시가 맞는다(서로의 칸을 밀지 않는다)"
-write_state "$T/wt2/docs/superpowers/interview" 2026-10-15-w-interview.state.md 5
+write_state "$T/wt2/docs/superpowers/intent" 2026-10-15-w-context.state.md 5
 sl >/dev/null; sl2 >/dev/null; sl >/dev/null; sl2 >/dev/null
 assert_eq "$(calls)" "$base" "한쪽 worktree 에 인터뷰가 생겨도 다른 쪽 캐시를 밀지 않는다"
-assert_contains "$(sl2)" "인터뷰 조사 7/20" "그 인터뷰는 그 worktree 에서만 보인다"
+assert_contains "$(sl2)" "컨텍스트 쌓기 조사 7/20" "그 인터뷰는 그 worktree 에서만 보인다"
 assert_not_contains "$(sl)" "7/20" "다른 worktree 의 인터뷰는 이쪽에 안 보인다"
 git -C "$W" worktree remove --force "$T/wt2"
-printf 'brief\n' > "$STATE_DIR/2026-10-15-t-interview.md"
+printf 'brief\n' > "$STATE_DIR/2026-10-15-t-context.md"
 assert_eq "$(sl)" "$LINE" "짝 brief 가 생기면 진행 중이 아니다"
-printf -- '---\ntype: interview-state\n' > "$STATE_DIR/2026-10-16-u-interview.state.md"
-assert_eq "$(sl)" "$LINE · 인터뷰 셀 수 없음" "읽지 못한 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
-assert_contains "$(show)" "    docs/superpowers/interview/2026-10-16-u-interview.state.md — 셀 수 없음(frontmatter 가 닫히지 않았다)" "지도에 사유"
-rm -f "$STATE_DIR/2026-10-16-u-interview.state.md"; sp_off "$S/state_path.py"
+printf -- '---\ntype: context-state\n' > "$STATE_DIR/2026-10-16-u-context.state.md"
+assert_eq "$(sl)" "$LINE · 컨텍스트 쌓기 셀 수 없음" "읽지 못한 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
+assert_contains "$(show)" "    docs/superpowers/intent/2026-10-16-u-context.state.md — 셀 수 없음(frontmatter 가 닫히지 않았다)" "지도에 사유"
+rm -f "$STATE_DIR/2026-10-16-u-context.state.md"; sp_off "$S/state_path.py"
 
 echo "=== 받은 시각은 캐시 밖(AC13) ==="
 sl >/dev/null; before="$(calls)"
@@ -347,10 +347,10 @@ out="$(cd "$T/plain" && printf '{"cwd":"%s"}' "$W" | python3 "$S/control_plane.p
 assert_contains "$out" "rm 외 1 · " "표준 입력 JSON 의 cwd 도 쓴다"
 git init -q "$T/noorigin"
 assert_eq "$(cd "$T/noorigin" && python3 "$S/control_plane.py" statusline </dev/null)" "" "origin 없는 레포 — 빈 줄"
-mkdir -p "$T/noorigin/docs/superpowers/interview"
+mkdir -p "$T/noorigin/docs/superpowers/intent"
 cp "$REAL/state_path.py" "$S/state_path.py"
-write_state "$T/noorigin/docs/superpowers/interview" 2026-10-15-v-interview.state.md 2
-assert_eq "$(cd "$T/noorigin" && python3 "$S/control_plane.py" statusline </dev/null)" "인터뷰 조사 4/20" "로드맵 없이 진행 중 인터뷰 — 인터뷰 조각만"
+write_state "$T/noorigin/docs/superpowers/intent" 2026-10-15-v-context.state.md 2
+assert_eq "$(cd "$T/noorigin" && python3 "$S/control_plane.py" statusline </dev/null)" "컨텍스트 쌓기 조사 4/20" "로드맵 없이 진행 중 인터뷰 — 인터뷰 조각만"
 sp_off "$S/state_path.py"
 
 echo "=== 진짜 상태 계산과의 인자 계약 ==="
@@ -397,13 +397,13 @@ rm -f "$CACHE"; msl main >/dev/null; c1="$(mcalls main)"; push_file other2.txt "
 [ "$c1" -gt 0 ] && [ "$c2" = "$c1" ] && ok "변이 잡힘: origin/main 요소를 빼면 커밋 단언이 RED" || no "변이 생존: origin/main 요소($c1 → $c2)"
 mutant stamps 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = {"supported": False, "items": [], "errors": []}  # 캐시 밖'
 cp "$REAL/state_path.py" "$T/m-stamps/state_path.py"
-write_state "$STATE_DIR" 2026-10-15-t-interview.state.md 1; rm -f "$STATE_DIR/2026-10-15-t-interview.md"
+write_state "$STATE_DIR" 2026-10-15-t-context.state.md 1; rm -f "$STATE_DIR/2026-10-15-t-context.md"
 rm -f "$CACHE"; msl stamps >/dev/null
 mutant stampsctl 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖' 'interview = read_interviews(supported, files, folder_error, deadline)  # 캐시 밖'
 cp "$REAL/state_path.py" "$T/m-stampsctl/state_path.py"
-[[ "$(msl stampsctl)" == *"인터뷰 조사 3/20" ]] && ok "양성 대조: 변이 없는 사본은 인터뷰 조각을 낸다" || no "양성 대조 실패 — 아래 단언이 공허하다"
-[[ "$(msl stamps)" != *"인터뷰 조사"* ]] && ok "변이 잡힘: 인터뷰를 안 읽으면 인터뷰 조각 단언이 RED" || no "변이 생존: 인터뷰 읽기"
-rm -rf "$W/docs/superpowers/interview"
+[[ "$(msl stampsctl)" == *"컨텍스트 쌓기 조사 3/20" ]] && ok "양성 대조: 변이 없는 사본은 인터뷰 조각을 낸다" || no "양성 대조 실패 — 아래 단언이 공허하다"
+[[ "$(msl stamps)" != *"컨텍스트 쌓기 조사"* ]] && ok "변이 잡힘: 인터뷰를 안 읽으면 인터뷰 조각 단언이 RED" || no "변이 생존: 인터뷰 읽기"
+rm -rf "$W/docs/superpowers/intent"
 mutant switch "        if switch_name():" "        if False:"
 out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$T/m-switch/control_plane.py" statusline </dev/null)"
 [ -n "$out" ] && ok "변이 잡힘: 끄기 스위치를 안 보면 빈 줄 단언이 RED" || no "변이 생존: 끄기 스위치"
@@ -458,36 +458,36 @@ assert_eq "$(body "$out")" "$LINE2" "읽다 만 입력은 버리고 프로세스
 cp "$REAL/state_path.py" "$S/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
+    fh.write("---\ntype: context-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-context.state.md"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+    fh.write("---\ntype: context-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-context.state.md"
 out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
 within "$out" 2.5 && ok "큰 상태 파일 · 긴 숫자 — 시간 안에 끝난다(${out##*@}초)" || no "큰 상태 파일에 막혔다: $out"
-assert_eq "$(body "$out")" "$LINE2 · 인터뷰 셀 수 없음" "큰 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
+assert_eq "$(body "$out")" "$LINE2 · 컨텍스트 쌓기 셀 수 없음" "큰 상태 파일은 셀 수 없음 — 로드맵 부분은 그대로"
 out="$(show)"
-assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(파일이 65536바이트를 넘는다)" "사유: 크기 상한"
-assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(research_limit 가 수가 아니다" "사유: 수의 자릿수 상한"
+assert_contains "$out" "2026-10-17-big-context.state.md — 셀 수 없음(파일이 65536바이트를 넘는다)" "사유: 크기 상한"
+assert_contains "$out" "2026-10-18-digits-context.state.md — 셀 수 없음(research_limit 가 수가 아니다" "사유: 수의 자릿수 상한"
 long="$(printf '%s\n' "$out" | awk 'length($0) > 400' | wc -l | tr -d ' ')"
 assert_eq "$long" "0" "사유는 줄여 낸다 — 400바이트 넘는 줄이 없다"
 rm -f "$STATE_DIR"/*
-i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.state.md"; i=$((i + 1)); done
-assert_contains "$(show)" "진행 중 인터뷰 상태 파일이 200개를 넘는다(201개)" "진행 중 상태 파일 수 상한"
-i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-interview.md"; i=$((i + 1)); done
+i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-context.state.md"; i=$((i + 1)); done
+assert_contains "$(show)" "진행 중 컨텍스트 쌓기 상태 파일이 200개를 넘는다(201개)" "진행 중 상태 파일 수 상한"
+i=0; while [ "$i" -le 200 ]; do : > "$STATE_DIR/2026-10-19-n$i-context.md"; i=$((i + 1)); done
 out="$(show)"
-assert_contains "$out" "인터뷰: 진행 중 없음" "짝 brief 가 있는 상태 파일은 상한에 세지 않는다"
+assert_contains "$out" "컨텍스트 쌓기: 진행 중 없음" "짝 brief 가 있는 상태 파일은 상한에 세지 않는다"
 assert_not_contains "$out" "개를 넘는다" "끝난 인터뷰가 많아도 셀 수 없음이 아니다"
 rm -f "$STATE_DIR"/*
-mkfifo "$STATE_DIR/2026-10-20-pipe-interview.state.md"
-mkfifo "$T/fifo"; ln -s "$T/fifo" "$STATE_DIR/2026-10-20-link-interview.state.md"
+mkfifo "$STATE_DIR/2026-10-20-pipe-context.state.md"
+mkfifo "$T/fifo"; ln -s "$T/fifo" "$STATE_DIR/2026-10-20-link-context.state.md"
 out="$(cd "$W" && timed 15 python3 "$S/control_plane.py" statusline </dev/null)"
 within "$out" 6 && ok "파이프 · 파이프로 가는 링크 — 기다리지 않는다(${out##*@}초)" || no "파이프에 상태줄이 막혔다: $out"
-assert_eq "$(body "$out")" "$LINE2 · 인터뷰 셀 수 없음" "파이프 · 링크 상태 파일은 셀 수 없음"
+assert_eq "$(body "$out")" "$LINE2 · 컨텍스트 쌓기 셀 수 없음" "파이프 · 링크 상태 파일은 셀 수 없음"
 out="$(show)"
-assert_contains "$out" "2026-10-20-pipe-interview.state.md — 셀 수 없음(일반 파일이 아니다)" "사유: 일반 파일이 아니다"
-assert_contains "$out" "2026-10-20-link-interview.state.md — 셀 수 없음(읽지 못했다(" "링크는 따라가지 않는다"
+assert_contains "$out" "2026-10-20-pipe-context.state.md — 셀 수 없음(일반 파일이 아니다)" "사유: 일반 파일이 아니다"
+assert_contains "$out" "2026-10-20-link-context.state.md — 셀 수 없음(읽지 못했다(" "링크는 따라가지 않는다"
 rm -rf "$STATE_DIR"; mkdir -p "$T/real-interview"; ln -s "$T/real-interview" "$STATE_DIR"
-assert_contains "$(show)" "인터뷰 폴더 경로에 링크가 있다: docs/superpowers/interview" "링크된 인터뷰 폴더는 읽지 않는다"
+assert_contains "$(show)" "의도 폴더 경로에 링크가 있다: docs/superpowers/intent" "링크된 의도 폴더는 읽지 않는다"
 rm -f "$STATE_DIR"
 
 # 변이 — 위 단언들이 이빨을 갖는가
@@ -507,23 +507,23 @@ mutant digits 'value.isdigit() and len(value) <= 9' 'value.isdigit()'
 cp "$REAL/state_path.py" "$T/m-digits/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+    fh.write("---\ntype: context-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-context.state.md"
 out="$(cd "$W" && timed 30 python3 "$T/m-digits/control_plane.py" show </dev/null)"
-assert_contains "$out" "2026-10-18-digits-interview.state.md" "양성 짝: 자릿수 변이 실행이 그 상태 파일을 봤다"
+assert_contains "$out" "2026-10-18-digits-context.state.md" "양성 짝: 자릿수 변이 실행이 그 상태 파일을 봤다"
 case "$out" in *"research_limit 가 수가 아니다"*) no "변이 생존: 자릿수 상한" ;; *) ok "변이 잡힘: 자릿수 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
 mutant cap 'STATE_MAX_BYTES = 1 << 16' 'STATE_MAX_BYTES = 1 << 26'
 cp "$REAL/state_path.py" "$T/m-cap/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-interview.state.md"
+    fh.write("---\ntype: context-state\n  research_limit: " + "9" * 30000000 + "\n---\n")' "$STATE_DIR/2026-10-17-big-context.state.md"
 out="$(cd "$W" && python3 "$T/m-cap/control_plane.py" show </dev/null)"
-assert_contains "$out" "2026-10-17-big-interview.state.md — 셀 수 없음(" "양성 짝: 크기 변이 실행이 그 상태 파일을 봤다"
+assert_contains "$out" "2026-10-17-big-context.state.md — 셀 수 없음(" "양성 짝: 크기 변이 실행이 그 상태 파일을 봤다"
 case "$out" in *"바이트를 넘는다"*) no "변이 생존: 크기 상한" ;; *) ok "변이 잡힘: 크기 상한이 없으면 사유 단언이 RED" ;; esac
 rm -rf "$STATE_DIR"
 mutant nonblock 'os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0)' 'os.O_RDONLY'
 cp "$REAL/state_path.py" "$T/m-nonblock/state_path.py"; mkdir -p "$STATE_DIR"
-mkfifo "$STATE_DIR/2026-10-20-pipe-interview.state.md"
+mkfifo "$STATE_DIR/2026-10-20-pipe-context.state.md"
 out="$(cd "$W" && timed 10 python3 "$T/m-nonblock/control_plane.py" statusline </dev/null)"
 assert_eq "$out" "TIMEOUT" "변이 잡힘: 파이프를 막힘 없이 열지 않으면 상태줄이 멈춘다(시간 단언이 RED)"
 rm -rf "$STATE_DIR"
@@ -706,23 +706,36 @@ mutant short 'return value if len(value) <= 80 else value[:80] + "…"' 'return 
 cp "$REAL/state_path.py" "$T/m-short/state_path.py"; mkdir -p "$STATE_DIR"
 python3 -I -c 'import sys
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write("---\ntype: interview-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-interview.state.md"
+    fh.write("---\ntype: context-state\norchestration:\n  research_dispatches: {a: 1}\n  research_limit: " + "9" * 60000 + "\n---\n")' "$STATE_DIR/2026-10-18-digits-context.state.md"
 out="$(cd "$W" && python3 "$T/m-short/control_plane.py" show </dev/null)"
-assert_contains "$out" "2026-10-18-digits-interview.state.md — 셀 수 없음(" "양성 짝: 줄이기 변이 실행이 그 상태 파일을 봤다"
+assert_contains "$out" "2026-10-18-digits-context.state.md — 셀 수 없음(" "양성 짝: 줄이기 변이 실행이 그 상태 파일을 봤다"
 [ "$(printf '%s\n' "$out" | awk 'length($0) > 400' | wc -l | tr -d ' ')" -gt 0 ] && ok "변이 잡힘: 사유를 줄이지 않으면 줄 길이 단언이 RED" || no "변이 생존: 사유 줄이기"
 rm -rf "$STATE_DIR"
 
-echo "=== 인터뷰 폴더는 기본 브랜치의 레포 설정(R8) ==="
+echo "=== 의도 폴더는 기본 브랜치의 레포 설정(R8) ==="
 cp "$REAL/state_path.py" "$S/state_path.py"
-push_file .devbrew.md "$(printf -- '---\ninterview_dir: notes/iv/\n---')"
-write_state "$W/notes/iv" 2026-10-20-n-interview.state.md 2
-write_state "$STATE_DIR" 2026-10-20-d-interview.state.md 7
+push_file .devbrew.md "$(printf -- '---\nintent_dir: notes/iv/\n---')"
+write_state "$W/notes/iv" 2026-10-20-n-context.state.md 2
+write_state "$STATE_DIR" 2026-10-20-d-context.state.md 7
 out="$(show)"
-assert_contains "$out" "notes/iv/2026-10-20-n-interview.state.md" "설정한 인터뷰 폴더의 상태 파일을 읽는다"
-assert_not_contains "$out" "2026-10-20-d-interview.state.md" "기본 폴더의 상태 파일은 읽지 않는다"
-assert_contains "$(sl)" "인터뷰 조사 4/20" "상태줄도 설정한 폴더의 인터뷰를 센다"
-push_file .devbrew.md "$(printf -- '---\ninterview_dir: /abs/\n---')"
-assert_contains "$(show)" "인터뷰 폴더를 정하지 못했다" "레포 설정이 깨지면 인터뷰 칸에 그 사유를 보인다"
+assert_contains "$out" "notes/iv/2026-10-20-n-context.state.md" "설정한 의도 폴더의 상태 파일을 읽는다"
+assert_not_contains "$out" "2026-10-20-d-context.state.md" "기본 폴더의 상태 파일은 읽지 않는다"
+assert_contains "$(sl)" "컨텍스트 쌓기 조사 4/20" "상태줄도 설정한 폴더의 컨텍스트 쌓기를 센다"
+push_file .devbrew.md "$(printf -- '---\nintent_dir: /abs/\n---')"
+assert_contains "$(show)" "의도 폴더를 정하지 못했다" "레포 설정이 깨지면 컨텍스트 쌓기 칸에 그 사유를 보인다"
+# 새 키와 옛 키가 다른 폴더를 가리키면 둘 다 센다 — 옛 폴더의 옛 꼴 상태 파일도 진행 중이다
+push_file .devbrew.md "$(printf -- '---\nintent_dir: notes/iv/\ninterview_dir: notes/old/\n---')"
+write_state "$W/notes/old" 2026-10-05-o-interview.state.md 3
+out="$(show)"
+assert_contains "$out" "컨텍스트 쌓기: 진행 중 2개" "새 · 옛 폴더에 하나씩이면 둘 다 센다"
+assert_contains "$out" "notes/old/2026-10-05-o-interview.state.md" "옛 폴더의 옛 꼴 상태 파일을 지도에 보인다"
+assert_contains "$(sl)" "컨텍스트 쌓기 조사 5/20 외 1" "상태줄도 둘을 센다(가장 새 것 + 외 1)"
+# 옛 키만 있어 두 폴더가 같으면 한 번만 센다
+push_file .devbrew.md "$(printf -- '---\ninterview_dir: notes/old/\n---')"
+rm -rf "$W/notes/iv"; write_state "$W/notes/old" 2026-10-06-o2-context.state.md 1
+out="$(show)"
+assert_contains "$out" "컨텍스트 쌓기: 진행 중 2개" "두 키가 같은 폴더면 한 번만 센다(그 폴더의 두 꼴 파일 둘)"
+assert_not_contains "$out" "진행 중 4개" "같은 폴더를 두 번 읽지 않는다"
 rm -rf "$STATE_DIR" "$W/notes"; sp_off "$S/state_path.py"
 
 echo "=== AC18 한 출처 — 적은 번호가 있는 브랜치는 이름으로 고르지 않는다 ==="

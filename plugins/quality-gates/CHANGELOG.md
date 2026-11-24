@@ -3,11 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [17.0.1] — 2026-11-24
+## [17.1.1] — 2026-11-24
 
 ### Fixed
 - codex 결과 파서(`scripts/codex_findings_to_yaml.py`, 정본 `shared/codex/`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
 - 문서 비평의 codex 결과 추출기(`scripts/extract_codex_artifact_yaml.py`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 성공 갈래 · 실패 갈래 모두 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 강등(`codex_failed: true`)을 알린다.
+
+## [17.1.0] — 2026-11-24
+
+### Changed
+- 의도 문서 표시의 기본 목록이 여섯 항목으로 `source_intent` 를 더했고, 원문 따라가기가 `source_intent` 와 옛 `source_interview` 두 머리 키를 읽는다. 두 키가 함께 있으면 새 키에 값이 있을 때 새 키만 따라가고, 새 키가 없거나 값이 없으면 옛 키를 따라간다 — 설계문서 길과 바뀐 의도 문서 길이 같은 문서를 고른다.
+- `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS` 를 레포가 직접 정했다면 그 값이 목록 전체를 갈아 끼우므로, 새 설계문서가 의도 문서로 세어지려면 그 목록에 `source_intent` 를 손으로 더해야 한다.
+- intent-critic 의 단계 낱말과 README 의 단계 낱말을 새 이름으로 맞췄다. 다른 팀 기록의 「확인 못 함」 줄 글도 고쳤다.
 
 ## [17.0.0] — 2026-11-24
 

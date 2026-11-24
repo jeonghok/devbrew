@@ -53,7 +53,7 @@ assert_not_contains "$(cat "$T/out.txt")" "team 형식 — " "거절에는 알�
 design_at "$TM/jobs/E1/design.md" "$TM/jobs/E1/sources.md" '| C1 · S1 | 반영 | §1 |'
 ent "$TM/jobs/E1/design.md" "$TM/jobs/E1/sources.md" >/dev/null
 assert_eq "$(tail -n 1 "$T/out.txt")" "bundle-entry: REFUSE" "번호 파일을 --bundle 로: REFUSE"
-assert_contains "$(cat "$T/out.txt")" "type 이 epic-bundle · interview-brief 가 아니다(job-sources)" "번호 파일: 사유는 지금 글 그대로"
+assert_contains "$(cat "$T/out.txt")" "type 이 epic-bundle · context-brief 가 아니다(job-sources)" "번호 파일: 사유는 지금 글 그대로"
 
 # 번호 파일이 없어진 에픽 과제 — 「단순 작업」 으로 건너뛰지 않고 검사 불가(경고 1)
 design_with_source "$I"
