@@ -241,7 +241,8 @@ one "$RES" '결과 줄 끝에 「 · 인증 못 함(<그 사유 글자 그대로
 one "$RES" '결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다' "result-line-cases(Q1): 의도 점검만 읽지 못하면 개수 뒤에 붙인다"
 one "$RES" '결과 파일을 옮기지 못함 · 판을 읽지 못함 · 보낸 범위의 것이 아님' "result-line-cases(Q1): 의도 점검만 읽지 못한 세 경우"
 one "$RES" '이 꼬리는 담당자 보고에 지적 목록이 온 리뷰와, 담당자가 돌아오지 않았어도 보관 폴더의 파일에서 지적을 다시 실은 리뷰(`### 이미 보낸 것` 의 5 의 첫 갈래)에만 붙는다' "result-line-cases(D30 · D33): 의도 점검 꼬리는 지적 목록이 온 리뷰와 보관 파일에서 다시 실은 돌아오지 못한 리뷰에만"
-one "$RES" '담당자가 돌아오지 않았고 다시 실을 파일도 없거나(`### 이미 보낸 것` 의 5 의 둘째 갈래), 돌아왔어도 qg 가 끝까지 돌지 못해 보고에 지적 목록이 없으면(보고 첫머리의 「지적 목록 없음 — …」 줄) 결과 줄 전체를 「셀 수 없음 — <그 자리에서 지휘자가 보이는 사유 문장 그대로>」 로 쓴다' "result-line-cases(D30 · D33): 돌아오지 않았고 다시 실을 파일도 없거나 지적 목록이 없으면 결과 줄 전체가 셀 수 없음"
+one "$RES" '담당자가 돌아오지 않았고 보관 폴더에 `## 판정` 절이 있는 `result.md` 도 없거나(`### 이미 보낸 것` 의 5 의 둘째 갈래), 돌아왔어도 qg 가 끝까지 돌지 못해 보고에 지적 목록이 없으면(보고 첫머리의 「지적 목록 없음 — …」 줄) 결과 줄 전체를 「셀 수 없음 — <그 자리에서 지휘자가 보이는 사유 문장 그대로>」 로 쓴다' "result-line-cases(D30 · D33 · D39): 돌아오지 않았고 판정 절이 있는 result.md 도 없거나 지적 목록이 없으면 결과 줄 전체가 셀 수 없음"
+zero "$WHOLE" '다시 실을 파일도 없거나' "result-line-cases(D39) 음성: 파일이 있기만 하면 다시 싣는다고 읽히던 옛 조건이 없다(양성 짝: 판정 절이 있는 result.md 도 없거나)"
 zero "$WHOLE" '이 꼬리는 담당자 보고에 지적 목록이 온 리뷰에만 붙는다' "result-line-cases(D33) 음성: 돌아오지 못한 리뷰를 꼬리에서 빼던 옛 문장이 없다(양성 짝: 위 줄)"
 zero "$WHOLE" '담당자가 돌아오지 않았거나(`### 이미 보낸 것` 의 5)' "result-line-cases(D33) 음성: 돌아오지 못한 리뷰를 늘 결과 줄 전체 셀 수 없음으로 쓰던 옛 문장이 없다(양성 짝: 5 의 둘째 갈래)"
 one "$RES" '지적 목록 없이 「막는 지적 없음」 으로 쓰지 않는다' "result-line-cases(D30): 지적 목록 없이 막는 지적 없음으로 쓰지 않는다"
@@ -302,20 +303,23 @@ RE="$(lead "$SENT" '**보고 없이 다시 들어왔을 때.**')"
 RE3="$(lead "$SENT" '3. 묻는 중 — ')"
 RE4="$(lead "$SENT" '4. 결과가 왔다 — ')"
 RE5="$(lead "$SENT" '5. 돌아오지 못한 리뷰 — ')"
-RE5A="$(lead "$SENT" '- 그 폴더에 `findings-pre-merge.yaml` 이나 `result.md` 가 있으면')"
-RE5B="$(lead "$SENT" '- 둘 다 없으면 결과 줄 전체를')"
+RE5A="$(lead "$SENT" '- 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있으면')"
+RE5B="$(lead "$SENT" '- 그런 `result.md` 가 없으면')"
 for pair in "다시 싣는 문단:$RE" "갈래 3:$RE3" "갈래 4:$RE4" "갈래 5:$RE5" "갈래 5 의 첫 갈래:$RE5A" "갈래 5 의 둘째 갈래:$RE5B"; do
   [ -n "${pair#*:}" ] && ok "reenter-without-report: 이미 보낸 것의 줄을 읽었다: ${pair%%:*}" || no "reenter-without-report: 이미 보낸 것의 줄이 없다 — 아래 단언이 공허하다: ${pair%%:*}"
 done
 for lit in '담당자 마지막 보고가 대화에 없이 다시 들어왔으면(압축 · 새 세션 뒤) — 갈래 3 · 4 · 5 어느 쪽이든 — 맥락 머리 결과 줄(`### 결과 글`)의 개수와 지적 목록(막는 지적은 원문까지)을 그 폴더의 `findings-pre-merge.yaml` 에서 보내는 글의 `지적 목록:` 규칙과 같은 꼴로 다시 싣는다' \
            '새로 깨진 테스트는 그 폴더의 `result.md` 의 `### 차등 회귀` 에서 싣는다' \
            '그 파일이 없으면 그 폴더의 `result.md` 의 고칠 목록에서 싣고 「합쳐지기 전 목록 없이 실었다 — 같은 줄의 지적이 하나로 합쳐졌을 수 있다」 를 보인다' \
-           '둘 다 없으면 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다 — 지적 목록 없이 「막는 지적 없음」 으로 쓰지 않는다' \
+           '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다 — 그 폴더의 `result.md` 에 `## 판정` 절이 없거나(qg 가 끝까지 돌지 못했다 — `findings-pre-merge.yaml` 이 남았어도 판정 앞에서 멈춘 실행이다) `result.md` 가 없으면(끝까지 돌았는지 알 수 없다) 개수를 쓰지 않고 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다 — 지적 목록 없이 「막는 지적 없음」 으로 쓰지 않는다' \
            '머지 앞 자리에서 PR 본문 `## qg 리뷰` 에 아직 막는 지적 목록이 없으면 이때 그 파일에서 막는 지적의 원문을 적는다'; do
   one "$RE" "$lit" "reenter-without-report: 다시 싣는 문단에 ${lit}"
 done
 in_order "$RE" "reenter-without-report: 합쳐지기 전 목록 → result.md → 셀 수 없음 차례" \
-  '그 폴더의 `findings-pre-merge.yaml` 에서' '그 파일이 없으면 그 폴더의 `result.md`' '둘 다 없으면 결과 줄 전체를'
+  '그 폴더의 `findings-pre-merge.yaml` 에서' '그 파일이 없으면 그 폴더의 `result.md`' '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다'
+# 다시 싣기는 「파일이 있나」 가 아니라 판정 절이 있는 result.md 로 가른다(재리뷰 2회차 M1 · D39) — qg 는 시작 때 머리만 든 result.md 를 만들고 절은 끝에서 붙인다
+zero "$WHOLE" '둘 다 없으면 결과 줄 전체를' "reenter-finished-only(D39) 음성: 두 파일이 모두 없을 때만 셀 수 없음이던 옛 조건이 없다(양성 짝: 판정 절이 있는 result.md 가 있을 때뿐)"
+zero "$WHOLE" '`findings-pre-merge.yaml` 이나 `result.md` 가 있으면' "reenter-finished-only(D39) 음성: 파일이 있기만 하면 다시 싣던 갈래 5 의 옛 조건이 없다(양성 짝: 판정 절이 있는 result.md 가 있으면)"
 one "$WHOLE" '`지적 목록:` 규칙과 같은 꼴로 다시 싣는다' "reenter-without-report: 다시 싣는 규칙은 파일에 한 번 — 그 문단에만"
 # 갈래 3 · 4 는 그 문단을 가리키기만 한다 — 다시 싣는 글자는 갈래 줄에 없다
 PTR='담당자 마지막 보고가 대화에 없으면 결과 줄과 지적 목록은 아래 「보고 없이 다시 들어왔을 때」 대로 싣는다.'
@@ -327,11 +331,12 @@ done
 assert_eq "$RE4" "4. 결과가 왔다 — 그 폴더 안에 \`intent-return.md\` 가 있으면 그 파일로 \`## 돌아왔을 때\` 를 잇는다. ${PTR}" "reenter-without-report(N1): 갈래 4 는 처음 한 문장과 가리키는 한 문장뿐"
 # 갈래 5 를 둘로 — 보관 파일이 남았으면 다시 싣고 의도 점검 꼬리, 둘 다 없을 때만 결과 줄 전체 셀 수 없음
 one "$RE5" '결과 줄은 그 폴더에 남은 파일로 가른다.' "reenter-without-report(N1): 갈래 5 가 결과 줄을 남은 파일로 가른다"
-one "$RE5A" '아래 「보고 없이 다시 들어왔을 때」 대로 지적을 다시 싣고 결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다 — `## 돌아왔을 때` 의 1 의 첫 갈래와 같은 쪽이고, `<사유>` 는 위에서 보인 줄 그대로다.' "reenter-without-report(N1 · D33): 파일이 남은 돌아오지 못한 리뷰는 다시 싣고 의도 점검 꼬리"
-assert_eq "$RE5B" '- 둘 다 없으면 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다.' "reenter-without-report(N1 · D33): 둘 다 없을 때만 결과 줄 전체가 셀 수 없음"
+one "$RE5A" '아래 「보고 없이 다시 들어왔을 때」 대로 지적을 다시 싣고 결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다 — `## 돌아왔을 때` 의 1 의 첫 갈래와 같은 쪽이고, `<사유>` 는 위에서 보인 줄 그대로다.' "reenter-without-report(N1 · D33 · D39): 판정 절이 있는 result.md 가 남은 돌아오지 못한 리뷰는 다시 싣고 의도 점검 꼬리"
+one "$RE5A" '`<사유>` 는 위에서 보인 줄 그대로다. 머지 앞 자리면 다시 실은 막는 지적은 `## 되돌리기` 로 간다.' "reenter-without-report(D39): 머지 앞 자리면 다시 실은 막는 지적이 되돌리기로 간다"
+assert_eq "$RE5B" '- 그런 `result.md` 가 없으면(`result.md` 가 없거나 `## 판정` 절이 없다 — `findings-pre-merge.yaml` 이 남았어도 같다) 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다.' "reenter-without-report(N1 · D39): 판정 절이 있는 result.md 가 없으면 합쳐지기 전 목록이 남았어도 결과 줄 전체가 셀 수 없음"
 n5="$(printf '%s\n' "$SENT" | grep -nF '5. 돌아오지 못한 리뷰 — ' | head -1 | cut -d: -f1)"
-n5a="$(printf '%s\n' "$SENT" | grep -nF -- '   - 그 폴더에 `findings-pre-merge.yaml` 이나' | head -1 | cut -d: -f1)"
-n5b="$(printf '%s\n' "$SENT" | grep -nF -- '   - 둘 다 없으면 결과 줄 전체를' | head -1 | cut -d: -f1)"
+n5a="$(printf '%s\n' "$SENT" | grep -nF -- '   - 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있으면' | head -1 | cut -d: -f1)"
+n5b="$(printf '%s\n' "$SENT" | grep -nF -- '   - 그런 `result.md` 가 없으면' | head -1 | cut -d: -f1)"
 nre="$(printf '%s\n' "$SENT" | grep -nF '**보고 없이 다시 들어왔을 때.**' | head -1 | cut -d: -f1)"
 nnx="$(printf '%s\n' "$SENT" | grep -nF '그다음 새로 보낼지를 자리마다 가린다.' | head -1 | cut -d: -f1)"
 if [ -n "$n5" ] && [ -n "$n5a" ] && [ -n "$n5b" ] && [ -n "$nre" ] && [ -n "$nnx" ] && [ "$n5" -lt "$n5a" ] && [ "$n5a" -lt "$n5b" ] && [ "$n5b" -lt "$nre" ] && [ "$nre" -lt "$nnx" ]; then
@@ -341,8 +346,8 @@ else
 fi
 # 다시 싣는 문단의 「합쳐지기 전 목록 없이 실었다」 줄은 지적이 하나도 없으면 보이지 않는다(D31 과 같은 뜻 · 재리뷰 N2)
 one "$RE" '지적이 하나도 없는 실행(합성 단계에 닿지 않아 그 파일이 없는 실행)에는 이 줄을 보이지 않는다 — 합쳐졌을 지적이 없다.' "reenter-no-findings(N2 · D31): 지적이 하나도 없으면 다시 싣는 화면에도 합쳐지기 전 목록 없이 실었다 줄이 없다"
-in_order "$RE" "reenter-no-findings(N2): 합쳐지기 전 목록 없이 실었다 → 지적 없으면 보이지 않음 → 둘 다 없으면 차례" \
-  '같은 줄의 지적이 하나로 합쳐졌을 수 있다」 를 보인다.' '지적이 하나도 없는 실행' '둘 다 없으면 결과 줄 전체를'
+in_order "$RE" "reenter-no-findings(N2): 합쳐지기 전 목록 없이 실었다 → 지적 없으면 보이지 않음 → 판정 절이 있는 result.md 로 가르기 차례" \
+  '같은 줄의 지적이 하나로 합쳐졌을 수 있다」 를 보인다.' '지적이 하나도 없는 실행' '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다'
 # 묻기의 압축 뒤 문장도 그 문단을 가리킨다
 one "$ASK" '압축이나 새 세션 뒤에는 그 줄의 보관 폴더에서 `intent-return.md` 를 다시 읽어 묻는다 — 맥락 머리의 결과 줄과 지적 목록은 `### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」 대로 싣는다.' "reenter-without-report(N1): 묻기의 압축 뒤 문장이 다시 싣는 문단을 가리킨다"
 # reenter-tail-and-notice (D33 지휘자 답) — 보고 없이 다시 실을 때 인증 못 함 꼬리의 출처와 화면의 한 줄
@@ -351,11 +356,12 @@ one "$RE" '맥락 머리 바로 아래에 「담당자 보고 없이 보관 파�
 one "$RE" '빠진 채 돌았다는 알림 줄은 담당자 보고에만 있던 것이라 다시 짓지 않는다' "reenter-tail-and-notice: 보고에만 있던 알림 줄은 다시 짓지 않는다"
 one "$WHOLE" '담당자 보고 없이 보관 파일에서 다시 실었다 — ' "reenter-tail-and-notice: 그 줄은 파일에 한 번 — 다시 싣는 문단에만"
 in_order "$RE" "reenter-tail-and-notice: 셀 수 없음 갈래 → 다시 실었을 때의 꼬리 · 한 줄 → PR 본문 차례" \
-  '둘 다 없으면 결과 줄 전체를' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서 PR 본문'
-one "$BACK" '예외는 둘이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」)와, 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`), 그리고 보인 지적을 후속 PR 의 고칠 목록이나 지휘 기록에 올릴 때(`### 결과 글` 의 「보인 지적을 받는 길」 과 그 아래 두 문단)는 보관 폴더의 `findings-pre-merge.yaml` 과 보관한 `result.md` 를 읽는다 — 어느 파일에서 무엇을 읽는지는 그 자리가 적는다.' "reenter-without-report(N1 · N3): 돌아왔을 때가 보관 파일을 읽는 예외 둘을 적는다 — 다시 싣는 문단 · 고르기와 되올리기 · 후속 PR 과 지휘 기록"
+  '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서 PR 본문'
+one "$BACK" '예외는 셋이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」)와, 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`), 그리고 보인 지적을 후속 PR 의 고칠 목록이나 지휘 기록에 올릴 때(`### 결과 글` 의 「보인 지적을 받는 길」 과 그 아래 두 문단)는 보관 폴더의 `findings-pre-merge.yaml` 과 보관한 `result.md` 를 읽는다 — 어느 파일에서 무엇을 읽는지는 그 자리가 적는다.' "reenter-without-report(N1 · N3): 돌아왔을 때가 보관 파일을 읽는 예외 셋을 적는다 — 다시 싣는 문단 · 고르기와 되올리기 · 후속 PR 과 지휘 기록"
+zero "$WHOLE" '예외는 둘이다' "reenter-without-report 음성: 셋을 둘이라 세던 옛 낱말이 없다(양성 짝: 예외는 셋이다)"
 zero "$WHOLE" '(없으면 보관한 `result.md`)을 읽는다' "back-exception-files(낱말) 음성: result.md 를 yaml 이 없을 때만 읽는다던 옛 괄호가 없다 — 다시 싣는 길은 yaml 이 있어도 result.md 를 읽는다(양성 짝: 위 줄의 「과 보관한 result.md 를 읽는다」)"
 zero "$WHOLE" '이미 보낸 것` 의 4)' "reenter-without-report(N1) 음성: 다시 싣기를 갈래 4 로 가리키던 옛 괄호가 없다(양성 짝: 「보고 없이 다시 들어왔을 때」 를 가리키는 괄호)"
-zero "$WHOLE" 'qg 본문을 읽지 않는다. 아래를 차례로 본다.' "reenter-without-report 음성: 예외 없이 intent-return.md 만 읽던 옛 문장이 없다(양성 짝: 예외는 둘이다)"
+zero "$WHOLE" 'qg 본문을 읽지 않는다. 아래를 차례로 본다.' "reenter-without-report 음성: 예외 없이 intent-return.md 만 읽던 옛 문장이 없다(양성 짝: 예외는 셋이다)"
 # carry-original-onward (재리뷰 N3 · D33 의 둘째 예외를 넓힘) — 후속 PR 의 고칠 목록 · 지휘 기록에 올리는 지적도 보관 폴더의 원문을 싣는다
 ORIG='올리는 글은 그 항목의 원문을 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md` 의 그 줄)에서 읽어 싣는다.'
 RWAY="$(lead "$RES" '**보인 지적을 받는 길.**')"
@@ -429,5 +435,13 @@ assert_contains "$RD" '`--answered` 파일은 그 로드맵의 지난 리뷰 기
 assert_contains "$RD" '질문마다 왜 묻는지를, 다시 묻는 질문에는 전에 한 답도 함께 보여 묻는다' "readme-matches-behavior: 전에 한 답은 다시 묻는 질문에만"
 assert_not_contains "$RD" '같은 대상에 전에 한 답을 지난 리뷰 기록에서 모아' "readme-matches-behavior 음성: 같은 대상의 답만 모은다던 옛 문장이 없다(양성 짝: 대상을 가리지 않고)"
 assert_not_contains "$RD" '왜 묻는지와 전에 한 답을 함께 보여' "readme-matches-behavior 음성: 질문마다 전에 한 답을 보인다던 옛 문장이 없다(양성 짝: 다시 묻는 질문에는)"
+
+# changelog-reenter-finished (재리뷰 2회차 M1 · D39) — 9.2.0 절이 판정 절로 가르는 고침과 앞 고침의 결정 번호를 적는다
+CL920="$(awk '/^## \[9\.2\.0\]/{on=1; next} on && /^## \[/{exit} on' "$ROOT/plugins/spec-distill/CHANGELOG.md")"
+[ -n "$CL920" ] && ok "changelog-reenter-finished: 9.2.0 절을 읽었다" || no "changelog-reenter-finished: 9.2.0 절이 비었다 — 아래 단언이 공허하다"
+one "$CL920" '보고 없이 다시 싣는 것은 보관한 `result.md` 에 `## 판정` 절이 있을 때뿐이다' "changelog-reenter-finished(D39): 판정 절이 있을 때만 다시 싣는다는 줄"
+one "$CL920" '되돌리기로 간다(결정 기록 D39).' "changelog-reenter-finished(D39): 그 줄이 D39 를 가리킨다"
+one "$CL920" '`- 답 원문:` 줄을 가리킨다(결정 기록 D33 · D38).' "changelog-reenter-finished(D38): 갈래 3 · 4 · 5 고침 줄이 D33 · D38 을 가리킨다"
+zero "$CL920" '`- 답 원문:` 줄을 가리킨다(결정 기록 D33).' "changelog-reenter-finished(D38) 음성: 그 줄이 D33 만 가리키던 옛 번호가 없다(양성 짝: D33 · D38)"
 
 finish
