@@ -166,7 +166,7 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 
 ### Task 2: 글자 그대로 옮기기(옮기는 커밋)
 
-설계 §1.9 의 옮기는 커밋이다 — 글은 한 글자도 고치지 않고, 락은 대상 경로만 바꾼다.
+설계 §1.9 의 옮기는 커밋이다 — 글은 한 글자도 고치지 않고, 락은 대상 경로만 바꾼다. AC4(옮긴 커밋에서 글자로 같다) · AC8(걸음 번호에 묶인 락 넷 · 서로를 절 제목으로 가리키는 문장의 락 · 세션 꼬리 펜스 락이 새 자리에서 같은 것을 지키고, 단언 수가 줄지 않는다).
 
 **Files:**
 - Create: `references/conducting-step-1.md` ~ `conducting-step-7.md` · `references/conducting-resume.md` · `references/conducting-team.md` · `references/conducting-manual.md` · `tests/conducting_corpus.sh`
@@ -449,7 +449,7 @@ cd "<root>" && python3 "$SD/scripts/conductor_sync.py" --roadmap "<로드맵>"
 
 ### Task 10: 판 번호 · CHANGELOG · README · 바이트 앞뒤
 
-설계 AC34 · AC13(PR 본문 바이트) · §6(기본 브랜치 합치기 뒤 PR #332 줄 확인).
+설계 AC34 · AC13(PR 본문 바이트) · §6(기본 브랜치 합치기 뒤 PR #332 줄 확인). AC35(머지 뒤 새 세션에서 맞추기 끝까지의 맥락 토큰과 읽은 바이트를 재 지휘 기록에 적기)는 리더가 한다 — 이 과제는 하지 않고, Step 5 의 바이트 표가 리더가 견줄 앞 값(2026-11-24 의 174KB)과 같은 기준의 수를 남긴다.
 
 **Files:**
 - Modify: `.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md`
