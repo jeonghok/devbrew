@@ -419,7 +419,13 @@ MARKERS = list(ot.io_.DEFAULT_MARKERS)
 CAP = 80000
 ALWAYS = ("- 원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다",
           "- 다른 컴퓨터 · 올리지 않은 작업은 볼 수 없음")
-INTERVIEW = "- 인터뷰 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다"
+INTERVIEW = "- 컨텍스트 쌓기 단계의 팀은 확인 못 함 — 그 문서의 표시가 설정에 없다"
+
+
+class TestLineInterviewWords(unittest.TestCase):
+    def test_line_interview_words(self):
+        self.assertIn("컨텍스트 쌓기", ot.LINE_INTERVIEW)
+        self.assertNotIn("인터뷰", ot.LINE_INTERVIEW)
 
 
 def _no_prs(repo):

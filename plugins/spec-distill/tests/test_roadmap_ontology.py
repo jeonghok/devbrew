@@ -19,6 +19,7 @@ from roadmap_model import FIELDS, FORBIDDEN, REQUIRED, section_body  # noqa: E40
 from roadmap_render import BUNDLE_FORMAT  # noqa: E402
 from conductor_mail import HEAD_KEYS  # noqa: E402  — 편지 머리의 칸 이름이 링크 이름이다
 from conductor_state import COLUMNS  # noqa: E402
+import legacy_names  # noqa: E402  — 설계문서 머리 키(새 키 · 옛 키)
 from repo_defaults import COUNT_KEYS, DIR_KEYS, TEXT_KEYS  # noqa: E402
 from repo_defaults import KEYS as SETTING_KEYS  # noqa: E402  — 레포 설정의 닫힌 키 집합
 
@@ -63,7 +64,7 @@ def frontmatter_keys() -> set:
 
 
 KEYS = (frontmatter_keys() | set(DIR_KEYS) | set(TEXT_KEYS) | set(COUNT_KEYS) | set(SETTING_KEYS)
-        | {"source_brief", "source_interview", "roadmap"} | set(HEAD_KEYS))
+        | {"source_brief", "roadmap"} | set(legacy_names.head_keys()) | set(HEAD_KEYS))
 
 
 def link_ok(token: str, corpus: str) -> bool:

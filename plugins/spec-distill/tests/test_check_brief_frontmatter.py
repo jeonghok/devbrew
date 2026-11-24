@@ -59,7 +59,7 @@ class OtherAxesStillBite(unittest.TestCase):
 
     def test_broken_type_still_fails(self):
         text = VALID.replace("type: interview-brief", "type: something-else")
-        self.assertIn("type != interview-brief", errs(text))
+        self.assertIn("type != context-brief", errs(text))
 
     def test_missing_user_sourced_items_still_fails(self):
         text = VALID.replace("user_sourced_items:\n  - id: S1\n", "")

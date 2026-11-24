@@ -202,8 +202,9 @@ for var in 'PAYLOAD=' 'AUDIT='; do
 done
 # 엔진은 상대 --doc 을 doc_not_absolute 로 거부한다. callee 도 상대를 절대로 고치지만,
 # 호출자가 절대로 넘기면 두 셸의 cwd 가 달라도 같은 문서를 가리킨다.
-grep -qE '^[[:space:]]*PAYLOAD="\$\(pwd\)/' <<<"$WA5_BASH" \
-  && ok "A.5가 PAYLOAD 를 절대경로(\$(pwd)/…)로 세운다" \
+grep -qE '^[[:space:]]*PAYLOAD="\$\{STATE_F%\.state\.md\}\.md"' <<<"$WA5_BASH" \
+  && grep -qF 'case "$STATE_F" in /*.state.md) ;; *)' <<<"$WA5_BASH" \
+  && ok "A.5가 PAYLOAD 를 절대경로(절대경로만 받는 상태 파일의 줄기)로 세운다" \
   || no "A.5의 PAYLOAD 가 상대경로다 — 엔진은 상대 문서 경로를 거부한다"
 
 # --- Step A 게이트·종료 조건 불변 (회귀 락) ---------------------------------
