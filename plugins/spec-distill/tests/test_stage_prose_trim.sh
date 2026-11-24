@@ -9,6 +9,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 NUM_FILES=(
   plugins/spec-distill/skills/context-build/SKILL.md
+  plugins/spec-distill/skills/context-build/references/finishing.md
   plugins/spec-distill/skills/roadmap-draft/SKILL.md
   plugins/spec-distill/skills/roadmap-draft/references/pr-merge.md
 )
@@ -105,5 +106,19 @@ has   "$CB" '해결돼도 목록에서 지우지 않는다' "AC31 ⑨: 해결된
 has   "$CB" 'subagent 에 넘기는 플러그인 파일은 경로가 아니라 내용으로 싣는다' "AC31 ⑤: 플러그인 파일은 내용으로 싣는다"
 has   "$CB" '웹 kill switch 는 dispatch 자리마다 따로 확인한다' "AC31 ⑦: 끄는 변수를 dispatch 자리마다 확인한다"
 has   plugins/spec-distill/skills/context-build/references/state-file.md '리뷰 결정 문구는 그렇게 정했다는 사실과 뜻까지만 읽는다' "글 일곱 ⑦: 컨텍스트 쌓기의 원자료 읽기도 리뷰 결정 문구를 뜻까지만 읽는다"
+
+# ── 끝맺음 절차 (과제 3) ──────────────────────────────────────────────────────────────
+FIN=plugins/spec-distill/skills/context-build/references/finishing.md
+lacks "$FIN" '5-section' "AC29 ①: audit 를 「5-section」 이라 부르지 않는다"
+has   "$FIN" 'audit 템플릿의 절 구조를 확보' "AC29 ①(양의 짝): audit 구조를 템플릿으로 가리킨다"
+has   "$FIN" '`advice-list` 는 읽기 전용이다' "AC29 ⑩(양의 짝): 끝난 일 문장을 걷고도 읽기 전용 문장은 남는다"
+lacks "$FIN" '두 경우에 온다' "「두 경우」 머리: B-S 로 오는 자리를 수로 적지 않는다"
+has   "$FIN" 'B-S 로 오는 자리' "「두 경우」 머리(양의 짝): B-S 로 오는 자리를 이름으로 든다"
+has   "$FIN" '읽어 보기까지 돈 뒤 Step B 를 B-0 부터 다시 돈다' "「두 경우」: 나눈 일 갈래 뒤에 돌아갈 자리가 있다"
+lacks "$FIN" 'brief terminal' "④: 정의 없는 「terminal advisory」 가 없다"
+has   "$FIN" '설계(brainstorming)로 넘기지 않는다' "글 일곱 ②: ④ 가 넘기지 않는다는 것을 로드맵 잡기 줄과 가른다"
+has   "$FIN" '작업 트리 루트: <루트 절대경로>' "글 일곱 ⑤: 공백 든 경로 안내에 루트 절대경로가 나간다"
+has   "$FIN" '그 상대경로에도 공백이 있으면' "글 일곱 ⑤: 상대경로 쪽 공백의 갈래가 있다"
+has   "$FIN" '🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론' "§6 범례: 끝맺음 글에 표시 규칙 범례가 있다"
 
 finish

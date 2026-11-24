@@ -228,7 +228,7 @@ for w in 1 2; do
 done
 
 # C5: 규약은 brief가 아니라 호출 프롬프트(= 다음 세션 줄)에 산다
-c5_par="$(awk '/^\*\*규약의 거처 \(C5\)\.\*\*/{f=1} f&&/^$/{exit} f' <<<"$b3_block")"
+c5_par="$(awk '/^\*\*규약의 거처\.\*\*/{f=1} f&&/^$/{exit} f' <<<"$b3_block")"
 grep -qE '호출 프롬프트|invocation prompt' <<<"$c5_par" \
   && ok "C5: 규약의 거처가 호출 프롬프트로 명시됨" \
   || no "C5: 규약이 brief에 실리지 않는다는 명시가 없다"
@@ -1247,7 +1247,7 @@ while :; do
   [ -n "$_hit" ] || break
   _rest="${_rest#*"$_hit"}"
   fin_rule_n=$((fin_rule_n + 1))
-  _c="$_hit${_rest%%(*}"
+  _c="$_hit${_rest%%. *}"
   _c="$(printf '%s' "$_c" | sed -e 's/[[:space:]]*$//')"
   if [ "$_c" != "$fin_formula_canon" ]; then
     fin_rule_bad=$((fin_rule_bad + 1)); fin_rule_got="$_c"
