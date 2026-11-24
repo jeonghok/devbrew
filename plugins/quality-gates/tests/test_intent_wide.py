@@ -819,6 +819,34 @@ class TestHeadValues(unittest.TestCase):
                          (False, ["차등 결과를 읽지 못함 — 근거로 세지 않았다"]))
 
 
+class TestHeadKeyPrecedence(unittest.TestCase):
+    """바뀐 의도 문서의 머리 키 — 새 키가 있고 비어 있지 않으면 새 키만, 아니면 옛 키(세 길이 같은 문서를 고른다)."""
+
+    def _origin(self, head):
+        with tempfile.TemporaryDirectory() as d:
+            tic._git_repo(d)
+            tic._write(head, d, "docs", "changed.md")
+            tic._write("## 6. 사용자 원문\nnew-token\n", d, "docs", "new.md")
+            tic._write("## 6. 사용자 원문\nold-token\n", d, "docs", "old.md")
+            _ok(d, "add", "docs")
+            _ok(d, "commit", "-q", "-m", "heads")
+            return io_.build_origin(d, "HEAD", "HEAD", None, [], changed_docs=["docs/changed.md"])["origin"]
+
+    def test_both_keys_follow_only_new(self):
+        o = self._origin(tic._fm(source_intent="docs/new.md", source_interview="docs/old.md"))
+        self.assertIn("new-token", o)
+        self.assertNotIn("old-token", o)
+
+    def test_empty_new_key_follows_old(self):
+        o = self._origin(tic._fm(source_intent='""', source_interview="docs/old.md"))
+        self.assertIn("old-token", o)
+        self.assertNotIn("new-token", o)
+
+    def test_only_old_key_follows_old(self):
+        o = self._origin(tic._fm(source_interview="docs/old.md"))
+        self.assertIn("old-token", o)
+
+
 class TestAnswerOddValues(unittest.TestCase):
     def test_answer_file_odd_values_unreadable(self):
         with tempfile.TemporaryDirectory() as rd:
