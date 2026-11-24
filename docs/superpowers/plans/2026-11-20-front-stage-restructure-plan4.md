@@ -67,6 +67,8 @@
 | `plugins/spec-distill/tests/test_raw_source.py` | #330 이 `team_write.py` 의 `FRAMING_TYPE` 을 `team_check.py` 로 옮긴다 — 이 시험의 `theirs` 도우미가 `team_write.FRAMING_TYPE` 을 읽는다(과제 1 이 그때 `theirs` 가 도는지 본다. 돌지 않으면 그 PR 이 남긴 자리의 상수를 읽게 고치는 것까지만 한다) | `class InterviewMode` · `class ParityWithTeamWrite` 에 시험 더하기 | 3 |
 | `plugins/spec-distill/tests/test_start_bundle.sh` · `test_team_sync.sh` | (스크립트 `start_bundle.py` 는 E1 · E3 예약 — 이 계획은 스크립트를 고치지 않고 시험의 기대 글자만) | `쓸 자리: 사용자 선호:` 넷 · `사용자 선호: 설계문서는` · `사용자 선호: 계획은` | 2 |
 
+2026-11-25 과제 1 의 다시 읽기(기준 c95bae8b): #326 · #330 은 머지됐다 — `theirs` 는 지금 돈다(`team_write.FRAMING_TYPE` 이 `team_check` 의 것을 가리킨다). 열린 PR 은 #327 · #334 · #335 이고 #327 은 `test_roadmap_draft_skill.sh` 를 고치지 않는다. 수리 브랜치(origin 끝 8322170a)는 `test_roadmap_draft_skill.sh` 의 다른 자리 · `test_roadmap_draft_entry.py` 의 `TestEntry` 끝(시험 넷) · `roadmap_draft_entry.py` 의 상태 파일 판정 줄 · `finishing.md` 의 같은 불릿 앞부분과 펜스 rc 줄을 고친다 — 이 계획의 grep 글자와 겹치지 않고 인접한다. 판은 #327 · #335 가 spec-distill 9.3.1, 수리 브랜치가 9.3.2 다.
+
 `roadmap_write.py`(E4 예약 · 수리 브랜치 후보) · `team_write.py`(E4 예약 · #330) · `references/team-files.md`(E4 · #330) 는 이 계획이 고치지 않는다. 과제 3 이 `team_write._framing_from_state` 와 갈라지는 점을 `raw_source.py` 의 docstring 과 시험에 적는다 — 옆 로드맵에 알린다.
 
 ## 계획 2 · 3 과 같은 자리를 고치는 곳(순서에 기댄다)
