@@ -137,6 +137,18 @@ class Foreign(TeamRepo):
         mine = self.write({self.team.rules: "- 내 줄\n"}).commit
         self.assertEqual(TS.foreign_commits(RS.Git(str(self.w)), mine, self.trust(), TS.rules_paths(self.team)), [])
 
+    def test_own_and_foreign_partition_the_edits_since(self):   # AC5 — 둘은 겹치지 않고 합치면 `edits_since`
+        git, paths = RS.Git(str(self.w)), TS.rules_paths(self.team)
+        mine = self.write({self.team.rules: "- 내 줄\n"}).commit
+        theirs = self.foreign_edit("o3", {self.team.rules: "- 남의 줄\n"})
+        all_ = TS.edits_since(git, self.tip(), self.trust(), paths)
+        own, foreign = TS.own_commits(git, self.tip(), self.trust(), paths), TS.foreign_commits(git, self.tip(), self.trust(), paths)
+        self.assertEqual([c for c, _p in all_], [mine, theirs])   # 양성 대조 — 둘 다 있다
+        self.assertEqual([c for c, _p in own], [mine])
+        self.assertEqual([c for c, _p in foreign], [theirs])
+        self.assertEqual(sorted(own + foreign), sorted(all_))
+        self.assertIsNone(TS.own_commits(git, "f" * 40, self.trust(), paths))
+
     def test_git_failure_or_missing_base_is_none_not_empty(self):
         git = RS.Git(str(self.w))
         self.assertIsNone(TS.foreign_commits(git, "f" * 40, self.trust(), TS.rules_paths(self.team)))
@@ -603,6 +615,30 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
         LS.rules_edit(str(self.w), rm(ALPHA), SID, add=NEW)   # 다시 열린다
 
+    def listed(self):   # show 가 재는 함수 그대로 — 이 기계가 쓴 것으로 적힌 고침 목록
+        return CST._edits(str(self.w), rm(ALPHA), self.team, self.tip())[1]
+
+    def test_reset_keeps_the_trust_base_while_an_own_pending_edit_is_unshown(self):   # AC5 — 대기 줄 `씀` 을 심음 → rules-reset
+        self.foreign_edit()
+        planted = self.foreign_edit("o2", {self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
+        CB.record_own(str(self.w), rm(ALPHA), SID, [planted])
+        self.assertEqual(LS.foreign(str(self.w), rm(ALPHA), self.tip(), TS.pending_paths(self.team)), [])   # 양성 대조 — 남의 고침으로는 안 센다
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertIsNone(CB.read(str(self.w), self.tip(), self.team.rules))   # 사본은 지웠다
+        self.assertEqual(res.notes[-1], LS.RESET_OWN_LEFT)
+        self.assertNotIn(LS.RESET_DONE, res.notes)
+        self.assertNotIn("확인", [r["까닭"] for r in self.rows()])
+        self.assertIn("  %s · %s" % (planted[:8], self.team.path(CB.PENDING_FILE)), CST.own_lines(self.listed()))
+
+    def test_reset_still_folds_over_own_rules_side_edits(self):   # 양성 대조 — 규칙 쪽 `씀` 은 reset 이 사본과 함께 되돌린다
+        self.foreign_edit()
+        planted = self.foreign_edit("o2")
+        CB.record_own(str(self.w), rm(ALPHA), SID, [planted])
+        res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
+        self.assertEqual(res.notes[-1], LS.RESET_DONE)
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(self.tip(), "확인")])
+        # `씀` 이 없으면 지금처럼 접는다 — test_reset_withdraws_a_foreign_rule_edit 가 잰다
+
     def test_reset_keeps_the_trust_base_when_pending_has_foreign_lines(self):   # F3 — 양성 단언: 사본은 지웠고 대기 줄 쪽 알림이 났다
         self.foreign_edit("o1", {self.team.rules: "- [남] r\n", self.team.path(CB.PENDING_FILE): "- A1 · 지휘 기록 · 남\n"})
         res = LS.rules_edit(str(self.w), rm(ALPHA), SID, reset=True)
@@ -665,6 +701,24 @@ class Confirm(TeamRepo):   # R3 AC21 · Review Focus 1 · I4 · I10 · M36
         self.write({self.team.status: "y\n"})
         self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
         self.assertEqual([r["까닭"] for r in self.rows()], ["확인"])
+
+    def test_settle_keeps_own_watched_edits_and_trims_only_abandoned_rows(self):   # AC5 · 마지막 리뷰 C1 — 접기를 미룬다
+        mine = self.write({self.team.rules: TEAM_RULE + "\n- [나] 내 줄\n"}).commit
+        abandoned = self.g("rev-parse", "origin/trunk")   # 범위 밖 커밋 — 다시 만들기로 버려진 `씀` 줄 흉내
+        path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))
+        data = cs.load(path, rm(ALPHA))
+        data[cs.TRUST] += [{"끝": abandoned, "까닭": "씀", "때": CB.stamp(), "세션": SID}]
+        cs.save(path, rm(ALPHA), data, SID)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)   # 반환값은 그대로 남의 고침 수다
+        ends = [(r["끝"], r["까닭"]) for r in self.rows()]
+        self.assertIn((mine, "씀"), ends)
+        self.assertNotIn((abandoned, "씀"), ends)
+        self.assertNotIn("확인", [w for _e, w in ends])
+        tip, notes = LS.confirm(str(self.w), rm(ALPHA), SID)
+        self.assertEqual(notes, (LS.NOTHING_TO_CONFIRM, CST.OWN_EDITS % 1, "  %s · %s" % (mine[:8], self.team.rules), LS.CONFIRM_TIP % tip))
+        LS.confirm(str(self.w), rm(ALPHA), SID, tip)
+        self.assertEqual(LS.settle(str(self.w), rm(ALPHA), SID, self.tip()), 0)
+        self.assertEqual([(r["끝"], r["까닭"]) for r in self.rows()], [(tip, "확인")])   # 확인 뒤에는 접힌다
 
     def test_unreadable_machine_state_is_three(self):   # I11 — confirm 이 기계 상태를 읽지 못하면
         path = cs.machine_path(state_root(str(self.w)), rm(ALPHA))

@@ -52,6 +52,11 @@ for lit in '### 계획 agent' '### 구현 agent' '### 이어 부르기'; do
   assert_contains "$TPL" "$lit" "틀: $lit"
 done
 assert_contains "$TPL" 'check_bundle_coverage.py --plan' "계획 틀: --plan 대조"
+once '## 늘 싣는 것' '기계 상태의 `확인한 끝` 절과 상태 브랜치는 쓰지 않는다'
+for t in '### 계획 agent' '### 구현 agent' '### team 형식 — 계획 · 구현 담당자'; do
+  blk="$(printf '%s\n' "$TPL" | awk -v h="$t" '$0==h{f=1;next} f&&/^### /{exit} f')"
+  assert_eq "$(printf '%s\n' "$blk" | grep -oF -- 'HEAD 뒤로 옮기기 · 기계 상태의 확인한 끝 절과 상태 브랜치 쓰기.' | wc -l | tr -d ' ')" "1" "${t} 틀: 금지 줄에 확인한 끝 절 · 상태 브랜치 쓰기가 한 번"
+done
 # 지휘자 수리 3 — 하위 agent 의 자리: 격리 agent 가 자기 worktree 에서 에픽 브랜치에 선다(기본) · 비격리는 다른 길
 once '## 늘 싣는 것' '`isolation: "worktree"` 로 띄운 agent 가 자기 worktree 에서 `git switch --ignore-other-worktrees <에픽 브랜치>`'
 once '## 늘 싣는 것' '지휘 세션이 그 에픽 worktree 에 머문 채 격리 없이 보낼 때'
