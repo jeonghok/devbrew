@@ -138,7 +138,7 @@
 
 ### Roadmap absorption (C-numbers)
 
-- **C43** 3-path Socratic routing (factual auto-confirm / judgment→user / ontological, 라벨 강제 없음).
+- **3-path routing** — Socratic routing (factual auto-confirm / judgment→user / ontological, 라벨 강제 없음).
 - **C1** 사용자-발화 floor 탈출구 — Unbounded-autonomy 가드(사용자가 언제든 종료를 요청하면 미충족 floor를 사용자-승인 박제로 닫고 payload §3 Open Questions로 이월).
 - **C4** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem). 둘 다 첫 호출은 필수(하한)이고 그 뒤는 조사 호출 상한 하나가 총량을 묶는다.
 

@@ -115,8 +115,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-file.md
 아래 절들을 진행한다. 이 skill 과 그 references(`seed-input.md` · `finishing.md`)가 말하는 「풀린 입력」은 2 의 결과다(3 에서 `force` 를 뗐으면 그 나머지 · 3.6 판결이 RESUME 이면 그 상태 파일의 `## 풀린 입력` 블록 — `state-file.md`). 「풀린 입력」이 비어 있으면 «라운드 규약»의 인자 없는 경로로 시작한다.
 
 당신은 spec-distill의 컨텍스트 쌓기 stage를 진행 중입니다. 이 stage는 *받아적는* 문답이
-아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
-앞단, 상보적·비중복). 매 라운드를 «지금 이해 · 다음 결정 · 질문 하나»로 묻되, 종료는
+아니라 **강한 문제공간 stage**입니다. 매 라운드를 «지금 이해 · 다음 결정 · 질문»으로 묻되, 종료는
 **커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이 **모두 `closed`**이고
 포화 판정자가 «포화»를 내거나 사용자가 종료를 고를 때, 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다)만 허용됩니다(`## 조사 상한 · 포화 판정`) — landscape·skepticism 등
 통과 의례 메커니즘이 각 차원을 채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
@@ -134,7 +133,7 @@ State frontmatter schema: (첫 두 키 `type` · `seed` 는 `state-file.md` 가 
 ---
 session_id: <uuid>
 phase: 1
-coverage:                            # G1 커버리지 원장 (floor 5 + derived[]). 종료 driver.
+coverage:                            # 커버리지 원장 (floor 5 + derived[]). 종료 driver.
   floor:
     root_problem:   {status: open, evidence: "", reopened: 0, reopen_log: []}
     landscape:      {status: open, evidence: "", reopened: 0, reopen_log: []}
@@ -165,8 +164,7 @@ State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조
 
 **`open_decisions[]` 의 생명주기.** 발급은 orchestrator 가 «다음 결정» 블록을 쓸 때 그 문장에
 `OQ<n>` 을 붙이는 것이다(새 결정이면 새 번호 — 순증, 컨텍스트 쌓기 안에서만 유일 — 이어가는 결정이면 기존 번호).
-`status: open → resolved` 는 사용자 발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다** — 조사가 결정을 해결하는 데 기여했으면 그것이
-성공 사례인데 목록에서 빠지면 게이트의 실재 검사가 그 조사를 red 로 만든다. 종료 시
+`status: open → resolved` 는 사용자 발화로만 바뀌고 **해결돼도 목록에서 지우지 않는다.** 종료 시
 `status: open` 인 것이 payload §3 Open Questions 로, **전량**이 §0 결정 목록으로 직렬화된다 — §0 이
 상위집합이고 §3 이 그 중 열린 것이다. `RC<n>` 은 별 state 키를 두지 않는다: V1 이 붙이고 audit §5 의
 확인 줄이 곧 레지스터이며, 확인 줄 없는 `RC<n>` 은 게이트가 red 로 잡는다.
@@ -177,9 +175,9 @@ State body: 각 라운드의 `## R<n>` 기록(«라운드 규약» 형식) + 조
 `check_verbatim_coverage.py`가 payload §6 ∪ audit §6 원문 대조에서 **이 토큰 집합**을 보고 L2를 advisory로 강등하므로,
 다른 형태로 치환하면 정당한 치환이 red로 잡혀 사용자가 Step B에서 판정해야 합니다(fail-closed 방향).
 
-## 라운드 규약 — 지금 이해 · 다음 결정 · 질문 하나
+## 라운드 규약 — 지금 이해 · 다음 결정 · 질문
 
-사용자에게 보이는 출력과 state 본문 기록이 같은 형식이다 — 단 «추천: 없음 — <이유>» 는 상태 파일에만 쓰고 화면의 질문에는 표시를 두지 않는다. «지금 이해» 끝의 `사실로 보고 직접 답한 질문 <N>개 — <질문 · 찾은 답 한 줄씩>` 은 C43 경로 (a) 로 사용자에게 묻지 않고 직접 확인한 질문이고(사용자가 그 답을 뒤집으면 새 발화가 이긴다), `줄인 사실 <N>개` 는 한두 문장에 들지 못한 그 라운드의 확인 사실이다 — 출력에는 수만 붙이고 전문은 state 본문 그 `## R<n>` 의 «지금 이해» 아래에 그대로 적으며, 사용자가 「전부 보기」라고 하면 그 원문을 그대로 보인다.
+사용자에게 보이는 출력과 state 본문 기록이 같은 형식이다 — 단 «추천: 없음 — <이유>» 는 상태 파일에만 쓰고 화면의 질문에는 표시를 두지 않는다. «지금 이해» 끝의 `사실로 보고 직접 답한 질문 <N>개 — <질문 · 찾은 답 한 줄씩>` 은 3-path routing 의 경로 (a) 로 사용자에게 묻지 않고 직접 확인한 질문이고(사용자가 그 답을 뒤집으면 새 발화가 이긴다), `줄인 사실 <N>개` 는 한두 문장에 들지 못한 그 라운드의 확인 사실이다 — 출력에는 수만 붙이고 전문은 state 본문 그 `## R<n>` 의 «지금 이해» 아래에 그대로 적으며, 사용자가 「전부 보기」라고 하면 그 원문을 그대로 보인다.
 
 ```markdown
 ## R<n>
@@ -204,7 +202,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
   질문을 여럿 묶을 수 있다(질문 도구가 받는 수까지) — 묶으면 «다음 결정»에 그 OQ 를 모두 적고 답마다
   `S<m>` 을 하나씩 기록한다. 질문마다 추천이 있으면 첫 선택지에 두고 그 라벨 끝에 `(권장)` 을 단다 —
   steelman 절차의 질문만 예외다(아래).
-- question 본문은 무엇을 정하는지·용어·기술 사실을 푼다. 컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다 — 같은 대가를 질문 앞 글과 질문에 두 번 싣지 않는다. 상태 파일의 `### 질문` 아래에는 본문과 함께 선택지와 그 설명을 적는다(무엇을 보이고 물었는지가 기록에 남는다). 기계 검사는 없다.
+- question 본문은 무엇을 정하는지·용어·기술 사실을 푼다. 컨텍스트 쌓기 라운드의 질문은 추천이 있든 없든 모든 선택지 설명을 「얻음: … · 내줌: …」 한 줄로 쓴다 — 같은 대가를 질문 앞 글과 질문에 두 번 싣지 않는다. 상태 파일의 `### 질문` 아래에는 본문과 함께 선택지와 그 설명을 적는다. 기계 검사는 없다.
 - **되묻기** — 직전 답이 보류(«모르겠다/둘 다/아무거나»)·한 단어·이유 없는 추천 수락·근거 없는 단정이면,
   그 라운드의 질문은 이유·사례·실패 조건 중 하나를 되묻고 모델의 추측을 첫 선택지로 두고 「(권장)」을 단다.
   같은 주제를 연속 두 번 되물은 뒤에도 약한 답이면 답을 그대로 기록하고(보류는 «사용자 발화
@@ -237,7 +235,7 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
 - **결정 연결은 §4·§5 에 달고 §3·§0 이 그것을 되가리킨다.** 조사 항목 줄 끝에 레포 `[RC3 → OQ1]` ·
   `[RC3 → 없음]`, 웹 `[→ OQ1]` · `[→ 없음]` 중 하나를 쓴다 — 레포 주장은 연결 안에 항상 `RC<n>` 을
   싣는다(`없음` = 닿는 결정 없음). §4 항목은 여러 줄로 쓸 수 있되 연결과 `RC<n>` 은 첫 줄 끝에 —
-  본문 줄에 두면 게이트가 red 다. **§3 은 연결의 대상이고 출처가 아니다** — §3 항목은 결정이다(열린 것과 해결한 것) — 거기에 연결을 걸면 자기지시가 된다.
+  본문 줄에 두면 게이트가 red 다. **§3 은 연결의 대상이고 출처가 아니다** — §3 항목은 결정이라 연결을 걸지 않는다(자기지시가 된다).
 
 ## 조사 주장 계약
 
@@ -246,8 +244,8 @@ OQ<n>: <무엇을 정하는지 한 줄> · 추천: <첫 선택지 | 없음 — <
 **배달**하는 책임만 진다 — 계약 본문을 여기 복사하지 않는다.
 `${OPEN_DECISIONS}` 에는 `open_decisions[]` 중 `status: open` 인 것만 한 줄에 하나씩 `OQ<n>: <한 줄>` 로 싣는다(없으면 빈 값).
 
-`${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다 — 플러그인 캐시는 사용자
-프로젝트 밖이라 subagent 의 Read 가 거부된다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
+subagent 에 넘기는 플러그인 파일은 경로가 아니라 내용으로 싣는다 — 플러그인 캐시는 사용자
+프로젝트 밖이라 subagent 의 Read 가 거부된다. `${CLAIMS_CONTRACT}` 에는 경로가 아니라 **계약 파일의 내용**을 싣는다. dispatch 직전(재dispatch 포함)에 아래 펜스를 돌려
 그 stdout 전문을 각 dispatch 의 `<claims_contract>` 슬롯에 싣는다. rc 가 0 이 아니면 **그 장치를
 dispatch 하지 않는다** — 컨텍스트 쌓기는 계속하되 그 차원을 자동으로 닫지 않고, 공시는 loud advisory +
 audit §2 unavailable 사유 다.
@@ -267,7 +265,7 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 ```
 <!-- claims-contract:end -->
 
-## C43 3-path routing
+## 3-path routing
 
 질문을 만들 때 다음 3 경로 중 하나로 분류해서 routing 하십시오:
 
@@ -280,7 +278,7 @@ printf '%s\n' "$CLAIMS_CONTRACT"
 매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
 먼저 찾아 «지금 이해»에 싣습니다.
 
-**`repo-researcher` dispatch** — 레포 질문이 여러 파일을 훑어야 하거나 본체의 맥락을 아껴야 할 때 부른다. 질문 칸에는 찾을 것만 쓰고 기대 결론은 싣지 않는다. 출력은 «지금 이해»에 싣기 전에 V1 을 타고, 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다. 계약 배달 실패면 dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory + 본체 직접 조사로 강등 이다.
+**`repo-researcher` dispatch** — 레포 질문이 여러 파일을 훑어야 하거나 본체의 맥락을 아껴야 할 때 부른다. 질문 칸에는 찾을 것만 쓰고 기대 결론은 싣지 않는다. 출력은 «지금 이해»에 싣기 전에 V1 을 타고, 첫 산출이면 3-path routing 절의 internal_research admit 이 여기서도 돈다. 계약 배달 실패면 dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory + 본체 직접 조사로 강등 이다.
 
 ```
 Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-researcher",
@@ -291,7 +289,7 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 **어느 자리든(경로 (a) · repo-researcher · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
 게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
-그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 종료 시점엔 늦다(닫힘 규칙).
+그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다.
 
 ## 조사 열기 — 여럿 동시에 · 만들어 보내기
 
@@ -363,10 +361,10 @@ Agent({ description: "Run an open research order", subagent_type: "spec-distill:
 
 출력은 다른 조사 출력과 같은 길을 탄다 — 산출 원문을 state 본문 조사 블록(`## 조사 상한 · 포화 판정`)에
 verbatim 으로 남기고 → V1(웹 주장 포함) → «지금 이해» → `research_log`. `repo_claims[]` 의 첫 산출이면
-C43 절의 internal_research admit 이 여기서도 돈다. 계약 펜스 · 요약 펜스 중 하나라도 rc 가 0 이 아니면
+3-path routing 절의 internal_research admit 이 여기서도 돈다. 계약 펜스 · 요약 펜스 중 하나라도 rc 가 0 이 아니면
 dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory + 본체 직접 조사로 강등 이다.
 
-## 사용자 발화 기록 (G1, AC1)
+## 사용자 발화 기록
 
 매 round 끝에 사용자가 실제로 답한 것을 `user_statements`에 append합니다. **여기서 무엇도
 판정하지 않습니다** — 이 stage는 문제공간이고, 무엇이 확정인지는 종료 직전 사용자 일괄
@@ -390,7 +388,7 @@ dispatch 하지 않고 본체가 직접 조사한다 — 공시는 loud advisory
 들어갈 슬롯에 미리 바인딩하면 다음 stage의 탐색이 그 슬롯 모양대로 갇힙니다.
 
 거절도 수락과 똑같이 **발화 그대로** 기록합니다. 반대 명제로 뒤집어 "잠긴 방향"으로
-승격시키지 않습니다 — 그 승격이 라운드마다 결정을 박제하던 경로였습니다.
+승격시키지 않습니다.
 
 ## 조사 상한 · 포화 판정
 
@@ -405,7 +403,7 @@ state 를 처음 만들 때(아래 한 줄보다 앞) 아래 `Read` 줄의 파�
 > `[spec-distill] 이 컨텍스트 쌓기는 조사 agent 를 최대 <limit>번까지 부른다(agent 안의 검색 · 출처 수는 세지 않는다 · 멈춤은 포화 판정이 정하고 이 수는 비상 끝 · 승인 없이 진행 · 닿으면 연장을 묻는다).`
 
 dispatch 마다 `research_dispatches` 의 그 장치 칸을 +1 한다 — 한 메시지에서 여럿을 띄우면 띄운 수만큼, 끝난 agent 를 `SendMessage` 로 이어 부르면 새 조사라 1 이다. agent 안의 검색 횟수 · 출처 수는 세지 않는다.
-산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim 으로 남기고(dispatch 가 실패 · 거부돼도 그 오류 원문을 같은 블록 꼴로 남긴다 — 포화 판정자가 실패한 조사를 가른다), «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다.
+산출 원문을 state 본문 `### 조사 <n> — <장치> · R<round> · 묶음 <b>` 아래 verbatim 으로 남기고(dispatch 가 실패 · 거부돼도 그 오류 원문을 같은 블록 꼴로 남긴다), «지금 이해»에 실은 뒤(V1 확인 뒤) `research_log` 에 한 항목을 더한다.
 `<b>` 는 컨텍스트 쌓기 안 1부터 순증하는 묶음 번호다 — 한 메시지에서 함께 띄운 조사는 같은 `<b>` 이고, 하나만 띄운 조사와 본체 직접 조사 블록은 각자 한 묶음이다. `research_log` 항목의 `batch` 도 같은 값이다. 본체의 직접 조사(경로 (a)
 확인 · web sweep)도 «지금 이해»에 실을 때 같은 두 자리에 `device: orchestrator` 로 남기되(`device: orchestrator` 의 원문 블록은 V1 확인 줄(`- 확인 RC<n> — …`)과
 웹 항목 줄 그대로다 — 산문 요약을 넣지 않는다) 상한에는 세지 않는다 — 판정자 호출도 세지 않는다. 본체 직접 조사는 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다. 합이 `research_limit` 에 닿을 때,
@@ -420,7 +418,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/saturation.md
 ## coverage-mapper dispatch
 
 `coverage-mapper` 는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(admit 은
-orchestrator, G2). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
+orchestrator). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」) 그 뒤는 조사 호출 상한 하나가 총량을 묶는다:
 
 1. **R1 첫 질문 전 필수 1회.** 입력: seed 전문(모델이 줄인 글)과 그 «다시 검증할 것» 문단, 원자료의 경로(진입 단계의 원자료 판결이 찾음일 때 — 글을 통째로 싣지 않고 레포 안 경로로 주어 읽게 한다), 원장 초기 상태.
    출력의 derived 차원을 admit 한 뒤에야 R1 질문이 나간다. 인자 없이 부른 경로에서는 R1 답을
@@ -431,14 +429,12 @@ orchestrator, G2). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너
 카운터 `orchestration.research_dispatches.coverage_mapper`. 종료 시 audit §2 에 `coverage-mapper <k>`
 를 쓰고 게이트가 k≥1 을 검사한다. dispatch 가 불가능한 환경(Agent 도구 부재)은
 `coverage-mapper 0 (unavailable: <이유>)` 로 적는다 — 게이트는 advisory 로 통과시키고 Step B 가
-사람에게 보인다(침묵과 0 은 다르다).
+사람에게 보인다.
 
-**Web kill switch (dispatch 직전 확인 — 이 블록에 종속)**: `coverage-mapper`는
+**웹 kill switch 는 dispatch 자리마다 따로 확인한다 — R2 의 landscape 확인으로 갈음하지 않는다.** `coverage-mapper`는
 `WebSearch`/`WebFetch`를 보유한다. kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
 dispatch 프롬프트에 `web_disabled: true`를 실어 **codebase 근거만으로 차원을 제안**하게 하고,
 loud advisory를 남긴다: `[spec-distill] web 비활성 — coverage-mapper가 codebase 근거만 사용`.
-이 확인은 R2의 landscape 확인과 **별개로** 여기 있어야 한다 — kill switch는 보안 컨트롤이고,
-egress를 가진 dispatch가 하나라도 게이트 밖에 있으면 스위치는 꺼졌다고 *믿게만* 만든다.
 `coverage-mapper`는 `tools:`에 `Bash`가 없어 스스로 확인할 수 없다(Law 2) — orchestrator가
 유일한 집행 지점이다.
 
@@ -467,9 +463,9 @@ orchestrator가 원장에 admit할지 판정한다. `neglect_flag: true`면 다�
 다: audit §2 Budget 의 불릿 줄에 `coverage-mapper 0 (unavailable: 계약 배달 실패)` 를 적는다 —
 게이트가 advisory 로 통과시키고 Step B 가 사람에게 보인다.
 
-**첫 dispatch 의 검증 의무(D6)** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다**
-`repo_claims` 를 산출해 V1 을 태운다(첫 산출이면 C43 절의 internal_research admit 도). 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
-그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을
+**첫 dispatch 의 검증 의무** — seed 의 «다시 검증할 것» 문단 중 **레포로 확인 가능한 항목마다**
+`repo_claims` 를 산출해 V1 을 태운다(첫 산출이면 3-path routing 절의 internal_research admit 도). 「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다.
+그 문단이 비어 있으면 이 의무는 미발동이고, 그 사실을
 audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — 의무는 받는 쪽에 있다.
 
 ## 닫힘 · 재개방
@@ -478,8 +474,8 @@ audit §5 에 한 줄로 공시한다. Phase 0 은 건드리지 않는다 — �
 sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landscape·premortem 출력은 «지금 이해»에 실려,
 steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
 원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
-정당화하는가»는 보지 않는다 — 그 한계는 spec OQ6).
-다섯 floor 의 닫힘 발화: root_problem = 사용자 원문 인용 S(S1 과 문제를 서술한 발화) · landscape = 외부 근거 처분 S ·
+정당화하는가»는 보지 않는다).
+다섯 floor 의 닫힘 발화: root_problem = 사용자 원문 인용 S(S1 과 문제를 서술한 발화 — S1 은 원자료가 실렸을 때만 든다. 찾지 못함 · 그대로 싣지 못함 갈래의 S1 은 모델이 줄인 글이다) · landscape = 외부 근거 처분 S ·
 skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처분 S · open_questions = OQ 목록
 확인 S.
 
@@ -487,14 +483,14 @@ skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처�
 충돌할 때(판단은 orchestrator). 기록: 그 차원의 `reopened` +1, `reopen_log` 에
 `{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «지금 이해»에 «→ <차원> 재개방: <사유>».
 상한 없음 — 재개방은 새 답 · 근거 · 사실이 닫힘 근거 S 와 충돌해야 일어나고, 조사 총량은 조사 호출 상한이 묶는다. 재개방된 차원이 다시 닫힐 때는 **새 S** 를
-인용한다(게이트는 최신 닫힘의 evidence 를 본다).
+인용한다.
 
-## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
+## blind-spot-prober dispatch (blind_spot floor 차원)
 
 `blind_spot` floor 차원의 **첫 open→in-progress 전이** 시 `blind-spot-prober`를 1회 필수로 dispatch 한다(하한). 작은 일의 건너뜀은 `## 조사 상한 · 포화 판정` 의 「건너뜀」 을 따른다.
 그 뒤는 새 framing · 재개방 · 포화 판정자의 빈 곳이 그 차원에 닿으면 다시 부른다 — 총량은 조사 호출 상한 하나가
 묶는다. dispatch 마다 `research_dispatches.blind_spot_prober` 를 +1 한다.
-kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(C5, §5 위험 항목을
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재면 dispatch 대신 loud advisory 후 **inline premortem**으로 전환한다(§5 위험 항목을
 codebase 근거·사용자 판단으로 기록).
 
 ```
@@ -515,7 +511,7 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 
 **강등된 inline premortem 도 같은 계약을 쓴다** — orchestrator 가 자기 `Read`/`Grep` 으로 레포
 근거를 확인하고 `repo_claims` 를 산출해 V1 을 태운다. 웹 근거만 사라지고 내부 축은 돈다. prober 경로든 강등
-경로든 `repo_claims` 의 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
+경로든 `repo_claims` 의 첫 산출이면 3-path routing 절의 internal_research admit 이 여기서도 돈다.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -524,7 +520,7 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
-| R1 | **사용자 말 그대로** | root_problem 은 S1 과 문제를 서술한 이후 사용자 발화를 **원문 그대로 인용**해 닫는다. 다시 쓴 문장 · 확인 질문 없음. | (d) ontological → payload §0 · §1 |
+| R1 | **사용자 말 그대로** | root_problem 은 S1 과 문제를 서술한 이후 사용자 발화를 **원문 그대로 인용**해 닫는다(S1 은 원자료가 실렸을 때만 든다 — 모델이 줄인 S1 은 원문이 아니다). 다시 쓴 문장 · 확인 질문 없음. | (d) ontological → payload §0 · §1 |
 | R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화(사용자가 고른 「외부 선례 무관」이면 그 한 줄). | path(a) 확장 → payload §4 External Landscape |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *유지 / 보완 / 전환 / 보류* 중 하나로 판정. un-challenged 의심 방향은 확정 후보가 될 수 없다. trigger 0건이면 `- 검토 — steelman 0건: …` 한 줄 명시(빈 섹션 금지). | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
 | R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
@@ -555,12 +551,12 @@ audit §6 에 사용자 선택(☑)으로 있을 때만 받는다. 조사 시점
 의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 절차 전문(전제 도출 ·
 `steelman-builder` dispatch · 게이트-전 확인 · 게이트 제시 블록 · 유지/보완/전환/보류 게이트 · 기록 · steelman 0건의
 `검토 —` 항목 · web 비활성 시 steelman 자동 생략)은 `references/steelman.md` 다 — R3 에 들어갈 때 그 파일을 Read 한다.
-builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다. builder 의 `repo_claims` 가 첫 산출이면 C43 절의 internal_research admit 이 여기서도 돈다.
+builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다. builder 의 `repo_claims` 가 첫 산출이면 3-path routing 절의 internal_research admit 이 여기서도 돈다.
 
 ## seed 를 입력으로 받았을 때
 
 **이 절 전문은 `references/seed-input.md` 에 있다** — 「풀린 입력」이 `type: intent-seed`(옛 기록은 `interview-seed`) frontmatter
-를 가진 문서일 때만 읽는다(조건부 로드 — seed 없는 호출이 더 흔해 finishing.md 보다 조건성이 강하다).
+를 가진 문서일 때만 읽는다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/seed-input.md
@@ -572,7 +568,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/seed-input.md
 
 **종료 절차 전문은 `references/finishing.md` 에 있다.** floor 5차원이 전부 `closed` 가 되고 포화 판정이
 끝나(`## 조사 상한 · 포화 판정`) — 또는 모델 판단으로 건너뛸 때(건너뜀 줄을 남긴다) — brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 컨텍스트 쌓기가 아직 진행 중일 때는
-읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
+읽지 않는다.
 
 종료가 정해지면 brief 를 쓰기 전에 그 파일의 「분해 판단」 단계부터 돈다 — 이 일을 spec 하나로 할지 나눌지 사용자가 정하고, 나누면 결과물을 확정 · 커밋한 뒤 로드맵 잡기 줄을 낸다.
 
@@ -581,11 +577,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/seed-input.md
 floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 언제든 종료를 요청할 수 있다.**
 그때 미충족 floor 는 **사용자-승인 박제**로 닫는다 — 그 차원의 `evidence` 에
 `사용자-승인 박제(@사용자 종료 요청) — §Open Questions 참조` 를 적고, 그 내용을 payload
-§3 Open Questions 로 이월한다. 박제 표식이 원장에 남으므로 silent bypass 가 아니다.
+§3 Open Questions 로 이월한다.
 
-발동 조건이 카운터가 아니라 **사용자 발화**라는 점만 예전 escalation 과 다르다. 상한을
-없애는 것과 탈출구를 없애는 것은 다르다 — 없애는 것은 사용자 질문의 상한이지 나가는 문이
-아니다. 포화 판정 전에 끝내면 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을
+포화 판정 전에 끝내면 `- 사용자 종료(@S<n>) — 포화 판정 전` 을, 마지막 판정이 «아직» 일 때 끝내면 `- 사용자 종료(@S<n>) — 마지막 판정 아직` 을
 state 본문 `## audit §2 대기 줄` 에 덧붙인다(종료 때 audit §2 로 옮긴다).
 
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed` 이고, 마지막 포화 판정이 «포화» 이거나, 사용자가 종료를 골랐거나, 나누지 않을 작은 일이라 `- 모델 판단으로 건너뜀 — 포화 판정: <이유>` 줄을 `## audit §2 대기 줄` 에 덧붙였다.
@@ -600,7 +594,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md
 
 ## In-flight state migration
 
-상태 파일을 읽을 때 §2.4 스키마의 **어떤 키든 부재**면 아래 파일을 읽는다.
+상태 파일을 읽을 때 `## State location` 의 스키마의 **어떤 키든 부재**면 아래 파일을 읽는다.
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-migration.md
