@@ -19,6 +19,10 @@ T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 TARGETS="skills/epic-conductor/SKILL.md references/conducting.md references/conducting-step-1.md references/conducting-step-2.md references/conducting-step-3.md references/conducting-step-4.md references/conducting-step-5.md references/conducting-step-6.md references/conducting-step-7.md references/conducting-resume.md references/conducting-team.md references/conducting-manual.md references/conductor-dispatch.md scripts/merge_check.py scripts/conductor_ledger.py agents/integration-reviewer.md agents/relay-checker.md skills/intent-sync/SKILL.md skills/context-build/SKILL.md skills/context-build/references/finishing.md skills/roadmap-draft/SKILL.md skills/context-build/references/state-file.md skills/spec-review/SKILL.md references/redecompose.md scripts/control_plane.py scripts/state_path.py scripts/roadmap_status.py scripts/walk_table.py scripts/conductor_branch.py scripts/conductor_mail.py scripts/conductor_status.py scripts/leader_seat.py references/conductor-state-branch.md skills/epic-conductor/references/qg-review.md scripts/merged_pr_range.py"
+if [ "${1:-}" = "--emit-scanned" ]; then  # test_conducting_lock_targets.sh 가 읽는다 — 대상 목록(레포 상대경로)
+  for t in $TARGETS; do printf 'plugins/spec-distill/%s\n' "$t"; done
+  exit 0
+fi
 scan() {  # scan <파일...> — 걸린 줄을 `<파일>:<줄>: <종류>` 로
   SCAN_DEPS="$SD/scripts" PYTHONIOENCODING=utf-8 python3 -I - "${SCAN_DEFS:-$SD/scripts}" "$@" <<'PY'
 import os, re, sys

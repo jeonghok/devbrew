@@ -253,4 +253,16 @@ once 5 '그 PR 의 머지 앞 리뷰 기록 파일(자리 글자 `premerge-pr<�
 assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
 assert_contains "$(cd_all | sed -n '/^- \*\*PR 전 확인.\*\*/p')" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
+# 차례(AC2 · AC37) — 걸음 표 · 끝 절 · 지킬 순서 · 리더 줄
+python3 "$ROOT/plugins/spec-distill/scripts/conductor_toc.py" files >/dev/null 2>&1 && ok "차례 파서가 rc 0 으로 파일 목록을 낸다" || no "차례 파서가 실패한다"
+TOC="$(cd_files all | head -1)"
+TOC_TEXT="$(cat "$TOC")"
+assert_eq "$(awk '$0=="### 걸음 표"{f=1;next} f&&/^#/{exit} f&&/^\| [1-9] /{split($0,c,"|"); gsub(/^ +| +$/,"",c[2]); print c[2]}' "$TOC" | tr '\n' ',')" "1 맞추기,2 사람 몫 모으기,3 다음 일 고르기와 보내기,4 돌아오기,5 머지 전 확인,6 머지 뒤,7 끝," "차례: 걸음 표의 첫 칸이 일곱, 글자 그대로, 차례대로"
+assert_eq "$(grep -E '^## ' "$TOC" | tail -1)" "## 손으로 따르는 절차" "차례: 끝 절 제목이 손으로 따르는 절차다"
+assert_eq "$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f' "$TOC" | grep -oF 'conducting-manual.md' | wc -l | tr -d ' ')" "1" "차례: 끝 절에 conducting-manual.md 가 한 번"
+assert_eq "$(printf '%s\n' "$TOC_TEXT" | grep -oF '제대로 아는 것이 이긴다' | wc -l | tr -d ' ')" "1" "차례: 지킬 순서 — 「제대로 아는 것이 이긴다」 한 번"
+for lit in '계획 검수' '설계 대화' '다른 에픽으로 넘기는'; do
+  assert_contains "$TOC_TEXT" "$lit" "차례: 지킬 순서가 「${lit}」 를 말한다"
+done
+assert_eq "$(printf '%s\n' "$TOC_TEXT" | grep -oF '리더는 로드맵을 이끄는 세션이다' | wc -l | tr -d ' ')" "1" "차례: 「리더는 로드맵을 이끄는 세션이다」 한 번"
 finish
