@@ -55,7 +55,8 @@ for lit in 'qg-review.md` 를 읽고 그 자리(「머지 앞」)' '머지 앞 q
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
 PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"
-once 4 "$PAR"
+once 4 'agent 를 보내거나 거둘 때마다 동시에 갈 일을 훑어 보내는 것 · 권장 수 · 구현 담당자 앞의 「차례로」 확인은 `<SD>/references/conducting-step-1.md` 의 판단 칸대로 한다.'
+assert_not_contains "$(step 4)" "$PAR" "걸음 4: 걸음 1 과 함께 쓰던 병렬 문단은 걸음 1 에만 있다(양성 짝: once 1 \$PAR)"
 # 지휘자 수리 2 — 원천에서 다시 세기 · 맞추기 순서 · 완료 표시는 끝이 아님 · 잠금 대기는 줄 · 권장 수 · 채우기 · 로드맵 밖 일
 for lit in '맞추기 순서(보낼 때 · 돌아올 때 · 진행 상황을 말할 때마다 같은 턴에)' '하니스 agent 목록(`ListAgents`)' '「HH:MM 기준」' \
            '조회하지 않은 숫자는 말하지 않는다' '이름 없는 agent(하위 agent 가 띄운 agent)는 세지 않는다' 'ledger progress --roadmap <로드맵>' \
@@ -187,9 +188,9 @@ assert_contains "$HAND" "$GUARD_RE" "손 절차 3: 보내기 앞에 live-agent �
 assert_contains "$HAND" '--section "살아 있는 agent"' "손 절차 3: 보낸 뒤 살아 있는 agent 에 적는다"
 assert_contains "$(step 3)" '--section "살아 있는 agent"' "걸음 3: 보낸 뒤 살아 있는 agent 에 적는다"
 assert_contains "$(step 1)" '「spec 승인됨(…) · 계획 없음」' "걸음 1: 승인됐고 계획이 없는 에픽에 계획 agent 를 보낸다"
-assert_contains "$(step 3)" '보낸 뒤는 끊기 좋은 자리다 — 맥락이 무거우면 `/compact 시점` 대로 압축을 권하고' "걸음 3: 보낸 뒤 압축은 지휘자 판단(R5 범위)"
+assert_contains "$(step 3)" '보낸 뒤는 끊기 좋은 자리다 — 맥락이 무거우면 `<SD>/references/conducting-resume.md` 대로 압축을 권하고' "걸음 3: 보낸 뒤 압축은 지휘자 판단(R5 범위)"
 once 5 '바탕 브랜치를 지우면 위 PR 이 닫히고 다시 열 수 없다'
-assert_contains "$(step 5)" '걸음 6 의 충돌 처리' "걸음 5: 충돌 처리는 걸음 6 을 가리킨다"
+assert_contains "$(step 5)" '`<SD>/references/conducting-step-6.md` 의 충돌 처리' "걸음 5: 충돌 처리는 걸음 6 지시서를 가리킨다"
 assert_contains "$(step 6)" '--section "쌓인 기록" --where' "걸음 6: PR 본문에 실은 쌓인 기록을 뺀다"
 assert_eq "$(printf '%s\n' "$LOOP" | grep -oF -- '설계문서 없이 산출물만 내는 에픽이면 같은 절(지휘 기록 · 판정 · 구현 대조)을 그 산출물 파일에 둔다' | wc -l | tr -d ' ')" "1" "지휘 순환: 설계문서 없는 에픽의 기록 자리"
 assert_eq "$(step 3 | grep -oF -- '브랜치나 worktree 가 이미 있으면(압축 뒤 다시 부른 경우 등) 새로 만들지 않고 그것을 쓴다' | wc -l | tr -d ' ')" "1" "걸음 3: 이미 있는 worktree 는 다시 만들지 않는다"
@@ -265,4 +266,86 @@ for lit in '계획 검수' '설계 대화' '다른 에픽으로 넘기는'; do
   assert_contains "$TOC_TEXT" "$lit" "차례: 지킬 순서가 「${lit}」 를 말한다"
 done
 assert_eq "$(printf '%s\n' "$TOC_TEXT" | grep -oF '리더는 로드맵을 이끄는 세션이다' | wc -l | tr -d ' ')" "1" "차례: 「리더는 로드맵을 이끄는 세션이다」 한 번"
+# 걸음 지시서의 꼴(AC3 · 설계 §1.3) — 첫 줄 `### <N>. ` · 바로 아래 읽을 것 · 남기는 것 · 그 뒤 다섯 칸, 칸마다 하나
+GUIDES="$(cd_files step)"
+guide() { printf '%s\n' "$GUIDES" | sed -n "${1}p"; }
+gi=0
+while IFS= read -r g; do
+  [ -n "$g" ] || continue
+  gi=$((gi + 1))
+  assert_eq "$(head -1 "$g" | grep -cE "^### ${gi}\. " || true)" "1" "지시서 ${gi}: 첫 줄이 「### ${gi}. 」"
+  assert_eq "$(sed -n 2p "$g" | grep -c '^- 읽을 것: ' || true)" "1" "지시서 ${gi}: 둘째 줄이 「- 읽을 것:」"
+  assert_eq "$(sed -n 3p "$g" | grep -c '^- 남기는 것: ' || true)" "1" "지시서 ${gi}: 셋째 줄이 「- 남기는 것:」"
+  for cell in '- 읽을 것:' '- 남기는 것:' '- 기본값:' '- 판단:' '- 부를 skill:' '- 기록:' '- 기계 상태:'; do
+    assert_eq "$(grep -c -- "^${cell}" "$g" || true)" "1" "지시서 ${gi}: 「${cell}」 칸이 하나"
+  done
+  assert_eq "$(grep -n -- '^- 기본값:' "$g" | head -1 | cut -d: -f1)" "4" "지시서 ${gi}: 기본값 칸이 머리 두 줄 바로 뒤(넷째 줄)"
+done <<EOF
+$GUIDES
+EOF
+assert_eq "$gi" "7" "지시서 일곱을 읽었다"
+also_of() {  # also_of <걸음> — 차례 걸음 표의 함께 읽는 것 칸을 읽을 것 줄의 꼴로(— 는 없음)
+  PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1] + "/scripts")
+import conductor_toc as T
+s = next(s for s in T.load(Path(sys.argv[1])).steps if s.number == int(sys.argv[2]))
+print("- 읽을 것: " + ("없음" if s.also == "—" else s.also))' "$ROOT/plugins/spec-distill" "$1"
+}
+for n in 1 2 3 4 5 6 7; do
+  assert_eq "$(sed -n 2p "$(guide "$n")")" "$(also_of "$n")" "걸음 ${n}: 읽을 것 줄이 차례 걸음 표의 함께 읽는 것 칸과 같다"
+done
+# 읽는 때(AC6 · 설계 §1.5) — 보내는 글 틀은 걸음 3 · 4, 상태 브랜치 절차는 걸음 1 · 2 · 5 · 7 에서만 읽으라고 한다
+READS_PY='import re, sys
+needle, skip = sys.argv[1], sys.argv[2]
+for p in sys.argv[3:]:
+    text = sys.stdin.read() if p == "-" else open(p, encoding="utf-8").read()
+    for line in text.split("\n"):
+        if line.startswith("|"):
+            continue
+        line = re.sub(r"^\s*-\s+", "", line)
+        for s in re.split(r"(?<=\.)\s+", line):
+            s = s.strip()
+            if needle in s and "읽" in s and s != skip:
+                print(p.rsplit("/", 1)[-1] + ": " + s)'
+reads_in() { PYTHONIOENCODING=utf-8 python3 -I -c "$READS_PY" "$@"; }   # reads_in <바늘> <면제 문장 | ''> <파일 | -> …
+DISPATCH_SKIP='하위에게 보내는 글은 같은 폴더 `conductor-dispatch.md` 의 틀이다 — 읽는 때는 걸음 표의 함께 읽는 것 칸이다.'
+assert_eq "$(reads_in conductor-dispatch.md "$DISPATCH_SKIP" "$TOC" "$(guide 1)" "$(guide 2)" "$(guide 5)" "$(guide 6)" "$(guide 7)")" "" \
+  "AC6: 걸음 1 · 2 · 5 · 6 · 7 지시서와 차례의 걸음 표 밖에 보내는 글 틀을 읽으라는 문장이 없다"
+assert_eq "$(grep -cF -- "- $DISPATCH_SKIP" "$TOC" || true)" "1" "AC6 면제: 차례 머리 불릿의 그 한 문장이 있다(면제가 공허하지 않다)"
+assert_contains "$(printf '%s\n' '- 보내는 글은 `conductor-dispatch.md` 를 읽고 쓴다.' | reads_in conductor-dispatch.md "$DISPATCH_SKIP" -)" '읽고 쓴다' "양성 대조: 보내는 글 틀을 읽으라는 문장을 잡는다"
+assert_contains "$(printf '%s\n' "- ${DISPATCH_SKIP%.} — 걸음마다 읽는다." | reads_in conductor-dispatch.md "$DISPATCH_SKIP" -)" '걸음마다 읽는다' "양성 대조: 면제는 그 문장 글자 그대로일 때만이다"
+assert_eq "$(printf '%s\n' '| 3 | x | y | `conductor-dispatch.md`(처음 보낼 때 읽는다) |' | reads_in conductor-dispatch.md '' -)" "" "양성 짝: 걸음 표의 줄은 세지 않는다"
+for n in 3 4; do
+  assert_contains "$(sed -n 2p "$(guide "$n")")" '`<SD>/references/conductor-dispatch.md`' "AC6: 걸음 ${n} 의 읽을 것 줄에 보내는 글 틀이 있다"
+done
+for n in 1 2 5 7; do
+  assert_contains "$(sed -n 2p "$(guide "$n")")" '`<SD>/references/conductor-state-branch.md`' "AC6: 걸음 ${n} 의 읽을 것 줄에 상태 브랜치 절차가 있다"
+done
+assert_eq "$(reads_in conductor-state-branch.md '' "$(guide 3)" "$(guide 4)" "$(guide 6)")" "" "AC6: 걸음 3 · 4 · 6 지시서에 상태 브랜치 절차를 읽으라는 문장이 없다"
+assert_contains "$(printf '%s\n' '- 온 글은 `conductor-state-branch.md` 를 읽고 받는다.' | reads_in conductor-state-branch.md '' -)" '읽고 받는다' "양성 대조: 상태 브랜치 절차를 읽으라는 문장을 잡는다"
+# 겹침(설계 §1.3) — 걸음끼리 함께 쓰는 문단은 한 지시서에만 둔다: 지시서 둘에 같은 문장(마침표로 끝나는 80자 이상)이 없다
+OVERLAP_PY='import re, sys
+def sents(t):
+    for line in t.split("\n"):
+        line = re.sub(r"^\s*-\s+", "", line)
+        for s in re.split(r"(?<=\.)\s+", line):
+            s = s.strip()
+            if s.endswith(".") and len(s) >= 80:
+                yield s
+texts = [(p.rsplit("/", 1)[-1], open(p, encoding="utf-8").read()) for p in sys.argv[2:]]
+if sys.argv[1] == "control":   # 걸음 1 의 첫 긴 문장을 걸음 5 끝에 붙인 글로 돈다
+    texts[4] = (texts[4][0], texts[4][1] + "\n- " + next(sents(texts[0][1])) + "\n")
+seen = {}
+for name, t in texts:
+    for s in set(sents(t)):
+        seen.setdefault(s, []).append(name)
+for s, names in sorted(seen.items()):
+    if len(names) > 1:
+        print(" · ".join(sorted(names)) + " — " + s[:60])'
+overlaps() { PYTHONIOENCODING=utf-8 python3 -I -c "$OVERLAP_PY" "$@"; }   # overlaps real|control <걸음 1~7 지시서>
+# shellcheck disable=SC2046
+assert_eq "$(overlaps real $(printf '%s\n' "$GUIDES"))" "" "지시서 둘에 같은 문장(마침표로 끝나는 80자 이상)이 없다"
+# shellcheck disable=SC2046
+assert_contains "$(overlaps control $(printf '%s\n' "$GUIDES"))" "conducting-step-1.md · conducting-step-5.md — " "양성 대조: 걸음 1 의 문장을 걸음 5 에 붙이면 잡는다"
 finish

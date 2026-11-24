@@ -81,7 +81,7 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
             self.assertEqual(fence_under(self.TEXT, heading), want, heading)
 
 
-POINTER = "team 형식 로드맵이면 아래 `## team 형식 로드맵` 절을 따른다"
+POINTER = "team 형식 로드맵이면 `<SD>/references/conducting-team.md` 를 따른다"
 
 
 def team_section(text):

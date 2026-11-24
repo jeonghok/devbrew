@@ -99,6 +99,13 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("conductor_branch.py", step(4))
         self.assertIn(CS.OWN_EDITS.split(" %d")[0], whole)   # 코드 상수의 앞부분 — 걸음 1 의 문장이 show 가 내는 글자와 묶인다
 
+    def test_toc_names_the_letter_time(self):   # 설계 §1.5 — 상태 브랜치 절차를 읽는 때 가운데 걸음에 달리지 않은 「글을 보낼 때」
+        toc = (PLUGIN / TOC.TOC_REL).read_text(encoding="utf-8")
+        lines = [l for l in toc.split("\n") if FILE_NAME in l and "편지" in l and not l.startswith("|")]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("`## 편지를 쓸 때`", lines[0])
+        self.assertIn("\n## 편지를 쓸 때\n", NEW.read_text(encoding="utf-8"))   # 가리킨 절이 그 파일에 있다
+
 
 NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py", "leader_seat.py"}   # leader_seat — R3 계획 2(S13)
 
