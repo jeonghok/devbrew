@@ -181,7 +181,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 
 ## 6. 커밋
 
-생성이 rc 0 으로 끝난 뒤 한 번 돌린다. 펜스의 `<결과물 절대경로>` 자리표를 진입 단계 2 에서 푼 절대경로로 바꿔 돌리고, 나온 `[spec-distill]` 줄을 그대로 보인다. 넣는 것은 로드맵 폴더와 상태 파일(`## 분해안` · `## 생성 기록` 이 더해졌다) 둘이다 — 결과물 · audit 은 앞 단계가 커밋했고 이 커밋에 넣지 않는다. 커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 상태 파일과 한 커밋에 넣는다. 결과물이 레포 설정의 의도 폴더(`intent_dir` — 옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니거나, 로드맵 폴더가 레포 설정의 로드맵 폴더(`roadmaps_dir`) 바로 아래가 아니거나(대소문자만 다른 경로 포함), 폴더가 아니거나, 작업 트리 밖이거나 링크를 거치거나, 커밋할 파일이 없거나, §7 의 파일이 `roadmap-check` 를 통과하지 못하면 커밋하지 않는다. 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치를 판정하지 못하거나, 지금 기본 브랜치 위거나, 브랜치 위가 아니면(detached HEAD) 커밋하지 않고 손으로 커밋할 목록(로드맵 폴더 · 상태 파일)을 보인다. 결과물의 원자료를 알면(`## 7.` 의 PR 본문 펜스처럼 `raw_source.py locate` 가 `FOUND` 를 내고 seed 경로는 상태 파일의 `seed:` 값이다) 아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다.
+생성이 rc 0 으로 끝난 뒤 한 번 돌린다. 펜스의 `<결과물 절대경로>` 자리표를 진입 단계 2 에서 푼 절대경로로 바꿔 돌리고, 나온 `[spec-distill]` 줄을 그대로 보인다. 넣는 것은 로드맵 폴더와 상태 파일(`## 분해안` · `## 생성 기록` 이 더해졌다) 둘이다 — 결과물 · audit 은 앞 단계가 커밋했고 이 커밋에 넣지 않는다. 커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 상태 파일과 한 커밋에 넣는다. 결과물이 레포 설정의 의도 폴더(`intent_dir` — 옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니거나, 로드맵 폴더가 레포 설정의 로드맵 폴더(`roadmaps_dir`) 바로 아래가 아니거나(대소문자만 다른 경로 포함), 폴더가 아니거나, 작업 트리 밖이거나 링크를 거치거나, 커밋할 파일이 없거나, §7 의 파일이 `roadmap-check` 를 통과하지 못하면 커밋하지 않는다. 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치를 판정하지 못하거나, 지금 기본 브랜치 위거나, 브랜치 위가 아니면(detached HEAD) 커밋하지 않고 손으로 커밋할 목록(로드맵 폴더 · 상태 파일)을 보인다. 결과물의 원자료를 알면(`## 7.` 의 PR 본문 펜스처럼 `raw_source.py locate` 가 `FOUND` 를 내고 seed 경로는 상태 파일의 `seed:` 값이다) 아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다. 로드맵 폴더와 상태 파일이 이미 커밋돼 있고 바뀐 것이 없으면(앞서 끊긴 로드맵 잡기가 커밋해 둔 것) 새 커밋 없이 그 사실을 낸다.
 
 <!-- roadmap-commit:begin -->
 ```bash
@@ -216,6 +216,11 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 [ -n "$cur" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 [ "$cur" != "$def" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+st="$(git -C "$top" status --porcelain -- "$RDIR" "$STATE_F" 2>/dev/null)" || st="?"
+if [ -z "$st" ] && [ -n "$(git -C "$top" ls-files -- "$STATE_F")" ] && [ -n "$(git -C "$top" ls-files -- "$RDIR")" ]; then
+  echo "[spec-distill] 로드맵 폴더 · 상태 파일은 이미 커밋돼 있다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+  exit 0
+fi
 c_rc=0
 git -C "$top" add -- "$RDIR" "$STATE_F" || c_rc=$?
 [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(roadmap): $(basename -- "$RDIR") 로드맵 · 분해안" -- "$RDIR" "$STATE_F" || c_rc=$?
