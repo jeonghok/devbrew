@@ -1370,7 +1370,7 @@ class TestPrepare(unittest.TestCase):
             _write("broken\n", tree, ANS_DIR, "2.md")
             p = self._prep([], tree_root=tree)
             self.assertIn("읽지 못한 답 파일 1", p.stdout.splitlines())
-            self.assertIn("- %s · 의도다 · 관찰: 3\t근거" % IDENT,
+            self.assertIn("- %s · 의도다 · 질문: Q? · 관찰: 3 근거" % IDENT,
                           self._f("intent-answered.md").splitlines())
 
     def test_missing_config_is_rc4(self):
@@ -2881,7 +2881,7 @@ PERSONA_RULES = (
     # 이미 답한 질문 (§5)
     "`<answered>` 를 보고 후보를 스스로 빼지 않는다.",
     "거르는 곳은 스크립트 한 곳이다.",
-    "`same_as` 칸에 그 정체를 글자 그대로 적는다",
+    "`same_as` 칸에 그 줄의 첫 칸(열쇠 또는 정체)을 글자 그대로 적는다",
     "관찰이 지금 달라졌다고 볼 때만 `observation_changed` 를 단다",
     "둘 중 하나라도 빠지면 다시 묻지 않는다.",
     # 출력 계약
@@ -2996,6 +2996,50 @@ class TestPersona(unittest.TestCase):
                 self.assertTrue(value.endswith("?"), value)
                 self.assertNotIn(".", value)
 
+    def test_why_field_instruction(self):
+        """why 칸 지시 — 정확히 한 번, question 줄 뒤에 있다."""
+        _fm, body = self._split()
+        want = ("- `why` — 이 질문의 답에 따라 무엇이 달라지는지를 처음 보는 사람이 읽을 쉬운 말 "
+                "한 문장으로. 번호는 괄호 안에만 둔다.")
+        self.assertEqual(body.count(want), 1)
+        q = body.index("- `question` —")
+        self.assertGreater(body.index(want), q)
+
+    def test_examples_carry_one_sentence_why(self):
+        """출력 예시 항목마다 why 가 하나, 한 문장(「다.」 로 끝나고 한 번뿐). 질문 없는 예시엔 없다."""
+        import re
+        _fm, body = self._split()
+        blocks = re.findall(r"```qg-intent-critic\n(.*?)```", body, re.S)
+        self.assertEqual(len(blocks), 2, len(blocks))
+        total = 0
+        for block in blocks:
+            data = yaml.safe_load(block)
+            if not data["questions"]:
+                self.assertNotIn("why:", block)
+                continue
+            self.assertEqual(len(data["questions"]), 3)
+            self.assertEqual(block.count("\n    why:"), 3)
+            for item in data["questions"]:
+                total += 1
+                why = item.get("why")
+                with self.subTest(why=why):
+                    self.assertIsInstance(why, str)
+                    self.assertNotIn("\n", why)
+                    self.assertTrue(why.endswith("다."), why)
+                    self.assertEqual(why.count("다."), 1, why)
+        self.assertEqual(total, 3)
+
+    def test_answered_slot_and_same_as_first_cell(self):
+        """same_as 는 줄의 첫 칸(열쇠 또는 정체)을 적는다 — 옛 문구는 없고 <answered> 줄은 새 꼴을 말한다."""
+        _fm, body = self._split()
+        new = "그 줄의 첫 칸(열쇠 또는 정체)을 글자 그대로 적는다"
+        self.assertEqual(body.count(new), 1)
+        self.assertEqual(body.count("그 정체를 글자 그대로 적는다"), 0)
+        lines = [l for l in body.split("\n") if l.startswith("- `<answered>` —")]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("첫 칸이 열쇠", lines[0])
+        self.assertIn("그때의 질문 글", lines[0])
+
     def test_frontmatter_is_read_only_and_unpinned(self):
         fm, _body = self._split()
         lines = fm.split("\n")
@@ -3082,18 +3126,89 @@ class TestOldNameGone(unittest.TestCase):
 class TestProcedureDoc(unittest.TestCase):
     """references/intent-critic.md — AC17 ③ 질문 창 앞 글."""
 
-    def test_meaning_is_shown_before_the_question_dialog(self):
+    DIRECT_ASK_FRONT = (
+        "<브랜치 이름> 리뷰\n"
+        "물을 것: <n>개[ · 전에 답해 묻지 않은 것 <m>개]\n"
+        "\n"
+        "질문 <n> — <질문 문장>\n"
+        "  왜 묻나: <why>\n"
+        "  <「여기는 직접 확인해 보세요 — …」 줄 — 질문 글에 그 표지가 있을 때만>\n"
+        "\n"
+        "자세히: <세션 폴더의 intent-questions.yaml 절대 경로>\n"
+        "답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.\n")
+    END_LINE = ("답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 "
+                "「의도다 — 이유」 처럼 쓴다.")
+
+    def _ask_front(self):
         text = REFERENCE.read_text(encoding="utf-8")
         anchor = "**질문 (PR 범위 · k ≥ 1).**"
         self.assertEqual(text.count(anchor), 1)
         start = text.index(anchor)
-        dialog = text.index("AskUserQuestion(", start)
-        shown = []
-        for line in text[start:dialog].split("\n"):
-            if MEANING in line:
-                shown.append(line)
-        self.assertEqual(len(shown), 1, text[start:dialog])
-        self.assertTrue(shown[0].startswith("> intent-critic "), shown[0])
+        return text[start:text.index("AskUserQuestion(", start)]
+
+    def test_direct_ask_front_text_shape(self):
+        """AC19 — I5 의 질문 앞 글이 맥락 두 줄 · 질문 블록 · 끝의 두 줄이다(펜스가 글자 그대로 한 번)."""
+        front = self._ask_front()
+        self.assertEqual(front.count("```text\n" + self.DIRECT_ASK_FRONT + "```\n"), 1, front)
+        # 양의 짝: 옛 맥락 줄과 결과 줄은 없다.
+        self.assertNotIn("이 에픽이 하기로 한 것", front)
+        self.assertNotIn("결과:", front)
+
+    def test_meaning_sentence_left_the_ask_template(self):
+        """AC19 — 옛 고정 문장 둘 가운데 첫째는 묻는 틀에 없고, 둘째는 홀로 선 줄이 아닌 새 끝 줄의 뒷부분뿐이다."""
+        front = self._ask_front()
+        self.assertEqual(front.count(MEANING), 0)
+        self.assertEqual(front.count("> intent-critic 은 의도대로"), 0)
+        lone = [l for l in front.split("\n") if l.startswith("이유를 남기려면 직접 입력 칸에")]
+        self.assertEqual(lone, [])
+        tail = [l for l in front.split("\n") if "이유를 남기려면 직접 입력 칸에" in l]
+        self.assertEqual(tail, [self.END_LINE])
+        # 양의 짝: 문서 전체에서도 그 구절은 새 끝 줄에만 있다.
+        text = REFERENCE.read_text(encoding="utf-8")
+        self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
+
+    def test_why_rules_in_direct_ask(self):
+        """왜 묻나 줄을 채우는 규칙 셋 — why 그대로 · `-` 면 쓰인 글 · 다시 묻는 앞 글(앞 칸은 있는 그대로)."""
+        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
+        rules = [
+            "- 왜 묻나 — 그 항목의 `why` 를 그대로 쓴다.",
+            "`why` 가 `-` 면 `왜 묻나: 리뷰어가 적지 않았다` 로 쓴다 — 줄을 빼지 않는다.",
+            "- 다시 묻는 질문(`asked_before` 가 `-` 가 아니면)에는 그 줄의 `why` 앞에 글을 붙인다 — `asked_before` 의 "
+            "넷째 칸이 `근거가 달라짐` 일 때 `전에 「<답>」 라고 답하셨는데(<날짜>) "
+            "이번에는 <새로 보인 것> 가 보였다. ` 를, `고친 뒤에도 보임` 일 때 "
+            "`전에 「잘못 골랐다」 라고 답하셨다(<날짜>) — 고친 뒤에도 같은 의심이 보인다. ` 를 붙인다.",
+            "`<답>` 은 `asked_before` 의 첫째 칸, `<날짜>` 는 둘째 칸을 있는 그대로 쓴다.",
+            "`<새로 보인 것>` 은 `changed_observation` 의 첫 항목이다",
+        ]
+        for rule in rules:
+            self.assertEqual(i5.count(rule), 1, rule)
+
+    def test_handed_contract_section(self):
+        """AC7(문서 쪽) — 새 절 `## 넘겨받은 답` 이 넘겨받는 파일의 계약을 적는다."""
+        text = REFERENCE.read_text(encoding="utf-8")
+        body = self._section("넘겨받은 답")
+        self.assertLess(text.index("\n## I7 돌려주기\n"), text.index("\n## 넘겨받은 답\n"))
+        fence = ("```yaml\n"
+                 "contract: 1\n"
+                 "entries:\n"
+                 "  - key: <답 파일 이름>#<번호>\n"
+                 "    id: <정체>\n"
+                 "    answer: <의도다 | 잘못 골랐다>\n"
+                 "    question: <질문 글>\n"
+                 "    observation: <관찰 글>\n"
+                 "    answered_at: <답한 때>\n"
+                 "    route: <이 에픽 안에서 고친다 | 새 일의 씨앗 | 재분해 신호 | ->\n"
+                 "    record: <기록 파일 경로>\n"
+                 "```\n")
+        self.assertEqual(body.count(fence), 1, body)
+        self.assertEqual(body.count("`contract: 1`"), 1)
+        for key in ("`key`", "`id`", "`answer`", "`question`", "`observation`", "`answered_at`",
+                    "`route`", "`record`"):
+            self.assertIn(key, body)
+        for reason in ("없음", "보통 파일이 아님", "크기 상한 넘음", "꼴이 맞지 않음", "판이 다름"):
+            self.assertIn("`%s`" % reason, body)
+        self.assertIn("1000000 바이트", body)
+        self.assertEqual(body.count("항목 하나라도 틀리면 파일 전체를 받지 않는다"), 1)
 
     def test_shown_question_window_always_runs_record(self):
         """F3 · AC2 — 닫거나 답하지 않은 질문은 머리 줄이 없고, 질문 창을 보였으면 답이 하나도 없어도 record 를
@@ -3219,13 +3334,11 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertNotIn("근거로 본 것(<근거의 종류>)", qlines[0])
         self.assertNotIn("이유를 남기려면", qlines[0])
         outside = [l for l in i5.split("\n") if "이유를 남기려면 직접 입력 칸에" in l]
-        self.assertEqual(len(outside), 1, outside)
-        self.assertTrue(outside[0].startswith("질문 창엔 "), outside[0])
-        self.assertIn("`질문 <n>`", outside[0])
-        self.assertTrue(outside[0].startswith("질문 창엔 질문 글의 첫 문장(질문 한 문장)만 둔다."), outside[0])
+        self.assertEqual(outside, [self.END_LINE])
         self.assertEqual(text.count("이유를 남기려면 직접 입력 칸에"), 1)
-        # 양의 짝: 근거의 종류 · 근거 줄 자리 채우기 규칙은 남아 있다.
-        self.assertEqual(i5.count("근거의 종류 — `evidence_kinds`"), 1)
+        # 양의 짝: 질문 글을 표지에서 나누는 규칙은 남아 있고, 화면에 싣지 않는 것은 자세히 줄의 파일에 있다고 적는다.
+        self.assertEqual(i5.count("- 질문 글 — `question` 은 고정 표지"), 1)
+        self.assertEqual(i5.count("의심하는 인용 · 근거 줄 · 근거의 종류 · 정체는 화면에 싣지 않는다"), 1)
 
     def test_direct_ask_splits_at_marker_not_line(self):
         """질문 글은 고정 표지에서 나눈다 — 줄바꿈은 YAML 에서 접힐 수 있어 나누는 데 쓰지 않는다(R18)."""

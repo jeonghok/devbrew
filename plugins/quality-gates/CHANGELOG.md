@@ -3,11 +3,26 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [16.0.1] — 2026-11-24
+## [17.0.1] — 2026-11-24
 
 ### Fixed
 - codex 결과 파서(`scripts/codex_findings_to_yaml.py`, 정본 `shared/codex/`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
 - 문서 비평의 codex 결과 추출기(`scripts/extract_codex_artifact_yaml.py`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 성공 갈래 · 실패 갈래 모두 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 강등(`codex_failed: true`)을 알린다.
+
+## [17.0.0] — 2026-11-24
+
+### Changed
+- 돌려주는 꼴(`intent-return.md`)의 판이 3으로 올랐다(`contract: 3`). 2판까지만 읽는 쪽은 이 파일을 읽지 못한다.
+- 직접 묻는 틀은 질문 문장을 먼저 보이고 「왜 묻나」 한 줄을 그 아래에 단다.
+- 다른 팀 읽기가 `type: roadmap-review` 문서를 싣지 않는다.
+
+### Added
+- `--answered <경로>` — 지휘하는 쪽이 넘기는 「이미 답한 것」 파일을 받는다(`intent_critic.py prepare` · `setup-qg.sh`). 읽지 못하면 `넘겨받은 답을 읽지 못함 — <사유>` 를 알리고 이어 간다.
+- 돌려주는 꼴의 `answered_filtered`(머리) · `why` · `asked_before` · `changed_observation`(질문 칸).
+- `synthesize_findings.py --pre-merge-out` — 합치기 전 지적 목록을 세션 폴더의 `findings-pre-merge.yaml` 에 쓴다.
+
+### Fixed
+- README 를 동작에 맞췄다 — 근거의 종류는 질문 화면에 싣지 않고 결과 절 표 · 돌려주는 꼴에 남으며, `asked_before` 의 넷째 칸은 다시 묻는 까닭(`근거가 달라짐` · `고친 뒤에도 보임`)이다.
 
 ## [16.0.0] — 2026-11-22
 
