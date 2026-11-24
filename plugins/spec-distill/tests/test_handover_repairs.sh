@@ -72,6 +72,7 @@ has "$FIN" '`templates/interview-seed-audit-template.md` 의 제목 순서와 �
 has "$FIN" '빈 앵커 줄로 나아가지 않는다' "나갈 길(양의 짝): 판결 줄 없는 멈춤 불릿이 그대로 있다"
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
+has "$RB" '상태 파일을 읽지 못함 · 원자료를 찾았는데 `--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기' "종료 2 목록: 괄호가 「원자료를 찾았는데 --raw-audit 없음」 을 번들 머리말과 같은 차례로 댄다"
 
 # ── 과제 7 — 「있는 것 먼저」 여섯 칸의 자리 ─────────────────────────────────────────
 CB=plugins/spec-distill/skills/context-build/SKILL.md
