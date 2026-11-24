@@ -107,10 +107,12 @@ with tempfile.TemporaryDirectory() as d:
     p.write_text(t.replace(head, head + body), encoding="utf-8")
     cp = subprocess.run([sys.executable, str(sd / "scripts" / "check_brief.py"), "gate", str(p)],
                         capture_output=True, text=True, encoding="utf-8")
-    print(json.loads(cp.stdout.strip().splitlines()[-1])["pass"])
+    g = json.loads(cp.stdout.strip().splitlines()[-1])
+    why = any("결정 연결이 첫 줄 끝이 아니라 본문 줄에 있다" in f for f in g.get("failures", []))
+    print(g["pass"], why)
 PY
 }
-assert_eq "$(six_cells 0)" "True" "여섯 칸의 자리: 웹 항목의 들여쓴 본문 줄에 여섯 칸을 실은 결과물이 구조 게이트를 지난다"
-assert_eq "$(six_cells 1)" "False" "여섯 칸의 자리(양성 대조): 본문 줄에 결정 연결을 두면 게이트가 막는다"
+assert_eq "$(six_cells 0)" "True False" "여섯 칸의 자리: 웹 항목의 들여쓴 본문 줄에 여섯 칸을 실은 결과물이 구조 게이트를 지난다"
+assert_eq "$(six_cells 1)" "False True" "여섯 칸의 자리(양성 대조): 본문 줄에 결정 연결을 두면 게이트가 그 사유(본문 줄 결정 연결)로 막는다"
 
 finish
