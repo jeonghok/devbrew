@@ -242,7 +242,7 @@ class FirstCell(_Base):
                 rc, out = self.check(fx)
                 self.assertEqual(rc, 1, out)
                 self.assertEqual(out["first_cell"], ["label_on_no_framing"], out)
-                self.assertIn("첫 칸 위반 — framing 없는 인터뷰인데 원자료 라벨을 달았다", out["advisories"])
+                self.assertIn("첫 칸 위반 — framing 없는 컨텍스트 쌓기인데 원자료 라벨을 달았다", out["advisories"])
 
     def test_no_framing_old_label(self):
         fx = self.repo(mode="no-framing")

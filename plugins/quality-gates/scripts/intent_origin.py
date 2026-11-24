@@ -34,7 +34,7 @@ REASON_LINK = "심볼릭 링크"
 REGULAR_MODES = ("100644", "100755")
 LINK_MODE = "120000"
 # 의도 문서를 가리는 머리 표시 — `<키>` 는 그 줄이 있음, `<키>=<값>` 은 그 줄의 값이 같음.
-DEFAULT_MARKERS = ("source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")
+DEFAULT_MARKERS = ("source_intent", "source_interview", "roadmap", "source_brief", "type=roadmap", "type=epic-bundle")
 
 _INTENT_DOUBT_WORDS = ("위험", "기각", "열린 질문", "risk", "rejected", "open question")
 _ROADMAP_DOUBT_WORDS = ("위험", "열린 질문", "risk", "open question")
@@ -779,15 +779,22 @@ def _reader(repo: str, commit: str, tree_root: Optional[str] = None):
     return lambda rel: read_tracked(repo, commit, rel)
 
 
+def _head_link(text: str) -> Optional[str]:
+    """머리의 원문 링크 — 새 키 `source_intent:` 에 값이 있으면 그 값, 키가 없거나 값이 없으면 옛 `source_interview:`(따옴표만 빈 값 `""` 은 값이다)."""
+    link = frontmatter_value(text, "source_intent")
+    if link is None:
+        link = frontmatter_value(text, "source_interview")
+    return link
+
+
 def _follow_changed(read, rel: str, st: dict) -> None:
-    """바뀐 의도 문서 — `source_interview:` · `source_brief:` 를 원문으로 따라가고, 로드맵 자체면 로드맵 칸에 싣는다."""
+    """바뀐 의도 문서 — `source_intent:` · 옛 `source_interview:` · `source_brief:` 를 원문으로 따라가고, 로드맵 자체면 로드맵 칸에 싣는다."""
     text = _open_doc(read, rel, st, "원문 링크 거부")
     if text is None:
         return
     if frontmatter_value(text, "type") == "roadmap":
         st["own_roadmaps"].append(rel)
-    for key in ("source_interview", "source_brief"):
-        link = frontmatter_value(text, key)
+    for link in (_head_link(text), frontmatter_value(text, "source_brief")):
         if link is None:
             continue
         linked = _open_doc(read, link, st, "원문 링크 거부")
@@ -814,7 +821,7 @@ def build_origin(repo: str, head_commit: str, review_commit: str,
             spec_text = _open_doc(review, spec, st, "원문 링크 거부")
             if spec_text is None:
                 continue
-            link = frontmatter_value(spec_text, "source_interview")
+            link = _head_link(spec_text)
             if link is None:
                 continue
             text = _open_doc(review, link, st, "원문 링크 거부")

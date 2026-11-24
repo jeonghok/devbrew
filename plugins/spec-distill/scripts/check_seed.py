@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""interview-seed 게이트 — seed 본문 둘(비어 있지 않음 · 모양) · audit 셋(제목 구조 · 원문 보존 · 덜어 낸 것).
+"""intent-seed 게이트 — seed 본문 둘(비어 있지 않음 · 모양) · audit 셋(제목 구조 · 원문 보존 · 덜어 낸 것).
 
 **seed 본문에 대한 슬롯 존재 검사는 없다.** seed 본문 검사는 모양 검사다 — `seed_body.parse_seed`
 문법(산문 문단만)이 받지 않는 줄이 없는지를 본다(부재 검사). 무엇이 «있어야» 한다는 검사를 추가하지

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""spec-distill — 인터뷰 상태 파일(`<줄기>-interview.state.md`)의 진입 판정 · 옛 자리 이월 · seed audit 이름 되찾기.
+"""spec-distill — 컨텍스트 쌓기 상태 파일(`<줄기>-context.state.md` 와 옛 꼴 이름)의 진입 판정 · 옛 자리 이월 · seed audit 이름 되찾기.
 
 CLI (판결은 stdout 마지막 줄):
   interview_state.py entry --arg <경로|""> --session <sid> [--cwd <dir>]
   interview_state.py migrate-legacy --session <sid> --topic <kebab> [--seed <경로>] [--date D] [--cwd <dir>]
     rc: 0 옮김 · 1 옮길 옛 파일 없음 · 2 자리 거부(링크 포함)/대상 이미 있음 · 3 읽기/쓰기 실패(옛 파일 그대로) 또는 옛 파일 삭제 실패
   interview_state.py seed-audit-for-session --session <sid> [--topic <kebab>] [--cwd <dir>]
-    rc: 0 이름 하나 · 1 없음 · 2 둘 이상 · 3 인터뷰 폴더를 정하지 못함(레포 설정이 깨짐)
-    --topic 이면 그 주제(`<날짜>-<주제>-interview`)의 audit 만 센다 — 다른 주제의 것만 있으면 알리고 1.
+    rc: 0 이름 하나 · 1 없음 · 2 둘 이상 · 3 의도 폴더를 정하지 못함(레포 설정이 깨짐)
+    새 의도 폴더에서만 찾는다(옛 폴더는 보지 않는다). --topic 이면 그 주제(`<날짜>-<주제>-intent`)의 audit 만 센다 — 다른 주제의 것만 있으면 알리고 1.
 """
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import legacy_names  # noqa: E402
+from legacy_names import CONTEXT_STATE, INTENT_SEED, INTENT_SEED_AUDIT, kind_matches  # noqa: E402
 from state_path import (  # noqa: E402
-    SESSION_PATTERN, frontmatter_scalars, inside_root, interview_dir, interview_state_path, physical_cwd_prefix,
+    SESSION_PATTERN, frontmatter_scalars, inside_root, intent_dirs, interview_state_path, physical_cwd_prefix,
     state_root, worktree_root,
 )
 from gc_common import root_escapes  # noqa: E402
 
 LEGACY_NAME = "state.local.md"
-_SEED_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-([a-z0-9]+(?:-[a-z0-9]+)*)-interview\.md")
-_AUDIT_TOPIC = re.compile(r"\d{4}-\d{2}-\d{2}-(.+)-interview\.audit\.md")
 # 상태 파일 경로는 펜스의 셸 리터럴(`ARG_PATH='<경로>'`)에 붙는다 — 작업 트리 안 상대 경로는 이 글자만 받는다.
 _SAFE_REL = re.compile(r"[\w./ -]+")
 _UNSAFE_ROOT_CHARS = frozenset("'\x7f").union(chr(c) for c in range(0x20))   # 작업 트리 루트 경로에서 받지 않는 글자
@@ -78,11 +78,25 @@ def seed_value(seed: str, cwd: str | None) -> str:
     return rel
 
 
+def _candidate_dirs(real_dir: str, root, is_git: bool) -> list[Path]:
+    """seed 의 폴더 · 새 의도 폴더 · 옛 의도 폴더 — 실제 경로로 겹침을 뺀 합집합(순서 유지). 설정이 깨졌으면 seed 의 폴더만."""
+    new, old, _why = intent_dirs(root, is_git)
+    out, seen = [], set()
+    for d in (Path(real_dir), new, old):
+        if d is None or os.path.realpath(str(d)) in seen:
+            continue
+        seen.add(os.path.realpath(str(d)))
+        out.append(d)
+    return out
+
+
 def resume_candidates(seed: str, want: str) -> list[Path]:
     real_dir = os.path.dirname(os.path.realpath(seed))
-    root, _ = worktree_root(real_dir)
+    root, is_git = worktree_root(real_dir)
+    found = sorted(p for d in _candidate_dirs(real_dir, root, is_git)
+                   for suffix in legacy_names.state_suffixes() for p in d.glob("*" + suffix))
     out = []
-    for p in sorted(Path(real_dir).glob("*-interview.state.md")):
+    for p in found:
         if inside_root(p, root):   # 링크이거나 작업 트리 밖이면 후보로 내지 않는다
             continue
         why = unsafe_name(p, root)
@@ -94,7 +108,7 @@ def resume_candidates(seed: str, want: str) -> list[Path]:
             print("[spec-distill] 이어 갈 후보에서 뺐다 — {0} ({1})".format(p, why), file=sys.stderr)
             continue
         fm = frontmatter_scalars(p) or {}
-        if fm.get("type") != "interview-state" or fm.get("seed") != want:
+        if not kind_matches(fm.get("type"), CONTEXT_STATE) or fm.get("seed") != want:
             continue
         if p.with_name(p.name[:-len(".state.md")] + ".md").exists():
             continue
@@ -110,45 +124,45 @@ def cmd_entry(a) -> int:
         root, _ = worktree_root(cwd)
         why = inside_root(abs_arg, root)
         if why:
-            print("interview-state: REJECT {0} ({1})".format(arg, why))
+            print("context-state: REJECT {0} ({1})".format(arg, why))
             return 2
         why = unsafe_name(abs_arg, root)
         if why:
-            print("interview-state: REJECT {0!r} ({1})".format(arg, why))
+            print("context-state: REJECT {0!r} ({1})".format(arg, why))
             return 2
         why = sibling_reason(abs_arg, root)
         if why:
-            print("interview-state: REJECT {0} ({1})".format(arg, why))
+            print("context-state: REJECT {0} ({1})".format(arg, why))
             return 2
         fm = frontmatter_scalars(abs_arg)
         have = None if fm is None else fm.get("type")
-        if have != "interview-state":
-            print("interview-state: REJECT {0} (type: {1})".format(arg, have or "없음"))
+        if not kind_matches(have, CONTEXT_STATE):
+            print("context-state: REJECT {0} (type: {1})".format(arg, have or "없음"))
             return 2
         if os.path.exists(abs_arg[:-len(".state.md")] + ".md"):
-            print("interview-state: REJECT {0} (이미 끝난 인터뷰다 — brief 가 있다)".format(arg))
+            print("context-state: REJECT {0} (이미 끝난 컨텍스트 쌓기다 — brief 가 있다)".format(arg))
             return 2
-        print("interview-state: RESUME {0}".format(abs_arg))
+        print("context-state: RESUME {0}".format(abs_arg))
         return 0
     leg = legacy_state(a.session, a.cwd)
     if leg is not None:
-        print("interview-state: LEGACY {0}".format(leg))
+        print("context-state: LEGACY {0}".format(leg))
         return 0
-    if arg and (frontmatter_scalars(arg) or {}).get("type") == "interview-seed":
+    if arg and kind_matches((frontmatter_scalars(arg) or {}).get("type"), INTENT_SEED):
         sv = seed_value(arg, a.cwd)
         cands = [] if sv == "없음" else resume_candidates(arg, sv)
         if cands:
             for c in cands:
                 print("candidate: {0}".format(c))
-            print("interview-state: ASK")
+            print("context-state: ASK")
             return 0
-        m = _SEED_NAME.fullmatch(os.path.basename(arg))
-        if m:
-            print("interview-state: NEW-SEED {0}-brief seed={1}".format(m.group(1), sv))
+        topic = legacy_names.seed_topic(os.path.basename(arg))
+        if topic:
+            print("context-state: NEW-SEED {0}-brief seed={1}".format(topic, sv))
             return 0
         print("[spec-distill] seed 이름에서 주제를 떼지 못했다 — 첫 라운드에서 정한다: {0}".format(arg),
               file=sys.stderr)
-    print("interview-state: NEW")
+    print("context-state: NEW")
     return 0
 
 
@@ -174,7 +188,7 @@ def cmd_migrate(a) -> int:
     tmp = path.with_name("." + path.name + ".tmp")
     try:
         text = leg.read_text(encoding="utf-8")
-        head = "type: interview-state\nseed: {0}\n".format(seed_value(a.seed, a.cwd) if a.seed else "없음")
+        head = "type: {0}\nseed: {1}\n".format(CONTEXT_STATE, seed_value(a.seed, a.cwd) if a.seed else "없음")
         new = "---\n" + head + text[4:] if text.startswith("---\n") else "---\n" + head + "---\n" + text
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
@@ -201,18 +215,18 @@ def cmd_migrate(a) -> int:
 
 def cmd_seed_audit(a) -> int:
     root, is_git = worktree_root(a.cwd)
-    d, why = interview_dir(root, is_git)
+    d, _old, why = intent_dirs(root, is_git)
     if d is None:
         print(why, file=sys.stderr)
         return 3
     hits = []
-    for p in sorted(d.glob("*-interview.audit.md")):
+    for p in sorted(q for tail in (legacy_names.SEED_TAIL, legacy_names.OLD_TAIL) for q in d.glob("*" + tail + ".audit.md")):
         fm = frontmatter_scalars(p) or {}
-        if fm.get("type") == "interview-seed-audit" and fm.get("session_id") == a.session:
+        if kind_matches(fm.get("type"), INTENT_SEED_AUDIT) and fm.get("session_id") == a.session:
             hits.append(p)
     if a.topic:
         # 이름에서 주제를 떼지 못하는 audit 은 주제를 모른다 — 다른 주제로 단정하지 않고 후보에 남긴다
-        mine = [p for p in hits if not (m := _AUDIT_TOPIC.fullmatch(p.name)) or m.group(1) == a.topic]
+        mine = [p for p in hits if not (m := legacy_names.seed_audit_topic(p.name)) or m == a.topic]
         if hits and not mine:
             print("[spec-distill] 이 세션에 다른 주제의 seed audit 이 있다 — 주제 {0} 는 새 이름으로 연다. 같은 회의를 잇는 "
                   "것이면 TOPIC 을 그 주제로 바꿔 다시 돌린다:".format(a.topic), file=sys.stderr)

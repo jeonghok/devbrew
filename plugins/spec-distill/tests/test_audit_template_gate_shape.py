@@ -136,6 +136,27 @@ class AuditTemplateGateShape(unittest.TestCase):
             self.assertEqual(vals, ["spec-distill context-build"], name)
             self.assertIsNone(re.search(r"v\d", vals[0]), name)
 
+    def test_templates_write_new_kind_words(self):
+        """두 템플릿은 새로 쓰는 종류 글자와 새 꼴 이름 예시를 쓴다(AC20) — 파일 이름은 그대로다."""
+        tdir = TPL.parent
+
+        def head(name):
+            text = (tdir / name).read_text(encoding="utf-8")
+            return text.split("\n---\n", 1)[0].splitlines() if text.startswith("---") else []
+
+        brief = head("interview-brief-template.md")
+        self.assertIn("type: context-brief", brief)
+        audit_file = [ln for ln in brief if ln.startswith("audit_file:")]
+        self.assertEqual(len(audit_file), 1, brief)
+        self.assertTrue(audit_file[0].split("#", 1)[0].rstrip().endswith("-context.audit.md"), audit_file[0])
+        audit = head("interview-audit-template.md")
+        self.assertIn("type: context-audit", audit)
+        payload = [ln for ln in audit if ln.startswith("payload:")]
+        self.assertEqual(len(payload), 1, audit)
+        self.assertTrue(payload[0].endswith("-context.md"), payload[0])
+        body = (tdir / "interview-audit-template.md").read_text(encoding="utf-8")
+        self.assertNotIn("-interview.", body)
+
 
 if __name__ == "__main__":
     unittest.main()

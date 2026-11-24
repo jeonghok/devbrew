@@ -7,7 +7,7 @@ seed 는 다음 세션의 첫 턴에 넘기는, 모델이 줄인 글이다. 사�
 
 ```markdown
 ---
-type: interview-seed
+type: intent-seed
 next_phase: spec-distill:context-build
 audit_file: <basename>.audit.md
 ---
