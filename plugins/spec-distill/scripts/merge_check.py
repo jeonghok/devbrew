@@ -371,7 +371,7 @@ def _assign_rows(path: Path):
 
 
 def assignment(tree: Path, work: Path):
-    _rc, files, _e = git(tree, "ls-files")
+    _rc, files, _e = git(tree, "-c", "core.quotePath=false", "ls-files")   # 영어가 아닌 경로도 글자 그대로
     first = work / "all.assign"
     rc, _o, err = select("assign", str(tree), str(first), stdin=files + "\n")
     if rc:

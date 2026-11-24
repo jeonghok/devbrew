@@ -989,6 +989,22 @@ class VersionReport(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("새 판", msg)
 
+    def test_plugin_json_under_non_ascii_folder(self):
+        # git 의 core.quotePath 를 켠 레포 — 영어가 아닌 글자가 든 폴더의 plugin.json 도 읽어 판을 견준다.
+        d = Path(tempfile.mkdtemp())
+        try:
+            subprocess.run(["git", "init", "-q", str(d)], env=ENV, check=True)
+            sh(d, "config", "core.quotePath", "true")
+            (d / "플러그인").mkdir()
+            (d / "플러그인" / "plugin.json").write_text(json.dumps({"name": "p", "version": "7.3.1"}), encoding="utf-8")
+            sh(d, "add", "-A")
+            (d / "installed.json").write_text(json.dumps({"name": "p", "version": "7.3.0"}), encoding="utf-8")
+            rc, msg = L.version_report(d, d / "installed.json")
+        finally:
+            shutil.rmtree(str(d))
+        self.assertEqual(rc, 1, msg)
+        self.assertIn("옛 판", msg)
+
     def test_uncomparable_is_never_ok(self):
         ok = json.dumps({"name": "p", "version": "1.0.0"})
         for inst, repo in [(json.dumps({"version": "1.0.0"}), ok), ("[]", ok),
