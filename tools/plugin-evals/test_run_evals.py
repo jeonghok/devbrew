@@ -81,7 +81,8 @@ class RunEvalsTest(unittest.TestCase):
         if os.path.exists(self.args_file):
             os.remove(self.args_file)
 
-    def run_script(self, extra, result=None, rc=0, with_bin=True):
+    def run_script(self, extra, result=None, rc=0, with_bin=True,
+                   plugin=None, cwd=None):
         path = "/usr/bin:/bin"
         if with_bin:
             path = self.bin + ":" + path
@@ -93,10 +94,10 @@ class RunEvalsTest(unittest.TestCase):
         }
         if result:
             env["FAKE_RESULT"] = self.results[result]
-        cmd = [sys.executable, SCRIPT, self.plugin] + extra
+        cmd = [sys.executable, SCRIPT, plugin or self.plugin] + extra
         return subprocess.run(
             cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            universal_newlines=True,
+            universal_newlines=True, cwd=cwd,
         )
 
     def fake_args(self):
@@ -107,11 +108,12 @@ class RunEvalsTest(unittest.TestCase):
         return p.stdout.rstrip("\n").split("\n")[-1]
 
     def test_always_flags_without_cap(self):
-        self.run_script([], result="ok")
+        self.run_script([], result="ok", plugin=os.path.basename(self.plugin),
+                        cwd=self.root)
         a = self.fake_args()
         i = a.index("plugin")
         self.assertEqual(a[i + 1], "eval")
-        self.assertEqual(a[i + 2], os.path.abspath(self.plugin))
+        self.assertEqual(a[i + 2], os.path.realpath(self.plugin))
         self.assertEqual(a.count("--no-publish"), 1)
         self.assertEqual(a.count("--max-cost-usd"), 1)
         self.assertEqual(a[a.index("--max-cost-usd") + 1], "2")
@@ -130,10 +132,15 @@ class RunEvalsTest(unittest.TestCase):
         self.assertEqual(a[a.index("--model") + 1], "sonnet")
 
     def test_bad_cap_does_not_call(self):
-        p = self.run_script(["--max-cost-usd", "abc"], result="ok")
-        self.assertFalse(os.path.exists(self.args_file))
-        self.assertTrue(self.last_line(p).startswith("plugin-evals: 돌지 못함 — "))
-        self.assertEqual(p.returncode, 1)
+        for bad in ("abc", "0", "-1"):
+            with self.subTest(cap=bad):
+                if os.path.exists(self.args_file):
+                    os.remove(self.args_file)
+                p = self.run_script(["--max-cost-usd", bad], result="ok")
+                self.assertFalse(os.path.exists(self.args_file))
+                self.assertTrue(
+                    self.last_line(p).startswith("plugin-evals: 돌지 못함 — "))
+                self.assertEqual(p.returncode, 1)
 
     def test_pass_line(self):
         p = self.run_script([], result="ok", rc=0)
