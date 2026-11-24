@@ -33,18 +33,26 @@ def is_safe(s):
     return s in FIXED or any(r.fullmatch(s) for r in SAFE)
 
 
-def strings(value, under_answers=False):
-    """값 안의 모든 글자 값. `answers` 사전은 열쇠(질문 글)도 낸다."""
+IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def is_safe_key(k):
+    return is_safe(k) or bool(IDENT.fullmatch(k))
+
+
+def unsafe(value):
+    """값 안의 안전하지 않은 글 값과 열쇠. 모든 깊이의 사전 · 목록을 돈다."""
     if isinstance(value, str):
-        yield value
+        if not is_safe(value):
+            yield value
     elif isinstance(value, list):
         for v in value:
-            yield from strings(v)
+            yield from unsafe(v)
     elif isinstance(value, dict):
         for k, v in value.items():
-            if under_answers:
+            if not is_safe_key(k):
                 yield k
-            yield from strings(v, under_answers=(k == "answers"))
+            yield from unsafe(v)
 
 
 def entries(name):
@@ -60,8 +68,23 @@ class Privacy(unittest.TestCase):
     def test_every_string_is_a_placeholder_or_a_fixed_word(self):
         for path in sorted(DATA.glob("*.jsonl")):
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                for s in strings(json.loads(line)):
-                    self.assertTrue(is_safe(s), "%s:%d %r" % (path.name, n, s[:12]))
+                self.assertEqual([s[:12] for s in unsafe(json.loads(line))], [], "%s:%d" % (path.name, n))
+
+    def test_keys_outside_answers_are_checked(self):   # AC4 — PR #305 리뷰
+        _use, res = entries("answer")
+        for bad in ("설계를 승인할까요?", "/Users/someone/x", "a@b.example"):
+            planted = json.loads(json.dumps(res))
+            planted["toolUseResult"]["annotations"] = {bad: {"notes": "자리표시"}}
+            self.assertIn(bad, list(unsafe(planted)), bad)
+            nested = json.loads(json.dumps(res))
+            nested["message"]["content"][0][bad] = "자리표시"            # 목록 안 사전의 열쇠
+            self.assertIn(bad, list(unsafe(nested)), bad)
+
+    def test_identifier_keys_pass_and_the_fixtures_are_clean(self):   # AC4 뒷부분 — 양성 대조는 위 심은 열쇠
+        self.assertEqual(list(unsafe({"advisorModel": "자리표시", "is_error": True})), [])
+        for path in sorted(DATA.glob("*.jsonl")):
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                self.assertEqual([s[:12] for s in unsafe(json.loads(line))], [], "%s:%d" % (path.name, n))
 
     def test_the_lock_bites(self):   # 양성 대조 — 경로 · 이메일 · 한글 문장은 걸린다
         for bad in ("/Users/someone/x", "a@b.example", "설계를 승인할까요?", "0123abcd-0000-4000-8000-000000000001",

@@ -380,6 +380,9 @@ def parse_history(text: str):
     return entries, errors
 
 
+SOURCE_BRIEF_MISSING = "frontmatter source_brief 가 없다"
+
+
 def parse_roadmap(text: str):
     """(meta, blocks, records, risk_rows, errors). blocks 는 등장 순서의 dict 목록."""
     errors = []
@@ -387,7 +390,7 @@ def parse_roadmap(text: str):
     if meta.get("type") != "roadmap":
         errors.append("frontmatter type 이 roadmap 이 아니다")
     if not meta.get("source_brief"):
-        errors.append("frontmatter source_brief 가 없다")
+        errors.append(SOURCE_BRIEF_MISSING)
     try:
         body = section_body(text, "## 에픽")
         rec_body = section_body(text, "## 결정 기록") or ""
