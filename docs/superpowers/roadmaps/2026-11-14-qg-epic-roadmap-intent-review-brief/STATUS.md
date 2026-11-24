@@ -1,7 +1,7 @@
 # STATUS — qg 에픽 · 로드맵 리뷰와 쓴소리 리뷰어 — 로드맵
 
 - 로드맵: docs/superpowers/roadmaps/2026-11-14-qg-epic-roadmap-intent-review-brief/roadmap.md
-- 계산: 2026-11-24 20:27 +0900 · 기준 커밋 be546bca · 지휘 세션 147ac5a2
+- 계산: 2026-11-24 20:29 +0900 · 기준 커밋 be546bca · 지휘 세션 147ac5a2
 
 ## 에픽
 - R6 읽히는 리뷰 글 · 답 이어지기 · 구현 끝 · 구현 대조 절 있음: docs/superpowers/plans/2026-11-23-qg-readable-review.md
@@ -12,7 +12,7 @@
 - R6 · #331 · feature/qg-readable-review
 
 ## 기다리는 질문
-- 없음
+- R6 · 머지 · 2026-11-24 20:29 +0900
 
 ## 작업
 - 에픽 · R6 읽히는 리뷰 글 · 담당자 1 · -
