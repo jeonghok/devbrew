@@ -33,7 +33,7 @@ for n in '승인된 로드맵 <roadmap-rel> 의 에픽 <epic-id> 다' '번호째
 done
 assert_not_contains "$ONE" "보다 이 순서가 우선한다" "에픽 넘김 줄도 외부 지시를 덮어쓰지 않는다"
 # 지휘자 수리 2 — superpowers 7.0.0 brainstorming 과 맞춤: 크기 · 건너뛰기는 사용자 선호 입력, 자리는 설계문서 점검 뒤 문서 승인
-for n in '사용자 선호: 이 에픽 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다.' \
+for n in '이 에픽 설계는 설계문서를 쓰는 크기다 — 질문을 건너뛰어도 설계문서를 쓰고 spec-review 를 거친다.' \
          '묶음의 확정 항목은 다시 묻지 않고 되비춤으로 확인한다.' \
          'brainstorming 의 설계문서 점검(builder check)과 그 질문을 마치고 문서를 승인받는 자리에서' \
          '사람에게 쓰는 글의 낱말 규칙(번호·해시는 내용을 문장으로 먼저 쓰고 괄호 안에)을 지키고, 메시지 모양(첫 메시지 · 질문 하나 · 되비춤)은 brainstorming 을 따른다.'; do
@@ -45,7 +45,7 @@ done
 pos() { WIN="$ONE" A="$1" python3 -I -c 'import os; print(os.environ["WIN"].find(os.environ["A"]))'; }
 a="$(pos 'Skill superpowers:brainstorming')"; b="$(pos 'spec-distill:spec-review')"; c="$(pos 'writing-plans')"
 [ "$a" -ge 0 ] && [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] && ok "순서: brainstorming → spec-review → writing-plans" || no "순서가 다르다(${a} · ${b} · ${c})"
-a="$(pos '사용자 선호:')"
+a="$(pos '이 에픽 설계는 설계문서를 쓰는 크기다')"
 [ "$a" -ge 0 ] && [ "$a" -lt "$b" ] && ok "지휘자 수리 2: 크기 선호가 spec-review 부르기보다 앞" || no "지휘자 수리 2: 크기 선호의 자리가 다르다(${a} · ${b})"
 names_ok() { LINE="$1" python3 -I -c '
 import os, re

@@ -59,8 +59,8 @@ class Ledger(unittest.TestCase):
 
 class Place(unittest.TestCase):
     def test_sentences(self):
-        self.assertEqual(WS.place_sentence("r/t/jobs/R3/design.md", "design"), "사용자 선호: 설계문서는 기본 자리 대신 r/t/jobs/R3/design.md 에 쓴다.")
-        self.assertEqual(WS.place_sentence("r/t/jobs/R3/plan-2.md", "plan"), "사용자 선호: 계획은 기본 자리 대신 r/t/jobs/R3/plan-2.md 에 쓴다.")
+        self.assertEqual(WS.place_sentence("r/t/jobs/R3/design.md", "design"), "설계문서는 기본 자리 대신 r/t/jobs/R3/design.md 에 쓴다.")
+        self.assertEqual(WS.place_sentence("r/t/jobs/R3/plan-2.md", "plan"), "계획은 기본 자리 대신 r/t/jobs/R3/plan-2.md 에 쓴다.")
         self.assertRaises(ValueError, WS.place_sentence, "x", "implement")
 
 
