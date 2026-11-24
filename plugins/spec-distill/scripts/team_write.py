@@ -30,7 +30,7 @@ NO_FRAMING = "framing audit 없음"
 NO_FRAMING_SAID = ("framing 원문 · 질문 전체 없이 brief 쪽 사용자 원문만 옮겼다 — 출처 줄 끝에 `%s` 을 적었다. "
                    "framing 을 거친 인터뷰라면 `original --brief <brief> --out <로드맵 폴더> --framing-audit <경로>` 로 "
                    "덧붙인다" % NO_FRAMING)
-FRAMING_TYPE = "interview-seed-audit"
+FRAMING_TYPE = team_check.FRAMING_TYPE
 SEED_NONE = "없음"   # 상태 파일의 seed 값 — framing 을 거치지 않은 인터뷰
 FRAMING_LOST = ("상태 파일 %s 의 seed 는 %s 인데 framing audit 를 찾지 못했다 — %s. "
                 "framing 원문 · 질문 전체 없이는 원자료 사본을 만들지 않는다. framing audit 의 경로를 "
@@ -128,7 +128,7 @@ def _framing_from_state(top: Path, state_rel: str, W) -> tuple:
         return None, FRAMING_LOST % (state_rel, seed, "seed 파일 %s 이 없다" % seed)
     if not seed.endswith(".md"):
         return None, FRAMING_LOST % (state_rel, seed, "seed 파일 이름 %s 이 .md 로 끝나지 않아 framing audit 의 이름을 정하지 못한다" % seed)
-    named = seed[:-3] + ".audit.md"
+    named = team_check.audit_of(seed)
     if not (top / named).is_file():
         return None, FRAMING_LOST % (state_rel, seed, "seed 파일 이름으로 정한 자리 %s 에 파일이 없다" % named)
     return W.rel(top, top / named), None
@@ -197,7 +197,7 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
     if not brief_rel.endswith(".md"):
         raise W.Usage("--brief 는 .md 파일이다: %s" % brief_rel)
     stem = brief_rel[:-3]
-    audit_rel = stem + ".audit.md"
+    audit_rel = team_check.audit_of(brief_rel)
     found, lost = _framing_from_state(top, stem + ".state.md", W)
     given = W.rel(top, framing_audit) if framing_audit else None
     if found and given and found != given:
@@ -210,9 +210,10 @@ def wanted_sections(top: Path, brief: Path, framing_audit, W, existing: bytes = 
     out, note = [], ""
     if framing:
         commit, data = _committed(top, framing, W)
-        kind = unquote(frontmatter(_decoded(framing, data, W)).get("type", ""))
-        if kind != FRAMING_TYPE:
-            raise W.Refused("%s 는 framing audit 이 아니다 — 머리 type 이 %s 가 아니다(%s)" % (framing, FRAMING_TYPE, kind or "없음"))
+        _decoded(framing, data, W)   # UTF-8 로 읽지 못하면 그 사유로 거절한다
+        kind = team_check.head_type(data)
+        if kind != team_check.FRAMING_TYPE:
+            raise W.Refused("%s 는 framing audit 이 아니다 — 머리 type 이 %s 가 아니다(%s)" % (framing, team_check.FRAMING_TYPE, kind or "없음"))
         out += [(framing, commit, label, first, lines, "") for label, first, lines in _framing_parts(framing, data, W)]
     elif not paired:
         note = NO_FRAMING
