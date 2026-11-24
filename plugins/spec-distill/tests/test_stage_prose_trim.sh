@@ -12,6 +12,7 @@ NUM_FILES=(
   plugins/spec-distill/skills/context-build/references/finishing.md
   plugins/spec-distill/skills/roadmap-draft/SKILL.md
   plugins/spec-distill/skills/roadmap-draft/references/pr-merge.md
+  plugins/spec-distill/skills/intent-sync/SKILL.md
 )
 num_corpus() {   # 명시 목록 + 로드맵 잡기 아래에 새로 생긴 추적 파일
   { printf '%s\n' "${NUM_FILES[@]}"; git -C "$ROOT" ls-files -- 'plugins/spec-distill/skills/roadmap-draft/*'; } | sort -u
@@ -120,5 +121,24 @@ has   "$FIN" '설계(brainstorming)로 넘기지 않는다' "글 일곱 ②: ④
 has   "$FIN" '작업 트리 루트: <루트 절대경로>' "글 일곱 ⑤: 공백 든 경로 안내에 루트 절대경로가 나간다"
 has   "$FIN" '그 상대경로에도 공백이 있으면' "글 일곱 ⑤: 상대경로 쪽 공백의 갈래가 있다"
 has   "$FIN" '🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론' "§6 범례: 끝맺음 글에 표시 규칙 범례가 있다"
+
+# ── 의도 싱크 본문 · seed 기록 템플릿 (과제 4) ─────────────────────────────────────────
+IS=plugins/spec-distill/skills/intent-sync/SKILL.md
+SAT=plugins/spec-distill/templates/interview-seed-audit-template.md
+lacks "$IS" '구조적으로 부재' "AC29 ⑤: 원장 「구조적 부재」 서술이 없다"
+has   "$IS" 'Phase 0 은 degrade 원장에 쓰지 않는다' "AC29 ⑤(양의 짝): 본문이 원장을 쓰지 않는다고 말한다"
+has   "$SAT" 'Phase 0 은 degrade 원장에 쓰지 않는다' "AC29 ⑤(양의 짝): 기록 템플릿이 본문과 같은 말을 한다"
+assert_eq "$(grep -cx '4옵션' "$ROOT/$IS" || true)" "0" "AC29 ⑥: 끊긴 「4옵션」 줄이 없다"
+has   "$IS" '게이트 앞 글에 degrade 를 **하나도 빠뜨리지 않고**' "AC29 ⑥(양의 짝): 그 뒤 지시는 남아 있다"
+has   "$IS" '덜어 낸 것 표가 든 audit 은 `.claude/spec-distill/` 에 두지 않는다' "AC31 ①"
+lacks "$IS" '에 두지 않는 이유는' "AC31 ①: 이유 문장 안에만 있지 않다"
+has   "$IS" '`worktree.baseRef` 를 자동으로 `head` 로 바꾸지 않는다' "AC31 ②"
+lacks "$IS" '로 바꾸지 않는 이유**' "AC31 ②: 이유 머리가 없다"
+has   "$IS" 'seed 의 frontmatter 를 떼지 않는다' "AC31 ③"
+lacks "$IS" '**frontmatter 를 떼지 않는 이유**' "AC31 ③: 이유 머리가 없다"
+has   "$IS" '풀이를 고르는 질문에는 추천을 달지 않는다' "AC31 ④"
+has   "$IS" '코드 블록마다 `## 상태` 블록을 앞에 이어 붙여 같은 `Bash` 호출로 돌린다' "AC31 ⑥"
+has   "$IS" 'seed 냉독에는 경로를 넘기지 않는다' "AC31 ⑧"
+has   "$IS" '경고 원장에 남지 않는다' "경고 표 행 이름 둘: handoff · raw-source 행이 원장 밖이라고 적는다"
 
 finish
