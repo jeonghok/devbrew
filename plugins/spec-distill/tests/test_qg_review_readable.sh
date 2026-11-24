@@ -350,9 +350,27 @@ one "$RE" '빠진 채 돌았다는 알림 줄은 담당자 보고에만 있던 �
 one "$WHOLE" '담당자 보고 없이 보관 파일에서 다시 실었다 — ' "reenter-tail-and-notice: 그 줄은 파일에 한 번 — 다시 싣는 문단에만"
 in_order "$RE" "reenter-tail-and-notice: 셀 수 없음 갈래 → 다시 실었을 때의 꼬리 · 한 줄 → PR 본문 차례" \
   '둘 다 없으면 결과 줄 전체를' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서 PR 본문'
-one "$BACK" '예외는 둘이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」)와 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`)는 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md`)을 읽는다' "reenter-without-report: 돌아왔을 때가 보관 파일을 읽는 예외 둘을 적는다(다시 싣는 문단을 가리킨다)"
+one "$BACK" '예외는 둘이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」)와, 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`), 그리고 보인 지적을 후속 PR 의 고칠 목록이나 지휘 기록에 올릴 때(`### 결과 글` 의 「보인 지적을 받는 길」 과 그 아래 두 문단)는 보관 폴더의 `findings-pre-merge.yaml` 과 보관한 `result.md` 를 읽는다 — 어느 파일에서 무엇을 읽는지는 그 자리가 적는다.' "reenter-without-report(N1 · N3): 돌아왔을 때가 보관 파일을 읽는 예외 둘을 적는다 — 다시 싣는 문단 · 고르기와 되올리기 · 후속 PR 과 지휘 기록"
+zero "$WHOLE" '(없으면 보관한 `result.md`)을 읽는다' "back-exception-files(낱말) 음성: result.md 를 yaml 이 없을 때만 읽는다던 옛 괄호가 없다 — 다시 싣는 길은 yaml 이 있어도 result.md 를 읽는다(양성 짝: 위 줄의 「과 보관한 result.md 를 읽는다」)"
 zero "$WHOLE" '이미 보낸 것` 의 4)' "reenter-without-report(N1) 음성: 다시 싣기를 갈래 4 로 가리키던 옛 괄호가 없다(양성 짝: 「보고 없이 다시 들어왔을 때」 를 가리키는 괄호)"
 zero "$WHOLE" 'qg 본문을 읽지 않는다. 아래를 차례로 본다.' "reenter-without-report 음성: 예외 없이 intent-return.md 만 읽던 옛 문장이 없다(양성 짝: 예외는 둘이다)"
+# carry-original-onward (재리뷰 N3 · D33 의 둘째 예외를 넓힘) — 후속 PR 의 고칠 목록 · 지휘 기록에 올리는 지적도 보관 폴더의 원문을 싣는다
+ORIG='올리는 글은 그 항목의 원문을 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md` 의 그 줄)에서 읽어 싣는다.'
+RWAY="$(lead "$RES" '**보인 지적을 받는 길.**')"
+RRAISE="$(lead "$RES" '사용자가 되올릴 지적을 말하면 ')"
+RPRE="$(lead "$RES" '구현이 끝나기 전의 자리(')"
+for pair in "보인 지적을 받는 길:$RWAY" "되올림:$RRAISE" "구현이 끝나기 전:$RPRE"; do
+  [ -n "${pair#*:}" ] && ok "carry-original-onward: 결과 글의 문단을 읽었다: ${pair%%:*}" || no "carry-original-onward: 결과 글의 문단이 없다 — 아래 단언이 공허하다: ${pair%%:*}"
+done
+one "$RWAY" "$ORIG" "carry-original-onward(N3): 로드맵 끝 · 이름으로 청한 머지된 에픽의 후속 PR 고칠 목록에 원문을 싣는다"
+one "$RRAISE" "$ORIG" "carry-original-onward(N3): 되올린 지적을 지휘 기록 · 후속 PR 에 올릴 때 원문을 싣는다"
+one "$RPRE" "$ORIG" "carry-original-onward(N3): 구현이 끝나기 전 자리의 지적을 지휘 기록에 적을 때 원문을 싣는다"
+one "$WHOLE" '이름으로 청한 머지된 에픽의 지적도 후속 PR 하나의 고칠 목록에 올린다. 올리는 글은' "carry-original-onward(N3): 원문 문장이 후속 PR 문장 바로 뒤"
+in_order "$RRAISE" "carry-original-onward(N3): 되올림 문단 — 후속 PR 에 올린다 → 원문 → 판정 줄은 낮춘 대로" \
+  '후속 PR 의 고칠 목록에 올린다.' '올리는 글은 그 항목의 원문을' 'qg 가 낸 판정 줄은 낮춘 대로 남는다.'
+in_order "$RPRE" "carry-original-onward(N3): 구현이 끝나기 전 문단 — 지휘 기록에 적어 → 원문 → 구현이 끝난 뒤" \
+  '`## 지휘 기록` 에 적어' '올리는 글은 그 항목의 원문을' '구현이 끝난 뒤 이름으로 청한'
+assert_eq "$(n_of "$WHOLE" "$ORIG")" "3" "carry-original-onward(N3): 원문 문장은 파일에 셋 — 결과 글의 받는 길 세 문단에만"
 # carry-original (통합 리뷰 F1 · D33) — 고른 제안 · 되올린 낮춘 지적은 보관 폴더의 원문을 싣는다
 RRE="$(lead "$RET" '- **돌아온 즉시 목록을 적는다.**')"
 RSG="$(lead "$RET" '- **제안은 보이기만 한다.**')"
