@@ -77,7 +77,7 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 의존: R4, R6
 - 브랜치: feature/qg-planted-text-suite-lock
 - 묶음: R7.md
-- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/build_artifact_codex_prompt.py, plugins/quality-gates/skills/artifact-critique/, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/test_agent_input_slots.sh, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json
+- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/build_artifact_codex_prompt.py, plugins/quality-gates/skills/artifact-critique/, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/dependencies.md, shared/suite-lock/, plugins/spec-distill/skills/epic-conductor/references/qg-review.md, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
 
 ### R8 — qg 답 기록 · 다른 팀 읽기 뒤처리와 리뷰가 낸 막는 지적
 - 의도: 앞 에픽들이 미룬 qg 안쪽 가장자리 가운데 intent-critic 의 답 기록과 다른 팀 읽기에 닿는 것과 R1 · R2 리뷰가 낸 막는 지적을 닫는다
@@ -185,6 +185,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 바뀜: 바뀐 에픽 R7 「같이 막자」
 - 원문:
   - 「같이 막자」
+
+### 2026-11-24 · R7 의 경로 예약을 설계문서의 고칠 파일에 맞춘다 — 잠금 자리를 호출 줄로 넘기려면 지휘 절차의 호출 줄 정본과 qg 시작 스크립트를, 잠금 스크립트를 두 플러그인이 함께 쓰려면 shared 의 새 폴더를, 테스트 선택을 고치면 스위트 대조의 대체 경로와 공유 테스트를 고쳐야 한다
+- 바뀜: 바뀐 에픽 R7 「1」
+- 원문:
+  - 「1」
 
 ## 위험 번호표
 
