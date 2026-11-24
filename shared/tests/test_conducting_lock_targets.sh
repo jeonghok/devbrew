@@ -6,11 +6,17 @@
 # Run (리포 루트에서): bash shared/tests/test_conducting_lock_targets.sh
 set -u
 ROOT="${LOCK_TARGETS_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
-. "$(cd "$(dirname "$0")" && pwd)/assert.sh"
 export PYTHONDONTWRITEBYTECODE=1
 TOC_PY="$ROOT/plugins/spec-distill/scripts/conductor_toc.py"
-if [ ! -f "$TOC_PY" ]; then no "conductor_toc.py 가 없다"; finish; exit $?; fi
+if [ ! -f "$TOC_PY" ]; then echo "conductor_toc.py 가 없다" >&2; exit 1; fi
 F="$(python3 -I "$TOC_PY" files --plugin-root "$ROOT/plugins/spec-distill" --kind all | sed "s#^$ROOT/##")"
+LOCKS="plugins/spec-distill/tests/test_plain_gate_templates.sh:emit shared/tests/test_ask_recommendation.sh:emit plugins/spec-distill/tests/test_repo_literals.sh:emit shared/tests/test_skill_reference_pointers.sh:guards"
+if [ "${1:-}" = "--emit-scanned" ]; then  # test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 읽는 경로
+  printf '%s\n' "$F"
+  for entry in $LOCKS; do printf '%s\n' "${entry%%:*}"; done
+  exit 0
+fi
+. "$(cd "$(dirname "$0")" && pwd)/assert.sh"
 if [ -z "$F" ]; then no "차례가 이름 붙인 파일이 하나도 없다 — 아래 단언이 공허하다"; finish; exit $?; fi
 ok "차례가 이름 붙인 파일 $(printf '%s\n' "$F" | grep -c .)개를 읽었다"
 
@@ -21,7 +27,6 @@ guards_list() {  # 락 머리의 `# guards:` 글롭을 git ls-files 로 푼 것
   # shellcheck disable=SC2086
   ( cd "$ROOT" && set -f && git ls-files -- $globs )
 }
-LOCKS="plugins/spec-distill/tests/test_plain_gate_templates.sh:emit shared/tests/test_ask_recommendation.sh:emit plugins/spec-distill/tests/test_repo_literals.sh:emit shared/tests/test_skill_reference_pointers.sh:guards"
 check() {  # check <대상 목록 재료 함수 접두> — 락마다 F 가 모두 들어 있는지
   local entry lock how list f
   for entry in $LOCKS; do
