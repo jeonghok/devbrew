@@ -17,7 +17,7 @@
 - 옛 기록(옛 폴더 · 옛 글자 · 옛 머리 키 · 옛 설정 키)은 옮기지 않고 그대로 읽는다.
 - `dependencies.md` 의 판 칸을 `check_deps.py measure` 로 다시 쟀다(quality-gates 16.1.0).
 - 의도 싱크가 이어 갈 기록(`seed-audit-for-session`)은 새 의도 폴더에서만 찾는다 — 설정 키가 없는 레포에서 업그레이드 전에 시작한 의도 싱크를 같은 세션에서 새 판으로 다시 부르면 옛 폴더의 그 세션 기록을 찾지 못해 새 이름으로 처음부터 다시 시작하고, 옛 기록은 그대로 남는다(컨텍스트 쌓기는 두 폴더 모두 찾는다).
-- 옛 판결 글자 `interview-state:` 와 옛 하위 명령 `state_path.py interview-state` · `repo_defaults.py get|check-path interview_dir` 인자는 받지 않는다 — 사용법 오류(rc 2)로 멈춘다.
+- 옛 하위 명령 `state_path.py interview-state`(모르는 하위 명령) · `repo_defaults.py get|check-path interview_dir` 인자(잘못된 인자)는 받지 않는다 — 둘 다 rc 2 로 멈춘다.
 
 ### Fixed
 - 안내 글의 「an context brief」 문법.

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/.claude-plugin/plugin.json plugins/quality-gates/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
-# 다섯 층 재편의 판 · 변경 기록 · README 락 — 변경 기록의 한 절이 새 글자와 옛 기록 읽기를 적는다.
+# guards: plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
+# 다섯 층 재편의 변경 기록 · README 락 — 변경 기록의 한 절이 새 글자와 옛 기록 읽기를 적는다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_intent_layers_release.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  printf '%s\n' plugins/spec-distill/.claude-plugin/plugin.json plugins/quality-gates/.claude-plugin/plugin.json \
-    plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
+  printf '%s\n' plugins/spec-distill/CHANGELOG.md plugins/quality-gates/CHANGELOG.md plugins/spec-distill/README.md plugins/quality-gates/README.md
   exit 0
 fi
 . "$ROOT/shared/tests/assert.sh"
@@ -24,10 +23,10 @@ secs=re.split(r"(?m)^(?=## \[)",t)
 sys.exit(0 if any(s.startswith("## [") and all(n in s for n in sys.argv[2:]) for s in secs) else 1)
 ' "$f" "$@"
 }
-sec_has plugins/spec-distill/CHANGELOG.md 'intent_dir' '옛 기록' 'context-state:' \
+sec_has plugins/spec-distill/CHANGELOG.md 'intent_dir' '옮기지 않고 그대로 읽는다' 'context-state:' \
   && ok "spec-distill 변경 기록: 한 절이 새 설정 키 · 옛 기록 읽기 · 판결 글자를 적는다" \
   || no "spec-distill 변경 기록에 새 설정 키 · 옛 기록 읽기 · 판결 글자를 함께 적은 절이 없다"
-sec_has plugins/quality-gates/CHANGELOG.md 'source_intent' \
+sec_has plugins/quality-gates/CHANGELOG.md 'source_intent' '두 머리 키를 읽는다' \
   && ok "quality-gates 변경 기록: source_intent" || no "quality-gates 변경 기록에 source_intent 를 적은 절이 없다"
 has plugins/spec-distill/README.md 'docs/superpowers/intent/'
 has plugins/quality-gates/README.md 'source_intent,source_interview,roadmap,source_brief,type=roadmap,type=epic-bundle'

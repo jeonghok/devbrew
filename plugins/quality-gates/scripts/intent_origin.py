@@ -780,9 +780,9 @@ def _reader(repo: str, commit: str, tree_root: Optional[str] = None):
 
 
 def _head_link(text: str) -> Optional[str]:
-    """머리의 원문 링크 — 새 키 `source_intent:` 가 있고 비어 있지 않으면 그 값, 아니면 옛 `source_interview:`."""
+    """머리의 원문 링크 — 새 키 `source_intent:` 에 값이 있으면 그 값, 키가 없거나 값이 없으면 옛 `source_interview:`(따옴표만 빈 값 `""` 은 값이다)."""
     link = frontmatter_value(text, "source_intent")
-    if not link:
+    if link is None:
         link = frontmatter_value(text, "source_interview")
     return link
 

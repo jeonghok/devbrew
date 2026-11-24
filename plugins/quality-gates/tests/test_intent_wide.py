@@ -820,7 +820,7 @@ class TestHeadValues(unittest.TestCase):
 
 
 class TestHeadKeyPrecedence(unittest.TestCase):
-    """바뀐 의도 문서의 머리 키 — 새 키가 있고 비어 있지 않으면 새 키만, 아니면 옛 키(세 길이 같은 문서를 고른다)."""
+    """바뀐 의도 문서의 머리 키 — 새 키에 값이 있으면 새 키만, 키가 없거나 값이 없으면 옛 키(세 길이 같은 문서를 고른다 — 따옴표만 빈 값은 값이다)."""
 
     def _origin(self, head):
         with tempfile.TemporaryDirectory() as d:
@@ -837,10 +837,14 @@ class TestHeadKeyPrecedence(unittest.TestCase):
         self.assertIn("new-token", o)
         self.assertNotIn("old-token", o)
 
-    def test_empty_new_key_follows_old(self):
-        o = self._origin(tic._fm(source_intent='""', source_interview="docs/old.md"))
+    def test_valueless_new_key_follows_old(self):
+        o = self._origin(tic._fm(source_intent="", source_interview="docs/old.md"))
         self.assertIn("old-token", o)
         self.assertNotIn("new-token", o)
+
+    def test_quoted_empty_new_key_does_not_fall_back(self):
+        o = self._origin(tic._fm(source_intent='""', source_interview="docs/old.md"))
+        self.assertNotIn("old-token", o)
 
     def test_only_old_key_follows_old(self):
         o = self._origin(tic._fm(source_interview="docs/old.md"))
