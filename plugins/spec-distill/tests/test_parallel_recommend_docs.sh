@@ -13,10 +13,11 @@ AG="$SD/agents/integration-reviewer.md"
 SK="$SD/skills/epic-conductor/SKILL.md"
 EH="$SD/references/epic-handoff.md"
 DP="$SD/references/docreview-profiles/design-doc.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 
-loop_of() { awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f' "$CD"; }
+loop_of() { cd_loop | awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f'; }
 cyc() { loop_of | awk -v n="$1" 'index($0, "### " n ". ")==1{f=1;next} f&&/^### /{exit} f'; }
-man() { awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$CD" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[0-9]+\. /{exit} f'; }
+man() { awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$(cd_manual_file)" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[0-9]+\. /{exit} f'; }
 count() { printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
 once_in() { assert_eq "$(count "$2" "$3")" "1" "$1: 「$3」 정확히 한 번"; }
 

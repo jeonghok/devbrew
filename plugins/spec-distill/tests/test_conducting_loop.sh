@@ -5,10 +5,12 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 CD="$ROOT/plugins/spec-distill/references/conducting.md"
-LOOP="$(awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f' "$CD")"
+LOOP="$(cd_loop | awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f')"
 [ -n "$LOOP" ] && ok "지휘 순환 절을 읽었다" || { no "지휘 순환 절이 없다"; finish; exit $?; }
 assert_eq "$(grep -E '^## ' "$CD" | tail -1)" "## 손으로 따르는 절차" "끝 절은 손으로 따르는 절차다(AC16)"
+assert_eq "$(grep -E '^## ' "$(cd_manual_file)" | tail -1)" "## 손으로 따르는 절차" "손 절차 파일의 끝 절도 손으로 따르는 절차다(AC16)"
 assert_eq "$(printf '%s\n' "$LOOP" | grep -E '^### [1-7]\. ' | sed 's/^### \([1-7]\)\..*/\1/' | tr '\n' ' ')" "1 2 3 4 5 6 7 " "걸음 1~7 이 차례로 있다"
 step() { printf '%s\n' "$LOOP" | awk -v n="$1" 'index($0, "### " n ". ")==1{f=1;next} f&&/^### /{exit} f'; }
 for n in 1 2 3 4 5 6 7; do
@@ -118,7 +120,8 @@ for sent in re.split(r"(?<=[.。!?])\s+|\n", sys.argv[1]):
             break' "$1"
 }
 SKILL_MD="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
-for f in "$CD" "$ROOT/plugins/spec-distill/references/conductor-dispatch.md" "$SKILL_MD"; do
+assert_eq "$(cap_hits "$(cd_all)")" "" "conducting.md: 동시 개수를 수량 상한에 묶는 문장이 없다"
+for f in "$ROOT/plugins/spec-distill/references/conductor-dispatch.md" "$SKILL_MD"; do
   assert_eq "$(cap_hits "$(cat "$f")")" "" "$(basename "$f"): 동시 개수를 수량 상한에 묶는 문장이 없다"
 done
 for lit in '동시에 셋까지만 돌린다.' '병렬 agent 는 최대 3개다.' '큰 작업을 3개 넘게 돌리지 않는다.' '동시 개수 상한은 3 이다.' \
@@ -179,7 +182,7 @@ assert_not_contains "$(step 3)" '계획 agent 를 보내고 기록을 커밋하�
 GUARD_RE='live-agent --roadmap <로드맵> --epic <에픽> --work 계획` 이 1'
 assert_contains "$(step 1)" "$GUARD_RE" "걸음 1: 계획 agent 보내기 앞에 live-agent 확인"
 assert_contains "$(step 3)" "$GUARD_RE" "걸음 3: 보내기 앞에 live-agent 확인"
-HAND="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f' "$CD" | grep -E '^3\. \*\*흐름과 설계')"
+HAND="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f' "$(cd_manual_file)" | grep -E '^3\. \*\*흐름과 설계')"
 assert_contains "$HAND" "$GUARD_RE" "손 절차 3: 보내기 앞에 live-agent 확인"
 assert_contains "$HAND" '--section "살아 있는 agent"' "손 절차 3: 보낸 뒤 살아 있는 agent 에 적는다"
 assert_contains "$(step 3)" '--section "살아 있는 agent"' "걸음 3: 보낸 뒤 살아 있는 agent 에 적는다"
@@ -209,7 +212,7 @@ unknown_ledger_cmds() {  # unknown_ledger_cmds <본문> — COMMANDS 에 없는 
   printf '%s\n' "$1" | grep -oE '(conductor_)?ledger(\.py)? [a-z][a-z_-]*' | sed -E 's/^(conductor_)?ledger(\.py)? //' | sort -u \
     | while IFS= read -r c; do printf '%s\n' "$LEDGER_KEYS" | grep -qxF -- "$c" || printf '%s\n' "$c"; done
 }
-WHOLE="$(cat "$CD")"
+WHOLE="$(cd_all)"
 assert_eq "$(unknown_ledger_cmds "$WHOLE")" "" "conducting.md 전체의 ledger 명령 이름은 모두 COMMANDS 의 키다"
 DISP="$(cat "$ROOT/plugins/spec-distill/references/conductor-dispatch.md")"
 assert_eq "$(unknown_ledger_cmds "$DISP")" "" "conductor-dispatch.md 의 ledger 명령 이름도 모두 COMMANDS 의 키다"
@@ -248,6 +251,6 @@ once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인�
 once 5 '두 형식 모두 머지 앞 qg 의 사용자 답도 싣는다 — PR 본문 `## qg 리뷰` 의 사용자 답(team 형식은 PR 이 열릴 때 검수 결과 파일의 펜스 내용을 그 절로 옮겨 두었다)'
 once 5 '그 PR 의 머지 앞 리뷰 기록 파일(자리 글자 `premerge-pr<번호>` · `recheck-pr<번호>`, team 형식은 `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`)의 `- 답:` 줄'
 assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
-assert_contains "$(sed -n '/^- \*\*PR 전 확인.\*\*/p' "$CD")" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
+assert_contains "$(cd_all | sed -n '/^- \*\*PR 전 확인.\*\*/p')" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"
 finish

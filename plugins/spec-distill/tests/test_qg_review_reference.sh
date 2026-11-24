@@ -699,16 +699,17 @@ done
 assert_contains "$ALL" 'origin/HEAD' "레포 전용 값 양성 짝: 기본 브랜치는 origin/HEAD"
 
 # ── conducting.md 의 들어가는 문장(AC2 · AC13) — 절차는 qg-review.md 에만 있다
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 CD="$ROOT/plugins/spec-distill/references/conducting.md"
 QE='`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고 그 자리('
-LOOP="$(awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f' "$CD")"
-MAN="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$CD")"
+LOOP="$(cd_loop | awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f')"
+MAN="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$(cd_manual_file)")"
 lstep() { printf '%s\n' "$LOOP" | awk -v n="$1" 'index($0, "### " n ". ")==1{f=1;next} f&&/^### /{exit} f'; }
 mstep() { printf '%s\n' "$MAN" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[1-9]\. /{exit} f'; }
 lhead() { printf '%s\n' "$LOOP" | awk 'index($0, "### 1. ")==1{exit} 1'; }
 mhead() { printf '%s\n' "$MAN" | awk 'index($0, "1. ")==1{exit} 1'; }
 cnt() { printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
-CDALL0="$(cat "$CD")"
+CDALL0="$(cd_all)"
 [ -n "$LOOP" ] && [ -n "$MAN" ] && ok "conducting.md 의 두 절을 읽었다" || no "conducting.md 의 두 절이 비었다 — 아래 단언이 공허하다"
 for pair in "3:spec 승인 앞" "5:머지 앞" "7:로드맵 끝"; do
   n="${pair%%:*}"; name="${pair#*:}"
@@ -760,7 +761,7 @@ assert_eq "$(cnt "$CDALL0" '설치돼 있지 않다')" "0" "행 21 음성: 「�
 assert_eq "$(cnt "$CALL" '설치돼 있지 않다')" "1" "행 21 양성 짝: 「설치돼 있지 않다」 규칙이 qg-review.md 의 호출 줄에 한 번"
 assert_eq "$(cnt "$(lstep 7)" 'ledger resource-dir --roadmap <로드맵> --kind relay --name roadmap')" "1" "행 23: 걸음 7 이 로드맵 담당자의 relay 폴더로 옮김 대조를 부른다"
 # team 형식 절의 검수 걸음 qg(AC10 · AC11 · AC13 · AC19)
-team_sec="$(awk '$0=="## team 형식 로드맵"{f=1;next} f&&/^## /{exit} f' "$CD")"
+team_sec="$(awk '$0=="## team 형식 로드맵"{f=1;next} f&&/^## /{exit} f' "$(cd_team_file)")"
 TQ="$(printf '%s\n' "$team_sec" | awk 'index($0, "- **검수 걸음의 qg.**")==1')"
 assert_eq "$(starts "$team_sec" '- **검수 걸음의 qg.**')" "1" "team 형식: 「검수 걸음의 qg」 불릿이 줄 첫머리에 한 번"
 for lit in '`quality-gates:quality-pipeline`' '다음 시도의 구현 결과 파일' '과제 결정 기록의 한 줄' '연속 실패 멈춤을 상한으로 쓰지 않는다' \
@@ -771,7 +772,7 @@ done
 assert_contains "$TQ" "${QE}「머지 앞」)" "team 형식: 검수 걸음의 qg 는 머지 앞 자리를 가리킨다"
 assert_not_contains "$team_sec" '과제 결정 기록의 줄로 적고 거기서 센다' "team 형식 음성(P3 그대로 두면): 기록을 결정 기록 줄로 세는 다른 갈래가 없다(양성 짝: 지적 목록 아래 펜스)"
 # AC2 음성 + 양성 짝 — 절차가 새지 않았다
-CDALL="$(cat "$CD")"
+CDALL="$(cd_all)"
 assert_not_contains "$CDALL" '로드맵 시작 커밋부터' "AC2: 범위 절차(로드맵 시작 커밋부터)가 conducting.md 에 없다"
 assert_contains "$(lstep 7)" "$QE" "AC2 양성 짝: 걸음 7 은 들어가는 문장을 가진다"
 for lit in 'intent-return.md' 'merged_pr_range.py' '의도 점검 <n>' 'reviews/<YYYY-MM-DD>' 'qg-<대상>-<자리>'; do
@@ -813,9 +814,9 @@ RETX="$(sec '## 되돌리기')"
 once "$RETX" '구현 담당자가 세션 담당자였으면 그 세션은 돌아왔을 때 이미 거둬 닫혔으니 이어 부를 수 없다' "IR1: 되돌리기에 세션 담당자였던 구현 담당자는 이어 부를 수 없다"
 once "$RETX" '`<SD>/references/conductor-dispatch.md` 의 `## 세션 담당자` 대로 새 세션을 같은 브랜치로 보내고, 지적마다의 처리는 그 세션의 결과 파일에서 읽는다' "IR1: 새 세션을 보내고 처리는 결과 파일에서 읽는다"
 assert_contains "$(sed -n 7p "$QR")" '걸음 4 는 손 절차 5(계획 · 구현)' "IR4: 대응 줄(본문 7행)에 걸음 4 → 손 절차 5"
-CDOC="$ROOT/plugins/spec-distill/references/conducting.md"
-assert_eq "$(awk '/^### 4\. 돌아오기/{f=1;next} f&&/^### /{exit} f' "$CDOC" | grep -c '세션 담당자 거두기' | tr -d ' ')" "1" "IR4 짝: 걸음 4 는 돌아오기(세션 담당자 거두기가 든 걸음)"
-assert_contains "$(grep -E '^5\. \*\*계획 · 구현' "$CDOC")" '돌아오면 AC 보고' "IR4 짝: 손 절차 5 는 계획 · 구현이고 돌아옴을 다룬다"
+CDOC="$(cd_all)"
+assert_eq "$(printf '%s\n' "$CDOC" | awk '/^### 4\. 돌아오기/{f=1;next} f&&/^### /{exit} f' | grep -c '세션 담당자 거두기' | tr -d ' ')" "1" "IR4 짝: 걸음 4 는 돌아오기(세션 담당자 거두기가 든 걸음)"
+assert_contains "$(printf '%s\n' "$CDOC" | grep -E '^5\. \*\*계획 · 구현')" '돌아오면 AC 보고' "IR4 짝: 손 절차 5 는 계획 · 구현이고 돌아옴을 다룬다"
 PH="$(grep -F '코드: `shared/docreview/references/reviewing-document.md`' "$ROOT/docs/philosophy/devbrew-harness-philosophy.md")"
 assert_contains "$PH" '「두 번까지」 상한(`plugins/spec-distill/skills/epic-conductor/references/qg-review.md` 의 `## 되돌리기`)' "IR3: P18 코드 지도가 살아 있는 상한(되돌리기 「두 번까지」)을 인용한다"
 assert_not_contains "$PH" 'qg fix-loop 의 반복 상한' "IR3 음성 짝: 사라진 qg fix-loop 상한을 인용하지 않는다"

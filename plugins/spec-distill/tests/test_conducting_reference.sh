@@ -6,14 +6,19 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SD="$ROOT/plugins/spec-distill"
-CD="$SD/references/conducting.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
+TOC="$SD/references/conducting.md"
+CD="$(cd_manual_file)"
 RED="$SD/references/redecompose.md"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
+CDALL="$T/conducting-all.md"; cd_all > "$CDALL"
+LOOPF="$T/conducting-loop.md"; cd_loop > "$LOOPF"
 
-[ -f "$CD" ] && ok "conducting.md 가 있다" || { no "conducting.md 가 없다"; finish; exit $?; }
+[ -f "$CD" ] && ok "conducting-manual.md 가 있다" || { no "conducting-manual.md 가 없다"; finish; exit $?; }
 assert_eq "$(grep -cxF '## 손으로 따르는 절차' "$CD" || true)" "1" "손 절차 절 머리가 정확히 하나"
+assert_eq "$(grep -cxF '## 손으로 따르는 절차' "$TOC" || true)" "1" "차례의 손 절차 절 머리가 정확히 하나"
 man_of() {  # man_of <파일> — 그 파일의 손 절차 절
   awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$1"
 }
@@ -89,7 +94,7 @@ unsectioned() {  # unsectioned <글> — 절 이름 없이 「설계문서에 �
 for m in re.finditer(r"설계문서에(\(|\s)(?!`## )", sys.argv[1]):
     print(sys.argv[1][max(0, m.start() - 30):m.end() + 20].replace(chr(10), " "))' "$1"
 }
-assert_eq "$(unsectioned "$(cat "$CD")")" "" "conducting.md: 설계문서에 적는 지시는 절 이름을 붙인다(지휘 기록 · 판정 — 결정 기록에 손으로 쓰지 않게)"
+assert_eq "$(unsectioned "$(cat "$CDALL")")" "" "conducting.md: 설계문서에 적는 지시는 절 이름을 붙인다(지휘 기록 · 판정 — 결정 기록에 손으로 쓰지 않게)"
 [ -n "$(unsectioned '가른 결과와 이유는 그 에픽 설계문서에 적는다.')" ] && ok "양성 대조: 절 없는 「설계문서에 적는다」 를 잡는다" || no "양성 대조: 절 없는 「설계문서에 적는다」 를 못 잡는다"
 assert_eq "$(unsectioned '그다음 설계문서에 `## 판정` 절을 둔다.')" "" "양성 짝: 절 머리를 바로 붙이면 허용"
 once 1 '목록의 완료 표시는 일이 끝났다는 뜻이 아니다'
@@ -222,7 +227,7 @@ assert_eq "$(acs_in_plan "$SYN_OK")" "yes" "양성 짝: --plan 문장에 --acs �
 
 # PR 캐시는 `ledger pr-refresh` 로만 채운다(R8 계획 2 Task 2) — 걸음 1 맞추기 · PR 을 연 뒤 · 머지 전 확인 · 다음 에픽 착수 직전.
 cyc() {  # cyc <n> [파일] — 지휘 순환 걸음 n(`### n.` 절)의 글
-  awk -v h="### $1. " 'index($0, h)==1{f=1; next} f && /^#{2,3} /{exit} f' "${2:-$CD}"
+  awk -v h="### $1. " 'index($0, h)==1{f=1; next} f && /^#{2,3} /{exit} f' "${2:-$LOOPF}"
 }
 for n in 1 3 4 5; do
   [ -n "$(cyc "$n")" ] && ok "지휘 순환 걸음 $n 을 읽었다" || no "지휘 순환 걸음 $n 이 비었다 — 아래 단언이 공허하다"
@@ -251,12 +256,12 @@ for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines()
     if re.search(r"--section\s+(\"PR\"|'"'"'PR'"'"'|PR)(?![\w가-힣])", line):
         print(i)' "$1"
 }
-assert_eq "$(pr_by_hand "$CD")" "" "conducting.md: PR 캐시를 손으로 적는 ledger add --section PR 이 없다"
+assert_eq "$(pr_by_hand "$CDALL")" "" "conducting.md: PR 캐시를 손으로 적는 ledger add --section PR 이 없다"
 for lit in '번호를 `ledger add --section PR` 로 적는다' '`ledger add --roadmap <로드맵> --session <세션> --section "PR" --cells "x"`'; do
-  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/pr.md"
+  { cat "$CDALL"; printf '%s\n' "$lit"; } > "$T/pr.md"
   [ -n "$(pr_by_hand "$T/pr.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
-{ cat "$CD"; printf '%s\n' '`ledger add --section PRX`'; } > "$T/pr.md"
+{ cat "$CDALL"; printf '%s\n' '`ledger add --section PRX`'; } > "$T/pr.md"
 assert_eq "$(pr_by_hand "$T/pr.md")" "" "양성 짝: 다른 절 이름(PRX)은 잡지 않는다"
 assert_not_contains "$(cyc 4)" 'PR 을 열 명령을 사용자에게 준다' "지휘 걸음 4: PR 을 연 뒤 gh 없을 때 PR 명령을 주는 괄호가 없다(양성 짝: 위 gh pr create -R · pr-refresh)"
 
@@ -324,7 +329,7 @@ for lit in '다시 만들 수 있는 것(PR 번호 · 자원 · 기다리는 질
 done
 assert_eq "$(rebuild_names_epic '다시 만들 수 있는 것(PR 캐시(`## PR`) · 자원 · 기다리는 질문)은 주인에서 다시 모은다.')" "" "양성 짝(걸음 1 목록): PR 캐시 · 자원 · 기다리는 질문은 잡지 않는다"
 cyc_head() {  # cyc_head [파일] — `## 지휘 순환` 머리(걸음 1 앞까지)
-  awk '$0=="## 지휘 순환"{f=1; next} f && /^#{2,3} /{exit} f' "${1:-$CD}"
+  awk '$0=="## 지휘 순환"{f=1; next} f && /^#{2,3} /{exit} f' "${1:-$LOOPF}"
 }
 HEAD_BULLET="$(cyc_head | grep -F -- 'pr-record' || true)"
 [ -n "$HEAD_BULLET" ] && ok "지휘 순환 머리에 번호 적기 불릿이 있다" || no "지휘 순환 머리에 번호 적기 불릿이 없다"
@@ -349,15 +354,15 @@ for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines()
     if re.search(r"--section\s+(\"에픽 PR\"|'"'"'에픽 PR'"'"')", line):
         print(i)' "$1"
 }
-assert_eq "$(epic_pr_by_hand "$CD")" "" "conducting.md: 에픽 PR 번호를 손으로 적는 --section \"에픽 PR\" 이 없다(AC2 — 양의 짝: pr-record)"
+assert_eq "$(epic_pr_by_hand "$CDALL")" "" "conducting.md: 에픽 PR 번호를 손으로 적는 --section \"에픽 PR\" 이 없다(AC2 — 양의 짝: pr-record)"
 for lit in '`ledger add --roadmap <로드맵> --session <세션> --section "에픽 PR" --cells "x"`' "\`ledger add --section '에픽 PR' --cells \"x\"\`"; do
-  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/epr.md"
+  { cat "$CDALL"; printf '%s\n' "$lit"; } > "$T/epr.md"
   [ -n "$(epic_pr_by_hand "$T/epr.md")" ] && ok "양성 대조(AC2): 「${lit}」 를 넣으면 잡는다" || no "양성 대조(AC2): 「${lit}」 를 못 잡는다"
 done
 pr_hash() {  # pr_hash <글> — 명령 예시의 `--pr #…`(번호는 숫자만 쓴다)
   printf '%s\n' "$1" | hit '--pr\s+#'
 }
-assert_eq "$(pr_hash "$(cat "$CD")")" "" "conducting.md: 명령 예시에 --pr # 가 없다(번호는 숫자만)"
+assert_eq "$(pr_hash "$(cat "$CDALL")")" "" "conducting.md: 명령 예시에 --pr # 가 없다(번호는 숫자만)"
 [ -n "$(pr_hash 'ledger pr-record --epic <에픽> --pr #123')" ] && ok "양성 대조: --pr #123 을 잡는다" || no "양성 대조: --pr #123 을 못 잡는다"
 
 # gh 없을 때의 대체 길은 없다(R8 계획 2 Task 5 · AC20) — 「gh 가 없…」 · 「`gh` 가 없…」 · 「gh 없음」 문장 부재 + 손 절차 5 의 -R 양의 짝.
@@ -367,12 +372,12 @@ for i, line in enumerate(open(sys.argv[1], encoding="utf-8").read().splitlines()
     if re.search(r"(?<![\w-])`?gh`?\s*(?:가\s*|이\s*)?없", line):
         print(i)' "$1"
 }
-assert_eq "$(gh_absent "$CD")" "" "conducting.md: gh 가 없을 때의 대체 길 문장이 없다"
+assert_eq "$(gh_absent "$CDALL")" "" "conducting.md: gh 가 없을 때의 대체 길 문장이 없다"
 for lit in '`gh` 가 없거나 GitHub 레포가 아니면 설계문서 `## 미룸` 표에 적는다.' 'gh 가 없으면 PR 을 열 명령을 준다.' 'gh 없음이면 건너뛴다.'; do
-  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/gh.md"
+  { cat "$CDALL"; printf '%s\n' "$lit"; } > "$T/gh.md"
   [ -n "$(gh_absent "$T/gh.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
-{ cat "$CD"; printf '%s\n' 'ghost 가 없다 · gh-repo.sh 가 없다'; } > "$T/gh.md"
+{ cat "$CDALL"; printf '%s\n' 'ghost 가 없다 · gh-repo.sh 가 없다'; } > "$T/gh.md"
 assert_eq "$(gh_absent "$T/gh.md")" "" "양성 짝: 다른 낱말(ghost · gh-repo.sh)은 잡지 않는다"
 assert_contains "$(step 5)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "손 절차 5: PR 은 gh_repo.py slug 로 origin 을 명시해 연다(음의 락의 양의 짝)"
 
@@ -396,24 +401,24 @@ for i, line in enumerate(text.splitlines(), 1):
             print("%d: %s — %s" % (i, p, line.strip()[:80]))
 PY
 }
-assert_eq "$(banned "$CD")" "" "레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴이 없다"
+assert_eq "$(banned "$CDALL")" "" "레포 전용 값 · 루트 토큰 · references/ 꼴 가리킴이 없다"
 for lit in 'origin/main' 'review_model: opus' 'python3 plugins/spec-distill/scripts/x.py' '${CLAUDE_PLUGIN_ROOT}/scripts' \
            'references/epic-handoff.md' 'feature/roadmap-x' 'main 에서 만든다' '.superpowers/sdd/x' \
            'origin/master' 'review_model: sonnet' 'haiku 로 부른다' 'plugins/other/x.py' 'shared/tests/x.sh' \
            '줄 안의 플러그인 루트 변수는 그 에픽 worktree 의 spec-distill 플러그인 폴더로' \
            '`<SD>/main.md`' '`<SD>/feature/x.md`' '`<SD>/../../docs/superpowers/specs/x.md`' '`<SD>/.superpowers/sdd/x.md`' \
            '`<SD>/../x/references/y.md`'; do
-  { cat "$CD"; printf '%s\n' "$lit"; } > "$T/mut.md"
+  { cat "$CDALL"; printf '%s\n' "$lit"; } > "$T/mut.md"
   [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: 「${lit}」 를 넣으면 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
 done
-{ cat "$CD"; printf '%s\n' '`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고'; } > "$T/mut.md"
+{ cat "$CDALL"; printf '%s\n' '`<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고'; } > "$T/mut.md"
 assert_eq "$(banned "$T/mut.md")" "" "음성 대조: <SD>/ 아래 references 경로는 잡지 않는다"
-{ cat "$CD"; printf '%s\n' '`<SD>/x.md` 와 맨몸 references/qg-review.md'; } > "$T/mut.md"
+{ cat "$CDALL"; printf '%s\n' '`<SD>/x.md` 와 맨몸 references/qg-review.md'; } > "$T/mut.md"
 [ -n "$(banned "$T/mut.md")" ] && ok "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 는 잡는다" || no "양성 대조: <SD>/ 경로 옆의 맨몸 references/ 를 못 잡는다"
 
 # 가리키는 skill 은 실재한다(아직 없는 skill 을 가리키는 릴리스 금지 — 설계 §11).
 n=0
-for s in $(grep -ohE 'spec-distill:[a-z][a-z-]*' "$CD" "$SD/references/epic-handoff.md" "$RED" "$SD/references/proceed-gate.md" | sed 's/^spec-distill://' | LC_ALL=C sort -u); do
+for s in $(grep -ohE 'spec-distill:[a-z][a-z-]*' "$CDALL" "$SD/references/epic-handoff.md" "$RED" "$SD/references/proceed-gate.md" | sed 's/^spec-distill://' | LC_ALL=C sort -u); do
   n=$((n+1))
   [ -f "$SD/skills/$s/SKILL.md" ] && ok "가리키는 skill 이 있다: $s" || no "없는 skill 을 가리킨다: $s"
 done

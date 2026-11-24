@@ -12,6 +12,7 @@ sys.path.insert(0, str(_HERE.parent / "scripts"))
 sys.path.insert(0, str(_HERE))
 import human_lines as H
 import walk_table as W
+import conductor_toc as TOC
 from test_team_docs import changelog_entries
 
 PLUGIN = _HERE.parent
@@ -84,7 +85,13 @@ POINTER = "team 형식 로드맵이면 아래 `## team 형식 로드맵` 절을 
 
 
 def team_section(text):
+    text = "\n" + text   # team 지시서는 그 절 머리로 시작한다
     return text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0] if "\n## team 형식 로드맵\n" in text else ""
+
+
+_TOC = TOC.load(PLUGIN)
+_NAMED = [PLUGIN / TOC.TOC_REL] + [TOC.resolve(PLUGIN, sd) for sd in TOC.named_files(_TOC)]
+_TEAM_FILE = next(TOC.resolve(PLUGIN, e.guide) for e in _TOC.extras if e.guide.endswith("/conducting-team.md"))
 
 
 def step(text, n):
@@ -93,8 +100,8 @@ def step(text, n):
 
 
 class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
-    TEXT = (REF / "conducting.md").read_text(encoding="utf-8")
-    TEAM = team_section(TEXT)
+    TEXT = "".join(p.read_text(encoding="utf-8") for p in _NAMED)   # 차례 + 이름 붙은 지시서(차례의 차례대로)
+    TEAM = team_section(_TEAM_FILE.read_text(encoding="utf-8"))
 
     def test_five_seats_and_the_walk_first(self):
         for seat in ("방향 확인", "설계 대화와 승인", "계획 확인", "구현 중 물음", "PR 전 확인"):

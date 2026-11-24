@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
 SK="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
 AG="$ROOT/plugins/spec-distill/agents/integration-reviewer.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 [ -f "$SK" ] && ok "SKILL.md 가 있다" || { no "SKILL.md 가 없다"; finish; exit $?; }
 [ -f "$AG" ] && ok "integration-reviewer.md 가 있다" || no "integration-reviewer.md 가 없다"
 HEAD="$(python3 "$ROOT/shared/entry/check_invocation_surface.py" --print-head spec-distill epic-conductor)"
@@ -61,7 +62,7 @@ for s in '### 6. 통합 리뷰어' '### 7. 옮김 대조'; do
   assert_contains "$(sec "$s")" '`repo_defaults.py get review_model --roadmap <로드맵>`' "$s: 모델 칸은 해결자 get review_model 의 값"
   assert_contains "$(sec "$s")" '3(설정을 읽지 못함)이면 그 사유 줄을 보이고' "$s: 해결자 rc 3 이면 사유 줄을 보인다"
 done
-assert_not_contains "$BODY$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '로드맵 frontmatter `review_model`' "리뷰 모델을 로드맵 머리말에서만 읽는 옛 문구가 없다"
+assert_not_contains "$BODY$(cd_all)" '로드맵 frontmatter `review_model`' "리뷰 모델을 로드맵 머리말에서만 읽는 옛 문구가 없다"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져' "꺼짐 행: 플러그인 전체가 꺼진다고 알린다(Ruling R35)"
 assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" '지휘자를 부르지 않은 채' "꺼짐 행: 손 절차는 지휘자를 부르지 않고 따른다"
 RC="$ROOT/plugins/spec-distill/agents/relay-checker.md"
@@ -222,8 +223,8 @@ t = sys.stdin.read()
 print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$reset_branch_check" "$OLD_MSG")"
   [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 갈래 락이 통과한다"
 done
-assert_not_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '옛 시작 승인이 지워진다' "conducting: 옛 시작 승인 괄호가 없다"
-assert_contains "$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
+assert_not_contains "$(cd_all)" '옛 시작 승인이 지워진다' "conducting: 옛 시작 승인 괄호가 없다"
+assert_contains "$(cd_all)" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"
 CM="$ROOT/CLAUDE.md"
 COST="$(grep -F '**모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다**' "$CM")"

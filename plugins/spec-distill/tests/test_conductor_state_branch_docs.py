@@ -27,9 +27,12 @@ import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
 import leader_seat as LS  # noqa: E402
+import conductor_toc as TOC  # noqa: E402
 
 NEW = PLUGIN / "references" / "conductor-state-branch.md"
-LOOP = PLUGIN / "references" / "conducting.md"
+_TOC = TOC.load(PLUGIN)
+LOOP = "".join(p.read_text(encoding="utf-8") for p in
+               [PLUGIN / TOC.TOC_REL] + [TOC.resolve(PLUGIN, sd) for sd in TOC.named_files(_TOC)])   # 차례 + 이름 붙은 지시서
 POINTER = "${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md"
 POINTER_HOME = PLUGIN / "references" / "redecompose.md"   # 완전한 가리킴 하나가 사는 reference(고아 락이 읽는 꼴)
 FILE_NAME = "conductor-state-branch.md"
@@ -38,7 +41,7 @@ FILE_NAME = "conductor-state-branch.md"
 def step(n: int) -> str:
     """지휘 절차서의 `### n. ` 걸음 본문."""
     out, on = [], False
-    for line in LOOP.read_text(encoding="utf-8").split("\n"):
+    for line in LOOP.split("\n"):
         if line.startswith("### "):
             on = line.startswith("### %d. " % n)
             continue
@@ -81,7 +84,7 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("AskUserQuestion", text)   # 확인 질문은 문장으로 적는다 — 질문 자리 목록에 행을 더하지 않는다(J43)
 
     def test_conducting_steps_carry_the_sentences(self):
-        whole = LOOP.read_text(encoding="utf-8")
+        whole = LOOP
         self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", whole)   # 지휘 순환은 루트 토큰을 쓰지 않는다 — 걸음에서는 파일 이름만
         self.assertEqual(POINTER_HOME.read_text(encoding="utf-8").count(POINTER), 1)
         for n in (1, 2, 7):

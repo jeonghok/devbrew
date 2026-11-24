@@ -100,28 +100,28 @@ plugins/spec-distill/skills/intent-sync/SKILL.md	꼬리	**다른 다음 단계(�
 plugins/spec-distill/skills/intent-sync/SKILL.md	비움	덜어 낸 것이 1개 이상이면 `AskUserQuestion` 한 번으로 묻습니다	되살린 항목은 seed 에	1
 
 # 지휘자 (Task 6)
-plugins/spec-distill/references/conducting.md	꼬리	넘겨받을지(`ledger takeover`)는 사용자에게 묻는다	기계 상태가 깨졌으면		2
-plugins/spec-distill/references/conducting.md	비움	「주인 모름」 worktree(고른 것만 지운다	`ledger version --plugin-json
-plugins/spec-distill/references/conducting.md	지시	사용자 몫 감사는 `ledger audit --roadmap <로드맵> --epic <에픽>` 의 후보 가운데	에픽에 새 항목을 넣을 때는
-plugins/spec-distill/references/conducting.md	언급	- 부를 skill: 없음(지휘자가 정할 질문은 `AskUserQuestion`.	
-plugins/spec-distill/references/conducting.md	꼬리	- 판단: 조사 · 측정 · 결정처럼 설계 흐름이 맞지 않으면	승인된 흐름 · 산출물은 같은 폴더	1	2
-plugins/spec-distill/references/conducting.md	꼬리	- 승인 게이트: 지휘 세션이 돌린 리뷰라 spec-review 의 승인 게이트는 질문 하나다	승인이면 이 세션은 writing-plans 를 따르지 않고		3
-plugins/spec-distill/references/conducting.md	꼬리	- 병렬 질문: 승인 게이트 직전	둘째 질문으로 흐름을 묻지 않는다.	1	2
-plugins/spec-distill/references/conducting.md	떼기	- 「차례로」 확인: 구현 담당자를 보내기 전에	닿는 답이 없으면 기본(병렬)대로 보낸다.
-plugins/spec-distill/references/conducting.md	지시	있으면 그 결정들을 배경과 함께 사용자에게 묻고(걸음 2)	구현 중에는 맞추기마다
-plugins/spec-distill/references/conducting.md	지시	구현이 막히면(SDD 의 BLOCKED 포함)	설계 안의 판정은 멈추지 않고
-plugins/spec-distill/references/conducting.md	지시	같은 자리(한 메커니즘의 보안 리뷰 등)가 라운드마다	계획 중간에 돌아온 구현 agent 를
-plugins/spec-distill/references/conducting.md	지시	머지된 에픽의 worktree 는 `ledger cleanup-check` 뒤	머지를 확인하면 `## 작업` 에서
-plugins/spec-distill/references/conducting.md	지시	맡을 에픽이 없으면 GitHub 이슈(`#<n>`)를 받는 곳으로 쓸 수 있으나	- 부를 skill: 없음.
-plugins/spec-distill/references/conducting.md	언급	2. **에픽과 브랜치.**	
-plugins/spec-distill/references/conducting.md	꼬리	3. **흐름과 설계.**	승인된 흐름 · 산출물은 로드맵 블록의	1	2
-plugins/spec-distill/references/conducting.md	꼬리	지휘 세션이 돌린 리뷰라 승인 게이트는 질문 하나(	승인이면 지휘 세션은 게이트가 낸		3
-plugins/spec-distill/references/conducting.md	꼬리	승인 질문 호출에는 지휘 순환 걸음 3 의 병렬 질문(	준비 에픽 구현 시작이 그 머지 때까지 밀린다		2
-plugins/spec-distill/references/conducting.md	떼기	「병렬 (권장)」 은 그 준비 에픽의 계획이 끝나는 대로	지휘 순환 걸음 3 대로 한다.
-plugins/spec-distill/references/conducting.md	지시	계획 검토는 지휘 세션이 계획을 읽고 설계에 없던 결정	가른 결과와 이유는 그 에픽 설계문서
-plugins/spec-distill/references/conducting.md	지시	다만 판정이 승인된 설계의 수용 기준 · 의도를 바꾸거나 구현이 막히면	돌아오면 AC 보고를
-plugins/spec-distill/references/conducting.md	지시	두 번째 재리뷰 뒤 남는 지적은 고치지 않고	다음 계획의 PR 을 앞 계획 브랜치를 바탕(base)으로
-plugins/spec-distill/references/conducting.md	지시	지우기 전에 수정 · 추적 안 된 파일이 있으면	끊긴 곳은 사용자에게 보이고
+plugins/spec-distill/references/conducting-step-1.md	꼬리	넘겨받을지(`ledger takeover`)는 사용자에게 묻는다	기계 상태가 깨졌으면		2
+plugins/spec-distill/references/conducting-step-1.md	비움	「주인 모름」 worktree(고른 것만 지운다	`ledger version --plugin-json
+plugins/spec-distill/references/conducting-step-2.md	지시	사용자 몫 감사는 `ledger audit --roadmap <로드맵> --epic <에픽>` 의 후보 가운데	에픽에 새 항목을 넣을 때는
+plugins/spec-distill/references/conducting-step-2.md	언급	- 부를 skill: 없음(지휘자가 정할 질문은 `AskUserQuestion`.	
+plugins/spec-distill/references/conducting-step-3.md	꼬리	- 판단: 조사 · 측정 · 결정처럼 설계 흐름이 맞지 않으면	승인된 흐름 · 산출물은 같은 폴더	1	2
+plugins/spec-distill/references/conducting-step-3.md	꼬리	- 승인 게이트: 지휘 세션이 돌린 리뷰라 spec-review 의 승인 게이트는 질문 하나다	승인이면 이 세션은 writing-plans 를 따르지 않고		3
+plugins/spec-distill/references/conducting-step-3.md	꼬리	- 병렬 질문: 승인 게이트 직전	둘째 질문으로 흐름을 묻지 않는다.	1	2
+plugins/spec-distill/references/conducting-step-3.md	떼기	- 「차례로」 확인: 구현 담당자를 보내기 전에	닿는 답이 없으면 기본(병렬)대로 보낸다.
+plugins/spec-distill/references/conducting-step-4.md	지시	있으면 그 결정들을 배경과 함께 사용자에게 묻고(걸음 2)	구현 중에는 맞추기마다
+plugins/spec-distill/references/conducting-step-4.md	지시	구현이 막히면(SDD 의 BLOCKED 포함)	설계 안의 판정은 멈추지 않고
+plugins/spec-distill/references/conducting-step-4.md	지시	같은 자리(한 메커니즘의 보안 리뷰 등)가 라운드마다	계획 중간에 돌아온 구현 agent 를
+plugins/spec-distill/references/conducting-step-6.md	지시	머지된 에픽의 worktree 는 `ledger cleanup-check` 뒤	머지를 확인하면 `## 작업` 에서
+plugins/spec-distill/references/conducting-step-6.md	지시	맡을 에픽이 없으면 GitHub 이슈(`#<n>`)를 받는 곳으로 쓸 수 있으나	- 부를 skill: 없음.
+plugins/spec-distill/references/conducting-manual.md	언급	2. **에픽과 브랜치.**	
+plugins/spec-distill/references/conducting-manual.md	꼬리	3. **흐름과 설계.**	승인된 흐름 · 산출물은 로드맵 블록의	1	2
+plugins/spec-distill/references/conducting-manual.md	꼬리	지휘 세션이 돌린 리뷰라 승인 게이트는 질문 하나(	승인이면 지휘 세션은 게이트가 낸		3
+plugins/spec-distill/references/conducting-manual.md	꼬리	승인 질문 호출에는 지휘 순환 걸음 3 의 병렬 질문(	준비 에픽 구현 시작이 그 머지 때까지 밀린다		2
+plugins/spec-distill/references/conducting-manual.md	떼기	「병렬 (권장)」 은 그 준비 에픽의 계획이 끝나는 대로	지휘 순환 걸음 3 대로 한다.
+plugins/spec-distill/references/conducting-manual.md	지시	계획 검토는 지휘 세션이 계획을 읽고 설계에 없던 결정	가른 결과와 이유는 그 에픽 설계문서
+plugins/spec-distill/references/conducting-manual.md	지시	다만 판정이 승인된 설계의 수용 기준 · 의도를 바꾸거나 구현이 막히면	돌아오면 AC 보고를
+plugins/spec-distill/references/conducting-manual.md	지시	두 번째 재리뷰 뒤 남는 지적은 고치지 않고	다음 계획의 PR 을 앞 계획 브랜치를 바탕(base)으로
+plugins/spec-distill/references/conducting-manual.md	지시	지우기 전에 수정 · 추적 안 된 파일이 있으면	끊긴 곳은 사용자에게 보이고
 
 # quality-gates (Task 7)
 plugins/quality-gates/skills/quality-pipeline/SKILL.md	언급	Decision points are `AskUserQuestion`	

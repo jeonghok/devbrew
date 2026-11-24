@@ -15,6 +15,7 @@ SCRIPTS = REPO / "plugins" / "spec-distill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import human_lines as H  # noqa: E402
 import team_files as F  # noqa: E402
+import conductor_toc as TOC  # noqa: E402
 
 S, E = "00000000-0000-4000-8000-00000000aaaa", "00000000-0000-4000-8000-000000000001"
 SPEC = "- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」 · design.md@51f1b64d · 근거 %s:%s#1" % (S, E)
@@ -33,11 +34,15 @@ class LineShape(unittest.TestCase):
 
     def test_pass_labels_are_the_ones_the_questions_offer(self):   # 계획 1 J20 · 미룸(통과 라벨 락에 spec-review)
         ref = REPO / "plugins/spec-distill"
-        text = (ref / "references/conducting.md").read_text(encoding="utf-8")
-        team = text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0]
+        toc = TOC.load(ref)
+        named = [TOC.resolve(ref, sd) for sd in TOC.named_files(toc)]
+        text = "".join(p.read_text(encoding="utf-8") for p in [ref / TOC.TOC_REL] + named)   # 차례 + 이름 붙은 지시서
+        team_file = next(TOC.resolve(ref, e.guide) for e in toc.extras if e.guide.endswith("/conducting-team.md"))
+        team = ("\n" + team_file.read_text(encoding="utf-8")).split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0]
         spec = "「%s %s」" % (H.PASS_LABELS[H.KIND_SPEC][0], H.RECOMMENDED)
         for path in ("references/conducting.md", "references/proceed-gate.md", "skills/spec-review/SKILL.md"):
-            self.assertIn(spec, (ref / path).read_text(encoding="utf-8"), path)
+            body = text if path == "references/conducting.md" else (ref / path).read_text(encoding="utf-8")
+            self.assertIn(spec, body, path)
         self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_PLAN][0], H.RECOMMENDED), team)
         self.assertIn("「%s %s」" % (H.PASS_LABELS[H.KIND_FLOW][0], H.RECOMMENDED), team)
         for label in H.PASS_LABELS[H.KIND_SKIP]:

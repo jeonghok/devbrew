@@ -5,6 +5,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 F="$ROOT/plugins/spec-distill/references/conductor-dispatch.md"
 [ -f "$F" ] && ok "conductor-dispatch.md 가 있다" || { no "conductor-dispatch.md 가 없다"; finish; exit $?; }
 TXT="$(cat "$F")"
@@ -136,9 +137,10 @@ SPEC="$ROOT/docs/superpowers/specs/2026-11-22-session-workers-design.md"
 tail_of() { awk '/^\*\*세션 꼬리\.\*\*|^### 세션 꼬리$/{f=1;next} f&&/^```text$/{g=1;next} g&&/^```$/{exit} g' "$1"; }
 assert_eq "$(tail_of "$F")" "$(tail_of "$SPEC")" "AC4: 세션 꼬리 펜스가 설계 §3 과 글자 그대로"
 assert_eq "$(tail_of "$F" | grep -c . )" "7" "AC4: 꼬리 펜스 일곱 줄(양성 대조 — 비어 있지 않다)"
-for f in "$F" "$ROOT/plugins/spec-distill/references/conducting.md"; do
+for f in "$F"; do
   assert_eq "$(grep -cE 'disallowedTools|disallowed-tools' "$f" || true)" "0" "AC3: 막는 옵션 글자가 없다 — ${f##*/}"
 done
+assert_eq "$(cd_all | grep -cE 'disallowedTools|disallowed-tools' || true)" "0" "AC3: 막는 옵션 글자가 없다 — conducting.md"
 once '## 사람 자리' '옮김 기록(`relay-<번호>.md`)의 「받은 원문」 은 담당자가 쓴 그 파일의 글 그대로다'
 once '## 사람 자리' 'skill 이 낸 질문이 아닌 물음(담당자가 스스로 낸 설계 물음)도 같은 꼴로 남긴다'
 once '## 단계마다 새 agent' '세션 길은 `## 세션 담당자` 의 「단계마다 새 세션」 을 따른다'
