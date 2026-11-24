@@ -143,7 +143,7 @@ for lit in 'roadmap-<요지>` 브랜치를 전용 worktree' \
            '에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다' \
            '## 7. 끝내기' '`check_bundle_coverage.py <묶음> <설계문서>` 를 먼저 돌려' 'spec-review 를 다시 돌린다' \
            'spec-review 게이트 ③ 의 후속 질문' '`## 분해안` 표를 `roadmap_write.py extract` 출력으로 바꿔 둔다' \
-           '머지되거나 끝난 에픽'; do
+           '머지되거나 끝난 에픽' '재분해가 그 리뷰의 「로드맵 다시 잡기」 갈래에서 왔다'; do
   has "$RTXT" "$lit" "redecompose(리뷰): $lit"
 done
 # R8 AC12 — 재분해 작업 브랜치의 기본 브랜치 · 접두는 해결자에서 얻는다(양의 짝)와 글자로 박지 않는다(음의 짝).
