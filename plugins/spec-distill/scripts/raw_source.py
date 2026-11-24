@@ -26,7 +26,7 @@ locate 의 판결 줄 — stdout 마지막 줄이다(다른 줄은 stdout 에 �
 상태 파일 길은 seed 와 기록 파일이 작업 트리 안이고 링크를 거치지 않을 때만 따라간다(쓰는 쪽 `seed_value` 와 같은
 `state_path.inside_root`). 아니면 LOST 다. `--seed` 길은 받은 경로를 그대로 따른다.
 
-옆 생성기(`team_write._framing_from_state`)와 다른 갈래 셋:
+옆 생성기(`team_write._framing_from_state`)와 다른 갈래 둘:
 - `seed:` 가 `없음` 이거나 비었는데 `## 풀린 입력` 이 seed 인 컨텍스트 쌓기를 옆 생성기는 framing 없는 컨텍스트 쌓기로 읽고
   이 모듈은 찾지 못함으로 읽는다 — 그쪽은 옮겨 적을 기록 파일이 없다는 것만 알면 되고, 이쪽은 첫 입력이 모델이 줄인 글이라는
   것까지 알아야 한다.
