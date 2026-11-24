@@ -124,7 +124,12 @@ zero "$WHOLE" '합성 표가 합치기 전의 목록' "pre-merge-file 음성: �
 zero "$WHOLE" '합성 표가 한 행으로 합친 지적은' "pre-merge-file 음성: 담당자가 합친 행을 풀어 세던 옛 문장이 없다(양성 짝: 항목 하나를 단위로 센다)"
 
 # degrade-lines-verbatim (AC16 담당자 쪽)
-one "$REPORT" 'qg 가 무엇이 빠지거나 줄어든 채 돌았다고 알린 줄(넘겨받은 답을 읽지 못함 · 리뷰어나 codex 가 돌지 못함 · 재비판이 돌지 못함 같은 줄)을 글자 그대로' "degrade-lines-verbatim: 마지막 보고가 빠진 채 돈 알림 줄을 글자 그대로 싣는다"
+one "$REPORT" 'qg 가 무엇이 빠지거나 줄어든 채 돌았다고 알린 줄(넘겨받은 답을 읽지 못함 · 리뷰어나 codex 가 돌지 못함 · 재비판이 돌지 못함 같은 줄)과 의도 점검이 원문이나 로드맵 없이 돌았다는 줄(「원문 없음 — <사유>」 · 「로드맵 없음 — <사유>」)을 글자 그대로' "degrade-lines-verbatim(D34): 마지막 보고가 빠진 채 돈 알림 줄과 원문 없음 · 로드맵 없음 줄을 글자 그대로 싣는다"
+zero "$REPORT" '재비판이 돌지 못함 같은 줄)을 글자 그대로' "degrade-lines-verbatim(D34) 음성: 원문 없음 · 로드맵 없음 줄을 빼던 옛 끝이 없다(양성 짝: 위 줄)"
+# D34 결합 — 화면에 남기는 두 줄의 머리는 qg 의 intent_origin.py 가 내는 글자다
+IO="$(cat "$ROOT/plugins/quality-gates/scripts/intent_origin.py")"
+one "$IO" 'origin = "원문 없음 — " + reason' "degrade-lines-verbatim(D34) 결합: 「원문 없음 — <사유>」 는 intent_origin.py 가 내는 글자다"
+one "$IO" 'line = "로드맵 없음 — " + reason' "degrade-lines-verbatim(D34) 결합: 「로드맵 없음 — <사유>」 는 intent_origin.py 가 내는 글자다"
 
 # asked-then-recheck (AC22)
 one "$RET" '구현이 끝난 머지 전 에픽을 이름으로 청해 본 리뷰(`asked`)가 막는 지적을 내 되돌린 뒤의 좁은 재리뷰는 `recheck-pr<번호>` 로 보내고 그 PR 의 「두 번까지」 에 센다. 그 뒤 자동 머지 앞 리뷰는 `premerge-pr<번호>` 로 평소대로 한 번 보낸다 — 이름으로 청한 리뷰는 그 횟수에 세지 않는다.' "asked-then-recheck: 이름으로 청한 리뷰 뒤의 좁은 재리뷰와 자동 머지 앞 리뷰의 자리 글자"
@@ -256,7 +261,8 @@ one "$LIST" 'qg 가 끝까지 돌지 못해 지적 목록을 싣지 못하면 �
 one "$RES" '돌려주는 꼴의 `answered_filtered` 에서 오고 0 이면 붙지 않는다' "filtered-count-and-notices: 전에 답해 묻지 않은 것은 answered_filtered 에서"
 one "$RES" '0 이면 붙지 않는다 — `-`(의도 점검을 건너뛰었거나 셀 수 없음)여도 붙지 않는다' "filtered-count-and-notices(통합 리뷰 F6): answered_filtered 가 - 여도 붙지 않는다"
 one "$RES" '`qg-answered-notices.txt` 의 줄을 맥락 머리 바로 아래에 글자 그대로' "filtered-count-and-notices: 알림 파일의 줄을 맥락 머리 아래에"
-one "$RES" '빠지거나 줄어든 채 돌았다고 알리는 줄도 같은 자리에' "filtered-count-and-notices: 빠진 채 돈 알림 줄도 같은 자리에"
+one "$RES" '빠지거나 줄어든 채 돌았다고 알리는 줄과 의도 점검이 원문이나 로드맵 없이 돌았다는 줄(「원문 없음 — <사유>」 · 「로드맵 없음 — <사유>」)도 같은 자리에' "filtered-count-and-notices(D34): 빠진 채 돈 알림 줄과 원문 없음 · 로드맵 없음 줄도 같은 자리에"
+zero "$RES" '빠지거나 줄어든 채 돌았다고 알리는 줄도 같은 자리에' "filtered-count-and-notices(D34) 음성: 원문 없음 · 로드맵 없음 줄을 빼던 옛 문장이 없다(양성 짝: 위 줄)"
 
 # record-template-3 (AC17 · Q5)
 TPL="$(fenced "$REC" 'type: roadmap-review')"
