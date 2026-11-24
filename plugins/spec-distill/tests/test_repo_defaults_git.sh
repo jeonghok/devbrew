@@ -224,7 +224,17 @@ assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 새 꼴 이름도 받는
 run "$OK" check-path intent_dir notes/iv/x-interview.md
 assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 옛 꼴 이름도 받는다"
 run "$OK" get interview_dir
-assert_eq "$RC" "2" "get 은 옛 키 인자를 받지 않는다"
+assert_eq "$RC:$OUT" "0:notes/iv/" "get 의 옛 키 인자는 한 판 동안 받는다 — 새 키 인자와 같은 stdout · rc"
+assert_contains "$ERR" "인자 interview_dir 는 이름이 intent_dir 로 바뀌었다" "get 의 옛 키 인자는 이름이 바뀌었다고 알린다"
+assert_contains "$ERR" "다음 minor 판에서 지운다" "알림이 언제 지우는지 말한다"
+run "$OK" check-path interview_dir notes/iv/x-context.md
+assert_eq "$RC" "0" "check-path 의 옛 키 인자도 한 판 동안 받는다(새 키 인자와 같은 rc 0)"
+assert_contains "$ERR" "인자 interview_dir 는 이름이 intent_dir 로 바뀌었다" "check-path 의 옛 키 인자도 알린다"
+run "$OK" check-path intent_dir elsewhere/x-context.md; NRC="$RC"
+run "$OK" check-path interview_dir elsewhere/x-context.md
+assert_eq "$RC" "$NRC" "옛 키 인자의 거절도 새 키 인자와 같은 rc 다"
+run "$OK" get intent_dir
+assert_not_contains "$ERR" "인자 interview_dir" "새 키 인자 호출에는 그 알림이 없다"
 mkrepo ob || { no "픽스처 ob"; finish; exit 1; }
 OB="$T/ob/work"
 on_trunk "$OB" .devbrew.md $'---\nintent_dir: new/\ninterview_dir: old/\n---\n'

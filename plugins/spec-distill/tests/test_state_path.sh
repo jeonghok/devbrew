@@ -124,9 +124,17 @@ put_type "$D/2026-10-16-o-context.md" interview-brief
 out=$(python3 "$HELPER" context-state --topic o --date 2026-10-16 --time 0930 --cwd "$IV" 2>/dev/null); rc=$?
 assert_eq "$rc:$out" "0:$D/2026-10-16-o-0930-context.state.md" "옛 type: interview-brief 도 끝난 일로 본다(새 줄기)"
 rm -f "$D/2026-10-16-o-context.md"
-# 하위 명령 이름 — 옛 이름은 받지 않는다
-python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" >/dev/null 2>&1; rc=$?
-assert_eq "$rc" "2" "옛 하위 명령 interview-state 는 rc 2"
+# 하위 명령 이름 — 옛 이름은 한 판 동안 받는다: 새 이름과 같은 stdout · rc 에 알림 한 줄(다음 minor 에서 지운다)
+new_out=$(python3 "$HELPER" context-state --topic t --date 2026-10-15 --cwd "$IV" 2>"$WORK/new.err"); new_rc=$?
+old_out=$(python3 "$HELPER" interview-state --topic t --date 2026-10-15 --cwd "$IV" 2>"$WORK/old.err"); old_rc=$?
+assert_eq "$old_rc|$old_out" "$new_rc|$new_out" "옛 하위 명령 interview-state 는 새 이름과 같은 stdout · rc 를 낸다"
+assert_eq "$new_rc" "0" "전제: 새 이름 호출이 rc 0 으로 경로를 낸다"
+assert_eq "$(grep -c '하위 명령 interview-state 는 이름이 context-state 로 바뀌었다' "$WORK/old.err")" "1" "옛 하위 명령은 stderr 에 이름이 바뀌었다는 알림 한 줄을 낸다"
+assert_contains "$(cat "$WORK/old.err")" "다음 minor 판에서 지운다" "알림이 언제 지우는지 말한다"
+assert_not_contains "$(cat "$WORK/new.err")" "이름이 context-state 로 바뀌었다" "새 이름 호출에는 그 알림이 없다"
+python3 "$HELPER" interview-state >/dev/null 2>"$WORK/old2.err"; rc=$?
+python3 "$HELPER" context-state >/dev/null 2>/dev/null; nrc=$?
+assert_eq "$rc" "$nrc" "옛 하위 명령의 인자 오류도 새 이름과 같은 rc 다"
 python3 "$HELPER" 2>&1 | grep -q 'interview-state' && no "usage 줄에 옛 하위 명령이 남았다" || ok "usage 줄에 옛 하위 명령이 없다"
 # ── path-inside · 링크 거부 ───────────────────────────────────────────────
 OUTD="$WORK/outside"; mkdir -p "$OUTD"

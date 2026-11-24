@@ -641,6 +641,26 @@ def _cmd_roadmap_check(base: str, path: str) -> int:
     return 3
 
 
+def _old_key_argument(argv: list) -> list:
+    """`get` · `check-path` 의 키 자리에 온 옛 키 이름을 새 키로 바꾸고 알린다 — 한 판 동안 받는다."""
+    if not argv or argv[0] not in ("get", "check-path"):
+        return argv
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--roadmap", "--root"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        if a == legacy_names.OLD_SETTING_KEY:
+            _say(legacy_names.rename_notice("repo_defaults.py %s 인자" % argv[0], a, legacy_names.SETTING_KEY))
+            return argv[:i] + [legacy_names.SETTING_KEY] + argv[i + 1:]
+        return argv
+    return argv
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="repo_defaults.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -658,7 +678,7 @@ def main(argv=None) -> int:
     p_rmc = sub.add_parser("roadmap-check")
     p_rmc.add_argument("path")
     p_rmc.add_argument("--root")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(_old_key_argument(sys.argv[1:] if argv is None else list(argv)))
     try:
         base = args.root or os.getcwd()
         if args.cmd == "default-branch":

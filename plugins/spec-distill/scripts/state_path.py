@@ -42,7 +42,8 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from legacy_names import (  # noqa: E402
-    CONTEXT_AUDIT, CONTEXT_BRIEF, CONTEXT_STATE, CONTEXT_TAIL, DEFAULT_DIR, OLD_DEFAULT_DIR, kind_matches,
+    CONTEXT_AUDIT, CONTEXT_BRIEF, CONTEXT_STATE, CONTEXT_TAIL, DEFAULT_DIR, OLD_DEFAULT_DIR, OLD_STATE_COMMAND,
+    kind_matches, rename_notice,
 )
 
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
@@ -430,6 +431,11 @@ def main(argv: list[str]) -> int:
         print("usage: state_path.py {state-root|session-id|context-state} …", file=sys.stderr)
         return 2
     sub = argv[1]
+    if sub == OLD_STATE_COMMAND:   # 옛 이름 — 한 판 동안 받고 알린다(stdout · rc 는 새 이름과 같다)
+        print("[spec-distill] " + rename_notice("state_path.py 하위 명령", OLD_STATE_COMMAND, CONTEXT_STATE),
+              file=sys.stderr)
+        argv = [argv[0], CONTEXT_STATE] + argv[2:]
+        sub = CONTEXT_STATE
     if sub in ("state-root", "state-root-for"):
         pos, flags, unknown = [], 0, False
         for arg in argv[2:]:
