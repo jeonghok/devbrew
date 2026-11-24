@@ -216,7 +216,7 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 [ -n "$cur" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 [ "$cur" != "$def" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
-st="$(git -C "$top" status --porcelain -- "$RDIR" "$STATE_F" 2>/dev/null)" || st="?"
+st="$(git -C "$top" status --porcelain --untracked-files=all -- "$RDIR" "$STATE_F" 2>/dev/null)" || st="?"
 if [ -z "$st" ] && [ -n "$(git -C "$top" ls-files -- "$STATE_F")" ] && [ -n "$(git -C "$top" ls-files -- "$RDIR")" ]; then
   echo "[spec-distill] 로드맵 폴더 · 상태 파일은 이미 커밋돼 있다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
   exit 0

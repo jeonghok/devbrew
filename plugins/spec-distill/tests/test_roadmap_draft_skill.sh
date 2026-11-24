@@ -257,6 +257,14 @@ printf '# R2\n' > "$c/$RREL/R2.md"
 o="$(runc "$c")"
 assert_eq "$(nhead "$c")" "4" "추적 안 된 새 파일: 새 커밋이 생긴다"
 assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
+# 사용자 설정 status.showUntrackedFiles=no 에서도 같다 — 추적 안 된 새 파일을 놓치지 않는다
+c="$(mk again-new-no "$DEC")"; generated "$c"; runc "$c" >/dev/null
+git -C "$c" config status.showUntrackedFiles no
+printf '# R2\n' > "$c/$RREL/R2.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "표시 설정 no · 추적 안 된 새 파일: 새 커밋이 생긴다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일을 커밋했다 — " "표시 설정 no · 추적 안 된 새 파일: 커밋했다 줄을 낸다"
+assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "표시 설정 no · 추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
 # 상태 파일이 인덱스에서 빠지고 git 이 무시하면 「이미 커밋」 을 내지 않는다
 c="$(mk again-ign "$DEC")"; generated "$c"; runc "$c" >/dev/null
 git -C "$c" rm -q --cached -- "$STEM.state.md"; git -C "$c" commit -q -m drop; printf '%s\n' "$STEM.state.md" >> "$c/.git/info/exclude"
