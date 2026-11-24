@@ -401,15 +401,20 @@ class CheckPathIntentFolders(unittest.TestCase):
         rc, _ = self.check({}, self.OLD + "x-interview.md", key="roadmaps_dir")
         self.assertEqual(rc, 3)
 
-    def test_check_path_rejects_old_key_argument(self):
-        rc, _ = self.check({}, self.NEW + "x.md", key="interview_dir")
-        self.assertEqual(rc, 2)
+    def test_check_path_old_key_argument_is_taken_for_one_minor(self):
+        # 옛 키 인자는 한 판 동안 받는다 — 새 키 인자와 같은 rc 에, 이름이 바뀌었다는 알림 한 줄.
+        new_rc, new_err = self.check({}, self.NEW + "x.md")
+        rc, err = self.check({}, self.NEW + "x.md", key=legacy_names.OLD_SETTING_KEY)
+        self.assertEqual(rc, new_rc)
+        self.assertEqual(err.count("이름이 %s 로 바뀌었다" % legacy_names.SETTING_KEY), 1, err)
+        self.assertNotIn("이름이 %s 로 바뀌었다" % legacy_names.SETTING_KEY, new_err)
 
     def test_get_choices(self):
+        # 모르는 키는 여전히 argparse 오류(rc 2)다 — 옛 키 하나만 한 판 동안 새 키로 받는다.
         import contextlib, io
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as c:
-                rd.main(["get", "interview_dir", "--root", self.tmp])
+                rd.main(["get", "no_such_dir", "--root", self.tmp])
         self.assertEqual(c.exception.code, 2)
 
     def test_old_folder_link_rejected(self):
