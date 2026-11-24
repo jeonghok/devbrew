@@ -263,6 +263,7 @@ assert_eq "$RC" "0" "두 키가 있으면 check-path 의 옛 키 인자는 옛 �
 run "$OB" check-path interview_dir new/x-context.md
 assert_eq "$RC" "3" "두 키가 있으면 check-path 의 옛 키 인자는 새 폴더를 받지 않는다"
 assert_contains "$ERR" "정해진 폴더는 old/" "거절 사유가 옛 키의 폴더를 댄다"
+assert_not_contains "$ERR" "옛 꼴 이름" "옛 키 인자의 거절에는 새 키의 옛 폴더 규칙(옛 꼴 이름만) 사유가 붙지 않는다 — PR #332 앞에는 없던 규칙이다"
 
 # ── test_roadmap_check (AC6) ─────────────────────────────────────────────────
 mkrepo rb || { no "픽스처 rb"; finish; exit 1; }
