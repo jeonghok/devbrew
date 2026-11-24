@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import legacy_names  # noqa: E402
 import repo_defaults  # noqa: E402
 import roadmap_model as M  # noqa: E402
 import team_files as F  # noqa: E402
@@ -76,8 +77,8 @@ _SRC_ABSENT = ("에 그 파일이 없어", "에 그 파일이 없고", "에 그 
 _SRC_BROKEN = ("에서 그 파일을 읽지 못해", "에서 그 파일을 읽지 못했고", "에서 그 파일을 읽지 못했다")  # 경로는 있고 읽지 못함
 _SRC_FOREIGN = ("가 기준 · HEAD 의 조상이 아니어서", "가 기준 · HEAD 의 조상이 아니고", "가 기준 · HEAD 의 조상이 아니다")  # 읽히나 기준 · HEAD 밖
 
-# 원자료 사본 구간의 출처가 될 수 있는 파일 — 로드맵 source_brief · 그 audit · framing audit(머리 type 이 FRAMING_TYPE)
-FRAMING_TYPE = "interview-seed-audit"
+# 원자료 사본 구간의 출처가 될 수 있는 파일 — 로드맵 source_brief · 그 audit · framing audit(머리 type 이 FRAMING_TYPE · 옛 기록은 옛 글자)
+FRAMING_TYPE = legacy_names.INTENT_SEED_AUDIT
 SOURCE_NOT_ALLOWED = "출처가 로드맵 source_brief(%s) · 그 audit · framing audit 가운데 하나가 아니다"
 
 
@@ -100,7 +101,7 @@ def source_problem(source: str, brief_rel: Optional[str], blob: Optional[bytes])
     대체 대조면 기준의 그 파일)이다 — 없으면 이어지는 대조가 판정한다."""
     if brief_rel is None or source in (brief_rel, audit_of(brief_rel)) or blob is None:
         return None
-    if head_type(blob) == FRAMING_TYPE:
+    if legacy_names.kind_matches(head_type(blob), legacy_names.INTENT_SEED_AUDIT):
         return None
     return SOURCE_NOT_ALLOWED % brief_rel
 

@@ -27,7 +27,7 @@ T="$(cd "$T" && pwd -P)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 
-KEYS="specs_dir plans_dir roadmaps_dir interview_dir test_command test_failure_pattern review_model parallel_default branch_prefix shared_files rules_budget handbook_budget walk_table human_gate state_branch"
+KEYS="specs_dir plans_dir roadmaps_dir intent_dir test_command test_failure_pattern review_model parallel_default branch_prefix shared_files rules_budget handbook_budget walk_table human_gate state_branch"
 RMD=docs/superpowers/roadmaps/rm
 RM="$RMD/roadmap.md"
 
@@ -169,7 +169,7 @@ js() {  # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 이 테�
 NFILES=$(( (15 * 2 + 3) * 3 ))
 
 echo "=== 작업공간 불변 락(AC27) ==="
-settings "$T/inv.devbrew.md" "interview_dir: notes/interview/" 'test_command: "true"' "human_gate: 끔"
+settings "$T/inv.devbrew.md" "intent_dir: notes/interview/" 'test_command: "true"' "human_gate: 끔"
 mkrepo inv main "$T/inv.devbrew.md" || { no "픽스처 inv"; finish; exit 1; }
 IW="$T/inv/work"
 docs "$IW" "$RMD" "" $'review_model: base-model\nparallel_default: 2\n'
@@ -177,7 +177,7 @@ g "$IW" add -A && g "$IW" commit -qm docs && g "$IW" push -q origin main
 g "$IW" worktree add -q -b feature/r1 "$T/inv/A" main && g "$IW" worktree add -q -b feature/b "$T/inv/B" main \
   || { no "픽스처 inv: worktree 둘"; finish; exit 1; }
 printf 'a\n' > "$T/inv/A/src-a.txt"; g "$T/inv/A" add -A; g "$T/inv/A" commit -qm r1
-settings "$T/inv/B/.devbrew.md" "interview_dir: other/" "roadmaps_dir: plan/"
+settings "$T/inv/B/.devbrew.md" "intent_dir: other/" "roadmaps_dir: plan/"
 docs "$T/inv/B" "$RMD" " 고침" $'review_model: branch-model\nparallel_default: 7\n'
 g "$T/inv/B" add -A; g "$T/inv/B" commit -qm "로드맵 · 설정을 자기 브랜치에서만 고침"
 [ "$(g "$T/inv/A" rev-parse --abbrev-ref HEAD) $(g "$T/inv/B" rev-parse --abbrev-ref HEAD)" = "feature/r1 feature/b" ] \
@@ -194,7 +194,7 @@ assert_eq "$(js "$T/out-A/status.out" "[(b['id'], b['read_tree']) for b in r['bl
   "읽은 트리: 진행 중인 에픽은 에픽 끝, 브랜치 없는 에픽은 기본 브랜치"
 assert_eq "$(js "$T/out-A/status.out" "r['exit']")" "0" "전제: 상태 계산이 로드맵을 끝까지 셌다(검사 불가가 아니다)"
 assert_contains "$(cat "$T/out-A/roadmaps.out")" "$RM" "전제: 로드맵 찾기가 로드맵을 찾았다"
-assert_eq "$(cat "$T/out-A/get-interview_dir.out")" "notes/interview/" "전제: 해결자는 기본 브랜치 판의 설정 값을 낸다"
+assert_eq "$(cat "$T/out-A/get-intent_dir.out")" "notes/interview/" "전제: 해결자는 기본 브랜치 판의 설정 값을 낸다"
 assert_eq "$(cat "$T/out-A/get-human_gate.out")|$(cat "$T/out-B/get-human_gate.out")" "끔|끔" "전제: human_gate 도 기본 브랜치 판의 값(끔)을 두 자리 다 낸다"
 assert_eq "$(cat "$T/out-B/getr-review_model.out")|$(cat "$T/out-B/getr-parallel_default.out")" "base-model|2" \
   "로드맵 층: 로드맵 머리말을 고친 자리(B)에서도 해결자는 기본 브랜치 판의 로드맵 값을 낸다"
@@ -209,14 +209,14 @@ else
 fi
 
 echo "=== 양성 대조: 설정이 다른 두 레포는 다른 답(AC27) ==="
-settings "$T/oth.devbrew.md" "interview_dir: elsewhere/" 'test_command: "true"'
+settings "$T/oth.devbrew.md" "intent_dir: elsewhere/" 'test_command: "true"'
 mkrepo oth main "$T/oth.devbrew.md" || { no "픽스처 oth"; finish; exit 1; }
 docs "$T/oth/work" "$RMD" ""
 g "$T/oth/work" add -A && g "$T/oth/work" commit -qm docs && g "$T/oth/work" push -q origin main && g "$T/oth/work" switch -q -c feature/r1
 battery "$T/oth/work" "$T/out-O"
 cmp_dirs "$T/out-A" "$T/out-O"
-assert_eq "$(cat "$T/out-O/get-interview_dir.out")" "elsewhere/" "양성 대조: 다른 레포의 get interview_dir"
-assert_contains "$DIFF" "get-interview_dir.out" "양성 대조: 비교가 get interview_dir 의 차이를 본다"
+assert_eq "$(cat "$T/out-O/get-intent_dir.out")" "elsewhere/" "양성 대조: 다른 레포의 get intent_dir"
+assert_contains "$DIFF" "get-intent_dir.out" "양성 대조: 비교가 get intent_dir 의 차이를 본다"
 assert_eq "$(cat "$T/out-O/get-human_gate.out")" "켬" "양성 대조: 설정에 human_gate 가 없는 레포는 켬"
 assert_contains "$DIFF" "get-human_gate.out" "양성 대조: 비교가 get human_gate 의 차이를 본다"
 assert_contains "$DIFF" "status.out" "양성 대조: 비교가 상태 계산 JSON 의 차이를 본다(빼는 칸이 전체를 덮지 않는다)"
@@ -263,7 +263,7 @@ assert_eq "$(printf '%s\n' "$out" | head -n 1)" "[spec-distill] 읽은 트리: �
 assert_contains "$(printf '%s\n' "$out" | tail -n 1)" "bundle-entry: PROCEED" "양성 대조: spec-review 진입 펜스가 끝까지 돌았다"
 
 echo "=== devbrew 밖 레포: 설정 폴더 plan/…(AC29) ==="
-settings "$T/pl.devbrew.md" "specs_dir: plan/specs/" "plans_dir: plan/plans/" "roadmaps_dir: plan/roadmaps/" "interview_dir: plan/interview/"
+settings "$T/pl.devbrew.md" "specs_dir: plan/specs/" "plans_dir: plan/plans/" "roadmaps_dir: plan/roadmaps/" "intent_dir: plan/interview/"
 mkrepo pl main "$T/pl.devbrew.md" || { no "픽스처 pl"; finish; exit 1; }
 PW="$T/pl/work"
 docs "$PW" plan/roadmaps/pl ""
@@ -276,11 +276,11 @@ assert_not_contains "$out" "$RM" "plan/: 기본 폴더의 로드맵은 찾지 �
 line="$(cd "$PW" && python3 "$S/control_plane.py" statusline </dev/null 2>&1)"
 assert_contains "$line" "pl · " "plan/ 상태줄: 설정 폴더의 로드맵을 셌다"
 assert_not_contains "$line" "rm · " "plan/ 상태줄: 기본 폴더의 미끼는 세지 않는다"
-out="$(cd "$PW" && python3 "$RD" get interview_dir 2>/dev/null)"
-assert_eq "$out" "plan/interview/" "plan/: get interview_dir"
+out="$(cd "$PW" && python3 "$RD" get intent_dir 2>/dev/null)"
+assert_eq "$out" "plan/interview/" "plan/: get intent_dir"
 n0="$(g "$PW" rev-list --count HEAD)"
-out="$(icommit "$PW" docs/superpowers/interview/2026-10-22-t-interview.md)"
-assert_contains "$out" "커밋하지 않았다 — brief 가 정해진 의도 폴더 바로 아래가 아니다" "plan/: 기본 인터뷰 폴더의 brief 는 커밋하지 않는다"
+out="$(icommit "$PW" docs/superpowers/interview/2026-10-22-t-context.md)"
+assert_contains "$out" "커밋하지 않았다 — brief 가 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다" "plan/: 기본 인터뷰 폴더의 brief 는 커밋하지 않는다"
 assert_eq "$(g "$PW" rev-list --count HEAD)" "$n0" "plan/: 거부하면 커밋이 없다"
 out="$(icommit "$PW" plan/interview/2026-10-22-t-interview.md)"
 assert_contains "$out" "brief · audit · 상태 파일을 커밋했다" "plan/: 설정 인터뷰 폴더의 brief 는 커밋한다"
@@ -294,9 +294,9 @@ mkdir -p "$NO" && git init -q -b main "$NO" && printf 'x\n' > "$NO/README.txt" &
 out="$(cd "$NO" && python3 "$RD" default-branch 2>&1)"; rc=$?
 assert_eq "$rc" "3" "origin 없음: default-branch rc 3"
 assert_contains "$out" "git remote add origin" "origin 없음: 원격을 더하라는 안내"
-out="$(cd "$NO" && python3 "$RD" get interview_dir 2>&1)"; rc=$?
+out="$(cd "$NO" && python3 "$RD" get intent_dir 2>&1)"; rc=$?
 assert_eq "$rc" "0" "origin 없음: get 은 멈추지 않는다(상수)"
-assert_contains "$out" "값의 출처: 기본값(기본 브랜치 없음 — 설정 파일 못 읽음)(interview_dir)" "origin 없음: 상수를 쓴 출처를 밝힌다"
+assert_contains "$out" "값의 출처: 기본값(기본 브랜치 없음 — 설정 파일 못 읽음)(intent_dir)" "origin 없음: 상수를 쓴 출처를 밝힌다"
 out="$(cd "$NO" && python3 "$CL" roadmaps 2>&1)"; rc=$?
 assert_eq "$rc" "3" "origin 없음: 로드맵 찾기 rc 3"
 assert_contains "$out" "git remote add origin" "origin 없음: 로드맵 찾기도 안내"
@@ -350,18 +350,18 @@ out="$(cd "$KW" && python3 "$S/state_path.py" state-root --ensure 2>&1)"; rc=$?
 assert_eq "$rc:$out" "0:$KW/.claude/spec-distill" "양의 짝: 추적을 풀면 rc 0"
 
 echo "=== 레포 설정 파일이 깨짐 — BOM · 같은 키 둘 · 오타 키(AC29) ==="
-printf '\357\273\277---\ninterview_dir: notes/\n---\n' > "$T/bom.devbrew.md"
-settings "$T/dup.devbrew.md" "interview_dir: notes/" "interview_dir: other/"
+printf '\357\273\277---\nintent_dir: notes/\n---\n' > "$T/bom.devbrew.md"
+settings "$T/dup.devbrew.md" "intent_dir: notes/" "intent_dir: other/"
 settings "$T/typo.devbrew.md" "interveiw_dir: notes/"
-settings "$T/good.devbrew.md" "interview_dir: notes/"
+settings "$T/good.devbrew.md" "intent_dir: notes/"
 for c in bom dup typo good; do
   mkrepo "cfg-$c" main "$T/$c.devbrew.md" || { no "픽스처 cfg-$c"; continue; }
   g "$T/cfg-$c/work" switch -q -c feature/r1
-  OUT="$(cd "$T/cfg-$c/work" && python3 "$RD" get interview_dir 2>"$T/err")"; RC=$?; ERR="$(cat "$T/err")"
+  OUT="$(cd "$T/cfg-$c/work" && python3 "$RD" get intent_dir 2>"$T/err")"; RC=$?; ERR="$(cat "$T/err")"
   ROUT="$(cd "$T/cfg-$c/work" && python3 "$CL" roadmaps 2>&1)"; RRC=$?
   case "$c" in
     bom)  assert_eq "$RC:$OUT" "3:" "BOM: get rc 3 · 값 없음"; assert_contains "$ERR" "BOM 이 있다" "BOM: 사유" ;;
-    dup)  assert_eq "$RC:$OUT" "3:" "같은 키 둘: get rc 3 · 값 없음"; assert_contains "$ERR" "같은 키가 둘이다(interview_dir)" "같은 키 둘: 사유" ;;
+    dup)  assert_eq "$RC:$OUT" "3:" "같은 키 둘: get rc 3 · 값 없음"; assert_contains "$ERR" "같은 키가 둘이다(intent_dir)" "같은 키 둘: 사유" ;;
     typo) assert_eq "$RC:$OUT" "3:" "오타 키: get rc 3 · 값 없음"; assert_contains "$ERR" "모르는 키가 있다(interveiw_dir)" "오타 키: 사유" ;;
     good) assert_eq "$RC:$OUT" "0:notes/" "양성 대조: 바른 설정 파일은 값을 낸다" ;;
   esac

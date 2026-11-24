@@ -77,7 +77,7 @@ CF="$(awk 'index($0,"<!-- context-commit:begin -->"){f=1;next} index($0,"<!-- co
 for tok in 'r7=' 'RDIR' 'roadmaps_dir' 'roadmap-check' '로드맵 폴더가 없어 빼고 진행한다' '로드맵 폴더에 커밋할 파일이 없어' '로드맵 폴더를 커밋했다'; do
   assert_not_contains "$CF" "$tok" "커밋 펜스(AC5): 로드맵 폴더 갈래 「${tok}」 가 없다"
 done
-has "$CF" 'repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 interview_dir 바로 아래(check-path)"
+has "$CF" 'repo_defaults.py" check-path intent_dir "$BRIEF" --root "$top" || {' "커밋 펜스: brief 는 해결자의 intent_dir 바로 아래(check-path)"
 has "$CF" 'repo_defaults.py" default-branch --check-remote --root "$top")" || d_rc=$?' "커밋 펜스: 기본 브랜치는 해결자가 원격과 대조해 준다"
 assert_not_contains "$CF" 'symbolic-ref' "커밋 펜스: 기본 브랜치를 symbolic-ref 로 직접 벗기지 않는다(양의 짝: 위 default-branch)"
 has "$CF" 'git -C "$top" add -- "$BRIEF" "$AUDIT_F" "$STATE_F" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || c_rc=$?' "커밋 펜스(AC5): add 경로는 세 파일과 B9 의 두 파일(있을 때만)"
@@ -129,7 +129,7 @@ assert_file_has "$TPL" "분해됨 — <로드맵 경로>" "brief 템플릿 §7: 
 RED="$SD/references/redecompose.md"
 if [ -f "$RED" ]; then ok "redecompose.md 실재"; else no "redecompose.md 없음"; fi
 RTXT="$(cat "$RED" 2>/dev/null)"
-for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「컨텍스트 쌓기 다시 열기」' '지휘 세션' \
+for lit in '빠짐 · 축소 · 여러 spec' '게이트 ③' '「로드맵 다시 잡기」' '지휘 세션' \
            'roadmap_write.py" extract' '`## 분해안`' \
            '| 에픽 | 바뀌는 것 | 옮겨 가는 번호 | 새 의존 | 진행 중인 브랜치 · 설계문서 |' \
            '"이대로 다시 나눈다 (권장)"' '"고치기"' '"그만둔다"' \
@@ -143,7 +143,7 @@ for lit in 'roadmap-<요지>` 브랜치를 전용 worktree' \
            '에픽의 feature 브랜치(진행 중인 설계문서가 있는 브랜치)는 고치지 않는다' \
            '## 7. 끝내기' '`check_bundle_coverage.py <묶음> <설계문서>` 를 먼저 돌려' 'spec-review 를 다시 돌린다' \
            'spec-review 게이트 ③ 의 후속 질문' '`## 분해안` 표를 `roadmap_write.py extract` 출력으로 바꿔 둔다' \
-           '머지되거나 끝난 에픽'; do
+           '머지되거나 끝난 에픽' '재분해가 그 리뷰의 「로드맵 다시 잡기」 갈래에서 왔다'; do
   has "$RTXT" "$lit" "redecompose(리뷰): $lit"
 done
 # R8 AC12 — 재분해 작업 브랜치의 기본 브랜치 · 접두는 해결자에서 얻는다(양의 짝)와 글자로 박지 않는다(음의 짝).
@@ -192,7 +192,14 @@ for lit in '`### <날짜> · <사유>`' '`- 바뀜:`' '`- 원문:`' '원문 칸�
 done
 case "$APPLY" in *'재분해 이력에 한 줄('*) no "재분해 이력: 옛 한 줄 꼴 설명이 남았다" ;; *) ok "재분해 이력: 옛 한 줄 꼴 설명이 없다(양성 짝: 새 꼴)" ;; esac
 FIN7="$(win "$RED" '## 7. 끝내기' '## ')"
-has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「컨텍스트 쌓기 다시 열기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+has "$FIN7" '(「지적대로 고치기」 · 「이 에픽 다시 설계」 · 「로드맵 다시 잡기」 · 「직접 편집」 네 갈래)' "AC33: 재분해 7 이 게이트 ③ 의 네 갈래로 돌아간다"
+SRV="$SD/skills/spec-review/SKILL.md"
+SRTXT="$(cat "$SRV" 2>/dev/null)"
+has "$SRTXT" '「컨텍스트 쌓기 다시 열기」 갈래의 라벨은 로드맵 에픽이면 「로드맵 다시 잡기」 다' "로드맵 다시 잡기: spec-review 불릿이 로드맵 에픽의 라벨을 정한다"
+has "$SRTXT" '「로드맵 다시 잡기」: 얻음: ' "로드맵 다시 잡기: 갈래 설명이 새 라벨로 시작한다"
+has "$SRTXT" '「컨텍스트 쌓기 다시 열기」(`context-build` 재진입)' "로드맵 다시 잡기: 로드맵 밖 설계문서의 라벨은 그대로(양성 짝)"
+has "$RTXT" '「로드맵 다시 잡기」 갈래를 골랐을 때' "로드맵 다시 잡기: 재분해 1 이 새 라벨을 문다"
+has "$(cat "$SD/README.md" 2>/dev/null)" '재분해(「로드맵 다시 잡기」)' "로드맵 다시 잡기: README 가 새 라벨을 쓴다"
 case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
 assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
 UP="$(win "$RED" '## 6. 올리기' '## ')"
@@ -220,7 +227,7 @@ e2e_run() {  # e2e_run <제목> <승인 원문> <결과 폴더 이름> — stdou
   body="$FENCE"
   body="${body//<주제 한 줄>/$title}"
   body="${body//<승인 원문>/$appr}"
-  body="${body//<file>/brief.md}"
+  body="${body//<결과물 절대경로>/$E/repo/docs/iv/brief.md}"
   body="${body//<YYYY-MM-DD>-<주제 또는 주제-HHMM>\//$outn/}"
   body="${body//<YYYY-MM-DD>/2026-10-21}"
   printf '%s\n' "$body" > "$E/fence.sh"
@@ -282,7 +289,7 @@ printf '# state\n\n## 분해안\n\n%s\n%s\n%s\n' \
   '|---|---|---|---|---|---|---|---|---|---|---|' \
   '| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | a/x.py | C1 · OQ1 · K1 · «ext-a» · S1 · S2 | 없음 | 없음 |' \
   > "$E/repo/docs/iv/brief.state.md"
-printf -- '---\ninterview_dir: docs/iv/\nroadmaps_dir: docs/\n---\n' > "$E/repo/.devbrew.md"
+printf -- '---\nintent_dir: docs/iv/\nroadmaps_dir: docs/\n---\n' > "$E/repo/.devbrew.md"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare -b main "$E/remote.git"
 git init -q -b main "$E/repo"
@@ -292,7 +299,7 @@ git -C "$E/repo" remote add origin "$E/remote.git"
 git -C "$E/repo" push -q origin main
 git -C "$E/repo" remote set-head origin --auto >/dev/null
 # 양성 대조 — 펜스가 얻는 두 폴더가 기본값이 아니라 기본 브랜치의 레포 설정 값이다.
-iv_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get interview_dir 2>/dev/null)"
+iv_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get intent_dir 2>/dev/null)"
 rm_got="$(cd "$E/repo" && python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir 2>/dev/null)"
 assert_eq "${iv_got}|${rm_got}" "docs/iv/|docs/" "stepa8_e2e: 픽스처 레포 설정이 인터뷰 · 로드맵 폴더를 정한다"
 HOSTILE_TITLE='-제목 $HOME `id` "q" '"'a'"
