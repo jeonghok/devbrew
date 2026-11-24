@@ -9,6 +9,7 @@
 #     이 리포 plugins/ 의 플러그인을 가리키는 `<플러그인>:<이름>`. 템플릿 · 글롭 · 맨 파일명 ·
 #     리포 밖 플러그인 · 경로 아닌 모양은 건너뛰고 수를 공시한다(조용히 재해석하지 않는다).
 #     추적 파일이 아닌 경로는 이름 목록(UNTRACKED_CITED)에 있는 것만 건너뛰고, 건너뛴 집합이 그 목록과 같아야 한다.
+#     CLAUDE.md 가 테스트 기준(docs/testing.md)을 가리킨다 — 기준이 세션에 닿는 길(테스트 기준 설계 AC16).
 #  2. 이력에서 사라진 이름은 헌장에 없다 — HEAD 이력에서 agent · 스크립트 · 플러그인으로 존재했으나
 #     지금 어떤 추적 파일 이름으로도 없는 식별자 모양(`-` `_` `.` 를 품은) 이름. 백틱 밖 산문도 잰다.
 #     한 단어 이름(예: adversarial)은 산문 낱말과 부딪쳐 건너뛴다 — 이 락이 못 보는 자리다.
@@ -108,6 +109,7 @@ UNTRACKED_CITED = (
 )
 untracked_seen = {}
 checked = []
+cites_testing = False
 for doc, text in texts.items():
     toks = re.findall(r"`([^`\n]+)`", text) + re.findall(r"\]\(([^)\s]+)\)", text)
     for raw in toks:
@@ -147,6 +149,8 @@ for doc, text in texts.items():
         if path.startswith("./") or path.startswith("../"):
             path = os.path.normpath(os.path.join(os.path.dirname(doc), path))
         path = path.rstrip("/")
+        if doc == "CLAUDE.md" and path == "docs/testing.md":
+            cites_testing = True
         if path not in tracked_set and path not in tracked_dirs:
             if path in UNTRACKED_CITED:
                 untracked_seen[path] = untracked_seen.get(path, 0) + 1
@@ -160,6 +164,12 @@ if len(checked) >= 10 and n_claude >= 3:
     out("OK", f"모양 인용 {len(checked)}건을 실재와 대조했다(CLAUDE.md {n_claude}건 — 하한 전체 10 · CLAUDE.md 3)")
 else:
     out("NO", f"모양 인용이 {len(checked)}건(CLAUDE.md {n_claude}건)뿐이다 — 도출이 무너졌다(하한 10 · 3)")
+if cites_testing:
+    out("OK", "CLAUDE.md 가 테스트 기준 docs/testing.md "
+              "를 가리킨다")
+else:
+    out("NO", "CLAUDE.md 가 docs/testing.md 를 가리키지 않는다 "
+              "— 테스트 기준이 닿는 길이 끊겼다")
 # 건너뛴 집합 = 이름 목록(집합 등호). 목록 밖의 없는 경로는 위에서 이미 실패했다 — 여기서는 목록에만 남은 이름을 잡는다.
 stale = sorted(set(UNTRACKED_CITED) - set(untracked_seen))
 for name in stale:
