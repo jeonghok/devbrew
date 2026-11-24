@@ -72,12 +72,12 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 ### R7 — qg 경계 굳히기 — 심은 글 · 공유 스위트 잠금
 - 의도: 리뷰 대상에 심은 글이 qg 의 리뷰어 입력 · 게시 확인 · 기록 펜스를 속이지 못하게 하고, qg 의 테스트 실행이 공유 스위트 잠금을 지키며 맡지 못한 파일 때문에 인증 못 함으로 끝나지 않게 하고, R4 머지 뒤 리뷰가 qg 본문에 낸 막는 지적을 닫는다
 - 범위:
-  - 한다: 리뷰 대상 글이 리뷰어 입력의 칸 표지를 닫는 흉내 막기(판정에 드는 리뷰어를 포함한 모든 리뷰어의 칸) · 게시 한 번 검사가 심은 줄에 속지 않게 하기 · qg 의 테스트 실행이 다른 하위 agent 의 전체 스위트와 겹치지 않게 공유 스위트 잠금 지키기 · qg 기록 펜스가 옮기는 글이 고정 끝 표지를 흉내 내지 못하게 하기(고칠 목록 · 걷기 기록) · 테스트 선택이 맡지 못한 파일 때문에 인증 못 함이 되는 것(TestCase 글자 없는 unittest 클래스 · tests 폴더의 테스트 아닌 파일) · R4 머지 뒤 리뷰가 qg 본문에 낸 막는 지적(무효 걷기 게이트의 선택지 하나 · 고칠 목록 가르기의 테스트 · 옛 세션 파일 부재 락의 범위) · 합성기가 판정 계산 앞에 합쳐지기 전 목록을 쓰는 순서
+  - 한다: 리뷰 대상 글이 리뷰어 입력의 칸 표지를 닫는 흉내 막기(판정에 드는 리뷰어와 문서 비평의 리뷰어를 포함한 모든 리뷰어의 칸) · 게시 한 번 검사가 심은 줄에 속지 않게 하기 · qg 의 테스트 실행이 다른 하위 agent 의 전체 스위트와 겹치지 않게 공유 스위트 잠금 지키기 · qg 기록 펜스가 옮기는 글이 고정 끝 표지를 흉내 내지 못하게 하기(고칠 목록 · 걷기 기록) · 테스트 선택이 맡지 못한 파일 때문에 인증 못 함이 되는 것(TestCase 글자 없는 unittest 클래스 · tests 폴더의 테스트 아닌 파일) · R4 머지 뒤 리뷰가 qg 본문에 낸 막는 지적(무효 걷기 게이트의 선택지 하나 · 고칠 목록 가르기의 테스트 · 옛 세션 파일 부재 락의 범위) · 합성기가 판정 계산 앞에 합쳐지기 전 목록을 쓰는 순서
   - 안 한다: 지휘 절차(R9) · qg 본문 흐름을 다시 짜기(R4) · 리뷰 글의 꼴과 답 이어지기(R6) · 답 기록과 다른 팀 읽기 뒤처리(R8) · 결과 파일 이름의 반복 번호 없애기 · 실행 격리
 - 의존: R4, R6
 - 브랜치: feature/qg-planted-text-suite-lock
 - 묶음: R7.md
-- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/test_agent_input_slots.sh, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json
+- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/build_artifact_codex_prompt.py, plugins/quality-gates/skills/artifact-critique/, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/test_agent_input_slots.sh, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json
 
 ### R8 — qg 답 기록 · 다른 팀 읽기 뒤처리와 리뷰가 낸 막는 지적
 - 의도: 앞 에픽들이 미룬 qg 안쪽 가장자리 가운데 intent-critic 의 답 기록과 다른 팀 읽기에 닿는 것과 R1 · R2 리뷰가 낸 막는 지적을 닫는다
@@ -180,6 +180,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 바뀜: 바뀐 에픽 R7 · R8 · 새 에픽 R9 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-24 · R7 의 리뷰어 칸 막기에 문서 비평(artifact-critique)의 리뷰어 칸을 넣는다 — 같은 꼴의 구멍이라 함께 막고 경로 예약에 그 skill 과 프롬프트 스크립트를 더한다
+- 바뀜: 바뀐 에픽 R7 「같이 막자」
+- 원문:
+  - 「같이 막자」
 
 ## 위험 번호표
 
