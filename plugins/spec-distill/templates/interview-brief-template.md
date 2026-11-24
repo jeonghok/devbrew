@@ -116,6 +116,8 @@ user_sourced_items:
  더한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑·열 0 펜스 래핑(백틱 · 코드 펜스 · 문자
  참조 · HTML 이 든 발화 — context-build `references/finishing.md`)뿐이며 요약·재서술·발췌는 금지. seed 로 시작한 컨텍스트 쌓기의 `S1` 은 손으로 옮겨 치지 않는다 — `raw_source.py place` 가 framing 기록의 원문 절과 질문 전체 절을 글자 그대로 싣고, 그 칸의 질문 문구 · 선택지 · 풀이 줄 · `### ` 구분 줄은 모델이나 저자가 쓴 줄이다. 원자료를 찾지 못했거나 그대로 싣지 못할 때만 seed 전문을 싣고 앵커 라벨로 밝힌다(context-build `references/finishing.md`).)
 
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
 - **S1** 🗣 최초 요청:
   > "..."
 - **S2** 🗣 R1 답:

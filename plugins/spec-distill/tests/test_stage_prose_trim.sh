@@ -147,4 +147,17 @@ lacks "$RD" '**다음 세션 줄 — 분해된 일 ①/② 공통**' "글 일곱
 has   "$RD" '**지휘자 줄 — 로드맵 PR 이 머지된 뒤**' "글 일곱 ④(양의 짝): 지휘자 줄 제목"
 has   "$RD" '경로에 공백이 있으면 새 `/spec-distill:context-build` 줄을 보이지 않고' "글 일곱 ③: 되돌아가는 길의 새 컨텍스트 쌓기 줄에 공백 가드가 있다"
 
+# ── 공용 글 (과제 6) ─────────────────────────────────────────────────────────────────
+PG=plugins/spec-distill/references/proceed-gate.md
+lacks "$PG" '각 skill 의 정의 블록이 그 갈래를 적는다' "글 일곱 ⑥: 정본 끝 문단이 정의 블록만 가리키지 않는다"
+has   "$PG" '그 갈래만 다루는 문단' "글 일곱 ⑥(양의 짝): 갈래를 적는 자리에 문단을 든다"
+lacks "$PG" 'roadmap-draft' "정본에 로드맵 잡기 skill 폴더 이름 글자가 없다(채택자 락)"
+has   plugins/spec-distill/skills/reviewing-brief/SKILL.md '첫 칸 대조 · 답 표시 대조도 건너뛴다' "「검사 없이 계속」: 함께 건너뛰는 것을 말한다"
+has   plugins/spec-distill/templates/interview-brief-template.md '🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론' "§6 범례: 결과물 템플릿에 표시 규칙 범례가 있다"
+lacks plugins/spec-distill/README.md '확정 · 커밋까지 간 뒤' "「확정 · 커밋한 뒤 끝」: README 가 기본 선택지에만 맞는 말을 하지 않는다"
+has   plugins/spec-distill/README.md '「brief만 종료」 는 확정하지 않고 커밋' "「확정 · 커밋한 뒤 끝」(양의 짝): README"
+lacks plugins/spec-distill/dependencies.md '지휘자 · 로드맵 흐름은 진입에서 멈춘다' "글 일곱 ①: 로드맵 잡기도 멈추는 것처럼 읽히지 않는다"
+has   plugins/spec-distill/dependencies.md '로드맵 잡기는 superpowers 없이도 돈다' "글 일곱 ①(양의 짝): 의존 표"
+has   plugins/spec-distill/dependencies.md '「brief만 종료」 는 확정하지 않고 커밋' "「확정 · 커밋한 뒤 끝」(양의 짝): 의존 표"
+
 finish
