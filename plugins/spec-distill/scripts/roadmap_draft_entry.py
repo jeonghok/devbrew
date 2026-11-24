@@ -240,7 +240,7 @@ def run(brief: str) -> int:
                 form = "파일 이름이 roadmap.md 가 아니다 — " + rel
             else:
                 frc, _, ferr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "check-path", "roadmaps_dir",
-                                         os.path.dirname(rel), "--root", top])
+                                         os.path.join(top, os.path.dirname(rel)), "--root", top])
                 if frc == 3:
                     form = _last_said(ferr) or "repo_defaults.py check-path 가 사유 없이 거절했다"
                 elif frc != 0:

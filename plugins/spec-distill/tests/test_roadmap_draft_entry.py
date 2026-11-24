@@ -385,6 +385,13 @@ class TestEntry(Base):
         self.assertEqual(rc, 0, out + err)
         self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: OK")
 
+    def test_split_value_option_like_stops(self):
+        # 값이 `-h/…` 처럼 옵션 꼴이어도 위치 인자로 읽혀 꼴 멈춤이 선다(도움말로 읽혀 통과하지 않는다)
+        self.build(split_value="-h/roadmap.md")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        self.assertIn(self.FORM, out)
+
     def test_split_value_in_code_form_ok(self):
         # 양성 대조: §7 줄이 목록 · 코드 꼴(`- `분해됨 — …``)이어도 값을 읽어 통과한다(기본 픽스처 꼴)
         self.build()
