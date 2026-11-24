@@ -304,6 +304,13 @@ for lit in '담당자 마지막 보고가 대화에 없으면(압축 · 새 세�
 done
 in_order "$RE4" "reenter-without-report: 합쳐지기 전 목록 → result.md → 셀 수 없음 차례" \
   '그 폴더의 `findings-pre-merge.yaml` 에서' '그 파일이 없으면 그 폴더의 `result.md`' '둘 다 없으면 결과 줄 전체를'
+# reenter-tail-and-notice (D33 지휘자 답) — 보고 없이 다시 실을 때 인증 못 함 꼬리의 출처와 화면의 한 줄
+one "$RE4" '그 폴더의 파일에서 다시 실었으면 결과 줄 끝의 「 · 인증 못 함(<사유>)」 꼬리는 그 폴더의 `result.md` 의 `## 판정` 에 있는 판정 줄에서 읽고' "reenter-tail-and-notice: 다시 실을 때 인증 못 함 꼬리는 보관한 result.md 의 판정 줄에서"
+one "$RE4" '맥락 머리 바로 아래에 「담당자 보고 없이 보관 파일에서 다시 실었다 — 빠진 채 돌았다는 알림은 `자세히` 의 파일에서 확인한다」 한 줄을 보인다' "reenter-tail-and-notice: 다시 실을 때 맥락 머리 아래 그 한 줄"
+one "$RE4" '빠진 채 돌았다는 알림 줄은 담당자 보고에만 있던 것이라 다시 짓지 않는다' "reenter-tail-and-notice: 보고에만 있던 알림 줄은 다시 짓지 않는다"
+one "$WHOLE" '담당자 보고 없이 보관 파일에서 다시 실었다 — ' "reenter-tail-and-notice: 그 줄은 파일에 한 번 — 이미 보낸 것의 4 에만"
+in_order "$RE4" "reenter-tail-and-notice: 셀 수 없음 갈래 → 다시 실었을 때의 꼬리 · 한 줄 → PR 본문 차례" \
+  '둘 다 없으면 결과 줄 전체를' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서 PR 본문'
 one "$BACK" '예외는 둘이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 4)와 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`)는 보관 폴더의 `findings-pre-merge.yaml`(없으면 보관한 `result.md`)을 읽는다' "reenter-without-report: 돌아왔을 때가 보관 파일을 읽는 예외 둘을 적는다"
 zero "$WHOLE" 'qg 본문을 읽지 않는다. 아래를 차례로 본다.' "reenter-without-report 음성: 예외 없이 intent-return.md 만 읽던 옛 문장이 없다(양성 짝: 예외는 둘이다)"
 # carry-original (통합 리뷰 F1 · D33) — 고른 제안 · 되올린 낮춘 지적은 보관 폴더의 원문을 싣는다
