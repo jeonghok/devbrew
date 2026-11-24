@@ -11,6 +11,14 @@ next_phase: superpowers:writing-plans
 
 > 문구를 그대로 대조하는 테스트를 걷으면 그 자리를 무엇이 지킬지 정한다. 후보 다섯을 따졌고, 실제 모델 평가는 한 번 돌려 숫자를 본 뒤 「작게 들인다」 로 정했다. 이 일은 쓰는 법을 기준 문서에 적고 평가 케이스 둘과 돌리는 스크립트 하나를 둔다. 있는 테스트를 바꾸는 일은 하지 않는다.
 
+## 목차
+
+- [Context / Why](#context--why) · [Goals](#goals) · [Non-goals](#non-goals) · [Anti-goals](#anti-goals) · [Constraints](#constraints) · [Approaches](#approaches)
+- [설계](#설계) — [§1 실측](#1-실측--2026-11-24) · [§2 장치와 맡는 글](#2-장치와-맡는-글) · [§3 평가 케이스를 쓰는 조건과 꼴](#3-평가-케이스를-쓰는-조건과-꼴) · [§4 돌리는 법](#4-돌리는-법) · [§5 첫 적용](#5-첫-적용) · [§6 기준 문서에 더하는 절](#6-기준-문서에-더하는-절) · [§7 장치가 못 지키는 글](#7-장치가-못-지키는-글--e4-에-넘김) · [§8 평가 명령의 꼴](#8-평가-명령의-꼴--실측에서-쓴-그대로)
+- [테스트할 자리](#테스트할-자리) · [인터뷰와 달라진 것](#인터뷰와-달라진-것) · [있는 것 검토](#있는-것-검토) · [상류 · 하류 연계](#상류--하류-연계)
+- [Acceptance Criteria](#acceptance-criteria) · [Files to Modify](#files-to-modify) · [Verification Plan](#verification-plan) · [Rejected Alternatives](#rejected-alternatives) · [미룸](#미룸)
+- [번호 대조](#번호-대조) · [Metadata](#metadata) · [Handoff Context](#handoff-context) · [결정 기록](#결정-기록) · [지휘 기록](#지휘-기록)
+
 ## Context / Why
 
 있는 테스트 정리(E4)는 문구를 글자 그대로 대조하는 테스트를 줄이거나 지운다. 진단(E5)은 그런 테스트를 84개로 셌고 고친 횟수의 합이 1,218번이다. 걷은 자리를 무엇이 지킬지는 인터뷰가 열어 둔 채 설계로 넘겼다(OQ4). 후보는 다섯이다 — 구조 확인 · 코드 조각 실행 · 가짜 응답 · 실제 모델 평가 · 리뷰(C23).
@@ -135,7 +143,8 @@ next_phase: superpowers:writing-plans
 - 늘 붙이는 것: `--eval-dir tests/evals` · `--ablation none` · `--no-publish` · `--trust-plugin` · `--scaffold` · `--allow-tools Bash` · `--max-cost-usd`(주지 않으면 2).
 - macOS 에서 개발 도구의 실행 파일 폴더가 있으면 `PATH` 앞에 둔다(문턱 1). 폴더는 `xcode-select -p` 로 얻는다 — 없으면 건드리지 않는다.
 - 끝에 요약 한 줄을 낸다: `plugin-evals: <통과|실패|부분> · 케이스 <통과>/<전체> · 실행 <n>회 · $<값> · <모델>`. 종료 코드는 평가 명령의 것을 그대로 돌려준다.
-- 모델은 박지 않는다. 주지 않으면 Claude Code 의 기본이고, 요약 줄이 쓴 모델을 보인다.
+- 모델은 박지 않는다. 주지 않으면 Claude Code 의 기본이고, 요약 줄이 쓴 모델을 보인다(결과에 모델이 없으면 「기본」 이라고 쓴다).
+- 스크립트는 사본을 만들지 않는다. 문장을 지운 쪽을 재려면(AC8) 플러그인 폴더를 레포 밖에 복사해(`cp -RL` — `shared/` 로 가는 링크를 풀어야 사본이 혼자 선다) 그 문장을 지우고, 그 사본을 `<플러그인 폴더>` 로 준다.
 
 **누가 언제.** 케이스가 지키는 파일을 고치는 PR 에서 돌린다.
 
@@ -165,6 +174,85 @@ next_phase: superpowers:writing-plans
 - agent 여럿을 띄우는 긴 흐름. 한 번 도는 값이 재 본 것과 자릿수가 다르다 — 재지 않았다.
 - 뜻이 덜 또렷한 문장. 흔들림을 재지 않았다 — 쓰려면 먼저 여러 번 돌려 본다.
 - 이유 · 설명 · 예시 문장. 어느 장치도 맡지 않는다 — 리뷰가 본다.
+
+### §8 평가 명령의 꼴 — 실측에서 쓴 그대로
+
+계획과 구현은 격리된 세션에서 이 명령을 돌리지 못한다. 그래서 실측에서 실제로 돈 꼴을 여기에 싣는다 — 테스트의 가짜 `claude` 는 이 꼴을 흉내 낸다.
+
+**명령.** Claude Code 2.1.331 에서 돌았다.
+
+```
+claude plugin eval <플러그인 폴더> --eval-dir tests/evals --case <글롭> --runs <n> --ablation none \
+  --model <모델> --max-cost-usd <달러> --trust-plugin --no-publish --scaffold --allow-tools Bash \
+  --json <결과.json>
+```
+
+**종료 코드**(문서와 실측이 같다): 0 은 모든 케이스가 문턱 이상, 1 은 문턱 미만인 케이스가 있거나 케이스를 읽지 못했거나 케이스가 없거나 실행을 시작하지 못함, 2 는 부분 실행(상한에 닿았거나 인증이 거절됨 — 결과 JSON 의 `partial` 이 `true`). 0 과 1 은 실측에서 봤고 2 는 문서에서만 읽었다.
+
+**케이스 파일.** 실측의 `arg-reject-free` 케이스다(정규식 채점기는 뺐다).
+
+`prompt.md`:
+
+```
+---
+max_turns: 12
+allowed_tools: [Read, Glob, Grep, Skill]
+---
+
+/spec-distill:roadmap-status docs/roadmap.md E2 extra
+```
+
+`case.yaml`(`description` 은 실측에 없었다 — 이 설계가 더한다. 받는 키인지는 문서의 칸 표에서만 읽었다):
+
+```
+schema_version: "1.1"
+name: arg-reject-free
+context:
+  scaffold_script: fixture.sh
+```
+
+`fixture.sh`(실행 비트가 있었다):
+
+```
+#!/bin/bash
+git init -q . && mkdir -p docs && printf '# roadmap\n' > docs/roadmap.md && git add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm init
+```
+
+`graders/no-map-run.md`:
+
+```
+---
+type: tool_used
+tool: Bash
+input_match: 'control_plane\.py'
+min: 0
+max: 0
+---
+```
+
+`graders/criteria.md`(다른 케이스 `arg-reject-judge` 의 것):
+
+```
+---
+type: llm
+---
+
+PASS if the response refuses to produce the roadmap map because the arguments are invalid, and tells the user that the argument must be one roadmap path, or a roadmap path plus an epic name.
+FAIL if the response shows a roadmap map or status output, says it ran the map script, or does not explain what arguments are accepted.
+```
+
+**결과 JSON 에서 스크립트가 읽는 칸**(실측 결과에 있던 이름 그대로):
+
+| 칸 | 뜻 |
+|---|---|
+| `partial` | 부분 실행이면 `true` |
+| `costUsd` · `durationSeconds` | 전체 값(판정 호출 포함) · 걸린 초 |
+| `suite.modelOverride` | `--model` 로 준 모델. 주지 않았을 때 모델이 어느 칸에 실리는지는 보지 않았다 |
+| `aggregates.casesPassed` · `aggregates.casesTotal` | 문턱 이상인 케이스 수 · 전체 케이스 수 |
+| `cases[].name` · `cases[].aggregates.score` | 케이스 이름 · 점수 |
+| `cases[].arms.with[]` | 실행 하나씩 — `passed` · `costUsd` · `error` · `graders[]`(`name` · `passed` · `explanation`). 실행 횟수는 이 목록의 길이다 |
+
+**계획이 먼저 확인할 것.** `plugins/spec-distill/tests/evals/` 아래에 새로 생기는 `.md` · `.yaml` · `.sh` 가 레포를 통째로 훑는 락(옛 낱말 · 실행 비트 · 중복 줄 · 지키는 문서 선언)에 걸리는지. 걸리면 케이스 파일의 낱말을 고치거나, 락의 대상에서 빼야 하는 이유를 적어 지휘자에게 돌려보낸다.
 
 ## 테스트할 자리
 
@@ -289,6 +377,8 @@ next_phase: superpowers:writing-plans
 **작성자가 정한 것(사용자가 고른 것이 아니다).** 실측의 대상 문장과 케이스 꼴 · 「이빨이 없으면 들이지 않는다」 는 기준 · 가짜 응답을 쓰지 않는 것 · 글자 확인을 평가로 바꾸지 않고 더한다는 것과 그 예외(§3 의 조건 2) · 평가 케이스를 쓰는 조건 넷 · 정규식 채점기를 쓰지 않는 것 · 케이스의 자리(`tests/evals`) · 돌리는 스크립트를 두는 것과 그 이름 · 늘 붙이는 인자와 상한의 기본값 2 · 모델을 박지 않는 것 · 「누가 언제」 의 규칙 · 그 문장에 글자 확인 하나를 더하는 것 · 새 절의 자리와 이름 · 돌렸는지 기계로 확인하지 않는 것.
 
 **계획이 정할 것.** `run_evals.py` 안의 짜임 · 테스트의 준비물 · 케이스 파일의 낱말 · 새 절의 문장.
+
+**빌더 점검(2026-11-25 · 읽는 담당자 하나)이 물은 넷과 처리.** ① 평가 명령의 실제 꼴(인자 · 결과 JSON · 종료 코드 · 「부분」)을 계획이 확인할 길이 없다 → §8 에 실측의 꼴을 실었다. ② 따라 쓸 케이스 원본이 레포 밖에 있다 → §8 에 케이스 파일을 글자 그대로 실었다. ③ 문장을 지운 사본을 어떻게 돌리나 → §4 에 적었다(스크립트는 사본을 만들지 않는다 — 작성자가 정했다). ④ 새 파일이 있는 락에 걸리는지 → 확인하지 않았다. §8 의 「계획이 먼저 확인할 것」 으로 넘겼다.
 
 ## 결정 기록
 
