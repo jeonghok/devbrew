@@ -317,7 +317,7 @@ qg 는 리뷰받는 글(diff · 커밋 메시지 · PR 본문 · 리뷰어가 �
 - `README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json` · `dependencies.md`.
 
 **shared · tools**
-- `shared/` 의 새 폴더 — 잠금 스크립트 정본(옮김).
+- `shared/suite-lock/`(새 폴더) — 잠금 스크립트 정본(옮김)과 그 README.
 - `shared/test-selection/run-test-selection.sh` · `compute-test-scope-candidates.sh` · `diff-test-results.py` · `README.md` — unittest 어댑터 · 지원 파일.
 - `shared/tests/` — 칸 계약 락 · 링크 계약 락 · 테스트 선택 묶음 락.
 - `tools/adjudication/check_slots.py` — 칸 꼴이 바뀌면.
@@ -407,7 +407,7 @@ qg 는 리뷰받는 글(diff · 커밋 메시지 · PR 본문 · 리뷰어가 �
 
 ### Deferred to plan
 
-- 태그 이름과 새 세션 파일 이름 · `shared/` 새 폴더 이름 · 잠금 자리 값을 세션 파일에 남기는 펜스의 자리 · 문서 비평이 세션 폴더를 얻는 길.
+- 태그 이름과 새 세션 파일 이름 · 잠금 자리 값을 세션 파일에 남기는 펜스의 자리 · 문서 비평이 세션 폴더를 얻는 길.
 - 잠금 감싸개의 꼴 — 잠금 스크립트의 종료 코드(잡지 못함 · 쓸 수 없음)가 테스트 명령의 종료 코드와 섞이지 않아야 한다(AC12). 명령줄로 부르지 않고 모듈로 쓰는 길이 있다.
 - 테스트 꼴 이름의 정규식과 unittest 어댑터의 판정식 — §5 의 표와 AC19 · AC20 이 기준이다.
 - 과제 나누기 — 서로 독립인 묶음은 넷이다: 칸과 리뷰어 정의(§1) · 게시와 펜스와 걷기 게이트(§2 · §3 · §6 · §7) · 잠금(§4) · 테스트 선택(§5).
