@@ -73,4 +73,43 @@ has "$FIN" '빈 앵커 줄로 나아가지 않는다' "나갈 길(양의 짝): �
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
 
+# ── 과제 7 — 「있는 것 먼저」 여섯 칸의 자리 ─────────────────────────────────────────
+CB=plugins/spec-distill/skills/context-build/SKILL.md
+has "$CB" '후보마다 정보 여섯 칸(공식인가 · 널리 쓰임과 재는 단위 · 유지 · 안정 단계 · 실행하고 닿는 것과 알려진 보안 문제 · 라이선스와 의무)을 함께 싣는다. 칸은 그 후보 항목' \
+  "여섯 칸의 자리: 여섯 칸 문장 바로 뒤 같은 줄에 자리 문장이 있다"
+has "$CB" '들여쓴 본문 줄에 한 칸 한 줄로 싣는다 — 결정 연결과 `RC<n>` 은 첫 줄에만 두고, 본문 줄의 출처는 «키» 로 적어 audit §7 에 선언한다.' \
+  "여섯 칸의 자리: 본문 줄 · 첫 줄 · 출처 키 규칙"
+six_cells() {   # six_cells <본문 줄에 결정 연결을 하나 넣는가 0|1> → 게이트의 pass
+  python3 - "$ROOT/plugins/spec-distill" "$1" <<'PY'
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sd, bad = Path(sys.argv[1]), sys.argv[2] == "1"
+cells = ("공식인가: 예", "널리 쓰임: 확인 못 함", "유지: 최근 릴리스 있음", "안정 단계: 안정",
+         "실행하고 닿는 것: 빌드 때 노드 실행 · 알려진 보안 문제 없음", "라이선스: MIT — 고지 유지")
+with tempfile.TemporaryDirectory() as d:
+    for n in ("interview-brief-v2-valid.md", "interview-brief-v2-valid.audit.md"):
+        shutil.copy(sd / "tests" / "fixtures" / n, Path(d) / n)
+    p = Path(d) / "interview-brief-v2-valid.md"
+    t = p.read_text(encoding="utf-8")
+    head = "- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합 [→ OQ1]\n"
+    if t.count(head) != 1:
+        print("fixture-changed")
+        sys.exit(0)
+    body = "".join("  - %s (출처 «nextjs-docs» · 확인 <YYYY-MM-DD>)\n" % c for c in cells)
+    if bad:
+        body = body.replace(")\n", ") [→ OQ1]\n", 1)
+    p.write_text(t.replace(head, head + body), encoding="utf-8")
+    cp = subprocess.run([sys.executable, str(sd / "scripts" / "check_brief.py"), "gate", str(p)],
+                        capture_output=True, text=True, encoding="utf-8")
+    print(json.loads(cp.stdout.strip().splitlines()[-1])["pass"])
+PY
+}
+assert_eq "$(six_cells 0)" "True" "여섯 칸의 자리: 웹 항목의 들여쓴 본문 줄에 여섯 칸을 실은 결과물이 구조 게이트를 지난다"
+assert_eq "$(six_cells 1)" "False" "여섯 칸의 자리(양성 대조): 본문 줄에 결정 연결을 두면 게이트가 막는다"
+
 finish
