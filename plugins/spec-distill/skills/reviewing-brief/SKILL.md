@@ -356,7 +356,7 @@ fi
 
 엔진 상태 디렉토리가 없으면(빈 payload · 세션 id 미해석 · `state-dir-for` 거부) 라운드를 시작하지 않고
 record(`pipeline` / `all` / `unavailable`, reason = 위 공시의 사유) 후 Step B 로 돌아간다. `blob_rc == 2`
-(payload·audit 부재 · 읽기 실패 · audit 에 `## 6. 사용자 원문` 없음 · payload · audit §6 사본 · 원자료 블록에 번들 표지와 같은 줄)와 표에 없는 코드도 같다 — 직전 번들을
+(payload·audit 부재 · 읽기 실패 · audit 에 `## 6. 사용자 원문` 없음 · 상태 파일을 읽지 못함 · `--raw-audit` 가 이 컨텍스트 쌓기의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 · framing 기록 파일을 읽지 못함 · framing 기록의 절 구조가 어긋남 · payload · audit §6 사본 · 원자료 블록에 번들 표지와 같은 줄 · 다 지은 번들에서 표지마다 제자리 한 번이 아님)와 표에 없는 코드도 같다 — 직전 번들을
 치운 뒤(치우지 못하면 그 사실이 공시된다) record(`pipeline` / `all` / `unavailable`) 후 Step B. 원문 없이
 충실도를 물으면 「왜곡 없음」이 공허하게 나온다. `blob_rc == 3` 은 번들의 payload 부분에 audit 파일명이
 남았다는 뜻이다 — 원문 보존이 우선이라 지우지 않고 record(`critic` / `fidelity` / `degraded`) 후 계속한다. **원자료 블록** — framing 을 거친 컨텍스트 쌓기면 펜스가 `raw_source.py` 로 framing 기록 파일의 자리를 받아 조립기에 넘기고, 조립기가 번들 끝에 `<<<RAW-SOURCE>>>` 블록을 싣는다 — framing 리뷰 결정의 사용자 문구가 든 줄들이고, 첫 칸이 「원자료를 그대로 싣지 못함」 갈래면 원문 절과 질문 전체 절도 싣는다. 실을 것이 없으면 블록이 없다 — degrade 가 아니다. 원자료를 찾지 못했으면(`raw-source: LOST`) 펜스가 위 문장을 내고 record(`critic` / `fidelity` / `degraded`)를 남긴 뒤 계속한다 — 그 라운드의 충실도는 첫 칸의 seed 전문(모델이 줄인 글)에 견준 것이다. 판결 줄을 받지 못하면 라운드를 시작하지 않고 record(`pipeline` / `all` / `unavailable`) 후 Step B 로 돌아간다.

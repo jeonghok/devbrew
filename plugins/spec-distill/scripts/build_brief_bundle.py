@@ -31,7 +31,7 @@ payload가 어느 audit을 자기 것이라 부를지 고르지 못하게 거절
 
 exit: 0 정상 / 2 payload·audit 부재·읽기 실패·audit §6 없음 · 상태 파일을 읽지 못함 · 원자료를 찾았는데
 `--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기의 framing 기록 파일이 아님 · 찾지 못했는데 `--raw-audit` 를 받음 ·
-framing 기록 파일을 읽지 못함 · payload · audit §6 사본 · 원자료 블록의 한 줄(줄 끝 공백을 뗀 글)이 번들 표지와 같음 —
+framing 기록 파일을 읽지 못함 · framing 기록의 절 구조가 어긋남 · payload · audit §6 사본 · 원자료 블록의 한 줄(줄 끝 공백을 뗀 글)이 번들 표지와 같음 ·
 다 지은 번들에서 표지마다 제자리 한 번이 아님(무디스패치) /
 3 번들 payload 부분에 자기 audit 파일명 잔존(위생 미달 — 호출자가 degrade 기록 후 계속)
 """
