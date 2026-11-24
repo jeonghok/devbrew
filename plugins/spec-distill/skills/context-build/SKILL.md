@@ -289,7 +289,7 @@ Agent({ description: "Research the repo", subagent_type: "spec-distill:repo-rese
 **어느 자리든(경로 (a) · repo-researcher · coverage-mapper · blind-spot-prober · steelman) `repo_claims[]` 가 처음 산출되면
 그 자리에서 derived 차원 internal_research 를 원장에 admit 한다**(coverage-mapper 제안과 무관 — 조사 행위가 그 차원을 함의한다). 이름은 그 글자대로 쓴다:
 게이트가 **정확 일치**로 재고 `internal_research_apparatus` 같은 유사 이름으로는 만족되지 않는다.
-그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다.
+그 차원은 **레포 주장의 처분 S** 로 닫고 evidence 에 그 S 를 인용한다 — 끝맺음 전에 라운드 안에서 닫는다(끝맺음의 구조 게이트가 `closed` 를 요구한다).
 
 ## 조사 열기 — 여럿 동시에 · 만들어 보내기
 

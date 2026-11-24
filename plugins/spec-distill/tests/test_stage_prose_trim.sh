@@ -109,6 +109,27 @@ has   "$CB" 'S1 은 원자료가 실렸을 때만 든다' "닫힘 규칙: 모델
 has   "$CB" '해결돼도 목록에서 지우지 않는다' "AC31 ⑨: 해결된 결정을 목록에서 지우지 않는다"
 has   "$CB" 'subagent 에 넘기는 플러그인 파일은 경로가 아니라 내용으로 싣는다' "AC31 ⑤: 플러그인 파일은 내용으로 싣는다"
 has   "$CB" '웹 kill switch 는 dispatch 자리마다 따로 확인한다' "AC31 ⑦: 끄는 변수를 dispatch 자리마다 확인한다"
+# AC31 ⑦ 은 보안 갈래(끄는 스위치를 지키는 문장)다 — 문장 전체를 글자로 물고, 그 문장이 웹 kill switch 펜스 바로 앞 문단에 한 번만 있는지 본다.
+KS_SENT='**웹 kill switch 는 dispatch 자리마다 따로 확인한다(dispatch 직전에) — R2 의 landscape 확인으로 갈음하지 않는다.**'
+ks_rc=0
+python3 - "$ROOT/$CB" "$KS_SENT" <<'PY' || ks_rc=$?
+import sys
+
+path, sent = sys.argv[1], sys.argv[2]
+lines = open(path, encoding="utf-8").read().splitlines()
+hits = [i for i, line in enumerate(lines) if sent in line]
+if len(hits) != 1:
+    sys.exit(3)
+i = hits[0]
+j = next((k for k in range(i + 1, len(lines)) if lines[k].lstrip().startswith("```")), None)
+if j is None or j - i > 8 or any(not lines[k].strip() for k in range(i, j - 1)):
+    sys.exit(4)
+if j + 1 >= len(lines) or "DEVBREW_SPEC_DISTILL_DISABLE_WEB" not in lines[j + 1]:
+    sys.exit(5)
+PY
+if [ "$ks_rc" -eq 0 ]; then ok "AC31 ⑦(보안 갈래): 웹 kill switch 문장 전체가 그 펜스 바로 앞 문단에 한 번 있다"
+else no "AC31 ⑦(보안 갈래): 웹 kill switch 문장이 없거나 바뀌었거나 자리를 옮겼다 (rc ${ks_rc})"; fi
+has   "$CB" '끝맺음 전에 라운드 안에서 닫는다' "AC31: internal_research 차원은 끝맺음 전에 라운드 안에서 닫는다"
 has   plugins/spec-distill/skills/context-build/references/state-file.md '리뷰 결정 문구는 그렇게 정했다는 사실과 뜻까지만 읽는다' "글 일곱 ⑦: 컨텍스트 쌓기의 원자료 읽기도 리뷰 결정 문구를 뜻까지만 읽는다"
 
 # ── 끝맺음 절차 (과제 3) ──────────────────────────────────────────────────────────────
