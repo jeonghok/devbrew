@@ -19,6 +19,7 @@
   --reason R           호출자만 아는 사유(반복 가능, verdict.REASONS 안)
   --angles PATH        각도 상태 파일(`<각도>: <상태>` 세 줄)
   --scope PATH         스코프 튜플(topic-head.sh 산출물)
+  --pre-merge-out PATH 재비판 처분 · 추가 지적을 반영한 뒤 · dedup 앞의 지적 목록을 YAML 로 쓴다(판정 · stdout 은 그대로)
   --restore-lowered L  되올린 낮춘 지적 번호(`L1,L3` · `all`, `--recritic` 과 함께) — `_parse_restore`
 
 본 보고서는 개수 줄 다음에 `blocking: N`(살아남은 CRITICAL·IMPORTANT) · `optional: M`(SUGGESTION) ·
@@ -30,6 +31,7 @@ exit: 0 정상 · 2 잘못된 호출 · 4 판정축 실패(stdout 비움).
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from collections import defaultdict
@@ -854,6 +856,19 @@ def _parse_restore(value):
     return tokens
 
 
+def _write_pre_merge(path, items):
+    """dedup 앞의 목록을 tmp 에 쓰고 `os.replace` 한다. 못 쓰면 한 줄만 내고 지나간다."""
+    tmp = path + ".tmp"
+    try:
+        text = yaml.safe_dump({"findings": items}, allow_unicode=True, sort_keys=False)
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except Exception as exc:   # 판정은 이 파일에 기대지 않는다 — rc · stdout 을 바꾸지 않는다
+        print("[synthesize_findings] 합치기 전 목록을 쓰지 못했다 — " + type(exc).__name__,
+              file=sys.stderr)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["prepare"]:
@@ -875,13 +890,15 @@ def main(argv=None):
     ap.add_argument("--recritic-diff", default=None)
     # 사용자가 「낮춘 지적」 게이트에서 되올린 번호 — `L<k>` 쉼표 목록 또는 `all`.
     ap.add_argument("--restore-lowered", default=None)
+    ap.add_argument("--pre-merge-out", default=None)
     args = ap.parse_args(argv)
 
     for flag, val in (("--differential", args.differential), ("--angles", args.angles),
                       ("--scope", args.scope), ("--recritic", args.recritic),
                       ("--recritic-map", args.recritic_map),
                       ("--recritic-diff", args.recritic_diff),
-                      ("--restore-lowered", args.restore_lowered)):
+                      ("--restore-lowered", args.restore_lowered),
+                      ("--pre-merge-out", args.pre_merge_out)):
         if val is not None and val == "":
             _usage(f"{flag} 는 빈 문자열을 받지 않는다 (플래그를 생략하거나 실제 경로를 줘라)")
     if (args.recritic is None) != (args.recritic_map is None):
@@ -929,6 +946,8 @@ def main(argv=None):
                          + dropped_primary + dropped_promoted)
     review_blocked = ledger.items_unaccounted() or dropped_malformed > 0
     blocking = ledger.blocks() or dropped_malformed > 0
+    if args.pre_merge_out is not None:
+        _write_pre_merge(args.pre_merge_out, sort_findings(findings + promoted))
     findings = sort_findings(dedup(findings + promoted, ledger=ledger))
     split = count_split(findings)
     n_block = split["CRITICAL"] + split["IMPORTANT"]   # K-4 의 blocking

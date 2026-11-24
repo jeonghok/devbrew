@@ -1,4 +1,4 @@
-"""돌려주는 꼴 2판 — 머리 칸 · 닫힌 어휘 · 결과 줄 · 리뷰 커밋 · 스위치(gate · prepare).
+"""돌려주는 꼴 3판 — 머리 칸 · 닫힌 어휘 · 결과 줄 · 리뷰 커밋 · 스위치(gate · prepare).
 
 `test_intent_critic.py` 의 헬퍼(`_cli` · `_env` · `_write` · `_read` · `_git_repo` · `_filter_rd` ·
 `_out` · `_q` · `_last` · `_return_block`)만 빌린다.
@@ -26,7 +26,7 @@ HEX40 = set("0123456789abcdef")
 
 def _check_vocab(case, block):
     """어느 갈래든 닫힌 어휘 안이다."""
-    case.assertEqual(block["contract"], 2)
+    case.assertEqual(block["contract"], 3)
     case.assertIn(block["status"], ic.RETURN_STATUSES)
     if block["status"] == "skipped":
         case.assertIn(block["reason"], ic.SKIP_REASONS)
@@ -254,7 +254,7 @@ class TestReturnHead(unittest.TestCase):
         tic._filter_rd(self.rd, call="none")
         self._render()
         _t, b = self._head()
-        self.assertEqual(b["contract"], 2)
+        self.assertEqual(b["contract"], 3)
         self.assertTrue(os.path.isabs(b["session_dir"]))
 
     def test_header_key_order(self):
@@ -267,8 +267,9 @@ class TestReturnHead(unittest.TestCase):
             if line and not line.startswith((" ", "`")):
                 keys.append(line.split(":", 1)[0])
         self.assertEqual(keys, list(ic.RETURN_KEYS) + ["questions"])
-        self.assertEqual(len(ic.RETURN_KEYS), 17)
-        self.assertEqual(len(ic.QUESTION_KEYS), 15)
+        self.assertEqual(len(ic.RETURN_KEYS), 18)
+        self.assertEqual(ic.RETURN_KEYS[-1], "answered_filtered")
+        self.assertEqual(len(ic.QUESTION_KEYS), 18)
 
     # ---- 리뷰 커밋
 
@@ -330,7 +331,7 @@ SIX = (
 )
 QUESTION_ORDER = ["n", "id", "state", "answer", "answer_text", "wrong_choice", "failure", "file",
                   "evidence", "question", "target_source", "target_id", "label", "quote",
-                  "observation"]
+                  "observation", "why", "asked_before", "changed_observation"]
 
 
 class TestQuestionRows(unittest.TestCase):
@@ -958,6 +959,25 @@ class TestReturnDoc(unittest.TestCase):
             for mutated in (tuple(src[1:]), tuple(src) + ("extra",)):
                 bad = _doc_mismatches(self.state, _code_lists(**{kw: mutated}))
                 self.assertEqual(len(bad), 1, (kw, mutated))
+
+    def test_contract_three_in_both_docs(self):
+        """상태 문서의 판 줄 · 제목 · 새 칸의 뜻 줄과 I7 의 3판 문장이 코드의 판과 같다(AC7 문서 쪽)."""
+        self.assertEqual(ic.CONTRACT, 3)
+        self.assertEqual(self.state.count("- `contract` — 꼴의 판(`3`)."), 1)
+        self.assertEqual(self.state.count("## 돌려주는 꼴 — `intent-return.md` (3판)"), 1)
+        for meaning in ("- `answered_filtered` — 이미 답해 거른 질문의 수(정수).",
+                        "- `why` — 리뷰어가 쓴 「왜 묻나」 한 줄 그대로",
+                        "- `asked_before` — ",
+                        "- `changed_observation` — "):
+            self.assertEqual(self.state.count(meaning), 1, meaning)
+        self.assertIn("`<전 답> · <답한 때> · <열쇠 또는 정체> · <근거가 달라짐 | 고친 뒤에도 보임>`", self.state)
+        self.assertIn("넘겨받은 답[ · 미뤄 둔 의심][ · 정체가 다름 — <그때> → <지금>]", self.state)
+        i7 = self._section("I7 돌려주기")
+        self.assertEqual(i7.count("`$RD/intent-return.md`(3판) 를 Read 로 읽어"), 1)
+        self.assertNotIn("(2판)", i7)
+        for cell in ("`answered_filtered`", "`why`", "`asked_before`", "`changed_observation`"):
+            self.assertIn(cell, i7)
+        self.assertIn("넘겨받은 답 · 미뤄 둔 의심 · 정체가 다름 표시 포함", i7)
 
     def test_lifetime_sentence_in_both_docs(self):
         first = "세션 폴더는 같은 세션의 다음 qg 시작에 지워진다"
