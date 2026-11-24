@@ -145,7 +145,7 @@ python3 "$SD/scripts/roadmap_write.py" check --brief "$BRIEF" --audit "${BRIEF%.
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 RMDIR="$(python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir)" || RMDIR=""
 [ -n "$RMDIR" ] || { echo "[spec-distill] 로드맵 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
-BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" ls-files --full-name -- "<결과물 절대경로>")"
+BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" -c core.quotePath=false ls-files --full-name -- "<결과물 절대경로>")"
 [ -n "$BRIEF_REL" ] || { echo "[spec-distill] 결과물의 레포 상대경로를 git 에서 얻지 못했다(커밋되지 않았거나 레포 밖이다) — 진입 검사부터 다시 돈다" >&2; exit 1; }
 IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'
 <주제 한 줄>
