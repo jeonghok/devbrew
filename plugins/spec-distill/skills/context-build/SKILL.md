@@ -431,7 +431,7 @@ orchestrator). 첫 dispatch 는 필수이고(하한 — 작은 일의 건너뜀�
 `coverage-mapper 0 (unavailable: <이유>)` 로 적는다 — 게이트는 advisory 로 통과시키고 Step B 가
 사람에게 보인다.
 
-**웹 kill switch 는 dispatch 자리마다 따로 확인한다 — R2 의 landscape 확인으로 갈음하지 않는다.** `coverage-mapper`는
+**웹 kill switch 는 dispatch 자리마다 따로 확인한다(dispatch 직전에) — R2 의 landscape 확인으로 갈음하지 않는다.** `coverage-mapper`는
 `WebSearch`/`WebFetch`를 보유한다. kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
 dispatch 프롬프트에 `web_disabled: true`를 실어 **codebase 근거만으로 차원을 제안**하게 하고,
 loud advisory를 남긴다: `[spec-distill] web 비활성 — coverage-mapper가 codebase 근거만 사용`.

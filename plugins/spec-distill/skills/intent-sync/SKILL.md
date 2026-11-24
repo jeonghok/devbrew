@@ -197,7 +197,7 @@ DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE>» 한 줄을 남기며, 어느 경우도 
 
 `worktree.baseRef` 를 자동으로 `head` 로 바꾸지 않는다 — 로컬에만 있는 커밋이 필요한지는 사용자가 정한다. 필요하면 사용자 설정 `worktree.baseRef=head` 로 로컬 HEAD 기준으로 바꾼다.
 
-이 절은 **실측한 것**(브랜치명 접두 · rename 무거부 · base-ref 기본값)만 단정하고,
+이 절은 **실측한 것**(브랜치명 접두 · base-ref 기본값)만 단정하고,
 **실측 밖**(슬래시 포함 이름의 결과 · 사람의 정상 종료 후 워크트리 정리)은 단정하지
 않는다.
 
@@ -1094,7 +1094,7 @@ Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-rea
 // **처분** — consumer=human · fail-open · disclosure=proceed 게이트 앞 글
 ```
 
-**싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내게 하지 않는다 — 어긋남의 감각이 사용자에게 오지
+**싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내게 하지 않는다 — 내면 어긋남의 감각이 사용자에게 오지
 않는다. 냉독 출력은 판정 경로 밖이라 엔진 게이트를 거치지 않고 proceed 게이트 앞 글에 그대로 실리며,
 audit `## 4. 비평과 냉독` 에도 옮깁니다 — 출력을 요약 없이 **Write 도구로** `$STATE_DIR/readback.txt` 에 쓰고 아래
 펜스로 인용 블록째 붙입니다(인용 표시가 없으면 출력 안의 제목 모양 줄이 audit 절 경계로 읽힌다). degrade 가

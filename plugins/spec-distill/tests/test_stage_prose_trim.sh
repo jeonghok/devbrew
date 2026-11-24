@@ -83,7 +83,9 @@ for f in "${NUM_FILES[@]}"; do
 done
 CORPUS="$(num_corpus)"
 # shellcheck disable=SC2086
-( cd "$ROOT" && scan_ids $CORPUS ) > "$TMPD/ids.txt"
+scan_rc=0
+( cd "$ROOT" && scan_ids $CORPUS ) > "$TMPD/ids.txt" || scan_rc=$?
+[ "$scan_rc" -eq 0 ] && ok "AC30(양의 짝): 번호 스캐너가 정상 종료했다" || no "AC30: 번호 스캐너가 rc ${scan_rc} 로 죽었다 — 0건이 공허하다"
 n_hits="$(grep -c . "$TMPD/ids.txt" || true)"
 if [ "$n_hits" -eq 0 ]; then ok "AC30: 앞단 글에 옛 설계 번호 · 옛 판 번호 · 날짜 실측 표기가 없다"
 else no "AC30: 옛 번호 ${n_hits}곳"; sed 's/^/      /' "$TMPD/ids.txt"; fi
@@ -95,6 +97,7 @@ for f in $CORPUS; do lacks "$f" 'decompose_edits' "AC29 ②: 스키마에 없는
 # ── 컨텍스트 쌓기 본문과 그 reference (과제 2) ────────────────────────────────────────
 CB=plugins/spec-distill/skills/context-build/SKILL.md
 lacks "$CB" '§2.4' "AC29 ③: 없는 절 번호 「§2.4」 가 본문에 없다"
+has   plugins/spec-distill/skills/context-build/references/state-migration.md '## State location' "AC29 ③(양의 짝): 이전 reference 가 있고 State location 절을 가리킨다"
 lacks plugins/spec-distill/skills/context-build/references/state-migration.md '§2.4' "AC29 ③: 없는 절 번호 「§2.4」 가 이전 reference 에 없다"
 has   "$CB" 'State location` 의 스키마' "AC29 ③(양의 짝): 스키마를 절 이름으로 가리킨다"
 lacks "$CB" '다음 결정 · 질문 하나' "AC29 ⑧: 라운드 꼴이 「질문 하나」 로 적히지 않는다"
