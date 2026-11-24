@@ -90,8 +90,7 @@ def siblings(brief: str) -> tuple[str, str]:
 
 def rename_notice(what: str, old: str, new: str) -> str:
     """옛 이름으로 불린 하위 명령 · 인자의 알림 한 줄 — 옛 설정 키 알림(`setting_notice`)과 같은 꼴."""
-    return (f"{what} {old} 는 이름이 {new} 로 바뀌었다 — {new} 와 같게 돈다. "
-            f"옛 이름은 다음 minor 판에서 지운다")
+    return f"{what} {old} 는 옛 이름이다 — 새 이름은 {new} 다. 옛 이름은 다음 minor 판에서 지운다"
 
 
 def setting_notice(old_value: str, new_value: str | None) -> str:

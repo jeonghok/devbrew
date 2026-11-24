@@ -14,9 +14,9 @@
 - 경로에 영어가 아닌 글자(한글 의도 폴더 등)가 있으면 git 이 낸 경로 글자가 따옴표 · 8진 이스케이프로 감싸여 없는 경로가 되던 자리에서 `core.quotePath` 를 끈다 — roadmap-draft 생성 펜스의 결과물 레포 상대경로(생성기가 실패했다), 스위트 대조의 단위 목록(그 폴더의 테스트가 빠졌다), 지휘자 판 비교의 plugin.json 목록, 통합 리뷰 묶음의 설계문서 첫 커밋 찾기, 로드맵 끝 리뷰 표지를 찾는 `ls-tree` 지시.
 
 ### Deprecated
-- `state_path.py interview-state` 하위 명령을 한 판 동안 다시 받는다 — `context-state` 와 같은 stdout · rc 를 내고 stderr 에 이름이 바뀌었다는 알림 한 줄을 낸다. 대신 `context-state` 를 쓴다.
-- `repo_defaults.py get interview_dir` · `check-path interview_dir` 의 인자를 한 판 동안 다시 받는다 — `intent_dir` 로 읽고 같은 알림 한 줄을 낸다. 대신 `intent_dir` 를 쓴다.
-- 둘 다 다음 minor 판에서 지운다(이슈 #337 이 받는다). 9.3.0 이 함께 적은 옛 판결 글자 `interview-state:` · 펜스 표지 `interview-state-entry:` 의 「읽는 호환」 은 되살리지 않았다 — 그 글자를 내는 쪽이 없고 읽던 자리는 skill 글과 테스트뿐이었다.
+- `state_path.py interview-state` 하위 명령을 한 판 동안 다시 받는다 — 9.3.0 앞과 같게 옛 의도 폴더(레포 설정의 옛 키 `interview_dir` 값, 없으면 `docs/superpowers/interview/`)의 옛 꼴 이름(`…-interview.state.md`) 경로를 내고, rc 는 `context-state` 와 같은 계산이다. stderr 에 옛 이름이라는 알림 한 줄을 낸다. 대신 `context-state` 를 쓴다.
+- `repo_defaults.py get interview_dir` · `check-path interview_dir` 의 인자를 한 판 동안 다시 받는다 — 9.3.0 앞과 같게 옛 의도 폴더를 내고 그 폴더 바로 아래인지로 경로를 잰다. 같은 알림 한 줄을 낸다. 대신 `intent_dir` 를 쓴다.
+- 둘 다 다음 minor 판에서 지운다(이슈 #337 이 받는다). 9.3.0 이 함께 적은 옛 판결 글자 `interview-state:` 는 이름이 바뀌지 않은 `interview_state.py` 가 내던 것이라, 옛 이름으로 불린 것을 가를 길이 없어 되살리지 않았다.
 
 ## [9.3.0] — 2026-11-24
 
