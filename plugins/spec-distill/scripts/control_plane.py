@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""control_plane.py — 로드맵 상태와 진행 중 인터뷰를 상태줄 한 줄 · 지도 · 작업 목록 줄로 보인다.
+"""control_plane.py — 로드맵 상태와 진행 중 컨텍스트 쌓기를 상태줄 한 줄 · 지도 · 작업 목록 줄로 보인다.
 
 명령줄:
   control_plane.py statusline                    상태줄 한 줄. 늘 rc 0.
@@ -41,6 +41,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import legacy_names  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 import team_layout  # noqa: E402
@@ -124,7 +125,7 @@ def first_line(report: dict) -> str:
         return "로드맵 상태 — 첫 줄을 만들지 못했다(%s)" % type(exc).__name__
 
 
-# ── 인터뷰 상태 파일 ──────────────────────────────────────────────────────────
+# ── 컨텍스트 쌓기 상태 파일 ──────────────────────────────────────────────────────────
 
 def _field(line: str, key: str):
     """들여쓴 `key: 값` 줄이면 주석을 뗀 값, 아니면 None."""
@@ -155,8 +156,8 @@ def parse_interview_state(text: str) -> dict:
     if end is None:
         raise ValueError("frontmatter 가 닫히지 않았다")
     head = lines[1:end]
-    if not head or head[0].strip() != "type: interview-state":
-        raise ValueError("첫 키가 type: interview-state 가 아니다")
+    if not head or head[0].strip() not in ["type: " + k for k in legacy_names.kinds(legacy_names.CONTEXT_STATE)]:
+        raise ValueError("첫 키가 type: context-state 가 아니다")
     n = limit = None
     for line in head:
         value = _field(line, "research_dispatches")
@@ -195,20 +196,20 @@ def interview_segment(interview) -> str:
     parts = []
     items = _latest(interview)
     if items:
-        seg = "인터뷰 조사 %d/%d" % (items[0]["n"], items[0]["limit"])
+        seg = "컨텍스트 쌓기 조사 %d/%d" % (items[0]["n"], items[0]["limit"])
         parts.append(seg + (" 외 %d" % (len(items) - 1) if len(items) > 1 else ""))
     if interview.get("errors"):
-        parts.append("인터뷰 셀 수 없음")
+        parts.append("컨텍스트 쌓기 셀 수 없음")
     return " · ".join(parts)
 
 
 def interview_lines(interview) -> list:
     if not interview or not interview.get("supported"):
-        return ["인터뷰: 셀 수 없음 — 이 플러그인 버전은 인터뷰 상태 파일을 아직 남기지 않는다"]
+        return ["컨텍스트 쌓기: 셀 수 없음 — 이 플러그인 버전은 컨텍스트 쌓기 상태 파일을 아직 남기지 않는다"]
     items, errors = _latest(interview), interview.get("errors") or []
     if not items and not errors:
-        return ["인터뷰: 진행 중 없음"]
-    out = ["인터뷰: 진행 중 %d개" % len(items)]
+        return ["컨텍스트 쌓기: 진행 중 없음"]
+    out = ["컨텍스트 쌓기: 진행 중 %d개" % len(items)]
     for it in items:
         line = "    %s — 조사 %d/%d" % (it["path"], it["n"], it["limit"])
         if it.get("last"):
@@ -505,11 +506,10 @@ def tasks_output(items, select_error=None):
     return out, "", 0
 
 
-# ── git · 인터뷰 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
+# ── git · 컨텍스트 쌓기 파일 · 캐시 (읽기 전용 — 쓰는 것은 캐시 파일 하나) ──────────────────
 
 GIT_OK = frozenset({"rev-parse", "ls-tree", "for-each-ref", "config", "cat-file"})   # config 는 --get 꼴만
 CACHE_VERSION = 1
-STATE_SUFFIX = "-interview.state.md"
 STATUSLINE_BUDGET = 3.0
 SHOW_BUDGET = 30.0
 STDIN_WAIT = 0.5
@@ -637,26 +637,36 @@ def default_ref(repo):
         return None, None, None, str(exc)
 
 
-def _folder_setting(repo: Repo, key: str, what: str):
-    """(폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
+def _resolved_settings(repo: Repo, what: str):
+    """(해결 결과, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
     try:
         result = repo_defaults.resolve(repo.cwd, run=repo.raw)
     except repo_defaults.SettingsError as exc:
         return None, str(exc)
     if result["errors"]:
         return None, "레포 설정을 읽지 못해 %s를 정하지 못했다 — %s" % (what, result["errors"][0])
-    return result["values"][key], None
+    return result, None
+
+
+def _folder_setting(repo: Repo, key: str, what: str):
+    """(폴더, 사유) — 해결자가 기본 브랜치의 레포 설정으로 정한 값. 설정이 깨졌으면 (None, 사유)."""
+    result, why = _resolved_settings(repo, what)
+    return (None, why) if result is None else (result["values"][key], None)
 
 
 def roadmaps_dir(repo: Repo):
     return _folder_setting(repo, "roadmaps_dir", "로드맵 폴더")
 
 
-def interview_dir(repo):
-    """(인터뷰 폴더, 사유). 레포 밖(repo 없음)이면 기본값."""
+def intent_dirs(repo):
+    """(새 의도 폴더, 옛 의도 폴더, 사유). 두 폴더가 같을 수 있다. 레포 밖(repo 없음)이면 두 기본값."""
     if repo is None:
-        return repo_defaults.INTERVIEW_DIR, None
-    return _folder_setting(repo, "interview_dir", "인터뷰 폴더")
+        return legacy_names.DEFAULT_DIR, legacy_names.OLD_DEFAULT_DIR, None
+    result, why = _resolved_settings(repo, "의도 폴더")
+    if result is None:
+        return None, None, why
+    new, old = repo_defaults.intent_dirs(result)
+    return new, old, None
 
 
 def listing(repo: Repo, main):
@@ -707,17 +717,8 @@ def candidates(repo: Repo, entries: dict, folder):
     return sorted(found + list(unchecked)), unchecked, failed
 
 
-def interview_files(root: str, rel: str | None, why: str | None = None):
-    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 brief 없는 것, (자리, 사유) | None). rel 은 인터뷰 폴더(레포
-    상대) — 정하지 못했으면 None 과 그 사유."""
-    try:
-        supported = "interview-state" in (SCRIPTS / "state_path.py").read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        supported = False
-    if not supported:
-        return False, [], None
-    if rel is None:
-        return True, [], (repo_defaults.SETTINGS_FILE, why)
+def _folder_state_files(root: str, rel: str):
+    """([(레포 상대 경로, Path, mtime_ns)] 짝 결과물 없는 상태 파일, (자리, 사유) | None) — 폴더 하나. 두 꼴 이름을 센다."""
     parts = rel.strip("/").split("/")
     shown = "/".join(parts)
     folder = Path(root, *parts)
@@ -725,28 +726,29 @@ def interview_files(root: str, rel: str | None, why: str | None = None):
         part = "/".join(parts[:i])
         try:
             if stat.S_ISLNK(os.lstat(os.path.join(root, part)).st_mode):
-                return True, [], (shown, "인터뷰 폴더 경로에 링크가 있다: %s" % part)
+                return [], (shown, "의도 폴더 경로에 링크가 있다: %s" % part)
         except FileNotFoundError:
-            return True, [], None
+            return [], None
         except OSError as exc:
-            return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
+            return [], (shown, "의도 폴더를 읽지 못했다(%s)" % type(exc).__name__)
     names = set()
     try:
         with os.scandir(str(folder)) as entries:
             for entry in entries:
                 if len(names) >= FOLDER_ENTRIES_MAX:
-                    return True, [], (shown, "인터뷰 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX)
+                    return [], (shown, "의도 폴더 항목이 %d개를 넘는다" % FOLDER_ENTRIES_MAX)
                 try:
                     entry.name.encode("utf-8")
                 except UnicodeEncodeError:
                     continue
                 names.add(entry.name)
     except OSError as exc:
-        return True, [], (shown, "인터뷰 폴더를 읽지 못했다(%s)" % type(exc).__name__)
+        return [], (shown, "의도 폴더를 읽지 못했다(%s)" % type(exc).__name__)
+    suffixes = legacy_names.state_suffixes()
     progress = sorted(n for n in names
-                      if n.endswith(STATE_SUFFIX) and n[: -len(".state.md")] + ".md" not in names)
+                      if n.endswith(suffixes) and n[: -len(".state.md")] + ".md" not in names)
     if len(progress) > STATE_FILES_MAX:
-        return True, [], (shown, "진행 중 인터뷰 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress)))
+        return [], (shown, "진행 중 컨텍스트 쌓기 상태 파일이 %d개를 넘는다(%d개)" % (STATE_FILES_MAX, len(progress)))
     files = []
     for name in progress:
         try:
@@ -754,15 +756,38 @@ def interview_files(root: str, rel: str | None, why: str | None = None):
         except OSError:
             mtime_ns = -1
         files.append((shown + "/" + name, folder / name, mtime_ns))
-    return True, files, None
+    return files, None
+
+
+def interview_files(root: str, new_rel: str | None, old_rel: str | None = None, why: str | None = None):
+    """(지원 여부, [(레포 상대 경로, Path, mtime_ns)] 짝 결과물 없는 것, [(자리, 사유)]). new_rel · old_rel 은 새 · 옛 의도
+    폴더(레포 상대) — 두 폴더를 읽고 같으면 한 번만 읽는다. 정하지 못했으면 new_rel 이 None 이고 why 가 그 사유."""
+    try:
+        supported = "context-state" in (SCRIPTS / "state_path.py").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        supported = False
+    if not supported:
+        return False, [], []
+    if new_rel is None:
+        return True, [], [(repo_defaults.SETTINGS_FILE, why)]
+    rels = [new_rel]
+    if old_rel is not None and old_rel.strip("/") != new_rel.strip("/"):
+        rels.append(old_rel)
+    files, errors = [], []
+    for rel in rels:
+        got, error = _folder_state_files(root, rel)
+        files += got
+        if error:
+            errors.append(error)
+    return True, files, errors
 
 
 def read_interviews(supported, files, folder_error, deadline: Deadline) -> dict:
     summary = {"supported": supported, "items": [], "errors": []}
-    if folder_error:
-        summary["errors"].append({"path": folder_error[0], "reason": folder_error[1]})
+    for place, reason in folder_error:
+        summary["errors"].append({"path": place, "reason": reason})
     for rel, path, mtime_ns in files:
-        deadline.left("인터뷰 상태 파일")
+        deadline.left("컨텍스트 쌓기 상태 파일")
         try:
             item = parse_interview_state(read_capped(path, STATE_MAX_BYTES))
         except OSError as exc:
@@ -810,7 +835,7 @@ def pr_cache_prints(targets, machine_lookup) -> str:
 
 def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
     """기본 브랜치 커밋 · 브랜치 머리 목록(기본 브랜치 · symref 줄 뺌) · 대상 로드맵의 기본 브랜치 사본 · 대상의 PR 캐시
-    지문. 인터뷰 상태 · PR 캐시와 확인한 끝 밖의 기계 상태는 키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
+    지문. 컨텍스트 쌓기 상태 · PR 캐시와 확인한 끝 밖의 기계 상태는 키에 없다(매번 읽는다). git 을 못 읽으면 None — 캐시를 쓰지 않는다."""
     rc, out = repo.git("for-each-ref", "--format=%(refname) %(objectname) %(symref)", "refs/heads", "refs/remotes")
     if rc != 0:
         return None
@@ -827,7 +852,7 @@ def cache_key(repo: Repo, main, main_full, mode, targets, pr_prints=""):
 
 CODE_STAMP_FILES = ("roadmap_status.py", "roadmap_model.py", "team_layout.py", "section6.py", "brief_body.py", "check_bundle_coverage.py", "control_plane.py",
                     "repo_defaults.py", "conductor_state.py", "team_files.py", "team_check.py", "team_status.py", "job_results.py",
-                    "workflow_superpowers.py", "branch_tip.py", "gh_repo.py", "human_lines.py", "session_record.py")
+                    "workflow_superpowers.py", "branch_tip.py", "gh_repo.py", "human_lines.py", "session_record.py", "legacy_names.py")
 
 
 def code_stamp() -> str:
@@ -1149,7 +1174,7 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, detail: bool = True, fo
     """화면에 필요한 것 전부. 받은 시각은 캐시 밖에서 매번 읽는다. ctx 에 레포 최상위 · 캐시 상태를 남긴다."""
     view = {"items": [], "interview": None, "notes": [], "minutes": None, "select_error": None}
     repo = open_repo(cwd, deadline)
-    supported, files, folder_error = interview_files(repo.cwd if repo else cwd, *interview_dir(repo))
+    supported, files, folder_error = interview_files(repo.cwd if repo else cwd, *intent_dirs(repo))
     if repo is None:
         view["interview"] = read_interviews(supported, files, folder_error, deadline)
         if arg:

@@ -71,7 +71,13 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
             self.skipTest("기준 커밋 %s 을 읽지 못했다(얕은 클론) — 옛 세 틀의 바이트 견줌을 건너뛴다" % BASE)
         old = got.stdout.decode("utf-8")
         for heading in ("### 계획 agent", "### 구현 agent", "### 이어 부르기"):
-            self.assertEqual(fence_under(self.TEXT, heading), fence_under(old, heading), heading)
+            then = fence_under(old, heading)
+            if heading == "### 이어 부르기":
+                want = then
+            else:   # 기준 틀에 금지 줄의 그 한 구절만 끼운 것과 바이트로 같다 — 양성 대조: 옛 블록에 그 구절이 정확히 한 번 있다
+                self.assertEqual(then.count("HEAD 뒤로 옮기기."), 1, heading)
+                want = then.replace("HEAD 뒤로 옮기기.", "HEAD 뒤로 옮기기 · 기계 상태의 확인한 끝 절과 상태 브랜치 쓰기.", 1)
+            self.assertEqual(fence_under(self.TEXT, heading), want, heading)
 
 
 POINTER = "team 형식 로드맵이면 아래 `## team 형식 로드맵` 절을 따른다"

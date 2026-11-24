@@ -14,6 +14,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+import legacy_names  # noqa: E402
 import repo_defaults as rd  # noqa: E402
 
 
@@ -126,7 +127,7 @@ class FolderSpecialChars(unittest.TestCase):
         return rd.merge_layers(None, {key: value}, LABEL, [])
 
     def test_folder_special_chars(self):
-        for key in ("specs_dir", "plans_dir", "roadmaps_dir", "interview_dir"):
+        for key in ("specs_dir", "plans_dir", "roadmaps_dir", "intent_dir"):
             for ch in ("*", "?", "[", "]", "\\"):
                 m = self.merged(key, "docs/a%sb/" % ch)
                 self.assertIsNone(m["values"][key], (key, ch))
@@ -158,7 +159,7 @@ class Layers(unittest.TestCase):
         self.assertEqual(c.exception.kind, "unknown_key")
 
     def test_roadmap_layer_rejects_pre_roadmap_keys(self):   # AC23b
-        for k in ("roadmaps_dir", "interview_dir", "branch_prefix"):
+        for k in ("roadmaps_dir", "intent_dir", legacy_names.OLD_SETTING_KEY, "branch_prefix"):
             with self.assertRaises(rd.SettingsError) as c:
                 rd.check_layer({k: "x/"}, "roadmap")
             self.assertEqual(c.exception.kind, "layer_key", k)
@@ -187,7 +188,7 @@ class Layers(unittest.TestCase):
 class Merge(unittest.TestCase):
     def test_missing_key_is_default_not_error(self):
         m = rd.merge_layers(None, {}, LABEL, [])
-        self.assertEqual((m["values"]["interview_dir"], m["sources"]["interview_dir"]), (rd.INTERVIEW_DIR, "기본값"))
+        self.assertEqual((m["values"]["intent_dir"], m["sources"]["intent_dir"]), (legacy_names.DEFAULT_DIR, "기본값"))
         self.assertEqual((m["values"]["branch_prefix"], m["values"]["roadmaps_dir"]), ("feature/", rd.ROADMAPS_DIR))
         self.assertEqual(m["errors"], [])
         self.assertEqual(list(m["values"]), list(rd.KEYS))
@@ -262,10 +263,171 @@ class InternalErrors(unittest.TestCase):
         self.addCleanup(setattr, rd, "resolve", real)
         err, out = io.StringIO(), io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
-            rc = rd.main(["get", "interview_dir", "--root", self.tmp])
+            rc = rd.main(["get", "intent_dir", "--root", self.tmp])
         self.assertEqual((rc, out.getvalue()), (3, ""))
         self.assertIn("내부 오류", err.getvalue())
 
+
+
+class IntentDirKey(unittest.TestCase):
+    """설정 키 intent_dir — 옛 키 interview_dir 는 레포 층에서만 읽고 한 줄로 알린다."""
+    NEW = legacy_names.DEFAULT_DIR
+    OLD = legacy_names.OLD_DEFAULT_DIR
+
+    def merged(self, repo):
+        return rd.merge_layers(None, repo, LABEL, [])
+
+    def test_no_setting_new_and_old_defaults(self):
+        m = self.merged({})
+        self.assertEqual(rd.intent_dirs(m), (self.NEW, self.OLD))
+        self.assertEqual((m["notices"], m["errors"]), ([], []))
+
+    def test_old_key_only(self):
+        m = self.merged({"interview_dir": "docs/a/"})
+        self.assertEqual(rd.intent_dirs(m), ("docs/a/", "docs/a/"))
+        self.assertEqual(m["sources"]["intent_dir"], LABEL + "(옛 키 interview_dir)")
+        self.assertEqual(len(m["notices"]), 1)
+        self.assertIn("값(docs/a/)을 그대로 읽는다", m["notices"][0])
+
+    def test_both_keys(self):
+        m = self.merged({"intent_dir": "docs/b/", "interview_dir": "docs/a/"})
+        self.assertEqual(rd.intent_dirs(m), ("docs/b/", "docs/a/"))
+        self.assertEqual(m["sources"]["intent_dir"], LABEL)   # 새 키가 이긴다
+        self.assertEqual(len(m["notices"]), 1)
+        self.assertIn("함께 있다", m["notices"][0])
+        self.assertEqual(m["errors"], [])
+
+    def test_new_key_only(self):
+        m = self.merged({"intent_dir": "docs/b/"})
+        self.assertEqual(rd.intent_dirs(m), ("docs/b/", self.OLD))
+        self.assertEqual((m["notices"], m["errors"]), ([], []))
+
+    def test_old_key_in_roadmap_layer_is_layer_key(self):
+        m = rd.merge_layers({"type": "roadmap", "interview_dir": "docs/a/"}, {}, LABEL, [], roadmap_path="r/roadmap.md")
+        self.assertEqual(len(m["errors"]), 1)
+        self.assertIn("interview_dir", m["errors"][0])
+        self.assertIn("레포 설정 파일", m["errors"][0])   # layer_key 사유(unknown_key 가 아니다)
+        self.assertNotIn("모르는 키", m["errors"][0])
+        self.assertEqual(m["notices"], [])
+
+    def test_broken_old_key_is_error(self):
+        m = self.merged({"interview_dir": "/abs"})
+        self.assertEqual(len(m["errors"]), 1)
+        self.assertIn("interview_dir", m["errors"][0])
+        self.assertEqual(rd.intent_dirs(m), (None, None))
+
+    def test_broken_old_key_with_good_new_key(self):
+        m = self.merged({"intent_dir": "docs/b/", "interview_dir": "/abs"})
+        self.assertEqual(len(m["errors"]), 1)
+        self.assertEqual(rd.intent_dirs(m), ("docs/b/", None))
+
+    def test_keys_count_unchanged(self):
+        self.assertEqual(len(rd.KEYS), 15)
+        self.assertIn("intent_dir", rd.KEYS)
+        self.assertNotIn("interview_dir", rd.KEYS)
+        self.assertEqual(rd.KEYS.index("intent_dir"), 3)
+
+
+class CheckPathIntentFolders(unittest.TestCase):
+    """check-path intent_dir — 새 폴더는 지금처럼, 옛 폴더는 옛 꼴 이름만. 해결자는 설정 값으로 바꿔 끼운다."""
+    OLD = legacy_names.OLD_DEFAULT_DIR
+    NEW = legacy_names.DEFAULT_DIR
+
+    def setUp(self):
+        import os, subprocess, tempfile
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        subprocess.run(["git", "init", "-q", self.tmp], check=True, env=env)
+
+    def check(self, repo, path, key="intent_dir", root=None):
+        import contextlib, io
+        real = rd.resolve
+        rd.resolve = lambda *_a, **_k: rd.merge_layers(None, repo, LABEL, [])
+        self.addCleanup(setattr, rd, "resolve", real)
+        err, out = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                rc = rd.main(["check-path", key, path, "--root", root or self.tmp])
+        except SystemExit as exc:   # argparse 오류
+            rc = exc.code
+        finally:
+            rd.resolve = real
+        return rc, err.getvalue()
+
+    def test_check_path_new_folder_any_name(self):
+        self.assertEqual(self.check({}, self.NEW + "notes.md")[0], 0)
+        self.assertEqual(self.check({}, self.NEW + "x-context.md")[0], 0)
+
+    def test_check_path_old_folder_old_name(self):
+        for name in ("2026-01-01-x-interview.state.md", "2026-01-01-x-interview.md", "2026-01-01-x-interview.audit.md"):
+            rc, err = self.check({}, self.OLD + name)
+            self.assertEqual(rc, 0, name)
+            lines = [l for l in err.splitlines() if l.strip()]
+            self.assertEqual(len(lines), 1, err)   # 「값의 출처」 줄 밖은 비었다 — 받았다는 알림이 없다
+            self.assertIn("값의 출처", lines[0])
+
+    def test_old_folder_rejects_new_form_and_other(self):
+        for name in ("x-context.md", "notes.md", "x-intent.md", "x-context.state.md"):
+            rc, err = self.check({}, self.OLD + name)
+            self.assertEqual(rc, 3, name)
+            self.assertIn(self.OLD, err)
+            self.assertIn(self.NEW, err)
+            self.assertIn("옛 꼴 이름", err)
+
+    def test_old_folder_name_must_end_old_form(self):
+        rc, _ = self.check({}, self.OLD + "x-interview.md.bak")
+        self.assertEqual(rc, 3)
+        rc, _ = self.check({}, self.OLD + "x-interview-notes.md")
+        self.assertEqual(rc, 3)
+
+    def test_old_key_only_same_folder_accepts_both(self):
+        repo = {"interview_dir": "docs/a/"}
+        self.assertEqual(self.check(repo, "docs/a/x-context.md")[0], 0)
+        self.assertEqual(self.check(repo, "docs/a/x-interview.md")[0], 0)
+
+    def test_both_keys_old_folder_old_name_only(self):
+        repo = {"intent_dir": "docs/b/", "interview_dir": "docs/a/"}
+        self.assertEqual(self.check(repo, "docs/b/anything.md")[0], 0)
+        self.assertEqual(self.check(repo, "docs/a/x-interview.state.md")[0], 0)
+        self.assertEqual(self.check(repo, "docs/a/x-context.md")[0], 3)
+
+    def test_other_parent_is_rejected_with_old_folder_note(self):
+        rc, err = self.check({}, "docs/x/x-interview.md")
+        self.assertEqual(rc, 3)
+        self.assertIn("부모 폴더가 다르다", err)
+
+    def test_roadmaps_dir_does_not_take_old_folder(self):
+        rc, _ = self.check({}, self.OLD + "x-interview.md", key="roadmaps_dir")
+        self.assertEqual(rc, 3)
+
+    def test_check_path_rejects_old_key_argument(self):
+        rc, _ = self.check({}, self.NEW + "x.md", key="interview_dir")
+        self.assertEqual(rc, 2)
+
+    def test_get_choices(self):
+        import contextlib, io
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as c:
+                rd.main(["get", "interview_dir", "--root", self.tmp])
+        self.assertEqual(c.exception.code, 2)
+
+    def test_old_folder_link_rejected(self):
+        import os
+        link = self.tmp + "-link"
+        os.symlink(self.tmp, link)
+        self.addCleanup(os.unlink, link)
+        rc, err = self.check({}, link + "/" + self.OLD + "x-interview.md")   # 링크로 시작하는 절대 경로 — 레포 밖으로 본다
+        self.assertEqual(rc, 3)
+        self.assertIn("레포 밖 경로", err)
+
+    def test_old_folder_case_difference_rejected(self):
+        rc, err = self.check({}, "docs/superpowers/Interview/x-interview.md")
+        self.assertEqual(rc, 3)
+
+    def test_old_key_broken_blocks_check(self):
+        rc, _ = self.check({"interview_dir": "/abs"}, self.NEW + "x.md")
+        self.assertEqual(rc, 3)
 
 
 class Budgets(unittest.TestCase):   # R1 AC2

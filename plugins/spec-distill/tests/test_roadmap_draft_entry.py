@@ -40,12 +40,17 @@ def digest(root: Path) -> dict:
 
 
 class Base(unittest.TestCase):
-    def build(self, mode="no-framing", split=True, state_extra="\n## R1\n\n본문\n"):
+    def build(self, mode="no-framing", split=True, state_extra="\n## R1\n\n본문\n", settings="intent_dir: docs/iv/"):
+        """픽스처 레포 — 결과물 묶음은 docs/iv 에 옛 꼴 이름으로 있다. settings 는 기본 브랜치의 레포 설정 머리말 줄들."""
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         r = F.make_repo(Path(self.tmp.name) / "repo", mode=mode)
         self.repo = Path(r["repo"])
         self.p = r
+        if settings:
+            (self.repo / ".devbrew.md").write_text("---\n%s\n---\n" % settings, encoding="utf-8")
+            git(self.repo, "add", ".devbrew.md")
+            git(self.repo, "commit", "-q", "-m", "settings")
         git(self.repo, "branch", "-M", "main")
         git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         git(self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
@@ -324,6 +329,62 @@ class TestEntry(Base):
         self.run_entry()
         after = (git(self.repo, "status", "--porcelain"), digest(self.repo))
         self.assertEqual(before, after)
+
+    # ── 결과물이 의도 폴더 바로 아래인가 — 커밋 펜스가 늦게 거는 같은 판정을 진입에서 먼저 본다 ──
+    INTENT_STOP = "roadmap-entry: STOP 결과물이 의도 폴더 바로 아래가 아니다: "
+
+    def copy_set(self, folder, stem):
+        """결과물 · audit · 상태 파일을 <folder>/<stem>{.md,.audit.md,.state.md} 로 옮겨 커밋하고 새 결과물 경로를 돌려준다."""
+        dest = self.repo / folder
+        dest.mkdir(parents=True, exist_ok=True)
+        for src, tail in ((self.brief, ".md"), (self.audit, ".audit.md"), (self.state, ".state.md")):
+            (dest / (stem + tail)).write_bytes(Path(src).read_bytes())
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "moved set")
+        return str(dest / (stem + ".md"))
+
+    def intent_stops(self, out):
+        return [ln for ln in out.split("\n") if ln.startswith(self.INTENT_STOP)]
+
+    def test_brief_outside_intent_folder_stops(self):
+        self.build()
+        other = self.copy_set("docs/other", "t-brief-interview")
+        rc, out, err = self.run_entry(brief=other)
+        self.assertEqual(rc, 1, out + err)
+        stops = self.intent_stops(out)
+        self.assertEqual(len(stops), 1, out)
+        # 사유는 해결자의 마지막 [spec-distill] 줄(거절 사유)이고 「값의 출처」 줄이 아니다
+        reason = stops[0][len(self.INTENT_STOP):]
+        self.assertTrue(reason.startswith("부모 폴더가 다르다: docs/other/t-brief-interview.md 의 부모는 docs/other/ "
+                                          "인데 정해진 폴더는 docs/iv/ 다(intent_dir)"), reason)
+        self.assertNotIn("값의 출처", out)
+        self.assertNotIn("[spec-distill]", stops[0])
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_brief_in_intent_folder_has_no_intent_stop(self):
+        self.build()
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(self.intent_stops(out), [], out)
+
+    def test_old_form_brief_in_old_folder_ok(self):
+        # 두 폴더가 다르다(새 폴더 docs/new/, 옛 폴더 docs/iv/) — 옛 폴더의 옛 꼴 결과물(커밋됨)은 받는다
+        self.build(settings="intent_dir: docs/new/\ninterview_dir: docs/iv/")
+        rc, out, err = self.run_entry()
+        self.assertEqual(self.intent_stops(out), [], out)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: OK")
+
+    def test_new_form_brief_in_old_folder_stops(self):
+        # 같은 두 폴더 — 옛 폴더의 새 꼴 이름은 받지 않고, 사유가 옛 폴더 규칙을 댄다
+        self.build(settings="intent_dir: docs/new/\ninterview_dir: docs/iv/")
+        moved = self.copy_set("docs/iv", "t-brief-context")
+        rc, out, err = self.run_entry(brief=moved)
+        self.assertEqual(rc, 1, out + err)
+        stops = self.intent_stops(out)
+        self.assertEqual(len(stops), 1, out)
+        self.assertIn("정해진 폴더는 docs/new/ 다(intent_dir)", stops[0])
+        self.assertIn("옛 의도 폴더(docs/iv/)는 옛 꼴 이름", stops[0])
 
     def test_bad_args_rc2(self):
         p = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)

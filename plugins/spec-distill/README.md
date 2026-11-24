@@ -4,13 +4,13 @@
 
 ## 이 플러그인이 하는 일
 
-흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-interview.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-interview.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
+흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/intent/YYYY-MM-DD-<topic>-context.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-context.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-context.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
 
 ## 쓰는 법
 
 사용자가 부르는 진입 skill 은 여섯입니다.
 
-- `/intent-sync` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`interview-seed`)이 나옵니다.
+- `/intent-sync` — 요청이 아직 흐릿해서 방향부터 맞추고 싶을 때. 다음 세션 첫 턴이 가리킬 요청 요약 파일(`intent-seed`)이 나옵니다.
 - `/context-build` — 요청을 질문과 조사로 다듬고 싶을 때(컨텍스트 쌓기). 그 결과를 정리한 문서(context brief)가 나옵니다.
 - `/roadmap-draft` — 나누기로 정한 brief 를 에픽 표와 로드맵으로 만들고 싶을 때. 로드맵 폴더가 나옵니다. 완전명은 `/spec-distill:roadmap-draft @<결과물 경로>` 입니다.
 - `/spec-review` — brainstorming 이 설계문서를 쓴 뒤 검토하고 싶을 때. 문서 리뷰 결과와 다음 단계를 고르는 질문이 나옵니다.
@@ -41,13 +41,13 @@
                                                 · 처분은 사용자가 — 처분 전 편집 금지 · 저자 편집 diff 공시 · 문구 없는 drop 차단
                                                 · 냉독 축(seed-readback)
                                        ▼ [확정 — proceed 게이트] ①/compact 후 /context-build @경로 · ②/new 후 /context-build @경로 · ③수정 필요 · ④멈춤
-                                   interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
+                                   intent-seed → docs/superpowers/intent/   ← 문서가 아니라 다음 세션 첫 턴이 가리키는 파일
                                        ▼ 다음 세션 첫 턴 = `/context-build @<seed 경로>` (진입 단계가 frontmatter 포함 전문으로 풀어 컨텍스트 쌓기에 넘김)
 /context-build ─→ [0] Trivia escape ─→ [1] Context build (문제공간 stage)
                                        · 지금 이해 · 다음 결정 · 질문 하나 + 3-path (web=path(a))
                                        · R1 사용자 말 그대로 / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
-                                   context brief (payload + audit) → docs/superpowers/interview/   ← terminal 산출물
+                                   context brief (payload + audit) → docs/superpowers/intent/   ← terminal 산출물
                                        ▼ [Step A.5]  ※ 구조 게이트를 통과했을 뿐 아직 분리 리뷰 전
                                    [2] reviewing-brief → 문서 리뷰 엔진 (Law 2 분리 리뷰, brief 프로필, cost_class: medium)
                                        │  라운드마다 먼저: 진입 게이트 둘(check_brief.py · check_verbatim_coverage.py) → payload+audit 번들
@@ -127,14 +127,14 @@
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P2 (Ambiguity Gate)** — numerical 거부 (philosophy P2). 설계문서의 모호성은 `doc-critic` 층 2 가 판정한다 — 필수 섹션 구조 게이트는 없다(위 Law 1).
 - **P12 (Trivia escape)** — `/context-build` first-step rule (판정 기준은 한 문장으로 설명 가능한가 — typo / 주석-only / formatting / rename / 짧은 안전 동사는 예시). 파일 수는 자격 기준이 아니다.
-- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`interview_dir`, 기본 `docs/superpowers/interview/`)의 `<날짜>-<주제>-interview.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
+- **P14 (State preservation)** — 컨텍스트 쌓기의 진행 기록은 작업 트리의 의도 폴더(`intent_dir`, 기본 `docs/superpowers/intent/`)의 `<날짜>-<주제>-context.state.md` 에 살아 압축 · 세션 종료 · 다른 세션의 정리로 사라지지 않고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다(기본 브랜치에서는 커밋하지 않는다). 이 세션의 옛 `.claude/spec-distill/<session-id>/state.local.md` 가 있으면 컨텍스트 쌓기 진입이 docs 로 옮기고 그 사실을 보인다. 다른 세션의 옛 기록은 그 세션을 이어 열고(`claude --resume`) 컨텍스트 쌓기에 들어오거나, 작업 트리에서 `python3 <플러그인 루트>/scripts/interview_state.py migrate-legacy --session <옛 세션 id> --topic <kebab 주제> [--seed <seed 경로>]` 로 옮긴다. 리뷰 원장은 `.claude/spec-distill/.docreview/<stem>-<hash>/` 에 문서마다 하나라(`docreview_state.py state-dir-for --root --doc`) 세션이 끝나도 남아 라운드를 이어 세고, 위치가 `state_path.state_root()` 하나로 정해져 worktree 에서 불러도 main repo 의 `.claude/spec-distill/` 에만 기록된다(`ExitWorktree action: remove` 로 원장이 조용히 사라지지 않는다). 그 밖의 세션 폴더는 만들지 않는다. 원장 정리는 문서가 사라질 때 한다: 리뷰를 시작하는 진입 셋(spec-review · reviewing-brief · intent-sync 의 리뷰)이 원장을 열 때 `scripts/ledger_sweep.py` 가 한 번 돈다 — 기록된 문서가 없고 원장 폴더에 TTL 동안 쓰기가 없는 원장을 지우고, 옛 버전의 세션 폴더 `<session-id>/` 중 `state.local.md` 가 없고 TTL 을 넘은 것을 지우되 그 안의 옛 원장 중 문서가 남은 것은 먼저 `.docreview/` 로 옮긴다. `state.local.md` 가 있는 옛 폴더는 시간과 무관하게 지우지 않고 알린다(아직 docs 로 옮기지 않은 옛 인터뷰 기록이다 — 옮기거나 지우는 일은 사용자 몫이다). 정리는 루트 디렉토리 잠금(`O_NOFOLLOW` 로 연 디렉토리 fd 의 `flock`, 락 파일 없음) 안에서 돈다.
 - **P17 (User sovereignty)** — 문서 리뷰 엔진의 **승인 게이트**(정본 `references/proceed-gate.md` — 진행·수정·멈춤을 사용자가 고른다), all kill switches.
 - **P17 (User sovereignty) — 사용자가 시계** — 차원은 사용자 발화 `S<N>` 을 인용해야 닫히고(`check_brief.py` 앵커 게이트), 재개방에 상한이 없다 — 재개방은 사용자 답 · 근거와의 충돌로만 일어나고, 조사 총량은 조사 호출 상한(사용자 연장)이 묶는다.
 - **P18 (Stagnation detection)** — 라운드 n 의 **열린 계보**(`open_lineages`) 집합이 n−1 과 같고 그 사이 진행이 0 건이면 stagnation 이고, 승인 게이트가 즉시 열린다(`shared/docreview/scripts/docreview_state.py` 의 `gate_summary`). 「진행」은 `check-intent` 를 통과한 fix 적용과 채택 결정의 permit 적용 둘을 센다 — 채택대로 고친 라운드는 계보가 같아도 stagnation 이 아니다.
 - **P18 보강 — must-catch 멈춤 기준** — 프로필이 `must_catch` 로 막는 축을 지목하면 그 밖의 rubric 축 finding 은 참고(advisory)로 라우팅돼 승인을 막지 않고 끝에서 한 번 보인다(`shared/docreview/scripts/docreview_advice.py`). 라운드별 계수 줄이 결정 기록 절에 남아 다음 사이클이 must-catch 축의 수렴 가정을 잰다(Law 3).
 - **P21 (Secret 기록 금지 / untrusted input)** — 컨텍스트 쌓기 상태 파일(커밋되는 파일이다 — `## 풀린 입력` 블록 포함)과 framing 기록 파일(seed 의 audit — 원문 절 · 질문 답 · 사용자가 적은 말 · 리뷰 결정의 사용자 문구 등 사용자의 말을 적는 모든 길)의 token/key/credential placeholder 치환. seed 본문은 줄 안의 가림 표시를 받는다. `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부). 끝맺음은 첫 칸에 실을 원자료에서 비밀값으로 보이는 값을 보면 싣지 않고 멈춰 묻고, 가릴 때는 framing 기록 파일부터 가린다.
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (context-build: variable / roadmap-draft: medium / intent-sync: variable / spec-review: medium / reviewing-brief: medium / epic-conductor: high / roadmap-status: low — 어느 skill 도 지출 승인을 묻지 않고(epic-conductor 의 high 는 시작할 때 규모 줄을 공시한다), 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다).
-- **P23 (Decisions Stay Refutable)** — `intent-sync`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `context-build`도 하류에서 같은 원칙을 잇는다 — `type: interview-seed` 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 컨텍스트 쌓기 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
+- **P23 (Decisions Stay Refutable)** — `intent-sync`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다. `context-build`도 하류에서 같은 원칙을 잇는다 — `type: intent-seed`(옛 seed 는 `interview-seed`) 입력을 받고(seed 가 아닌 입력에는 한 줄 안내만 내고 막지 않는다), 컨텍스트 쌓기 중 새 발화가 seed의 확정을 뒤집으면 조용히 덮어쓰지 않고 새 발화가 이기며, §5 기각에 같은 *원래/재결정/근거* 형태로 남는다.
 
 ### Roadmap absorption (C-numbers)
 
@@ -177,10 +177,11 @@
 - `references/walk-table.md` · `scripts/walk_table.py` — team 형식 로드맵의 걸음표. 걸음표는 리더가 담당자를 어느 걸음으로 보낼지 정하는 표로, 걸음마다 누가 · 단계 · 관문 · 작업 방식 · 상한 · 도구 칸이 있습니다. `walk_table.py next --roadmap <로드맵> --job <과제>` 가 git 에서 다시 계산한 단계로 지금 걸음 · 다음 걸음과 그 칸 · 막는 것을 한 화면에 냅니다(읽기만 합니다 — 리더는 늘 다음 걸음의 칸으로 담당자를 보냅니다). 레포는 설정 `walk_table`(기본 브랜치의 파일)로 걸음 · 누가 · 작업 방식 · 상한 · 도구를 바꿀 수 있지만 관문은 이 표로 바뀌지 않습니다 — 시작 묶음 · 결과 대조 · 걸음 보기의 막는 것은 표의 관문 칸을 읽지 않고, 설정한 표가 깨졌으면 기본 표로 넘어가지 않고 멈춥니다. `walk_table.py check` 가 표를 검사합니다. 형식은 `references/team-files.md` 의 「걸음표」 절입니다.
 - `scripts/merge_check.py` — 머지 전 스위트 대조(실패를 단위와 이름으로 가름). 종료 코드 0 · 1 새 실패 · 3 검사 불가 · 4 이름 대조 불가 단위 · 5 다른 스위트가 공유 잠금을 쥠(주인 · 잡은 시각을 보인다 — `--wait <초>` 면 줄을 선다) · 6 테스트 명령 모름 · 7 테스트 없음. 로컬 브랜치와 `origin/<브랜치>` 가 다르면 앞선 쪽을 쓰고 알리며, 갈라졌으면 3 이다(`--branch origin/<브랜치>` 도 받는다) — 이 끝 고르기는 `scripts/branch_tip.py` 하나이고 `conductor_ledger.py review-pack` 도 같이 쓴다.
 - `scripts/suite_lock.py` — 공유 스위트 잠금. 지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 기계 상태 자원 폴더의 잠금 하나(`<기계 상태 폴더>/files/suite-lock`)를 쓴다. 하위는 `run --lock <경로> --owner <이름> [--wait <초>] -- bash -c '<명령>'` 한 번으로 잡고 · 돌리고 · 푼다(못 잡으면 75 · 잠금 폴더에 쓰지 못하면 3 — 잠금 없이 돌리지 않는다). 주인이 프로세스 번호가 아닌 잠금은 살았는지 알 수 없어 훔치지 않고 주인 · 잡은 시각을 보인다.
+- `scripts/qg_answered.py` — 리뷰 기록 파일에서 qg 의 `--answered` 가 읽는 「이미 답한 것」 파일을 만든다(같은 열쇠는 앞 자리 기록의 것을 싣고, 읽지 못한 기록은 알림 줄로 센다).
 - `scripts/conductor_ledger.py` — 기계 상태 · 자원 폴더(`resource-dir`) · 자원 정리(확인 없이 치우는 것은 버릴 것(합친 사본 · 리뷰 묶음 · 자원 폴더 항목)뿐 — 사용자 worktree 는 깨끗하고 등록된 것만 `--force` 없이 지우고, 지휘 세션의 자리는 지우지 않으며, 브랜치는 그대로) · 설계문서 기록 절 · 통합 리뷰 묶음(열린 에픽 브랜치는 상태 계산과 같은 규칙으로 — 기본 브랜치 블록에 더해 블록을 잇는 로드맵 사본이 더한 브랜치도 · 함께 진행된 에픽의 설계 의도 `intents.md`) · 공유 스위트 잠금 경로(`suite-lock`) · 실행 원장마다 마지막 고친 시각과 마지막 줄(`progress`). 기계 상태의 `## 작업` 표는 로드맵 밖 일(수리 PR · 정리 일)까지 한 곳에 담고, 상태 보기가 그 표와 돌고 있는 큰 작업 수 · 권장 수(`parallel_default` — 로드맵 frontmatter · 레포 설정 파일 순, 없거나 깨졌으면 3 — 기본값이지 상한이 아니다) · 스위트 잠금을 함께 보인다. team 형식(로드맵 머리말 `layout: team`)의 과제 폴더 안 파일을 `--spec` 으로 받으면 `record` · `flush` 는 그 과제 INTENT.md 의 결정 기록에 쓰고, `write-sections` 는 쓰지 않고 알린다(판정은 결과 파일의 `Ruling:` 줄, 구현 대조는 결과 파일의 AC 줄과 받음 줄이 대신한다).
 - `agents/integration-reviewer.md` — 쓰기 권한 없는 통합 리뷰어(`Read, Grep, Glob`).
 - `agents/relay-checker.md` — 쓰기 권한 없는 옮김 대조 agent(`Read, Grep, Glob`). 에픽이 끝나면 지휘자가 하위의 질문을 사용자에게 옮긴 기록마다 선택지 수 · 순서 · 라벨 · 「(권장)」 과 사용자 답이 그대로 갔는지 대조한다.
-- spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「컨텍스트 쌓기 다시 열기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).
+- spec-review 게이트 ③ — 로드맵 에픽의 설계문서면 「이 에픽 다시 설계」(같은 묶음으로 brainstorming 을 다시) 와 재분해(「로드맵 다시 잡기」) 를 고를 수 있습니다. 재분해 신호는 열린 목록입니다(`references/redecompose.md` 1).
 - `scripts/roadmap_write.py create · update · extract · migrate` — 로드맵 잡기가 승인받은 분해안 표(`## 분해안`, 칸 열하나)로 로드맵과 에픽 묶음을 쓰고(create), 재분해 때 바뀐 블록과 그 묶음만 다시 쓰고(update), 로드맵에서 표를 거꾸로 뽑습니다(extract). update 는 새 에픽 번호가 문자마다 최댓값 다음부터 빈틈없이 이어져야 하고, 「…」 인용은 재분해 이력의 번호 판정에서 뺍니다. create 는 상태 파일 `## 생성 기록` 에 적힌 파일만 덮어쓰고, 자기 것이 아닌 `<id>.md` 를 덮어쓰게 되면 쓰기 전에 거부합니다. 검증이 실패하면 새로 만든 파일은 지웁니다. `--audit` 은 `--brief` 경로의 `.md` 를 `.audit.md` 로 바꾼 파일이어야 하고(아니면 사용법 오류 2), update 는 묶음 번호 순서만 다른 표를 바뀜으로 세지 않습니다. 쓴 직후 `roadmap_status.py --json` 의 `format_errors` · `unassigned` · `orphans` · `unknown_ids` 중 하나라도 비지 않으면 쓴 것을 원래 바이트(파일 모드 포함)로 되돌리고 1 로 끝납니다. 머지된 에픽은 바꾸지 않고 사라진 번호는 다시 쓰지 않습니다. 재분해 절차는 `references/redecompose.md` 에 있습니다. migrate 는 옛 꼴 블록을 새 형식(범위 하위 항목)으로 다시 씁니다 — 각 블록의 `- 범위:` 줄만 고치고 바꿀 수 없는 것은 1 로 거절하며 CRLF 를 지킵니다.
 - `scripts/roadmap_write.py create --layout team · original --brief · job new` — team 형식(로드맵 머리말 `layout: team`)의 팀 폴더를 만듭니다. `create --layout team` 은 로드맵 · `RULES.md` · 원자료 사본 `intent/original.md` · 에픽마다 `jobs/<번호>/INTENT.md` · `sources.md` · `results/` 를 한 거래로 쓰고, 로드맵 폴더에 없으면 역할 문서 넷(`leader` · `designer` · `writer` · `worker` 의 `CLAUDE.md`)과 `HANDBOOK.md` 를 틀에서 깝니다(있는 파일은 바이트를 바꾸지 않고 `.claude/` 아래에는 쓰지 않습니다). `original --brief <brief> --out <로드맵 폴더>` 는 framing audit · brief · brief audit 의 사용자 말을 출처 커밋과 함께 `original.md` 끝에 덧붙이고, `job new` 는 단순 작업의 과제 폴더를 만듭니다(지시 원문은 표준 입력 그대로). team 형식의 `update` 는 있던 INTENT.md 를 다시 쓰지 않습니다 — 과제의 목표 · 범위 · 지시 원문 범위가 바뀌어 손으로 고칠 것이 있으면 그 글을 내고 4 로, 없으면 0 으로 끝납니다(지시 원문 범위만 다르면 아무것도 쓰지 않고 4 입니다). team 형식의 `update` 도 머지되거나 끝난 에픽은 바꾸거나 지우지 않습니다 — 지시 원문 범위만 바꾼 표도 같습니다. 지휘 절차는 아직 옛 형식(묶음 파일)을 쓰고, 새 형식을 기본으로 켜는 일은 지휘 절차 개편이 합니다. 역할 문서는 알림이고 막는 것은 도구 권한이다 — 역할 문서의 하지 않을 일은 도구를 막지 않습니다. 형식은 `references/team-files.md` 에 있습니다.
 - `scripts/team_layout.py check --roadmap <로드맵>` — team 팀 폴더의 구조와 원자료 사본의 세 검사(줄 범위 · 덧붙이기만 · 출처와 바이트 같음)를 한 번에 봅니다. 읽기만 합니다. 종료 코드 0 통과 · 1 어긋남 · 2 사용법 · 3 검사 불가(어긋남보다 앞섭니다). 출처와 바이트 같음은 원자료 사본의 출처 줄이 적은 커밋을 읽어 견줍니다. squash · rebase 머지나 고쳐 쓴 브랜치로 그 커밋을 읽지 못하면 덧붙이기 검사와 같은 기준(`--base <ref>`, 없으면 기본 브랜치)의 같은 파일 · 같은 줄과 견줘, 같으면 통과하고 알림 줄을 냅니다. 다르거나 기준에 그 파일이 없거나 기준을 모르면 검사 불가(3)이고 무엇과 견줬는지를 적습니다 — 그때 `create --layout team` · `update` 는 쓰지 않고 멈추고, `original` · `job new` 는 그대로 돌고 검사 불가 줄을 화면에 냅니다. 원자료 사본을 만들기 전에 출처 파일을 기본 브랜치에 커밋해 두거나 머지 커밋으로 머지하면 출처 커밋이 남습니다.
@@ -213,7 +214,7 @@ team 형식 로드맵의 단계는 과제 폴더 · 결과 파일 · INTENT.md �
 
 - `rules-add` · `rules-drop` · `rules-reset` — 규칙 줄을 사본에 더하고 빼고, 사본을 지워 기본 브랜치의 규칙으로 돌아갑니다. 사본이 없으면 기본 브랜치의 글에서 만듭니다. 다음 시작 묶음부터 사본의 글이 실리고, 맞추는 명령이 `--rules-at` 을 실어 결과 파일 머리 `rules_at` 에 그 커밋이 적힙니다 — 「묶음 낡음」 은 팀 규칙을 그 커밋의 글과 견줍니다.
 - `rules-branch --branch <브랜치>` — 기본 브랜치 끝 위에 규칙 파일만 사본의 글로 바꾼 커밋 하나를 로컬 브랜치로 만듭니다(올리지 않습니다). PR 과 머지 전 확인은 지금 절차 그대로이고 머지는 사용자가 합니다. 사본이 기본 브랜치와 갈라졌으면 만들지 않고 차이를 보입니다. 머지되어 같아지면 `sync` 가 사본을 지웁니다.
-- `confirm` — 상태 브랜치에 남이 올린 규칙 · 대기 줄 고침을 커밋마다 차이와 함께 보이고 `확인할 끝: <40자>` 를 냅니다. 사용자가 받아들이면 `--confirmed <40자>` 로 기계 상태의 「확인한 끝」 절에 기록합니다. 그 전까지 규칙은 기본 브랜치의 글을 읽고 그 줄은 옮기지 않습니다.
+- `confirm` — 상태 브랜치에 남이 올린 규칙 · 대기 줄 고침을 커밋마다 차이와 함께 보이고 `확인할 끝: <40자>` 를 냅니다. 이 기계가 쓴 것으로 적힌 고침 목록이 있으면 그 목록과 확인할 끝도 함께 냅니다. 사용자가 받아들이면 `--confirmed <40자>` 로 기계 상태의 「확인한 끝」 절에 기록합니다. 그 전까지 규칙은 기본 브랜치의 글을 읽고 그 줄은 옮기지 않습니다.
 - 대기 줄 — `conductor_ledger.py` 의 `add --section "쌓인 기록"` · `pending` · `drop` · `flush` 가 상태 브랜치의 `pending.md` 를 다룹니다. 브랜치가 아직 없으면 기계 상태에 쌓고 알립니다. 사람 줄 관문이 켜져 있으면 사람 줄은 넣지 않고 `flush` 가 건너뛰어 셉니다.
 
 ### 상태줄
@@ -283,7 +284,7 @@ in=$(cat); a=$(printf '%s' "$in" | <기존 명령>); b=$(printf '%s' "$in" | sh 
 specs_dir: docs/superpowers/specs/
 plans_dir: docs/superpowers/plans/
 roadmaps_dir: docs/superpowers/roadmaps/
-interview_dir: docs/superpowers/interview/
+intent_dir: docs/superpowers/intent/
 parallel_default: 3
 branch_prefix: feature/
 shared_files: plugin.json, CHANGELOG.md, README.md
@@ -302,7 +303,7 @@ state_branch: 켬
 | `specs_dir` | 설계문서 폴더 | `docs/superpowers/specs/` | 받는다 |
 | `plans_dir` | 계획 폴더 | `docs/superpowers/plans/` | 받는다 |
 | `roadmaps_dir` | 로드맵 폴더 | `docs/superpowers/roadmaps/` | 오류 |
-| `interview_dir` | 의도 폴더 | `docs/superpowers/interview/` | 오류 |
+| `intent_dir` | 의도 폴더 | `docs/superpowers/intent/` | 오류 |
 | `test_command` | 스위트 대조가 도는 명령 | 없음(러너를 찾는다) | 받는다 |
 | `test_failure_pattern` | 실패 이름을 뽑는 정규식 | 없음(알려진 모양) | 받는다 |
 | `review_model` | 통합 리뷰어 · 옮김 대조의 모델 | 없음(세션 모델) | 받는다 |
@@ -314,6 +315,8 @@ state_branch: 켬
 | `walk_table` | 걸음 보기(`walk_table.py next`)가 읽는 레포의 걸음표 파일(레포 상대경로 — 관문은 이 표로 바뀌지 않는다) | 없음(플러그인 기본 표 `references/walk-table.md`) | 오류 |
 | `human_gate` | 사람 줄 관문(`켬` · `끔` 둘뿐, 환경 변수로는 끄지 않는다) | `켬` | 오류 |
 | `state_branch` | 지휘자 상태 브랜치(현황 · 편지)를 쓸지 — `켬` · `끔` | 켬 | 오류 |
+
+옛 키 `interview_dir` 가 있으면 그 값을 읽고 한 줄로 알린다 — 그 폴더는 옛 기록을 읽는 옛 의도 폴더로도 쓴다.
 
 - **기본 브랜치에 머지된 판만 읽는다**(`origin/HEAD` 가 가리키는 커밋의 `.devbrew.md`). 작업 브랜치에서 고친 값은 그 PR 이 머지된 뒤에 적용된다 — 작업 브랜치가 자기 검사 범위를 바꾸지 못하고, 어느 worktree 에서 불러도 같은 값이 나온다. 작업 트리에만 있으면 「아직 기본 브랜치에 없다 — 기본값을 쓴다」를 알린다. 기본 브랜치를 모르면 기본값을 쓰고 출처를 「기본값(기본 브랜치 없음 — 설정 파일 못 읽음)」으로 낸다.
 - **값이 정해지는 순서**: 로드맵 머리말(그 로드맵에만) > `.devbrew.md` > 기본값. 출처는 `로드맵` · `레포 설정@<커밋 8자>` · `기본값` 으로 보인다. 기계 상태 파일은 설정 층이 아니다 — 검사받는 하위 agent 도 쓸 수 있다. 스위트 대조(`merge_check.py run`)가 테스트 명령을 몰라 멈추면(종료 코드 6) 지휘자가 사용자에게 물은 답을 그 호출의 인자(`--test-command` · `--test-failure-pattern`)로만 넘긴다 — 출처 「이 호출의 인자(사용자 답)」, 레포 설정 파일에 올리자고 알린다.
@@ -438,7 +441,7 @@ state_branch: 켬
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다. 문서 리뷰 엔진은
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
 - **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 context-build 는 brief 를 완료하고 선택지 셋의 끝 질문(확정하고 끝낸다 · 확정 목록 수정 · brief만 종료)으로 확정 · 커밋까지 간 뒤 다음 단계로 넘기지 않고 끝낸다 (단독 완결). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 컨텍스트 쌓기도 돌지 않는다.
-- **quality-gates** (같은 마켓플레이스, optional) — 지휘자가 자리 넷(spec 승인 앞 · 머지 앞 · 로드맵 끝 · 이름으로 청한 리뷰)에서 담당자를 시켜 `/quality-gates:quality-pipeline range <시작>..<끝> --origin <원문>` 을 부르고, 돌아온 의도 점검 질문을 사용자에게 옮겨 묻는다. 설치돼 있지 않으면 그 자리마다 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다. qg 의 문서 경로 설정이 `docs/` 를 거르는 레포에서는 spec 승인 앞과 로드맵 끝의 리뷰가 「리뷰할 diff 없음」 건너뜀으로 끝난다.
+- **quality-gates** (같은 마켓플레이스, optional) — 지휘자가 자리 넷(spec 승인 앞 · 머지 앞 · 로드맵 끝 · 이름으로 청한 리뷰)에서 담당자를 시켜 `/quality-gates:quality-pipeline range <시작>..<끝> --origin <원문> --answered <절대경로>` 를 부른다. `--answered` 파일은 그 로드맵의 지난 리뷰 기록에 적힌 답(「의도다」 · 「잘못 골랐다」)을 대상을 가리지 않고 모아 `scripts/qg_answered.py` 가 만들고, qg 는 근거가 그대로인 질문을 다시 묻지 않고 넘어간다(좁은 재리뷰도 같다). 옛 qg 가 `--answered` 를 모르면 담당자가 그것만 빼고 한 번 다시 부르고 「답 이어지기 없이 돌았다」 를 알린다. 지휘자는 qg 가 돌려주는 꼴 3판만 읽고(2판이 오면 읽지 못했다고 알린다), 리뷰 결과와 의도 점검 질문을 맥락 머리 네 줄로 시작하는 글로 보인 뒤 질문마다 왜 묻는지를, 다시 묻는 질문에는 전에 한 답도 함께 보여 묻는다. 설치돼 있지 않으면 그 자리마다 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다. qg 의 문서 경로 설정이 `docs/` 를 거르는 레포에서는 spec 승인 앞과 로드맵 끝의 리뷰가 「리뷰할 diff 없음」 건너뜀으로 끝난다.
 - **project-init** (같은 마켓플레이스, optional) — 지휘자 상태 브랜치를 만들기 전에 그 플러그인이 두는 브랜치 규칙 문서(`docs/git-workflow/branch-strategy.md`)의 이름 정규식을 읽는다. 문서가 없으면 그대로 만든다.
 - **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `origin` 에서 도출한 `<호스트>/<owner>/<repo>` 를 명시한다(`-R`, `-R` 을 받지 않는 레포 조회는 인자로). 스크립트와 문서의 bash 펜스가 gh 를 찾고 부르는 자리는 `scripts/gh_repo.py` 하나다(지휘 절차서가 글로 적은 PR 열기는 gh 를 직접 부르고, 레포는 그 모듈의 `slug` 로 준다). 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 나눈 일은 로드맵 잡기가 끝맺음에서 커밋 뒤 브랜치를 push 하고 gh 로 PR 을 열고, 사용자가 고르면 PR 주소의 레포가 `origin` 인지 대조하고 CI 검사가 끝난 뒤 PR 을 열 때 push 한 끝 커밋에 묶어 머지한 다음, PR 이 실제로 머지됐는지 확인하고 `origin` 을 받는다 — 지휘자가 로드맵을 기본 브랜치에서 읽기 때문이다. gh 가 없거나 실패하면 그 걸음만 건너뛰고 직접 머지하라고 알린다.
 - **herdr-core** (외부, 권장) — 있으면 지휘자가 계획 · 구현 담당자를 `hc` 로 따로 띄운 세션으로 돌린다. 없으면 계획 · 구현 담당자는 하위 agent 로 돈다 — 설치를 요구하지 않고 한 줄로 알린다. 명령 문법은 판마다 바뀌므로 매번 `hc --skill` 에서 읽는다. 판은 재지 않는다(`dependencies.md` 의 `## 권장 도구`).

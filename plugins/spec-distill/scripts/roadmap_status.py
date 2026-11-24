@@ -47,6 +47,7 @@ from conductor_state import EPIC_PR, RECORDED_MISSING, recorded_cache_row, recor
 from conductor_state import TRUST  # noqa: E402 — 확인한 끝 읽기만(규칙을 읽을 끝)
 from gh_repo import GhStop, origin_slug  # noqa: E402 — origin 소유자 읽기만
 from state_path import state_root_for_common  # noqa: E402
+import legacy_names  # noqa: E402
 import team_layout  # noqa: E402
 import team_status  # noqa: E402
 
@@ -278,6 +279,12 @@ class Git:
                                      env=self.pathspec_env())
         return rc, out
 
+    def diff_names(self, old: str, new: str, paths: list):
+        """(rc, 경로들) — `old` 와 `new` 사이에서 paths 가 다른 파일(읽기만). paths 는 레포 뿌리 기준 · 글자 그대로다."""
+        rc, out, _err = self.run_err("diff", "--no-renames", "--name-only", "-z", old, new, "--", *_top_literal(paths),
+                                     env=self.pathspec_env())
+        return rc, [p for p in out.split("\0") if p]
+
     def grep_files(self, tree: str, fixed: str, pathspec: str):
         rc, out, err = self.run_err("grep", "-l", "-z", "-F", "-e", fixed, tree, "--", pathspec)
         if rc == 1 and not err.strip():  # 일치 없음 — git grep 은 이때 rc 1 과 빈 표준 오류다
@@ -389,7 +396,7 @@ def find_specs(git: Git, tree: str, block: dict, bundle_path, specs_dir: str):
     found = []
     for path in git.grep_files(tree, bundle_path, specs_dir):
         text = git.blob(tree, path)
-        if text and unquote(frontmatter(text).get("source_interview", "")) == bundle_path:
+        if text and unquote(legacy_names.source_of(frontmatter(text))) == bundle_path:
             found.append(path)
     return sorted(found)
 
@@ -751,7 +758,7 @@ class _GitTreeRepo:
             if text is None:   # 이 묶음을 가리키는 글이 있는데 못 읽었다 — 그 묶음이 무엇을 기각했는지 모른다
                 unread.append(path)
                 continue
-            if text and unquote(frontmatter(text).get("source_interview", "")) == source:
+            if text and unquote(legacy_names.source_of(frontmatter(text))) == source:
                 out.append((path, text))
         self._memo[key] = sorted(out)
         self._unread[key] = unread   # 그 묶음의 grep 이 찾은 것만 — 다른 묶음의 판정에 번지지 않는다

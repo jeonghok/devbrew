@@ -2,7 +2,7 @@
 
 이 stage 전체가 **확산**이고(라운드 질문·landscape sweep·steelman·blind-spot premortem), Step A 는 그 결과를 **압축**해 payload 로 내보낸다 — 압축 규약 정본은 `${CLAUDE_PLUGIN_ROOT}/references/compression.md` 다. 남기는 불변량은 의도·steering·방향·goal 넷, 나머지 원자료(질문 라운드 전문·landscape 원문·steelman 중간 추론)는 audit 에 남는다.
 
-오늘부터 `interview-brief` 도 이 규약을 **게이트로 집행**한다 — payload 외부 URL 금지(N1a) · §6 은 사용자 원문 S1~Sn 전부(N1b) · landscape 원자료는 audit 결속(N2). 집행 지점만 seed 와 다르다: seed 는 `check_seed.py`, brief 는 아래 Step A ⑦ 의 `check_brief.py`.
+오늘부터 `context-brief` 도 이 규약을 **게이트로 집행**한다 — payload 외부 URL 금지(N1a) · §6 은 사용자 원문 S1~Sn 전부(N1b) · landscape 원자료는 audit 결속(N2). 집행 지점만 seed 와 다르다: seed 는 `check_seed.py`, brief 는 아래 Step A ⑦ 의 `check_brief.py`.
 
 종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 이고 마지막 포화 판정이 «포화» 이거나 사용자가 종료를 고른 것이다(고정 라운드 수 아님, G1 · 이중 종료).
 다음을 모두 만족하면 brief를 작성합니다:
@@ -52,7 +52,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    권하는 쪽의 이유는 그 선택지의 얻음에 담는다 — 권고 줄에 대가를 따로 붙이지 않는다.
    권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다 — 위 권고 한 줄이 가리키는 쪽이다. 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
    「spec 하나로」면 Step A 로 간다.
-3. 「나눈다」 면 Step A 가 §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓰고(로드맵 경로는 레포 설정의 로드맵 폴더(`roadmaps_dir`) 아래, 결과물 파일 이름에서 끝의 `-interview.md` 를 뗀 이름의 폴더의 `roadmap.md` 를 레포 루트 기준 상대경로로 — 지금 규칙), 표는 다음 단계(로드맵 잡기)가 짠다. 그다음 Step A 로 간다.
+3. 「나눈다」 면 Step A 가 §7 첫 줄에 `분해됨 — <로드맵 경로>` 를 쓰고(로드맵 경로는 레포 설정의 로드맵 폴더(`roadmaps_dir`) 아래, 결과물 파일 이름에서 끝의 `-context.md`(옛 꼴 줄기면 옛 `-interview.md`)를 뗀 이름의 폴더의 `roadmap.md` 를 레포 루트 기준 상대경로로 — 지금 규칙), 표는 다음 단계(로드맵 잡기)가 짠다. 그다음 Step A 로 간다.
 
 ### Step A — brief 작성 (terminal 산출물, 2파일)
 
@@ -61,9 +61,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    audit **5-section** 구조를 확보합니다.
 2. 경로 (둘 다 워크트리 안 → `Write` tool 사용): payload · audit 경로는 상태 파일 이름에서 `.state.md` 를 뗀
    `<줄기>` 에 `.md` · `.audit.md` 를 붙인 것이다(`state-file.md`). 날짜 · 주제로 다시 계산하지 않는다.
-   - payload: `<줄기>.md` (의도 폴더(`interview_dir`) 아래 `<YYYY-MM-DD>-<kebab-topic>-interview.md`)
+   - payload: `<줄기>.md` — 상태 파일 줄기 그대로(새로 시작한 일은 `<YYYY-MM-DD>-<kebab-topic>-context.md`, 옛 꼴 상태 파일로 이어 온 일은 그 파일의 줄기)
    - audit:   `<줄기>.audit.md`
-   - payload frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`(기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 B-3 이 그 skill 의 완전명으로 바꾼다),
+   - payload frontmatter: `type: context-brief`(어느 줄기든), `next_phase: superpowers:brainstorming`(기본 다음 단계 — 끝 게이트의 둘째 질문에서 다른 단계를 고르면 B-3 이 그 skill 의 완전명으로 바꾼다),
      `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
      경로 구분자가 들어가면 게이트가 거부합니다), `user_sourced_items[]`.
 3. **`user_sourced_items` 직렬화**: state의 `user_statements`를 훑어 제약으로 승격할 항목을
@@ -89,7 +89,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    `check_verbatim_coverage.py`의 앵커 중복·포함 검사가 red를 냅니다).
    비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다 — 번호는
    `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
-   **seed 로 시작한 컨텍스트 쌓기의 `S1` 은 seed 가 아니라 원자료다.** 「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다. payload §6 맨 앞에 앵커 줄 `- **S1** 🗣 최초 요청:` 한 줄만 두고(본문 없이) payload · audit · 상태 파일을 쓴 뒤 아래 순서로 간다. audit §6 에는 `S1` 을 두지 않는다.
+   **seed 로 시작한 컨텍스트 쌓기의 `S1` 은 seed 가 아니라 원자료다.** 「풀린 입력」이 `intent-seed`(옛 `interview-seed`) 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다. payload §6 맨 앞에 앵커 줄 `- **S1** 🗣 최초 요청:` 한 줄만 두고(본문 없이) payload · audit · 상태 파일을 쓴 뒤 아래 순서로 간다. audit §6 에는 `S1` 을 두지 않는다.
    ```bash
    SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
    PAYLOAD_P="<Step A 2 의 payload 경로>"
@@ -227,13 +227,13 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 게이트(Step A 7)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를 받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 문서 리뷰 엔진이 층 1(방향성)·층 2(충실도)를 보며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
 
-핸드오프 변수 2개를 **절대경로**로 세팅합니다(엔진은 상대 문서 경로를 거부하고, codex 산출물 경로는 그 skill 이 도출합니다):
+핸드오프 변수 2개를 **절대경로**로 세팅합니다(엔진은 상대 문서 경로를 거부하고, codex 산출물 경로는 그 skill 이 도출합니다). 펜스의 `STATE_F` 자리표는 이 컨텍스트 쌓기의 상태 파일 절대경로로 바꾼다 — payload 는 그 줄기에서 짓고 의도 폴더와 파일 이름으로 다시 짓지 않는다:
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
-[ -n "$IDIR" ] || { echo "[spec-distill] 의도 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
-PAYLOAD="$(pwd)/${IDIR}<file>"   # Step A가 방금 쓰고 검증한 경로
+STATE_F="<상태 파일 절대경로>"
+case "$STATE_F" in /*.state.md) ;; *) echo "[spec-distill] 상태 파일 경로가 비었거나 자리표 그대로거나 절대경로가 아니다 — 이 컨텍스트 쌓기의 상태 파일 절대경로로 바꿔 다시 돌린다" >&2; exit 1 ;; esac
+PAYLOAD="${STATE_F%.state.md}.md"   # Step A가 방금 쓰고 검증한 경로 — 상태 파일 줄기 그대로
 AUDIT="${PAYLOAD%.md}.audit.md"                      # payload 의 audit sidecar (§6 S2+ 원문)
 ```
 
@@ -329,7 +329,7 @@ AskUserQuestion({ questions: [{
 카운터는 프로즈 self-tracking이 아니라 상태 파일에 씁니다:
 
 ```bash
-# confirm_repost_count 는 상태 파일(<줄기>-interview.state.md)의 frontmatter 에 Edit 로 쓴다(③ 마다 +1, 「계속 고친다(2번 더)」는 0 으로 되돌림)
+# confirm_repost_count 는 상태 파일(<줄기>.state.md)의 frontmatter 에 Edit 로 쓴다(③ 마다 +1, 「계속 고친다(2번 더)」는 0 으로 되돌림)
 ```
 
 #### B-A — 참고(advisory) 목록 — 한 번 보이고 §3 · §5 에 박제
@@ -614,7 +614,7 @@ AskUserQuestion({
 게이트 재실행이 통과하지 않으면 커밋하지 않는다. 나눈 일의 위험 번호 검사(Step A 8)가 `brief-risk: OK` 를 내지 않아도 커밋하지 않는다 — 그 자리에서 고친 뒤 게이트와 검사를 다시 돈다. 펜스의 `BRIEF` 자리표를 Step A.5 의 PAYLOAD 절대경로로 바꿔 돌리고,
 나온 `[spec-distill]` 줄을 그대로 보인다. 펜스는 brief 가 사는 레포(`top`)를 기준으로 돌고 해결자 `repo_defaults.py` 를 모두 `--root "$top"` 으로 부른다.
 넣는 것은 brief · audit · 상태 파일 셋(과 아래 framing 기록 · seed)뿐이다 — 나눈 일이어도 로드맵 폴더는 넣지 않는다(로드맵은 로드맵 잡기가 만들어 커밋한다).
-brief 가 레포 설정의 의도 폴더(`interview_dir`) 바로 아래가 아니거나, 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있으면 커밋하지 않는다.
+brief 가 레포 설정의 의도 폴더(`intent_dir` — 옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니거나, 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있거나, 같은 커밋에 넣을 framing 기록 · seed 가 같은 규칙의 의도 폴더 바로 아래가 아니거나 작업 트리 밖이거나 링크를 거치면 커밋하지 않는다.
 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치가 없거나 원격과 다르면 커밋하지 않고, 원격과 대조하지 못하면 그 알림을 보이고 커밋한다. 어느 갈래도 진행은 막지 않는다.
 원자료를 찾은 컨텍스트 쌓기에서 framing 기록 파일이나 seed 파일에 가렸는지와 상관없이 커밋되지 않은 변경(커밋된 적 없는 파일 포함)이 있으면 같은 커밋에 넣고 그 사실을 한 줄로 알린다. 펜스는 이 둘을 첫 거절보다 앞에서 알아 두므로, 커밋하지 않는 어느 갈래(git 저장소가 아님은 뺀다)의 손으로 커밋할 목록에도 알 수 있는 만큼 그 둘이 든다. seed 경로는 상태 파일의 `seed:` 값이다.
 
@@ -645,11 +645,11 @@ esac
 [ -z "$RAW_S" ] || [ -n "$(git -C "$top" status --porcelain -- "$RAW_S" 2>/dev/null)" ] || RAW_S=""
 FILES="${FILES}${RAW_A:+ · ${RAW_A}}${RAW_S:+ · ${RAW_S}}"
 echo "[spec-distill] 읽은 트리: 이 작업공간"
-python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$BRIEF" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — brief 가 정해진 의도 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$BRIEF" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — brief 가 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 python3 "$SD/scripts/state_path.py" path-inside --root "$top" "$BRIEF" "$AUDIT_F" "$STATE_F" || { echo "[spec-distill] 커밋하지 않았다 — 세 파일 중 작업 트리 밖이거나 링크를 거치는 경로가 있다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 if [ -n "${RAW_A}${RAW_S}" ]; then
-  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 의도 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
-  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 의도 폴더 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+  [ -z "$RAW_A" ] || python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$RAW_A" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+  [ -z "$RAW_S" ] || python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$RAW_S" --root "$top" || { echo "[spec-distill] 커밋하지 않았다 — seed 파일이 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
   python3 "$SD/scripts/state_path.py" path-inside --root "$top" ${RAW_A:+"$RAW_A"} ${RAW_S:+"$RAW_S"} || { echo "[spec-distill] 커밋하지 않았다 — framing 기록 파일이나 seed 파일이 작업 트리 밖이거나 링크를 거친다(위 사유). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 fi
 d_rc=0

@@ -13,7 +13,7 @@ trap 'rm -rf "$T"' EXIT
 T="$(cd "$T" && pwd -P)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-DEF_IV="docs/superpowers/interview/"
+DEF_IV="docs/superpowers/intent/"
 NO_REF_LABEL="기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
 
 g() {  # g <레포> <git 인자…>
@@ -39,35 +39,35 @@ run() {  # run <cwd> <인자…> → OUT · ERR · RC
 # ── test_default_ref_file_wins_over_worktree ─────────────────────────────────
 mkrepo a || { no "픽스처 a"; finish; exit 1; }
 A="$T/a/work"
-on_trunk "$A" .devbrew.md $'---\ninterview_dir: notes/iv/\n---\n'
+on_trunk "$A" .devbrew.md $'---\nintent_dir: notes/iv/\n---\n'
 SHA8="$(g "$A" rev-parse --short=8 trunk)"
 g "$A" checkout -q -b work
-printf -- '---\ninterview_dir: other/\n---\n' > "$A/.devbrew.md"
-run "$A" get interview_dir
+printf -- '---\nintent_dir: other/\n---\n' > "$A/.devbrew.md"
+run "$A" get intent_dir
 assert_eq "$RC:$OUT" "0:notes/iv/" "기본 브랜치의 설정 파일이 작업 트리를 이긴다"
 assert_contains "$ERR" "레포 설정@$SHA8" "출처가 레포 설정@<커밋 8자> 다"
 mkdir -p "$A/sub/dir"
-run "$A/sub/dir" get interview_dir
+run "$A/sub/dir" get intent_dir
 assert_eq "$RC:$OUT" "0:notes/iv/" "하위 폴더에서 불러도 같은 값이다"
 
 # ── 양성 대조 · test_root_flag_reads_other_repo ──────────────────────────────
 mkrepo b || { no "픽스처 b"; finish; exit 1; }
 B="$T/b/work"
-on_trunk "$B" .devbrew.md $'---\ninterview_dir: plan/iv/\n---\n'
-run "$B" get interview_dir
+on_trunk "$B" .devbrew.md $'---\nintent_dir: plan/iv/\n---\n'
+run "$B" get intent_dir
 assert_eq "$RC:$OUT" "0:plan/iv/" "양성 대조: 설정이 다른 레포 b 의 값"
 [ "$OUT" != "notes/iv/" ] && ok "양성 대조: 두 레포의 결과가 다르다" || no "양성 대조: 두 레포의 결과가 같다"
-run "$A" get interview_dir --root "$B"
+run "$A" get intent_dir --root "$B"
 assert_eq "$RC:$OUT" "0:plan/iv/" "--root 는 cwd 가 아니라 그 레포의 값을 읽는다"
 
 # ── test_worktree_only_file_notice ───────────────────────────────────────────
 mkrepo c || { no "픽스처 c"; finish; exit 1; }
 C="$T/c/work"
-run "$C" get interview_dir
+run "$C" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "설정 파일이 없으면 기본값"
 assert_not_contains "$ERR" "아직 기본 브랜치에 없다" "설정 파일이 어디에도 없으면 알림이 없다"
-printf -- '---\ninterview_dir: wt/\n---\n' > "$C/.devbrew.md"
-run "$C" get interview_dir
+printf -- '---\nintent_dir: wt/\n---\n' > "$C/.devbrew.md"
+run "$C" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "작업 트리에만 있는 설정 파일은 쓰지 않는다"
 assert_contains "$ERR" "아직 기본 브랜치에 없다" "작업 트리에만 있으면 알린다"
 
@@ -101,26 +101,26 @@ assert_eq "$RC:$OUT" "2:" "모르는 키를 물으면 rc 2(사용법)"
 mkrepo d || { no "픽스처 d"; finish; exit 1; }
 D="$T/d/work"
 g "$D" remote set-head origin -d
-run "$D" get interview_dir
+run "$D" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "기본 브랜치가 없어도 멈추지 않고 기본값"
 assert_contains "$ERR" "$NO_REF_LABEL" "출처가 기본값(기본 브랜치 없음 — 설정 파일 못 읽음)"
 assert_not_contains "$ERR" "[주의]" "작업 트리에 설정 파일이 없으면 크게 알리지 않는다"
-printf -- '---\ninterview_dir: wt/\n---\n' > "$D/.devbrew.md"
-run "$D" get interview_dir
+printf -- '---\nintent_dir: wt/\n---\n' > "$D/.devbrew.md"
+run "$D" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "기본 브랜치가 없으면 작업 트리 설정도 쓰지 않는다"
 assert_contains "$ERR" "[주의]" "작업 트리에 설정 파일이 있으면 크게 알린다"
 N="$T/n/work"
 mkdir -p "$N" && git init -q -b trunk "$N" && g "$N" commit -q --allow-empty -m init || no "픽스처 n(원격 없음)"
-run "$N" get interview_dir
+run "$N" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "원격 origin 이 아예 없어도 get 은 기본값(rc 0)"
 assert_contains "$ERR" "$NO_REF_LABEL" "원격이 없을 때도 출처가 기본 브랜치 없음 기본값"
 
 # ── 내부 오류는 rc 3(값 없음 rc 1 로 읽히지 않는다) ───────────────────────────
 mkdir "$T/gone-root" && rmdir "$T/gone-root"
-run "$A" get interview_dir --root "$T/gone-root"
+run "$A" get intent_dir --root "$T/gone-root"
 assert_eq "$RC:$OUT" "3:" "지워진 --root 는 rc 3 · stdout 빔"
 mkdir "$T/gone-cwd"
-OUT="$(cd "$T/gone-cwd" && rmdir "$T/gone-cwd" && python3 "$RD" get interview_dir 2>"$T/err")"; RC=$?
+OUT="$(cd "$T/gone-cwd" && rmdir "$T/gone-cwd" && python3 "$RD" get intent_dir 2>"$T/err")"; RC=$?
 ERR="$(cat "$T/err")"
 assert_eq "$RC:$OUT" "3:" "지워진 cwd 에서 부르면 rc 3 · stdout 빔"
 assert_contains "$ERR" "내부 오류" "지워진 cwd 는 내부 오류로 알린다"
@@ -129,17 +129,17 @@ assert_not_contains "$ERR" "Traceback" "내부 오류가 Traceback 으로 새지
 # ── test_symlink_and_lfs_refused ─────────────────────────────────────────────
 mkrepo e || { no "픽스처 e"; finish; exit 1; }
 E="$T/e/work"
-printf -- '---\ninterview_dir: x/\n---\n' > "$E/real.md"
+printf -- '---\nintent_dir: x/\n---\n' > "$E/real.md"
 ln -s real.md "$E/.devbrew.md"
 g "$E" add -- real.md .devbrew.md && g "$E" commit -qm link && g "$E" push -q origin trunk
 assert_eq "$(g "$E" ls-tree trunk -- .devbrew.md | cut -c1-6)" "120000" "픽스처: 기본 브랜치의 설정 파일이 링크다"
-run "$E" get interview_dir
+run "$E" get intent_dir
 assert_eq "$RC:$OUT" "3:" "링크 설정 파일은 rc 3 · stdout 빔"
 assert_contains "$ERR" "일반 파일이 아니다" "링크 설정 파일의 사유"
 mkrepo f || { no "픽스처 f"; finish; exit 1; }
 F="$T/f/work"
 on_trunk "$F" .devbrew.md $'version https://git-lfs.github.com/spec/v1\noid sha256:0000000000000000000000000000000000000000000000000000000000000000\nsize 40\n'
-run "$F" get interview_dir
+run "$F" get intent_dir
 assert_eq "$RC:$OUT" "3:" "LFS 포인터 설정 파일은 rc 3 · stdout 빔"
 assert_contains "$ERR" "LFS" "LFS 포인터의 사유"
 
@@ -147,11 +147,11 @@ assert_contains "$ERR" "LFS" "LFS 포인터의 사유"
 broken() {  # broken <이름> <내용> → BRC · BERR. 픽스처가 실패하면 크게 실패하고 앞 사례의 값을 남기지 않는다
   BRC="픽스처 실패"; BERR="픽스처 실패"
   mkrepo "$1" && on_trunk "$T/$1/work" .devbrew.md "$2" || { no "픽스처 $1 를 만들지 못했다"; return 1; }
-  run "$T/$1/work" get interview_dir
+  run "$T/$1/work" get intent_dir
   BRC="$RC:$OUT"; BERR="$ERR"
 }
-broken dup $'---\ninterview_dir: a/\ninterview_dir: b/\n---\n'; dup_rc="$BRC"; dup_err="$BERR"
-broken bom $'\xef\xbb\xbf---\ninterview_dir: a/\n---\n'; bom_rc="$BRC"; bom_err="$BERR"
+broken dup $'---\nintent_dir: a/\nintent_dir: b/\n---\n'; dup_rc="$BRC"; dup_err="$BERR"
+broken bom $'\xef\xbb\xbf---\nintent_dir: a/\n---\n'; bom_rc="$BRC"; bom_err="$BERR"
 broken typo $'---\ninterveiw_dir: a/\n---\n'; typo_rc="$BRC"; typo_err="$BERR"
 assert_eq "$dup_rc" "3:" "같은 키 둘은 rc 3 · stdout 빔"
 assert_eq "$bom_rc" "3:" "BOM 은 rc 3 · stdout 빔"
@@ -165,7 +165,7 @@ for e in "$dup_err" "$bom_err" "$typo_err"; do
   assert_not_grep "$e" ' repo |repo:' "사유에 층 내부 이름(repo)이 보이지 않는다"
   assert_contains "$e" "레포 설정 파일(.devbrew.md, 기본 브랜치 판)" "사유가 자리를 쉬운 이름으로 짚는다"
 done
-broken badval $'---\ninterview_dir: ../up/\n---\n'
+broken badval $'---\nintent_dir: ../up/\n---\n'
 assert_eq "$BRC" "3:" "잘못된 폴더 값(층 합치기의 오류)은 rc 3 · stdout 빔"
 
 # ── test_check_path ──────────────────────────────────────────────────────────
@@ -192,13 +192,13 @@ run "$T" check-path roadmaps_dir docs/superpowers/roadmaps/x --root "$H"
 assert_eq "$RC" "0" "check-path: --root 기준 상대 경로"
 L="$T/h-link"
 ln -s "$H" "$L" || no "픽스처: 레포를 가리키는 링크를 만들지 못했다"
-run "$T" check-path interview_dir "$L/${DEF_IV}x.md" --root "$L"
+run "$T" check-path intent_dir "$L/${DEF_IV}x.md" --root "$L"
 assert_eq "$RC" "0" "check-path: 절대 경로가 --root 의 글자 그대로(링크)로 시작하면 그 접두를 실제 경로로 바꿔 판정"
-run "$T" check-path interview_dir "$L/${DEF_IV}x.md" --root "$H"
+run "$T" check-path intent_dir "$L/${DEF_IV}x.md" --root "$H"
 assert_eq "$RC" "3" "check-path(대조): --root 가 실제 경로면 링크로 시작하는 같은 경로는 레포 밖(rc 3)"
 assert_contains "$ERR" "레포 밖 경로" "check-path(대조): 레포 밖 사유"
-run "$H" check-path interview_dir docs/superpowers/interview/x-interview.md
-assert_eq "$RC" "0" "check-path: interview_dir 도 같은 명령"
+run "$H" check-path intent_dir docs/superpowers/intent/x-interview.md
+assert_eq "$RC" "0" "check-path: intent_dir 도 같은 명령(새 폴더는 어떤 이름이든)"
 run "$H" check-path test_command x
 assert_eq "$RC" "2" "check-path: 폴더 키가 아니면 rc 2(사용법)"
 mkdir -p "$H/docs/superpowers/Roadmaps"
@@ -210,6 +210,33 @@ if [ -e "$T/caseprobe" ]; then
 else
   note "  - 건너뜀: 대소문자를 가리는 파일시스템이라 디스크 대소문자 사례를 돌지 않는다"
 fi
+
+# ── 옛 키 interview_dir — 레포 층에서 읽고 알리며, 그 폴더는 옛 의도 폴더로도 받는다 ──
+mkrepo ok || { no "픽스처 ok"; finish; exit 1; }
+OK="$T/ok/work"
+on_trunk "$OK" .devbrew.md $'---\ninterview_dir: notes/iv/\n---\n'
+run "$OK" get intent_dir
+assert_eq "$RC:$OUT" "0:notes/iv/" "옛 키만 있으면 그 값이 새 폴더다"
+assert_contains "$ERR" "그대로 읽는다" "옛 키만 있으면 한 줄로 알린다"
+assert_contains "$ERR" "(옛 키 interview_dir)" "출처가 옛 키를 짚는다"
+run "$OK" check-path intent_dir notes/iv/x-context.md
+assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 새 꼴 이름도 받는다"
+run "$OK" check-path intent_dir notes/iv/x-interview.md
+assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 옛 꼴 이름도 받는다"
+run "$OK" get interview_dir
+assert_eq "$RC" "2" "get 은 옛 키 인자를 받지 않는다"
+mkrepo ob || { no "픽스처 ob"; finish; exit 1; }
+OB="$T/ob/work"
+on_trunk "$OB" .devbrew.md $'---\nintent_dir: new/\ninterview_dir: old/\n---\n'
+run "$OB" get intent_dir
+assert_eq "$RC:$OUT" "0:new/" "두 키가 있으면 새 키가 이긴다"
+assert_contains "$ERR" "함께 있다" "두 키가 있으면 한 줄로 알린다"
+run "$OB" check-path intent_dir old/2026-01-01-x-interview.state.md
+assert_eq "$RC" "0" "옛 폴더의 옛 꼴 이름은 받는다"
+assert_not_contains "$ERR" "옛 꼴 이름" "받을 때는 거절 사유 줄이 없다"
+run "$OB" check-path intent_dir old/x-context.md
+assert_eq "$RC" "3" "옛 폴더의 새 꼴 이름은 거절한다"
+assert_contains "$ERR" "옛 의도 폴더(old/)" "거절 사유가 옛 폴더를 댄다"
 
 # ── test_roadmap_check (AC6) ─────────────────────────────────────────────────
 mkrepo rb || { no "픽스처 rb"; finish; exit 1; }
@@ -245,7 +272,7 @@ mkrepo rn || { no "픽스처 rn"; finish; exit 1; }
 RN="$T/rn/work"
 mkdir -p "$RN/docs/superpowers/roadmaps/x"
 printf -- '---\ntype: roadmap\n---\n# x\n' > "$RN/docs/superpowers/roadmaps/x/roadmap.md"
-printf -- '---\ninterview_dir: wt/\n---\n' > "$RN/.devbrew.md"
+printf -- '---\nintent_dir: wt/\n---\n' > "$RN/.devbrew.md"
 run "$RN" get roadmaps_dir
 assert_contains "$ERR" "아직 기본 브랜치에 없다" "양성 짝: 작업 트리에만 있는 설정 파일의 해결자 알림이 get 에는 나온다"
 run "$RN" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
@@ -276,16 +303,16 @@ assert_contains "$ERR" "typo_key" "roadmap-check: 깨진 설정의 사유를 알
 # ── 레포 밖 — get 은 기본 브랜치를 모를 때와 같은 기본값, 판정 명령 · --roadmap 은 rc 3 ─────────
 NR="$T/norepo/sub"; mkdir -p "$NR"
 [ -z "$(git -C "$NR" rev-parse --show-toplevel 2>/dev/null)" ] && ok "전제: 픽스처가 레포 밖이다" || no "전제: 픽스처가 레포 안이다 — 아래 칸이 공허하다"
-run "$NR" get interview_dir
+run "$NR" get intent_dir
 assert_eq "$RC:$OUT" "0:$DEF_IV" "레포 밖 get: 기본값 · rc 0"
-assert_contains "$ERR" "값의 출처: $NO_REF_LABEL(interview_dir)" "레포 밖 get: 출처는 「기본 브랜치 없음」 표기"
+assert_contains "$ERR" "값의 출처: $NO_REF_LABEL(intent_dir)" "레포 밖 get: 출처는 「기본 브랜치 없음」 표기"
 assert_contains "$ERR" "git 레포 밖이라" "레포 밖 get: 레포가 아니라는 알림"
 assert_eq "$(printf '%s\n' "$ERR" | grep -c .)" "2" "레포 밖 get: stderr 는 알림 한 줄 + 출처 한 줄"
 run "$NR" get test_command
 assert_eq "$RC:$OUT" "1:" "레포 밖 get: 기본값이 없는 키는 rc 1"
 run "$NR" get test_command --roadmap x/roadmap.md
 assert_eq "$RC" "3" "레포 밖 get --roadmap: 로드맵을 읽을 수 없어 rc 3"
-run "$NR" check-path interview_dir "$DEF_IV"x-interview.md
+run "$NR" check-path intent_dir "$DEF_IV"x-interview.md
 assert_eq "$RC" "3" "레포 밖 check-path: rc 3"
 run "$NR" roadmap-check docs/superpowers/roadmaps/x/roadmap.md
 assert_eq "$RC" "3" "레포 밖 roadmap-check: rc 3"
@@ -293,12 +320,12 @@ run "$NR" default-branch
 assert_eq "$RC" "3" "레포 밖 default-branch: rc 3"
 # 음의 짝 — 조상에 `.git` 이 있는데 git 이 레포를 못 읽으면 레포 밖이 아니라 깨짐(rc 3)
 BG="$T/brokengit"; mkdir -p "$BG/.git" "$BG/sub"
-run "$BG/sub" get interview_dir
+run "$BG/sub" get intent_dir
 assert_eq "$RC" "3" "못 읽는 .git 아래 get: 기본값으로 조용히 넘어가지 않고 rc 3"
 
 run "$H" check-path specs_dir docs/superpowers/specs/x
 assert_eq "$RC" "2" "check-path: specs_dir 는 키가 아니다(사용법 오류 rc 2)"
-run "$H" check-path interview_dir docs/superpowers/interview/x
-assert_eq "$RC" "0" "check-path(양의 짝): interview_dir 는 그대로 통과"
+run "$H" check-path intent_dir docs/superpowers/intent/x
+assert_eq "$RC" "0" "check-path(양의 짝): intent_dir 는 그대로 통과"
 
 finish

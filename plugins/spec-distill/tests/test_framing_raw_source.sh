@@ -243,4 +243,9 @@ PYEOF
 expect_fail_sk degrade_row_last "$T/sk24.md"
 # 겹침 물음 문단(AC6)과 구분 — 이 자리의 설명이 번들 자리 설명 문단을 건드리지 않는다(양성 대조: 실제 파일의 overlap_unchanged 는 통과)
 
+# 새로 쓰는 종류 글자(AC20) — 두 seed 템플릿의 머리 type 은 새 글자다(템플릿 파일 이름은 그대로)
+assert_eq "$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f&&/^type:/{print}' "$AT")" "type: intent-seed-audit" "seed audit 템플릿 머리: type: intent-seed-audit"
+assert_eq "$(grep -c '^type: intent-seed$' "$ST")" "1" "seed 템플릿 예시의 머리: type: intent-seed"
+assert_file_absent "$ST" '^type: interview-seed$' "seed 템플릿에 옛 종류 글자 머리가 없다(양성 짝: 위 단언)"
+
 finish

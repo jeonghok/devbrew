@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import subprocess
 from typing import List, Optional
 
@@ -116,13 +117,17 @@ def _frontmatter(text: str):
 
 
 def _observation(body_lines: list) -> str:
+    return _section(body_lines, _HEAD_OBS)
+
+
+def _section(body_lines: list, head: str) -> str:
     out = []
     inside = False
     for line in body_lines:
         if line.startswith("## "):
             if inside:
                 break
-            inside = line.strip() == _HEAD_OBS
+            inside = line.strip() == head
             continue
         if inside:
             out.append(line)
@@ -155,9 +160,85 @@ def parse_answer_file(text: str) -> Optional[dict]:
         return {"id": ident, "answer": answer,
                 "answered_at": "" if at is None else str(at),
                 "observation": _observation(body),
+                "question": _section(body, "## 질문"),
                 "target": "" if target is None else str(target)}
     except Exception:  # noqa: BLE001 — 글로 바꿀 수 없는 값은 읽지 못한 답 파일
         return None
+
+
+HANDED_MISSING = "없음"
+HANDED_NOT_FILE = "보통 파일이 아님"
+HANDED_TOO_BIG = "크기 상한 넘음"
+HANDED_BAD_SHAPE = "꼴이 맞지 않음"
+HANDED_BAD_VERSION = "판이 다름"
+HANDED_MAX_BYTES = 1000000
+HANDED_CONTRACT = 1
+
+_HANDED_KEYS = ("key", "id", "answer", "question", "observation", "answered_at",
+                "route", "record")
+_HANDED_ROUTES = ("이 에픽 안에서 고친다", "새 일의 씨앗", "재분해 신호")
+
+
+def _handed_key_ok(key: str) -> bool:
+    parts = key.split("#")
+    if len(parts) != 2:
+        return False
+    name, num = parts
+    return (name.endswith(".md") and len(name) > 3 and "/" not in name
+            and num.isascii() and num.isdigit())
+
+
+def _handed_entry(raw) -> Optional[dict]:
+    if not isinstance(raw, dict):
+        return None
+    entry = {}
+    for k in _HANDED_KEYS:
+        v = raw.get(k)
+        if not isinstance(v, str):
+            return None
+        entry[k] = v
+    if not _handed_key_ok(entry["key"]) or entry["answer"] not in ANSWERS[:2]:
+        return None
+    if entry["answer"] == "의도다":
+        if entry["route"] != "-":
+            return None
+    elif entry["route"] not in _HANDED_ROUTES:
+        return None
+    return entry
+
+
+def read_handed(path: str) -> tuple:
+    """지휘자가 넘긴 「이미 답한 것」 파일. 성공 (항목들, None), 실패 (None, 사유)."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None, HANDED_MISSING
+    if not stat.S_ISREG(st.st_mode):
+        return None, HANDED_NOT_FILE
+    if st.st_size > HANDED_MAX_BYTES:
+        return None, HANDED_TOO_BIG
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh.read())
+    except Exception:  # noqa: BLE001 — YAML · 인코딩 · 읽기 실패는 모두 꼴이 맞지 않음
+        return None, HANDED_BAD_SHAPE
+    if not isinstance(data, dict):
+        return None, HANDED_BAD_SHAPE
+    contract = data.get("contract")
+    if type(contract) is not int or contract != HANDED_CONTRACT:
+        return None, HANDED_BAD_VERSION
+    raw_entries = data.get("entries")
+    if not isinstance(raw_entries, list):
+        return None, HANDED_BAD_SHAPE
+    entries = []
+    seen = set()
+    for raw in raw_entries:
+        entry = _handed_entry(raw)
+        if entry is None or entry["key"] in seen:
+            return None, HANDED_BAD_SHAPE
+        seen.add(entry["key"])
+        entries.append(entry)
+    return entries, None
 
 
 def read_answered(answers_dir: str) -> tuple:

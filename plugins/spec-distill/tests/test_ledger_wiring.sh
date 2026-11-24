@@ -720,8 +720,8 @@ grep -qF 'interview_state.py" seed-audit-for-session --session "$sid"' "$RF" \
 grep -qE '^STATE="\$ROOT/\$sid/state\.local\.md"' "$RF" && no "§1-6: intent-sync 의 세션 STATE 줄이 남았다" || ok "§1-6: 세션 STATE 줄이 없다"
 # 상태 블록 실행 — 같은 세션 seed audit 둘이면 이름을 만들지 않는다
 blk="$(awk '/^## 상태/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RF")"
-rfr="$T/rf"; mkdir -p "$rfr/docs/superpowers/interview" && git -C "$rfr" init -q
-for n in a b; do printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/interview/2026-10-15-$n-interview.audit.md"; done
+rfr="$T/rf"; mkdir -p "$rfr/docs/superpowers/intent" && git -C "$rfr" init -q
+for n in a b; do printf -- '---\ntype: intent-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/intent/2026-10-15-$n-intent.audit.md"; done
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션 seed audit 이 둘이면 이름을 만들지 않는다" || no "AC11: 둘 이상에서 이름을 골랐다: $out"
@@ -730,28 +730,28 @@ assert_contains "$out" "seed audit 이 둘 이상이다(위 경로들) — 이�
 rf_topic() { (cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$(printf '%s\n' "$blk" | sed "s/^TOPIC=\"<kebab-topic>\"\$/TOPIC=\"$1\"/")
 echo \"SEED=[\$SEED]\"" 2>&1); }
 out="$(rf_topic b)"
-printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-b-interview.md]' && ok "AC11: 둘 이상이어도 TOPIC 이 그 주제의 audit 을 가린다" || no "AC11: TOPIC 으로 그 주제의 audit 을 되찾지 못했다: $out"
+printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/intent/2026-10-15-b-intent.md]' && ok "AC11: 둘 이상이어도 TOPIC 이 그 주제의 audit 을 가린다" || no "AC11: TOPIC 으로 그 주제의 audit 을 되찾지 못했다: $out"
 # 같은 세션에서 다른 주제로 다시 열면 옛 주제의 audit · seed 이름을 쓰지 않는다 — 새 주제 이름으로 가고 알린다
 out="$(rf_topic rfz)"
-printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/interview/$(date +%F)-rfz-interview.md]" && ok "AC11: 다른 주제로 다시 열면 새 주제 이름을 쓴다(옛 audit · seed 를 다시 쓰지 않는다)" || no "AC11: 다른 주제인데 새 이름이 아니다: $out"
+printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/intent/$(date +%F)-rfz-intent.md]" && ok "AC11: 다른 주제로 다시 열면 새 주제 이름을 쓴다(옛 audit · seed 를 다시 쓰지 않는다)" || no "AC11: 다른 주제인데 새 이름이 아니다: $out"
 assert_contains "$out" "다른 주제의 seed audit" "AC11: 다른 주제로 다시 열 때 옛 주제의 audit 이 있음을 알린다"
-rm -f "$rfr/docs/superpowers/interview/2026-10-15-b-interview.audit.md"
+rm -f "$rfr/docs/superpowers/intent/2026-10-15-b-intent.audit.md"
 out="$(rf_topic rfz)"
-printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/interview/$(date +%F)-rfz-interview.md]" && ok "AC11: 이 세션의 audit 이 하나여도 주제가 다르면 그 이름을 쓰지 않는다" || no "AC11: 하나뿐인 옛 주제 audit 을 새 주제에 다시 썼다: $out"
+printf '%s\n' "$out" | grep -qF "SEED=[docs/superpowers/intent/$(date +%F)-rfz-intent.md]" && ok "AC11: 이 세션의 audit 이 하나여도 주제가 다르면 그 이름을 쓰지 않는다" || no "AC11: 하나뿐인 옛 주제 audit 을 새 주제에 다시 썼다: $out"
 # 새 주제의 audit 을 쓴 뒤 자리표 TOPIC 그대로 이어 붙인 블록은 둘 이상에서 멈추되, 푸는 길(TOPIC 을 채운다)을 댄다
-printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
+printf -- '---\ntype: intent-seed-audit\nsession_id: sess-rf000001\n---\n' > "$rfr/docs/superpowers/intent/$(date +%F)-rfz-intent.audit.md"
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 주제가 둘인 세션에서 자리표 TOPIC 이면 이름을 고르지 않는다" || no "AC11: 자리표 TOPIC 으로 둘 중 하나를 골랐다: $out"
 assert_contains "$out" "TOPIC 을 이 회의의 주제로 채워 다시 돌린다" "AC11: 자리표 TOPIC 으로 둘 이상에서 멈출 때 푸는 길을 댄다"
 grep -qF 'TOPIC 은 이 블록을 이어 붙이는 모든 사본에서 같은 값으로 채운다' "$RF" && ok "AC11: 블록 주석이 TOPIC 을 모든 사본에서 같은 값으로 채우라고 한다" || no "AC11: TOPIC 을 사본마다 같게 채우라는 지시가 없다"
-rm -f "$rfr/docs/superpowers/interview/$(date +%F)-rfz-interview.audit.md"
+rm -f "$rfr/docs/superpowers/intent/$(date +%F)-rfz-intent.audit.md"
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000001 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000001 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
-printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/interview/2026-10-15-a-interview.md]' \
+printf '%s\n' "$out" | grep -qF 'SEED=[docs/superpowers/intent/2026-10-15-a-intent.md]' \
   && ok "AC11: 하나면 그 이름을 되찾는다" || no "AC11: 이름을 되찾지 못했다: $out"
 # 같은 세션의 인터뷰 audit(type 이 다르다)은 이름 되찾기에 걸리지 않는다 — TOPIC 이 자리표면 이름이 없다
-printf -- '---\ntype: interview-audit\nsession_id: sess-rf000002\n---\n' > "$rfr/docs/superpowers/interview/2026-10-15-c-interview.audit.md"
+printf -- '---\ntype: context-audit\nsession_id: sess-rf000002\n---\n' > "$rfr/docs/superpowers/intent/2026-10-15-c-intent.audit.md"
 out="$(cd "$rfr" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-rf000002 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-rf000002 bash -c "$blk
 echo \"SEED=[\$SEED]\"" 2>&1)"
 printf '%s\n' "$out" | grep -qF 'SEED=[]' && ok "AC11: 같은 세션의 인터뷰 audit 으로 이름을 되찾지 않는다" || no "AC11: 인터뷰 audit 이 이름 되찾기에 걸렸다: $out"
@@ -767,9 +767,9 @@ rf_run() {   # rf_run <repo> <sid> <이어 붙일 스크립트> → 출력(rc �
 $3" 2>&1 )
 }
 rf_repo() {   # rf_repo <dir> → seed 하나를 둔 git 저장소를 만들고 그 seed 의 절대경로를 낸다
-  mkdir -p "$1/docs/superpowers/interview" && git -C "$1" init -q
-  printf -- '---\ntype: interview-seed\n---\n\n본문.\n' > "$1/docs/superpowers/interview/$(date +%F)-rfx-interview.md"
-  printf '%s\n' "$1/docs/superpowers/interview/$(date +%F)-rfx-interview.md"
+  mkdir -p "$1/docs/superpowers/intent" && git -C "$1" init -q
+  printf -- '---\ntype: intent-seed\n---\n\n본문.\n' > "$1/docs/superpowers/intent/$(date +%F)-rfx-intent.md"
+  printf '%s\n' "$1/docs/superpowers/intent/$(date +%F)-rfx-intent.md"
 }
 bash_with() {   # bash_with <파일> <고정 문자열> → 그 문자열을 담은 첫 bash 펜스
   awk -v pat="$2" '/^```bash$/ {b=1; buf=""; next} b && /^```$/ {b=0; if (!done && index(buf, pat)) {printf "%s", buf; done=1}; next} b {buf = buf $0 "\n"}' "$1"
@@ -791,7 +791,7 @@ $RFO" 2>&1)"
 assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "ledger-open: NO_SESSION" "T8: 세션 id 가 없으면 NO_SESSION"
 # 쓰기 전 확인 — 펜스와 실제 원장 쓰기 펜스(처분 · 답 기록)
 ledger "$RS1/docreview-state.md" "$sd1" 1
-printf -- '---\ntype: interview-seed-audit\nsession_id: sess-rfaa0001\n---\n\n## 6. 리뷰 결정\n' > "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md"
+printf -- '---\ntype: intent-seed-audit\nsession_id: sess-rfaa0001\n---\n\n## 6. 리뷰 결정\n' > "$rf1/docs/superpowers/intent/$(date +%F)-rfx-intent.audit.md"
 RG="$(fence "$RF" ledger-guard)"
 printf '%s\n' "$RG" | grep -qF 'ledger_marker.py" check --dir "$STATE_DIR" --session "$sid"' \
   && ok "T8: intent-sync 쓰기 전 확인이 \$sid 로 잰다" || no "T8: intent-sync 쓰기 전 확인 펜스 꼴: $RG"
@@ -811,14 +811,14 @@ ANS="$(bash_with "$RF" 'kind 답' | sed -e 's/<n>/1/g' -e 's/<id>/RFID1/g')"
 for pair in "처분|$DISP" "답 기록|$ANS"; do
   nm="${pair%%|*}"; body="${pair#*|}"
   printf '채택\n' > "$RS1/said-RFID1.txt"; printf '요약\n' > "$RS1/note-RFID1.txt"
-  ab="$(cksum < "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md")"
-  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md'; sid=sess-rfbb0002
+  ab="$(cksum < "$rf1/docs/superpowers/intent/$(date +%F)-rfx-intent.audit.md")"
+  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/intent/$(date +%F)-rfx-intent.audit.md'; sid=sess-rfbb0002
 $body" 2>&1)"; rc=$?
   assert_eq "$rc" "3" "T8: ${nm} 펜스 — 남의 표지면 rc 3 으로 멈춘다"
   assert_eq "$(cksum < "$RS1/docreview-state.md")" "$rs1b" "T8: ${nm} 펜스 — 남의 표지면 원장이 그대로다"
-  assert_eq "$(cksum < "$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md")" "$ab" "T8: ${nm} 펜스 — 남의 표지면 audit 도 그대로다"
+  assert_eq "$(cksum < "$rf1/docs/superpowers/intent/$(date +%F)-rfx-intent.audit.md")" "$ab" "T8: ${nm} 펜스 — 남의 표지면 audit 도 그대로다"
   [ -e "$RS1/said-RFID1.txt" ] && ok "T8: ${nm} 펜스 — 남의 표지면 문구 파일을 지우지 않는다" || no "T8: ${nm} 펜스 — 멈췄는데 문구 파일이 사라졌다"
-  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/interview/$(date +%F)-rfx-interview.audit.md'; sid=sess-rfaa0001
+  out="$(cd "$rf1" && bash -c "SD='$SD'; STATE_DIR='$RS1'; AUDIT_ABS='$rf1/docs/superpowers/intent/$(date +%F)-rfx-intent.audit.md'; sid=sess-rfaa0001
 $body" 2>&1)"
   case "$out" in *"q_rc="*|*"ans_rc="*) ok "T8: ${nm} 펜스 — 표지 주인이면 확인을 지나 엔진 호출에 닿는다(양의 짝)" ;;
     *) no "T8: ${nm} 펜스 — 표지 주인인데 끝 줄에 닿지 않았다: $out" ;; esac

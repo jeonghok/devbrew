@@ -1,6 +1,6 @@
 ---
-type: interview-audit
-payload: <YYYY-MM-DD>-<kebab-topic>-interview.md
+type: context-audit
+payload: <YYYY-MM-DD>-<kebab-topic>-context.md
 created_at: YYYY-MM-DD
 session_id: <uuid>
 source: spec-distill context-build
@@ -14,7 +14,7 @@ source: spec-distill context-build
 ## 1. Coverage Ledger
 
 (커버리지 원장 직렬화 — floor 5행(전부 closed + evidence) + derived(≥1행 OR N/A sentinel).
- orchestrator가 상태 파일(`<줄기>-interview.state.md`)에서 직렬화한다. evidence는 실재 `S<N>` 앵커를 인용해야 한다(AC3).
+ orchestrator가 상태 파일(`<YYYY-MM-DD>-<kebab-topic>-context.state.md`)에서 직렬화한다. evidence는 실재 `S<N>` 앵커를 인용해야 한다(AC3).
  아래의 `S1`은 **예시**이며, 실제로는 그 차원의 닫힘을 근거한 실제 `S<N>`으로 — 행마다
  서로 다른 발화로 — 바뀐다.
  payload 가 레포 주장(`RC<n>`)을 하나라도 실으면 **정확히 `derived:internal_research`** 라는

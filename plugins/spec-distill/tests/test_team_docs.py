@@ -259,14 +259,57 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
                       "사본을 framing 없이 만든 뒤 ② 로 짝을 끝에 덧붙인 사본 · 구간 차례가 어긋난 사본 · 같은 팀 폴더의 다른 brief 가 "
                       "이미 옮긴 audit 를 ② 로 받아(링크로 같은 파일을 가리켜도) framing 구간이 건너뛰어진 사본처럼 이 brief 의 첫 구간 "
                       "바로 앞에 짝이 없으면 — 다시 부를 때마다 같은 ② 를 준다. 이 판정은 틀려도 멈추는 쪽으로만 틀린다.", s3)
+        # 남는 것 둘째 — 고쳤다 되돌린 결과물(마지막 리뷰 I3)
+        self.assertIn("\n  - 같은 브랜치에서 brief 를 고쳤다 되돌린 커밋도 이 검사를 지나간다 — 고친 커밋을 출처로 만든 사본은 지금 HEAD 의 조상인 출처 커밋을 받기 때문이다. "
+                      "그 고침은 PR 의 바뀐 파일 목록에는 나오지 않고 커밋별 보기에서만 보인다. squash 머지면 머지 뒤 기준과 견줘 검사 불가로 드러나고, "
+                      "머지 커밋으로 머지하면 계속 지나간다.\n", s3)
+        # 남는 것 첫째의 뒤 문장 — 커밋했다 지운 framing audit 꼴 파일(PR #330 품질 게이트 리뷰)
+        self.assertIn("같은 브랜치에 framing audit 꼴을 갖춘 파일을 새로 커밋하면 이 검사를 지나간다 — 그 파일은 PR 에 새 파일로 보인다. "
+                      "그 파일을 같은 브랜치에서 다시 지워도 지나간다 — 그때는 PR 의 바뀐 파일 목록에 나오지 않고 커밋별 보기에서만 보인다.\n", s3)
+        # 남는 것 셋째 — 견줄 기준의 사본이 없을 때 바꾼 source_brief(PR #330 품질 게이트 리뷰 · 좁은 재리뷰)
+        self.assertIn("\n  - 덧붙이기 검사가 견줄 기준의 사본이 없으면 로드맵의 `source_brief` 를 다른 brief 로 바꾸고 사본을 그 brief 로 다시 만들어도 "
+                      "이 검사를 지나간다 — 기준에 그 팀 폴더가 아직 없는 브랜치와, 기본 기준을 몰라 덧붙이기 검사를 건너뛴 때(그 알림 줄이 나온다)다. "
+                      "PR 에는 로드맵 파일의 `source_brief` 값으로 보인다. 기준의 사본에 옛 brief 의 구간이 있으면 `source_brief` 를 바꿔도 "
+                      "그 구간이 어긋남으로 남고, 사본을 다시 만들면 덧붙이기 검사가 거절한다.\n", s3)
         # 대체 대조의 사유 글 — 출처 쪽 말머리는 코드의 상수, 기준 쪽 글은 코드에 있는 글과 같은지 함께 본다
-        for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN):
+        for say in (TC._SRC_UNREAD, TC._SRC_ABSENT, TC._SRC_BROKEN, TC._SRC_FOREIGN):
             self.assertIn("`%s`" % say[0], s3, say)
         source = (SCRIPTS / "team_check.py").read_text(encoding="utf-8")
         for words in ("의 같은 줄과 견줬다 — 같다", "의 같은 줄과도 다르다", "에도 그 파일이 없다", "의 그 파일도 읽지 못했다",
                       "을 몰라 같은 줄과 견주지 못했다"):
             self.assertIn(words, source, words)
             self.assertIn(words, s3, words)
+
+    def test_source_problem(self):   # AC1 · AC3 — 출처 규칙 하나
+        import team_check as TC
+        brief = "docs/iv/b.md"
+        seed = b"---\ntype: interview-seed-audit\n---\n"
+        self.assertEqual(TC.audit_of(brief), "docs/iv/b.audit.md")
+        self.assertIsNone(TC.audit_of("docs/iv/b.txt"))
+        self.assertIsNone(TC.source_problem(brief, brief, b"x"))
+        self.assertIsNone(TC.source_problem("docs/iv/b.audit.md", brief, b"x"))
+        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, seed))   # 옛 기록 — 옛 종류 글자
+        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, b"---\ntype: intent-seed-audit\n---\n"))
+        self.assertEqual(TC.source_problem("docs/x/forged.audit.md", brief, b"---\ntype: interview-audit\n---\n"),
+                         TC.SOURCE_NOT_ALLOWED % brief)
+        self.assertEqual(TC.source_problem("docs/iv/other.md", brief, b"no head"), TC.SOURCE_NOT_ALLOWED % brief)
+        self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", None, b"x"))     # Review Focus 3
+        self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", brief, None))    # 견줄 파일 없음 — 대조가 3 으로 끝낸다
+
+    def test_one_source_rule(self):   # 규칙을 두 군데에 따로 적지 않는다 — framing 종류 글자는 대응표 모듈에서만 온다
+        import re
+        tw = (SCRIPTS / "team_write.py").read_text(encoding="utf-8")
+        tc = (SCRIPTS / "team_check.py").read_text(encoding="utf-8")
+        self.assertNotIn('".audit.md"', tw)
+        self.assertEqual(tc.count('".audit.md"'), 1)
+        for name, src in (("team_write.py", tw), ("team_check.py", tc)):
+            for lit in ("interview-seed-audit", "intent-seed-audit"):   # 옛 글자 · 새 글자 리터럴 모두 없다(주석 포함)
+                self.assertNotIn(lit, src, "%s: %s" % (name, lit))
+            self.assertIsNone(re.search(r"[!=]=\s*(?:team_check\.)?FRAMING_TYPE", src), name)   # 글자 그대로 견주지 않는다
+            self.assertEqual(src.count("legacy_names.kind_matches("), 1, name)   # 견주는 자리 하나 — 옛 글자도 받는다
+        self.assertEqual(re.findall(r"(?m)^FRAMING_TYPE = .*$", tc), ["FRAMING_TYPE = legacy_names.INTENT_SEED_AUDIT"])
+        self.assertEqual(re.findall(r"(?m)^FRAMING_TYPE = .*$", tw), ["FRAMING_TYPE = team_check.FRAMING_TYPE"])
+        self.assertRegex(tc, r"(?m)^import legacy_names\b")
 
     def test_origin_table_and_review_entry(self):   # 원문 대조 표의 규칙 · spec-review 진입
         import check_bundle_coverage as cbc

@@ -1,5 +1,5 @@
 ---
-type: interview-seed-audit
+type: intent-seed-audit
 payload: <basename>.md
 created_at: YYYY-MM-DD
 session_id: <uuid>

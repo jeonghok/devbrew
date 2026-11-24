@@ -1,7 +1,7 @@
 ---
 name: seed-readback
 description: >
-  Use this agent to read an interview-seed cold and say back, in plain prose, what
+  Use this agent to read an intent-seed cold and say back, in plain prose, what
   it understood — what work is being handed off, what the direction is, and what
   the sender cares about. A synchronization measurement, not a review: it is given
   no criteria, no schema, and nothing but the seed itself, inlined as a single

@@ -3,10 +3,32 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [16.0.1] — 2026-11-24
+## [17.1.2] — 2026-11-25
 
 ### Fixed
 - `qg-worktree.sh` 가 앞 사본을 지우기 전에 등록된 worktree 목록(`git worktree list`)을 읽지 못하면 「등록 안 됨」 으로 보고 지우던 것을, 지우지 않고 `등록된 worktree 목록을 읽지 못했다` 사유와 함께 rc 2 로 멈춘다.
+
+## [17.1.0] — 2026-11-24
+
+### Changed
+- 의도 문서 표시의 기본 목록이 여섯 항목으로 `source_intent` 를 더했고, 원문 따라가기가 `source_intent` 와 옛 `source_interview` 두 머리 키를 읽는다. 두 키가 함께 있으면 새 키에 값이 있을 때 새 키만 따라가고, 새 키가 없거나 값이 없으면 옛 키를 따라간다 — 설계문서 길과 바뀐 의도 문서 길이 같은 문서를 고른다.
+- `DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS` 를 레포가 직접 정했다면 그 값이 목록 전체를 갈아 끼우므로, 새 설계문서가 의도 문서로 세어지려면 그 목록에 `source_intent` 를 손으로 더해야 한다.
+- intent-critic 의 단계 낱말과 README 의 단계 낱말을 새 이름으로 맞췄다. 다른 팀 기록의 「확인 못 함」 줄 글도 고쳤다.
+
+## [17.0.0] — 2026-11-24
+
+### Changed
+- 돌려주는 꼴(`intent-return.md`)의 판이 3으로 올랐다(`contract: 3`). 2판까지만 읽는 쪽은 이 파일을 읽지 못한다.
+- 직접 묻는 틀은 질문 문장을 먼저 보이고 「왜 묻나」 한 줄을 그 아래에 단다.
+- 다른 팀 읽기가 `type: roadmap-review` 문서를 싣지 않는다.
+
+### Added
+- `--answered <경로>` — 지휘하는 쪽이 넘기는 「이미 답한 것」 파일을 받는다(`intent_critic.py prepare` · `setup-qg.sh`). 읽지 못하면 `넘겨받은 답을 읽지 못함 — <사유>` 를 알리고 이어 간다.
+- 돌려주는 꼴의 `answered_filtered`(머리) · `why` · `asked_before` · `changed_observation`(질문 칸).
+- `synthesize_findings.py --pre-merge-out` — 합치기 전 지적 목록을 세션 폴더의 `findings-pre-merge.yaml` 에 쓴다.
+
+### Fixed
+- README 를 동작에 맞췄다 — 근거의 종류는 질문 화면에 싣지 않고 결과 절 표 · 돌려주는 꼴에 남으며, `asked_before` 의 넷째 칸은 다시 묻는 까닭(`근거가 달라짐` · `고친 뒤에도 보임`)이다.
 
 ## [16.0.0] — 2026-11-22
 

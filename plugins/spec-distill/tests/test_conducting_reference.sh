@@ -58,7 +58,7 @@ done
 once() {  # once <걸음> <문장> — 그 걸음 글에 문장이 정확히 한 번
   assert_eq "$(printf '%s\n' "$(step "$1")" | grep -oF -- "$2" | wc -l | tr -d ' ')" "1" "걸음 $1: 「${2}」 는 정확히 한 번이다"
 }
-for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`--bundle` 값이 설계문서 frontmatter `source_interview` 와 다르거나 읽을 수 없으면 리뷰하지 않고 끝나고' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
+for lit in 'spec-review 도 지휘 세션이 직접 돌린다' '`--bundle` 값이 설계문서 frontmatter `source_intent`(옛 문서는 `source_interview`) 와 다르거나 읽을 수 없으면 리뷰하지 않고 끝나고' '`root=` 가 그 worktree 가 아니면 멈춘다' '다음 세션 줄의 writing-plans 를 직접 따르지 않고' '`## 지휘 기록` 에 한 줄로 커밋한다' '리뷰 원장이 라운드 · 상한을 잇는다' \
            '그다음 메인 체크아웃으로 돌아온다' '「승인 — 계획 담당자에게 (권장)」' '그리고 같은 턴에 계획 agent 를 보낸다' \
            '승인 줄은 있고 계획은 없는 에픽' '`<SD>`(이 세션이 쓰는 spec-distill 플러그인 폴더의 절대경로)로' \
            'git switch --ignore-other-worktrees <에픽 브랜치>' '지휘 세션이 그 에픽 worktree 에 머문 채 격리 없이 보내고 agent 가 돌아올 때까지 떠나지 않는' \

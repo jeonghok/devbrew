@@ -228,4 +228,24 @@ h="$("$SCRIPT" --help)"
 assert "--help 가 --origin 을 안내한다" "printf '%s' \"\$h\" | grep -qF -- \"--origin <path>      Caller's origin file for the intent critic (tracked file in this repo)\""
 cd / && rm -rf "$TMPDIR"
 
+# --- intent-critic --answered: --origin 과 같은 꼴 — 값 하나를 소비하고 범위 인자로 세지 않는다 ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+out="$("$SCRIPT" --session-id "test-answered-$$" --answered /tmp/x.yaml 2>&1)"; rc=$?
+assert "--answered <경로>: rc 0" "[ $rc = 0 ]"
+assert "--answered <경로>: 모르는 인자로 읽지 않는다" "! printf '%s' \"\$out\" | grep -q '모르는 인자'"
+assert "--answered <경로>: 실행이 진행해 세션 폴더를 만든다" "test -f '.claude/quality-gates/test-answered-$$/result.md'"
+for combo in "range x --answered /tmp/a.yaml" "--paths a/* --answered /tmp/a.yaml" "--answered /tmp/a.yaml branch" "range x --origin docs/a.md --answered /tmp/a.yaml"; do
+  out="$("$SCRIPT" --session-id "test-answered-$$" $combo 2>&1)"; rc=$?
+  assert "범위 인자 하나 + --answered($combo): rc 0" "[ $rc = 0 ]"
+  assert "범위 인자 하나 + --answered($combo): 범위 인자 둘로 세지 않는다" "! printf '%s' \"\$out\" | grep -q '범위 인자는 하나만'"
+done
+for rest in "" "--ensure" "-x"; do
+  out="$("$SCRIPT" --session-id "test-answered-$$" --answered $rest 2>&1)"; rc=$?
+  assert "--answered 값 없음(뒤: '$rest'): rc 1" "[ $rc = 1 ]"
+  assert "--answered 값 없음(뒤: '$rest'): 이유 한 줄" "printf '%s' \"\$out\" | grep -qxF '❌ --answered 뒤에 「이미 답한 것」 파일 경로가 없다.'"
+done
+h="$("$SCRIPT" --help)"
+assert "--help 가 --answered 를 안내한다" "printf '%s' \"\$h\" | grep -qF -- \"--answered <path>    Conductor's already-answered file for the intent critic (absolute path)\""
+cd / && rm -rf "$TMPDIR"
+
 finish

@@ -21,6 +21,7 @@ import conductor_branch as CB  # noqa: E402
 import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
+import leader_seat as LS  # noqa: E402
 import suite_lock  # noqa: E402
 import team_status as TS  # noqa: E402
 from state_path import state_root  # noqa: E402
@@ -438,6 +439,165 @@ class Show(CrossRepo):
         commit = CB.write(str(other), rm(name), OTHER, lambda b: files, "남").commit
         self.g("fetch", "-q", "origin", spec)
         return commit
+
+    def test_own_rules_edit_is_listed_after_the_foreign_line(self):   # AC5
+        team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.status: "s\n"}, "현황")   # STATUS 쓰기도 `씀` 이다 — 규칙 · 대기 줄 경로가 아니라 세지 않는다
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())          # 처음에는 없다(Review Focus 5)
+        commit = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertLess(out.index(CS.OWN_EDITS % 1), out.index("다른 로드맵과 닿는 것"))
+        self.assertEqual(CS.cross_view(self.w, rm(ALPHA), now=at(20))["own"], [(commit, (team.rules,))])
+
+    def test_own_list_follows_the_foreign_line_right_after_it(self):   # AC5 — 「바로 뒤」 차례
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내")
+        lines = self.text().split("\n")
+        foreign = [i for i, l in enumerate(lines) if l.startswith(TS.FOREIGN % 1)]
+        own = [i for i, l in enumerate(lines) if l == CS.OWN_EDITS % 1]
+        self.assertEqual((len(foreign), len(own)), (1, 1), lines)
+        self.assertEqual(own[0], foreign[0] + 1, lines)
+
+    def test_a_planted_own_row_moves_a_foreign_edit_into_the_own_list(self):   # G3 — 일꾼이 남의 고침을 `씀` 으로 적는다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        self.assertIn(TS.FOREIGN % 1 + CS.FOREIGN_TAIL, self.text())             # 양성 대조 — 심기 전에는 남의 고침이다
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        out = self.text()
+        self.assertNotIn("확인되지 않은 남의 고침", out)
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), out)
+
+    def trust_rows(self):
+        return [(r["끝"], r["까닭"]) for r in cs.load(cs.machine_path(state_root(str(self.w)), rm(ALPHA)), rm(ALPHA))[cs.TRUST]]
+
+    def test_a_planted_own_edit_stays_listed_after_sync_until_confirmed(self):   # AC5 · 마지막 리뷰 C1 — 씀 을 심음 → sync → show
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.rules: "- [남] 심은 줄\n"})
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertNotIn("확인되지 않은 남의 고침", out)
+        # confirm --confirmed 뒤에는 없다 — 표시 없이 부르면 남의 고침은 없어도 목록 줄과 확인할 끝을 한 출력에 낸다
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        tip, notes = LS.confirm(self.w, rm(ALPHA), SID)
+        self.assertEqual((tip, notes), (seen, (LS.NOTHING_TO_CONFIRM, CS.OWN_EDITS % 1, "  %s · %s" % (commit[:8], team.rules),
+                                               LS.CONFIRM_TIP % seen)))
+        LS.confirm(self.w, rm(ALPHA), SID, confirmed=seen)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(6))
+        out = self.text()
+        self.assertNotIn(commit[:8], out)
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", out)
+        after, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(self.trust_rows(), [(after, "확인")])                    # 확인한 끝 절이 한 줄로 접혔다
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID), (after, (LS.NOTHING_TO_CONFIRM,)))   # 양성 대조 — 목록이 없으면 끝을 내지 않는다
+
+    def test_a_stale_tip_with_an_own_list_is_one_and_records_nothing(self):   # AC5 — 낡은 끝은 1 · 새 끝이면 접힌다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        CB.record_own(self.w, rm(ALPHA), SID, [commit])
+        old, notes = LS.confirm(self.w, rm(ALPHA), SID)
+        self.assertEqual(notes[-1], LS.CONFIRM_TIP % old)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))   # 사용자에게 묻는 사이에 끝이 옮겨 갔다(STATUS 커밋)
+        new, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertNotEqual(new, old)                                              # 양성 대조 — 정말 낡은 끝이다
+        rows = self.trust_rows()
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(self.w, rm(ALPHA), SID, confirmed=old)
+        self.assertEqual(cm.exception.rc, 1)
+        self.assertEqual(str(cm.exception).split("\n"), [LS.NOT_THE_TIP, CS.OWN_EDITS % 1,
+                                                         "  %s · %s" % (commit[:8], team.path(CB.PENDING_FILE)), LS.CONFIRM_TIP % new])
+        self.assertEqual(self.trust_rows(), rows)                                  # 기록을 바꾸지 않았다
+        self.assertIn("\n  %s · %s\n" % (commit[:8], team.path(CB.PENDING_FILE)), self.text())
+        # 새 끝이면 접힌다
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID, confirmed=new)[0], new)
+        CS.sync(self.w, rm(ALPHA), SID, now=at(6))
+        self.assertNotIn(commit[:8], self.text())
+        latest, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(LS.confirm(self.w, rm(ALPHA), SID, confirmed=old), (latest, (LS.NOTHING_TO_CONFIRM,)))   # 목록 · 남의 고침 없음 — 지금 그대로 0
+
+    def test_confirm_carries_the_own_list_with_foreign_edits(self):   # 남의 고침이 있을 때도 목록 줄을 같은 출력에
+        team = CB.team_of(self.w, rm(ALPHA))
+        self.foreign_write(ALPHA, {team.path(CB.PENDING_FILE): "- A1 · 결정 기록 · 남\n"})
+        mine = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        with self.assertRaises(CB.BranchError) as cm:
+            LS.confirm(self.w, rm(ALPHA), SID)
+        lines = str(cm.exception).split("\n")
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertTrue(lines[0].startswith(TS.FOREIGN % 1), lines)
+        self.assertEqual(lines[-3:], [CS.OWN_EDITS % 1, "  %s · %s" % (mine[:8], team.rules), LS.CONFIRM_TIP % seen])
+
+    def test_a_leaders_own_rules_edit_stays_listed_after_sync(self):   # AC5 — 리더의 바른 규칙 고침도 확인받을 때까지 남는다
+        team = CB.team_of(self.w, rm(ALPHA))
+        commit = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- [나] 내 줄\n"}, "내").commit
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        out = self.text()
+        self.assertIn("\n" + CS.OWN_EDITS % 1 + "\n  %s · %s\n" % (commit[:8], team.rules), out)
+        self.assertIn((commit, "씀"), self.trust_rows())                          # 접지 않았다 — 그 커밋의 `씀` 줄이 남았다
+
+    def test_status_only_own_rows_still_compact_on_sync(self):   # 감시 경로 밖 `씀` 만이면 지금처럼 접힌다
+        team = CB.team_of(self.w, rm(ALPHA))
+        CB.write(self.w, rm(ALPHA), SID, lambda b: {team.status: "s\n"}, "현황")
+        CS.sync(self.w, rm(ALPHA), SID, now=at(5))
+        seen, _split = CB.seen_tip(self.w, ALPHA)
+        self.assertEqual(self.trust_rows(), [(seen, "확인")])
+        self.assertNotIn("이 기계가 쓴 것으로 적힌 고침", self.text())
+
+    def tree_of(self, base, files):
+        """base 커밋의 트리에 files 를 얹은 트리 — 임시 인덱스로 만든다."""
+        idx = str(self.t / "merge-index")
+        env = dict(ENV, GIT_INDEX_FILE=idx)
+        run = lambda *a, **kw: subprocess.run(["git", "-C", str(self.w)] + list(a), env=env, check=True, capture_output=True, text=True, **kw).stdout.strip()
+        run("read-tree", base)
+        for path, text in files.items():
+            run("update-index", "--add", "--cacheinfo", "100644,%s,%s" % (run("hash-object", "-w", "--stdin", input=text), path))
+        out = run("write-tree")
+        os.remove(idx)
+        return out
+
+    def planted_merge(self, shape):
+        """내 상태 브랜치 끝을 병합 M 으로 옮긴다 — shape: "same-as-parent"(한 부모와 감시 경로가 같다) ·
+        "differs-from-both" · "unchanged"(감시 경로를 안 바꾼다). M 은 아직 `씀` 이 아니다."""
+        team = CB.team_of(self.w, rm(ALPHA))
+        p1 = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- 옛 줄\n"}, "하나").commit
+        p2 = CB.write(self.w, rm(ALPHA), SID, lambda b: {team.rules: "- 새 줄\n"}, "둘").commit
+        commit = lambda tree, *parents: self.g("commit-tree", tree, *sum((["-p", q] for q in parents), []), "-m", "M")
+        if shape == "unchanged":
+            tree = self.g("rev-parse", p2 + "^{tree}")
+            b = commit(tree, p1)
+            m = commit(tree, p2, b)
+        elif shape == "same-as-parent":
+            tree = self.g("rev-parse", p1 + "^{tree}")
+            m = commit(tree, p2, commit(tree, p1))
+        else:
+            b = commit(self.g("rev-parse", p1 + "^{tree}"), p1)
+            m = commit(self.tree_of(p2, {team.rules: "- 셋째 줄\n"}), p2, b)
+        self.g("update-ref", CB.ref_of(team.name), m)
+        return team, m
+
+    def check_planted_merge_is_listed(self, shape):   # 리뷰 I1 — `씀` 병합이 두 목록에서 빠지거나 빈 경로 줄을 낸다
+        team, m = self.planted_merge(shape)
+        self.assertIn(TS.FOREIGN_UNMEASURED, self.text())                          # 양성 대조 — 심기 전에는 남의 병합이라 재지 못한다
+        CB.record_own(self.w, rm(ALPHA), SID, [m])
+        out = self.text()
+        self.assertIn("\n  %s · %s\n" % (m[:8], team.rules), out)
+        self.assertNotIn(" · \n", out)
+        self.assertNotIn(TS.FOREIGN_UNMEASURED, out)
+
+    def test_a_planted_own_merge_same_as_a_parent_is_listed(self):
+        self.check_planted_merge_is_listed("same-as-parent")
+
+    def test_a_planted_own_merge_differing_from_both_parents_is_listed(self):
+        self.check_planted_merge_is_listed("differs-from-both")
+
+    def test_a_planted_own_merge_that_leaves_the_watched_paths_alone_is_not_listed(self):
+        _team, m = self.planted_merge("unchanged")
+        CB.record_own(self.w, rm(ALPHA), SID, [m])
+        out = self.text()
+        self.assertNotIn(m[:8], out)
+        self.assertIn(CS.OWN_EDITS % 2, out)                                       # 양성 대조 — 병합 앞의 두 규칙 고침은 나온다
 
     def test_foreign_edit_of_my_roadmap_is_told_under_my_status(self):   # R3 AC21 — 옛 형식이어도 같은 판정
         line = TS.FOREIGN % 1 + " — conductor_branch.py confirm"

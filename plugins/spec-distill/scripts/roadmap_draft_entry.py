@@ -22,11 +22,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from check_brief import SPLIT_LINE_PREFIX, payload_is_split  # noqa: E402
+import legacy_names  # noqa: E402
 
 PLAN_HEADING = "## 분해안"
 LOG_HEADING = "## 생성 기록"
 HEAD_NAME = "머리"
 VERDICT = "roadmap-entry: "
+SAID = "[spec-distill] "
 
 
 class InternalError(Exception):
@@ -148,6 +150,12 @@ def _first_line(out: str, prefix: str) -> "str | None":
     return None
 
 
+def _last_said(err: str) -> str:
+    """repo_defaults.py 가 stderr 에 낸 `[spec-distill] ` 줄 가운데 마지막 것(접두를 뗀 글) — 거절 사유는 「값의 출처」 줄 뒤에 온다."""
+    said = [ln[len(SAID):].strip() for ln in err.split("\n") if ln.startswith(SAID)]
+    return said[-1] if said else ""
+
+
 def _read(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as fh:
@@ -167,8 +175,7 @@ def run(brief: str) -> int:
     if rc != 0 or not top:
         print("[roadmap_draft_entry] git 저장소가 아니다: %s" % folder, file=sys.stderr)
         return 2
-    stem = brief[:-3]
-    audit, state = stem + ".audit.md", stem + ".state.md"
+    audit, state = legacy_names.siblings(brief)
 
     rc, out = _run([sys.executable, str(HERE / "raw_source.py"), "locate", "--interview", brief, "--absolute"])
     raw_line = _first_line(out, "raw-source: ")
@@ -177,6 +184,17 @@ def run(brief: str) -> int:
     print(raw_line)
 
     stops: "list[str]" = []
+
+    # 결과물이 의도 폴더 바로 아래인가 — 로드맵 잡기의 커밋 펜스가 늦게 거는 같은 판정을 진입에서 먼저 본다.
+    # 폴더만 물리 경로로 풀고 이름은 그대로 넘긴다(해결자는 레포 루트를 물리 경로로 견준다).
+    given = os.path.join(os.path.realpath(os.path.dirname(brief)), os.path.basename(brief))
+    crc, _, cerr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "check-path", legacy_names.SETTING_KEY,
+                             given, "--root", top])
+    if crc == 3:
+        stops.append("결과물이 의도 폴더 바로 아래가 아니다: %s"
+                     % (_last_said(cerr) or "repo_defaults.py check-path 가 사유 없이 거절했다"))
+    elif crc != 0:
+        raise InternalError("repo_defaults.py check-path 가 판정하지 못했다 (rc %d): %s" % (crc, cerr.strip()))
 
     def check(path: str, subject_never: str, subject_dirty: "str | None") -> str:
         st = commit_state(path)

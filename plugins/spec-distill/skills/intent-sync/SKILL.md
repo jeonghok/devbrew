@@ -3,7 +3,7 @@ name: intent-sync
 description: >
   Phase 0 회의 skill. 사용자가 `/spec-distill:intent-sync` 으로 부른다. 확산(원문 보존 → 레포
   읽기 → 질문 라운드) 후 압축해, 다음 세션 첫 턴의 `/spec-distill:context-build @<seed 경로>` 가
-  가리키는 `interview-seed` 파일을 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
+  가리키는 `intent-seed` 파일을 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
 metadata:
   cost_class: variable
 argument-hint: "[raw request / 생각 / 대화 / 자료]"
@@ -198,7 +198,7 @@ AskUserQuestion({ questions: [{
 
 1. `EnterWorktree(name=<kebab-topic>)` — native 도구 우선(superpowers `using-git-worktrees` 와 같은 원칙). 실측(v6): 요청한 이름 그대로가 아니라 `worktree-` 접두가 붙은 브랜치가 된다 — 그래서 2단계의 rename 이 항상 필요하다.
 2. `git branch -m <접두><kebab-topic>` — `<접두>` 는 질문 앞 펜스가 낸 값. 실측(v6): rename 은 거부되지 않았다.
-3. audit·seed 를 그 워크트리 안의 의도 폴더(`interview_dir`)에 쓴다(`## 상태` 의 경로 그대로).
+3. audit·seed 를 그 워크트리 안의 의도 폴더(`intent_dir`)에 쓴다(`## 상태` 의 경로 그대로).
 4. proceed 게이트에서 ①/② 를 고르면 **handoff 직전** 커밋 1회(`## 확정 — proceed 게이트` 의 절차).
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
    열 때 그 디렉토리에서 열어야 `/spec-distill:context-build @<seed 경로>` 가 그 파일을 찾는다.
@@ -390,9 +390,9 @@ fi
 
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
-| audit (`$AUDIT`) | 의도 폴더(`interview_dir` — `## 상태` 블록의 `$IDIR`) | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정). 첫 write 때 frontmatter `session_id: <sid>` 를 적는다 — 이후 라운드의 이름 되찾기가 그 값을 본다 |
+| audit (`$AUDIT`) | 의도 폴더(`intent_dir` — `## 상태` 블록의 `$IDIR`) | `## 확산` 1번부터 — 덧붙이기(예외 둘: `## 1` 의 인용 감싸기 · `## 2` 의 어긋난 풀이 줄 제자리 수정). 첫 write 때 frontmatter `session_id: <sid>` 를 적는다 — 이후 라운드의 이름 되찾기가 그 값을 본다 |
 | 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
-| interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
+| intent-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 덜어 낸 것 표 | `$AUDIT` 의 `## seed 에서 덜어 낸 것` 절 | 압축 직후 — seed 와 함께 쓴다 |
 | 리뷰 엔진 자리 `$STATE_DIR` — 엔진 원장 · 번들 둘(`$BUNDLE` · `$BUNDLE_RC`) · 리뷰어 산출물(`critic-<i>.txt` · `recritic.txt` · `$CODEX_YAML`) · 저자 편집 기준 사본(`$SEED_BASE`) · 저자 편집 이유 파일(`hunk-reasons.txt`) · 쓴 지적 목록(`hunk-used-findings.txt`) · 동시 리뷰 표지(`reviewing-by` · `last-session`) · `## 2` 답 문구 파일(`said-r<n>.txt` — 질문 라운드마다, 한 줄로 이은 뒤 지운다) | `<state-root>/.docreview/<seed 이름>-<해시>/` | 리뷰 라운드마다 — 경로는 seed 의 절대경로의 순수 함수다 |
 
@@ -410,7 +410,7 @@ SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
 ROOT="$(python3 "$SD/scripts/state_path.py" state-root --ensure)" || ROOT=""
 [ -n "$ROOT" ] || { echo "[spec-distill] 상태 폴더를 쓸 수 없다(위 사유) — 고친 뒤 이 블록을 다시 돌린다" >&2; exit 1; }
-IDIR="$(python3 "$SD/scripts/repo_defaults.py" get interview_dir)" || IDIR=""
+IDIR="$(python3 "$SD/scripts/repo_defaults.py" get intent_dir)" || IDIR=""
 [ -n "$IDIR" ] || { echo "[spec-distill] 의도 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 # 두 산출 문서의 이름. 첫 라운드는 TOPIC 으로 정하고, audit 을 처음 쓸 때 frontmatter `session_id` 에 이 세션 id 를
 # 적는다. 그 뒤로는 그 audit 에서 되찾는다 — 이 블록을 다시 돌리면 같은 두 경로가 나온다. TOPIC 이 실값이면 그 주제의
@@ -428,11 +428,11 @@ else
   f_rc=0; IV_NAME="$(python3 "$SD/scripts/interview_state.py" seed-audit-for-session --session "$sid" --topic "$TOPIC_ARG")" || f_rc=$?
   if [ "$f_rc" -eq 1 ]; then
     IV_NAME=""
-    [ -z "$TOPIC_ARG" ] || IV_NAME="$(date +%F)-${TOPIC_ARG}-interview"
+    [ -z "$TOPIC_ARG" ] || IV_NAME="$(date +%F)-${TOPIC_ARG}-intent"
   elif [ "$f_rc" -eq 2 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 이 둘 이상이다(위 경로들) — 이름을 고르지 않고 멈춘다." >&2
-    [ -n "$TOPIC_ARG" ] || echo "[spec-distill] 이 세션에 회의가 둘 이상이다 — 블록의 TOPIC 을 이 회의의 주제로 채워 다시 돌린다(위 경로의 <날짜>-<주제>-interview 중 하나)." >&2
+    [ -n "$TOPIC_ARG" ] || echo "[spec-distill] 이 세션에 회의가 둘 이상이다 — 블록의 TOPIC 을 이 회의의 주제로 채워 다시 돌린다(위 경로의 <날짜>-<주제>-intent 중 하나)." >&2
   elif [ "$f_rc" -ne 0 ]; then
     IV_NAME=""
     echo "[spec-distill] 이 세션의 seed audit 을 찾지 못했다(위 사유) — 이름을 고르지 않고 멈춘다." >&2
@@ -1209,7 +1209,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 ### 호출 모양 — 이 파이프라인에서 여기가 정본이다
 
 **다음 세션의 첫 턴은 `/spec-distill:context-build @<seed 경로>` 한 줄입니다.** `<seed 경로>` 는 `$SEED` 의 실제 값
-(의도 폴더(`interview_dir`) 아래 `<날짜>-<topic>-interview.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
+(의도 폴더(`intent_dir`) 아래 `<날짜>-<topic>-intent.md` 모양의 상대경로)으로 치환한 뒤 노출합니다 —
 치환하지 않은 자리표가 나가면 사용자가 깨진 명령을 실행하고, 그것을 잡는 자리가 없습니다.
 
 **다음 세션 줄 — ①/② 공통**
@@ -1228,7 +1228,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 - `context-build` 가 방금 Phase 0 을 거친 사용자에게 「`/spec-distill:intent-sync` 을 먼저 거치면…」
   조언을 내고, 컨텍스트 쌓기가 「어떤 것을 만들고 싶으신가요?」로 시작합니다.
 
-**frontmatter 를 떼지 않는 이유**: `type: interview-seed` 줄이 소비자가 seed 를 알아보는
+**frontmatter 를 떼지 않는 이유**: `type: intent-seed` 줄이 소비자가 seed 를 알아보는
 유일한 표지입니다. 본문은 라벨 없는 산문이라 그것만으로는 seed 인지 아닌지 구별되지
 않습니다. `check_seed.py` 와 리뷰 번들 조립기가 **본문만** 보는 것은 별개 사실입니다 —
 그 둘은 사람이 읽는 메시지를 재고, frontmatter 는 하니스용 메타데이터입니다.
@@ -1255,7 +1255,7 @@ python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || echo "[spec-dis
 
 ```
 /compact
-/spec-distill:context-build @<의도 폴더><날짜>-<topic>-interview.md
+/spec-distill:context-build @<의도 폴더><날짜>-<topic>-intent.md
 ```
 
 `/compact` 뒤 같은 줄에 붙인 텍스트는 요약 지시로, `/new` 뒤 같은 줄에 붙인 텍스트는 세션 이름이 되므로, 두 줄을 따로 입력하라는 안내를 명령과 함께 냅니다.
@@ -1269,8 +1269,8 @@ python3 "$SD/scripts/raw_source.py" locate --seed "$SEED_ABS" || echo "[spec-dis
 않습니다 — 게이트 앞 글에 «미커밋 — <사유>» 를 적습니다:
 
 ```bash
-python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$AUDIT" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
-python3 "$SD/scripts/repo_defaults.py" check-path interview_dir "$SEED" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$AUDIT" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
+python3 "$SD/scripts/repo_defaults.py" check-path intent_dir "$SEED" || { echo "[spec-distill] 미커밋 — 위 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
 git add -- "$AUDIT" "$SEED"
 git commit -q --only -m 'docs(intent): <topic> intent seed + audit' -- "$AUDIT" "$SEED"
 ```
