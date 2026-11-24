@@ -13,7 +13,7 @@ description: >
   on the current branch (no push).
 metadata:
   cost_class: variable
-argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>]"
+argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>] [--answered <경로>]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)
 ---
@@ -45,7 +45,7 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git,
 | rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다 |
 | 그 밖 | `[quality-gates] quality-pipeline 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>).` 와 펜스 출력을 내고 멈춘다 |
 
-# Quality Gates — In-Turn Orchestrator (v16.0.0)
+# Quality Gates — In-Turn Orchestrator (v17.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -100,7 +100,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
-rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md"
+rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md" "$RD/findings-pre-merge.yaml"
 ( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ( cd "$RD" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )
 ```
@@ -113,6 +113,7 @@ Every run then starts without the previous run's `differential.yaml` · `differe
 `intent.md` · `topic-scope.txt` · `range-scope.txt` · `review-tree.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`, the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`),
 the intent-critic stage's other-teams record (`other-teams.md`),
+the pre-merge findings list (`findings-pre-merge.yaml`),
 the review diff files of Review Step 1c (`review-i1.*` — the first `find` line, which also works when there are none)
 and the intent-critic stage's run files (`intent-*` — the second `find` line).
 `e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
@@ -124,7 +125,7 @@ way P2 does (`TOP` from `git rev-parse --show-toplevel`, stop when that fails, t
 `RD="${TOP}/.claude/quality-gates/<session-id>"`). Outside a git repository P2 stops the run.
 
 Arguments: `branch` · `--paths <glob>...` · `range <시작>[..<끝>]` override the review scope (Review Step 1). `range` 의 끝을 생략하면 `origin/HEAD` 다.
-`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다. 쓰는 곳은 intent-critic 단계 I2 다.
+`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다. `--answered <경로>` 는 부른 쪽(지휘자)이 넘기는 「이미 답한 것」 파일의 절대 경로이고 범위 인자가 아니다. 쓰는 곳은 intent-critic 단계 I2 다.
 
 **P2b — 범위 (range 인자일 때만 · 실행에 한 번).** 인자에 `range` 가 없으면 건너뛴다(앞 실행의 범위 파일은 P2 가 지웠다). 돌려도 해는 없다 — 그때 스크립트는 범위 파일을 지우고 `range: none` 만 낸다:
 
@@ -660,6 +661,7 @@ python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
   --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
   --recritic-diff "$RV/recritic.diff" \
   --emit-verdict --angles "$RV/angles.txt" \
+  --pre-merge-out "$RD/findings-pre-merge.yaml" \
   <위 표의 판정 입력> > "$RV/synth.out"
 echo "synth rc=$?"
 cat "$RV/synth.out"
@@ -672,7 +674,7 @@ cat "$RV/synth.out"
 `mv "$RV/synth.out" "$RV/synth-before-restore.out"`. 그다음 위 펜스를 같은 판정 입력 그대로 다시 돌리되 `> "$RV/synth.out"` 앞에
 `--restore-lowered <번호들>` 을 더한다 — 번호는 「낮춘 지적」 표의 `L<k>` 를 쉼표로 잇고(예: `--restore-lowered L1,L3`), 전부면 `all` 이다.
 합성기는 그 번호의 lower 를 적용하지 않아 원래 심각도로 판정에 넣고, `restored:` 줄과 「낮춘 이유」 칸 머리의 `(사용자가 되올림)` 으로
-그 사실을 싣는다. 그 합성이 0 으로 끝났으면 Step 3.9 의 펜스를 같은 판정 입력에 같은 `--restore-lowered <번호들>` 을 더해 다시 돌린다 —
+그 사실을 싣는다. 이 펜스에는 `--pre-merge-out "$RD/findings-pre-merge.yaml"` 이 들어 있으므로 되올려 다시 돌면 같은 파일을 덮는다. 그 합성이 0 으로 끝났으면 Step 3.9 의 펜스를 같은 판정 입력에 같은 `--restore-lowered <번호들>` 을 더해 다시 돌린다 —
 그 펜스가 낸 줄이 되올린 뒤 리뷰 결과 줄이다(차등 기원 사유가 없는 리뷰 축 줄이다). Step 3.9 가 처음 낸 줄도 버리지 않는다 — 판정 펜스가
 둘을 함께 받는다. 표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`). 번호는 Step 4.5 의 확인 펜스가 먼저 거르므로 여기 닿지 않아야 한다.
 그래도 rc 2 면 멈추지 않는다: `mv "$RV/synth-before-restore.out" "$RV/synth.out"` 으로 앞 출력을 되돌리고

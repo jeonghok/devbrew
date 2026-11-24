@@ -87,6 +87,15 @@ while [[ $# -gt 0 ]]; do
       fi
       shift
       ;;
+    --answered)
+      # intent-critic 단계에 넘기는 「이미 답한 것」 파일 — 범위 인자가 아니다(SCOPE_ARGS 를 늘리지 않는다). 값 하나를 소비한다.
+      shift
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^- ]]; then
+        echo "❌ --answered 뒤에 「이미 답한 것」 파일 경로가 없다." >&2
+        exit 1
+      fi
+      shift
+      ;;
     --reset)
       gone "--reset" "세션 폴더는 /quality-gates:quality-pipeline 을 시작할 때마다 지우고 다시 만든다"
       shift
@@ -137,6 +146,7 @@ OPTIONS:
   --paths <glob>...    Scope override — review only the matched paths
   --origin <path>      Caller's origin file for the intent critic (tracked file in this repo)
                        If that file has no roadmap: line, the other-teams map reports 「로드맵 없음」.
+  --answered <path>    Conductor's already-answered file for the intent critic (absolute path)
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message

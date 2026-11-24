@@ -81,7 +81,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
    `- <브랜치>[ · PR #<n> <제목> · …] — <겹치는 경로> · …` 줄들, 겹침을 봤는데 없으면 `- 겹침 없음`, 확인하지 못했으면 `- 겹침 확인 못 함`)과
    `다른 팀 확인 못 함:`(그 기록의 `## 확인 못 함` 줄 그대로). 기록에서 절이 비었으면 그 목록 아래 `- 기록에서 이 절을 읽지 못함`.
    목록 줄은 기록의 `## 팀 지도` 앞까지만 읽는다 — 다른 브랜치의 본문은 목록 줄이 되지 못한다. 기록이 없으면 두 목록 대신 `- 다른 팀 기록 없음`
- - 목록 `상한 넘어 남김:`(없으면 `- 없음`) · `이미 답한 질문이라 거른 질문:`(`- <정체> · <앞 답> · <답 파일>[ · 이 범위가 더한 답 파일 | · 범위 변경 여부를 확인하지 못함] — <질문>`) ·
+ - 목록 `상한 넘어 남김:`(없으면 `- 없음`) · `이미 답한 질문이라 거른 질문:`(`- <정체> · <앞 답> · <답 파일>[ · 이 범위가 더한 답 파일 | · 범위 변경 여부를 확인하지 못함] — <질문>`, 넘겨받은 항목은 `- <정체> · <앞 답> · <넘겨받은 기록 파일> · 넘겨받은 답[ · 미뤄 둔 의심][ · 정체가 다름 — <그때> → <지금>] — <질문>`) ·
    `이미 「잘못 골랐다」 답이 있어 거른 질문:` — 뒤 둘은 거른 질문이 있을 때만>
 ```
 
@@ -109,14 +109,14 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 `other-teams.md` 는 판정 · 게시 뒤에만 생기고 다음 실행의 Preflight P2 가 지운다. 답 파일은 세션 폴더가 아니라 docs 답 자리에 산다(레포 설정 `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`, 기본
 `docs/qg-intent-answers` — `record` 가 쓰고 그 파일만 커밋한다).
 
-## 돌려주는 꼴 — `intent-return.md` (2판)
+## 돌려주는 꼴 — `intent-return.md` (3판)
 
 쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(꺼짐 줄 · 건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
 
 부르는 쪽은 이 파일에서 시작해 `session_dir` 로, 거기서 `other_teams` 로 내려간다. 내부 파일(`intent-questions.yaml`)은 읽지 않는다. 나중에 쓸 부르는 쪽이 가져갈 것은 이 파일과(다른 팀 기록이 필요하면) `session_dir` 아래 `other_teams` 값의 파일 둘이다.
 
-- 머리 칸(차례대로): `contract` · `status` · `reason` · `reason_text` · `outcome` · `result_line` · `none_reason` · `mode` · `reviewed_head` · `reviewed_base` · `session_dir` · `answers_dir` · `answers_dir_source` · `commit` · `breadth` · `other_teams` · `overlaps` · `questions`
-- 질문 칸(차례대로): `n` · `id` · `state` · `answer` · `answer_text` · `wrong_choice` · `failure` · `file` · `evidence` · `question` · `target_source` · `target_id` · `label` · `quote` · `observation`
+- 머리 칸(차례대로): `contract` · `status` · `reason` · `reason_text` · `outcome` · `result_line` · `none_reason` · `mode` · `reviewed_head` · `reviewed_base` · `session_dir` · `answers_dir` · `answers_dir_source` · `commit` · `breadth` · `other_teams` · `overlaps` · `answered_filtered` · `questions`
+- 질문 칸(차례대로): `n` · `id` · `state` · `answer` · `answer_text` · `wrong_choice` · `failure` · `file` · `evidence` · `question` · `target_source` · `target_id` · `label` · `quote` · `observation` · `why` · `asked_before` · `changed_observation`
 - 칸 `status` 의 값: `ran` · `uncountable` · `skipped` · `failed`
 - 칸 `reason` 의 값(skipped): `kill-switch` · `halted` · `trivia` · `empty-diff` · `no-evidence`
 - 칸 `reason` 의 값(failed): `tree-failed`
@@ -125,7 +125,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 머리 칸의 뜻:
 
-- `contract` — 꼴의 판(`2`).
+- `contract` — 꼴의 판(`3`).
 - `status` · `reason` · `reason_text` — 실행의 갈래와, 건너뛰었거나 실패한 까닭의 닫힌 부호 · 사람이 읽는 글. 그 밖의 갈래는 `reason` 이 `-` 다(`uncountable` 의 `reason_text` 는 공시 줄의 첫 줄).
 - `outcome` — `ran` 일 때 질문이 왜 있고 없는지. 그 밖은 `-`. `none` 은 리뷰어가 질문을 내지 않은 실행과 낸 질문이 모두 이미 답한 질문이라 걸러진 실행을 함께 뜻한다. 걸러진 질문의 목록은 이 파일에 없고 `result.md` 의 `## intent-critic` 절에만 있다.
 - `result_line` · `none_reason` — 사람에게 보인 결과 줄 그대로 · 리뷰어가 질문이 없다고 낸 이유(없으면 `-`).
@@ -133,6 +133,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 - `session_dir` · `other_teams` — 세션 폴더의 절대경로 · 그 아래 다른 팀 기록 파일의 이름(없으면 `-`).
 - `answers_dir` · `answers_dir_source` · `commit` — docs 답 자리와 그 값의 출처 · 답 커밋(없으면 `-`, 못 했으면 `failed — …`).
 - `breadth` · `overlaps` — 리뷰의 넓이(`narrow` · `range` · `intent-docs`) · 다른 팀과 겹치는 곳의 수(모르면 `-`).
+- `answered_filtered` — 이미 답해 거른 질문의 수(정수). 건너뜀 · 셀 수 없음은 `-`. 질문이 모두 걸러진 실행도 그 수다. 걸러진 질문의 목록은 이 파일에 없고 `result.md` 의 `## intent-critic` 에만 있다.
 - `questions` — 질문 목록.
 
 질문 칸의 뜻:
@@ -144,3 +145,6 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 - `failure` · `file` — 답 기록 실패의 사유 · 답 파일 경로(없으면 `-`).
 - `evidence` — 그 질문이 선 근거의 종류.
 - `question` · `target_source` · `target_id` · `label` · `quote` · `observation` — 질문 기록의 같은 칸. `observation` 은 관찰 줄 전부의 목록이다.
+- `why` — 리뷰어가 쓴 「왜 묻나」 한 줄 그대로(적지 않았거나 한 줄이 아니면 `-`).
+- `asked_before` — 리뷰어가 이미 답한 의심과 같다고 가리켰는데 다시 묻는 질문이면 `<전 답> · <답한 때> · <열쇠 또는 정체> · <근거가 달라짐 | 고친 뒤에도 보임>`, 그 밖은 `-`. 둘째 칸은 저장된 `answered_at` 그대로(날짜가 앞이다)이고, 셋째 칸은 넘겨받은 항목이면 그 열쇠 · 답 폴더에서 읽은 답이면 그 답의 정체다.
+- `changed_observation` — `근거가 달라짐` 인 질문은 목록이고 그 첫 항목이 화면에 싣는 한 구절(지금의 근거 첫 항목을 한 줄로 접어 자른 것)이다. 그 뒤로 이전 관찰(`이전 관찰: …`) · 지금의 근거 줄 · 읽은 인용이 온다. 그 밖은 `-`.
