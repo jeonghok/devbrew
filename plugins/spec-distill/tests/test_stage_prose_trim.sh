@@ -160,4 +160,11 @@ lacks plugins/spec-distill/dependencies.md '지휘자 · 로드맵 흐름은 진
 has   plugins/spec-distill/dependencies.md '로드맵 잡기는 superpowers 없이도 돈다' "글 일곱 ①(양의 짝): 의존 표"
 has   plugins/spec-distill/dependencies.md '「brief만 종료」 는 확정하지 않고 커밋' "「확정 · 커밋한 뒤 끝」(양의 짝): 의존 표"
 
+# ── 철학 문서 (과제 7) ───────────────────────────────────────────────────────────────
+PH=docs/philosophy/devbrew-harness-philosophy.md
+lacks "$PH" '인터뷰 brief' "AC34: 철학 문서가 옛 단계 이름으로 결과물을 부르지 않는다"
+has   "$PH" 'context brief 는 `check_brief.py` 가 구조로 막는다' "AC34(양의 짝): Law 1 의 막는 자리"
+has   "$PH" '문서 리뷰 자리 셋(design doc · context brief · intent seed)' "AC34: 리뷰 자리 셋이 새 이름이다"
+has   "$PH" 'skills/context-build/SKILL.md' "AC34(양의 짝): P2 코드 앵커가 새 skill 경로다(계획 1 — 지킨다)"
+
 finish
