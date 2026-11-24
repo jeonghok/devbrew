@@ -31,7 +31,7 @@
 1. **차례 표를 사람이 고쳐 꼴이 깨진 경우** — 칸이 빠지거나 걸음 번호가 겹치면 맞추기 명령은 죽지 않고 「차례 — 이상: 표를 읽지 못했다 — <사유>」 를 내고 나머지 구간을 끝까지 돈다. Task 1 의 `test_parse_rejects_*` 와 Task 8 의 `test_toc_broken_does_not_stop` 이 문다.
 2. **상태 보기가 처음 보는 줄을 낸 경우** — 맞추기 명령이 아는 「이상 없음」 꼴이 아닌 줄은 버리지 않고 이상으로 원문을 낸다(모르는 줄을 조용히 삼키면 리더가 기다리는 질문 · 온 글을 놓친다). Task 8 의 `test_status_line_outside_benign_is_shown` 이 문다.
 3. **세션 번호를 얻지 못한 셸에서 원장 명령을 부른 경우** — 아무것도 쓰지 않고 멈춘다(빈 번호로 표지를 잡지 않는다). Task 7 의 `test_missing_session_writes_nothing` 이 문다.
-4. **표에 없는 단계 이름(대기 · 로드맵 밖 일 · 뒤 판이 더한 단계)** — 그 일의 줄은 「걸음 없음 — 차례 표에 이 단계가 없다」 로 나오고 명령은 0 으로 끝난다. Task 8 의 `test_unmapped_stage_line` 이 문다.
+4. **표에 없는 단계 이름(대기 · 로드맵 밖 일 · 뒤 판이 더한 단계)** — 그 일의 줄은 「걸음 없음 — 차례 표에 이 단계가 없다」 로 나오고 명령은 0 으로 끝난다. Task 8 의 `test_unmapped_stage_line` 이 문다. 머지된 에픽은 「끝나지 않은 일」 이 아니어서 걸음 6 이 출력에서 사라지기 쉽다 — 그 에픽의 줄이 기계 상태에 남은 동안은 걸음 6 으로 나온다. Task 8 의 `test_merged_epic_rows_bring_step6` 이 문다.
 5. **나눈 파일 하나가 공유 락의 대상에서 빠진 경우** — 차례에서 읽은 파일 이름으로 견주는 확인이 실패한다. Task 3 의 `test_conducting_lock_targets.sh` 의 변이 대조가 문다.
 
 ## 계획이 정한 것
@@ -42,7 +42,8 @@
 |---|---|
 | 새 파일 이름(설계 §1.1 · Handoff Context) | `references/conducting.md`(차례 — 이름 그대로) · `references/conducting-step-1.md` ~ `conducting-step-7.md`(걸음 지시서) · `references/conducting-resume.md`(끊고 잇기 지시서) · `references/conducting-team.md`(team 형식 지시서) · `references/conducting-manual.md`(손 절차 파일). 모두 `references/` 바로 아래다 — 가리킴 락이 한 단계만 훑는다 |
 | 새 모듈(설계 §2 · Files to Modify 「몇으로 나눌지는 계획이」) | `scripts/conductor_toc.py`(차례 표 파서 — 맞추기 명령과 테스트가 함께 쓴다) · `scripts/conductor_sync.py`(맞추기 명령). 테스트 `tests/test_conductor_toc.py` · `tests/test_conductor_sync.py` · `shared/tests/test_conducting_lock_targets.sh` · 테스트 도우미 `tests/conducting_corpus.sh`(이름이 `test_` 로 시작하지 않아 스위트가 돌리지 않는다) |
-| 단계 → 걸음(설계 §2 「들어서는 때 칸에 상태 계산이 내는 단계 이름」) | 걸음 3: 준비 · 설계 중 · 일부 머지 / 걸음 4: 계획 · 구현 중 · 구현 끝 · 진행 중 / 걸음 5: PR · 결과 받음. 걸음 1 · 2 · 6 · 7 은 일에 달리지 않는다(칸에 `단계:` 가 없다). 「일부 머지 1/2」 처럼 뒤에 값이 붙는 단계는 표의 이름 뒤에 빈칸이 오면 맞는다 |
+| 단계 → 걸음(설계 §2 「들어서는 때 칸에 상태 계산이 내는 단계 이름」) | 걸음 3: 준비 · 설계 중 · 일부 머지 / 걸음 4: 계획 · 구현 중 · 구현 끝 · 진행 중 / 걸음 5: PR · 결과 받음 / 걸음 6: 머지됨 · 끝남(아래 줄의 조건이 붙는다). 걸음 1 · 2 · 7 은 일에 달리지 않는다(칸에 `단계:` 가 없다). 「일부 머지 1/2」 처럼 뒤에 값이 붙는 단계는 표의 이름 뒤에 빈칸이 오면 맞는다 |
+| 걸음 6 에 들어서는 때(설계 §2 — 리더의 계획 검토 고침) | 단계가 끝(`roadmap_status.DONE` — 머지됨 · 끝남)인 에픽 가운데 기계 상태에 그 에픽의 줄이 남은 것 — `## 작업`(단계 칸이 끝 낱말 `conductor_state.WORK_DONE` 이 아닌 줄) · `## 자원` · `## 살아 있는 agent` 에서 에픽 칸이 그 에픽인 줄. 맞추기 명령은 그런 에픽을 끝 묶음 `머지 뒤 일이 남은 에픽:` 에 걸음 6 과 그 지시서 경로, 남은 줄 수와 함께 낸다. 줄이 없으면 내지 않는다. 상태에서 읽으므로 같은 상태면 같은 출력이고(AC11), 새 기계 상태 칸은 만들지 않는다. 못 잡는 것: 줄을 남기지 않는 머지 뒤 일(남은 에픽 재평가 · 넘김 확인)만 남은 경우 — 그 일은 걸음 5 지시서의 머지 뒤 차례가 걸음 6 지시서로 잇는다 |
 | 표에서 걸음을 찾지 못했을 때(Deferred e5f19361) | 그 일의 줄 끝을 `→ 걸음 없음 — 차례 표에 이 단계가 없다` 로 내고 종료 코드는 바꾸지 않는다. 표를 읽지 못하면 `차례 — 이상: 표를 읽지 못했다 — <사유>` 한 줄을 내고 일마다의 걸음 칸 없이 나머지를 돈다 |
 | 머지 준비 담당자 틀의 줄(Deferred 719f25e9) | 계획 1 의 차례에는 그 줄이 없다(파일이 계획 3 뒤에 생긴다). 계획 3 이 차례의 「걸음에 달리지 않은 지시서」 목록에 「리더는 읽지 않는다 — 머지 준비 담당자를 보낼 때 명령이 채운다」 로 더한다 — 그 줄의 경로도 AC7 확인이 따라온다 |
 | 끊고 잇기 지시서를 읽는 때(Deferred 32896450 · 설계 §1.2) | 계획 1 의 차례 줄은 지금 글의 자리를 이름으로 든다 — 「승인 뒤 계획 담당자를 보낸 직후 · 담당자를 보낸 뒤처럼 끊기 좋은 자리에서 맥락이 무거울 때」 |
@@ -152,8 +153,8 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 - 이름 붙은 경로가 겹치면 `TocError`.
 
 - [ ] **Step 1: 실패하는 테스트를 하나씩 쓴다** — `tests/test_conductor_toc.py`(unittest, 픽스처 글은 테스트 안 문자열):
-  - `test_parse_reads_seven_steps` — 일곱 행 표 → `[s.number for s in toc.steps] == [1,2,3,4,5,6,7]`, `toc.steps[2].stages == ("준비", "설계 중", "일부 머지")`, `toc.steps[0].stages == ()`.
-  - `test_step_for_exact_and_suffixed` — `step_for(toc, "설계 중").number == 3` · `step_for(toc, "일부 머지 1/2").number == 3` · `step_for(toc, "일부 머지됨") is None` · `step_for(toc, "대기") is None`.
+  - `test_parse_reads_seven_steps` — 일곱 행 표 → `[s.number for s in toc.steps] == [1,2,3,4,5,6,7]`, `toc.steps[2].stages == ("준비", "설계 중", "일부 머지")`, `toc.steps[5].stages == ("머지됨", "끝남")`, `toc.steps[0].stages == ()`.
+  - `test_step_for_exact_and_suffixed` — `step_for(toc, "설계 중").number == 3` · `step_for(toc, "일부 머지 1/2").number == 3` · `step_for(toc, "머지됨").number == 6` · `step_for(toc, "일부 머지됨") is None` · `step_for(toc, "대기") is None`.
   - `test_parse_rejects_missing_row` · `test_parse_rejects_duplicate_stage` · `test_parse_rejects_bad_path`(`references/x.md` 처럼 `<SD>/` 없는 경로) · `test_parse_rejects_two_manual_paths` — 각각 `TocError` 이고 사유에 걸음 번호나 경로가 든다.
   - `test_named_files_order` — steps 1~7 · extras · manual 차례.
   - `test_cli_files_and_step` — 임시 폴더에 `references/conducting.md` 와 이름 붙은 파일을 만들고 `--plugin-root` 로 부른다: `files` rc 0 · 첫 줄이 차례 · `step --stage 준비` 의 첫 칸 `3` · `step --stage 대기` rc 1 · 지시서 하나를 지우면 `files` rc 3 과 `지시서가 없다`.
@@ -187,7 +188,7 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 - `conducting-team.md` = `## team 형식 로드맵` 머리 줄부터 `## 손으로 따르는 절차` 앞까지.
 - `conducting-manual.md` = `## 손으로 따르는 절차` 머리 줄부터 파일 끝까지.
 - 각 파일의 끝은 줄바꿈 하나다(절 사이의 빈 줄은 뗀다).
-- 남는 `conducting.md` = 옛 1행부터 `### 1.` 앞까지 + 아래 새 글 + 옛 `### 알림` 절 + `## 손으로 따르는 절차` 와 가리킴 한 줄. 새 글은 `### 걸음 표`(Task 1 꼴 — 들어서는 때 칸은 위 「계획이 정한 것」 의 단계 → 걸음과, 1 「부를 때마다」 · 2 「사용자를 기다리는 질문이 있을 때」 · 6 「에픽 PR 이 머지됐을 때」 · 7 「끝나지 않은 에픽이 없을 때」 · 함께 읽는 것 칸은 `—`)와 `### 걸음에 달리지 않은 지시서`(끊고 잇기 · team 형식 두 줄 — 읽는 때는 「계획이 정한 것」 의 글과 「로드맵 머리말이 `layout: team` 일 때만」)다. 끝 절 가리킴: `손으로 따르는 절차는 `<SD>/references/conducting-manual.md` 에 있다 — 지휘자를 부르지 않고 진행할 때의 것이고, 지휘자 skill 안에서는 따르지 않는다.`
+- 남는 `conducting.md` = 옛 1행부터 `### 1.` 앞까지 + 아래 새 글 + 옛 `### 알림` 절 + `## 손으로 따르는 절차` 와 가리킴 한 줄. 새 글은 `### 걸음 표`(Task 1 꼴 — 들어서는 때 칸은 위 「계획이 정한 것」 의 단계 → 걸음과, 1 「부를 때마다」 · 2 「사용자를 기다리는 질문이 있을 때」 · 6 「에픽 PR 이 머지된 뒤 그 에픽의 줄(작업 · 자원 · 살아 있는 agent)이 기계 상태에 남아 있는 동안 — 단계: 머지됨 · 끝남」(`단계:` 를 칸 끝에 둔다) · 7 「끝나지 않은 에픽이 없을 때」 · 함께 읽는 것 칸은 `—`)와 `### 걸음에 달리지 않은 지시서`(끊고 잇기 · team 형식 두 줄 — 읽는 때는 「계획이 정한 것」 의 글과 「로드맵 머리말이 `layout: team` 일 때만」)다. 끝 절 가리킴: `손으로 따르는 절차는 `<SD>/references/conducting-manual.md` 에 있다 — 지휘자를 부르지 않고 진행할 때의 것이고, 지휘자 skill 안에서는 따르지 않는다.`
 
 - [ ] **Step 1: 새 파일을 옛 글에서 잘라 만든다** — `$TMPDIR` 의 일회용 스크립트로 자른다(커밋하지 않는다). 손으로 옮겨 적지 않는다.
 - [ ] **Step 2: 글자 대조를 돌린다** — `$TMPDIR` 스크립트가 `git show HEAD:plugins/spec-distill/references/conducting.md` 에서 같은 범위를 다시 잘라 새 파일과 바이트로 견준다(끝 줄바꿈 하나 규칙만 맞춘 뒤). Expected: 파일 열 개 모두 같음. 결과 줄을 커밋 본문에 싣는다(AC4 의 「옮긴 커밋에서 글자로 같다」 근거).
@@ -226,7 +227,7 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 - 「리더」 한 줄: `리더는 로드맵을 이끄는 세션이다 — team 형식 설계 걸음의 leader 역할이 그 세션이다.`
 - 지킬 순서 한 줄(AC37, 설계 §1.2 글 그대로): `지킬 순서 — 덜 읽는 것과 제대로 아는 것이 부딪히면 제대로 아는 것이 이긴다. 계획 검수는 계획을 통째로 읽고, 설계 대화에서는 묶음과 원문을 다시 읽고, 다른 에픽으로 넘기는 판단은 원문을 읽고 한다.`
 - 읽는 규칙 한 문단(설계 §1.2): 걸음에 들어설 때 그 걸음의 지시서를 읽는다 · 이 대화에서 이미 읽은 지시서는 다시 읽지 않는다 · 압축이나 비우기 뒤에는 읽은 것으로 치지 않는다 · 차례가 이름 붙이는 파일은 지금 있는 것 전부다.
-- 걸음 표의 함께 읽는 것 칸: 3 `` `<SD>/references/conductor-dispatch.md`(이 대화에서 담당자를 처음 보낼 때) · `<SD>/skills/epic-conductor/references/qg-review.md`(spec 승인 앞) `` · 4 `` `<SD>/references/conductor-dispatch.md`(돌아온 사람 자리를 옮길 때) `` · 5 `` `<SD>/skills/epic-conductor/references/qg-review.md`(머지 앞) `` · 1 `` `<SD>/references/conductor-state-branch.md`(맞추기 명령이 상태 브랜치 구간에 이상을 냈을 때 · 온 글이 있을 때) `` · 7 `` `<SD>/skills/epic-conductor/references/qg-review.md`(로드맵 끝) `` · 나머지는 `—`. 설계 §1.5 의 때 밖의 읽기는 적지 않는다.
+- 걸음 표의 함께 읽는 것 칸: 3 `` `<SD>/references/conductor-dispatch.md`(이 대화에서 담당자를 처음 보낼 때) · `<SD>/skills/epic-conductor/references/qg-review.md`(spec 승인 앞) `` · 4 `` `<SD>/references/conductor-dispatch.md`(돌아온 사람 자리를 옮길 때) `` · 5 `` `<SD>/skills/epic-conductor/references/qg-review.md`(머지 앞) `` · 1 `` `<SD>/references/conductor-state-branch.md`(맞추기 명령이 상태 브랜치 구간에 이상을 냈을 때 · 온 글이 있을 때) `` · 2 `` `<SD>/references/conductor-state-branch.md`(기다리는 질문을 걸 때) `` · 5 에 더해 `` `<SD>/references/conductor-state-branch.md`(안 올린 규칙 고침을 올릴 때) `` · 7 `` `<SD>/skills/epic-conductor/references/qg-review.md`(로드맵 끝) · `<SD>/references/conductor-state-branch.md`(상태 브랜치를 지울 때) `` · 나머지는 `—`. 설계 §1.5 의 때 밖의 읽기는 적지 않는다(§1.5 표는 2026-11-25 에 걸음 2 · 5 · 7 을 더했다 — 사용자 「셋을 더한다」).
 - 머리 불릿 「하위에게 보내는 글은 같은 폴더 `conductor-dispatch.md` 의 틀이다」 뒤에 「— 읽는 때는 걸음 표의 함께 읽는 것 칸이다」 를 붙인다.
 
 - [ ] **Step 1: AC2 · AC37 테스트를 쓴다** — `tests/test_conducting_loop.sh` 끝에 더한다:
@@ -262,13 +263,13 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 - 머리 두 줄(설계 §1.3): 읽을 것 = 이 걸음에서 함께 읽는 파일과 그 조건(차례의 함께 읽는 것 칸과 같은 때 — 설계 §1.5) · 남기는 것 = 이 걸음이 쓰는 기록 · 파일의 자리(설계문서 `## 지휘 기록` · 기계 상태의 절 · 옮김 폴더 파일 — 지금 「기록」 · 「기계 상태」 칸이 말하는 자리를 모은 것).
 - 다른 걸음 · 다른 절을 가리키는 말에 파일을 붙인다 — 「걸음 3 의 「차례로」 확인」 → 「`<SD>/references/conducting-step-3.md` 의 「차례로」 확인」 꼴. 대상: `걸음 N 의` · `N 의 「` · `아래 맞추기 순서`(걸음 1 안이면 그대로) · `위 머리의 번호 적기 불릿`(→ 차례) · `손 절차 1`(→ `conducting-manual.md` 의 1) · `` 아래 `## team 형식 로드맵` 절 ``(→ `` `<SD>/references/conducting-team.md` ``) · `` `/compact 시점` ``(→ `` `<SD>/references/conducting-resume.md` ``). 찾는 법은 Step 1 의 grep 이다.
 - 걸음끼리 함께 쓰는 문단은 한 지시서에만 둔다 — 걸음 1 과 걸음 4 의 「병렬 권장 수 …」 · 「구현 담당자를 보낼 때는 먼저 …」 문장이 겹치면 걸음 1 에 두고 걸음 4 는 가리킨다.
-- 읽는 때(설계 §1.5): 보내는 글 틀은 걸음 3(이 대화에서 처음 보낼 때) · 걸음 4(돌아온 사람 자리를 옮길 때)에서만, 상태 브랜치 절차는 걸음 1(상태 브랜치 구간에 이상 · 온 글)과 글을 보낼 때에서만 읽으라고 적는다. 품질 게이트 절차의 「읽고 그 자리의 줄을 따른다」 문장은 그대로다. 걸음 2 · 5 · 7 의 지금 괄호 가리킴(「종류와 건 길은 `conductor-state-branch.md`」 · 규칙 고침 브랜치 · 상태 브랜치 지우기)은 자리를 밝히는 가리킴이라 그대로 두고 읽을 것 줄에는 올리지 않는다(물음 Q1 의 답이 오면 그대로 따른다). 걸음 5 처럼 담당자를 보내는 다른 걸음에 보내는 글 틀을 읽으라는 문장이 지금 있으면 Step 1 목록에 적고, 설계 §1.5 와 어긋나면 고치지 말고 멈춰 보고한다.
+- 읽는 때(설계 §1.5): 보내는 글 틀은 걸음 3(이 대화에서 처음 보낼 때) · 걸음 4(돌아온 사람 자리를 옮길 때)에서만, 상태 브랜치 절차는 걸음 1(상태 브랜치 구간에 이상 · 온 글) · 걸음 2(기다리는 질문을 걸 때) · 걸음 5(안 올린 규칙 고침을 올릴 때) · 걸음 7(상태 브랜치를 지울 때)과 글을 보낼 때에서만 읽으라고 적는다 — 걸음 2 · 5 · 7 의 읽을 것 줄에 그 파일과 때를 올린다(설계 §1.5 표, 2026-11-25 사용자 「셋을 더한다」). 품질 게이트 절차의 「읽고 그 자리의 줄을 따른다」 문장은 그대로다. 걸음 5 처럼 담당자를 보내는 다른 걸음에 보내는 글 틀을 읽으라는 문장이 지금 있으면 Step 1 목록에 적고, 설계 §1.5 와 어긋나면 고치지 말고 멈춰 보고한다.
 - 쌓는 줄의 꼴(설계 §1.8): 걸음 3 의 병렬 답 보기 `병렬 답 · <YYYY-MM-DD HH:MM> · 「<고른 선택지>」 …` 를 `- 병렬 답 · <YYYY-MM-DD> · 「<고른 선택지>」 · 준비 에픽 <…>` 꼴로 — 날짜 칸에 시각을 붙이지 않는다. 「가장 최근(줄의 시각)」 은 「가장 아래 줄(줄은 쌓기만 하고 고치지 않는다)」 로. 쌓인 기록 줄의 보기도 같은 꼴로.
 
 - [ ] **Step 1: 가리키는 말의 전수를 뽑는다** — Run: `grep -n -E '걸음 [1-7] 의|[1-7] 의 「|아래 맞추기 순서|위 머리|손 절차 [1-9]|## team 형식 로드맵|/compact 시점' plugins/spec-distill/references/conducting-step-*.md` · 결과를 `$TMPDIR/plan1-pointers.txt` 에 두고 줄마다 고칠지(다른 파일) · 둘지(같은 파일 안)를 적는다.
 - [ ] **Step 2: AC3 · AC6 · 겹침 테스트를 쓴다** — `tests/test_conducting_loop.sh`:
   - 지시서마다 첫 줄이 `### <N>. ` 이고 `- 읽을 것:` · `- 남기는 것:` · 다섯 칸이 각 정확히 하나, 읽을 것 · 남기는 것이 `- 기본값:` 보다 앞(AC3).
-  - 걸음 1 · 2 · 5 · 6 · 7 지시서와 차례의 걸음 표 밖에 `conductor-dispatch.md` 가 「읽」 과 같은 문장에 없다 · 걸음 3 · 4 의 읽을 것 줄에 있다(AC6 의 보내는 글 틀). 상태 브랜치 절차도 같은 꼴로 걸음 1 의 읽을 것 줄에 있다.
+  - 걸음 1 · 2 · 5 · 6 · 7 지시서와 차례의 걸음 표 밖에 `conductor-dispatch.md` 가 「읽」 과 같은 문장에 없다 · 걸음 3 · 4 의 읽을 것 줄에 있다(AC6 의 보내는 글 틀). 상태 브랜치 절차는 걸음 1 · 2 · 5 · 7 의 읽을 것 줄에 있고, 걸음 3 · 4 · 6 지시서에는 `conductor-state-branch.md` 가 「읽」 과 같은 문장에 없다(AC6 의 상태 브랜치 절차).
   - 겹침: 지시서 둘에 같은 문장(마침표로 끝나는 80자 이상)이 없다. 짝: `$TMPDIR` 사본에서 걸음 1 의 한 문장을 걸음 5 에 붙이면 RED.
 - [ ] **Step 3: AC9 테스트를 쓴다** — `tests/test_conductor_ledger.py` 에 `test_guide_example_lines_are_accepted`: 걸음 3 지시서에서 병렬 답 보기 줄과 쌓인 기록 줄 보기를 정규식으로 꺼내 꺾쇠 자리를 아는 값(날짜 `2026-11-25` · 선택지 `병렬 (권장)` · 에픽 `E4`)으로 채운 뒤, 옛 형식 설계문서 픽스처에 `record --spec <픽스처> --line <줄>` 과 team 형식 과제 파일 픽스처에 같은 명령을 주고 둘 다 rc 0 · 결정 기록에 그 줄이 있음을 본다. 쌓인 기록은 `add --section "쌓인 기록"` 뒤 `flush` 가 rc 0 이고 설계문서에 그 줄이 옮겨졌음을 본다. 같은 파일의 기존 픽스처 준비를 쓴다(케이스마다 레포를 새로 세우지 않는다).
 - [ ] **Step 4: 돌려 실패를 본다** — Expected: 머리 두 줄 없음 · 병렬 답 보기에 시각이 있어 team 형식 `record` 가 rc 2.
@@ -357,15 +358,15 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
 - Test: `tests/test_conductor_sync.py` · 걸음 1 문장 락(`test_conducting_loop.sh` 의 `once 1 …` · `test_conductor_state_branch_docs.py` 의 걸음 1 낱말 · `test_epic_conductor_skill.sh:226`)
 
 **Interfaces:**
-- Consumes: Task 1 `conductor_toc.load` · `step_for` · Task 7 `conductor_ledger.session_or_fail` · `control_plane.gather`(작업 목록과 규모 줄을 한 번의 계산으로 — 같은 블록을 `tasks_output` 이 읽는 그대로 쓴다).
+- Consumes: Task 1 `conductor_toc.load` · `step_for` · Task 7 `conductor_ledger.session_or_fail` · `control_plane.gather`(작업 목록과 규모 줄을 한 번의 계산으로 — 같은 블록을 `tasks_output` 이 읽는 그대로 쓴다) · `roadmap_status.DONE` · `conductor_state.WORK_DONE` · 기계 상태 읽기(`control_plane.machine_for` 처럼 지금 읽는 길 — 걸음 6 조건의 세 절).
 - Produces: 명령줄 `python3 conductor_sync.py --roadmap <로드맵> [--session <세션>] [--takeover]`. 종료 코드: 0 · 멈춤이면 그 구간의 종료 코드. 출력은 아래 꼴뿐이다.
 
 출력의 꼴:
 - 구간마다 `<구간> — <한 줄>`. 이상이면 `<구간> — 이상: <한 줄>` 뒤에 그 구간 원문을 줄마다 네 칸 들여 낸다.
 - 멈춤이면 `멈춤 — <구간>: <사유 한 줄>` 과 원문(들여 쓴)을 내고 그 종료 코드로 끝난다. 뒤 구간은 돌지 않는다.
 - 정보 줄은 `<무엇> <n>개 — 다시 보기: <명령>`.
-- 끝 묶음: `규모 — <지금 SKILL 4 의 꼴>` → (team 형식이면) `리더 묶음 — 이 대화에서 처음이면 돌린다: python3 "<SD>"/scripts/start_bundle.py --roadmap <로드맵> --role leader` → `끝나지 않은 일:` 과 일마다 `- <작업 목록의 제목> → 걸음 <N> <이름> · <지시서 절대경로>`(못 찾으면 `→ 걸음 없음 — 차례 표에 이 단계가 없다`) → 작업 목록의 탭 없는 끝 줄(`동시에 갈 수 있는 준비 에픽: …`)이 있으면 그대로 → 마지막 줄 `맞추기 — <YYYY-MM-DD HH:MM> 기준`(시각 줄은 이 하나다).
-- 일에 달리지 않은 걸음(1 · 2 · 6 · 7)은 일마다 내지 않는다. 기계 상태 `## 작업` 의 로드맵 밖 줄도 그 단계 칸 글로 같은 찾기를 한다.
+- 끝 묶음: `규모 — <지금 SKILL 4 의 꼴>` → (team 형식이면) `리더 묶음 — 이 대화에서 처음이면 돌린다: python3 "<SD>"/scripts/start_bundle.py --roadmap <로드맵> --role leader` → `끝나지 않은 일:` 과 일마다 `- <작업 목록의 제목> → 걸음 <N> <이름> · <지시서 절대경로>`(못 찾으면 `→ 걸음 없음 — 차례 표에 이 단계가 없다`) → (있으면) `머지 뒤 일이 남은 에픽:` 과 에픽마다 `- <작업 목록의 제목> → 걸음 6 머지 뒤 · <지시서 절대경로> · 남은 줄: 작업 <a> · 자원 <b> · 살아 있는 agent <c>`(「계획이 정한 것」 의 걸음 6 조건 — 그 에픽의 단계로 `step_for` 가 6 을 낸다) → 작업 목록의 탭 없는 끝 줄(`동시에 갈 수 있는 준비 에픽: …`)이 있으면 그대로 → 마지막 줄 `맞추기 — <YYYY-MM-DD HH:MM> 기준`(시각 줄은 이 하나다).
+- 일에 달리지 않은 걸음(1 · 2 · 7)은 일마다 내지 않는다. 단계가 끝인 에픽은 `끝나지 않은 일:` 에 넣지 않고, 걸음 6 조건에 맞을 때만 `머지 뒤 일이 남은 에픽:` 에 넣는다. 기계 상태 `## 작업` 의 로드맵 밖 줄도 그 단계 칸 글로 같은 찾기를 한다.
 
 구간(차례대로 — 설계 §2):
 
@@ -402,6 +403,7 @@ Expected: `1`(손 절차 「3. 흐름과 설계」 안). 0 이면 멈추고 보�
   - `test_stop_unreadable_state` — 기계 상태 파일을 깨진 꼴로 두고 → rc 3 · `멈춤 — 표지:`(원문 들여 씀). 픽스처를 되돌린다.
   - `test_status_line_outside_benign_is_shown` — 상태 보기 구간은 「이상 없음」 꼴의 줄을 허용 목록으로 갖고 그 밖의 줄은 모두 이상으로 낸다(목록에 없는 줄을 버리는 갈래를 두지 않는다). 기다리는 질문 한 줄을 `conductor_status.py waiting add` 로 올린 상태에서 `상태 브랜치 — 이상:` 과 그 질문 줄이 그대로 나온다(Review Focus 2).
   - `test_unmapped_stage_line` — 단계 「대기」 인 에픽 줄이 `→ 걸음 없음 — 차례 표에 이 단계가 없다` 로 끝나고 rc 0. 단계 「준비」 인 에픽 줄은 `→ 걸음 3 다음 일 고르기와 보내기 · ` 와 `conducting-step-3.md` 로 끝난다(Review Focus 4).
+  - `test_merged_epic_rows_bring_step6` — 준비물에서 에픽 하나의 브랜치를 기본 브랜치에 머지해 단계를 「머지됨」 으로 만든다. 기계 상태 `## 자원` 에 그 에픽의 줄 하나(`ledger add --section "자원"`)가 있으면 출력에 `머지 뒤 일이 남은 에픽:` 과 그 에픽 줄이 `→ 걸음 6 머지 뒤 · ` · `conducting-step-6.md` · `자원 1` 을 담고 나온다 · 그 에픽은 `끝나지 않은 일:` 밑에 없다. 그 줄을 `ledger drop` 으로 지우고 다시 부르면 `머지 뒤 일이 남은 에픽:` 이 없다. 줄이 남은 상태에서 두 번 부르면 시각 줄을 빼고 같다(AC11).
   - `test_toc_broken_does_not_stop` — 플러그인 폴더 사본을 `$TMPDIR` 에 두고 사본 차례의 걸음 표 한 행을 지운 뒤 사본의 `scripts/conductor_sync.py` 를 부른다(차례 경로를 바꾸는 옵션 · 환경 변수는 만들지 않는다) → `차례 — 이상: 표를 읽지 못했다` · 나머지 구간이 끝까지 · rc 0(Review Focus 1).
   - `test_session_workers` — 가짜 `hc` 가 내 주소(`HC_TERMINAL_ID=t9a`)의 자식 둘(이름 `plan-e1` · `stray`)을 낸다 · 기계 상태 `## 살아 있는 agent` 에 `plan-e1` · `sub-x` → `견줄 줄: sub-x` · `표에 없는 내 자식: … stray` · 표의 줄은 그대로(`ledger` 로 다시 읽어 확인). `hc` 가 PATH 에 없으면 `세션 담당자 — hc 없음`.
   - `test_team_bundle_line` — team 형식 로드맵 픽스처에서 `리더 묶음 — ` 줄 하나 · 그 줄에 `start_bundle.py` 와 `--role leader` · 묶음 본문(역할 문서 글)이 출력에 없다.
