@@ -488,3 +488,26 @@ PR 본문에만 두면 레포 안에서 찾을 수 없다. 지운 테스트는 �
 ## 지휘 기록
 
 - spec 승인 · 2026-11-24 · 「승인 — 계획 담당자에게 (권장)」
+- 계획 검토 — 설계에 없던 결정 없음 · 2026-11-24 19:37 · 지휘자가 계획(docs/superpowers/plans/2026-11-24-test-criteria-rules.md · 과제 일곱)을 끝까지 읽었다. 범위 · 인터페이스 · 파일 배치에서 설계에 없던 결정을 찾지 못해 사용자에게 묻지 않고 구현 담당자를 보냈다. 과제 2 가 설계문서 본문 일곱 줄을 고치는 것은 설계 리뷰 2라운드의 참고(Deferred to plan)를 받은 것이다
+- 구현 보고를 거둠 — 판정 10개 · 구현 대조 경고 2개 · 2026-11-24 19:37 · 구현 담당자가 커밋 일곱(끝 8e148c78)을 올렸다. 판정 10개는 모두 설계 안의 것이다(잠금 기다림 시간 · 리뷰어 고르기 · 커밋 차례 · 마지막 수정 뒤 전체 스위트를 다시 돌지 않음 등). 구현 대조의 경고 2개는 AC19 · AC20 이 보고에 없다는 것이고, 둘은 머지 뒤 지휘자가 남기는 기록이라 구현 보고에 들 수 없다. 담당자가 본 전체 스위트(08946d58 · rc 1)의 실패는 모두 기준 커밋에서도 나거나 worktree 에서만 나는 것이라고 보고했다 — 판정은 머지 전 대조가 한다
+- 지휘자가 직접 다시 돌린 확인 · 2026-11-24 19:37 · 브랜치 끝 8e148c78 에서 ① 원문 대조 스크립트를 설치본 tdd 폴더(판 1.3.2)에 대어 돌려 세 해시가 고지 파일과 같고 「차이 0」 임을 봤다 ② shared/tests/test_charter_citations.sh 가 rc 0 · 확인 14개 통과이고 새 확인 줄이 통과에 들어 있음을 봤다 ③ main 과의 차이가 파일 아홉이고 plugins/ 아래 변경과 지운 파일 · 권한 바뀜이 없음을 봤다. 사본 넷으로 락을 망가뜨려 본 결과(AC16)와 원문 대조의 양성 대조는 담당자 보고에 기댄다
+
+## 판정
+
+### docs/superpowers/plans/2026-11-24-test-criteria-rules.md
+
+- Ruling: R1 suite lock `--wait 14400` (dispatch instruction) instead of plan's 7200 — caller's instruction is later and explicit — cost if wrong: longer wait only.
+- Ruling: R2 Task 1 has no diff; task reviewer reviews the produced TMPDIR files (copied into this workspace) against the brief — skill forbids skipping review; there is nothing else to review — cost if wrong: one cheap review seat.
+- Ruling: R3 Task 5 Step 7 clones "after committing Steps 1–5": implementer commits Steps 1–5 (the Step 9 commit) before Step 7, then Step 8 runs readers; if Step 7/8 reveal a problem, a follow-up commit fixes — plan's own text demands the commit exist before cloning — cost if wrong: one extra commit.
+- Ruling: R4 reviewers = feature-dev:code-reviewer (Read/Grep/Glob only, no Write/Edit/Bash) — Law 2 physical separation — cost if wrong: reviewer cannot run commands; it names tests instead.
+- Ruling: R5 TMPDIR files that reviewers must read are copied into this workspace (inside worktree) since reviewers' Read may be denied outside the worktree — cost if wrong: none.
+- Ruling: concerns are pre-existing observations, not correctness/scope — proceed to review; later tasks compare against this baseline — cost if wrong: a real regression hidden in those two files (mitigated: compare ✗ lines, not rc).
+- Ruling: R6 final whole-branch review dispatched while the full suite runs (plan orders Step 3 before Step 4) — review judges docs/lock content, independent of suite outcome; suite result is added to the report before finishing — cost if wrong: a suite failure needing a fix would need a re-review of that fix (would happen anyway).
+- Ruling: R7 the single final fix wave (both Minors, one fixer) is dispatched only after the running full suite finishes — editing docs while the suite reads the worktree would make the suite result unattributable — cost if wrong: wall-clock wait only. After the fix, rerun the docs readers (fix diff is two phrase edits in docs).
+- Ruling: R8 full suite not rerun after fix commit 8e148c78 — the fix is two phrase edits in two docs; the reader list (all docs/CLAUDE.md readers) was rerun at 8e148c78 instead — cost if wrong: an unseen suite reader of these two docs outside the list (Task 1 review found none).
+- Ruling: R9 finishing-a-development-branch Step 1 finds the suite not green (pre-existing failures, all also at base or worktree-only) → stop without the menu; the pre-given answer (branch pushed, no PR, conductor opens it) is what happens anyway — cost if wrong: none; the conductor's comparison judges the failures.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-24-test-criteria-rules.md
+
+- 구현 대조: 경고 2개 — 보고에 없는 AC 2개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 0개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (보고에 없는 AC — AC19 · AC20 은 머지 뒤 지휘자가 남기는 기록이다)
+- 보고: AC 20개 중 구현됨 18(AC1–AC18) · 지휘자 몫이라 보고에 없음 2(AC19 · AC20)
