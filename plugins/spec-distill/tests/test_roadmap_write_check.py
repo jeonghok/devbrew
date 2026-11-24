@@ -182,12 +182,42 @@ class Check(Base):
         self.assertEqual(rc, 0)
         self.assertEqual(out.strip().splitlines(), ["brief-risk: OK"])
 
-    def test_risk_fail_with_table_still_reports_table_unknown(self):
+    def test_risk_fail_with_table_reports_only_risk(self):
+        # 위험 줄 결함이면 표를 셀 수 없다 — 표 결함이 아니므로 roadmap-table 줄을 내지 않는다(brief-risk 줄은 한 번).
         rc, out = self.run_check(brief(RISKS_MIXED), AUDIT, TABLE_ALL)
         self.assertEqual(rc, 1)
         lines = out.splitlines()
-        self.assertTrue(lines[0].startswith("brief-risk: FAIL "))
-        self.assertTrue(lines[1].startswith("roadmap-table: UNKNOWN "), out)
+        self.assertTrue(lines[0].startswith("brief-risk: FAIL brief §5 위험 줄 가운데"), out)
+        self.assertNotIn("roadmap-table:", out)
+        self.assertEqual(sum(1 for ln in lines if ln.startswith("brief-risk:")), 1, out)
+
+    def test_audit_side_defect_is_unreadable_first_line(self):
+        # 결과물 · audit 쪽 결함(번호를 셀 수 없다)은 표를 고쳐도 낫지 않는다 — 첫 줄 「못 읽었다」 로 낸다.
+        rc, out = self.run_check(brief(), "# audit\n\n본문만 있고 §6 이 없다\n", TABLE_ALL)
+        self.assertEqual(rc, 1)
+        lines = out.splitlines()
+        self.assertTrue(lines[0].startswith("brief-risk: FAIL 못 읽었다: audit §6 을 하나로 읽을 수 없다"), out)
+        self.assertNotIn("roadmap-table:", out)
+        self.assertNotIn("brief-risk: OK", out)
+
+    def test_unreadable_state_file_is_unreadable_first_line(self):
+        rc, out = self.run_check(brief(), AUDIT, None)
+        b, a = self.dir / "brief.md", self.dir / "brief.audit.md"
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        p = subprocess.run([sys.executable, str(RW), "check", "--brief", str(b), "--audit", str(a),
+                            "--plan-table", str(self.dir / "없는-state.md")],
+                           capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertEqual(p.returncode, 1)
+        lines = p.stdout.splitlines()
+        self.assertTrue(lines[0].startswith("brief-risk: FAIL 못 읽었다: "), p.stdout)
+        self.assertNotIn("roadmap-table:", p.stdout)
+
+    def test_table_defect_stays_unknown_after_ok_risk(self):
+        # 양의 짝 — 표 자체의 결함만 roadmap-table: UNKNOWN 이고, 그때 첫 줄은 brief-risk: OK 다.
+        rc, out = self.run_check(brief(), AUDIT, "# state\n\n표가 없다\n")
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.splitlines()[0], "brief-risk: OK")
+        self.assertTrue(out.splitlines()[1].startswith("roadmap-table: UNKNOWN "), out)
 
     def test_unreadable_table_unknown(self):
         rc, out = self.run_check(brief(), AUDIT, "# state\n\n표가 없다\n")
