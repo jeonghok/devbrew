@@ -56,6 +56,7 @@ LINE_PR_LIMIT = "열린 PR 이 조회 상한에 닿아 일부를 못 봤을 수 
 LINE_DIVERGED = "같은 이름의 원격 사본이 갈라져 있다 — %s"
 LINE_FOLDED = "같은 이름의 원격 사본 %d개를 로컬 브랜치와 한 작업으로 묶었다"
 LINE_SIBLINGS = "토픽 리뷰의 형제 브랜치 %d개를 다른 팀에서 뺐다 — 이번 리뷰 범위다"
+LINE_REVIEW_RECORDS = "리뷰 기록 %d개는 다른 팀 근거로 싣지 않았다"
 LINE_TIMEOUTS = "git 읽기 %d번이 시간 한도 %d초를 넘겨 그 읽기를 확인 못 함"
 LINE_DOC_TIMEOUT = "%s 의 %s 를 읽지 못함 — %s"
 PR_NO_GH = "gh 없음"
@@ -637,10 +638,12 @@ def _pr_label(entry: dict, prs_known: bool) -> str:
 
 # ---------------------------------------------------------------- 다른 작업 항목
 
-def _intent_docs(repo: str, entry: dict, markers: List[str], unverified: List[str]) -> List[tuple]:
+def _intent_docs(repo: str, entry: dict, markers: List[str], unverified: List[str],
+                 skipped: List[int]) -> List[tuple]:
     """그 브랜치 끝에서 읽은 의도 문서 `(경로, 글)` — 다른 작업이 바꾼 문서 파일 가운데.
 
     머리가 YAML 로 읽히지 않는 문서는 의도 문서로 세지 않고 「확인 못 함」 에 그 브랜치 · 경로를 남긴다.
+    머리의 `type` 이 `roadmap-review` 인 리뷰 기록은 싣지 않고 `skipped[0]` 에 센다.
     """
     docs: List[tuple] = []
     for rel in sorted(entry["paths"]):
@@ -654,6 +657,8 @@ def _intent_docs(repo: str, entry: dict, markers: List[str], unverified: List[st
                                                       io_.REASON_TIMEOUT))
         elif io_.frontmatter_unreadable(text):
             unverified.append(LINE_FRONTMATTER % (one_line(entry["name"]), one_line(rel)))
+        elif io_.frontmatter_value(text, "type") == "roadmap-review":
+            skipped[0] += 1
         elif io_.is_intent_doc(text, markers):
             docs.append((rel, text))
     return docs
@@ -778,6 +783,7 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
     plain = 0
     notes: dict = {"folded": 0, "diverged": []}
     dropped_siblings = 0
+    review_records = [0]
     prs_known = False
     overlap_known = False  # 기본 브랜치 · 브랜치 목록 · 바뀐 파일 목록이 모두 있어야 「겹침 없음」 이라 말한다
     if default is None:
@@ -807,7 +813,7 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
             unverified.append("PR #%d 내용 확인 못 함 — 그 브랜치가 이 리포에 없다" % number)
         for entry in entries:
             try:
-                entry["docs"] = _intent_docs(repo, entry, markers, unverified)
+                entry["docs"] = _intent_docs(repo, entry, markers, unverified, review_records)
             except Exception as exc:  # noqa: BLE001 — 브랜치 하나의 실패가 기록 전체를 지우지 않게
                 entry["docs"] = []
                 unverified.append(_branch_failed(entry, exc))
@@ -851,6 +857,8 @@ def collect(repo: str, tree_root: str, review_commit: str, names: Optional[set],
         parts.append(LINE_FOLDED % notes["folded"] + "\n")
     if dropped_siblings:
         parts.append(LINE_SIBLINGS % dropped_siblings + "\n")
+    if review_records[0]:
+        parts.append(LINE_REVIEW_RECORDS % review_records[0] + "\n")
     parts.append("%s\n%s\n" % (HEAD_CAP, cap_line))
     return {"text": _clean("".join(parts)), "notices": notices}
 

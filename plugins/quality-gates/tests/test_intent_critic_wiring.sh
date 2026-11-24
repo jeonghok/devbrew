@@ -59,8 +59,13 @@ assert_not_grep "$(section "$S" '## Requirement index')" '^\| I1 ' "Requirement 
 P2F="$(awk '/^\*\*P2 — setup\.\*\*/{p=1} p&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$S")"
 P2_LINE="$(printf '%s\n' "$P2F" | grep -F -- "-name 'intent-*'")"
 assert_eq "$P2_LINE" "$P2_CLEAN" "P2 펜스: intent-* 정리 줄"
-assert_file_grep "$S" '^argument-hint: ".*\[--origin <경로>\]"$' "argument-hint 끝에 --origin"
+assert_file_grep "$S" '^argument-hint: ".*\[--origin <경로>\] \[--answered <경로>\]"$' "argument-hint 끝에 --origin 과 --answered"
 assert_contains "$SF" '`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다.' "Arguments: --origin 은 범위 인자가 아니다"
+assert_contains "$SF" '`--answered <경로>` 는 부른 쪽(지휘자)이 넘기는 「이미 답한 것」 파일의 절대 경로이고 범위 인자가 아니다.' "Arguments: --answered 는 범위 인자가 아니다"
+IR="$(fenced "$PROC")"
+assert_contains "$IR" "<<'QG_INTENT_ANSWERED'" "I2 펜스: QG_INTENT_ANSWERED heredoc"
+assert_contains "$IR" 'A_ARGS=(--answered "$ANSWERED_ARG")' "I2 펜스: A_ARGS 목록"
+assert_contains "$IR" '"${A_ARGS[@]}"' "I2 펜스: prepare 줄 끝의 A_ARGS"
 assert_file_grep "$S" '^ ├ Publish ── ' "Flow: Publish 는 마지막 가지가 아니다"
 assert_file_grep "$S" '^ └ intent-critic ── 판정 밖 질문 · 판정 · 게시 뒤 · 답 파일만 커밋 \(references/intent-critic\.md · 범위 모드는 묻지 않음\)$' "Flow: intent-critic 이 마지막 가지"
 assert_contains "$SF" 'intent-critic 답 커밋은 `scripts/intent_critic.py record` 하나가 한다 — 답 파일만 경로 지정으로, push 없이.' "Rules: 답 커밋은 record 하나"
@@ -129,6 +134,32 @@ else no "README kill switch 표에 ${KILL} 가 없다"; fi
 
 note "[README 뜻 문장 — AC17 자리 4]"
 assert_contains "$(flat < "$RM")" "intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다." "README: intent-critic 뜻 문장"
+
+note "[README 17.0.0 — --answered · 돌려주는 꼴 3판 · 직접 묻는 틀 · 합치기 전 목록]"
+RMF="$(flat < "$RM")"
+assert_contains "$RMF" '`--answered <경로>` 는 지휘하는 쪽이 이미 사용자에게 물어 답을 받은 것을 담은 파일을 qg 에 넘기는 인자다' "README: --answered 뜻 문장"
+assert_contains "$RMF" '돌려주는 꼴은 3판이다 — `contract: 3`' "README: 돌려주는 꼴 3판"
+for k in why asked_before changed_observation answered_filtered; do
+  assert_contains "$RMF" "새 칸 \`$k\`" "README: 새 칸 $k"
+done
+assert_contains "$RMF" '직접 묻는 틀은 질문 문장을 먼저 보이고 「왜 묻나」 한 줄을 그 아래에 단다' "README: 직접 묻는 틀 문장"
+assert_contains "$RMF" '`findings-pre-merge.yaml` 은 재비판 처분을 반영한 뒤 · 같은 지적을 합치기 전의 목록이다' "README: 합치기 전 목록 파일"
+assert_contains "$RMF" '`type: roadmap-review` 문서는 다른 팀 기록에 싣지 않는다' "README: roadmap-review 제외"
+assert_contains "$RMF" '넘겨받은 답을 읽지 못함 — <사유>' "README: 읽지 못함 알림"
+# R6 통합 리뷰 F5 — README 가 화면 틀 · asked_before 값과 맞는다
+assert_contains "$RMF" '를 결과 절 표의 `근거` 칸 · 돌려주는 꼴에 남긴다 — 질문 화면에는 싣지 않고 `자세히` 줄의 파일에 있다' "README(F5 가): 근거의 종류는 질문 화면에 싣지 않는다"
+assert_not_contains "$RMF" '질문 앞 글 · 결과 절 표의 `근거` 칸' "README(F5 가) 음성: 근거의 종류를 질문 앞 글에 보인다던 옛 문장이 없다(양성 짝: 질문 화면에는 싣지 않고)"
+assert_contains "$RMF" '열쇠 또는 정체 · 다시 묻는 까닭 — `근거가 달라짐` 또는 `고친 뒤에도 보임`)' "README(F5 다): asked_before 넷째 칸은 다시 묻는 까닭 두 값"
+assert_not_contains "$RMF" '열쇠 또는 정체 · 근거가 달라졌는지' "README(F5 다) 음성: 넷째 칸을 「근거가 달라졌는지」 로 적던 옛 글이 없다(양성 짝: 다시 묻는 까닭 두 값)"
+CHG="$(flat < "$PLUGIN_ROOT/CHANGELOG.md")"
+assert_contains "$CHG" '## [17.0.0] — 2026-11-24' "CHANGELOG: 17.0.0 절"
+# 판은 major 의 바닥만 본다 — 돌려주는 꼴 3판이 17 에서 나왔고 그 아래로 돌아가지 않았다. 판 글자를 박으면 다음 bump 마다 RED 다.
+QG_VER="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -1)"
+QG_MAJOR="${QG_VER%%.*}"
+case "$QG_MAJOR" in
+  ''|*[!0-9]*) no "plugin.json 판을 읽지 못했다(${QG_VER})" ;;
+  *) if [ "$QG_MAJOR" -ge 17 ]; then ok "plugin.json 판의 major 가 17 이상(${QG_VER})"; else no "plugin.json 판의 major 가 17 이상(${QG_VER})"; fi ;;
+esac
 
 note "[옛 이름 부재]"
 for f in "$S" "$PROC" "$SFF" "$RM" "$SCRIPTS/setup-qg.sh" "$PLUGIN_ROOT/agents/intent-critic.md" \

@@ -1393,14 +1393,15 @@ class TestWideRender(_WideRun, unittest.TestCase):
                                 "result_line", "none_reason", "mode", "reviewed_head",
                                 "reviewed_base", "session_dir", "answers_dir",
                                 "answers_dir_source", "commit", "breadth", "other_teams",
-                                "overlaps", "questions"])
+                                "overlaps", "answered_filtered", "questions"])
         fields = []
         for line in text.split("\n"):
             if (line.startswith("    ") and not line.startswith("     ")) or line.startswith("  - "):
                 fields.append(line.strip().lstrip("- ").split(":", 1)[0])
         self.assertEqual(fields, ["n", "id", "state", "answer", "answer_text", "wrong_choice",
                                   "failure", "file", "evidence", "question", "target_source",
-                                  "target_id", "label", "quote", "observation"])
+                                  "target_id", "label", "quote", "observation", "why",
+                                  "asked_before", "changed_observation"])
 
     def test_overlap_list_without_reviewer(self):
         self._prepare(wide=False, call="none")

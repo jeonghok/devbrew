@@ -68,10 +68,11 @@ fi
 
 ## I2 설정 · 준비
 
-`config` 는 docs 답 자리 · 리뷰어 입력 상한 · 다른 팀 기록의 바이트 상한 · 의도 문서를 가리는 표시를 정하고, `prepare` 는 리뷰의 넓이를 정해 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문 · 리뷰어의 `<scope>` 칸(`intent-scope.md`)을 세션 폴더의 `intent-*` 파일로 조립하고 다른 팀 기록(`other-teams.md`)을 쓴다. 펜스의 자리 셋을 채운다:
+`config` 는 docs 답 자리 · 리뷰어 입력 상한 · 다른 팀 기록의 바이트 상한 · 의도 문서를 가리는 표시를 정하고, `prepare` 는 리뷰의 넓이를 정해 근거 · 원문 · 로드맵 · 의도 출처 · 의심 · 이미 답한 질문 · 리뷰어의 `<scope>` 칸(`intent-scope.md`)을 세션 폴더의 `intent-*` 파일로 조립하고 다른 팀 기록(`other-teams.md`)을 쓴다. 펜스의 자리 넷을 채운다:
 
 - `QG_INTENT_JSON` — P3 이 낸 JSON 한 줄을 글자 그대로. P3 이 JSON 을 남기지 못했으면 빈 줄로 둔다(`prepare` 가 공시한다).
 - `QG_INTENT_ORIGIN` — 인자에 `--origin <경로>` 가 있었으면 그 경로를 글자 그대로, 없으면 빈 줄.
+- `QG_INTENT_ANSWERED` — 인자에 `--answered <경로>` 가 있었으면 그 경로를 글자 그대로, 없으면 빈 줄.
 - `BASE` — PR 범위면 Step 1c 출력의 `base:` 값, 모르면 `-`. 범위 모드는 펜스가 범위 파일의 `start:` 를 읽으므로 비워 둔다. `prepare` 는 이 값으로 `<scope>` 칸의 커밋 제목(기준 커밋부터 리뷰한 커밋까지)을 읽는다.
 
 리뷰 트리 루트는 PR 범위면 리포 루트(`git rev-parse --show-toplevel`), 범위 모드면 I1 의 트리다 — `config` 는 그곳의 설정을, `prepare` 는 그곳의 docs 답 자리를 읽고 그 루트를 계획 파일에 적는다. 리뷰한 커밋은 PR 범위면 `HEAD`, 범위 모드면 끝 커밋이다.
@@ -86,6 +87,9 @@ QG_INTENT_JSON
 IFS= read -r ORIGIN_ARG <<'QG_INTENT_ORIGIN'
 <인자의 --origin 경로 — 없으면 빈 줄>
 QG_INTENT_ORIGIN
+IFS= read -r ANSWERED_ARG <<'QG_INTENT_ANSWERED'
+<인자의 --answered 경로 — 없으면 빈 줄>
+QG_INTENT_ANSWERED
 if [ -f "$RD/range-scope.txt" ]; then
   MODE=range; RS="$RD/range-scope.txt"
   BASE="$(sed -n 's/^start: //p' "$RS")"; REVIEW="$(sed -n 's/^end: //p' "$RS")"; TREE="$(cat "$RD/intent-review-tree.txt")"
@@ -95,8 +99,9 @@ fi
 case "$BASE" in ''|*[!0-9a-f]*) BASE=- ;; esac
 [ -n "$TREE" ] && [ -d "$TREE" ] || { echo "[quality-gates] intent-critic 단계의 리뷰 트리가 없다(${TREE:-빈 값}) — 준비하지 않는다" >&2; exit 5; }
 O_ARGS=(); [ -z "$ORIGIN_ARG" ] || O_ARGS=(--origin "$ORIGIN_ARG")
+A_ARGS=(); [ -z "$ANSWERED_ARG" ] || A_ARGS=(--answered "$ANSWERED_ARG")
 python3 "$QG/scripts/intent_critic.py" config --rd "$RD" --repo "$TOP" --base "$BASE" --project-dir "$TREE" || exit
-python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" --base "$BASE" "${O_ARGS[@]}"
+python3 "$QG/scripts/intent_critic.py" prepare --rd "$RD" --repo "$TOP" --tree-root "$TREE" --mode "$MODE" --head HEAD --review-commit "$REVIEW" --specs-json "$RD/intent-specs.json" --base "$BASE" "${O_ARGS[@]}" "${A_ARGS[@]}"
 echo "prepare rc=$?"
 ```
 
@@ -104,7 +109,7 @@ echo "prepare rc=$?"
 
 **다른 팀 읽기.** `prepare` 는 어느 넓이에서나 다른 팀 기록을 모아 `$RD/other-teams.md` 에 쓴다(기록이 비면 그 파일을 지운다). 「팀」 은 로드맵 하나다. 읽는 것은 이번 로드맵(리뷰 트리)과 나란한 다른 로드맵(기본 브랜치 끝)의 에픽 블록 · 결정 기록, 기본 브랜치에서도 리뷰한 커밋에서도 닿지 않는 커밋이 있는 브랜치(로컬 · 원격)의 바뀐 의도 문서, 이번 변경과 겹치는 파일의 그쪽 diff, 열린 PR 목록(번호 · 제목 · 브랜치 이름 · 포크 여부 — 조회 한 번)이다. 정해진 git 읽기 명령만 쓰고 리포를 바꾸지 않는다 — 원격을 새로 받지 않는다. 못 보는 것(다른 worktree 의 커밋 안 된 작업 · 이 리포에 브랜치가 없는 PR · 확인하지 못한 열린 PR 목록(`열린 PR 확인 못 함 — <사유>`) · 다른 컴퓨터와 올리지 않은 작업 · 새로 받지 않은 원격(`원격 브랜치를 새로 받지 않았다 — 오래됐을 수 있다`) · 표시가 설정에 없는 컨텍스트 쌓기 단계의 팀 · 읽지 못한 브랜치 목록이나 기본 브랜치 · 읽지 못한 브랜치(`브랜치 <이름> 를 읽지 못함 — <예외 이름>`) · 머리를 읽지 못한 문서)은 기록의 「확인 못 함」 절에 한 줄씩 남는다. 기록은 리뷰어를 부를 때 근거 파일에 `[다른 팀]` 줄로 실린다. `intent-call: none` 이어도 기록은 남고, 겹치는 곳 · 확인 못 함 목록은 [I6](#i6-렌더) 의 결과 절에 보인다.
 
-`config` 의 여덟 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` · `넓게 본다 — 범위 모드` · `넓게 본다 — 의도 문서가 바뀐 변경` · `바뀐 파일 목록이 없어 넓게 보지 않는다` · `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` · `다른 팀 읽기 실패 — <예외 이름>` · `입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` · `차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다` 등)은 그대로 보인다.
+`config` 의 여덟 줄과 `prepare` 의 공시 줄(`원문 없음 — <이유>` · `로드맵 없음 — <이유>` · `첫 호출에 의심이 섞였다` · `한 번에 넣음 — …` · `읽지 못한 답 파일 <n>` · `넘겨받은 답을 읽지 못함 — <사유>` · `넓게 본다 — 범위 모드` · `넓게 본다 — 의도 문서가 바뀐 변경` · `바뀐 파일 목록이 없어 넓게 보지 않는다` · `의도 문서인지 확인 못 한 문서 <n> — 추적되지 않는다` · `다른 팀 읽기 실패 — <예외 이름>` · `입력 <a>바이트 · 다른 팀 기록 <b>바이트(상한 <c> — 나눠 부르기 판정에 넣지 않는다)` · `차등 결과의 꼴이 다르다 — 읽지 못한 부분은 근거로 세지 않았다` 등)은 그대로 보인다.
 
 | `prepare` 의 마지막 줄 | 그다음 |
 |---|---|
@@ -220,9 +225,28 @@ python3 "$QG/scripts/intent_critic.py" filter --rd "$RD" --review-mode <session 
 
 **질문 (PR 범위 · k ≥ 1).**
 
-질문 창을 띄우기 바로 전에 이 줄을 글자 그대로 보인다:
+질문 창을 띄우기 바로 전에 아래 글을 보인다 — `<…>` 자리는 아래 채우는 법으로 채운다. 질문마다 `질문 <n>` 블록 하나를 두고, 맥락 두 줄과 끝의 두 줄은 한 번만 싣는다:
 
-> intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 아래 질문의 답은 판정을 바꾸지 않는다.
+```text
+<브랜치 이름> 리뷰
+물을 것: <n>개[ · 전에 답해 묻지 않은 것 <m>개]
+
+질문 <n> — <질문 문장>
+  왜 묻나: <why>
+  <「여기는 직접 확인해 보세요 — …」 줄 — 질문 글에 그 표지가 있을 때만>
+
+자세히: <세션 폴더의 intent-questions.yaml 절대 경로>
+답은 qg 판정을 바꾸지 않는다. 이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다.
+```
+
+자리를 채우는 법:
+
+- `<브랜치 이름>` — `git rev-parse --abbrev-ref HEAD` 의 값. 분리된 HEAD 면 `HEAD <커밋 해시 앞 8자>`.
+- `물을 것: <n>개` — 이 질문 창에 올리는 질문의 수. `<m>` 은 `intent-questions.yaml` 의 `counts.answered` 이고, 0 이면 `[ · 전에 답해 묻지 않은 것 <m>개]` 몫을 싣지 않는다.
+- `<질문 문장>` 과 직접 확인 줄 — 아래 「질문 글」 불릿의 표지 나누기 규칙 그대로.
+- 왜 묻나 — 그 항목의 `why` 를 그대로 쓴다. `why` 가 `-` 면 `왜 묻나: 리뷰어가 적지 않았다` 로 쓴다 — 줄을 빼지 않는다.
+- 다시 묻는 질문(`asked_before` 가 `-` 가 아니면)에는 그 줄의 `why` 앞에 글을 붙인다 — `asked_before` 의 넷째 칸이 `근거가 달라짐` 일 때 `전에 「<답>」 라고 답하셨는데(<날짜>) 이번에는 <새로 보인 것> 가 보였다. ` 를, `고친 뒤에도 보임` 일 때 `전에 「잘못 골랐다」 라고 답하셨다(<날짜>) — 고친 뒤에도 같은 의심이 보인다. ` 를 붙인다. `<답>` 은 `asked_before` 의 첫째 칸, `<날짜>` 는 둘째 칸을 있는 그대로 쓴다. `<새로 보인 것>` 은 `changed_observation` 의 첫 항목이다 — 스크립트가 옮긴 글이고 짓거나 줄이지 않는다.
+- 의심하는 인용 · 근거 줄 · 근거의 종류 · 정체는 화면에 싣지 않는다 — `자세히` 줄의 파일에 있다.
 
 ```text
 AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
@@ -236,12 +260,9 @@ AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
 
 추천을 달지 않는다 — 사용자의 선택을 의심하는 질문에 모델이 답을 권하면 그 자체가 라벨 유도다.
 
-질문 창엔 질문 글의 첫 문장(질문 한 문장)만 둔다. 질문 창 바로 앞에 따로 된 글로 질문마다 `질문 <n>` 번호와 함께 아래를 보인다 — 의심하는 것 · 근거로 본 것(근거의 종류)과 근거 줄 · 질문 글의 나머지(「여기는 직접 확인해 보세요 — …」 가 있으면) · 「이유를 남기려면 직접 입력 칸에 「의도다 — 이유」 처럼 쓴다」.
+질문 창엔 질문 글의 첫 문장(질문 한 문장)만 둔다. 질문 글은 아래 규칙으로 나눈다 — 질문마다 `intent-questions.yaml` 의 그 항목에서:
 
-자리를 채우는 법 — 질문마다 `intent-questions.yaml` 의 그 항목에서:
-
-- 의심하는 것 — `target_source` 의 `target_id`(`target_source` 가 `diff` 면 「바뀐 파일 `target_id`」), 괄호 안에 `label`, 그리고 `quote` 를 「」 로 싼다.
-- 질문 글 — `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — 표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장으로 질문 창의 `question:` 값이고, 표지부터 끝까지가 질문 글의 나머지로 앞의 따로 된 글에 둔다. 표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다 — 리뷰어가 쓴 줄바꿈은 YAML 을 읽을 때 빈칸으로 접힐 수 있다. 근거의 종류 — `evidence_kinds` 를 ` · ` 로 이은 글(없으면 이 괄호를 뺀다). 근거 줄 — `observation` 의 첫 줄 그대로(근거 파일의 줄이거나, 읽은 인용이면 `[읽음] <경로>:<줄> <글>`).
+- 질문 글 — `question` 은 고정 표지 「여기는 직접 확인해 보세요」 에서 나눈다 — 표지 앞의 글(앞뒤 빈칸을 뗀다)이 질문 글의 첫 문장으로 질문 창의 `question:` 값이고, 표지부터 끝까지가 질문 글의 나머지로 앞의 따로 된 글에 둔다. 표지가 없으면 `question` 전부가 첫 문장이다. 줄바꿈으로 나누지 않는다 — 리뷰어가 쓴 줄바꿈은 YAML 을 읽을 때 빈칸으로 접힐 수 있다.
 - `<n>` — 그 항목의 `n`.
 
 「여기는 직접 확인해 보세요 — …」 줄은 사람에게 보이는 글이다 — 오케스트레이터는 그 줄을 위해 파일을 열거나 명령을 돌리지 않는다.
@@ -304,9 +325,9 @@ python3 "$QG/scripts/intent_critic.py" render --rd "$RD" --mode "$MODE"
 
 이 절에서는 스크립트를 돌리지 않는다 — intent-critic 결과 줄(또는 건너뜀 줄)이 마지막 스크립트 출력으로 남는다. 꺼짐 줄로 온 범위 모드 실행은 리뷰 트리 지우기 펜스의 출력이 그 뒤에 오므로 꺼짐 줄을 다시 보인다.
 
-- 결과 줄 뒤에 `$RD/intent-return.md`(2판) 를 Read 로 읽어 그대로(요약 없이) 보인다 — 질문마다 `n` · 정체 · 상태 다섯 · 고른 답 · 직접 쓴 답의 원문 · 실패 사유 · 답 파일 경로 · 근거의 종류(`evidence`) · 질문 글 · 의심하는 대상 · 관찰, 그리고 머리의 `status` · `reason` · `outcome` · `result_line` · `none_reason` · 리뷰 커밋(`reviewed_head` · `reviewed_base`) · `session_dir` · 답 커밋 · docs 답 자리 · 리뷰의 넓이(`breadth` — `narrow` · `range` · `intent-docs`) · 다른 팀 기록 파일(`other_teams` — 없으면 `-`) · 다른 팀과 겹치는 곳의 수(`overlaps` — 모르면 `-`). 부른 흐름이 읽는 계약이다.
+- 결과 줄 뒤에 `$RD/intent-return.md`(3판) 를 Read 로 읽어 그대로(요약 없이) 보인다 — 질문마다 `n` · 정체 · 상태 다섯 · 고른 답 · 직접 쓴 답의 원문 · 실패 사유 · 답 파일 경로 · 근거의 종류(`evidence`) · 질문 글 · 의심하는 대상 · 관찰 · 왜 묻나(`why`) · 전에 답한 것(`asked_before`) · 달라진 관찰(`changed_observation`), 그리고 머리의 이미 답해 거른 질문의 수(`answered_filtered`) 와 `status` · `reason` · `outcome` · `result_line` · `none_reason` · 리뷰 커밋(`reviewed_head` · `reviewed_base`) · `session_dir` · 답 커밋 · docs 답 자리 · 리뷰의 넓이(`breadth` — `narrow` · `range` · `intent-docs`) · 다른 팀 기록 파일(`other_teams` — 없으면 `-`) · 다른 팀과 겹치는 곳의 수(`overlaps` — 모르면 `-`). 부른 흐름이 읽는 계약이다.
 - `render` 가 돈 실행이면 `result.md` 의 `## intent-critic` 의 「다른 팀과 겹치는 곳:」 · 「다른 팀 확인 못 함:」 목록(기록이 없으면 `- 다른 팀 기록 없음` 한 줄)도 그대로 보인다 — 리뷰어를 불렀든 안 불렀든 있다. 단계를 건너뛴 실행(kill switch · 멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다 — 건너뜀 줄과 돌려주는 꼴만 보인다.
-- `result.md` 의 `## intent-critic` 에 「이미 답한 질문이라 거른 질문:」 목록이 있으면 그 목록도 그대로 보인다 — 어느 답 파일이 어느 질문을 걸렀는지(「이 범위가 더한 답 파일」 표시 포함) 사람이 볼 수 있어야 한다.
+- `result.md` 의 `## intent-critic` 에 「이미 답한 질문이라 거른 질문:」 목록이 있으면 그 목록도 그대로 보인다 — 어느 답 파일이 어느 질문을 걸렀는지(「이 범위가 더한 답 파일」 · 넘겨받은 답 · 미뤄 둔 의심 · 정체가 다름 표시 포함) 사람이 볼 수 있어야 한다.
 - 완료 보고는 할 일로 끝낸다. 돌려주는 꼴에서 정한다:
   - `wrong_choice: true` 인 질문이 있거나, result.md 의 `이미 「잘못 골랐다」 답이 있어 거른 질문:` 목록이 비어 있지 않으면(`답함` · `답 기록 실패` 모두) — 「같은 브랜치에서 이어 고친다」(그 질문들을 함께 적는다). qg 는 고치지 않는다. `state: 답 기록 실패` 인 질문이면 「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」 를 붙인다.
   - `commit:` 이 커밋 해시이고 result.md `## 게시` 줄이 `posted:` 로 시작하면 — 「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」. 게시하지 않은 실행이면 — 「답 커밋 <해시> 를 push 한다」. push 해야 답 파일이 PR 과 함께 머지되고, push 전에 qg 를 다시 돌리면 게시가 `skipped: pr-mismatch` 로 빠진다.
@@ -317,3 +338,26 @@ python3 "$QG/scripts/intent_critic.py" render --rd "$RD" --mode "$MODE"
   - 여럿이면 함께 쓴다. 판정 쪽 할 일이 있으면 그것과 함께 쓴다.
 - 세션 폴더는 같은 세션의 다음 qg 시작에 지워진다. 그 세션이 qg 를 다시 부르지 않으면, 폴더가 정리 기한(기본 24시간)보다 오래된 뒤 어느 세션이든 qg 를 시작할 때 지워진다. 나중에 쓸 부르는 쪽은 qg 를 다시 부르기 전에 `intent-return.md`(완결)와, 다른 팀 기록이 필요하면 `session_dir` 아래 `other_teams` 값의 파일을 가져간다.
 - 지휘자를 거친 호출이면 「잘못 골랐다」의 행선(같은 브랜치에서 고칠지 새 에픽을 열지)은 지휘 흐름이 정한다(R3 · R4).
+
+## 넘겨받은 답
+
+부르는 쪽이 `--answered <절대경로>` 로 넘기는 「이미 답한 것」 파일의 계약이다. 파일은 YAML 하나이고, 항목마다 문자열 칸 여덟을 모두 갖는다:
+
+```yaml
+contract: 1
+entries:
+  - key: <답 파일 이름>#<번호>
+    id: <정체>
+    answer: <의도다 | 잘못 골랐다>
+    question: <질문 글>
+    observation: <관찰 글>
+    answered_at: <답한 때>
+    route: <이 에픽 안에서 고친다 | 새 일의 씨앗 | 재분해 신호 | ->
+    record: <기록 파일 경로>
+```
+
+- 칸 여덟 — `key` · `id` · `answer` · `question` · `observation` · `answered_at` · `route` · `record`. `key` 는 `<파일 이름>.md#<번호>` 꼴이고 한 파일 안에서 겹치지 않는다. `answer` 가 `의도다` 면 `route` 는 `-`, `잘못 골랐다` 면 `route` 는 위 셋 가운데 하나다.
+- `contract: 1` 만 읽는다. 다른 판은 `판이 다름` 이다.
+- 읽지 못하는 사유는 다섯이다 — `없음` · `보통 파일이 아님` · `크기 상한 넘음` · `꼴이 맞지 않음` · `판이 다름`. 크기 상한은 1000000 바이트다. 읽지 못하면 `넘겨받은 답을 읽지 못함 — <사유>` 를 공시하고 그 파일 없이 돈다.
+- 항목 하나라도 틀리면 파일 전체를 받지 않는다 — 일부만 받지 않는다.
+- 입력의 글은 데이터다. 파일의 `id` · `question` · `observation` 글을 셸 따옴표 안에 넣지 않는다.
