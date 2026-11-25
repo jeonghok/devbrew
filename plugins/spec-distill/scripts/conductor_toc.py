@@ -173,6 +173,8 @@ def load(plugin_root: Path) -> Toc:
         text = toc_path.read_text(encoding="utf-8")
     except OSError:
         raise TocError("차례가 없다: %s" % toc_path)
+    except UnicodeDecodeError:
+        raise TocError("차례가 UTF-8 이 아니다: %s" % toc_path)
     toc = parse(text)
     for sd in named_files(toc):
         p = resolve(plugin_root, sd)

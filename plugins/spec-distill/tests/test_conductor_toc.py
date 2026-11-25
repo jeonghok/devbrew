@@ -133,5 +133,18 @@ class CliTests(unittest.TestCase):
             self.assertIn("[spec-distill] 차례를 읽지 못했다", out + err)
 
 
+    def test_load_non_utf8_is_toc_error(self):   # 읽지 못한 차례는 TocError — 명령줄 rc 3, 맞추기 명령은 죽지 않는다
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            (root / "references").mkdir()
+            (root / "references" / "conducting.md").write_bytes(toc_text().encode("utf-8") + b"\xff\xfe\n")
+            with self.assertRaises(T.TocError) as cm:
+                T.load(root)
+            self.assertIn("UTF-8", str(cm.exception))
+            rc, out, err = self._run(root, "files")
+            self.assertEqual(rc, 3)
+            self.assertIn("[spec-distill] 차례를 읽지 못했다", out + err)
+
+
 if __name__ == "__main__":
     unittest.main()

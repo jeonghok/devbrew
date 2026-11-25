@@ -19,9 +19,9 @@ for n in 1 2 3 4 5 6 7; do
   done
 done
 once() { assert_eq "$(step "$1" | grep -oF -- "$2" | wc -l | tr -d ' ')" "1" "걸음 ${1}: 「${2}」 정확히 한 번"; }
-for lit in 'control_plane.py show --tasks <로드맵>' 'ledger claim --roadmap <로드맵> --session <세션>' '읽기 전용으로 보이며' \
+for lit in 'control_plane.py show --tasks <로드맵>' 'conductor_sync.py --roadmap <로드맵>' '읽기 전용으로 보이며' \
            '덮어쓰지 않는다' '주인을 믿고 캐시를 고친 뒤 알린다' '놀고 있는 agent 는 내린다' '기억에 기대지 않는다' \
-           'ledger orphans' 'ledger version'; do once 1 "$lit"; done
+           'ledger orphans' 'ledger version' '처음일 때만 주인 모를 worktree · 판 차이' '같은 명령에 `--takeover` 를 붙여 다시 부른다'; do once 1 "$lit"; done
 for lit in '「지금 답할 수 있나」' '배경과 함께 하나씩' '질문 문장 앞머리에 에픽 이름' '그 답에 기대는 일' '무관하다고 본 이유를 적는다' \
            '그 리뷰 게이트의 질문 호출에 섞지 않고' 'ledger audit' 'brainstorming 을 거친다' \
            'brainstorming 대화의 질문은 brainstorming 이 정한 모양 그대로다' '그 대화의 메시지와' '따로 된 메시지로' \
