@@ -1,7 +1,7 @@
 # STATUS — 지휘 맥락 경제 — my-team 구조로 지휘 재설계 — 로드맵
 
 - 로드맵: docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/roadmap.md
-- 계산: 2026-11-25 20:00 +0900 · 기준 커밋 5abebdce · 지휘 세션 f1e0666f
+- 계산: 2026-11-25 20:04 +0900 · 기준 커밋 5abebdce · 지휘 세션 f1e0666f
 
 ## 에픽
 - E2 리더 덜기와 다시 띄우기 · 구현 중 · Spec: 트레일러 커밋 있음: docs/superpowers/plans/2026-11-25-leader-step-guides-plan1.md
@@ -14,7 +14,6 @@
 
 ## 기다리는 질문
 - E4 · 설계 대화 · 2026-11-25 19:13 +0900
-- E4 · 그 밖 · 2026-11-25 20:00 +0900
 
 ## 작업
 - 구현 · E2 계획 1 걸음만 읽기 · 담당자 1 · -
