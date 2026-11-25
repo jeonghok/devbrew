@@ -65,9 +65,9 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의도: 지휘 절차서를 걸음별 지시서로 쪼개 그 걸음에서만 읽고 손 일을 담당 세션으로 넘기며 리더 세션을 끊고 다시 띄울 수 있게 한다
 - 범위: 한다: 걸음별 지시서 · 손 절차 분리, 머지 전 확인(스위트 대조 · 통합 리뷰 · PR 본문)을 담당 세션으로, 리더가 끊는 자리와 적고 나가는 것, 「지휘자」를 「리더」로 맞추는 낱말 / 안 한다: 상태 브랜치
 - 의존: R2, E1
-- 브랜치: feature/conductor-step-guides
+- 브랜치: feature/conductor-step-guides, feature/leader-clear-resume, feature/merge-prep-worker, feature/leader-wording
 - 묶음: E2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/skills/epic-conductor/references/, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/templates/team/role-leader.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/proceed-gate.md
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 걸음과 세션 담당자가 선 뒤에 리더의 일을 덜 수 있다
@@ -213,6 +213,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 바뀜: 바뀐 에픽 E1 · R5 · 새 에픽 E4 「좋아 나누자」 · 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「좋아 나누자」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-25 · E2 설계 승인 뒤 브랜치와 경로 예약을 맞춘다 — 계획 2 · 3 · 4 의 브랜치를 더하고 승인된 설계가 고치는 파일 여섯을 경로 예약에 더한다. 범위 · 의존 · 묶음은 그대로
+- 바뀜: 바뀐 에픽 E2 「이대로 다시 나눈다 (권장)」
+- 원문:
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
