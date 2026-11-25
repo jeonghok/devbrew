@@ -2314,10 +2314,11 @@ class TeamRecords(Repo):   # R1 AC16
         plugin = SCRIPTS.parent
         toc = TOC.load(plugin)
         guide = TOC.resolve(plugin, next(s.guide for s in toc.steps if s.number == 3)).read_text(encoding="utf-8")
-        want = "- 병렬 답 · 2026-11-25 · 「병렬 (권장)」 · 준비 에픽 E4"   # 형식 정본의 꼴 `- <종류> · <YYYY-MM-DD> · …`
+        want = "- 병렬 답 · 2026-11-25 · 09:30 · 「병렬 (권장)」 · 준비 에픽 E4"   # 형식 정본의 꼴 `- <종류> · <YYYY-MM-DD> · …` — 시각은 날짜 다음 칸(§1.8)
 
-        def fill(s):   # 꺾쇠 자리를 아는 값으로 — 날짜 칸에 시각 자리가 있으면 시각도 채운다
+        def fill(s):   # 꺾쇠 자리를 아는 값으로 — 날짜 칸에 시각 자리가 붙어 있으면 그 칸에도 시각을 채운다(그 꼴은 record 가 거절한다)
             s = re.sub(r"<YYYY-MM-DD( HH:MM)?>", lambda m: "2026-11-25" + (" 09:30" if m.group(1) else ""), s)
+            s = s.replace("<HH:MM>", "09:30")
             s = re.sub(r"<(?:B…|A|에픽)>", "E4", s.replace("<고른 선택지>", "병렬 (권장)"))
             self.assertNotIn("<", s, s)   # 모든 꺾쇠 자리를 채웠다
             return s
