@@ -1,5 +1,21 @@
 # Changelog
 
+## [9.4.0] — 2026-11-25
+
+호출 이름(`/spec-distill:epic-conductor` 등 slash 명령 · skill 이름)은 그대로다.
+
+### Added
+- `scripts/conductor_sync.py` — 지휘 걸음 1(맞추기)을 명령 하나로 돈다. 구간마다 한 줄, 이상이 있는 구간만 원문을 낸다.
+- `scripts/conductor_toc.py` — 지휘 차례의 걸음 표를 읽어 지시서 경로를 낸다(`files` · `step`).
+- 걸음 지시서 열 파일 — `references/conducting-step-1.md` ~ `conducting-step-7.md` · `conducting-resume.md` · `conducting-team.md` · `conducting-manual.md`.
+- 원장 명령(`conductor_ledger.py`)이 `--session` 을 생략하면 세션 번호를 스스로 읽는다.
+
+### Changed
+- 지휘 절차서(`references/conducting.md`)가 차례가 됐다 — 걸음 표와 걸음마다의 지시서 경로만 두고 본문은 걸음 지시서로 옮겼다.
+- 지휘자 skill 이 진입에서 맞추기 명령 하나와 차례만 읽는다.
+- 병렬 답 줄에 시각을 붙이지 않는다.
+- 지휘자를 부르지 않고 진행하는 손 절차는 `references/conducting-manual.md` 로 자리를 옮겼다.
+
 ## [9.3.0] — 2026-11-24
 
 ### Added
