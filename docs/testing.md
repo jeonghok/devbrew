@@ -92,7 +92,7 @@
 
 **케이스의 꼴.**
 
-- 자리: `plugins/<플러그인>/tests/evals/<케이스 이름>/` — `prompt.md` · `case.yaml` · `graders/*.md` · 필요하면 준비 스크립트(`case.yaml` 의 `scaffold_script`).
+- 자리: `plugins/<플러그인>/tests/evals/<케이스 이름>/` — `prompt.md` · `case.yaml` · `graders/*.md` · 필요하면 준비 스크립트(`case.yaml` 의 `scaffold_script`). 준비 스크립트의 이름은 `.sh` 로 끝내지 않는다 — `tests/` 아래 실행 비트가 있는 `.sh` 는 차등 테스트가 테스트로 잡아 리뷰 트리에서 돌린다.
 - `case.yaml` 의 `description` 에 지키는 글을 적는다 — 파일 경로와 문장의 뜻 한 줄. 그 파일을 고치는 사람이 경로로 찾는다.
 - 채점기는 행동을 본다 — 도구 사용(`tool_used` · `tool_order`) · 만든 파일(`file_exists`) · 루브릭(`llm`). 마지막 글의 글자를 정규식으로 무는 채점기는 쓰지 않는다 — 말만 바꿔도 깨진다.
 - 루브릭은 통과와 실패를 한 줄씩 또렷하게 쓴다.
