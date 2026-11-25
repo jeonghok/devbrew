@@ -5,7 +5,7 @@
 호출 이름(`/spec-distill:epic-conductor` 등 slash 명령 · skill 이름)은 그대로다.
 
 ### Added
-- `scripts/conductor_sync.py` — 지휘 걸음 1(맞추기)을 명령 하나로 돈다. 구간마다 한 줄, 이상이 있는 구간만 원문을 낸다. 상태 보기의 정보 줄(닿는 것)은 이상일 때도 개수와 다시 볼 명령으로만 내고, 표지를 잡을 때 원장이 낸 알림은 표지 구간의 원문으로 낸다. 상태 브랜치를 꺼 둔 레포(`state_branch: 끔`)에서는 그 구간이 「꺼져 있다」 한 줄이다.
+- `scripts/conductor_sync.py` — 지휘 걸음 1(맞추기)을 명령 하나로 돈다. 구간마다 한 줄, 이상이 있는 구간만 원문을 낸다. 상태 보기의 닿는 것 정보 줄(예약 겹침 · 바꾼 파일 겹침 · 기본 브랜치의 움직임 · 도는 스위트)은 이상일 때도 개수와 다시 볼 명령으로만 내고, 끝 묶음의 머지 뒤 일이 남은 에픽(걸음 6)은 걸음 6 이 치우는 줄(worktree 자원 · 살아 있는 agent · 끝나지 않은 작업)로만 센다. 표지를 잡을 때 원장이 낸 알림은 표지 구간의 원문으로 낸다. 상태 브랜치를 꺼 둔 레포(`state_branch: 끔`)에서는 그 구간이 「꺼져 있다」 한 줄이다.
 - `scripts/conductor_toc.py` — 지휘 차례의 걸음 표를 읽어 지시서 경로를 낸다(`files` · `step`).
 - 걸음 지시서 열 파일 — `references/conducting-step-1.md` ~ `conducting-step-7.md` · `conducting-resume.md` · `conducting-team.md` · `conducting-manual.md`.
 - 원장 명령(`conductor_ledger.py`)이 `--session` 을 생략하면 세션 번호를 스스로 읽는다.
@@ -14,7 +14,6 @@
 - 지휘 절차서(`references/conducting.md`)가 차례가 됐다 — 걸음 표와 걸음마다의 지시서 경로만 두고 본문은 걸음 지시서로 옮겼다.
 - 지휘자 skill 이 진입에서 맞추기 명령 하나와 차례만 읽는다.
 - 병렬 답 줄의 시각을 날짜 칸에 붙이지 않고 날짜 다음 칸에 따로 둔다 — 여러 설계문서 사이의 순서는 날짜와 그 시각으로 정한다.
-- 머지 뒤 일이 남은 에픽(걸음 6)은 걸음 6 이 치우는 줄(worktree 자원 · 살아 있는 agent · 끝나지 않은 작업)로만 센다.
 - 지휘자를 부르지 않고 진행하는 손 절차는 `references/conducting-manual.md` 로 자리를 옮겼다.
 
 ## [9.3.1] — 2026-11-24
