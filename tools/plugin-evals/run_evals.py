@@ -112,6 +112,8 @@ def summary_line(rc: int, result: Optional[dict],
                  why: Optional[str]) -> Tuple[str, int]:
     if result is None:
         return not_run(why or "결과 파일이 없다"), (rc if rc != 0 else 1)
+    if not any(c["arms"]["with"] for c in result["cases"]):
+        return not_run("돈 실행이 없다"), (rc if rc != 0 else 1)
     idle = no_session_runs(result)
     if idle:
         return not_run("세션이 시작되지 않았다"

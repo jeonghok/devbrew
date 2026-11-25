@@ -88,6 +88,15 @@ class RunEvalsTest(unittest.TestCase):
             cls.results[name] = os.path.join(cls.root, name + ".json")
             with open(cls.results[name], "w", encoding="utf-8") as f:
                 json.dump(data, f)
+        no_cases = _result(0, 0.0, None, [])
+        no_cases["aggregates"]["casesTotal"] = 0
+        for name, data in (
+            ("no_cases", no_cases),
+            ("empty_runs", _result(0, 0.01, "sonnet", [0, 0], True)),
+        ):
+            cls.results[name] = os.path.join(cls.root, name + ".json")
+            with open(cls.results[name], "w", encoding="utf-8") as f:
+                json.dump(data, f)
         nokey = _result(2, 0.5, "sonnet", [3, 3])
         del nokey["aggregates"]
         cls.results["nokey"] = os.path.join(cls.root, "nokey.json")
@@ -232,6 +241,16 @@ class RunEvalsTest(unittest.TestCase):
                 self.assertNotIn("실패", last)
                 self.assertNotIn("케이스", last)
                 self.assertEqual(p.returncode, 1)
+
+    def test_no_runs_is_not_run(self):
+        for result, rc, want in (("no_cases", 1, 1), ("no_cases", 0, 1),
+                                 ("empty_runs", 2, 2)):
+            with self.subTest(result=result, rc=rc):
+                p = self.run_script([], result=result, rc=rc)
+                last = self.last_line(p)
+                self.assertEqual(last, "plugin-evals: 돌지 못함 — 돈 실행이 없다")
+                self.assertNotIn("케이스", last)
+                self.assertEqual(p.returncode, want)
 
     def test_some_zero_turns_is_fail_line(self):
         p = self.run_script([], result="one_zero_turn", rc=1)
