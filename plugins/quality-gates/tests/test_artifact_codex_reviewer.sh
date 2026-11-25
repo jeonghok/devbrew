@@ -71,6 +71,12 @@ echo "$out" | grep -q "codex_failed: true" && ok "exit override -> codex_failed"
 # extract degrade: garbage stdin -> codex_failed
 out="$(echo "not json at all" | python3 "$EXTRACT")"
 echo "$out" | grep -q "codex_failed: true" && ok "garbage stdin -> codex_failed" || no "garbage degrade ($out)"
+# 깨진 바이트(\xff) 표준 입력 — 엄격한 UTF-8 표준 입력으로(로캘에 기대지 않는다) 두 갈래 모두 죽지 않고 강등한다
+printf '\x00\x01\x02notjson\xff' > "$tmp/bad.bin"
+out="$(PYTHONIOENCODING=utf-8:strict python3 "$EXTRACT" < "$tmp/bad.bin" 2>&1)"
+echo "$out" | grep -q "reason: no_agent_message" && ok "broken bytes (success branch) -> no_agent_message, no crash" || no "broken bytes success branch ($out)"
+out="$(PYTHONIOENCODING=utf-8:strict python3 "$EXTRACT" --meta-override-exit-code 1 < "$tmp/bad.bin" 2>&1)"
+echo "$out" | grep -q "exit_code: 1" && ! echo "$out" | grep -q "Traceback" && ok "broken bytes (failure branch) -> exit_code meta, no crash" || no "broken bytes failure branch ($out)"
 
 # run wrapper: missing project_dir -> degrade meta in OUT (no crash)
 #

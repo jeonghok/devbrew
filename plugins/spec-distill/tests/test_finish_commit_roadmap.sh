@@ -47,7 +47,7 @@ roadmap() {   # roadmap <클론> [로드맵 폴더(레포 상대)] → 생성기
 runc() {   # runc <클론> → BRIEF 자리표를 그 클론의 brief 절대경로로 바꿔 돈 출력
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$1/$STEM.md}" 2>&1 )
 }
-files_of_head() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' '; }
+files_of_head() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' '; }
 nhead() { git -C "$1" rev-list --count HEAD; }
 THREE="$STEM.audit.md $STEM.md $STEM.state.md "
 DEC="분해됨 — $RREL/roadmap.md"
