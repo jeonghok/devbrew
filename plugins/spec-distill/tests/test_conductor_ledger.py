@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -147,6 +147,55 @@ class Marker(Repo):
                            "--cells", "worktree · /x · A1 · 설계 · t")
         self.assertEqual(rc, 3)
         self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
+
+
+class SessionDefault(Repo):
+    """--session 을 안 주면 환경의 세션 번호를 쓰고, 그것도 없으면 아무것도 쓰지 않는다(E2 설계 §2)."""
+    ENV_KEYS = ("DEVBREW_SPEC_DISTILL_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+
+    def env(self, **kw):
+        clean = {k: v for k, v in os.environ.items() if k not in self.ENV_KEYS}
+        clean.update(kw)
+        p = mock.patch.dict(os.environ, clean, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def cli(self, *args):
+        with redirect_stderr(io.StringIO()):   # 세션을 못 찾았다는 해결자의 stderr 줄은 이 클래스가 일부러 부른 길이다
+            return super().cli(*args)
+
+    def marker(self):
+        return L.mpath(self.w, RM).parent / cs.MARKER
+
+    def test_session_defaults_to_env(self):
+        self.env(DEVBREW_SPEC_DISTILL_SESSION_ID="session-plan1-a")
+        rc, _out = self.cli("claim", "--roadmap", RM)
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.marker().read_text(encoding="utf-8"), "session-plan1-a\n")
+
+    def test_missing_session_writes_nothing(self):
+        self.env()
+        rc, out = self.cli("claim", "--roadmap", RM)
+        self.assertEqual(rc, 3)
+        self.assertIn("[spec-distill] 세션 번호를 얻지 못했다", out)
+        self.assertFalse(self.marker().exists())
+        self.assertFalse(L.mpath(self.w, RM).exists())
+
+    def test_missing_session_leaves_existing_state_byte_identical(self):
+        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID)[0], 0)
+        before = (self.marker().read_bytes(), L.mpath(self.w, RM).read_bytes())
+        self.env()
+        for cmd in (("claim",), ("takeover",), ("release",)):
+            rc, out = self.cli(*cmd, "--roadmap", RM)
+            self.assertEqual(rc, 3, cmd)
+            self.assertIn("세션 번호를 얻지 못했다", out)
+        self.assertEqual((self.marker().read_bytes(), L.mpath(self.w, RM).read_bytes()), before)
+
+    def test_explicit_session_wins(self):
+        self.env(DEVBREW_SPEC_DISTILL_SESSION_ID="session-plan1-a")
+        rc, _out = self.cli("claim", "--roadmap", RM, "--session", OTHER)
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.marker().read_text(encoding="utf-8"), OTHER + "\n")
 
 
 class RetiredApproval(Repo):
