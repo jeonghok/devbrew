@@ -147,6 +147,23 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
             self.assertIn('record --human "spec 승인"', text, path.name)
             self.assertIn("human_gate: 끔", text, path.name)
 
+    def test_team_guide_carries_the_three_handed_over_items(self):   # R3 설계 §1.7 — 넘겨받은 셋
+        team = _TEAM_FILE.read_text(encoding="utf-8")
+        for word in ("받음 줄", "검수 묶음", "`<SD>/references/conducting-step-5.md` 의 「승인 기록 다시 보이기」",
+                     "confirm --confirmed",
+                     "작업 방식과 도구는 걸음 보기(`walk_table.py next`)가 낸 칸을 쓴다 — 걸음 지시서의 부를 skill 칸은 옛 형식의 값이다"):
+            self.assertIn(word, team, word)
+        self.assertIn("승인 기록 다시 보이기", step(self.TEXT, 5))   # 가리키는 자리가 실재한다
+
+    def test_conducting_team_is_named_only_under_the_team_condition(self):   # AC5 — 옛 형식 로드맵에서는 읽으라고 하지 않는다
+        self.assertEqual(unconditioned(self.TEXT), [])
+        mutated = self.TEXT + "\n- 이 줄은 `<SD>/references/conducting-team.md` 를 읽는다\n"   # 양성 대조 — 조건 글 없는 줄을 잡는다
+        self.assertEqual(len(unconditioned(mutated)), 1)
+
+
+def unconditioned(text):
+    return [l for l in text.splitlines() if "conducting-team.md" in l and "team 형식" not in l and "layout: team" not in l]
+
 
 class ReviewProfile(unittest.TestCase):   # R2 AC18 · K19
     def test_scope_axis_flags_unmarked_decisions(self):
