@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # guards: plugins/spec-distill/skills/roadmap-status/SKILL.md
-# roadmap-status 인자 거절 문장 락(보안 갈래 — 믿지 않는 입력의 검증). 정적 락이다 — 모델이 이 글을 따르는지는 tests/evals/roadmap-status-arg-reject 가 손으로 잰다.
+# roadmap-status 인자 거절 문장 락. 정적 락이다 — 모델이 이 글을 따르는지는 tests/evals/roadmap-status-arg-reject 가 손으로 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_roadmap_status_skill.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
