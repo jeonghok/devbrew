@@ -34,8 +34,15 @@ mkdir -p "$TMP/nohome"
 assert_grep "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY= OPENAI_API_KEY= HOME="$TMP/nohome" bash "$PROBE")" 'skip_reason: auth_missing' "auth_missing"
 # Case 6: known bad version
 assert_grep "$(PATH="$MOCKS/bad-version:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: known_bad_version' "known_bad_version"
-# Case 7: timeout bin missing
-assert_grep "$(PATH="$MOCKS/safe-v1:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: timeout_binary_missing' "timeout_binary_missing"
+# Case 7: timeout bin missing — /usr/bin · /bin 을 링크로 모으되 timeout · gtimeout 만 뺀 폴더를 만든다
+# (OS 가 /usr/bin/timeout 을 싣는 기계에서도 「timeout 없음」 을 시험이 스스로 만든다)
+mkdir -p "$TMP/no-timeout"
+for f in /usr/bin/* /bin/*; do
+  n="${f##*/}"
+  case "$n" in timeout|gtimeout) continue ;; esac
+  [ -e "$TMP/no-timeout/$n" ] || [ -L "$TMP/no-timeout/$n" ] || ln -s "$f" "$TMP/no-timeout/$n"
+done
+assert_grep "$(PATH="$MOCKS/safe-v1:$TMP/no-timeout" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: timeout_binary_missing' "timeout_binary_missing"
 
 # Case 8/9: 버전 바닥·판독 불가 (합집합 — AC25)
 assert_grep "$(PATH="$MOCKS/below-floor:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: version_below_floor' "version_below_floor"

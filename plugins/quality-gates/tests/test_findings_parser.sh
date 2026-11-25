@@ -52,6 +52,8 @@ check "raw JSON Stage 2" "$TMP/raw.jsonl" "" 'file: b.py'
 # Fixture 3: malformed bytes (Stage 3 fallback)
 printf '\x00\x01\x02notjson\xff' > "$TMP/bad.bin"
 check "malformed Stage 3" "$TMP/bad.bin" "" 'reason: malformed_json'
+# 같은 바이트를 엄격한 UTF-8 표준 입력으로 — C 로캘의 surrogateescape 에 기대지 않고 디코딩 실패 갈래를 연다
+PYTHONIOENCODING=utf-8:strict check "malformed Stage 3 (엄격한 UTF-8 표준 입력)" "$TMP/bad.bin" "" 'reason: malformed_json'
 
 # Fixture 4: missing agent_message
 cat > "$TMP/missing.jsonl" <<'EOF'
