@@ -1,5 +1,40 @@
 # Changelog
 
+## [9.3.1] — 2026-11-24
+
+### Fixed
+- codex 결과 파서(`scripts/codex_findings_to_yaml.py`, 정본 `shared/codex/`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
+- 머지 전 대조(`merge_check.py`)의 임시 자리 고르기 — 기본 임시 자리를 정하지 못해도 내부 오류로 멈추지 않고 다음 후보 · 대체 길로 간다. git 이 「레포가 아니다」 라고 답할 때만 git 밖으로 치고(.git 폴더 안 · 판정하지 못한 경우는 다음 후보), 대체 길 알림에 후보마다 떨어진 까닭을 싣는다.
+- 머지 전 대조가 임시 자리가 따로 마운트된 곳(파일시스템 경계)에 있을 때도 git 밖 후보로 알아본다 — git 의 「레포가 아니다」 답을 오류 글 전체에서 찾는다. git 밖인지 가리지 못한 까닭은 `fatal:` 줄로 보인다.
+- 머지 전 대조가 멈춘 예외에 기준 사본 실행 꼴을 싣지 못하면 그 사실을 다른 알림과 같은 표준 출력에 한 줄로 알린다.
+
+## [9.3.0] — 2026-11-24
+
+### Added
+- `scripts/legacy_names.py` — 옛 글자와 새 글자의 대응표 한 곳. 옛 글자 리터럴은 이 모듈에만 있다.
+- 설정 키 `intent_dir`(기본 `docs/superpowers/intent/`). 옛 키 `interview_dir` 는 그대로 읽고 그 폴더를 옛 의도 폴더로도 쓴다.
+- 경로 검사가 옛 의도 폴더의 옛 꼴 파일을 받는다 — 업그레이드 전에 시작한 컨텍스트 쌓기를 새 판으로 이어 갈 수 있다.
+- 로드맵 잡기 진입의 이른 경로 확인 — 거절하면 `[spec-distill] ` 로 시작하는 마지막 stderr 줄을 사유로 보이고 멈춘다.
+
+### Changed
+- 기본 폴더가 `docs/superpowers/intent/` 이다. 새로 쓰는 기록의 종류 글자 다섯 · 파일 이름 끝 · 머리 키 `source_intent` 가 새 이름이다(리뷰 기준 · agent 정의 · 단계 낱말 포함).
+- 스크립트가 내는 판결 글자 `interview-state:` 가 `context-state:` 로, 펜스 표지가 `context-state-entry:` 로 바뀌었다.
+- 하위 명령이 `state_path.py context-state` 이다. 상태줄 칸 이름 · 스크립트 안내 낱말도 새 이름으로 맞췄다.
+- PR 파일 세기가 옛 의도 폴더를 통째로 빼지 않고 결과물 짝 세 파일만 뺀다.
+- 로드맵 에픽에서 spec-review 의 기타 문장과 기각 되돌리기 권고가 「로드맵 다시 잡기」 라벨을 함께 댄다.
+- 옛 기록(옛 폴더 · 옛 글자 · 옛 머리 키 · 옛 설정 키)은 옮기지 않고 그대로 읽는다.
+- `dependencies.md` 의 판 칸을 `check_deps.py measure` 로 다시 쟀다(quality-gates 17.1.0).
+- 의도 싱크가 이어 갈 기록(`seed-audit-for-session`)은 새 의도 폴더에서만 찾는다 — 설정 키가 없는 레포에서 업그레이드 전에 시작한 의도 싱크를 같은 세션에서 새 판으로 다시 부르면 옛 폴더의 그 세션 기록을 찾지 못해 새 이름으로 처음부터 다시 시작하고, 옛 기록은 그대로 남는다(컨텍스트 쌓기는 두 폴더 모두 찾는다).
+- 옛 하위 명령 `state_path.py interview-state`(모르는 하위 명령) · `repo_defaults.py get|check-path interview_dir` 인자(잘못된 인자)는 받지 않는다 — 둘 다 rc 2 로 멈춘다.
+
+### Fixed
+- 안내 글의 「an context brief」 문법.
+
+### Removed
+- `state_path.py interview-state` 하위 명령 — `context-state` 로 대신한다. 옛 이름은 받지 않는다(rc 2).
+- `repo_defaults.py get interview_dir` · `check-path interview_dir` 의 인자 — `intent_dir` 로 대신한다. 설정 파일의 옛 키 `interview_dir` 는 그대로 읽는다.
+- 옛 판결 글자 `interview-state:` 와 펜스 표지 `interview-state-entry:` 를 읽는 호환.
+
 ## [9.2.0] — 2026-11-24
 
 ### Added

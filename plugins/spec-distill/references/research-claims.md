@@ -35,7 +35,7 @@ repo_claims:                   # 내부(레포) 주장
 
 > 인덱스·레지스트리·목차·description 필드만 읽고 판정하지 말 것. **구현을 읽어라.**
 
-출처: `docs/archive/interview/2026-07-12-project-init-audit-interview.md`. 그 사이클은 「레포에서
+출처: 옛 기록 `docs/archive/interview/2026-07-12-project-init-audit-interview.md`. 그 사이클은 「레포에서
 auto-confirm 한 사실」 범주를 만들었다가 **4건 중 3건의 전제가 틀린 것**을 확인하고 범주 자체를
 폐기했다. 틀린 것은 경로가 아니었다 — 넷 다 실재하는 파일을 가리켰고, 틀린 것은 「그 자리가 주장과
 맞는가」였다. 그래서 `path` 와 `anchor` 만으로는 이 실패가 걸러지지 않는다.

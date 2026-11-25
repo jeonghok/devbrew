@@ -48,13 +48,13 @@ BASE = [blk("R1", "설계 중", "in_progress", warnings=["경고 하나"]), blk(
         blk("R3", "준비", "pending"), blk("R4", "대기", "pending"), blk("R0", "머지됨", "completed")]
 NO_IV = {"supported": True, "items": [], "errors": []}
 IV = {"supported": True, "errors": [],
-      "items": [{"path": "docs/superpowers/interview/2026-10-15-t-interview.state.md", "n": 3, "limit": 20,
+      "items": [{"path": "docs/superpowers/intent/2026-10-15-t-context.state.md", "n": 3, "limit": 20,
                  "last": "포화 판정 1: 아직 — 빈 곳 2개", "mtime": 2.0},
-                {"path": "docs/superpowers/interview/2026-10-14-u-interview.state.md", "n": 9, "limit": 20,
+                {"path": "docs/superpowers/intent/2026-10-14-u-context.state.md", "n": 9, "limit": 20,
                  "last": None, "mtime": 1.0}]}
 
 STATE = """---
-type: interview-state
+type: context-state
 seed: none
 orchestration:
   focused_dimension: null
@@ -93,21 +93,21 @@ class Statusline(unittest.TestCase):
 
     def test_interview_segment_latest_first(self):
         line = cp.statusline_text([(RM, report(BASE, 1))], IV, 5)
-        self.assertTrue(line.endswith(" · 받은 지 5분 · 인터뷰 조사 3/20 외 1"), line)
+        self.assertTrue(line.endswith(" · 받은 지 5분 · 컨텍스트 쌓기 조사 3/20 외 1"), line)
 
     def test_no_roadmap_with_interview(self):
-        self.assertEqual(cp.statusline_text([], IV, None), "인터뷰 조사 3/20 외 1")
+        self.assertEqual(cp.statusline_text([], IV, None), "컨텍스트 쌓기 조사 3/20 외 1")
 
     def test_no_roadmap_no_interview_is_empty(self):
         self.assertEqual(cp.statusline_text([], NO_IV, 3), "")
 
     def test_unsupported_interview_has_no_segment(self):
         line = cp.statusline_text([(RM, report(BASE, 1))], {"supported": False, "items": [], "errors": []}, 5)
-        self.assertNotIn("인터뷰", line)
+        self.assertNotIn("컨텍스트 쌓기", line)
 
     def test_interview_error(self):
         iv = {"supported": True, "items": [], "errors": [{"path": "x", "reason": "깨짐"}]}
-        self.assertTrue(cp.statusline_text([(RM, report(BASE, 1))], iv, 5).endswith(" · 인터뷰 셀 수 없음"))
+        self.assertTrue(cp.statusline_text([(RM, report(BASE, 1))], iv, 5).endswith(" · 컨텍스트 쌓기 셀 수 없음"))
 
     def test_minutes_unknown(self):
         self.assertIn("· 받은 시각 모름", cp.statusline_text([(RM, report(BASE, 1))], NO_IV, None))
@@ -203,12 +203,12 @@ class Show(unittest.TestCase):
         self.assertEqual(self.show([], sel="목록을 못 읽었다")[0], "검사 불가: 목록을 못 읽었다")
 
     def test_interview_sections(self):
-        self.assertIn("인터뷰: 셀 수 없음 — 이 플러그인 버전은 인터뷰 상태 파일을 아직 남기지 않는다",
+        self.assertIn("컨텍스트 쌓기: 셀 수 없음 — 이 플러그인 버전은 컨텍스트 쌓기 상태 파일을 아직 남기지 않는다",
                       self.show([], {"supported": False, "items": [], "errors": []}))
-        self.assertIn("인터뷰: 진행 중 없음", self.show([], NO_IV))
+        self.assertIn("컨텍스트 쌓기: 진행 중 없음", self.show([], NO_IV))
         lines = self.show([], IV)
-        self.assertIn("인터뷰: 진행 중 2개", lines)
-        self.assertIn("    docs/superpowers/interview/2026-10-15-t-interview.state.md — 조사 3/20 · 마지막 사건: "
+        self.assertIn("컨텍스트 쌓기: 진행 중 2개", lines)
+        self.assertIn("    docs/superpowers/intent/2026-10-15-t-context.state.md — 조사 3/20 · 마지막 사건: "
                       "포화 판정 1: 아직 — 빈 곳 2개", lines)
         err = {"supported": True, "items": [], "errors": [{"path": "p.state.md", "reason": "깨짐"}]}
         self.assertIn("    p.state.md — 셀 수 없음(깨짐)", self.show([], err))
@@ -394,8 +394,9 @@ class InterviewState(unittest.TestCase):
     def test_bad_inputs(self):
         cases = {
             "no frontmatter": "본문만",
-            "unclosed": "---\ntype: interview-state\n",
-            "wrong type": STATE.replace("type: interview-state", "type: interview-brief"),
+            "unclosed": "---\ntype: context-state\n",
+            "wrong type": STATE.replace("type: context-state", "type: context-brief"),
+            "old wrong type": STATE.replace("type: context-state", "type: interview-brief"),
             "bad count": STATE.replace("coverage_mapper: 1", "coverage_mapper: x"),
             "no limit": STATE.replace("  research_limit: 20\n", ""),
             "no dispatches": STATE.replace("research_dispatches", "research_other"),
@@ -404,6 +405,65 @@ class InterviewState(unittest.TestCase):
             with self.subTest(name):
                 with self.assertRaises(ValueError):
                     cp.parse_interview_state(text)
+
+
+class InterviewFolders(unittest.TestCase):
+    """상태줄 · 지도는 새 · 옛 의도 폴더의 진행 중 일을 함께 세고, 두 키가 같은 폴더면 한 번만 센다."""
+
+    NEW, OLD = "docs/superpowers/intent/", "docs/superpowers/interview/"
+
+    def setUp(self):
+        self.top = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.top), True)
+
+    def put(self, rel, name, kind="context-state"):
+        d = self.top / rel
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(STATE.replace("type: context-state", "type: " + kind), encoding="utf-8")
+
+    def view(self, new, old):
+        supported, files, errors = cp.interview_files(str(self.top), new, old)
+        return cp.read_interviews(supported, files, errors, cp.Deadline(5))
+
+    def test_statusline_counts_both_folders_once(self):
+        self.put(self.NEW, "2026-10-15-t-context.state.md")
+        self.put(self.OLD, "2026-10-14-u-interview.state.md", "interview-state")
+        iv = self.view(self.NEW, self.OLD)
+        self.assertEqual(len(iv["items"]), 2)
+        self.assertTrue(cp.interview_segment(iv).endswith(" 외 1"), cp.interview_segment(iv))
+        self.assertIn("컨텍스트 쌓기 조사", cp.interview_segment(iv))
+        self.assertIn("컨텍스트 쌓기: 진행 중 2개", cp.interview_lines(iv))
+
+    def test_same_folder_counts_once(self):
+        self.put(self.OLD, "2026-10-14-u-interview.state.md", "interview-state")
+        iv = self.view(self.OLD, self.OLD)
+        self.assertEqual(len(iv["items"]), 1)
+        self.assertIn("컨텍스트 쌓기: 진행 중 1개", cp.interview_lines(iv))
+
+    def test_both_forms_and_finished_pair(self):
+        self.put(self.NEW, "2026-10-15-a-context.state.md")
+        self.put(self.NEW, "2026-10-15-b-interview.state.md", "interview-state")
+        self.put(self.NEW, "2026-10-15-c-context.state.md")
+        (self.top / self.NEW / "2026-10-15-c-context.md").write_text("x", encoding="utf-8")   # 짝 결과물이 있다 — 끝난 일
+        self.assertEqual(len(self.view(self.NEW, self.NEW)["items"]), 2)
+
+    def test_parse_accepts_both_state_kinds(self):
+        for kind in ("context-state", "interview-state"):
+            self.assertEqual(cp.parse_interview_state(STATE.replace("type: context-state", "type: " + kind))["n"], 3)
+
+    def test_show_label_words(self):
+        out = "\n".join(cp.interview_lines(self.view(self.NEW, self.OLD)))
+        self.assertIn("컨텍스트 쌓기: 진행 중 없음", out)
+        self.assertNotIn("인터뷰", out)
+        self.assertNotIn("인터뷰", "\n".join(cp.interview_lines(None)))
+
+    def test_linked_old_folder_is_reported(self):
+        self.put(self.NEW, "2026-10-15-t-context.state.md")
+        (self.top / "docs/superpowers/real").mkdir(parents=True)
+        os.symlink(str(self.top / "docs/superpowers/real"), str(self.top / "docs/superpowers/interview"))
+        iv = self.view(self.NEW, self.OLD)
+        self.assertEqual(len(iv["items"]), 1)
+        self.assertIn("의도 폴더 경로에 링크가 있다", iv["errors"][0]["reason"])
 
 
 class Failed(unittest.TestCase):
@@ -624,7 +684,7 @@ class Overlay(unittest.TestCase):
         self.assertEqual((counts["구현"], other), (1, 0))
 
     def test_code_stamp_covers_state_computation_modules(self):
-        # 기계 상태는 캐시 밖이라 state_path · ledger_marker 는 열쇠가 아니다(인터뷰 지원 토글이 캐시를 밀지 않는다)
+        # 기계 상태는 캐시 밖이라 state_path · ledger_marker 는 열쇠가 아니다(컨텍스트 쌓기 지원 토글이 캐시를 밀지 않는다)
         for name in ("conductor_state.py", "repo_defaults.py"):
             self.assertIn(name, cp.CODE_STAMP_FILES)
         self.assertNotIn("state_path.py", cp.CODE_STAMP_FILES)
@@ -812,7 +872,7 @@ class PrCache(unittest.TestCase):
 
     def test_statusline_puts_the_segment_after_fetch_time(self):
         line = cp.statusline_text([(RM, report(BASE, 1))], IV, 5, None, "main", "PR 캐시 3시간 전")
-        self.assertTrue(line.endswith(" · 받은 지 5분(어느 원격 · 브랜치든) · PR 캐시 3시간 전 · 인터뷰 조사 3/20 외 1"), line)
+        self.assertTrue(line.endswith(" · 받은 지 5분(어느 원격 · 브랜치든) · PR 캐시 3시간 전 · 컨텍스트 쌓기 조사 3/20 외 1"), line)
         self.assertEqual(cp.statusline_text([], NO_IV, 5, None, "main", "PR 캐시 없음"), "")
 
     def test_machine_reader_reads_each_file_once(self):

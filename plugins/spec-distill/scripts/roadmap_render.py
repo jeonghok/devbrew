@@ -390,7 +390,7 @@ BUNDLE_FORMAT = (
     "## 0. 역참조\n\n"
     "- 원본 brief: `%s` (audit `%s`)\n"
     "- 로드맵: `%s` 의 `### %s` 블록\n"
-    "- 이 에픽의 설계문서는 frontmatter `source_interview:` 에 이 묶음 경로를, `roadmap:` 에 로드맵 경로를 적고, "
+    "- 이 에픽의 설계문서는 frontmatter `source_intent:` 에 이 묶음 경로를, `roadmap:` 에 로드맵 경로를 적고, "
     "본문 `## 번호 대조` 표(칸: 번호 · 반영/기각 · 자리 또는 이유)에 위 `ids` 전부를 싣는다.\n\n"
     "## 1. Goal · Non-goal\n\n### 이 에픽의 Goal · Non-goal\n\n- 의도: %s\n- 범위: %s\n\n### 공통 목표\n%s"
     "## 2. 제약\n\n%s\n\n"

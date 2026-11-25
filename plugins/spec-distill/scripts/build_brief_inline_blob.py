@@ -16,7 +16,7 @@ v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload +
 방어-in-depth이고, 그 밖에는 불필요하지만 프롬프트를 작게 유지하는 부수 효과가 있어
 유지한다.
 
-`audit_file`을 redact해도 `name` + `created_at`으로 `<date>-<topic>-interview.audit.md`를
+`audit_file`을 redact해도 `name` + `created_at`으로 `<date>-<topic>-context.audit.md`를
 **재구성**할 수 있으므로 세 값을 함께 지운다(round-1 리뷰가 적발한 경로).
 
 §6 사용자 원문(payload §6 의 S1~Sn)은 **절대 건드리지 않는다.** 본문이 **자기** audit 파일명을

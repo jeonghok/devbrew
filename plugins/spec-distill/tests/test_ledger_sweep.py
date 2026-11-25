@@ -375,7 +375,7 @@ class OldGcIgnoresDocreviewTest(unittest.TestCase):
                              "옛 GC 를 git 에서 꺼내지 못했다(커밋 %s 도달 불가) — 도출 불가는 RED" % OLD_GC_COMMIT)
             tools = tmp / "oldgc"; tools.mkdir()
             (tools / "spec-distill-gc.py").write_text(src.stdout, encoding="utf-8")
-            for n in ("state_path.py", "gc_common.py", "kill_switch_active.py"):
+            for n in ("state_path.py", "legacy_names.py", "gc_common.py", "kill_switch_active.py"):
                 shutil.copy(SCRIPTS / n, tools / n)
             repo = tmp / "repo"; repo.mkdir()
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)

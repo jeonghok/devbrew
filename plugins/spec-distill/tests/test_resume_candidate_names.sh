@@ -21,7 +21,7 @@ fence() {   # fence <파일> <마커 이름> → 그 마커 사이 첫 bash 펜�
   awk -v b="<!-- $2:begin -->" -v e="<!-- $2:end -->" '
     index($0,b){f=1;next} index($0,e){f=0} f&&/^```bash$/{c=1;next} f&&c&&/^```$/{c=0;next} f&&c' "$1"
 }
-ENTRY="$(fence "$SD/skills/context-build/SKILL.md" interview-state-entry)"
+ENTRY="$(fence "$SD/skills/context-build/SKILL.md" context-state-entry)"
 [ -n "$ENTRY" ] && ok "전제: 진입 펜스를 뽑았다" || no "전제: 진입 펜스가 비었다 — 아래 칸이 공허하다"
 in_sess() {   # in_sess <저장소> <스크립트>
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" CLAUDE_CODE_SESSION_ID=sess-candname1 DEVBREW_SPEC_DISTILL_SESSION_ID=sess-candname1 bash -c "$2" 2>&1 )
@@ -41,7 +41,7 @@ git -C "$R" add -- docs; git -C "$R" commit -q -m seed
 o="$(in_sess "$R" "ARG_PATH='$SEED'
 $ENTRY")"
 cands="$(printf '%s\n' "$o" | sed -n 's/^candidate: //p')"
-assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: ASK" "1: 끝나지 않은 상태 파일이 있으면 ASK"
+assert_eq "$(printf '%s\n' "$o" | tail -n 1)" "context-state: ASK" "1: 끝나지 않은 상태 파일이 있으면 ASK"
 assert_eq "$cands" "$GOOD" "1: 허용 글자 밖 이름(작은따옴표 · 세미콜론)은 후보로 내지 않는다"
 assert_contains "$o" "허용 글자" "1: 뺀 후보와 그 사유를 알린다"
 
@@ -59,7 +59,7 @@ done
 
 # 직접 넘긴 상태 파일 경로도 같은 글자 규칙으로 판정한다(이름 검사가 후보 목록에만 있지 않다).
 o="$(cd "$R" && CLAUDE_PLUGIN_ROOT="$SD" python3 "$SD/scripts/interview_state.py" entry --arg "$BAD" --session sess-candname1 2>&1)"
-assert_contains "$(printf '%s\n' "$o" | tail -n 1)" "interview-state: REJECT" "3: 허용 글자 밖 상태 파일 경로를 직접 넘기면 REJECT"
+assert_contains "$(printf '%s\n' "$o" | tail -n 1)" "context-state: REJECT" "3: 허용 글자 밖 상태 파일 경로를 직접 넘기면 REJECT"
 
 # 사용자가 @ 로 직접 넘긴 경로는 스크립트가 보기 전에 셸 리터럴이 된다 — 3.6 절이 셸에 붙이기 전의 글자 확인을 지시한다.
 S36="$(awk '/^### 3\.6 /{f=1;next} /^### /{f=0} f' "$SD/skills/context-build/SKILL.md" | tr '\n' ' ')"

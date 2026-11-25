@@ -2,7 +2,7 @@
 # guards: plugins/spec-distill/references/epic-handoff.md
 #
 # R3 AC2 · AC10 — 에픽 넘김 줄(`references/epic-handoff.md`)이 묶음을 첨부하고 로드맵 속 위치를 밝히며,
-# brief 다음 세션 줄과 같은 지시(번호째 읽기 · 번호 대조 · source_interview · --bundle · --plan · --impl)를 싣는가.
+# brief 다음 세션 줄과 같은 지시(번호째 읽기 · 번호 대조 · source_intent · --bundle · --plan · --impl)를 싣는가.
 # 정적 락이다 — 지휘 세션이 이 줄을 실제로 치환해 쓰는지는 재지 못한다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -25,7 +25,7 @@ case "$ONE" in
   "@<bundle-abs> 이 에픽 묶음으로 Skill superpowers:brainstorming 을 시작하라."*) ok "AC2: 줄이 @<bundle-abs> 첨부로 시작해 brainstorming 을 부른다" ;;
   *) no "AC2: 줄의 머리가 다르다: $ONE" ;;
 esac
-for n in '승인된 로드맵 <roadmap-rel> 의 에픽 <epic-id> 다' '번호째' '## 번호 대조 표' 'source_interview 에 <bundle-rel>' \
+for n in '승인된 로드맵 <roadmap-rel> 의 에픽 <epic-id> 다' '번호째' '## 번호 대조 표' 'source_intent 에 <bundle-rel>' \
          '--bundle <bundle-rel>' 'check_bundle_coverage.py --plan' '## Acceptance Criteria 의 AC 목록' \
          'AC1 · AC2 … 처럼 번호를 단다' '구현됨 · 미룸 · 빠짐' 'git 이 추적하지 않는 파일' '## 미룸 표' 'check_bundle_coverage.py --impl' \
          '게이트 없이 끝나면 brainstorming 의 문서 승인 자리로 돌아간다'; do
@@ -78,7 +78,7 @@ assert_not_contains "$ONE" '그 흐름이 정한 대로 한다' "AC31: 순환 �
 assert_eq "$(grep -c '^> `@<intent-abs> 이 과제 파일로 Skill superpowers:brainstorming 을 시작하라' "$EH")" "1" "AC17: team 형식의 넘김 줄이 하나 있다"
 TEAM_LINE="$(grep -m1 '^> `@<intent-abs> ' "$EH")"
 for lit in '원자료 <original-rel> 전체와 번호 파일 <sources-rel> 을 읽는다' '설계문서에 ## 원문 대조 표(칸: 원문 요소 · 설계 요소 · 그대로/바꿈 · 근거)를 두어' \
-           '바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다' 'source_interview 에 <intent-rel> 을' '--bundle <intent-rel>' '<place-sentence>' \
+           '바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다' 'source_intent 에 <intent-rel> 을' '--bundle <intent-rel>' '<place-sentence>' \
            '설계문서에 ## 번호 대조 표(칸: 번호 · 반영/기각 · 자리 또는 이유)를 두어 번호 파일 ids 의 모든 번호를 싣고'; do
   assert_contains "$TEAM_LINE" "$lit" "AC17: team 넘김 줄 — $lit"
 done
@@ -117,7 +117,7 @@ subs = [
      "다른 에픽으로 넘기는 번호는 기각 칸에 그 에픽 번호를 적는다."
      " 설계문서에 ## 원문 대조 표(칸: 원문 요소 · 설계 요소 · 그대로/바꿈 · 근거)를 두어 원자료의 요소마다"
      " 한 행을 싣고, 바꾼 것은 근거를 적거나 「작성자 제안」 으로 표시한다."),
-    ("source_interview 에 <bundle-rel> 을", "source_interview 에 <intent-rel> 을"),
+    ("source_intent 에 <bundle-rel> 을", "source_intent 에 <intent-rel> 을"),
     ("묶음의 확정 항목은 다시 묻지 않고", "번호 파일의 확정 항목은 다시 묻지 않고"),
     ("설계문서를 쓰고 커밋한 뒤,", "<place-sentence> 설계문서를 쓰고 커밋한 뒤,"),
     ("--bundle <bundle-rel>", "--bundle <intent-rel>"),
