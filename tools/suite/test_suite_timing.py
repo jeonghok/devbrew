@@ -272,14 +272,15 @@ class PeerCountTests(unittest.TestCase):
     def test_real_ps_self_ancestor_child_excluded(self):
         for sub in ("a", "b", "c"):
             os.makedirs(os.path.join(self.tmp, sub))
-        release = os.path.join(self.tmp, "release")
+        release = os.path.join(self.tmp, "release")       # b 의 자식을 풀어 준다
+        release_c = os.path.join(self.tmp, "release_c")  # c 는 a 의 목록까지 읽은 뒤에 따로 풀어 준다
         out = os.path.join(self.tmp, "out")
         out_a = os.path.join(self.tmp, "out_a")
         a = os.path.join(self.tmp, "a", "run-all.sh")
         b = os.path.join(self.tmp, "b", "run-all.sh")
         c = os.path.join(self.tmp, "c", "run-all.sh")
         with open(c, "w", encoding="utf-8") as fh:
-            fh.write("echo $$ > %s/c.pid\n%s\n" % (self.tmp, hold_until(release)))
+            fh.write("echo $$ > %s/c.pid\n%s\n" % (self.tmp, hold_until(release_c)))
         with open(a, "w", encoding="utf-8") as fh:
             fh.write("echo $$ > %s/a.pid\nbash %s\n%s %s --pid $$ --list > %s\necho $? > %s.rc\n"
                      % (self.tmp, b, sys.executable, PEERS, out_a, out_a))
@@ -299,22 +300,25 @@ class PeerCountTests(unittest.TestCase):
             self.assertTrue(wait_for_files(files + [out, out + ".rc"]), "가짜 러너 파일이 없다")
             with open(out, encoding="utf-8") as fh:
                 listed = fh.read().split()
-            open(release, "w").close()   # 목록을 읽었으니 b 의 자식 · c 를 풀어 준다
+            open(release, "w").close()   # b 의 목록을 읽었으니 b 의 자식을 풀어 준다 — c 는 아직 살아 있다
             proc.wait(timeout=30)
-            self.assertTrue(wait_for_files([out_a, out_a + ".rc"]), "a 의 목록이 없다")
+            self.assertTrue(wait_for_files([out_a, out_a + ".rc"]), "a 의 목록이 없거나 비었다(c 가 빠졌다)")
             with open(out_a, encoding="utf-8") as fh:
                 listed_a = fh.read().split()
+            open(release_c, "w").close()   # a 의 목록까지 읽었으니 c 를 풀어 준다
             for rc in (out + ".rc", out_a + ".rc"):
                 with open(rc, encoding="utf-8") as fh:
                     self.assertEqual(fh.read().strip(), "0", rc)
-            # 양성 대조: 다른 자리의 러너는 목록에 있다
+            # 양성 대조: 다른 자리의 러너는 b 의 목록에도 a 의 목록에도 있다
             self.assertIn(str(read_pid(cpid)), listed)
+            self.assertIn(str(read_pid(cpid)), listed_a)
             for f in files:
                 self.assertNotIn(str(read_pid(f)), listed, (out, f))
             for f in files:
                 self.assertNotIn(str(read_pid(f)), listed_a, (out_a, f))
         finally:
             open(release, "w").close()
+            open(release_c, "w").close()
             if proc is not None and proc.poll() is None:
                 proc.kill()
                 proc.wait()

@@ -70,6 +70,8 @@ class LiteralsLiveInOnePlace(unittest.TestCase):   # AC1
         return [L.JOBS_DIR + "/", L.INTENT_DIR + "/", L.RESULTS_DIR + "/", L.RULES_FILE, L.HANDBOOK_FILE]
 
     def hits(self, text):
+        # 레포의 의도 폴더 경로(docs/superpowers/intent/)는 팀 폴더의 intent/ 와 다른 자리다 — 그 경로 꼴만 뺀다
+        text = text.replace("superpowers/intent/", "")
         return [f for f in self.fragments() if re.search(r"(?<![\w-])" + re.escape(f), text)]
 
     def test_no_other_script_spells_the_fragments(self):
@@ -81,6 +83,8 @@ class LiteralsLiveInOnePlace(unittest.TestCase):   # AC1
         self.assertEqual(self.hits('p = "jobs/" + x'), ["jobs/"])
         self.assertEqual(self.hits("see RULES.md"), ["RULES.md"])
         self.assertEqual(self.hits("tool-results/x · reintent/"), [])
+        self.assertEqual(self.hits('D = "docs/superpowers/intent/"'), [])   # 레포 의도 폴더는 다른 자리
+        self.assertEqual(self.hits('p = "intent/" + "docs/superpowers/intent/"'), ["intent/"])   # 팀 폴더 철자는 그대로 잡힌다
         self.assertEqual(len(self.fragments()), 5)
 
 

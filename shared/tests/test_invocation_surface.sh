@@ -318,13 +318,18 @@ out = []
 # directory 는 2.1.309 무렵부터 있는 디렉토리 등록 점검(2.1.309 · 2.1.310 에서 실측) — 하위 키도 닫힌 집합이고,
 # 막지 않는 찾음(blocking:false · hold:false)만 판정하지 않는다. 막는 찾음 · error · 보류(hold) ·
 # 정하지 못한 규칙(undecided) · 점검 실패(failure) · 미완료(incomplete) · 키 부재는 RED 다.
-KNOWN = {"success", "strict", "target", "manifest", "contents", "advice", "directory"}
+# provides(플러그인이 싣는 구성 요소 목록) · hosts(구성 요소가 이름 대는 호스트 · 읽지 못한 부분 · plugin.json 선언)는
+# 2.1.330 에서 실측한 목록 객체 — success 를 바꾸지 않아 판정하지 않는다(형식만 본다).
+KNOWN = {"success", "strict", "target", "manifest", "contents", "advice", "directory", "provides", "hosts"}
 DKEYS = {"profile", "findings", "undecided", "incomplete", "failure", "notes"}
 extra = sorted(set(d) - KNOWN)
 if extra:
     out.append("shape: 모르는 최상위 키 %s — 스키마 표류" % extra)
 if "advice" in d and not isinstance(d["advice"], list):
     out.append("shape: advice 가 배열이 아니다")
+for k in ("provides", "hosts"):
+    if k in d and not isinstance(d[k], dict):
+        out.append("shape: %s 가 객체가 아니다" % k)
 if "directory" in d:
     dr = d["directory"]
     if not isinstance(dr, dict):
@@ -415,6 +420,9 @@ assert_eq "$(mb '{"success":false,"strict":true,"target":"t","manifest":'"$MOK"'
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[]}')" "" "manifest_bad: 깨끗한 success:true 는 통과"
 assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":[{"file":"x","message":"m","installLine":"/plugin install p"}]}')" "" "manifest_bad: advice 배열은 비게이팅 — 통과"
 assert_grep "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"advice":"oops"}')" '^shape: advice 가 배열이 아니다$' "manifest_bad: advice 가 배열이 아니면 모양 사유로 RED"
+assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"provides":{"skills":["p:s"]},"hosts":{"named":[],"unread":[{"kind":"skills","name":"p:s","reason":"process"}]}}')" "" "manifest_bad: provides · hosts 객체는 비게이팅 — 통과"
+assert_eq "$(mb '{"success":true,"strict":true,"target":"t","manifest":'"$MOK"',"contents":[],"provides":[],"hosts":"x"}')" "shape: provides 가 객체가 아니다
+shape: hosts 가 객체가 아니다" "manifest_bad: provides · hosts 가 객체가 아니면 모양 사유로 RED"
 # directory — 2.1.309 무렵부터 있는 디렉토리 등록 점검(2.1.303 엔 없다, 2.1.309 · 2.1.310 에서 실측).
 # 막지 않는 찾음(ICON_MISSING 등 blocking:false · hold:false 경고)은 판정하지 않고, 그 밖은 RED 다.
 DOK='{"profile":null,"findings":[{"code":"ICON_MISSING","severity":"warning","blocking":false,"hold":false,"file":".claude-plugin/plugin.json"}],"undecided":[],"incomplete":false,"failure":null,"notes":["n"]}'

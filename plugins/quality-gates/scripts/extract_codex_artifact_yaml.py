@@ -98,6 +98,11 @@ def read_stderr(path):
         return "", (str(e.errno) if e.errno else type(e).__name__)
 
 
+def read_stdin() -> str:
+    """바이트로 읽어 UTF-8 로 풀고 깨진 바이트는 대체 글자로 — sys.stdin.read() 는 UTF-8 로캘에서 깨진 바이트에 죽는다."""
+    return sys.stdin.buffer.read().decode("utf-8", errors="replace")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--meta-override-exit-code", type=int, default=0)
@@ -109,9 +114,9 @@ def main():
         text, read_error = read_stderr(a.stderr_file)
         # 원문 첫 줄은 화면에만 — 산출물에는 분류만(실패 이벤트가 있으면 그것으로)
         return degrade(a.meta_override_reason or "exit_nonzero", a.meta_override_exit_code,
-                       failure_kind(sys.stdin.read(), text, bool(read_error)), read_error)
+                       failure_kind(read_stdin(), text, bool(read_error)), read_error)
 
-    text = extract_text(sys.stdin.read())
+    text = extract_text(read_stdin())
     if not text:
         return degrade("no_agent_message")
     # AC9(b) parity with codex_findings_to_yaml.py: pick the LAST fenced block

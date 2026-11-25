@@ -19,6 +19,8 @@ from roadmap_model import frontmatter, parse_history, quotes, section_body, unqu
 
 RM_REL = "docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose"
 RM_DIR = REPO / RM_REL
+NEW_HEAD_HINT = "frontmatter `source_intent:` 에 이 묶음 경로를"
+OLD_HEAD_HINT = "frontmatter `source_interview:` 에 이 묶음 경로를"
 
 MINI_BRIEF = """---
 type: interview-brief
@@ -382,6 +384,9 @@ class GoldenSample(unittest.TestCase):
                 continue
             want = (RM_DIR / (r.id + ".md")).read_text(encoding="utf-8")
             got = R.render_bundle(r, self.idx, RM_REL + "/roadmap.md", self.brief_rel, self.audit_rel)
+            # 골든 묶음은 옛 기록이라 §0 의 설계문서 머리 키 안내가 옛 키다 — 그 한 문장만 맞춰 견준다(새로 쓰는 쪽은 새 키).
+            self.assertEqual(got.count(NEW_HEAD_HINT), 1, r.id)
+            got = got.replace(NEW_HEAD_HINT, OLD_HEAD_HINT)
             if got != want:
                 diffs.append(self._diff(r.id, want, got))
         self.assertEqual(diffs, [], "\n".join(diffs))

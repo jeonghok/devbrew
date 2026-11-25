@@ -13,11 +13,11 @@ if [ "${1:-}" = "--emit-scanned" ]; then
 fi
 . "$ROOT/shared/tests/assert.sh"
 GT="$(grep -E '^ground_truth: ' "$P" || true)"
-for n in 'source_interview' '`epic-bundle` 이면 묶음 모드' '`interview-brief` 면 brief 모드' '§3 열린 질문 · §4 조사 · §5 위험' '그 밖의 종류면 brief §2 확정 항목'; do
+for n in '`source_intent`(옛 문서는 `source_interview`)' '`epic-bundle` 이면 묶음 모드' '`context-brief`(옛 `interview-brief`) 면 brief 모드' '§3 열린 질문 · §4 조사 · §5 위험' '그 밖의 종류면 brief §2 확정 항목' '두 키가 다 없거나'; do
   assert_contains "$GT" "$n" "AC13: ground_truth 에 「${n}」"
 done
 L1="$(awk '/^## 층 1 — /{f=1;next} f&&NF{print;exit}' "$P")"
-for n in 'source_interview' 'epic-bundle' 'interview-brief'; do
+for n in 'source_intent`(옛 문서는 `source_interview`)' 'epic-bundle' 'context-brief'; do
   assert_contains "$L1" "$n" "AC13: 층 1 첫 문장이 모드 문장이다 — 「${n}」"
 done
 REL="$(grep -F '**층 1 판정 관계** —' "$P" || true)"
