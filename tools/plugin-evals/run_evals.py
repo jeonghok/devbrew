@@ -115,6 +115,29 @@ def summary_line(rc: int, result: Optional[dict],
     return line, rc
 
 
+def copy_plugin(plugin_dir: str, out_dir: str) -> Tuple[Optional[str], Optional[str]]:
+    """링크를 풀어 복사한다 — 링크가 든 폴더에서는 평가 세션이 시작되지 않는다."""
+    src = os.path.abspath(plugin_dir)
+    dst = os.path.join(out_dir, os.path.basename(src) or "plugin")
+    reports = os.path.join(src, "tests", "evals")
+
+    def skip(folder, names):
+        if os.path.abspath(folder) == reports and "results" in names:
+            return ["results"]
+        return []
+
+    try:
+        shutil.copytree(src, dst, symlinks=False, ignore=skip)
+    except shutil.Error as e:
+        errors = e.args[0] if e.args and isinstance(e.args[0], list) else []
+        first = errors[0] if errors and len(errors[0]) == 3 else None
+        why = "%s: %s" % (first[0], first[2]) if first else str(e)
+        return None, why
+    except (OSError, RecursionError) as e:
+        return None, str(e)
+    return dst, None
+
+
 def valid_cap(text: str) -> bool:
     try:
         value = float(text)
@@ -158,10 +181,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     out_dir = tempfile.mkdtemp(prefix="plugin-evals-")
     json_path = os.path.join(out_dir, "result.json")
-    cmd = build_command(os.path.abspath(args.plugin_dir), args.case, args.runs,
+    copy, why = copy_plugin(args.plugin_dir, out_dir)
+    if copy is None:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        print(not_run("플러그인 폴더의 사본을 만들지 못했다 (%s)" % why))
+        return 1
+    cmd = build_command(copy, args.case, args.runs,
                         args.model, args.max_cost_usd, json_path, claude)
     print("plugin-evals: 결과 파일 " + json_path, file=sys.stderr)
-    proc = subprocess.run(cmd, env=env)
+    try:
+        proc = subprocess.run(cmd, env=env)
+    finally:
+        shutil.rmtree(copy, ignore_errors=True)
     rc = proc.returncode if proc.returncode >= 0 else 128 - proc.returncode
     result, why = read_result(json_path)
     line, code = summary_line(rc, result, why)
