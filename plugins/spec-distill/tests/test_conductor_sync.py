@@ -292,6 +292,28 @@ class Stops(SyncRepo):
         self.assertTrue(any(l.startswith("    ") and "--reset" in l for l in out.splitlines()), out)
 
 
+class MarkerNotice(SyncRepo):
+    def test_claim_notice_is_not_swallowed(self):   # 리뷰 I2 — 원장이 claim 에서 한 번 내는 알림을 표지 구간이 원문으로 낸다
+        self.sync()
+        self.forget()
+        path = cs.machine_path(self.w / ".claude" / "spec-distill", RM)
+        before = path.read_text(encoding="utf-8")
+        self.addCleanup(path.write_text, before, encoding="utf-8")
+        path.write_text(before.rstrip("\n") + "\n\n## 레포 설정\n\n- test_command · bash -c \"exit 0\"\n", encoding="utf-8")
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        lines = out.splitlines()
+        self.assertIn("표지 — 이상: 새로 잡았다 · 알림이 있다", lines)   # 새로 잡음 판정은 그대로 · 알림이 있다
+        at = lines.index("표지 — 이상: 새로 잡았다 · 알림이 있다")
+        self.assertEqual(lines[at + 1], "    [spec-distill] " + cs.OLD_REPO_SETTINGS_DROPPED)   # 원장 알림 원문 그대로
+        self.assertEqual(lines[at + 2], "    acquired")
+        self.assertIn("기본 브랜치", heads(out))   # 멈추지 않는다
+        self.assertNotIn("## 레포 설정", path.read_text(encoding="utf-8"))
+        rc, out, err = self.sync()   # 양성 짝 — 알림이 없는 claim 은 한 줄
+        self.assertIn("\n표지 — 이 세션이 쥐고 있다\n", out)
+        self.assertNotIn("표지 — 이상", out)
+
+
 class PrCache(SyncRepo):
     def test_cache_change_is_shown(self):   # 고침 알림 — 캐시가 바뀐 줄을 낸다, 다음 번은 달라진 것 없음
         e1 = self.t / "gh-e1.json"
@@ -370,7 +392,7 @@ class StatusView(SyncRepo):
 
 
 class OtherRoadmap(SyncRepo):   # 다른 로드맵의 상태 브랜치를 바꾼다 — 이 클래스의 레포에만 남는다
-    def test_other_roadmap_waiting_shows_full_raw(self):   # 이상이면 구간 원문 전부를 들여 낸다
+    def test_other_roadmap_waiting_shows_full_raw(self):   # 이상이면 구간 원문을 정보 줄 밖은 다 들여 낸다
         self.assertEqual(self.sync("--roadmap", TM)[0], 0)
         rc, _o, err = self.run_py(SCRIPTS / "conductor_status.py", "waiting", "add", "--roadmap", TM, "--session", SID,
                                   "--epic", "T1", "--kind", "spec 승인", "--via", cs.ASK_VIA[1])
@@ -392,6 +414,65 @@ class OtherRoadmap(SyncRepo):   # 다른 로드맵의 상태 브랜치를 바꾼
             self.assertIn(want, raw, want)
         self.assertTrue([l for l in raw if l.startswith("다른 로드맵과 닿는 것 (계산 ")], raw)
         self.assertTrue([l for l in raw if l.startswith("- tm · T1 · spec 승인 · ") and "부터" in l], raw)
+
+
+class InfoLines(SyncRepo):   # 두 로드맵이 같은 경로를 예약한다 — 기본 브랜치를 바꾸므로 이 클래스의 레포에만 남는다
+    def test_anomaly_raw_keeps_info_lines_as_count(self):   # 설계 §2 · AC11 — 이상 원문에서도 정보 줄은 개수와 다시 볼 명령으로
+        reserve = "- 경로 예약: 없음\n"
+        rm, tm = (self.w / RM).read_text(encoding="utf-8"), (self.w / TM).read_text(encoding="utf-8")
+        self.assertIn(reserve, rm)
+        self.put({RM: rm.replace(reserve, "- 경로 예약: src/shared/\n", 1), TM: tm.replace(reserve, "- 경로 예약: src/shared/\n", 1)})
+        self.git(self.w, "commit", "-qam", "reserve")
+        self.git(self.w, "push", "-q", "origin", "trunk")
+        self.assertEqual(self.sync("--roadmap", TM)[0], 0)
+        self.assertEqual(self.sync()[0], 0)
+        rc, view, err = self.run_py(SCRIPTS / "conductor_status.py", "show", "--roadmap", RM)
+        info = [l for l in view.splitlines() if l.startswith("- 예약 겹침: ")]
+        self.assertTrue(info, view)   # 양성 짝 — 현황 화면에는 정보 줄이 있다
+        rc, _o, err = self.run_py(SCRIPTS / "conductor_status.py", "waiting", "add", "--roadmap", RM, "--session", SID,
+                                  "--epic", "E1", "--kind", "spec 승인", "--via", cs.ASK_VIA[1])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        lines = out.splitlines()
+        self.assertIn("상태 브랜치 — 이상: 기다리는 질문 1 · 온 글 0", lines)
+        self.assertTrue([l for l in lines if l.startswith("    - 이 로드맵 · E1 · spec 승인 · ") and l.endswith("부터")], out)
+        self.assertTrue([l for l in lines if l.startswith("    다른 로드맵과 닿는 것 (계산 ")], out)   # 정보 줄 밖은 원문 그대로
+        self.assertFalse([l for l in lines if "- 예약 겹침: " in l], out)   # 정보 줄은 원문에 싣지 않는다
+        self.assertIn("다른 로드맵과 닿는 것 %d개 — 다시 보기: %s" % (len(info), 'python3 "%s"/scripts/conductor_status.py show '
+                                                                          "--roadmap %s" % (PLUGIN, RM)), lines)
+
+
+class StateBranchOff(SyncRepo):   # 레포 설정 state_branch: 끔 — 기본 브랜치를 바꾸므로 이 클래스의 레포에만 남는다
+    def test_off_is_one_line(self):   # 리뷰 I3 — 꺼 둔 레포는 거짓 이상 없이 한 줄, 같은 상태에서 같은 출력
+        import conductor_branch as CB
+        self.put({".devbrew.md": "---\nstate_branch: 끔\n---\n"})
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-qm", "off")
+        self.git(self.w, "push", "-q", "origin", "trunk")
+        rc, first, err = self.sync()
+        self.assertEqual(rc, 0, first + err)
+        lines = first.splitlines()
+        self.assertIn("상태 브랜치 — 꺼져 있다", lines)
+        self.assertFalse([l for l in lines if " — 이상:" in l], first)
+        self.assertNotIn(CB.OFF_NOTE, first.replace("상태 브랜치 — 꺼져 있다", ""))   # 세 명령의 꺼짐 줄은 원문으로 내지 않는다
+        self.assertTrue([l for l in lines if l.startswith("다른 로드맵과 닿는 것 0개 — 다시 보기: ")], first)
+        second, third = self.sync()[1], self.sync()[1]
+        self.assertIn("상태 브랜치 — 꺼져 있다", second.splitlines())
+        self.assertEqual(without_time(second), without_time(third))   # AC11 — 꺼짐 원문의 시계가 출력에 실리지 않는다
+
+    def test_off_view_reads_only_known_forms(self):   # 꺼짐 꼴 밖의 줄은 그대로 이상 — 아는 꼴 하나를 넓혔을 뿐이다
+        import conductor_branch as CB
+        import conductor_sync as SY
+        said = [SY.PREFIX + CB.OFF_NOTE]
+        view = [CB.OFF_NOTE, "", "다른 로드맵과 닿는 것 (계산 09:00)", "- 닿는 것 없음"]
+        self.assertEqual(SY._off_view([said, said], view), (0, [], [], []))   # 양성 짝
+        self.assertIsNone(SY._off_view([said, said + ["다른 줄"]], view))   # 꺼짐 줄 하나가 아니면 꺼진 꼴이 아니다
+        self.assertIsNone(SY._off_view([said, said], ["STATUS 머리"] + view[1:]))
+        self.assertEqual(SY._off_view([said, said], view + ["처음 보는 줄"])[1], ["처음 보는 줄"])
+        self.assertEqual(SY._off_view([said, said], view[:2])[2], ["다른 로드맵과 닿는 것"])   # 닿는 것 절이 빠지면 빠진 줄
+        got = SY._off_view([said, said], view[:3] + ["- 예약 겹침: a — b"])
+        self.assertEqual((got[0], got[1], got[3]), (1, [], [3]))   # 정보 줄은 세고 그 자리를 낸다
 
 
 class Letters(SyncRepo):   # 보낸 글이 상태 브랜치에 남는다 — 이 클래스의 레포에만 남는다

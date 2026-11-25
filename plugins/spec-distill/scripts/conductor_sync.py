@@ -196,16 +196,19 @@ def seg_marker(roadmap, given, takeover):
     last = out[-1].strip() if out else ""
     if takeover:
         prev = last.rpartition(TAKEN_FROM)[2] if TAKEN_FROM in last else last
-        segment("표지", "넘겨받았다(이전 주인 %s)" % prev)
-        return sid, True
-    if last == CLAIM_NEW:
-        segment("표지", "새로 잡았다")
-        return sid, True
-    if last == CLAIM_HELD:
-        segment("표지", "이 세션이 쥐고 있다")
+        verdict, first = "넘겨받았다(이전 주인 %s)" % prev, True
+    elif last == CLAIM_NEW:
+        verdict, first = "새로 잡았다", True
+    elif last == CLAIM_HELD:
+        verdict, first = "이 세션이 쥐고 있다", False
+    else:
+        anomaly("표지", "원장이 모르는 낱말을 냈다", out + err)
         return sid, False
-    anomaly("표지", "원장이 모르는 낱말을 냈다", out + err)
-    return sid, False
+    if out[:-1] or err:   # 원장의 알림(옛 레포 설정 줄을 지웠다 · 상태 루트 알림 …)은 한 번만 나온다 — 삼키지 않는다
+        anomaly("표지", verdict + " · 알림이 있다", out + err)
+    else:
+        segment("표지", verdict)
+    return sid, first
 
 
 def seg_default(roadmap, sid):
@@ -272,14 +275,14 @@ def _status_block(lines):
     return end, odd
 
 
-def read_view(lines):
+def read_view(lines, info=None):
     """(기다리는 질문 수, 온 글 수, 닿는 것 수, 이상 줄들, 빠진 줄들) — 아는 「이상 없음」 꼴이 아닌 줄은 모두 이상이고,
-    이상 없음 꼴에 있어야 할 줄(`NEEDED`)이 빠져도 이상이다."""
+    이상 없음 꼴에 있어야 할 줄(`NEEDED`)이 빠져도 이상이다. `info` 를 주면 정보 줄(닿는 것)의 자리를 거기에 담는다."""
     end, odd = _status_block(lines)
     waiting = letters = touch = 0
     part = "head"
     seen = {NEEDED[0]} if lines and lines[0].startswith(CS.TITLE_HEAD) else set()
-    for ln in lines[end:]:
+    for i, ln in enumerate(lines[end:], end):
         if ln.startswith(TOUCH_HEAD):
             part = "touch"
             seen.add(NEEDED[1])
@@ -302,6 +305,8 @@ def read_view(lines):
             continue
         if part == "touch" and ln.startswith(TOUCH_INFO):
             touch += 1
+            if info is not None:
+                info.append(i)
             continue
         if part == "waiting" and (ln == "- " + CS.NONE_LINE or QUIET_TAIL in ln or ln.endswith(" · " + CB.NO_BRANCH)):
             continue
@@ -311,27 +316,45 @@ def read_view(lines):
     return waiting, letters, touch, odd, [n for n in NEEDED if n not in seen]
 
 
+def _off_view(outs, show):
+    """상태 브랜치를 꺼 둔 레포의 꼴인가 — ensure · sync 가 `[spec-distill] <꺼져 있다>` 한 줄씩이고 show 의 첫 줄이 그 글이면
+    (닿는 것 수, 이상 줄들, 빠진 줄들, 정보 줄 자리)를 show 의 나머지(닿는 것 절)에서 읽고, 아니면 None."""
+    if any(o != [PREFIX + CB.OFF_NOTE] for o in outs) or not show or show[0] != CB.OFF_NOTE:
+        return None
+    info = []
+    _w, _l, touch, odd, missing = read_view(show[1:], info)
+    return touch, odd, [m for m in missing if m == NEEDED[1]], [i + 1 for i in info]
+
+
 def seg_state_branch(roadmap, sid):
-    odd, raw = [], []
+    odd, raw, outs = [], [], []
     for args, ok in ((("conductor_branch.py", "ensure", "--roadmap", roadmap, "--session", sid), ENSURE_OK),
                      (("conductor_status.py", "sync", "--roadmap", roadmap, "--session", sid), (CS.UNCHANGED,))):
         rc, out, err = script(*args)
         if rc in (3, 5):
             raise Stop("상태 브랜치", reason_of(err + out, rc), rc, raw + out + err)
         raw += out + err
+        outs.append(out + err + (["종료 코드 %d" % rc] if rc else []))
         if rc:
             odd.append("%s %s 종료 코드 %d" % (args[0], args[1], rc))
         odd += [ln for ln in out + err if not (ln.startswith(PREFIX) and ln[len(PREFIX):].startswith(ok))]
     rc, out, err = script("conductor_status.py", "show", "--roadmap", roadmap)
     if rc in (3, 5):
         raise Stop("상태 브랜치", reason_of(err + out, rc), rc, raw + out + err)
-    raw += out + err
-    waiting, letters, touch, seen, missing = read_view(out)
-    odd += seen + err + (["conductor_status.py show 종료 코드 %d" % rc] if rc else [])
-    head = "기다리는 질문 %d · 온 글 %d" % (waiting, letters)
-    notes = [ln for ln in odd if ln.startswith("conductor_")] + (["빠진 줄: " + " · ".join(missing)] if missing else [])
-    if odd or missing:
-        anomaly("상태 브랜치", " · ".join([head] + notes), raw)   # 원문은 이 구간이 부른 세 명령의 출력 전부
+    off = None if rc or err else _off_view(outs, out)
+    info = []
+    if off is not None:   # 꺼 둔 레포 — 세 명령의 꺼짐 줄은 아는 꼴이고, 있어야 할 줄은 닿는 것 절 하나다
+        touch, odd, missing, info = off
+        head, notes = "꺼져 있다", []
+    else:
+        waiting, letters, touch, seen, missing = read_view(out, info)
+        odd += seen + err + (["conductor_status.py show 종료 코드 %d" % rc] if rc else [])
+        head = "기다리는 질문 %d · 온 글 %d" % (waiting, letters)
+        notes = [ln for ln in odd if ln.startswith("conductor_")]
+    notes += ["빠진 줄: " + " · ".join(missing)] if missing else []
+    if odd or missing:   # 원문은 이 구간이 부른 세 명령의 출력 — 정보 줄(닿는 것)만 빼고, 그 수는 아래 한 줄이 낸다
+        skip = set(info)
+        anomaly("상태 브랜치", " · ".join([head] + notes), raw + [ln for i, ln in enumerate(out) if i not in skip] + err)
     else:
         segment("상태 브랜치", head)
     say("다른 로드맵과 닿는 것 %d개 — 다시 보기: %s" % (touch, sd_command("conductor_status.py", "show", "--roadmap", roadmap)))
