@@ -220,16 +220,16 @@ RF_T=skills/intent-sync/SKILL.md
 shape_mut "$RF_T" 's/ || IDIR=""$//' "rc 확인 꼴이 아니다" "rc 확인 지움"
 shape_mut "$RF_T" '/^\[ -n "\$IDIR" \]/d' "빈 값을 확인하지 않는다" "빈 값 확인 지움"
 shape_mut "$RF_T" 's/^\[ -n "\$IDIR" \] || .*$/[ -n "$IDIR" ] || true/' "비면 셸을 멈추지 않는다" "빈 값 확인을 || true 로"
-shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 의 rc 처리 지움"
-shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path interview_dir "\$AUDIT"\) || .*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 를 || true 로"
-shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$AUDIT"/d' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정 지움"
-shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path interview_dir "\$AUDIT"\)/# \1/' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정을 주석으로"
-shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir /d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 판정 줄 둘 다 지움"
-shape_mut "$RF_T" '/repo_defaults\.py" check-path interview_dir "\$SEED"/d' "경로 \$SEED 를 add 앞에서 판정하지 않는다" "handoff 펜스의 SEED 판정 지움"
+shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path intent_dir "\$AUDIT"\) || .*$/\1/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 의 rc 처리 지움"
+shape_mut "$RF_T" 's/^\(python3 .*repo_defaults\.py" check-path intent_dir "\$AUDIT"\) || .*$/\1 || true/' "거부되어도 셸을 멈추지 않는다" "handoff check-path 를 || true 로"
+shape_mut "$RF_T" '/repo_defaults\.py" check-path intent_dir "\$AUDIT"/d' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정 지움"
+shape_mut "$RF_T" 's/^python3 \(.*repo_defaults\.py" check-path intent_dir "\$AUDIT"\)/# \1/' "경로 \$AUDIT 를 add 앞에서 판정하지 않는다" "handoff 펜스의 AUDIT 판정을 주석으로"
+shape_mut "$RF_T" '/repo_defaults\.py" check-path intent_dir /d' "check-path · roadmap-check 를 부르지 않는다" "handoff 펜스의 판정 줄 둘 다 지움"
+shape_mut "$RF_T" '/repo_defaults\.py" check-path intent_dir "\$SEED"/d' "경로 \$SEED 를 add 앞에서 판정하지 않는다" "handoff 펜스의 SEED 판정 지움"
 shape_mut "$RF_T" '/^git add -- "\$AUDIT"/{h;s/.*/AUDIT="$SEED"/;G;}' "git add 경로 \$AUDIT 를 판정 뒤 다시 대입한다" "handoff 펜스의 판정과 add 사이 AUDIT 재대입"
 shape_mut "$RF_T" '/^git add -- "\$AUDIT"/{h;s/.*/AUDIT="$(printf %s x)"/;G;}' "git add 경로 \$AUDIT 를 판정 뒤 다시 대입한다" "handoff 펜스의 판정과 add 사이 AUDIT 명령 치환 재대입"
 rf_pre="$T/shape-pre-$(basename "$RF_T")"
-sed '/check-path interview_dir "\$AUDIT"/{h;s/.*/AUDIT="$SEED"/;G;}' "$SD/$RF_T" > "$rf_pre"
+sed '/check-path intent_dir "\$AUDIT"/{h;s/.*/AUDIT="$SEED"/;G;}' "$SD/$RF_T" > "$rf_pre"
 if cmp -s "$SD/$RF_T" "$rf_pre"; then no "음성 대조(판정 앞 대입): 사본이 그대로다 — 판정이 공허하다"
 else
   case "$(shape "$rf_pre")" in *"다시 대입한다"*|*"판정하지 않는다"*) no "음성 대조(판정 앞 대입): 판정 앞의 대입을 잘못 잡는다" ;;
@@ -237,12 +237,12 @@ else
 fi
 FIN_T=skills/context-build/references/finishing.md
 shape_mut "$FIN_T" '/repo_defaults\.py" check-path /d' "check-path · roadmap-check 를 부르지 않는다" "끝내기 커밋 펜스의 판정 줄 지움"
-shape_mut "$FIN_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
+shape_mut "$FIN_T" '/repo_defaults\.py" check-path intent_dir "\$BRIEF"/d' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정 지움"
 shape_mut "$FIN_T" 's/^AUDIT_F="\${stem}\.audit\.md"$/AUDIT_F="$(printf %s "${stem}").audit.md"/' "경로 \$AUDIT_F 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 audit 경로를 명령 치환으로"
-shape_mut "$FIN_T" '/check-path interview_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
+shape_mut "$FIN_T" '/check-path intent_dir "\$BRIEF"/{h;d;};/ add -- "\$BRIEF"/G' "경로 \$BRIEF 를 add 앞에서 판정하지 않는다" "끝내기 커밋 펜스의 인터뷰 폴더 판정을 add 뒤로"
 RD_T=skills/roadmap-draft/SKILL.md
 shape_mut "$RD_T" '/repo_defaults\.py" roadmap-check "\$r7"/d' "함께 부르지 않는다" "로드맵 잡기 커밋 펜스의 roadmap-check 지움"
-shape_mut "$RD_T" '/repo_defaults\.py" check-path interview_dir "\$BRIEF"/d' "경로 \$STATE_F 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 결과물 폴더 판정 지움"
+shape_mut "$RD_T" '/repo_defaults\.py" check-path intent_dir "\$BRIEF"/d' "경로 \$STATE_F 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 결과물 폴더 판정 지움"
 # 로드맵 폴더 판정은 로드맵 잡기의 커밋 펜스에만 있다(끝내기 커밋 펜스에서 옮겨 온 변이 자리)
 shape_mut "$RD_T" '/repo_defaults\.py" check-path roadmaps_dir "\$RDIR"/d' "함께 부르지 않는다" "로드맵 잡기 커밋 펜스의 로드맵 폴더 판정 지움"
 shape_mut "$RD_T" '/repo_defaults\.py" check-path roadmaps_dir /d;/repo_defaults\.py" roadmap-check /d' "경로 \$RDIR 를 add 앞에서 판정하지 않는다" "로드맵 잡기 커밋 펜스의 로드맵 판정 둘 다 지움"

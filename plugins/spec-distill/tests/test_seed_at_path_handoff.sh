@@ -59,8 +59,8 @@ assert_contains "$s2" '시도: ' "@ 실패 문구가 시도한 절대경로를 �
 assert_contains "$s2" '공백 없는 경로 한 토큰으로 다시 불러라' "@ 경로의 공백을 알리고 멈춘다"
 assert_contains "$s2" '발동하지 않았으면 「풀린 입력」은' "§3: 미발동이면 받은 입력 그대로"
 assert_contains "$s3" '「풀린 입력」을 그 파일의 기준과 예시로 판정한다' "§3: 진입 단계 3 trivia 대조 대상 = 풀린 입력"
-assert_contains "$s3" '「풀린 입력」의 frontmatter 에 `type: interview-seed` 가 있으면 이 단계를 건너뛴다' "§3: seed 면 trivia 판정을 건너뛴다"
-assert_contains "$s35" '「풀린 입력」의 frontmatter 에 `type: interview-seed`' "§3: 진입 단계 3.5 seed 판별 대상 = 풀린 입력"
+assert_contains "$s3" '「풀린 입력」의 frontmatter 에 `type: intent-seed`(옛 기록은 `interview-seed`)가 있으면 이 단계를 건너뛴다' "§3: seed 면 trivia 판정을 건너뛴다"
+assert_contains "$s35" '「풀린 입력」의 frontmatter 에 `type: intent-seed`' "§3: 진입 단계 3.5 seed 판별 대상 = 풀린 입력"
 assert_contains "$s4" '「풀린 입력」' "§3: 진입 단계 4 가 풀린 입력을 본 절차로 넘긴다"
 assert_contains "$s4" '2 의 결과' "§3: 진입 단계 4 — 풀린 입력은 2 의 결과"
 
@@ -217,7 +217,7 @@ assert_file_absent "$TPL"    '첫 턴에 붙여넣는' "§4: audit 템플릿에 
 assert_file_grep   "$SEEDIN" '`/spec-distill:context-build @<seed 경로>` 를 치게 하고' "§4: seed-input 도착 경로가 새 모양"
 assert_file_absent "$SEEDIN" '붙여넣게 하고' "§4: seed-input 에 옛 도착 경로가 없다"
 # 두 도착 경로(`@경로` · 붙여넣기) 모두 「풀린 입력」이 seed 전문이 된다 — finishing 은 그 조건 하나로 S1 갈래를 연다.
-assert_file_grep   "$FIN"    '「풀린 입력」이 `interview-seed` 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다' "§4: finishing S1 문장이 seed 전문(두 도착 경로)의 갈래를 적는다"
+assert_file_grep   "$FIN"    '「풀린 입력」이 `intent-seed`\(옛 `interview-seed`\) 전문이면 `S1` 의 본문을 손으로 옮겨 치지 않는다' "§4: finishing S1 문장이 seed 전문(두 도착 경로)의 갈래를 적는다"
 assert_file_absent "$README" '다음 세션 첫 턴에 붙여넣는 메시지' "§4: README 흐름도에 옛 서술이 없다"
 
 finish

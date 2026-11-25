@@ -47,7 +47,7 @@ roadmap() {   # roadmap <클론> [로드맵 폴더(레포 상대)] → 생성기
 runc() {   # runc <클론> → BRIEF 자리표를 그 클론의 brief 절대경로로 바꿔 돈 출력
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$1/$STEM.md}" 2>&1 )
 }
-files_of_head() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | sort | tr '\n' ' '; }
+files_of_head() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' '; }
 nhead() { git -C "$1" rev-list --count HEAD; }
 THREE="$STEM.audit.md $STEM.md $STEM.state.md "
 DEC="분해됨 — $RREL/roadmap.md"
@@ -111,9 +111,12 @@ refused() {   # refused <클론> <출력> <라벨> <사유 조각>
   assert_eq "$(git -C "$1" diff --cached --name-only)" "" "$3: 아무것도 stage 하지 않는다"
   case "$2" in *"커밋하지 않았다"*"$4"*"$STEM.state.md"*) ok "$3: 사유와 경로를 보인다" ;; *) nob "$3: 사유 · 경로가 없다" "$2" ;; esac
 }
-# 4a. 레포 설정 interview_dir — brief 가 그 폴더 바로 아래가 아니면 멈춘다
+# 4a. 레포 설정 intent_dir(옛 키만 있는 레포도) — brief 가 그 폴더 바로 아래가 아니면 멈춘다
 c="$(mk cfg-iv 'interview_dir: notes/')"; brief7 "$c" "superpowers:brainstorming 으로 간다."
-o="$(runc "$c")"; refused "$c" "$o" "설정 interview_dir · 다른 자리" "정해진 의도 폴더 바로 아래가 아니다"
+o="$(runc "$c")"; refused "$c" "$o" "설정 옛 키 interview_dir · 다른 자리" "정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다"
+# 설정에 새 키만 있으면 옛 의도 폴더는 옛 기본 폴더다 — 그 폴더의 옛 꼴 결과물(이어 온 일)은 받는다
+c="$(mk cfg-in 'intent_dir: notes/')"; brief7 "$c" "superpowers:brainstorming 으로 간다."
+o="$(runc "$c")"; only_three "$c" "$o" "설정 intent_dir 만 · 옛 기본 폴더의 옛 꼴 결과물"
 
 # 5. 기본 브랜치 — 나눈 일이어도 「커밋하지 않았다」 줄의 손 목록은 세 파일이다(로드맵 폴더는 로드맵 잡기가 커밋한다)
 c="$(mk onmain)"; git -C "$c" switch -q main; roadmap "$c"; brief7 "$c" "$DEC"
@@ -201,7 +204,7 @@ assert_eq "$(git -C "$c" show --name-only --pretty=format: HEAD | sed '/^$/d' | 
 case "$cf" in *'RAW_S="${RAW_A%.audit.md}.md"'*) no "AC16(부재): 커밋 펜스가 seed 경로를 기록 경로에서 짓는다" ;; *) ok "AC16(부재): 커밋 펜스가 seed 경로를 기록 경로에서 짓지 않는다" ;; esac
 case "$cf" in *'/^seed:/'*'"$STATE_F"'*'RAW_S="${top}/${sv}"'*) ok "AC16(양성 짝): 커밋 펜스가 상태 파일의 seed: 값에서 seed 경로를 얻어 git 뿌리에 붙인다" ;; *) no "AC16(양성 짝): 커밋 펜스가 상태 파일의 seed: 를 읽지 않는다" ;; esac
 # 순서 — 첫 거절보다 앞에서 알아 둔다
-p_loc="${cf%%raw_source.py\" locate*}"; p_rej="${cf%%check-path interview_dir \"\$BRIEF\"*}"
+p_loc="${cf%%raw_source.py\" locate*}"; p_rej="${cf%%check-path intent_dir \"\$BRIEF\"*}"
 [ "${#p_loc}" -lt "${#p_rej}" ] && ok "AC16: raw_source.py locate 가 첫 거절(brief 폴더 검사)보다 앞에 있다" || no "AC16: raw_source.py locate 가 첫 거절보다 뒤에 있다"
 
 # 펜스 밖 안내 — README 의 「세 경로를 보입니다」 와 roadmap-draft 의 손 목록 줄이 원자료가 있을 때 framing 기록 · seed 를 댄다
@@ -209,6 +212,70 @@ README="$SD/README.md"; RDS="$SD/skills/roadmap-draft/SKILL.md"
 assert_contains "$(cat "$README")" "세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다" "펜스 밖(AC16): README 가 framing 기록 · seed 를 댄다"
 assert_contains "$(cat "$RDS")" "아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다" "펜스 밖(AC16): roadmap-draft 의 손 목록 줄이 framing 기록 · seed 를 댄다"
 assert_contains "$(cat "$SD/skills/context-build/references/state-file.md")" "원자료를 찾은 컨텍스트 쌓기면 framing 기록 · seed 도 커밋되지 않은 변경이 있을 때 같은 커밋에 든다" "펜스 밖(AC16): 상태 파일 reference 의 끝낼 때가 framing 기록 · seed 를 댄다"
+
+# 6b. 새 글자와 옛 폴더의 일(AC20 · AC25) — 기본 설정이라 새 의도 폴더(intent/)와 옛 의도 폴더(interview/)가 다르다
+NEWD=docs/superpowers/intent
+OLDD=docs/superpowers/interview
+mkb() {   # mkb <이름> → origin 을 가진 클론 · 기능 브랜치 · 두 폴더(파일 없음)
+  local o="$T/$1-origin.git" c="$T/$1"
+  git init -q --bare -b main "$o"; git clone -q "$o" "$c" 2>/dev/null
+  git -C "$c" config user.email t@t.t; git -C "$c" config user.name t
+  git -C "$c" commit -q --allow-empty -m init; git -C "$c" push -q origin main 2>/dev/null
+  git -C "$c" remote set-head origin main >/dev/null 2>&1
+  git -C "$c" switch -q -c feature/x
+  mkdir -p "$c/$NEWD" "$c/$OLDD"
+  printf '%s' "$c"
+}
+put3() {   # put3 <클론> <줄기(레포 상대)> [seed 값] → 새로 쓰는 종류 글자의 결과물 · audit · 상태 파일
+  printf -- '---\ntype: context-brief\n---\n## 7. Next Action\n\nx\n' > "$1/$2.md"
+  printf -- '---\ntype: context-audit\n---\nx\n' > "$1/$2.audit.md"
+  printf -- '---\ntype: context-state\nseed: %s\n---\nx\n' "${3:-없음}" > "$1/$2.state.md"
+}
+runb() { ( cd "$1" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${cf//"$PH"/$2}" 2>&1 ); }   # runb <클론> <결과물 절대경로>
+heads() { git -C "$1" show --name-only --pretty=format: HEAD | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' '; }
+sorted() { local r; for r in "$@"; do printf '%s\n' "$r"; done | LC_ALL=C sort | tr '\n' ' '; }
+# new_interview_commit — 새 폴더의 새 꼴 세 파일
+c="$(mkb new-iv)"; S="$NEWD/2026-11-24-x-context"; put3 "$c" "$S"
+o="$(runb "$c" "$c/$S.md")"
+assert_eq "$(nhead "$c")" "2" "new_interview_commit: 커밋이 하나 생겼다"
+assert_eq "$(heads "$c")" "$(sorted "$S.md" "$S.audit.md" "$S.state.md")" "new_interview_commit: 새 폴더의 새 꼴 세 파일을 한 커밋에"
+assert_contains "$o" "[spec-distill] brief · audit · 상태 파일을 커밋했다 — " "new_interview_commit: 성공 줄"
+# old_stem_payload_and_commit — 옛 폴더의 옛 꼴 상태 파일로 이어 온 일: 리뷰 넘김 펜스가 그 줄기로 payload 를 짓고, 커밋 펜스가 받는다
+A5="$(awk '/^### Step A\.5/{f=1;next} f&&/^### /{exit} f&&/^```bash$/{c=1;b="";next}
+  f&&c&&/^```$/{c=0; if (index(b, "STATE_F=\"<상태 파일 절대경로>\"")) {printf "%s", b; exit}; next} f&&c{b=b $0 "\n"}' "$FIN")"
+case "$A5" in *'PAYLOAD="${STATE_F%.state.md}.md"'*) ok "전제: 리뷰 넘김 펜스(Step A.5)를 뽑았다" ;; *) no "전제: 리뷰 넘김 펜스를 못 뽑았다 — 아래 칸이 공허하다" ;; esac
+c="$(mkb old-stem)"; S="$OLDD/2026-10-01-x-interview"; put3 "$c" "$S"
+got="$( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${A5//<상태 파일 절대경로>/$c/$S.state.md}
+printf '%s\n' \"\$PAYLOAD\" \"\$AUDIT\"" 2>&1 )"
+assert_eq "$got" "$(printf '%s\n%s' "$c/$S.md" "$c/$S.audit.md")" "old_stem_payload_and_commit: 넘김 펜스의 PAYLOAD · AUDIT 가 옛 폴더 · 옛 줄기다"
+o="$(runb "$c" "$(printf '%s\n' "$got" | head -n 1)")"
+assert_eq "$(heads "$c")" "$(sorted "$S.md" "$S.audit.md" "$S.state.md")" "old_stem_payload_and_commit: 커밋 펜스가 옛 폴더의 그 세 파일을 받는다"
+assert_eq "$(git -C "$c" show "HEAD:$S.md" | sed -n 2p)" "type: context-brief" "old_stem_payload_and_commit: 결과물의 종류 글자는 새 글자다"
+got="$( cd "$c" && CLAUDE_PLUGIN_ROOT="$SD" bash -c "${A5//<상태 파일 절대경로>/}" 2>&1 )" && rc=0 || rc=$?
+assert_eq "$rc" "1" "넘김 펜스: 상태 파일 자리표가 비면 멈춘다"
+# old_seed_new_interview_commit — 옛 폴더의 옛 seed 로 새로 시작한 일: 새 폴더의 새 꼴 결과물 묶음과 옛 폴더의 seed · framing 기록이 한 커밋에(B9)
+c="$(mkb old-seed)"; SEED="$OLDD/2026-10-01-s-interview.md"; REC="$OLDD/2026-10-01-s-interview.audit.md"
+printf -- '---\ntype: interview-seed\n---\n# seed\n' > "$c/$SEED"
+printf -- '---\ntype: interview-seed-audit\n---\n## 1. 원문\n\nx\n' > "$c/$REC"
+S="$NEWD/2026-11-24-s-context"; put3 "$c" "$S" "$SEED"
+o="$(runb "$c" "$c/$S.md")"
+assert_eq "$(nhead "$c")" "2" "old_seed_new_interview_commit: 커밋이 하나 생겼다"
+assert_eq "$(heads "$c")" "$(sorted "$S.md" "$S.audit.md" "$S.state.md" "$SEED" "$REC")" "old_seed_new_interview_commit: 다섯 파일이 한 커밋에 든다"
+[ "$(nhead "$c")" = 2 ] || printf '      출력: %s\n' "$o"
+# old_folder_new_form_rejected — 두 폴더가 다를 때 옛 폴더의 새 꼴 이름은 받지 않는다
+c="$(mkb old-newform)"; S="$OLDD/2026-11-24-x-context"; put3 "$c" "$S"
+o="$(runb "$c" "$c/$S.md")"
+assert_eq "$(nhead "$c")" "1" "old_folder_new_form_rejected: 커밋하지 않는다"
+assert_contains "$o" "커밋하지 않았다 — brief 가 정해진 의도 폴더(옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니다" "old_folder_new_form_rejected: 펜스의 거절 줄"
+assert_contains "$o" "옛 의도 폴더(docs/superpowers/interview/)는 옛 꼴 이름" "old_folder_new_form_rejected: 사유가 옛 의도 폴더 규칙을 댄다"
+# 글자 — 펜스는 새 키로 판정하고, 결과물 경로를 의도 폴더 + 파일 이름으로 짓지 않는다
+assert_file_grep "$FIN" 'PAYLOAD="\$\{STATE_F%\.state\.md\}\.md"' "글자: 리뷰 넘김 펜스가 상태 파일 줄기에서 payload 를 짓는다"
+assert_file_absent "$FIN" '\$\{IDIR\}<file>' "글자: 의도 폴더 + 파일 이름으로 payload 를 짓지 않는다"
+SKF="$(git -C "$ROOT_REPO" ls-files 'plugins/spec-distill/skills/*')"
+[ "$(printf '%s\n' "$SKF" | grep -c .)" -ge 10 ] && ok "글자(양성 짝): skill 파일 $(printf '%s\n' "$SKF" | grep -c .)개" || no "글자: skill 파일 목록이 비었다 — 아래 부재 단언이 공허하다"
+hit="$(cd "$ROOT_REPO" && printf '%s\n' "$SKF" | while IFS= read -r f; do grep -lE -- 'check-path interview_dir|get interview_dir' "$f"; done)"
+assert_eq "$hit" "" "글자: skill 파일 어디에도 옛 키로 부르는 해결자(check-path · get interview_dir)가 없다"
+assert_file_grep "$SD/skills/intent-sync/SKILL.md" '-\$\{TOPIC_ARG\}-intent"' "글자: intent-sync 가 seed 이름을 새 꼴(-intent)로 짓는다"
 
 # 7. 재분해 표 — 세션 상태 폴더가 아니라 펜스의 임시 파일에 쓰이고, 생성기 rc 를 넘기며, 끝나면 지워진다
 rf="$(awk '/^## 5\. 적용/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' "$RED")"

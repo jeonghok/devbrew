@@ -44,6 +44,7 @@ from roadmap_model import (  # noqa: E402,F401 — 이 이름들은 이 모듈�
     FormatError, PREFIX_ORDER, SEP_CELL_RE, SEP_RE, TOKEN_RE, brief_universe, bundle_ids,
     collect_assigned, frontmatter, id_sort_key, parse_ids, parse_roadmap, receiver_ok, section_body, unquote)
 from workflow_superpowers import task_text  # noqa: E402
+import legacy_names  # noqa: E402
 import team_files  # noqa: E402
 import team_layout  # noqa: E402
 
@@ -136,7 +137,7 @@ class Repo:
         return False
 
     def specs_for(self, source: str, specs_dir: str) -> list:
-        """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_interview` 가 source 인 (경로, 글)."""
+        """설계문서 폴더(로드맵 레포 설정)의 `*.md` 중 frontmatter `source_intent`(옛 기록은 옛 머리 키) 가 source 인 (경로, 글)."""
         d = specs_dir.rstrip("/")
         if d not in self._specs:
             found, unread = [], []
@@ -152,7 +153,7 @@ class Repo:
                 rel = d + "/" + name
                 text = self.read(rel)
                 if text is not None:
-                    found.append((rel, unquote(frontmatter(text).get("source_interview", "")), text))
+                    found.append((rel, unquote(legacy_names.source_of(frontmatter(text))), text))
                 else:
                     unread.append(rel)
             self._specs[d] = found
@@ -515,7 +516,7 @@ def check(bundle_text: str, spec_text: str, *, audit_text=None, repo=None, roadm
     정답 출처가 번호 파일이면(team) mode 는 "sources", 로드맵 경로는 roadmap_rel 이고 결과에 notices 칸이 있다."""
     fm = frontmatter(bundle_text)
     kind = unquote(fm.get("type", ""))
-    mode = "brief" if kind == "interview-brief" else ("sources" if kind == SOURCES_TYPE else "bundle")
+    mode = "brief" if legacy_names.kind_matches(kind, legacy_names.CONTEXT_BRIEF) else ("sources" if kind == SOURCES_TYPE else "bundle")
     notices, origin_shallow = origin_notes(spec_text) if mode == "sources" else (None, [])
     try:
         if mode == "brief":
@@ -906,7 +907,7 @@ def coverage(first_path: str, spec_path: str) -> dict:
         texts.append(text)
     try:
         fm = frontmatter(texts[0])
-        if unquote(fm.get("type", "")) == "interview-brief":
+        if legacy_names.kind_matches(unquote(fm.get("type", "")), legacy_names.CONTEXT_BRIEF):
             audit = _read(first_path[:-3] + ".audit.md")[0] if first_path.endswith(".md") else None
             return check(texts[0], texts[1], audit_text=audit)
         if unquote(fm.get("type", "")) == SOURCES_TYPE:
