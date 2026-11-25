@@ -76,7 +76,7 @@ plugins/spec-distill/skills/reviewing-brief/SKILL.md	지시	**열린 것이 있�
 plugins/spec-distill/skills/reviewing-brief/SKILL.md	떼기	「추가 라운드 1회 열기」를 고르면 다음 라운드가 진입 게이트부터	
 plugins/spec-distill/references/redecompose.md	꼬리	이어서 `AskUserQuestion` 하나:	multiSelect: false	2	3
 plugins/spec-distill/skills/epic-conductor/SKILL.md	비움	하나면 그것, 여럿이면 `AskUserQuestion` 으로 고르게 한다	종료 코드 2(없음)면	1
-plugins/spec-distill/skills/epic-conductor/SKILL.md	꼬리	넘겨받을지 `AskUserQuestion` 으로 묻는다	넘겨받기면 아래 펜스를 돌린 뒤	1	2
+plugins/spec-distill/skills/epic-conductor/SKILL.md	꼬리	넘겨받을지 `AskUserQuestion` 으로 묻는다	넘겨받기면 같은 펜스에	1	2
 plugins/spec-distill/skills/epic-conductor/SKILL.md	언급	사람에게 쓰는 글은 위 쉬운 말 규칙을 따른다.	
 
 # intent-sync (Task 5)

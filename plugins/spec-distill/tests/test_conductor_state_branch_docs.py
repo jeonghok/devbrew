@@ -193,8 +193,10 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
         for word in (FILE_NAME, "안 올린 규칙 고침", "conductor_branch.py rules-branch", "판 번호"):
             self.assertIn(word, step(5), word)
         self.assertNotIn("rules-branch", step(4))   # 걸음 가르기가 이웃 걸음을 잡지 않는다
-        skill = (PLUGIN / "skills" / "epic-conductor" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Read " + POINTER, skill)
+        guide = (PLUGIN / "references" / "conducting-step-1.md").read_text(encoding="utf-8")   # [plan-mandated] SKILL 이 아니라 걸음 1 지시서의 읽을 것 줄이 가리킨다
+        reads = [ln for ln in guide.splitlines() if ln.startswith("- 읽을 것:")]
+        self.assertEqual(len(reads), 1)
+        self.assertIn(FILE_NAME, reads[0])
 
     def test_procedure_file_has_the_three_new_sections(self):
         text = NEW.read_text(encoding="utf-8")

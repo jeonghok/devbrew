@@ -28,17 +28,26 @@ done
 assert_not_contains "$(sec '### 2. 로드맵 정하기')" '절대경로면 `root=` 기준 상대경로로' "로드맵 정하기: root= 하나만 기준으로 삼던 옛 문장이 없다(다른 worktree 의 절대경로를 놓친다)"
 assert_contains "$(sec '### 2. 로드맵 정하기')" '둘째 칸이 `검사 불가 — <사유>` 인 줄은 셀 수 없었던 로드맵이니 그 사유를 함께 보인다' "로드맵 정하기: ledger roadmaps 줄의 검사 불가 칸을 읽는 법"
 assert_not_contains "$(sec '### 2. 로드맵 정하기')" '줄마다 `<경로><탭><끝나지 않은 에픽 수>` 다. 하나면' "로드맵 정하기: 검사 불가 칸 없이 하나면으로 잇던 옛 문장이 없다"
-CLAIM_LINE="$(sec '### 3. 자리 · 세션 · 표지' | grep -F 'claim --roadmap' || true)"
-assert_contains "$CLAIM_LINE" 'then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim' "자리 · 세션 · 표지: claim 줄도 cd 에 묶였다"
-for lit in 'worktree 안에서 시작했다' '여기서도 지휘한다' 'state_path.py" session-id' 'conductor_ledger.py" claim' '읽기 전용'; do
-  assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" "$lit" "자리 · 세션 · 표지: $lit"
+S3="$(sec '### 3. 맞추기 명령')"
+for lit in 'conductor_sync.py" --roadmap "<로드맵>"' '세션 번호는 스스로 읽는다' '읽기 전용' '`--takeover`' '읽기만 (권장)' '넘겨받기 — 그 세션은 쓰기를 멈춘다' \
+           '`AskUserQuestion`' '옛 판이 쓴 PR 캐시 줄' '「옛 PR 캐시 다시 채우기」' '그 밖 모두' '기본 브랜치 확인 실패' '표지를 풀고'; do
+  assert_contains "$S3" "$lit" "맞추기 명령 절: $lit"
+done
+for lit in 'conductor_ledger.py" claim' 'conductor_ledger.py" takeover' 'state_path.py" session-id' 'control_plane.py" show' 'claim_rc' 'default_rc' 'repo_defaults.py'; do
+  assert_not_contains "$S3" "$lit" "맞추기 명령 절: 옛 펜스 흔적이 없다 — $lit"
 done
 APP="$(sec '### 4. 규모 공시')"
-for lit in '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' 'qg 담당자' \
+for lit in '`규모 —` 줄' '남은 에픽' 'agent 약' '라운드마다 부르는 리뷰어 agent' 'qg 담당자' \
            'spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다)' \
            '구현 안 agent 수는 task 수에 따라 — 상한 없음' \
            '규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다.'; do
   assert_contains "$APP" "$lit" "규모 공시: $lit"
+done
+# [내가 더한 단언] 규모 줄의 꼴 낱말은 이제 명령이 짓는다 — SKILL 이 적은 꼴이 명령의 것과 같다
+for lit in '남은 에픽' 'agent 약' \
+           'spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다)' \
+           '구현 안 agent 수는 task 수에 따라 — 상한 없음'; do
+  assert_contains "$(cat "$ROOT/plugins/spec-distill/scripts/conductor_sync.py")" "$lit" "규모 줄(스크립트): $lit"
 done
 for lit in 'conductor_ledger.py" approval' 'conductor_ledger.py" approve' '`AskUserQuestion`' 'conductor_ledger.py" release' \
            '승인 전에는 agent 를 보내지 않는다' '이름 붙인 예외'; do
@@ -47,12 +56,35 @@ done
 # 규모 공시 순서: 규모 줄을 만들고 → 보이고 5 로 간다
 order="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t = sys.argv[1]
-ks = ["규모 줄 하나를 만든다", "규모 줄을 보이고 5 로 간다"]
+ks = ["`규모 —` 줄", "규모 줄을 보이고 5 로 간다"]
 ix = [t.find(k) for k in ks]
 print("yes" if min(ix) >= 0 and ix == sorted(ix) else "no")' "$APP")"
-assert_eq "$order" "yes" "규모 공시: 규모 줄을 만든 뒤 보이고 5 로 간다 순서"
+assert_eq "$order" "yes" "규모 공시: 명령이 낸 규모 줄을 그대로 보이고 5 로 간다 순서"
 assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md' "conducting.md 를 읽는다"
-assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md' "conductor-dispatch.md 를 읽는다"
+# [plan-mandated] AC1 — 지휘 순환 절이 처음에 읽는 것은 차례 하나
+S5="$(sec '### 5. 지휘 순환')"
+assert_eq "$(printf '%s\n' "$S5" | grep -c '^Read ')" "1" "AC1: 지휘 순환 절의 Read 줄이 정확히 하나다"
+assert_eq "$(printf '%s\n' "$S5" | grep '^Read ')" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md' "AC1: 그 Read 줄이 차례(conducting.md)다"
+assert_not_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md' "AC1: SKILL 에 conductor-dispatch.md 를 읽으라는 줄이 없다"
+assert_not_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md' "AC1: SKILL 에 conductor-state-branch.md 를 읽으라는 줄이 없다"
+assert_contains "$S5" '차례의 걸음 표대로 돈다 — 걸음에 들어설 때 그 걸음의 지시서를 읽는다' "AC1: 걸음에 들어설 때 지시서를 읽는다"
+assert_contains "$S5" '차례와 지시서의 `<SD>`' "AC1: <SD> 는 차례와 지시서의 것"
+assert_contains "$BODY" '지휘의 걸음은 차례(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md`)와 그 걸음 지시서가 담는다' "AC1: 31행이 차례와 걸음 지시서를 가리킨다"
+assert_not_contains "$BODY" '지휘의 걸음은 두 reference 가 담는다' "AC1: 옛 두 reference 문장이 없다"
+# [plan-mandated] AC13 — 진입 단계의 정상 길 셸 호출: 1.5 하나 · 2 의 하나(둘 중 하나) · 맞추기 명령 하나
+ENTRY_FENCES='import sys
+t = sys.stdin.read()
+a = t.index("## 진입 단계")
+b = t.index("### 5. ")
+parts = t[a:b].split("`" * 3)
+fs = [parts[i] for i in range(1, len(parts), 2) if parts[i].startswith("bash")]
+def n(k): return sum(1 for f in fs if k in f)
+print("%d %d %d %d %d %d" % (len(fs), n("conductor_sync.py"), n("check_deps.py"), n("conductor_ledger.py\" claim") + n("conductor_ledger.py\" takeover"), n("state_path.py\" session-id"), n("control_plane.py\" show")))'
+assert_eq "$(python3 -I -c "$ENTRY_FENCES" < "$SK")" "5 1 1 0 0 0" "AC13: 진입 bash 펜스 = 1.5 하나 · 2 의 둘(하나만 돈다) · 맞추기 명령 하나 · 다시 채우기 하나(갈래) — claim · 세션 id · show 가 없다"
+mutated="$(python3 -I -c 'import sys
+t = sys.stdin.read()
+print(t.replace("### 4. ", "`" * 3 + "bash\npython3 \"$SD/scripts/state_path.py\" session-id\n" + "`" * 3 + "\n\n### 4. ", 1))' < "$SK")"
+assert_eq "$(printf '%s\n' "$mutated" | python3 -I -c "$ENTRY_FENCES")" "6 1 1 0 1 0" "양성 대조: 진입에 세션 id 펜스가 생기면 AC13 락이 잡는다"
 assert_contains "$BODY" '손 절차 파일(`conducting-manual.md`)' "꺼짐: 손 절차 파일을 가리킨다"
 assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손 절차 파일\(`conducting-manual\.md`\).*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차 파일을 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
@@ -107,7 +139,7 @@ for f in test_invocation_surface.sh test_dispatch_disposition.sh test_agent_inpu
   assert_eq "$rc" "0" "공유 락 $f 가 통과한다"
   [ "$rc" -eq 0 ] || printf '%s\n' "$out" | grep -E '✗|RED|FAIL' | head -5
 done
-# 3~4절 펜스: sid 를 쓰는 펜스는 같은 펜스 안에서 sid 와 루트 가드를 정한다(Bash 호출마다 새 셸)
+# 3~4절 펜스: 세션 번호는 명령이 스스로 읽는다 — 이 절들의 펜스가 --session 을 넘기지 않는다
 fence_check="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 t = open(sys.argv[1], encoding="utf-8").read()
 a = t.index("### 3. ")
@@ -123,7 +155,7 @@ for i in range(1, len(parts), 2):
             bad += 1
 print("%d %d" % (n, bad))' "$SK")"
 assert_eq "${fence_check#* }" "0" "3~4절: --session 을 쓰는 펜스가 같은 펜스에서 sid 와 루트 가드를 정한다"
-[ "${fence_check%% *}" -ge 4 ] && ok "3~4절: 세션을 쓰는 펜스 4개 이상(claim · takeover · 다시 채우기 · release)" || no "세션 펜스 수 부족: ${fence_check}"
+assert_eq "${fence_check%% *}" "0" "3~4절: --session 을 넘기는 펜스가 없다(세션 번호는 명령이 스스로 읽는다)"
 # 3~4절 산문(펜스 밖)에는 셸 변수 sid · SD 가 없고, sid 를 쓰는 펜스는 빈 값이면 멈춘다
 fence_lint='import sys
 t = sys.stdin.read()
@@ -145,37 +177,17 @@ t = sys.stdin.read()
 print(t.replace("### 5. ", "`--session \"$sid\"` 를 산문에서 돌린다\n\n### 5. ", 1))' < "$SK")"
 bad_lint="$(printf '%s\n' "$mutated" | python3 -I -c "$fence_lint")"
 assert_eq "${bad_lint%% *}" "1" "양성 대조: 산문의 --session 줄을 락이 잡는다"
-assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'claim_rc=$?' "3절: claim 종료 코드를 낸다"
-assert_contains "$(sec '### 3. 자리 · 세션 · 표지')" 'conductor_ledger.py" takeover' "3절: takeover 전체 명령"
-REL_CNT="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
-t = open(sys.argv[1], encoding="utf-8").read()
+mutated="$(python3 -I -c 'import sys
+t = sys.stdin.read()
+print(t.replace("### 5. ", "`" * 3 + "bash\npython3 x --session \"$sid\"\n" + "`" * 3 + "\n\n### 5. ", 1))' < "$SK")"
+bad_fence="$(printf '%s\n' "$mutated" | python3 -I -c 'import sys
+t = sys.stdin.read()
 a = t.index("### 3. ")
-b = t.index("### 4. ")
+b = t.index("### 5. ")
 parts = t[a:b].split("`" * 3)
-n = 0
-stop = 0
-for i in range(1, len(parts), 2):
-    f = parts[i]
-    if "pr-refresh" in f:
-        continue
-    if "python3 \"$SD/scripts/conductor_ledger.py\" release --roadmap \"<로드맵>\" --session \"$sid\"" in f:
-        n += 1
-        if "[ -n \"$sid\" ] ||" in f:
-            stop += 1
-print("%d %d" % (n, stop))' "$SK")"
-assert_eq "$REL_CNT" "1 1" "3절: 표지 풀기 펜스(release)가 pr-refresh 없는 펜스로 정확히 하나이고 세션 id 멈춤을 가진다"
-# 기본 브랜치 대조 — 표지를 잡은 뒤 돌므로, 멈출 때 잡은 표지를 풀고 멈춘다(다른 세션이 「지휘 중」으로 막히지 않게)
-S3="$(sec '### 3. 자리 · 세션 · 표지')"
-DEF_FENCE="$(printf '%s\n' "$S3" | awk '/^```bash/{f=1;n++;next} /^```/{f=0} f&&n==1')"
-assert_contains "$DEF_FENCE" 'cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"' "3절 첫 펜스: 기본 브랜치 원격 대조 줄과 종료 코드"
-DEF_BULLET="$(printf '%s\n' "$S3" | grep -F -- '- `default_rc=`' || true)"
-assert_eq "$(printf '%s\n' "$DEF_BULLET" | grep -c .)" "1" "3절: default_rc 처리 줄이 하나다"
-for lit in '0 이 아니면' '3 기본 브랜치 없음' '5 원격과 다름' '그 밖 모두' '`claim_rc=0` 이면' '`conductor_ledger.py" release`' '돌린 뒤 멈춘다' '「대조하지 못했다」 줄은 보이고 간다'; do
-  assert_contains "$DEF_BULLET" "$lit" "3절 default_rc 줄: $lit"
-done
-assert_not_contains "$DEF_BULLET" '4 끝의' "3절 default_rc 줄: 4절 끝을 가리키는 옛 문구가 없다"
-assert_not_contains "$S3" '옛 시작 승인' "3절: 옛 시작 승인 언급이 없다"
-# 옛 PR 캐시 다시 채우기 — claim rc 3 + 옛 줄 문구면 멈추지 않고 reset → release → claim(R8 계획 2 최종 리뷰 I-2).
+print(sum(1 for i in range(1, len(parts), 2) if "--session" in parts[i]))')"
+assert_eq "$bad_fence" "1" "양성 대조: 3~4절에 --session 펜스가 생기면 락이 잡는다"
+# 옛 PR 캐시 다시 채우기 — 3 + 옛 줄 문구면 멈추지 않고 reset → release → 맞추기 명령 다시(R8 계획 2 최종 리뷰 I-2).
 # 문구는 conductor_state 가 실제로 내는 OldPrRows 메시지의 부분 문자열이어야 한다.
 OLD_MSG="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
 sys.path.insert(0, sys.argv[1])
@@ -189,33 +201,33 @@ t, msg = sys.stdin.read(), sys.argv[1]
 a = t.index("### 3. "); b = t.index("### 4. ")
 s3 = t[a:b]
 bad = []
-bullet = next((l for l in s3.splitlines() if l.startswith("- `claim_rc=` 가 0 이면")), "")
-m = re.search(r"`claim_rc=3` 이고 출력에 `([^`]+)` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다", bullet)
+bullet = next((l for l in s3.splitlines() if l.startswith("- `3` 이고 출력에")), "")
+m = re.search(r"^- `3` 이고 출력에 `([^`]+)` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다", bullet)
 if not m:
-    bad.append("claim 줄에 rc 3 + 옛 줄 갈래가 없다")
+    bad.append("3 이고 옛 줄 갈래가 없다")
 elif not msg or m.group(1) not in msg:
     bad.append("갈래의 문구가 OldPrRows 메시지에 없다: %r" % m.group(1))
-if "takeover 펜스의 출력에 그 문구가 있어도 같다" not in bullet:
+if "`--takeover` 를 붙여 돌린 출력에 그 문구가 있어도 같다" not in bullet:
     bad.append("takeover 출력 갈래가 없다")
 parts = s3.split("`" * 3)
 fence = next((parts[i] for i in range(1, len(parts), 2) if "pr-refresh" in parts[i]), "")
-rs = "python3 \"$SD/scripts/conductor_ledger.py\" pr-refresh --roadmap \"<로드맵>\" --session \"$sid\" --reset; reset_rc=$?"
-rel = "python3 \"$SD/scripts/conductor_ledger.py\" release --roadmap \"<로드맵>\" --session \"$sid\" && "
-cl = "python3 \"$SD/scripts/conductor_ledger.py\" claim --roadmap \"<로드맵>\" --session \"$sid\"; claim_rc=$?"
-ix = [fence.find(k) for k in (rs, "if [ \"$reset_rc\" = 0 ]; then cd \"<root>\" && " + rel + cl, "echo \"claim_rc=")]
+rs = "python3 \"$SD/scripts/conductor_ledger.py\" pr-refresh --roadmap \"<로드맵>\" --reset; reset_rc=$?"
+rel = "if [ \"$reset_rc\" = 0 ]; then cd \"<root>\" && python3 \"$SD/scripts/conductor_ledger.py\" release --roadmap \"<로드맵>\"; fi"
+ix = [fence.find(rs), fence.find(rel)]
 if min(ix) < 0 or ix != sorted(ix):
-    bad.append("다시 채우기 펜스가 reset → (0 이면) release → claim 순서가 아니다: %r" % ix)
-if "[ -n \"$sid\" ] ||" not in fence:
-    bad.append("다시 채우기 펜스에 세션 id 멈춤이 없다")
+    bad.append("다시 채우기 펜스가 reset → (0 이면) release 순서가 아니다: %r" % ix)
+if "--session" in fence or "session-id" in fence:
+    bad.append("다시 채우기 펜스가 세션 번호를 넘긴다")
 tail = parts[parts.index(fence) + 1] if fence in parts else ""
-for lit in ("- `reset_rc=` 가 0 이 아니면 그 사유", "멈춘다", "- `claim_rc=` 가 0 이면 4 로 간다", "위 5 와 같이 한다"):
+for lit in ("- `reset_rc=` 가 0 이 아니면 그 사유", "멈춘다", "- `reset_rc=` 가 0 이면 위 맞추기 명령을 처음부터 다시 돈다", "위 5 와 같이 한다"):
     if lit not in tail:
         bad.append("펜스 뒤 처리 줄이 없다: %s" % lit)
 print(" | ".join(bad) or "ok")'
 assert_contains "$OLD_MSG" "--reset" "OldPrRows 메시지를 실제로 얻었다(--reset 명령을 담는다)"
-assert_eq "$(python3 -I -c "$reset_branch_check" "$OLD_MSG" < "$SK")" "ok" "3절: claim rc 3 + 옛 PR 캐시 줄 → reset → release → claim 갈래"
-for mut in '단 `claim_rc=3` 이고|단 claim 이 3 이고' '`옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고|`옛 판 PR 줄` 이 있으면 멈추지 않고' \
-           'release --roadmap "<로드맵>" --session "$sid" && |' '- `reset_rc=` 가 0 이 아니면|- reset 이 실패하면'; do
+assert_eq "$(python3 -I -c "$reset_branch_check" "$OLD_MSG" < "$SK")" "ok" "3절: 3 + 옛 PR 캐시 줄 → reset → release → 맞추기 명령 다시 갈래"
+for mut in '- `3` 이고 출력에|- `3` 이면 출력에' '`옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고|`옛 판 PR 줄` 이 있으면 멈추지 않고' \
+           'release --roadmap "<로드맵>"; fi|true; fi' '- `reset_rc=` 가 0 이 아니면|- reset 이 실패하면' \
+           '(`--takeover` 를 붙여 돌린 출력에 그 문구가 있어도 같다)|' ; do
   from="${mut%%|*}"; to="${mut#*|}"
   applied="$(grep -cF -- "$from" "$SK")"
   got="$(python3 -I -c 'import sys
@@ -223,6 +235,7 @@ t = sys.stdin.read()
 print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -I -c "$reset_branch_check" "$OLD_MSG")"
   [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 갈래 락이 통과한다"
 done
+assert_not_contains "$S3" '옛 시작 승인' "3절: 옛 시작 승인 언급이 없다"
 assert_not_contains "$(cd_all)" '옛 시작 승인이 지워진다' "conducting: 옛 시작 승인 괄호가 없다"
 assert_contains "$(cd_all)" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"

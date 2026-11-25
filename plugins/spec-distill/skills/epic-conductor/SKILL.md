@@ -28,7 +28,7 @@ allowed-tools:
 예) 전: 설명 「더 낫다」 → 후: 「얻음: 겹치는 규칙을 한 번에 고친다 · 내줌: 일이 커져 설계가 길어진다」.
 <!-- plain-language:end -->
 
-지휘의 걸음은 두 reference 가 담는다 — 이 본문은 진입 · 규모 공시 · 차례 · 통합 리뷰어와 옮김 대조의 dispatch 자리만 둔다.
+지휘의 걸음은 차례(`${CLAUDE_PLUGIN_ROOT}/references/conducting.md`)와 그 걸음 지시서가 담는다 — 이 본문은 진입 · 규모 공시 · 차례 · 통합 리뷰어와 옮김 대조의 dispatch 자리만 둔다.
 
 !`python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" spec-distill epic-conductor`
 
@@ -82,65 +82,39 @@ cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" roadmaps
 
 줄마다 `<경로><탭><끝나지 않은 에픽 수>` 다 — 둘째 칸이 `검사 불가 — <사유>` 인 줄은 셀 수 없었던 로드맵이니 그 사유를 함께 보인다. 하나면 그것, 여럿이면 `AskUserQuestion` 으로 고르게 한다(추천을 달지 않는다 — 어느 로드맵을 지휘할지는 사용자가 고른다). 종료 코드 2(없음)면 그 줄을 보이고 멈추고, 3 이면 사유를 보이고 멈춘다.
 
-### 3. 자리 · 세션 · 표지
+### 3. 맞추기 명령
+
+아래 펜스를 Bash 로 한 번 돌린다(`<root>` 는 감시줄 `root=` 값, `<로드맵>` 은 2 에서 정한 경로). 이 명령이 자리 · 원격 받기 · 작업 목록 · 표지 · 기본 브랜치 · PR 캐시 · 상태 브랜치 · 세션 담당자 · 스위트 잠금 · 실행 원장을 차례로 돌고, 세션 번호는 스스로 읽는다. 이상이 없는 구간은 한 줄이고 이상이 있는 구간은 그 원문이 따른다 — 출력은 고치지 않고 그대로 보인다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-cd "<root>" && echo "toplevel=$(git rev-parse --show-toplevel)" && git worktree list --porcelain | head -1
-sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
-claim_rc=
-if [ -n "$sid" ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
-echo "session=${sid:-없음}"
-echo "claim_rc=${claim_rc:-없음}"
-cd "<root>" && python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote; echo "default_rc=$?"
+cd "<root>" && python3 "$SD/scripts/conductor_sync.py" --roadmap "<로드맵>"
 ```
 
-Bash 도구는 호출마다 새 셸이다 — 아래 모든 펜스는 첫 줄(플러그인 루트 가드)과 세션 id 줄을 자기 안에 갖고, 한 번의 Bash 호출로 돌린다. 앞 펜스의 셸 변수를 이어 쓰지 않는다.
+종료 코드마다 이렇게 한다.
 
-- `toplevel=` 이 첫 worktree 줄(메인 체크아웃)과 다르면 「이 세션은 worktree 안에서 시작했다(<경로>) — 여기서도 지휘한다. 에픽 worktree 로는 하니스의 worktree 옮겨 가기로 오간다」 를 한 줄로 알린다. 새 세션을 열라고 하지 않는다.
-- `session=없음` 이면 표지를 잡을 수 없다 — 「세션 id 를 얻지 못해 기계 상태를 쓸 수 없다 — 읽기 전용으로 지도만 보인다」 를 알리고 `control_plane.py show <로드맵>` 을 보인 뒤 멈춘다.
-- `default_rc=` 가 0 이 아니면(3 기본 브랜치 없음 · 5 원격과 다름 · 그 밖 모두) 그 줄(`[spec-distill] …`, 없으면 종료 코드)을 보이고, `claim_rc=0` 이면 아래 표지 풀기 펜스(`conductor_ledger.py" release`)를 돌린 뒤 멈춘다. rc 0 의 「대조하지 못했다」 줄은 보이고 간다.
-- `claim_rc=` 가 0 이면 4 로 간다. 5 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 설명은 이렇게 쓴다 — 「읽기만」: 얻음: 지휘 중인 다른 세션을 건드리지 않고 지도만 본다 · 내줌: 이 세션은 쓰지 못해 에픽을 보내거나 기록할 수 없다 / 「넘겨받기」: 얻음: 이 세션이 지휘를 이어받아 에픽을 보내고 기록한다 · 내줌: 그 세션의 쓰기가 끊겨 하던 에픽이 어중간하게 남을 수 있다. 넘겨받기면 아래 펜스를 돌린 뒤 4 로 간다. 0 · 5 가 아닌 값(3 기계 상태 읽기 불가 포함)이면 그 사유를 보이고 멈춘다 — 단 `claim_rc=3` 이고 출력에 `옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다(takeover 펜스의 출력에 그 문구가 있어도 같다).
+- `0` 이면 4 로 간다.
+- `2` 이면 인자 오류다 — 출력을 그대로 보이고 멈춘다.
+- `3` 이고 출력에 `옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고 아래 「옛 PR 캐시 다시 채우기」 로 간다(`--takeover` 를 붙여 돌린 출력에 그 문구가 있어도 같다).
+- `3` 이고 그 문구가 없으면(세션 번호를 얻지 못했다 · 기계 상태를 읽지 못했다 등) 출력을 그대로 보이고 멈춘다.
+- `5` 면 다른 세션이 지휘 중이다 — 이 세션은 읽기 전용이다. 지도(출력의 작업 목록 · 끝나지 않은 일)를 보이고, 넘겨받을지 `AskUserQuestion` 으로 묻는다(「읽기만 (권장)」 · 「넘겨받기 — 그 세션은 쓰기를 멈춘다」). 설명은 이렇게 쓴다 — 「읽기만」: 얻음: 지휘 중인 다른 세션을 건드리지 않고 지도만 본다 · 내줌: 이 세션은 쓰지 못해 에픽을 보내거나 기록할 수 없다 / 「넘겨받기」: 얻음: 이 세션이 지휘를 이어받아 에픽을 보내고 기록한다 · 내줌: 그 세션의 쓰기가 끊겨 하던 에픽이 어중간하게 남을 수 있다. 넘겨받기면 같은 펜스에 `--takeover` 를 붙여 돌리고 그 종료 코드를 이 표대로 읽는다. 읽기만이면 멈춘다.
+- 그 밖 모두(기본 브랜치 확인 실패는 명령이 잡은 표지를 풀고 그 종료 코드로 끝난다)는 그 줄(`멈춤 — <구간>: <사유>`, 없으면 종료 코드)과 출력을 그대로 보이고 멈춘다.
 
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
-cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" takeover --roadmap "<로드맵>" --session "$sid"
-```
-
-옛 PR 캐시 다시 채우기 — 그 출력이 이름 붙인 `pr-refresh … --reset` 을 이 로드맵 · 세션으로 돌리고, 0 이면 표지를 풀었다 다시 잡는다.
+옛 PR 캐시 다시 채우기 — 그 출력이 이름 붙인 `pr-refresh … --reset` 을 이 로드맵으로 돌리고, 0 이면 표지를 푼다.
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
-cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" pr-refresh --roadmap "<로드맵>" --session "$sid" --reset; reset_rc=$?
+cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" pr-refresh --roadmap "<로드맵>" --reset; reset_rc=$?
 echo "reset_rc=$reset_rc"
-claim_rc=
-if [ "$reset_rc" = 0 ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid" && python3 "$SD/scripts/conductor_ledger.py" claim --roadmap "<로드맵>" --session "$sid"; claim_rc=$?; fi
-echo "claim_rc=${claim_rc:-없음}"
+if [ "$reset_rc" = 0 ]; then cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>"; fi
 ```
 
 - `reset_rc=` 가 0 이 아니면 그 사유(`[spec-distill] …`, 없으면 종료 코드)를 보이고 멈춘다.
-- `claim_rc=` 가 0 이면 4 로 간다. 5 면 그 사이 다른 세션이 표지를 잡았다 — 위 5 와 같이 한다. 그 밖이면 사유를 보이고 멈춘다.
-
-표지 풀기 — 위에서 표지를 잡은 채 멈출 때 이 펜스로 푼다.
-
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""; [ -n "$sid" ] || { echo "[spec-distill] 세션 id 를 얻지 못했다 — 기계 상태를 쓰지 않고 멈춘다" >&2; exit 1; }
-cd "<root>" && python3 "$SD/scripts/conductor_ledger.py" release --roadmap "<로드맵>" --session "$sid"
-```
+- `reset_rc=` 가 0 이면 위 맞추기 명령을 처음부터 다시 돈다 — 5 면 그 사이 다른 세션이 표지를 잡았다 — 위 5 와 같이 한다.
 
 ### 4. 규모 공시
 
-아래 펜스로 남은 에픽과 의존 순서를 읽는다.
-
-```bash
-SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<로드맵>"
-```
-
-그 출력으로 규모 줄 하나를 만든다 — `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …> · spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · 구현 안 agent 수는 task 수에 따라 — 상한 없음`. agent 수는 에픽마다 계획 1 · 구현 1(실행 방식 안의 agent 는 task 수에 따라 더) · 통합 리뷰 1 이상 · qg 담당자(spec 승인 앞 1 · 에픽 PR 마다 머지 앞 1 · 좁은 재리뷰 PR 마다 기본 2 — 사용자가 더 열 수 있다)에, 로드맵 끝 qg 담당자 1 과, 이 세션의 spec 리뷰가 라운드마다 부르는 리뷰어 agent(탐지 · 재비판 둘 이상, 라운드 상한까지)를 더한 대략이다. 같은 상태에서는 같은 줄이 나오게 이 꼴 그대로 쓴다.
+맞추기 명령이 낸 `규모 —` 줄은 고치거나 풀어 쓰지 않고 그대로 보인다. 그 줄의 꼴은 `남은 에픽 <n>(<번호 목록>) · agent 약 <n> · 순서 <번호 → 번호 …> · spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · 구현 안 agent 수는 task 수에 따라 — 상한 없음` 이다. agent 수는 에픽마다 계획 1 · 구현 1(실행 방식 안의 agent 는 task 수에 따라 더) · 통합 리뷰 1 이상 · qg 담당자(spec 승인 앞 1 · 에픽 PR 마다 머지 앞 1 · 좁은 재리뷰 PR 마다 기본 2 — 사용자가 더 열 수 있다)에, 로드맵 끝 qg 담당자 1 과, 이 세션의 spec 리뷰가 라운드마다 부르는 리뷰어 agent(탐지 · 재비판 둘 이상, 라운드 상한까지)를 더한 대략이다.
 
 규모 줄을 보이고 5 로 간다 — 지출 승인을 묻지 않는다. 그 뒤의 dispatch 도 띄우기 전에 규모만 알리고 간다.
 
@@ -148,13 +122,11 @@ cd "<root>" && python3 "$SD/scripts/control_plane.py" show "<로드맵>"
 
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md
-Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md
-Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md
 ```
 
-세 파일의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
+차례와 지시서의 `<SD>` 는 위 `Read` 줄의 플러그인 폴더(이 skill 이 쓰는 spec-distill 의 절대경로)다. 위 `Read` 줄의 경로가 절대 경로로 보이지 않으면 reference 를 cwd 에서 찾지 말고 멈춰 보고한다.
 
-`conducting.md` 의 `## 지휘 순환` 걸음 1~7 을 차례로 돈다 — 1 맞추기 · 2 사람 몫 모으기 · 3 다음 일 고르기와 보내기 · 4 돌아오기 · 5 머지 전 확인 · 6 머지 뒤 · 7 끝. 하위에게 보내는 글은 `conductor-dispatch.md` 의 틀이고 그 파일의 처분 줄을 보내는 자리마다 단다. `conducting.md` 의 손으로 따르는 절차는 지휘자를 부르지 않고 진행할 때의 것이다 — 이 skill 안에서는 따르지 않는다.
+차례의 걸음 표대로 돈다 — 걸음에 들어설 때 그 걸음의 지시서를 읽는다. 보내는 글 틀 · 상태 브랜치 절차는 차례의 함께 읽는 것 칸의 때에 읽는다. 손 절차 파일은 지휘자를 부르지 않고 진행할 때의 것이다 — 이 skill 안에서는 따르지 않는다.
 
 ### 6. 통합 리뷰어
 
