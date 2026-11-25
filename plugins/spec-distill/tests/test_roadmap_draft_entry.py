@@ -400,6 +400,52 @@ class TestEntry(Base):
         rc, out, err = self.run_entry()
         self.assertEqual(rc, 0, out + err)
 
+    # ── 작업 트리 밖 · 링크 성분 · `..` — 커밋 펜스의 path-inside 판정을 진입에서 먼저 본다(로드맵 폴더는 아직 없다) ──
+    INSIDE = "경로가 작업 트리 밖이거나 링크를 거친다 — "
+
+    def test_split_value_dotdot_stops(self):
+        rel = "docs/superpowers/roadmaps/a/../2026-11-20-x/roadmap.md"
+        self.build(split_value=rel)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), rel))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": '..' 성분이 있다\n", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_split_value_parent_link_stops(self):
+        # 로드맵 폴더(아직 없음)의 부모 성분이 링크다 — check-path 는 지나고 path-inside 가 막는다
+        self.build()
+        sp = self.repo / "docs" / "superpowers"
+        (sp / "real-roadmaps").mkdir(parents=True)
+        os.symlink(str(sp / "real-roadmaps"), str(sp / "roadmaps"))
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), ROADMAP_REL))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": 링크를 거친다 (" + str(sp / "roadmaps") + ")\n", out)
+
+    def test_split_value_absolute_through_link_stops(self):
+        # 절대값의 성분이 링크다 — 진입이 realpath 로 풀어 지나가던 값(커밋 펜스에서야 막혔다)
+        self.build(split_value="{repo}/alias/" + ROADMAP_REL)
+        os.symlink(str(self.repo), str(self.repo / "alias"))
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), "alias", ROADMAP_REL))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": 링크를 거친다 (" + str(self.repo / "alias") + ")\n", out)
+
+    def test_split_value_crlf_line_ok(self):
+        # 백틱 없이 쓴 §7 줄이 CRLF 로 끝나도 커밋 펜스(`[[:space:]]*$`)처럼 끝의 CR 을 떼고 읽는다
+        self.build()
+        brief = Path(self.brief)
+        text = brief.read_text(encoding="utf-8")
+        old = "- `" + SPLIT_LINE + "`\n"
+        self.assertEqual(text.count(old), 1)
+        brief.write_bytes(text.replace(old, "- " + SPLIT_LINE + "\r\n").encode("utf-8"))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "crlf")
+        rc, out, err = self.run_entry()
+        self.assertNotIn(self.FORM, out)
+        self.assertEqual(rc, 0, out + err)
+
     def test_recorded_seed_comes_from_state_file(self):
         # 상태 파일의 seed: 값이 가리키는 파일에 변경이 있으면 원자료 사유가 선다(기록 경로에서 거꾸로 짓지 않는다)
         self.build(mode="recorded")

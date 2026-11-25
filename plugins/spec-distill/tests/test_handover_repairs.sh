@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/scripts/workflow_superpowers.py plugins/spec-distill/skills/roadmap-draft/* plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/scripts/build_brief_bundle.py plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/coverage-mapper.md
+# guards: plugins/spec-distill/references/epic-handoff.md plugins/spec-distill/scripts/workflow_superpowers.py plugins/spec-distill/skills/roadmap-draft/* plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/scripts/build_brief_bundle.py plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/skills/context-build/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/coverage-mapper.md plugins/spec-distill/scripts/check_brief.py plugins/spec-distill/tests/fixtures/interview-brief-v2-valid.md plugins/spec-distill/tests/fixtures/interview-brief-v2-valid.audit.md
 # 넘겨받은 수리의 글 — 에픽 넘김 줄 라벨과 낡은 문장 · 로드맵 잡기의 멈춤 갈래와 이미 커밋된 로드맵 · 구조 멈춤의 고칠 자리 ·
 # 종료 2 목록 · 정보 여섯 칸의 자리 · 결과물 리뷰 기준 다섯 문장 · 범위 조사 agent 의 데이터 문장.
 # 정적 락이다 — 모델이 이 글을 실제로 따르는지는 재지 못한다. 여섯 칸 절만 구조 게이트를 실제로 돌린다.
@@ -17,6 +17,9 @@ FILES=(
   plugins/spec-distill/skills/context-build/SKILL.md
   plugins/spec-distill/references/docreview-profiles/brief.md
   plugins/spec-distill/agents/coverage-mapper.md
+  plugins/spec-distill/scripts/check_brief.py
+  plugins/spec-distill/tests/fixtures/interview-brief-v2-valid.md
+  plugins/spec-distill/tests/fixtures/interview-brief-v2-valid.audit.md
 )
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "${FILES[@]}"
@@ -69,6 +72,40 @@ RB=plugins/spec-distill/skills/reviewing-brief/SKILL.md
 has "$FIN" '고칠 자리는 그 framing 기록 파일(이 걸음의 `raw-source: FOUND <경로>`)의 그 줄이다' "나갈 길: 구조 멈춤이 고칠 자리를 댄다"
 has "$FIN" '`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md` 의 제목 순서와 꼴대로 고친 뒤 이 걸음부터 다시 돈다' "나갈 길: 고친 뒤 다시 도는 자리"
 has "$FIN" '빈 앵커 줄로 나아가지 않는다' "나갈 길(양의 짝): 판결 줄 없는 멈춤 불릿이 그대로 있다"
+last_bullet() {   # last_bullet <finishing.md> → locate 펜스 뒤 판결 갈래 목록의 마지막 불릿 줄(펜스가 「아래 마지막 갈래」 로 가리키는 줄)
+  python3 - "$1" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+start = next((n for n, ln in enumerate(lines) if "**seed 로 시작한 컨텍스트 쌓기의 `S1` 은 seed 가 아니라 원자료다.**" in ln), None)
+if start is None:
+    sys.exit(0)
+fence = [n for n in range(start, len(lines)) if lines[n].strip().startswith("```")][:2]
+bullets = []
+for ln in lines[fence[1] + 1:] if len(fence) == 2 else []:
+    if not ln.startswith("   - "):
+        break
+    bullets.append(ln)
+print(bullets[-1] if bullets else "")
+PY
+}
+STOP_BULLET='   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2)'
+case "$(last_bullet "$ROOT/$FIN")" in
+  "$STOP_BULLET"*) ok "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이다(종료 2 펜스의 「아래 마지막 갈래」)" ;;
+  *) no "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이 아니다 — «$(last_bullet "$ROOT/$FIN")»" ;;
+esac
+LB_TMP="$(mktemp)"; [ -n "$LB_TMP" ] || { no "mktemp 실패"; finish; exit 1; }
+python3 - "$ROOT/$FIN" "$LB_TMP" "$STOP_BULLET" <<'PY'
+import sys
+src, dst, stop = sys.argv[1:4]
+out = []
+for ln in open(src, encoding="utf-8").read().split("\n"):
+    out.append(ln)
+    if ln.startswith(stop):
+        out.append("   - 덧붙인 불릿")
+open(dst, "w", encoding="utf-8").write("\n".join(out))
+PY
+assert_eq "$(last_bullet "$LB_TMP")" "   - 덧붙인 불릿" "나갈 길(양성 대조): 멈춤 불릿 뒤에 불릿을 더하면 그 불릿이 마지막으로 잡힌다"
+rm -f "$LB_TMP"
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
 has "$RB" '상태 파일을 읽지 못함 · 원자료를 찾았는데 `--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기' "종료 2 목록: 괄호가 「원자료를 찾았는데 --raw-audit 없음」 을 번들 머리말과 같은 차례로 댄다"

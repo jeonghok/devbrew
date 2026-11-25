@@ -30,6 +30,7 @@ LOG_HEADING = "## 생성 기록"
 HEAD_NAME = "머리"
 VERDICT = "roadmap-entry: "
 SAID = "[spec-distill] "
+POSIX_SPACE = " \t\n\v\f\r"   # 커밋 펜스 sed 의 `[[:space:]]` (POSIX 로캘)
 
 
 class InternalError(Exception):
@@ -119,7 +120,7 @@ def roadmap_path(brief_text: str) -> str:
             s = s[1:]
         if s.startswith(SPLIT_LINE_PREFIX):
             val = s[len(SPLIT_LINE_PREFIX):]
-            return val.split("`", 1)[0].rstrip(" \t")
+            return val.split("`", 1)[0].rstrip(POSIX_SPACE)
     return ""
 
 
@@ -232,6 +233,8 @@ def run(brief: str) -> int:
         if not rel:
             stops.append("결과물 §7 의 분해됨 줄에 로드맵 경로가 없다")
         else:
+            # 커밋 펜스가 path-inside 에 넘기는 그 폴더 — 상대값은 레포 루트에 잇고 절대값은 그대로 둔다.
+            rdir = os.path.dirname(rel if os.path.isabs(rel) else os.path.join(top, rel))
             if os.path.isabs(rel):
                 rel = os.path.relpath(os.path.realpath(rel), os.path.realpath(top))
             # 로드맵 폴더 꼴 — 커밋 펜스가 늦게 거는 같은 판정(check-path roadmaps_dir)을 진입에서 먼저 본다.
@@ -245,6 +248,13 @@ def run(brief: str) -> int:
                     form = _last_said(ferr) or "repo_defaults.py check-path 가 사유 없이 거절했다"
                 elif frc != 0:
                     raise InternalError("repo_defaults.py check-path 가 판정하지 못했다 (rc %d): %s" % (frc, ferr.strip()))
+            if not form:
+                # 작업 트리 밖 · 링크 성분 · `..` — 커밋 펜스가 늦게 거는 같은 판정(path-inside)을 진입에서 먼저 본다.
+                irc, _, ierr = _run_err([sys.executable, str(HERE / "state_path.py"), "path-inside", "--root", top, rdir])
+                if irc != 0:
+                    form = _last_said(ierr)
+                    if not form:
+                        raise InternalError("state_path.py path-inside 가 판정하지 못했다 (rc %d): %s" % (irc, ierr.strip()))
             if form:
                 stops.append("결과물 §7 의 로드맵 자리가 꼴에 맞지 않다: " + form)
             drc, dout, derr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "default-branch", "--root", top])
