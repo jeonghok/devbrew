@@ -82,6 +82,8 @@ if start is None:
 fence = [n for n in range(start, len(lines)) if lines[n].strip().startswith("```")][:2]
 bullets = []
 for ln in lines[fence[1] + 1:] if len(fence) == 2 else []:
+    if ln.startswith("     "):
+        continue   # 하위 불릿은 갈래가 아니다 — 같은 들여쓰기 갈래만 센다
     if not ln.startswith("   - "):
         break
     bullets.append(ln)
