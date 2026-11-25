@@ -44,7 +44,8 @@ INDENT = "    "
 PREFIX = "[spec-distill] "
 STAMP = "%Y-%m-%d %H:%M"
 AGENTS = "살아 있는 agent"
-LEFT_ROWS = ("작업", "자원", AGENTS)   # 머지 뒤 일이 남았는지 보는 기계 상태 절(에픽 칸이 그 에픽인 줄)
+LEFT_ROWS = ("작업", "자원", AGENTS)   # 머지 뒤 일이 남았는지 보는 기계 상태 절(에픽 칸이 그 에픽인 줄) — 걸음 6 이 치우는 줄만 센다
+LEFT_KIND = "worktree"   # 자원 가운데 걸음 6 이 치우는 종류 — 보관 · 임시 · 옮김 폴더 같은 자원 줄은 세지 않는다(설계 §2)
 AGENTS_PER_EPIC = 9   # 계획 1 · 구현 1 · 통합 리뷰 1 · qg 담당자 4 · spec 리뷰 한 라운드의 리뷰어 2
 AGENTS_ROADMAP_END = 1   # 로드맵 끝 qg 담당자
 SCALE_TAIL = ("spec 리뷰는 라운드마다 리뷰어 agent 둘 이상, 엔진의 재리뷰 상한까지(사용자가 더 열 수 있다) · "
@@ -478,9 +479,17 @@ def step_tail(toc, stage):
     return " → 걸음 %d %s · %s" % (s.number, s.name, TOC.resolve(SD, s.guide))
 
 
+def counts(sec, row):
+    """걸음 6 이 치우는 줄인가 — 끝나지 않은 작업 줄 · 종류가 worktree 인 자원 줄 · 살아 있는 agent 줄."""
+    if sec == "작업":
+        return row["단계"] not in cs.WORK_DONE
+    if sec == "자원":
+        return row["종류"] == LEFT_KIND
+    return True
+
+
 def left_rows(machine, epic):
-    return [sum(1 for r in machine[sec] if r["에픽"] == epic and not (sec == "작업" and r["단계"] in cs.WORK_DONE))
-            for sec in LEFT_ROWS]
+    return [sum(1 for r in machine[sec] if r["에픽"] == epic and counts(sec, r)) for sec in LEFT_ROWS]
 
 
 def closing(roadmap, report, lines, items, machine, toc):
@@ -503,7 +512,7 @@ def closing(roadmap, report, lines, items, machine, toc):
         if rows:
             say("머지 뒤 일이 남은 에픽:")
             for (title, stage, _d, _b), (a, b, c) in rows:
-                say("- %s%s · 남은 줄: 작업 %d · 자원 %d · 살아 있는 agent %d" % (title, step_tail(toc, stage), a, b, c))
+                say("- %s%s · 남은 줄: 작업 %d · %s 자원 %d · 살아 있는 agent %d" % (title, step_tail(toc, stage), a, LEFT_KIND, b, c))
     for ln in lines:
         if "\t" not in ln and ln.startswith(CP.PARALLEL_LINE_HEAD):
             say(ln)

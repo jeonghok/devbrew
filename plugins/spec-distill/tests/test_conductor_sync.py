@@ -504,6 +504,14 @@ class Steps(SyncRepo):
 
     def test_merged_epic_rows_bring_step6(self):   # Review Focus 4 — 머지된 에픽의 줄이 남은 동안 걸음 6
         self.assertEqual(self.ledger("claim", "--roadmap", RM, "--session", SID)[0], 0)
+        for kind, path in (("tmp", "/x/e3-tmp"), ("report", "/x/qg-e3"), ("relay", "/x/relay-e3")):   # 걸음 6 이 치우지 않는 자원(§2)
+            self.assertEqual(self.ledger("add", "--roadmap", RM, "--session", SID, "--section", "자원",
+                                         "--cells", "%s · %s · E3 · 보관 · t" % (kind, path))[0], 0)
+            self.addCleanup(self.ledger, "drop", "--roadmap", RM, "--session", SID, "--section", "자원", "--where", "경로=" + path)
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        self.assertNotIn("머지 뒤 일이 남은 에픽", out)   # 보관 · 임시 · 옮김 자원 줄만 남은 에픽은 뜨지 않는다
+        self.assertFalse([l for l in out.splitlines() if l.startswith("- E3 ")], out)
         self.assertEqual(self.ledger("add", "--roadmap", RM, "--session", SID, "--section", "자원",
                                      "--cells", "worktree · /x/e3 · E3 · 설계 · t")[0], 0)
         self.addCleanup(self.ledger, "drop", "--roadmap", RM, "--session", SID, "--section", "자원", "--where", "경로=/x/e3")
@@ -517,7 +525,7 @@ class Steps(SyncRepo):
         self.assertEqual(len(e3), 1, out)
         self.assertIn(" → 걸음 6 머지 뒤 · ", e3[0])
         self.assertIn(str(PLUGIN / "references" / "conducting-step-6.md"), e3[0])
-        self.assertTrue(e3[0].endswith(" · 남은 줄: 작업 0 · 자원 1 · 살아 있는 agent 0"), e3[0])
+        self.assertTrue(e3[0].endswith(" · 남은 줄: 작업 0 · worktree 자원 1 · 살아 있는 agent 0"), e3[0])   # 세는 줄만 — 보관 · 임시 셋은 빠진다
         self.assertEqual(without_time(out), without_time(self.sync()[1]))   # AC11 — 줄이 남은 같은 상태
         self.assertEqual(self.ledger("drop", "--roadmap", RM, "--session", SID, "--section", "자원",
                                      "--where", "경로=/x/e3")[0], 0)

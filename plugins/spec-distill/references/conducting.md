@@ -26,7 +26,7 @@
 | 3 다음 일 고르기와 보내기 | 단계: 준비 · 설계 중 · 일부 머지 | `<SD>/references/conducting-step-3.md` | `<SD>/references/conductor-dispatch.md`(이 대화에서 담당자를 처음 보낼 때) · `<SD>/skills/epic-conductor/references/qg-review.md`(spec 승인 앞) |
 | 4 돌아오기 | 단계: 계획 · 구현 중 · 구현 끝 · 진행 중 | `<SD>/references/conducting-step-4.md` | `<SD>/references/conductor-dispatch.md`(돌아온 사람 자리를 옮길 때) |
 | 5 머지 전 확인 | 단계: PR · 결과 받음 | `<SD>/references/conducting-step-5.md` | `<SD>/skills/epic-conductor/references/qg-review.md`(머지 앞) · `<SD>/references/conductor-state-branch.md`(안 올린 규칙 고침을 올릴 때) |
-| 6 머지 뒤 | 에픽 PR 이 머지된 뒤 그 에픽의 줄(작업 · 자원 · 살아 있는 agent)이 기계 상태에 남아 있는 동안 — 단계: 머지됨 · 끝남 | `<SD>/references/conducting-step-6.md` | — |
+| 6 머지 뒤 | 에픽 PR 이 머지된 뒤 걸음 6 이 치우는 그 에픽의 줄(자원 가운데 종류가 worktree 인 줄 · 살아 있는 agent 줄 · 끝나지 않은 작업 줄)이 기계 상태에 남아 있는 동안 — 단계: 머지됨 · 끝남 | `<SD>/references/conducting-step-6.md` | — |
 | 7 끝 | 끝나지 않은 에픽이 없을 때 | `<SD>/references/conducting-step-7.md` | `<SD>/skills/epic-conductor/references/qg-review.md`(로드맵 끝) · `<SD>/references/conductor-state-branch.md`(상태 브랜치를 지울 때) |
 
 ### 걸음에 달리지 않은 지시서
