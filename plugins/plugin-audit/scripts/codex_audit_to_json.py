@@ -125,7 +125,8 @@ def main() -> int:
     ap.add_argument("--meta-override-reason", default=None)
     args = ap.parse_args()
 
-    stdin_text = sys.stdin.read()
+    # 바이트로 읽어 UTF-8 로 풀고 깨진 바이트는 대체 글자로 — sys.stdin.read() 는 UTF-8 로캘에서 깨진 바이트에 죽는다
+    stdin_text = sys.stdin.buffer.read().decode("utf-8", errors="replace")
     stderr_text = ""
     stderr_read_error: str | None = None
     if args.stderr_file:
