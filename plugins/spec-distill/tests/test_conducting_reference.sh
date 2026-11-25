@@ -425,5 +425,5 @@ done
 [ "$n" -ge 1 ] && ok "skill 이름을 ${n}개 읽었다" || no "skill 이름을 하나도 못 읽었다 — 위 검사가 공허하다"
 
 # 고아 방지 — 재분해 6 이 손 절차를 가리킨다.
-assert_file_grep "$RED" '\$\{CLAUDE_PLUGIN_ROOT\}/references/conducting\.md' "재분해 6 이 손 절차를 가리킨다"
+assert_file_grep "$RED" '\$\{CLAUDE_PLUGIN_ROOT\}/references/conducting-manual\.md' "재분해 6 이 손 절차 파일을 가리킨다"
 finish

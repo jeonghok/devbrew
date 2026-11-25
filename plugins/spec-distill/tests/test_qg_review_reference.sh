@@ -285,7 +285,7 @@ BEAT="$(ssec '### 한 박자')"
 for v in "$SENT" "$MERGED" "$FAILED" "$END_" "$LOCK" "$STORE" "$RECF" "$RBR" "$BEAT" "$HEAD_"; do
   [ -n "$v" ] && ok "### 절 본문을 읽었다(${#v}자)" || no "### 절 본문이 비었다 — 아래 단언이 공허하다"
 done
-L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸음이다 — 손으로 따르는 절차로 들어왔으면 걸음 4 는 손 절차 5(계획 · 구현), 걸음 5 는 손 절차 8(머지 전 확인), 걸음 7 은 손 절차 9(끝)로 읽고, 걸음 1 · 2 · 3 · 6 은 번호가 같다.'
+L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 차례의 걸음이다 — 손 절차(`conducting-manual.md`)로 들어왔으면 걸음 4 는 손 절차 5(계획 · 구현), 걸음 5 는 손 절차 8(머지 전 확인), 걸음 7 은 손 절차 9(끝)로 읽고, 걸음 1 · 2 · 3 · 6 은 번호가 같다.'
 L_order='보내는 차례는 아래 `### 이미 보낸 것` 의 확인 → 규모 줄 → `### 스위트 잠금` 의 확인 → 보관 폴더 만들기와 `## 자원` 에 적기(`## 보관과 기록 파일` 의 `### 보관`) → 「이미 답한 것」 파일 만들기(같은 절의 `### 이미 답한 것`) → 보내기 → 살아 있는 agent 줄 적기다.'
 L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<하니스가 준 agent 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
 L_livename='이름 칸 · 담당 칸은 다른 담당자처럼 하니스가 준 agent 이름이고, 그 담당자가 어느 자리의 것인지는 작업 표 줄의 근거 칸(보관 폴더 경로)으로 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문과 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
@@ -685,7 +685,7 @@ bw="$(printf '%s\n' "$BEAT" | grep -nF '그 차례 맨 앞, `### 이미 보낸 �
 [ -n "$bq" ] && [ "$bq" = "$bw" ] && ok "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 함께" || no "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 없다(확인=${bq:-없음} · 적기=${bw:-없음})"
 TEAMQ="$(line_of "$RET" '**team 형식 로드맵.**')"
 [ -n "$TEAMQ" ] && ok "team 형식: 되돌리기 절에 team 형식 단락이 있다" || no "team 형식: 되돌리기 절에 team 형식 단락이 없다 — 아래 단언이 공허하다"
-for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` · `premerge-resend-<과제>-plan<n>`' 'PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다'; do
+for lit in '`conducting-team.md` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` · `premerge-resend-<과제>-plan<n>`' 'PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다'; do
   once "$TEAMQ" "$lit" "team 형식 단락: ${lit}"
 done
 # fix 1 — 계획마다 PR 이 따로라 team 자리 글자에 계획 번호가 든다(둘째 계획의 리뷰가 첫 계획 폴더에 막히지 않게)

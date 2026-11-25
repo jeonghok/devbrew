@@ -63,4 +63,10 @@ for old in '①/② 를 골라도 정리만 한다' '계획 agent 는 이 턴에
 done
 assert_contains "$(awk '/^## 5\. 적용/{f=1;next} f&&/^## /{exit} f' "$RED")" '고른 라벨을 글자 그대로' "재분해 5: 라벨만 고른 답의 --approval"
 assert_contains "$(awk '/^## 5\. 적용/{f=1;next} f&&/^## /{exit} f' "$RED")" '「순서만」' "재분해 5: 순서만 바뀐 경우"
+# 로드맵 틀의 안내 줄이 가리키는 「`references/conducting.md` 끝 절 「손으로 따르는 절차」」 가 맞다
+TOC_MD="$SD/references/conducting.md"
+LASTH="$(grep -E '^## ' "$TOC_MD" | tail -n 1)"
+assert_eq "$LASTH" '## 손으로 따르는 절차' "안내 줄 대상: 차례의 마지막 절이 「손으로 따르는 절차」"
+assert_contains "$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$TOC_MD")" 'conducting-manual.md' "안내 줄 대상: 그 절이 conducting-manual.md 를 가리킨다"
+assert_contains "$(cat "$TPL")" '`references/conducting.md` 끝 절 「손으로 따르는 절차」' "안내 줄 대상: 로드맵 틀의 안내 줄이 그 절을 이름으로 부른다"
 finish
