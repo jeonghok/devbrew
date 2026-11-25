@@ -291,7 +291,9 @@ def main() -> int:
     args = p.parse_args()
     keys = {"design": DESIGN_KEYS, "docreview": DOCREVIEW_KEYS}.get(args.emit_keys, DEFAULT_KEYS)
 
-    stdin_text = sys.stdin.read()
+    # 바이트로 읽어 UTF-8 로 풀고 깨진 바이트는 대체 글자로 바꾼다 — sys.stdin.read() 는 로캘에 따라
+    # 오류 처리가 갈려(C 로캘 surrogateescape · UTF-8 로캘 strict) 깨진 바이트에 UnicodeDecodeError 로 죽는다.
+    stdin_text = sys.stdin.buffer.read().decode("utf-8", errors="replace")
     stderr_text = ""
     _stderr_read_error: str | None = None
     if args.stderr_file:

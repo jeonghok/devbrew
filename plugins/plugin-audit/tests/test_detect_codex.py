@@ -13,14 +13,30 @@ CONF = ROOT / "scripts" / "codex-killswitch.conf"
 QG_MOCKS = ROOT.parent / "quality-gates" / "tests" / "mocks"
 
 
-def run(env_extra=None, path_dirs=None):
+TIMEOUT_NAMES = ("timeout", "gtimeout")
+
+
+def system_farm_without_timeout(dest):
+    """/usr/bin · /bin 의 실행 파일을 dest 에 심볼릭 링크로 모으되 timeout · gtimeout 만 뺀다.
+    OS 가 /usr/bin/timeout 을 싣는 기계에서도 「timeout 없음」 을 시험이 스스로 만든다."""
+    import os
+    dest = Path(dest)
+    for d in ("/usr/bin", "/bin"):
+        for name in sorted(os.listdir(d)):
+            if name in TIMEOUT_NAMES or os.path.lexists(dest / name):
+                continue
+            os.symlink(os.path.join(d, name), dest / name)
+    return dest
+
+
+def run(env_extra=None, path_dirs=None, system="/usr/bin:/bin"):
     import os
     env = dict(os.environ)
     env.pop("CODEX_SANDBOX", None)
     env.pop("CODEX_SESSION_ID", None)
     env.pop("DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX", None)
     if path_dirs is not None:
-        env["PATH"] = ":".join(str(p) for p in path_dirs) + ":/usr/bin:/bin"
+        env["PATH"] = ":".join(str(p) for p in path_dirs) + ":" + system
     env.update(env_extra or {})
     p = subprocess.run(["bash", str(PROBE)], capture_output=True, text=True, env=env)
     return p.stdout
@@ -59,7 +75,10 @@ class TestDetectCodex(unittest.TestCase):
         self.assertIn("skip_reason: known_bad_version", out)
 
     def test_7_timeout_binary_missing(self):
-        out = run({"CODEX_API_KEY": "t"}, [QG_MOCKS / "safe-v1"])
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            farm = str(system_farm_without_timeout(td))
+            out = run({"CODEX_API_KEY": "t"}, [QG_MOCKS / "safe-v1"], system=farm)
         self.assertIn("skip_reason: timeout_binary_missing", out)
 
     def test_8_foreign_kill_switch_inert(self):
