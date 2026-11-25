@@ -533,17 +533,19 @@ class Steps(SyncRepo):
         self.assertEqual(rc, 0, out + err)
         self.assertNotIn("머지 뒤 일이 남은 에픽", out)
         self.assertFalse([l for l in out.splitlines() if l.startswith("- E3 ")], out)
-        for stage, shown in (("끝남", False), ("구현", True)):   # 작업 줄 — 끝 낱말이면 세지 않고, 끝나지 않았으면 센다
-            self.assertEqual(self.ledger("add", "--roadmap", RM, "--session", SID, "--section", "작업",
-                                         "--cells", "구현 · e3-impl · E3 · %s · 리더 · t" % stage)[0], 0)
+        cases = (("작업", "구현 · e3-impl · E3 · 끝남 · 리더 · t", "이름=e3-impl", None),   # 끝 낱말 작업 줄은 세지 않는다
+                 ("작업", "구현 · e3-impl · E3 · 구현 · 리더 · t", "이름=e3-impl", "작업 1 · worktree 자원 0 · 살아 있는 agent 0"),
+                 ("살아 있는 agent", "e3-agent · E3 · 구현 · /wt/e3 · t", "이름=e3-agent", "작업 0 · worktree 자원 0 · 살아 있는 agent 1"))
+        for sec, cells, where, tail in cases:
+            self.assertEqual(self.ledger("add", "--roadmap", RM, "--session", SID, "--section", sec, "--cells", cells)[0], 0)
+            self.addCleanup(self.ledger, "drop", "--roadmap", RM, "--session", SID, "--section", sec, "--where", where)
             rc, out, err = self.sync()
             self.assertEqual(rc, 0, out + err)
             e3 = [l for l in out.splitlines() if l.startswith("- E3 ")]
-            self.assertEqual(bool(e3), shown, (stage, out))
-            if shown:
-                self.assertTrue(e3[0].endswith(" · 남은 줄: 작업 1 · worktree 자원 0 · 살아 있는 agent 0"), e3[0])
-            self.assertEqual(self.ledger("drop", "--roadmap", RM, "--session", SID, "--section", "작업",
-                                         "--where", "이름=e3-impl")[0], 0)
+            self.assertEqual(len(e3), 0 if tail is None else 1, (cells, out))
+            if tail is not None:
+                self.assertTrue(e3[0].endswith(" · 남은 줄: " + tail), e3[0])
+            self.assertEqual(self.ledger("drop", "--roadmap", RM, "--session", SID, "--section", sec, "--where", where)[0], 0)
 
     def test_toc_broken_does_not_stop(self):   # Review Focus 1
         copy = self.t / "plugin-copy"
