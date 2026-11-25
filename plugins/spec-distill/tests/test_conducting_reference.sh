@@ -233,7 +233,7 @@ for n in 1 3 4 5; do
   [ -n "$(cyc "$n")" ] && ok "지휘 순환 걸음 $n 을 읽었다" || no "지휘 순환 걸음 $n 이 비었다 — 아래 단언이 공허하다"
 done
 REFRESH='`ledger pr-refresh --roadmap <로드맵> --session <세션>'
-assert_contains "$(cyc 1)" "→ ${REFRESH}\` 으로 기계 상태의 PR 캐시를 주인(GitHub)과 맞춘다" "지휘 걸음 1(맞추기): pr-refresh 로 PR 캐시를 맞춘다"
+assert_contains "$(cyc 1)" "→ 기본 브랜치 → PR 캐시 → 상태 브랜치(" "지휘 걸음 1(맞추기): 맞추기 명령이 기본 브랜치 다음에 PR 캐시를 맞춘다"
 assert_contains "$(cyc 1)" '`ledger claim` · `ledger takeover` · `ledger pr-refresh` 가 옛 판이 쓴 PR 캐시 줄이라고 멈추면(claim · takeover 는 표지를 잡은 뒤 멈춘다) 그 줄이 보인 `--reset` 명령으로' "지휘 걸음 1(판단): 옛 판 PR 줄에서 claim · takeover · pr-refresh 가 멈추면 --reset"
 assert_contains "$(cyc 4)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 채운다" "지휘 걸음 4: PR 을 연 뒤 pr-refresh"
 assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "지휘 걸음 4: gh pr create 에 -R origin"

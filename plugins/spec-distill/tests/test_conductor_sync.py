@@ -34,6 +34,7 @@ ME = "t9a"
 SEGMENTS = ("자리", "원격 받기", "작업 목록", "표지", "기본 브랜치", "PR 캐시", "상태 브랜치", "세션 담당자", "스위트 잠금",
             "실행 원장", "주인 모를 worktree", "판 차이")
 FIRST_ONLY = ("주인 모를 worktree", "판 차이")
+WAITING_HEAD_TEXT = "사용자를 기다리는 질문 (오래된 순)"
 ROLE_DOC = "리더 역할 문서의 고유 글 7f3a"   # 리더 묶음 본문에만 있는 줄
 TIME_LINE = re.compile(r"맞추기 — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} 기준")
 
@@ -196,6 +197,9 @@ class Segments(SyncRepo):
         last = out.rstrip("\n").split("\n")[-1]
         self.assertTrue(last.startswith("맞추기 — ") and last.endswith(" 기준"), last)
         self.assertTrue(TIME_LINE.fullmatch(last), last)
+        self.assertFalse([l for l in out.splitlines() if " — 이상:" in l], out)   # 깨끗한 상태 — 거짓 이상이 없다
+        for line in ("상태 브랜치 — 기다리는 질문 0 · 온 글 0", "PR 캐시 — 달라진 것 없음", "주인 모를 worktree — 없음", "판 차이 — 없음"):
+            self.assertIn(line, out.splitlines(), line)
 
 
 class Repeat(SyncRepo):
@@ -311,10 +315,11 @@ class StatusView(SyncRepo):
         import conductor_sync as SY
         sections = dict((name, [CS.NONE_LINE]) for name in CS.STATUS_SECTIONS)
         sections[CS.STATUS_SECTIONS[-1]] = ["0줄"]
+        sections["편지"] = ["보낸 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 0 · 받은 글 0"]   # sync 가 늘 쓰는 꼴
         head = CS.render_status(CS.Status("r", RM, "2026-11-25 09:00 +0900", "0123abcd", "session-", sections)).split("\n")
         tail = ["다른 로드맵과 닿는 것 (계산 09:00)", "- 닿는 것 없음", "사용자를 기다리는 질문 (오래된 순)", "- 없음",
                 "온 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 0"]
-        self.assertEqual(SY.read_view(head + tail), (0, 0, 0, []))   # 양성 짝 — 아는 꼴만이면 이상이 없다
+        self.assertEqual(SY.read_view(head + tail), (0, 0, 0, [], []))   # 양성 짝 — 아는 꼴만이면 이상이 없다
         for at in range(len(tail) + 1):
             lines = head + tail[:at] + ["처음 보는 줄 %d" % at] + tail[at:]
             self.assertIn("처음 보는 줄 %d" % at, SY.read_view(lines)[3], at)
@@ -322,6 +327,70 @@ class StatusView(SyncRepo):
         self.assertEqual((got[2], got[3]), (1, []))   # 정보 줄은 개수로 센다
         rules = head[:-2] + ["- 3줄", ""]
         self.assertEqual(SY.read_view(rules + tail)[3], ["## 안 올린 규칙 고침: 3줄"])   # STATUS 안의 0 이 아닌 고침
+        for pending in ("온 글 0 · 아직 받지 않은 보낸 글 1 · 답 기다리는 글 0", "온 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 2"):
+            self.assertEqual(SY.read_view(head + tail[:-1] + [pending])[3], [pending])   # 보낸 글이 걸려 있으면 이상 없음 꼴이 아니다
+        mail = [l.replace("보낸 글 0 · 아직 받지 않은 보낸 글 0", "보낸 글 1 · 아직 받지 않은 보낸 글 1") for l in head]
+        self.assertNotEqual(mail, head)
+        self.assertEqual(SY.read_view(mail + tail)[3], ["## 편지: 보낸 글 1 · 아직 받지 않은 보낸 글 1 · 답 기다리는 글 0 · 받은 글 0"])
+        sent = [l.replace("보낸 글 0 · 아직", "보낸 글 3 · 아직").replace("받은 글 0", "받은 글 3") for l in head]
+        self.assertNotEqual(sent, head)
+        self.assertEqual(SY.read_view(sent + tail)[3], [])   # 다 받은 지난 글의 수는 이상이 아니다
+
+    def test_missing_view_lines_are_anomaly(self):   # 비거나 빠진 현황 화면은 이상 없음이 아니다
+        import conductor_status as CS
+        import conductor_sync as SY
+        sections = dict((name, [CS.NONE_LINE]) for name in CS.STATUS_SECTIONS)
+        sections[CS.STATUS_SECTIONS[-1]] = ["0줄"]
+        sections["편지"] = ["보낸 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 0 · 받은 글 0"]   # sync 가 늘 쓰는 꼴
+        head = CS.render_status(CS.Status("r", RM, "2026-11-25 09:00 +0900", "0123abcd", "session-", sections)).split("\n")
+        tail = ["다른 로드맵과 닿는 것 (계산 09:00)", "- 닿는 것 없음", "사용자를 기다리는 질문 (오래된 순)", "- 없음",
+                "온 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 0"]
+        self.assertEqual(SY.read_view(head + tail)[4], [])   # 양성 짝
+        self.assertEqual(len(SY.read_view([])[4]), 4)   # 빈 출력 — STATUS · 닿는 것 · 기다리는 질문 · 편지 줄이 다 빠졌다
+        for i in range(len(tail)):
+            if tail[i].startswith("- "):
+                continue
+            got = SY.read_view(head + tail[:i] + tail[i + 1:])
+            self.assertEqual(len(got[4]), 1, (tail[i], got))
+        self.assertIn("STATUS", SY.read_view(tail)[4])   # STATUS 가 빠졌다
+
+
+class OtherRoadmap(SyncRepo):   # 다른 로드맵의 상태 브랜치를 바꾼다 — 이 클래스의 레포에만 남는다
+    def test_other_roadmap_waiting_shows_full_raw(self):   # 이상이면 구간 원문 전부를 들여 낸다
+        self.assertEqual(self.sync("--roadmap", TM)[0], 0)
+        rc, _o, err = self.run_py(SCRIPTS / "conductor_status.py", "waiting", "add", "--roadmap", TM, "--session", SID,
+                                  "--epic", "T1", "--kind", "spec 승인", "--via", cs.ASK_VIA[1])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.run_py(SCRIPTS / "conductor_status.py", "sync", "--roadmap", TM, "--session", SID)[0], 0)
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        lines = out.splitlines()
+        self.assertIn("상태 브랜치 — 이상: 기다리는 질문 1 · 온 글 0", lines)
+        at = lines.index("상태 브랜치 — 이상: 기다리는 질문 1 · 온 글 0")
+        raw = []
+        for l in lines[at + 1:]:
+            if not l.startswith("    ") and l:
+                break
+            raw.append(l[4:])
+        self.assertTrue(raw[0].startswith("[spec-distill] ") and "conductor/rm(" in raw[0], raw)   # ensure 원문부터
+        for want in ("# STATUS — 버릴 로드맵", "## 에픽", "- E1 가 · 준비 · 의존 완료 · 브랜치 없음", WAITING_HEAD_TEXT,
+                     "온 글 0 · 아직 받지 않은 보낸 글 0 · 답 기다리는 글 0"):
+            self.assertIn(want, raw, want)
+        self.assertTrue([l for l in raw if l.startswith("다른 로드맵과 닿는 것 (계산 ")], raw)
+        self.assertTrue([l for l in raw if l.startswith("- tm · T1 · spec 승인 · ") and "부터" in l], raw)
+
+
+class Letters(SyncRepo):   # 보낸 글이 상태 브랜치에 남는다 — 이 클래스의 레포에만 남는다
+    def test_pending_sent_letter_is_anomaly(self):
+        self.assertEqual(self.sync("--roadmap", TM)[0], 0)
+        self.assertEqual(self.sync()[0], 0)
+        rc, out, err = self.run_py(SCRIPTS / "conductor_mail.py", "send", "--roadmap", RM, "--session", SID, "--to", "tm",
+                                   "--kind", "예고", "--body", "곧 E1 을 시작한다")
+        self.assertEqual(rc, 0, out + err)
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        self.assertTrue([l for l in out.splitlines() if l.startswith("상태 브랜치 — 이상: ")], out)
+        self.assertIn("\n    온 글 0 · 아직 받지 않은 보낸 글 1 · 답 기다리는 글 0\n", out)
 
 
 class Steps(SyncRepo):

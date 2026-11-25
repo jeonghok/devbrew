@@ -61,8 +61,11 @@ TOUCH_NONE = "- 닿는 것 없음"
 TOUCH_INFO = ("- 예약 겹침: ", "- 바꾼 파일 겹침: ", "- 기본 브랜치의 움직임: ", "- 이 기계에서 도는 스위트: ")
 WAITING_HEAD = "사용자를 기다리는 질문 (오래된 순)"
 QUIET_TAIL = " · 기다리는 질문 없음   (STATUS "
-LETTERS_RE = re.compile(r"온 글 ([0-9]+) · 아직 받지 않은 보낸 글 [0-9]+ · 답 기다리는 글 [0-9]+")
+LETTERS_RE = re.compile(r"온 글 ([0-9]+) · 아직 받지 않은 보낸 글 ([0-9]+) · 답 기다리는 글 ([0-9]+)")
+MAIL_RE = re.compile(r"보낸 글 [0-9]+ · 아직 받지 않은 보낸 글 ([0-9]+) · 답 기다리는 글 ([0-9]+) · 받은 글 [0-9]+")   # STATUS 의 편지 절
 RULES_ZERO = "0줄"
+MAIL = "편지"
+NEEDED = ("STATUS", "다른 로드맵과 닿는 것", "사용자를 기다리는 질문", "온 글")   # 이상 없음 꼴의 현황 화면에 있어야 할 줄
 
 
 class Stop(Exception):
@@ -170,7 +173,7 @@ def work_items(report, lines):
 def seg_tasks(roadmap):
     report, lines, err, rc = task_view(roadmap)
     items = work_items(report, lines) if report is not None else None
-    if rc == 0 and items is not None:
+    if rc == 0 and report is not None and items is not None:
         segment("작업 목록", "에픽 %d · 끝나지 않은 일 %d" % (len(report.get("blocks") or []),
                                                      sum(1 for it in items if not it[2])))
     elif rc == 0:
@@ -263,27 +266,34 @@ def _status_block(lines):
         stop = next((i for i, ln in enumerate(lines) if ln.startswith(TOUCH_HEAD)), len(lines))
         return stop, [ln for ln in lines[:stop] if ln]
     odd = ["- " + q for q in status.sections["기다리는 질문"] if q != CS.NONE_LINE]
+    odd += ["## %s: %s" % (MAIL, r) for r in status.sections[MAIL]
+            if not (MAIL_RE.fullmatch(r) and MAIL_RE.fullmatch(r).groups() == ("0", "0"))]
     odd += ["## %s: %s" % (CS.STATUS_SECTIONS[-1], r) for r in status.sections[CS.STATUS_SECTIONS[-1]] if r != RULES_ZERO]
     return end, odd
 
 
 def read_view(lines):
-    """(기다리는 질문 수, 온 글 수, 닿는 것 수, 이상 줄들) — 아는 「이상 없음」 꼴이 아닌 줄은 모두 이상이다."""
+    """(기다리는 질문 수, 온 글 수, 닿는 것 수, 이상 줄들, 빠진 줄들) — 아는 「이상 없음」 꼴이 아닌 줄은 모두 이상이고,
+    이상 없음 꼴에 있어야 할 줄(`NEEDED`)이 빠져도 이상이다."""
     end, odd = _status_block(lines)
     waiting = letters = touch = 0
     part = "head"
+    seen = {NEEDED[0]} if lines and lines[0].startswith(CS.TITLE_HEAD) else set()
     for ln in lines[end:]:
         if ln.startswith(TOUCH_HEAD):
             part = "touch"
+            seen.add(NEEDED[1])
             continue
         if ln == WAITING_HEAD:
             part = "waiting"
+            seen.add(NEEDED[2])
             continue
         m = LETTERS_RE.fullmatch(ln)
         if m:
             part = "letters"
+            seen.add(NEEDED[3])
             letters = int(m.group(1))
-            if letters:
+            if m.groups() != ("0", "0", "0"):
                 odd.append(ln)
             continue
         if part == "head" and ln == "":
@@ -298,27 +308,30 @@ def read_view(lines):
         if part == "waiting" and ln.startswith("- ") and "부터" in ln:
             waiting += 1
         odd.append(ln)
-    return waiting, letters, touch, odd
+    return waiting, letters, touch, odd, [n for n in NEEDED if n not in seen]
 
 
 def seg_state_branch(roadmap, sid):
-    odd = []
+    odd, raw = [], []
     for args, ok in ((("conductor_branch.py", "ensure", "--roadmap", roadmap, "--session", sid), ENSURE_OK),
                      (("conductor_status.py", "sync", "--roadmap", roadmap, "--session", sid), (CS.UNCHANGED,))):
         rc, out, err = script(*args)
         if rc in (3, 5):
-            raise Stop("상태 브랜치", reason_of(err + out, rc), rc, out + err)
+            raise Stop("상태 브랜치", reason_of(err + out, rc), rc, raw + out + err)
+        raw += out + err
         if rc:
-            odd.append("%s %s — 종료 코드 %d" % (args[0], args[1], rc))
+            odd.append("%s %s 종료 코드 %d" % (args[0], args[1], rc))
         odd += [ln for ln in out + err if not (ln.startswith(PREFIX) and ln[len(PREFIX):].startswith(ok))]
     rc, out, err = script("conductor_status.py", "show", "--roadmap", roadmap)
     if rc in (3, 5):
-        raise Stop("상태 브랜치", reason_of(err + out, rc), rc, out + err)
-    waiting, letters, touch, seen = read_view(out)
-    odd += seen + err + (["conductor_status.py show — 종료 코드 %d" % rc] if rc else [])
+        raise Stop("상태 브랜치", reason_of(err + out, rc), rc, raw + out + err)
+    raw += out + err
+    waiting, letters, touch, seen, missing = read_view(out)
+    odd += seen + err + (["conductor_status.py show 종료 코드 %d" % rc] if rc else [])
     head = "기다리는 질문 %d · 온 글 %d" % (waiting, letters)
-    if odd:
-        anomaly("상태 브랜치", head, odd)
+    notes = [ln for ln in odd if ln.startswith("conductor_")] + (["빠진 줄: " + " · ".join(missing)] if missing else [])
+    if odd or missing:
+        anomaly("상태 브랜치", " · ".join([head] + notes), raw)   # 원문은 이 구간이 부른 세 명령의 출력 전부
     else:
         segment("상태 브랜치", head)
     say("다른 로드맵과 닿는 것 %d개 — 다시 보기: %s" % (touch, sd_command("conductor_status.py", "show", "--roadmap", roadmap)))
