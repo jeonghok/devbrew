@@ -67,7 +67,7 @@ FIN=plugins/spec-distill/skills/context-build/references/finishing.md
 BB=plugins/spec-distill/scripts/build_brief_bundle.py
 RB=plugins/spec-distill/skills/reviewing-brief/SKILL.md
 has "$FIN" '고칠 자리는 그 framing 기록 파일(이 걸음의 `raw-source: FOUND <경로>`)의 그 줄이다' "나갈 길: 구조 멈춤이 고칠 자리를 댄다"
-has "$FIN" '`templates/interview-seed-audit-template.md` 의 제목 순서와 꼴대로 고친 뒤 이 걸음부터 다시 돈다' "나갈 길: 고친 뒤 다시 도는 자리"
+has "$FIN" '`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md` 의 제목 순서와 꼴대로 고친 뒤 이 걸음부터 다시 돈다' "나갈 길: 고친 뒤 다시 도는 자리"
 has "$FIN" '빈 앵커 줄로 나아가지 않는다' "나갈 길(양의 짝): 판결 줄 없는 멈춤 불릿이 그대로 있다"
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
