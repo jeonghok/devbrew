@@ -14,7 +14,7 @@ SR="$SD/skills/spec-review/SKILL.md"
 RED="$SD/references/redecompose.md"
 CD="$SD/references/conducting.md"
 SHARED='실행 방식은 writing-plans 가 권하는 방식이고, 계획 검토는 계획에 설계에 없던 결정이 있을 때만 기다린다.'
-MARK='**다음 세션 줄 — 분해된 일 ①/② 공통**'
+MARK='**지휘자 줄 — 로드맵 PR 이 머지된 뒤**'
 DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$SD/skills/roadmap-draft/SKILL.md")"
 assert_eq "$DLINE" '`/spec-distill:epic-conductor <roadmap-path>`' "AC36: 나눈 일의 다음 세션 줄이 지휘자 호출 한 줄"
 assert_eq "$(grep -cF '이 로드맵의 지휘 절차대로 진행하라' "$FIN" || true)" "0" "AC36: 옛 지휘 절차 줄이 없다"
