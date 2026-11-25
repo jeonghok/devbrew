@@ -220,7 +220,8 @@ if min(ix) < 0 or ix != sorted(ix):
 if "--session" in fence or "session-id" in fence:
     bad.append("다시 채우기 펜스가 세션 번호를 넘긴다")
 tail = parts[parts.index(fence) + 1] if fence in parts else ""
-for lit in ("- `reset_rc=` 가 0 이 아니면 그 사유", "멈춘다", "- `reset_rc=` 가 0 이면 위 맞추기 명령을 처음부터 다시 돈다", "위 5 와 같이 한다"):
+for lit in ("- `reset_rc=` 가 0 이 아니면 그 사유", "멈춘다", "- `reset_rc=` 가 0 이면 위 맞추기 명령을 처음부터 다시 돈다", "위 5 와 같이 한다",
+            "- 다시 돈 출력에도 `옛 판이 쓴 PR 캐시 줄` 이 있으면 다시 채우기로 다시 오지 않는다 — 그 출력을 그대로 보이고 멈춘다."):   # 고리에 끝이 있다
     if lit not in tail:
         bad.append("펜스 뒤 처리 줄이 없다: %s" % lit)
 print(" | ".join(bad) or "ok")'
@@ -228,7 +229,8 @@ assert_contains "$OLD_MSG" "--reset" "OldPrRows 메시지를 실제로 얻었다
 assert_eq "$(python3 -I -c "$reset_branch_check" "$OLD_MSG" < "$SK")" "ok" "3절: 3 + 옛 PR 캐시 줄 → reset → release → 맞추기 명령 다시 갈래"
 for mut in '- `3` 이고 출력에|- `3` 이면 출력에' '`옛 판이 쓴 PR 캐시 줄` 이 있으면 멈추지 않고|`옛 판 PR 줄` 이 있으면 멈추지 않고' \
            'release --roadmap "<로드맵>"; fi|true; fi' '- `reset_rc=` 가 0 이 아니면|- reset 이 실패하면' \
-           '(`--takeover` 를 붙여 돌린 출력에 그 문구가 있어도 같다)|' ; do
+           '(`--takeover` 를 붙여 돌린 출력에 그 문구가 있어도 같다)|' \
+           '- 다시 돈 출력에도 `옛 판이 쓴 PR 캐시 줄` 이 있으면 다시 채우기로 다시 오지 않는다|- 다시 돈 출력에도 `옛 판이 쓴 PR 캐시 줄` 이 있으면 다시 채우기로 간다' ; do
   from="${mut%%|*}"; to="${mut#*|}"
   applied="$(grep -cF -- "$from" "$SK")"
   got="$(python3 -I -c 'import sys

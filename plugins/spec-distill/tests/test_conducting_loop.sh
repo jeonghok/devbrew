@@ -319,6 +319,14 @@ assert_eq "$(printf '%s\n' '| 3 | x | y | `conductor-dispatch.md`(처음 보낼 
 for n in 3 4; do
   assert_contains "$(sed -n 2p "$(guide "$n")")" '`<SD>/references/conductor-dispatch.md`' "AC6: 걸음 ${n} 의 읽을 것 줄에 보내는 글 틀이 있다"
 done
+# 걸음 4 · 6 에서 구현 담당자를 보낼 때 걸음 3 의 「보내기」(글 틀 · 자리 · 살아 있는 agent 줄)를 가리킨다(리뷰 I4)
+SEND_PTR='같은 파일의 「보내기」(글 틀 · 하위 agent 의 자리 · `## 살아 있는 agent` 줄)대로'
+for n in 4 6; do
+  line="$(grep -F -- "$SEND_PTR" "$(guide "$n")" || true)"
+  assert_eq "$(printf '%s' "$line" | grep -c .)" "1" "걸음 ${n}: 구현 담당자 보내기가 걸음 3 의 「보내기」 를 가리키는 줄이 하나"
+  assert_contains "$line" '`<SD>/references/conducting-step-3.md`' "걸음 ${n}: 그 「같은 파일」 이 걸음 3 지시서다"
+done
+assert_contains "$(cat "$(guide 3)")" '  - 보내기: ' "걸음 3: 가리키는 「보내기」 자리가 실재한다"
 for n in 1 2 5 7; do
   assert_contains "$(sed -n 2p "$(guide "$n")")" '`<SD>/references/conductor-state-branch.md`' "AC6: 걸음 ${n} 의 읽을 것 줄에 상태 브랜치 절차가 있다"
 done

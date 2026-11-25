@@ -149,7 +149,8 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
 
     def test_team_guide_carries_the_three_handed_over_items(self):   # R3 설계 §1.7 — 넘겨받은 셋
         team = _TEAM_FILE.read_text(encoding="utf-8")
-        for word in ("받음 줄", "검수 묶음", "`<SD>/references/conducting-step-5.md` 의 「승인 기록 다시 보이기」",
+        for word in ("구현 담당자가 돌아오면 결과 대조를 돌려 받음 줄을 낸다",   # 첫째는 「결과 대조 · 받음 줄」 불릿에만 있는 글
+                     "검수 묶음", "`<SD>/references/conducting-step-5.md` 의 「승인 기록 다시 보이기」",
                      "confirm --confirmed",
                      "작업 방식과 도구는 걸음 보기(`walk_table.py next`)가 낸 칸을 쓴다 — 걸음 지시서의 부를 skill 칸은 옛 형식의 값이다"):
             self.assertIn(word, team, word)
