@@ -288,19 +288,28 @@ class CarriedRulings(unittest.TestCase):   # 계획 2 를 도는 동안 정해�
         self.assertIsNone(TC.audit_of("docs/iv/b.txt"))
         self.assertIsNone(TC.source_problem(brief, brief, b"x"))
         self.assertIsNone(TC.source_problem("docs/iv/b.audit.md", brief, b"x"))
-        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, seed))
+        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, seed))   # 옛 기록 — 옛 종류 글자
+        self.assertIsNone(TC.source_problem("anywhere/s.audit.md", brief, b"---\ntype: intent-seed-audit\n---\n"))
         self.assertEqual(TC.source_problem("docs/x/forged.audit.md", brief, b"---\ntype: interview-audit\n---\n"),
                          TC.SOURCE_NOT_ALLOWED % brief)
         self.assertEqual(TC.source_problem("docs/iv/other.md", brief, b"no head"), TC.SOURCE_NOT_ALLOWED % brief)
         self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", None, b"x"))     # Review Focus 3
         self.assertIsNone(TC.source_problem("docs/x/forged.audit.md", brief, None))    # 견줄 파일 없음 — 대조가 3 으로 끝낸다
 
-    def test_one_source_rule(self):   # 규칙을 두 군데에 따로 적지 않는다
+    def test_one_source_rule(self):   # 규칙을 두 군데에 따로 적지 않는다 — framing 종류 글자는 대응표 모듈에서만 온다
+        import re
         tw = (SCRIPTS / "team_write.py").read_text(encoding="utf-8")
         tc = (SCRIPTS / "team_check.py").read_text(encoding="utf-8")
-        for lit in ('".audit.md"', '"interview-seed-audit"'):
-            self.assertNotIn(lit, tw, lit)
-            self.assertEqual(tc.count(lit), 1, lit)
+        self.assertNotIn('".audit.md"', tw)
+        self.assertEqual(tc.count('".audit.md"'), 1)
+        for name, src in (("team_write.py", tw), ("team_check.py", tc)):
+            for lit in ("interview-seed-audit", "intent-seed-audit"):   # 옛 글자 · 새 글자 리터럴 모두 없다(주석 포함)
+                self.assertNotIn(lit, src, "%s: %s" % (name, lit))
+            self.assertIsNone(re.search(r"[!=]=\s*(?:team_check\.)?FRAMING_TYPE", src), name)   # 글자 그대로 견주지 않는다
+            self.assertEqual(src.count("legacy_names.kind_matches("), 1, name)   # 견주는 자리 하나 — 옛 글자도 받는다
+        self.assertEqual(re.findall(r"(?m)^FRAMING_TYPE = .*$", tc), ["FRAMING_TYPE = legacy_names.INTENT_SEED_AUDIT"])
+        self.assertEqual(re.findall(r"(?m)^FRAMING_TYPE = .*$", tw), ["FRAMING_TYPE = team_check.FRAMING_TYPE"])
+        self.assertRegex(tc, r"(?m)^import legacy_names\b")
 
     def test_origin_table_and_review_entry(self):   # 원문 대조 표의 규칙 · spec-review 진입
         import check_bundle_coverage as cbc

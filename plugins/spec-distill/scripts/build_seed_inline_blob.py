@@ -129,7 +129,7 @@ def heading_shaped_warnings(audit_text: str, heading: str, body: str) -> list[in
 def assemble(seed_text: str, audit_text: str, claude_md_text: str | None, consumer: str = "detect") -> str:
     sec_raw, sec_questions, sec_decisions = UNTRUSTED_VERBATIM_SECTIONS
     parts = [
-        "## 초안 (interview-seed 본문)\n\n" + seed_body(seed_text).strip(),
+        "## 초안 (intent-seed 본문)\n\n" + seed_body(seed_text).strip(),
         f"## 사용자 원문 (audit `{sec_raw}`)\n\n" + _or_none(section_body(audit_text, sec_raw)),
         f"## 질문 전체 (audit `{sec_questions}`)\n\n" + _or_none(section_body(audit_text, sec_questions)),
     ]

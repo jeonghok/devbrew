@@ -31,7 +31,7 @@ frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`�
       exit 3은 호출자 rc 표에서 degradation record가 **의무**인 행이다. 원래 결함의
       본질은 "통과했다"가 아니라 **"강등이 조용했다"** 였다(rc 0의 advisory는 호출자
       표에서 폐기됐다). 판정을 포기하되 그 사실을 사람에게 반드시 도달시킨다.
-  L3: 인터뷰를 닫은 답 — `check_brief.closing_answer_anchors` 가 내는 S(payload §4 의 「외부 선례 무관(@S…)」
+  L3: 컨텍스트 쌓기를 닫은 답 — `check_brief.closing_answer_anchors` 가 내는 S(payload §4 의 「외부 선례 무관(@S…)」
       줄 전부 · audit §2 **마지막** 포화 판정 줄의 「사용자 판단 포화(@S…)」)의 state 레코드가 `source: chosen`
       인가. 레코드가 없거나 `chosen` 이 아닌 값(`verbatim` · `Chosen` · `selected` …) → red(`not_chosen`).
       레코드에 `source` 가 없거나 비면 검사 불가(exit 3). 빈 원장 조기 반환보다 **먼저** 판정한다 — 원장을
@@ -114,7 +114,7 @@ FIRST_CELL_TEXT = {
                                       "「그대로 싣지 못함」 라벨을 달았다"),
     "label_lost_but_found": "첫 칸 위반 — 원자료를 찾았는데 「찾지 못함」 라벨을 달았다",
     "label_raw_but_lost": "첫 칸 위반 — 원자료를 찾지 못했는데(%s) 원자료 라벨을 달았다",
-    "label_on_no_framing": "첫 칸 위반 — framing 없는 인터뷰인데 원자료 라벨을 달았다",
+    "label_on_no_framing": "첫 칸 위반 — framing 없는 컨텍스트 쌓기인데 원자료 라벨을 달았다",
 }
 FIRST_CELL_UNREADABLE = ("검사 불가 — framing 기록의 원문 절 · 질문 전체 절을 읽지 못해 "
                          "첫 칸을 견주지 못했다(%s)")
@@ -413,7 +413,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
         # payload(+audit)를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가
         # payload의 StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조
         # 위반(차단)이 검사 불가(사용자 선택 때만 계속)로 되돌아간다 — state는 저자가 쓰는 파일이다(작업
-        # 트리의 `<줄기>-interview.state.md` — 인터뷰가 끝날 때 brief · audit 와 함께 커밋된다).
+        # 트리의 `<줄기>-context.state.md` — 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 커밋된다).
         items = parse_section6_union(payload_text, audit_text)
         pay_ids = set(parse_section6(payload_text, "payload"))
         statements = parse_user_statements(_frontmatter(state_text))
@@ -431,7 +431,7 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
     # 위반 > 불확정 순으로 한다.
     saw_indeterminate = False
 
-    # L3 — 인터뷰를 닫은 답의 출처. 아래 빈 원장 조기 반환보다 먼저 돈다.
+    # L3 — 컨텍스트 쌓기를 닫은 답의 출처. 아래 빈 원장 조기 반환보다 먼저 돈다.
     sources: dict[str, list] = {}
     for st in statements:
         sources.setdefault(st["id"], []).append(st["source"])
@@ -444,15 +444,15 @@ def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, di
             result["not_chosen"].append(sid)
         elif not all(srcs):
             result["advisories"].append(
-                f"검사 불가 — {sid}: 인터뷰를 닫은 답인데 상태 파일의 그 기록에 source 가 없다(또는 비었다) "
+                f"검사 불가 — {sid}: 컨텍스트 쌓기를 닫은 답인데 상태 파일의 그 기록에 source 가 없다(또는 비었다) "
                 "— 고른 선택지인지 판정하지 않는다(통과로 집계하지 않는다)")
             saw_indeterminate = True
     result["not_chosen"].sort(key=lambda s: int(s[1:]))
     if result["not_chosen"]:
         label = " · ".join(f"{s}({' · '.join(CLOSING_KIND_TEXT[k] for k in kinds[s])})" for s in result["not_chosen"])
         result["advisories"].append(
-            f"인터뷰를 닫은 답 {label}이 고른 선택지로 기록되지 않았다 — 마무리 단계(finishing Step A.5)가 "
-            "그 질문을 선택지로 다시 묻는다. 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 인터뷰라 이어 갈 수 없다")
+            f"컨텍스트 쌓기를 닫은 답 {label}이 고른 선택지로 기록되지 않았다 — 마무리 단계(finishing Step A.5)가 "
+            "그 질문을 선택지로 다시 묻는다. 이 리뷰를 다른 세션에서 따로 불렀다면 끝난 컨텍스트 쌓기라 이어 갈 수 없다")
 
     # L4 · L5 — 첫 칸과 표시. L3 처럼 빈 원장 조기 반환보다 먼저 돈다.
     heads = section6_heads(payload_text)

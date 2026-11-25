@@ -1,6 +1,6 @@
 ---
 detectors: 1
-ground_truth: "설계문서 frontmatter `source_interview` 가 가리키는 파일 — `type` 이 `epic-bundle` 이면 묶음 모드(번호 항목 · 이 에픽의 몫 · 사용자 원문), `interview-brief` 면 brief 모드(§2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험), `source_interview` 가 없거나 그 밖의 종류면 brief §2 확정 항목"
+ground_truth: "설계문서 frontmatter `source_intent`(옛 문서는 `source_interview`) 가 가리키는 파일 — `type` 이 `epic-bundle` 이면 묶음 모드(번호 항목 · 이 에픽의 몫 · 사용자 원문), `context-brief`(옛 `interview-brief`) 면 brief 모드(§2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험), 두 키가 다 없거나 그 밖의 종류면 brief §2 확정 항목"
 allowed_dispositions: [decide, ask, fix, defer, drop]
 fix_anchors: ["*"]
 immutable: []
@@ -24,7 +24,7 @@ web: false
 
 ## 층 1 — 큰 그림 정합 (먼저 검토하고 `docreview-layer1` 블록으로 낸다)
 
-정답의 출처는 설계문서 frontmatter `source_interview` 가 가리키는 파일이고, 그 파일의 `type` 이 모드를 정한다 — `epic-bundle` 이면 묶음(번호 항목 · 이 에픽의 몫 · 사용자 원문), `interview-brief` 면 brief 의 §2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험, 없거나 그 밖의 종류면 brief §2 확정 항목이다. 문서가 그 정답 출처와 **하나의 그림**으로 정합한지 본다.
+정답의 출처는 설계문서 frontmatter `source_intent`(옛 문서는 `source_interview`) 가 가리키는 파일이고, 그 파일의 `type` 이 모드를 정한다 — `epic-bundle` 이면 묶음(번호 항목 · 이 에픽의 몫 · 사용자 원문), `context-brief`(옛 `interview-brief`) 면 brief 의 §2 확정 항목과 §3 열린 질문 · §4 조사 · §5 위험, 없거나 그 밖의 종류면 brief §2 확정 항목이다. 문서가 그 정답 출처와 **하나의 그림**으로 정합한지 본다.
 
 **층 1 판정 관계** — 문서가 `ground_truth`(위 모드가 정한 정답 출처)와 **하나의 그림으로 정합한가**. 어긋남은 문서 쪽의 결함이다. 단 `overdesign` 은 정합이 아니라 **과함**을 잰다 — 기준이 정답 출처의 확정이 아니라 **같은 정답 출처 파일의 §1 Goal**(묶음 모드면 묶음 `## 1. Goal · Non-goal` — 이 에픽의 Goal · 공통 목표)이라, 이 축만 정답 출처의 확정 자체를 의심할 수 있다.
 
@@ -83,7 +83,7 @@ web: false
 ### 자르지 않는 것
 
 - trust boundary 검증 · 데이터 손실 처리 · 보안 · 접근성 · 사용자가 **명시로 요청한** 동작
-- 자르라는 판정이 가리키는 것이 사용자 원문(frontmatter `source_interview` 가 가리키는 파일(brief · 에픽 묶음)의 §6)에 있는지 인용으로 대조한다 — 원문에 있으면 「자르기」가 아니라 `decide` 로 올리고 `evidence` 에 그 원문 `S<N>` 을 인용한다.
+- 자르라는 판정이 가리키는 것이 사용자 원문(frontmatter `source_intent`(옛 문서는 `source_interview`) 가 가리키는 파일(brief · 에픽 묶음)의 §6)에 있는지 인용으로 대조한다 — 원문에 있으면 「자르기」가 아니라 `decide` 로 올리고 `evidence` 에 그 원문 `S<N>` 을 인용한다.
 - 사용자가 완전판을 고집하면 짓는다 — **새 근거 없이 재논쟁하지 않는다.** 같은 판정을 새 근거 없이 다음 라운드에 다시 내는 것은 규약 위반이다.
 - 사다리는 **해답**을 줄이지 **읽기를 줄이지 않는다.**
 - 이 축은 **과함만** 본다. 충실도·방향의 결함은 다른 축이 낸다.

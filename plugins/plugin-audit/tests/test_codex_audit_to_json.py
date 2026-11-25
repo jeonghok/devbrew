@@ -151,6 +151,17 @@ class TestCodexAuditToJson(unittest.TestCase):
         for stdin_text in ("", "garbage", event("no fence here")):
             self.assertEqual(run(stdin_text)[0], 0)
 
+    def test_broken_bytes_degrade_instead_of_crash(self):
+        """깨진 바이트(\\xff)가 섞인 입력 — 표준 입력을 엄격한 UTF-8 로 열어(로캘에 기대지 않는다) 죽지 않고 강등을 낸다."""
+        import os
+        env = dict(os.environ, PYTHONIOENCODING="utf-8:strict")
+        p = subprocess.run([sys.executable, str(SCRIPT)], input=b"\x00\x01\x02notjson\xff",
+                           capture_output=True, env=env)
+        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+        d = json.loads(p.stdout.decode("utf-8"))
+        self.assertIs(d["meta"]["codex_failed"], True)
+        self.assertEqual(d["meta"]["reason"], "malformed_json")
+
     def test_plain_passes_through(self):
         payload = {"findings": [{"id": "CX-1", "axis": 3, "title": "t", "severity": "IMPORTANT",
                                  "evidence": [{"file": "a.py", "line": 1}], "plain": "쉬운 한 문장"}],

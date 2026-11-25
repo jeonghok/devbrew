@@ -102,6 +102,7 @@ yml_of() { printf '%s/docreview-codex.yaml' "$(dir_of "$1" "$SPEC_DOC")"; }
 PR="$SCRATCH/plugin"
 mkdir -p "$PR/scripts"
 cp "$ROOT/plugins/spec-distill/scripts/state_path.py"        "$PR/scripts/"
+cp "$ROOT/plugins/spec-distill/scripts/legacy_names.py"      "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/detect_codex.sh"      "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/codex-killswitch.conf" "$PR/scripts/"
 cp -L "$ROOT/plugins/spec-distill/scripts/docreview_state.py" "$ROOT/plugins/spec-distill/scripts/docreview_config.py" \
