@@ -99,10 +99,23 @@ def _missing_field(data) -> Optional[str]:
     return None
 
 
+def no_session_runs(result: dict) -> int:
+    """모든 실행의 turns 가 정수 0 이면 그 실행 수, 아니면 0."""
+    runs = [r for c in result["cases"] for r in c["arms"]["with"]]
+    if runs and all(isinstance(r, dict) and _is_int(r.get("turns"))
+                    and r["turns"] == 0 for r in runs):
+        return len(runs)
+    return 0
+
+
 def summary_line(rc: int, result: Optional[dict],
                  why: Optional[str]) -> Tuple[str, int]:
     if result is None:
         return not_run(why or "결과 파일이 없다"), (rc if rc != 0 else 1)
+    idle = no_session_runs(result)
+    if idle:
+        return not_run("세션이 시작되지 않았다"
+                       "(실행 %d회 모두 0턴)" % idle), (rc if rc != 0 else 1)
     if rc not in (0, 1, 2):
         return not_run("평가 명령이 종료 코드 %d 로 끝났다" % rc), rc
     agg = result["aggregates"]

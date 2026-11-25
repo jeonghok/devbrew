@@ -48,6 +48,14 @@ def _result(passed, cost, model, runs_per_case, partial=False):
     }
 
 
+def _turns_result(passed, turns_per_case):
+    data = _result(passed, 0.3, "sonnet", [0] * len(turns_per_case))
+    for case, turns in zip(data["cases"], turns_per_case):
+        case["arms"]["with"] = [
+            {"passed": t > 0, "error": None, "turns": t} for t in turns]
+    return data
+
+
 class RunEvalsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -74,6 +82,8 @@ class RunEvalsTest(unittest.TestCase):
             ("ok", _result(2, 0.5234, "sonnet", [3, 3])),
             ("fail", _result(1, 0.4, None, [3, 3])),
             ("partial", _result(0, 1.003, "sonnet", [1, 2], True)),
+            ("zero_turns", _turns_result(0, [[0, 0], [0]])),
+            ("one_zero_turn", _turns_result(1, [[0, 3], [3, 3]])),
         ):
             cls.results[name] = os.path.join(cls.root, name + ".json")
             with open(cls.results[name], "w", encoding="utf-8") as f:
@@ -210,6 +220,25 @@ class RunEvalsTest(unittest.TestCase):
             self.last_line(p),
             "plugin-evals: 부분 · 케이스 0/2 · 실행 3회 · $1.00 · sonnet")
         self.assertEqual(p.returncode, 2)
+
+    def test_all_zero_turns_is_not_run(self):
+        for rc in (1, 0):
+            with self.subTest(rc=rc):
+                p = self.run_script([], result="zero_turns", rc=rc)
+                last = self.last_line(p)
+                self.assertEqual(
+                    last, "plugin-evals: 돌지 못함 — 세션이 시작되지 않았다"
+                          "(실행 3회 모두 0턴)")
+                self.assertNotIn("실패", last)
+                self.assertNotIn("케이스", last)
+                self.assertEqual(p.returncode, 1)
+
+    def test_some_zero_turns_is_fail_line(self):
+        p = self.run_script([], result="one_zero_turn", rc=1)
+        self.assertEqual(
+            self.last_line(p),
+            "plugin-evals: 실패 · 케이스 1/2 · 실행 4회 · $0.30 · sonnet")
+        self.assertEqual(p.returncode, 1)
 
     def test_no_result_rc0_is_not_run(self):
         p = self.run_script([], rc=0)
