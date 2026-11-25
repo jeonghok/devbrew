@@ -207,7 +207,7 @@ done <<<"$SMK"
 # 철학 P3 문장과 design-doc 프로필의 대안 비교 줄
 PHIL="$(cat "$REPO_ROOT/docs/philosophy/devbrew-harness-philosophy.md")"
 assert_not_contains "$PHIL" '자리 넷' "철학 문서: 옛 「자리 넷」 0건(음)"
-assert_contains "$PHIL" '문서 리뷰 자리 셋(design doc · brief · seed)' "철학 문서: 리뷰 자리는 셋(양)"
+assert_contains "$PHIL" '문서 리뷰 자리 셋(design doc · context brief · intent seed)' "철학 문서: 리뷰 자리는 셋(양)"
 assert_contains "$PHIL" '`generic` 프로필은 엔진 테스트만 읽는다' "철학 문서: generic 은 엔진 테스트만 읽는다(양)"
 DD_TXT="$(cat "$DD")"
 assert_contains "$DD_TXT" 'Rejected Alternatives 의 각 대안이 채택안과 같은 기준으로 비교됐는가 — 한 단어로만 기각했으면 지적' "design-doc 프로필: approaches_comparison 줄에 같은 기준 비교(양)"
