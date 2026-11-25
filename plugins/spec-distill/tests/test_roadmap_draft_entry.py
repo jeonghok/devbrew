@@ -432,14 +432,14 @@ class TestEntry(Base):
         rdir = os.path.dirname(os.path.join(str(self.repo), "alias", ROADMAP_REL))
         self.assertIn(self.FORM + self.INSIDE + rdir + ": 링크를 거친다 (" + str(self.repo / "alias") + ")\n", out)
 
-    def test_split_value_crlf_line_ok(self):
-        # 백틱 없이 쓴 §7 줄이 CRLF 로 끝나도 커밋 펜스(`[[:space:]]*$`)처럼 끝의 CR 을 떼고 읽는다
+    def test_split_value_trailing_space_class_ok(self):
+        # 백틱 없이 쓴 §7 줄 끝의 공백 글자(폼 피드 + CRLF)를 커밋 펜스 sed 의 `[[:space:]]*$` 처럼 떼고 읽는다
         self.build()
         brief = Path(self.brief)
         text = brief.read_text(encoding="utf-8")
         old = "- `" + SPLIT_LINE + "`\n"
         self.assertEqual(text.count(old), 1)
-        brief.write_bytes(text.replace(old, "- " + SPLIT_LINE + "\r\n").encode("utf-8"))
+        brief.write_bytes(text.replace(old, "- " + SPLIT_LINE + "\f\r\n").encode("utf-8"))
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "crlf")
         rc, out, err = self.run_entry()
