@@ -228,7 +228,7 @@ for w in 1 2; do
 done
 
 # C5: 규약은 brief가 아니라 호출 프롬프트(= 다음 세션 줄)에 산다
-c5_par="$(awk '/^\*\*규약의 거처 \(C5\)\.\*\*/{f=1} f&&/^$/{exit} f' <<<"$b3_block")"
+c5_par="$(awk '/^\*\*규약의 거처\.\*\*/{f=1} f&&/^$/{exit} f' <<<"$b3_block")"
 grep -qE '호출 프롬프트|invocation prompt' <<<"$c5_par" \
   && ok "C5: 규약의 거처가 호출 프롬프트로 명시됨" \
   || no "C5: 규약이 brief에 실리지 않는다는 명시가 없다"
@@ -1247,7 +1247,7 @@ while :; do
   [ -n "$_hit" ] || break
   _rest="${_rest#*"$_hit"}"
   fin_rule_n=$((fin_rule_n + 1))
-  _c="$_hit${_rest%%(*}"
+  _c="$_hit${_rest%%. *}"
   _c="$(printf '%s' "$_c" | sed -e 's/[[:space:]]*$//')"
   if [ "$_c" != "$fin_formula_canon" ]; then
     fin_rule_bad=$((fin_rule_bad + 1)); fin_rule_got="$_c"
@@ -1505,7 +1505,7 @@ grep -qE 'path \(a\|b\|c\|d\)' "$TPL" && no "AC10: 템플릿 §5 에 경로 (c) 
 # 「거스를 것」이 되고, 다음 사람이 숫자만 맞춰 통과시키는 길이 열린다. 대신 **파일 안의 두
 # 수를 서로 지배시킨다**: 선언한 수(헤딩·산문)가 실제 표 행 수와 같아야 한다. 어느 쪽을
 # 건드려도 짝이 어긋나면 RED 다(행 삭제·행 추가·숫자 변경 세 방향 전부).
-c43_block="$(awk '/^## C43 /{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+c43_block="$(awk '/^## [0-9][0-9]*-path routing/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 # AC10 산출자 — 게이트가 요구하는 `derived:internal_research` 를 «누가 원장에 넣는가». 이 지시가
 # 없으면 게이트는 레포 주장을 실은 brief 를 막고, 저자는 종료 시점에 그것을 고칠 수 없다(닫힘
 # 규칙이 사용자 발화를 요구한다) — 게이트가 조사를 한 것을 벌한다. 소비자는 Task 16 의 술어 ④다.
@@ -1531,17 +1531,17 @@ grep -qF '어느 자리든(경로 (a) · repo-researcher · coverage-mapper · b
 i2_prober="$(awk '/^## blind-spot-prober dispatch/{f=1;next} /^## /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 i2_r3="$(awk '/^### R3 — Steelman/{f=1;next} /^##+ /{f=0} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 i2_repo="$(awk '/^\*\*`repo-researcher` dispatch\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
-i2_d6="$(awk '/^\*\*첫 dispatch 의 검증 의무\(D6\)\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
+i2_d6="$(awk '/^\*\*첫 dispatch 의 검증 의무\*\*/{f=1} f&&/^$/{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' ')"
 for pair in "D6:$i2_d6" "prober:$i2_prober" "steelman(R3):$i2_r3" "repo:$i2_repo"; do
   lbl="${pair%%:*}"; body="${pair#*:}"
-  { [[ -n "$body" ]] && grep -qF 'C43 절의 internal_research admit' <<<"$body"; } \
-    && ok "AC10(산출자·포인터): ${lbl} 절이 C43 절의 admit 을 가리킨다" \
+  { [[ -n "$body" ]] && grep -qF '3-path routing 절의 internal_research admit' <<<"$body"; } \
+    && ok "AC10(산출자·포인터): ${lbl} 절이 질문 경로 절의 admit 을 가리킨다" \
     || no "AC10(산출자·포인터): ${lbl} 절이 비었거나 admit 포인터가 없다"
 done
 # AC20 — D6 의무의 내용과 극성. 포인터만 물면 「repo_claims 를 산출하지 않는다」로 뒤집어도 통과한다(qg iter 1).
 for lit in '**레포로 확인 가능한 항목마다** `repo_claims` 를 산출해 V1 을 태운다' \
            '「사용자만 답할 수 있는 것」과 「인과 추정」은 대상이 아니다' \
-           '그 문단이 비어 있으면(규약 위반 seed — 위 슬롯 주석이 명시 허용) 이 의무는 미발동이고, 그 사실을 audit §5 에 한 줄로 공시한다.'; do
+           '그 문단이 비어 있으면 이 의무는 미발동이고, 그 사실을 audit §5 에 한 줄로 공시한다.'; do
   grep -qF -- "$lit" <<<"$i2_d6" && ok "AC20(D6): «${lit}»" || no "AC20(D6): 의무 문구 «${lit}» 부재 또는 반전"
 done
 grep -qF '그 차원은 레포 주장의 처분 S 로 닫고' <<<"$c43_flat" \
@@ -1568,7 +1568,7 @@ grep -qF '본체가 직접 조사한다' <<<"$c43_block" \
   && ok "R1/F: 계약 배달 실패 → 본체 직접 조사로 강등" || no "R1/F: repo-researcher 강등 경로 부재"
 
 c43_rows="$(grep -cE '^\| \([a-z]\) \*\*' <<<"$c43_block" || true)"
-c43_head_n="$(sed -n 's/^## C43 \([0-9][0-9]*\)-path.*/\1/p' <<<"$c43_block" | head -1)"
+c43_head_n="$(sed -n 's/^## \([0-9][0-9]*\)-path.*/\1/p' <<<"$c43_block" | head -1)"
 c43_prose_n="$(sed -n 's/.*다음 \([0-9][0-9]*\) 경로 중.*/\1/p' <<<"$c43_block" | head -1)"
 # 양성 대조 — 넷 중 하나라도 추출에 실패하면 아래 «같다» 비교가 공허해진다(빈 문자열끼리
 # 같다고 통과할 수 있다). 앵커가 바뀌어 절을 못 뜨는 경우도 여기서 잡힌다.

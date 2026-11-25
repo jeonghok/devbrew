@@ -4,7 +4,7 @@
 
 ## 이 플러그인이 하는 일
 
-흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/intent/YYYY-MM-DD-<topic>-context.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-context.audit.md`(5섹션, `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-context.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
+흐릿한 요청을 한국어 질문 라운드와 조사로 다듬어(컨텍스트 쌓기) brainstorming 에 넘길 문서(context brief)로 만들고, 그 뒤에 나온 설계문서는 고칠 수 없는 독립 리뷰어가 검토합니다. 컨텍스트 쌓기는 «지금 이해 · 다음 결정 · 질문» 형식으로 진행하고, 필요하면 웹에서 비슷한 사례를 찾고(횟수 제한) 약한 방향은 반대 입장을 가장 강하게 세워 시험합니다(steelman). brief 는 **2파일 쌍**으로 나옵니다 — 본문 `docs/superpowers/intent/YYYY-MM-DD-<topic>-context.md`(결론부터 쓰는 **8섹션**, `templates/interview-brief-template.md`)와 기록 `…-context.audit.md`(섹션 구성은 `templates/interview-audit-template.md`)이고, `.audit.md` 이름은 본문 파일명에서 따라 정해집니다. 컨텍스트 쌓기의 진행 기록은 같은 줄기의 `…-context.state.md` 에 남아 새 세션에서 `/spec-distill:context-build @<그 파일>` 로 이어 갈 수 있고, 컨텍스트 쌓기가 끝날 때 brief · audit 와 함께 한 커밋으로 남습니다(기본 브랜치에서는 커밋하지 않고 세 경로를 보입니다 — 원자료를 찾았으면 커밋되지 않은 framing 기록 · seed 도 함께 보입니다).
 
 ## 쓰는 법
 
@@ -21,7 +21,7 @@
 /context-build todo 앱 만들어줘
 ```
 
-`context-build` skill 이 «지금 이해 · 다음 결정 · 질문 하나» 형식으로 첫 라운드를 시작합니다.
+`context-build` skill 이 «지금 이해 · 다음 결정 · 질문» 형식으로 첫 라운드를 시작합니다.
 
 9.0.0 에서 호출 이름이 바뀌었다 — 옛 이름과 옛 명령 줄은 CHANGELOG.md 의 9.0.0 절에 있다.
 
@@ -138,7 +138,7 @@
 
 ### Roadmap absorption (C-numbers)
 
-- **C43** 3-path Socratic routing (factual auto-confirm / judgment→user / ontological, 라벨 강제 없음).
+- **3-path routing** — Socratic routing (factual auto-confirm / judgment→user / ontological, 라벨 강제 없음).
 - **C1** 사용자-발화 floor 탈출구 — Unbounded-autonomy 가드(사용자가 언제든 종료를 요청하면 미충족 floor를 사용자-승인 박제로 닫고 payload §3 Open Questions로 이월).
 - **C4** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem). 둘 다 첫 호출은 필수(하한)이고 그 뒤는 조사 호출 상한 하나가 총량을 묶는다.
 
@@ -443,7 +443,7 @@ state_branch: 켬
 - **Python 3** — 스킬이 부르는 `scripts/*.py` 는 사용자의 `python3` 로 돈다. 이 플러그인에는 훅이 없어
   devbrew 의 출하 Python 바닥(루트 README 「Python」)을 집행하는 해석기를 거치지 않는다. 문서 리뷰 엔진은
   PyYAML 을 쓴다 — 없으면 리뷰 진입의 원장 정리는 「셀 수 없음(pyyaml 없음)」 을 내고 아무것도 지우지 않는다.
-- **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 context-build 는 brief 를 완료하고 선택지 셋의 끝 질문(확정하고 끝낸다 · 확정 목록 수정 · brief만 종료)으로 확정 · 커밋까지 간 뒤 다음 단계로 넘기지 않고 끝낸다 (단독 완결). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 컨텍스트 쌓기도 돌지 않는다.
+- **superpowers** (외부) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 context-build 는 brief 를 완료하고 선택지 셋의 끝 질문(확정하고 끝낸다 · 확정 목록 수정 · brief만 종료)으로 끝낸다 — 「확정하고 끝낸다」 는 확정한 뒤 커밋하고, 「brief만 종료」 는 확정하지 않고 커밋하며, 어느 쪽도 설계(brainstorming)로 넘기지 않는다 — 나눈 일이면 로드맵 잡기 줄을 낸다 (단독 완결). 지휘자(`/spec-distill:epic-conductor`)와 손으로 따르는 지휘 절차는 superpowers 가 없으면 진입에서 멈춘다 — Claude Code 의 `/plugin` 에서 superpowers 를 설치한 뒤 다시 부른다. Claude Code `plugin.json` 의 `dependencies` 로는 선언하지 않는다 — 없으면 이 플러그인 전체가 꺼져 컨텍스트 쌓기도 돌지 않는다.
 - **quality-gates** (같은 마켓플레이스, optional) — 지휘자가 자리 넷(spec 승인 앞 · 머지 앞 · 로드맵 끝 · 이름으로 청한 리뷰)에서 담당자를 시켜 `/quality-gates:quality-pipeline range <시작>..<끝> --origin <원문> --answered <절대경로>` 를 부른다. `--answered` 파일은 그 로드맵의 지난 리뷰 기록에 적힌 답(「의도다」 · 「잘못 골랐다」)을 대상을 가리지 않고 모아 `scripts/qg_answered.py` 가 만들고, qg 는 근거가 그대로인 질문을 다시 묻지 않고 넘어간다(좁은 재리뷰도 같다). 옛 qg 가 `--answered` 를 모르면 담당자가 그것만 빼고 한 번 다시 부르고 「답 이어지기 없이 돌았다」 를 알린다. 지휘자는 qg 가 돌려주는 꼴 3판만 읽고(2판이 오면 읽지 못했다고 알린다), 리뷰 결과와 의도 점검 질문을 맥락 머리 네 줄로 시작하는 글로 보인 뒤 질문마다 왜 묻는지를, 다시 묻는 질문에는 전에 한 답도 함께 보여 묻는다. 설치돼 있지 않으면 그 자리마다 「품질 게이트 없이 간다 — quality-gates 가 설치돼 있지 않다」를 알리고 진행한다. qg 의 문서 경로 설정이 `docs/` 를 거르는 레포에서는 spec 승인 앞과 로드맵 끝의 리뷰가 「리뷰할 diff 없음」 건너뜀으로 끝난다.
 - **project-init** (같은 마켓플레이스, optional) — 지휘자 상태 브랜치를 만들기 전에 그 플러그인이 두는 브랜치 규칙 문서(`docs/git-workflow/branch-strategy.md`)의 이름 정규식을 읽는다. 문서가 없으면 그대로 만든다.
 - **gh CLI** (외부, 필수) — 지휘자가 PR 캐시를 채우고(`ledger pr-refresh`) 머지됨을 판정할 때 쓴다. 호출마다 `origin` 에서 도출한 `<호스트>/<owner>/<repo>` 를 명시한다(`-R`, `-R` 을 받지 않는 레포 조회는 인자로). 스크립트와 문서의 bash 펜스가 gh 를 찾고 부르는 자리는 `scripts/gh_repo.py` 하나다(지휘 절차서가 글로 적은 PR 열기는 gh 를 직접 부르고, 레포는 그 모듈의 `slug` 로 준다). 없으면 gh 를 쓰는 진입(지휘자 · 분해 뒤 로드맵 흐름)에서 멈추고 설치 방법을 보인다. 인증이 안 됐으면 첫 gh 호출에서 `gh auth login --hostname <호스트>` 를 보이고 멈춘다. 지원하는 레포는 `origin` 이 GitHub(gh 가 다루는 호스트)인 레포다 — `origin` 을 읽지 못하거나 gh 가 그 레포를 다루지 못하면 이유를 보이고 멈춘다. 상태줄과 `/spec-distill:roadmap-status` 는 gh 를 부르지 않고 PR 캐시만 읽는다. 나눈 일은 로드맵 잡기가 끝맺음에서 커밋 뒤 브랜치를 push 하고 gh 로 PR 을 열고, 사용자가 고르면 PR 주소의 레포가 `origin` 인지 대조하고 CI 검사가 끝난 뒤 PR 을 열 때 push 한 끝 커밋에 묶어 머지한 다음, PR 이 실제로 머지됐는지 확인하고 `origin` 을 받는다 — 지휘자가 로드맵을 기본 브랜치에서 읽기 때문이다. gh 가 없거나 실패하면 그 걸음만 건너뛰고 직접 머지하라고 알린다.
