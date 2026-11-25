@@ -106,6 +106,25 @@ open(dst, "w", encoding="utf-8").write("\n".join(out))
 PY
 assert_eq "$(last_bullet "$LB_TMP")" "   - 덧붙인 불릿" "나갈 길(양성 대조): 멈춤 불릿 뒤에 불릿을 더하면 그 불릿이 마지막으로 잡힌다"
 rm -f "$LB_TMP"
+w9_under_stop() {   # w9_under_stop <finishing.md> → 멈춤 불릿 바로 다음 줄이 한 칸 더 들여쓴 구조 사유 불릿이면 yes
+  python3 - "$1" "$STOP_BULLET" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+idx = [n for n, ln in enumerate(lines) if ln.startswith(sys.argv[2])]
+nxt = lines[idx[0] + 1] if len(idx) == 1 and idx[0] + 1 < len(lines) else ""
+print("yes" if nxt.startswith("     - 그 `[raw_source]` 줄이 framing 기록의 절 구조 사유") else "no")
+PY
+}
+assert_eq "$(w9_under_stop "$ROOT/$FIN")" "yes" "나갈 길: 구조 사유 불릿이 멈춤 불릿 바로 아래 하위 불릿이다"
+W9_TMP="$(mktemp)"; [ -n "$W9_TMP" ] || { no "mktemp 실패"; finish; exit 1; }
+python3 - "$ROOT/$FIN" "$W9_TMP" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+s = open(src, encoding="utf-8").read()
+open(dst, "w", encoding="utf-8").write(s.replace("\n     - 그 `[raw_source]` 줄이 framing", "\n   - 그 `[raw_source]` 줄이 framing", 1))
+PY
+assert_eq "$(w9_under_stop "$W9_TMP")" "no" "나갈 길(양성 대조): 구조 사유 불릿을 같은 들여쓰기로 되돌리면 하위 불릿 단언이 실패한다"
+rm -f "$W9_TMP"
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
 has "$RB" '상태 파일을 읽지 못함 · 원자료를 찾았는데 `--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기' "종료 2 목록: 괄호가 「원자료를 찾았는데 --raw-audit 없음」 을 번들 머리말과 같은 차례로 댄다"
