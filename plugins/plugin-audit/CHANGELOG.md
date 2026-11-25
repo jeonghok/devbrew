@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.2] — 2026-11-23
+
+### Fixed
+- codex 감사 결과 추출기(`scripts/codex_audit_to_json.py`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
+
 ## [1.10.1] — 2026-11-22
 
 ### Removed
