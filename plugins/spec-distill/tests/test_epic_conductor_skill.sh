@@ -33,7 +33,7 @@ for lit in 'conductor_sync.py" --roadmap "<로드맵>"' '세션 번호는 스스
            '`AskUserQuestion`' '옛 판이 쓴 PR 캐시 줄' '「옛 PR 캐시 다시 채우기」' '그 밖 모두' '기본 브랜치 확인 실패' '표지를 풀고'; do
   assert_contains "$S3" "$lit" "맞추기 명령 절: $lit"
 done
-for lit in 'conductor_ledger.py" claim' 'conductor_ledger.py" takeover' 'state_path.py" session-id' 'control_plane.py" show' 'claim_rc' 'default_rc' 'repo_defaults.py'; do
+for lit in 'conductor_ledger.py" claim' 'conductor_ledger.py" takeover' 'state_path.py" session-id' 'control_plane.py" show "<로드맵>"' 'claim_rc' 'default_rc' 'repo_defaults.py'; do
   assert_not_contains "$S3" "$lit" "맞추기 명령 절: 옛 펜스 흔적이 없다 — $lit"
 done
 APP="$(sec '### 4. 규모 공시')"
@@ -79,12 +79,13 @@ b = t.index("### 5. ")
 parts = t[a:b].split("`" * 3)
 fs = [parts[i] for i in range(1, len(parts), 2) if parts[i].startswith("bash")]
 def n(k): return sum(1 for f in fs if k in f)
-print("%d %d %d %d %d %d" % (len(fs), n("conductor_sync.py"), n("check_deps.py"), n("conductor_ledger.py\" claim") + n("conductor_ledger.py\" takeover"), n("state_path.py\" session-id"), n("control_plane.py\" show")))'
-assert_eq "$(python3 -I -c "$ENTRY_FENCES" < "$SK")" "5 1 1 0 0 0" "AC13: 진입 bash 펜스 = 1.5 하나 · 2 의 둘(하나만 돈다) · 맞추기 명령 하나 · 다시 채우기 하나(갈래) — claim · 세션 id · show 가 없다"
+exc = sum(1 for f in fs if "pr-refresh" in f or "show --tasks" in f)
+print("%d %d %d %d %d %d %d" % (len(fs), n("conductor_sync.py"), n("check_deps.py"), n("conductor_ledger.py\" claim") + n("conductor_ledger.py\" takeover"), n("state_path.py\" session-id"), n("control_plane.py\" show \"<로드맵>\""), exc))'
+assert_eq "$(python3 -I -c "$ENTRY_FENCES" < "$SK")" "6 1 1 0 0 0 2" "AC13: 진입 bash 펜스 = 1.5 하나 · 2 의 둘(하나만 돈다) · 맞추기 명령 하나(정상 길 셋) + 갈래 둘(다시 채우기 · 읽기 전용 지도) — claim · 세션 id · 옛 show 가 없다"
 mutated="$(python3 -I -c 'import sys
 t = sys.stdin.read()
 print(t.replace("### 4. ", "`" * 3 + "bash\npython3 \"$SD/scripts/state_path.py\" session-id\n" + "`" * 3 + "\n\n### 4. ", 1))' < "$SK")"
-assert_eq "$(printf '%s\n' "$mutated" | python3 -I -c "$ENTRY_FENCES")" "6 1 1 0 1 0" "양성 대조: 진입에 세션 id 펜스가 생기면 AC13 락이 잡는다"
+assert_eq "$(printf '%s\n' "$mutated" | python3 -I -c "$ENTRY_FENCES")" "7 1 1 0 1 0 2" "양성 대조: 진입에 세션 id 펜스가 생기면 AC13 락이 잡는다"
 assert_contains "$BODY" '손 절차 파일(`conducting-manual.md`)' "꺼짐: 손 절차 파일을 가리킨다"
 assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손 절차 파일\(`conducting-manual\.md`\).*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차 파일을 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
@@ -236,6 +237,14 @@ print(t.replace(sys.argv[1], sys.argv[2], 1))' "$from" "$to" < "$SK" | python3 -
   [ "$applied" = "1" ] && [ -n "$got" ] && [ "$got" != "ok" ] && ok "양성 대조: 「${from}」 를 바꾸면 갈래 락이 잡는다" || no "양성 대조: 「${from}」 를 바꿔도 갈래 락이 통과한다"
 done
 assert_not_contains "$S3" '옛 시작 승인' "3절: 옛 시작 승인 언급이 없다"
+# [fix 1] 5 는 두 뜻이다 — 멈춤 줄의 구간으로 가른다 · 읽기 전용 길은 지도 펜스를 돈다 · 새 세션을 열라고 하지 않는다
+for lit in '`멈춤 — 표지:`' '`멈춤 — 기본 브랜치:`' 'control_plane.py" show --tasks "<로드맵>"' '새 세션을 열라고 하지 않는다' '`9 × 남은 에픽 수 + 1`'; do
+  assert_contains "$(sec '### 3. 맞추기 명령')$(sec '### 4. 규모 공시')" "$lit" "맞추기 명령 절: $lit"
+done
+MAPFENCE="$(printf '%s\n' "$S3" | awk '/^```bash/{f=1;n++;next} /^```/{f=0} f&&/show --tasks/{print}')"
+assert_eq "$(printf '%s\n' "$MAPFENCE" | grep -c .)" "1" "3절: 읽기 전용 지도 펜스가 하나다"
+assert_not_contains "$MAPFENCE" 'conductor_ledger.py' "3절: 지도 펜스는 기계 상태를 쓰지 않는다(읽기 전용)"
+assert_contains "$(sec '### 5. 지휘 순환')" '걸음 1 의 맞추기 명령은 진입 3 에서 돌았다' "5절: 진입의 맞추기가 걸음 1 의 맞추기다(다시 돌리지 않는다)"
 assert_not_contains "$(cd_all)" '옛 시작 승인이 지워진다' "conducting: 옛 시작 승인 괄호가 없다"
 assert_contains "$(cd_all)" '다시 채운 뒤 `ledger release` → `ledger claim` 으로 표지를 다시 잡는다' "conducting 걸음 1: 다시 채운 뒤 표지를 풀었다 다시 잡는다"
 assert_contains "$(cat "$AG")" '내는 형식은 아래 `## 내는 것`' "agent: 출력 형식은 내는 것 절"

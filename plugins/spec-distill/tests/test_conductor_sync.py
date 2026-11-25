@@ -237,6 +237,20 @@ class Stops(SyncRepo):
         for name in FIRST_ONLY:
             self.assertIn(name, heads(out), out)
 
+    def test_stop_default_branch_differs(self):   # 리뷰 I3 — 기본 브랜치 구간이 멈추면 잡은 표지를 풀고 repo_defaults 의 코드로 끝난다
+        remote = self.t / "remotes" / "me" / "r.git"
+        self.git(remote, "symbolic-ref", "HEAD", "refs/heads/feature/e3")   # 원격 HEAD 만 로컬 기본 브랜치(trunk)와 다르게
+        self.addCleanup(self.git, remote, "symbolic-ref", "HEAD", "refs/heads/trunk")
+        want, _o, _e = self.run_py(SCRIPTS / "repo_defaults.py", "default-branch", "--check-remote")
+        self.assertEqual(want, 5)
+        rc, out, err = self.sync()
+        self.assertEqual(rc, want, out + err)
+        self.assertIn("\n멈춤 — 기본 브랜치: ", out)
+        self.assertNotIn("PR 캐시", heads(out))   # 뒤 구간은 돌지 않는다
+        got, text = self.ledger("claim", "--roadmap", RM, "--session", OTHER)   # 풀렸으면 다른 세션이 새로 잡는다
+        self.assertEqual(got, 0, text)
+        self.assertIn("acquired", text)
+
     def test_stop_no_session(self):   # AC12
         env = {k: v for k, v in self.env.items() if k not in ("DEVBREW_SPEC_DISTILL_SESSION_ID", "CLAUDE_CODE_SESSION_ID")}
         self.assertFalse(self.marker().exists())
