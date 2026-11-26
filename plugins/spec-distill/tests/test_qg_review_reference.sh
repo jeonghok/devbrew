@@ -821,4 +821,33 @@ assert_contains "$PH" '「두 번까지」 상한(`plugins/spec-distill/skills/e
 assert_not_contains "$PH" 'qg fix-loop 의 반복 상한' "IR3 음성 짝: 사라진 qg fix-loop 상한을 인용하지 않는다"
 once "$RETX" '- **두 번까지.**' "IR3 짝: 인용하는 「두 번까지」 가 되돌리기에 실재한다"
 
+# R7 §4 · AC17 — 지휘 절차 쪽 스위트 잠금: 호출 줄 · 다시 부르기 · 겹침 문장 · 기계 상태 행
+# call_line_suite_lock — 호출 줄이 잠금 자리를 싣고, 값은 작은따옴표로 감싼다(qg 는 인자 글을 셸이 나눈 대로 읽는다 — 빈칸 든 경로가 쪼개지지 않게)
+CFENCE="$(fence_with "$CALL" 'quality-pipeline range')"
+assert_contains "$CFENCE" "--suite-lock '<스위트 잠금 경로>'" "call_line_suite_lock: 호출 줄에 --suite-lock 과 따옴표로 감싼 값 자리"
+assert_eq "$(printf '%s\n' "$CFENCE" | grep -oF -- '--suite-lock' | wc -l | tr -d ' ')" "1" "call_line_suite_lock: 호출 줄에 --suite-lock 이 한 번"
+once "$CALL" '값은 보내기 전에 `ledger suite-lock --roadmap <로드맵>` 의 첫 줄로 얻은 그 로드맵의 공유 스위트 잠금 경로' "call_line_suite_lock: 값은 ledger suite-lock 첫 줄(레포 전용 경로를 박지 않는다)"
+# reinvoke_per_unknown_arg — 모르는 인자마다 한 번씩 · 많아야 두 번 · 값 통째로 · 뺀 인자마다 보고 줄
+DFENCE="$(fence_with "$DISP" '너는 qg 리뷰 담당자다')"
+[ -n "$DFENCE" ] && ok "reinvoke_per_unknown_arg: 보내는 글 펜스를 읽었다" || no "reinvoke_per_unknown_arg: 보내는 글 펜스가 없다 — 아래 단언이 공허하다"
+once "$DFENCE" '멈춘 줄이 이름으로 든 인자와 그 값을 뺀 같은 줄로 다시 부른다 — 모르는 인자마다 한 번씩, 많아야 두 번.' "reinvoke_per_unknown_arg: 모르는 인자마다 한 번씩 · 많아야 두 번"
+once "$DFENCE" '`--suite-lock` 을 빼면 따옴표로 감싼 값까지 통째로 뺀다 — 값의 일부만 남긴 줄로 부르지 않는다.' "reinvoke_per_unknown_arg: 잠금 인자는 값까지 통째로 뺀다"
+once "$DFENCE" '멈춘 줄이 든 이름이 호출 줄의 `--answered` · `--suite-lock` 이 아니면 다시 부르지 않고 그 줄을 보고한다.' "reinvoke_per_unknown_arg: 호출 줄에 없는 이름(값 조각)이면 다시 부르지 않는다"
+once "$DFENCE" '「답 이어지기 없이 돌았다 — 깔린 quality-gates 가 `--answered` 를 모른다」' "reinvoke_per_unknown_arg: --answered 보고 줄"
+once "$DFENCE" '「잠금 없이 돌았다 — 깔린 quality-gates 가 `--suite-lock` 을 모른다」' "reinvoke_per_unknown_arg: --suite-lock 보고 줄"
+assert_not_contains "$ALL" '한 번만 다시 부르고' "reinvoke_per_unknown_arg 음성: 「이미 답한 것」 인자 하나에 한 번이던 옛 규칙이 없다(양성 짝: 모르는 인자마다 한 번씩)"
+# overlap_sentence — 겹침은 qg 가 낸 줄을 그대로 보인다 · 보내기와 대조를 엇갈리게 하는 두 규칙은 그대로
+SLOCK="$(awk '/^```/{q=!q} !q&&$0=="### 스위트 잠금"{f=1;next} f&&!q&&/^##/{exit} f' "$QR")"
+[ -n "$SLOCK" ] && ok "overlap_sentence: ### 스위트 잠금 절을 읽었다" || no "overlap_sentence: ### 스위트 잠금 절이 없다 — 아래 단언이 공허하다"
+once "$SLOCK" 'qg 가 낸 겹침 줄을 그대로 보인다' "overlap_sentence: qg 가 낸 겹침 줄을 그대로 보인다"
+assert_not_contains "$ALL" '경합일 수 있다고 보고에 적어' "overlap_sentence 음성: 지휘자가 경합을 따로 적던 옛 문장이 없다(양성 짝: 겹침 줄을 그대로)"
+once "$SLOCK" "$L_suitewait" "overlap_sentence 짝: 잠금이 잡혀 있으면 보내지 않는 규칙은 그대로"
+once "$SLOCK" '다른 PR 의 스위트 대조와 qg 담당자 보내기가 겹치면 기본은 스위트 대조를 먼저 하고 그 대조가 끝난 뒤 보내는 것이다' "overlap_sentence 짝: 스위트 대조를 먼저 하는 규칙은 그대로"
+# ontology_names_qg — 기계 상태 행의 잠금 문장이 qg 를 쓰는 쪽으로 든다
+ONT="$ROOT/plugins/spec-distill/references/roadmap-ontology.md"
+MROW="$(awk 'index($0, "| 기계 상태 |")==1' "$ONT")"
+[ -n "$MROW" ] && ok "ontology_names_qg: 기계 상태 행을 읽었다" || no "ontology_names_qg: 기계 상태 행이 없다 — 아래 단언이 공허하다"
+assert_contains "$MROW" '지휘자 스위트 대조 · 하위 agent 전체 스위트 · quality-gates 의 차등 테스트가 같이 쓴다' "ontology_names_qg: 잠금을 쓰는 쪽에 quality-gates 의 차등 테스트"
+assert_contains "$MROW" '하위에게 싣고 qg 호출 줄에도 싣는다' "ontology_names_qg: 잠금 경로를 qg 호출 줄에도 싣는다"
+
 finish

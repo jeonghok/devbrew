@@ -56,16 +56,16 @@ LIST="$(lead "$SF" '지적 목록:')"
 [ -n "$LIST" ] && ok "지적 목록 줄을 읽었다" || no "지적 목록 줄이 없다 — 아래 단언이 공허하다"
 
 # call-line-answered (AC15) — 지휘자가 내는 호출 줄은 --answered 를 붙인 한 꼴
-CALL_LINE='/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로> --answered <「이미 답한 것」 파일의 절대경로>'
-assert_eq "$(fenced "$CALL" 'quality-pipeline range')" "$CALL_LINE" "call-line-answered: 호출 줄 펜스가 --answered 를 붙인 그 한 줄뿐"
+CALL_LINE="/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로> --answered <「이미 답한 것」 파일의 절대경로> --suite-lock '<스위트 잠금 경로>'"
+assert_eq "$(fenced "$CALL" 'quality-pipeline range')" "$CALL_LINE" "call-line-answered: 호출 줄 펜스가 --answered · --suite-lock 을 붙인 그 한 줄뿐"
 one "$CALL" "$CALL_LINE" "call-line-answered: 호출 줄 절에 그 줄이 한 번"
 one "$WHOLE" 'quality-pipeline range' "call-line-answered: 파일 전체에서 quality-pipeline range 가 한 번(다른 꼴의 호출 줄이 없다)"
 
-# old-qg-retry-once (AC8 · AC15 담당자 쪽) — 호출 줄 락과 따로 묶는다
-RETRY='qg 가 `--answered` 를 모르는 인자라고 멈추면 그 인자와 값을 뺀 같은 줄로 한 번만 다시 부르고, 마지막 보고 첫머리에 「답 이어지기 없이 돌았다 — 깔린 quality-gates 가 `--answered` 를 모른다」 를 적는다.'
+# old-qg-retry-once (AC8 · AC15 담당자 쪽 → R7 AC17: 모르는 인자마다 한 번씩) — 호출 줄 락과 따로 묶는다
+RETRY='qg 가 모르는 인자라고 멈추면 멈춘 줄이 이름으로 든 인자와 그 값을 뺀 같은 줄로 다시 부른다 — 모르는 인자마다 한 번씩, 많아야 두 번.'
 one "$SF" "$RETRY" "old-qg-retry-once: 보내는 글 펜스에 옛 qg 다시 부르기 문장이 한 번"
 one "$WHOLE" "$RETRY" "old-qg-retry-once: 그 문장이 파일 전체에서 한 번(지휘자 쪽에 다른 꼴의 호출 지시가 없다)"
-zero "$CALL" '인자와 값을 뺀' "old-qg-retry-once 음성: 호출 줄 절은 인자를 빼는 꼴을 싣지 않는다(양성 짝: 보내는 글의 다시 부르기 문장)"
+zero "$CALL" '그 값을 뺀' "old-qg-retry-once 음성: 호출 줄 절은 인자를 빼는 꼴을 싣지 않는다(양성 짝: 보내는 글의 다시 부르기 문장)"
 
 # back-contract-3 (AC8)
 one "$BACK" '`contract` 가 `3` 이 아니면' "back-contract-3: 돌아왔을 때가 판 3 만 읽는다"
