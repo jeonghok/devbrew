@@ -164,8 +164,9 @@ def support_tests_of(assign: list[tuple[str, str, str]], support: list[str]) -> 
         nearest = max((i for i, p in enumerate(parts) if p in ("tests", "test")), default=None)
         if nearest is not None:
             dirs.update("/".join(parts[:j + 1]) for j in range(nearest, len(parts)))
-    return len({u for u, r, _ in assign
-                if r not in NOT_RUNNERS and "/" in u and u.rsplit("/", 1)[0] in dirs})
+    # 패키지 입도의 unit 은 폴더 이름 자체다 — 그 폴더가 길 위 폴더면 센다. 파일 입도는 파일이 든 폴더로 잰다.
+    return len({u for u, r, g in assign if r not in NOT_RUNNERS
+                and (u in dirs if g == "package" else ("/" in u and u.rsplit("/", 1)[0] in dirs))})
 
 
 def same_tree(base: str, head: str) -> bool:

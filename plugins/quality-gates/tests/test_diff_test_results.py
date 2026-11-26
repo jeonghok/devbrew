@@ -332,6 +332,17 @@ class Contract(DiffBase):
         self.assertNotIn('unit: "tests/data.tsv"', p.stdout)
         self.assertIn("verdict: clean", self.verdict(p.stdout))
 
+    def test_support_tests_counts_package_units(self):
+        # 패키지 입도 러너(go)의 unit 은 폴더 이름이다 — 그 폴더가 길 위 폴더면 그 unit 을 센다.
+        write_assign(self.memo, [("lib/test", "go", "package"), ("lib/test/data.txt", "support", "file"),
+                                 ("lib", "go", "package")], adapters="go")
+        rows = [("lib/test", "pass", "0", "per-unit"), ("lib", "pass", "0", "per-unit")]
+        write_rows(self.memo / "baseline-go.tsv", "go", self.repo.B, rows)
+        write_rows(self.memo / "head-go-i1.tsv", "go", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
+
     def test_support_absent_prints_empty(self):
         self.pair("shell", [("a.sh", "pass", "0", "per-unit")], [("a.sh", "pass", "0", "per-unit")])
         p = self.run_diff()

@@ -18,6 +18,15 @@ qg 차등 테스트가 쓰는 스크립트 넷의 정본이다. 플러그인은 
 - `run-test-selection.sh assign` 은 흡수 러너(cargo · make · npm-script)가 없을 때 맡지 않은 지원 파일을 가른다. 같은 입력에서 러너가 맡은 파일(패키지로 접기 전 경로)이 길 위 폴더에 바로 있으면 `support`, 없으면 `unclaimed` 다. 흡수 러너가 있으면 지금처럼 `BULK` 가 흡수한다.
 - `diff-test-results.py` 는 `support` 행을 unit 전체 · `unclaimed` · `silent-drop` 에서 빼고 `support: [...]` · `support_tests: <n>` 을 낸다. `support_tests` 는 길 위 폴더에 바로 든, 러너가 맡은 행의 수다(겹치면 한 번).
 
+## unittest 맡기(`run-test-selection.sh assign`)
+
+- 이름이 테스트 꼴인 `.py` 가운데 모듈 수준 `def test…` 가 있는 파일은 글자로 거른다 — 불러 보지 않고 맡지 않는다.
+- 나머지는 루프 뒤에 한 번 불러 본다(`unittest_probe`). 관문은 이 순서다: 일회용 트리인가(`tree_is_disposable` — `run` 과 같은 검사) → `adapter_usable`(kill switch → 감지 → 환경 폴더 무시 여부 → 준비 → 러너). 어느 하나에서 멈추면 불러 보지 않고 그 사유를 표준 오류에 남긴 채 unittest 가 맡지 않는다.
+- 불러 보기는 실행 줄과 같은 파이썬 · 같은 작업 폴더 · 같은 경로 꼴(`__init__.py` 가 있으면 점 이름, 없으면 그 폴더를 앞에 둔 바탕 이름)로 폴더마다 한 번 돈다. 그 모듈에서 정의된 모듈 수준 클래스 가운데 이름이 `Test` 로 시작하거나 `test` 로 시작하는 이름(물려받은 것 포함)을 가진 것이 모두 `unittest.TestCase` 의 자손일 때만 맡는다. 불러오지 못하면 맡지 않는다. 판정은 결과 파일의 줄로만 받는다 — 모듈의 표준 출력 · 종료 코드는 보지 않는다.
+- 지원 파일의 `support` / `unclaimed` 는 불러 보기가 끝난 뒤의 맡음으로 가른다.
+- unittest 실행은 테스트 0개로 끝나면 종료 코드 5(행 상태 `error`)다 — 파이썬 판(3.12 미만은 0, 3.12 부터는 5)에 따라 갈리지 않는다.
+- 비용: 불러 보기는 준비(`uv sync` 등)를 먼저 한 번 돈다. 스위트 대조의 대체 경로(spec-distill `merge_check.assignment`)는 `assign` 을 두 번 부르므로 준비와 불러 보기도 두 번 돈다.
+
 ## 기준선(`resolve-baseline.sh`)
 
 - 기준 브랜치는 `origin/HEAD` 가 가리키는 브랜치 하나다. `origin/main` · `origin/master` · 로컬 `main` · `master` 로 대신하지 않는다.
