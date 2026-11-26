@@ -77,6 +77,7 @@ class RecriticSlots(unittest.TestCase):
         self.assertIn("입력 실패(주): code-recritic — %s" % why, r.stdout)
         self.assertIn("verdict: not-certified", r.stdout)
         self.assertIn("reason: angle-absent", r.stdout)
+        self.assertNotIn("기각 1", r.stdout)    # 죽은 응답의 reject 는 쓰이지 않는다(AC35)
 
     def test_slots_ok_keeps_verdict(self):
         r = self.synth(self.values())
@@ -150,7 +151,6 @@ class RecriticSlots(unittest.TestCase):
         for p, b in before.items():
             self.assertEqual(p.read_bytes(), b, "원본이 바뀌었다: %s" % p)
         self.assertEqual((rv / "recritic.diff").read_bytes(), before[rd / "review-i1.diff"])
-        rf_before = (rv / "recritic-findings.yaml").read_bytes()
         srcs = {"scope": rd / "review-i1.names", "findings": rv / "recritic-findings.yaml",
                 "diff": rv / "recritic.diff", "intent": rv / "intent-src.txt"}
         for s, src in srcs.items():
@@ -159,7 +159,8 @@ class RecriticSlots(unittest.TestCase):
             body, last = copy.read_bytes().rstrip(b"\n").rsplit(b"\n", 1)
             self.assertRegex(last.decode("ascii"), r"^qg-slot-end: [0-9a-f]{16}$")
             self.assertEqual(body + b"\n", src.read_bytes(), "칸 사본 = 원본 + 끝 줄: %s" % s)
-        self.assertEqual((rv / "recritic-findings.yaml").read_bytes(), rf_before)
+        self.assertNotIn(b"qg-slot-end:", (rv / "recritic-findings.yaml").read_bytes(),
+                         "익명 목록 원본에 끝 줄이 붙었다")
         self.assertFalse(list(rd.glob("recritic-map*")), "대응표가 세션 폴더에 있다")
         self.assertFalse((rd / "findings.yaml").exists(), "익명화 전 목록이 세션 폴더에 있다")
 
