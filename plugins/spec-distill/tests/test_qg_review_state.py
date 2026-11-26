@@ -274,6 +274,7 @@ class TestQgReviewState(unittest.TestCase):
         rv.stage, rv.close_reason, rv.worker, rv.result = "닫힘", "다시 보냄", "qg-w1 · " + AT, failed()
         rv.answers = [answer("q-failed", "지적 목록을 얻지 못함", "다시 보낸다")]
         F.write_review(first / F.STATE_NAME, rv)
+        self.code()  # 끝이 움직여도 다시 보냄은 같은 범위다
         lines = self.ok(self.open("premerge"))
         second = self.folder_of(lines)
         self.assertEqual(second.name, first.name + "-2")
@@ -334,11 +335,28 @@ class TestQgReviewState(unittest.TestCase):
 
     def test_inconsistent_state_refused(self):
         self.code()
-        self.put(self.closed_rereview(F.NO_HANDLING))
-        before = self.count()
-        for site in ("premerge", "recheck", "asked"):
-            self.refused(self.open(site))
-        self.assertEqual(self.count(), before)
+        cases = {
+            "재리뷰로 이어짐인데 처리 없음": self.closed_rereview(F.NO_HANDLING),
+            "의도 점검 답의 기록 경로 빔": review(
+                "asked", 1, self.base_sha, self.c1, stage="닫힘", close_reason="막는 지적 없음",
+                result=obtained(self.base_sha, self.c1), answers=[answer("q1", "의도 점검", "의도다")]),
+            "앞 리뷰가 닫히지 않음": None,
+        }
+        for label, rv in cases.items():
+            with self.subTest(case=label):
+                self.setUp()
+                self.code()
+                if rv is None:
+                    self.put(review("asked", 1, self.base_sha, self.c1, stage="보냄", worker="qg-w1 · " + AT))
+                    self.put(review("asked", 2, self.base_sha, self.c1, stage="닫힘", close_reason="막는 지적 없음",
+                                    result=obtained(self.base_sha, self.c1)))
+                else:
+                    self.put(rv)
+                before = self.count()
+                for site in ("premerge", "recheck", "asked"):
+                    lines = self.refused(self.open(site))
+                    self.assertIn("칸끼리 맞지 않는다", lines[0])
+                self.assertEqual(self.count(), before)
 
 
 if __name__ == "__main__":
