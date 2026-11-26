@@ -89,7 +89,7 @@ A credential, API key, token, or encryption key that the change commits to sourc
 
 ## Output format
 
-응답 맨 앞의 `qg-slot-end:` 줄(`## Inputs`)은 아래 YAML 목록 밖에 두는 유일한 줄이다 — 그 줄들 다음에 YAML 목록 하나를 낸다.
+응답 맨 앞의 `qg-slot-end:` 줄(`## Inputs`)과, 칸 파일을 읽지 못했을 때의 `QG_INPUT_UNREADABLE:` 한 줄만 아래 YAML 목록 밖에 둔다 — 끝 값 줄들 다음에 YAML 목록 하나를 내고, 읽지 못했으면 YAML 목록 없이 그 한 줄만 답한다.
 
 Emit exactly one YAML list, no surrounding prose, no Markdown headings:
 
