@@ -606,7 +606,7 @@ state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추�
 - `review-i1-slot-<리뷰어>-b<B>-t<T>-<칸>.txt` · `intent-slot-<k>-<칸>.md` — 리뷰어 칸에 경로로 싣는 사본. 끝 줄이 호출마다 새 끝 값(`qg-slot-end: …`)이다.
 - `publish-at.txt` — 게시 펜스가 덧붙인 `## 게시` 절의 자리(`<시작 바이트> <길이 바이트>`). 같은 실행에서 다시 돌린 게시 펜스가 그 자리를 바꿔 쓴다.
 - `suite-lock-path.txt` — `--suite-lock` 으로 받은 잠금 자리(한 줄). `setup-qg.sh` 가 시작마다 지우고 인자가 있으면 다시 쓴다.
-- `suite-overlap.txt` — 차등 테스트가 잠금 없이 돈 명령마다 한 줄(`busy\t<주인>\t<잡은 시각>` 또는 `unusable\t-\t-`). 화면의 겹침 줄과 결과 파일의 겹침 줄이 이것을 읽는다.
+- `suite-overlap.txt` — 차등 테스트가 잠금 없이 돈 명령마다 한 줄(`busy\t<주인 이름>\t<잡은 시각>` 또는 `unusable\t-\t-`). 화면의 겹침 줄과 결과 파일의 겹침 줄이 이것을 읽는다.
 - `artifact-critique/` — 문서 비평(`/quality-gates:artifact-critique`) 몫 폴더. 병합된 지적과 그 끝 값 사본 · 반박자 응답을 대상 · 라운드마다 둔다.
 
 `result.md` 를 빼고 위 파일은 `/quality-gates:quality-pipeline` 시작 때 지운다(`suite-lock-path.txt` 는 시작 스크립트가 다시 쓴다). `artifact-critique/` 는 세션 폴더와 수명이 같다.
