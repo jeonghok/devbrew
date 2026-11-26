@@ -33,6 +33,7 @@ S5_LINES = [
     "- 기각 — 한 줄에 둘 — RC4 와 RC5 가 함께 [RC4 → OQ1 · OQ2]",
     "- 기각 — 복수 연결 [RC6 → OQ1 · OQ2]",
     "- 기각 — a / b / c 가 ST2 에 기댄다 [→ 없음]",
+    "- 기각 — RC1 이 뒤에도 나온다 [RC1 → OQ2]",
 ]
 RC_ALL = ["RC%d" % n for n in range(1, 7)]
 
@@ -107,91 +108,52 @@ SEP = "|---|---|---|---|---|---|---|---|---|---|---|"
 P1 = "| P1 | 결정 하나 | 결정 | 무엇을 정한다 | 한다 결정 / 안 한다 코드 | 없음 | 없음 | 없음 | S3 · OQ2 | 없음 | 없음 |"
 
 
-def lines_of(brief: str, audit: str):
-    return R.index_brief(brief, audit).lines
+def swap_s5(extra):
+    return BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + list(extra)))
 
 
 class Invariant(unittest.TestCase):
-    """brief_universe 가 센 번호는 모두 index_brief 가 줄을 얻는다."""
+    """세는 쪽과 줄을 찾는 쪽이 같은 번호를 읽는다 — 센 번호는 모두 줄을 얻고, 줄을 얻은 번호는 모두 센 번호다."""
 
     def check(self, brief):
         non_s, _s, _k = M.brief_universe(brief, AUDIT)
-        found = lines_of(brief, AUDIT)
-        counted = {n for n in non_s if re.fullmatch(r"(?:RC|ST)\d+|«[^«»]+»", n)}
-        self.assertEqual(sorted(n for n in counted if n not in found), [])
-        return found
+        idx = R.index_brief(brief, AUDIT)
+        counted = {n for n in non_s if re.fullmatch(r"(?:RC|ST)\d+", n)}
+        cited = set(idx.s5)
+        self.assertEqual(sorted(counted - cited - set(idx.lines)), [], "센 번호가 줄을 못 얻었다")
+        self.assertEqual(sorted(cited - counted), [], "센 적 없는 번호가 줄을 얻었다")
+        for n, lines in idx.s5.items():
+            for line in lines:
+                self.assertRegex(line, r"\b%s\b" % n)
+        return idx
 
-    def test_every_counted_number_gets_a_line(self):
-        found = self.check(BRIEF)
+    def test_task_shapes(self):
+        idx = self.check(BRIEF)
         for n in RC_ALL + ["ST1", "ST2"]:
-            self.assertIn(n, found)
+            self.assertIn(n, idx.s5)
 
-    def test_link_line_wins_over_a_bare_mention(self):
-        found = lines_of(BRIEF, AUDIT)
-        self.assertEqual(found["RC2"], S5_LINES[4])
-        self.assertEqual(found["RC3"], S5_LINES[5])
-        self.assertEqual(found["RC4"], S5_LINES[6])
-        self.assertEqual(found["RC5"], S5_LINES[6])
-        self.assertEqual(found["RC6"], S5_LINES[7])
-        self.assertEqual(found["ST2"], S5_LINES[8])
-
-    def test_old_forms_keep_their_line(self):
-        found = lines_of(BRIEF, AUDIT)
-        self.assertEqual(found["RC1"], S5_LINES[3])
-        self.assertEqual(found["ST1"], S5_LINES[0])
-
-    def test_later_old_form_line_wins(self):
-        later = ["- 위험 — 사실 | 뒤에 또 — RC1 (c/d.py) [RC1 → OQ2]", "- 기각 — 또 — verdict: kept — ST1 — 부착 1/1"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + later)), AUDIT)
-        self.assertEqual(found["RC1"], later[0])
-        self.assertEqual(found["ST1"], later[1])
-
-    def test_section4_head_line_beats_a_section5_mention_but_not_an_old_form(self):
-        weak = BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES[:3] + ["- 기각 — 근거 RC9 반증 [RC9 → OQ1]"]))
-        self.assertIn("«ext-d» — RC9 (z.py)", lines_of(weak, AUDIT)["RC9"])
-        old = BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + ["- 위험 — 사실 | 옛 꼴 — RC9 (q.py)"]))
-        self.assertIn("옛 꼴 — RC9 (q.py)", lines_of(old, AUDIT)["RC9"])
-
-    def test_old_form_st_beats_a_later_st_mention(self):
-        s5 = S5_LINES + ["- 기각 — 뒤의 인용 ST1 만"]
-        self.assertEqual(lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)["ST1"], S5_LINES[0])
-
-    def test_link_head_with_several_numbers_and_arrow_tail(self):
-        s5 = S5_LINES + ["- 기각 — 둘 [RC20 · ST4 → OQ1]", "- 기각 — 화살표 뒤 [→ RC20 · ST4]"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
-        self.assertEqual(found["RC20"], "- 기각 — 둘 [RC20 · ST4 → OQ1]")
-        self.assertEqual(found["ST4"], "- 기각 — 둘 [RC20 · ST4 → OQ1]")
-
-    def test_name_glued_number_is_not_an_old_form_key(self):
-        s5 = S5_LINES + ["- 위험 — 사실 | 경로RC1 (e.py) 는 번호가 아니다"]
-        self.assertEqual(lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)["RC1"], S5_LINES[3])
-
-    def test_paren_form_beats_a_later_link_line(self):
-        s5 = S5_LINES + ["- 기각 — 뒤에 또 나온다 [RC1 → OQ2]"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
-        self.assertEqual(found["RC1"], S5_LINES[3])
-
-    def test_link_tier_beats_bare_mentions_before_and_after(self):
-        s5 = S5_LINES + ["- 기각 — 앞선 본문 인용 RC8 만", "- 기각 — 근거는 RC8 [RC8 → OQ1]", "- 기각 — 뒤의 본문 인용 RC8 만"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
-        self.assertEqual(found["RC8"], "- 기각 — 근거는 RC8 [RC8 → OQ1]")
-
-    def test_bare_mention_only_takes_the_last_line(self):
-        s5 = S5_LINES + ["- 기각 — 앞선 인용 RC8 만", "- 기각 — 뒤의 인용 RC8 만"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
-        self.assertEqual(found["RC8"], "- 기각 — 뒤의 인용 RC8 만")
-
-    def test_last_link_line_wins(self):
-        s5 = S5_LINES + ["- 기각 — 뒤에 또 나온다 [RC2 → OQ2]"]
-        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
-        self.assertEqual(found["RC2"], "- 기각 — 뒤에 또 나온다 [RC2 → OQ2]")
-
-    def test_other_counting_values(self):
-        # 세는 쪽의 값을 바꿔 흔든다 — 번호가 줄의 처음 · 끝 · 두 자리 수 · 이름 뒤에 붙은 꼴.
-        for extra in ("- 기각 — RC10 으로 시작", "- 기각 — 끝에 RC11", "- 기각 — [RC12 → OQ1] 앞에", "- 기각 — XRC13 은 번호가 아니다"):
+    def test_shapes_outside_the_convention(self):
+        extras = ["- 기각 — a, RC10, b 처럼 쉼표 사이", "- 기각 — RC11으로 시작하지 않는 붙임", "- 기각 — 끝에 RC12", "- 기각 — [RC13 → OQ1] 앞에",
+                  "- 기각 — (RC14) 괄호 안", "- 기각 — RC15/RC16 슬래시", "- 기각 — ST7 와 RC17 와 ST8", "- 기각 — XRC18 은 번호가 아니다",
+                  "- 기각 — RC19 RC19 두 번", "  - 들여쓴 줄 RC20", "- 기각 — `RC21` 코드 안", "- 기각 — RC22\u00a0NBSP"]
+        for extra in extras:
             with self.subTest(extra):
-                brief = BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + [extra]))
-                self.check(brief)
+                self.check(swap_s5([extra]))
+
+    def test_number_on_several_lines_points_at_all_of_them_in_brief_order(self):
+        more = ["- 기각 — 첫째 RC1 도 (z.py) [RC1 → OQ1]", "- 기각 — 근거 RC2 반증"]
+        idx = self.check(swap_s5(more))
+        self.assertEqual(idx.s5["RC1"], [S5_LINES[3], S5_LINES[9], more[0]])
+        self.assertEqual(idx.s5["RC2"], [S5_LINES[4], more[1]])
+
+    def test_line_with_two_numbers_is_listed_under_both(self):
+        idx = self.check(BRIEF)
+        self.assertEqual(idx.s5["RC4"], [S5_LINES[6]])
+        self.assertEqual(idx.s5["RC5"], [S5_LINES[6]])
+
+    def test_line_is_cut_like_the_rest_of_the_brief_readers(self):
+        idx = self.check(swap_s5(["- 기각 — 줄 나눔 글자\u2028RC23 이 줄 안에 남는다"]))
+        self.assertEqual(idx.s5["RC23"], ["- 기각 — 줄 나눔 글자\u2028RC23 이 줄 안에 남는다"])
 
     def test_section4_counted_equals_indexed(self):
         s4 = M.section4_items(M.brief_section(BRIEF, "4"))
@@ -199,6 +161,14 @@ class Invariant(unittest.TestCase):
         counted |= {rc for head, _b in s4 for rc in M.RC_RE.findall(head)}
         indexed = set(R._section4_index(BRIEF))
         self.assertEqual(counted, indexed)
+
+    def test_bundle_parts_lists_each_cited_line_once_in_brief_order(self):
+        more = ["- 기각 — 첫째 RC1 도 (z.py) [RC1 → OQ1]"]
+        idx = R.index_brief(swap_s5(more), AUDIT)
+        row = R.parse_table("# s\n\n## 분해안\n\n%s\n%s\n%s\n" % (HEAD, SEP, "| E1 | 이름 | 묶음 | 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | 없음 | RC1 · RC4 · RC5 · ST1 | 없음 | 없음 |"))[0]
+        _ids, parts = R.bundle_parts(row, idx)
+        rest = parts[R.team_files.SOURCE_PARTS[3]]
+        self.assertEqual(rest, [S5_LINES[3], S5_LINES[9], more[0], S5_LINES[6], S5_LINES[0]])
 
 
 def git(top, *args):
@@ -249,8 +219,8 @@ class Create(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         e1 = (self.top / "docs/rm/E1.md").read_text(encoding="utf-8")
         e2 = (self.top / "docs/rm/E2.md").read_text(encoding="utf-8")
-        for line in (S5_LINES[3], S5_LINES[4], S5_LINES[6]):
-            self.assertIn(line, e1)
+        for line in (S5_LINES[3], S5_LINES[4], S5_LINES[6], S5_LINES[9]):
+            self.assertEqual(e1.count(line), 1)
         for line in (S5_LINES[0], S5_LINES[5], S5_LINES[7], S5_LINES[8]):
             self.assertIn(line, e2)
         self.assertIn("«ext-d»", e2)
@@ -274,8 +244,8 @@ class Create(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         sources = {p.parent.name: p.read_text(encoding="utf-8") for p in (self.top / out).rglob("sources.md")}
         self.assertEqual(sorted(sources), ["E1", "E2"])
-        for line in (S5_LINES[3], S5_LINES[4], S5_LINES[6]):
-            self.assertIn(line, sources["E1"])
+        for line in (S5_LINES[3], S5_LINES[4], S5_LINES[6], S5_LINES[9]):
+            self.assertEqual(sources["E1"].count(line), 1)
         for line in (S5_LINES[0], S5_LINES[5], S5_LINES[7], S5_LINES[8]):
             self.assertIn(line, sources["E2"])
         self.assertEqual(sources["E1"].count(S5_LINES[6]), 1)

@@ -263,9 +263,6 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ID_ITEM_RE = re.compile(r"\s+- id: ([CD]\d+)\s*")
 RC_RE = re.compile(r"\bRC\d+\b")
 ST_RE = re.compile(r"\bST\d+\b")
-RC_LINE_RE = re.compile(r"\b(RC\d+) \(")      # §5 줄 꼴 ① — `RCn (경로…)` (줄마다 첫 번호 하나)
-ST_LINE_RE = re.compile(r" — (ST\d+) — ")      # §5 줄 꼴 ② — `기각 … — STn — 부착`
-LINK_RE = re.compile(r"\[([^\[\]→]*)→")         # §5 줄 끝 결정 연결 `[RCn → OQ…]` 의 화살표 앞
 KEY_RE = re.compile(r"«[^«»]+»")
 LIST_SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
 
@@ -588,28 +585,15 @@ def brief_risk_numbers(s5: str):
     return sorted(rows, key=lambda row: int(row[0][1:])), False
 
 
-def section5_tiers(s5: str):
-    """(약한 줄, 옛 꼴 줄) — 둘 다 §5 의 RC · ST 번호 → 줄. 옛 꼴은 `RCn (` · ` — STn — ` 줄이다. 약한 줄은 그 밖이고
-    ① 줄 끝 연결 `[RCn → …]` 에 실린 번호의 줄이 ② 본문 인용의 줄을 이긴다. 층 안에서는 뒤에 나온 줄이 이긴다."""
-    legacy, link, mention = {}, {}, {}
-    for line in brief_body.split_lines(s5):
-        for rx in (RC_LINE_RE, ST_LINE_RE):
-            m = rx.search(line)
-            if m:
-                legacy[m.group(1)] = line
-        for head in LINK_RE.findall(line):
-            for n in RC_RE.findall(head) + ST_RE.findall(head):
-                link[n] = line
-        for n in RC_RE.findall(line) + ST_RE.findall(line):
-            mention[n] = line
-    return {**mention, **link}, legacy
-
-
 def section5_lines(s5: str) -> dict:
-    """§5 의 RC · ST 번호 → 줄. 세는 일(`brief_universe`)이 이 키를 센다 — 줄을 찾는 일(`index_brief`)은 같은
-    `section5_tiers` 를 읽고 §4 머리 줄과 겹칠 때만 순서를 달리한다(옛 꼴만 §4 를 덮는다)."""
-    weak, legacy = section5_tiers(s5)
-    return {**weak, **legacy}
+    """§5 의 RC · ST 번호 → 그 번호가 나오는 줄들(brief 에 나온 차례, 줄마다 한 번). 번호를 읽는 식은 `RC_RE` ·
+    `ST_RE` 하나이고, 세는 일(`brief_universe`)과 줄을 찾는 일(`index_brief`)이 이 함수를 함께 쓴다 — 줄 꼴(괄호 ·
+    줄 끝 연결 · 본문 인용)을 가리지 않는다. 줄은 `brief_body.split_lines` 로 가른다."""
+    out = {}
+    for line in brief_body.split_lines(s5):
+        for n in dict.fromkeys(RC_RE.findall(line) + ST_RE.findall(line)):
+            out.setdefault(n, []).append(line)
+    return out
 
 
 def brief_universe(brief: str, audit: str):
