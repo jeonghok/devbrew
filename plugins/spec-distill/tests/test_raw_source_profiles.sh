@@ -56,9 +56,10 @@ GT = [
     ("gt_two_sources", ["`## 6. 사용자 원문` 의 사용자 줄", "`<<<RAW-SOURCE>>>` 뒤 블록의 사용자 줄"]),
     ("gt_model_lines", ["질문 문구 · 선택지 · 풀이 줄 · 구분 줄은 모델이나 저자가 쓴 줄이라 읽되 정답이 아니다"]),
     ("gt_unloadable", ["「원자료를 그대로 싣지 못함」 이면 첫 칸은 모델이 줄인 글이라 정답이 아니고"]),
-    ("gt_lost", ["「원자료를 찾지 못함」 이면 견줄 원자료가 없어 첫 칸(seed 전문)에 견주되, "
-                 "모델이 줄인 글에 견줬다는 것을 리뷰 앞 글과 기록에 밝힌다"]),
-    ("gt_decision_scope", ["(리뷰 결정 문구는 정한 사실과 뜻까지만 정답이다)"]),
+    ("gt_lost", ["「원자료를 찾지 못함」 이면 견줄 원자료가 없어 첫 칸(seed 전문)에 견준다 — "
+                 "리뷰어는 그 칸에 견준 finding 의 `summary` 에 모델이 줄인 글에 견줬다고 적고, "
+                 "리뷰 앞 글과 기록의 공시는 리뷰를 돌리는 쪽이 한다"]),
+    ("gt_decision_scope", ["이 사용자 줄들이 정답이다 — 리뷰 결정 문구는 정한 사실과 뜻까지만 정답이다"]),
 ]
 L2 = [
     ("body_separator", ["원문 절에서 `### ` 로 시작하는 줄은 저자가 쓴 구분 줄이라 읽되 사용자의 말이 아니다"]),
@@ -155,7 +156,7 @@ try:
     print(("OK" if "layer1_one_line" in got else "NO") + " 변이 [판정 관계 줄 중복 추가] -> layer1_one_line 실패")
     # 머리만 만족: 본문에서 지우고 ground_truth 에만 넣는다 — 본문 단언은 실패해야 하고 gt 단언은 영향이 없다
     ph = "글자는 원문 절이 정본이고, "
-    mb = mutate(brief_t, ph, "", "## 층 2").replace("정답이다(리뷰 결정", ph + "정답이다(리뷰 결정", 1)
+    mb = mutate(brief_t, ph, "", "## 층 2").replace("이 사용자 줄들이 정답이다", ph + "이 사용자 줄들이 정답이다", 1)
     with open(bp, "w", encoding="utf-8") as fh:
         fh.write(mb)
     got = profile_fails(bp, DESIGN)

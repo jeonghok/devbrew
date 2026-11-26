@@ -21,12 +21,16 @@ locate 의 판결 줄 — stdout 마지막 줄이다(다른 줄은 stdout 에 �
     raw-source: LOST <사유>
 인자 오류 · 읽지 못함 · 쓰지 못함은 stderr `[raw_source] …` 한 줄이다(판결 줄은 내지 않는다). 새 명령 셋의 P 는 있는 파일이어야 한다.
 
-찾는 길: seed 이름 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. 받은 글자에서 도출하고 링크를 풀지 않으며, seed 머리의
-`audit_file:` 은 읽지 않는다. `--interview` 는 상태 파일 `seed:` 값(작업 트리 루트 기준 상대 경로)에서 같은 길로 간다.
+찾는 길: seed 이름 끝의 `.md` 를 `.audit.md` 로 바꾼 파일이다. 받은 글자에서 도출하고 받은 경로를 풀지 않으며, seed 머리의
+`audit_file:` 은 읽지 않는다. `--interview` 는 상태 파일 `seed:` 값(작업 트리 루트 기준 상대 경로)에서 같은 길로 간다 —
+상태 파일 길은 seed 와 기록 파일이 작업 트리 안이고 링크를 거치지 않을 때만 따라간다(쓰는 쪽 `seed_value` 와 같은
+`state_path.inside_root`). 아니면 LOST 다. `--seed` 길은 받은 경로를 그대로 따른다.
 
-옆 생성기(`team_write._framing_from_state`)와 다른 한 갈래: `seed:` 가 `없음` 인데 `## 풀린 입력` 이 seed 인 컨텍스트 쌓기를
-옆 생성기는 framing 없는 컨텍스트 쌓기로 읽고 이 모듈은 찾지 못함으로 읽는다 — 그쪽은 옮겨 적을 기록 파일이 없다는 것만 알면
-되고, 이쪽은 첫 입력이 모델이 줄인 글이라는 것까지 알아야 한다.
+옆 생성기(`team_write._framing_from_state`)와 다른 갈래 둘:
+- `seed:` 가 `없음` 이거나 비었는데 `## 풀린 입력` 이 seed 인 컨텍스트 쌓기를 옆 생성기는 framing 없는 컨텍스트 쌓기로 읽고
+  이 모듈은 찾지 못함으로 읽는다 — 그쪽은 옮겨 적을 기록 파일이 없다는 것만 알면 되고, 이쪽은 첫 입력이 모델이 줄인 글이라는
+  것까지 알아야 한다.
+- 링크이거나 작업 트리 밖인 seed · 기록 파일을 옆 생성기는 따라 읽고 이 모듈은 LOST 로 읽는다.
 
 기록 파일은 `seed_review_log.read_audit_text` 로 읽는다(`\\r\\n` 만 `\\n` 으로). 두 절(원문 절 · 질문 전체 절)의 줄에
 다른 줄 나눔 글자(홀로 선 `\\r` · U+2028 등 — `seed_review_log.separator_lines`)가 있으면 그 줄은 `line_separator` 로
@@ -44,7 +48,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from state_path import frontmatter_scalars, worktree_root  # noqa: E402
+from state_path import frontmatter_scalars, inside_root, worktree_root  # noqa: E402
 import brief_body  # noqa: E402
 import legacy_names  # noqa: E402
 import section6  # noqa: E402
@@ -59,6 +63,8 @@ R_SEED_MISSING = "seed 파일이 없다 — {seed}"
 R_SEED_NOT_MD = "seed 파일 이름이 .md 로 끝나지 않아 framing 기록 파일의 자리를 정하지 못한다 — {seed}"
 R_AUDIT_MISSING = "seed 옆에 framing 기록 파일이 없다 — {audit}"
 R_AUDIT_TYPE = "framing 기록 파일 머리의 type 이 intent-seed-audit 이 아니다 — {audit} (type: {kind})"
+R_SEED_UNSAFE = "상태 파일의 seed 경로가 작업 트리 밖이거나 링크를 거친다 — {seed}: {why}"
+R_AUDIT_UNSAFE = "framing 기록 파일이 작업 트리 밖이거나 링크를 거친다 — {audit}: {why}"
 R_SEED_UNRECORDED = ("seed 로 시작했는데 상태 파일에 seed 경로가 기록되지 않았다 — 붙여 넣은 seed 이거나 링크 · "
                      "작업 트리 밖 · 이름 꼴이 다른 seed 다")
 
@@ -107,11 +113,19 @@ def _chain(seed: str, base: "Path | None") -> Verdict:
     def at(s: str) -> Path:
         return Path(s) if base is None else base / s
 
+    if base is not None:   # 상태 파일 길만 — --seed 길은 받은 경로를 그대로 따른다
+        why = inside_root(at(seed), base)
+        if why:
+            return _lost(R_SEED_UNSAFE.format(seed=seed, why=why))
     if not at(seed).is_file():
         return _lost(R_SEED_MISSING.format(seed=seed))
     if not seed.endswith(".md"):
         return _lost(R_SEED_NOT_MD.format(seed=seed))
     audit = seed[:-3] + ".audit.md"
+    if base is not None:
+        why = inside_root(at(audit), base)
+        if why:
+            return _lost(R_AUDIT_UNSAFE.format(audit=audit, why=why))
     if not at(audit).is_file():
         return _lost(R_AUDIT_MISSING.format(audit=audit))
     fm = frontmatter_scalars(at(audit))
@@ -186,7 +200,7 @@ def locate_from_interview(path: str) -> Verdict:
 
 
 def audit_file(state: "Path", v: Verdict) -> "Path":
-    """FOUND 의 절대경로 — 상태 파일의 작업 트리 루트에 잇는다(링크는 풀지 않는다)."""
+    """FOUND 의 절대경로 — 상태 파일의 작업 트리 루트에 잇는다(루트 아래 경로는 풀지 않는다 — 링크를 거치면 LOST 였다)."""
     if v.kind != "FOUND" or v.audit is None:
         raise ValueError("FOUND 판결이 아니다 — %s" % v.kind)
     return worktree_root(str(Path(state).parent))[0] / v.audit

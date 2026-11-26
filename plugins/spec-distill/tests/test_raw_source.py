@@ -208,6 +208,68 @@ class InterviewMode(RepoCase):
             self.assertEqual(self.run_("--interview", str(st), cwd=other),
                              (0, "raw-source: FOUND docs/s.audit.md"))
 
+    UNSAFE_SEED = "raw-source: LOST 상태 파일의 seed 경로가 작업 트리 밖이거나 링크를 거친다 — "
+    UNSAFE_AUDIT = "raw-source: LOST framing 기록 파일이 작업 트리 밖이거나 링크를 거친다 — "
+
+    def test_recorded_seed_link_lost(self):
+        self.seed_pair()
+        os.symlink("s.md", str(Path(self.repo) / "docs/l.md"))
+        os.symlink("s.audit.md", str(Path(self.repo) / "docs/l.audit.md"))
+        put(self.repo, "docs/b.state.md", state_text("docs/l.md"))
+        rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_SEED + "docs/l.md: 링크를 거친다"), line)
+
+    def test_recorded_seed_in_linked_dir_lost(self):
+        self.seed_pair()
+        os.symlink("docs", str(Path(self.repo) / "lnk"))
+        put(self.repo, "docs/b.state.md", state_text("lnk/s.md"))
+        rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_SEED + "lnk/s.md: 링크를 거친다"), line)
+
+    def test_recorded_seed_outside_tree_lost(self):
+        with tempfile.TemporaryDirectory() as outside:
+            s = put(outside, "x.md", SEED)
+            put(outside, "x.audit.md", AUDIT)
+            put(self.repo, "docs/b.state.md", state_text(str(s)))
+            rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_SEED + str(s) + ": 작업 트리 밖이다"), line)
+
+    def test_recorded_seed_dotdot_lost(self):
+        self.seed_pair()
+        put(self.repo, "docs/b.state.md", state_text("docs/../docs/s.md"))
+        rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_SEED + "docs/../docs/s.md: '..' 성분이 있다"), line)
+
+    def test_recorded_audit_link_lost(self):
+        put(self.repo, "docs/s.md", SEED)
+        put(self.repo, "keep/real.audit.md", AUDIT)
+        os.symlink("../keep/real.audit.md", str(Path(self.repo) / "docs/s.audit.md"))
+        put(self.repo, "docs/b.state.md", state_text("docs/s.md"))
+        rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_AUDIT + "docs/s.audit.md: 링크를 거친다"), line)
+
+    def test_recorded_audit_dangling_link_lost(self):
+        put(self.repo, "docs/s.md", SEED)
+        os.symlink("gone.audit.md", str(Path(self.repo) / "docs/s.audit.md"))
+        put(self.repo, "docs/b.state.md", state_text("docs/s.md"))
+        rc, line = self.run_("--interview", "docs/b.state.md")
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith(self.UNSAFE_AUDIT + "docs/s.audit.md: 링크를 거친다"), line)
+
+    def test_state_through_linked_cwd_found(self):
+        self.seed_pair()
+        put(self.repo, "docs/b.state.md", state_text("docs/s.md"))
+        with tempfile.TemporaryDirectory() as other:
+            via = Path(other) / "via"
+            os.symlink(self.repo, str(via))
+            self.assertEqual(self.run_("--interview", str(via / "docs/b.state.md"), cwd=other),
+                             (0, "raw-source: FOUND docs/s.audit.md"))
+
     def test_usage_errors(self):
         for args in (("--interview", "docs/x.audit.md"), ("--interview", "docs/x.txt"),
                      ("--seed", "a.md", "--interview", "b.md"), ()):
@@ -298,9 +360,18 @@ class ParityWithTeamWrite(RepoCase):
     def test_documented_difference(self):
         put(self.repo, "docs/b.state.md", state_text("없음", SEED.rstrip("\n")))
         self.assertEqual(theirs(self.repo, "docs/b.state.md"), ("NO-FRAMING", None))
+
         self.assertEqual(self.mine(), ("LOST", None))
         self.assertEqual(RS.locate_from_interview(str(Path(self.repo) / "docs/b.state.md")).reason,
                          RS.R_SEED_UNRECORDED)
+
+    def test_documented_difference_link_seed(self):
+        self.seed_pair()
+        os.symlink("s.md", str(Path(self.repo) / "docs/l.md"))
+        os.symlink("s.audit.md", str(Path(self.repo) / "docs/l.audit.md"))
+        put(self.repo, "docs/b.state.md", state_text("docs/l.md"))
+        self.assertEqual(theirs(self.repo, "docs/b.state.md")[0], "FOUND")
+        self.assertEqual(self.mine(), ("LOST", None))
 
 
 if __name__ == "__main__":
