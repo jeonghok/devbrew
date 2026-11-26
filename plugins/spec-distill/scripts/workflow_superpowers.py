@@ -100,9 +100,9 @@ def ledger_lines(ledger_text: str, total: int) -> list:
 def place_sentence(path: str, stage: str) -> str:
     """superpowers 에게 산출물을 기본 자리 대신 path 에 쓰라고 전하는 문장. design · plan 만 받는다."""
     if stage == team_layout.STAGES[0]:
-        return "사용자 선호: 설계문서는 기본 자리 대신 %s 에 쓴다." % path
+        return "설계문서는 기본 자리 대신 %s 에 쓴다." % path
     if stage == team_layout.STAGES[1]:
-        return "사용자 선호: 계획은 기본 자리 대신 %s 에 쓴다." % path
+        return "계획은 기본 자리 대신 %s 에 쓴다." % path
     raise ValueError("자리를 정하는 단계는 %s 뿐이다: %r" % (" · ".join(team_layout.STAGES[:2]), stage))
 
 

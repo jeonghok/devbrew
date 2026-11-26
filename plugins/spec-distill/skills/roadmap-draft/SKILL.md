@@ -80,7 +80,7 @@ python3 "$SD/scripts/roadmap_draft_entry.py" --brief "$BRIEF"
 |---|---|
 | `roadmap-entry: OK` | `## 1. 읽기` 로 간다 |
 | `roadmap-entry: RESUME` | 아래 「다시 불렀을 때」 로 간다 |
-| `roadmap-entry: STOP` | `roadmap-entry: STOP <사유>` 줄들을 고치지 않고 보이고 멈춘다. 사유가 분해됨 줄이 없다는 것이면 나눌지를 이 단계에서 묻지 않는다 — 나눌지는 컨텍스트 쌓기에서 정한다. 사유가 위험 줄 번호면 결과물을 고치지 않고 `## 되돌아가는 길` 의 둘째 갈래대로 길 둘을 보인다. 사유가 결과물이나 audit 을 읽지 못했다는 것이면 그 사유만 보이고 멈춘다 — 길 둘은 보이지 않는다 |
+| `roadmap-entry: STOP` | `roadmap-entry: STOP <사유>` 줄들을 고치지 않고 보이고 멈춘다. 사유가 분해됨 줄이 없다는 것이면 나눌지를 이 단계에서 묻지 않는다 — 나눌지는 컨텍스트 쌓기에서 정한다. 사유가 위험 줄 번호면 결과물을 고치지 않고 `## 되돌아가는 길` 의 둘째 갈래대로 길 둘을 보인다. 사유가 분해됨 줄의 로드맵 경로나 자리면 결과물 쪽 결함이다 — 위험 줄 번호와 같이 `## 되돌아가는 길` 의 둘째 갈래대로 길 둘을 보인다. 사유가 결과물이나 audit 을 읽지 못했다는 것이면 그 사유만 보이고 멈춘다 — 길 둘은 보이지 않는다 |
 | 판결 줄 없음 · 그 밖 | 출력을 그대로 보이고 멈춘다 |
 
 **다시 불렀을 때.** 판결이 `RESUME` 이면 앞선 로드맵 잡기가 도중에 끊긴 것이다(상태 파일에 분해안 표나 생성 기록이 있다). `roadmap-entry: RESUME <무엇이 있는가>` 줄을 그대로 보이고 `AskUserQuestion` 하나로 묻는다 — 「그 표에서 이어 간다」 · 「표를 버리고 처음부터」. 설명은 이렇게 쓴다 — 「그 표에서 이어 간다」: 얻음: 앞서 짠 표를 다시 보고 승인만 다시 받아 생성으로 간다 · 내줌: 그사이 결과물이나 코드가 바뀌었으면 낡은 표를 다시 승인하게 된다 / 「표를 버리고 처음부터」: 얻음: 결과물과 코드를 다시 읽고 표를 새로 짠다 · 내줌: 앞서 짠 표와 고친 내용을 버린다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다. 라벨 끝의 「(권장)」 · 「(Recommended)」 꼬리를 뗀 이름으로 읽는다.
@@ -181,7 +181,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/epic-handoff.md
 
 ## 6. 커밋
 
-생성이 rc 0 으로 끝난 뒤 한 번 돌린다. 펜스의 `<결과물 절대경로>` 자리표를 진입 단계 2 에서 푼 절대경로로 바꿔 돌리고, 나온 `[spec-distill]` 줄을 그대로 보인다. 넣는 것은 로드맵 폴더와 상태 파일(`## 분해안` · `## 생성 기록` 이 더해졌다) 둘이다 — 결과물 · audit 은 앞 단계가 커밋했고 이 커밋에 넣지 않는다. 커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 상태 파일과 한 커밋에 넣는다. 결과물이 레포 설정의 의도 폴더(`intent_dir` — 옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니거나, 로드맵 폴더가 레포 설정의 로드맵 폴더(`roadmaps_dir`) 바로 아래가 아니거나(대소문자만 다른 경로 포함), 폴더가 아니거나, 작업 트리 밖이거나 링크를 거치거나, 커밋할 파일이 없거나, §7 의 파일이 `roadmap-check` 를 통과하지 못하면 커밋하지 않는다. 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치를 판정하지 못하거나, 지금 기본 브랜치 위거나, 브랜치 위가 아니면(detached HEAD) 커밋하지 않고 손으로 커밋할 목록(로드맵 폴더 · 상태 파일)을 보인다. 결과물의 원자료를 알면(`## 7.` 의 PR 본문 펜스처럼 `raw_source.py locate` 가 `FOUND` 를 내고 seed 경로는 상태 파일의 `seed:` 값이다) 아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다.
+생성이 rc 0 으로 끝난 뒤 한 번 돌린다. 펜스의 `<결과물 절대경로>` 자리표를 진입 단계 2 에서 푼 절대경로로 바꿔 돌리고, 나온 `[spec-distill]` 줄을 그대로 보인다. 넣는 것은 로드맵 폴더와 상태 파일(`## 분해안` · `## 생성 기록` 이 더해졌다) 둘이다 — 결과물 · audit 은 앞 단계가 커밋했고 이 커밋에 넣지 않는다. 커밋 펜스가 결과물 §7 의 `분해됨 — <로드맵 경로>` 줄에서 로드맵 폴더를 도출해 상태 파일과 한 커밋에 넣는다. 결과물이 레포 설정의 의도 폴더(`intent_dir` — 옛 꼴 파일은 옛 의도 폴더) 바로 아래가 아니거나, 로드맵 폴더가 레포 설정의 로드맵 폴더(`roadmaps_dir`) 바로 아래가 아니거나(대소문자만 다른 경로 포함), 폴더가 아니거나, 작업 트리 밖이거나 링크를 거치거나, 커밋할 파일이 없거나, §7 의 파일이 `roadmap-check` 를 통과하지 못하면 커밋하지 않는다. 기본 브랜치는 `default-branch --check-remote` 로 얻는다 — 기본 브랜치를 판정하지 못하거나, 지금 기본 브랜치 위거나, 브랜치 위가 아니면(detached HEAD) 커밋하지 않고 손으로 커밋할 목록(로드맵 폴더 · 상태 파일)을 보인다. 결과물의 원자료를 알면(`## 7.` 의 PR 본문 펜스처럼 `raw_source.py locate` 가 `FOUND` 를 내고 seed 경로는 상태 파일의 `seed:` 값이다) 아직 커밋되지 않은 framing 기록 · seed 도 그 목록에 댄다. 로드맵 폴더와 상태 파일이 이미 커밋돼 있고 바뀐 것이 없으면(앞서 끊긴 로드맵 잡기가 커밋해 둔 것) 새 커밋 없이 그 사실을 낸다.
 
 <!-- roadmap-commit:begin -->
 ```bash
@@ -216,6 +216,11 @@ def="$(python3 "$SD/scripts/repo_defaults.py" default-branch --check-remote --ro
 cur="$(git -C "$top" branch --show-current 2>/dev/null)" || cur=""
 [ -n "$cur" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 브랜치 위가 아니다(detached HEAD). 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
 [ "$cur" != "$def" ] || { echo "[spec-distill] 커밋하지 않았다 — 지금 기본 브랜치(${def})에 있다. 확인한 뒤 직접 커밋하라: ${FILES}"; exit 0; }
+st="$(git -C "$top" status --porcelain --untracked-files=all -- "$RDIR" "$STATE_F" 2>/dev/null)" || st="?"
+if [ -z "$st" ] && [ -n "$(git -C "$top" ls-files -- "$STATE_F")" ] && [ -n "$(git -C "$top" ls-files -- "$RDIR")" ]; then
+  echo "[spec-distill] 로드맵 폴더 · 상태 파일은 이미 커밋돼 있다 — $(git -C "$top" rev-parse --short HEAD) (${cur})"
+  exit 0
+fi
 c_rc=0
 git -C "$top" add -- "$RDIR" "$STATE_F" || c_rc=$?
 [ "$c_rc" -ne 0 ] || git -C "$top" commit -q --only -m "docs(roadmap): $(basename -- "$RDIR") 로드맵 · 분해안" -- "$RDIR" "$STATE_F" || c_rc=$?
@@ -263,4 +268,4 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/roadmap-draft/references/pr-merge.md
      > `@<brief-path> 이 context brief 로 Skill superpowers:brainstorming 을 시작하라. 시작하기 전에 ${CLAUDE_PLUGIN_ROOT}/references/brief-handoff.md 의 ## brainstorming 지시 절을 읽고 그 지시를 따른다 — 그 파일의 플러그인 루트 변수는 ${CLAUDE_PLUGIN_ROOT} 로 읽는다. 읽지 못하면 추측하지 말고 멈춰 보고한다.`
 
      `@<brief-path>` 는 결과물 절대경로로, 줄 안의 `${CLAUDE_PLUGIN_ROOT}` 는 이 플러그인의 절대경로로 바꿔 보인다. 바꾸지 못한 자리표가 남거나 경로에 공백이 있으면 그 줄을 보이지 않고 사유와 결과물 경로를 보인 뒤 멈춘다. 새 세션(`/compact` 또는 `/new` 뒤)에서 그 줄을 입력하라고 알리고 턴을 끝낸다 — 같은 턴에서 brainstorming 을 부르지 않는다.
-- **결과물에서 모자란 것을 보거나**(조사가 더 필요하다 등) **생성기가 결과물 쪽 결함으로 실패하면**(진입 검사의 위험 줄 번호 멈춤 · `## 3.` 의 `brief-risk: FAIL` · `## 5.` 의 위험 줄 사유 — 커밋 전 검사를 거치지 않은 옛 결과물 등): 결과물을 고치지 않고 그 사실을 보이고 멈춘다. 끝난 컨텍스트 쌓기는 다시 이을 수 없다. 사용자가 고를 길은 둘이다 — 「spec 하나로」 · 그 결과물을 입력으로 새 `/spec-distill:context-build` 를 시작한다(`/spec-distill:context-build @<결과물 절대경로>`) — `<결과물 절대경로>` 를 바꾸지 못하거나 경로에 공백이 있으면 새 `/spec-distill:context-build` 줄을 보이지 않고 사유와 결과물 경로를 보인다. 사용자가 「spec 하나로」 를 말하면 위 첫 갈래로 간다.
+- **결과물에서 모자란 것을 보거나**(조사가 더 필요하다 등) **생성기가 결과물 쪽 결함으로 실패하면**(진입 검사의 위험 줄 번호 멈춤 · 진입 검사의 로드맵 경로 · 자리 멈춤 · `## 3.` 의 `brief-risk: FAIL` · `## 5.` 의 위험 줄 사유 — 커밋 전 검사를 거치지 않은 옛 결과물 등): 결과물을 고치지 않고 그 사실을 보이고 멈춘다. 끝난 컨텍스트 쌓기는 다시 이을 수 없다. 사용자가 고를 길은 둘이다 — 「spec 하나로」 · 그 결과물을 입력으로 새 `/spec-distill:context-build` 를 시작한다(`/spec-distill:context-build @<결과물 절대경로>`) — `<결과물 절대경로>` 를 바꾸지 못하거나 경로에 공백이 있으면 새 `/spec-distill:context-build` 줄을 보이지 않고 사유와 결과물 경로를 보인다. 사용자가 「spec 하나로」 를 말하면 위 첫 갈래로 간다.
