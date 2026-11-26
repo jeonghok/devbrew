@@ -422,6 +422,25 @@ case_gate_rows_one_pass() {
   assert_eq "$(grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)' "$REF")" "0" "e2e.md 에 'CAP' 이 없다"
 }
 
+case_invalid_single_option_no_question() {
+  # AC21 — 무효 걷기에서 바뀐 경로에 소스 파일이 있어 선택지가 하나만 남으면 질문 창 없이 알림 한 줄을 보이고
+  # 「무효로 남긴다」 의 길로 간다. 본문(SKILL `## e2e`)과 걷기 reference(5 절)가 같은 말을 한다.
+  # 둘이 남는 경우의 표 행은 case_gate_rows_one_pass 가 그대로 잰다.
+  local w s t name notice rec
+  w=$(section "$REF" "## 5. 걷기 직후 게이트"); s=$(section "$SKILL" "## e2e")
+  notice='`> [quality-gates] 걷는 사이 소스 파일이 바뀌었다(<경로 — 많으면 처음 몇 개와 수>) — 이 걷기는 무효로 남긴다.`'
+  rec='`질문 없이 무효 — 소스 파일이 바뀜`'
+  for name in w s; do
+    if [ "$name" = w ]; then t="$w"; else t="$s"; fi
+    assert_eq "$(printf '%s\n' "$t" | grep -cF -- "$notice")" "1" "AC21($name): 무효 걷기 알림 줄이 글자 그대로 한 번 있다"
+    assert_eq "$(printf '%s\n' "$t" | grep -cF -- "$rec")" "1" "AC21($name): 걷기 기록 글 「질문 없이 무효 — 소스 파일이 바뀜」 이 한 번 있다"
+    assert_contains "$t" '질문 창을 띄우지 않는다' "AC21($name): 선택지가 하나면 질문 창을 띄우지 않는다"
+    assert_contains "$t" '「사람이 뒤집음」 으로 적지 않는다.' "AC21($name): 질문 없는 무효를 「사람이 뒤집음」 으로 적지 않는다"
+  done
+  assert_eq "$(grep -cF -- "$notice" "$REF")" "1" "AC21: e2e.md 전체에 알림 줄이 한 번뿐이다(5 절)"
+  assert_eq "$(grep -cF -- "$notice" "$SKILL")" "1" "AC21: SKILL 전체에 알림 줄이 한 번뿐이다(## e2e)"
+}
+
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do
   note "── $c"
   "$c"
