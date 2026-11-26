@@ -313,6 +313,13 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n", tests_script=self.READ + "\n"),
                              (False, ["DEVBREW_FX_DISABLE_A"]))
 
+    def test_every_plugin_of_this_repo_has_readers_present(self):   # AC24 — 이 레포의 플러그인마다 끄기 변수에 읽는 코드가 있다
+        plugins = sorted(p for p in (REPO / "plugins").iterdir() if (p / ".claude-plugin" / "plugin.json").is_file())
+        self.assertGreaterEqual(len(plugins), 4)
+        for p in plugins:
+            with self.subTest(plugin=p.name):
+                self.assertEqual(self._readers_at(p), (True, None))
+
     def _readers_at(self, dd):
         g = self._gaps(dd)["switches_have_readers"]
         return g["present"], g.get("missing")

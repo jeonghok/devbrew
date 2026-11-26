@@ -349,11 +349,14 @@ for ent in raw:
     if f.startswith("shared/") and "/tests/" not in f and base not in ("switches.md", "CHANGELOG.md") and not base.startswith("README"): have_other.add("shared")
     if f.startswith("tools/") and "/tests/" not in f and "/test_" not in f: have_other.add("tools")
     if f.startswith("docs/git-workflow/"): have_other.add("docs/git-workflow")
-    if not (plug or sh or tl or gw): continue
+    rd_ = re.match(r"^plugins/[^/]+/README\.md$", f)
+    if rd_: have_other.add("README 산문")
+    if not (plug or sh or tl or gw or rd_): continue
     try:
         with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
     except (OSError, UnicodeDecodeError): skipped_decode += 1; continue
-    branches.add("plugins/" + plug.group(1) if plug else ("shared" if sh else ("tools" if tl else "docs/git-workflow")))
+    if rd_: txt = re.sub(r"<!-- switches:begin -->.*?<!-- switches:end -->", "", txt, flags=re.S)   # 끄기 변수 표 표지 안은 표가 맡는다(절 C) — 밖 본문만 코퍼스다
+    branches.add("plugins/" + plug.group(1) if plug else ("shared" if sh else ("tools" if tl else ("README 산문" if rd_ else "docs/git-workflow"))))
     corpus.append((f, txt))
 if len(corpus) > 50 and len(ret) >= 20: ok("코퍼스 %d 파일(디코드 못 해 뺀 파일 %d 개) · 은퇴 이름 %d 개(별칭 포함)를 도출했다" % (len(corpus), skipped_decode, len(ret)))
 else: no("코퍼스 %d 파일 · 은퇴 이름 %d 개 — 도출이 비었거나 너무 작다" % (len(corpus), len(ret)))
@@ -366,7 +369,7 @@ if not bad: ok("어느 은퇴 이름도 코퍼스에 없다")
 else:
     for f, h in bad: no("은퇴 이름이 남았다: %s %s" % (f, " ".join(h)))
 bare = bound(SKIPNAME)
-got = sorted(f for f, t in corpus if bare.search(t))
+got = sorted(f for f, t in corpus if bare.search(t) and not re.match(r"^plugins/[^/]+/README\.md$", f))   # 맨이름 집합은 코드 코퍼스의 것이다 — README 산문은 은퇴 이름 검사에만 든다
 want = ["plugins/spec-distill/scripts/review_entry.py", "shared/entry/entry_preflight.py"]
 if got == want: ok("맨이름 " + SKIPNAME + " 가 나오는 파일이 정확히 둘이다")
 else: no("맨이름 " + SKIPNAME + " 가 나오는 파일 집합이 다르다: " + repr(got))
