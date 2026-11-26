@@ -309,6 +309,35 @@ class Contract(DiffBase):
         self.assertIn('"x.rb"', self.field(p.stdout, "unclaimed"))
         self.assertIn("reason: silent-drop", self.verdict(p.stdout))
 
+    def test_support_rows_not_counted(self):
+        # 지원 파일(support 행)은 러너가 아니다 — 돌릴 대상 · unit 전체 · unclaimed · silent-drop 에서 빠지고, 그 경로와
+        # 그 때문에 더한 테스트 수(길 위 폴더에 바로 든, 러너가 맡은 행의 수)가 차등 출력에 실린다(AC19 · 설계 §5).
+        units = ["tests/a.sh", "tests/fixtures/test_f.sh", "tests/sub/test_s.sh"]
+        write_assign(self.memo, [("tests/a.sh", "shell", "file"), ("tests/data.tsv", "support", "file"),
+                                 ("tests/fixtures/x.tsv", "support", "file"),
+                                 ("tests/fixtures/test_f.sh", "shell", "file"),
+                                 ("tests/sub/test_s.sh", "shell", "file")])
+        rows = [(u, "pass", "0", "per-unit") for u in units]
+        write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, rows)
+        write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "unclaimed"), "[]")
+        self.assertIn("silent_drop: false", p.stdout)
+        self.assertNotIn("silent-drop", self.field(p.stdout, "degrade_causes"))
+        self.assertEqual(self.field(p.stdout, "adapters"), "[shell]")
+        self.assertEqual(self.field(p.stdout, "support"), '["tests/data.tsv", "tests/fixtures/x.tsv"]')
+        self.assertEqual(self.field(p.stdout, "support_tests"), "2")
+        self.assertIn("counts: {still_green: 3,", p.stdout)
+        self.assertNotIn('unit: "tests/data.tsv"', p.stdout)
+        self.assertIn("verdict: clean", self.verdict(p.stdout))
+
+    def test_support_absent_prints_empty(self):
+        self.pair("shell", [("a.sh", "pass", "0", "per-unit")], [("a.sh", "pass", "0", "per-unit")])
+        p = self.run_diff()
+        self.assertEqual(self.field(p.stdout, "support"), "[]")
+        self.assertEqual(self.field(p.stdout, "support_tests"), "0")
+
     def test_R17_truncated_assign_is_exit_4(self):
         write_assign(self.memo, [("a.sh", "shell", "file")])
         text = (self.memo / "assign-i1.tsv").read_text(encoding="utf-8").splitlines()[:-1]

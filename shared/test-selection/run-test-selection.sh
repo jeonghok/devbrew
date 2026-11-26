@@ -9,7 +9,7 @@
 #   unrun       <rows-file> <runner> <commit|-> <unit>...  → 관측 없는 행(unrun)을 병합한다
 #   pending     <rows-file> <unit>...                  → 관측된 행이 아직 없는 unit 을 한 줄씩 낸다
 #
-# 배정 파일: `<unit>\t<runner|unclaimed>\t<granularity>` 행들 + 마지막 줄
+# 배정 파일: `<unit>\t<runner|unclaimed|support>\t<granularity>` 행들 + 마지막 줄 — support 는 러너가 아니다(지원 파일 — 돌리지 않는다)
 #   `#qg-assign\tadapters=<a,b|->\trows=<N>`
 # 행 파일:   `<unit>\t<pass|fail|error|unrun|absent>\t<exit|->\t<bulk|per-unit|flaky|skip>` 행들 + 마지막 줄
 #   `#qg-rows\trunner=<runner>\tcommit=<sha|->\trows=<N>\tflaky=<0|1>`
@@ -320,6 +320,41 @@ adapter_usable() {
   return 0
 }
 
+# 지원 파일(§5) — 맡지 않은 파일 가운데 이름이 테스트 꼴이 아니고 경로에 tests · test 폴더가 있는 것. 그 파일이 든
+# 폴더부터 가장 가까운 tests · test 폴더까지(둘 다 포함)의 길 위 폴더에 러너가 맡은 파일(패키지로 접기 전 경로)이 바로
+# 들어 있으면 support, 없으면 unclaimed 다. 이름이 테스트 꼴인 파일은 unclaimed 그대로다.
+# 테스트 꼴 이름: 마지막 성분이 `test_` 로 시작하거나 `_test.<확장자>` · `.test.<확장자>` · `.spec.<확장자>` 로 끝난다.
+# 입력: IN_F · IN_R · n_in(맡는 판정이 끝난 값). 출력: SPLIT — 맡지 않은(IN_R 이 빈) 입력마다 차례로 support|unclaimed.
+support_split() {
+  local i claimed_list="" open_list="" n_open=0 line
+  SPLIT=()
+  for ((i = 0; i < n_in; i++)); do
+    case "${IN_R[i]}" in
+      "!") ;;
+      "")  open_list="$open_list${IN_F[i]}"$'\n'; n_open=$((n_open + 1)) ;;
+      *)   claimed_list="$claimed_list${IN_F[i]}"$'\n' ;;
+    esac
+  done
+  [[ $n_open -eq 0 ]] && return 0
+  i=0
+  while IFS= read -r line; do
+    SPLIT[i]=$line; i=$((i + 1))
+  done < <(awk '
+    function is_test(b) { return b ~ /^test_/ || b ~ /_test\.[A-Za-z0-9]+$/ || b ~ /\.(test|spec)\.[A-Za-z0-9]+$/ }
+    function dir_of(x,   n, p) { n = split(x, p, "/"); return n < 2 ? "" : substr(x, 1, length(x) - length(p[n]) - 1) }
+    FILENAME == ARGV[1] { if ($0 != "") have[dir_of($0)] = 1; next }
+    { n = split($0, p, "/"); cls = "unclaimed"
+      if (n >= 2 && !is_test(p[n])) {
+        k = 0; for (i = n - 1; i >= 1; i--) if (p[i] == "tests" || p[i] == "test") { k = i; break }
+        for (j = n - 1; k && j >= k; j--) {
+          d = p[1]; for (i = 2; i <= j; i++) d = d "/" p[i]
+          if (d in have) { cls = "support"; break }
+        }
+      }
+      print cls }' <(printf '%s' "$claimed_list") <(printf '%s' "$open_list"))
+  [[ $i -eq $n_open ]] || { rm -f "$tmp"; die "지원 파일 판정의 줄 수가 맞지 않는다(${i} ≠ ${n_open})"; }
+}
+
 COMMIT_RE='^([0-9a-f]{40}|[0-9a-f]{64}|-)$'
 
 # 행 파일을 읽어 ROWS_UNIT/ROWS_LINE 배열과 꼬리 값(T_RUNNER/T_COMMIT/T_FLAKY)을 채운다.
@@ -432,10 +467,14 @@ case "${1:-}" in
 $1"
       n=$((n + 1))
     }
+    # 입력마다 맡는 러너를 먼저 정하고(IN_R — 빈 값은 맡지 않음, `!` 는 트리 밖) 행은 입력 순서대로 마지막에 쓴다.
+    # 맡지 않은 파일을 support · unclaimed 로 가르는 것은 맡는 판정이 모두 끝난 뒤의 맡은 파일로 한다.
+    IN_F=(); IN_R=(); n_in=0
     while IFS= read -r f || [[ -n "$f" ]]; do
       [[ -z "$f" ]] && continue
+      IN_F[n_in]=$f; IN_R[n_in]=""; n_in=$((n_in + 1))
       if ! unit_within_worktree "$w" "$f"; then
-        emit "$f" unclaimed file; continue
+        IN_R[n_in - 1]="!"; continue
       fi
       claimed=""
       case "$f" in
@@ -457,7 +496,16 @@ $1"
           *.test.ts|*.test.tsx|*.test.js|*.test.jsx|*.spec.*) claimed="$js" ;;
         esac
       fi
-      if [[ -n "$claimed" ]]; then
+      IN_R[n_in - 1]=$claimed
+    done
+    SPLIT=()
+    [[ -z "$absorber" ]] && support_split
+    j=0
+    for ((i = 0; i < n_in; i++)); do
+      f=${IN_F[i]}; claimed=${IN_R[i]}
+      if [[ "$claimed" == "!" ]]; then
+        emit "$f" unclaimed file
+      elif [[ -n "$claimed" ]]; then
         if [[ "$(granularity_of "$claimed")" == "package" ]]; then
           emit "$(dirname -- "$f")" "$claimed" package
         else
@@ -466,7 +514,7 @@ $1"
       elif [[ -n "$absorber" ]]; then
         residual=1
       else
-        emit "$f" unclaimed file
+        emit "$f" "${SPLIT[j]}" file; j=$((j + 1))
       fi
     done
     [[ $residual -eq 1 ]] && emit BULK "$absorber" bulk

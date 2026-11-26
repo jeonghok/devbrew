@@ -4,10 +4,19 @@ qg 차등 테스트가 쓰는 스크립트 넷의 정본이다. 플러그인은 
 
 ## 소비자 규칙
 
-- **넷을 전부 링크한다** — `run-test-selection.sh` · `diff-test-results.py` · `compute-test-scope-candidates.sh` · `resolve-baseline.sh`. 셋만 링크하면 설치본에서 형제를 못 찾는다: `compute-test-scope-candidates.sh` 는 링크를 풀지 않은 자기 폴더에서 `resolve-baseline.sh` 를 부르고(`:18 · :54`), `diff-test-results.py` 는 링크를 푼 자기 폴더에서 `run-test-selection.sh` 를 찾는다(`:142`).
+- **넷을 전부 링크한다** — `run-test-selection.sh` · `diff-test-results.py` · `compute-test-scope-candidates.sh` · `resolve-baseline.sh`. 셋만 링크하면 설치본에서 형제를 못 찾는다: `compute-test-scope-candidates.sh` 는 링크를 풀지 않은 자기 폴더에서 `resolve-baseline.sh` 를 부르고(`:20 · :56`), `diff-test-results.py` 는 링크를 푼 자기 폴더에서 `run-test-selection.sh` 를 찾는다(`:146`).
 - 링크는 `ln -s ../../../shared/test-selection/<이름> plugins/<플러그인>/scripts/<이름>` 꼴의 상대 경로다.
 - 바이트 그대로 옮긴 파일이라 qg 이름이 계약에 들어 있다. 차등 테스트를 끄는 변수는 어느 플러그인에서 불러도 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이다(`run-test-selection.sh:22`). 배정 · 행 파일의 꼬리 줄 `#qg-assign` · `#qg-rows`(`:13` · `:15`)는 소유자 이름이 아니라 형식 표지로 읽는다. 이름을 바꾸려면 kill switch 는 옛 이름을 별칭으로 계속 읽어야 한다.
 - 이 파일들의 동작을 바꾸는 변경은 공유본 변경이다 — 링크한 모든 플러그인의 스위트로 잰다.
+- 배정 파일의 둘째 칸은 러너 이름이거나 `unclaimed` · `support` 다. 둘 다 러너가 아니다 — 배정을 읽어 `run` 을 부르는 소비자는 두 값을 함께 거른다.
+
+## 지원 파일(`support`)
+
+- 지원 파일은 경로에 `tests` · `test` 폴더가 있고 이름이 테스트 꼴이 아닌 파일이다. 테스트 꼴 이름은 마지막 성분이 `test_` 로 시작하거나 `_test.<확장자>` · `.test.<확장자>` · `.spec.<확장자>` 로 끝나는 것이다.
+- 길 위 폴더는 그 파일이 든 폴더부터 가장 가까운 `tests` · `test` 폴더까지다(둘 다 포함). 하위 폴더로는 내려가지 않는다.
+- `compute-test-scope-candidates.sh` 는 바뀐 지원 파일마다 길 위 폴더에 바로 든 테스트 꼴 파일을 후보에 더한다.
+- `run-test-selection.sh assign` 은 흡수 러너(cargo · make · npm-script)가 없을 때 맡지 않은 지원 파일을 가른다. 같은 입력에서 러너가 맡은 파일(패키지로 접기 전 경로)이 길 위 폴더에 바로 있으면 `support`, 없으면 `unclaimed` 다. 흡수 러너가 있으면 지금처럼 `BULK` 가 흡수한다.
+- `diff-test-results.py` 는 `support` 행을 unit 전체 · `unclaimed` · `silent-drop` 에서 빼고 `support: [...]` · `support_tests: <n>` 을 낸다. `support_tests` 는 길 위 폴더에 바로 든, 러너가 맡은 행의 수다(겹치면 한 번).
 
 ## 기준선(`resolve-baseline.sh`)
 

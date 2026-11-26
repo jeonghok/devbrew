@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test_run_test_selection.sh — assign · run · unrun · pending 의 행 파일 계약.
 # 요구: R5 · R7 · R11 · R15 · R16 · R17 · R20 · R21 (docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록)
+#       지원 파일 배정(support) — docs/superpowers/specs/2026-11-24-qg-planted-text-suite-lock-design.md §5 · AC19
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 RTS="$(cd -- "$SCRIPT_DIR/.." && pwd)/scripts/run-test-selection.sh"
@@ -78,11 +79,11 @@ case_R20_assign_refuses_units_outside_tree() {
 }
 # R20 — shell 은 tests/*.sh 이면서 실행 비트가 있을 때만 claim 한다.
 case_R20_shell_scope() {
-  mkrepo; shtest tests/a.sh 0; shtest scripts/b.sh 0; printf '#!/bin/bash\n' > "$REPO/main/tests/c.sh"
+  mkrepo; shtest tests/a.sh 0; shtest scripts/b.sh 0; printf '#!/bin/bash\n' > "$REPO/main/tests/test_c.sh"
   mktree || { rmrepo; return; }
-  assign scripts/b.sh tests/c.sh tests/a.sh
+  assign scripts/b.sh tests/test_c.sh tests/a.sh
   assert_eq "$(arow scripts/b.sh)" "unclaimed	file" "R20: tests/ 밖 .sh → unclaimed"
-  assert_eq "$(arow tests/c.sh)" "unclaimed	file" "R20: 실행 비트 없음 → unclaimed"
+  assert_eq "$(arow tests/test_c.sh)" "unclaimed	file" "R20: 실행 비트 없음 → unclaimed"
   assert_eq "$(arow tests/a.sh)" "shell	file" "R20 양성 대조"
   rmrepo
 }
@@ -269,6 +270,76 @@ case_trailer_values_are_validated() {
   assert_eq "$rc" "2" "빈 flaky= 는 거부"
   rmrepo
 }
+# ── 지원 파일(§5 · AC19) ──────────────────────────────────────────────────────────
+# 흡수 러너가 없을 때, 맡지 않은 파일 가운데 이름이 테스트 꼴이 아니고 경로에 tests · test 폴더가 있는 것은 같은 입력에서
+# 러너가 맡은 파일이 그 길 위 폴더(파일이 든 폴더 .. 가장 가까운 tests · test 폴더)에 바로 들어 있으면 support 다.
+case_support_row_when_folder_claimed() {
+  mkrepo; shtest tests/a.sh 0; shtest tests/fixtures/test_f.sh 0
+  printf 'x\n' > "$REPO/main/tests/data.tsv"; printf 'x\n' > "$REPO/main/tests/fixtures/x.tsv"
+  printf 'x\n' > "$REPO/main/tests/helper.sh"
+  mktree || { rmrepo; return; }
+  assign tests/data.tsv tests/fixtures/x.tsv tests/helper.sh tests/a.sh
+  assert_eq "$(arow tests/data.tsv)" "support	file" "support_row_when_folder_claimed: 같은 폴더에 맡은 테스트가 있는 데이터 파일 → support"
+  assert_eq "$(arow tests/fixtures/x.tsv)" "support	file" "support_row_when_folder_claimed: 위 테스트 폴더(tests/)에 맡은 테스트가 있으면 → support"
+  assert_eq "$(arow tests/helper.sh)" "support	file" "support_row_when_folder_claimed: 실행 비트 없는 도우미 셸 → support"
+  assert_eq "$(arow tests/a.sh)" "shell	file" "support_row_when_folder_claimed: 그 폴더의 테스트는 지금처럼 러너가 맡는다"
+  assert_eq "$(trailer "$REPO/assign.tsv")" "#qg-assign	adapters=shell	rows=4" "support_row_when_folder_claimed: support 행도 꼬리의 행 수에 든다"
+  rmrepo
+}
+case_unclaimed_when_folder_has_no_claimed_test() {
+  mkrepo; shtest tests/a.sh 0; shtest tests/sub/test_s.sh 0
+  printf 'x\n' > "$REPO/main/tests/data.tsv"; mkdir -p "$REPO/main/lib/test"; printf 'x\n' > "$REPO/main/lib/test/d.json"
+  mktree || { rmrepo; return; }
+  assign tests/data.tsv tests/sub/test_s.sh lib/test/d.json
+  assert_eq "$(arow tests/data.tsv)" "unclaimed	file" "unclaimed_when_folder_has_no_claimed_test: 맡은 테스트가 하위 폴더에만 있으면 → unclaimed"
+  assert_eq "$(arow lib/test/d.json)" "unclaimed	file" "unclaimed_when_folder_has_no_claimed_test: test/ 폴더에 맡은 테스트가 없으면 → unclaimed"
+  assert_eq "$(arow tests/sub/test_s.sh)" "shell	file" "unclaimed_when_folder_has_no_claimed_test: 양성 대조 — 하위 폴더의 테스트는 맡는다"
+  assign tests/data.tsv
+  assert_eq "$(arow tests/data.tsv)" "unclaimed	file" "unclaimed_when_folder_has_no_claimed_test: 폴더의 테스트(tests/a.sh)가 같은 입력에 없으면 → unclaimed"
+  rmrepo
+}
+case_test_named_unclaimed_stays() {
+  mkrepo; shtest plugins/x/tests/test_ok.sh 0
+  printf '#!/bin/bash\n' > "$REPO/main/plugins/x/tests/test_y.sh"
+  mktree || { rmrepo; return; }
+  assign plugins/x/tests/test_y.sh plugins/x/tests/test_ok.sh
+  assert_eq "$(arow plugins/x/tests/test_y.sh)" "unclaimed	file" "test_named_unclaimed_stays: 이름이 테스트 꼴인데 맡는 러너가 없으면 → unclaimed(지원 파일 아님)"
+  assert_eq "$(arow plugins/x/tests/test_ok.sh)" "shell	file" "test_named_unclaimed_stays: 양성 대조 — 같은 폴더의 맡은 테스트"
+  rmrepo
+}
+# 바뀐 도우미를 쓰는 테스트가 이름 맞추기로 닿지 않아도 후보의 바닥 → 배정을 거쳐 그 테스트가 행에 있다.
+case_helper_reached_only_by_folder() {
+  mkrepo; local M="$REPO/main"
+  printf 'helper_ok() { return 0; }\n' > "$M/tests/lib.sh"
+  printf '#!/bin/bash\n. "$(dirname "$0")/lib.sh"\nhelper_ok\n' > "$M/tests/test_uses.sh"; chmod +x "$M/tests/test_uses.sh"
+  ( cd "$M" && git add -A && git commit -qm base && git update-ref refs/remotes/origin/main main \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main && git checkout -q -b feature \
+    && printf 'helper_ok() { return 1; }\n' > tests/lib.sh && git commit -qam helper ) || { no "픽스처 실패"; rmrepo; return; }
+  local cands; cands=$( cd "$M" && bash "$(dirname "$RTS")/compute-test-scope-candidates.sh" 2>/dev/null )
+  git -C "$M" worktree add -q --detach "$REPO/wt" HEAD || { no "픽스처 worktree 실패"; rmrepo; return; }
+  TREE="$REPO/wt"
+  printf '%s\n' "$cands" | bash "$RTS" assign "$TREE" "$REPO/assign.tsv" 2>/dev/null
+  assert_eq "$(arow tests/test_uses.sh)" "shell	file" "helper_reached_only_by_folder: 이름이 맞지 않는 테스트도 폴더로 닿아 배정 행이 있다"
+  assert_eq "$(arow tests/lib.sh)" "support	file" "helper_reached_only_by_folder: 바뀐 도우미는 support 행이다(silent-drop 이 아니다)"
+  rmrepo
+}
+case_bulk_absorber_unchanged() {
+  mkrepo; shtest tests/a.sh 0; printf 'x\n' > "$REPO/main/tests/data.tsv"; printf 'test:\n\ttrue\n' > "$REPO/main/Makefile"
+  mktree || { rmrepo; return; }
+  assign tests/data.tsv tests/a.sh
+  assert_eq "$(arow BULK)" "make	bulk" "bulk_absorber_unchanged: 흡수 러너가 있으면 지원 파일도 지금처럼 전체 실행을 부른다"
+  assert_eq "$(arow tests/data.tsv)" "" "bulk_absorber_unchanged: 흡수 러너가 있으면 지원 파일의 행이 따로 없다"
+  assert_eq "$(awk -F'\t' '$2 == "support"' "$REPO/assign.tsv")" "" "bulk_absorber_unchanged: support 행이 없다"
+  rmrepo
+}
+case_scope_empty_unchanged() {
+  mkrepo; shtest tests/a.sh 0; mktree || { rmrepo; return; }
+  printf '' | bash "$RTS" assign "$TREE" "$REPO/assign.tsv" 2>/dev/null; local rc=$?
+  assert_eq "$rc" "0" "scope_empty_unchanged: 후보 0 → exit 0"
+  assert_eq "$(cat "$REPO/assign.tsv")" "#qg-assign	adapters=shell	rows=0" "scope_empty_unchanged: 돌릴 단위 0 이면 꼬리 줄만(지금과 같다)"
+  rmrepo
+}
+
 for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R17_failed_assign_removes_stale_file case_R17_output_path_is_directory_fails \
          case_R20_assign_refuses_units_outside_tree case_R20_shell_scope \
@@ -278,7 +349,10 @@ for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R15_flaky_rerun_once_and_keeps_unobserved case_R15_flaky_rerun_unobserved_exit_keeps_row \
          case_R15_flaky_rerun_replaces_observed_row \
          case_R20_run_rechecks_scope case_unrun_and_pending case_truncated_rows_file_is_refused \
-         case_rows_count_mismatch_is_refused case_trailer_values_are_validated; do
+         case_rows_count_mismatch_is_refused case_trailer_values_are_validated \
+         case_support_row_when_folder_claimed case_unclaimed_when_folder_has_no_claimed_test \
+         case_test_named_unclaimed_stays case_helper_reached_only_by_folder case_bulk_absorber_unchanged \
+         case_scope_empty_unchanged; do
   echo "== $c"; $c
 done
 finish

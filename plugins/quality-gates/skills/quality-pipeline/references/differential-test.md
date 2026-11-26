@@ -173,18 +173,23 @@ printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<
 
 스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 범위 스코프에서 이 대체는 어느 러너가 맡을지 정하는 데만 쓰인다 —
 `head_tree` 가 비면 D3 이 HEAD 축을 관측 없음으로 채우므로 지금 체크아웃(시작 커밋일 수 있다)의 테스트 결과는 판정에 들어가지 않는다. 배정 파일의 행은
-`<unit>\t<runner|unclaimed>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
-9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16).
+`<unit>\t<runner|unclaimed|support>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
+9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16). `support` 는 지원 파일이다 — 테스트 폴더(`tests/` · `test/`) 아래
+이름이 테스트 꼴이 아닌 파일(데이터 · 문서 · 도우미)로, 그 파일이 든 폴더부터 가장 가까운 테스트 폴더까지의 길 위 폴더에 러너가
+맡은 테스트가 같은 배정에 있다. 후보의 바닥이 그 길 위 폴더들의 테스트를 이미 더했다. 지원 파일 자신은 러너가 아니라 돌리지 않고,
+unit 전체와 silent-drop 에서 빠진다. 그 폴더들에 맡은 테스트가 없으면 `unclaimed` 다.
 
 계획을 한 줄로 알린다. 분모는 `--total` 의 출력이다(토픽 · 범위 스코프면 `--total --tree <tree>` — 범위면 `--total --tree <end>`):
 
 > `> Differential scope: 영향 테스트 <N>개 선택 (전체 <M>개 중), 러너 <runners> — 이번 변경의 영향분만 기준선 대비로 돌린다.`
 
+`<N>` 은 배정 파일의 행 가운데 `support` 행을 뺀 수다. 분모 `<M>` 은 그대로 `--total` 의 출력이다.
 `granularity: bulk` 러너가 하나라도 있으면 같은 줄 뒤에 `커버리지 미보장(러너가 선택을 무시함)` 을 붙인다.
+배정 파일에 `support` 행이 `<n>`개 있으면 같은 줄 끝에 `· 테스트 폴더의 테스트 아닌 파일 <n>개가 바뀌어 그 폴더의 테스트를 함께 돌린다` 를 붙인다 — 0 이면 붙이지 않는다.
 
 ## D3 HEAD 축 실행
 
-배정 파일의 러너마다(unclaimed 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
+배정 파일의 러너마다(unclaimed · support 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
 per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다.
 
 테스트를 돌리는 명령(D3 · D4 의 `run` · D5 의 flaky 재실행)은 감싸개 `with-suite-lock.sh` 를 거친다. 세션 폴더에
@@ -212,8 +217,8 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 ## D4 기준선 축 — 아직 돌지 않은 unit 만
 
-같은 실행 안에서 기준선 커밋은 바뀌지 않는다 — 아래 `<기준선 커밋>` 은 D0 이 정한 값이다. 메모에 관측된 행이 없는
-unit 만 돌린다:
+같은 실행 안에서 기준선 커밋은 바뀌지 않는다 — 아래 `<기준선 커밋>` 은 D0 이 정한 값이다. D3 과 같이 배정 파일의 러너마다
+(unclaimed · support 제외) 메모에 관측된 행이 없는 unit 만 돌린다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -317,7 +322,9 @@ python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
 
 판정 줄의 「차등 새 실패」 칸은 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
 그 사본의 `new_failures:` 에서 낸다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
-커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 양측 빨강을 공시하는
+커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 그 사본의 `support:` 는 바뀐 지원 파일의
+경로, `support_tests:` 는 그 때문에 더한 테스트 수(지원 파일의 길 위 폴더에 바로 든, 러너가 맡은 unit 수)다 — 사본을 붙이면
+함께 실린다. 양측 빨강을 공시하는
 `resolution_disclosure:` 줄이 있으면 판정 줄 옆에도 그대로 보인다(R10). bulk 러너가 양측 red 면 이 문장을 그대로 쓴다:
 
 > `기준선도 빨간 상태입니다. 이 러너(<runner>)는 파일 단위 지목이 안 되므로 그 안에 새 회귀가 숨었는지 구분하지 못했습니다.`

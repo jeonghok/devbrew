@@ -2,6 +2,7 @@
 # test_differential_procedure.sh — 차등 테스트 절차 문서와 파이프라인 SKILL 의 판정 입력 배선.
 # 요구: R6 · R18 · R22 · R24 (docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록 ·
 #       R24 의 새 뜻은 docs/superpowers/specs/2026-10-20-review-engine-leftovers-design.md §7)
+#       지원 파일의 공시 꼬리 — docs/superpowers/specs/2026-11-24-qg-planted-text-suite-lock-design.md §5 · AC19 · D60
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -189,6 +190,24 @@ case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict() {
 }
 
 # 한 실행은 한 번 지난다 — 절차 reference 에 반복 · 다시 돌기 낱말이 없고(부재), 절 머리가 반복 표지 없이 선다(양의 짝).
+# 지원 파일(배정의 support 행)의 범위 공시 꼬리 · 영향 테스트 수 · 실행 제외(qg 설계 2026-11-24 §5 · AC19 · D60).
+case_disclosure_suffix() {
+  local d2 d3 d4 d7 tail_line
+  d2=$(section "$REF" '## D2 후보와 배정'); d3=$(section "$REF" '## D3 HEAD 축 실행')
+  d4=$(section "$REF" '## D4 기준선 축 — 아직 돌지 않은 unit 만'); d7=$(section "$REF" '## D7 판정 입력')
+  tail_line=$(printf '%s\n' "$d2" | grep -F '`· 테스트 폴더의 테스트 아닌 파일 <n>개가 바뀌어 그 폴더의 테스트를 함께 돌린다`')
+  [ -n "$tail_line" ] && ok "disclosure_suffix: D2 가 공시 줄 꼬리 글자를 그대로 싣는다" || no "disclosure_suffix: D2 에 공시 줄 꼬리 글자가 없다"
+  assert_contains "$tail_line" '`support` 행' "disclosure_suffix: 꼬리의 <n> 은 support 행 수다(같은 줄)"
+  assert_contains "$tail_line" '0 이면 붙이지 않는다' "disclosure_suffix: 0 이면 꼬리를 붙이지 않는다(같은 줄)"
+  assert_contains "$d2" '`<N>` 은 배정 파일의 행 가운데 `support` 행을 뺀 수다' "disclosure_suffix: 영향 테스트 <N> 은 support 행을 뺀 수다"
+  assert_contains "$d2" '분모 `<M>` 은 그대로 `--total` 의 출력이다' "disclosure_suffix: 분모(--total)는 그대로다(D60)"
+  assert_contains "$d2" '`<unit>\t<runner|unclaimed|support>\t<granularity>`' "disclosure_suffix: 배정 행 꼴이 support 를 싣는다"
+  assert_contains "$d3" '배정 파일의 러너마다(unclaimed · support 제외)' "disclosure_suffix: D3 은 support 를 러너로 돌리지 않는다"
+  assert_not_contains "$d3" '(unclaimed 제외)' "disclosure_suffix: D3 의 옛 제외 괄호가 없다"
+  assert_contains "$d4" '(unclaimed · support 제외)' "disclosure_suffix: D4 도 support 를 러너로 돌리지 않는다"
+  assert_contains "$d7" '`support:`' "disclosure_suffix: D7 이 차등 출력의 support 목록을 싣는다"
+  assert_contains "$d7" '`support_tests:`' "disclosure_suffix: D7 이 그 때문에 더한 테스트 수를 싣는다"
+}
 case_one_pass_vocabulary() {
   local tok n
   for tok in 'iteration' 'Retry' 'excluded.md' 'extra-iterations.md' '제외 패치' '추가 반복'; do
@@ -335,7 +354,8 @@ for c in case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict \
          case_R6_memo_drop_after_record_before_publish case_skill_section_wires_the_reference \
          case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_from_scope_file case_one_pass_vocabulary \
          case_run_lines_wrapped case_sequential_sentence case_two_runners_sequential_no_overlap \
-         case_overlap_line_in_result case_verdict_unchanged_with_overlap case_stale_overlap_cleared; do
+         case_overlap_line_in_result case_verdict_unchanged_with_overlap case_stale_overlap_cleared \
+         case_disclosure_suffix; do
   echo "== $c"; $c
 done
 finish
