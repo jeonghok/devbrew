@@ -12,8 +12,8 @@
   - 첫 낱말이 숫자가 아님(사람이 쓴 잠금 등): 살았는지 알 수 없어 바쁨으로 본다 — 주인 · 잡은 시각을 보이고 사람이 정한다
 
 잠금 꼴(`lock_shaped`): 링크가 아닌 폴더이고, 안에 든 것이 없거나 일반 파일 `owner` 하나뿐이다. 잠금 자리가 폴더가 아니면
-(일반 파일 · 링크 등) 나이와 무관하게, 주인 없는 잠금으로 판정된 폴더가 잠금 꼴이 아니면 치우지도 옮기지도 않고 기다리지
-않은 채 못 잡는다(stuck) — 잘못 가리킨 잠금 인자가 남의 폴더를 지우지 않는다.
+(일반 파일 · 링크 등), 폴더가 잠금 꼴이 아니면 나이 · 주인과 무관하게 치우지도 옮기지도 않고 기다리지 않은 채 못
+잡는다(stuck) — 잘못 가리킨 잠금 인자가 남의 폴더를 지우지 않는다.
 
 명령줄:
   suite_lock.py show --lock <잠금 폴더>
@@ -144,6 +144,12 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
             s = state(d)
             if not s["held"]:
                 continue
+            # owner 말고 다른 것이 든 폴더는 바쁘든 아니든 남의 폴더다 — 기다리지도 치우지도 않는다. state 뒤에 보므로
+            # 그 뒤에 더해진 것은 옮긴 뒤의 ident 비교가 잡는다
+            if not lock_shaped(d):
+                if not os.path.lexists(str(d)):
+                    continue
+                raise Busy(not_lock(d), stuck=True)
             if s["busy"]:
                 if time.time() >= deadline:
                     raise Busy(describe(d))
@@ -152,10 +158,6 @@ def take(d: Path, owner: str, wait: float = 0, say=print) -> None:
                     announced = True
                 time.sleep(min(POLL, max(0.5, deadline - time.time())))
                 continue
-            if not lock_shaped(d):   # 주인 없는 잠금으로 보여도 owner 말고 다른 것이 들었으면 남의 폴더다
-                if not os.path.lexists(str(d)):
-                    continue
-                raise Busy(not_lock(d), stuck=True)
             gone = d.parent / ("%s.stale-%d-%d" % (d.name, os.getpid(), int(time.time() * 1000)))
             try:
                 os.rename(str(d), str(gone))

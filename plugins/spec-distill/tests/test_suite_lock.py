@@ -427,6 +427,16 @@ class Cli(unittest.TestCase):
         self.assertIn("주인 없는 잠금을 풀었다", out)
         self.assertEqual(sorted(p.name for p in self.t.iterdir() if ".stale-" in p.name), [])
 
+    def test_fresh_dir_with_other_file_refused_without_wait(self):
+        """갓 생긴(60초 안) 폴더라도 owner 말고 다른 것이 들었으면 바쁜 잠금으로 기다리지 않고 3 으로 끝난다."""
+        self.d.mkdir()
+        (self.d / "report.md").write_text("keep\n", encoding="utf-8")
+        start = time.time()
+        rc, out, mark = self._run_marking("--wait", "30")
+        self.assertLess(time.time() - start, 5, "잠금 꼴이 아닌 폴더에서 기다렸다")
+        self._refused(rc, out, mark)
+        self.assertEqual((self.d / "report.md").read_text(encoding="utf-8"), "keep\n")
+
     def test_no_wait_on_non_lock(self):
         for make in ("dir", "file"):
             if make == "dir":
