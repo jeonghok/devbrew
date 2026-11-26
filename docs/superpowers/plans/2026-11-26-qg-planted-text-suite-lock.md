@@ -49,9 +49,9 @@
 | 칸 사본의 끝 줄 | `qg-slot-end: <16진수 16자>` — 칸마다 · 호출마다 새 값(`secrets.token_hex(8)`) |
 | 리뷰어가 적는 자리 | 응답의 맨 앞, 출력 블록 밖에 칸마다 한 줄 `qg-slot-end: <그 값>`. 대조는 「응답 글 안에 그 값이 있는가」 — 블록을 읽는 파서(`qg-recritic` · `qg-intent-critic` · 반박자 YAML)는 블록 밖 글을 보지 않으므로 깨지지 않는다 |
 | here-doc 끝 표지 | `<<'<이름>_<8 hex>'` — 값은 펜스 앞 한 줄 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 로 받는다. 이름은 지금 이름 그대로(`QG_FIX_LIST` · `E2E_RECORD` · `QG_ARGS_R` …) |
-| qg 본문 칸 사본 | `$RD/review-i1-slot-<리뷰어>-c<N>-<칸>.txt` — 리뷰어 `security` · `external` · `recritic`, `N` 은 그 리뷰어의 호출 번호(다시 부르기 · 나눠 돌림 묶음마다 1 씩), 칸 `intent` · `diff` · `findings` · `scope`. P2 의 `review-i*` 지우기가 지운다 |
-| 범위의 경로 목록(재비판) | 원본은 이미 있는 `$RD/review-i1.names`(review-diff.sh 가 쓰는 거르기 전 경로, 한 줄에 하나) → 칸에는 그 사본. 새 원본 파일을 만들지 않는다 |
-| 응답 사본(보안 · 외부) | `$RV/resp-<리뷰어>-c<N>.txt` — 세션 폴더가 아니다 |
+| qg 본문 칸 사본 | `$RD/review-i1-slot-<리뷰어>-b<B>-t<T>-<칸>.txt` — 리뷰어 `security` · `external` · `recritic`, `B` 는 묶음 번호(나눠 돌리지 않으면 `1`, 재비판은 늘 `1`), `T` 는 그 묶음의 시도 번호(처음 `1`, 한 번 다시 부르면 `2`), 칸 `intent` · `diff` · `findings` · `scope`. P2 의 `review-i*` 지우기가 지운다 |
+| 범위의 경로 목록(재비판) | 원본은 이미 있는 `$RD/review-i1.names`(review-diff.sh 가 쓰는 거르기 전 경로, 한 줄에 하나) → 칸에는 그 사본. 새 원본 파일을 만들지 않는다. 지금 재비판 칸의 「this run's scope path list」(SKILL.md 의 Step 3.5) 는 code-recritic 정의의 「리뷰 범위의 파일 목록」 — Step 1 스코프의 바뀐 경로 전부 — 이고, 그 목록을 파일로 쓰는 것은 `review-i1.names`(거르기 전) 하나라 같은 목록이다(계획 담당자 확인 2026-11-26). 문서 경로를 뺀 목록은 따로 파일이 없고 diff 에 담긴다 |
+| 응답 사본(보안 · 외부) | `$RV/resp-<리뷰어>-b<B>-t<T>.txt` — 세션 폴더가 아니다 |
 | 의도 점검 칸 사본 | `$RD/intent-slot-<k>-<칸>.md` — `k` 는 `1`(첫째 호출) · `2`(둘째 · 한 번에 넣은 호출), 칸 `diff` · `scope` · `evidence` · `origin` · `roadmap` · `intent` · `doubts`(k=2 만) · `answered`. P2 의 `intent-*` 지우기가 지운다 |
 | 문서 비평 몫 폴더 | `$TOP/.claude/quality-gates/<session-id>/artifact-critique/` — `merged-t<T>-r<R>.yaml`(원본) · `merged-t<T>-r<R>-slot.txt`(끝 값 사본) · `adversarial-t<T>-r<R>.txt`(반박자 응답 전체). `T` 는 대상 번호, `R` 은 라운드 |
 | 잠금 자리 파일 | `$RD/suite-lock-path.txt` — 한 줄, 잠금 폴더 절대경로 |
@@ -61,6 +61,7 @@
 | 칸 태그(경로) | 보안 `<intent_file>${INTENT_FILE}` · `<filtered_diff_file>${FILTERED_DIFF_FILE}` / 재비판 `<scope_file>${SCOPE_FILE}` · `<findings_file>${FINDINGS_FILE}` · `<diff_file>${DIFF_FILE}` · `<intent_file>${INTENT_FILE}` / 의도 점검 `<diff_file>` · `<scope_file>` · `<evidence_file>` · `<origin_file>` · `<roadmap_file>` · `<intent_file>` · `<doubts_file>` · `<answered_file>`(변수는 태그의 대문자) / 반박자 `<merged_findings_file>${MERGED_FINDINGS_FILE}` / 외부 리뷰어 글 `<intent_file>` · `<diff_file>`. 그대로인 칸: `project_dir` · `diff_scope` · `criteria` · `profile` · `artifact_path` |
 | 테스트 꼴 이름(지원 파일을 가르는 것) | 파일 이름(마지막 성분)이 `^test_` 로 시작하거나 `_test\.[A-Za-z0-9]+$` · `\.(test|spec)\.[A-Za-z0-9]+$` 로 끝난다. 이 꼴이 아니고 경로에 `tests/` · `test/` 성분이 있고 어느 러너도 맡지 않은 파일이 지원 파일 후보다 |
 | 배정의 새 분류 | 행 `<파일>\tsupport\tfile` |
+| 게시 절 자리가 맞지 않을 때의 알림(D62) | `> [quality-gates] 게시 절 자리 기록이 결과 파일과 맞지 않는다 — 게시 단계는 그대로 했고(위 줄), 결과 파일의 게시 절은 고쳐 쓰지 않았다.` — 결과 줄 다음에 낸다. 「게시는 했다」 를 「게시 단계는 그대로 했다(위 줄)」 로 쓴 것은 범위 모드 · 「게시 안 함」 실행에서도 맞는 말이 되게 하려는 것이다 |
 
 ## Review Focus
 
@@ -116,7 +117,7 @@ AC1 · AC2 · AC25 → Task 1 · 4 · 5 · 6 · 7 · 8 / AC3 → Task 4 / AC4 �
 
 ### Task 0: 시작 확인
 
-계획 담당자가 2026-11-26(브랜치 끝 05aa6389, 기본 브랜치 포함)에 본 결과 — 설계가 근거로 든 자리는 모두 그대로다: 게시 펜스의 첫 검사(SKILL.md `grep -qx '## 게시'`) · 외부 리뷰어 처분 줄(`consumer=orchestrator · fail-open · disclosure=실패`) · state-file-format.md 생명주기 2 의 「하나뿐이다 — 이미 있으면 … 출력한다」 · `test_range_wiring.sh` 의 「두 번째는 거절한다」 · `test_publish_pipeline_wiring.sh` 의 범위 두 번째 실행과 M2 · 고정 끝 표지 here-doc(SKILL 18 · differential-test 1 · intent-critic 3 + 모델이 고르는 둘) · 출처 표지 셋(`intent_origin.py:722,765,767`) · 다시 부르기 규칙(`qg-review.md:142`) · 스위트 대조가 `test_command` 를 먼저 씀 · 문서 비평의 `merged.yaml` 이 작업 폴더 상대경로 · 반박자 응답이 `verdicts.yaml` 로 저장됨 · 잠금 스크립트가 주인 없는 잠금을 내용과 무관하게 옮겨 지움 · `unittest_can_judge` 의 클래스 줄 글자 검사 · `setup-qg.sh` 의 `--answered` · `--ensure` 갈래. 여섯 파일은 `uv run python`(3.12.13)으로 불러 보는 규칙에 모두 맡겨진다(`test_other_teams.py` 19 · `test_brief_review_state.py` 7 · `test_conductor_cross.py` 3 · `test_conductor_status.py` 6 · `test_leader_seat.py` 7 · `test_roadmap_draft_entry.py` 1 — 본 클래스 수). 덧붙여 본 것: `test_range_wiring.sh:181-189` 가 「한 번만」 검사의 위치를 재는 단언을 하나 더 갖는다(Task 10 이 고친다).
+계획 담당자가 2026-11-26(브랜치 끝 05aa6389, 기본 브랜치 포함)에 본 결과 — 설계가 근거로 든 자리는 모두 그대로다: 게시 펜스의 첫 검사(SKILL.md `grep -qx '## 게시'`) · 외부 리뷰어 처분 줄(`consumer=orchestrator · fail-open · disclosure=실패`) · state-file-format.md 생명주기 2 의 「하나뿐이다 — 이미 있으면 … 출력한다」 · `test_range_wiring.sh` 의 「두 번째는 거절한다」 · `test_publish_pipeline_wiring.sh` 의 범위 두 번째 실행과 M2 · 고정 끝 표지 here-doc(SKILL 19 · differential-test 1 · intent-critic 3 + 모델이 고르는 둘) · 출처 표지 셋(`intent_origin.py:722,765,767`) · 다시 부르기 규칙(`qg-review.md:142`) · 스위트 대조가 `test_command` 를 먼저 씀 · 문서 비평의 `merged.yaml` 이 작업 폴더 상대경로 · 반박자 응답이 `verdicts.yaml` 로 저장됨 · 잠금 스크립트가 주인 없는 잠금을 내용과 무관하게 옮겨 지움 · `unittest_can_judge` 의 클래스 줄 글자 검사 · `setup-qg.sh` 의 `--answered` · `--ensure` 갈래. 여섯 파일은 `uv run python`(3.12.13)으로 불러 보는 규칙에 모두 맡겨진다(`test_other_teams.py` 19 · `test_brief_review_state.py` 7 · `test_conductor_cross.py` 3 · `test_conductor_status.py` 6 · `test_leader_seat.py` 7 · `test_roadmap_draft_entry.py` 1 — 본 클래스 수). 덧붙여 본 것: `test_range_wiring.sh:181-189` 가 「한 번만」 검사의 위치를 재는 단언을 하나 더 갖는다(Task 10 이 고친다).
 
 - [ ] **Step 1: 기본 브랜치를 합친 뒤 같은 자리를 다시 본다**
 
@@ -137,11 +138,13 @@ Expected: 모두 그대로. R8(#332) 이 먼저 머지됐으면 `intent_origin.p
   - `qg_nonce.py attach <원본> <사본>` → 원본 바이트 + (끝에 줄바꿈이 없으면 하나) + `qg-slot-end: <16 hex>\n` 을 사본에 쓴다. 표준 출력은 사본 경로 한 줄.
   - `qg_nonce.py split <리뷰 diff> <사본> -- <경로>...` → 경로마다 그 파일의 `diff --git` 조각만 골라 원본 차례대로 싣고 attach 와 같은 끝 줄을 붙인다. 경로 가운데 하나라도 diff 에 없으면 쓰지 않고 4.
   - `qg_nonce.py check --response <응답 파일> --slot <사본>...` → 표준 출력 한 줄: `ok`(0) · `fail: 끝 값 없음`(1) · `fail: 읽지 못함`(1) · `fail: 응답 없음`(1 — 응답 파일이 없거나 읽지 못함).
+  - `qg_nonce.py check-reviewer --rd <RD> --rv <RV> --reviewer <이름>` → 그 리뷰어의 칸 사본(`$RD/review-i1-slot-<이름>-b<B>-t<T>-*.txt`)과 응답 사본(`$RV/resp-<이름>-b<B>-t<T>.txt`)을 묶음 · 시도로 짝지어 판정 하나를 낸다 — 묶음은 맞은 시도가 하나라도 있으면 맞음, 묶음 하나라도 맞지 않으면 리뷰어 전체 실패(AC27). 표준 출력: 묶음마다 `b<B>: ok` · `b<B>: fail: <사유>`, 마지막 줄 `<이름>: ok`(0) 또는 `<이름>: fail: <사유>`(1) — 사유는 맞지 않은 첫 묶음의 마지막 시도의 것(`끝 값 없음` · `읽지 못함` · `응답 없음`). 칸 사본이 하나도 없으면 2. 응답 사본은 읽기만 한다 — 지우거나 비우지 않는다(AC35).
 - Produces(모듈 — 같은 폴더의 스크립트가 `import qg_nonce`):
   - `new_hex(nbytes: int) -> str`
   - `attach(src, out) -> str` — 붙인 값을 돌려준다
   - `slot_value(path) -> str | None` — 끝 줄이 `^qg-slot-end: [0-9a-f]{16}$` 이면 그 값
   - `check(response_text: str, slot_paths: list) -> str | None` — `None` 은 모두 맞음, 아니면 `"끝 값 없음"` · `"읽지 못함"`
+  - `check_reviewer(rd, rv, reviewer) -> tuple` — `(리뷰어 사유 또는 None, [(묶음 번호, 사유 또는 None), …])`
   - `UNREADABLE = "QG_INPUT_UNREADABLE:"`
 
 - [ ] **Step 1: 실패하는 시험을 쓴다** — 하나씩 쓰고 돌린다(`docs/testing.md` 「쓰는 차례」). 시험 이름과 단언:
@@ -161,6 +164,11 @@ def test_check_unreadable_line_with_values_is_ok(): # 값이 모두 맞고 "QG_I
 def test_check_unreadable_reason(): # 값이 없고 줄머리 QG_INPUT_UNREADABLE: 줄이 있으면 "fail: 읽지 못함" (AC4)
 def test_check_slot_without_end_line_fails_closed(): # 칸 사본 끝 줄이 꼴 밖이면 "fail: 끝 값 없음"
 def test_check_missing_response(): # 응답 파일 없음 → "fail: 응답 없음"
+def test_check_reviewer_all_bundles_ok(): # b1 · b2 맞음 → 마지막 줄 "<이름>: ok"
+def test_check_reviewer_one_bundle_fails(): # b2 만 값 없음 → "<이름>: fail: 끝 값 없음", b1 줄은 ok (AC27)
+def test_check_reviewer_retry_ok(): # b1 의 t1 값 없음 · t2 맞음 → ok
+def test_check_reviewer_dead_try(): # 칸 사본은 있는데 응답 사본이 없는 시도뿐 → "fail: 응답 없음"
+def test_check_reviewer_keeps_responses(): # 실패를 낸 뒤에도 응답 사본 바이트가 그대로 (AC35)
 ```
 
 - [ ] **Step 2: 돌려 실패를 본다**
@@ -184,7 +192,7 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
 ### Task 2: here-doc 끝 표지 — 값은 스크립트가 낸다(§3 · AC9)
 
 **Files:**
-- Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(here-doc 18 곳 — `E2E_CMD` · `E2E_EVIDENCE` · `E2E_RECORD` · `E2E_FLIP` · `QG_ARGS_*` · `QG_FIX_LIST` · `QG_COMMENT_HEAD`)
+- Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(here-doc 19 곳 — `E2E_CMD` · `E2E_EVIDENCE` · `E2E_RECORD` · `E2E_FLIP` · `QG_ARGS_*` · `QG_FIX_LIST` · `QG_COMMENT_HEAD`)
 - Modify: `plugins/quality-gates/skills/quality-pipeline/references/differential-test.md`(`QG_NOT_COUNTED`) · `references/intent-critic.md`(`QG_INTENT_JSON` · `QG_INTENT_ORIGIN` · `QG_INTENT_ANSWERED` · 응답 · 답 펜스의 「새로 고른 16진수」 문장 둘)
 - Modify: `plugins/quality-gates/tests/lib/verdict_fence.py`(`fill_heredoc` — `<이름>_<8 hex>` 꼴을 받아 값을 넣는다) · 펜스를 채우는 시험들(`test_v_requirements.sh` · `test_verdict_no_reread.sh` · `test_differential_procedure.sh` · `test_e2e_docs.sh` · `test_intent_critic_wiring.sh` · `test_range_wiring.sh` 의 here-doc 이름 자리)
 - Create: `plugins/quality-gates/tests/test_heredoc_nonce.sh`
@@ -200,7 +208,7 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
   - `model_picks_phrase_absent` — 코퍼스에 `고른 16진수` 가 없다 / 짝: 시험 안에서 그 글자를 넣은 사본으로 잡히는지 본다.
   - 보안 갈래(믿지 않는 입력) — 변이 넷: 끝 표지 하나를 고정 이름으로(반전) · 값 받는 줄 하나 지우기(삭제) · `고른 16진수` 문장 더하기(추가) · `<<"QG_FIX_LIST"` 큰따옴표 꼴(형태) 각각이 RED, 양성 대조(손대지 않은 사본) GREEN — 시험 안에서 임시 사본으로 돈다.
 
-- [ ] **Step 2: 돌려 실패를 본다** — Run: `bash plugins/quality-gates/tests/test_heredoc_nonce.sh` · Expected: `fixed_terminator_absent` FAIL(22 곳), `model_picks_phrase_absent` FAIL.
+- [ ] **Step 2: 돌려 실패를 본다** — Run: `bash plugins/quality-gates/tests/test_heredoc_nonce.sh` · Expected: `fixed_terminator_absent` FAIL(23 곳 — SKILL 19 · differential-test 1 · intent-critic 3), `model_picks_phrase_absent` FAIL.
 
 - [ ] **Step 3: 문서를 고친다** — 각 here-doc 의 끝 표지를 `<이름>_<8 hex>` 로(시작 · 끝 두 자리), 그 펜스 바로 앞에 한 줄: `값 받기 — \`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex\` 를 먼저 돌려 나온 8자를 아래 \`<8 hex>\` 두 자리에 넣는다.` 한 펜스에 here-doc 이 여럿이면(QG_ARGS_*) 값 하나를 함께 써도 된다고 같은 줄에 적는다. intent-critic.md 의 「새로 고른 16진수 8자(두 자리 같은 값)」 두 문장을 같은 값 받기 문장으로 바꾼다.
 
@@ -258,13 +266,13 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
 
 **Files:**
 - Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(공통 입력 절 · 보안 dispatch · 외부 리뷰어 프롬프트 · 나눠 돌림 문단 · 탐지 단계 끝 줄 · Step 3.5 의 `RV` 만들기 자리 · 응답을 지적 목록으로 옮기는 문단)
-- Modify: `plugins/quality-gates/scripts/review-diff.sh`(`QG_NAMES` 에 `review-i[1-9][0-9]*-slot-(security|external|recritic)-c[1-9][0-9]*-(intent|diff|findings|scope)\.txt`)
+- Modify: `plugins/quality-gates/scripts/review-diff.sh`(`QG_NAMES` 에 `review-i[1-9][0-9]*-slot-(security|external|recritic)-b[1-9][0-9]*-t[1-9]-(intent|diff|findings|scope)\.txt`)
 - Modify: `plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md`(새 세션 파일 목록)
-- Test: `plugins/quality-gates/tests/test_slot_files.sh`(케이스 더함) · `plugins/quality-gates/tests/test_skill_run_contract.sh`(그대로 통과해야 함)
+- Test: `plugins/quality-gates/tests/test_slot_files.sh`(케이스 더함) · `plugins/quality-gates/tests/test_detector_failure_e2e.sh`(새 — 스크립트 수준 끝에서 끝) · `plugins/quality-gates/tests/test_skill_run_contract.sh`(그대로 통과해야 함)
 
 **Interfaces:**
-- Consumes: Task 1 `attach` · `split` · `check` · Task 4 칸 태그.
-- Produces: `RV` 는 탐지 리뷰어를 부르기 전(Step 3 첫머리)에 `mktemp -d` 로 만들고 Step 3.5 는 그것을 그대로 쓴다. 호출마다 칸 사본(`review-i1-slot-security-c<N>-intent.txt` · `…-diff.txt`), 응답 사본 `$RV/resp-<리뷰어>-c<N>.txt`, 대조 줄 하나.
+- Consumes: Task 1 `attach` · `split` · `check-reviewer` · Task 4 칸 태그.
+- Produces: `RV` 는 탐지 리뷰어를 부르기 전(Step 3 첫머리)에 `mktemp -d` 로 만들고 Step 3.5 는 그것을 그대로 쓴다. 호출마다 칸 사본(`review-i1-slot-security-b<B>-t<T>-intent.txt` · `…-diff.txt`), 응답 사본 `$RV/resp-<리뷰어>-b<B>-t<T>.txt`, 대조 줄 하나.
 
 - [ ] **Step 1: 실패하는 시험** — `test_slot_files.sh` 에 케이스:
   - `skill_dispatch_paths`(보안 dispatch 펜스에 `<intent_file>${INTENT_FILE}` · `<filtered_diff_file>${FILTERED_DIFF_FILE}` 가 있고 `<intent>${INTENT}` · `<filtered_diff>${FILTERED_DIFF}` 가 없다 · 외부 프롬프트에 `<intent_file>` · `<diff_file>` 가 있고 `<diff>${FILTERED_DIFF}` 가 없다)
@@ -272,15 +280,22 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
   - `slot_fence_runs`(SKILL 의 칸 사본 펜스를 표지로 뽑아 가짜 세션 폴더에서 돌린다 — 사본 둘이 생기고 끝 줄이 꼴대로, 원본 `review-i1.diff` · `intent.md` 바이트 그대로 — AC25 원본 쪽)
   - `split_fence_runs`(나눠 돌림 펜스를 뽑아 파일 목록 둘로 돌린다 — 묶음 사본 둘, 값이 다르다, 모델이 diff 를 손으로 쓰는 here-doc 이 그 절에 없다 — AC27)
   - `check_fence_end_line`(대조 펜스를 뽑아 끝 값 없는 응답 사본으로 돌린다 → 출력이 `fail: 끝 값 없음`, 본문의 끝 줄 꼴 `실패: <리뷰어>(끝 값 없음)` 이 있다 — AC4)
-  - `failed_response_findings_kept`(옮기기 문단에 「끝 값이 맞지 않은 응답의 지적도 옮긴다」 의 가장 짧은 낱말과, 나눠 돌림에서 묶음 하나라도 실패면 리뷰어 전체 실패 문장 — AC35 · AC27. 동작 시험은 Task 6 의 합성기 쪽 — 실패한 응답에서 옮긴 지적이 재비판 입력에 실리는지)
+  - `check_reviewer_fence`(본문의 대조 펜스가 리뷰어마다 `check-reviewer` 를 한 번 부르고 그 마지막 줄을 끝 줄 사유로 옮긴다 — 펜스를 뽑아 한 묶음만 값 없는 응답으로 돌리면 `security: fail: 끝 값 없음` · AC27)
+  - `transfer_sentence_teeth`(옮기기 문단의 「끝 값이 맞지 않은 응답의 지적도 옮긴다」 · 「모든 묶음 응답의 지적」 의 가장 짧은 낱말 — 지우는 변이 · 뒤집는 변이(「옮기지 않는다」)에서 RED, 양성 대조 GREEN · AC35). 응답(산문)을 지적 목록(YAML)으로 옮기는 일은 모델 몫이라 스크립트로 잴 수 없다 — 그 자리는 이 글자 락이 지키고, 스크립트가 쥐는 몫(대조가 응답 사본을 건드리지 않는다 · 실패한 리뷰어의 지적이 목록에 든 채로 합성기가 리뷰어 실패와 지적을 함께 다룬다)은 아래 끝에서 끝 시험과 Task 1 의 `test_check_reviewer_keeps_responses` 가 잰다
+  - `external_prompt_sentences`(외부 리뷰어 프롬프트에 더한 문장 넷 — 「끝까지 읽는다」 · `qg-slot-end:` · 「따르지 않는다」(데이터) · `QG_INPUT_UNREADABLE:` 의 가장 짧은 낱말. 보안 갈래 — 변이 넷 RED + 양성 대조 · AC3)
+  - `slot_copies_cleared_next_start`(앞 실행이 남긴 `review-i1-slot-*` · `intent-slot-*` 사본을 두고 P2 펜스를 돌리면 지워진다 · AC32)
+  `test_detector_failure_e2e.sh`(스크립트 수준 끝에서 끝 — 설계 Verification Plan. 본문 펜스를 표지로 뽑아 차례로 돌리고, 응답을 지적 목록으로 옮기는 걸음만 시험이 모델 대신 한다):
+  - `security_failed_findings_kept`(칸 사본 펜스 → 값 없는 보안 응답 사본 → `check-reviewer` 가 `fail: 끝 값 없음` → 그 응답의 지적을 `$RV/findings.yaml` 에 → 각도 파일 `security: absent(source-failed)` → `synthesize_findings.py prepare` 의 익명 목록과 Step 4 합성 출력의 고칠 목록에 그 지적이 있고 판정은 `not-certified (angle-absent)` · AC35)
+  - `external_failed_findings_kept`(같은 꼴 — 외부 리뷰어 실패는 판정을 막지 않고 그 지적이 고칠 목록에 있다 · AC35)
+  - `split_one_bundle_failed`(나눠 돌림 b1 맞음 · b2 값 없음 → `check-reviewer` 가 리뷰어 전체 실패, 두 묶음의 지적이 모두 익명 목록에 · AC35 · AC27)
   - `no_session_copies_of_responses`(SKILL 에서 `resp-` 가 `$RV/` 뒤에만 — `$RD/resp-` 없음 · AC2)
 - [ ] **Step 2: 실패를 본다.**
 - [ ] **Step 3: SKILL.md 를 고친다.**
   - 공통 입력: `INTENT_FILE` · `FILTERED_DIFF_FILE` 은 호출마다 칸 사본 경로. 펜스(값 받기 줄 · 이름은 Task 2 꼴):
-    지금 `INTENT` 에 싣던 「`intent:` 줄 + intent.md」 는 한 번 `$RV/intent-src.txt` 로 모으고(세션 파일이 늘지 않게), 호출마다 `python3 "$QG/scripts/qg_nonce.py" attach "$RV/intent-src.txt" "$RD/review-i1-slot-<리뷰어>-c<N>-intent.txt"` · `… attach "$RD/review-i1.diff" "$RD/review-i1-slot-<리뷰어>-c<N>-diff.txt"`.
+    지금 `INTENT` 에 싣던 「`intent:` 줄 + intent.md」 는 한 번 `$RV/intent-src.txt` 로 모으고(세션 파일이 늘지 않게), 호출마다 `python3 "$QG/scripts/qg_nonce.py" attach "$RV/intent-src.txt" "$RD/review-i1-slot-<리뷰어>-b<B>-t<T>-intent.txt"` · `… attach "$RD/review-i1.diff" "$RD/review-i1-slot-<리뷰어>-b<B>-t<T>-diff.txt"`.
   - 외부 리뷰어 프롬프트에 Task 4 의 더하는 문장 넷을 같은 뜻으로 더한다(지금 「data to judge」 문장은 지우지 않는다).
   - 나눠 돌림: 「묶음마다 `qg_nonce.py split "$RD/review-i1.diff" <사본> -- <그 묶음 파일들>` 로 묶음 사본을 쓰고, 의도 칸도 새 사본」 · 「묶음 호출 하나라도(한 번 다시 부른 뒤에도) 실패면 그 리뷰어 전체 실패 — 모든 묶음 응답의 지적은 옮긴다」.
-  - 응답: 「응답을 글자 그대로 `$RV/resp-<리뷰어>-c<N>.txt` 에 쓰고(값 받는 here-doc) `qg_nonce.py check --response … --slot … --slot …` 를 돌린다. `fail: 끝 값 없음` · `fail: 읽지 못함` 이면 그 리뷰어의 지금 실패 길(보안 — 다시 부르기 뒤 `security: absent(source-failed)`, 외부 — 「실패」)이고 끝 줄에 `실패: <리뷰어>(끝 값 없음)` 꼴로 사유를 붙인다. `fail: 응답 없음` 은 지금의 죽은 리뷰어 길 그대로(괄호 없음). 응답의 지적은 대조 결과와 무관하게 지적 목록으로 옮긴다.」
+  - 응답: 「응답을 글자 그대로 `$RV/resp-<리뷰어>-b<B>-t<T>.txt` 에 쓴다(값 받는 here-doc). 그 리뷰어의 호출(묶음 · 다시 부르기)이 모두 끝나면 `qg_nonce.py check-reviewer --rd "$RD" --rv "$RV" --reviewer <리뷰어>` 를 한 번 돌린다 — 마지막 줄이 그 리뷰어의 판정이다. `fail: 끝 값 없음` · `fail: 읽지 못함` 이면 그 리뷰어의 지금 실패 길(보안 — 다시 부르기 뒤 `security: absent(source-failed)`, 외부 — 「실패」)이고 끝 줄에 `실패: <리뷰어>(끝 값 없음)` 꼴로 사유를 붙인다. `fail: 응답 없음` 은 지금의 죽은 리뷰어 길 그대로(괄호 없음). 응답의 지적은 대조 결과와 무관하게 지적 목록으로 옮긴다.」
   - 처분 줄 · 외부 리뷰어의 fail-open 은 그대로.
 - [ ] **Step 4: `QG_NAMES` · state-file-format 목록을 맞춘다** — `review-i*` 꼴은 P2 find 지우기가 이미 지운다(AC32 쪽: 끝 값 사본 · 범위 경로 목록 사본).
 - [ ] **Step 5: 통과를 본다** — Run: `bash plugins/quality-gates/tests/test_slot_files.sh` · `bash plugins/quality-gates/tests/test_skill_run_contract.sh` · `bash plugins/quality-gates/tests/test_review_diff.sh`.
@@ -297,7 +312,7 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
 
 **Interfaces:**
 - Consumes: Task 1 `qg_nonce.check` · Task 5 의 `RV`.
-- Produces: 칸 사본 넷 `$RD/review-i1-slot-recritic-c<N>-{scope,findings,diff,intent}.txt` — 원본: `$RD/review-i1.names`(범위 경로 목록) · `$RV/recritic-findings.yaml` · `$RV/recritic.diff` · `$RV/intent-src.txt`. 익명화 전 목록 · 대응표는 `RV` 에 그대로. 합성기는 `--recritic-slot` 이 하나라도 있고 대조가 실패하면 `_dead("끝 값 없음")` 또는 `_dead("읽지 못함")` — 표시는 지금 줄 `[synthesize_findings] 재비판 결과를 쓸 수 없다 (끝 값 없음) — 판정 각도의 주 입력 실패다` 와 `입력 실패(주): code-recritic — 끝 값 없음`, 판정 `not-certified (angle-absent)`.
+- Produces: 칸 사본 넷 `$RD/review-i1-slot-recritic-b1-t<T>-{scope,findings,diff,intent}.txt` — 원본: `$RD/review-i1.names`(범위 경로 목록) · `$RV/recritic-findings.yaml` · `$RV/recritic.diff` · `$RV/intent-src.txt`. 익명화 전 목록 · 대응표는 `RV` 에 그대로. 합성기는 `--recritic-slot` 이 하나라도 있고 대조가 실패하면 `_dead("끝 값 없음")` 또는 `_dead("읽지 못함")` — 표시는 지금 줄 `[synthesize_findings] 재비판 결과를 쓸 수 없다 (끝 값 없음) — 판정 각도의 주 입력 실패다` 와 `입력 실패(주): code-recritic — 끝 값 없음`, 판정 `not-certified (angle-absent)`.
 
 - [ ] **Step 1: 실패하는 시험** — `test_synthesize_recritic_slots.py`:
 
@@ -308,7 +323,6 @@ def test_wrong_value_is_dead(): # (AC25)
 def test_partial_values_is_dead(): # 칸 넷 가운데 셋만 (AC25)
 def test_unreadable_reason(): # 값 없음 + QG_INPUT_UNREADABLE: 줄 → "(읽지 못함)" (AC4)
 def test_unreadable_quote_with_values_ok(): # 값이 다 맞고 그 줄을 인용 → 실패 아님 (AC4)
-def test_failed_detector_findings_reach_recritic_input(): # 실패로 센 응답에서 옮긴 지적이 든 findings.yaml → prepare 가 낸 익명 목록에 그 지적이 있다 (AC35)
 def test_recritic_diff_original_unchanged(): # --recritic-diff 원본 바이트가 사본을 만든 뒤에도 같다 (AC25)
 ```
 
@@ -334,7 +348,7 @@ def test_recritic_diff_original_unchanged(): # --recritic-diff 원본 바이트�
 - Produces:
   - `intent_critic.py slots --rd <RD> --call {1,2}` → 「정한 이름과 꼴」 의 `intent-slot-<k>-<칸>.md` 를 쓰고(원본: `review-i1.diff` · `intent-scope.md` · `intent-evidence.txt` · `intent-origin.md` · `intent-roadmap.md` · `intent-intent.md` · `intent-doubts.md`(k=2) · `intent-answered.md`), 표준 출력에 `<칸>\t<경로>` 줄. 원본은 그대로 — `doubts-append` 가 원본 `intent-doubts.md` 에 덧붙이므로 k=2 사본은 덧붙인 뒤에 만든다.
   - `intent_critic.py check-output <file> --call {1,2}` → 그 호출의 사본으로 대조, 실패면 `unreadable: 끝 값 없음` · `unreadable: 읽지 못함`(rc 3 — 지금 꼴).
-  - `_candidates` 는 `OUT1` 을 k=1 사본으로, `OUT2` 를 k=2 사본으로 대조 — 실패의 `why` 가 `끝 값 없음` · `읽지 못함` 이 되어 지금 길(`입력 실패(주): intent-critic — 첫째 호출 — 끝 값 없음` · 결과 줄 `리뷰어 출력을 읽지 못함(셀 수 없음)`)로 간다. 사본이 없으면 `끝 값 없음`(fail-closed).
+  - `_candidates` 는 `OUT1` 을 k=1 사본으로, `OUT2` 를 k=2 사본으로 대조 — 실패의 `why` 가 `끝 값 없음` · `읽지 못함` 이 되어 지금 길로 간다 — 사유는 설계(§1 · D44 · D64)대로 괄호 꼴이다: `입력 실패(주): intent-critic — 첫째 호출(끝 값 없음)`(한 번에 넣은 호출이면 `한 번에 넣은 호출(끝 값 없음)`), 결과 줄은 지금 `리뷰어 출력을 읽지 못함(셀 수 없음)` 그대로. 지금의 다른 사유(펜스 없음 등)는 `첫째 호출 — <사유>` 그대로다. 이 글을 읽는 쪽(`intent-return.md` 의 `reason_text` · 회계 줄)은 사람이 읽는 글로만 다뤄 괄호에 깨지지 않는다(계획 담당자 확인 2026-11-26 — 깨지면 고치지 말고 묻는다). 사본이 없으면 `끝 값 없음`(fail-closed).
   - 출처 표지 무력화: 본문 줄머리(앞 공백 허용)의 `<!--` 뒤가 `origin-source:` · `roadmap:` · `roadmap-doubts:` · `intent-doubts` 이면 그 줄의 `<!--` 를 `&lt;!--` 로. 표지에 들어가는 필드(`source` · `rel` · `path`)의 `-->` 는 `--&gt;` 로.
 
 - [ ] **Step 1: 실패하는 시험** — `test_intent_critic.py` 에:
@@ -342,7 +356,7 @@ def test_recritic_diff_original_unchanged(): # --recritic-diff 원본 바이트�
 ```python
 def test_slots_write_copies_with_end_line(): # k=1 일곱 · k=2 여덟, 끝 줄 꼴, 원본 그대로 (AC25)
 def test_slot_values_differ_between_calls(): # 같은 칸 k=1 · k=2 값이 다르다 (AC25)
-def test_candidates_missing_value_unreadable(): # 값 없는 OUT1 → filter 출력에 "첫째 호출 — 끝 값 없음", render 결과 줄 UNREADABLE (AC4)
+def test_candidates_missing_value_unreadable(): # 값 없는 OUT1 → filter 출력에 "첫째 호출(끝 값 없음)", render 결과 줄 UNREADABLE (AC4)
 def test_candidates_unreadable_reason(): # 값 없음 + QG_INPUT_UNREADABLE: → "읽지 못함" (AC4)
 def test_candidates_quote_unreadable_with_values_ok(): # (AC4)
 def test_candidates_partial_values(): # 여덟 가운데 일곱 (AC25)
@@ -369,7 +383,7 @@ def test_source_brief_arrow_neutralized(): # source_brief 에 "-->" → 표지 �
 
 **Interfaces:**
 - Consumes: Task 1 · Task 4 `merged_findings_file`.
-- Produces: 대상마다 첫 라운드 앞에 한 번: `SID="<session-id>"; "$QG/scripts/setup-qg.sh" --ensure --session-id "$SID" >/dev/null || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다" >&2; exit 1; }` — 표준 출력(시작 줄)은 버리고 오류는 보인다(D47 「qg 시작 줄을 더하지 않는다」). `AC="$TOP/.claude/quality-gates/$SID/artifact-critique"; mkdir -p "$AC"`. `merged.yaml` 자리에 `$AC/merged-t<T>-r<R>.yaml`, 칸에는 `qg_nonce.py attach` 한 `$AC/merged-t<T>-r<R>-slot.txt`. 반박자 응답 전체를 `$AC/adversarial-t<T>-r<R>.txt` 에, 그 안의 YAML 블록만 `verdicts.yaml` 에(지금처럼). 합성 둘째 걸음은 원본 `merged-…yaml` 을 읽는다.
+- Produces: 대상마다 첫 라운드 앞에 한 번: `SID="<session-id>"; "$QG/scripts/setup-qg.sh" --ensure --session-id "$SID" >/dev/null || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다" >&2; exit 1; }` — 표준 출력(시작 줄)은 버리고 오류는 보인다(D47 「qg 시작 줄을 더하지 않는다」). 멈춤 줄과 「옛 길로 돌아가지 않는다」 는 설계 §1(D61) 그대로다. `AC="$TOP/.claude/quality-gates/$SID/artifact-critique"; mkdir -p "$AC"`. `merged.yaml` 자리에 `$AC/merged-t<T>-r<R>.yaml`, 칸에는 `qg_nonce.py attach` 한 `$AC/merged-t<T>-r<R>-slot.txt`. 반박자 응답 전체를 `$AC/adversarial-t<T>-r<R>.txt` 에, 그 안의 YAML 블록만 `verdicts.yaml` 에(지금처럼). 합성 둘째 걸음은 원본 `merged-…yaml` 을 읽는다.
 
 - [ ] **Step 1: 실패하는 시험:**
   - `test_artifact_slots.sh`: `merged_written_under_session`(2.5 펜스를 뽑아 돌리면 `merged-t1-r1.yaml` 이 세션 폴더의 `artifact-critique/` 아래 · 작업 폴더에 `merged.yaml` 없음 — AC2) · `round_commit_excludes_merged`(가짜 리포에서 `artifact_commit.sh` 뒤 커밋 파일 목록에 그 파일 없음 · `artifact_change_signal.sh` 출력이 그 파일과 무관 — AC2) · `dispatch_path_tag`(`<merged_findings_file>${MERGED_FINDINGS_FILE}`, `<merged_findings>${MERGED_FINDINGS}` 없음) · `artifact_critique_setup_refusal_stops`(세션 id 꼴 밖으로 세션 폴더 펜스를 돌리면 rc ≠ 0 과 멈춤 줄, `$AC` 없음 — Review Focus 5) · `no_start_line`(세션 폴더 펜스 출력에 「Quality Gates 를 시작한다」 없음).
@@ -422,10 +436,13 @@ def test_source_brief_arrow_neutralized(): # source_brief 에 "-->" → 표지 �
 
 **Interfaces:**
 - Consumes: Task 9 의 `skipped: already-posted` 와 확인 못함 줄(sink 표준 출력의 마지막 앞 줄).
-- Produces: 펜스 흐름 — 첫 검사 없음 → 범위 · OUTCOME · 판정 줄 · 이해글 판단은 지금 그대로 → 줄 하나(`line`) → 게시 절 쓰기: `publish-at.txt` 가 있고 그 `<시작> <길이>` 자리의 바이트가 `\n## 게시\n` 로 시작하며 파일 안에 들면 그 자리를 새 절로 바꿔 쓰고(앞 · 뒤 바이트 보존 — `head -c` · `tail -c` 로 임시 파일 → `mv`), 아니면 끝에 덧붙이고 `publish-at.txt` 를 새로 쓴다. sink 를 부른 실행은 `publish.out` 에서 `> [quality-gates] 이미 단 댓글을 확인하지 못했다(` 로 시작하는 줄을 결과 줄 앞에 보인다.
+- Produces: 펜스 흐름 — 첫 검사 없음 → 범위 · OUTCOME · 판정 줄 · 이해글 판단은 지금 그대로 → 줄 하나(`line`) → 게시 절 쓰기: `publish-at.txt` 가 있고 그 `<시작> <길이>` 자리의 바이트가 `\n## 게시\n` 로 시작하며 파일 안에 들면 그 자리를 새 절로 바꿔 쓰고(앞 · 뒤 바이트 보존 — `head -c` · `tail -c` 로 임시 파일 → `mv`) `publish-at.txt` 의 길이를 새 절의 길이로 다시 쓴다(줄 길이가 바뀐다 — 안 그러면 세 번째 실행이 낡은 길이로 뒤 절을 자른다). `publish-at.txt` 가 없으면 처음 도는 것 — 끝에 덧붙이고 `publish-at.txt` 를 쓴다. `publish-at.txt` 가 있는데 그 자리가 결과 파일 밖이거나 `\n## 게시\n` 로 시작하지 않으면 게시 절을 덧붙이지도 바꿔 쓰지도 않고, 결과 줄을 보인 뒤 「정한 이름과 꼴」 의 알림 줄을 낸다 — 게시(sink 호출)는 그대로 한다(설계 §2 · D62). sink 를 부른 실행은 `publish.out` 에서 `> [quality-gates] 이미 단 댓글을 확인하지 못했다(` 로 시작하는 줄을 결과 줄 앞에 보인다.
 
 - [ ] **Step 1: 실패하는 시험(고친 단언)** — `test_publish_pipeline_wiring.sh`:
   - `planted_publish_line_still_posts`(결과 파일의 고칠 목록 절에 `## 게시` 줄을 심고 → sink 를 부른다 · 끝에 게시 절이 덧붙고 심은 줄이 든 앞 절 글이 그대로 — AC7 · AC36)
+  - `planted_publish_line_second_run`(같은 결과 파일로 두 번째 실행 → 심은 줄이 든 앞 절의 바이트가 첫 실행 뒤와 같고, 바뀐 것은 끝의 게시 절뿐 · `grep -cx '## 게시'` 는 심은 줄 1 + 펜스 절 1 — AC36)
+  - `position_mismatch_alerts`(`publish-at.txt` 의 자리를 결과 파일 밖으로 · 또 게시 절 머리가 아닌 자리로 바꿔 두고 실행 → 게시 절이 늘지 않고(앞 실행의 줄 그대로) 알림 줄이 결과 줄 다음에 · sink 는 불린다 — AC36 · D62)
+  - `third_run_after_rewrite_keeps_tail`(첫 실행 `posted: x` → `## intent-critic` 절 덧붙임 → 두 번째 실행 `skipped: already-posted`(줄 길이가 다르다) → 세 번째 실행 → `## intent-critic` 절이 바이트 그대로 끝에 남는다 — AC36)
   - `M2`(뒤집힘): 첫 실행 sink 한 번 → 두 번째 실행도 sink 를 부르고 가짜 sink 가 `skipped: already-posted` 를 내면 `grep -cx '## 게시'` 가 1 · 마지막 절 줄이 `skipped: already-posted` · 첫 실행의 `posted: x` 가 결과 파일에 없다
   - `rerun_after_skipped_or_failed_retries`(첫 실행 `failed: x` → 두 번째도 sink 를 부른다)
   - `range_rerun_same_line`(범위 모드 두 번 → 둘 다 범위 줄 · sink 0 회 · 절 하나)
@@ -554,7 +571,7 @@ def test_no_wait_on_non_lock(): # --wait 30 이어도 바로 끝난다(경과 < 
 - Modify: `plugins/spec-distill/skills/epic-conductor/references/qg-review.md`(호출 줄 :13-15 · :17 · 다시 부르기 :142 · 겹침 문장 :129)
 - Modify: `plugins/spec-distill/references/roadmap-ontology.md`(:38 기계 상태 행 — 잠금을 쓰는 쪽에 qg 를 더한다)
 - Modify: `plugins/spec-distill/tests/test_qg_review_reference.sh`(필요한 단언)
-- (의존 표의 quality-gates 최소 판은 판 번호가 정해지는 Task 18 이 쓴다.)
+- (의존 표의 quality-gates 최소 판 칸은 손으로 고치지 않는다 — 측정이 쓴다. 시험 · 「없을 때」 문장 · 측정은 판 번호가 정해지는 Task 18 이 한다 — D63.)
 
 **Interfaces:**
 - Produces: 호출 줄 `/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로> --answered <「이미 답한 것」 파일의 절대경로> --suite-lock <스위트 잠금 경로>`(지휘자가 `ledger suite-lock` 으로 얻은 그 로드맵의 경로). 다시 부르기: 「qg 가 모르는 인자라고 멈추면 멈춘 줄이 이름으로 든 인자와 그 값을 뺀 같은 줄로 다시 부른다 — 모르는 인자마다 한 번씩, 많아야 두 번. 뺀 인자마다 마지막 보고 첫머리에 한 줄(`--answered` 면 지금 줄, `--suite-lock` 이면 Global Constraints 의 줄)」. 겹침 문장 → 「qg 가 낸 겹침 줄을 그대로 보인다」. 보내기와 대조를 엇갈리게 하는 두 규칙(:125 · :127)은 그대로.
@@ -581,7 +598,7 @@ def test_no_wait_on_non_lock(): # --wait 30 이어도 바로 끝난다(경과 < 
 - Produces:
   - 테스트 폴더 = 파일 경로에서 가장 깊은 `tests` · `test` 성분까지의 폴더. 길 위 폴더 = 파일이 든 폴더부터 그 테스트 폴더까지(둘 다 포함). 더하는 것 = 길 위 폴더에 바로 든(하위로 내려가지 않는) 이름이 테스트 꼴인 파일(「정한 이름과 꼴」 의 정규식). 작업 트리 모드와 `--topic` 모드 둘 다 같은 universe 에서.
   - 배정: 흡수 러너가 있으면 지금처럼 `BULK`. 없으면 맡지 않은 파일 가운데 이름이 테스트 꼴이 아니고 경로에 `tests/` · `test/` 성분이 있는 것 → 같은 입력에서 러너가 맡은 파일(패키지로 접기 전 경로) 가운데 그 길 위 폴더에 바로 든 것이 있으면 `support`, 없으면 `unclaimed`. 이름이 테스트 꼴인데 맡지 않은 파일은 지금처럼 `unclaimed`.
-  - 해석 하나(설계 「지원 파일 자신은 돌릴 대상 · 전체 수 · silent-drop 에서 빠진다」): 「전체 수」 를 차등 출력의 unit 전체와 공시 줄의 `영향 테스트 <N>개` 로 읽는다 — `--total`(공시 줄의 `전체 <M>개` 분모)은 바꾸지 않는다. `--total` 에서 빼면 실행 비트로 맡는 이름 자유 셸 테스트(`tests/*.sh`)가 함께 빠진다. 이 해석은 계획 확인 질문에 함께 싣는다.
+  - 해석 하나(설계 「지원 파일 자신은 돌릴 대상 · 전체 수 · silent-drop 에서 빠진다」): 「전체 수」 를 차등 출력의 unit 전체와 공시 줄의 `영향 테스트 <N>개` 로 읽는다 — `--total`(공시 줄의 `전체 <M>개` 분모)은 바꾸지 않는다. `--total` 에서 빼면 실행 비트로 맡는 이름 자유 셸 테스트(`tests/*.sh`)가 함께 빠진다. 사용자 답(2026-11-26 · 설계 D60) 그대로다.
 
 - [ ] **Step 1: 실패하는 시험** — 설계 §5 의 두 표가 시험이다:
   - `test_compute_test_scope_candidates.sh`: `support_expands_path_dirs`(`plugins/quality-gates/tests/fixtures/x.tsv` 를 바꾼 작은 리포 → 후보에 `tests/fixtures/test_a.sh` · `tests/test_b.py`, 없음: `tests/spike/test_codex_json_extraction.sh` · `tests/fixtures/e2e-app/base/tests/test_store.sh` · `tests/mocks/mock-x.sh` — AC19) · `support_in_tests_root`(`tests/e2e-scenarios.md` → `tests/` 바로 든 테스트만) · `shared_tests_fixture`(`shared/tests/fixtures/ask-sites.tsv` → `shared/tests/fixtures/` · `shared/tests/` 바로 든 테스트) · `topic_mode_same`.
@@ -631,13 +648,17 @@ def test_no_wait_on_non_lock(): # --wait 30 이어도 바로 끝난다(경과 < 
 
 **Files:**
 - Modify: `plugins/quality-gates/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` · `dependencies.md`(바뀐 것 없으면 그대로 — `check_deps.py measure` 만 판 칸을 쓴다)
-- Modify: `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` · `dependencies.md`(Task 15 의 quality-gates 최소 판)
+- Modify: `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` · `README.md` · `dependencies.md`(quality-gates 행 — 판 칸은 측정이 쓰고, 「없을 때」 칸에 문장 하나를 더한다)
+- Modify: `plugins/spec-distill/tests/test_qg_review_readable.sh`(선례 `deps-min-qg` · `deps-low-qg` 옆에 같은 꼴의 케이스 둘)
 
-- Modify: `plugins/spec-distill/tests/test_qg_review_reference.sh`(케이스 `deps_min_version` — spec-distill 의존 표 quality-gates 행의 최소 판이 qg CHANGELOG 에서 `--suite-lock` 이 처음 나온 머리의 판과 같다. 기대값은 CHANGELOG 에서 도출)
+**Interfaces(의존 표 — D63 · 설계 AC17):**
+- 판 칸은 손으로 고치지 않는다. qg 판을 올린 뒤 `plugins/spec-distill` 에서 `python3 scripts/check_deps.py measure --plugin-root . --superpowers-base "<불러온 superpowers skill 의 기준 폴더>"` 를 돌린다 — 측정은 레포 안 `plugins/quality-gates/.claude-plugin/plugin.json` 의 판을 읽으므로(`check_deps.py` 의 quality-gates 갈래) 이 PR 에서는 `--suite-lock` 이 처음 나온 판과 같은 값이 써져 「이상」 검사가 깨지지 않는다(계획 담당자 확인 2026-11-26). 측정은 다른 행(python · git · claude-code · superpowers)의 판 칸도 다시 쓸 수 있다 — 측정이 쓴 대로 두고 PR 본문에 적는다. 측정 뒤 quality-gates 판 칸이 그 판보다 낮게 써지면 고치지 말고 묻는다.
+- 「없을 때」 칸 끝에 더하는 문장: `깔린 판이 <판>(\`--suite-lock\` 이 처음 나온 판)보다 낮으면 qg 가 모르는 인자라며 시작에서 멈추고, 지휘자의 다시 부르기가 그 인자를 빼고 다시 불러 리뷰는 스위트 잠금 자리 없이 돈다 — quality-gates 를 <판> 이상으로 올리면 풀린다`(`<판>` 은 받은 qg 번호). 지금 칸의 `--answered` 문장은 그대로 둔다.
+- 시험(선례 꼴 · 버전 리터럴은 기능이 처음 나온 판 하나만 — 올림마다 바뀌지 않는 문턱): `deps-min-qg-suite-lock` — 최소 판 칸이 `<판>` 이상이고 지금 qg `plugin.json` 의 판 이하(선례의 `ver_cmp` 를 그대로 쓴다) · `deps-low-qg-suite-lock` — 「없을 때」 칸에 위 문장의 「스위트 잠금 자리 없이 돈다」 와 `<판> 이상으로 올리면 풀린다`.
 
-- [ ] **Step 1: 지휘자에게 판 번호를 받는다** — 받기 전에는 이 과제를 시작하지 않는다. 받으면 `deps_min_version` 을 먼저 쓰고 실패를 본다.
+- [ ] **Step 1: 지휘자에게 판 번호를 받는다** — 받기 전에는 이 과제를 시작하지 않는다. 받으면 `deps-min-qg-suite-lock` · `deps-low-qg-suite-lock` 을 먼저 쓰고 실패를 본다.
 - [ ] **Step 2: 판 · CHANGELOG 를 쓴다** — `## [<판>] — <날짜>` 의 Added(qg: `--suite-lock` · `qg_nonce.py` · 게시 앞 확인 · 지원 파일 / spec-distill: 호출 줄의 잠금 자리) · Changed(리뷰어 칸이 경로 · here-doc 끝 표지 · 게시 다시 돌리기 · unittest 판정 · 무효 걷기 · 잠금 정본 자리) · Fixed(합치기 전 목록 쓰기 순서 · 잠금 꼴 아닌 것 지우기 · 고칠 방법 줄). README 의 Principles Instantiated · 인자 표 · 세션 파일 표.
-- [ ] **Step 3: 확인** — Run: `bash plugins/quality-gates/tests/test_intent_critic_wiring.sh` · `bash plugins/spec-distill/tests/test_qg_review_reference.sh`(이제 `deps_min_version` GREEN) · `claude plugin validate plugins/quality-gates` · `claude plugin validate plugins/spec-distill` · `grep -rn 'DISABLE_' plugins/quality-gates/scripts | sort -u` 가 이 브랜치 앞과 같은 이름 집합(새 kill switch 없음 — AC24).
+- [ ] **Step 3: 확인** — Run: `bash plugins/quality-gates/tests/test_intent_critic_wiring.sh` · `bash plugins/spec-distill/tests/test_qg_review_readable.sh`(새 두 케이스 GREEN) · `bash plugins/spec-distill/tests/test_qg_review_reference.sh` · `claude plugin validate plugins/quality-gates` · `claude plugin validate plugins/spec-distill` · `grep -rn 'DISABLE_' plugins/quality-gates/scripts | sort -u` 가 이 브랜치 앞과 같은 이름 집합(새 kill switch 없음 — AC24).
 - [ ] **Step 4: 커밋** — `chore(qg,spec-distill): 판 올림 · CHANGELOG · README`.
 
 ---
