@@ -108,8 +108,8 @@ class TestQgReviewFile(unittest.TestCase):
                   if line.startswith("```")]
         self.assertEqual(fences, [])
 
-    def _broken(self, old: str, new: str, count: int = 1) -> str:
-        F.write_review(self.path, full_review())
+    def _broken(self, old: str, new: str, count: int = 1, review: F.Review = None) -> str:
+        F.write_review(self.path, review or full_review())
         text = self.path.read_text(encoding="utf-8")
         self.assertIn(old, text)
         return text.replace(old, new, count)
@@ -117,11 +117,16 @@ class TestQgReviewFile(unittest.TestCase):
     def test_malformed_state_is_unreadable(self):
         good = self.path.read_text(encoding="utf-8") if self.path.exists() else None
         self.assertIsNone(good)
+        unmarked = full_review()   # 표시가 없어야 사유 칸만의 어긋남을 잰다(표시 짝 검사가 가리지 않게)
+        unmarked.close_reason, unmarked.close_mark = "막는 지적 없음", ""
         cases = {
             "단계 반쯤": self._broken("- 단계: 닫힘\n", "- 단계: 반쯤\n"),
-            "닫힘인데 사유 없음": self._broken("- 닫힘 사유: 「잘못 골랐다」 — 설계 대화로\n", "- 닫힘 사유:\n"),
-            "사유가 여덟 밖": self._broken("- 닫힘 사유: 「잘못 골랐다」 — 설계 대화로\n",
-                                     "- 닫힘 사유: 그냥 닫음\n"),
+            "닫힘인데 사유 없음": self._broken("- 닫힘 사유: 막는 지적 없음\n", "- 닫힘 사유:\n",
+                                       review=unmarked),
+            "사유가 여덟 밖": self._broken("- 닫힘 사유: 막는 지적 없음\n", "- 닫힘 사유: 그냥 닫음\n",
+                                     review=unmarked),
+            "열렸는데 사유 있음": self._broken("- 단계: 닫힘\n", "- 단계: 돌아옴\n", review=unmarked),
+            "칸 뒤 공백만": self._broken("- 사유:\n", "- 사유: \n"),
             "들여쓰기 풀린 원문 줄": self._broken("  둘째 줄\n", "둘째 줄\n"),
             "막는 지적 절 머리 지움": self._broken("## 막는 지적\n", ""),
             "끝 개행 뒤 값": self._broken("", "") + "열림\n",
@@ -139,14 +144,15 @@ class TestQgReviewFile(unittest.TestCase):
                 with self.assertRaises(F.Unreadable):
                     F.read_review(self.path)
         # 양의 짝 — 고치지 않은 글은 읽힌다
-        F.write_review(self.path, full_review())
-        self.assertEqual(F.read_review(self.path), full_review())
+        for review in (full_review(), unmarked):
+            F.write_review(self.path, review)
+            self.assertEqual(F.read_review(self.path), review)
         # 쓰는 쪽도 꼴이 어긋난 값을 쓰지 않는다
         bad = full_review()
         bad.stage = "열림\n"
         with self.assertRaises(ValueError):
             F.write_review(self.path, bad)
-        self.assertEqual(F.read_review(self.path), full_review())
+        self.assertEqual(F.read_review(self.path), unmarked)
 
     def test_symlink_target_untouched(self):
         victim = self.rig.t / "victim.md"
