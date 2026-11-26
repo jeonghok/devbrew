@@ -115,6 +115,13 @@ class RecriticSlots(unittest.TestCase):
                   "--recritic-slot", str(self.slots[0])])
         self.assertEqual(r.returncode, 2, r.stderr)
 
+    def test_empty_slot_is_usage(self):
+        r = _run([sys.executable, str(SYNTH), "--findings", str(self.d / "findings.yaml"),
+                  "--recritic", str(self.d / "rf.yaml"), "--recritic-map", str(self.d / "map.json"),
+                  "--recritic-slot", ""])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("--recritic-slot 은 빈 문자열을 받지 않는다", r.stderr)
+
     def test_recritic_diff_original_unchanged(self):
         """본문 Step 3.5 펜스를 뽑아 돌린다 — 사본 넷이 생기고 원본(리뷰 diff · 경로 목록 · 의도 원본 ·
         익명 목록 · 재비판 diff)은 바이트 그대로다(AC25)."""

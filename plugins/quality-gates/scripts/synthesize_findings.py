@@ -919,7 +919,7 @@ def main(argv=None):
         _usage("--recritic-diff 는 --recritic 없이 의미가 없다")
     if args.recritic_slot and args.recritic is None:
         _usage("--recritic-slot 은 --recritic 없이 의미가 없다")
-    if any(s == "" for s in args.recritic_slot):
+    if "" in args.recritic_slot:
         _usage("--recritic-slot 은 빈 문자열을 받지 않는다 (플래그를 생략하거나 실제 경로를 줘라)")
     restore = _parse_restore(args.restore_lowered)
     if restore is not None and args.recritic is None:
