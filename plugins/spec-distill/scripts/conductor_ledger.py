@@ -821,7 +821,20 @@ def c_release(root, a) -> int:
     return 0
 
 
+RESOURCES = "자원"
+
+
+def add_resource(root, roadmap: str, session: str, cells: str) -> None:
+    """`## 자원` 에 한 줄을 더한다 — 칸은 `종류 · 경로 · 에픽 · 용도 · 만든 때`. 표지를 쥔 세션만 쓴다."""
+    row = split_cells(RESOURCES, cells)
+    update(root, roadmap, session, lambda d: d[RESOURCES].append(row))
+
+
 def c_add(root, a) -> int:
+    if a.section == RESOURCES:
+        add_resource(root, a.roadmap, a.session, a.cells)
+        print("적었다 — %s: %s" % (a.section, a.cells))
+        return 0
     row = split_cells(a.section, a.cells)
     if a.section == "레포 설정":   # 검사받는 하위 agent 도 쓸 수 있는 파일이라 스위트 대조가 읽지 않는다
         raise Fail(2, "기계 상태에는 레포 설정을 적지 않는다 — 사용자가 답한 테스트 명령은 `merge_check.py run … "
@@ -2043,13 +2056,13 @@ def c_worktree_path(root, a) -> int:
     return 0
 
 
-def c_resource_dir(root, a) -> int:
-    """기계 상태 자원 폴더 `<기계 상태 폴더>/files/<종류>/<이름>` 을 만들고 경로를 낸다 — `cleanup` 이 확인 없이 치우는 자리."""
-    if not a.name or not set(a.name) <= NAME_CHARS or a.name in (".", ".."):
-        raise Fail(2, "자원 이름은 영숫자 · . · _ · - 만 쓴다: %r" % a.name)
-    mdir = mdir_for_write(root, a.roadmap)
-    base = mdir / FILES_DIR / a.kind
-    out = base / a.name
+def resource_dir(root, roadmap: str, kind: str, name: str) -> Path:
+    """기계 상태 자원 폴더 `<기계 상태 폴더>/files/<종류>/<이름>` 을 만들고 그 경로를 낸다 — `cleanup` 이 확인 없이 치우는 자리."""
+    if not name or not set(name) <= NAME_CHARS or name in (".", ".."):
+        raise Fail(2, "자원 이름은 영숫자 · . · _ · - 만 쓴다: %r" % name)
+    mdir = mdir_for_write(root, roadmap)
+    base = mdir / FILES_DIR / kind
+    out = base / name
     for p in (mdir, mdir / FILES_DIR, base, out):
         if p.is_symlink():
             raise Fail(3, "자원 폴더 경로에 심볼릭 링크가 있다 — 만들지 않는다: %s" % p)
@@ -2057,9 +2070,13 @@ def c_resource_dir(root, a) -> int:
         out.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise Fail(3, "자원 폴더를 만들지 못했다: %s (%s)" % (out, type(exc).__name__))
-    if disposable_kind(root, a.roadmap, out) != "file":
+    if disposable_kind(root, roadmap, out) != "file":
         raise Fail(3, "만든 폴더가 자원 폴더 자리가 아니다: %s" % out)
-    print(out)
+    return out
+
+
+def c_resource_dir(root, a) -> int:
+    print(resource_dir(root, a.roadmap, a.kind, a.name))
     return 0
 
 
