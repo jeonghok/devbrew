@@ -420,14 +420,18 @@ ver_cmp() {
 }
 LOW="$(ver_cmp "$QGMIN" 17.0.0)"
 HIGH="$(ver_cmp "$QGMIN" "$QGV")"
+# qg_max_ok <라벨> — 최소 판(QGMIN)이 지금 qg plugin.json 의 판(QGV) 이하인가(HIGH). deps-min-qg · deps-min-qg-suite-lock 이 함께 쓴다
+qg_max_ok() {
+  case "$HIGH" in -1|0) ok "${1}: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "${1}: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
+}
 case "$LOW" in 0|1) ok "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상" ;; *) no "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상 (${LOW})" ;; esac
 # deps-low-qg (통합 리뷰 F7) — 「없을 때」 칸이 깔린 판이 낮을 때의 동작과 푸는 길도 적는다(판 칸은 check_deps.py 몫)
 assert_contains "$QGROW" '깔린 판이 17.0.0(`--answered` 와 돌려주는 꼴 3판이 처음 나온 판)보다 낮으면 리뷰는 답 이어지기 없이 돌고 의도 점검 결과는 「셀 수 없음」 이 된다 — quality-gates 를 17.0.0 이상으로 올리면 풀린다' "deps-low-qg: 낮은 판의 동작과 푸는 길이 quality-gates 행에"
-case "$HIGH" in -1|0) ok "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
+qg_max_ok deps-min-qg
 # deps-min-qg-suite-lock (AC17) — 최소 판이 17.2.0(`--suite-lock` 이 처음 나온 판) 이상이고 지금 qg plugin.json 의 판 이하
 SLLOW="$(ver_cmp "$QGMIN" 17.2.0)"
 case "$SLLOW" in 0|1) ok "deps-min-qg-suite-lock: quality-gates 최소 판(${QGMIN})이 17.2.0 이상" ;; *) no "deps-min-qg-suite-lock: quality-gates 최소 판(${QGMIN})이 17.2.0 이상 (${SLLOW})" ;; esac
-case "$HIGH" in -1|0) ok "deps-min-qg-suite-lock: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "deps-min-qg-suite-lock: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
+qg_max_ok deps-min-qg-suite-lock
 # deps-low-qg-suite-lock (AC17) — 「없을 때」 칸이 잠금 인자를 모르는 낮은 판의 동작과 푸는 길도 적는다
 assert_contains "$QGROW" '스위트 잠금 자리 없이 돈다' "deps-low-qg-suite-lock: 낮은 판이면 잠금 자리 없이 돈다"
 assert_contains "$QGROW" '17.2.0 이상으로 올리면 풀린다' "deps-low-qg-suite-lock: 푸는 길(17.2.0 이상)"
