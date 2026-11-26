@@ -395,6 +395,20 @@ class Cli(unittest.TestCase):
             self.assertTrue(self.d.is_symlink())
             self.assertTrue(target.is_dir())
 
+    def test_dangling_symlink_at_lock_path_is_refused(self):
+        """대상이 없는 링크도 잠금 꼴이 아니다 — 같은 자리를 끝없이 돌지 않고 3 으로 끝나며 링크는 그대로다."""
+        os.symlink(str(self.t / "nowhere"), str(self.d))
+        mark = self.t / "ran"
+        try:
+            p = subprocess.run([sys.executable, str(SCRIPTS / "suite_lock.py"), "run", "--lock", str(self.d), "--owner", "a",
+                                "--", sys.executable, "-c", "import pathlib, sys; pathlib.Path(sys.argv[1]).write_text('x')",
+                                str(mark)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
+        except subprocess.TimeoutExpired:
+            self.fail("대상 없는 링크 자리에서 10초 안에 끝나지 않았다")
+        self._refused(p.returncode, p.stdout.decode("utf-8"), mark)
+        self.assertTrue(self.d.is_symlink())
+        self.assertFalse((self.t / "nowhere").exists())
+
     def test_unreadable_old_dir_is_not_cleared(self):
         """안을 읽지 못하는 폴더는 잠금 꼴인지 알 수 없어 치우지 않는다."""
         self.d.mkdir()
