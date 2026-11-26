@@ -104,7 +104,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt` · `e2e-app.pgid` · `e2e-app.log`(e2e) ·
 `review-i1.names` · `review-i1.full.diff` · `review-i1.diff` · `review-i1.doc-paths` · `review-i1.self-state` · `review-i1.mode`(Review Step 1c 의 리뷰 diff 와 그 실행이 쓴 범위 모드) ·
 `other-teams.md`(intent-critic 단계의 다른 팀 기록 — 팀 지도 · 진행 중인 의도 문서 · 겹치는 diff · 확인 못 함) ·
-`suite-overlap.txt`(차등 테스트의 겹침 기록 — 잠금 감싸개가 겹친 테스트 명령마다 탭으로 나눈 한 줄을 덧붙인다: 잡혀 있었으면 busy · 주인 · 잡은 시각, 쓸 수 없었으면 unusable · - · -) —
+`suite-overlap.txt`(차등 테스트의 겹침 기록 — 잠금 감싸개가 겹친 테스트 명령마다 탭으로 나눈 한 줄을 덧붙인다: 잡혀 있었으면 busy · 주인 이름 · 잡은 시각, 쓸 수 없었으면 unusable · - · -) —
 도 같은 생명주기를 따른다.
 
 `suite-lock-path.txt`(공유 스위트 잠금 폴더의 절대경로 한 줄 — `--suite-lock` 이 있을 때만)는 쓰는 쪽이 `setup-qg.sh` 하나다 — 시작마다(`--ensure` 로 폴더를 그대로 둘 때도) 지우고 인자가 있으면 다시 쓴다. 그래서 Preflight P2 의 지우기 목록에는 들지 않는다. 읽는 쪽은 잠금 감싸개다.
