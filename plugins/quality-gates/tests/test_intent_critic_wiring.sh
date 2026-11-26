@@ -109,6 +109,8 @@ assert_contains "$IR" 'python3 "$QG/scripts/intent_critic.py" slots --rd "$RD" -
 assert_contains "$IR" 'check-output "$RD/intent-critic-${N}.txt" --call "$N"; echo "check rc=$?"' "절차 문서: 응답 쓰기 뒤 check-output 이 그 호출과 견준다"
 assert_eq "$(fenced "$PROC" | grep -c -F 'check-output')" 1 "절차 문서: check-output 줄은 하나(위 꼴뿐)"
 assert_contains "$PF" 'QG_INPUT_UNREADABLE: <읽지 못한 경로>' "절차 문서: 읽지 못함 한 줄 글자"
+assert_eq "$(count "$PF" '칸 사본 펜스를 같은 `K` 로 다시 돌려 새 사본 · 새 끝 값을 받고, 그 경로로 같은 dispatch 를 한 번 다시 부른')" 1 "절차 문서: 다시 부르기 앞에 칸 사본을 새로 만든다(AC25 호출마다 새 값)"
+assert_eq "$(count "$PF" '같은 dispatch(같은 칸 사본)')" 0 "절차 문서: 같은 칸 사본으로 다시 부르던 옛 글 0"
 
 note "[i7_sentence — push 안내는 게시 여부를 읽지 않는다(AC34)]"
 I7S='답 커밋 <해시> 를 push 한다 — 이 실행이 판정을 게시했다면 그 판정은 그 앞 커밋의 것이다'

@@ -680,6 +680,7 @@ def strip_roadmap_doubts(text: str) -> tuple:
 # ---------------------------------------------------------------- 원문 · 로드맵 조립
 
 _ORIGIN_HEADS = ("## 6.", "## 2.")
+_DOUBT_HEADS = ("## 5.", "## 3.")
 
 # 출처 표지 — 원문 · 로드맵 · 의심 칸에서 스크립트가 쓰는 표지 줄의 머리 낱말. 본문(리뷰받는 쪽 글)에
 # 같은 꼴이 있으면 `<!--` 를 `&lt;!--` 로 바꿔 싣는다 — 표지는 스크립트가 쓴 것만 남는다.
@@ -722,7 +723,6 @@ def neutralize_markers(text: str) -> str:
 def marker_field(value: str) -> str:
     """표지 안에 들어가는 필드(출처 · 경로) — 표지를 닫거나 새 표지를 여는 글자를 무력화한다."""
     return neutralize_markers(value).replace(MARK_CLOSE, MARK_CLOSE_SAFE)
-_DOUBT_HEADS = ("## 5.", "## 3.")
 
 
 def _note(st: dict, line: str) -> None:

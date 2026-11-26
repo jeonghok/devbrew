@@ -940,7 +940,7 @@ def cmd_check_output(args) -> int:
 
 
 def cmd_doubts_append(args) -> int:
-    data, why = _parse_output(_read(_path(args.rd, OUT1)))
+    data, why, _slot_fail = _checked_output(_path(args.rd, OUT1), args.rd, 1)
     if data is None:
         print("첫째 호출 출력을 읽지 못함 — 덧붙이지 않았다(%s)" % why)
         print("doubts-append: 0")

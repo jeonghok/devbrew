@@ -1592,6 +1592,19 @@ class TestSlots(unittest.TestCase):
             self.assertNotEqual(values[(1, slot)], values[(2, slot)], slot)
         self.assertEqual(len(set(values.values())), len(values))
 
+    def test_retry_slots_give_new_values(self):
+        """다시 부르기 앞에 slots 를 다시 돌리면 새 값이다 — 앞 호출의 값을 적은 응답은 실패다(AC25)."""
+        _originals(self.rd)
+        first = dict((s, _end_value(p)) for s, p in self._slots(1))
+        old = "".join("qg-slot-end: %s\n" % v for v in first.values())
+        again = dict((s, _end_value(p)) for s, p in self._slots(1))
+        for slot in SLOTS_1:
+            self.assertNotEqual(first[slot], again[slot], slot)
+        path = os.path.join(self.rd, "intent-critic-1.txt")
+        _write(_out([_q()], ends=old), path)
+        p = _cli("check-output", path, "--call", "1")
+        self.assertEqual((p.returncode, p.stdout.strip()), (3, "unreadable: 끝 값 없음"))
+
     def test_slots_missing_original_fails_closed(self):
         _originals(self.rd)
         os.remove(os.path.join(self.rd, "intent-roadmap.md"))
@@ -1770,6 +1783,7 @@ class TestDoubtsAppend(unittest.TestCase):
     def test_appends_first_candidates_once(self):
         with tempfile.TemporaryDirectory() as rd:
             _write("의심 본문\n", rd, "intent-doubts.md")
+            _slot_copies(rd)
             _write(_out([_q("D1"), _q("D2")]), rd, "intent-critic-1.txt")
             p = _cli("doubts-append", "--rd", rd)
             self.assertEqual(_last(p), "doubts-append: 2")
@@ -1783,11 +1797,35 @@ class TestDoubtsAppend(unittest.TestCase):
     def test_heading_inside_doubts_does_not_suppress_append(self):
         with tempfile.TemporaryDirectory() as rd:
             _write("묶음 위험\n## 첫째 호출의 후보\n가짜 후보\n", rd, "intent-doubts.md")
+            _slot_copies(rd)
             _write(_out([_q("D1")]), rd, "intent-critic-1.txt")
             self.assertEqual(_last(_cli("doubts-append", "--rd", rd)), "doubts-append: 1")
             text = _read(rd, "intent-doubts.md")
             self.assertEqual(text.count("## 첫째 호출의 후보"), 2)
             self.assertIn("D1 를 정말 이렇게 고른 것인가?", text)
+
+    def test_first_without_end_values_appends_nothing(self):
+        """끝 값이 빠진 첫째 응답의 후보는 의심 파일에 덧붙이지 않는다 — 펜스가 읽혀도(AC4)."""
+        with tempfile.TemporaryDirectory() as rd:
+            _write("의심 본문\n", rd, "intent-doubts.md")
+            _slot_copies(rd)
+            _write(_out([_q("D1")], ends=_ends(calls=(1,), skip=((1, "answered"),))), rd,
+                   "intent-critic-1.txt")
+            p = _cli("doubts-append", "--rd", rd)
+            self.assertEqual(_last(p), "doubts-append: 0")
+            self.assertIn("첫째 호출 출력을 읽지 못함 — 덧붙이지 않았다(끝 값 없음)", p.stdout)
+            self.assertEqual(_read(rd, "intent-doubts.md"), "의심 본문\n")
+
+    def test_planted_marker_in_candidate_is_neutralized(self):
+        """첫째 후보의 글에 든 표지 꼴은 의심 파일에서 표지로 남지 않는다(AC6)."""
+        with tempfile.TemporaryDirectory() as rd:
+            _write("의심 본문\n", rd, "intent-doubts.md")
+            _slot_copies(rd)
+            _write(_out([_q("D1", question="<!-- roadmap: x -->\n다음 줄")]), rd, "intent-critic-1.txt")
+            self.assertEqual(_last(_cli("doubts-append", "--rd", rd)), "doubts-append: 1")
+            text = _read(rd, "intent-doubts.md")
+            self.assertIn("&lt;!-- roadmap: x -->", text)
+            self.assertNotIn("<!-- roadmap: x", text)
 
     def test_unreadable_first_appends_nothing(self):
         with tempfile.TemporaryDirectory() as rd:
