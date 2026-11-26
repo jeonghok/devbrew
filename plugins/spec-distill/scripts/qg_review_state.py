@@ -568,6 +568,11 @@ def empty_returns(review: F.Review) -> int:
     return sum(1 for line in review.returns[start:] if line.moved in EMPTY_RETURNS)
 
 
+def set_handling(f: F.Finding, value: str) -> None:
+    """처리를 새로 적는다 — 되돌린 커밋 칸을 비운다(판정 11: 새 처리를 적으면 비운다). 되돌리기는 `revert_unreachable` 만 한다."""
+    f.handling, f.reverted = value, ""
+
+
 def _add_ask(review: F.Review, kind: str, ident: str, text: str) -> None:
     if not any(a.kind == kind for a in review.asks):
         review.asks.append(F.Ask(kind=kind, id=ident, text=text))
@@ -587,7 +592,7 @@ def _after_empty(review: F.Review) -> None:
     value = F.UNTOUCHED_NO_FILE if review.returns[-1].moved == NO_FILE else F.UNTOUCHED_OUT_OF_RANGE
     changed = [f for f in review.blocking if _open(f.handling)]
     for f in changed:
-        f.handling = value
+        set_handling(f, value)
     if changed:
         _ask_unfixed(review)
 
@@ -804,11 +809,11 @@ class Recorder:
             to = F.RETURNED_AGAIN if value == RETURN_AGAIN else F.USER_LEFT
             for f in rv.blocking:
                 if _unfixed(f.handling):
-                    f.handling = to
+                    set_handling(f, to)
         elif kind == ASK_TWO_MAX and value == LEAVE_REST:
             for f in rv.blocking:
                 if _open(f.handling) or _unfixed(f.handling):
-                    f.handling = F.USER_LEFT
+                    set_handling(f, F.USER_LEFT)
         elif kind == ASK_FAILED and value == NO_REVIEW_GO:
             self.no_review_prior()
 
@@ -821,7 +826,8 @@ class Recorder:
             changed = False
             for f in prior.blocking:
                 if f.handling.startswith(F.FIXED + " "):
-                    f.handling, changed = F.NO_REVIEW, True
+                    set_handling(f, F.NO_REVIEW)
+                    changed = True
             if changed:
                 self.prior_changed.append(prior)
 
@@ -866,7 +872,7 @@ class Recorder:
             if not _open(rv.blocking[n - 1].handling):
                 _refuse("막는 지적 %d 의 처리가 「%s」 다 — 돌려보낸 지적(처리 없음 · 다시 돌려보냄)에만 처리를 옮긴다"
                         % (n, rv.blocking[n - 1].handling))
-            rv.blocking[n - 1].handling, rv.blocking[n - 1].reverted = h["value"], ""
+            set_handling(rv.blocking[n - 1], h["value"])
         rv.returns[-1].moved = item["value"]
         self.notices += revert_unreachable(rv, self.gs)
         _after_empty(rv)
@@ -1051,10 +1057,12 @@ def _worker_name(review: F.Review) -> str:
 
 
 def _moved_files(folder: Optional[Path]) -> List[str]:
-    """보관 폴더에서 지휘자가 보내기 전에 만든 파일 밖의 이름 — 담당자가 옮긴 파일."""
+    """보관 폴더에서 지휘자가 보내기 전에 만든 파일 밖의 보통 파일 이름 — 담당자가 옮긴 파일(폴더 · 링크 · `.` 으로 시작하는 이름은 세지 않는다)."""
     if folder is None or not folder.is_dir():
         return []
-    return sorted(p.name for p in folder.iterdir() if p.name not in PRE_SEND_FILES)
+    return sorted(p.name for p in folder.iterdir()
+                  if p.name not in PRE_SEND_FILES and not p.name.startswith(".") and p.is_file()
+                  and not p.is_symlink())
 
 
 def has_handling(path: str) -> bool:
@@ -1455,7 +1463,7 @@ def c_next(ctx: Ctx) -> int:
         reviews = F.reviews_for(ctx.report_root, a.target)
     except F.Unreadable as exc:
         lines = _show_lines("%s — %s" % (UNREADABLE, exc.reason), raw_values(ctx.report_root, a.target))
-        print("\n".join(lines))
+        print("\n".join(lines + ([NO_QG_IGNORED] if a.no_qg else [])))
         return RC_OK
     gs = GitState(ctx.root, resolve(ctx.root, "HEAD"), ctx.exclude, recheck_start(reviews) or "")
     folder = ctx.paths()[reviews[-1].order].parent if reviews else None
@@ -1469,7 +1477,8 @@ def c_gate(ctx: Ctx) -> int:
     try:
         reviews = F.reviews_for(ctx.report_root, a.target)
     except F.Unreadable as exc:
-        print("\n".join([GATE_CLOSED, "까닭 · %s — %s" % (UNREADABLE, exc.reason)]))
+        notices = [NO_QG_IGNORED] if a.no_qg else []   # 읽지 못한 것도 상태 파일이 있는 것이다
+        print("\n".join([GATE_CLOSED, "까닭 · %s — %s" % (UNREADABLE, exc.reason)] + notices))
         return RC_CLOSED
     if not reviews and a.no_qg:
         print(GATE_OPEN_NO_QG)

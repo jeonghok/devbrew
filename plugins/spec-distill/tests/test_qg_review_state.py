@@ -1288,6 +1288,16 @@ class TestQgReviewState(unittest.TestCase):
             lines = self.next(no_qg=True)
             self.assertEqual(self.row(lines), "R1a")
             self.assertIn(NO_QG_NOTICE, lines)
+        with self.subTest(case="읽지 못한 상태 파일도 상태 파일이다"):
+            self.setUp()
+            self.broken_state()
+            proc = self.gate("--no-qg")
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn(NO_QG_NOTICE, proc.stdout.splitlines())
+            lines = self.next(no_qg=True)
+            self.assertEqual(self.row(lines), "RX")
+            self.assertIn(NO_QG_NOTICE, lines)
+            self.assertNotIn(NO_QG_NOTICE, self.next())   # 인자가 없으면 알리지 않는다
 
     def test_next_failed_review_asks(self):
         folder = self.sent()
@@ -1314,7 +1324,9 @@ class TestQgReviewState(unittest.TestCase):
         return folder
 
     def test_sending_only_pre_files_sends(self):
-        self.sending()
+        folder = self.sending()
+        (folder / ".DS_Store").write_bytes(b"\0")      # 숨은 파일 · 폴더는 담당자가 옮긴 파일이 아니다
+        (folder / "sub").mkdir()
         lines = self.next()
         self.assertEqual((self.row(lines), self.kind(lines)), ("R1b", "보냄"))
         self.assertIn("send --phase done --worker", lines[0])
@@ -1525,6 +1537,19 @@ class TestQgReviewState(unittest.TestCase):
         rv, _lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
                                     {"kind": "handling", "finding": 1, "value": "고친 커밋 " + fix}])
         self.assertEqual((rv.blocking[0].handling, rv.blocking[0].reverted), ("고친 커밋 " + fix, ""))
+        with self.subTest(case="다른 길로 새 처리가 적혀도 비운다 — 알림이 한 바퀴 늦게 나오지 않는다"):
+            self.setUp()
+            self.returned(blocking=[finding("지적 1")], returns=[self.ret(1)])
+            self.recorded([{"kind": "return_moved", "value": "옮김"},
+                           {"kind": "handling", "finding": 1, "value": "고친 커밋 deadbeef"}])
+            self.recorded([{"kind": "return", "worker": "impl-w2", "handling_file": self.handling_file(2)}])
+            rv, _lines = self.recorded([{"kind": "return_moved", "value": "처리 파일 없이 끝남"}])
+            self.assertEqual((rv.blocking[0].handling, rv.blocking[0].reverted), (F.UNTOUCHED_NO_FILE, ""))
+            rv, _lines = self.recorded([item_answer(rv.asks[0].id, UNFIXED, "다시 돌려보낸다")])
+            self.assertEqual((rv.blocking[0].handling, rv.blocking[0].reverted), (F.RETURNED_AGAIN, ""))
+            lines = self.next()
+            self.assertEqual(self.row(lines), "R7d")
+            self.assertFalse([x for x in lines if x.startswith("알림 · 적어 낸")], lines)
 
     def test_at_cap_no_return_without_two_max_answer(self):
         # 상한에 닿은 PR 에서 「두 번까지」 의 답 없이 돌려보낼 것이 있으면 돌려보내기를 내지 않는다(AC32) —
