@@ -106,7 +106,7 @@ advisory 의 정확한 문면은 각 skill 이 자기 대상(`current_spec` · b
 approve(①/②) 를 고른 뒤 *"approved!"* 만 narrate 하고 그 옵션의 완료 동작을 skip 하는 것은
 polite stop 이다. ①/② 의 완료 동작은 skill 고유 단계를 마친 뒤 두 줄 명령과 위치를 노출하고 턴을 끝내는 것이다 —
 명령을 노출하지 않고 설명만 하고 끝내면 polite stop 이다. 게이트를 **실제로 띄우는 것** 이 이 금지를 푸는
-유일한 방법이며, 게이트를 거치지 않는 예외 경로(Step A 의 경로 부재)는 **명시적
+유일한 방법이며, 게이트를 거치지 않는 예외 경로(Step A 의 경로 부재 · spec-review 의 진입 검사 실패)는 **명시적
 advisory 단락**을 동반해야 한다. 게이트-less silent 종료는 금지다.
 
 게이트는 사용자가 redirect 가능한 approval gate 이므로 P17 주권에 기여하며 polite stop 이 아니다.
