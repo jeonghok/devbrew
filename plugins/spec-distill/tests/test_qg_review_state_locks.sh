@@ -93,7 +93,6 @@ def ticks(text):
 # ---------------------------------------------------------------- 1 gate-call
 
 def lock_gate_call():
-    import qg_review_state as S
     helped = subprocess.run([sys.executable, str(SD / "scripts" / "qg_review_state.py"), "--help"],
                             capture_output=True, text=True)
     m = re.search("[{]([a-z,]+)[}]", helped.stdout)
@@ -118,7 +117,6 @@ def lock_gate_call():
     for where, body in (("지휘 순환 걸음 1", step1), ("손 절차 1", manual1)):
         check(body != "", "%s 문장을 읽었다" % where)
         check("qg_review_state.py next`" in body, "%s — 다시 들어오면 `qg_review_state.py next` 를 부른다" % where)
-    check(S.__name__ == "qg_review_state", "상태 스크립트를 import 했다")
 
 
 # ---------------------------------------------------------------- 2 team-sentences
@@ -237,10 +235,14 @@ def lock_qg_file_shape():
         check("`### %s`" % sub in fixes, "`## 고칠 목록` 꼴에 읽는 하위 절 `### %s` 가 있다" % sub)
     verdict_block = fmt_block("판정")
     words = set(re.findall("[A-Za-z_-]+", verdict_block))
-    for key in _gets(funcs, "_verdict", "got"):
+    keys = _gets(funcs, "_verdict", "got")
+    check(len(keys) >= 2, "읽는 쪽이 `## 판정` 에서 읽는 칸을 뽑았다(%r)" % keys)
+    for key in keys:
         check(key in words, "`## 판정` 꼴에 읽는 칸 `%s` 가 있다" % key)
     range_words = set(re.findall("[A-Za-z_-]+", fmt_block("범위")))
-    for key in _gets(funcs, "_range", "got"):
+    keys = _gets(funcs, "_range", "got")
+    check(len(keys) >= 2, "읽는 쪽이 `## 범위` 에서 읽는 칸을 뽑았다(%r)" % keys)
+    for key in keys:
         check(key in range_words, "`## 범위` 꼴에 읽는 칸 `%s` 가 있다" % key)
     nothing = _compared(funcs, "read_archive", "verdict")
     check(len(nothing) == 1, "읽는 쪽이 「리뷰할 것 없음」 으로 보는 판정 값을 뽑았다(%r)" % nothing)
@@ -293,7 +295,10 @@ def lock_qg_file_shape():
           line_starting(lines, "## 돌려주는 꼴"), "그 절이 `%s` 의 %d판이다" % (A.INTENT_NAME, A.INTENT_CONTRACT))
     check("`%s`" % A.INTENT_FENCE.lstrip("`") in ret_text, "그 절에 펜스 이름 `%s` 가 있다" % A.INTENT_FENCE.lstrip("`"))
     ret_ticks = set(ticks(ret_text))
-    for key in _gets(funcs, "_intent", "data") + _gets(funcs, "_intent", "q"):
+    head_keys, q_keys = _gets(funcs, "_intent", "data"), _gets(funcs, "_intent", "q")
+    check(len(head_keys) >= 3 and len(q_keys) >= 3,
+          "읽는 쪽이 돌려주는 꼴에서 읽는 칸을 뽑았다(%r · %r)" % (head_keys, q_keys))
+    for key in head_keys + q_keys:
         check(key in ret_ticks, "돌려주는 꼴에 읽는 칸 `%s` 가 있다" % key)
     state_line = line_starting(ret, "- 질문 칸 `state` 의 값:")
     doc_states = set(ticks(state_line.partition(":")[2]))
@@ -341,6 +346,11 @@ def lock_no_paths():
             check(token not in body, "%s에 `%s` 가 없다" % (where, token))
     live = [t for t in banned if t in qr_text or t in read(CONDUCTING)]
     check("보관 폴더" in live and "--answered" in live, "금지 낱말이 문서의 다른 자리에는 있다(살아 있는 낱말 %d개)" % len(live))
+    writes = [n for n in ast.walk(ast.parse(read(SD / "scripts" / "qg_review_state.py")))
+              if isinstance(n, ast.Attribute) and n.attr == "STATE_NAME"
+              and isinstance(n.value, ast.Name) and n.value.id == "F"]
+    check(len(writes) >= 1 and F.STATE_NAME.endswith(".md"),
+          "금지 낱말 `%s` 는 상태 스크립트가 쓰는 상태 파일 이름이다(쓰는 자리 %d곳)" % (F.STATE_NAME, len(writes)))
 
 
 LOCKS = (("gate-call", lock_gate_call), ("team-sentences", lock_team_sentences),

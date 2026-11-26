@@ -4,6 +4,9 @@
 스크립트 명령만으로 끝까지 돌리고, 중간 세 곳에서 끊었다 `next` 로 잇는다. 지휘 절차 문서의 펜스를 뽑아 돌리고,
 접은 여러 줄 지적 줄을 기록 명령이 받는지 본다(설계 Verification Plan 「걸어 보기」 · AC8 · AC18 · AC31).
 
+펜스를 돌린 종료 코드는 이 걸음에서 나와야 하는 값과만 견준다 — 문서의 종료 코드 문장(명령마다 흩어져 있다)과의
+대조는 손으로 한다.
+
 끊는 곳마다 리포를 새로 세운다 — 구현 담당자의 커밋이 브랜치 끝을 옮겨, 한 리포에서는 걸음끼리 범위가 섞인다.
 
 Run: cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_qg_review_state_walk -v
@@ -335,9 +338,7 @@ class TestQgReviewStateWalk(unittest.TestCase):
                   "<설계문서>": SPEC, "<살아 있는 담당자 이름>": "qg-w9", "<자리>": "premerge", "<바탕>": BASE,
                   "<리뷰받는 브랜치>": HEAD, "<에픽>": EPIC, "<세션>": SESSION, "<이름>": "qg-w1",
                   "<입력 파일>": str(input_file)}
-        # 문서가 그 자리에 적은 종료 코드(0 됨 · 1 관문 닫힘 · 4 받지 않음)와, 이 걸음에서 나와야 하는 값
-        doc_rc = {"next": (0,), "open": (0, 4), "send": (0,), "back": (0,), "record": (0, 4), "gate": (0, 1),
-                  "render": (0, 4)}
+        # 이 걸음에서 명령마다 나와야 하는 종료 코드 — 문서가 적은 종료 코드 문장과의 대조는 손으로 한다
         walk_rc = {"next": 0, "open": 0, "send": 0, "back": 0, "record": 0, "gate": 1, "render": 0}
 
         def before(cmd, argv):
@@ -359,7 +360,6 @@ class TestQgReviewStateWalk(unittest.TestCase):
             proc = subprocess.run(argv, cwd=str(w.rig.repo), env=dict(os.environ, **GIT_ENV),
                                   capture_output=True, encoding="utf-8")
             ran.append((cmd, proc.returncode))
-            self.assertIn(proc.returncode, doc_rc[cmd], (line, proc.stdout, proc.stderr))
             self.assertEqual(proc.returncode, walk_rc[cmd], (line, proc.stdout, proc.stderr))
         self.assertEqual([c for c, _rc in ran],
                          ["next", "open", "send", "send", "back", "record", "gate", "render"])
