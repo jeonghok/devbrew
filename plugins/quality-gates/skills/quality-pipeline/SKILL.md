@@ -110,7 +110,7 @@ step of this run already made it; otherwise setup creates it with a `result.md` 
 ([state-file-format](references/state-file-format.md)). A `result.md` that already has `## 판정`
 belongs to a finished earlier run in this session — setup without `--ensure` recreates the folder.
 Every run then starts without the previous run's `differential.yaml` · `differential-not-counted.md` · `verdict.out` ·
-`intent.md` · `topic-scope.txt` · `range-scope.txt` · `review-tree.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err`, the e2e walk files
+`intent.md` · `topic-scope.txt` · `range-scope.txt` · `review-tree.txt` · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` · `publish-at.txt`, the e2e walk files
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`),
 the intent-critic stage's other-teams record (`other-teams.md`),
 the pre-merge findings list (`findings-pre-merge.yaml`),
@@ -1465,9 +1465,9 @@ D="$TOP/.claude/quality-gates/$SID"
 RESULT="$D/result.md"
 AT="$D/publish-at.txt"
 # 게시 절(줄은 `line`)을 쓰는 한 자리 — 자리 파일이 없으면 끝에 덧붙이고 자리를 적는다. 있으면 그 자리(머리 `\n## 게시\n` ·
-# 파일 안)의 절을 바꿔 쓰고 길이를 다시 적는다. 맞지 않으면 쓰지 않고 줄 다음에 알림을 낸다.
+# 파일 안 · 끝 바이트 줄바꿈 · 그 뒤가 파일 끝이나 `\n## `)의 절을 바꿔 쓰고 길이를 다시 적는다. 맞지 않으면 쓰지 않고 줄 다음에 알림을 낸다.
 put_section() {
-  local head_hex len at_s at_l rsize hl got
+  local head_hex len at_s at_l rsize hl got end
   len="$(printf '\n## 게시\n\n%s\n' "$line" | wc -c | tr -d ' ')"
   rsize="$(wc -c < "$RESULT" 2>/dev/null | tr -d ' ')"; [ -n "$rsize" ] || rsize=0
   if [ ! -e "$AT" ]; then
@@ -1482,6 +1482,9 @@ put_section() {
   got=""
   if [[ "$at_s" =~ ^(0|[1-9][0-9]{0,11})$ ]] && [[ "$at_l" =~ ^[1-9][0-9]{0,11}$ ]] && [ "$at_l" -ge "$hl" ] && [ $((at_s + at_l)) -le "$rsize" ]; then
     got="$(tail -c +$((at_s + 1)) "$RESULT" | head -c "$hl" | od -An -tx1 | tr -d ' \n')"
+    end=$((at_s + at_l))
+    [ "$(tail -c +"$end" "$RESULT" | head -c 1 | od -An -tx1 | tr -d ' \n')" = "0a" ] || got=""
+    if [ "$end" -lt "$rsize" ] && [ "$(tail -c +$((end + 1)) "$RESULT" | head -c 4 | od -An -tx1 | tr -d ' \n')" != "0a232320" ]; then got=""; fi
   fi
   if [ -n "$got" ] && [ "$got" = "$head_hex" ] \
      && { head -c "$at_s" "$RESULT"; printf '\n## 게시\n\n%s\n' "$line"; tail -c +$((at_s + at_l + 1)) "$RESULT"; } > "$RESULT.tmp.$$" \
@@ -1527,7 +1530,7 @@ else
     *) line="게시 결과 불명 — sink 출력 계약 위반(rc ${pub_rc})" ;;
   esac
   # sink 가 이미 단 댓글을 확인하지 못하고 게시했으면 그 한 줄을 결과 줄 앞에 보인다.
-  grep -F '> [quality-gates] 이미 단 댓글을 확인하지 못했다(' "$D/publish.out"
+  grep '^> \[quality-gates\] 이미 단 댓글을 확인하지 못했다(' "$D/publish.out"
 fi
 put_section
 ```
@@ -1537,7 +1540,7 @@ put_section
 처음부터 탄다 — 댓글을 단 실행은 sink 가 `skipped: already-posted` 로 끝내고, 건너뛰었거나 실패한 실행은 다시 게시를
 시도하며, 범위 모드 · `게시 안 함` 으로 끝난 실행은 조건이 그대로면 같은 줄을 낸다. 바꿔 쓸 자리는 결과 파일의 글자로
 찾지 않고 처음 덧붙일 때 세션 폴더의 `publish-at.txt`(한 줄 `<시작 바이트> <길이 바이트>`)에 적은 자리다 — 뒤에 붙은
-`## intent-critic` 절은 그대로 남는다. 그 자리가 결과 파일과 맞지 않으면(파일 밖 · 게시 절 머리가 아님) 펜스는 절을
+`## intent-critic` 절은 그대로 남는다. 그 자리가 결과 파일과 맞지 않으면(파일 밖 · 게시 절 머리가 아님 · 절 끝이 줄바꿈이 아니거나 그 뒤가 파일 끝도 다음 절 머리도 아님) 펜스는 절을
 덧붙이지도 바꿔 쓰지도 않고 결과 줄 다음에 `> [quality-gates] 게시 절 자리 기록이 결과 파일과 맞지 않는다 — 게시 단계는 그대로 했고(위 줄), 결과 파일의 게시 절은 고쳐 쓰지 않았다.` 를 낸다 — 그 줄도 그대로 보인다.
 
 `skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `pr-mismatch` · `kill-switch` ·

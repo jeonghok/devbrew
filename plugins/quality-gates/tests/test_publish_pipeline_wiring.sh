@@ -164,16 +164,25 @@ case_rerun_cases() {
 
   # position_mismatch_alerts — 자리 기록이 결과 파일과 맞지 않으면 절을 늘리지도 고치지도 않고 알림 · sink 는 부른다.
   local kind bad
-  for kind in outside not-head overrun garbage empty; do
+  local at0 len0 hl0
+  hl0="$(printf '\n## 게시\n' | wc -c | tr -d ' ')"
+  for kind in outside not-head overrun garbage empty short-head short-mid long-tail; do
     fresh_proj
     SINK_LAST="posted: x" run_fence "$sh" "finished"
+    # long-tail — 뒤에 `## intent-critic` 절이 붙은 결과 파일(길이를 늘려도 파일 안에 든다)
+    [ "$kind" = long-tail ] && printf '\n## intent-critic\n\n의도 점검 줄 하나\n' >> "$R"
     size="$(wc -c < "$R" | tr -d ' ')"
+    at0="$(sed 's/ .*//' "$(AT_FILE)")"; len0="$(sed 's/.* //' "$(AT_FILE)")"
     case "$kind" in
       outside)  bad="$((size + 5)) 10" ;;               # 시작이 파일 밖
       not-head) bad="0 10" ;;                            # 파일 안이지만 게시 절 머리가 아니다
-      overrun)  bad="$(sed 's/ .*//' "$(AT_FILE)") $((size * 2))" ;;  # 머리는 맞고 길이가 파일 밖
+      overrun)  bad="$at0 $((size * 2))" ;;              # 머리는 맞고 길이가 파일 밖
       garbage)  bad="x y" ;;
       empty)    bad="" ;;
+      # 머리는 맞고 길이가 틀렸지만 파일 안 — 바꿔 쓰면 옛 줄이 절 밖에 남거나 뒤 절을 깎는다.
+      short-head) bad="$at0 $((hl0 + 1))" ;;             # 끝 바이트는 줄바꿈 · 그 뒤가 파일 끝도 다음 절 머리도 아니다
+      short-mid)  bad="$at0 $((len0 - 1))" ;;            # 끝 바이트가 줄바꿈이 아니다
+      long-tail)  bad="$at0 $((len0 + 1))" ;;            # 끝 바이트는 줄바꿈(다음 절 앞 빈 줄) · 그 뒤가 「\n## 」 가 아니다
     esac
     printf '%s\n' "$bad" > "$(AT_FILE)"
     cp "$R" "$T/mm.md"
@@ -221,6 +230,10 @@ $NOTICE_AT" "position_mismatch_alerts($sh · 게시 안 함 갈래): 줄 다음�
   assert_eq "$OUT" "$NOTICE_CHECK
 posted: x" "notice_line_shown($sh): 확인 못함 줄 · 결과 줄(그 밖의 sink 줄 없음)"
   assert_eq "$(tail -n 1 "$R")" "posted: x" "notice_line_shown($sh): 결과 파일의 절은 결과 줄 하나"
+  # notice_mid_line_not_shown — 같은 글이 sink 출력 줄 가운데 있으면 확인 못함 줄이 아니다(줄 머리에서만 읽는다).
+  fresh_proj
+  SINK_PRE="progress: $NOTICE_CHECK" SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$OUT" "posted: x" "notice_mid_line_not_shown($sh): 줄 가운데의 같은 글은 보이지 않는다(결과 줄 하나)"
 }
 
 # ── refusal_sentence_absent · 생명주기 2 문장 ──────────────────────────────────────
@@ -236,6 +249,22 @@ LC2="$(awk '/^2\. \*\*덧붙인다\*\*/{f=1} f&&/^3\. /{exit} f' "$SFMT" | tr '\
 assert_contains "$LC2" '`## 게시` 는 하나뿐이다 — 다시 돌리면 펜스가 그 절을 그 실행의 결과로 바꿔 쓴다' "생명주기 2: 설계 문장 그대로(「바꿔 쓴다」)"
 assert_not_contains "$LC2" "이미 게시 단계를 돌았다" "생명주기 2: 옛 거절 줄이 없다"
 assert_contains "$LC2" "publish-at.txt" "생명주기 2: 게시 절 자리 파일을 밝힌다"
+
+# ── P2 산문 — 매 실행이 지우고 시작하는 파일의 산문 목록이 P2 의 `rm -f` 목록과 같은 이름을 모두 밝힌다 ──
+# (게시 절 자리 파일 publish-at.txt 가 `rm -f` 에만 있고 산문에 빠졌던 자리 — 목록에서 이름을 도출해 잰다.)
+P2RM="$(grep -m 1 '^rm -f "\$RD/differential.yaml"' "$SKILL")"
+P2PROSE="$(awk '/^Every run then starts without /{f=1} f&&/^`e2e-app.pgid` is kept\./{exit} f' "$SKILL" | tr '\n' ' ')"
+P2NAMES="$(printf '%s\n' "$P2RM" | grep -o '"\$RD/[^"]*"' | sed -e 's|^"\$RD/||' -e 's|"$||')"
+[ "$(printf '%s\n' "$P2NAMES" | grep -c .)" -ge 10 ] && ok "P2 산문: rm -f 목록에서 이름을 도출했다($(printf '%s\n' "$P2NAMES" | grep -c .)개)" \
+  || no "P2 산문: rm -f 목록 도출이 비었다 — 앵커가 죽었다"
+printf '%s\n' "$P2NAMES" | grep -qx 'publish-at.txt' && ok "P2 산문: rm -f 목록에 publish-at.txt 가 있다(양성 증인)" \
+  || no "P2 산문: rm -f 목록에 publish-at.txt 가 없다"
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  assert_contains "$P2PROSE" "\`$n\`" "P2 산문: 매 실행이 지우고 시작하는 파일 목록에 \`$n\` 이 있다"
+done <<P2N
+$P2NAMES
+P2N
 
 SHELLS="bash"
 command -v zsh >/dev/null 2>&1 && SHELLS="bash zsh"
