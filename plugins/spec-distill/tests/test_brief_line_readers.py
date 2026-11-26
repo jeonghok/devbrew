@@ -162,7 +162,7 @@ class Invariant(unittest.TestCase):
         indexed = set(R._section4_index(BRIEF))
         self.assertEqual(counted, indexed)
 
-    def test_bundle_parts_lists_each_cited_line_once_in_brief_order(self):
+    def test_bundle_parts_lists_each_cited_line_once_by_number_then_brief_order(self):
         more = ["- 기각 — 첫째 RC1 도 (z.py) [RC1 → OQ1]"]
         idx = R.index_brief(swap_s5(more), AUDIT)
         row = R.parse_table("# s\n\n## 분해안\n\n%s\n%s\n%s\n" % (HEAD, SEP, "| E1 | 이름 | 묶음 | 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | 없음 | RC1 · RC4 · RC5 · ST1 | 없음 | 없음 |"))[0]
