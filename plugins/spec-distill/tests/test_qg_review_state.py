@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""qg_review_state.py — 기준 커밋 · 범위 · 세는 수와 상한 · 「열기」 · 「보냄」 · 「돌아옴」
-(AC2 · AC3 · AC4 · AC5 · AC8 · AC9 · AC19 · AC32 · AC33).
+"""qg_review_state.py — 기준 커밋 · 범위 · 세는 수와 상한 · 「열기」 · 「보냄」 · 「돌아옴」 · 「답 적기」 와 닫는 조건
+(AC2 · AC3 · AC4 · AC5 · AC7 · AC8 · AC9 · AC19 · AC24 · AC26 · AC27 · AC32 · AC33).
 
 Run: cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_qg_review_state -v
 """
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -31,6 +32,12 @@ OTHER_RANGE = "결과가 보낸 범위의 것이 아니다"
 UNCOUNTABLE = "의도 점검은 셀 수 없음"
 ASK_KIND_TWO = "두 번까지"
 NO_YAML = "알림 · PyYAML 이 없다 — 합치기 전 지적 목록 대신 결과 파일의 고칠 목록에서 옮겼다"
+OUT_OF_RANGE = "알림 · 적어 낸 고친 커밋 %s 가 범위에 없다"
+UNFIXED = "고치지 않은 막는 지적"
+FAILED = "지적 목록을 얻지 못함"
+INTENT = "의도 점검"
+STOP = "이 에픽을 멈춘다"
+NO_BRANCH = "기록 브랜치 없음 — 기록 브랜치를 push 하지 못했다"
 
 
 def review(site, order, start, end, target=TARGET, **kw) -> F.Review:
@@ -52,6 +59,15 @@ def finding(text, handling=F.NO_HANDLING) -> F.Finding:
 
 def answer(ident, kind, value, record="") -> F.Answer:
     return F.Answer(id=ident, kind=kind, answer=value, at=AT, record=record)
+
+
+def ask(kind, ident, text="질문") -> F.Ask:
+    return F.Ask(kind=kind, id=ident, text=text)
+
+
+def item_answer(question, ask_kind, value, original=""):
+    return {"kind": "answer", "question": question, "ask_kind": ask_kind, "value": value,
+            "original": original}
 
 
 class TestQgReviewState(unittest.TestCase):
@@ -662,6 +678,447 @@ class TestQgReviewState(unittest.TestCase):
         self.assertTrue(any(UNCOUNTABLE in x for x in lines), lines)
         self.assertEqual([f.text for f in rv.blocking], [fix])
         self.assertEqual((rv.result.kind, rv.result.intent_line, rv.asks), ("얻음", UNCOUNTABLE, []))
+
+
+    # ------------------------------------------------------------ 답 적기 · 닫는 조건
+
+    def record(self, items=None):
+        args = ["record", "--roadmap", ROADMAP, "--target", TARGET, "--repo", str(self.rig.repo), "--at", LATER,
+                "--spec", SPEC]
+        if items is not None:
+            self.inputs = getattr(self, "inputs", 0) + 1
+            path = self.rig.t / ("input-%d.json" % self.inputs)
+            path.write_text(json.dumps({"items": items}, ensure_ascii=False), encoding="utf-8")
+            args += ["--input", str(path)]
+        return self.rig.run(*args)
+
+    def recorded(self, items=None):
+        lines = self.ok(self.record(items))
+        self.assertTrue(lines and lines[0].startswith("할 일 · "), lines)
+        return self.reviews()[-1], lines
+
+    def returned(self, order=1, start=None, end=None, site="premerge", **kw) -> Path:
+        start = self.base_sha if start is None else start
+        end = self.c1 if end is None else end
+        kw.setdefault("result", obtained(start, end))
+        return self.put(review(site, order, start, end, stage="돌아옴", worker="qg-w%d · %s" % (order, AT), **kw))
+
+    def state_bytes(self, folder: Path) -> bytes:
+        return (folder / F.STATE_NAME).read_bytes()
+
+    def handling_file(self, n=1) -> str:
+        return str(self.rig.resource_dir("report", EPIC) / ("handling-%d.md" % n))
+
+    def ret(self, n=1, moved="아직", worker="impl-w1") -> F.ReturnLine:
+        return F.ReturnLine(worker=worker, at=AT, path=self.handling_file(n), moved=moved)
+
+    def test_close_no_blocking_after_answers(self):
+        self.returned(asks=[ask(INTENT, "q1", "이 기능이 정말 필요한가")])
+        rv, _lines = self.recorded([item_answer("q1", INTENT, "의도다"),
+                                    {"kind": "record_path", "question": "q1", "path": RECORD}])
+        self.assertEqual((rv.stage, rv.close_reason, rv.asks), ("닫힘", "막는 지적 없음", []))
+        self.assertEqual([(a.id, a.kind, a.answer, a.record, a.at) for a in rv.answers],
+                         [("q1", INTENT, "의도다", RECORD, LATER)])
+
+    def two_max_returned(self):
+        return self.returned(blocking=[finding("지적 1"), finding("지적 2", "반박 — 설계가 그렇게 정했다")],
+                             asks=[ask(ASK_KIND_TWO, "q-cap")])
+
+    def test_close_rereview_needs_base_commit(self):
+        self.two_max_returned()
+        self.code()  # 그 사이 올라온 기준 커밋
+        rv, _lines = self.recorded([item_answer("q-cap", ASK_KIND_TWO, "남은 지적을 적고 머지 준비로 간다")])
+        self.assertEqual([f.handling for f in rv.blocking], [F.USER_LEFT, F.USER_LEFT])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "재리뷰로 이어짐"))
+
+    def test_close_user_left_without_base_commit(self):
+        self.two_max_returned()
+        self.spec_only()  # 리더 기록 파일만 바꾼 커밋은 기준 커밋이 아니다
+        rv, _lines = self.recorded([item_answer("q-cap", ASK_KIND_TWO, "남은 지적을 적고 머지 준비로 간다")])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "사용자가 남김"))
+
+    def test_close_without_review(self):
+        self.returned(result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+        rv, _lines = self.recorded([item_answer("q-failed", FAILED, "리뷰 없이 머지 준비로 간다")])
+        self.assertEqual((rv.stage, rv.close_reason, rv.asks), ("닫힘", "리뷰 없이 감", []))
+
+    def test_close_resend(self):
+        self.returned(result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+        rv, _lines = self.recorded([item_answer("q-failed", FAILED, "다시 보낸다")])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "다시 보냄"))
+        with self.subTest(case="선택지 밖 답 · 「(권장)」 꼬리"):
+            self.setUp()
+            folder = self.returned(result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+            before = self.state_bytes(folder)
+            for value in ("다시 보낸다 (권장)", "그냥 간다"):
+                self.assertEqual(self.record([item_answer("q-failed", FAILED, value)]).returncode, 2, value)
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def test_close_wrong_choice_routes(self):
+        with self.subTest(case="의도 점검 답의 행선"):
+            folder = self.returned(blocking=[finding("지적 1")], asks=[ask(INTENT, "q1")])
+            rv, _lines = self.recorded([item_answer("q1", INTENT, "잘못 골랐다")])
+            self.assertEqual(rv.stage, "돌아옴")
+            before = self.state_bytes(folder)
+            lines = self.refused(self.record([{"kind": "route", "question": "q1", "value": "설계 대화로"}]))
+            self.assertIn("기록 파일 경로", lines[0])  # 기록 파일 경로를 먼저 적는다(§4 표의 차례)
+            self.assertEqual(self.state_bytes(folder), before)
+            self.recorded([{"kind": "record_path", "question": "q1", "path": RECORD}])
+            rv, _lines = self.recorded([{"kind": "route", "question": "q1", "value": "설계 대화로"}])
+            self.assertEqual((rv.stage, rv.close_reason, rv.close_mark), ("닫힘", F.REASON_DESIGN, ""))
+            self.assertEqual(rv.blocking[0].handling, F.NO_HANDLING)  # 막는 지적이 있어도 설계 대화가 먼저다
+        with self.subTest(case="거른 「잘못 골랐다」 목록의 행선"):
+            self.setUp()
+            self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="막는 지적 없음",
+                            worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                            filtered_wrong=[F.Filtered(id="q7", text="가"), F.Filtered(id="q8", text="나")]))
+            rv, _lines = self.recorded([{"kind": "route", "question": "q7", "value": "설계 대화로"}])
+            self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "막는 지적 없음"))  # q8 의 행선이 아직이다
+            self.assertEqual([x.dest for x in rv.filtered_wrong], ["설계 대화로", ""])
+            rv, _lines = self.recorded([{"kind": "route", "question": "q8", "value": "재분해 신호"}])
+            self.assertEqual((rv.stage, rv.close_reason), ("닫힘", F.REASON_RESPLIT))
+        with self.subTest(case="의도 점검 답과 거른 목록이 함께면 행선을 함께 적는다"):
+            self.setUp()
+            folder = self.returned(blocking=[finding("지적 1")], filtered_wrong=[F.Filtered(id="q7", text="가")],
+                                   answers=[answer("q1", INTENT, "잘못 골랐다", RECORD)])
+            before = self.state_bytes(folder)
+            self.refused(self.record([{"kind": "route", "question": "q1", "value": "설계 대화로"}]))
+            self.assertEqual(self.state_bytes(folder), before)
+            rv, _lines = self.recorded([{"kind": "route", "question": "q1", "value": "설계 대화로"},
+                                        {"kind": "route", "question": "q7", "value": "설계 대화로"}])
+            self.assertEqual((rv.stage, rv.close_reason), ("닫힘", F.REASON_DESIGN))
+            before = self.state_bytes(folder)
+            self.recorded()  # git 이 사유를 바꾸지 못하는 닫힘은 다시 가려도 그대로다
+            self.assertEqual(self.state_bytes(folder), before)
+        with self.subTest(case="없는 질문의 행선"):
+            self.setUp()
+            folder = self.returned(blocking=[finding("지적 1")])
+            before = self.state_bytes(folder)
+            self.refused(self.record([{"kind": "route", "question": "q9", "value": "설계 대화로"}]))
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def test_close_epic_stop_even_with_asks(self):
+        self.returned(blocking=[finding("지적 1", "반박 — 설계가 그렇게 정했다")], returns=[self.ret(1, "옮김")],
+                      asks=[ask(INTENT, "q1"), ask(UNFIXED, "q-unfixed-1")])
+        rv, _lines = self.recorded([item_answer("q-unfixed-1", UNFIXED, STOP)])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "에픽을 멈춤"))
+        self.assertEqual([a.id for a in rv.asks], ["q1"])
+
+    def test_epic_stop_reanswer_reopens(self):
+        self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="에픽을 멈춤",
+                        worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                        blocking=[finding("지적 1", "반박 — 설계가 그렇게 정했다")], returns=[self.ret(1, "옮김")],
+                        answers=[answer("q-unfixed-1", UNFIXED, STOP)]))
+        rv, _lines = self.recorded([item_answer("q-unfixed-1", UNFIXED, STOP)])  # 같은 답 — 그대로
+        self.assertEqual((rv.stage, rv.close_reason, len(rv.answers)), ("닫힘", "에픽을 멈춤", 1))
+        rv, _lines = self.recorded([item_answer("q-unfixed-1", UNFIXED, "다시 돌려보낸다")])
+        self.assertEqual((rv.stage, rv.close_reason, rv.close_mark), ("돌아옴", "", ""))
+        self.assertEqual([a.answer for a in rv.answers], [STOP, "다시 돌려보낸다"])
+        self.assertEqual(rv.blocking[0].handling, F.RETURNED_AGAIN)
+        with self.subTest(case="지적 목록을 얻지 못한 질문"):
+            self.setUp()
+            self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="에픽을 멈춤",
+                            worker="qg-w1 · " + AT, result=failed(), answers=[answer("q-failed", FAILED, STOP)]))
+            rv, _lines = self.recorded([item_answer("q-failed", FAILED, "다시 보낸다")])
+            self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "다시 보냄"))
+            self.assertEqual([a.answer for a in rv.answers], [STOP, "다시 보낸다"])
+
+    def test_intent_answer_needs_record_path(self):
+        for label, path in (("기록 파일", RECORD), ("기록 브랜치 없음", NO_BRANCH)):
+            with self.subTest(case=label):
+                self.setUp()
+                self.returned(asks=[ask(INTENT, "q1")])
+                rv, lines = self.recorded([item_answer("q1", INTENT, "의도다", "직접 쓴 답\n둘째 줄")])
+                self.assertEqual((rv.stage, rv.asks, rv.answers[0].record), ("돌아옴", [], ""))
+                self.assertEqual(rv.answers[0].answer_text, "직접 쓴 답\n둘째 줄")
+                self.assertIn("기록 파일", lines[0])
+                rv, _lines = self.recorded([{"kind": "record_path", "question": "q1", "path": path}])
+                self.assertEqual((rv.stage, rv.close_reason, rv.answers[0].record), ("닫힘", "막는 지적 없음", path))
+        with self.subTest(case="꼴이 틀린 경로"):
+            self.setUp()
+            folder = self.returned(answers=[answer("q1", INTENT, "의도다")])
+            before = self.state_bytes(folder)
+            for bad in ("기록 브랜치 없음", "/abs/path.md", "../up.md", "a\nb.md", ""):
+                self.assertEqual(self.record([{"kind": "record_path", "question": "q1", "path": bad}]).returncode,
+                                 2, bad)
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def test_unanswered_intent_leaves_asks(self):
+        self.returned(blocking=[finding("지적 1", "반박 — 설계가 그렇게 정했다")], returns=[self.ret(1, "옮김")],
+                      asks=[ask(INTENT, "q1"), ask(UNFIXED, "q-unfixed-1")])
+        rv, _lines = self.recorded([item_answer("q1", INTENT, "답하지 않음")])
+        self.assertEqual([a.id for a in rv.asks], ["q-unfixed-1"])
+        self.recorded([{"kind": "record_path", "question": "q1", "path": RECORD}])
+        rv, _lines = self.recorded()  # 다시 가려도 다시 띄우지 않고, 다른 종류의 질문은 남는다
+        self.assertEqual(([a.id for a in rv.asks], rv.stage), (["q-unfixed-1"], "돌아옴"))
+
+    def test_fixed_hash_outside_range_reverts(self):
+        self.returned(blocking=[finding("지적 1")], returns=[self.ret(1)])
+        rv, lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
+                                   {"kind": "handling", "finding": 1, "value": "고친 커밋 deadbeef"}])
+        self.assertEqual(rv.blocking[0].handling, F.NO_HANDLING)
+        self.assertEqual(rv.returns[0].moved, "옮겼으나 범위 밖 커밋")
+        self.assertIn(OUT_OF_RANGE % "deadbeef", lines)
+        self.assertEqual((rv.stage, rv.asks), ("돌아옴", []))  # 쓸 처리 없이 끝난 첫 번째 — 다시 돌려보낼 차례
+        with self.subTest(case="범위 안의 고친 커밋은 남는다"):
+            self.setUp()
+            self.returned(blocking=[finding("지적 1")], returns=[self.ret(1)])
+            fix = self.code()
+            rv, lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
+                                       {"kind": "handling", "finding": 1, "value": "고친 커밋 " + fix[:10]}])
+            self.assertEqual((rv.blocking[0].handling, rv.returns[0].moved), ("고친 커밋 " + fix[:10], "옮김"))
+            self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "재리뷰로 이어짐"))
+            self.assertFalse([x for x in lines if x.startswith("알림 · 적어 낸")], lines)
+        with self.subTest(case="여러 줄 처리 값"):
+            self.setUp()
+            folder = self.returned(blocking=[finding("지적 1")], returns=[self.ret(1)])
+            before = self.state_bytes(folder)
+            proc = self.record([{"kind": "return_moved", "value": "옮김"},
+                                {"kind": "handling", "finding": 1, "value": "반박 — 첫 줄\n둘째 줄"}])
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn("한 줄", proc.stderr)
+            for bad in ("고쳤다", F.USER_LEFT):
+                self.assertEqual(self.record([{"kind": "return_moved", "value": "옮김"},
+                                              {"kind": "handling", "finding": 1, "value": bad}]).returncode, 2, bad)
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def test_open_never_moves_previous(self):
+        c2 = self.code()
+        folder = self.put(self.closed_rereview("고친 커밋 " + c2))
+        before = self.state_bytes(folder)
+        self.ok(self.open("recheck"))
+        self.assertEqual(self.state_bytes(folder), before)
+        self.assertEqual([(r.order, r.stage) for r in self.reviews()], [(1, "닫힘"), (2, "열림")])
+
+    def picked_reviews(self, close_reason="막는 지적 없음", **kw):
+        """차례 1(첫 리뷰 — 재리뷰로 이어짐) · 차례 2(좁은 재리뷰 — 닫힘). (차례 1 의 보관 폴더, c2) 를 낸다."""
+        c2 = self.code()
+        first = self.put(self.closed_rereview("고친 커밋 " + c2))
+        self.put(review("recheck", 2, self.c1, c2, stage="닫힘", close_reason=close_reason, worker="qg-w2 · " + AT,
+                        result=obtained(self.c1, c2), **kw))
+        return first, c2
+
+    def test_pick_goes_to_last_review_and_reopens(self):
+        first, c2 = self.picked_reviews()
+        before = self.state_bytes(first)
+        rv, _lines = self.recorded([{"kind": "pick", "text": "SUGGESTION src/a.py:2 — 이름을 바꾼다",
+                                     "from_order": 1, "pick_kind": "고른 제안"},
+                                    {"kind": "pick", "text": "되올린 지적 원문", "from_order": 2,
+                                     "pick_kind": "되올린 지적"}])
+        self.assertEqual(self.state_bytes(first), before)
+        self.assertEqual((rv.order, rv.stage, rv.close_reason), (2, "돌아옴", ""))
+        self.assertEqual([(f.kind, f.text, f.handling, f.from_review) for f in rv.blocking],
+                         [("고른 제안", "SUGGESTION src/a.py:2 — 이름을 바꾼다", F.NO_HANDLING, "1"),
+                          ("되올린 지적", "되올린 지적 원문", F.NO_HANDLING, "")])
+        rv, _lines = self.recorded()  # 차례 2 의 범위로는 그 지적이 닫히지 않는다
+        self.assertEqual(rv.stage, "돌아옴")
+        self.recorded([{"kind": "return", "worker": "impl-w1", "handling_file": self.handling_file(1)}])
+        c3 = self.code()
+        rv, _lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
+                                    {"kind": "handling", "finding": 1, "value": "고친 커밋 " + c3},
+                                    {"kind": "handling", "finding": 2, "value": "고친 커밋 " + c3}])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "재리뷰로 이어짐"))  # 뒤에 여는 리뷰가 본다
+        with self.subTest(case="없는 차례 · 도는 리뷰"):
+            self.setUp()
+            self.picked_reviews()
+            item = {"kind": "pick", "text": "가", "from_order": 3, "pick_kind": "고른 제안"}
+            self.refused(self.record([item]))
+            self.setUp()
+            folder = self.sent()
+            before = self.state_bytes(folder)
+            self.refused(self.record([dict(item, from_order=1)]))
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def at_cap_last(self, **kw) -> Path:
+        """차례 1 · 2 재리뷰로 이어짐, 차례 3(좁은 재리뷰 둘째) — 세는 재리뷰가 상한(2)에 닿았다."""
+        c2, c3 = self.at_cap_rechecks()
+        kw.setdefault("stage", "닫힘")
+        if kw["stage"] == "닫힘":
+            kw.setdefault("close_reason", "막는 지적 없음")
+        return self.put(review("recheck", 3, c2, c3, worker="qg-w3 · " + AT, result=obtained(c2, c3), **kw))
+
+    def test_pick_at_cap_asks_two_max(self):
+        self.at_cap_last()
+        self.assertEqual((Q.counted_rechecks(self.reviews()), Q.cap(self.reviews())), (2, 2))
+        pick = {"kind": "pick", "text": "제안 — 이름을 바꾼다", "from_order": 3, "pick_kind": "고른 제안"}
+        rv, _lines = self.recorded([pick])
+        self.assertEqual((rv.stage, [(a.kind, a.id) for a in rv.asks]), ("돌아옴", [(ASK_KIND_TWO, "q-cap")]))
+        rv, _lines = self.recorded([dict(pick, text="둘째 제안")])
+        self.assertEqual([a.kind for a in rv.asks], [ASK_KIND_TWO])  # 두 번 적지 않는다
+        lines = self.refused(self.record([{"kind": "return", "worker": "impl-w1",
+                                           "handling_file": self.handling_file(1)}]))
+        self.assertIn("물을 것", lines[0])  # 「두 번까지」 의 답 전에는 돌려보내지 않는다
+        rv, _lines = self.recorded([item_answer("q-cap", ASK_KIND_TWO, "한 번 더 돌려보낸다")])
+        self.assertEqual((rv.stage, rv.asks, Q.cap(self.reviews())), ("돌아옴", [], 3))
+        with self.subTest(case="상한 안이면 묻지 않는다"):
+            self.setUp()
+            self.picked_reviews()
+            rv, _lines = self.recorded([dict(pick, from_order=2)])
+            self.assertEqual(rv.asks, [])
+
+    def test_wrong_choice_withdraws_two_max(self):
+        self.at_cap_last(stage="돌아옴", asks=[ask(INTENT, "q1")])
+        rv, _lines = self.recorded([{"kind": "pick", "text": "제안", "from_order": 3, "pick_kind": "고른 제안"}])
+        self.assertEqual([a.kind for a in rv.asks], [INTENT, ASK_KIND_TWO])
+        rv, _lines = self.recorded([item_answer("q1", INTENT, "잘못 골랐다")])
+        self.assertEqual(rv.asks, [])
+        self.assertEqual([a.kind for a in rv.answers], [INTENT])  # 거둔 것이지 답으로 적지 않는다
+
+    def test_pick_with_wrong_list_no_two_max(self):
+        self.at_cap_last(filtered_wrong=[F.Filtered(id="q7", text="앞서 잘못 골랐다고 답한 방향")])
+        rv, _lines = self.recorded([{"kind": "pick", "text": "제안", "from_order": 3, "pick_kind": "고른 제안"}])
+        self.assertNotIn(ASK_KIND_TWO, [a.kind for a in rv.asks])
+        self.assertEqual(rv.stage, "돌아옴")
+
+    def test_return_line_and_empty_return_count(self):
+        self.returned(blocking=[finding("지적 1")])
+
+        def send_back(worker, n):
+            rv, _lines = self.recorded([{"kind": "return", "worker": worker, "handling_file": self.handling_file(n)}])
+            self.assertEqual((rv.returns[-1].worker, rv.returns[-1].moved, rv.returns[-1].at),
+                             (worker, "아직", LATER))
+            self.assertEqual(rv.returns[-1].path, self.handling_file(n))
+            return rv
+
+        send_back("impl-w1", 1)
+        self.refused(self.record([{"kind": "return", "worker": "impl-w9", "handling_file": self.handling_file(9)}]))
+        rv, _lines = self.recorded([{"kind": "return_moved", "value": "처리 파일 없이 끝남"}])
+        self.assertEqual((rv.returns[0].moved, rv.blocking[0].handling, rv.asks),
+                         ("처리 파일 없이 끝남", F.NO_HANDLING, []))  # 첫 번째 — 다시 돌려보낼 차례
+        send_back("impl-w2", 2)
+        rv, lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
+                                   {"kind": "handling", "finding": 1, "value": "고친 커밋 deadbeef"}])
+        self.assertIn(OUT_OF_RANGE % "deadbeef", lines)  # 「옮겼으나 범위 밖 커밋」 도 함께 센다 — 두 번째
+        self.assertEqual(rv.returns[1].moved, "옮겼으나 범위 밖 커밋")
+        self.assertEqual(rv.blocking[0].handling, F.UNTOUCHED_OUT_OF_RANGE)
+        self.assertEqual([a.kind for a in rv.asks], [UNFIXED])
+        rv, _lines = self.recorded([item_answer(rv.asks[0].id, UNFIXED, "다시 돌려보낸다")])
+        self.assertEqual((rv.blocking[0].handling, rv.asks), (F.RETURNED_AGAIN, []))
+        send_back("impl-w3", 3)
+        rv, _lines = self.recorded([{"kind": "return_moved", "value": "처리 파일 없이 끝남"}])
+        self.assertEqual((rv.blocking[0].handling, rv.asks), (F.RETURNED_AGAIN, []))  # 세기가 처음부터
+        send_back("impl-w4", 4)
+        rv, _lines = self.recorded([{"kind": "return_moved", "value": "처리 파일 없이 끝남"}])
+        self.assertEqual(rv.blocking[0].handling, F.UNTOUCHED_NO_FILE)
+        self.assertEqual([a.kind for a in rv.asks], [UNFIXED])
+        rv, _lines = self.recorded([item_answer(rv.asks[0].id, UNFIXED, "반박을 받아들이고 남긴 지적으로 적는다")])
+        self.assertEqual((rv.blocking[0].handling, rv.stage, rv.close_reason), (F.USER_LEFT, "닫힘", "사용자가 남김"))
+        with self.subTest(case="반박이 있으면 고치지 않은 막는 지적의 질문"):
+            self.setUp()
+            self.returned(blocking=[finding("지적 1"), finding("지적 2")], returns=[self.ret(1)])
+            rv, _lines = self.recorded([{"kind": "return_moved", "value": "옮김"},
+                                        {"kind": "handling", "finding": 1, "value": "반박 — 설계가 그렇게 정했다"},
+                                        {"kind": "handling", "finding": 2, "value": "손대지 않음"}])
+            self.assertEqual([a.kind for a in rv.asks], [UNFIXED])
+            self.assertEqual(rv.returns[0].moved, "옮김")
+            rv, _lines = self.recorded([item_answer(rv.asks[0].id, UNFIXED, "다시 돌려보낸다")])
+            self.assertEqual([f.handling for f in rv.blocking], [F.RETURNED_AGAIN, F.RETURNED_AGAIN])
+        with self.subTest(case="아직 줄 없이 옮김 · 처리 없이 옮김"):
+            self.setUp()
+            folder = self.returned(blocking=[finding("지적 1")])
+            before = self.state_bytes(folder)
+            self.refused(self.record([{"kind": "return_moved", "value": "처리 파일 없이 끝남"}]))
+            self.assertEqual(self.record([{"kind": "handling", "finding": 1, "value": "반박"}]).returncode, 2)
+            self.assertEqual(self.state_bytes(folder), before)
+
+    def test_no_review_closes_prior_fixed(self):
+        c2 = self.code()
+        first = review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                       worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                       blocking=[finding("지적 1", "고친 커밋 " + c2), finding("지적 2", F.USER_LEFT)])
+        self.put(first)
+        self.returned(2, self.c1, c2, site="recheck", result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+        rv, _lines = self.recorded([item_answer("q-failed", FAILED, "리뷰 없이 머지 준비로 간다")])
+        self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "리뷰 없이 감"))
+        prior = self.reviews()[0]
+        self.assertEqual([f.handling for f in prior.blocking], [F.NO_REVIEW, F.USER_LEFT])
+        self.assertEqual((prior.stage, prior.close_reason), ("닫힘", "재리뷰로 이어짐"))
+        with self.subTest(case="뒤 리뷰가 이미 본 고친 커밋은 그대로"):
+            self.setUp()
+            c2, c3 = self.at_cap_rechecks()
+            self.returned(3, c2, c3, site="recheck", result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+            self.recorded([item_answer("q-failed", FAILED, "리뷰 없이 머지 준비로 간다")])
+            got = self.reviews()
+            self.assertEqual(got[0].blocking[0].handling, "고친 커밋 " + c2)
+            self.assertEqual(got[1].blocking[0].handling, F.NO_REVIEW)
+
+    def test_mark_rejected_on_wrong_reason(self):
+        cases = (("막는 지적 없음", "", F.MARK_REIMPLEMENTED), (F.REASON_RESPLIT, "", F.MARK_REIMPLEMENTED),
+                 (F.REASON_DESIGN, "", F.MARK_RESPLIT_CONTINUE),
+                 (F.REASON_DESIGN, "%s %s" % (F.MARK_REIMPLEMENTED, AT), F.MARK_REIMPLEMENTED),
+                 (None, "", F.MARK_REIMPLEMENTED))
+        for reason, mark, value in cases:
+            with self.subTest(reason=reason, mark=mark, value=value):
+                self.setUp()
+                if reason is None:
+                    folder = self.returned(answers=[answer("q1", INTENT, "잘못 골랐다", RECORD)])
+                else:
+                    folder = self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘",
+                                             close_reason=reason, close_mark=mark, worker="qg-w1 · " + AT,
+                                             result=obtained(self.base_sha, self.c1),
+                                             answers=[answer("q1", INTENT, "잘못 골랐다", RECORD)]))
+                before = self.state_bytes(folder)
+                self.refused(self.record([{"kind": "mark", "value": value}]))
+                self.assertEqual(self.state_bytes(folder), before)
+        for reason, value in ((F.REASON_DESIGN, F.MARK_REIMPLEMENTED), (F.REASON_RESPLIT, F.MARK_RESPLIT_CONTINUE)):
+            with self.subTest(reason=reason, value=value, case="받는다"):
+                self.setUp()
+                self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason=reason,
+                                worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                                answers=[answer("q1", INTENT, "잘못 골랐다", RECORD)]))
+                rv, _lines = self.recorded([{"kind": "mark", "value": value}])
+                self.assertEqual((rv.stage, rv.close_reason, rv.close_mark), ("닫힘", reason, "%s %s" % (value, LATER)))
+
+    def test_reevaluate_after_rewrite(self):
+        c2 = self.code()
+        folder = self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                                 worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                                 blocking=[finding("지적 1", "고친 커밋 " + c2)], returns=[self.ret(1, "옮김")]))
+        before = self.state_bytes(folder)
+        self.recorded()  # 기준 커밋이 그대로면 바뀌지 않는다
+        self.assertEqual(self.state_bytes(folder), before)
+        self.rig.git("reset", "-q", "--hard", self.c1)  # 닫은 뒤 브랜치가 다시 쓰였다
+        self.spec_only()
+        rv, lines = self.recorded()
+        self.assertEqual((rv.stage, rv.close_reason), ("돌아옴", ""))
+        self.assertEqual(rv.blocking[0].handling, F.NO_HANDLING)
+        self.assertEqual(rv.returns[0].moved, "옮겼으나 범위 밖 커밋")
+        self.assertIn(OUT_OF_RANGE % c2, lines)
+
+    def test_record_input_and_stage_refusals(self):
+        folder = self.returned(blocking=[finding("지적 1")], asks=[ask(INTENT, "q1")])
+        before = self.state_bytes(folder)
+        bad_inputs = ([{"kind": "모름"}], [{"kind": ["answer"]}], [{"kind": "answer", "question": "q1"}], ["글"],
+                      [dict(item_answer("q1", INTENT, "의도다"), extra=1)],
+                      [{"kind": "handling", "finding": True, "value": "반박"}],
+                      [{"kind": "pick", "text": "가", "from_order": 1, "pick_kind": "제안"}])
+        for items in bad_inputs:
+            self.assertEqual(self.record(items).returncode, 2, items)
+        path = self.rig.t / "broken.json"
+        path.write_text("{not json", encoding="utf-8")
+        args = ["record", "--roadmap", ROADMAP, "--target", TARGET, "--repo", str(self.rig.repo), "--spec", SPEC]
+        self.assertEqual(self.rig.run(*args, "--input", str(path)).returncode, 2)
+        self.assertEqual(self.rig.run(*args[:-2]).returncode, 2)  # --spec | --job-dir 가 없다
+        self.refused(self.record([item_answer("q9", INTENT, "의도다")]))  # 없는 질문
+        self.refused(self.record([item_answer("q1", FAILED, "다시 보낸다")]))  # 종류가 다르다
+        self.assertEqual(self.state_bytes(folder), before)
+        with self.subTest(case="도는 리뷰 · 담당자가 옮긴 질문"):
+            self.setUp()
+            self.sent()
+            self.refused(self.record())
+            self.refused(self.record([item_answer("q1", INTENT, "의도다")]))
+            self.ok(self.record([{"kind": "worker_ask", "question": "w1", "text": "이 파일을 지워도 되나\n둘째 줄"}]))
+            rv = self.reviews()[-1]
+            self.assertEqual((rv.stage, [(a.kind, a.id, a.text) for a in rv.asks]),
+                             ("보냄", [("담당자가 옮긴 질문", "w1", "이 파일을 지워도 되나\n둘째 줄")]))
+            self.ok(self.record([item_answer("w1", "담당자가 옮긴 질문", "지우지 않는다")]))
+            rv = self.reviews()[-1]
+            self.assertEqual((rv.stage, rv.asks, [a.answer for a in rv.answers]), ("보냄", [], ["지우지 않는다"]))
+        with self.subTest(case="멈출 조건"):
+            self.setUp()
+            self.put(review("recheck", 1, self.base_sha, self.c1))
+            self.ok(self.record([{"kind": "stop_rule", "text": "두 번 뒤 남는 지적은 통합 리뷰 인계에 적는다"}]))
+            self.assertEqual(self.reviews()[-1].stop_rule, "두 번 뒤 남는 지적은 통합 리뷰 인계에 적는다")
 
 
 if __name__ == "__main__":
