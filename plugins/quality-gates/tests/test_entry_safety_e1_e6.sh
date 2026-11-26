@@ -135,6 +135,40 @@ assert_eq "$rc" "1" "E1: .claude 자체가 밖을 가리키는 링크면 exit 1 
 assert_eq "$(snap "$OUTd")" "$before" "E1: 링크인 .claude 너머에 아무 파일도 쓰지 않는다"
 assert_contains "$err" "지우지 않는다" "E1: .claude 링크 거부도 한 줄로 알린다"
 
+# --ensure 가 세션 폴더를 그대로 두는 갈래도 링크 가드가 먼저다 — 링크 너머의 result.md 를 보고 그 너머의
+# 잠금 자리 파일을 지우거나 쓰지 않는다. 링크 자리 셋(.claude · state root · 세션 폴더) × 인자 있음 · 없음.
+ensure_link_case() {   # ensure_link_case <이름> <링크 자리: claude|root|session> [setup 인자…]
+  local name="$1" where="$2" w="$TMP/ens-$1" o="$TMP/ens-$1-out" inner before err rc; shift 2
+  mkdir -p "$w" "$o"
+  case "$where" in
+    claude)  inner="$o/quality-gates/$SID"; ln -s "$o" "$w/.claude" ;;
+    root)    inner="$o/$SID"; mkdir -p "$w/.claude"; ln -s "$o" "$w/.claude/quality-gates" ;;
+    session) inner="$o"; mkdir -p "$w/.claude/quality-gates"; ln -s "$o" "$w/.claude/quality-gates/$SID" ;;
+  esac
+  mkdir -p "$inner"
+  printf -- '---\nsession_id: "%s"\n---\n' "$SID" > "$inner/result.md"
+  printf '/elsewhere/old-lock\n' > "$inner/suite-lock-path.txt"
+  before="$(snap "$o")$(cat "$inner/suite-lock-path.txt")"
+  err="$(cd "$w" && "$SETUP" --ensure --session-id "$SID" "$@" 2>&1 >/dev/null)"; rc=$?
+  assert_eq "$rc" "1" "E1(--ensure · ${name}): 링크로 풀리는 자리면 exit 1 로 거부한다"
+  assert_eq "$(snap "$o")$(cat "$inner/suite-lock-path.txt" 2>/dev/null)" "$before" \
+    "E1(--ensure · ${name}): 링크 너머의 잠금 자리 파일을 지우거나 쓰지 않는다"
+  assert_contains "$err" "지우지 않는다" "E1(--ensure · ${name}): 거부를 한 줄로 알린다"
+}
+mkdir -p "$TMP/locks-x"   # 잠금 인자의 부모 — 없으면 값 검사가 먼저 거부해 링크 가드를 가린다
+ensure_link_case claude-arg claude --suite-lock "$TMP/locks-x/suite-lock"
+ensure_link_case claude-noarg claude
+ensure_link_case root-arg root --suite-lock "$TMP/locks-x/suite-lock"
+ensure_link_case session-noarg session
+# 양성 대조 — 링크가 없으면 같은 --ensure 가 잠금 자리 파일을 다시 쓴다(거부가 아무 때나 나는 것이 아니다).
+WEP="$TMP/ens-plain"; mkdir -p "$WEP/.claude/quality-gates/$SID"
+printf -- '---\nsession_id: "%s"\n---\n' "$SID" > "$WEP/.claude/quality-gates/$SID/result.md"
+printf '/elsewhere/old-lock\n' > "$WEP/.claude/quality-gates/$SID/suite-lock-path.txt"
+(cd "$WEP" && "$SETUP" --ensure --session-id "$SID" --suite-lock "$TMP/locks-x/suite-lock" >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1(--ensure · 링크 없음): exit 0"
+assert_eq "$(cat "$WEP/.claude/quality-gates/$SID/suite-lock-path.txt" 2>/dev/null)" "$TMP/locks-x/suite-lock" \
+  "E1(--ensure · 링크 없음): 잠금 자리 파일을 새 경로로 다시 쓴다"
+
 # kill switch — setup 직접 호출도 막는다. (test_kill_switches.py 의
 # test_skill_setup_qg_honors_disable_kill_switch 를 이어받는 자리: 그 파일이 지워져도 이 단언이 남는다.)
 WK="$TMP/ks"; mkdir -p "$WK"

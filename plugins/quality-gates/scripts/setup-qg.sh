@@ -251,12 +251,6 @@ write_suite_lock_path() {
   fi
 }
 
-# --ensure: 이 세션 폴더가 이미 있으면 잠금 자리 파일 말고는 아무것도 하지 않는다.
-if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
-  write_suite_lock_path
-  exit 0
-fi
-
 # --- 자기 세션 폴더를 지우고 다시 만든다 (E1 · E4) ---
 # `.claude` 나 state root 가 제자리의 실제 디렉토리로 풀리지 않으면(링크면 리포 안을 가리켜도) 지우지
 # 않는다 — 링크 너머를 지울 수 있다(qg-gc.py 의 root_escapes 와 같은 판단). 자기 폴더 자신이 링크여도
@@ -286,6 +280,22 @@ refuse() {
   echo "[quality-gates] $1 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
 }
+# 링크 가드 — 세션 폴더 위 자리나 세션 폴더 자신이 링크로 풀리면 지우거나 쓰기 전에 거부한다.
+guard_links() {
+  if root_escapes; then
+    refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /quality-gates:quality-pipeline 이 돈다)"
+  elif [[ -L "$STATE_DIR" ]]; then
+    refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
+  fi
+}
+
+# --ensure: 이 세션 폴더가 이미 있으면 링크 가드 뒤 잠금 자리 파일 말고는 아무것도 하지 않는다.
+if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
+  guard_links
+  write_suite_lock_path
+  exit 0
+fi
+
 load_markers() {
   local out m
   out="$(python3 -I -X utf8 -c 'import importlib.util as u, sys
@@ -303,11 +313,8 @@ EOF2
 if ! load_markers; then
   refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
 fi
-if root_escapes; then
-  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /quality-gates:quality-pipeline 이 돈다)"
-elif [[ -L "$STATE_DIR" ]]; then
-  refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
-elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
+guard_links
+if [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
   refuse "'$STATE_DIR' 가 폴더가 아니다"
 elif [[ -d "$STATE_DIR" ]]; then
   # 자기 세션 폴더는 그대로 지운다. 그 밖에는 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
