@@ -19,7 +19,7 @@ import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids, section5_lines,
     field_text, id_sort_key, is_quote, is_team, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -30,8 +30,6 @@ SCOPE_RE = team_files.SCOPE_RE
 KIND_BUNDLE, KIND_BRANCH, KIND_DECISION = "bundle", "branch", "decision"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "roadmap-template.md"
 C_LINE_RE = re.compile(r"- \S+ (?:confirmed|provisional) \*\*([CD]\d+)\*\* — ")
-RC_LINE_RE = re.compile(r"(RC\d+) \(")
-ST_LINE_RE = re.compile(r" — (ST\d+) — ")
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
 
 
@@ -330,13 +328,7 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         if oq:
             lines[oq] = line
     lines.update(_section4_index(brief))
-    for line in brief_body.split_lines(_body(brief, "## 5.")):
-        m = RC_LINE_RE.search(line)
-        if m:
-            lines[m.group(1)] = line
-        m = ST_LINE_RE.search(line)
-        if m:
-            lines[m.group(1)] = line
+    lines.update(section5_lines(_body(brief, "## 5.")))   # brief_universe 와 같은 판독
     found = brief_body.audit_subset_problems(audit)   # 방어층 — brief_universe 가 먼저 같은 검사를 하지만 이 함수가 따로 불려도 막는다
     if found:
         raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
@@ -421,7 +413,7 @@ def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
     oq = pick(lambda t: t.startswith("OQ"))
     rest = (pick(lambda t: t.startswith("RC")) + pick(lambda t: t.startswith("ST"))
             + [idx.k_lines[t] for t in ids if t.startswith("K")])
-    groups = (c_d, oq, keys, rest)
+    groups = tuple(list(dict.fromkeys(g)) for g in (c_d, oq, keys, rest))   # 한 줄에 번호 둘이어도 그 줄은 한 번만
     if len(team_files.SOURCE_PARTS) != len(groups):
         raise ValueError("번호 파일 칸 이름 %d개와 고른 줄 묶음 %d개가 다르다" % (len(team_files.SOURCE_PARTS), len(groups)))
     return ids, dict(zip(team_files.SOURCE_PARTS, groups))

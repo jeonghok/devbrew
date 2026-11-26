@@ -263,6 +263,9 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ID_ITEM_RE = re.compile(r"\s+- id: ([CD]\d+)\s*")
 RC_RE = re.compile(r"\bRC\d+\b")
 ST_RE = re.compile(r"\bST\d+\b")
+RC_LINE_RE = re.compile(r"\b(RC\d+) \(")      # §5 줄 꼴 ① — `RCn (경로…)` (줄마다 첫 번호 하나)
+ST_LINE_RE = re.compile(r" — (ST\d+) — ")      # §5 줄 꼴 ② — `기각 … — STn — 부착`
+LINK_RE = re.compile(r"\[([^\[\]→]*)→")         # §5 줄 끝 결정 연결 `[RCn → OQ…]` 의 화살표 앞
 KEY_RE = re.compile(r"«[^«»]+»")
 LIST_SEP_RE = re.compile(r"\s*,\s*|\s+·\s+")
 
@@ -585,6 +588,24 @@ def brief_risk_numbers(s5: str):
     return sorted(rows, key=lambda row: int(row[0][1:])), False
 
 
+def section5_lines(s5: str) -> dict:
+    """§5 의 RC · ST 번호 → 그 번호의 줄. 세는 일(`brief_universe`)과 줄을 찾는 일(`index_brief`)이 이 함수 하나로 읽는다.
+    번호가 여러 줄에 나오면 높은 꼴이 이긴다 — ① `RCn (` · ` — STn — ` 꼴 ② 줄 끝 연결 `[RCn → …]` 에 실린 번호
+    ③ 그 밖의 본문 인용. 같은 꼴 안에서는 뒤에 나온 줄이 이긴다."""
+    legacy, link, mention = {}, {}, {}
+    for line in brief_body.split_lines(s5):
+        for rx in (RC_LINE_RE, ST_LINE_RE):
+            m = rx.search(line)
+            if m:
+                legacy[m.group(1)] = line
+        for head in LINK_RE.findall(line):
+            for n in RC_RE.findall(head) + ST_RE.findall(head):
+                link[n] = line
+        for n in RC_RE.findall(line) + ST_RE.findall(line):
+            mention[n] = line
+    return {**mention, **link, **legacy}
+
+
 def brief_universe(brief: str, audit: str):
     """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
     fm_lines = brief.split("\n---", 1)[0].splitlines()
@@ -597,7 +618,7 @@ def brief_universe(brief: str, audit: str):
         raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
                           % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
     non_s |= {oq for oq, _line in oq_entries if oq}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
+    non_s |= set(section5_lines(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
     k_expected = brief_risk_numbers(s5)[0]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()
