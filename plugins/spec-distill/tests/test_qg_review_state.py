@@ -1526,6 +1526,19 @@ class TestQgReviewState(unittest.TestCase):
                                     {"kind": "handling", "finding": 1, "value": "고친 커밋 " + fix}])
         self.assertEqual((rv.blocking[0].handling, rv.blocking[0].reverted), ("고친 커밋 " + fix, ""))
 
+    def test_at_cap_no_return_without_two_max_answer(self):
+        # 상한에 닿은 PR 에서 「두 번까지」 의 답 없이 돌려보낼 것이 있으면 돌려보내기를 내지 않는다(AC32) —
+        # 「돌아옴」 · 「답 적기」 가 그 질문을 적으므로 이 꼴은 칸끼리 맞지 않는 것이고 끝 줄이다(§4 「표가 덮는 것」).
+        c2, c3 = self.at_cap_rechecks()
+        folder = self.returned(3, c2, c3, site="recheck", blocking=[finding("지적 3")])
+        lines = self.next()
+        self.assertEqual(self.row(lines), "RX", lines)
+        self.assertNotEqual(self.kind(lines), "돌려보낸다")
+        rv = self.reviews()[-1]
+        rv.answers = [answer("q-cap", ASK_KIND_TWO, "한 번 더 돌려보낸다")]  # 양의 짝 — 「한 번 더」 뒤에는 상한 안
+        F.write_review(folder / F.STATE_NAME, rv)
+        self.assertEqual(self.row(self.next()), "R7d")
+
     def test_asked_refused_until_mark(self):
         wrong = [answer("q1", INTENT, "잘못 골랐다", RECORD)]
         cases = {
