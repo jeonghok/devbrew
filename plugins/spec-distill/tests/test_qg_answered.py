@@ -92,6 +92,11 @@ def rpath(name):
     return "%s/%s" % (FOLDER, name)
 
 
+def rname(target, site="spec", day="2026-11-24"):
+    """기록 이름 틀 `<날짜>-<대상>-<자리>.md` 안의 이름."""
+    return "%s-%s-%s.md" % (day, target, site)
+
+
 class TestQgAnswered(unittest.TestCase):
     def two_record(self, obs1="x"):
         return record(2, [section(1, obs=(obs1,), ans="의도다"),
@@ -174,8 +179,8 @@ class TestQgAnswered(unittest.TestCase):
         self.assertEqual(e.notice_text(), "")
 
     def test_prior_cell_identity_with_separator(self):
-        # 전에 한 답의 셋째 칸(열쇠 또는 정체)에 ` · ` 가 있어도 기록을 읽는다 — 앞 두 칸은 왼쪽에서,
-        # 끝 칸은 오른쪽에서 떼고 가운데가 열쇠다
+        # 이름에 ` · ` 가 든 기록 파일은 이름 틀 밖 — 그 이름의 열쇠(`a · b.md#<n>`)는 qg 가 칸을 ` · ` 로
+        # 나눠 읽어 맞출 수 없으니 넘기지 않고, 대상을 가릴 수 없어 어느 답도 넘기지 않는다(AC30 · AC13)
         e = Env(self)
         odd = "a · b.md"
         commit_files(e.repo, {rpath(odd): self.two_record()})
@@ -185,8 +190,9 @@ class TestQgAnswered(unittest.TestCase):
                                                        section(2, prior=key_prior)])})
         p = e.run(["main"])
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual([x["key"] for x in e.entries()], [NAME2 + "#1", NAME2 + "#2", odd + "#3"])
-        self.assertEqual(e.notice_text(), "")
+        self.assertEqual(e.entries(), [])
+        self.assertEqual(e.notice_text().splitlines(),
+                         ["읽지 못한 기록 1개: main:%s" % rpath(odd)])
 
     def test_answer_outside_template_is_noticed_not_dropped(self):
         # 틀의 다섯 값 밖인 `- 답:` 은 그 절만 넘기지 않고 알림 한 줄(기록 · 질문 번호 · 값)을 남긴다.
@@ -250,34 +256,35 @@ class TestQgAnswered(unittest.TestCase):
         broken = "---\ntype: [roadmap-review\ncontract: 2\n---\n\n" + section(1)
         v4 = record(4, [section(1)])
         commit_files(e.repo, {rpath(NAME): self.two_record(),
-                              rpath("broken.md"): broken, rpath("v4.md"): v4})
+                              rpath(rname("R7")): broken, rpath(rname("R8")): v4})
         p = e.run(["main", "nope"])
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
         line = e.notice_text().splitlines()
         self.assertEqual(len(line), 1)
         self.assertTrue(line[0].startswith("읽지 못한 기록 3개: "), line[0])
-        for part in ("main:%s" % rpath("broken.md"), "main:%s" % rpath("v4.md"),
+        for part in ("main:%s" % rpath(rname("R7")), "main:%s" % rpath(rname("R8")),
                      "nope:%s/" % FOLDER):
             self.assertIn(part, line[0])
         self.assertIn(line[0], p.stderr)
 
     def test_unreadable_variants(self):
+        # 이름은 틀 안 · 대상은 저마다 달라(R11–R17) 깨진 것은 내용뿐이다
         bad = {
-            "type.md": record(2, [section(1)], rtype="other"),
-            "prior.md": record(3, [section(1, prior="의도다 · 한 칸")]),
-            "prior3.md": record(3, [section(1, prior="의도다 · 2026-11-22 21:25 · 까닭 없는 열쇠")]),
-            "num.md": record(2, [section(1).replace("## 질문 1", "## 질문 １")]),
-            "ctl.md": record(2, [section(1, question="a\x07b")]),
-            "route.md": record(3, [section(1, ans="잘못 골랐다", route="아무 곳")]),
-            "nosite.md": record(2, [section(1, ans="잘못 골랐다")], site="nowhere"),
+            rname("R11"): record(2, [section(1)], rtype="other"),
+            rname("R12"): record(3, [section(1, prior="의도다 · 한 칸")]),
+            rname("R13"): record(3, [section(1, prior="의도다 · 2026-11-22 21:25 · 까닭 없는 열쇠")]),
+            rname("R14"): record(2, [section(1).replace("## 질문 1", "## 질문 １")]),
+            rname("R15"): record(2, [section(1, question="a\x07b")]),
+            rname("R16"): record(3, [section(1, ans="잘못 골랐다", route="아무 곳")]),
+            rname("R17"): record(2, [section(1, ans="잘못 골랐다")], site="nowhere"),
         }
         e = Env(self)
         files = {rpath(k): v for k, v in bad.items()}
         files[rpath(NAME)] = self.two_record()
         commit_files(e.repo, files)
         # UTF-8 아님
-        with open(os.path.join(e.repo, rpath("latin.md")), "wb") as fh:
+        with open(os.path.join(e.repo, rpath(rname("R18"))), "wb") as fh:
             fh.write(b"---\xff\n")
         run_git(e.repo, "add", "-A")
         run_git(e.repo, "commit", "-q", "-m", "bin")
@@ -294,10 +301,12 @@ class TestQgAnswered(unittest.TestCase):
         commit_files(e.repo, files)
         p = e.run(["main"])
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual([x["key"] for x in e.entries()], [NAME + "#1", NAME + "#3"])
+        # 제어 글자가 든 이름은 틀 밖 — 어느 답도 넘어가지 않는다(AC13). 알림 줄은 한 줄로 남는다
+        self.assertEqual(e.entries(), [])
         lines = e.notice_text().splitlines()
         self.assertEqual(len(lines), 1, lines)
         self.assertTrue(lines[0].startswith("읽지 못한 기록 2개: "), lines[0])
+        self.assertIn("bad\\x0aname.md", lines[0])
         self.assertEqual(len(p.stderr.splitlines()), 1)
         sys.path.insert(0, os.path.abspath(QG_SCRIPTS))
         try:
@@ -310,8 +319,8 @@ class TestQgAnswered(unittest.TestCase):
         dup_ans = section(1, ans="지금은 모르겠다").replace(
             "- 질문: 질문 글", "- 질문: 질문 글\n- 답: 의도다")
         e = Env(self)
-        commit_files(e.repo, {rpath("dup_field.md"): record(2, [dup_ans]),
-                              rpath("dup_num.md"): record(2, [section(1), section(1)])})
+        commit_files(e.repo, {rpath(rname("R7")): record(2, [dup_ans]),
+                              rpath(rname("R8")): record(2, [section(1), section(1)])})
         p = e.run(["main"])
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(e.entries(), [])
@@ -376,6 +385,301 @@ class TestQgAnswered(unittest.TestCase):
         self.assertIsNone(why)
         self.assertEqual([x["key"] for x in entries], [x["key"] for x in e.entries()])
         self.assertEqual(len(entries), 3)
+
+
+def good_record(n_sections=1):
+    return record(3, [section(i + 1) for i in range(n_sections)])
+
+
+def prior_to(key, ans="의도다", at="2026-11-22 21:25", why="근거가 달라짐"):
+    return "%s · %s · %s · %s" % (ans, at, key, why)
+
+
+NOTICE_FAIL = "[qg_answered] 알림 파일을 쓰지 못했다 — 알림은 위 줄뿐이다"
+OUT_FAIL = "[qg_answered] 출력 파일을 쓰지 못했다 — "
+NO_YAML = "[qg_answered] PyYAML 이 없다 — 답 없이 보낸다"
+
+
+class TestQgAnsweredEdges(unittest.TestCase):
+    def keys(self, env):
+        return [x["key"] for x in env.entries()]
+
+    def test_unreadable_record_drops_same_target(self):
+        # 같은 에픽(R4)의 기록 하나가 깨졌으면 R4 의 답은 하나도 넘기지 않는다 — 깨진 파일 안의 「전에 한 답」
+        # 이 NAME#1 을 뒤집었을 수 있다. 다른 에픽(R6)의 답은 넘어간다
+        later = rname("R4", "premerge-pr12")
+        broken = record(3, [section(1, prior=prior_to(NAME + "#1")),
+                            section(2, ans="잘못 골랐다")])  # 3판 「잘못 골랐다」 에 행선이 없다
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(2), rpath(NAME2): good_record(),
+                              rpath(later): broken})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [NAME2 + "#1"])
+        self.assertEqual(e.notice_text().splitlines(),
+                         ["읽지 못한 기록 1개: main:%s" % rpath(later)])
+        # 양의 짝 — 깨진 파일이 없으면 R4 의 답도 넘어간다
+        e2 = Env(self)
+        commit_files(e2.repo, {rpath(NAME): good_record(2), rpath(NAME2): good_record()})
+        p = e2.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e2), [NAME + "#1", NAME + "#2", NAME2 + "#1"])
+        # 로드맵 대상 — 깨진 로드맵 기록은 로드맵의 답만 막는다
+        end = rname("roadmap", "end")
+        e3 = Env(self)
+        commit_files(e3.repo, {rpath(NAME): good_record(), rpath(end): good_record(),
+                               rpath(rname("roadmap", "asked")): record(3, [section(1, ans="잘못 골랐다")])})
+        p = e3.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e3), [NAME + "#1"])
+        # 다른 ref 에 있는 같은 대상의 답도 막는다
+        e4 = Env(self)
+        commit_files(e4.repo, {rpath(NAME): good_record(), rpath(NAME2): good_record()})
+        run_git(e4.repo, "checkout", "-q", "-b", "docs/records")
+        commit_files(e4.repo, {rpath(later): broken})
+        p = e4.run(["main", "docs/records"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e4), [NAME2 + "#1"])
+
+    def test_out_of_template_name_drops_all(self):
+        # 이름이 틀(`<YYYY-MM-DD>-<대상>-<자리>[-<n>].md`) 밖인 기록이 하나라도 있으면 대상을 가릴 수 없어
+        # 어느 답도 넘기지 않는다(AC13) — 내용이 멀쩡해도 같다
+        for odd in ("notes.md", "2026-11-24-R4-review.md", "2026-11-24-r4-spec.md",
+                    "2026-11-24-R4-spec-x.md", "2026-11-24-R4-premerge.md", "26-11-24-R4-spec.md",
+                    "2026-11-24-R4-spec.md.md", "2026-11-24-R-spec.md"):
+            e = Env(self)
+            commit_files(e.repo, {rpath(NAME): good_record(), rpath(NAME2): good_record(),
+                                  rpath(odd): good_record()})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(e.entries(), [], odd)
+            self.assertEqual(e.notice_text().splitlines(),
+                             ["읽지 못한 기록 1개: main:%s" % rpath(odd)], odd)
+        # 양의 짝 — 틀 안의 이름(번호 붙은 이름 · 로드맵 · 자리 다섯)은 모두 읽힌다
+        names = [rname("R4", "spec-2"), rname("roadmap", "end"), rname("E12a", "recheck-pr7"),
+                 rname("R4", "premerge-pr338"), rname("roadmap", "asked-3"), rname("R10", "asked")]
+        e = Env(self)
+        commit_files(e.repo, {rpath(n): good_record() for n in names})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(sorted(self.keys(e)), sorted(n + "#1" for n in names))
+        self.assertEqual(e.notice_text(), "")
+
+    def test_whole_ref_unreadable_drops_that_ref(self):
+        # 없는 ref · `-` 로 시작하는 ref 는 그 ref 의 답이 없고 알림 한 줄, 다른 ref 의 답은 넘어간다
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record()})
+        p = e.run(["main", "nope"], extra=("--ref=-main",))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [NAME + "#1"])
+        lines = e.notice_text().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("읽지 못한 기록 2개: "), lines[0])
+        for part in ("nope:%s/" % FOLDER, "-main:%s/" % FOLDER):
+            self.assertIn(part, lines[0])
+        # `-` 로 시작하는 ref 는 git 에 닿지 않는다 · 파일 목록을 읽지 못한 자리도 통째로 읽지 못한 자리다
+        sys.path.insert(0, os.path.abspath(os.path.dirname(SCRIPT)))
+        try:
+            import qg_answered
+        finally:
+            sys.path.pop(0)
+        calls = []
+
+        def fake_git(repo, *args):
+            calls.append(args)
+            if args[0] == "rev-parse":
+                return 0, b"0123456789abcdef0123456789abcdef01234567\n"
+            return 1, b""
+        real = qg_answered._git
+        qg_answered._git = fake_git
+        try:
+            self.assertEqual(qg_answered.read_ref(".", "-main", FOLDER), ([], "-main:%s/" % FOLDER))
+            self.assertEqual(calls, [])
+            self.assertEqual(qg_answered.read_ref(".", "main", FOLDER), ([], "main:%s/" % FOLDER))
+            self.assertEqual([c[0] for c in calls], ["rev-parse", "ls-tree"])
+        finally:
+            qg_answered._git = real
+
+    def test_quiet_answer_keeps_prior(self):
+        # 뒤 기록의 새 답이 넘기지 않는 값 셋이면 「전에 한 답」 이 가리킨 앞 답이 그대로 넘어가고,
+        # 넘기는 값 둘이면 빠진다(AC14)
+        later = rname("R4", "recheck-pr12")
+        cases = (("지금은 모르겠다", True), ("답하지 않음", True),
+                 ("묻지 않음(상한 넘어 남김)", True), ("의도다", False), ("잘못 골랐다", False))
+        for ans, kept in cases:
+            e = Env(self)
+            route = ROUTE_IN if ans == "잘못 골랐다" else None
+            commit_files(e.repo, {rpath(NAME): good_record(2), rpath(later): record(3, [
+                section(1, prior=prior_to(NAME + "#1"), ans=ans, route=route)])})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(NAME + "#1" in self.keys(e), kept, ans)
+            self.assertIn(NAME + "#2", self.keys(e), ans)
+            self.assertEqual(e.notice_text(), "", ans)
+
+    def test_multiline_answer_with_heading(self):
+        # 답 원문 둘째 줄부터 두 칸 들여 쓴 줄은 그 칸의 이어지는 글 — 그 가운데 `## ` 줄 · `- 답:` 꼴의 줄이
+        # 있어도 절이 끊기지 않고(뒤 `- 답한 때:` 를 읽는다) 칸이 겹치지 않는다(AC15)
+        raw = "- 답 원문: 첫 줄\n  ## 다른 것\n  - 답: 잘못 골랐다\n  # 제목 꼴\n  끝 줄"
+        sec = section(1, at="2026-11-24 10:05").replace("- 답한 때:", raw + "\n- 답한 때:")
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): record(3, [sec, section(2, ans="잘못 골랐다",
+                                                                  route=ROUTE_SEED)])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        by = {x["key"]: x for x in e.entries()}
+        self.assertEqual(sorted(by), [NAME + "#1", NAME + "#2"])
+        self.assertEqual(by[NAME + "#1"]["answer"], "의도다")
+        self.assertEqual(by[NAME + "#1"]["answered_at"], "2026-11-24 10:05")
+        self.assertEqual(by[NAME + "#2"]["route"], ROUTE_SEED)
+        self.assertEqual(e.notice_text(), "")
+
+    def test_prior_time_with_separator_unreadable(self):
+        # 「전에 한 답」 의 둘째 칸(답한 때)이 꼴 밖이면 열쇠를 짐작하지 않고 그 기록을 읽지 못한 기록으로
+        # 센다 — 같은 대상(R4)의 답이 넘어가지 않고 알림이 남는다. 기록의 `- 답한 때:` 가 꼴 밖이어도 같다(AC30)
+        later = rname("R4", "recheck-pr12")
+        variants = {
+            "prior-time-sep": section(1, prior=prior_to(NAME + "#1", at="2026-11-22 · 21:25")),
+            "prior-time-iso": section(1, prior=prior_to(NAME + "#1", at="2026-11-22T21:25:00Z")),
+            "prior-time-empty": section(1, prior=prior_to(NAME + "#1", at="")),
+            "prior-first-cell": section(1, prior=prior_to(NAME + "#1", ans="지금은 모르겠다")),
+            "prior-no-key": section(1, prior="의도다 · 2026-11-22 21:25 ·  · 근거가 달라짐"),
+            "at-sep": section(1, at="2026-11-22 · 12:16"),
+            "at-word": section(1, at="어제"),
+            "at-seconds": section(1, at="2026-11-22 12:16:00"),
+        }
+        for label, sec in variants.items():
+            e = Env(self)
+            commit_files(e.repo, {rpath(NAME): good_record(2), rpath(NAME2): good_record(),
+                                  rpath(later): record(3, [sec])})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(self.keys(e), [NAME2 + "#1"], label)
+            self.assertEqual(e.notice_text().splitlines(),
+                             ["읽지 못한 기록 1개: main:%s" % rpath(later)], label)
+        # 양의 짝 — `-` 인 답한 때 · 꼴 안의 답한 때는 읽혀 그 열쇠를 뺀다
+        for at in ("-", "2026-11-22 21:25"):
+            e = Env(self)
+            commit_files(e.repo, {rpath(NAME): good_record(2), rpath(later): record(3, [
+                section(1, prior=prior_to(NAME + "#1", at=at), at=at)])})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(self.keys(e), [NAME + "#2", later + "#1"], at)
+            self.assertEqual(e.notice_text(), "", at)
+
+    def test_prior_identity_with_separator_reads(self):
+        # 셋째 칸(정체)에 ` · ` 가 든 「전에 한 답」 은 읽힌다 — 같은 기록의 열쇠 칸이 가리킨 앞 답을 뺀다(AC30)
+        later = rname("R4", "recheck-pr12")
+        ident_prior = prior_to("diff#a · b.md#갈라짐#방향")
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(2), rpath(later): record(3, [
+            section(1, prior=ident_prior), section(2, prior=prior_to(NAME + "#1"))])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [NAME + "#2", later + "#1", later + "#2"])
+        self.assertEqual(e.notice_text(), "")
+
+    def test_notice_file_fail_keeps_stderr(self):
+        # 알림 파일을 쓰지 못하면 rc 4 — 표준 오류에 알림 줄과 끝 줄, 답 파일은 있다(AC16)
+        broken = rname("R7")
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(),
+                              rpath(broken): record(3, [section(1, ans="잘못 골랐다")])})
+        notice = "읽지 못한 기록 1개: main:%s" % rpath(broken)
+        e.notices = os.path.join(e.work, "no-such-dir", "notices.txt")
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertEqual(p.stderr.splitlines(), [notice, NOTICE_FAIL])
+        self.assertEqual(self.keys(e), [NAME + "#1"])
+        # 답 파일을 쓰지 못하면 rc 3 — 알림 줄은 그 전에 이미 표준 오류에 있다
+        e2 = Env(self)
+        commit_files(e2.repo, {rpath(NAME): good_record(),
+                               rpath(broken): record(3, [section(1, ans="잘못 골랐다")])})
+        p = e2.run(["main"], out=os.path.join(e2.work, "no-such-dir", "out.yaml"))
+        self.assertEqual(p.returncode, 3, p.stderr)
+        lines = p.stderr.splitlines()
+        self.assertEqual(len(lines), 2, lines)
+        self.assertEqual(lines[0], notice)
+        self.assertTrue(lines[1].startswith(OUT_FAIL), lines[1])
+        self.assertNotIn(NOTICE_FAIL, p.stderr)
+        # 알림이 없으면 rc 0 · 표준 오류는 비어 있다(양의 짝)
+        e3 = Env(self)
+        commit_files(e3.repo, {rpath(NAME): good_record()})
+        p = e3.run(["main"])
+        self.assertEqual((p.returncode, p.stderr), (0, ""))
+
+    def test_no_partial_files_on_fail(self):
+        # 바꿔 놓기가 실패하는 두 경우(쓸 자리가 폴더) 모두 임시 파일 · 반쯤 쓴 파일이 남지 않는다(AC29)
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(),
+                              rpath(rname("R7")): record(3, [section(1, ans="잘못 골랐다")])})
+        e.notices = os.path.join(e.work, "notices-dir")
+        os.makedirs(e.notices)
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 4, p.stderr)
+        self.assertEqual(sorted(os.listdir(e.work)), ["answered.yaml", "notices-dir"])
+        self.assertEqual(os.listdir(e.notices), [])
+        self.assertEqual(self.keys(e), [NAME + "#1"])
+        e2 = Env(self)
+        commit_files(e2.repo, {rpath(NAME): good_record()})
+        out_dir = os.path.join(e2.work, "out-dir")
+        os.makedirs(out_dir)
+        p = e2.run(["main"], out=out_dir)
+        self.assertEqual(p.returncode, 3, p.stderr)
+        self.assertEqual(sorted(os.listdir(e2.work)), ["out-dir"])
+        self.assertEqual(os.listdir(out_dir), [])
+
+    def test_route_missing_contract3_unreadable(self):
+        # 3판 기록의 「잘못 골랐다」 에 행선이 없으면 읽지 못한 기록 — 2판은 자리에서 행선을 짓는다
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(),
+                              rpath(rname("R7")): record(3, [section(1, ans="잘못 골랐다")]),
+                              rpath(rname("R8")): record(2, [section(1, ans="잘못 골랐다")])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [NAME + "#1", rname("R8") + "#1"])
+        self.assertEqual(e.notice_text().splitlines(),
+                         ["읽지 못한 기록 1개: main:%s" % rpath(rname("R7"))])
+
+    def test_record_branch_answer_carries_epic_only_does_not(self):
+        # 첫 머지 앞 리뷰의 기록은 기록 브랜치에만, 같은 대상의 다른 기록은 에픽 브랜치에만 있다 — 지휘 절차의
+        # 호출 꼴(`--ref <기본 브랜치> --ref <기록 브랜치>`)로 부르면 기록 브랜치의 답만 넘어간다(AC11)
+        first = rname("R4", "premerge-pr12")
+        epic_only = rname("R4", "recheck-pr12")
+        e = Env(self)
+        commit_files(e.repo, {"README.md": "x\n"})
+        run_git(e.repo, "checkout", "-q", "-b", "docs/conductor-records")
+        commit_files(e.repo, {rpath(first): good_record()})
+        run_git(e.repo, "checkout", "-q", "main")
+        run_git(e.repo, "checkout", "-q", "-b", "feature/r4-epic")
+        commit_files(e.repo, {rpath(epic_only): good_record()})
+        run_git(e.repo, "checkout", "-q", "main")
+        p = e.run(["main", "docs/conductor-records"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [first + "#1"])
+        self.assertEqual(e.notice_text(), "")
+
+    def test_no_yaml_guard(self):
+        # PyYAML 을 들일 수 없으면 rc 5 와 한 줄 — 답 파일 · 알림 파일은 쓰지 않는다
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record()})
+        argv = [SCRIPT, "--roadmap", ROADMAP, "--ref", "main", "--out", e.out,
+                "--notices", e.notices, "--repo", e.repo]
+        code = ("import runpy, sys\n"
+                "sys.modules['yaml'] = None\n"
+                "sys.argv = %r\n"
+                "runpy.run_path(%r, run_name='__main__')\n") % (argv, SCRIPT)
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        p = subprocess.run([sys.executable, "-c", code], cwd=e.work, capture_output=True,
+                           text=True, encoding="utf-8", env=env)
+        self.assertEqual(p.returncode, 5, p.stderr)
+        self.assertEqual(p.stderr.splitlines(), [NO_YAML])
+        self.assertEqual(os.listdir(e.work), [])
+        # 양의 짝 — 같은 꼴로 막지 않고 부르면 rc 0
+        code_ok = code.replace("sys.modules['yaml'] = None\n", "")
+        p = subprocess.run([sys.executable, "-c", code_ok], cwd=e.work, capture_output=True,
+                           text=True, encoding="utf-8", env=env)
+        self.assertEqual(p.returncode, 0, p.stderr)
 
 
 if __name__ == "__main__":

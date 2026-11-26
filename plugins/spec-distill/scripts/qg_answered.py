@@ -8,18 +8,25 @@
 
 --ref 의 차례가 앞섬이다(같은 열쇠는 앞 자리 것을 싣는다). 자리마다 `<로드맵 폴더>/reviews/` 의
 `.md` 를 git 에서 읽는다(허용 git 하위 명령은 GIT_ALLOWED 뿐, 인자 목록 · 시간 상한).
-출력: --out 에 `contract: 1` · `entries`(답이 없으면 `entries: []`)를 tmp + os.replace 로 쓴다.
-      --notices 에 알림 줄(없으면 빈 파일) — 같은 줄을 stderr 에도 낸다.
-종료 코드: 0 정상(알림이 있어도) · 2 사용법 · 3 출력 파일을 쓰지 못함(stderr 한 줄).
+기록 하나를 읽지 못하면 그 이름의 대상(에픽 번호 · `roadmap`)의 답은 어느 자리 것도 싣지 않는다 —
+읽지 못한 기록이 그 답을 뒤집었을 수 있다. 이름이 틀 밖이면 대상을 가릴 수 없어 어느 답도 싣지 않는다.
+출력: 알림 줄을 먼저 stderr 에 낸 뒤, --out 에 `contract: 1` · `entries`(답이 없으면 `entries: []`),
+      그다음 --notices 에 같은 알림 줄(없으면 빈 파일)을 쓴다 — 둘 다 tmp + os.replace.
+종료 코드: 0 정상(알림이 있어도) · 2 사용법 · 3 답 파일을 쓰지 못함 · 4 답 파일은 썼는데 알림 파일을
+          쓰지 못함 · 5 PyYAML 이 없음(답 파일 · 알림 파일을 쓰지 않는다) — 3 · 4 · 5 는 stderr 끝 줄 하나.
 """
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
-import yaml
+try:
+    import yaml
+except ImportError:  # 지휘 절차가 rc 5 를 「답 없이 보낸다」 로 다룬다
+    yaml = None
 
 GIT_ALLOWED = frozenset({"rev-parse", "ls-tree", "show"})
 GIT_TIMEOUT = 30
@@ -40,10 +47,18 @@ SITE_ROUTES = {
 CONTENT_KEYS = ("id", "answer", "question", "observation", "answered_at", "route", "record")
 OBS_INDENT = "  "
 HEADING = "## 질문"
+SEP = " · "
+TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}|-")
+NAME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-(?P<target>[A-Z][0-9]+[a-z]?|roadmap)-"
+                     r"(?:spec|premerge-pr[0-9]+|recheck-pr[0-9]+|end|asked)(?:-[0-9]+)?\.md")
+ALL_TARGETS = None
+NOTICE_FAIL = "[qg_answered] 알림 파일을 쓰지 못했다 — 알림은 위 줄뿐이다"
+NO_YAML = "[qg_answered] PyYAML 이 없다 — 답 없이 보낸다"
 
 
 class Unreadable(Exception):
-    """기록 파일 하나를 읽지 못한다 — 그 파일의 항목은 하나도 싣지 않는다."""
+    """기록 파일 하나를 읽지 못한다 — 그 파일과 같은 대상의 항목은 하나도 싣지 않는다.
+    인자는 사유(디버깅용) — 알림 글에는 싣지 않는다."""
 
 
 def _git(repo, *args):
@@ -135,17 +150,25 @@ def _parse_sections(body):
 
 
 def _prior_key(value):
-    """`<답> · <답한 때> · <열쇠 또는 정체> · <까닭>` 의 셋째 칸 — 앞 두 칸은 왼쪽에서, 끝 칸은 오른쪽에서
-    떼고 가운데를 열쇠로 본다(정체에 ` · ` 가 들어도 읽는다). 「없음」 · `-` · 빈 값은 앞 답이 없다."""
+    """`<답> · <답한 때> · <열쇠 또는 정체> · <까닭>` 의 셋째 칸. 칸마다 제 꼴로 읽는다 — 첫 칸은 ANSWERS
+    가운데 하나, 둘째 칸은 TIME_RE, 끝 칸(오른쪽에서 뗀 것)은 까닭이고 그 사이가 열쇠 또는 정체다
+    (정체에는 ` · ` 가 들어도 된다). 꼴이 아니면 열쇠를 짐작하지 않고 Unreadable.
+    「없음」 · `-` · 빈 값은 앞 답이 없다."""
     if value in NO_PRIOR:
         return None
-    head = value.split(" · ", 2)
-    if len(head) != 3:
-        raise Unreadable()
-    rest = head[2].rsplit(" · ", 1)
-    if len(rest) != 2:
-        raise Unreadable()
-    return rest[0]
+    for answer in ANSWERS:
+        if value.startswith(answer + SEP):
+            rest = value[len(answer) + len(SEP):]
+            break
+    else:
+        raise Unreadable("전에 한 답의 칸이 꼴 밖이다")
+    at, sep, rest = rest.partition(SEP)
+    if not sep or not TIME_RE.fullmatch(at):
+        raise Unreadable("전에 한 답의 칸이 꼴 밖이다")
+    key, sep, why = rest.rpartition(SEP)
+    if not sep or not key or not why:
+        raise Unreadable("전에 한 답의 칸이 꼴 밖이다")
+    return key
 
 
 def parse_record(text, name, record_path):
@@ -162,11 +185,15 @@ def parse_record(text, name, record_path):
     superseded = []
     odd = []
     for num, fields in _parse_sections(body):
+        answer = fields.get("답")
+        at = fields.get("답한 때", "") or NO_TIME
+        if not TIME_RE.fullmatch(at):
+            raise Unreadable("답한 때가 꼴 밖이다")
         if "전에 한 답" in fields:
             prior = _prior_key(fields["전에 한 답"])
-            if prior is not None:
+            # 새 답이 넘기는 값일 때만 앞 답을 뺀다 — 넘기지 않는 값 · 틀 밖의 값은 앞 답을 그대로 둔다
+            if prior is not None and answer in ANSWERS:
                 superseded.append(prior)
-        answer = fields.get("답")
         if answer not in ANSWERS:
             if answer is not None and answer not in QUIET_ANSWERS:
                 odd.append((num, answer))
@@ -187,7 +214,7 @@ def parse_record(text, name, record_path):
             "answer": answer,
             "question": fields.get("질문", ""),
             "observation": "\n".join(fields.get("관찰", [])),
-            "answered_at": fields.get("답한 때", "") or NO_TIME,
+            "answered_at": at,
             "route": route,
             "record": record_path,
         })
@@ -200,11 +227,20 @@ def _is_ctl(ch):
 
 def _name_ok(name):
     return (name.endswith(".md") and len(name) > 3 and "/" not in name and "#" not in name
-            and not any(_is_ctl(c) for c in name))
+            and SEP not in name and not any(_is_ctl(c) for c in name))
+
+
+def _target(name):
+    """기록 이름 틀 `<YYYY-MM-DD>-<대상>-<자리>[-<n>].md` 의 대상(에픽 번호 · `roadmap`), 틀 밖이면 None."""
+    if not _name_ok(name):
+        return None
+    m = NAME_RE.fullmatch(name)
+    return m.group("target") if m else None
 
 
 def _esc(text):
-    """알림 한 줄에 싣는 경로의 제어 글자를 \\xNN 으로 바꾼다."""
+    """알림 한 줄에 싣는 글(경로 · ref · 답 값)의 C0 제어 글자(줄 나눔 \\n · \\r · 탭 포함)와 DEL 을
+    \\xNN 으로 바꾼다. 그 밖의 글자(C1 · U+2028 같은 유니코드 줄 나눔 글자)는 그대로 둔다."""
     return "".join("\\x%02x" % ord(c) if _is_ctl(c) else c for c in text)
 
 
@@ -241,6 +277,7 @@ def read_ref(repo, ref, folder):
 def collect(repo, roadmap, refs):
     folder = roadmap.rsplit("/", 1)[0] + "/reviews" if "/" in roadmap else "reviews"
     unreadable = []
+    blocked = set()  # 읽지 못한 기록의 대상 — ALL_TARGETS 면 모든 대상
     per_file = []
     odd_answers = []
     for ref in refs:
@@ -248,24 +285,33 @@ def collect(repo, roadmap, refs):
         if bad_place is not None:
             unreadable.append(bad_place)
         for shown, name, path, text in found:
-            if text is None or not _name_ok(name):
+            target = _target(name)
+            if target is None:
                 unreadable.append(shown)
+                blocked.add(ALL_TARGETS)
+                continue
+            if text is None:
+                unreadable.append(shown)
+                blocked.add(target)
                 continue
             try:
                 entries, prior, odd = parse_record(text, name, path)
             except Unreadable:
                 unreadable.append(shown)
+                blocked.add(target)
                 continue
-            per_file.append((entries, prior))
+            per_file.append((target, entries, prior))
             for num, value in odd:
                 odd_answers.append("%s 질문 %s 「%s」" % (shown, num, _esc(value)))
     superseded = set()
-    for _entries, prior in per_file:
+    for _target_of, _entries, prior in per_file:
         superseded.update(prior)
     kept = {}
     order = []
     conflicts = 0
-    for entries, _prior in per_file:
+    for target, entries, _prior in per_file:
+        if ALL_TARGETS in blocked or target in blocked:
+            continue
         for entry in entries:
             if entry["key"] in superseded:
                 continue
@@ -279,17 +325,22 @@ def collect(repo, roadmap, refs):
 
 
 def _atomic_write(path, text):
+    """tmp 에 다 쓴 뒤 os.replace — 실패하면 tmp 를 지우고 다시 던진다(반쯤 쓴 파일이 남지 않는다)."""
     tmp = "%s.tmp.%d" % (path, os.getpid())
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(text)
         os.replace(tmp, path)
-    except OSError:
+    except BaseException:
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
+
+
+def _why(exc):
+    return getattr(exc, "strerror", None) or type(exc).__name__
 
 
 def main(argv=None):
@@ -305,6 +356,9 @@ def main(argv=None):
         print("[qg_answered] 사용법: --ref 는 하나 이상, --roadmap 은 .. 없는 레포 상대경로",
               file=sys.stderr)
         return 2
+    if yaml is None:
+        print(NO_YAML, file=sys.stderr)
+        return 5
     entries, unreadable, conflicts, odd_answers = collect(args.repo, road, args.ref)
     notices = []
     if unreadable:
@@ -314,16 +368,22 @@ def main(argv=None):
     if odd_answers:
         notices.append("답이 틀의 값 밖이라 넘기지 않은 질문 %d개: %s"
                        % (len(odd_answers), " · ".join(odd_answers)))
+    # 알림 줄은 파일을 쓰기 전에 화면에 먼저 낸다 — 뒤의 쓰기가 실패해도 사라지지 않는다
+    for n in notices:
+        print(n, file=sys.stderr)
+    sys.stderr.flush()
     doc = yaml.safe_dump({"contract": CONTRACT_OUT, "entries": entries},
                          allow_unicode=True, sort_keys=False, width=1000000)
     try:
         _atomic_write(args.out, doc)
-        _atomic_write(args.notices, "".join(n + "\n" for n in notices))
-    except OSError as exc:
-        print("[qg_answered] 출력 파일을 쓰지 못했다 — %s" % exc.strerror, file=sys.stderr)
+    except (OSError, UnicodeError) as exc:
+        print("[qg_answered] 출력 파일을 쓰지 못했다 — %s" % _why(exc), file=sys.stderr)
         return 3
-    for n in notices:
-        print(n, file=sys.stderr)
+    try:
+        _atomic_write(args.notices, "".join(n + "\n" for n in notices))
+    except (OSError, UnicodeError):
+        print(NOTICE_FAIL, file=sys.stderr)
+        return 4
     return 0
 
 
