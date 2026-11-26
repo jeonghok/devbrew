@@ -123,6 +123,9 @@ LITERAL_EXEMPT_FILES = (
     # 진입 펜스를 실행해 은퇴 토큰의 advisory 를 잰다 — 토큰을 환경변수 값으로 쥐어야 한다.
     f"{SD}/tests/test_reviewing_spec_entry_fence.sh",
 )
+#: 끄기 변수 표의 `은퇴` 행이 이름을 갖는 변수 — 읽던 코드가 없어져 「삭제된 코드의 환경변수」 로 도출되지만
+#: 그 이름이 어디에 남는지는 `shared/tests/test_switch_tables.sh` 가 문다(AC18).
+TABLE_OWNED = frozenset({"DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE"})
 README = f"{SD}/README.md"
 README_RETIRED_HEADING = re.compile(r"^### 은퇴한 스위치")
 
@@ -261,7 +264,7 @@ def derivation():
     for lit in RETIRED_LITERALS:
         live_env.pop(lit, None)
 
-    tokens = ((s1 | s3 | ((s2 | s4 | s5) - set(stop))) - set(live_env)) | RETIRED_FULL
+    tokens = ((s1 | s3 | ((s2 | s4 | s5) - set(stop))) - set(live_env) - TABLE_OWNED) | RETIRED_FULL
     return {"S1": s1, "S2": s2, "S3": s3, "S4": s4, "S5": s5}, stop, live_env, frozenset(tokens)
 
 
