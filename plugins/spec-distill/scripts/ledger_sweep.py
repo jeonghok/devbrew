@@ -10,8 +10,6 @@
   링크: 저장소가 심은 링크는 따라가지 않는다 — 옛 원장 경로가 `inside_root` 를 통과하지 못하거나, 옮길 대상
   이름이 링크이거나, 상태 파일이 링크면 그 원장은 「읽지 못한 원장」 으로 세고 옮기지도 지우지도 않는다.
 
-Kill switches: DEVBREW_SPEC_DISTILL_DISABLE=1 · DEVBREW_SKIP_HOOKS 의 spec-distill:SessionEnd ·
-spec-distill:session-end-cleanup · spec-distill:spec-distill-gc — 셋 다 이 정리를 끈다.
 TTL: DEVBREW_SPEC_DISTILL_TTL_HOURS(기본 24) — ① 의 삭제 유예와 ② 의 판정 두 자리에 쓴다.
 """
 from __future__ import annotations
@@ -28,7 +26,6 @@ from state_path import SESSION_PATTERN, inside_root, state_root  # noqa: E402
 from gc_common import (  # noqa: E402
     GC_PENDING_PREFIX, folder_mtime_ns, gc_one, locked_root, root_escapes, safe_rmtree, ttl_ns,
 )
-from kill_switch_active import kill_switch_active  # noqa: E402
 import docreview_state  # noqa: E402
 from docreview_state import STATE_SUBDIR, load_state, state_dir_for  # noqa: E402
 
@@ -48,11 +45,6 @@ class Report:
         self.preserved: list[str] = []
         self.unread: list[str] = []
         self.uncountable: list[str] = []
-
-
-def disabled() -> bool:
-    return (kill_switch_active("spec-distill", "session-end-cleanup", "SessionEnd")
-            or kill_switch_active("spec-distill", "spec-distill-gc"))
 
 
 def recorded_doc(ledger_dir: Path) -> str | None:
@@ -249,8 +241,6 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="ledger_sweep.py")
     ap.add_argument("--root", default=None)
     a = ap.parse_args(argv)
-    if disabled():
-        return 0
     root = Path(a.root) if a.root else state_root()
     if root_escapes(root, "spec-distill"):
         print("[spec-distill] 원장 정리 — 셀 수 없음(state root '{0}' 가 링크를 거쳐 제자리 밖으로 풀린다)".format(root))

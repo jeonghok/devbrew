@@ -156,7 +156,7 @@ assert_contains "$line" "시간 초과" "양성 대조: 느린 config 호출에 
 
 # ── statusline_names_default ─────────────────────────────────────────────────
 S="$T/scripts"; mkdir -p "$S"
-cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" "$REAL/legacy_names.py" \
+cp "$REAL/control_plane.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" "$REAL/legacy_names.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/team_layout.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" \
   "$REAL/state_path.py" "$REAL/workflow_superpowers.py" "$S/"
 printf '%s\n' 'import json, sys' \

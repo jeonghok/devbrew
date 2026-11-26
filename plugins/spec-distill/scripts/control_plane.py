@@ -39,7 +39,6 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
-from kill_switch_active import kill_switch_active  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import legacy_names  # noqa: E402
 import repo_defaults  # noqa: E402
@@ -1243,14 +1242,6 @@ def gather(cwd: str, arg, deadline: Deadline, ctx: dict, detail: bool = True, fo
 
 # ── 명령줄 ───────────────────────────────────────────────────────────────────
 
-def switch_name():
-    if os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE") == "1":
-        return "DEVBREW_SPEC_DISTILL_DISABLE=1"
-    if kill_switch_active("spec-distill", "statusline"):
-        return "DEVBREW_SKIP_HOOKS 의 spec-distill:statusline"
-    return None
-
-
 def stdin_dir():
     """상태줄 표준 입력 JSON 의 workspace.current_dir → cwd. 없거나 읽을 수 없으면 None.
     STDIN_WAIT 초 · STDIN_MAX_BYTES 까지만 받는다 — 닫히지 않는 입력에도 기다리지 않는다."""
@@ -1303,9 +1294,6 @@ def timed_out_line(ctx: dict) -> str:
 def cmd_statusline() -> int:
     ctx = {}
     try:
-        if switch_name():
-            print("")
-            return 0
         deadline = Deadline(STATUSLINE_BUDGET)
         v = gather(stdin_dir() or os.getcwd(), None, deadline, ctx, detail=False)
         line = statusline_text(v["items"], v["interview"], v["minutes"], v["select_error"], v.get("default_name"),
@@ -1411,13 +1399,6 @@ def epic_view(path: str, report: dict, epic: str):
 
 
 def cmd_show(tasks: bool, arg, epic=None) -> int:
-    sw = switch_name()
-    if sw:
-        if tasks:
-            sys.stderr.write("꺼져 있다 — %s\n" % sw)
-            return 3
-        print("꺼져 있다 — %s" % sw)
-        return 0
     try:
         v = gather(os.getcwd(), arg, Deadline(SHOW_BUDGET), {}, focus=epic)
     except TimedOut as exc:

@@ -240,7 +240,7 @@ class OldSessionTest(Base):
 
 
 class SafetyTest(Base):
-    def test_kill_switches_spare_everything(self):
+    def test_retired_switches_do_not_spare(self):
         envs = [{"DEVBREW_SPEC_DISTILL_DISABLE": "1"},
                 {"DEVBREW_SKIP_HOOKS": "spec-distill:SessionEnd"},
                 {"DEVBREW_SKIP_HOOKS": "spec-distill:session-end-cleanup"},
@@ -249,10 +249,8 @@ class SafetyTest(Base):
             s = self.old_session("oldsess%02d" % envs.index(env))
             d = key_for(self.root, str(self.docs / "gone.md")); write_ledger(d, str(self.docs / "gone.md")); age(d)
             self.sweep(env)
-            self.assertTrue(s.exists(), env)
-            self.assertTrue(d.exists(), env)
-        self.sweep()                                   # 양성 대조 — 스위치 없으면 지운다
-        self.assertFalse(d.exists())
+            self.assertFalse(s.exists(), env)
+            self.assertFalse(d.exists(), env)
 
     def test_root_escape_refused(self):
         real = self.tmp / "elsewhere"; real.mkdir()

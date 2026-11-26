@@ -8,9 +8,7 @@
 소비자: 훅이 없어진 뒤(6.0.0) 남은 소비자는 `brief_review_state.py` 하나다 — `_yaml_scalar` 을
 쓴다(census #45의 spec-distill 부분).
 
-**담지 않는 것** — `kill_switch_active`(`shared/killswitch/` 정본의 형제 사본에서
-온다. 여기로 다시 가져오면 정본이 둘이 된다) · `resolve_session_id` / `state_root`
-(`state_path.py` 소유).
+**담지 않는 것** — `resolve_session_id` / `state_root`(`state_path.py` 소유).
 """
 from __future__ import annotations
 
