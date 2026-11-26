@@ -116,12 +116,15 @@ AFTER = {
     "R6e": {"R1a"},                                     # 열림
     "R7a": {"R7b", "R7c"},                              # 「아직」 · 담당자 없음
     "R7b": set(_AFTER_R7B),                             # 재리뷰로 이어짐 · 사용자가 남김 · 까닭 4 · 처리 없음 줄
-    "R7c": {"R7a", "R7b", "R4"} | _AFTER_R7B,            # 첫째 새 「아직」 · 둘째 까닭 4 · 위 줄처럼 옮김
+    "R7c": {"R7a", "R4"},                               # 첫째: 새 「아직」 줄 · 두 번째: 까닭 4
     "R7d": {"R7a", "R7b", "R7c"},                       # 「아직」 인 「돌려보냄」
     "R7e": {"R1a"},                                     # 열림
     "R7f": {"R7d", "R4"},                               # 돌아옴 — 처리 없음 줄(두 번째면 까닭 4)
     "R8b": {"R1a"},                                     # 열림
 }
+# 「지휘자가 가린다」 줄에서 지휘자가 대신 부른 명령 뒤의 줄. R7c 의 대신 명령은 「위 줄처럼」 처리를 옮긴다 —
+# R7b 의 뒤 상태다(§4 R7c 칸에는 적혀 있지 않다 — DO 길의 AFTER[R7c] 에는 넣지 않는다).
+CHOICE_AFTER = {"R1b": AFTER["R1b"], "R1c": AFTER["R1c"], "R7c": set(_AFTER_R7B)}
 
 
 def next_rows():
@@ -306,7 +309,8 @@ def at_cap(rig):
 
 
 def var(label, **kw) -> SimpleNamespace:
-    base = dict(label=label, alive=(), no_qg=False, kind=None, open_site=None, open_range=None)
+    base = dict(label=label, alive=(), no_qg=False, kind=None, open_site=None, open_range=None,
+                after=None, open_rc=None)
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -333,20 +337,20 @@ def _sending(rig) -> Path:
 
 def b_r1b_pre_only(rig):
     _sending(rig)
-    return var("보내기 전 파일만", kind="보냄")
+    return var("보내기 전 파일만", kind="보냄", after={"R1e"})
 
 
 def b_r1b_moved(rig):
     folder = _sending(rig)
     (folder / "handler-report.md").write_text("# 담당자 보고\n", encoding="utf-8")
-    return var("담당자가 옮긴 파일 있음 · 결과 파일 없음", kind="돌아옴")
+    return var("담당자가 옮긴 파일 있음 · 결과 파일 없음", kind="돌아옴", after={"R3a"})
 
 
 def b_r1c(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="보냄", worker=qg(1),
                     asks=[F.Ask(kind="담당자가 옮긴 질문", id="w1",
                                 text="담당자가 멈춘 질문 — 이 파일을 지워도 되나")]))
-    return var("담당자가 옮긴 질문")
+    return var("담당자가 옮긴 질문", after={"R1e"})
 
 
 def b_r1d(rig):
@@ -358,20 +362,20 @@ def b_r1e(rig):
     folder = put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="보냄", worker=qg(1)))
     rig.write_result(folder, "clean", rig.base_sha, rig.c1)
     rig.write_intent_return(folder, [])
-    return var("담당자가 없다 · 결과 파일 있음")
+    return var("담당자가 없다 · 결과 파일 있음", after={"R9"})
 
 
 def b_r2(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="닫힘", close_reason="에픽을 멈춤",
                     worker=qg(1), result=failed(),
                     answers=[answer("q-failed", "지적 목록을 얻지 못함", "이 에픽을 멈춘다")]))
-    return var("에픽을 멈춤")
+    return var("에픽을 멈춤", after={"R3b"})
 
 
 def b_r3a(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="돌아옴", worker=qg(1), result=failed(),
                     asks=[F.Ask(kind="지적 목록을 얻지 못함", id="q-failed", text=NO_VERDICT)]))
-    return var("얻지 못함 · 답 없음")
+    return var("얻지 못함 · 답 없음", after={"R3b"})
 
 
 def b_r3b(rig):
@@ -385,7 +389,7 @@ def b_r4_intent(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="돌아옴", worker=qg(1),
                     result=obtained(rig.base_sha, rig.c1),
                     asks=[F.Ask(kind="의도 점검", id="q1", text="이 기능이 정말 필요한가")]))
-    return var("의도 점검")
+    return var("의도 점검", after={"R5"})
 
 
 def b_r4_two_max(rig):
@@ -393,7 +397,7 @@ def b_r4_two_max(rig):
     put(rig, review("recheck", 3, c2, c3, stage="돌아옴", worker=qg(3), result=obtained(c2, c3),
                     blocking=[finding("지적 3")],
                     asks=[F.Ask(kind="두 번까지", id="q-cap", text="세 번째로 돌려보낼까")]))
-    return var("「두 번까지」")
+    return var("「두 번까지」", after={"R7d"})
 
 
 def b_r4_unfixed(rig):
@@ -402,28 +406,28 @@ def b_r4_unfixed(rig):
                     blocking=[finding("지적 1", "반박 — 설계가 그렇게 정했다")],
                     returns=[ret(rig, 1, "옮김")],
                     asks=[F.Ask(kind="고치지 않은 막는 지적", id="q-unfixed", text="반박한 지적을 어떻게 할까")]))
-    return var("고치지 않은 막는 지적")
+    return var("고치지 않은 막는 지적", after={"R9"})
 
 
 def b_r5(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="돌아옴", worker=qg(1),
                     result=obtained(rig.base_sha, rig.c1),
                     answers=[answer("q1", "의도 점검", "의도다")]))
-    return var("기록 경로 빔")
+    return var("기록 경로 빔", after={"R9"})
 
 
 def b_r6a_returned(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="돌아옴", worker=qg(1),
                     result=obtained(rig.base_sha, rig.c1), blocking=[finding("지적 1")],
                     answers=[answer("q1", "의도 점검", "잘못 골랐다", RECORD)]))
-    return var("돌아옴 · 의도 점검 답 「잘못 골랐다」")
+    return var("돌아옴 · 의도 점검 답 「잘못 골랐다」", after={"R6b"})
 
 
 def b_r6a_closed(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="닫힘", close_reason="막는 지적 없음",
                     worker=qg(1), result=obtained(rig.base_sha, rig.c1),
                     filtered_wrong=[F.Filtered(id="q7", text="앞서 잘못 골랐다고 답한 방향")]))
-    return var("닫힘 · 거른 「잘못 골랐다」 목록")
+    return var("닫힘 · 거른 「잘못 골랐다」 목록", after={"R6d"})
 
 
 def _wrong_closed(rig, reason, mark=""):
@@ -464,24 +468,24 @@ def _pending_return(rig, header: bool):
 
 def b_r7a(rig):
     _pending_return(rig, header=True)
-    return var("「아직」 · 살아 있음", alive=(IMPL_WORKER,))
+    return var("「아직」 · 살아 있음", alive=(IMPL_WORKER,), after={"R7b"})
 
 
 def b_r7b(rig):
     _pending_return(rig, header=True)
-    return var("「아직」 · 없음 · 처리 파일 있음")
+    return var("「아직」 · 없음 · 처리 파일 있음", after={"R7e"})
 
 
 def b_r7c_first(rig):
     _pending_return(rig, header=False)
-    return var("첫째 — 머리 없는 결과 파일")
+    return var("첫째 — 머리 없는 결과 파일", after={"R7a"})
 
 
 def b_r7c_second(rig):
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="돌아옴", worker=qg(1),
                     result=obtained(rig.base_sha, rig.c1), blocking=[finding("지적 1")],
                     returns=[ret(rig, 1, "처리 파일 없이 끝남"), ret(rig, 2, worker="impl-w2")]))
-    return var("둘째 — 처리 파일 없음")
+    return var("둘째 — 처리 파일 없음", after={"R4"})
 
 
 def b_r7d(rig):
@@ -509,7 +513,7 @@ def b_r7f(rig):
     rig.git("reset", "-q", "--hard", rig.c1)  # 닫은 뒤 브랜치가 다시 쓰여 고친 커밋이 사라졌다
     spec_only(rig)
     rig.dropped = c2
-    return var("기준 커밋 없음 · 리더 기록 커밋만")
+    return var("기준 커밋 없음 · 리더 기록 커밋만", after={"R7d"})
 
 
 def b_r8b(rig):
@@ -544,14 +548,14 @@ def b_rx_malformed(rig):
     text = F.render(review("premerge", 1, rig.base_sha, rig.c1))
     folder = rig.archive("qg-%s-premerge-%s-built-1" % (EPIC, TARGET))
     (folder / F.STATE_NAME).write_text(text.replace("- 단계: 열림", "- 단계: 도는 중"), encoding="utf-8")
-    return var("단계 값이 틀 밖")
+    return var("단계 값이 틀 밖", open_rc=3)
 
 
 def b_rx_mismatch(rig):
     code(rig)
     put(rig, review("premerge", 1, rig.base_sha, rig.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
                     worker=qg(1), result=obtained(rig.base_sha, rig.c1), blocking=[finding("지적 1")]))
-    return var("재리뷰로 이어짐인데 처리 없음 지적")
+    return var("재리뷰로 이어짐인데 처리 없음 지적", open_rc=4)
 
 
 BUILD = {
@@ -770,9 +774,9 @@ class TestQgReviewStateSweep(unittest.TestCase):
                 self.assertIsNotNone(after.id, after.text)
                 self.assertNotEqual(after.id, row_id, "할 일 뒤에도 같은 줄이다\n" + after.text)
                 self.assertNotEqual(after.id, "RX", "할 일 뒤 끝 줄이다\n" + after.text)
-                if rows[after.id].reason == rows[row_id].reason:
-                    self.assertIn(after.id, AFTER[row_id], "같은 까닭의 다른 줄이 「그 할 일 뒤 상태」 "
-                                                           "칸 밖이다\n" + after.text)
+                self.assertIn(after.id, AFTER[row_id], "「그 할 일 뒤 상태」 칸 밖이다\n" + after.text)
+                if v.after is not None:  # 그 변형이 적은 답 · 처리로 §4 가 정하는 다음 줄
+                    self.assertIn(after.id, v.after, v.label + "\n" + after.text)
 
     def test_conductor_choices_accepted(self):
         for row_id, build in self.variants(list(CHOOSE)):
@@ -781,7 +785,7 @@ class TestQgReviewStateSweep(unittest.TestCase):
                 self.assert_row(run_next(rig, v.alive, v.no_qg), row_id, v.label)
                 CHOOSE[row_id][1](rig)
                 after = run_next(rig)
-                self.assertIn(after.id, AFTER[row_id], after.text)
+                self.assertIn(after.id, CHOICE_AFTER[row_id], after.text)
 
     def test_next_open_is_accepted(self):
         for row_id, build in self.variants([r for r in ORDER if r in OPEN_ROWS]):
@@ -808,10 +812,10 @@ class TestQgReviewStateSweep(unittest.TestCase):
             with self.subTest(row=row_id, variant=build.__name__):
                 rig, v = self.build(build)
                 before = state_count(rig)
-                if row_id == "RX":  # 꼴이 깨졌거나 칸끼리 맞지 않는다 — 어느 자리도 받지 않는다
+                if row_id == "RX":  # 꼴이 깨졌으면 rc 3(읽지 못함), 칸끼리 맞지 않으면 rc 4(받지 않음)
                     for site in ("premerge", "recheck", "asked"):
                         proc = run_open(rig, site)
-                        self.assertIn(proc.returncode, (3, 4), proc.stdout + proc.stderr)
+                        self.assertEqual(proc.returncode, v.open_rc, site + "\n" + proc.stdout + proc.stderr)
                         self.assertEqual(state_count(rig), before, site)
                     continue
                 for site in ("premerge", "recheck"):
