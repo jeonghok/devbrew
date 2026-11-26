@@ -30,15 +30,13 @@ LP="$RD/suite-lock-path.txt"
 [ -e "$LP" ] || exec "$@"
 
 overlap() {   # overlap <busy|unusable> <주인> <잡은 시각> — 기록에 덧붙이고, 이 실행의 첫 겹침이면 화면 줄을 낸다
-  local ov="$RD/suite-overlap.txt" first=0 inner wrote=1
+  local ov="$RD/suite-overlap.txt" first=0 inner
   [ -s "$ov" ] || first=1
-  { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$ov"; } 2>/dev/null || wrote=0
+  printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$ov" 2>/dev/null
   if [ "$first" = 1 ]; then
     if [ "$1" = busy ]; then inner="잠금 주인: ${2} · ${3}"; else inner="잠금을 쓸 수 없었다"; fi
     printf '> [quality-gates] 차등 테스트가 다른 전체 테스트와 겹쳐 돈다 — 결과가 경합일 수 있다(%s).\n' "$inner" >&2
   fi
-  # 결과 파일의 겹침 줄은 이 기록에서 나온다 — 쓰지 못했으면 그 줄이 빠진다는 것을 알린다(판정은 그대로).
-  [ "$wrote" = 1 ] || printf '%s\n' '> [quality-gates] 겹침 기록을 쓰지 못했다 — 결과 파일의 「## 차등 테스트」 에 겹침 줄이 빠진다.' >&2
 }
 
 L="$(head -n 1 "$LP" 2>/dev/null)"

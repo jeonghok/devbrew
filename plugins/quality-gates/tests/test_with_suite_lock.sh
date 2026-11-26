@@ -19,7 +19,6 @@ ge() { python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.arg
 lt() { python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) - float(sys.argv[2]) < float(sys.argv[3]) else 1)' "$1" "$2" "$3"; }
 OVL_BUSY_HEAD='> [quality-gates] 차등 테스트가 다른 전체 테스트와 겹쳐 돈다 — 결과가 경합일 수 있다(잠금 주인: '
 OVL_UNUSABLE='> [quality-gates] 차등 테스트가 다른 전체 테스트와 겹쳐 돈다 — 결과가 경합일 수 있다(잠금을 쓸 수 없었다).'
-OVL_NOREC='> [quality-gates] 겹침 기록을 쓰지 못했다 — 결과 파일의 「## 차등 테스트」 에 겹침 줄이 빠진다.'
 
 newrd() {   # newrd <이름> [잠금 폴더] — 세션 폴더를 만들고, 잠금 폴더를 주면 잠금 자리 파일을 쓴다
   local rd="$T/$1"; mkdir -p "$rd"
@@ -145,28 +144,8 @@ case_lock_path_with_space() {   # Review Focus 3 — 공백 든 잠금 경로도
   [ ! -e "$rd/suite-overlap.txt" ] && ok "lock_path_with_space: 겹침 기록이 없다" || no "lock_path_with_space: 겹침 기록이 생겼다"
 }
 
-case_overlap_record_unwritable_noted() {   # 겹침 기록을 쓰지 못하면 결과 파일에 겹침 줄이 빠진다는 것을 표준 오류에 한 줄 알린다(판정 값은 없다)
-  local lk="$T/locks6/lk" rd out rc err
-  if [ "$(id -u)" = 0 ]; then ok "overlap_record_unwritable_noted: root 라 쓰기 막기를 잴 수 없어 건너뛴다"; return; fi
-  mkdir -p "$lk"; printf 'keep\n' > "$lk/report.md"; rd=$(newrd unwritable "$lk")
-  chmod a-w "$rd"
-  out=$("$W" "$rd" -- sh -c 'echo ran; exit 5' 2>"$T/unwritable.err"); rc=$?
-  chmod u+w "$rd"
-  assert_eq "$rc" "5" "overlap_record_unwritable_noted: 명령의 종료 코드를 그대로 낸다"
-  assert_eq "$out" "ran" "overlap_record_unwritable_noted: 명령이 잠금 없이 돌았다"
-  [ ! -e "$rd/suite-overlap.txt" ] && ok "overlap_record_unwritable_noted: 겹침 기록이 생기지 않았다(쓰기가 실제로 막혔다)" \
-    || no "overlap_record_unwritable_noted: 겹침 기록이 생겼다 — 쓰기 막기가 듣지 않아 아래 단언이 공허하다"
-  err="$(cat "$T/unwritable.err")"
-  assert_eq "$(printf '%s\n' "$err" | grep -cxF "$OVL_UNUSABLE")" "1" "overlap_record_unwritable_noted: 화면 겹침 줄은 그대로 한 번"
-  assert_eq "$(printf '%s\n' "$err" | grep -cxF "$OVL_NOREC")" "1" "overlap_record_unwritable_noted: 결과 파일에 겹침 줄이 빠진다는 알림이 한 번"
-  assert_eq "$(printf '%s\n' "$err" | grep -c .)" "2" "overlap_record_unwritable_noted: 표준 오류는 그 두 줄뿐이다(쓰기 실패의 셸 오류를 흘리지 않는다)"
-  # 쓸 수 있으면 그 알림이 없다(양성 짝)
-  "$W" "$rd" -- true 2>"$T/writable.err"
-  assert_eq "$(grep -cF "$OVL_NOREC" "$T/writable.err")" "0" "overlap_record_unwritable_noted 짝: 기록을 쓸 수 있으면 그 알림이 없다"
-}
-
 for c in case_free_lock_held_during_command case_busy_runs_without_wait case_unusable_runs case_rc_not_mixed \
-         case_other_waits_for_qg case_no_lock_file_exec case_lock_path_with_space case_overlap_record_unwritable_noted; do
+         case_other_waits_for_qg case_no_lock_file_exec case_lock_path_with_space; do
   echo "== $c"; $c
 done
 finish
