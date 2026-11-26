@@ -108,7 +108,6 @@ else
   # 어느 배포 경로로 불러도 그 변수가 effect·엄격성으로 재진다.
   kill_switch_for() {  # <candidate path> -> switch var name
     case "$(basename "$1")" in
-      run_audit_codex_reviewer.sh) echo 'DEVBREW_PLUGIN_AUDIT_DISABLE_WEB' ;;
       run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
       run_docreview_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
       *) echo '' ;;
@@ -245,6 +244,23 @@ EOF_KNOWN
 
       if [[ "$exp" == on ]]; then
         sw="$(kill_switch_for "$f")"
+        if [[ "$bn" == run_audit_codex_reviewer.sh ]]; then
+          # 감사 웹 끄기는 은퇴했다 — 은퇴한 이름을 켜도 웹은 프로필대로 켜진 채다.
+          cap_retired="$SCRATCH/ac21-retired-$slug"
+          mkdir -p "$cap_retired"
+          export DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1
+          obs_invoke "$f" "$cap_retired" || true
+          unset DEVBREW_PLUGIN_AUDIT_DISABLE_WEB
+          if [[ "$(obs_call_count "$cap_retired")" -lt 1 ]]; then
+            no "$bn: 은퇴한 감사 웹 끄기를 켜고 실행했으나 codex 호출이 관측되지 않았다"
+          else
+            for d in "$cap_retired"/call-*; do
+              [ -d "$d" ] || continue
+              check_posture "$d" "$bn (은퇴한 웹 끄기를 켜도, $(basename "$d"))" "on"
+            done
+          fi
+          continue
+        fi
         if [[ -z "$sw" ]]; then
           no "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
           continue

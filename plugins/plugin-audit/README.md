@@ -17,18 +17,12 @@ devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. �
   없으면 fresh discovery로 degrade(배너 표시).
 
 `cost_class: high` — dispatch 전에 축을 고르고(「중단」으로 멈출 수 있다) 규모를 한 줄로 본 뒤 진행한다 — 지출 승인을 묻지 않는다.
-Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
-본문 전 사전 검사(`scripts/entry_preflight.py`)가 이 스위치를 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
+본문 전 사전 검사(`scripts/entry_preflight.py`)가 끄기 변수 표를 읽는다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 **산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(규모 공시 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장
 `audit-journal.jsonl` 과 중간 파일이 모두 여기 쌓이고, 안의 `.gitignore`(`*`)로 스스로 git-ignore 된다.
 감사가 끝나면 상태 한 줄과 리포트(`audit.md`) 경로를 보고한다 — 데이터 · 원장 경로는 물으면 보인다.
 같은 날 같은 대상을 다시 감사하면 `-2` 로 새로 만든다.
-
-`DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1` — codex 감사 co-reviewer의 웹 검색만 비활성화한다
-(AC21). 감사 preamble이 외부 prior-art 근거를 요구해 기본은 ON(`web_search="live"`)이지만,
-꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
-(graceful degradation).
 
 `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1` — 대상 플러그인의 자체 테스트 실행(`scripts/run-own-tests.sh`가
 `scripts/audit-sandbox.sh create-sandbox`로 만든 일회용 샌드박스에서 돈다)을 끈다. 축③은 테스트를 *읽어*

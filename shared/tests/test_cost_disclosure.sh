@@ -99,15 +99,15 @@ EC="$ROOT/plugins/spec-distill/skills/epic-conductor/SKILL.md"
 PA="$ROOT/plugins/plugin-audit/skills/plugin-audit/SKILL.md"
 AC="$ROOT/plugins/quality-gates/skills/artifact-critique/SKILL.md"
 W_EC="$(win "$EC" '### 4. 규모 공시' '##')"; rc_ec=$?
-W_PA="$(win "$PA" '3. **범위 고르기 · 규모 공시' '4. **실행 디렉토리**')"; rc_pa=$?
+W_PA="$(win "$PA" '2. **범위 고르기 · 규모 공시' '3. **실행 디렉토리**')"; rc_pa=$?
 W_AC="$(win "$AC" '### E3 — 범위 고르기 · 규모 공시' '##')"; rc_ac=$?
 assert_eq "$rc_ec" "0" "(나) epic-conductor: 「### 4. 규모 공시」 절의 시작과 끝을 찾았다"
-assert_eq "$rc_pa" "0" "(나) plugin-audit: step 3 「범위 고르기 · 규모 공시」 부터 step 4 앞까지 찾았다"
+assert_eq "$rc_pa" "0" "(나) plugin-audit: step 2 「범위 고르기 · 규모 공시」 부터 step 3 앞까지 찾았다"
 assert_eq "$rc_ac" "0" "(나) artifact-critique: 「### E3 — 범위 고르기 · 규모 공시」 절의 시작과 끝을 찾았다"
 assert_contains "$W_EC" '지출 승인을 묻지 않는다' "(나) epic-conductor 규모 공시 절: 지출 승인을 묻지 않는다"
-assert_contains "$W_PA" '지출 승인을 묻지 않는다' "(나) plugin-audit step 3: 지출 승인을 묻지 않는다"
+assert_contains "$W_PA" '지출 승인을 묻지 않는다' "(나) plugin-audit step 2: 지출 승인을 묻지 않는다"
 assert_contains "$W_AC" '지출 승인을 묻지 않는다' "(나) artifact-critique E3: 지출 승인을 묻지 않는다"
-assert_contains "$W_PA" '「감사자 k · 반박 최대 k · codex 감사 k회' "(나) plugin-audit step 3 (b): 규모 공시 줄 본문(감사자 k · 반박 최대 k · codex 감사 k회)"
+assert_contains "$W_PA" '「감사자 k · 반박 최대 k · codex 감사 k회' "(나) plugin-audit step 2 (b): 규모 공시 줄 본문(감사자 k · 반박 최대 k · codex 감사 k회)"
 
 # 규칙 문서도 같은 문장을 갖는다(음성 scan 의 양의 짝).
 COST="$(grep -F '**모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다**' "$ROOT/CLAUDE.md")"
@@ -117,8 +117,7 @@ assert_contains "$P22" '어느 클래스의 스킬도 지출 승인을 묻지 �
 
 # ── RC14 — 루프 상한 · kill switch 는 남는다 ──────────────────────────────────
 assert_contains "$W_EC" '엔진의 재리뷰 상한까지' "RC14 epic-conductor: 규모 줄이 리뷰 라운드 상한을 밝힌다"
-assert_contains "$(cat "$PA")" 'DEVBREW_PLUGIN_AUDIT_DISABLE=1' "RC14 plugin-audit: kill switch"
-assert_contains "$W_PA" '상한 없음' "RC14 plugin-audit: step 3 이 상한 없는 부분을 밝힌다"
+assert_contains "$W_PA" '상한 없음' "RC14 plugin-audit: step 2 이 상한 없는 부분을 밝힌다"
 for lit in 'effective_max_rounds' 'artifact_stagnation.py'; do
   assert_contains "$(cat "$AC")" "$lit" "RC14 artifact-critique: $lit"
 done

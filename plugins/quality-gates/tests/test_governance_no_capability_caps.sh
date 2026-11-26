@@ -143,7 +143,7 @@ assert_not_contains "$p22" '<Use_When>' "AC12: P22 죽은 장치 없음"
 # AC12 바이트 같음 — 설계 §2 의 확정 문안 세 줄(설계 파일에서 읽지 않는다).
 FIXED_CLAUDE='- **모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다** (`low`|`medium`|`high`|`variable`). `high` 는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다. 어느 클래스의 skill 도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문도 지출 승인이 아니라 그대로 묻는다. 클래스보다 비싸게 도는 skill 은 버그다.'
 FIXED_P22_1='**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter `metadata` 아래에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.'
-FIXED_P22_2='코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 3 · `shared/tests/test_cost_disclosure.sh`'
+FIXED_P22_2='코드: `plugins/spec-distill/skills/epic-conductor/SKILL.md` 의 `### 4. 규모 공시` · `plugins/plugin-audit/skills/plugin-audit/SKILL.md` phase 0 step 2 · `shared/tests/test_cost_disclosure.sh`'
 assert_eq "$(grep -cxF -- "$FIXED_CLAUDE" "$CLAUDE_MD")" "1" "AC12: CLAUDE.md cost 줄이 설계 §2 확정 문안과 바이트 같다"
 assert_eq "$(grep -cxF -- "$FIXED_P22_1" "$PHIL")" "1" "AC12: P22 본문 첫 줄이 설계 §2 확정 문안과 바이트 같다"
 assert_eq "$(grep -cxF -- "$FIXED_P22_2" "$PHIL")" "1" "AC12: P22 코드 줄이 설계 §2 확정 문안과 바이트 같다"
