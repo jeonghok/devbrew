@@ -14,7 +14,7 @@
 
 - 자리 표시 — `<지휘 자원>` 은 지휘자가 보내는 글에 준 이 로드맵의 지휘 자원 폴더(`…/files`), `<spec-distill 설치본>` 은 이 세션이 쓰는 spec-distill 설치본 폴더다. 지휘자가 준 글의 실제 경로로 바꿔 쓴다.
 - 한 PR · 한 브랜치(`feature/conductor-qg-review-edges`). 과제 차례대로 커밋한다 — 문서 과제(Task 10–12)는 스크립트 과제(Task 2–9)가 낸 명령 이름과 출력 꼴을 글자로 인용한다.
-- 판 번호는 지휘자가 준다. 계획 · 테스트에 판 글자를 박지 않는다(락이 판을 재면 `plugin.json` 에서 읽는다). spec-distill 은 minor(새 스크립트 · 새 동작), quality-gates 는 patch(문서 하나).
+- 판 번호는 지휘자가 준다. 계획 · 테스트에 판 글자를 박지 않는다(락이 판을 재면 `plugin.json` 에서 읽는다). spec-distill 은 minor(새 스크립트 · 새 동작), quality-gates 는 patch(문서 하나), plugin-audit · project-init 은 공유 `shared/deps/check_deps.py` 의 측정이 바뀌어 함께 올린다(D76) — 올림 단위와 번호는 지휘자가 구현을 보낼 때 주고, 머지 직전에 기본 브랜치의 판이 올라가 있으면 다시 맞춘다.
 - 상태 파일은 머지 앞 자리(첫 리뷰 · 좁은 재리뷰 · 구현이 끝난 뒤 이름으로 청한 리뷰)만 쓴다. spec 승인 앞 · 로드맵 끝은 지금 문장을 두고 spec 쪽 다시 보내기 표지에 설계문서 커밋만 더한다(설계 Non-goals · D6).
 - 스크립트는 상태 파일 · 그 파일에 적힌 경로의 파일 · 보관 폴더 · git · 지휘자가 넘긴 인자(살아 있는 담당자 이름 · `--no-qg` · 뺄 파일)만 본다. 대화 · PR 본문 · 기록 파일 · 기계 상태의 쌓인 기록 줄은 읽지 않는다.
 - 상태를 옮기는 명령은 `send` · `back` · `record` 셋뿐이다. `open` 은 새 상태 파일만 만들고 앞 리뷰를 건드리지 않는다. 닫기만 하는 명령은 없다(AC1 · AC26).
@@ -485,12 +485,17 @@
 **Files:**
 - Modify: `plugins/spec-distill/dependencies.md` · `README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
 - Modify: `plugins/quality-gates/CHANGELOG.md` · `.claude-plugin/plugin.json`
+- Modify: `plugins/plugin-audit/CHANGELOG.md` · `.claude-plugin/plugin.json` · `plugins/project-init/CHANGELOG.md` · `.claude-plugin/plugin.json`(공유 `check_deps.py` 를 싣는 플러그인 — D76)
 - Modify: `plugins/spec-distill/tests/test_qg_review_readable.sh`(머리 주석 — 제안 34 · 35)
-- Modify(물음 3 의 답에 따라): `shared/deps/check_deps.py`(`plugins/spec-distill/scripts/check_deps.py` 가 심볼릭 링크로 가리키는 정본 — `_measure_row` 에 PyYAML 을 재는 길) · `shared/tests/test_check_deps.py`(PyYAML 이 있을 때 판 셋 · 없을 때 사유 줄을 재는 테스트) — D73
+- Modify: `shared/deps/check_deps.py`(`plugins/spec-distill/scripts/check_deps.py` 가 심볼릭 링크로 가리키는 정본 — `_measure_row` 에 PyYAML 을 재는 길) · `shared/tests/test_check_deps.py`(PyYAML 이 있을 때 판 셋 · 없을 때 사유 줄을 재는 테스트) — D73
 
-- [ ] **Step 1: 의존 표.** `dependencies.md` 에 PyYAML 행(강도 「알림」, 없을 때 「답 넘기기는 rc 5 로 답 없이 보낸다(질문이 더 나온다) · 리뷰 상태의 「돌아옴」 은 합치기 전 지적 목록 대신 결과 파일의 고칠 목록에서 옮기고 의도 점검은 셀 수 없음으로 둔다 — 둘 다 그렇다고 알린다」)을 더한다. 판 칸 둘은 측정이 쓴다(손으로 고치지 않는다 — D73). **측정을 어떻게 고칠지는 계획 담당자의 물음 3 을 기다린다** — `check_deps.py` 는 네 플러그인이 심볼릭 링크로 싣는 `shared/deps/check_deps.py` 라 고치면 네 플러그인의 판이 함께 오른다. 답이 오면 이 걸음을 그 답으로 채운다.
+- [ ] **Step 1: 의존 표.** `dependencies.md` 에 PyYAML 행(강도 「알림」, 없을 때 「답 넘기기는 rc 5 로 답 없이 보낸다(질문이 더 나온다) · 리뷰 상태의 「돌아옴」 은 합치기 전 지적 목록 대신 결과 파일의 고칠 목록에서 옮기고 의도 점검은 셀 수 없음으로 둔다 — 둘 다 그렇다고 알린다」)을 더한다. 판 칸 둘은 측정이 쓴다(손으로 고치지 않는다 — D73). 측정은 이렇게 고친다(D76) —
+  - 실패하는 테스트 먼저: `shared/tests/test_check_deps.py` 에 `test_measure_pyyaml_present`(PyYAML 이 있는 하위 프로세스에서 `_measure_row("PyYAML", …)` 가 `yaml.__version__` 의 판 셋과 사유 `None` 을 낸다) · `test_measure_pyyaml_absent`(`yaml` import 를 막은 하위 프로세스에서 판 `None` 과 사유 「PyYAML 을 불러오지 못했다」). 판 글자는 박지 않고 그 프로세스의 `yaml.__version__` 과 견준다. `cd shared/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_check_deps -v` 로 FAIL 을 본다.
+  - `shared/deps/check_deps.py` 의 `_measure_row` 에 `name == "PyYAML"` 갈래 — 함수 안에서 `import yaml` 하고 `version_triple(yaml.__version__)`, import 가 실패하면 `(None, "PyYAML 을 불러오지 못했다")`. 다른 이름의 갈래는 그대로.
+  - 같은 명령 PASS 와 `bash shared/tests/test_check_deps.sh` PASS. 그 뒤 `python3 plugins/spec-distill/scripts/check_deps.py measure` 로 PyYAML 행 판 칸을 채운다(다른 행의 판 칸이 함께 바뀌면 그대로 둔다 — 측정이 쓴 값이다).
+  - 다른 세 플러그인의 `dependencies.md` 에는 PyYAML 행을 더하지 않는다(그 플러그인의 의존이 바뀐 것이 아니다 — 측정할 수 있는 이름이 는 것이다).
 - [ ] **Step 2: README.** `## 한계` 에 둘 — §6 의 한계(에픽 PR diff 에 섞인 가짜 기록 · qg 가 스스로 읽는 답 파일)와 Non-goals 의 한계(상태 파일은 기계 상태와 같은 폴더 나무 · 처리 파일 경로의 옆 폴더라 같은 사용자 권한의 담당자가 고치는 것을 막지 못한다 · 마지막 확인은 승인 기록 다시 보이기 · 지워진 지적은 거기에도 보이지 않는다). Principles Instantiated 에 새 스크립트 한 줄. 스크립트 목록에 `qg_review_state.py` 세 모듈.
-- [ ] **Step 3: 판 · CHANGELOG.** 지휘자가 준 번호로 두 `plugin.json` 을 올리고, CHANGELOG 에 `## [<판>] — <날짜>` 와 Added(상태 스크립트 · rc 4 · 5) · Changed(기록 자리 · 머지 앞 절차 · 이름으로 청한 리뷰는 앞 리뷰가 닫힌 뒤) · Fixed(답 넘기기 가장자리) — quality-gates 는 Changed(꼴 문서에 읽히는 이름을 적음).
+- [ ] **Step 3: 판 · CHANGELOG.** 지휘자가 준 번호로 네 `plugin.json`(spec-distill · quality-gates · plugin-audit · project-init)을 올리고, plugin-audit · project-init 의 CHANGELOG 에는 Changed(「의존 측정(`check_deps.py measure`)이 PyYAML 판을 잰다 — 공유 파일 변경」) 한 줄을 적는다. spec-distill · quality-gates 는 CHANGELOG 에 `## [<판>] — <날짜>` 와 Added(상태 스크립트 · rc 4 · 5) · Changed(기록 자리 · 머지 앞 절차 · 이름으로 청한 리뷰는 앞 리뷰가 닫힌 뒤) · Fixed(답 넘기기 가장자리) — quality-gates 는 Changed(꼴 문서에 읽히는 이름을 적음).
 - [ ] **Step 4: 머리 주석.** `test_qg_review_readable.sh` 머리 주석이 잠그는 파일(`qg-review.md` · `dependencies.md` · `README.md`)을 다 적고 은퇴한 규칙 문구를 뺀다(제안 34 · 35).
 - [ ] **Step 5:** `bash shared/tests/test_plugin_versions.sh` 같은 판 락이 있으면 그것과 `bash plugins/spec-distill/tests/test_qg_review_readable.sh` PASS(판 락의 실제 이름은 `git ls-files 'shared/tests/*' | grep -i version` 으로 찾는다).
 - [ ] **Step 6: 커밋.** `git commit -m "chore(conductor): 리뷰 상태 스크립트의 의존 · 한계 · 판" -- <위 파일들>`
@@ -508,7 +513,7 @@
 - [ ] **Step 3: 보고 파일.** 리뷰의 AC 줄들을 `TMPDIR/ac-report.md` 에 쓴다.
 - [ ] **Step 4: 미룸 표.** 리뷰가 미룸 · 빠짐으로 낸 AC 와 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표에 `| 항목 | 이유 | 받는 곳 |` 행으로 더한다(받는 곳은 로드맵의 에픽 번호 또는 `#<PR 번호>`). 커밋: `git commit -m "docs(spec): R9 구현 뒤 미룸을 적는다" -- docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md`
 - [ ] **Step 5: 덮음 확인.** PR 을 만들기 전에 `python3 <spec-distill 설치본>/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md "$TMPDIR/ac-report.md"` 를 돌려 출력 전부를 마지막 보고에 싣는다(경고는 지휘자가 사용자에게 보인다).
-- [ ] **Step 6: PR 본문 재료.** 제안 열다섯(§7)의 가름 — 「들어감」 은 그 AC, 「계획이 가림」(24 · 27 · 32 · 33 · 34 · 35 · 23 의 가드)은 「받음 — Task 9 · 14」, 「남김(받는 곳 없음)」(25 의 사유 나누기)은 그대로 — 과 `TMPDIR/lock-map.md` 를 마지막 보고에 싣는다(AC22).
+- [ ] **Step 6: PR 본문 재료.** 제안 열다섯(§7)의 가름 — 「들어감」 은 그 AC, 「계획이 가림」(24 · 27 · 32 · 33 · 34 · 35 · 23 의 가드)은 「받음 — Task 9 · 14」, 「남김(받는 곳 없음)」(25 의 사유 나누기)은 그대로 — 과 Task 10 Step 1 의 지우는 락 대응표를 마지막 보고에 싣는다(AC22). PR 본문 인계 절(`## 통합 리뷰 인계`)에 「이 PR 이 공유 `check_deps.py` 때문에 plugin-audit · project-init 의 판을 올린다 — 그 둘을 고치는 다른 PR 과 판 번호가 겹칠 수 있고, 뒤에 머지되는 쪽이 맞춘다」 를 싣게 마지막 보고에 적는다.
 
 ---
 
@@ -540,7 +545,7 @@
 | `conducting.md` 잠금 문장 | R7 D48 이 R9 로 넘김 | Task 11 `lock-users-qg` |
 | `qg-review.md` 「## 호출 줄」 절 | R7: 호출 줄 · 다시 부르기 문장 | Task 10 — 같은 절의 quality-gates 가 없을 때 문장 옆에 `--no-qg` 를 넘기는 문장을 더한다 |
 
-뒤에 머지되는 쪽이 기본 브랜치를 합친다. 같은 판 번호로 올린 `plugin.json` 은 충돌 없이 합쳐질 수 있어 합친 뒤 기본 브랜치 쪽 판을 `git diff` 로 견준다.
+이 PR 은 공유 `check_deps.py` 때문에 plugin-audit · project-init 의 판도 올린다(D76) — 그 둘을 고치는 다른 PR 과 판 번호가 겹칠 수 있다. 뒤에 머지되는 쪽이 기본 브랜치를 합친다. 같은 판 번호로 올린 `plugin.json` 은 충돌 없이 합쳐질 수 있어 합친 뒤 기본 브랜치 쪽 판을 `git diff` 로 견준다.
 
 ## 계획이 정한 것 (설계에 없던 자리)
 
