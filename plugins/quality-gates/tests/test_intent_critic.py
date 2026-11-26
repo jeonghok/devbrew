@@ -3592,14 +3592,17 @@ class TestProcedureDoc(unittest.TestCase):
         return text.split("\n## %s\n" % head, 1)[1].split("\n## ", 1)[0]
 
     def test_slot_files_are_read_to_the_end(self):
-        """칸 파일(다른 팀 기록이 실린 근거 파일 포함)은 끝까지 읽어 넘긴다 — 둘째 호출은 I3 을 가리킨다."""
+        """칸은 칸 사본의 경로다 — 리뷰어가 끝까지 읽는다(R7 AC1 · AC25). 둘째 호출은 I3 의 칸 사본 펜스를 K=2 로 돈다."""
         text = REFERENCE.read_text(encoding="utf-8")
-        rule = ("칸 파일이 Read 한 번에 다 읽히지 않으면(다른 팀 기록이 실린 `intent-evidence.txt` 는 커질 수 있다) "
-                "끝까지 이어 읽어 전부 넣는다 — 다 넣지 못했으면 어느 칸을 어디까지 넣었는지 사용자에게 보인다"
-                "(잘린 파일을 말없이 넘기지 않는다).")
+        rule = ("`slots --call <k>` 가 낸 경로를 칸에 싣는다 — 내용을 싣지 않는다. 리뷰어는 그 경로의 파일을 "
+                "끝까지 읽고 칸마다 끝 값을 응답 맨 앞에 적는다.")
         self.assertEqual(text.count(rule), 1)
         self.assertEqual(self._section("I3 첫째 호출").count(rule), 1)
-        self.assertEqual(self._section("I4 둘째 호출").count("칸 값은 I3 과 같고"), 1)
+        self.assertNotIn("칸 값은 경로가 아니라 **내용**이다", text)
+        self.assertNotIn("끝까지 이어 읽어 전부 넣는다", text)
+        i4 = self._section("I4 둘째 호출")
+        self.assertEqual(i4.count("I3 의 칸 사본 펜스를 `K=2` 로 돌려"), 1)
+        self.assertEqual(i4.count("사본은 덧붙인 뒤에 만든다"), 1)
 
     def test_result_section_only_on_rendered_runs(self):
         """결과 절의 다른 팀 목록은 `render` 가 돈 실행에만 있다 — 건너뛴 실행의 목록은 상태 문서와 같은 말."""
@@ -3648,19 +3651,14 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
     def test_push_line_only_when_published(self):
-        """답 커밋 push 줄은 갈래가 둘이다 — 「게시된 판정」 은 게시된 갈래에만 있다."""
+        """답 커밋 push 줄은 게시 여부와 무관한 한 문장이다(R7 AC34) — 게시 절을 읽어 가르는 갈래가 없다."""
         i7 = self._section("I7 돌려주기")
-        posted = "「답 커밋 <해시> 를 push 한다 — 게시된 판정은 그 앞 커밋의 것이다」"
-        unposted = "게시하지 않은 실행이면 — 「답 커밋 <해시> 를 push 한다」."
-        self.assertEqual(i7.count(posted), 1)
-        self.assertEqual(i7.count(unposted), 1)
-        line = [l for l in i7.split("\n") if posted in l][0]
-        self.assertTrue(line.startswith(
-            "  - `commit:` 이 커밋 해시이고 result.md `## 게시` 줄이 `posted:` 로 시작하면 — "), line)
-        self.assertLess(line.index(posted), line.index(unposted))
-        self.assertEqual(line.count("게시된 판정"), 1)
-        tail = line[line.index(unposted):]
-        self.assertNotIn("게시된 판정", tail.split(" push ", 1)[0])
+        sentence = "「답 커밋 <해시> 를 push 한다 — 이 실행이 판정을 게시했다면 그 판정은 그 앞 커밋의 것이다」"
+        self.assertEqual(i7.count(sentence), 1)
+        line = [l for l in i7.split("\n") if sentence in l][0]
+        self.assertTrue(line.startswith("  - `commit:` 이 커밋 해시면 — "), line)
+        for old in ("게시된 판정은 그 앞 커밋의 것이다", "게시하지 않은 실행이면", "posted:"):
+            self.assertNotIn(old, REFERENCE.read_text(encoding="utf-8"))
         for fact in ("push 해야 답 파일이 PR 과 함께 머지되고",
                      "push 전에 qg 를 다시 돌리면 게시가 `skipped: pr-mismatch` 로 빠진다"):
             self.assertIn(fact, line)

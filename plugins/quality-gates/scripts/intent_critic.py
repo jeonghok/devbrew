@@ -886,7 +886,10 @@ def parse_reviewer_output(text: str) -> Optional[dict]:
 
 
 def _slot_paths(rd: str, k: int) -> List[str]:
-    return [_path(rd, SLOT_COPY % (k, slot)) for slot in SLOT_NAMES[k]]
+    paths: List[str] = []
+    for slot in SLOT_NAMES[k]:
+        paths.append(_path(rd, SLOT_COPY % (k, slot)))
+    return paths
 
 
 def _checked_output(path: str, rd: str, k: int) -> tuple:
