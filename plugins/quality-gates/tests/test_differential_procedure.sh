@@ -284,9 +284,8 @@ case_overlap_line_in_result() {
 # 견주는 것은 실패할 수 없다 — 대신 겹침 기록이 판정에 닿을 수 있는 길 셋을 막는다:
 #   (1) 기록 펜스를 겹침 기록 있음 · 없음으로 돌려 `## 판정` 절이 같다(겹침 줄은 `## 차등 테스트` 에만 붙는다)
 #   (2) 판정 펜스(final-verdict 표지 사이)와 D5 펜스(차등 결과 줄을 내는 펜스)가 겹침 기록을 이름으로 들지 않는다
-#   (3) scripts/ 아래 전부(하위 폴더 · shared 에서 링크로 싣는 스크립트 포함 — BSD grep -R 은 링크를 따라가지 않아 find -L 로 연다)에서
-#       겹침 기록을 아는 파일은
-#       감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다
+#   (3) scripts/ 아래 전부(하위 폴더 · shared 에서 링크로 싣는 스크립트 포함 — BSD grep -R 은 링크를 따라가지 않아
+#       find -L 로 연다)에서 겹침 기록을 아는 파일은 감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다
 case_verdict_unchanged_with_overlap() {
   local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
   local a b
