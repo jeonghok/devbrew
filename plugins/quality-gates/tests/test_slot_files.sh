@@ -405,6 +405,12 @@ if [ -f "$RDIR/review-i1-slot-security-b1-t2-intent.txt" ] && [ ! -s "$RDIR/revi
   ok "멈춘 호출은 끝 값 없는 빈 사본을 남겨 대조가 그 시도를 실패로 센다"
 else no "멈춘 호출의 빈 의도 사본이 없다(대조가 그 시도를 놓친다)"; fi
 
+chmod a-w "$RDIR"
+out="$(slot security 3)"; rc=$?
+chmod u+w "$RDIR"
+assert_eq "$rc" "2" "빈 사본도 쓰지 못하면 rc 2 — 그 리뷰어를 실패로 센다(묶음이 대조에서 조용히 빠지지 않는다)"
+assert_contains "$out" "빈 칸 사본도 쓰지 못했다" "rc 2 의 까닭을 한 줄로 보인다"
+
 note "── split_fence_runs"
 out="$(split_slot security 1 1 'src/a.py')"; rc1=$?
 out2="$(split_slot security 2 1 'src/한글.py

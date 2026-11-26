@@ -319,7 +319,7 @@ trivia 펜스다. trivia 실행은 `clean` 이 아니다(`not-certified (trivia)
    - `.doc-paths` 의 `bad_patterns:` 가 `-` 가 아니면: `> [quality-gates] 읽지 못한 문서 경로 패턴 — 적용하지 않았다: <bad_patterns>`
    - stdout 의 `self_state:` 가 0 보다 큰 수면 공시 한 줄(조용히 넘기지 않는다 — 경로는 `$RD/review-i1.self-state` 의 줄들): `> [quality-gates] qg 상태 파일이라 리뷰에서 건너뛴 추적 안 되는 경로 <self_state 값>개: <review-i1.self-state 의 경로들>`
    - `files:` 가 0 보다 크고 `filtered_files: 0` 이면 `> [quality-gates] 리뷰할 diff 가 비었다 — 바뀐 파일 <files>개가 전부 문서 경로라 리뷰에서 뺐다. 이 실행은 clean 이 아니다.` 를 내고 리뷰어 · 차등 테스트 · e2e 를 건너뛰어 [Final verdict](#final-verdict) 의 「걸러진 diff 가 빈 실행」 펜스로 간다.
-   - 리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i1.diff` 의 내용이다 — 문서 경로를 뺀 diff 이고, 보안 · 외부 리뷰어 · codex · 재비판이 모두 이 파일 하나를 받는다. `review-i1.full.diff` 는 거르기 전 diff, `review-i1.names` 는 거르기 전 경로 목록이다.
+   - 리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i1.diff` 의 내용이다 — 문서 경로를 뺀 diff 이고, codex 러너는 이 파일을 읽고 보안 · 외부 리뷰어 · 재비판은 이 파일에 끝 값을 붙인 칸 사본의 경로를 받는다(Step 3 · Step 3.5). `review-i1.full.diff` 는 거르기 전 diff, `review-i1.names` 는 거르기 전 경로 목록이다.
    - 스코프가 `topic` · `range` 면 리뷰어로 가기 전에 [Trivia escape](#trivia-escape) 의 미룬 판단을 한다.
 
    **Scope transparency (P8 determinism-economy):** 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> 리뷰 범위: 이번 세션에서 바뀐 파일 <COUNT>개. 브랜치 전체를 보려면 /quality-gates:quality-pipeline branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 스코프가 `topic` 으로 풀렸으면 대신 `> 리뷰 범위: 토픽 <topic_key> — 바뀐 파일 <COUNT>개 · 구성원 <branches>.` 를 낸다. 명시적 `/quality-gates:quality-pipeline branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 범위 모드도 출력하지 않는다 — P2b 의 「리뷰 범위」 줄이 이미 냈다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지).
@@ -372,7 +372,7 @@ echo "> [quality-gates] 리뷰어 모델: ${CLAUDE_CODE_SUBAGENT_MODEL:-세션 �
 
 - `CRITERIA` = the criteria block's **content** (reviewers cannot read the plugin cache path).
 - `INTENT` = the `intent:` line from P3, then the intent file's content.
-- `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i1.diff` that Step 1c wrote in this run — every reviewer below (security · external · codex · re-critic) gets this one file.
+- `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i1.diff` that Step 1c wrote in this run — the codex runner reads this file; security · external reviewers and the re-critic get the path of an end-value copy of it instead (`FILTERED_DIFF_FILE` · Step 3.5 `<diff_file>`).
 - `INTENT_FILE` · `FILTERED_DIFF_FILE` = 보안 · 외부 리뷰어 호출마다 아래 「칸 사본」 펜스가 낸 두 경로(의도 출처 · 리뷰 diff 의 칸 사본). 보안 · 외부 리뷰어에게는 위 두 칸의 글 대신 이 경로가 간다 — 리뷰받는 쪽에서 온 글은 칸에 싣지 않는다.
 - `PROJECT_DIR` = P0 의 `project_dir` — 범위 모드에서 P2b 의 리뷰 트리 펜스가 `review_tree: <경로>` 를 냈으면 그 경로다. 아래 모든 dispatch 의 `project_dir`(외부 리뷰어 프롬프트의 `<project_dir>` 포함)와 codex 러너 · Step 3.5 재비판이 이 값 하나를 쓴다.
 
@@ -425,7 +425,7 @@ If `pr-review-toolkit` is not installed, continue and print
 `> [quality-gates] specialist <X> unavailable (<plugin> 미설치) — degraded coverage`. Do not thread a
 `model:` override into any external dispatch.
 
-**칸 사본** — 보안 · 외부 리뷰어를 부르는 호출마다(한 번 다시 부르는 호출도) 그 호출 앞에 돌린다. `<리뷰어 이름>` 은 보안이면 `security`, 외부 리뷰어면 `ext-<agent 이름의 마지막 `:` 뒤>`(예: `pr-review-toolkit:code-reviewer` → `ext-code-reviewer`)다. `<시도 번호>` 는 처음 `1`, 한 번 다시 부르면 `2` 다. 펜스가 낸 두 줄이 그 호출의 `INTENT_FILE`(첫 줄) · `FILTERED_DIFF_FILE`(둘째 줄)이다 — 칸마다 · 호출마다 새 끝 값이 붙은 사본이다.
+**칸 사본** — 보안 · 외부 리뷰어를 부르는 호출마다(한 번 다시 부르는 호출도) 그 호출 앞에 돌린다. `<리뷰어 이름>` 은 보안이면 `security`, 외부 리뷰어면 `ext-<짧은 이름>` 이다 — 짧은 이름은 agent 이름의 마지막 `:` 뒤를 소문자로 바꾸고 `[a-z0-9-]` 밖의 글자를 모두 `-` 로 바꾼 것이다(예: `pr-review-toolkit:code-reviewer` → `ext-code-reviewer`). 한 실행의 외부 리뷰어 둘이 같은 이름이 되면 부른 차례대로 둘째부터 `-2` · `-3` 을 붙인다 — 리뷰어마다 칸 사본 · 응답 사본이 따로다. `<시도 번호>` 는 처음 `1`, 한 번 다시 부르면 `2` 다. 펜스가 낸 두 줄이 그 호출의 `INTENT_FILE`(첫 줄) · `FILTERED_DIFF_FILE`(둘째 줄)이다 — 칸마다 · 호출마다 새 끝 값이 붙은 사본이다.
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -436,10 +436,10 @@ R="<리뷰어 이름>"; B="1"; T="<시도 번호>"
 I="$RD/review-i1-slot-${R}-b${B}-t${T}-intent.txt"; D="$RD/review-i1-slot-${R}-b${B}-t${T}-diff.txt"
 python3 "$QG/scripts/qg_nonce.py" attach "$RV/intent-src.txt" "$I" \
   && python3 "$QG/scripts/qg_nonce.py" attach "$RD/review-i1.diff" "$D" \
-  || { rm -f "$I" "$D"; : > "$I"; echo "[quality-gates] ${R} 의 칸 사본을 쓰지 못했다(묶음 ${B} · 시도 ${T}) — 이 호출을 부르지 않는다" >&2; exit 1; }
+  || { rm -f "$I" "$D"; : > "$I" || { echo "[quality-gates] ${R} 의 빈 칸 사본도 쓰지 못했다(묶음 ${B} · 시도 ${T}) — ${R} 를 실패로 센다" >&2; exit 2; }; echo "[quality-gates] ${R} 의 칸 사본을 쓰지 못했다(묶음 ${B} · 시도 ${T}) — 이 호출을 부르지 않는다" >&2; exit 1; }
 ```
 
-**칸 사본 — 나눠 돌림.** 나눠 돌리면 위 펜스 대신 묶음 호출마다 이 펜스를 돌린다. `<묶음 번호>` 는 `1` 부터 센다. 묶음의 파일 경로는 리뷰 diff(`$RD/review-i1.diff`)의 `diff --git` 줄에 든 경로를 한 줄에 하나씩 글자 그대로 옮긴다 — 리뷰 diff 는 `core.quotePath=false` 로 만들어져 한글 경로도 따옴표 없이 든다(`$RD/review-i1.names` 의 줄과 같다). 펜스가 낸 두 줄이 그 묶음 호출의 `INTENT_FILE` · `FILTERED_DIFF_FILE` 이다 — 의도 칸도 묶음마다 새 사본이다.
+**칸 사본 — 나눠 돌림.** 나눠 돌리면 위 펜스 대신 묶음 호출마다 이 펜스를 돌린다. `<묶음 번호>` 는 `1` 부터 센다. 묶음의 파일 경로는 `$RD/review-i1.names` 의 줄을 한 줄에 하나씩 글자 그대로 옮긴다 — 그 파일은 따옴표 없는 경로를 한 줄에 하나 담는다. 리뷰 diff 의 `diff --git` 머리줄에서 옮기지 않는다(따옴표로 싼 경로 · 공백이 든 경로는 머리줄에서 경계가 모호하다). 문서 경로로 걸러져 리뷰 diff 에 들지 않은 경로를 고르면 펜스가 멈춘다. 펜스가 낸 두 줄이 그 묶음 호출의 `INTENT_FILE` · `FILTERED_DIFF_FILE` 이다 — 의도 칸도 묶음마다 새 사본이다.
 
 값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
 
@@ -459,10 +459,10 @@ python3 "$QG/scripts/qg_nonce.py" attach "$RV/intent-src.txt" "$I" \
 paths = [p for p in open(sys.argv[4], encoding="utf-8", errors="surrogateescape").read().split("\n") if p]
 sys.exit(subprocess.call([sys.executable, sys.argv[1], "split", sys.argv[2], sys.argv[3], "--"] + paths) if paths else 4)' \
      "$QG/scripts/qg_nonce.py" "$RD/review-i1.diff" "$D" "$L" \
-  || { rm -f "$I" "$D"; : > "$I"; echo "[quality-gates] ${R} 의 칸 사본을 쓰지 못했다(묶음 ${B} · 시도 ${T}) — 이 호출을 부르지 않는다" >&2; exit 1; }
+  || { rm -f "$I" "$D"; : > "$I" || { echo "[quality-gates] ${R} 의 빈 칸 사본도 쓰지 못했다(묶음 ${B} · 시도 ${T}) — ${R} 를 실패로 센다" >&2; exit 2; }; echo "[quality-gates] ${R} 의 칸 사본을 쓰지 못했다(묶음 ${B} · 시도 ${T}) — 이 호출을 부르지 않는다" >&2; exit 1; }
 ```
 
-칸 사본 펜스가 0 이 아니면 그 호출을 부르지 않고 stderr 줄을 그대로 보인다. 그 호출은 응답이 없는 실패로 센다 — 위 일시 실패 재시도 규칙대로 시도 번호를 올려 칸 사본부터 한 번 다시 한다. 펜스는 실패할 때 그 시도의 의도 칸 자리에 빈 사본을 남긴다 — 끝 값이 없는 그 사본 때문에 아래 리뷰어 대조가 그 시도를 놓치지 않고 실패로 센다. 칸 하나만 쓰인 채로 부르지 않는다.
+칸 사본 펜스가 0 이 아니면 그 호출을 부르지 않고 stderr 줄을 그대로 보인다. 그 호출은 응답이 없는 실패로 센다 — 위 일시 실패 재시도 규칙대로 시도 번호를 올려 칸 사본부터 한 번 다시 한다. 펜스는 실패할 때 그 시도의 의도 칸 자리에 빈 사본을 남긴다 — 끝 값이 없는 그 사본 때문에 아래 리뷰어 대조가 그 시도를 놓치지 않고 실패로 센다. 칸 하나만 쓰인 채로 부르지 않는다. 펜스가 rc 2 로 「빈 칸 사본도 쓰지 못했다」 를 내면 그 묶음은 대조에 남지 못하므로, 다시 부르지 않고 그 리뷰어를 실패로 센다(보안은 `security: absent(source-failed)`, 외부는 끝 줄의 「실패」 — 괄호 없음). 묶음 하나도 대조에서 조용히 빠지지 않는다.
 
 **보안 각도 — `quality-gates:security-reviewer`, 늘 부른다.** 스코프 판단으로 빼지 않는다.
 
@@ -479,6 +479,8 @@ IF `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`:
    `not-certified (angle-absent)` 가 된다 — 탐지가 0 이어도(V5).
 
 ELSE: 아래 리터럴을 평소대로 발행한다.
+
+kill switch 로 부르지 않은 보안 리뷰어는 칸 사본 · 응답 사본 · 대조 펜스를 모두 건너뛰고 각도는 `security: absent` 그대로다(`absent(source-failed)` 가 아니다).
 
 codex 의 kill switch 와 달리 이것은 loud 다 — codex 는 다른 전제 각도라 부재를 공시만 하고,
 보안 각도가 빠지면 판정을 막는다.
