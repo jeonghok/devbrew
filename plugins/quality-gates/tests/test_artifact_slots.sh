@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/artifact-critique/SKILL.md plugins/quality-gates/scripts/synthesize_artifact_findings.py plugins/quality-gates/scripts/setup-qg.sh plugins/quality-gates/scripts/review-diff.sh
 # 문서 비평 — 세션 폴더 · 병합된 지적 칸 사본 · 반박자 끝 값 대조(R7 §1 · AC1 · AC2 · AC4 · AC25 · AC33).
 # 본문 펜스는 tests/lib/skill_fence.py 로 표지로 뽑아 임시 리포에서 돌린다 — 손으로 옮긴 사본이 아니다.
 #   session_fence          세션 폴더 펜스: 시작 줄 없음 · 마커(result.md)가 선 폴더 · artifact-critique/ 몫 폴더
