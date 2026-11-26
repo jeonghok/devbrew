@@ -177,6 +177,11 @@ def mutate(s, name):
         return s.replace(OPEN, "<<'QG_FIX_LIST'").replace(END, "\nQG_FIX_LIST\n")
     if name == "delete":
         return "\n".join(l for l in s.split("\n") if 'qg_nonce.py" hex' not in l)
+    if name == "delete_one":
+        # 앞쪽 펜스의 값 받는 줄은 두고 마지막 하나만 지운다 — 창이 파일 머리까지 열리면 놓친다.
+        lines = s.split("\n")
+        last = max(k for k, l in enumerate(lines) if 'qg_nonce.py" hex' in l)
+        return "\n".join(lines[:last] + lines[last + 1:])
     if name == "add":
         return s + PICK
     if name == "reshape":
@@ -223,6 +228,7 @@ case_mutations() {
   expect_red "$(mutate invert "$SK")" fixed "변이(반전) — QG_FIX_LIST 끝 표지를 고정 이름으로"
   # 삭제 — 값 받는 줄 지우기(차등 테스트 reference 의 것)
   expect_red "$(mutate delete "$DT")" noval "변이(삭제) — 값 받는 줄을 지운다"
+  expect_red "$(mutate delete_one "$SK")" noval "변이(삭제) — 본문의 마지막 값 받는 줄 하나만 지운다"
   # 추가 — 모델이 고른다는 문장 더하기
   expect_red "$(mutate add "$IC")" phrase "변이(추가) — 「새로 고른 16진수」 문장을 더한다"
   # 형태 — 큰따옴표 꼴(고정 이름) · 큰따옴표 꼴(값 자리는 그대로) · 따옴표 없음
