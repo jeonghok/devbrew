@@ -6,7 +6,7 @@
 # 잠금 자리 파일(<세션 폴더>/suite-lock-path.txt — setup-qg.sh 가 --suite-lock 으로 쓴다)이 없으면 명령만 돌린다.
 # 있으면 suite_lock.py run 으로 기다리지 않고(--wait 0) 잡아 본다:
 #   - 잡으면 명령이 도는 동안 쥐고 끝나면 푼다(주인 quality-gates).
-#   - 잡혀 있으면(75) 겹침 기록(<세션 폴더>/suite-overlap.txt)에 `busy\t<주인>\t<잡은 시각>`,
+#   - 잡혀 있으면(75) 겹침 기록(<세션 폴더>/suite-overlap.txt)에 `busy\t<주인 이름>\t<잡은 시각>`,
 #     그 밖(쓸 수 없음 3 등)이면 `unusable\t-\t-` 를 덧붙이고 명령을 잠금 없이 돌린다.
 #     겹침 기록이 비어 있었으면 겹침 줄을 표준 오류에 한 번 낸다.
 # 종료 코드는 언제나 명령의 것이다 — 명령이 잠금 아래 돌았는지는 종료 코드가 아니라 --child 가 남긴 파일로 가린다.
@@ -80,6 +80,10 @@ who=""; at=""
 if [ "$lrc" = 75 ]; then
   who="$(printf '%s\n' "$line" | LC_ALL=C sed -n 's/.* — 주인 \(.*\) · 잡은 시각 .*$/\1/p')"
   at="$(printf '%s\n' "$line" | LC_ALL=C sed -n 's/.* · 잡은 시각 \(.*\)$/\1/p')"
+  # 주인은 owner 파일 글 전부다 — suite_lock.py 의 take 가 `<프로세스 번호> <이름> <stamp()>` 로 쓴다. 겹침 줄에는
+  # 이름 몫만 싣는다(잡은 시각은 따로 있다). 그 꼴이 아닌 owner(손으로 적은 것)는 떼지 못한 만큼 그대로 둔다.
+  name="$(printf '%s\n' "$who" | LC_ALL=C sed -E 's/^[0-9]+ //; s/ [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$//')"
+  [ -n "$name" ] && who="$name"
 fi
 if [ -n "$who" ] && [ -n "$at" ]; then overlap busy "$who" "$at"; else overlap unusable - -; fi
 exec "$@"

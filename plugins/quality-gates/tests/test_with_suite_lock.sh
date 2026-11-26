@@ -64,7 +64,7 @@ case_busy_runs_without_wait() {   # AC12 · AC13 — 잡혀 있으면 기다리�
   assert_eq "$(grep -c . "$rd/suite-overlap.txt" 2>/dev/null)" "1" "busy_runs_without_wait: 겹침 기록이 한 줄이다"
   local kind o at; IFS="$(printf '\t')" read -r kind o at < "$rd/suite-overlap.txt"
   assert_eq "$kind" "busy" "busy_runs_without_wait: 겹침 기록의 꼴이 busy 다"
-  assert_eq "$o" "$owner" "busy_runs_without_wait: 겹침 기록의 주인이 잠금의 owner 그대로다"
+  assert_eq "$o" "other-suite" "busy_runs_without_wait: 겹침 기록의 주인은 owner 의 이름 몫(프로세스 번호 · 적은 시각을 뗀다 — owner: ${owner})"
   assert_grep "$at" '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$' "busy_runs_without_wait: 겹침 기록에 잡은 시각이 있다"
   assert_eq "$(cat "$T/busy.err")" "${OVL_BUSY_HEAD}${o} · ${at})." "busy_runs_without_wait: 화면 줄(표준 오류)이 정해진 꼴 한 줄이다"
   "$W" "$rd" -- true 2>"$T/busy2.err"
@@ -144,8 +144,27 @@ case_lock_path_with_space() {   # Review Focus 3 — 공백 든 잠금 경로도
   [ ! -e "$rd/suite-overlap.txt" ] && ok "lock_path_with_space: 겹침 기록이 없다" || no "lock_path_with_space: 겹침 기록이 생겼다"
 }
 
+case_owner_name_only() {   # 겹침 줄의 <이름> 은 owner 파일(take 가 쓰는 `<프로세스 번호> <이름> <적은 시각>`)의 이름 몫이다
+  local lk rd kind o at
+  # 이름에 빈칸이 든 owner — 프로세스 번호는 살아 있는 이 셸이라 바쁘다
+  lk="$T/locks-name/lk"; mkdir -p "$lk"; printf '%s merge_check feature/x 2026-11-27 01:02:03\n' "$$" > "$lk/owner"
+  rd=$(newrd owner-name "$lk")
+  "$W" "$rd" -- true 2>"$T/owner-name.err"
+  IFS="$(printf '\t')" read -r kind o at < "$rd/suite-overlap.txt"
+  assert_eq "$kind" "busy" "owner_name_only: 바쁜 잠금이다"
+  assert_eq "$o" "merge_check feature/x" "owner_name_only: 겹침 기록의 주인은 이름 몫(빈칸 든 이름 그대로)"
+  assert_eq "$(cat "$T/owner-name.err")" "${OVL_BUSY_HEAD}merge_check feature/x · ${at})." "owner_name_only: 화면 줄에 시각이 한 번만 나온다"
+  # 프로세스 번호 · 적은 시각이 없는 owner — 손으로 적은 이름은 그대로 둔다
+  lk="$T/locks-bare/lk"; mkdir -p "$lk"; printf 'someone by hand\n' > "$lk/owner"
+  rd=$(newrd owner-bare "$lk")
+  "$W" "$rd" -- true 2>/dev/null
+  IFS="$(printf '\t')" read -r kind o at < "$rd/suite-overlap.txt"
+  assert_eq "$o" "someone by hand" "owner_name_only: 꼴 밖의 owner 는 글자 그대로"
+  rm -rf "$T/locks-name" "$T/locks-bare"
+}
+
 for c in case_free_lock_held_during_command case_busy_runs_without_wait case_unusable_runs case_rc_not_mixed \
-         case_other_waits_for_qg case_no_lock_file_exec case_lock_path_with_space; do
+         case_other_waits_for_qg case_no_lock_file_exec case_lock_path_with_space case_owner_name_only; do
   echo "== $c"; $c
 done
 finish

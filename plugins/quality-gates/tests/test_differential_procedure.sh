@@ -287,9 +287,9 @@ case_overlap_line_in_result() {
   local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
   [ -n "$(record_fence)" ] && ok "overlap_line_in_result: 기록 펜스를 뽑았다" || { no "overlap_line_in_result: 기록 펜스가 없다"; rm -rf "$T"; return; }
   local out
-  out=$(run_record "$T/busy" "$(printf 'busy\t4242 merge_check feature/x 2026-11-27 01:02:03\t2026-11-27 01:02:03\nunusable\t-\t-\n')")
+  out=$(run_record "$T/busy" "$(printf 'busy\tmerge_check feature/x\t2026-11-27 01:02:03\nunusable\t-\t-\n')")
   assert_eq "$(printf '%s\n' "$out" | grep -cF -- "$OVL_RESULT_HEAD")" "1" "overlap_line_in_result: 겹쳤으면 ## 차등 테스트 에 겹침 줄이 하나다"
-  assert_contains "$out" "${OVL_RESULT_HEAD}잠금 주인: 4242 merge_check feature/x 2026-11-27 01:02:03 · 2026-11-27 01:02:03)" "overlap_line_in_result: 첫 겹침의 주인 · 잡은 시각"
+  assert_contains "$out" "${OVL_RESULT_HEAD}잠금 주인: merge_check feature/x · 2026-11-27 01:02:03)" "overlap_line_in_result: 첫 겹침의 주인 · 잡은 시각"
   assert_contains "$out" "new_failures: 0" "overlap_line_in_result: 차등 사본이 그대로 붙는다(겹침 줄은 그 뒤)"
   out=$(run_record "$T/unusable" "$(printf 'unusable\t-\t-\n')")
   assert_eq "$(printf '%s\n' "$out" | grep -xF -- "${OVL_RESULT_HEAD}잠금을 쓸 수 없었다)" | grep -c .)" "1" "overlap_line_in_result: 쓸 수 없었으면 괄호 안이 「잠금을 쓸 수 없었다」"
