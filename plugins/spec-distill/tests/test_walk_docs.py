@@ -12,6 +12,7 @@ sys.path.insert(0, str(_HERE.parent / "scripts"))
 sys.path.insert(0, str(_HERE))
 import human_lines as H
 import walk_table as W
+import conductor_toc as TOC
 from test_team_docs import changelog_entries
 
 PLUGIN = _HERE.parent
@@ -80,11 +81,17 @@ class DispatchTemplate(unittest.TestCase):   # R2 AC16 · AC21
             self.assertEqual(fence_under(self.TEXT, heading), want, heading)
 
 
-POINTER = "team 형식 로드맵이면 아래 `## team 형식 로드맵` 절을 따른다"
+POINTER = "team 형식 로드맵이면 `<SD>/references/conducting-team.md` 를 따른다"
 
 
 def team_section(text):
+    text = "\n" + text   # team 지시서는 그 절 머리로 시작한다
     return text.split("\n## team 형식 로드맵\n", 1)[1].split("\n## ", 1)[0] if "\n## team 형식 로드맵\n" in text else ""
+
+
+_TOC = TOC.load(PLUGIN)
+_NAMED = [PLUGIN / TOC.TOC_REL] + [TOC.resolve(PLUGIN, sd) for sd in TOC.named_files(_TOC)]
+_TEAM_FILE = next(TOC.resolve(PLUGIN, e.guide) for e in _TOC.extras if e.guide.endswith("/conducting-team.md"))
 
 
 def step(text, n):
@@ -93,8 +100,8 @@ def step(text, n):
 
 
 class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
-    TEXT = (REF / "conducting.md").read_text(encoding="utf-8")
-    TEAM = team_section(TEXT)
+    TEXT = "".join(p.read_text(encoding="utf-8") for p in _NAMED)   # 차례 + 이름 붙은 지시서(차례의 차례대로)
+    TEAM = team_section(_TEAM_FILE.read_text(encoding="utf-8"))
 
     def test_five_seats_and_the_walk_first(self):
         for seat in ("방향 확인", "설계 대화와 승인", "계획 확인", "구현 중 물음", "PR 전 확인"):
@@ -139,6 +146,24 @@ class ConductingTeam(unittest.TestCase):   # R2 AC17 · AC16 · AC23
             text = path.read_text(encoding="utf-8")
             self.assertIn('record --human "spec 승인"', text, path.name)
             self.assertIn("human_gate: 끔", text, path.name)
+
+    def test_team_guide_carries_the_three_handed_over_items(self):   # R3 설계 §1.7 — 넘겨받은 셋
+        team = _TEAM_FILE.read_text(encoding="utf-8")
+        for word in ("구현 담당자가 돌아오면 결과 대조를 돌려 받음 줄을 낸다",   # 첫째는 「결과 대조 · 받음 줄」 불릿에만 있는 글
+                     "검수 묶음", "`<SD>/references/conducting-step-5.md` 의 「승인 기록 다시 보이기」",
+                     "confirm --confirmed",
+                     "작업 방식과 도구는 걸음 보기(`walk_table.py next`)가 낸 칸을 쓴다 — 걸음 지시서의 부를 skill 칸은 옛 형식의 값이다"):
+            self.assertIn(word, team, word)
+        self.assertIn("승인 기록 다시 보이기", step(self.TEXT, 5))   # 가리키는 자리가 실재한다
+
+    def test_conducting_team_is_named_only_under_the_team_condition(self):   # AC5 — 옛 형식 로드맵에서는 읽으라고 하지 않는다
+        self.assertEqual(unconditioned(self.TEXT), [])
+        mutated = self.TEXT + "\n- 이 줄은 `<SD>/references/conducting-team.md` 를 읽는다\n"   # 양성 대조 — 조건 글 없는 줄을 잡는다
+        self.assertEqual(len(unconditioned(mutated)), 1)
+
+
+def unconditioned(text):
+    return [l for l in text.splitlines() if "conducting-team.md" in l and "team 형식" not in l and "layout: team" not in l]
 
 
 class ReviewProfile(unittest.TestCase):   # R2 AC18 · K19

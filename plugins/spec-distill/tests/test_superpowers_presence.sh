@@ -15,6 +15,7 @@ SD="$ROOT/plugins/spec-distill"
 EC="$SD/skills/epic-conductor/SKILL.md"
 FIN="$SD/skills/context-build/references/finishing.md"
 CD="$SD/references/conducting.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 README="$SD/README.md"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/sppresence.XXXXXX")" || exit 1
@@ -86,17 +87,17 @@ avail_line="$(printf '%s\n' "$B1" | grep -F -- '- **superpowers 가용 시**' | 
 assert_eq "$avail_line" "- **superpowers 가용 시**: B-2 proceed 게이트 제시." "finishing.md B-1: superpowers 가 있으면 B-2 게이트로 간다"
 
 # ── 3. 손 절차 머리 · 걸음 7 ─────────────────────────────────────────────────
-MAN_HEAD="$(section "$CD" '^## 손으로 따르는 절차$' '^1\. \*\*')"
+MAN_HEAD="$(section "$(cd_manual_file)" '^## 손으로 따르는 절차$' '^1\. \*\*')"
 [ -n "$MAN_HEAD" ] && ok "conducting.md: 손 절차 머리를 읽었다" || no "conducting.md: 손 절차 머리가 없다"
 mline="$(printf '%s\n' "$MAN_HEAD" | grep -F -- "$STOP" | head -1)"
 assert_contains "$mline" "$STOP" "conducting.md 손 절차 머리: superpowers 가 없으면 보일 문장"
 assert_contains "$mline" "멈춘다" "conducting.md 손 절차 머리: 그 문장의 줄이 멈춘다고 적는다"
 assert_eq "$(stop_literal "$mline")" "$MAN_STOP_LINE" "conducting.md 손 절차 머리: 멈춤 줄 전체가 모델 줄 꼴이다(스크립트 머리 아님)"
-S7="$(section "$CD" '^### 7\. 끝$' '^##+ ')"
+S7="$(section <(cd_loop) '^### 7\. 끝$' '^##+ ')"
 [ -n "$S7" ] && ok "conducting.md: 걸음 7 을 읽었다" || no "conducting.md: 걸음 7 이 없다"
 qline="$(printf '%s\n' "$S7" | grep -F -- "$QG_POINT" | head -1)"
 assert_contains "$qline" "$QG_POINT" "conducting.md 걸음 7: quality-gates 가 없을 때는 qg-review.md 의 호출 줄을 가리킨다"
-assert_not_contains "$(cat "$CD")" "$QG_ABSENT" "conducting.md 음성: 설치 안 됨 규칙을 따로 두지 않는다(양성 짝: 호출 줄 가리킴 · qg-review.md 의 그 문장)"
+assert_not_contains "$(cd_all)" "$QG_ABSENT" "conducting.md 음성: 설치 안 됨 규칙을 따로 두지 않는다(양성 짝: 호출 줄 가리킴 · qg-review.md 의 그 문장)"
 QR="$SD/skills/epic-conductor/references/qg-review.md"
 QCALL="$(section "$QR" '^## 호출 줄$' '^## 자리$')"
 [ -n "$QCALL" ] && ok "qg-review.md: 호출 줄 절을 읽었다" || no "qg-review.md: 호출 줄 절이 없다 — 아래 단언이 공허하다"

@@ -12,7 +12,7 @@ RMAP="$ROOT/docs/superpowers/roadmaps/2026-10-11-persistent-explore-pm-decompose
 EH="$SD/references/epic-handoff.md"
 SR="$SD/skills/spec-review/SKILL.md"
 RED="$SD/references/redecompose.md"
-CD="$SD/references/conducting.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 SHARED='실행 방식은 writing-plans 가 권하는 방식이고, 계획 검토는 계획에 설계에 없던 결정이 있을 때만 기다린다.'
 MARK='**지휘자 줄 — 로드맵 PR 이 머지된 뒤**'
 DLINE="$(awk -v m="$MARK" '$0==m{f=1;next} f&&NF{print;exit}' "$SD/skills/roadmap-draft/SKILL.md")"
@@ -35,7 +35,7 @@ RM_REL="${RMAP#"$ROOT"/}"
 TOK='{{ROADMAP}}'
 [ -n "$TPL_LINE" ] && [ "$RM_REL" != "$RMAP" ] && ok "안내 줄과 로드맵 상대경로를 읽었다" || no "안내 줄이나 로드맵 상대경로를 못 읽었다 — 아래 비교가 공허하다"
 assert_eq "${RM_LINE//"$RM_REL"/$TOK}" "$TPL_LINE" "템플릿과 이 로드맵의 지휘자 안내 줄은 경로만 다르다"
-assert_eq "$(grep -cF -- "$SHARED" "$CD")" "1" "AC37: conducting.md 에 같은 문장이 한 번"
+assert_eq "$(cd_all | grep -cF -- "$SHARED")" "1" "AC37: conducting.md 에 같은 문장이 한 번"
 assert_contains "$(sed -n '1,5p' "$EH")" '지휘자를 껐거나' "AC31: 넘김 줄은 지휘자를 끈 경우(또는 사용자가 따로 진행할 때)에만"
 assert_contains "$(sed -n '1,5p' "$EH")" '자기 brainstorming 입력으로 쓴다' "AC31: 지휘자는 넘김 줄을 사용자에게 주지 않는다"
 assert_eq "$(grep -cF '지휘 세션이 붙여 넣는 줄' "$EH" || true)" "0" "넘김 줄 머리말: 재결정 전 표현이 없다"
@@ -63,4 +63,10 @@ for old in '①/② 를 골라도 정리만 한다' '계획 agent 는 이 턴에
 done
 assert_contains "$(awk '/^## 5\. 적용/{f=1;next} f&&/^## /{exit} f' "$RED")" '고른 라벨을 글자 그대로' "재분해 5: 라벨만 고른 답의 --approval"
 assert_contains "$(awk '/^## 5\. 적용/{f=1;next} f&&/^## /{exit} f' "$RED")" '「순서만」' "재분해 5: 순서만 바뀐 경우"
+# 로드맵 틀의 안내 줄이 가리키는 「`references/conducting.md` 끝 절 「손으로 따르는 절차」」 가 맞다
+TOC_MD="$SD/references/conducting.md"
+LASTH="$(grep -E '^## ' "$TOC_MD" | tail -n 1)"
+assert_eq "$LASTH" '## 손으로 따르는 절차' "안내 줄 대상: 차례의 마지막 절이 「손으로 따르는 절차」"
+assert_contains "$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$TOC_MD")" 'conducting-manual.md' "안내 줄 대상: 그 절이 conducting-manual.md 를 가리킨다"
+assert_contains "$(cat "$TPL")" '`references/conducting.md` 끝 절 「손으로 따르는 절차」' "안내 줄 대상: 로드맵 틀의 안내 줄이 그 절을 이름으로 부른다"
 finish

@@ -9,13 +9,13 @@ INTENT.md 의 `## 결정 기록` 에 쓰고 `write-sections` 는 쓰지 않고 �
 team 형식이고 상태 브랜치를 쓸 수 있으면 대기 줄(`add --section "쌓인 기록"` · `drop` · `pending` · `flush`)은 상태 브랜치의
 `pending.md` 를 다룬다(`leader_seat` — 함수 안에서 가져온다). 브랜치가 아직 없으면 기계 상태에 쌓고 알린다.
 
-명령줄(모두 `--root <레포>` 선택):
+명령줄(모두 `--root <레포>` 선택. `--session` 을 빼면 이 세션의 번호를 환경에서 읽고, 얻지 못하면 쓰지 않고 rc 3):
   roadmaps                                             끝나지 않은 로드맵 찾기(frontmatter `type: roadmap`)
-  claim | takeover | release --roadmap R --session S    세션 표지
-  add  --roadmap R --session S --section 절 --cells "칸 · 칸 …"
-  drop --roadmap R --session S --section 절 --where 칸=값
-  pr-refresh --roadmap R --session S [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다(적은 번호는 따로 받는다)
-  pr-record  --roadmap R --session S --epic E --pr <PR> [--drop]   대조한 에픽 PR 번호 줄과 PR 캐시 줄을 쓴다(--drop 은 지운다)
+  claim | takeover | release --roadmap R [--session S]    세션 표지
+  add  --roadmap R [--session S] --section 절 --cells "칸 · 칸 …"
+  drop --roadmap R [--session S] --section 절 --where 칸=값
+  pr-refresh --roadmap R [--session S] [--epic E] [--reset]   PR 캐시를 head 이름의 PR 전부로 채운다(적은 번호는 따로 받는다)
+  pr-record  --roadmap R [--session S] --epic E --pr <PR> [--drop]   대조한 에픽 PR 번호 줄과 PR 캐시 줄을 쓴다(--drop 은 지운다)
   (Task 5~7 이 자원 · 기록 절 · 감사 명령을 더한다)
   ask-head --human K --roadmap R --job J [--plan n]    사람 줄 질문 머리 한 줄(team 형식). 0 · 1 · 2 · 3
   record --human K --roadmap R --job J [--plan n] [--gate G]   지휘 세션 기록의 질문 창 답에서만 사람 줄을 적는다.
@@ -61,7 +61,7 @@ import team_layout  # noqa: E402
 from roadmap_model import (APPROVAL_PREFIX, DEFAULT_REF, IMPL_PREFIX, RECORD_HEADING,  # noqa: E402
                            RULINGS_HEADING, FormatError, approval_date, blob_reader, field_list, find_roadmaps,
                            frontmatter, parse_roadmap, section_lines, tree_entries)
-from state_path import StateRootError, ensure_state_root, state_root  # noqa: E402
+from state_path import StateRootError, ensure_state_root, resolve_session_id, state_root  # noqa: E402
 
 DONE = ("머지됨", "끝남")
 GIT = shutil.which("git") or "git"
@@ -73,6 +73,16 @@ class Fail(Exception):
     def __init__(self, rc: int, msg: str):
         super().__init__(msg)
         self.rc = rc
+
+
+def session_or_fail(given):
+    """--session 을 받았으면 그대로, 아니면 이 세션의 번호. 얻지 못하면 기계 상태를 쓰기 전에 Fail(3)."""
+    if given is not None:
+        return given
+    sid = resolve_session_id(None)
+    if not sid:
+        raise Fail(3, "세션 번호를 얻지 못했다 — --session 을 주거나 Claude Code 세션 안에서 부른다. 기계 상태를 쓰지 않았다")
+    return sid
 
 
 def git(cwd, *args):
@@ -799,6 +809,7 @@ def _check_state(root, a):
 
 
 def c_claim(root, a) -> int:
+    a.session = session_or_fail(a.session)
     got = cs.acquire(mdir_for_write(root, a.roadmap), a.session)
     if got in ("acquired", "held"):
         if got == "acquired":
@@ -810,6 +821,7 @@ def c_claim(root, a) -> int:
 
 
 def c_takeover(root, a) -> int:
+    a.session = session_or_fail(a.session)
     prev = cs.takeover(mdir_for_write(root, a.roadmap), a.session)
     _check_state(root, a)
     print("표지를 넘겨받았다 — 이전 주인: %s" % (prev or "없음"))
@@ -817,11 +829,13 @@ def c_takeover(root, a) -> int:
 
 
 def c_release(root, a) -> int:
+    a.session = session_or_fail(a.session)
     print("표지를 풀었다" if cs.release(mpath(root, a.roadmap).parent, a.session) else "이 세션의 표지가 아니다 — 그대로 둔다")
     return 0
 
 
 def c_add(root, a) -> int:
+    a.session = session_or_fail(a.session)
     row = split_cells(a.section, a.cells)
     if a.section == "레포 설정":   # 검사받는 하위 agent 도 쓸 수 있는 파일이라 스위트 대조가 읽지 않는다
         raise Fail(2, "기계 상태에는 레포 설정을 적지 않는다 — 사용자가 답한 테스트 명령은 `merge_check.py run … "
@@ -854,6 +868,7 @@ def c_add(root, a) -> int:
 
 
 def c_drop(root, a) -> int:
+    a.session = session_or_fail(a.session)
     key, eq, value = a.where.partition("=")
     if not eq:
         raise Fail(2, "--where 는 <칸>=<값> 모양이다: %r" % a.where)
@@ -912,6 +927,7 @@ def c_cleanup_check(root, a) -> int:
 
 
 def c_cleanup(root, a) -> int:
+    a.session = session_or_fail(a.session)
     path = Path(a.path)
     owner = cs.holder(mpath(root, a.roadmap).parent)
     if owner != a.session:
@@ -1507,6 +1523,7 @@ def c_write_sections(root, a) -> int:
 
 
 def c_flush(root, a) -> int:
+    a.session = session_or_fail(a.session)
     path = Path(a.spec)
     owner = cs.holder(mpath(root, a.roadmap).parent)
     if owner != a.session:
@@ -1688,6 +1705,7 @@ def c_pr_refresh(root, a) -> int:
     그 번호를 목록에 없으면 따로 받아 줄을 두고, 그 PR 이 브랜치와 어긋나면 그 줄만 빼고 경고한다(rc 0).
     `--epic` 이 없으면 team 로드맵의 로드맵 밖 단순 작업(`jobs` — `--reset` 이 아니면 끝나지 않은 것)의 브랜치도 채우고
     그 줄의 에픽 칸은 과제 이름이다."""
+    a.session = session_or_fail(a.session)
     if a.reset and a.epic:
         raise Fail(2, "`--reset` 은 PR 절 전체를 다시 채운다 — `--epic` 을 빼고 다시 돌려라")
     for line in gh_repo.env_notices():
@@ -1759,6 +1777,7 @@ def c_pr_refresh(root, a) -> int:
 def c_pr_record(root, a) -> int:
     """번호로 물은 PR 의 head · 교차 · base 를 그 에픽의 브랜치와 대조한 뒤에만 `## 에픽 PR` 번호 줄과 `## PR` 캐시 줄을
     한 번에 쓴다. `--drop` 은 gh 없이 (에픽, 번호) 줄을 지운다."""
+    a.session = session_or_fail(a.session)
     for line in gh_repo.env_notices():
         print("[spec-distill] " + line)
     ref = gh_repo.parse_pr_ref(a.pr)
@@ -2104,7 +2123,7 @@ def c_version(root, a) -> int:
 
 def _rs(p):
     p.add_argument("--roadmap", required=True)
-    p.add_argument("--session", required=True)
+    p.add_argument("--session", default=None)
 
 
 def _rows(p):

@@ -1,0 +1,8 @@
+### 7. 끝
+- 읽을 것: `<SD>/skills/epic-conductor/references/qg-review.md`(로드맵 끝) · `<SD>/references/conductor-state-branch.md`(상태 브랜치를 지울 때)
+- 남기는 것: 마지막 로드맵 수정 PR 본문 `## 지휘 기록` · 기계 상태(정리하되 `## 에픽 PR` 은 남긴다).
+- 기본값: 모든 에픽이 머지되면 끝에서 끝 확인 — 기본 경로(컨텍스트 쌓기 → 로드맵 잡기(분해) → 에픽 설계 → spec-review → 계획 · 구현 대조 → 작업 목록 · 상태줄)와 설계 흐름이 아닌 에픽의 경로를 실제 명령으로 걷는다. 그때 품질 게이트 리뷰는 `<SD>/skills/epic-conductor/references/qg-review.md` 를 읽고 그 자리(「로드맵 끝」)의 줄을 따른다. 표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다. 표지를 풀기 전에 `python3 "<SD>"/scripts/conductor_branch.py delete --roadmap <로드맵> --session <세션>` 이 낸 수와 수를 센 끝을 사용자에게 보이고 확인받은 뒤 `--confirmed <수를 센 끝>` 을 붙여 상태 브랜치를 지운다(`conductor-state-branch.md`).
+- 판단: 품질 게이트가 설치돼 있지 않을 때는 `qg-review.md` 의 `## 호출 줄` 대로 한다. 로드맵 끝 리뷰가 끝나면 그 담당자의 relay 폴더(`ledger resource-dir --roadmap <로드맵> --kind relay --name roadmap`)로 옮김 대조를 한 번 부른다(지휘자 skill 본문 `### 7. 옮김 대조` 의 자리) — 머지 앞 리뷰의 relay 는 그 에픽 폴더에 있어 에픽 끝의 옮김 대조에 든다. 넘김이 모두 처리됐는지 `python3 "<SD>"/scripts/control_plane.py show <로드맵> <에픽>` 의 열린 넘김으로 확인하고, 쌓인 기록이 남았으면 기록만 담은 로드맵 수정 PR(로드맵을 닫는 기록 브랜치 PR 이 있으면 그 PR)로 싣고 실은 줄은 `<SD>/references/conducting-step-6.md` 처럼 뺀다. 쓴 자원을 `ledger resources` · `ledger orphans` 로 보고 정리한 뒤 표지를 푼다(`ledger release`).
+- 부를 skill: 없음(품질 게이트는 `qg-review.md` 의 담당자가 부른다).
+- 기록: 끝에서 끝으로 걸어 본 결과 · 품질 게이트를 건너뛴 사실 → 마지막 로드맵 수정 PR 본문 `## 지휘 기록`.
+- 기계 상태: `## 에픽 PR` 은 남기고 나머지를 비운다(남은 자원 · agent · 쌓인 기록이 없을 때) — 에픽 PR 번호 기록은 다시 만들 수 없고, 정리 뒤에도 상태 계산이 같은 번호로 머지를 판정한다.

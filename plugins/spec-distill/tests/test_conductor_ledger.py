@@ -9,12 +9,13 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -23,6 +24,7 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # team 형식 · 상태 브랜치 픽스처(test_leader_seat.TeamRepo)
 import conductor_ledger as L  # noqa: E402
 import conductor_state as cs  # noqa: E402
+import conductor_toc as TOC  # noqa: E402
 import repo_defaults  # noqa: E402
 import suite_lock  # noqa: E402
 import team_files as TF  # noqa: E402
@@ -145,6 +147,55 @@ class Marker(Repo):
                            "--cells", "worktree · /x · A1 · 설계 · t")
         self.assertEqual(rc, 3)
         self.assertEqual(path.read_text(encoding="utf-8"), "깨진 글\n")
+
+
+class SessionDefault(Repo):
+    """--session 을 안 주면 환경의 세션 번호를 쓰고, 그것도 없으면 아무것도 쓰지 않는다(E2 설계 §2)."""
+    ENV_KEYS = ("DEVBREW_SPEC_DISTILL_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+
+    def env(self, **kw):
+        clean = {k: v for k, v in os.environ.items() if k not in self.ENV_KEYS}
+        clean.update(kw)
+        p = mock.patch.dict(os.environ, clean, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def cli(self, *args):
+        with redirect_stderr(io.StringIO()):   # 세션을 못 찾았다는 해결자의 stderr 줄은 이 클래스가 일부러 부른 길이다
+            return super().cli(*args)
+
+    def marker(self):
+        return L.mpath(self.w, RM).parent / cs.MARKER
+
+    def test_session_defaults_to_env(self):
+        self.env(DEVBREW_SPEC_DISTILL_SESSION_ID="session-plan1-a")
+        rc, _out = self.cli("claim", "--roadmap", RM)
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.marker().read_text(encoding="utf-8"), "session-plan1-a\n")
+
+    def test_missing_session_writes_nothing(self):
+        self.env()
+        rc, out = self.cli("claim", "--roadmap", RM)
+        self.assertEqual(rc, 3)
+        self.assertIn("[spec-distill] 세션 번호를 얻지 못했다", out)
+        self.assertFalse(self.marker().exists())
+        self.assertFalse(L.mpath(self.w, RM).exists())
+
+    def test_missing_session_leaves_existing_state_byte_identical(self):
+        self.assertEqual(self.cli("claim", "--roadmap", RM, "--session", SID)[0], 0)
+        before = (self.marker().read_bytes(), L.mpath(self.w, RM).read_bytes())
+        self.env()
+        for cmd in (("claim",), ("takeover",), ("release",)):
+            rc, out = self.cli(*cmd, "--roadmap", RM)
+            self.assertEqual(rc, 3, cmd)
+            self.assertIn("세션 번호를 얻지 못했다", out)
+        self.assertEqual((self.marker().read_bytes(), L.mpath(self.w, RM).read_bytes()), before)
+
+    def test_explicit_session_wins(self):
+        self.env(DEVBREW_SPEC_DISTILL_SESSION_ID="session-plan1-a")
+        rc, _out = self.cli("claim", "--roadmap", RM, "--session", OTHER)
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.marker().read_text(encoding="utf-8"), OTHER + "\n")
 
 
 class RetiredApproval(Repo):
@@ -2258,6 +2309,52 @@ class TeamRecords(Repo):   # R1 AC16
         rc, out = self.cli("record", "--spec", str(intent), "--line", line)
         self.assertEqual(rc, 0, out)
         self.assertIn(line, intent.read_text(encoding="utf-8").split("\n"))
+
+    def test_guide_example_lines_are_accepted(self):   # 설계 AC9 · §1.8 — 걸음 3 지시서의 보기 줄을 그대로 record · flush 에 준다
+        plugin = SCRIPTS.parent
+        toc = TOC.load(plugin)
+        guide = TOC.resolve(plugin, next(s.guide for s in toc.steps if s.number == 3)).read_text(encoding="utf-8")
+        want = "- 병렬 답 · 2026-11-25 · 09:30 · 「병렬 (권장)」 · 준비 에픽 E4"   # 형식 정본의 꼴 `- <종류> · <YYYY-MM-DD> · …` — 시각은 날짜 다음 칸(§1.8)
+
+        def fill(s):   # 꺾쇠 자리를 아는 값으로 — 날짜 칸에 시각 자리가 붙어 있으면 그 칸에도 시각을 채운다(그 꼴은 record 가 거절한다)
+            s = re.sub(r"<YYYY-MM-DD( HH:MM)?>", lambda m: "2026-11-25" + (" 09:30" if m.group(1) else ""), s)
+            s = s.replace("<HH:MM>", "09:30")
+            s = re.sub(r"<(?:B…|A|에픽)>", "E4", s.replace("<고른 선택지>", "병렬 (권장)"))
+            self.assertNotIn("<", s, s)   # 모든 꺾쇠 자리를 채웠다
+            return s
+        intent, design = team_tree(self)
+        fresh = intent.read_text(encoding="utf-8")
+        spec = self.w / "s.md"
+        cases = ((spec, "옛 형식 설계문서의 지휘 기록", lambda: L.section_lines(spec.read_text(encoding="utf-8"), L.RECORD_HEADING) or []),
+                 (design, "team 형식 과제 파일의 결정 기록", lambda: TF.decision_lines(intent.read_text(encoding="utf-8"))))
+        with self.subTest("병렬 답 보기 줄 → record --line"):
+            par = re.search(r'--line "((?:- )?병렬 답 · [^"]*)"', guide)
+            self.assertIsNotNone(par, "걸음 3 지시서에 병렬 답 보기 줄(record --line)이 없다")
+            line = fill(par.group(1))
+            for target, where, lines_of in cases:
+                spec.write_text(SPEC_DOC, encoding="utf-8")
+                intent.write_text(fresh, encoding="utf-8")
+                rc, out = self.cli("record", "--spec", str(target), "--line", line)
+                self.assertEqual(rc, 0, (where, out))
+                self.assertIn(L._bullet(line), [l.strip() for l in lines_of()], where)
+            self.assertEqual(L._bullet(line), want)
+        with self.subTest("쌓인 기록 줄 보기 → add --section 쌓인 기록 → flush"):
+            pend = re.search(r'--section "쌓인 기록" --cells "([^"]*)"', guide)
+            self.assertIsNotNone(pend, "걸음 3 지시서에 쌓인 기록 줄 보기(add --cells)가 없다")
+            cells = fill(pend.group(1))
+            epic, section, text = cells.split(" · ", 2)
+            self.assertEqual((epic, section, text), ("E4", "지휘 기록", want))
+            self.cli("claim", "--roadmap", RM, "--session", SID)
+            for target, where, lines_of in cases:
+                spec.write_text(SPEC_DOC, encoding="utf-8")
+                intent.write_text(fresh, encoding="utf-8")
+                self.assertNotIn(want, [l.strip() for l in lines_of()], where)   # 양성 짝 — 옮기기 전에는 없다
+                rc, out = self.cli("add", "--roadmap", RM, "--session", SID, "--section", "쌓인 기록", "--cells", cells)
+                self.assertEqual(rc, 0, (where, out))
+                rc, out = self.cli("flush", "--roadmap", RM, "--session", SID, "--epic", epic, "--spec", str(target))
+                self.assertEqual(rc, 0, (where, out))
+                self.assertIn("1줄을 옮겼고", out, where)
+                self.assertIn(want, [l.strip() for l in lines_of()], where)
 
     def test_old_layout_and_other_paths_behave_as_before(self):
         intent, design = team_tree(self, layout=None)           # 머리말에 layout 이 없는 로드맵의 같은 자리

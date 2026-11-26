@@ -27,9 +27,12 @@ import conductor_mail as CM  # noqa: E402
 import conductor_state as cs  # noqa: E402
 import conductor_status as CS  # noqa: E402
 import leader_seat as LS  # noqa: E402
+import conductor_toc as TOC  # noqa: E402
 
 NEW = PLUGIN / "references" / "conductor-state-branch.md"
-LOOP = PLUGIN / "references" / "conducting.md"
+_TOC = TOC.load(PLUGIN)
+LOOP = "".join(p.read_text(encoding="utf-8") for p in
+               [PLUGIN / TOC.TOC_REL] + [TOC.resolve(PLUGIN, sd) for sd in TOC.named_files(_TOC)])   # 차례 + 이름 붙은 지시서
 POINTER = "${CLAUDE_PLUGIN_ROOT}/references/conductor-state-branch.md"
 POINTER_HOME = PLUGIN / "references" / "redecompose.md"   # 완전한 가리킴 하나가 사는 reference(고아 락이 읽는 꼴)
 FILE_NAME = "conductor-state-branch.md"
@@ -38,7 +41,7 @@ FILE_NAME = "conductor-state-branch.md"
 def step(n: int) -> str:
     """지휘 절차서의 `### n. ` 걸음 본문."""
     out, on = [], False
-    for line in LOOP.read_text(encoding="utf-8").split("\n"):
+    for line in LOOP.split("\n"):
         if line.startswith("### "):
             on = line.startswith("### %d. " % n)
             continue
@@ -81,7 +84,7 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("AskUserQuestion", text)   # 확인 질문은 문장으로 적는다 — 질문 자리 목록에 행을 더하지 않는다(J43)
 
     def test_conducting_steps_carry_the_sentences(self):
-        whole = LOOP.read_text(encoding="utf-8")
+        whole = LOOP
         self.assertNotIn("${CLAUDE_PLUGIN_ROOT}", whole)   # 지휘 순환은 루트 토큰을 쓰지 않는다 — 걸음에서는 파일 이름만
         self.assertEqual(POINTER_HOME.read_text(encoding="utf-8").count(POINTER), 1)
         for n in (1, 2, 7):
@@ -95,6 +98,13 @@ class Procedure(unittest.TestCase):
         self.assertNotIn("conductor_status.py", step(3))   # 양성 대조 — 걸음을 가르는 손이 걸음마다 다른 글을 낸다
         self.assertNotIn("conductor_branch.py", step(4))
         self.assertIn(CS.OWN_EDITS.split(" %d")[0], whole)   # 코드 상수의 앞부분 — 걸음 1 의 문장이 show 가 내는 글자와 묶인다
+
+    def test_toc_names_the_letter_time(self):   # 설계 §1.5 — 상태 브랜치 절차를 읽는 때 가운데 걸음에 달리지 않은 「글을 보낼 때」
+        toc = (PLUGIN / TOC.TOC_REL).read_text(encoding="utf-8")
+        lines = [l for l in toc.split("\n") if FILE_NAME in l and "편지" in l and not l.startswith("|")]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("`## 편지를 쓸 때`", lines[0])
+        self.assertIn("\n## 편지를 쓸 때\n", NEW.read_text(encoding="utf-8"))   # 가리킨 절이 그 파일에 있다
 
 
 NEW_MODULES = {"conductor_branch.py", "conductor_mail.py", "conductor_status.py", "leader_seat.py"}   # leader_seat — R3 계획 2(S13)
@@ -183,8 +193,10 @@ class LeaderSeatDocs(unittest.TestCase):   # R3 AC12(걸음 5) · AC19(계획 2 
         for word in (FILE_NAME, "안 올린 규칙 고침", "conductor_branch.py rules-branch", "판 번호"):
             self.assertIn(word, step(5), word)
         self.assertNotIn("rules-branch", step(4))   # 걸음 가르기가 이웃 걸음을 잡지 않는다
-        skill = (PLUGIN / "skills" / "epic-conductor" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Read " + POINTER, skill)
+        guide = (PLUGIN / "references" / "conducting-step-1.md").read_text(encoding="utf-8")   # [plan-mandated] SKILL 이 아니라 걸음 1 지시서의 읽을 것 줄이 가리킨다
+        reads = [ln for ln in guide.splitlines() if ln.startswith("- 읽을 것:")]
+        self.assertEqual(len(reads), 1)
+        self.assertIn(FILE_NAME, reads[0])
 
     def test_procedure_file_has_the_three_new_sections(self):
         text = NEW.read_text(encoding="utf-8")

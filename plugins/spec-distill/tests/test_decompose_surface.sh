@@ -203,7 +203,8 @@ has "$(cat "$SD/README.md" 2>/dev/null)" '재분해(「로드맵 다시 잡기�
 case "$FIN7" in *'세 갈래)'*) no "AC33: 재분해 7 에 옛 「세 갈래」가 남았다" ;; *) ok "AC33: 재분해 7 에 옛 「세 갈래」가 없다(양성 짝: 네 갈래)" ;; esac
 assert_file_has "$SD/references/epic-handoff.md" '게이트 ③ 에서 「이 에픽 다시 설계」 와 재분해 갈래를 연다' "AC33: 넘김 줄 자리표 설명이 게이트 ③ 의 두 갈래를 말한다"
 UP="$(win "$RED" '## 6. 올리기' '## ')"
-has "$UP" '`${CLAUDE_PLUGIN_ROOT}/references/conducting.md` 의 손 절차 6' "재분해 6: 손 절차를 가리킨다"
+has "$UP" '`${CLAUDE_PLUGIN_ROOT}/references/conducting-manual.md` 의 6' "재분해 6: 손 절차 파일의 6 을 가리킨다"
+has "$UP" '`${CLAUDE_PLUGIN_ROOT}/references/conducting-step-5.md` 의 스위트 대조' "재분해 6: 스위트 대조는 지휘 순환 걸음 5 지시서를 가리킨다"
 case "$UP" in *'(지휘 절차 6)'*) no "재분해 6: 로드맵의 지휘 절차를 가리키는 옛 꼬리가 남았다" ;; *) ok "재분해 6: 옛 꼬리가 없다" ;; esac
 
 # ── AC11 — 재결정 규약 한 줄 ────────────────────────────────────────────────

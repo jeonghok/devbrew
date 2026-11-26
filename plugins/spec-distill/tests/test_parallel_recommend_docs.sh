@@ -13,10 +13,11 @@ AG="$SD/agents/integration-reviewer.md"
 SK="$SD/skills/epic-conductor/SKILL.md"
 EH="$SD/references/epic-handoff.md"
 DP="$SD/references/docreview-profiles/design-doc.md"
+. "$ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 
-loop_of() { awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f' "$CD"; }
+loop_of() { cd_loop | awk '$0=="## 지휘 순환"{f=1;next} f&&/^## /{exit} f'; }
 cyc() { loop_of | awk -v n="$1" 'index($0, "### " n ". ")==1{f=1;next} f&&/^### /{exit} f'; }
-man() { awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$CD" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[0-9]+\. /{exit} f'; }
+man() { awk '$0=="## 손으로 따르는 절차"{f=1;next} f&&/^## /{exit} f' "$(cd_manual_file)" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[0-9]+\. /{exit} f'; }
 count() { printf '%s\n' "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
 once_in() { assert_eq "$(count "$2" "$3")" "1" "$1: 「$3」 정확히 한 번"; }
 
@@ -63,7 +64,7 @@ once_in "cyc 3" "$C3" '「병렬 (권장)」(얻음: <B…> 구현이 계획이 
 once_in "cyc 3" "$C3" '「차례로」(얻음: <B…> 의 설계 · 계획은 그대로 가고 <A> 가 머지된 뒤 구현을 시작해 부딪힐 일이 없다'
 once_in "cyc 3" "$C3" '짝 조건이 없어도'
 once_in "man 3" "$(man 3)" '병렬 질문(「병렬 (권장)」 · 「차례로」)이 둘째 질문으로 붙을 수 있다'
-once_in "cyc 2" "$(cyc 2)" '— 걸음 3 의 병렬 질문은 소식이 아니다'
+once_in "cyc 2" "$(cyc 2)" '— `<SD>/references/conducting-step-3.md` 의 병렬 질문은 소식이 아니다'
 once_in "man 2" "$(man 2)" '— 걸음 3 의 병렬 질문은 소식이 아니다'
 PGT="$(cat "$PG")"
 SRST="$(cat "$SRS")"
@@ -74,8 +75,18 @@ assert_not_contains "$PGT" '계획이 끝나는 대로 구현 담당자를 보�
 assert_not_contains "$SRST" '계획이 끝나는 대로 구현 담당자를 보낸다' "SRS: 선택지 설명 복사 없음"
 
 # --- Task 7: AC7 답 기록 · 지난 답 ---
-once_in "cyc 3" "$C3" '병렬 답 · <YYYY-MM-DD HH:MM> · 「<고른 선택지>」 · 준비 에픽 <B…>'
-once_in "cyc 3" "$C3" '가장 최근(줄의 시각)'
+once_in "cyc 3" "$C3" '--line "- 병렬 답 · <YYYY-MM-DD> · <HH:MM> · 「<고른 선택지>」 · 준비 에픽 <B…>"'
+assert_eq "$(count "$C3" '여러 설계문서의 병렬 답 가운데 날짜와 시각이 가장 늦은 줄')" "2" "병렬 질문 · 「차례로」 확인이 같은 말로 순서를 정한다"
+once_in "cyc 3" "$C3" '날짜 칸에 시각이 붙은 옛 줄과 시각 칸이 없는 줄은 적힌 글자대로 읽는다'
+once_in "cyc 3" "$C3" 'B 를 준비 에픽 칸에 담은 줄만 추려, 그 안에서 여러 설계문서의 병렬 답 가운데'   # 「차례로」 확인은 B 에 닿는 줄 안에서 고른다
+assert_eq "$(count "$C3" '동률(날짜와 시각이 같거나 한쪽에 시각 칸이 없어 순서가 서지 않음)이면 한 문서 안에서는 가장 아래 줄을 고르고')" "2" "병렬 질문 · 「차례로」 확인이 같은 동률 앞 절반을 쓴다"
+C3PAR="$(printf '%s\n' "$C3" | grep -F -- '- 병렬 질문:')"
+C3SEQ="$(printf '%s\n' "$C3" | grep -F -- '- 「차례로」 확인:')"
+once_in "cyc 3 병렬 질문" "$C3PAR" '문서 사이에서는 걸음 3 의 병렬 질문을 다시 붙여 묻는다(새 질문 꼴을 만들지 않는다)'
+once_in "cyc 3 「차례로」 확인" "$C3SEQ" '문서 사이에서는 그 줄들의 A 를 들어 병렬 질문과 같은 꼴 · 같은 선택지로 따로 묻고, 답은 B 의 설계문서 `## 지휘 기록` 에 새 병렬 답 줄'
+assert_not_contains "$C3SEQ" '병렬 질문을 다시 붙여 묻는다' "「차례로」 확인에 승인 게이트 쪽 뒤 절반이 섞이지 않는다"
+assert_not_contains "$C3PAR" '그 줄들의 A 를 들어' "병렬 질문에 「차례로」 확인 쪽 뒤 절반이 섞이지 않는다"
+assert_eq "$(count "$C3" '가장 아래 줄')" "2" "가장 아래 줄은 동률 규칙 안에만 있다(옛 순서가 남지 않는다)"
 once_in "cyc 3" "$C3" '「지난 답: <선택지>(준비 에픽 <…>)」'
 once_in "cyc 3" "$C3" '지난 답에 없던 에픽이 하나라도 들어왔을 때만 다시 묻는다'
 once_in "cyc 3" "$C3" '승인을 골랐을 때만'
@@ -87,8 +98,9 @@ assert_eq "$(printf '%s\n' "$C3" | grep -cF -- '- 병렬 질문:')" "1" "병렬 
 # --- Task 7: AC8 「차례로」 확인 ---
 once_in "cyc 3" "$C3" '「구현 기다림 — <에픽> 머지」'
 once_in "cyc 3" "$C3" '닿는 답이 없으면 기본(병렬)대로 보낸다'
-assert_eq "$(count "$(cyc 1)" '걸음 3 의 「차례로」 확인')" "1" "cyc 1 가리킴"
-assert_eq "$(count "$(cyc 4)" '걸음 3 의 「차례로」 확인')" "2" "cyc 4 가리킴"
+assert_eq "$(count "$(cyc 1)" '`<SD>/references/conducting-step-3.md` 의 「차례로」 확인')" "1" "cyc 1 가리킴"
+assert_eq "$(count "$(cyc 4)" '`<SD>/references/conducting-step-3.md` 의 「차례로」 확인')" "1" "cyc 4 가리킴(계획 검토 뒤 보내기)"
+once_in "cyc 4" "$(cyc 4)" '구현 담당자 앞의 「차례로」 확인은 `<SD>/references/conducting-step-1.md` 의 판단 칸대로 한다.'
 once_in "man 1" "$(man 1)" '3 의 「차례로」 확인'
 once_in "man 4" "$(man 4)" '3 의 「차례로」 확인'
 once_in "man 5" "$(man 5)" '3 의 「차례로」 확인'
@@ -155,7 +167,7 @@ once_in "프로필" "$PROF" '`(머지됨 · 설계 전 바탕인지 확인하지
 
 # --- 최종 리뷰 수정 2 · 4: 「차례로」 풀기 · 손 절차 3 의 「병렬」 ---
 C6_DEFAULT="$(cyc 6 | grep -F -- '- 기본값:')"
-once_in "cyc 6 기본값" "$C6_DEFAULT" '머지를 확인하면 `## 작업` 에서 그 에픽의 머지를 기다리던 줄(「구현 기다림 — <에픽> 머지」)마다 걸음 3 의 「차례로」 확인을 다시 하고, 더 기다릴 것이 없으면 그 에픽의 구현 담당자를 보낸다.'
+once_in "cyc 6 기본값" "$C6_DEFAULT" '머지를 확인하면 `## 작업` 에서 그 에픽의 머지를 기다리던 줄(「구현 기다림 — <에픽> 머지」)마다 `<SD>/references/conducting-step-3.md` 의 「차례로」 확인을 다시 하고, 더 기다릴 것이 없으면 그 에픽의 구현 담당자를 보낸다.'
 once_in "man 6" "$(man 6)" '에픽이 머지되면 `## 작업` 에서 그 에픽의 머지를 기다리던 줄(「구현 기다림 — <에픽> 머지」)마다 3 의 「차례로」 확인을 다시 하고, 더 기다릴 것이 없으면 그 에픽의 구현 담당자를 보낸다.'
 once_in "man 3" "$(man 3)" '「병렬 (권장)」 은 그 준비 에픽의 계획이 끝나는 대로 구현 담당자를 보낸다는 뜻이다 — 지금 승인하는 에픽 구현과 동시에 돌고, 머지는 하나씩이다.'
 assert_not_contains "$(man 6)" '걸음 3 의 「차례로」 확인을 다시' "man 6 은 손 절차 번호(3)로 가리킨다"

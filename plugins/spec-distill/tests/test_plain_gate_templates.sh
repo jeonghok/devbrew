@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/references/proceed-gate.md shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md plugins/spec-distill/references/conducting-step-1.md plugins/spec-distill/references/conducting-step-2.md plugins/spec-distill/references/conducting-step-3.md plugins/spec-distill/references/conducting-step-4.md plugins/spec-distill/references/conducting-step-5.md plugins/spec-distill/references/conducting-step-6.md plugins/spec-distill/references/conducting-step-7.md plugins/spec-distill/references/conducting-resume.md plugins/spec-distill/references/conducting-team.md plugins/spec-distill/references/conducting-manual.md
 #
 # 쉬운 말 출력 설계 §4 · AC7 — 모든 게이트 질문은 결정 하나와 상태 한 줄만 담고, 경고 목록은 앞 글에 쓴다.
 # 「채널을 읽은 뒤에만 없음을 쓴다」 계약은 그대로 남는다.
@@ -8,10 +8,14 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   git -C "$REPO_ROOT" ls-files -- 'plugins/spec-distill/skills/*/SKILL.md' \
     plugins/spec-distill/skills/context-build/references/finishing.md plugins/spec-distill/references/proceed-gate.md \
-    shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md
+    shared/docreview/references/reviewing-document.md plugins/spec-distill/references/conducting.md \
+    plugins/spec-distill/references/conducting-step-1.md plugins/spec-distill/references/conducting-step-2.md plugins/spec-distill/references/conducting-step-3.md plugins/spec-distill/references/conducting-step-4.md plugins/spec-distill/references/conducting-step-5.md \
+    plugins/spec-distill/references/conducting-step-6.md plugins/spec-distill/references/conducting-step-7.md plugins/spec-distill/references/conducting-resume.md plugins/spec-distill/references/conducting-team.md plugins/spec-distill/references/conducting-manual.md
   exit 0
 fi
 . "$REPO_ROOT/shared/tests/assert.sh"
+ROOT="$REPO_ROOT"
+. "$REPO_ROOT/plugins/spec-distill/tests/conducting_corpus.sh"
 SD="$REPO_ROOT/plugins/spec-distill"
 FIN="$SD/skills/context-build/references/finishing.md"
 RS="$SD/skills/spec-review/SKILL.md"
@@ -140,8 +144,8 @@ for v in F_FIN F_RB F_FR F_RS; do
 done
 # 같은 옛 이름을 인용하는 지휘 절차도 본다(마지막 전체 리뷰 M3) — 양의 짝은 그 자리의 새 문장.
 CD="$SD/references/conducting.md"
-assert_eq "$(grep -oE '그 위에 더|엔진 K \+ 그 밖의 M|경고 N개 — 위에 적었다|「경고 N개」에 (더|넣)' "$CD" | wc -l | tr -d ' ')" "0" "M3: conducting.md 에 「경고 N개」에 더하라는 옛 문장이 없다"
-assert_eq "$(grep -cF '검사 불가는 막지 않고 승인 질문의 경고 줄에 번호 대조의 짧은 줄로 이어진다' "$CD")" "1" "M3 양의 짝: conducting.md 의 번호 대조 경고가 승인 질문의 경고 줄로 간다"
+assert_eq "$(cd_all | grep -oE '그 위에 더|엔진 K \+ 그 밖의 M|경고 N개 — 위에 적었다|「경고 N개」에 (더|넣)' | wc -l | tr -d ' ')" "0" "M3: conducting.md 에 「경고 N개」에 더하라는 옛 문장이 없다"
+assert_eq "$(cd_all | grep -cF '검사 불가는 막지 않고 승인 질문의 경고 줄에 번호 대조의 짧은 줄로 이어진다')" "1" "M3 양의 짝: conducting.md 의 번호 대조 경고가 승인 질문의 경고 줄로 간다"
 
 # ⑫ 「이상 없음」·「경고 없음」 구분과 그 조건(「…때만」) — 파일마다 실제 글자. reviewing-document.md 에는 이 구분 문장이 없다.
 assert_eq "$(cnt "$F_RS" '셋 다 비었을 때만, 남은 항목도 없으면 「이상 없음」, 있으면 「경고 없음」이다 — 그 문구는')" "1" "구분: spec-review 승인 게이트의 「셋 다 비었을 때만」 구분"
