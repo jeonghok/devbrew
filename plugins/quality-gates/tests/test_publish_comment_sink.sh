@@ -649,12 +649,15 @@ case_check_crlf_and_trailing_newline_still_same() {
 }
 case_check_other_difference_posts() {
   local v
-  for v in trailing-space lone-cr inner-blank leading-space; do
+  for v in trailing-space lone-cr inner-blank leading-space prefix extended; do
     case "$v" in
       trailing-space) python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.rstrip(b"\n") + b" \n")' "$BODY" "$T/v.md" ;;
       lone-cr)        python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"abc1234", b"abc\r1234"))' "$BODY" "$T/v.md" ;;
       inner-blank)    python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"\n\n", b"\n", 1))' "$BODY" "$T/v.md" ;;
       leading-space)  python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(b" " + d)' "$BODY" "$T/v.md" ;;
+      # 앞 실행의 댓글이 이번 본문의 앞부분이거나(마지막 줄 없음) 이번 본문을 앞부분으로 품어도(줄 하나 더) 다르다.
+      prefix)         python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.rstrip(b"\n").rsplit(b"\n", 1)[0] + b"\n")' "$BODY" "$T/v.md" ;;
+      extended)       python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d + b"more\n")' "$BODY" "$T/v.md" ;;
     esac
     cmp -s "$BODY" "$T/v.md" && no "전제(${v}): 변형 본문이 원본과 같다"
     mk_comments "$T/c-v" me "$T/v.md"
