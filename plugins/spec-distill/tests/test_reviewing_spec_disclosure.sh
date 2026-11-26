@@ -41,9 +41,6 @@ else
   printf '%s' "$KS" | grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' \
     && ok "codex-only kill switch 가 이 skill 표면에 공시된다" \
     || no "codex-only kill switch 공시 소실 — 사용자가 끌 수 있다는 사실을 알 경로가 없다 (P21)"
-  printf '%s' "$KS" | grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE=1' \
-    && ok "전역 kill switch 도 함께 이름 대어진다" \
-    || no "전역 kill switch 가 이 skill 표면에 없다"
   # 「언제 읽는가」까지 적혀야 공시가 행동을 바꾼다 — 캐시된 값으로 게이트하면
   # 세션 중 끈 사용자의 opt-out 이 그 세션 내내 무시된다.
   printf '%s' "$KS" | grep -qF '캐시하지 않' \

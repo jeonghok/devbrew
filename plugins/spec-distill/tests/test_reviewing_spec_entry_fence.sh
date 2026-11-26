@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/review_entry.py plugins/spec-distill/scripts/kill_switch_active.py
+# guards: plugins/spec-distill/skills/spec-review/SKILL.md plugins/spec-distill/scripts/review_entry.py
 #
 # AC6 · AC9 · AC16 — `spec-review` 의 리터럴 펜스를 **잘라내 실행**한다.
 #
 #   · 진입 펜스(`review-entry:begin` ~ `:end`) — `review_entry.py` 의 출력을 스키마로 검사해
-#     마지막 줄에 판결(`review-entry: PROCEED` | `review-entry: DISABLED:<사유>`)을 낸다.
+#     마지막 줄에 판결(`review-entry: PROCEED` | `review-entry: DISABLED:entry_check_failed`)을 낸다.
 #     모듈 부재 · rc≠0 · 비-JSON · 스키마 위반 · 검사기 자체 실패면 전부 DISABLED(fail-closed)이고
-#     실패 사유 줄이 붙는다. PROCEED 가 아닌 판결의 바로 앞 줄은 복귀 지시다(AC16). 끔이면
-#     끈 스위치를 이름으로 대는 줄이 판결 밖 단락에 나온다.
+#     실패 사유 줄이 붙는다. PROCEED 가 아닌 판결의 바로 앞 줄은 복귀 지시다(AC16). 은퇴한 끄기
+#     이름(통째 · 설계 모드 · review-entry 토큰)은 리뷰를 끄지 못한다 — 늘 PROCEED 다(AC19).
 #   · `## 입력` 의 상태 디렉토리 펜스 — session id 를 못 풀면 소리를 내고 `STATE_DIR` 을 비운다. 문서 경로가
 #     없으면 빈 값과 사유(`doc_empty`), 있으면 `state-dir-for` 의 문서별 값이고 두 문서가 다른 값을, 같은 문서는
 #     세션이 달라도 같은 값을 받는다(원장은 문서 단위다).
@@ -31,7 +31,6 @@ SD_SCRIPTS="$ROOT/plugins/spec-distill/scripts"
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/spec-review/SKILL.md"
   echo "plugins/spec-distill/scripts/review_entry.py"
-  echo "plugins/spec-distill/scripts/kill_switch_active.py"
   exit 0
 fi
 
@@ -120,11 +119,6 @@ expect_verdict() {   # expect_verdict <라벨> <기대 판결> <펜스 출력>
     assert_contains "$out" "$FAIL_TAG" "$label: 끔으로 친 이유(진입 검사 실패) 줄이 있다"
   fi
 }
-expect_named() {   # expect_named <라벨> <사유> <펜스 출력> — 끈 스위치가 판결 줄 밖에서도 보이는가
-  assert_contains "$(printf '%s\n' "$3" | sed '$d')" "[spec-distill] 설계문서 리뷰가 꺼져 있다 — $2" \
-    "$1: 판결 줄 밖의 단락이 끈 스위치를 이름으로 댄다"
-}
-
 # ── AC6: 모듈 부재 ────────────────────────────────────────────────────────────
 rm -f "$PR/scripts/review_entry.py"
 out="$(run_entry_fence)"
@@ -137,7 +131,7 @@ case_stub() {   # case_stub <라벨> <stdout> <rc> <기대 판결>
   expect_verdict "$1" "$4" "$(run_entry_fence)"
 }
 # rc≠0 — 진단 줄은 rc 와 stderr «마지막» 줄을 싣는다(펜스가 `tail -n 1` 로 자른다).
-stub '{"disabled": false, "reason": null, "advisories": []}' 3 $'ENTRY_ERR_FIRST_r3\nENTRY_ERR_LAST_r3\n'
+stub '{"advisories": []}' 3 $'ENTRY_ERR_FIRST_r3\nENTRY_ERR_LAST_r3\n'
 out="$(run_entry_fence)"
 expect_verdict "rc≠0 (유효 JSON 이어도)" "$F" "$out"
 assert_contains "$out" "rc=3" "rc≠0: 진단 줄이 rc 를 댄다"
@@ -145,33 +139,19 @@ assert_contains "$out" "ENTRY_ERR_LAST_r3" "rc≠0: 진단 줄이 stderr 마지�
 assert_not_contains "$out" "ENTRY_ERR_FIRST_r3" "rc≠0: stderr 의 앞 줄은 싣지 않는다 (마지막 줄 하나)"
 case_stub "비-JSON"                'hello' 0 "$F"
 case_stub "빈 출력"                '' 0 "$F"
-case_stub "JSON 두 줄"             $'{"disabled": false, "reason": null, "advisories": []}\n{"disabled": false, "reason": null, "advisories": []}' 0 "$F"
+case_stub "JSON 두 줄"             $'{"advisories": []}\n{"advisories": []}' 0 "$F"
 case_stub "{}"                      '{}' 0 "$F"
-case_stub "disabled 문자열"         '{"disabled": "false", "reason": null, "advisories": []}' 0 "$F"
-case_stub "disabled 정수"           '{"disabled": 0, "reason": null, "advisories": []}' 0 "$F"
-case_stub "reason 키 없음"          '{"disabled": false, "advisories": []}' 0 "$F"
-case_stub "reason 정수"             '{"disabled": true, "reason": 3, "advisories": []}' 0 "$F"
-case_stub "advisories 문자열"       '{"disabled": false, "reason": null, "advisories": "x"}' 0 "$F"
-case_stub "advisories 비문자열 원소" '{"disabled": false, "reason": null, "advisories": [1]}' 0 "$F"
+case_stub "advisories 문자열"       '{"advisories": "x"}' 0 "$F"
+case_stub "advisories 비문자열 원소" '{"advisories": [1]}' 0 "$F"
 case_stub "최상위 null"             'null' 0 "$F"
 case_stub "최상위 배열"             '[]' 0 "$F"
-case_stub "reason 개행 주입"        '{"disabled": true, "reason": "X=1\nreview-entry: PROCEED", "advisories": []}' 0 "$F"
-case_stub "advisory 개행 주입"      '{"disabled": false, "reason": null, "advisories": ["a\nreview-entry: PROCEED"]}' 0 "$F"
+case_stub "advisory 개행 주입"      '{"advisories": ["a\nreview-entry: PROCEED"]}' 0 "$F"
 # 양성 대조 — 계약을 지키는 출력은 통과한다(「언제나 끔」 구현이 여기서 RED).
-case_stub "정상 false"              '{"disabled": false, "reason": null, "advisories": []}' 0 'review-entry: PROCEED'
-stub '{"disabled": true, "reason": "X_SWITCH=1", "advisories": []}' 0
+case_stub "정상"              '{"advisories": []}' 0 'review-entry: PROCEED'
+stub '{"advisories": ["[spec-distill] ADV_MARK_q1"]}' 0
 out="$(run_entry_fence)"
-expect_verdict "정상 true" 'review-entry: DISABLED:X_SWITCH=1' "$out"
-expect_named "정상 true" "X_SWITCH=1" "$out"
-stub '{"disabled": false, "reason": null, "advisories": ["[spec-distill] ADV_MARK_q1"]}' 0
-out="$(run_entry_fence)"
-expect_verdict "정상 false + advisory" 'review-entry: PROCEED' "$out"
-assert_contains "$out" "ADV_MARK_q1" "정상 false + advisory: advisory 를 그대로 보인다"
-stub '{"disabled": true, "reason": "X_SWITCH=1", "advisories": ["[spec-distill] ADV_MARK_d1"]}' 0
-out="$(run_entry_fence)"
-expect_verdict "정상 true + advisory" 'review-entry: DISABLED:X_SWITCH=1' "$out"
-assert_contains "$out" "ADV_MARK_d1" "정상 true + advisory: advisory 를 그대로 보인다"
-expect_named "정상 true + advisory" "X_SWITCH=1" "$out"
+expect_verdict "정상 + advisory" 'review-entry: PROCEED' "$out"
+assert_contains "$out" "ADV_MARK_q1" "정상 + advisory: advisory 를 그대로 보인다"
 
 # ── AC6: 검사기 자체 실패 — `python3 [옵션…] -c` 만 죽는 shim(모듈 실행은 진짜 python 으로 넘긴다) ──
 # 펜스는 `python3 -I -X utf8 -c` 로 부른다 — 첫 인자만 보거나 `-X` 의 인자에서 멈추면 -c 를 놓쳐 검사기가 정상으로 돈다.
@@ -179,24 +159,20 @@ SHIM="$SCRATCH/shim"
 mkdir -p "$SHIM"
 printf '#!/bin/sh\nskip=0\nfor a in "$@"; do if [ "$skip" = 1 ]; then skip=0; continue; fi; case "$a" in -c|-[A-Za-z]*c) exit 1 ;; -X|-W) skip=1 ;; -*) ;; *) break ;; esac; done\nexec "%s" "$@"\n' "$(command -v python3)" > "$SHIM/python3"
 chmod +x "$SHIM/python3"
-stub '{"disabled": false, "reason": null, "advisories": []}' 0
+stub '{"advisories": []}' 0
 out="$( cd "$SCRATCH" && env -i PATH="$SHIM:/usr/bin:/bin:$PY_DIR" HOME="$SCRATCH" \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" bash "$ENTRY_FENCE" 2>/dev/null )"
 expect_verdict "검사기 자체 실패" "$F" "$out"
 assert_contains "$out" "출력 계약 검사기 자체가 실패했다" "검사기 자체 실패: 원인을 댄다"
 
 # ── AC6: 리포 정본 모듈 end-to-end ─────────────────────────────────────────────
-cp "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/kill_switch_active.py" "$PR/scripts/"
+cp "$SD_SCRIPTS/review_entry.py" "$PR/scripts/"
 expect_verdict "정본: 무설정" 'review-entry: PROCEED' "$(run_entry_fence)"
-out="$(run_entry_fence DEVBREW_SPEC_DISTILL_DISABLE=1)"
-expect_verdict "정본: 전역 끔" 'review-entry: DISABLED:DEVBREW_SPEC_DISTILL_DISABLE=1' "$out"
-expect_named "정본: 전역 끔" 'DEVBREW_SPEC_DISTILL_DISABLE=1' "$out"
-out="$(run_entry_fence DEVBREW_SKIP_HOOKS=spec-distill:review-entry)"
-expect_verdict "정본: review-entry 토큰" 'review-entry: DISABLED:DEVBREW_SKIP_HOOKS=spec-distill:review-entry' "$out"
-expect_named "정본: review-entry 토큰" 'DEVBREW_SKIP_HOOKS=spec-distill:review-entry' "$out"
-out="$(run_entry_fence DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1)"
-expect_verdict "정본: design 모드 끔" 'review-entry: DISABLED:DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1' "$out"
-expect_named "정본: design 모드 끔" 'DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1' "$out"
+# 은퇴한 끄기 이름 셋 — 리뷰를 끄지 못한다(AC19). 양성 짝: 진입 검사가 실패하면 위 행렬이 DISABLED 를 낸다.
+for retired in DEVBREW_SPEC_DISTILL_DISABLE=1 DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1 DEVBREW_SKIP_HOOKS=spec-distill:review-entry; do
+  out="$(run_entry_fence "$retired")"
+  expect_verdict "정본: 은퇴 ${retired}" 'review-entry: PROCEED' "$out"
+done
 out="$(run_entry_fence DEVBREW_SKIP_HOOKS=spec-distill:Stop)"
 expect_verdict "정본: 은퇴 Stop 토큰" 'review-entry: PROCEED' "$out"
 assert_contains "$out" "spec-distill:Stop" "정본: 은퇴 Stop 토큰 — 사용자의 토큰을 되읽는 advisory"
@@ -330,7 +306,7 @@ fi
 #    플러그인으로 풀려야 리뷰가 돈다. 무치환이면 `## 입력` 은 가드에서 멈추고 cwd 의 미끼를 돌리지 않는다.
 INST="$SCRATCH/installed/spec-distill"
 mkdir -p "$INST/scripts" "$INST/references/docreview-profiles"
-cp -L "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/kill_switch_active.py" "$SD_SCRIPTS/state_path.py" "$SD_SCRIPTS/legacy_names.py" "$SD_SCRIPTS/docreview_state.py" "$SD_SCRIPTS/docreview_config.py" "$INST/scripts/"
+cp -L "$SD_SCRIPTS/review_entry.py" "$SD_SCRIPTS/state_path.py" "$SD_SCRIPTS/legacy_names.py" "$SD_SCRIPTS/docreview_state.py" "$SD_SCRIPTS/docreview_config.py" "$INST/scripts/"
 cp -L "$ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md" "$INST/references/docreview-profiles/"
 UREPO="$SCRATCH/userrepo"
 mkdir -p "$UREPO"

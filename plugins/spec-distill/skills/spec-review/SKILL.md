@@ -63,10 +63,9 @@ python3 "$SD/scripts/check_deps.py" entry --plugin-root "$SD" --need python,git
 
 ## 진입 검사
 
-`## 진입 단계` 의 감시줄 판독과 의존 확인 펜스 다음(1.5)에 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 끄기 판정은
+`## 진입 단계` 의 감시줄 판독과 의존 확인 펜스 다음(1.5)에 한 번 돈다 — 인자 해석·후보 제시보다, 엔진 라운드보다 앞이다. 검사는
 이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
-읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않고, kill switch 는 P21 보안 컨트롤이라
-그 공백은 "껐다고 믿게만" 만든다.
+읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않는다.
 
 <!-- review-entry:begin -->
 ```bash
@@ -92,23 +91,15 @@ try:
 except ValueError:
     d = None
 ok = (isinstance(d, dict)
-      and isinstance(d.get("disabled"), bool)
-      and "reason" in d
-      and (d["reason"] is None or isinstance(d["reason"], str))
-      and not (isinstance(d["reason"], str) and ("\n" in d["reason"] or "\r" in d["reason"]))
       and isinstance(d.get("advisories"), list)
       and all(isinstance(a, str) and "\n" not in a and "\r" not in a for a in d["advisories"]))
 if not ok:
-    print("[spec-distill] 진입 검사 실패(끔으로 친다) — 출력이 계약(JSON 객체 · disabled boolean · reason 문자열|null · advisories 문자열 배열 · 개행 없음)을 어긴다: " + raw[:120].replace("\n", " "))
+    print("[spec-distill] 진입 검사 실패(끔으로 친다) — 출력이 계약(JSON 객체 · advisories 문자열 배열 · 개행 없음)을 어긴다: " + raw[:120].replace("\n", " "))
     print("review-entry: DISABLED:entry_check_failed")
     sys.exit(0)
 for a in d["advisories"]:
     print(a)
-if d["disabled"]:
-    print("[spec-distill] 설계문서 리뷰가 꺼져 있다 — " + (d["reason"] or "disabled"))
-    print("review-entry: DISABLED:" + (d["reason"] or "disabled"))
-else:
-    print("review-entry: PROCEED")
+print("review-entry: PROCEED")
 ')" || block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — 출력 계약 검사기 자체가 실패했다" "review-entry: DISABLED:entry_check_failed")"
   fi
 fi
@@ -124,13 +115,12 @@ printf '%s\n' "$verdict"
 <!-- review-entry:end -->
 
 마지막 줄이 정확히 `review-entry: PROCEED` 일 때만 `## 입력` 을 거쳐 `## 절차` 로 간다.
-그 밖이면 — `review-entry: DISABLED:<사유>` — 펜스가 낸 `[spec-distill]` 줄(끈 스위치 또는 실패 사유 ·
+그 밖이면 — `review-entry: DISABLED:<사유>` — 펜스가 낸 `[spec-distill]` 줄(실패 사유 ·
 advisory · 복귀 지시)을 **그대로** 한 단락으로 보이고 게이트 없이 끝난다(그 단락의 마지막 문장이 복귀
-지시다). 정본 `proceed-gate.md` 의 kill switch 예외 경로다. `PROCEED` 여도 `[spec-distill]` 줄(은퇴
+지시다). `PROCEED` 여도 `[spec-distill]` 줄(은퇴
 스위치 공시)이 있으면 그대로 보인다.
 
-끄는 스위치는 셋이고 셋 다 이 skill 을 직접 불러도 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry`
-· `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입
+진입
 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반 · 검사기 자체 실패) 끔으로 친다.
 
 ## 입력
@@ -466,8 +456,7 @@ fi
 ```
 <!-- codex-gate:end -->
 
-`DEVBREW_SPEC_DISTILL_DISABLE=1` 은 `## 진입 검사` 펜스가 엔진 라운드 전에 걸러낸다(엔진 2단계도 한 번
-더 본다). `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 은 codex 만 끄고 탐지 리뷰는 그대로 돈다.
+`DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 은 codex 만 끄고 탐지 리뷰는 그대로 돈다.
 `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 은 재비판만 끈다. 뒤의 둘은 dispatch 직전에 확인하고
 캐시하지 않으며, 발화한 스위치는 아래 degrade 채널로 공시한다.
 

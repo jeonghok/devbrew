@@ -372,7 +372,7 @@ state_branch: 켬
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
-설계문서 리뷰 진입은 `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)가 판정한다. 끄는 스위치는 셋이고 셋 다 수동 호출(`/spec-distill:spec-review`)까지 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
+설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 플러그인 전체는 Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`)다. `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)는 은퇴한 이름이 켜져 있으면 알릴 뿐 리뷰를 끄지 않는다. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
 
 ### 스위치 목록
 
@@ -411,10 +411,10 @@ state_branch: 켬
 
 `PostToolUse` validator 와 `UserPromptSubmit` reminder(v0.36.0), 설계문서 리뷰 훅(3.0.0)이 삭제되면서 다음 훅 토큰 · 변수가 아무것도 끄지 않게 됐다. `spec-review` 의 진입 검사가 리뷰를 부를 때마다 advisory 로 알린다. 6.0.0 에서 은퇴한 이름은 끄는 스위치가 아니라 진단 출력 변수 하나다(맨 아래).
 
-- `DEVBREW_SKIP_HOOKS=spec-distill:Stop` / `:review-dispatch` (3.0.0) — 가리키던 훅이 삭제됐다. **리뷰를 막지 않는다** — 이 토큰으로 자동 리뷰를 꺼 두었다면 이제 리뷰가 돈다. 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`. 이 토큰은 리뷰 진입의 원장 정리(옛 TTL-GC)도 멈추지 않는다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:Stop` / `:review-dispatch` (3.0.0) — 가리키던 훅이 삭제됐다. **리뷰를 막지 않는다** — 이 토큰으로 자동 리뷰를 꺼 두었다면 이제 리뷰가 돈다. 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 이 토큰은 리뷰 진입의 원장 정리(옛 TTL-GC)도 멈추지 않는다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` / `:validator` (v0.36.0) — 끄던 구조 검사가 삭제돼 아무것도 끄지 않는다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` (v0.36.0) — 재-nag 층 자체가 없다.
-- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`.
+- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (6.0.0) — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 TTL-GC 스크립트가 지워져 읽는 곳이 없다. 진입 검사는 이 이름을 알리지 않는다. 원장 정리는 한 일을 늘 한 줄로 낸다.
 
 ## 한계
