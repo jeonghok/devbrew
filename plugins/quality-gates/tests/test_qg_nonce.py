@@ -34,6 +34,18 @@ class QgNonceTest(unittest.TestCase):
         self.assertRegex(b.stdout, r"\A[0-9a-f]{8}\n\Z")
         self.assertNotEqual(a.stdout, b.stdout)
 
+    def test_isolated_interpreter_still_imports_writer(self):
+        # -I 는 스크립트 폴더를 sys.path 에서 뺀다 — import 실패가 rc 1(대조 실패)로 읽히면 안 된다.
+        src = self.tmp / "src.txt"
+        src.write_bytes(b"x\n")
+        out = self.tmp / "slot.txt"
+        r = subprocess.run(
+            [sys.executable, "-I", str(SCRIPT), "attach", str(src), str(out)],
+            capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertRegex(out.read_bytes().decode("utf-8"),
+                         r"\Ax\nqg-slot-end: [0-9a-f]{16}\n\Z")
+
     def test_attach_appends_one_end_line(self):
         src = self.tmp / "src.txt"
         src.write_bytes(b"a\nb")
@@ -149,6 +161,24 @@ class QgNonceTest(unittest.TestCase):
         self.assertEqual(
             data[: m.start()],
             rename + rename_spaced + quoted + spaced + spaced_b + escaped)
+
+    def test_split_cr_in_content_does_not_start_chunk(self):
+        x = (
+            "diff --git a/x.py b/x.py\n"
+            "@@ -1 +1,2 @@\n"
+            "+a\rdiff --git a/zzz b/zzz\n"
+            "+evil\n"
+        )
+        other = self._chunk("y.py", "Y")
+        diff = self.tmp / "review.diff"
+        diff.write_bytes((x + other).encode("utf-8"))
+        out = self.tmp / "bundle.txt"
+        r = run("split", diff, out, "--", "x.py")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        data = out.read_bytes().decode("utf-8")
+        m = END_RE.search(data)
+        self.assertIsNotNone(m)
+        self.assertEqual(data[: m.start()], x)
 
     def test_split_unknown_path_fails(self):
         diff = self.tmp / "review.diff"
@@ -371,6 +401,7 @@ class QgNonceTest(unittest.TestCase):
         r = self._check_reviewer(rd, rv, "recritic")
         self.assertEqual(r.returncode, 2)
         self.assertEqual(r.stdout, "")
+        self.assertEqual(r.stderr, "[qg_nonce] 칸 사본이 없다 — recritic\n")
 
     def test_module_api_for_sibling_scripts(self):
         sys.path.insert(0, str(SCRIPT.parent))

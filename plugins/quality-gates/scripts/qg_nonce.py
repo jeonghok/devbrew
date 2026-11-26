@@ -19,7 +19,11 @@ import re
 import secrets
 import sys
 
-import nofollow_write
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import nofollow_write  # noqa: E402
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -71,9 +75,14 @@ DIFF_HEAD = b"diff --git "
 
 
 def _chunks(diff: bytes) -> list:
-    """`diff --git ` 줄마다 조각 하나. 첫 머리 앞의 글은 버린다."""
+    """`diff --git ` 줄마다 조각 하나. 첫 머리 앞의 글은 버린다.
+
+    줄은 `\n` 으로만 가른다 — 내용 줄 안의 `\r` 뒤 글자가 조각 머리로 읽히면 안 된다.
+    """
     chunks = []
-    for line in diff.splitlines(keepends=True):
+    for line in re.split(rb"(?<=\n)", diff):
+        if not line:
+            continue
         if line.startswith(DIFF_HEAD):
             chunks.append([line])
         elif chunks:
