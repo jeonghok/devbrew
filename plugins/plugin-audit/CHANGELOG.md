@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.3] — 2026-11-27
+
+### Changed
+- 의존 측정(`check_deps.py measure`)이 PyYAML 판을 잰다 — 공유 파일 변경.
+
 ## [1.10.2] — 2026-11-23
 
 ### Fixed

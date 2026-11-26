@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# R6 — 지휘자가 지난 답을 qg 에 넘기고 판 3 만 읽는다(skills/epic-conductor/references/qg-review.md). 정적 락이다.
+# 지휘자의 qg 리뷰 절차가 지난 답을 qg 에 넘기고 돌려주는 꼴 3판만 읽는다 — 정적 락이다. 잠그는 파일:
+#   plugins/spec-distill/skills/epic-conductor/references/qg-review.md(본문 대부분) · plugins/spec-distill/skills/epic-conductor/SKILL.md(## 보이기 의 qg 문장)
+#   plugins/spec-distill/dependencies.md(quality-gates 행) · plugins/spec-distill/README.md · plugins/spec-distill/CHANGELOG.md(9.2.0 절)
+#   plugins/quality-gates/scripts/intent_origin.py(화면에 남기는 두 줄의 머리 글자) · plugins/quality-gates/.claude-plugin/plugin.json(판)
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_qg_review_readable.sh
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -335,7 +338,7 @@ for gone in 'findings-pre-merge.yaml' '합쳐지기 전 목록 없이' '인증 �
   zero "$RE4" "$gone" "reenter-without-report(N1) 음성: 갈래 4 줄에 다시 싣는 글자 「${gone}」 가 없다(양성 짝: 다시 싣는 문단)"
 done
 assert_eq "$RE4" "4. 결과가 왔다 — 그 폴더 안에 \`intent-return.md\` 가 있으면 그 파일로 \`## 돌아왔을 때\` 를 잇는다. ${PTR}" "reenter-without-report(N1): 갈래 4 는 처음 한 문장과 가리키는 한 문장뿐"
-# 갈래 5 를 둘로 — 보관 파일이 남았으면 다시 싣고 의도 점검 꼬리, 둘 다 없을 때만 결과 줄 전체 셀 수 없음
+# 갈래 5 를 둘로 — `## 판정` 절이 있는 result.md 가 남았으면 다시 싣고 의도 점검 꼬리, 그런 result.md 가 없으면 결과 줄 전체 셀 수 없음(D39)
 one "$RE5" '결과 줄은 그 폴더에 남은 파일로 가른다.' "reenter-without-report(N1): 갈래 5 가 결과 줄을 남은 파일로 가른다"
 one "$RE5A" '아래 「보고 없이 다시 들어왔을 때」 대로 지적을 다시 싣고 결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다 — `## 돌아왔을 때` 의 1 의 첫 갈래와 같은 쪽이고, `<사유>` 는 위에서 보인 줄 그대로다.' "reenter-without-report(N1 · D33 · D39): 판정 절이 있는 result.md 가 남은 돌아오지 못한 리뷰는 다시 싣고 의도 점검 꼬리"
 zero "$RE5A" '머지 앞 자리면 다시 실은 막는 지적은' "reenter-without-report(R9) 음성: 갈래 5 가 머지 앞 자리를 다루지 않는다 — 머지 앞은 next 가 정한다(양성 짝: 이미 보낸 것 머리의 머지 앞 문장)"

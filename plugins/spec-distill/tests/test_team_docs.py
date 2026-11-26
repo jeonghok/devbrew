@@ -506,7 +506,7 @@ class SessionWorkerDocs(unittest.TestCase):
         sys.path.insert(0, str(REPO / "shared" / "deps"))
         import check_deps  # noqa: E402
         names = {r["name"] for r in check_deps.read_table(PLUGIN / "dependencies.md")}
-        self.assertEqual(names, {"python", "git", "gh", "superpowers", "quality-gates", "claude-code"})
+        self.assertEqual(names, {"python", "PyYAML", "git", "gh", "superpowers", "quality-gates", "claude-code"})
 
     def test_changelog_has_session_workers_entry(self):
         entries = [body for ver, body in changelog_entries((PLUGIN / "CHANGELOG.md").read_text(encoding="utf-8")) if ver == (8, 31, 0)]

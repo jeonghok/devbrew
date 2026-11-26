@@ -27,7 +27,7 @@ done
 # ── 2. 플러그인마다 의존 목록이 있고, 행이 정해진 이름이고, 판 칸이 재어져 있다 ──
 expected_names() {
   case "$1" in
-    spec-distill)  echo "python git gh superpowers quality-gates claude-code" ;;
+    spec-distill)  echo "python PyYAML git gh superpowers quality-gates claude-code" ;;
     quality-gates) echo "python git gh claude-code pr-review-toolkit" ;;
     project-init)  echo "python python-hook claude-code" ;;
     *)             echo "python claude-code" ;;

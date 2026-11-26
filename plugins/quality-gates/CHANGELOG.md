@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [17.2.1] — 2026-11-27
+
+### Changed
+- 세션 파일 꼴 문서(`skills/quality-pipeline/references/state-file-format.md`)에 qg 밖에서 이름으로 읽히는 것을 적었다 — spec-distill 지휘자의 머지 앞 리뷰가 읽는 `result.md` 의 절 · 목록 머리 이름, `findings-pre-merge.yaml` 의 맨 위 키 `findings` 와 막는 지적을 가르는 `severity`, `intent-return.md` 의 질문 칸.
+- 의존 측정(`check_deps.py measure`)이 PyYAML 판을 잰다 — 공유 파일 변경.
+
 ## [17.1.1] — 2026-11-24
 
 ### Fixed

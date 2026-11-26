@@ -5,6 +5,11 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [5.6.2] — 2026-11-27
+
+### Changed
+- 의존 측정(`check_deps.py measure`)이 PyYAML 판을 잰다 — 공유 파일 변경.
+
 ## [5.6.1] — 2026-11-22
 
 ### Removed

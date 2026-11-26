@@ -1,6 +1,8 @@
-"""shared/deps/check_deps.py — 판 문자열 판독 · 의존 표 판독."""
+"""shared/deps/check_deps.py — 판 문자열 판독 · 의존 표 판독 · PyYAML 재기."""
+import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -166,6 +168,55 @@ class WriteAtomic(unittest.TestCase):
         path = os.path.join(self.tmp, check_deps.FILE_NAME)
         check_deps._write_atomic(path, GOOD)
         self.assertEqual(os.listdir(self.tmp), [check_deps.FILE_NAME])
+
+
+_PYYAML_PROBE = (
+    "import json, sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "if sys.argv[2] == 'block':\n"
+    "    sys.modules['yaml'] = None\n"
+    "import check_deps\n"
+    "triple, reason = check_deps._measure_row('PyYAML', sys.argv[1], None)\n"
+    "try:\n"
+    "    import yaml\n"
+    "    have = yaml.__version__\n"
+    "except ImportError:\n"
+    "    have = None\n"
+    "print(json.dumps({'triple': list(triple) if triple else None, 'reason': reason, 'have': have}))\n"
+)
+
+
+class MeasurePyYAML(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def probe(self, mode):
+        # 스크립트 파일로 돌린다 — `-I -c` 는 사용자 site-packages 를 끄므로 그곳에 깔린 PyYAML 을 보지 못한다.
+        script = os.path.join(self.tmp, "probe.py")
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write(_PYYAML_PROBE)
+        deps = os.path.join(HERE, "..", "deps")
+        proc = subprocess.run([sys.executable, script, deps, mode],
+                              capture_output=True, encoding="utf-8", timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_measure_pyyaml_present(self):
+        got = self.probe("open")
+        if got["have"] is None:
+            self.skipTest("이 해석기에 PyYAML 이 없다")
+        self.assertIsNotNone(got["triple"], got["reason"])
+        self.assertEqual(tuple(got["triple"]), check_deps.version_triple(got["have"]))
+        self.assertIsNone(got["reason"])
+
+    def test_measure_pyyaml_absent(self):
+        got = self.probe("block")
+        self.assertIsNone(got["have"])
+        self.assertIsNone(got["triple"])
+        self.assertEqual(got["reason"], "PyYAML 을 불러오지 못했다")
 
 
 if __name__ == "__main__":

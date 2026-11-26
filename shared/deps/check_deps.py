@@ -8,7 +8,8 @@
   measure --plugin-root R [--superpowers-base <경로>] [--today YYYY-MM-DD]
       표의 `최소 판` · `잰 날짜` 칸을 지금 깔린 판으로 바꿔 쓴다. 강도 · 없을 때 칸은 그대로 둔다.
       재지 못한 행은 그대로 두고 알린다. `python-hook` 행은 플러그인의 훅 해석기
-      (`scripts/devbrew-python.sh`)가 고른 해석기의 판이다.
+      (`scripts/devbrew-python.sh`)가 고른 해석기의 판이다. `PyYAML` 행은 이 스크립트를 돌린 해석기가
+      불러오는 PyYAML 의 판이다.
 
 형제 모듈을 import 하지 않는다. 플러그인마다 `scripts/check_deps.py` 심볼릭 링크로 돌면
 sys.path[0] 이 정본 폴더(`shared/deps/`)라서 형제가 풀리지 않는다. 플러그인 루트는 인자로 받는다.
@@ -237,6 +238,15 @@ def _measure_row(name, plugin_root, superpowers_base, plugin=""):
         return _run_version(["gh", "--version"])
     if name == "claude-code":
         return _run_version(["claude", "--version"])
+    if name == "PyYAML":
+        try:
+            import yaml
+        except ImportError:
+            return None, "PyYAML 을 불러오지 못했다"
+        triple = version_triple(getattr(yaml, "__version__", ""))
+        if triple is None:
+            return None, "PyYAML 의 판을 뽑지 못했다: {0!r}".format(getattr(yaml, "__version__", None))
+        return triple, None
     if name == "superpowers":
         if not superpowers_base:
             return None, "superpowers skill 의 기준 폴더 경로를 받지 못했다 (--superpowers-base)"
