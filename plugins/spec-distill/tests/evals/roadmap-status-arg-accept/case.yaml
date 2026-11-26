@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: roadmap-status-arg-accept
+description: "plugins/spec-distill/skills/roadmap-status/SKILL.md 「지도 내기」 — 로드맵 경로 하나는 지도 스크립트에 넘긴다(roadmap-status-arg-reject 의 짝)"
+context:
+  scaffold_script: fixture
