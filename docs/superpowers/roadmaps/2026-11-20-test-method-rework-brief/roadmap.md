@@ -47,7 +47,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 의도: 새 기준으로 있는 테스트를 가르고 지우거나 합치거나 바꿔 테스트 양과 문구 수정 때의 깨짐, 값에 견줘 비싼 테스트가 쓰는 시간을 줄인다
 - 범위: 한다: 교차 참조까지 본 판정, 묶음(갈래 · 플러그인별) 단위 승인, 지운 것 기록, 네 갈래 밖 테스트를 같은 기준으로, 판정 뒤 이력 주석 덜기, 지우는 테스트를 이름으로 부르는 규칙 문서 고치기, 앞단 에픽과의 앞뒤 정하기, 값 대비 비용과 필요성 판정에 따라 줄이기 · 합치기, 테스트 쪽 구조 고치기(준비 함께 쓰기 · 나누기 · 더 싼 확인으로 내리기), E1 이 넘긴 느린 넷 · python 테스트 묶음 · 문서 리뷰 엔진 케이스를 준비물 단위로 고치기 / 안 한다: 보안 갈래의 글자 확인 지우기, 머지 전 대조의 구조(E1 의 일)
 - 의존: E2, E3
-- 브랜치: feature/test-prune
+- 브랜치: feature/test-prune-team-repo, feature/test-prune-docreview, feature/test-prune-conductor-state, feature/test-prune-spec-distill, feature/test-prune-qg, feature/test-prune-rest
 - 묶음: E4.md
 - 경로 예약: plugins/spec-distill/tests/, plugins/quality-gates/tests/, plugins/plugin-audit/tests/, plugins/project-init/tests/, shared/tests/, docs/removed-tests.md, docs/testing.md
 
@@ -104,6 +104,11 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
   - 「이대로 다시 나눈다 (권장)」
 
 ### 2026-11-26 · E4 의 경로 예약에 E2 가 만든 지운 것 기록(docs/removed-tests.md)과 기준 문서(docs/testing.md)를 더한다 — E4 가 테스트를 지우며 고칠 자리다
+- 바뀜: 바뀐 에픽 E4 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-26 · E4 의 브랜치를 PR 여섯의 브랜치 여섯으로 나눈다 — 설계(docs/superpowers/specs/2026-11-26-test-prune-design.md §1)가 준비물 단위 PR 셋과 플러그인 단위 정리 PR 셋으로 나눴다
 - 바뀜: 바뀐 에픽 E4 「이대로 다시 나눈다 (권장)」
 - 원문:
   - 「이대로 다시 나눈다 (권장)」
