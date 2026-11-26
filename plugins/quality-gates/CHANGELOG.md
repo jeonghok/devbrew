@@ -16,11 +16,11 @@
 - `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` — 대신: `/quality-gates:artifact-critique` 를 부르지 않는다
 - `DEVBREW_QUALITY_GATES_DISABLE_E2E` — 대신: e2e 질문에 「아니오」 로 답한다. 실행 자체를 막으려면 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST`
 - `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC` — 대신: 없음 — 읽기만 하는 단계다
-- `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` — 대신: 유예 시간 `DEVBREW_QUALITY_GATES_TTL_HOURS` 를 크게 준다
+- `DEVBREW_SKIP_HOOKS=quality-gates:qg-gc` — 대신: 유예 시간 `DEVBREW_QUALITY_GATES_TTL_HOURS` 를 크게 준다 — 켜 둔 사용자는 정리가 다시 돈다. 지워지는 것은 유예 시간이 지난 남의 품질 게이트 세션 폴더다
 - 진입 사전 검사(`scripts/entry_preflight.py`)의 통째 끄기 판정 — `disabled` 감시줄과 `switch_name` 갈래. 끄기 변수가 켜져 있어도 사전 검사는 `ok` 감시줄을 낸다.
 - 진입 skill 의 통째 끄기 판독 표 행.
 - 끄기 판정 정본 `kill_switch_active.py` 의 사본(`scripts/kill_switch_active.py`).
-- 옛 작업 사본 자리(`.claude/quality-gates/worktrees`)의 치우기 · 옛 경로 받기 · 알림과 `setup-qg.sh` 의 `worktrees` 예약.
+- 옛 작업 사본 자리(`.claude/quality-gates/worktrees`)의 치우기 · 옛 경로 받기 · 알림과 `setup-qg.sh` 의 `worktrees` 예약. 옛 자리에 남은 사본은 이 판부터 만들기도 지우기 명령도 다루지 않는다 — 손으로 지운다.
 
 ## [17.1.2] — 2026-11-25
 

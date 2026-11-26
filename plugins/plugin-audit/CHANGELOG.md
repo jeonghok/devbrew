@@ -11,10 +11,10 @@
 ### Removed
 - 끄기 변수 은퇴 — 더 듣지 않는다.
 - `DEVBREW_PLUGIN_AUDIT_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
-- `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` — 대신: `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` — codex 는 쓰되 웹만 막는 길은 없어진다
+- `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` — 대신: `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` — codex 는 쓰되 웹만 막는 길은 없어진다. 감사의 웹 끄기 변수를 켜 둔 사용자는 감사의 codex 웹 검색이 다시 켜진다
 - 진입 사전 검사(`scripts/entry_preflight.py`)의 통째 끄기 판정 — `disabled` 감시줄과 `switch_name` 갈래. 끄기 변수가 켜져 있어도 사전 검사는 `ok` 감시줄을 낸다.
 - 진입 skill 의 통째 끄기 판독 표 행.
-- 옛 작업 사본 자리(`.claude/plugin-audit/worktrees`)의 치우기 · 옛 경로 받기 · 알림과 감사 복사 제외.
+- 옛 작업 사본 자리(`.claude/plugin-audit/worktrees`)의 치우기 · 옛 경로 받기 · 알림과 감사 복사 제외. 옛 자리에 남은 사본은 이 판부터 만들기도 지우기 명령도 다루지 않는다 — 손으로 지운다.
 
 ## [1.10.3] — 2026-11-25
 
