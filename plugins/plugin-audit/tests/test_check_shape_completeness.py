@@ -1,4 +1,4 @@
-import ast, json, subprocess, sys, tempfile, unittest
+import ast, json, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-shape-completeness.py"
@@ -14,6 +14,7 @@ ANCHORS = {
     "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
     "deps_declared": "최소 버전이 선언된 의존성",
 }
+FX = Path(__file__).resolve().parent / "fixtures" / "switch-readers"
 
 
 def run(plugin_dir):
@@ -236,12 +237,60 @@ class TestShapeCompleteness(unittest.TestCase):
                 self.assertTrue(gaps[req]["present"], req)
             self.assertTrue(gaps["deps_declared"]["present"])
 
-    def test_checklist_names(self):  # AC9 — 요건은 정확히 여섯
+    def _readers(self, case):
+        g = self._gaps(FX / case)["switches_have_readers"]
+        return g["present"], g.get("missing")
+
+    def test_switch_with_reader_is_present(self):   # AC24 — 읽는 코드가 있다
+        self.assertEqual(self._readers("reads"), (True, None))
+
+    def test_switch_named_but_never_read_is_gap(self):   # AC24 — 이름만 댄다
+        self.assertEqual(self._readers("nowhere"), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_comment_and_echo_lines_are_not_readers(self):   # AC24 — 주석 · echo 줄은 읽는 곳이 아니다
+        self.assertEqual(self._readers("comment-only"), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_indirect_conf_reader_is_present(self):   # AC24 — .conf 의 키로 간접해서 읽는다
+        self.assertEqual(self._readers("indirect"), (True, None))
+
+    def test_retired_row_name_is_not_a_gap(self):   # AC24 — 은퇴 행의 이름은 읽는 곳이 없어도 gap 이 아니다
+        with tempfile.TemporaryDirectory() as d:
+            dd = Path(d) / "fx"
+            shutil.copytree(FX / "nowhere", dd)
+            self.assertFalse(self._gaps(dd)["switches_have_readers"]["present"])   # 양성 대조 — 남음 행이면 gap
+            sw = dd / "switches.md"
+            sw.write_text(sw.read_text(encoding="utf-8").replace("| 남음 |", "| 은퇴 |"), encoding="utf-8")
+            self.assertTrue(self._gaps(dd)["switches_have_readers"]["present"])
+
+    def test_other_plugin_and_old_form_names_are_not_gaps(self):   # AC24 — 이 플러그인 접두가 아닌 이름은 센 대상이 아니다
+        with tempfile.TemporaryDirectory() as d:
+            dd = Path(d) / "fx"
+            shutil.copytree(FX / "reads", dd)
+            sk = dd / "skills" / "x" / "SKILL.md"
+            sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_OTHER_DISABLE_X` · `DEVBREW_DISABLE_FX_A`\n", encoding="utf-8")
+            self.assertEqual(self._readers_at(dd), (True, None))
+            sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_FX_DISABLE_B`\n", encoding="utf-8")   # 양성 대조 — 접두가 맞으면 잡힌다
+            self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_B"]))
+
+    def test_table_row_without_reader_is_gap_even_if_text_is_silent(self):   # AC24 — 표에 있는데 읽는 곳이 없다
+        with tempfile.TemporaryDirectory() as d:
+            dd = Path(d) / "fx"
+            shutil.copytree(FX / "nowhere", dd)
+            sk = dd / "skills" / "x" / "SKILL.md"
+            sk.write_text("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\nbody\n", encoding="utf-8")
+            self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def _readers_at(self, dd):
+        g = self._gaps(dd)["switches_have_readers"]
+        return g["present"], g.get("missing")
+
+    def test_checklist_names(self):  # AC9 · AC24 — 요건은 정확히 일곱
         with tempfile.TemporaryDirectory() as d:
             _mk_plugin(d)
             names = [g["requirement"] for g in self._gaps_list(d)]
             self.assertEqual(names, ["plugin_json_fields", "readme_principles", "changelog_if_v1",
-                                     "agents_allowlist", "skills_cost_class", "deps_declared"])
+                                     "agents_allowlist", "skills_cost_class", "deps_declared",
+                                     "switches_have_readers"])
 
     def _gaps_list(self, d):
         r, obj = run(d)
