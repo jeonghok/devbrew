@@ -275,7 +275,7 @@ run_record() {   # run_record <디렉토리> <겹침 기록 내용 | -> [절 머
   local d="$1" sid=sidrec0001 rd
   mkdir -p "$d"; git -C "$d" init -q && git -C "$d" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
   rd="$d/.claude/quality-gates/$sid"; mkdir -p "$rd"
-  record_fence | sed -e "s/<8 hex>/deadbeef/g" -e "s/<session-id>/$sid/g" -e "s|<Step 3.5 의 RV>|$d|g" > "$d/rec.sh"
+  record_fence | sed -e "s/<8 hex>/deadbeef/g" -e "s/<session-id>/$sid/g" -e "s|<Step 3 의 RV 절대 경로>|$d|g" > "$d/rec.sh"
   printf 'verdict: clean\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · abc1234\n' > "$rd/verdict.out"
   printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$rd/result.md"
   printf 'new_failures: 0\n' > "$rd/differential.yaml"

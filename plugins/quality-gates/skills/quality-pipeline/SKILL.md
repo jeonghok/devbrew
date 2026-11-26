@@ -1360,7 +1360,7 @@ Then render the summary and record the local result (a trivia run and an empty-f
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-SYN="<Step 3.5 의 RV>/synth.out"
+SYN="<Step 3 의 RV 절대 경로>/synth.out"
 printf '판정\t%s\n결과\tfinished\n' "$(tail -n 1 "$RD/verdict.out")" \
   | "$QG/scripts/render-terminal.py" table --title "Quality Gates — 끝"
 {

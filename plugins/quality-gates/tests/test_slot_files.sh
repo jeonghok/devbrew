@@ -347,7 +347,7 @@ sec_ln="$(grep -n 'subagent_type: "quality-gates:security-reviewer"' "$SKILLF" |
 assert_eq "$(grep -c 'mktemp' "$SKILLF")" "1" "SKILL 에 mktemp 줄이 하나 — RV 는 한 자리에서만 만든다"
 if [ -n "$rv_ln" ] && [ -n "$sec_ln" ] && [ "$rv_ln" -lt "$sec_ln" ]; then ok "RV 를 만드는 줄($rv_ln)이 보안 dispatch($sec_ln)보다 앞"
 else no "RV 를 만드는 줄이 보안 dispatch 보다 앞이 아니다(RV ${rv_ln:-없음} · 보안 ${sec_ln:-없음})"; fi
-assert_not_grep "$(cat "$SKILLF")" '<Step 3\.5 의 절대 경로>|<1 에서 만든 절대 경로>' "옛 RV 자리표(Step 3.5 에서 만든 RV)가 없다"
+assert_not_grep "$(cat "$SKILLF")" '<Step 3\.5 의[^>]*>|<1 에서 만든 절대 경로>' "옛 RV 자리표(Step 3.5 에서 만든 RV — 「<Step 3.5 의 …>」 꼴 전부)가 없다"
 
 # 가짜 세션 — 임시 리포에 세션 폴더 · 리뷰 diff · 의도 출처를 두고 RV 펜스를 돌린다.
 SID="slotfiles01"
