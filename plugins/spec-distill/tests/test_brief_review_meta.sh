@@ -48,8 +48,6 @@ for kw in 'doc-critic' 'doc-recritic' 'brief-readback' 'reviewing-brief'; do
     && ok "T15: README에 brief 자리 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
 done
 KS="$(section '^## 끄는 법' "$RM")"
-grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \
-  && ok "T15: README 「끄는 법」에 신규 스위치" || no "T15: 신규 kill switch 미문서화"
 grep -qF 'Law 2' <<<"$PRIN" && ok "T15: Principles Instantiated에 Law 2" || no "T15: Law 2 항목 부재"
 
 # --- C4 : Flow **다이어그램**이 리뷰 단계를 통과한다 -------------------------

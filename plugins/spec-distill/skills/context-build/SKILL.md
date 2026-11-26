@@ -601,6 +601,5 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/context-build/references/state-migration.md
 
 ## kill switch
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1`: `## 진입 단계` 1 이 멈춘다(no-op). 상태 파일은 docs 에 그대로 남는다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` · `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>`: 조사 호출 · 포화 판정 상한의 시작값(기본 60 · 5). 상한은 끄는 스위치가 아니라 닿으면 사용자에게 묻는 자리다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.

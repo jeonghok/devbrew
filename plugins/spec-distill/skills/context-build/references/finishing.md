@@ -236,7 +236,6 @@ Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT
 두 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다.
 
 - 지출 승인 게이트는 없습니다(`cost_class: medium`). 재리뷰 상한은 안전 정지이고 승인 게이트에서 사용자가 연다 — 상한 뒤의 추가 라운드는 사용자가 그 skill 의 승인 게이트에서 고른 선택지 이름이나 기타 칸에 쓴 말을 승인으로 남겨(출처와 함께 기록) 열어야만 돕니다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가 Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
 - 리뷰가 payload 를 수정할 수 있습니다(§0 · §2~§5 — 프로필의 수정 자리. §1 은 사용자 결정이고 §6 은 추가만 허용이다). 수정이 일어나면 Step B는 **리뷰 후 최종 문서**를 봅니다.
 - 산출물 셋(엔진 게이트 결과 / 냉독 요약 + gap / degrade 채널)이 Step B 게이트로 넘어옵니다. 엔진
   승인 게이트의 2단계(진행 옵션)는 그 skill 이 띄우지 않고 아래 Step B 가 묻습니다.

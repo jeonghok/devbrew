@@ -183,8 +183,6 @@ for gone_var in 'CODEX_DIR_YAML' 'CODEX_FID_YAML'; do
     && no "A.5 가 옛 인자 ${gone_var} 를 아직 세우거나 나른다 — 호출자 계약은 \$PAYLOAD·\$AUDIT 둘이다" \
     || ok "A.5 에 옛 인자 ${gone_var} 없음 (callee 가 codex 산출물 경로를 도출한다)"
 done
-grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$WA5" \
-  && ok "A.5에 kill switch 경로" || no "A.5에 kill switch 경로 부재"
 # 한 블록만 추가 — A.5가 파이프라인 절차를 복제하면 두 곳 drift가 생긴다
 n5="$(wc -l <<<"$WA5" | tr -d ' ')"
 [[ "$n5" -le 30 ]] && ok "A.5가 한 블록 규모 (${n5} 줄 ≤ 30)" || no "A.5가 ${n5} 줄 — 파이프라인을 복제했다"

@@ -120,7 +120,7 @@ seed 는 태그를 쓰지 않습니다. 대신 산문 규약 셋으로 Phase 1 �
 워크트리 질문을 건너뛰는 경우도 같다 — audit 이름에 주제가 필요하다. 그 답들은 audit 보다 먼저 온
 원문이므로 `## 확산` 1번에서 `## 1. 원문` 의 **첫 항목**부터 요약 없이 옮긴다.
 
-`DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` 이거나 `EnterWorktree` 도구가 없으면 **묻지 않고** 현재
+`EnterWorktree` 도구가 없으면 **묻지 않고** 현재
 디렉토리에서 진행한다. 그 밖에는 **질문을 띄우기 전에** 로컬 전용 커밋 여부부터 확인한다 —
 사용자가 실제로 읽는 것은 질문·옵션 텍스트뿐이다:
 
@@ -189,8 +189,7 @@ AskUserQuestion({ questions: [{
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
    열 때 그 디렉토리에서 열어야 `/spec-distill:context-build @<seed 경로>` 가 그 파일을 찾는다.
 
-거절·도구 부재·스위치 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재|
-DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
+거절·도구 부재 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
 
 `worktree.baseRef` 를 자동으로 `head` 로 바꾸지 않는다 — 로컬에만 있는 커밋이 필요한지는 사용자가 정한다. 필요하면 사용자 설정 `worktree.baseRef=head` 로 로컬 HEAD 기준으로 바꾼다.
 
@@ -725,7 +724,6 @@ Agent({
 이 자리(문서 경로)는 `diff` 를 싣지 않습니다. 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를
 못 받으면 「이 변경이 도입했는가」 축을 쓰지 않습니다. dispatch 사유도 이전 대화도 어느 리뷰어가
 냈는지도 넣지 않습니다.
-`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 이면 dispatch 하지 않고 7단계를 `--recritic-skipped` 로 돕니다.
 
 ```
 Agent({
@@ -1450,7 +1448,7 @@ check 0 은 seed 본문 **전체**가 비어 있지 않은지만 보고, audit �
 
 - **polite stop 금지 (AP2)** — ①/② 는 둘 다 핸드오프입니다. 이 옵션에서 polite stop 은 두 줄 명령을
   노출하지 않고 설명만 하고 끝내는 것입니다 — 명령을 노출하고 턴을 끝내는 것이 이 옵션의 완료입니다.
-  게이트를 거치지 않는 예외 경로(kill switch · 경로 부재)면 명시적 advisory 단락을 동반해야 합니다 —
+  게이트를 거치지 않는 예외 경로(경로 부재)면 명시적 advisory 단락을 동반해야 합니다 —
   게이트-less silent 종료 금지.
 - **cross-compact 조기 진행 금지** — ①/② 어느 쪽이든 두 줄 명령을 노출하면 **거기서 턴 종료(STOP)**
   합니다. 같은 턴에서 컨텍스트 쌓기를 시작하지 않습니다. 다음 단계는 사용자가 그 명령을 실제로 친 **다음 턴**의
@@ -1465,8 +1463,5 @@ check 0 은 seed 본문 **전체**가 비어 있지 않은지만 보고, audit �
 
 ## kill switch
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1` — `## 진입 단계` 1 이 멈춘다(no-op), state 보존.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — 리뷰 엔진의 codex 축만 skip(탐지 · 재비판은 그대로). `### codex` 펜스가 집행하고 엔진이 게이트 첫 줄로 공시한다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 재비판만 skip(`doc-recritic` dispatch 없음 · 7단계 `--recritic-skipped`). 엔진이 `advisory[]` 로 공시한다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이름 조회를 하지 않는다(`### 탐색 경계` 펜스가 집행).
-- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — 워크트리 질문·생성을 건너뛰고 현재 디렉토리에서 진행(audit §5 에 사유).

@@ -457,7 +457,7 @@ fi
 <!-- codex-gate:end -->
 
 `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 은 codex 만 끄고 탐지 리뷰는 그대로 돈다.
-`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 은 재비판만 끈다. 뒤의 둘은 dispatch 직전에 확인하고
+이 스위치는 dispatch 직전에 확인하고
 캐시하지 않으며, 발화한 스위치는 아래 degrade 채널로 공시한다.
 
 ## dispatch 블록 둘

@@ -467,15 +467,12 @@ if [[ $BUILD_RC -eq 7 ]]; then emit_fallback preamble_missing; fi
 if [[ $BUILD_RC -ne 0 ]]; then emit_fallback prompt_build_failed; fi
 
 # 웹 스위치 — 이 if/else 가 WEB_ARGS 를 만드는 **유일한 자리**다(P11). 기본값은 꺼짐:
-# 프로필 web:false 면 두 kill switch 와 무관하게 꺼져 있고(WEB_META_FILE 이 "web: false"),
-# `web: true` 여도 두 호스트 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB ·
-# DEVBREW_QUALITY_GATES_DISABLE_WEB) 중 하나라도 켜져 있으면 끈다 — 공유 러너는 자기
-# 호스트를 모르므로 과잉 적용(둘 다 검사)이 안전한 방향이다.
+# 프로필 web:false 면 kill switch 와 무관하게 꺼져 있고(WEB_META_FILE 이 "web: false"),
+# `web: true` 여도 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB)가 켜져 있으면 끈다.
 WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
 WEB_META_VAL="$(cat "$WEB_META_FILE" 2>/dev/null || true)"
 if [[ "$WEB_META_VAL" == "web: true" \
-      && "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" != "1" \
-      && "${DEVBREW_QUALITY_GATES_DISABLE_WEB:-0}" != "1" ]]; then
+      && "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" != "1" ]]; then
   WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
 elif [[ "$WEB_META_VAL" == "web: true" ]]; then
   echo "[docreview] web 비활성(kill switch) — codex 리포 근거만" >&2

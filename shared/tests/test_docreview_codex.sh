@@ -4,7 +4,7 @@
 # codex 러너(run_docreview_codex_reviewer.sh)의 배선을 잰다 — 실제 codex 는 절대 부르지
 # 않는다(fixtures/docreview/codex-stub.sh 가 그 자리를 대신한다). 재는 것 셋: ① 프로필의
 # ground_truth·layer_rubric·allowed_dispositions·본문(검토 항목)·prompt-preamble.md(P21) 가 실제로 프롬프트에 실리는가
-# ② 웹 스위치가 프로필 web 필드 + 두 호스트 kill switch 의 OR 로 정확히 닫히는가(P11 —
+# ② 웹 스위치가 프로필 web 필드와 spec-distill 웹 끄기 변수로 정확히 닫히는가(P11 —
 # 양성 대조 포함, 켠 적 없는 스위치의 "꺼짐"은 공허하다) ③ codex_findings_to_yaml.py
 # --emit-keys docreview 변환과 rc==3 fail-closed(호출자가 stale 을 지워야 하는 계약).
 #
@@ -62,9 +62,9 @@ assert_file_grep "$TMPD/out.yaml" 'edit_scope: "#2-goals"' \
   "러너: docreview keyset 이 edit_scope 도 낸다"
 assert_file_grep "$TMPD/out.yaml" 'codex_failed: false' "러너: 성공 마커"
 assert_file_absent "$TMPD/argv.txt" 'web_search="live"' \
-  "러너: web:false 프로필 → 두 kill switch 무관하게 웹 켜지 않음"
+  "러너: web:false 프로필 → 웹 끄기 변수와 무관하게 웹 켜지 않음"
 
-# ── P11 양성 대조 — brief 프로필(web: true) + 두 kill switch 다 꺼짐 → live ──
+# ── P11 양성 대조 — brief 프로필(web: true) + 웹 끄기 변수 꺼짐 → live ──
 # 이 케이스가 없으면 "웹이 꺼졌다"는 아래 부정 케이스들이 전부 공허참이다(켠 적이
 # 없으니 항상 꺼져 보인다) — 브리프가 명시적으로 요구한 양성 대조. `env -u` 로 앰비언트
 # 환경의 오염 가능성까지 배제한다(둘 다 명시적으로 없는 상태를 만든다).
@@ -75,18 +75,20 @@ assert_file_grep "$TMPD/bargv.txt" 'web_search="live"' \
   "P11 양성 대조: web:true + 두 kill switch 다 꺼짐 → 웹 live"
 assert_file_grep "$TMPD/b.yaml" 'disposition: decide' "러너: brief 프로필 경로도 정상 변환"
 
-# ── P11 음성 — 두 kill switch 를 **각각** 켜서 OR 로 닫히는지 확인 ──────────
+# ── P11 음성 — 웹 끄기 변수를 켜면 닫히고, 은퇴한 qg 변수는 더 닫지 않는다 ─────
+# 은퇴한 이름만 켠 호출이 웹을 live 로 둔다 — 양성 대조(위)와 같은 꼴의 호출이라
+# 「살아 있는 변수만 닫는다」 가 재어진다.
 DEVBREW_QUALITY_GATES_DISABLE_WEB=1 DOCREVIEW_CODEX_ARGV_FILE="$TMPD/b2argv.txt" \
   CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$BRIEFPROF" "$FX/brief-sample.md" "$REPO_ROOT" "$TMPD/b2.yaml" 2>/dev/null
-assert_file_absent "$TMPD/b2argv.txt" 'web_search="live"' \
-  "러너: DEVBREW_QUALITY_GATES_DISABLE_WEB=1 만으로도 웹을 끈다(P11 OR)"
+assert_file_grep "$TMPD/b2argv.txt" 'web_search="live"' \
+  "러너: DEVBREW_QUALITY_GATES_DISABLE_WEB=1 만으로는 웹을 끄지 않는다(은퇴한 이름)"
 
 DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 DOCREVIEW_CODEX_ARGV_FILE="$TMPD/b3argv.txt" \
   CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$BRIEFPROF" "$FX/brief-sample.md" "$REPO_ROOT" "$TMPD/b3.yaml" 2>/dev/null
 assert_file_absent "$TMPD/b3argv.txt" 'web_search="live"' \
-  "러너: DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 만으로도 웹을 끈다(P11 OR, 다른 호스트 스위치)"
+  "러너: DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 이면 웹을 끈다"
 
 # ── fail-closed — 프로필 부재 ─────────────────────────────────────────────
 CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \

@@ -95,7 +95,7 @@ else
       # 넘기는 profile의 posture"를 잰다 — 아래 루프 앞에서 `OBS_DOCREVIEW_WEB=true` 로
       # obs_invoke 가 `web: true` 프로필을 넘기게 하므로 on 이다. 그래서 brief 자리의 웹 ON
       # 경로가 다른 호출부와 **같은 계약**(두 열 양방향 · kill switch effect · `=yes` 엄격성)
-      # 으로 재진다. 두 배포 경로가 두 호스트 스위치를 하나씩 맡는다(kill_switch_for).
+      # 으로 재진다. 두 배포 경로가 같은 변수를 맡는다(kill_switch_for).
       # `shared/tests/test_docreview_codex.sh` 는 프로필 web 필드 × 스위치 조합의 `live`
       # 여부를 따로 잰다.
       run_docreview_codex_reviewer.sh) echo on ;;
@@ -104,19 +104,13 @@ else
   }
   # ON 사이트에만 의미가 있다. qg 두 곳은 현재 OFF라 이 표에 미도달이지만, ON
   # 전환 시 쓸 이름을 미리 등록해둔다(지금 죽은 스위치를 만들지는 않는다).
-  # docreview 러너는 두 플러그인에 같은 파일로 배포되고 두 호스트 스위치를 모두 본다(P11 OR).
-  # 배포 경로마다 그 호스트의 스위치를 하나씩 맡겨, 두 스위치가 각각 effect·엄격성으로 재진다.
-  # 경로 패턴은 `plugins/` 뒤 구분자 수에 기대지 않는다(수집기 출력이 `plugins//x` 일 수 있다).
+  # docreview 러너는 두 플러그인에 같은 파일로 배포되고 spec-distill 웹 끄기 변수만 본다 —
+  # 어느 배포 경로로 불러도 그 변수가 effect·엄격성으로 재진다.
   kill_switch_for() {  # <candidate path> -> switch var name
     case "$(basename "$1")" in
       run_audit_codex_reviewer.sh) echo 'DEVBREW_PLUGIN_AUDIT_DISABLE_WEB' ;;
       run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
-      run_docreview_codex_reviewer.sh)
-        case "$1" in
-          */spec-distill/scripts/*) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
-          */quality-gates/scripts/*) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
-          *) echo '' ;;
-        esac ;;
+      run_docreview_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
       *) echo '' ;;
     esac
   }
