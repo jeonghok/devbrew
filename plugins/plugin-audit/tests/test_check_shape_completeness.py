@@ -13,6 +13,7 @@ ANCHORS = {
     "agents_allowlist": "`tools:` allowlist를 선언",
     "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
     "deps_declared": "최소 버전이 선언된 의존성",
+    "switches_have_readers": "끄기 변수마다 읽는 코드가 있다",
 }
 FX = Path(__file__).resolve().parent / "fixtures" / "switch-readers"
 
@@ -279,6 +280,38 @@ class TestShapeCompleteness(unittest.TestCase):
             sk = dd / "skills" / "x" / "SKILL.md"
             sk.write_text("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\nbody\n", encoding="utf-8")
             self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def _skill_variant(self, d, skill_tail, tests_script=None):
+        dd = Path(d) / "fx"
+        shutil.copytree(FX / "nowhere", dd)
+        (dd / "skills" / "x" / "SKILL.md").write_text(
+            "---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\n" + skill_tail, encoding="utf-8")
+        if tests_script:
+            (dd / "tests").mkdir()
+            (dd / "tests" / "t.sh").write_text(tests_script, encoding="utf-8")
+        return self._readers_at(dd)
+
+    READ = '[ "${DEVBREW_FX_DISABLE_A:-}" = 1 ]'
+
+    def test_read_form_in_skill_prose_is_not_a_reader(self):   # AC24 — skill 문장으로만 꺼지는 스위치
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A` " + self.READ + "\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_read_form_in_skill_bash_fence_is_a_reader(self):   # AC24 — 양성 짝
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n```bash\n" + self.READ + "\n```\n"),
+                             (True, None))
+
+    def test_read_form_in_non_bash_fence_is_not_a_reader(self):   # AC24
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n```text\n" + self.READ + "\n```\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_read_form_only_in_tests_is_not_a_reader(self):   # AC24
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n", tests_script=self.READ + "\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
 
     def _readers_at(self, dd):
         g = self._gaps(dd)["switches_have_readers"]
