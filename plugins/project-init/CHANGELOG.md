@@ -5,6 +5,18 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [6.0.0] — 2026-11-26
+
+### Changed
+- `PostToolUse` 훅이 끄기 변수 표의 은퇴 행 가운데 켜진 이름이 있을 때만 사람 채널 끝에 「더 듣지 않는다 — 플러그인 끄기를 쓴다(<이름들>)」 한 줄을 덧붙인다. 표를 못 읽으면 덧붙임 없이 지금처럼 돈다.
+
+### Removed
+- 끄기 변수 은퇴 — 더 듣지 않는다.
+- `DEVBREW_PROJECT_INIT_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` — 대신: 플러그인 끄기, 또는 설정의 `disableAllHooks`(모든 플러그인의 훅이 함께 꺼진다)
+- 진입 사전 검사(`scripts/entry_preflight.py`)의 통째 끄기 판정 — `disabled` 감시줄과 `switch_name` 갈래. 끄기 변수가 켜져 있어도 사전 검사는 `ok` 감시줄을 낸다.
+- 끄기 판정 정본 `kill_switch_active.py` 의 사본(`scripts/kill_switch_active.py`)과 해석기(`scripts/devbrew-python.sh`)의 kill switch 절. 훅은 끄기 변수로 꺼지지 않는다.
+
 ## [5.6.1] — 2026-11-22
 
 ### Removed
