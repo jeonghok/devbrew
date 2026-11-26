@@ -1217,7 +1217,7 @@ def _e_r4(v: View) -> Todo:
 def _e_r5(v: View) -> Todo:
     idents = [_ident(a.id) for a in v.last.answers if a.kind == ASK_INTENT and a.record == ""]
     return Todo("기록 파일 쓰기", "의도 점검 답(%s)의 기록 파일을 기록 브랜치에 쓰고 record 로 그 경로를 적는다 — "
-                            "다시 묻지 않는다. 기록 브랜치를 만들지 못하면 「%s — <사유>」 를 적는다"
+                            "그 질문을 다시 내지 않는다. 기록 브랜치를 만들지 못하면 「%s — <사유>」 를 적는다"
                 % (", ".join(idents), F.NO_RECORD_BRANCH))
 
 
