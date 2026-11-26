@@ -45,6 +45,30 @@ case "$1 ${2:-}" in
     done
     [ "${GH_COMMENT_RC:-0}" = 0 ] || { echo 'HTTP 403' >&2; exit "$GH_COMMENT_RC"; }
     echo 'https://github.com/o/r/pull/7#issuecomment-1'; exit 0 ;;
+  "api --hostname")
+    # 확인 갈래의 읽기 둘. GH_LOGIN(기본 me) · GH_USER_RC — `user --jq .login`.
+    # GH_COMMENTS — `login<TAB>본문` 줄의 파일(본문은 printf %b 꼴: \n · \r · \\). 가짜가 본문을 base64 로 바꿔
+    # `login<TAB>base64` 로 낸다(sink 가 넘긴 --jq 의 결과 꼴). GH_COMMENTS_RAW — 그 파일을 그대로 낸다(깨진 줄 흉내).
+    # GH_COMMENTS_RC — 목록 호출이 그 rc 로 실패. GH_COMMENTS_PAGE_FAIL=1 — 첫 쪽(첫 줄)을 낸 뒤 둘째 쪽에서 rc 1.
+    case " $* " in
+      *" user --jq .login "*)
+        [ "${GH_USER_RC:-0}" = 0 ] || { echo 'HTTP 401: Bad credentials' >&2; exit "$GH_USER_RC"; }
+        printf '%s\n' "${GH_LOGIN-me}"; exit 0 ;;
+      *" --paginate repos/"*"/issues/"*"/comments --jq "*)
+        [ "${GH_COMMENTS_RC:-0}" = 0 ] || { echo 'HTTP 502: Bad Gateway' >&2; exit "$GH_COMMENTS_RC"; }
+        if [ -n "${GH_COMMENTS_RAW:-}" ]; then cat "$GH_COMMENTS_RAW"; exit 0; fi
+        n=0; tab="$(printf '\t')"
+        if [ -n "${GH_COMMENTS:-}" ]; then
+          while IFS= read -r line || [ -n "$line" ]; do
+            n=$((n + 1))
+            if [ "${GH_COMMENTS_PAGE_FAIL:-0}" = 1 ] && [ "$n" -gt 1 ]; then break; fi
+            printf '%s\t%s\n' "${line%%"$tab"*}" "$(printf '%b' "${line#*"$tab"}" | base64 | tr -d '\n')"
+          done < "$GH_COMMENTS"
+        fi
+        [ "${GH_COMMENTS_PAGE_FAIL:-0}" = 1 ] && { echo 'HTTP 502: Bad Gateway (page 2)' >&2; exit 1; }
+        exit 0 ;;
+    esac
+    echo "gh stub: 모르는 api 호출: $*" >&2; exit 1 ;;
 esac
 exit 0
 EOF
@@ -65,6 +89,11 @@ ln -s "$(command -v python3)" "$T/nogh/python3"
 NOGH_PATH="$T/nogh:/usr/bin:/bin"
 
 OPEN_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t@HEAD@\tfalse'
+# 확인 갈래의 gh 호출 두 줄(가짜 gh 기록 꼴 — 인자를 빈칸 하나로 잇는다).
+API_USER='api --hostname github.com user --jq .login'
+API_LIST='api --hostname github.com --paginate repos/o/r/issues/7/comments --jq .[] | [.user.login, (.body|@base64)] | @tsv'
+POSTED='posted: https://github.com/o/r/pull/7#issuecomment-1'
+notice() { printf '> [quality-gates] 이미 단 댓글을 확인하지 못했다(%s) — 게시한다(같은 판정이 두 번 달릴 수 있다).' "$1"; }
 
 # ── 픽스처 리포: main 위에 feat 브랜치 커밋 하나 ─────────────────────────────
 REPO="$T/repo"
@@ -106,7 +135,10 @@ case_AC12_posts_one_new_comment() {
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "AC12: 마지막 줄 posted: <url>"
   p6_single_result_line AC12
   assert_eq "$(printf '%s\n' "$GHCALLS" | grep -c '^pr comment')" "1" "AC12: gh pr comment 정확히 한 번"
-  assert_eq "$(printf '%s\n' "$GHCALLS" | grep -cE '^api|--edit-last|^pr edit')" "0" "AC12: 기존 코멘트 수정 경로(api · --edit-last · pr edit) 0"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep -cE -- '--edit-last|^pr edit')" "0" "AC12: 기존 코멘트 수정 경로(--edit-last · pr edit) 0"
+  # api 호출은 확인 갈래의 읽기 둘뿐이다(R7 §2) — 쓰기 꼴(-X · --method · -f · -F · --field · --raw-field · --input)이 없다.
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^api')" "$API_USER
+$API_LIST" "AC12: api 호출은 확인 갈래의 읽기 둘(계정 · 댓글 목록) 그대로"
   if cmp -s "$BODY" "$GH_BODY_COPY"; then ok "P4: gh 가 받은 본문이 파일 바이트 그대로"; else no "P4: gh 가 받은 본문이 다르다"; fi
   printf '%s\n' "$GHCALLS" | grep -q '^pr comment 7 --body-file ' \
     && ok "P4: 본문은 --body-file 로만 넘긴다" || no "P4: --body-file 이 아닌 경로로 넘겼다 ($GHCALLS)"
@@ -570,6 +602,171 @@ case_usage_errors() {
   assert_eq "$GHCALLS" "" "usage: 빈 본문 파일은 gh 호출 0"
 }
 
+# ── R7 §2 · AC7 · AC30 — 게시 앞에 같은 본문의 내 댓글이 있는지 GitHub 에 묻는다 ──────────────
+# mk_comments <out> (<login> <본문 파일>)... — 가짜 gh 의 GH_COMMENTS 파일(본문은 printf %b 꼴로 적는다).
+mk_comments() {
+  python3 -I -c '
+import sys
+out, a = sys.argv[1], sys.argv[2:]
+with open(out, "w", encoding="utf-8", newline="") as f:
+    for i in range(0, len(a), 2):
+        b = open(a[i + 1], "rb").read().decode("utf-8")
+        f.write(a[i] + "\t" + b.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n") + "\n")
+' "$@"
+}
+api_calls() { printf '%s\n' "$GHCALLS" | grep -c '^api'; }
+
+case_check_same_body_same_account_skips() {
+  printf 'x\n' > "$T/other-body.md"
+  mk_comments "$T/c-same" other "$T/other-body.md" me "$BODY"
+  GH_COMMENTS="$T/c-same" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$RC:$LAST" "0:skipped: already-posted" "같은 계정 · 같은 본문: skipped: already-posted(rc 0)"
+  p6_single_result_line already-posted; no_comment_call "already-posted"
+  assert_eq "$GHCALLS" "auth status --active --hostname github.com
+pr view feat -R github.com/o/r --json number,state,url,baseRefName,headRefOid,isCrossRepository --jq [.number,.state,.url,.baseRefName,.headRefOid,.isCrossRepository]|@tsv
+$API_USER
+$API_LIST" "확인 순서: 인증 → PR 찾기 → 계정 → 댓글 목록(모든 쪽) — 그 뒤 pr comment 없음"
+}
+case_check_crlf_and_trailing_newline_still_same() {
+  local v
+  for v in crlf no-final-newline extra-newlines crlf-extra; do
+    case "$v" in
+      crlf)             python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"\n", b"\r\n"))' "$BODY" "$T/v.md" ;;
+      no-final-newline) python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.rstrip(b"\n"))' "$BODY" "$T/v.md" ;;
+      extra-newlines)   python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d + b"\n\n")' "$BODY" "$T/v.md" ;;
+      crlf-extra)       python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"\n", b"\r\n") + b"\r\n")' "$BODY" "$T/v.md" ;;
+    esac
+    mk_comments "$T/c-v" me "$T/v.md"
+    GH_COMMENTS="$T/c-v" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+    assert_eq "$LAST" "skipped: already-posted" "돌려받은 본문의 줄 끝 CR · 끝 줄바꿈만 다름(${v}): 같다"
+    no_comment_call "줄 끝 다름(${v})"
+  done
+  # 반대 방향 — 이번 본문 쪽이 CRLF 여도 같다(양쪽에서 뗀다).
+  python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"\n", b"\r\n"))' "$BODY" "$T/crlf-body.md"
+  mk_comments "$T/c-v" me "$BODY"
+  GH_COMMENTS="$T/c-v" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$T/crlf-body.md"
+  assert_eq "$LAST" "skipped: already-posted" "이번 본문이 CRLF · 돌려받은 본문이 LF: 같다"
+}
+case_check_other_difference_posts() {
+  local v
+  for v in trailing-space lone-cr inner-blank leading-space; do
+    case "$v" in
+      trailing-space) python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.rstrip(b"\n") + b" \n")' "$BODY" "$T/v.md" ;;
+      lone-cr)        python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"abc1234", b"abc\r1234"))' "$BODY" "$T/v.md" ;;
+      inner-blank)    python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(d.replace(b"\n\n", b"\n", 1))' "$BODY" "$T/v.md" ;;
+      leading-space)  python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); open(sys.argv[2],"wb").write(b" " + d)' "$BODY" "$T/v.md" ;;
+    esac
+    cmp -s "$BODY" "$T/v.md" && no "전제(${v}): 변형 본문이 원본과 같다"
+    mk_comments "$T/c-v" me "$T/v.md"
+    GH_COMMENTS="$T/c-v" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+    assert_eq "$OUT" "$POSTED" "줄 끝 CR · 끝 줄바꿈 밖의 차이(${v}): 게시하고 확인 못함 줄이 없다"
+  done
+}
+case_check_different_body_same_account_posts() {
+  printf '## 이 변경을 한 줄로\n앞 실행.\n\n---\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · 0000000\n' > "$T/old-body.md"
+  mk_comments "$T/c-diff" me "$T/old-body.md"
+  GH_COMMENTS="$T/c-diff" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$POSTED" "같은 계정 · 다른 본문: 게시(확인 못함 줄 없음)"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep -c '^pr comment')" "1" "같은 계정 · 다른 본문: pr comment 한 번"
+}
+case_check_same_body_other_account_posts() {
+  local who
+  for who in other m me2 ME; do
+    mk_comments "$T/c-other" "$who" "$BODY"
+    GH_COMMENTS="$T/c-other" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+    assert_eq "$OUT" "$POSTED" "다른 계정(${who})의 같은 본문: 게시 — 계정은 글자 그대로 같아야 한다"
+  done
+  # 로그인이 me2 인 gh 계정에게는 me 의 같은 본문이 남의 댓글이다(같은 기록 · 다른 계정).
+  mk_comments "$T/c-other" me "$BODY"
+  GH_LOGIN=me2 GH_COMMENTS="$T/c-other" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$POSTED" "지금 계정 me2 · 댓글 계정 me: 게시"
+}
+case_check_multiple_pages() {
+  local i
+  : > "$T/c-many"
+  for i in $(seq 1 150); do printf 'u%s\tfiller %s\\n\n' "$i" "$i" >> "$T/c-many"; done
+  mk_comments "$T/c-last" me "$BODY"; cat "$T/c-last" >> "$T/c-many"
+  GH_COMMENTS="$T/c-many" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST" "skipped: already-posted" "여러 쪽(댓글 151개)의 마지막 댓글이 같은 본문: 건너뛴다"
+  printf '%s\n' "$GHCALLS" | grep -q -- '--paginate' && ok "여러 쪽: 목록 호출이 --paginate 로 모든 쪽을 읽는다" || no "여러 쪽: --paginate 가 없다"
+}
+case_check_page_failure_posts_with_notice() {
+  # 첫 쪽에 같은 본문이 있어도 둘째 쪽을 읽지 못하면 「묻지 못함」 이다 — 부분 목록을 믿지 않는다.
+  printf 'x\n' > "$T/x.md"
+  mk_comments "$T/c-page" me "$BODY" other "$T/x.md"
+  GH_COMMENTS_PAGE_FAIL=1 GH_COMMENTS="$T/c-page" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$(notice '댓글 목록을 읽지 못했다')
+$POSTED" "한 쪽 실패: 확인 못함 줄 · 그 뒤 결과 줄 posted"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep -c '^pr comment')" "1" "한 쪽 실패: 게시한다"
+}
+case_check_user_call_failure_posts_with_notice() {
+  mk_comments "$T/c-u" me "$BODY"
+  GH_USER_RC=1 GH_COMMENTS="$T/c-u" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$(notice '계정을 읽지 못했다')
+$POSTED" "계정 호출 실패: 확인 못함 줄 · 게시"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep -c '^api')" "1" "계정 호출 실패: 댓글 목록은 묻지 않는다"
+  local bad
+  for bad in '' 'me other' '-me'; do
+    GH_LOGIN="$bad" GH_COMMENTS="$T/c-u" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+    assert_eq "$OUT" "$(notice '계정을 읽지 못했다')
+$POSTED" "계정 이름이 로그인 꼴이 아님(「${bad}」): 확인 못함 줄 · 게시"
+  done
+  GH_LOGIN='github-actions[bot]' GH_COMMENTS="$T/c-u" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$POSTED" "bot 꼴 로그인(github-actions[bot])은 읽는다 — me 의 댓글은 남의 것"
+}
+case_check_comments_call_failure_posts_with_notice() {
+  mk_comments "$T/c-f" me "$BODY"
+  GH_COMMENTS_RC=1 GH_COMMENTS="$T/c-f" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$(notice '댓글 목록을 읽지 못했다')
+$POSTED" "목록 호출 실패: 확인 못함 줄 · 게시"
+  # 돌려받은 줄을 풀지 못하면(탭 없음 · base64 아님) 「댓글 본문을 읽지 못했다」.
+  local raw
+  for raw in 'me' 'me\t!!!not-base64' 'me\tYQ==\textra'; do
+    printf "${raw}\\n" > "$T/c-raw"
+    GH_COMMENTS_RAW="$T/c-raw" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+    assert_eq "$OUT" "$(notice '댓글 본문을 읽지 못했다')
+$POSTED" "깨진 목록 줄(${raw}): 확인 못함 줄 · 게시"
+  done
+}
+case_check_first_post_no_notice() {
+  : > "$T/c-empty"
+  GH_COMMENTS="$T/c-empty" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$OUT" "$POSTED" "댓글 없음(첫 게시): 결과 줄 하나뿐 — 확인 못함 줄이 없다"
+  assert_eq "$(api_calls)" "2" "첫 게시도 확인 호출 둘을 거친다"
+}
+case_check_kill_switch_no_gh_calls() {
+  mk_comments "$T/c-k" me "$BODY"
+  DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 GH_COMMENTS="$T/c-k" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST:$GHCALLS" "skipped: kill-switch:" "AC30: DISABLE_PUBLISH=1 — 확인 갈래도 gh 호출 0"
+  DEVBREW_QUALITY_GATES_DISABLE=1 GH_COMMENTS="$T/c-k" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST:$GHCALLS" "skipped: kill-switch:" "AC30: DISABLE=1 — 확인 갈래도 gh 호출 0"
+  # 양성 짝: 스위치가 꺼져 있으면 같은 입력에서 확인 갈래가 돈다.
+  GH_COMMENTS="$T/c-k" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST:$(api_calls)" "skipped: already-posted:2" "AC30 양성 짝: 스위치 없으면 확인 호출 둘 · already-posted"
+}
+case_check_after_head_mismatch() {
+  mk_comments "$T/c-h" me "$BODY"
+  GH_COMMENTS="$T/c-h" GH_PR='7\tOPEN\thttps://github.com/o/r/pull/7\tmain\t0123456789abcdef0123456789abcdef01234567\tfalse' \
+    run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST:$(api_calls)" "skipped: pr-mismatch:0" "끝 커밋 다름: pr-mismatch 이고 api 호출 없음"
+  GH_COMMENTS="$T/c-h" GH_PR=none run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$LAST:$(api_calls)" "skipped: no-pr:0" "PR 없음: api 호출 없음"
+  printf 'key AKIAIOSFODNN7EXAMPLE\n' > "$T/bad-k.md"
+  GH_COMMENTS="$T/c-h" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$T/bad-k.md"
+  assert_eq "$LAST:$(api_calls)" "skipped: scan-failed:0" "scan 실패: api 호출 없음"
+  python3 -I -c 'import sys; open(sys.argv[1],"w",encoding="utf-8").write("가"*65537)' "$T/over-k.md"
+  GH_COMMENTS="$T/c-h" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$T/over-k.md"
+  assert_eq "$LAST:$(api_calls)" "skipped: too-long:0" "길이 초과: api 호출 없음(확인은 길이 검사 뒤)"
+  # GHE origin — 확인 호출도 origin 호스트를 밝힌다.
+  g remote set-url origin git@ghe.example.com:o/r.git
+  GH_COMMENTS="$T/c-h" GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
+  assert_eq "$(printf '%s\n' "$GHCALLS" | grep '^api')" "api --hostname ghe.example.com user --jq .login
+api --hostname ghe.example.com --paginate repos/o/r/issues/7/comments --jq .[] | [.user.login, (.body|@base64)] | @tsv" \
+    "GHE: 확인 호출 둘이 --hostname <origin 호스트> 를 밝힌다"
+  assert_eq "$LAST" "skipped: already-posted" "GHE: 같은 본문이면 건너뛴다"
+  g remote set-url origin https://github.com/o/r
+}
+
 for c in case_AC12_posts_one_new_comment case_pr_mismatch_not_posted case_AC13_no_pr case_AC13_pr_closed \
          case_AC13_kill_switch_AC14_zero_network case_AC13_scan_failed case_AC13_gh_unavailable \
          case_AC13_too_long case_P1_literal_scan_gate case_P2_degraded_and_corpus_content \
@@ -578,7 +775,11 @@ for c in case_AC12_posts_one_new_comment case_pr_mismatch_not_posted case_AC13_n
          case_N1_option_shaped_file_names case_N2_binary_attribute_hides_nothing \
          case_T1_textconv_plaintext_in_corpus case_unreadable_changed_file_fails_closed \
          case_I2_images_and_html_refused case_M4_session_dir_not_in_corpus case_pr_base_ignores_planted_origin_refs \
-         case_usage_errors; do
+         case_usage_errors case_check_same_body_same_account_skips case_check_crlf_and_trailing_newline_still_same \
+         case_check_other_difference_posts case_check_different_body_same_account_posts \
+         case_check_same_body_other_account_posts case_check_multiple_pages case_check_page_failure_posts_with_notice \
+         case_check_user_call_failure_posts_with_notice case_check_comments_call_failure_posts_with_notice \
+         case_check_first_post_no_notice case_check_kill_switch_no_gh_calls case_check_after_head_mismatch; do
   note "-- $c"
   "$c"
 done
