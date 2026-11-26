@@ -90,7 +90,7 @@ for ln in lines[fence[1] + 1:] if len(fence) == 2 else []:
 print(bullets[-1] if bullets else "")
 PY
 }
-STOP_BULLET='   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2)'
+STOP_BULLET='   - 판결 줄 없이 끝나면(종료 코드 2 의 `[raw_source] …` 줄, 또는 스크립트가 예외로 죽어'
 case "$(last_bullet "$ROOT/$FIN")" in
   "$STOP_BULLET"*) ok "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이다(종료 2 펜스의 「아래 마지막 갈래」)" ;;
   *) no "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이 아니다 — «$(last_bullet "$ROOT/$FIN")»" ;;
