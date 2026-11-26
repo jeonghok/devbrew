@@ -54,6 +54,7 @@ frontmatter 의 키 부재는 `shared/tests/test_docreview_agents.sh` 가, spec-
 
 - 새 책임은 별도 모듈(스크립트 · skill · reference)로 두고, 기존 파일에는 진입 한 줄만 더한다.
 - 테스트를 쓰거나 고치면 [`docs/testing.md`](testing.md#망가뜨려-보기) 의 「망가뜨려 보기」 를 따른다.
+- skill · agent · reference 를 고치면 그 플러그인의 `tests/evals` 에서 고친 파일의 경로를 찾아본다. 나오면 [`docs/testing.md`](testing.md#글자-대조-말고-쓰는-확인) 의 「글자 대조 말고 쓰는 확인」 대로 그 케이스를 돌린다.
 - 새 파일 · 문면을 쓰기 전에 그 경로를 코퍼스로 삼는 락(`# guards:` 글롭 · 부재 스캔)을 찾는다.
 - 새 셸 테스트는 실행 비트를 붙여(`100755`) 커밋한다.
 - 플러그인 파일을 subagent 에 넘길 때는 경로가 아니라 내용으로 싣는다 — 설치본 캐시는 작업 폴더 밖이라 subagent 가 못 읽을 수 있다.
