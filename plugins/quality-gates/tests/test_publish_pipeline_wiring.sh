@@ -166,11 +166,13 @@ case_rerun_cases() {
   local kind bad
   local at0 len0 hl0
   hl0="$(printf '\n## 게시\n' | wc -c | tr -d ' ')"
-  for kind in outside not-head overrun garbage empty short-head short-mid long-tail; do
+  for kind in outside not-head overrun garbage empty short-head head-only short-mid long-tail glued-tail; do
     fresh_proj
     SINK_LAST="posted: x" run_fence "$sh" "finished"
     # long-tail — 뒤에 `## intent-critic` 절이 붙은 결과 파일(길이를 늘려도 파일 안에 든다)
     [ "$kind" = long-tail ] && printf '\n## intent-critic\n\n의도 점검 줄 하나\n' >> "$R"
+    # glued-tail — 빈 줄 없이 붙은 다음 절(절 끝 바로 뒤가 `## `)
+    [ "$kind" = glued-tail ] && printf '## intent-critic\n\n의도 점검 줄 하나\n' >> "$R"
     size="$(wc -c < "$R" | tr -d ' ')"
     at0="$(sed 's/ .*//' "$(AT_FILE)")"; len0="$(sed 's/.* //' "$(AT_FILE)")"
     case "$kind" in
@@ -181,8 +183,10 @@ case_rerun_cases() {
       empty)    bad="" ;;
       # 머리는 맞고 길이가 틀렸지만 파일 안 — 바꿔 쓰면 옛 줄이 절 밖에 남거나 뒤 절을 깎는다.
       short-head) bad="$at0 $((hl0 + 1))" ;;             # 끝 바이트는 줄바꿈 · 그 뒤가 파일 끝도 다음 절 머리도 아니다
+      head-only)  bad="$at0 $hl0" ;;                     # 끝 바이트는 줄바꿈 · 그 뒤가 줄바꿈으로 시작하지만 「\n## 」 가 아니다
       short-mid)  bad="$at0 $((len0 - 1))" ;;            # 끝 바이트가 줄바꿈이 아니다
       long-tail)  bad="$at0 $((len0 + 1))" ;;            # 끝 바이트는 줄바꿈(다음 절 앞 빈 줄) · 그 뒤가 「\n## 」 가 아니다
+      glued-tail) bad="$at0 $((len0 - 1))" ;;            # 그 뒤는 「\n## 」 지만 끝 바이트가 줄바꿈이 아니다
     esac
     printf '%s\n' "$bad" > "$(AT_FILE)"
     cp "$R" "$T/mm.md"
