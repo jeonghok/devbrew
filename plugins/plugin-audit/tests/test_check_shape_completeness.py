@@ -1,4 +1,4 @@
-import ast, json, shutil, subprocess, sys, tempfile, unittest
+import ast, json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check-shape-completeness.py"
@@ -15,7 +15,40 @@ ANCHORS = {
     "deps_declared": "최소 버전이 선언된 의존성",
     "switches_have_readers": "끄기 변수마다 읽는 코드가 있다",
 }
-FX = Path(__file__).resolve().parent / "fixtures" / "switch-readers"
+# 읽는 코드 검사의 fixture 플러그인 — 임시 폴더에 만든다(추적 파일로 두면 레포의 skill · README 글롭에 섞인다).
+_FX_TABLE = ("---\ntype: devbrew-switches\nplugin: fx\n---\n\n# fx 끄기 변수\n\n"
+             "| 이름 | 끄는 것 | 상태 | 대신할 길 |\n|---|---|---|---|\n"
+             "| `DEVBREW_FX_DISABLE_A` | x | 남음 | - |\n")
+_FX_SKILL = ("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\n# x\n\n"
+             "`DEVBREW_FX_DISABLE_A` 가 켜져 있으면 멈춘다.\n")
+_FX_SCRIPTS = {
+    "reads": {"a.sh": '#!/usr/bin/env bash\n[ "${DEVBREW_FX_DISABLE_A:-}" = 1 ] && exit 0\n'},
+    "nowhere": {"a.sh": "#!/usr/bin/env bash\nexit 0\n"},
+    "comment-only": {
+        "a.sh": ("#!/usr/bin/env bash\n"
+                 "# DEVBREW_FX_DISABLE_A=1 이면 끈다 ${DEVBREW_FX_DISABLE_A}\n"
+                 'echo "set ${DEVBREW_FX_DISABLE_A} to stop"\n'
+                 'printf "%s\\n" "${DEVBREW_FX_DISABLE_A}"\n'),
+        "p.py": 'import os\nprint(os.environ.get("DEVBREW_FX_DISABLE_A"))\n',
+    },
+    "indirect": {"b.sh": '#!/usr/bin/env bash\n. "$(dirname "$0")/x.conf"\n[ "${!K:-}" = 1 ] && exit 0\n',
+                 "x.conf": "K=DEVBREW_FX_DISABLE_A\n"},
+}
+
+
+def _mk_fx(d, case):
+    dd = Path(d) / "fx"
+    (dd / ".claude-plugin").mkdir(parents=True)
+    (dd / ".claude-plugin" / "plugin.json").write_text(
+        '{"name":"fx","description":"x","version":"0.1.0"}\n', encoding="utf-8")
+    (dd / "README.md").write_text("# fx\n## Principles Instantiated\n- Law 1\n", encoding="utf-8")
+    (dd / "switches.md").write_text(_FX_TABLE, encoding="utf-8")
+    (dd / "skills" / "x").mkdir(parents=True)
+    (dd / "skills" / "x" / "SKILL.md").write_text(_FX_SKILL, encoding="utf-8")
+    (dd / "scripts").mkdir()
+    for name, body in _FX_SCRIPTS[case].items():
+        (dd / "scripts" / name).write_text(body, encoding="utf-8")
+    return dd
 
 
 def run(plugin_dir):
@@ -239,8 +272,8 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertTrue(gaps["deps_declared"]["present"])
 
     def _readers(self, case):
-        g = self._gaps(FX / case)["switches_have_readers"]
-        return g["present"], g.get("missing")
+        with tempfile.TemporaryDirectory() as d:
+            return self._readers_at(_mk_fx(d, case))
 
     def test_switch_with_reader_is_present(self):   # AC24 — 읽는 코드가 있다
         self.assertEqual(self._readers("reads"), (True, None))
@@ -256,8 +289,7 @@ class TestShapeCompleteness(unittest.TestCase):
 
     def test_retired_row_name_is_not_a_gap(self):   # AC24 — 은퇴 행의 이름은 읽는 곳이 없어도 gap 이 아니다
         with tempfile.TemporaryDirectory() as d:
-            dd = Path(d) / "fx"
-            shutil.copytree(FX / "nowhere", dd)
+            dd = _mk_fx(d, "nowhere")
             self.assertFalse(self._gaps(dd)["switches_have_readers"]["present"])   # 양성 대조 — 남음 행이면 gap
             sw = dd / "switches.md"
             sw.write_text(sw.read_text(encoding="utf-8").replace("| 남음 |", "| 은퇴 |"), encoding="utf-8")
@@ -265,9 +297,8 @@ class TestShapeCompleteness(unittest.TestCase):
 
     def test_other_plugin_and_old_form_names_are_not_gaps(self):   # AC24 — 이 플러그인 접두가 아닌 이름은 센 대상이 아니다
         with tempfile.TemporaryDirectory() as d:
-            dd = Path(d) / "fx"
-            shutil.copytree(FX / "reads", dd)
-            sk = dd / "skills" / "x" / "SKILL.md"
+            dd = _mk_fx(d, "reads")
+            sk =dd / "skills" / "x" / "SKILL.md"
             sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_OTHER_DISABLE_X` · `DEVBREW_DISABLE_FX_A`\n", encoding="utf-8")
             self.assertEqual(self._readers_at(dd), (True, None))
             sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_FX_DISABLE_B`\n", encoding="utf-8")   # 양성 대조 — 접두가 맞으면 잡힌다
@@ -275,15 +306,13 @@ class TestShapeCompleteness(unittest.TestCase):
 
     def test_table_row_without_reader_is_gap_even_if_text_is_silent(self):   # AC24 — 표에 있는데 읽는 곳이 없다
         with tempfile.TemporaryDirectory() as d:
-            dd = Path(d) / "fx"
-            shutil.copytree(FX / "nowhere", dd)
-            sk = dd / "skills" / "x" / "SKILL.md"
+            dd = _mk_fx(d, "nowhere")
+            sk =dd / "skills" / "x" / "SKILL.md"
             sk.write_text("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\nbody\n", encoding="utf-8")
             self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_A"]))
 
     def _skill_variant(self, d, skill_tail, tests_script=None):
-        dd = Path(d) / "fx"
-        shutil.copytree(FX / "nowhere", dd)
+        dd = _mk_fx(d, "nowhere")
         (dd / "skills" / "x" / "SKILL.md").write_text(
             "---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\n" + skill_tail, encoding="utf-8")
         if tests_script:

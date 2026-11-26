@@ -46,7 +46,7 @@ for sk in "$ROOT"/plugins/*/skills/*/SKILL.md; do
   SK_N=$((SK_N + 1))
   if grep -qF -- '끝에 할 일 하나)' "$sk"; then SK_HIT=$((SK_HIT + 1)); fi
 done
-SK_FIND="$(cd "$ROOT" && find plugins -mindepth 4 -maxdepth 4 -path '*/skills/*/SKILL.md' | grep -c .)"
+SK_FIND="$(cd "$ROOT" && find plugins -path '*/skills/*/SKILL.md' | grep -c .)"
 assert_eq "$SK_N" "$SK_FIND" "R9: SKILL.md 글롭 도출 수가 find 수와 같다(양의 짝)"
 assert_eq "$SK_HIT" "0" "R9: 어떤 SKILL.md 에도 옛 꼬리 「끝에 할 일 하나)」 가 없다(음)"
 assert_file_grep "$ROOT/plugins/spec-distill/skills/spec-review/SKILL.md" '끝에 할 일\(기본 하나 — 여럿이거나 병렬이면 밝힌다\)' "R9: spec-review 계획 세션 넘김 줄이 새 꼬리를 쓴다(양)"
