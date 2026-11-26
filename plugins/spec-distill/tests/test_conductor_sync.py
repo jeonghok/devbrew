@@ -613,6 +613,8 @@ class Steps(SyncRepo):
         self.assertTrue(tail.startswith(" → 걸음 3 ") and tail.endswith(guide(3)), tail)
         tail = self.partial_tail("다음 브랜치 없음: feature/e4b", tip=None)   # 양성 짝 — 다음 브랜치가 없으면 표의 「일부 머지」 행
         self.assertTrue(tail.startswith(" → 걸음 3 다음 일 고르기와 보내기 · ") and tail.endswith(guide(3)), tail)
+        tail = self.partial_tail("지금 feature/e4b — 계획 · 계획 있음")   # 지금 브랜치가 있는데 이유 꼴을 못 읽으면 걸음 3 이 아니다
+        self.assertEqual(tail, " → 걸음 없음 — 차례 표에 이 단계가 없다")
 
     def test_toc_broken_does_not_stop(self):   # Review Focus 1
         copy = self.t / "plugin-copy"

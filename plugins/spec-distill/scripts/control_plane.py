@@ -990,11 +990,14 @@ def active_branch(b: dict):
 
 def active_stage(b: dict):
     """일부 머지 블록에서 지금 브랜치의 단계 — roadmap_status 가 이유에 `<브랜치> — <단계> · <근거>` 로 싣는다. 끝난 구현인데
-    overlay 가 얹은 PR 사실이 열림이면 「PR」. 일부 머지가 아니거나 지금 브랜치가 없으면(다음 브랜치 없음) None."""
+    overlay 가 얹은 PR 사실이 열림이면 「PR」. 일부 머지가 아니거나 지금 브랜치가 없으면(다음 브랜치 없음) None.
+    지금 브랜치가 있는데 이유가 그 꼴이 아니면 「알 수 없음」 — 차례 표에 없는 단계라 걸음 3 으로 조용히 돌아가지 않는다."""
     br = active_branch(b)
     reason = b.get("reason") or ""
-    if not (b.get("stage") or "").startswith("일부 머지") or not br or not reason.startswith(br + " — "):
+    if not (b.get("stage") or "").startswith("일부 머지") or not br:
         return None
+    if not reason.startswith(br + " — "):
+        return "알 수 없음"
     stage = reason[len(br + " — "):].split(" · ", 1)[0]
     if stage in PR_STAGES and (b.get("pr") or {}).get("state") == "열림":
         return "PR"
