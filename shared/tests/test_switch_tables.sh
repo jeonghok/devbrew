@@ -320,8 +320,8 @@ ret -= kept_names
 SKIPNAME = "DEVBREW_SKIP_HOOKS"
 for n in sorted(ret):
     if n.startswith(SKIPNAME + "="): tokens[n] = n[len(SKIPNAME) + 1:]
-def bound(x): return re.compile(r"(?<![A-Za-z0-9_])" + re.escape(x) + r"(?![A-Za-z0-9_])")
-def tokbound(x): return re.compile(re.escape(SKIPNAME) + r"=[\x22\x27 ]*" + re.escape(x) + r"(?![A-Za-z0-9_-])")
+def bound(x): return re.compile(r"(?<![A-Z0-9_])" + re.escape(x) + r"(?![A-Za-z0-9_])")   # 앞은 대문자 · 숫자 · _ 만 막는다 — 줄바꿈 · 탭 · %s 에 붙은 꼴도 잡는다
+def tokbound(x): return re.compile(r"(?<![A-Za-z0-9_:-])" + re.escape(x) + r"(?![A-Za-z0-9_-])")   # 변수 이름 없이 토큰 글자만 있는 꼴(쉼표 목록 · dict 꼴)
 def retired_pats():
     pats = []
     for n in sorted(ret):
@@ -332,6 +332,9 @@ def hits_in(text, pats):
     return sorted(set(n for n, rx in pats if rx.search(text)))
 raw = subprocess.run(["git", "-C", root, "ls-files", "-s", "-z"], stdout=subprocess.PIPE, check=True).stdout.decode("utf-8").split("\0")
 corpus = []
+skipped_decode = 0
+SIX = ("skills", "references", "templates", "scripts", "hooks", "agents")
+have_six, have_other, branches = set(), set(), set()
 for ent in raw:
     if not ent or "\t" not in ent: continue
     meta, f = ent.split("\t", 1)
@@ -341,19 +344,28 @@ for ent in raw:
     sh = f.startswith("shared/") and "/tests/" not in f and base not in ("switches.md", "CHANGELOG.md") and not base.startswith("README")
     tl = f.startswith("tools/") and "/tests/" not in f and "/test_" not in f
     gw = f.startswith("docs/git-workflow/")
+    mm6 = re.match(r"^plugins/[^/]+/([^/]+)/", f)
+    if mm6 and mm6.group(1) in SIX: have_six.add(mm6.group(1))   # 기대 집합은 거르기와 따로 센다
+    if f.startswith("shared/") and "/tests/" not in f and base not in ("switches.md", "CHANGELOG.md") and not base.startswith("README"): have_other.add("shared")
+    if f.startswith("tools/") and "/tests/" not in f and "/test_" not in f: have_other.add("tools")
+    if f.startswith("docs/git-workflow/"): have_other.add("docs/git-workflow")
     if not (plug or sh or tl or gw): continue
     try:
         with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
-    except (OSError, UnicodeDecodeError): continue
+    except (OSError, UnicodeDecodeError): skipped_decode += 1; continue
+    branches.add("plugins/" + plug.group(1) if plug else ("shared" if sh else ("tools" if tl else "docs/git-workflow")))
     corpus.append((f, txt))
-if len(corpus) > 50 and len(ret) >= 20: ok("코퍼스 %d 파일 · 은퇴 이름 %d 개(별칭 포함)를 도출했다" % (len(corpus), len(ret)))
+if len(corpus) > 50 and len(ret) >= 20: ok("코퍼스 %d 파일(디코드 못 해 뺀 파일 %d 개) · 은퇴 이름 %d 개(별칭 포함)를 도출했다" % (len(corpus), skipped_decode, len(ret)))
 else: no("코퍼스 %d 파일 · 은퇴 이름 %d 개 — 도출이 비었거나 너무 작다" % (len(corpus), len(ret)))
+want_br = set("plugins/" + x for x in have_six) | have_other
+if branches == want_br and len(have_six) >= 4: ok("코퍼스가 담은 갈래가 기대 집합과 같다: " + " ".join(sorted(branches)))
+else: no("코퍼스 갈래가 기대와 다르다: 실제 %s · 기대 %s" % (sorted(branches), sorted(want_br)))
 pats = retired_pats()
 bad = [(f, hits_in(t, pats)) for f, t in corpus if hits_in(t, pats)]
 if not bad: ok("어느 은퇴 이름도 코퍼스에 없다")
 else:
     for f, h in bad: no("은퇴 이름이 남았다: %s %s" % (f, " ".join(h)))
-bare = re.compile(r"(?<![A-Za-z0-9_])" + SKIPNAME + r"(?![A-Za-z0-9_])")
+bare = bound(SKIPNAME)
 got = sorted(f for f, t in corpus if bare.search(t))
 want = ["plugins/spec-distill/scripts/review_entry.py", "shared/entry/entry_preflight.py"]
 if got == want: ok("맨이름 " + SKIPNAME + " 가 나오는 파일이 정확히 둘이다")
@@ -370,9 +382,16 @@ if hits_in("x " + probe + " y", pats) == [probe]: ok("계측기 양성 대조: �
 else: no("계측기 양성 대조 실패: 은퇴 이름을 넣어도 검사가 못 잡는다")
 if not hits_in("x " + "DEVBREW_QUALITY_GATES_DISABLE_CODEX y", pats): ok("계측기 경계 대조: 남는 이름은 은퇴 이름으로 잡히지 않는다")
 else: no("계측기 경계 대조 실패: 남는 이름이 은퇴 이름에 걸린다")
-tk = [n for n in sorted(tokens)]
-if tk and all(n in hits_in(SKIPNAME + "=" + tokens[n] + " ", pats) for n in tk): ok("계측기 양성 대조: 토큰 글자로도 잡는다")
-else: no("계측기 양성 대조 실패: 토큰 글자를 못 잡는다")
+tk = sorted(tokens)
+tokonly = [(n, rx) for n, rx in pats if n in tokens and rx.pattern.startswith("(?<![A-Za-z0-9_:-])")]
+if tk and len(tokonly) == len(tk) and all(any(rx.search("x:y," + tokens[n] + " ") for m_, rx in tokonly if m_ == n) and not any(rx.search("DEVBREW_SKIP_HOOKS=x:y") for _, rx in tokonly) for n in tk): ok("계측기 양성 대조: 변수 이름 없이 쉼표 목록 둘째 자리의 토큰 글자만 있어도 토큰 패턴이 잡는다")
+else: no("계측기 양성 대조 실패: 토큰 패턴이 토큰 글자만 있는 꼴을 못 잡는다")
+if tk and all(n not in hits_in("x:y," + tokens[n] + "z", pats) for n in tk): ok("계측기 경계 대조: 토큰 글자에 글자가 붙으면 안 잡힌다")
+else: no("계측기 경계 대조 실패: 토큰 뒤에 글자가 붙어도 잡힌다")
+if probe in hits_in("a" + chr(92) + "n" + probe + "=1", pats) and probe in hits_in("-u" + probe, pats): ok("계측기 양성 대조: 이름이 다른 글자(줄바꿈 표기 n · u)에 붙은 꼴도 잡는다")
+else: no("계측기 양성 대조 실패: 소문자에 붙은 이름을 못 잡는다")
+if not hits_in("X" + probe, pats): ok("계측기 경계 대조: 대문자에 붙은 이름은 안 잡힌다")
+else: no("계측기 경계 대조 실패: 대문자에 붙은 이름이 잡힌다")
 '
 
 finish
