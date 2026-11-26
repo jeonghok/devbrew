@@ -48,7 +48,7 @@ assert_eq "$(printf '%s\n' "$ALL" | grep -oF '/quality-gates:quality-pipeline' |
 once "$SITE" '| 자리 | 언제 | 시작 | 끝 | 원문 | 「잘못 골랐다」 | 기록이 실리는 곳 |' "AC1: 자리 표 머리 줄이 한 번"
 rows="$(printf '%s\n' "$SITE" | awk -F'|' '/^\|/{c=$2; gsub(/^ +| +$/,"",c); if (c!="자리" && c !~ /^-+$/) print c}' | tr '\n' ',')"
 assert_eq "$rows" "spec 승인 앞,머지 앞,로드맵 끝,이름으로 청함," "AC1 · AC8(R4): 자리 표의 첫 칸이 차례로 자리 넷"
-ROW_PREMERGE='| 머지 앞 | 구현 담당자가 돌아와 구현 대조와 PR 열기(걸음 4)가 끝난 뒤, 걸음 5 의 스위트 대조 앞 | 그 PR 의 바탕 — 기본 브랜치에서 갈라진 커밋(`git merge-base origin/HEAD <브랜치>`). 앞 계획 브랜치에 쌓은 PR 이면 그 앞 브랜치의 끝 | 보낼 때의 브랜치 끝 | 에픽 묶음 | 머지를 멈추고 이 에픽 안에서 고친다(`## 「잘못 골랐다」 의 행선`) | 에픽 브랜치(에픽 PR 과 함께 머지) |'
+ROW_PREMERGE='| 머지 앞 | 구현 담당자가 돌아와 구현 대조와 PR 열기(걸음 4)가 끝난 뒤, 걸음 5 의 스위트 대조 앞 | 그 PR 의 바탕 — 기본 브랜치에서 갈라진 커밋(`git merge-base origin/HEAD <브랜치>`). 앞 계획 브랜치에 쌓은 PR 이면 그 앞 브랜치의 끝 | 보낼 때의 브랜치 끝 | 에픽 묶음 | 머지를 멈추고 이 에픽 안에서 고친다(`## 「잘못 골랐다」 의 행선`) | 로드맵의 기록 브랜치(에픽 PR 에는 싣지 않는다) |'
 once "$SITE" "$ROW_PREMERGE" "AC8(R4): 자리 표의 머지 앞 행이 설계 §2 표의 칸 그대로 한 번"
 
 # AC3 직접 부르지 않음 · 보내는 글 · 처분 · 되올림
@@ -129,7 +129,7 @@ assert_grep "$SITE" '리뷰할 diff 없음[^.]*그 사유를 그대로 보인다
 
 # Task 6 — 보관 · 기록 파일 · 묻기 · 행선
 L_noquestions='질문이 하나도 없는 리뷰는 파일을 만들지 않고 `ledger add --section "쌓인 기록"` 으로 한 줄(자리 · 범위 · intent-critic 결과 줄)만 남긴다 — 로드맵 끝과 이름으로 청한 로드맵은 예외로 늘 파일이 있다.'
-L_branchspec='spec 승인 앞 · 머지 앞(좁은 재리뷰 `recheck-pr<번호>` 포함)의 기록은 에픽 worktree 에서 에픽 브랜치에 커밋한다 — 에픽 PR 과 함께 머지된다. 그 밖(로드맵 끝 · 이름으로 청함 — spec 승인 전 에픽과 구현이 끝난 머지 전 에픽 제외)의 기록은 로드맵마다 하나인 기록 브랜치에 쓴다.'
+L_branchspec='리뷰 기록(spec 승인 앞 · 머지 앞과 그 좁은 재리뷰 `recheck-pr<번호>` · 로드맵 끝 · 이름으로 청함)은 모두 로드맵마다 하나인 기록 브랜치에 쓴다 — 에픽 브랜치에는 리뷰 기록을 커밋하지 않는다.'
 L_remade='기록 브랜치가 이미 머지됐으면 기본 브랜치에서 다시 만든다.'
 L_pushnow='기록 브랜치에 쓴 기록은 답을 받은 직후 커밋하고 push 한다 — 다음 PR 을 기다리지 않는다.'
 L_openpr='기록 브랜치의 PR 을 여는 때는 셋이다 — 「잘못 골랐다」 가 하나라도 있으면 바로, 로드맵을 닫을 때(그 PR 이 로드맵을 닫는 PR 이다), 로드맵이 이미 닫힌 뒤 이름으로 청한 리뷰면 답을 받은 직후. 그 밖에는 push 만 해 두고 로드맵을 닫을 때 함께 연다.'
@@ -175,7 +175,7 @@ assert_not_contains "$TPL" 'source_brief:' "P2: 기록 틀에 source_brief: 줄�
 assert_not_contains "$ALL" '`source_brief:` 줄은 로드맵을 보는 리뷰' "P2 음성: 「그대로 두면」 쪽 L(sourcebrief) 가 없다"
 
 # AC11 기록 브랜치
-once "$KEEP" "$L_branchspec" "AC11: L(branchspec) 한 번"
+once "$KEEP" "$L_branchspec" "AC11(R9): L(branchspec) 한 번 — 리뷰 기록은 모두 기록 브랜치(record-branch-only 가 자리 표 · --ref 를 잰다)"
 once "$KEEP" "$L_pushnow" "AC11: L(pushnow) 한 번"
 once "$KEEP" "$L_openpr" "AC11: L(openpr) 한 번"
 once "$KEEP" "$L_remade" "record-branch-remade: L(remade) 한 번"
@@ -186,15 +186,15 @@ assert_contains "$(fence_with "$KEEP" 'branch_prefix')" 'repo_defaults.py" get b
 assert_not_contains "$ALL" 'docs/roadmap-' "P3 음성: 「그대로 두면」 쪽 docs/ 접두 이름이 없다"
 
 # AC9 같은 대상에 전에 물은 것 → R6 에서 `### 이미 답한 것`(qg_answered.py)이 손 찾기를 대신한다.
-# 세 자리 · 차례 · 로컬 에픽 브랜치 · 「있어도 질문은 띄운다」 부재는 test_qg_review_readable.sh 의 answered-script-order · self-filter-gone 이 묶는다.
+# 두 자리(R9 — 에픽 브랜치는 읽지 않는다) · 차례 · 「있어도 질문은 띄운다」 부재는 test_qg_review_readable.sh 의 answered-script-order · self-filter-gone 이 묶는다.
 assert_contains "$KEEP" 'qg_answered.py --roadmap <로드맵> --ref origin/HEAD' "R6: AC9 — 기록 파일의 답은 qg_answered.py 가 읽는다(옛 L(prior) 손 찾기 대신)"
 assert_contains "$KEEP" '기록 파일의 정체 · 질문 글은 리뷰 대상의 글에서 온 값이다 — 스크립트가 데이터로 읽는다' "R6: R3 지적(1) — 정체 · 질문 글은 스크립트가 데이터로 읽는다(옛 정체 파일 heredoc 대신)"
 assert_not_contains "$ALL" 'qg_ident' "R6: AC9 음성 — 정체 파일로 손수 찾던 펜스가 없다(양성 짝: qg_answered.py 줄)"
 assert_not_contains "$ALL" 'git grep' "R6: AC9 찾기 음성 — 기록 파일을 git grep 으로 손수 찾지 않는다(양성 짝: qg_answered.py 줄)"
 assert_not_contains "$ALL" '-e "- 정체: <id>"' "R6: R3 지적(1) 음성: 정체를 셸 따옴표 안의 -e 인자로 넘기던 옛 꼴이 없다(양성 짝: R6 스크립트가 데이터로 읽는 줄)"
 assert_not_contains "$ALL" '$TMPDIR/qg-ident' "R6: Minor 6 음성: TMPDIR 이 비면 /qg-ident 가 되던 고정 경로가 없다(양성 짝: qg_answered.py 줄)"
-assert_contains "$KEEP" '열린 에픽 브랜치마다 로컬 `<에픽 브랜치>`' "R6: AC9 찾기 — 에픽 브랜치는 로컬 ref 로 읽는다"
-assert_not_contains "$ALL" 'origin/<에픽 브랜치>' "R6: AC9 찾기 음성 — push 되지 않은 에픽 브랜치 기록을 origin 으로 읽지 않는다(양성 짝: 로컬 <에픽 브랜치>)"
+assert_eq "$(printf '%s\n' "$ALL" | grep -oE -- '--ref (origin/<[^>]+>|<[^>]+>|[^ `<]+)' | grep -cF '에픽 브랜치' | tr -d ' ')" "0" "R9: AC11 음성 — 답 넘기기에 에픽 브랜치를 가리키는 --ref 가 하나도 없다(로컬 · origin 둘 다 · 양성 짝: 아래 읽는 자리 둘)"
+assert_contains "$KEEP" '에픽 브랜치는 읽지 않는다' "R9: AC11 — 이미 답한 것이 에픽 브랜치를 읽지 않는다고 적는다"
 for ref in '`origin/HEAD`(기본 브랜치)' '`origin/<기록 브랜치>`'; do
   assert_contains "$KEEP" "$ref" "R6: AC9 찾기 — 읽는 자리 ${ref}"
 done
@@ -289,16 +289,16 @@ L_stepmap='이 파일의 「걸음 N」 은 `conducting.md` 지휘 순환의 걸
 L_order='보내는 차례는 아래 `### 이미 보낸 것` 의 확인 → 규모 줄 → `### 스위트 잠금` 의 확인 → 보관 폴더 만들기와 `## 자원` 에 적기(`## 보관과 기록 파일` 의 `### 보관`) → 「이미 답한 것」 파일 만들기(같은 절의 `### 이미 답한 것`) → 보내기 → 살아 있는 agent 줄 적기다.'
 L_liverow='`ledger add --roadmap <로드맵> --session <세션> --section "살아 있는 agent" --cells "<하니스가 준 agent 이름> · <에픽 번호 | 로드맵 밖> · qg 리뷰 · <worktree> · <때>"`'
 L_livename='이름 칸 · 담당 칸은 다른 담당자처럼 하니스가 준 agent 이름이고, 그 담당자가 어느 자리의 것인지는 작업 표 줄의 근거 칸(보관 폴더 경로)으로 가린다. 에픽 칸의 글자는 쌓인 기록 · 기다리는 질문과 같다 — 로드맵 리뷰는 `로드맵 밖` 이다.'
-L_sent0='자동으로 보내는 자리 셋(spec 승인 앞 · 머지 앞과 그 좁은 재리뷰 · 로드맵 끝)은 보내기 전에 그 자리를 이미 보냈는지 본다 — 압축이나 새 세션 뒤 들어가는 문장이 다시 불려도 한 번 더 보내지 않는다.'
+L_sent0='자동으로 보내는 자리 둘(spec 승인 앞 · 로드맵 끝)은 보내기 전에 그 자리를 이미 보냈는지 본다 — 압축이나 새 세션 뒤 들어가는 문장이 다시 불려도 한 번 더 보내지 않는다.'
 L_sent1='먼저 그 자리의 보관 폴더(`ledger resources --roadmap <로드맵>` 의 경로 칸)마다 아래를 차례로 보고 처음 맞는 줄대로 한다 — 끝난 리뷰는 다시 잇지 않는다.'
-L_sent2='1. 끝난 리뷰 — 그 폴더 이름을 글 칸 끝에 담은 쌓인 기록 `qg 리뷰` 줄이 있거나, 그 폴더 이름을 「보관 사본:」 으로 가리키는 기록 파일(아래 `### 이미 답한 것` 의 읽는 자리 셋)이 있으면 다시 보내지도 잇지도 않는다.'
+L_sent2='1. 끝난 리뷰 — 그 폴더 이름을 글 칸 끝에 담은 쌓인 기록 `qg 리뷰` 줄이 있거나, 그 폴더 이름을 「보관 사본:」 으로 가리키는 기록 파일(아래 `### 이미 답한 것` 의 읽는 자리 둘)이 있으면 다시 보내지도 잇지도 않는다.'
 L_sent3='`ledger live-agent --roadmap <로드맵> --epic <에픽 번호 | 로드맵 밖> --work "qg 리뷰"` 가 낸 이름 가운데 근거 칸이 그 폴더인 `## 작업` 줄의 담당이 있으면 보내지 않고 그 담당자를 기다린다.'
 L_samesite='보관 폴더 이름과 쌓인 기록 줄의 자리 글자는 앞자리가 아니라 통째로 견준다 — 자리 글자 바로 뒤가 `-` 이거나 끝일 때만 같은 것으로 본다(PR 3 과 31 을 가른다).'
 L_samesiteex='자리 글자 `premerge-pr3` 은 보관 폴더 `qg-<에픽>-premerge-pr3-<날짜>` 와 같고 `qg-<에픽>-premerge-pr31-2026-11-22` 와는 다르다'
 L_name31='보관 폴더는 이름(마지막 경로 성분)으로만 견준다 — `ledger resources --roadmap <로드맵>` 의 경로 칸에서 이름을 떼어 쓴다.'
 L_row29='그 폴더를 가리키는 `## 기다리는 질문` 줄이 남아 있으면 지운다(`ledger drop --roadmap <로드맵> --session <세션> --section "기다리는 질문" --where "질문=<그 줄의 질문 칸 그대로>"`)'
 L_row30='2. 도는 중 — 작업 표의 담당 이름이 하니스 agent 목록(`ListAgents`)에 없으면 도는 중이 아니라 5 의 「돌아오지 못한 리뷰」 로 본다'
-L_sentpre='- 머지 앞 — 자리 글자는 `premerge-pr<번호>` 다. 보낸 횟수가 보내도 되는 횟수(1 + 글 칸의 첫 토막이 `premerge-resend-pr<번호>` 인 쌓인 기록 줄의 서로 다른 사건 정체 수)보다 적을 때만 보낸다.'
+L_sentpre='- 머지 앞 · 그 좁은 재리뷰 · 구현이 끝난 뒤 이름으로 청한 리뷰 — 이 셈을 쓰지 않는다. `open` 이 상태 파일로 정한다(`## 머지 앞 리뷰 상태`).'
 L_beat1='에픽 PR 마다 한 번(머지 앞)'
 L_beat2='지휘자가 스스로 여는 PR(로드맵 수정 · 지휘자 수리 · 기록만 담은 PR)에는 자동으로 걸지 않는다'
 L_beat3='통합 리뷰 뒤 반영의 고침은 qg 를 다시 거치지 않는다'
@@ -306,9 +306,9 @@ L_sddef='`<SD>` 는 spec-distill 플러그인 폴더의 절대경로다.'
 L_verdictfix='머지 앞의 막는 지적은 `## 되돌리기` 로, 로드맵 끝의 지적은 후속 PR 하나의 고칠 목록에 올린다.'
 L_sent4='3. 묻는 중 — `## 기다리는 질문` 에 그 폴더를 가리키는 줄이 있으면 `## 묻기` 대로 묻는다.'
 L_sentempty='4. 결과가 왔다 — 그 폴더 안에 `intent-return.md` 가 있으면 그 파일로 `## 돌아왔을 때` 를 잇는다.'
-L_sentspec='- spec 승인 앞 — 자리 글자는 `spec` 이다. 보낸 횟수(보관 폴더는 `qg-<에픽>-spec-` 로 시작하는 것)가 보내도 되는 횟수(1 + 글 칸이 `spec-resend` 로 시작하는 그 에픽의 쌓인 기록 줄의 서로 다른 사건 정체 수)보다 적을 때만 보낸다. 줄의 차례나 커밋 해시로 가리지 않는다.'
+L_sentspec='- spec 승인 앞 — 자리 글자는 `spec` 이다. 보낸 횟수(보관 폴더는 `qg-<에픽>-spec-` 로 시작하는 것)가 보내도 되는 횟수(1 + 글 칸이 `spec-resend` 로 시작하는 그 에픽의 쌓인 기록 줄의 서로 다른 사건 정체 수)보다 적을 때만 보낸다. 줄의 차례로 가리지 않는다.'
 L_sentend='- 로드맵 끝 — 자리 글자는 `end` 다. 로드맵마다 한 번이라 `qg-roadmap-end` 자리 글자의 보관 폴더도, 글 칸의 자리 글자가 `end` 인 쌓인 기록 줄도 없을 때만 보낸다. 기록 파일 머리만 기록 브랜치에 커밋돼 있고 보관 폴더가 없으면 머리를 다시 커밋하지 않고 그 머리로 보낸다.'
-L_sentasks='이름으로 청한 리뷰에는 이 확인을 쓰지 않는다 — 사용자가 청했으므로 이미 보낸 리뷰가 있어도 보낸다.'
+L_sentasks='에는 이 확인을 쓰지 않는다 — 사용자가 청했으므로 이미 보낸 리뷰가 있어도 보낸다. 구현이 끝난 머지 전 에픽은 `open --site asked` 가 받는지 정한다'
 L_fetchrange='범위 스크립트를 부르기 전에 `git fetch origin` 을 돌린다 — 걸음 1 의 받아오기 뒤에 머지된 PR 이면 머지 커밋이 아직 이 레포에 없다.'
 L_specline='보관 폴더가 있는 리뷰의 줄은 글 칸 끝에 그 폴더 이름(마지막 경로 성분)을 덧붙인다 — 위 `### 이미 보낸 것` 이 그 폴더를 끝난 리뷰로 보고 돌 때마다 다시 기록하지 않는다.'
 L_qgdrop='절이 `qg 리뷰` 인 쌓인 기록 줄은 로드맵을 닫는 PR(기록 브랜치의 PR 이 없으면 걸음 7 의 기록만 담은 로드맵 수정 PR)만 본문에 싣고 뺀다 — 걸음 6 의 로드맵 수정 PR 과 로드맵 중간의 기록 브랜치 PR 은 이 줄을 싣지도 빼지도 않는다.'
@@ -344,7 +344,12 @@ assert_not_contains "$ALL" '<이름> · <대상> · qg 리뷰' "나 A 음성: �
 for v in L_sent0 L_sent1 L_sent3 L_sent4 L_sentempty L_sentspec L_sentend L_sentasks L_sentpre L_samesite L_samesiteex L_name31 L_row29 L_row30; do
   once "$SENT" "${!v}" "M8 · 나 C · 나 4(가): 이미 보낸 것 — ${v}"
 done
-once "$SENT" "$L_sent2" "R6: M8 · 나 C · 나 4(가): 이미 보낸 것 — L_sent2(기록 파일을 ### 이미 답한 것 의 읽는 자리 셋에서)"
+once "$SENT" "$L_sent2" "R9: M8 · 나 C · 나 4(가): 이미 보낸 것 — L_sent2(기록 파일을 ### 이미 답한 것 의 읽는 자리 둘에서 — AC11)"
+# R9 — 이미 보낸 것은 spec 승인 앞 · 로드맵 끝만 센다. 머지 앞 몫(premerge-resend-pr 표지 · PR 본문 recheck 줄 · 보관 사본)은 상태 파일이 센다
+# (잇는 테스트: test_open_refused_while_last_not_closed · test_cap_counts_only_obtained_rechecks · test_legacy_traces_open_whole_pr)
+for gone in 'premerge-resend' '- 호출 · recheck-pr<번호> · ' '머지 앞과 그 좁은 재리뷰 · 로드맵 끝)은'; do
+  assert_not_contains "$ALL" "$gone" "R9 M8 음성: 머지 앞을 쌓인 기록 · PR 본문으로 세던 옛 글자 「${gone}」 가 없다(양성 짝: L(sentpre))"
+done
 # R4 — 머지 앞 자리 · 통째 견줌 · 행 29 · 30 · 31
 assert_eq "$(printf '%s\n' "$SITE" | grep -oF '에픽 머지 뒤' | wc -l | tr -d ' ')" "0" "AC8(R4) 음성: 「에픽 머지 뒤」 가 ## 자리 에 없다(양성 짝: 머지 앞 행 · L(sentpre))"
 assert_eq "$(printf '%s\n' "$SENT" | grep -oF '에픽 머지 뒤' | wc -l | tr -d ' ')" "0" "AC8(R4) 음성: 「에픽 머지 뒤」 가 ### 이미 보낸 것 에 없다(양성 짝: L(sent0))"
@@ -409,7 +414,7 @@ assert_contains "$ASK" '- 화면에 싣지 않는 것 — 의심하는 인용 ·
 # 좁은 재리뷰 1차 뒤 — 끝난 리뷰 · 차례 · spec 다시 보내기 표지 · 작업 줄 · 없음 표지 YAML
 L_sentlost='5. 돌아오지 못한 리뷰 — 그 밖(`intent-return.md` 가 없는 폴더 — 세션이 끊긴 경우 등)이면 「질문을 가져오지 못했다 — 담당자가 돌아오지 않았다」 를 보이고 그 자리의 리뷰를 「셀 수 없음」 으로 기록한다'
 L_workrow='`## 작업` 표에 `ledger add --roadmap <로드맵> --session <세션> --section "작업" --cells "qg 리뷰 · <자리 글자> · <에픽 번호 | 로드맵 밖> · 리뷰 중 · <같은 agent 이름> · <보관 폴더 경로>"` 로 한 줄을 적는다.'
-L_resendmark='- 그 두 사건으로 설계 대화에 돌아갈 때 `ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽> · qg 리뷰 · spec-resend · <사건의 정체 — 돌아가게 한 질문의 정체 | spec 리뷰 라운드>"` 로 표지 한 줄을 적는다 — 위 `### 이미 보낸 것` 이 이 줄로 다시 보내도 되는 횟수를 센다.'
+L_resendmark='- 그 두 사건으로 설계 대화에 돌아갈 때 `ledger add --roadmap <로드맵> --session <세션> --section "쌓인 기록" --cells "<에픽> · qg 리뷰 · spec-resend · <사건의 정체 — 돌아가게 한 질문의 정체 | spec 리뷰 라운드> @ <그때의 설계문서 커밋 앞 8자>"` 로 표지 한 줄을 적는다 — 위 `### 이미 보낸 것` 이 이 줄로 다시 보내도 되는 횟수를 센다.'
 L_none='- 머리 칸의 없음 표지는 따옴표에 싸서 `"-"` 로 적는다 — 따옴표 없는 `-` 가 하나라도 있으면 qg 가 머리 전체를 YAML 로 읽지 못해 이 파일의 `roadmap:` 을 따라가지 못한다. 결과 파일의 값이 `-` 여도 같다.'
 once "$SENT" "$L_sentlost" "재리뷰 지적 3 · 통합 리뷰 F6: 근거 다섯째 — 돌아오지 못한 리뷰(intent-return.md 가 없는 폴더)"
 assert_not_contains "$ALL" '그 밖(빈 폴더 — ' "통합 리뷰 F6 음성: 보관 폴더를 빈 폴더로 부르던 옛 말이 없다(양성 짝: L(sentlost))"
@@ -507,15 +512,16 @@ hb="$(grep -nxF '## 돌아왔을 때' "$QR" | head -1 | cut -d: -f1)"; hr="$(gre
 if [ -n "$hb" ] && [ -n "$hr" ] && [ -n "$hk" ] && [ "$hb" -lt "$hr" ] && [ "$hr" -lt "$hk" ]; then ok "되돌리기: 절이 돌아왔을 때 다음 · 보관과 기록 파일 앞"; else no "되돌리기: 절 자리가 다르다(돌아왔을 때=${hb:-없음} · 되돌리기=${hr:-없음} · 보관=${hk:-없음})"; fi
 line_of() { printf '%s\n' "$1" | awk -v p="$2" 'index($0, p)==1'; }   # 줄 첫머리가 p 인 줄
 para() { printf '%s\n' "$1" | awk -v p="$2" 'index($0, p)==1{f=1} f&&/^$/{exit} f'; }   # 줄 첫머리가 p 인 줄부터 빈 줄 앞까지
-R_REC="$(line_of "$RET" '- **돌아온 즉시 목록을 적는다.**')"
+R_REC="$(line_of "$RET" '- **돌아온 즉시 목록을 옮긴다.**')"
 R_QF="$(line_of "$RET" '- **의도 점검 질문이 함께 오면 질문부터 묻는다.**')"
 R_BLK="$(line_of "$RET" '- **막는 지적 · 차등 결함이 있으면**')"
-# return-record-first (AC10)
+# return-record-first (AC10 → R9) — 질문을 묻기 전에 `back` 이 원문을 상태 파일로 옮기고, 돌려보낼 목록은 render --kind return-list 가 짓는다
+# (잇는 테스트: test_qg_review_state_sweep 의 test_each_row_yields_its_action · 위 mf-calls-script)
 once "$RET" '질문을 묻기 전에' "return-record-first: 「질문을 묻기 전에」 가 되돌리기에 한 번"
-once "$RET" 'PR 본문 `## qg 리뷰` 에 글자 그대로' "return-record-first: 막는 지적 목록을 PR 본문 qg 리뷰 절에 글자 그대로"
-assert_contains "$R_REC" '질문을 묻기 전에' "return-record-first: 두 구절이 「돌아온 즉시 목록을 적는다」 불릿에 함께(1)"
-assert_contains "$R_REC" 'PR 본문 `## qg 리뷰` 에 글자 그대로' "return-record-first: 두 구절이 「돌아온 즉시 목록을 적는다」 불릿에 함께(2)"
-assert_contains "$R_REC" '돌려보내는 글은 그 절에서 싣는다' "return-record-first: 돌려보내는 글은 그 절에서 싣는다"
+assert_contains "$R_REC" '질문을 묻기 전에 `back` 을 부른다' "return-record-first(R9): 질문을 묻기 전에 back 을 부른다"
+assert_contains "$R_REC" '보관 폴더의 파일에서 상태 파일로 글자 그대로 옮긴다' "return-record-first(R9): 원문은 back 이 상태 파일로 글자 그대로"
+assert_contains "$R_REC" '돌려보내는 글의 목록은 `render --kind return-list` 가 상태 파일에서 짓는다' "return-record-first(R9): 돌려보낼 목록은 render --kind return-list"
+assert_not_contains "$RET" 'PR 본문 `## qg 리뷰` 에 글자 그대로' "return-record-first(R9) 음성: 목록을 PR 본문에 적고 거기서 싣던 옛 문장이 없다(양성 짝: back · return-list)"
 # return-questions-first (AC10)
 once "$RET" '「잘못 골랐다」 가 하나라도 있으면 돌려보내지 않고' "return-questions-first: 「잘못 골랐다」 가 있으면 돌려보내지 않는다"
 once "$R_QF" '질문을 먼저 묻고, 답을 받은 뒤에 돌려보낸다' "return-questions-first: 질문을 먼저 묻고 답을 받은 뒤에 돌려보낸다"
@@ -567,29 +573,18 @@ once "$UB" '좁은 재리뷰가 통과해도 풀린 것으로 세지 않는다' 
 once "$UB" '질문 문장 앞머리에 에픽 이름' "unfixed-blocking-ask: 질문 문장 앞머리에 에픽 이름"
 once "$UB" "$P4_DIR" "unfixed-blocking-ask(P4): 권하는 쪽이 있으면 첫 자리 · 「(권장)」"
 assert_not_contains "$UB" '추천을 달지 않는다' "unfixed-blocking-ask(P4) 음성: 비움 문구가 없다(양성 짝: 권하는 쪽 문장)"
-assert_contains "$UB" '사유와 답은 PR 본문 `## qg 리뷰` 에 적는다' "unfixed-blocking-ask: 결과를 PR 본문 qg 리뷰에"
-# recheck-start-from-pr-body (AC11 · Review Focus 1)
+assert_contains "$UB" '답은 `record` 로 적는다 — 사유와 답은 상태 파일이 쥔다' "unfixed-blocking-ask(R9): 답은 record 로 — 상태 파일이 쥔다(잇는 테스트: test_return_line_and_empty_return_count)"
+assert_not_contains "$UB" 'PR 본문' "unfixed-blocking-ask(R9) 음성: 사유와 답을 PR 본문에 적던 옛 문장이 없다(양성 짝: record)"
+# 좁은 재리뷰 — 범위 · 여는 조건은 open 이 정한다. 옛 recheck-start-from-pr-body · recheck-merge-commit-full · fix I1 은 지웠다
+# (잇는 테스트: test_recheck_start_is_last_obtained_end · test_display_has_no_paths(호출 줄 꼴) · test_qg_review_state 의 merge 커밋 케이스)
 RC="$(para "$RET" '- **좁은 재리뷰.**')"
 [ -n "$RC" ] && ok "좁은 재리뷰 문단을 읽었다" || no "좁은 재리뷰 문단이 없다 — 아래 단언이 공허하다"
-once "$RC" '`range <지난 리뷰의 끝>..<고친 뒤의 끝>`' "recheck-start-from-pr-body: 범위의 꼴"
-once "$RC" 'PR 본문 `## qg 리뷰` 에 적어 둔 호출 줄에서 읽는다' "recheck-start-from-pr-body: 지난 리뷰의 끝은 PR 본문의 호출 줄"
-once "$RC" '`reviewed_head` 는 견주는 데만' "recheck-start-from-pr-body: reviewed_head 는 견주는 데만"
-once "$RC" '비어 오면 견주지 않는다' "recheck-start-from-pr-body: 비어 오면 견주지 않는다"
-# recheck-merge-commit-full (AC11 · Review Focus 2)
-once "$RC" '`git rev-list --merges <시작>..<끝>`' "recheck-merge-commit-full: merge 커밋을 git rev-list --merges 로 본다"
-once "$RC" '재리뷰 한 번으로 센다' "recheck-merge-commit-full: 처음부터 다시 본 리뷰도 재리뷰 한 번으로 센다"
-assert_contains "$RC" '그 PR 을 처음부터 다시 보며' "recheck-merge-commit-full: 그 PR 을 처음부터 다시 본다"
-once "$RC" '범위에 구현 담당자의 고친 커밋이 하나도 없으면 보내지 않는다' "recheck: 고친 커밋이 없으면 보내지 않는다"
+once "$RC" '`next` 가 「열기」(`open --site recheck`)를 내면 연다' "recheck(R9): 좁은 재리뷰는 next 가 낸 open --site recheck 로 연다"
+once "$RC" '`open` 이 git 에서 정한다' "recheck(R9): 범위 · 여는 조건은 open 이 git 에서 정한다"
 assert_contains "$RC" '자리 글자는 `recheck-pr<번호>`' "recheck: 자리 글자 recheck-pr"
-assert_contains "$RC" '그 호출 줄은 `### 이미 보낸 것` 의 확인보다 먼저 PR 본문 `## qg 리뷰` 에 적는다' "recheck(fix I1): 호출 줄을 이미 보낸 것 확인보다 먼저 PR 본문에"
-# fix I1 — 머지 앞 호출 줄은 확인보다 먼저 · 같은 범위면 다시 적지 않는다 · 재리뷰는 서로 다른 범위를 센다
-once "$BEAT" '머지 앞 자리(첫 리뷰와 좁은 재리뷰)는 그 차례 맨 앞, `### 이미 보낸 것` 의 확인보다 먼저 호출 줄을 PR 본문 `## qg 리뷰` 에 `- 호출 · <자리 글자> · <시작 커밋>..<끝 커밋>` 한 줄로 적는다' "fix I1: 머지 앞 호출 줄은 이미 보낸 것 확인보다 먼저 PR 본문에"
-once "$BEAT" '같은 자리 글자 · 같은 범위의 줄이 이미 있으면 다시 적지 않는다' "fix I1: 같은 범위의 호출 줄은 다시 적지 않는다"
-once "$SENT" '`- 호출 · recheck-pr<번호> · ` 줄이 적은 서로 다른 범위의 수 — 지휘자는 이 확인보다 먼저 그 줄을 적는다' "fix I1: 재리뷰의 보내도 되는 횟수는 서로 다른 범위 수 · 줄은 확인보다 먼저"
-once "$RC" '그 PR 의 `- 호출 · ` 줄 가운데 마지막 줄의 끝 커밋' "fix I1: 지난 리뷰의 끝은 마지막 호출 줄의 끝 커밋"
-assert_contains "$(line_of "$RET" '- **PR 본문.**')" '첫 리뷰의 호출 줄(보내기 전, 위 `### 한 박자` 대로 적는다)' "fix I1: 첫 리뷰의 호출 줄도 보내기 전에"
-assert_not_contains "$ALL" '보내기 직전에 그' "fix I1 음성: 호출 줄을 확인 뒤 보내기 직전에 적던 옛 문장이 없다(양성 짝: 확인보다 먼저 적는 두 줄)"
-assert_not_contains "$ALL" '첫 리뷰의 호출 줄(보낼 때 적는다)' "fix I1 음성: 첫 리뷰 호출 줄을 보낼 때 적던 옛 괄호가 없다(양성 짝: 보내기 전)"
+for gone in '`range <지난 리뷰의 끝>..<고친 뒤의 끝>`' '적어 둔 호출 줄에서 읽는다' '`- 호출 · ` 줄 가운데 마지막 줄' '같은 자리 글자 · 같은 범위의 줄이 이미 있으면 다시 적지 않는다'; do
+  assert_not_contains "$ALL" "$gone" "recheck(R9) 음성: PR 본문 호출 줄로 범위를 정하던 옛 글자 「${gone}」 가 없다(양성 짝: open --site recheck)"
+done
 # recheck-cap-two (AC11)
 once "$CAP" 'PR 하나에 두 번까지' "recheck-cap-two: PR 하나에 두 번"
 once "$CAP" '따로 센다' "recheck-cap-two: 통합 리뷰의 재리뷰 횟수와 따로 센다"
@@ -604,27 +599,33 @@ assert_eq "$(printf '%s\n' "$CAP" | grep -oF '얻음:' | wc -l | tr -d ' ')" "3"
 assert_eq "$(printf '%s\n' "$CAP" | grep -oF '내줌:' | wc -l | tr -d ' ')" "3" "recheck-cap-two: 내줌 셋"
 once "$CAP" "$P4_DIR" "recheck-cap-two(P4): 권하는 쪽이 있으면 첫 자리 · 「(권장)」"
 assert_not_contains "$CAP" '추천을 달지 않는다' "recheck-cap-two(P4) 음성: 비움 문구가 없다(양성 짝: 권하는 쪽 문장)"
+assert_contains "$CAP" '멈출 조건(그 뒤에도 남는 지적을 어디에 적고 넘길지)을 `record` 의 `stop_rule` 로 적는다' "recheck-cap-two(R9): 멈출 조건은 record 의 stop_rule"
+assert_contains "$CAP" '`next` 가 이 질문을 낸다' "recheck-cap-two(R9): 묻는 때는 next 가 낸다(잇는 테스트: test_cap_counts_only_obtained_rechecks · 훑기 test_cap_cases)"
+assert_not_contains "$CAP" 'PR 본문' "recheck-cap-two(R9) 음성: 멈출 조건 · 답을 PR 본문에 적던 옛 문장이 없다(양성 짝: stop_rule · record)"
 # recheck-intent-not-filtered (AC11) → R6 recheck-intent-answered — 거르는 곳은 qg, 지휘자는 돌아온 질문을 모두 묻는다
 R_RI="$(line_of "$RET" '- **좁은 재리뷰의 의도 점검.**')"
 [ -n "$R_RI" ] && ok "R6: 좁은 재리뷰의 의도 점검 불릿을 읽었다" || no "R6: 좁은 재리뷰의 의도 점검 불릿이 없다 — 아래 단언이 공허하다"
 once "$R_RI" '호출 줄은 첫 리뷰와 같은 꼴이라(`--answered` 포함)' "R6: recheck-intent: 좁은 재리뷰의 호출 줄도 --answered 를 붙인다"
 once "$R_RI" '거르는 쪽은 qg 이고, 돌아온 질문은 `## 묻기` 대로 모두 묻는다' "R6: recheck-intent: 지휘자는 거르지 않고 돌아온 질문을 모두 묻는다"
 assert_not_contains "$RET" '「같은 대상에 전에 물은 것」' "R6: recheck-intent 음성: 앞 리뷰의 질문 글을 손으로 찾아 앞 글에 싣던 옛 구절이 없다(양성 짝: --answered 포함)"
-# PR 본문 (AC19)
+# PR 본문 (AC19 → R9) — 절은 render --kind pr-body 의 글을 올린다 · 호출 줄 꼴(잇는 테스트: Task 12 의 no-paths-to-reviewed · test_display_has_no_paths)
 R_PR="$(line_of "$RET" '- **PR 본문.**')"
-for lit in '`## qg 리뷰` 절에 첫 리뷰의 호출 줄' '좁은 재리뷰마다 호출 줄과 판정 줄' '멈출 조건' '고치지 않은 막는 지적의 사유와 사용자 답' '`## 통합 리뷰 인계` 절에도 받는 에픽과 함께' '첫 리뷰가 돌아온 뒤와 좁은 재리뷰가 돌아올 때마다 고친다'; do
+for lit in '`## qg 리뷰` 절은 `render --kind pr-body` 의 글을 올린다' '호출 줄은 `- 호출 · <자리 글자> · <범위>` 꼴까지다' '멈출 조건' '`## 통합 리뷰 인계` 절에도 받는 에픽과 함께' '지휘자는 그 절을 판단에 쓰지 않는다'; do
   assert_contains "$R_PR" "$lit" "PR 본문 불릿: ${lit}"
 done
+assert_not_contains "$R_PR" '첫 리뷰가 돌아온 뒤와 좁은 재리뷰가 돌아올 때마다 고친다' "PR 본문 불릿(R9) 음성: 지휘자가 손으로 고치던 옛 문장이 없다(양성 짝: render --kind pr-body)"
 assert_eq "$(printf '%s\n' "$RET" | grep -oF 'AskUserQuestion' | wc -l | tr -d ' ')" "0" "되돌리기: 도구 이름을 쓰지 않는다(질문 자리 목록의 덮는 수 0 — ask-sites.tsv 행은 Task 12)"
-# premerge-wrong-choice (AC12) — 머지 앞 갈래 불릿(다음 맨 앞 불릿 앞까지)
+# premerge-wrong-choice (AC12 → R9) — 머지 앞 갈래 불릿(다음 맨 앞 불릿 앞까지). 행선(설계 대화로 · 재분해 신호)은 남기고 premerge-resend-pr 표지는 뺐다
+# (잇는 테스트: 훑기 R6a–R6e · test_reopen_after_design_mark)
 PM="$(printf '%s\n' "$WRONG" | awk 'index($0, "- **머지 앞.**")==1{f=1;print;next} f&&/^- /{exit} f')"
 assert_eq "$(starts "$WRONG" '- **머지 앞.**')" "1" "premerge-wrong-choice: 행선 절에 머지 앞 갈래가 줄 첫머리에 한 번"
-for lit in '머지 명령 줄을 내지 않는다' '돌아가기 전에' 'premerge-resend-pr<번호>' '처음부터 보고' '새로 센다' '재분해 신호' '앞서 잘못 골랐다고 답한 것이 아직 그대로다'; do
+for lit in '머지 명령 줄을 내지 않는다' '돌아가기 전에' '처음부터 보고' '새로 센다' '앞서 잘못 골랐다고 답한 것이 아직 그대로다'; do
   once "$PM" "$lit" "premerge-wrong-choice: ${lit}"
 done
+assert_contains "$PM" '`record` 의 `route`(`설계 대화로`)' "premerge-wrong-choice(R9): 설계 대화로 행선을 record 로"
+assert_contains "$PM" '`record` 의 `route`(`재분해 신호`)' "premerge-wrong-choice(R9): 재분해 신호 행선을 record 로"
 assert_contains "$PM" '열린 PR 은 닫지 않고 둔다' "premerge-wrong-choice: 열린 PR 은 닫지 않는다"
-once "$PM" '--cells "<에픽> · qg 리뷰 · premerge-resend-pr<번호> · <돌아가게 한 질문의 정체>"' "premerge-wrong-choice: 표지 줄의 꼴(첫 토막이 이미 보낸 것이 세는 자리 글자)"
-assert_contains "$SENT" '글 칸의 첫 토막이 `premerge-resend-pr<번호>` 인' "premerge-wrong-choice 결합: 이미 보낸 것이 같은 표지를 센다"
+assert_not_contains "$PM" 'premerge-resend' "premerge-wrong-choice(R9) 음성: 머지 앞 다시 보내기 표지가 없다 — 상태 파일의 닫힘 사유와 표시가 대신한다(양성 짝: route)"
 assert_contains "$PM" '`spec-resend` 표지' "premerge-wrong-choice: spec 승인 앞을 다시 보낼 spec-resend 표지도 적는다"
 assert_contains "$PM" '`이미 「잘못 골랐다」 답이 있어 거른 질문:`' "premerge-wrong-choice: 거른 「잘못 골랐다」 목록도 같은 행선"
 # wrong-choice-label-premerge (AC12)
@@ -662,14 +663,15 @@ assert_not_contains "$ALL" '질문의 정체는 결과 파일의 그 질문 `id`
 # Task 9 리뷰 이월 (a)–(f)
 once "$MERGED" '이름으로 청한 spec 승인 뒤 · 머지 전 에픽은 구현 담당자가 아직 일하는 중이면 이 줄대로(재분해 신호 · 기록 브랜치), 구현이 끝난 뒤(구현 담당자가 돌아와 PR 을 연 뒤)면 위 자리 표의 「머지 앞」 줄대로 한다' "(a) 이름으로 청한 머지 전 에픽 — 구현 중 · 구현 뒤 갈래(설계 §2)"
 assert_not_contains "$ALL" '머지 전 자리(spec 승인 앞 · 이름으로 청한 머지 전 에픽)' "(a) 음성: 이름으로 청한 머지 전 에픽을 통째로 막지 않는다던 옛 문장이 없다(양성 짝: L(premerge))"
-once "$SITE" '같다(spec 승인 전 에픽과 구현이 끝난 머지 전 에픽은 에픽 브랜치, 그 밖은 기록 브랜치)' "(a) 자리 표: 구현이 끝난 머지 전 에픽의 기록은 에픽 브랜치"
+# (a) 자리 표의 이름으로 청함 행 기록 칸 → R9: 모든 자리가 기록 브랜치(record-branch-only 가 잰다)
+assert_not_contains "$SITE" '구현이 끝난 머지 전 에픽은 에픽 브랜치' "(a)(R9) 음성: 이름으로 청함 행이 구현이 끝난 머지 전 에픽의 기록을 에픽 브랜치에 두던 옛 칸이 없다(양성 짝: record-branch-only)"
 assert_eq "$(printf '%s\n' "$WRONG" | grep -oF '에픽 머지 뒤' | wc -l | tr -d ' ')" "0" "(b) 음성: 행선 절에 「에픽 머지 뒤」 가 없다(양성 짝: 로드맵 끝 · 이름으로 청한 머지된 에픽 불릿)"
 assert_not_contains "$WRONG" '머지 뒤 리뷰의' "(b) 음성: 행선 절에 자동 머지 뒤 리뷰가 없다"
 assert_eq "$(starts "$WRONG" '- **로드맵 끝 · 이름으로 청한 머지된 에픽.**')" "1" "(b): 행선 절의 새 갈래 이름"
 once "$FAILED" '옛 자동 자리의 `merged-pr` 에 PR 번호가 붙은 글자도 든다' "(d) 닫는 PR 거르기가 옛 merged-pr 자리 글자도 가린다"
 once "$SENT" '보관 폴더 없이 끝난 리뷰의 쌓인 기록 줄(글 칸의 첫 토막이 그 자리 글자이고 글 칸 끝에 보관 폴더 이름이 없는 줄' "(e) 보낸 횟수는 보관 폴더 없이 끝난 리뷰의 쌓인 기록 줄도 센다"
 once "$FAILED" '위 「이미 보낸 것」 확인이 이 줄을 보낸 횟수에 세어 다시 보내지 않는다' "(e) 보내지 못한 리뷰 줄을 이미 보낸 것이 보낸 횟수에 센다"
-once "$SENT" '- 머지 앞의 좁은 재리뷰 — 자리 글자는 `recheck-pr<번호>` 다.' "(e) 이미 보낸 것에 좁은 재리뷰 줄"
+assert_not_contains "$SENT" '- 머지 앞의 좁은 재리뷰 — 자리 글자는 `recheck-pr<번호>` 다.' "(e)(R9) 음성: 이미 보낸 것이 좁은 재리뷰를 세지 않는다 — 상태 파일이 센다(양성 짝: L(sentpre) · ledger-two-lines)"
 once "$SENT" '앞쪽 경계도 같다 — 보관 폴더 이름에서는 `qg-<에픽>-` 바로 뒤에서 시작하는 글자만 자리 글자로 견주고' "(f) 통째 견줌의 앞쪽 경계"
 # R4 Task 11 — 행 27 · 재리뷰 호출 줄 앞의 고친 커밋 확인 · team 형식 한 단락
 L_row27='로드맵을 닫는 PR 이 머지된 로드맵(기본 브랜치에 그 로드맵의 `reviews/<날짜>-roadmap-end.md` 가 커밋돼 있다)에서는 자동 자리 셋을 보내지 않는다'
@@ -677,17 +679,22 @@ once "$ALL" "$L_row27" "행 27: 닫힌 로드맵에서는 자동 자리 셋을 �
 once "$SENT" "$L_row27" "행 27: 그 문장이 이미 보낸 것에"
 once "$END_" '로드맵을 닫는 PR 이 이미 머지된 로드맵이면 보내지 않는다(위 `### 이미 보낸 것`)' "행 27: 로드맵 끝이 이미 보낸 것의 그 문장을 가리킨다"
 once "$SENT" 'git ls-tree --name-only origin/HEAD' "행 27: 판정은 기본 브랜치의 reviews/ 이름으로"
-once "$BEAT" '좁은 재리뷰는 그 줄을 적기 전에 범위를 정하고 그 범위에 구현 담당자의 고친 커밋이 있는지 본다' "이월 (c): 재리뷰는 호출 줄을 적기 전에 고친 커밋을 본다"
-once "$BEAT" '없으면 줄을 적지 않고 보내지도 않는다' "이월 (c): 고친 커밋이 없으면 줄을 적지 않는다"
-once "$RC" '범위 정하기(merge 커밋이 끼면 처음부터) → 고친 커밋 확인 → 호출 줄 적기 → `### 이미 보낸 것` 의 확인' "이월 (c): 좁은 재리뷰의 보내기 전 차례"
-bq="$(printf '%s\n' "$BEAT" | grep -nF '좁은 재리뷰는 그 줄을 적기 전에' | head -1 | cut -d: -f1)"
-bw="$(printf '%s\n' "$BEAT" | grep -nF '그 차례 맨 앞, `### 이미 보낸 것` 의 확인보다 먼저 호출 줄을' | head -1 | cut -d: -f1)"
-[ -n "$bq" ] && [ "$bq" = "$bw" ] && ok "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 함께" || no "이월 (c): 고친 커밋 확인이 호출 줄 적기 문단에 없다(확인=${bq:-없음} · 적기=${bw:-없음})"
+# 이월 (c) → R9 — 머지 앞 보내기 차례는 open → … → send --phase start → 보내기 → send --phase done(잇는 테스트: test_walk_doc_fences_run). spec 승인 앞 차례는 위 L(order) 그대로
+L_ordermf='그 차례 대신 `open` → 규모 줄 → `### 스위트 잠금` 의 확인 → 「이미 답한 것」 파일 만들기 → `send --phase start` → 보내기 → `send --phase done` → 살아 있는 agent 줄 적기의 차례로 보낸다'
+once "$BEAT" "$L_ordermf" "이월 (c)(R9): 머지 앞 보내기 차례가 한 박자에 한 번"
+once "$BEAT" '`### 이미 보낸 것` 의 확인과 보관 폴더 만들기는 하지 않는다' "이월 (c)(R9): 머지 앞은 이미 보낸 것 확인 · 보관 폴더 만들기를 하지 않는다(open 이 한다)"
+once "$BEAT" '호출 줄의 시작 · 끝 커밋은 `open` 이 낸 `범위 · <시작>..<끝>` 줄의 글자를' "이월 (c)(R9): 호출 줄의 범위는 open 이 낸 줄의 글자"
+mo="$(printf '%s\n' "$BEAT" | grep -nF -- "$L_ordermf" | head -1 | cut -d: -f1)"; lo="$(printf '%s\n' "$BEAT" | grep -nF -- "$L_order" | head -1 | cut -d: -f1)"
+[ -n "$mo" ] && [ -n "$lo" ] && [ "$lo" -lt "$mo" ] && ok "이월 (c)(R9): 머지 앞 차례가 spec 승인 앞 차례(L(order)) 뒤에서 그 차례를 대신한다" || no "이월 (c)(R9): 머지 앞 차례가 L(order) 뒤에 없다(order=${lo:-없음} · 머지 앞=${mo:-없음})"
+o_open="$(printf '%s\n' "$L_ordermf" | awk '{print index($0, "`open`")}')"; o_start="$(printf '%s\n' "$L_ordermf" | awk '{print index($0, "`send --phase start`")}')"; o_done="$(printf '%s\n' "$L_ordermf" | awk '{print index($0, "`send --phase done`")}')"
+[ "$o_open" -gt 0 ] && [ "$o_open" -lt "$o_start" ] && [ "$o_start" -lt "$o_done" ] && ok "이월 (c)(R9): open → send start → send done 차례" || no "이월 (c)(R9): open · send start · send done 의 차례가 다르다"
 TEAMQ="$(line_of "$RET" '**team 형식 로드맵.**')"
 [ -n "$TEAMQ" ] && ok "team 형식: 되돌리기 절에 team 형식 단락이 있다" || no "team 형식: 되돌리기 절에 team 형식 단락이 없다 — 아래 단언이 공허하다"
-for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '검수 결과 파일의 펜스 안에' '`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` · `premerge-resend-<과제>-plan<n>`' 'PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다'; do
+# team 단락(R9) — 같은 스크립트 · 대상 <과제>-plan<n> · --job-dir · 펜스는 render --kind team-fence 의 표시(잇는 테스트: Task 12 team-sentences · Task 11 team-review-qg)
+for lit in '`conducting.md` 의 `## team 형식 로드맵` 의 「검수 걸음의 qg」' '같은 스크립트와 상태 파일을 쓴다' '`--job-dir <과제 폴더>`' '`render --kind team-fence` 가 지은 글(바깥 펜스까지)을 싣는다' '그 펜스는 표시이고 지휘자는 거기서 판단하지 않는다' '`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>` 이고' 'PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다'; do
   once "$TEAMQ" "$lit" "team 형식 단락: ${lit}"
 done
+assert_not_contains "$TEAMQ" '거기서 세며' "team 형식 단락(R9) 음성: 펜스에 적고 거기서 세던 옛 문장이 없다(양성 짝: team-fence 표시)"
 # fix 1 — 계획마다 PR 이 따로라 team 자리 글자에 계획 번호가 든다(둘째 계획의 리뷰가 첫 계획 폴더에 막히지 않게)
 once "$TEAMQ" '계획마다 브랜치와 PR 이 따로라' "fix 1: team 자리 글자에 계획 번호를 넣는 까닭"
 assert_eq "$(printf '%s\n' "$TEAMQ" | grep -oE '`(premerge|recheck|premerge-resend)-<과제>`' | wc -l | tr -d ' ')" "0" "fix 1 음성: 계획 번호 없는 team 자리 글자가 없다(양성 짝: -plan<n> 자리 글자 셋)"
@@ -820,5 +827,178 @@ PH="$(grep -F '코드: `shared/docreview/references/reviewing-document.md`' "$RO
 assert_contains "$PH" '「두 번까지」 상한(`plugins/spec-distill/skills/epic-conductor/references/qg-review.md` 의 `## 되돌리기`)' "IR3: P18 코드 지도가 살아 있는 상한(되돌리기 「두 번까지」)을 인용한다"
 assert_not_contains "$PH" 'qg fix-loop 의 반복 상한' "IR3 음성 짝: 사라진 qg fix-loop 상한을 인용하지 않는다"
 once "$RETX" '- **두 번까지.**' "IR3 짝: 인용하는 「두 번까지」 가 되돌리기에 실재한다"
+
+# ── R9 Task 10 — 머지 앞 자리는 상태 스크립트를 부르고 그 답대로 한다 · 기록은 기록 브랜치에(설계 §1–§4 · §6–§9)
+SST="$ROOT/plugins/spec-distill/scripts/qg_review_state.py"
+SSF="$ROOT/plugins/spec-distill/scripts/qg_review_file.py"
+QGA="$ROOT/plugins/spec-distill/scripts/qg_answered.py"
+MF="$(sec '## 머지 앞 리뷰 상태')"
+[ -n "$MF" ] && ok "R9: 머지 앞 리뷰 상태 절을 읽었다(${#MF}자)" || no "R9: 머지 앞 리뷰 상태 절이 없다 — 아래 단언이 공허하다"
+# mf-calls-script (AC1 · AC8) — 세 절의 머지 앞 갈래가 `next` 를 부르고, 명령마다 부르는 때 다섯 · next 의 할 일 꼴이 표에 모두
+NEXT_SENT='`next` 를 부르고 그 할 일대로 한다'
+for pair in "돌아왔을 때:$BACK" "되돌리기:$RET" "행선 머지 앞:$PM"; do
+  assert_contains "${pair#*:}" "$NEXT_SENT" "mf-calls-script: ${pair%%:*} 의 머지 앞 갈래가 next 를 부르고 그 할 일대로 한다"
+done
+[ -n "$(fence_with "$MF" 'qg_review_state.py next ')" ] && ok "mf-calls-script: next 를 부르는 펜스가 있다" || no "mf-calls-script: next 를 부르는 펜스가 없다"
+for lit in '보내기 직전에 `send --phase start` 를 부른다' '보낸 뒤에 `send --phase done --worker <하니스가 준 agent 이름>` 을 부른다' \
+           '담당자가 돌아오면 `back` 을 부른다' '답을 받으면 먼저 `record` 로 상태 파일에 적고, 그 뒤에 기록 파일을 쓰고 커밋한다' \
+           '구현 길로 돌려보내면 보낸 즉시 `record` 의 `return` 을 적는다'; do
+  once "$MF" "$lit" "mf-calls-script: 명령마다 부르는 때 — ${lit}"
+done
+once "$MF" '`record` 가 내는 첫 줄은 살아 있는 담당자를 모르고 지은 줄이라 그 줄만 보고 다음 명령을 부르지 않는다' "mf-calls-script: record 뒤에는 next --alive 로 다시 본다"
+once "$CALL" '그 사실을 「qg 없음」 인자 `--no-qg` 로 `gate` · `next` · `render` 에 넘긴다' "mf-calls-script: qg 없음이면 --no-qg 를 gate · next · render 에 넘긴다"
+TODO_KINDS="$( { grep -oE 'Todo\("[^"]+"' "$SST" | sed 's/^Todo("//; s/"$//'; grep -oE '"할 일 · [^ ]+ [^ ]+ · ' "$SST" | sed 's/^"할 일 · //; s/ · $//'; } | LC_ALL=C sort -u)"
+assert_contains "$TODO_KINDS" '상태 보이기' "mf-calls-script: 스크립트에서 할 일 꼴을 읽었다(끝 줄 상태 보이기 포함)"
+while IFS= read -r k; do
+  [ -n "$k" ] || continue
+  assert_eq "$(starts "$MF" "| ${k} |")" "1" "mf-calls-script: next 의 할 일 꼴 「${k}」 이 하는 일 표에 한 줄"
+done <<EOF
+$TODO_KINDS
+EOF
+# mf-no-pr-body-read (AC1) — 음: `PR 본문` 이 든 줄(spec 승인 앞 · 로드맵 끝 절은 뺀다)에 읽 · 센다 · 세 · 싣는다 · 찾 이 없고,
+# 펜스 밖 `- 답:` 이 든 줄에 읽 · 찾 이 없다. 한계 — 동사를 다른 말로 바꾼 문장(「거기서 가져온다」)은 지나간다. 그 몫은 양의 짝과
+# 스크립트 테스트(test_back_moves_originals_without_pr_body · test_approval_has_every_answer_left_and_reason)가 잰다.
+PBL="$(awk '/^```/{q=!q} !q && /^#+ /{skip=($0=="### spec 승인 앞" || $0=="### 로드맵 끝")} !skip && index($0, "PR 본문")' "$QR")"
+[ -n "$PBL" ] && ok "mf-no-pr-body-read: PR 본문 이 든 줄을 읽었다" || no "mf-no-pr-body-read: PR 본문 이 든 줄이 없다 — 아래 음 단언이 공허하다"
+for v in 읽 센다 세 싣는다 찾; do
+  assert_eq "$(printf '%s\n' "$PBL" | grep -F -- "$v")" "" "mf-no-pr-body-read 음: PR 본문 이 든 줄에 「${v}」 가 없다"
+done
+DAL="$(awk '/^```/{q=!q; next} !q && index($0, "- 답:")' "$QR")"
+[ -n "$DAL" ] && ok "mf-no-pr-body-read: - 답: 이 든 줄을 읽었다" || no "mf-no-pr-body-read: - 답: 이 든 줄이 없다 — 아래 음 단언이 공허하다"
+for v in 읽 찾; do
+  assert_eq "$(printf '%s\n' "$DAL" | grep -F -- "$v")" "" "mf-no-pr-body-read 음: - 답: 이 든 줄에 「${v}」 가 없다(승인 기록 다시 보이기는 상태 파일에서 짓는다)"
+done
+assert_contains "$ALL" '`## qg 리뷰` 절은 `render --kind pr-body` 의 글을 올린다' "mf-no-pr-body-read 양: PR 본문 절은 render --kind pr-body 의 글을 올린다"
+assert_contains "$MF" '승인 기록 다시 보이기의 qg 몫은 `render --kind approval` 이 상태 파일에서 짓는다 — 기록 파일을 보지 않는다' "mf-no-pr-body-read 양: 승인 기록 다시 보이기는 render --kind approval"
+# failed-review-question (AC7) — 선택지 셋의 글자 · 차례 · 얻음 · 내줌(설계 §3 그대로)
+FQ="$(para "$MF" '- **리뷰가 지적 목록을 얻지 못했을 때.**')"
+[ -n "$FQ" ] && ok "failed-review-question: 질문 문단을 읽었다" || no "failed-review-question: 질문 문단이 없다 — 아래 단언이 공허하다"
+assert_eq "$(printf '%s\n' "$ALL" | grep -oF -- '**리뷰가 지적 목록을 얻지 못했을 때.**' | wc -l | tr -d ' ')" "1" "failed-review-question: 질문 자리 앵커가 파일에서 한 번"
+order3 "$FQ" '다시 보낸다 (권장)' '리뷰 없이 머지 준비로 간다' '이 에픽을 멈춘다' "failed-review-question"
+for l in '  - 「다시 보낸다 (권장)」: 얻음: 리뷰를 받고 머지한다 · 내줌: 리뷰 한 번이 더 든다' \
+         '  - 「리뷰 없이 머지 준비로 간다」: 얻음: 지금 머지 준비로 간다 · 내줌: 이 PR 의 코드가 qg 리뷰 없이 머지된다' \
+         '  - 「이 에픽을 멈춘다」: 얻음: 리뷰 없이 머지되는 일이 없다 · 내줌: 이 에픽이 서고 다시 불러야 이어진다'; do
+  assert_eq "$(starts "$FQ" "$l")" "1" "failed-review-question: 선택지 줄 ${l%%」*}」"
+done
+assert_eq "$(printf '%s\n' "$FQ" | grep -oF '얻음:' | wc -l | tr -d ' ')" "3" "failed-review-question: 얻음 셋"
+assert_eq "$(printf '%s\n' "$FQ" | grep -oF '내줌:' | wc -l | tr -d ' ')" "3" "failed-review-question: 내줌 셋"
+once "$FQ" '질문 문장 앞머리에 에픽 이름과 사유' "failed-review-question: 질문 문장 앞머리에 에픽 이름과 사유"
+once "$FQ" '「(권장)」 꼬리를 뗀 라벨로 `record` 의 `answer` 에 적는다' "failed-review-question: 답은 꼬리를 뗀 라벨로 record 에"
+assert_contains "$(cat "$SST")" 'RESEND, NO_REVIEW_GO = "다시 보낸다", "리뷰 없이 머지 준비로 간다"' "failed-review-question 결합: 스크립트가 받는 라벨(꼬리 뺌)이 문서 라벨과 같다"
+assert_eq "$(grep -cF "$(printf 'skills/epic-conductor/references/qg-review.md\t꼬리\t**리뷰가 지적 목록을 얻지 못했을 때.**')" "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "1" "failed-review-question: ask-sites.tsv 에 꼬리 행이 한 줄"
+# record-branch-only (AC11 · AC27) — 자리 표 네 줄의 기록 칸 · --ref 둘 · 에픽 브랜치 --ref 없음 / 양: 기록 브랜치를 만들지 못했을 때
+for r in 'spec 승인 앞' '머지 앞' '로드맵 끝' '이름으로 청함'; do
+  cell="$(printf '%s\n' "$SITE" | awk -F'|' -v r="$r" '/^\|/{c=$2; gsub(/^ +| +$/,"",c); if (c==r){x=$(NF-1); gsub(/^ +| +$/,"",x); print x}}')"
+  assert_contains "$cell" '로드맵의 기록 브랜치' "record-branch-only: 자리 표 「${r}」 행의 기록 칸이 기록 브랜치"
+  assert_not_contains "$cell" '에픽 브랜치' "record-branch-only 음: 자리 표 「${r}」 행의 기록 칸에 에픽 브랜치가 없다"
+done
+REFS="$(printf '%s\n' "$ALL" | grep -oE -- '--ref (origin/<[^>]+>|<[^>]+>|[^ `<]+)' | LC_ALL=C sort -u | tr '\n' ',')"
+assert_eq "$REFS" "--ref origin/<기록 브랜치>,--ref origin/HEAD," "record-branch-only: 답 넘기기의 --ref 는 기본 브랜치와 기록 브랜치 둘뿐(에픽 브랜치 --ref 없음)"
+for gone in '에픽 worktree 에서 에픽 브랜치에 커밋' '기록도 그 줄대로 에픽 브랜치에 쓴다' '에픽 브랜치에 커밋한 앞 리뷰의 기록' '열린 에픽 브랜치마다'; do
+  assert_not_contains "$ALL" "$gone" "record-branch-only 음: 옛 「${gone}」 가 없다"
+done
+NRB="$(para "$RBR" '**기록 브랜치를 만들지 못했을 때.**')"
+for lit in '「이 답은 다음 리뷰로 넘어가지 않는다」' '에픽 브랜치에 대신 쓰지 않는다' '머지 앞 답은 `record` 의 `record_path` 로 그 답의 경로 자리에 `기록 브랜치 없음 — <사유>` 를 적는다' 'spec 승인 앞 답은 설계문서의 `## 지휘 기록` 에 한 줄(질문 정체 · 답 · `기록 브랜치 없음 — <사유>`)로 남긴다'; do
+  once "$NRB" "$lit" "record-branch-only 양: 기록 브랜치를 만들지 못했을 때 — ${lit}"
+done
+assert_contains "$(cat "$SSF")" 'NO_RECORD_BRANCH = "기록 브랜치 없음"' "record-branch-only 결합: 표지 글자가 스크립트와 같다"
+# rc-lines (AC16) — 답 넘기기 스크립트의 rc 4 · 5 · 그 밖
+ANS_="$(ssec '### 이미 답한 것')"
+RC4="$(line_of "$ANS_" '- rc 가 4 면')"; RC5="$(line_of "$ANS_" '- rc 가 5 면')"; RCX="$(line_of "$ANS_" '- 그 밖의 종료 코드')"
+for pair in "rc 4:$RC4" "rc 5:$RC5" "그 밖:$RCX"; do
+  [ -n "${pair#*:}" ] && ok "rc-lines: ${pair%%:*} 줄을 읽었다" || no "rc-lines: ${pair%%:*} 줄이 없다"
+done
+for lit in '알림 파일만 쓰지 못한 것이다' '표준 오류의 알림 줄을 그대로 리뷰 글에 싣고' '`--answered` 에 넣어 보낸다'; do
+  assert_contains "$RC4" "$lit" "rc-lines: rc 4 — ${lit}"
+done
+assert_contains "$RC5" 'PyYAML 이 없는 것이다' "rc-lines: rc 5 — PyYAML 없음"
+assert_contains "$RC5" '답 없이 보낸다' "rc-lines: rc 5 — 답 없이 보낸다"
+assert_contains "$RCX" '스크립트가 죽은 경우 포함' "rc-lines: 그 밖 — 스크립트가 죽은 경우 포함"
+assert_contains "$RCX" '답 없이 보낸다' "rc-lines: 그 밖 — 답 없이 보낸다"
+assert_contains "$(cat "$QGA")" 'NO_YAML = "[qg_answered] PyYAML 이 없다 — 답 없이 보낸다"' "rc-lines 결합: rc 5 의 줄이 스크립트에 있다"
+assert_contains "$(cat "$QGA")" 'NOTICE_FAIL = "[qg_answered] 알림 파일을 쓰지 못했다 — 알림은 위 줄뿐이다"' "rc-lines 결합: rc 4 의 끝 줄이 스크립트에 있다"
+# notice-fold (AC17) — 접는 글자 · 앞 보관 폴더 고르는 법 · 접지 않는 둘 / 음: 원장에 알린 기록 명령이 없다
+RES="$(ssec '### 결과 글')"
+NF_="$(line_of "$RES" '- 바로 앞 리뷰의 보관 폴더')"
+[ -n "$NF_" ] && ok "notice-fold: 접는 규칙 줄을 읽었다" || no "notice-fold: 접는 규칙 줄이 없다 — 아래 단언이 공허하다"
+for lit in '「전에 알린 알림 <n>줄 — 자세히는 알림 파일」' '`## 자원` 에 이번 보관 폴더보다 먼저 적힌 qg 보관 폴더 가운데 마지막 것' \
+           '<n> 은 접은 줄의 수' '앞 보관 폴더나 그 알림 파일이 없으면 접지 않고' '종료 코드 4 로 끝난 리뷰는 접지 않고'; do
+  assert_contains "$NF_" "$lit" "notice-fold: ${lit}"
+done
+LH="$(python3 "$ROOT/plugins/spec-distill/scripts/conductor_ledger.py" --help 2>&1)"
+assert_contains "$LH" 'resource-dir' "notice-fold: 원장 명령 목록을 읽었다"
+assert_not_contains "$LH" 'notice' "notice-fold 음: 원장에 알린 기록을 적고 읽는 명령이 없다"
+# finding-fold (AC18)
+FF_="$(line_of "$RES" '**여러 줄 지적을 지휘 기록에.**')"
+assert_contains "$FF_" '첫 줄만 싣고 끝에 「…(전문: <보관 폴더 이름>의 지적 목록)」 을 붙인다' "finding-fold: 첫 줄 + 전문 자리"
+assert_contains "$FF_" '접은 글을 원문이라고 부르지 않는다' "finding-fold: 접은 글을 원문이라 부르지 않는다"
+# return-text (AC23 · AC24) — 처리 파일 절대경로 · 하위 agent 길 / 음: 보내는 글 펜스에 보관 폴더 · 상태 파일 경로 없음
+RTF="$(fence_with "$RET" 'worktree 밖이어도')"
+[ -n "$RTF" ] && ok "return-text: 되돌리기의 보내는 글 펜스를 읽었다" || no "return-text: 되돌리기의 보내는 글 펜스가 없다 — 아래 단언이 공허하다"
+assert_contains "$RTF" '`render --kind return-list --handling-file <처리 파일의 절대경로>`' "return-text: 보내는 글이 return-list 글을 싣는다"
+assert_contains "$RTF" 'worktree 밖이어도 이 경로에 지적마다의 처리를 쓰고 끝낸다' "return-text: 하위 agent 길 문장"
+for bad in '보관 폴더' 'qg-review-state.md' '--answered'; do
+  assert_not_contains "$RTF" "$bad" "return-text 음: 보내는 글 펜스에 ${bad} 가 없다"
+done
+once "$RET" '하위 agent 면 `ledger resource-dir --roadmap <로드맵> --kind report --name <에픽>` 안의 `handling-<자리 글자>-<n>.md` 다 — 돌려보낼 때마다 새 `<n>`' "return-text: 처리 파일 자리 — 하위 agent"
+once "$RET" '세션 담당자면 그 세션의 결과 파일' "return-text: 처리 파일 자리 — 세션 담당자"
+once "$RET" '리뷰 보관 폴더와 상태 파일의 경로는 싣지 않는다' "return-text: 검사받는 쪽에 보관 폴더 · 상태 파일 경로를 싣지 않는다"
+assert_contains "$(cat "$SST")" 'HANDLING_FILE_RULE = "이 파일의 `%s` 머리 아래에 지적마다의 처리를 쓴다" % HANDLING_HEAD' "return-text 결합: return-list 글이 처리 파일에 쓰는 법을 싣는다"
+# asked-after-close (AC33 · D77 · D78)
+ASKED_L="$(line_of "$MERGED" '- spec 승인 뒤 · 머지 전인 에픽')"
+for lit in '`open --site asked`' '마지막 리뷰가 닫힌 뒤에만 받고' '「에픽을 멈춤」 이나 표시 없는 「잘못 골랐다」(설계 대화로 · 재분해 신호 · 거른 목록)로 닫혔으면 받지 않는다' '종료 코드 4' '그 할 일을 먼저 한다'; do
+  assert_contains "$ASKED_L" "$lit" "asked-after-close: ${lit}"
+done
+assert_not_contains "$ASKED_L" '이미 보낸 리뷰가 있어도 보낸다' "asked-after-close 음: 구현이 끝난 머지 전 에픽 줄에 「이미 보낸 리뷰가 있어도 보낸다」 가 없다"
+assert_not_contains "$ALL" '이름으로 청한 리뷰에는 이 확인을 쓰지 않는다 — 사용자가 청했으므로 이미 보낸 리뷰가 있어도 보낸다.' "asked-after-close 음: 머지 앞까지 덮던 옛 문장이 없다(양성 짝: 범위를 밝힌 새 문장)"
+once "$SENT" '이름으로 청한 리뷰 가운데 머지 앞 자리가 아닌 것' "asked-after-close 양: 이미 보낸 것을 쓰지 않는 이름으로 청한 리뷰의 범위"
+assert_contains "$(cat "$SST")" '이름으로 청한 리뷰도 받지 않는다' "asked-after-close 결합: 스크립트가 이름으로 청한 리뷰를 거절한다"
+# spec-resend-commit (AC9)
+RMK="$(line_of "$SPECSEC" '- 그 두 사건으로 설계 대화에 돌아갈 때')"
+assert_contains "$RMK" 'spec 리뷰 라운드> @ <그때의 설계문서 커밋 앞 8자>"`' "spec-resend-commit: 표지 글 칸 끝에 설계문서 커밋"
+assert_contains "$RMK" '설계문서가 그 커밋 그대로인 동안 그 표지로는 보내지 않는다' "spec-resend-commit: 그 커밋 그대로인 동안 쓰지 않는다"
+assert_contains "$(line_of "$SENT" '- spec 승인 앞 — ')" '그 커밋 그대로인 동안' "spec-resend-commit: 이미 보낸 것의 spec 셈이 같은 기준을 쓴다"
+assert_not_contains "$ALL" '줄의 차례나 커밋 해시로 가리지 않는다' "spec-resend-commit 음: 커밋으로 가리지 않는다던 옛 문장이 없다"
+# worker-description (D72)
+once "$DISP" 'description: "qg <자리 글자> <차례>",' "worker-description: qg 담당자 설명 글의 꼴"
+assert_not_contains "$ALL" 'Run quality gates for' "worker-description 음: 옛 설명 글이 없다(양성 짝: qg <자리 글자> <차례>)"
+assert_contains "$(cat "$SST")" '설명(qg %s %d)' "worker-description 결합: next 가 같은 꼴의 설명 글로 담당자를 찾는다"
+# legacy-show-once (AC19 · 설계 §9)
+LG="$(para "$MF" '**이 변경 전에 시작한 PR.**')"
+for lit in '`--legacy-trace pr-body`' '`--legacy-trace ledger`' '범위 · 횟수로 쓰지 않는다' '사용자에게 한 번 보인다' '새 리뷰가 같은 지적을 다시 낼 수 있다'; do
+  assert_contains "$LG" "$lit" "legacy-show-once: ${lit}"
+done
+assert_eq "$(printf '%s\n' "$ALL" | grep -F '옛 흔적' | grep -F -e '읽' -e '센다')" "" "legacy-show-once 음: 옛 흔적에서 범위 · 횟수를 읽거나 세는 문장이 없다"
+assert_contains "$(cat "$SST")" 'LEGACY_PR_BODY = "할 일 · 사용자 차례 · 옛 PR 본문의 막는 지적과 사용자 답을 한 번 보인다"' "legacy-show-once 결합: 스크립트가 옛 PR 본문을 한 번 보이라고 낸다"
+# mark-timing (AC9 · 설계 §4)
+for lit in '고친 설계의 구현 담당자가 돌아온 뒤에 `record` 의 `mark` 「다시 구현됨」 을' '재분해가 끝나 그 PR 을 이어 가기로 했을 때 「재분해 뒤 이어 감」 을 적는다' '브랜치 끝이 움직였다는 것으로 적지 않는다'; do
+  once "$PM" "$lit" "mark-timing: ${lit}"
+done
+assert_contains "$(cat "$SSF")" 'MARK_REIMPLEMENTED = "다시 구현됨"' "mark-timing 결합: 다시 구현됨 표시 글자"
+assert_contains "$(cat "$SSF")" 'MARK_RESPLIT_CONTINUE = "재분해 뒤 이어 감"' "mark-timing 결합: 재분해 뒤 이어 감 표시 글자"
+# ledger-two-lines (AC28)
+once "$FAILED" '머지 앞 자리도 이 줄을 같은 꼴로 적지만 보낸 횟수로 세지 않는다' "ledger-two-lines: 보내지 못한 리뷰의 줄 — 머지 앞도 적고 세지 않는다"
+once "$RECF" '머지 앞 리뷰에서도 이 줄을 같은 꼴로 적는다' "ledger-two-lines: 질문 없는 리뷰의 줄 — 머지 앞도 적는다"
+once "$RECF" '머지 앞 자리의 보낸 횟수는 이 줄로 세지 않는다' "ledger-two-lines: 질문 없는 리뷰의 줄 — 머지 앞의 보낸 횟수로 세지 않는다"
+# doc-fence-args — 펜스 안 qg_review_state.py 줄은 그 명령의 --help 에 있는 인자만 쓰고 heredoc 이 없다(펜스를 돌리는 몫은 test_walk_doc_fences_run)
+FL_="$(awk '/^```/{q=!q; next} q && index($0, "qg_review_state.py ")' "$QR")"
+[ -n "$FL_" ] && ok "doc-fence-args: 펜스의 qg_review_state.py 줄을 읽었다" || no "doc-fence-args: 펜스에 qg_review_state.py 줄이 없다 — 아래 단언이 공허하다"
+TOPCMDS="$(python3 "$SST" --help 2>&1 | grep -oE '\{[a-z,]+\}' | head -1 | tr -d '{}' | tr ',' '\n')"
+for c in $TOPCMDS; do
+  assert_contains "$FL_" "qg_review_state.py ${c} " "doc-fence-args: 펜스가 ${c} 를 부른다"
+done
+while IFS= read -r fl; do
+  [ -n "$fl" ] || continue
+  c="$(printf '%s\n' "$fl" | sed 's/.*qg_review_state\.py \([a-z]*\).*/\1/')"
+  HELP="$(python3 "$SST" "$c" --help 2>&1)"
+  KNOWN="$(printf '%s\n' "$HELP" | grep -oE -- '--[a-z][a-z-]*' | LC_ALL=C sort -u)"
+  [ -n "$KNOWN" ] && ok "doc-fence-args: ${c} --help 를 읽었다" || no "doc-fence-args: ${c} --help 를 읽지 못했다(명령 ${c} 가 없다)"
+  for f in $(printf '%s\n' "$fl" | grep -oE -- '--[a-z][a-z-]*'); do
+    printf '%s\n' "$KNOWN" | grep -qxF -- "$f" && ok "doc-fence-args: ${c} ${f}" || no "doc-fence-args: ${c} 의 --help 에 ${f} 가 없다"
+  done
+  assert_not_contains "$fl" '<<' "doc-fence-args: ${c} 줄에 heredoc 이 없다"
+done <<EOF
+$FL_
+EOF
 
 finish

@@ -81,15 +81,16 @@ assert_eq "$(grep -cxF '### 이미 답한 것' "$DOC")" "1" "answered-script-ord
 one "$ANS" 'qg_answered.py --roadmap <로드맵> --ref origin/HEAD' "answered-script-order: 스크립트를 기본 브랜치 ref 부터 부른다"
 one "$ANS" '--out <보관 폴더>/qg-answered.yaml --notices <보관 폴더>/qg-answered-notices.txt' "answered-script-order: 출력과 알림 파일이 보관 폴더에"
 PLACES="$(lead "$ANS" '- 읽는 자리')"
-in_order "$PLACES" "answered-script-order: 읽는 자리 셋이 기본 브랜치 → 기록 브랜치 → 에픽 브랜치 차례" \
-  '`origin/HEAD`(기본 브랜치)' '`origin/<기록 브랜치>`' '열린 에픽 브랜치마다 로컬 `<에픽 브랜치>`'
+in_order "$PLACES" "answered-script-order(R9): 읽는 자리 둘이 기본 브랜치 → 기록 브랜치 차례" \
+  '읽는 자리 `<ref>` 는 둘이고' '`origin/HEAD`(기본 브랜치)' '`origin/<기록 브랜치>`' '에픽 브랜치는 읽지 않는다'
 CMDLINE="$(lead "$ANS" '- 부르는 꼴:')"
-in_order "$CMDLINE" "answered-script-order: 부르는 꼴의 --ref 도 같은 차례" \
-  '--ref origin/HEAD' '--ref origin/<기록 브랜치>' '--ref <에픽 브랜치>'
-zero "$WHOLE" 'origin/<에픽 브랜치>' "answered-script-order 음성: push 되지 않은 에픽 브랜치 기록을 origin 으로 읽지 않는다(양성 짝: 로컬 <에픽 브랜치>)"
+in_order "$CMDLINE" "answered-script-order(R9): 부르는 꼴의 --ref 도 같은 차례" \
+  '--ref origin/HEAD' '--ref origin/<기록 브랜치>' '--out <보관 폴더>'
+zero "$WHOLE" '--ref <에픽 브랜치>' "answered-script-order(R9) 음성: 에픽 브랜치를 로컬 ref 로 읽던 옛 --ref 가 없다(양성 짝: 위 두 --ref)"
+zero "$WHOLE" 'origin/<에픽 브랜치>' "answered-script-order 음성: 에픽 브랜치 기록을 origin 으로도 읽지 않는다(양성 짝: 읽는 자리 둘)"
 one "$ANS" '- rc 가 2 면 부른 꼴이 틀린 것이다 — 스크립트가 낸 stderr 줄을 보이고, 부른 꼴을 고쳐 다시 부른다.' "answered-script-order: rc 2 면 부른 꼴을 고쳐 다시 부른다"
 one "$ANS" '- rc 가 3 이면 파일을 쓰지 못한 것이다 — 그 stderr 줄을 보이고 그대로 보낸다(qg 가 「넘겨받은 답을 읽지 못함 — 없음」 으로 알린다).' "answered-script-order: rc 3 이면 stderr 줄을 보이고 그대로 보낸다"
-one "$SENT" '(아래 `### 이미 답한 것` 의 읽는 자리 셋)' "answered-script-order: 이미 보낸 것 1 이 이미 답한 것의 읽는 자리 셋을 가리킨다"
+one "$SENT" '(아래 `### 이미 답한 것` 의 읽는 자리 둘)' "answered-script-order(R9): 이미 보낸 것 1 이 이미 답한 것의 읽는 자리 둘을 가리킨다"
 
 # self-filter-gone (AC15) — 거르는 곳은 qg 한 곳
 SELF='지휘자는 스스로 거르지 않는다 — 거르는 곳은 qg 한 곳이다.'
@@ -288,6 +289,11 @@ one "$REC" '`- 달라진 관찰:` 줄과 그 아래 두 칸 들여 쓴 줄은 �
 one "$REC" '「잘못 골랐다」 인 질문에는 반드시 적는다 — 값은 「이 에픽 안에서 고친다」 · 「새 일의 씨앗」 · 「재분해 신호」 가운데 하나를 글자 그대로 쓰고, 없거나 다른 값이면 `qg_answered.py` 가 그 기록 파일 전체를 읽지 못한 기록으로 센다' "record-route-required: 잘못 골랐다의 행선 줄은 반드시 · 값은 셋 가운데 하나 · 없으면 그 기록 파일 전체를 읽지 못한다"
 one "$REC" '`- 질문:` · `- 답:` · `- 답 원문:` 줄의 이름과 자리 글자는 바꾸지 않는다' "record-template-3: 걸음 5 가 읽는 줄 이름은 그대로"
 one "$REC" '2판 기록 파일(이 줄들이 없는 지난 기록)은 고치지 않는다 — `qg_answered.py` 가 그대로 읽는다' "record-template-3: 지난 2판 기록은 고치지 않고 qg_answered.py 가 읽는다"
+one "$REC" '- `- 답 원문:` 이 여러 줄이면 첫 줄은 그 줄에 쓰고 둘째 줄부터 두 칸 들여 쓴다(관찰 줄과 같은 꼴)' "record-template(R9 AC15): 여러 줄 답 원문은 둘째 줄부터 두 칸 들여 쓴다"
+one "$REC" '줄머리가 `## ` 인 답 줄도 들여 쓰면 질문 절을 끊지 않는다' "record-template(R9 AC15): 줄머리 ## 인 답 줄도 들여 쓰면 절을 끊지 않는다"
+one "$REC" '- `- 답한 때:` 는 `YYYY-MM-DD HH:MM` 이나 `-` 로만 쓴다' "record-template(R9 AC30): 답한 때의 꼴"
+one "$REC" '같은 이름이 쓰는 기록 브랜치나 기본 브랜치(origin/HEAD)에 이미 있으면 끝에 -2, -3 … 을 붙인다 — 두 자리를 모두 본다' "record-template(R9 AC15): 이름 번호는 쓰는 기록 브랜치와 기본 브랜치를 모두 본다"
+zero "$WHOLE" '`- 답:` 줄을 자리 글자로 찾아 읽는다' "record-template(R9) 음성: 승인 기록 다시 보이기가 기록 파일의 답 줄을 찾아 읽던 옛 문장이 없다(양성 짝: render --kind approval)"
 # answer-label-only (통합 리뷰 F2) — 직접 쓴 답은 `- 답:` 에 라벨만 · 다섯 값 밖이면 알림
 one "$REC" '사용자가 직접 입력 칸에 쓴 답은 `- 답:` 에 그 라벨만 쓰고 쓴 글 전부는 `- 답 원문:` 에 적는다' "answer-label-only: 직접 쓴 답은 답 줄에 라벨만 · 쓴 글은 답 원문 줄에"
 one "$REC" '다섯 값 밖이면 `qg_answered.py` 가 그 질문을 넘기지 않고 알림 한 줄을 남긴다' "answer-label-only: 다섯 값 밖인 답은 넘기지 않고 알림 한 줄"
@@ -312,7 +318,7 @@ for lit in '담당자 마지막 보고가 대화에 없이 다시 들어왔으�
            '새로 깨진 테스트는 그 폴더의 `result.md` 의 `### 차등 회귀` 에서 싣는다' \
            '그 파일이 없으면 그 폴더의 `result.md` 의 고칠 목록에서 싣고 「합쳐지기 전 목록 없이 실었다 — 같은 줄의 지적이 하나로 합쳐졌을 수 있다」 를 보인다' \
            '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다 — 그 폴더의 `result.md` 에 `## 판정` 절이 없거나(qg 가 끝까지 돌지 못했다 — `findings-pre-merge.yaml` 이 남았어도 판정 앞에서 멈춘 실행이다) `result.md` 가 없으면(끝까지 돌았는지 알 수 없다) 개수를 쓰지 않고 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다 — 지적 목록 없이 「막는 지적 없음」 으로 쓰지 않는다' \
-           '머지 앞 자리에서 PR 본문 `## qg 리뷰` 에 아직 막는 지적 목록이 없으면 이때 그 파일에서 막는 지적의 원문을 적는다'; do
+           '머지 앞 자리에서는 이 문단을 `next` 가 낸 할 일 앞에 쓴다 — 막는 지적의 원문은 `back` 이 이미 상태 파일에 옮겼으니 다시 적지 않는다'; do
   one "$RE" "$lit" "reenter-without-report: 다시 싣는 문단에 ${lit}"
 done
 in_order "$RE" "reenter-without-report: 합쳐지기 전 목록 → result.md → 셀 수 없음 차례" \
@@ -332,7 +338,8 @@ assert_eq "$RE4" "4. 결과가 왔다 — 그 폴더 안에 \`intent-return.md\`
 # 갈래 5 를 둘로 — 보관 파일이 남았으면 다시 싣고 의도 점검 꼬리, 둘 다 없을 때만 결과 줄 전체 셀 수 없음
 one "$RE5" '결과 줄은 그 폴더에 남은 파일로 가른다.' "reenter-without-report(N1): 갈래 5 가 결과 줄을 남은 파일로 가른다"
 one "$RE5A" '아래 「보고 없이 다시 들어왔을 때」 대로 지적을 다시 싣고 결과 줄 끝에 「 · 의도 점검은 셀 수 없음(<사유>)」 를 붙인다 — `## 돌아왔을 때` 의 1 의 첫 갈래와 같은 쪽이고, `<사유>` 는 위에서 보인 줄 그대로다.' "reenter-without-report(N1 · D33 · D39): 판정 절이 있는 result.md 가 남은 돌아오지 못한 리뷰는 다시 싣고 의도 점검 꼬리"
-one "$RE5A" '`<사유>` 는 위에서 보인 줄 그대로다. 머지 앞 자리면 다시 실은 막는 지적은 `## 되돌리기` 로 간다.' "reenter-without-report(D39): 머지 앞 자리면 다시 실은 막는 지적이 되돌리기로 간다"
+zero "$RE5A" '머지 앞 자리면 다시 실은 막는 지적은' "reenter-without-report(R9) 음성: 갈래 5 가 머지 앞 자리를 다루지 않는다 — 머지 앞은 next 가 정한다(양성 짝: 이미 보낸 것 머리의 머지 앞 문장)"
+one "$SENT" '머지 앞 자리(첫 리뷰 · 좁은 재리뷰 · 구현이 끝난 머지 전 에픽을 이름으로 청한 리뷰)는 이 절의 확인과 셈을 쓰지 않는다' "reenter-without-report(R9): 머지 앞 자리는 이미 보낸 것의 갈래 대신 next(잇는 테스트: 훑기 · mf-calls-script)"
 assert_eq "$RE5B" '- 그런 `result.md` 가 없으면(`result.md` 가 없거나 `## 판정` 절이 없다 — `findings-pre-merge.yaml` 이 남았어도 같다) 결과 줄 전체를 「셀 수 없음 — <사유>」 로 쓴다.' "reenter-without-report(N1 · D39): 판정 절이 있는 result.md 가 없으면 합쳐지기 전 목록이 남았어도 결과 줄 전체가 셀 수 없음"
 n5="$(printf '%s\n' "$SENT" | grep -nF '5. 돌아오지 못한 리뷰 — ' | head -1 | cut -d: -f1)"
 n5a="$(printf '%s\n' "$SENT" | grep -nF -- '   - 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있으면' | head -1 | cut -d: -f1)"
@@ -356,7 +363,7 @@ one "$RE" '맥락 머리 바로 아래에 「담당자 보고 없이 보관 파�
 one "$RE" '빠진 채 돌았다는 알림 줄은 담당자 보고에만 있던 것이라 다시 짓지 않는다' "reenter-tail-and-notice: 보고에만 있던 알림 줄은 다시 짓지 않는다"
 one "$WHOLE" '담당자 보고 없이 보관 파일에서 다시 실었다 — ' "reenter-tail-and-notice: 그 줄은 파일에 한 번 — 다시 싣는 문단에만"
 in_order "$RE" "reenter-tail-and-notice: 셀 수 없음 갈래 → 다시 실었을 때의 꼬리 · 한 줄 → PR 본문 차례" \
-  '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서 PR 본문'
+  '다시 싣는 것은 그 폴더에 `## 판정` 절이 있는 `result.md` 가 있을 때뿐이다' '그 폴더의 파일에서 다시 실었으면' '머지 앞 자리에서는 이 문단을'
 one "$BACK" '예외는 셋이다 — 담당자 마지막 보고 없이 다시 들어왔을 때(`### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」)와, 사용자가 제안을 고르거나 낮춘 지적을 되올렸을 때(`## 되돌리기`), 그리고 보인 지적을 후속 PR 의 고칠 목록이나 지휘 기록에 올릴 때(`### 결과 글` 의 「보인 지적을 받는 길」 과 그 아래 두 문단)는 보관 폴더의 `findings-pre-merge.yaml` 과 보관한 `result.md` 를 읽는다 — 어느 파일에서 무엇을 읽는지는 그 자리가 적는다.' "reenter-without-report(N1 · N3): 돌아왔을 때가 보관 파일을 읽는 예외 셋을 적는다 — 다시 싣는 문단 · 고르기와 되올리기 · 후속 PR 과 지휘 기록"
 zero "$WHOLE" '예외는 둘이다' "reenter-without-report 음성: 셋을 둘이라 세던 옛 낱말이 없다(양성 짝: 예외는 셋이다)"
 zero "$WHOLE" '(없으면 보관한 `result.md`)을 읽는다' "back-exception-files(낱말) 음성: result.md 를 yaml 이 없을 때만 읽는다던 옛 괄호가 없다 — 다시 싣는 길은 yaml 이 있어도 result.md 를 읽는다(양성 짝: 위 줄의 「과 보관한 result.md 를 읽는다」)"
@@ -380,13 +387,14 @@ in_order "$RPRE" "carry-original-onward(N3): 구현이 끝나기 전 문단 — 
   '`## 지휘 기록` 에 적어' '올리는 글은 그 항목의 원문을' '구현이 끝난 뒤 이름으로 청한'
 assert_eq "$(n_of "$WHOLE" "$ORIG")" "3" "carry-original-onward(N3): 원문 문장은 파일에 셋 — 결과 글의 받는 길 세 문단에만"
 # carry-original (통합 리뷰 F1 · D33) — 고른 제안 · 되올린 낮춘 지적은 보관 폴더의 원문을 싣는다
-RRE="$(lead "$RET" '- **돌아온 즉시 목록을 적는다.**')"
+RRE="$(lead "$RET" '- **돌아온 즉시 목록을 옮긴다.**')"
 RSG="$(lead "$RET" '- **제안은 보이기만 한다.**')"
 RLW="$(lead "$RET" '- **낮춘 지적은 결과 글의')"
 for pair in "돌아온 즉시:$RRE" "제안:$RSG" "낮춘 지적:$RLW"; do
   [ -n "${pair#*:}" ] && ok "carry-original: 되돌리기 불릿을 읽었다: ${pair%%:*}" || no "carry-original: 되돌리기 불릿이 없다 — 아래 단언이 공허하다: ${pair%%:*}"
 done
-one "$RRE" '보관한 결과 파일에서 읽지 않는다 — 담당자 마지막 보고 없이 다시 들어와 이 절에 목록이 아직 없을 때만 `### 이미 보낸 것` 의 「보고 없이 다시 들어왔을 때」 대로 보관 폴더의 파일에서 적는다' "carry-original: 돌아온 즉시 목록의 예외는 보고 없이 다시 들어온 때뿐"
+one "$RRE" '`back` 이 막는 지적과 새로 깨진 테스트의 원문(고칠 방법 포함, 합쳐지기 전 지적 목록의 항목마다)을 보관 폴더의 파일에서 상태 파일로 글자 그대로 옮긴다' "carry-original(R9): 원문은 back 이 보관 폴더에서 상태 파일로 옮긴다 — 담당자 보고가 없어도 같다"
+zero "$RRE" 'PR 본문' "carry-original(R9) 음성: 원문을 PR 본문에 적던 옛 문장이 없다(양성 짝: 위 줄)"
 zero "$WHOLE" '보관한 결과 파일에서 읽지 않는다.' "carry-original 음성: 예외 없이 끝나던 옛 문장이 없다(양성 짝: 위 줄)"
 zero "$WHOLE" '이미 보낸 것` 의 4 대로' "carry-original(N1) 음성: 돌아온 즉시 목록이 갈래 4 를 가리키던 옛 말이 없다(양성 짝: 위 줄)"
 one "$RSG" '넣는 글은 그 항목의 원문(파일 · 줄 · 심각도 · `summary` · `proposed_fix`)을 보관 폴더의 `findings-pre-merge.yaml` 에서 읽어 글자 그대로 싣는다 — 그 파일이 없으면 보관한 `result.md` 의 그 줄이다' "carry-original: 고른 제안은 보관 폴더의 원문을 글자 그대로"
