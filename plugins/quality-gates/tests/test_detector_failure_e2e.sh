@@ -17,6 +17,10 @@
 #   two_externals_not_mixing      — 같은 실행의 외부 리뷰어 둘(ext-code-reviewer 맞음 · ext-pr-test-analyzer 값 없음)의
 #                                   대조가 서로 섞이지 않는다.
 #   no_session_copies_of_responses — 본문에서 `resp-` 는 `$RV/` 뒤에만 있다 · 세션 폴더에 응답 사본이 생기지 않는다.
+#
+# 지적 목록(findings.yaml)과 각도 파일(angles.txt)은 모델 몫이라 시험이 쓴다 — 그 입력으로 낸 단언은 「옮긴 입력으로」
+# 라고 밝힌다. 옮기는 규칙과 `security: fail` → `absent(source-failed)` 대응은 SKILL 의 두 줄을 통째로 견주는
+# rule_pins 가 잰다(그 줄을 지우거나 뒤집으면 RED).
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 QGP="$ROOT/plugins/quality-gates"
@@ -76,6 +80,14 @@ prepare_and_synth() {
 yaml_finding() {  # <agent> <file> <severity> <summary>
   printf -- '- agent: %s\n  file: %s\n  line: 1\n  severity: %s\n  summary: "%s"\n  proposed_fix: "%s 를 고친다"\n' "$1" "$2" "$3" "$4" "$4"
 }
+# pin_line <줄> <메시지> — SKILL 에 그 줄이 한 줄 통째로 꼭 한 번 있다.
+pin_line() { assert_eq "$(grep -cxF -- "$1" "$SKILL")" "1" "$2"; }
+
+note "── rule_pins"
+pin_line '응답의 지적은 대조 결과와 무관하게 지적 목록으로 옮긴다 — 끝 값이 맞지 않은 응답의 지적도 옮긴다. 나눠 돌렸으면 모든 묶음 응답의 지적을, 한 번 다시 불렀으면 앞 응답의 지적도 옮긴다(겹치면 합성기가 흡수한다).' \
+  "SKILL 의 옮기기 규칙 — 대조 결과와 무관하게 지적을 옮긴다(아래 케이스가 쓰는 findings.yaml 의 근거)"
+pin_line '- `fail: 끝 값 없음` · `fail: 읽지 못함` — 그 리뷰어의 지금 실패 길이다. 보안은 각도 파일에 `security: absent(source-failed)`(아래 fail-closed), 외부는 끝 줄의 「실패」다. 끝 줄에 사유를 괄호로 붙인다 — `실패: <리뷰어>(끝 값 없음)` · `실패: <리뷰어>(읽지 못함)`.' \
+  "SKILL 의 대응 — security: fail 이면 각도 파일에 absent(source-failed)(아래 케이스가 쓰는 angles.txt 의 근거)"
 
 note "── security_failed_findings_kept"
 fresh sec
@@ -100,10 +112,10 @@ prepare_and_synth 'verdicts:
 assert_eq "$PREP_RC" "0" "Step 3.5 익명화 펜스가 0 으로 끝난다"
 assert_eq "$(ls "$RDIR" | grep -c '^review-i1-slot-recritic-b1-t1-')" "4" "재비판 칸 사본 넷이 세션 폴더에 있다"
 assert_not_contains "$SYNTH_OUT" "입력 실패(주): code-recritic" "끝 값을 적은 재비판 응답은 죽은 것으로 세지 않는다"
-assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_S" "실패한 보안 응답의 지적이 익명 목록에 있다"
-assert_contains "$SYNTH_OUT" "$SUM_S 를 고친다" "그 지적이 합성 출력의 고칠 목록에 있다"
+assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_S" "옮긴 입력으로 — 실패한 보안 응답의 지적이 익명 목록에 있다"
+assert_contains "$SYNTH_OUT" "$SUM_S 를 고친다" "옮긴 입력으로 — 그 지적이 합성 출력의 고칠 목록에 있다"
 assert_contains "$SYNTH_OUT" "verdict: not-certified" "판정은 not-certified"
-assert_contains "$SYNTH_OUT" "reason: angle-absent" "사유는 angle-absent(보안 각도 부재)"
+assert_contains "$SYNTH_OUT" "reason: angle-absent" "옮긴 입력(absent(source-failed))으로 — 사유는 angle-absent(보안 각도 부재)"
 
 note "── external_failed_findings_kept"
 fresh ext
@@ -124,8 +136,8 @@ printf 'security: filled\nadjudication: filled\ndifferent-premise: absent\n' > "
 prepare_and_synth 'verdicts:
   - f: f1
     verdict: confirm'
-assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_E" "실패한 외부 응답의 지적이 익명 목록에 있다"
-assert_contains "$SYNTH_OUT" "$SUM_E 를 고친다" "그 지적이 고칠 목록에 있다"
+assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_E" "옮긴 입력으로 — 실패한 외부 응답의 지적이 익명 목록에 있다"
+assert_contains "$SYNTH_OUT" "$SUM_E 를 고친다" "옮긴 입력으로 — 그 지적이 고칠 목록에 있다"
 assert_contains "$SYNTH_OUT" "verdict: defect" "외부 리뷰어 실패는 판정을 막지 않는다(막는 지적이 판정을 정한다)"
 assert_not_contains "$SYNTH_OUT" "verdict: not-certified" "판정이 not-certified 가 아니다"
 
@@ -151,8 +163,8 @@ prepare_and_synth 'verdicts:
     verdict: confirm
   - f: f2
     verdict: confirm'
-assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_1" "맞은 묶음의 지적이 익명 목록에"
-assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_2" "실패한 묶음의 지적도 익명 목록에"
+assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_1" "옮긴 입력으로 — 맞은 묶음의 지적이 익명 목록에"
+assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_2" "옮긴 입력으로 — 실패한 묶음의 지적도 익명 목록에"
 
 note "── two_externals_not_mixing"
 fresh two
