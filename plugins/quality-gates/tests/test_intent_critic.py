@@ -3732,7 +3732,7 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(text.count("\n## %s\n" % head), 1, head)
         return text.split("\n## %s\n" % head, 1)[1].split("\n## ", 1)[0]
 
-    def test_slot_files_are_read_to_the_end(self):
+    def test_slot_carries_path_reviewer_reads_to_end(self):
         """칸은 칸 사본의 경로다 — 리뷰어가 끝까지 읽는다(R7 AC1 · AC25). 둘째 호출은 I3 의 칸 사본 펜스를 K=2 로 돈다."""
         text = REFERENCE.read_text(encoding="utf-8")
         rule = ("`slots --call <k>` 가 낸 경로를 칸에 싣는다 — 내용을 싣지 않는다. 리뷰어는 그 경로의 파일을 "
@@ -3791,7 +3791,7 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertIn("「이 질문에 잘못 골랐다고 답했다 — 기록되지 않았다」", wrong[0])
         self.assertIn("`state: %s` 인 질문이면" % ic.QUESTION_STATES[1], wrong[0])
 
-    def test_push_line_only_when_published(self):
+    def test_push_line_same_whether_published(self):
         """답 커밋 push 줄은 게시 여부와 무관한 한 문장이다(R7 AC34) — 게시 절을 읽어 가르는 갈래가 없다."""
         i7 = self._section("I7 돌려주기")
         sentence = "「답 커밋 <해시> 를 push 한다 — 이 실행이 판정을 게시했다면 그 판정은 그 앞 커밋의 것이다」"
