@@ -253,7 +253,7 @@ case_two_runners_sequential_no_overlap() {
 }
 # 기록 펜스를 뽑아 겹침 기록 있음 · 없음으로 돌린다 — `## 차등 테스트` 에 겹침 줄이 하나 · 없다(AC13).
 record_fence() { section "$SKILL" '## Final verdict' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /## 판정/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}'; }
-run_record() {   # run_record <디렉토리> <겹침 기록 내용 | -> → 그 디렉토리의 result.md 를 낸다
+run_record() {   # run_record <디렉토리> <겹침 기록 내용 | -> [절 머리] → 그 디렉토리 result.md 의 그 절(기본 `## 차등 테스트`)을 낸다
   local d="$1" sid=sidrec0001 rd
   mkdir -p "$d"; git -C "$d" init -q && git -C "$d" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
   rd="$d/.claude/quality-gates/$sid"; mkdir -p "$rd"
@@ -263,7 +263,7 @@ run_record() {   # run_record <디렉토리> <겹침 기록 내용 | -> → 그 
   printf 'new_failures: 0\n' > "$rd/differential.yaml"
   [ "$2" = "-" ] || printf '%s' "$2" > "$rd/suite-overlap.txt"
   (cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$d/rec.sh") >/dev/null 2>&1
-  awk '/^## 차등 테스트$/{f=1;next} f&&/^## /{exit} f' "$rd/result.md"
+  awk -v h="${3:-## 차등 테스트}" '$0==h{f=1;next} f&&/^## /{exit} f' "$rd/result.md"
 }
 case_overlap_line_in_result() {
   local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
@@ -280,19 +280,30 @@ case_overlap_line_in_result() {
   assert_eq "$(printf '%s\n' "$out" | grep -cF -- '- 겹침:')" "0" "overlap_line_in_result: 겹치지 않았으면 겹침 줄이 없다"
   rm -rf "$T"
 }
-# 겹침은 알리되 판정을 바꾸지 않는다 — 같은 차등 사본이면 겹침 기록이 있어도 판정 줄이 같다(AC13).
+# 겹침은 알리되 판정을 바꾸지 않는다(AC13). verdict.py 는 겹침 기록을 입력으로 받지 않으므로 verdict.py 를 두 번 돌려
+# 견주는 것은 실패할 수 없다 — 대신 겹침 기록이 판정에 닿을 수 있는 길 셋을 막는다:
+#   (1) 기록 펜스를 겹침 기록 있음 · 없음으로 돌려 `## 판정` 절이 같다(겹침 줄은 `## 차등 테스트` 에만 붙는다)
+#   (2) 판정 펜스(final-verdict 표지 사이)와 D5 펜스(차등 결과 줄을 내는 펜스)가 겹침 기록을 이름으로 들지 않는다
+#   (3) scripts/ 아래 전부(하위 폴더 · shared 에서 링크로 싣는 스크립트 포함 — BSD grep -R 은 링크를 따라가지 않아 find -L 로 연다)에서
+#       겹침 기록을 아는 파일은
+#       감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다
 case_verdict_unchanged_with_overlap() {
   local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
-  { printf 'adapters: [bash]\nverdict_input:\n  confirmed_product_defect: true\n  silent_drop: false\n  baseline_unrunnable: false\n'
-    printf 'attribution_status: closed\ndegrade_causes: []\nnew_failures: 1\nunclaimed: []\nper_adapter: []\n'; } > "$T/differential.yaml"
   local a b
-  a=$(cd "$T" && python3 "$VERDICT" --emit-args --differential "$T/differential.yaml")
-  printf 'busy\tx\t2026-11-27 01:02:03\n' > "$T/suite-overlap.txt"
-  b=$(cd "$T" && python3 "$VERDICT" --emit-args --differential "$T/differential.yaml")
-  assert_eq "$b" "$a" "verdict_unchanged_with_overlap: 겹침 기록이 있어도 차등 결과 줄이 같다"
-  assert_eq "$a" "qg-verdict-args: --new-failures 1 --defect" "verdict_unchanged_with_overlap: 그 줄이 사본의 값이다(양성 짝)"
-  local readers; readers=$(grep -l 'suite-overlap' "$PLUGIN_ROOT"/scripts/*.py "$PLUGIN_ROOT"/scripts/*.sh 2>/dev/null | sed "s|$PLUGIN_ROOT/||" | tr '\n' ' ')
-  assert_eq "$readers" "scripts/review-diff.sh scripts/with-suite-lock.sh " "verdict_unchanged_with_overlap: 겹침 기록을 아는 스크립트는 감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다 — 판정 · 합성 스크립트는 읽지 않는다"
+  a=$(run_record "$T/none" - '## 판정')
+  b=$(run_record "$T/busy" "$(printf 'busy\tx\t2026-11-27 01:02:03\n')" '## 판정')
+  assert_contains "$a" 'qg: clean · 막는 지적 0' "verdict_unchanged_with_overlap: 겹침 기록 없이 돈 기록 펜스의 ## 판정 절을 읽었다(양성 짝)"
+  assert_eq "$b" "$a" "verdict_unchanged_with_overlap: 겹침 기록이 있어도 ## 판정 절이 같다"
+  assert_contains "$(run_record "$T/busy2" "$(printf 'busy\tx\t2026-11-27 01:02:03\n')")" "$OVL_RESULT_HEAD" "verdict_unchanged_with_overlap: 같은 기록으로 돈 펜스가 ## 차등 테스트 에는 겹침 줄을 붙인다(기록이 실제로 읽혔다)"
+  local vf d5
+  vf=$(awk '/<!-- final-verdict:begin -->/{f=1;next} /<!-- final-verdict:end -->/{exit} f' "$SKILL")
+  d5=$(section "$REF" '## D5 짝짓기' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /verdict\.py" --emit-args --differential/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}')
+  assert_contains "$vf" 'verdict.py" --line' "verdict_unchanged_with_overlap: 판정 펜스를 읽었다(양성 짝)"
+  assert_contains "$d5" 'verdict.py" --emit-args --differential' "verdict_unchanged_with_overlap: D5 펜스를 읽었다(양성 짝)"
+  assert_not_contains "$vf" 'suite-overlap' "verdict_unchanged_with_overlap: 판정 펜스가 겹침 기록을 읽지 않는다"
+  assert_not_contains "$d5" 'suite-overlap' "verdict_unchanged_with_overlap: D5 펜스가 겹침 기록을 읽지 않는다"
+  local readers; readers=$(find -L "$PLUGIN_ROOT/scripts" -type f ! -path '*/__pycache__/*' -exec grep -lI 'suite-overlap' {} + 2>/dev/null | sed "s|$PLUGIN_ROOT/||" | LC_ALL=C sort | tr '\n' ' ')
+  assert_eq "$readers" "scripts/review-diff.sh scripts/with-suite-lock.sh " "verdict_unchanged_with_overlap: scripts/ 아래 전부에서 겹침 기록을 아는 파일은 감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다 — 판정 · 합성 스크립트는 읽지 않는다"
   rm -rf "$T"
 }
 # 앞 실행이 남긴 겹침 기록은 다음 실행의 P2 가 지운다 · 잠금 자리 파일은 setup 이 다시 쓴다(AC32 · AC11).
