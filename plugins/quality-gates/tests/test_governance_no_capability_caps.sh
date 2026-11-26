@@ -359,4 +359,21 @@ U6='에픽의 머지됨은 지휘자가 PR 을 열 때 기계 상태에 적은 P
 assert_contains "$p5" "$U6" "R14 U6: P5 가 에픽 머지 판정 규칙을 쓴다"
 assert_contains "$p5" '`plugins/spec-distill/scripts/roadmap_status.py`' "R14 U6: P5 코드 줄이 번호 판정 스크립트를 가리킨다"
 
+# F7 AC25 — 철학 P13 · P17 · P21 절과 저술 가이드가 공식 플러그인 끄기와 끄기 변수 규칙을 말한다
+p13="$(awk '/^### P13 —/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+p17="$(awk '/^### P17 —/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+p21="$(awk '/^### P21 —/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
+AC25_TREE="$p13
+$p21
+$(cat "$AUTHORING")"
+for tok in 'per-plugin kill switch' 'hooks kill switch' '어떤 훅도 inspect해서 거부할 수 없고' 'DEVBREW_<PLUGIN>_DISABLE=1'; do
+  assert_not_contains "$AC25_TREE" "$tok" "F7 AC25: P13 · P21 · 가이드에 옛 구절 «${tok}» 가 없다"
+done
+assert_contains "$p13" '플러그인 끄기' "F7 AC25: P13 절이 플러그인 끄기를 말한다(양)"
+assert_contains "$p21" '끄기 변수는 보안 컨트롤' "F7 AC25: P21 절이 끄기 변수는 보안 컨트롤이라 한다(양)"
+assert_contains "$(cat "$AUTHORING")" '플러그인 끄기' "F7 AC25: 가이드가 플러그인 끄기를 말한다(양)"
+assert_contains "$(cat "$AUTHORING")" '보안 컨트롤' "F7 AC25: 가이드가 보안 컨트롤을 말한다(양)"
+assert_not_contains "$p17" 'DEVBREW_QUALITY_GATES_DISABLE=1' "F7 AC25: P17 절에 은퇴한 전역 끄기 이름이 없다"
+assert_contains "$p17" 'DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1' "F7 AC25: P17 절에 남는 게시 끄기 이름은 있다(양)"
+
 finish

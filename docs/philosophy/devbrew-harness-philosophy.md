@@ -44,11 +44,11 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/spec-distill/references/trivia-escape.md` · CLAUDE.md Law 1
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
-**Cross-cutting (L1·L2·L3) 집행.** hook=사건에 붙는 관찰 · 알림, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·per-plugin kill switch). 진입 skill 의 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다. Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
+**Cross-cutting (L1·L2·L3) 집행.** hook=사건에 붙는 관찰 · 알림, skill=capability 표면, agent=scoped persona의 명확한 역할 분담 + 훅 공존 규칙(commutativity·mutation-free `SessionStart`·통째 끄기는 Claude Code 의 플러그인 끄기). 진입 skill 의 사전 검사(`!`)가 켜진 끄기 변수를 모델 판단 밖에서 보인다. Load-bearing: 같은 event에 여러 플러그인 훅이 공존하려면 순서 무관성이 구조적으로 필요하다.
 코드: `plugins/project-init/hooks/hooks.json` · `shared/entry/entry_preflight.py`
 
 ### P17 — User Sovereignty
-**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다. qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다 — 게시마다 묻지 않고, 게시만 끄는 길은 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(전역 `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다).
+**Law 1 집행.** 위험한·되돌리기 어려운·공유 state에 영향을 주는 액션은 항상 confirmation 게이트를 거친다 — agent는 권고하고 사용자가 결정한다. Load-bearing: 게이트를 skip한 narrate-only 종료는 polite-stop(AP2)이다 — approval gate는 사용자가 *redirect* 가능해야 하고 단순 *acknowledge*가 아니다. qg 의 매 실행 PR 코멘트 게시는 사용자의 상시 동의다 — 게시마다 묻지 않고, 게시만 끄는 길은 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다(플러그인 전부를 끄는 길은 플러그인 끄기다).
 코드: `plugins/spec-distill/skills/spec-review/SKILL.md` 의 `## 게이트` 절 (`AskUserQuestion` proceed gate) · `plugins/quality-gates/scripts/publish-comment.sh` (상시 동의 게시 — kill switch 가 sink 안에서 끈다)
 
 ### P18 — Stagnation Is a Failure Mode
@@ -56,8 +56,8 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `shared/docreview/references/reviewing-document.md` (재리뷰 상한 — 값의 정본 한 줄) · `shared/docreview/scripts/docreview_state.py` 의 `gate_summary`(stagnation 술어) · 지휘자 qg 좁은 재리뷰의 「두 번까지」 상한(`plugins/spec-distill/skills/epic-conductor/references/qg-review.md` 의 `## 되돌리기`)
 
 ### P21 — Security & Supply Chain
-**Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, description prompt-injection 리뷰가 floor. Load-bearing: kill switch는 보안 컨트롤이라 어떤 훅도 inspect해서 거부할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
-코드: `plugins/quality-gates/scripts/publish-comment.sh` (게시 sink — kill switch · secret-scan · 비신뢰 입력) · hooks kill switch · persona=보안-민감
+**Cross-cutting (L1·L2·L3) 집행.** 플러그인=코드, agent=prompt, 둘 다 공격 표면이다 — state secret hygiene, description prompt-injection 리뷰가 floor. Load-bearing: 끄기 변수는 보안 컨트롤이라 읽는 코드가 그 값을 무시할 수 없고, persona 파일을 약화(규칙 제거·임계 완화)하는 PR은 test-suite 편집과 같은 scrutiny의 보안-민감 변경이다.
+코드: `plugins/quality-gates/scripts/publish-comment.sh` (게시 sink — kill switch · secret-scan · 비신뢰 입력) · 끄기 변수 표(switches.md) · persona=보안-민감
 
 ### P22 — Cost Awareness
 **Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter `metadata` 아래에 선언한다. Load-bearing: `cost_class: high`는 크게 쓰기 전에 규모(띄울 agent 수 · 라운드 · 상한이 없으면 없다는 사실)를 한 줄로 알리고 진행한다 — fan-out 규모는 띄우기 전 이 공시 줄로 알린다. 어느 클래스의 스킬도 지출 승인을 묻지 않는다 — 상한 · 압축은 공시하고, 사용자가 상한을 여는 질문은 지출 승인이 아니다. 대상 · 모드 · 취소처럼 일의 범위를 고르는 질문은 사용자 결정이라 남는다(P17). 클래스보다 비싸게 도는 스킬은 버그다.
