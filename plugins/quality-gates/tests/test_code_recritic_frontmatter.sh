@@ -32,7 +32,7 @@ print("model=%s" % fm.get("model"))
 print("slots=%s" % " ".join(s["tag"] for s in fm["input_slots"]))' "$A" 2>&1)"
 assert_grep "$parsed" '^tools=Read, Grep, Glob$' "YAML 파싱 — tools 값이 정확히 Read, Grep, Glob"
 assert_grep "$parsed" '^model=None$' "YAML 파싱 — model 키가 없다"
-assert_grep "$parsed" '^slots=project_dir scope findings diff intent profile$' "입력 슬롯 여섯 — 출처·이력 슬롯이 없다"
+assert_grep "$parsed" '^slots=project_dir scope_file findings_file diff_file intent_file profile$' "입력 슬롯 여섯 — 출처·이력 슬롯이 없다"
 
 # 출력 블록 이름은 리터럴로 잰다 — 합성기 import 가 실패해 값이 비면 `^```$` 가 아무 펜스에나
 # 맞아 공허하게 통과한다(C-6).

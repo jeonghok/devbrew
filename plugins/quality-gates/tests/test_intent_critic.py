@@ -3106,7 +3106,8 @@ class TestPersona(unittest.TestCase):
         tags = []
         for slot in data["input_slots"]:
             tags.append(slot["tag"])
-        self.assertEqual(tags, SLOT_TAGS)
+        # 경로를 싣는 칸의 태그는 `<글 칸>_file` 이다(R7 §1) — 본문의 경계 문장은 글 칸 이름을 그대로 쓴다.
+        self.assertEqual(tags, [t if t == "project_dir" else t + "_file" for t in SLOT_TAGS])
 
 
 REPO = Path(__file__).resolve().parents[3]

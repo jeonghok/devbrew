@@ -84,7 +84,7 @@ assert_line "$(severity_section)" 'A credential, API key, token, or encryption k
 # I4 — 입력이 이끄는 시간·자원 초과(가용성)는 막는 조건이다. 0f795b50 이 codex 단독으로 잡혔다.
 assert_line "$(severity_section)" 'Input-driven resource exhaustion (see `## Hunt categories`) is behavior this change made wrong — the first blocking condition, not only the third. When the finding names the input and the regex, loop, or read the change added that takes it past a time or memory limit, it is `IMPORTANT`; when crossing that limit makes a control fail open (a hook or gate that times out and lets the action through, a check skipped on timeout or crash), it is `CRITICAL`.' \
   "I4: Severity — 입력이 이끄는 자원 초과는 IMPORTANT, 통제를 fail-open 시키면 CRITICAL"
-assert_count_ge "grep -cE '^  - tag: (intent|criteria)$' '$PERSONA'" 2 "intent · criteria 입력 슬롯을 선언한다"
+assert_count_ge "grep -cE '^  - tag: (intent_file|criteria)$' '$PERSONA'" 2 "intent_file · criteria 입력 슬롯을 선언한다"
 assert_count_ge "grep -c '^[[:space:]]*file:' '$PERSONA'" 1 "schema key file:"
 assert_count_ge "grep -c '^[[:space:]]*line:' '$PERSONA'" 1 "schema key line:"
 assert_count_ge "grep -cE 'CRITICAL.*IMPORTANT.*SUGGESTION' '$PERSONA'" 1 "severity enum CRITICAL/IMPORTANT/SUGGESTION"
