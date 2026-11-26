@@ -884,6 +884,8 @@ q_ran="$(q_round "$SCRATCH/q-ran" --recritic "$FX/recritic-empty.txt")"
 assert_eq "$(cat "$SCRATCH/q-skip.rc" 2>/dev/null) $(cat "$SCRATCH/q-ran.rc" 2>/dev/null)" "0 0" "Q 전제: 두 라운드의 finalize 가 rc 0 이다 (brief 프로필)"
 assert_contains "$q_skip" "$Q_WARN" "Q: 재비판을 건너뛴 라운드의 게이트 첫 줄이 재비판이 돌지 않았다고 경고한다"
 assert_contains "$q_skip" "skipped)" "Q: 그 경고의 괄호가 건너뜀(skipped)을 싣는다"
+assert_contains "$q_skip" "모델 판단" "Q: 건너뜀 사유가 모델 판단이다(양성 짝: 위 「재비판이 돌지 않아」 경고)"
+assert_not_contains "$q_skip" "kill switch" "Q: 건너뜀 사유가 kill switch 가 아니다(양성 짝: 위 「모델 판단」 단언)"
 assert_contains "$q_ran" "라운드를 마쳤다" "Q 양의 짝 전제: 재비판이 돈 라운드의 첫 줄을 읽었다"
 assert_not_contains "$q_ran" "재비판이 돌지 않아" "Q 양의 짝: 재비판이 돈 라운드의 첫 줄에는 그 경고가 없다"
 finish
