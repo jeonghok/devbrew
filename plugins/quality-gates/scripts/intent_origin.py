@@ -186,9 +186,13 @@ def _checked_quote(tree_root: str, quote, files: dict) -> Optional[dict]:
     if content is None:
         return None
     rows = content.split("\n")
-    if line > len(rows) or rows[line - 1].strip() != wanted:
+    if line > len(rows):
         return None
-    return {"path": path, "line": line, "text": wanted}
+    row = rows[line - 1].strip()
+    # 칸 사본에서 옮긴 인용은 `<!` 가 `&lt;!` 다 — 트리 줄을 같은 꼴로 바꿔서도 견주고, 남기는 글은 트리의 글이다.
+    if row != wanted and neutralize_markers(row) != wanted:
+        return None
+    return {"path": path, "line": line, "text": row}
 
 
 def verify_quotes(tree_root: str, quotes) -> tuple:
@@ -693,6 +697,11 @@ MARK_CLOSE_SAFE = "--&gt;"
 def neutralize_markers(text: str) -> str:
     """리뷰받는 쪽 글의 `<!` 를 모두 `&lt;!` 로 바꾼다 — 표지는 스크립트가 쓴 것만 남는다."""
     return text.replace(MARK_OPEN, MARK_OPEN_SAFE)
+
+
+def unescape_markers(text: str) -> str:
+    """리뷰어가 칸 사본에서 옮겨 적은 글을 원래 꼴로 — `marker_field` · `neutralize_markers` 의 거꾸로."""
+    return text.replace(MARK_CLOSE_SAFE, MARK_CLOSE).replace(MARK_OPEN_SAFE, MARK_OPEN)
 
 
 def marker_field(value: str) -> str:

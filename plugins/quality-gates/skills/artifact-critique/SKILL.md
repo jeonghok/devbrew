@@ -300,7 +300,8 @@ python3 -I "$QG/scripts/qg_nonce.py" attach "$M" "$AC/merged-t${T}-r${R}-slot.tx
 ```
 
 자리표는 비평자마다 `--findings critic-<i>.yaml` 하나씩이고, `[--findings codex.yaml]` 은 codex 가 가용 · 성공일 때만 싣는다. 병합 원본의 각 finding은 `dedup_key`를 갖는다(다음 단계 adversarial가 echo). 펜스가 0 이 아니면 그 라운드의 반박자를
-부르지 않는다 — 출력을 보이고 4 의 판정 실패 질문으로 간다.
+부르지 않고 4 의 합성도 돌리지 않는다 — 출력을 보이고 4 의 판정 실패 질문으로 간다. 그때 질문의 `<degraded_reason>` 자리는
+`findings_load` 이고 `<사유 괄호>` 는 비운다(병합 단계가 실패했다).
 
 **3. adversarial** — `artifact-adversarial`(반박자) 디스패치(read-only). 2.5 의 끝 값 사본 경로
    (`MERGED_FINDINGS_FILE` = `$AC/merged-t<T>-r<R>-slot.txt`)를 칸에 싣는다 — 내용을 싣지 않는다. 반박자는 그 파일을
@@ -442,9 +443,9 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 판정 못 한 지적이 있으면(`unadjudicated > 0`) 첫 줄에 「판정 못 한 지적 <N>건」을 함께 쓰고, 첫 줄을 「남은 지적 없음」 ·
 「이상 없음」처럼 깨끗하게 읽히게 쓰지 않는다.
 
-종료(수렴 / max-rounds / stagnation / 지적만 받기 / NEEDS_RESOLUTION-중단 / kill switch) 시 반드시 출력 — 대상이 여럿이면 대상마다:
+종료(수렴 / max-rounds / stagnation / 지적만 받기 / NEEDS_RESOLUTION-중단 / kill switch / 세션 폴더를 얻지 못해 멈춤) 시 반드시 출력 — 대상이 여럿이면 대상마다:
 - **라운드 히스토리**: 라운드별 비평자 수 · kept 요약 + 각 커밋 SHA(지적만 받기는 커밋 없음) + 추가 라운드 승인 줄.
-- **종료 사유**: converged / max_rounds(N) / stagnant(reason) / findings_only / needs_resolution / killed.
+- **종료 사유**: converged / max_rounds(N) / stagnant(reason) / findings_only / needs_resolution / killed. 세션 폴더를 얻지 못해 멈춘 대상(루프 0)은 새 사유 값을 만들지 않고 그 멈춤 줄을 그대로 싣는다.
 - **잔여 kept 집합**(중단 · 지적만 받기 시): 마지막 라운드의 미해소 CRITICAL/IMPORTANT(지적만 받기는 SUGGESTION 도).
 - **판정 못 한 지적**(`unadjudicated > 0` 일 때, 모드 무관): `판정 못 한 지적 <N>건` 한 줄과 마지막 라운드의
   `unadjudicated_items` 를 하나씩 「판정 못 함」 라벨로.

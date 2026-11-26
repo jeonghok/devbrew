@@ -85,6 +85,8 @@ grep -q 'dedup_key' "$M" 2>/dev/null; assert_eq "$?" 0 "병합 원본 merged-t1-
 [ -n "$(endval "$MS")" ]; assert_eq "$?" 0 "끝 값 사본 merged-t1-r1-slot.txt 의 끝 줄"
 [ "$(sed '$d' "$MS")" = "$(cat "$M")" ]; assert_eq "$?" 0 "사본 = 원본 + 끝 줄"
 assert_eq "$(grep -c 'qg-slot-end' "$M")" 0 "원본에는 끝 줄이 붙지 않는다(AC25)"
+( cd "$R" && python3 "$SYN" --phase key --findings critic-1.yaml 2>/dev/null ) > "$TMP/key-direct.yaml"
+cmp -s "$M" "$TMP/key-direct.yaml"; assert_eq "$?" 0 "merged_original_unchanged: 펜스가 쓴 병합 원본이 합성 첫째 걸음의 출력 그대로다 — 사본만 끝 줄을 갖는다(AC25)"
 assert_eq "$(find "$R" -name 'merged*.yaml' ! -path '*/.claude/*' | wc -l | tr -d ' ')" 0 "작업 폴더에 merged*.yaml 이 없다(AC2)"
 
 note "── round_commit_excludes_merged"
@@ -151,7 +153,7 @@ cp "$D/merged.yaml" "$D/merged.orig"
 python3 "$NONCE" attach "$D/merged.yaml" "$D/slot1.txt" >/dev/null
 printf 'other slot\n' > "$D/other.src"; python3 "$NONCE" attach "$D/other.src" "$D/slot2.txt" >/dev/null
 V1="$(endval "$D/slot1.txt")"; V2="$(endval "$D/slot2.txt")"
-cmp -s "$D/merged.yaml" "$D/merged.orig"; assert_eq "$?" 0 "merged_original_unchanged: 사본을 만든 뒤 원본이 같다(AC25)"
+cmp -s "$D/merged.yaml" "$D/merged.orig"; assert_eq "$?" 0 "attach 뒤 원본이 같다(fixture 확인)"
 KS="$(python3 -c 'import sys,yaml; print(" ".join(f["dedup_key"] for f in yaml.safe_load(open(sys.argv[1],encoding="utf-8"))["findings"]))' "$D/merged.yaml")"
 KA="${KS%% *}"; KB="${KS##* }"
 VB="verdicts:

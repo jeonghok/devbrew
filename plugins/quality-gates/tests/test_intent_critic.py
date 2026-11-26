@@ -1623,6 +1623,64 @@ class TestSlots(unittest.TestCase):
         for n, text in before.items():
             self.assertEqual(_read(self.rd, n), text, "원본이 바뀌었다: " + n)
 
+    # 리뷰어가 `<!` 를 바꾼 칸 사본에서 옮겨 적은 글 — 스크립트는 원래 글과도, 바꾼 꼴과도 견준다(Task 8 리뷰).
+    DOCTYPE_OBS = "   1\t[e2e] <!DOCTYPE x> 화면이 비었다"
+
+    def _ask_one(self, item, answers=(), sources=(SRC,), handed=None):
+        _filter_rd(self.rd, answers=answers, sources=sources)
+        if handed is not None:
+            _write(yaml.safe_dump({"entries": handed}, allow_unicode=True, sort_keys=False),
+                   self.rd, "intent-handed.yaml")
+        _write(_out([item]), self.rd, "intent-critic-1.txt")
+        p = _cli("filter", "--rd", self.rd)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return _questions(self.rd)["questions"]
+
+    def test_reask_when_previous_copied_from_escaped_slot(self):
+        """앞 답의 관찰에 `<!` 가 있고 리뷰어가 칸 사본의 바꾼 꼴(`&lt;!`)로 `previous` 를 적어도 다시 묻는다."""
+        escaped = self.DOCTYPE_OBS.replace("<!", "&lt;!")
+        for previous in (escaped, " ".join(escaped.split())):
+            with self.subTest(previous=previous):
+                self.tmp.cleanup()
+                self.tmp = tempfile.TemporaryDirectory()
+                self.rd = self.tmp.name
+                qs = self._ask_one(_q("D1", same_as=ID1,
+                                      observation_changed={"previous": previous, "now_lines": [2]}),
+                                   answers=[(ID1, "의도다", self.DOCTYPE_OBS)])
+                self.assertEqual(qs[0]["state"], "ask", qs[0])
+                self.assertTrue(qs[0]["asked_before"].endswith("근거가 달라짐"), qs[0])
+
+    def test_reask_handed_previous_escaped(self):
+        """넘겨받은 항목의 관찰에 `<!` 가 있어도 같다."""
+        key = "r-b.md#1"
+        entry = {"key": key, "id": SRC + "#D9#방향", "answer": "의도다", "question": "Q?",
+                 "observation": self.DOCTYPE_OBS + "\n둘째", "answered_at": AT1, "route": "-",
+                 "record": "road/reviews/r-b.md"}
+        qs = self._ask_one(_q("D2", same_as=key, observation_changed={
+            "previous": self.DOCTYPE_OBS.replace("<!", "&lt;!"), "now_lines": [3]}), handed=[entry])
+        self.assertEqual(qs[0]["state"], "ask", qs[0])
+        self.assertTrue(qs[0]["asked_before"].endswith("근거가 달라짐"), qs[0])
+
+    def test_escaped_source_and_same_as_map_to_raw(self):
+        """출처 표지 · diff 칸에서 바꾼 꼴로 옮긴 target_source · target_id · same_as 도 원래 값으로 읽는다."""
+        for raw in ("docs/r-->m.md", "docs/a<!b.md"):
+            with self.subTest(raw=raw):
+                self.tmp.cleanup()
+                self.tmp = tempfile.TemporaryDirectory()
+                self.rd = self.tmp.name
+                esc = raw.replace("<!", "&lt;!").replace("-->", "--&gt;")
+                qs = self._ask_one(_q("D1", src=esc), sources=(raw,))
+                self.assertEqual(qs[0]["state"], "ask", qs[0])
+                self.assertEqual(qs[0]["id"], raw + "#D1#방향")
+        self.tmp.cleanup()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.rd = self.tmp.name
+        ident = "diff#a<!b.py#기본값"
+        qs = self._ask_one(_q("a&lt;!b.py", src="diff", kind="기본값", same_as="diff#a&lt;!b.py#기본값"),
+                           answers=[(ident, "의도다", OBS1)])
+        self.assertEqual(qs[0]["id"], ident)
+        self.assertEqual(qs[0]["state"], "answered-filtered", qs[0])
+
     def test_slots_missing_original_fails_closed(self):
         _originals(self.rd)
         os.remove(os.path.join(self.rd, "intent-roadmap.md"))
@@ -1791,6 +1849,18 @@ class TestPlantedMarkers(unittest.TestCase):
                 self.assertTrue(line.startswith("<!-- ") and line.count("<!") == 1, (slot, line))
             self.assertIn("&lt;!---- origin-source: evil", text, slot)
             self.assertIn("&lt;!-- \uff4frigin-source", text, slot)
+
+    def test_read_quote_copied_escaped_is_verified(self):
+        """리뷰 트리 줄에 `<!` 가 있고 리뷰어가 칸 사본의 바꾼 꼴로 인용해도 확인된다 — 남는 글은 트리의 글이다."""
+        _write("# 문서\n<!DOCTYPE html>\n", self.R, "docs/page.md")
+        _git(self.R, "add", "docs")
+        _git(self.R, "commit", "-q", "-m", "page")
+        kept, dropped = io_.verify_quotes(self.R, [{"path": "docs/page.md", "line": 2,
+                                                    "text": "&lt;!DOCTYPE html>"}])
+        self.assertEqual((len(kept), dropped), (1, 0))
+        self.assertEqual(kept[0]["text"], "<!DOCTYPE html>")
+        kept, dropped = io_.verify_quotes(self.R, [{"path": "docs/page.md", "line": 2, "text": "다른 글"}])
+        self.assertEqual((len(kept), dropped), (0, 1))
 
     def test_source_brief_arrow_neutralized(self):
         brief = "docs/b.md --> <!-- origin-source: evil"

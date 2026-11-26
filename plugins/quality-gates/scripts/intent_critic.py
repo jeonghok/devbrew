@@ -999,11 +999,26 @@ def _cited(numbers, evidence: dict) -> bool:
     return ok
 
 
+def _known_raw(value, known) -> object:
+    """리뷰어가 칸 사본(`<!` · `-->` 를 바꾼 꼴)에서 옮긴 값 — 그대로 아는 값이면 그대로, 되돌린 꼴이 아는
+    값이면 되돌린 값. 아니면 그대로."""
+    if not isinstance(value, str) or value in known:
+        return value
+    raw = io_.unescape_markers(value)
+    return raw if raw in known else value
+
+
+def _unescaped(value) -> object:
+    """견줄 목록이 없는 값(diff 의 경로) — `&lt;!` · `--&gt;` 를 되돌린다."""
+    return io_.unescape_markers(value) if isinstance(value, str) else value
+
+
 def _identity(item: dict, plan: dict) -> Optional[str]:
-    source = item.get("target_source")
+    source = _known_raw(item.get("target_source"),
+                        set(plan["sources"]) | set(plan["aliases"]) | {"diff"})
     if isinstance(source, str) and source in plan["aliases"]:
         source = plan["aliases"][source]
-    ident = ia.make_id(source, item.get("target_id"), item.get("kind"))
+    ident = ia.make_id(source, _unescaped(item.get("target_id")), item.get("kind"))
     if ident is None or (source != "diff" and source not in plan["sources"]):
         return None
     return ident
@@ -1021,7 +1036,12 @@ def _observation_changed(value, observation: str, evidence: dict, wide: bool,
     if not isinstance(previous, str) or not previous.strip():
         return False
     folded = _one_line(previous)
-    if previous not in observation and not (folded and folded in _one_line(observation)):
+    # 리뷰어는 `<answered>` 칸 사본(`<!` 가 `&lt;!`)에서 옮겨 적는다 — 원래 관찰과 바꾼 꼴 둘 다와 견준다.
+    matched = False
+    for seen in (observation, io_.neutralize_markers(observation)):
+        if previous in seen or (folded and folded in _one_line(seen)):
+            matched = True
+    if not matched:
         return False
     if _cited(value.get("now_lines"), evidence):
         return True
@@ -1060,6 +1080,7 @@ def _prior(item: dict, ident: Optional[str], answered: dict, handed: dict, evide
     same = item.get("same_as")
     if not isinstance(same, str):
         return None
+    same = _known_raw(same, set(handed) | set(answered))
     value = item.get("observation_changed")
     entry = handed.get(same)
     if entry is not None:
