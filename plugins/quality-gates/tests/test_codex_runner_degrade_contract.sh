@@ -58,8 +58,9 @@ abort_trigger_sleeping_codex "$tmp/binabort"
 # 로 읽혀, 이 테스트가 재려던 경로(추출기 실패)와 다른 이유로 끝난다.
 # `codex_prompt_common.py` 는 빌더의 **형제 import** 다(stdout 가드 + P21 로더 정본의
 # 사본) — 빠지면 빌더가 ImportError 로 죽고, 그 죽음도 degrade 로 읽혀 이 테스트가
-# 재려던 경로(추출기 실패)와 **다른 이유**로 GREEN 이 된다.
-for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh gh-repo.sh resolve-baseline.sh prompt-preamble.md; do
+# 재려던 경로(추출기 실패)와 **다른 이유**로 GREEN 이 된다. `qg_nonce.py`(칸 경계 값)와 그것이
+# 부르는 `nofollow_write.py` 도 빌더의 형제 import 다.
+for f in build_codex_prompt.py codex_prompt_common.py qg_nonce.py nofollow_write.py discover-spec.sh gh-repo.sh resolve-baseline.sh prompt-preamble.md; do
   [ -f "$QG/scripts/$f" ] && cp "$QG/scripts/$f" "$tmp/root/scripts/"
 done
 mkdir -p "$tmp/root/references" && cp "$QG/references/review-criteria.md" "$tmp/root/references/"
@@ -421,7 +422,7 @@ chmod +x "$tmp/sscbin/codex" "$tmp/sscbin/gh"
     bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$tmp/ssc-out.yaml" ) >/dev/null 2>"$tmp/ssc-err.txt"
 assert_eq "$(grep -c 'DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE 는 없어졌다 — 의도 입력은 언제나 codex 에 실린다' "$tmp/ssc-err.txt")" "1" \
   "없어진 DISABLE_SPEC_CONFORMANCE=1 은 stderr 한 줄로 공시된다"
-ssc_intent="$(python3 -c 'import re,sys; m=re.search(r"<intent>\n(.*?)</intent>", open(sys.argv[1], encoding="utf-8").read(), re.S); print((m.group(1) if m else "").strip()[:40])' "$tmp/ssc-prompt.md" 2>/dev/null)"
+ssc_intent="$(python3 -c 'import re,sys; m=re.search(r"<intent boundary=\x22([0-9a-f]{16})\x22>\n(.*?)</intent boundary=\x22\1\x22>", open(sys.argv[1], encoding="utf-8").read(), re.S); print((m.group(2) if m else "").strip()[:40])' "$tmp/ssc-prompt.md" 2>/dev/null)"
 [ -n "$ssc_intent" ] && ok "양성 짝: 그 스위치가 켜져 있어도 codex 프롬프트의 <intent> 가 비지 않는다" \
   || no "양성 짝: 그 스위치가 켜져 있어도 codex 프롬프트의 <intent> 가 비지 않는다 (prompt=$(wc -c < "$tmp/ssc-prompt.md" 2>/dev/null || echo MISSING) bytes)"
 

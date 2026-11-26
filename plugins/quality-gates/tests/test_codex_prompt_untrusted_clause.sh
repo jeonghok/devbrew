@@ -110,7 +110,8 @@ emit() {
 
 # 지배(dominance) 판정: 세 앵커(CLAUSE/BLANKET/ACTION)가 전부 입력 태그보다 앞에
 # 있고, 마지막 앵커의 끝과 태그의 시작 사이엔 공백만 있는가. 태그는 빌더 소스에서
-# `<tag>\n{{PLACEHOLDER}}` 패턴으로 도출한다 — 빌더→태그 이름표를 따로 안 둔다.
+# `<tag>\n{{PLACEHOLDER}}` 패턴으로 도출한다 — 빌더→태그 이름표를 따로 안 둔다. 여는 태그가
+# 경계 값을 실으면(`<tag boundary="…">` — 출력에서는 호출마다 다른 값) 그 꼴도 같은 태그로 본다.
 check_dominance() {
   # $3(선택) — 입력 태그를 소스에서 도출하는 정규식. 빌더는 `<tag>\n{{PLACEHOLDER}}`(기본값),
   # 인라인 빌더를 가진 셸 러너는 `<tag>\n" + doc` 모양이라 호출부가 넘긴다.
@@ -119,13 +120,14 @@ check_dominance() {
 import re, sys, pathlib
 src_path, out_path, clause, blanket, action, tag_pat = sys.argv[1:7]
 src = pathlib.Path(src_path).read_text(encoding="utf-8")
-m = re.search(tag_pat or r'<([a-zA-Z_]+)>\n\{\{', src)
+m = re.search(tag_pat or r'<([a-zA-Z_]+)( boundary="[^"]*")?>\n\{\{', src)
 if not m:
     print("NO_TAG_DERIVED")
     sys.exit(0)
 tag = f"<{m.group(1)}>"
 out = pathlib.Path(out_path).read_text(encoding="utf-8")
-i_c, i_b, i_a, i_t = out.find(clause), out.find(blanket), out.find(action), out.find(tag)
+t = re.search(r'<' + re.escape(m.group(1)) + r'( boundary="[^"]*")?>', out)
+i_c, i_b, i_a, i_t = out.find(clause), out.find(blanket), out.find(action), (t.start() if t else -1)
 if -1 in (i_c, i_b, i_a, i_t):
     print(f"MISSING tag={tag}")
     sys.exit(0)
