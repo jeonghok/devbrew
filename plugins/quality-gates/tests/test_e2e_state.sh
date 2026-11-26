@@ -103,7 +103,7 @@ case_V8_missing_after_fingerprint_is_not_same() {
   [ "$(printf '%s\n' "$out" | tail -n 1)" != "same" ] && ok "M7: 걷기 뒤 지문 파일이 없으면 same 이 아니다" || no "M7: 없는 지문 파일을 same 으로 읽었다"
 }
 
-# ── X5 · AC20 — kill switch 둘(+전역) 중 하나라도 켜지면 측정·실행 전에 exit 3 ─────────
+# ── X5 · AC20 — kill switch 가 켜지면 측정·실행 전에 exit 3 ─────────
 case_X5_AC20_kill_switch_refuses_fingerprint_compare() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
   fp "$d" "$s/b"

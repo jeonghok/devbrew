@@ -17,6 +17,7 @@ def run_gc(cwd, env_extra=None, args=None):
     env = os.environ.copy()
     env.pop("DEVBREW_QUALITY_GATES_GC_VERBOSE", None)
     env.pop("DEVBREW_QUALITY_GATES_TTL_HOURS", None)
+    env.pop("DEVBREW_QUALITY_GATES_DISABLE", None)
     if env_extra:
         env.update(env_extra)
     cmd = [sys.executable, str(GC)]

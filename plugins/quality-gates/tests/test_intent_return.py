@@ -103,18 +103,31 @@ class TestReturnHead(unittest.TestCase):
         self.assertEqual(block["result_line"], tic._last(p))
 
     def test_retired_switches_do_not_stop_prepare(self):
-        # prepare 도 은퇴한 두 변수를 읽지 않는다 — 다른 팀 기록 · scope 칸을 평소대로 쓴다.
-        tic._write(tic._config_text(), self.rd, "intent-config.txt")
-        sp = os.path.join(self.rd, "specs.json")
-        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
-        env = tic._env(**{GLOBAL: "1", STAGE: "1"})
-        p = tic._cli("prepare", "--rd", self.rd, "--repo", self.rd, "--tree-root", self.rd,
-                     "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
-                     "--specs-json", sp, env=env)
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertTrue(tic._last(p).startswith("intent-call: "), p.stdout)
-        self.assertNotIn("꺼짐", p.stdout)
-        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-return.md")))
+        # prepare 도 은퇴한 두 변수를 읽지 않는다 — 켠 실행과 끈 실행의 출력 · 만든 파일(내용 포함)이 같다.
+        # 짝: 두 실행 모두 다른 팀 기록 · scope 칸을 실제로 썼다(비교가 공허하지 않다).
+        def run(env_extra):
+            with tempfile.TemporaryDirectory() as rd:
+                tic._write(tic._config_text(), rd, "intent-config.txt")
+                sp = os.path.join(rd, "specs.json")
+                tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
+                p = tic._cli("prepare", "--rd", rd, "--repo", self.rd, "--tree-root", self.rd,
+                             "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
+                             "--specs-json", sp, env=tic._env(**env_extra))
+                files = {}
+                for name in sorted(os.listdir(rd)):
+                    with open(os.path.join(rd, name), encoding="utf-8") as fh:
+                        files[name] = fh.read().replace(rd, "<rd>")
+                return p, files
+        on, on_files = run({GLOBAL: "1", STAGE: "1"})
+        off, off_files = run({})
+        self.assertEqual(on.returncode, 0, on.stderr)
+        self.assertTrue(tic._last(on).startswith("intent-call: "), on.stdout)
+        self.assertNotIn("꺼짐", on.stdout)
+        self.assertEqual((on.returncode, on.stdout, on.stderr), (off.returncode, off.stdout, off.stderr))
+        self.assertEqual(on_files, off_files)
+        for name in (ic.OTHER_TEAMS, ic.SCOPE):
+            self.assertIn(name, on_files)
+        self.assertNotIn("intent-return.md", on_files)
 
     # ---- render 의 갈래
 

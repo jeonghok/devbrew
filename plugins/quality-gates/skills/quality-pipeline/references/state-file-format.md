@@ -111,7 +111,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 ## 돌려주는 꼴 — `intent-return.md` (3판)
 
-쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
+쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
 
 부르는 쪽은 이 파일에서 시작해 `session_dir` 로, 거기서 `other_teams` 로 내려간다. 내부 파일(`intent-questions.yaml`)은 읽지 않는다. 나중에 쓸 부르는 쪽이 가져갈 것은 이 파일과(다른 팀 기록이 필요하면) `session_dir` 아래 `other_teams` 값의 파일 둘이다.
 
