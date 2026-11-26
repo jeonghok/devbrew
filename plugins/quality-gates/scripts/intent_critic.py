@@ -8,6 +8,8 @@
   intent-scope.md       prepare 가 쓴다 — 리뷰어의 <scope> 칸(넓이 · 읽은 인용을 받는지 · 바뀐 파일 · 커밋 제목)
   other-teams.md        prepare 가 쓴다 — 다른 팀 기록(other_teams.py). 기록이 없으면 지운다
   intent-prepare-notices.txt  prepare 의 공시 줄(한 줄에 하나) — render 가 결과 절 앞에 싣는다
+  intent-slot-<k>-<칸>.md  slots 가 쓴다 — 호출 k(1 첫째 · 2 둘째 · 한 번에 넣은 호출)의 칸 사본(원본 + 끝 줄
+                        `qg-slot-end: <값>`). 원본은 그대로다
   intent-critic-1.txt · intent-critic-2.txt                   리뷰어 응답(오케스트레이터가 쓴다)
   intent-questions.yaml  filter 가 쓰고 record 가 고친다
   intent-return.md       gate(건너뜀) · render 가 쓴다
@@ -40,6 +42,7 @@ from render_disposition import disposition_report  # noqa: E402
 import intent_answers as ia  # noqa: E402
 import intent_origin as io_  # noqa: E402
 import other_teams as ot  # noqa: E402
+import qg_nonce  # noqa: E402
 
 KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
 DIR_ENV = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
@@ -66,6 +69,12 @@ SCOPE = "intent-scope.md"
 OTHER_TEAMS = ot.FILE
 OUT1 = "intent-critic-1.txt"
 OUT2 = "intent-critic-2.txt"
+# 칸 사본 — 호출마다의 칸(차례대로)과 그 원본. k=2(둘째 · 한 번에 넣은 호출)만 의심을 싣는다.
+SLOT_COPY = "intent-slot-%d-%s.md"
+SLOT_NAMES = {1: ("diff", "scope", "evidence", "origin", "roadmap", "intent", "answered"),
+              2: ("diff", "scope", "evidence", "origin", "roadmap", "intent", "doubts", "answered")}
+SLOT_SOURCES = {"diff": "review-i1.diff", "scope": SCOPE, "evidence": EVIDENCE, "origin": ORIGIN,
+                "roadmap": ROADMAP, "intent": INTENT, "doubts": DOUBTS, "answered": ANSWERED}
 QUESTIONS = "intent-questions.yaml"
 RETURN = "intent-return.md"
 RESULT = "result.md"
@@ -754,7 +763,7 @@ def _prepare(args, notices: List[str]) -> str:
     if intent_moved.strip():
         if doubts and not doubts.endswith("\n"):
             doubts += "\n"
-        doubts += INTENT_DOUBTS_MARK + "\n" + intent_moved
+        doubts += INTENT_DOUBTS_MARK + "\n" + io_.neutralize_markers(intent_moved)
 
     answered, unreadable, why = ia.read_answered_under(tree_root, cfg["answers_dir"])
     if why:
@@ -876,8 +885,50 @@ def parse_reviewer_output(text: str) -> Optional[dict]:
     return data
 
 
+def _slot_paths(rd: str, k: int) -> List[str]:
+    return [_path(rd, SLOT_COPY % (k, slot)) for slot in SLOT_NAMES[k]]
+
+
+def _checked_output(path: str, rd: str, k: int) -> tuple:
+    """(dict | None, 사유, 끝 값 대조의 실패인가). 대조가 먼저다 — 칸 사본이 하나라도 없거나 그 끝 값이
+    응답에 없으면 `끝 값 없음` · `읽지 못함`(qg_nonce.check)."""
+    text = _read(path)
+    if text is None:
+        return None, "파일을 읽지 못함", False
+    reason = qg_nonce.check(text, _slot_paths(rd, k))
+    if reason is not None:
+        return None, reason, True
+    data, why = _parse_output(text)
+    return data, why, False
+
+
+def _call_why(label: str, why: str, slot_fail: bool) -> str:
+    """실패 사유 — 끝 값 대조면 괄호(`첫째 호출(끝 값 없음)`), 그 밖이면 지금 꼴(`첫째 호출 — <사유>`)."""
+    return "%s(%s)" % (label, why) if slot_fail else "%s — %s" % (label, why)
+
+
+def cmd_slots(args) -> int:
+    rd, k = args.rd, args.call
+    written = []
+    try:
+        for slot in SLOT_NAMES[k]:
+            out = _path(rd, SLOT_COPY % (k, slot))
+            qg_nonce.attach(_path(rd, SLOT_SOURCES[slot]), out)
+            written.append((slot, out))
+    except qg_nonce.IoFail as exc:
+        for slot in SLOT_NAMES[k]:
+            _remove(_path(rd, SLOT_COPY % (k, slot)))
+        sys.stderr.write("[intent_critic] 칸 사본을 쓰지 못했다(%s — %s) — 이 호출의 리뷰어를 부르지 "
+                         "않는다\n" % (exc.reason, exc.path))
+        return 4
+    for slot, out in written:
+        print("%s\t%s" % (slot, out))
+    return 0
+
+
 def cmd_check_output(args) -> int:
-    data, why = _parse_output(_read(args.file))
+    path = os.path.abspath(args.file)
+    data, why, _slot_fail = _checked_output(path, os.path.dirname(path), args.call)
     if data is None:
         print("unreadable: " + why)
         return 3
@@ -894,8 +945,8 @@ def cmd_doubts_append(args) -> int:
     path = _path(args.rd, DOUBTS)
     existing = _read(path) or ""
     count = len(data["questions"])
-    dumped = yaml.safe_dump({"questions": data["questions"]}, allow_unicode=True,
-                            sort_keys=False)
+    dumped = io_.neutralize_markers(yaml.safe_dump({"questions": data["questions"]},
+                                                   allow_unicode=True, sort_keys=False))
     block = "\n%s\n\n```yaml\n%s```\n" % (FIRST_CANDIDATES, dumped)
     # 이미 덧붙였는지는 파일 끝이 이 블록인지로 본다 — 의심 본문(리뷰 트리에서 온 글)에 같은
     # 머리 줄이 있어도 덧붙이기를 막지 못하게.
@@ -1081,12 +1132,12 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str],
     쓴 출력의 `none_reason` 이 빈 글 아닌 글이면 한 줄로 접어 `reasons` 에 더한다.
     """
     call = plan["call"]
-    first, first_why = _parse_output(_read(_path(rd, OUT1)))
-    second, second_why = _parse_output(_read(_path(rd, OUT2)))
+    first, first_why, first_slot = _checked_output(_path(rd, OUT1), rd, 1)
+    second, second_why, second_slot = _checked_output(_path(rd, OUT2), rd, 2)
     if call == "single":
-        main, main_why, extra = second, "한 번에 넣은 호출 — " + second_why, None
+        main, main_why, extra = second, _call_why("한 번에 넣은 호출", second_why, second_slot), None
     elif call in ("first-only", "split"):
-        main, main_why, extra = first, "첫째 호출 — " + first_why, None
+        main, main_why, extra = first, _call_why("첫째 호출", first_why, first_slot), None
         if call == "split":
             extra = second
     else:
@@ -1103,7 +1154,8 @@ def _candidates(plan: dict, rd: str, ledger: Ledger, notices: List[str],
     for i, item in enumerate(main["questions"], 1):
         out.append(("%s %d" % ("첫째" if number == 1 else "한 번", i), number, item))
     if call == "split" and extra is None:
-        ledger.source_failed("intent-critic", "둘째 호출 — " + second_why, primary=False)
+        ledger.source_failed("intent-critic", _call_why("둘째 호출", second_why, second_slot),
+                             primary=False)
         notices.append(SECOND_FAILED)
     elif extra is not None:
         for i, item in enumerate(extra["questions"], 1):
@@ -2032,10 +2084,28 @@ def _parser() -> argparse.ArgumentParser:
                    help="지휘자가 넘긴 「이미 답한 것」 파일(절대 경로) — intent-critic 단계에만 쓴다")
     p.set_defaults(func=cmd_prepare)
 
+    p = sub.add_parser("slots", help="호출 하나의 칸 사본을 쓴다",
+                       description="세션 폴더의 원본(review-i1.diff · %s · %s · %s · %s · %s · %s(k=2 만) · "
+                                   "%s)마다 원본 끝에 `qg-slot-end: <16 hex>` 줄을 붙인 사본 "
+                                   "intent-slot-<k>-<칸>.md 를 쓰고 「<칸>\\t<경로>」 줄을 낸다 — 칸마다 · "
+                                   "호출마다 새 값. 원본은 그대로다. 둘째 호출의 사본은 doubts-append 뒤에 "
+                                   "만든다. rc 0 · 원본을 읽지 못했거나 쓰지 못함 4(이 호출의 사본을 "
+                                   "모두 지운다)."
+                                   % (SCOPE, EVIDENCE, ORIGIN, ROADMAP, INTENT, DOUBTS, ANSWERED))
+    p.add_argument("--rd", required=True, help="qg 세션 폴더")
+    p.add_argument("--call", required=True, type=int, choices=(1, 2),
+                   help="1 첫째 호출 · 2 둘째 호출 또는 한 번에 넣은 호출")
+    p.set_defaults(func=cmd_slots)
+
     p = sub.add_parser("check-output", help="리뷰어 응답을 읽을 수 있나 본다",
-                       description="qg-intent-critic 펜스 하나 + questions 목록이면 「readable」 rc 0, "
-                                   "아니면 「unreadable: <사유>」 rc 3.")
+                       description="먼저 응답 파일과 같은 폴더의 그 호출 칸 사본(intent-slot-<k>-*.md)의 "
+                                   "끝 값이 응답에 모두 있는지 본다 — 아니면 「unreadable: 끝 값 없음」 "
+                                   "(응답에 QG_INPUT_UNREADABLE: 로 시작하는 줄이 있으면 「unreadable: 읽지 "
+                                   "못함」) rc 3. 그다음 qg-intent-critic 펜스 하나 + questions 목록이면 "
+                                   "「readable」 rc 0, 아니면 「unreadable: <사유>」 rc 3.")
     p.add_argument("file", help="리뷰어 응답 파일")
+    p.add_argument("--call", required=True, type=int, choices=(1, 2),
+                   help="그 응답의 호출 — 1 첫째 · 2 둘째 또는 한 번에 넣은 호출")
     p.set_defaults(func=cmd_check_output)
 
     p = sub.add_parser("doubts-append", help="첫째 호출의 후보를 의심 파일 끝에 덧붙인다",
@@ -2046,7 +2116,8 @@ def _parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("filter", help="후보를 거르고 상한을 둔다",
                        description="intent-plan.txt 의 call 로 응답을 고른다(first-only=1 · single=2 · "
-                                   "split=1 과 2 의 합). 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 "
+                                   "split=1 과 2 의 합). 응답마다 그 호출의 칸 사본 끝 값과 먼저 견준다 — "
+                                   "맞지 않으면 그 응답을 쓰지 않는다. 근거 · 정체 · 이미 답함 · 상한 순으로 거르고 "
                                    "intent-questions.yaml 을 쓴다. 공시 줄들 뒤 「intent-ask: <k>」. rc 0.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--review-mode", default="-",

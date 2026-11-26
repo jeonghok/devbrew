@@ -107,7 +107,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 `review-i1-slot-<리뷰어>-b<B>-t<T>-<칸>.txt`(Review Step 3 · 3.5 가 리뷰어에게 경로로 넘기는 칸 사본 — 원본 끝에 `qg-slot-end: <값>` 줄을 붙였다. 리뷰어는 `security` · `ext-<짧은 이름>` · `recritic`, 칸은 `intent` · `diff` · `findings` · `scope`)도 같은 생명주기를 따른다 — Preflight P2 의 `review-i*` 지우기가 지운다. 리뷰어 응답 사본은 세션 폴더가 아니라 실행 임시 폴더 `RV` 에 있다.
 
-`intent-*`(intent-critic 단계의 실행 파일 — 예: 리뷰어의 넓이 칸 `intent-scope.md`. 이름과 내용은 `scripts/intent_critic.py` 와 [intent-critic 절차](intent-critic.md)가 정한다)와
+`intent-*`(intent-critic 단계의 실행 파일 — 예: 리뷰어의 넓이 칸 `intent-scope.md`, 리뷰어에게 경로로 넘기는 칸 사본 `intent-slot-<k>-<칸>.md`(`slots` 가 원본 끝에 `qg-slot-end: <값>` 줄을 붙인다 — `k` 는 `1` 첫째 호출 · `2` 둘째 · 한 번에 넣은 호출). 이름과 내용은 `scripts/intent_critic.py` 와 [intent-critic 절차](intent-critic.md)가 정한다)와
 `other-teams.md` 는 판정 · 게시 뒤에만 생기고 다음 실행의 Preflight P2 가 지운다. 답 파일은 세션 폴더가 아니라 docs 답 자리에 산다(레포 설정 `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`, 기본
 `docs/qg-intent-answers` — `record` 가 쓰고 그 파일만 커밋한다).
 

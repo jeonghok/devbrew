@@ -680,6 +680,48 @@ def strip_roadmap_doubts(text: str) -> tuple:
 # ---------------------------------------------------------------- 원문 · 로드맵 조립
 
 _ORIGIN_HEADS = ("## 6.", "## 2.")
+
+# 출처 표지 — 원문 · 로드맵 · 의심 칸에서 스크립트가 쓰는 표지 줄의 머리 낱말. 본문(리뷰받는 쪽 글)에
+# 같은 꼴이 있으면 `<!--` 를 `&lt;!--` 로 바꿔 싣는다 — 표지는 스크립트가 쓴 것만 남는다.
+MARK_OPEN = "<!--"
+MARK_OPEN_SAFE = "&lt;!--"
+MARK_CLOSE = "-->"
+MARK_CLOSE_SAFE = "--&gt;"
+MARK_KEYS = ("origin-source", "roadmap", "intent-doubts")
+# `<!--` 와 머리 낱말 사이에 있어도 표지로 읽힐 글자 — 빈칸(str.isspace)과 폭 없는 글자.
+_MARK_GAP = "\u200b\u200c\u200d\u2060\ufeff"
+
+
+def _marker_like(rest: str) -> bool:
+    i = 0
+    while i < len(rest) and (rest[i].isspace() or rest[i] in _MARK_GAP):
+        i += 1
+    head = rest[i:i + 32].casefold()
+    for key in MARK_KEYS:
+        if head.startswith(key):
+            return True
+    return False
+
+
+def neutralize_markers(text: str) -> str:
+    """본문의 표지 꼴(`<!--` 뒤 빈칸 · 폭 없는 글자 다음이 표지 머리 낱말 — 글자 크기 무관, 줄 어디서든)의
+    `<!--` 를 `&lt;!--` 로 바꾼다."""
+    out: List[str] = []
+    start = 0
+    while True:
+        at = text.find(MARK_OPEN, start)
+        if at < 0:
+            out.append(text[start:])
+            return "".join(out)
+        out.append(text[start:at])
+        end = at + len(MARK_OPEN)
+        out.append(MARK_OPEN_SAFE if _marker_like(text[end:]) else MARK_OPEN)
+        start = end
+
+
+def marker_field(value: str) -> str:
+    """표지 안에 들어가는 필드(출처 · 경로) — 표지를 닫거나 새 표지를 여는 글자를 무력화한다."""
+    return neutralize_markers(value).replace(MARK_CLOSE, MARK_CLOSE_SAFE)
 _DOUBT_HEADS = ("## 5.", "## 3.")
 
 
@@ -719,7 +761,8 @@ def _add_origin_doc(rel: str, text: str, st: dict) -> None:
             st["aliases"][rel] = brief
     if source not in st["sources"]:
         st["sources"].append(source)
-    marker = "<!-- origin-source: %s · file: %s -->" % (source, rel)
+    marker = "<!-- origin-source: %s · file: %s -->" % (marker_field(source), marker_field(rel))
+    text = neutralize_markers(text)
     origin_parts: List[str] = []
     doubt_parts: List[str] = []
     for head, body in split_sections(text):
@@ -760,11 +803,12 @@ def _follow_roadmaps(st: dict) -> str:
                 _note(st, "로드맵 링크 거부 — %s" % why)
             st["rejected_roadmap"] = True
             continue
-        kept, moved = strip_roadmap_doubts(body)
+        kept, moved = strip_roadmap_doubts(neutralize_markers(body))
         st["roadmaps"].append(path)
-        parts.append("<!-- roadmap: %s · from: %s -->\n%s" % (path, rel, kept))
+        parts.append("<!-- roadmap: %s · from: %s -->\n%s"
+                     % (marker_field(path), marker_field(rel), kept))
         if moved.strip():
-            st["doubts"].append("<!-- roadmap-doubts: %s -->\n%s" % (path, moved))
+            st["doubts"].append("<!-- roadmap-doubts: %s -->\n%s" % (marker_field(path), moved))
     if parts:
         return "\n".join(parts)
     reason = "로드맵 링크 거부" if st.get("rejected_roadmap") else "연 문서에 roadmap: 없음"
