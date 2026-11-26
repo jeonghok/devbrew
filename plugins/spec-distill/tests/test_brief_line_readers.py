@@ -170,6 +170,14 @@ class Invariant(unittest.TestCase):
         rest = parts[R.team_files.SOURCE_PARTS[3]]
         self.assertEqual(rest, [S5_LINES[3], S5_LINES[9], more[0], S5_LINES[6], S5_LINES[0]])
 
+    def test_number_cited_in_a_section4_head_carries_that_item_before_the_section5_lines(self):
+        idx = R.index_brief(swap_s5(["- 기각 — RC9 를 또 인용한다"]), AUDIT)
+        row = R.parse_table("# s\n\n## 분해안\n\n%s\n%s\n%s\n" % (HEAD, SEP, "| E1 | 이름 | 묶음 | 의도 | 한다 가 / 안 한다 나 | 없음 | feature/e1 | 없음 | RC9 | 없음 | 없음 |"))[0]
+        rest = R.bundle_parts(row, idx)[1][R.team_files.SOURCE_PARTS[3]]
+        self.assertEqual(len(rest), 2)
+        self.assertIn("«ext-d» — RC9 (z.py)", rest[0])
+        self.assertEqual(rest[1], "- 기각 — RC9 를 또 인용한다")
+
 
 def git(top, *args):
     return subprocess.run(["git", "-C", str(top), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
