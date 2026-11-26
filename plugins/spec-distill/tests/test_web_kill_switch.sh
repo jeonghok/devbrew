@@ -62,6 +62,7 @@ fi
 # (`tools.web_search`·`web_search` 모드)을 양방향 대조하고, 웹 ON 인 곳은
 # **kill switch를 세팅한 채 두 번째로 실행**해 분기가 실제로 두 값을 OFF로
 # 뒤집는지 관측한다 — 헤더가 아니라 effect를 잰다(Critical 1을 직접 겨냥).
+# 감사 러너는 그 예외다 — 웹 끄기가 은퇴해, 은퇴한 이름을 켜도 웹이 켜진 채인지를 본다.
 #
 # OBS_REPO는 **소싱 전에** 명시적으로 세팅한다. codex_observation.sh 자신의
 # fallback(`${OBS_REPO:-$(dirname BASH_SOURCE[0])/../../..}`)은 이 파일 위치

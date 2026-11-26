@@ -17,7 +17,6 @@ devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. �
   없으면 fresh discovery로 degrade(배너 표시).
 
 `cost_class: high` — dispatch 전에 축을 고르고(「중단」으로 멈출 수 있다) 규모를 한 줄로 본 뒤 진행한다 — 지출 승인을 묻지 않는다.
-본문 전 사전 검사(`scripts/entry_preflight.py`)가 끄기 변수 표를 읽는다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 그 스크립트나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 **산출 위치** — 감사마다 실행 디렉토리 `.claude/plugin-audit/<date>-<target>[-N]/` 이 생긴다(규모 공시 직후, `scripts/prepare-run-dir.py`). 리포트 `audit.md` · 데이터 `audit-data.json` · 원장
 `audit-journal.jsonl` 과 중간 파일이 모두 여기 쌓이고, 안의 `.gitignore`(`*`)로 스스로 git-ignore 된다.
@@ -37,9 +36,7 @@ devbrew 플러그인 하나를 고치지 않고 읽기만 해서 감사한다. �
 
 | 옛 이름 | 새 이름 |
 |---|---|
-| `DEVBREW_DISABLE_PLUGIN_AUDIT` | `DEVBREW_PLUGIN_AUDIT_DISABLE` |
 | `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` |
-| `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` | `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` |
 | `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX` |
 
