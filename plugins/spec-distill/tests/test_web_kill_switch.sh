@@ -103,13 +103,12 @@ else
       *) echo '' ;;
     esac
   }
-  # ON 사이트에만 의미가 있다. qg 두 곳은 현재 OFF라 이 표에 미도달이지만, ON
-  # 전환 시 쓸 이름을 미리 등록해둔다(지금 죽은 스위치를 만들지는 않는다).
+  # ON 사이트에만 의미가 있다. qg 두 러너는 지금 OFF 라 이 표에 닿지 않는다 — 웹을 켜는
+  # 쪽이 새 끄기 변수 이름을 정해 여기에 등록한다(등록이 없으면 아래 「특정할 수 없다」 가 RED).
   # docreview 러너는 두 플러그인에 같은 파일로 배포되고 spec-distill 웹 끄기 변수만 본다 —
   # 어느 배포 경로로 불러도 그 변수가 effect·엄격성으로 재진다.
   kill_switch_for() {  # <candidate path> -> switch var name
     case "$(basename "$1")" in
-      run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
       run_docreview_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
       *) echo '' ;;
     esac
