@@ -236,7 +236,7 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
 QG_NAMES='result\.md|intent\.md|differential\.yaml|differential-not-counted\.md|verdict\.out'
 QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt'
-QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err'
+QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err|publish-at\.txt'
 QG_NAMES="$QG_NAMES"'|other-teams\.md'
 QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'

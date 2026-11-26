@@ -100,7 +100,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
-rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md" "$RD/findings-pre-merge.yaml"
+rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/publish-at.txt" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md" "$RD/findings-pre-merge.yaml"
 ( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ( cd "$RD" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )
 ```
@@ -1412,7 +1412,9 @@ The completion report opens — before the table — with one Korean sentence: w
 
 `## Final verdict` 뒤에 한 번 돈다(spec §5). 오케스트레이터는 gh 를 직접 부르지 않는다 — 게시의 통제(kill switch ·
 인증 · 열린 PR · secret-scan · 길이)는 전부 sink `scripts/publish-comment.sh` 안에 있다(P3 · AC15). 열린 PR 이 있으면
-매 실행 새 코멘트 하나를 남기고 기존 코멘트는 고치지 않는다. 이 게시는 사용자의 상시 동의다(P17) — 따로 묻지 않는다.
+매 실행 새 코멘트 하나를 남기고 기존 코멘트는 고치지 않는다 — 이 PR 에 지금 gh 계정이 단 댓글 가운데 본문이 이번 본문과
+같은 것이 이미 있으면 sink 가 달지 않고 `skipped: already-posted` 로 끝난다(「이미 게시함」 은 GitHub 이 정한다 — 결과 파일의
+줄 · 세션 파일로 정하지 않는다). 이 게시는 사용자의 상시 동의다(P17) — 따로 묻지 않는다.
 커밋 안 된 추적 변경이 있는 실행은 게시하지 않는다 — 판정이 본 코드가 PR 의 커밋에 없어서다(펜스가 거절 줄을 낸다).
 
 판정이 무엇이든(막는 지적이나 차등 결함으로 끝난 `defect` 도) 그 판정을 그대로 게시한다.
@@ -1444,7 +1446,9 @@ QG_COMMENT_HEAD_<8 hex>
 ```
 
 **2. 게시** — `OUTCOME` 에 `## Final verdict` 표의 결과 칸 값(Outcome)을, `<session-id>` 에 이 세션의 id 를 그대로 넣고 돌린다. sink 는 리포 루트에서 돈다(펜스가 `cd` 한다). 마지막 줄을 그대로 보인다.
-펜스가 `result.md` 의 `## 게시` 절에 같은 줄을 남긴다(K-2).
+펜스가 `result.md` 의 `## 게시` 절에 같은 줄을 남긴다(K-2). sink 가 이미 단 댓글을 확인하지 못하고 게시했으면 펜스가
+sink 의 그 한 줄(`> [quality-gates] 이미 단 댓글을 확인하지 못했다(<사유>) — 게시한다(같은 판정이 두 번 달릴 수 있다).`)을
+결과 줄 앞에 보인다 — 그대로 보인다.
 
 <!-- publish-fence:begin -->
 ```bash
@@ -1456,22 +1460,47 @@ TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] 리포 루트�
 cd "$TOP" || exit 1
 D="$TOP/.claude/quality-gates/$SID"
 RESULT="$D/result.md"
-if grep -qx '## 게시' "$RESULT" 2>/dev/null; then
-  printf '%s\n' "게시 안 함 — 이 실행은 이미 게시 단계를 돌았다"
-  exit 0
-fi
+AT="$D/publish-at.txt"
+# 게시 절(줄은 `line`)을 쓰는 한 자리 — 자리 파일이 없으면 끝에 덧붙이고 자리를 적는다. 있으면 그 자리(머리 `\n## 게시\n` ·
+# 파일 안)의 절을 바꿔 쓰고 길이를 다시 적는다. 맞지 않으면 쓰지 않고 줄 다음에 알림을 낸다.
+put_section() {
+  local head_hex len at_s at_l rsize hl got
+  len="$(printf '\n## 게시\n\n%s\n' "$line" | wc -c | tr -d ' ')"
+  rsize="$(wc -c < "$RESULT" 2>/dev/null | tr -d ' ')"; [ -n "$rsize" ] || rsize=0
+  if [ ! -e "$AT" ]; then
+    printf '\n## 게시\n\n%s\n' "$line" >> "$RESULT" && printf '%s %s\n' "$rsize" "$len" > "$AT"
+    printf '%s\n' "$line"
+    return 0
+  fi
+  at_s=""; at_l=""
+  read -r at_s at_l < "$AT" 2>/dev/null
+  hl="$(printf '\n## 게시\n' | wc -c | tr -d ' ')"
+  head_hex="$(printf '\n## 게시\n' | od -An -tx1 | tr -d ' \n')"
+  got=""
+  if [[ "$at_s" =~ ^(0|[1-9][0-9]{0,11})$ ]] && [[ "$at_l" =~ ^[1-9][0-9]{0,11}$ ]] && [ "$at_l" -ge "$hl" ] && [ $((at_s + at_l)) -le "$rsize" ]; then
+    got="$(tail -c +$((at_s + 1)) "$RESULT" | head -c "$hl" | od -An -tx1 | tr -d ' \n')"
+  fi
+  if [ -n "$got" ] && [ "$got" = "$head_hex" ] \
+     && { head -c "$at_s" "$RESULT"; printf '\n## 게시\n\n%s\n' "$line"; tail -c +$((at_s + at_l + 1)) "$RESULT"; } > "$RESULT.tmp.$$" \
+     && mv "$RESULT.tmp.$$" "$RESULT"; then
+    printf '%s %s\n' "$at_s" "$len" > "$AT"
+    printf '%s\n' "$line"
+  else
+    rm -f "$RESULT.tmp.$$"
+    printf '%s\n' "$line"
+    printf '%s\n' "> [quality-gates] 게시 절 자리 기록이 결과 파일과 맞지 않는다 — 게시 단계는 그대로 했고(위 줄), 결과 파일의 게시 절은 고쳐 쓰지 않았다."
+  fi
+}
 if [ -f "$D/range-scope.txt" ]; then
   line="게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)"
-  printf '\n## 게시\n\n%s\n' "$line" >> "$RESULT"
-  printf '%s\n' "$line"
+  put_section
   exit 0
 fi
 case "$OUTCOME" in
   finished) ;;
   *)
     line="게시 안 함 — OUTCOME 이 형식 밖이다"
-    printf '\n## 게시\n\n%s\n' "$line" >> "$RESULT"
-    printf '%s\n' "$line"
+    put_section
     exit 0
     ;;
 esac
@@ -1494,16 +1523,22 @@ else
     "posted: "*|"skipped: "*|"failed: "*) ;;
     *) line="게시 결과 불명 — sink 출력 계약 위반(rc ${pub_rc})" ;;
   esac
+  # sink 가 이미 단 댓글을 확인하지 못하고 게시했으면 그 한 줄을 결과 줄 앞에 보인다.
+  grep -F '> [quality-gates] 이미 단 댓글을 확인하지 못했다(' "$D/publish.out"
 fi
-printf '\n## 게시\n\n%s\n' "$line" >> "$RESULT"
-printf '%s\n' "$line"
+put_section
 ```
 <!-- publish-fence:end -->
 
-이 펜스는 `/quality-gates:quality-pipeline` 한 번에 한 번만 돈다 — 결과가 무엇이든 다시 돌리지 않는다(다시 돌리면 펜스가 거절한다).
+`## 게시` 는 하나뿐이다 — 다시 돌리면 펜스가 그 절을 그 실행의 결과로 바꿔 쓴다. 다시 돌린 펜스는 처음과 같은 길을
+처음부터 탄다 — 댓글을 단 실행은 sink 가 `skipped: already-posted` 로 끝내고, 건너뛰었거나 실패한 실행은 다시 게시를
+시도하며, 범위 모드 · `게시 안 함` 으로 끝난 실행은 조건이 그대로면 같은 줄을 낸다. 바꿔 쓸 자리는 결과 파일의 글자로
+찾지 않고 처음 덧붙일 때 세션 폴더의 `publish-at.txt`(한 줄 `<시작 바이트> <길이 바이트>`)에 적은 자리다 — 뒤에 붙은
+`## intent-critic` 절은 그대로 남는다. 그 자리가 결과 파일과 맞지 않으면(파일 밖 · 게시 절 머리가 아님) 펜스는 절을
+덧붙이지도 바꿔 쓰지도 않고 결과 줄 다음에 `> [quality-gates] 게시 절 자리 기록이 결과 파일과 맞지 않는다 — 게시 단계는 그대로 했고(위 줄), 결과 파일의 게시 절은 고쳐 쓰지 않았다.` 를 낸다 — 그 줄도 그대로 보인다.
 
 `skipped: <사유>` 는 실패가 아니다 — 판정은 바뀌지 않는다. 사유는 `no-pr` · `pr-closed` · `pr-mismatch` · `kill-switch` ·
-`scan-failed` · `gh-unavailable` · `too-long` 중 하나다. `failed: <사유>` 는 실패다 — `gh-unavailable`(gh 가 없다) ·
+`scan-failed` · `gh-unavailable` · `too-long` · `already-posted`(같은 본문의 내 댓글이 이미 있다) 중 하나다. `failed: <사유>` 는 실패다 — `gh-unavailable`(gh 가 없다) ·
 `gh-unauthenticated`(gh 가 로그인돼 있지 않다 — 로그인 안내는 sink stderr 에 있다) · `no-origin`(origin 이 없거나 그 URL 에서 레포를 못 읽거나 gh 가 그 레포를 다루지 못한다)이라 코멘트를 달지 못했다. 그 줄을 오류로 보이고, 펜스가 보인 sink
 stderr 의 설치 · 확인 안내 줄을 그대로 보인다. 판정은 이미 났으므로
 바뀌지 않는다. `scan-failed` 면 sink 가 stderr 로 낸 finding

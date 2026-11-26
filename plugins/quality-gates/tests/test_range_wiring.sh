@@ -178,15 +178,16 @@ case_text_locks() {
 
   local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
   assert_contains "$PB" '게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다' "게시: 범위 모드는 달지 않고 공시한다"
-  # 범위 거절은 게시 펜스 하나 안에 있다 — 「한 번만」 검사 뒤, OUTCOME 갈래 앞(범위 공시 · sink 에 닿지 않음)
+  # 범위 거절은 게시 펜스 하나 안에 있다 — OUTCOME 갈래 앞(범위 공시 · sink 에 닿지 않음). 결과 파일의 `## 게시` 줄로
+  # 건너뛰는 첫 검사는 없다(R7 §2 — 심은 줄이 게시를 막지 못한다).
   local pf; pf="$(printf '%s\n' "$PB" | fence_with 'scripts/publish-comment.sh')"
-  local l_once l_rng l_case
-  l_once="$(printf '%s\n' "$pf" | grep -n "^if grep -qx '## 게시' \"\$RESULT\"" | head -n 1 | cut -d: -f1)"
+  local l_rng l_case
+  assert_not_contains "$pf" "grep -qx '## 게시'" "게시 펜스: 결과 파일의 \`## 게시\` 줄로 건너뛰는 첫 검사가 없다"
   l_rng="$(printf '%s\n' "$pf" | grep -nxF 'if [ -f "$D/range-scope.txt" ]; then' | head -n 1 | cut -d: -f1)"
   l_case="$(printf '%s\n' "$pf" | grep -nxF 'case "$OUTCOME" in' | head -n 1 | cut -d: -f1)"
-  if [ -n "$l_once" ] && [ -n "$l_rng" ] && [ -n "$l_case" ] && [ "$l_once" -lt "$l_rng" ] && [ "$l_rng" -lt "$l_case" ]; then
-    ok "게시 펜스: 범위 거절이 「한 번만」 검사 뒤 · OUTCOME 갈래 앞에 있다"
-  else no "게시 펜스: 범위 거절 위치 (once=$l_once range=$l_rng case=$l_case)"; fi
+  if [ -n "$l_rng" ] && [ -n "$l_case" ] && [ "$l_rng" -lt "$l_case" ]; then
+    ok "게시 펜스: 범위 거절이 OUTCOME 갈래 앞에 있다"
+  else no "게시 펜스: 범위 거절 위치 (range=$l_rng case=$l_case)"; fi
   assert_eq "$(printf '%s\n' "$PB" | grep -c '범위 모드라 PR 코멘트를 달지 않는다(범위에는')" "2" "게시: 범위 문구는 설명 한 줄 + 게시 펜스 한 줄뿐이다(따로 떨어진 범위 펜스가 없다)"
 
   echo "[문면 — differential-test.md · state-file-format.md]"
@@ -399,8 +400,9 @@ case_fences_agree() {
   assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "게시 펜스: ## 게시 절을 남긴다"
   assert_eq "$(cat "$ROOT/sink.log")" "" "게시 펜스: 범위 모드면 sink 를 부르지 않는다"
   run_fence "$body"
-  assert_eq "$out" "게시 안 함 — 이 실행은 이미 게시 단계를 돌았다" "게시 펜스: 두 번째는 거절한다"
-  assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "게시 펜스: ## 게시 는 하나뿐이다"
+  assert_eq "$out" "게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)" "게시 펜스: 두 번째도 범위 공시 줄(거절하지 않는다)"
+  assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "게시 펜스: 두 번째도 ## 게시 는 하나뿐이다"
+  assert_eq "$(cat "$ROOT/sink.log")" "" "게시 펜스: 두 번째도 범위 모드면 sink 를 부르지 않는다"
 }
 
 case_text_locks

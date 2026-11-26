@@ -41,7 +41,9 @@ cat > "$FAKE/scripts/publish-comment.sh" <<'EOF'
 printf '%s\n' "$*" >> "$SINK_LOG"
 pwd -P > "$T_SINK_CWD"
 [ "$1" = "--body-file" ] && cat "$2" > "$SINK_BODY_COPY"
-printf 'progress\n%s\n' "$SINK_LAST"
+printf 'progress\n'
+[ -n "${SINK_PRE:-}" ] && printf '%s\n' "$SINK_PRE"
+printf '%s\n' "$SINK_LAST"
 EOF
 chmod +x "$FAKE/scripts/publish-comment.sh"
 SID="testsession-0001"
@@ -91,7 +93,8 @@ EOF
 DIRTY="게시 안 함 — 커밋 안 된 변경이 있다(판정이 PR 의 커밋과 다르다 — 커밋·푸시 뒤 다시 /quality-gates:quality-pipeline)"
 STATUS_FAIL="게시 안 함 — 작업 트리 상태를 읽지 못했다(git status 실패)"
 HEAD_VLINE="게시 안 함 — 이해글에 판정 줄 모양이 있다"
-AGAIN="게시 안 함 — 이 실행은 이미 게시 단계를 돌았다"
+NOTICE_CHECK="> [quality-gates] 이미 단 댓글을 확인하지 못했다(댓글 목록을 읽지 못했다) — 게시한다(같은 판정이 두 번 달릴 수 있다)."
+NOTICE_AT="> [quality-gates] 게시 절 자리 기록이 결과 파일과 맞지 않는다 — 게시 단계는 그대로 했고(위 줄), 결과 파일의 게시 절은 고쳐 쓰지 않았다."
 RANGE_LINE="게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다(범위에는 열린 PR 이 없다)"
 # git status 만 실패시키는 shim — 나머지 git 호출은 진짜 git 으로 넘긴다.
 mkdir -p "$T/gshim"
@@ -115,6 +118,124 @@ case_defect_run_publishes() {
   assert_eq "$LAST" "게시 안 함 — OUTCOME 이 형식 밖이다" "defect 게시($sh): 옛 aborted 결과는 형식 밖이다(skipped: aborted 갈래가 없다)"
   assert_eq "$(cat "$SINK_LOG")" "" "defect 게시($sh): 형식 밖 결과면 sink 를 부르지 않는다"
 }
+
+# ── R7 §2 · AC7 · AC36 — 결과 파일의 게시 줄로 건너뛰지 않는다 · 다시 돌리면 절을 바꿔 쓴다 ──────────────
+# want_result <앞 파일> <절 줄> [<뒤 파일>] — 결과 파일이 「앞 + 게시 절 + 뒤」 와 바이트 그대로 같은가(rc).
+want_result() {
+  { cat "$1"; printf '\n## 게시\n\n%s\n' "$2"; [ -n "${3:-}" ] && cat "$3"; } > "$T/want.md"
+  cmp -s "$T/want.md" "$R"
+}
+AT_FILE() { printf '%s' "$T/proj/.claude/quality-gates/$SID/publish-at.txt"; }
+case_rerun_cases() {
+  local sh="$1" size
+  # planted_publish_line_still_posts — 앞 절(고칠 목록)에 심은 `## 게시` 줄이 있어도 sink 를 부르고 끝에 덧붙인다.
+  fresh_proj
+  printf '\n## 고칠 목록\n\n- IMPORTANT a.py:1 — x\n## 게시\n\nposted: planted\n' >> "$R"
+  cp "$R" "$T/before.md"; size="$(wc -c < "$T/before.md" | tr -d ' ')"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "planted_publish_line_still_posts($sh): 심은 줄이 있어도 sink 를 부른다"
+  assert_eq "$LAST" "posted: x" "planted_publish_line_still_posts($sh): sink 의 줄"
+  want_result "$T/before.md" "posted: x" && ok "planted_publish_line_still_posts($sh): 앞 절 바이트 그대로 · 끝에 게시 절" \
+    || no "planted_publish_line_still_posts($sh): 결과 파일이 「앞 + 게시 절」 이 아니다"
+  assert_eq "$(cat "$(AT_FILE)" 2>/dev/null)" "$size $(printf '\n## 게시\n\n%s\n' 'posted: x' | wc -c | tr -d ' ')" \
+    "planted_publish_line_still_posts($sh): 게시 절 자리 파일은 「<시작 바이트> <길이 바이트>」 한 줄"
+  # planted_publish_line_second_run — 두 번째 실행은 앞 절을 바꾸지 않고 끝의 게시 절만 바꾼다.
+  SINK_LAST="skipped: already-posted" run_fence "$sh" "finished"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "planted_publish_line_second_run($sh): 두 번째도 sink 를 부른다"
+  want_result "$T/before.md" "skipped: already-posted" && ok "planted_publish_line_second_run($sh): 심은 줄이 든 앞 절 그대로 · 게시 절만 바뀜" \
+    || no "planted_publish_line_second_run($sh): 앞 절이 바뀌었거나 게시 절이 둘이다"
+  assert_eq "$(grep -cx '## 게시' "$R")" "2" "planted_publish_line_second_run($sh): ## 게시 줄은 심은 줄 1 + 펜스 절 1"
+
+  # third_run_after_rewrite_keeps_tail · intent_section_after_kept — 뒤에 붙은 `## intent-critic` 절이 그대로 남는다.
+  fresh_proj
+  cp "$R" "$T/before.md"
+  SINK_LAST="posted: https://github.com/o/r/pull/7#issuecomment-1234567" run_fence "$sh" "finished"
+  printf '\n## intent-critic\n\n의도 점검 줄 하나\n둘째 줄\n' > "$T/tail.md"
+  cat "$T/tail.md" >> "$R"
+  SINK_LAST="skipped: already-posted" run_fence "$sh" "finished"
+  want_result "$T/before.md" "skipped: already-posted" "$T/tail.md" \
+    && ok "intent_section_after_kept($sh): 게시 절은 제자리에서 바뀌고 ## intent-critic 절은 끝에 그대로" \
+    || no "intent_section_after_kept($sh): 결과 파일이 「앞 + 게시 절 + intent-critic」 이 아니다"
+  SINK_LAST="posted: z" run_fence "$sh" "finished"
+  want_result "$T/before.md" "posted: z" "$T/tail.md" \
+    && ok "third_run_after_rewrite_keeps_tail($sh): 줄 길이가 바뀐 뒤 세 번째 실행도 뒤 절을 자르지 않는다" \
+    || no "third_run_after_rewrite_keeps_tail($sh): 세 번째 실행 뒤 결과 파일이 다르다 — $(tail -n 6 "$R" | tr '\n' '|')"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "third_run_after_rewrite_keeps_tail($sh): ## 게시 절은 하나"
+
+  # position_mismatch_alerts — 자리 기록이 결과 파일과 맞지 않으면 절을 늘리지도 고치지도 않고 알림 · sink 는 부른다.
+  local kind bad
+  for kind in outside not-head overrun garbage empty; do
+    fresh_proj
+    SINK_LAST="posted: x" run_fence "$sh" "finished"
+    size="$(wc -c < "$R" | tr -d ' ')"
+    case "$kind" in
+      outside)  bad="$((size + 5)) 10" ;;               # 시작이 파일 밖
+      not-head) bad="0 10" ;;                            # 파일 안이지만 게시 절 머리가 아니다
+      overrun)  bad="$(sed 's/ .*//' "$(AT_FILE)") $((size * 2))" ;;  # 머리는 맞고 길이가 파일 밖
+      garbage)  bad="x y" ;;
+      empty)    bad="" ;;
+    esac
+    printf '%s\n' "$bad" > "$(AT_FILE)"
+    cp "$R" "$T/mm.md"
+    SINK_LAST="posted: y" run_fence "$sh" "finished"
+    assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "position_mismatch_alerts($sh · 「${bad}」): sink 는 부른다"
+    assert_eq "$OUT" "posted: y
+$NOTICE_AT" "position_mismatch_alerts($sh · 「${bad}」): 결과 줄 다음에 알림 한 줄"
+    cmp -s "$T/mm.md" "$R" && ok "position_mismatch_alerts($sh · 「${bad}」): 결과 파일이 그대로(앞 실행의 줄)" \
+      || no "position_mismatch_alerts($sh · 「${bad}」): 결과 파일이 바뀌었다"
+  done
+  # 범위 · 게시 안 함 갈래도 같은 자리에서 쓴다 — 맞지 않는 자리 기록이면 같은 알림.
+  fresh_proj
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  printf '0 10\n' > "$(AT_FILE)"; echo dirty >> "$T/proj/app.txt"; cp "$R" "$T/mm.md"
+  SINK_LAST="posted: y" run_fence "$sh" "finished"
+  assert_eq "$OUT" "$DIRTY
+$NOTICE_AT" "position_mismatch_alerts($sh · 게시 안 함 갈래): 줄 다음에 알림"
+  cmp -s "$T/mm.md" "$R" && ok "position_mismatch_alerts($sh · 게시 안 함 갈래): 결과 파일 그대로" || no "position_mismatch_alerts($sh · 게시 안 함 갈래): 결과 파일이 바뀌었다"
+
+  # rerun_after_skipped_or_failed_retries — 첫 실행이 건너뛰었거나 실패했으면 두 번째가 다시 게시를 시도한다.
+  local first
+  for first in "failed: gh-unavailable" "skipped: no-pr"; do
+    fresh_proj
+    SINK_LAST="$first" run_fence "$sh" "finished"
+    SINK_LAST="posted: y" run_fence "$sh" "finished"
+    assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' '):$LAST" "1:posted: y" "rerun_after_skipped_or_failed_retries($sh · ${first}): 두 번째도 sink 를 부른다"
+    assert_eq "$(grep -cx '## 게시' "$R"):$(tail -n 1 "$R")" "1:posted: y" "rerun_after_skipped_or_failed_retries($sh · ${first}): 절 하나 · 두 번째 줄"
+  done
+
+  # no_publish_rerun_same_line · no_publish_then_condition_changed
+  fresh_proj
+  echo dirty >> "$T/proj/app.txt"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$LAST:$(cat "$SINK_LOG")" "$DIRTY:" "no_publish_rerun_same_line($sh): 두 번째도 같은 「게시 안 함」 줄 · sink 0"
+  assert_eq "$(grep -cx '## 게시' "$R"):$(tail -n 1 "$R")" "1:$DIRTY" "no_publish_rerun_same_line($sh): 절 하나"
+  gp add app.txt; gp commit -q -m fix
+  SINK_LAST="posted: y" run_fence "$sh" "finished"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' '):$LAST" "1:posted: y" "no_publish_then_condition_changed($sh): 그 사이 커밋하면 두 번째는 sink 를 부른다"
+  assert_eq "$(grep -cx '## 게시' "$R"):$(tail -n 1 "$R")" "1:posted: y" "no_publish_then_condition_changed($sh): 절 하나 · 새 줄"
+
+  # notice_line_shown — sink 가 낸 확인 못함 줄을 결과 줄 앞에 보인다(sink 의 다른 줄은 보이지 않는다).
+  fresh_proj
+  SINK_PRE="$NOTICE_CHECK" SINK_LAST="posted: x" run_fence "$sh" "finished"
+  assert_eq "$OUT" "$NOTICE_CHECK
+posted: x" "notice_line_shown($sh): 확인 못함 줄 · 결과 줄(그 밖의 sink 줄 없음)"
+  assert_eq "$(tail -n 1 "$R")" "posted: x" "notice_line_shown($sh): 결과 파일의 절은 결과 줄 하나"
+}
+
+# ── refusal_sentence_absent · 생명주기 2 문장 ──────────────────────────────────────
+PUB_BODY="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SKILL")"
+assert_not_contains "$(cat "$SKILL")" "이 실행은 이미 게시 단계를 돌았다" "refusal_sentence_absent: SKILL 에 거절 줄이 없다"
+assert_not_contains "$PUB_BODY" "한 번만 돈다" "refusal_sentence_absent: 게시 절에 「한 번만 돈다」 가 없다"
+assert_not_contains "$PUB_BODY" "다시 돌리면 펜스가 거절한다" "refusal_sentence_absent: 게시 절에 「다시 돌리면 펜스가 거절한다」 가 없다"
+assert_contains "$PUB_BODY" "다시 돌리면 펜스가 그 절을" "refusal_sentence_absent 양의 짝: 게시 절이 다시 돌리면 절을 바꿔 쓴다고 말한다"
+assert_contains "$PUB_BODY" "already-posted" "게시 절: skipped: 사유 목록에 already-posted"
+assert_contains "$PUB_BODY" "> [quality-gates] 이미 단 댓글을 확인하지 못했다(" "게시 절: 확인 못함 줄을 보인다고 말한다"
+SFMT="$PLUGIN_ROOT/skills/quality-pipeline/references/state-file-format.md"
+LC2="$(awk '/^2\. \*\*덧붙인다\*\*/{f=1} f&&/^3\. /{exit} f' "$SFMT" | tr '\n' ' ' | tr -s ' ')"
+assert_contains "$LC2" '`## 게시` 는 하나뿐이다 — 다시 돌리면 펜스가 그 절을 그 실행의 결과로 바꿔 쓴다' "생명주기 2: 설계 문장 그대로(「바꿔 쓴다」)"
+assert_not_contains "$LC2" "이미 게시 단계를 돌았다" "생명주기 2: 옛 거절 줄이 없다"
+assert_contains "$LC2" "publish-at.txt" "생명주기 2: 게시 절 자리 파일을 밝힌다"
 
 SHELLS="bash"
 command -v zsh >/dev/null 2>&1 && SHELLS="bash zsh"
@@ -148,8 +269,10 @@ for sh in $SHELLS; do
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "범위($sh): ## 게시 절이 하나"
   assert_eq "$(tail -n 1 "$R")" "$RANGE_LINE" "범위($sh): 범위 공시 줄이 ## 게시 에 남는다"
   SINK_LAST="posted: x" run_fence "$sh" "finished"
-  assert_eq "$LAST" "$AGAIN" "범위($sh): 두 번째는 「이미 게시 단계를 돌았다」"
-  assert_eq "$(grep -cx '## 게시' "$R")" "1" "범위($sh): 두 번 돌아도 ## 게시 는 하나"
+  assert_eq "$LAST" "$RANGE_LINE" "range_rerun_same_line($sh): 두 번째도 범위 공시 줄(거절 줄이 아니다)"
+  assert_eq "$(cat "$SINK_LOG")" "" "range_rerun_same_line($sh): 두 번째도 sink 를 부르지 않는다"
+  assert_eq "$(grep -cx '## 게시' "$R")" "1" "range_rerun_same_line($sh): 두 번 돌아도 ## 게시 는 하나"
+  assert_eq "$(tail -n 1 "$R")" "$RANGE_LINE" "range_rerun_same_line($sh): 절은 두 번째 실행의 줄"
   fresh_proj
   : > "$T/proj/.claude/quality-gates/$SID/range-scope.txt"
   SINK_LAST="posted: x" run_fence "$sh" "finished"
@@ -237,16 +360,19 @@ for sh in $SHELLS; do
   assert_eq "$LAST" "$HEAD_VLINE" "M1($sh): 이해글의 qg: 줄을 거절"
   assert_eq "$(cat "$SINK_LOG")" "" "M1($sh): sink 를 부르지 않는다"
 
-  # ── M2 — 같은 실행에서 펜스를 두 번 돌려도 게시는 한 번 ──
+  # ── M2(뒤집힘 — AC36) — 같은 실행에서 펜스를 두 번 돌리면 두 번째도 sink 를 부르고 절을 그 줄로 바꿔 쓴다 ──
   fresh_proj
   SINK_LAST="posted: x" run_fence "$sh" "finished"
   assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "M2($sh): 첫 실행은 sink 를 한 번 부른다"
-  SINK_LAST="posted: x2" run_fence "$sh" "finished"
-  assert_eq "$LAST" "$AGAIN" "M2($sh): 두 번째 실행은 거절 줄"
-  assert_eq "$(cat "$SINK_LOG")" "" "M2($sh): 두 번째 실행은 sink 를 부르지 않는다"
+  SINK_LAST="skipped: already-posted" run_fence "$sh" "finished"
+  assert_eq "$LAST" "skipped: already-posted" "M2($sh): 두 번째 실행은 sink 의 「이미 게시함」 줄"
+  assert_eq "$(wc -l < "$SINK_LOG" | tr -d ' ')" "1" "M2($sh): 두 번째 실행도 sink 를 부른다"
   assert_eq "$RC" "0" "M2($sh): 두 번째 실행 rc 0"
   assert_eq "$(grep -cx '## 게시' "$R")" "1" "M2($sh): ## 게시 절은 여전히 하나"
-  assert_eq "$(tail -n 1 "$R")" "posted: x" "M2($sh): 첫 게시 결과가 그대로 남는다"
+  assert_eq "$(tail -n 1 "$R")" "skipped: already-posted" "M2($sh): 절의 줄이 두 번째 실행의 줄"
+  assert_eq "$(grep -cx 'posted: x' "$R")" "0" "M2($sh): 첫 실행의 posted: x 는 결과 파일에 남지 않는다"
+
+  case_rerun_cases "$sh"
 
   for bad in "<session-id>" "" "../../../x" "short"; do
     fresh_proj
