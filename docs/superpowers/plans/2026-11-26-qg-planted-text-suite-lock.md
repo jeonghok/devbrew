@@ -181,7 +181,7 @@ git commit -m "feat(qg): 끝 값과 끝 표지 값을 내는 qg_nonce.py" -- plu
 
 ---
 
-### Task 2: here-doc 끝 표지 — 값은 스크립트가 낸다(§3)
+### Task 2: here-doc 끝 표지 — 값은 스크립트가 낸다(§3 · AC9)
 
 **Files:**
 - Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`(here-doc 18 곳 — `E2E_CMD` · `E2E_EVIDENCE` · `E2E_RECORD` · `E2E_FLIP` · `QG_ARGS_*` · `QG_FIX_LIST` · `QG_COMMENT_HEAD`)
